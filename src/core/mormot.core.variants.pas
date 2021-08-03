@@ -3152,7 +3152,7 @@ begin
         case t of
           varError:
             begin
-              v^.VError := VAR_PARAMNOTFOUND
+              v^.VError := VAR_PARAMNOTFOUND;
               asize := 0;
             end;
           varVariant:
