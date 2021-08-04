@@ -980,6 +980,12 @@ type
     // - will return the same result than JSON comparison, but more efficiently
     function Compare(const Another: TDocVariantData;
       CaseInsensitive: boolean = false): integer;
+    /// efficient comparison of two TDocVariantData objects
+    // - will always ensure that both this instance and Another are Objects
+    // - will compare all values following the supplied Fields order
+    // - if no Fields is specified, will fallback to regular Compare()
+    function CompareObject(const Fields: array of RawUtf8;
+      const Another: TDocVariantData; CaseInsensitive: boolean = false): integer;
     /// efficient equality comparison of two TDocVariantData content
     // - just a wrapper around Compare(Another)=0
     function Equals(const Another: TDocVariantData;
@@ -1521,6 +1527,7 @@ type
     // - do nothing if the document is not a dvArray, or if the items are no dvObject
     // - will sort by UTF-8 text (VariantCompare) if no aValueCompareField is supplied
     procedure SortArrayByFields(const aItemPropNames: array of RawUtf8;
+      aValueCompare: TVariantCompare = nil;
       const aValueCompareField: TVariantCompareField = nil;
       aValueCompareReverse: boolean = false; aNameSortedCompare: TUtf8Compare = nil);
     /// create a TDocVariant object, from a selection of properties of this
@@ -4914,6 +4921,46 @@ begin
   result := VCount - Another.VCount;
 end;
 
+function TDocVariantData.CompareObject(const Fields: array of RawUtf8;
+  const Another: TDocVariantData; CaseInsensitive: boolean): integer;
+var
+  f: PtrInt;
+  ndx: integer;
+  v1, v2: PVarData;
+begin
+  if dvoIsObject in VOptions then
+    if dvoIsObject in Another.VOptions then
+    begin
+      // compare Object, Object by specified fields
+      if high(Fields) < 0 then
+      begin
+        result := Compare(Another, CaseInsensitive);
+        exit;
+      end;
+      for f := 0 to high(Fields) do
+      begin
+        v1 := GetVarData(Fields[f], nil, @ndx);
+        if (cardinal(ndx) < cardinal(Another.VCount)) and
+           (StrCompByCase[not (dvoNameCaseSensitive in VOptions)](
+              pointer(Fields[f]), pointer(Another.VName[ndx])) = 0) then
+          v2 := @Another.VValue[ndx] // fields are likely at the same position
+        else
+          v2 := Another.GetVarData(Fields[f]); // full safe field name lookup
+        result := FastVarDataComp(v1, v2, CaseInsensitive);
+        if result <> 0 then // each value should match
+          exit;
+      end;
+      // all fields did match -> difference is now about the document size
+      result := VCount - Another.VCount;
+    end
+    else
+      result := 1   // Object, not Object
+  else if dvoIsObject in Another.VOptions then
+      result := -1  // not Object, Object
+    else
+      result := 0;  // not Object, not Object
+end;
+
 function TDocVariantData.Equals(const Another: TDocVariantData;
   CaseInsensitive: boolean): boolean;
 begin
@@ -5427,6 +5474,7 @@ type
     Compare: TVariantCompare;
     CompareField: TVariantCompareField;
     Fields: PRawUtf8Array;
+    P: PtrInt;
     Pivot: PQuickSortByFieldLookup;
     Doc: PDocVariantData;
     TempExch: TQuickSortByFieldLookup;
@@ -5523,7 +5571,7 @@ end;
 
 procedure TQuickSortDocVariantValuesByField.Sort(L, R: PtrInt);
 var
-  I, J, P: PtrInt;
+  I, J: PtrInt;
 begin
   if L < R then
     repeat
@@ -5543,9 +5591,7 @@ begin
             if Doc.VName <> nil then
               ExchgPointer(@Doc.VName[I], @Doc.VName[J]);
             ExchgVariant(@Doc.VValue[I], @Doc.VValue[J]);
-            TempExch := Lookup[I];
-            Lookup[I] := Lookup[J];
-            Lookup[J] := TempExch;
+            ExchgPointers(@Lookup[I], @Lookup[J], Depth + 1);
           end;
           if P = I then
             P := J
