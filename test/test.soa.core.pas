@@ -135,6 +135,7 @@ type
       out CustomerData: TCustomerData): Boolean;
     //// validate TOrm transmission
     procedure FillPeople(var People: TOrmPeople);
+    {$ifndef CPUAARCH64} // FPC doesn't follow the AARCH64 ABI -> fixme
     {$ifndef HASNOSTATICRTTI}
     /// validate simple record transmission
     // - older Delphi versions (e.g. 6-7-2009) do not allow records without
@@ -143,6 +144,7 @@ type
     // returned as function result -> Echo is an "out" parameter here
     function EchoRecord(const Nav: TConsultaNav): TConsultaNav;
     {$endif HASNOSTATICRTTI}
+    {$endif CPUAARCH64}
   end;
 
   /// a test interface, used by TTestServiceOrientedArchitecture
