@@ -24,6 +24,7 @@ uses
   mormot.core.os,
   mormot.core.log,
   mormot.core.test,
+  mormot.db.raw.sqlite3, // for the SQLite3 version below
   {$ifdef USEZEOS}
   mormot.db.sql.zeos,
   {$endif USEZEOS}
