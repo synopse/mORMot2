@@ -19,6 +19,8 @@ uses
   {$ifdef UNIX}
   cwstring, // needed as fallback if ICU is not available
   {$endif UNIX}
+  sysutils,
+  mormot.core.base,
   mormot.core.os,
   mormot.core.log,
   mormot.core.test,
@@ -55,11 +57,22 @@ uses
 
 type
   TIntegrationTests = class(TSynTestsLogged)
+  public
+    function Run: boolean; override;
   published
     procedure CoreUnits;
     procedure ORM;
     procedure SOA;
   end;
+
+function TIntegrationTests.Run: boolean;
+begin
+  CustomVersions := format(#13#10#13#10'%s (cp%d)'#13#10 +
+    '    %s'#13#10'Using mORMot %s'#13#10'    %s', [OSVersionText,
+    Unicode_CodePage, CpuInfoText, SYNOPSE_FRAMEWORK_FULLVERSION,
+    sqlite3.Version]);
+  result := inherited Run;
+end;
 
 procedure TIntegrationTests.CoreUnits;
 begin
