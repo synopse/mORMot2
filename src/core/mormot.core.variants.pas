@@ -4893,7 +4893,7 @@ begin
       exit;
     end
     else
-      nameCmp := StrCompByCase[CaseInsensitive];
+      nameCmp := StrCompByCase[not (dvoNameCaseSensitive in VOptions)];
   // compare as many in-order content as possible
   n := Another.VCount;
   if VCount < n then
