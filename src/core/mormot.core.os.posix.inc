@@ -2206,6 +2206,10 @@ begin
   result := gettimeofday(tp, tzp);
 end;
 
+{$endif OSLINUX}
+
+{$ifdef CPUARM3264} // POSIX libc is faster than the RTL or our pascal code
+
 function libc_strlen(s: PAnsiChar): SizeInt;
   cdecl external clib name 'strlen';
 
@@ -2237,8 +2241,7 @@ begin
     libc_memset(@dest, value, count);
 end;
 
-{$endif OSLINUX}
-
+{$endif CPUARM3264}
 
 procedure InitializeUnit;
 var

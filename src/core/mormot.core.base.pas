@@ -2427,8 +2427,11 @@ var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$endif FPC_X86}
 
-{$else} // fallback to RTL versions on non-INTEL or PIC platforms
+{$else}
 
+
+// fallback to RTL versions on non-INTEL or PIC platforms by default
+// and mormot.core.os.posix.inc redirects them to libc memset/memmove
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = FillChar;
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 

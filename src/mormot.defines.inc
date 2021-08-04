@@ -572,6 +572,7 @@
       {.$define LIBQUICKJSSTATIC} // compiles, but untested
     {$endif CPUARM}
     {$ifdef CPUAARCH64}
+      {$define NOSQLITE3STATIC}   // issues with our static Sqlite3 3.35.5
       {$define LIBDEFLATESTATIC}
       {.$define LIBQUICKJSSTATIC} // compiles, but access violations
     {$endif CPUAARCH64}
