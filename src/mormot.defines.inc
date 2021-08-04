@@ -574,7 +574,6 @@
     {$ifdef CPUAARCH64}
       {$define LIBDEFLATESTATIC}
       {.$define LIBQUICKJSSTATIC} // compiles, but access violations
-      {$define NOSQLITE3STATIC} // our static linked version fails
     {$endif CPUAARCH64}
   {$endif OSLINUX}
   {$ifdef OSWINDOWS}
@@ -593,7 +592,9 @@
   {$endif CPUX86}
   // there is a linking bug with Delphi XE4 on Win64
   {$ifdef CPUX64}
-    {$if CompilerVersion = 25.0} // exactly XE4
+    {$if (CompilerVersion = 25.0) or
+         (CompilerVersion = 28.0) or 
+         (CompilerVersion = 29.0)} // exactly XE4, XE7 or XE8 are known to GPF
       // other Win32/Win64 Delphi platforms "should work" (tm) as expected
       {$define NOSQLITE3STATIC}
     {$ifend}
