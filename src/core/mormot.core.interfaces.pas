@@ -3874,13 +3874,15 @@ begin
                   [self, InterfaceDotMethodName, Args[a].ParamName^]);
             ArgsResultIsServiceCustomAnswer := true;
           end
-        else
-        {$ifdef CPUAARCH64} // we didn't fix this (alignment?) issue yet :(
-        if ArgRtti.Size and 7 <> 0 then
+        {$ifdef CPUAARCH64}
+        // FPC uses registers for managed records, but follows the ABI otherwise
+        // which requires the result to be in X8 which is not handled yet
+        // - see aarch64/cpupara.pas: tcpuparamanager.create_paraloc_info_intern
+        else if not (rcfIsManaged in ArgRtti.Flags) then
           raise EInterfaceFactory.CreateUtf8(
-            '%.Create: I% result type % is unsupported record of size %' +
-            'on Aarch64: use an OUT parameter instead',
-            [self, InterfaceDotMethodName, ArgTypeName^, ArgRtti.Size]);
+            '%.Create: I% record result type % is unsupported on aarch64:' +
+            'use an OUT parameter instead, or include a managed field',
+            [self, InterfaceDotMethodName, ArgTypeName^]);
         {$endif CPUAARCH64}
       end;
     if (ArgsInputValuesCount = 1) and
