@@ -588,7 +588,7 @@
   {$endif OSWINDOWS}
 {$else}
   {$ifdef CPUX86}
-    {$define LIBQUICKJSSTATIC}  // we have our quickjs.obj :)
+    {$define LIBQUICKJSSTATIC}  // our quickjs.obj seems fine on Win32 :)
   {$endif CPUX86}
   // there is a linking bug with Delphi XE4 on Win64
   {$ifdef CPUX64}
@@ -599,6 +599,9 @@
       {$define NOSQLITE3STATIC}
     {$ifend}
     {$define LIBQUICKJSSTATIC} // seems fine BUT on Delphi 10.4 Win64
+    {$if CompilerVersion = 34.0} // = Delphi 10.4
+      {$undef LIBQUICKJSSTATIC}
+    {$ifend}
   {$endif}
 {$endif FPC}
 
