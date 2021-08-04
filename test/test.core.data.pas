@@ -4480,6 +4480,23 @@ begin
   {$ifdef HASITERATORS}
   DoEnumerators;
   {$endif HASITERATORS}
+  Doc.Clear;
+  s := '[{a:1,b:2,c:0},{a:2,b:1,c:2},{b:3,c:1,a:1}]';
+  Doc.InitJson(s);
+  Check(Doc.Count = 3);
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact), s, 'd');
+  Doc.SortByValue;
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
+    '[{a:1,b:2,c:0},{a:2,b:1,c:2},{b:3,c:1,a:1}]', 'SortByValue');
+  Doc.SortArrayByField('c');
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
+    '[{a:1,b:2,c:0},{b:3,c:1,a:1},{a:2,b:1,c:2}]', 'SortArrayByField c');
+  Doc.SortArrayByField('b');
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
+    '[{a:2,b:1,c:2},{a:1,b:2,c:0},{b:3,c:1,a:1}]', 'SortArrayByField b');
+  Doc.SortArrayByFields(['a', 'b']);
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
+    '[{a:1,b:2,c:0},{b:3,c:1,a:1},{a:2,b:1,c:2}]', 'SortArrayByField ab');
   // some tests to avoid regression about bugs reported by users on forum
   lTable := TOrmTableJson.Create('');
   try
