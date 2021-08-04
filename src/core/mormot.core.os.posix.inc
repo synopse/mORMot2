@@ -2206,7 +2206,14 @@ begin
   result := gettimeofday(tp, tzp);
 end;
 
-function libc_strlen(s: PAnsiChar): SizeInt; cdecl external clib name 'strlen';
+function libc_strlen(s: PAnsiChar): SizeInt;
+  cdecl external clib name 'strlen';
+
+function libc_memmove(dst, src: pointer; n: SizeInt): pointer;
+  cdecl external clib name 'memmove';
+
+function libc_memset(dst: pointer; c: integer; n: SizeInt): pointer;
+  cdecl external clib name 'memset';
 
 function StrLenLibc(s: PAnsiChar): SizeInt;
 begin
@@ -2214,6 +2221,20 @@ begin
     result := PtrUInt(s)
   else
     result := libc_strlen(s);
+end;
+
+procedure MoveFastLibC(const source; var dest; count: SizeInt);
+begin
+  if (@dest <> @source) and
+     (count > 0) then
+    libc_memmove(@dest, @source, count);
+end;
+
+procedure FillCharLibC(var dest; count: PtrInt; value: byte);
+begin
+  if (@dest <> nil) and
+     (count > 0) then
+    libc_memset(@dest, value, count);
 end;
 
 {$endif OSLINUX}
@@ -2413,7 +2434,9 @@ begin
       [PAnsiChar(@uts.release), fpgeterrno]);
   // redirect some syscall FPC RTL functions to faster vDSO libc variant
   {$ifdef CPUARM3264}
-  StrLen := @StrLenLibc; // libc version is much faster than ours
+  StrLen := @StrLenLibc; // libc version is faster than plain pascal or RTL code
+  MoveFast := @MoveFastLibC;
+  FillCharFast := @FillCharLibC;
   {$endif CPUARM3264}
   {$ifdef CPUX64}
   {$ifdef OSLINUX}

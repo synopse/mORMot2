@@ -186,10 +186,8 @@ type
     procedure _TRawUtf8Interning;
     /// test T*ObjArray types and the ObjArray*() wrappers
     procedure _TObjArray;
-    {$ifdef CPUINTEL}
     /// validate our optimized MoveFast/FillCharFast functions
     procedure CustomRTL;
-    {$endif CPUINTEL}
     /// test StrIComp() and AnsiIComp() functions
     procedure FastStringCompare;
     /// test IdemPropName() and IdemPropNameU() functions
@@ -1940,7 +1938,6 @@ begin
   TestCities;
 end;
 
-{$ifdef CPUINTEL}
 function BufEquals(P, n, b: PtrInt): boolean;
 begin
   // slower than FillChar, faster than for loop, but fast enough for testing
@@ -1981,7 +1978,7 @@ begin
 end;
 
 procedure TTestCoreBase.CustomRTL;
-// note: FPC uses the RTL for FillCharFast/MoveFast
+// note: mormot.core.os.posix.inc redirects FillCharFast/MoveFast to the libc
 var
   buf: RawByteString;
 
@@ -2159,7 +2156,6 @@ begin
   Validate(false);
   {$endif ASMX64}
 end;
-{$endif CPUINTEL}
 
 procedure TTestCoreBase._RecordCopy;
 type
