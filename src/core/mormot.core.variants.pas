@@ -5585,7 +5585,7 @@ begin
 end;
 
 procedure TDocVariantData.SortArrayByFields(
-  const aItemPropNames: array of RawUtf8;
+  const aItemPropNames: array of RawUtf8; aValueCompare: TVariantCompare;
   const aValueCompareField: TVariantCompareField;
   aValueCompareReverse: boolean; aNameSortedCompare: TUtf8Compare);
 var
@@ -5600,8 +5600,10 @@ begin
     QS.Fields := @aItemPropNames[0];
     QS.CompareField := aValueCompareField;
   end
-  else
-    QS.Compare := VariantCompare;
+  else if Assigned(aValueCompare) then
+      QS.Compare := aValueCompare
+    else
+      QS.Compare := VariantCompare;
   QS.Doc := @self;
   QS.Init(aItemPropNames, aNameSortedCompare);
   QS.Reverse := aValueCompareReverse;
