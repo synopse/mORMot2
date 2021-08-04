@@ -2866,18 +2866,24 @@ var
 label
   rtl, utf;
 begin
-  repeat
-    at := cardinal(A^.VType);
-    if at <> varVariantByRef then
-      break;
-    A := A^.VPointer;
-  until false;
-  repeat
-    bt := cardinal(B^.VType);
-    if bt <> varVariantByRef then
-      break;
-    B := B^.VPointer;
-  until false;
+  if A <> nil then
+    repeat
+      at := cardinal(A^.VType);
+      if at <> varVariantByRef then
+        break;
+      A := A^.VPointer;
+    until false
+  else
+    at := varNull;
+  if B <> nil then
+    repeat
+      bt := cardinal(B^.VType);
+      if bt <> varVariantByRef then
+        break;
+      B := B^.VPointer;
+    until false
+  else
+    bt := varNull;
   if at = bt then
     // optimized comparison if A and B share the same type (most common case)
     if at <= high(_VARDATACMP[false]) then
