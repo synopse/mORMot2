@@ -6348,8 +6348,8 @@ begin
             P := J
           else if P = J then
             P := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then

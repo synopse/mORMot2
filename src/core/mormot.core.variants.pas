@@ -141,8 +141,11 @@ function ValuesToVariantDynArray(const items: array of const): TVariantDynArray;
 
 type
   /// function prototype used internally for variant comparison
-  // - used in mormot.core.variants.pas unit e.g. by TDocVariantData.SortByValue
+  // - as used e.g. by TDocVariantData.SortByValue
   TVariantCompare = function(const V1, V2: variant): PtrInt;
+  /// function prototype used internally for extended variant comparison
+  // - as used by TDocVariantData.SortByRow
+  TVariantComparer = function(const V1, V2: variant): PtrInt of object;
 
 /// internal function as called by inlined VariantCompare/VariantCompareI and
 // the SortDynArrayVariantComp() function overriden by this unit
@@ -1492,13 +1495,19 @@ type
     // - once sorted, you can use GetVarData(..,Compare) or GetAs*(..,Compare)
     // methods for much faster O(log(n)) binary search
     procedure SortByName(SortCompare: TUtf8Compare = nil);
-    /// sort the document object values by value
+    /// sort the document object values by value using a comparison function
     // - work for both dvObject and dvArray documents
     // - will sort by UTF-8 text (VariantCompare) if no custom aCompare is supplied
     procedure SortByValue(SortCompare: TVariantCompare = nil);
+    /// sort the document object values by value using a comparison method
+    // - work for both dvObject and dvArray documents
+    // - you should supply a TVariantComparer callback method
+    procedure SortByRow(const SortComparer: TVariantComparer);
     /// sort the document array values by a field of some stored objet values
     // - do nothing if the document is not a dvArray, or if the items are no dvObject
+    // - aValueCompare will be called with the aItemPropName values, not row
     // - will sort by UTF-8 text (VariantCompare) if no custom aValueCompare is supplied
+    // - this method is faster than SortByValue/SortByRow
     procedure SortArrayByField(const aItemPropName: RawUtf8;
       aValueCompare: TVariantCompare = nil;
       aValueCompareReverse: boolean = false;
@@ -5233,6 +5242,7 @@ type
     values: PVariantArray;
     nameCompare: TUtf8Compare;
     valueCompare: TVariantCompare;
+    valueComparer: TVariantComparer;
     procedure SortByName(L, R: PtrInt);
     procedure SortByValue(L, R: PtrInt);
   end;
@@ -5250,9 +5260,9 @@ begin
       repeat
         pivot := names[P];
         while nameCompare(names[I], pivot) < 0 do
-          Inc(I);
+          inc(I);
         while nameCompare(names[J], pivot) > 0 do
-          Dec(J);
+          dec(J);
         if I <= J then
         begin
           if I <> J then
@@ -5296,10 +5306,20 @@ begin
       P := (L + R) shr 1;
       repeat
         pivot := @values[P];
-        while valueCompare(values[I], pivot^) < 0 do
-          Inc(I);
-        while valueCompare(values[J], pivot^) > 0 do
-          Dec(J);
+        if Assigned(valueCompare) then
+        begin // called from SortByValue
+          while valueCompare(values[I], pivot^) < 0 do
+            inc(I);
+          while valueCompare(values[J], pivot^) > 0 do
+            dec(J);
+        end
+        else
+        begin // called from SortByRow
+          while valueComparer(values[I], pivot^) < 0 do
+            inc(I);
+          while valueComparer(values[J], pivot^) > 0 do
+            dec(J);
+        end;
         if I <= J then
         begin
           if I <> J then
@@ -5358,6 +5378,21 @@ begin
     qs.valueCompare := SortCompare
   else
     qs.valueCompare := @VariantCompare;
+  qs.valueComparer := nil;
+  qs.names := pointer(VName);
+  qs.values := pointer(VValue);
+  qs.SortByValue(0, VCount - 1);
+end;
+
+procedure TDocVariantData.SortByRow(const SortComparer: TVariantComparer);
+var
+  qs: TQuickSortDocVariant;
+begin
+  if (VCount <= 0) or
+     not Assigned(SortComparer) then
+    exit;
+  qs.valueCompare := nil;
+  qs.valueComparer := SortComparer;
   qs.names := pointer(VName);
   qs.values := pointer(VValue);
   qs.SortByValue(0, VCount - 1);
@@ -5391,16 +5426,16 @@ begin
         if Reverse then
         begin
           while Compare(Lookup[I]^, pivot^) < 0 do
-            Inc(I);
+            inc(I);
           while Compare(Lookup[J]^, pivot^) > 0 do
-            Dec(J);
+            dec(J);
         end
         else
         begin
           while Compare(Lookup[I]^, pivot^) > 0 do
-            Inc(I);
+            inc(I);
           while Compare(Lookup[J]^, pivot^) < 0 do
-            Dec(J);
+            dec(J);
         end;
         if I <= J then
         begin
