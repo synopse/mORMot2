@@ -252,6 +252,11 @@ var
   /// some textual information about the current computer hardware, from BIOS
   BiosInfoText: RawUtf8;
 
+  {$ifdef OSLINUXANDROID}
+  /// contains the "Features:" value of Linux /proc/cpuinfo
+  CpuInfoFeatures: RawUtf8;
+  {$endif OSLINUXANDROID}
+
   /// the running Operating System
   OSVersion32: TOperatingSystemVersion;
   /// the running Operating System, encoded as a 32-bit integer
@@ -564,6 +569,18 @@ type
 // - returned folder name contains the trailing path delimiter (\ or /)
 function GetSystemPath(kind: TSystemPath): TFileName;
 
+
+/// recognize a given ARM/AARCH64 CPU from its 12-bit hardware ID
+function ArmCpuType(id: word): TArmCpuType;
+
+/// recognize a given ARM/AARCH64 CPU type name from its 12-bit hardware ID
+function ArmCpuTypeName(act: TArmCpuType; id: word): RawUtf8;
+
+/// recognize a given ARM/AARCH64 CPU implementer from its 8-bit hardware ID
+function ArmCpuImplementer(id: byte): TArmCpuImplementer;
+
+/// recognize a given ARM/AARCH64 CPU implementer name from its 8-bit hardware ID
+function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word): RawUtf8;
 
 
 { ****************** Operating System Specific Types (e.g. TWinRegistry) }
@@ -3954,6 +3971,10 @@ begin
     Hash.c0 := Version.Version32;
     {$ifdef CPUINTEL}
     Hash.c0 := crc32c(Hash.c0, @CpuFeatures, SizeOf(CpuFeatures));
+    {$else}
+    {$ifdef OSLINUXANDROID}
+    Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoFeatures), length(CpuInfoFeatures));
+    {$endif OSLINUXANDROID}
     {$endif CPUINTEL}
     Hash.c0 := crc32c(Hash.c0, pointer(Host), length(Host));
     Hash.c1 := crc32c(Hash.c0, pointer(User), length(User));
@@ -3980,6 +4001,68 @@ begin // just return the address as hexadecimal
     inc(b);
   end;
 end; // mormot.core.log.pas will properly decode debug info - and handle .mab
+
+
+const
+  // https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
+  ARMCPU_ID: array[TArmCpuType] of word = (
+    0,
+    $0810, $0920, $0922, $0926, $0940, $0946, $0966, $0a20, $0a22, $0a26, $0b02,
+    $0b36, $0b56, $0b76, $0c05, $0c07, $0c08, $0c09, $0c0d, $0c0f, $0c0e, $0c14,
+    $0c15, $0c17, $0c18, $0c20, $0c21, $0c23, $0c24, $0c27, $0c60, $0d01, $0d03,
+    $0d04, $0d05, $0d06, $0d07, $0d08, $0d09, $0d0a, $0d0b, $0d0c, $0d0d, $0d0e,
+    $0d13, $0d20, $0d21, $0d41, $0d42, $0d4a, $0d4b);
+  ARMCPU_IMPL: array[TArmCpuImplementer] of byte = (
+    0,
+    $41, $42, $43, $44, $46, $48, $49, $4d, $4e, $50, $51, $53, $56,
+    $61, $66, $69, $c0);
+  ARMCPU_ID_TXT: array[TArmCpuType] of PUtf8Char = (
+     '',
+     'ARM810', 'ARM920', 'ARM922', 'ARM926', 'ARM940', 'ARM946', 'ARM966',
+     'ARM1020', 'ARM1022', 'ARM1026', 'ARM11 MPCore', 'ARM1136', 'ARM1156',
+     'ARM1176', 'Cortex-A5', 'Cortex-A7', 'Cortex-A8', 'Cortex-A9',
+     'Cortex-A17',{Originally A12} 'Cortex-A15', 'Cortex-A17', 'Cortex-R4',
+     'Cortex-R5', 'Cortex-R7', 'Cortex-R8', 'Cortex-M0', 'Cortex-M1',
+     'Cortex-M3', 'Cortex-M4', 'Cortex-M7', 'Cortex-M0+', 'Cortex-A32',
+     'Cortex-A53', 'Cortex-A35', 'Cortex-A55', 'Cortex-A65', 'Cortex-A57',
+     'Cortex-A72', 'Cortex-A73', 'Cortex-A75', 'Cortex-A76', 'Neoverse-N1',
+     'Cortex-A77', 'Cortex-A76AE', 'Cortex-R52', 'Cortex-M23', 'Cortex-M33',
+     'Cortex-A78', 'Cortex-A78AE', 'Neoverse-E1', 'Cortex-A78C');
+  ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of PUtf8Char = (
+      '',
+      'ARM', 'Broadcom', 'Cavium', 'DEC', 'FUJITSU', 'HiSilicon', 'Infineon',
+      'Motorola/Freescale', 'NVIDIA', 'APM', 'Qualcomm', 'Samsung', 'Marvell',
+      'Apple', 'Faraday', 'Intel', 'Ampere');
+
+function ArmCpuType(id: word): TArmCpuType;
+begin
+  for result := low(TArmCpuType) to high(TArmCpuType) do
+    if ARMCPU_ID[result] = id then
+      exit;
+  result := actUnknown;
+end;
+
+function ArmCpuTypeName(act: TArmCpuType; id: word): RawUtf8;
+begin
+  result := ARMCPU_ID_TXT[act];
+  if act = actUnknown then
+    result := 'ARM 0x' + RawUtf8(IntToHex(id, 3));
+end;
+
+function ArmCpuImplementer(id: byte): TArmCpuImplementer;
+begin
+  for result := low(TArmCpuImplementer) to high(TArmCpuImplementer) do
+    if ARMCPU_IMPL[result] = id then
+      exit;
+  result := aciUnknown;
+end;
+
+function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word): RawUtf8;
+begin
+  result := ARMCPU_IMPL_TXT[aci];
+  if aci = aciUnknown then
+    result := 'HW 0x' + RawUtf8(IntToHex(id, 2));
+end;
 
 
 { **************** TSynLocker Threading Features }

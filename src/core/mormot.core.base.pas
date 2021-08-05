@@ -2272,7 +2272,7 @@ procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
 { ************ Faster Alternative to RTL Standard Functions }
 
 type
-  /// the potential features, retrieved from an Intel CPU
+  /// the potential features, retrieved from an Intel/AMD CPU
   // - cf https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
   // - is defined on all platforms, so that e.g. an ARM desktop may browse
   // Intel-generated logs using TSynLogFile from mormot.core.log.pas
@@ -2305,10 +2305,40 @@ type
   /// all CPU features flags, as retrieved from an Intel/AMD CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
 
+
+  /// the recognized ARM/AARCH64 CPU types
+  // - https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
+  // - is defined on all platforms for cross-system use
+  TArmCpuType = (
+    actUnknown,
+    actARM810, actARM920, actARM922, actARM926, actARM940, actARM946, actARM966,
+    actARM1020, actARM1022, actARM1026, actARM11MPCore, actARM1136, actARM1156,
+    actARM1176, actCortexA5, actCortexA7, actCortexA8, actCortexA9, actCortexA12,
+    actCortexA15, actCortexA17, actCortexR4, actCortexR5, actCortexR7,
+    actCortexR8, actCortexM0, actCortexM1, actCortexM3, actCortexM4, actCortexM7,
+    actCortexM0P, actCortexA32, actCortexA53, actCortexA35, actCortexA55,
+    actCortexA65, actCortexA57, actCortexA72, actCortexA73, actCortexA75,
+    actCortexA76, actNeoverseN1, actCortexA77, actCortexA76AE, actCortexR52,
+    actCortexM23, actCortexM33, actCortexA78, actCortexA78AE, actNeoverseE1,
+    actCortexA78C);
+  /// a set of recognized ARM/AARCH64 CPU types
+  TArmCpuTypes = set of TArmCpuType;
+
+  /// the recognized ARM/AARCH64 CPU hardware implementers
+  // - https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
+  TArmCpuImplementer = (
+    aciUnknown,
+    aciARM, aciBroadcom, aciCavium, aciDEC, aciFUJITSU, aciHiSilicon,
+    aciInfineon, aciMotorola, aciNVIDIA, aciAPM, aciQualcomm, aciSamsung,
+    aciMarvell, aciApple, aciFaraday, aciIntel, aciAmpere);
+  /// a set of recognized ARM/AARCH64 CPU hardware implementers
+  TArmCpuImplementers = set of TArmCpuImplementer;
+
 {$ifdef CPUINTEL}
 
 var
-  /// the available CPU features, as recognized at program startup
+  /// the available Intel/AMD CPU features, as recognized at program startup
+  // - on LINUX, consider the textual CpuInfoFeatures from mormot.core.os.pas
   CpuFeatures: TIntelCpuFeatures;
 
 /// compute 32-bit random number using Intel hardware
@@ -2934,32 +2964,32 @@ function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute CRC64C checksum on the supplied buffer, cascading two crc32c
-// - will use SSE 4.2 hardware accelerated instruction, if available
+// - will use SSE 4.2 or ARMv8 hardware accelerated instruction, if available
 // - will combine two crc32c() calls into a single Int64 result
 // - by design, such combined hashes cannot be cascaded
 function crc64c(buf: PAnsiChar; len: cardinal): Int64;
 
 /// compute two CRC32C checksum on the supplied buffer for 64-bit hashing
-// - will use SSE 4.2 hardware accelerated instruction, if available
+// - will use SSE 4.2 or ARMv8 hardware accelerated instruction, if available
 // - is the default implementation of DefaultHasher64
 function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
 
 /// compute CRC63C checksum on the supplied buffer, cascading two crc32c
 // - similar to crc64c, but with 63-bit, so no negative value: may be used
 // safely e.g. as mORMot's TID source
-// - will use SSE 4.2 hardware accelerated instruction, if available
+// - will use SSE 4.2 or ARMv8 hardware accelerated instruction, if available
 // - will combine two crc32c() calls into an unsigned 63-bit Int64 result
 // - by design, such combined hashes cannot be cascaded
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
 
 /// compute a 128-bit checksum on the supplied buffer, cascading two crc32c
-// - will use SSE 4.2 hardware accelerated instruction, if available
+// - will use SSE 4.2 or ARMv8 hardware accelerated instruction, if available
 // - will combine two crc32c() calls into a single TAesBlock result
 // - by design, such combined hashes cannot be cascaded
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 
 /// compute a 256-bit checksum on the supplied buffer using crc32c
-// - will use SSE 4.2 hardware accelerated instruction, if available
+// - will use SSE 4.2 or ARMv8 hardware accelerated instruction, if available
 // - will combine two crc32c() calls into a single THash256 result
 // - by design, such combined hashes cannot be cascaded
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
@@ -2969,14 +2999,13 @@ function crc32cBy4fast(crc, value: cardinal): cardinal;
 
 /// compute a proprietary 128-bit CRC of 128-bit binary buffers
 // - to be used for regression tests only: crcblocks will use the fastest
-// implementation available on the current CPU (e.g. with SSE 4.2 opcodes)
+// implementation available on the current CPU (e.g. with SSE 4.2 or ARMv8)
 procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
 
 /// computation of our 128-bit CRC of a 128-bit binary buffer without SSE4.2
 // - to be used for regression tests only: crcblock will use the fastest
 // implementation available on the current CPU
 procedure crcblockfast(crc128, data128: PBlock128);
-  {$ifndef ASMX86} inline; {$endif}
 
 /// compute a 128-bit CRC of any binary buffers
 // - combine crcblocks() with 4 parallel crc32c() for 1..15 trailing bytes
@@ -2984,8 +3013,8 @@ procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
 
 var
   /// compute CRC32C checksum on the supplied buffer
-  // - result is not compatible with zlib's crc32() - Intel/SCSI CRC32C is not
-  // the same polynom - but will use the fastest mean available, e.g. SSE 4.2, to
+  // - result is not compatible with zlib's crc32() - Intel/SCSI CRC32C has not
+  // same polynom - but will use the fastest mean available, e.g. SSE 4.2 or ARMv8,
   // achieve up to 16GB/s with the optimized implementation from mormot.crypt.core
   // - you should use this function instead of crc32cfast() or crc32csse42()
   crc32c: THasher = crc32cfast;
@@ -2995,13 +3024,13 @@ var
   // - doesn't make "crc := not crc" before and after the computation: caller has
   // to start with "crc := cardinal(not 0)" and make "crc := not crc" at the end,
   // to compute the very same hash value than regular crc32c()
-  // - this variable will use the fastest mean available, e.g. SSE 4.2
+  // - this variable will use the fastest mean available, e.g. SSE 4.2 or ARMv8
   crc32cBy4: function(crc, value: cardinal): cardinal = crc32cBy4fast;
 
   /// compute a proprietary 128-bit CRC of a 128-bit binary buffer
   // - apply four crc32c() calls on the 128-bit input chunk, into a 128-bit crc
   // - its output won't match crc128c() value, which works on 8-bit input
-  // - will use SSE 4.2 hardware accelerated instruction, if available
+  // - will use SSE 4.2 or ARMv8 hardware accelerated instruction, if available
   // - is used e.g. by mormot.crypt.core's TAesCfc/TAesOfc/TAesCtc to 
   // check for data integrity
   crcblock: procedure(crc128, data128: PBlock128)  = crcblockfast;
@@ -3009,7 +3038,7 @@ var
   /// compute a proprietary 128-bit CRC of 128-bit binary buffers
   // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
   // - its output won't match crc128c() value, which works on 8-bit input
-  // - will use SSE 4.2 hardware accelerated instruction, if available
+  // - will use SSE 4.2 or ARMv8 hardware accelerated instruction, if available
   // - is used e.g. by mormot.crypt.ecc's TEcdheProtocol.ComputeMAC for
   // macCrc128c or TAesAbstractAead.MacCheckError
   crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
@@ -3066,13 +3095,13 @@ function xxHash32Mixup(crc: cardinal): cardinal;
 
 var
   /// the 32-bit default hasher used by TDynArrayHashed
-  // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
+  // - set to crc32csse42() if SSE4.2 or ARMv8 are available on this CPU,
   // or fallback to xxHash32() which is faster than crc32cfast() e.g. on ARM
   // - mormot.crypt.core will assign safer and faster AesNiHash32() if available
   DefaultHasher: THasher = xxHash32;
 
   /// the 32-bit hash function used by TRawUtf8Interning
-  // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
+  // - set to crc32csse42() if SSE4.2 or ARMv8 are available on this CPU,
   // or fallback to xxHash32() which performs better than crc32cfast()
   // - mormot.crypt.core will assign safer and faster AesNiHash32() if available
   InterningHasher: THasher = xxHash32;
@@ -8958,7 +8987,7 @@ type
   {$include mormot.core.base.asmx86.inc}
 {$endif CPUX86}
 
-procedure TestIntelCpuFeatures;
+procedure TestCpuFeatures;
 var
   regs: TIntelRegisters;
   c: cardinal;
@@ -9051,6 +9080,10 @@ end;
 {$else not CPUINTEL}
 
 // fallback to pure pascal version for ARM
+
+procedure TestCpuFeatures;
+begin
+end;
 
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 var
@@ -10309,6 +10342,25 @@ begin
   result := result xor (result shr 16);
 end;
 
+procedure crcblockone(crc128, data128: PBlock128; tab: PCrc32tab);
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  c: cardinal;
+begin
+  c := crc128^[0] xor data128^[0];
+  crc128^[0] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
+                tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
+  c := crc128^[1] xor data128^[1];
+  crc128^[1] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
+                tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
+  c := crc128^[2] xor data128^[2];
+  crc128^[2] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
+                tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
+  c := crc128^[3] xor data128^[3];
+  crc128^[3] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
+                tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
+end;
+
 {$ifndef ASMX86} // those functions have their tuned x86 asm version
 
 {$ifdef CPUX64}
@@ -10491,23 +10543,8 @@ begin
 end;
 
 procedure crcblockfast(crc128, data128: PBlock128);
-var
-  c: cardinal;
-  tab: PCrc32tab; // efficient registers use on 64-bit, ARM or PIC
 begin
-  tab := @crc32ctab;
-  c := crc128^[0] xor data128^[0];
-  crc128^[0] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
-                tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
-  c := crc128^[1] xor data128^[1];
-  crc128^[1] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
-                tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
-  c := crc128^[2] xor data128^[2];
-  crc128^[2] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
-                tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
-  c := crc128^[3] xor data128^[3];
-  crc128^[3] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
-                tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
+  crcblockone(crc128, data128, @crc32ctab);
 end;
 
 function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
@@ -10547,13 +10584,17 @@ end;
 {$endif ASMX86}
 
 procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
+var
+  tab: PCrc32tab; // good enough or PIC or ARM
 begin
-  if count > 0 then
-    repeat
-      crcblockfast(crc128, data128); // optimized x86 asm or good inlined pascal
-      inc(data128);
-      dec(count);
-    until count = 0;
+  if count <= 0 then
+    exit;
+  tab := @crc32ctab;
+  repeat
+    crcblockone(crc128, data128, tab); // properly inlined
+    inc(data128);
+    dec(count);
+  until count = 0;
 end;
 
 function SameValue(const A, B: Double; DoublePrec: double): boolean;
@@ -11790,9 +11831,7 @@ begin
   VariantClearSeveral := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
   // initialize CPU-specific asm
-  {$ifdef CPUINTEL}
-  TestIntelCpuFeatures;
-  {$endif CPUINTEL}
+  TestCpuFeatures;
 end;
 
 

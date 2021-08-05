@@ -1148,12 +1148,5 @@ begin
 end;
 
 
-initialization
-  {$ifdef LIBDEFLATESTATIC}
-  {$ifdef CPUAARCH64}
-  DefaultHasher := @libdeflate_crc32; // faster than xxHash32
-  {$endif CPUAARCH64}
-  {$endif LIBDEFLATESTATIC}
-
 end.
 

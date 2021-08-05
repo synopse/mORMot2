@@ -69,9 +69,9 @@ type
 function TIntegrationTests.Run: boolean;
 begin
   CustomVersions := format(#13#10#13#10'%s (cp%d)'#13#10 +
-    '    %s'#13#10'Using mORMot %s'#13#10'    %s', [OSVersionText,
-    Unicode_CodePage, CpuInfoText, SYNOPSE_FRAMEWORK_FULLVERSION,
-    sqlite3.Version]);
+    '    %s'#13#10'    on %s'#13#10'Using mORMot %s'#13#10'    %s',
+    [OSVersionText, Unicode_CodePage, CpuInfoText, BiosInfoText,
+     SYNOPSE_FRAMEWORK_FULLVERSION, sqlite3.Version]);
   result := inherited Run;
 end;
 

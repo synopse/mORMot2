@@ -2241,13 +2241,89 @@ begin
     libc_memset(@dest, value, count);
 end;
 
+function Hex2Dec(c: AnsiChar): integer; inline;
+begin
+  result := ord(c);
+  case c of
+    '0'..'9':
+      dec(result, ord('0'));
+    'A'..'Z':
+      dec(result, ord('A') - 10);
+    'a'..'z':
+      dec(result, ord('a') - 10);
+  else
+    result := -1;
+  end;
+end;
+
+procedure ParseHex32(p: PAnsiChar; var result: TIntegerDynArray);
+var
+  v, v0, v1: integer;
+begin
+  p := StrScan(p, 'x');
+  if p = nil then
+    exit;
+  v := 0;
+  repeat
+    inc(p); // points to trailing 'x' at start
+    v0 := Hex2Dec(p^);
+    if v0 < 0 then
+      break; // not in '0'..'9','a'..'f'
+    inc(p);
+    v1 := Hex2Dec(p^);
+    if v1 < 0 then
+    begin
+      v := (v shl 4) or v0; // only one char left
+      break;
+    end;
+    v := (v shl 8) or (v0 shl 4) or v1;
+  until false;
+  AddInteger(result, v, {nodup=}true);
+end;
+
 {$endif CPUARM3264}
+
+function ParseLine(P: PUtf8Char): PUtf8Char;
+begin
+  if P <> nil then
+    P := strscan(P, ':');
+  result := P;
+  if P = nil then
+    exit;
+  repeat
+    inc(P);
+  until (P^ = #0) or
+        (P^ > ' ');
+  result := P;
+  while not (ord(P^) in [0, 10, 13]) do
+  begin
+    if P^ < ' ' then
+      P^ := ' '; // change any tab into space
+    inc(P);
+  end;
+  P^ := #0; // make asciiz
+end;
+
+{$ifdef CPUAARCH64}
+
+{$L ..\..\static\aarch64-linux\armv8.o} // ARMv8 crc32c Linux code for POSIX
+
+function crc32carm64(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal; external;
+function crc32cby4arm64(crc, value: cardinal): cardinal; external;
+procedure crc32blockarm64(crc128, data128: PBlock128); external;
+procedure crc32blocksarm64(crc128, data128: PBlock128; count: integer); external;
+
+{$endif CPUAARCH64}
 
 procedure InitializeUnit;
 var
   P: PAnsiChar;
   modname, beg: PUtf8Char;
   uts: UtsName;
+  {$ifdef CPUARM3264}
+  act, aci: TIntegerDynArray;
+  i: PtrInt;
+  {$endif CPUARM3264}
   {$ifndef OSDARWIN}
   tp: timespec;
   {$endif OSDARWIN}
@@ -2360,20 +2436,35 @@ begin
     cpuinfo := GotoNextLine(cpuinfo);
     if IdemPChar(beg, 'PROCESSOR') then
       if beg^ = 'P' then
-        modname := beg
-      else // Processor : ARMv7
+        modname := ParseLine(beg) // Processor : ARMv7
+      else
+        // loop over all "processor : 0 .. 1 .. 2" lines to count the CPUs
         inc(SystemInfo.dwNumberOfProcessors)
-    else // processor : 0
-    if IdemPChar(beg, 'MODEL NAME') then
-      modname := beg;
+    else if IdemPChar(beg, 'MODEL NAME') then
+      modname := ParseLine(beg)
+    else if IdemPChar(beg, 'FEATURES') or
+            IdemPChar(beg, 'FLAGS') then
+      CpuInfoFeatures := ParseLine(beg)
+    {$ifdef CPUARM3264}
+    else if IdemPChar(beg, 'CPU IMPLEMENTER') then
+      ParseHex32(beg, aci)
+    else if IdemPChar(beg, 'CPU PART') then
+      ParseHex32(beg, act);
+    {$endif CPUARM3264}
   end;
-  if modname <> nil then
-    modname := strscan(modname, ':');
-  if modname <> nil then
-    repeat
-      inc(modname);
-    until (modname^ = #0) or
-          (modname^ > ' ');
+  {$ifdef CPUARM3264}
+  if act <> nil then // CPU part/implementer are more detailed than model name
+  begin
+    proccpuinfo := '';
+    for i := 0 to high(aci) do // there should be a single implementer
+      proccpuinfo := proccpuinfo +
+        ArmCpuImplementerName(ArmCpuImplementer(aci[i]), aci[i]) + ' ';
+    proccpuinfo := proccpuinfo + ArmCpuTypeName(ArmCpuType(act[0]), act[0]);
+    for i := 1 to high(act) do // but there may be several parts/models
+      proccpuinfo := proccpuinfo + ' / ' + ArmCpuTypeName(ArmCpuType(act[i]), act[i]);
+    modname := pointer(proccpuinfo);
+  end;
+  {$endif CPUARM3264}
   SystemInfo.release := release;
   {$endif OSBSDDARWIN}
   SystemInfo.uts.release := uts.Release;
@@ -2394,18 +2485,8 @@ begin
   {$endif OSANDROID}
   if (SystemInfo.dwNumberOfProcessors > 0) and
      (modname <> nil) then
-  begin
-    beg := modname;
-    while not (ord(modname^) in [0, 10, 13]) do
-    begin
-      if modname^ < ' ' then
-        modname^ := ' ';
-      inc(modname);
-    end;
-    modname^ := #0;
     CpuInfoText := Format('%d x %s (' + CPU_ARCH_TEXT + ')',
-      [SystemInfo.dwNumberOfProcessors, beg]);
-  end;
+      [SystemInfo.dwNumberOfProcessors, modname]);
   if CpuInfoText = '' then
     CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
@@ -2440,6 +2521,26 @@ begin
   StrLen := @StrLenLibc; // libc version is faster than plain pascal or RTL code
   MoveFast := @MoveFastLibC;
   FillCharFast := @FillCharLibC;
+  {$ifdef CPUAARCH64}
+  {$ifdef OSLINUX}
+  if PosEx('crc32', CpuInfoFeatures) > 0 then
+  {$endif OSLINUX}
+    try
+      if (crc32cby4arm64(0, 1) = 3712330424) and
+         (crc32carm64(0, @SystemInfo, SizeOf(SystemInfo)) =
+          crc32cfast(0, @SystemInfo, SizeOf(SystemInfo))) then
+      begin
+        crc32c := @crc32carm64;
+        DefaultHasher := @crc32carm64;
+        InterningHasher := @crc32carm64;
+        crc32cby4 := @crc32cby4arm64;
+        crcblock := @crc32blockarm64;
+        crcblocks := @crc32blocksarm64;
+      end;
+    except
+      // crc32 was actually not supported
+    end;
+  {$endif CPUAARCH64}
   {$endif CPUARM3264}
   {$ifdef CPUX64}
   {$ifdef OSLINUX}

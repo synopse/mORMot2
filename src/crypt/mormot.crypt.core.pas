@@ -80,12 +80,18 @@ type
     {$define USEAESNIHASH} // aesni+sse4.1 32-64-128 aeshash
   {$endif HASAESNI}
   {$ifdef OSWINDOWS}
-  {$define SHA512_X86} // external sha512-x86.o for win32/lin32
+    {$define SHA512_X86} // external sha512-x86.o for win32/lin32
   {$endif OSWINDOWS}
   {$ifdef OSLINUX}
-  {$define SHA512_X86} // external sha512-x86.o for win32/lin32
+    {$define SHA512_X86} // external sha512-x86.o for win32/lin32
   {$endif OSLINUX}
 {$endif ASMX86}
+
+{$ifdef CPUAARCH64}
+  {$ifdef OSLINUXANDROID}
+    {.$define USEARMCRYPTO}
+  {$endif OSLINUXANDROID}
+{$endif CPUAARCH64}
 
 
 { ****************** Low-Level Memory Buffers Helper Functions }
@@ -3188,6 +3194,34 @@ end;
 
 { TAes }
 
+{$ifdef USEARMCRYPTO}
+
+var
+  AesArmAvailable, ShaArmAvailable: boolean;
+
+{$ifdef CPUAARCH64}
+
+{$L ..\..\static\aarch64-linux\armv8.o} // we can reuse Linux code on any POSIX
+{$L ..\..\static\aarch64-linux\sha256armv8.o}
+
+procedure aesencryptarm64(rk: pointer; rnd: cardinal; bi, bo: pointer); external;
+procedure aesdecryptarm64(rk: pointer; rnd: cardinal; bi, bo: pointer); external;
+procedure sha256_block_data_order(ctx, bi: pointer; count: PtrInt); external;
+
+procedure aesencryptarm(const ctxt: TAesContext; bi, bo: PWA4);
+begin
+  aesencryptarm64(@ctxt.RK, ctxt.Rounds, bi, bo);
+end;
+
+procedure aesdecryptarm(const ctxt: TAesContext; bi, bo: PWA4);
+begin
+  aesdecryptarm64(@ctxt.RK, ctxt.Rounds, bi, bo);
+end;
+
+{$endif CPUAARCH64}
+
+{$endif USEARMCRYPTO}
+
 procedure TAes.Encrypt(var B: TAesBlock);
 begin
   TAesContext(Context).DoBlock(Context, B, B);
@@ -3218,7 +3252,12 @@ begin
   {$ifdef ASMINTEL}
   ctx.DoBlock := @AesEncryptAsm;
   {$else}
-  ctx.DoBlock := @aesencryptpas;
+  {$ifdef USEARMCRYPTO}
+  if AesArmAvailable then
+    ctx.DoBlock := @aesencryptarm
+  else
+  {$endif USEARMCRYPTO}
+    ctx.DoBlock := @aesencryptpas;
   {$endif ASMINTEL}
   {$ifdef USEAESNI}
   if cfAESNI in CpuFeatures then
@@ -3277,7 +3316,12 @@ begin
   {$ifdef ASMX86}
   ctx.DoBlock := @aesdecrypt386;
   {$else}
-  ctx.DoBlock := @aesdecryptpas;
+  {$ifdef USEARMCRYPTO}
+  if AesArmAvailable then
+    ctx.DoBlock := @aesdecryptarm
+  else
+  {$endif USEARMCRYPTO}
+    ctx.DoBlock := @aesdecryptpas;
   {$endif ASMX86}
   {$ifdef USEAESNI}
   if aesNi in ctx.Flags then
@@ -6579,10 +6623,14 @@ procedure RawSha256Compress(var Hash; Data: pointer);
 begin
   {$ifdef ASMX64}
   if K256Aligned <> nil then
-    // use optimized Intel's Sha256Sse4.asm
-    Sha256Sse4(Data^, Hash, 1)
+    Sha256Sse4(Data^, Hash, 1) // from optimized Intel's Sha256Sse4.asm
   else
   {$endif ASMX64}
+  {$ifdef USEARMCRYPTO}
+  if ShaArmAvailable then
+    sha256_block_data_order(@Hash, Data, 1) // from sha256armv8.o
+  else
+  {$endif USEARMCRYPTO}
     Sha256CompressPas(TSHAHash(Hash), Data);
 end;
 
@@ -9648,6 +9696,12 @@ end;
 
 
 procedure InitializeUnit;
+{$ifdef USEARMCRYPTO}
+var
+  rk: TKeyArray;
+  bi, bo: TAesBlock;
+  shablock: array[0..63] of byte;
+{$endif USEARMCRYPTO}
 begin
   ComputeAesStaticTables;
   {$ifdef ASMX64}
@@ -9695,6 +9749,22 @@ begin
     Random32Seed; // re-seed main FillRandom() with AesNiHash128 as hasher
   end;
   {$endif USEAESNIHASH}
+  {$ifdef USEARMCRYPTO}
+  if PosEx(' aes', CpuInfoFeatures) >= 0 then
+    try
+      aesencryptarm64(@rk, AesMaxRounds, @bi, @bo); // apply to stack random
+      AesArmAvailable := true;
+    except
+      // ARMv8 AES HW opcodes seem not available
+    end;
+  if PosEx(' sha2', CpuInfoFeatures) >= 0 then
+    try
+      sha256_block_data_order(@rk, @shablock, 1);
+      ShaArmAvailable := true;
+    except
+      // ARMv8 SHA HW opcodes seem not available
+    end;
+  {$endif USEARMCRYPTO}
   assert(SizeOf(TMd5Buf) = SizeOf(TMd5Digest));
   assert(SizeOf(TAes) = AES_CONTEXT_SIZE);
   assert(SizeOf(TAesContext) = AES_CONTEXT_SIZE);
