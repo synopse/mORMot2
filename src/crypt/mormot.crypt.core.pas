@@ -2637,7 +2637,7 @@ type
   // - is defined privately in the implementation section
   // - do NOT change this structure: it is fixed in the asm code
   TAesContext = packed record
-    RK: TKeyArray;   // Key (encr. or decr.)
+    RK: TKeyArray;   // Key (encr. or decr.) - should remain the first field
     iv: THash128Rec; // IV or CTR used e.g. by TAesGcmEngine or TAesPrng
     buf: TAesBlock;  // Work buffer used e.g. by TAesGcmEngine or AesNiTrailer()
     DoBlock: TAesContextDoBlock; // main AES function
@@ -3164,8 +3164,9 @@ begin
   end;
 end;
 
+// compute AES decryption key from encryption key using "Inverse Cipher" scheme
+// note: both AES-NI and ARMv8 use another scheme "Equivalent Inverse Cipher"
 procedure MakeDecrKeyPas(rounds: integer; k: PAWk);
-// compute AES decryption key from encryption key
 var
   x: cardinal;
   t: PCardinalArray; // faster on a PIC system
@@ -3206,12 +3207,13 @@ var
 {$L ..\..\static\aarch64-linux\armv8.o} // we can reuse Linux code on any POSIX
 {$L ..\..\static\aarch64-linux\sha256armv8.o}
 
-procedure aesencryptarm128(rk: pointer; bi, bo: pointer); external;
-procedure aesencryptarm192(rk: pointer; bi, bo: pointer); external;
-procedure aesencryptarm256(rk: pointer; bi, bo: pointer); external;
-procedure aesdecryptarm128(rk: pointer; bi, bo: pointer); external;
-procedure aesdecryptarm192(rk: pointer; bi, bo: pointer); external;
-procedure aesdecryptarm256(rk: pointer; bi, bo: pointer); external;
+procedure aesencryptarm128(rk, bi, bo: pointer); external;
+procedure aesencryptarm192(rk, bi, bo: pointer); external;
+procedure aesencryptarm256(rk, bi, bo: pointer); external;
+procedure MakeDecrKeyArm(rounds: integer; rk: pointer); external;
+procedure aesdecryptarm128(rk, bi, bo: pointer); external;
+procedure aesdecryptarm192(rk, bi, bo: pointer); external;
+procedure aesdecryptarm256(rk, bi, bo: pointer); external;
 procedure gf_mul_h_arm(a, b: pointer); external;
 procedure sha256_block_data_order(ctx, bi: pointer; count: PtrInt); external;
 
@@ -3322,6 +3324,8 @@ begin
   ctx.DoBlock := @aesdecryptpas;
   {$ifdef USEARMCRYPTO}
   if AesArmAvailable then
+  begin
+    MakeDecrKeyArm(ctx.Rounds, @ctx.RK); // use "Equivalent Inverse Cipher"
     case KeySize of
       128:
         ctx.DoBlock := @aesdecryptarm128;
@@ -3330,12 +3334,14 @@ begin
       256:
         ctx.DoBlock := @aesdecryptarm256;
     end;
+  end
+  else
   {$endif USEARMCRYPTO}
   {$endif ASMX86}
   {$ifdef USEAESNI}
   if aesNi in ctx.Flags then
   begin
-    MakeDecrKeyAesNi(ctx.Rounds, @ctx.RK);
+    MakeDecrKeyAesNi(ctx.Rounds, @ctx.RK); // use "Equivalent Inverse Cipher"
     case KeySize of
       128:
         ctx.DoBlock := @AesNiDecrypt128;
@@ -3347,7 +3353,7 @@ begin
   end
   else
   {$endif USEAESNI}
-    MakeDecrKeyPas(ctx.Rounds, @ctx.RK);
+    MakeDecrKeyPas(ctx.Rounds, @ctx.RK); // not compatible with AES-NI and ARMv8
 end;
 
 function TAes.DecryptInit(const Key; KeySize: cardinal): boolean;
@@ -3618,6 +3624,11 @@ begin
     gf_mul_pclmulqdq(@a, @b)
   else
   {$endif USECLMUL}
+  {$ifdef USEARMCRYPTO}
+  if PmullArmAvailable then
+    gf_mul_h_arm(@a, @b)
+  else
+  {$endif USEARMCRYPTO}
     gf_mul_pas(a, b);
 end;
 
