@@ -2283,132 +2283,22 @@ end;
 
 {$ifdef OSLINUXANDROID}
 
-const
-  AT_HWCAP  = 16;
-  AT_HWCAP2 = 26;
-
-  {$ifdef CPUARM}
-  HWCAP = AT_HWCAP2;
-
-  HWCAP_ARM_SWP        = 1 shl 0;
-  HWCAP_ARM_HALF       = 1 shl 1;
-  HWCAP_ARM_THUMB      = 1 shl 2;
-  HWCAP_ARM_26BIT      = 1 shl 3;
-  HWCAP_ARM_FAST_MULT  = 1 shl 4;
-  HWCAP_ARM_FPA        = 1 shl 5;
-  HWCAP_ARM_VFP        = 1 shl 6;
-  HWCAP_ARM_EDSP       = 1 shl 7;
-  HWCAP_ARM_JAVA       = 1 shl 8;
-  HWCAP_ARM_IWMMXT     = 1 shl 9;
-  HWCAP_ARM_CRUNCH     = 1 shl 10;
-  HWCAP_ARM_THUMBEE    = 1 shl 11;
-  HWCAP_ARM_NEON       = 1 shl 12;
-  HWCAP_ARM_VFPv3      = 1 shl 13;
-  HWCAP_ARM_VFPv3D16   = 1 shl 14;
-  HWCAP_ARM_TLS        = 1 shl 15;
-  HWCAP_ARM_VFPv4      = 1 shl 16;
-  HWCAP_ARM_IDIVA      = 1 shl 17;
-  HWCAP_ARM_IDIVT      = 1 shl 18;
-  HWCAP_ARM_VFPD32     = 1 shl 19;
-  HWCAP_ARM_LPAE       = 1 shl 20;
-  HWCAP_ARM_EVTSTRM    = 1 shl 21;
-
-  HWCAP2_ARM_AES       = 1 shl 0;
-  HWCAP2_ARM_PMULL     = 1 shl 1;
-  HWCAP2_ARM_SHA1      = 1 shl 2;
-  HWCAP2_ARM_SHA2      = 1 shl 3;
-  HWCAP2_ARM_CRC32     = 1 shl 4;
-
-  HWCAP_AES   = HWCAP2_ARM_AES;
-  HWCAP_PMULL = HWCAP2_ARM_PMULL;
-  HWCAP_SHA1  = HWCAP2_ARM_SHA1;
-  HWCAP_SHA2  = HWCAP2_ARM_SHA2;
-  HWCAP_CRC32 = HWCAP2_ARM_CRC32;
-  {$endif CPUARM}
-
-  {$ifdef CPUAARCH64}
-  HWCAP = AT_HWCAP;
-
-  HWCAP_FP         = 1 shl 0;
-  HWCAP_ASIMD      = 1 shl 1;
-  HWCAP_EVTSTRM    = 1 shl 2;
-  HWCAP_AES        = 1 shl 3;
-  HWCAP_PMULL      = 1 shl 4;
-  HWCAP_SHA1       = 1 shl 5;
-  HWCAP_SHA2       = 1 shl 6;
-  HWCAP_CRC32      = 1 shl 7;
-  HWCAP_ATOMICS    = 1 shl 8;
-  HWCAP_FPHP       = 1 shl 9;
-  HWCAP_ASIMDHP    = 1 shl 10;
-  HWCAP_CPUID      = 1 shl 11;
-  HWCAP_ASIMDRDM   = 1 shl 12;
-  HWCAP_JSCVT      = 1 shl 13;
-  HWCAP_FCMA       = 1 shl 14;
-  HWCAP_LRCPC      = 1 shl 15;
-  HWCAP_DCPOP      = 1 shl 16;
-  HWCAP_SHA3       = 1 shl 17;
-  HWCAP_SM3        = 1 shl 18;
-  HWCAP_SM4        = 1 shl 19;
-  HWCAP_ASIMDDP    = 1 shl 20;
-  HWCAP_SHA512     = 1 shl 21;
-  HWCAP_SVE        = 1 shl 22;
-  HWCAP_ASIMDFHM   = 1 shl 23;
-  HWCAP_DIT        = 1 shl 24;
-  HWCAP_USCAT      = 1 shl 25;
-  HWCAP_ILRCPC     = 1 shl 26;
-  HWCAP_FLAGM      = 1 shl 27;
-  {$endif CPUAARCH64}
-
 procedure RetrieveCpuInfoArm;
-var
-  info: TArmCpuFeatures;
-  p: PPChar;
-  cap: PtrUInt;
 begin
-  info := [];
-  // C library function getauxval() is not always available -> use system.envp
-  try
-    p := system.envp;
-    while p^ <> nil do
-      inc(p);
-    inc(p); // auxv is located after the last textual environment variable
-    repeat
-      if PtrUInt(p[0]) = HWCAP then // 32-bit or 64-bit entries = PtrUInt
-      begin
-        cap := PtrUInt(p[1]);
-        if cap <> 0 then
-          if cap and HWCAP_AES <> 0 then
-            include(info, acfAes);
-          if cap and HWCAP_PMULL <> 0 then
-            include(info, acfPmull);
-          if cap and HWCAP_SHA1 <> 0 then
-            include(info, acfSha1);
-          if cap and HWCAP_SHA2 <> 0 then
-            include(info, acfSha2);
-          if cap and HWCAP_CRC32 <> 0 then
-            include(info, acfCrc32);
-        break;
-      end;
-      p := @p[2];
-    until p[0] = nil;
-  except
-    // may happen on some untested Operating System
-  end;
-  if info = [] then
+  if CpuFeatures = [] then
   begin
     // fallback to /proc/cpuinfo "Features:" text
     if PosEx(' aes', CpuInfoFeatures) >= 0 then
-      include(info, acfAes);
+      include(CpuFeatures, ahcAes);
     if PosEx(' pmull', CpuInfoFeatures) >= 0 then
-      include(info, acfPmull);
+      include(CpuFeatures, ahcPmull);
     if PosEx(' sha1', CpuInfoFeatures) >= 0 then
-      include(info, acfSha1);
+      include(CpuFeatures, ahcSha1);
     if PosEx(' sha2', CpuInfoFeatures) >= 0 then
-      include(info, acfSha2);
+      include(CpuFeatures, ahcSha2);
     if PosEx(' crc32', CpuInfoFeatures) >= 0 then
-      include(info, acfCrc32);
+      include(CpuFeatures, ahcCrc32);
   end;
-  CpuInfoArm := info;
 end;
 
 {$endif OSLINUXANDROID}
@@ -2669,7 +2559,7 @@ begin
   MoveFast := @MoveFastLibC;
   FillCharFast := @FillCharLibC;
   {$ifdef CPUAARCH64}
-  if acfCrc32 in CpuInfoArm then
+  if ahcCrc32 in CpuFeatures then
     try
       if (crc32cby4arm64(0, 1) = 3712330424) and
          (crc32carm64(0, @SystemInfo, SizeOf(SystemInfo)) =
@@ -2683,7 +2573,7 @@ begin
         crcblocks := @crc32blocksarm64;
       end;
     except
-      // crc32 was actually not supported
+      exclude(CpuFeatures, ahcCrc32); // crc32 was actually not supported
     end;
   {$endif CPUAARCH64}
   {$endif CPUARM3264}

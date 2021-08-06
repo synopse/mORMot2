@@ -2334,9 +2334,61 @@ type
   /// a set of recognized ARM/AARCH64 CPU hardware implementers
   TArmCpuImplementers = set of TArmCpuImplementer;
 
+
+{$ifdef CPUARM3264}
+
+type
+  {$ifdef CPUARM}
+  /// 32-bit ARM Hardware capabilities
+  // - merging AT_HWCAP and AT_HWCAP2 flags as reported by
+  // github.com/torvalds/linux/blob/master/arch/arm/include/uapi/asm/hwcap.h
+  TArmHwCap = (
+    // HWCAP_* constants
+    ahcSWP, ahcHALF, ahcTHUMB, ahc26BIT, ahcFAST_MULT, ahcFPA,
+    ahcVFP, ahcEDSP, ahcJAVA, ahcIWMMXT, ahcCRUNCH, ahcTHUMBEE,
+    ahcNEON, ahcVFPv3, ahcVFPv3D16, ahcTLS, ahcVFPv4, ahcIDIVA,
+    ahcIDIVT, ahcVFPD32, ahcLPAE, ahcEVTSTRM,
+    ahc22, ahc23, ahc24, ahc25, ahc26, ahc27, ahc28, ahc29, ahc30, ahc31,
+    // HWCAP2_* constants
+    ahcAES, ahcPMULL, ahcSHA1, ahcSHA2, ahcCRC32);
+  {$endif CPUARM}
+
+  {$ifdef CPUAARCH64}
+  /// AARCH64 Hardware capabilities
+  // - merging AT_HWCAP and AT_HWCAP2 flags as reported by
+  // github.com/torvalds/linux/blob/master/arch/arm64/include/uapi/asm/ahccap.h
+  TArmHwCap = (
+    // HWCAP_* constants
+    ahcFP, ahcASIMD, ahcEVTSTRM, ahcAES, ahcPMULL, ahcSHA1, ahcSHA2, ahcCRC32,
+    ahcATOMICS, ahcFPHP, ahcASIMDHP, ahcCPUID, ahcASIMDRDM, ahcJSCVT, ahcFCMA,
+    ahcLRCPC, ahcDCPOP, ahcSHA3, ahcSM3, ahcSM4, ahcASIMDDP, ahcSHA512, ahcSVE,
+    ahcASIMDFHM, ahcDIT, ahcUSCAT, ahcILRCPC, ahcFLAGM, ahcSSBS, ahcSB, ahcPACA, ahcPACG,
+    // HWCAP2_* constants
+    ahcDCPODP, ahcSVE2, ahcSVEAES, ahcSVEPMULL, ahcSVEBITPERM, ahcSVESHA3, ahcSVESM4,
+    ahcFLAGM2, ahcFRINT, ahcSVEI8MM, ahcSVEF32MM, ahcSVEF64MM, ahcSVEBF16, ahcI8MM,
+    ahcBF16, ahcDGH, ahcRNG, ahcBTI, ahcMTE);
+  {$endif CPUAARCH64}
+
+  TArmHwCaps = set of TArmHwCap;
+
+var
   /// the low-level ARM/AARCH64 CPU features retrieved from system.envp
-  // - used by CpuInfoArm global variable from mormot.core.os.pas
-  TArmCpuFeatures = set of (acfAes, acfPmull, acfSha1, acfSha2, acfCrc32);
+  // - text from CpuInfoFeatures may not be accurate on oldest kernels
+  CpuFeatures: TArmHwCaps;
+
+{$endif CPUARM3264}
+
+/// recognize a given ARM/AARCH64 CPU from its 12-bit hardware ID
+function ArmCpuType(id: word): TArmCpuType;
+
+/// recognize a given ARM/AARCH64 CPU type name from its 12-bit hardware ID
+function ArmCpuTypeName(act: TArmCpuType; id: word): RawUtf8;
+
+/// recognize a given ARM/AARCH64 CPU implementer from its 8-bit hardware ID
+function ArmCpuImplementer(id: byte): TArmCpuImplementer;
+
+/// recognize a given ARM/AARCH64 CPU implementer name from its 8-bit hardware ID
+function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word): RawUtf8;
 
 {$ifdef CPUINTEL}
 
@@ -8104,6 +8156,69 @@ end;
 
 { ************ Faster alternative to RTL standard functions }
 
+
+const
+  // https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
+  ARMCPU_ID: array[TArmCpuType] of word = (
+    0,
+    $0810, $0920, $0922, $0926, $0940, $0946, $0966, $0a20, $0a22, $0a26, $0b02,
+    $0b36, $0b56, $0b76, $0c05, $0c07, $0c08, $0c09, $0c0d, $0c0f, $0c0e, $0c14,
+    $0c15, $0c17, $0c18, $0c20, $0c21, $0c23, $0c24, $0c27, $0c60, $0d01, $0d03,
+    $0d04, $0d05, $0d06, $0d07, $0d08, $0d09, $0d0a, $0d0b, $0d0c, $0d0d, $0d0e,
+    $0d13, $0d20, $0d21, $0d41, $0d42, $0d4a, $0d4b);
+  ARMCPU_IMPL: array[TArmCpuImplementer] of byte = (
+    0,
+    $41, $42, $43, $44, $46, $48, $49, $4d, $4e, $50, $51, $53, $56,
+    $61, $66, $69, $c0);
+  ARMCPU_ID_TXT: array[TArmCpuType] of PUtf8Char = (
+     '',
+     'ARM810', 'ARM920', 'ARM922', 'ARM926', 'ARM940', 'ARM946', 'ARM966',
+     'ARM1020', 'ARM1022', 'ARM1026', 'ARM11 MPCore', 'ARM1136', 'ARM1156',
+     'ARM1176', 'Cortex-A5', 'Cortex-A7', 'Cortex-A8', 'Cortex-A9',
+     'Cortex-A17',{Originally A12} 'Cortex-A15', 'Cortex-A17', 'Cortex-R4',
+     'Cortex-R5', 'Cortex-R7', 'Cortex-R8', 'Cortex-M0', 'Cortex-M1',
+     'Cortex-M3', 'Cortex-M4', 'Cortex-M7', 'Cortex-M0+', 'Cortex-A32',
+     'Cortex-A53', 'Cortex-A35', 'Cortex-A55', 'Cortex-A65', 'Cortex-A57',
+     'Cortex-A72', 'Cortex-A73', 'Cortex-A75', 'Cortex-A76', 'Neoverse-N1',
+     'Cortex-A77', 'Cortex-A76AE', 'Cortex-R52', 'Cortex-M23', 'Cortex-M33',
+     'Cortex-A78', 'Cortex-A78AE', 'Neoverse-E1', 'Cortex-A78C');
+  ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of PUtf8Char = (
+      '',
+      'ARM', 'Broadcom', 'Cavium', 'DEC', 'FUJITSU', 'HiSilicon', 'Infineon',
+      'Motorola/Freescale', 'NVIDIA', 'APM', 'Qualcomm', 'Samsung', 'Marvell',
+      'Apple', 'Faraday', 'Intel', 'Ampere');
+
+function ArmCpuType(id: word): TArmCpuType;
+begin
+  for result := low(TArmCpuType) to high(TArmCpuType) do
+    if ARMCPU_ID[result] = id then
+      exit;
+  result := actUnknown;
+end;
+
+function ArmCpuTypeName(act: TArmCpuType; id: word): RawUtf8;
+begin
+  result := ARMCPU_ID_TXT[act];
+  if act = actUnknown then
+    result := 'ARM 0x' + RawUtf8(IntToHex(id, 3));
+end;
+
+function ArmCpuImplementer(id: byte): TArmCpuImplementer;
+begin
+  for result := low(TArmCpuImplementer) to high(TArmCpuImplementer) do
+    if ARMCPU_IMPL[result] = id then
+      exit;
+  result := aciUnknown;
+end;
+
+function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word): RawUtf8;
+begin
+  result := ARMCPU_IMPL_TXT[aci];
+  if aci = aciUnknown then
+    result := 'HW 0x' + RawUtf8(IntToHex(id, 2));
+end;
+
+
 {$ifndef CPUX86} // those functions have their own PIC-compatible x86 asm version
 
 function StrLenSafe(S: pointer): PtrInt;
@@ -9086,9 +9201,46 @@ end;
 
 // fallback to pure pascal version for ARM
 
+{$ifdef OSLINUXANDROID}
+
+const
+  AT_HWCAP  = 16;
+  AT_HWCAP2 = 26;
+
+procedure TestCpuFeatures;
+var
+  p: PPChar;
+  caps: TArmHwCaps;
+begin
+  // C library function getauxval() is not always available -> use system.envp
+  caps := [];
+  try
+    p := system.envp;
+    while p^ <> nil do
+      inc(p);
+    inc(p); // auxv is located after the last textual environment variable
+    repeat
+      if PtrUInt(p[0]) = AT_HWCAP then // 32-bit or 64-bit entries = PtrUInt
+        PCardinalArray(@caps)[0] := PtrUInt(p[1])
+      else if PtrUInt(p[0]) = AT_HWCAP2 then
+        PCardinalArray(@caps)[1] := PtrUInt(p[1]);
+      p := @p[2];
+    until p[0] = nil;
+  except
+    // may happen on some untested Operating System
+    caps := []; // is likely to be invalid
+  end;
+  CpuFeatures := caps;
+end;
+
+{$else}
+
 procedure TestCpuFeatures;
 begin
+  // perhaps system.envp would work somewhat, but the HWCAP items don't match
 end;
+
+{$endif OSLINUXANDROID}
 
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 var

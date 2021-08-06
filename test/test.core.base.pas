@@ -3216,16 +3216,17 @@ begin
     FillZero(crc1);
     crcblock(@crc1, @digest);
     check(not IsZero(crc1));
-    {$ifdef CPUINTEL}
-    FillZero(crc2);
-    crcblockreference(@crc2, @digest);
-    check(not IsZero(crc2));
-    check(IsEqual(crc1, crc2));
-    FillZero(crc2);
-    crcblockfast(@crc2, @digest);
-    check(not IsZero(crc2));
-    check(IsEqual(crc1, crc2));
-    {$endif CPUINTEL}
+    if @crcblock <> @crcblockfast then
+    begin
+      FillZero(crc2);
+      crcblockreference(@crc2, @digest);
+      check(not IsZero(crc2));
+      check(IsEqual(crc1, crc2));
+      FillZero(crc2);
+      crcblockfast(@crc2, @digest);
+      check(not IsZero(crc2));
+      check(IsEqual(crc1, crc2));
+    end;
     for j := 0 to high(digest) do
       inc(digest[j]);
   end;
@@ -3259,6 +3260,9 @@ begin
      (cfAesNi in CpuFeatures) then
     Test(crc32c, 'sse42+aesni'); // use SSE4.2+pclmulqdq instructions on x64
   {$endif CPUX64}
+  {$else}
+  if @crc32c <> @crc32cfast then
+    Test(crc32c, 'armv8');
   {$endif CPUINTEL}
 end;
 

@@ -9770,26 +9770,29 @@ begin
   end;
   {$endif USEAESNIHASH}
   {$ifdef USEARMCRYPTO}
-  if acfAes in CpuInfoArm then
+  if ahcAes in CpuFeatures then
     try
       aesencryptarm128(@rk, @bi, @bo); // apply to stack random
       AesArmAvailable := true;
     except
       // ARMv8 AES HW opcodes seem not available
+      exclude(CpuFeatures, ahcAes);
     end;
-  if acfPmull in CpuInfoArm then
+  if ahcPmull in CpuFeatures then
     try
       gf_mul_h_arm(@bi, @bo); // apply to stack random
       PmullArmAvailable := true;
     except
       // ARMv8 PMULL HW opcodes seem not available
+      exclude(CpuFeatures, ahcPmull);
     end;
-  if acfSha2 in CpuInfoArm then
+  if ahcSha2 in CpuFeatures then
     try
       sha256_block_data_order(@rk, @shablock, 1);
       ShaArmAvailable := true;
     except
       // ARMv8 SHA HW opcodes seem not available
+      exclude(CpuFeatures, ahcSha2);
     end;
   {$endif USEARMCRYPTO}
   assert(SizeOf(TMd5Buf) = SizeOf(TMd5Digest));
