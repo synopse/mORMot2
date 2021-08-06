@@ -3140,14 +3140,12 @@ var
 
 var
   i, j: integer;
-  Timer: TPrecisionTimer;
   c1, c2: cardinal;
   crc1, crc2: THash128;
   crcs: THash512Rec;
   digest: THash256;
   tmp: RawByteString;
   hmac32: THmacCrc32c;
-//    hmac256: THMAC_CRC256C;
 begin
   test16('', $ffff);
   test16('a', $9d77);
@@ -3165,8 +3163,8 @@ begin
   check(hmac32.Done = c1);
   c2 := $12345678;
   HmacCrc256c(@c2, pointer(tmp), 4, length(tmp), digest);
-  check(Sha256DigestToString(digest) = '46da01fb9f4a97b5f8ba2c70512bc22aa' +
-    'a9b57e5030ced9f5c7c825ab5ec1715');
+  checkEqual(Sha256DigestToString(digest),
+    '46da01fb9f4a97b5f8ba2c70512bc22aaa9b57e5030ced9f5c7c825ab5ec1715');
   FillZero(crc2);
   crcblock(@crc2, PBlock128(PAnsiChar('0123456789012345')));
   check(not IsZero(crc2));
@@ -3182,12 +3180,10 @@ begin
   crcblocks(@crc1, PBlock128(PAnsiChar('0123456789012345')), 1);
   check(not IsZero(crc1));
   check(IsEqual(crc1, crc2), 'crcblocks');
-  {$ifdef CPUINTEL}
   FillZero(crc1);
   crcblockfast(@crc1, PBlock128(PAnsiChar('0123456789012345')));
   check(not IsZero(crc1));
   check(IsEqual(crc1, crc2));
-  {$endif CPUINTEL}
   for i := 0 to high(crcs.b) do
     crcs.b[i] := i;
   for j := 1 to 4 do
@@ -3264,13 +3260,6 @@ begin
     Test(crc32c, 'sse42+aesni'); // use SSE4.2+pclmulqdq instructions on x64
   {$endif CPUX64}
   {$endif CPUINTEL}
-  exit; // code below is speed informative only, without any test
-  Timer.Start;
-  for i := 0 to high(crc) do
-    with crc[i] do
-      fnv32(0, pointer(S), length(S));
-  fRunConsole := format('%s fnv32 %s %s/s', [fRunConsole, Timer.Stop, KB(Timer.PerSec
-    (totallen))]);
 end;
 
 procedure TTestCoreBase.intadd(const Sender; Value: integer);

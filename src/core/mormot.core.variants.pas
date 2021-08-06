@@ -147,7 +147,7 @@ type
   // - as used by TDocVariantData.SortByRow
   TVariantComparer = function(const V1, V2: variant): PtrInt of object;
   /// function prototype used internally for extended variant comparison
-  // - as used by TDocVariantData.SortArrayByFields1
+  // - as used by TDocVariantData.SortArrayByFields
   TVariantCompareField = function(const FieldName: RawUtf8;
     const V1, V2: variant): PtrInt of object;
 
@@ -5491,7 +5491,7 @@ procedure TQuickSortDocVariantValuesByField.Init(
   const aPropNames: array of RawUtf8; aNameSortedCompare: TUtf8Compare);
 var
   namecomp: TUtf8Compare;
-  p: pointer;
+  v: pointer;
   row, f: PtrInt;
   rowdata: PDocVariantData;
   ndx: integer;
@@ -5516,14 +5516,14 @@ begin
       rowdata := _Safe(Doc^.VValue[row]);
       if (cardinal(ndx) < cardinal(rowdata^.VCount)) and
          (namecomp(pointer(rowdata^.VName[ndx]), pointer(aPropNames[f])) = 0) then
-        p := @rowdata^.VValue[ndx] // get the value at the (likely) same position
+        v := @rowdata^.VValue[ndx] // get the value at the (likely) same position
       else
       begin
-        p := rowdata^.GetVarData(aPropNames[f], aNameSortedCompare, @ndx);
-        if p = nil then
-          p := @NullVarData;
+        v := rowdata^.GetVarData(aPropNames[f], aNameSortedCompare, @ndx);
+        if v = nil then
+          v := @NullVarData;
       end;
-      Lookup[row, f] := p;
+      Lookup[row, f] := v;
     end;
   end;
 end;

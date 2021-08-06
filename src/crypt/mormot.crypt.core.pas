@@ -89,7 +89,7 @@ type
 
 {$ifdef CPUAARCH64}
   {$ifdef OSLINUXANDROID}
-    {.$define USEARMCRYPTO}
+    {$define USEARMCRYPTO}
   {$endif OSLINUXANDROID}
 {$endif CPUAARCH64}
 
@@ -3197,26 +3197,23 @@ end;
 {$ifdef USEARMCRYPTO}
 
 var
-  AesArmAvailable, ShaArmAvailable: boolean;
+  AesArmAvailable,
+  ShaArmAvailable,
+  PmullArmAvailable: boolean;
 
 {$ifdef CPUAARCH64}
 
 {$L ..\..\static\aarch64-linux\armv8.o} // we can reuse Linux code on any POSIX
 {$L ..\..\static\aarch64-linux\sha256armv8.o}
 
-procedure aesencryptarm64(rk: pointer; rnd: cardinal; bi, bo: pointer); external;
-procedure aesdecryptarm64(rk: pointer; rnd: cardinal; bi, bo: pointer); external;
+procedure aesencryptarm128(rk: pointer; bi, bo: pointer); external;
+procedure aesencryptarm192(rk: pointer; bi, bo: pointer); external;
+procedure aesencryptarm256(rk: pointer; bi, bo: pointer); external;
+procedure aesdecryptarm128(rk: pointer; bi, bo: pointer); external;
+procedure aesdecryptarm192(rk: pointer; bi, bo: pointer); external;
+procedure aesdecryptarm256(rk: pointer; bi, bo: pointer); external;
+procedure gf_mul_h_arm(a, b: pointer); external;
 procedure sha256_block_data_order(ctx, bi: pointer; count: PtrInt); external;
-
-procedure aesencryptarm(const ctxt: TAesContext; bi, bo: PWA4);
-begin
-  aesencryptarm64(@ctxt.RK, ctxt.Rounds, bi, bo);
-end;
-
-procedure aesdecryptarm(const ctxt: TAesContext; bi, bo: PWA4);
-begin
-  aesdecryptarm64(@ctxt.RK, ctxt.Rounds, bi, bo);
-end;
 
 {$endif CPUAARCH64}
 
@@ -3252,12 +3249,18 @@ begin
   {$ifdef ASMINTEL}
   ctx.DoBlock := @AesEncryptAsm;
   {$else}
+  ctx.DoBlock := @aesencryptpas;
   {$ifdef USEARMCRYPTO}
   if AesArmAvailable then
-    ctx.DoBlock := @aesencryptarm
-  else
+    case KeySize of
+      128:
+        ctx.DoBlock := @aesencryptarm128;
+      192:
+        ctx.DoBlock := @aesencryptarm192;
+      256:
+        ctx.DoBlock := @aesencryptarm256;
+    end;
   {$endif USEARMCRYPTO}
-    ctx.DoBlock := @aesencryptpas;
   {$endif ASMINTEL}
   {$ifdef USEAESNI}
   if cfAESNI in CpuFeatures then
@@ -3316,12 +3319,18 @@ begin
   {$ifdef ASMX86}
   ctx.DoBlock := @aesdecrypt386;
   {$else}
+  ctx.DoBlock := @aesdecryptpas;
   {$ifdef USEARMCRYPTO}
   if AesArmAvailable then
-    ctx.DoBlock := @aesdecryptarm
-  else
+    case KeySize of
+      128:
+        ctx.DoBlock := @aesdecryptarm128;
+      192:
+        ctx.DoBlock := @aesdecryptarm192;
+      256:
+        ctx.DoBlock := @aesdecryptarm256;
+    end;
   {$endif USEARMCRYPTO}
-    ctx.DoBlock := @aesdecryptpas;
   {$endif ASMX86}
   {$ifdef USEAESNI}
   if aesNi in ctx.Flags then
@@ -3620,6 +3629,11 @@ begin
     gf_mul_pclmulqdq(@a, @engine.ghash_h)
   else
   {$endif USECLMUL}
+  {$ifdef USEARMCRYPTO}
+  if PmullArmAvailable then
+    gf_mul_h_arm(@a, @engine.ghash_h)
+  else
+  {$endif USEARMCRYPTO}
     // use pure pascal efficient code with 4KB pre-computed table
     engine.gf_mul_h_pas(a);
 end;
@@ -9752,10 +9766,17 @@ begin
   {$ifdef USEARMCRYPTO}
   if PosEx(' aes', CpuInfoFeatures) >= 0 then
     try
-      aesencryptarm64(@rk, AesMaxRounds, @bi, @bo); // apply to stack random
+      aesencryptarm128(@rk, @bi, @bo); // apply to stack random
       AesArmAvailable := true;
     except
       // ARMv8 AES HW opcodes seem not available
+    end;
+  if PosEx(' pmull', CpuInfoFeatures) >= 0 then
+    try
+      gf_mul_h_arm(@bi, @bo); // apply to stack random
+      PmullArmAvailable := true;
+    except
+      // ARMv8 PMULL HW opcodes seem not available
     end;
   if PosEx(' sha2', CpuInfoFeatures) >= 0 then
     try
