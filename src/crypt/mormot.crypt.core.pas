@@ -3164,8 +3164,7 @@ begin
   end;
 end;
 
-// compute AES decryption key from encryption key using "Inverse Cipher" scheme
-// note: both AES-NI and ARMv8 use another scheme "Equivalent Inverse Cipher"
+// compute AES decryption key from encryption key
 procedure MakeDecrKeyPas(rounds: integer; k: PAWk);
 var
   x: cardinal;
@@ -3210,7 +3209,7 @@ var
 procedure aesencryptarm128(rk, bi, bo: pointer); external;
 procedure aesencryptarm192(rk, bi, bo: pointer); external;
 procedure aesencryptarm256(rk, bi, bo: pointer); external;
-procedure MakeDecrKeyArm(rounds: integer; rk: pointer); external;
+//procedure MakeDecrKeyArm(rounds: integer; rk: pointer); external; buggy
 procedure aesdecryptarm128(rk, bi, bo: pointer); external;
 procedure aesdecryptarm192(rk, bi, bo: pointer); external;
 procedure aesdecryptarm256(rk, bi, bo: pointer); external;
@@ -3324,8 +3323,6 @@ begin
   ctx.DoBlock := @aesdecryptpas;
   {$ifdef USEARMCRYPTO}
   if AesArmAvailable then
-  begin
-    MakeDecrKeyArm(ctx.Rounds, @ctx.RK); // use "Equivalent Inverse Cipher"
     case KeySize of
       128:
         ctx.DoBlock := @aesdecryptarm128;
@@ -3334,14 +3331,12 @@ begin
       256:
         ctx.DoBlock := @aesdecryptarm256;
     end;
-  end
-  else
   {$endif USEARMCRYPTO}
   {$endif ASMX86}
   {$ifdef USEAESNI}
   if aesNi in ctx.Flags then
   begin
-    MakeDecrKeyAesNi(ctx.Rounds, @ctx.RK); // use "Equivalent Inverse Cipher"
+    MakeDecrKeyAesNi(ctx.Rounds, @ctx.RK);
     case KeySize of
       128:
         ctx.DoBlock := @AesNiDecrypt128;
@@ -3353,7 +3348,7 @@ begin
   end
   else
   {$endif USEAESNI}
-    MakeDecrKeyPas(ctx.Rounds, @ctx.RK); // not compatible with AES-NI and ARMv8
+    MakeDecrKeyPas(ctx.Rounds, @ctx.RK);
 end;
 
 function TAes.DecryptInit(const Key; KeySize: cardinal): boolean;

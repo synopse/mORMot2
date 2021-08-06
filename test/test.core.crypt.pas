@@ -1598,8 +1598,8 @@ begin
           A.Decrypt(b, p);
         A.Done;
         Timer[noaesni].Pause;
+        CheckUtf8(IsEqual(p, s), 'encrypt/decrypt ks=% %<>%', [ks, p[0], s[0]]);
         Check(CompareMem(@p, @s, sizeof(p)));
-        Check(IsEqual(p, s));
       end;
       iv.c3 := $e0ffffff; // to trigger an explicit CTR overflow
       for m := low(MODES) to high(MODES) do
