@@ -253,8 +253,16 @@ var
   BiosInfoText: RawUtf8;
 
   {$ifdef OSLINUXANDROID}
+
   /// contains the "Features:" value of Linux /proc/cpuinfo
   CpuInfoFeatures: RawUtf8;
+
+  {$ifdef CPUARM3264}
+  /// the low-level ARM/AARCH64 CPU features retrieved from system.envp
+  // - text from CpuInfoFeatures may not be accurate on oldest kernels
+  CpuInfoArm: TArmCpuFeatures;
+  {$endif CPUARM3264}
+
   {$endif OSLINUXANDROID}
 
   /// the running Operating System

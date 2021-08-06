@@ -2334,11 +2334,16 @@ type
   /// a set of recognized ARM/AARCH64 CPU hardware implementers
   TArmCpuImplementers = set of TArmCpuImplementer;
 
+  /// the low-level ARM/AARCH64 CPU features retrieved from system.envp
+  // - used by CpuInfoArm global variable from mormot.core.os.pas
+  TArmCpuFeatures = set of (acfAes, acfPmull, acfSha1, acfSha2, acfCrc32);
+
 {$ifdef CPUINTEL}
 
 var
   /// the available Intel/AMD CPU features, as recognized at program startup
-  // - on LINUX, consider the textual CpuInfoFeatures from mormot.core.os.pas
+  // - on LINUX, consider CpuInfoArm or the textual CpuInfoFeatures from
+  // mormot.core.os.pas
   CpuFeatures: TIntelCpuFeatures;
 
 /// compute 32-bit random number using Intel hardware
