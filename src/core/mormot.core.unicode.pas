@@ -2122,32 +2122,47 @@ end;
 function IsValidUtf8Pas(source: PUtf8Char; sourcelen: PtrInt): boolean;
 var
   c: byte;
-  utf8: PUtf8Table; // is faster even on plain i386
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: PUtf8Table;
+  {$endif CPUX86NOTPIC}
 label
   done;
 begin
-  // per quad is not faster because we need to check >=#80 but also for #0
-  inc(sourcelen, PtrInt(source));
+  inc(PtrUInt(sourcelen), PtrUInt(source) - 4);
+  if source = nil then
+    goto done;
+  {$ifndef CPUX86NOTPIC}
   utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   repeat
-    if PtrUInt(source) >= PtrUInt(sourcelen) then
-      break;
-    {$ifdef CPUX86} // on i386, c is put on the stack otherwise :(
-    if utf8.Lookup[ord(source^)] = UTF8_ASCII then
+    if PtrUInt(source) <= PtrUInt(sourcelen) then
     begin
-      inc(source);
-      continue;
-    end;
-    c := utf8.Lookup[ord(source^)];
-    inc(source);
-    {$else}
+      if utf8.Lookup[ord(source[0])] = UTF8_ASCII then
+        if utf8.Lookup[ord(source[1])] = UTF8_ASCII then
+          if utf8.Lookup[ord(source[2])] = UTF8_ASCII then
+            if utf8.Lookup[ord(source[3])] = UTF8_ASCII then
+            begin
+              inc(source, 4); // optimized for JSON-like content
+              continue;
+            end
+            else
+              inc(source, 3)
+          else
+            inc(source, 2)
+        else
+          inc(source);
+    end
+    else if PtrUInt(source) >= PtrUInt(sourcelen) + 4 then
+      break;
     c := utf8.Lookup[ord(source^)];
     inc(source);
     if c = UTF8_ASCII then
-      continue;
-    {$endif CPUX86}
-    if c >= UTF8_INVALID then
-      break; // UTF8_INVALID=6, UTF8_ZERO=7 means unexpected end of input
+      continue
+    else if c >= UTF8_INVALID then
+      // UTF8_INVALID=6, UTF8_ZERO=7 means unexpected end of input
+      break;
     // c = extras -> check valid UTF-8 content
     repeat
       if byte(source^) and $c0 <> $80 then
@@ -2157,7 +2172,7 @@ begin
     until c = 0;
   until false;
 done:
-  result := PtrUInt(source) = PtrUInt(sourcelen);
+  result := PtrUInt(source) = PtrUInt(sourcelen) + 4;
 end;
 
 function IsValidUtf8(source: PUtf8Char): boolean;
