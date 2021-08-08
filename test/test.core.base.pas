@@ -4511,7 +4511,7 @@ begin
       len120 := Utf8TruncatedLength(P, 120)
     else
       len120 := 0;
-    Check(IsValidUtf8(P, len120));
+    Check(IsValidUtf8Buffer(P, len120), 'IsValidUtF8');
     for j := 1 to lenup100 do
     begin
       check(PosChar(P, U[j])^ = U[j], 'PosCharj');
@@ -4530,9 +4530,9 @@ begin
         bak := P[len120];
         P[len120] := #0; // no need to go any further
         P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // always invalidate the UTF-8 content
-        check(not IsValidUtf8(P, len120), 'IsValidUtf8 up100');
+        check(not IsValidUtf8Buffer(P, len120), 'IsValidUtf8 up100');
         P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // restore
-        check(IsValidUtf8(P, len120), 'IsValidUtf8 restored');
+        check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8 restored');
         P[len120] := bak;
       end;
     end;

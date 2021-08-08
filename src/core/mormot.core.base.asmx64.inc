@@ -691,6 +691,10 @@ end;
 // adapted from https://github.com/simdjson/simdjson - Apache License 2.0
 function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
   {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        test    source, source
+        jz      @ok
+        test    sourcelen, sourcelen
+        jle     @ok
         push    rbp
         mov     r8, source
         mov     rdx, sourcelen
@@ -763,6 +767,8 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         sete    al
         vzeroupper
         leave
+        ret
+@ok:    mov     al, 1
         ret
 @small: vpxor   xmm4, xmm4, xmm4
         xor     esi, esi
