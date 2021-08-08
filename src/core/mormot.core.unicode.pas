@@ -2151,10 +2151,18 @@ var
   IsValidUtf8Impl: function(source: PUtf8Char; sourcelen: PtrInt): boolean;
 
 function IsValidUtf8Pas(source: PUtf8Char; sourcelen: PtrInt): boolean;
+var
+  p: PUtf8Char;
 begin
-  result := (source = nil) or
-            (sourcelen = 0) or
-            (EndValidUtf8(source) - source >= sourcelen);
+  if (source = nil) or
+     (sourcelen <= 0) then
+    result := true
+  else
+  begin
+    p := EndValidUtf8(source);
+    result := (p <> nil) and
+              ((p - source) >= sourcelen);
+  end;
 end;
 
 function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean;
@@ -2170,33 +2178,43 @@ begin
             IsValidUtf8Impl(source, StrLen(source));
 end;
 
-function IsValidUtf8(const source: RawUtf8): boolean;
-begin
-  result := IsValidUtf8Impl(pointer(source), Length(source));
-end;
-
 {$else}
 
 function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean;
+var
+  p: PUtf8Char;
 begin
-  result := (source = nil) or
-            (sourcelen = 0) or
-            (EndValidUtf8(source) - source >= sourcelen);
+  if (source = nil) or
+     (sourcelen <= 0) then
+    result := true
+  else
+  begin
+    p := EndValidUtf8(source);
+    result := (p <> nil) and
+              ((p - source) >= sourcelen);
+  end;
 end;
 
 function IsValidUtf8(source: PUtf8Char): boolean;
+var
+  p: PUtf8Char;
 begin
-  result := (source = nil) or
-            (EndValidUtf8(source) <> source);
-end;
-
-function IsValidUtf8(const source: RawUtf8): boolean;
-begin
-  result := (source = '') or
-            (EndValidUtf8(pointer(source)) - pointer(source) = Length(source));
+  if source = nil then
+    result := true
+  else
+  begin
+    p := EndValidUtf8(source);
+    result := (p <> nil) and
+              (p^ = #0);
+  end;
 end;
 
 {$endif ASMX64AVX}
+
+function IsValidUtf8(const source: RawUtf8): boolean;
+begin
+  result := IsValidUtf8(pointer(source), length(source));
+end;
 
 function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean;
 var
