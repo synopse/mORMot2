@@ -904,7 +904,7 @@ function libdeflate_crc32; external;
     {$L ..\..\static\aarch64-linux\libdeflate_dd.o} // deflate_decompress.o
     {$L ..\..\static\aarch64-linux\libdeflate_zc.o} // zlib_compress.o
     {$L ..\..\static\aarch64-linux\libdeflate_zd.o} // zlib_decompress.o
-    {$L ..\..\static\aarch64-linux\libgcc.a}
+    {$linklib ..\..\static\aarch64-linux\libgcc.a}
   {$endif CPUAARCH64}
   {$ifdef CPUARM}
     // current supplied .o don't link yet
@@ -916,7 +916,7 @@ function libdeflate_crc32; external;
     {$L ..\..\static\arm-linux\libdeflate_dd.o} // deflate_decompress.o
     {$L ..\..\static\arm-linux\libdeflate_zc.o} // zlib_compress.o
     {$L ..\..\static\arm-linux\libdeflate_zd.o} // zlib_decompress.o
-    {$L ..\..\static\arm-linux\libgcc.a}
+    {$linklib ..\..\static\arm-linux\libgcc.a}
   {$endif CPUARM}
   const
     _PU = '';

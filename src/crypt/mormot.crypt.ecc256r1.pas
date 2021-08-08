@@ -48,10 +48,12 @@ uses
   {$endif CPUX86}
 
   {$ifdef CPUX64}
+    {$ifndef OSANDROID}
     {$ifndef OSBSDDARWIN}
       {$define ECC_STATICLIB_AVAILABLE}
       {$define ECC_O2}  // gcc -g -O2 -c ecc.c
     {$endif OSBSDDARWIN}
+    {$endif OSANDROID}
   {$endif CPUX64}
 
 {$endif CPUINTEL}
