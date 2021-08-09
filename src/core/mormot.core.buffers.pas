@@ -1600,22 +1600,28 @@ type
   {$M-}
 
 
+/// fast add some content to a RawByteString buffer
+procedure AppendBufferToRawByteString(var Content: RawByteString;
+  const Buffer; BufferLen: PtrInt);
+
 /// fast add some characters to a RawUtf8 string
 // - faster than SetString(tmp,Buffer,BufferLen); Text := Text+tmp;
-procedure AppendBufferToRawUtf8(var Text: RawUtf8; Buffer: pointer; BufferLen: PtrInt);
+procedure AppendBufferToRawUtf8(var Text: RawUtf8;
+  Buffer: pointer; BufferLen: PtrInt);
 
 /// fast add one character to a RawUtf8 string
-// - faster than
+// - avoid a temporary memory allocation of a string, so slightly faster than
 // ! Text := Text + ch;
 procedure AppendCharToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
 
 /// fast add one character to a RawUtf8 string, if not already present
-// - faster than
+// - avoid a temporary memory allocation of a string, so faster alternative to
 // ! if (Text<>'') and (Text[length(Text)]<>Ch) then Text := Text + ch;
 procedure AppendCharOnceToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
 
 /// fast add some characters to a RawUtf8 string
 // - faster than Text := Text+RawUtf8(Buffers[0])+RawUtf8(Buffers[0])+...
+// - will handle up to 64 Buffers[] - raise an ESynException on too many Buffers
 procedure AppendBuffersToRawUtf8(var Text: RawUtf8; const Buffers: array of PUtf8Char);
 
 /// fast add some characters from a RawUtf8 string into a given buffer
@@ -7981,6 +7987,18 @@ begin
   end;
   MoveSmall(P, Buffer, L);
   result := Buffer + L;
+end;
+
+procedure AppendBufferToRawByteString(
+  var Content: RawByteString; const Buffer; BufferLen: PtrInt);
+var
+  ContentLen: PtrInt;
+begin
+  if BufferLen <= 0 then
+    exit;
+  ContentLen := length(Content);
+  SetLength(Content, ContentLen + BufferLen);
+  MoveFast(Buffer, PByteArray(Content)^[ContentLen], BufferLen);
 end;
 
 function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;

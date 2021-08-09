@@ -59,6 +59,7 @@ type
     // - returns false if it is used by another thread
     // - warning: this method is not re-entrant
     function Lock(writer: boolean): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// try to acquire an exclusive R/W access to this connection
     // - returns true if slot has been acquired
     // - returns false if it is used by another thread, after the timeoutMS period
@@ -66,6 +67,7 @@ type
     function TryLock(writer: boolean; timeoutMS: cardinal): boolean;
     /// release exclusive R/W access to this connection
     procedure UnLock(writer: boolean);
+      {$ifdef HASINLINE} inline; {$endif}
   end;
 
   /// points to thread-safe information of one TPollAsyncSockets connection
@@ -110,7 +112,7 @@ type
     fProcessing: integer;
     fOptions: TPollAsyncSocketsOptions;
     function GetCount: integer;
-    // warning: abstract methods below should be properly overriden
+    // (warning: abstract methods below should be properly overriden)
     // return low-level socket information from connection instance
     function SlotFromConnection(connection: TObject): PPollSocketsSlot; virtual; abstract;
     // extract frames from slot.readbuf, and handle them
@@ -652,18 +654,6 @@ begin
     result := Write(connection, pointer(data)^, length(data));
 end;
 
-procedure AppendData(var buf: RawByteString; const data; datalen: PtrInt);
-var
-  buflen: PtrInt;
-begin
-  if datalen > 0 then
-  begin
-    buflen := length(buf);
-    SetLength(buf, buflen + datalen);
-    MoveFast(data, PByteArray(buf)^[buflen], datalen);
-  end;
-end;
-
 function TPollAsyncSockets.Write(connection: TObject; const data;
   datalen, timeout: integer): boolean;
 var
@@ -721,7 +711,7 @@ begin
           inc(P, sent);
         until false;
         // use fWrite output polling for the remaining data in ProcessWrite
-      AppendData(slot.writebuf, P^, datalen);
+      AppendBufferToRawByteString(slot.writebuf, P^, datalen);
       if previous > 0 then // already subscribed
         result := slot.socket <> nil
       else if fWrite.Subscribe(slot.socket, [pseWrite], tag) then
@@ -798,7 +788,7 @@ begin
             CloseConnection(true);
             exit; // socket closed gracefully or unrecoverable error -> abort
           end;
-          AppendData(slot.readbuf, temp, recved);
+          AppendBufferToRawByteString(slot.readbuf, temp, recved);
           inc(added, recved);
         until false;
         if added > 0 then
