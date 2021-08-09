@@ -738,12 +738,19 @@ type
   // our units as valid JSON input, without previous correction
   // - jsonUnquotedPropNameCompact will emit single-line layout with unquoted
   // property names
+  // - by default we rely on UTF-8 encoding (which is mandatory in the RFC 8259)
+  // but you can use jsonEscapeUnicode to produce compact 7-bit ASCII output,
+  // with \u#### escape of all accents, e.g. as default python json.dumps
+  // - jsonNoEscapeUnicode will process any \u#### pattern and ensure proper
+  // UTF-8 is generated instead
   // - those features are not implemented in this unit, but in mormot.core.json
   TTextWriterJsonFormat = (
     jsonCompact,
     jsonHumanReadable,
     jsonUnquotedPropName,
-    jsonUnquotedPropNameCompact);
+    jsonUnquotedPropNameCompact,
+    jsonEscapeUnicode,
+    jsonNoEscapeUnicode);
     
   /// parent to T*Writer text processing classes, with the minimum set of methods
   // - use an internal buffer, so much faster than naive string+string
@@ -2105,8 +2112,9 @@ function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from two hexa bytes into a 16-bit UTF-16 WideChar
-// - similar to HexToBin(Hex,@wordvar,2) + bswap(wordvar)
-function HexToWideChar(Hex: PAnsiChar): cardinal;
+// - similar to HexDisplayToBin(Hex,@wordvar,2)
+// - returns 0 on malformated input
+function HexToWideChar(Hex: PUtf8Char): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from binary data into hexa chars
@@ -10110,8 +10118,8 @@ begin
     {$ifndef CPUX86NOTPIC}
     tab := @ConvertHexToBin;
     {$endif CPUX86NOTPIC}
-    b := tab[Ord(Hex[0]) + 256]; // + 256 for shl 4
-    c := tab[Ord(Hex[1])];
+    b := tab[ord(Hex[0]) + 256]; // + 256 for shl 4
+    c := tab[ord(Hex[1])];
     if (b <> 255) and
        (c <> 255) then
     begin
@@ -10124,25 +10132,36 @@ begin
   result := false; // return false if any invalid char
 end;
 
-function HexToWideChar(Hex: PAnsiChar): cardinal;
+function HexToWideChar(Hex: PUtf8Char): cardinal;
 var
-  B: PtrUInt;
+  B: cardinal;
+  {$ifdef CPUX86NOTPIC}
+  tab: THexToDualByte absolute ConvertHexToBin;
+  {$else}
+  tab: PByteArray; // faster on PIC, ARM and x86_64
+  {$endif CPUX86NOTPIC}
 begin
-  result := ConvertHexToBin[Ord(Hex[0])];
+  {$ifndef CPUX86NOTPIC}
+  tab := @ConvertHexToBin;
+  {$endif CPUX86NOTPIC}
+  result := tab[ord(Hex[0])];
   if result <= 15 then
   begin
-    B := ConvertHexToBin[Ord(Hex[1])];
+    result := result shl 12;
+    B := tab[ord(Hex[1])];
     if B <= 15 then
     begin
-      result := result shl 4 + B;
-      B := ConvertHexToBin[Ord(Hex[2])];
+      B := B shl 8;
+      inc(result, B);
+      B := tab[ord(Hex[2])];
       if B <= 15 then
       begin
-        result := result shl 4 + B;
-        B := ConvertHexToBin[Ord(Hex[3])];
+        B := B shl 4;
+        inc(result, B);
+        B := tab[ord(Hex[3])];
         if B <= 15 then
         begin
-          result := result shl 4 + B;
+          inc(result, B);
           exit;
         end;
       end;
@@ -10150,7 +10169,6 @@ begin
   end;
   result := 0;
 end;
-
 
 function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt;
 var

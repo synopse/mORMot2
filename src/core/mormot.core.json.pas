@@ -135,11 +135,15 @@ function NeedsJsonEscape(P: PUtf8Char): boolean; overload;
 // http://www.ietf.org/rfc/rfc4627.txt
 function NeedsJsonEscape(P: PUtf8Char; PLen: integer): boolean; overload;
 
-/// UTF-8 encode one or two \u#### JSON escaped codepoints into Dest
+/// UTF-8 decode one or two \u#### JSON escaped codepoints into Dest
 // - P^ should point at 'u1234' just after \u1234
 // - return ending P position, maybe after another \u#### UTF-16 surrogate char
-function JsonEscapeToUtf8(var D: PUtf8Char; P: PUtf8Char): PUtf8Char;
-  {$ifdef HASINLINE}inline;{$endif}
+function JsonUnicodeEscapeToUtf8(var D: PUtf8Char; P: PUtf8Char): PUtf8Char;
+//  {$ifdef HASINLINE}inline;{$endif}
+
+/// encode one \u#### JSON escaped UTF-16 codepoint into Dest
+procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUint);
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// test if the supplied buffer is a "string" value or a numerical value
 // (floating point or integer), according to the characters within
@@ -769,6 +773,14 @@ type
     // - may be used with InternalJsonWriter, as a faster alternative to
     // ! AddNoJsonEscapeUtf8(Source.Text);
     procedure AddNoJsonEscape(Source: TTextWriter); overload;
+    /// append a UTF-8 already encoded JSON forcing Unicode escape
+    // - don't escapes chars according to the JSON RFC but escape all 8-bit
+    // UTF-8 values as their UTF-16 \u#### escaped content
+    // - used for jsonEscapeUnicode to follow python default json.dumps() layout
+    procedure AddNoJsonEscapeForcedUnicode(P: PUtf8Char; Len: PtrInt);
+    /// append a pure UTF-8 encoded JSON with \u#### no Unicode escape
+    // - as used for jsonNoEscapeUnicode transformation
+    procedure AddNoJsonEscapeForcedNoUnicode(P: PUtf8Char; Len: PtrInt);
     /// append an open array constant value to the buffer
     // - "" won't be added for string values
     // - string values may be escaped, depending on the supplied parameter
@@ -2325,42 +2337,42 @@ begin
   result := true;
 end;
 
-function JsonEscapeToUtf8(var D: PUtf8Char;  P: PUtf8Char): PUtf8Char;
+function JsonUnicodeEscapeToUtf8(var D: PUtf8Char;  P: PUtf8Char): PUtf8Char;
 var
   c, s: cardinal;
 begin
   // P^ points at 'u1234' just after \u0123
-  c := (ConvertHexToBin[ord(P[1])] shl 12) or
-       (ConvertHexToBin[ord(P[2])] shl 8) or
-       (ConvertHexToBin[ord(P[3])] shl 4) or
-        ConvertHexToBin[ord(P[4])];
-  if c = 0 then
-    D^ := '?' // \u0000 is an invalid value
-  else if c <= $7f then
-    D^ := AnsiChar(c)
+  c := HexToWideChar(P + 1);
+  if c <= $7f then
+    if c <> 0 then
+      D^ := AnsiChar(c)
+    else
+      D^ := '?' // \u0000 is an invalid value
   else if c < $7ff then
   begin
     D[0] := AnsiChar($C0 or (c shr 6));
     D[1] := AnsiChar($80 or (c and $3F));
     inc(D);
   end
-  else if (c >= UTF16_HISURROGATE_MIN) and
+  else if (c >= UTF16_HISURROGATE_MIN) and  // decode from two UTF-16 surrogates
           (c <= UTF16_LOSURROGATE_MAX) then
     if PWord(P + 5)^ = ord('\') + ord('u') shl 8 then
     begin
-      s := (ConvertHexToBin[ord(P[7])] shl 12)+
-           (ConvertHexToBin[ord(P[8])] shl 8)+
-           (ConvertHexToBin[ord(P[9])] shl 4)+
-            ConvertHexToBin[ord(P[10])];
-      case c of // inlined Utf16CharToUtf8()
-        UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
-          c := ((c - $D7C0) shl 10) or (s xor UTF16_LOSURROGATE_MIN);
-        UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-          c := ((s - $D7C0)shl 10) or (c xor UTF16_LOSURROGATE_MIN);
+      s := HexToWideChar(P + 7);
+      if s = 0 then
+        D^ := '?' // invalid surrogate
+      else
+      begin
+        case c of // inlined Utf16CharToUtf8()
+          UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
+            c := ((c - $D7C0) shl 10) or (s xor UTF16_LOSURROGATE_MIN);
+          UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
+            c := ((s - $D7C0)shl 10) or (c xor UTF16_LOSURROGATE_MIN);
+        end;
+        inc(D, Ucs4ToUtf8(c, D));
+        result := P + 11;
+        exit;
       end;
-      inc(D, Ucs4ToUtf8(c, D));
-      result := P + 11;
-      exit;
     end
     else
       D^ := '?'
@@ -2373,6 +2385,17 @@ begin
   end;
   inc(D);
   result := P + 5;
+end;
+
+procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUInt);
+var
+  P: PUtf8Char;
+begin
+  P := B;
+  PWord(P + 1)^ := ord('\') + ord('u') shl 8;
+  PWord(P + 3)^ := TwoDigitsHexWBLower[c shr 8];
+  PWord(P + 5)^ := TwoDigitsHexWBLower[c and $ff];
+  inc(B, 6);
 end;
 
 function IsString(P: PUtf8Char): boolean;  // test if P^ is a "string" value
@@ -2963,7 +2986,7 @@ lit:        inc(P);
           else if c = 'u' then
           begin
             // decode '\u0123' UTF-16 into UTF-8
-            // note: JsonEscapeToUtf8() inlined here to optimize GetJsonField
+            // note: inlined JsonUnicodeEscapeToUtf8() to optimize GetJsonField
             c4 := (ConvertHexToBin[ord(P[1])] shl 12) or
                   (ConvertHexToBin[ord(P[2])] shl 8) or
                   (ConvertHexToBin[ord(P[3])] shl 4) or
@@ -5909,14 +5932,14 @@ begin
         end
         else
         begin
-          if not (Format in [jsonCompact, jsonUnquotedPropNameCompact]) then
+          if Format in [jsonHumanReadable, jsonUnquotedPropName] then
             AddCRAndIndent;
           inc(fHumanReadableLevel);
           Add('[');
           repeat
             if Json = nil then
               exit;
-            if not (Format in [jsonCompact, jsonUnquotedPropNameCompact]) then
+            if Format in [jsonHumanReadable, jsonUnquotedPropName] then
               AddCRAndIndent;
             Json := AddJsonReformat(Json, Format, @objEnd);
             if objEnd = ']' then
@@ -5924,7 +5947,7 @@ begin
             Add(objEnd);
           until false;
           dec(fHumanReadableLevel);
-          if not (Format in [jsonCompact, jsonUnquotedPropNameCompact]) then
+          if Format in [jsonHumanReadable, jsonUnquotedPropName] then
             AddCRAndIndent;
         end;
         Add(']');
@@ -5938,7 +5961,7 @@ begin
               (Json^ > ' ');
         Add('{');
         inc(fHumanReadableLevel);
-        if not (Format in [jsonCompact, jsonUnquotedPropNameCompact]) then
+        if Format in [jsonHumanReadable, jsonUnquotedPropName] then
           AddCRAndIndent;
         if Json^ = '}' then
           repeat
@@ -5970,11 +5993,11 @@ begin
             if objEnd = '}' then
               break;
             Add(objEnd);
-            if not (Format in [jsonCompact, jsonUnquotedPropNameCompact]) then
+            if Format in [jsonHumanReadable, jsonUnquotedPropName] then
               AddCRAndIndent;
           until false;
         dec(fHumanReadableLevel);
-        if not (Format in [jsonCompact, jsonUnquotedPropNameCompact]) then
+        if Format in [jsonHumanReadable, jsonUnquotedPropName] then
           AddCRAndIndent;
         Add('}');
       end;
@@ -5986,7 +6009,12 @@ begin
         if Json^ <> '"' then
           exit;
         inc(Json);
-        AddNoJsonEscape(Value, Json - Value);
+        if Format = jsonEscapeUnicode then
+          AddNoJsonEscapeForcedUnicode(Value, Json - Value)
+        else if Format = jsonNoEscapeUnicode then
+          AddNoJsonEscapeForcedNoUnicode(Value, Json - Value)
+        else
+          AddNoJsonEscape(Value, Json - Value);
       end;
   else
     begin
@@ -6335,6 +6363,95 @@ begin
     AddNoJsonEscape(Source.fTempBuf, Source.B - Source.fTempBuf + 1)
   else
     AddNoJsonEscapeUtf8(Source.Text);
+end;
+
+procedure TTextWriter.AddNoJsonEscapeForcedUnicode(P: PUtf8Char; Len: PtrInt);
+var
+  S, P2: PUtf8Char;
+  c: cardinal;
+begin
+  repeat
+    // handle 7-bit ASCII chars, by quad if possible
+    S := P;
+    if Len >= 4 then
+      repeat
+        if PCardinal(S)^ and $80808080 <> 0 then
+          break; // break on first non ASCII quad
+        inc(S, 4);
+        dec(Len, 4);
+      until Len < 4;
+    if (Len > 0) and
+       (S^ < #128) then // some 1..3 trailing ASCII chars
+      repeat
+        inc(S);
+        dec(Len);
+      until (Len = 0) or
+            (S^ > #127);
+    P2 := P;
+    P := S;
+    dec(S, PtrUInt(P2));
+    if S <> nil then
+      AddNoJsonEscape(P2, PtrUInt(S));
+    if Len = 0 then
+      exit;
+    // some characters needs UTF-16 \u#### Unicode encoding
+    if B >= BEnd then
+      FlushToStream;
+    P2 := P;
+    c := UTF8_TABLE.GetHighUtf8Ucs4(P);
+    dec(Len, P - P2);
+    if (Len < 0) or
+       (c = 0) then
+      break;
+    if c <= $ffff then
+      Utf16ToJsonUnicodeEscape(B, c)
+    else
+    begin
+      dec(c, $10000); // store as UTF-16 surrogates
+      Utf16ToJsonUnicodeEscape(B, (c shr 10) or UTF16_HISURROGATE_MIN);
+      Utf16ToJsonUnicodeEscape(B, (c and $3FF) or UTF16_LOSURROGATE_MIN);
+    end;
+  until false;
+end;
+
+procedure TTextWriter.AddNoJsonEscapeForcedNoUnicode(P: PUtf8Char; Len: PtrInt);
+var
+  P2: PUtf8Char;
+begin
+  repeat
+    P2 := P;
+    repeat
+      if P^ <> '\' then
+      begin
+        inc(P);
+        dec(Len);
+        if Len = 0 then
+          break;
+        continue;
+      end;
+      if P[1] = 'u' then // found a \u#### pattern
+        break;
+      inc(P, 2); // ignore whole \# escaped block
+      dec(Len, 2);
+      if Len = 0 then
+        break;
+      if Len < 0 then
+        exit;
+    until false;
+    if P <> P2 then
+      AddNoJsonEscape(P2, P - P2);
+    if Len <= 0 then
+      exit;
+    // some characters needs UTF-16 \u#### Unicode decoding
+    if B >= BEnd then
+      FlushToStream;
+    P2 := P;
+    inc(P); // P^ should point at 'u1234' just after \u1234
+    inc(B);
+    P := JsonUnicodeEscapeToUtf8(B, P); // decode up to two UTF-16 surrogates
+    dec(B);
+    dec(Len, P - P2);
+  until Len <= 0;
 end;
 
 procedure TTextWriter.AddJsonString(const Text: RawUtf8);
