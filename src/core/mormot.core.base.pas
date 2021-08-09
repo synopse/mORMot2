@@ -271,8 +271,9 @@ type
   /// low-level storage of UCS4 CodePoints, stored as 32-bit integers
   RawUcs4 = TIntegerDynArray;
 
-  /// store one UCS4 CodePoint, as a 32/64-bit PtrInt for better codegen
+  /// store one 32-bit UCS4 CodePoint (better naming than UCS4 Char)
   // - RTL's Ucs4Char is buggy, especially on oldest Delphi
+  // - defined as a 32/64-bit PtrUInt for better codegen
   Ucs4CodePoint = PtrUInt;
 
   PRawUnicode = ^RawUnicode;
@@ -9405,11 +9406,11 @@ begin
     if p1 <> nil then
       if p2 <> nil then
       begin
-        l1 := PStrLen(PtrUInt(p1) - _STRLEN)^;
-        l2 := PStrLen(PtrUInt(p2) - _STRLEN)^;
         result := p1[0] - p2[0]; // compare first char for quicksort
         if result <> 0 then
           exit;
+        l1 := PStrLen(PtrUInt(p1) - _STRLEN)^;
+        l2 := PStrLen(PtrUInt(p2) - _STRLEN)^;
         result := l1;
         if l1 > l2 then
           l1 := l2;
@@ -11336,7 +11337,11 @@ begin
   {$ifdef UNICODE}
   result := StrCompW(PWideChar(A), PWideChar(B));
   {$else}
+  {$ifdef CPUINTEL}
+  result := SortDynArrayAnsiString(A, B); // has its own optimized asm
+  {$else}
   result := StrComp(PUtf8Char(A), PUtf8Char(B));
+  {$endif CPUINTEL}
   {$endif UNICODE}
 end;
 
