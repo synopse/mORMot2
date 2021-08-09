@@ -5959,10 +5959,10 @@ begin
               AddJsonEscape(Name);
               Add('"');
             end;
-            if Format in [jsonCompact, jsonUnquotedPropNameCompact] then
-              Add(':')
+            if Format in [jsonHumanReadable, jsonUnquotedPropName] then
+              Add(':', ' ')
             else
-              Add(':', ' ');
+              Add(':');
             while (Json^ <= ' ') and
                   (Json^ <> #0) do
               inc(Json);
