@@ -4307,7 +4307,7 @@ var
   SU: SynUnicode;
   str: string;
   up4: RawUcs4;
-  U, U2, res, Up, Up2: RawUtf8;
+  U, U2, res, Up, Up2, json, json1, json2: RawUtf8;
   arr: TRawUtf8DynArray;
   P: PUtf8Char;
   PB: PByte;
@@ -4536,6 +4536,13 @@ begin
         P[len120] := bak;
       end;
     end;
+    json := FormatUtf8('{"a":?,"b":%}', [i], [U], {jsonformat=}true);
+    Check(IsValidJson(json, {strict=}true));
+    json1 := JsonReformat(json, jsonEscapeUnicode);
+    Check(IsValidJson(json1, true));
+    Check(IsAnsiCompatible(U) or (PosEx('\u', json1) > 0));
+    json2 := JsonReformat(json1, jsonNoEscapeUnicode);
+    Check(json2 = json, 'jeu2');
     Unic := Utf8DecodeToRawUnicode(U);
     {$ifndef FPC_HAS_CPSTRING} // buggy FPC
     Check(Utf8ToWinAnsi(U) = W);

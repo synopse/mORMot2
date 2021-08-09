@@ -2925,7 +2925,7 @@ const
   ITER = 20;
   ONLYLOG = false;
 var
-  people, sample, notexpanded: RawUtf8;
+  people, sample, notexpanded, j0, j1, j2, j3: RawUtf8;
   peoples: string;
   P: PUtf8Char;
   count, len, lennexp, i, interned: integer;
@@ -3008,6 +3008,15 @@ begin
   for i := 1 to ITER * 5000 do
     Check(JsonObjectPropCount(P + 3) = 6, 'first TOrmPeople object');
   NotifyTestSpeed('JsonObjectPropCount()', 0, ITER * 5000 * 119, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+    j0 := JsonReformat(people, jsonUnquotedPropNameCompact);
+  NotifyTestSpeed('jsonUnquotedPropNameCompact', 0,
+    length(j0) * ITER, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+    j0 := JsonReformat(people, jsonHumanReadable);
+  NotifyTestSpeed('jsonHumanReadable', 0, length(j0) * ITER, @timer, ONLYLOG);
   interned := DocVariantType.InternNames.Count;
   timer.Start;
   for i := 1 to ITER do
@@ -3221,6 +3230,24 @@ begin
   sample := StringFromFile(WorkDir + 'sample.json');
   if sample <> '' then
     begin
+      timer.Start;
+      for i := 1 to ITER do
+        j0 := JsonReformat(sample, jsonCompact);
+      NotifyTestSpeed('JsonReformat sample.json', 0,
+        length(sample) * ITER, @timer, ONLYLOG);
+      j1 := JsonReformat(sample, jsonEscapeUnicode);
+      j2 := JsonReformat(j1, jsonNoEscapeUnicode);
+      j3 := JsonReformat(sample, jsonNoEscapeUnicode);
+      //FileFromString(j0, WorkDir + 'sample0.json');
+      //FileFromString(j1, WorkDir + 'sample1.json');
+      //FileFromString(j2, WorkDir + 'sample2.json');
+      //FileFromString(j3, WorkDir + 'sample3.json');
+      Check(IsValidUtf8(sample), 'sample.json utf8');
+      Check(IsValidUtf8(j0), 'sample0.json utf8');
+      Check(IsValidUtf8(j1), 'sample1.json utf8');
+      Check(IsValidUtf8(j2), 'sample2.json utf8');
+      Check(IsValidUtf8(j3), 'sample3.json utf8');
+      Check(j2 = j3, 'reformat sample.json');
       timer.Start;
       for i := 1 to ITER do
       begin
