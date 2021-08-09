@@ -5387,7 +5387,7 @@ utf8:     Add(PUtf8Char(P), Len, Escape);
             inc(P);
             dec(Len);
           until (Len = 0) or
-                (P^ >= #127);
+                (P^ > #127);
         if P <> pointer(B) then
           Add(B, P - B, Escape);
         if Len <= 0 then

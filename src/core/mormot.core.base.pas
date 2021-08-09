@@ -8713,7 +8713,7 @@ begin
     inc(Len, 4);
     if Len > PtrUInt(PC) then
       repeat
-        if PC^ >= #127 then
+        if PC^ > #127 then
           exit;
         inc(PC);
       until Len <= PtrUInt(PC);

@@ -5428,7 +5428,7 @@ begin
             inc(P);
             dec(Len);
           until (Len = 0) or
-                (P^ >= #127);
+                (P^ > #127);
         if P <> B then
           AddNoJsonEscape(B, P - B);
         if Len > 0 then
