@@ -205,11 +205,14 @@ function GetJsonField(P: PUtf8Char; out PDest: PUtf8Char;
 /// decode a JSON field name in an UTF-8 encoded buffer
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that P^ is not shared
-// - it will return the property name (with an ending #0) or nil on error
+// - it will return the property name, with an ending #0, and "..." content
+// properly unescaped unless NoJsonUnescape is set to true
+// - returns nil on error
 // - this function will handle strict JSON property name (i.e. a "string"), but
 // also MongoDB extended syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
-function GetJsonPropName(var Json: PUtf8Char; Len: PInteger = nil): PUtf8Char; overload;
+function GetJsonPropName(var Json: PUtf8Char; Len: PInteger = nil;
+  NoJsonUnescape: boolean = false): PUtf8Char; overload;
 
 /// decode a JSON field name in an UTF-8 encoded shortstring variable
 // - this function would left the P^ buffer memory untouched, so may be safer
@@ -2344,10 +2347,15 @@ begin
   // P^ points at 'u1234' just after \u0123
   c := HexToWideChar(P + 1);
   if c <= $7f then
-    if c <> 0 then
+    if c >= 32 then
       D^ := AnsiChar(c)
+    else if c = 0 then
+      D^ := '?' // \u0000 is an invalid value (at least in our framework)
     else
-      D^ := '?' // \u0000 is an invalid value
+    begin
+      PInt64(D)^ := PInt64(P - 1)^; // control chars should always be escaped
+      inc(D, 5);
+    end
   else if c < $7ff then
   begin
     D[0] := AnsiChar($C0 or (c shr 6));
@@ -2375,7 +2383,7 @@ begin
       end;
     end
     else
-      D^ := '?'
+      D^ := '?' // the first \u#### expects a following \u#### surrogate
   else
   begin
     D[0] := AnsiChar($E0 or (c shr 12));
@@ -3199,7 +3207,8 @@ begin
   until P^ <> '/'; // there may be other subsequent comments ;)
 end;
 
-function GetJsonPropName(var Json: PUtf8Char; Len: PInteger): PUtf8Char;
+function GetJsonPropName(var Json: PUtf8Char; Len: PInteger;
+  NoJsonUnescape: boolean): PUtf8Char;
 var
   P, Name: PUtf8Char;
   WasString: boolean;
@@ -3233,10 +3242,13 @@ begin
       inc(P);
     until jcJsonStringMarker in tab[P^]; // [#0, '"', '\']
     if P^ <> '"' then
+      // we need to handle a complex property name (seldom encoutered)
       if P^ = #0 then
         exit
+      else if NoJsonUnescape then
+        P := GotoEndOfJsonString2(P, tab)
       else
-      begin // we need to unescape the property name (seldom encoutered)
+      begin // should be unescaped
         Name := GetJsonField(Name - 1, Json, @WasString, @EndOfObject, Len);
         if (Name <> nil) and
            WasString and
@@ -5405,7 +5417,7 @@ utf8:     Add(PUtf8Char(P), Len, Escape);
             dec(Len, 4);
           until Len < 4;
         if (Len > 0) and
-           (P^ < #128) then
+           (P^ <= #127) then
           repeat
             inc(P);
             dec(Len);
@@ -5970,7 +5982,8 @@ begin
                 (Json^ > ' ')
         else
           repeat
-            Name := GetJsonPropName(Json, @NameLen);
+            // processs property name
+            Name := GetJsonPropName(Json, @NameLen, {nounescape=}true);
             if Name = nil then
               exit;
             if (Format in [jsonUnquotedPropName, jsonUnquotedPropNameCompact]) and
@@ -5979,13 +5992,19 @@ begin
             else
             begin
               Add('"');
-              AddJsonEscape(Name);
+              if Format = jsonEscapeUnicode then
+                AddNoJsonEscapeForcedUnicode(Name, NameLen)
+              else if Format = jsonNoEscapeUnicode then
+                AddNoJsonEscapeForcedNoUnicode(Name, NameLen)
+              else
+                AddNoJsonEscape(Name, NameLen);
               Add('"');
             end;
             if Format in [jsonHumanReadable, jsonUnquotedPropName] then
               Add(':', ' ')
             else
               Add(':');
+            // recurcisvely process value
             while (Json^ <= ' ') and
                   (Json^ <> #0) do
               inc(Json);
@@ -6369,7 +6388,10 @@ procedure TTextWriter.AddNoJsonEscapeForcedUnicode(P: PUtf8Char; Len: PtrInt);
 var
   S, P2: PUtf8Char;
   c: cardinal;
+label
+  nxt;
 begin
+  if Len > 0 then
   repeat
     // handle 7-bit ASCII chars, by quad if possible
     S := P;
@@ -6381,7 +6403,7 @@ begin
         dec(Len, 4);
       until Len < 4;
     if (Len > 0) and
-       (S^ < #128) then // some 1..3 trailing ASCII chars
+       (S^ <= #127) then // some 1..3 trailing ASCII chars
       repeat
         inc(S);
         dec(Len);
@@ -6392,7 +6414,7 @@ begin
     dec(S, PtrUInt(P2));
     if S <> nil then
       AddNoJsonEscape(P2, PtrUInt(S));
-    if Len = 0 then
+nxt:if Len = 0 then
       exit;
     // some characters needs UTF-16 \u#### Unicode encoding
     if B >= BEnd then
@@ -6411,6 +6433,8 @@ begin
       Utf16ToJsonUnicodeEscape(B, (c shr 10) or UTF16_HISURROGATE_MIN);
       Utf16ToJsonUnicodeEscape(B, (c and $3FF) or UTF16_LOSURROGATE_MIN);
     end;
+    if P^ > #127 then
+      goto nxt;
   until false;
 end;
 
@@ -6418,6 +6442,7 @@ procedure TTextWriter.AddNoJsonEscapeForcedNoUnicode(P: PUtf8Char; Len: PtrInt);
 var
   P2: PUtf8Char;
 begin
+  if Len > 0 then
   repeat
     P2 := P;
     repeat
