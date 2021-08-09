@@ -984,7 +984,7 @@ type
     // - will always ensure that both this instance and Another are Objects
     // - will compare all values following the supplied Fields order
     // - if no Fields is specified, will fallback to regular Compare()
-    function CompareObject(const Fields: array of RawUtf8;
+    function CompareObject(const ObjFields: array of RawUtf8;
       const Another: TDocVariantData; CaseInsensitive: boolean = false): integer;
     /// efficient equality comparison of two TDocVariantData content
     // - just a wrapper around Compare(Another)=0
@@ -4921,7 +4921,7 @@ begin
   result := VCount - Another.VCount;
 end;
 
-function TDocVariantData.CompareObject(const Fields: array of RawUtf8;
+function TDocVariantData.CompareObject(const ObjFields: array of RawUtf8;
   const Another: TDocVariantData; CaseInsensitive: boolean): integer;
 var
   f: PtrInt;
@@ -4932,20 +4932,20 @@ begin
     if dvoIsObject in Another.VOptions then
     begin
       // compare Object, Object by specified fields
-      if high(Fields) < 0 then
+      if high(ObjFields) < 0 then
       begin
         result := Compare(Another, CaseInsensitive);
         exit;
       end;
-      for f := 0 to high(Fields) do
+      for f := 0 to high(ObjFields) do
       begin
-        v1 := GetVarData(Fields[f], nil, @ndx);
+        v1 := GetVarData(ObjFields[f], nil, @ndx);
         if (cardinal(ndx) < cardinal(Another.VCount)) and
            (StrCompByCase[not (dvoNameCaseSensitive in VOptions)](
-              pointer(Fields[f]), pointer(Another.VName[ndx])) = 0) then
-          v2 := @Another.VValue[ndx] // fields are likely at the same position
+              pointer(ObjFields[f]), pointer(Another.VName[ndx])) = 0) then
+          v2 := @Another.VValue[ndx] // ObjFields are likely at the same position
         else
-          v2 := Another.GetVarData(Fields[f]); // full safe field name lookup
+          v2 := Another.GetVarData(ObjFields[f]); // full safe field name lookup
         result := FastVarDataComp(v1, v2, CaseInsensitive);
         if result <> 0 then // each value should match
           exit;
