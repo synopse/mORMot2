@@ -3603,9 +3603,7 @@ begin
             begin
               if checkExtendedPropName and
                  JsonPropNameValid(pointer(VName[ndx])) then
-              begin
-                W.AddNoJsonEscape(pointer(VName[ndx]), Length(VName[ndx]));
-              end
+                W.AddNoJsonEscape(pointer(VName[ndx]), Length(VName[ndx]))
               else
               begin
                 W.Add('"');

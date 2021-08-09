@@ -2062,6 +2062,7 @@ type
   TAnsiCharToByte = array[AnsiChar] of byte;
   TAnsiCharToWord = array[AnsiChar] of word;
   TByteToWord = array[byte] of word;
+  PByteToWord = ^TByteToWord;
 
 var
   /// a conversion table from hexa chars into binary data

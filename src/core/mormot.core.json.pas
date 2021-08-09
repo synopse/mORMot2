@@ -142,7 +142,7 @@ function JsonUnicodeEscapeToUtf8(var D: PUtf8Char; P: PUtf8Char): PUtf8Char;
 //  {$ifdef HASINLINE}inline;{$endif}
 
 /// encode one \u#### JSON escaped UTF-16 codepoint into Dest
-procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUint);
+procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUint; tab: PByteToWord);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// test if the supplied buffer is a "string" value or a numerical value
@@ -2395,14 +2395,14 @@ begin
   result := P + 5;
 end;
 
-procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUInt);
+procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUInt; tab: PByteToWord);
 var
   P: PUtf8Char;
 begin
   P := B;
   PWord(P + 1)^ := ord('\') + ord('u') shl 8;
-  PWord(P + 3)^ := TwoDigitsHexWBLower[c shr 8];
-  PWord(P + 5)^ := TwoDigitsHexWBLower[c and $ff];
+  PWord(P + 3)^ := tab[c shr 8];
+  PWord(P + 5)^ := tab[c and $ff];
   inc(B, 6);
 end;
 
@@ -6388,6 +6388,7 @@ procedure TTextWriter.AddNoJsonEscapeForcedUnicode(P: PUtf8Char; Len: PtrInt);
 var
   S, P2: PUtf8Char;
   c: cardinal;
+  tab: PByteToWord;
 label
   nxt;
 begin
@@ -6425,13 +6426,14 @@ nxt:if Len = 0 then
     if (Len < 0) or
        (c = 0) then
       break;
+    tab := @TwoDigitsHexWBLower;
     if c <= $ffff then
-      Utf16ToJsonUnicodeEscape(B, c)
+      Utf16ToJsonUnicodeEscape(B, c, tab)
     else
     begin
       dec(c, $10000); // store as UTF-16 surrogates
-      Utf16ToJsonUnicodeEscape(B, (c shr 10) or UTF16_HISURROGATE_MIN);
-      Utf16ToJsonUnicodeEscape(B, (c and $3FF) or UTF16_LOSURROGATE_MIN);
+      Utf16ToJsonUnicodeEscape(B, (c shr 10) or UTF16_HISURROGATE_MIN, tab);
+      Utf16ToJsonUnicodeEscape(B, (c and $3FF) or UTF16_LOSURROGATE_MIN, tab);
     end;
     if P^ > #127 then
       goto nxt;
