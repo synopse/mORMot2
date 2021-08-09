@@ -5359,34 +5359,36 @@ end;
 
 procedure TBaseWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
 var
-  i: PtrInt;
+  direct: PtrInt;
+  D: PUtf8Char;
 begin
   if (P <> nil) and
      (Len > 0) then
   begin
-    inc(B); // allow CancelLastChar
     repeat
-      i := BEnd - B; // guess biggest size to be added into buf^ at once
-      if i >= 0 then // -1..-15 may happen because Add up to BEnd + 16
+      D := B + 1;
+      direct := BEnd - D; // guess biggest size available in fTempBuf at once
+      if direct > 0 then // 0..-15 may happen because Add up to BEnd + 16
       begin
-        if Len < i then
-          i := Len;
-        // add UTF-8 bytes
-        if i > 0 then
+        if Len < direct then
+          direct := Len;
+        // append UTF-8 bytes to fTempBuf
+        if direct > 0 then
         begin
-          MoveFast(P^, B^, i);
-          inc(B, i);
+          MoveFast(P^, D^, direct);
+          inc(B, direct);
         end;
-        if i = Len then
+        dec(Len, direct);
+        if Len = 0 then
           break;
-        inc(PByte(P), i);
-        dec(Len, i);
+        inc(PByte(P), direct);
       end;
-      // FlushInc writes B-buf+1 -> special one below:
-      WriteToStream(fTempBuf, B - fTempBuf);
-      B := fTempBuf;
+      FlushToStream;
+      if Len < fTempBufSize then
+        continue;
+      WriteToStream(P, Len); // no need to transit huge content into fTempBuf
+      break;
     until false;
-    dec(B); // allow CancelLastChar
   end;
 end;
 
