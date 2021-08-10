@@ -5484,7 +5484,7 @@ begin
         FlushToStream;
       if WideChar^ = 0 then
         break;
-      if WideChar^ <= 126 then
+      if WideChar^ <= 127 then
       begin
         B[1] := AnsiChar(ord(WideChar^));
         inc(WideChar);
@@ -5501,7 +5501,7 @@ begin
         FlushToStream;
       if WideChar^ = 0 then
         break;
-      if WideChar^ <= 126 then
+      if WideChar^ <= 127 then
       begin
         B[1] := AnsiChar(ord(WideChar^));
         inc(WideChar);
@@ -5707,13 +5707,13 @@ begin
           inc(B);
           inc(P);
         end;
-      33..126:
+      33..127:
         begin
           B[1] := AnsiChar(c); // direct store 7-bit ASCII
           inc(B);
           inc(P);
         end;
-    else // characters higher than #126 -> UTF-8 encode
+    else // characters higher than #127 -> UTF-8 encode
       inc(B, Utf16CharToUtf8(B + 1, P));
     end;
   end;

@@ -273,8 +273,7 @@ type
 
   /// store one 32-bit UCS4 CodePoint (better naming than UCS4 Char)
   // - RTL's Ucs4Char is buggy, especially on oldest Delphi
-  // - defined as a 32/64-bit PtrUInt for better codegen
-  Ucs4CodePoint = PtrUInt;
+  Ucs4CodePoint = cardinal;
 
   PRawUnicode = ^RawUnicode;
   PRawJson = ^RawJson;

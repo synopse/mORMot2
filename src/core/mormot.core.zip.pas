@@ -1269,7 +1269,7 @@ begin
     while true do
       if ord(P^) = 0 then
         break
-      else if ord(P^) <= 126 then
+      else if ord(P^) <= 127 then
         inc(P)
       else
         exit;

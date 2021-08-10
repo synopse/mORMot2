@@ -38,9 +38,6 @@ type
       offset, minimum: cardinal;
     end;
     FirstByte: array[2..6] of byte;
-    /// UTF-8 encode one UCS4 CodePoint into Dest
-    function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
-      {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a >127 UCS4 CodePoint from UTF-8
     function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
   end;
@@ -84,6 +81,7 @@ const
   UTF16_HISURROGATE_MAX = $dbff;
   UTF16_LOSURROGATE_MIN = $dc00;
   UTF16_LOSURROGATE_MAX = $dfff;
+  UTF16_SURROGATE_OFFSET = $d7c0;
 
   /// replace any incoming character whose value is unrepresentable in Unicode
   // - set e.g. by GetUtf8WideChar(), Utf8UpperReference() or
@@ -112,22 +110,16 @@ function GetUtf8WideChar(P: PUtf8Char): cardinal;
 function NextUtf8Ucs4(var P: PUtf8Char): Ucs4CodePoint;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// UTF-8 encode one UTF-16 character into Dest
-// - return the number of bytes written into Dest (i.e. 1,2 or 3)
-// - this method does NOT handle UTF-16 surrogate pairs
-function WideCharToUtf8(Dest: PUtf8Char; aWideChar: PtrUInt): integer;
-  {$ifdef HASINLINE}inline;{$endif}
-
- /// UTF-8 encode one UTF-16 encoded UCS4 CodePoint into Dest
+/// UTF-8 encode one UTF-16 encoded UCS4 CodePoint into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
 // - Source will contain the next UTF-16 character
-// - this method DOES handle UTF-16 surrogate pairs
+// - this method DOES properly handle UTF-16 surrogate pairs
 function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): integer;
 
 /// UTF-8 encode one UCS4 CodePoint into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
-// - this method DOES handle UTF-16 surrogate pairs
-function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
+// - this method DOES properly handle UTF-16 surrogate pairs
+function Ucs4ToUtf8(ucs4: cardinal; Dest: PUtf8Char): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
@@ -1503,46 +1495,6 @@ implementation
 
 { TUtf8Table }
 
-function TUtf8Table.Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
-var
-  j: PtrInt;
-begin
-  if ucs4 <= $7f then
-  begin
-    Dest^ := AnsiChar(ucs4);
-    result := 1;
-    exit;
-  end
-  else if ucs4 <= $7ff then
-  begin
-    Dest[0] := AnsiChar($C0 or (ucs4 shr 6));
-    Dest[1] := AnsiChar($80 or (ucs4 and $3F));
-    result := 2;
-    exit;
-  end
-  else if ucs4 <= $ffff then
-  begin
-    Dest[0] := AnsiChar($E0 or (ucs4 shr 12));
-    Dest[1] := AnsiChar($80 or ((ucs4 shr 6) and $3F));
-    Dest[2] := AnsiChar($80 or (ucs4 and $3F));
-    result := 3;
-    exit;
-  end
-  else if ucs4 <= $1FFFFF then
-    result := 4
-  else if ucs4 <= $3FFFFFF then
-    result := 5
-  else
-    result := 6;
-  j := result - 1;
-  repeat
-    Dest[j] := AnsiChar((ucs4 and $3f) or $80);
-    ucs4 := ucs4 shr 6;
-    dec(j);
-  until j = 0;
-  Dest^ := AnsiChar(byte(ucs4) or FirstByte[result]);
-end;
-
 function TUtf8Table.GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
 var
   x, i: PtrInt;
@@ -1572,7 +1524,6 @@ begin
   end;
   result := c;
 end;
-
 
 function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
 begin
@@ -1618,32 +1569,50 @@ begin
     result := 0;
 end;
 
-function WideCharToUtf8(Dest: PUtf8Char; aWideChar: PtrUInt): integer;
+function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
+var
+  j: PtrInt;
 begin
-  if aWideChar <= $7F then
+  if ucs4 <= $7f then
   begin
-    Dest^ := AnsiChar(aWideChar);
+    Dest^ := AnsiChar(ucs4);
     result := 1;
   end
-  else if aWideChar > $7ff then
+  else if ucs4 <= $7ff then
   begin
-    Dest[0] := AnsiChar($E0 or (aWideChar shr 12));
-    Dest[1] := AnsiChar($80 or ((aWideChar shr 6) and $3F));
-    Dest[2] := AnsiChar($80 or (aWideChar and $3F));
+    Dest[0] := AnsiChar($C0 or (ucs4 shr 6));
+    Dest[1] := AnsiChar($80 or (ucs4 and $3F));
+    result := 2;
+  end
+  else if ucs4 <= $ffff then
+  begin
+    Dest[0] := AnsiChar($E0 or (ucs4 shr 12));
+    Dest[1] := AnsiChar($80 or ((ucs4 shr 6) and $3F));
+    Dest[2] := AnsiChar($80 or (ucs4 and $3F));
     result := 3;
   end
   else
   begin
-    Dest[0] := AnsiChar($C0 or (aWideChar shr 6));
-    Dest[1] := AnsiChar($80 or (aWideChar and $3F));
-    result := 2;
+    // here ucs4 > $ffff
+    if ucs4 <= $1FFFFF then
+      result := 4
+    else if ucs4 <= $3FFFFFF then
+      result := 5
+    else
+      result := 6;
+    j := result - 1;
+    repeat
+      Dest[j] := AnsiChar((ucs4 and $3f) or $80);
+      ucs4 := ucs4 shr 6;
+      dec(j);
+    until j = 0;
+    Dest^ := AnsiChar(byte(ucs4) or UTF8_TABLE.FirstByte[result]);
   end;
 end;
 
 function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): integer;
 var
   c: cardinal;
-  j: integer;
 begin
   c := Source^;
   inc(Source);
@@ -1656,39 +1625,19 @@ begin
       end;
     UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
       begin
-        c := ((c - $D7C0) shl 10) or
+        c := ((c - UTF16_SURROGATE_OFFSET) shl 10) or
               (Source^ xor UTF16_LOSURROGATE_MIN);
         inc(Source);
       end;
     UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
       begin
-        c := ((cardinal(Source^) - $D7C0) shl 10) or
+        c := ((cardinal(Source^) - UTF16_SURROGATE_OFFSET) shl 10) or
               (c xor UTF16_LOSURROGATE_MIN);
         inc(Source);
       end;
-  end; // now c is the UTF-32/UCS4 code point
-  if c <= $7ff then
-    result := 2
-  else if c <= $ffff then
-    result := 3
-  else if c <= $1FFFFF then
-    result := 4
-  else if c <= $3FFFFFF then
-    result := 5
-  else
-    result := 6;
-  j := result - 1;
-  repeat
-    Dest[j] := AnsiChar((c and $3f) or $80);
-    c := c shr 6;
-    dec(j);
-  until j = 0;
-  Dest^ := AnsiChar(byte(c) or UTF8_TABLE.FirstByte[result]);
-end;
-
-function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
-begin
-  result := UTF8_TABLE.Ucs4ToUtf8(ucs4, Dest);
+  end;
+  // now c is the UTF-32/UCS4 code point
+  result := Ucs4ToUtf8(c, Dest);
 end;
 
 function RawUnicodeToUtf8(Dest: PUtf8Char; DestLen: PtrInt; Source: PWideChar;
@@ -1757,7 +1706,7 @@ unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
             end
             else
             begin
-              c := ((c - $D7C0) shl 10) or
+              c := ((c - UTF16_SURROGATE_OFFSET) shl 10) or
                    (cardinal(Source^) xor UTF16_LOSURROGATE_MIN);
               inc(Source);
             end;
@@ -1768,7 +1717,7 @@ unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
               goto unmatch
             else
             begin
-              c := ((cardinal(Source^) - $D7C0) shl 10) or
+              c := ((cardinal(Source^) - UTF16_SURROGATE_OFFSET) shl 10) or
                    (c xor UTF16_LOSURROGATE_MIN);
               inc(Source);
             end;
@@ -5418,7 +5367,7 @@ begin
       w := ord(PW^);
     until (PW - Start >= UpperLen) or
           (w = 0) or
-          ((w < 126) and
+          ((w < 127) and
            not (tcWord in TEXT_BYTES[w]));
     if PW - Start >= UpperLen then
       if Unicode_CompareString(Start, Upper, UpperLen, UpperLen,
@@ -5432,7 +5381,7 @@ begin
       w := ord(PW^);
       if w = 0 then
         exit
-      else if ((w < 126) and
+      else if ((w < 127) and
               not (tcWord in TEXT_BYTES[w])) then
         Break;
       inc(PW);
@@ -5932,7 +5881,7 @@ type
     IndexHi: array[0..271] of byte;
     IndexLo: array[0..8, 0..31] of byte;
     // branchless Unicode 10.0 uppercase folding using our internal tables
-    function Ucs4Upper(c: Ucs4CodePoint): Ucs4CodePoint;
+    function Ucs4Upper(c: PtrUInt): Ucs4CodePoint;
       {$ifdef HASINLINE} inline; {$endif}
   end;
   {$ifndef CPUX86NOTPIC}
@@ -6224,7 +6173,7 @@ var
       12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12));
   );
 
-function TUnicodeUpperTable.Ucs4Upper(c: Ucs4CodePoint): Ucs4CodePoint;
+function TUnicodeUpperTable.Ucs4Upper(c: PtrUInt): Ucs4CodePoint;
 var
   i: PtrUInt;
 begin
@@ -6235,7 +6184,7 @@ end;
 
 function Utf8UpperReference(S, D: PUtf8Char): PUtf8Char;
 var
-  c: Ucs4CodePoint;
+  c: PtrUInt;
   S2: PUtf8Char;
   {$ifdef CPUX86NOTPIC}
   tab: TUnicodeUpperTable absolute UU;
@@ -6283,7 +6232,7 @@ end;
 
 function Utf8UpperReference(S, D: PUtf8Char; SLen: PtrUInt): PUtf8Char;
 var
-  c: Ucs4CodePoint;
+  c: PtrUInt;
   endSBy4: PUtf8Char;
   extra, i: PtrInt;
   {$ifdef CPUX86NOTPIC}
@@ -6367,7 +6316,7 @@ by1:    c := byte(S^);
           end;
           if c <= UU_MAX then
             c := tab.Ucs4Upper(c);
-          inc(D, utf8.Ucs4ToUtf8(c, D));
+          inc(D, Ucs4ToUtf8(c, D));
           if S < PUtf8Char(SLen) then
             continue
           else
@@ -6392,7 +6341,7 @@ end;
 function UpperCaseUcs4Reference(const S: RawUtf8): RawUcs4;
 var
   n: PtrInt;
-  c: Ucs4CodePoint;
+  c: PtrUInt;
   U: PUtf8Char;
 begin
   if S = '' then

@@ -2373,9 +2373,11 @@ begin
       begin
         case c of // inlined Utf16CharToUtf8()
           UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
-            c := ((c - $D7C0) shl 10) or (s xor UTF16_LOSURROGATE_MIN);
+            c := ((c - UTF16_SURROGATE_OFFSET) shl 10) or
+                 (s xor UTF16_LOSURROGATE_MIN);
           UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-            c := ((s - $D7C0)shl 10) or (c xor UTF16_LOSURROGATE_MIN);
+            c := ((s - UTF16_SURROGATE_OFFSET) shl 10) or
+                 (c xor UTF16_LOSURROGATE_MIN);
         end;
         inc(D, Ucs4ToUtf8(c, D));
         result := P + 11;
@@ -3029,11 +3031,11 @@ lit:        inc(P);
                   case c4 of
                     // inlined Utf16CharToUtf8()
                     UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
-                      c4 := ((c4 - $D7C0) shl 10) or
-                         (surrogate xor UTF16_LOSURROGATE_MIN);
+                      c4 := ((c4 - UTF16_SURROGATE_OFFSET) shl 10) or
+                            (surrogate xor UTF16_LOSURROGATE_MIN);
                     UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-                      c4 := ((surrogate - $D7C0) shl 10) or
-                         (c4 xor UTF16_LOSURROGATE_MIN);
+                      c4 := ((surrogate - UTF16_SURROGATE_OFFSET) shl 10) or
+                            (c4 xor UTF16_LOSURROGATE_MIN);
                   end;
                   if c4 <= $7ff then
                     c := #2

@@ -4250,8 +4250,8 @@ procedure TTestCoreBase._UTF8;
     CheckEqual('ABCDEFGH', UpperCaseReference('aBcdEfgh'));
     for i := 0 to 11 do
     begin
-      lo[WideCharToUtf8(@lo, _CASEFOLDINGTESTS[i * 2])] := #0;
-      up[WideCharToUtf8(@up, _CASEFOLDINGTESTS[i * 2 + 1])] := #0;
+      lo[Ucs4ToUtf8(_CASEFOLDINGTESTS[i * 2], @lo)] := #0;
+      up[Ucs4ToUtf8(_CASEFOLDINGTESTS[i * 2 + 1], @up)] := #0;
       PInt64(@up2)^ := 0;
       Utf8UpperReference(@lo, @up2);
       Check(StrComp(@up, @up2) = 0, 'CaseFolding');
