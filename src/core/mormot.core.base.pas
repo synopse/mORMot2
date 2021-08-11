@@ -3547,6 +3547,7 @@ type
     function Seek(Offset: Longint; Origin: Word): Longint; override;
   end;
 
+  {$M+}
   /// TStream with a protected fPosition field
   TStreamWithPosition = class(TStream)
   protected
@@ -3560,6 +3561,7 @@ type
     /// call the 64-bit Seek() overload
     function Seek(Offset: Longint; Origin: Word): Longint; override;
   end;
+  {$M-}
 
   /// TStream using a RawByteString as internal storage
   // - default TStringStream uses UTF-16 WideChars since Delphi 2009, so it is

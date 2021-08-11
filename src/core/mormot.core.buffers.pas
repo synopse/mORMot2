@@ -1779,7 +1779,7 @@ type
     fConsoleLen: byte;
     fMode: (mUnknown, mRead, mWrite);
     function GetSize: Int64; override;
-    procedure DoReport;
+    procedure DoReport(ReComputeElapsed: boolean);
     procedure DoHash(data: pointer; len: integer); virtual; // do nothing
     procedure SetExpectedSize(Value: Int64);
     procedure ReadWriteHash(const Buffer; Count: Longint); virtual;
@@ -8290,6 +8290,12 @@ function TStreamRedirect.GetProgress: RawUtf8;
 var
   ctx: shortstring;
 begin
+  if (self = nil) or
+     fTerminated then
+  begin
+    result := '';
+    exit;
+  end;
   Ansi7StringToShortString(Context, ctx);
   if ctx[0] > #30 then
   begin
@@ -8340,8 +8346,10 @@ begin
 end;
 {$I+}
 
-procedure TStreamRedirect.DoReport;
+procedure TStreamRedirect.DoReport(ReComputeElapsed: boolean);
 begin
+  if ReComputeElapsed then
+    fElapsed := GetTickCount64 - fStartTix; // may have changed in-between
   if (fCurrentSize <> fExpectedSize) and
      (fElapsed < fReportTix) then
     exit;
@@ -8450,7 +8458,7 @@ begin
   fExpectedSize := fCurrentSize; // reached 100%
   if Assigned(fOnProgress) or
      Assigned(fOnLog) then
-    DoReport; // notify finished
+    DoReport(true); // notify finished
 end;
 
 procedure TStreamRedirect.Terminate;
@@ -8495,7 +8503,7 @@ begin
               SleepHiRes(300); // show progress on very low bandwidth
               if Assigned(fOnProgress) or
                  Assigned(fOnLog) then
-                DoReport;
+                DoReport(true);
               dec(tosleep, 300);
               if fTerminated then
                 raise ESynException.CreateUtf8('%.%(%) Terminated',
@@ -8509,7 +8517,7 @@ begin
   end;
   if Assigned(fOnProgress) or
      Assigned(fOnLog) then
-    DoReport;
+    DoReport(false);
   if fTerminated then
     raise ESynException.CreateUtf8('%.%(%) Terminated',
       [self, Caller, fContext]);
