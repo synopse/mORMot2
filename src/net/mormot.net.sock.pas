@@ -830,7 +830,12 @@ type
     /// direct send data through network
     // - raise a ENetSock exception on any error
     // - bypass the SockSend() or SockOut^ buffers
-    procedure SndLow(P: pointer; Len: integer);
+    procedure SndLow(P: pointer; Len: integer); overload;
+    /// direct send data through network
+    // - raise a ENetSock exception on any error
+    // - bypass the SndBuf or SockOut^ buffers
+    // - raw Data is sent directly to OS: no LF/CRLF is appened to the block
+    procedure SndLow(const Data: RawByteString); overload;
     /// direct send data through network
     // - return false on any error, true on success
     // - bypass the SndBuf or SockOut^ buffers
@@ -838,11 +843,6 @@ type
     /// returns the low-level error number
     // - i.e. returns WSAGetLastError
     function LastLowSocketError: integer;
-    /// direct send data through network
-    // - raise a ENetSock exception on any error
-    // - bypass the SndBuf or SockOut^ buffers
-    // - raw Data is sent directly to OS: no LF/CRLF is appened to the block
-    procedure Write(const Data: RawByteString);
     /// direct accept an new incoming connection on a bound socket
     // - instance should have been setup as a server via a previous Bind() call
     // - returns nil on error or a ResultClass instance on success
@@ -3013,6 +3013,11 @@ begin
       [ClassNameShort(self)^, fServer, Len], NetLastError);
 end;
 
+procedure TCrtSocket.SndLow(const Data: RawByteString);
+begin
+  SndLow(pointer(Data), Length(Data));
+end;
+
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
 var
   sent: integer;
@@ -3057,11 +3062,6 @@ end;
 function TCrtSocket.LastLowSocketError: integer;
 begin
   result := sockerrno;
-end;
-
-procedure TCrtSocket.Write(const Data: RawByteString);
-begin
-  SndLow(pointer(Data), Length(Data));
 end;
 
 function TCrtSocket.AcceptIncoming(ResultClass: TCrtSocketClass): TCrtSocket;

@@ -295,7 +295,7 @@ begin
               PendingDelete(found, 'duplicated')
             else
             begin
-              sock.Write(FormatUtf8(
+              sock.SndLow(FormatUtf8(
                 'HTTP/1.0 200 OK'#13#10 +
                 'Server: % %'#13#10 +
                 'Connection: close'#13#10 +

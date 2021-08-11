@@ -70,7 +70,7 @@ begin
         begin
           session := TSynTestCase.RandomIdentifier(20 + r and 15);
           get := THttpSocket.Open('localhost', proxy.Server.Port);
-          get.Write('GET /sw.mov HTTP/1.0'#13#10 +
+          get.SndLow('GET /sw.mov HTTP/1.0'#13#10 +
             'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +
             'x-sessioncookie: ' + session + #13#10 +
             'Accept: ' + RTSP_MIME + #13#10 +
@@ -89,7 +89,7 @@ begin
         with req[r] do
         begin
           post := TCrtSocket.Open('localhost', proxy.Server.Port);
-          post.Write('POST /sw.mov HTTP/1.0'#13#10 +
+          post.SndLow('POST /sw.mov HTTP/1.0'#13#10 +
             'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +
             'x-sessioncookie: ' + session + #13#10 +
             'Content-Type: ' + RTSP_MIME + #13#10 +
@@ -114,7 +114,7 @@ begin
         if i and 7 = 0 then
         begin
           for r := 0 to rmax do
-            req[r].post.Write(
+            req[r].post.SndLow(
               'REVTQ1JJQkUgcnRzcDovL3R1Y2tydS5hcHBsZS5jb20vc3cubW92IFJUU1AvMS4w'#13#10 +
               'DQpDU2VxOiAxDQpBY2NlcHQ6IGFwcGxpY2F0aW9uL3NkcA0KQmFuZHdpZHRoOiAx'#13#10 +
               'NTAwMDAwDQpBY2NlcHQtTGFuZ3VhZ2U6IGVuLVVTDQpVc2VyLUFnZW50OiBRVFMg'#13#10 +
@@ -130,7 +130,7 @@ begin
         end;
         // stream output should be redirected to the GET request
         for r := 0 to rmax do
-          req[r].stream.Write(req[r].session);
+          req[r].stream.SndLow(req[r].session);
         for r := 0 to rmax do
           with req[r] do
             test.check(get.SockReceiveString = session);

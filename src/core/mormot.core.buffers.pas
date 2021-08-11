@@ -8308,11 +8308,11 @@ begin
       [ctx, KBNoSpace(fCurrentSize), KBNoSpace(PerSecond)], result)
   else if fCurrentSize < ExpectedSize then
   begin
+    // we can state the current progression ratio
     if Remaining <= 0 then
       remain := ''
     else
       FormatShort(' remaining:%', [MicroSecToString(Remaining * 1000)], remain);
-    // we can state the current progression ratio
     FormatUtf8('% %% %/% %/s%',
       [ctx, Percent, '%', KBNoSpace(fCurrentSize), KBNoSpace(ExpectedSize),
        KBNoSpace(PerSecond), remain], result)
