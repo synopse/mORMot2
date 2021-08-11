@@ -4917,42 +4917,33 @@ end;
 
 procedure TBaseWriter.FlushToStream;
 var
-  len: PtrInt;
-  newsize: PtrUInt;
+  tmp, written: PtrUInt;
 begin
-  len := B - fTempBuf + 1;
-  if len > 0 then
-  begin
-    WriteToStream(fTempBuf, len);
-    if not (twoFlushToStreamNoAutoResize in fCustomOptions) then
-    begin
-      newsize := fTotalFileSize - fInitialStreamPosition;
-      if (fTempBufSize < 49152) and
-         (newsize > PtrUInt(fTempBufSize) * 4) then
-        // tune small (stack-allocated?) buffer to grow by twice its size
-        newsize := fTempBufSize * 2
-      else if (fTempBufSize < 1 shl 20) and
-              (newsize > 40 shl 20) then
-        // total > 40MB -> grow internal buffer to 1MB
-        newsize := 1 shl 20
-      else
-        // nothing to change about internal buffer size
-        newsize := 0;
-      if newsize > 0 then
-      begin
-        fTempBufSize := newsize;
-        if twoBufferIsExternal in fCustomOptions then
-          // use heap, not stack from now on
-          exclude(fCustomOptions, twoBufferIsExternal)
-        else
-          // from big content comes bigger buffer
-          FreeMem(fTempBuf);
-        GetMem(fTempBuf, fTempBufSize);
-        BEnd := fTempBuf + (fTempBufSize - 16); // as in SetBuffer()
-      end;
-    end; 
-    B := fTempBuf - 1;
-  end;
+  FlushFinal;
+  if twoFlushToStreamNoAutoResize in fCustomOptions then
+    exit;
+  written := fTotalFileSize - fInitialStreamPosition;
+  tmp := fTempBufSize;
+  if (tmp < 49152) and
+     (written > PtrUInt(tmp) * 4) then
+    // tune small (stack-allocated?) buffer to grow by twice its size
+    fTempBufSize := fTempBufSize * 2
+  else if (written > 40 shl 20) and
+          (tmp < 1 shl 20) then
+    // total > 40MB -> grow internal buffer to 1MB
+    fTempBufSize := 1 shl 20
+  else
+    // nothing to change about internal buffer size
+    exit;
+  if twoBufferIsExternal in fCustomOptions then
+    // use heap, not stack from now on
+    exclude(fCustomOptions, twoBufferIsExternal)
+  else
+    // from big content comes bigger buffer - but no need to realloc/move
+    FreeMem(fTempBuf);
+  GetMem(fTempBuf, fTempBufSize);
+  BEnd := fTempBuf + (fTempBufSize - 16); // as in SetBuffer()
+  B := fTempBuf - 1;
 end;
 
 procedure TBaseWriter.ForceContent(const text: RawUtf8);
