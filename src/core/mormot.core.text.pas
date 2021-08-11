@@ -4906,20 +4906,24 @@ begin
 end;
 
 procedure TBaseWriter.FlushFinal;
-begin
-  Include(fCustomOptions, twoFlushToStreamNoAutoResize);
-  FlushToStream;
+var
+  len: PtrInt;
+begin // don't mess with twoFlushToStreamNoAutoResize
+  len := B - fTempBuf + 1;
+  if len > 0 then
+    WriteToStream(fTempBuf, len);
+  B := fTempBuf - 1;
 end;
 
 procedure TBaseWriter.FlushToStream;
 var
-  i: PtrInt;
+  len: PtrInt;
   newsize: PtrUInt;
 begin
-  i := B - fTempBuf + 1;
-  if i > 0 then
+  len := B - fTempBuf + 1;
+  if len > 0 then
   begin
-    WriteToStream(fTempBuf, i);
+    WriteToStream(fTempBuf, len);
     if not (twoFlushToStreamNoAutoResize in fCustomOptions) then
     begin
       newsize := fTotalFileSize - fInitialStreamPosition;
@@ -5373,32 +5377,34 @@ var
 begin
   if (P <> nil) and
      (Len > 0) then
-  begin
-    repeat
-      D := B + 1;
-      direct := BEnd - D; // guess biggest size available in fTempBuf at once
-      if direct > 0 then // 0..-15 may happen because Add up to BEnd + 16
-      begin
-        if Len < direct then
-          direct := Len;
-        // append UTF-8 bytes to fTempBuf
-        if direct > 0 then
+    if Len < fTempBufSize * 2 then
+    begin
+      repeat
+        D := B + 1;
+        direct := BEnd - D; // guess biggest size available in fTempBuf at once
+        if direct > 0 then // 0..-15 may happen because Add up to BEnd + 16
         begin
-          MoveFast(P^, D^, direct);
-          inc(B, direct);
+          if Len < direct then
+            direct := Len;
+          // append UTF-8 bytes to fTempBuf
+          if direct > 0 then
+          begin
+            MoveFast(P^, D^, direct);
+            inc(B, direct);
+          end;
+          dec(Len, direct);
+          if Len = 0 then
+            break;
+          inc(PByte(P), direct);
         end;
-        dec(Len, direct);
-        if Len = 0 then
-          break;
-        inc(PByte(P), direct);
-      end;
-      FlushToStream;
-      if Len < fTempBufSize then
-        continue;
+        FlushToStream;
+      until false;
+    end
+    else
+    begin
+      FlushFinal; // no auto-resize
       WriteToStream(P, Len); // no need to transit huge content into fTempBuf
-      break;
-    until false;
-  end;
+    end;
 end;
 
 procedure EngineAppendUtf8(W: TBaseWriter; Engine: TSynAnsiConvert;
@@ -5916,7 +5922,7 @@ end;
 
 procedure TBaseWriter.AddBinToHex(Bin: Pointer; BinBytes: PtrInt);
 var
-  ChunkBytes: PtrInt;
+  chunk: PtrInt;
 begin
   if BinBytes <= 0 then
     exit;
@@ -5925,14 +5931,14 @@ begin
   inc(B);
   repeat
     // guess biggest size to be added into buf^ at once
-    ChunkBytes := (BEnd - B) shr 1; // div 2, *2 -> two hexa chars per byte
-    if BinBytes < ChunkBytes then
-      ChunkBytes := BinBytes;
+    chunk := (BEnd - B) shr 1; // div 2 -> two hexa chars per byte
+    if BinBytes < chunk then
+      chunk := BinBytes;
     // add hexa characters
-    mormot.core.text.BinToHex(PAnsiChar(Bin), PAnsiChar(B), ChunkBytes);
-    inc(B, ChunkBytes * 2);
-    inc(PByte(Bin), ChunkBytes);
-    dec(BinBytes, ChunkBytes);
+    mormot.core.text.BinToHex(PAnsiChar(Bin), PAnsiChar(B), chunk);
+    inc(B, chunk * 2);
+    inc(PByte(Bin), chunk);
+    dec(BinBytes, chunk);
     if BinBytes = 0 then
       break;
     // Flush writes B-buf+1 -> special one below:

@@ -1873,10 +1873,10 @@ var
     begin
       if ClientSock.fCompressAcceptEncoding <> '' then
         ClientSock.SockSend(ClientSock.fCompressAcceptEncoding);
-      ClientSock.SockSend('Connection: Keep-Alive'#13#10); // #13#10 -> end headers
+      ClientSock.SockSend('Connection: Keep-Alive'#13#10); // #13#10 -> end CRLF
     end
     else
-      ClientSock.SockSendCRLF; // headers must end with a void line
+      ClientSock.SockSendCRLF; // headers must end with a void #13#10 line
     // 3. sent HTTP body content (if any)
     ClientSock.SockSendFlush(ctxt.OutContent); // flush all data to network
   end;
