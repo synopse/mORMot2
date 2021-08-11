@@ -4908,7 +4908,7 @@ end;
 procedure TBaseWriter.FlushFinal;
 var
   len: PtrInt;
-begin // don't mess with twoFlushToStreamNoAutoResize
+begin // don't mess with twoFlushToStreamNoAutoResize: it may not be final
   len := B - fTempBuf + 1;
   if len > 0 then
     WriteToStream(fTempBuf, len);

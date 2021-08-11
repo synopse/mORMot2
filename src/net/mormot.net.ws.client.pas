@@ -352,12 +352,12 @@ begin
           HeaderSetText(Ctxt.OutCustomHeaders)
         else
           HeaderSetText(Ctxt.OutCustomHeaders, Ctxt.OutContentType);
-        ContentLength := length(Ctxt.OutContent);
+        Http.ContentLength := length(Ctxt.OutContent);
         if OutStream <> nil then
-          OutStream.WriteBuffer(pointer(Ctxt.OutContent)^, ContentLength)
+          OutStream.WriteBuffer(pointer(Ctxt.OutContent)^, Http.ContentLength)
         else
-          Content := Ctxt.OutContent;
-        ContentType := Ctxt.OutContentType;
+          Http.Content := Ctxt.OutContent;
+        Http.ContentType := Ctxt.OutContentType;
       finally
         Ctxt.Free;
       end;
@@ -437,9 +437,9 @@ begin
       prot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       result := 'Invalid HTTP Upgrade Header';
       if not IdemPChar(pointer(cmd), 'HTTP/1.1 101') or
-         not (hfConnectionUpgrade in HeaderFlags) or
-         (ContentLength > 0) or
-         not IdemPropNameU(Upgrade, 'websocket') or
+         not (hfConnectionUpgrade in Http.HeaderFlags) or
+         (Http.ContentLength > 0) or
+         not IdemPropNameU(Http.Upgrade, 'websocket') or
          not aProtocol.SetSubprotocol(prot) then
         exit;
       aProtocol.Name := prot;

@@ -8,6 +8,7 @@ unit mormot.net.http;
 
    HTTP/HTTPS Abstract Process Classes and Definitions
    - Shared HTTP Constants and Functions
+   - Reusable HTTP State Machine
    - THttpSocket Implementing HTTP over plain sockets
    - Abstract Server-Side Types used e.g. for Client-Server Protocol
 
@@ -100,19 +101,82 @@ const
 {$endif NOXPOWEREDNAME}
 
 
-{ ******************** THttpSocket Implementing HTTP over plain sockets }
+{ ******************** Reusable HTTP State Machine }
 
 type
-  /// exception class raised during HTTP process
-  EHttpSocket = class(ENetSock);
-
-  /// map the presence of some HTTP headers for THttpSocket.HeaderFlags
-  THttpSocketHeaderFlags = set of (
+  /// map the presence of some HTTP headers for THttpRequestContext.HeaderFlags
+  THttpRequestHeaderFlags = set of (
     hfTransferChuked,
     hfConnectionClose,
     hfConnectionUpgrade,
     hfConnectionKeepAlive,
     hfHasRemoteIP);
+
+  /// reusable structure to parse any HTTP content
+  THttpRequestContext = object
+  private
+    /// an internal buffer used to reduce memory allocations
+    WorkBuffer: RawByteString;
+    WorkBufferLen: PtrInt;
+    procedure AppendToWorkBuffer(P: pointer; Len: PtrInt; CRLF: boolean);
+  public
+    /// will contain the first header line:
+    // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
+    // - 'HTTP/1.0 200 OK' for a GET response after Get() e.g.
+    Command: RawUtf8;
+    /// will contain all header lines after a Request
+    // - use HeaderGetValue() to get one HTTP header item value by name
+    Headers: RawUtf8;
+    /// same as HeaderGetValue('CONTENT-TYPE'), but retrieved during Request
+    ContentType: RawUtf8;
+    /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved during Request
+    ContentEncoding: RawUtf8;
+    /// same as HeaderGetValue('ACCEPT-ENCODING'), but retrieved during Request
+    AcceptEncoding: RawUtf8;
+    /// same as HeaderGetValue('UPGRADE'), but retrieved during Request
+    Upgrade: RawUtf8;
+    /// same as FindNameValue(aInHeaders, HEADER_BEARER_UPPER, ...),
+    // but retrieved during Request
+    // - is the raw Token, excluding 'Authorization: Bearer ' trailing chars
+    BearerToken: RawUtf8;
+    /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
+    XPoweredBy: RawUtf8;
+    /// will contain the data retrieved from the server, after the Request
+    Content: RawByteString;
+    /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during Request
+    // - is overridden with real Content length during HTTP body retrieval
+    ContentLength: Int64;
+    /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved during Request
+    // - proprietary header, used with our RESTful ORM access
+    ServerInternalState: integer;
+    /// map the presence of some HTTP headers, but retrieved during Request
+    HeaderFlags: THttpRequestHeaderFlags;
+    /// reset the internal state of this request
+    procedure Clear;
+    /// parse a HTTP header into Headers and fill internal properties
+    // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
+    // use directly the ContentLength/ContentType/ServerInternalState/Upgrade
+    // and HeaderFlags fields since HeaderGetValue() would return ''
+    // - force HeadersUnFiltered=true to store all headers including the
+    // connection-related fields, but increase memory and reduce performance
+    // - returns the position of the end of the line, excluding trailing #13/#0
+    function ParseHeader(P: PUtf8Char; HeadersUnFiltered: boolean = false): PUtf8Char;
+    /// to be called once all ParseHeader lines have been done
+    procedure ParseHeaderFinalize;
+    /// search a value from the internal parsed Headers
+    // - supplied aUpperName should be already uppercased:
+    // HeaderGetValue('CONTENT-TYPE')='text/html', e.g.
+    // - note that GetHeader(HeadersUnFiltered=false) will set ContentType field
+    // but let HeaderGetValue('CONTENT-TYPE') return ''
+    function HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
+  end;
+
+
+{ ******************** THttpSocket Implementing HTTP over plain sockets }
+
+type
+  /// exception class raised during HTTP process
+  EHttpSocket = class(ENetSock);
 
   /// parent of THttpClientSocket and THttpServerSocket classes
   // - contain properties for implementing HTTP/1.1 using the Socket API
@@ -141,33 +205,8 @@ type
     procedure CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
       var OutContent: RawByteString; OutStream: TStream);
   public
-    /// will contain the first header line:
-    // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
-    // - 'HTTP/1.0 200 OK' for a GET response after Get() e.g.
-    Command: RawUtf8;
-    /// will contain all header lines after a Request
-    // - use HeaderGetValue() to get one HTTP header item value by name
-    Headers: RawUtf8;
-    /// same as HeaderGetValue('CONTENT-TYPE'), but retrieved during Request
-    ContentType: RawUtf8;
-    /// same as HeaderGetValue('UPGRADE'), but retrieved during Request
-    Upgrade: RawUtf8;
-    /// same as FindNameValue(aInHeaders, HEADER_BEARER_UPPER, ...),
-    // but retrieved during Request
-    // - is the raw Token, excluding 'Authorization: Bearer ' trailing chars
-    BearerToken: RawUtf8;
-    /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
-    XPoweredBy: RawUtf8;
-    /// will contain the data retrieved from the server, after the Request
-    Content: RawByteString;
-    /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during Request
-    // - is overridden with real Content length during HTTP body retrieval
-    ContentLength: Int64;
-    /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved during Request
-    // - proprietary header, used with our RESTful ORM access
-    ServerInternalState: integer;
-    /// map the presence of some HTTP headers, but retrieved during Request
-    HeaderFlags: THttpSocketHeaderFlags;
+    /// the whole context of the HTTP request
+    Http: THttpRequestContext;
     /// retrieve the HTTP headers into Headers[] and fill most properties below
     // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
     // use directly the ContentLength/ContentType/ServerInternalState/Upgrade
@@ -573,6 +612,183 @@ end;
 
 
 
+{ ******************** Reusable HTTP State Machine }
+
+{ THttpRequestContext }
+
+procedure THttpRequestContext.AppendToWorkBuffer(P: pointer; Len: PtrInt;
+  CRLF: boolean);
+var
+  cap: PtrInt;
+begin
+  cap := Length(WorkBuffer);
+  if WorkBufferLen + 2 > cap then
+    SetLength(WorkBuffer, cap + cap shr 3 + 2048);
+  MoveFast(P^, PByteArray(WorkBuffer)[WorkBufferLen], Len);
+  inc(WorkBufferLen, Len);
+  if CRLF then
+  begin
+    PWord(@PByteArray(WorkBuffer)[WorkBufferLen])^ := $0a0d;
+    inc(WorkBufferLen, 2);
+  end;
+end;
+
+procedure THttpRequestContext.Clear;
+begin
+  WorkBufferLen := 0; // keep and reuse existing temporary WorkBuffer
+  Command := '';
+  Headers := '';
+  ContentType := '';
+  ContentEncoding := '';
+  Upgrade := '';
+  BearerToken := '';
+  XPoweredBy := '';
+  Content := '';
+  ContentLength := -1;
+  ServerInternalState := 0;
+  HeaderFlags := [];
+end;
+
+function THttpRequestContext.ParseHeader(P: PUtf8Char;
+  HeadersUnFiltered: boolean): PUtf8Char;
+begin
+  result := P;
+  if P = nil then
+    exit; // avoid unexpected GPF in case of wrong usage
+  case IdemPCharArray(P, [
+      'CONTENT-',
+      'TRANSFER-ENCODING: CHUNKED',
+      'CONNECTION: ',
+      'ACCEPT-ENCODING:',
+      'UPGRADE:',
+      'SERVER-INTERNALSTATE:',
+      'X-POWERED-BY:',
+      HEADER_BEARER_UPPER]) of
+    0:
+      // 'CONTENT-'
+      case IdemPCharArray(P + 8, [
+            'LENGTH:',
+            'TYPE:',
+            'ENCODING:']) of
+        0:
+          begin
+            // 'CONTENT-LENGTH:'
+            inc(P, 16);
+            ContentLength := GetInt64(P);
+          end;
+        1:
+          begin
+            // 'CONTENT-TYPE:'
+            P := GotoNextNotSpace(P + 13);
+            if IdemPChar(P, 'APPLICATION/JSON') then
+              ContentType := JSON_CONTENT_TYPE_VAR
+            else
+            begin
+              GetTrimmed(P, ContentType);
+              if ContentType <> '' then
+                // 'CONTENT-TYPE:' is searched by HEADER_CONTENT_TYPE_UPPER
+                HeadersUnFiltered := true;
+            end;
+          end;
+        2:
+          begin
+            // 'CONTENT-ENCODING:'
+            inc(P, 17);
+            GetTrimmed(P, ContentEncoding);
+          end;
+      else
+        HeadersUnFiltered := true;
+      end;
+    1:
+      // 'TRANSFER-ENCODING: CHUNKED'
+      include(HeaderFlags, hfTransferChuked);
+    2:
+      begin
+        // 'CONNECTION: '
+        inc(P, 12);
+        case IdemPCharArray(P, [
+              'CLOSE',
+              'UPGRADE',
+              'KEEP-ALIVE']) of
+          0:
+            // 'CONNECTION: CLOSE'
+            include(HeaderFlags, hfConnectionClose);
+          1:
+            // 'CONNECTION: UPGRADE'
+            include(HeaderFlags, hfConnectionUpgrade);
+          2:
+            begin
+              // 'CONNECTION: KEEP-ALIVE'
+              include(HeaderFlags, hfConnectionKeepAlive);
+              if P[10] = ',' then
+              begin
+                P := GotoNextNotSpace(P + 11);
+                if IdemPChar(P, 'UPGRADE') then
+                  // 'CONNECTION: KEEP-ALIVE, UPGRADE'
+                  include(HeaderFlags, hfConnectionUpgrade);
+              end;
+            end;
+        else
+          HeadersUnFiltered := true;
+        end;
+      end;
+    3:
+      begin
+        // 'ACCEPT-ENCODING:'
+        inc(P, 17);
+        GetTrimmed(P, AcceptEncoding);
+      end;
+    4:
+      // 'UPGRADE:'
+      GetTrimmed(P + 8, Upgrade);
+    5:
+      begin
+        // 'SERVER-INTERNALSTATE:'
+        inc(P, 21);
+        ServerInternalState := GetCardinal(P);
+      end;
+    6:
+      begin
+        // 'X-POWERED-BY:'
+        inc(P, 13);
+        GetTrimmed(P, XPoweredBy);
+      end;
+    7:
+      // 'AUTHORIZATION: BEARER '
+      begin
+        inc(P, 22);
+        GetTrimmed(P, BearerToken);
+        if BearerToken <> '' then
+          // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
+          HeadersUnFiltered := true;
+      end
+  else
+    // unrecognized name should be stored in Headers
+    HeadersUnFiltered := true;
+  end;
+  while P^ > #13 do
+    inc(P); // no control char should appear in any header
+  if HeadersUnFiltered then
+    // store meaningful headers into WorkBuffer
+    AppendToWorkBuffer(result, P - result, {crlf=}true);
+end;
+
+procedure THttpRequestContext.ParseHeaderFinalize;
+begin
+  if WorkBufferLen = 0 then
+    exit;
+  FastSetString(Headers, nil, WorkBufferLen + 40); // some space for RemoteIP
+  MoveFast(pointer(WorkBuffer)^, pointer(Headers)^, WorkBufferLen);
+  PStrLen(PAnsiChar(pointer(Headers)) - _STRLEN)^ := WorkBufferLen; // fake len
+  WorkBufferLen := 0; // we can reuse the temp buffer now
+end;
+
+function THttpRequestContext.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
+begin
+  FindNameValue(Headers, pointer(aUpperName), result, false, ':');
+end;
+
+
 { ******************** THttpSocket Implementing HTTP over plain sockets }
 
 { THttpSocket }
@@ -603,33 +819,23 @@ end;
 
 procedure THttpSocket.HttpStateReset;
 begin
-  HeaderFlags := [];
-  Headers := '';
+  Http.Clear;
   fBodyRetrieved := false;
   fContentCompress := -1;
   integer(fCompressAcceptHeader) := 0;
-  ContentType := '';
-  Upgrade := '';
-  ContentLength := -1;
-  Content := '';
-  ServerInternalState := 0;
-  BearerToken := '';
 end;
 
 procedure THttpSocket.GetHeader(HeadersUnFiltered: boolean);
 var
-  s, c: RawUtf8;
-  i, len: PtrInt;
+  s: RawUtf8;
+  i: PtrInt;
   err: integer;
-  P: PUtf8Char;
   line: array[0..4095] of AnsiChar; // avoid most memory allocation
 begin
+  // parse the headers
   HttpStateReset;
-  fSndBufLen := 0; // SockSend() used as headers temp buffer to avoid getmem
-  repeat
-    P := @line;
-    if (SockIn <> nil) and
-       not HeadersUnFiltered then
+  if SockIn <> nil then
+    while true do
     begin
       {$I-}
       readln(SockIn^, line);
@@ -640,129 +846,31 @@ begin
       {$I+}
       if line[0] = #0 then
         break; // HTTP headers end with a void line
+      Http.ParseHeader(@line, HeadersUnFiltered);
     end
     else
+    while true do
     begin
       SockRecvLn(s);
       if s = '' then
         break;
-      P := pointer(s);
+      Http.ParseHeader(pointer(s), HeadersUnFiltered);
     end;
-    // note: set P=nil below to store in Headers[]
-    case IdemPCharArray(P, [
-        'CONTENT-',
-        'TRANSFER-ENCODING: CHUNKED',
-        'CONNECTION: ',
-        'ACCEPT-ENCODING:',
-        'UPGRADE:',
-        'SERVER-INTERNALSTATE:',
-        'X-POWERED-BY:', HEADER_BEARER_UPPER]) of
-      0:
-        // 'CONTENT-'
-        case IdemPCharArray(P + 8, ['LENGTH:', 'TYPE:', 'ENCODING:']) of
-          0:
-            // 'CONTENT-LENGTH:'
-            ContentLength := GetInt64(P + 16);
-          1:
-            begin
-              // 'CONTENT-TYPE:'
-              P := GotoNextNotSpace(P + 13);
-              if IdemPChar(P, 'APPLICATION/JSON') then
-                ContentType := JSON_CONTENT_TYPE_VAR
-              else
-              begin
-                GetTrimmed(P, ContentType);
-                if ContentType <> '' then
-                  // 'CONTENT-TYPE:' is searched by HEADER_CONTENT_TYPE_UPPER
-                  P := nil;
-              end;
-            end;
-          2:
-            // 'CONTENT-ENCODING:'
-            if fCompress <> nil then
-            begin
-              GetTrimmed(P + 17, c);
-              for i := 0 to high(fCompress) do
-                if fCompress[i].Name = c then
-                begin
-                  fContentCompress := i;
-                  break;
-                end;
-            end;
-        else
-          P := nil;
-        end;
-      1:
-        // 'TRANSFER-ENCODING: CHUNKED'
-        include(HeaderFlags, hfTransferChuked);
-      2:
-        // 'CONNECTION: '
-        case IdemPCharArray(P + 12, ['CLOSE', 'UPGRADE', 'KEEP-ALIVE']) of
-          0:
-            // 'CONNECTION: CLOSE'
-            include(HeaderFlags, hfConnectionClose);
-          1:
-            // 'CONNECTION: UPGRADE'
-            include(HeaderFlags, hfConnectionUpgrade);
-          2:
-            begin
-              // 'CONNECTION: KEEP-ALIVE'
-              include(HeaderFlags, hfConnectionKeepAlive);
-              if P[22] = ',' then
-              begin
-                P := GotoNextNotSpace(P + 23);
-                if IdemPChar(P, 'UPGRADE') then
-                  // 'CONNECTION: KEEP-ALIVE, UPGRADE'
-                  include(HeaderFlags, hfConnectionUpgrade);
-              end;
-            end;
-        else
-          P := nil;
-        end;
-      3:
-        // 'ACCEPT-ENCODING:'
-        if fCompress <> nil then
-          fCompressAcceptHeader := ComputeContentEncoding(fCompress, P + 16)
-        else
-          P := nil;
-      4:
-        // 'UPGRADE:'
-        GetTrimmed(P + 8, Upgrade);
-      5:
-        // 'SERVER-INTERNALSTATE:'
-        ServerInternalState := GetCardinal(P + 21);
-      6:
-        // 'X-POWERED-BY:'
-        GetTrimmed(P + 13, XPoweredBy);
-      7:
-        // 'AUTHORIZATION: BEARER '
-        begin
-          GetTrimmed(P + 22, BearerToken);
-          if BearerToken <> '' then
-            // allows FindNameValue(..., HEADER_BEARER_UPPER, ...) search
-            P := nil;
-        end
-    else
-      // unrecognized name should be stored in Headers
-      P := nil;
-    end;
-    if (P = nil) or
-       HeadersUnFiltered then
-      // store meaningful headers into SockSend() fSndBuf/Len as temp buffer
-      if {%H-}s = '' then
-      begin
-        len := StrLen(@line);
-        if len > SizeOf(line) - 2 then
-          break; // avoid buffer overflow
-        PWord(@line[len])^ := 13 + 10 shl 8; // include CR + LF
-        SockSend(@line, len + 2);
-      end
-      else
-        SockSend(s);
-  until false;
-  // retrieve meaningful headers from SockSend() fSndBuf/fSndBufLen temp buffer
-  Headers := copy(fSndBuf, 1, fSndBufLen);
-  fSndBufLen := 0;
+  // finalize the headers
+  if fCompress <> nil then
+  begin
+    if Http.ContentEncoding <> '' then
+     for i := 0 to high(fCompress) do
+       if fCompress[i].Name = Http.ContentEncoding then
+       begin
+         fContentCompress := i;
+         break;
+       end;
+    if Http.AcceptEncoding <> '' then
+      fCompressAcceptHeader :=
+        ComputeContentEncoding(fCompress, pointer(Http.AcceptEncoding));
+  end;
+  Http.ParseHeaderFinalize; // compute all meaningful headers
 end;
 
 procedure THttpSocket.GetBody(DestStream: TStream);
@@ -773,17 +881,17 @@ var
   Len, LChunk, Error: integer;
 begin
   fBodyRetrieved := true;
-  Content := '';
+  Http.Content := '';
   if DestStream <> nil then
     if (cardinal(fContentCompress) < cardinal(length(fCompress))) then
       raise EHttpSocket.Create('%s.GetBody(%s) does not support compression',
         [ClassNameShort(self)^, ClassNameShort(DestStream)^]);
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
-  if hfTransferChuked in HeaderFlags then
+  if hfTransferChuked in Http.HeaderFlags then
   begin
     // supplied Content-Length header should be ignored when chunked
-    ContentLength := 0;
+    Http.ContentLength := 0;
     repeat // chunks decoding loop
       if SockIn <> nil then
       begin
@@ -812,22 +920,22 @@ begin
       end
       else
       begin
-        SetLength(Content, ContentLength + Len); // reserve space for this chunk
-        SockInRead(@PByteArray(Content)[ContentLength], Len); // append data
+        SetLength(Http.Content, Http.ContentLength + Len); // reserve space for this chunk
+        SockInRead(@PByteArray(Http.Content)[Http.ContentLength], Len); // append data
       end;
-      inc(ContentLength, Len);
+      inc(Http.ContentLength, Len);
       SockRecvLn; // ignore next #13#10
     until false;
   end
-  else if ContentLength > 0 then
+  else if Http.ContentLength > 0 then
     // read Content-Length header bytes
     if DestStream <> nil then
     begin
       LChunk := 256 shl 10; // not chunked: use a 256 KB temp buffer
-      if ContentLength < LChunk then
-        LChunk := ContentLength;
+      if Http.ContentLength < LChunk then
+        LChunk := Http.ContentLength;
       SetLength(chunk, LChunk);
-      Len := ContentLength;
+      Len := Http.ContentLength;
       repeat
         if LChunk > Len then
           LChunk := Len;
@@ -838,38 +946,38 @@ begin
     end
     else
     begin
-      SetLength(Content, ContentLength); // not chuncked: direct read
-      SockInRead(pointer(Content), ContentLength);
+      SetLength(Http.Content, Http.ContentLength); // not chuncked: direct read
+      SockInRead(pointer(Http.Content), Http.ContentLength);
     end
-  else if (ContentLength < 0) and // -1 means no Content-Length header
-          IdemPChar(pointer(Command), 'HTTP/1.0 200') then
+  else if (Http.ContentLength < 0) and // -1 means no Content-Length header
+          IdemPChar(pointer(Http.Command), 'HTTP/1.0 200') then
   begin
     // body = either Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
     if SockIn <> nil then // client loop for compatibility with old servers
       while not eof(SockIn^) do
       begin
         readln(SockIn^, Line);
-        if Content = '' then
-          Content := Line
+        if Http.Content = '' then
+          Http.Content := Line
         else
-          Content := Content + #13#10 + Line;
+          Http.Content := Http.Content + #13#10 + Line;
       end;
-    ContentLength := length(Content); // update Content-Length
+    Http.ContentLength := length(Http.Content); // update Content-Length
     if DestStream <> nil then
     begin
-      DestStream.WriteBuffer(pointer(Content)^, ContentLength);
-      Content := '';
+      DestStream.WriteBuffer(pointer(Http.Content)^, Http.ContentLength);
+      Http.Content := '';
     end;
     exit;
   end;
   // optionaly uncompress content
   if cardinal(fContentCompress) < cardinal(length(fCompress)) then
   begin
-    if fCompress[fContentCompress].Func(Content, false) = '' then
+    if fCompress[fContentCompress].Func(Http.Content, false) = '' then
       // invalid content
       raise EHttpSocket.CreateFmt('%s uncompress failed',
         [fCompress[fContentCompress].Name]);
-    ContentLength := length(Content); // uncompressed Content-Length
+    Http.ContentLength := length(Http.Content); // uncompressed Content-Length
   end;
   {$ifdef SYNCRTDEBUGLOW}
   TSynLog.Add.Log(sllCustom2, 'GetBody sock=% pending=% sockin=% len=% %',
@@ -888,37 +996,38 @@ end;
 procedure THttpSocket.HeaderAdd(const aValue: RawUtf8);
 begin
   if aValue <> '' then
-    Headers := Headers + aValue + #13#10;
+    Http.Headers := Http.Headers + aValue + #13#10;
 end;
 
 procedure THttpSocket.HeaderSetText(const aText: RawUtf8;
   const aForcedContentType: RawUtf8);
 begin
   if aText = '' then
-    Headers := ''
+    Http.Headers := ''
   else if aText[length(aText) - 1] <> #10 then
-    Headers := aText + #13#10
+    Http.Headers := aText + #13#10
   else
-    Headers := aText;
+    Http.Headers := aText;
   if (aForcedContentType <> '') and
      (FindNameValue(pointer(aText), 'CONTENT-TYPE:') = nil) then
-    Headers := Headers + 'Content-Type: ' + aForcedContentType + #13#10;
+    Http.Headers := Http.Headers + 'Content-Type: ' + aForcedContentType + #13#10;
 end;
 
 function THttpSocket.HeaderGetText(const aRemoteIP: RawUtf8): RawUtf8;
 begin
   if (aRemoteIP <> '') and
-     not (hfHasRemoteIP in HeaderFlags) then
+     not (hfHasRemoteIP in Http.HeaderFlags) then
   begin
-    Headers := Headers + 'RemoteIP: ' + aRemoteIP + #13#10;
-    include(HeaderFlags, hfHasRemoteIP);
+    // Http.ParseHeaderFinalize did reserve 40 bytes for fast realloc
+    Http.Headers := Http.Headers + 'RemoteIP: ' + aRemoteIP + #13#10;
+    include(Http.HeaderFlags, hfHasRemoteIP);
   end;
-  result := Headers;
+  result := Http.Headers;
 end;
 
 function THttpSocket.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
 begin
-  FindNameValue(Headers, pointer(aUpperName), result, false, ':');
+  result := Http.HeaderGetValue(aUpperName);
 end;
 
 function THttpSocket.RegisterCompress(aFunction: THttpSocketCompress;
@@ -942,6 +1051,7 @@ begin
     else
       fInHeaders := fInHeaders + #13#10 + additionalHeader;
 end;
+
 
 
 end.

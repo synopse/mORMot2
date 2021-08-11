@@ -628,6 +628,8 @@
 
 {$ifdef OSWINDOWS}
 
+  {.$define ONLYUSEHTTPSOCKET} // better performance, but less integrated
+
   {$ifndef ONLYUSEHTTPSOCKET}
     {$define USEWININET}   // publish TWinINet/TWinHttp/TWinHttpAPI classes
     {$define USE_WINIOCP}  // I/O completion ports API is the best option under Windows
@@ -642,6 +644,8 @@
 {$endif OSWINDOWS}
 
 {$ifdef OSPOSIX}
+
+  {$define ONLYUSEHTTPSOCKET} // efficient cross-platform Socket API
 
   {$ifdef OSANDROID}
 

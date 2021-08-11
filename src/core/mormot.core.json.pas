@@ -5994,12 +5994,12 @@ begin
             else
             begin
               Add('"');
-              if Format = jsonEscapeUnicode then
-                AddNoJsonEscapeForcedUnicode(Name, NameLen)
+              if Format < jsonEscapeUnicode then
+                AddNoJsonEscape(Name, NameLen)
               else if Format = jsonNoEscapeUnicode then
                 AddNoJsonEscapeForcedNoUnicode(Name, NameLen)
               else
-                AddNoJsonEscape(Name, NameLen);
+                AddNoJsonEscapeForcedUnicode(Name, NameLen);
               Add('"');
             end;
             if Format in [jsonHumanReadable, jsonUnquotedPropName] then
@@ -6030,12 +6030,12 @@ begin
         if Json^ <> '"' then
           exit;
         inc(Json);
-        if Format = jsonEscapeUnicode then
-          AddNoJsonEscapeForcedUnicode(Value, Json - Value)
+        if Format < jsonEscapeUnicode then
+          AddNoJsonEscape(Value, Json - Value)
         else if Format = jsonNoEscapeUnicode then
           AddNoJsonEscapeForcedNoUnicode(Value, Json - Value)
         else
-          AddNoJsonEscape(Value, Json - Value);
+          AddNoJsonEscapeForcedUnicode(Value, Json - Value);
       end;
   else
     begin

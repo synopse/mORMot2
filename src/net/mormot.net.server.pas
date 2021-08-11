@@ -1823,7 +1823,7 @@ var
       ctxt.OutContentType := ''; // true HTTP always expects a response
     // send response (multi-thread OK) at once
     if (cod < HTTP_SUCCESS) or
-       (ClientSock.Headers = '') then
+       (ClientSock.Http.Headers = '') then
       cod := HTTP_NOTFOUND;
     StatusCodeToReason(cod, reason);
     if errmsg <> '' then
@@ -1883,7 +1883,7 @@ var
 
 begin
   if (ClientSock = nil) or
-     (ClientSock.Headers = '') then
+     (ClientSock.Http.Headers = '') then
     // we didn't get the request = socket read error
     exit; // -> send will probably fail -> nothing to send back
   if Terminated then
@@ -1893,7 +1893,8 @@ begin
   try
     respsent := false;
     with ClientSock do
-      ctxt.Prepare(URL, Method, HeaderGetText(fRemoteIP), Content, ContentType, '');
+      ctxt.Prepare(URL, Method, HeaderGetText(fRemoteIP),
+        Http.Content, Http.ContentType, '');
     try
       cod := DoBeforeRequest(ctxt);
       if cod > 0 then
@@ -1985,7 +1986,7 @@ begin
         if (fServer.ServerKeepAliveTimeOut > 0) and
            (fServer.fInternalHttpServerRespList.Count < pool.MaxBodyThreadCount) and
            (KeepAliveClient or
-            (ContentLength > pool.BigBodySize)) then
+            (Http.ContentLength > pool.BigBodySize)) then
         begin
           // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 16 MB
           // -> process in dedicated background thread
@@ -1995,7 +1996,7 @@ begin
         else
         begin
           // no Keep Alive = multi-connection -> process in the Thread Pool
-          if not (hfConnectionUpgrade in HeaderFlags) and
+          if not (hfConnectionUpgrade in Http.HeaderFlags) and
              (IdemPCharArray(pointer(Method), ['HEAD', 'OPTIONS']) < 0) then
           begin
             GetBody; // we need to get it now
@@ -2056,8 +2057,8 @@ begin
     else
       noheaderfilter := false;
     // 1st line is command: 'GET /path HTTP/1.1' e.g.
-    SockRecvLn(Command);
-    P := pointer(Command);
+    SockRecvLn(Http.Command);
+    P := pointer(Http.Command);
     if P = nil then
       exit; // broken
     GetNextItem(P, ' ', fMethod); // 'GET'
@@ -2065,18 +2066,19 @@ begin
     fKeepAliveClient := ((fServer = nil) or
                          (fServer.ServerKeepAliveTimeOut > 0)) and
                         IdemPChar(P, 'HTTP/1.1');
-    Content := '';
+    Http.Content := '';
     // get headers and content
     GetHeader(noheaderfilter);
     if fServer <> nil then // = nil e.g. from TRtspOverHttpServer
     begin
       if fServer.fRemoteIPHeaderUpper <> '' then
         // real Internet IP (replace 127.0.0.1 from a proxy)
-        FindNameValue(headers, pointer(fServer.fRemoteIPHeaderUpper),
+        FindNameValue(Http.Headers, pointer(fServer.fRemoteIPHeaderUpper),
           fRemoteIP, {keepnotfound=}true);
       if fServer.fRemoteConnIDHeaderUpper <> '' then
       begin
-        P := FindNameValue(pointer(headers), pointer(fServer.fRemoteConnIDHeaderUpper));
+        P := FindNameValue(pointer(Http.Headers),
+          pointer(fServer.fRemoteConnIDHeaderUpper));
         if P <> nil then
           SetQWord(P, PQWord(@fRemoteConnectionID)^);
       end;
@@ -2084,12 +2086,12 @@ begin
         // fallback to 31-bit sequence
         fRemoteConnectionID := fServer.NextConnectionID;
     end;
-    if hfConnectionClose in HeaderFlags then
+    if hfConnectionClose in Http.HeaderFlags then
       fKeepAliveClient := false;
-    if (ContentLength < 0) and
+    if (Http.ContentLength < 0) and
        (KeepAliveClient or
        (fMethod = 'GET')) then
-      ContentLength := 0; // HTTP/1.1 and no content length -> no eof
+      Http.ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     if (headerMaxTix > 0) and
        (GetTickCount64 > headerMaxTix) then
     begin
@@ -2098,9 +2100,9 @@ begin
     end;
     if fServer <> nil then
     begin
-      if (ContentLength > 0) and
+      if (Http.ContentLength > 0) and
          (fServer.MaximumAllowedContentLength > 0) and
-         (cardinal(ContentLength) > fServer.MaximumAllowedContentLength) then
+         (cardinal(Http.ContentLength) > fServer.MaximumAllowedContentLength) then
       begin
         SockSend('HTTP/1.0 413 Payload Too Large'#13#10#13#10'Rejected');
         SockSendFlush('');
@@ -2110,8 +2112,9 @@ begin
       if Assigned(fServer.OnBeforeBody) then
       begin
         allheaders := HeaderGetText(fRemoteIP);
-        status := fServer.OnBeforeBody(fUrl, fMethod, allheaders, ContentType,
-          fRemoteIP, BearerToken, ContentLength, HTTPREMOTEFLAGS[TLS.Enabled]);
+        status := fServer.OnBeforeBody(fUrl, fMethod, allheaders,
+          Http.ContentType, fRemoteIP, Http.BearerToken, Http.ContentLength,
+          HTTPREMOTEFLAGS[TLS.Enabled]);
         {$ifdef SYNCRTDEBUGLOW}
         TSynLog.Add.Log(sllCustom2,
           'GetRequest sock=% OnBeforeBody=% Command=% Headers=%', [fSock, status,
@@ -2132,7 +2135,7 @@ begin
       end;
     end;
     if withBody and
-       not (hfConnectionUpgrade in HeaderFlags) then
+       not (hfConnectionUpgrade in Http.HeaderFlags) then
     begin
       if IdemPCharArray(pointer(fMethod), ['HEAD', 'OPTIONS']) < 0 then
         GetBody;

@@ -1968,8 +1968,8 @@ function TSqlDBSocketConnectionProperties.InternalRequest(
 begin
   result := fSocket.Request(fDatabaseName, 'POST', fKeepAliveMS, '', Data,
     DataType, false);
-  Data := fSocket.Content;
-  DataType := fSocket.ContentType;
+  Data := fSocket.Http.Content;
+  DataType := fSocket.Http.ContentType;
 end;
 
 

@@ -32,6 +32,7 @@ uses
   mormot.crypt.jwt,
   mormot.net.client,
   mormot.net.server,
+  mormot.net.http,
   mormot.net.relay,
   mormot.net.ws.core,
   mormot.net.ws.client,
@@ -900,7 +901,8 @@ begin
       CheckSame(C3.Imaginary, -27);
       cust := Inst.CC.TestBlob(C3);
       Check(PosEx(TEXT_CONTENT_TYPE_HEADER, cust.Header) > 0);
-      Check(cust.Content = FormatUtf8('%,%', [C3.Real, C3.Imaginary]));
+      FormatUtf8('%,%', [C3.Real, C3.Imaginary], s);
+      CheckEqual(cust.Content, s);
       V1 := C3.Real;
       V2 := c;
       case c mod 3 of

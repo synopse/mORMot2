@@ -738,10 +738,10 @@ begin
     [method, fSocket.ClassType, pointer(fSocket)], self);
   result.Lo := fSocket.Request(url, method, KeepAliveMS, Header,
     RawByteString(Data), DataType, false);
-  result.Hi := fSocket.ServerInternalState;
+  result.Hi := fSocket.Http.ServerInternalState;
   Header := fSocket.HeaderGetText;
-  Data := fSocket.Content;
-  fSocket.Content := ''; // ensure RefCnt=1 to avoid body alloc+copy
+  Data := fSocket.Http.Content;
+  fSocket.Http.Content := ''; // ensure RefCnt=1 to avoid body alloc+copy
 end;
 
 

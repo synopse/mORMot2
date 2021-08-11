@@ -1448,8 +1448,8 @@ var
 begin
   if SockIn = nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
-  Content := '';
-  if (hfConnectionClose in HeaderFlags) or
+  Http.Content := '';
+  if (hfConnectionClose in Http.HeaderFlags) or
      (SockReceivePending(0) = cspSocketError) then
     DoRetry(HTTP_NOTFOUND, 'connection closed/broken (keepalive or maxrequest)', [])
   else
@@ -1486,8 +1486,8 @@ begin
             [GetEnumName(TypeInfo(TCrtSocketPending), ord(pending))^, TimeOut]);
           exit;
         end;
-        SockRecvLn(Command); // will raise ENetSock on any error
-        P := pointer(Command);
+        SockRecvLn(Http.Command); // will raise ENetSock on any error
+        P := pointer(Http.Command);
         if IdemPChar(P, 'HTTP/1.') then
         begin
           // get http numeric status code (200,404...) from 'HTTP/1.x ######'
@@ -1501,8 +1501,8 @@ begin
           begin
             repeat
               // 100 CONTINUE is just to be ignored on client side
-              SockRecvLn(Command);
-              P := pointer(Command);
+              SockRecvLn(Http.Command);
+              P := pointer(Http.Command);
             until IdemPChar(P, 'HTTP/1.'); // ignore up to next command
             ctxt.status := GetCardinal(P + 9);
           end;
@@ -1513,10 +1513,10 @@ begin
         else
         begin
           // error on reading answer -> 505=wrong format
-          if Command = '' then
+          if Http.Command = '' then
             DoRetry(HTTP_TIMEOUT, 'Broken Link - timeout=%ms', [TimeOut])
           else
-            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Command=%', [Command]);
+            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Command=%', [Http.Command]);
           exit;
         end;
         // retrieve all HTTP headers
@@ -1530,12 +1530,12 @@ begin
         begin
           if ctxt.OutStream <> nil then
           begin
-            if (ContentLength > 0) and
+            if (Http.ContentLength > 0) and
                (ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
             begin
               if ctxt.OutStream.InheritsFrom(TStreamRedirect) then
                 TStreamRedirect(ctxt.OutStream).ExpectedSize :=
-                  fRangeStart + ContentLength;
+                  fRangeStart + Http.ContentLength;
               GetBody(ctxt.OutStream)
             end;
           end
@@ -1644,7 +1644,7 @@ begin
         OnLog(sllTrace, 'Request % % redirected to %', [method, url, ctxt.url], self);
       if IdemPChar(pointer(ctxt.url), 'HTTP') and
          newuri.From(ctxt.url) then
-        if (hfConnectionClose in HeaderFlags) or
+        if (hfConnectionClose in Http.HeaderFlags) or
            (newuri.Server <> Server) or
            (newuri.Port <> Port) or
            (newuri.Https <> TLS.Enabled) then
@@ -1734,7 +1734,7 @@ var
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
       raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
         [fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
-    Size := ContentLength;
+    Size := Http.ContentLength;
     result := Size > 0;
     if result and
        (fRedirected <> '') and
@@ -1773,7 +1773,7 @@ begin
         parthash := url + parthash; // e.g. 'files/somefile.zip.md5'
         if Get(parthash, 5000) = 200 then
           // handle 'c7d8e61e82a14404169af3fa5a72be85 *file.name' format
-          params.Hash := Split(TrimU(Content), ' ');
+          params.Hash := Split(TrimU(Http.Content), ' ');
         if Assigned(OnLog) then
           OnLog(sllTrace, 'WGet: hash from % = %', [parthash, params.Hash], self);
       end;
@@ -1938,7 +1938,7 @@ begin
   try
     bak := Context.header;
     repeat
-      FindNameValue(Sender.Headers, pointer(InHeaderUp), RawUtf8(datain));
+      FindNameValue(Sender.Http.Headers, pointer(InHeaderUp), RawUtf8(datain));
       datain := Base64ToBin(TrimU(datain));
       ClientSspiAuth(sc, datain, Sender.AuthorizeSspiSpn, dataout);
       if dataout = '' then
@@ -2020,7 +2020,7 @@ begin
       outStatus^ := status;
     if status in [HTTP_SUCCESS..HTTP_PARTIALCONTENT] then
     begin
-      result := Http.Content;
+      result := Http.Http.Content;
       if outHeaders <> nil then
         outHeaders^ := Http.HeaderGetText;
     end;
@@ -3068,7 +3068,7 @@ begin
     else
       result := fHttp.Request(
         Uri.Address, Method, KeepAlive, Header, Data, DataType, true);
-    fBody := fHttp.Content;
+    fBody := fHttp.Http.Content;
     fHeaders := fHttp.HeaderGetText;
     if KeepAlive = 0 then
       FreeAndNil(fHttp);

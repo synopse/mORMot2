@@ -363,7 +363,7 @@ var
 begin
   result := HTTP_BADREQUEST;
   try
-    if not IdemPropNameU(ClientSock.Upgrade, 'websocket') then
+    if not IdemPropNameU(ClientSock.Http.Upgrade, 'websocket') then
       exit;
     version := ClientSock.HeaderGetValue('SEC-WEBSOCKET-VERSION');
     if GetInteger(pointer(version)) < 13 then
@@ -518,10 +518,10 @@ procedure TWebSocketServer.Process(ClientSock: THttpServerSocket;
 var
   err: integer;
 begin
-  if (hfConnectionUpgrade in ClientSock.HeaderFlags) and
+  if (hfConnectionUpgrade in ClientSock.Http.HeaderFlags) and
      ClientSock.KeepAliveClient and
      IdemPropNameU('GET', ClientSock.Method) and
-     IdemPropNameU(ClientSock.Upgrade, 'websocket') then
+     IdemPropNameU(ClientSock.Http.Upgrade, 'websocket') then
   begin
     // upgrade and run fProcess.ProcessLoop
     err := WebSocketProcessUpgrade(ClientSock);
@@ -659,10 +659,10 @@ begin
       headertix := headertix + GetTickCount64;
     res := GetRequest({withbody=}false, headertix);
     if (res = grHeaderReceived) and
-       (hfConnectionUpgrade in HeaderFlags) and
+       (hfConnectionUpgrade in Http.HeaderFlags) and
        KeepAliveClient and
        IdemPropNameU(Method, 'GET') and
-       IdemPropNameU(Upgrade, 'websocket') then
+       IdemPropNameU(Http.Upgrade, 'websocket') then
     begin
       // perform a WebSockets upgrade
 

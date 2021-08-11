@@ -319,8 +319,8 @@ begin
                 log.Log(sllDebug, 'ConnectionCreate rejected on unknown %',
                   [sock], self)
             end
-            else if not IdemPropNameU(sock.ContentType, RTSP_MIME) then
-              PendingDelete(found, sock.ContentType)
+            else if not IdemPropNameU(sock.Http.ContentType, RTSP_MIME) then
+              PendingDelete(found, sock.Http.ContentType)
             else
             begin
               get := fPendingGet.Objects[found];

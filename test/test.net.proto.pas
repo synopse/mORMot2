@@ -79,9 +79,9 @@ begin
           get.SockRecvLn(text);
           test.Check(text = 'HTTP/1.0 200 OK');
           get.GetHeader(false);
-          test.Check(hfConnectionClose in get.HeaderFlags);
+          test.Check(hfConnectionClose in get.Http.HeaderFlags);
           test.Check(get.SockConnected);
-          test.Check(get.ContentType = RTSP_MIME);
+          test.Check(get.Http.ContentType = RTSP_MIME);
         end;
       if log <> nil then
         log.Log(sllCustom1, 'RegressionTests % POST', [clientcount], proxy);

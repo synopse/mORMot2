@@ -658,9 +658,9 @@ begin
         rest.status := http.Request(rest.url, rest.method, {keepalive=}0,
           rest.headers, rest.content, rest.contenttype, {retry=}false);
         SetRestFrame(Frame, rest.status, '', '', http.HeaderGetText,
-          http.Content, http.ContentType);
+          http.Http.Content, http.Http.ContentType);
         log.Log(sllTrace, 'ProcessIncomingFrame: answered [%] %',
-          [rest.status, KB(http.content)], self);
+          [rest.status, KB(http.Http.Content)], self);
       finally
         http.Free;
       end;
