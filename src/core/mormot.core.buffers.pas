@@ -1784,6 +1784,7 @@ type
     procedure SetExpectedSize(Value: Int64);
     procedure ReadWriteHash(const Buffer; Count: Longint); virtual;
     procedure ReadWriteReport(const Caller: ShortString); virtual;
+    function GetProgress: RawUtf8;
   public
     /// initialize the internal structure, and start the timing
     // - before calling Read/Write, you should set the Redirected property or
@@ -1866,6 +1867,10 @@ type
     // - at least at process startup and finish, and every second
     property OnProgress: TOnStreamProgress
       read fOnProgress write fOnProgress;
+  published
+    /// the current progression as text, as returned by ProgressToConsole
+    property Progress: RawUtf8
+      read GetProgress;
   end;
 
   /// meta-class of TStreamRedirect hierarchy
@@ -8281,6 +8286,33 @@ begin
   inherited Destroy;
 end;
 
+function TStreamRedirect.GetProgress: RawUtf8;
+var
+  ctx: shortstring;
+begin
+  Ansi7StringToShortString(Context, ctx);
+  if ctx[0] > #30 then
+  begin
+    ctx[0] := #33;
+    PCardinal(@ctx[30])^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
+  end;
+  if ExpectedSize = 0 then
+    // size may not be known (e.g. server-side chunking)
+    FormatUtf8('% % read %/s ...',
+      [ctx, KBNoSpace(Size), KBNoSpace(PerSecond)], result)
+  else if Size < ExpectedSize then
+    // we can state the current progression ratio
+    FormatUtf8('% %% %/% %/s remaining:%',
+      [ctx, Percent, '%', KBNoSpace(Size),
+      KBNoSpace(ExpectedSize), KBNoSpace(PerSecond),
+      MicroSecToString(Remaining * 1000)], result)
+  else
+    // process is finished
+    FormatUtf8('% % done in % (%/s)' + CRLF,  [Context,
+      KBNoSpace(ExpectedSize), MicroSecToString(Elapsed * 1000),
+      KBNoSpace(PerSecond)], result);
+end;
+
 function TStreamRedirect.GetSize: Int64;
 begin
   if (fMode <> mWrite) and
@@ -8293,33 +8325,18 @@ end;
 {$I-}
 class procedure TStreamRedirect.ProgressToConsole(Sender: TStreamRedirect);
 var
-  ctx, msg: shortstring;
+  eraseline: shortstring;
+  msg: RawUtf8;
 begin
-  msg[0] := AnsiChar(Sender.fConsoleLen + 2);
-  msg[1] := #13;
-  FillCharFast(msg[2], Sender.fConsoleLen, 32);
-  msg[ord(msg[0])] := #13;
+  eraseline[0] := AnsiChar(Sender.fConsoleLen + 2);
+  eraseline[1] := #13;
+  FillCharFast(eraseline[2], ord(eraseline[0]) - 2, 32);
+  eraseline[ord(eraseline[0])] := #13;
+  system.write(eraseline);
+  msg := Sender.GetProgress;
+  Sender.fConsoleLen := length(msg);
   system.write(msg);
-  Ansi7StringToShortString(Sender.Context, ctx);
-  if ctx[0] > #30 then
-    ctx[0] := #30;
-  if Sender.ExpectedSize = 0 then
-    // size may not be known (e.g. server-side chunking)
-    FormatShort('% % %/s ...',
-      [ctx, KB(Sender.Size), KB(Sender.PerSecond)], msg)
-  else if Sender.Size < Sender.ExpectedSize then
-    // we can state the current progression ratio
-    FormatShort('% %% %/% %/s remaining:%',
-      [ctx, Sender.Percent, '%', KBNoSpace(Sender.Size),
-      KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond),
-      MicroSecToString(Sender.Remaining * 1000)], msg)
-  else
-    // process is finished
-    FormatShort('% % done in % (%/s)' + CRLF,  [Sender.Context,
-      KBNoSpace(Sender.ExpectedSize), MicroSecToString(Sender.Elapsed * 1000),
-      KBNoSpace(Sender.PerSecond)], msg);
-  Sender.fConsoleLen := ord(msg[0]);
-  system.write(msg);
+  ioresult;
 end;
 {$I+}
 
