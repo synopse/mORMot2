@@ -8276,7 +8276,7 @@ begin
   fRedirected := aRedirected;
   if aRead and
      Assigned(aRedirected) then
-    fExpectedSize := aRedirected.Size; // needed e.g. to upload a file
+    SetExpectedSize(aRedirected.Size); // needed e.g. to upload a file
   fStartTix := GetTickCount64;
 end;
 
@@ -8288,7 +8288,7 @@ end;
 
 function TStreamRedirect.GetProgress: RawUtf8;
 var
-  ctx: shortstring;
+  ctx, remain: shortstring;
 begin
   if (self = nil) or
      fTerminated then
@@ -8307,10 +8307,16 @@ begin
     FormatUtf8('% % read %/s ...',
       [ctx, KBNoSpace(fCurrentSize), KBNoSpace(PerSecond)], result)
   else if fCurrentSize < ExpectedSize then
+  begin
+    if Remaining <= 0 then
+      remain := ''
+    else
+      FormatShort(' remaining:%', [MicroSecToString(Remaining * 1000)], remain);
     // we can state the current progression ratio
-    FormatUtf8('% %% %/% %/s remaining:%',
+    FormatUtf8('% %% %/% %/s%',
       [ctx, Percent, '%', KBNoSpace(fCurrentSize), KBNoSpace(ExpectedSize),
-       KBNoSpace(PerSecond), MicroSecToString(Remaining * 1000)], result)
+       KBNoSpace(PerSecond), remain], result)
+  end
   else
     // process is finished
     FormatUtf8('% % done in % (%/s)' + CRLF,
