@@ -1826,7 +1826,12 @@ begin
   begin
     P := SqlBegin(P);
     case IdemPCharArray(P,
-      ['SELECT', 'EXPLAIN ', 'VACUUM', 'PRAGMA', 'WITH', 'EXECUTE']) of
+      ['SELECT',
+       'EXPLAIN ',
+       'VACUUM',
+       'PRAGMA',
+       'WITH',
+       'EXECUTE']) of
       0:
         // SELECT SelectClause^ FROM ...
         if (P[6] <= ' ') and
@@ -1922,8 +1927,15 @@ begin
     result := false
   else
     result := IdemPCharArray(GotoNextNotSpace(pointer(Where)), [
-      'ORDER BY ', 'GROUP BY ', 'LIMIT ', 'OFFSET ',
-      'LEFT ', 'RIGHT ', 'INNER ', 'OUTER ', 'JOIN ']) >= 0;
+      'ORDER BY ',
+      'GROUP BY ',
+      'LIMIT ',
+      'OFFSET ',
+      'LEFT ',
+      'RIGHT ',
+      'INNER ',
+      'OUTER ',
+      'JOIN ']) >= 0;
 end;
 
 function SqlFromWhere(const Where: RawUtf8): RawUtf8;

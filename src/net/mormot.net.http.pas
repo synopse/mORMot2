@@ -436,8 +436,16 @@ begin
     while P <> nil do
     begin
       next := GotoNextLine(P);
-      if IdemPCharArray(P, ['CONTENT-', 'CONNECTION:', 'KEEP-ALIVE:', 'TRANSFER-',
-         'X-POWERED', 'USER-AGENT', 'REMOTEIP:', 'HOST:', 'ACCEPT:']) < 0 then
+      if IdemPCharArray(P, [
+         'CONTENT-',
+         'CONNECTION:',
+         'KEEP-ALIVE:',
+         'TRANSFER-',
+         'X-POWERED',
+         'USER-AGENT',
+         'REMOTEIP:',
+         'HOST:',
+         'ACCEPT:']) < 0 then
       begin
         if W = nil then
           W := TBaseWriter.CreateOwnedStream(tmp);
@@ -517,15 +525,20 @@ begin
   begin
     OutContentLen := length(OutContent);
     case IdemPCharArray(OutContentTypeP,
-          ['TEXT/', 'IMAGE/', 'APPLICATION/']) of
+          ['TEXT/',
+           'IMAGE/',
+           'APPLICATION/']) of
       0:
         compressible := true;
       1:
         compressible := IdemPCharArray(OutContentTypeP + 6,
-          ['SVG', 'X-ICO']) >= 0;
+          ['SVG',
+           'X-ICO']) >= 0;
       2:
         compressible := IdemPCharArray(OutContentTypeP + 12,
-          ['JSON', 'XML', 'JAVASCRIPT']) >= 0;
+          ['JSON',
+           'XML',
+           'JAVASCRIPT']) >= 0;
     else
       compressible := false;
     end;

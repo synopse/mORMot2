@@ -393,7 +393,12 @@ begin
       end;
     if cmd = cNone then
       byte(cmd) := ord(cVersion) +
-        IdemPCharArray(p, ['VERS', 'VERB', 'START', 'STOP', 'STAT', 'SILENTK']);
+        IdemPCharArray(p, ['VERS',
+                           'VERB',
+                           'START',
+                           'STOP',
+                           'STAT',
+                           'SILENTK']);
     end;
   try
     case cmd of
