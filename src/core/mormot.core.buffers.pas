@@ -8305,13 +8305,12 @@ begin
   if ExpectedSize = 0 then
     // size may not be known (e.g. server-side chunking)
     FormatUtf8('% % read %/s ...',
-      [ctx, KBNoSpace(Size), KBNoSpace(PerSecond)], result)
-  else if Size < ExpectedSize then
+      [ctx, KBNoSpace(fCurrentSize), KBNoSpace(PerSecond)], result)
+  else if fCurrentSize < ExpectedSize then
     // we can state the current progression ratio
     FormatUtf8('% %% %/% %/s remaining:%',
-      [ctx, Percent, '%', KBNoSpace(Size),
-       KBNoSpace(ExpectedSize), KBNoSpace(PerSecond),
-       MicroSecToString(Remaining * 1000)], result)
+      [ctx, Percent, '%', KBNoSpace(fCurrentSize), KBNoSpace(ExpectedSize),
+       KBNoSpace(PerSecond), MicroSecToString(Remaining * 1000)], result)
   else
     // process is finished
     FormatUtf8('% % done in % (%/s)' + CRLF,
