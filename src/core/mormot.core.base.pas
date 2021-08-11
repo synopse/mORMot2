@@ -2500,6 +2500,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt):  boolean;
 // - you could try to define WITH_ERMS conditional but it is usually slower
 // - note: Delphi RTL is far from efficient: on i386 the FPU is slower/unsafe,
 // and on x86_64, ERMS is wrongly used even for small blocks
+// - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 
 /// our fast version of move()
@@ -2508,6 +2509,7 @@ procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 // - FPC x86_64 RTL is slower than our SSE2/AVX asm
 // - you could try to define WITH_ERMS conditional but it is usually slower
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
+// - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
 {$ifdef FPC_X86}
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 {$else}
@@ -2639,6 +2641,7 @@ function StrLenSafe(S: pointer): PtrInt;
 
 /// our fast version of StrLen(), to be used with PUtf8Char/PAnsiChar
 // - under x86, will detect SSE2 and use it if available
+// - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
 {$ifdef CPUX64}
 function StrLen(S: pointer): PtrInt;
 {$else}

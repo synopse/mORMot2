@@ -8304,13 +8304,13 @@ begin
     // we can state the current progression ratio
     FormatUtf8('% %% %/% %/s remaining:%',
       [ctx, Percent, '%', KBNoSpace(Size),
-      KBNoSpace(ExpectedSize), KBNoSpace(PerSecond),
-      MicroSecToString(Remaining * 1000)], result)
+       KBNoSpace(ExpectedSize), KBNoSpace(PerSecond),
+       MicroSecToString(Remaining * 1000)], result)
   else
     // process is finished
-    FormatUtf8('% % done in % (%/s)' + CRLF,  [Context,
-      KBNoSpace(ExpectedSize), MicroSecToString(Elapsed * 1000),
-      KBNoSpace(PerSecond)], result);
+    FormatUtf8('% % done in % (%/s)' + CRLF,
+      [Context, KBNoSpace(ExpectedSize), MicroSecToString(Elapsed * 1000),
+       KBNoSpace(PerSecond)], result);
 end;
 
 function TStreamRedirect.GetSize: Int64;

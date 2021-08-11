@@ -997,7 +997,7 @@ type
     /// ICU UTF-16 text comparison
     u_strCompare: function (s1: PWideChar; length1: cardinal;
       s2: PWideChar; length2: cardinal; codePointOrder: LongBool): cardinal; cdecl;
-    /// ICU UTF-16 text comparison with options, e.g. for case-insensitive
+    /// ICU UTF-16 text comparison with options, e.g. for case-insensitivity
     u_strCaseCompare: function (s1: PWideChar; length1: cardinal;
       s2: PWideChar; length2: cardinal; options: cardinal;
       var err: SizeInt): cardinal; cdecl;
