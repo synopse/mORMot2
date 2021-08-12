@@ -1294,7 +1294,8 @@ end;
 procedure THttpServerGeneric.RegisterCompress(aFunction: THttpSocketCompress;
   aCompressMinSize: integer);
 begin
-  RegisterCompressFunc(fCompress, aFunction, fCompressAcceptEncoding, aCompressMinSize);
+  RegisterCompressFunc(
+    fCompress, aFunction, fCompressAcceptEncoding, aCompressMinSize);
 end;
 
 procedure THttpServerGeneric.Shutdown;

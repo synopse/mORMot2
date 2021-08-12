@@ -542,7 +542,7 @@ begin
     else
       compressible := false;
     end;
-    for i := 0 to high(Handled) do
+    for i := 0 to length(Handled) - 1 do
       if i in Accepted then
         with Handled[i] do
           if (CompressMinSize = 0) or // 0 means "always" (e.g. for encryption)
@@ -560,8 +560,7 @@ end;
 function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
   P: PUtf8Char): THttpSocketCompressSet;
 var
-  i: PtrInt;
-  aName: RawUtf8;
+  i, len: PtrInt;
   Beg: PUtf8Char;
 begin
   integer(result) := 0;
@@ -572,10 +571,11 @@ begin
       Beg := P; // 'gzip;q=1.0, deflate' -> aName='gzip' then 'deflate'
       while not (P^ in [';', ',', #0]) do
         inc(P);
-      FastSetString(aName, Beg, P - Beg);
-      for i := 0 to high(Compress) do
-        if aName = Compress[i].Name then
-          include(result, i);
+      len := P - Beg;
+      if len <> 0 then
+        for i := 0 to length(Compress) - 1 do
+          if IdemPropNameU(Compress[i].Name, Beg, len) then
+            include(result, i);
       while not (P^ in [',', #0]) do
         inc(P);
     until P^ = #0;
@@ -587,12 +587,13 @@ var
 begin
   while (P^ > #0) and
         (P^ <= ' ') do
-    inc(P);
+    inc(P); // trim left
   B := P;
-  inc(P, StrLen(P));
+  while P^ > #13 do // a header would never contain a control char
+    inc(P);
   while (P > B) and
         (P[-1] <= ' ') do
-    dec(P);
+    dec(P); // trim right
   FastSetString(result, B, P - B);
 end;
 
@@ -813,7 +814,7 @@ var
   len: Int64;
 begin
   if (integer(fCompressAcceptHeader) <> 0) and
-     (OutStream <> nil) then // no stream compression (yet)
+     (OutStream = nil) then // no stream compression (yet)
   begin
     OutContentEncoding := CompressDataAndGetHeaders(
       fCompressAcceptHeader, fCompress, OutContentType, OutContent);
@@ -873,7 +874,7 @@ begin
   if fCompress <> nil then
   begin
     if Http.ContentEncoding <> '' then
-     for i := 0 to high(fCompress) do
+     for i := 0 to length(fCompress) - 1 do
        if fCompress[i].Name = Http.ContentEncoding then
        begin
          fContentCompress := i;
