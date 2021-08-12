@@ -2395,15 +2395,16 @@ begin
     @pthread_mutex_unlock := dlsym(pthread, 'pthread_mutex_unlock');
     {$endif OSLINUX}
   end;
-  prod := TrimU(StringFromFile('/sys/class/dmi/id/product_name', true));
+  prod := TrimU(TrimU(StringFromFile('/sys/class/dmi/id/sys_vendor', true)) +
+    ' ' + StringFromFile('/sys/class/dmi/id/product_name', true));
   if prod <> '' then
-  begin
+  begin // e.g. 'QEMU KVM Virtual Machine' or 'LENOVO 20HES23B0U'
     prodver := TrimU(StringFromFile('/sys/class/dmi/id/product_version', true));
     if prodver <> '' then
       prod := prod + ' ' + prodver;
   end
   else
-    // return e.g.
+    // return e.g. 'Raspberry Pi 3 Model B Rev 1.2'
     prod := TrimU(StringFromFile('/proc/device-tree/model', true));
   FindNameValue(StringFromFile('/etc/os-release'), 'PRETTY_NAME=', release);
   if (release <> '') and
