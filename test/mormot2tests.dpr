@@ -26,10 +26,6 @@ uses
   mormot.core.test,
   mormot.db.raw.sqlite3, // for the SQLite3 version below
 
-  mormot.core.buffers,
-  mormot.lib.openssl11,
-  mormot.net.client,
-  mormot.net.sock,
   {$ifdef USEZEOS}
   mormot.db.sql.zeos,
   {$endif USEZEOS}
@@ -65,27 +61,6 @@ uses
 
 
 { TIntegrationTests }
-
-
-{$ifdef FPC}
-  {$ifdef CPUINTEL}
-    {$ifndef OSWINDOWS}
-      {$ifndef OSLINUX}
-         // no static .o outside Windows/Linux yet
-         {$define LIZARD_EXTERNALONLY}
-       {$endif OSLINUX}
-    {$endif OSWINDOWS}
-  {$else}
-    {$ifdef CPUAARCH64}
-    {$endif CPUAARCH64}
-    // no static .o outside Intel x86/x64 yet
-    {$define LIZARD_EXTERNALONLY}
-  {$endif CPUINTEL}
-{$else}
-  // no static .obj for Delphi Win32/Win64 yet
-  {$define LIZARD_EXTERNALONLY}
-{$endif FPC}
-
 
 type
   TIntegrationTests = class(TSynTestsLogged)
@@ -155,34 +130,8 @@ begin
   ]);
 end;
 
-procedure testit;
-const
-  ZIPPED='zipped.zip';
-var
-  params: THttpClientSocketWGet;
-  tls: TNetTlsContext;
-begin
-  //@NewNetTls := @OpenSslNewNetTls;
-  FillChar(tls,SizeOf(tls),0);
-  tls.IgnoreCertificateErrors := true;
-  params.Clear;
-  params.Resume := true;
-  params.OnProgress := TStreamRedirect.ProgressToConsole;
-  if params.WGet(
-  //'https://synopse.info',
-  'https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases/download/wincrossbins_v1.2/WinCrossBinsAppleAll.zip',
-    ZIPPED, '', @tls, 5000, 5) <> ZIPPED then
-  begin
-    writeln('------------ Error :( -------------');
-  end
-  else
-    writeln(' :D SUCCESS');
-  readln;
-end;
-
 
 begin
-  //testit;
   TIntegrationTests.RunAsConsole('mORMot2 Regression Tests',
     //LOG_VERBOSE,
     LOG_FILTER[lfExceptions],
