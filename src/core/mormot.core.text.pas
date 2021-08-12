@@ -5364,6 +5364,7 @@ end;
 procedure TBaseWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
 var
   direct: PtrInt;
+  lastcommainmem: boolean;
   D: PUtf8Char;
 begin
   if (P <> nil) and
@@ -5394,7 +5395,12 @@ begin
     else
     begin
       FlushFinal; // no auto-resize
+      lastcommainmem := PAnsiChar(P)[Len - 1]= ',';
+      if lastcommainmem then
+        dec(Len);
       WriteToStream(P, Len); // no need to transit huge content into fTempBuf
+      if lastcommainmem then
+        Add(','); // but we need the last comma to be cancelable
     end;
 end;
 
