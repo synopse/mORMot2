@@ -4543,6 +4543,21 @@ begin
   finally
     lTable.Free;
   end;
+  J := StringFromFile(WorkDir + 'm1.json');
+  if J <> '' then
+  begin
+    check(IsValidUtf8(J));
+    check(IsValidJson(J));
+    Doc.Clear;
+    Doc.InitJson(J, JSON_OPTIONS_FLOAT);
+    CheckEqual(Doc.Count, 1);
+    Doc.SaveToJsonFile(WorkDir + 'm1-saved1.json');
+    Doc.Clear;
+    Doc.InitJsonInPlace(pointer(J), JSON_OPTIONS_FLOAT);
+    CheckEqual(Doc.Count, 1);
+    Doc.SaveToJsonFile(WorkDir + 'm1-saved2.json');
+    Doc.Clear;
+  end;
 end;
 
 // wrapper used to test GetPublishedMethods()
