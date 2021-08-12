@@ -463,7 +463,8 @@
     {$if CompilerVersion >= 27.0} // = Delphi XE6
       {$define ISDELPHIXE6}
     {$ifend}
-    {$if CompilerVersion = 28.0}  // = Delphi XE7
+    {$if (CompilerVersion = 27.0) or
+         (CompilerVersion = 28.0)}  // = Delphi XE6 or XE7
       // avoid internal error G2515 or F2084 AV0044FF4E-R00000008-0
       {$undef HASGENERICS}
     {$ifend}

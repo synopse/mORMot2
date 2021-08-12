@@ -2480,7 +2480,7 @@ type
   /// most common x86_64 CPU abilities, used e.g. by FillCharFast/MoveFast
   // - cpuERMS is slightly slower than cpuAVX so is not available by default
   // - cpuHaswell identify Intel/AMD AVX2+BMI support at Haswell level
-  TX64CpuFeatures = set of(
+  TX64CpuFeatures = set of (
     cpuAVX, cpuAVX2 {$ifdef WITH_ERMS}, cpuERMS{$endif}, cpuHaswell);
 
 var

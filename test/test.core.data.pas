@@ -4548,8 +4548,13 @@ begin
   begin
     check(IsValidUtf8(J));
     check(IsValidJson(J));
+    _Json(J, v, [dvoReturnNullForUnknownProperty,
+      dvoAllowDoubleValue, dvoValueCopiedByReference]);
+    CheckEqual(_Safe(v)^.Count, 1);
+    _Safe(v)^.SaveToJsonFile(WorkDir + 'm1-saved0.json');
+    VarClear(v); // release memory ASAP
     Doc.Clear;
-    Doc.InitJson(J, JSON_OPTIONS_FAST_FLOAT);
+    Doc.InitJson(J, JSON_OPTIONS_FAST_FLOAT + [dvoSerializeAsExtendedJson]);
     CheckEqual(Doc.Count, 1);
     Doc.SaveToJsonFile(WorkDir + 'm1-saved1.json');
     Doc.Clear;
