@@ -239,6 +239,12 @@ function EventArchiveLizard(
 
 implementation
 
+{
+    Lizard Library - Original C Source Code Under BSD 2-Clause license
+      Copyright (C) 2011-2016, Yann Collet.
+      Copyright (C) 2016-2017, Przemyslaw Skibinski <inikep@gmail.com>
+    All rights reserved.
+}
 
 { ****************** Low-Level Lizard Process }
 

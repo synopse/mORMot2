@@ -9,6 +9,16 @@ The following modifications have been made by Synopse to the original source cod
 This source code is included as reference. Please don't try to compile the static files by yourself, but download them from the latest https://github.com/synopse/mORMot2/releases or https://synopse.info/files/mormot2static.7z
 
 
+# Original Source Code License
+
+The following copyright notice applies to the patched source code available in the `res/static/liblizard/lib` sub-folder:
+
+  Lizard Library - under BSD 2-Clause license
+  Copyright (C) 2011-2016, Yann Collet.
+  Copyright (C) 2016-2017, Przemyslaw Skibinski <inikep@gmail.com>
+  All rights reserved.
+
+
 # Lizard - efficient compression with very fast decompression
 
 Lizard (formerly LZ5) is a lossless compression algorithm which contains 4 compression methods:
