@@ -5394,7 +5394,7 @@ begin
     end
     else
     begin
-      FlushFinal; // no auto-resize
+      FlushFinal; // no auto-resize if content is really huge
       lastcommainmem := PAnsiChar(P)[Len - 1]= ',';
       if lastcommainmem then
         dec(Len);
@@ -5938,7 +5938,7 @@ begin
     dec(BinBytes, chunk);
     if BinBytes = 0 then
       break;
-    // Flush writes B-buf+1 -> special one below:
+    // FlushToStream writes B-fTempBuf+1 -> special one below:
     WriteToStream(fTempBuf, B - fTempBuf);
     B := fTempBuf;
   until false;

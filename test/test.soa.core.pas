@@ -114,7 +114,7 @@ type
   // - since it inherits from ICalculator interface, it will also test
   // the proper interface inheritance handling (i.e. it will test that
   // ICalculator methods are also available)
-  IComplexCalculator = interface(ICalculator)
+  IComplexCalculator = interface(ICalculator)           
     ['{8D0F3839-056B-4488-A616-986CF8D4DEB7}']
     /// purpose of this method is to substract two complex numbers
     // - using class instances as parameters
@@ -126,6 +126,8 @@ type
     /// test variant kind of parameters
     function TestVariants(const Text: RawUtf8; V1: Variant;
       var V2: variant): variant;
+    /// test (maybe huge) RawJson content
+    function TestRawJson(len, value: integer): RawJson;
     /// test in/out collections
     procedure Collections(Item: TCollTest; var List: TCollTestsI;
       out Copy: TCollTestsI);
@@ -346,6 +348,7 @@ type
     function TestBlob(n: TComplexNumber): TServiceCustomAnswer;
     function TestVariants(const Text: RawUtf8;
       V1: Variant; var V2: variant): variant;
+    function TestRawJson(len, value: integer): RawJson;
     procedure Collections(Item: TCollTest; var List: TCollTestsI;
       out Copy: TCollTestsI);
     destructor Destroy; override;
@@ -593,6 +596,16 @@ function TServiceComplexCalculator.TestVariants(const Text: RawUtf8;
 begin
   V2 := V2 + V1;
   VariantLoadJson(Result, Text);
+end;
+
+function TServiceComplexCalculator.TestRawJson(len, value: integer): RawJson;
+begin
+  if len < 0 then
+    len := 0;
+  FastSetString(RawUtf8(result), nil, len + 2);
+  result[1] := '"';
+  FillcharFast(PByteArray(result)[1], len, value);
+  result[len + 2] := '"';
 end;
 
 function TServiceComplexCalculator.GetCurrentThreadID: PtrUInt;
@@ -855,7 +868,7 @@ var
   C1, C2, C3: TComplexNumber;
   Item: TCollTest;
   List, Copy: TCollTestsI;
-  j: integer;
+  n, j: integer;
   x, y: PtrUInt; // TThreadID  = ^TThreadRec under BSD
   V1, V2, V3: variant;
   {$ifndef HASNOSTATICRTTI}
@@ -884,6 +897,11 @@ begin
   end;
   TestCalculator(Inst.I);
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
+  n := 1000;
+  s := Inst.CC.TestRawJson(n, 49);
+  Check(length(s) = n + 2);
+  CheckEqual(Hash32(s), 4223609852); // n = 1000
+  //CheckEqual(Hash32(s), 2508875362); // n = 100000000
   C3 := TComplexNumber.Create(0, 0);
   C1 := TComplexNumber.Create(2, 3);
   C2 := TComplexNumber.Create(20, 30);
@@ -917,6 +935,18 @@ begin
       CheckSame(V1, C3.Real);
       CheckSame(V2, C3.Real + c);
       Check(VariantSaveJson(V3) = s);
+      s := Inst.CC.TestRawJson(c, c and 31 + 48);
+      Check(length(s) = integer(c + 2));
+      Check(IsValidJson(s));
+      if s <> '' then
+      begin
+        Check(s[1] = '"');
+        if c > 0 then
+          Check(ord(s[2]) = c and 31 + 48);
+        for j := 3 to length(s) - 1 do
+          Check(s[j] = s[2]);
+        Check(s[length(s)] = '"');
+      end;
       Check(Inst.CC.GetCustomer(c, data));
       Check(data.Id = integer(c));
       Check(GetCardinal(pointer(data.AccountNum)) = c);
