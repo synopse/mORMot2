@@ -306,12 +306,16 @@ const
   /// some convenient TDocVariant options, as JSON_OPTIONS[CopiedByReference]
   // - JSON_OPTIONS[false] is e.g. _Json() and _JsonFmt() functions default
   // - JSON_OPTIONS[true] are used e.g. by _JsonFast() and _JsonFastFmt() functions
+  // - handle only currency for floating point values: use JSON_OPTIONS_FAST_FLOAT
+  // if you want to support double values, with potential precision loss
   JSON_OPTIONS: array[boolean] of TDocVariantOptions = (
     [dvoReturnNullForUnknownProperty],
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference]);
 
   /// same as JSON_OPTIONS[true], but can not be used as PDocVariantOptions
+  // - handle only currency for floating point values: use JSON_OPTIONS_FAST_FLOAT
+  // if you want to support double values, with potential precision loss
   JSON_OPTIONS_FAST =
     [dvoReturnNullForUnknownProperty, dvoValueCopiedByReference];
 
@@ -323,8 +327,8 @@ const
      dvoJsonParseDoNotTryCustomVariants];
 
   /// same as JSON_OPTIONS_FAST, but including dvoAllowDoubleValue for floating
-  // point value parsing into double
-  JSON_OPTIONS_FLOAT =
+  // point values parsing into double, with potential precision loss
+  JSON_OPTIONS_FAST_FLOAT =
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoAllowDoubleValue];
@@ -926,6 +930,8 @@ type
     // it will call the other overloaded InitJsonInPlace() method
     // - this method is called e.g. by _Json() and _JsonFast() global functions
     // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - handle only currency for floating point values: set JSON_OPTIONS_FAST_FLOAT
+    // or dvoAllowDoubleValue option to support double, with potential precision loss
     function InitJson(const Json: RawUtf8;
       aOptions: TDocVariantOptions = []): boolean;
     /// ensure a document-based variant instance will have one unique options set
@@ -1920,6 +1926,8 @@ function _Arr(const Items: array of const;
 // properties can be slow - if you expect the data to be read-only or not
 // propagated into another place, add dvoValueCopiedByReference in Options
 // will increase the process speed a lot, or use _JsonFast()
+// - handle only currency for floating point values: call _JsonFastFloat or set
+// dvoAllowDoubleValue option to support double, with potential precision loss
 function _Json(const Json: RawUtf8;
   Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty]): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -1996,7 +2004,16 @@ function _ArrFast(const Items: array of const): variant; overload;
 // speed - but you should better write on the resulting variant tree with caution
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names or ObjectID()
+// - will handle only currency for floating point values to avoid precision
+// loss: use _JsonFastFloat() instead if you want to support double values
 function _JsonFast(const Json: RawUtf8): variant;
+
+/// initialize a variant instance to store some document-based content
+// from a supplied (extended) JSON content, with double conversion
+// - _JsonFast() will support only currency floats: use this method instead
+// if your JSON input is likely to require double values - with potential
+// precision loss
+function _JsonFastFloat(const Json: RawUtf8): variant;
 
 /// initialize a variant instance to store some extended document-based content
 // - this global function is an handy alias to:
@@ -7061,6 +7078,11 @@ end;
 function _JsonFast(const Json: RawUtf8): variant;
 begin
   _Json(Json, result, JSON_OPTIONS_FAST);
+end;
+
+function _JsonFastFloat(const Json: RawUtf8): variant;
+begin
+  _Json(Json, result, JSON_OPTIONS_FAST_FLOAT);
 end;
 
 function _JsonFastExt(const Json: RawUtf8): variant;

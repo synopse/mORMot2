@@ -3251,7 +3251,7 @@ begin
       timer.Start;
       for i := 1 to ITER do
       begin
-        dv.InitJson(sample, JSON_OPTIONS_FAST + [dvoAllowDoubleValue]);
+        dv.InitJson(sample, JSON_OPTIONS_FAST_FLOAT);
         Check(dv.count = 3);
         dv.Clear; // to reuse dv
       end;
@@ -4549,11 +4549,11 @@ begin
     check(IsValidUtf8(J));
     check(IsValidJson(J));
     Doc.Clear;
-    Doc.InitJson(J, JSON_OPTIONS_FLOAT);
+    Doc.InitJson(J, JSON_OPTIONS_FAST_FLOAT);
     CheckEqual(Doc.Count, 1);
     Doc.SaveToJsonFile(WorkDir + 'm1-saved1.json');
     Doc.Clear;
-    Doc.InitJsonInPlace(pointer(J), JSON_OPTIONS_FLOAT);
+    Doc.InitJsonInPlace(pointer(J), JSON_OPTIONS_FAST_FLOAT);
     CheckEqual(Doc.Count, 1);
     Doc.SaveToJsonFile(WorkDir + 'm1-saved2.json');
     Doc.Clear;
