@@ -22,6 +22,7 @@ interface
 
 uses
   sysutils,
+  classes,
   variants,
   mormot.core.base,
   mormot.core.os,
@@ -320,6 +321,13 @@ const
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoJsonParseDoNotTryCustomVariants];
+
+  /// same as JSON_OPTIONS_FAST, but including dvoAllowDoubleValue for floating
+  // point value parsing into double
+  JSON_OPTIONS_FLOAT =
+    [dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference,
+     dvoAllowDoubleValue];
 
   /// TDocVariant options to be used for case-sensitive TSynNameValue-like
   // storage, with optional extended JSON syntax serialization
@@ -1075,6 +1083,8 @@ type
     // - implemented as just a wrapper around VariantSaveJson()
     function ToJson(const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
       Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
+    /// save a document as UTF-8 encoded JSON file
+    procedure SaveToJsonFile(const FileName: TFileName);
     /// save an array of objects as UTF-8 encoded non expanded layout JSON
     // - returned content would be a JSON object in mORMot's TOrmTable non
     // expanded format, with reduced JSON size, i.e.
@@ -6605,7 +6615,7 @@ begin
     result := ''; // null -> 'null'
     exit;
   end;
-  W := DefaultTextWriterSerializer.CreateOwnedStream(temp) as TTextWriter;
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     W.AddString(Prefix);
     DocVariantType.ToJson(W, variant(self), twJsonEscape);
@@ -6613,6 +6623,27 @@ begin
     W.SetText(result, Format);
   finally
     W.Free;
+  end;
+end;
+
+procedure TDocVariantData.SaveToJsonFile(const FileName: TFileName);
+var
+  F: TFileStream;
+  W: TTextWriter;
+begin
+  if cardinal(VType) <> DocVariantVType then
+    exit;
+  F := TFileStream.Create(FileName, fmCreate);
+  try
+    W := TTextWriter.Create(F, 65536);
+    try
+      DocVariantType.ToJson(W, variant(self), twJsonEscape);
+      W.FlushFinal;
+    finally
+      W.Free;
+    end;
+  finally
+    F.Free;
   end;
 end;
 
