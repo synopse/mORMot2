@@ -39,9 +39,18 @@ unit mormot.lib.lizard;
      TAlgoLizardFast 53 MB->6.8 MB: comp 700.3 MB/s decomp 1.6 GB/s
      TAlgoDeflate 53 MB->4.8 MB: comp 70.5 MB/s decomp 544.5 MB/s
      TAlgoDeflateFast 53 MB->7 MB: comp 141.4 MB/s decomp 420.2 MB/s
+  Note: Deflate was system zlib, not our faster libdeflate
   Conclusion: SynLZ has the best compression ratio for its compression speed,
     but Lizard is much faster at decompression, when working with big log filesiles.
   For small files (<MB), SynLZ is always faster, and uses less memory than Lizard.
+
+  Some numbers, taken from regression tests on an AARCH64 Oracle Cloud VM:
+    TAlgoSynLZ 3.8 MB->2 MB: comp 285:150MB/s decomp 215:410MB/s
+    TAlgoLizard 3.8 MB->1.9 MB: comp 18:9MB/s decomp 838:1631MB/s
+    TAlgoLizardFast 3.8 MB->2.3 MB: comp 329:197MB/s decomp 1268:2113MB/s
+    TAlgoLizardHuffman 3.8 MB->1.8 MB: comp 85:40MB/s decomp 391:821MB/s
+    TAlgoDeflate 3.8 MB->1.5 MB: comp 30:12MB/s decomp 78:196MB/s
+    TAlgoDeflateFast 3.8 MB->1.6 MB: comp 48:20MB/s decomp 73:173MB/s
 
   NOTE:
   - FOR DELPHI PLEASE DOWNLOAD external Lizard1-32.dll / Lizard1-64.dll
@@ -57,24 +66,6 @@ interface
 {.$define LIZARD_EXTERNALONLY}
 // will force to use an external Lizard1-32.dll/Lizard1-64.dll/liblizard.so.1
 // as available from https://synopse.info/files/SynLizardLibs.7z
-
-{$ifdef FPC}
-  {$ifdef CPUINTEL}
-    {$ifndef OSWINDOWS}
-      {$ifndef OSLINUX}
-         // no static .o outside Windows/Linux yet
-         {$define LIZARD_EXTERNALONLY}
-       {$endif OSLINUX}
-    {$endif OSWINDOWS}
-  {$else}
-    // no static .o outside Intel x86/x64 yet
-    {$define LIZARD_EXTERNALONLY}
-  {$endif CPUINTEL}
-{$else}
-  // no static .obj for Delphi Win32/Win64 yet
-  {$define LIZARD_EXTERNALONLY}
-{$endif FPC}
-
 
 uses
   sysutils,
@@ -328,6 +319,17 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer;
   {$endif FPC}
 {$endif CPUX86}
 
+{$ifdef CPUARM}
+  {$ifdef FPC}
+    {$linklib ../../static/arm-linux/liblizard.a}
+  {$endif FPC}
+{$endif CPUARM}
+
+{$ifdef CPUAARCH64}
+  {$ifdef FPC}
+    {$linklib ../../static/aarch64-linux/liblizard.a}
+  {$endif FPC}
+{$endif CPUAARCH64}
 
 { TSynLizardStatic }
 

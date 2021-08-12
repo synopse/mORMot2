@@ -5482,6 +5482,8 @@ procedure TTestCoreCompression._TAlgoCompress;
     log := StringFromFile(WorkDir + 'bigTest.log');
     for i := 0 to 100 do
     begin
+      t := '';
+      s2 := '';
       if log = '' then
         s := copy(Data, 1, i * 800) // first 80KB from executable
       else

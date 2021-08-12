@@ -563,21 +563,26 @@
   {$if defined(OSOPENBSD) and defined(FPC_CROSSCOMPILING)}
     {$define NOSQLITE3STATIC} // OpenBSD problems with fpcupdeluxe libgcc.a
   {$ifend}
+  {$define LIZARD_EXTERNALONLY} // Lizard is disabled but on some targets
   {$ifdef OSLINUX}
     {$ifdef CPUINTEL}
       {$define LIBDEFLATESTATIC}  // libdeflate static binding
       {$define LIBQUICKJSSTATIC}  // quickjs static binding
+      {$undef LIZARD_EXTERNALONLY} // static liblizard.a
     {$endif CPUINTEL}
     {$ifdef CPUARM}
+      {.$undef LIZARD_EXTERNALONLY} // static liblizard.a is not tested
       {.$define LIBDEFLATESTATIC} // compiles, but untested
       {.$define LIBQUICKJSSTATIC} // compiles, but untested
     {$endif CPUARM}
     {$ifdef CPUAARCH64}
       {$define LIBDEFLATESTATIC}
+      {$undef LIZARD_EXTERNALONLY} // static liblizard.a seems OK
       {.$define LIBQUICKJSSTATIC} // compiles, but access violations
     {$endif CPUAARCH64}
   {$endif OSLINUX}
   {$ifdef OSWINDOWS}
+    {$undef LIZARD_EXTERNALONLY} // static liblizard.a
     {$ifdef CPUX86}
       {$define LIBDEFLATESTATIC}
       {$define LIBQUICKJSSTATIC}
@@ -588,6 +593,7 @@
     {$endif CPUX64}
   {$endif OSWINDOWS}
 {$else}
+  {$define LIZARD_EXTERNALONLY} // no static .obj for Delphi Win32/Win64 yet
   {$ifdef CPUX86}
     {$define LIBQUICKJSSTATIC}  // our quickjs.obj seems fine on Win32 :)
   {$endif CPUX86}
