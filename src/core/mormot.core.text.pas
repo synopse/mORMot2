@@ -2113,6 +2113,7 @@ function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from two hexa bytes into a 16-bit UTF-16 WideChar
+// - as used by JsonUnicodeEscapeToUtf8() for \u#### chars unescape
 // - similar to HexDisplayToBin(Hex,@wordvar,2)
 // - returns 0 on malformated input
 function HexToWideChar(Hex: PUtf8Char): cardinal;
@@ -2734,7 +2735,8 @@ end;
 function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUtf8;
   found: integer): RawUtf8;
 var
-  oldlen, newlen, i, last, posCount, sharedlen: integer;
+  i, last, oldlen, newlen, sharedlen: PtrInt;
+  posCount: integer;
   pos: TIntegerDynArray;
   src, dst: PAnsiChar;
 begin

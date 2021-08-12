@@ -8175,7 +8175,7 @@ const
     0,
     $41, $42, $43, $44, $46, $48, $49, $4d, $4e, $50, $51, $53, $56,
     $61, $66, $69, $c0);
-  ARMCPU_ID_TXT: array[TArmCpuType] of PUtf8Char = (
+  ARMCPU_ID_TXT: array[TArmCpuType] of RawUtf8 = (
      '',
      'ARM810', 'ARM920', 'ARM922', 'ARM926', 'ARM940', 'ARM946', 'ARM966',
      'ARM1020', 'ARM1022', 'ARM1026', 'ARM11 MPCore', 'ARM1136', 'ARM1156',
@@ -8187,7 +8187,7 @@ const
      'Cortex-A72', 'Cortex-A73', 'Cortex-A75', 'Cortex-A76', 'Neoverse-N1',
      'Cortex-A77', 'Cortex-A76AE', 'Cortex-R52', 'Cortex-M23', 'Cortex-M33',
      'Cortex-A78', 'Cortex-A78AE', 'Neoverse-E1', 'Cortex-A78C');
-  ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of PUtf8Char = (
+  ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of RawUtf8 = (
       '',
       'ARM', 'Broadcom', 'Cavium', 'DEC', 'FUJITSU', 'HiSilicon', 'Infineon',
       'Motorola/Freescale', 'NVIDIA', 'APM', 'Qualcomm', 'Samsung', 'Marvell',
@@ -8203,9 +8203,10 @@ end;
 
 function ArmCpuTypeName(act: TArmCpuType; id: word): RawUtf8;
 begin
-  result := ARMCPU_ID_TXT[act];
   if act = actUnknown then
-    result := 'ARM 0x' + RawUtf8(IntToHex(id, 3));
+    result := 'ARM 0x' + RawUtf8(IntToHex(id, 3))
+  else
+    result := ARMCPU_ID_TXT[act];
 end;
 
 function ArmCpuImplementer(id: byte): TArmCpuImplementer;
@@ -8218,9 +8219,10 @@ end;
 
 function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word): RawUtf8;
 begin
-  result := ARMCPU_IMPL_TXT[aci];
   if aci = aciUnknown then
-    result := 'HW 0x' + RawUtf8(IntToHex(id, 2));
+    result := 'HW 0x' + RawUtf8(IntToHex(id, 2))
+  else
+    result := ARMCPU_IMPL_TXT[aci];
 end;
 
 
