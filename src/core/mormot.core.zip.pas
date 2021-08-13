@@ -375,12 +375,27 @@ type
   PZipReadEntry = ^TZipReadEntry;
   TZipReadEntryDynArray = array of TZipReadEntry;
 
+  TZipAbstract = class
+  protected
+    fZipNamePathDelim, fZipNamePathDelimReversed: AnsiChar;
+    fZipNamePathDelimString, fZipNamePathDelimReversedString: string;
+    procedure SetZipNamePathDelim(Value: AnsiChar);
+  public
+    /// initialize this class
+    constructor Create;
+    /// how sub folders names are handled in the ZIP
+    // - by default, is '/' to follow 4.4.17 of reference PKware appnote
+    // - you can force '\' if you want backward compatibility
+    property ZipNamePathDelim: AnsiChar
+      read fZipNamePathDelim write SetZipNamePathDelim;
+  end;
+
   /// read-only access to a .zip archive file
   // - can open directly a specified .zip file - only trailing WorkingMem bytes
   // are read in the memory, and should contain at least the Central Directory
   // - can open a .zip archive file content from a resource (embedded in the executable)
   // - can open a .zip archive file content from memory
-  TZipRead = class
+  TZipRead = class(TZipAbstract)
   private
     fSource: TStream; // if .zip is a file bigger than 1MB
     fSourceOffset: QWord; // where the .zip start in fSource (if appended)
@@ -481,7 +496,7 @@ type
 
   /// write-only access for creating a .zip archive
   // - update can be done manualy by using CreateFrom()
-  TZipWrite = class
+  TZipWrite = class(TZipAbstract)
   protected
     fDest: TStream;
     fAppendOffset: QWord;
@@ -1277,6 +1292,29 @@ begin
 end;
 
 
+{ TZipAbstract }
+
+constructor TZipAbstract.Create;
+begin
+  SetZipNamePathDelim('/'); // APPNOTE.TXT 4.4.17: MUST be forward slashes
+end;
+
+procedure TZipAbstract.SetZipNamePathDelim(Value: AnsiChar);
+begin
+  if Value = fZipNamePathDelim then
+    exit;
+  if Value = '/' then
+    fZipNamePathDelimReversed := '\'
+  else if Value = '\' then
+    fZipNamePathDelimReversed := '/'
+  else
+    exit; // do nothing if not one of two common folder delimiters
+  fZipNamePathDelim := Value;
+  fZipNamePathDelimString := string(Value);
+  fZipNamePathDelimReversedString := string(fZipNamePathDelimReversed);
+end;
+
+
 { TZipWrite }
 
 constructor TZipWrite.Create(aDest: TStream);
@@ -1602,11 +1640,8 @@ begin
     if RemovePath then
       ZipName := ExtractFileName(aFileName)
     else
-      {$ifdef OSWINDOWS}
-      ZipName := aFileName;
-      {$else}
-      ZipName := StringReplace(aFileName, '/', '\', [rfReplaceAll]);
-      {$endif OSWINDOWS}
+      ZipName := StringReplace(aFileName, fZipNamePathDelimReversedString,
+        fZipNamePathDelimString, [rfReplaceAll]);
   // open the input file
   f := FileOpen(aFileName, fmOpenRead or fmShareDenyNone);
   if ValidHandle(f) then
@@ -1710,7 +1745,8 @@ procedure TZipWrite.AddFolder(const FolderName: TFileName;
       begin
         repeat
           if SearchRecValidFolder(f) then
-            RecursiveAdd(fileDir + f.Name + PathDelim, zipDir + f.Name + '\');
+            RecursiveAdd(fileDir + f.Name + PathDelim,
+              zipDir + f.Name + fZipNamePathDelimString);
         until FindNext(f) <> 0;
         FindClose(f);
       end;
@@ -1957,13 +1993,13 @@ begin
     isascii7 := true;
     P := pointer(tmp);
     repeat
-      if P^ = '/' then // normalize path delimiter
-        P^ := '\'
+      if P^ = fZipNamePathDelimReversed then // normalize path delimiter
+        P^ := fZipNamePathDelim
       else if P^ > #127 then
         isascii7 := false;
       inc(P);
     until P^ = #0;
-    if P[-1] = '\' then
+    if P[-1] = fZipNamePathDelim then
     begin
       h := hnext;
       continue; // ignore void folder entry
@@ -2441,7 +2477,7 @@ function TZipRead.UnZip(aIndex: integer; const DestDir: TFileName;
   DestDirIsFileName: boolean): boolean;
 var
   FS: TFileStream;
-  Path: TFileName;
+  LocalZipName, Path: TFileName;
   info: TFileInfoFull;
 begin
   result := false;
@@ -2452,10 +2488,15 @@ begin
       Path := DestDir
     else
     begin
-      Path := EnsureDirectoryExists(DestDir + ExtractFilePath(zipName));
+      if fZipNamePathDelim = PathDelim then
+        LocalZipName := zipName
+      else
+        LocalZipName := StringReplace(
+          zipName, fZipNamePathDelimString, PathDelim, [rfReplaceAll]);
+      Path := EnsureDirectoryExists(DestDir + ExtractFilePath(LocalZipName));
       if Path = '' then
         exit;
-      Path := Path + ExtractFileName(zipName);
+      Path := Path + ExtractFileName(LocalZipName);
     end;
   FS := TFileStream.Create(Path, fmCreate);
   try
