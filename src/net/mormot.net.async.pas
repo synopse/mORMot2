@@ -50,10 +50,10 @@ type
     lockcounter: array[boolean] of integer;
     /// the last error reported before the connection ends
     lastWSAError: TNetResult;
-    /// the current read data buffer of this slot
-    readbuf: RawByteString;
-    /// the current write data buffer of this slot
-    writebuf: RawByteString;
+    /// the current (reusable) read data buffer of this slot
+    rd: TRawByteStringBuffer;
+    /// the current (reusable) write data buffer of this slot
+    wr: TRawByteStringBuffer;
     /// acquire an exclusive R/W access to this connection
     // - returns true if slot has been acquired
     // - returns false if it is used by another thread
@@ -115,9 +115,9 @@ type
     // (warning: abstract methods below should be properly overriden)
     // return low-level socket information from connection instance
     function SlotFromConnection(connection: TObject): PPollSocketsSlot; virtual; abstract;
-    // extract frames from slot.readbuf, and handle them
+    // extract frames from slot.rd, and handle them
     function OnRead(connection: TObject): TPollAsyncSocketOnRead; virtual; abstract;
-    // called when slot.writebuf has been sent through the socket
+    // called when slot.wr has been sent through the socket
     procedure AfterWrite(connection: TObject); virtual; abstract;
     // pseClosed: should do connection.free - Stop() has been called (socket=0)
     procedure OnClose(connection: TObject); virtual; abstract;
@@ -226,9 +226,9 @@ type
     // - default implementation will set fLastOperation content
     procedure AfterCreate(Sender: TAsyncConnections); virtual;
     /// this method is called when the some input data is pending on the socket
-    // - should extract frames or requests from fSlot.readbuf, and handle them
+    // - should extract frames or requests from fSlot.rd, and handle them
     // - this is where the input should be parsed and extracted according to
-    // the implemented procotol; fSlot.readbuf could be kept as temporary
+    // the implemented procotol; fSlot.rd could be kept as temporary
     // buffer during the parsing, and voided by the caller once processed
     // - Sender.Write() could be used for asynchronous answer sending
     // - Sender.LogVerbose() allows logging of escaped data
@@ -393,7 +393,7 @@ type
     // - can be executed from an TAsyncConnection.OnRead method to track content:
     // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(...);
     procedure LogVerbose(connection: TAsyncConnection; const ident: RawUtf8;
-      const frame: RawByteString); overload;
+      const frame: TRawByteStringBuffer); overload;
     /// will execute TAsyncConnection.OnLastOperationIdle after an idle period
     // - could be used to send heartbeats after read/write inactivity
     // - equals 0 (i.e. disabled) by default
@@ -678,7 +678,7 @@ begin
     if slot.TryLock(true, timeout) then // try and wait for another ProcessWrite
     try
       P := @data;
-      previous := length(slot.writebuf);
+      previous := slot.wr.Len;
       if (previous = 0) and
          not (paoWritePollOnly in fOptions) then
         repeat
@@ -711,13 +711,13 @@ begin
           inc(P, sent);
         until false;
         // use fWrite output polling for the remaining data in ProcessWrite
-      AppendBufferToRawByteString(slot.writebuf, P^, datalen);
+      slot.wr.Append(P, datalen);
       if previous > 0 then // already subscribed
         result := slot.socket <> nil
       else if fWrite.Subscribe(slot.socket, [pseWrite], tag) then
         result := slot.socket <> nil
       else
-        slot.writebuf := ''; // subscription error -> abort
+        slot.wr.Reset; // subscription error -> abort
     finally
       slot.UnLock({writer=}true);
     end;
@@ -788,7 +788,7 @@ begin
             CloseConnection(true);
             exit; // socket closed gracefully or unrecoverable error -> abort
           end;
-          AppendBufferToRawByteString(slot.readbuf, temp, recved);
+          slot.rd.Append(@temp, recved);
           inc(added, recved);
         until false;
         if added > 0 then
@@ -841,10 +841,10 @@ begin
       exit;
     if slot.Lock({writer=}true) then // paranoid check
     try
-      buflen := length(slot.writebuf);
+      buflen := slot.wr.Len;
       if buflen <> 0 then
       begin
-        buf := pointer(slot.writebuf);
+        buf := slot.wr.Buffer;
         sent := 0;
         repeat
           if fWrite.Terminated or
@@ -864,9 +864,9 @@ begin
           dec(buflen, bufsent);
         until buflen = 0;
         inc(fWriteBytes, sent);
-        delete(slot.writebuf, 1, sent);
+        slot.wr.Remove(sent);
       end;
-      if slot.writebuf = '' then
+      if slot.wr.Len = 0 then
       begin
         // no data any more to be sent
         fWrite.Unsubscribe(slot.socket, notif.tag);
@@ -939,7 +939,7 @@ var
 begin
   ac := connection as TAsyncConnection;
   if not (acoNoLogRead in fOwner.Options) then
-    fOwner.fLog.Add.Log(sllTrace, 'OnRead% len=%', [ac, length(ac.fSlot.readbuf)], self);
+    fOwner.fLog.Add.Log(sllTrace, 'OnRead% len=%', [ac, ac.fSlot.rd.Len], self);
   result := ac.OnRead(fOwner);
   if not (acoLastOperationNoRead in fOwner.Options) then
     ac.fLastOperation := UnixTimeUtc;
@@ -1294,9 +1294,9 @@ begin
 end;
 
 procedure TAsyncConnections.LogVerbose(connection: TAsyncConnection;
-  const ident: RawUtf8; const frame: RawByteString);
+  const ident: RawUtf8; const frame: TRawByteStringBuffer);
 begin
-  LogVerbose(connection, ident, pointer(frame), length(frame));
+  LogVerbose(connection, ident, frame.Buffer, frame.Len)
 end;
 
 procedure TAsyncConnections.IdleEverySecond;

@@ -134,11 +134,11 @@ function TRtspConnection.OnRead(
   Sender: TAsyncConnections): TPollAsyncSocketOnRead;
 begin
   if acoVerboseLog in Sender.Options then
-    Sender.LogVerbose(self, 'Frame forwarded', fSlot.readbuf);
-  if fGetBlocking.TrySndLow(pointer(fSlot.readbuf), length(fSlot.readbuf)) then
+    Sender.LogVerbose(self, 'Frame forwarded', fSlot.rd);
+  if fGetBlocking.TrySndLow(fSlot.rd.Buffer, fSlot.rd.Len) then
   begin
     Sender.Log.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
-      [Handle, length(fSlot.readbuf)], self);
+      [Handle, fSlot.rd.Len], self);
     result := sorContinue;
   end
   else
@@ -148,7 +148,7 @@ begin
       [Handle, RemoteIP], self);
     result := sorClose;
   end;
-  fSlot.readbuf := '';
+  fSlot.rd.Reset;
 end;
 
 procedure TRtspConnection.BeforeDestroy(Sender: TAsyncConnections);
@@ -160,17 +160,18 @@ end;
 
 { TPostConnection }
 
-function TPostConnection.OnRead(
-  Sender: TAsyncConnections): TPollAsyncSocketOnRead;
+function TPostConnection.OnRead(Sender: TAsyncConnections): TPollAsyncSocketOnRead;
 var
+  b64: RawUtf8;
   decoded: RawByteString;
   rtsp: TAsyncConnection;
 begin
   result := sorContinue;
-  decoded := Base64ToBinSafe(TrimControlChars(fSlot.readbuf));
+  fSlot.rd.AsText(b64);
+  decoded := Base64ToBinSafe(TrimControlChars(b64));
   if decoded = '' then
     exit; // maybe some pending command chars
-  fSlot.readbuf := '';
+  fSlot.rd.Reset;
   rtsp := Sender.ConnectionFindLocked(fRtspTag);
   if rtsp <> nil then
   try
