@@ -1428,7 +1428,7 @@ function UrlDecodeNeedParameters(U, CsvNames: PUtf8Char): boolean;
 // the input buffer, or points to #0 if all content has been processed
 // - if a pair is not decoded, return nil
 function UrlDecodeNextNameValue(U: PUtf8Char;
-  var Name,Value: RawUtf8): PUtf8Char;
+  var Name, Value: RawUtf8): PUtf8Char;
 
 /// decode a URI-encoded Value from an input buffer
 // - decoded value is set in Value out variable
@@ -2172,6 +2172,36 @@ type
   /// pointer reference to a TRawByteStringGroup
   PRawByteStringGroup = ^TRawByteStringGroup;
 
+  /// store one RawByteString content with an associated length
+  // - to be used e.g. as a convenient reusable memory buffer
+  {$ifdef USERECORDWITHMETHODS}
+  TRawByteStringBuffer = record
+  {$else}
+  TRawByteStringBuffer = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    /// the actual storage, with length(Buffer) as Capacity
+    fBuffer: RawByteString;
+  public
+    /// how many bytes are currently used in the Buffer
+    Len: PtrInt;
+    /// set BufferLen to 0, but doesn't clear/free the Buffer itself
+    procedure Reset;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// a convenient wrapper to pointer(fBuffer) for easier Buffer/Len use
+    function Buffer: pointer;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// add some content to the Buffer, resizing it if needed
+    // - could optionally include a #13#10 end of line
+    procedure Append(P: pointer; PLen: PtrInt; CRLF: boolean = false);
+    /// similar to delete(fBuffer, 1, FirstBytes)
+    procedure Remove(FirstBytes: PtrInt);
+    /// retrieve the current Buffer/BufferLen content as RawUtf8 text
+    // - with some optional overhead for faster reallocmem at concatenation
+    // - won't force Len to 0: caller should call Reset if done with it
+    procedure AsText(out Text: RawUtf8; Overhead: PtrInt = 0);
+  end;
+
 
 implementation
 
@@ -2855,6 +2885,7 @@ begin
   result.Len := FromVarUInt32(Data);
   result.Ptr := pointer(Data);
 end;
+
 
 
 { ****************** TFastReader / TBufferWriter Binary Streams }
@@ -9513,6 +9544,66 @@ begin
     MoveFast(P^, aDest^, aLength);
 end;
 
+
+{ TRawByteStringBuffer }
+
+procedure TRawByteStringBuffer.Reset;
+begin
+  Len := 0;
+end;
+
+function TRawByteStringBuffer.Buffer: pointer;
+begin
+  result := pointer(fBuffer);
+end;
+
+procedure TRawByteStringBuffer.Append(P: pointer; PLen: PtrInt; CRLF: boolean);
+var
+  cap, needed: PtrInt;
+begin
+  if (P = nil) or
+     (PLen <= 0) then
+    exit;
+  cap := Length(fBuffer);
+  if cap = 0 then
+    SetLength(fBuffer, PLen + 128) // small overhead at first
+  else
+  begin
+    needed := Len + PLen + 2;
+    if needed > cap then
+      SetLength(fBuffer, needed + needed shr 3 + 2048); // generous overhead
+  end;
+  MoveFast(P^, PByteArray(fBuffer)[Len], PLen);
+  inc(Len, PLen);
+  if CRLF then
+  begin
+    PWord(@PByteArray(fBuffer)[Len])^ := $0a0d;
+    inc(Len, 2);
+  end;
+end;
+
+procedure TRawByteStringBuffer.Remove(FirstBytes: PtrInt);
+begin
+  if FirstBytes > 0 then
+    if FirstBytes >= Len then
+      Len := 0
+    else
+    begin
+      dec(Len, FirstBytes);
+      MoveFast(PByteArray(fBuffer)[FirstBytes], pointer(fBuffer)^, Len);
+    end;
+end;
+
+procedure TRawByteStringBuffer.AsText(out Text: RawUtf8; Overhead: PtrInt);
+begin
+  if (Len = 0) or
+     (OverHead < 0) then
+    exit;
+  FastSetString(Text, nil, Len + Overhead);
+  MoveFast(pointer(fBuffer)^, pointer(Text)^, Len);
+  if OverHead <> 0 then
+    PStrLen(PAnsiChar(pointer(Text)) - _STRLEN)^ := Len; // fake length
+end;
 
 
 procedure InitializeUnit;
