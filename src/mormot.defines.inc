@@ -299,6 +299,7 @@
     {$define HASINTERFACERTTI}
     // generics support seems excellent in FPC 3.2+
     {$define HASGENERICS}
+    {$define FPCGENERICS}
   {$endif}
 
   {$ifdef FPC_NEWRTTI}

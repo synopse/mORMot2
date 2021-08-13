@@ -861,13 +861,37 @@ function DynArrayLoadHeader(var Source: TFastReader;
 // - if Info=TypeInfo(TObjectDynArray) then will compare any T*ObjArray
 function DynArrayCompare(A, B: PAnsiChar;
   ExternalCountA, ExternalCountB: PInteger; Info: PRttiInfo;
-  CaseInSensitive: boolean): integer;
+  CaseInSensitive: boolean): integer; overload;
+
+/// wrapper around TDynArray.Add
+// - warning: the Item type is not checked at runtime, so should be as expected
+// - not very fast, but could be useful for simple code
+function DynArrayAdd(TypeInfo: PRttiInfo; var DynArray; const Item): integer; overload;
+
+/// wrapper around TDynArray.Delete
+// - not very fast, but could be useful for simple code
+function DynArrayDelete(TypeInfo: PRttiInfo; var DynArray; Index: PtrInt): boolean; overload;
 
 /// compare two dynamic arrays by calling TDynArray.Equals
 // - if Info=TypeInfo(TObjectDynArray) then will compare any T*ObjArray
 function DynArrayEquals(TypeInfo: PRttiInfo; var Array1, Array2;
   Array1Count: PInteger = nil; Array2Count: PInteger = nil): boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+{$ifdef FPCGENERICS}
+/// wrapper around TDynArray.Add
+// - warning: the Item type is not checked at runtime, so should be as expected
+// - not very fast, but could be useful for simple code
+function DynArrayAdd<TArray>(var DynArray: TArray; const Item): integer; overload;
+
+/// wrapper around TDynArray.Delete
+// - not very fast, but could be useful for simple code
+function DynArrayDelete<TArray>(var DynArray: TArray; Index: PtrInt): boolean; overload;
+
+/// compare two dynamic arrays values
+function DynArrayCompare<TArray>(var Array1, Array2: TArray;
+  CaseInSensitive: boolean = false): integer; overload;
+{$endif FPCGENERICS}
 
 // two low-level comparison methods used for T*ObjArray by mormot.core.json
 function _BC_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
@@ -5338,12 +5362,49 @@ begin
   result := n1 - n2;
 end;
 
+function DynArrayAdd(TypeInfo: PRttiInfo; var DynArray; const Item): integer;
+var
+  da: TDynArray;
+begin
+  da.Init(TypeInfo, DynArray);
+  result := da.Add(Item);
+end;
+
+function DynArrayDelete(TypeInfo: PRttiInfo; var DynArray; Index: PtrInt): boolean;
+var
+  da: TDynArray;
+begin
+  da.Init(TypeInfo, DynArray);
+  result := da.Delete(Index);
+end;
+
 function DynArrayEquals(TypeInfo: PRttiInfo; var Array1, Array2;
   Array1Count, Array2Count: PInteger): boolean;
 begin
   result := DynArrayCompare(@Array1, @Array2, Array1Count, Array2Count,
     TypeInfo, {CaseSensitive=}true) = 0;
 end;
+
+{$ifdef FPCGENERICS}
+
+function DynArrayAdd<TArray>(var DynArray: TArray; const Item): integer;
+begin
+  result := DynArrayAdd(TypeInfo(TArray), DynArray, Item);
+end;
+
+function DynArrayDelete<TArray>(var DynArray: TArray; Index: PtrInt): boolean;
+begin
+  result := DynArrayDelete(TypeInfo(TArray), DynArray, Index);
+end;
+
+function DynArrayCompare<TArray>(var Array1, Array2: TArray;
+  CaseInSensitive: boolean): integer;
+begin
+  result := DynArrayCompare(
+    @Array1, @Array2, nil, nil, TypeInfo(TArray), CaseInSensitive);
+end;
+
+{$endif FPCGENERICS}
 
 function _BC_DynArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
