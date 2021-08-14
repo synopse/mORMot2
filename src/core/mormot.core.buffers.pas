@@ -2185,9 +2185,11 @@ type
   public
     /// how many bytes are currently used in the Buffer
     Len: PtrInt;
-    /// set BufferLen to 0, but doesn't clear/free the Buffer itself
+    /// set Len to 0, but doesn't clear/free the Buffer itself
     procedure Reset;
       {$ifdef HASINLINE}inline;{$endif}
+    /// release internal storage fBuffer instance
+    procedure Clear;
     /// a convenient wrapper to pointer(fBuffer) for easier Buffer/Len use
     function Buffer: pointer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2196,7 +2198,7 @@ type
     procedure Append(P: pointer; PLen: PtrInt; CRLF: boolean = false);
     /// similar to delete(fBuffer, 1, FirstBytes)
     procedure Remove(FirstBytes: PtrInt);
-    /// retrieve the current Buffer/BufferLen content as RawUtf8 text
+    /// retrieve the current Buffer/Len content as RawUtf8 text
     // - with some optional overhead for faster reallocmem at concatenation
     // - won't force Len to 0: caller should call Reset if done with it
     procedure AsText(out Text: RawUtf8; Overhead: PtrInt = 0);
@@ -9550,6 +9552,12 @@ end;
 procedure TRawByteStringBuffer.Reset;
 begin
   Len := 0;
+end;
+
+procedure TRawByteStringBuffer.Clear;
+begin
+  Len := 0;
+  fBuffer := '';
 end;
 
 function TRawByteStringBuffer.Buffer: pointer;
