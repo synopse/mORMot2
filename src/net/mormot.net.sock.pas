@@ -167,6 +167,7 @@ type
   TNetSocketWrap = object
   private
     procedure SetOpt(prot, name: integer; value: pointer; valuelen: integer);
+    function GetOptInt(prot, name: integer): integer;
     function SetIoMode(async: cardinal): TNetResult;
   public
     procedure SetupConnection(layer: TNetLayer; sendtimeout, recvtimeout: integer);
@@ -175,6 +176,10 @@ type
     procedure SetKeepAlive(keepalive: boolean);
     procedure SetLinger(linger: integer);
     procedure SetNoDelay(nodelay: boolean);
+    procedure SetSendBufferSize(bytes: integer);
+    procedure SetReceiveBufferSize(bytes: integer);
+    function GetSendBufferSize: integer;
+    function GetReceiveBufferSize: integer;
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr): TNetResult;
     function GetPeer(out addr: TNetAddr): TNetResult;
     function MakeAsync: TNetResult;
@@ -1342,6 +1347,18 @@ begin
     raise ENetSock.Create('SetOptions(%d,%d)', [prot, name], NetLastError);
 end;
 
+function TNetSocketWrap.GetOptInt(prot, name: integer): integer;
+var
+  len: integer;
+begin
+  if @self = nil then
+    raise ENetSock.Create('GetOptInt(%d,%d) with no socket', [prot, name]);
+  result := 0;
+  len := SizeOf(result);
+  if getsockopt(TSocket(@self), prot, name, @result, @len) <> NO_ERROR then
+    raise ENetSock.Create('GetOptInt(%d,%d)', [prot, name], NetLastError);
+end;
+
 procedure TNetSocketWrap.SetKeepAlive(keepalive: boolean);
 var
   v: integer;
@@ -1356,6 +1373,30 @@ var
 begin
   v := ord(nodelay);
   SetOpt(IPPROTO_TCP, TCP_NODELAY, @v, SizeOf(v));
+end;
+
+procedure TNetSocketWrap.SetSendBufferSize(bytes: integer);
+begin
+  SetOpt(SOL_SOCKET, SO_SNDBUF, @bytes, SizeOf(bytes));
+end;
+
+procedure TNetSocketWrap.SetReceiveBufferSize(bytes: integer);
+begin
+  SetOpt(SOL_SOCKET, SO_RCVBUF, @bytes, SizeOf(bytes));
+end;
+
+function TNetSocketWrap.GetSendBufferSize: integer;
+begin
+  result := GetOptInt(SOL_SOCKET, SO_SNDBUF);
+  // typical value on Linux is 2626560 bytes for TCP (16384 for accept),
+  // 212992 for Unix socket - on Windows, default is 8192
+end;
+
+function TNetSocketWrap.GetReceiveBufferSize: integer;
+begin
+  result := GetOptInt(SOL_SOCKET, SO_RCVBUF);
+  // typical value on Linux is 131072 bytes for TCP, 212992 for Unix socket
+  // - on Windows, default is 8192
 end;
 
 procedure TNetSocketWrap.SetupConnection(layer: TNetLayer;

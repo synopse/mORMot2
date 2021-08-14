@@ -141,6 +141,9 @@ type
 
 { ******** Sockets API calls via the libc }
 
+// we use the libc rather than fp*() low-level functions because the libc
+// may be implemented via vDSO and avoid a syscall
+
 function gethostbyname(name: PAnsiChar): PHostEnt; cdecl;
   external clib name 'gethostbyname';
 function socket(af, struct, protocol: integer): TSocket; cdecl;
@@ -148,6 +151,9 @@ function socket(af, struct, protocol: integer): TSocket; cdecl;
 function setsockopt(s: TSocket; level, optname: integer;
    optval: pointer; optlen: integer): integer; cdecl;
   external clib name 'setsockopt';
+function getsockopt(s: TSocket; level, optname: integer;
+   optval: pointer; optlen: PInteger): integer; cdecl;
+  external clib name 'getsockopt';
 function ioctlsocket(s: TSocket; cmd: cardinal; arg: PCardinal): integer; cdecl;
   external clib name 'ioctl';
 function shutdown(s: TSocket; how: integer): integer; cdecl;
