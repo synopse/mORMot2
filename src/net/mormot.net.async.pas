@@ -246,6 +246,8 @@ type
     // called after TAsyncConnections.LastOperationIdleSeconds of no activity
     // - Sender.Write() could be used to send e.g. a hearbeat frame
     procedure OnLastOperationIdle(Sender: TAsyncConnections); virtual;
+    // called after TAsyncConnections.LastOperationReleaseMemorySeconds
+    procedure ReleaseMemoryOnIdle; virtual;
   public
     /// initialize this instance
     constructor Create(const aRemoteIP: RawUtf8); reintroduce; virtual;
@@ -910,6 +912,21 @@ procedure TAsyncConnection.OnLastOperationIdle(Sender: TAsyncConnections);
 begin
 end;
 
+procedure TAsyncConnection.ReleaseMemoryOnIdle;
+begin
+  if fSlot.Lock({wr=}false) then
+  begin
+    fSlot.rd.Clear;
+    fSlot.UnLock(false);
+  end;
+  if fSlot.Lock({wr=}true) then
+  begin
+    fSlot.wr.Clear;
+    fSlot.UnLock(true);
+  end;
+  fSlot.wasactive := false; // Lock() was with no true activity here
+end;
+
 procedure TAsyncConnection.AfterWrite(Sender: TAsyncConnections);
 begin
   // do nothing
@@ -1305,9 +1322,10 @@ end;
 
 procedure TAsyncConnections.IdleEverySecond;
 var
-  i, notified, gced: integer;
+  i: PtrInt;
+  notified, gced: integer;
   now, allowed, gc: cardinal;
-  c: ^TAsyncConnection;
+  c: TAsyncConnection;
   log: ISynLog;
 begin
   if Terminated or
@@ -1324,40 +1342,31 @@ begin
     gc := now - gc;
   fConnectionLock.Lock;
   try
-    c := pointer(fConnection);
-    for i := 1 to fConnectionCount do
+    for i := 0 to fConnectionCount - 1 do
     begin
-      if c^.fSlot.wasactive then
+      c := fConnection[i];
+      if c.fSlot.wasactive then
       begin
-        c^.fSlot.wasactive := false;
-        c^.fLastOperation := now;
+        c.fSlot.wasactive := false;
+        c.fLastOperation := now;
       end
       else if (gc <> 0) and
-              (c^.fLastOperation < gc) then
+              (c.fLastOperation < gc) then
       begin
         inc(gced);
-        if c^.fSlot.Lock({wr=}false) then
-        begin
-          c^.fSlot.rd.Clear;
-          c^.fSlot.UnLock(false);
-        end;
-        if c^.fSlot.Lock({wr=}true) then
-        begin
-          c^.fSlot.wr.Clear;
-          c^.fSlot.UnLock(true);
-        end;
-        c^.fSlot.wasactive := false; // Lock() was with no true activity here
+        c.ReleaseMemoryOnIdle;
       end
       else if (allowed <> 0) and
-              (c^.fLastOperation < allowed) then
+              (c.fLastOperation < allowed) then
         try
           if {%H-}log = nil then
             log := fLog.Enter(self, 'IdleEverySecond');
-          c^.OnLastOperationIdle(self);
+          c.OnLastOperationIdle(self);
           inc(notified);
+          if Terminated then
+            break;
         except
         end;
-      inc(c);
     end;
     if log <> nil then
       log.Log(sllTrace, 'IdleEverySecond notified=% gced=% %',
