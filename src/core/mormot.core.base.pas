@@ -2419,10 +2419,10 @@ function InterlockedIncrement(var I: integer): integer;
 // - FPC will define this function as intrinsic for non-Intel CPUs
 function InterlockedDecrement(var I: integer): integer;
 
-/// slightly faster than InterlockedIncrement()
+/// slightly faster than InterlockedIncrement() when you don't need the result
 procedure LockedInc32(int32: PInteger);
 
-/// slightly faster than InterlockedDecrement()
+/// slightly faster than InterlockedDecrement() when you don't need the result
 procedure LockedDec32(int32: PInteger);
 
 /// slightly faster than InterlockedIncrement64()
@@ -9528,7 +9528,7 @@ end;
 procedure LockedInc64(int64: PInt64);
 begin
   {$ifdef FPC_64}
-  InterlockedIncrement64(int64^);
+  InterlockedIncrement64(int64^); // we can use the existing 64-bit RTL function
   {$else}
   with PInt64Rec(int64)^ do
     if InterlockedIncrement(Lo) = 0 then

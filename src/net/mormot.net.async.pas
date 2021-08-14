@@ -58,7 +58,7 @@ type
     /// the current (reusable) write data buffer of this slot
     wr: TRawByteStringBuffer;
     /// acquire an exclusive R/W access to this connection
-    // - returns true if slot has been acquired
+    // - returns true if slot has been acquired, setting the wasactive flag
     // - returns false if it is used by another thread
     // - warning: this method is not re-entrant
     function Lock(writer: boolean): boolean;
@@ -1336,16 +1336,17 @@ begin
               (c^.fLastOperation < gc) then
       begin
         inc(gced);
-        if c^.fSlot.TryLock({wr=}false, 0) then
+        if c^.fSlot.Lock({wr=}false) then
         begin
           c^.fSlot.rd.Clear;
           c^.fSlot.UnLock(false);
         end;
-        if c^.fSlot.TryLock({wr=}true, 0) then
+        if c^.fSlot.Lock({wr=}true) then
         begin
           c^.fSlot.wr.Clear;
           c^.fSlot.UnLock(true);
         end;
+        c^.fSlot.wasactive := false; // Lock() was with no true activity here
       end
       else if (allowed <> 0) and
               (c^.fLastOperation < allowed) then
