@@ -610,6 +610,7 @@ type
   // grow FD_SETSIZE up to 512 for the purpose of this class
   // - under POSIX, select() is very limited, so poll/epoll APIs are to be used
   // - in practice, TPollSocketSelect is FASTER than TPollSocketPoll + WSAPoll()
+  // because the new WSAPoll API is just an emulator usinig select() internally
   TPollSocketSelect = class(TPollSocketAbstract)
   protected
     fHighestSocket: TNetSocket;

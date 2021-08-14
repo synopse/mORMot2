@@ -542,6 +542,7 @@ type
 
 /// the TPollSocketAbstract class best fitting with the current Operating System
 // - as used by TPollSocketAbstract.New method
+// - returns e.g. TPollSocketEpoll on Linux, or TPollSocketSelect on Windows
 function PollSocketClass: TPollSocketClass;
 
 

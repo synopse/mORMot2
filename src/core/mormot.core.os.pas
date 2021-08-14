@@ -247,12 +247,14 @@ var
   OSVersionInfoEx: RawUtf8;
   /// the current Operating System version, as retrieved for the current process
   // and computed by ToTextOS(OSVersionInt32)
-  // - returns e.g. 'Windows Vista' or 'Ubuntu 5.4.0'
+  // - contains e.g. 'Windows Vista' or 'Ubuntu 5.4.0'
   OSVersionShort: RawUtf8;
 
   /// some textual information about the current CPU
+  // - contains e.g. '4 x Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz (x64)'
   CpuInfoText: RawUtf8;
   /// some textual information about the current computer hardware, from BIOS
+  // - contains e.g. 'LENOVO 20HES23B0U ThinkPad T470'
   BiosInfoText: RawUtf8;
 
   {$ifdef OSLINUXANDROID}

@@ -2224,11 +2224,11 @@ type
   /// maintain a thread-safe list of PRttiInfo/TRttiCustom/TRttiJson registration
   TRttiCustomList = object
   private
-    fGlobalClass: TRttiCustomClass;
     // store PRttiInfo/TRttiCustom pairs by TRttiKind.Kind+Name[0..1]
     Table: ^TRttiCustomListHashTable;
     // used to release memory used by registered customizations
     Instances: array of TRttiCustom;
+    fGlobalClass: TRttiCustomClass;
     function GetByClass(ObjectClass: TClass): TRttiCustom;
       {$ifdef HASINLINE}inline;{$endif}
     // called by FindOrRegister() for proper inlining
@@ -7206,9 +7206,10 @@ begin
   if Info^.Kind <> rkClass then
   begin
     // our optimized "hash table of the poor" (tm) lookup
-    P := @Table^.Pairs[Info^.Kind, (PtrUInt(Info.RawName[0]) xor
-      PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH];
-    // note: we tried to include RawName[1] and $df, but with no gain
+    P := @Table^.Pairs[Info^.Kind,
+      (PtrUInt(Info.RawName[0]) xor PtrUInt(Info.RawName[1])) and
+      RTTICUSTOMTYPEINFOHASH];
+    // note: we tried to include RawName[2] and $df, but with no gain
     result := pointer(P^.RttiInfoRttiCustom);
     if result = nil then
       exit;
