@@ -50,6 +50,9 @@ type
     lockcounter: array[boolean] of integer;
     /// the last error reported before the connection ends
     lastWSAError: TNetResult;
+    /// flag set by TAsyncConnections.IdleEverySecond to purge rd/wr unused buffers
+    // - avoid to call the GetTickCount64 system API for every activity
+    wasactive: boolean;
     /// the current (reusable) read data buffer of this slot
     rd: TRawByteStringBuffer;
     /// the current (reusable) write data buffer of this slot
@@ -223,7 +226,6 @@ type
     fLastOperation: cardinal;
     fRemoteIP: RawUtf8;
     /// this method is called when the instance is connected to a poll
-    // - default implementation will set fLastOperation content
     procedure AfterCreate(Sender: TAsyncConnections); virtual;
     /// this method is called when the some input data is pending on the socket
     // - should extract frames or requests from fSlot.rd, and handle them
@@ -242,7 +244,6 @@ type
     // - default implementation will reset fHandle to 0
     procedure BeforeDestroy(Sender: TAsyncConnections); virtual;
     // called after TAsyncConnections.LastOperationIdleSeconds of no activity
-    // - reset fLastOperation by default - overriden code should be fast
     // - Sender.Write() could be used to send e.g. a hearbeat frame
     procedure OnLastOperationIdle(Sender: TAsyncConnections); virtual;
   public
@@ -310,16 +311,12 @@ type
   // - acoOnAcceptFailureStop will let failed Accept() finalize the process
   // - acoNoLogRead and acoNoLogWrite could reduce the log verbosity
   // - acoVerboseLog will log transmitted frames content, for debugging purposes
-  // - acoLastOperationNoRead and acoLastOperationNoWrite could be used to
-  // avoid TAsyncConnection.fLastOperation reset at read or write
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoOnAcceptFailureStop,
     acoNoLogRead,
     acoNoLogWrite,
-    acoVerboseLog,
-    acoLastOperationNoRead,
-    acoLastOperationNoWrite);
+    acoVerboseLog);
 
   /// implements an abstract thread-pooled high-performance TCP clients or server
   // - internal TAsyncConnectionsSockets will handle high-performance process
@@ -342,12 +339,14 @@ type
     fLog: TSynLogClass;
     fTempConnectionForSearchPerHandle: TAsyncConnection;
     fOptions: TAsyncConnectionsOptions;
+    fLastOperationReleaseMemorySeconds,
     fLastOperationIdleSeconds: cardinal;
     fThreadClients: record // used by TAsyncClient
       Count, Timeout: integer;
       Address, Port: RawUtf8;
     end;
     fConnectionLock: TSynLocker;
+    // is called by TAsyncConnectionsThread.Execute every second
     procedure IdleEverySecond;
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
       out aConnection: TAsyncConnection): boolean; virtual;
@@ -394,6 +393,12 @@ type
     // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(...);
     procedure LogVerbose(connection: TAsyncConnection; const ident: RawUtf8;
       const frame: TRawByteStringBuffer); overload;
+    /// allow idle connection to release its internal fSlot.rd/wr memory buffers
+    // - default is 60 seconds, which is pretty conservative
+    // - could be tuned in case of high numbers of concurrent connections and
+    // constrained memory, e.g. with a lower value like 2 seconds
+    property LastOperationReleaseMemorySeconds: cardinal
+      read fLastOperationReleaseMemorySeconds write fLastOperationReleaseMemorySeconds;
     /// will execute TAsyncConnection.OnLastOperationIdle after an idle period
     // - could be used to send heartbeats after read/write inactivity
     // - equals 0 (i.e. disabled) by default
@@ -486,7 +491,9 @@ end;
 function TPollSocketsSlot.Lock(writer: boolean): boolean;
 begin
   result := InterlockedIncrement(lockcounter[writer]) = 1;
-  if not result then
+  if result then
+    wasactive := true
+  else
     LockedDec32(@lockcounter[writer]);
 end;
 
@@ -655,7 +662,7 @@ begin
 end;
 
 function TPollAsyncSockets.Write(connection: TObject; const data;
-  datalen, timeout: integer): boolean;
+  datalen: integer; timeout: integer): boolean;
 var
   tag: TPollSocketTag;
   slot: PPollSocketsSlot;
@@ -877,7 +884,7 @@ begin
       end;
     finally
       slot.UnLock(true);
-    end;
+    end; // if already locked (unlikely) -> will try next time
   finally
     LockedDec32(@fProcessing);
   end;
@@ -892,16 +899,15 @@ constructor TAsyncConnection.Create(const aRemoteIP: RawUtf8);
 begin
   inherited Create;
   fRemoteIP := aRemoteIP;
+  fSlot.wasactive := true; // by definition
 end;
 
 procedure TAsyncConnection.AfterCreate(Sender: TAsyncConnections);
 begin
-  fLastOperation := UnixTimeUtc;
 end;
 
 procedure TAsyncConnection.OnLastOperationIdle(Sender: TAsyncConnections);
 begin
-  fLastOperation := UnixTimeUtc;
 end;
 
 procedure TAsyncConnection.AfterWrite(Sender: TAsyncConnections);
@@ -941,8 +947,6 @@ begin
   if not (acoNoLogRead in fOwner.Options) then
     fOwner.fLog.Add.Log(sllTrace, 'OnRead% len=%', [ac, ac.fSlot.rd.Len], self);
   result := ac.OnRead(fOwner);
-  if not (acoLastOperationNoRead in fOwner.Options) then
-    ac.fLastOperation := UnixTimeUtc;
 end;
 
 function TAsyncConnectionsSockets.SlotFromConnection(connection: TObject):
@@ -972,9 +976,6 @@ var
   tmp: TLogEscape;
 begin
   result := inherited Write(connection, data, datalen, timeout);
-  if result and
-     not (acoLastOperationNoWrite in fOwner.Options) then
-    (connection as TAsyncConnection).fLastOperation := UnixTimeUtc;
   if (fOwner.fLog <> nil) and
      not (acoNoLogWrite in fOwner.Options) then
     fOwner.fLog.Add.Log(sllTrace, 'Write%=% len=%%', [connection,
@@ -1019,7 +1020,8 @@ begin
       if (fOwner.fThreadClients.Count > 0) and
          (InterlockedDecrement(fOwner.fThreadClients.Count) >= 0) then
         fOwner.ThreadClientsConnect
-      else      // generic TAsyncConnections read/write process
+      else
+        // generic TAsyncConnections read/write process
         case fProcess of
           pseRead:
             fOwner.fClients.ProcessRead(30000);
@@ -1028,7 +1030,8 @@ begin
               fOwner.fClients.ProcessWrite(30000);
               if mormot.core.os.GetTickCount64 >= idletix then
               begin
-                fOwner.IdleEverySecond; // may take some time -> retrieve ticks again
+                fOwner.IdleEverySecond;
+                // may take some time -> retrieve ticks again
                 idletix := mormot.core.os.GetTickCount64 + 1000;
               end;
             end;
@@ -1067,6 +1070,7 @@ begin
     raise EAsyncConnections.CreateUtf8('%.Create(%)', [self, aStreamClass]);
   if aThreadPoolCount <= 0 then
     aThreadPoolCount := 1;
+  fLastOperationReleaseMemorySeconds := 60;
   fLog := aLog;
   fStreamClass := aStreamClass;
   fConnectionLock.Init;
@@ -1301,28 +1305,62 @@ end;
 
 procedure TAsyncConnections.IdleEverySecond;
 var
-  i, n: integer;
-  allowed: cardinal;
+  i, notified, gced: integer;
+  now, allowed, gc: cardinal;
+  c: ^TAsyncConnection;
   log: ISynLog;
 begin
   if Terminated or
-     (LastOperationIdleSeconds <= 0) then
+     (fConnectionCount = 0) then
     exit;
+  notified := 0;
+  gced := 0;
+  now := Qword(mormot.core.os.GetTickCount64) div 1000;
+  allowed := LastOperationIdleSeconds;
+  if allowed <> 0 then
+    allowed := now - allowed;
+  gc := LastOperationReleaseMemorySeconds;
+  if gc <> 0 then
+    gc := now - gc;
   fConnectionLock.Lock;
   try
-    n := 0;
-    allowed := UnixTimeUtc - LastOperationIdleSeconds;
-    for i := 0 to fConnectionCount - 1 do
-      if fConnection[i].fLastOperation < allowed then
-      try
-        if {%H-}log = nil then
-          log := fLog.Enter(self, 'IdleEverySecond');
-        fConnection[i].OnLastOperationIdle(self);
-        inc(n);
-      except
-      end;
+    c := pointer(fConnection);
+    for i := 1 to fConnectionCount do
+    begin
+      if c^.fSlot.wasactive then
+      begin
+        c^.fSlot.wasactive := false;
+        c^.fLastOperation := now;
+      end
+      else if (gc <> 0) and
+              (c^.fLastOperation < gc) then
+      begin
+        inc(gced);
+        if c^.fSlot.TryLock({wr=}false, 0) then
+        begin
+          c^.fSlot.rd.Clear;
+          c^.fSlot.UnLock(false);
+        end;
+        if c^.fSlot.TryLock({wr=}true, 0) then
+        begin
+          c^.fSlot.wr.Clear;
+          c^.fSlot.UnLock(true);
+        end;
+      end
+      else if (allowed <> 0) and
+              (c^.fLastOperation < allowed) then
+        try
+          if {%H-}log = nil then
+            log := fLog.Enter(self, 'IdleEverySecond');
+          c^.OnLastOperationIdle(self);
+          inc(notified);
+        except
+        end;
+      inc(c);
+    end;
     if log <> nil then
-      log.Log(sllTrace, 'IdleEverySecond notified % %', [n, fStreamClass], self);
+      log.Log(sllTrace, 'IdleEverySecond notified=% gced=% %',
+        [notified, gced, fStreamClass], self);
   finally
     fConnectionLock.UnLock;
   end;
