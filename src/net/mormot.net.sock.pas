@@ -169,6 +169,10 @@ type
     procedure SetOpt(prot, name: integer; value: pointer; valuelen: integer);
     function GetOptInt(prot, name: integer): integer;
     function SetIoMode(async: cardinal): TNetResult;
+    procedure SetSendBufferSize(bytes: integer);
+    procedure SetRecvBufferSize(bytes: integer);
+    function GetSendBufferSize: integer;
+    function GetRecvBufferSize: integer;
   public
     procedure SetupConnection(layer: TNetLayer; sendtimeout, recvtimeout: integer);
     procedure SetSendTimeout(ms: integer);
@@ -176,10 +180,6 @@ type
     procedure SetKeepAlive(keepalive: boolean);
     procedure SetLinger(linger: integer);
     procedure SetNoDelay(nodelay: boolean);
-    procedure SetSendBufferSize(bytes: integer);
-    procedure SetReceiveBufferSize(bytes: integer);
-    function GetSendBufferSize: integer;
-    function GetReceiveBufferSize: integer;
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr): TNetResult;
     function GetPeer(out addr: TNetAddr): TNetResult;
     function MakeAsync: TNetResult;
@@ -198,6 +198,10 @@ type
     function Close: TNetResult;
     function Socket: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
+    property SendBufferSize: integer
+      read GetSendBufferSize write SetSendBufferSize;
+    property RecvBufferSize: integer
+      read GetRecvBufferSize write SetRecvBufferSize;
   end;
 
 
@@ -1269,6 +1273,13 @@ begin
     exit;
   end;
   // bind or connect to this Socket
+  {$ifdef OSWINDOWS}
+  if not dobind then
+  begin // on Windows, default buffers are of 8KB :(
+    TNetSocket(sock).SetRecvBufferSize(65536);
+    TNetSocket(sock).SetSendBufferSize(65536);
+  end; // to be done before the actual connect() for proper TCP negotiation
+  {$endif OSWINDOWS}
   // open non-blocking Client connection if a timeout was specified
   if (connecttimeout > 0) and
      not dobind then
@@ -1380,7 +1391,7 @@ begin
   SetOpt(SOL_SOCKET, SO_SNDBUF, @bytes, SizeOf(bytes));
 end;
 
-procedure TNetSocketWrap.SetReceiveBufferSize(bytes: integer);
+procedure TNetSocketWrap.SetRecvBufferSize(bytes: integer);
 begin
   SetOpt(SOL_SOCKET, SO_RCVBUF, @bytes, SizeOf(bytes));
 end;
@@ -1392,7 +1403,7 @@ begin
   // 212992 for Unix socket - on Windows, default is 8192
 end;
 
-function TNetSocketWrap.GetReceiveBufferSize: integer;
+function TNetSocketWrap.GetRecvBufferSize: integer;
 begin
   result := GetOptInt(SOL_SOCKET, SO_RCVBUF);
   // typical value on Linux is 131072 bytes for TCP, 212992 for Unix socket
