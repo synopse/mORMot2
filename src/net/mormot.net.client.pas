@@ -405,7 +405,7 @@ type
   THttpClientSocketClass = class of THttpClientSocket;
 
 /// returns the HTTP User-Agent header value of a mORMot client including
-// the Instance class name
+// the Instance class name in its minified/uppercase-only translation
 function DefaultUserAgent(Instance: TObject): RawUtf8;
 
 /// create a THttpClientSocket, returning nil on error
@@ -1284,11 +1284,11 @@ end;
 
 function DefaultUserAgent(Instance: TObject): RawUtf8;
 var
-  i: integer;
+  i: PtrInt;
   P: PShortString;
   name: ShortString;
 begin
-  // instance class THttpClientSocket -> 'HCS'
+  // instance class THttpClientSocket translated into 'HCS'
   P := ClassNameShort(Instance);
   name[0] := #0;
   for i := 2 to ord(P^[0]) do

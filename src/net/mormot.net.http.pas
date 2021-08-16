@@ -104,22 +104,68 @@ const
 { ******************** Reusable HTTP State Machine }
 
 type
+  /// the states of THttpRequestContext processing
+  THttpRequestState = (
+    hrsNoStateMachine,
+    hrsGetCommand,
+    hrsGetHeaders,
+    hrsGetBodyChunkedHex,
+    hrsGetBodyChunkedData,
+    hrsGetBodyChunkedDataVoidLine,
+    hrsGetBodyContentLength,
+    hrsWaitProcessing,
+    hrsSendCommand,
+    hrsSendHeaders,
+    hrsSendBody,
+    hrsClosed,
+    hrsKeptAlive,
+    hrsErrorMisuse,
+    hrsErrorUnsupportedFormat,
+    hrsErrorPayloadTooLarge,
+    hrsErrorAborted);
+
+  /// set of states for THttpRequestContext processing
+  THttpRequestStates = set of THttpRequestState;
+
+  /// customize THttpRequestContext process
+  THttpRequestOptions = set of (
+    hroHeadersUnfiltered);
+
   /// map the presence of some HTTP headers for THttpRequestContext.HeaderFlags
   THttpRequestHeaderFlags = set of (
-    hfTransferChuked,
+    hfTransferChunked,
     hfConnectionClose,
     hfConnectionUpgrade,
     hfConnectionKeepAlive,
     hfHasRemoteIP);
 
-  /// reusable structure to parse any HTTP content
+  PHttpRequestContext = ^THttpRequestContext;
+
+  /// optional callback triggered when THttpRequestContext state changes
+  // - i.e. after Command, Headers or Content have been retrieved
+  // - should return the current Sender.State, or an error to interrupt the
+  // process (typically hrsErrorAborted)
+  TOnHttpRequestStateChange = function(
+     Sender: PHttpRequestContext): THttpRequestState of object;
+
+  /// low-level reusable State Machine to parse any HTTP content
+  {$ifdef USERECORDWITHMETHODS}
+  THttpRequestContext = record
+  {$else}
   THttpRequestContext = object
+  {$endif USERECORDWITHMETHODS}
   private
-    /// an internal buffer used to reduce memory allocations
-    WorkBuffer: RawByteString;
-    WorkBufferLen: PtrInt;
-    procedure AppendToWorkBuffer(P: pointer; Len: PtrInt; CRLF: boolean);
+    // internal reusable buffers - reduce memory allocations during process
+    Head, Process: TRawByteStringBuffer;
+    ContentLeft: Int64;
+    ContentPos: PByte;
   public
+    /// the current state of this HTTP context
+    State: THttpRequestState;
+    /// map the presence of some HTTP headers, but retrieved during Request
+    HeaderFlags: THttpRequestHeaderFlags;
+    /// customize the HTTP process
+    Options: THttpRequestOptions;
     /// will contain the first header line:
     // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
     // - 'HTTP/1.0 200 OK' for a GET response after Get() e.g.
@@ -149,9 +195,13 @@ type
     /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved during Request
     // - proprietary header, used with our RESTful ORM access
     ServerInternalState: integer;
-    /// map the presence of some HTTP headers, but retrieved during Request
-    HeaderFlags: THttpRequestHeaderFlags;
-    /// reset the internal state of this request
+    /// optional callback to track the HTTP ProcessRead/ProcessWrite work
+    OnStateChange: TOnHttpRequestStateChange;
+    /// optional stream to store the input body instead of Content memory
+    InputStream: TStream;
+    /// optional stream to read the input body instead of Content memory
+    OutputStream: TStream;
+    /// reset this request context to be used without any ProcessInit/Read/Write
     procedure Clear;
     /// parse a HTTP header into Headers and fill internal properties
     // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
@@ -169,7 +219,39 @@ type
     // - note that GetHeader(HeadersUnFiltered=false) will set ContentType field
     // but let HeaderGetValue('CONTENT-TYPE') return ''
     function HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
+    /// (re)initialize the HTTP Server state machine
+    procedure ProcessInit(InStream, OutStream: TStream);
+    /// receiving socket entry point of our asynchronous HTTP Server
+    // - to be called with the incoming bytes from the socket receive buffer
+    // - caller should have checked that current State is in HTTP_REQUEST_READ
+    procedure ProcessRead(P: pointer; Len: PtrInt);
+    /// sending socket entry point of our asynchronous HTTP Server
+    // - to be called when some bytes could be written to output socket
+    // - main entry point of the asynchronous Machine State of HTTP processing
+    // - caller should have checked that current State is in HTTP_REQUEST_WRITE
+    // - returns how many bytes from P should be sent to the socket
+    function ProcessWrite(out P: pointer): PtrInt;
   end;
+
+const
+  /// when THttpRequestContext.State is expected some ProcessRead() data
+  HTTP_REQUEST_READ =
+    [hrsGetCommand,
+     hrsGetHeaders,
+     hrsGetBodyChunkedHex,
+     hrsGetBodyChunkedData,
+     hrsGetBodyChunkedDataVoidLine,
+     hrsGetBodyContentLength];
+
+  /// when THttpRequestContext.State is expected some ProcessWrite() data
+  HTTP_REQUEST_WRITE =
+    [hrsSendCommand,
+     hrsSendHeaders,
+     hrsSendBody];
+
+  /// THttpRequestContext.State >= HTTP_REQUEST_FINAL are ending the process
+  // - typically end of request, or fatal error
+  HTTP_REQUEST_FINAL = hrsClosed;
 
 
 { ******************** THttpSocket Implementing HTTP over plain sockets }
@@ -652,26 +734,13 @@ end;
 
 { THttpRequestContext }
 
-procedure THttpRequestContext.AppendToWorkBuffer(P: pointer; Len: PtrInt;
-  CRLF: boolean);
-var
-  cap: PtrInt;
-begin
-  cap := Length(WorkBuffer);
-  if WorkBufferLen + 2 > cap then
-    SetLength(WorkBuffer, cap + cap shr 3 + 2048);
-  MoveFast(P^, PByteArray(WorkBuffer)[WorkBufferLen], Len);
-  inc(WorkBufferLen, Len);
-  if CRLF then
-  begin
-    PWord(@PByteArray(WorkBuffer)[WorkBufferLen])^ := $0a0d;
-    inc(WorkBufferLen, 2);
-  end;
-end;
-
 procedure THttpRequestContext.Clear;
 begin
-  WorkBufferLen := 0; // keep and reuse existing temporary WorkBuffer
+  Head.Reset;
+  Process.Reset;
+  State := hrsNoStateMachine;
+  HeaderFlags := [];
+  Options := [];
   Command := '';
   Headers := '';
   ContentType := '';
@@ -682,7 +751,6 @@ begin
   Content := '';
   ContentLength := -1;
   ServerInternalState := 0;
-  HeaderFlags := [];
 end;
 
 function THttpRequestContext.ParseHeader(P: PUtf8Char;
@@ -737,7 +805,7 @@ begin
       end;
     1:
       // 'TRANSFER-ENCODING: CHUNKED'
-      include(HeaderFlags, hfTransferChuked);
+      include(HeaderFlags, hfTransferChunked);
     2:
       begin
         // 'CONNECTION: '
@@ -805,23 +873,249 @@ begin
   while P^ > #13 do
     inc(P); // no control char should appear in any header
   if HeadersUnFiltered then
-    // store meaningful headers into WorkBuffer
-    AppendToWorkBuffer(result, P - result, {crlf=}true);
+    // store meaningful headers into WorkBuffer, if not already there
+    Head.Append(result, P - result, {crlf=}true);
+  result := P;
 end;
 
 procedure THttpRequestContext.ParseHeaderFinalize;
 begin
-  if WorkBufferLen = 0 then
-    exit;
-  FastSetString(Headers, nil, WorkBufferLen + 40); // some space for RemoteIP
-  MoveFast(pointer(WorkBuffer)^, pointer(Headers)^, WorkBufferLen);
-  PStrLen(PAnsiChar(pointer(Headers)) - _STRLEN)^ := WorkBufferLen; // fake len
-  WorkBufferLen := 0; // we can reuse the temp buffer now
+  Head.AsText(Headers, {OverheadForRemoteIP=}40);
+  Head.Reset;
 end;
 
 function THttpRequestContext.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
 begin
   FindNameValue(Headers, pointer(aUpperName), result, false, ':');
+end;
+
+procedure THttpRequestContext.ProcessInit(InStream, OutStream: TStream);
+begin
+  Clear;
+  InputStream := InStream;
+  OutputStream := OutStream;
+  ContentLeft := 0;
+  State := hrsGetCommand;
+end;
+
+type
+  TProcessParseLine = record
+    P: PUtf8Char;
+    Len: PtrInt;
+    Line: PUtf8Char;
+    LineLen: PtrInt;
+  end;
+
+function ProcessParseLine(var st: TProcessParseLine; line: PRawUtf8): boolean;
+var
+  P: PUtf8Char;
+  Len: PtrInt;
+begin
+  P := st.P;
+  Len := st.Len;
+  result := false;
+  if Len <= 0 then
+    exit;
+  // search for the CR or CRLF line end - assume no other control char appears
+  dec(Len, 4);
+  if Len >= 0 then
+    repeat
+      if P[0] > #13 then
+        if P[1] > #13 then
+          if P[2] > #13 then
+            if P[3] > #13 then
+            begin
+              inc(P, 4);
+              dec(Len, 4);
+              if Len <= 0 then
+                break;
+              continue;
+            end;
+      break;
+    until false;
+  inc(Len, 4);
+  // here Len=0..3
+  if Len = 0 then
+    exit;
+  repeat
+    if P[0] > #13 then
+      break;
+    dec(Len);
+    if Len = 0 then
+      exit;
+    inc(P);
+  until false;
+  // here P^ <= #13: we found a whole text line
+  st.Line := st.P;
+  st.LineLen := P - st.P;
+  if line <> nil then
+    FastSetString(line^, st.Line, st.LineLen);
+  result := true;
+  // go to beginning of next line
+  dec(Len);
+  if (Len <> 0) and
+     (PWord(P)^ = $0a0d) then
+    begin
+      inc(P);
+      dec(Len);
+    end;
+  inc(P);
+  st.P := P;
+  st.Len := Len;
+end;
+
+procedure THttpRequestContext.ProcessRead(P: pointer; Len: PtrInt);
+var
+  st: TProcessParseLine;
+  previous: THttpRequestState;
+label
+  fin;
+begin
+  if (P = nil) or
+     (Len <= 0) then
+    exit;
+  if Process.Len <> 0 then
+  begin
+    Process.Append(P, Len);
+    st.P := Process.Buffer;
+    st.Len := Process.Len;
+  end
+  else
+  begin
+    st.P := P; // most of the time, all headers come as a single block
+    st.Len := Len;
+  end;
+  previous := State;
+  repeat
+    // this is the main loop of our HTTP server asynchronous state machine
+    case State of
+      hrsGetCommand:
+        if ProcessParseLine(st, @Command) then
+          State := hrsGetHeaders
+        else
+          break; // not enough input
+      hrsGetHeaders:
+        if ProcessParseLine(st, nil) then
+          if st.LineLen <> 0 then
+            ParseHeader(st.P, hroHeadersUnfiltered in Options)
+          else
+          begin
+            // void line indicates end of Headers
+            ParseHeaderFinalize;
+            // Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
+            if hfTransferChunked in HeaderFlags then
+              State := hrsGetBodyChunkedHex
+            else if ContentLength > 0 then
+              State := hrsGetBodyContentLength
+              // note: old HTTP/1.0 format with no Content-Length is unsupported
+            else
+              State := hrsWaitProcessing;
+          end
+        else
+          break;
+      hrsGetBodyChunkedHex:
+        if ProcessParseLine(st, nil) then
+        begin
+          ContentLeft := HttpChunkToHex32(PAnsiChar(st.Line));
+          if ContentLeft <> 0 then
+          begin
+            State := hrsGetBodyChunkedData;
+            SetLength(Content, ContentLength + ContentLeft);
+            ContentPos := @PByteArray(Content)[ContentLength];
+            inc(ContentLength, ContentLeft);
+          end
+          else
+            State := hrsGetBodyChunkedDataVoidLine;
+        end
+        else
+          break;
+      hrsGetBodyChunkedData:
+        begin
+          if st.Len < ContentLeft then
+            Len := st.Len
+          else
+            Len := ContentLeft;
+          if InputStream <> nil then
+            InputStream.WriteBuffer(st.P^, Len)
+          else
+          begin
+            MoveFast(st.P^, ContentPos^, Len);
+            inc(ContentPos, Len);
+          end;
+          dec(ContentLeft, Len);
+          if ContentLeft = 0 then
+            State := hrsGetBodyChunkedDataVoidLine;
+        end;
+      hrsGetBodyChunkedDataVoidLine:
+        if ProcessParseLine(st, nil) then // chunks end with a void line
+          if ContentLeft = 0 then
+            State := hrsWaitProcessing
+          else
+            State := hrsGetBodyChunkedHex
+        else
+          break;
+      hrsGetBodyContentLength:
+        begin
+          if ContentLeft = 0 then
+            ContentLeft := ContentLength;
+          if st.Len < ContentLeft then
+            Len := st.Len
+          else
+            Len := ContentLeft;
+          if InputStream = nil then
+          begin
+            if Content = '' then
+            begin
+              if ContentLength > 1 shl 30 then // 1 GB
+              begin
+                State := hrsErrorPayloadTooLarge; // avoid memory overflow
+                goto fin;
+              end;
+              SetLength(Content, ContentLength);
+              ContentPos := pointer(Content);
+            end;
+            MoveFast(st.P^, ContentPos^, Len);
+            inc(ContentPos, Len);
+          end
+          else
+            InputStream.WriteBuffer(st.P^, Len);
+          dec(st.Len, Len);
+          dec(ContentLeft, Len);
+          if ContentLeft = 0 then
+            State := hrsWaitProcessing;
+        end;
+      hrsWaitProcessing:
+        if st.Len <> 0 then
+          State := hrsErrorUnsupportedFormat // there should be no further input
+        else
+          goto fin;
+    else
+      State := hrsErrorMisuse; // out of context State for input
+    end;
+    if (State <> previous) and
+       (State <> hrsGetBodyChunkedHex) and
+       (State <> hrsGetBodyChunkedDataVoidLine) and
+       Assigned(OnStateChange) then
+    begin
+      State := OnStateChange(@self);
+      previous := State;
+    end;
+    if State < HTTP_REQUEST_FINAL then
+      continue;
+    // everything is done, or an error occured
+fin:Process.Reset;
+    exit;
+  until false;
+  // if we reached here, we didn't have enough input for full parsing
+  if Process.Len <> 0 then
+    Process.Remove(st.P - Process.Buffer)
+  else
+    Process.Append(st.P, st.Len);
+end;
+
+function THttpRequestContext.ProcessWrite(out P: pointer): PtrInt;
+begin
+
 end;
 
 
@@ -924,7 +1218,7 @@ begin
         [ClassNameShort(self)^, ClassNameShort(DestStream)^]);
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
-  if hfTransferChuked in Http.HeaderFlags then
+  if hfTransferChunked in Http.HeaderFlags then
   begin
     // supplied Content-Length header should be ignored when chunked
     Http.ContentLength := 0;
