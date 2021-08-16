@@ -84,7 +84,7 @@ function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
 function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 
 /// will remove most usual HTTP headers which are to be recomputed on sending
-function PurgeHeaders(P: PUtf8Char): RawUtf8;
+function PurgeHeaders(const headers: RawUtf8): RawUtf8;
 
 /// encode some text into a mime header compatible value
 // - see https://tools.ietf.org/html/rfc2047
@@ -424,16 +424,32 @@ begin
     result := 'Authorization: Bearer ' + AuthToken;
 end;
 
-function PurgeHeaders(P: PUtf8Char): RawUtf8;
+function PurgeHeaders(const headers: RawUtf8): RawUtf8;
 var
-  tmp: TTextWriterStackBuffer;
-  next: PUtf8Char;
-  W: TBaseWriter;
+  ok: array[byte] of PUtf8Char;
+  len: array[byte] of integer;
+  n, purged, i, tot: PtrInt;
+  P, next: PUtf8Char;
 begin
-  result := '';
-  W := nil;
-  try
-    while P <> nil do
+  n := 0;
+  tot := 0;
+  purged := 0;
+  P := pointer(headers);
+  while P <> nil do
+  begin
+    if P^ = #0 then
+      break;
+    next := GotoNextLine(P);
+    if IdemPCharArray(P, [
+       'CONTENT-',
+       'CONNECTION:',
+       'KEEP-ALIVE:',
+       'TRANSFER-',
+       'X-POWERED',
+       'USER-AGENT',
+       'REMOTEIP:',
+       'HOST:',
+       'ACCEPT:']) < 0 then
     begin
       next := GotoNextLine(P);
       if IdemPCharArray(P, [

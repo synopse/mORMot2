@@ -326,6 +326,7 @@ procedure TTestBidirectionalRemoteConnection.RunHttpServer;
 var
   port: integer;
 begin
+  WebSocketLog := TSynLog; // for very detailed log
   TInterfaceFactory.RegisterInterfaces([TypeInfo(IBidirService), TypeInfo(IBidirCallback)]);
   // sicClientDriven services expect authentication for sessions
   fServer := TRestServerFullMemory.CreateWithOwnModel([], true);
@@ -356,7 +357,7 @@ begin
     for b := -10 to 10 do
     begin
       v := I.TestRest(a, b, c);
-      check(GetInteger(pointer(c)) = a + b);
+      CheckEqual(GetInteger(pointer(c)), a + b);
       if CheckFailed(DocVariantType.IsOfType(v)) then
         continue;
       check(v.a = a);

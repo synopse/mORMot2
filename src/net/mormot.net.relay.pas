@@ -394,7 +394,7 @@ begin
   rest.status := status;
   rest.url := url;
   rest.method := method;
-  rest.headers := PurgeHeaders(pointer(headers));
+  rest.headers := PurgeHeaders(headers);
   if (contenttype <> '') and
      not IdemPropNameU(contenttype, JSON_CONTENT_TYPE_VAR) then
     rest.contenttype := contenttype;
@@ -854,7 +854,8 @@ begin
     inc(fFrames);
   end;
   fLog.Add.Log(LOG_TRACEWARNING[not result], 'EncapsulateAndSend % #% % %',
-    [ToText(Frame.opcode)^, Connection, IP, KBNoSpace(length(dest.payload))], self);
+    [ToText(Frame.opcode)^, Connection, IP,
+     KBNoSpace(length(dest.payload))], self);
 end;
 
 function TAbstractRelay.Decapsulate(Protocol: TWebSocketProtocol;
@@ -921,6 +922,7 @@ begin
   fClients.WaitStarted;
   fClients.WebSocketProtocols.Add(TSynopseServerProtocol.Create(self));
   fClients.OnRequest := OnClientsRequest;
+  // fServer.Settings^.SetFullLog; fClients.Settings^.SetFullLog;
   if log <> nil then
     log.Log(sllDebug, 'Create: Server=% Clients=%', [fServer, fClients], self);
 end;
