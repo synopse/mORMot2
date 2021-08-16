@@ -137,12 +137,20 @@ function  GetDesktopWindow;           external user32;
 function  Unicode_InPlaceUpper;       external user32 name 'CharUpperBuffW';
 function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 
+{$I-}
 procedure DisplayFatalError(const title, msg: RawUtf8);
 begin
   // better than a MessageBox() especially for services
   AllocConsole; // will create one black window console if none
-  ConsoleWrite(title + CRLF + msg, ccLightRed);
+  TextColor(ccWhite);
+  writeln(#13#10, title);
+  writeln(StringOfChar('-', length(title) + 1), #13#10);
+  TextColor(ccLightRed);
+  writeln(msg);
+  TextColor(ccLightGray);
+  ioresult;
 end;
+{$I+}
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin
