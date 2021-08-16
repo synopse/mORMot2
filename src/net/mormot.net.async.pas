@@ -75,6 +75,7 @@ type
 
   /// points to thread-safe information of one TPollAsyncSockets connection
   PPollSocketsSlot = ^TPollSocketsSlot;
+  PPPollSocketsSlot = ^PPollSocketsSlot;
 
   /// possible options for TPollAsyncSockets process
   // - by default, TPollAsyncSockets.Write will first try to send the data
@@ -127,6 +128,8 @@ type
     // pseError: return false to close socket and connection (calling OnClose)
     function OnError(connection: TObject; events: TPollSocketEvents): boolean;
       virtual; abstract;
+    procedure UnlockSlotAndCloseConnection(slot: PPPollSocketsSlot;
+      var connection: TObject);
   public
     /// initialize the read/write sockets polling
     // - fRead and fWrite TPollSocketsBuffer instances will track pseRead or
@@ -221,6 +224,7 @@ type
   // if needed, AfterCreate/AfterWrite/BeforeDestroy/OnLastOperationIdle)
   TAsyncConnection = class(TSynPersistent)
   protected
+    fMagic: cardinal; // for TAsyncConnectionsSockets.SlotFromConnection
     fSlot: TPollSocketsSlot;
     fHandle: TAsyncConnectionHandle;
     fLastOperation: cardinal;
@@ -251,6 +255,8 @@ type
   public
     /// initialize this instance
     constructor Create(const aRemoteIP: RawUtf8); reintroduce; virtual;
+    /// finalize this instance
+    destructor Destroy; override;
     /// read-only access to the socket number associated with this connection
     property Socket: TNetSocket
       read fSlot.socket;
@@ -356,6 +362,8 @@ type
     function ConnectionDelete(aHandle: TAsyncConnectionHandle): boolean; overload; virtual;
     function ConnectionDelete(aConnection: TAsyncConnection; aIndex: integer): boolean; overload;
     procedure ThreadClientsConnect; // from fThreadClients
+    procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
+      const TextArgs: array of const; Instance: TObject);
   public
     /// initialize the multiple connections
     // - warning: currently reliable only with aThreadPoolCount=1
@@ -703,36 +711,53 @@ begin
             break; // fails now -> retry later in ProcessWrite
           if res <> nrOK then
             exit;  // connection closed or broken -> abort
+          inc(P, sent);
           inc(fWriteCount);
           inc(fWriteBytes, sent);
           dec(datalen, sent);
-          if datalen = 0 then
-          begin
-            try
-              // notify everything written
-              AfterWrite(connection);
-              result := true;
-            except
-              result := false;
-            end;
-            exit;
-          end;
-          inc(P, sent);
-        until false;
+        until datalen = 0;
+      if datalen <> 0 then
+      begin
         // use fWrite output polling for the remaining data in ProcessWrite
-      slot.wr.Append(P, datalen);
-      if previous > 0 then // already subscribed
-        result := slot.socket <> nil
-      else if fWrite.Subscribe(slot.socket, [pseWrite], tag) then
-        result := slot.socket <> nil
-      else
-        slot.wr.Reset; // subscription error -> abort
+        slot.wr.Append(P, datalen);
+        if previous > 0 then // already subscribed
+          result := slot.socket <> nil
+        else if fWrite.Subscribe(slot.socket, [pseWrite], tag) then
+          result := slot.socket <> nil
+        else
+          slot.wr.Reset; // subscription error -> abort
+      end;
     finally
       slot.UnLock({writer=}true);
     end;
+    if datalen = 0 then
+    begin
+      // notify everything written outside of slot.Lock - may call Write()
+      try
+        AfterWrite(connection);
+        result := true;
+      except
+        result := false;
+      end;
+    end
   finally
     LockedDec32(@fProcessing);
   end;
+end;
+
+procedure TPollAsyncSockets.UnlockSlotAndCloseConnection(
+  slot: PPPollSocketsSlot; var connection: TObject);
+begin
+  if slot <> nil then
+    slot^.UnLock({writer=}false); // Stop() will try to acquire this lock
+  try
+    Stop(connection); // shutdown and set socket:=0 + acquire locks
+    OnClose(connection); // now safe to perform connection.Free
+  except
+    connection := nil;   // user code may be unstable
+  end;
+  if slot <> nil then
+    slot^ := nil; // ignore pseClosed and slot.Unlock(false)
 end;
 
 procedure TPollAsyncSockets.ProcessRead(timeoutMS: integer);
@@ -743,20 +768,6 @@ var
   recved, added: integer;
   res: TNetResult;
   temp: array[0..$7fff] of byte; // read up to 32KB per chunk
-
-  procedure CloseConnection(withinreadlock: boolean);
-  begin
-    if withinreadlock then
-      slot.UnLock({writer=}false); // Stop() will try to acquire this lock
-    Stop(connection); // shutdown and set socket:=0 + acquire locks
-    try
-      OnClose(connection); // now safe to perform connection.Free
-    except
-      connection := nil;   // user code may be unstable
-    end;
-    slot := nil; // ignore pseClosed and slot.Unlock(false)
-  end;
-
 begin
   if (self = nil) or
      fRead.Terminated then
@@ -773,15 +784,14 @@ begin
     if pseError in notif.events then
       if not OnError(connection, notif.events) then
       begin
-        // false = shutdown
-        CloseConnection({withinlock=}false);
+        UnlockSlotAndCloseConnection(nil, connection);
         exit;
       end;
     if pseRead in notif.events then
     begin
+      added := 0;
       if slot.Lock({writer=}false) then // paranoid thread-safe read
-      try
-        added := 0;
+      begin
         repeat
           if fRead.Terminated or
              (slot.socket = nil) then
@@ -794,30 +804,29 @@ begin
             break; // may block, try later
           if res <> nrOk then
           begin
-            CloseConnection(true);
+            UnlockSlotAndCloseConnection(@slot, connection);
             exit; // socket closed gracefully or unrecoverable error -> abort
           end;
           slot.rd.Append(@temp, recved);
           inc(added, recved);
         until false;
         if added > 0 then
-        try
-          inc(fReadCount);
-          inc(fReadBytes, added);
-          if OnRead(connection) = sorClose then
-            CloseConnection(true);
-        except
-          CloseConnection(true); // force socket shutdown
-        end;
-      finally
-        slot.UnLock(false); // CloseConnection may set slot=nil
+          try
+            inc(fReadCount);
+            inc(fReadBytes, added);
+            if OnRead(connection) = sorClose then
+              UnlockSlotAndCloseConnection(@slot, connection);
+          except
+            UnlockSlotAndCloseConnection(@slot, connection); // shutdown socket
+          end;
+        slot.UnLock(false); // UnlockSlotAndCloseConnection may set slot=nil
       end;
     end;
     if (slot <> nil) and
        (slot.socket <> nil) and
        (pseClosed in notif.events) then
     begin
-      CloseConnection(false);
+      UnlockSlotAndCloseConnection(nil, connection);
       exit;
     end;
   finally
@@ -897,11 +906,21 @@ end;
 
 { TAsyncConnection }
 
+const
+  ASYNCCONNECTION_MAGIC = $3eedc0f3;
+
 constructor TAsyncConnection.Create(const aRemoteIP: RawUtf8);
 begin
   inherited Create;
   fRemoteIP := aRemoteIP;
   fSlot.wasactive := true; // by definition
+  fMagic := ASYNCCONNECTION_MAGIC; // TAsyncConnectionsSockets.SlotFromConnection
+end;
+
+destructor TAsyncConnection.Destroy;
+begin
+  inherited Destroy;
+  fMagic := 0; // for TAsyncConnectionsSockets.SlotFromConnection
 end;
 
 procedure TAsyncConnection.AfterCreate(Sender: TAsyncConnections);
@@ -943,14 +962,14 @@ end;
 procedure TAsyncConnectionsSockets.OnClose(connection: TObject);
 begin
   // caller did call Stop() before calling OnClose (socket=0)
-  fOwner.fLog.Add.Log(sllTrace, 'OnClose%', [connection], self);
+  fOwner.DoLog(sllTrace, 'OnClose%', [connection], self);
   fOwner.ConnectionDelete((connection as TAsyncConnection).Handle); // do connection.Free
 end;
 
 function TAsyncConnectionsSockets.OnError(connection: TObject; events:
   TPollSocketEvents): boolean;
 begin
-  fOwner.fLog.Add.Log(sllDebug,
+  fOwner.DoLog(sllDebug,
     'OnError% events=[%] -> free socket and instance', [connection,
     GetSetName(TypeInfo(TPollSocketEvents), events)], self);
   result := acoOnErrorContinue in fOwner.Options; // false=close by default
@@ -962,29 +981,33 @@ var
 begin
   ac := connection as TAsyncConnection;
   if not (acoNoLogRead in fOwner.Options) then
-    fOwner.fLog.Add.Log(sllTrace, 'OnRead% len=%', [ac, ac.fSlot.rd.Len], self);
+    fOwner.DoLog(sllTrace, 'OnRead% len=%', [ac, ac.fSlot.rd.Len], self);
   result := ac.OnRead(fOwner);
 end;
 
-function TAsyncConnectionsSockets.SlotFromConnection(connection: TObject):
-  PPollSocketsSlot;
+function TAsyncConnectionsSockets.SlotFromConnection(
+  connection: TObject): PPollSocketsSlot;
 begin
+  {$ifdef HASFASTTRYFINALLY}
   try
+  {$endif HASFASTTRYFINALLY}
     if (connection = nil) or
-       not connection.InheritsFrom(TAsyncConnection) or
+       (TAsyncConnection(connection).fMagic <> ASYNCCONNECTION_MAGIC) or
        (TAsyncConnection(connection).Handle = 0) then
     begin
-      fOwner.fLog.Add.Log(sllStackTrace,
+      fOwner.DoLog(sllStackTrace,
         'SlotFromConnection() with dangling pointer %', [connection], self);
       result := nil;
     end
     else
       result := @TAsyncConnection(connection).fSlot;
+  {$ifdef HASFASTTRYFINALLY}
   except
-    fOwner.fLog.Add.Log(sllError, 'SlotFromConnection() with dangling pointer %',
+    fOwner.DoLog(sllError, 'SlotFromConnection() with dangling pointer %',
       [pointer(connection)], self);
     result := nil;
   end;
+  {$endif HASFASTTRYFINALLY}
 end;
 
 function TAsyncConnectionsSockets.Write(connection: TObject; const data;
@@ -995,7 +1018,7 @@ begin
   result := inherited Write(connection, data, datalen, timeout);
   if (fOwner.fLog <> nil) and
      not (acoNoLogWrite in fOwner.Options) then
-    fOwner.fLog.Add.Log(sllTrace, 'Write%=% len=%%', [connection,
+    fOwner.DoLog(sllTrace, 'Write%=% len=%%', [connection,
       BOOL_STR[result], datalen, LogEscape(@data, datalen, tmp{%H-},
       acoVerboseLog in fOwner.Options)], self);
 end;
@@ -1059,10 +1082,10 @@ begin
     end;
   except
     on E: Exception do
-      fOwner.fLog.Add.Log(sllWarning, 'Execute raised a % -> terminate % thread',
+      fOwner.DoLog(sllWarning, 'Execute raised a % -> terminate % thread',
         [E.ClassType, fOwner.fStreamClass], self);
   end;
-  fOwner.fLog.Add.Log(sllDebug, 'Execute: done', self);
+  fOwner.DoLog(sllDebug, 'Execute: done', [], self);
 end;
 
 
@@ -1111,7 +1134,7 @@ var
 begin
   if fClients <> nil then
     with fClients do
-      fLog.Add.Log(sllDebug, 'Destroy total=% reads=%/% writes=%/%',
+      DoLog(sllDebug, 'Destroy total=% reads=%/% writes=%/%',
         [Total, ReadCount, KB(ReadBytes), WriteCount, KB(WriteBytes)], self);
   Terminate;
   for i := 0 to high(fThreads) do
@@ -1146,6 +1169,14 @@ begin
     client.ShutdownAndClose({rdwr=}false);
 end;
 
+procedure TAsyncConnections.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
+  const TextArgs: array of const; Instance: TObject);
+begin
+  if (self <> nil) and
+     Assigned(fLog) then
+    fLog.Add.Log(Level, TextFmt, TextArgs, Instance);
+end;
+
 function TAsyncConnections.ConnectionCreate(aSocket: TNetSocket;
   const aRemoteIp: RawUtf8; out aConnection: TAsyncConnection): boolean;
 begin
@@ -1171,7 +1202,7 @@ begin
     inc(fLastHandle);
     aConnection.fHandle := fLastHandle;
     fConnections.Add(aConnection);
-    fLog.Add.Log(sllTrace, 'ConnectionAdd% count=%',
+    DoLog(sllTrace, 'ConnectionAdd% count=%',
       [aConnection, fConnectionCount], self);
     fConnections.Sorted := true; // handles are increasing
   finally
@@ -1196,7 +1227,7 @@ begin
   finally
     fConnections.FastDeleteSorted(aIndex);
   end;
-  fLog.Add.Log(sllTrace, 'ConnectionDelete %.Handle=% count=%',
+  DoLog(sllTrace, 'ConnectionDelete %.Handle=% count=%',
     [t, h, fConnectionCount], self);
   result := true;
 end;
@@ -1219,7 +1250,7 @@ begin
     fConnectionLock.UnLock;
   end;
   if not result then
-    fLog.Add.Log(sllTrace, 'ConnectionDelete(%)=false count=%',
+    DoLog(sllTrace, 'ConnectionDelete(%)=false count=%',
       [aHandle, fConnectionCount], self);
 end;
 
@@ -1244,7 +1275,7 @@ begin
       if aIndex <> nil then
         aIndex^ := i;
     end;
-    fLog.Add.Log(sllTrace, 'ConnectionFindLocked(%)=%', [aHandle, result], self);
+    DoLog(sllTrace, 'ConnectionFindLocked(%)=%', [aHandle, result], self);
   finally
     if result = nil then
       fConnectionLock.UnLock;
@@ -1265,16 +1296,16 @@ begin
   if conn <> nil then
   try
     if not fClients.Stop(conn) then
-      fLog.Add.Log(sllDebug, 'ConnectionRemove: Stop=false for %', [conn], self);
+      DoLog(sllDebug, 'ConnectionRemove: Stop=false for %', [conn], self);
     result := ConnectionDelete(conn, i);
   finally
     fConnectionLock.UnLock;
   end;
   if not result then
-    fLog.Add.Log(sllTrace, 'ConnectionRemove(%)=false', [aHandle], self);
+    DoLog(sllTrace, 'ConnectionRemove(%)=false', [aHandle], self);
 end;
 
-procedure TAsyncConnections.lock;
+procedure TAsyncConnections.Lock;
 begin
   fConnectionLock.Lock;
 end;
@@ -1310,7 +1341,7 @@ begin
   if not (acoNoLogRead in Options) and
      (acoVerboseLog in Options) and
      (fLog <> nil) then
-    fLog.Add.Log(sllTrace, '% len=%%', [ident, framelen, LogEscape(frame,
+    DoLog(sllTrace, '% len=%%', [ident, framelen, LogEscape(frame,
       framelen, tmp{%H-})], connection);
 end;
 
@@ -1429,7 +1460,7 @@ begin
           break
         else
         begin
-          fLog.Add.Log(sllWarning, 'Execute: Accept()=%', [ToText(res)^], self);
+          DoLog(sllWarning, 'Execute: Accept()=%', [ToText(res)^], self);
           raise EAsyncConnections.CreateUtf8('%.Execute: Accept failed as %',
             [self, ToText(res)^]);
           SleepHiRes(1);
@@ -1443,7 +1474,7 @@ begin
       ip := sin.IP;
       if ConnectionCreate(client, ip, connection) then
         if fClients.Start(connection) then
-          fLog.Add.Log(sllTrace, 'Execute: Accept()=%', [connection], self)
+          DoLog(sllTrace, 'Execute: Accept()=%', [connection], self)
         else
           connection.Free
       else
@@ -1451,10 +1482,10 @@ begin
     end;
   except
     on E: Exception do
-      fLog.Add.Log(sllWarning, 'Execute raised % -> terminate %',
+      DoLog(sllWarning, 'Execute raised % -> terminate %',
         [E.ClassType, fProcessName], self);
   end;
-  fLog.Add.Log(sllDebug, 'Execute: % done', [fProcessName], self);
+  DoLog(sllDebug, 'Execute: % done', [fProcessName], self);
   fExecuteFinished := true;
 end;
 
@@ -1484,10 +1515,10 @@ begin
       ThreadClientsConnect; // will connect some clients in this main thread
   except
     on E: Exception do
-      fLog.Add.Log(sllWarning, 'Execute raised % -> terminate %', [E.ClassType,
+      DoLog(sllWarning, 'Execute raised % -> terminate %', [E.ClassType,
         fProcessName], self);
   end;
-  fLog.Add.Log(sllDebug, 'Execute: % done', [fProcessName], self);
+  DoLog(sllDebug, 'Execute: % done', [fProcessName], self);
 end;
 
 
