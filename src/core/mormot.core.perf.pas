@@ -1214,6 +1214,8 @@ begin
 end;
 
 function TPrecisionTimer.ByCount(Count: QWord): TShort16;
+var
+  us: QWord;
 begin
   if Count = 0 then // avoid div per 0 exception
     result := '0'
@@ -1221,7 +1223,17 @@ begin
   begin
     if fStart <> 0 then
       Pause;
-    MicroSecToString(fTime div Count, result);
+    if fTime = 0 then
+      result := '0'
+    else
+    begin
+      us := fTime div Count;
+      if us > 1 then
+        MicroSecToString(us, result)
+      else
+        // microsecond resolution seems not enough -> use nanoseconds
+        FormatShort16('%ns', [(fTime * 1000) div Count], result);
+    end;
   end;
 end;
 
