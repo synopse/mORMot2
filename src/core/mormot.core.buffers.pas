@@ -1655,7 +1655,7 @@ function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
 // - will be #0 terminated, with '...' characters trailing on overflow
 // - ensure the destination buffer contains at least max*3+3 bytes, which is
 // always the case when using LogEscape() and its local TLogEscape variable
-function EscapeBuffer(s,d: PAnsiChar; len,max: integer): PAnsiChar;
+function EscapeBuffer(s, d: PAnsiChar; len, max: integer): PAnsiChar;
 
 const
   /// maximum size, in bytes, of a TLogEscape / LogEscape() buffer
@@ -2182,17 +2182,19 @@ type
   private
     /// the actual storage, with length(Buffer) as Capacity
     fBuffer: RawByteString;
+    fLen: PtrInt;
   public
-    /// how many bytes are currently used in the Buffer
-    Len: PtrInt;
     /// set Len to 0, but doesn't clear/free the Buffer itself
     procedure Reset;
       {$ifdef HASINLINE}inline;{$endif}
-    /// release internal storage fBuffer instance
+    /// release/free the internal Buffer storage
     procedure Clear;
-    /// a convenient wrapper to pointer(fBuffer) for easier Buffer/Len use
+    /// a convenient wrapper to pointer(fBuffer) for direct Buffer/Len use
     function Buffer: pointer;
       {$ifdef HASINLINE}inline;{$endif}
+    /// how many bytes are currently used in the Buffer
+    property Len: PtrInt
+      read fLen;
     /// add some content to the Buffer, resizing it if needed
     // - could optionally include a #13#10 end of line
     procedure Append(P: pointer; PLen: PtrInt; CRLF: boolean = false);
@@ -9551,12 +9553,12 @@ end;
 
 procedure TRawByteStringBuffer.Reset;
 begin
-  Len := 0;
+  fLen := 0;
 end;
 
 procedure TRawByteStringBuffer.Clear;
 begin
-  Len := 0;
+  fLen := 0;
   fBuffer := '';
 end;
 
@@ -9577,28 +9579,28 @@ begin
     SetLength(fBuffer, PLen + 128) // small overhead at first
   else
   begin
-    needed := Len + PLen + 2;
+    needed := fLen + PLen + 2;
     if needed > cap then
       SetLength(fBuffer, needed + needed shr 3 + 2048); // generous overhead
   end;
-  MoveFast(P^, PByteArray(fBuffer)[Len], PLen);
-  inc(Len, PLen);
+  MoveFast(P^, PByteArray(fBuffer)[fLen], PLen);
+  inc(fLen, PLen);
   if CRLF then
   begin
-    PWord(@PByteArray(fBuffer)[Len])^ := $0a0d;
-    inc(Len, 2);
+    PWord(@PByteArray(fBuffer)[fLen])^ := $0a0d;
+    inc(fLen, 2);
   end;
 end;
 
 procedure TRawByteStringBuffer.Remove(FirstBytes: PtrInt);
 begin
   if FirstBytes > 0 then
-    if FirstBytes >= Len then
-      Len := 0
+    if FirstBytes >= fLen then
+      fLen := 0
     else
     begin
-      dec(Len, FirstBytes);
-      MoveFast(PByteArray(fBuffer)[FirstBytes], pointer(fBuffer)^, Len);
+      dec(fLen, FirstBytes);
+      MoveFast(PByteArray(fBuffer)[FirstBytes], pointer(fBuffer)^, fLen);
     end;
 end;
 
@@ -9610,7 +9612,10 @@ begin
   FastSetString(Text, nil, Len + Overhead);
   MoveFast(pointer(fBuffer)^, pointer(Text)^, Len);
   if OverHead <> 0 then
+  begin
+    PAnsiChar(pointer(Text))[Len] := #0;
     PStrLen(PAnsiChar(pointer(Text)) - _STRLEN)^ := Len; // fake length
+  end;
 end;
 
 

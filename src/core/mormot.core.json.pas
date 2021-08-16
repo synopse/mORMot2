@@ -99,6 +99,11 @@ const
   /// JSON_ESCAPE[] lookup value: should be escaped as \u00xx
   JSON_ESCAPE_UNICODEHEX = 2;
 
+  /// JSON_UNESCAPE[] lookup value: indicates #0 or unexpected control char
+  JSON_UNESCAPE_UNEXPECTED = #0;
+  /// JSON_UNESCAPE[] lookup value: indicates '\u0123' UTF-16 pattern
+  JSON_UNESCAPE_UTF16 = #1;
+
 var
   /// 256-byte lookup table for fast branchless initial character JSON parsing
   JSON_TOKENS: TJsonTokens;
@@ -112,6 +117,13 @@ var
   // - 2 = JSON_ESCAPE_UNICODEHEX should be escaped as \u00xx
   // - b,t,n,f,r,\," as escaped character for #8,#9,#10,#12,#13,\,"
   JSON_ESCAPE: array[byte] of byte;
+
+  /// 256-byte lookup table for fast branchless JSON text un-escaping
+  // - 0 for unexpected #0 or control char
+  // - 1 for '\u0123' UTF-16 pattern
+  // - #8,#9,#10,#12,#13,\," as unescaped char from b,t,n,f,r,\,"
+  // - other characters are litterals and should be written as such
+  JSON_UNESCAPE: array[AnsiChar] of AnsiChar;
 
   /// how many initial chars of a JSON array are parsed for intial capacity
   // - used e.g. by _JL_DynArray() and TDocVariantData.InitJsonInPlace()
@@ -2938,7 +2950,8 @@ begin
           exit; // a JSON number value should be followed by , } or ]
         if Len <> nil then
           Len^ := P - result;
-        if P^ <= ' ' then
+        if (P^ <= ' ') and
+           (P^ <> #0) then
         begin
           P^ := #0; // force numerical field with no trailing ' '
           inc(P);
@@ -2973,107 +2986,95 @@ lit:        inc(P);
           if c = #0 then
             // premature ending (PDest=nil)
             exit;
-          // unescape JSON text: get char after \
+          // unescape JSON text: process char after \
           inc(P); // P^ was '\' here
-          c := P^;
-          if (c = '"') or
-             (c = '\') then
-            // most common cases are \\ or \"
-            goto lit
-          else if c = #0 then
-            // to avoid potential buffer overflow issue on \#0
-            exit
-          else if c = 'b' then
-            c := #8
-          else if c = 't' then
-            c := #9
-          else if c = 'n' then
-            c := #10
-          else if c = 'f' then
-            c := #12
-          else if c = 'r' then
-            c := #13
-          else if c = 'u' then
-          begin
-            // decode '\u0123' UTF-16 into UTF-8
-            // note: inlined JsonUnicodeEscapeToUtf8() to optimize GetJsonField
-            c4 := (ConvertHexToBin[ord(P[1])] shl 12) or
-                  (ConvertHexToBin[ord(P[2])] shl 8) or
-                  (ConvertHexToBin[ord(P[3])] shl 4) or
-                   ConvertHexToBin[ord(P[4])];
-            inc(P, 5); // optimistic conversion (no check)
-            case c4 of
-              0:
-                begin
-                  // \u0000 is an invalid value (at least in our framework)
-                  D^ := '?';
-                  inc(D);
-                end;
-              1..$7f:
-                begin
-                  D^ := AnsiChar(c4);
-                  inc(D);
-                end;
-              $80..$7ff:
-                begin
-                  D[0] := AnsiChar($C0 or (c4 shr 6));
-                  D[1] := AnsiChar($80 or (c4 and $3F));
-                  inc(D, 2);
-                end;
-              UTF16_HISURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-                if PWord(P)^ = ord('\') + ord('u') shl 8 then
-                begin
-                  inc(P);
-                  surrogate := (ConvertHexToBin[ord(P[1])] shl 12) or
-                               (ConvertHexToBin[ord(P[2])] shl 8) or
-                               (ConvertHexToBin[ord(P[3])] shl 4) or
-                                ConvertHexToBin[ord(P[4])];
-                  case c4 of
-                    // inlined Utf16CharToUtf8()
-                    UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
-                      c4 := ((c4 - UTF16_SURROGATE_OFFSET) shl 10) or
-                            (surrogate xor UTF16_LOSURROGATE_MIN);
-                    UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-                      c4 := ((surrogate - UTF16_SURROGATE_OFFSET) shl 10) or
-                            (c4 xor UTF16_LOSURROGATE_MIN);
-                  end;
-                  if c4 <= $7ff then
-                    c := #2
-                  else if c4 <= $ffff then
-                    c := #3
-                  else if c4 <= $1FFFFF then
-                    c := #4
-                  else if c4 <= $3FFFFFF then
-                    c := #5
-                  else
-                    c := #6;
-                  extra := ord(c) - 1;
-                  repeat
-                    D[extra] := AnsiChar((c4 and $3f) or $80);
-                    c4 := c4 shr 6;
-                    dec(extra);
-                  until extra = 0;
-                  D^ := AnsiChar(byte(c4) or UTF8_TABLE.FirstByte[ord(c)]);
-                  inc(D, ord(c));
-                  inc(P, 5);
-                end
-                else
-                begin
-                  // unexpected surrogate without its pair
-                  D^ := '?';
-                  inc(D);
-                end;
-            else
+          c := JSON_UNESCAPE[P^];
+          case c of
+            JSON_UNESCAPE_UNEXPECTED:
+              // to avoid potential buffer overflow issue on \#0 or control char
+              exit;
+            JSON_UNESCAPE_UTF16:
               begin
-                D[0] := AnsiChar($E0 or (c4 shr 12));
-                D[1] := AnsiChar($80 or ((c4 shr 6) and $3F));
-                D[2] := AnsiChar($80 or (c4 and $3F));
-                inc(D, 3);
+                // decode '\u0123' UTF-16 into UTF-8
+                // (inlined JsonUnicodeEscapeToUtf8() to optimize GetJsonField)
+                c4 := (ConvertHexToBin[ord(P[1])] shl 12) or
+                      (ConvertHexToBin[ord(P[2])] shl 8) or
+                      (ConvertHexToBin[ord(P[3])] shl 4) or
+                       ConvertHexToBin[ord(P[4])];
+                inc(P, 5); // optimistic conversion (no check)
+                case c4 of
+                  0:
+                    begin
+                      // \u0000 is an invalid value (at least in our framework)
+                      D^ := '?';
+                      inc(D);
+                    end;
+                  1..$7f:
+                    begin
+                      D^ := AnsiChar(c4);
+                      inc(D);
+                    end;
+                  $80..$7ff:
+                    begin
+                      D[0] := AnsiChar($C0 or (c4 shr 6));
+                      D[1] := AnsiChar($80 or (c4 and $3F));
+                      inc(D, 2);
+                    end;
+                  UTF16_HISURROGATE_MIN..UTF16_LOSURROGATE_MAX:
+                    if PWord(P)^ = ord('\') + ord('u') shl 8 then
+                    begin
+                      inc(P);
+                      surrogate := (ConvertHexToBin[ord(P[1])] shl 12) or
+                                   (ConvertHexToBin[ord(P[2])] shl 8) or
+                                   (ConvertHexToBin[ord(P[3])] shl 4) or
+                                    ConvertHexToBin[ord(P[4])];
+                      case c4 of
+                        // inlined Utf16CharToUtf8()
+                        UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
+                          c4 := ((c4 - UTF16_SURROGATE_OFFSET) shl 10) or
+                                (surrogate xor UTF16_LOSURROGATE_MIN);
+                        UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
+                          c4 := ((surrogate - UTF16_SURROGATE_OFFSET) shl 10) or
+                                (c4 xor UTF16_LOSURROGATE_MIN);
+                      end;
+                      if c4 <= $7ff then
+                        c := #2
+                      else if c4 <= $ffff then
+                        c := #3
+                      else if c4 <= $1FFFFF then
+                        c := #4
+                      else if c4 <= $3FFFFFF then
+                        c := #5
+                      else
+                        c := #6;
+                      extra := ord(c) - 1;
+                      repeat
+                        D[extra] := AnsiChar((c4 and $3f) or $80);
+                        c4 := c4 shr 6;
+                        dec(extra);
+                      until extra = 0;
+                      D^ := AnsiChar(byte(c4) or UTF8_TABLE.FirstByte[ord(c)]);
+                      inc(D, ord(c));
+                      inc(P, 5);
+                    end
+                    else
+                    begin
+                      // unexpected surrogate without its pair
+                      D^ := '?';
+                      inc(D);
+                    end;
+                else
+                  begin
+                    D[0] := AnsiChar($E0 or (c4 shr 12));
+                    D[1] := AnsiChar($80 or ((c4 shr 6) and $3F));
+                    D[2] := AnsiChar($80 or (c4 and $3F));
+                    inc(D, 3);
+                  end;
+                end;
               end;
-            end;
-            continue;
+          else
+            goto lit;
           end;
-          goto lit;
         until false;
         // here P^='"'
         inc(P);
@@ -3125,12 +3126,8 @@ lit:        inc(P);
     exit;
   end;
   while not (jcEndOfJsonFieldOr0 in tab[P^]) do
-    if P^ = #0 then
-      // leave PDest=nil for unexpected end
-      exit
-    else
-      // loop until #0 , ] } : delimiter
-      inc(P);
+    // loop until #0 , ] } : delimiter
+    inc(P);
   if EndOfObject <> nil then
     EndOfObject^ := P^;
   // ensure JSON value is zero-terminated, and continue after it
@@ -10285,7 +10282,14 @@ begin
   JSON_ESCAPE[13] := ord('r');
   JSON_ESCAPE[ord('\')] := ord('\');
   JSON_ESCAPE[ord('"')] := ord('"');
-  // branchless JSON parsing
+  for c := #32 to #127 do
+    JSON_UNESCAPE[c] := c;
+  JSON_UNESCAPE['b'] := #8;
+  JSON_UNESCAPE['t'] := #9;
+  JSON_UNESCAPE['n'] := #10;
+  JSON_UNESCAPE['f'] := #12;
+  JSON_UNESCAPE['r'] := #13;
+  JSON_UNESCAPE['u'] := JSON_UNESCAPE_UTF16;
   for c := low(c) to high(c) do
   begin
     if c in [#0, ',', ']', '}', ':'] then
