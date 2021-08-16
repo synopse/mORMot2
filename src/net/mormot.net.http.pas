@@ -451,31 +451,37 @@ begin
        'HOST:',
        'ACCEPT:']) < 0 then
     begin
-      next := GotoNextLine(P);
-      if IdemPCharArray(P, [
-         'CONTENT-',
-         'CONNECTION:',
-         'KEEP-ALIVE:',
-         'TRANSFER-',
-         'X-POWERED',
-         'USER-AGENT',
-         'REMOTEIP:',
-         'HOST:',
-         'ACCEPT:']) < 0 then
-      begin
-        if W = nil then
-          W := TBaseWriter.CreateOwnedStream(tmp);
-        if next = nil then
-          W.AddNoJsonEscape(P)
-        else
-          W.AddNoJsonEscape(P, next - P);
-      end;
-      P := next;
+      if n = high(len) then
+        break;
+      ok[n] := P;
+      if next <> nil then
+        len[n] := next - P
+      else if purged <> 0 then
+        len[n] := StrLen(P);
+      inc(tot, len[n]);
+      inc(n);
+    end
+    else
+      inc(purged);
+    P := next;
+  end;
+  if purged = 0 then
+    // nothing to purge
+    result := headers
+  else if tot = 0 then
+    // genocide
+    result := ''
+  else
+  begin
+    // allocate at once and append all non-purged headers
+    FastSetString(result, nil, tot);
+    P := pointer(result);
+    for i := 0 to n - 1 do
+    begin
+      MoveFast({%H-}ok[i]^, P^, {%H-}len[i]);
+      inc(P, len[i]);
     end;
-    if W <> nil then
-      W.SetText(result);
-  finally
-    W.Free;
+    assert(P - pointer(result) = tot);
   end;
 end;
 
@@ -584,7 +590,7 @@ begin
     repeat
       while P^ in [' ', ','] do
         inc(P);
-      Beg := P; // 'gzip;q=1.0, deflate' -> aName='gzip' then 'deflate'
+      Beg := P; // 'gzip;q=1.0, deflate' -> Name='gzip' then 'deflate'
       while not (P^ in [';', ',', #0]) do
         inc(P);
       len := P - Beg;
