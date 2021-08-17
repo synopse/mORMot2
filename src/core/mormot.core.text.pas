@@ -1965,8 +1965,12 @@ function MicroSecToString(Micro: QWord): TShort16; overload;
 // with two fractional digits
 procedure MicroSecToString(Micro: QWord; out result: TShort16); overload;
 
-/// internal conversion of some "valueunit" values into 'x' or 'x.xx' text
-// with up to 2 digits
+/// convert a nano seconds elapsed time into a human readable value
+// - append 'ns', 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value
+// range, with two fractional digits
+procedure NanoSecToString(Nano: QWord; out result: TShort16);
+
+/// convert "valueunit" values into x or x.xx text with up to 2 digits
 // - supplied value should be the actual unit value * 100
 procedure By100ToTwoDigitString(value: cardinal; const valueunit: shortstring;
   var result: TShort16);
@@ -9621,7 +9625,7 @@ end;
 procedure MicroSecToString(Micro: QWord; out result: TShort16);
 begin
   if Int64(Micro) <= 0 then
-    result := '0us'
+    PCardinal(@result)^ := 3 + ord('0') shl 8 + ord('u') shl 16 + ord('s') shl 24
   else if Micro < 1000 then
     FormatShort16('%us', [Micro], result)
   else if Micro < 1000000 then
@@ -9637,6 +9641,18 @@ begin
     _TimeToString(Micro div 60000000, 'h', result)
   else
     FormatShort16('%d', [Micro div QWord(86400000000)], result)
+end;
+
+procedure NanoSecToString(Nano: QWord; out result: TShort16);
+begin
+  if Int64(Nano) <= 0 then
+    PCardinal(@result)^ := 3 + ord('0') shl 8 + ord('n') shl 16 + ord('s') shl 24
+  else if Nano > 5000 then
+    MicroSecToString(Nano div 5000, result)
+  else if Nano >= 1000 then
+    By100ToTwoDigitString(cardinal(Nano) div 10, 'us', result)
+  else
+    By100ToTwoDigitString(cardinal(Nano) * 100, 'ns', result);
 end;
 
 
