@@ -4543,6 +4543,44 @@ begin
   finally
     lTable.Free;
   end;
+  Doc.Clear;
+  Doc.InitJson(
+   '{' + #13#10 +
+   '	"CostCenter": {' + #13#10 +
+   '		"ContactData": [{' + #13#10 +
+   '			"ContactID": 1637001,' + #13#10 +
+   '			"ContactTypeID": 0,' + #13#10 +
+   '			"ContactType": "Adresse",' + #13#10 +
+   '			"PropertyValueID": 572326,' + #13#10 +
+   '			"PropertyID": 175,' + #13#10 +
+   '			"DoubleValue": 6.92616701126099,' + #13#10 +
+   '			"ShortStringValue": "6.92617",' + #13#10 +
+   '			"PropertyType": 7,' + #13#10 +
+   '			"PropertyName": "Longitude",' + #13#10 +
+   '			"PropertyNotation": "Longitude",' + #13#10 +
+   '			"IsRequired": false' + #13#10 +
+   '		}, {' + #13#10 +
+   '			"PropertyValueID": 572327,' + #13#10 +
+   '			"PropertyID": 174,' + #13#10 +
+   '			"DoubleValue": 51.5208320617676,' + #13#10 +
+   '			"ShortStringValue": "51.5208",' + #13#10 +
+   '			"PropertyType": 7,' + #13#10 +
+   '			"PropertyName": "Latitude",' + #13#10 +
+   '			"PropertyNotation": "Latitude",' + #13#10 +
+   '			"IsRequired": false' + #13#10 +
+   '		}]' + #13#10 +
+   '	}' + #13#10 +
+   '}', JSON_OPTIONS_FAST_FLOAT);
+  Check(Doc.Count = 1);
+  Check(Doc.Kind = dvObject);
+  J := Doc.ToJson('', '', jsonUnquotedPropNameCompact);
+  CheckEqual(J, '{CostCenter:{ContactData:[{ContactID:1637001,ContactTypeID:0,' +
+    'ContactType:"Adresse",PropertyValueID:572326,PropertyID:175,DoubleValue:' +
+    '6.92616701126099,ShortStringValue:"6.92617",PropertyType:7,PropertyName:' +
+    '"Longitude",PropertyNotation:"Longitude",IsRequired:false},{PropertyValueID:' +
+    '572327,PropertyID:174,DoubleValue:51.5208320617676,ShortStringValue:"51.5208",' +
+    'PropertyType:7,PropertyName:"Latitude",PropertyNotation:"Latitude",' +
+    'IsRequired:false}]}}');
   J := StringFromFile(WorkDir + 'm1.json');
   if J <> '' then
   begin
