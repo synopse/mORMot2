@@ -1965,6 +1965,12 @@ function MicroSecToString(Micro: QWord): TShort16; overload;
 // with two fractional digits
 procedure MicroSecToString(Micro: QWord; out result: TShort16); overload;
 
+/// internal conversion of some "valueunit" values into 'x' or 'x.xx' text
+// with up to 2 digits
+// - supplied value should be the actual unit value * 100
+procedure By100ToTwoDigitString(value: cardinal; const valueunit: shortstring;
+  var result: TShort16);
+
 /// convert an integer value into its textual representation with thousands marked
 // - ThousandSep is the character used to separate thousands in numbers with
 // more than three digits to the left of the decimal separator
@@ -9585,51 +9591,50 @@ begin
   MicroSecToString(Micro, result);
 end;
 
-procedure MicroSecToString(Micro: QWord; out result: TShort16);
-
-  procedure TwoDigitToString(value: cardinal; const u: shortstring;
-    var result: TShort16);
-  var
-    d100: TDiv100Rec;
+procedure By100ToTwoDigitString(value: cardinal; const valueunit: shortstring;
+  var result: TShort16);
+var
+  d100: TDiv100Rec;
+begin
+  if value < 100 then
+    FormatShort16('0.%%', [UInt2DigitsToShortFast(value), valueunit], result)
+  else
   begin
-    if value < 100 then
-      FormatShort16('0.%%', [UInt2DigitsToShortFast(value), u], result)
+    Div100(value, d100{%H-});
+    if d100.m = 0 then
+      FormatShort16('%%', [d100.d, valueunit], result)
     else
-    begin
-      Div100(value, d100{%H-});
-      if d100.m = 0 then
-        FormatShort16('%%', [d100.d, u], result)
-      else
-        FormatShort16('%.%%', [d100.d, UInt2DigitsToShortFast(d100.m), u], result);
-    end;
+      FormatShort16('%.%%', [d100.d, UInt2DigitsToShortFast(d100.m), valueunit], result);
   end;
+end;
 
-  procedure TimeToString(value: cardinal; const u: shortstring;
-    var result: TShort16);
-  var
-    d: cardinal;
-  begin
-    d := value div 60;
-    FormatShort16('%%%',
-      [d, u, UInt2DigitsToShortFast(value - (d * 60))], result);
-  end;
+procedure _TimeToString(value: cardinal; const u: shortstring;
+  var result: TShort16);
+var
+  d: cardinal;
+begin
+  d := value div 60;
+  FormatShort16('%%%',
+    [d, u, UInt2DigitsToShortFast(value - (d * 60))], result);
+end;
 
+procedure MicroSecToString(Micro: QWord; out result: TShort16);
 begin
   if Int64(Micro) <= 0 then
     result := '0us'
   else if Micro < 1000 then
     FormatShort16('%us', [Micro], result)
   else if Micro < 1000000 then
-    TwoDigitToString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
+    By100ToTwoDigitString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
       div 10, 'ms', result)
   else if Micro < 60000000 then
-    TwoDigitToString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
+    By100ToTwoDigitString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
       div 10000, 's', result)
   else if Micro < QWord(3600000000) then
-    TimeToString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
+    _TimeToString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
       div 1000000, 'm', result)
   else if Micro < QWord(86400000000 * 2) then
-    TimeToString(Micro div 60000000, 'h', result)
+    _TimeToString(Micro div 60000000, 'h', result)
   else
     FormatShort16('%d', [Micro div QWord(86400000000)], result)
 end;

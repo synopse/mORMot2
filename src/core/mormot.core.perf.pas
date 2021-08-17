@@ -1215,7 +1215,7 @@ end;
 
 function TPrecisionTimer.ByCount(Count: QWord): TShort16;
 var
-  us: QWord;
+  v: QWord;
 begin
   if Count = 0 then // avoid div per 0 exception
     result := '0'
@@ -1223,16 +1223,22 @@ begin
   begin
     if fStart <> 0 then
       Pause;
-    if fTime = 0 then
+    if Int64(fTime) <= 0 then
       result := '0'
     else
     begin
-      us := fTime div Count;
-      if us > 1 then
-        MicroSecToString(us, result)
+      v := fTime div Count;
+      if v > 1 then
+        MicroSecToString(v, result)
       else
+      begin
         // microsecond resolution seems not enough -> use nanoseconds
-        FormatShort16('%ns', [(fTime * 1000) div Count], result);
+        v := (fTime * 1000) div Count;
+        if v < 1000 then
+          By100ToTwoDigitString(cardinal(v) div 10, 'us', result)
+        else
+          By100ToTwoDigitString(cardinal(v) * 100, 'ns', result);
+      end;
     end;
   end;
 end;
@@ -1241,7 +1247,8 @@ function TPrecisionTimer.PerSec(const Count: QWord): QWord;
 begin
   if fStart <> 0 then
     Pause;
-  if fTime <= 0 then
+  if (Count = 0) or
+     (Int64(fTime) <= 0) then
     // avoid negative or div per 0 in case of incorrect Start/Stop sequence
     result := 0
   else

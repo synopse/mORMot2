@@ -5764,7 +5764,8 @@ begin
     item := _Safe(VValue[ndx]);
     j := item^.GetValueIndex(aPropName);
     if j >= 0 then
-      if not Assigned(OnReduce) or OnReduce(item) then
+      if not Assigned(OnReduce) or
+         OnReduce(item) then
         result.AddItem(item^.VValue[j]);
   end;
 end;
@@ -5795,7 +5796,8 @@ begin
     if j >= 0 then
     begin
       v := @item^.VValue[j];
-      if not Assigned(OnReduce) or OnReduce(v^) then
+      if not Assigned(OnReduce) or
+         OnReduce(v^) then
         result.AddItem(v^);
     end;
   end;
