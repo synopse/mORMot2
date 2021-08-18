@@ -2638,7 +2638,7 @@ function StrCompW(Str1, Str2: PWideChar): PtrInt;
 // so are safe to use in practice, but may read outside the string buffer
 // itself, so may not please paranoid tools like valgrid
 function StrLenSafe(S: pointer): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef CPU64}inline;{$endif}
 
 /// our fast version of StrLen(), to be used with PUtf8Char/PAnsiChar
 // - under x86, will detect SSE2 and use it if available

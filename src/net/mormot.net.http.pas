@@ -881,7 +881,7 @@ begin
             len := PtrUInt(P);
             while P^ > #13 do
               inc(P); // no control char should appear in any header
-            len := PtrUInt(P) - len;
+            len := PtrInt(PtrUInt(P)) - len;
             if len <> 0 then
               for i := 0 to length(Compress) - 1 do
                 if IdemPropNameU(Compress[i].Name, result, len) then
@@ -1277,10 +1277,7 @@ begin
   end;
   if (State <> previous) and
      Assigned(OnStateChange) then
-  begin
     State := OnStateChange(previous, @self);
-    previous := State;
-  end;
 end;
 
 procedure THttpRequestContext.ProcessDone;
@@ -1611,7 +1608,8 @@ var
   P, PEnd: PUtf8Char;
   len: PtrInt;
   reason: RawUtf8;
-  fn, err: string;
+  fn: TFileName;
+  err: string;
 begin
   // note: caller should have set hfConnectionClose in Context.HeaderFlags
   err := ErrorMessage;
