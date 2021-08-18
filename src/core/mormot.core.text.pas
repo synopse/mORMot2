@@ -9629,14 +9629,14 @@ begin
   else if Micro < 1000 then
     FormatShort16('%us', [Micro], result)
   else if Micro < 1000000 then
-    By100ToTwoDigitString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
-      div 10, 'ms', result)
+    By100ToTwoDigitString(
+      {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 10, 'ms', result)
   else if Micro < 60000000 then
-    By100ToTwoDigitString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
-      div 10000, 's', result)
+    By100ToTwoDigitString(
+      {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 10000, 's', result)
   else if Micro < QWord(3600000000) then
-    _TimeToString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
-      div 1000000, 'm', result)
+    _TimeToString(
+      {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 1000000, 'm', result)
   else if Micro < QWord(86400000000 * 2) then
     _TimeToString(Micro div 60000000, 'h', result)
   else
@@ -9647,12 +9647,14 @@ procedure NanoSecToString(Nano: QWord; out result: TShort16);
 begin
   if Int64(Nano) <= 0 then
     PCardinal(@result)^ := 3 + ord('0') shl 8 + ord('n') shl 16 + ord('s') shl 24
-  else if Nano > 5000 then
-    MicroSecToString(Nano div 5000, result)
+  else if Nano > 9900 then
+    MicroSecToString(Nano div 1000, result)
   else if Nano >= 1000 then
-    By100ToTwoDigitString(cardinal(Nano) div 10, 'us', result)
+    By100ToTwoDigitString(
+      {$ifdef CPU32} PCardinal(@Nano)^ {$else} Nano {$endif} div 10, 'us', result)
   else
-    By100ToTwoDigitString(cardinal(Nano) * 100, 'ns', result);
+    By100ToTwoDigitString(
+      {$ifdef CPU32} PCardinal(@Nano)^ {$else} Nano {$endif} * 100, 'ns', result);
 end;
 
 
