@@ -868,7 +868,8 @@ end;
 
 function zlibCompressMax(input: PtrUInt): PtrUInt;
 begin
-  result := (QWord(input) * 11) div 10 + 256;
+  // zlib compresBound = len + (len >> 12) + (len >> 14) +  (len >> 25) + 13
+  result := input + input shr 12 + input shr 14 + input shr 25 + 256;
 end;
 
 
