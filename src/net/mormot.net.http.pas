@@ -80,6 +80,10 @@ function RegisterCompressFunc(var Comp: THttpSocketCompressRecDynArray;
 function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
   P: PUtf8Char): THttpSocketCompressSet;
 
+/// search for a given compression function
+function CompressIndex(const Compress: THttpSocketCompressRecDynArray;
+  CompFunction: THttpSocketCompress): PtrInt;
+
 
 /// compute the 'Authorization: Bearer ####' HTTP header of a given token value
 function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
@@ -164,7 +168,7 @@ type
     ContentLeft: Int64;
     ContentPos: PByte;
     ContentEncoding: RawUtf8;
-    function ContentFromFile(const FileName: TFileName; TryGz: boolean): boolean;
+    function ContentFromFile(const FileName: TFileName; CompressGz: integer): boolean;
   public
     /// the current state of this HTTP context
     State: THttpRequestState;
@@ -442,7 +446,7 @@ type
     /// prepare one reusable State Machine for sending the response
     procedure SetupResponse(var Context: THttpRequestContext;
       const ServerName: RawUtf8; const ErrorMessage: string;
-      const OnSendFile: TOnHttpServerSendFile; TryGzFile: boolean);
+      const OnSendFile: TOnHttpServerSendFile; CompressGz: integer);
     /// input parameter containing the caller URI
     property Url: RawUtf8
       read fUrl;
@@ -760,6 +764,16 @@ begin
         inc(P);
     until P^ = #0;
 end;
+
+function CompressIndex(const Compress: THttpSocketCompressRecDynArray;
+  CompFunction: THttpSocketCompress): PtrInt;
+begin
+  for result := 0 to length(Compress) - 1 do
+    if @Compress[result].Func = @CompFunction then
+      exit;
+  result := -1;
+end;
+
 
 procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8);
 var
@@ -1289,31 +1303,26 @@ begin
 end;
 
 function THttpRequestContext.ContentFromFile(
-  const FileName: TFileName; TryGz: boolean): boolean;
+  const FileName: TFileName; CompressGz: integer): boolean;
 var
   gz: TFileName;
-  i: integer;
 begin
   Content := '';
-  if TryGz and
-     (integer(CompressAcceptHeader) <> 0) then
-    for i := 0 to length(Compress) - 1 do
-      if (i in CompressAcceptHeader) and
-         (@Compress[i].Func = @CompressGZip) then
-      begin
-        gz := FileName + '.gz';
-        ContentLength := FileSize(gz);
-        if ContentLength > 0 then
-        begin
-          // there is an already-compressed .gz file to send away
-          ContentStream := TFileStream.Create(gz, fmOpenRead or fmShareDenyNone);
-          ContentEncoding := 'gzip';
-          include(HeaderFlags, hfContentStreamNeedFree);
-          result := true;
-          exit;
-        end;
-        break;
-      end;
+  if (CompressGz >= 0) and
+     (CompressGz in CompressAcceptHeader) then
+  begin
+    gz := FileName + '.gz';
+    ContentLength := FileSize(gz);
+    if ContentLength > 0 then
+    begin
+      // there is an already-compressed .gz file to send away
+      ContentStream := TFileStream.Create(gz, fmOpenRead or fmShareDenyNone);
+      ContentEncoding := 'gzip';
+      include(HeaderFlags, hfContentStreamNeedFree);
+      result := true;
+      exit;
+    end;
+  end;
   ContentLength := FileSize(FileName);
   result := ContentLength <> 0;
   if not result then
@@ -1603,7 +1612,7 @@ end;
 
 procedure THttpServerRequestAbstract.SetupResponse(var Context: THttpRequestContext;
   const ServerName: RawUtf8; const ErrorMessage: string;
-  const OnSendFile: TOnHttpServerSendFile; TryGzFile: boolean);
+  const OnSendFile: TOnHttpServerSendFile; CompressGz: integer);
 var
   P, PEnd: PUtf8Char;
   len: PtrInt;
@@ -1624,7 +1633,7 @@ begin
     Utf8ToFileName(OutContent, fn);
     if not Assigned(OnSendFile) or
        not OnSendFile(self, fn) then
-      if not Context.ContentFromFile(fn, TryGzFile) then
+      if not Context.ContentFromFile(fn, CompressGz) then
       begin
         FormatString('Impossible to find %', [fn], err);
         RespStatus := HTTP_NOTFOUND;
