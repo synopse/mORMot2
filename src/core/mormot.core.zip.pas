@@ -1592,7 +1592,7 @@ begin
   // may call libdeflate_crc32 / libdeflate_deflate_compress
   e := NewEntry(Z_DEFLATED, mormot.lib.z.crc32(0, Buf, Size), FileAge);
   e^.h64.zfullSize := Size;
-  tmp.Init((Size * 11) div 10 + 256); // max potential size
+  tmp.Init(zlibCompressMax(Size));
   try
     e^.h64.zzipSize := CompressMem(Buf, tmp.buf, Size, tmp.len, CompressLevel);
     WriteHeader(aZipName);
@@ -1676,7 +1676,7 @@ begin
         if met = Z_STORED then
           h64.zzipSize := todo
         else
-          h64.zzipSize := (todo * 11) div 10 + 256; // max potential size
+          h64.zzipSize := zlibCompressMax(todo);
         headerpos := fDest.Position;
         WriteHeader(ZipName);
         // append the stored/deflated data
@@ -2842,7 +2842,7 @@ var
   len : integer;
 begin
   result := '';
-  SetLength(result, 12 + (Int64(length(data)) * 11) div 10 + 12);
+  SetLength(result, 12 + zlibCompressMax(length(data)));
   PInt64(result)^ := length(data);
   PCardinalArray(result)^[2] := adler32(0, pointer(data), length(data));
   // use faster libdeflate instead of plain zlib if available
@@ -2940,7 +2940,7 @@ end;
 
 function TAlgoDeflate.AlgoCompressDestLen(PlainLen: integer): integer;
 begin
-  result := PlainLen + 256 + PlainLen shr 3;
+  result := zlibCompressMax(PlainLen);
 end;
 
 

@@ -185,6 +185,10 @@ function adler32(adler: TZCRC; buf: pointer; len: cardinal): TZCRC;
   {$ifdef ZLIBEXT} cdecl; {$else} {$ifdef ZLIBSTATIC} cdecl; {$else}
     {$ifdef FPC} inline; {$endif} {$endif} {$endif} {$endif}
 
+/// compute the maximum potential compressed size of an uncompressed buffer
+function zlibCompressMax(input: PtrUInt): PtrUInt;
+  {$ifdef CPU64} inline; {$endif}
+
 
 const
   ZLIB_VERSION = '1.2.3';
@@ -860,6 +864,11 @@ begin
       exit;
   raise EZLib.CreateFmt('Error %d during %s process (avail in=%d out=%d)',
     [Code, Context, Stream.avail_in, Stream.avail_out]);
+end;
+
+function zlibCompressMax(input: PtrUInt): PtrUInt;
+begin
+  result := (QWord(input) * 11) div 10 + 256;
 end;
 
 
