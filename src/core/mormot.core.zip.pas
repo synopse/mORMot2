@@ -2778,59 +2778,67 @@ const
 
 function CompressGZip(var Data: RawByteString; Compress: boolean): RawUtf8;
 var
-  L: integer;
+  max, L, C: integer;
   P: PAnsiChar;
+  tmp: RawByteString;
 begin
   L := length(Data);
   if Compress then
   begin
-    SetString(result, nil, L + 128 + L shr 3); // maximum possible memory required
-    P := pointer(result);
+    max := zlibCompressMax(L);
+    SetString(tmp, nil, max + (GZHEAD_SIZE + 8));
+    P := pointer(tmp);
     MoveFast(GZHEAD, P^, GZHEAD_SIZE);
     inc(P, GZHEAD_SIZE);
-    inc(P, CompressMem(pointer(Data), P, L, // maybe libdeflate_deflate_compress
-      length(result) - (GZHEAD_SIZE + 8), HTTP_LEVEL));
-    PCardinal(P)^ := crc32(0, pointer(Data), L); // maybe libdeflate_crc32
-    inc(P,4);
-    PCardinal(P)^ := L;
-    inc(P,4);
-    SetString(Data, PAnsiChar(pointer(result)), P - pointer(result));
+    C := CompressMem(pointer(Data), P, L, max, HTTP_LEVEL);
+    if C <= 0 then // error (maybe from libdeflate_deflate_compress)
+      Data := ''
+    else
+    begin
+      inc(P, C);
+      PCardinal(P)^ := crc32(0, pointer(Data), L); // maybe libdeflate_crc32
+      inc(P, 4);
+      PCardinal(P)^ := L;
+      inc(P, 4);
+      PStrLen(PtrUInt(tmp) - _STRLEN)^ := P - pointer(tmp); // no realloc
+      Data := tmp;
+    end;
   end
   else
-    Data := gzread(pointer(Data), length(Data));
+    Data := gzread(pointer(Data), L);
   result := 'gzip';
 end;
 
-procedure CompressInternal(var Data: RawByteString; Compress, ZLib: boolean);
+procedure CompressRaw(var Data: RawByteString; Compress, ZLib: boolean);
 var
-  tmp: RawByteString;
-  DataLen: integer;
+  src: RawByteString;
+  max, L: integer;
 begin
-  tmp := Data;
-  DataLen := length(Data);
+  src := Data;
+  L := length(src);
   if Compress then
   begin
-    SetString(Data, nil, DataLen + 256 + DataLen shr 3); // max mem required
-    DataLen := CompressMem(
-      pointer(tmp), pointer(Data), DataLen, length(Data), HTTP_LEVEL, ZLib);
-    if DataLen <= 0 then
+    max := zlibCompressMax(L);
+    SetString(Data, nil, max);
+    L := CompressMem(pointer(src), pointer(Data), L, max, HTTP_LEVEL, ZLib);
+    if L <= 0 then
       Data := ''
     else
-      SetLength(Data, DataLen);
+      PStrLen(PtrUInt(Data) - _STRLEN)^ := L; // fake len: no realloc
   end
   else
-    Data := UnCompressZipString(pointer(tmp), DataLen, nil, ZLib, 0);
+    Data := UnCompressZipString(pointer(src), L, nil, ZLib, 0);
 end;
 
 function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUtf8;
 begin
-  CompressInternal(Data, Compress, {zlib=}false);
+  CompressRaw(Data, Compress, {zlib=}false);
   result := 'deflate';
 end;
 
 function CompressZLib(var Data: RawByteString; Compress: boolean): RawUtf8;
 begin
-  CompressInternal(Data, Compress, {zlib=}true);
+  CompressRaw(Data, Compress, {zlib=}true);
   result := 'zlib';
 end;
 
