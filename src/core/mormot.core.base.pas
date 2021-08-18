@@ -2354,7 +2354,7 @@ type
   {$endif CPUARM}
 
   {$ifdef CPUAARCH64}
-  /// AARCH64 Hardware capabilities
+  /// 64-bit AARCH64 Hardware capabilities
   // - merging AT_HWCAP and AT_HWCAP2 flags as reported by
   // github.com/torvalds/linux/blob/master/arch/arm64/include/uapi/asm/ahccap.h
   TArmHwCap = (
@@ -2638,6 +2638,7 @@ function StrCompW(Str1, Str2: PWideChar): PtrInt;
 // so are safe to use in practice, but may read outside the string buffer
 // itself, so may not please paranoid tools like valgrid
 function StrLenSafe(S: pointer): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// our fast version of StrLen(), to be used with PUtf8Char/PAnsiChar
 // - under x86, will detect SSE2 and use it if available
@@ -8229,28 +8230,33 @@ end;
 {$ifndef CPUX86} // those functions have their own PIC-compatible x86 asm version
 
 function StrLenSafe(S: pointer): PtrInt;
-label
-  _0, _1, _2, _3; // ugly but faster
 begin
   result := PtrUInt(S);
   if S <> nil then
-  begin
-    while true do
-      if PAnsiChar(result)[0] = #0 then
-        goto _0
-      else if PAnsiChar(result)[1] = #0 then
-        goto _1
-      else if PAnsiChar(result)[2] = #0 then
-        goto _2
-      else if PAnsiChar(result)[3] = #0 then
-        goto _3
-      else
-        inc(result, 4);
-_3: inc(result);
-_2: inc(result);
-_1: inc(result);
-_0: dec(result, PtrUInt(S)); // return length
-  end;
+    repeat
+      if PAnsiChar(result)[0] <> #0 then
+        if PAnsiChar(result)[1] <> #0 then
+          if PAnsiChar(result)[2] <> #0 then
+            if PAnsiChar(result)[3] <> #0 then
+            begin
+              inc(result, 4);
+              continue;
+            end
+            else
+            begin
+              dec(result, PtrUInt(S) - 3);
+              exit;
+            end
+          else
+          begin
+            dec(result, PtrUInt(S) - 2);
+            exit;
+          end
+        else
+          dec(PtrUInt(S));
+      dec(result, PtrUInt(S));
+      exit;
+    until false;
 end;
 
 function StrComp(Str1, Str2: pointer): PtrInt;
