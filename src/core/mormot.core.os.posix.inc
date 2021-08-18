@@ -844,26 +844,22 @@ end;
 
 function FileSize(const FileName: TFileName): Int64;
 var
-  f: THandle;
+  st: TStat;
 begin
-  f := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
-  if ValidHandle(f) then
-  begin
-    result := FileSize(f);
-    FileClose(f);
-  end
+  if fpStat(pointer(FileName), st) <> 0 then
+    result := 0
   else
-    result := 0;
+    result := st.st_size;
 end;
 
 function FileSize(F: THandle): Int64;
 var
-  FileInfo: TStat;
+  st: TStat;
 begin
-  if fpFstat(F, FileInfo) <> 0 then
+  if fpFstat(F, st) <> 0 then
     result := 0
   else
-    result := FileInfo.st_size;
+    result := st.st_size;
 end;
 
 function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int64;
