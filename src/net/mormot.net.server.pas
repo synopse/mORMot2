@@ -119,9 +119,8 @@ type
     fOnAfterRequest: TOnHttpServerRequest;
     fOnAfterResponse: TOnHttpServerAfterResponse;
     fMaximumAllowedContentLength: cardinal;
-    /// list of all registered compression algorithms
-    fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
+    fCompress: THttpSocketCompressRecDynArray;
     fCompressAcceptEncoding: RawUtf8;
     fServerName: RawUtf8;
     fCurrentConnectionID: integer; // 31-bit NextConnectionID sequence
@@ -466,15 +465,6 @@ type
   // - used to override THttpServerSocket.GetRequest for instance
   THttpServerSocketClass = class of THttpServerSocket;
 
-  /// event handler used by THttpServer.Process to send a local file
-  // when STATICFILE_CONTENT_TYPE content-type is returned by the service
-  // - can be defined e.g. to use NGINX X-Accel-Redirect header
-  // - should return true if the Context has been modified to serve the file, or
-  // false so that the file will be manually read and sent from memory
-  // - any exception during process will be returned as a HTTP_NOTFOUND page
-  TOnHttpServerSendFile = function(Context: THttpServerRequest;
-    const LocalFileName: TFileName): boolean of object;
-
   /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
   // - bind to a port and listen to incoming requests
   // - assign this requests to THttpServerResp threads from a ThreadPool
@@ -515,7 +505,7 @@ type
     procedure SetHttpQueueLength(aValue: cardinal); override;
     procedure InternalHttpServerRespListAdd(resp: THttpServerResp);
     procedure InternalHttpServerRespListRemove(resp: THttpServerResp);
-    function OnNginxAllowSend(Context: THttpServerRequest;
+    function OnNginxAllowSend(Context: THttpServerRequestAbstract;
       const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetApiVersion: RawUtf8; override;
@@ -1545,32 +1535,33 @@ begin
   end;
 end;
 
-function THttpServer.OnNginxAllowSend(Context: THttpServerRequest;
+function THttpServer.OnNginxAllowSend(Context: THttpServerRequestAbstract;
   const LocalFileName: TFileName): boolean;
 var
   match, i, f: PtrInt;
-  folder: ^TFileName;
+  folderlefttrim: ^TFileName;
 begin
   match := 0;
-  folder := pointer(fNginxSendFileFrom);
+  folderlefttrim := pointer(fNginxSendFileFrom);
   if LocalFileName <> '' then
     for f := 1 to length(fNginxSendFileFrom) do
     begin
-      match := length(folder^);
+      match := length(folderlefttrim^);
       for i := 1 to match do // case sensitive left search
-        if LocalFileName[i] <> folder^[i] then
+        if LocalFileName[i] <> folderlefttrim^[i] then
         begin
           match := 0;
           break;
         end;
       if match <> 0 then
-        break; // found matching folder
-      inc(folder);
+        break; // found matching folderlefttrim
+      inc(folderlefttrim);
     end;
   result := match <> 0;
   if not result then
     exit; // no match -> manual send
-  delete(Context.fOutContent, 1, match); // remove e.g. '/var/www'
+  Context.OutContent :=
+    copy(Context.OutContent, match + 1, 1024); // remove '/var/www'
   Context.OutCustomHeaders := TrimU(Context.OutCustomHeaders + #13#10 +
     'X-Accel-Redirect: ' + Context.OutContent);
   Context.OutContent := '';
@@ -1708,65 +1699,6 @@ begin
   LockedDec32(@fServerConnectionActive);
 end;
 
-function IdemPCharNotVoid(p: PByteArray; up: PByte; toup: PByteArray): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-var
-  u: byte;
-begin
-  // slightly more efficient than plain IdemPChar() - we don't check p/up=nil
-  result := false;
-  dec(PtrUInt(p), PtrUInt(up));
-  repeat
-    u := up^;
-    if u = 0 then
-      break;
-    if toup[p[PtrUInt(up)]] <> u then
-      exit;
-    inc(up);
-  until false;
-  result := true;
-end;
-
-procedure ExtractNameValue(var headers: RawUtf8; const upname: RawUtf8;
-  out res: RawUtf8);
-var
-  i, j, k: PtrInt;
-begin
-  if (headers = '') or
-      (upname = '') then
-    exit;
-  i := 1;
-  repeat
-    k := length(headers) + 1;
-    for j := i to k - 1 do
-      if headers[j] < ' ' then
-      begin
-        k := j;
-        break;
-      end;
-    if IdemPCharNotVoid(@PByteArray(headers)[i - 1], pointer(upname), @NormToUpper) then
-    begin
-      j := i;
-      inc(i, length(upname));
-      TrimCopy(headers, i, k - i, res);
-      while true do // delete also ending #13#10
-        if (headers[k] = #0) or
-           (headers[k] >= ' ') then
-          break
-        else
-          inc(k);
-      delete(headers, j, k - j);
-      exit;
-    end;
-    i := k;
-    while headers[i] < ' ' do
-      if headers[i] = #0 then
-        exit
-      else
-        inc(i);
-  until false;
-end;
-
 const
   // accessed only in the HTTP context over Sockets, not WebSockets
   // - currently, THttpServerSocket.TLS.Enabled is never set
@@ -1788,7 +1720,7 @@ var
     fn: TFileName;
   begin
     result := true;
-    ExtractNameValue(ctxt.fOutCustomHeaders, 'CONTENT-TYPE:', ctxt.fOutContentType);
+    ExtractHeader(ctxt.fOutCustomHeaders, 'CONTENT-TYPE:', ctxt.fOutContentType);
     Utf8ToFileName(ctxt.OutContent, fn);
     if not Assigned(fOnSendFile) or
        not fOnSendFile(ctxt, fn) then
@@ -1853,7 +1785,7 @@ var
           // no void line (means headers ending)
           if IdemPChar(P, 'CONTENT-ENCODING:') then
             // custom encoding: don't compress
-            integer(ClientSock.fCompressAcceptHeader) := 0;
+            integer(ClientSock.Http.CompressAcceptHeader) := 0;
           ClientSock.SockSend(P, len);
           ClientSock.SockSendCRLF;
           inc(P, len);
@@ -1872,8 +1804,8 @@ var
       ctxt.OutContentType, ctxt.fOutContent, nil);
     if ClientSock.KeepAliveClient then
     begin
-      if ClientSock.fCompressAcceptEncoding <> '' then
-        ClientSock.SockSend(ClientSock.fCompressAcceptEncoding);
+      if ClientSock.Http.CompressAcceptEncoding <> '' then
+        ClientSock.SockSend(ClientSock.Http.CompressAcceptEncoding);
       ClientSock.SockSend('Connection: Keep-Alive'#13#10); // #13#10 -> end CRLF
     end
     else
@@ -2024,8 +1956,8 @@ begin
   if aServer <> nil then // nil e.g. from TRtspOverHttpServer
   begin
     fServer := aServer;
-    fCompress := aServer.fCompress;
-    fCompressAcceptEncoding := aServer.fCompressAcceptEncoding;
+    Http.Compress := aServer.fCompress;
+    Http.CompressAcceptEncoding := aServer.fCompressAcceptEncoding;
     fSocketLayer := aServer.Sock.SocketLayer;
     TLS.Enabled := aServer.Sock.TLS.Enabled; // not implemented yet
     OnLog := aServer.Sock.OnLog;

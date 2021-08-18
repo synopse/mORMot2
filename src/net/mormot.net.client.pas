@@ -1467,8 +1467,8 @@ begin
         CompressDataAndWriteHeaders(ctxt.DataType, dat, ctxt.InStream);
         if ctxt.header <> '' then
           SockSend(ctxt.header);
-        if fCompressAcceptEncoding <> '' then
-          SockSend(fCompressAcceptEncoding);
+        if Http.CompressAcceptEncoding <> '' then
+          SockSend(Http.CompressAcceptEncoding);
         SockSendCRLF;
         // flush headers and Data/InStream body
         SockSendFlush(dat);
@@ -2193,8 +2193,8 @@ end;
 function THttpRequest.RegisterCompress(aFunction: THttpSocketCompress;
   aCompressMinSize: integer): boolean;
 begin
-  result := RegisterCompressFunc(fCompress, aFunction, fCompressAcceptEncoding,
-    aCompressMinSize) <> '';
+  result := RegisterCompressFunc(fCompress, aFunction,
+    fCompressAcceptEncoding, aCompressMinSize) <> '';
 end;
 
 

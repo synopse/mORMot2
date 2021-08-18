@@ -482,7 +482,7 @@ begin
                   else
                     p^.OutContentType := rest.contenttype;
                   p^.OutCustomHeaders := rest.headers;
-                  p^.status := rest.status; // should be the latest set
+                  p^.RespStatus := rest.status; // should be the latest set
                   exit; // will be intercepted by TPublicRelay.OnClientsRequest
                 end
                 else
@@ -1021,12 +1021,12 @@ begin
   try
     start := GetTickCount64;
     repeat
-      if Ctxt.Status <> 0 then
+      if Ctxt.RespStatus <> 0 then
       begin
         if log <> nil then
           log.Log(sllTrace, 'OnClientsRequest: answer [%] % %',
-            [Ctxt.Status, KB(Ctxt.OutContent), Ctxt.OutContentType], self);
-        result := Ctxt.Status;
+            [Ctxt.RespStatus, KB(Ctxt.OutContent), Ctxt.OutContentType], self);
+        result := Ctxt.RespStatus;
         break;
       end;
       diff := GetTickCount64 - start;
