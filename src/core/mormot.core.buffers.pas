@@ -2197,9 +2197,24 @@ type
       read fLen;
     /// add some content to the Buffer, resizing it if needed
     // - could optionally include a #13#10 end of line
-    procedure Append(P: pointer; PLen: PtrInt; CRLF: boolean = false);
+    procedure Append(P: pointer; PLen: PtrInt; CRLF: boolean = false); overload;
+    /// add some content to the Buffer, resizing it if needed
+    procedure Append(const Text: RawUtf8; CRLF: boolean = false); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+   /// add some values as text to the Buffer, resizing it if needed
+    procedure Append(const Args: array of const; CRLF: boolean = false); overload;
+    /// check if Append(Bytes) would not need to resize the internal Buffer
+    function CanAppend(Bytes: PtrInt): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// ensure the internal Buffer has at least MaxSize bytes and return it
+    // - also reset the internal Len to 0
+    function Reserve(MaxSize: PtrInt): pointer;
     /// similar to delete(fBuffer, 1, FirstBytes)
     procedure Remove(FirstBytes: PtrInt);
+    /// similar to insert(P/PLen, fBuffer, Position + 1)
+    // - could optionally include a #13#10 pattern between the two
+    procedure Insert(P: pointer; PLen: PtrInt; Position: PtrInt = 0;
+      CRLF: boolean = false);
     /// retrieve the current Buffer/Len content as RawUtf8 text
     // - with some optional overhead for faster reallocmem at concatenation
     // - won't force Len to 0: caller should call Reset if done with it
@@ -3742,7 +3757,8 @@ constructor TBufferWriter.Create(const aFileName: TFileName;
 var
   s: TStream;
 begin
-  if Append and FileExists(aFileName) then
+  if Append and
+     FileExists(aFileName) then
   begin
     s := TFileStream.Create(aFileName, fmOpenWrite);
     s.Seek(0, soEnd);
@@ -9571,8 +9587,8 @@ procedure TRawByteStringBuffer.Append(P: pointer; PLen: PtrInt; CRLF: boolean);
 var
   cap, needed: PtrInt;
 begin
-  if (P = nil) or
-     (PLen <= 0) then
+  if (PLen <= 0) and
+     not CRLF then
     exit;
   cap := Length(fBuffer);
   if cap = 0 then
@@ -9583,13 +9599,50 @@ begin
     if needed > cap then
       SetLength(fBuffer, needed + needed shr 3 + 2048); // generous overhead
   end;
-  MoveFast(P^, PByteArray(fBuffer)[fLen], PLen);
-  inc(fLen, PLen);
+  if PLen > 0 then
+  begin
+    MoveFast(P^, PByteArray(fBuffer)[fLen], PLen);
+    inc(fLen, PLen);
+  end;
   if CRLF then
   begin
     PWord(@PByteArray(fBuffer)[fLen])^ := $0a0d;
     inc(fLen, 2);
   end;
+end;
+
+procedure TRawByteStringBuffer.Append(const Text: RawUtf8; CRLF: boolean);
+begin
+  Append(pointer(Text), length(Text), CRLF);
+end;
+
+procedure TRawByteStringBuffer.Append(const Args: array of const; CRLF: boolean);
+var
+  tmp: TTempUtf8;
+  a: PtrInt;
+begin
+  for a := 0 to high(Args) do
+  begin
+    VarRecToTempUtf8(Args[a], tmp);
+    Append(tmp.Text, tmp.Len);
+    if tmp.TempRawUtf8 <> nil then
+      RawUtf8(tmp.TempRawUtf8) := ''; // release temp memory
+  end;
+  if CRLF then
+    Append('', {crlf=}true);
+end;
+
+function TRawByteStringBuffer.CanAppend(Bytes: PtrInt): boolean;
+begin
+  result := fLen + Bytes <= length(fBuffer);
+end;
+
+function TRawByteStringBuffer.Reserve(MaxSize: PtrInt): pointer;
+begin
+  fLen := 0;
+  if MaxSize > length(fBuffer) then
+    SetString(fBuffer, nil, MaxSize); // no realloc -> not SetLength()
+  result := pointer(fBuffer);
 end;
 
 procedure TRawByteStringBuffer.Remove(FirstBytes: PtrInt);
@@ -9602,6 +9655,19 @@ begin
       dec(fLen, FirstBytes);
       MoveFast(PByteArray(fBuffer)[FirstBytes], pointer(fBuffer)^, fLen);
     end;
+end;
+
+procedure TRawByteStringBuffer.Insert(P: pointer; PLen: PtrInt;
+  Position: PtrInt; CRLF: boolean);
+begin
+  inc(PLen, 2 * ord(CRLF));
+  if PLen + fLen > length(fBuffer) then
+    SetLength(fBuffer, PLen + fLen + fLen shr 3);
+  MoveFast(pointer(fBuffer)^, PByteArray(fBuffer)[PLen], fLen);
+  dec(PLen, 2 * ord(CRLF));
+  MoveFast(P^, pointer(fBuffer)^, PLen);
+  if CRLF then
+    PWord(@PByteArray(fBuffer)[PLen])^ := $0a0d;
 end;
 
 procedure TRawByteStringBuffer.AsText(out Text: RawUtf8; Overhead: PtrInt);
