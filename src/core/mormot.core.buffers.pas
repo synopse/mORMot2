@@ -2183,6 +2183,8 @@ type
     /// the actual storage, with length(Buffer) as Capacity
     fBuffer: RawByteString;
     fLen: PtrInt;
+    function GetCapacity: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// set Len to 0, but doesn't clear/free the Buffer itself
     procedure Reset;
@@ -2195,6 +2197,9 @@ type
     /// how many bytes are currently used in the Buffer
     property Len: PtrInt
       read fLen;
+    /// how many bytes are currently allocated in the Buffer
+    property Capacity: PtrInt
+      read GetCapacity;
     /// add some content to the Buffer, resizing it if needed
     // - could optionally include a #13#10 end of line
     procedure Append(P: pointer; PLen: PtrInt; CRLF: boolean = false); overload;
@@ -9566,6 +9571,11 @@ end;
 
 
 { TRawByteStringBuffer }
+
+function TRawByteStringBuffer.GetCapacity: PtrInt;
+begin
+  result := length(fBuffer);
+end;
 
 procedure TRawByteStringBuffer.Reset;
 begin
