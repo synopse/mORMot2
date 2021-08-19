@@ -24,14 +24,19 @@ uses
   mormot.core.test,
   mormot.net.sock,
   mormot.net.http,
+  mormot.net.async,
   mormot.net.rtsphttp;
 
 type
   /// this test case will validate several low-level protocols
   TNetworkProtocols = class(TSynTestCase)
+  protected
+    procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
   published
     /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
     procedure RtspOverHttp;
+    /// RTSP over HTTP, with always temporary buffering
+    procedure RtspOverHttpForcedWriteBuffer;
   end;
 
   
@@ -55,7 +60,8 @@ var
 begin
   // here we follow the steps and content stated by https://goo.gl/CX6VA3
   log := proxy.Log.Enter(proxy, 'Tests');
-  if (proxy = nil) or (proxy.RtspServer <> '127.0.0.1') then
+  if (proxy = nil) or
+     (proxy.RtspServer <> '127.0.0.1') then
     test.Check(false, 'expect a running proxy on 127.0.0.1')
   else
   try
@@ -159,7 +165,7 @@ begin
   end;
 end;
 
-procedure TNetworkProtocols.RtspOverHttp;
+procedure TNetworkProtocols.DoRtspOverHttp(options: TAsyncConnectionsOptions);
 const
   {$ifdef OSDARWIN}
   N = 10;
@@ -170,12 +176,22 @@ var
   proxy: TRtspOverHttpServer;
 begin
   proxy := TRtspOverHttpServer.Create(
-    '127.0.0.1', '3999', '3998', TSynLog, nil, nil);
+    '127.0.0.1', '3999', '3998', TSynLog, nil, nil, options);
   try
     RtspRegressionTests(proxy, self, N, 10);
   finally
     proxy.Free;
   end;
+end;
+
+procedure TNetworkProtocols.RtspOverHttp;
+begin
+  DoRtspOverHttp([]);
+end;
+
+procedure TNetworkProtocols.RtspOverHttpForcedWriteBuffer;
+begin
+  DoRtspOverHttp([acoWritePollOnly]);
 end;
 
 end.

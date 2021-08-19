@@ -6912,21 +6912,21 @@ begin
   if n > 0 then
     if Assigned(aCompare) then
     begin
-      dec(n);
       P := fValue^;
       if fSorted and
          (@aCompare = @fCompare) and
          (n > 10) then
       begin
         // array is sorted -> use fast O(log(n)) binary search
+        dec(n);
         L := 0;
         repeat
           result := (L + n) shr 1;
           cmp := aCompare(P[result * fInfo.Cache.ItemSize], Item);
-          if cmp = 0 then
-            exit;
           if cmp < 0 then
             L := result + 1
+          else if cmp = 0 then
+            exit
           else
             n := result - 1;
         until L > n;
@@ -6941,7 +6941,8 @@ begin
             exit;
           inc(P, L);
           inc(result);
-        until result > n;
+          dec(n);
+        until n = 0;
       end;
     end
     else

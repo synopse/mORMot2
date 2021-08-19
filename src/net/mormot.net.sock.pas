@@ -1810,9 +1810,11 @@ begin
   {$endif HASFASTTRYFINALLY}
 end;
 
-function TPollSockets.GetOne(timeoutMS: integer; out notif: TPollSocketResult): boolean;
+function TPollSockets.GetOne(timeoutMS: integer;
+  out notif: TPollSocketResult): boolean;
 
   function PollAndSearchWithinPending(p: PtrInt): boolean;
+    {$ifdef HASINLINE} inline; {$endif}
   begin
     if not fTerminated and
        fPoll[p].WaitForModified(fPending, {waitms=}0) then
@@ -1833,15 +1835,15 @@ begin
   if result or
      (timeoutMS < 0) then
     exit;
+  if timeoutMS = 0 then
+    start := 0
+  else
+    start := mormot.core.os.GetTickCount64;
   LockedInc32(@fGettingOne);
   try
     byte(notif.events) := 0;
     if fTerminated then
       exit;
-    if timeoutMS = 0 then
-      start := 0
-    else
-      start := mormot.core.os.GetTickCount64;
     repeat
       // non-blocking search within all fPoll[] items
       if fCount > 0 then
@@ -1874,11 +1876,12 @@ begin
       if elapsed > timeoutMS then
         break;
       if elapsed > 300 then
-        SleepHiRes(50)
+        n := 50
       else if elapsed > 50 then
-        SleepHiRes(10)
+        n := 10
       else
-        SleepHiRes(1);
+        n := 1;
+      SleepHiRes(n);
       result := GetOneWithinPending(notif); // retrieved from another thread?
     until result or fTerminated;
   finally
