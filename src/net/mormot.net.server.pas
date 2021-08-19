@@ -108,7 +108,7 @@ type
   end;
 
   /// abstract class to implement a HTTP server
-  // - do not use this class, but rather the THttpServer or THttpApiServer
+  // - do not use this class, but rather THttpServer or THttpApiServer
   THttpServerGeneric = class(TServerGeneric)
   protected
     fShutdownInProgress: boolean;
@@ -1617,8 +1617,8 @@ begin
   try
     fSock := TCrtSocket.Bind(fSockPort); // BIND + LISTEN
     {$ifdef OSLINUX}
-    // in case was started by systemd, listening socket is created by another
-    // process and do not interrupt while process got a signal. So we need to
+    // in case started by systemd (port=''), listening socket is created by
+    // another process and do not interrupt when it got a signal. So we need to
     // set a timeout to unlock accept() periodically and check for termination
     if fSockPort = '' then // external socket
       fSock.ReceiveTimeout := 1000; // unblock accept every second

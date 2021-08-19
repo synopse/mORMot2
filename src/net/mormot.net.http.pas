@@ -1239,6 +1239,35 @@ fin:Process.Reset;
   // we may have more luck in next ProcessRead() call
 end;
 
+procedure THttpRequestContext.CompressContentAndFinalizeHead;
+begin
+  // same logic than THttpSocket.CompressDataAndWriteHeaders below
+  if (integer(CompressAcceptHeader) <> 0) and
+     (ContentStream = nil) then // no stream compression (yet)
+    ContentEncoding := CompressDataAndGetHeaders(
+      CompressAcceptHeader, Compress, ContentType, Content);
+  if ContentEncoding <> '' then
+    Head.Append(['Content-Encoding: ', ContentEncoding]);
+  if ContentStream = nil then
+  begin
+    ContentPos := pointer(Content);
+    ContentLength := length(Content);
+  end
+  else if ContentLength = 0 then // maybe set by SetupResponse for local file
+    ContentLength := ContentStream.Size - ContentStream.Position;
+  Head.Append(['Content-Length: ', ContentLength]); // needed even 0
+  if (ContentType <> '') and
+     (ContentType <> STATICFILE_CONTENT_TYPE) then
+    Head.Append(['Content-Type: ', ContentType]);
+  if not (hfConnectionClose in HeaderFlags) then
+  begin
+    if CompressAcceptEncoding <> '' then
+      Head.Append(CompressAcceptEncoding, {crlf=}true);
+    Head.Append('Connection: Keep-Alive', {crlf=}true);
+  end;
+  Head.Append(nil, 0, {crlf=}true); // headers finish with a void line
+end;
+
 function THttpRequestContext.ProcessWrite(out P: pointer; MaxSize: PtrInt): Int64;
 var
   previous: THttpRequestState;
@@ -1300,6 +1329,7 @@ begin
     FreeAndNil(ContentStream);
   HeaderFlags := [];
   Content := ''; // release memory ASAP
+  ContentEncoding := '';
 end;
 
 function THttpRequestContext.ContentFromFile(
@@ -1311,6 +1341,7 @@ begin
   if (CompressGz >= 0) and
      (CompressGz in CompressAcceptHeader) then
   begin
+    // try locally cached gzipped static content
     gz := FileName + '.gz';
     ContentLength := FileSize(gz);
     if ContentLength > 0 then
@@ -1326,47 +1357,19 @@ begin
   ContentLength := FileSize(FileName);
   result := ContentLength <> 0;
   if not result then
+    // there is no such file available
     exit;
   ContentStream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
   if ContentLength < 1 shl 20 then
   begin
-    // load smallest files (up to 1MB) in memory (and maybe compress them)
+    // load smallest files (up to 1MB) in temp memory (and maybe compress them)
     SetLength(Content, ContentLength);
     ContentStream.Read(pointer(Content)^, ContentLength);
     FreeAndNil(ContentStream);
   end
   else
-    // stream existing file by chunks
+    // stream existing big file by chunks
     include(HeaderFlags, hfContentStreamNeedFree);
-end;
-
-procedure THttpRequestContext.CompressContentAndFinalizeHead;
-begin
-  // same logic than THttpSocket.CompressDataAndWriteHeaders below
-  if (integer(CompressAcceptHeader) <> 0) and
-     (ContentStream = nil) then // no stream compression (yet)
-    ContentEncoding := CompressDataAndGetHeaders(
-      CompressAcceptHeader, Compress, ContentType, Content);
-  if ContentEncoding <> '' then
-    Head.Append(['Content-Encoding: ', ContentEncoding]);
-  if ContentStream = nil then
-  begin
-    ContentPos := pointer(Content);
-    ContentLength := length(Content);
-  end
-  else if ContentLength = 0 then // maybe set by SetupResponse for local file
-    ContentLength := ContentStream.Size - ContentStream.Position;
-  Head.Append(['Content-Length: ', ContentLength]); // needed even 0
-  if (ContentType <> '') and
-     (ContentType <> STATICFILE_CONTENT_TYPE) then
-    Head.Append(['Content-Type: ', ContentType]);
-  if not (hfConnectionClose in HeaderFlags) then
-  begin
-    if CompressAcceptEncoding <> '' then
-      Head.Append(CompressAcceptEncoding, {crlf=}true);
-    Head.Append('Connection: Keep-Alive', {crlf=}true);
-  end;
-  Head.Append(nil, 0, {crlf=}true); // headers finish with a void line
 end;
 
 
