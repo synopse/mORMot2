@@ -6935,11 +6935,13 @@ begin
       begin
         // array is very small, or not sorted -> O(n) iterative search
         L := fInfo.Cache.ItemSize;
-        for result := 0 to n do
+        result := 0;
+        repeat
           if aCompare(P^, Item) = 0 then
-            exit
-          else
-            inc(P, L);
+            exit;
+          inc(P, L);
+          inc(result);
+        until result > n;
       end;
     end
     else
@@ -7676,12 +7678,14 @@ bin:  result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize)
       if Assigned(cmp) then
       begin
         P := fValue^;
-        for result := 0 to n - 1 do
-        begin
+        result := 0;
+        repeat
           inc(P, cmp(P, @Item, rtti, comp));
           if comp = 0 then
             exit;
-        end;
+          inc(result);
+          dec(n);
+        until n = 0;
       end
       else
         goto bin;
