@@ -4355,7 +4355,7 @@ var
 begin
   n := length(List);
   offs := 1;
-  while offs < length(Csv) do
+  while offs <= length(Csv) do
   begin
     i := PosEx(Sep, Csv, offs);
     if i = 0 then
