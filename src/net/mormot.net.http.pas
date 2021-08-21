@@ -29,6 +29,7 @@ uses
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.zip,
+  mormot.core.threads,
   mormot.net.sock;
 
 
@@ -125,9 +126,9 @@ type
     hrsSendHeaders,
     hrsSendBody,
     hrsResponseDone,
+    hrsErrorPayloadTooLarge,
     hrsErrorMisuse,
     hrsErrorUnsupportedFormat,
-    hrsErrorPayloadTooLarge,
     hrsErrorAborted);
 
   /// set of states for THttpRequestContext processing
@@ -251,8 +252,7 @@ type
     // - to be called when some bytes could be written to output socket
     // - main entry point of the asynchronous Machine State of HTTP processing
     // - caller should have checked that current State is in HTTP_REQUEST_WRITE
-    // - returns how many bytes from P should be sent to the socket
-    function ProcessWrite(out P: pointer; MaxSize: PtrInt): Int64;
+    procedure ProcessWrite(var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
     /// should be done when the HTTP Server state machine is done
     procedure ProcessDone;
   end;
@@ -271,6 +271,9 @@ const
   HTTP_REQUEST_WRITE =
     [hrsSendHeaders,
      hrsSendBody];
+
+  /// when any later THttpRequestContext.State is a fatal HTTP error
+  HTTP_REQUEST_FIRSTERROR = succ(hrsResponseDone);
 
 
 { ******************** THttpSocket Implementing HTTP over plain sockets }
@@ -434,6 +437,7 @@ type
     fConnectionFlags: THttpServerRequestFlags;
     fAuthenticationStatus: THttpServerRequestAuthentication;
     fRespStatus: integer;
+    fConnectionThread: TSynThread;
   public
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
@@ -499,6 +503,10 @@ type
     /// define how the client is connected
     property ConnectionFlags: THttpServerRequestFlags
       read fConnectionFlags write fConnectionFlags;
+    /// the thread which owns the connection of this execution context
+    // - depending on the HTTP server used, may not follow ConnectionID
+    property ConnectionThread: TSynThread
+      read fConnectionThread;
     /// contains the THttpServer-side authentication status
     // - e.g. when using http.sys authentication with HTTP API 2.0
     property AuthenticationStatus: THttpServerRequestAuthentication
@@ -1189,7 +1197,7 @@ begin
             Len := st.Len
           else
             Len := ContentLeft;
-          if ContentStream= nil then
+          if ContentStream = nil then
           begin
             if Content = '' then
             begin
@@ -1268,44 +1276,44 @@ begin
   Head.Append(nil, 0, {crlf=}true); // headers finish with a void line
 end;
 
-function THttpRequestContext.ProcessWrite(out P: pointer; MaxSize: PtrInt): Int64;
+procedure THttpRequestContext.ProcessWrite(
+  var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
 var
   previous: THttpRequestState;
+  P: pointer;
 begin
   previous := State;
   case State of
     hrsSendHeaders:
       begin
+        Dest.Append(Head.Buffer, Head.Len);
         if (ContentStream = nil) and
-           Head.CanAppend(length(Content)) then
+           Dest.CanAppend(ContentLength) then
         begin
           // single socket send() if possible (small or no output body)
-          Head.Append(Content);
+          Dest.Append(Content);
           State := hrsResponseDone;
         end
         else
           State := hrsSendBody;
-        P := Head.Buffer;
-        result := Head.Len;
       end;
     hrsSendBody:
       begin
-        result := ContentLength;
-        if result > MaxSize then
-          result := MaxSize;
-        if result > 0 then
+        if ContentLength < MaxSize then
+          MaxSize := ContentLength;
+        if MaxSize > 0 then
         begin
           if ContentStream <> nil then
           begin
-            P := Process.Reserve(result);
-            result := ContentStream.Read(P^, result);
+            P := Dest.Reserve(MaxSize);
+            Dest.Append(P, ContentStream.Read(P^, MaxSize));
           end
           else
           begin
-            P := ContentPos;
-            inc(ContentPos, result);
+            Dest.Append(ContentPos, MaxSize);
+            inc(ContentPos, MaxSize);
           end;
-          dec(ContentLeft, result);
+          dec(ContentLeft, MaxSize);
           if ContentLeft = 0 then
             State := hrsResponseDone;
         end
@@ -1313,10 +1321,7 @@ begin
           raise EHttpSocket.Create('Unexpected ProcessWrite(%d)', [MaxSize]);
       end;
   else
-    begin
-      result := 0;
       exit; // nothing to write in this current state
-    end;
   end;
   if (State <> previous) and
      Assigned(OnStateChange) then

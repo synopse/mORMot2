@@ -54,7 +54,6 @@ type
   THttpServerRequest = class(THttpServerRequestAbstract)
   protected
     fServer: THttpServerGeneric;
-    fConnectionThread: TSynThread;
     {$ifdef OSWINDOWS}
     fHttpApiRequest: Pointer;
     fFullURL: SynUnicode;
@@ -79,10 +78,6 @@ type
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric
       read fServer;
-    /// the thread which owns the connection of this execution context
-    // - depending on the HTTP server used, may not follow ConnectionID
-    property ConnectionThread: TSynThread
-      read fConnectionThread;
     {$ifdef OSWINDOWS}
     /// for THttpApiServer, points to a PHTTP_REQUEST structure
     // - not used by now for other kind of servers
@@ -1295,18 +1290,15 @@ begin
 end;
 
 function THttpServerGeneric.Request(Ctxt: THttpServerRequestAbstract): cardinal;
-var
-  thrd: TSynThread;
 begin
   if (self = nil) or
      fShutdownInProgress then
     result := HTTP_NOTFOUND
   else
   begin
-    thrd := THttpServerRequest(Ctxt).ConnectionThread;
-    if Assigned(thrd) and
-       not Assigned(thrd.StartNotified) then
-      NotifyThreadStart(thrd);
+    if Assigned(Ctxt.ConnectionThread) and
+       not Assigned(Ctxt.ConnectionThread.StartNotified) then
+      NotifyThreadStart(Ctxt.ConnectionThread);
     if Assigned(OnRequest) then
       result := OnRequest(Ctxt)
     else
