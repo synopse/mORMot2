@@ -6915,7 +6915,7 @@ begin
       P := fValue^;
       if fSorted and
          (@aCompare = @fCompare) and
-         (n > 10) then
+         (n >= 10) then
       begin
         // array is sorted -> use fast O(log(n)) binary search
         dec(n);

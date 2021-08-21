@@ -3920,8 +3920,8 @@ begin
     if (rtticustom = nil) or
        (vmt <> rtticustom) then
       // TSynLog.Family / TSynLog.Add expect TRttiCustom in the first slot
-      raise ESynLogException.CreateUtf8('%.FamilyCreate: vmtAutoTable=% not %',
-        [self, vmt, rtticustom]);
+      raise ESynLogException.CreateUtf8(
+        '%.FamilyCreate: vmtAutoTable=% not %', [self, vmt, rtticustom]);
     Rtti.DoLock;
     try
       result := rtticustom.PrivateSlot;
@@ -3930,9 +3930,8 @@ begin
           // registered by a background thread
           exit
         else
-          // paranoid
-          raise ESynLogException.CreateUtf8('%.FamilyCreate: vmtAutoTable=%',
-            [self, result]);
+          raise ESynLogException.CreateUtf8( // paranoid
+            '%.FamilyCreate: vmtAutoTable=%', [self, result]);
       // create the TSynLogFamily instance associated with this TSynLog class
       result := TSynLogFamily.Create(self); // stored in SynLogFamily[]
       rtticustom.PrivateSlot := result; // will be owned by this TRttiCustom

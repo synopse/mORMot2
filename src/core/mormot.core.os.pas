@@ -2212,6 +2212,13 @@ var
 // value to guess the elapsed time, but call GetTickCount64
 procedure SleepHiRes(ms: cardinal);
 
+/// call SleepHiRes() taking count of the activity, in 0/1/10/50/150 ms steps
+// - should reset start := 0 when some activity occured
+procedure SleepStep(var start: Int64; terminated: PBoolean = nil);
+
+/// compute optimal sleep time as SleepStep, in 0/1/10/50/150 ms steps
+function SleepStepTime(var start: Int64; endtix: PInt64 = nil): integer;
+
 /// low-level naming of a thread
 // - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
@@ -4010,6 +4017,47 @@ end;
 procedure GlobalUnLock;
 begin
   LeaveCriticalSection(GlobalCriticalSection);
+end;
+
+function SleepStepTime(var start: Int64; endtix: PInt64): integer;
+var
+  elapsed: PtrInt;
+  tix: Int64;
+begin
+  tix := GetTickCount64;
+  if start = 0 then
+    start := tix;
+  elapsed := tix - start;
+  if elapsed = 0 then
+    result := 0 // thread switch within HW clock granularity
+  else if elapsed < 20 then
+    result := 1 // 1 ms is a pious wish on Windows anyway
+  else
+  begin
+    if elapsed < 50 then
+      result := 10
+    else if elapsed < 200 then
+      result := 50
+    else
+      result := 120 + Random32(80); // random 120-200 ms
+  end;
+  if endtix <> nil then
+    endtix^ := tix + result;
+end;
+
+procedure SleepStep(var start: Int64; terminated: PBoolean);
+var
+  ms: integer;
+  endtix: Int64;
+begin
+  ms := SleepStepTime(start, @endtix);
+  if ms < 10 then
+    SleepHiRes(ms) // < 16 ms is a pious wish on Windows anyway
+  else
+    repeat
+      SleepHiRes(10); // on Windows, HW clock resolution is around 16 ms
+    until (GetTickCount64 > endtix) or
+          ((terminated <> nil) and terminated^);
 end;
 
 procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
