@@ -418,7 +418,7 @@ type
 
   /// all modifications returned by TPollSocketAbstract.WaitForModified
   TPollSocketResults = record
-    // hold [0 .. Count - 1] notified events
+    // hold [0..Count-1] notified events
     Events: array of TPollSocketResult;
     /// how many modifications are currently monitored in Results[]
     Count: PtrInt;
@@ -438,6 +438,7 @@ type
     // - similar to epoll's EPOLL_CTL_ADD control interface
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
       tag: TPollSocketTag): boolean; virtual; abstract;
+  published
     /// how many TSocket instances are currently tracked
     property Count: integer
       read fCount;
@@ -495,15 +496,17 @@ type
   // - call GetOne from any consumming threads to process new events
   TPollSockets = class(TPollAbstract)
   protected
-    fPoll: array of TPollSocketAbstract;
+    fPoll: array of TPollSocketAbstract; // each track up to fPoll[].MaxSockets
     fPollIndex: integer;
     fPending: TPollSocketResults;
     fPendingIndex: PtrInt;
     fGettingOne: integer;
     fTerminated: boolean;
+    fPollingForPendingEvents: boolean;
     fPollClass: TPollSocketClass;
     fPollLock: TRTLCriticalSection;
     fPendingLock: TRTLCriticalSection;
+    fOnLog: TSynLogProc;
   public
     /// initialize the sockets polling
     // - under Linux/POSIX, will set the open files maximum number for the
@@ -527,8 +530,8 @@ type
     // - this method is thread-safe
     function Unsubscribe(socket: TNetSocket; tag: TPollSocketTag): boolean; virtual;
     /// retrieve the next pending notification, or let the poll wait for new
-    // - if there is no pending notification, will poll and wait up to
-    // timeoutMS milliseconds for pending data
+    // - if GetOneWithinPending returns no pending notification, will try
+    // PollForPendingEvents and wait up to timeoutMS milliseconds for events
     // - returns true and set notif.events/tag with the corresponding notification
     // - returns false if no pending event was handled within the timeoutMS period
     // - this method is thread-safe, and could be called from several threads
@@ -538,14 +541,31 @@ type
     // - returns false if no pending event is available
     // - this method is thread-safe, and could be called from several threads
     function GetOneWithinPending(out notif: TPollSocketResult): boolean;
+    /// let the poll check for pending events
+    // - could be called when PendingCount=0, i.e. GetOneWithinPending()=false
+    // - returns how many events have been retrieved for the subscribed sockets
+    function PollForPendingEvents(timeoutMS: integer): integer;
     /// notify any GetOne waiting method to stop its polling loop
     procedure Terminate; virtual;
+    /// is set to true when PollForPendingEvents() is running
+    property PollingForPendingEvents: boolean
+      read fPollingForPendingEvents;
     /// the actual polling class used to track socket state changes
     property PollClass: TPollSocketClass
       read fPollClass write fPollClass;
-    /// set to true by the Terminate method
+    /// allow raw debugging via logs of the low-level process
+    property OnLog: TSynLogProc
+      read fOnLog write fOnLog;
+  published
+    /// is set to true by the Terminate method
     property Terminated: boolean
       read fTerminated;
+    /// the index of the last notified event in the internal queue
+    property PendingIndex: PtrInt
+      read fPendingIndex;
+    /// how many notified events are currently in the internal queue
+    property PendingCount: PtrInt
+      read fPending.Count;
   end;
 
 
@@ -1700,7 +1720,7 @@ begin
         (mormot.core.os.GetTickCount64 < endtix) do
     SleepHiRes(1);
   for p := 0 to high(fPoll) do
-    fPoll[p].Free;
+    FreeAndNil(fPoll[p]);
   DeleteCriticalSection(fPendingLock);
   DeleteCriticalSection(fPollLock);
   inherited Destroy;
@@ -1709,27 +1729,31 @@ end;
 function TPollSockets.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
   tag: TPollSocketTag): boolean;
 var
-  p, n: PtrInt;
+  n, i: PtrInt;
   poll: TPollSocketAbstract;
+  p: ^TPollSocketAbstract;
 begin
   result := false;
   if (self = nil) or
      (socket = nil) or
      (events = []) then
     exit;
+  poll := nil;
   EnterCriticalSection(fPollLock);
   try
-    poll := nil;
     n := length(fPoll);
-    for p := 0 to n - 1 do
-      if fPoll[p].Count < fPoll[p].MaxSockets then
+    p := pointer(fPoll);
+    for i := 1 to n do
+      if p^.Count < p^.MaxSockets then
       begin
-        poll := fPoll[p]; // stil some place in this poll instance
+        poll := p^; // stil some place in this poll instance
         break;
-      end;
+      end
+      else
+        inc(p);
     if poll = nil then
     begin
-      poll := fPollClass.Create;
+      poll := fPollClass.Create; // need a new poll instance
       SetLength(fPoll, n + 1);
       fPoll[n] := poll;
     end;
@@ -1744,20 +1768,23 @@ end;
 function TPollSockets.Unsubscribe(socket: TNetSocket; tag: TPollSocketTag): boolean;
 var
   p: PtrInt;
+  res: ^TPollSocketResult;
 begin
   result := false;
   EnterCriticalSection(fPendingLock);
   try
     for p := fPendingIndex to fPending.Count - 1 do
-      if fPending.Events[p].tag = tag then
-        // event to be ignored in future GetOneWithinPending
-        byte(fPending.Events[p].events) := 0;
+    begin
+      res := @fPending.Events[p];
+      if res^.tag = tag then
+        byte(res^.events) := 0;
+    end; // warning: inc(res) is faulty in a loop due to alignment issues
   finally
     LeaveCriticalSection(fPendingLock);
   end;
   EnterCriticalSection(fPollLock);
   try
-    for p := 0 to high(fPoll) do
+    for p := 0 to length(fPoll) - 1 do
       if fPoll[p].Unsubscribe(socket) then
       begin
         dec(fCount);
@@ -1788,19 +1815,28 @@ begin
         notif := fPending.Events[ndx];
         // move forward
         inc(ndx);
-        if ndx = fPending.Count then
+        if byte(notif.events) <> 0 then // Unsubscribe() may have reset to 0
         begin
-          fPending.Count := 0; // reuse shared Events[] memory
-          ndx := 0;
-        end;
-        // return event (if not set to 0 by Unsubscribe)
-        if byte(notif.events) <> 0 then
-        begin
+          // there is a not-void event to return
+          if Assigned(fOnLog) then
+            fOnLog(sllTrace, 'GetOneWithinPending=% % (%/%)',
+              [pointer(notif.tag), byte(notif.events), ndx, fPending.Count], self);
           result := true;
-          break;
+          if ndx = fPending.Count then
+            break; // need to reset fPending
+          fPendingIndex := ndx; // will continue with next event
+          // quick exit with one notified event
+          {$ifndef HASFASTTRYFINALLY}
+          LeaveCriticalSection(fPendingLock);
+          {$endif HASFASTTRYFINALLY}
+          exit;
         end;
       until ndx >= fPending.Count;
-    fPendingIndex := ndx;
+    if Assigned(fOnLog) then
+      fOnLog(sllTrace, 'GetOneWithinPending: void slot (%/%)',
+        [ndx, fPending.Count], self);
+    fPending.Count := 0; // reuse shared Events[] memory
+    fPendingIndex := 0;
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
@@ -1810,80 +1846,117 @@ begin
   {$endif HASFASTTRYFINALLY}
 end;
 
+function TPollSockets.PollForPendingEvents(timeoutMS: integer): integer;
+var
+  p, last, n: PtrInt;
+begin
+  result := 0;
+  if fTerminated or
+     (fCount = 0) then
+    exit;
+  last := -1;
+  EnterCriticalSection(fPendingLock);
+  EnterCriticalSection(fPollLock);
+  try
+    fPollingForPendingEvents := true;
+    n := length(fPoll);
+    if timeoutMS > 0 then
+    begin
+      timeoutMS := timeoutMS div n;
+      if timeoutMS = 0 then
+        timeoutMS := 1;
+    end;
+    result := fPending.Count;
+    if (result <> 0) or
+       (n = 0) then
+      exit;
+    // calls fPoll[].WaitForModified() to refresh pending state
+    for p := fPollIndex + 1 to n - 1 do
+      // search from fPollIndex = last found
+      if fTerminated then
+        exit
+      else if fPoll[p].WaitForModified(fPending, timeoutMS) then
+      begin
+        last := p;
+        break;
+      end;
+    if last < 0 then
+      for p := 0 to fPollIndex do
+        // search from beginning up to fPollIndex
+        if fTerminated then
+          exit
+        else if fPoll[p].WaitForModified(fPending, timeoutMS) then
+        begin
+          last := p;
+          break;
+        end;
+    if last < 0 then
+      exit;
+    // WaitForModified() did return some fPending events
+    result := fPending.Count;
+    if Assigned(fOnLog) then
+      fOnLog(sllTrace,
+        'PollForPendingEvents=% in fPoll[%]', [result, last], self);
+    fPollIndex := last; // next call will continue from fPoll[fPollIndex+1]
+    fPendingIndex := 0;
+  finally
+    fPollingForPendingEvents := false;
+    LeaveCriticalSection(fPollLock);
+    LeaveCriticalSection(fPendingLock);
+  end;
+end;
+
 function TPollSockets.GetOne(timeoutMS: integer;
   out notif: TPollSocketResult): boolean;
-
-  function PollAndSearchWithinPending(p: PtrInt): boolean;
-    {$ifdef HASINLINE} inline; {$endif}
-  begin
-    if not fTerminated and
-       fPoll[p].WaitForModified(fPending, {waitms=}0) then
-    begin
-      result := GetOneWithinPending(notif);
-      if result then
-        fPollIndex := p; // next fPollLock to continue from fPoll[fPollIndex+1]
-    end
-    else
-      result := false;
-  end;
-
 var
-  p, n: PtrInt;
-  elapsed, start: Int64;
+  delay: integer;
+  start: Int64;
+  elapsed: integer;
 begin
-  result := GetOneWithinPending(notif); // some events may be available
+  // first check if some pending events are available
+  result := GetOneWithinPending(notif);
   if result or
      (timeoutMS < 0) then
     exit;
+  // here we need to ask the socket layer
+  byte(notif.events) := 0;
   if timeoutMS = 0 then
     start := 0
   else
     start := mormot.core.os.GetTickCount64;
   LockedInc32(@fGettingOne);
   try
-    byte(notif.events) := 0;
-    if fTerminated then
-      exit;
     repeat
-      // non-blocking search within all fPoll[] items
-      if fCount > 0 then
+      if fTerminated then
+        exit;
+      // non-blocking search of pending events within all subscribed fPoll[]
+      if (PollForPendingEvents({timeoutMS=}0) <> 0) and
+         GetOneWithinPending(notif) then
       begin
-        EnterCriticalSection(fPollLock);
-        try
-          // calls fPoll[].WaitForModified({waitms=}0) to refresh pending state
-          n := length(fPoll);
-          if n > 0 then
-          begin
-            for p := fPollIndex + 1 to n - 1 do
-              // search from fPollIndex = last found
-              if PollAndSearchWithinPending(p) then
-                exit;
-            for p := 0 to fPollIndex do
-              // search from beginning up to fPollIndex
-              if PollAndSearchWithinPending(p) then
-                exit;
-          end;
-        finally
-          LeaveCriticalSection(fPollLock);
-          result := byte(notif.events) <> 0; // exit comes here -> set result
-        end;
+        result := true;
+        exit;
       end;
-      // wait a little for something to happen
+      // if we reached here, we have no pending event
       if fTerminated or
          (timeoutMS = 0) then
         exit;
+      // wait a little for something to happen
       elapsed := mormot.core.os.GetTickCount64 - start;
       if elapsed > timeoutMS then
         break;
       if elapsed > 300 then
-        n := 50
+        delay := 50
       else if elapsed > 50 then
-        n := 10
+        delay := 10
       else
-        n := 1;
-      SleepHiRes(n);
+        delay := 1;
+      if Assigned(fOnLog) and
+         (delay > 1) then
+        fOnLog(sllTrace,
+          'GetOne Sleep(%) elapsed=% up to %', [delay, elapsed, timeoutMS], self);
+      SleepHiRes(delay);
       result := GetOneWithinPending(notif); // retrieved from another thread?
-    until result or fTerminated;
+    until result;
   finally
     LockedDec32(@fGettingOne);
   end;

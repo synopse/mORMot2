@@ -642,20 +642,21 @@ function TPollSocketEpoll.WaitForModified(var results: TPollSocketResults;
   timeoutMS: integer): boolean;
 var
   e: TPollSocketEvents;
-  i: PtrInt;
+  i, n: PtrInt;
   ev: integer;
   t: TPollSocketTag;
 begin
-  result := false; // error
+  result := false; // error or nothing new
   if (self = nil) or
      (fCount = 0) then
     exit;
-  results.Count := epoll_wait(fEPFD, pointer(fResults), fMaxSockets, timeoutMS);
-  if results.Count <= 0 then
+  n := epoll_wait(fEPFD, pointer(fResults), fMaxSockets, timeoutMS);
+  results.Count := n;
+  if n <= 0 then
     exit;
-  if length(results.Events) < results.Count then
-    SetLength(results.Events, fCount);
-  for i := 0 to results.Count - 1 do
+  if n > length(results.Events) then
+    SetLength(results.Events, fMaxSockets); // n<=fMaxSockets for sure
+  for i := 0 to n - 1 do
   begin
     with fResults[i] do
     begin
