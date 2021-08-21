@@ -1106,7 +1106,7 @@ var
   hasher: TSynHasher;
   temp: RawByteString;
   F: THandle;
-  size: Int64;
+  size, tempsize: Int64;
   read: cardinal;
 begin
   result := '';
@@ -1117,10 +1117,13 @@ begin
   if ValidHandle(F) then
   try
     size := FileSize(F);
-    SetLength(temp, 1 shl 20); // 1MB temporary buffer for reading
+    tempsize := 1 shl 20; // 1MB temporary buffer for reading
+    if tempsize > size then
+      tempsize := size;
+    SetLength(temp, tempsize);
     while size > 0 do
     begin
-      read := FileRead(F, pointer(temp)^, 1 shl 20);
+      read := FileRead(F, pointer(temp)^, tempsize);
       if read <= 0 then
         exit;
       hasher.Update(pointer(temp), read);

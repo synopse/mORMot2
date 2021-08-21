@@ -36,6 +36,8 @@ uses
 const
   /// defined here to avoid explicit link to syncobjs in uses clause
   wrSignaled = syncobjs.wrSignaled;
+  /// defined here to avoid explicit link to syncobjs in uses clause
+  wrTimeout = syncobjs.wrTimeout;
 
 type
   /// defined here to avoid explicit link to syncobjs in uses clause
