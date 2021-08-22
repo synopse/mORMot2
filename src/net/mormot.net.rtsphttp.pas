@@ -53,8 +53,8 @@ type
   protected
     fRtspTag: TPollSocketTag;
     // redirect the POST base-64 encoded command to the RTSP socket
-    function OnRead(
-      Sender: TAsyncConnections): TPollAsyncSocketOnRead; override;
+    function OnRead(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
+      override;
     // will release the associated TRtspConnection instance
     procedure BeforeDestroy(Sender: TAsyncConnections); override;
   end;
@@ -65,8 +65,8 @@ type
   protected
     fGetBlocking: TCrtSocket;
     // redirect the RTSP socket input to the GET content
-    function OnRead(
-      Sender: TAsyncConnections): TPollAsyncSocketOnRead; override;
+    function OnRead(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
+      override;
     // will release the associated blocking GET socket
     procedure BeforeDestroy(Sender: TAsyncConnections); override;
   end;
@@ -94,9 +94,11 @@ type
       out aConnection: TAsyncConnection): boolean; override;
   public
     /// initialize the proxy HTTP server forwarding specified RTSP server:port
+    // - default aThreadPoolCount=1 is the best and fastest for our RTSP/HTTP
+    // tunneling process, which is almost non blocking
     constructor Create(const aRtspServer, aRtspPort, aHttpPort: RawUtf8;
       aLog: TSynLogClass; const aOnStart, aOnStop: TOnNotifyThread;
-      aOptions: TAsyncConnectionsOptions = []); reintroduce;
+      aOptions: TAsyncConnectionsOptions = []; aThreadPoolCount: integer = 1); reintroduce;
     /// shutdown and finalize the server
     destructor Destroy; override;
     /// convert a rtsp://.... URI into a http://... proxy URI
@@ -131,7 +133,7 @@ implementation
 { TRtspConnection }
 
 function TRtspConnection.OnRead(
-  Sender: TAsyncConnections): TPollAsyncSocketOnRead;
+  Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
 begin
   if acoVerboseLog in Sender.Options then
     Sender.LogVerbose(self, 'Frame forwarded', fSlot.rd);
@@ -139,14 +141,14 @@ begin
   begin
     Sender.Log.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
       [Handle, fSlot.rd.Len], self);
-    result := sorContinue;
+    result := soContinue;
   end
   else
   begin
     Sender.Log.Add.Log(sllDebug,
       'OnRead % RTSP failed send to GET -> close % connection',
       [Handle, RemoteIP], self);
-    result := sorClose;
+    result := soClose;
   end;
   fSlot.rd.Reset;
 end;
@@ -160,13 +162,14 @@ end;
 
 { TPostConnection }
 
-function TPostConnection.OnRead(Sender: TAsyncConnections): TPollAsyncSocketOnRead;
+function TPostConnection.OnRead(
+  Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
 var
   b64: RawUtf8;
   decoded: RawByteString;
   rtsp: TAsyncConnection;
 begin
-  result := sorContinue;
+  result := soContinue;
   fSlot.rd.AsText(b64);
   decoded := Base64ToBinSafe(TrimControlChars(b64));
   if decoded = '' then
@@ -185,7 +188,7 @@ begin
   begin
     Sender.Log.Add.Log(sllDebug, 'OnRead % POST found no rtsp=%',
       [Handle, fRtspTag], self);
-    result := sorClose;
+    result := soClose;
   end;
 end;
 
@@ -199,19 +202,19 @@ end;
 
 { ******************** RTSP over HTTP Tunnelling }
 
-
 { TRtspOverHttpServer }
 
 constructor TRtspOverHttpServer.Create(
   const aRtspServer, aRtspPort, aHttpPort: RawUtf8; aLog: TSynLogClass;
-  const aOnStart, aOnStop: TOnNotifyThread; aOptions: TAsyncConnectionsOptions);
+  const aOnStart, aOnStop: TOnNotifyThread; aOptions: TAsyncConnectionsOptions;
+  aThreadPoolCount: integer);
 begin
   fLog := aLog;
   fRtspServer := aRtspServer;
   fRtspPort := aRtspPort;
   fPendingGet := TRawUtf8List.Create([fObjectsOwned, fCaseSensitive]);
-  inherited Create(
-    aHttpPort, aOnStart, aOnStop, TPostConnection, 'rtsp/http', aLog, aOptions);
+  inherited Create(aHttpPort, aOnStart, aOnStop, TPostConnection, 'rtsp/http',
+    aLog, aOptions, aThreadPoolCount);
 end;
 
 destructor TRtspOverHttpServer.Destroy;

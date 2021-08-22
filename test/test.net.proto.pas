@@ -36,7 +36,7 @@ type
     /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
     procedure RtspOverHttp;
     /// RTSP over HTTP, with always temporary buffering
-    procedure RtspOverHttpForcedWriteBuffer;
+    procedure RtspOverHttpBufferedWrite;
   end;
 
   
@@ -75,7 +75,7 @@ begin
         with req[r] do
         begin
           session := TSynTestCase.RandomIdentifier(20 + r and 15);
-          get := THttpSocket.Open('localhost', proxy.Server.Port);
+          get := THttpSocket.Open('localhost', proxy.Server.Port, nlTcp, 1000);
           get.SndLow('GET /sw.mov HTTP/1.0'#13#10 +
             'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +
             'x-sessioncookie: ' + session + #13#10 +
@@ -136,10 +136,19 @@ begin
         end;
         // stream output should be redirected to the GET request
         for r := 0 to rmax do
-          req[r].stream.SndLow(req[r].session);
+          req[r].stream.SndLow(req[r].session); // session text as video stream
+        if log <> nil then
+          log.Log(sllCustom1, 'RegressionTests % RUN #% SndLow',
+            [clientcount, i], proxy);
         for r := 0 to rmax do
           with req[r] do
-            test.check(get.SockReceiveString = session);
+          begin
+            text := get.SockReceiveString;
+            //if log <> nil then
+            //  log.Log(sllCustom1, 'RegressionTests % #%/% received %',
+            //    [clientcount, r, rmax, text], proxy);
+            test.check(text = session);
+          end;
       end;
       if log <> nil then
         log.Log(sllCustom1, 'RegressionTests % SHUTDOWN', [clientcount], proxy);
@@ -176,7 +185,8 @@ var
   proxy: TRtspOverHttpServer;
 begin
   proxy := TRtspOverHttpServer.Create(
-    '127.0.0.1', '3999', '3998', TSynLog, nil, nil, options);
+    '127.0.0.1', '3999', '3998', TSynLog, nil, nil, options, {threads=}1);
+    // threads=1 is the safest & fastest - but you may set 16 for testing
   try
     RtspRegressionTests(proxy, self, N, 10);
   finally
@@ -184,14 +194,18 @@ begin
   end;
 end;
 
+const
+  //ASYNC_OPTION = ASYNC_OPTION_DEBUG;
+  ASYNC_OPTION = ASYNC_OPTION_VERBOSE;
+
 procedure TNetworkProtocols.RtspOverHttp;
 begin
-  DoRtspOverHttp([]);
+  DoRtspOverHttp(ASYNC_OPTION);
 end;
 
-procedure TNetworkProtocols.RtspOverHttpForcedWriteBuffer;
+procedure TNetworkProtocols.RtspOverHttpBufferedWrite;
 begin
-  DoRtspOverHttp([acoWritePollOnly]);
+  DoRtspOverHttp(ASYNC_OPTION + [acoWritePollOnly]);
 end;
 
 end.

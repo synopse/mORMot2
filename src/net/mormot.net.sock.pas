@@ -1909,9 +1909,7 @@ end;
 function TPollSockets.GetOne(timeoutMS: integer;
   out notif: TPollSocketResult): boolean;
 var
-  delay: integer;
-  start: Int64;
-  elapsed: integer;
+  start, endtix: Int64;
 begin
   // first check if some pending events are available
   result := GetOneWithinPending(notif);
@@ -1920,16 +1918,26 @@ begin
     exit;
   // here we need to ask the socket layer
   byte(notif.events) := 0;
-  if timeoutMS = 0 then
-    start := 0
-  else
-    start := mormot.core.os.GetTickCount64;
+  start := 0;
+  endtix := 0;
   LockedInc32(@fGettingOne);
   try
+    {if (fCount = 1) and
+       (length(fPoll) = 1) then
+    begin
+      // we only have a single socket - e.g. TAsyncServer accept()
+      if (PollForPendingEvents(timeoutMS) <> 0) and
+         GetOneWithinPending(notif) then
+      begin
+        result := true;
+        exit;
+      end;
+    end
+    else} // we tried it but it slows down everything
     repeat
+      // non-blocking search of pending events within all subscribed fPoll[]
       if fTerminated then
         exit;
-      // non-blocking search of pending events within all subscribed fPoll[]
       if (PollForPendingEvents({timeoutMS=}0) <> 0) and
          GetOneWithinPending(notif) then
       begin
@@ -1941,22 +1949,14 @@ begin
          (timeoutMS = 0) then
         exit;
       // wait a little for something to happen
-      elapsed := mormot.core.os.GetTickCount64 - start;
-      if elapsed > timeoutMS then
-        break;
-      if elapsed > 300 then
-        delay := 50
-      else if elapsed > 50 then
-        delay := 10
-      else
-        delay := 1;
-      if Assigned(fOnLog) and
-         (delay > 1) then
-        fOnLog(sllTrace,
-          'GetOne Sleep(%) elapsed=% up to %', [delay, elapsed, timeoutMS], self);
-      SleepHiRes(delay);
+      if endtix = 0 then
+        endtix := GetTickCount64 + timeoutMS;
+      SleepStep(start, @fTerminated);
+      if fTerminated then
+        exit;
       result := GetOneWithinPending(notif); // retrieved from another thread?
-    until result;
+    until result or
+          (GetTickCount64 > endtix);
   finally
     LockedDec32(@fGettingOne);
   end;
