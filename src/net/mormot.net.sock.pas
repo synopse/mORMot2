@@ -489,6 +489,9 @@ type
   // - see PollSocketClass function and TPollSocketAbstract.New method
   TPollSocketClass = class of TPollSocketAbstract;
 
+  /// TPollSockets.OnGetOneIdle callback prototype
+  TOnPollSocketsIdle = procedure(Sender: TObject; NowTix: Int64) of object;
+
   /// implements efficient polling of multiple sockets
   // - will maintain a pool of TPollSocketAbstract instances, to monitor
   // incoming data or outgoing availability for a set of active connections
@@ -507,6 +510,7 @@ type
     fPollLock: TRTLCriticalSection;
     fPendingLock: TRTLCriticalSection;
     fOnLog: TSynLogProc;
+    fOnGetOneIdle: TOnPollSocketsIdle;
   public
     /// initialize the sockets polling
     // - under Linux/POSIX, will set the open files maximum number for the
@@ -556,6 +560,9 @@ type
     /// allow raw debugging via logs of the low-level process
     property OnLog: TSynLogProc
       read fOnLog write fOnLog;
+    /// callback called by GetOne when Idle
+    property OnGetOneIdle: TOnPollSocketsIdle
+      read fOnGetOneIdle write fOnGetOneIdle;
   published
     /// is set to true by the Terminate method
     property Terminated: boolean
@@ -1909,7 +1916,7 @@ end;
 function TPollSockets.GetOne(timeoutMS: integer;
   out notif: TPollSocketResult): boolean;
 var
-  start, endtix: Int64;
+  start, tix, endtix: Int64;
 begin
   // first check if some pending events are available
   result := GetOneWithinPending(notif);
@@ -1949,14 +1956,16 @@ begin
          (timeoutMS = 0) then
         exit;
       // wait a little for something to happen
+      tix := SleepStep(start, @fTerminated);
       if endtix = 0 then
-        endtix := GetTickCount64 + timeoutMS;
-      SleepStep(start, @fTerminated);
+        endtix := start + timeoutMS
+      else if Assigned(fOnGetOneIdle) then
+        fOnGetOneIdle(self, tix);
       if fTerminated then
         exit;
       result := GetOneWithinPending(notif); // retrieved from another thread?
     until result or
-          (GetTickCount64 > endtix);
+          (tix > endtix);
   finally
     LockedDec32(@fGettingOne);
   end;

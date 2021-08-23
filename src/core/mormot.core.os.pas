@@ -2214,10 +2214,11 @@ procedure SleepHiRes(ms: cardinal);
 
 /// call SleepHiRes() taking count of the activity, in 0/1/10/50/150 ms steps
 // - should reset start := 0 when some activity occured
-procedure SleepStep(var start: Int64; terminated: PBoolean = nil);
+// - returns the current GetTickCount64 value
+function SleepStep(var start: Int64; terminated: PBoolean = nil): Int64;
 
 /// compute optimal sleep time as SleepStep, in 0/1/10/50/150 ms steps
-function SleepStepTime(var start: Int64; endtix: PInt64 = nil): integer;
+function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): integer;
 
 /// low-level naming of a thread
 // - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
@@ -4019,10 +4020,9 @@ begin
   LeaveCriticalSection(GlobalCriticalSection);
 end;
 
-function SleepStepTime(var start: Int64; endtix: PInt64): integer;
+function SleepStepTime(var start, tix: Int64; endtix: PInt64): integer;
 var
   elapsed: PtrInt;
-  tix: Int64;
 begin
   tix := GetTickCount64;
   if start = 0 then
@@ -4045,18 +4045,19 @@ begin
     endtix^ := tix + result;
 end;
 
-procedure SleepStep(var start: Int64; terminated: PBoolean);
+function SleepStep(var start: Int64; terminated: PBoolean): Int64;
 var
   ms: integer;
   endtix: Int64;
 begin
-  ms := SleepStepTime(start, @endtix);
+  ms := SleepStepTime(start, result, @endtix);
   if ms < 10 then
     SleepHiRes(ms) // < 16 ms is a pious wish on Windows anyway
   else
     repeat
       SleepHiRes(10); // on Windows, HW clock resolution is around 16 ms
-    until (GetTickCount64 > endtix) or
+      result := GetTickCount64;
+    until (result > endtix) or
           ((terminated <> nil) and terminated^);
 end;
 

@@ -109,6 +109,7 @@ type
   TPollAsyncSockets = class
   protected
     fRead: TPollSockets;
+    // separated fWrite because its subscriptions are short-term
     fWrite: TPollSockets;
     fProcessingRead, fProcessingWrite: integer;
     fSendBufferSize: integer; // retrieved at first connection Start()
@@ -403,7 +404,7 @@ type
       Events: integer; Kind: TAsyncConnectionsThreadProcesses);
     procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject);
-    procedure ProcessIdleTix;
+    procedure ProcessIdleTix(Sender: TObject; NowTix: Int64);
     procedure IdleEverySecond(tix: Int64);
   public
     /// initialize the multiple connections
@@ -1318,6 +1319,7 @@ begin
     include(opt, paoWritePollOnly);
   fClients := TAsyncConnectionsSockets.Create(opt);
   fClients.fOwner := self;
+  fClients.fWrite.OnGetOneIdle := ProcessIdleTix;
   if Assigned(fLog) and
      (acoDebugReadWriteLog in aOptions) then
   begin
@@ -1653,19 +1655,15 @@ begin
   end;
 end;
 
-procedure TAsyncConnections.ProcessIdleTix;
-var
-  tix: Int64;
+procedure TAsyncConnections.ProcessIdleTix(Sender: TObject; NowTix: Int64);
 begin
-  if Terminated then
-    exit;
-  tix := mormot.core.os.GetTickCount64;
-  if tix >= fIdleTix then
-  begin
-    IdleEverySecond(tix);
-    // IdleEverySecond may take some time -> retrieve ticks again
-    fIdleTix := mormot.core.os.GetTickCount64 + 1000;
-  end;
+  if not Terminated then
+    if NowTix >= fIdleTix then
+    begin
+      IdleEverySecond(NowTix);
+      // IdleEverySecond may take some time -> retrieve ticks again
+      fIdleTix := mormot.core.os.GetTickCount64 + 1000;
+    end;
 end;
 
 
@@ -1783,7 +1781,6 @@ begin
           // this was a pseWrite notification -> try to send pending data
           // here connection = TObject(notif.tag)
           fClients.ProcessWrite(notif);
-      ProcessIdleTix;
     end;
   except
     on E: Exception do
@@ -1824,11 +1821,8 @@ begin
         // will first connect some clients in this main thread
         ThreadClientsConnect;
     while not Terminated do
-    begin
       if fClients.fWrite.GetOne(1000, notif) then
         fClients.ProcessWrite(notif);
-      ProcessIdleTix;
-    end;
     DoLog(sllInfo, 'Execute: done % C', [fProcessName], self);
   except
     on E: Exception do
