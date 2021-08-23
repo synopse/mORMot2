@@ -56,7 +56,7 @@
     <SearchPaths>
       <IncludeFiles Value="..\..\..\..\..\src;..\..\..\..\..\src\core;$(ProjOutDir)"/>
       <Libraries Value="..\..\..\..\..\static\$(TargetCPU)-$(TargetOS)"/>
-      <OtherUnitFiles Value="..\..\..\..\..\src;..\..\..\..\..\src\app;..\..\..\..\..\src\core;..\..\..\..\..\src\db;..\..\..\..\..\src\lib;..\..\..\..\..\src\net;..\..\..\..\..\src\orm;..\..\..\..\..\src\rest;..\..\..\..\..\src\soa"/>
+      <OtherUnitFiles Value="..\..\..\..\..\src;..\..\..\..\..\src\app;..\..\..\..\..\src\core;..\..\..\..\..\src\crypt;..\..\..\..\..\src\db;..\..\..\..\..\src\lib;..\..\..\..\..\src\net;..\..\..\..\..\src\orm;..\..\..\..\..\src\rest;..\..\..\..\..\src\soa"/>
       <UnitOutputDirectory Value="..\lib\fpc\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>
@@ -81,16 +81,7 @@
 -dVer150
 -dDelphi7
 -dCompiler6_Up
--dPUREPASCAL
 -dPUREMORMOT2"/>
-      <OtherDefines Count="6">
-        <Define0 Value="Borland"/>
-        <Define1 Value="Ver150"/>
-        <Define2 Value="Delphi7"/>
-        <Define3 Value="Compiler6_Up"/>
-        <Define4 Value="PUREPASCAL"/>
-        <Define5 Value="PUREMORMOT2"/>
-      </OtherDefines>
     </Other>
   </CompilerOptions>
   <Debugging>
