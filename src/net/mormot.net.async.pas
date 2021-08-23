@@ -9,6 +9,7 @@ unit mormot.net.async;
    Event-Driven Network Classes and Functions
    - Low-Level Non-blocking Connections
    - Client or Server Asynchronous Process
+   - THttpAsyncServer Event-Driven HTTP Server
 
   *****************************************************************************
 
@@ -25,10 +26,13 @@ uses
   mormot.core.os,
   mormot.core.data,
   mormot.core.text,
+  mormot.core.unicode,
   mormot.core.buffers,
   mormot.core.threads,
   mormot.core.log,
   mormot.core.rtti,
+  mormot.core.perf,
+  mormot.core.zip,
   mormot.net.sock,
   mormot.net.http,
   mormot.net.server; // for multi-threaded process
@@ -138,7 +142,7 @@ type
     function OnError(connection: TObject; events: TPollSocketEvents): boolean;
       virtual; abstract;
     procedure UnlockSlotAndCloseConnection(slot: PPPollSocketsSlot;
-      var connection: TObject);
+      var connection: TObject; const caller: shortstring);
   public
     /// initialize the read/write sockets polling
     // - fRead and fWrite TPollSocketsBuffer instances will track pseRead or
@@ -146,7 +150,7 @@ type
     constructor Create(aOptions: TPollAsyncSocketsOptions); virtual;
     /// finalize buffer-oriented sockets polling, and release all used memory
     destructor Destroy; override;
-    /// assign a new connection to the internal poll
+    /// assign a new connection to the internal reading poll
     // - the TSocket handle will be retrieved via SlotFromConnection, and
     // set in non-blocking mode from now on - it is not recommended to access
     // it directly any more, but use Write() and handle OnRead() callback
@@ -234,6 +238,7 @@ type
     fLastOperation: cardinal;
     fSlot: TPollSocketsSlot;
     fRemoteIP: RawUtf8;
+    fRemoteConnID: THttpServerConnectionID;
     /// this method is called when the instance is connected to a poll
     procedure AfterCreate(Sender: TAsyncConnections); virtual;
     /// this method is called when the some input data is pending on the socket
@@ -488,7 +493,7 @@ type
   // for server process
   TAsyncServer = class(TAsyncConnections)
   protected
-    fServer: TCrtSocket;
+    fServer: TCrtSocket; // for proper complex binding
     fExecuteFinished: boolean;
     procedure Execute; override;
   public
@@ -557,7 +562,65 @@ const
     acoDebugReadWriteLog];
 
 
+{ ******************** THttpAsyncServer Event-Driven HTTP Server }
+
+type
+  /// exception associated with Event-Driven HTTP Server process
+  EHttpAsyncConnections = class(EAsyncConnections);
+
+  THttpAsyncServer = class;
+  THttpAsyncConnections = class;
+
+  /// handle one HTTP client connection to our non-blocking THttpAsyncServer
+  THttpAsyncConnection = class(TAsyncConnection)
+  protected
+    fHttp: THttpRequestContext;
+    fServer: THttpAsyncServer;
+    procedure HttpInit;
+    procedure AfterCreate(Sender: TAsyncConnections); override;
+    // redirect to fHttp.ProcessRead()
+    function OnRead(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
+      override;
+    // redirect to fHttp.ProcessWrite()
+    function AfterWrite(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
+      override;
+    function DoHeaders: TPollAsyncSocketOnReadWrite;
+    function DoRequest: TPollAsyncSocketOnReadWrite;
+  public
+  end;
+
+  /// event-driven process of HTTP/WebSockets connections
+  THttpAsyncConnections = class(TAsyncServer)
+  protected
+    fAsyncServer: THttpAsyncServer;
+  end;
+
+  /// HTTP server using non-blocking sockets
+  THttpAsyncServer = class(THttpServerSocketGeneric)
+  private
+    function GetRegisterCompressGzStatic: boolean;
+    procedure SetRegisterCompressGzStatic(Value: boolean);
+  protected
+    fAsync: THttpAsyncConnections;
+    fCompressGz: integer;
+  public
+    /// create a socket-based HTTP Server, ready to be bound and listening on a port
+    constructor Create(const aPort: RawUtf8;
+      const OnStart, OnStop: TOnNotifyThread;
+      const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
+      KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
+      CreateSuspended: boolean = false); override;
+    /// if we should search for local .gz cache when serving static files
+    property RegisterCompressGzStatic: boolean
+      read GetRegisterCompressGzStatic write SetRegisterCompressGzStatic;
+    /// direct access to the internal high-performance TCP server
+    property Async: THttpAsyncConnections
+      read fAsync;
+  end;
+
+
 implementation
+
 
 { ******************** Low-Level Non-blocking Connections }
 
@@ -638,9 +701,10 @@ end;
 function TPollAsyncSockets.Start(connection: TObject): boolean;
 var
   slot: PPollSocketsSlot;
+  res: TNetResult;
 begin
   result := false;
-  if (fRead.Terminated) or
+  if fRead.Terminated or
      (connection = nil) then
     exit;
   LockedInc32(@fProcessingRead);
@@ -649,8 +713,14 @@ begin
     if (slot = nil) or
        (slot.socket = nil) then
       exit;
-    if slot.socket.MakeAsync <> nrOK then
+    res := slot.socket.MakeAsync;
+    if res <> nrOK then
+    begin
+      if fDebugLog <> nil then
+        DoLog('Start: MakeAsync(%)=% %',
+          [PtrUInt(slot.socket), ToText(res)^, connection]);
       exit; // we expect non-blocking mode on a real working socket
+    end;
     if fSendBufferSize = 0 then
       fSendBufferSize := slot.socket.SendBufferSize;
     result := fRead.Subscribe(slot.socket, [pseRead], TPollSocketTag(connection));
@@ -801,7 +871,12 @@ begin
         if res = nrRetry then
           break; // fails now -> retry later in ProcessWrite
         if res <> nrOK then
+        begin
+          if fDebugLog <> nil then
+            DoLog('Write: Send(%)=% %',
+              [PtrUInt(slot.socket), ToText(res)^, connection]);
           exit;  // connection closed or broken -> abort
+        end;
         inc(P, sent);
         inc(fWriteCount);
         inc(fWriteBytes, sent);
@@ -817,6 +892,10 @@ begin
       // notify everything written - maybe call slot.wr.Append
       try
         result := AfterWrite(connection) = soContinue;
+        if (not result) and
+           (fDebugLog <> nil) then
+          DoLog('Write % closed by AfterWrite callback %',
+            [PtrUInt(slot.socket), connection]);
       except
         result := false;
       end;
@@ -837,7 +916,7 @@ begin
       slot.UnLock({writer=}true)
     else
       // sending or subscription error -> abort
-      UnlockSlotAndCloseConnection(@slot, connection);
+      UnlockSlotAndCloseConnection(@slot, connection, 'Write() finished');
     LockedDec32(@fProcessingWrite);
   end
   else
@@ -849,10 +928,10 @@ begin
 end;
 
 procedure TPollAsyncSockets.UnlockSlotAndCloseConnection(
-  slot: PPPollSocketsSlot; var connection: TObject);
+  slot: PPPollSocketsSlot; var connection: TObject; const caller: shortstring);
 begin
   if fDebugLog <> nil then
-    DoLog('UnlockSlotAndCloseConnection % %', [slot, connection]);
+    DoLog('UnlockSlotAndCloseConnection: % on % %', [caller, slot, connection]);
   if slot <> nil then
     slot^.UnLock({writer=}false); // Stop() will try to acquire this lock
   try
@@ -871,6 +950,7 @@ var
   slot: PPollSocketsSlot;
   recved, added: integer;
   res: TNetResult;
+  timer: TPrecisionTimer;
   temp: array[0..$7fff] of byte; // read up to 32KB per chunk
 begin
   result := false;
@@ -887,7 +967,7 @@ begin
     if pseError in notif.events then
       if not OnError(connection, notif.events) then
       begin
-        UnlockSlotAndCloseConnection(nil, connection);
+        UnlockSlotAndCloseConnection(nil, connection, 'ProcessRead error');
         exit;
       end;
     if pseRead in notif.events then
@@ -901,19 +981,18 @@ begin
             exit;
           recved := SizeOf(temp);
           if fDebugLog <> nil then
-            DoLog('ProcessRead recv(%) before %',
-              [PtrUInt(slot.socket), fRead]);
+            timer.Start;
           res := slot.socket.Recv(@temp, recved);
           if fDebugLog <> nil then
-            DoLog('ProcessRead recv(%)=% %B %',
-              [PtrUInt(slot.socket), ToText(res)^, recved, fRead]);
+            DoLog('ProcessRead recv(%)=% %B in % %',
+              [PtrUInt(slot.socket), ToText(res)^, recved, timer.Stop, fRead]);
           if slot.socket = nil then
             exit; // Stop() called
           if res = nrRetry then
             break; // may block, try later
           if res <> nrOk then
           begin
-            UnlockSlotAndCloseConnection(@slot, connection);
+            UnlockSlotAndCloseConnection(@slot, connection, 'ProcessRead Recv');
             exit; // socket closed gracefully or unrecoverable error -> abort
           end;
           slot.rd.Append(@temp, recved);
@@ -925,9 +1004,9 @@ begin
             inc(fReadCount);
             inc(fReadBytes, added);
             if OnRead(connection) = soClose then
-              UnlockSlotAndCloseConnection(@slot, connection);
+              UnlockSlotAndCloseConnection(@slot, connection, 'OnRead abort');
           except
-            UnlockSlotAndCloseConnection(@slot, connection); // shutdown socket
+            UnlockSlotAndCloseConnection(@slot, connection, 'ProcessRead except');
           end;
         slot.UnLock(false); // UnlockSlotAndCloseConnection may set slot=nil
       end
@@ -938,7 +1017,7 @@ begin
        (slot.socket <> nil) and
        (pseClosed in notif.events) then
     begin
-      UnlockSlotAndCloseConnection(nil, connection);
+      UnlockSlotAndCloseConnection(nil, connection, 'ProcessRead terminated');
       exit;
     end;
   finally
@@ -954,6 +1033,7 @@ var
   buflen, bufsent, sent: integer;
   res: TNetResult;
   b: boolean;
+  timer: TPrecisionTimer;
 begin
   if (self = nil) or
      fWrite.Terminated or
@@ -980,10 +1060,12 @@ begin
              (slot.socket = nil) then
             exit;
           bufsent := buflen;
+          if fDebugLog <> nil then
+            timer.Start;
           res := slot.socket.Send(buf, bufsent);
           if fDebugLog <> nil then
-            DoLog('ProcessWrite send(%)=% %B %',
-              [PtrUInt(slot.socket), ToText(res)^, bufsent, fWrite]);
+            DoLog('ProcessWrite send(%)=% %B in % %',
+              [PtrUInt(slot.socket), ToText(res)^, bufsent, timer.Stop, fWrite]);
           if slot.socket = nil then
             exit; // Stop() called
           if res = nrRetry then
@@ -1010,6 +1092,9 @@ begin
         try
           if AfterWrite(connection) <> soContinue then
           begin
+            if fDebugLog <> nil then
+              DoLog('ProcessWrite % closed by AfterWrite callback %',
+                [PtrUInt(slot.socket), connection]);
             slot.wr.Clear;
             res := nrClosed;
           end;
@@ -1018,7 +1103,7 @@ begin
         end;
         if slot.wr.Len = 0 then
         begin
-          // no further ProcessWrite unless if slot.wr contains data
+          // no further ProcessWrite unless slot.wr contains pending data
           b := fWrite.Unsubscribe(slot.socket, notif.tag);
           if fDebugLog <> nil then
             DoLog('Write Unsubscribe(%,%)=% %',
@@ -1030,7 +1115,7 @@ begin
         slot.UnLock(true)
       else
         // sending error or AfterWrite abort
-        UnlockSlotAndCloseConnection(@slot, connection);
+        UnlockSlotAndCloseConnection(@slot, connection, 'ProcessWrite');
     end
     // if already locked (unlikely) -> will try next time
     else if fDebugLog <> nil then
@@ -1076,19 +1161,21 @@ function TAsyncConnection.ReleaseMemoryOnIdle: PtrInt;
 begin
   // after some inactivity, we can safely flush fSlot.rd/wr temporary buffers
   result := 0;
-  if fSlot.Lock({wr=}false) then
+  if (fSlot.rd.Buffer <> nil) and
+     fSlot.Lock({wr=}false) then
   begin
     inc(result, fSlot.rd.Capacity); // returns number of bytes released
     fSlot.rd.Clear;
     fSlot.UnLock(false);
   end;
-  if fSlot.Lock({wr=}true) then
+  if (fSlot.wr.Buffer <> nil) and
+     fSlot.Lock({wr=}true) then
   begin
     inc(result, fSlot.wr.Capacity);
     fSlot.wr.Clear;
     fSlot.UnLock(true);
   end;
-  fSlot.wasactive := false; // Lock() was with no true activity here
+  fSlot.wasactive := false; // fSlot.Lock() was with no true activity here
 end;
 
 function TAsyncConnection.AfterWrite(
@@ -1610,7 +1697,7 @@ begin
     exit;
   notified := 0;
   gced := 0;
-  now := Qword(tix) div 1000;
+  now := Qword(tix) div 1000; // we work at 32-bit second resolution here
   allowed := LastOperationIdleSeconds;
   if allowed <> 0 then
     allowed := now - allowed;
@@ -1627,21 +1714,24 @@ begin
         c.fSlot.wasactive := false;
         c.fLastOperation := now; // update once per second is good enough
       end
-      else if (gc <> 0) and
-              (c.fLastOperation < gc) then
-        inc(gced, c.ReleaseMemoryOnIdle)
-      else if (allowed <> 0) and
-              (c.fLastOperation < allowed) then
-        try
-          if {%H-}log = nil then
-            if acoVerboseLog in fOptions then
-              log := fLog.Enter(self, 'IdleEverySecond');
-          c.OnLastOperationIdle(self, now - c.fLastOperation);
-          inc(notified);
-          if Terminated then
-            break;
-        except
-        end;
+      else
+      begin
+        if (gc <> 0) and
+           (c.fLastOperation < gc) then
+          inc(gced, c.ReleaseMemoryOnIdle);
+        if (allowed <> 0) and
+           (c.fLastOperation < allowed) then
+          try
+            if {%H-}log = nil then
+              if acoVerboseLog in fOptions then
+                log := fLog.Enter(self, 'IdleEverySecond');
+            c.OnLastOperationIdle(self, now - c.fLastOperation);
+            inc(notified);
+            if Terminated then
+              break;
+          except
+          end;
+      end;
     end;
     if log <> nil then
       log.Log(sllTrace, 'IdleEverySecond % notified=% GC=%',
@@ -1713,18 +1803,10 @@ begin
   // Accept() incoming connections and Send() output packets in the background
   SetCurrentThreadName('AW %', [fProcessName]);
   NotifyThreadStart(self);
+  // constructor did bind fServer to the expected TCP port
   if fServer.Sock <> nil then
   try
-    // constructor did bind to the expected TCP port
-    {$ifdef OSLINUX}
-    // in case started by systemd (port=''), listening socket is created by
-    // another process and do not interrupt when it got a signal. So we need to
-    // set a timeout to unlock accept() periodically and check for termination
-    // - not needed with MakeAsync but we may switch to blocking in some place
-    if fServer.Port = '' then // external socket
-      fServer.ReceiveTimeout := 1000; // unblock accept every second
-    {$endif OSLINUX}
-    // make Accept() be non-blocking
+    // make Accept() non-blocking (and therefore also systemd-ready)
     if not fServer.SockIsDefined or // paranoid (Bind would have raise an exception)
        (fServer.Sock.MakeAsync <> nrOK) then
       raise EAsyncConnections.CreateUtf8(
@@ -1752,8 +1834,6 @@ begin
               // failure (too many clients?) -> wait and retry
               DoLog(sllWarning, 'Execute: Accept(%) failed as %',
                 [fServer.Port, ToText(res)^], self);
-              {raise EAsyncConnections.CreateUtf8('%.Execute: Accept failed as %',
-                [self, ToText(res)^]);}
               SleepStep(start, @Terminated);
               continue;
             end;
@@ -1830,6 +1910,223 @@ begin
         [E.ClassType, fProcessName], self);
   end;
 end;
+
+
+{ ******************** THttpAsyncServer Event-Driven HTTP Server }
+
+{ THttpAsyncConnection }
+
+procedure THttpAsyncConnection.AfterCreate(Sender: TAsyncConnections);
+begin
+  HttpInit;
+  fServer := (Sender as THttpAsyncConnections).fAsyncServer;
+  if fServer.HeadersUnFiltered then
+    include(fHttp.Options, hroHeadersUnfiltered);
+end;
+
+procedure THttpAsyncConnection.HttpInit;
+begin
+  fHttp.ProcessInit({instream=}nil); // ready to process this HTTP request
+end;
+
+function THttpAsyncConnection.OnRead(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
+begin
+  if Sender.fClients = nil then
+    fHttp.State := hrsErrorMisuse
+  else
+  begin
+    // use the HTTP machine state to parse fSlot.rd input
+    fHttp.ProcessRead(fSlot.rd.Buffer, fSlot.rd.Len);
+    fSlot.rd.Reset;
+  end;
+  // compute next step
+  case fHttp.State of
+    hrsGetCommand,
+    hrsGetHeaders,
+    hrsGetBodyChunkedHexNext,
+    hrsGetBodyChunkedData,
+    hrsGetBodyChunkedDataVoidLine,
+    hrsGetBodyChunkedDataLastLine:
+      // async receiving phase
+      result := soContinue;
+    hrsGetBodyChunkedHexFirst,
+    hrsGetBodyContentLength:
+      // we just received all command + headers
+      result := DoHeaders;
+    hrsWaitProcessing:
+      // calls the (blocking) HTTP request processing callback
+      result := DoRequest;
+  else
+    begin
+      Sender.DoLog(sllWarning, 'OnRead: unexpected %',
+        [ToText(fHttp.State)^], self);
+      result := soClose
+    end;
+  end;
+end;
+
+function THttpAsyncConnection.AfterWrite(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
+begin
+  if Sender.fClients = nil then
+    fHttp.State := hrsErrorMisuse;
+  // compute next step
+  case fHttp.State of
+    hrsSendHeaders,
+    hrsSendBody:
+      begin
+        // async command+headers+body send phase
+        // use the HTTP machine state to fill fSlot.wr with outgoing data
+        fHttp.ProcessWrite(fSlot.wr, Sender.fClients.fSendBufferSize);
+        result := soContinue;
+      end;
+    hrsResponseDone:
+      // all outgoing data was all sent
+      if hfConnectionClose in fHttp.HeaderFlags then
+        // connection: close -> shutdown and clear the connection
+        result := soClose
+      else
+      begin
+        // kept alive conenction -> reset the HTTP parser and continue
+        fHttp.ProcessInit({instream=}nil);
+        result := soContinue;
+      end;
+  else
+    begin
+      Sender.DoLog(sllWarning, 'AfterWrite: unexpected %',
+        [ToText(fHttp.State)^], self);
+      result := soClose;
+    end;
+  end;
+end;
+
+function THttpAsyncConnection.DoHeaders: TPollAsyncSocketOnReadWrite;
+var
+  status: integer;
+begin
+  // finalize the headers
+  result := soClose;
+  if (nfHeadersParsed in fHttp.HeaderFlags) or
+     not fHttp.ParseCommandAndHeader then
+    exit;
+  fServer.ParseRemoteIPConnID(fHttp.Headers,
+    fRemoteIP, fRemoteConnID);
+  // immediate reject of clearly invalid requests
+  status := HTTP_SUCCESS;
+  if Assigned(fServer.OnBeforeBody) then
+    status := fServer.OnBeforeBody(
+      fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers,
+      fHttp.ContentType, fRemoteIP, fHttp.BearerToken,
+      fHttp.ContentLength, {notls=}[]);
+  if status = HTTP_SUCCESS then
+    if (fServer.MaximumAllowedContentLength > 0) and
+       (fHttp.ContentLength > fServer.MaximumAllowedContentLength) then
+      status := HTTP_PAYLOADTOOLARGE; // 413
+  if status <> HTTP_SUCCESS then
+  begin
+    // on fatal error direct reject and close the connection
+    // (use fHttp.Command* as temp variables to avoid local RawUtf8 allocation)
+    StatusCodeToReason(status, fHttp.Command);
+    FormatUtf8('HTTP/1.0 % %'#13#10#13#10'Server Rejected Request as % %',
+      [status, fHttp.Command, status, fHttp.Command],
+      fHttp.CommandUri);
+    fServer.fAsync.fClients.WriteString(self, fHttp.CommandUri); // no send polling
+    exit;
+  end;
+  // now THttpAsyncConnection.OnRead can get the body
+  if (fHttp.State <> hrsWaitProcessing) and
+     (IdemPCharArray(pointer(fHttp.CommandMethod), ['HEAD', 'OPTIONS']) < 0) then
+    // HEAD and OPTIONS have Content-Length but no body
+    result := DoRequest
+  else
+    result := soContinue;
+end;
+
+function THttpAsyncConnection.DoRequest: TPollAsyncSocketOnReadWrite;
+var
+  req: THttpServerRequest;
+  cod: integer;
+  err: string;
+begin
+  // check the status
+  if not (nfHeadersParsed in fHttp.HeaderFlags) then
+  begin
+    // content-length was 0, so hrsGetBody* and DoHeaders() were not called
+    result := DoHeaders;
+    if result <> soContinue then
+      exit; // rejected
+  end;
+  // compute the HTTP/REST process
+  result := soClose;
+  req := THttpServerRequest.Create(fServer, fRemoteConnID, {thread=}nil, []);
+  try
+    req.Prepare(fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers,
+      fHttp.Content, fHttp.ContentType, fRemoteIP);
+    try
+      req.RespStatus := fServer.DoBeforeRequest(req);
+      if req.RespStatus > 0 then
+        FormatString('Rejected % Request', [fHttp.CommandUri], err)
+      else
+      begin
+        // execute the main processing callback
+        req.RespStatus := fServer.Request(req);
+        cod := fServer.DoAfterRequest(req);
+        if cod > 0 then
+          req.RespStatus := cod;
+      end;
+      result := soContinue;
+    except
+      on E: Exception do
+        begin
+          // intercept and return Internal Server Error 500
+          FormatString('%: %', [E, E.Message], err);
+          req.RespStatus := HTTP_SERVERERROR;
+          // will keep soClose as result to shutdown the connection
+        end;
+    end;
+    // prepare the response for the HTTP state machine
+    req.SetupResponse(fHttp, fServer.ServerName, err,
+      fServer.OnSendFile, fServer.fCompressGz);
+    fServer.DoAfterResponse(req, req.RespStatus);
+  finally
+    req.Free;
+  end;
+  // now we can send the response
+  if result <> soContinue then
+  begin
+    // send error response at once with no polling, just before socket shutdown
+    fHttp.Head.Append(fHttp.Content);
+    fServer.fAsync.fClients.Write(self, fHttp.Head.Buffer^, fHttp.Head.Len);
+  end;
+end;
+
+
+{ THttpAsyncServer }
+
+constructor THttpAsyncServer.Create(const aPort: RawUtf8; const OnStart,
+  OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+  ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
+  aHeadersUnFiltered: boolean; CreateSuspended: boolean);
+begin
+  fCompressGz := -1;
+  inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
+    KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended);
+end;
+
+function THttpAsyncServer.GetRegisterCompressGzStatic: boolean;
+begin
+  result := fCompressGz >= 0;
+end;
+
+procedure THttpAsyncServer.SetRegisterCompressGzStatic(Value: boolean);
+begin
+  if Value then
+    fCompressGz := CompressIndex(fCompress, @CompressGzip)
+  else
+    fCompressGz := -1;
+end;
+
+
+
 
 
 end.

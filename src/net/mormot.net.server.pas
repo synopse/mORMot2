@@ -69,6 +69,10 @@ type
     procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
       const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8);
         override;
+    /// prepare one reusable HTTP State Machine for sending the response
+    procedure SetupResponse(var Context: THttpRequestContext;
+      const ServerName: RawUtf8; const ErrorMessage: string;
+      const OnSendFile: TOnHttpServerSendFile; CompressGz: integer);
     {$ifdef OSWINDOWS}
     /// input parameter containing the caller Full URL
     property FullURL: SynUnicode
@@ -179,6 +183,9 @@ type
     // - the first registered algorithm will be the prefered one for compression
     procedure RegisterCompress(aFunction: THttpSocketCompress;
       aCompressMinSize: integer = 1024); virtual;
+    /// low-level server-side parsing of the headers to extract remote info
+    procedure ParseRemoteIPConnID(const Headers: RawUtf8;
+      var RemoteIP: RawUtf8; var RemoteConnID: THttpServerConnectionID);
     /// you can call this method to prepare the HTTP server for shutting down
     procedure Shutdown;
     /// event handler called by the default implementation of the
@@ -460,61 +467,20 @@ type
   // - used to override THttpServerSocket.GetRequest for instance
   THttpServerSocketClass = class of THttpServerSocket;
 
-  /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
-  // - bind to a port and listen to incoming requests
-  // - assign this requests to THttpServerResp threads from a ThreadPool
-  // - it implements a HTTP/1.1 compatible server, according to RFC 2068 specifications
-  // - if the client is also HTTP/1.1 compatible, KeepAlive connection is handled:
-  //  multiple requests will use the existing connection and thread;
-  //  this is faster and uses less resources, especialy under Windows
-  // - a Thread Pool is used internally to speed up HTTP/1.0 connections - a
-  // typical use, under Linux, is to run this class behind a NGINX frontend,
-  // configured as https reverse proxy, leaving default "proxy_http_version 1.0"
-  // and "proxy_request_buffering on" options for best performance, and
-  // setting KeepAliveTimeOut=0 in the THttpServer.Create constructor
-  // - under windows, will trigger the firewall UAC popup at first run
-  // - don't forget to use Free method when you are finished
-  THttpServer = class(THttpServerGeneric)
+  /// abstract parent class for both THttpServer and THttpAsyncServer
+  THttpServerSocketGeneric = class(THttpServerGeneric)
   protected
-    /// used to protect Process() call, e.g. fInternalHttpServerRespList
-    fProcessCS: TRTLCriticalSection;
-    fHeaderRetrieveAbortDelay: integer;
-    fThreadPool: TSynThreadPoolTHttpServer;
-    fInternalHttpServerRespList: TSynList;
-    fServerConnectionCount: integer;
-    fServerConnectionActive: integer;
     fServerKeepAliveTimeOut: cardinal;
-    fSockPort: RawUtf8;
-    fSock: TCrtSocket;
+    fStats: array[THttpServerSocketGetRequestResult] of integer;
     fOnSendFile: TOnHttpServerSendFile;
     fNginxSendFileFrom: array of TFileName;
-    fHttpQueueLength: cardinal;
-    fExecuteState: (esNotStarted, esBinding, esRunning, esFinished);
-    fStats: array[THttpServerSocketGetRequestResult] of integer;
-    fSocketClass: THttpServerSocketClass;
-    fThreadRespClass: THttpServerRespClass;
+    fSockPort: RawUtf8;
     fHeadersUnFiltered: boolean;
-    fExecuteMessage: string;
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
-    function GetHttpQueueLength: cardinal; override;
-    procedure SetHttpQueueLength(aValue: cardinal); override;
-    procedure InternalHttpServerRespListAdd(resp: THttpServerResp);
-    procedure InternalHttpServerRespListRemove(resp: THttpServerResp);
     function OnNginxAllowSend(Context: THttpServerRequestAbstract;
       const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetApiVersion: RawUtf8; override;
-    /// server main loop - don't change directly
-    procedure Execute; override;
-    /// this method is called on every new client connection, i.e. every time
-    // a THttpServerResp thread is created with a new incoming socket
-    procedure OnConnect; virtual;
-    /// this method is called on every client disconnection to update stats
-    procedure OnDisconnect; virtual;
-    /// override this function in order to low-level process the request;
-    // default process is to get headers, and call public function Request
-    procedure Process(ClientSock: THttpServerSocket;
-      ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread); virtual;
   public
     /// create a Server Thread, ready to be bound and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -538,17 +504,6 @@ type
       const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
       KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
       CreateSuspended: boolean = false); reintroduce; virtual;
-    /// ensure the HTTP server thread is actually bound to the specified port
-    // - TCrtSocket.Bind() occurs in the background in the Execute method: you
-    // should call and check this method result just after THttpServer.Create
-    // - initial THttpServer design was to call Bind() within Create, which
-    // works fine on Delphi + Windows, but fails with a EThreadError on FPC/Linux
-    // - raise a EHttpServer if binding failed within the specified period (if
-    // port is free, it would be almost immediate)
-    // - calling this method is optional, but if the background thread didn't
-    // actually bind the port, the server will be stopped and unresponsive with
-    // no explicit error message, until it is terminated
-    procedure WaitStarted(Seconds: integer = 30); virtual;
     /// enable NGINX X-Accel internal redirection for STATICFILE_CONTENT_TYPE
     // - will define internally a matching OnSendFile event handler
     // - generating "X-Accel-Redirect: " header, trimming any supplied left
@@ -561,53 +516,20 @@ type
     // $ }
     // - call this method several times to register several folders
     procedure NginxSendFileFrom(const FileNameLeftTrim: TFileName);
-    /// release all memory and handlers
-    destructor Destroy; override;
     /// by default, only relevant headers are added to internal headers list
     // - for instance, Content-Length, Content-Type and Content-Encoding are
     // stored as fields in this THttpSocket, but not included in its Headers[]
     // - set this property to true to include all incoming headers
     property HeadersUnFiltered: boolean
       read fHeadersUnFiltered;
-    /// access to the main server low-level Socket
-    // - it's a raw TCrtSocket, which only need a socket to be bound, listening
-    // and accept incoming request
-    // - THttpServerSocket are created on the fly for every request, then
-    // a THttpServerResp thread is created for handling this THttpServerSocket
-    property Sock: TCrtSocket
-      read fSock;
     /// custom event handler used to send a local file for STATICFILE_CONTENT_TYPE
     // - see also NginxSendFileFrom() method
     property OnSendFile: TOnHttpServerSendFile
       read fOnSendFile write fOnSendFile;
   published
-    /// will contain the current number of connections to the server
-    property ServerConnectionActive: integer
-      read fServerConnectionActive write fServerConnectionActive;
-    /// will contain the total number of connections to the server
-    // - it's the global count since the server started
-    property ServerConnectionCount: integer
-      read fServerConnectionCount write fServerConnectionCount;
-    /// time, in milliseconds, for the HTTP/1.1 connections to be kept alive
-    // - default is 30000 ms, i.e. 30 seconds
-    // - setting 0 here (or in KeepAliveTimeOut constructor parameter) will
-    // disable keep-alive, and fallback to HTTP.1/0 for all incoming requests
-    // (may be a good idea e.g. behind a NGINX reverse proxy)
-    // - see THttpApiServer.SetTimeOutLimits(aIdleConnection) parameter
-    property ServerKeepAliveTimeOut: cardinal
-      read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
     /// the bound TCP port, as specified to Create() constructor
-    // - TCrtSocket.Bind() occurs in the Execute method
     property SockPort: RawUtf8
       read fSockPort;
-    /// the associated thread pool
-    // - may be nil if ServerThreadPoolCount was 0 on constructor
-    property ThreadPool: TSynThreadPoolTHttpServer
-      read fThreadPool;
-    /// milliseconds delay to reject a connection due to too long header retrieval
-    // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
-    property HeaderRetrieveAbortDelay: integer
-      read fHeaderRetrieveAbortDelay write fHeaderRetrieveAbortDelay;
     /// how many invalid HTTP headers have been rejected
     property StatHeaderErrors: integer
       index grError read GetStat;
@@ -633,6 +555,103 @@ type
     // - e.g. for background WebSockets processing after proper upgrade
     property StatOwnedConnections: integer
       index grOwned read GetStat;
+  end;
+
+  /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
+  // - bind to a port and listen to incoming requests
+  // - assign this requests to THttpServerResp threads from a ThreadPool
+  // - it implements a HTTP/1.1 compatible server, according to RFC 2068 specifications
+  // - if the client is also HTTP/1.1 compatible, KeepAlive connection is handled:
+  //  multiple requests will use the existing connection and thread;
+  //  this is faster and uses less resources, especialy under Windows
+  // - a Thread Pool is used internally to speed up HTTP/1.0 connections - a
+  // typical use, under Linux, is to run this class behind a NGINX frontend,
+  // configured as https reverse proxy, leaving default "proxy_http_version 1.0"
+  // and "proxy_request_buffering on" options for best performance, and
+  // setting KeepAliveTimeOut=0 in the THttpServer.Create constructor
+  // - under windows, will trigger the firewall UAC popup at first run
+  // - don't forget to use Free method when you are finished
+  THttpServer = class(THttpServerSocketGeneric)
+  protected
+    /// used to protect Process() call, e.g. fInternalHttpServerRespList
+    fProcessCS: TRTLCriticalSection;
+    fHeaderRetrieveAbortDelay: integer;
+    fThreadPool: TSynThreadPoolTHttpServer;
+    fInternalHttpServerRespList: TSynList;
+    fSock: TCrtSocket;
+    fHttpQueueLength: cardinal;
+    fExecuteState: (esNotStarted, esBinding, esRunning, esFinished);
+    fSocketClass: THttpServerSocketClass;
+    fThreadRespClass: THttpServerRespClass;
+    fExecuteMessage: string;
+    fServerConnectionCount: integer;
+    fServerConnectionActive: integer;
+    function GetHttpQueueLength: cardinal; override;
+    procedure SetHttpQueueLength(aValue: cardinal); override;
+    procedure InternalHttpServerRespListAdd(resp: THttpServerResp);
+    procedure InternalHttpServerRespListRemove(resp: THttpServerResp);
+    /// server main loop - don't change directly
+    procedure Execute; override;
+    /// this method is called on every new client connection, i.e. every time
+    // a THttpServerResp thread is created with a new incoming socket
+    procedure OnConnect; virtual;
+    /// this method is called on every client disconnection to update stats
+    procedure OnDisconnect; virtual;
+    /// override this function in order to low-level process the request;
+    // default process is to get headers, and call public function Request
+    procedure Process(ClientSock: THttpServerSocket;
+      ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread); virtual;
+  public
+    /// create a socket-based HTTP Server, ready to be bound and listening on a port
+    constructor Create(const aPort: RawUtf8;
+      const OnStart, OnStop: TOnNotifyThread;
+      const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
+      KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
+      CreateSuspended: boolean = false); override;
+    /// ensure the HTTP server thread is actually bound to the specified port
+    // - TCrtSocket.Bind() occurs in the background in the Execute method: you
+    // should call and check this method result just after THttpServer.Create
+    // - initial THttpServer design was to call Bind() within Create, which
+    // works fine on Delphi + Windows, but fails with a EThreadError on FPC/Linux
+    // - raise a EHttpServer if binding failed within the specified period (if
+    // port is free, it would be almost immediate)
+    // - calling this method is optional, but if the background thread didn't
+    // actually bind the port, the server will be stopped and unresponsive with
+    // no explicit error message, until it is terminated
+    procedure WaitStarted(Seconds: integer = 30); virtual;
+    /// release all memory and handlers
+    destructor Destroy; override;
+    /// access to the main server low-level Socket
+    // - it's a raw TCrtSocket, which only need a socket to be bound, listening
+    // and accept incoming request
+    // - THttpServerSocket are created on the fly for every request, then
+    // a THttpServerResp thread is created for handling this THttpServerSocket
+    property Sock: TCrtSocket
+      read fSock;
+  published
+    /// will contain the current number of connections to the server
+    property ServerConnectionActive: integer
+      read fServerConnectionActive write fServerConnectionActive;
+    /// will contain the total number of connections to the server
+    // - it's the global count since the server started
+    property ServerConnectionCount: integer
+      read fServerConnectionCount write fServerConnectionCount;
+    /// time, in milliseconds, for the HTTP/1.1 connections to be kept alive
+    // - default is 30000 ms, i.e. 30 seconds
+    // - setting 0 here (or in KeepAliveTimeOut constructor parameter) will
+    // disable keep-alive, and fallback to HTTP.1/0 for all incoming requests
+    // (may be a good idea e.g. behind a NGINX reverse proxy)
+    // - see THttpApiServer.SetTimeOutLimits(aIdleConnection) parameter
+    property ServerKeepAliveTimeOut: cardinal
+      read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
+    /// the associated thread pool
+    // - may be nil if ServerThreadPoolCount was 0 on constructor
+    property ThreadPool: TSynThreadPoolTHttpServer
+      read fThreadPool;
+    /// milliseconds delay to reject a connection due to too long header retrieval
+    // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
+    property HeaderRetrieveAbortDelay: integer
+      read fHeaderRetrieveAbortDelay write fHeaderRetrieveAbortDelay;
   end;
 
 
@@ -1236,6 +1255,82 @@ begin
   fOutCustomHeaders := '';
 end;
 
+procedure THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
+  const ServerName: RawUtf8; const ErrorMessage: string;
+  const OnSendFile: TOnHttpServerSendFile; CompressGz: integer);
+var
+  P, PEnd: PUtf8Char;
+  len: PtrInt;
+  reason: RawUtf8;
+  fn: TFileName;
+  err: string;
+begin
+  // note: caller should have set hfConnectionClose in Context.HeaderFlags
+  err := ErrorMessage;
+  // process content
+  Context.ContentLength := 0;
+  if OutContentType = NORESPONSE_CONTENT_TYPE then
+    OutContentType := '' // true HTTP always expects a response
+  else if (OutContent <> '') and
+          (OutContentType = STATICFILE_CONTENT_TYPE) then
+  begin
+    ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
+    Utf8ToFileName(OutContent, fn);
+    if not Assigned(OnSendFile) or
+       not OnSendFile(self, fn) then
+      if not Context.ContentFromFile(fn, CompressGz) then
+      begin
+        FormatString('Impossible to find %', [fn], err);
+        fRespStatus := HTTP_NOTFOUND;
+      end;
+  end;
+  StatusCodeToReason(fRespStatus, reason);
+  if err <> '' then
+  begin
+    OutCustomHeaders := '';
+    OutContentType := 'text/html; charset=utf-8'; // create message to display
+    OutContent := FormatUtf8('<body style="font-family:verdana">'#10 +
+      '<h1>% Server Error %</h1><hr><p>HTTP % %<p>%<p><small>' + XPOWEREDVALUE,
+      [ServerName, fRespStatus, fRespStatus, reason, HtmlEscapeString(err)]);
+  end;
+  // append Command
+  Context.Head.Reset;
+  if hfConnectionClose in Context.HeaderFlags then
+    Context.Head.Append('HTTP/1.0 ')
+  else
+    Context.Head.Append('HTTP/1.1 ');
+  Context.Head.Append([fRespStatus, ' ', reason], {crlf=}true);
+  // custom headers from Request() method
+  P := pointer(OutCustomHeaders);
+  if P <> nil then
+  begin
+    PEnd := P + length(OutCustomHeaders);
+    repeat
+      len := BufferLineLength(P, PEnd);
+      if len > 0 then // no void line (means headers ending)
+      begin
+        if IdemPChar(P, 'CONTENT-ENCODING:') then
+          // custom encoding: don't compress
+          integer(Context.CompressAcceptHeader) := 0;
+        Context.Head.Append(P, len, {crlf=}true); // normalize CR/LF endings
+        inc(P, len);
+      end;
+      while P^ in [#10, #13] do
+        inc(P);
+    until P^ = #0;
+  end;
+  // generic headers
+  Context.Head.Append('Server: ');
+  Context.Head.Append(ServerName, {crlf=}true);
+  {$ifndef NOXPOWEREDNAME}
+  Context.Head.Append(XPOWEREDNAME + ': ' + XPOWEREDVALUE, true);
+  {$endif NOXPOWEREDNAME}
+  Context.Content := OutContent;
+  Context.ContentType := OutContentType;
+  Context.CompressContentAndFinalizeHead;
+  // now Context.Head is ready and Context.ProcessWrite should be called
+end;
+
 
 
 { TServerGeneric }
@@ -1311,6 +1406,29 @@ function THttpServerGeneric.{%H-}Callback(Ctxt: THttpServerRequest;
 begin
   raise EHttpServer.CreateUtf8('%.Callback is not implemented: try to use ' +
     'another communication protocol, e.g. WebSockets', [self]);
+end;
+
+procedure THttpServerGeneric.ParseRemoteIPConnID(const Headers: RawUtf8;
+  var RemoteIP: RawUtf8; var RemoteConnID: THttpServerConnectionID);
+var
+  P: PUtf8Char;
+begin
+  if self = nil then // = nil e.g. from TRtspOverHttpServer
+    exit;
+  // real Internet IP (replace RemoteIP='127.0.0.1' from a proxy)
+  if fRemoteIPHeaderUpper <> '' then
+    FindNameValue(Headers, pointer(fRemoteIPHeaderUpper),
+      RemoteIP, {keepnotfound=}true);
+  // real proxy connection ID
+  if fRemoteConnIDHeaderUpper <> '' then
+  begin
+    P := FindNameValue(pointer(Headers), pointer(fRemoteConnIDHeaderUpper));
+    if P <> nil then
+      SetQWord(P, PQWord(@RemoteConnID)^);
+  end;
+  if RemoteConnID = 0 then
+    // fallback to 31-bit sequence
+    RemoteConnID := NextConnectionID;
 end;
 
 procedure THttpServerGeneric.SetServerName(const aName: RawUtf8);
@@ -1398,6 +1516,78 @@ end;
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
 
+{ THttpServerSocketGeneric }
+
+function THttpServerSocketGeneric.GetApiVersion: RawUtf8;
+begin
+  result := SocketApiVersion;
+end;
+
+constructor THttpServerSocketGeneric.Create(const aPort: RawUtf8;
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+  ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
+  aHeadersUnFiltered: boolean; CreateSuspended: boolean);
+begin
+  fSockPort := aPort;
+  fServerKeepAliveTimeOut := KeepAliveTimeOut; // 30 seconds by default
+  // event handlers set before inherited Create to be visible in childs
+  fOnHttpThreadStart := OnStart;
+  SetOnTerminate(OnStop);
+  fProcessName := ProcessName; // TSynThreadPoolTHttpServer needs it now
+  fHeadersUnFiltered := aHeadersUnFiltered;
+  inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
+end;
+
+function THttpServerSocketGeneric.GetStat(
+  one: THttpServerSocketGetRequestResult): integer;
+begin
+  result := fStats[one];
+end;
+
+function THttpServerSocketGeneric.OnNginxAllowSend(
+  Context: THttpServerRequestAbstract; const LocalFileName: TFileName): boolean;
+var
+  match, i, f: PtrInt;
+  folderlefttrim: ^TFileName;
+begin
+  match := 0;
+  folderlefttrim := pointer(fNginxSendFileFrom);
+  if LocalFileName <> '' then
+    for f := 1 to length(fNginxSendFileFrom) do
+    begin
+      match := length(folderlefttrim^);
+      for i := 1 to match do // case sensitive left search
+        if LocalFileName[i] <> folderlefttrim^[i] then
+        begin
+          match := 0;
+          break;
+        end;
+      if match <> 0 then
+        break; // found matching folderlefttrim
+      inc(folderlefttrim);
+    end;
+  result := match <> 0;
+  if not result then
+    exit; // no match -> manual send
+  Context.OutContent :=
+    copy(Context.OutContent, match + 1, 1024); // remove '/var/www'
+  Context.OutCustomHeaders := TrimU(Context.OutCustomHeaders + #13#10 +
+    'X-Accel-Redirect: ' + Context.OutContent);
+  Context.OutContent := '';
+end;
+
+procedure THttpServerSocketGeneric.NginxSendFileFrom(
+  const FileNameLeftTrim: TFileName);
+var
+  n: PtrInt;
+begin
+  n := length(fNginxSendFileFrom);
+  SetLength(fNginxSendFileFrom, n + 1);
+  fNginxSendFileFrom[n] := FileNameLeftTrim;
+  fOnSendFile := OnNginxAllowSend;
+end;
+
+
 { THttpServer }
 
 constructor THttpServer.Create(const aPort: RawUtf8;
@@ -1405,32 +1595,21 @@ constructor THttpServer.Create(const aPort: RawUtf8;
   ServerThreadPoolCount, KeepAliveTimeOut: integer;
   aHeadersUnFiltered, CreateSuspended: boolean);
 begin
-  fSockPort := aPort;
   fInternalHttpServerRespList := TSynList.Create;
   InitializeCriticalSection(fProcessCS);
-  fServerKeepAliveTimeOut := KeepAliveTimeOut; // 30 seconds by default
   if fThreadPool <> nil then
     fThreadPool.ContentionAbortDelay := 5000; // 5 seconds default
-  // event handlers set before inherited Create to be visible in childs
-  fOnHttpThreadStart := OnStart;
-  SetOnTerminate(OnStop);
   if fThreadRespClass = nil then
     fThreadRespClass := THttpServerResp;
   if fSocketClass = nil then
     fSocketClass := THttpServerSocket;
-  fProcessName := ProcessName; // TSynThreadPoolTHttpServer needs it now
+  inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
+    KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended);
   if ServerThreadPoolCount > 0 then
   begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
     fHttpQueueLength := 1000;
   end;
-  fHeadersUnFiltered := aHeadersUnFiltered;
-  inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
-end;
-
-function THttpServer.GetApiVersion: RawUtf8;
-begin
-  result := SocketApiVersion;
 end;
 
 destructor THttpServer.Destroy;
@@ -1481,11 +1660,6 @@ begin
   end;
 end;
 
-function THttpServer.GetStat(one: THttpServerSocketGetRequestResult): integer;
-begin
-  result := fStats[one];
-end;
-
 function THttpServer.GetHttpQueueLength: cardinal;
 begin
   result := fHttpQueueLength;
@@ -1527,47 +1701,6 @@ begin
   end;
 end;
 
-function THttpServer.OnNginxAllowSend(Context: THttpServerRequestAbstract;
-  const LocalFileName: TFileName): boolean;
-var
-  match, i, f: PtrInt;
-  folderlefttrim: ^TFileName;
-begin
-  match := 0;
-  folderlefttrim := pointer(fNginxSendFileFrom);
-  if LocalFileName <> '' then
-    for f := 1 to length(fNginxSendFileFrom) do
-    begin
-      match := length(folderlefttrim^);
-      for i := 1 to match do // case sensitive left search
-        if LocalFileName[i] <> folderlefttrim^[i] then
-        begin
-          match := 0;
-          break;
-        end;
-      if match <> 0 then
-        break; // found matching folderlefttrim
-      inc(folderlefttrim);
-    end;
-  result := match <> 0;
-  if not result then
-    exit; // no match -> manual send
-  Context.OutContent :=
-    copy(Context.OutContent, match + 1, 1024); // remove '/var/www'
-  Context.OutCustomHeaders := TrimU(Context.OutCustomHeaders + #13#10 +
-    'X-Accel-Redirect: ' + Context.OutContent);
-  Context.OutContent := '';
-end;
-
-procedure THttpServer.NginxSendFileFrom(const FileNameLeftTrim: TFileName);
-var
-  n: PtrInt;
-begin
-  n := length(fNginxSendFileFrom);
-  SetLength(fNginxSendFileFrom, n + 1);
-  fNginxSendFileFrom[n] := FileNameLeftTrim;
-  fOnSendFile := OnNginxAllowSend;
-end;
 
 procedure THttpServer.WaitStarted(Seconds: integer);
 var
@@ -1813,8 +1946,8 @@ begin
     exit; // -> send will probably fail -> nothing to send back
   if Terminated then
     exit;
-  ctxt := THttpServerRequest.Create(
-    self, ConnectionID, ConnectionThread, HTTPREMOTEFLAGS[ClientSock.TLS.Enabled]);
+  ctxt := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
+    HTTPREMOTEFLAGS[ClientSock.TLS.Enabled]);
   try
     respsent := false;
     with ClientSock do
@@ -1994,23 +2127,7 @@ begin
     Http.Content := '';
     // get headers and content
     GetHeader(noheaderfilter);
-    if fServer <> nil then // = nil e.g. from TRtspOverHttpServer
-    begin
-      if fServer.fRemoteIPHeaderUpper <> '' then
-        // real Internet IP (replace 127.0.0.1 from a proxy)
-        FindNameValue(Http.Headers, pointer(fServer.fRemoteIPHeaderUpper),
-          fRemoteIP, {keepnotfound=}true);
-      if fServer.fRemoteConnIDHeaderUpper <> '' then
-      begin
-        P := FindNameValue(pointer(Http.Headers),
-          pointer(fServer.fRemoteConnIDHeaderUpper));
-        if P <> nil then
-          SetQWord(P, PQWord(@fRemoteConnectionID)^);
-      end;
-      if fRemoteConnectionID = 0 then
-        // fallback to 31-bit sequence
-        fRemoteConnectionID := fServer.NextConnectionID;
-    end;
+    fServer.ParseRemoteIPConnID(Http.Headers, fRemoteIP, fRemoteConnectionID);
     if hfConnectionClose in Http.HeaderFlags then
       fKeepAliveClient := false;
     if (Http.ContentLength < 0) and
@@ -2027,7 +2144,7 @@ begin
     begin
       if (Http.ContentLength > 0) and
          (fServer.MaximumAllowedContentLength > 0) and
-         (cardinal(Http.ContentLength) > fServer.MaximumAllowedContentLength) then
+         (Http.ContentLength > fServer.MaximumAllowedContentLength) then
       begin
         SockSend('HTTP/1.0 413 Payload Too Large'#13#10#13#10'Rejected');
         SockSendFlush('');

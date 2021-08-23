@@ -355,6 +355,7 @@ begin
     if res <> nrOK then
       raise ERtspOverHttp.CreateUtf8('No RTSP server on %:% (%)',
         [fRtspServer, fRtspPort, ToText(res)^]);
+    // create the main POST connection and its associated RTSP connection
     postconn := TPostConnection.Create(aRemoteIp);
     rtspconn := TRtspConnection.Create(aRemoteIp);
     if not inherited ConnectionAdd(aSocket, postconn) or

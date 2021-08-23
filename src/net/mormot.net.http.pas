@@ -30,6 +30,7 @@ uses
   mormot.core.buffers,
   mormot.core.zip,
   mormot.core.threads,
+  mormot.core.rtti,
   mormot.net.sock;
 
 
@@ -117,7 +118,8 @@ type
     hrsNoStateMachine,
     hrsGetCommand,
     hrsGetHeaders,
-    hrsGetBodyChunkedHex,
+    hrsGetBodyChunkedHexFirst,
+    hrsGetBodyChunkedHexNext,
     hrsGetBodyChunkedData,
     hrsGetBodyChunkedDataVoidLine,
     hrsGetBodyChunkedDataLastLine,
@@ -145,6 +147,7 @@ type
     hfConnectionUpgrade,
     hfConnectionKeepAlive,
     hfHasRemoteIP,
+    nfHeadersParsed,
     hfContentStreamNeedFree);
 
   PHttpRequestContext = ^THttpRequestContext;
@@ -163,14 +166,13 @@ type
   THttpRequestContext = object
   {$endif USERECORDWITHMETHODS}
   private
-    // internal reusable buffers - reduce memory allocations during process
-    Head, Process: TRawByteStringBuffer;
     ContentStream: TStream; // to be used instead of Content
     ContentLeft: Int64;
     ContentPos: PByte;
     ContentEncoding: RawUtf8;
-    function ContentFromFile(const FileName: TFileName; CompressGz: integer): boolean;
   public
+    // reusable buffers for internal process - do not use
+    Head, Process: TRawByteStringBuffer;
     /// the current state of this HTTP context
     State: THttpRequestState;
     /// map the presence of some HTTP headers, but retrieved during Request
@@ -181,6 +183,10 @@ type
     // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
     // - 'HTTP/1.0 200 OK' for a GET response after Get() e.g.
     Command: RawUtf8;
+    /// the HTTP method parsed from Command, e.g. 'GET'
+    CommandMethod: RawUtf8;
+    /// the HTTP URI parsed from Command, e.g. '/path/to/resource'
+    CommandUri: RawUtf8;
     /// will contain all header lines after a Request
     // - use HeaderGetValue() to get one HTTP header item value by name
     Headers: RawUtf8;
@@ -217,7 +223,7 @@ type
     OnStateChange: TOnHttpRequestStateChange;
     /// reset this request context to be used without any ProcessInit/Read/Write
     procedure Clear;
-    /// parse a HTTP header into Headers and fill internal properties
+    /// parse a HTTP header into Header and fill internal properties
     // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
     // use directly the ContentLength/ContentType/ServerInternalState/Upgrade
     // and HeaderFlags fields since HeaderGetValue() would return ''
@@ -225,16 +231,22 @@ type
     // connection-related fields, but increase memory and reduce performance
     // - returns the position of the end of the line, excluding trailing #13/#0
     function ParseHeader(P: PUtf8Char; HeadersUnFiltered: boolean = false): PUtf8Char;
-    /// to be called once all ParseHeader lines have been done
+    /// to be called once all ParseHeader lines have been done to fill Headers
     // - also set CompressContentEncoding/CompressAcceptHeader from Compress[]
     // and Content-Encoding header value
     procedure ParseHeaderFinalize;
+    /// parse Command and Head into Headers and CommandMethod/CommandUri fields
+    // - calls ParseHeaderFinalize() and server-side process the Command
+    function ParseCommandAndHeader: boolean;
     /// search a value from the internal parsed Headers
     // - supplied aUpperName should be already uppercased:
     // HeaderGetValue('CONTENT-TYPE')='text/html', e.g.
     // - note that GetHeader(HeadersUnFiltered=false) will set ContentType field
     // but let HeaderGetValue('CONTENT-TYPE') return ''
     function HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
+    /// initialize ContentStream/ContentLength from a given file name
+    // - if CompressGz is set, would also try for a cached local FileName+'.gz'
+    function ContentFromFile(const FileName: TFileName; CompressGz: integer): boolean;
     /// uncompress Content according to CompressContentEncoding header
     procedure UncompressData;
     /// (re)initialize the HTTP Server state machine for ProcessRead/ProcessWrite
@@ -262,8 +274,9 @@ const
   HTTP_REQUEST_READ =
     [hrsGetCommand,
      hrsGetHeaders,
-     hrsGetBodyChunkedHex,
-     hrsGetBodyChunkedData,
+     hrsGetBodyChunkedHexFirst,
+     hrsGetBodyChunkedHexNext,
+      hrsGetBodyChunkedData,
      hrsGetBodyChunkedDataVoidLine,
      hrsGetBodyContentLength];
 
@@ -274,6 +287,8 @@ const
 
   /// when any later THttpRequestContext.State is a fatal HTTP error
   HTTP_REQUEST_FIRSTERROR = succ(hrsResponseDone);
+
+function ToText(st: THttpRequestState): PShortString; overload;
 
 
 { ******************** THttpSocket Implementing HTTP over plain sockets }
@@ -447,10 +462,6 @@ type
         virtual; abstract;
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(AppendedHeader: RawUtf8);
-    /// prepare one reusable State Machine for sending the response
-    procedure SetupResponse(var Context: THttpRequestContext;
-      const ServerName: RawUtf8; const ErrorMessage: string;
-      const OnSendFile: TOnHttpServerSendFile; CompressGz: integer);
     /// input parameter containing the caller URI
     property Url: RawUtf8
       read fUrl;
@@ -997,12 +1008,37 @@ end;
 
 procedure THttpRequestContext.ParseHeaderFinalize;
 begin
+  if nfHeadersParsed in HeaderFlags then
+    exit;
+  include(HeaderFlags, nfHeadersParsed);
   Head.AsText(Headers, {OverheadForRemoteIP=}40);
   Head.Reset;
   if Compress <> nil then
     if AcceptEncoding <> '' then
       CompressAcceptHeader :=
         ComputeContentEncoding(Compress, pointer(AcceptEncoding));
+end;
+
+function THttpRequestContext.ParseCommandAndHeader: boolean;
+var
+  P: PUtf8Char;
+begin
+  result := false;
+  if nfHeadersParsed in HeaderFlags then
+    exit;
+  P := pointer(Command);
+  if P = nil then
+    exit;
+  GetNextItem(P, ' ', CommandMethod); // GET
+  GetNextItem(P, ' ', CommandUri);    // /path
+  if not IdemPChar(P, 'HTTP/1.') then
+    exit;
+  if not (hfConnectionClose in HeaderFlags) then
+    if not (hfConnectionKeepAlive in HeaderFlags) or
+       (P[7] <> '1')then
+      include(HeaderFlags, hfConnectionClose);
+  ParseHeaderFinalize;
+  result := true;
 end;
 
 procedure THttpRequestContext.UncompressData;
@@ -1123,24 +1159,27 @@ begin
           break; // not enough input
       hrsGetHeaders:
         if ProcessParseLine(st, nil) then
+          // void line indicates end of Headers
           if st.LineLen <> 0 then
             ParseHeader(st.P, hroHeadersUnfiltered in Options)
           else
           begin
-            // void line indicates end of Headers
-            ParseHeaderFinalize;
             // Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
             if hfTransferChunked in HeaderFlags then
-              State := hrsGetBodyChunkedHex
+              // process chunked body
+              State := hrsGetBodyChunkedHexFirst
             else if ContentLength > 0 then
+              // regular process with explicit content-length
               State := hrsGetBodyContentLength
               // note: old HTTP/1.0 format with no Content-Length is unsupported
             else
+              // no body
               State := hrsWaitProcessing;
           end
         else
           break;
-      hrsGetBodyChunkedHex:
+      hrsGetBodyChunkedHexFirst,
+      hrsGetBodyChunkedHexNext:
         if ProcessParseLine(st, nil) then
         begin
           ContentLeft := HttpChunkToHex32(PAnsiChar(st.Line));
@@ -1178,7 +1217,7 @@ begin
         end;
       hrsGetBodyChunkedDataVoidLine:
         if ProcessParseLine(st, nil) then // chunks end with a void line
-          State := hrsGetBodyChunkedHex
+          State := hrsGetBodyChunkedHexNext
         else
           break;
       hrsGetBodyChunkedDataLastLine:
@@ -1226,7 +1265,7 @@ begin
       State := hrsErrorMisuse; // out of context State for input
     end;
     if (State <> previous) and
-       (State <> hrsGetBodyChunkedHex) and
+       (State <> hrsGetBodyChunkedHexNext) and
        (State <> hrsGetBodyChunkedDataVoidLine) and
        Assigned(OnStateChange) then
     begin
@@ -1287,15 +1326,16 @@ begin
     hrsSendHeaders:
       begin
         Dest.Append(Head.Buffer, Head.Len);
-        if (ContentStream = nil) and
-           Dest.CanAppend(ContentLength) then
-        begin
+        State := hrsSendBody;
+        if ContentStream = nil then
           // single socket send() if possible (small or no output body)
-          Dest.Append(Content);
-          State := hrsResponseDone;
-        end
-        else
-          State := hrsSendBody;
+          if ContentLength = 0 then
+            State := hrsResponseDone
+          else if Dest.CanAppend(ContentLength) then
+          begin
+            Dest.Append(Content);
+            State := hrsResponseDone;
+          end;
       end;
     hrsSendBody:
       begin
@@ -1318,7 +1358,7 @@ begin
             State := hrsResponseDone;
         end
         else
-          raise EHttpSocket.Create('Unexpected ProcessWrite(%d)', [MaxSize]);
+          raise EHttpSocket.Create('ProcessWrite: MaxSize=%d', [MaxSize]);
       end;
   else
       exit; // nothing to write in this current state
@@ -1375,6 +1415,12 @@ begin
   else
     // stream existing big file by chunks
     include(HeaderFlags, hfContentStreamNeedFree);
+end;
+
+
+function ToText(st: THttpRequestState): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpRequestState), ord(st));
 end;
 
 
@@ -1616,82 +1662,6 @@ begin
       fInHeaders := AppendedHeader
     else
       fInHeaders := fInHeaders + #13#10 + AppendedHeader;
-end;
-
-procedure THttpServerRequestAbstract.SetupResponse(var Context: THttpRequestContext;
-  const ServerName: RawUtf8; const ErrorMessage: string;
-  const OnSendFile: TOnHttpServerSendFile; CompressGz: integer);
-var
-  P, PEnd: PUtf8Char;
-  len: PtrInt;
-  reason: RawUtf8;
-  fn: TFileName;
-  err: string;
-begin
-  // note: caller should have set hfConnectionClose in Context.HeaderFlags
-  err := ErrorMessage;
-  // process content
-  Context.ContentLength := 0;
-  if OutContentType = NORESPONSE_CONTENT_TYPE then
-    OutContentType := '' // true HTTP always expects a response
-  else if (OutContent <> '') and
-          (OutContentType = STATICFILE_CONTENT_TYPE) then
-  begin
-    ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
-    Utf8ToFileName(OutContent, fn);
-    if not Assigned(OnSendFile) or
-       not OnSendFile(self, fn) then
-      if not Context.ContentFromFile(fn, CompressGz) then
-      begin
-        FormatString('Impossible to find %', [fn], err);
-        RespStatus := HTTP_NOTFOUND;
-      end;
-  end;
-  StatusCodeToReason(RespStatus, reason);
-  if err <> '' then
-  begin
-    OutCustomHeaders := '';
-    OutContentType := 'text/html; charset=utf-8'; // create message to display
-    OutContent := FormatUtf8('<body style="font-family:verdana">'#10 +
-      '<h1>% Server Error %</h1><hr><p>HTTP % %<p>%<p><small>' + XPOWEREDVALUE,
-      [ServerName, RespStatus, RespStatus, reason, HtmlEscapeString(err)]);
-  end;
-  // append Command
-  Context.Head.Reset;
-  if hfConnectionClose in Context.HeaderFlags then
-    Context.Head.Append('HTTP/1.0 ')
-  else
-    Context.Head.Append('HTTP/1.1 ');
-  Context.Head.Append([RespStatus, ' ', reason], {crlf=}true);
-  // custom headers from Request() method
-  P := pointer(OutCustomHeaders);
-  if P <> nil then
-  begin
-    PEnd := P + length(OutCustomHeaders);
-    repeat
-      len := BufferLineLength(P, PEnd);
-      if len > 0 then // no void line (means headers ending)
-      begin
-        if IdemPChar(P, 'CONTENT-ENCODING:') then
-          // custom encoding: don't compress
-          integer(Context.CompressAcceptHeader) := 0;
-        Context.Head.Append(P, len, {crlf=}true); // normalize CR/LF endings
-        inc(P, len);
-      end;
-      while P^ in [#10, #13] do
-        inc(P);
-    until P^ = #0;
-  end;
-  // generic headers
-  Context.Head.Append('Server: ');
-  Context.Head.Append(ServerName, {crlf=}true);
-  {$ifndef NOXPOWEREDNAME}
-  Context.Head.Append(XPOWEREDNAME + ': ' + XPOWEREDVALUE, true);
-  {$endif NOXPOWEREDNAME}
-  Context.Content := OutContent;
-  Context.ContentType := OutContentType;
-  Context.CompressContentAndFinalizeHead;
-  // now Context.Head is ready and Context.ProcessWrite should be called
 end;
 
 
