@@ -7632,7 +7632,7 @@ begin
     LoadFromJson(pointer(Source.SaveToJson))
   else
   begin
-    DynArrayCopy(fValue^, Source.fValue^, fInfo.Info, Source.fCountP);
+    DynArrayCopy(fValue, Source.fValue, fInfo.Info, Source.fCountP);
     if fCountP <> nil then
       fCountP^ := GetCapacity;
   end;
