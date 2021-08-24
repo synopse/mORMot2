@@ -613,10 +613,11 @@ type
     // or custom (synlzo/synlz) protocols
     // - returns true on success, false if this function or this
     // ACCEPT-ENCODING: header was already registered
-    // - you can specify a minimal size (in bytes) before which the content won't
+    // - you can specify a minimal size (in bytes) below which the content won't
     // be compressed (1024 by default, corresponding to a MTU of 1500 bytes)
     // - the first registered algorithm will be the prefered one for compression
-    function RegisterCompress(aFunction: THttpSocketCompress; aCompressMinSize: integer = 1024): boolean;
+    function RegisterCompress(aFunction: THttpSocketCompress;
+      aCompressMinSize: integer = 1024): boolean;
 
     /// allows to ignore untrusted SSL certificates
     // - similar to adding a security exception for a domain in the browser
@@ -2128,7 +2129,7 @@ begin
     aData := InData;
     if integer(fCompressAcceptHeader) <> 0 then
     begin
-      aDataEncoding := CompressDataAndGetHeaders(fCompressAcceptHeader,
+      aDataEncoding := CompressContent(fCompressAcceptHeader,
         fCompress, InDataType, aData);
       if aDataEncoding <> '' then
         InternalAddHeader(RawUtf8('Content-Encoding: ') + aDataEncoding);

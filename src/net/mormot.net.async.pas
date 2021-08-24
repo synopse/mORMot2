@@ -58,6 +58,8 @@ type
     /// flag set by TAsyncConnections.IdleEverySecond to purge rd/wr unused buffers
     // - avoid to call the GetTickCount64 system API for every activity
     wasactive: boolean;
+    /// flag set when Subscribe() has been called
+    writesubscribed: boolean;
     /// the current (reusable) read data buffer of this slot
     rd: TRawByteStringBuffer;
     /// the current (reusable) write data buffer of this slot
@@ -240,7 +242,12 @@ type
     fRemoteIP: RawUtf8;
     fRemoteConnID: THttpServerConnectionID;
     /// this method is called when the instance is connected to a poll
+    // - overriding this method is cheaper than the plain Create destructor
     procedure AfterCreate(Sender: TAsyncConnections); virtual;
+    /// this method is called when the instance is about to be deleted from a poll
+    // - default implementation will reset fHandle to 0
+    // - overriding this method is cheaper than the plain Destroy destructor
+    procedure BeforeDestroy(Sender: TAsyncConnections); virtual;
     /// this method is called when the some input data is pending on the socket
     // - should extract frames or requests from fSlot.rd, and handle them
     // - this is where the input should be parsed and extracted according to
@@ -256,9 +263,6 @@ type
     // - you may continue sending data asynchronously using fSlot.wr.Append()
     function AfterWrite(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
       virtual;
-    /// this method is called when the instance is about to be deleted from a poll
-    // - default implementation will reset fHandle to 0
-    procedure BeforeDestroy(Sender: TAsyncConnections); virtual;
     // called after TAsyncConnections.LastOperationIdleSeconds of no activity
     // - Sender.Write() could be used to send e.g. a hearbeat frame
     procedure OnLastOperationIdle(Sender: TAsyncConnections;
@@ -268,8 +272,6 @@ type
   public
     /// initialize this instance
     constructor Create(const aRemoteIP: RawUtf8); reintroduce; virtual;
-    /// finalize this instance
-    destructor Destroy; override;
     /// read-only access to the socket number associated with this connection
     property Socket: TNetSocket
       read fSlot.socket;
@@ -353,14 +355,12 @@ type
   /// low-level options for TAsyncConnections processing
   // - TAsyncConnectionsSockets.OnError will shutdown the connection on any error,
   // unless acoOnErrorContinue is defined
-  // - acoOnAcceptFailureStop will let failed Accept() finalize the process
   // - acoNoLogRead and acoNoLogWrite could reduce the log verbosity
   // - acoVerboseLog will log transmitted frames content, for debugging purposes
   // - acoWritePollOnly will be translated into paoWritePollOnly on server
-  // - acoLowLevelReadWriteLog would make low-level send/receive logging
+  // - acoDebugReadWriteLog would make low-level send/receive logging
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
-    acoOnAcceptFailureStop,
     acoNoLogRead,
     acoNoLogWrite,
     acoVerboseLog,
@@ -495,6 +495,8 @@ type
   protected
     fServer: TCrtSocket; // for proper complex binding
     fExecuteFinished: boolean;
+    fMaxPending: integer;
+    fMaxConnections: integer;
     procedure Execute; override;
   public
     /// run the TCP server, listening on a supplied IP port
@@ -515,6 +517,19 @@ type
     /// access to the TCP server socket
     property Server: TCrtSocket
       read fServer;
+    /// above how many active connections accept() would reject
+    // - MaxPending applies to the actual thread-pool processing activity,
+    // whereas MaxConnections tracks the number of connections even in idle state
+    property MaxConnections: integer
+      read fMaxConnections write fMaxConnections;
+    /// above how many fClients.fRead.PendingCount accept() would reject
+    // - is mapped by the high-level THttpAsyncServer.HttpQueueLength property
+    // - default is 1000, but could be a lower value e.g. for a load-balancer
+    // - MaxConnections regulates the absolute number of (idle) connections,
+    // whereas this property tracks the actual REST/HTTP requests pending for
+    // the internal thread pool
+    property MaxPending: integer
+      read fMaxPending write fMaxPending;
   end;
 
   /// implements thread-pooled high-performance TCP multiple clients
@@ -576,8 +591,12 @@ type
   protected
     fHttp: THttpRequestContext;
     fServer: THttpAsyncServer;
-    procedure HttpInit;
+    fKeepAliveTix: Int64;
+    fHeadersTix: Int64;
+    fRespStatus: integer;
     procedure AfterCreate(Sender: TAsyncConnections); override;
+    procedure BeforeDestroy(Sender: TAsyncConnections); override;
+    procedure HttpInit;
     // redirect to fHttp.ProcessRead()
     function OnRead(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
       override;
@@ -586,7 +605,6 @@ type
       override;
     function DoHeaders: TPollAsyncSocketOnReadWrite;
     function DoRequest: TPollAsyncSocketOnReadWrite;
-  public
   end;
 
   /// event-driven process of HTTP/WebSockets connections
@@ -597,23 +615,27 @@ type
 
   /// HTTP server using non-blocking sockets
   THttpAsyncServer = class(THttpServerSocketGeneric)
-  private
-    function GetRegisterCompressGzStatic: boolean;
-    procedure SetRegisterCompressGzStatic(Value: boolean);
   protected
     fAsync: THttpAsyncConnections;
     fCompressGz: integer;
+    function GetRegisterCompressGzStatic: boolean;
+    procedure SetRegisterCompressGzStatic(Value: boolean);
+    function GetHttpQueueLength: cardinal; override;
+    procedure SetHttpQueueLength(aValue: cardinal); override;
   public
-    /// create a socket-based HTTP Server, ready to be bound and listening on a port
+    /// create an event-driven HTTP Server
     constructor Create(const aPort: RawUtf8;
       const OnStart, OnStop: TOnNotifyThread;
       const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
       KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
-      CreateSuspended: boolean = false); override;
-    /// if we should search for local .gz cache when serving static files
+      AsyncOptions: TAsyncConnectionsOptions = []); reintroduce;
+    /// finalize the HTTP Server
+    destructor Destroy; override;
+    /// if we should search for local .gz cached file when serving static files
     property RegisterCompressGzStatic: boolean
       read GetRegisterCompressGzStatic write SetRegisterCompressGzStatic;
     /// direct access to the internal high-performance TCP server
+    // - you could set e.g. Async.MaxConnections
     property Async: THttpAsyncConnections
       read fAsync;
   end;
@@ -761,7 +783,8 @@ begin
       if slot.lastWSAError = nrClosed then
         slot.lastWSAError := nrOK;
       fRead.Unsubscribe(sock, TPollSocketTag(connection));
-      fWrite.Unsubscribe(sock, TPollSocketTag(connection));
+      if slot.writesubscribed then
+        fWrite.Unsubscribe(sock, TPollSocketTag(connection));
       result := true;
     finally
       sock.ShutdownAndClose({rdwr=}false);
@@ -907,6 +930,8 @@ begin
         // register for ProcessWrite() if not already
         result := fWrite.Subscribe(
           slot.socket, [pseWrite], TPollSocketTag(connection));
+        if result then
+          slot.writesubscribed := true;
         if fDebugLog <> nil then
           DoLog('Write Subscribe(%,%)=% %',
             [PtrUInt(slot.socket), connection, result, fWrite]);
@@ -1073,6 +1098,7 @@ begin
           else if res <> nrOk then
           begin
             b := fWrite.Unsubscribe(slot.socket, notif.tag);
+            slot.writesubscribed := false;
             if fDebugLog <> nil then
               DoLog('Write % Unsubscribe(%,%)=% %',
                 [ToText(res)^, PtrUInt(slot.socket), connection, b, fWrite]);
@@ -1105,6 +1131,7 @@ begin
         begin
           // no further ProcessWrite unless slot.wr contains pending data
           b := fWrite.Unsubscribe(slot.socket, notif.tag);
+          slot.writesubscribed := false;
           if fDebugLog <> nil then
             DoLog('Write Unsubscribe(%,%)=% %',
               [PtrUInt(slot.socket), connection, b, fWrite]);
@@ -1142,14 +1169,14 @@ begin
   fMagic := ASYNCCONNECTION_MAGIC; // TAsyncConnectionsSockets.SlotFromConnection
 end;
 
-destructor TAsyncConnection.Destroy;
-begin
-  inherited Destroy;
-  fMagic := 0; // for TAsyncConnectionsSockets.SlotFromConnection
-end;
-
 procedure TAsyncConnection.AfterCreate(Sender: TAsyncConnections);
 begin
+end;
+
+procedure TAsyncConnection.BeforeDestroy(Sender: TAsyncConnections);
+begin
+  fHandle := 0; // to detect any dangling pointer
+  fMagic := 0; // for TAsyncConnectionsSockets.SlotFromConnection
 end;
 
 procedure TAsyncConnection.OnLastOperationIdle(
@@ -1182,11 +1209,6 @@ function TAsyncConnection.AfterWrite(
   Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
 begin
   result := soContinue; // nothing to do by default
-end;
-
-procedure TAsyncConnection.BeforeDestroy(Sender: TAsyncConnections);
-begin
-  fHandle := 0; // to detect any dangling pointer
 end;
 
 
@@ -1765,6 +1787,8 @@ constructor TAsyncServer.Create(const aPort: RawUtf8;
   aOptions: TAsyncConnectionsOptions; aThreadPoolCount: integer);
 begin
   fServer := TCrtSocket.Bind(aPort);
+  fMaxConnections := 7777777; // huge number for sure
+  fMaxPending := 1000; // fair enough for pending requests
   inherited Create(OnStart, OnStop, aConnectionClass, ProcessName, aLog,
     aOptions, aThreadPoolCount);
 end;
@@ -1826,6 +1850,10 @@ begin
           res := fServer.Sock.Accept(client, sin);
           if Terminated then
             break;
+          if (fClients.fRead.Count > fMaxConnections) or
+             (fClients.fRead.PendingCount > fMaxPending) then
+            // map THttpAsyncServer.HttpQueueLength property value
+            res := nrTooManyConnections;
           if res <> nrOK then
             if res = nrRetry then
               continue // we reached ReceiveTimeout
@@ -1834,7 +1862,9 @@ begin
               // failure (too many clients?) -> wait and retry
               DoLog(sllWarning, 'Execute: Accept(%) failed as %',
                 [fServer.Port, ToText(res)^], self);
-              SleepStep(start, @Terminated);
+              if res <> nrTooManyConnections then
+                // progressive wait (if not load-balancing, but socket error)
+                SleepStep(start, @Terminated);
               continue;
             end;
           if Terminated then
@@ -1918,21 +1948,32 @@ end;
 
 procedure THttpAsyncConnection.AfterCreate(Sender: TAsyncConnections);
 begin
-  HttpInit;
   fServer := (Sender as THttpAsyncConnections).fAsyncServer;
-  if fServer.HeadersUnFiltered then
-    include(fHttp.Options, hroHeadersUnfiltered);
+  HttpInit;
+  if fServer.ServerKeepAliveTimeOut > 0 then
+    fKeepAliveTix := GetTickCount64 + fServer.ServerKeepAliveTimeOut;
+end;
+
+procedure THttpAsyncConnection.BeforeDestroy(Sender: TAsyncConnections);
+begin
+  fHttp.ProcessDone;
+  inherited BeforeDestroy(Sender);
 end;
 
 procedure THttpAsyncConnection.HttpInit;
 begin
   fHttp.ProcessInit({instream=}nil); // ready to process this HTTP request
+  if fServer.HeadersUnFiltered then
+    include(fHttp.Options, hroHeadersUnfiltered);
+  fHeadersTix := 0;
 end;
 
 function THttpAsyncConnection.OnRead(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
 begin
   if Sender.fClients = nil then
     fHttp.State := hrsErrorMisuse
+  else if fServer.fShutdownInProgress then
+    fHttp.State := hrsErrorShutdownInProgress
   else
   begin
     // use the HTTP machine state to parse fSlot.rd input
@@ -1941,7 +1982,13 @@ begin
   end;
   // compute next step
   case fHttp.State of
-    hrsGetCommand,
+    hrsGetCommand:
+      begin
+        if fServer.HeaderRetrieveAbortDelay > 0 then
+          // start measuring time for receiving the headers
+          fHeadersTix := GetTickCount64 + fServer.HeaderRetrieveAbortDelay;
+        result := soContinue;
+      end;
     hrsGetHeaders,
     hrsGetBodyChunkedHexNext,
     hrsGetBodyChunkedData,
@@ -1958,38 +2005,48 @@ begin
       result := DoRequest;
   else
     begin
-      Sender.DoLog(sllWarning, 'OnRead: unexpected %',
+      Sender.DoLog(sllWarning, 'OnRead: close connection after %',
         [ToText(fHttp.State)^], self);
       result := soClose
     end;
   end;
 end;
 
-function THttpAsyncConnection.AfterWrite(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
+function THttpAsyncConnection.AfterWrite(
+  Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
 begin
   if Sender.fClients = nil then
     fHttp.State := hrsErrorMisuse;
   // compute next step
   case fHttp.State of
-    hrsSendHeaders,
     hrsSendBody:
       begin
-        // async command+headers+body send phase
-        // use the HTTP machine state to fill fSlot.wr with outgoing data
-        fHttp.ProcessWrite(fSlot.wr, Sender.fClients.fSendBufferSize);
+        // use the HTTP machine state to fill fSlot.wr with outgoing body data
+        fHttp.ProcessBody(fSlot.wr, Sender.fClients.fSendBufferSize);
         result := soContinue;
       end;
     hrsResponseDone:
-      // all outgoing data was all sent
-      if hfConnectionClose in fHttp.HeaderFlags then
-        // connection: close -> shutdown and clear the connection
-        result := soClose
-      else
       begin
-        // kept alive conenction -> reset the HTTP parser and continue
-        fHttp.ProcessInit({instream=}nil);
-        result := soContinue;
-      end;
+        // all headers + body outgoing content was sent
+        if Assigned(fServer.fOnAfterResponse) then
+          try
+            fServer.fOnAfterResponse(
+              fHttp.CommandMethod, fHttp.CommandUri, fRemoteIP, fRespStatus);
+          except
+            include(fHttp.HeaderFlags, hfConnectionClose);
+          end;
+        if hfConnectionClose in fHttp.HeaderFlags then
+          // connection: close -> shutdown and clear the connection
+          result := soClose
+        else
+        begin
+          // kept alive connection -> reset the HTTP parser and continue
+          fHttp.ProcessDone; // ContentStream.Free
+          HttpInit;
+          result := soContinue;
+          LockedInc32(@fServer.fStats[grOwned]);
+        end;
+      end
   else
     begin
       Sender.DoLog(sllWarning, 'AfterWrite: unexpected %',
@@ -2012,15 +2069,22 @@ begin
     fRemoteIP, fRemoteConnID);
   // immediate reject of clearly invalid requests
   status := HTTP_SUCCESS;
-  if Assigned(fServer.OnBeforeBody) then
+  if (fServer.MaximumAllowedContentLength > 0) and
+     (fHttp.ContentLength > fServer.MaximumAllowedContentLength) then
+  begin
+    status := HTTP_PAYLOADTOOLARGE; // 413
+    LockedInc32(@fServer.fStats[grOversizedPayload]);
+  end else if (fHeadersTix > 0) and
+              (GetTickCount64 > fHeadersTix) then
+  begin
+    status := HTTP_TIMEOUT; // 408
+    LockedInc32(@fServer.fStats[grTimeout]);
+  end
+  else if Assigned(fServer.OnBeforeBody) then
     status := fServer.OnBeforeBody(
       fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers,
       fHttp.ContentType, fRemoteIP, fHttp.BearerToken,
       fHttp.ContentLength, {notls=}[]);
-  if status = HTTP_SUCCESS then
-    if (fServer.MaximumAllowedContentLength > 0) and
-       (fHttp.ContentLength > fServer.MaximumAllowedContentLength) then
-      status := HTTP_PAYLOADTOOLARGE; // 413
   if status <> HTTP_SUCCESS then
   begin
     // on fatal error direct reject and close the connection
@@ -2029,10 +2093,12 @@ begin
     FormatUtf8('HTTP/1.0 % %'#13#10#13#10'Server Rejected Request as % %',
       [status, fHttp.Command, status, fHttp.Command],
       fHttp.CommandUri);
-    fServer.fAsync.fClients.WriteString(self, fHttp.CommandUri); // no send polling
+    fServer.fAsync.fClients.WriteString(self, fHttp.CommandUri); // no polling
+    LockedInc32(@fServer.fStats[grRejected]);
     exit;
   end;
   // now THttpAsyncConnection.OnRead can get the body
+  LockedInc32(@fServer.fStats[grHeaderReceived]);
   if (fHttp.State <> hrsWaitProcessing) and
      (IdemPCharArray(pointer(fHttp.CommandMethod), ['HEAD', 'OPTIONS']) < 0) then
     // HEAD and OPTIONS have Content-Length but no body
@@ -2048,13 +2114,15 @@ var
   err: string;
 begin
   // check the status
-  if not (nfHeadersParsed in fHttp.HeaderFlags) then
-  begin
-    // content-length was 0, so hrsGetBody* and DoHeaders() were not called
-    result := DoHeaders;
-    if result <> soContinue then
-      exit; // rejected
-  end;
+  if nfHeadersParsed in fHttp.HeaderFlags then
+    LockedInc32(@fServer.fStats[grBodyReceived])
+  else
+    begin
+      // content-length was 0, so hrsGetBody* and DoHeaders() were not called
+      result := DoHeaders;
+      if result <> soContinue then
+        exit; // rejected
+    end;
   // compute the HTTP/REST process
   result := soClose;
   req := THttpServerRequest.Create(fServer, fRemoteConnID, {thread=}nil, []);
@@ -2078,38 +2146,50 @@ begin
       on E: Exception do
         begin
           // intercept and return Internal Server Error 500
-          FormatString('%: %', [E, E.Message], err);
           req.RespStatus := HTTP_SERVERERROR;
+          FormatString('%: %', [E, E.Message], err);
+          LockedInc32(@fServer.fStats[grException]);
           // will keep soClose as result to shutdown the connection
         end;
     end;
     // prepare the response for the HTTP state machine
     req.SetupResponse(fHttp, fServer.ServerName, err,
       fServer.OnSendFile, fServer.fCompressGz);
-    fServer.DoAfterResponse(req, req.RespStatus);
+    fRespStatus := req.RespStatus;
+    if (fKeepAliveTix > 0) and
+       not (hfConnectionClose in fHttp.HeaderFlags) and
+       (GetTickCount64 > fKeepAliveTix) then
+      include(fHttp.HeaderFlags, hfConnectionClose);
   finally
     req.Free;
   end;
-  // now we can send the response
-  if result <> soContinue then
-  begin
-    // send error response at once with no polling, just before socket shutdown
-    fHttp.Head.Append(fHttp.Content);
-    fServer.fAsync.fClients.Write(self, fHttp.Head.Buffer^, fHttp.Head.Len);
-  end;
+  // now try socket send() with headers (and small body as hrsResponseDone)
+  // then TPollAsyncSockets.ProcessWrite/subscribe if needed as hrsSendBody
+  fServer.fAsync.fClients.Write(self, fHttp.Head.Buffer^, fHttp.Head.Len);
 end;
 
 
 { THttpAsyncServer }
 
-constructor THttpAsyncServer.Create(const aPort: RawUtf8; const OnStart,
-  OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+constructor THttpAsyncServer.Create(const aPort: RawUtf8;
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  aHeadersUnFiltered: boolean; CreateSuspended: boolean);
+  aHeadersUnFiltered: boolean; AsyncOptions: TAsyncConnectionsOptions);
 begin
   fCompressGz := -1;
+  fAsync := THttpAsyncConnections.Create(aPort, OnStart, OnStop,
+    THttpAsyncConnection, ProcessName, TSynLog, AsyncOptions, ServerThreadPoolCount);
+  fAsync.fAsyncServer := self;
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
-    KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended);
+    KeepAliveTimeOut, aHeadersUnFiltered, {suspended=}true);
+end;
+
+destructor THttpAsyncServer.Destroy;
+begin
+  if fAsync <> nil then
+    fAsync.Terminate;
+  inherited Destroy;
+  FreeAndNil(fAsync);
 end;
 
 function THttpAsyncServer.GetRegisterCompressGzStatic: boolean;
@@ -2125,8 +2205,15 @@ begin
     fCompressGz := -1;
 end;
 
+function THttpAsyncServer.GetHttpQueueLength: cardinal;
+begin
+  result := fAsync.fMaxPending;
+end;
 
-
+procedure THttpAsyncServer.SetHttpQueueLength(aValue: cardinal);
+begin
+  fAsync.fMaxPending := aValue;
+end;
 
 
 end.

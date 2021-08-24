@@ -9644,7 +9644,8 @@ end;
 
 function TRawByteStringBuffer.CanAppend(Bytes: PtrInt): boolean;
 begin
-  result := fLen + Bytes <= length(fBuffer);
+  result := (Bytes = 0) or
+            (fLen + Bytes <= length(fBuffer));
 end;
 
 function TRawByteStringBuffer.Reserve(MaxSize: PtrInt): pointer;

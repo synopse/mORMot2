@@ -106,8 +106,8 @@ type
       const ProcessName: RawUtf8); reintroduce; virtual;
   end;
 
-  /// abstract class to implement a HTTP server
-  // - do not use this class, but rather THttpServer or THttpApiServer
+  /// abstract parent class to implement a HTTP server
+  // - do not use it, but rather THttpServer/THttpAsyncServer or THttpApiServer
   THttpServerGeneric = class(TServerGeneric)
   protected
     fShutdownInProgress: boolean;
@@ -145,6 +145,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Code: cardinal); virtual;
     function NextConnectionID: integer; // 31-bit internal sequence
+    procedure ParseRemoteIPConnID(const Headers: RawUtf8;
+      var RemoteIP: RawUtf8; var RemoteConnID: THttpServerConnectionID);
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean; 
@@ -183,9 +185,6 @@ type
     // - the first registered algorithm will be the prefered one for compression
     procedure RegisterCompress(aFunction: THttpSocketCompress;
       aCompressMinSize: integer = 1024); virtual;
-    /// low-level server-side parsing of the headers to extract remote info
-    procedure ParseRemoteIPConnID(const Headers: RawUtf8;
-      var RemoteIP: RawUtf8; var RemoteConnID: THttpServerConnectionID);
     /// you can call this method to prepare the HTTP server for shutting down
     procedure Shutdown;
     /// event handler called by the default implementation of the
@@ -251,9 +250,8 @@ type
     // - default value if 1000, which sounds fine for most use cases
     // - for THttpApiServer, will return 0 if the system does not support HTTP
     // API 2.0 (i.e. under Windows XP or Server 2003)
-    // - for THttpServer, will shutdown any incoming accepted socket if the
-    // internal TSynThreadPool.PendingContextCount+ThreadCount exceeds this limit;
-    // each pending connection is a THttpServerSocket instance in the queue
+    // - for THttpServer or THttpAsyncServer, will shutdown any incoming accepted
+    // socket if the internal number of pending requests exceed this limit
     // - increase this value if you don't have any load-balancing in place, and
     // in case of e.g. many 503 HTTP answers or if many "QueueFull" messages
     // appear in HTTP.sys log files (normally in
@@ -322,7 +320,7 @@ type
   // - grHeaderReceived is returned for GetRequest({withbody=}false)
   // - grBodyReceived is returned for GetRequest({withbody=}true)
   // - grOwned indicates that this connection is now handled by another thread,
-  // e.g. asynchronous WebSockets
+  // e.g. asynchronous WebSockets or THttpAsyncServer kept alive connection
   THttpServerSocketGetRequestResult = (
     grError,
     grException,
@@ -475,6 +473,7 @@ type
     fOnSendFile: TOnHttpServerSendFile;
     fNginxSendFileFrom: array of TFileName;
     fSockPort: RawUtf8;
+    fHeaderRetrieveAbortDelay: integer;
     fHeadersUnFiltered: boolean;
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
     function OnNginxAllowSend(Context: THttpServerRequestAbstract;
@@ -522,6 +521,10 @@ type
     // - set this property to true to include all incoming headers
     property HeadersUnFiltered: boolean
       read fHeadersUnFiltered;
+    /// milliseconds delay to reject a connection due to too long header retrieval
+    // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
+    property HeaderRetrieveAbortDelay: integer
+      read fHeaderRetrieveAbortDelay write fHeaderRetrieveAbortDelay;
     /// custom event handler used to send a local file for STATICFILE_CONTENT_TYPE
     // - see also NginxSendFileFrom() method
     property OnSendFile: TOnHttpServerSendFile
@@ -530,6 +533,14 @@ type
     /// the bound TCP port, as specified to Create() constructor
     property SockPort: RawUtf8
       read fSockPort;
+    /// time, in milliseconds, for the HTTP/1.1 connections to be kept alive
+    // - default is 30000 ms, i.e. 30 seconds
+    // - setting 0 here (or in KeepAliveTimeOut constructor parameter) will
+    // disable keep-alive, and fallback to HTTP.1/0 for all incoming requests
+    // (may be a good idea e.g. behind a NGINX reverse proxy)
+    // - see THttpApiServer.SetTimeOutLimits(aIdleConnection) parameter
+    property ServerKeepAliveTimeOut: cardinal
+      read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
     /// how many invalid HTTP headers have been rejected
     property StatHeaderErrors: integer
       index grError read GetStat;
@@ -552,7 +563,8 @@ type
     property StatBodyProcessed: integer
       index grBodyReceived read GetStat;
     /// how many HTTP connections were passed to an asynchronous handler
-    // - e.g. for background WebSockets processing after proper upgrade
+    // - e.g. for background WebSockets processing after proper upgrade, or
+    // for kept alive THttpAsyncServer connections
     property StatOwnedConnections: integer
       index grOwned read GetStat;
   end;
@@ -575,7 +587,6 @@ type
   protected
     /// used to protect Process() call, e.g. fInternalHttpServerRespList
     fProcessCS: TRTLCriticalSection;
-    fHeaderRetrieveAbortDelay: integer;
     fThreadPool: TSynThreadPoolTHttpServer;
     fInternalHttpServerRespList: TSynList;
     fSock: TCrtSocket;
@@ -636,22 +647,10 @@ type
     // - it's the global count since the server started
     property ServerConnectionCount: integer
       read fServerConnectionCount write fServerConnectionCount;
-    /// time, in milliseconds, for the HTTP/1.1 connections to be kept alive
-    // - default is 30000 ms, i.e. 30 seconds
-    // - setting 0 here (or in KeepAliveTimeOut constructor parameter) will
-    // disable keep-alive, and fallback to HTTP.1/0 for all incoming requests
-    // (may be a good idea e.g. behind a NGINX reverse proxy)
-    // - see THttpApiServer.SetTimeOutLimits(aIdleConnection) parameter
-    property ServerKeepAliveTimeOut: cardinal
-      read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
     /// the associated thread pool
     // - may be nil if ServerThreadPoolCount was 0 on constructor
     property ThreadPool: TSynThreadPoolTHttpServer
       read fThreadPool;
-    /// milliseconds delay to reject a connection due to too long header retrieval
-    // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
-    property HeaderRetrieveAbortDelay: integer
-      read fHeaderRetrieveAbortDelay write fHeaderRetrieveAbortDelay;
   end;
 
 
@@ -1327,8 +1326,8 @@ begin
   {$endif NOXPOWEREDNAME}
   Context.Content := OutContent;
   Context.ContentType := OutContentType;
-  Context.CompressContentAndFinalizeHead;
-  // now Context.Head is ready and Context.ProcessWrite should be called
+  Context.CompressContentAndFinalizeHead; // also set proper State
+  // now TAsyncConnectionsSockets.Write(Head) should be called
 end;
 
 
@@ -1486,7 +1485,7 @@ procedure THttpServerGeneric.DoAfterResponse(Ctxt: THttpServerRequest;
   const Code: cardinal);
 begin
   if Assigned(fOnAfterResponse) then
-    fOnAfterResponse(Ctxt, Code);
+    fOnAfterResponse(Ctxt.Method, Ctxt.Url, Ctxt.RemoteIP, Code);
 end;
 
 procedure THttpServerGeneric.SetMaximumAllowedContentLength(aMax: cardinal);
@@ -2753,7 +2752,7 @@ var
   datachunkfile: HTTP_DATA_CHUNK_FILEHANDLE;
   logdata: PHTTP_LOG_FIELDS_DATA;
   contrange: ShortString;
-  vervs: TVerbText; // to avoid memory allocation
+  verbs: TVerbText; // to avoid memory allocation
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: string; E: Exception = nil);
   var
@@ -2898,8 +2897,8 @@ var
           if RawValueLength = 0 then
           begin
             // no previous encoding -> try if any compression
-            outcontenc := CompressDataAndGetHeaders(compressset,
-              fCompress, ctxt.OutContentType, ctxt.fOutContent);
+            outcontenc := CompressContent(
+              compressset, fCompress, ctxt.OutContentType, ctxt.fOutContent);
             pRawValue := pointer(outcontenc);
             RawValueLength := length(outcontenc);
           end;
@@ -2926,7 +2925,7 @@ begin
     SetLength(reqbuf, 16384 + sizeof(HTTP_REQUEST)); // req^ + 16 KB of headers
     req := pointer(reqbuf);
     logdata := pointer(fLogDataStorage);
-    vervs := VERB_TEXT;
+    verbs := VERB_TEXT;
     ctxt := THttpServerRequest.Create(self, 0, self, []);
     // main loop reusing a single ctxt instance for this thread
     reqid := 0;
@@ -2952,8 +2951,8 @@ begin
             ctxt.fHttpApiRequest := req;
             SetString(ctxt.fFullURL, req^.CookedUrl.pFullUrl, req^.CookedUrl.FullUrlLength);
             FastSetString(ctxt.fUrl, req^.pRawUrl, req^.RawUrlLength);
-            if req^.Verb in [low(vervs)..high(vervs)] then
-              ctxt.fMethod := vervs[req^.Verb]
+            if req^.Verb in [low(verbs)..high(verbs)] then
+              ctxt.fMethod := verbs[req^.Verb]
             else
               FastSetString(ctxt.fMethod, req^.pUnknownVerb, req^.UnknownVerbLength);
             with req^.headers.KnownHeaders[reqContentType] do

@@ -69,7 +69,7 @@ type
 /// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
 // - will detect most used compressible content (like 'text/*' or
 // 'application/json') from OutContentType
-function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
+function CompressContent(Accepted: THttpSocketCompressSet;
   const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
   var OutContent: RawByteString): RawUtf8;
 
@@ -125,13 +125,13 @@ type
     hrsGetBodyChunkedDataLastLine,
     hrsGetBodyContentLength,
     hrsWaitProcessing,
-    hrsSendHeaders,
     hrsSendBody,
     hrsResponseDone,
     hrsErrorPayloadTooLarge,
     hrsErrorMisuse,
     hrsErrorUnsupportedFormat,
-    hrsErrorAborted);
+    hrsErrorAborted,
+    hrsErrorShutdownInProgress);
 
   /// set of states for THttpRequestContext processing
   THttpRequestStates = set of THttpRequestState;
@@ -166,7 +166,6 @@ type
   THttpRequestContext = object
   {$endif USERECORDWITHMETHODS}
   private
-    ContentStream: TStream; // to be used instead of Content
     ContentLeft: Int64;
     ContentPos: PByte;
     ContentEncoding: RawUtf8;
@@ -207,6 +206,9 @@ type
     /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during Request
     // - is overridden with real Content length during HTTP body retrieval
     ContentLength: Int64;
+    /// stream-oriented alternative to the Content in-memory buffer
+    // - is typically a TFileStream
+    ContentStream: TStream;
     /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved during Request
     // - proprietary header, used with our RESTful ORM access
     ServerInternalState: integer;
@@ -251,6 +253,7 @@ type
     procedure UncompressData;
     /// (re)initialize the HTTP Server state machine for ProcessRead/ProcessWrite
     procedure ProcessInit(InStream: TStream);
+      {$ifdef HASINLINE} inline; {$endif}
     /// receiving socket entry point of our asynchronous HTTP Server
     // - to be called with the incoming bytes from the socket receive buffer
     // - caller should have checked that current State is in HTTP_REQUEST_READ
@@ -259,14 +262,15 @@ type
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
     // - and if Content is not '', will add 'Content-Type: ' header
     // - always compute ContentLength and add a 'Content-Length: ' header
+    // - then append small content to Head if possible, and update final State
+    // to hrsSendBody/hrsResponseDone
     procedure CompressContentAndFinalizeHead;
-    /// sending socket entry point of our asynchronous HTTP Server
+    /// body sending socket entry point of our asynchronous HTTP Server
     // - to be called when some bytes could be written to output socket
-    // - main entry point of the asynchronous Machine State of HTTP processing
-    // - caller should have checked that current State is in HTTP_REQUEST_WRITE
-    procedure ProcessWrite(var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
+    procedure ProcessBody(var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
     /// should be done when the HTTP Server state machine is done
     procedure ProcessDone;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
 
 const
@@ -276,14 +280,13 @@ const
      hrsGetHeaders,
      hrsGetBodyChunkedHexFirst,
      hrsGetBodyChunkedHexNext,
-      hrsGetBodyChunkedData,
+     hrsGetBodyChunkedData,
      hrsGetBodyChunkedDataVoidLine,
      hrsGetBodyContentLength];
 
   /// when THttpRequestContext.State is expected some ProcessWrite() data
   HTTP_REQUEST_WRITE =
-    [hrsSendHeaders,
-     hrsSendBody];
+    [hrsSendBody];
 
   /// when any later THttpRequestContext.State is a fatal HTTP error
   HTTP_REQUEST_FIRSTERROR = succ(hrsResponseDone);
@@ -380,7 +383,7 @@ type
   /// event handler used by THttpServerGeneric.OnAfterResponse property
   // - Ctxt defines both input and output parameters
   // - Code defines the HTTP response code the (200 if OK, e.g.)
-  TOnHttpServerAfterResponse = procedure(Ctxt: THttpServerRequestAbstract;
+  TOnHttpServerAfterResponse = procedure(const Method, Url, RemoteIP: RawUtf8;
     const Code: cardinal) of object;
 
   /// the server-side available authentication schemes
@@ -714,7 +717,7 @@ begin
   result := algo;
 end;
 
-function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
+function CompressContent(Accepted: THttpSocketCompressSet;
   const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
   var OutContent: RawByteString): RawUtf8;
 var
@@ -1187,6 +1190,7 @@ begin
           begin
             if ContentStream = nil then
             begin
+              // reserve appended chunk size to Content memory buffer
               SetLength(Content, length(Content) + ContentLeft);
               ContentPos := @PByteArray(Content)[length(Content)];
             end;
@@ -1291,7 +1295,7 @@ begin
   // same logic than THttpSocket.CompressDataAndWriteHeaders below
   if (integer(CompressAcceptHeader) <> 0) and
      (ContentStream = nil) then // no stream compression (yet)
-    ContentEncoding := CompressDataAndGetHeaders(
+    ContentEncoding := CompressContent(
       CompressAcceptHeader, Compress, ContentType, Content);
   if ContentEncoding <> '' then
     Head.Append(['Content-Encoding: ', ContentEncoding]);
@@ -1312,69 +1316,58 @@ begin
       Head.Append(CompressAcceptEncoding, {crlf=}true);
     Head.Append('Connection: Keep-Alive', {crlf=}true);
   end;
-  Head.Append(nil, 0, {crlf=}true); // headers finish with a void line
+  Head.Append(nil, 0, {crlf=}true); // headers always end with a void line
+  if (ContentStream = nil) and
+     Head.CanAppend(ContentLength) then
+  begin
+    // single socket send() if possible (small or no output body)
+    Head.Append(Content);
+    State := hrsResponseDone;
+  end
+  else
+    // regular headers + body sending
+    State := hrsSendBody;
 end;
 
-procedure THttpRequestContext.ProcessWrite(
+procedure THttpRequestContext.ProcessBody(
   var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
 var
-  previous: THttpRequestState;
   P: pointer;
 begin
-  previous := State;
-  case State of
-    hrsSendHeaders:
-      begin
-        Dest.Append(Head.Buffer, Head.Len);
-        State := hrsSendBody;
-        if ContentStream = nil then
-          // single socket send() if possible (small or no output body)
-          if ContentLength = 0 then
-            State := hrsResponseDone
-          else if Dest.CanAppend(ContentLength) then
-          begin
-            Dest.Append(Content);
-            State := hrsResponseDone;
-          end;
-      end;
-    hrsSendBody:
-      begin
-        if ContentLength < MaxSize then
-          MaxSize := ContentLength;
-        if MaxSize > 0 then
-        begin
-          if ContentStream <> nil then
-          begin
-            P := Dest.Reserve(MaxSize);
-            Dest.Append(P, ContentStream.Read(P^, MaxSize));
-          end
-          else
-          begin
-            Dest.Append(ContentPos, MaxSize);
-            inc(ContentPos, MaxSize);
-          end;
-          dec(ContentLeft, MaxSize);
-          if ContentLeft = 0 then
-            State := hrsResponseDone;
-        end
-        else
-          raise EHttpSocket.Create('ProcessWrite: MaxSize=%d', [MaxSize]);
-      end;
+  // THttpAsyncConnection.DoRequest did send the headers
+  if State <> hrsSendBody then
+    exit;
+  // send the body in the background, using polling up to socket.SendBufferSize
+  if ContentLength < MaxSize then
+    MaxSize := ContentLength;
+  if MaxSize > 0 then
+  begin
+    if ContentStream <> nil then
+    begin
+      P := Dest.Reserve(MaxSize);
+      Dest.Append(P, ContentStream.Read(P^, MaxSize));
+    end
+    else
+    begin
+      Dest.Append(ContentPos, MaxSize);
+      inc(ContentPos, MaxSize);
+    end;
+    dec(ContentLeft, MaxSize);
+    if ContentLeft = 0 then
+    begin
+      State := hrsResponseDone;
+      if Assigned(OnStateChange) then
+        State := OnStateChange(hrsSendBody, @self);
+    end;
+  end
   else
-      exit; // nothing to write in this current state
-  end;
-  if (State <> previous) and
-     Assigned(OnStateChange) then
-    State := OnStateChange(previous, @self);
+    raise EHttpSocket.Create('ProcessWrite: len=%d', [MaxSize]);
 end;
 
 procedure THttpRequestContext.ProcessDone;
 begin
   if hfContentStreamNeedFree in HeaderFlags then
     FreeAndNil(ContentStream);
-  HeaderFlags := [];
-  Content := ''; // release memory ASAP
-  ContentEncoding := '';
 end;
 
 function THttpRequestContext.ContentFromFile(
@@ -1437,7 +1430,7 @@ begin
   if (integer(Http.CompressAcceptHeader) <> 0) and
      (OutStream = nil) then // no stream compression (yet)
   begin
-    OutContentEncoding := CompressDataAndGetHeaders(
+    OutContentEncoding := CompressContent(
       Http.CompressAcceptHeader, Http.Compress, OutContentType, OutContent);
     if OutContentEncoding <> '' then
       SockSend(['Content-Encoding: ', OutContentEncoding]);
