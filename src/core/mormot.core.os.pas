@@ -1108,7 +1108,7 @@ var
 
 type
   /// redefined as our own mormot.core.os type to avoid dependency to Windows
-  // - warning: do use this type directly, but rather TSynSystemTime as
+  // - warning: do not use this type directly, but rather TSynSystemTime as
   // defined in mormot.core.datetime which is really cross-platform, and has
   // consistent field order (FPC POSIX/Windows fields do not match!)
   TSystemTime = Windows.TSystemTime;
@@ -1131,10 +1131,16 @@ type
 // defined in mormot.core.datetime which is really cross-platform
 procedure GetLocalTime(out result: TSystemTime); stdcall;
 
+/// a wrapper around FileTimeToLocalFileTime/FileTimeToSystemTime Windows APIs
+// - only used by mormot.lib.static for proper SQlite3 linking on Windows
+procedure UnixTimeToLocalTime(I64: Int64; out Local: TSystemTime);
+
 {$else}
 
 var
   // globally defined for proper inlined calls
+  // - slight performance gain to inline our own GetCurrentThreadId,
+  // EnterCriticalSection and LeaveCriticalSection RTL-like functions
 {$ifdef OSLINUX}
   pthread_self: function: pointer; cdecl;
   pthread_mutex_lock: function(mutex: pointer): integer; cdecl;

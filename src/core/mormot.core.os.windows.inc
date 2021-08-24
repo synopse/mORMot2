@@ -38,6 +38,7 @@ function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
   external kernel32 name 'GetProcAddress';
 
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   {$ifdef CPU64}
   PInt64Rec(@I64)^.Lo := FT.dwLowDateTime;
@@ -47,12 +48,40 @@ begin
   {$endif CPU64}
 end;
 
+procedure Int64ToFileTime(const I64: Int64; out FT: TFileTime);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  {$ifdef CPU64}
+  FT.dwLowDateTime := PInt64Rec(@I64)^.Lo;
+  FT.dwHighDateTime := PInt64Rec(@I64)^.Hi;
+  {$else}
+  PInt64(@FT)^ := I64;
+  {$endif CPU64}
+end;
+
 const
   UnixDelta = 25569;
   UnixFileTimeDelta = 116444736000000000; // from year 1601 to 1970
   DateFileTimeDelta =  94353120000000000; // from year 1601 to 1899
 
+procedure UnixTimeToFileTime(I64: Int64; out FT: TFileTime);
+begin
+  I64 := I64 * 10000000;
+  inc(I64, UnixFileTimeDelta);
+  Int64ToFileTime(I64, FT);
+end;
+
+procedure UnixTimeToLocalTime(I64: Int64; out Local: TSystemTime);
+var
+  ft, lt: TFileTime;
+begin
+  UnixTimeToFileTime(I64, ft);
+  FileTimeToLocalFileTime(ft, lt);
+  FileTimeToSystemTime(lt, Local);
+end;
+
 function FileTimeToUnixTime(const FT: TFileTime): Int64;
+  {$ifdef HASINLINE} inline; {$endif}
 {$ifdef CPU64}
 var
   nano100: Int64; // TFileTime is in 100 ns unit
@@ -84,7 +113,7 @@ function UnixTimeUtc: Int64;
 var
   ft: TFileTime;
 begin
-  GetSystemTimeAsFileTime(ft); // fast but with HW low resolution
+  GetSystemTimeAsFileTime(ft); // fast (HW resolution is < TUnixTime second)
   result := FileTimeToUnixTime(ft);
 end;
 
