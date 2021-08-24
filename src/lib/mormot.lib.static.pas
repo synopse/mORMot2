@@ -88,6 +88,22 @@ type
     usec: integer;
   end;
 
+  time_t = packed record
+    tm_sec: integer;            { Seconds.      [0-60] (1 leap second) }
+    tm_min: integer;            { Minutes.      [0-59]  }
+    tm_hour: integer;           { Hours.        [0-23]  }
+    tm_mday: integer;           { Day.          [1-31]  }
+    tm_mon: integer;            { Month.        [0-11]  }
+    tm_year: integer;           { Year          - 1900. }
+    tm_wday: integer;           { Day of week.  [0-6]   }
+    tm_yday: integer;           { Days in year. [0-365] }
+    tm_isdst: integer;          { DST.          [-1/0/1]}
+    __tm_gmtoff: integer;       { Seconds east of UTC  }
+    __tm_zone: PChar;           { Timezone abbreviation}
+  end;
+
+function localtime64_s(var t: Int64; var atm: time_t): integer; cdecl;
+function localtime32_s(var t: cardinal; var atm: time_t): integer; cdecl;
 function putchar(c: integer): integer; cdecl;
 function gettimeofday(var tv: timeval; zone: pointer): integer; cdecl;
 function fputc(c: integer; f: pointer): integer; cdecl;
@@ -298,6 +314,47 @@ function libc_beginthreadex(security: pointer; stksize: cardinal;
 procedure libc_endthreadex(exitcode: cardinal); cdecl;
   external _CLIB name '_endthreadex';
 
+function localtime64_s(var t: Int64; var atm: time_t): integer;
+var
+ S: TSystemTime;
+begin
+  UnixTimeToLocalTime(t, S);
+  atm.tm_sec := S.wSecond;
+  atm.tm_min := S.wMinute;
+  atm.tm_hour := S.wHour;
+  atm.tm_mday := S.wDay;
+  atm.tm_mon := S.wMonth - 1;
+  atm.tm_year := S.wYear - 1900;
+  atm.tm_wday := S.wDay;
+  result := 0; // on Windows, should return 0; on POSIX, nil or @atm :(
+end;
+
+function localtime32_s(var t: cardinal; var atm: time_t): integer;
+var
+  t64: Int64;
+begin
+  t64 := t;
+  result := localtime64_s(t64, atm);
+end;
+
+var
+ { as standard C library documentation states:
+   Statically allocated buffer, shared by the functions gmtime() and localtime().
+   Each call of these functions overwrites the content of this structure.
+   -> this buffer is shared, but SQlite3 will protect it with a mutex :) }
+   atm: time_t;
+
+function localtime32(t: PCardinal): pointer; cdecl;
+begin
+  localtime32_s(t^, atm);
+  result := @atm;
+end;
+
+function localtime64(t: PInt64): pointer; cdecl;
+begin
+  localtime64_s(t^, atm);
+  result := @atm;
+end;
 
 function putchar(c: integer): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'putchar'; {$endif}
@@ -488,6 +545,12 @@ var
   // redirect mingw import pointer to libc_endthreadex
   endthreadex: pointer public name
     {$ifdef CPU32} '__imp___endthreadex' {$else} '__imp__endthreadex' {$endif};
+  // redirect mingw import pointer to our internal functions
+  {$ifdef CPU32}
+  imp_localtime32: pointer public name '__imp___localtime32';
+  {$else}
+  imp_localtime64: pointer public name '__imp__localtime64';
+  {$endif CPU32}
 {$endif FPC}
 
 procedure __exit;
@@ -1867,8 +1930,14 @@ end;
 initialization
 {$ifdef FPC}
 {$ifdef OSWINDOWS}
-  beginthreadex := @libc_beginthreadex; // manual fill of our import table
+  // manual fill of our raw mingw import table
+  beginthreadex := @libc_beginthreadex;
   endthreadex := @libc_endthreadex;
+  {$ifdef CPU32}
+  imp_localtime32 := @localtime32;
+  {$else}
+  imp_localtime64 := @localtime64;
+  {$endif CPU32}
 {$endif OSWINDOWS}
 {$endif FPC}
 

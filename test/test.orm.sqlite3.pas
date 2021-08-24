@@ -512,6 +512,12 @@ begin
   check(Names[i1] = '');
   for i := 0 to i1 - 1 do
     check(PosEx('eona', Names[i]) > 0);
+  s := Demo.ExecuteNoExceptionUtf8('SELECT current_timestamp;');
+  check(s <> '', 'current_timestamp');
+  s := Demo.ExecuteNoExceptionUtf8('SELECT datetime(current_timestamp);');
+  check(s <> '', 'datetime');
+  s := Demo.ExecuteNoExceptionUtf8('SELECT datetime(current_timestamp,''localtime'');');
+  check(s <> '', 'localtime');
 end;
 
 procedure TTestSQLite3Engine.VirtualTableDirectAccess;

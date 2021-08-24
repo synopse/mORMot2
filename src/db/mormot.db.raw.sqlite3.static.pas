@@ -420,46 +420,20 @@ begin
   libc_qsort(baseP, NElem, Width, comparF);
 end;
 
+{$ifdef OSWINDOWS}
+
 var
   { as standard C library documentation states:
   Statically allocated buffer, shared by the functions gmtime() and localtime().
   Each call of these functions overwrites the content of this structure.
-  -> since timing is not thread-dependent, it's OK to share this buffer :) }
-  atm: packed record
-    tm_sec: integer;            { Seconds.      [0-60] (1 leap second) }
-    tm_min: integer;            { Minutes.      [0-59]  }
-    tm_hour: integer;           { Hours.        [0-23]  }
-    tm_mday: integer;           { Day.          [1-31]  }
-    tm_mon: integer;            { Month.        [0-11]  }
-    tm_year: integer;           { Year          - 1900. }
-    tm_wday: integer;           { Day of week.  [0-6]   }
-    tm_yday: integer;           { Days in year. [0-365] }
-    tm_isdst: integer;          { DST.          [-1/0/1]}
-    __tm_gmtoff: integer;       { Seconds east of UTC  }
-    __tm_zone: PChar;           { Timezone abbreviation}
-  end;
+  -> this buffer is shared, but SQlite3 will protect it with a mutex :) }
+  atm: time_t;
 
-function localtime64(const t: Int64): pointer; cdecl; 
-// a fast full pascal version of the standard C library function
-var S: TSystemTime;
+function localtime(t: PCardinal): pointer; cdecl;
 begin
-  GetLocalTime(S);
-  atm.tm_sec := S.wSecond;
-  atm.tm_min := S.wMinute;
-  atm.tm_hour := S.wHour;
-  atm.tm_mday := S.wDay;
-  atm.tm_mon := S.wMonth-1;
-  atm.tm_year := S.wYear-1900;
-  atm.tm_wday := S.wDay;
+  localtime32_s(t^, atm);
   result := @atm;
 end;
-
-function localtime(t: PCardinal): pointer; cdecl; 
-begin
-  result := localtime64(t^);
-end;
-
-{$ifdef OSWINDOWS}
 
 function _beginthreadex(security: pointer; stksize: dword;
   start, arg: pointer; flags: dword; var threadid: dword): THandle; cdecl;
