@@ -17920,7 +17920,7 @@ begin
      name := GetJsonPropName(Context.Json, @namelen);
      if name = nil then
        Context.Valid := false;
-     if not Context.ParseNext then // GetJsonField() into Context.Value
+     if not Context.ParseNextAny then // GetJsonFieldOrObjectOrArray()
        exit;
      if IsRowID(name, namelen) then // handle both ID and RowID names
        SetID(Context.Value, orm.fID)
