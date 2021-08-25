@@ -1317,10 +1317,10 @@ function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
 // to avoid the 32-bit overflow/wrapping issue of GetTickCount
 // - warning: FPC's SysUtils.GetTickCount64 or TThread.GetTickCount64 don't
 // handle properly 49 days wrapping under XP -> always use this safe version
+// - warning: FPC's SysUtils.GetTickCount64 may call fpgettimeofday() e.g.
+// on Darwin, which is not monotonic -> always use this more coherent version
 // - on POSIX, will call (via vDSO) the very fast CLOCK_MONOTONIC_COARSE if
 // available, or the low-level mach_absolute_time() monotonic Darwin API
-// - warning: FPC's SysUtils.GetTickCount64 may call fpgettimeofday() e.g.
-// on Darwin, which is not monotonic -> always use this safe version
 // - do not expect exact millisecond resolution - it may rather be within the
 // 10-16 ms range, especially under Windows
 {$ifdef OSWINDOWS}

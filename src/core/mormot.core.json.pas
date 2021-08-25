@@ -10264,14 +10264,14 @@ var
   c: AnsiChar;
 begin
   // branchless JSON escaping - JSON_ESCAPE_NONE=0 if no JSON escape needed
-  JSON_ESCAPE[0] := JSON_ESCAPE_ENDINGZERO;   // 1 for #0 end of input
+  JSON_ESCAPE[0]   := JSON_ESCAPE_ENDINGZERO; // 1 for #0 end of input
   for i := 1 to 31 do
     JSON_ESCAPE[i] := JSON_ESCAPE_UNICODEHEX; // 2 should be escaped as \u00xx
-  JSON_ESCAPE[8]  := ord('b');  // others contain the escaped character
-  JSON_ESCAPE[9]  := ord('t');
-  JSON_ESCAPE[10] := ord('n');
-  JSON_ESCAPE[12] := ord('f');
-  JSON_ESCAPE[13] := ord('r');
+  JSON_ESCAPE[8]   := ord('b');  // others contain the escaped character
+  JSON_ESCAPE[9]   := ord('t');
+  JSON_ESCAPE[10]  := ord('n');
+  JSON_ESCAPE[12]  := ord('f');
+  JSON_ESCAPE[13]  := ord('r');
   JSON_ESCAPE[ord('\')] := ord('\');
   JSON_ESCAPE[ord('"')] := ord('"');
   for c := #32 to #127 do
@@ -10307,20 +10307,20 @@ begin
       // exclude '0'..'9' as already in jcDigitFirstChar
       JSON_TOKENS[c] := jtIdentifierFirstChar;
   end;
-  JSON_TOKENS[#0 ] := jtEndOfBuffer;
-  JSON_TOKENS['{'] := jtObjectStart;
-  JSON_TOKENS['}'] := jtObjectStop;
-  JSON_TOKENS['['] := jtArrayStart;
-  JSON_TOKENS[']'] := jtArrayStop;
-  JSON_TOKENS[':'] := jtAssign;
-  JSON_TOKENS['='] := jtEqual;
-  JSON_TOKENS[','] := jtComma;
+  JSON_TOKENS[#0 ]  := jtEndOfBuffer;
+  JSON_TOKENS['{']  := jtObjectStart;
+  JSON_TOKENS['}']  := jtObjectStop;
+  JSON_TOKENS['[']  := jtArrayStart;
+  JSON_TOKENS[']']  := jtArrayStop;
+  JSON_TOKENS[':']  := jtAssign;
+  JSON_TOKENS['=']  := jtEqual;
+  JSON_TOKENS[',']  := jtComma;
   JSON_TOKENS[''''] := jtSingleQuote;
-  JSON_TOKENS['"'] := jtDoubleQuote;
-  JSON_TOKENS['t'] := jtTrueFirstChar;
-  JSON_TOKENS['f'] := jtFalseFirstChar;
-  JSON_TOKENS['n'] := jtNullFirstChar;
-  JSON_TOKENS['/'] := jtSlash;
+  JSON_TOKENS['"']  := jtDoubleQuote;
+  JSON_TOKENS['t']  := jtTrueFirstChar;
+  JSON_TOKENS['f']  := jtFalseFirstChar;
+  JSON_TOKENS['n']  := jtNullFirstChar;
+  JSON_TOKENS['/']  := jtSlash;
   // initialize JSON serialization
   Rtti.GlobalClass := TRttiJson; // will ensure Rtti.Count = 0
   GetDataFromJson := _GetDataFromJson;
