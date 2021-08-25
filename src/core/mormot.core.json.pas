@@ -1647,6 +1647,10 @@ type
     // - on success, return true and set Value/ValueLen and WasString fields
     function ParseNext: boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// call GetJsonFieldOrObjectOrArray() to retrieve the next JSON value
+    // - on success, return true and set Value/ValueLen and WasString fields
+    function ParseNextAny: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the next JSON value as UTF-8 text
     function ParseUtf8: RawUtf8;
     /// retrieve the next JSON value as VCL string text
@@ -6743,6 +6747,14 @@ end;
 function TJsonParserContext.ParseNext: boolean;
 begin
   Value := GetJsonField(Json, Json, @WasString, @EndOfObject, @ValueLen);
+  result := Json <> nil;
+  Valid := result;
+end;
+
+function TJsonParserContext.ParseNextAny: boolean;
+begin
+  Value := GetJsonFieldOrObjectOrArray(Json, @WasString, @EndOfObject,
+    {handleobjarr=}true, {normalizbool=}true, @ValueLen);
   result := Json <> nil;
   Valid := result;
 end;
