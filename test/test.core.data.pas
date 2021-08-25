@@ -1118,6 +1118,14 @@ type
       read FSomeField write FSomeField;
   end;
 
+  TObjectWithVariant = class(TSynPersistent)
+  protected
+    fValue: variant;
+  published
+    property Value: variant
+      read fValue write fValue;
+  end;
+
   {$ifdef ISDELPHI2010}
   TStaticArrayOfInt = packed array[1..5] of Integer;
 
@@ -1189,6 +1197,7 @@ var
   JAS: TTestCustomJsonArraySimple;
   JAV: TTestCustomJsonArrayVariant;
   GDtoObject: TDtoObject;
+  owv: TObjectWithVariant;
   Trans: TTestCustomJson2;
   Disco: TTestCustomDiscogs;
   Cache: TRestCacheEntryValue;
@@ -1719,6 +1728,28 @@ var
     J := ObjectToJson(GDtoObject, [woDontStoreVoid]);
     CheckEqual(J, U);
     GDtoObject.Free;
+    owv := TObjectWithVariant.Create;
+    J := ObjectToJson(owv);
+    CheckEqual(J, '{"Value":null}');
+    owv.Value := 10;
+    J := ObjectToJson(owv);
+    CheckEqual(J, '{"Value":10}');
+    owv.Value := '{"a":10}';
+    J := ObjectToJson(owv);
+    CheckEqual(J, '{"Value":"{\"a\":10}"}');
+    owv.Value := _JsonFast('{"a":10}');
+    J := ObjectToJson(owv);
+    CheckEqual(J, '{"Value":{"a":10}}');
+    ClearObject(owv);
+    J := ObjectToJson(owv);
+    CheckEqual(J, '{"Value":null}');
+    J := '{ "RowID": 1, "Value": {"SegmentID": "1976-113", "From":"LEXINGTON ' +
+      'AV/72 ST","To":"LEXINGTON AV/57 ST"} }';
+    Check(ObjectLoadJson(owv, J, nil, JSONPARSER_TOLERANTOPTIONS));
+    CheckEqual(_safe(owv.value)^.Count, 3);
+    CheckEqual(_safe(owv.value)^.ToJson, '{"SegmentID":"1976-113","From":' +
+      '"LEXINGTON AV/72 ST","To":"LEXINGTON AV/57 ST"}');
+    owv.Free;
 
     Finalize(Cache);
     FillCharFast(Cache, sizeof(Cache), 0);
