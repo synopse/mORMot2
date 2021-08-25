@@ -29,6 +29,7 @@ uses
   mormot.core.threads,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.buffers,
   mormot.core.rtti,
   mormot.net.sock,
   mormot.net.http,
@@ -2054,7 +2055,7 @@ begin
         begin
           // no Keep Alive = multi-connection -> process in the Thread Pool
           if not (hfConnectionUpgrade in Http.HeaderFlags) and
-             (IdemPCharArray(pointer(Method), ['HEAD', 'OPTIONS']) < 0) then
+             not HttpMethodWithNoBody(Method) then
           begin
             GetBody; // we need to get it now
             LockedInc32(@fServer.fStats[grBodyReceived]);
@@ -2178,7 +2179,7 @@ begin
     if withBody and
        not (hfConnectionUpgrade in Http.HeaderFlags) then
     begin
-      if IdemPCharArray(pointer(fMethod), ['HEAD', 'OPTIONS']) < 0 then
+      if not HttpMethodWithNoBody(fMethod) then
         GetBody;
       result := grBodyReceived;
     end
@@ -2365,7 +2366,7 @@ begin
       begin
         // call from TSynThreadPoolTHttpServer -> handle first request
         if not fServerSock.fBodyRetrieved and
-           (IdemPCharArray(pointer(fServerSock.fMethod), ['HEAD', 'OPTIONS']) < 0) then
+           not HttpMethodWithNoBody(fServerSock.fMethod) then
           fServerSock.GetBody;
         fServer.Process(fServerSock, ConnectionID, self);
         if (fServer <> nil) and

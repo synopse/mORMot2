@@ -27,6 +27,7 @@ uses
   mormot.core.log,
   mormot.core.test,
   mormot.net.sock,
+  mormot.net.http,
   mormot.net.client,
   mormot.db.core,
   mormot.orm.core,
@@ -5611,6 +5612,18 @@ var
   end;
 
 begin
+  Check(HttpMethodWithNoBody('HEAD'));
+  Check(HttpMethodWithNoBody('head'));
+  Check(HttpMethodWithNoBody('HEADER'));
+  Check(HttpMethodWithNoBody('OPTIONS'));
+  Check(HttpMethodWithNoBody('options'));
+  Check(HttpMethodWithNoBody('OPTION'));
+  Check(HttpMethodWithNoBody('OPTI'));
+  Check(not HttpMethodWithNoBody('toto'));
+  Check(not HttpMethodWithNoBody('HE4D'));
+  Check(not HttpMethodWithNoBody('GET'));
+  Check(not HttpMethodWithNoBody('POST'));
+  Check(not HttpMethodWithNoBody('PUT'));
   // mime content types
   CheckEqual(GetMimeContentType(nil, 0, 'toto.h264'), 'video/H264');
   CheckEqual(GetMimeContentType(nil, 0, 'toto', 'def1'), 'def1');

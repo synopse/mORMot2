@@ -2100,8 +2100,8 @@ begin
   // now THttpAsyncConnection.OnRead can get the body
   LockedInc32(@fServer.fStats[grHeaderReceived]);
   if (fHttp.State <> hrsWaitProcessing) and
-     (IdemPCharArray(pointer(fHttp.CommandMethod), ['HEAD', 'OPTIONS']) < 0) then
-    // HEAD and OPTIONS have Content-Length but no body
+     not HttpMethodWithNoBody(fHttp.CommandMethod) then
+    // HEAD and OPTIONS are requests with Content-Length header but no body
     result := DoRequest
   else
     result := soContinue;

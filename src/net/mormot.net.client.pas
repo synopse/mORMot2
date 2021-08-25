@@ -1526,7 +1526,7 @@ begin
         if (ctxt.status >= HTTP_SUCCESS) and
            (ctxt.status <> HTTP_NOCONTENT) and
            (ctxt.status <> HTTP_NOTMODIFIED) and
-           (IdemPCharArray(pointer(ctxt.method), ['HEAD', 'OPTIONS']) < 0) then
+           not HttpMethodWithNoBody(ctxt.method) then
            // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
         begin
           if ctxt.OutStream <> nil then
@@ -2935,7 +2935,8 @@ procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8;
   const aData: RawByteString);
 begin
   // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
-  if fIn.Method = 'HEAD' then // the only verb what do not expect body in answer is HEAD
+  if HttpMethodWithNoBody(fIn.Method) then
+    // the only verbs which do not expect body in answer are HEAD and OPTIONS
     curl.easy_setopt(fHandle, coNoBody, 1)
   else
     curl.easy_setopt(fHandle, coNoBody, 0);

@@ -97,6 +97,11 @@ function PurgeHeaders(const headers: RawUtf8): RawUtf8;
 procedure ExtractHeader(var headers: RawUtf8; const upname: RawUtf8;
   out res: RawUtf8);
 
+/// 'HEAD' and 'OPTIONS' methods would be detected and return true
+// - will check only the first four chars for efficiency
+function HttpMethodWithNoBody(const method: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// encode some text into a mime header compatible value
 // - see https://tools.ietf.org/html/rfc2047
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
@@ -678,6 +683,16 @@ begin
     result := '=?UTF-8?B?' + BinToBase64(header) + '?=';
 end;
 
+function HttpMethodWithNoBody(const method: RawUtf8): boolean;
+var
+  c: cardinal;
+begin
+  c := PCardinal(method)^;
+  result := (((c xor cardinal(ord('H') + ord('E') shl 8 + ord('A') shl 16 +
+                     ord('D') shl 24)) and $dfdfdfdf) = 0) or
+            (((c xor cardinal(ord('O') + ord('P') shl 8 + ord('T') shl 16 +
+                     ord('I') shl 24)) and $dfdfdfdf) = 0);
+end;
 
 function RegisterCompressFunc(var Comp: THttpSocketCompressRecDynArray;
   CompFunction: THttpSocketCompress; var AcceptEncoding: RawUtf8;
