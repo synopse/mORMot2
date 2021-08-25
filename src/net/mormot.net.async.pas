@@ -618,6 +618,7 @@ type
   protected
     fAsync: THttpAsyncConnections;
     fCompressGz: integer;
+    fHeadersDefaultBufferSize: integer;
     function GetRegisterCompressGzStatic: boolean;
     procedure SetRegisterCompressGzStatic(Value: boolean);
     function GetHttpQueueLength: cardinal; override;
@@ -634,6 +635,10 @@ type
     /// if we should search for local .gz cached file when serving static files
     property RegisterCompressGzStatic: boolean
       read GetRegisterCompressGzStatic write SetRegisterCompressGzStatic;
+    /// initial capacity of internal per-connection Headers buffer
+    // - 2 KB by default
+    property HeadersDefaultBufferSize: integer
+      read fHeadersDefaultBufferSize write fHeadersDefaultBufferSize;
     /// direct access to the internal high-performance TCP server
     // - you could set e.g. Async.MaxConnections
     property Async: THttpAsyncConnections
@@ -1223,8 +1228,8 @@ begin
   fOwner.ConnectionDelete((connection as TAsyncConnection).Handle);
 end;
 
-function TAsyncConnectionsSockets.OnError(connection: TObject; events:
-  TPollSocketEvents): boolean;
+function TAsyncConnectionsSockets.OnError(connection: TObject;
+  events: TPollSocketEvents): boolean;
 var
   err: shortstring;
 begin
@@ -1270,8 +1275,8 @@ begin
   {$endif HASFASTTRYFINALLY}
 end;
 
-function TAsyncConnectionsSockets.Write(connection: TObject; const data;
-  datalen, timeout: integer): boolean;
+function TAsyncConnectionsSockets.Write(connection: TObject;
+  const data; datalen, timeout: integer): boolean;
 var
   tmp: TLogEscape;
 begin
@@ -1586,7 +1591,8 @@ begin
   result := true;
 end;
 
-function TAsyncConnections.ConnectionDelete(aHandle: TAsyncConnectionHandle): boolean;
+function TAsyncConnections.ConnectionDelete(
+  aHandle: TAsyncConnectionHandle): boolean;
 var
   i: integer;
   conn: TAsyncConnection;
@@ -1637,7 +1643,8 @@ begin
   end;
 end;
 
-function TAsyncConnections.ConnectionRemove(aHandle: TAsyncConnectionHandle): boolean;
+function TAsyncConnections.ConnectionRemove(
+  aHandle: TAsyncConnectionHandle): boolean;
 var
   i: integer;
   conn: TAsyncConnection;
@@ -1670,8 +1677,8 @@ begin
   fConnectionLock.UnLock;
 end;
 
-function TAsyncConnections.Write(connection: TAsyncConnection; const data;
-  datalen: integer): boolean;
+function TAsyncConnections.Write(connection: TAsyncConnection;
+  const data; datalen: integer): boolean;
 begin
   if Terminated then
     result := false
@@ -1950,6 +1957,7 @@ procedure THttpAsyncConnection.AfterCreate(Sender: TAsyncConnections);
 begin
   fServer := (Sender as THttpAsyncConnections).fAsyncServer;
   HttpInit;
+  fHttp.Head.Reserve(fServer.HeadersDefaultBufferSize); // 2KB by default
   if fServer.ServerKeepAliveTimeOut > 0 then
     fKeepAliveTix := GetTickCount64 + fServer.ServerKeepAliveTimeOut;
 end;
@@ -1968,7 +1976,8 @@ begin
   fHeadersTix := 0;
 end;
 
-function THttpAsyncConnection.OnRead(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
+function THttpAsyncConnection.OnRead(
+  Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
 begin
   if Sender.fClients = nil then
     fHttp.State := hrsErrorMisuse
@@ -2082,9 +2091,8 @@ begin
   end
   else if Assigned(fServer.OnBeforeBody) then
     status := fServer.OnBeforeBody(
-      fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers,
-      fHttp.ContentType, fRemoteIP, fHttp.BearerToken,
-      fHttp.ContentLength, {notls=}[]);
+      fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers, fHttp.ContentType,
+      fRemoteIP, fHttp.BearerToken, fHttp.ContentLength, {notls=}[]);
   if status <> HTTP_SUCCESS then
   begin
     // on fatal error direct reject and close the connection
@@ -2166,6 +2174,7 @@ begin
   // now try socket send() with headers (and small body as hrsResponseDone)
   // then TPollAsyncSockets.ProcessWrite/subscribe if needed as hrsSendBody
   fServer.fAsync.fClients.Write(self, fHttp.Head.Buffer^, fHttp.Head.Len);
+  // will call THttpAsyncConnection.AfterWrite once Head sent to finish/continue
 end;
 
 
@@ -2177,6 +2186,7 @@ constructor THttpAsyncServer.Create(const aPort: RawUtf8;
   aHeadersUnFiltered: boolean; AsyncOptions: TAsyncConnectionsOptions);
 begin
   fCompressGz := -1;
+  fHeadersDefaultBufferSize := 2048;
   fAsync := THttpAsyncConnections.Create(aPort, OnStart, OnStop,
     THttpAsyncConnection, ProcessName, TSynLog, AsyncOptions, ServerThreadPoolCount);
   fAsync.fAsyncServer := self;
