@@ -929,10 +929,10 @@ begin
           begin
             // 'CONTENT-ENCODING:'
             P := GotoNextNotSpace(P + 17);
-            len := PtrUInt(P);
-            while P^ > #13 do
+            result := P;
+            while P^ > ' ' do
               inc(P); // no control char should appear in any header
-            len := PtrInt(PtrUInt(P)) - len;
+            len := P - result;
             if len <> 0 then
               for i := 0 to length(Compress) - 1 do
                 if IdemPropNameU(Compress[i].Name, result, len) then
