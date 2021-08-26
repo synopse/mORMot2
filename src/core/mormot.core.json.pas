@@ -1632,11 +1632,11 @@ type
     Prop: PRttiCustomProp;
     /// force the item class when reading a TObjectList without "ClassName":...
     ObjectListItem: TRttiCustom;
-    /// ParseNext unserialized value
+    /// ParseNext/ParseNextAny unserialized value
     Value: PUtf8Char;
-    /// ParseNext unserialized value length
+    /// ParseNext/ParseNextAny unserialized value length
     ValueLen: integer;
-    /// if ParseNext unserialized a JSON string
+    /// if ParseNext/ParseNextAny unserialized a JSON string
     WasString: boolean;
     /// TDocVariant initialization options
     DVO: TDocVariantOptions;

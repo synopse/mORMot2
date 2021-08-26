@@ -432,7 +432,7 @@ procedure SetID(const U: RawByteString; var result: TID); overload;
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-function BlobToRawBlob(P: PUtf8Char): RawBlob; overload;
+function BlobToRawBlob(P: PUtf8Char; Len: integer = 0): RawBlob; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a RawBlob from TEXT-encoded blob data
@@ -870,7 +870,8 @@ type
     // - handle TPersistent, TCollection, TRawUtf8List or TStrings with JsonToObject
     // - note that the supplied Value buffer won't be modified by this method:
     // overriden implementation should create their own temporary copy
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean);
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean);
       virtual; abstract;
     /// convert UTF-8 encoded text into the property value
     // - just a wrapper around SetValue(...,pointer(Value),...) which may be
@@ -1040,7 +1041,8 @@ type
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
@@ -1072,7 +1074,8 @@ type
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure NormalizeValue(var Value: RawUtf8); override;
@@ -1084,7 +1087,8 @@ type
   /// information about a character published property
   TOrmPropInfoRttiChar = class(TOrmPropInfoRttiInt32)
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure NormalizeValue(var Value: RawUtf8); override;
@@ -1099,7 +1103,8 @@ type
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
@@ -1139,7 +1144,8 @@ type
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
@@ -1159,7 +1165,8 @@ type
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
@@ -1176,7 +1183,8 @@ type
   /// information about a TDateTime published property
   TOrmPropInfoRttiDateTime = class(TOrmPropInfoRttiDouble)
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar; var temp:
@@ -1196,7 +1204,8 @@ type
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUtf8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
@@ -1219,7 +1228,8 @@ type
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUtf8;
       wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
@@ -1239,7 +1249,8 @@ type
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUtf8;
       wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
@@ -1254,7 +1265,8 @@ type
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUtf8;
       wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
@@ -1276,7 +1288,8 @@ type
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure CopyValue(Source, Dest: TObject); override;
@@ -1294,7 +1307,8 @@ type
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUtf8;
       wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
@@ -1330,7 +1344,8 @@ type
     // class function CreateFrom()
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
@@ -1371,7 +1386,8 @@ type
     /// initialize the internal fields
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUtf8; wasString: boolean); override;
     procedure SetValuePtr(Instance: TObject; Value: PUtf8Char; ValueLen: integer;
       wasString: boolean);
@@ -1482,7 +1498,8 @@ type
       aData2Text: TOnSqlPropInfoRecord2Text = nil;
       aText2Data: TOnSqlPropInfoRecord2Data = nil); reintroduce; overload;
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
@@ -1521,7 +1538,8 @@ type
       aData2Text: TOnSqlPropInfoRecord2Text = nil;
       aText2Data: TOnSqlPropInfoRecord2Data = nil); reintroduce; overload;
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
@@ -1596,7 +1614,8 @@ type
     /// the corresponding custom JSON parser
     property CustomParser: TRttiJson read fCustomParser;
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
@@ -1729,7 +1748,8 @@ type
   TOrmPropInfoRttiID = class(TOrmPropInfoRttiInstance)
   public
     /// raise an exception if was created by Create*Joined() constructor
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     /// this method will recognize if the TOrm was allocated by
     // a Create*Joined() constructor: in this case, it will write the ID
     // of the nested property, and not the PtrInt() transtyped value
@@ -1748,7 +1768,8 @@ type
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
@@ -1763,7 +1784,8 @@ type
   // a separated pivot table
   TOrmPropInfoRttiMany = class(TOrmPropInfoRttiInstance)
   public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
@@ -3926,7 +3948,7 @@ type
     // - won't do anything in case of wrong property name
     // - expect BLOB and dynamic array fields encoded as SQlite3 BLOB literals
     // ("x'01234'" e.g.) or '\uFFF0base64encodedbinary'
-    procedure SetFieldValue(const PropName: RawUtf8; Value: PUtf8Char);
+    procedure SetFieldValue(const PropName: RawUtf8; Value: PUtf8Char; ValueLen: PtrInt);
     /// retrieve the record content as a TDocVariant custom variant object
     function GetAsDocVariant(withID: boolean; const withFields: TFieldBits;
       options: PDocVariantOptions = nil; replaceRowIDWithID: boolean = false): variant; overload;
@@ -4183,8 +4205,8 @@ type
     // type RawBlob, since by default all BLOB properties are not
     // set by the standard Retrieve() method (to save bandwidth)
     // - if FieldBits is defined, it will store the identified field index
-    procedure FillValue(PropName, Value: PUtf8Char; wasString: boolean;
-      FieldBits: PFieldBits = nil);
+    procedure FillValue(PropName, Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean; FieldBits: PFieldBits = nil);
 
     /// return true if all published properties values in Other are identical to
     // the published properties of this object
@@ -8014,9 +8036,9 @@ begin
 {$endif CPU64}
 end;
 
-function BlobToRawBlob(P: PUtf8Char): RawBlob;
+function BlobToRawBlob(P: PUtf8Char; Len: integer): RawBlob;
 begin
-  BlobToRawBlob(P, result, 0);
+  BlobToRawBlob(P, result, Len);
 end;
 
 procedure BlobToRawBlob(P: PUtf8Char; var result: RawBlob; Len: integer);
@@ -9407,7 +9429,7 @@ end;
 procedure TOrmPropInfo.SetValueVar(Instance: TObject; const Value: RawUtf8;
   wasString: boolean);
 begin
-  SetValue(Instance, pointer(Value), wasString);
+  SetValue(Instance, pointer(Value), length(Value), wasString);
 end;
 
 function TOrmPropInfo.SqlDBFieldTypeName: PShortString;
@@ -9474,9 +9496,9 @@ begin
     ftBlob:
       SetValueVar(Instance, RawBlobToBlob(aValue.VBlob, aValue.VBlobLen), true);
     ftUtf8:
-      SetValue(Instance, aValue.VText, true);
+      SetValue(Instance, aValue.VText, StrLen(aValue.VText), true);
   else
-    SetValue(Instance, nil, false);
+    SetValue(Instance, nil, 0, false);
   end;
   result := true;
 end;
@@ -9993,7 +10015,7 @@ begin
 end;
 
 procedure TOrmPropInfoRttiInt32.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   i32: integer;
 begin
@@ -10107,9 +10129,9 @@ begin
 end;
 
 procedure TOrmPropInfoRttiEnum.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
-  i, err, len: integer;
+  i, err: integer;
 begin
   if Value = nil then
     i := 0
@@ -10119,10 +10141,8 @@ begin
     if err <> 0 then
     begin // we allow a value stated as text
       if fOrmFieldType = oftBoolean then
-      begin
-        len := StrLen(Value);
-        i := ord(IdemPropName('TRUE', Value, len) or IdemPropName('YES', Value, len));
-      end
+        i := ord(IdemPropName('TRUE', Value, ValueLen) or
+                 IdemPropName('YES', Value, ValueLen))
       else
         i := fEnumType^.GetEnumNameValue(Value); // -> convert into integer
       if cardinal(i) > cardinal(fEnumType^.MaxValue) then
@@ -10164,7 +10184,7 @@ begin // do nothing: should already be UTF-8 encoded
 end;
 
 procedure TOrmPropInfoRttiChar.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   i: integer;
 begin
@@ -10303,7 +10323,7 @@ begin
 end;
 
 procedure TOrmPropInfoRttiInt64.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   V64: Int64;
 begin
@@ -10380,7 +10400,7 @@ begin
 end;
 
 procedure TOrmPropInfoRttiDouble.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   V: double;
   err: integer;
@@ -10505,7 +10525,7 @@ begin
 end;
 
 procedure TOrmPropInfoRttiCurrency.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   tmp: Int64;
 begin
@@ -10642,11 +10662,11 @@ begin
 end;
 
 procedure TOrmPropInfoRttiDateTime.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   V: TDateTime;
 begin
-  Iso8601ToDateTimePUtf8CharVar(Value, 0, V);
+  Iso8601ToDateTimePUtf8CharVar(Value, ValueLen, V);
   if fSetterIsFieldPropOffset <> 0 then
     unaligned(PDouble(PtrUInt(Instance) + fSetterIsFieldPropOffset)^) := V
   else
@@ -10676,7 +10696,7 @@ begin
 end;
 
 procedure TOrmPropInfoRttiMany.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 begin
 end;
 
@@ -10758,11 +10778,11 @@ end;
 { TOrmPropInfoRttiID }
 
 procedure TOrmPropInfoRttiID.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 begin
   if TOrm(Instance).fFill.JoinedFields then
     raise EModelException.CreateUtf8('%(%).SetValue after Create*Joined', [self, Name]);
-  inherited SetValue(Instance, Value, wasString);
+  inherited SetValue(Instance, Value, ValueLen, wasString);
 end;
 
 procedure TOrmPropInfoRttiID.GetJsonValues(Instance: TObject; W: TTextWriter);
@@ -10800,12 +10820,12 @@ begin
 end;
 
 procedure TOrmPropInfoRttiObject.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   valid: boolean;
   tmp: TSynTempBuffer;
 begin
-  tmp.Init(Value); // private copy since the buffer will be modified
+  tmp.Init(Value, ValueLen); // private copy since the buffer will be modified
   try
     PropertyFromJson(GetRttiCustomProp(Instance), Instance, tmp.buf, valid,
       JSONPARSER_TOLERANTOPTIONS);
@@ -10964,12 +10984,12 @@ begin
 end;
 
 procedure TOrmPropInfoRttiAnsi.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 begin
   if Value = nil then
     fPropInfo.SetLongStrProp(Instance, '')
   else
-    fPropInfo.SetLongStrProp(Instance, fEngine.Utf8BufferToAnsi(Value, StrLen(Value)));
+    fPropInfo.SetLongStrProp(Instance, fEngine.Utf8BufferToAnsi(Value, ValueLen));
 end;
 
 procedure TOrmPropInfoRttiAnsi.SetValueVar(Instance: TObject; const Value:
@@ -11159,21 +11179,20 @@ begin
 end;
 
 procedure TOrmPropInfoRttiRawUtf8.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 
   procedure NeedSub;
   var
     tmp: RawUtf8;
   begin
     if Value <> nil then
-      FastSetString(tmp, Value, StrLen(Value));
+      FastSetString(tmp, Value, ValueLen);
     fPropInfo.SetLongStrProp(Instance, tmp);
   end;
 
 begin
   if fSetterIsFieldPropOffset <> 0 then
-    FastSetString(PRawUtf8(PtrUInt(Instance) + fSetterIsFieldPropOffset)^,
-      Value, StrLen(Value))
+    FastSetString(PRawUtf8(PtrUInt(Instance) + fSetterIsFieldPropOffset)^, Value, ValueLen)
   else
     NeedSub;
 end;
@@ -11244,13 +11263,12 @@ begin
 end;
 
 procedure TOrmPropInfoRttiRawUnicode.SetValue(Instance: TObject;
-  Value: PUtf8Char; wasString: boolean);
+  Value: PUtf8Char; ValueLen: PtrInt; wasString: boolean);
 begin
   if Value = nil then
     fPropInfo.SetLongStrProp(Instance, '')
   else
-    fPropInfo.SetLongStrProp(Instance,
-      Utf8DecodeToRawUnicode(Value, StrLen(Value)));
+    fPropInfo.SetLongStrProp(Instance, Utf8DecodeToRawUnicode(Value, ValueLen));
 end;
 
 procedure TOrmPropInfoRttiRawUnicode.SetValueVar(Instance: TObject;
@@ -11334,9 +11352,9 @@ begin
 end;
 
 procedure TOrmPropInfoRttiRawBlob.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 begin
-  fPropInfo.SetLongStrProp(Instance, BlobToRawBlob(Value));
+  fPropInfo.SetLongStrProp(Instance, BlobToRawBlob(Value, ValueLen));
 end;
 
 procedure TOrmPropInfoRttiRawBlob.SetValueVar(Instance: TObject;
@@ -11475,12 +11493,12 @@ begin
 end;
 
 procedure TOrmPropInfoRttiWide.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   Wide: WideString;
 begin
   if Value <> nil then
-    Utf8ToWideString(Value, StrLen(Value), Wide);
+    Utf8ToWideString(Value, ValueLen, Wide);
   fPropInfo.SetWideStrProp(Instance, Wide);
 end;
 
@@ -11579,12 +11597,12 @@ begin
 end;
 
 procedure TOrmPropInfoRttiUnicode.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   tmp: UnicodeString;
 begin
   if Value <> nil then
-    Utf8DecodeToUnicodeString(Value, StrLen(Value), tmp);
+    Utf8DecodeToUnicodeString(Value, ValueLen, tmp);
   fPropInfo.SetUnicodeStrProp(Instance, tmp);
 end;
 
@@ -11806,7 +11824,7 @@ begin
 end;
 
 procedure TOrmPropInfoRttiDynArray.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   tmp: TSynTempBuffer;
   da: TDynArray;
@@ -11816,7 +11834,7 @@ begin
     da.Clear
   else
   try
-    if (fObjArray = nil) and Base64MagicCheckAndDecode(Value, tmp) then
+    if (fObjArray = nil) and Base64MagicCheckAndDecode(Value, tmp, ValueLen) then
       da.LoadFrom(tmp.buf, PAnsiChar(tmp.buf) + tmp.len)
     else
       da.LoadFromJson(tmp.Init(Value));
@@ -11996,9 +12014,9 @@ begin
 end;
 
 procedure TOrmPropInfoRttiVariant.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 begin
-  SetValuePtr(Instance, Value, StrLen(Value), wasString);
+  SetValuePtr(Instance, Value, ValueLen, wasString);
 end;
 
 procedure TOrmPropInfoRttiVariant.SetValueVar(Instance: TObject;
@@ -12176,7 +12194,7 @@ begin // use our RecordLoad() binary serialization
 end;
 
 procedure TOrmPropInfoRecordRtti.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   data: RawByteString;
 begin
@@ -12315,7 +12333,7 @@ begin
 end;
 
 procedure TOrmPropInfoRecordFixedSize.SetValue(Instance: TObject;
-  Value: PUtf8Char; wasString: boolean);
+  Value: PUtf8Char; ValueLen: PtrInt; wasString: boolean);
 var
   data: RawByteString;
 begin
@@ -12409,11 +12427,11 @@ end;
 
 procedure TOrmPropInfoCustomJson.SetBinary(Instance: TObject; var Read: TFastReader);
 var
-  tmp: TSynTempBuffer;
+  tmp: TSynTempBuffer; // temporary copy
 begin // stored as JSON VarString in the binary stream
   Read.VarBlob(tmp);
   try
-    SetValue(Instance, tmp.buf, false);
+    SetValue(Instance, tmp.buf, tmp.Len, false);
   finally
     tmp.Done;
   end;
@@ -12449,18 +12467,16 @@ begin
 end;
 
 procedure TOrmPropInfoCustomJson.SetValue(Instance: TObject; Value: PUtf8Char;
-  wasString: boolean);
+  ValueLen: PtrInt; wasString: boolean);
 var
   Data: PByte;
   B: PUtf8Char;
-  len: PtrInt;
   tmp: RawUtf8;
 begin
   Data := GetFieldAddr(Instance);
   if Value <> nil then
   begin // exact JSON string, array of objet ?
-    Value := GotoNextNotSpace(Value);
-    case Value^ of
+    case GotoNextNotSpace(Value)^ of
       '{', '[':
         B := GotoEndJsonItem(Value);
       '"':
@@ -12472,10 +12488,9 @@ begin
     else
       B := nil;
     end;
-    len := StrLen(Value);
-    if (B = nil) or (B - Value <> len) then
+    if (B = nil) or (B - Value <> ValueLen) then
     begin
-      QuotedStrJson(Value, len, tmp); // need escaping as JSON string
+      QuotedStrJson(Value, ValueLen, tmp); // need escaping as JSON string
       Value := pointer(tmp);
     end;
   end;
@@ -13895,7 +13910,7 @@ begin
     LenStore.buf := nil; // avoid GPF in LenStore.Done
     exit;
   end;
-  len := LenStore.Init(fRowCount * SizeOf({%H-}len^));
+  len := LenStore.Init(fRowCount * SizeOf(integer));
   n := fFieldCount;
   for i := 1 to fRowCount do
   begin
@@ -16223,6 +16238,7 @@ function TOrmFill.Fill(aRow: integer; aDest: TOrm): boolean;
 var
   D: TOrm;
   f: PtrInt;
+  P: PUtf8Char;
 begin
   if (self = nil) or (Table = nil) or (cardinal(aRow) > cardinal(Table.fRowCount)) then
     result := False
@@ -16235,11 +16251,11 @@ begin
         D := Dest;
         if aDest <> nil then
           D := aDest;
+        P := Table.GetResults(aRow + TableIndex);
         if DestField = nil then
-          SetID(Table.GetResults(aRow + TableIndex), D.fID)
+          SetID(P, D.fID)
         else
-          DestField.SetValue(D, Table.GetResults(aRow + TableIndex),
-           TableIndex in fTable.fFieldParsedAsString);
+          DestField.SetValue(D, P, StrLen(P), TableIndex in fTable.fFieldParsedAsString);
       end;
     result := True;
   end;
@@ -16650,21 +16666,21 @@ var
   F: array[0..MAX_SQLFIELDS - 1] of PUtf8Char; // store field/property names
   wasString: boolean;
   i, n: PtrInt;
+  ValueLen: integer;
   Prop, Value: PUtf8Char;
 begin
   if FieldBits <> nil then
     FillZero(FieldBits^);
-  // go to start of object
   if P = nil then
     exit;
-  while P^ <> '{' do
+  while P^ <> '{' do  // go to start of object
     if P^ = #0 then
       exit
     else
       inc(P);
+  // set each property from values using efficient TOrmPropInfo.SetValue()
   if Expect(P, FIELDCOUNT_PATTERN, 14) then
-  begin
-    // not expanded format: read the values directly from the input array
+  begin // not expanded format: read the values directly from the input array
     n := GetNextItemCardinal(P, #0) - 1;
     if cardinal(n) > high(F) then
       exit;
@@ -16677,22 +16693,19 @@ begin
       F[i] := GetJsonField(P, P);
     for i := 0 to n do
     begin
-      // set properties from values using efficient TOrmPropInfo.SetValue()
-      Value := GetJsonFieldOrObjectOrArray(P, @wasString, nil, true);
-      FillValue({%H-}F[i], Value, wasString, FieldBits);
+      Value := GetJsonFieldOrObjectOrArray(P, @wasString, nil, true, true, @ValueLen);
+      FillValue({%H-}F[i], Value, ValueLen, wasString, FieldBits);
     end;
   end
   else if P^ = '{' then
-  begin
-    // expanded format: check each property name
+  begin // expanded format: check each property name
     inc(P);
     repeat
       Prop := GetJsonPropName(P);
       if (Prop = nil) or (P = nil) then
         break;
-      // set each property from values using efficient TOrmPropInfo.SetValue()
-      Value := GetJsonFieldOrObjectOrArray(P, @wasString, nil, true);
-      FillValue(Prop, Value, wasString, FieldBits);
+      Value := GetJsonFieldOrObjectOrArray(P, @wasString, nil, true, true, @ValueLen);
+      FillValue(Prop, Value, ValueLen, wasString, FieldBits);
     until P = nil;
   end;
 end;
@@ -16825,8 +16838,8 @@ begin
   W.Add(']');
 end;
 
-procedure TOrm.FillValue(PropName, Value: PUtf8Char; wasString: boolean;
-  FieldBits: PFieldBits);
+procedure TOrm.FillValue(PropName, Value: PUtf8Char; ValueLen: PtrInt;
+  wasString: boolean; FieldBits: PFieldBits);
 var
   field: TOrmPropInfo;
 begin
@@ -16838,7 +16851,9 @@ begin
       field := Orm.Fields.ByName(PropName);
       if field <> nil then
       begin
-        field.SetValue(self, Value, wasString);
+        if (ValueLen = 0) and (Value <> nil) then
+          ValueLen := StrLen(Value);
+        field.SetValue(self, Value, ValueLen, wasString);
         if FieldBits <> nil then
           Include(FieldBits^, field.PropertyIndex);
       end;
@@ -17383,7 +17398,7 @@ begin
     begin
       for i := 0 to length(CopiableFields) - 1 do
         if CopiableFields[i].OrmFieldType <> oftID then
-          CopiableFields[i].SetValue(self, nil, false)
+          CopiableFields[i].SetValue(self, nil, 0, false)
         else
           // clear nested allocated TOrm
           TOrm(TOrmPropInfoRttiInstance(CopiableFields[i]).GetInstance(self)).
@@ -17391,7 +17406,7 @@ begin
     end
     else
       for i := 0 to length(CopiableFields) - 1 do
-        CopiableFields[i].SetValue(self, nil, false);
+        CopiableFields[i].SetValue(self, nil, 0, false);
 end;
 
 procedure TOrm.ClearProperties(const aFieldsCsv: RawUtf8);
@@ -17409,7 +17424,7 @@ begin
       exit;
     for f := 0 to Fields.Count - 1 do
       if (byte(f) in bits) and (Fields.List[f].OrmFieldType in COPIABLE_FIELDS) then
-        Fields.List[f].SetValue(self, nil, false); // clear field value
+        Fields.List[f].SetValue(self, nil, 0, false); // clear field value
   end;
 end;
 
@@ -17938,7 +17953,7 @@ begin
          cur := nil;
        end;
        if f <> nil then // just ignore unknown property names
-         f.SetValue(orm, Context.Value, Context.WasString);
+         f.SetValue(orm, Context.Value, Context.ValueLen, Context.WasString);
      end;
   until Context.EndOfObject = '}';
   Context.ParseEndOfObject;
@@ -18081,7 +18096,7 @@ begin
     P.GetValueVar(self, False, result, nil);
 end;
 
-procedure TOrm.SetFieldValue(const PropName: RawUtf8; Value: PUtf8Char);
+procedure TOrm.SetFieldValue(const PropName: RawUtf8; Value: PUtf8Char; ValueLen: PtrInt);
 var
   P: TOrmPropInfo;
 begin
@@ -18089,7 +18104,7 @@ begin
     exit;
   P := Orm.Fields.ByName(pointer(PropName));
   if P <> nil then
-    P.SetValue(self, Value, false);
+    P.SetValue(self, Value, ValueLen, false);
 end;
 
 function TOrm.GetAsDocVariant(withID: boolean;
@@ -20301,8 +20316,7 @@ begin // use length(SqlTableName)
   if (self <> nil) and (SqlTableName <> '') then
   begin
     result := FastFindUpperPUtf8CharSorted( // branchless O(log(n)) bin search
-      pointer(fSortedTablesNameUpper), fTablesMax,
-      pointer(SqlTableName), length(SqlTableName));
+      pointer(fSortedTablesNameUpper), fTablesMax, pointer(SqlTableName), length(SqlTableName));
     if result >= 0 then
       result := fSortedTablesNameIndex[result];
   end
@@ -20315,8 +20329,7 @@ begin // use StrLen(SqlTableName)
   if (self <> nil) and (SqlTableName <> nil) then
   begin
     result := FastFindUpperPUtf8CharSorted( // branchless O(log(n)) bin search
-      pointer(fSortedTablesNameUpper), fTablesMax,
-      SqlTableName, StrLen(SqlTableName));
+      pointer(fSortedTablesNameUpper), fTablesMax, SqlTableName, StrLen(SqlTableName));
     if result >= 0 then
       result := fSortedTablesNameIndex[result];
   end

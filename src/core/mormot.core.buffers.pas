@@ -1011,7 +1011,8 @@ function Base64MagicCheckAndDecode(Value: PUtf8Char; ValueLen: integer;
 /// check and decode '\uFFF0base64encodedbinary' content into binary
 // - this method will check the supplied value to match the expected
 // JSON_BASE64_MAGIC_C pattern, decode and set Blob and return TRUE
-function Base64MagicCheckAndDecode(Value: PUtf8Char; var Blob: TSynTempBuffer): boolean; overload;
+function Base64MagicCheckAndDecode(Value: PUtf8Char;
+  var Blob: TSynTempBuffer; ValueLen: integer = 0): boolean; overload;
 
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 function BinToBase64(const s: RawByteString): RawUtf8; overload;
@@ -6377,9 +6378,8 @@ begin
   end;
 end;
 
-function Base64MagicCheckAndDecode(Value: PUtf8Char; var Blob: TSynTempBuffer): boolean;
-var
-  ValueLen: integer;
+function Base64MagicCheckAndDecode(Value: PUtf8Char; var Blob: TSynTempBuffer;
+  ValueLen: integer): boolean;
 begin
   if (Value = nil) or
      (Value[0] = #0) or
@@ -6389,7 +6389,9 @@ begin
     result := false
   else
   begin
-    ValueLen := StrLen(Value) - 3;
+    if ValueLen = 0 then
+      ValueLen := StrLen(Value);
+    dec(ValueLen, 3);
     if ValueLen > 0 then
       result := Base64ToBin(PAnsiChar(Value) + 3, ValueLen, Blob)
     else
