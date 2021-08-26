@@ -39,6 +39,7 @@ uses
   mormot.net.ws.server,
   mormot.db.core,
   mormot.db.nosql.bson,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.orm.storage,

@@ -40,6 +40,7 @@ uses
   mormot.core.json,
   mormot.core.interfaces,
   mormot.core.mustache,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.soa.core,

@@ -80,12 +80,15 @@ type
   // is inconsistent between browsers: http://stackoverflow.com/a/9186091
   // - TRestHttpClientGeneric.Compression default property is [hcSynLZ]
   // - deprecated hcSynShaAes used SHA-256/AES-256-CFB to encrypt the content
-  // (after SynLZ compression), but has been audited as weak so HTTPS is to
-  // be used instead
+  // (after SynLZ compression), but has been audited as weak so standard HTTPS
+  // is to be used instead
   TRestHttpCompression = (
     hcSynLZ,
     hcDeflate
-    {$ifndef PUREMORMOT2} , hcSynShaAes {$endif PUREMORMOT2} );
+    {$ifndef PUREMORMOT2}
+    , hcSynShaAes
+    {$endif PUREMORMOT2}
+    );
 
   /// set of available compressions schemes
   TRestHttpCompressions = set of TRestHttpCompression;
@@ -192,9 +195,7 @@ type
     // - you may include hcDeflate, which will have a better compression ratio,
     // be recognized by all browsers and libraries, but would consume much
     // more CPU resources than hcSynLZ
-    // - if you include hcSynShaAes, it will use SHA-256/AES-256-CFB to encrypt
-    // the content (after SynLZ compression), if it is enabled on the server side:
-    // ! MyServer := TRestHttpServer.Create('888',[DataBase],'+',useHttpApi,32,secSynShaAes);
+    // - hcSynShaAes is weak and deprecated, so should not be used on production
     // - for fast and safe communication between stable mORMot nodes, consider
     // using TRestHttpClientWebSockets, leaving hcDeflate for AJAX or non mORMot
     // clients, and hcSynLZ if you expect to have mORMot client(s)
@@ -472,8 +473,8 @@ var
   HttpClientFullWebSocketsLog: boolean;
 
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   TSqlRestHttpClientWinSock = TRestHttpClientSocket;

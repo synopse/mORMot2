@@ -1712,8 +1712,8 @@ var
     [jpoHandleCustomVariants, jpoIgnoreUnknownEnum,
      jpoIgnoreUnknownProperty, jpoIgnoreStringType, jpoAllowInt64Hex]);
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   TJsonToObjectOption = TJsonParserOption;

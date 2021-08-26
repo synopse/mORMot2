@@ -31,6 +31,7 @@ uses
   mormot.core.test,
   mormot.db.core,
   mormot.db.nosql.bson,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.soa.core,
   mormot.rest.client,

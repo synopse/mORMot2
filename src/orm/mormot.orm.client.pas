@@ -38,6 +38,7 @@ uses
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
+  mormot.orm.base,
   mormot.orm.core, // for TOrm and IRestOrm
   mormot.orm.rest,
   mormot.soa.core,

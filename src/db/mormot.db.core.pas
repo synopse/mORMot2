@@ -309,8 +309,8 @@ const
     'Int64', 'Double', 'Currency', 'TDateTime', 'RawUtf8', 'RawBlob');
 
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   TSqlFieldBits = TFieldBits;
@@ -989,8 +989,8 @@ type
 
 function ToText(Op: TSelectStatementOperator): PShortString; overload;
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   TSynTableStatement = TSelectStatement;

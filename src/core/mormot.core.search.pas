@@ -359,7 +359,6 @@ const
   SOUNDEX_BITS = 4;
 
 
-
 { ****************** Versatile Expression Search Engine }
 
 type
@@ -3171,7 +3170,6 @@ begin
   if next <> nil then
     next^ := FindNextUtf8WordBegin(U);
 end;
-
 
 
 { ****************** Versatile Expression Search Engine }

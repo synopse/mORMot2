@@ -41,6 +41,7 @@ uses
   mormot.core.log,
   mormot.core.interfaces,
   mormot.core.mustache,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.orm.server,

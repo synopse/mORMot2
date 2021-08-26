@@ -793,9 +793,9 @@ function PropNameEquals(const P1, P2: RawUtf8): boolean; overload;
 function DateTimeToIsoString(dt: TDateTime): string;
 
 
+// backward compatibility types redirections
 {$ifndef PUREMORMOT2}
 
-// backward compatibility types redirections
 type
   TSqlRawBlob = RawBlob;
 

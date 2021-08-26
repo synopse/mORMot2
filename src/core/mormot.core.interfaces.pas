@@ -399,8 +399,8 @@ type
   PInterfaceMethod = ^TInterfaceMethod;
 
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   TServiceMethodValueType = TInterfaceMethodValueType;

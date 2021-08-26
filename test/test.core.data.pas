@@ -89,6 +89,7 @@ uses
   mormot.net.sock,
   mormot.db.core,
   mormot.db.nosql.bson,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.rest.client,
   mormot.rest.server,

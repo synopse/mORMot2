@@ -48,6 +48,7 @@ uses
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
+  mormot.orm.base,
   mormot.orm.core, // for TOrm and IRestOrm
   mormot.soa.core,
   mormot.db.core;
@@ -261,8 +262,8 @@ type
   end;
 
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
   TSqlRestServerUriContextCommand = TRestServerUriContextCommand;
   TSqlRestServerAcquireMode = TRestServerAcquireMode;
@@ -857,8 +858,8 @@ type
   {$endif PUREMORMOT2}
   end;
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   TSqlRest = TRest;
@@ -1183,8 +1184,8 @@ type
     out HeadRespFree: TLibraryRequestFree; var Head: PUtf8Char; var HeadLen: cardinal;
     out Resp: PUtf8Char; out RespLen, State: cardinal): cardinal; cdecl;
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   TSqlAuthUser = TAuthUser;
@@ -1465,8 +1466,8 @@ type
   TOrmTableDeletedClass = class of TOrmTableDeleted;
 
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   TSqlRestThread = TRestThread;

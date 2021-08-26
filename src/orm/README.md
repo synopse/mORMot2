@@ -12,17 +12,25 @@ This folder hosts the *RESTful ORM* high-level features of the *mORMot* Open Sou
 - `IRestOrm IRestOrmServer IRestOrmClient` interfaces can be used in business code for abstract and persistent-agnostic data access;
 - UTF-8 and JSON are used from the ground up, to make our ORM easy to consume in a REST approach, as defined in the `/src/rest` folder;
 - It can leverage *SQlite3* as its kernel, to access several data sources over virtual tables;
-- A high-performance in-memory engine, using JSON or binary on disk, is available;
+- A high-performance in-memory engine, using JSON or binary on disk, can be used instead of *SQlite3*;
 - Switch to a *NoSQL* database like *MongoDB* is possible, transforming our ORM to an ODM - aka *Object-Document-Mapping*.
 
 ## Units Presentation
 
-### mormot.orm.core
+### mormot.orm.base
 
-Shared Types and Definitions for our RESTful ORM
+Low-Level Basic Types and Definitions for our RESTful ORM
 - Shared ORM/JSON Fields and Values Definitions
 - JSON Object Decoder and SQL Generation
-- `TJSONSerializer` Class for `TOrm` Serialization
+- ORM Ready UTF-8 Comparison Functions
+- `TJsonSerializer` Class for `TOrm` Serialization
+- Abstract `TOrmPropInfo` Parent Class
+- Abstract `TOrmTableAbstract` Parent Class
+- `TOrmTableRowVariant` Custom Variant Type
+
+### mormot.orm.core
+
+Main Shared Types and Definitions for our RESTful ORM
 - `TOrmPropInfo` Classes for Efficient ORM Processing
 - `IRestOrm IRestOrmServer IRestOrmClient` Definitions
 - `TOrm` Definition

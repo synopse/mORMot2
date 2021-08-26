@@ -455,8 +455,8 @@ type
   {$M-}
 
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
   TSQLHTTPServerOptions = TRestHttpServerUse;
   TSQLHTTPServerSecurity = TRestHttpServerSecurity;

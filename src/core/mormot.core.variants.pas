@@ -7623,7 +7623,7 @@ begin
         if Json - start <= 19 then // signed Int64 precision
           result := varInt64
         else
-          result := varDouble; // we may lost precision, but still a number
+          result := varDouble; // we may loose precision, but still a number
       '.':
         if (Json[1] >= '0') and
            (Json[1] <= '9') and

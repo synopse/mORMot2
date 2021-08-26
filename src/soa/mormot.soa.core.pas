@@ -37,6 +37,7 @@ uses
   mormot.core.json,
   mormot.core.threads,
   mormot.core.interfaces,
+  mormot.orm.base,
   mormot.orm.core;
 
 

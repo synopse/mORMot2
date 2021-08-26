@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
-  <Package Version="4">
+  <Package Version="5">
     <Name Value="mormot2"/>
     <Author Value="A. Bouchez, Synopse"/>
     <CompilerOptions>
@@ -43,7 +43,7 @@
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Release="1"/>
-    <Files Count="92">
+    <Files Count="93">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -325,93 +325,97 @@
         <UnitName Value="mormot.net.ws.server"/>
       </Item70>
       <Item71>
-        <Filename Value="../../src/orm/mormot.orm.client.pas"/>
-        <UnitName Value="mormot.orm.client"/>
+        <Filename Value="../../src/orm/mormot.orm.base.pas"/>
+        <UnitName Value="mormot.orm.base"/>
       </Item71>
       <Item72>
-        <Filename Value="../../src/orm/mormot.orm.core.pas"/>
-        <UnitName Value="mormot.orm.core"/>
+        <Filename Value="../../src/orm/mormot.orm.client.pas"/>
+        <UnitName Value="mormot.orm.client"/>
       </Item72>
       <Item73>
-        <Filename Value="../../src/orm/mormot.orm.mongodb.pas"/>
-        <UnitName Value="mormot.orm.mongodb"/>
+        <Filename Value="../../src/orm/mormot.orm.core.pas"/>
+        <UnitName Value="mormot.orm.core"/>
       </Item73>
       <Item74>
-        <Filename Value="../../src/orm/mormot.orm.rest.pas"/>
-        <UnitName Value="mormot.orm.rest"/>
+        <Filename Value="../../src/orm/mormot.orm.mongodb.pas"/>
+        <UnitName Value="mormot.orm.mongodb"/>
       </Item74>
       <Item75>
-        <Filename Value="../../src/orm/mormot.orm.server.pas"/>
-        <UnitName Value="mormot.orm.server"/>
+        <Filename Value="../../src/orm/mormot.orm.rest.pas"/>
+        <UnitName Value="mormot.orm.rest"/>
       </Item75>
       <Item76>
-        <Filename Value="../../src/orm/mormot.orm.sql.pas"/>
-        <UnitName Value="mormot.orm.sql"/>
+        <Filename Value="../../src/orm/mormot.orm.server.pas"/>
+        <UnitName Value="mormot.orm.server"/>
       </Item76>
       <Item77>
-        <Filename Value="../../src/orm/mormot.orm.sqlite3.pas"/>
-        <UnitName Value="mormot.orm.sqlite3"/>
+        <Filename Value="../../src/orm/mormot.orm.sql.pas"/>
+        <UnitName Value="mormot.orm.sql"/>
       </Item77>
       <Item78>
-        <Filename Value="../../src/orm/mormot.orm.storage.pas"/>
-        <UnitName Value="mormot.orm.storage"/>
+        <Filename Value="../../src/orm/mormot.orm.sqlite3.pas"/>
+        <UnitName Value="mormot.orm.sqlite3"/>
       </Item78>
       <Item79>
-        <Filename Value="../../src/rest/mormot.rest.client.pas"/>
-        <UnitName Value="mormot.rest.client"/>
+        <Filename Value="../../src/orm/mormot.orm.storage.pas"/>
+        <UnitName Value="mormot.orm.storage"/>
       </Item79>
       <Item80>
-        <Filename Value="../../src/rest/mormot.rest.core.pas"/>
-        <UnitName Value="mormot.rest.core"/>
+        <Filename Value="../../src/rest/mormot.rest.client.pas"/>
+        <UnitName Value="mormot.rest.client"/>
       </Item80>
       <Item81>
-        <Filename Value="../../src/rest/mormot.rest.http.client.pas"/>
-        <UnitName Value="mormot.rest.http.client"/>
+        <Filename Value="../../src/rest/mormot.rest.core.pas"/>
+        <UnitName Value="mormot.rest.core"/>
       </Item81>
       <Item82>
-        <Filename Value="../../src/rest/mormot.rest.http.server.pas"/>
-        <UnitName Value="mormot.rest.http.server"/>
+        <Filename Value="../../src/rest/mormot.rest.http.client.pas"/>
+        <UnitName Value="mormot.rest.http.client"/>
       </Item82>
       <Item83>
-        <Filename Value="../../src/rest/mormot.rest.memserver.pas"/>
-        <UnitName Value="mormot.rest.memserver"/>
+        <Filename Value="../../src/rest/mormot.rest.http.server.pas"/>
+        <UnitName Value="mormot.rest.http.server"/>
       </Item83>
       <Item84>
-        <Filename Value="../../src/rest/mormot.rest.mvc.pas"/>
-        <UnitName Value="mormot.rest.mvc"/>
+        <Filename Value="../../src/rest/mormot.rest.memserver.pas"/>
+        <UnitName Value="mormot.rest.memserver"/>
       </Item84>
       <Item85>
-        <Filename Value="../../src/rest/mormot.rest.server.pas"/>
-        <UnitName Value="mormot.rest.server"/>
+        <Filename Value="../../src/rest/mormot.rest.mvc.pas"/>
+        <UnitName Value="mormot.rest.mvc"/>
       </Item85>
       <Item86>
-        <Filename Value="../../src/rest/mormot.rest.sqlite3.pas"/>
-        <UnitName Value="mormot.rest.sqlite3"/>
+        <Filename Value="../../src/rest/mormot.rest.server.pas"/>
+        <UnitName Value="mormot.rest.server"/>
       </Item86>
       <Item87>
-        <Filename Value="../../src/script/mormot.script.core.pas"/>
-        <UnitName Value="mormot.script.core"/>
+        <Filename Value="../../src/rest/mormot.rest.sqlite3.pas"/>
+        <UnitName Value="mormot.rest.sqlite3"/>
       </Item87>
       <Item88>
-        <Filename Value="../../src/script/mormot.script.quickjs.pas"/>
-        <UnitName Value="mormot.script.quickjs"/>
+        <Filename Value="../../src/script/mormot.script.core.pas"/>
+        <UnitName Value="mormot.script.core"/>
       </Item88>
       <Item89>
-        <Filename Value="../../src/soa/mormot.soa.client.pas"/>
-        <UnitName Value="mormot.soa.client"/>
+        <Filename Value="../../src/script/mormot.script.quickjs.pas"/>
+        <UnitName Value="mormot.script.quickjs"/>
       </Item89>
       <Item90>
-        <Filename Value="../../src/soa/mormot.soa.codegen.pas"/>
-        <UnitName Value="mormot.soa.codegen"/>
+        <Filename Value="../../src/soa/mormot.soa.client.pas"/>
+        <UnitName Value="mormot.soa.client"/>
       </Item90>
       <Item91>
-        <Filename Value="../../src/soa/mormot.soa.core.pas"/>
-        <UnitName Value="mormot.soa.core"/>
+        <Filename Value="../../src/soa/mormot.soa.codegen.pas"/>
+        <UnitName Value="mormot.soa.codegen"/>
       </Item91>
       <Item92>
+        <Filename Value="../../src/soa/mormot.soa.core.pas"/>
+        <UnitName Value="mormot.soa.core"/>
+      </Item92>
+      <Item93>
         <Filename Value="../../src/soa/mormot.soa.server.pas"/>
         <UnitName Value="mormot.soa.server"/>
-      </Item92>
+      </Item93>
     </Files>
     <UsageOptions>
       <IncludePath Value="$(PkgIncPath)"/>

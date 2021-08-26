@@ -47,6 +47,7 @@ uses
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.soa.core,
@@ -360,8 +361,8 @@ type
   end;
 
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
   TSqlRestServerAuthenticationClientSetUserPassword = TRestClientSetUserPassword;
   TSqlRestServerAuthenticationSignedUriAlgo = TRestAuthenticationSignedUriAlgo;
@@ -436,8 +437,8 @@ type
       out sent, head: RawUtf8); override;
   end;
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
   TSqlRestServerUriContextClientInvoke = TRestClientSideInvoke;
 
@@ -1059,9 +1060,8 @@ type
   end;
 
 
-
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   TSqlRestClientUri = TRestClientUri;

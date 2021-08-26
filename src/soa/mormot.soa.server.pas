@@ -37,6 +37,7 @@ uses
   mormot.core.threads,
   mormot.core.interfaces,
   mormot.db.core,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.soa.core,

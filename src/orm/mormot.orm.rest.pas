@@ -35,6 +35,7 @@ uses
   mormot.core.rtti,
   mormot.core.log,
   mormot.core.json,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.rest.core,
   mormot.db.core;

@@ -31,6 +31,7 @@ uses
   mormot.db.raw.sqlite3,
   mormot.db.raw.sqlite3.static,
   mormot.db.proxy,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.storage,
   mormot.orm.sql,

@@ -236,8 +236,8 @@ function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
   aHandleUserAuthentication: boolean): TRestServer;
 
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   // should be a proper type for RegisterClassNameForDefinition

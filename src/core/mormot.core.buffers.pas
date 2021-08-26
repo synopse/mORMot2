@@ -1247,6 +1247,51 @@ function Base58ToBin(B58: PAnsiChar; B58Len: integer): RawByteString; overload;
 function Base58ToBin(const base58: RawUtf8): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fill a RawBlob from TEXT-encoded blob data
+// - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
+// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+function BlobToRawBlob(P: PUtf8Char; Len: integer = 0): RawBlob; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fill a RawBlob from TEXT-encoded blob data
+// - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
+// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+procedure BlobToRawBlob(P: PUtf8Char; var result: RawBlob; Len: integer = 0); overload;
+
+/// fill a RawBlob from TEXT-encoded blob data
+// - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
+// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+function BlobToRawBlob(const Blob: RawByteString): RawBlob; overload;
+
+/// create a TBytes from TEXT-encoded blob data
+// - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
+// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+function BlobToBytes(P: PUtf8Char): TBytes;
+
+/// create a memory stream from TEXT-encoded blob data
+// - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
+// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+// - the caller must free the stream instance after use
+function BlobToStream(P: PUtf8Char): TStream;
+
+/// creates a TEXT-encoded version of blob data from a RawBlob
+// - TEXT will be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
+function RawBlobToBlob(const RawBlob: RawBlob): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a TEXT-encoded version of blob data from a memory data
+// - same as RawBlob, but with direct memory access via a pointer/byte size pair
+// - TEXT will be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
+function RawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUtf8; overload;
+
+/// convert a Base64-encoded content into binary hexadecimal ready for SQL
+// - returns e.g. X'53514C697465'
+procedure Base64MagicToBlob(Base64: PUtf8Char; var result: RawUtf8);
+
+/// return true if the TEXT is encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
+function isBlobHex(P: PUtf8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 
 type
   /// used by MultiPartFormDataDecode() to return one item of its data
@@ -6573,6 +6618,170 @@ function Base58ToBin(const base58: RawUtf8): RawByteString;
 begin
   result := Base58ToBin(pointer(base58), length(base58));
 end;
+
+function BlobToRawBlob(P: PUtf8Char; Len: integer): RawBlob;
+begin
+  BlobToRawBlob(P, result, Len);
+end;
+
+procedure BlobToRawBlob(P: PUtf8Char; var result: RawBlob; Len: integer);
+var
+  LenHex: integer;
+begin
+  result := '';
+  if Len = 0 then
+    Len := StrLen(P);
+  if Len = 0 then
+    exit;
+  if Len >= 3 then
+    if (P[0] in ['x', 'X']) and
+       (P[1] = '''') and
+       (P[Len - 1] = '''') then
+    begin
+      // BLOB literals are string literals containing hexadecimal data and
+      // preceded by a single "x" or "X" character. For example: X'53514C697465'
+      LenHex := (Len - 3) shr 1;
+      SetLength(result, LenHex);
+      if mormot.core.text.HexToBin(@P[2], pointer(result), LenHex) then
+        exit; // valid hexa data
+    end
+    else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC_C) and
+       Base64ToBinSafe(@P[3], Len - 3, RawByteString(result)) then
+      exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
+  // TEXT format
+  SetString(result, PAnsiChar(P), Len);
+end;
+
+function BlobToRawBlob(const Blob: RawByteString): RawBlob;
+var
+  Len, LenHex: integer;
+  P: PUtf8Char;
+begin
+  result := '';
+  if Blob = '' then
+    exit;
+  Len := length(Blob);
+  P := pointer(Blob);
+  if Len >= 3 then
+    if (P[0] in ['x', 'X']) and
+       (P[1] = '''') and
+       (P[Len - 1] = '''') then
+    begin
+      // BLOB literals are string literals containing hexadecimal data and
+      // preceded by a single "x" or "X" character. For example: X'53514C697465'
+      LenHex := (Len - 3) shr 1;
+      SetLength(result, LenHex);
+      if mormot.core.text.HexToBin(@P[2], pointer(result), LenHex) then
+        exit; // valid hexa data
+    end
+    else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC_C) and
+        Base64ToBinSafe(@P[3], Len - 3, RawByteString(result)) then
+      exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
+  // TEXT format
+  result := Blob;
+end;
+
+function BlobToStream(P: PUtf8Char): TStream;
+begin
+  result := TRawByteStringStream.Create(BlobToRawBlob(P));
+end;
+
+function BlobToBytes(P: PUtf8Char): TBytes;
+var
+  Len, LenResult: integer;
+begin
+  result := nil;
+  Len := StrLen(P);
+  if Len = 0 then
+    exit;
+  if Len >= 3 then
+    if (P[0] in ['x', 'X']) and
+       (P[1] = '''') and
+       (P[Len - 1] = '''') then
+    begin
+      // BLOB literals format
+      LenResult := (Len - 3) shr 1;
+      SetLength(result, LenResult);
+      if mormot.core.text.HexToBin(@P[2], pointer(result), LenResult) then
+        exit; // valid hexa data
+    end
+    else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC_C) and
+            IsBase64(@P[3], Len - 3) then
+    begin
+      // Base-64 encoded content ('\uFFF0base64encodedbinary')
+      inc(P, 3);
+      dec(Len, 3);
+      LenResult := Base64ToBinLength(pointer(P), Len);
+      SetLength(result, LenResult);
+      if LenResult > 0 then
+        Base64Decode(pointer(P), pointer(result), Len shr 2);
+      exit;
+    end;
+  // TEXT format
+  SetLength(result, Len);
+  MoveFast(P^, pointer(result)^, Len);
+end;
+
+function RawBlobToBlob(const RawBlob: RawBlob): RawUtf8;
+// BLOB literals are string literals containing hexadecimal data and
+//  preceded by a single "x" or "X" character. For example: X'53514C697465'
+begin
+  result := RawBlobToBlob(pointer(RawBlob), length(RawBlob));
+end;
+
+function RawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUtf8;
+// BLOB literals are string literals containing hexadecimal data and
+//  preceded by a single "x" or "X" character. For example: X'53514C697465'
+var
+  P: PAnsiChar;
+begin
+  result := '';
+  if RawBlobLength <> 0 then
+  begin
+    SetLength(result, RawBlobLength * 2 + 3);
+    P := pointer(result);
+    P[0] := 'X';
+    P[1] := '''';
+    BinToHex(RawBlob, P + 2, RawBlobLength);
+    P[RawBlobLength * 2 + 2] := '''';
+  end;
+end;
+
+function isBlobHex(P: PUtf8Char): boolean;
+// BLOB literals are string literals containing hexadecimal data and
+// preceded by a single "x" or "X" character. For example: X'53514C697465'
+var
+  Len: integer;
+begin
+  if P = nil then
+  begin
+    result := false;
+    exit;
+  end;
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
+  if (P[0] in ['x', 'X']) and
+     (P[1] = '''') then
+  begin
+    Len := (StrLen(P) - 3) shr 1;
+    result := (P[Len - 1] = '''') and
+              mormot.core.text.HexToBin(@P[2], nil, Len);
+    exit;
+  end
+  else
+  begin
+    result := false;
+    exit;
+  end;
+end;
+
+procedure Base64MagicToBlob(Base64: PUtf8Char; var result: RawUtf8);
+begin
+  // do not escape the result: returns e.g. X'53514C697465'
+  result := RawBlobToBlob(Base64ToBin(PAnsiChar(Base64), StrLen(Base64)));
+end;
+
 
 
 { --------- MultiPart encoding/decoding }
