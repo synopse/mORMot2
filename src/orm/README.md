@@ -24,14 +24,14 @@ Low-Level Basic Types and Definitions for our RESTful ORM
 - JSON Object Decoder and SQL Generation
 - ORM Ready UTF-8 Comparison Functions
 - `TJsonSerializer` Class for `TOrm` Serialization
-- Abstract `TOrmPropInfo` Parent Class
+- `TOrmPropInfo` ORM / RTTI Classes
 - Abstract `TOrmTableAbstract` Parent Class
 - `TOrmTableRowVariant` Custom Variant Type
 
 ### mormot.orm.core
 
 Main Shared Types and Definitions for our RESTful ORM
-- `TOrmPropInfo` Classes for Efficient ORM Processing
+- ORM Specific `TOrmPropInfoRtti` Classes
 - `IRestOrm IRestOrmServer IRestOrmClient` Definitions
 - `TOrm` Definition
 - `RecordRef` Wrapper Definition

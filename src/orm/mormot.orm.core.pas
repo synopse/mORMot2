@@ -7,7 +7,7 @@ unit mormot.orm.core;
   *****************************************************************************
 
    Main Shared Types and Definitions for our RESTful ORM
-    - TOrmPropInfo Classes for Efficient ORM Processing
+    - ORM Specific TOrmPropInfoRtti Classes
     - IRestOrm IRestOrmServer IRestOrmClient Definitions
     - TOrm Definition
     - RecordRef Wrapper Definition
@@ -62,854 +62,15 @@ uses
 
 
 
-{ ************ TOrmPropInfo Classes for Efficient ORM Processing }
-
-type
-  /// define how the published properties RTTI is to be interpreted
-  // - i.e. how TOrmPropInfoList.Create() and TOrmPropInfoRtti.CreateFrom()
-  // will handle the incoming RTTI
-  TOrmPropInfoListOptions = set of (
-    pilRaiseEOrmExceptionIfNotHandled,
-    pilAllowIDFields,
-    pilSubClassesFlattening,
-    pilIgnoreIfGetter,
-    pilSingleHierarchyLevel,
-    pilAuxiliaryFields);
-
-  /// parent information about a published property retrieved from RTTI
-  TOrmPropInfoRtti = class(TOrmPropInfo)
-  protected
-    fPropInfo: PRttiProp;
-    fPropType: PRttiInfo;
-    fPropRtti: TRttiJson;
-    fFlattenedProps: PRttiPropDynArray;
-    fGetterIsFieldPropOffset, fSetterIsFieldPropOffset: PtrUInt;
-    fInPlaceCopySameClassPropOffset: PtrUInt;
-    fRttiCustomProp: PRttiCustomProp;
-    function GetSqlFieldRttiTypeName: RawUtf8; override;
-    function GetRttiCustomProp(Instance: TObject): PRttiCustomProp;
-      {$ifdef HASINLINE}inline;{$endif}
-  public
-    /// this meta-constructor will create an instance of the exact descendant
-    // of the specified property RTTI
-    // - it will raise an EOrmException in case of an unhandled type
-    class function CreateFrom(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOptions: TOrmPropInfoListOptions;
-      const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
-    /// register this class corresponding to the RTTI TypeInfo() pointer
-    // - could be used e.g. to define custom serialization and process of
-    // any custom type
-    class procedure RegisterTypeInfo(aTypeInfo: PRttiInfo);
-    /// initialize the internal fields
-    // - should not be called directly, but with dedicated class methods like
-    // class function CreateFrom()
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType;
-      aOptions: TOrmPropInfoListOptions); reintroduce; virtual;
-    /// retrieve the property value into a Variant
-    // - will set the Variant type to the best matching kind according to the
-    // OrmFieldType type
-    // - BLOB field returns SQlite3 BLOB textual literals ("x'01234'" e.g.)
-    // - dynamic array field is returned as a variant array
-    procedure GetVariant(Instance: TObject; var Dest: Variant); override;
-    /// retrieve the property field offset from RTTI
-    function GetFieldAddr(Instance: TObject): pointer; override;
-    /// copy a value from one instance to another property instance
-    // - if the property has been flattened (for a TOrmPropInfoRtti), the real
-    // Source/Dest instance will be used for the copy
-    procedure CopyProp(Source: TObject; DestInfo: TOrmPropInfo; Dest: TObject); override;
-    /// get the absolute reading property field offset from RTTI
-    property GetterIsFieldPropOffset: PtrUInt
-      read fGetterIsFieldPropOffset;
-    /// get the absolute writing property field offset from RTTI
-    property SetterIsFieldPropOffset: PtrUInt
-      read fSetterIsFieldPropOffset;
-    /// for pilSubClassesFlattening properties, compute the actual instance
-    // containing the property value
-    // - if the property was not flattened, return the instance
-    function Flattened(Instance: TObject): TObject;
-    /// corresponding RTTI information
-    property PropInfo: PRttiProp read fPropInfo;
-    /// for pilSubClassesFlattening properties, the parents RTTI
-    property FlattenedPropInfo: PRttiPropDynArray read fFlattenedProps;
-    /// corresponding type information, as retrieved from PropInfo RTTI
-    property PropType: PRttiInfo read fPropType;
-    /// corresponding JSON-aware type information, as retrieved from PropInfo RTTI
-    property PropRtti: TRttiJson read fPropRtti;
-  end;
-
-  /// class-reference type (metaclass) of a TOrmPropInfoRtti information
-  TOrmPropInfoRttiClass = class of TOrmPropInfoRtti;
-
-  TOrmPropInfoRttiObjArray = array of TOrmPropInfoRtti;
-
-  /// information about an ordinal Int32 published property
-  TOrmPropInfoRttiInt32 = class(TOrmPropInfoRtti)
-  protected
-    fUnsigned, fIntegerGetPropOffset, fIntegerSetPropOffset: boolean;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
-      var temp: RawByteString); override;
-    function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-  end;
-
-  /// information about a set published property
-  TOrmPropInfoRttiSet = class(TOrmPropInfoRttiInt32)
-  protected
-    fSetEnumType: PRttiEnumType;
-  public
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    property SetEnumType: PRttiEnumType read fSetEnumType;
-  end;
-
-  /// information about a enumeration published property
-  // - can be either oftBoolean or oftEnumerate kind of property
-  TOrmPropInfoRttiEnum = class(TOrmPropInfoRttiInt32)
-  protected
-    fEnumType: PRttiEnumType;
-  public
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    function GetCaption(Value: RawUtf8; out IntValue: integer): string;
-    property EnumType: PRttiEnumType read fEnumType;
-  end;
-
-  /// information about a character published property
-  TOrmPropInfoRttiChar = class(TOrmPropInfoRttiInt32)
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-  end;
-
-  /// information about an ordinal Int64 published property
-  TOrmPropInfoRttiInt64 = class(TOrmPropInfoRtti)
-  protected
-    fIsQWord: boolean;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
-      var temp: RawByteString); override;
-    function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-  end;
-
-  /// information about a PtrInt published property, according to the native CPU
-  // - not a real stand-alone class, but a convenient wrapper type
-  {$ifdef CPU64}
-  TOrmPropInfoRttiPtrInt = TOrmPropInfoRttiInt64;
-  {$else}
-  TOrmPropInfoRttiPtrInt =TOrmPropInfoRttiInt32;
-  {$endif CPU64}
-
-  /// information about a TTimeLog published property
-  // - stored as an Int64, but with a specific class
-  TOrmPropInfoRttiTimeLog = class(TOrmPropInfoRttiInt64);
-
-  /// information about a TUnixTime published property
-  // - stored as an Int64, but with a specific class
-  TOrmPropInfoRttiUnixTime = class(TOrmPropInfoRttiInt64);
-
-  /// information about a TUnixMSTime published property
-  // - stored as an Int64, but with a specific class
-  TOrmPropInfoRttiUnixMSTime = class(TOrmPropInfoRttiInt64);
-
-  /// information about a floating-point Double published property
-  TOrmPropInfoRttiDouble = class(TOrmPropInfoRtti)
-  protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
-      var temp: RawByteString); override;
-    function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-  end;
-
-  /// information about a fixed-decimal Currency published property
-  TOrmPropInfoRttiCurrency = class(TOrmPropInfoRttiDouble)
-  protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
-      var temp: RawByteString); override;
-    function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-  end;
-
-  /// information about a TDateTime published property
-  TOrmPropInfoRttiDateTime = class(TOrmPropInfoRttiDouble)
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar; var temp:
-      RawByteString); override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean):
-      PtrInt; override;
-  end;
-
-  /// information about a AnsiString published property
-  TOrmPropInfoRttiAnsi = class(TOrmPropInfoRtti)
-  protected
-    fEngine: TSynAnsiConvert;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure SetValueVar(Instance: TObject; const Value: RawUtf8; wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure CopyValue(Source, Dest: TObject); override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar; var temp:
-      RawByteString); override;
-    function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-  end;
-
-  /// information about a RawUtf8 published property
-  // - will also serialize a RawJson property without JSON escape
-  TOrmPropInfoRttiRawUtf8 = class(TOrmPropInfoRttiAnsi)
-  protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure SetValueVar(Instance: TObject; const Value: RawUtf8;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
-      var temp: RawByteString); override;
-    function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-  end;
-
-  /// information about a RawUnicode published property
-  TOrmPropInfoRttiRawUnicode = class(TOrmPropInfoRttiAnsi)
-  protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure SetValueVar(Instance: TObject; const Value: RawUtf8;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-  end;
-
-  /// information about a RawBlob published property
-  TOrmPropInfoRttiRawBlob = class(TOrmPropInfoRttiAnsi)
-  protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure SetValueVar(Instance: TObject; const Value: RawUtf8;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar; var temp:
-      RawByteString); override;
-    function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    procedure GetBlob(Instance: TObject; var Blob: RawByteString);
-    procedure SetBlob(Instance: TObject; const Blob: RawByteString);
-    function IsNull(Instance: TObject): boolean;
-  end;
-
-  /// information about a WideString published property
-  TOrmPropInfoRttiWide = class(TOrmPropInfoRtti)
-  protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure CopyValue(Source, Dest: TObject); override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-  end;
-
-  {$ifdef HASVARUSTRING}
-  /// information about a UnicodeString published property
-  TOrmPropInfoRttiUnicode = class(TOrmPropInfoRtti)
-  protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure SetValueVar(Instance: TObject; const Value: RawUtf8;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure CopyValue(Source, Dest: TObject); override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
-      var temp: RawByteString); override;
-    function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-  end;
-  {$endif HASVARUSTRING}
-
-  /// information about a dynamic array published property
-  TOrmPropInfoRttiDynArray = class(TOrmPropInfoRtti)
-  protected
-    fObjArray: TRttiJson;
-    procedure GetDynArray(Instance: TObject; var result: TDynArray);
-      {$ifdef HASINLINE}inline;{$endif}
-    function GetDynArrayElemType: TRttiCustom;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// will create TDynArray.SaveTo by default, or JSON if is T*ObjArray
-    procedure Serialize(Instance: TObject; var data: RawByteString;
-      ExtendedJson: boolean); virtual;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    /// initialize the internal fields
-    // - should not be called directly, but with dedicated class methods like
-    // class function CreateFrom()
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
-      var temp: RawByteString); override;
-    function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    procedure GetVariant(Instance: TObject; var Dest: Variant); override;
-    procedure SetVariant(Instance: TObject; const Source: Variant); override;
-    /// optional index of the dynamic array published property
-    // - used e.g. for fast lookup by TOrm.DynArray(DynArrayFieldIndex)
-    property DynArrayIndex: integer read fFieldWidth;
-    /// read-only access to the low-level type information the array item type
-    property DynArrayElemType: TRttiCustom read GetDynArrayElemType;
-    /// dynamic array item information for a T*ObjArray
-    // - equals nil if this dynamic array was not previously registered via
-    // Rtti.RegisterObjArray() on Delphi 7-2009
-    // - note that if the field is a T*ObjArray, you could create a new item
-    // by calling ObjArray^.ClassNewInstance
-    // - T*ObjArray database column will be stored as text
-    property ObjArray: TRttiJson read fObjArray;
-  end;
-
-  TOrmPropInfoRttiDynArrayObjArray = array of TOrmPropInfoRttiDynArray;
-
-  /// information about a variant published property
-  // - is also used for TNullable* properties
-  TOrmPropInfoRttiVariant = class(TOrmPropInfoRtti)
-  protected
-    fDocVariantOptions: TDocVariantOptions;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    /// initialize the internal fields
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure SetValueVar(Instance: TObject; const Value: RawUtf8; wasString: boolean); override;
-    procedure SetValuePtr(Instance: TObject; Value: PUtf8Char; ValueLen: integer;
-      wasString: boolean);
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    procedure GetVariant(Instance: TObject; var Dest: Variant); override;
-    procedure SetVariant(Instance: TObject; const Source: Variant); override;
-    /// how this property will deal with its instances (including TDocVariant)
-    // - by default, contains JSON_OPTIONS_FAST for best performance - i.e.
-    // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
-    // - set JSON_OPTIONS_FAST_EXTENDED (or include dvoSerializeAsExtendedJson)
-    // so that any TDocVariant nested field names will not be double-quoted,
-    // saving some chars in the stored TEXT column and in the JSON escaped
-    // transmitted data over REST, by writing '{name:"John",age:123}' instead of
-    // '{"name":"John","age":123}': be aware that this syntax is supported by
-    // the ORM, SOA, TDocVariant, TBsonVariant, and our SynCrossPlatformJSON
-    // unit, but not AJAX/JavaScript or most JSON libraries
-    // - see also TOrmModel/TOrmProperties.SetVariantFieldsDocVariantOptions
-    property DocVariantOptions: TDocVariantOptions
-      read fDocVariantOptions write fDocVariantOptions;
-  end;
-
-  /// optional event handler used by TOrmPropInfoRecord to handle textual storage
-  // - by default, TOrmPropInfoRecord content will be stored as oftBlobCustom;
-  // specify such a callback event to allow storage as UTF-8 textual field and
-  // use a oftUtf8Custom kind of column
-  // - event implementation shall convert data/datalen binary value into Text
-  TOnSqlPropInfoRecord2Text = procedure(Data: pointer; DataLen: integer;
-    var Text: RawUtf8);
-
-  /// optional event handler used by TOrmPropInfoRecord to handle textual storage
-  // - by default, TOrmPropInfoRecord content will be stored as oftBlobCustom;
-  // specify such a callback event to allow storage as UTF-8 textual field and
-  // use a oftUtf8Custom kind of column
-  // - event implementaiton shall convert Text into Data binary value
-  TOnSqlPropInfoRecord2Data = procedure(Text: PUtf8Char; var Data: RawByteString);
-
-  /// abstract information about a record-like property defined directly in code
-  // - do not use this class, but TOrmPropInfoRecordRtti and TOrmPropInfoRecordFixedSize
-  // - will store the content as BLOB by default, and OrmFieldType as oftBlobCustom
-  // - if aData2Text/aText2Data are defined, use TEXT storage and oftUtf8Custom type
-  TOrmPropInfoCustom = class(TOrmPropInfo)
-  protected
-    fOffset: PtrUInt;
-    fData2Text: TOnSqlPropInfoRecord2Text;
-    fText2Data: TOnSqlPropInfoRecord2Data;
-    procedure BinaryToText(var Value: RawUtf8; ToSql: boolean;
-      wasSqlString: PBoolean); override;
-    procedure TextToBinary(Value: PUtf8Char; var result: RawByteString); override;
-  public
-    /// define a custom property in code
-    // - do not call this constructor directly, but one of its inherited classes,
-    // via a call to TOrmProperties.RegisterCustom*()
-    constructor Create(const aName: RawUtf8; aOrmFieldType: TOrmFieldType;
-      aAttributes: TOrmPropInfoAttributes; aFieldWidth, aPropIndex: integer;
-      aProperty: pointer; aData2Text: TOnSqlPropInfoRecord2Text;
-      aText2Data: TOnSqlPropInfoRecord2Data); reintroduce;
-  public
-    function GetFieldAddr(Instance: TObject): pointer; override;
-  end;
-
-  /// information about a record property defined directly in code using RTTI
-  TOrmPropInfoRecordTyped = class(TOrmPropInfoCustom)
-  protected
-    fTypeInfo: PRttiInfo;
-  public
-    property TypeInfo: PRttiInfo read fTypeInfo;
-  end;
-
-  /// information about a record property defined directly in code
-  // - Delphi does not publish RTTI for published record properties
-  // - you can use this class to register a record property from its RTTI
-  // - will store the content as BLOB by default, and OrmFieldType as oftBlobCustom
-  // - if aData2Text/aText2Data are defined, use TEXT storage and oftUtf8Custom type
-  // - this class will use only binary RecordLoad/RecordSave methods
-  TOrmPropInfoRecordRtti = class(TOrmPropInfoRecordTyped)
-  protected
-    function GetSqlFieldRttiTypeName: RawUtf8; override;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    /// define a record property from its RTTI definition
-    // - handle any kind of record with available generated TypeInfo()
-    // - aPropertyPointer shall be filled with the offset to the private
-    // field within a nil object, e.g for
-    // !  class TMainObject = class(TOrm)
-    // !    (...)
-    // !    fFieldName: TMyRecord;
-    // !  public
-    // !    (...)
-    // !    property FieldName: TMyRecord read fFieldName write fFieldName;
-    // !  end;
-    // you will have to register it via a call to
-    // TOrmProperties.RegisterCustomRttiRecordProperty()
-    // - optional aIsNotUnique parametercanl be defined
-    // - implementation will use internally RecordLoad/RecordSave functions
-    // - you can specify optional aData2Text/aText2Data callbacks to store
-    // the content as textual values, and not as BLOB
-    constructor Create(aRecordInfo: PRttiInfo; const aName: RawUtf8;
-      aPropertyIndex: integer; aPropertyPointer: pointer;
-      aAttributes: TOrmPropInfoAttributes = []; aFieldWidth: integer = 0;
-      aData2Text: TOnSqlPropInfoRecord2Text = nil;
-      aText2Data: TOnSqlPropInfoRecord2Data = nil); reintroduce; overload;
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
-      var temp: RawByteString); override;
-    function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetVariant(Instance: TObject; var Dest: Variant); override;
-    procedure SetVariant(Instance: TObject; const Source: Variant); override;
-  end;
-
-  /// information about a fixed-size record property defined directly in code
-  // - Delphi does not publish RTTI for published record properties
-  // - you can use this class to register a record property with no RTTI (i.e.
-  // a record with no reference-counted types within)
-  // - will store the content as BLOB by default, and OrmFieldType as oftBlobCustom
-  // - if aData2Text/aText2Data are defined, use TEXT storage and oftUtf8Custom type
-  TOrmPropInfoRecordFixedSize = class(TOrmPropInfoRecordTyped)
-  protected
-    fRecordSize: integer;
-    function GetSqlFieldRttiTypeName: RawUtf8; override;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    /// define an unmanaged fixed-size record property
-    // - simple kind of records (i.e. those not containing reference-counted
-    // members) do not have RTTI generated, at least in older versions of Delphi:
-    // use this constructor to define a direct property access
-    // - main parameter is the record size, in bytes
-    constructor Create(aRecordSize: cardinal; const aName: RawUtf8;
-      aPropertyIndex: integer; aPropertyPointer: pointer;
-      aAttributes: TOrmPropInfoAttributes = []; aFieldWidth: integer = 0;
-      aData2Text: TOnSqlPropInfoRecord2Text = nil;
-      aText2Data: TOnSqlPropInfoRecord2Data = nil); reintroduce; overload;
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
-      var temp: RawByteString); override;
-    function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetVariant(Instance: TObject; var Dest: Variant); override;
-    procedure SetVariant(Instance: TObject; const Source: Variant); override;
-  end;
-
-  /// information about a custom property defined directly in code
-  // - you can define any kind of property, either a record or any type
-  // - this class will use JSON serialization, by type name or TypeInfo() pointer
-  // - will store the content as TEXT by default, and OrmFieldType as oftUtf8Custom
-  TOrmPropInfoCustomJson = class(TOrmPropInfoRecordTyped)
-  protected
-    fCustomParser: TRttiJson;
-    function GetSqlFieldRttiTypeName: RawUtf8; override;
-    procedure SetCustomParser(aCustomParser: TRttiJson);
-  public
-    /// initialize the internal fields
-    // - should not be called directly
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer);
-      reintroduce; overload; virtual;
-    /// define a custom property from its RTTI definition
-    // - handle any kind of property, e.g. from enhanced RTTI or a custom record
-    // defined by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
-    // - aPropertyPointer shall be filled with the offset to the private
-    // field within a nil object, e.g for
-    // !  class TMainObject = class(TOrm)
-    // !    (...)
-    // !    fFieldName: TMyRecord;
-    // !  public
-    // !    (...)
-    // !    property FieldName: TMyRecord read fFieldName write fFieldName;
-    // !  end;
-    // you will have to register it via a call to
-    // TOrmProperties.RegisterCustomPropertyFromRtti()
-    // - optional aIsNotUnique parameter can be defined
-    // - implementation will use internally RecordLoadJson/RecordSave functions
-    // - you can specify optional aData2Text/aText2Data callbacks to store
-    // the content as textual values, and not as BLOB
-    constructor Create(aTypeInfo: PRttiInfo; const aName: RawUtf8;
-      aPropertyIndex: integer; aPropertyPointer: pointer;
-      aAttributes: TOrmPropInfoAttributes = []; aFieldWidth: integer = 0);
-      reintroduce; overload;
-    /// define a custom property from its RTTI definition
-    // - handle any kind of property, e.g. from enhanced RTTI or a custom record
-    // defined by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
-    // - aPropertyPointer shall be filled with the offset to the private
-    // field within a nil object, e.g for
-    // !  class TMainObject = class(TOrm)
-    // !    (...)
-    // !    fGUID: TGUID;
-    // !  public
-    // !    (...)
-    // !    property GUID: TGUID read fGUID write fGUID;
-    // !  end;
-    // you will have to register it via a call to
-    // TOrmProperties.RegisterCustomPropertyFromTypeName()
-    // - optional aIsNotUnique parameter can be defined
-    // - implementation will use internally RecordLoadJson/RecordSave functions
-    // - you can specify optional aData2Text/aText2Data callbacks to store
-    // the content as textual values, and not as BLOB
-    constructor Create(const aTypeName, aName: RawUtf8; aPropertyIndex: integer;
-      aPropertyPointer: pointer; aAttributes: TOrmPropInfoAttributes = [];
-      aFieldWidth: integer = 0); reintroduce; overload;
-    /// the corresponding custom JSON parser
-    property CustomParser: TRttiJson read fCustomParser;
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-  end;
-
-  /// dynamic array of ORM fields information for published properties
-  TOrmPropInfoObjArray = array of TOrmPropInfo;
-
-  /// handle a read-only list of fields information for published properties
-  // - is mainly used by our ORM for TOrm RTTI, but may be used for
-  // any TPersistent
-  TOrmPropInfoList = class
-  protected
-    fList: TOrmPropInfoObjArray;
-    fCount: integer;
-    fTable: TClass; // TOrmClass
-    fOptions: TOrmPropInfoListOptions;
-    fOrderedByName: TIntegerDynArray;
-    function GetItem(aIndex: PtrInt): TOrmPropInfo;
-    procedure QuickSortByName(L, R: PtrInt);
-    procedure InternalAddParentsFirst(aClassType: TClass); overload;
-    procedure InternalAddParentsFirst(aClassType: TClass;
-      aFlattenedProps: PRttiPropDynArray); overload;
-  public
-    /// initialize the list from a given class RTTI
-    constructor Create(aTable: TClass; aOptions: TOrmPropInfoListOptions);
-    /// release internal list items
-    destructor Destroy; override;
-    /// add a TOrmPropInfo to the list
-    function Add(aItem: TOrmPropInfo): integer;
-    /// find an item in the list using O(log(n)) binary search
-    // - returns nil if not found
-    function ByRawUtf8Name(const aName: RawUtf8): TOrmPropInfo; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// find an item in the list using O(log(n)) binary search
-    // - returns nil if not found
-    function ByName(aName: PUtf8Char): TOrmPropInfo; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// find an item in the list using O(log(n)) binary search
-    // - returns -1 if not found
-    function IndexByName(const aName: RawUtf8): integer; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// find an item in the list using O(log(n)) binary search
-    // - returns -1 if not found
-    function IndexByName(aName: PUtf8Char): PtrInt; overload;
-    /// find an item by name in the list, including RowID/ID
-    // - will identify 'ID' / 'RowID' field name as -1
-    // - raise an EOrmException if not found in the internal list
-    function IndexByNameOrExcept(const aName: RawUtf8): integer;
-    /// find an item by name in the list, including RowID/ID
-    // - will identify 'ID' / 'RowID' field name as -1
-    // - raise an EOrmException if not found in the internal list
-    // - aName is not defined as "const aName" since it is made an ASCIIZ
-    function IndexByNameOrExceptShort(aName: ShortString): integer;
-    /// find one or several items by name in the list, including RowID/ID
-    // - will identify 'ID' / 'RowID' field name as -1
-    // - raise an EOrmException if not found in the internal list
-    procedure IndexesByNamesOrExcept(const aNames: array of RawUtf8;
-      const aIndexes: array of PInteger);
-    /// find an item in the list, searching by unflattened name
-    // - for a flattened property, you may for instance call
-    // IndexByNameUnflattenedOrExcept('Address.Country.Iso')
-    // instead of IndexByNameOrExcept('Address_Country')
-    // - won't identify 'ID' / 'RowID' field names, just List[].
-    // - raise an EOrmException if not found in the internal list
-    function IndexByNameUnflattenedOrExcept(const aName: RawUtf8): integer;
-    /// fill a TRawUtf8DynArray instance from the field names
-    // - excluding ID
-    procedure NamesToRawUtf8DynArray(var Names: TRawUtf8DynArray);
-    /// returns the number of TOrmPropInfo in the list
-    property Count: integer read fCount;
-    /// quick access to the TOrmPropInfo list
-    // - note that length(List) may not equal Count, since is its capacity
-    property List: TOrmPropInfoObjArray read fList;
-    /// read-only retrieval of a TOrmPropInfo item
-    // - will raise an exception if out of range
-    property Items[aIndex: PtrInt]: TOrmPropInfo read GetItem;
-  end;
-
-  /// abstract information about a TOrm class property
-  // - oftID for TOrm properties, which are pointer(RecordID), not
-  // any true class instance
-  // - oftMany for TOrmMany properties, for which no data is
-  // stored in the table itself, but in a pivot table
-  // - oftObject for e.g. TStrings TRawUtf8List TCollection instances
-  TOrmPropInfoRttiInstance = class(TOrmPropInfoRttiPtrInt)
-  protected
-    fObjectClass: TClass;
-  public
-    /// will setup the corresponding ObjectClass property
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    /// direct access to the property class instance
-    function GetInstance(Instance: TObject): TObject;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// direct access to the property class instance
-    procedure SetInstance(Instance, Value: TObject);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// direct access to the property class
-    // - can be used e.g. for TOrmMany properties
-    property ObjectClass: TClass read fObjectClass;
-  end;
-
-  /// information about a TRecordReference/TRecordReferenceToBeDeleted
-  // published property
-  // - identified as a oftRecord kind of property
-  TOrmPropInfoRttiRecordReference = class(TOrmPropInfoRttiInt64)
-  protected
-    fCascadeDelete: boolean;
-  public
-    /// will identify TRecordReferenceToBeDeleted kind of field, and
-    // setup the corresponding CascadeDelete property
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    /// TRUE if this oftRecord is a TRecordReferenceToBeDeleted
-    property CascadeDelete: boolean read fCascadeDelete;
-  end;
-
-  /// information about a TRecordVersion published property
-  // - identified as a oftRecordVersion kind of property, to track changes
-  TOrmPropInfoRttiRecordVersion = class(TOrmPropInfoRttiInt64);
-
-  /// information about a TOrm class TOrm property
-  // - kind oftID, which are pointer(RecordID), not any true class instance
-  // - will store the content just as an integer value
-  // - will recognize any instance pre-allocated via Create*Joined() constructor
-  TOrmPropInfoRttiID = class(TOrmPropInfoRttiInstance)
-  public
-    /// raise an exception if was created by Create*Joined() constructor
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    /// this method will recognize if the TOrm was allocated by
-    // a Create*Joined() constructor: in this case, it will write the ID
-    // of the nested property, and not the PtrInt() transtyped value
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-  end;
-
-  TOrmPropInfoRttiIDObjArray = array of TOrmPropInfoRttiID;
-
-  /// information about a TOrm class TStrings/TRawUtf8List/TCollection
-  // property
-  // - kind oftObject e.g. for TStrings TRawUtf8List TCollection TObjectList instances
-  // - binary serialization will store textual JSON serialization of the
-  // object, including custom serialization
-  TOrmPropInfoRttiObject = class(TOrmPropInfoRttiInstance)
-  protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
-      Dest: TObject); override;
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-  end;
-
-  /// information about a TOrm class TOrmMany property
-  // - kind oftMany, for which no data is stored in the table itself, but in
-  // a separated pivot table
-  TOrmPropInfoRttiMany = class(TOrmPropInfoRttiInstance)
-  public
-    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
-      wasSqlString: PBoolean); override;
-    procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
-    procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-  end;
-
-  TOrmPropInfoRttiManyObjArray = array of TOrmPropInfoRttiMany;
-
-  POrmPropInfoRttiMany = ^TOrmPropInfoRttiMany;
-
-
 
 { ************ TOrm TOrmModel TOrmTable IRestOrm Core Definitions }
+
+/// this meta-constructor will create an instance of the exact descendant
+// of the specified property RTTI
+// - it will raise an EOrmException in case of an unhandled type
+function TOrmPropInfoRttiCreateFrom(
+  aPropInfo: PRttiProp; aPropIndex: integer; aOptions: TOrmPropInfoListOptions;
+  const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
 
 const
   /// maximum handled dimension for TOrmRTree
@@ -966,6 +127,71 @@ type
 
   /// exception raised in case of wrong Model definition
   EModelException = class(EOrmException);
+
+
+  { -------------------- ORM Specific TOrmPropInfoRtti Classes }
+
+  /// information about a TOrm class TOrm property
+  // - kind oftID, which are pointer(RecordID), not any true class instance
+  // - will store the content just as an integer value
+  // - will recognize any instance pre-allocated via Create*Joined() constructor
+  TOrmPropInfoRttiID = class(TOrmPropInfoRttiInstance)
+  public
+    /// raise an exception if was created by Create*Joined() constructor
+    procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
+      wasString: boolean); override;
+    /// this method will recognize if the TOrm was allocated by
+    // a Create*Joined() constructor: in this case, it will write the ID
+    // of the nested property, and not the PtrInt() transtyped value
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
+  end;
+
+  TOrmPropInfoRttiIDObjArray = array of TOrmPropInfoRttiID;
+
+  /// information about a TID published property
+  // - identified as a oftTID kind of property, optionally tied to a TOrm
+  // class, via its custom type name, e.g.
+  // ! TOrmClientID = type TID;  ->  TOrmClient class
+  TOrmPropInfoRttiTID = class(TOrmPropInfoRttiRecordReference)
+  protected
+    fRecordClass: TOrmClass;
+  public
+    /// will setup the corresponding RecordClass property from the TID type name
+    // - the TOrm type should have previously been registered to the
+    // Rtti.RegisterClass list, e.g. in TOrmModel.Create, so that e.g.
+    // 'TOrmClientID' type name will match TOrmClient
+    // - in addition, the '...ToBeDeletedID' name pattern will set CascadeDelete
+    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
+      aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
+    /// the TOrm class associated to this TID
+    // - is computed from its type name - for instance, if you define:
+    // ! type
+    // !   TOrmClientID = type TID;
+    // !   TOrmOrder = class(TOrm)
+    // !   ...
+    // !   published OrderedBy: TOrmClientID read fOrderedBy write fOrderedBy;
+    // !   ...
+    // then this OrderedBy property will be tied to the TOrmClient class
+    // of the corresponding model, and the field value will be reset to 0 when
+    // the targetting record is deleted (emulating a ON DELETE SET DEFAULT)
+    // - equals TOrm for plain TID field
+    // - equals nil if T*ID type name doesn't match any registered class
+    property RecordClass: TOrmClass read fRecordClass;
+    /// TRUE if this oftTID type name follows the '...ToBeDeletedID' pattern
+    // - e.g. 'TOrmClientToBeDeletedID' type name will match
+    // TOrmClient and set CascadeDelete
+    // - is computed from its type name - for instance, if you define:
+    // ! type
+    // !   TOrmClientToBeDeletedID = type TID;
+    // !   TOrmOrder = class(TOrm)
+    // !   ...
+    // !   published OrderedBy: TOrmClientToBeDeletedID read fOrderedBy write fOrderedBy;
+    // !   ...
+    // then this OrderedBy property will be tied to the TOrmClient class
+    // of the corresponding model, and the whole record will be deleted when
+    // the targetting record is deleted (emulating a ON DELETE CASCADE)
+    property CascadeDelete: boolean read fCascadeDelete;
+  end;
 
 
   { -------------------- IRestOrm IRestOrmServer IRestOrmClient Definitions }
@@ -2100,29 +1326,6 @@ type
     property ForceBlobTransfertTable[aTable: TOrmClass]: boolean
       read GetForceBlobTransfertTable write SetForceBlobTransfertTable;
   end;
-
-  /// the possible options for IRestOrmServer.CreateMissingTables and
-  // TOrm.InitializeTable methods
-  // - itoNoAutoCreateGroups and itoNoAutoCreateUsers will avoid
-  // TAuthGroup.InitializeTable to fill the TAuthGroup and TAuthUser
-  // tables with default records
-  // - itoNoCreateMissingField will avoid to create the missing fields on a table
-  // - itoNoIndex4ID won't create the index for the main ID field (do nothing
-  // on SQLite3, by design - but may be used for tables on external databases)
-  // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
-  // - itoNoIndex4NestedRecord won't create indexes for TOrm fields
-  // - itoNoIndex4RecordReference won't create indexes for TRecordReference fields
-  // - itoNoIndex4TID won't create indexes for TID fields
-  // - itoNoIndex4RecordVersion won't create indexes for TRecordVersion fields
-  // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
-  TOrmInitializeTableOption = (
-    itoNoAutoCreateGroups, itoNoAutoCreateUsers, itoNoCreateMissingField,
-    itoNoIndex4ID, itoNoIndex4UniqueField, itoNoIndex4NestedRecord,
-    itoNoIndex4RecordReference, itoNoIndex4TID, itoNoIndex4RecordVersion);
-
-  /// the options to be specified for IRestOrmServer.CreateMissingTables and
-  // TOrm.InitializeTable methods
-  TOrmInitializeTableOptions = set of TOrmInitializeTableOption;
 
   /// event signature triggered by TRestBatch.OnWrite
   // - also used by TRestServer.RecordVersionSynchronizeSlave*() methods
@@ -3434,51 +2637,6 @@ type
   TOrmArray = array[0..MaxInt div SizeOf(TOrm) - 1] of TOrm;
   POrmArray = ^TOrmArray;
 
-  /// information about a TID published property
-  // - identified as a oftTID kind of property, optionally tied to a TOrm
-  // class, via its custom type name, e.g.
-  // ! TOrmClientID = type TID;  ->  TOrmClient class
-  TOrmPropInfoRttiTID = class(TOrmPropInfoRttiRecordReference)
-  protected
-    fRecordClass: TOrmClass;
-  public
-    /// will setup the corresponding RecordClass property from the TID type name
-    // - the TOrm type should have previously been registered to the
-    // Rtti.RegisterClass list, e.g. in TOrmModel.Create, so that e.g.
-    // 'TOrmClientID' type name will match TOrmClient
-    // - in addition, the '...ToBeDeletedID' name pattern will set CascadeDelete
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    /// the TOrm class associated to this TID
-    // - is computed from its type name - for instance, if you define:
-    // ! type
-    // !   TOrmClientID = type TID;
-    // !   TOrmOrder = class(TOrm)
-    // !   ...
-    // !   published OrderedBy: TOrmClientID read fOrderedBy write fOrderedBy;
-    // !   ...
-    // then this OrderedBy property will be tied to the TOrmClient class
-    // of the corresponding model, and the field value will be reset to 0 when
-    // the targetting record is deleted (emulating a ON DELETE SET DEFAULT)
-    // - equals TOrm for plain TID field
-    // - equals nil if T*ID type name doesn't match any registered class
-    property RecordClass: TOrmClass read fRecordClass;
-    /// TRUE if this oftTID type name follows the '...ToBeDeletedID' pattern
-    // - e.g. 'TOrmClientToBeDeletedID' type name will match
-    // TOrmClient and set CascadeDelete
-    // - is computed from its type name - for instance, if you define:
-    // ! type
-    // !   TOrmClientToBeDeletedID = type TID;
-    // !   TOrmOrder = class(TOrm)
-    // !   ...
-    // !   published OrderedBy: TOrmClientToBeDeletedID read fOrderedBy write fOrderedBy;
-    // !   ...
-    // then this OrderedBy property will be tied to the TOrmClient class
-    // of the corresponding model, and the whole record will be deleted when
-    // the targetting record is deleted (emulating a ON DELETE CASCADE)
-    property CascadeDelete: boolean read fCascadeDelete;
-  end;
-
   {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
 
   /// since Delphi interfaces cannot have parametrized methods, we need
@@ -4323,6 +3481,77 @@ type
 
 
   { -------------------- TOrmProperties Definitions }
+
+  /// handle a read-only list of fields information for published properties
+  // - is mainly used by our ORM for TOrm RTTI, but may be used for
+  // any TPersistent
+  TOrmPropInfoList = class
+  protected
+    fList: TOrmPropInfoObjArray;
+    fCount: integer;
+    fTable: TClass; // TOrmClass
+    fOptions: TOrmPropInfoListOptions;
+    fOrderedByName: TIntegerDynArray;
+    function GetItem(aIndex: PtrInt): TOrmPropInfo;
+    procedure QuickSortByName(L, R: PtrInt);
+    procedure InternalAddParentsFirst(aClassType: TClass); overload;
+    procedure InternalAddParentsFirst(aClassType: TClass;
+      aFlattenedProps: PRttiPropDynArray); overload;
+  public
+    /// initialize the list from a given class RTTI
+    constructor Create(aTable: TClass; aOptions: TOrmPropInfoListOptions);
+    /// release internal list items
+    destructor Destroy; override;
+    /// add a TOrmPropInfo to the list
+    function Add(aItem: TOrmPropInfo): integer;
+    /// find an item in the list using O(log(n)) binary search
+    // - returns nil if not found
+    function ByRawUtf8Name(const aName: RawUtf8): TOrmPropInfo; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// find an item in the list using O(log(n)) binary search
+    // - returns nil if not found
+    function ByName(aName: PUtf8Char): TOrmPropInfo; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// find an item in the list using O(log(n)) binary search
+    // - returns -1 if not found
+    function IndexByName(const aName: RawUtf8): integer; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// find an item in the list using O(log(n)) binary search
+    // - returns -1 if not found
+    function IndexByName(aName: PUtf8Char): PtrInt; overload;
+    /// find an item by name in the list, including RowID/ID
+    // - will identify 'ID' / 'RowID' field name as -1
+    // - raise an EOrmException if not found in the internal list
+    function IndexByNameOrExcept(const aName: RawUtf8): integer;
+    /// find an item by name in the list, including RowID/ID
+    // - will identify 'ID' / 'RowID' field name as -1
+    // - raise an EOrmException if not found in the internal list
+    // - aName is not defined as "const aName" since it is made an ASCIIZ
+    function IndexByNameOrExceptShort(aName: ShortString): integer;
+    /// find one or several items by name in the list, including RowID/ID
+    // - will identify 'ID' / 'RowID' field name as -1
+    // - raise an EOrmException if not found in the internal list
+    procedure IndexesByNamesOrExcept(const aNames: array of RawUtf8;
+      const aIndexes: array of PInteger);
+    /// find an item in the list, searching by unflattened name
+    // - for a flattened property, you may for instance call
+    // IndexByNameUnflattenedOrExcept('Address.Country.Iso')
+    // instead of IndexByNameOrExcept('Address_Country')
+    // - won't identify 'ID' / 'RowID' field names, just List[].
+    // - raise an EOrmException if not found in the internal list
+    function IndexByNameUnflattenedOrExcept(const aName: RawUtf8): integer;
+    /// fill a TRawUtf8DynArray instance from the field names
+    // - excluding ID
+    procedure NamesToRawUtf8DynArray(var Names: TRawUtf8DynArray);
+    /// returns the number of TOrmPropInfo in the list
+    property Count: integer read fCount;
+    /// quick access to the TOrmPropInfo list
+    // - note that length(List) may not equal Count, since is its capacity
+    property List: TOrmPropInfoObjArray read fList;
+    /// read-only retrieval of a TOrmPropInfo item
+    // - will raise an exception if out of range
+    property Items[aIndex: PtrInt]: TOrmPropInfo read GetItem;
+  end;
 
   /// some information about a given TOrm class properties
   // - used internally by TOrm, via a global cache handled by this unit:
@@ -6006,14 +5235,6 @@ type
 
 
 const
-  /// used as "stored AS_UNIQUE" published property definition in TOrm
-  AS_UNIQUE = false;
-
-  /// options to specify no index createon for IRestOrmServer.CreateMissingTables
-  // and TOrm.InitializeTable methods
-  INITIALIZETABLE_NOINDEX: TOrmInitializeTableOptions =
-    [itoNoIndex4ID.. itoNoIndex4RecordVersion];
-
   /// Supervisor Table access right, i.e. alllmighty over all fields
   ALL_ACCESS_RIGHTS = [0..MAX_TABLES - 1];
 
@@ -6221,1087 +5442,7 @@ type
 implementation
 
 
-
-{ ************ TOrmPropInfo Classes for Efficient ORM Processing }
-
-{ TOrmPropInfoRtti }
-
-var
-  OrmPropInfoRegistration: TSynDictionary = nil;
-
-class procedure TOrmPropInfoRtti.RegisterTypeInfo(aTypeInfo: PRttiInfo);
-begin
-  if OrmPropInfoRegistration = nil then
-  begin
-    GlobalLock;
-    try
-      if OrmPropInfoRegistration = nil then
-        OrmPropInfoRegistration := TSynDictionary.Create(
-          TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArray));
-    finally
-      GlobalUnLock;
-    end;
-  end;
-  OrmPropInfoRegistration.AddOrUpdate(aTypeInfo, self);
-end;
-
-class function TOrmPropInfoRtti.CreateFrom(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOptions: TOrmPropInfoListOptions;
-  const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
-var
-  aOrmFieldType: TOrmFieldType;
-  aType: PRttiInfo;
-  C: TOrmPropInfoRttiClass;
-
-  procedure FlattenedPropNameSet;
-  var
-    i, max: PtrInt;
-  begin // Address.Street1 -> Address_Street1
-    (result as TOrmPropInfoRtti).fFlattenedProps := aFlattenedProps;
-    TOrmPropInfoRtti(result).fNameUnflattened := result.Name;
-    max := high(aFlattenedProps);
-    for i := max downto 0 do
-      TOrmPropInfoRtti(result).fNameUnflattened :=
-        ToUtf8(aFlattenedProps[i]^.Name^) + '.' + result.NameUnflattened;
-    if (max >= 0) and
-       (aFlattenedProps[max]^.TypeInfo^.ClassFieldCount(
-         {withoutgetter=}pilIgnoreIfGetter in aOptions) = 1) then
-    begin
-      // Birth.Date -> Birth or Address.Country.Iso -> Address_Country
-      TOrmPropInfoRtti(result).fName := ToUtf8(aFlattenedProps[max]^.Name^);
-      dec(max);
-    end;
-    for i := max downto 0 do
-      TOrmPropInfoRtti(result).fName := ToUtf8(aFlattenedProps[i]^.Name^) + '_' + result.Name;
-  end;
-
-begin
-  if aPropInfo = nil then
-    raise EModelException.CreateUtf8('Invalid %.CreateFrom(nil) call', [self]);
-  result := nil;
-  aOrmFieldType := oftUnknown;
-  aType := aPropInfo^.TypeInfo;
-  if aType^.Kind = rkVariant then
-  begin
-    aOrmFieldType := NullableTypeToOrmFieldType(aType);
-    if aOrmFieldType <> oftUnknown then // handle oftNullable type
-      result := TOrmPropInfoRttiVariant.Create(aPropInfo, aPropIndex,
-        aOrmFieldType, aOptions);
-  end;
-  if result = nil then
-  begin
-    aOrmFieldType := GetOrmFieldType(aType); // guess from RTTI
-    C := nil;
-    if (OrmPropInfoRegistration = nil) or
-       not OrmPropInfoRegistration.FindAndCopy(aType, C) then
-      case aOrmFieldType of
-        oftUnknown, oftBlobCustom:
-          ; // will raise an EOrmException
-        oftBoolean, oftEnumerate:
-          C := TOrmPropInfoRttiEnum;
-        oftTimeLog, oftModTime, oftCreateTime:
-          // specific class for further use
-          C := TOrmPropInfoRttiTimeLog;
-        oftUnixTime:
-          // specific class for further use
-          C := TOrmPropInfoRttiUnixTime;
-        oftUnixMSTime:
-          C := TOrmPropInfoRttiUnixMSTime;
-        oftCurrency:
-          C := TOrmPropInfoRttiCurrency;
-        oftDateTime, oftDateTimeMS:
-          C := TOrmPropInfoRttiDateTime;
-        oftID: // = TOrm(aID)
-          C := TOrmPropInfoRttiID;
-        oftTID:
-          // = TID or T*ID
-          C := TOrmPropInfoRttiTID;
-        oftSessionUserID:
-          C := TOrmPropInfoRttiInt64;
-        oftRecord:
-          // = TRecordReference/TRecordReferenceToBeDeleted
-          C := TOrmPropInfoRttiRecordReference;
-        oftRecordVersion:
-          C := TOrmPropInfoRttiRecordVersion;
-        oftMany:
-          C := TOrmPropInfoRttiMany;
-        oftObject:
-          C := TOrmPropInfoRttiObject;
-        oftVariant:
-          C := TOrmPropInfoRttiVariant;  // oftNullable already handle above
-        oftBlob:
-          C := TOrmPropInfoRttiRawBlob;
-        oftBlobDynArray:
-          C := TOrmPropInfoRttiDynArray;
-        oftUtf8Custom:
-          // will happen only for DELPHI XE5 and up
-          result := TOrmPropInfoCustomJson.Create(aPropInfo, aPropIndex);
-      else
-        case aType^.Kind of // retrieve matched type from RTTI binary level
-          rkInteger:
-            C := TOrmPropInfoRttiInt32;
-          rkSet:
-            C := TOrmPropInfoRttiSet;
-          rkChar, rkWChar:
-            C := TOrmPropInfoRttiChar;
-          rkInt64 {$ifdef FPC}, rkQWord{$endif}:
-            C := TOrmPropInfoRttiInt64;
-          rkFloat:
-            if aType^.RttiFloat = rfDouble then
-              C := TOrmPropInfoRttiDouble;
-          rkLString:
-            case aType^.AnsiStringCodePage of
-              // recognize optimized UTF-8/UTF-16
-              CP_UTF8:
-                C := TOrmPropInfoRttiRawUtf8;
-              CP_UTF16:
-                C := TOrmPropInfoRttiRawUnicode;
-            else
-              C := TOrmPropInfoRttiAnsi; // will use the right TSynAnsiConvert
-            end;
-        {$ifdef HASVARUSTRING}
-          rkUString:
-            C := TOrmPropInfoRttiUnicode;
-        {$endif HASVARUSTRING}
-          rkWString:
-            C := TOrmPropInfoRttiWide;
-        end;
-      end;
-    if C <> nil then
-      result := C.Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  end;
-  if result <> nil then
-  begin
-    if aFlattenedProps <> nil then
-      FlattenedPropNameSet;
-  end
-  else if pilRaiseEOrmExceptionIfNotHandled in aOptions then
-    raise EOrmException.CreateUtf8('%.CreateFrom: Unhandled %/% type for property %',
-      [self, ToText(aOrmFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name^]);
-end;
-
-function TOrmPropInfoRtti.GetSqlFieldRttiTypeName: RawUtf8;
-begin
-  result := ToUtf8(fPropType^.Name^);
-end;
-
-function TOrmPropInfoRtti.GetRttiCustomProp(Instance: TObject): PRttiCustomProp;
-begin
-  if (fRttiCustomProp = nil) and (Instance <> nil) then
-    fRttiCustomProp := Rtti.RegisterClass(Instance).Props.Find(fName);
-  result := fRttiCustomProp;
-end;
-
-function TOrmPropInfoRtti.GetFieldAddr(Instance: TObject): pointer;
-begin
-  if Instance = nil then
-    result := nil
-  else
-    result := fPropInfo^.GetFieldAddr(Instance);
-end;
-
-procedure TOrmPropInfoRtti.CopyProp(Source: TObject; DestInfo: TOrmPropInfo;
-  Dest: TObject);
-var
-  i: PtrInt;
-begin
-  if (Source = nil) or (DestInfo = nil) or (Dest = nil) then
-    exit; // avoid GPF
-  if fFlattenedProps <> nil then
-    for i := 0 to length(fFlattenedProps) - 1 do
-      Source := fFlattenedProps[i].GetObjProp(Source);
-  if fFlattenedProps <> nil then
-    for i := 0 to length(fFlattenedProps) - 1 do
-      Dest := fFlattenedProps[i].GetObjProp(Dest);
-  inherited CopyProp(Source, DestInfo, Dest);
-end;
-
-function TOrmPropInfoRtti.Flattened(Instance: TObject): TObject;
-var
-  i: integer;
-begin
-  result := Instance;
-  for i := 0 to length(fFlattenedProps) - 1 do
-    result := fFlattenedProps[i].GetObjProp(result);
-end;
-
-procedure TOrmPropInfoRtti.GetVariant(Instance: TObject; var Dest: Variant);
-var
-  temp: RawUtf8;
-begin
-  GetValueVar(Instance, true, temp, nil);
-  ValueVarToVariant(pointer(temp), length(temp), fOrmFieldTypeStored,
-    TVarData(Dest), false, fPropInfo^.TypeInfo);
-end;
-
-constructor TOrmPropInfoRtti.Create(aPropInfo: PRttiProp; aPropIndex: integer;
-  aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
-var
-  attrib: TOrmPropInfoAttributes;
-  call: TMethod;
-begin
-  byte(attrib) := 0;
-  if aPropInfo^.IsStored(nil) = AS_UNIQUE then
-    Include(attrib, aIsUnique); // property MyProperty: RawUtf8 stored AS_UNIQUE;
-  if (pilAuxiliaryFields in aOptions) and (aPropInfo^.Name^[1] = '_') then
-    Include(attrib, aAuxiliaryRTreeField);
-  inherited Create(aPropInfo^.NameUtf8, aOrmFieldType, attrib, aPropInfo^.Index,
-    aPropIndex); // property MyProperty: RawUtf8 index 10; -> FieldWidth=10
-  fPropInfo := aPropInfo;
-  fPropType := aPropInfo^.TypeInfo;
-  fPropRtti := Rtti.RegisterType(fPropType) as TRttiJson;
-  if fPropRtti = nil then
-    raise EModelException.CreateUtf8('%.Create(%): unknown type', [self, aPropInfo^.Name^]);
-  if aPropInfo.Setter(nil, @call) = rpcField then
-    fSetterIsFieldPropOffset := PtrInt(call.Data);
-  if aPropInfo.GetterIsField then
-  begin
-    fGetterIsFieldPropOffset := PtrUInt(fPropInfo.GetterAddr(nil));
-    if fGetterIsFieldPropOffset = fSetterIsFieldPropOffset then
-      fInPlaceCopySameClassPropOffset := fGetterIsFieldPropOffset;
-  end;
-end;
-
-
-{ TOrmPropInfoRttiInt32 }
-
-constructor TOrmPropInfoRttiInt32.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
-begin
-  inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  fUnsigned := fPropType^.RttiOrd in [roUByte, roUWord, roULong];
-  if fPropType^.RttiOrd = roSLong then
-    fIntegerGetPropOffset := fGetterIsFieldPropOffset <> 0;
-  if fPropType^.RttiOrd in [roSLong, roULong] then
-    fIntegerSetPropOffset := fSetterIsFieldPropOffset <> 0;
-end;
-
-procedure TOrmPropInfoRttiInt32.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-begin
-  TOrmPropInfoRttiInt32(DestInfo).fPropInfo.SetOrdProp(
-    Dest, fPropInfo.GetOrdProp(Source));
-end;
-
-procedure TOrmPropInfoRttiInt32.GetBinary(Instance: TObject; W: TBufferWriter);
-begin
-  W.WriteVarUInt32(cardinal(fPropInfo.GetOrdProp(Instance)));
-end;
-
-function TOrmPropInfoRttiInt32.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  v: integer;
-begin
-  v := fPropInfo.GetOrdProp(Instance);
-  result := DefaultHasher(0, @v, 4);
-end;
-
-procedure TOrmPropInfoRttiInt32.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  v: integer;
-begin
-  if fIntegerGetPropOffset then
-    W.Add(PInteger(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
-  else
-  begin
-    v := fPropInfo.GetOrdProp(Instance);
-    if fUnsigned then
-      W.AddU(cardinal(v))
-    else
-      W.Add(v);
-  end;
-end;
-
-procedure TOrmPropInfoRttiInt32.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-var
-  v: integer;
-begin
-  if wasSqlString <> nil then
-    wasSqlString^ := false;
-  v := fPropInfo.GetOrdProp(Instance);
-  if fUnsigned then
-    UInt32ToUtf8(cardinal(v), result)
-  else
-    Int32ToUtf8(v, result);
-end;
-
-procedure TOrmPropInfoRttiInt32.NormalizeValue(var Value: RawUtf8);
-var
-  err, v: integer;
-begin
-  v := GetInteger(pointer(Value), err);
-  if err <> 0 then
-    Value := ''
-  else if fUnsigned then
-    UInt32ToUtf8(cardinal(v), Value)
-  else
-    Int32ToUtf8(v, Value);
-end;
-
-function TOrmPropInfoRttiInt32.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var
-  A, B: integer;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    if fIntegerGetPropOffset then
-    begin
-      A := PInteger(PtrUInt(Item1) + fGetterIsFieldPropOffset)^;
-      B := PInteger(PtrUInt(Item2) + fGetterIsFieldPropOffset)^;
-    end
-    else
-    begin
-      A := fPropInfo.GetOrdProp(Item1);
-      B := fPropInfo.GetOrdProp(Item2);
-    end;
-    result := CompareInteger(A, B);
-  end;
-end;
-
-procedure TOrmPropInfoRttiInt32.SetBinary(Instance: TObject; var Read: TFastReader);
-begin
-  fPropInfo.SetOrdProp(Instance, Read.VarUInt32);
-end;
-
-procedure TOrmPropInfoRttiInt32.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  i32: integer;
-begin
-  i32 := GetInteger(Value);
-  if fIntegerSetPropOffset then
-    PInteger(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := i32
-  else
-    fPropInfo.SetOrdProp(Instance, i32);
-end;
-
-function TOrmPropInfoRttiInt32.SetFieldSqlVar(Instance: TObject;
-  const aValue: TSqlVar): boolean;
-begin
-  if aValue.VType = ftInt64 then
-  begin
-    fPropInfo.SetOrdProp(Instance, aValue.VInt64);
-    result := true;
-  end
-  else
-    result := inherited SetFieldSqlVar(Instance, aValue);
-end;
-
-procedure TOrmPropInfoRttiInt32.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-var
-  v: integer;
-begin
-  aValue.Options := [];
-  aValue.VType := ftInt64;
-  v := fPropInfo.GetOrdProp(Instance);
-  if fUnsigned then
-    aValue.VInt64 := cardinal(v)
-  else
-    aValue.VInt64 := v;
-end;
-
-
-{ TOrmPropInfoRttiSet }
-
-constructor TOrmPropInfoRttiSet.Create(aPropInfo: PRttiProp; aPropIndex: integer;
-  aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
-begin
-  inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  fSetEnumType := fPropType^.SetEnumType;
-end;
-
-
-{ TOrmPropInfoRttiEnum }
-
-constructor TOrmPropInfoRttiEnum.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
-begin
-  inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  fEnumType := fPropType^.EnumBaseType;
-end;
-
-procedure TOrmPropInfoRttiEnum.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  i: PtrInt;
-begin
-  i := fPropInfo.GetOrdProp(Instance);
-  if fOrmFieldType = oftBoolean then
-    W.Add(i <> 0)
-  else
-    W.Add(i);
-end;
-
-function TOrmPropInfoRttiEnum.GetCaption(Value: RawUtf8; out IntValue: integer): string;
-begin
-  NormalizeValue(Value);
-  IntValue := GetInteger(pointer(Value));
-  if Value = '' then
-    result := ''
-  else
-    result := EnumType^.GetCaption(IntValue);
-end;
-
-procedure TOrmPropInfoRttiEnum.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-var
-  i: PtrInt;
-begin
-  if wasSqlString <> nil then
-    wasSqlString^ := false;
-  i := fPropInfo.GetOrdProp(Instance);
-  if (fOrmFieldType = oftBoolean) and not ToSql then
-    result := BOOL_UTF8[i <> 0]
-  else
-    UInt32ToUtf8(i, result);
-end;
-
-procedure TOrmPropInfoRttiEnum.NormalizeValue(var Value: RawUtf8);
-var
-  i, err: integer;
-begin
-  i := GetInteger(pointer(Value), err);
-  if err <> 0 then
-    // we allow a value stated as text
-    if fOrmFieldType = oftBoolean then
-      i := Ord(IdemPropNameU(Value, 'TRUE') or IdemPropNameU(Value, 'YES'))
-    else
-      i := fEnumType^.GetEnumNameValue(pointer(Value), length(Value))
-  else if fOrmFieldType = oftBoolean then // normalize boolean values range to 0,1
-    if i <> 0 then
-      i := 1;
-  if cardinal(i) > cardinal(fEnumType^.MaxValue) then
-    Value := ''
-  else
-    // only set a valid value
-    UInt32ToUtf8(i, Value);
-end;
-
-procedure TOrmPropInfoRttiEnum.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  i, err: integer;
-begin
-  if Value = nil then
-    i := 0
-  else
-  begin
-    i := GetInteger(Value, err);
-    if err <> 0 then
-    begin // we allow a value stated as text
-      if fOrmFieldType = oftBoolean then
-        i := ord(IdemPropName('TRUE', Value, ValueLen) or
-                 IdemPropName('YES', Value, ValueLen))
-      else
-        i := fEnumType^.GetEnumNameValue(Value); // -> convert into integer
-      if cardinal(i) > cardinal(fEnumType^.MaxValue) then
-        i := 0;  // only set a valid text value
-    end
-    else if fOrmFieldType = oftBoolean then // normalize boolean values range to 0,1
-      if i <> 0 then
-        i := 1;
-  end;
-  fPropInfo.SetOrdProp(Instance, i);
-end;
-
-
-{ TOrmPropInfoRttiChar }
-
-procedure TOrmPropInfoRttiChar.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-var
-  w: WideChar;
-begin
-  w := WideChar(fPropInfo.GetOrdProp(Instance));
-  if ToSql and (w = #0) then
-  begin
-    // 'null' and not #0 to avoid end of SQL text - JSON will escape #0
-    result := NULL_STR_VAR;
-    if wasSqlString <> nil then
-      wasSqlString^ := false;
-  end
-  else
-  begin
-    RawUnicodeToUtf8(@w, 1, result);
-    if wasSqlString <> nil then
-      wasSqlString^ := true;
-  end;
-end;
-
-procedure TOrmPropInfoRttiChar.NormalizeValue(var Value: RawUtf8);
-begin // do nothing: should already be UTF-8 encoded
-end;
-
-procedure TOrmPropInfoRttiChar.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  i: integer;
-begin
-  if (Value = nil) or (PInteger(Value)^ = NULL_LOW) then
-    i := 0
-  else
-    // decode one UTF-16 or return UNICODE_REPLACEMENT_CHARACTER
-    i := GetUtf8WideChar(Value);
-  fPropInfo.SetOrdProp(Instance, i);
-end;
-
-
-{ TOrmPropInfoRttiInt64 }
-
-constructor TOrmPropInfoRttiInt64.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
-begin
-  inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  fIsQWord := fPropType^.IsQword;
-end;
-
-procedure TOrmPropInfoRttiInt64.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-begin
-  TOrmPropInfoRttiInt64(DestInfo).fPropInfo.SetInt64Prop(
-    Dest, fPropInfo.GetInt64Prop(Source));
-end;
-
-procedure TOrmPropInfoRttiInt64.GetBinary(Instance: TObject; W: TBufferWriter);
-var
-  V64: Int64;
-begin
-  V64 := fPropInfo.GetInt64Prop(Instance);
-  W.Write(@V64, SizeOf(Int64));
-end;
-
-function TOrmPropInfoRttiInt64.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  V64: Int64;
-begin
-  if fGetterIsFieldPropOffset <> 0 then
-    V64 := PInt64(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
-  else
-    V64 := fPropInfo.GetInt64Prop(Instance);
-  result := DefaultHasher(0, @V64, SizeOf(V64));
-end;
-
-procedure TOrmPropInfoRttiInt64.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  V64: Int64;
-begin
-  if fGetterIsFieldPropOffset <> 0 then
-    V64 := PInt64(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
-  else
-    V64 := fPropInfo.GetInt64Prop(Instance);
-  if fIsQWord then
-    W.AddQ(V64)
-  else
-    W.Add(V64);
-end;
-
-procedure TOrmPropInfoRttiInt64.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-var
-  V64: Int64;
-begin
-  if wasSqlString <> nil then
-    wasSqlString^ := false;
-  if fGetterIsFieldPropOffset <> 0 then
-    V64 := PInt64(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
-  else
-    V64 := fPropInfo.GetInt64Prop(Instance);
-  if fIsQWord then
-    UInt64ToUtf8(V64, result)
-  else
-    Int64ToUtf8(V64, result);
-end;
-
-procedure TOrmPropInfoRttiInt64.NormalizeValue(var Value: RawUtf8);
-var
-  err: integer;
-  V64: Int64;
-begin
-  if fIsQWord then
-  begin
-    V64 := GetQWord(pointer(Value), err);
-    if err <> 0 then
-      Value := ''
-    else
-      UInt64ToUtf8(V64, Value);
-  end
-  else
-  begin
-    V64 := GetInt64(pointer(Value), err);
-    if err <> 0 then
-      Value := ''
-    else
-      Int64ToUtf8(V64, Value);
-  end;
-end;
-
-function TOrmPropInfoRttiInt64.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var
-  V1, V2: Int64;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    if fGetterIsFieldPropOffset <> 0 then
-    begin
-      V1 := PInt64(PtrUInt(Item1) + fGetterIsFieldPropOffset)^;
-      V2 := PInt64(PtrUInt(Item2) + fGetterIsFieldPropOffset)^;
-    end
-    else
-    begin
-      V1 := fPropinfo.GetInt64Prop(Item1);
-      V2 := fPropinfo.GetInt64Prop(Item2);
-    end;
-    if fIsQWord then
-      result := CompareQWord(V1, V2)
-    else
-      result := CompareInt64(V1, V2);
-  end;
-end;
-
-procedure TOrmPropInfoRttiInt64.SetBinary(Instance: TObject; var Read: TFastReader);
-begin
-  fPropInfo.SetInt64Prop(Instance, Int64(Read.Next8));
-end;
-
-procedure TOrmPropInfoRttiInt64.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  V64: Int64;
-begin
-  if fIsQWord then
-    SetQWord(Value, PQword(@V64)^)
-  else
-    SetInt64(Value, V64{%H-});
-  if fSetterIsFieldPropOffset <> 0 then
-    PInt64(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := V64
-  else
-    fPropInfo.SetInt64Prop(Instance, V64);
-end;
-
-function TOrmPropInfoRttiInt64.SetFieldSqlVar(Instance: TObject;
-  const aValue: TSqlVar): boolean;
-begin
-  if aValue.VType = ftInt64 then
-  begin
-    fPropInfo.SetInt64Prop(Instance, aValue.VInt64);
-    result := true;
-  end
-  else
-    result := inherited SetFieldSqlVar(Instance, aValue);
-end;
-
-procedure TOrmPropInfoRttiInt64.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-begin
-  aValue.Options := [];
-  aValue.VType := ftInt64;
-  aValue.VInt64 := fPropInfo.GetInt64Prop(Instance);
-end;
-
-
-{ TOrmPropInfoRttiDouble }
-
-procedure TOrmPropInfoRttiDouble.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-begin
-  TOrmPropInfoRttiDouble(DestInfo).fPropInfo.SetDoubleProp(
-    Dest, fPropInfo.GetDoubleProp(Source));
-end;
-
-procedure TOrmPropInfoRttiDouble.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  V: double;
-begin
-  if fGetterIsFieldPropOffset <> 0 then
-    V := unaligned(PDouble(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
-  else
-    V := fPropInfo.GetDoubleProp(Instance);
-  W.AddDouble(V);
-end;
-
-procedure TOrmPropInfoRttiDouble.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-begin
-  DoubleToStr(fPropInfo.GetDoubleProp(Instance), result);
-  if wasSqlString <> nil then
-    wasSqlString^ := (result = '') or
-                     not (result[1] in ['0'..'9']);
-end;
-
-procedure TOrmPropInfoRttiDouble.NormalizeValue(var Value: RawUtf8);
-var
-  VFloat: TSynExtended;
-  err: integer;
-begin
-  VFloat := GetExtended(pointer(Value), err);
-  if err <> 0 then
-    Value := ''
-  else
-    DoubleToStr(VFloat, Value);
-end;
-
-procedure TOrmPropInfoRttiDouble.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  V: double;
-  err: integer;
-begin
-  if Value = nil then
-    V := 0
-  else
-  begin
-    V := GetExtended(pointer(Value), err);
-    if err <> 0 then
-      V := 0;
-  end;
-  if fSetterIsFieldPropOffset <> 0 then
-    unaligned(PDouble(PtrUInt(Instance) + fSetterIsFieldPropOffset)^) := V
-  else
-    fPropInfo.SetDoubleProp(Instance, V);
-end;
-
-function TOrmPropInfoRttiDouble.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-    result := CompareFloat(
-      fPropInfo.GetDoubleProp(Item1), fPropInfo.GetDoubleProp(Item2));
-end;
-
-function TOrmPropInfoRttiDouble.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  V: double;
-begin
-  V := fPropInfo.GetDoubleProp(Instance);
-  result := DefaultHasher(0, @V, SizeOf(V));
-end;
-
-procedure TOrmPropInfoRttiDouble.GetBinary(Instance: TObject; W: TBufferWriter);
-var
-  V: double;
-begin
-  V := fPropInfo.GetDoubleProp(Instance);
-  W.Write(@V, SizeOf(V));
-end;
-
-procedure TOrmPropInfoRttiDouble.SetBinary(Instance: TObject; var Read: TFastReader);
-var
-  V: double;
-begin
-  Read.Copy(@V, SizeOf(V));
-  fPropInfo.SetDoubleProp(Instance, V);
-end;
-
-function TOrmPropInfoRttiDouble.SetFieldSqlVar(Instance: TObject;
-  const aValue: TSqlVar): boolean;
-var
-  V: double;
-begin
-  case aValue.VType of
-    ftCurrency:
-      V := aValue.VCurrency;
-    ftDouble, ftDate:
-      V := aValue.VDouble;
-    ftInt64:
-      V := aValue.VInt64;
-  else
-    begin
-      result := inherited SetFieldSqlVar(Instance, aValue);
-      exit;
-    end;
-  end;
-  fPropInfo.SetDoubleProp(Instance, V);
-  result := true;
-end;
-
-procedure TOrmPropInfoRttiDouble.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-begin
-  aValue.Options := [];
-  aValue.VType := ftDouble;
-  aValue.VDouble := fPropInfo.GetDoubleProp(Instance);
-end;
-
-
-{ TOrmPropInfoRttiCurrency }
-
-procedure TOrmPropInfoRttiCurrency.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  curr: currency;
-begin
-  fPropInfo.GetCurrencyProp(Source, curr);
-  TOrmPropInfoRttiCurrency(DestInfo).fPropInfo.SetCurrencyProp(Dest, curr);
-end;
-
-procedure TOrmPropInfoRttiCurrency.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  curr: currency;
-begin
-  fPropInfo.GetCurrencyProp(Instance, curr);
-  W.AddCurr(curr);
-end;
-
-procedure TOrmPropInfoRttiCurrency.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-var
-  curr: currency;
-begin
-  if wasSqlString <> nil then
-    wasSqlString^ := false;
-  fPropInfo.GetCurrencyProp(Instance, curr);
-  result := CurrencyToStr(curr);
-end;
-
-procedure TOrmPropInfoRttiCurrency.NormalizeValue(var Value: RawUtf8);
-begin
-  Value := Curr64ToStr(StrToCurr64(pointer(Value)));
-end;
-
-procedure TOrmPropInfoRttiCurrency.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  tmp: Int64;
-begin
-  tmp := StrToCurr64(Value, nil);
-  if fSetterIsFieldPropOffset <> 0 then
-    PInt64(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := tmp
-  else
-    fPropInfo.SetCurrencyProp(Instance, PCurrency(@tmp)^);
-end;
-
-function TOrmPropInfoRttiCurrency.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var
-  V1, V2: currency;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    fPropInfo.GetCurrencyProp(Item1, V1);
-    fPropInfo.GetCurrencyProp(Item2, V2);
-    result := CompareInt64(PInt64(@V1)^, PInt64(@V2)^);
-  end;
-end;
-
-function TOrmPropInfoRttiCurrency.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  V: currency;
-begin
-  fPropInfo.GetCurrencyProp(Instance, V);
-  result := DefaultHasher(0, @V, SizeOf(V));
-end;
-
-procedure TOrmPropInfoRttiCurrency.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-begin
-  aValue.Options := [];
-  aValue.VType := ftCurrency;
-  fPropInfo.GetCurrencyProp(Instance, aValue.VCurrency);
-end;
-
-function TOrmPropInfoRttiCurrency.SetFieldSqlVar(Instance: TObject;
-  const aValue: TSqlVar): boolean;
-var
-  V: currency;
-begin
-  case aValue.VType of
-    ftDouble, ftDate:
-      V := aValue.VDouble;
-    ftInt64:
-      V := aValue.VInt64;
-    ftCurrency:
-      V := aValue.VCurrency;
-  else
-    begin
-      result := inherited SetFieldSqlVar(Instance, aValue);
-      exit;
-    end;
-  end;
-  fPropInfo.SetCurrencyProp(Instance, PCurrency(@V)^);
-  result := true;
-end;
-
-procedure TOrmPropInfoRttiCurrency.GetBinary(Instance: TObject; W: TBufferWriter);
-var
-  V: currency;
-begin
-  fPropInfo.GetCurrencyProp(Instance, V);
-  W.Write(@V, SizeOf(V));
-end;
-
-procedure TOrmPropInfoRttiCurrency.SetBinary(Instance: TObject; var Read: TFastReader);
-var
-  V: currency;
-begin
-  Read.Copy(@V, SizeOf(V));
-  fPropInfo.SetCurrencyProp(Instance, V);
-end;
-
-
-{ TOrmPropInfoRttiDateTime }
-
-procedure TOrmPropInfoRttiDateTime.GetJsonValues(Instance: TObject; W: TTextWriter);
-begin
-  W.Add('"');
-  W.AddDateTime(fPropInfo.GetDoubleProp(Instance), fOrmFieldType = oftDateTimeMS);
-  W.Add('"');
-end;
-
-function TOrmPropInfoRttiDateTime.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-const
-  PRECISION: array[boolean] of double = (1 / SecsPerDay, 1 / MSecsPerDay);
-var
-  V1, V2: double;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    V1 := fPropInfo.GetDoubleProp(Item1);
-    V2 := fPropInfo.GetDoubleProp(Item2);
-    if mormot.core.base.SameValue(V1, V2, PRECISION[fOrmFieldType = oftDateTimeMS]) then
-      result := 0
-    else if V1 > V2 then
-      result := 1
-    else
-      result := -1;
-  end;
-end;
-
-procedure TOrmPropInfoRttiDateTime.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-begin
-  if wasSqlString <> nil then
-    wasSqlString^ := true;
-  DateTimeToIso8601TextVar(fPropInfo.GetDoubleProp(Instance), 'T', result,
-    fOrmFieldType = oftDateTimeMS);
-end;
-
-procedure TOrmPropInfoRttiDateTime.NormalizeValue(var Value: RawUtf8);
-begin
-  DateTimeToIso8601TextVar(Iso8601ToDateTime(Value), 'T', Value,
-    {withms=}fOrmFieldType = oftDateTimeMS);
-end;
-
-procedure TOrmPropInfoRttiDateTime.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  V: TDateTime;
-begin
-  Iso8601ToDateTimePUtf8CharVar(Value, ValueLen, V);
-  if fSetterIsFieldPropOffset <> 0 then
-    unaligned(PDouble(PtrUInt(Instance) + fSetterIsFieldPropOffset)^) := V
-  else
-    fPropInfo.SetDoubleProp(Instance, V);
-end;
-
-procedure TOrmPropInfoRttiDateTime.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-begin
-  if fOrmFieldType = oftDateTimeMS then
-    aValue.Options := [svoDateWithMS]
-  else
-    aValue.Options := [];
-  aValue.VType := ftDate;
-  aValue.VDouble := fPropInfo.GetDoubleProp(Instance);
-end;
-
-
-{ TOrmPropInfoRttiMany }
-
-// TOrmMany stores nothing within the table
-
-procedure TOrmPropInfoRttiMany.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-begin
-  result := '';
-end;
-
-procedure TOrmPropInfoRttiMany.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-begin
-end;
-
-procedure TOrmPropInfoRttiMany.GetBinary(Instance: TObject; W: TBufferWriter);
-begin
-end;
-
-procedure TOrmPropInfoRttiMany.SetBinary(Instance: TObject; var Read: TFastReader);
-begin
-end;
-
-
-{ TOrmPropInfoRttiInstance }
-
-constructor TOrmPropInfoRttiInstance.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
-begin
-  inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  fObjectClass := fPropType^.RttiClass^.RttiClass;
-end;
-
-function TOrmPropInfoRttiInstance.GetInstance(Instance: TObject): TObject;
-begin
-  if fGetterIsFieldPropOffset <> 0 then
-    result := PObject(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
-  else
-    result := fPropInfo.GetObjProp(Instance);
-end;
-
-procedure TOrmPropInfoRttiInstance.SetInstance(Instance, Value: TObject);
-begin
-  if fSetterIsFieldPropOffset <> 0 then
-    PObject(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := Value
-  else
-    fPropInfo.SetOrdProp(Instance, PtrInt(Value));
-end;
-
-
-{ TOrmPropInfoRttiRecordReference }
-
-constructor TOrmPropInfoRttiRecordReference.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
-begin
-  inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  fCascadeDelete := IdemPropName(fPropType^.RawName, 'TRecordReferenceToBeDeleted')
-end;
-
+{ -------------------- ORM Specific TOrmPropInfoRtti Classes }
 
 { TOrmPropInfoRttiTID }
 
@@ -7354,1707 +5495,6 @@ begin
 end;
 
 
-{ TOrmPropInfoRttiIObject }
-
-procedure TOrmPropInfoRttiObject.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  S, D: TObject;
-begin
-  // generic case: copy also class content (create instances)
-  S := GetInstance(Source);
-  D := TOrmPropInfoRttiObject(DestInfo).GetInstance(Dest);
-  case fPropRtti.ValueRtlClass of
-    vcCollection:
-      CopyCollection(TCollection(S), TCollection(D));
-    vcStrings:
-      CopyStrings(TStrings(S), TStrings(D));
-    else
-      begin
-        D.Free; // release previous instance
-        TOrmPropInfoRttiObject(DestInfo).SetInstance(Dest, CopyObject(S));
-      end;
-  end;
-end;
-
-procedure TOrmPropInfoRttiObject.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  valid: boolean;
-  tmp: TSynTempBuffer;
-begin
-  tmp.Init(Value, ValueLen); // private copy since the buffer will be modified
-  try
-    PropertyFromJson(GetRttiCustomProp(Instance), Instance, tmp.buf, valid,
-      JSONPARSER_TOLERANTOPTIONS);
-  finally
-    tmp.Done;
-  end;
-end;
-
-procedure TOrmPropInfoRttiObject.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-begin
-  if wasSqlString <> nil then
-    wasSqlString^ := true;
-  result := ObjectToJson(GetInstance(Instance));
-end;
-
-procedure TOrmPropInfoRttiObject.GetBinary(Instance: TObject; W: TBufferWriter);
-begin
-  // serialize object as JSON UTF-8 TEXT - not fast, but works
-  W.Write(ObjectToJson(GetInstance(Instance)));
-end;
-
-procedure TOrmPropInfoRttiObject.SetBinary(Instance: TObject; var Read: TFastReader);
-var
-  valid: boolean;
-  tmp: TSynTempBuffer;
-begin
-  // unserialize object from JSON UTF-8 TEXT - not fast, but works
-  Read.VarBlob(tmp);
-  try
-    PropertyFromJson(GetRttiCustomProp(Instance), Instance, tmp.buf, valid,
-      JSONPARSER_TOLERANTOPTIONS);
-  finally
-    tmp.Done;
-  end;
-  if not valid then
-    Read.ErrorData('%.SetBinary: invalid JSON for %', [self, fName]);
-end;
-
-function TOrmPropInfoRttiObject.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  tmp: RawUtf8;
-begin // JSON is case-sensitive by design -> ignore CaseInsensitive parameter
-  tmp := ObjectToJson(GetInstance(Instance));
-  result := DefaultHasher(0, pointer(tmp), length(tmp));
-end;
-
-procedure TOrmPropInfoRttiObject.NormalizeValue(var Value: RawUtf8);
-begin // do nothing: should already be normalized
-end;
-
-procedure TOrmPropInfoRttiObject.GetJsonValues(Instance: TObject; W: TTextWriter);
-begin
-  if W.InheritsFrom(TJsonSerializer) and
-     (jwoAsJsonNotAsString in TJsonSerializer(W).OrmOptions) then
-    W.WriteObject(GetInstance(Instance))
-  else
-    W.WriteObjectAsString(GetInstance(Instance));
-end;
-
-
-{ TOrmPropInfoRttiAnsi }
-
-constructor TOrmPropInfoRttiAnsi.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
-begin
-  inherited;
-  fEngine := fPropRtti.Cache.Engine;
-end;
-
-procedure TOrmPropInfoRttiAnsi.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  Value: RawByteString;
-begin
-  if TOrmPropInfoRttiAnsi(DestInfo).fEngine = fEngine then
-  begin
-    fPropInfo.GetLongStrProp(Source, Value);
-    TOrmPropInfoRttiAnsi(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
-  end
-  else
-  begin
-    GetValueVar(Source, false, RawUtf8(Value), nil);
-    DestInfo.SetValueVar(Dest, Value, true);
-  end;
-end;
-
-procedure TOrmPropInfoRttiAnsi.GetBinary(Instance: TObject; W: TBufferWriter);
-var
-  Value: RawByteString;
-begin
-  fPropInfo.GetLongStrProp(Instance, Value);
-  W.Write(Value);
-end;
-
-function TOrmPropInfoRttiAnsi.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
-  Value: RawByteString;
-begin
-  fPropInfo.GetLongStrProp(Instance, Value);
-  if CaseInsensitive then
-    if fEngine.CodePage = CODEPAGE_US then
-      result := DefaultHasher(0, Up{%H-}, UpperCopyWin255(Up{%H-}, Value) - {%H-}Up)
-    else
-      result := DefaultHasher(0, Up, UpperCopy255Buf(Up, pointer(Value), length(Value)) - Up)
-  else
-    result := DefaultHasher(0, pointer(Value), length(Value));
-end;
-
-procedure TOrmPropInfoRttiAnsi.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-var
-  tmp: RawByteString;
-begin
-  if wasSqlString <> nil then
-    wasSqlString^ := true;
-  fPropInfo.GetLongStrProp(Instance, tmp);
-  result := fEngine.AnsiBufferToRawUtf8(pointer(tmp), length(tmp));
-end;
-
-procedure TOrmPropInfoRttiAnsi.NormalizeValue(var Value: RawUtf8);
-begin // do nothing: should already be UTF-8 encoded
-end;
-
-function TOrmPropInfoRttiAnsi.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var
-  tmp1, tmp2: RawByteString;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    fPropInfo.GetLongStrProp(Item1, tmp1);
-    fPropInfo.GetLongStrProp(Item2, tmp2);
-    if CaseInsensitive then
-      if fEngine.CodePage = CODEPAGE_US then
-        result := AnsiIComp(pointer(tmp1), pointer(tmp2))
-      else
-        result := StrIComp(pointer(tmp1), pointer(tmp2))
-    else
-      result := StrComp(pointer(tmp1), pointer(tmp2));
-  end;
-end;
-
-procedure TOrmPropInfoRttiAnsi.SetBinary(Instance: TObject; var Read: TFastReader);
-begin
-  fPropInfo.SetLongStrProp(Instance, Read.VarString(fEngine.CodePage));
-end;
-
-procedure TOrmPropInfoRttiAnsi.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-begin
-  if Value = nil then
-    fPropInfo.SetLongStrProp(Instance, '')
-  else
-    fPropInfo.SetLongStrProp(Instance, fEngine.Utf8BufferToAnsi(Value, ValueLen));
-end;
-
-procedure TOrmPropInfoRttiAnsi.SetValueVar(Instance: TObject; const Value:
-  RawUtf8; wasString: boolean);
-begin
-  fPropInfo.SetLongStrProp(Instance, fEngine.Utf8ToAnsi(Value));
-end;
-
-procedure TOrmPropInfoRttiAnsi.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  tmp: RawByteString;
-begin
-  W.Add('"');
-  fPropInfo.GetLongStrProp(Instance, tmp);
-  if tmp <> '' then
-    W.AddAnyAnsiString(tmp, twJsonEscape, fEngine.CodePage);
-  W.Add('"');
-end;
-
-function TOrmPropInfoRttiAnsi.SetFieldSqlVar(Instance: TObject;
-  const aValue: TSqlVar): boolean;
-var
-  tmp: RawByteString;
-begin
-  case aValue.VType of
-    ftNull:
-      ; // leave tmp=''
-    ftUtf8:
-      fEngine.Utf8BufferToAnsi(aValue.VText, StrLen(aValue.VText), tmp);
-  else
-    begin
-      result := inherited SetFieldSqlVar(Instance, aValue);
-      exit;
-    end;
-  end;
-  fPropInfo.SetLongStrProp(Instance, tmp{%H-});
-  result := True;
-end;
-
-procedure TOrmPropInfoRttiAnsi.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-begin
-  fPropInfo.GetLongStrProp(Instance, temp);
-  temp := fEngine.AnsiToUtf8(temp);
-  aValue.Options := [];
-  aValue.VType := ftUtf8;
-  aValue.VText := pointer(temp);
-end;
-
-procedure TOrmPropInfoRttiAnsi.CopyValue(Source, Dest: TObject);
-begin // avoid temporary variable use, for simple fields with no getter/setter
-  if fInPlaceCopySameClassPropOffset = 0 then
-    fPropInfo.CopyLongStrProp(Source, Dest)
-  else
-    PRawByteString(PtrUInt(Dest) + fInPlaceCopySameClassPropOffset)^ :=
-      PRawByteString(PtrUInt(Source) + fInPlaceCopySameClassPropOffset)^;
-end;
-
-
-{ TOrmPropInfoRttiRawUtf8 }
-
-procedure TOrmPropInfoRttiRawUtf8.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  Value: RawByteString;
-begin // don't know why, but fInPlaceCopySameClassPropOffset trick leaks memory :(
-  fPropInfo.GetLongStrProp(Source, Value);
-  TOrmPropInfoRttiRawUtf8(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
-end;
-
-function TOrmPropInfoRttiRawUtf8.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
-  Value: RawByteString;
-begin
-  fPropInfo.GetLongStrProp(Instance, Value);
-  if CaseInsensitive then
-    result := DefaultHasher(0, Up{%H-}, Utf8UpperCopy255(Up{%H-}, Value) - {%H-}Up)
-  else
-    result := DefaultHasher(0, pointer(Value), length(Value));
-end;
-
-procedure TOrmPropInfoRttiRawUtf8.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  tmp: RawByteString;
-begin
-  fPropInfo.GetLongStrProp(Instance, tmp);
-  if fPropType = TypeInfo(RawJson) then
-    W.AddRawJson(tmp)
-  else
-  begin
-    W.Add('"');
-    if tmp <> '' then
-      W.AddJsonEscape(pointer(tmp));
-    W.Add('"');
-  end;
-end;
-
-procedure TOrmPropInfoRttiRawUtf8.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-begin
-  if wasSqlString <> nil then
-    wasSqlString^ := fPropType <> TypeInfo(RawJson);
-  fPropInfo.GetLongStrProp(Instance, RawByteString(result));
-end;
-
-procedure TOrmPropInfoRttiRawUtf8.SetBinary(Instance: TObject; var Read: TFastReader);
-begin
-  fPropInfo.SetLongStrProp(Instance, Read.VarUtf8);
-end;
-
-function TOrmPropInfoRttiRawUtf8.SetFieldSqlVar(Instance: TObject;
-  const aValue: TSqlVar): boolean;
-var
-  tmp: RawByteString;
-begin
-  case aValue.VType of
-    ftNull:
-      ; // leave tmp=''
-    ftUtf8:
-      SetString(tmp, PAnsiChar(aValue.VText), StrLen(aValue.VText));
-  else
-    begin
-      result := inherited SetFieldSqlVar(Instance, aValue);
-      exit;
-    end;
-  end;
-  fPropInfo.SetLongStrProp(Instance, tmp{%H-});
-  result := True;
-end;
-
-procedure TOrmPropInfoRttiRawUtf8.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-begin
-  fPropInfo.GetLongStrProp(Instance, temp);
-  aValue.Options := [];
-  aValue.VType := ftUtf8;
-  aValue.VText := Pointer(temp);
-end;
-
-function TOrmPropInfoRttiRawUtf8.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-
-  function CompareUTF8WithLocalTempCopy: PtrInt;
-  var
-    tmp1, tmp2: RawByteString;
-  begin
-    fPropInfo.GetLongStrProp(Item1, tmp1);
-    fPropInfo.GetLongStrProp(Item2, tmp2);
-    if aUnicodeNoCaseCollation in Attributes then
-      result := Utf8ICompReference(pointer(tmp1), pointer(tmp2))
-    else if CaseInsensitive then
-      result := Utf8IComp(pointer(tmp1), pointer(tmp2))
-    else
-      result := StrComp(pointer(tmp1), pointer(tmp2));
-  end;
-
-var
-  offs: PtrUInt;
-  p1, p2: pointer;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    offs := fGetterIsFieldPropOffset;
-    if offs <> 0 then
-    begin // avoid any temporary variable
-      p1 := PPointer(PtrUInt(Item1) + offs)^;
-      p2 := PPointer(PtrUInt(Item2) + offs)^;
-      if CaseInsensitive then
-        if aUnicodeNoCaseCollation in Attributes then
-          result := Utf8ICompReference(p1, p2)
-        else
-          result := Utf8IComp(p1, p2)
-      else
-        result := StrComp(p1, p2);
-    end
-    else
-      result := CompareUTF8WithLocalTempCopy;
-  end;
-end;
-
-procedure TOrmPropInfoRttiRawUtf8.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-
-  procedure NeedSub;
-  var
-    tmp: RawUtf8;
-  begin
-    if Value <> nil then
-      FastSetString(tmp, Value, ValueLen);
-    fPropInfo.SetLongStrProp(Instance, tmp);
-  end;
-
-begin
-  if fSetterIsFieldPropOffset <> 0 then
-    FastSetString(PRawUtf8(PtrUInt(Instance) + fSetterIsFieldPropOffset)^, Value, ValueLen)
-  else
-    NeedSub;
-end;
-
-procedure TOrmPropInfoRttiRawUtf8.SetValueVar(Instance: TObject;
-  const Value: RawUtf8; wasString: boolean);
-begin
-  fPropInfo.SetLongStrProp(Instance, Value);
-end;
-
-
-{ TOrmPropInfoRttiRawUnicode }
-
-procedure TOrmPropInfoRttiRawUnicode.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  Value: RawByteString;
-begin
-  fPropInfo.GetLongStrProp(Source, Value);
-  TOrmPropInfoRttiRawUnicode(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
-end;
-
-function TOrmPropInfoRttiRawUnicode.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
-  Value: RawByteString;
-begin
-  fPropInfo.GetLongStrProp(Instance, Value);
-  if CaseInsensitive then
-    result := DefaultHasher(0, Up{%H-},
-      UpperCopy255W(Up{%H-}, pointer(Value), length(Value) shr 1) - {%H-}Up)
-  else
-    result := DefaultHasher(0, pointer(Value), length(Value));
-end;
-
-procedure TOrmPropInfoRttiRawUnicode.GetValueVar(Instance: TObject;
-  ToSql: boolean; var result: RawUtf8; wasSqlString: PBoolean);
-var
-  tmp: RawByteString;
-begin
-  if wasSqlString <> nil then
-    wasSqlString^ := true;
-  fPropInfo.GetLongStrProp(Instance, tmp);
-  RawUnicodeToUtf8(pointer(tmp), length(tmp) shr 1, result);
-end;
-
-function TOrmPropInfoRttiRawUnicode.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var
-  tmp1, tmp2: RawByteString;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    fPropInfo.GetLongStrProp(Item1, tmp1);
-    fPropInfo.GetLongStrProp(Item2, tmp2);
-    if CaseInsensitive then
-      result := AnsiICompW(pointer(tmp1), pointer(tmp2))
-    else
-      result := StrCompW(pointer(tmp1), pointer(tmp2));
-  end;
-end;
-
-procedure TOrmPropInfoRttiRawUnicode.SetValue(Instance: TObject;
-  Value: PUtf8Char; ValueLen: PtrInt; wasString: boolean);
-begin
-  if Value = nil then
-    fPropInfo.SetLongStrProp(Instance, '')
-  else
-    fPropInfo.SetLongStrProp(Instance, Utf8DecodeToRawUnicode(Value, ValueLen));
-end;
-
-procedure TOrmPropInfoRttiRawUnicode.SetValueVar(Instance: TObject;
-  const Value: RawUtf8; wasString: boolean);
-begin
-  fPropInfo.SetLongStrProp(Instance, Utf8DecodeToRawUnicode(Value));
-end;
-
-
-{ TOrmPropInfoRttiRawBlob }
-
-procedure TOrmPropInfoRttiRawBlob.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  Value: RawByteString;
-begin
-  fPropInfo.GetLongStrProp(Source, Value);
-  TOrmPropInfoRttiRawBlob(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
-end;
-
-function TOrmPropInfoRttiRawBlob.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  Value: RawByteString;
-begin
-  fPropInfo.GetLongStrProp(Instance, Value);
-  result := DefaultHasher(0, pointer(Value), length(Value)); // binary -> case sensitive
-end;
-
-procedure TOrmPropInfoRttiRawBlob.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  tmp: RawByteString;
-begin
-  fPropInfo.GetLongStrProp(Instance, tmp);
-  W.WrBase64(pointer(tmp), length(tmp), true);
-end;
-
-procedure TOrmPropInfoRttiRawBlob.GetBlob(Instance: TObject; var Blob: RawByteString);
-begin
-  fPropInfo.GetLongStrProp(Instance, Blob);
-end;
-
-procedure TOrmPropInfoRttiRawBlob.SetBlob(Instance: TObject; const Blob: RawByteString);
-begin
-  fPropInfo.SetLongStrProp(Instance, Blob);
-end;
-
-function TOrmPropInfoRttiRawBlob.IsNull(Instance: TObject): boolean;
-var
-  Blob: RawByteString;
-begin
-  fPropInfo.GetLongStrProp(Instance, Blob);
-  result := (Blob = '');
-end;
-
-procedure TOrmPropInfoRttiRawBlob.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-begin
-  fPropInfo.GetLongStrProp(Instance, RawByteString(result));
-  BinaryToText(result, ToSql, wasSqlString);
-end;
-
-function TOrmPropInfoRttiRawBlob.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var
-  tmp1, tmp2: RawByteString;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    fPropInfo.GetLongStrProp(Item1, tmp1);
-    fPropInfo.GetLongStrProp(Item2, tmp2);
-    // BLOB is binary so always case sensitive
-    result := StrComp(pointer(tmp1), pointer(tmp2));
-  end;
-end;
-
-procedure TOrmPropInfoRttiRawBlob.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-begin
-  fPropInfo.SetLongStrProp(Instance, BlobToRawBlob(Value, ValueLen));
-end;
-
-procedure TOrmPropInfoRttiRawBlob.SetValueVar(Instance: TObject;
-  const Value: RawUtf8; wasString: boolean);
-begin
-  fPropInfo.SetLongStrProp(Instance, BlobToRawBlob(Value));
-end;
-
-function TOrmPropInfoRttiRawBlob.SetFieldSqlVar(Instance: TObject;
-  const aValue: TSqlVar): boolean;
-var
-  tmp: RawByteString;
-begin
-  case aValue.VType of
-    ftBlob:
-      begin
-        SetString(tmp, PAnsiChar(aValue.VBlob), aValue.VBlobLen);
-        fPropInfo.SetLongStrProp(Instance, tmp);
-        result := true;
-      end;
-    ftNull:
-      begin
-        fPropInfo.SetLongStrProp(Instance, '');
-        result := true;
-      end;
-  else
-    result := inherited SetFieldSqlVar(Instance, aValue);
-  end;
-end;
-
-procedure TOrmPropInfoRttiRawBlob.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-begin
-  fPropInfo.GetLongStrProp(Instance, temp);
-  aValue.Options := [];
-  if temp = '' then
-    aValue.VType := ftNull
-  else
-  begin
-    aValue.VType := ftBlob;
-    aValue.VBlob := pointer(temp);
-    aValue.VBlobLen := length(temp);
-  end;
-end;
-
-
-{ TOrmPropInfoRttiWide }
-
-procedure TOrmPropInfoRttiWide.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  Value: WideString;
-begin
-  fPropInfo.GetWideStrProp(Source, Value);
-  TOrmPropInfoRttiWide(DestInfo).fPropInfo.SetWideStrProp(Dest, Value);
-end;
-
-procedure TOrmPropInfoRttiWide.GetBinary(Instance: TObject; W: TBufferWriter);
-var
-  Value: WideString;
-begin
-  fPropInfo.GetWideStrProp(Instance, Value);
-  W.Write(WideStringToUtf8(Value));
-end;
-
-function TOrmPropInfoRttiWide.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
-  Value: WideString;
-begin
-  fPropInfo.GetWideStrProp(Instance, Value);
-  if CaseInsensitive then
-    result := DefaultHasher(0, Up{%H-},
-      UpperCopy255W(Up{%H-}, pointer(Value), length(Value)) - {%H-}Up)
-  else
-    result := DefaultHasher(0, pointer(Value), length(Value) * 2);
-end;
-
-procedure TOrmPropInfoRttiWide.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  Value: WideString;
-begin
-  W.Add('"');
-  fPropInfo.GetWideStrProp(Instance, Value);
-  if pointer(Value) <> nil then
-    W.AddJsonEscapeW(pointer(Value), 0);
-  W.Add('"');
-end;
-
-procedure TOrmPropInfoRttiWide.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-var
-  Value: WideString;
-begin
-  fPropInfo.GetWideStrProp(Instance, Value);
-  result := WideStringToUtf8(Value);
-  if wasSqlString <> nil then
-    wasSqlString^ := true;
-end;
-
-procedure TOrmPropInfoRttiWide.CopyValue(Source, Dest: TObject);
-begin // avoid temporary variable use, for simple fields with no getter/setter
-  if fInPlaceCopySameClassPropOffset = 0 then
-    CopySameClassProp(Source, self, Dest)
-  else
-    PWideString(PtrUInt(Dest) + fInPlaceCopySameClassPropOffset)^ :=
-      PWideString(PtrUInt(Source) + fInPlaceCopySameClassPropOffset)^;
-end;
-
-function TOrmPropInfoRttiWide.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var
-  tmp1, tmp2: WideString;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    fPropInfo.GetWideStrProp(Item1, tmp1);
-    fPropInfo.GetWideStrProp(Item2, tmp2);
-    if CaseInsensitive then
-      result := AnsiICompW(pointer(tmp1), pointer(tmp2))
-    else
-      result := StrCompW(pointer(tmp1), pointer(tmp2));
-  end;
-end;
-
-procedure TOrmPropInfoRttiWide.SetBinary(Instance: TObject; var Read: TFastReader);
-begin
-  fPropInfo.SetWideStrProp(Instance, Utf8ToWideString(Read.VarUtf8));
-end;
-
-procedure TOrmPropInfoRttiWide.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  Wide: WideString;
-begin
-  if Value <> nil then
-    Utf8ToWideString(Value, ValueLen, Wide);
-  fPropInfo.SetWideStrProp(Instance, Wide);
-end;
-
-
-{$ifdef HASVARUSTRING}
-
-{ TOrmPropInfoRttiUnicode }
-
-procedure TOrmPropInfoRttiUnicode.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  tmp: UnicodeString;
-begin
-  fPropInfo.GetUnicodeStrProp(Source, tmp);
-  TOrmPropInfoRttiUnicode(DestInfo).fPropInfo.SetUnicodeStrProp(Dest, tmp);
-end;
-
-procedure TOrmPropInfoRttiUnicode.GetBinary(Instance: TObject; W: TBufferWriter);
-var
-  tmp: UnicodeString;
-begin
-  fPropInfo.GetUnicodeStrProp(Instance, tmp);
-  W.Write(UnicodeStringToUtf8(tmp));
-end;
-
-procedure TOrmPropInfoRttiUnicode.CopyValue(Source, Dest: TObject);
-begin // avoid temporary variable use, for simple fields with no getter/setter
-  if fInPlaceCopySameClassPropOffset = 0 then
-    CopySameClassProp(Source, self, Dest)
-  else
-    PUnicodeString(PtrUInt(Dest) + fInPlaceCopySameClassPropOffset)^ :=
-      PUnicodeString(PtrUInt(Source) + fInPlaceCopySameClassPropOffset)^;
-end;
-
-function TOrmPropInfoRttiUnicode.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
-  Value: UnicodeString;
-begin
-  fPropInfo.GetUnicodeStrProp(Instance, Value);
-  if CaseInsensitive then
-    result := DefaultHasher(0, Up{%H-},
-      UpperCopy255W(Up{%H-}, pointer(Value), length(Value)) - {%H-}Up)
-  else
-    result := DefaultHasher(0, pointer(Value), length(Value) * 2);
-end;
-
-procedure TOrmPropInfoRttiUnicode.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-var
-  tmp: UnicodeString;
-begin
-  fPropInfo.GetUnicodeStrProp(Instance, tmp);
-  RawUnicodeToUtf8(pointer(tmp), length(tmp), result);
-  if wasSqlString <> nil then
-    wasSqlString^ := true;
-end;
-
-procedure TOrmPropInfoRttiUnicode.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  tmp: UnicodeString;
-begin
-  W.Add('"');
-  fPropInfo.GetUnicodeStrProp(Instance, tmp);
-  if tmp <> '' then
-    W.AddJsonEscapeW(pointer(tmp), 0);
-  W.Add('"');
-end;
-
-function TOrmPropInfoRttiUnicode.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var
-  tmp1, tmp2: UnicodeString;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    fPropInfo.GetUnicodeStrProp(Item1, tmp1);
-    fPropInfo.GetUnicodeStrProp(Item2, tmp2);
-    if CaseInsensitive then
-      result := AnsiICompW(pointer(tmp1), pointer(tmp2))
-    else
-      result := StrCompW(pointer(tmp1), pointer(tmp2));
-  end;
-end;
-
-procedure TOrmPropInfoRttiUnicode.SetBinary(Instance: TObject; var Read: TFastReader);
-begin
-  fPropInfo.SetUnicodeStrProp(Instance, Utf8DecodeToUnicodeString(Read.VarUtf8));
-end;
-
-procedure TOrmPropInfoRttiUnicode.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  tmp: UnicodeString;
-begin
-  if Value <> nil then
-    Utf8DecodeToUnicodeString(Value, ValueLen, tmp);
-  fPropInfo.SetUnicodeStrProp(Instance, tmp);
-end;
-
-procedure TOrmPropInfoRttiUnicode.SetValueVar(Instance: TObject;
-  const Value: RawUtf8; wasString: boolean);
-begin
-  fPropInfo.SetUnicodeStrProp(Instance, Utf8DecodeToUnicodeString(Value));
-end;
-
-function TOrmPropInfoRttiUnicode.SetFieldSqlVar(Instance: TObject;
-  const aValue: TSqlVar): boolean;
-var
-  tmp: UnicodeString;
-begin
-  case aValue.VType of
-    ftNull:
-      ; // leave tmp=''
-    ftUtf8:
-      Utf8DecodeToUnicodeString(aValue.VText, StrLen(aValue.VText), tmp);
-  else
-    begin
-      result := inherited SetFieldSqlVar(Instance, aValue);
-      exit;
-    end;
-  end;
-  fPropInfo.SetUnicodeStrProp(Instance, tmp{%H-});
-  result := True;
-end;
-
-procedure TOrmPropInfoRttiUnicode.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-var
-  tmp: UnicodeString;
-begin
-  fPropInfo.GetUnicodeStrProp(Instance, tmp);
-  RawUnicodeToUtf8(pointer(tmp), length(tmp), RawUtf8(temp));
-  aValue.Options := [];
-  aValue.VType := ftUtf8;
-  aValue.VText := Pointer(temp);
-end;
-
-{$endif HASVARUSTRING}
-
-
-{ TOrmPropInfoRttiDynArray }
-
-constructor TOrmPropInfoRttiDynArray.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
-begin
-  inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  if rcfObjArray in fPropRtti.Flags then
-  begin
-    fObjArray := fPropRtti.ArrayRtti as TRttiJson;
-    fSqlDBFieldType := ftUtf8; // matches GetFieldSqlVar() below
-  end;
-  if fGetterIsFieldPropOffset = 0 then
-    raise EModelException.CreateUtf8('%.Create(%) should be a field, not with getter!',
-      [self, fPropType^.Name]);
-end;
-
-procedure TOrmPropInfoRttiDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
-begin
-  // very fast assignment of fWrapper pre-initialized RTTI
-  result.InitRtti(fPropRtti, pointer(PtrUInt(Instance) + fGetterIsFieldPropOffset)^);
-end;
-
-function TOrmPropInfoRttiDynArray.GetDynArrayElemType: TRttiCustom;
-begin
-  result := fPropRtti.ArrayRtti;
-end;
-
-procedure TOrmPropInfoRttiDynArray.Serialize(Instance: TObject;
-  var data: RawByteString; ExtendedJson: boolean);
-var
-  da: TDynArray;
-  temp: TTextWriterStackBuffer;
-begin
-  GetDynArray(Instance, da);
-  if da.Count = 0 then
-    data := ''
-  else if fObjArray <> nil then
-    // T*ObjArray use JSON serialization
-    with TJsonSerializer.CreateOwnedStream(temp) do
-    try
-      if ExtendedJson then // smaller content
-        CustomOptions := CustomOptions + [twoForceJsonExtended];
-      AddDynArrayJson(da);
-      SetText(RawUtf8(data));
-    finally
-      Free;
-    end
-  else
-    // regular (e.g. record) dynamic arrays use our binary encoding
-    data := da.SaveTo;
-end;
-
-procedure TOrmPropInfoRttiDynArray.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  sda, dda: TDynArray;
-begin
-  GetDynArray(Source, sda);
-  TOrmPropInfoRttiDynArray(DestInfo).GetDynArray(Dest, dda);
-  if (fObjArray <> nil) or (TOrmPropInfoRttiDynArray(DestInfo).fObjArray <> nil)
-    or (sda.Info.ArrayRtti <> dda.Info.ArrayRtti) then
-    dda.LoadFromJson(pointer(sda.SaveToJson))
-  else
-    dda.Copy(@sda);
-end;
-
-procedure TOrmPropInfoRttiDynArray.GetBinary(Instance: TObject; W: TBufferWriter);
-var
-  Value: RawByteString;
-begin
-  Serialize(Instance, Value, true); // JSON for T*ObjArray, or our binary format
-  if fObjArray <> nil then
-    W.Write(Value)
-  else
-    W.WriteBinary(Value);
-end;
-
-function TOrmPropInfoRttiDynArray.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  tmp: RawByteString;
-begin
-  Serialize(Instance, tmp, true);
-  result := DefaultHasher(0, pointer(tmp), length(tmp));
-end;
-
-procedure TOrmPropInfoRttiDynArray.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-begin
-  Serialize(Instance, RawByteString(result), false);
-  if fObjArray = nil then
-    BinaryToText(result, ToSql, wasSqlString);
-end;
-
-procedure TOrmPropInfoRttiDynArray.GetVariant(Instance: TObject; var Dest: Variant);
-var
-  json: RawUtf8;
-  da: TDynArray;
-begin
-  GetDynArray(Instance, da);
-  json := da.SaveToJson;
-  VarClear(Dest);
-  TDocVariantData(Dest).InitJsonInPlace(pointer(json), JSON_OPTIONS_FAST);
-end;
-
-procedure TOrmPropInfoRttiDynArray.SetVariant(Instance: TObject; const Source: Variant);
-var
-  json: RawUtf8;
-  da: TDynArray;
-begin
-  GetDynArray(Instance, da);
-  VariantSaveJson(Source, twJsonEscape, json);
-  da.LoadFromJson(pointer(json));
-end;
-
-procedure TOrmPropInfoRttiDynArray.NormalizeValue(var Value: RawUtf8);
-begin // do nothing: should already be normalized
-end;
-
-function TOrmPropInfoRttiDynArray.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var
-  da1, da2: TDynArray;
-  i: integer;
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    GetDynArray(Item1, da1);
-    GetDynArray(Item2, da2);
-    result := da1.Count - da2.Count;
-    if result <> 0 then
-      exit;
-    result := PtrInt(Item1) - PtrInt(Item2); // pseudo comparison
-    if fObjArray <> nil then
-    begin
-      for i := 0 to da1.Count - 1 do
-      begin
-        result := ObjectCompare(PObjectArray(da1.Value^)[i],
-          PObjectArray(da2.Value^)[i], CaseInsensitive);
-        if result <> 0 then
-          exit;
-      end;
-    end
-    else if not da1.Equals(@da2) then
-      exit;
-    result := 0;
-  end;
-end;
-
-procedure TOrmPropInfoRttiDynArray.SetBinary(Instance: TObject; var Read: TFastReader);
-var
-  tmp: TSynTempBuffer; // LoadFromJson() may change the input buffer
-  da: TDynArray;
-begin
-  GetDynArray(Instance, da);
-  if fObjArray <> nil then
-  begin
-    // T*ObjArray use JSON serialization
-    Read.VarBlob(tmp);
-    try
-      da.LoadFromJson(tmp.buf);
-    finally
-      tmp.Done;
-    end;
-  end
-  else
-    // regular (e.g. record) dynamic arrays use our binary encoding
-    da.LoadFromReader(Read);
-end;
-
-procedure TOrmPropInfoRttiDynArray.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  tmp: TSynTempBuffer;
-  da: TDynArray;
-begin
-  GetDynArray(Instance, da);
-  if Value = nil then
-    da.Clear
-  else
-  try
-    if (fObjArray = nil) and Base64MagicCheckAndDecode(Value, tmp, ValueLen) then
-      da.LoadFrom(tmp.buf, PAnsiChar(tmp.buf) + tmp.len)
-    else
-      da.LoadFromJson(tmp.Init(Value));
-  finally
-    tmp.Done;
-  end;
-end;
-
-function TOrmPropInfoRttiDynArray.SetFieldSqlVar(Instance: TObject;
-  const aValue: TSqlVar): boolean;
-var
-  da: TDynArray;
-begin
-  if aValue.VType = ftBlob then
-  begin
-    GetDynArray(Instance, da);
-    result := da.LoadFrom(aValue.VBlob, PAnsiChar(aValue.VBlob) + aValue.VBlobLen) <> nil;
-  end
-  else
-    result := inherited SetFieldSqlVar(Instance, aValue);
-end;
-
-procedure TOrmPropInfoRttiDynArray.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  tmp: RawByteString;
-begin
-  if W.InheritsFrom(TJsonSerializer) and
-     (jwoAsJsonNotAsString in TJsonSerializer(W).OrmOptions) then
-    W.AddDynArrayJson(GetFieldAddr(Instance), fPropRtti)
-  else if fObjArray <> nil then
-    W.AddDynArrayJsonAsString(fPropType, GetFieldAddr(Instance)^)
-  else
-  begin
-    Serialize(Instance, tmp, false);
-    W.WrBase64(pointer(tmp), Length(tmp), true); // withMagic=true -> add ""
-  end;
-end;
-
-procedure TOrmPropInfoRttiDynArray.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-begin
-  Serialize(Instance, temp, false);
-  aValue.Options := [];
-  if temp = '' then
-    aValue.VType := ftNull
-  else if fObjArray <> nil then
-  begin
-    aValue.VType := ftUtf8; // JSON
-    aValue.VText := pointer(temp);
-  end
-  else
-  begin
-    aValue.VType := ftBlob; // binary
-    aValue.VBlob := pointer(temp);
-    aValue.VBlobLen := length(temp);
-  end;
-end;
-
-
-{ TOrmPropInfoRttiVariant }
-
-constructor TOrmPropInfoRttiVariant.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
-begin
-  inherited;
-  if aOrmFieldType = oftVariant then
-    fDocVariantOptions := JSON_OPTIONS_FAST
-  else
-    fOrmFieldType := oftNullable; // TNullable* will use fOrmFieldTypeStored
-end;
-
-procedure TOrmPropInfoRttiVariant.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  value: Variant;
-begin
-  fPropInfo.GetVariantProp(Source, value, {byref=}true);
-  TOrmPropInfoRttiVariant(DestInfo).fPropInfo.SetVariantProp(Dest, value);
-end;
-
-procedure TOrmPropInfoRttiVariant.GetBinary(Instance: TObject; W: TBufferWriter);
-var
-  value: Variant;
-begin
-  fPropInfo.GetVariantProp(Instance, value, {byref=}true);
-  BinarySave(@value, fPropType, W);
-end;
-
-function TOrmPropInfoRttiVariant.GetHash(Instance: TObject; CaseInsensitive:
-  boolean): cardinal;
-var
-  value: Variant;
-begin
-  fPropInfo.GetVariantProp(Instance, value, {byref=}true);
-  result := VariantHash(value, CaseInsensitive);
-end;
-
-procedure TOrmPropInfoRttiVariant.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  value: Variant;
-  backup: TTextWriterOptions;
-begin
-  fPropInfo.GetVariantProp(Instance, value, {byref=}true);
-  backup := W.CustomOptions;
-  if W.InheritsFrom(TJsonSerializer) and
-     (jwoAsJsonNotAsString in TJsonSerializer(W).OrmOptions) then
-    W.CustomOptions := backup + [twoForceJsonStandard] - [twoForceJsonExtended];
-  W.AddVariant(value, twJsonEscape); // even oftNullable should escape strings
-  W.CustomOptions := backup;
-end;
-
-procedure TOrmPropInfoRttiVariant.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-var
-  wasString: boolean;
-  value: Variant;
-begin
-  fPropInfo.GetVariantProp(Instance, value, {byref=}true);
-  VariantToUtf8(value, result, wasString);
-  if wasSqlString <> nil then
-    if fOrmFieldType = oftNullable then
-      // only TNullableUtf8Text and TNullableDateTime will be actual text
-      wasSqlString^ := (fSqlDBFieldType in TEXT_DBFIELDS) and not VarIsEmptyOrNull(value)
-    else
-      // from SQL point of view, variant columns are TEXT or NULL
-      wasSqlString^ := not VarIsEmptyOrNull(value);
-end;
-
-procedure TOrmPropInfoRttiVariant.GetVariant(Instance: TObject; var Dest: Variant);
-begin
-  fPropInfo.GetVariantProp(Instance, Dest, {byref=}true);
-end;
-
-procedure TOrmPropInfoRttiVariant.NormalizeValue(var Value: RawUtf8);
-begin // content should be already normalized
-end;
-
-function TOrmPropInfoRttiVariant.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-
-  function CompareWithLocalTempCopy: PtrInt;
-  var
-    V1, V2: variant;
-  begin
-    fPropInfo.GetVariantProp(Item1, V1, {byref=}true);
-    fPropInfo.GetVariantProp(Item2, V2, {byref=}true);
-    result := FastVarDataComp(@V1, @V2, CaseInsensitive);
-  end;
-
-begin
-  if Item1 = Item2 then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else if fGetterIsFieldPropOffset <> 0 then // avoid any temporary variable
-    result := FastVarDataComp(PVarData(PtrUInt(Item1) + fGetterIsFieldPropOffset),
-            PVarData(PtrUInt(Item2) + fGetterIsFieldPropOffset), CaseInsensitive)
-  else
-    result := CompareWithLocalTempCopy;
-end;
-
-procedure TOrmPropInfoRttiVariant.SetBinary(Instance: TObject; var Read: TFastReader);
-var
-  value: Variant;
-  bak: PDocVariantOptions;
-begin
-  bak := Read.CustomVariants;
-  if fOrmFieldType = oftNullable then
-    Read.CustomVariants := nil
-  else
-    Read.CustomVariants := @DocVariantOptions;
-  RTTI_BINARYLOAD[rkVariant](@value, Read, fPropType);
-  Read.CustomVariants := bak;
-  fPropInfo.SetVariantProp(Instance, value);
-end;
-
-procedure TOrmPropInfoRttiVariant.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-begin
-  SetValuePtr(Instance, Value, ValueLen, wasString);
-end;
-
-procedure TOrmPropInfoRttiVariant.SetValueVar(Instance: TObject;
-  const Value: RawUtf8; wasString: boolean);
-begin
-  SetValuePtr(Instance, pointer(Value), length(Value), wasString);
-end;
-
-procedure TOrmPropInfoRttiVariant.SetValuePtr(Instance: TObject;
-  Value: PUtf8Char; ValueLen: integer; wasString: boolean);
-var
-  tmp: TSynTempBuffer;
-  V: Variant;
-begin
-  if ValueLen > 0 then
-  begin
-    tmp.Init(Value, ValueLen);
-    try
-      if fOrmFieldType = oftNullable then
-        if fSqlDBFieldType = ftDate then
-        begin // decode as date/time variant
-          TVarData(V).VType := varDate;
-          TVarData(V).VDate := Iso8601ToDateTimePUtf8Char(Value, ValueLen);
-        end
-        else
-          GetVariantFromJson(tmp.buf, wasString, V, nil, false, ValueLen)
-      else
-      begin
-        if wasString and (GotoNextNotSpace(Value)^ in ['{', '[']) then
-          wasString := false; // allow to create a TDocVariant stored as DB text
-        GetVariantFromJson(tmp.buf, wasString, V, @DocVariantOptions,false, ValueLen);
-      end;
-    finally
-      tmp.Done;
-    end;
-  end
-  else
-    TVarData(V).VType := varNull; // TEXT or NULL: see GetValueVar()
-  if fSetterIsFieldPropOffset <> 0 then
-    PVariant(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := V
-  else
-    fPropInfo.SetVariantProp(Instance, V);
-end;
-
-procedure TOrmPropInfoRttiVariant.SetVariant(Instance: TObject; const Source: Variant);
-begin
-  fPropInfo.SetVariantProp(Instance, Source);
-end;
-
-
-{ TOrmPropInfoCustom }
-
-function TOrmPropInfoCustom.GetFieldAddr(Instance: TObject): pointer;
-begin
-  if Instance = nil then
-    result := nil
-  else
-    result := PAnsiChar(Instance) + fOffset;
-end;
-
-constructor TOrmPropInfoCustom.Create(const aName: RawUtf8;
-  aOrmFieldType: TOrmFieldType; aAttributes: TOrmPropInfoAttributes;
-  aFieldWidth, aPropIndex: integer; aProperty: pointer;
-  aData2Text: TOnSqlPropInfoRecord2Text; aText2Data: TOnSqlPropInfoRecord2Data);
-begin
-  inherited Create(aName, aOrmFieldType, aAttributes, aFieldWidth, aPropIndex);
-  fOffset := PtrUInt(aProperty);
-  if (Assigned(aData2Text) and not Assigned(aText2Data)) or
-     (Assigned(aText2Data) and not Assigned(aData2Text)) then
-    raise EModelException.CreateUtf8(
-      'Invalid %.Create: expecting both Data2Text/Text2Data', [self]);
-  fData2Text := aData2Text;
-  fText2Data := aText2Data;
-end;
-
-procedure TOrmPropInfoCustom.TextToBinary(Value: PUtf8Char; var result: RawByteString);
-begin
-  if Assigned(fText2Data) then
-    fText2Data(Value, result)
-  else
-    result := BlobToRawBlob(Value);
-end;
-
-procedure TOrmPropInfoCustom.BinaryToText(var Value: RawUtf8; ToSql: boolean;
-  wasSqlString: PBoolean);
-begin
-  if Assigned(fData2Text) then
-    fData2Text(UniqueRawUtf8(Value), length(Value), Value)
-  else
-    inherited BinaryToText(Value, ToSql, wasSqlString);
-end;
-
-
-{ TOrmPropInfoRecordRtti }
-
-procedure TOrmPropInfoRecordRtti.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-begin
-  if TOrmPropInfoRecordRtti(DestInfo).fTypeInfo = fTypeInfo then
-    RecordCopy(TOrmPropInfoRecordRtti(DestInfo).GetFieldAddr(Dest)^,
-      GetFieldAddr(Source)^, fTypeInfo)
-  else
-    inherited CopySameClassProp(Source, DestInfo, Dest);
-end;
-
-function TOrmPropInfoRecordRtti.GetSqlFieldRttiTypeName: RawUtf8;
-begin
-  if fTypeInfo = nil then
-    result := inherited GetSqlFieldRttiTypeName
-  else
-    result := ToUtf8(fTypeInfo^.RawName);
-end;
-
-constructor TOrmPropInfoRecordRtti.Create(aRecordInfo: PRttiInfo;
-  const aName: RawUtf8; aPropertyIndex: integer; aPropertyPointer: pointer;
-  aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer; aData2Text:
-  TOnSqlPropInfoRecord2Text; aText2Data: TOnSqlPropInfoRecord2Data);
-begin
-  if (aRecordInfo = nil) or
-     not (aRecordInfo^.Kind in rkRecordTypes) then
-    raise EModelException.CreateUtf8(
-      '%.Create: Invalid type information for %', [self, aName]);
-  inherited Create(aName, oftBlobCustom, aAttributes, aFieldWidth,
-    aPropertyIndex, aPropertyPointer, aData2Text, aText2Data);
-  fTypeInfo := aRecordInfo;
-end;
-
-procedure TOrmPropInfoRecordRtti.GetBinary(Instance: TObject; W: TBufferWriter);
-var
-  Value: RawByteString;
-begin
-  Value := RecordSave(GetFieldAddr(Instance)^, fTypeInfo);
-  W.Write(pointer(Value), length(Value));
-end;
-
-function TOrmPropInfoRecordRtti.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  tmp: TSynTempBuffer;
-begin
-  RecordSave(GetFieldAddr(Instance)^, tmp, fTypeInfo);
-  result := DefaultHasher(0, tmp.buf, tmp.len);
-  tmp.Done;
-end;
-
-procedure TOrmPropInfoRecordRtti.GetVariant(Instance: TObject; var Dest: Variant);
-begin
-  RawByteStringToVariant(RecordSave(GetFieldAddr(Instance)^, fTypeInfo), Dest);
-end;
-
-procedure TOrmPropInfoRecordRtti.SetVariant(Instance: TObject; const Source: Variant);
-var
-  tmp: RawByteString;
-begin
-  VariantToRawByteString(Source, tmp);
-  RecordLoad(GetFieldAddr(Instance)^, tmp, fTypeInfo);
-end;
-
-procedure TOrmPropInfoRecordRtti.NormalizeValue(var Value: RawUtf8);
-begin // a BLOB should already be normalized
-end;
-
-function TOrmPropInfoRecordRtti.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-begin
-  if RecordEquals(GetFieldAddr(Item1)^, GetFieldAddr(Item2)^, fTypeInfo) then
-    result := 0
-  else
-    result := PtrInt(Item1) - PtrInt(Item2); // pseudo comparison
-end;
-
-procedure TOrmPropInfoRecordRtti.SetBinary(Instance: TObject; var Read: TFastReader);
-begin // use our RecordLoad() binary serialization
-  RTTI_BINARYLOAD[rkRecord](GetFieldAddr(Instance), Read, fTypeInfo);
-end;
-
-procedure TOrmPropInfoRecordRtti.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  data: RawByteString;
-begin
-  TextToBinary(Value, data);
-  RecordLoad(GetFieldAddr(Instance)^, data, fTypeInfo);
-end;
-
-procedure TOrmPropInfoRecordRtti.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-begin
-  result := RecordSave(GetFieldAddr(Instance)^, fTypeInfo);
-  BinaryToText(result, ToSql, wasSqlString);
-end;
-
-function TOrmPropInfoRecordRtti.SetFieldSqlVar(Instance: TObject;
-  const aValue: TSqlVar): boolean;
-begin
-  if aValue.VType = ftBlob then
-    result := RecordLoad(GetFieldAddr(Instance)^, aValue.VBlob, fTypeInfo) <> nil
-  else
-    result := inherited SetFieldSqlVar(Instance, aValue);
-end;
-
-procedure TOrmPropInfoRecordRtti.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-begin
-  temp := RecordSave(GetFieldAddr(Instance)^, fTypeInfo);
-  aValue.Options := [];
-  aValue.VType := ftBlob;
-  aValue.VBlob := pointer(temp);
-  aValue.VBlobLen := length(temp);
-end;
-
-
-{ TOrmPropInfoRecordFixedSize }
-
-procedure TOrmPropInfoRecordFixedSize.CopySameClassProp(Source: TObject;
-  DestInfo: TOrmPropInfo; Dest: TObject);
-begin
-  if TOrmPropInfoRecordFixedSize(DestInfo).fTypeInfo = fTypeInfo then
-    MoveFast(GetFieldAddr(Source)^, TOrmPropInfoRecordFixedSize(DestInfo).GetFieldAddr
-      (Dest)^, fRecordSize)
-  else
-    inherited CopySameClassProp(Source, DestInfo, Dest);
-end;
-
-function TOrmPropInfoRecordFixedSize.GetSqlFieldRttiTypeName: RawUtf8;
-begin
-  if fTypeInfo = nil then
-    result := inherited GetSqlFieldRttiTypeName
-  else
-    result := ToUtf8(fTypeInfo^.RawName);
-end;
-
-constructor TOrmPropInfoRecordFixedSize.Create(aRecordSize: cardinal;
-  const aName: RawUtf8; aPropertyIndex: integer; aPropertyPointer: pointer;
-  aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer;
-  aData2Text: TOnSqlPropInfoRecord2Text; aText2Data: TOnSqlPropInfoRecord2Data);
-begin
-  if integer(aRecordSize) <= 0 then
-    raise EModelException.CreateUtf8('%.Create: invalid % record size',
-      [self, aRecordSize]);
-  fRecordSize := aRecordSize;
-  inherited Create(aName, oftBlobCustom, aAttributes, aFieldWidth,
-    aPropertyIndex, aPropertyPointer, aData2Text, aText2Data);
-end;
-
-procedure TOrmPropInfoRecordFixedSize.GetBinary(Instance: TObject; W: TBufferWriter);
-begin
-  W.Write(GetFieldAddr(Instance), fRecordSize);
-end;
-
-function TOrmPropInfoRecordFixedSize.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-begin
-  result := DefaultHasher(0, GetFieldAddr(Instance), fRecordSize);
-end;
-
-procedure TOrmPropInfoRecordFixedSize.GetValueVar(Instance: TObject;
-  ToSql: boolean; var result: RawUtf8; wasSqlString: PBoolean);
-begin
-  FastSetString(result, GetFieldAddr(Instance), fRecordSize);
-  BinaryToText(result, ToSql, wasSqlString);
-end;
-
-procedure TOrmPropInfoRecordFixedSize.GetVariant(Instance: TObject; var Dest: Variant);
-var
-  tmp: RawByteString;
-begin
-  SetString(tmp, PAnsiChar(GetFieldAddr(Instance)), fRecordSize);
-  Dest := tmp;
-end;
-
-procedure TOrmPropInfoRecordFixedSize.SetVariant(Instance: TObject;
-  const Source: Variant);
-begin
-  if TVarData(Source).VType = varString then
-    MoveFast(TVarData(Source).VAny^, GetFieldAddr(Instance)^, fRecordSize)
-  else
-    FillCharFast(GetFieldAddr(Instance)^, fRecordSize, 0);
-end;
-
-procedure TOrmPropInfoRecordFixedSize.NormalizeValue(var Value: RawUtf8);
-begin // a BLOB should already be normalized
-end;
-
-function TOrmPropInfoRecordFixedSize.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var
-  i: integer;
-  P1, P2: PByteArray;
-begin
-  if (Item1 = Item2) or (fRecordSize = 0) then
-    result := 0
-  else if Item1 = nil then
-    result := -1
-  else if Item2 = nil then
-    result := 1
-  else
-  begin
-    result := 0;
-    P1 := GetFieldAddr(Item1);
-    P2 := GetFieldAddr(Item2);
-    for i := 0 to fRecordSize - 1 do
-    begin
-      result := P1^[i] - P2^[i];
-      if result <> 0 then
-        exit;
-    end;
-  end;
-end;
-
-procedure TOrmPropInfoRecordFixedSize.SetBinary(Instance: TObject; var Read: TFastReader);
-begin
-  Read.Copy(GetFieldAddr(Instance), fRecordSize);
-end;
-
-procedure TOrmPropInfoRecordFixedSize.SetValue(Instance: TObject;
-  Value: PUtf8Char; ValueLen: PtrInt; wasString: boolean);
-var
-  data: RawByteString;
-begin
-  TextToBinary(Value, data);
-  Value := pointer(data);
-  if Value = nil then
-    FillCharFast(GetFieldAddr(Instance)^, fRecordSize, 0)
-  else
-    MoveFast(Value^, GetFieldAddr(Instance)^, fRecordSize);
-end;
-
-function TOrmPropInfoRecordFixedSize.SetFieldSqlVar(Instance: TObject;
-  const aValue: TSqlVar): boolean;
-begin
-  if aValue.VType = ftBlob then
-  begin
-    result := aValue.VBlobLen = fRecordSize;
-    if result then
-      MoveFast(aValue.VBlob^, GetFieldAddr(Instance)^, fRecordSize)
-  end
-  else
-    result := inherited SetFieldSqlVar(Instance, aValue);
-end;
-
-procedure TOrmPropInfoRecordFixedSize.GetFieldSqlVar(Instance: TObject;
-  var aValue: TSqlVar; var temp: RawByteString);
-begin
-  SetString(temp, PAnsiChar(GetFieldAddr(Instance)), fRecordSize);
-  aValue.Options := [];
-  aValue.VType := ftBlob;
-  aValue.VBlob := pointer(temp);
-  aValue.VBlobLen := length(temp);
-end;
-
-
-{ TOrmPropInfoCustomJson }
-
-constructor TOrmPropInfoCustomJson.Create(aPropInfo: PRttiProp; aPropIndex: integer);
-var
-  attrib: TOrmPropInfoAttributes;
-begin
-  byte(attrib) := 0;
-  if aPropInfo^.IsStored(nil) = AS_UNIQUE then
-    Include(attrib, aIsUnique); // property MyProperty: RawUtf8 stored AS_UNIQUE;ieldWidth=10
-  Create(aPropInfo^.TypeInfo, aPropInfo^.NameUtf8, aPropIndex,
-    aPropInfo^.GetFieldAddr(nil), attrib, aPropInfo^.Index);
-end;
-
-constructor TOrmPropInfoCustomJson.Create(aTypeInfo: PRttiInfo;
-  const aName: RawUtf8; aPropertyIndex: integer; aPropertyPointer: pointer;
-  aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer);
-begin
-  inherited Create(aName, oftUtf8Custom, aAttributes, aFieldWidth,
-    aPropertyIndex, aPropertyPointer, nil, nil);
-  fTypeInfo := aTypeInfo;
-  SetCustomParser(Rtti.RegisterType(aTypeInfo) as TRttiJson);
-end;
-
-constructor TOrmPropInfoCustomJson.Create(const aTypeName, aName: RawUtf8;
-  aPropertyIndex: integer; aPropertyPointer: pointer;
-  aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer);
-begin
-  inherited Create(aName, oftUtf8Custom, aAttributes, aFieldWidth,
-    aPropertyIndex, aPropertyPointer, nil, nil);
-  SetCustomParser(Rtti.RegisterTypeFromName(aTypeName) as TRttiJson);
-end;
-
-function TOrmPropInfoCustomJson.GetSqlFieldRttiTypeName: RawUtf8;
-begin
-  if fTypeInfo = nil then
-    result := inherited GetSqlFieldRttiTypeName
-  else
-    result := ToUtf8(fTypeInfo^.RawName);
-end;
-
-procedure TOrmPropInfoCustomJson.SetCustomParser(aCustomParser: TRttiJson);
-begin
-  if aCustomParser = nil then
-    raise EModelException.CreateUtf8(
-      '%.SetCustomParser: Invalid type information for %', [self, Name]);
-  fCustomParser := aCustomParser;
-end;
-
-procedure TOrmPropInfoCustomJson.GetBinary(Instance: TObject; W: TBufferWriter);
-var
-  json: RawUtf8;
-begin
-  GetValueVar(Instance, false, json, nil);
-  W.Write(json);
-end;
-
-procedure TOrmPropInfoCustomJson.SetBinary(Instance: TObject; var Read: TFastReader);
-var
-  tmp: TSynTempBuffer; // temporary copy
-begin // stored as JSON VarString in the binary stream
-  Read.VarBlob(tmp);
-  try
-    SetValue(Instance, tmp.buf, tmp.Len, false);
-  finally
-    tmp.Done;
-  end;
-end;
-
-procedure TOrmPropInfoCustomJson.NormalizeValue(var Value: RawUtf8);
-begin // do nothing: should already be normalized
-end;
-
-procedure TOrmPropInfoCustomJson.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  Data: PByte;
-begin
-  Data := GetFieldAddr(Instance);
-  W.AddRttiCustomJson(Data, fCustomParser, []);
-end;
-
-procedure TOrmPropInfoCustomJson.GetValueVar(Instance: TObject; ToSql: boolean;
-  var result: RawUtf8; wasSqlString: PBoolean);
-var
-  W: TJsonSerializer;
-  temp: TTextWriterStackBuffer;
-begin
-  W := TJsonSerializer.CreateOwnedStream(temp);
-  try
-    GetJsonValues(Instance, W);
-    W.SetText(result);
-    if wasSqlString <> nil then
-      wasSqlString^ := (result <> '') and (result[1] = '"');
-  finally
-    W.Free;
-  end;
-end;
-
-procedure TOrmPropInfoCustomJson.SetValue(Instance: TObject; Value: PUtf8Char;
-  ValueLen: PtrInt; wasString: boolean);
-var
-  Data: PByte;
-  B: PUtf8Char;
-  tmp: RawUtf8;
-begin
-  Data := GetFieldAddr(Instance);
-  if Value <> nil then
-  begin // exact JSON string, array of objet ?
-    case GotoNextNotSpace(Value)^ of
-      '{', '[':
-        B := GotoEndJsonItem(Value);
-      '"':
-        begin
-          B := GotoEndOfJsonString(Value);
-          if B^ <> '"' then
-            B := nil;
-        end;
-    else
-      B := nil;
-    end;
-    if (B = nil) or (B - Value <> ValueLen) then
-    begin
-      QuotedStrJson(Value, ValueLen, tmp); // need escaping as JSON string
-      Value := pointer(tmp);
-    end;
-  end;
-  fCustomParser.ValueLoadJson(Data, Value, nil, JSONPARSER_TOLERANTOPTIONS, nil);
-end;
-
 
 { TOrmPropInfoList }
 
@@ -9103,7 +5543,7 @@ begin
       SetLength(aFlattenedProps, prev);
     end
     else if not (pilIgnoreIfGetter in fOptions) or p^.GetterIsField then
-      Add(TOrmPropInfoRtti.CreateFrom(p, Count, fOptions, aFlattenedProps));
+      Add(TOrmPropInfoRttiCreateFrom(p, Count, fOptions, aFlattenedProps));
     p := p^.Next;
   end;
 end;
@@ -9119,7 +5559,7 @@ begin
     InternalAddParentsFirst(GetClassParent(aClassType));
   for i := 1 to GetRttiProp(aClassType, p) do
   begin
-    Add(TOrmPropInfoRtti.CreateFrom(p, Count, fOptions, nil));
+    Add(TOrmPropInfoRttiCreateFrom(p, Count, fOptions, nil));
     p := p^.Next;
   end;
 end;
@@ -9134,7 +5574,8 @@ begin
     exit;
   end;
   // check that this property is not an ID/RowID (handled separately)
-  if IsRowID(pointer(aItem.Name)) and not (pilAllowIDFields in fOptions) then
+  if IsRowID(pointer(aItem.Name)) and
+     not (pilAllowIDFields in fOptions) then
     raise EModelException.CreateUtf8(
       '%.Add: % should not include a [%] published property', [self, fTable, aItem.Name]);
   // check that this property name is not already defined
@@ -9235,7 +5676,9 @@ var
   table: PByteArray;
   {$endif CPUX86NOTPIC}
 begin
-  if (self <> nil) and (aName <> nil) and (fCount > 0) then
+  if (self <> nil) and
+     (aName <> nil) and
+     (fCount > 0) then
   begin
     if fOrderedByName = nil then
     begin
@@ -9353,7 +5796,144 @@ begin
 end;
 
 
-{ ************ TOrm TOrmModel TOrmTable IRestOrm Core Definitions }
+{ ************ TOrmModel TOrmTable IRestOrm Core Definitions }
+
+function TOrmPropInfoRttiCreateFrom(aPropInfo: PRttiProp;
+  aPropIndex: integer; aOptions: TOrmPropInfoListOptions;
+  const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
+var
+  aOrmFieldType: TOrmFieldType;
+  aType: PRttiInfo;
+  C: TOrmPropInfoRttiClass;
+
+  procedure FlattenedPropNameSet;
+  var
+    i, max: PtrInt;
+    res: TOrmPropInfoRttiID absolute result;
+  begin // Address.Street1 -> Address_Street1
+    res.fFlattenedProps := aFlattenedProps;
+    res.fNameUnflattened := result.Name;
+    max := high(aFlattenedProps);
+    for i := max downto 0 do
+      res.fNameUnflattened :=
+        ToUtf8(aFlattenedProps[i]^.Name^) + '.' + result.NameUnflattened;
+    if (max >= 0) and
+       (aFlattenedProps[max]^.TypeInfo^.ClassFieldCount(
+         {withoutgetter=}pilIgnoreIfGetter in aOptions) = 1) then
+    begin
+      // Birth.Date -> Birth or Address.Country.Iso -> Address_Country
+      res.fName := ToUtf8(aFlattenedProps[max]^.Name^);
+      dec(max);
+    end;
+    for i := max downto 0 do
+      res.fName := ToUtf8(aFlattenedProps[i]^.Name^) + '_' + result.Name;
+  end;
+
+begin
+  if aPropInfo = nil then
+    raise EOrmException.Create('Invalid TOrmPropInfoRttiCreateFrom(nil) call');
+  result := nil;
+  aOrmFieldType := oftUnknown;
+  aType := aPropInfo^.TypeInfo;
+  if aType^.Kind = rkVariant then
+  begin
+    aOrmFieldType := NullableTypeToOrmFieldType(aType);
+    if aOrmFieldType <> oftUnknown then // handle oftNullable type
+      result := TOrmPropInfoRttiVariant.Create(aPropInfo, aPropIndex,
+        aOrmFieldType, aOptions);
+  end;
+  if result = nil then
+  begin
+    aOrmFieldType := GetOrmFieldType(aType); // guess from RTTI
+    C := nil;
+    if (OrmPropInfoRegistration = nil) or
+       not OrmPropInfoRegistration.FindAndCopy(aType, C) then
+      case aOrmFieldType of
+        oftUnknown, oftBlobCustom:
+          ; // will raise an EOrmException
+        oftBoolean, oftEnumerate:
+          C := TOrmPropInfoRttiEnum;
+        oftTimeLog, oftModTime, oftCreateTime:
+          // specific class for further use
+          C := TOrmPropInfoRttiTimeLog;
+        oftUnixTime:
+          // specific class for further use
+          C := TOrmPropInfoRttiUnixTime;
+        oftUnixMSTime:
+          C := TOrmPropInfoRttiUnixMSTime;
+        oftCurrency:
+          C := TOrmPropInfoRttiCurrency;
+        oftDateTime, oftDateTimeMS:
+          C := TOrmPropInfoRttiDateTime;
+        oftID: // = TOrm(aID)
+          C := TOrmPropInfoRttiID;
+        oftTID:
+          // = TID or T*ID
+          C := TOrmPropInfoRttiTID;
+        oftSessionUserID:
+          C := TOrmPropInfoRttiInt64;
+        oftRecord:
+          // = TRecordReference/TRecordReferenceToBeDeleted
+          C := TOrmPropInfoRttiRecordReference;
+        oftRecordVersion:
+          C := TOrmPropInfoRttiRecordVersion;
+        oftMany:
+          C := TOrmPropInfoRttiMany;
+        oftObject:
+          C := TOrmPropInfoRttiObject;
+        oftVariant:
+          C := TOrmPropInfoRttiVariant;  // oftNullable already handle above
+        oftBlob:
+          C := TOrmPropInfoRttiRawBlob;
+        oftBlobDynArray:
+          C := TOrmPropInfoRttiDynArray;
+        oftUtf8Custom:
+          // will happen only for DELPHI XE5 and up
+          result := TOrmPropInfoCustomJson.Create(aPropInfo, aPropIndex);
+      else
+        case aType^.Kind of // retrieve matched type from RTTI binary level
+          rkInteger:
+            C := TOrmPropInfoRttiInt32;
+          rkSet:
+            C := TOrmPropInfoRttiSet;
+          rkChar, rkWChar:
+            C := TOrmPropInfoRttiChar;
+          rkInt64 {$ifdef FPC}, rkQWord{$endif}:
+            C := TOrmPropInfoRttiInt64;
+          rkFloat:
+            if aType^.RttiFloat = rfDouble then
+              C := TOrmPropInfoRttiDouble;
+          rkLString:
+            case aType^.AnsiStringCodePage of
+              // recognize optimized UTF-8/UTF-16
+              CP_UTF8:
+                C := TOrmPropInfoRttiRawUtf8;
+              CP_UTF16:
+                C := TOrmPropInfoRttiRawUnicode;
+            else
+              C := TOrmPropInfoRttiAnsi; // will use the right TSynAnsiConvert
+            end;
+        {$ifdef HASVARUSTRING}
+          rkUString:
+            C := TOrmPropInfoRttiUnicode;
+        {$endif HASVARUSTRING}
+          rkWString:
+            C := TOrmPropInfoRttiWide;
+        end;
+      end;
+    if C <> nil then
+      result := C.Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
+  end;
+  if result <> nil then
+  begin
+    if aFlattenedProps <> nil then
+      FlattenedPropNameSet;
+  end
+  else if pilRaiseEOrmExceptionIfNotHandled in aOptions then
+    raise EOrmException.CreateUtf8(
+      'TOrmPropInfoRttiCreateFrom: Unhandled %/% type for property %',
+      [ToText(aOrmFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name^]);
+end;
 
 {$ifdef CPUX64}
 
@@ -9412,7 +5992,10 @@ begin
       break;
     if C <> T[1] then
       if C <> T[2] then
-        if (C <> T[3]) and (C <> T[4]) and (C <> T[5]) and (C <> T[6]) then
+        if (C <> T[3]) and
+           (C <> T[4]) and
+           (C <> T[5]) and
+           (C <> T[6]) then
         begin
           if CT^.PropCount > 0 then
             // identify any class with published properties as oftObject
@@ -9654,7 +6237,8 @@ end;
 
 function RecordReference(aTableIndex: cardinal; aID: TID): TRecordReference;
 begin
-  if (aID = 0) or (aTableIndex > 63) then
+  if (aID = 0) or
+     (aTableIndex > 63) then
     result := 0
   else
     result := aTableIndex + aID shl 6;
@@ -9689,7 +6273,8 @@ function RecordRef.Table(Model: TOrmModel): TOrmClass;
 var
   V: integer;
 begin
-  if (Model = nil) or (Value = 0) then
+  if (Model = nil) or
+     (Value = 0) then
     result := nil
   else
   begin
@@ -9731,7 +6316,8 @@ var
   m: TOrmModel;
 begin
   result := '';
-  if ((Value shr 6) = 0) or (Rest = nil) then
+  if ((Value shr 6) = 0) or
+     (Rest = nil) then
     exit;
   m := Rest.Model;
   T := Table(m);
@@ -9790,7 +6376,8 @@ begin
   if fQueryTableIndexFromSql = -2 then
   begin
     fQueryTableIndexFromSql := -1;
-    if (fQueryTables <> nil) and (QueryTableNameFromSql <> '') then
+    if (fQueryTables <> nil) and
+       (QueryTableNameFromSql <> '') then
       for i := 0 to length(fQueryTables) - 1 do
         if IdemPropNameU(fQueryTables[i].SqlTableName, fQueryTableNameFromSql) then
         begin
@@ -9877,7 +6464,8 @@ end;
 
 function TOrmTable.QueryRecordType: TOrmClass;
 begin
-  if (self <> nil) and (pointer(fQueryTables) <> nil) then
+  if (self <> nil) and
+     (pointer(fQueryTables) <> nil) then
     result := fQueryTables[0]
   else
     result := nil;
@@ -9911,7 +6499,8 @@ var
   {$endif ISDELPHIXE3}
 begin
   result := TObjectList<T>.Create; // TObjectList<T> will free each T instance
-  if (self = nil) or (fRowCount = 0) then
+  if (self = nil) or
+     (fRowCount = 0) then
     exit;
   cloned := TOrmClass(T).Create;
   try
@@ -9965,7 +6554,8 @@ begin
   if DestList = nil then
     exit;
   DestList.Clear;
-  if (self = nil) or (fRowCount = 0) then
+  if (self = nil) or
+     (fRowCount = 0) then
     exit;
   if RecordType = nil then
   begin
@@ -10006,7 +6596,8 @@ end;
 
 function TOrmTable.FieldTable(Field: PtrInt): TOrmClass;
 begin
-  if (self = nil) or (PtrUInt(Field) >= PtrUInt(fFieldCount)) or
+  if (self = nil) or
+     (PtrUInt(Field) >= PtrUInt(fFieldCount)) or
      (fQueryTables = nil) then
     result := nil
   else
@@ -10043,8 +6634,11 @@ var
   tmp: array[0..23] of AnsiChar;
 begin
   result := 0;
-  if (self = nil) or (StartRow <= 0) or (StartRow > fRowCount) or
-     (UpperValue = '') or (PtrUInt(FieldIndex) >= PtrUInt(fFieldCount)) then
+  if (self = nil) or
+     (StartRow <= 0) or
+     (StartRow > fRowCount) or
+     (UpperValue = '') or
+     (PtrUInt(FieldIndex) >= PtrUInt(fFieldCount)) then
     exit;
   Search := pointer(UpperValue);
   if Search^ = '%' then
@@ -10064,13 +6658,15 @@ begin
     else
       Lang := sndxEnglish;
   end;
-  if ((Lang <> sndxNone) and not Soundex.Prepare(Search, Lang)) then
+  if (Lang <> sndxNone) and
+     not Soundex.Prepare(Search, Lang) then
     exit;
   result := StartRow;
   Kind := FieldType(FieldIndex, info);
   o := fFieldCount * StartRow + FieldIndex;
   // search in one specified field value
-  if (Kind = oftEnumerate) and (info.ContentTypeInfo <> nil) then
+  if (Kind = oftEnumerate) and
+     (info.ContentTypeInfo <> nil) then
   begin
     // for enumerates: first search in all available values
     Int64(EnumValues) := 0;
@@ -10090,7 +6686,9 @@ begin
       while PtrUInt(result) <= PtrUInt(fRowCount) do
       begin
         i := GetInteger(GetResults(o), err);
-        if (err = 0) and (i < 255) and (byte(i) in EnumValues) then
+        if (err = 0) and
+           (i < 255) and
+           (byte(i) in EnumValues) then
           exit; // we found a matching field
         inc(o, fFieldCount); // ignore all other fields -> jump to next row data
         inc(result);
@@ -10118,8 +6716,9 @@ begin
       inc(o, fFieldCount);
       inc(result);
     end
-  else if ((Kind in [oftRecord, oftID, oftTID, oftSessionUserID]) and
-          (Client <> nil) and (Client.Model <> nil)) then
+  else if (Kind in [oftRecord, oftID, oftTID, oftSessionUserID]) and
+          (Client <> nil) and
+          (Client.Model <> nil) then
   begin
     M := Client.Model;
     while PtrUInt(result) <= PtrUInt(fRowCount) do
@@ -10188,13 +6787,17 @@ var
   F, Row: PtrInt;
 begin
   result := 0;
-  if (self = nil) or (StartRow <= 0) or (StartRow > fRowCount) or (UpperValue = '') then
+  if (self = nil) or
+     (StartRow <= 0) or
+     (StartRow > fRowCount) or
+     (UpperValue = '') then
     exit;
   // search in all fields values
   for F := 0 to FieldCount - 1 do
   begin
     Row := SearchValue(UpperValue, StartRow, F, Client, Lang, UnicodeComparison);
-    if (Row <> 0) and ((result = 0) or (Row < result)) then
+    if (Row <> 0) and
+       ((result = 0) or (Row < result)) then
     begin
       if FieldIndex <> nil then
         FieldIndex^ := F;
@@ -10304,7 +6907,8 @@ IsDateTime:
       {      oftID, oftTID, oftSet, oftRecordVersion:
               result := oftUtf8Text; // will display INTEGER field as number }
             oftRecord:
-              if (Value <> 0) and (Client <> nil) then // 'TableName ID'
+              if (Value <> 0) and
+                 (Client <> nil) then // 'TableName ID'
                 {$ifdef UNICODE}
                 Text := Ansi7ToString(Ref.Text(Client.Model))
                 {$else}
@@ -10398,7 +7002,9 @@ begin
   if aUpdateHash then
   begin
     Hash := DefaultHasher(0, pointer(aJson), aLen);
-    result := (fPrivateCopyHash = 0) or (Hash = 0) or (Hash <> fPrivateCopyHash);
+    result := (fPrivateCopyHash = 0) or
+              (Hash = 0) or
+              (Hash <> fPrivateCopyHash);
     if not result then
       exit;
     fPrivateCopyHash := Hash;
@@ -10435,7 +7041,8 @@ var
 begin
   result := false; // error on parsing
   fFieldIndexID := -1;
-  if (self = nil) or (Buffer = nil) then
+  if (self = nil) or
+     (Buffer = nil) then
     exit;
   // go to start of object
   {$ifndef NOPOINTEROFFSET}
@@ -10473,7 +7080,8 @@ begin
       // get a field value
       SetResults(i, GetJsonFieldOrObjectOrArray(P, @wasString, nil, true
          {$ifndef NOPOINTEROFFSET} , {normalizebool=}false {$endif}));
-      if (P = nil) and (i <> max) then
+      if (P = nil) and
+         (i <> max) then
         // failure (GetRowCountNotExpanded should have detected it)
         exit;
       if wasString then
@@ -10552,7 +7160,8 @@ begin
         end;
         if wasString then // mark column was "string"
           Include(fFieldParsedAsString, f);
-        if (EndOfObject = '}') and (f < fFieldCount - 1) then
+        if (EndOfObject = '}') and
+           (f < fFieldCount - 1) then
         begin
           // allow some missing fields in the input object
           inc(max, fFieldCount - f);
@@ -10669,7 +7278,8 @@ end;
 procedure TOrmFill.AddMap(aRecord: TOrm; aField: TOrmPropInfo;
   aIndex: integer);
 begin
-  if (self = nil) or (aRecord = nil) then
+  if (self = nil) or
+     (aRecord = nil) then
     exit;
   if fTableMapCount >= length(fTableMap) then
     SetLength(fTableMap, fTableMapCount + fTableMapCount shr 1 + 16);
@@ -10687,7 +7297,8 @@ procedure TOrmFill.AddMap(aRecord: TOrm; const aFieldName: RawUtf8;
 var
   aFieldIndex: integer;
 begin
-  if (self <> nil) and (aRecord <> nil) then
+  if (self <> nil) and
+     (aRecord <> nil) then
     if IsRowID(pointer(aFieldName)) then
       AddMap(aRecord, nil, aIndex)
     else
@@ -10732,7 +7343,9 @@ var
   f: PtrInt;
   P: PUtf8Char;
 begin
-  if (self = nil) or (Table = nil) or (cardinal(aRow) > cardinal(Table.fRowCount)) then
+  if (self = nil) or
+     (Table = nil) or
+     (cardinal(aRow) > cardinal(Table.fRowCount)) then
     result := False
   else
   begin
@@ -10756,7 +7369,8 @@ end;
 procedure TOrmFill.ComputeSetUpdatedFieldBits(Props: TOrmProperties;
   out Bits: TFieldBits);
 begin
-  if (self <> nil) and (fTable <> nil) and
+  if (self <> nil) and
+     (fTable <> nil) and
      (fTableMapRecordManyInstances = nil) then
     // within FillPrepare/FillOne loop: update ID, TModTime and mapped fields
     Bits := fTableMapFields + Props.ComputeBeforeUpdateFieldsBits
@@ -10915,7 +7529,7 @@ begin
     for i := 0 to length(props.DynArrayFields) - 1 do
       with props.DynArrayFields[i] do
         if ObjArray <> nil then
-          ObjArrayClear(fPropInfo^.GetFieldAddr(self)^);
+          ObjArrayClear(PropInfo^.GetFieldAddr(self)^);
   inherited Destroy;
 end;
 
@@ -10949,7 +7563,8 @@ begin
   result.fID := fID;
   with Orm do
     for f := 0 to Fields.Count - 1 do
-      if (byte(f) in CustomFields) and (byte(f) in CopiableFieldsBits) then
+      if (byte(f) in CustomFields) and
+         (byte(f) in CopiableFieldsBits) then
         Fields.List[f].CopyValue(self, result);
 end;
 
@@ -10960,7 +7575,8 @@ begin
   FillZero(result{%H-});
   with Orm do
     for f := 0 to Fields.Count - 1 do
-      if (byte(f) in CopiableFieldsBits) and not Fields.List[f].IsValueVoid(self) then
+      if (byte(f) in CopiableFieldsBits) and
+         not Fields.List[f].IsValueVoid(self) then
         include(result, f);
 end;
 
@@ -11027,7 +7643,8 @@ var
   f: PtrInt;
 begin
   // is not part of TOrmProperties because has been declared as virtual
-  if (self <> nil) and (Server <> nil) and
+  if (self <> nil) and
+     (Server <> nil) and
      (Options * INITIALIZETABLE_NOINDEX <> INITIALIZETABLE_NOINDEX) then
   begin
     // ensure ID/RowID column is indexed
@@ -11056,7 +7673,8 @@ end;
 
 procedure TOrm.FillFrom(aRecord: TOrm);
 begin
-  if (self <> nil) and (aRecord <> nil) then
+  if (self <> nil) and
+     (aRecord <> nil) then
     FillFrom(aRecord, aRecord.OrmProps.CopiableFieldsBits);
 end;
 
@@ -11068,7 +7686,9 @@ var
   wasString: boolean;
   tmp: RawUtf8;
 begin
-  if (self = nil) or (aRecord = nil) or IsZero(aRecordFieldBits) then
+  if (self = nil) or
+     (aRecord = nil) or
+     IsZero(aRecordFieldBits) then
     exit;
   D := Orm;
   if POrmClass(aRecord)^.InheritsFrom(POrmClass(self)^) then
@@ -11194,7 +7814,8 @@ begin
     inc(P);
     repeat
       Prop := GetJsonPropName(P);
-      if (Prop = nil) or (P = nil) then
+      if (Prop = nil) or
+         (P = nil) then
         break;
       Value := GetJsonFieldOrObjectOrArray(P, @wasString, nil, true, true, @ValueLen);
       FillValue(Prop, Value, ValueLen, wasString, FieldBits);
@@ -11232,7 +7853,8 @@ var
 begin
   result := false;
   FillClose; // so that no further FillOne will work
-  if (self = nil) or (aClient = nil) then
+  if (self = nil) or
+     (aClient = nil) then
     exit;
   T := aClient.MultiFieldValues(RecordClass, aCustomFieldsCsv, aSqlWhere);
   if T = nil then
@@ -11288,7 +7910,9 @@ end;
 
 function TOrm.FillOne(aDest: TOrm): boolean;
 begin
-  if (self = nil) or (fFill = nil) or (fFill.Table = nil) or
+  if (self = nil) or
+     (fFill = nil) or
+     (fFill.Table = nil) or
      (fFill.Table.fRowCount = 0) or // also check if FillTable is emtpy
      (cardinal(fFill.FillCurrentRow) > cardinal(fFill.Table.fRowCount)) then
     result := false
@@ -11302,7 +7926,9 @@ end;
 
 function TOrm.FillRewind: boolean;
 begin
-  if (self = nil) or (fFill = nil) or (fFill.Table = nil) or
+  if (self = nil) or
+     (fFill = nil) or
+     (fFill.Table = nil) or
      (fFill.Table.fRowCount = 0) then
     result := false
   else
@@ -11343,7 +7969,8 @@ begin
       field := Orm.Fields.ByName(PropName);
       if field <> nil then
       begin
-        if (ValueLen = 0) and (Value <> nil) then
+        if (ValueLen = 0) and
+           (Value <> nil) then
           ValueLen := StrLen(Value);
         field.SetValue(self, Value, ValueLen, wasString);
         if FieldBits <> nil then
@@ -11829,7 +8456,8 @@ var
   i: PtrInt;
 begin
   result := false;
-  if (self = nil) or (Reference = nil) or
+  if (self = nil) or
+     (Reference = nil) or
      (POrmClass(Reference)^ <> POrmClass(self)^) or
      (Reference.fID <> fID) then
     exit;
@@ -11847,7 +8475,8 @@ var
   This, Ref: TOrmProperties;
 begin
   result := false;
-  if (self = nil) or (Reference = nil) or
+  if (self = nil) or
+     (Reference = nil) or
      (Reference.fID <> fID) then // ID field must be tested by hand
     exit;
   if self <> Reference then
@@ -11906,7 +8535,8 @@ var
   bits: TFieldBits;
   f: PtrInt;
 begin
-  if (self = nil) or (aFieldsCsv = '') then
+  if (self = nil) or
+     (aFieldsCsv = '') then
     exit;
   with Orm do
   begin
@@ -11915,7 +8545,8 @@ begin
     else if not FieldBitsFromCsv(aFieldsCsv, bits) then
       exit;
     for f := 0 to Fields.Count - 1 do
-      if (byte(f) in bits) and (Fields.List[f].OrmFieldType in COPIABLE_FIELDS) then
+      if (byte(f) in bits) and
+         (Fields.List[f].OrmFieldType in COPIABLE_FIELDS) then
         Fields.List[f].SetValue(self, nil, 0, false); // clear field value
   end;
 end;
@@ -11930,7 +8561,8 @@ end;
 
 function TOrm.RecordReference(Model: TOrmModel): TRecordReference;
 begin
-  if (self = nil) or (fID <= 0) then
+  if (self = nil) or
+     (fID <= 0) then
     result := 0
   else
   begin
@@ -12192,7 +8824,8 @@ var
 begin
   result := '';
   FillClose; // so that no further FillOne will work
-  if (self = nil) or (aClient = nil) then
+  if (self = nil) or
+     (aClient = nil) then
     exit;
   // reset TOrmFill object
   if fFill = nil then
@@ -12347,7 +8980,8 @@ begin
     exit;
   T := TOrmTableJson.CreateFromTables(ObjectsClass, sql, json,
     {ownJSON=}PRefCnt(PAnsiChar(pointer(json)) - _STRREFCNT)^ = 1);
-  if (T = nil) or (T.fData = nil) then
+  if (T = nil) or
+     (T.fData = nil) then
   begin
     T.Free;
     exit;
@@ -12556,7 +9190,8 @@ end;
 
 function TOrm.GetFillCurrentRow: integer;
 begin
-  if (self = nil) or (fFill = nil) then
+  if (self = nil) or
+     (fFill = nil) then
     result := 0
   else
     result := fFill.FillCurrentRow;
@@ -12564,13 +9199,16 @@ end;
 
 function TOrm.GetFillReachedEnd: boolean;
 begin
-  result := (self = nil) or (fFill = nil) or (fFill.Table.fRowCount = 0) or
-         (cardinal(fFill.FillCurrentRow) > cardinal(fFill.Table.fRowCount));
+  result := (self = nil) or
+            (fFill = nil) or
+            (fFill.Table.fRowCount = 0) or
+            (cardinal(fFill.FillCurrentRow) > cardinal(fFill.Table.fRowCount));
 end;
 
 function TOrm.GetTable: TOrmTable;
 begin
-  if (self = nil) or (fFill = nil) then
+  if (self = nil) or
+     (fFill = nil) then
     result := nil
   else
     result := fFill.Table;
@@ -12712,9 +9350,9 @@ end;
 
 function TOrm.Filter(const aFields: array of RawUtf8): boolean;
 var
-  F: TFieldBits;
+  f: TFieldBits;
 begin
-  if Orm.FieldBitsFromRawUtf8(aFields, F) then
+  if Orm.FieldBitsFromRawUtf8(aFields, f) then
     // must always call the virtual Filter() method
     result := Filter(F)
   else
@@ -12726,7 +9364,8 @@ var
   n, i: PtrInt;
 begin
   n := length(varClassPairs);
-  if (n = 0) or (n and 1 = 1) then
+  if (n = 0) or
+     (n and 1 = 1) then
     exit;
   n := n shr 1;
   if n = 0 then
@@ -12852,11 +9491,11 @@ end;
 function TOrm.Validate(const aRest: IRestOrm; const aFields: array of RawUtf8;
   aInvalidFieldIndex: PInteger; aValidator: PSynValidate): string;
 var
-  F: TFieldBits;
+  f: TFieldBits;
 begin
-  if Orm.FieldBitsFromRawUtf8(aFields, F) then
+  if Orm.FieldBitsFromRawUtf8(aFields, f) then
     // must always call the virtual Validate() method
-    result := Validate(aRest, F, aInvalidFieldIndex, aValidator)
+    result := Validate(aRest, f, aInvalidFieldIndex, aValidator)
   else
     result := '';
 end;
@@ -12893,11 +9532,11 @@ end;
 
 function TOrm.DynArray(const DynArrayFieldName: RawUtf8): TDynArray;
 var
-  F: PtrInt;
+  f: PtrInt;
 begin
   with Orm do
-    for F := 0 to length(DynArrayFields) - 1 do
-      with DynArrayFields[F] do
+    for f := 0 to length(DynArrayFields) - 1 do
+      with DynArrayFields[f] do
         if IdemPropNameU(Name, DynArrayFieldName) then
         begin
           GetDynArray(self, result);
@@ -12908,12 +9547,12 @@ end;
 
 function TOrm.DynArray(DynArrayFieldIndex: integer): TDynArray;
 var
-  F: PtrInt;
+  f: PtrInt;
 begin
   if DynArrayFieldIndex > 0 then
     with Orm do
-      for F := 0 to length(DynArrayFields) - 1 do
-        with DynArrayFields[F] do
+      for f := 0 to length(DynArrayFields) - 1 do
+        with DynArrayFields[f] do
           if DynArrayIndex = DynArrayFieldIndex then
           begin
             GetDynArray(self, result);
@@ -12925,38 +9564,40 @@ end;
 procedure TOrm.ComputeFieldsBeforeWrite(const aRest: IRestOrm;
   aOccasion: TOrmEvent);
 var
-  F: PtrInt;
+  f: PtrInt;
   types: TOrmFieldTypes;
   i64: Int64;
   p: TOrmPropInfo;
 begin
-  if (self <> nil) and (aRest <> nil) then
+  if (self <> nil) and
+     (aRest <> nil) then
     with Orm do
     begin
       integer(types) := 0;
       if oftModTime in HasTypeFields then
         include(types, oftModTime);
-      if (oftCreateTime in HasTypeFields) and (aOccasion = oeAdd) then
+      if (oftCreateTime in HasTypeFields) and
+         (aOccasion = oeAdd) then
         include(types, oftCreateTime);
       if integer(types) <> 0 then
       begin
         i64 := aRest.GetServerTimestamp;
-        for F := 0 to Fields.Count - 1 do
+        for f := 0 to Fields.Count - 1 do
         begin
-          p := Fields.List[F];
+          p := Fields.List[f];
           if p.OrmFieldType in types then
-            TOrmPropInfoRttiInt64(p).fPropInfo.SetInt64Prop(self, i64);
+            TOrmPropInfoRttiInt64(p).PropInfo.SetInt64Prop(self, i64);
         end;
       end;
       if oftSessionUserID in HasTypeFields then
       begin
         i64 := aRest.GetCurrentSessionUserID;
         if i64 <> 0 then
-          for F := 0 to Fields.Count - 1 do
+          for f := 0 to Fields.Count - 1 do
           begin
-            p := Fields.List[F];
+            p := Fields.List[f];
             if p.OrmFieldType = oftSessionUserID then
-              TOrmPropInfoRttiInt64(p).fPropInfo.SetInt64Prop(self, i64);
+              TOrmPropInfoRttiInt64(p).PropInfo.SetInt64Prop(self, i64);
           end;
       end;
     end;
@@ -13012,7 +9653,8 @@ constructor TOrmMany.Create;
 begin
   inherited Create;
   with Orm do
-    if (fRecordManySourceProp <> nil) and (fRecordManyDestProp <> nil) then
+    if (fRecordManySourceProp <> nil) and
+       (fRecordManyDestProp <> nil) then
     begin
       fSourceID := fRecordManySourceProp.GetFieldAddr(self);
       fDestID := fRecordManyDestProp.GetFieldAddr(self);
@@ -13023,8 +9665,12 @@ function TOrmMany.ManyAdd(const aClient: IRestOrm; aSourceID, aDestID: TID;
   NoDuplicates: boolean; aUseBatch: TRestBatch): boolean;
 begin
   result := false;
-  if (self = nil) or (aClient = nil) or (aSourceID = 0) or (aDestID = 0) or
-     (fSourceID = nil) or (fDestID = nil) then
+  if (self = nil) or
+     (aClient = nil) or
+     (aSourceID = 0) or
+     (aDestID = 0) or
+     (fSourceID = nil) or
+     (fDestID = nil) then
     exit; // invalid parameters
   if NoDuplicates and
      (InternalIDFromSourceDest(aClient, aSourceID, aDestID) <> 0) then
@@ -13040,7 +9686,8 @@ end;
 function TOrmMany.ManyAdd(const aClient: IRestOrm; aDestID: TID;
   NoDuplicates: boolean): boolean;
 begin
-  if (self = nil) or (fSourceID = nil) then
+  if (self = nil) or
+     (fSourceID = nil) then
     result := false
   else // avoid GPF
     result := ManyAdd(aClient, fSourceID^, aDestID, NoDuplicates);
@@ -13113,7 +9760,10 @@ var
 
 begin
   result := nil;
-  if (self = nil) or (fSourceID = nil) or (fDestID = nil) or (aClient = nil) then
+  if (self = nil) or
+     (fSourceID = nil) or
+     (fDestID = nil) or
+     (aClient = nil) then
     exit;
   if aSourceID = 0 then
     if fSourceID <> nil then
@@ -13182,7 +9832,10 @@ var
   aID: TID;
 begin
   result := false;
-  if (self = nil) or (aClient = nil) or (aSourceID = 0) or (aDestID = 0) then
+  if (self = nil) or
+     (aClient = nil) or
+     (aSourceID = 0) or
+     (aDestID = 0) then
     exit;
   aID := InternalIDFromSourceDest(aClient, aSourceID, aDestID);
   if aID <> 0 then
@@ -13203,7 +9856,10 @@ end;
 function TOrmMany.ManySelect(const aClient: IRestOrm;
   aSourceID, aDestID: TID): boolean;
 begin
-  if (self = nil) or (aClient = nil) or (aSourceID = 0) or (aDestID = 0) then
+  if (self = nil) or
+     (aClient = nil) or
+     (aSourceID = 0) or
+     (aDestID = 0) then
     result := false
   else // invalid parameters
     result := aClient.Retrieve(FormatUtf8('Source=:(%): AND Dest=:(%):',
@@ -13212,7 +9868,8 @@ end;
 
 function TOrmMany.ManySelect(const aClient: IRestOrm; aDestID: TID): boolean;
 begin
-  if (self = nil) or (fSourceID = nil) then
+  if (self = nil) or
+     (fSourceID = nil) then
     result := false
   else // avoid GPF
     result := ManySelect(aClient, fSourceID^, aDestID);
@@ -13227,7 +9884,8 @@ begin
   result := 0;
   if self = nil then
     exit;
-  if not isDest and (aID = 0) then
+  if not isDest and
+     (aID = 0) then
     if fSourceID <> nil then
       aID := fSourceID^; // has been set by TOrm.Create
   Where := IDWhereSql(aClient, aID, isDest, aAndWhereSql);
@@ -13268,7 +9926,10 @@ function TOrmMany.IDWhereSql(const aClient: IRestOrm; aID: TID;
 const
   FieldName: array[boolean] of RawUtf8 = ('Source=', 'Dest=');
 begin
-  if (self = nil) or (aID = 0) or (fSourceID = nil) or (fDestID = nil) or
+  if (self = nil) or
+     (aID = 0) or
+     (fSourceID = nil) or
+     (fDestID = nil) or
      (aClient = nil) then
     result := ''
   else
@@ -13311,7 +9972,8 @@ end;
 
 class function TOrmFts3.OptimizeFTS3Index(const Server: IRestOrmServer): boolean;
 begin
-  if (self = nil) or (Server = nil) then
+  if (self = nil) or
+     (Server = nil) then
     result := false
   else
     with OrmProps do
@@ -13334,7 +9996,8 @@ begin
     exit;
   m := Server.Model;
   p := m.Props[self];
-  if (p = nil) or (p.fFTSWithoutContentFields = '') then
+  if (p = nil) or
+     (p.fFTSWithoutContentFields = '') then
     exit;
   main := m.Tables[p.fFTSWithoutContentTableIndex].SqlTableName;
   if not Server.IsInternalSQLite3Table(p.fFTSWithoutContentTableIndex) then
@@ -13402,7 +10065,8 @@ begin
   BlobToCoord(BlobB, B);
   result := false;
   for i := 0 to (OrmProps.RTreeCoordBoundaryFields shr 1) - 1 do
-    if (A[i].max < B[i].min) or (A[i].min > B[i].max) then
+    if (A[i].max < B[i].min) or
+       (A[i].min > B[i].max) then
       exit; // no match
   result := true; // box match
 end;
@@ -13425,7 +10089,8 @@ begin
   BlobToCoord(BlobB, B);
   result := false;
   for i := 0 to (OrmProps.RTreeCoordBoundaryFields shr 1) - 1 do
-    if (A[i].max < B[i].min) or (A[i].min > B[i].max) then
+    if (A[i].max < B[i].min) or
+       (A[i].min > B[i].max) then
       exit; // no match
   result := true; // box match
 end;
@@ -13559,7 +10224,8 @@ begin
           goto Copiabl;
         end;
       oftID: // = TOrm(aID)
-        if isTOrmMany and (IdemPropNameU(F.Name, 'Source') or
+        if isTOrmMany and
+           (IdemPropNameU(F.Name, 'Source') or
           IdemPropNameU(F.Name, 'Dest')) then
           goto Small
         else
@@ -13684,7 +10350,8 @@ function TOrmProperties.BlobFieldPropFromRawUtf8(const PropName: RawUtf8): PRtti
 var
   i: integer;
 begin
-  if (self <> nil) and (PropName <> '') then
+  if (self <> nil) and
+     (PropName <> '') then
     for i := 0 to high(BlobFields) do
       if IdemPropNameU(BlobFields[i].Name, PropName) then
       begin
@@ -13699,7 +10366,8 @@ function TOrmProperties.BlobFieldPropFromUtf8(PropName: PUtf8Char;
 var
   i: integer;
 begin
-  if (self <> nil) and (PropName <> '') then
+  if (self <> nil) and
+     (PropName <> '') then
     for i := 0 to high(BlobFields) do
       if IdemPropName(BlobFields[i].PropInfo^.Name^, PropName, PropNameLen) then
       begin
@@ -13744,7 +10412,8 @@ const
 
 function TOrmProperties.OrmFieldTypeToSql(FieldIndex: integer): RawUtf8;
 begin
-  if (self = nil) or (cardinal(FieldIndex) >= cardinal(Fields.Count)) then
+  if (self = nil) or
+    (cardinal(FieldIndex) >= cardinal(Fields.Count)) then
     result := ''
   else if (FieldIndex < length(fCustomCollation)) and
           (fCustomCollation[FieldIndex] <> '') then
@@ -13756,7 +10425,8 @@ end;
 function TOrmProperties.SetCustomCollation(FieldIndex: integer;
   const aCollationName: RawUtf8): boolean;
 begin
-  result := (self <> nil) and (cardinal(FieldIndex) < cardinal(Fields.Count));
+  result := (self <> nil) and
+            (cardinal(FieldIndex) < cardinal(Fields.Count));
   if result then
   begin
     if Fields.Count > length(fCustomCollation) then
@@ -13784,7 +10454,8 @@ procedure TOrmProperties.SetCustomCollationForAll(aFieldType: TOrmFieldType;
 var
   i: PtrInt;
 begin
-  if (self <> nil) and not (aFieldType in [oftUnknown, oftMany]) then
+  if (self <> nil) and
+     not (aFieldType in [oftUnknown, oftMany]) then
     for i := 0 to Fields.Count - 1 do
       if Fields.List[i].OrmFieldTypeStored = aFieldType then
         SetCustomCollation(i, aCollationName);
@@ -13797,7 +10468,8 @@ begin
   if self <> nil then
     for i := 0 to Fields.Count - 1 do
       with Fields.List[i] do
-        if (SqlDBFieldType in TEXT_DBFIELDS) and (cardinal(FieldWidth - 1) < 262144) then
+        if (SqlDBFieldType in TEXT_DBFIELDS) and
+           (cardinal(FieldWidth - 1) < 262144) then
           AddFilterOrValidate(i, TSynValidateText.CreateUtf8('{maxLength:%,Utf8Length:%}',
             [FieldWidth, IndexIsUtf8Length], []));
 end;
@@ -13809,7 +10481,8 @@ begin
   if self <> nil then
     for i := 0 to Fields.Count - 1 do
       with Fields.List[i] do
-        if (SqlDBFieldType in TEXT_DBFIELDS) and (cardinal(FieldWidth - 1) < 262144) then
+        if (SqlDBFieldType in TEXT_DBFIELDS) and
+           (cardinal(FieldWidth - 1) < 262144) then
           AddFilterOrValidate(i, TSynFilterTruncate.CreateUtf8('{maxLength:%,Utf8Length:%}',
             [FieldWidth, IndexIsUtf8Length], []));
 end;
@@ -13874,7 +10547,8 @@ function TOrmProperties.CreateJsonWriter(Json: TStream;
   Expand, withID: boolean; const aFields: TFieldIndexDynArray;
   KnownRowsCount, aBufSize: integer): TJsonSerializer;
 begin
-  if (self = nil) or ((Fields.Count = 0) and not withID) then  // no data
+  if (self = nil) or
+     ((Fields.Count = 0) and not withID) then  // no data
     result := nil
   else
   begin
@@ -13980,14 +10654,16 @@ begin
     exit;
   for i := 0 to Fields.Count - 1 do
     with Fields.List[i] do
-      if (Name <> FieldNames[i]) or (OrmFieldType <> FieldTypes[i]) then
+      if (Name <> FieldNames[i]) or
+         (OrmFieldType <> FieldTypes[i]) then
         exit;
   result := true;
 end;
 
 function TOrmProperties.IsFieldName(const PropName: RawUtf8): boolean;
 begin
-  result := (PropName <> '') and (isRowID(pointer(PropName)) or
+  result := (PropName <> '') and
+            (isRowID(pointer(PropName)) or
     (Fields.IndexByName(PropName) >= 0));
 end;
 
@@ -13996,7 +10672,8 @@ var
   L: integer;
 begin
   L := length(PropName);
-  if (L = 0) or (self = nil) then
+  if (L = 0) or
+     (self = nil) then
     result := false
   else if PropName[L] = ')' then
     case IdemPCharArray(pointer(PropName),
@@ -14020,7 +10697,8 @@ end;
 function TOrmProperties.AddFilterOrValidate(aFieldIndex: integer;
   aFilter: TSynFilterOrValidate): boolean;
 begin
-  if (self = nil) or (cardinal(aFieldIndex) >= cardinal(Fields.Count)) or
+  if (self = nil) or
+     (cardinal(aFieldIndex) >= cardinal(Fields.Count)) or
      (aFilter = nil) then
     result := false
   else
@@ -14057,7 +10735,7 @@ begin
   FillZero(Bits);
   if self <> nil then
     for f := 0 to high(BlobFields) do
-      if BlobFields[f].fPropInfo = aBlobField then
+      if BlobFields[f].PropInfo = aBlobField then
       begin
         Include(Bits, BlobFields[f].PropertyIndex);
         result := true;
@@ -14097,7 +10775,8 @@ var
   P: PUtf8Char;
   FieldName: ShortString;
 begin
-  if (aFieldsCsv = '*') and (self <> nil) then
+  if (aFieldsCsv = '*') and
+     (self <> nil) then
   begin
     Bits := SimpleFieldsBits[ooSelect];
     withID := true;
@@ -14252,7 +10931,7 @@ var
 begin
   if self <> nil then
     for f := 0 to high(BlobFields) do
-      if BlobFields[f].fPropInfo = aBlobField then
+      if BlobFields[f].PropInfo = aBlobField then
       begin
         AddFieldIndex(Indexes, BlobFields[f].PropertyIndex);
         result := true;
@@ -14270,7 +10949,8 @@ begin
       Text := Text + 'ID'
     else
       Text := Text + 'RowID'
-  else if (self = nil) or (cardinal(FieldIndex) >= cardinal(Fields.Count)) then
+  else if (self = nil) or
+          (cardinal(FieldIndex) >= cardinal(Fields.Count)) then
     result := true
   else
     Text := Text + Fields.List[FieldIndex].Name;
@@ -14278,7 +10958,9 @@ end;
 
 function TOrmProperties.MainFieldName(ReturnFirstIfNoUnique: boolean): RawUtf8;
 begin
-  if (self = nil) or (Table = nil) or (MainField[ReturnFirstIfNoUnique] < 0) then
+  if (self = nil) or
+     (Table = nil) or
+     (MainField[ReturnFirstIfNoUnique] < 0) then
     result := ''
   else
     result := Fields.List[MainField[ReturnFirstIfNoUnique]].Name;
@@ -14350,7 +11032,8 @@ var
   var
     R: integer;
   begin
-    if (aFieldTable = nil) or (aFieldTable = TOrm) or
+    if (aFieldTable = nil) or
+       (aFieldTable = TOrm) or
        not aFieldTable.InheritsFrom(TOrm) then
       exit; // no associated table to track deletion
     R := length(fRecordReferences);
@@ -14369,7 +11052,8 @@ var
   end;
 
 begin
-  if (cardinal(aIndex) > cardinal(fTablesMax)) or (fTableProps[aIndex] <> nil) then
+  if (cardinal(aIndex) > cardinal(fTablesMax)) or
+     (fTableProps[aIndex] <> nil) then
     raise EModelException.Create('TOrmModel.SetTableProps');
   Table := fTables[aIndex];
   if Table.InheritsFrom(TOrmFts5) then
@@ -14409,7 +11093,7 @@ begin
         begin
           TableID := (fields.List[f] as TOrmPropInfoRttiTID).RecordClass;
           if TableID = nil then // T*ID name didn't match any TOrm type
-            TOrmPropInfoRtti(fields.List[f]).fOrmFieldType := oftInteger
+            TOrmPropInfoRttiID(fields.List[f]).fOrmFieldType := oftInteger
           else
             RegisterTableForRecordReference(fields.List[f], TableID);
         end;
@@ -14558,7 +11242,8 @@ begin
     if not (aRoot[i] in ['0'..'9', 'a'..'z', 'A'..'Z', '_', '-', '.', '~', ' ', '/']) then
       raise EModelException.CreateUtf8('%.Root="%" contains URI unfriendly chars',
         [self, aRoot]);
-  if (aRoot <> '') and (aRoot[length(aRoot)] = '/') then
+  if (aRoot <> '') and
+     (aRoot[length(aRoot)] = '/') then
     fRoot := copy(aRoot, 1, Length(aRoot) - 1)
   else
     fRoot := aRoot;
@@ -14598,7 +11283,8 @@ var
   i: PtrInt;
 begin
   i := GetTableIndex(aTable);
-  if (i < 0) or (cardinal(aFieldIndex) >= MAX_SQLFIELDS) then
+  if (i < 0) or
+     (cardinal(aFieldIndex) >= MAX_SQLFIELDS) then
     result := false
   else
     result := aFieldIndex in TableProps[i].Props.IsUniqueFieldsBits;
@@ -14623,7 +11309,8 @@ begin
       k := i + j;
       while SQL[k] in [#1..' '] do
         inc(k);
-      if not EnsureUniqueTableInFrom or (SQL[k] <> ',') then
+      if not EnsureUniqueTableInFrom or
+         (SQL[k] <> ',') then
       begin
         FastSetString(result, PAnsiChar(PtrInt(SQL) + i - 1), j);
         exit;
@@ -14743,10 +11430,12 @@ var
   Props: TOrmProperties;
   c: POrmClass;
 begin
-  if (self <> nil) and (aTable <> nil) then
+  if (self <> nil) and
+     (aTable <> nil) then
   begin
     Props := aTable.OrmProps;
-    if (Props <> nil) and (Props.fModelMax < fTablesMax) then
+    if (Props <> nil) and
+       (Props.fModelMax < fTablesMax) then
       // fastest O(1) search in all registered models (if worth it)
       for i := 0 to Props.fModelMax do
         with Props.fModel[i] do
@@ -14768,7 +11457,9 @@ end;
 
 function TOrmModel.GetTableIndexInheritsFrom(aTable: TOrmClass): PtrInt;
 begin
-  if (self <> nil) and (aTable <> nil) and (aTable <> TOrm) then
+  if (self <> nil) and
+     (aTable <> nil) and
+     (aTable <> TOrm) then
     for result := 0 to fTablesMax do
       if Tables[result].InheritsFrom(aTable) then
         exit;
@@ -14805,7 +11496,8 @@ end;
 
 function TOrmModel.GetTableIndex(const SqlTableName: RawUtf8): PtrInt;
 begin // use length(SqlTableName)
-  if (self <> nil) and (SqlTableName <> '') then
+  if (self <> nil) and
+     (SqlTableName <> '') then
   begin
     result := FastFindUpperPUtf8CharSorted( // branchless O(log(n)) bin search
       pointer(fSortedTablesNameUpper), fTablesMax, pointer(SqlTableName), length(SqlTableName));
@@ -14818,7 +11510,8 @@ end;
 
 function TOrmModel.GetTableIndexPtr(SqlTableName: PUtf8Char): PtrInt;
 begin // use StrLen(SqlTableName)
-  if (self <> nil) and (SqlTableName <> nil) then
+  if (self <> nil) and
+     (SqlTableName <> nil) then
   begin
     result := FastFindUpperPUtf8CharSorted( // branchless O(log(n)) bin search
       pointer(fSortedTablesNameUpper), fTablesMax, SqlTableName, StrLen(SqlTableName));
@@ -14863,7 +11556,9 @@ var
   UriLen: PtrInt;
 begin
   result := rmNoMatch;
-  if (self = nil) or (fRoot = '') or (Uri = '') then
+  if (self = nil) or
+     (fRoot = '') or
+     (Uri = '') then
     exit;
   if IdemPChar(pointer(Uri), pointer(fRootUpper)) then
   begin
@@ -14995,7 +11690,8 @@ end;
 
 function TOrmModel.GetSqlCreate(aTableIndex: integer): RawUtf8;
 begin
-  if (self = nil) or (cardinal(aTableIndex) > cardinal(fTablesMax)) then
+  if (self = nil) or
+     (cardinal(aTableIndex) > cardinal(fTablesMax)) then
     result := ''
   else
     result := Tables[aTableIndex].GetSqlCreate(self);
@@ -15003,7 +11699,8 @@ end;
 
 function TOrmModel.GetSqlAddField(aTableIndex: integer; aFieldIndex: integer): RawUtf8;
 begin
-  if (self = nil) or (cardinal(aTableIndex) > cardinal(fTablesMax)) then
+  if (self = nil) or
+     (cardinal(aTableIndex) > cardinal(fTablesMax)) then
     result := ''
   else
     result := TableProps[aTableIndex].Props.SqlAddField(aFieldIndex);
@@ -15036,7 +11733,8 @@ end;
 
 function TOrmModel.Lock(aTableIndex: integer; aID: TID): boolean;
 begin
-  if (self = nil) or (cardinal(aTableIndex) > cardinal(fTablesMax)) then
+  if (self = nil) or
+     (cardinal(aTableIndex) > cardinal(fTablesMax)) then
     result := false
   else
   begin
@@ -15065,7 +11763,8 @@ end;
 
 function TOrmModel.UnLock(aTable: TOrmClass; aID: TID): boolean;
 begin
-  if (self = nil) or (fLocks = nil) then
+  if (self = nil) or
+     (fLocks = nil) then
     result := false
   else
     result := GetLocks(aTable)^.UnLock(aID);
@@ -15073,7 +11772,8 @@ end;
 
 function TOrmModel.UnLock(aTableIndex: integer; aID: TID): boolean;
 begin
-  if (self = nil) or (cardinal(aTableIndex) >= cardinal(length(fLocks))) then
+  if (self = nil) or
+     (cardinal(aTableIndex) >= cardinal(length(fLocks))) then
     result := false
   else
     result := fLocks[aTableIndex].UnLock(aID);
@@ -15089,7 +11789,8 @@ end;
 
 function TOrmModel.GetLocks(aTable: TOrmClass): POrmLocks;
 begin
-  if (self = nil) or (fLocks = nil) then
+  if (self = nil) or
+     (fLocks = nil) then
     result := nil
   else
     result := @fLocks[GetTableIndexExisting(aTable)];
@@ -15105,7 +11806,8 @@ end;
 
 function TOrmModel.RecordReference(Table: TOrmClass; ID: TID): TRecordReference;
 begin
-  if (self = nil) or (ID <= 0) then
+  if (self = nil) or
+     (ID <= 0) then
     result := 0
   else
   begin
@@ -15164,7 +11866,8 @@ var
   i: PtrInt;
 begin
   result := nil;
-  if (self = nil) or (fVirtualTableModule = nil) then
+  if (self = nil) or
+     (fVirtualTableModule = nil) then
     exit;
   i := GetTableIndexExisting(aClass);
   if TableProps[i].Kind in IS_CUSTOM_VIRTUAL then
@@ -15467,7 +12170,8 @@ type
     f: PtrInt;
   begin
     W.CancelAll;
-    if withID and (content = cTableSimpleFields) then
+    if withID and
+       (content = cTableSimpleFields) then
     begin
       if withTableName then
         W.AddStrings([TableName, '.']);
@@ -15638,7 +12342,9 @@ end;
 
 function TOrmLocks.isLocked(aID: TID): boolean;
 begin
-  result := (@self <> nil) and (Count <> 0) and (aID <> 0) and
+  result := (@self <> nil) and
+            (Count <> 0) and
+            (aID <> 0) and
             Int64ScanExists(pointer(IDs), Count, aID);
 end;
 
@@ -15646,7 +12352,8 @@ function TOrmLocks.Lock(aID: TID): boolean;
 var
   P: PInt64;
 begin
-  if (@self = nil) or (aID = 0) then
+  if (@self = nil) or
+     (aID = 0) then
     // void or full
     result := false
   else
@@ -15687,7 +12394,8 @@ var
   LastOK64: Int64;
   i, LastEntry: PtrInt;
 begin
-  if (@self = nil) or (Count = 0) then
+  if (@self = nil) or
+     (Count = 0) then
     exit; // nothing to purge
   LastOK64 := GetTickCount64 - MinutesFromNow * (1000 * 60); // GetTickCount64() unit is ms
   LastEntry := -1;
@@ -15704,7 +12412,9 @@ function TOrmLocks.UnLock(aID: TID): boolean;
 var
   P: PInt64;
 begin
-  if (@self = nil) or (Count = 0) or (aID = 0) then
+  if (@self = nil) or
+     (Count = 0) or
+     (aID = 0) then
     result := false
   else
   begin
@@ -15796,7 +12506,9 @@ begin
   EnterCriticalSection(Mutex);
   try
     CacheEnable := true;
-    if not CacheAll and not Value.FastLocateSorted(aID, i) and (i >= 0) then
+    if not CacheAll and
+       not Value.FastLocateSorted(aID, i) and
+       (i >= 0) then
     begin
       Rec.ID := aID;
       Rec.Timestamp512 := 0; // indicates no value cache yet
@@ -15821,7 +12533,8 @@ begin
   try
     if Value.FastLocateSorted(Rec, i) then
       Values[i] := Rec
-    else if CacheAll and (i >= 0) then
+    else if CacheAll and
+            (i >= 0) then
       Value.FastAddSorted(i, Rec);
   finally
     LeaveCriticalSection(Mutex);
@@ -15881,7 +12594,8 @@ var
   tix512: cardinal;
 begin
   result := 0;
-  if CacheEnable and (Count > 0) then
+  if CacheEnable and
+     (Count > 0) then
   begin
     tix512 := (GetTickCount64 - TimeOutMS) shr 9;
     EnterCriticalSection(Mutex);
@@ -15889,7 +12603,8 @@ begin
       for i := Count - 1 downto 0 do
         with Values[i] do
           if Timestamp512 <> 0 then
-            if (TimeOutMS <> 0) and (tix512 > Timestamp512) then
+            if (TimeOutMS <> 0) and
+               (tix512 > Timestamp512) then
             begin
               FlushCacheEntry(i);
               if FlushedEntriesCount <> nil then
@@ -15967,7 +12682,8 @@ var
   i: PtrInt;
 begin
   result := false;
-  if (self = nil) or (aTable = nil) then
+  if (self = nil) or
+     (aTable = nil) then
     exit;
   i := fModel.GetTableIndexExisting(aTable);
   if Rest.CacheWorthItForTable(i) then
@@ -15989,7 +12705,8 @@ var
   i: PtrUInt;
 begin
   result := false;
-  if (self = nil) or (aTable = nil) then
+  if (self = nil) or
+     (aTable = nil) then
     exit;
   i := fModel.GetTableIndexExisting(aTable);
   if i < PtrUInt(Length(fCache)) then
@@ -16002,7 +12719,8 @@ var
   i: PtrInt;
 begin
   result := false;
-  if (self = nil) or (aTable = nil) then
+  if (self = nil) or
+     (aTable = nil) then
     exit;
   i := fModel.GetTableIndexExisting(aTable);
   if Rest.CacheWorthItForTable(i) then
@@ -16027,7 +12745,9 @@ var
   i: PtrInt;
 begin
   result := false;
-  if (self = nil) or (aTable = nil) or (aID <= 0) then
+  if (self = nil) or
+     (aTable = nil) or
+     (aID <= 0) then
     exit;
   i := fModel.GetTableIndex(aTable);
   if PtrUInt(i) >= PtrUInt(Length(fCache)) then
@@ -16044,7 +12764,9 @@ var
   j: PtrInt;
 begin
   result := false;
-  if (self = nil) or (aTable = nil) or (length(aIDs) = 0) then
+  if (self = nil) or
+     (aTable = nil) or
+     (length(aIDs) = 0) then
     exit;
   i := fModel.GetTableIndex(aTable);
   if i >= PtrUInt(Length(fCache)) then
@@ -16057,7 +12779,9 @@ end;
 
 function TRestCache.SetCache(aRecord: TOrm): boolean;
 begin
-  if (self = nil) or (aRecord = nil) or (aRecord.fID <= 0) then
+  if (self = nil) or
+     (aRecord = nil) or
+     (aRecord.fID <= 0) then
     result := false
   else
     result := SetCache(POrmClass(aRecord)^, aRecord.fID);
@@ -16130,7 +12854,8 @@ procedure TRestCache.Flush(aTable: TOrmClass; const aIDs: array of TID);
 var
   i: PtrInt;
 begin
-  if (self <> nil) and (length(aIDs) > 0) then
+  if (self <> nil) and
+     (length(aIDs) > 0) then
     with fCache[fModel.GetTableIndexExisting(aTable)] do
       if CacheEnable then
       begin
@@ -16147,7 +12872,9 @@ end;
 procedure TRestCache.Notify(aTable: TOrmClass; aID: TID;
   const aJson: RawUtf8; aAction: TOrmOccasion);
 begin
-  if (self <> nil) and (aTable <> nil) and (aID > 0) then
+  if (self <> nil) and
+     (aTable <> nil) and
+     (aID > 0) then
     Notify(fModel.GetTableIndex(aTable), aID, aJson, aAction);
 end;
 
@@ -16155,7 +12882,9 @@ procedure TRestCache.Notify(aRecord: TOrm; aAction: TOrmOccasion);
 var
   aTableIndex: cardinal;
 begin
-  if (self = nil) or (aRecord = nil) or (aRecord.fID <= 0) or
+  if (self = nil) or
+     (aRecord = nil) or
+     (aRecord.fID <= 0) or
      not (aAction in [ooInsert, ooUpdate]) then
     exit;
   aTableIndex := fModel.GetTableIndex(POrmClass(aRecord)^);
@@ -16168,9 +12897,11 @@ end;
 procedure TRestCache.Notify(aTableIndex: integer; aID: TID;
   const aJson: RawUtf8; aAction: TOrmOccasion);
 begin
-  if (self <> nil) and (aID > 0) and
+  if (self <> nil) and
+     (aID > 0) and
      (aAction in [ooSelect, ooInsert, ooUpdate]) and
-     (aJson <> '') and (cardinal(aTableIndex) < cardinal(Length(fCache))) then
+     (aJson <> '') and
+     (cardinal(aTableIndex) < cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
       if CacheEnable then
         SetJson(aID, aJson);
@@ -16178,7 +12909,8 @@ end;
 
 procedure TRestCache.NotifyDeletion(aTableIndex: integer; aID: TID);
 begin
-  if (self <> nil) and (aID > 0) and
+  if (self <> nil) and
+     (aID > 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
       if CacheEnable then
@@ -16197,7 +12929,8 @@ procedure TRestCache.NotifyDeletions(aTableIndex: integer;
 var
   i: PtrInt;
 begin
-  if (self <> nil) and (high(aIDs) >= 0) and
+  if (self <> nil) and
+     (high(aIDs) >= 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
       if CacheEnable then
@@ -16215,7 +12948,8 @@ end;
 procedure TRestCache.NotifyDeletion(aTable: TOrmClass; aID: TID);
 begin
   if (self <> nil) and
-     (aTable <> nil) and (aID > 0) then
+     (aTable <> nil) and
+     (aID > 0) then
     NotifyDeletion(fModel.GetTableIndex(aTable), aID);
 end;
 
@@ -16342,7 +13076,8 @@ begin
      (fBatch = nil) then
     exit;
   if not ForceResetFields then
-    if fBatch.Expand and (fBatch.WithID = withID) and
+    if fBatch.Expand and
+       (fBatch.WithID = withID) and
        IsEqual(fBatchFields, WrittenFields) then
       exit; // already set -> do not compute it again
   fBatchFields := WrittenFields;
@@ -16378,7 +13113,8 @@ begin // '{"Table":[...,"PUT",{object},...]}'
   if (fBatch = nil) or
      (fTable = nil) then
     raise EOrmException.CreateUtf8('%.RawUpdate % %', [self, ID, SentData]);
-  if JsonGetID(pointer(SentData), sentID) and (sentID <> ID) then
+  if JsonGetID(pointer(SentData), sentID) and
+     (sentID <> ID) then
     raise EOrmException.CreateUtf8('%.RawUpdate ID=% <> %', [self, ID, SentData]);
   fBatch.AddShort('"PUT",{ID:');
   fBatch.Add(ID);
@@ -16410,7 +13146,9 @@ begin
   if SendData and
      (fModel.Props[POrmClass(Value)^].Kind in INSERT_WITH_ID) then
     ForceID := true; // same format as TRestClient.Add
-  if SendData and not ForceID and IsZero(CustomFields) and
+  if SendData and
+     not ForceID and
+     IsZero(CustomFields) and
      not (boPostNoSimpleFields in fOptions) then
   begin
     PostSimpleFields := true;
@@ -16496,7 +13234,8 @@ end;
 function TRestBatch.Delete(ID: TID): integer;
 begin
   if (self = nil) or
-     (fTable = nil) or (ID <= 0) or
+     (fTable = nil) or
+     (ID <= 0) or
      not fRest.RecordCanBeUpdated(fTable, ID, oeDelete) then
   begin
     result := -1; // invalid parameters, or not opened BATCH sequence
@@ -16559,7 +13298,8 @@ begin
     Value.ComputeFieldsBeforeWrite(fRest, oeUpdate); // update oftModTime fields
   Value.GetJsonValues(fBatch);
   fBatch.AddComma;
-  if fCalledWithinRest and (FieldBits - Props.SimpleFieldsBits[ooUpdate] = []) then
+  if fCalledWithinRest and
+     (FieldBits - Props.SimpleFieldsBits[ooUpdate] = []) then
     ForceCacheUpdate := true; // safe to update the cache with supplied values
   if ForceCacheUpdate then
     fRest.CacheOrNil.Notify(Value, ooUpdate)
@@ -16597,8 +13337,8 @@ begin
     begin // if something to send
       for i := 0 to fDeletedCount - 1 do
         if fDeletedRecordRef[i] <> 0 then
-          fRest.CacheOrNil.NotifyDeletion(fDeletedRecordRef[i] and 63,
-            fDeletedRecordRef[i] shr 6);
+          fRest.CacheOrNil.NotifyDeletion(
+            fDeletedRecordRef[i] and 63, fDeletedRecordRef[i] shr 6);
       fBatch.CancelLastComma;
       fBatch.Add(']');
       if fTable <> nil then
@@ -16855,8 +13595,7 @@ begin
 end;
 
 
-procedure InitializeUnit;
-begin
+initialization
   // FPC and modern Delphi do have RTTI for array of class
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(
@@ -16865,22 +13604,7 @@ begin
   // - needed e.g. by TRestStorageInMemory.Create
   Rtti.RegisterObjArray(TypeInfo(TOrmObjArray), TOrm);
   {$endif HASDYNARRAYTYPE}
-end;
 
-procedure FinalizeUnit;
-begin
-  FreeAndNil(OrmPropInfoRegistration);
-end;
 
-// yes, I know, this is a huge unit, but there are a lot of comments and
-// the core ORM types are coupled together by design :)
-// - we may uncouple some dependencies using interfaces, but not worth it now
-
-initialization
-  InitializeUnit;
-
-finalization
-  FinalizeUnit;
-  
 end.
 
