@@ -1149,37 +1149,6 @@ const
 
 {$endif PUREMORMOT2}
 
-var
-  /// helper array to get the comparison function corresponding to a given
-  // standard array type
-  // - e.g. as PT_SORT[CaseInSensitive,ptRawUtf8]
-  // - not to be used as such, but e.g. when inlining TDynArray methods
-  PT_SORT: array[boolean, TRttiParserType] of TDynArraySortCompare = (
-    (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
-     SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
-     SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
-     {$ifdef CPUINTEL}SortDynArrayAnsiString{$else}SortDynArrayRawByteString{$endif},
-     SortDynArrayAnsiString, SortDynArrayAnsiString,
-     nil, SortDynArraySingle,
-     {$ifdef UNICODE}SortDynArrayString{$else}SortDynArrayAnsiString{$endif},
-     SortDynArrayUnicodeString,
-     SortDynArrayDouble, SortDynArrayDouble, SortDynArray128, SortDynArray128,
-     SortDynArray256, SortDynArray512, SortDynArrayInt64, SortDynArrayInt64,
-     SortDynArrayUnicodeString, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariant,
-     SortDynArrayUnicodeString, SortDynArrayAnsiString, SortDynArrayWord,
-     nil, nil, nil, nil, nil, nil),
-   (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
-    SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
-    SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
-    {$ifdef CPUINTEL}SortDynArrayAnsiString{$else}SortDynArrayRawByteString{$endif},
-    SortDynArrayAnsiStringI, SortDynArrayAnsiStringI,
-    nil, SortDynArraySingle, SortDynArrayStringI, SortDynArrayUnicodeStringI,
-    SortDynArrayDouble, SortDynArrayDouble, SortDynArray128, SortDynArray128,
-    SortDynArray256, SortDynArray512, SortDynArrayInt64, SortDynArrayInt64,
-    SortDynArrayUnicodeStringI, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariantI,
-    SortDynArrayUnicodeStringI, SortDynArrayAnsiStringI, SortDynArrayWord,
-    nil, nil, nil, nil, nil, nil));
-
 type
   /// the kind of exceptions raised during TDynArray/TDynArrayHashed process
   EDynArray = class(ESynException);
@@ -2151,12 +2120,14 @@ function DynArray(aTypeInfo: PRttiInfo; var aValue;
 procedure DynArraySortIndexed(Values: pointer; ItemSize, Count: integer;
   out Indexes: TSynTempBuffer; Compare: TDynArraySortCompare);
 
-var
-  /// helper array to get the hash function corresponding to a given
-  // standard array type
-  // - e.g. as PT_HASH[CaseInSensitive,ptRawUtf8]
-  // - not to be used as such, but e.g. when inlining TDynArray methods
-  PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of TDynArrayHashOne;
+/// get the comparison function corresponding to a given standard array type
+// - as used e.g. internally by TDynArray
+function DynArraySortOne(Kind: TRttiParserType; CaseInsensitive: boolean): TDynArraySortCompare;
+
+/// get the hash function corresponding to a given standard array type
+// - as used e.g. internally by TDynArray
+function DynArrayHashOne(Kind: TRttiParserType;
+  CaseInsensitive: boolean = false): TDynArrayHashOne;
 
 {$ifndef CPU32DELPHI} // Delphi Win32 compiler doesn't like Lemire algorithm
 
@@ -6211,6 +6182,34 @@ end;
 
 { ************ TDynArray, TDynArrayHashed and TSynQueue Wrappers }
 
+const
+  // helper arrays to get the standard comparison/hash functions
+  PT_SORT: array[boolean, TRttiParserType] of TDynArraySortCompare = (
+    (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
+     SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
+     SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
+     {$ifdef CPUINTEL}SortDynArrayAnsiString{$else}SortDynArrayRawByteString{$endif},
+     SortDynArrayAnsiString, SortDynArrayAnsiString,
+     nil, SortDynArraySingle,
+     {$ifdef UNICODE}SortDynArrayString{$else}SortDynArrayAnsiString{$endif},
+     SortDynArrayUnicodeString,
+     SortDynArrayDouble, SortDynArrayDouble, SortDynArray128, SortDynArray128,
+     SortDynArray256, SortDynArray512, SortDynArrayInt64, SortDynArrayInt64,
+     SortDynArrayUnicodeString, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariant,
+     SortDynArrayUnicodeString, SortDynArrayAnsiString, SortDynArrayWord,
+     nil, nil, nil, nil, nil, nil),
+   (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
+    SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
+    SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
+    {$ifdef CPUINTEL}SortDynArrayAnsiString{$else}SortDynArrayRawByteString{$endif},
+    SortDynArrayAnsiStringI, SortDynArrayAnsiStringI,
+    nil, SortDynArraySingle, SortDynArrayStringI, SortDynArrayUnicodeStringI,
+    SortDynArrayDouble, SortDynArrayDouble, SortDynArray128, SortDynArray128,
+    SortDynArray256, SortDynArray512, SortDynArrayInt64, SortDynArrayInt64,
+    SortDynArrayUnicodeStringI, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariantI,
+    SortDynArrayUnicodeStringI, SortDynArrayAnsiStringI, SortDynArrayWord,
+    nil, nil, nil, nil, nil, nil));
+
 { TDynArray }
 
 procedure TDynArray.InitRtti(aInfo: TRttiCustom; var aValue;
@@ -6941,8 +6940,7 @@ begin
             exit;
           inc(P, L);
           inc(result);
-          dec(n);
-        until n = 0;
+        until result = n;
       end;
     end
     else
@@ -8116,16 +8114,6 @@ begin
       UpperCopy255W(tmp{%H-}, pointer(Item^), Length(Item^)) - {%H-}tmp);
 end;
 
-function HashPtrUInt(Item: pointer; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0, Item, SizeOf(PtrUInt));
-end;
-
-function HashPointer(Item: pointer; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0, Item, SizeOf(pointer));
-end;
-
 function HashByte(Item: pointer; Hasher: THasher): cardinal;
 begin
   result := Hasher(0, Item, SizeOf(byte));
@@ -8181,7 +8169,7 @@ begin
   with TVarData(value) do
   begin
     vt := VType;
-    P := @VByte;
+    P := @VByte; // same address than VWord/VInteger/VInt64...
     case vt of
       varNull, varEmpty:
         len := 0; // good enough for void values
@@ -8226,7 +8214,8 @@ begin
         end;
       end;
     end;
-    if CaseInsensitive then
+    if CaseInsensitive and
+       (P <> @VByte) then
     begin
       len := UpperCopy255Buf(tmp, P, len) - tmp;
       P := @tmp;
@@ -8246,8 +8235,8 @@ begin
 end;
 
 const
-  // copied into global PT_HASH[] var in interface section of this unit
-  _PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of pointer = (
+  // helper arrays to get the standard hash functions
+  PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of pointer = (
    (nil, nil, @HashByte, @HashByte, @HashInteger, @HashInt64, @HashInt64,
     @HashExtended, @HashInt64, @HashInteger, @HashInt64, @HashAnsiString,
     @HashAnsiString, @HashAnsiString, nil, @HashInteger,
@@ -8264,6 +8253,18 @@ const
     @HashInt64, @HashInt64, @HashSynUnicodeI, @HashInt64, @HashInt64,
     @HashVariantI, @HashWideStringI, @HashAnsiStringI, @HashWord,
     nil, nil, nil, nil, nil, nil));
+  // default TDynArrayHasher.CountTrigger value
+  DYNARRAY_COUNT_TRIGGER = 32;
+
+function DynArrayHashOne(Kind: TRttiParserType; CaseInsensitive: boolean): TDynArrayHashOne;
+begin
+  result := PT_HASH[CaseInsensitive, Kind];
+end;
+
+function DynArraySortOne(Kind: TRttiParserType; CaseInsensitive: boolean): TDynArraySortCompare;
+begin
+  result := PT_SORT[CaseInsensitive, Kind];
+end;
 
 procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
   aEventHash: TOnDynArrayHashOne; aHasher: THasher;
@@ -8271,22 +8272,22 @@ procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne
   aCaseInsensitive: boolean);
 begin
   DynArray := aDynArray;
-  if @aHasher = nil then
-    Hasher := DefaultHasher
-  else
-    Hasher := aHasher;
   HashItem := aHashItem;
   EventHash := aEventHash;
   if (@HashItem = nil) and
      (@EventHash = nil) then
-    HashItem := _PT_HASH[aCaseInsensitive, DynArray^.Info.ArrayFirstField];
+    HashItem := PT_HASH[aCaseInsensitive, DynArray^.Info.ArrayFirstField];
   Compare := aCompare;
   EventCompare := aEventCompare;
+  if @aHasher = nil then
+    Hasher := DefaultHasher
+  else
+    Hasher := aHasher;
   if (@Compare = nil) and
      (@EventCompare = nil) then
     Compare := PT_SORT[aCaseInsensitive, DynArray^.Info.ArrayFirstField];
-  CountTrigger := 32;
-  Clear;
+  CountTrigger := DYNARRAY_COUNT_TRIGGER;
+  Clear; // set HashTable/HashTableSize/ScanCounter/State
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   CountCollisions := 0;
   CountCollisionsCurrent := 0;
@@ -8295,17 +8296,26 @@ end;
 
 procedure TDynArrayHasher.InitSpecific(aDynArray: PDynArray; aKind: TRttiParserType;
   aCaseInsensitive: boolean; aHasher: THasher);
-var
-  cmp: TDynArraySortCompare;
-  hsh: TDynArrayHashOne;
 begin
-  cmp := PT_SORT[aCaseInsensitive, aKind];
-  hsh := _PT_HASH[aCaseInsensitive, aKind];
-  if (@hsh = nil) or
-     (@cmp = nil) then
+  DynArray := aDynArray;
+  HashItem := PT_HASH[aCaseInsensitive, aKind];
+  EventHash := nil;
+  Compare := PT_SORT[aCaseInsensitive, aKind];
+  EventCompare := nil;
+  if (@Compare = nil) or
+     (@HashItem = nil) then
     raise EDynArray.CreateUtf8(
       'TDynArrayHasher.InitSpecific: %?', [ToText(aKind)^]);
-  Init(aDynArray, hsh, nil, aHasher, cmp, nil, aCaseInsensitive)
+  if @aHasher = nil then
+    Hasher := DefaultHasher
+  else
+    Hasher := aHasher;
+  CountTrigger := DYNARRAY_COUNT_TRIGGER;
+  Clear; // set HashTable/HashTableSize/ScanCounter/State
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  CountCollisions := 0;
+  CountCollisionsCurrent := 0;
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
 end;
 
 procedure TDynArrayHasher.Clear;
@@ -9463,7 +9473,6 @@ var
   k: TRttiKind;
 begin
   // initialize RTTI binary persistence and comparison
-  MoveFast(_PT_HASH, PT_HASH, SizeOf(PT_HASH));
   for k := succ(low(k)) to high(k) do
     case k of
       rkInteger, rkEnumeration, rkSet,
