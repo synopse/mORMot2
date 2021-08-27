@@ -65,13 +65,6 @@ uses
 
 { ************ TOrm TOrmModel TOrmTable IRestOrm Core Definitions }
 
-/// this meta-constructor will create an instance of the exact descendant
-// of the specified property RTTI
-// - it will raise an EOrmException in case of an unhandled type
-function TOrmPropInfoRttiCreateFrom(
-  aPropInfo: PRttiProp; aPropIndex: integer; aOptions: TOrmPropInfoListOptions;
-  const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
-
 // most types are defined as a single "type" statement due to classes coupling
 
 type
@@ -4966,8 +4959,71 @@ type
   TRestBatchLockedDynArray = array of TRestBatchLocked;
 
 
-  { -------------------- TSynValidateRest TSynValidateUniqueField Definitions }
+const
+  /// if the TOrmVirtual table kind is a FTS virtual table
+  IS_FTS =
+    [ovkFTS3, ovkFTS4, ovkFTS5];
 
+  /// if the TOrmVirtual table kind is not an embedded type
+  // - can be set for a TOrm after a VirtualTableExternalRegister call
+  IS_CUSTOM_VIRTUAL =
+    [ovkCustomForcedID, ovkCustomAutoID];
+
+  /// if the TOrmVirtual table kind expects the ID to be set on INSERT
+  INSERT_WITH_ID =
+    [ovkFTS3, ovkFTS4, ovkFTS5, ovkRTree, ovkRTreeInteger, ovkCustomForcedID];
+
+  /// if a TOrmVirtualTablePreparedConstraint.Column is to be ignored
+  VIRTUAL_TABLE_IGNORE_COLUMN = -2;
+
+  /// if a TOrmVirtualTablePreparedConstraint.Column points to the RowID
+  VIRTUAL_TABLE_ROWID_COLUMN = -1;
+
+var
+  /// late-binding return of TOrmVirtualTableClass.ModuleName
+  // - link mormot.orm.storage.pas unit for properly set this value
+  GetVirtualTableModuleName: function(VirtualTableClass: TClass): RawUtf8;
+
+function ToText(vk: TOrmVirtualKind): PShortString; overload;
+
+/// compute the SQL field names, used to create a SQLite3 virtual table
+function GetVirtualTableSqlCreate(Props: TOrmProperties): RawUtf8;
+
+/// TDynArraySortCompare compatible function, sorting by TOrm.ID
+function TOrmDynArrayCompare(const Item1, Item2): integer;
+
+/// TDynArrayHashOne compatible function, hashing TOrm.ID
+function TOrmDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
+
+/// create a TRecordReference with the corresponding parameters
+function RecordReference(Model: TOrmModel; aTable: TOrmClass;
+  aID: TID): TRecordReference; overload;
+
+/// create a TRecordReference with the corresponding parameters
+function RecordReference(aTableIndex: cardinal; aID: TID): TRecordReference; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a dynamic array of TRecordReference into its corresponding IDs
+procedure RecordRefToID(var aArray: TInt64DynArray);
+
+/// get the SQL type of this class type
+// - returns either oftObject, oftID, oftMany or oftUnknown
+function ClassOrmFieldType(info: PRttiInfo): TOrmFieldType;
+
+/// get the SQL type of this type, as managed with the database driver
+function GetOrmFieldType(Info: PRttiInfo): TOrmFieldType;
+
+/// this meta-constructor will create an instance of the exact descendant
+// of the specified property RTTI
+// - it will raise an EOrmException in case of an unhandled type
+function TOrmPropInfoRttiCreateFrom(
+  aPropInfo: PRttiProp; aPropIndex: integer; aOptions: TOrmPropInfoListOptions;
+  const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
+
+
+{ ************ TSynValidateRest TSynValidateUniqueField Definitions }
+
+type
   /// will define a validation to be applied to a TOrm field, using
   // if necessary an associated TRest instance and a TOrm class
   // - a typical usage is to validate a value to be unique in the table
@@ -5036,8 +5092,10 @@ type
   end;
 
 
-  { -------------------- TOrmAccessRights Definition }
 
+{ ************ TOrmAccessRights Definition }
+
+type
   /// a set of potential actions to be executed from the server
   // - reSQL will indicate the right to execute any POST SQL statement (not only
   // SELECT statements)
@@ -5154,96 +5212,6 @@ const
     DELETE: ALL_ACCESS_RIGHTS
   );
 
-  /// if the TOrmVirtual table kind is a FTS virtual table
-  IS_FTS =
-    [ovkFTS3, ovkFTS4, ovkFTS5];
-
-  /// if the TOrmVirtual table kind is not an embedded type
-  // - can be set for a TOrm after a VirtualTableExternalRegister call
-  IS_CUSTOM_VIRTUAL =
-    [ovkCustomForcedID, ovkCustomAutoID];
-
-  /// if the TOrmVirtual table kind expects the ID to be set on INSERT
-  INSERT_WITH_ID =
-    [ovkFTS3, ovkFTS4, ovkFTS5, ovkRTree, ovkRTreeInteger, ovkCustomForcedID];
-
-  /// if a TOrmVirtualTablePreparedConstraint.Column is to be ignored
-  VIRTUAL_TABLE_IGNORE_COLUMN = -2;
-
-  /// if a TOrmVirtualTablePreparedConstraint.Column points to the RowID
-  VIRTUAL_TABLE_ROWID_COLUMN = -1;
-
-var
-  /// late-binding return of TOrmVirtualTableClass.ModuleName
-  // - link mormot.orm.storage.pas unit for properly set this value
-  GetVirtualTableModuleName: function(VirtualTableClass: TClass): RawUtf8;
-
-function ToText(vk: TOrmVirtualKind): PShortString; overload;
-
-/// compute the SQL field names, used to create a SQLite3 virtual table
-function GetVirtualTableSqlCreate(Props: TOrmProperties): RawUtf8;
-
-/// TDynArraySortCompare compatible function, sorting by TOrm.ID
-function TOrmDynArrayCompare(const Item1, Item2): integer;
-
-/// TDynArrayHashOne compatible function, hashing TOrm.ID
-function TOrmDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
-
-/// create a TRecordReference with the corresponding parameters
-function RecordReference(Model: TOrmModel; aTable: TOrmClass;
-  aID: TID): TRecordReference; overload;
-
-/// create a TRecordReference with the corresponding parameters
-function RecordReference(aTableIndex: cardinal; aID: TID): TRecordReference; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// convert a dynamic array of TRecordReference into its corresponding IDs
-procedure RecordRefToID(var aArray: TInt64DynArray);
-
-/// get the SQL type of this class type
-// - returns either oftObject, oftID, oftMany or oftUnknown
-function ClassOrmFieldType(info: PRttiInfo): TOrmFieldType;
-
-/// get the SQL type of this type, as managed with the database driver
-function GetOrmFieldType(Info: PRttiInfo): TOrmFieldType;
-
-// backward compatibility types redirections
-{$ifndef PUREMORMOT2}
-
-type
-  TSqlRecord = TOrm;
-  PSqlRecord = POrm;
-  TSqlRecordArray = TOrmArray;
-  PSqlRecordArray = POrmArray;
-  TSqlRecordObjArray = TOrmObjArray;
-  TSqlRecordClass = TOrmClass;
-  TSqlRecordClassDynArray = TOrmClassDynArray;
-  PSqlClass = POrmClass;
-  TSqlTable = TOrmTable;
-  TSqlTableJson = TOrmTableJson;
-  TSqlInitializeTableOption = TOrmInitializeTableOption;
-  TSqlInitializeTableOptions = TOrmInitializeTableOptions;
-  TSqlAccessRights = TOrmAccessRights;
-  PSqlAccessRights = POrmAccessRights;
-  TSqlFieldType = TOrmFieldType;
-  TSqlFieldTables = TOrmFieldTables;
-  TSqlModel = TOrmModel;
-  TSqlModelProperties = TOrmModelProperties;
-  TSqlModelPropertiesObjArray = TOrmModelPropertiesObjArray;
-  TSqlProperties = TOrmProperties;
-  TSqlPropInfo = TOrmPropInfo;
-  TSqlPropInfoObjArray = TOrmPropInfoObjArray;
-  TSqlPropInfoClass = TOrmPropInfoClass;
-  TSqlPropInfoListOptions = TOrmPropInfoListOptions;
-  TSqlPropInfoAttribute = TOrmPropInfoAttribute;
-  TSqlPropInfoAttributes = TOrmPropInfoAttributes;
-  TSqlRestCache = TRestCache;
-  TSqlRestBatch = TRestBatch;
-  TSqlRestBatchLocked = TRestBatchLocked;
-
-{$endif PUREMORMOT2}
-
-
 
 { ************** TOrm High-Level Parents }
 
@@ -5327,6 +5295,43 @@ type
     class procedure InitializeTable(const Server: IRestOrmServer;
      const FieldName: RawUtf8; Options: TOrmInitializeTableOptions); override;
   end;
+
+
+// backward compatibility types redirections
+{$ifndef PUREMORMOT2}
+
+type
+  TSqlRecord = TOrm;
+  PSqlRecord = POrm;
+  TSqlRecordArray = TOrmArray;
+  PSqlRecordArray = POrmArray;
+  TSqlRecordObjArray = TOrmObjArray;
+  TSqlRecordClass = TOrmClass;
+  TSqlRecordClassDynArray = TOrmClassDynArray;
+  PSqlClass = POrmClass;
+  TSqlTable = TOrmTable;
+  TSqlTableJson = TOrmTableJson;
+  TSqlInitializeTableOption = TOrmInitializeTableOption;
+  TSqlInitializeTableOptions = TOrmInitializeTableOptions;
+  TSqlAccessRights = TOrmAccessRights;
+  PSqlAccessRights = POrmAccessRights;
+  TSqlFieldType = TOrmFieldType;
+  TSqlFieldTables = TOrmFieldTables;
+  TSqlModel = TOrmModel;
+  TSqlModelProperties = TOrmModelProperties;
+  TSqlModelPropertiesObjArray = TOrmModelPropertiesObjArray;
+  TSqlProperties = TOrmProperties;
+  TSqlPropInfo = TOrmPropInfo;
+  TSqlPropInfoObjArray = TOrmPropInfoObjArray;
+  TSqlPropInfoClass = TOrmPropInfoClass;
+  TSqlPropInfoListOptions = TOrmPropInfoListOptions;
+  TSqlPropInfoAttribute = TOrmPropInfoAttribute;
+  TSqlPropInfoAttributes = TOrmPropInfoAttributes;
+  TSqlRestCache = TRestCache;
+  TSqlRestBatch = TRestBatch;
+  TSqlRestBatchLocked = TRestBatchLocked;
+
+{$endif PUREMORMOT2}
 
 
 implementation
