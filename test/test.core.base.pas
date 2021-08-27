@@ -918,7 +918,7 @@ begin
   AmountDA.Init(TypeInfo(TAmountCollection), AmountCollection);
   Check(AmountDA.Info.Parser = ptDynArray);
   Check(AmountDA.Info.ArrayFirstField = ptInteger);
-  Check(@AmountDA.HashItem = @PT_HASH[false, ptInteger]);
+  Check(@AmountDA.HashItem = @DynArrayHashOne(ptInteger));
   for i := 1 to 100 do
   begin
     A.firmID := i;
@@ -932,7 +932,7 @@ begin
   AmountIDA1.Init(TypeInfo(TAmountICollection), AmountICollection);
   Check(AmountIDA1.Info.Parser = ptDynArray);
   Check(AmountIDA1.Info.ArrayFirstField = ptInt64);
-  Check(@AmountIDA1.HashItem = @PT_HASH[false, ptInt64]);
+  Check(@AmountIDA1.HashItem = @DynArrayHashOne(ptInt64));
   for i := 1 to 100 do
   begin
     AI.firmID := i;
@@ -952,7 +952,7 @@ begin
     TypeInfo(TAmountICollection), AmountICollection, ptInteger);
   Check(AmountIDA2.Info.Parser = ptDynArray);
   Check(AmountIDA2.Info.ArrayFirstField = ptInt64); // global TRttiCustom untouched
-  Check(@AmountIDA2.HashItem = @PT_HASH[false, ptInteger]);
+  Check(@AmountIDA2.HashItem = @DynArrayHashOne(ptInteger));
   for i := 1 to 100 do
   begin
     AI.firmID := i;
@@ -6644,7 +6644,9 @@ begin
     pointer(TOrmPeople(A).FirstName), pointer(TOrmPeople(B).FirstName));
 end;
 
-begin
+
+
+initialization
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(TypeInfo(TOrmPeopleObjArray), TOrmPeople);
   {$endif HASDYNARRAYTYPE}

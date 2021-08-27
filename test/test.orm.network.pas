@@ -190,8 +190,9 @@ begin
     DataBase.DB.Synchronous := smOff;
     DataBase.DB.LockingMode := lmExclusive;
     Server := TRestHttpServer.Create(HTTP_DEFAULTPORT, [DataBase], '+',
-      HTTP_DEFAULT_MODE, 16, secSynShaAes);
-    fRunConsole := fRunConsole + 'using ' + Utf8ToString(Server.HttpServer.APIVersion);
+      HTTP_DEFAULT_MODE, 16, secSynShaAes, '', '', [{rsoLogVerbose}]);
+    fRunConsole := FormatString('%using % %',
+      [fRunConsole, Server.HttpServer, Server.HttpServer.APIVersion]);
     Database.NoAjaxJson := true; // expect not expanded JSON from now on
   except
     on E: Exception do
