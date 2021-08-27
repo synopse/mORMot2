@@ -73,7 +73,8 @@ type
     /// prepare one reusable HTTP State Machine for sending the response
     procedure SetupResponse(var Context: THttpRequestContext;
       const ServerName: RawUtf8; const ErrorMessage: string;
-      const OnSendFile: TOnHttpServerSendFile; CompressGz: integer);
+      const OnSendFile: TOnHttpServerSendFile;
+      CompressGz, MaxSizeAtOnce: integer);
     {$ifdef OSWINDOWS}
     /// input parameter containing the caller Full URL
     property FullURL: SynUnicode
@@ -466,6 +467,13 @@ type
   // - used to override THttpServerSocket.GetRequest for instance
   THttpServerSocketClass = class of THttpServerSocket;
 
+  /// THttpServerSocketGeneric current state
+  THttpServerExecuteState = (
+    esNotStarted,
+    esBinding,
+    esRunning,
+    esFinished);
+
   /// abstract parent class for both THttpServer and THttpAsyncServer
   THttpServerSocketGeneric = class(THttpServerGeneric)
   protected
@@ -503,7 +511,9 @@ type
       const OnStart, OnStop: TOnNotifyThread;
       const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
       KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
-      CreateSuspended: boolean = false); reintroduce; virtual;
+      CreateSuspended: boolean = false; aLogVerbose: boolean = false); reintroduce; virtual;
+    /// ensure the HTTP server thread is actually bound to the specified port
+    procedure WaitStarted(Seconds: integer = 30); virtual; abstract;
     /// enable NGINX X-Accel internal redirection for STATICFILE_CONTENT_TYPE
     // - will define internally a matching OnSendFile event handler
     // - generating "X-Accel-Redirect: " header, trimming any supplied left
@@ -570,6 +580,11 @@ type
       index grOwned read GetStat;
   end;
 
+  /// meta-class of our THttpServerSocketGeneric classes
+  // - typically implemented by THttpServer, TWebSocketServer,
+  // TWebSocketServerRest or THttpAsyncServer classes
+  THttpServerSocketGenericClass = class of THttpServerSocketGeneric;
+
   /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
   // - bind to a port and listen to incoming requests
   // - assign this requests to THttpServerResp threads from a ThreadPool
@@ -592,12 +607,12 @@ type
     fInternalHttpServerRespList: TSynList;
     fSock: TCrtSocket;
     fHttpQueueLength: cardinal;
-    fExecuteState: (esNotStarted, esBinding, esRunning, esFinished);
     fSocketClass: THttpServerSocketClass;
     fThreadRespClass: THttpServerRespClass;
     fExecuteMessage: string;
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
+    fExecuteState: THttpServerExecuteState;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     procedure InternalHttpServerRespListAdd(resp: THttpServerResp);
@@ -619,7 +634,9 @@ type
       const OnStart, OnStop: TOnNotifyThread;
       const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
       KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
-      CreateSuspended: boolean = false); override;
+      CreateSuspended: boolean = false; aLogVerbose: boolean = false); override;
+    /// release all memory and handlers
+    destructor Destroy; override;
     /// ensure the HTTP server thread is actually bound to the specified port
     // - TCrtSocket.Bind() occurs in the background in the Execute method: you
     // should call and check this method result just after THttpServer.Create
@@ -630,9 +647,7 @@ type
     // - calling this method is optional, but if the background thread didn't
     // actually bind the port, the server will be stopped and unresponsive with
     // no explicit error message, until it is terminated
-    procedure WaitStarted(Seconds: integer = 30); virtual;
-    /// release all memory and handlers
-    destructor Destroy; override;
+    procedure WaitStarted(Seconds: integer = 30); override;
     /// access to the main server low-level Socket
     // - it's a raw TCrtSocket, which only need a socket to be bound, listening
     // and accept incoming request
@@ -1257,7 +1272,7 @@ end;
 
 procedure THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   const ServerName: RawUtf8; const ErrorMessage: string;
-  const OnSendFile: TOnHttpServerSendFile; CompressGz: integer);
+  const OnSendFile: TOnHttpServerSendFile; CompressGz, MaxSizeAtOnce: integer);
 var
   P, PEnd: PUtf8Char;
   len: PtrInt;
@@ -1327,7 +1342,7 @@ begin
   {$endif NOXPOWEREDNAME}
   Context.Content := OutContent;
   Context.ContentType := OutContentType;
-  Context.CompressContentAndFinalizeHead; // also set proper State
+  Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // also set State
   // now TAsyncConnectionsSockets.Write(Head) should be called
 end;
 
@@ -1526,7 +1541,7 @@ end;
 constructor THttpServerSocketGeneric.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  aHeadersUnFiltered: boolean; CreateSuspended: boolean);
+  aHeadersUnFiltered, CreateSuspended, aLogVerbose: boolean);
 begin
   fSockPort := aPort;
   fServerKeepAliveTimeOut := KeepAliveTimeOut; // 30 seconds by default
@@ -1593,7 +1608,7 @@ end;
 constructor THttpServer.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount, KeepAliveTimeOut: integer;
-  aHeadersUnFiltered, CreateSuspended: boolean);
+  aHeadersUnFiltered, CreateSuspended, aLogVerbose: boolean);
 begin
   fInternalHttpServerRespList := TSynList.Create;
   InitializeCriticalSection(fProcessCS);
@@ -1700,7 +1715,6 @@ begin
     LeaveCriticalSection(fProcessCS);
   end;
 end;
-
 
 procedure THttpServer.WaitStarted(Seconds: integer);
 var

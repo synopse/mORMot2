@@ -267,9 +267,9 @@ type
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
     // - and if Content is not '', will add 'Content-Type: ' header
     // - always compute ContentLength and add a 'Content-Length: ' header
-    // - then append small content to Head if possible, and update final State
-    // to hrsSendBody/hrsResponseDone
-    procedure CompressContentAndFinalizeHead;
+    // - then append small content (<MaxSizeAtOnce) to Head if possible, and
+    // refresh the final State to hrsSendBody/hrsResponseDone
+    procedure CompressContentAndFinalizeHead(MaxSizeAtOnce: integer);
     /// body sending socket entry point of our asynchronous HTTP Server
     // - to be called when some bytes could be written to output socket
     procedure ProcessBody(var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
@@ -956,8 +956,11 @@ begin
               'UPGRADE',
               'KEEP-ALIVE']) of
           0:
-            // 'CONNECTION: CLOSE'
-            include(HeaderFlags, hfConnectionClose);
+            begin
+              // 'CONNECTION: CLOSE'
+              include(HeaderFlags, hfConnectionClose);
+              inc(P, 5);
+            end;
           1:
             // 'CONNECTION: UPGRADE'
             include(HeaderFlags, hfConnectionUpgrade);
@@ -965,9 +968,10 @@ begin
             begin
               // 'CONNECTION: KEEP-ALIVE'
               include(HeaderFlags, hfConnectionKeepAlive);
-              if P[10] = ',' then
+              inc(P, 10);
+              if P^ = ',' then
               begin
-                P := GotoNextNotSpace(P + 11);
+                P := GotoNextNotSpace(P + 1);
                 if IdemPChar(P, 'UPGRADE') then
                   // 'CONNECTION: KEEP-ALIVE, UPGRADE'
                   include(HeaderFlags, hfConnectionUpgrade);
@@ -1119,7 +1123,7 @@ begin
   if Len = 0 then
     exit;
   repeat
-    if P[0] > #13 then
+    if P[0] <= #13 then
       break;
     dec(Len);
     if Len = 0 then
@@ -1179,7 +1183,7 @@ begin
         if ProcessParseLine(st, nil) then
           // void line indicates end of Headers
           if st.LineLen <> 0 then
-            ParseHeader(st.P, hroHeadersUnfiltered in Options)
+            ParseHeader(st.Line, hroHeadersUnfiltered in Options)
           else
           begin
             // Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
@@ -1305,7 +1309,7 @@ fin:Process.Reset;
   // we may have more luck in next ProcessRead() call
 end;
 
-procedure THttpRequestContext.CompressContentAndFinalizeHead;
+procedure THttpRequestContext.CompressContentAndFinalizeHead(MaxSizeAtOnce: integer);
 begin
   // same logic than THttpSocket.CompressDataAndWriteHeaders below
   if (integer(CompressAcceptHeader) <> 0) and
@@ -1313,7 +1317,7 @@ begin
     ContentEncoding := CompressContent(
       CompressAcceptHeader, Compress, ContentType, Content);
   if ContentEncoding <> '' then
-    Head.Append(['Content-Encoding: ', ContentEncoding]);
+    Head.Append(['Content-Encoding: ', ContentEncoding], {crlf=}true);
   if ContentStream = nil then
   begin
     ContentPos := pointer(Content);
@@ -1321,10 +1325,10 @@ begin
   end
   else if ContentLength = 0 then // maybe set by SetupResponse for local file
     ContentLength := ContentStream.Size - ContentStream.Position;
-  Head.Append(['Content-Length: ', ContentLength]); // needed even 0
+  Head.Append(['Content-Length: ', ContentLength], {crlf=}true);
   if (ContentType <> '') and
      (ContentType <> STATICFILE_CONTENT_TYPE) then
-    Head.Append(['Content-Type: ', ContentType]);
+    Head.Append(['Content-Type: ', ContentType], {crlf=}true);
   if not (hfConnectionClose in HeaderFlags) then
   begin
     if CompressAcceptEncoding <> '' then
@@ -1332,15 +1336,36 @@ begin
     Head.Append('Connection: Keep-Alive', {crlf=}true);
   end;
   Head.Append(nil, 0, {crlf=}true); // headers always end with a void line
-  if (ContentStream = nil) and
-     Head.CanAppend(ContentLength) then
-  begin
-    // single socket send() if possible (small or no output body)
-    Head.Append(Content);
-    State := hrsResponseDone;
-  end
+  Process.Reset;
+  if ContentStream = nil then
+    if ContentLength = 0 then
+      // single socket send() is possible (no output body)
+      State := hrsResponseDone
+    else if Head.CanAppend(ContentLength) then
+    begin
+      // single socket send() is possible (small body appended to headers)
+      Head.Append(Content);
+      Content := '';
+      State := hrsResponseDone;
+    end
+    else
+    begin
+      if ContentLength + Head.Len < MaxSizeAtOnce then
+      begin
+        // single socket send() is possible (body could fit the sending buffer)
+        Process.Reserve(ContentLength + Head.Len);
+        Process.Append(Head.Buffer, Head.Len);
+        Process.Append(Content);
+        Content := ''; // release ASAP
+        Head.Reset; // DoRequest will use Process
+        State := hrsResponseDone;
+      end
+      else
+        // async huge body sent using Write polling
+        State := hrsSendBody;
+    end
   else
-    // regular headers + body sending
+    // ContentStream requires async body sending
     State := hrsSendBody;
 end;
 
@@ -1359,16 +1384,17 @@ begin
   begin
     if ContentStream <> nil then
     begin
-      P := Dest.Reserve(MaxSize);
-      Dest.Append(P, ContentStream.Read(P^, MaxSize));
+      P := Process.Reserve(MaxSize);
+      MaxSize := ContentStream.Read(P^, MaxSize);
+      Dest.Append(P, MaxSize);
     end
     else
     begin
       Dest.Append(ContentPos, MaxSize);
       inc(ContentPos, MaxSize);
     end;
-    dec(ContentLeft, MaxSize);
-    if ContentLeft = 0 then
+    dec(ContentLength, MaxSize);
+    if ContentLength = 0 then
     begin
       State := hrsResponseDone;
       if Assigned(OnStateChange) then

@@ -144,7 +144,7 @@ type
     // - default is 0, i.e. no automatic ping sending on client side, and
     // 20000, i.e. 20 seconds, on server side
     HeartbeatDelay: cardinal;
-    /// maximum period time in milli seconds when ProcessLoop thread will stay
+    /// maximum period time in milliseconds when ProcessLoop thread will stay
     // idle before checking for the next pending requests
     // - default is 500 ms, but you may put a lower value, if you expects e.g.
     // REST commands or NotifyCallback(wscNonBlockWithoutAnswer) to be processed
