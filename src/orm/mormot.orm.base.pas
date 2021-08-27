@@ -14,6 +14,7 @@ unit mormot.orm.base;
    - TOrmPropInfo ORM / RTTI Classes
    - Abstract TOrmTableAbstract Parent Class
    - TOrmTableRowVariant Custom Variant Type
+   - TOrmLocks and TRestCacheEntry Basic Structures
 
   *****************************************************************************
 }
@@ -68,6 +69,10 @@ const
   /// the used TAuthSession.IDCardinal value if authentication mode is not set
   // - i.e. if TRest.HandleAuthentication equals FALSE
   CONST_AUTHENTICATION_NOT_USED = 1;
+
+  /// maximum handled dimension for TOrmRTree
+  // - this value is the one used by SQLite3 R-Tree virtual table
+  RTREE_MAX_DIMENSION = 5;
 
 
 type
@@ -619,7 +624,88 @@ type
   // - TJsonObjectDecoder will use it to compute the corresponding SQL
   TRestBatchOptions = set of TRestBatchOption;
 
+  /// how TOrmModel.UriMatch() will compare an URI
+  // - will allow to make a difference about case-sensitivity
+  TRestModelMatch = (
+    rmNoMatch,
+    rmMatchExact,
+    rmMatchWithCaseChange);
 
+  /// the kind of SQlite3 (virtual) table
+  // - TOrmFts3/4/5 will be associated with vFTS3/vFTS4/vFTS5 values,
+  // TOrmRTree/TOrmRTreeInteger with rRTree/rRTreeInteger, any native
+  // SQlite3 table as vSQLite3, and a TOrmVirtualTable*ID as
+  // rCustomForcedID/rCustomAutoID
+  // - a plain TOrm class can be defined as rCustomForcedID (e.g. for
+  // TOrmMany) after registration for an external DB via a call to
+  // VirtualTableExternalRegister() from mormot.orm.sql unit
+  TOrmVirtualKind = (
+    ovkSQLite3,
+    ovkFTS3,
+    ovkFTS4,
+    ovkFTS5,
+    ovkRTree,
+    ovkRTreeInteger,
+    ovkCustomForcedID,
+    ovkCustomAutoID);
+
+  /// pre-computed SQL statements for ORM operations for a given
+  // TOrmModelProperties instance
+  TOrmModelPropertiesSql = record
+    /// the simple field names in a SQL SELECT compatible format: 'COL1,COL2' e.g.
+    // - format is
+    // ! SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
+    // - returns '*' if no field is of RawBlob/TOrmMany kind
+    // - returns 'COL1,COL2' with all COL* set to simple field names if withID is false
+    // - returns 'ID,COL1,COL2' with all COL* set to simple field names if withID is true
+    // - returns 'Table.ID,Table.COL1,Table.COL2' if withTableName and withID are true
+    TableSimpleFields: array[boolean, boolean] of RawUtf8;
+    /// the SQL statement for reading all simple fields and RowID
+    // - to be checked if we may safely call EngineList()
+    SelectAllWithRowID: RawUtf8;
+    /// the SQL statement for reading all simple fields with ID
+    // - to be checked if we may safely call EngineList()
+    SelectAllWithID: RawUtf8;
+    /// the JOINed SQL statement for reading all fields with ID, including
+    // nested TOrm pre-allocated instances
+    // - is '' if there is no nested TOrm
+    SelectAllJoined: RawUtf8;
+    /// the updated simple fields exposed as 'COL1=?,COL2=?'
+    // - excluding ID (but including TCreateTime fields - as used in
+    // TOrmVirtualTableExternal.Update method)
+    // - to be used e.g. for UPDATE statements
+    UpdateSetSimple: RawUtf8;
+    /// all updated fields exposed as 'COL1=?,COL2=?'
+    // - excluding ID (but including TCreateTime fields - as used in
+    // TOrmVirtualTableExternal.Update method)
+    // - to be used e.g. for UPDATE statements
+    UpdateSetAll: RawUtf8;
+    /// all fields, excluding the ID field, exposed as 'COL1,COL2'
+    // - to be used e.g. in TOrmVirtualTableExternal.Insert()
+    InsertSet: RawUtf8;
+  end;
+
+  /// used by TOrmPropertiesMapping.Options for custom field mapping
+  // of a TOrm on an external database process
+  // - rpmAutoMapKeywordFields is set if MapAutoKeywordFields has been defined,
+  // i.e. if field names which may conflict with a keyword should be
+  // automatically mapped to a harmless symbol name
+  // - rpmNoCreateMissingTable will bypass the existing table check, e.g.
+  // to circumvent some specific DB provider or case sensitivity issue on tables
+  // - rpmNoCreateMissingField will bypass the existing field check, e.g.
+  // to circumvent some specific DB provider or case sensitivity issue on fields
+  // - by default, check of missing field name will be case insensitive, unless
+  // the rpmMissingFieldNameCaseSensitive option is set
+  // - rpmQuoteFieldName will quote the field names - to be used e.g. with
+  // FireBird in its Dialect 3
+  // - rpmClearPoolOnConnectionIssue will enable detecting connection loss
+  TOrmPropertiesMappingOptions = set of (
+    rpmAutoMapKeywordFields,
+    rpmNoCreateMissingTable,
+    rpmNoCreateMissingField,
+    rpmMissingFieldNameCaseSensitive,
+    rpmQuoteFieldName,
+    rpmClearPoolOnConnectionIssue);
 
 { ************ JSON Object Decoder and SQL Generation }
 
@@ -1246,7 +1332,8 @@ type
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
-    property SetEnumType: PRttiEnumType read fSetEnumType;
+    property SetEnumType: PRttiEnumType
+      read fSetEnumType;
   end;
 
   /// information about a enumeration published property
@@ -1264,7 +1351,8 @@ type
     procedure NormalizeValue(var Value: RawUtf8); override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     function GetCaption(Value: RawUtf8; out IntValue: integer): string;
-    property EnumType: PRttiEnumType read fEnumType;
+    property EnumType: PRttiEnumType
+      read fEnumType;
   end;
 
   /// information about a character published property
@@ -1799,7 +1887,8 @@ type
       aPropertyPointer: pointer; aAttributes: TOrmPropInfoAttributes = [];
       aFieldWidth: integer = 0); reintroduce; overload;
     /// the corresponding custom JSON parser
-    property CustomParser: TRttiJson read fCustomParser;
+    property CustomParser: TRttiJson
+      read fCustomParser;
   public
     procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
       wasString: boolean); override;
@@ -2580,6 +2669,121 @@ type
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
   end;
+
+
+
+{ ************ TOrmLocks and TRestCacheEntry Basic Structures }
+
+type
+  /// used to store the locked record list, in a specified table
+  // - the maximum count of the locked list if fixed to 512 by default,
+  // which seems correct for common usage
+  {$ifdef USERECORDWITHMETHODS}
+  TOrmLocks = record
+  {$else}
+  TOrmLocks = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// the number of locked records stored in this object
+    Count: integer;
+    /// contains the locked record ID
+    // - an empty position is marked with 0 after UnLock()
+    IDs: TIDDynArray;
+    /// contains the time and date of the lock
+    // - filled internally by the fast GetTickCount64() function (faster than
+    // TDateTime or TSystemTime/GetLocalTime)
+    // - used to purge to old entries - see PurgeOlderThan() method below
+    Ticks64s: TInt64DynArray;
+    /// lock a record, specified by its ID
+    // - returns true on success, false if was already locked
+    function Lock(aID: TID): boolean;
+    /// unlock a record, specified by its ID
+    // - returns true on success, false if was not already locked
+    function UnLock(aID: TID): boolean;
+    /// return true if a record, specified by its ID, is locked
+    function isLocked(aID: TID): boolean;
+    /// delete all the locked IDs entries, after a specified time
+    // - to be used to release locked records if the client crashed
+    // - default value is 30 minutes, which seems correct for common database usage
+    procedure PurgeOlderThan(MinutesFromNow: cardinal = 30);
+  end;
+
+  POrmLocks = ^TOrmLocks;
+
+  TOrmLocksDynArray = array of TOrmLocks;
+
+  /// for TRestCache, stores a table values
+  TRestCacheEntryValue = packed record
+    /// corresponding ID
+    ID: TID;
+    /// GetTickCount64 shr 9 timestamp when this cached value was stored
+    // - resulting time period has therefore a resolution of 512 ms, and
+    // overflows after 70 years without computer reboot
+    // - equals 0 when there is no JSON value cached
+    Timestamp512: cardinal;
+    /// some associated unsigned integer value
+    // - not used by TRestCache, but available at TRestCacheEntry level
+    Tag: cardinal;
+    /// JSON encoded UTF-8 serialization of the record
+    Json: RawUtf8;
+  end;
+
+  /// for TRestCache, stores all tables values
+  TRestCacheEntryValueDynArray = array of TRestCacheEntryValue;
+
+  /// for TRestCache, stores a table settings and values
+  // - use a TRestCacheEntryValue array sorted by ID for O(log(n)) search
+  {$ifdef USERECORDWITHMETHODS}
+  TRestCacheEntry = record
+  {$else}
+  TRestCacheEntry = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// TRUE if this table should use caching
+    // - i.e. if was not set, or worth it for this table (e.g. in-memory table)
+    CacheEnable: boolean;
+    /// the whole specified Table content will be cached
+    CacheAll: boolean;
+    /// time out value (in ms)
+    // - if 0, caching will never expire
+    TimeOutMS: cardinal;
+    /// the number of entries stored in Values[]
+    Count: integer;
+    /// all cached IDs and JSON content
+    Values: TRestCacheEntryValueDynArray;
+    /// TDynArray wrapper around the Values[] array
+    Value: TDynArray;
+    /// used to lock the table cache for multi thread safety
+    Mutex: TRTLCriticalSection;
+    /// initialize this table cache
+    // - will set Value wrapper and Mutex handle - other fields should have
+    // been cleared by caller (is the case for a TRestCacheEntryDynArray)
+    procedure Init;
+    /// reset all settings corresponding to this table cache
+    procedure Clear;
+    /// finalize this table cache entry
+    procedure Done;
+    /// flush cache for a given Value[] index
+    procedure FlushCacheEntry(Index: integer);
+    /// flush cache for all Value[]
+    procedure FlushCacheAllEntries;
+    /// add the supplied ID to the Value[] array
+    procedure SetCache(aID: TID);
+    /// update/refresh the cached JSON serialization of a given ID
+    procedure SetJson(aID: TID; const aJson: RawUtf8;
+      aTag: cardinal = 0); overload;
+    /// retrieve a JSON serialization of a given ID from cache
+    function RetrieveJson(aID: TID; var aJson: RawUtf8;
+      aTag: PCardinal = nil): boolean; overload;
+    /// compute how much memory stored entries are using
+    // - will also flush outdated entries
+    function CachedMemory(FlushedEntriesCount: PInteger = nil): cardinal;
+  end;
+
+  /// for TRestCache, stores all table settings and values
+  // - this dynamic array will follow TRest.Model.Tables[] layout, i.e. one
+  // entry per TOrm class in the data model
+  TRestCacheEntryDynArray = array of TRestCacheEntry;
 
 
 
@@ -9050,6 +9254,267 @@ begin
     r := TOrmTableRowVariantData(Value).VTable.fStepRow;
   TOrmTableRowVariantData(Value).VTable.ToDocVariant(r, tmp);
   W.AddVariant(tmp, Escape);
+end;
+
+
+{ ************ TOrmLocks and TRestCacheEntry Basic Structures }
+
+{ TOrmLocks }
+
+function TOrmLocks.isLocked(aID: TID): boolean;
+begin
+  result := (@self <> nil) and
+            (Count <> 0) and
+            (aID <> 0) and
+            Int64ScanExists(pointer(IDs), Count, aID);
+end;
+
+function TOrmLocks.Lock(aID: TID): boolean;
+var
+  P: PInt64;
+begin
+  if (@self = nil) or
+     (aID = 0) then
+    // void or full
+    result := false
+  else
+  begin
+    P := Int64Scan(pointer(IDs), Count, aID);
+    if P <> nil then
+      // already locked
+      result := false
+    else
+    begin
+      // add to ID[] and Ticks[]
+      P := Int64Scan(pointer(IDs), Count, 0);
+      if P = nil then
+      begin
+        // no free entry -> add at the end
+        if Count >= length(IDs) then
+        begin
+          SetLength(IDs, Count + 512);
+          SetLength(Ticks64s, Count + 512);
+        end;
+        IDs[Count] := aID;
+        Ticks64s[Count] := GetTickCount64;
+        inc(Count);
+      end
+      else
+      begin
+        // store at free entry
+        P^ := aID;
+        Ticks64s[(PtrUInt(P) - PtrUInt(IDs)) shr 3] := GetTickCount64;
+      end;
+      result := true;
+    end;
+  end;
+end;
+
+procedure TOrmLocks.PurgeOlderThan(MinutesFromNow: cardinal);
+var
+  LastOK64: Int64;
+  i, LastEntry: PtrInt;
+begin
+  if (@self = nil) or
+     (Count = 0) then
+    exit; // nothing to purge
+  LastOK64 := GetTickCount64 - MinutesFromNow * (1000 * 60); // GetTickCount64() unit is ms
+  LastEntry := -1;
+  for i := 0 to Count - 1 do
+    if IDs[i] <> 0 then
+      if Ticks64s[i] < LastOK64 then // too old?
+        IDs[i] := 0
+      else // 0 frees entry
+        LastEntry := i; // refresh last existing entry
+  Count := LastEntry + 1; // update count (may decrease list length)
+end;
+
+function TOrmLocks.UnLock(aID: TID): boolean;
+var
+  P: PInt64;
+begin
+  if (@self = nil) or
+     (Count = 0) or
+     (aID = 0) then
+    result := false
+  else
+  begin
+    P := Int64Scan(pointer(IDs), Count, aID);
+    if P = nil then
+      result := false
+    else
+    begin
+      P^ := 0; // 0 marks free entry
+      if ((PtrUInt(P) - PtrUInt(IDs)) shr 3 >= PtrUInt(Count - 1)) then
+        dec(Count); // freed last entry -> decrease list length
+      result := true;
+    end;
+  end;
+end;
+
+
+{ TRestCacheEntry }
+
+procedure TRestCacheEntry.Init;
+begin
+  Value.InitSpecific(TypeInfo(TRestCacheEntryValueDynArray),
+    Values, ptInt64, @Count); // will search/sort by first ID: TID field
+  InitializeCriticalSection(Mutex);
+end;
+
+procedure TRestCacheEntry.Done;
+begin
+  DeleteCriticalSection(Mutex);
+end;
+
+procedure TRestCacheEntry.Clear;
+begin
+  EnterCriticalSection(Mutex);
+  try
+    Value.Clear;
+    CacheAll := false;
+    CacheEnable := false;
+    TimeOutMS := 0;
+  finally
+    LeaveCriticalSection(Mutex);
+  end;
+end;
+
+procedure TRestCacheEntry.FlushCacheEntry(Index: integer);
+begin
+  if cardinal(Index) < cardinal(Count) then
+    if CacheAll then
+      Value.FastDeleteSorted(Index)
+    else
+      with Values[Index] do
+      begin
+        Timestamp512 := 0;
+        Json := '';
+        Tag := 0;
+      end;
+end;
+
+procedure TRestCacheEntry.FlushCacheAllEntries;
+var
+  i: PtrInt;
+begin
+  if not CacheEnable then
+    exit;
+  EnterCriticalSection(Mutex);
+  try
+    if CacheAll then
+      Value.Clear
+    else
+      for i := 0 to Count - 1 do
+        with Values[i] do
+        begin
+          Timestamp512 := 0;
+          Json := '';
+          Tag := 0;
+        end;
+  finally
+    LeaveCriticalSection(Mutex);
+  end;
+end;
+
+procedure TRestCacheEntry.SetCache(aID: TID);
+var
+  Rec: TRestCacheEntryValue;
+  i: integer;
+begin
+  EnterCriticalSection(Mutex);
+  try
+    CacheEnable := true;
+    if not CacheAll and
+       not Value.FastLocateSorted(aID, i) and
+       (i >= 0) then
+    begin
+      Rec.ID := aID;
+      Rec.Timestamp512 := 0; // indicates no value cache yet
+      Rec.Tag := 0;
+      Value.FastAddSorted(i, Rec);
+    end; // do nothing if aID is already in Values[]
+  finally
+    LeaveCriticalSection(Mutex);
+  end;
+end;
+
+procedure TRestCacheEntry.SetJson(aID: TID; const aJson: RawUtf8; aTag: cardinal);
+var
+  Rec: TRestCacheEntryValue;
+  i: integer;
+begin
+  Rec.ID := aID;
+  Rec.Json := aJson;
+  Rec.Timestamp512 := GetTickCount64 shr 9;
+  Rec.Tag := aTag;
+  EnterCriticalSection(Mutex);
+  try
+    if Value.FastLocateSorted(Rec, i) then
+      Values[i] := Rec
+    else if CacheAll and
+            (i >= 0) then
+      Value.FastAddSorted(i, Rec);
+  finally
+    LeaveCriticalSection(Mutex);
+  end;
+end;
+
+function TRestCacheEntry.RetrieveJson(aID: TID; var aJson: RawUtf8;
+  aTag: PCardinal): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  EnterCriticalSection(Mutex);
+  try
+    i := Value.Find(aID); // fast O(log(n)) binary search by first ID field
+    if i >= 0 then
+      with Values[i] do
+        if Timestamp512 <> 0 then // 0 when there is no JSON value cached
+          if (TimeOutMS <> 0) and
+             ((GetTickCount64 - TimeOutMS) shr 9 > Timestamp512) then
+            FlushCacheEntry(i)
+          else
+          begin
+            if aTag <> nil then
+              aTag^ := Tag;
+            aJson := JSON;
+            result := true; // found a non outdated serialized value in cache
+          end;
+  finally
+    LeaveCriticalSection(Mutex);
+  end;
+end;
+
+function TRestCacheEntry.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
+var
+  i: PtrInt;
+  tix512: cardinal;
+begin
+  result := 0;
+  if CacheEnable and
+     (Count > 0) then
+  begin
+    tix512 := (GetTickCount64 - TimeOutMS) shr 9;
+    EnterCriticalSection(Mutex);
+    try
+      for i := Count - 1 downto 0 do
+        with Values[i] do
+          if Timestamp512 <> 0 then
+            if (TimeOutMS <> 0) and
+               (tix512 > Timestamp512) then
+            begin
+              FlushCacheEntry(i);
+              if FlushedEntriesCount <> nil then
+                inc(FlushedEntriesCount^);
+            end
+            else
+              inc(result, length(JSON) + (SizeOf(TRestCacheEntryValue) + 16));
+    finally
+      LeaveCriticalSection(Mutex);
+    end;
+  end;
 end;
 
 

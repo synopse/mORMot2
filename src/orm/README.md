@@ -27,6 +27,7 @@ Low-Level Basic Types and Definitions for our RESTful ORM
 - `TOrmPropInfo` ORM / RTTI Classes
 - Abstract `TOrmTableAbstract` Parent Class
 - `TOrmTableRowVariant` Custom Variant Type
+- `TOrmLocks` and `TRestCacheEntry` Basic Structures
 
 ### mormot.orm.core
 

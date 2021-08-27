@@ -72,17 +72,12 @@ function TOrmPropInfoRttiCreateFrom(
   aPropInfo: PRttiProp; aPropIndex: integer; aOptions: TOrmPropInfoListOptions;
   const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
 
-const
-  /// maximum handled dimension for TOrmRTree
-  // - this value is the one used by SQLite3 R-Tree virtual table
-  RTREE_MAX_DIMENSION = 5;
-
 // most types are defined as a single "type" statement due to classes coupling
 
 type
   {$M+}
   { we expect RTTI information for the published properties of these
-    forward definitions - due to internal coupling, those classes are
+    forward definitions - due to internal coupling, all those classes are
     to be defined in a single "type" statement }
   TOrmTable = class;
   TOrm = class;
@@ -176,7 +171,8 @@ type
     // the targetting record is deleted (emulating a ON DELETE SET DEFAULT)
     // - equals TOrm for plain TID field
     // - equals nil if T*ID type name doesn't match any registered class
-    property RecordClass: TOrmClass read fRecordClass;
+    property RecordClass: TOrmClass
+      read fRecordClass;
     /// TRUE if this oftTID type name follows the '...ToBeDeletedID' pattern
     // - e.g. 'TOrmClientToBeDeletedID' type name will match
     // TOrmClient and set CascadeDelete
@@ -190,7 +186,8 @@ type
     // then this OrderedBy property will be tied to the TOrmClient class
     // of the corresponding model, and the whole record will be deleted when
     // the targetting record is deleted (emulating a ON DELETE CASCADE)
-    property CascadeDelete: boolean read fCascadeDelete;
+    property CascadeDelete: boolean
+      read fCascadeDelete;
   end;
 
 
@@ -1552,14 +1549,17 @@ type
     /// the TOrmTable stated as FillPrepare() parameter
     // - the internal temporary table is stored here for TOrmMany
     // - this instance is freed by TOrm.Destroy if fTable.OwnerMustFree=true
-    property Table: TOrmTable read fTable;
+    property Table: TOrmTable
+      read fTable;
     /// the current Row during a Loop
-    property FillCurrentRow: integer read fFillCurrentRow;
+    property FillCurrentRow: integer
+      read fFillCurrentRow;
     /// equals TRUE if the instance was initialized via TOrm.CreateJoined()
     // TOrm.CreateAndFillPrepareJoined()
     // - it means that all nested TOrm are pre-allocated instances,
     // not trans-typed pointer(IDs)
-    property JoinedFields: boolean read GetJoinedFields;
+    property JoinedFields: boolean
+      read GetJoinedFields;
     /// set by TOrm.FillPrepareMany() to release M.fDestID^ instances
     property TableMapRecordManyInstances: TOrmManyObjArray
       read fTableMapRecordManyInstances;
@@ -2568,7 +2568,8 @@ type
 
     /// this property gives direct access to the class instance ID
     // - not defined as "published" since RttiCustomSetParser did register it
-    property IDValue: TID read fID write fID;
+    property IDValue: TID
+      read fID write fID;
     /// this property stores the record's integer ID
     // - if this TOrm is not a instance, but a field value in a published
     //  property of type oftID (i.e. TOrm(aID)), this method will try
@@ -2580,7 +2581,8 @@ type
     //  Add of the record
     // - rather use IDValue property for direct read/write access to the
     // ID field, if you know that this TOrm is a true allocated class instance
-    property ID: TID read GetID;
+    property ID: TID
+      read GetID;
     /// this read-only property can be used to retrieve the ID as a TOrm object
     // - published properties of type TOrm (one-to-many relationship) do not
     // store real class instances (only exception is if they inherit from
@@ -2604,30 +2606,38 @@ type
     // - on FPC, if you get an Error: Incompatible types: got "Pointer" expected
     // "T...", then you are missing a {$mode Delphi} conditional in your unit:
     // the easiest is to include {$I mormot.define.inc} at the top of your unit
-    property AsTOrm: pointer read GetIDAsPointer;
+    property AsTOrm: pointer
+      read GetIDAsPointer;
     /// this property is set to true, if any published property is a BLOB (RawBlob)
-    property HasBlob: boolean read GetHasBlob;
+    property HasBlob: boolean
+      read GetHasBlob;
     /// this property returns the published property count with any valid
     // database field except RawBlob/TOrmMany
     // - by default, the RawBlob (BLOB) fields are not included into this set:
     // they must be read specificaly (in order to spare bandwidth)
     // - TOrmMany fields are not accessible directly, but as instances
     // created by TOrm.Create
-    property SimpleFieldCount: integer read GetSimpleFieldCount;
+    property SimpleFieldCount: integer
+      read GetSimpleFieldCount;
     /// this property contains the TOrmTable after a call to FillPrepare()
-    property FillTable: TOrmTable read GetTable;
+    property FillTable: TOrmTable
+      read GetTable;
     /// this property contains the current row number (beginning with 1),
     // initialized to 1 by FillPrepare(), which will be read by FillOne
-    property FillCurrentRow: integer read GetFillCurrentRow;
+    property FillCurrentRow: integer
+      read GetFillCurrentRow;
     /// this property is set to true, if all rows have been browsed after
     // FillPrepare / while FillOne do ...
-    property FillReachedEnd: boolean read GetFillReachedEnd;
+    property FillReachedEnd: boolean
+      read GetFillReachedEnd;
     /// used internally by FillPrepare() and corresponding Fill*() methods
-    property FillContext: TOrmFill read fFill;
+    property FillContext: TOrmFill
+      read fFill;
     /// this property contains the internal state counter of the server database
     // when the data was retrieved from it
     // - can be used to check if retrieved data may be out of date
-    property InternalState: cardinal read fInternalState write fInternalState;
+    property InternalState: cardinal
+      read fInternalState write fInternalState;
   published
     { published properties in inherited classes will be interpreted as SQL fields }
   end;
@@ -2891,7 +2901,8 @@ type
     function ToObjArray(var ObjArray; RecordType: TOrmClass = nil): boolean;
 
     /// contains the associated record class on Query
-    property QueryTables: TOrmClassDynArray read fQueryTables;
+    property QueryTables: TOrmClassDynArray
+      read fQueryTables;
   end;
 
 
@@ -2987,7 +2998,8 @@ type
     // - this buffer is not to be access directly: this won't be a valid JSON
     // content, but a processed buffer, on which Results[] elements point to -
     // it will contain unescaped text and numerical values, ending with #0
-    property PrivateInternalCopy: RawUtf8 read fPrivateCopy;
+    property PrivateInternalCopy: RawUtf8
+      read fPrivateCopy;
   end;
 
 
@@ -3413,7 +3425,8 @@ type
      // - ID property is read-only, but this DocID property can be written/set
      // - internally, we use RowID in the SQL statements, which is compatible
      // with both TOrm and TOrmFts3 kind of table
-    property DocID: TID read GetID write fID;
+    property DocID: TID
+      read GetID write fID;
   end;
 
   /// this base class will create a FTS3 table using the Porter Stemming algorithm
@@ -3544,13 +3557,16 @@ type
     // - excluding ID
     procedure NamesToRawUtf8DynArray(var Names: TRawUtf8DynArray);
     /// returns the number of TOrmPropInfo in the list
-    property Count: integer read fCount;
+    property Count: integer
+      read fCount;
     /// quick access to the TOrmPropInfo list
     // - note that length(List) may not equal Count, since is its capacity
-    property List: TOrmPropInfoObjArray read fList;
+    property List: TOrmPropInfoObjArray
+      read fList;
     /// read-only retrieval of a TOrmPropInfo item
     // - will raise an exception if out of range
-    property Items[aIndex: PtrInt]: TOrmPropInfo read GetItem;
+    property Items[aIndex: PtrInt]: TOrmPropInfo
+      read GetItem;
   end;
 
   /// some information about a given TOrm class properties
@@ -3866,14 +3882,18 @@ type
       aAttributes: TOrmPropInfoAttributes = []; aFieldWidth: integer = 0);
 
     /// fast access to the RTTI properties attribute
-    property TableRtti: TRttiJson read fTableRtti;
+    property TableRtti: TRttiJson
+      read fTableRtti;
     /// if this class has any BLOB or TOrmRecordMany fields
     // - i.e. some fields to be ignored
-    property HasNotSimpleFields: boolean read fHasNotSimpleFields;
+    property HasNotSimpleFields: boolean
+      read fHasNotSimpleFields;
     /// set of field types appearing in this record
-    property HasTypeFields: TOrmFieldTypes read fHasTypeFields;
+    property HasTypeFields: TOrmFieldTypes
+      read fHasTypeFields;
     /// list all fields, as retrieved from RTTI
-    property Fields: TOrmPropInfoList read fFields;
+    property Fields: TOrmPropInfoList
+      read fFields;
     /// list all "simple" fields of this TOrm
     // - by default, the RawBlob and TOrmMany fields are not included
     // into this set: they must be read specificaly (in order to spare
@@ -3881,64 +3901,81 @@ type
     // - dynamic arrays belong to simple fields: they are sent with other
     // properties content
     // - match inverted NOT_SIMPLE_FIELDS mask
-    property SimpleFields: TOrmPropInfoObjArray read fSimpleFields;
+    property SimpleFields: TOrmPropInfoObjArray
+      read fSimpleFields;
     /// list all fields which can be copied from one TOrm instance to another
     // - match COPIABLE_FIELDS mask, i.e. all fields except oftMany
-    property CopiableFields: TOrmPropInfoObjArray read fCopiableFields;
+    property CopiableFields: TOrmPropInfoObjArray
+      read fCopiableFields;
     /// list all TOrmMany fields of this TOrm
-    property ManyFields: TOrmPropInfoRttiManyObjArray read fManyFields;
+    property ManyFields: TOrmPropInfoRttiManyObjArray
+      read fManyFields;
     /// list all TOrm fields of this TOrm
     // - ready to be used by TOrmTableJson.CreateFromTables()
     // - i.e. the class itself then, all fields of type oftID (excluding oftMany)
-    property JoinedFields: TOrmPropInfoRttiIDObjArray read fJoinedFields;
+    property JoinedFields: TOrmPropInfoRttiIDObjArray
+      read fJoinedFields;
     /// wrapper of all nested TOrm class of this TOrm
     // - ready to be used by TOrmTableJson.CreateFromTables()
     // - i.e. the class itself as JoinedFieldsTable[0], then, all nested
     // TOrm published properties (of type oftID, ergo excluding oftMany)
     // - equals nil if there is no nested TOrm property (i.e. JoinedFields=nil)
-    property JoinedFieldsTable: TOrmClassDynArray read fJoinedFieldsTable;
+    property JoinedFieldsTable: TOrmClassDynArray
+      read fJoinedFieldsTable;
     /// list of all oftBlobDynArray fields of this TOrm
-    property DynArrayFields: TOrmPropInfoRttiDynArrayObjArray read fDynArrayFields;
+    property DynArrayFields: TOrmPropInfoRttiDynArrayObjArray
+      read fDynArrayFields;
     /// TRUE if any of the oftBlobDynArray fields of this TOrm is a T*ObjArray
     // - used e.g. by TOrm.Destroy to release all owned nested instances
-    property DynArrayFieldsHasObjArray: boolean read fDynArrayFieldsHasObjArray;
+    property DynArrayFieldsHasObjArray: boolean
+      read fDynArrayFieldsHasObjArray;
     /// list of all oftBlobCustom fields of this TOrm
     // - have been defined e.g. as TOrmPropInfoCustom custom definition
-    property BlobCustomFields: TOrmPropInfoObjArray read fBlobCustomFields;
+    property BlobCustomFields: TOrmPropInfoObjArray
+      read fBlobCustomFields;
     /// list all BLOB fields of this TOrm
     // - i.e. generic oftBlob fields (not oftBlobDynArray, oftBlobCustom nor
     // oftBlobRecord)
-    property BlobFields: TOrmPropInfoRttiObjArray read fBlobFields;
+    property BlobFields: TOrmPropInfoRttiObjArray
+      read fBlobFields;
     /// all TSynFilter or TSynValidate instances registered per each field
     // - since validation and filtering are used within some CPU-consuming
     // part of the framework (like UI edition), both filters and validation
     // rules are grouped in the same list
-    property Filters: TSynFilterOrValidateObjArrayArray read fFilters;
+    property Filters: TSynFilterOrValidateObjArrayArray
+      read fFilters;
     /// for a TOrmMany class, points to the Source property RTTI
-    property RecordManySourceProp: TOrmPropInfoRttiInstance read fRecordManySourceProp;
+    property RecordManySourceProp: TOrmPropInfoRttiInstance
+      read fRecordManySourceProp;
     /// for a TOrmMany class, points to the Dest property RTTI
-    property RecordManyDestProp: TOrmPropInfoRttiInstance read fRecordManyDestProp;
+    property RecordManyDestProp: TOrmPropInfoRttiInstance
+      read fRecordManyDestProp;
     /// points to any TRecordVersion field
     // - contains nil if no such oftRecordVersion field do exist
     // - will be used by low-level storage engine to compute and store the
     // monotonic version number during any write operation
-    property RecordVersionField: TOrmPropInfoRttiRecordVersion read fRecordVersionField;
+    property RecordVersionField: TOrmPropInfoRttiRecordVersion
+      read fRecordVersionField;
     /// the Table name in the database in uppercase with a final '.'
     // - e.g. 'TEST.' for TOrmTest class
     // - can be used with IdemPChar() for fast check of a table name
-    property SqlTableNameUpperWithDot: RawUtf8 read fSqlTableNameUpperWithDot;
+    property SqlTableNameUpperWithDot: RawUtf8
+      read fSqlTableNameUpperWithDot;
     /// returns 'COL1,COL2' with all COL* set to simple field names
     // - same value as SqlTableSimpleFields[false,false]
     // - this won't change depending on the ORM settings: so it can be safely
     // computed here and not in TOrmModelProperties
     // - used e.g. by TOrm.GetSqlValues
-    property SqlTableSimpleFieldsNoRowID: RawUtf8 read fSqlTableSimpleFieldsNoRowID;
+    property SqlTableSimpleFieldsNoRowID: RawUtf8
+      read fSqlTableSimpleFieldsNoRowID;
     /// returns 'COL1=?,COL2=?' with all BLOB columns names
     // - used e.g. by TRestServerDB.UpdateBlobFields()
-    property SqlTableUpdateBlobFields: RawUtf8 read fSqlTableUpdateBlobFields;
+    property SqlTableUpdateBlobFields: RawUtf8
+      read fSqlTableUpdateBlobFields;
     /// returns 'COL1,COL2' with all BLOB columns names
     // - used e.g. by TRestServerDB.RetrieveBlobFields()
-    property SqlTableRetrieveBlobFields: RawUtf8 read fSqlTableRetrieveBlobFields;
+    property SqlTableRetrieveBlobFields: RawUtf8
+      read fSqlTableRetrieveBlobFields;
   public
     /// bit set to 1 for indicating each TOrmFieldType fields of this TOrm
     FieldBits: array[TOrmFieldType] of TFieldBits;
@@ -3983,93 +4020,21 @@ type
     RTreeCoordBoundaryFields: integer;
   published
     /// the TOrm class
-    property Table: TOrmClass read fTable;
+    property Table: TOrmClass
+      read fTable;
     /// the Table name in the database, associated with this TOrm class
     // - 'TSql' or 'TOrm' chars are trimmed at the beginning of the ClassName
     // - or the ClassName is returned as is, if no 'TSql' or 'TOrm' at first
-    property SqlTableName: RawUtf8 read fSqlTableName;
+    property SqlTableName: RawUtf8
+      read fSqlTableName;
     /// returns 'COL1,COL2' with all COL* set to all field names, including
     // RowID, TRecordVersion and BLOBs
     // - this won't change depending on the ORM settings: so it can be safely
     // computed here and not in TOrmModelProperties
     // - used e.g. by TRest.InternalListJson()
-    property SqlTableRetrieveAllFields: RawUtf8 read fSqlTableRetrieveAllFields;
+    property SqlTableRetrieveAllFields: RawUtf8
+      read fSqlTableRetrieveAllFields;
   end;
-
-  /// how TOrmModel.UriMatch() will compare an URI
-  // - will allow to make a difference about case-sensitivity
-  TRestModelMatch = (
-    rmNoMatch, rmMatchExact, rmMatchWithCaseChange);
-
-  /// the kind of SQlite3 (virtual) table
-  // - TOrmFts3/4/5 will be associated with vFTS3/vFTS4/vFTS5 values,
-  // TOrmRTree/TOrmRTreeInteger with rRTree/rRTreeInteger, any native
-  // SQlite3 table as vSQLite3, and a TOrmVirtualTable*ID as
-  // rCustomForcedID/rCustomAutoID
-  // - a plain TOrm class can be defined as rCustomForcedID (e.g. for
-  // TOrmMany) after registration for an external DB via a call to
-  // VirtualTableExternalRegister() from mormot.orm.sql unit
-  TOrmVirtualKind = (
-    ovkSQLite3, ovkFTS3, ovkFTS4, ovkFTS5, ovkRTree, ovkRTreeInteger,
-    ovkCustomForcedID, ovkCustomAutoID);
-
-  /// pre-computed SQL statements for ORM operations for a given
-  // TOrmModelProperties instance
-  TOrmModelPropertiesSql = record
-    /// the simple field names in a SQL SELECT compatible format: 'COL1,COL2' e.g.
-    // - format is
-    // ! SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
-    // - returns '*' if no field is of RawBlob/TOrmMany kind
-    // - returns 'COL1,COL2' with all COL* set to simple field names if withID is false
-    // - returns 'ID,COL1,COL2' with all COL* set to simple field names if withID is true
-    // - returns 'Table.ID,Table.COL1,Table.COL2' if withTableName and withID are true
-    TableSimpleFields: array[boolean, boolean] of RawUtf8;
-    /// the SQL statement for reading all simple fields and RowID
-    // - to be checked if we may safely call EngineList()
-    SelectAllWithRowID: RawUtf8;
-    /// the SQL statement for reading all simple fields with ID
-    // - to be checked if we may safely call EngineList()
-    SelectAllWithID: RawUtf8;
-    /// the JOINed SQL statement for reading all fields with ID, including
-    // nested TOrm pre-allocated instances
-    // - is '' if there is no nested TOrm
-    SelectAllJoined: RawUtf8;
-    /// the updated simple fields exposed as 'COL1=?,COL2=?'
-    // - excluding ID (but including TCreateTime fields - as used in
-    // TOrmVirtualTableExternal.Update method)
-    // - to be used e.g. for UPDATE statements
-    UpdateSetSimple: RawUtf8;
-    /// all updated fields exposed as 'COL1=?,COL2=?'
-    // - excluding ID (but including TCreateTime fields - as used in
-    // TOrmVirtualTableExternal.Update method)
-    // - to be used e.g. for UPDATE statements
-    UpdateSetAll: RawUtf8;
-    /// all fields, excluding the ID field, exposed as 'COL1,COL2'
-    // - to be used e.g. in TOrmVirtualTableExternal.Insert()
-    InsertSet: RawUtf8;
-  end;
-
-  /// used by TOrmPropertiesMapping.Options for custom field mapping
-  // of a TOrm on an external database process
-  // - rpmAutoMapKeywordFields is set if MapAutoKeywordFields has been defined,
-  // i.e. if field names which may conflict with a keyword should be
-  // automatically mapped to a harmless symbol name
-  // - rpmNoCreateMissingTable will bypass the existing table check, e.g.
-  // to circumvent some specific DB provider or case sensitivity issue on tables
-  // - rpmNoCreateMissingField will bypass the existing field check, e.g.
-  // to circumvent some specific DB provider or case sensitivity issue on fields
-  // - by default, check of missing field name will be case insensitive, unless
-  // the rpmMissingFieldNameCaseSensitive option is set
-  // - rpmQuoteFieldName will quote the field names - to be used e.g. with
-  // FireBird in its Dialect 3
-  // - rpmClearPoolOnConnectionIssue will enable detecting connection loss
-  TOrmPropertiesMappingOptions = set of (
-    rpmAutoMapKeywordFields,
-    rpmNoCreateMissingTable,
-    rpmNoCreateMissingField,
-    rpmMissingFieldNameCaseSensitive,
-    rpmQuoteFieldName,
-    rpmClearPoolOnConnectionIssue);
 
   /// pointer to external database properties for ORM
   // - is used e.g. to allow a "fluent" interface for MapField() method
@@ -4206,83 +4171,56 @@ type
     // - in ORM context, equals nil if the table is internal to SQLite3:
     // ! if Server.Model.Props[TOrmArticle].ExternalDB.ConnectionProperties = nil then
     // !   // this is not an external table, since Init() was not called
-    property ConnectionProperties: TObject read fConnectionProperties;
+    property ConnectionProperties: TObject
+      read fConnectionProperties;
     /// the associated TOrmProperties
-    property Properties: TOrmProperties read fProps;
+    property Properties: TOrmProperties
+      read fProps;
     /// used on the Server side to specify the external DB table name
     // - e.g. for including a schema name or an existing table name, with an
     // OleDB/MSSQL/Oracle/MySQL/PostgreSQL/Jet/SQLite3 backend
     // - equals SqlTableName by default (may be overridden e.g. by mormot.orm.sql's
     // VirtualTableExternalRegister procedure)
-    property TableName: RawUtf8 read fTableName;
+    property TableName: RawUtf8
+      read fTableName;
     /// pre-computed SQL statements for this external TOrm in this model
     // - you can use those SQL statements directly with the external engine
     // - filled if AutoComputeSql was set to true in Init() method
-    property SQL: TOrmModelPropertiesSql read fSql;
+    property SQL: TOrmModelPropertiesSql
+      read fSql;
     /// the ID/RowID customized external field name, if any
     // - is 'ID' by default, since 'RowID' is a reserved column name for some
     // database engines (e.g. Oracle)
     // - can be customized e.g. via
     // ! aModel.Props[TOrmMyExternal].ExternalDB.MapField('ID', 'ExternalID');
-    property RowIDFieldName: RawUtf8 read fRowIDFieldName;
+    property RowIDFieldName: RawUtf8
+      read fRowIDFieldName;
     /// the external field names, following fProps.Props.Field[] order
     // - excluding ID/RowID field, which is stored in RowIDFieldName
-    property ExtFieldNames: TRawUtf8DynArray read fExtFieldNames;
+    property ExtFieldNames: TRawUtf8DynArray
+      read fExtFieldNames;
     /// the unquoted external field names, following fProps.Props.Field[] order
     // - excluding ID/RowID field, which is stored in RowIDFieldName
     // - in respect to ExtFieldNames[], this array will never quote the field name
-    property ExtFieldNamesUnQuotedSQL: TRawUtf8DynArray read fExtFieldNamesUnQuotedSQL;
+    property ExtFieldNamesUnQuotedSQL: TRawUtf8DynArray
+      read fExtFieldNamesUnQuotedSQL;
     /// each bit set, following fProps.Props.Field[]+1 order (i.e. 0=ID,
     // 1=Field[0], ...), indicates that this external field name
     // has not been mapped
-    property FieldNamesMatchInternal: TFieldBits read fFieldNamesMatchInternal;
+    property FieldNamesMatchInternal: TFieldBits
+      read fFieldNamesMatchInternal;
     /// how the mapping process will take place
-    property Options: TOrmPropertiesMappingOptions read fOptions;
+    property Options: TOrmPropertiesMappingOptions
+      read fOptions;
     /// each time MapField/MapFields is called, this number will increase
     // - can be used to track mapping changes in real time
-    property MappingVersion: cardinal read fMappingVersion;
+    property MappingVersion: cardinal
+      read fMappingVersion;
   end;
 
 
 
   { -------------------- TOrmModel TOrmModelProperties Definitions }
-
-  /// used to store the locked record list, in a specified table
-  // - the maximum count of the locked list if fixed to 512 by default,
-  // which seems correct for common usage
-  {$ifdef USERECORDWITHMETHODS}
-  TOrmLocks = record
-  {$else}
-  TOrmLocks = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    /// the number of locked records stored in this object
-    Count: integer;
-    /// contains the locked record ID
-    // - an empty position is marked with 0 after UnLock()
-    IDs: TIDDynArray;
-    /// contains the time and date of the lock
-    // - filled internally by the fast GetTickCount64() function (faster than
-    // TDateTime or TSystemTime/GetLocalTime)
-    // - used to purge to old entries - see PurgeOlderThan() method below
-    Ticks64s: TInt64DynArray;
-    /// lock a record, specified by its ID
-    // - returns true on success, false if was already locked
-    function Lock(aID: TID): boolean;
-    /// unlock a record, specified by its ID
-    // - returns true on success, false if was not already locked
-    function UnLock(aID: TID): boolean;
-    /// return true if a record, specified by its ID, is locked
-    function isLocked(aID: TID): boolean;
-    /// delete all the locked IDs entries, after a specified time
-    // - to be used to release locked records if the client crashed
-    // - default value is 30 minutes, which seems correct for common database usage
-    procedure PurgeOlderThan(MinutesFromNow: cardinal = 30);
-  end;
-
-  POrmLocks = ^TOrmLocks;
-
-  TOrmLocksDynArray = array of TOrmLocks;
 
   /// dynamic array of TOrmModelProperties
   // - used by TOrmModel to store the non-shared information of all its tables
@@ -4344,13 +4282,16 @@ type
     procedure FTS4WithoutContent(ContentTable: TOrmClass);
 
     /// the table index of this TOrm in the associated Model
-    property TableIndex: integer read fTableIndex;
+    property TableIndex: integer
+      read fTableIndex;
     /// direct access to a property RTTI information, by name
-    property Prop[const PropName: RawUtf8]: TOrmPropInfo read GetProp; default;
+    property Prop[const PropName: RawUtf8]: TOrmPropInfo
+      read GetProp; default;
   published
     /// the shared TOrmProperties information of this TOrm
     // - as retrieved from RTTI
-    property Props: TOrmProperties read fProps;
+    property Props: TOrmProperties
+      read fProps;
     /// define if is a normal table ( ovkSQLite3), an FTS/R-Tree virtual
     // table or a custom TOrmVirtualTable*ID (rCustomForcedID/rCustomAutoID)
     // - when set, all internal SQL statements will be (re)created, depending of
@@ -4568,7 +4509,8 @@ type
     /// returns the TSynUniqueIdentifierGenerator associated to a table, if any
     function GetIDGenerator(aTable: TOrmClass): TSynUniqueIdentifierGenerator;
     /// low-level access to the TSynUniqueIdentifierGenerator instances, if any
-    property IDGenerator: TSynUniqueIdentifierGenerators read fIDGenerator;
+    property IDGenerator: TSynUniqueIdentifierGenerators
+      read fIDGenerator;
 
     /// register a Virtual Table module for a specified class
     // - to be called server-side only (Client don't need to know the virtual
@@ -4631,7 +4573,8 @@ type
     property Props[aClass: TOrmClass]: TOrmModelProperties
       read GetTableProps;
     /// get the classes list (TOrm descendent) of all available tables
-    property Tables: TOrmClassDynArray read fTables;
+    property Tables: TOrmClassDynArray
+      read fTables;
     /// get a class from a table name
     // - expects SqlTableName to be SQL-like formated (i.e. without TOrm[Record])
     property Table[const SqlTableName: RawUtf8]: TOrmClass
@@ -4640,28 +4583,33 @@ type
     property TableExact[const TableName: RawUtf8]: TOrmClass
       read GetTableExactClass;
     /// the maximum index of TableProps[] class properties array
-    property TablesMax: integer read fTablesMax;
+    property TablesMax: integer
+      read fTablesMax;
 
     /// returns the Root property, or '' if the instance is nil
     function SafeRoot: RawUtf8;
     /// compute the URI for a class in this Model, as 'ModelRoot/SqlTableName'
     // - set also GetUri/GetUriID/GetUriCallback methods
-    property Uri[aClass: TOrmClass]: RawUtf8 read GetUri;
+    property Uri[aClass: TOrmClass]: RawUtf8
+      read GetUri;
 
     /// this property value is used to auto free the database Model class
     // - set this property after Owner.Create() in order to have
     // Owner.Destroy autofreeing this instance
     // - Owner is typically a TRest or a TRestOrm class
-    property Owner: TObject read fOwner write fOwner;
+    property Owner: TObject
+      read fOwner write fOwner;
     /// for every table, contains a locked record list
     // - very fast, thanks to the use one TOrmLocks entry by table
-    property Locks: TOrmLocksDynArray read fLocks;
+    property Locks: TOrmLocksDynArray
+      read fLocks;
     /// this array contain all TRecordReference and TOrm properties
     // existing in the database model
     // - used in TRestServer.Delete() to enforce relational database coherency
     // after deletion of a record: all other records pointing to it will be
     // reset to 0 or deleted (if CascadeDelete is true)
-    property RecordReferences: TOrmModelReferenceDynArray read fRecordReferences;
+    property RecordReferences: TOrmModelReferenceDynArray
+      read fRecordReferences;
     /// set a callback event to be executed in loop during client remote
     // blocking process, e.g. to refresh the UI during a somewhat long request
     // - will be passed to TRestClientUri.OnIdle property by
@@ -4675,92 +4623,17 @@ type
     // i.e. only alphanumerical characters, excluding e.g. space or '+',
     // otherwise an EModelException is raised
     // - use SafeRoot function is you are not sure that the TOrmModel is not nil
-    property Root: RawUtf8 read fRoot write SetRoot;
+    property Root: RawUtf8
+      read fRoot write SetRoot;
     /// the associated ORM information about all handled TOrm class properties
     // - this TableProps[] array will map the Tables[] array, and will allow
     // fast direct access to the Tables[].OrmProps values
-    property TableProps: TOrmModelPropertiesObjArray read fTableProps;
+    property TableProps: TOrmModelPropertiesObjArray
+      read fTableProps;
   end;
 
 
   { -------------------- TRestCache Definition }
-
-  /// for TRestCache, stores a table values
-  TRestCacheEntryValue = packed record
-    /// corresponding ID
-    ID: TID;
-    /// GetTickCount64 shr 9 timestamp when this cached value was stored
-    // - resulting time period has therefore a resolution of 512 ms, and
-    // overflows after 70 years without computer reboot
-    // - equals 0 when there is no JSON value cached
-    Timestamp512: cardinal;
-    /// some associated unsigned integer value
-    // - not used by TRestCache, but available at TRestCacheEntry level
-    Tag: cardinal;
-    /// JSON encoded UTF-8 serialization of the record
-    Json: RawUtf8;
-  end;
-
-  /// for TRestCache, stores all tables values
-  TRestCacheEntryValueDynArray = array of TRestCacheEntryValue;
-
-  /// for TRestCache, stores a table settings and values
-  {$ifdef USERECORDWITHMETHODS}
-  TRestCacheEntry = record
-  {$else}
-  TRestCacheEntry = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    /// TRUE if this table should use caching
-    // - i.e. if was not set, or worth it for this table (e.g. in-memory table)
-    CacheEnable: boolean;
-    /// the whole specified Table content will be cached
-    CacheAll: boolean;
-    /// time out value (in ms)
-    // - if 0, caching will never expire
-    TimeOutMS: cardinal;
-    /// the number of entries stored in Values[]
-    Count: integer;
-    /// all cached IDs and JSON content
-    Values: TRestCacheEntryValueDynArray;
-    /// TDynArray wrapper around the Values[] array
-    Value: TDynArray;
-    /// used to lock the table cache for multi thread safety
-    Mutex: TRTLCriticalSection;
-    /// initialize this table cache
-    // - will set Value wrapper and Mutex handle - other fields should have
-    // been cleared by caller (is the case for a TRestCacheEntryDynArray)
-    procedure Init;
-    /// reset all settings corresponding to this table cache
-    procedure Clear;
-    /// finalize this table cache entry
-    procedure Done;
-    /// flush cache for a given Value[] index
-    procedure FlushCacheEntry(Index: integer);
-    /// flush cache for all Value[]
-    procedure FlushCacheAllEntries;
-    /// add the supplied ID to the Value[] array
-    procedure SetCache(aID: TID);
-    /// update/refresh the cached JSON serialization of a given ID
-    procedure SetJson(aID: TID; const aJson: RawUtf8;
-      aTag: cardinal = 0); overload;
-    /// update/refresh the cached JSON serialization of a supplied Record
-    procedure SetJson(aRecord: TOrm); overload;
-    /// retrieve a JSON serialization of a given ID from cache
-    function RetrieveJson(aID: TID; var aJson: RawUtf8;
-      aTag: PCardinal = nil): boolean; overload;
-    /// unserialize a JSON cached record of a given ID
-    function RetrieveJson(aID: TID; aValue: TOrm;
-      aTag: PCardinal = nil): boolean; overload;
-    /// compute how much memory stored entries are using
-    // - will also flush outdated entries
-    function CachedMemory(FlushedEntriesCount: PInteger = nil): cardinal;
-  end;
-
-  /// for TRestCache, stores all table settings and values
-  // - this dynamic array will follow TRest.Model.Tables[] layout, i.e. one
-  // entry per TOrm class in the data model
-  TRestCacheEntryDynArray = array of TRestCacheEntry;
 
   /// implement a fast TOrm cache, per ID, at the TRest level
   // - purpose of this caching mechanism is to speed up retrieval of some common
@@ -4844,9 +4717,11 @@ type
     // - this method will also flush any outdated entries in the cache
     function CachedMemory(FlushedEntriesCount: PInteger = nil): cardinal;
     /// read-only access to the associated TRest.ORM instance
-    property Rest: IRestOrm read fRest;
+    property Rest: IRestOrm
+      read fRest;
     /// read-only access to the associated TOrmModel instance
-    property Model: TOrmModel read fModel;
+    property Model: TOrmModel
+      read fModel;
   public { TRest low level methods which are not to be called usualy: }
     /// retrieve a record specified by its ID from cache into JSON content
     // - return '' if the item is not in cache
@@ -5031,24 +4906,33 @@ type
     // - you should not have to call it in normal use cases
     function PrepareForSending(out Data: RawUtf8): boolean; virtual;
     /// read only access to the associated TRest instance
-    property Rest: IRestOrm read fRest;
+    property Rest: IRestOrm
+      read fRest;
     /// read only access to the associated TOrmModel instance
-    property Model: TOrmModel read fModel;
+    property Model: TOrmModel
+      read fModel;
     /// how many times Add() has been called for this BATCH process
-    property AddCount: integer read fAddCount;
+    property AddCount: integer
+      read fAddCount;
     /// how many times Update() has been called for this BATCH process
-    property UpdateCount: integer read fUpdateCount;
+    property UpdateCount: integer
+      read fUpdateCount;
     /// how many times Delete() has been called for this BATCH process
-    property DeleteCount: integer read fDeleteCount;
+    property DeleteCount: integer
+      read fDeleteCount;
     /// this event handler will be triggerred by each Add/Update/Delete method
-    property OnWrite: TOnBatchWrite read fOnWrite write fOnWrite;
+    property OnWrite: TOnBatchWrite
+      read fOnWrite write fOnWrite;
   published
     /// read only access to the main associated TOrm class (if any)
-    property Table: TOrmClass read fTable;
+    property Table: TOrmClass
+      read fTable;
     /// retrieve the current number of pending transactions in the BATCH sequence
-    property Count: integer read GetCount;
+    property Count: integer
+      read GetCount;
     /// retrieve the current JSON size of pending transaction in the BATCH sequence
-    property SizeBytes: cardinal read GetSizeBytes;
+    property SizeBytes: cardinal
+      read GetSizeBytes;
   end;
 
   /// thread-safe class to store a BATCH sequence of writing operations
@@ -5069,11 +4953,14 @@ type
       AutomaticTransactionPerRow: cardinal = 0; Options: TRestBatchOptions = []); override;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
-    property Safe: TSynLocker read fSafe;
+    property Safe: TSynLocker
+      read fSafe;
     /// property set to the current GetTickCount64 value when Reset is called
-    property ResetTix: Int64 read fResetTix write fResetTix;
+    property ResetTix: Int64
+      read fResetTix write fResetTix;
     /// may be used to store a number of rows to flush the content
-    property Threshold: integer read fThreshold write fThreshold;
+    property Threshold: integer
+      read fThreshold write fThreshold;
   end;
 
   TRestBatchLockedDynArray = array of TRestBatchLocked;
@@ -5105,12 +4992,14 @@ type
     // - this value is updated by Validate with the current
     // TRest used for the validation
     // - it can be used in the overridden DoValidate method
-    property ProcessRest: IRestOrm read fProcessRest;
+    property ProcessRest: IRestOrm
+      read fProcessRest;
     /// the associated TOrm instance
     // - this value is updated by Validate with the current
     // TOrm instance to be validated
     // - it can be used in the overridden DoValidate method
-    property ProcessRec: TOrm read fProcessRec;
+    property ProcessRec: TOrm
+      read fProcessRec;
   end;
 
   /// will define a validation for a TOrm Unique text field
@@ -5142,7 +5031,8 @@ type
       aProcessRec: TOrm): boolean; override;
   public
     /// the validated field names
-    property FieldNames: TRawUtf8DynArray read fFieldNames;
+    property FieldNames: TRawUtf8DynArray
+      read fFieldNames;
   end;
 
 
@@ -7792,7 +7682,8 @@ begin
       inc(P);
   // set each property from values using efficient TOrmPropInfo.SetValue()
   if Expect(P, FIELDCOUNT_PATTERN, 14) then
-  begin // not expanded format: read the values directly from the input array
+  begin
+    // not expanded format: read the values directly from the input array
     n := GetNextItemCardinal(P, #0) - 1;
     if cardinal(n) > high(F) then
       exit;
@@ -7810,7 +7701,8 @@ begin
     end;
   end
   else if P^ = '{' then
-  begin // expanded format: check each property name
+  begin
+    // expanded format: check each property name
     inc(P);
     repeat
       Prop := GetJsonPropName(P);
@@ -12338,247 +12230,25 @@ begin
 end;
 
 
-{ TOrmLocks }
-
-function TOrmLocks.isLocked(aID: TID): boolean;
-begin
-  result := (@self <> nil) and
-            (Count <> 0) and
-            (aID <> 0) and
-            Int64ScanExists(pointer(IDs), Count, aID);
-end;
-
-function TOrmLocks.Lock(aID: TID): boolean;
-var
-  P: PInt64;
-begin
-  if (@self = nil) or
-     (aID = 0) then
-    // void or full
-    result := false
-  else
-  begin
-    P := Int64Scan(pointer(IDs), Count, aID);
-    if P <> nil then
-      // already locked
-      result := false
-    else
-    begin
-      // add to ID[] and Ticks[]
-      P := Int64Scan(pointer(IDs), Count, 0);
-      if P = nil then
-      begin
-        // no free entry -> add at the end
-        if Count >= length(IDs) then
-        begin
-          SetLength(IDs, Count + 512);
-          SetLength(Ticks64s, Count + 512);
-        end;
-        IDs[Count] := aID;
-        Ticks64s[Count] := GetTickCount64;
-        inc(Count);
-      end
-      else
-      begin
-        // store at free entry
-        P^ := aID;
-        Ticks64s[(PtrUInt(P) - PtrUInt(IDs)) shr 3] := GetTickCount64;
-      end;
-      result := true;
-    end;
-  end;
-end;
-
-procedure TOrmLocks.PurgeOlderThan(MinutesFromNow: cardinal);
-var
-  LastOK64: Int64;
-  i, LastEntry: PtrInt;
-begin
-  if (@self = nil) or
-     (Count = 0) then
-    exit; // nothing to purge
-  LastOK64 := GetTickCount64 - MinutesFromNow * (1000 * 60); // GetTickCount64() unit is ms
-  LastEntry := -1;
-  for i := 0 to Count - 1 do
-    if IDs[i] <> 0 then
-      if Ticks64s[i] < LastOK64 then // too old?
-        IDs[i] := 0
-      else // 0 frees entry
-        LastEntry := i; // refresh last existing entry
-  Count := LastEntry + 1; // update count (may decrease list length)
-end;
-
-function TOrmLocks.UnLock(aID: TID): boolean;
-var
-  P: PInt64;
-begin
-  if (@self = nil) or
-     (Count = 0) or
-     (aID = 0) then
-    result := false
-  else
-  begin
-    P := Int64Scan(pointer(IDs), Count, aID);
-    if P = nil then
-      result := false
-    else
-    begin
-      P^ := 0; // 0 marks free entry
-      if ((PtrUInt(P) - PtrUInt(IDs)) shr 3 >= PtrUInt(Count - 1)) then
-        dec(Count); // freed last entry -> decrease list length
-      result := true;
-    end;
-  end;
-end;
-
-
 { ------------ TRestCache Definition }
 
-{ TRestCacheEntry }
-
-procedure TRestCacheEntry.Init;
-begin
-  Value.InitSpecific(TypeInfo(TRestCacheEntryValueDynArray),
-    Values, ptInt64, @Count); // will search/sort by first ID: TID field
-  InitializeCriticalSection(Mutex);
-end;
-
-procedure TRestCacheEntry.Done;
-begin
-  DeleteCriticalSection(Mutex);
-end;
-
-procedure TRestCacheEntry.Clear;
-begin
-  EnterCriticalSection(Mutex);
-  try
-    Value.Clear;
-    CacheAll := false;
-    CacheEnable := false;
-    TimeOutMS := 0;
-  finally
-    LeaveCriticalSection(Mutex);
-  end;
-end;
-
-procedure TRestCacheEntry.FlushCacheEntry(Index: integer);
-begin
-  if cardinal(Index) < cardinal(Count) then
-    if CacheAll then
-      Value.FastDeleteSorted(Index)
-    else
-      with Values[Index] do
-      begin
-        Timestamp512 := 0;
-        Json := '';
-        Tag := 0;
-      end;
-end;
-
-procedure TRestCacheEntry.FlushCacheAllEntries;
-var
-  i: PtrInt;
-begin
-  if not CacheEnable then
-    exit;
-  EnterCriticalSection(Mutex);
-  try
-    if CacheAll then
-      Value.Clear
-    else
-      for i := 0 to Count - 1 do
-        with Values[i] do
-        begin
-          Timestamp512 := 0;
-          Json := '';
-          Tag := 0;
-        end;
-  finally
-    LeaveCriticalSection(Mutex);
-  end;
-end;
-
-procedure TRestCacheEntry.SetCache(aID: TID);
-var
-  Rec: TRestCacheEntryValue;
-  i: integer;
-begin
-  EnterCriticalSection(Mutex);
-  try
-    CacheEnable := true;
-    if not CacheAll and
-       not Value.FastLocateSorted(aID, i) and
-       (i >= 0) then
-    begin
-      Rec.ID := aID;
-      Rec.Timestamp512 := 0; // indicates no value cache yet
-      Rec.Tag := 0;
-      Value.FastAddSorted(i, Rec);
-    end; // do nothing if aID is already in Values[]
-  finally
-    LeaveCriticalSection(Mutex);
-  end;
-end;
-
-procedure TRestCacheEntry.SetJson(aID: TID; const aJson: RawUtf8; aTag: cardinal);
-var
-  Rec: TRestCacheEntryValue;
-  i: integer;
-begin
-  Rec.ID := aID;
-  Rec.Json := aJson;
-  Rec.Timestamp512 := GetTickCount64 shr 9;
-  Rec.Tag := aTag;
-  EnterCriticalSection(Mutex);
-  try
-    if Value.FastLocateSorted(Rec, i) then
-      Values[i] := Rec
-    else if CacheAll and
-            (i >= 0) then
-      Value.FastAddSorted(i, Rec);
-  finally
-    LeaveCriticalSection(Mutex);
-  end;
-end;
-
-procedure TRestCacheEntry.SetJson(aRecord: TOrm);
+/// update/refresh the cached JSON serialization of a supplied Record
+procedure CacheSetJson(var Entry: TRestCacheEntry; aRecord: TOrm);
+  {$ifdef HASINLINE} inline; {$endif}
 begin  // ooInsert = include all fields
-  SetJson(aRecord.fID, aRecord.GetJsonValues(true, false, ooInsert));
+  if Entry.CacheEnable then
+    Entry.SetJson(aRecord.fID, aRecord.GetJsonValues(true, false, ooInsert));
 end;
 
-function TRestCacheEntry.RetrieveJson(aID: TID; var aJson: RawUtf8;
-  aTag: PCardinal): boolean;
-var
-  i: PtrInt;
-begin
-  result := false;
-  EnterCriticalSection(Mutex);
-  try
-    i := Value.Find(aID); // fast O(log(n)) binary search by first ID field
-    if i >= 0 then
-      with Values[i] do
-        if Timestamp512 <> 0 then // 0 when there is no JSON value cached
-          if (TimeOutMS <> 0) and
-             ((GetTickCount64 - TimeOutMS) shr 9 > Timestamp512) then
-            FlushCacheEntry(i)
-          else
-          begin
-            if aTag <> nil then
-              aTag^ := Tag;
-            aJson := JSON;
-            result := true; // found a non outdated serialized value in cache
-          end;
-  finally
-    LeaveCriticalSection(Mutex);
-  end;
-end;
-
-function TRestCacheEntry.RetrieveJson(aID: TID; aValue: TOrm;
-  aTag: PCardinal): boolean;
+/// unserialize a JSON cached record of a given ID
+function CacheRetrieveJson(var Entry: TRestCacheEntry; aID: TID; aValue: TOrm;
+  aTag: PCardinal = nil): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 var
   json: RawUtf8;
 begin
-  if RetrieveJson(aID, json, aTag) then
+  if Entry.CacheEnable and
+     Entry.RetrieveJson(aID, json, aTag) then
   begin
     aValue.FillFrom(json);
     aValue.fID := aID; // override RowID field (may be not present after Update)
@@ -12586,36 +12256,6 @@ begin
   end
   else
     result := false;
-end;
-
-function TRestCacheEntry.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
-var
-  i: PtrInt;
-  tix512: cardinal;
-begin
-  result := 0;
-  if CacheEnable and
-     (Count > 0) then
-  begin
-    tix512 := (GetTickCount64 - TimeOutMS) shr 9;
-    EnterCriticalSection(Mutex);
-    try
-      for i := Count - 1 downto 0 do
-        with Values[i] do
-          if Timestamp512 <> 0 then
-            if (TimeOutMS <> 0) and
-               (tix512 > Timestamp512) then
-            begin
-              FlushCacheEntry(i);
-              if FlushedEntriesCount <> nil then
-                inc(FlushedEntriesCount^);
-            end
-            else
-              inc(result, length(JSON) + (SizeOf(TRestCacheEntryValue) + 16));
-    finally
-      LeaveCriticalSection(Mutex);
-    end;
-  end;
 end;
 
 
@@ -12812,7 +12452,7 @@ begin
   try
     while rec.FillOne do
     begin
-      cache^.SetJson(rec);
+      CacheSetJson(cache^, rec);
       inc(result);
     end;
   finally
@@ -12889,9 +12529,7 @@ begin
     exit;
   aTableIndex := fModel.GetTableIndex(POrmClass(aRecord)^);
   if aTableIndex < cardinal(Length(fCache)) then
-    with fCache[aTableIndex] do
-      if CacheEnable then
-        SetJson(aRecord);
+    CacheSetJson(fCache[aTableIndex], aRecord);
 end;
 
 procedure TRestCache.Notify(aTableIndex: integer; aID: TID;
@@ -12964,9 +12602,8 @@ begin
     exit;
   TableIndex := fModel.GetTableIndexExisting(POrmClass(aValue)^);
   if TableIndex < cardinal(Length(fCache)) then
-    with fCache[TableIndex] do
-      if CacheEnable and RetrieveJson(aID, aValue) then
-        result := true;
+    if CacheRetrieveJson(fCache[TableIndex], aID, aValue) then
+      result := true;
 end;
 
 function TRestCache.Retrieve(aTableIndex: integer; aID: TID): RawUtf8;

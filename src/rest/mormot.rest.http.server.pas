@@ -40,6 +40,7 @@ uses
   mormot.core.log,
   mormot.core.interfaces,
   mormot.core.zip,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.soa.core,
