@@ -2522,12 +2522,15 @@ type
   // - rsoHeadersUnFiltered maps THttpServer.HeadersUnFiltered property
   // - rsoCompressSynLZ and rsoCompressGZip enable SynLZ and GZip compression
   // on server side - it should also be enabled for the client
+  // - rsoLogVerbose would include a lot of detailed information, useful only
+  // to debug the low-level server process - to be enabled only when required
   TRestHttpServerOption = (
     rsoOnlyJsonRequests,
     rsoRedirectServerRootUriForExactCase,
     rsoHeadersUnFiltered,
     rsoCompressSynLZ,
-    rsoCompressGZip);
+    rsoCompressGZip,
+    rsoLogVerbose);
 
   /// how to customize TRestHttpServer process
   TRestHttpServerOptions = set of TRestHttpServerOption;
@@ -2616,8 +2619,10 @@ type
   end;
 
 const
-  /// default TRestHttpServer processing options
-  HTTPSERVER_DEFAULT_OPTIONS = [rsoCompressGZip, rsoCompressSynLZ];
+  /// default TRestHttpServer processing options are to support SynLZ and GZip
+  HTTPSERVER_DEFAULT_OPTIONS =
+    [rsoCompressGZip,
+     rsoCompressSynLZ];
 
 
 
@@ -3608,7 +3613,7 @@ begin
           if Method <> mLOCK then
           begin
             // Safe.Lock not available here
-            sqlselect := 'RowID'; // if no select is specified (i.e. ModelRoot/TableName)
+            sqlselect := ROWID_TXT; // if no select is specified (i.e. ModelRoot/TableName)
             // all IDs of this table are returned to the client
             sqltotalrowcount := 0;
             if Parameters <> nil then
