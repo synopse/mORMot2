@@ -4964,7 +4964,7 @@ end;
 
 function SortDynArrayAnsiStringI(const A, B): integer;
 begin
-  result := StrIComp(PUtf8Char(A), PUtf8Char(B));
+  result := StrIComp(PUtf8Char(A), PUtf8Char(B)); // very agressively inlined
 end;
 
 function SortDynArrayPUtf8CharI(const A, B): integer;

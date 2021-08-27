@@ -177,7 +177,7 @@ begin
 end;
 
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
-begin
+begin // is very efficiently inlined by FPC
   result := aTypeInfo^.EnumBaseType.GetEnumNameOrd(aIndex);
 end;
 

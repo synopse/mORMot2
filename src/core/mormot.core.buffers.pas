@@ -1209,7 +1209,8 @@ function Base64uriDecode(sp, rp: PAnsiChar; len: PtrInt): boolean;
 
 /// conversion from a binary buffer into Base58 encoded text as TSynTempBuffer
 // - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
-// - Base58 is much slower than Base64, and should not be used on big buffers
+// - Base58 is much slower than Base64, performing in O(n^2) instead of O(n),
+// and should not be used on big buffers
 // - returns the number of encoded chars encoded into Dest.buf
 // - caller should call Dest.Done once it is finished with the output text
 function BinToBase58(Bin: PAnsiChar; BinLen: integer;
@@ -1217,18 +1218,21 @@ function BinToBase58(Bin: PAnsiChar; BinLen: integer;
 
 /// conversion from a binary buffer into Base58 encoded text as TSynTempBuffer
 // - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
-// - Base58 is much slower than Base64, and should not be used on big buffers
+// - Base58 is much slower than Base64, performing in O(n^2) instead of O(n),
+// and should not be used on big buffers
 function BinToBase58(Bin: PAnsiChar; BinLen: integer): RawUtf8; overload;
 
 /// conversion from a binary buffer into Base58 encoded text as TSynTempBuffer
 // - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
-// - Base58 is much slower than Base64, and should not be used on big buffers
+// - Base58 is much slower than Base64, performing in O(n^2) instead of O(n),
+// and should not be used on big buffers
 function BinToBase58(const Bin: RawByteString): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// conversion from Base58 encoded text into a binary buffer
 // - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
-// - Base58 is much slower than Base64, and should not be used on big buffers
+// - Base58 is much slower than Base64, performing in O(n^2) instead of O(n),
+// and should not be used on big buffers
 // - returns the number of decoded chars encoded into Dest.buf
 // - caller should call Dest.Done once it is finished with the output binary
 function Base58ToBin(B58: PAnsiChar; B58Len: integer;
@@ -2242,7 +2246,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// how many bytes are currently used in the Buffer
     property Len: PtrInt
-      read fLen;
+      read fLen write fLen;
     /// how many bytes are currently allocated in the Buffer
     property Capacity: PtrInt
       read GetCapacity;
@@ -6501,6 +6505,7 @@ begin
     exit;
   len := 0;
   repeat
+    // this loop is O(n2) by definition so BinLen should remain small
     i := 0;
     P2 := PEnd;
     carry := PByte(Bin)^;
@@ -6580,6 +6585,7 @@ begin
     exit;
   end;
   repeat
+    // this loop is O(n2) by definition so B58Len should remain small
     carry := ConvertBase58ToBin[B58^];
     inc(B58);
     if carry < 0 then
