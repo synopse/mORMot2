@@ -5351,8 +5351,7 @@ begin
   TypeName := fPropType^.Name;
   if IdemPropName(TypeName^, 'TID') or
      (ord(TypeName^[1]) and $df <> ord('T')) or // expect T...ID pattern
-     (PWord(@TypeName^[ord(TypeName^[0]) - 1])^ and $dfdf <>
-      ord('I') + ord('D') shl 8) or
+     (PWord(@TypeName^[ord(TypeName^[0]) - 1])^ and $dfdf <> ord('I') + ord('D') shl 8) or
      (Rtti.Counts[rkClass] = 0) then
     exit;
   if (ord(TypeName^[0]) > 13) and
@@ -5461,7 +5460,7 @@ end;
 
 function TOrmPropInfoList.Add(aItem: TOrmPropInfo): integer;
 var
-  f: integer;
+  f: PtrInt;
 begin
   if aItem = nil then
   begin
@@ -5744,11 +5743,15 @@ begin
     if (OrmPropInfoRegistration = nil) or
        not OrmPropInfoRegistration.FindAndCopy(aType, C) then
       case aOrmFieldType of
-        oftUnknown, oftBlobCustom:
+        oftUnknown,
+        oftBlobCustom:
           ; // will raise an EOrmException
-        oftBoolean, oftEnumerate:
+        oftBoolean,
+        oftEnumerate:
           C := TOrmPropInfoRttiEnum;
-        oftTimeLog, oftModTime, oftCreateTime:
+        oftTimeLog,
+        oftModTime,
+        oftCreateTime:
           // specific class for further use
           C := TOrmPropInfoRttiTimeLog;
         oftUnixTime:
@@ -5758,7 +5761,8 @@ begin
           C := TOrmPropInfoRttiUnixMSTime;
         oftCurrency:
           C := TOrmPropInfoRttiCurrency;
-        oftDateTime, oftDateTimeMS:
+        oftDateTime,
+        oftDateTimeMS:
           C := TOrmPropInfoRttiDateTime;
         oftID: // = TOrm(aID)
           C := TOrmPropInfoRttiID;
@@ -5791,9 +5795,11 @@ begin
             C := TOrmPropInfoRttiInt32;
           rkSet:
             C := TOrmPropInfoRttiSet;
-          rkChar, rkWChar:
+          rkChar,
+          rkWChar:
             C := TOrmPropInfoRttiChar;
-          rkInt64 {$ifdef FPC}, rkQWord{$endif}:
+          rkInt64
+          {$ifdef FPC}, rkQWord{$endif}:
             C := TOrmPropInfoRttiInt64;
           rkFloat:
             if aType^.RttiFloat = rfDouble then
@@ -5978,7 +5984,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       else if (ord(Info^.RawName[1]) and $df = ord('T')) and
         // T...ID pattern in type name -> TID
         (PWord(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf =
-         ord('I') + ord('D') shl 8) then
+           ord('I') + ord('D') shl 8) then
       begin
         result := oftTID;
         exit;
@@ -6055,7 +6061,10 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         result := oftUtf8Text; // CP_UTF8,CP_UTF16 and any other to UTF-8 text
         exit;
       end;
-    {$ifdef HASVARUSTRING} rkUString, {$endif} rkChar, rkWChar, rkWString:
+    {$ifdef HASVARUSTRING} rkUString, {$endif}
+    rkChar,
+    rkWChar,
+    rkWString:
       begin
         result := oftUtf8Text;
         exit;
@@ -6711,7 +6720,7 @@ var
   ValueDateTime: TDateTime;
   Ref: RecordRef absolute Value;
 label
-  IsDateTime;
+  dt;
 begin // Text was already forced to '' because was defined as "out" parameter
   if Row = 0 then
   begin // Field Name
@@ -6721,11 +6730,11 @@ begin // Text was already forced to '' because was defined as "out" parameter
   end;
   result := FieldType(Field, info);
   case result of
-    oftDateTime, oftDateTimeMS:
+    oftDateTime,
+    oftDateTimeMS:
       begin
         Value := Iso8601ToTimeLogPUtf8Char(Get(Row, Field), 0);
-IsDateTime:
-        if Value <> 0 then
+dt:     if Value <> 0 then
         begin
           if CustomFormat <> '' then
           begin
@@ -6764,8 +6773,18 @@ IsDateTime:
         on Exception do
           Text := '';
       end;
-    oftEnumerate, oftSet, oftRecord, oftID, oftTID, oftRecordVersion, oftSessionUserID,
-    oftTimeLog, oftModTime, oftCreateTime, oftUnixTime, oftUnixMSTime:
+    oftEnumerate,
+    oftSet,
+    oftRecord,
+    oftID,
+    oftTID,
+    oftRecordVersion,
+    oftSessionUserID,
+    oftTimeLog,
+    oftModTime,
+    oftCreateTime,
+    oftUnixTime,
+    oftUnixMSTime:
       begin
         Value := GetInt64(Get(Row, Field), err);
         if err <> 0 then
@@ -6779,12 +6798,14 @@ IsDateTime:
                 Text := PRttiEnumType(info.ContentTypeInfo)^.GetCaption(Value);
                 exit;
               end;
-            oftTimeLog, oftModTime, oftCreateTime:
-              goto IsDateTime;
+            oftTimeLog,
+            oftModTime,
+            oftCreateTime:
+              goto dt;
             oftUnixTime:
               begin
                 ValueTimeLog.FromUnixTime(Value);
-                goto IsDateTime;
+                goto dt;
               end;
             oftUnixMSTime:
               if Value <> 0 then
@@ -7211,7 +7232,7 @@ end;
 procedure TOrmFill.AddMapSimpleFields(aRecord: TOrm;
   const aProps: array of TOrmPropInfo; var aIndex: integer);
 var
-  i: integer;
+  i: PtrInt;
 begin
   AddMap(aRecord, nil, aIndex);
   inc(aIndex);
@@ -7248,9 +7269,10 @@ begin
     for f := 0 to fTableMapCount - 1 do
       with fTableMap[f] do
       begin
-        D := Dest;
         if aDest <> nil then
-          D := aDest;
+          D := aDest
+        else
+          D := Dest;
         P := Table.GetResults(aRow + TableIndex);
         if DestField = nil then
           SetID(P, D.fID)
@@ -7475,8 +7497,7 @@ begin
         include(result, f);
 end;
 
-constructor TOrm.Create(const aClient: IRestOrm; aID: TID;
-  ForUpdate: boolean);
+constructor TOrm.Create(const aClient: IRestOrm; aID: TID; ForUpdate: boolean);
 begin
   Create;
   if aClient <> nil then
@@ -7550,7 +7571,8 @@ begin
     with OrmProps do
       for f := 0 to Fields.Count - 1 do
         with Fields.List[f] do
-          if (FieldName = '') or IdemPropNameU(FieldName, Name) then
+          if (FieldName = '') or
+             IdemPropNameU(FieldName, Name) then
             if ((aIsUnique in Attributes) and
                 not (itoNoIndex4UniqueField in Options)) or
                ((OrmFieldType = oftRecord) and
@@ -7742,9 +7764,8 @@ begin
   fFill.Map(self, Table, aCheckTableName);
 end;
 
-function TOrm.FillPrepare(const aClient: IRestOrm;
-  const aSqlWhere: RawUtf8; const aCustomFieldsCsv: RawUtf8;
-  aCheckTableName: TOrmCheckTableName): boolean;
+function TOrm.FillPrepare(const aClient: IRestOrm; const aSqlWhere: RawUtf8;
+  const aCustomFieldsCsv: RawUtf8; aCheckTableName: TOrmCheckTableName): boolean;
 var
   T: TOrmTable;
 begin
@@ -7761,9 +7782,8 @@ begin
   result := true;
 end;
 
-function TOrm.FillPrepare(const aClient: IRestOrm;
-  const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8): boolean;
+function TOrm.FillPrepare(const aClient: IRestOrm; const FormatSqlWhere: RawUtf8;
+  const BoundsSqlWhere: array of const; const aCustomFieldsCsv: RawUtf8): boolean;
 var
   sqlwhere: RawUtf8;
 begin
@@ -7771,8 +7791,8 @@ begin
   result := FillPrepare(aClient, sqlwhere, aCustomFieldsCsv);
 end;
 
-function TOrm.FillPrepare(const aClient: IRestOrm;
-  const FormatSqlWhere: RawUtf8; const ParamsSqlWhere, BoundsSqlWhere: array of const;
+function TOrm.FillPrepare(const aClient: IRestOrm; const FormatSqlWhere: RawUtf8;
+  const ParamsSqlWhere, BoundsSqlWhere: array of const;
   const aCustomFieldsCsv: RawUtf8): boolean;
 var
   sqlwhere: RawUtf8;
@@ -8200,7 +8220,8 @@ begin
         result := result + 'rtree(RowID,';
       ovkRTreeInteger:
         result := result + 'rtree_i32(RowID,';
-      ovkCustomForcedID, ovkCustomAutoID:
+      ovkCustomForcedID,
+      ovkCustomAutoID:
         begin
           M := aModel.VirtualTableModule(self);
           if (M = nil) or
@@ -8217,7 +8238,9 @@ begin
     end;
     fields := Props.Props.Fields;
     case Props.Kind of
-      ovkFTS3, ovkFTS4, ovkFTS5:
+      ovkFTS3,
+      ovkFTS4,
+      ovkFTS5:
         begin
           if (Props.fFTSWithoutContentFields <> '') and
              (Props.fFTSWithoutContentTableIndex >= 0) then
@@ -8256,7 +8279,8 @@ begin
           until c = TOrm;
           result := FormatUtf8('% tokenize=%)', [result, tokenizer]);
         end;
-      ovkRTree, ovkRTreeInteger:
+      ovkRTree,
+      ovkRTreeInteger:
         begin
           for i := 0 to fields.Count - 1 do
             with fields.List[i] do
@@ -8267,7 +8291,8 @@ begin
                 result := result + Name + ',';
           result[length(result)] := ')';
         end;
-      ovkCustomForcedID, ovkCustomAutoID:
+      ovkCustomForcedID,
+      ovkCustomAutoID:
         result := result + GetVirtualTableSqlCreate(Props.Props);
     end;
   end
@@ -8333,7 +8358,8 @@ begin
         exit
       else
       begin
-        if HasNotSimpleFields then // get 'COL1,COL2': no 'ID,' for INSERT (false below)
+        if HasNotSimpleFields then
+          // get 'COL1,COL2': no 'ID,' for INSERT (false below)
           result := SqlTableSimpleFieldsNoRowID; // always <> '*'
         result := result + ' VALUES (';
         for i := 0 to length(SimpleFields) - 1 do
@@ -8680,9 +8706,12 @@ var
     while tcIdentifier in TEXT_CHARS[P^] do
       inc(P); // go to end of field name
     FastSetString(result, B, P - B);
-    if (result = '') or IdemPropNameU(result, 'AND') or
-       IdemPropNameU(result, 'OR')  or IdemPropNameU(result, 'LIKE') or
-       IdemPropNameU(result, 'NOT') or IdemPropNameU(result, 'NULL') then
+    if (result = '') or
+       IdemPropNameU(result, 'AND') or
+       IdemPropNameU(result, 'OR')  or
+       IdemPropNameU(result, 'LIKE') or
+       IdemPropNameU(result, 'NOT') or
+       IdemPropNameU(result, 'NULL') then
       exit;
     if not IsRowID(pointer(result)) then
     begin
@@ -10059,7 +10088,7 @@ begin
       [Table, self, Fields.Count, MAX_SQLFIELDS]);
   SetLength(Fields.fList, Fields.Count);
   // generate some internal lookup information
-  fSqlTableRetrieveAllFields := 'ID';
+  fSqlTableRetrieveAllFields := ID_TXT;
   SetLength(fManyFields, MAX_SQLFIELDS);
   SetLength(fSimpleFields, MAX_SQLFIELDS);
   SetLength(fJoinedFields, MAX_SQLFIELDS);
@@ -10123,7 +10152,7 @@ begin
       oftID: // = TOrm(aID)
         if isTOrmMany and
            (IdemPropNameU(F.Name, 'Source') or
-          IdemPropNameU(F.Name, 'Dest')) then
+            IdemPropNameU(F.Name, 'Dest')) then
           goto Small
         else
         begin
@@ -10150,7 +10179,8 @@ begin
           inc(nDynArray);
           goto Simple;
         end;
-      oftBlobCustom, oftUtf8Custom:
+      oftBlobCustom,
+      oftUtf8Custom:
         begin
           BlobCustomFields[nBlobCustom] := F;
           inc(nBlobCustom);
@@ -10161,7 +10191,8 @@ begin
           include(ComputeBeforeAddFieldsBits, i);
           goto Small;
         end;
-      oftModTime, oftSessionUserID:
+      oftModTime,
+      oftSessionUserID:
         begin
           include(ComputeBeforeAddFieldsBits, i);
           include(ComputeBeforeUpdateFieldsBits, i);
@@ -10245,7 +10276,7 @@ end;
 
 function TOrmProperties.BlobFieldPropFromRawUtf8(const PropName: RawUtf8): PRttiProp;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if (self <> nil) and
      (PropName <> '') then
@@ -10261,7 +10292,7 @@ end;
 function TOrmProperties.BlobFieldPropFromUtf8(PropName: PUtf8Char;
   PropNameLen: integer): PRttiProp;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if (self <> nil) and
      (PropName <> '') then
@@ -10422,7 +10453,7 @@ begin
   nf := Length(W.Fields);
   SetLength(W.ColNames, nf + n);
   if W.withID then
-    W.ColNames[0] := 'RowID'; // works for both normal and FTS3 records
+    W.ColNames[0] := ROWID_TXT; // works for both normal and FTS3 records
   for i := 0 to nf - 1 do
   begin
     W.ColNames[n] := Fields.List[W.Fields[i]].Name;
@@ -11133,7 +11164,7 @@ end;
 
 procedure TOrmModel.SetRoot(const aRoot: RawUtf8);
 var
-  i: integer;
+  i: PtrInt;
 begin
   for i := 1 to length(aRoot) do // allow RFC URI + '/' for URI-fragment
     if not (aRoot[i] in ['0'..'9', 'a'..'z', 'A'..'Z', '_', '-', '.', '~', ' ', '/']) then
@@ -11718,7 +11749,7 @@ end;
 
 function TOrmModel.RecordReferenceTable(const Ref: TRecordReference): TOrmClass;
 var
-  i: integer;
+  i: PtrInt;
 begin
   i := Ref and 63;
   if i <= fTablesMax then
@@ -11888,7 +11919,9 @@ var
   expected: TOrmFieldType;
 begin
   case Value of // validates virtual table fields expectations
-    ovkFTS3, ovkFTS4, ovkFTS5:
+    ovkFTS3,
+    ovkFTS4,
+    ovkFTS5:
       begin
         if Props.Fields.Count = 0 then
           raise EModelException.CreateUtf8(
@@ -11899,7 +11932,8 @@ begin
               raise EModelException.CreateUtf8('%.%: FTS field must be RawUtf8',
                 [Props.Table, Name])
       end;
-    ovkRTree, ovkRTreeInteger:
+    ovkRTree,
+    ovkRTreeInteger:
       begin
         Props.RTreeCoordBoundaryFields := 0;
         if Value = ovkRTree then
@@ -11991,7 +12025,7 @@ begin
   fOptions := MappingOptions;
   fAutoComputeSql := AutoComputeSql;
   // setup default values
-  fRowIDFieldName := 'ID';
+  fRowIDFieldName := ID_TXT;
   fProps.Fields.NamesToRawUtf8DynArray(fExtFieldNames);
   fProps.Fields.NamesToRawUtf8DynArray(fExtFieldNamesUnQuotedSQL);
   FillcharFast(fFieldNamesMatchInternal, SizeOf(fFieldNamesMatchInternal), 255);
@@ -12205,7 +12239,7 @@ var
 begin
   i := ExternalToInternalIndex(ExtFieldName);
   if i = -1 then
-    result := 'ID'
+    result := ID_TXT
   else if i >= 0 then
     result := fProps.Fields.List[i].Name
   else

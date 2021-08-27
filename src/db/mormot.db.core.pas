@@ -308,6 +308,10 @@ const
     '???','???',
     'Int64', 'Double', 'Currency', 'TDateTime', 'RawUtf8', 'RawBlob');
 
+var
+  ID_TXT: RawUtf8;
+  ROWID_TXT: RawUtf8;
+
 
 // backward compatibility types redirections
 {$ifndef PUREMORMOT2}
@@ -1231,7 +1235,7 @@ begin
   if FieldName <> nil then
   begin
     f := PInt64(FieldName)^;
-    result := (f and $ffdfdf = (ord('I') + ord('D') shl 8)) or
+    result := (cardinal(f) and $ffdfdf = (ord('I') + ord('D') shl 8)) or
         (f and $ffdfdfdfdfdf = (ord('R') + ord('O') shl 8 + ord('W') shl 16 +
           ord('I') shl 24 + Int64(ord('D')) shl 32))
   end
@@ -2779,6 +2783,8 @@ end;
 
 initialization
   ShortStringToAnsi7String(JSON_SQLDATE_MAGIC_STR, JSON_SQLDATE_MAGIC_TEXT);
+  ID_TXT := 'ID'; // avoid reallocation
+  ROWID_TXT := 'RowID';
 
 end.
 

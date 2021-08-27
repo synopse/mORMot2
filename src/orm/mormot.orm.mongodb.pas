@@ -1395,7 +1395,7 @@ var
           else
           begin
             if Field = 0 then
-              name := 'RowID'
+              name := ROWID_TXT
             else
               name := fStoredClassRecordProps.Fields.List[Field - 1].Name;
             if SubField <> '' then // 'field.subfield1.subfield2'

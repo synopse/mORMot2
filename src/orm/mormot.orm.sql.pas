@@ -827,7 +827,7 @@ begin
           else if not (Field in fStoredClassMapping^.FieldNamesMatchInternal) then
           begin
             if Field = 0 then
-              name := 'ID'
+              name := ID_TXT
             else
               // RowID may be reserved (e.g. for Oracle)
               name := fStoredClassRecordProps.Fields.List[Field - 1].name;

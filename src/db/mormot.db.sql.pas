@@ -4426,7 +4426,7 @@ begin
   if aAddID then
   begin
     FieldID.DBType := ftInt64;
-    FieldID.Name := 'ID';
+    FieldID.Name := ID_TXT;
     FieldID.Unique := true;
     FieldID.NonNullable := true;
     FieldID.PrimaryKey := true;
@@ -7522,6 +7522,6 @@ initialization
   assert(SizeOf(TSqlDBColumnProperty) = sizeof(PtrUInt) * 2 + 20);
   Rtti.RegisterType(TypeInfo(TSqlDBFieldType));
   Rtti.RegisterFromText(TypeInfo(TSqlDBColumnDefine), __TSqlDBColumnDefine);
-  
+
 end.
 

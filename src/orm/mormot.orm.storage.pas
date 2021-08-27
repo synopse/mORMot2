@@ -2998,33 +2998,34 @@ const
   _CALLER: array[boolean] of string[7] = (
     'Json', 'Binary');
 var
-  f, c: PtrInt;
-  cf: RawUtf8;
+  f, dup: PtrInt;
+  dupfield: RawUtf8;
   timer: TPrecisionTimer;
 begin
   // now fValue[] contains the just loaded data
   loaded.Pause;
   timer.Start;
   fCount := length(fValue);
-  c := fValues.ReHash;
-  if c > 0 then
-    cf := 'ID'
+  dup := fValues.ReHash;
+  if dup > 0 then
+    dupfield := ID_TXT
   else
     for f := 0 to high(fUnique) do
       if byte(f) in fIsUnique then
       begin
-        c := fUnique[f].Hasher.ReHash({forced=}true);
-        if c > 0 then
+        dup := fUnique[f].Hasher.ReHash({forced=}true);
+        if dup > 0 then
         begin
-          cf := fUnique[f].PropInfo.Name;
+          dupfield := fUnique[f].PropInfo.Name;
           break;
         end;
       end;
-  if c > 0 then
+  if dup > 0 then
   begin
     DropValues({andupdatefile=}false);
     raise ERestStorage.CreateUtf8('%.LoadFrom%: found % % in %.% field',
-      [self, _CALLER[binary], Plural('duplicate', c), fStoredClass, {%H-}cf]);
+      [self, _CALLER[binary], Plural('duplicate', dup), fStoredClass,
+       {%H-}dupfield]);
   end;
   if binary then
   begin
