@@ -4113,6 +4113,7 @@ end;
 
 procedure TSynLog.NotifyThreadEnded;
 begin
+  CurrentThreadName := ''; // reset threadvar
   if (self = nil) or
      (fThreadContextCount = 0) then
     exit; // nothing to release
