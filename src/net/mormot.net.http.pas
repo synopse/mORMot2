@@ -1181,25 +1181,23 @@ begin
           break; // not enough input
       hrsGetHeaders:
         if ProcessParseLine(st, nil) then
-          // void line indicates end of Headers
           if st.LineLen <> 0 then
+            // Headers end with a void line
             ParseHeader(st.Line, hroHeadersUnfiltered in Options)
           else
-          begin
-            // Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
-            if hfTransferChunked in HeaderFlags then
-              // process chunked body
-              State := hrsGetBodyChunkedHexFirst
-            else if ContentLength > 0 then
-              // regular process with explicit content-length
-              State := hrsGetBodyContentLength
-              // note: old HTTP/1.0 format with no Content-Length is unsupported
-            else
-              // no body
-              State := hrsWaitProcessing;
-          end
+          // Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
+          if hfTransferChunked in HeaderFlags then
+            // process chunked body
+            State := hrsGetBodyChunkedHexFirst
+          else if ContentLength > 0 then
+            // regular process with explicit content-length
+            State := hrsGetBodyContentLength
+            // note: old HTTP/1.0 format with no Content-Length is unsupported
+          else
+            // no body
+            State := hrsWaitProcessing
         else
-          break;
+          break; // not enough input
       hrsGetBodyChunkedHexFirst,
       hrsGetBodyChunkedHexNext:
         if ProcessParseLine(st, nil) then
@@ -1263,7 +1261,7 @@ begin
           begin
             if Content = '' then
             begin
-              if ContentLength > 1 shl 30 then // 1 GB
+              if ContentLength > 1 shl 30 then // 1 GB mem chunk is fair enough
               begin
                 State := hrsErrorPayloadTooLarge; // avoid memory overflow
                 goto fin;
@@ -1287,10 +1285,10 @@ begin
     else
       State := hrsErrorMisuse; // out of context State for input
     end;
-    if (State <> previous) and
+    if Assigned(OnStateChange) and
+       (State <> previous) and
        (State <> hrsGetBodyChunkedHexNext) and
-       (State <> hrsGetBodyChunkedDataVoidLine) and
-       Assigned(OnStateChange) then
+       (State <> hrsGetBodyChunkedDataVoidLine) then
     begin
       State := OnStateChange(previous, @self);
       previous := State;

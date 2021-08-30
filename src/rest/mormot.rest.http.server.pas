@@ -1101,7 +1101,7 @@ var
 begin
   if self = nil then
     exit;
-  if PosEx(TrimU(fDBServerNames), GetCurrentThreadName) = 0 then
+  if CurrentThreadName = '' then
     SetCurrentThreadName('% %% %', [self, fPort, fDBServerNames, Sender]);
   fSafe.Lock; // protect fDBServers[]
   try

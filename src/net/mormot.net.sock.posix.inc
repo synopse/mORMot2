@@ -606,6 +606,7 @@ begin
      (byte(events) = 0) or
      (fCount = fMaxSockets) then
     exit;
+  // "EPOLLET" edge triggered detection is not consistent with select or poll
   e.data.ptr := pointer(tag); // don't use data.u64
   if pseRead in events then
     if pseWrite in events then
@@ -617,14 +618,14 @@ begin
   else
     e.events := 0;
   // EPOLLERR and EPOLLHUP are always implicitly tracked
-  result := epoll_ctl(fEPFD, EPOLL_CTL_ADD, TSocket(socket), @e) = NO_ERROR;
+  result := epoll_ctl(fEPFD, EPOLL_CTL_ADD, TSocket(socket), @e) >= NO_ERROR;
   if result then
     inc(fCount);
 end;
 
 function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
 var
-  e: EPoll_Event; // should be there even if not used
+  e: EPoll_Event; // should be there even if not used (old kernel < 2.6.9)
 begin
   if (self = nil) or
      (socket = nil) or
@@ -632,7 +633,7 @@ begin
     result := false
   else
   begin
-    result := epoll_ctl(fEPFD, EPOLL_CTL_DEL, TSocket(socket), @e) = NO_ERROR;
+    result := epoll_ctl(fEPFD, EPOLL_CTL_DEL, TSocket(socket), @e) >= NO_ERROR;
     if result then
       dec(fCount);
   end;

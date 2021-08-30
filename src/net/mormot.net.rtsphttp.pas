@@ -53,10 +53,9 @@ type
   protected
     fRtspTag: TPollSocketTag;
     // redirect the POST base-64 encoded command to the RTSP socket
-    function OnRead(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
-      override;
+    function OnRead: TPollAsyncSocketOnReadWrite; override;
     // will release the associated TRtspConnection instance
-    procedure BeforeDestroy(Sender: TAsyncConnections); override;
+    procedure BeforeDestroy; override;
   end;
 
   /// holds a RTSP connection for HTTP GET proxy
@@ -65,10 +64,9 @@ type
   protected
     fGetBlocking: TCrtSocket;
     // redirect the RTSP socket input to the GET content
-    function OnRead(Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
-      override;
+    function OnRead: TPollAsyncSocketOnReadWrite; override;
     // will release the associated blocking GET socket
-    procedure BeforeDestroy(Sender: TAsyncConnections); override;
+    procedure BeforeDestroy; override;
   end;
 
 
@@ -132,20 +130,19 @@ implementation
 
 { TRtspConnection }
 
-function TRtspConnection.OnRead(
-  Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
+function TRtspConnection.OnRead: TPollAsyncSocketOnReadWrite;
 begin
-  if acoVerboseLog in Sender.Options then
-    Sender.LogVerbose(self, 'Frame forwarded', fSlot.rd);
+  if acoVerboseLog in fOwner.Options then
+    fOwner.LogVerbose(self, 'Frame forwarded', fSlot.rd);
   if fGetBlocking.TrySndLow(fSlot.rd.Buffer, fSlot.rd.Len) then
   begin
-    Sender.Log.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
+    fOwner.Log.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
       [Handle, fSlot.rd.Len], self);
     result := soContinue;
   end
   else
   begin
-    Sender.Log.Add.Log(sllDebug,
+    fOwner.Log.Add.Log(sllDebug,
       'OnRead % RTSP failed send to GET -> close % connection',
       [Handle, RemoteIP], self);
     result := soClose;
@@ -153,17 +150,16 @@ begin
   fSlot.rd.Reset;
 end;
 
-procedure TRtspConnection.BeforeDestroy(Sender: TAsyncConnections);
+procedure TRtspConnection.BeforeDestroy;
 begin
   fGetBlocking.Free;
-  inherited BeforeDestroy(Sender);
+  inherited BeforeDestroy;
 end;
 
 
 { TPostConnection }
 
-function TPostConnection.OnRead(
-  Sender: TAsyncConnections): TPollAsyncSocketOnReadWrite;
+function TPostConnection.OnRead: TPollAsyncSocketOnReadWrite;
 var
   b64: RawUtf8;
   decoded: RawByteString;
@@ -175,27 +171,27 @@ begin
   if decoded = '' then
     exit; // maybe some pending command chars
   fSlot.rd.Reset;
-  rtsp := Sender.ConnectionFindLocked(fRtspTag);
+  rtsp := fOwner.ConnectionFindLocked(fRtspTag);
   if rtsp <> nil then
   try
-    Sender.Write(rtsp, decoded); // async sending to RTSP server
-    Sender.Log.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
+    fOwner.Write(rtsp, decoded); // async sending to RTSP server
+    fOwner.Log.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
       [Handle, decoded], self);
   finally
-    Sender.Unlock;
+    fOwner.Unlock;
   end
   else
   begin
-    Sender.Log.Add.Log(sllDebug, 'OnRead % POST found no rtsp=%',
+    fOwner.Log.Add.Log(sllDebug, 'OnRead % POST found no rtsp=%',
       [Handle, fRtspTag], self);
     result := soClose;
   end;
 end;
 
-procedure TPostConnection.BeforeDestroy(Sender: TAsyncConnections);
+procedure TPostConnection.BeforeDestroy;
 begin
-  Sender.ConnectionRemove(fRtspTag); // disable associated RTSP and GET sockets
-  inherited BeforeDestroy(Sender);
+  fOwner.ConnectionRemove(fRtspTag); // disable associated RTSP and GET sockets
+  inherited BeforeDestroy;
 end;
 
 
@@ -356,8 +352,8 @@ begin
       raise ERtspOverHttp.CreateUtf8('No RTSP server on %:% (%)',
         [fRtspServer, fRtspPort, ToText(res)^]);
     // create the main POST connection and its associated RTSP connection
-    postconn := TPostConnection.Create(aRemoteIp);
-    rtspconn := TRtspConnection.Create(aRemoteIp);
+    postconn := TPostConnection.Create(self, aRemoteIp);
+    rtspconn := TRtspConnection.Create(self, aRemoteIp);
     if not inherited ConnectionAdd(aSocket, postconn) or
        not inherited ConnectionAdd(rtsp, rtspconn) then
       raise ERtspOverHttp.CreateUtf8('inherited %.ConnectionAdd(%) % failed',
