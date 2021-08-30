@@ -1187,18 +1187,30 @@ var
 begin
   result := '';
   with PSockAddr(@Addr)^ do
-    if sa_family = AF_INET then
-      // check most common used values
-      if cardinal(sin_addr) = 0 then
-        // '0.0.0.0' bound to any host -> ''
-        exit
-      else if cardinal(sin_addr) = cLocalhost32 then
-      begin
-        // '127.0.0.1' loopback -> no memory allocation
-        if not localasvoid then
-          result := IP4local;
+    case sa_family of
+      AF_INET:
+        // check most common used values
+        if cardinal(sin_addr) = 0 then
+          // '0.0.0.0' bound to any host -> ''
+          exit
+        else if cardinal(sin_addr) = cLocalhost32 then
+        begin
+          // '127.0.0.1' loopback -> no memory allocation
+          if not localasvoid then
+            result := IP4local;
+          exit;
+        end;
+      {$ifdef OSPOSIX}
+      AF_UNIX:
+        begin
+          if not localasvoid then
+            result := IP4local;
+          exit;
+        end;
+      {$endif OSPOSIX}
+      else
         exit;
-      end;
+    end;
   IPShort(tmp, {withport=}false);
   if not localasvoid or
      (tmp <> c6Localhost) then
@@ -1940,7 +1952,6 @@ var
   u, s, p, last, n: PtrInt;
   poll: TPollSocketAbstract;
   sock: TNetSocket;
-  res: TNetResult;
   sub: TPollSocketsSubscription; // local copy to avoid nested locks
   new: TPollSocketResults;
 begin
