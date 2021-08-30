@@ -153,6 +153,16 @@ function NeedsJsonEscape(P: PUtf8Char; PLen: integer): boolean; overload;
 function JsonUnicodeEscapeToUtf8(var D: PUtf8Char; P: PUtf8Char): PUtf8Char;
 //  {$ifdef HASINLINE}inline;{$endif}
 
+/// ensure all UTF-8 Unicode glyphs are escaped as \u#### UTF-16 JSON
+// - this will work at raw UTF-8 text level: if your input is true JSON,
+// consider using JsonReformat(s, jsonEscapeUnicode) instead
+function JsonUnicodeEscape(const s: RawUtf8): RawUtf8;
+
+/// ensure all \u#### UTF-16 JSON are decoded into plain UTF-8 content
+// - this will work at raw UTF-8 text level: if your input is true JSON,
+// consider using JsonReformat(s, jsonNoEscapeUnicode) instead
+function JsonUnicodeUnEscape(const s: RawUtf8): RawUtf8;
+
 /// encode one \u#### JSON escaped UTF-16 codepoint into Dest
 procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUint; tab: PByteToWord);
   {$ifdef HASINLINE} inline; {$endif}
@@ -2411,6 +2421,32 @@ begin
   end;
   inc(D);
   result := P + 5;
+end;
+
+procedure JsonDoUniEscape(const s: RawUtf8; var result: RawUtf8; esc: boolean);
+var
+  tmp: TTextWriterStackBuffer;
+begin
+  with TTextWriter.CreateOwnedStream(tmp) do
+    try
+      if esc then
+        AddNoJsonEscapeForcedUnicode(pointer(s), length(s))
+      else
+        AddNoJsonEscapeForcedNoUnicode(pointer(s), length(s));
+      SetText(result);
+    finally
+      Free;
+    end;
+end;
+
+function JsonUnicodeEscape(const s: RawUtf8): RawUtf8;
+begin
+  JsonDoUniEscape(s, result, true);
+end;
+
+function JsonUnicodeUnEscape(const s: RawUtf8): RawUtf8;
+begin
+  JsonDoUniEscape(s, result, false);
 end;
 
 procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUInt; tab: PByteToWord);
