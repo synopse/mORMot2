@@ -406,8 +406,7 @@ type
     function TryJsonToVariant(var Json: PUtf8Char; var Value: variant;
       EndOfObject: PUtf8Char): boolean; override;
     /// variant serialization will use modMongoStrict JSON-compatible mode
-    procedure ToJson(W: TTextWriter; const Value: variant; Escape:
-      TTextWriterKind); override;
+    procedure ToJson(W: TTextWriter; const Value: variant); override;
     /// handle type conversion
     // - only types processed by now are string/OleStr/UnicodeString/date
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
@@ -2053,8 +2052,7 @@ begin
   inherited Create;
 end;
 
-procedure TBsonVariant.ToJson(W: TTextWriter; const Value: variant;
-  Escape: TTextWriterKind);
+procedure TBsonVariant.ToJson(W: TTextWriter; const Value: variant);
 var
   item: TBsonElement;
   temp: RawByteString;

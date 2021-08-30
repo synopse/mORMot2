@@ -236,8 +236,7 @@ type
     function TryJsonToVariant(var Json: PUtf8Char; var Value: variant;
       EndOfObject: PUtf8Char): boolean; virtual;
     /// customization of variant into JSON serialization
-    procedure ToJson(W: TTextWriter; const Value: variant;
-      Escape: TTextWriterKind); virtual;
+    procedure ToJson(W: TTextWriter; const Value: variant); virtual;
     /// clear the content
     // - this default implementation will set VType := varEmpty
     // - override it if your custom type needs to manage its internal memory
@@ -599,8 +598,7 @@ type
     function InternValues: TRawUtf8Interning;
       {$ifdef HASINLINE}inline;{$endif}
     // this implementation will write the content as JSON object or array
-    procedure ToJson(W: TTextWriter; const Value: variant;
-      Escape: TTextWriterKind); override;
+    procedure ToJson(W: TTextWriter; const Value: variant); override;
     /// will check if the value is an array, and return the number of items
     // - if the document is an array, will return the items count (0 meaning
     // void array) - used e.g. by TSynMustacheContextVariant
@@ -3314,8 +3312,7 @@ begin
   result := false;
 end;
 
-procedure TSynInvokeableVariantType.ToJson(W: TTextWriter; const Value: variant;
-  Escape: TTextWriterKind);
+procedure TSynInvokeableVariantType.ToJson(W: TTextWriter; const Value: variant);
 begin
   raise ESynVariant.CreateUtf8('%.ToJson is not implemented', [self]);
 end;
@@ -3409,7 +3406,7 @@ begin
   result := true;
   if FindCustomVariantType(TVarData(Value).VType, v) then
     if v.InheritsFrom(TSynInvokeableVariantType) then
-      TSynInvokeableVariantType(v).ToJson(W, Value, Escape)
+      TSynInvokeableVariantType(v).ToJson(W, Value)
     else
       try
         v.CastTo(TVarData(tmp), TVarData(Value), varNativeString);
@@ -3597,8 +3594,7 @@ begin
   result := dvoReturnNullForUnknownProperty in Data.VOptions; // to avoid error
 end;
 
-procedure TDocVariant.ToJson(W: TTextWriter; const Value: variant;
-  escape: TTextWriterKind);
+procedure TDocVariant.ToJson(W: TTextWriter; const Value: variant);
 var
   ndx: PtrInt;
   vt: cardinal;
@@ -6637,7 +6633,7 @@ begin
   W := TTextWriter.CreateOwnedStream(temp);
   try
     W.AddString(Prefix);
-    DocVariantType.ToJson(W, variant(self), twJsonEscape);
+    DocVariantType.ToJson(W, variant(self));
     W.AddString(Suffix);
     W.SetText(result, Format);
   finally
@@ -6656,7 +6652,7 @@ begin
   try
     W := TTextWriter.Create(F, 65536);
     try
-      DocVariantType.ToJson(W, variant(self), twJsonEscape);
+      DocVariantType.ToJson(W, variant(self));
       W.FlushFinal;
     finally
       W.Free;

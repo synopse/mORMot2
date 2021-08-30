@@ -5840,7 +5840,7 @@ begin
     if vt >= varArray then // complex types are always < varArray
       AddNull
     else if DocVariantType.FindSynVariantType(vt, cv) then // our custom types
-      cv.ToJson(self, Value, Escape)
+      cv.ToJson(self, Value)
     else if not CustomVariantToJson(self, Value, Escape) then // generic CastTo
       raise EJsonException.CreateUtf8('%.AddVariant VType=%', [self, vt]);
   end;

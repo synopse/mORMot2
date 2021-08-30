@@ -2661,8 +2661,7 @@ type
       Name: PAnsiChar; NameLen: PtrInt): boolean; override;
   public
     /// customization of variant into JSON serialization
-    procedure ToJson(W: TTextWriter; const Value: variant;
-      Escape: TTextWriterKind); override;
+    procedure ToJson(W: TTextWriter; const Value: variant); override;
     /// handle type conversion to string
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
     /// handle type conversion to string
@@ -9326,17 +9325,16 @@ begin
   end;
 end;
 
-procedure TOrmTableRowVariant.ToJson(W: TTextWriter; const Value: variant;
-  Escape: TTextWriterKind);
+procedure TOrmTableRowVariant.ToJson(W: TTextWriter; const Value: variant);
 var
-  r: integer;
+  r: PtrInt;
   tmp: variant; // write row via a TDocVariant
 begin
   r := TOrmTableRowVariantData(Value).VRow;
   if r < 0 then
     r := TOrmTableRowVariantData(Value).VTable.fStepRow;
   TOrmTableRowVariantData(Value).VTable.ToDocVariant(r, tmp);
-  W.AddVariant(tmp, Escape);
+  W.AddVariant(tmp, twJsonEscape);
 end;
 
 
