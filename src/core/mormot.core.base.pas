@@ -2536,6 +2536,11 @@ var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// perform a MoveFast then fill the Source buffer with zeros
+// - could be used e.g. to quickly move a managed record content into a newly
+// allocated stack variable with no reference counting
+procedure MoveAndZero(Source, Dest: Pointer; Count: PtrUInt);
+
 /// fill all bytes of a memory buffer with zero
 // - just redirect to FillCharFast(..,...,0)
 procedure FillZero(var dest; count: PtrInt); overload;
@@ -8827,6 +8832,14 @@ end;
 procedure FillZero(var dest; count: PtrInt);
 begin
   FillCharFast(dest, count, 0);
+end;
+
+procedure MoveAndZero(Source, Dest: Pointer; Count: PtrUInt);
+begin
+  if Count = 0 then
+    exit;
+  MoveFast(Source^, Dest^, Count);
+  FillCharFast(Source^, Count, 0);
 end;
 
 procedure FillZeroSmall(P: pointer; Length: PtrInt);
