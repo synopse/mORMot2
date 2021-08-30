@@ -1501,6 +1501,10 @@ function AddInt64Once(var Values: TInt64DynArray; Value: Int64): PtrInt;
 /// if not already existing, add a 64-bit integer value to a sorted dynamic array
 procedure AddInt64Sorted(var Values: TInt64DynArray; Value: Int64);
 
+/// add a pointer-sized integer array at the end of a dynamic array
+function AddPtrUInt(var Values: TPtrUIntDynArray;
+  var ValuesCount: integer; Value: PtrUInt): PtrInt;
+
 /// delete any 32-bit integer in Values[]
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
 
@@ -5954,6 +5958,16 @@ begin
     MoveFast(Another[0], Values[v], a * SizeOf(Int64));
   end;
   result := v + a;
+end;
+
+function AddPtrUInt(var Values: TPtrUIntDynArray;
+  var ValuesCount: integer; Value: PtrUInt): PtrInt;
+begin
+  result := ValuesCount;
+  if result = Length(Values) then
+    SetLength(Values, NextGrow(result));
+  Values[result] := Value;
+  inc(ValuesCount);
 end;
 
 procedure AddInt64Sorted(var Values: TInt64DynArray; Value: Int64);
