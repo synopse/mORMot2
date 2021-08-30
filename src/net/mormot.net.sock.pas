@@ -533,7 +533,7 @@ type
     fLastUnsubscribedTagCount: integer;
     fSubscription: TPollSocketsSubscription;
     fUnsubscribeShouldShutdownSocket: boolean;
-    procedure NoMorePending; virtual;
+    procedure NoMorePending; {$ifdef HASINLINE} inline; {$endif}
   public
     /// initialize the sockets polling
     // - under Linux/POSIX, will set the open files maximum number for the
@@ -1764,7 +1764,8 @@ begin
     SleepHiRes(1);
   for i := 0 to high(fPoll) do
     FreeAndNil(fPoll[i]);
-  if fUnsubscribeShouldShutdownSocket then
+  if fUnsubscribeShouldShutdownSocket and
+     (fSubscription.UnsubscribedCount > 0) then
   begin
     if Assigned(fOnLog) then
       fOnLog(sllTrace, 'Destroy: shutdown UnsubscribedCount=%',
@@ -1847,6 +1848,13 @@ begin
   end;
 end;
 
+procedure TPollSockets.NoMorePending;
+begin
+  fPending.Count := 0; // reuse shared Events[] memory
+  fPendingIndex := 0;
+  fLastUnsubscribedTagCount := 0;
+end;
+
 function TPollSockets.GetOnePending(out notif: TPollSocketResult;
   const call: RawUtf8): boolean;
 var
@@ -1901,13 +1909,6 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   end;
   {$endif HASFASTTRYFINALLY}
-end;
-
-procedure TPollSockets.NoMorePending;
-begin
-  fPending.Count := 0; // reuse shared Events[] memory
-  fPendingIndex := 0;
-  fLastUnsubscribedTagCount := 0;
 end;
 
 function MergePendingEvents(var res: TPollSocketResults; resindex: PtrInt;
@@ -1993,13 +1994,14 @@ begin
             begin
               dec(fCount);
               if fUnsubscribeShouldShutdownSocket then
-                res := sock.ShutdownAndClose({rdwr=}false)
+                sock.ShutdownAndClose({rdwr=}false);
+              {res := sock.ShutdownAndClose(false)
               else
                 res := nrClosed;
               if Assigned(fOnLog) then
                 fOnLog(sllTrace,
                   'PollForPendingEvents Unsubscribe(%) count=% shutdown=%',
-                  [pointer(sock), fCount, ToText(res)^], self);
+                  [pointer(sock), fCount, ToText(res)^], self);}
               sock := nil;
               break;
             end;
@@ -2026,12 +2028,15 @@ begin
             SetLength(fPoll, n + 1);
             fPoll[n] := poll;
           end;
-          if Assigned(fOnLog) then
+          {if Assigned(fOnLog) then
             fOnLog(sllTrace, 'PollForPendingEvents Subscribe(%) count=%',
-              [pointer(sub.Subscribe[s].socket), fCount], self);
+              [pointer(sub.Subscribe[s].socket), fCount], self);}
           with sub.Subscribe[s] do
             if poll.Subscribe(socket, events, tag) then
-              inc(fCount);
+              inc(fCount)
+            else if Assigned(fOnLog) then
+              fOnLog(sllTrace, 'PollForPendingEvents Subscribe(%) failed count=%',
+                [pointer(socket), fCount], self);
         end;
       // eventually do the actual polling
       if fTerminated or
@@ -2149,6 +2154,8 @@ begin
         exit;
       if fPending.Count = 0 then
         PollForPendingEvents({timeoutMS=}0);
+      if fTerminated then
+        exit;
       if GetOnePending(notif, call) then
       begin
         result := true;

@@ -678,6 +678,7 @@ function TPollAsyncReadSockets.PollForPendingEvents(timeoutMS: integer): integer
 begin
   result := inherited PollForPendingEvents(timeoutMS);
   if fPending.Count <> 0 then
+    // don't free any connection while we have pending events
     exit;
   if fGCCount2 > 0 then
     // the actual Free should be done at the second pass of this thread
@@ -768,8 +769,8 @@ begin
   if not fRead.Terminated then
     Terminate(5000);
   ObjArrayClear(fRead.fGC2, {continueonexception=}true, @fRead.fGCCount2);
-  FreeAndNil(fRead);
-  FreeAndNil(fWrite);
+  fRead.Free;
+  fWrite.Free;
   inherited Destroy;
 end;
 
@@ -1302,7 +1303,8 @@ begin
   if acoVerboseLog in fOwner.fOptions then
     fOwner.DoLog(sllTrace, 'OnClose%', [connection], self);
   // unregister from fOwner list and do connection.Free
-  fOwner.ConnectionDelete((connection as TAsyncConnection).Handle);
+  if connection.InheritsFrom(TAsyncConnection) then
+    fOwner.ConnectionDelete(TAsyncConnection(connection).Handle);
 end;
 
 function TAsyncConnectionsSockets.OnError(connection: TObject;
@@ -1319,12 +1321,16 @@ end;
 function TAsyncConnectionsSockets.OnRead(
   connection: TObject): TPollAsyncSocketOnReadWrite;
 var
-  ac: TAsyncConnection;
+  ac: TAsyncConnection absolute connection;
 begin
-  ac := connection as TAsyncConnection;
-  if not (acoNoLogRead in fOwner.Options) then
-    fOwner.DoLog(sllTrace, 'OnRead% len=%', [ac, ac.fSlot.rd.Len], self);
-  result := ac.OnRead;
+  if not connection.InheritsFrom(TAsyncConnection) then
+    result := soClose
+  else
+  begin
+    if not (acoNoLogRead in fOwner.Options) then
+      fOwner.DoLog(sllTrace, 'OnRead% len=%', [ac, ac.fSlot.rd.Len], self);
+    result := ac.OnRead;
+  end;
 end;
 
 function TAsyncConnectionsSockets.SlotFromConnection(
@@ -1367,7 +1373,10 @@ end;
 function TAsyncConnectionsSockets.AfterWrite(
   connection: TObject): TPollAsyncSocketOnReadWrite;
 begin
-  result := (connection as TAsyncConnection).AfterWrite;
+  if connection.InheritsFrom(TAsyncConnection) then
+    result := TAsyncConnection(connection).AfterWrite
+  else
+    result := soClose;
 end;
 
 function TAsyncConnectionsSockets.GetTotal: integer;
@@ -1421,7 +1430,8 @@ begin
           atpReadSingle:
             // a single thread to rule them all: polling, reading and processing
             if fOwner.fClients.fRead.GetOne(30000, n, notif) then
-              fOwner.fClients.ProcessRead(notif);
+              if not Terminated then
+                fOwner.fClients.ProcessRead(notif);
           atpReadPoll:
             // main thread will just fill pending events from socket polls
             // (no process because a faulty service would delay all reading)
@@ -1562,7 +1572,8 @@ begin
       fThreads[i].fEvent.SetEvent;
   end;
   // stop polling and refuse further Write/ConnectionRemove
-  FreeAndNil(fClients);
+  fClients.Free;
+  fClients := nil; // FreeAndNil() sets nil first which is incorrect
   endtix := mormot.core.os.GetTickCount64 + 1000;
   repeat
     n := 0;
