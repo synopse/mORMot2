@@ -1770,10 +1770,17 @@ var
   endtix: Int64; // never wait forever
 begin
   Terminate;
-  endtix := mormot.core.os.GetTickCount64 + 5000;
-  while (fGettingOne > 0) and
-        (mormot.core.os.GetTickCount64 < endtix) do
-    SleepHiRes(1);
+  if fGettingOne > 0 then
+  begin
+    if Assigned(fOnLog) then
+      fOnLog(sllTrace, 'Destroy: wait for fGettingOne=%', [fGettingOne], self);
+    endtix := mormot.core.os.GetTickCount64 + 5000;
+    while (fGettingOne > 0) and
+          (mormot.core.os.GetTickCount64 < endtix) do
+      SleepHiRes(1);
+    if Assigned(fOnLog) then
+      fOnLog(sllTrace, 'Destroy: ended as fGettingOne=%', [fGettingOne], self);
+  end;
   for i := 0 to high(fPoll) do
     FreeAndNil(fPoll[i]);
   if fUnsubscribeShouldShutdownSocket and
@@ -1849,7 +1856,7 @@ begin
     begin
       byte(fnd^.events) := 0; // GetOnePending() will just ignore it
       if Assigned(fOnLog) then
-        fOnLog(sllTrace, 'Unsubscribed(%) reset pending count=%',
+        fOnLog(sllTrace, 'Unsubscribed(%) events:=0 count=%',
           [pointer(fnd^.tag), fPending.Count], self);
     end;
     AddPtrUInt(fLastUnsubscribedTag, fLastUnsubscribedTagCount, tag);
@@ -1995,7 +2002,7 @@ begin
               if Assigned(fOnLog) then
                 fOnLog(sllTrace, 'PollForPendingEvents sub/unsub sock=%',
                   [pointer(sock)], self);
-              sock := nil; // Unsubscribe followed/preceded by Subscribe -> no op
+              sock := nil; // Unsubscribe after/before Subscribe -> no op
               sub.Subscribe[s].socket := nil;
               break;
             end;
@@ -2006,13 +2013,9 @@ begin
               dec(fCount);
               if fUnsubscribeShouldShutdownSocket then
                 sock.ShutdownAndClose({rdwr=}false);
-              {res := sock.ShutdownAndClose(false)
-              else
-                res := nrClosed;
-              if Assigned(fOnLog) then
-                fOnLog(sllTrace,
-                  'PollForPendingEvents Unsubscribe(%) count=% shutdown=%',
-                  [pointer(sock), fCount, ToText(res)^], self);}
+              {if Assigned(fOnLog) then
+                fOnLog(sllTrace, 'PollForPendingEvents Unsubscribe(%) count=%',
+                  [pointer(sock), fCount], self);}
               sock := nil;
               break;
             end;

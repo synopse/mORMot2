@@ -51,8 +51,14 @@ type
     /// the associated TCP connection
     // - equals 0 after TPollAsyncSockets.Stop
     socket: TNetSocket;
-    /// Lock/Unlock R/W thread acquisition (lighter than a TRTLCriticalSection)
+    /// Lock/Unlock R/W thread acquisition
+    // - we first used a simple atomic counter, but it failed on AARCH64 CPU so
+    // standard TRTLCriticalSection is used and was found out fast enough
+    locker: array[boolean] of TRTLCriticalSection;
+    /// current number of nested TryLock/WaitLock calls
     lockcounter: array[boolean] of integer;
+    /// atomically incremented during WaitLock()
+    waitcounter: integer;
     /// flag set by TAsyncConnections.IdleEverySecond to purge rd/wr unused buffers
     // - avoid to call the GetTickCount64 system API for every activity
     wasactive: boolean;
@@ -64,20 +70,25 @@ type
     rd: TRawByteStringBuffer;
     /// the current (reusable) write data buffer of this slot
     wr: TRawByteStringBuffer;
+    /// initialize the locker[] mutexes
+    procedure Init;
+    /// finalize the locker[] mutexes
+    procedure Done;
     /// acquire an exclusive R/W access to this connection
     // - returns true if slot has been acquired, setting the wasactive flag
     // - returns false if it is used by another thread
-    // - warning: this method is not re-entrant
-    function Lock(writer: boolean): boolean;
+    function TryLock(writer: boolean): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// try to acquire an exclusive R/W access to this connection
     // - returns true if slot has been acquired
     // - returns false if it is used by another thread, after the timeoutMS period
-    // - warning: this method is not re-entrant
-    function TryLock(writer: boolean; timeoutMS: cardinal): boolean;
+    function WaitLock(writer: boolean; timeoutMS: cardinal): boolean;
     /// release exclusive R/W access to this connection
     procedure UnLock(writer: boolean);
       {$ifdef HASINLINE} inline; {$endif}
+    /// release all R/W nested locks
+    // - used when the connection is closed and this slot becomes inactive
+    procedure UnLockFinal(writer: boolean);
   end;
 
   /// points to thread-safe information of one TPollAsyncSockets connection
@@ -100,9 +111,9 @@ type
   TPollAsyncReadSockets = class(TPollSockets)
   protected
     fGC, fGC2: TObjectDynArray;
-    fGCCount, fGCCount2: integer;
+    fGCCount, fGCCount2, fGCPass: integer;
   public
-    /// overriden to eventually free the instances as registered by AddGC
+    /// overriden to eventually free the instances as registered by AddGC()
     function PollForPendingEvents(timeoutMS: integer): integer; override;
     /// thread-safe registration of a to-be-freed TObject instance
     // - typically TAsyncConnection instances
@@ -157,7 +168,7 @@ type
     function OnError(connection: TObject; events: TPollSocketEvents): boolean;
       virtual; abstract;
     procedure UnlockSlotAndCloseConnection(slot: PPPollSocketsSlot;
-      var connection: TObject; const caller: shortstring);
+      writer: boolean; var connection: TObject; const caller: shortstring);
   public
     /// initialize the read/write sockets polling
     // - fRead and fWrite TPollSocketsBuffer instances will track pseRead or
@@ -681,8 +692,18 @@ begin
     // don't free any connection while we have pending events
     exit;
   if fGCCount2 > 0 then
-    // the actual Free should be done at the second pass of this thread
+  begin
+    if fGCCount2 < 1000 then
+    begin
+      // a few Free should be done at the 8th pass of this thread
+      inc(fGCPass);
+      if fGCPass and 7 <> 0 then
+        exit;
+    end;
+    if Assigned(fOnLog) then
+      fOnLog(sllTrace, 'PollForPendingEvents: GC=%', [fGCCount2], self);
     ObjArrayClear(fGC2, {continueonexception=}true, @fGCCount2);
+  end;
   if fGCCount > 0 then
   begin
     EnterCriticalSection(fPendingLock);
@@ -706,22 +727,65 @@ end;
 
 { TPollSocketsSlot }
 
-function TPollSocketsSlot.Lock(writer: boolean): boolean;
+procedure TPollSocketsSlot.Init;
 begin
-  result := InterlockedIncrement(lockcounter[writer]) = 1;
-  if result then
-    wasactive := true
+  InitializeCriticalSection(locker[false]);
+  InitializeCriticalSection(locker[true]);
+end;
+
+procedure TPollSocketsSlot.Done;
+var
+  b: boolean;
+begin
+  for b := false to true do
+    if lockcounter[b] >= 0 then
+    begin
+      while lockcounter[b] <> 0 do
+      begin
+        TSynLog.DoLog(sllWarning, 'TPollSocketsSlot(%) Done locked: r=% w=%',
+          [pointer(@self), lockcounter[false], lockcounter[true]], nil);
+        LeaveCriticalSection(locker[b]);
+        dec(lockcounter[b]);
+      end;
+      DeleteCriticalSection(locker[b]);
+      lockcounter[b] := -1; // call DeleteCriticalSection() only once
+    end;
+end;
+
+function TPollSocketsSlot.TryLock(writer: boolean): boolean;
+begin
+  if (socket <> nil) and
+     (lockcounter[writer] = 0) and
+     (TryEnterCriticalSection(locker[writer]) <> 0) then
+  begin
+    wasactive := true;
+    inc(lockcounter[writer]);
+    result := true;
+  end
   else
-    LockedDec32(@lockcounter[writer]);
+    result := false;
 end;
 
-procedure TPollSocketsSlot.Unlock(writer: boolean);
+procedure TPollSocketsSlot.UnLock(writer: boolean);
 begin
-  if @self <> nil then
-    LockedDec32(@lockcounter[writer]);
+  if (@self <> nil) and
+     (lockcounter[writer] > 0) then
+  begin
+    dec(lockcounter[writer]);
+    LeaveCriticalSection(locker[writer]);
+  end;
 end;
 
-function TPollSocketsSlot.TryLock(writer: boolean; timeoutMS: cardinal): boolean;
+procedure TPollSocketsSlot.UnLockFinal(writer: boolean);
+begin
+  while lockcounter[writer] > 0 do
+  begin
+    dec(lockcounter[writer]);
+    LeaveCriticalSection(locker[writer]);
+  end;
+end;
+
+function TPollSocketsSlot.WaitLock(writer: boolean; timeoutMS: cardinal): boolean;
 var
   endtix: Int64;
   ms: integer;
@@ -730,26 +794,29 @@ begin
             (socket <> nil);
   if not result then
     exit; // socket closed
-  result := Lock(writer);
+  result := TryLock(writer);
   if result or
      (timeoutMS = 0) then
     exit; // we acquired the slot, or we don't want to wait
+  InterlockedIncrement(waitcounter);
   endtix := GetTickCount64 + timeoutMS; // never wait forever
   ms := 0;
   repeat
     SleepHiRes(ms);
     ms := ms xor 1; // 0,1,0,1,0,1...
-    if socket = nil then
-      exit; // no socket to lock for
-    result := Lock(writer);
+    if (socket = nil) or
+       closing  then
+      break; // no socket to lock for
+    result := TryLock(writer);
     if result then
     begin
-      result := socket <> nil;
+      result := (socket <> nil) and not closing;
       if not result then
         UnLock(writer);
-      exit; // acquired or socket closed
+      break; // acquired or socket closed
     end;
   until GetTickCount64 >= endtix;
+  InterlockedDecrement(waitcounter);
 end;
 
 
@@ -813,8 +880,6 @@ function TPollAsyncSockets.Stop(connection: TObject): boolean;
 var
   slot: PPollSocketsSlot;
   sock: TNetSocket;
-  endtix: Int64;
-  lock: set of (r, w);
 begin
   result := false;
   if fRead.Terminated or
@@ -827,49 +892,18 @@ begin
       exit;
     sock := slot.socket;
     if fDebugLog <> nil then
-      DoLog('Stop sock=% handle=%',
-        [pointer(sock), TAsyncConnection(connection).Handle]);
+      DoLog('Stop sock=% handle=% r=% w=%',
+        [pointer(sock), TAsyncConnection(connection).Handle,
+         slot.lockcounter[false], slot.lockcounter[true]]);
     if sock <> nil then
-    try
-      slot.socket := nil; // notify ProcessRead/ProcessWrite to abort
+    begin
+      // notify ProcessRead/ProcessWrite to abort
+      slot.socket := nil;
+      // register to unsubscribe for the next PollForPendingEvents() call
       fRead.Unsubscribe(sock, TPollSocketTag(connection));
       if slot.writesubscribed then
         fWrite.Unsubscribe(sock, TPollSocketTag(connection));
       result := true;
-    finally
-      if slot.closing then
-      begin
-        // force acquire the r/w locks
-        slot.lockcounter[false] := 255;
-        slot.lockcounter[true] := 255;
-        if fDebugLog <> nil then
-          DoLog('Stop closing % sock=%', [connection, pointer(sock)]);
-      end
-      else
-      begin
-        // async Stop: wait to acquire the r/w locks
-        if fDebugLog <> nil then
-          DoLog('Stop sock=% wait r=% w=%',
-            [pointer(sock), slot.lockcounter[false], slot.lockcounter[true]]);
-        endtix := GetTickCount64 + 10000;
-        lock := [];
-        repeat
-          if fRead.Terminated then
-            break;
-          // acquire r+w locks to avoid OnClose -> Connection.Free -> GPF
-          if not (r in lock) and
-             slot.Lock(false) then
-            include(lock, r);
-          if not (w in lock) and
-             slot.Lock(true) then
-            include(lock, w);
-          if lock = [r, w] then
-            break;
-          SleepHiRes(0); // 10 microsecs on POSIX
-        until GetTickCount64 >= endtix;
-        if fDebugLog <> nil then
-          DoLog('Stop % lock=% sock=%', [connection, byte(lock), pointer(sock)]);
-      end;
     end;
   finally
     LockedDec32(@fProcessingRead);
@@ -941,7 +975,7 @@ begin
      slot.closing then
     exit;
   LockedInc32(@fProcessingWrite);
-  if slot.TryLock(true, timeout) then // try and wait for another ProcessWrite
+  if slot.WaitLock(true, timeout) then // try and wait for another ProcessWrite
   try
     P := @data;
     previous := slot.wr.Len;
@@ -1006,24 +1040,29 @@ begin
       slot.UnLock({writer=}true)
     else
       // sending or subscription error -> abort
-      UnlockSlotAndCloseConnection(@slot, connection, 'Write() finished');
+      UnlockSlotAndCloseConnection(@slot, true, connection, 'Write() finished');
     LockedDec32(@fProcessingWrite);
   end
   else
   begin
+    // WaitLock() should always work - unless the connection is closing
     if fDebugLog <> nil then
-      DoLog('Write: TryLock failed % %', [connection, fWrite]);
+      DoLog('Write: WaitLock failed % %', [pointer(connection), fWrite]);
     LockedDec32(@fProcessingWrite);
   end;
 end;
 
 procedure TPollAsyncSockets.UnlockSlotAndCloseConnection(slot: PPPollSocketsSlot;
-  var connection: TObject; const caller: shortstring);
+  writer: boolean; var connection: TObject; const caller: shortstring);
 begin
   if fDebugLog <> nil then
     DoLog('UnlockSlotAndCloseConnection: % on slot=% handle=%',
       [caller, slot, TAsyncConnection(connection).Handle]);
   if slot <> nil then
+  begin
+    // first unlock (if needed)
+    slot^.UnLockFinal(writer);
+    // mark as closed (if not already)
     if slot^.closing then
     begin
       // nested Read + Write calls of UnlockSlotAndCloseConnection()
@@ -1033,12 +1072,16 @@ begin
     else
       // Stop() will try to acquire this lock -> notify no need to wait
       slot^.closing := true;
-  try
-    Stop(connection);    // shutdown and set socket:=0 + acquire locks
-    OnClose(connection); // now safe to perform connection.Free
-  except
-    connection := nil;   // user code may be unstable
   end;
+  if connection <> nil then
+    try
+      // set socket := nil and async unsubscribe for next PollForPendingEvents()
+      Stop(connection);
+      // now safe to perform fOwner.ConnectionDelete() for async
+      OnClose(connection);
+    except
+      connection := nil;   // user code may be unstable
+    end;
   if slot <> nil then
     slot^ := nil; // ignore pseClosed and slot.Unlock(false)
 end;
@@ -1067,18 +1110,18 @@ begin
     if pseError in notif.events then
       if not OnError(connection, notif.events) then
       begin
-        UnlockSlotAndCloseConnection(nil, connection, 'ProcessRead error');
+        UnlockSlotAndCloseConnection(nil, false, connection, 'ProcessRead error');
         exit;
       end;
     if pseClosed in notif.events then
     begin
-      UnlockSlotAndCloseConnection(nil, connection, 'ProcessRead close');
+      UnlockSlotAndCloseConnection(nil, false, connection, 'ProcessRead close');
       exit;
     end
     else if pseRead in notif.events then
     begin
       added := 0;
-      if slot.Lock({writer=}false) then
+      if slot.TryLock({writer=}false) then
       // thread-safe read is mandatory since PollForPendingEvents+GetOnePending
       begin
         repeat
@@ -1098,7 +1141,7 @@ begin
             break; // may block, try later
           if res <> nrOk then
           begin
-            UnlockSlotAndCloseConnection(@slot, connection, 'ProcessRead Recv');
+            UnlockSlotAndCloseConnection(@slot, false, connection, 'ProcessRead Recv');
             exit; // socket closed gracefully or unrecoverable error -> abort
           end;
           slot.rd.Append(@temp, recved);
@@ -1110,20 +1153,20 @@ begin
             inc(fReadCount);
             inc(fReadBytes, added);
             if OnRead(connection) = soClose then
-              UnlockSlotAndCloseConnection(@slot, connection, 'OnRead abort');
+              UnlockSlotAndCloseConnection(@slot, false, connection, 'OnRead abort');
           except
-            UnlockSlotAndCloseConnection(@slot, connection, 'ProcessRead except');
+            UnlockSlotAndCloseConnection(@slot, false, connection, 'ProcessRead except');
           end;
         slot.UnLock(false); // UnlockSlotAndCloseConnection may set slot=nil
       end
       else if fDebugLog <> nil then
-        DoLog('ProcessRead: Lock failed % %', [connection, fRead]);
+        DoLog('ProcessRead: TryLock failed % %', [connection, fRead]);
     end;
     if (slot <> nil) and
        (slot.socket <> nil) and
        (pseClosed in notif.events) then
     begin
-      UnlockSlotAndCloseConnection(nil, connection, 'ProcessRead abort');
+      UnlockSlotAndCloseConnection(nil, false, connection, 'ProcessRead abort');
       exit;
     end;
   finally
@@ -1153,7 +1196,7 @@ begin
        (slot.socket = nil) then
       exit;
     res := nrOK;
-    if slot.TryLock({writer=}true, 1000) then // paranoid check
+    if slot.WaitLock({writer=}true, 1000) then // paranoid check
     try
       buflen := slot.wr.Len;
       if buflen <> 0 then
@@ -1223,12 +1266,12 @@ begin
         slot.UnLock(true)
       else
         // sending error or AfterWrite abort
-        UnlockSlotAndCloseConnection(@slot, connection, 'ProcessWrite');
+        UnlockSlotAndCloseConnection(@slot, false, connection, 'ProcessWrite');
     end
     // if already locked (unlikely) -> will try next time
     else if fDebugLog <> nil then
-      DoLog('ProcessWrite: Lock failed % %',
-        [TAsyncConnection(connection).Handle, fWrite]);
+      DoLog('ProcessWrite: WaitLock failed % %',
+        [pointer(connection), fWrite]);
   finally
     LockedDec32(@fProcessingWrite);
   end;
@@ -1251,17 +1294,23 @@ end;
 
 destructor TAsyncConnection.Destroy;
 begin
-  BeforeDestroy;
+  try
+    BeforeDestroy;
+  except
+    // ignore any exception - we have seen random EThreadError on POSIX
+  end;
   inherited Destroy;
 end;
 
 procedure TAsyncConnection.AfterCreate;
 begin
+  fSlot.Init;
 end;
 
 procedure TAsyncConnection.BeforeDestroy;
 begin
   fHandle := 0; // to detect any dangling pointer
+  fSlot.Done;
 end;
 
 procedure TAsyncConnection.OnLastOperationIdle(IdleSeconds: cardinal);
@@ -1273,14 +1322,14 @@ begin
   // after some inactivity, we can safely flush fSlot.rd/wr temporary buffers
   result := 0;
   if (fSlot.rd.Buffer <> nil) and
-     fSlot.Lock({wr=}false) then
+     fSlot.TryLock({wr=}false) then
   begin
     inc(result, fSlot.rd.Capacity); // returns number of bytes released
     fSlot.rd.Clear;
     fSlot.UnLock(false);
   end;
   if (fSlot.wr.Buffer <> nil) and
-     fSlot.Lock({wr=}true) then
+     fSlot.TryLock({wr=}true) then
   begin
     inc(result, fSlot.wr.Capacity);
     fSlot.wr.Clear;
@@ -1299,9 +1348,12 @@ end;
 
 procedure TAsyncConnectionsSockets.OnClose(connection: TObject);
 begin
+  if (connection = nil) or
+     (TAsyncConnection(connection).Handle = 0) then
+    exit;
   // caller did call Stop() before calling OnClose (socket=0)
   if acoVerboseLog in fOwner.fOptions then
-    fOwner.DoLog(sllTrace, 'OnClose%', [connection], self);
+    fOwner.DoLog(sllTrace, 'OnClose %', [connection], self);
   // unregister from fOwner list and do connection.Free
   if connection.InheritsFrom(TAsyncConnection) then
     fOwner.ConnectionDelete(TAsyncConnection(connection).Handle);
@@ -1429,7 +1481,7 @@ begin
         case fProcess of
           atpReadSingle:
             // a single thread to rule them all: polling, reading and processing
-            if fOwner.fClients.fRead.GetOne(30000, n, notif) then
+            if fOwner.fClients.fRead.GetOne(1000, n, notif) then
               if not Terminated then
                 fOwner.fClients.ProcessRead(notif);
           atpReadPoll:
@@ -1534,6 +1586,7 @@ begin
     fClients.fWrite.OnLog := fLog.DoLog;
   end;
   fTempConnectionForSearchPerHandle := fConnectionClass.Create(self, '');
+  fTempConnectionForSearchPerHandle.AfterCreate;
   fOptions := aOptions;
   inherited Create(false, OnStart, OnStop, ProcessName);
   fThreadPoolCount := aThreadPoolCount;
@@ -1625,33 +1678,7 @@ begin
         exit;
     end;
 end;
-{
-var
-  i, n: PtrInt;
-  run: array[byte] of byte;
-begin
-  n := 0;
-  for i := 0 to length(fThreads) - 1 do
-    if fThreads[i].fWaitForReadPending then
-    begin
-      fThreads[i].fEvent.SetEvent;
-      dec(Events);
-      if Events = 0 then
-        exit;
-    end
-    else if (n <= 255) and
-            (fThreads[i].fProcess = atpReadPending) then
-    begin
-      run[n] := i;
-      inc(n);
-    end;
-  if n = 0 then
-    exit;
-  DoLog(sllTrace, 'ThreadPollingWakeup(%) congestion: notify all', [Events], self);
-  for i := 0 to n - 1 do
-    fThreads[run[i]].fEvent.SetEvent;
-end;
-}
+
 procedure TAsyncConnections.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
   const TextArgs: array of const; Instance: TObject);
 begin
@@ -1701,19 +1728,15 @@ end;
 
 function TAsyncConnections.ConnectionDelete(aConnection: TAsyncConnection;
   aIndex: integer): boolean;
-var
-  t: TClass;
-  h: TAsyncConnectionHandle;
 begin
   // caller should have done fConnectionLock.Lock
   try
-    t := PClass(aConnection)^;
-    h := aConnection.Handle;
     fConnections.FastDeleteSorted(aIndex);
-    fClients.fRead.AddGC(aConnection); // will be released after processed
     if acoVerboseLog in fOptions then
-      DoLog(sllTrace, 'ConnectionDelete %.Handle=% count=%',
-        [t, h, fConnectionCount], self);
+      DoLog(sllTrace, 'ConnectionDelete % count=%',
+        [aConnection, fConnectionCount], self);
+    aConnection.fSlot.socket := nil;
+    fClients.fRead.AddGC(aConnection); // will be released after processed
     result := true;
   except
     result := false;
@@ -1764,8 +1787,8 @@ begin
       if aIndex <> nil then
         aIndex^ := i;
     end;
-    if acoVerboseLog in fOptions then
-      DoLog(sllTrace, 'ConnectionFindLocked(%)=%', [aHandle, result], self);
+    //if acoVerboseLog in fOptions then
+    //  DoLog(sllTrace, 'ConnectionFindLocked(%)=%', [aHandle, result], self);
   finally
     if result = nil then
       fConnectionLock.UnLock;
@@ -1943,11 +1966,14 @@ begin
          10, 0, 0, 0, touchandgo) = nrOk then
       touchandgo.ShutdownAndClose(false);
   end;
+  DoLog(sllDebug, 'Destroy before inherited', [], self);
   inherited Destroy;
+  DoLog(sllDebug, 'Destroy before sleep', [], self);
   while not fExecuteFinished and
         (mormot.core.os.GetTickCount64 < endtix) do
     SleepHiRes(1); // wait for Execute to be finalized (unlikely)
   fServer.Free;
+  DoLog(sllDebug, 'Destroy finished', [], self);
 end;
 
 procedure TAsyncServer.Execute;
@@ -2088,9 +2114,13 @@ end;
 procedure THttpAsyncConnection.AfterCreate;
 begin
   fServer := (fOwner as THttpAsyncConnections).fAsyncServer;
-  HttpInit;
-  if fServer.ServerKeepAliveTimeOut > 0 then
-    fKeepAliveTix := GetTickCount64 + fServer.ServerKeepAliveTimeOut;
+  if fServer <> nil then
+  begin
+    HttpInit;
+    if fServer.ServerKeepAliveTimeOut > 0 then
+      fKeepAliveTix := GetTickCount64 + fServer.ServerKeepAliveTimeOut;
+  end;
+  inherited AfterCreate;
 end;
 
 procedure THttpAsyncConnection.BeforeDestroy;
