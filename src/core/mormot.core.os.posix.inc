@@ -1102,6 +1102,19 @@ begin
   {$endif OSLINUX}
 end;
 
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer;
+begin
+  {$ifdef OSLINUX}
+  result := pthread_mutex_trylock(@cs);
+  if result = 0 then // pthread success
+    result := 1
+  else
+    result := 0;
+  {$else}
+  result := FpcCurrentThreadManager.TryEnterCriticalSection(cs);
+  {$endif OSLINUX}
+end;
+
 {$ifdef OSBSDDARWIN}
 
 function fpsysctlhwint(hwid: cint): Int64;
@@ -2389,6 +2402,7 @@ begin
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
     @pthread_mutex_lock := dlsym(pthread, 'pthread_mutex_lock');
     @pthread_mutex_unlock := dlsym(pthread, 'pthread_mutex_unlock');
+    @pthread_mutex_trylock := dlsym(pthread, 'pthread_mutex_trylock');
     {$endif OSLINUX}
   end;
   prod := TrimU(TrimU(StringFromFile('/sys/class/dmi/id/sys_vendor', true)) +

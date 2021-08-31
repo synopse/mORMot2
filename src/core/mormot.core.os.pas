@@ -893,6 +893,7 @@ function FreeEnvironmentStringsW(EnvBlock: PWideChar): BOOL; stdcall;
 function ExpandEnvVars(const aStr: string): string;
 
 /// try to enter a Critical Section (Lock)
+// - returns 1 if the lock was acquired, or 0 if the mutex is already locked
 // - redefined in mormot.core.os to avoid dependency to Windows
 // - under Delphi/Windows, directly call the homonymous Win32 API
 function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer; stdcall;
@@ -1145,6 +1146,7 @@ var
   pthread_self: function: pointer; cdecl;
   pthread_mutex_lock: function(mutex: pointer): integer; cdecl;
   pthread_mutex_unlock: function(mutex: pointer): integer; cdecl;
+  pthread_mutex_trylock: function(mutex: pointer): integer; cdecl;
   pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
 {$else}
   FpcCurrentThreadManager: TThreadManager;
@@ -1196,6 +1198,11 @@ procedure EnterCriticalSection(var cs: TRTLCriticalSection); inline;
 /// leave a Critical Section (UnLock)
 // - defined in mormot.core.os for inlined FpcCurrentThreadManager/pthread call
 procedure LeaveCriticalSection(var cs: TRTLCriticalSection); inline;
+
+/// leave a Critical Section (UnLock)
+// - returns 1 if the lock was acquired, or 0 if the mutex is already locked
+// - defined in mormot.core.os for inlined FpcCurrentThreadManager/pthread call
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer; inline;
 
 {$endif OSWINDOWS}
 
