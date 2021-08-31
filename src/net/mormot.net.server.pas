@@ -483,7 +483,9 @@ type
     fNginxSendFileFrom: array of TFileName;
     fSockPort: RawUtf8;
     fHeaderRetrieveAbortDelay: integer;
+    fExecuteState: THttpServerExecuteState;
     fHeadersUnFiltered: boolean;
+    fExecuteMessage: string;
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
     function OnNginxAllowSend(Context: THttpServerRequestAbstract;
       const LocalFileName: TFileName): boolean;
@@ -513,7 +515,16 @@ type
       KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
       CreateSuspended: boolean = false; aLogVerbose: boolean = false); reintroduce; virtual;
     /// ensure the HTTP server thread is actually bound to the specified port
-    procedure WaitStarted(Seconds: integer = 30); virtual; abstract;
+    // - TCrtSocket.Bind() occurs in the background in the Execute method: you
+    // should call and check this method result just after THttpServer.Create
+    // - initial THttpServer design was to call Bind() within Create, which
+    // works fine on Delphi + Windows, but fails with a EThreadError on FPC/Linux
+    // - raise a EHttpServer if binding failed within the specified period (if
+    // port is free, it would be almost immediate)
+    // - calling this method is optional, but if the background thread didn't
+    // actually bind the port, the server will be stopped and unresponsive with
+    // no explicit error message, until it is terminated
+    procedure WaitStarted(Seconds: integer = 30);
     /// enable NGINX X-Accel internal redirection for STATICFILE_CONTENT_TYPE
     // - will define internally a matching OnSendFile event handler
     // - generating "X-Accel-Redirect: " header, trimming any supplied left
@@ -540,6 +551,9 @@ type
     // - see also NginxSendFileFrom() method
     property OnSendFile: TOnHttpServerSendFile
       read fOnSendFile write fOnSendFile;
+    /// the low-level thread execution thread
+    property ExecuteState: THttpServerExecuteState
+      read fExecuteState write fExecuteState;
   published
     /// the bound TCP port, as specified to Create() constructor
     property SockPort: RawUtf8
@@ -609,10 +623,8 @@ type
     fHttpQueueLength: cardinal;
     fSocketClass: THttpServerSocketClass;
     fThreadRespClass: THttpServerRespClass;
-    fExecuteMessage: string;
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
-    fExecuteState: THttpServerExecuteState;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     procedure InternalHttpServerRespListAdd(resp: THttpServerResp);
@@ -637,17 +649,6 @@ type
       CreateSuspended: boolean = false; aLogVerbose: boolean = false); override;
     /// release all memory and handlers
     destructor Destroy; override;
-    /// ensure the HTTP server thread is actually bound to the specified port
-    // - TCrtSocket.Bind() occurs in the background in the Execute method: you
-    // should call and check this method result just after THttpServer.Create
-    // - initial THttpServer design was to call Bind() within Create, which
-    // works fine on Delphi + Windows, but fails with a EThreadError on FPC/Linux
-    // - raise a EHttpServer if binding failed within the specified period (if
-    // port is free, it would be almost immediate)
-    // - calling this method is optional, but if the background thread didn't
-    // actually bind the port, the server will be stopped and unresponsive with
-    // no explicit error message, until it is terminated
-    procedure WaitStarted(Seconds: integer = 30); override;
     /// access to the main server low-level Socket
     // - it's a raw TCrtSocket, which only need a socket to be bound, listening
     // and accept incoming request
@@ -1553,6 +1554,22 @@ begin
   inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
 end;
 
+procedure THttpServerSocketGeneric.WaitStarted(Seconds: integer);
+var
+  tix: Int64;
+begin
+  tix := mormot.core.os.GetTickCount64 + Seconds * 1000; // never wait forever
+  repeat
+    if Terminated or
+       (fExecuteState in [esRunning, esFinished]) then
+      exit;
+    Sleep(1); // warning: waits typically 1-15 ms on Windows
+    if mormot.core.os.GetTickCount64 > tix then
+      raise EHttpServer.CreateUtf8('%.WaitStarted timeout after % seconds [%]',
+        [self, Seconds, fExecuteMessage]);
+  until false;
+end;
+
 function THttpServerSocketGeneric.GetStat(
   one: THttpServerSocketGetRequestResult): integer;
 begin
@@ -1714,26 +1731,6 @@ begin
   finally
     LeaveCriticalSection(fProcessCS);
   end;
-end;
-
-procedure THttpServer.WaitStarted(Seconds: integer);
-var
-  tix: Int64;
-  ok: boolean;
-begin
-  tix := mormot.core.os.GetTickCount64 + Seconds * 1000; // never wait forever
-  repeat
-    EnterCriticalSection(fProcessCS);
-    ok := Terminated or
-          (fExecuteState in [esRunning, esFinished]);
-    LeaveCriticalSection(fProcessCS);
-    if ok then
-      exit;
-    Sleep(1); // warning: waits typically 1-15 ms on Windows
-    if mormot.core.os.GetTickCount64 > tix then
-      raise EHttpServer.CreateUtf8('%.WaitStarted timeout after % seconds [%]',
-        [self, Seconds, fExecuteMessage]);
-  until false;
 end;
 
 {.$define MONOTHREAD}

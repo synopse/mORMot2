@@ -238,6 +238,7 @@ var
   log: ISynLog;
   sock, get, old: TProxySocket;
   cookie: RawUtf8;
+  parse: THttpServerSocketGetRequestResult;
   res: TNetResult;
   rtsp: TNetSocket;
   i, found: PtrInt;
@@ -263,7 +264,8 @@ begin
       sock.AcceptRequest(aSocket, nil);
       sock.RemoteIP := aRemoteIp;
       sock.CreateSockIn; // faster header process (released below once not needed)
-      if (sock.GetRequest({withBody=}false, {headertix=}0) = grHeaderReceived) and
+      parse := sock.GetRequest({withBody=}false, {headertix=}0);
+      if (parse = grHeaderReceived) and
          (sock.URL <> '') then
       begin
         if log <> nil then
@@ -334,7 +336,9 @@ begin
         end;
       end
       else if log <> nil then
-        log.Log(sllDebug, 'ConnectionCreate: ignored invalid %', [sock], self);
+        log.Log(sllDebug, 'ConnectionCreate: % ignored invalid % % % % %',
+          [ToText(parse)^, sock.Http.Command, sock, sock.Method, sock.URL,
+           sock.HeaderGetText], self);
     finally
       sock.Free;
     end;

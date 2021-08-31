@@ -534,6 +534,7 @@ type
     fSubscription: TPollSocketsSubscription;
     fUnsubscribeShouldShutdownSocket: boolean;
     procedure NoMorePending; {$ifdef HASINLINE} inline; {$endif}
+    function IsValidPending(tag: TPollSocketTag): boolean; virtual;
   public
     /// initialize the sockets polling
     // - under Linux/POSIX, will set the open files maximum number for the
@@ -1874,10 +1875,17 @@ begin
   fLastUnsubscribedTagCount := 0;
 end;
 
+function TPollSockets.IsValidPending(tag: TPollSocketTag): boolean;
+begin
+  result := true;
+end;
+
 function TPollSockets.GetOnePending(out notif: TPollSocketResult;
   const call: RawUtf8): boolean;
 var
   ndx: PtrInt;
+label
+  o1, o2;
 begin
   result := false;
   if fTerminated or
@@ -1898,35 +1906,35 @@ begin
         if (byte(notif.events) <> 0) and // Unsubscribe() may have reset to 0
            ((fLastUnsubscribedTagCount = 0) or
             not PtrUIntScanExists(pointer(fLastUnsubscribedTag),
-              fLastUnsubscribedTagCount, notif.tag)) then
+              fLastUnsubscribedTagCount, notif.tag)) and
+           IsValidPending(notif.tag) then
         begin
           // there is a not-void event to return
           if Assigned(fOnLog) then
             fOnLog(sllTrace, 'GetOnePending(%)=% % #%/%', [call,
              pointer(notif.tag), byte(notif.events), ndx, fPending.Count], self);
           result := true;
-          if ndx = fPending.Count then
-            NoMorePending
-          else
-            fPendingIndex := ndx; // continue with next event
+          fPendingIndex := ndx; // continue with next event
           // quick exit with one notified event
-          {$ifndef HASFASTTRYFINALLY}
-          LeaveCriticalSection(fPendingLock);
-          {$endif HASFASTTRYFINALLY}
-          exit;
+          if ndx = fPending.Count then
+            goto o1
+          else
+            goto o2;
         end;
       until ndx >= fPending.Count;
-      if Assigned(fOnLog) then
+      {if Assigned(fOnLog) then
         fOnLog(sllTrace, 'GetOnePending(%): reset after reached #%/% lastuns=%',
-          [call, ndx, fPending.Count, fLastUnsubscribedTagCount], self);
-      NoMorePending;
-    end;
+          [call, ndx, fPending.Count, fLastUnsubscribedTagCount], self);}
+o1:   fPending.Count := 0; // reuse shared Events[] memory
+      fPendingIndex := 0;
+      fLastUnsubscribedTagCount := 0;
+o2: end;
   {$ifdef HASFASTTRYFINALLY}
   finally
-  {$endif HASFASTTRYFINALLY}
     LeaveCriticalSection(fPendingLock);
-  {$ifdef HASFASTTRYFINALLY}
   end;
+  {$else}
+  LeaveCriticalSection(fPendingLock);
   {$endif HASFASTTRYFINALLY}
 end;
 
@@ -2042,9 +2050,9 @@ begin
             SetLength(fPoll, n + 1);
             fPoll[n] := poll;
           end;
-          {if Assigned(fOnLog) then
+          if Assigned(fOnLog) then
             fOnLog(sllTrace, 'PollForPendingEvents Subscribe(%) count=%',
-              [pointer(sub.Subscribe[s].socket), fCount], self);}
+              [pointer(sub.Subscribe[s].socket), fCount], self);
           with sub.Subscribe[s] do
             if poll.Subscribe(socket, events, tag) then
               inc(fCount)
