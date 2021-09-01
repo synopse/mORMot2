@@ -523,7 +523,6 @@ type
     fPendingIndex: PtrInt;
     fGettingOne: integer;
     fTerminated: boolean;
-    fPollingForPendingEvents: boolean;
     fPollClass: TPollSocketClass;
     fPollLock: TRTLCriticalSection;
     fPendingLock: TRTLCriticalSection;
@@ -586,9 +585,6 @@ type
     // has not been called before shutdown
     property UnsubscribeShouldShutdownSocket: boolean
       read fUnsubscribeShouldShutdownSocket write fUnsubscribeShouldShutdownSocket;
-    /// is set to true when PollForPendingEvents() is running
-    property PollingForPendingEvents: boolean
-      read fPollingForPendingEvents;
     /// the actual polling class used to track socket state changes
     property PollClass: TPollSocketClass
       read fPollClass write fPollClass;
@@ -1828,6 +1824,7 @@ end;
 
 function FindPending(res: PPollSocketResult; n: PtrInt;
   tag: TPollSocketTag): PPollSocketResult;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   if n > 0 then
   begin
@@ -1939,35 +1936,45 @@ o2: end;
 end;
 
 function MergePendingEvents(var res: TPollSocketResults; resindex: PtrInt;
-  const new: TPollSocketResults): integer;
+  new: PPollSocketResult; newcount: integer): integer;
 var
-  i, n: PtrInt;
+  n: PtrInt;
+  exist: PPollSocketResult;
 begin
-  result := 0;
+  result := 0; // returns number of new events to process
   n := res.Count - resindex;
   // here we know that new.Count > 0 and n > 0
   if resindex <> 0 then
-    MoveFast(res.Events[resindex], res.Events[0], n * SizeOf(new.Events[0]));
-  if n + new.Count > length(res.Events) then
-    SetLength(res.Events, n + new.Count);
+    MoveFast(res.Events[resindex], res.Events[0], n * SizeOf(res.Events[0]));
+  if n + newCount > length(res.Events) then
+    SetLength(res.Events, n + newCount + 16); // seldom needed in practice
   // remove any duplicate: PollForPendingEvents() called before GetOnePending()
-  for i := 0 to new.Count - 1 do
-    // O(n*m) is faster than UnSubscribe/Subscribe because n and m are small
-    if FindPending(pointer(res.Events), n, new.Events[i].tag) = nil then
-    begin
-      res.Events[n] := new.Events[i];
-      inc(n);
-      inc(result); // returns number of new events
-    end;
   res.Count := n;
+  repeat
+    // O(n*m) is faster than UnSubscribe/Subscribe because n and m are small
+    exist := FindPending(pointer(res.Events), n, new^.tag);
+    if exist = nil then
+    begin
+      // new event to process
+      res.Events[res.Count] := new^;
+      inc(res.Count);
+      inc(result);
+    end
+    else
+      // merge with existing notification flags
+      exist^.events := exist^.events + new^.events;
+    inc(new);
+    dec(newCount);
+  until newCount = 0;
 end;
 
 function TPollSockets.PollForPendingEvents(timeoutMS: integer): integer;
 var
-  u, s, p, last, n: PtrInt;
+  u, s, p, last, lastcount, n: PtrInt;
   poll: TPollSocketAbstract;
   sock: TNetSocket;
-  sub: TPollSocketsSubscription; // local copy to avoid nested locks
+  // some local variables to avoid nested locks
+  sub: TPollSocketsSubscription;
   new: TPollSocketResults;
 begin
   // by design, this method is called from a single thread
@@ -1977,28 +1984,29 @@ begin
     exit;
   LockedInc32(@fGettingOne);
   try
+    // thread-safe get the pending (un)subscriptions
     last := -1;
     new.Count := 0;
-    sub.SubscribeCount := fSubscription.SubscribeCount;
-    sub.UnsubscribedCount := fSubscription.UnsubscribedCount;
-    if (sub.SubscribeCount <> 0) or
-       (sub.UnsubscribedCount <> 0) then
-    begin
-      EnterCriticalSection(fPendingLock);
-      try
-        if fPending.Count = 0 then
-          new.Events := fPending.Events; // we can reuse the main results array
+    EnterCriticalSection(fPendingLock);
+    try
+      if fPending.Count = 0 then
+        new.Events := fPending.Events; // reuse the main dynamic array
+      sub.SubscribeCount := fSubscription.SubscribeCount;
+      sub.UnsubscribedCount := fSubscription.UnsubscribedCount;
+      if (sub.SubscribeCount <> 0) or
+         (sub.UnsubscribedCount <> 0) then
+      begin
         MoveAndZero(@fSubscription, @sub, SizeOf(fSubscription));
         if Assigned(fOnLog) then
           fOnLog(sllTrace, 'PollForPendingEvents sub=% unsub=%',
             [sub.SubscribeCount, sub.UnsubscribedCount], self);
-      finally
-        LeaveCriticalSection(fPendingLock);
       end;
+    finally
+      LeaveCriticalSection(fPendingLock);
     end;
+    // use fPoll[] to retrieve any pending notifications
     EnterCriticalSection(fPollLock);
     try
-      fPollingForPendingEvents := true;
       // first unsubscribe closed connections
       for u := 0 to sub.UnsubscribedCount - 1 do
       begin
@@ -2008,7 +2016,7 @@ begin
             if sub.Subscribe[s].socket = sock then
             begin
               if Assigned(fOnLog) then
-                fOnLog(sllTrace, 'PollForPendingEvents sub/unsub sock=%',
+                fOnLog(sllTrace, 'PollForPendingEvents sub+unsub sock=%',
                   [pointer(sock)], self);
               sock := nil; // Unsubscribe after/before Subscribe -> no op
               sub.Subscribe[s].socket := nil;
@@ -2032,7 +2040,7 @@ begin
             fOnLog(sllTrace, 'PollForPendingEvents Unsubscribe(%) failed count=%',
               [pointer(sock), fCount], self);
       end;
-      // then subscribe the new connections
+      // then subscribe to the new connections
       for s := 0 to sub.SubscribeCount - 1 do
         if sub.Subscribe[s].socket <> nil then
         begin
@@ -2095,32 +2103,34 @@ begin
           end;
       if last < 0 then
         exit;
-      // WaitForModified() did return some events in new
+      // WaitForModified() did return some events in new local list
       result := new.Count;
-      if Assigned(fOnLog) then
-        fOnLog(sllTrace,
-          'PollForPendingEvents=% in fPoll[%] (subscribed=%) pending=%',
-            [new.Count, last, fPoll[last].Count, fPending.Count], self);
       fPollIndex := last; // next call will continue from fPoll[fPollIndex+1]
       if (result = 0) or
          fTerminated then
         exit;
-      // append the new events to the main fPending
-      EnterCriticalSection(fPendingLock);
-      try
-        if (fPending.Count = 0) or
-           (fPendingIndex = fPending.Count) then
-          fPending := new
-        else
-          result := MergePendingEvents(fPending, fPendingIndex, new);
-        fPendingIndex := 0;
-        new.Events := nil;
-      finally
-        LeaveCriticalSection(fPendingLock);
-      end;
+      lastcount := fPoll[last].Count;
     finally
-      fPollingForPendingEvents := false;
       LeaveCriticalSection(fPollLock);
+    end;
+    // append the new events to the main fPending list
+    EnterCriticalSection(fPendingLock);
+    try
+      if (fPending.Count = 0) or
+         (fPendingIndex = fPending.Count) then
+        fPending := new // atomic list assignment (most common case)
+      else
+        result := MergePendingEvents(fPending, fPendingIndex,
+          pointer(new.Events), new.Count); // avoid duplicates
+      fPendingIndex := 0;
+      new.Events := nil;
+      if (result > 0) and
+         Assigned(fOnLog) then
+        fOnLog(sllTrace,
+          'PollForPendingEvents=% in fPoll[%] (subscribed=%) pending=%',
+            [result, last, lastcount, fPending.Count], self);
+    finally
+      LeaveCriticalSection(fPendingLock);
     end;
   finally
     LockedDec32(@fGettingOne);

@@ -419,7 +419,6 @@ type
     fThreads: array of TAsyncConnectionsThread;
     fThreadReadPoll: TAsyncConnectionsThread;
     fThreadPoolCount: integer;
-//    fThreadPollingCount: integer;
     fLastHandle: integer;
     fLog: TSynLogClass;
     fOptions: TAsyncConnectionsOptions;
@@ -1436,9 +1435,12 @@ begin
       result := @TAsyncConnection(connection).fSlot;
   {$ifdef HASFASTTRYFINALLY}
   except
-    fOwner.DoLog(sllError, 'SlotFromConnection() with dangling pointer %',
-      [pointer(connection)], self);
-    result := nil;
+    on E: Exception do
+    begin
+      fOwner.DoLog(sllError, 'SlotFromConnection() % from dangling pointer %',
+        [E, pointer(connection)], self);
+      result := nil;
+    end;
   end;
   {$endif HASFASTTRYFINALLY}
 end;
@@ -1550,13 +1552,11 @@ begin
                 else
                 begin
                   fWaitForReadPending := false;
-                  //LockedInc32(@fOwner.fThreadPollingCount);
                   while fOwner.fClients.fRead.GetOnePending(notif, n) and
                         not Terminated do
                     fOwner.fClients.ProcessRead(notif);
-                  //if InterlockedDecrement(fOwner.fThreadPollingCount) and 3 = 0 then
-                    // release atpReadPoll lock above
-                    fOwner.fThreadReadPoll.fEvent.SetEvent;
+                  // release atpReadPoll lock above
+                  fOwner.fThreadReadPoll.fEvent.SetEvent;
                 end;
             end;
         else
@@ -1802,19 +1802,18 @@ end;
 function FastFindConnection(Conn: PPointerArray; R: PtrInt; H: integer): PtrInt;
 var
   L, RR: PtrInt;
-  cmp: integer;
+  C: integer;
 begin
   L := 0;
   if 0 <= R then
     repeat
       result := (L + R) shr 1;
-      cmp := TAsyncConnection(Conn[result]).Handle;
-      dec(cmp, H); // 31-bit resolution is fine (we ensured Handle > 0)
-      if cmp = 0 then
+      C := TAsyncConnection(Conn[result]).Handle;
+      if C = H then
         exit;
       RR := result + 1; // compile as 2 branchless cmovc/cmovnc on FPC
       dec(result);
-      if cmp < 0 then
+      if C < H then
         L := RR
       else
         R := result;
