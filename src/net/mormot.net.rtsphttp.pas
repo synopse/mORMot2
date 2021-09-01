@@ -257,8 +257,14 @@ begin
   aConnection := nil;
   get := nil;
   result := false;
-  log := fLog.Enter('ConnectionCreate(%)', [PtrUInt(aSocket)], self);
+  log := fLog.Enter('ConnectionCreate(%)', [pointer(aSocket)], self);
   try
+    {$ifndef OSLINUX}
+    res := aSocket.MakeBlocking; // otherwise sock.GetRequest() fails randomly
+    if (res <> nrOK) and
+       (log <> nil) then
+      log.Log(sllTrace, 'ConnectionCreate MakeBlocking=%', [ToText(res)^], self);
+    {$endif OSLINUX}
     sock := TProxySocket.Create(nil);
     try
       sock.AcceptRequest(aSocket, nil);
@@ -336,7 +342,7 @@ begin
         end;
       end
       else if log <> nil then
-        log.Log(sllDebug, 'ConnectionCreate: % ignored invalid % % % % %',
+        log.Log(sllDebug, 'ConnectionCreate rejected % % % % % %',
           [ToText(parse)^, sock.Http.Command, sock, sock.Method, sock.URL,
            sock.HeaderGetText], self);
     finally
@@ -377,11 +383,11 @@ begin
     if log <> nil then
       log.Log(sllTrace,
         'ConnectionCreate added get=% post=%/% and rtsp=%/% for %',
-        [PtrUInt(rtspconn.fGetBlocking.Sock), PtrUInt(aSocket), aConnection.Handle,
-         PtrUInt(rtsp), rtspconn.Handle, cookie], self);
+        [pointer(rtspconn.fGetBlocking.Sock), pointer(aSocket), aConnection.Handle,
+         pointer(rtsp), rtspconn.Handle, cookie], self);
   except
     if log <> nil then
-      log.Log(sllDebug, 'ConnectionCreate(%) failed', [PtrUInt(aSocket)], self);
+      log.Log(sllDebug, 'ConnectionCreate(%) failed', [pointer(aSocket)], self);
     get.Free;
   end;
 end;
