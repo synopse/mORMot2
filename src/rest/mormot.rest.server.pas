@@ -3090,8 +3090,8 @@ begin
   fakeid := GetInteger(GetJsonField(Par, Par)); // GetInteger returns a PtrInt
   if Par = nil then
     Par := @NULCHAR; // allow e.g. '[12345]'
-  if (fakeid=0) or
-     (ParamInterfaceInfo=TypeInfo(IInvokable)) then
+  if (fakeid = 0) or
+     (ParamInterfaceInfo.Info = TypeInfo(IInvokable)) then
   begin
     pointer(Obj) := pointer(fakeid); // Obj = IInvokable(fakeid)
     exit;
