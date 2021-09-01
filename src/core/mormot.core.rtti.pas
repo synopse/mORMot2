@@ -6618,10 +6618,9 @@ begin
     fValueRtlClass := vcException;
   // register the published properties of this class
   fProps.AddFromClass(aInfo, {includeparents=}true);
-  if fProps.Count = 0 then
-    if fValueRtlClass = vcException then
-      // manual registration of the Exception.Message property
-      fProps.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
+  if fValueRtlClass = vcException then
+    // manual registration of the Exception.Message property
+    fProps.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
 end;
 
 constructor TRttiCustom.Create(aInfo: PRttiInfo);

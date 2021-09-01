@@ -462,6 +462,9 @@ type
   TCollectionClass = class of TCollection;
   TCollectionItemClass = class of TCollectionItem;
   ExceptionClass = class of Exception;
+  {$M+}
+  ExceptionWithProps = class(Exception); // not as good as ESynException
+  {$M-}
 
 type
   /// stack-allocated ASCII string, used by GuidToShort() function

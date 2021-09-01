@@ -66,10 +66,10 @@ uses
 
 type
   /// exception class raised by this unit
-  EOpenSsl = class(Exception)
+  EOpenSsl = class(ExceptionWithProps)
   protected
     fLastError: integer;
-    fLastErrorMsg: RawUtf8;
+    function GetOpenSsl: string;
     class procedure CheckFailed(caller: TObject; const method: string;
       res: integer; errormsg: PRawUtf8);
   public
@@ -82,12 +82,13 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// raise the exception if OpenSslIsAvailable if false
     class procedure CheckAvailable(caller: TClass; const method: string);
+  published
     /// the last error code from OpenSSL, after Check() failure
     property LastError: integer
       read fLastError;
-    /// the last error message text from OpenSSL, after Check() failure
-    property LastErrorMsg: RawUtf8
-      read fLastErrorMsg;
+    /// returns the OpenSslVersionHexa value
+    property OpenSsl: string
+      read GetOpenSsl;
   end;
 
 
@@ -157,6 +158,9 @@ var
   /// numeric OpenSSL library version loaded e.g. after OpenSslIsAvailable call
   // - equals e.g. $1010106f
   OpenSslVersion: cardinal;
+  /// hexadecimal OpenSSL library version loaded e.g. after OpenSslIsAvailable call
+  // - equals e.g. '1010106F'
+  OpenSslVersionHexa: string;
 
 {$ifndef OPENSSLSTATIC}
   /// internal flag used by OpenSslIsAvailable function for dynamic loading
@@ -2278,9 +2282,10 @@ begin
         raise EOpenSsl.Create('CRYPTO_set_mem_functions() failure');
       {$endif OPENSSLUSERTLMM}
       OpenSslVersion := libcrypto.OpenSSL_version_num;
+      OpenSslVersionHexa := IntToHex(OpenSslVersion, 8);
       if OpenSslVersion and $ffffff00 < $10101000 then // paranoid check 1.1.1
         raise EOpenSsl.CreateFmt('Incorrect OpenSSL version %x in %s - expects' +
-          ' >= 101010xx (1.1.1.x)', [libcrypto.LibraryPath, OpenSslVersion]);
+          ' >= 101010xx (1.1.1.x)', [OpenSslVersion, libcrypto.LibraryPath]);
     except
       FreeAndNil(libssl);
       FreeAndNil(libcrypto);
@@ -3046,7 +3051,6 @@ begin
     exc := CreateFmt('%s.%s: OpenSSL error %d [%s]',
       [ClassNameShort(caller)^, method, res, msg]);
   exc.fLastError := res;
-  exc.fLastErrorMsg := msg;
   raise exc;
 end;
 
@@ -3059,6 +3063,11 @@ begin
     else
       raise CreateFmt('%s.%s: OpenSSL 1.1.1 is not available',
         [ClassNameShort(caller)^, method]);
+end;
+
+function EOpenSsl.GetOpenSsl: string;
+begin
+  result := OpenSslVersionHexa;
 end;
 
 

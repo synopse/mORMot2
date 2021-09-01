@@ -1144,7 +1144,7 @@ type
   /// exception raised during http.sys HTTP/1.1 process
   EHttpApiServer = class(ENetSock)
   protected
-    fLastError: integer;
+    fLastApiError: integer;
     fLastApi: THttpApis;
   public
     /// raise an EHttpApiServer if the http.sys API result code is an error
@@ -1153,8 +1153,8 @@ type
     constructor Create(api: THttpApis; Error: integer); reintroduce;
   published
     /// the error code of this exception
-    property LastError: integer
-      read fLastError;
+    property LastApiError: integer
+      read fLastApiError;
     /// the execution context of this exception
     property LastApi: THttpApis
       read fLastApi;
@@ -1945,10 +1945,11 @@ end;
 
 constructor EHttpApiServer.Create(api: THttpApis; Error: integer);
 begin
-  fLastError := Error;
+  fLastError := nrFatalError;
+  fLastApiError := Error;
   fLastApi := api;
-  inherited CreateFmt('%s failed: %s (%d)', [HttpNames[api],
-    SysErrorMessagePerModule(Error, HTTPAPI_DLL), Error])
+  inherited CreateFmt('%s failed: %s (%d=0x%x)', [HttpNames[api],
+    SysErrorMessagePerModule(Error, HTTPAPI_DLL), Error, Error])
 end;
 
 

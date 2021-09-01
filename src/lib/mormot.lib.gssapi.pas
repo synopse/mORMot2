@@ -239,7 +239,7 @@ type
   end;
 
   /// Exception raised during gssapi library process
-  EGssApi = class(Exception)
+  EGssApi = class(ExceptionWithProps)
   private
     fMajorStatus: cardinal;
     fMinorStatus: cardinal;
@@ -247,6 +247,7 @@ type
     /// initialize an gssapi library exception with the proper error message
     constructor Create(aMajorStatus, aMinorStatus: cardinal;
       const aPrefix: string);
+  published
     /// associated GSS_C_GSS_CODE state value
     property MajorStatus: cardinal
       read fMajorStatus;
