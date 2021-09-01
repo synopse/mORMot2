@@ -1495,6 +1495,11 @@ function OemToFileName(const oem: RawByteString): TFileName;
 // - on POSIX, will use Writeln(StdErr)
 procedure DisplayFatalError(const title, msg: RawUtf8);
 
+/// prompt the user for an error message to notify an unexpected issue
+// - redirect to DisplayFatalError without any title
+// - expects the regular Format() layout with %s %d - not the FormatUtf8() %
+procedure DisplayError(const fmt: string; const args: array of const);
+
 const
   /// operating-system dependent Line Feed characters
   {$ifdef OSWINDOWS}
@@ -3118,6 +3123,14 @@ end;
 function ValidHandle(Handle: THandle): boolean;
 begin
   result := PtrInt(Handle) > 0;
+end;
+
+procedure DisplayError(const fmt: string; const args: array of const);
+var
+  msg: string;
+begin
+  msg := Format(fmt, args);
+  DisplayFatalError('', RawUtf8(msg));
 end;
 
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;

@@ -963,9 +963,13 @@ end;
 
 {$I-}
 procedure DisplayFatalError(const title, msg: RawUtf8);
+var
+  err: ^Text;
 begin
-  writeln(StdErr, title);
-  writeln(StdErr, msg);
+  err := @StdErr;
+  if title <> '' then
+    writeln(err^, Executable.ProgramName, ': ', title);
+  writeln(err^, Executable.ProgramName, ': ', msg);
   ioresult;
 end;
 {$I+}

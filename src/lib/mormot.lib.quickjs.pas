@@ -3169,10 +3169,7 @@ var
   err: RawUtf8;
 begin
   ErrorMessage({stacktrace=}true, err, reason);
-  {$I-}
-  writeln({$ifdef FPC}StdErr,{$endif} err); // default is output to the console
-  ioresult;
-  {$I+}
+  DisplayError('QuickJS: %s', [err]); // default is output to (stderr) console
 end;
 
 function TJSContext.Eval(const code, fn: RawUtf8; flags: integer;

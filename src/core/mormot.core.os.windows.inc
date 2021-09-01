@@ -171,12 +171,17 @@ procedure DisplayFatalError(const title, msg: RawUtf8);
 begin
   // better than a MessageBox() especially for services
   AllocConsole; // will create one black window console if none
-  TextColor(ccWhite);
-  writeln(#13#10, title);
-  writeln(StringOfChar('-', length(title) + 1), #13#10);
-  TextColor(ccLightRed);
-  writeln(msg);
-  TextColor(ccLightGray);
+  if title <> '' then
+  begin
+    TextColor(ccWhite);
+    writeln(#13#10, title);
+    writeln(StringOfChar('-', length(title) + 1), #13#10);
+    TextColor(ccLightRed);
+    writeln(msg);
+    TextColor(ccLightGray);
+  end
+  else
+    writeln(msg);
   ioresult;
 end;
 {$I+}

@@ -1864,7 +1864,7 @@ begin
   // open exe filename or follow '.gnu_debuglink' redirection
   if not OpenExeFile(e, filename) then
   begin
-    writeln(stderr, 'OpenExeFile failed on ', filename);
+    DisplayError('OpenExeFile failed on  %s', [filename]);
     exit;
   end;
   if ReadDebugLink(e, dbgfn) then // is there an external .dbg file?
@@ -1872,7 +1872,7 @@ begin
     CloseExeFile(e);
     if not OpenExeFile(e, dbgfn) then
     begin
-      writeln(stderr, 'OpenExeFile failed on ', dbgfn);
+      DisplayError('OpenExeFile failed on  %s', [dbgfn]);
       exit;
     end;
   end
@@ -2104,7 +2104,7 @@ begin
     DW_FORM_flag_present:
       ; // none
   else
-    writeln(stderr, 'Internal error: unknown dwarf form: ', form);
+    DisplayError('Internal error: unknown dwarf form: %x', [form]);
   end;
 end;
 

@@ -2902,7 +2902,6 @@ begin
   end;
 end;
 
-{$I-}
 procedure WritelnSSL_error;
 var
   err: integer;
@@ -2912,10 +2911,8 @@ begin
   if err = 0 then
     exit;
   ERR_error_string_n(err, @tmp, SizeOf(tmp));
-  writeln({$ifdef FPC}stderr,{$endif} tmp);
-  ioresult;
+  DisplayError('%s', [tmp]);
 end;
-{$I+}
 
 function SSL_CTX_set_session_cache_mode(ctx: PSSL_CTX; mode: integer): integer;
 begin
