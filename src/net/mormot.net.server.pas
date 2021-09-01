@@ -3116,7 +3116,7 @@ begin
                 // handle any exception raised during process: show must go on!
                 if not respsent then
                   if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
-                    (EHttpApiServer(E).LastError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
+                    (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
                     SendError(HTTP_SERVERERROR, E.Message, E);
             end;
           finally

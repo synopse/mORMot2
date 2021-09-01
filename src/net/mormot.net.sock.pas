@@ -80,9 +80,8 @@ type
     nrRefused,
     nrConnectTimeout);
 
-  {$M+}
   /// exception class raised by this unit
-  ENetSock = class(Exception)
+  ENetSock = class(ExceptionWithProps)
   protected
     fLastError: TNetResult;
   public
@@ -98,7 +97,6 @@ type
     property LastError: TNetResult
       read fLastError;
   end;
-  {$M-}
 
   /// one data state to be tracked on a given socket
   TNetEvent = (

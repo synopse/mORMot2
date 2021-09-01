@@ -2144,7 +2144,9 @@ begin
     end;
   except
     on E: Exception do
-      DoLog(sllWarning, 'Execute raised % -> terminate %',
+      // callback exceptions should all be catched: so we assume that any
+      // exception in mORMot code should be considered as fatal
+      DoLog(sllWarning, 'Execute raised uncatched % -> terminate %',
         [E.ClassType, fProcessName], self);
   end;
   DoLog(sllInfo, 'Execute: done AW %', [fProcessName], self);
