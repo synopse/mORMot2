@@ -191,6 +191,41 @@ begin
   result := Windows.GetModuleHandle(lpModuleName); // call either A or W API
 end;
 
+const
+  // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383770
+  ERROR_WINHTTP_TIMEOUT = 12002;
+  ERROR_WINHTTP_CANNOT_CONNECT = 12029;
+  ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
+
+function SysErrorMessage(Code: cardinal; ModuleName: PChar): string;
+var
+  flags, len: PtrUInt;
+  src: pointer;
+  tmp: array[0..1023] of Char;
+begin
+  if ModuleName = nil then
+  begin
+    flags := FORMAT_MESSAGE_FROM_SYSTEM;
+    src := nil;
+  end
+  else
+  begin
+    flags := FORMAT_MESSAGE_FROM_HMODULE;
+    src := pointer(GetModuleHandle(ModuleName));
+  end;
+  len := FormatMessage(flags, src, Code, ENGLISH_LANGID, @tmp, 256, nil);
+  if (len = 0) and
+     (GetLastError = ERROR_RESOURCE_LANG_NOT_FOUND) then
+    len := FormatMessage(flags, src, Code, 0, @tmp, SizeOf(tmp), nil);
+  if len > 0 then
+  begin
+    while (len > 0) and
+          (ord(tmp[len - 1]) in [0..32, ord('.')]) do
+      dec(len);
+    SetString(result, PChar(@tmp), len);
+  end;
+end;
+
 function PostMessage(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
 begin
   result := Windows.PostMessage(hWnd, Msg, wParam, lParam); // call either A or W API

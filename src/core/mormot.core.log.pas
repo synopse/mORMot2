@@ -3974,12 +3974,13 @@ begin
   // most of the time, the thread didn't change so this method is inlined
   if id <> fThreadID then
     // quickly switch fThreadContext/fThreadIndex to the new thread
-    GetThreadContextInternal(PtrUInt(id));
+    GetThreadContextInternal(PtrUInt(id))
+  else
+    fExceptionIgnoredBackup := fExceptionIgnoreThreadVar^;
   // caller should always perform in its finally ... end block an eventual:
   // fExceptionIgnoreThreadVar^ := fExceptionIgnoredBackup;
-  fExceptionIgnoredBackup := fExceptionIgnoreThreadVar^;
   fExceptionIgnoreThreadVar^ := true;
-  // any exception within logging process will be ignored now
+  // any exception within logging process will be ignored from now on
 end;
 
 function TSynLog.NewRecursion: PSynLogThreadRecursion;

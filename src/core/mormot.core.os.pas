@@ -802,7 +802,8 @@ const
   ERROR_ACCESS_DENIED = Windows.ERROR_ACCESS_DENIED;
   ERROR_INVALID_PARAMETER = Windows.ERROR_INVALID_PARAMETER;
   INVALID_HANDLE_VALUE = Windows.INVALID_HANDLE_VALUE;
-  
+  ENGLISH_LANGID = $0409;
+
   PROV_RSA_AES = 24;
   CRYPT_NEWKEYSET = 8;
   PLAINTEXTKEYBLOB = 8;
@@ -1253,6 +1254,11 @@ function GetErrorText(error: integer): RawUtf8;
 /// retrieve the text corresponding to an error message for a given Windows module
 // - use RTL SysErrorMessage() as fallback
 function SysErrorMessagePerModule(Code: cardinal; ModuleName: PChar): string;
+
+{$ifdef OSWINDOWS}
+/// override the RTL function to force the ENGLISH_LANGID flag
+function SysErrorMessage(Code: cardinal; ModuleName: PChar = nil): string;
+{$endif OSWINDOWS}
 
 /// raise an Exception from the last system error
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
@@ -2236,7 +2242,7 @@ procedure SleepHiRes(ms: cardinal);
 function SleepStep(var start: Int64; terminated: PBoolean = nil): Int64;
 
 /// compute optimal sleep time as SleepStep, in 0/1/10/50/150 ms steps
-function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): integer;
+function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): PtrInt;
 
 /// low-level naming of a thread
 // - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
@@ -2996,49 +3002,28 @@ begin
     DeleteCriticalSection(cs);
 end;
 
-const
-  ENGLISH_LANGID = $0409;
-  // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383770
-  ERROR_WINHTTP_CANNOT_CONNECT = 12029;
-  ERROR_WINHTTP_TIMEOUT = 12002;
-  ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
-
 function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
-{$ifdef OSWINDOWS}
-var
-  tmpLen: DWORD;
-  err: PChar;
-{$endif OSWINDOWS}
 begin
   result := '';
   if Code = 0 then
     exit;
   {$ifdef OSWINDOWS}
-  tmpLen := FormatMessage(
-    FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER,
-    pointer(GetModuleHandle(ModuleName)), Code, ENGLISH_LANGID, @err, 0, nil);
-  try
-    while (tmpLen > 0) and
-          (ord(err[tmpLen - 1]) in [0..32, ord('.')]) do
-      dec(tmpLen);
-    SetString(result, err, tmpLen);
-  finally
-    LocalFree(HLOCAL(err));
-  end;
+  result := SysErrorMessage(Code, ModuleName);
+  if result <> '' then
+    exit;
   {$endif OSWINDOWS}
+  result := SysErrorMessage(Code);
   if result = '' then
-  begin
-    result := SysErrorMessage(Code);
-    if result = '' then
-      if Code = ERROR_WINHTTP_CANNOT_CONNECT then
-        result := 'cannot connect'
-      else if Code = ERROR_WINHTTP_TIMEOUT then
-        result := 'timeout'
-      else if Code = ERROR_WINHTTP_INVALID_SERVER_RESPONSE then
-        result := 'invalid server response'
-      else
-        result := IntToHex(Code, 8);
-  end;
+    {$ifdef OSWINDOWS}
+    if Code = ERROR_WINHTTP_CANNOT_CONNECT then
+      result := 'cannot connect'
+    else if Code = ERROR_WINHTTP_TIMEOUT then
+      result := 'timeout'
+    else if Code = ERROR_WINHTTP_INVALID_SERVER_RESPONSE then
+      result := 'invalid server response'
+    else
+    {$endif OSWINDOWS}
+      result := IntToHex(Code, 8);
 end;
 
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
@@ -4046,7 +4031,7 @@ begin
   LeaveCriticalSection(GlobalCriticalSection);
 end;
 
-function SleepStepTime(var start, tix: Int64; endtix: PInt64): integer;
+function SleepStepTime(var start, tix: Int64; endtix: PInt64): PtrInt;
 var
   elapsed: PtrInt;
 begin

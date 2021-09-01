@@ -10659,9 +10659,9 @@ begin
   end;
   {$ifndef EXTENDEDTOSHORT_USESTR}
   {$ifdef ISDELPHIXE}
-  SettingsUS := TFormatSettings.Create($0409);
+  SettingsUS := TFormatSettings.Create(ENGLISH_LANGID);
   {$else}
-  GetLocaleFormatSettings($0409, SettingsUS);
+  GetLocaleFormatSettings(ENGLISH_LANGID, SettingsUS);
   {$endif ISDELPHIXE}
   SettingsUS.DecimalSeparator := '.'; // value may have been overriden :(
   {$endif EXTENDEDTOSHORT_USESTR}
