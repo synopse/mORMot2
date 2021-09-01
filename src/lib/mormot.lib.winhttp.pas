@@ -1142,7 +1142,7 @@ const
 
 type
   /// exception raised during http.sys HTTP/1.1 process
-  EHttpApiServer = class(ENetSock)
+  EHttpApiServer = class(ExceptionWithProps)
   protected
     fLastApiError: integer;
     fLastApi: THttpApis;
@@ -1478,7 +1478,7 @@ var
   WinHttpApi: TWinHttpBinding;
 
 type
-  EWinHttp = class(ENetSock);
+  EWinHttp = class(ExceptionWithProps);
   
   TWinHttpApis = (
     hOpen, hSetStatusCallback, hConnect, hOpenRequest, hCloseHandle,
@@ -1662,7 +1662,7 @@ type
     hReceive, hSend);
 
   /// exception raised during http.sys WebSockets process
-  EWebSocketApi = class(ENetSock)
+  EWebSocketApi = class(ExceptionWithProps)
   protected
     fLastError: integer;
     fLastApi: TWebSocketApis;
@@ -1945,7 +1945,6 @@ end;
 
 constructor EHttpApiServer.Create(api: THttpApis; Error: integer);
 begin
-  fLastError := nrFatalError;
   fLastApiError := Error;
   fLastApi := api;
   inherited CreateFmt('%s failed: %s (%d=0x%x)', [HttpNames[api],

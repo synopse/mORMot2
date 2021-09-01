@@ -95,7 +95,7 @@ type
       AnotherNonFatal: integer = 0);
   published
     property LastError: TNetResult
-      read fLastError;
+      read fLastError default nrOk;
   end;
 
   /// one data state to be tracked on a given socket

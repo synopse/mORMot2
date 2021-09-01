@@ -3948,8 +3948,9 @@ begin
         WebSocketApi.Receive(fWSHandle, nil, nil));
   end
   else
-    raise EWebSocketApi.Create('THttpApiWebSocketConnection.BeforeRead state ' +
-      'is not wsOpen (%d)', [ord(fState)]);
+    raise EWebSocketApi.CreateFmt(
+      'THttpApiWebSocketConnection.BeforeRead state is not wsOpen (%d)',
+      [ord(fState)]);
 end;
 
 const
@@ -4113,7 +4114,7 @@ constructor THttpApiWebSocketServer.Create(CreateSuspended: boolean;
 begin
   inherited Create(CreateSuspended, QueueName);
   if not (WebSocketApi.WebSocketEnabled) then
-    raise EWebSocketApi.Create('WebSocket API not supported', []);
+    raise EWebSocketApi.Create('WebSocket API not supported');
   fPingTimeout := aPingTimeout;
   if fPingTimeout > 0 then
     fGuard := TSynWebSocketGuard.Create(Self);

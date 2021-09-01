@@ -1337,7 +1337,7 @@ var
 begin
   try
     if destfile = '' then
-      raise EHttpSocket.Create('WGet(destfile='''') for %s', [url]);
+      raise EHttpSocket.CreateFmt('WGet(destfile='''') for %s', [url]);
     params.Clear;
     params.Resume := true;
     params.Hasher := hasher;
@@ -1718,7 +1718,7 @@ var
       if (res = HTTP_NOTACCEPTABLE) or
          (res =  HTTP_RANGENOTSATISFIABLE) then
         DeleteFile(part); // force delete (maybe) incorrect partial file
-      raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
+      raise EHttpSocket.CreateFmt('WGet: %s:%s/%s failed with %s',
         [fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
     end;
     partstream.Ended; // notify finished
@@ -1733,7 +1733,7 @@ var
   begin
     res := Head(requrl, params.KeepAlive, params.Header);
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
-      raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
+      raise EHttpSocket.CreateFmt('WGet: %s:%s/%s failed with %s',
         [fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
     Size := Http.ContentLength;
     result := Size > 0;
@@ -1802,7 +1802,7 @@ begin
         if Assigned(OnLog) then
           OnLog(sllTrace, 'WGet %: copy from cached %', [url, cached], self);
         if not CopyFile(cached, result, {failexists=}false) then
-          raise EHttpSocket.Create('WGet: copy from %s failed', [cached]);
+          raise EHttpSocket.CreateFmt('WGet: copy from %s failed', [cached]);
         exit;
       end;
     end;
@@ -1812,7 +1812,7 @@ begin
   if FileExists(result) then
     if not DeleteFile(result) or
        FileExists(result) then
-      raise EHttpSocket.Create('WGet: impossible to delete old %s', [result]);
+      raise EHttpSocket.CreateFmt('WGet: impossible to delete old %s', [result]);
   part := result + '.part';
   size := FileSize(part);
   resumed := params.Resume;
@@ -1865,7 +1865,7 @@ begin
       if not IdemPropNameU(parthash, params.Hash) then
       begin
         DeleteFile(part); // this .part was clearly incorrect
-        raise EHttpSocket.Create('WGet: %s:%s/%s hash failure',
+        raise EHttpSocket.CreateFmt('WGet: %s:%s/%s hash failure',
           [fServer, fPort, url]);
       end;
     end;
@@ -1876,7 +1876,7 @@ begin
       CopyFile(part, cached, {failsexist=}false);
     end;
     if not RenameFile(part, result) then
-      raise EHttpSocket.Create('WGet: impossible to rename %s', [result]);
+      raise EHttpSocket.CreateFmt('WGet: impossible to rename %s', [result]);
     part := '';
   finally
     partstream.Free;  // close file on unexpected error
@@ -3113,7 +3113,7 @@ begin
     {$ifdef USELIBCURL}
     _MainHttpClass := TCurlHttp
     {$else}
-    raise EHttpSocket.Create('MainHttpClass: No THttpRequest class known!', []);
+    raise EHttpSocket.Create('MainHttpClass: No THttpRequest class known!');
     {$endif USELIBCURL}
     {$endif USEWININET}
   end;

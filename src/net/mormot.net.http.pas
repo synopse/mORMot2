@@ -303,7 +303,7 @@ function ToText(st: THttpRequestState): PShortString; overload;
 
 type
   /// exception class raised during HTTP process
-  EHttpSocket = class(ENetSock);
+  EHttpSocket = class(ExceptionWithProps);
 
   /// parent of THttpClientSocket and THttpServerSocket classes
   // - contain properties for implementing HTTP/1.1 using the Socket API
@@ -1400,7 +1400,7 @@ begin
     end;
   end
   else
-    raise EHttpSocket.Create('ProcessWrite: len=%d', [MaxSize]);
+    raise EHttpSocket.CreateFmt('ProcessWrite: len=%d', [MaxSize]);
 end;
 
 procedure THttpRequestContext.ProcessDone;
@@ -1535,7 +1535,7 @@ begin
   Http.Content := '';
   if DestStream <> nil then
     if (cardinal(Http.CompressContentEncoding) < cardinal(length(Http.Compress))) then
-      raise EHttpSocket.Create('%s.GetBody(%s) does not support compression',
+      raise EHttpSocket.CreateFmt('%s.GetBody(%s) does not support compression',
         [ClassNameShort(self)^, ClassNameShort(DestStream)^]);
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
