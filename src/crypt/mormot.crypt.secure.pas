@@ -1035,7 +1035,13 @@ end;
 
 const
   HASH_EXT: array[THashAlgo] of RawUtf8 = (
-    '.md5', '.sha1', '.sha256', '.sha384', '.sha512', '.sha3-256', '.sha3-512');
+    '.md5',
+    '.sha1',
+    '.sha256',
+    '.sha384',
+    '.sha512',
+    '.sha3-256',
+    '.sha3-512');
 
 class function TStreamRedirectSynHasher.GetHashFileExt: RawUtf8;
 begin
@@ -2275,8 +2281,8 @@ end;
 
 { ******* TBinaryCookieGenerator Simple Cookie Generator }
 
-procedure XorMemoryCtr(data: PCardinal; key256bytes: PCardinalArray;
-  size: PtrUInt; ctr: cardinal);
+procedure XorMemoryCtr(data: PCardinal; size: PtrUInt; ctr: cardinal;
+  key256bytes: PCardinalArray);
 begin
   while size >= sizeof(cardinal) do
   begin
@@ -2355,8 +2361,8 @@ begin
       MoveFast(tmp.buf^, cc.data, tmp.len);
     inc(tmp.len, sizeof(cc.head));
     cc.head.crc := DefaultHasher(Secret, @cc.head.session, tmp.len - 8);
-    XorMemoryCtr(@cc.head.crc, @Crypt, tmp.len - 4,
-      {ctr=}CryptNonce xor cc.head.cryptnonce);
+    XorMemoryCtr(@cc.head.crc, tmp.len - 4,
+      {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
     Cookie := BinToBase64Uri(@cc, tmp.len);
   finally
     tmp.Done;
@@ -2381,8 +2387,8 @@ begin
      (len <= sizeof(cc)) and
      Base64uriDecode(pointer(Cookie), @cc, clen) then
   begin
-    XorMemoryCtr(@cc.head.crc, @Crypt, len - 4,
-      {ctr=}CryptNonce xor cc.head.cryptnonce);
+    XorMemoryCtr(@cc.head.crc, len - 4,
+      {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
     if (cardinal(cc.head.session) <= cardinal(SessionSequence)) then
     begin
       if PExpires <> nil then
