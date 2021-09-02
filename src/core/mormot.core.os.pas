@@ -4308,9 +4308,7 @@ begin
       PaddingUsedCount := Index + 1;
     with Padding[Index] do
     begin
-      if not (integer(VType) in VTYPE_SIMPLE) then
-        VarClear(PVariant(@VType)^);
-      VType := varUnknown;
+      VarClearAndSetType(PVariant(@VType)^, varUnknown);
       VUnknown := Value;
     end;
   finally

@@ -3851,8 +3851,7 @@ begin
   else if not SetVariantUnRefSimpleValue(PVariant(call.Data)^, PVarData(@Result)^) then
     if SetByRef then
     begin
-      VarClear(Result);
-      TVarData(Result).VType := varVariantByRef;
+      VarClearAndSetType(Result, varVariantByRef);
       TVarData(Result).VPointer := call.Data;
     end
     else
@@ -4885,7 +4884,7 @@ begin
       _StringClearSeveral(pointer(Value), Count);
     rkVariant:
       // from mormot.core.variants - supporting custom variants
-      // or at least from mormot.core.base
+      // or at least from mormot.core.base calling inlined VarClear()
       VariantClearSeveral(pointer(Value), Count);
     else
       begin
@@ -5133,13 +5132,7 @@ end;
 
 function _VariantClear(V: PVarData; Info: PRttiInfo): PtrInt;
 begin
-  {$ifdef CPUINTEL} // see VarClear: problems reported on ARM + BSD
-  if PCardinal(V)^ and $BFE8 <> 0 then
-  {$else}
-  if V^.VType >= varOleStr then // bypass for most obvious types
-  {$endif CPUINTEL}
-    VarClearProc(V^);
-  PCardinal(V)^ := 0;
+  VarClear(Variant(V^));
   result := SizeOf(V^);
 end;
 
@@ -5264,13 +5257,7 @@ end;
 
 procedure _VariantRandom(V: PRttiVarData; RC: TRttiCustom);
 begin
-  {$ifdef CPUINTEL} // see VarClear: problems reported on ARM + BSD
-  if V^.VType and $BFE8 <> 0 then
-  {$else}
-  if V^.DataType >= varOleStr then // bypass for most obvious types
-  {$endif CPUINTEL}
-    VarClearProc(V^.Data);
-  V^.VType := varInteger;
+  VarClearAndSetType(Variant(V^), varInteger);
   V^.Data.VInt64 := Rtti.SharedRandom.Next;
   // generate some 8-bit 32-bit 64-bit integers or a RawUtf8 varString
   case V^.Data.VInteger and 3 of
@@ -5364,14 +5351,8 @@ var
 label
   rtl, raw;
 begin
-  {$ifdef CPUINTEL} // see VarClear: problems reported on ARM + BSD
-  if PCardinal(Dest)^ and $BFE8 <> 0 then
-  {$else}
-  if Dest^.VType >= varOleStr then
-  {$endif CPUINTEL}
-    VarClearProc(Dest^);
   vt := Source^.VType;
-  PCardinal(Dest)^ := vt;
+  VarClearAndSetType(Variant(Dest^), vt);
   if vt > varNull then
     // varEmpty,varNull need no copy
     if vt <= varWord64 then

@@ -762,10 +762,12 @@ type
     // retrieve the value as varByRef
     function GetValueOrItem(const aNameOrIndex: variant): variant;
     procedure SetValueOrItem(const aNameOrIndex, aValue: variant);
+    // kind is stored as dvoIsArray/dvoIsObject within VOptions
     function GetKind: TDocVariantKind;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetOptions(const opt: TDocVariantOptions); // keep dvoIsObject/Array
       {$ifdef HASINLINE}inline;{$endif}
+    // capacity is Length(VValue) and Length(VName)
     procedure SetCapacity(aValue: integer);
     function GetCapacity: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2680,8 +2682,8 @@ begin
         if vt = varOleStr then
           WideString(V^.VAny) := ''
         else
-          goto clr; // varError, varDispatch
-    end
+          goto clr; // varError/varDispatch
+    end // note: varVariant/varUnknown are not handled because should not appear
     else if vt = varString then
       {$ifdef FPC}
       FastAssignNew(V^.VAny)
@@ -2706,7 +2708,7 @@ hdr:      handler.Clear(V^)
         goto hdr
       else
         goto clr;
-    PInteger(V)^ := 0; // set VType=varEmpty
+    PInteger(V)^ := varEmpty; // reset VType
     inc(V);
     dec(n);
   until n = 0;
@@ -2726,8 +2728,7 @@ begin
     RawUtf8ToVariant(Txt,variant(Value));
     exit;
   end;
-  VarClear(variant(Value));
-  TRttiVarData(Value).VType := ExpectedValueType;
+  VarClearAndSetType(variant(Value), ExpectedValueType);
   Value.VAny := nil; // avoid GPF below
   if Txt <> '' then
     case ExpectedValueType of
@@ -3679,8 +3680,7 @@ begin
     SetVariantByRef(variant(Source), variant(Dest));
     exit;
   end;
-  VarClear(variant(Dest)); // Dest may be a complex type
-  PCardinal(@D)^ := PCardinal(@S)^; // VType + VOptions
+  VarClearAndSetType(variant(Dest), PCardinal(@S)^); // VType + VOptions
   pointer(D.VName) := nil; // avoid GPF
   pointer(D.VValue) := nil;
   D.VCount := S.VCount;
@@ -5839,7 +5839,7 @@ begin
   for ndx := 0 to Count - 1 do
     system.delete(VName[ndx], 1, len);
   nested := self;
-  Clear;
+  ClearFast;
   InitObject([aObjectPropName, variant(nested)]);
   result := true;
 end;
@@ -7101,7 +7101,7 @@ var
 begin
   temp := FormatUtf8(Format, Args, Params, true);
   if TDocVariantData(Result).InitJsonInPlace(pointer(temp), Options) = nil then
-    TDocVariantData(Result).Clear;
+    TDocVariantData(Result).ClearFast;
 end;
 
 function _JsonFastFmt(const Format: RawUtf8;
@@ -7348,7 +7348,7 @@ begin
   fLock.Enter;
   try
     opt := fValue.Options;
-    fValue.Clear;
+    fValue.ClearFast;
     fValue.Init(opt);
   finally
     fLock.Leave;
@@ -7531,7 +7531,7 @@ astext:   TRttiVarData(V).VType := varString;
     P := TDocVariantData(Value).InitJsonInPlace(P, Options^, EndOfObject);
     if P = nil then
     begin
-      TDocVariantData(Value).Clear;
+      TDocVariantData(Value).ClearFast;
       Json := nil;
       exit; // error parsing
     end;

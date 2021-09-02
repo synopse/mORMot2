@@ -3728,8 +3728,7 @@ const
 var
   err: integer;
 begin
-  VarClear(variant(result));
-  result.VType := SQL_ELEMENTTYPES[fieldType];
+  VarClearAndSetType(variant(result), SQL_ELEMENTTYPES[fieldType]);
   result.VAny := nil; // avoid GPF
   case fieldType of
     oftCurrency:
@@ -8858,8 +8857,7 @@ begin
      (POrmTableRowVariantData(RowVariant)^.VTable = self) and
      (POrmTableRowVariantData(RowVariant)^.VRow < 0) then
     exit; // already initialized -> quick exit
-  VarClear(RowVariant^);
-  POrmTableRowVariantData(RowVariant)^.VType := OrmTableRowVariantType.VarType;
+  VarClearAndSetType(RowVariant^, OrmTableRowVariantType.VarType);
   POrmTableRowVariantData(RowVariant)^.VTable := self;
   POrmTableRowVariantData(RowVariant)^.VRow := -1; // follow fStepRow
 end;
@@ -9318,6 +9316,7 @@ begin
     if AVarType = DocVariantVType then
     begin
       VarClear(variant(Dest));
+      ZeroFill(@Dest); // avoid GPF
       TDocVariantData(Dest) := TDocVariantData(tmp);
     end
     else

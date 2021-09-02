@@ -1107,7 +1107,7 @@ var
   temp: RawByteString;
   F: THandle;
   size, tempsize: Int64;
-  read: cardinal;
+  read: integer;
 begin
   result := '';
   if (aFileName = '') or

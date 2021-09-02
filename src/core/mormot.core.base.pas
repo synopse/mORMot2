@@ -3282,11 +3282,13 @@ var
   Null: variant absolute NullVarData;
 
 {$ifdef HASINLINE}
-
 /// overloaded function which can be properly inlined to clear a variant
 procedure VarClear(var v: variant); inline;
-
 {$endif HASINLINE}
+
+/// overloaded function which can be properly inlined to clear a variant
+procedure VarClearAndSetType(var v: variant; vtype: integer);
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// same as Value := Null, but slightly faster
 procedure SetVariantNull(var Value: variant);
@@ -4046,6 +4048,40 @@ uses
 
 { ************ Common Types Used for Compatibility Between Compilers and CPU }
 
+const
+  VTYPE_STATIC = $BFE8; // bitmask to avoid unneeded VarClearProc call
+
+procedure VarClearAndSetType(var v: variant; vtype: integer);
+var
+  p: PInteger; // more efficient generated asm with an explicit temp variable
+begin
+  p := @v;
+  {$if defined(OSBSDDARWIN) and defined(ARM3264)}
+  if PVarData(p)^.VType and VTYPE_STATIC <> 0 then // just like in Variants.pas
+  {$else}
+  if p^ and VTYPE_STATIC <> 0 then
+  {$ifend}
+    VarClearProc(PVarData(p)^);
+  p^ := vtype;
+end;
+
+{$ifdef HASINLINE}
+procedure VarClear(var v: variant); // defined here for proper inlining
+var
+  p: PInteger; // more efficient generated asm with an explicit temp variable
+begin
+  p := @v;
+  {$if defined(OSBSDDARWIN) and defined(ARM3264)}
+  if PVarData(p)^.VType and VTYPE_STATIC = 0 then // just like in Variants.pas
+  {$else}
+  if p^ and VTYPE_STATIC = 0 then
+  {$ifend}
+    p^ := 0
+  else
+    VarClearProc(PVarData(p)^);
+end;
+{$endif HASINLINE}
+
 {$ifdef CPUARM}
 function ToByte(value: cardinal): cardinal;
 begin
@@ -4126,9 +4162,7 @@ end;
 
 procedure CurrencyToVariant(const c: currency; var v: variant);
 begin
-  if PVarData(@v)^.VType >= varOleStr then // bypass for most obvious types
-    VarClearProc(PVarData(@v)^);
-  PCardinal(@v)^ := varCurrency;
+  VarClearAndSetType(v, varCurrency);
   PVarData(@v).VCurrency := c;
 end;
 
@@ -10827,41 +10861,9 @@ end;
 
 { ************ Efficient Variant Values Conversion }
 
-{$ifdef HASINLINE}
-
-{$if defined(OSBSDDARWIN) and defined(ARM3264)}
-
-procedure VarClear(var v: variant); // Alfred reported issues with VTYPE_STATIC
-begin
-  if PVarData(@v)^.VType >= varOleStr then // bypass for most obvious types
-    VarClearProc(PVarData(@v)^)
-  else
-    PInteger(@v)^ := 0;
-end;
-
-{$else}
-
-procedure VarClear(var v: variant); // defined here for proper inlining
-const
-  VTYPE_STATIC = $BFE8; // bitmask to avoid unneeded VarClearProc call
-var
-  p: PInteger; // more efficient generated asm with an explicit temp variable
-begin
-  p := @v;
-  if p^ and VTYPE_STATIC = 0 then
-    p^ := 0
-  else
-    VarClearProc(PVarData(p)^);
-end;
-
-{$ifend}
-
-{$endif HASINLINE}
-
 procedure SetVariantNull(var Value: variant);
 begin
-  VarClear(Value);
-  PInteger(@Value)^ := varNull;
+  VarClearAndSetType(Value, varNull);
 end;
 
 procedure ClearVariantForString(var Value: variant);
@@ -10872,12 +10874,10 @@ begin
   if v = varString then
     FastAssignNew(TVarData(Value).VAny)
   else
-    begin
-      if v >= varOleStr then // bypass for most obvious types
-        VarClearProc(TVarData(Value));
-      PCardinal(@Value)^ := varString;
-      TVarData(Value).VAny := nil; // to avoid GPF when assigning the value
-    end;
+  begin
+    VarClearAndSetType(Value, varString);
+    TVarData(Value).VAny := nil; // to avoid GPF when assigning the value
+  end;
 end;
 
 procedure RawByteStringToVariant(Data: PByte; DataLen: integer; var Value: variant);
