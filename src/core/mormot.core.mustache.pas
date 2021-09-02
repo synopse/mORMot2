@@ -841,7 +841,7 @@ var
 begin
   result := nil;
   with _Safe(Partials)^ do
-    if (Kind = dvObject) and
+    if IsObject and
        (Count > 0) then
     begin
       result := TSynMustachePartials.Create;
@@ -1557,7 +1557,7 @@ var
 begin
   // {{DateFmt DateValue,"dd/mm/yyy"}}
   with _Safe(Value)^ do
-    if (Kind = dvArray) and
+    if IsArray and
        (Count = 2) and
        VariantToDateTime(Values[0], dt) then
       Result := FormatDateTime(Values[1], dt)
@@ -1613,7 +1613,7 @@ var
 begin
   // {{{SimpleToHtml content,browserhasnoemoji,nohtmlescape}}}
   d := _Safe(Value);
-  if (dvoIsArray in d^.Options) and
+  if d^.IsArray and
      (d^.Count >= 2) then
   begin
     if VarIsEmptyOrNull(d^.Values[0]) then
@@ -1725,7 +1725,7 @@ class procedure TSynMustache.Equals_(const Value: variant;
 begin
   // {{#Equals .,12}}
   with _Safe(Value)^ do
-    if (Kind = dvArray) and
+    if IsArray and
        (Count = 2) and
        (FastVarDataComp(@Values[0], @Values[1], false) = 0) then
       Result := true
@@ -1742,7 +1742,7 @@ begin
   // {{#if .<>""}} or {{#if .,"=",123}}
   SetVariantNull(Result{%H-});
   with _Safe(Value)^ do
-    if (Kind = dvArray) and
+    if IsArray and
        (Count = 3) then
     begin
       VariantToUtf8(Values[1], oper, wasString);

@@ -2077,7 +2077,7 @@ var
   item: variant;
 begin
   if Dest.VarType <> DocVariantType.VarType then
-    TDocVariant.New(Variant(Dest), JSON_OPTIONS_FAST);
+    TDocVariant.NewFast(Variant(Dest), dvArray);
   result := Dest.Count;
   if (fReply = '') or
      (DocumentCount <= 0) then
@@ -3436,15 +3436,14 @@ end;
 procedure TMongoCollection.EnsureIndex(const Keys: array of RawUtf8;
   Ascending, Unique: boolean);
 const
-  order: array[boolean] of integer = (
-    -1, 1);
+  order: array[boolean] of integer = ( -1, 1);
 var
   k, opt: variant;
   A: integer;
 begin
   if high(Keys) < 0 then
     exit; // no column name
-  TDocVariant.New(k);
+  TDocVariant.NewFast(k);
   for A := 0 to high(Keys) do
     TDocVariantData(k).AddValue(Keys[A], order[Ascending]);
   if Unique then

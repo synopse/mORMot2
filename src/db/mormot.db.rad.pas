@@ -1144,7 +1144,7 @@ begin
      not (fColumns[F].FieldType in [mormot.db.core.ftNull,
        mormot.db.core.ftUnknown, mormot.db.core.ftCurrency]) then
     with _Safe(fValues[RowIndex])^ do
-      if (Kind = dvObject) and
+      if IsObject and
          (Count > 0) then
       begin
         if IdemPropNameU(fColumns[F].Name, Names[F]) then
@@ -1214,7 +1214,7 @@ begin
   f := -1; // allows O(1) field lookup for invariant object columns
   for result := 1 to length(fValues) do
     with _Safe(fValues[result - 1])^ do
-      if (Kind = dvObject) and
+      if IsObject and
          (Count > 0) then
       begin
         if (cardinal(f) >= cardinal(Count)) or

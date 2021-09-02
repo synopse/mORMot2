@@ -1828,8 +1828,8 @@ begin
       'withinterfaces', true,
       'withsessions', true], stats);
     FileFromString(JsonReformat(stats), WorkDir + 'stats.Json');
+    FreeAndNil(fClient);
   end;
-  FreeAndNil(fClient);
   FreeAndNil(fModel);
 end;
 

@@ -940,8 +940,7 @@ const
    (labelValue, labelValue),
    (labelFalse, labelTrue));
 begin
-  Rec := _Safe(Value);
-  if Rec^.Kind = dvObject then
+  if _SafeObject(Value, Rec) then
   begin
     W := TTextWriter.CreateOwnedStream(tmp);
     try
@@ -1980,7 +1979,7 @@ begin
           if not VarIsEmpty(inputContext) then
             with _Safe(inputContext)^ do
             begin
-              if (kind = dvObject) and
+              if IsObject and
                  (Count > 0) then
                 // try {"p.a1":5,"p.a2":"dfasdfa"} -> {"p":{"a1":5,"a2":"dfasdfa"}}
                 if method^.ArgsInputValuesCount = 1 then

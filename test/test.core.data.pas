@@ -544,7 +544,7 @@ begin
   mustache := TSynMustache.Parse(
     'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
   Check(mustache.SectionMaxCount = 0);
-  TDocVariant.New(doc);
+  TDocVariant.NewFast(doc);
   doc.name := 'Chris';
   doc.value := 10000;
   html := mustache.Render(doc);
@@ -1701,6 +1701,8 @@ var
       with DocVariantData(JAV.C[3])^ do
       begin
         Check(Kind = dvObject);
+        Check(IsObject);
+        Check(not IsArray);
         Check(Count = 1);
         Check(Names[0] = 'four');
         Check(Values[0]._Kind = ord(dvArray));
@@ -1708,6 +1710,7 @@ var
         with DocVariantData(Values[0])^ do
         begin
           Check(Kind = dvArray);
+          Check(IsArray);
           Check(Count = 4);
           for v := 0 to Count - 1 do
             Check(Values[v] = v + 1);
@@ -4041,6 +4044,8 @@ procedure TTestCoreProcess._TDocVariant;
     if CheckFailed(Doc.VarType = DocVariantVType) then
       exit;
     Check(Doc.Kind = dvObject);
+    Check(Doc.IsObject);
+    Check(not Doc.IsArray);
     Check(Doc.Count = 2);
     Check(Doc.Names[0] = 'name');
     Check(Doc.Values[0] = 'John');
@@ -4087,6 +4092,8 @@ var
     Doc2.InitObject(['id', 10, 'doc', _Obj(['name', 'John', 'birthyear', 1972],
       aOptions)]);
     Check(Doc2.Kind = dvObject);
+    Check(Doc2.IsObject);
+    Check(not Doc2.IsArray);
     Check(variant(Doc2)._kind = ord(dvObject));
     Check(Doc2.Count = 2);
     Check(Doc2.Value['id'] = 10);
@@ -4245,6 +4252,8 @@ var
 begin
   Doc.Init;
   Check(Doc.Kind = dvUndefined);
+  Check(not Doc.IsObject);
+  Check(not Doc.IsArray);
   Check(variant(Doc)._kind = ord(dvUndefined));
   Doc.AddValue('name', 'Jonas');
   Doc.AddValue('birthyear', 1972);
@@ -4258,6 +4267,8 @@ begin
   Doc.Clear;
   Doc.InitFast;
   Check(Doc.Kind = dvUndefined);
+  Check(not Doc.IsObject);
+  Check(not Doc.IsArray);
   Check(variant(Doc)._kind = ord(dvUndefined));
   Doc.AddValue('name', 'Jonas');
   Doc.AddValue('birthyear', 1972);
@@ -4605,6 +4616,8 @@ begin
    '}', JSON_OPTIONS_FAST_FLOAT);
   Check(Doc.Count = 1);
   Check(Doc.Kind = dvObject);
+  Check(Doc.IsObject);
+  Check(not Doc.IsArray);
   J := Doc.ToJson('', '', jsonUnquotedPropNameCompact);
   CheckEqual(J, '{CostCenter:{ContactData:[{ContactID:1637001,ContactTypeID:0,' +
     'ContactType:"Adresse",PropertyValueID:572326,PropertyID:175,DoubleValue:' +

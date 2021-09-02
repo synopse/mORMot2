@@ -391,7 +391,7 @@ begin
       TOrmArticle, '', whereClause, [match, rank],
       'id,title,tags,author,authorname,createdat,abstract,contenthtml,rank');
     with _Safe(articles)^ do
-      if (Kind = dvArray) and
+      if IsArray and
          (Count > 0) then
         rank := Values{%H-}[Count - 1].rank
       else

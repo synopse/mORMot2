@@ -2122,10 +2122,12 @@ var
   t, n, p: PtrInt;
   track: PSynMonitorUsageTrack;
   data, val: TDocVariantData;
+  g: PDocVariantData;
 begin
   if Gran < low(fValues) then
     raise ESynException.CreateUtf8('%.Save(%) unexpected', [self, ToText(Gran)^]);
   TDocVariant.IsOfTypeOrNewFast(fValues[Gran]);
+  g := _Safe(fValues[Gran]);
   for t := 0 to length(fTracked) - 1 do
   begin
     track := @fTracked[t];
@@ -2153,10 +2155,10 @@ begin
                 Values[Gran][ID.GetTime(pred(Gran), true)];
           end;
         end;
-    _Safe(fValues[Gran]).AddOrUpdateValue(track^.Name, variant(data));
+    g^.AddOrUpdateValue(track^.Name, variant(data));
     data.Clear;
   end;
-  _Safe(fValues[Gran]).SortByName;
+  g^.SortByName;
   ID.Truncate(Gran);
   if not SaveDB(ID.Value, fValues[Gran], Gran) then
     fLog.SynLog.Log(sllWarning, 'Save(ID=%=%,%) failed',
@@ -2179,7 +2181,7 @@ begin
           with Track.Props[p] do
             if val^.GetAsDocVariant(Name, int) and
                (int^.Count > 0) and
-               (dvoIsArray in int^.Options) then
+               int^.IsArray then
             begin
               for v := 0 to length(Values[g]) - 1 do
                 if v < int^.Count then

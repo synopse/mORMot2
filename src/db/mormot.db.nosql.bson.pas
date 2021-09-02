@@ -2996,9 +2996,9 @@ str:    Kind := betString;
       finally
         Free;
       end;
-      if dvoIsObject in vdoc.Options then
+      if vdoc.IsObject then
         Kind := betDoc
-      else if dvoIsArray in vdoc.Options then
+      else if vdoc.IsArray then
         Kind := betArray
       else
         raise EBsonException.CreateUtf8('TBsonElement.FromVariant(doc,%)',
@@ -3330,9 +3330,9 @@ end;
 
 procedure TBsonWriter.BsonWrite(const name: RawUtf8; const doc: TDocVariantData);
 begin
-  if dvoIsObject in doc.Options then
+  if doc.IsObject then
     BsonWrite(name, betDoc)
-  else if dvoIsArray in doc.Options then
+  else if doc.IsArray then
     BsonWrite(name, betArray)
   else
     raise EBsonException.Create('Undefined nested document');
@@ -3644,7 +3644,7 @@ begin
       begin
         // http://docs.mongodb.org/manual/reference/operator/query/in
         BsonDocumentBegin(name);
-        if _Safe(Value)^.Kind = dvArray then
+        if _Safe(Value)^.IsArray then
           BsonWriteVariant(QUERY_OPS[opIn], Value)
         else
         begin
@@ -4293,7 +4293,7 @@ begin
     begin
       result := Bson(TDocVariantData(v));
       if kind <> nil then
-        if TDocVariantData(v).kind = dvArray then
+        if TDocVariantData(v).IsArray then
           kind^ := betArray
         else
           kind^ := betDoc;
@@ -4358,7 +4358,7 @@ function BsonVariant(const doc: TDocVariantData): variant;
 var
   k: TBsonElementType;
 begin
-  if doc.Kind = dvArray then
+  if doc.IsArray then
     k := betArray
   else
     k := betDoc;

@@ -2734,7 +2734,7 @@ var
   tmp: variant;
 begin
   AsVariant(tmp, V, Dest.Options);
-  if dvoIsArray in Dest.Options then
+  if Dest.IsArray then
     Dest.AddItem(tmp)
   else
     Dest.AddValue(ShortStringToAnsi7String(ParamName^), tmp);
@@ -2777,7 +2777,7 @@ begin
         end;
       end;
     imvDynArray:
-      if _Safe(Value)^.Kind = dvArray then
+      if _Safe(Value)^.IsArray then
       begin
         arr := nil; // recreate using a proper dynamic array
         dyn.InitRtti(ArgRtti, arr);
@@ -2791,7 +2791,7 @@ begin
         end;
       end;
     imvRecord:
-      if _Safe(Value)^.Kind = dvObject then
+      if _Safe(Value)^.IsObject then
       begin
         SetLength(rec, ArgRtti.Size);
         try
@@ -5703,9 +5703,8 @@ begin
         val := OutputAsDocVariant(pdvObjectFixed)
       else
         val := InputAsDocVariant(pdvObjectFixed);
-      SynLog.Log(aLevel, '%(%)',
-        [fMethod^.InterfaceDotMethodName, _Safe(val)^.ToTextPairs(
-          '=', ',', twJsonEscape)], self);
+      SynLog.Log(aLevel, '%(%)', [fMethod^.InterfaceDotMethodName,
+         _Safe(val)^.ToTextPairs('=', ',', twJsonEscape)], self);
     end;
 end;
 

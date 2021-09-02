@@ -1870,7 +1870,7 @@ begin
       head.sign := Signature.fContent;
       if Signature.InheritsFrom(TEccSignatureCertifiedFile) then
         with _Safe(TEccSignatureCertifiedFile(Signature).MetaData)^ do
-          if (Kind = dvObject) and
+          if IsObject and
              (Count > 0) then
           begin
             head.magic := THash128(ECIES_MAGIC[1]); // indicates efMetaData

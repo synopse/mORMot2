@@ -7746,7 +7746,7 @@ procedure TOrm.FillFrom(const aDocVariant: variant);
 var
   json: RawUtf8;
 begin
-  if _Safe(aDocVariant)^.Kind = dvObject then
+  if _Safe(aDocVariant)^.IsObject then
   begin
     VariantSaveJson(aDocVariant, twJsonEscape, json);
     FillFrom(pointer(json));
