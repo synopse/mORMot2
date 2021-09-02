@@ -556,6 +556,12 @@ type
     function CloneByUri(const aClientUri: RawUtf8): TWebSocketProtocol;
     /// how many protocols are stored
     function Count: integer;
+    /// server-side HTTP Upgrade to one supported WebSockets protocols
+    // - if returns, HTTP_SUCCESS caller should send the Response headers
+    // and use the Protocol - or free it and close the connection
+    function ServerUpgrade(const Http: THttpRequestContext;
+      const RemoteIp: RawUtf8; out Protocol: TWebSocketProtocol;
+      out Response: RawUtf8): integer;
   end;
 
   /// indicates which kind of process did occur in the main WebSockets loop
@@ -2003,6 +2009,89 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+function TWebSocketProtocolList.ServerUpgrade(
+  const Http: THttpRequestContext; const RemoteIp: RawUtf8;
+  out Protocol: TWebSocketProtocol; out Response: RawUtf8): integer;
+var
+  uri, version, prot, subprot, key, extin, extout: RawUtf8;
+  extins: TRawUtf8DynArray;
+  P: PUtf8Char;
+  Digest: TSha1Digest;
+begin
+  result := HTTP_BADREQUEST;
+  if not IdemPropNameU(Http.Upgrade, 'websocket') then
+    exit;
+  version := Http.HeaderGetValue('SEC-WEBSOCKET-VERSION');
+  if GetInteger(pointer(version)) < 13 then
+    exit; // we expect WebSockets protocol version 13 at least
+  uri := TrimU(Http.CommandUri);
+  if (uri <> '') and
+     (uri[1] = '/') then
+    Delete(uri, 1, 1);
+  prot := Http.HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
+  P := pointer(prot);
+  if P <> nil then
+  begin
+    repeat
+      GetNextItemTrimed(P, ',', subprot);
+      Protocol := CloneByName(subprot, uri);
+    until (P = nil) or
+          (Protocol <> nil);
+    if (Protocol <> nil) and
+       (Protocol.Uri = '') and
+       not Protocol.ProcessHandshakeUri(uri) then
+    begin
+      Protocol.Free;
+      result := HTTP_NOTFOUND;
+      exit;
+    end;
+  end
+  else
+    // if no protocol is specified, try to match by URI
+    Protocol := CloneByUri(uri);
+  if Protocol = nil then
+    exit;
+  Protocol.UpgradeUri := uri;
+  Protocol.RemoteIP := Http.HeaderGetValue('SEC-WEBSOCKET-REMOTEIP');
+  if Protocol.RemoteIP = '' then
+  begin
+    Protocol.RemoteIP := RemoteIP;
+    Protocol.RemoteLocalhost := (RemoteIP = '127.0.0.1') or
+                                 (RemoteIPLocalHostAsVoidInServers and
+                                  (RemoteIP = ''));
+  end
+  else
+    Protocol.RemoteLocalhost := Protocol.RemoteIP = '127.0.0.1';
+  extin := Http.HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
+  if extin <> '' then
+  begin
+    CsvToRawUtf8DynArray(pointer(extin), extins, ';', true);
+    if not Protocol.ProcessHandshake(extins, extout, nil) then
+    begin
+      Protocol.Free;
+      result := HTTP_NOTACCEPTABLE;
+      exit;
+    end;
+  end;
+  key := Http.HeaderGetValue('SEC-WEBSOCKET-KEY');
+  if Base64ToBinLengthSafe(pointer(key), length(key)) <> 16 then
+  begin
+    Protocol.Free;
+    exit; // this nonce must be a Base64-encoded value of 16 bytes
+  end;
+  ComputeChallenge(key, Digest);
+  if {%H-}extout <> '' then
+    extout := 'Sec-WebSocket-Extensions: ' + extout + #13#10;
+  FormatUtf8('HTTP/1.1 101 Switching Protocols'#13#10 +
+             'Upgrade: websocket'#13#10 +
+             'Connection: Upgrade'#13#10 +
+             'Sec-WebSocket-Protocol: %'#13#10 +
+             '%Sec-WebSocket-Accept: %'#13#10#13#10,
+    [Protocol.Name, extout, BinToBase64Short(@Digest, sizeof(Digest))], Response);
+  result := HTTP_SUCCESS;
+  // on connection upgrade, will never be back to plain HTTP/1.1
 end;
 
 

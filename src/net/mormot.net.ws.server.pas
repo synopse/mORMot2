@@ -354,104 +354,6 @@ end;
 
 { ******************** TWebSocketProcessServer Processing Class }
 
-function HttpServerWebSocketUpgrade(ClientSock: THttpServerSocket;
-  Protocols: TWebSocketProtocolList; out Protocol: TWebSocketProtocol): integer;
-var
-  uri, version, prot, subprot, key, extin, extout, header: RawUtf8;
-  extins: TRawUtf8DynArray;
-  P: PUtf8Char;
-  Digest: TSha1Digest;
-begin
-  result := HTTP_BADREQUEST;
-  try
-    if not IdemPropNameU(ClientSock.Http.Upgrade, 'websocket') then
-      exit;
-    version := ClientSock.HeaderGetValue('SEC-WEBSOCKET-VERSION');
-    if GetInteger(pointer(version)) < 13 then
-      exit; // we expect WebSockets protocol version 13 at least
-    uri := TrimU(ClientSock.URL);
-    if (uri <> '') and
-       (uri[1] = '/') then
-      Delete(uri, 1, 1);
-    prot := ClientSock.HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
-    P := pointer(prot);
-    if P <> nil then
-    begin
-      repeat
-        GetNextItemTrimed(P, ',', subprot);
-        Protocol := Protocols.CloneByName(subprot, uri);
-      until (P = nil) or
-            (Protocol <> nil);
-      if (Protocol <> nil) and
-         (Protocol.Uri = '') and
-         not Protocol.ProcessHandshakeUri(uri) then
-      begin
-        Protocol.Free;
-        result := HTTP_NOTFOUND;
-        exit;
-      end;
-    end
-    else
-      // if no protocol is specified, try to match by URI
-      Protocol := Protocols.CloneByUri(uri);
-    if Protocol = nil then
-      exit;
-    Protocol.UpgradeUri := uri;
-    Protocol.RemoteIP := ClientSock.HeaderGetValue('SEC-WEBSOCKET-REMOTEIP');
-    if Protocol.RemoteIP = '' then
-    begin
-      Protocol.RemoteIP := ClientSock.RemoteIP;
-      Protocol.RemoteLocalhost := (ClientSock.RemoteIP = '127.0.0.1') or
-                                   (RemoteIPLocalHostAsVoidInServers and
-                                    (ClientSock.RemoteIP = ''));
-    end
-    else
-      Protocol.RemoteLocalhost := Protocol.RemoteIP = '127.0.0.1';
-    extin := ClientSock.HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
-    if extin <> '' then
-    begin
-      CsvToRawUtf8DynArray(pointer(extin), extins, ';', true);
-      if not Protocol.ProcessHandshake(extins, extout, nil) then
-      begin
-        Protocol.Free;
-        result := HTTP_NOTACCEPTABLE;
-        exit;
-      end;
-    end;
-    key := ClientSock.HeaderGetValue('SEC-WEBSOCKET-KEY');
-    if Base64ToBinLengthSafe(pointer(key), length(key)) <> 16 then
-    begin
-      Protocol.Free;
-      exit; // this nonce must be a Base64-encoded value of 16 bytes
-    end;
-    ComputeChallenge(key, Digest);
-    if extout <> '' then
-      extout := 'Sec-WebSocket-Extensions: ' + extout + #13#10;
-    FormatUtf8('HTTP/1.1 101 Switching Protocols'#13#10 +
-               'Upgrade: websocket'#13#10'Connection: Upgrade'#13#10 +
-               'Sec-WebSocket-Protocol: %'#13#10 +
-               '%Sec-WebSocket-Accept: %'#13#10#13#10,
-      [Protocol.Name, extout, BinToBase64Short(@Digest, sizeof(Digest))], header);
-    if not ClientSock.TrySndLow(pointer(header), length(header)) then
-    begin
-      Protocol.Free;
-      result := HTTP_BADREQUEST;
-      exit;
-    end;
-    result := HTTP_SUCCESS; // connection upgraded: never back to HTTP/1.1
-  finally
-    if result <> HTTP_SUCCESS then
-    begin
-      // notify upgrade failure to client and close connection
-      FormatUtf8('HTTP/1.0 % WebSocket Upgrade Error'#13#10 +
-                 'Connection: Close'#13#10#13#10, [result], header);
-      ClientSock.TrySndLow(pointer(header), length(header));
-      ClientSock.KeepAliveClient := false;
-    end;
-  end;
-end;
-
-
 { TWebSocketServer }
 
 constructor TWebSocketServer.Create(const aPort: RawUtf8;
@@ -481,15 +383,28 @@ function TWebSocketServer.WebSocketProcessUpgrade(
   ClientSock: THttpServerSocket): integer;
 var
   protocol: TWebSocketProtocol;
+  resp: RawUtf8;
   sock: TWebSocketServerSocket;
 begin
   sock := ClientSock as TWebSocketServerSocket;
   // validate the WebSockets upgrade handshake
-  result := HttpServerWebSocketUpgrade(sock, fProtocols, protocol);
-  if result <> HTTP_SUCCESS then
-    exit;
-  // if we reached here, we switched/upgraded to WebSockets bidir frames
   sock.KeepAliveClient := false; // close connection with WebSockets
+  result := fProtocols.ServerUpgrade(sock.Http, sock.RemoteIP, protocol, resp);
+  if result = HTTP_SUCCESS then
+    if not sock.TrySndLow(pointer(resp), length(resp)) then
+    begin
+      protocol.Free;
+      result := HTTP_BADREQUEST;
+    end;
+  if result <> HTTP_SUCCESS then
+  begin
+    // notify upgrade failure to client and close connection
+    FormatUtf8('HTTP/1.0 % WebSocket Upgrade Error'#13#10 +
+               'Connection: Close'#13#10#13#10, [result], resp);
+    sock.TrySndLow(pointer(resp), length(resp));
+    exit;
+  end;
+  // if we reached here, we switched/upgraded to WebSockets bidir frames
   sock.fProcess := fProcessClass.Create(ClientSock, protocol,
     sock.RemoteConnectionID, {ownerthread=}nil, @fSettings, fProcessName);
   fWebSocketConnections.Add(sock.fProcess);
@@ -512,10 +427,10 @@ end;
 procedure TWebSocketServer.DoDisconnect(Context: TWebSocketServerSocket);
 begin
   if Assigned(fOnWSDisconnect) then
-  try
-    fOnWSDisconnect(Context);
-  except // ignore any external callback error during shutdown
-  end;
+    try
+      fOnWSDisconnect(Context);
+    except // ignore any external callback error during shutdown
+    end;
 end;
 
 procedure TWebSocketServer.Process(ClientSock: THttpServerSocket;
