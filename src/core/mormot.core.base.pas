@@ -11686,6 +11686,15 @@ end;
 
 { TNestedStreamReader }
 
+destructor TNestedStreamReader.Destroy;
+var
+  i: PtrInt;
+begin
+  inherited Destroy;
+  for i := 0 to length(fNested) - 1 do
+    fNested[i].Stream.Free;
+end;
+
 function TNestedStreamReader.GetSize: Int64;
 begin
   result := fSize; // Flush should have been called
@@ -11697,15 +11706,6 @@ begin
      (Origin = soBeginning) then
     Flush; // allow to read the file again, and set nested stream sizes
   result := inherited Seek(Offset, Origin);
-end;
-
-destructor TNestedStreamReader.Destroy;
-var
-  i: PtrInt;
-begin
-  inherited Destroy;
-  for i := 0 to length(fNested) - 1 do
-    fNested[i].Stream.Free;
 end;
 
 function TNestedStreamReader.NewStream(Stream: TStream): TStream;

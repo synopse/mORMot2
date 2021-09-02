@@ -3165,72 +3165,57 @@ end;
 
 function FindNameValue(P: PUtf8Char; UpperName: PAnsiChar): PUtf8Char;
 var
-  {$ifdef CPUX86NOTPIC}
-  table: TNormTable absolute NormToUpperAnsi7;
-  {$else}
-  table: PNormTable;
-  {$endif CPUX86NOTPIC}
-  c: AnsiChar;
+  table: PNormTable; // faster even on i386
   u: PAnsiChar;
 label
-  _0;
+  eof, eol;
 begin
   if (P = nil) or
      (UpperName = nil) then
-    goto _0;
-  {$ifndef CPUX86NOTPIC}
+    goto eof;
   table := @NormToUpperAnsi7;
-  {$endif CPUX86NOTPIC}
   repeat
-    c := UpperName^;
-    if table[P^] = c then // first character is likely not to match
+    if table[P^] <> UpperName^ then // first character is likely not to match
+      repeat // quickly go to end of current line
+        repeat
+eol:      if P^ <= #13 then
+            break;
+          inc(P);
+        until false;
+        if (P^ = #13) or
+           (P^ = #10) then
+        begin
+          repeat
+            inc(P);
+          until (P^ <> #10) and
+                (P^ <> #13);
+          if P^ = #0 then
+            goto eof;
+          break; // go to new line
+        end
+        else if P^ <> #0 then
+          continue; // e.g. #9
+eof:    result := nil; // reached P^=#0 -> not found
+        exit;
+      until false
+    else
     begin
+      // first char did match -> try other chars
       inc(P);
       u := UpperName + 1;
       repeat
-        c := u^;
-        inc(u);
-        if c <> #0 then
+        if u^ <> #0 then
         begin
-          if table[P^] <> c then
-            break;
+          if table[P^] <> u^ then
+            goto eol;
           inc(P);
+          inc(u);
           continue;
         end;
         result := P; // if found, points just after UpperName
         exit;
       until false;
     end;
-    repeat // quickly go to end of current line
-      repeat
-        c := P^;
-        inc(P);
-      until c <= #13;
-      if c = #13 then // most common case is text ending with #13#10
-        repeat
-          c := P^;
-          if (c <> #10) and
-             (c <> #13) then
-            break;
-          inc(P);
-        until false
-      else if c <> #10 then
-        if c <> #0 then
-          continue // e.g. #9
-        else
-          goto _0
-      else
-        repeat
-          c := P^;
-          if c <> #10 then
-            break;
-          inc(P);
-        until false;
-      if c <> #0 then
-        break; // check if UpperName is at the begining of the new line
-_0:   result := nil; // reached P^=#0 -> not found
-      exit;
-    until false;
   until false;
 end;
 
@@ -3242,23 +3227,23 @@ var
 begin
   P := FindNameValue(pointer(NameValuePairs), UpperName);
   if P <> nil then
-  repeat
-    if UpperNameSeparator <> #0 then
-      if P^ = UpperNameSeparator then
-        inc(P) // e.g. THttpSocket.HeaderGetValue uses UpperNameSeparator=':'
-      else
-        break;
-    while P^ in [#9, ' '] do // trim left
-      inc(P);
-    L := 0;
-    while P[L] > #13 do      // end of line/value
-      inc(L);
-    while P[L - 1] = ' ' do  // trim right
-      dec(L);
-    FastSetString(Value, P, L);
-    result := true;
-    exit;
-  until false;
+    repeat
+      if UpperNameSeparator <> #0 then
+        if P^ = UpperNameSeparator then
+          inc(P) // e.g. THttpSocket.HeaderGetValue uses UpperNameSeparator=':'
+        else
+          break;
+      while P^ in [#9, ' '] do // trim left
+        inc(P);
+      L := 0;
+      while P[L] > #13 do      // end of line/value
+        inc(L);
+      while P[L - 1] = ' ' do  // trim right
+        dec(L);
+      FastSetString(Value, P, L);
+      result := true;
+      exit;
+    until false;
   if not KeepNotFoundValue then
     {$ifdef FPC}
     FastAssignNew(Value);
