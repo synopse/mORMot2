@@ -181,7 +181,7 @@ type
     function Callback(Ctxt: THttpServerRequest; aNonBlocking: boolean): cardinal; virtual;
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
-    // or custom (synlzo/synlz) protocols
+    // or custom (synlz) protocols
     // - you can specify a minimal size (in bytes) before which the content won't
     // be compressed (1024 by default, corresponding to a MTU of 1500 bytes)
     // - the first registered algorithm will be the prefered one for compression

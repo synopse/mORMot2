@@ -940,15 +940,47 @@ const
   HTTP_URL_FLAG_REMOVE_ALL = 1;
 
   HTTP_KNOWNHEADERS: array[low(THttpHeader)..reqUserAgent] of string[19] = (
-    'Cache-Control', 'Connection', 'Date', 'Keep-Alive', 'Pragma',
-    'Trailer', 'Transfer-Encoding', 'Upgrade', 'Via', 'Warning',
-    'Allow', 'Content-Length', 'Content-Type', 'Content-Encoding',
-    'Content-Language', 'Content-Location', 'Content-MD5', 'Content-Range',
-    'Expires', 'Last-Modified', 'Accept', 'Accept-Charset', 'Accept-Encoding',
-    'Accept-Language', 'Authorization', 'Cookie', 'Expect', 'From', 'Host',
-    'If-Match', 'If-Modified-Since', 'If-None-Match', 'If-Range',
-    'If-Unmodified-Since', 'Max-Forwards', 'Proxy-Authorization', 'Referer',
-    'Range', 'TE', 'Translate', 'User-Agent');
+    'Cache-Control',
+    'Connection',
+    'Date',
+    'Keep-Alive',
+    'Pragma',
+    'Trailer',
+    'Transfer-Encoding',
+    'Upgrade',
+    'Via',
+    'Warning',
+    'Allow',
+    'Content-Length',
+    'Content-Type',
+    'Content-Encoding',
+    'Content-Language',
+    'Content-Location',
+    'Content-MD5',
+    'Content-Range',
+    'Expires',
+    'Last-Modified',
+    'Accept',
+    'Accept-Charset',
+    'Accept-Encoding',
+    'Accept-Language',
+    'Authorization',
+    'Cookie',
+    'Expect',
+    'From',
+    'Host',
+    'If-Match',
+    'If-Modified-Since',
+    'If-None-Match',
+    'If-Range',
+    'If-Unmodified-Since',
+    'Max-Forwards',
+    'Proxy-Authorization',
+    'Referer',
+    'Range',
+    'TE',
+    'Translate',
+    'User-Agent');
 
 type
   HTTP_SERVER_PROPERTY = (
@@ -1114,29 +1146,61 @@ var
 
 type
   THttpApis = (
-    hInitialize, hTerminate, hCreateHttpHandle, hAddUrl, hRemoveUrl,
-    hReceiveHttpRequest, hSendHttpResponse, hReceiveRequestEntityBody,
-    hResponseEntityBody, hSetServiceConfiguration, hDeleteServiceConfiguration,
-    hFlushResponseCache, hCancelHttpRequest, hCreateServerSession,
-    hCloseServerSession, hCreateRequestQueue, hSetServerSessionProperty,
-    hQueryServerSessionProperty, hCreateUrlGroup, hCloseUrlGroup,
-    hAddUrlToUrlGroup, hRemoveUrlFromUrlGroup, hSetUrlGroupProperty,
-    hQueryUrlGroupProperty, hSetRequestQueueProperty, hQueryRequestQueueProperty);
+    hInitialize,
+    hTerminate,
+    hCreateHttpHandle,
+    hAddUrl,
+    hRemoveUrl,
+    hReceiveHttpRequest,
+    hSendHttpResponse,
+    hReceiveRequestEntityBody,
+    hResponseEntityBody,
+    hSetServiceConfiguration,
+    hDeleteServiceConfiguration,
+    hFlushResponseCache,
+    hCancelHttpRequest,
+    hCreateServerSession,
+    hCloseServerSession,
+    hCreateRequestQueue,
+    hSetServerSessionProperty,
+    hQueryServerSessionProperty,
+    hCreateUrlGroup,
+    hCloseUrlGroup,
+    hAddUrlToUrlGroup,
+    hRemoveUrlFromUrlGroup,
+    hSetUrlGroupProperty,
+    hQueryUrlGroupProperty,
+    hSetRequestQueueProperty,
+    hQueryRequestQueueProperty);
 
 const
   hHttpApi2First = hCancelHttpRequest;
   HttpNames: array[THttpApis] of PChar = (
-    'HttpInitialize', 'HttpTerminate',
-    'HttpCreateHttpHandle', 'HttpAddUrl', 'HttpRemoveUrl',
-    'HttpReceiveHttpRequest', 'HttpSendHttpResponse',
-    'HttpReceiveRequestEntityBody', 'HttpSendResponseEntityBody',
-    'HttpSetServiceConfiguration', 'HttpDeleteServiceConfiguration',
-    'HttpFlushResponseCache', 'HttpCancelHttpRequest', 'HttpCreateServerSession',
-    'HttpCloseServerSession', 'HttpCreateRequestQueue',
-    'HttpSetServerSessionProperty', 'HttpQueryServerSessionProperty',
-    'HttpCreateUrlGroup', 'HttpCloseUrlGroup', 'HttpAddUrlToUrlGroup',
-    'HttpRemoveUrlFromUrlGroup', 'HttpSetUrlGroupProperty',
-    'HttpQueryUrlGroupProperty', 'HttpSetRequestQueueProperty',
+    'HttpInitialize',
+    'HttpTerminate',
+    'HttpCreateHttpHandle',
+    'HttpAddUrl',
+    'HttpRemoveUrl',
+    'HttpReceiveHttpRequest',
+    'HttpSendHttpResponse',
+    'HttpReceiveRequestEntityBody',
+    'HttpSendResponseEntityBody',
+    'HttpSetServiceConfiguration',
+    'HttpDeleteServiceConfiguration',
+    'HttpFlushResponseCache',
+    'HttpCancelHttpRequest',
+    'HttpCreateServerSession',
+    'HttpCloseServerSession',
+    'HttpCreateRequestQueue',
+    'HttpSetServerSessionProperty',
+    'HttpQueryServerSessionProperty',
+    'HttpCreateUrlGroup',
+    'HttpCloseUrlGroup',
+    'HttpAddUrlToUrlGroup',
+    'HttpRemoveUrlFromUrlGroup',
+    'HttpSetUrlGroupProperty',
+    'HttpQueryUrlGroupProperty',
+    'HttpSetRequestQueueProperty',
     'HttpQueryRequestQueueProperty');
 
 
@@ -1481,27 +1545,58 @@ type
   EWinHttp = class(ExceptionWithProps);
   
   TWinHttpApis = (
-    hOpen, hSetStatusCallback, hConnect, hOpenRequest, hCloseHandle,
-    hAddRequestHeaders, hSendRequest, hReceiveResponse, hQueryHeaders,
-    hQueryDataAvailable, hQueryOption, hGetProxyForUrl,
-    hGetIEProxyConfigForCurrentUser, hReadData,
-    hSetTimeouts, hSetOption, hSetCredentials,
-    hWebSocketCompleteUpgrade, hWebSocketClose, hWebSocketQueryCloseStatus,
-    hWebSocketSend, hWebSocketReceive, hWriteData);
+    hOpen,
+    hSetStatusCallback,
+    hConnect,
+    hOpenRequest,
+    hCloseHandle,
+    hAddRequestHeaders,
+    hSendRequest,
+    hReceiveResponse,
+    hQueryHeaders,
+    hQueryDataAvailable,
+    hQueryOption,
+    hGetProxyForUrl,
+    hGetIEProxyConfigForCurrentUser,
+    hReadData,
+    hSetTimeouts,
+    hSetOption,
+    hSetCredentials,
+    hWebSocketCompleteUpgrade,
+    hWebSocketClose,
+    hWebSocketQueryCloseStatus,
+    hWebSocketSend,
+    hWebSocketReceive,
+    hWriteData);
 
 const
   hWebSocketApiFirst = hWebSocketCompleteUpgrade;
 
 const
   WinHttpNames: array[TWinHttpApis] of PChar = (
-    'WinHttpOpen', 'WinHttpSetStatusCallback', 'WinHttpConnect',
-    'WinHttpOpenRequest', 'WinHttpCloseHandle', 'WinHttpAddRequestHeaders',
-    'WinHttpSendRequest', 'WinHttpReceiveResponse', 'WinHttpQueryHeaders',
-    'WinHttpQueryDataAvailable', 'WinHttpQueryOption', 'WinHttpGetProxyForUrl',
-    'WinHttpGetIEProxyConfigForCurrentUser', 'WinHttpReadData', 'WinHttpSetTimeouts',
-    'WinHttpSetOption', 'WinHttpSetCredentials', 'WinHttpWebSocketCompleteUpgrade',
-    'WinHttpWebSocketClose', 'WinHttpWebSocketQueryCloseStatus',
-    'WinHttpWebSocketSend', 'WinHttpWebSocketReceive', 'WinHttpWriteData');
+    'WinHttpOpen',
+    'WinHttpSetStatusCallback',
+    'WinHttpConnect',
+    'WinHttpOpenRequest',
+    'WinHttpCloseHandle',
+    'WinHttpAddRequestHeaders',
+    'WinHttpSendRequest',
+    'WinHttpReceiveResponse',
+    'WinHttpQueryHeaders',
+    'WinHttpQueryDataAvailable',
+    'WinHttpQueryOption',
+    'WinHttpGetProxyForUrl',
+    'WinHttpGetIEProxyConfigForCurrentUser',
+    'WinHttpReadData',
+    'WinHttpSetTimeouts',
+    'WinHttpSetOption',
+    'WinHttpSetCredentials',
+    'WinHttpWebSocketCompleteUpgrade',
+    'WinHttpWebSocketClose',
+    'WinHttpWebSocketQueryCloseStatus',
+    'WinHttpWebSocketSend',
+    'WinHttpWebSocketReceive',
+    'WinHttpWriteData');
 
 
 /// low-level thread-safe initialization of the WinHtpp API
@@ -1656,10 +1751,19 @@ type
 
   /// identify each TWebSocketApi late-binding API function
   TWebSocketApis = (
-    hAbortHandle, hBeginClientHandshake, hBeginServerHandshake,
-    hCompleteAction, hCreateClientHandle, hCreateServerHandle, hDeleteHandle,
-    hEndClientHandshake, hEndServerHandshake, hGetAction, hGetGlobalProperty,
-    hReceive, hSend);
+    hAbortHandle,
+    hBeginClientHandshake,
+    hBeginServerHandshake,
+    hCompleteAction,
+    hCreateClientHandle,
+    hCreateServerHandle,
+    hDeleteHandle,
+    hEndClientHandshake,
+    hEndServerHandshake,
+    hGetAction,
+    hGetGlobalProperty,
+    hReceive,
+    hSend);
 
   /// exception raised during http.sys WebSockets process
   EWebSocketApi = class(ExceptionWithProps)
@@ -1683,12 +1787,20 @@ type
 const
   WEBSOCKET_DLL = 'websocket.dll';
   WebSocketNames: array[TWebSocketApis] of PChar = (
-    'WebSocketAbortHandle', 'WebSocketBeginClientHandshake',
-    'WebSocketBeginServerHandshake', 'WebSocketCompleteAction',
-    'WebSocketCreateClientHandle', 'WebSocketCreateServerHandle',
-    'WebSocketDeleteHandle', 'WebSocketEndClientHandshake',
-    'WebSocketEndServerHandshake', 'WebSocketGetAction',
-    'WebSocketGetGlobalProperty', 'WebSocketReceive', 'WebSocketSend');
+    'WebSocketAbortHandle',
+    'WebSocketBeginClientHandshake',
+    'WebSocketBeginServerHandshake',
+    'WebSocketCompleteAction',
+    'WebSocketCreateClientHandle',
+    'WebSocketCreateServerHandle',
+    'WebSocketDeleteHandle',
+    'WebSocketEndClientHandshake',
+    'WebSocketEndServerHandshake',
+    'WebSocketGetAction',
+    'WebSocketGetGlobalProperty',
+    'WebSocketReceive',
+    'WebSocketSend');
+
   WEB_SOCKET_SEND_ACTION_QUEUE = $1;
   WEB_SOCKET_RECEIVE_ACTION_QUEUE = $2;
   WEB_SOCKET_ALL_ACTION_QUEUE = WEB_SOCKET_SEND_ACTION_QUEUE or
@@ -1755,7 +1867,8 @@ const
   sProtocolHeader: RawUtf8 = 'SEC-WEBSOCKET-PROTOCOL';
 
 /// retrieve an array of headers from WebSockets low-level information
-function HttpSys2ToWebSocketHeaders(const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
+function HttpSys2ToWebSocketHeaders(
+  const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
 
 /// retrieve the linefeed separated text from WebSockets array of headers
 function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
@@ -2018,12 +2131,35 @@ function HTTP_RESPONSE.AddCustomHeader(P: PUtf8Char;
   ForceCustomHeader: boolean): PUtf8Char;
 const
   KNOWNHEADERS: array[reqCacheControl..respWwwAuthenticate] of PAnsiChar = (
-    'CACHE-CONTROL:', 'CONNECTION:', 'DATE:', 'KEEP-ALIVE:', 'PRAGMA:',
-    'TRAILER:', 'TRANSFER-ENCODING:', 'UPGRADE:', 'VIA:', 'WARNING:', 'ALLOW:',
-    'CONTENT-LENGTH:', 'CONTENT-TYPE:', 'CONTENT-ENCODING:', 'CONTENT-LANGUAGE:',
-    'CONTENT-LOCATION:', 'CONTENT-MD5:', 'CONTENT-RANGE:', 'EXPIRES:',
-    'LAST-MODIFIED:', 'ACCEPT-RANGES:', 'AGE:', 'ETAG:', 'LOCATION:',
-    'PROXY-AUTHENTICATE:', 'RETRY-AFTER:', 'SERVER:', 'SET-COOKIE:', 'VARY:',
+    'CACHE-CONTROL:',
+    'CONNECTION:',
+    'DATE:',
+    'KEEP-ALIVE:',
+    'PRAGMA:',
+    'TRAILER:',
+    'TRANSFER-ENCODING:',
+    'UPGRADE:',
+    'VIA:',
+    'WARNING:',
+    'ALLOW:',
+    'CONTENT-LENGTH:',
+    'CONTENT-TYPE:',
+    'CONTENT-ENCODING:',
+    'CONTENT-LANGUAGE:',
+    'CONTENT-LOCATION:',
+    'CONTENT-MD5:',
+    'CONTENT-RANGE:',
+    'EXPIRES:',
+    'LAST-MODIFIED:',
+    'ACCEPT-RANGES:',
+    'AGE:',
+    'ETAG:',
+    'LOCATION:',
+    'PROXY-AUTHENTICATE:',
+    'RETRY-AFTER:',
+    'SERVER:',
+    'SET-COOKIE:',
+    'VARY:',
     'WWW-AUTHENTICATE:');
 var
   UnknownName: PUtf8Char;
@@ -2110,8 +2246,8 @@ var
   tmp: SynUnicode;
   P: PWideChar;
 begin
-  if not GetTokenInformation(UserToken, TokenUser, @Buffer, SizeOf(Buffer),
-    BufferSize) then
+  if not GetTokenInformation(UserToken, TokenUser,
+           @Buffer, SizeOf(Buffer), BufferSize) then
     exit;
   UserInfo := @Buffer;
   UserSize := 0;
@@ -2363,8 +2499,8 @@ begin
     end;
 end;
 
-function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER; const
-  aHeadersCount: integer): RawUtf8;
+function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
+  const aHeadersCount: integer): RawUtf8;
 var
   i: integer;
   h: PWEB_SOCKET_HTTP_HEADER;

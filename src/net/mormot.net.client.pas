@@ -610,7 +610,7 @@ type
 
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
-    // or custom (synlzo/synlz) protocols
+    // or custom (synlz) protocols
     // - returns true on success, false if this function or this
     // ACCEPT-ENCODING: header was already registered
     // - you can specify a minimal size (in bytes) below which the content won't

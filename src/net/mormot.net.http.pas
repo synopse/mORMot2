@@ -40,7 +40,7 @@ type
   /// event used to compress or uncompress some data during HTTP protocol
   // - should always return the protocol name for ACCEPT-ENCODING: header
   // e.g. 'gzip' or 'deflate' for standard HTTP format, but you can add
-  // your own (like 'synlzo' or 'synlz')
+  // your own (like 'synlz')
   // - the data is compressed (if Compress=TRUE) or uncompressed (if
   // Compress=FALSE) in the Data variable (i.e. it is modified in-place)
   // - to be used with THttpSocket.RegisterCompress method
@@ -109,6 +109,7 @@ function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
 const
   /// pseudo-header containing the current Synopse mORMot framework version
   XPOWEREDNAME = 'X-Powered-By';
+
   /// the full text of the current Synopse mORMot framework version
   // - we don't supply full version number with build revision
   // (as SYNOPSE_FRAMEWORK_VERSION), to reduce potential attacker knowledge
@@ -309,7 +310,7 @@ type
   // - contain properties for implementing HTTP/1.1 using the Socket API
   // - handle chunking of body content
   // - can optionaly compress and uncompress on the fly the data, with
-  // standard gzip/deflate or custom (synlzo/synlz) protocols
+  // standard gzip/deflate or custom (synlz) protocols
   THttpSocket = class(TCrtSocket)
   protected
     /// to call GetBody only once
@@ -349,7 +350,7 @@ type
     function HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
-    // or custom (synlzo/synlz) protocols
+    // or custom (synlz) protocols
     // - returns true on success, false if this function or this
     // ACCEPT-ENCODING: header was already registered
     // - you can specify a minimal size (in bytes) before which the content won't
