@@ -1337,7 +1337,7 @@ var
 begin
   try
     if destfile = '' then
-      raise EHttpSocket.CreateFmt('WGet(destfile='''') for %s', [url]);
+      raise EHttpSocket.CreateUtf8('WGet(destfile='''') for %', [url]);
     params.Clear;
     params.Resume := true;
     params.Hasher := hasher;
@@ -1555,7 +1555,8 @@ begin
           RequestClear;
       except
         on E: Exception do
-          if E.InheritsFrom(ENetSock) then
+          if E.InheritsFrom(ENetSock) or
+             E.InheritsFrom(EHttpSocket) then
             // network layer problem - typically EHttpSocket
             DoRetry(HTTP_NOTFOUND, '% raised after % [%]',
               [E, ToText(ENetSock(E).LastError)^, E.Message])
@@ -1718,8 +1719,8 @@ var
       if (res = HTTP_NOTACCEPTABLE) or
          (res =  HTTP_RANGENOTSATISFIABLE) then
         DeleteFile(part); // force delete (maybe) incorrect partial file
-      raise EHttpSocket.CreateFmt('WGet: %s:%s/%s failed with %s',
-        [fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
+      raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
+        [self, fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
     end;
     partstream.Ended; // notify finished
     parthash := partstream.GetHash; // hash updated on each partstream.Write()
@@ -1733,8 +1734,8 @@ var
   begin
     res := Head(requrl, params.KeepAlive, params.Header);
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
-      raise EHttpSocket.CreateFmt('WGet: %s:%s/%s failed with %s',
-        [fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
+      raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
+        [self, fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
     Size := Http.ContentLength;
     result := Size > 0;
     if result and
@@ -1802,7 +1803,8 @@ begin
         if Assigned(OnLog) then
           OnLog(sllTrace, 'WGet %: copy from cached %', [url, cached], self);
         if not CopyFile(cached, result, {failexists=}false) then
-          raise EHttpSocket.CreateFmt('WGet: copy from %s failed', [cached]);
+          raise EHttpSocket.CreateUtf8('%.WGet: copy from % cache failed',
+            [self, cached]);
         exit;
       end;
     end;
@@ -1812,7 +1814,8 @@ begin
   if FileExists(result) then
     if not DeleteFile(result) or
        FileExists(result) then
-      raise EHttpSocket.CreateFmt('WGet: impossible to delete old %s', [result]);
+      raise EHttpSocket.CreateUtf8(
+        '%.WGet: impossible to delete deprecated %', [self, result]);
   part := result + '.part';
   size := FileSize(part);
   resumed := params.Resume;
@@ -1865,8 +1868,8 @@ begin
       if not IdemPropNameU(parthash, params.Hash) then
       begin
         DeleteFile(part); // this .part was clearly incorrect
-        raise EHttpSocket.CreateFmt('WGet: %s:%s/%s hash failure',
-          [fServer, fPort, url]);
+        raise EHttpSocket.CreateUtf8('%.WGet: %:%/% hash failure (% vs %)',
+          [self, fServer, fPort, url, parthash, params.Hash]);
       end;
     end;
     if cached <> '' then
@@ -1876,7 +1879,8 @@ begin
       CopyFile(part, cached, {failsexist=}false);
     end;
     if not RenameFile(part, result) then
-      raise EHttpSocket.CreateFmt('WGet: impossible to rename %s', [result]);
+      raise EHttpSocket.CreateUtf8(
+        '%.WGet: impossible to rename % as %', [self, part, result]);
     part := '';
   finally
     partstream.Free;  // close file on unexpected error
@@ -2098,8 +2102,7 @@ var
   uri: TUri;
 begin
   if not uri.From(aUri) then
-    raise EHttpSocket.CreateFmt('%.Create: invalid url=%',
-      [ClassNameShort(self)^, aUri]);
+    raise EHttpSocket.CreateUtf8('%.Create: invalid url=%', [self, aUri]);
   IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
   Create(uri.Server, uri.Port, uri.Https, aProxyName, aProxyByPass,
     ConnectionTimeOut, SendTimeout, ReceiveTimeout, uri.Layer);
@@ -2148,7 +2151,8 @@ begin
           with fCompress[i] do
             if Name = aDataEncoding then
               if Func(OutData, false) = '' then
-                raise EHttpSocket.CreateFmt('%s uncompress', [Name])
+                raise EHttpSocket.CreateUtf8(
+                  '%.Request: % uncompress error', [self, Name])
               else
                 break; // successfully uncompressed content
       if aAcceptEncoding <> '' then

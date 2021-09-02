@@ -304,7 +304,7 @@ function ToText(st: THttpRequestState): PShortString; overload;
 
 type
   /// exception class raised during HTTP process
-  EHttpSocket = class(ExceptionWithProps);
+  EHttpSocket = class(ESynException);
 
   /// parent of THttpClientSocket and THttpServerSocket classes
   // - contain properties for implementing HTTP/1.1 using the Socket API
@@ -1070,7 +1070,7 @@ begin
   begin
     if Compress[CompressContentEncoding].Func(Content, false) = '' then
       // invalid content
-      raise EHttpSocket.CreateFmt('%s uncompress failed',
+      raise EHttpSocket.CreateUtf8('% UncompressData failed',
         [Compress[CompressContentEncoding].Name]);
     ContentLength := length(Content); // uncompressed Content-Length
   end;
@@ -1401,7 +1401,7 @@ begin
     end;
   end
   else
-    raise EHttpSocket.CreateFmt('ProcessWrite: len=%d', [MaxSize]);
+    raise EHttpSocket.CreateUtf8('ProcessWrite: len=%', [MaxSize]);
 end;
 
 procedure THttpRequestContext.ProcessDone;
@@ -1506,8 +1506,7 @@ begin
       readln(SockIn^, line);
       err := ioresult;
       if err <> 0 then
-        raise EHttpSocket.CreateFmt('%s.GetHeader error=%d',
-          [ClassNameShort(self)^, err]);
+        raise EHttpSocket.CreateUtf8('%.GetHeader error=%', [self, err]);
       {$I+}
       if line[0] = #0 then
         break; // HTTP headers end with a void line
