@@ -3155,9 +3155,9 @@ begin
     if rd = 0 then
       break;
     if not TrySndLow(pointer(chunk), rd) then
-      raise ENetSock.Create('%s.SockSendStream(%s,%d) rd=%d pos=%d to %s',
+      raise ENetSock.Create('%s.SockSendStream(%s,%d) rd=%d pos=%d to %s:%s',
         [ClassNameShort(self)^, ClassNameShort(Stream)^, ChunkSize,
-         rd, pos, fServer], NetLastError);
+         rd, pos, fServer, fPort], NetLastError);
     inc(pos, rd);
   until false;
 end;

@@ -341,8 +341,6 @@ type
   THttpServerSocket = class(THttpSocket)
   protected
     fRemoteConnectionID: THttpServerConnectionID;
-    fMethod: RawUtf8;
-    fUrl: RawUtf8;
     fServer: THttpServer;
     fKeepAliveClient: boolean;
     // from TSynThreadPoolTHttpServer.Task
@@ -362,10 +360,10 @@ type
       headerMaxTix: Int64): THttpServerSocketGetRequestResult; virtual;
     /// contains the method ('GET','POST'.. e.g.) after GetRequest()
     property Method: RawUtf8
-      read fMethod;
+      read Http.CommandMethod;
     /// contains the URL ('/' e.g.) after GetRequest()
     property URL: RawUtf8
-      read fUrl;
+      read Http.CommandUri;
     /// true if the client is HTTP/1.1 and 'Connection: Close' is not set
     // - default HTTP/1.1 behavior is "keep alive", unless 'Connection: Close'
     // is specified, cf. RFC 2068 page 108: "HTTP/1.1 applications that do not
@@ -2130,8 +2128,8 @@ begin
     P := pointer(Http.Command);
     if P = nil then
       exit; // broken
-    GetNextItem(P, ' ', fMethod); // 'GET'
-    GetNextItem(P, ' ', fUrl);    // '/path'
+    GetNextItem(P, ' ', Http.CommandMethod); // 'GET'
+    GetNextItem(P, ' ', Http.CommandUri);    // '/path'
     fKeepAliveClient := ((fServer = nil) or
                          (fServer.ServerKeepAliveTimeOut > 0)) and
                         IdemPChar(P, 'HTTP/1.1');
@@ -2143,7 +2141,7 @@ begin
       fKeepAliveClient := false;
     if (Http.ContentLength < 0) and
        (KeepAliveClient or
-       (fMethod = 'GET')) then
+       (Http.CommandMethod = 'GET')) then
       Http.ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     if (headerMaxTix > 0) and
        (GetTickCount64 > headerMaxTix) then
@@ -2165,9 +2163,9 @@ begin
       if Assigned(fServer.OnBeforeBody) then
       begin
         allheaders := HeaderGetText(fRemoteIP);
-        status := fServer.OnBeforeBody(fUrl, fMethod, allheaders,
-          Http.ContentType, fRemoteIP, Http.BearerToken, Http.ContentLength,
-          HTTPREMOTEFLAGS[TLS.Enabled]);
+        status := fServer.OnBeforeBody(Http.CommandUri, Http.CommandMethod,
+          allheaders, Http.ContentType, fRemoteIP, Http.BearerToken,
+          Http.ContentLength, HTTPREMOTEFLAGS[TLS.Enabled]);
         {$ifdef SYNCRTDEBUGLOW}
         TSynLog.Add.Log(sllCustom2,
           'GetRequest sock=% OnBeforeBody=% Command=% Headers=%', [fSock, status,
@@ -2190,7 +2188,7 @@ begin
     if withBody and
        not (hfConnectionUpgrade in Http.HeaderFlags) then
     begin
-      if not HttpMethodWithNoBody(fMethod) then
+      if not HttpMethodWithNoBody(Http.CommandMethod) then
         GetBody;
       result := grBodyReceived;
     end
@@ -2377,7 +2375,7 @@ begin
       begin
         // call from TSynThreadPoolTHttpServer -> handle first request
         if not fServerSock.fBodyRetrieved and
-           not HttpMethodWithNoBody(fServerSock.fMethod) then
+           not HttpMethodWithNoBody(fServerSock.Http.CommandMethod) then
           fServerSock.GetBody;
         fServer.Process(fServerSock, ConnectionID, self);
         if (fServer <> nil) and

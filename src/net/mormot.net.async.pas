@@ -673,7 +673,8 @@ type
     property RegisterCompressGzStatic: boolean
       read GetRegisterCompressGzStatic write SetRegisterCompressGzStatic;
     /// initial capacity of internal per-connection Headers buffer
-    // - 2 KB by default
+    // - 2 KB by default is within the mormot.core.fpcx64mm SMALL blocks limit
+    // so will use up to 3 locks before contention
     property HeadersDefaultBufferSize: integer
       read fHeadersDefaultBufferSize write fHeadersDefaultBufferSize;
     /// direct access to the internal high-performance TCP server
@@ -2450,7 +2451,7 @@ var
   aco: TAsyncConnectionsOptions;
 begin
   fCompressGz := -1;
-  fHeadersDefaultBufferSize := 2048;
+  fHeadersDefaultBufferSize := 2048; // one fpcx64mm small block
   if aLogVerbose then
     aco := ASYNC_OPTION_VERBOSE // for server debugging
   else

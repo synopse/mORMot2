@@ -348,6 +348,7 @@ type
     // - note that GetHeader(HeadersUnFiltered=false) will set ContentType field
     // but let HeaderGetValue('CONTENT-TYPE') return ''
     function HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
     // or custom (synlz) protocols
@@ -557,7 +558,7 @@ end;
 
 function PurgeHeaders(const headers: RawUtf8): RawUtf8;
 var
-  ok: array[byte] of PUtf8Char;
+  pos: array[byte] of PUtf8Char;
   len: array[byte] of integer;
   n, purged, i, tot: PtrInt;
   P, next: PUtf8Char;
@@ -565,6 +566,7 @@ begin
   n := 0;
   tot := 0;
   purged := 0;
+  // put all allowed headers in pos[]/len[]
   P := pointer(headers);
   while P <> nil do
   begin
@@ -584,7 +586,7 @@ begin
     begin
       if n = high(len) then
         break;
-      ok[n] := P;
+      pos[n] := P;
       if next <> nil then
         len[n] := next - P
       else if purged <> 0 then
@@ -596,6 +598,7 @@ begin
       inc(purged);
     P := next;
   end;
+  // recreate an expurgated headers set
   if purged = 0 then
     // nothing to purge
     result := headers
@@ -609,7 +612,7 @@ begin
     P := pointer(result);
     for i := 0 to n - 1 do
     begin
-      MoveFast({%H-}ok[i]^, P^, {%H-}len[i]);
+      MoveFast({%H-}pos[i]^, P^, {%H-}len[i]);
       inc(P, len[i]);
     end;
     assert(P - pointer(result) = tot);
