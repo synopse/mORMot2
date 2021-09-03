@@ -165,6 +165,14 @@ type
   TOnHttpRequestStateChange = function(Previous: THttpRequestState;
      Sender: PHttpRequestContext): THttpRequestState of object;
 
+  /// raw information used during THttpRequestContext header parsing
+  TProcessParseLine = record
+    P: PUtf8Char;
+    Len: PtrInt;
+    Line: PUtf8Char;
+    LineLen: PtrInt;
+  end;
+
   /// low-level reusable State Machine to parse and process any HTTP content
   {$ifdef USERECORDWITHMETHODS}
   THttpRequestContext = record
@@ -227,8 +235,6 @@ type
     /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved during Request
     // and mapped into the Compress[] array
     CompressContentEncoding: integer;
-    /// optional callback to track the HTTP ProcessRead/ProcessWrite work
-    OnStateChange: TOnHttpRequestStateChange;
     /// reset this request context to be used without any ProcessInit/Read/Write
     procedure Clear;
     /// parse a HTTP header into Header and fill internal properties
@@ -263,7 +269,9 @@ type
     /// receiving socket entry point of our asynchronous HTTP Server
     // - to be called with the incoming bytes from the socket receive buffer
     // - caller should have checked that current State is in HTTP_REQUEST_READ
-    procedure ProcessRead(P: pointer; Len: PtrInt);
+    // - returns true if a new State was reached, or false if some more
+    // input is needed
+    function ProcessRead(var st: TProcessParseLine): boolean;
     /// compress Content according to CompressAcceptHeader, adding headers
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
     // - and if Content is not '', will add 'Content-Type: ' header
@@ -1087,14 +1095,6 @@ begin
   State := hrsGetCommand;
 end;
 
-type
-  TProcessParseLine = record
-    P: PUtf8Char;
-    Len: PtrInt;
-    Line: PUtf8Char;
-    LineLen: PtrInt;
-  end;
-
 function ProcessParseLine(var st: TProcessParseLine; line: PRawUtf8): boolean;
 var
   P: PUtf8Char;
@@ -1153,36 +1153,21 @@ begin
   st.Len := Len;
 end;
 
-procedure THttpRequestContext.ProcessRead(P: pointer; Len: PtrInt);
+function THttpRequestContext.ProcessRead(var st: TProcessParseLine): boolean;
 var
-  st: TProcessParseLine;
   previous: THttpRequestState;
-label
-  fin;
 begin
-  if (P = nil) or
-     (Len <= 0) then
+  result := false; // not enough input
+  if st.Len = 0 then
     exit;
-  if Process.Len <> 0 then
-  begin
-    Process.Append(P, Len);
-    st.P := Process.Buffer;
-    st.Len := Process.Len;
-  end
-  else
-  begin
-    st.P := P; // most of the time, input comes as a single block
-    st.Len := Len;
-  end;
   previous := State;
   repeat
-    // main input loop of our HTTP server asynchronous state machine
     case State of
       hrsGetCommand:
         if ProcessParseLine(st, @Command) then
           State := hrsGetHeaders
         else
-          break; // not enough input
+          exit; // not enough input
       hrsGetHeaders:
         if ProcessParseLine(st, nil) then
           if st.LineLen <> 0 then
@@ -1201,7 +1186,7 @@ begin
             // no body
             State := hrsWaitProcessing
         else
-          break; // not enough input
+          exit;
       hrsGetBodyChunkedHexFirst,
       hrsGetBodyChunkedHexNext:
         if ProcessParseLine(st, nil) then
@@ -1222,29 +1207,31 @@ begin
             State := hrsGetBodyChunkedDataLastLine;
         end
         else
-          break;
+          exit;
       hrsGetBodyChunkedData:
         begin
           if st.Len < ContentLeft then
-            Len := st.Len
+            st.LineLen := st.Len
           else
-            Len := ContentLeft;
+            st.LineLen := ContentLeft;
           if ContentStream <> nil then
-            ContentStream.WriteBuffer(st.P^, Len)
+            ContentStream.WriteBuffer(st.P^, st.LineLen)
           else
           begin
-            MoveFast(st.P^, ContentPos^, Len);
-            inc(ContentPos, Len);
+            MoveFast(st.P^, ContentPos^, st.LineLen);
+            inc(ContentPos, st.LineLen);
           end;
-          dec(ContentLeft, Len);
+          dec(ContentLeft, st.LineLen);
           if ContentLeft = 0 then
-            State := hrsGetBodyChunkedDataVoidLine;
+            State := hrsGetBodyChunkedDataVoidLine
+          else
+            exit;
         end;
       hrsGetBodyChunkedDataVoidLine:
         if ProcessParseLine(st, nil) then // chunks end with a void line
           State := hrsGetBodyChunkedHexNext
         else
-          break;
+          exit;
       hrsGetBodyChunkedDataLastLine:
         if ProcessParseLine(st, nil) then // last chunk
           if st.Len <> 0 then
@@ -1252,63 +1239,51 @@ begin
           else
             State := hrsWaitProcessing
         else
-          break;
+          exit;
       hrsGetBodyContentLength:
         begin
           if ContentLeft = 0 then
             ContentLeft := ContentLength;
           if st.Len < ContentLeft then
-            Len := st.Len
+            st.LineLen := st.Len
           else
-            Len := ContentLeft;
+            st.LineLen := ContentLeft;
           if ContentStream = nil then
           begin
-            if Content = '' then
+            if Content = '' then // we need to allocate the result memory buffer
             begin
               if ContentLength > 1 shl 30 then // 1 GB mem chunk is fair enough
               begin
                 State := hrsErrorPayloadTooLarge; // avoid memory overflow
-                goto fin;
+                result := true;
+                exit;
               end;
               SetLength(Content, ContentLength);
               ContentPos := pointer(Content);
             end;
-            MoveFast(st.P^, ContentPos^, Len);
-            inc(ContentPos, Len);
+            MoveFast(st.P^, ContentPos^, st.LineLen);
+            inc(ContentPos, st.LineLen);
           end
           else
-            ContentStream.WriteBuffer(st.P^, Len);
-          dec(st.Len, Len);
-          dec(ContentLeft, Len);
+            ContentStream.WriteBuffer(st.P^, st.LineLen);
+          dec(st.Len, st.LineLen);
+          dec(ContentLeft, st.LineLen);
           if ContentLeft = 0 then
             if st.Len <> 0 then
               State := hrsErrorUnsupportedFormat // should be no further input
             else
-              State := hrsWaitProcessing;
+              State := hrsWaitProcessing
+          else
+            exit;
         end;
     else
       State := hrsErrorMisuse; // out of context State for input
     end;
-    if Assigned(OnStateChange) and
-       (State <> previous) and
-       (State <> hrsGetBodyChunkedHexNext) and
-       (State <> hrsGetBodyChunkedDataVoidLine) then
-    begin
-      State := OnStateChange(previous, @self);
-      previous := State;
-    end;
-    if State < hrsWaitProcessing then
-      continue;
-    // everything is done, or an error occured
-fin:Process.Reset;
-    exit;
-  until false;
-  // if we reached here, we didn't have enough input for full parsing
-  if Process.Len <> 0 then
-    Process.Remove(st.P - Process.Buffer)
-  else
-    Process.Append(st.P, st.Len);
-  // we may have more luck in next ProcessRead() call
+  until (State <> previous) and
+        ((State = hrsGetBodyChunkedHexFirst) or
+         (State = hrsGetBodyContentLength) or
+         (State >= hrsWaitProcessing));
+  result := true; // notify the next main state change
 end;
 
 procedure THttpRequestContext.CompressContentAndFinalizeHead(MaxSizeAtOnce: integer);
@@ -1397,11 +1372,7 @@ begin
     end;
     dec(ContentLength, MaxSize);
     if ContentLength = 0 then
-    begin
       State := hrsResponseDone;
-      if Assigned(OnStateChange) then
-        State := OnStateChange(hrsSendBody, @self);
-    end;
   end
   else
     raise EHttpSocket.CreateUtf8('ProcessWrite: len=%', [MaxSize]);

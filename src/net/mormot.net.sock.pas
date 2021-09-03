@@ -1805,8 +1805,8 @@ begin
     exit;
   // trick is to append the information to fSubscription.Subscribe[]
   one.socket := socket;
-  one.events := events;
   one.tag := tag;
+  one.events := events;
   EnterCriticalSection(fPendingLock);
   try
     n := fSubscription.SubscribeCount;
@@ -1843,17 +1843,20 @@ var
 begin
   EnterCriticalSection(fPendingLock);
   try
-    if Assigned(fOnLog) then
-      fOnLog(sllTrace, 'Unsubscribe(%) count=% pending #%/%',
-        [pointer(tag), fCount, fPendingIndex, fPending.Count], self);
-    fnd := FindPending(@fPending.Events[fPendingIndex],
-             fPending.Count - fPendingIndex, tag);
-    if fnd <> nil then
+    if fPending.Count <> 0 then
     begin
-      byte(fnd^.events) := 0; // GetOnePending() will just ignore it
       if Assigned(fOnLog) then
-        fOnLog(sllTrace, 'Unsubscribed(%) events:=0 count=%',
-          [pointer(fnd^.tag), fPending.Count], self);
+        fOnLog(sllTrace, 'Unsubscribe(%) count=% pending #%/%',
+          [pointer(tag), fCount, fPendingIndex, fPending.Count], self);
+      fnd := FindPending(@fPending.Events[fPendingIndex],
+               fPending.Count - fPendingIndex, tag);
+      if fnd <> nil then
+      begin
+        byte(fnd^.events) := 0; // GetOnePending() will just ignore it
+        if Assigned(fOnLog) then
+          fOnLog(sllTrace, 'Unsubscribed(%) events:=0 count=%',
+            [pointer(fnd^.tag), fPending.Count], self);
+      end;
     end;
     AddPtrUInt(fLastUnsubscribedTag, fLastUnsubscribedTagCount, tag);
     AddPtrUInt(TPtrUIntDynArray(fSubscription.Unsubscribed),
@@ -1880,7 +1883,7 @@ function TPollSockets.GetOnePending(out notif: TPollSocketResult;
 var
   ndx: PtrInt;
 label
-  o1, o2;
+  ok;
 begin
   result := false;
   if fTerminated or
@@ -1899,31 +1902,30 @@ begin
         // move forward
         inc(ndx);
         if (byte(notif.events) <> 0) and // Unsubscribe() may have reset to 0
+           IsValidPending(notif.tag) and
            ((fLastUnsubscribedTagCount = 0) or
             not PtrUIntScanExists(pointer(fLastUnsubscribedTag),
-              fLastUnsubscribedTagCount, notif.tag)) and
-           IsValidPending(notif.tag) then
+              fLastUnsubscribedTagCount, notif.tag)) then
         begin
           // there is a not-void event to return
           if Assigned(fOnLog) then
             fOnLog(sllTrace, 'GetOnePending(%)=% % #%/%', [call,
-             pointer(notif.tag), byte(notif.events), ndx, fPending.Count], self);
+              pointer(notif.tag), byte(notif.events), ndx, fPending.Count], self);
           result := true;
           fPendingIndex := ndx; // continue with next event
           // quick exit with one notified event
           if ndx = fPending.Count then
-            goto o1
-          else
-            goto o2;
+            break;
+          goto ok;
         end;
       until ndx >= fPending.Count;
       {if Assigned(fOnLog) then
         fOnLog(sllTrace, 'GetOnePending(%): reset after reached #%/% lastuns=%',
           [call, ndx, fPending.Count, fLastUnsubscribedTagCount], self);}
-o1:   fPending.Count := 0; // reuse shared Events[] memory
+      fPending.Count := 0; // reuse shared Events[] memory
       fPendingIndex := 0;
       fLastUnsubscribedTagCount := 0;
-o2: end;
+ok: end;
   {$ifdef HASFASTTRYFINALLY}
   finally
     LeaveCriticalSection(fPendingLock);
