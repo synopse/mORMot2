@@ -2236,12 +2236,14 @@ var
 // value to guess the elapsed time, but call GetTickCount64
 procedure SleepHiRes(ms: cardinal);
 
-/// call SleepHiRes() taking count of the activity, in 0/1/10/50/150 ms steps
+/// call SleepHiRes() taking count of the activity, in 0/1/5/50/120-250 ms steps
+// - range is agressively designed burning some CPU in favor or responsiveness
 // - should reset start := 0 when some activity occured
 // - returns the current GetTickCount64 value
 function SleepStep(var start: Int64; terminated: PBoolean = nil): Int64;
 
-/// compute optimal sleep time as SleepStep, in 0/1/10/50/150 ms steps
+/// compute optimal sleep time as SleepStep, in 0/1/5/50/120-250 ms steps
+// - is agressively designed burning some CPU in favor or responsiveness
 function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): PtrInt;
 
 /// low-level naming of a thread
@@ -4039,18 +4041,18 @@ begin
   if start = 0 then
     start := tix;
   elapsed := tix - start;
-  if elapsed = 0 then
-    result := 0 // thread switch within HW clock granularity
-  else if elapsed < 20 then
-    result := 1 // 1 ms is a pious wish on Windows anyway
+  if elapsed < 50 then
+    result := 0 // 10us on POSIX, SwitchToThread on Windows
   else
   begin
-    if elapsed < 50 then
-      result := 10
-    else if elapsed < 200 then
+    if elapsed < 200 then
+      result := 1
+    else if elapsed < 500 then
+      result := 5
+    else if elapsed < 2000 then
       result := 50
     else
-      result := 120 + Random32(80); // random 120-200 ms
+      result := 120 + Random32(130); // random 120-250 ms
   end;
   if endtix <> nil then
     endtix^ := tix + result;
