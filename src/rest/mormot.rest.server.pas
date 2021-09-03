@@ -2924,7 +2924,7 @@ procedure TRestServerUriContext.ExecuteCommand;
 
 var
   method: TThreadMethod;
-  starttix: Int64;
+  tix, start: Int64;
   current: cardinal;
 begin
   with Server.fAcquireExecution[Command] do
@@ -2940,7 +2940,7 @@ begin
         begin
           // special behavior to handle transactions at writing
           method := ExecuteOrmWrite;
-          starttix := GetTickCount64;
+          start := 0;
           repeat
             if Safe.TryLock then
             try
@@ -2959,13 +2959,13 @@ begin
             finally
               Safe.UnLock;
             end;
+            tix := SleepStep(start);
             if (LockedTimeOut <> 0) and
-               (GetTickCount64 > starttix + LockedTimeOut) then
+               (tix > start + LockedTimeOut) then
             begin
               TimeOut; // wait up to 5 second by default
               exit;
             end;
-            SleepHiRes(1); // retry every 1 ms
           until Server.fShutdownRequested;
         end;
     else
@@ -2993,18 +2993,18 @@ begin
         end
         else
         begin
-          starttix := GetTickCount64;
+          start := 0;
           repeat
             if Safe.TryLock then
             try
               method;
+              exit;
             finally
               Safe.UnLock;
             end;
-            if GetTickCount64 > starttix + LockedTimeOut then
-              break; // wait up to 2 second by default
-            SleepHiRes(1); // retry every 1 ms
-          until Server.fShutdownRequested;
+            tix := SleepStep(start);
+          until Server.fShutdownRequested or
+                (tix > start + LockedTimeOut);
           TimeOut;
         end;
       amMainThread:
@@ -6205,23 +6205,8 @@ begin
 end;
 
 function TRestServer.SleepOrShutdown(MS: integer): boolean;
-var
-  timeout: Int64;
 begin
-  result := true;
-  timeout := GetTickCount64 + MS;
-  repeat
-    if fShutdownRequested then
-      exit;
-    if MS <= 10 then
-      SleepHiRes(MS)
-    else
-      SleepHiRes(1);
-    if fShutdownRequested then
-      exit;
-  until (MS <= 10) or
-        (GetTickCount64 >= timeout);
-  result := false;
+  result := not SleepHiRes(MS, fShutdownRequested);
 end;
 
 function TRestServer.GetAuthenticationSchemesCount: integer;

@@ -584,7 +584,7 @@ type
   TWebSocketFrameList = class(TSynPersistentLock)
   protected
     fTimeoutSec: PtrInt;
-    procedure Delete(i: integer);
+    procedure Delete(i: PtrInt);
   public
     /// low-level access to the WebSocket frames list
     List: TWebSocketFrameDynArray;
@@ -606,7 +606,7 @@ type
       out frame: TWebSocketFrame): boolean;
     /// how many 'answer' frames are to be ignored
     // - this method is thread-safe
-    function AnswerToIgnore(incr: integer = 0): integer;
+    function AnswerToIgnore(incdec: integer = 0): integer;
   end;
 
   /// a WebSocket protocol able to generate ephemeral connection URI
@@ -719,7 +719,7 @@ type
     function ComputeContext(
        out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
       virtual; abstract;
-    procedure HiResDelay(const start: Int64);
+    function HiResDelay(var start: Int64): Int64;
     procedure Log(const frame: TWebSocketFrame; const aMethodName: RawUtf8;
       aEvent: TSynLogInfo = sllTrace; DisableRemoteLog: boolean = false); virtual;
     function SendPendingOutgoingFrames: boolean;
@@ -879,9 +879,9 @@ type
     process: TWebSocketProcess;
     outputframe: PWebSocketFrame;
     len: integer;
-    data: RawByteString;
+    data: RawByteString; // will eventually be appended to outputframe.payload
     procedure Init(Owner: TWebSocketProcess; output: PWebSocketFrame);
-    function GetBytes(P: PAnsiChar; count: integer): boolean;
+    function HasBytes(P: PAnsiChar; count: integer): boolean;
     function GetHeader: boolean;
     function GetData: boolean;
     function Step(ErrorWithoutException: PInteger): TWebProcessInFrameState;
@@ -947,17 +947,20 @@ begin
   SHA.Final(Digest);
 end;
 
-procedure ProcessMask(data: PCardinal; mask: cardinal; len: PtrInt);
+procedure ProcessMask(data: PCardinalArray; mask: PtrUInt; len: PtrInt);
 var
-  i, maskCount: PtrInt;
+  i: PtrInt;
 begin
-  maskCount := len shr 2;
-  if maskCount <> 0 then
+  i := len shr 2;
+  if i <> 0 then
+  begin
+    data := @data[i];
+    i := -i;
     repeat
-      data^ := data^ xor mask;
-      inc(data);
-      dec(maskCount);
-    until maskCount = 0;
+      data^[i] := data^[i] xor mask;
+      inc(i);
+    until i = 0;
+  end;
   for i := 0 to (len and 3) - 1 do
   begin
     PByteArray(data)^[i] := PByteArray(data)^[i] xor mask;
@@ -1183,11 +1186,11 @@ begin
   fTimeoutSec := timeoutsec;
 end;
 
-function TWebSocketFrameList.AnswerToIgnore(incr: integer): integer;
+function TWebSocketFrameList.AnswerToIgnore(incdec: integer): integer;
 begin
   Safe^.Lock;
-  if incr <> 0 then
-    inc(Safe^.Padding[0].VInteger, incr);
+  if incdec <> 0 then
+    inc(Safe^.Padding[0].VInteger, incdec);
   result := Safe^.Padding[0].VInteger;
   Safe^.UnLock;
 end;
@@ -1256,7 +1259,7 @@ begin
   Push(frame);
 end;
 
-procedure TWebSocketFrameList.Delete(i: integer);
+procedure TWebSocketFrameList.Delete(i: PtrInt);
 begin
   // slightly faster than a TDynArray which would release the memory
   List[i].payload := '';
@@ -2457,24 +2460,11 @@ begin
   end;
 end;
 
-procedure TWebSocketProcess.HiResDelay(const start: Int64);
+function TWebSocketProcess.HiResDelay(var start: Int64): Int64;
 var
   delay: cardinal;
 begin
-  case GetTickCount64 - start of
-    0..50:
-      delay := 0; // 10 microsecs on POSIX
-    51..200:
-      delay := 1;
-    201..500:
-      delay := 5;
-    501..2000:
-      delay := 50;
-    2001..5000:
-      delay := 100;
-  else
-    delay := 500;
-  end;
+  delay := SleepStepTime(start, result);
   if (fSettings.LoopDelay <> 0) and
      (delay > fSettings.LoopDelay) then
     delay := fSettings.LoopDelay;
@@ -2504,7 +2494,7 @@ function TWebSocketProcess.NotifyCallback(aRequest: THttpServerRequestAbstract;
 var
   request, answer: TWebSocketFrame;
   i: integer;
-  start, max: Int64;
+  start, max, tix: Int64;
   head: RawUtf8;
 begin
   result := HTTP_NOTFOUND;
@@ -2526,15 +2516,16 @@ begin
         exit;
       end;
     wscBlockWithAnswer:
+      // need to block until all previous answers are received
       if fIncoming.AnswerToIgnore > 0 then
       begin
         WebSocketLog.Add.Log(sllDebug,
           'NotifyCallback: Waiting for AnswerToIgnore=%',
           [fIncoming.AnswerToIgnore], self);
         start := GetTickCount64;
-        max := start + 30000;
+        max := start + 30000; // never wait forever
         repeat
-          HiResDelay(start);
+          tix := HiResDelay(start);
           if fState in [wpsDestroy, wpsClose] then
           begin
             WebSocketLog.Add.Log(sllError,
@@ -2543,7 +2534,7 @@ begin
           end;
           if fIncoming.AnswerToIgnore = 0 then
             break; // it is now safe to send a new 'request'
-          if GetTickCount64 < max then
+          if tix < max then
             continue;
           self.Log(request, 'NotifyCallback AnswerToIgnore TIMEOUT -> ' +
             'abort connection', sllInfo);
@@ -2552,6 +2543,7 @@ begin
         until false;
       end;
   end;
+  // wscBlockWithoutAnswer or wscBlockWithAnswer
   i := InterlockedIncrement(fProcessCount);
   try
     if (i > 2) and
@@ -2565,15 +2557,16 @@ begin
       result := HTTP_SUCCESS;
       exit;
     end;
-    start := GetTickCount64;
-    if fSettings.CallbackAnswerTimeOutMS = 0 then
+    tix := GetTickCount64;
+    start := tix;
+    max := fSettings.CallbackAnswerTimeOutMS;
+    if max = 0 then
       // never wait for ever
-      max := start + 30000
-    else if fSettings.CallbackAnswerTimeOutMS < 2000 then
+      max := 30000
+    else if max < 2000 then
       // 2 seconds minimal wait
-      max := start + 2000
-    else
-      max := start + fSettings.CallbackAnswerTimeOutMS;
+      max := 2000;
+    inc(max, start);
     while not fIncoming.Pop(fProtocol, head, answer) do
       if fState in [wpsDestroy, wpsClose] then
       begin
@@ -2581,7 +2574,7 @@ begin
           'NotifyCallback on closed connection', self);
         exit;
       end
-      else if GetTickCount64 > max then
+      else if tix > max then
       begin
         WebSocketLog.Add.Log(sllWarning,
           'NotifyCallback TIMEOUT %', [head], self);
@@ -2590,7 +2583,7 @@ begin
         exit; // returns HTTP_NOTFOUND
       end
       else
-        HiResDelay(start);
+        tix := HiResDelay(start);
   finally
     LockedDec32(@fProcessCount);
   end;
@@ -2784,7 +2777,7 @@ begin
   len := 0;
 end;
 
-function TWebProcessInFrame.GetBytes(P: PAnsiChar; count: integer): boolean;
+function TWebProcessInFrame.HasBytes(P: PAnsiChar; count: integer): boolean;
 begin
   if len > count then
   begin
@@ -2806,7 +2799,7 @@ begin
     FillCharFast(hdr, sizeof(hdr), 0);
   end;
   if (len < 2) and
-     not GetBytes(@hdr, 2) then // first+len8
+     not HasBytes(@hdr, 2) then // first+len8
     exit;
   opcode := TWebSocketFrameOpCode(hdr.first and 15);
   masked := hdr.len8 and FRAME_LEN_MASK <> 0;
@@ -2816,13 +2809,13 @@ begin
     hdr.len32 := hdr.len8
   else if hdr.len8 = FRAME_LEN_2BYTES then
   begin
-    if not GetBytes(@hdr, 4) then // first+len8+len32.low
+    if not HasBytes(@hdr, 4) then // first+len8+len32.low
       exit;
     hdr.len32 := swap(word(hdr.len32)); // FPC expects explicit word() cast
   end
   else if hdr.len8 = FRAME_LEN_8BYTES then
   begin
-    if not GetBytes(@hdr, 10) then // first+len8+len32+len64.low
+    if not HasBytes(@hdr, 10) then // first+len8+len32+len64.low
       exit;
     if hdr.len32 <> 0 then // size is more than 32 bits (4GB) -> reject
       hdr.len32 := maxInt
@@ -2835,7 +2828,7 @@ begin
   if masked then
   begin
     len := 0; // not appended to hdr
-    if not GetBytes(@hdr.mask, 4) then
+    if not HasBytes(@hdr.mask, 4) then
       raise EWebSockets.CreateUtf8('%.GetFrame: truncated mask', [process]);
   end;
   len := 0; // prepare upcoming GetData
@@ -2846,12 +2839,12 @@ function TWebProcessInFrame.GetData: boolean;
 begin
   if length(data) <> integer(hdr.len32) then
     SetString(data, nil, hdr.len32);
-  result := GetBytes(pointer(data), hdr.len32);
+  result := HasBytes(pointer(data), hdr.len32);
   if result then
   begin
     if hdr.mask <> 0 then
       ProcessMask(pointer(data), hdr.mask, hdr.len32);
-    len := 0; // prepare upcoming GetHeader
+    len := 0; // prepare next upcoming GetHeader
   end;
 end;
 

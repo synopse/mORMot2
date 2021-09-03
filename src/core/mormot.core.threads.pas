@@ -235,7 +235,7 @@ type
     fPendingProcessFlag: TSynBackgroundThreadProcessStep;
     fPendingProcessLock: TSynLocker;
     procedure ExecuteLoop; override;
-    function OnIdleProcessNotify(start: Int64): integer;
+    function OnIdleProcessNotify(var start: Int64): Int64; // return elapsed ms
     function GetOnIdleBackgroundThreadActive: boolean;
     function GetPendingProcess: TSynBackgroundThreadProcessStep;
     procedure SetPendingProcess(State: TSynBackgroundThreadProcessStep);
@@ -1045,25 +1045,8 @@ begin
 end;
 
 function TSynBackgroundThreadAbstract.SleepOrTerminated(MS: cardinal): boolean;
-var
-  endtix: Int64;
 begin
-  result := true; // notify Terminated
-  if Terminated then
-    exit;
-  if MS < 32 then
-    // smaller than GetTickCount resolution (under Windows)
-    SleepHiRes(MS)
-  else
-  begin
-    endtix := mormot.core.os.GetTickCount64 + MS;
-    repeat
-      SleepHiRes(10);
-      if Terminated then
-        exit;
-    until mormot.core.os.GetTickCount64 > endtix;
-  end;
-  result := Terminated; // abnormal delay expiration
+  result := SleepHiRes(MS, PBoolean(@Terminated)^);
 end;
 
 destructor TSynBackgroundThreadAbstract.Destroy;
@@ -1208,11 +1191,13 @@ begin
   end;
 end;
 
-function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(start: Int64): integer;
+function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(
+  var start: Int64): Int64;
 begin
-  result := mormot.core.os.GetTickCount64 - start;
-  if result < 0 then
-    result := MaxInt; // should happen only under XP -> ignore
+  result := mormot.core.os.GetTickCount64;
+  if start = 0 then
+    result := start;
+  dec(result, start);
   if Assigned(fOnIdle) then
     fOnIdle(self, result);
 end;
@@ -1227,17 +1212,13 @@ begin
     exit; // nothing to wait for
   try
     if Assigned(onmainthreadidle) then
-    begin
       while fCallerEvent.WaitFor(100) = wrTimeout do
-        onmainthreadidle(self);
-    end
+        onmainthreadidle(self)
     else
     {$ifdef OSWINDOWS} // do process the OnIdle only if UI
     if Assigned(fOnIdle) then
-    begin
       while fCallerEvent.WaitFor(100) = wrTimeout do
-        OnIdleProcessNotify(start);
-    end
+        OnIdleProcessNotify(start)
     else
     {$endif OSWINDOWS}
       fCallerEvent.WaitFor(INFINITE);
@@ -1273,25 +1254,16 @@ begin
   // 1. wait for any previous request to be finished (should not happen often)
   if Assigned(fOnIdle) then
     fOnIdle(self, 0); // notify started
-  start := mormot.core.os.GetTickCount64;
-  repeat
+  start := 0;
+  while true do
     case AcquireThread of
       flagDestroying:
         exit;
       flagIdle:
         break; // we acquired the background thread
-    end;
-    case OnIdleProcessNotify(start) of // Windows.GetTickCount64 res is 10-16 ms
-      0..20:
-        SleepHiRes(0); // 10 microsec delay on POSIX
-      21..100:
-        SleepHiRes(1);
-      101..900:
-        SleepHiRes(5);
     else
-      SleepHiRes(50);
+      SleepHiRes(SleepDelay(OnIdleProcessNotify(start)));
     end;
-  until false;
   // 2. process execution in the background thread
   fParam := OpaqueParam;
   fProcessEvent.SetEvent; // notify background thread for Call pending process
@@ -1559,16 +1531,9 @@ begin
 end;
 
 procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
-var
-  timeout: Int64;
 begin
-  if not Processing then
-    exit;
-  timeout := mormot.core.os.GetTickCount64 + timeoutsecs * 1000;
-  repeat
-    SleepHiRes(1);
-  until not Processing or
-        (mormot.core.os.GetTickcount64 > timeout);
+  SleepHiRes(timeoutsecs, PBoolean(@fTaskLock.Padding[0].VBoolean)^,
+    {terminatedvalue=}false);
 end;
 
 function TSynBackgroundTimer.ExecuteNow(

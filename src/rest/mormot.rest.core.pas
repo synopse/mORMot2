@@ -2922,7 +2922,7 @@ end;
 function TRestBackgroundTimer.AsyncBatchStop(Table: TOrmClass): boolean;
 var
   b: PtrInt;
-  timeout: Int64;
+  start, tix, timeout: Int64;
   {%H-}log: ISynLog;
 begin
   result := false;
@@ -2930,7 +2930,8 @@ begin
      (fBackgroundBatch = nil) then
     exit;
   log := fRest.fLogClass.Enter('AsyncBatchStop(%)', [Table], self);
-  timeout := mormot.core.os.GetTickCount64 + 5000;
+  start := mormot.core.os.GetTickCount64;
+  timeout := start + 5000;
   if Table = nil then
   begin
     // as called from TRest.Destroy
@@ -2950,10 +2951,10 @@ begin
        not EnQueue(AsyncBatchExecute, 'free@' + Table.SqlTableName, true) then
       exit;
     repeat
-      SleepHiRes(1); // wait for all pending rows to be sent
+      tix := SleepStep(start); // wait for all pending rows to be sent
     until (fBackgroundBatch[b] = nil) or
-          (mormot.core.os.GetTickCount64 > timeout);
-    if ObjArrayCount(fBackgroundBatch) > 0 then
+          (tix > timeout);
+    if ObjArrayNotNilCount(fBackgroundBatch) > 0 then
       result := true
     else
     begin
@@ -3409,17 +3410,8 @@ begin
 end;
 
 procedure TRestThread.WaitForNotExecuting(maxMS: integer);
-var
-  endtix: Int64;
 begin
-  if fExecuting then
-  begin
-    endtix := mormot.core.os.GetTickCount64 + maxMS;
-    repeat
-      SleepHiRes(1); // wait for InternalExecute to finish
-    until not fExecuting or
-              (mormot.core.os.GetTickCount64 >= endtix);
-  end;
+  SleepHiRes(maxMS, fExecuting, {termvalue=}false);
 end;
 
 destructor TRestThread.Destroy;

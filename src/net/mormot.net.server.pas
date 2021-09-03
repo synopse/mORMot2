@@ -480,7 +480,7 @@ type
     fOnSendFile: TOnHttpServerSendFile;
     fNginxSendFileFrom: array of TFileName;
     fSockPort: RawUtf8;
-    fHeaderRetrieveAbortDelay: integer;
+    fHeaderRetrieveAbortDelay: cardinal;
     fExecuteState: THttpServerExecuteState;
     fHeadersUnFiltered: boolean;
     fExecuteMessage: string;
@@ -543,7 +543,7 @@ type
       read fHeadersUnFiltered;
     /// milliseconds delay to reject a connection due to too long header retrieval
     // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
-    property HeaderRetrieveAbortDelay: integer
+    property HeaderRetrieveAbortDelay: cardinal
       read fHeaderRetrieveAbortDelay write fHeaderRetrieveAbortDelay;
     /// custom event handler used to send a local file for STATICFILE_CONTENT_TYPE
     // - see also NginxSendFileFrom() method

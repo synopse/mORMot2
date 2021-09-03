@@ -132,13 +132,34 @@ const
   /// the recognized Windows versions, as plain text
   // - defined even outside MSWINDOWS to allow process e.g. from monitoring tools
   WINDOWS_NAME: array[TWindowsVersion] of RawUtf8 = (
-    '', '2000', 'XP', 'XP 64bit', 'Server 2003', 'Server 2003 R2',
-    'Vista', 'Vista 64bit', 'Server 2008', 'Server 2008 64bit',
-    '7', '7 64bit', 'Server 2008 R2', 'Server 2008 R2 64bit',
-    '8', '8 64bit', 'Server 2012', 'Server 2012 64bit',
-    '8.1', '8.1 64bit', 'Server 2012 R2', 'Server 2012 R2 64bit',
-    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit',
-    'Server 2019 64bit', 'Server 2022 64bit');
+    '',
+    '2000',
+    'XP',
+    'XP 64bit',
+    'Server 2003',
+    'Server 2003 R2',
+    'Vista',
+    'Vista 64bit',
+    'Server 2008',
+    'Server 2008 64bit',
+    '7',
+    '7 64bit',
+    'Server 2008 R2',
+    'Server 2008 R2 64bit',
+    '8',
+    '8 64bit',
+    'Server 2012',
+    'Server 2012 64bit',
+    '8.1',
+    '8.1 64bit',
+    'Server 2012 R2',
+    'Server 2012 R2 64bit',
+    '10',
+    '10 64bit',
+    'Server 2016',
+    'Server 2016 64bit',
+    'Server 2019 64bit',
+    'Server 2022 64bit');
 
   /// the recognized Windows versions which are 32-bit
   WINDOWS_32 = [
@@ -148,11 +169,41 @@ const
 
   /// translate one operating system (and distribution) into a its common name
   OS_NAME: array[TOperatingSystem] of RawUtf8 = (
-    'Unknown', 'Windows', 'Linux', 'OSX', 'BSD', 'POSIX',
-    'Arch', 'Aurox', 'Debian', 'Fedora', 'Gentoo', 'Knoppix', 'Mint', 'Mandrake',
-    'Mandriva', 'Novell', 'Ubuntu', 'Slackware', 'Solaris', 'Suse', 'Synology',
-    'Trustix', 'Clear', 'United', 'RedHat', 'LFS', 'Oracle', 'Mageia', 'CentOS',
-    'Cloud', 'Xen', 'Amazon', 'CoreOS', 'Alpine', 'Android');
+    'Unknown',
+    'Windows',
+    'Linux',
+    'OSX',
+    'BSD',
+    'POSIX',
+    'Arch',
+    'Aurox',
+    'Debian',
+    'Fedora',
+    'Gentoo',
+    'Knoppix',
+    'Mint',
+    'Mandrake',
+    'Mandriva',
+    'Novell',
+    'Ubuntu',
+    'Slackware',
+    'Solaris',
+    'Suse',
+    'Synology',
+    'Trustix',
+    'Clear',
+    'United',
+    'RedHat',
+    'LFS',
+    'Oracle',
+    'Mageia',
+    'CentOS',
+    'Cloud',
+    'Xen',
+    'Amazon',
+    'CoreOS',
+    'Alpine',
+    'Android');
 
   /// translate one operating system (and distribution) into a single character
   // - may be used internally e.g. for a HTTP User-Agent header, as with
@@ -2006,6 +2057,11 @@ type
     function GetUtf8(Index: integer): RawUtf8;
     procedure SetUtf8(Index: integer; const Value: RawUtf8);
   public
+    /// number of values stored in the internal Padding[] array
+    // - equals 0 if no value is actually stored, or a 1..7 number otherwise
+    // - you should not have to use this field, but for optimized low-level
+    // direct access to Padding[] values, within a Lock/UnLock safe block
+    PaddingUsedCount: integer;
     /// internal padding data, also used to store up to 7 variant values
     // - this memory buffer will ensure no CPU cache line mixup occurs
     // - you should not use this field directly, but rather the Locked[],
@@ -2014,11 +2070,6 @@ type
     // using a Safe.Lock; try ... Padding[n] ... finally Safe.Unlock structure,
     // and maintain the PaddingUsedCount field accurately
     Padding: array[0..6] of TVarData;
-    /// number of values stored in the internal Padding[] array
-    // - equals 0 if no value is actually stored, or a 1..7 number otherwise
-    // - you should not have to use this field, but for optimized low-level
-    // direct access to Padding[] values, within a Lock/UnLock safe block
-    PaddingUsedCount: integer;
     /// initialize the mutex
     // - calling this method is mandatory (e.g. in the class constructor owning
     // the TSynLocker instance), otherwise you may encounter unexpected
@@ -2044,7 +2095,7 @@ type
     // !   Safe.Unlock;
     // ! end;
     procedure Lock;
-      {$ifdef FPC} inline; {$endif}
+      {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// will try to acquire the mutex
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! if Safe.TryLock then
@@ -2054,7 +2105,7 @@ type
     // !     Safe.Unlock;
     // !   end;
     function TryLock: boolean;
-      {$ifdef FPC} inline; {$endif}
+      {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// will try to acquire the mutex for a given time
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! if Safe.TryLockMS(100) then
@@ -2068,7 +2119,7 @@ type
     // - each Lock/TryLock should have its exact UnLock opposite, so a
     // try..finally block is mandatory for safe code
     procedure UnLock;
-      {$ifdef FPC} inline; {$endif}
+      {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// will enter the mutex until the IUnknown reference is released
     // - could be used as such under Delphi:
     // !begin
@@ -2234,13 +2285,23 @@ var
 // - warning: wait typically the next system timer interrupt on Windows, which
 // is every 16ms by default; as a consequence, never rely on the ms supplied
 // value to guess the elapsed time, but call GetTickCount64
-procedure SleepHiRes(ms: cardinal);
+procedure SleepHiRes(ms: cardinal); overload;
+
+/// similar to Windows sleep() API call, but truly cross-platform and checking
+// the Terminated flag during its wait for quick abort response
+// - returns true if terminated^ was set to true
+function SleepHiRes(ms: cardinal; var terminated: boolean;
+  terminatedvalue: boolean = true): boolean; overload;
 
 /// call SleepHiRes() taking count of the activity, in 0/1/5/50/120-250 ms steps
 // - range is agressively designed burning some CPU in favor of responsiveness
 // - should reset start := 0 when some activity occured
 // - returns the current GetTickCount64 value
 function SleepStep(var start: Int64; terminated: PBoolean = nil): Int64;
+
+/// compute optimal sleep time as 0/1/5/50 then 120-250 ms steps
+// - is agressively designed burning some CPU in favor of responsiveness
+function SleepDelay(elapsed: PtrInt): PtrInt;
 
 /// compute optimal sleep time as SleepStep, in 0/1/5/50/120-250 ms steps
 // - is agressively designed burning some CPU in favor of responsiveness
@@ -2965,7 +3026,7 @@ function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
 var
   vmt: PPointer;
 begin
-  EnterCriticalSection(AutoSlotsLock);
+  mormot.core.os.EnterCriticalSection(AutoSlotsLock);
   try
     vmt := Pointer(PAnsiChar(ObjectClass) + vmtAutoTable);
     result := vmt^;
@@ -2984,7 +3045,7 @@ begin
       raise EOSException.CreateFmt('ClassPropertiesAdd: mprotect failed for %s',
         [ClassNameShort(ObjectClass)^]);
   finally
-    LeaveCriticalSection(AutoSlotsLock);
+    mormot.core.os.LeaveCriticalSection(AutoSlotsLock);
   end;
 end;
 
@@ -2995,7 +3056,7 @@ procedure InitializeCriticalSectionIfNeededAndEnter(var cs: TRTLCriticalSection)
 begin
   if not IsInitializedCriticalSection(cs) then
     InitializeCriticalSection(cs);
-  EnterCriticalSection(cs);
+  mormot.core.os.EnterCriticalSection(cs);
 end;
 
 procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
@@ -4025,35 +4086,34 @@ var
 
 procedure GlobalLock;
 begin
-  EnterCriticalSection(GlobalCriticalSection);
+  mormot.core.os.EnterCriticalSection(GlobalCriticalSection);
 end;
 
 procedure GlobalUnLock;
 begin
-  LeaveCriticalSection(GlobalCriticalSection);
+  mormot.core.os.LeaveCriticalSection(GlobalCriticalSection);
+end;
+
+function SleepDelay(elapsed: PtrInt): PtrInt;
+begin
+  if elapsed < 50 then
+    result := 0 // 10us on POSIX, SwitchToThread on Windows
+  else if elapsed < 200 then
+    result := 1
+  else if elapsed < 500 then
+    result := 5
+  else if elapsed < 2000 then
+    result := 50
+  else
+    result := 120 + Random32(130); // random 120-250 ms
 end;
 
 function SleepStepTime(var start, tix: Int64; endtix: PInt64): PtrInt;
-var
-  elapsed: PtrInt;
 begin
   tix := GetTickCount64;
   if start = 0 then
     start := tix;
-  elapsed := tix - start;
-  if elapsed < 50 then
-    result := 0 // 10us on POSIX, SwitchToThread on Windows
-  else
-  begin
-    if elapsed < 200 then
-      result := 1
-    else if elapsed < 500 then
-      result := 5
-    else if elapsed < 2000 then
-      result := 50
-    else
-      result := 120 + Random32(130); // random 120-250 ms
-  end;
+  result := SleepDelay(tix - start);
   if endtix <> nil then
     endtix^ := tix + result;
 end;
@@ -4064,14 +4124,34 @@ var
   endtix: Int64;
 begin
   ms := SleepStepTime(start, result, @endtix);
-  if ms < 10 then
+  if (ms < 10) or
+     (terminated = nil) then
     SleepHiRes(ms) // < 16 ms is a pious wish on Windows anyway
   else
     repeat
       SleepHiRes(10); // on Windows, HW clock resolution is around 16 ms
       result := GetTickCount64;
-    until (result > endtix) or
-          ((terminated <> nil) and terminated^);
+    until terminated^ or
+          (result > endtix);
+end;
+
+function SleepHiRes(ms: cardinal; var terminated: boolean;
+  terminatedvalue: boolean): boolean;
+var
+  start, endtix: Int64;
+begin
+  if terminated <> terminatedvalue then
+    if ms < 20 then
+      SleepHiRes(ms) // below HW clock resolution
+    else
+    begin
+      start := GetTickCount64;
+      endtix := start + ms;
+      repeat
+      until (terminated = terminatedvalue) or
+            (SleepStep(start, @terminated) > endtix);
+    end;
+  result := terminated = terminatedvalue;
 end;
 
 procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
@@ -4153,20 +4233,20 @@ end;
 
 procedure TSynLocker.Lock;
 begin
-  EnterCriticalSection(fSection);
+  mormot.core.os.EnterCriticalSection(fSection);
   fLocked := true;
 end;
 
 procedure TSynLocker.UnLock;
 begin
   fLocked := false;
-  LeaveCriticalSection(fSection);
+  mormot.core.os.LeaveCriticalSection(fSection);
 end;
 
 function TSynLocker.TryLock: boolean;
 begin
   if fLocked or
-     (TryEnterCriticalSection(fSection) = 0) then
+     (mormot.core.os.TryEnterCriticalSection(fSection) = 0) then
     result := false
   else
   begin
@@ -4196,12 +4276,12 @@ function TSynLocker.GetVariant(Index: integer): Variant;
 begin
   if cardinal(Index) < cardinal(PaddingUsedCount) then
   try
-    EnterCriticalSection(fSection);
+    mormot.core.os.EnterCriticalSection(fSection);
     fLocked := true;
     result := variant(Padding[Index]);
   finally
     fLocked := false;
-    LeaveCriticalSection(fSection);
+    mormot.core.os.LeaveCriticalSection(fSection);
   end
   else
     VarClear(result);
@@ -4211,14 +4291,14 @@ procedure TSynLocker.SetVariant(Index: integer; const Value: Variant);
 begin
   if cardinal(Index) <= high(Padding) then
   try
-    EnterCriticalSection(fSection);
+    mormot.core.os.EnterCriticalSection(fSection);
     fLocked := true;
     if Index >= PaddingUsedCount then
       PaddingUsedCount := Index + 1;
     variant(Padding[Index]) := Value;
   finally
     fLocked := false;
-    LeaveCriticalSection(fSection);
+    mormot.core.os.LeaveCriticalSection(fSection);
   end;
 end;
 
@@ -4226,13 +4306,13 @@ function TSynLocker.GetInt64(Index: integer): Int64;
 begin
   if cardinal(Index) < cardinal(PaddingUsedCount) then
   try
-    EnterCriticalSection(fSection);
+    mormot.core.os.EnterCriticalSection(fSection);
     fLocked := true;
     if not VariantToInt64(variant(Padding[Index]), result) then
       result := 0;
   finally
     fLocked := false;
-    LeaveCriticalSection(fSection);
+    mormot.core.os.LeaveCriticalSection(fSection);
   end
   else
     result := 0;
@@ -4247,13 +4327,13 @@ function TSynLocker.GetBool(Index: integer): boolean;
 begin
   if cardinal(Index) < cardinal(PaddingUsedCount) then
   try
-    EnterCriticalSection(fSection);
+    mormot.core.os.EnterCriticalSection(fSection);
     fLocked := true;
-    if not VariantToboolean(variant(Padding[Index]), result) then
+    if not VariantToBoolean(variant(Padding[Index]), result) then
       result := false;
   finally
     fLocked := false;
-    LeaveCriticalSection(fSection);
+    mormot.core.os.LeaveCriticalSection(fSection);
   end
   else
     result := false;
@@ -4285,7 +4365,7 @@ function TSynLocker.GetPointer(Index: integer): Pointer;
 begin
   if cardinal(Index) < cardinal(PaddingUsedCount) then
   try
-    EnterCriticalSection(fSection);
+    mormot.core.os.EnterCriticalSection(fSection);
     fLocked := true;
     with Padding[Index] do
       if VType = varUnknown then
@@ -4294,7 +4374,7 @@ begin
         result := nil;
   finally
     fLocked := false;
-    LeaveCriticalSection(fSection);
+    mormot.core.os.LeaveCriticalSection(fSection);
   end
   else
     result := nil;
@@ -4304,7 +4384,7 @@ procedure TSynLocker.SetPointer(Index: integer; const Value: Pointer);
 begin
   if cardinal(Index) <= high(Padding) then
   try
-    EnterCriticalSection(fSection);
+    mormot.core.os.EnterCriticalSection(fSection);
     fLocked := true;
     if Index >= PaddingUsedCount then
       PaddingUsedCount := Index + 1;
@@ -4315,7 +4395,7 @@ begin
     end;
   finally
     fLocked := false;
-    LeaveCriticalSection(fSection);
+    mormot.core.os.LeaveCriticalSection(fSection);
   end;
 end;
 
@@ -4323,12 +4403,12 @@ function TSynLocker.GetUtf8(Index: integer): RawUtf8;
 begin
   if cardinal(Index) < cardinal(PaddingUsedCount) then
   try
-    EnterCriticalSection(fSection);
+    mormot.core.os.EnterCriticalSection(fSection);
     fLocked := true;
     VariantStringToUtf8(variant(Padding[Index]), result);
   finally
     fLocked := false;
-    LeaveCriticalSection(fSection);
+    mormot.core.os.LeaveCriticalSection(fSection);
   end
   else
     result := '';
@@ -4338,14 +4418,14 @@ procedure TSynLocker.SetUtf8(Index: integer; const Value: RawUtf8);
 begin
   if cardinal(Index) <= high(Padding) then
   try
-    EnterCriticalSection(fSection);
+    mormot.core.os.EnterCriticalSection(fSection);
     fLocked := true;
     if Index >= PaddingUsedCount then
       PaddingUsedCount := Index + 1;
     RawUtf8ToVariant(Value, variant(Padding[Index]));
   finally
     fLocked := false;
-    LeaveCriticalSection(fSection);
+    mormot.core.os.LeaveCriticalSection(fSection);
   end;
 end;
 
@@ -4353,7 +4433,7 @@ function TSynLocker.LockedInt64Increment(Index: integer; const Increment: Int64)
 begin
   if cardinal(Index) <= high(Padding) then
   try
-    EnterCriticalSection(fSection);
+    mormot.core.os.EnterCriticalSection(fSection);
     fLocked := true;
     result := 0;
     if Index < PaddingUsedCount then
@@ -4363,7 +4443,7 @@ begin
     variant(Padding[Index]) := Int64(result + Increment);
   finally
     fLocked := false;
-    LeaveCriticalSection(fSection);
+    mormot.core.os.LeaveCriticalSection(fSection);
   end
   else
     result := 0;
@@ -4373,7 +4453,7 @@ function TSynLocker.LockedExchange(Index: integer; const Value: Variant): Varian
 begin
   if cardinal(Index) <= high(Padding) then
   try
-    EnterCriticalSection(fSection);
+    mormot.core.os.EnterCriticalSection(fSection);
     fLocked := true;
     with Padding[Index] do
     begin
@@ -4388,7 +4468,7 @@ begin
     end;
   finally
     fLocked := false;
-    LeaveCriticalSection(fSection);
+    mormot.core.os.LeaveCriticalSection(fSection);
   end
   else
     VarClear(result);
@@ -4398,7 +4478,7 @@ function TSynLocker.LockedPointerExchange(Index: integer; Value: pointer): point
 begin
   if cardinal(Index) <= high(Padding) then
   try
-    EnterCriticalSection(fSection);
+    mormot.core.os.EnterCriticalSection(fSection);
     fLocked := true;
     with Padding[Index] do
     begin
@@ -4420,7 +4500,7 @@ begin
     end;
   finally
     fLocked := false;
-    LeaveCriticalSection(fSection);
+    mormot.core.os.LeaveCriticalSection(fSection);
   end
   else
     result := nil;

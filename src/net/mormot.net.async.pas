@@ -78,14 +78,14 @@ type
     // - returns true if slot has been acquired, setting the wasactive flag
     // - returns false if it is used by another thread
     function TryLock(writer: boolean): boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// try to acquire an exclusive R/W access to this connection
     // - returns true if slot has been acquired
     // - returns false if it is used by another thread, after the timeoutMS period
     function WaitLock(writer: boolean; timeoutMS: cardinal): boolean;
     /// release exclusive R/W access to this connection
     procedure UnLock(writer: boolean);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// release all R/W nested locks
     // - used when the connection is closed and this slot becomes inactive
     procedure UnLockFinal(writer: boolean);
@@ -788,7 +788,7 @@ function TPollSocketsSlot.TryLock(writer: boolean): boolean;
 begin
   if (socket <> nil) and
      (lockcounter[writer] = 0) and
-     (TryEnterCriticalSection(locker[writer]) <> 0) then
+     (mormot.core.os.TryEnterCriticalSection(locker[writer]) <> 0) then
   begin
     wasactive := true;
     inc(lockcounter[writer]);
@@ -804,7 +804,7 @@ begin
      (lockcounter[writer] > 0) then
   begin
     dec(lockcounter[writer]);
-    LeaveCriticalSection(locker[writer]);
+    mormot.core.os.LeaveCriticalSection(locker[writer]);
   end;
 end;
 
@@ -813,7 +813,7 @@ begin
   while lockcounter[writer] > 0 do
   begin
     dec(lockcounter[writer]);
-    LeaveCriticalSection(locker[writer]);
+    mormot.core.os.LeaveCriticalSection(locker[writer]);
   end;
 end;
 

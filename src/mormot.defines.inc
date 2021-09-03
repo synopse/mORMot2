@@ -118,6 +118,7 @@
   {$CODEPAGE UTF8} // otherwise unexpected behavior occurs in most cases
 
   {$define HASINLINE}
+  {$define HASINLINEWINAPI} // Delphi has troubles inlining Windows API calls
   {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
   {$define NODELPHIASM}   // avoid e.g. low-level System.@LStrFromPCharLen calls
   {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
