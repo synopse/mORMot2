@@ -11120,6 +11120,7 @@ begin
       varEmpty, varNull:
         begin
           result := false;
+          Value := false;
           exit;
         end;
       varBoolean: // 16-bit WordBool to 8-bit boolean
