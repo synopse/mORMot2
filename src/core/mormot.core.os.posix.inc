@@ -205,10 +205,19 @@ end;
 procedure TIcuLibrary.DoLoad(const LibName: TFileName; const Version: string);
 const
   NAMES: array[0..12] of string = (
-    'ucnv_open', 'ucnv_close', 'ucnv_setSubstChars', 'ucnv_setFallback',
-    'ucnv_fromUChars', 'ucnv_toUChars', 'u_strToUpper', 'u_strToLower',
-    'u_strCompare', 'u_strCaseCompare', 'u_getDataDirectory',
-    'u_setDataDirectory', 'u_init');
+    'ucnv_open',
+    'ucnv_close',
+    'ucnv_setSubstChars',
+    'ucnv_setFallback',
+    'ucnv_fromUChars',
+    'ucnv_toUChars',
+    'u_strToUpper',
+    'u_strToLower',
+    'u_strCompare',
+    'u_strCaseCompare',
+    'u_getDataDirectory',
+    'u_setDataDirectory',
+    'u_init');
   {$ifdef OSANDROID}
   // from https://developer.android.com/guide/topics/resources/internationalization
   ICU_VER: array[1..13] of string = (
@@ -735,8 +744,10 @@ begin
   result := UnixMSTimeUtc;
 end;
 
+{$ifdef OSPTHREADS}
 var
   {%H-}pthread: pointer;
+{$endif OSPTHREADS}
 
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
@@ -768,10 +779,10 @@ begin
   if L = 0 then
     exit;
   trunc[L] := #0;
-  {$ifdef OSLINUX} // see https://stackoverflow.com/a/7989973
+  {$ifdef OSPTHREADS} // see https://stackoverflow.com/a/7989973
   if Assigned(pthread_setname_np) then
     pthread_setname_np(pointer(ThreadID), @trunc[0]);
-  {$endif OSLINUX}
+  {$endif OSPTHREADS}
 end;
 
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
@@ -1010,7 +1021,7 @@ begin
   if aCustomOffset <> 0 then
     if (aCustomOffset and (SystemInfo.dwPageSize - 1)) <> 0 then
       raise EOSException.CreateFmt(
-        'DoMap(aCustomOffset=%d) with dwPageSize=%d',
+        'DoMap(aCustomOffset=%d) incompatible with dwPageSize=%d',
         [aCustomOffset, SystemInfo.dwPageSize])
     else
       aCustomOffset := aCustomOffset div SystemInfo.dwPageSize;
@@ -1081,34 +1092,34 @@ end;
 
 function GetCurrentThreadId: TThreadID;
 begin
-  {$ifdef OSLINUX}
+  {$ifdef OSPTHREADS} // inlined direct pthread API call
   result := TThreadID(pthread_self);
   {$else}
   result := FpcCurrentThreadManager.GetCurrentThreadId;
-  {$endif OSLINUX}
+  {$endif OSPTHREADS}
 end;
 
 procedure EnterCriticalSection(var cs: TRTLCriticalSection);
 begin
-  {$ifdef OSLINUX}
+  {$ifdef OSPTHREADS}
   pthread_mutex_lock(@cs);
   {$else}
   FpcCurrentThreadManager.EnterCriticalSection(cs);
-  {$endif OSLINUX}
+  {$endif OSPTHREADS}
 end;
 
 procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
 begin
-  {$ifdef OSLINUX}
+  {$ifdef OSPTHREADS}
   pthread_mutex_unlock(@cs);
   {$else}
   FpcCurrentThreadManager.LeaveCriticalSection(cs);
-  {$endif OSLINUX}
+  {$endif OSPTHREADS}
 end;
 
 function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer;
 begin
-  {$ifdef OSLINUX}
+  {$ifdef OSPTHREADS}
   result := pthread_mutex_trylock(@cs);
   if result = 0 then // pthread success
     result := 1
@@ -1116,7 +1127,7 @@ begin
     result := 0;
   {$else}
   result := FpcCurrentThreadManager.TryEnterCriticalSection(cs);
-  {$endif OSLINUX}
+  {$endif OSPTHREADS}
 end;
 
 {$ifdef OSBSDDARWIN}
@@ -1193,8 +1204,12 @@ var
   i, j: PtrInt;
 const
   NAMES: array[0..5] of PAnsiChar = (
-    'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print',
-    'sd_journal_sendv', 'sd_notify', 'sd_watchdog_enabled');
+    'sd_listen_fds',
+    'sd_is_socket_unix',
+    'sd_journal_print',
+    'sd_journal_sendv',
+    'sd_notify',
+    'sd_watchdog_enabled');
 begin
   GlobalLock;
   if not tested then
@@ -2398,17 +2413,6 @@ begin
     GetSystemProperty('ro.product.name') + ' ' +
     GetSystemProperty('ro.product.device')));
   {$else}
-  pthread := dlopen('libpthread.so.0', RTLD_LAZY);
-  if pthread <> nil then
-  begin
-    {$ifdef OSLINUX}
-    @pthread_self := dlsym(pthread, 'pthread_self');
-    @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
-    @pthread_mutex_lock := dlsym(pthread, 'pthread_mutex_lock');
-    @pthread_mutex_unlock := dlsym(pthread, 'pthread_mutex_unlock');
-    @pthread_mutex_trylock := dlsym(pthread, 'pthread_mutex_trylock');
-    {$endif OSLINUX}
-  end;
   prod := TrimU(TrimU(StringFromFile('/sys/class/dmi/id/sys_vendor', true)) +
     ' ' + StringFromFile('/sys/class/dmi/id/product_name', true));
   if prod <> '' then
@@ -2568,6 +2572,18 @@ begin
     raise EOSException.CreateFmt(
       'clock_gettime() not supported by %s kernel - errno=%d',
       [PAnsiChar(@uts.release), fpgeterrno]);
+  // direct access to the pthread library if possible (Linux only)
+  {$ifdef OSPTHREADS}
+  pthread := dlopen('libpthread.so.0', RTLD_LAZY);
+  if pthread <> nil then
+  begin
+    @pthread_self          := dlsym(pthread, 'pthread_self');
+    @pthread_setname_np    := dlsym(pthread, 'pthread_setname_np');
+    @pthread_mutex_lock    := dlsym(pthread, 'pthread_mutex_lock');
+    @pthread_mutex_unlock  := dlsym(pthread, 'pthread_mutex_unlock');
+    @pthread_mutex_trylock := dlsym(pthread, 'pthread_mutex_trylock');
+  end;
+  {$endif OSPTHREADS}
   // redirect some syscall FPC RTL functions to faster vDSO libc variant
   {$ifdef CPUARM3264}
   StrLen := @StrLenLibc; // libc version is faster than plain pascal or RTL code
@@ -2609,12 +2625,14 @@ end;
 
 procedure FinalizeSpecificUnit;
 begin
+  {$ifdef OSPTHREADS}
   if pthread <> nil then
     dlclose(pthread);
-  icu.Done;
+  {$endif OSPTHREADS}
   {$ifdef OSLINUX} // systemd API is Linux-specific
   sd.Done;
   {$endif OSLINUX}
+  icu.Done;
   SynDaemonInterceptLog := nil;
 end;
 

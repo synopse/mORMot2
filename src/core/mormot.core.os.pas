@@ -1190,11 +1190,15 @@ procedure UnixTimeToLocalTime(I64: Int64; out Local: TSystemTime);
 
 {$else}
 
+{$ifdef OSLINUX}
+  {$define OSPTHREADS} // direct pthread calls were tested on Linux only
+{$endif OSLINUX}
+
 var
   // globally defined for proper inlined calls
   // - slight performance gain to inline our own GetCurrentThreadId,
   // EnterCriticalSection and LeaveCriticalSection RTL-like functions
-{$ifdef OSLINUX}
+{$ifdef OSPTHREADS}
   pthread_self: function: pointer; cdecl;
   pthread_mutex_lock: function(mutex: pointer): integer; cdecl;
   pthread_mutex_unlock: function(mutex: pointer): integer; cdecl;
@@ -1202,7 +1206,7 @@ var
   pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
 {$else}
   FpcCurrentThreadManager: TThreadManager;
-{$endif OSLINUX}
+{$endif OSPTHREADS}
 
 {$endif OSWINDOWS}
 
@@ -3512,7 +3516,7 @@ begin
   {$endif OSWINDOWS}
   fFileLocal := aFileOwned;
   fFile := aFile;
-  fFileSize := FileSeek64(fFile, 0, soFromEnd);
+  fFileSize := mormot.core.os.FileSize(fFile);
   if fFileSize = 0 then
   begin
     result := true; // handle 0 byte file without error (but no memory map)
@@ -3549,7 +3553,7 @@ begin
     end;
   end
   else
-    // call actual Windows/POSIX map API
+    // call actual Windows/POSIX memory mapping API
     result := DoMap(aCustomOffset);
 end;
 

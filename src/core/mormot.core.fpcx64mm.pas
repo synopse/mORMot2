@@ -1093,12 +1093,12 @@ asm
         // Since most allocations are for small blocks, determine small block type
         lea     rbx, [rip + SmallBlockInfo]
 @VoidSizeToSomething:
-        lea     rdx, [rcx + BlockHeaderSize - 1]
+        lea     rdx, [size + BlockHeaderSize - 1]
         shr     rdx, 4 // div SmallBlockGranularity
         // Is it a tiny/small block?
-        cmp     rcx, (MaximumSmallBlockSize - BlockHeaderSize)
+        cmp     size, (MaximumSmallBlockSize - BlockHeaderSize)
         ja      @NotTinySmallBlock
-        test    rcx, rcx
+        test    size, size
         jz      @VoidSize
         {$ifndef FPCMM_ASSUMEMULTITHREAD}
         mov     rax, qword ptr [rbx].TSmallBlockInfo.IsMultiThreadPtr
@@ -1225,7 +1225,7 @@ asm
         {$endif MSWINDOWS}
         ret
 @VoidSize:
-        inc     ecx // "we always need to allocate something" (see RTL heap.inc)
+        inc     size // "we always need to allocate something" (see RTL heap.inc)
         jmp     @VoidSizeToSomething
 @TrySmallSequentialFeed:
         // Feed a small block sequentially

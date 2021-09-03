@@ -3171,21 +3171,21 @@ var
   /// the 32-bit default hasher used by TDynArrayHashed
   // - set to crc32csse42() if SSE4.2 or ARMv8 are available on this CPU,
   // or fallback to xxHash32() which is faster than crc32cfast() e.g. on ARM
-  // - mormot.crypt.core will assign safer and faster AesNiHash32() if available
+  // - mormot.crypt.core may assign safer and faster AesNiHash32() if available
   DefaultHasher: THasher = xxHash32;
 
   /// the 32-bit hash function used by TRawUtf8Interning
   // - set to crc32csse42() if SSE4.2 or ARMv8 are available on this CPU,
   // or fallback to xxHash32() which performs better than crc32cfast()
-  // - mormot.crypt.core will assign safer and faster AesNiHash32() if available
+  // - mormot.crypt.core may assign safer and faster AesNiHash32() if available
   InterningHasher: THasher = xxHash32;
 
   /// a 64-bit hasher function
-  // - crc32cTwice() by default, but mormot.crypt.core will assign AesNiHash64()
+  // - crc32cTwice() by default, but mormot.crypt.core may assign AesNiHash64()
   DefaultHasher64: THasher64 = crc32cTwice;
 
   /// a 128-bit hasher function
-  // - crc32c128() by default, but mormot.crypt.core will assign AesNiHash128()
+  // - crc32c128() by default, but mormot.crypt.core may assign AesNiHash128()
   DefaultHasher128: THasher128 = crc32c128;
 
 
@@ -4032,7 +4032,7 @@ uses
   Windows; // circumvent unexpected warning about inlining (WTF!)
 {$endif ISDELPHI20062007}
 
-{$ifdef FPC_X64MM}
+{$ifdef FPC_X64MM} // for direct string access to our fpcx64mm Memory Manager
 {$ifdef CPUX64}
 uses
   mormot.core.fpcx64mm;
@@ -4289,8 +4289,11 @@ begin
 end;
 
 procedure FillZero(var result: TGUID);
+var
+  d: TInt64Array absolute result;
 begin
-  FillZero(PHash128(@result)^);
+  d[0] := 0;
+  d[1] := 0;
 end;
 
 function RandomGuid: TGUID;
@@ -8901,13 +8904,13 @@ var
   e: THash128Rec;
   i, j: PtrInt;
 begin
+  if entropy <> nil then
+    for i := 0 to entropylen - 1 do
+    begin
+      j := i and 15;
+      e.b[j] := {%H-}e.b[j] xor entropy^[i];
+    end;
   repeat
-    if entropy <> nil then
-      for i := 0 to entropylen - 1 do
-      begin
-        j := i and 15;
-        e.b[j] := {%H-}e.b[j] xor entropy^[i];
-      end;
     XorEntropy(@e.c);
     rs1 := rs1 xor e.c0 xor e.c3;
     rs2 := rs2 xor e.c1;
@@ -10305,32 +10308,44 @@ end;
 
 function IsZero(P: pointer; Length: integer): boolean;
 var
-  i: integer;
+   n: integer;
 begin
   result := false;
-  for i := 1 to Length shr 4 do // 16 bytes (4 DWORD) by loop - aligned read
-    {$ifdef CPU64}
-    if (PInt64Array(P)^[0] <> 0) or
-       (PInt64Array(P)^[1] <> 0) then
-    {$else}
-    if (PCardinalArray(P)^[0] <> 0) or
-       (PCardinalArray(P)^[1] <> 0) or
-       (PCardinalArray(P)^[2] <> 0) or
-       (PCardinalArray(P)^[3] <> 0) then
-    {$endif CPU64}
+  n := Length shr 4;
+  if n <> 0 then
+    repeat // 16 bytes (4 DWORD) by loop - aligned read
+      {$ifdef CPU64}
+      if (PInt64(P)^ <> 0) or
+         (PInt64Array(P)^[1] <> 0) then
+      {$else}
+      if (PCardinal(P)^ <> 0) or
+         (PCardinalArray(P)^[1] <> 0) or
+         (PCardinalArray(P)^[2] <> 0) or
+         (PCardinalArray(P)^[3] <> 0) then
+      {$endif CPU64}
+          exit
+        else
+          inc(PByte(P), 16);
+      dec(n);
+    until n = 0;
+  n := (Length shr 2) and 3;
+  if n <> 0 then
+    repeat // 4 bytes (1 DWORD) by loop
+      if PCardinal(P)^ <> 0 then
         exit
       else
-        inc(PByte(P), 16);
-  for i := 1 to (Length shr 2) and 3 do // 4 bytes (1 DWORD) by loop
-    if PCardinal(P)^ <> 0 then
-      exit
-    else
-      inc(PByte(P), 4);
-  for i := 1 to Length and 3 do // remaining content
-    if PByte(P)^ <> 0 then
-      exit
-    else
-      inc(PByte(P));
+        inc(PByte(P), 4);
+        dec(n);
+    until n = 0;
+  n := Length and 3;
+  if n <> 0 then
+    repeat // remaining content
+      if PByte(P)^ <> 0 then
+        exit
+      else
+        inc(PByte(P));
+      dec(n);
+    until n = 0;
   result := true;
 end;
 
