@@ -2540,13 +2540,15 @@ type
   public
     /// initialize the RawUtf8/Objects storage with [fCaseSensitive] flags
     constructor Create; overload; override;
-    /// initialize the RawUtf8/Objects storage
+    /// initialize the RawUtf8/Objects storage with extended flags
     // - by default, any associated Objects[] are just weak references;
     // you may supply fOwnObjects flag to force object instance management
     // - if you want the stored text items to be unique, set fNoDuplicate
     // and then an internal hash table will be maintained for fast IndexOf()
     // - you can unset fCaseSensitive to let the UTF-8 lookup be case-insensitive
-    constructor Create(aFlags: TRawUtf8ListFlags); reintroduce; overload;
+    // - is defined as CreateEx instead of overload Create to avoid weird Delphi
+    // compilation issues, especially within packages
+    constructor CreateEx(aFlags: TRawUtf8ListFlags);
     {$ifndef PUREMORMOT2}
     /// backward compatiliby overloaded constructor
     // - please rather use the overloaded Create(TRawUtf8ListFlags)
@@ -4215,7 +4217,7 @@ end;
 
 constructor TRawUtf8List.Create;
 begin
-  Create([fCaseSensitive]);
+  CreateEx([fCaseSensitive]);
 end;
 
 {$ifndef PUREMORMOT2}
@@ -4227,11 +4229,11 @@ begin
     include(fFlags, fNoDuplicate);
   if aCaseSensitive then
     include(fFlags, fCaseSensitive);
-  Create(fFlags);
+  CreateEx(fFlags);
 end;
 {$endif PUREMORMOT2}
 
-constructor TRawUtf8List.Create(aFlags: TRawUtf8ListFlags);
+constructor TRawUtf8List.CreateEx(aFlags: TRawUtf8ListFlags);
 begin
   inherited Create;
   fNameValueSep := '=';

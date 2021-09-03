@@ -692,7 +692,7 @@ end;
 procedure TThreadSafeEngine.AtomCacheAdd(const Name: RawUtf8; Atom: TScriptAtom);
 begin
   if fAtomCache = nil then
-    fAtomCache := TRawUtf8List.Create([fCaseSensitive, fNoDuplicate]);
+    fAtomCache := TRawUtf8List.CreateEx([fCaseSensitive, fNoDuplicate]);
   fAtomCache.AddObject(Name, Atom);
 end;
 

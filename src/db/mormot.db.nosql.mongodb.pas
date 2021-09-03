@@ -2726,7 +2726,7 @@ begin
         FormatUtf8('%,%:%', [fConnectionString, secHost[i], Port]);
     end;
   end;
-  fDatabases := TRawUtf8List.Create([fObjectsOwned, fNoDuplicate, fCaseSensitive]);
+  fDatabases := TRawUtf8List.CreateEx([fObjectsOwned, fNoDuplicate, fCaseSensitive]);
 end;
 
 destructor TMongoClient.Destroy;
@@ -3125,7 +3125,7 @@ var
 begin
   fClient := aClient;
   fName := aDatabaseName;
-  fCollections := TRawUtf8List.Create([fObjectsOwned, fNoDuplicate, fCaseSensitive]);
+  fCollections := TRawUtf8List.CreateEx([fObjectsOwned, fNoDuplicate, fCaseSensitive]);
   if fClient.ServerBuildInfoNumber < 3000000 then
   begin
     if colls.Init(client.Connections[0].GetBsonAndFree(TMongoRequestQuery.Create(

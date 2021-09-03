@@ -6734,7 +6734,7 @@ var
         if ToCache then
         begin
           if fCache = nil then
-            fCache := TRawUtf8List.Create(
+            fCache := TRawUtf8List.CreateEx(
               [fObjectsOwned, fNoDuplicate, fCaseSensitive]);
           if fCache.AddObject(cachedSql, Stmt) >= 0 then
             Stmt._AddRef

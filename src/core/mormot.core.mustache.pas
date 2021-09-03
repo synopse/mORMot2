@@ -795,7 +795,7 @@ end;
 
 constructor TSynMustachePartials.Create;
 begin
-  fList := TRawUtf8List.Create([fNoDuplicate, fCaseSensitive]);
+  fList := TRawUtf8List.CreateEx([fNoDuplicate, fCaseSensitive]);
 end;
 
 constructor TSynMustachePartials.CreateOwned(
@@ -1226,7 +1226,7 @@ begin
     GlobalLock;
     try
       if SynMustacheCache = nil then
-        SynMustacheCache := TSynMustacheCache.Create(
+        SynMustacheCache := TSynMustacheCache.CreateEx(
           [fObjectsOwned, fNoDuplicate, fCaseSensitive]);
     finally
       GlobalUnLock;

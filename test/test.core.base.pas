@@ -800,7 +800,7 @@ var
   Rec: TSynFilterOrValidate;
   s: RawUtf8;
 begin
-  L := TRawUtf8List.Create([fObjectsOwned]);
+  L := TRawUtf8List.CreateEx([fObjectsOwned]);
   try // no hash table involved
     for i := 0 to MAX do
     begin
@@ -827,7 +827,7 @@ begin
   finally
     L.Free;
   end;
-  L := TRawUtf8List.Create([fObjectsOwned, fNoDuplicate, fCaseSensitive]);
+  L := TRawUtf8List.CreateEx([fObjectsOwned, fNoDuplicate, fCaseSensitive]);
   try // with hash table
     for i := 1 to MAX do
     begin
