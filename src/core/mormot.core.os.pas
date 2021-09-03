@@ -2237,13 +2237,13 @@ var
 procedure SleepHiRes(ms: cardinal);
 
 /// call SleepHiRes() taking count of the activity, in 0/1/5/50/120-250 ms steps
-// - range is agressively designed burning some CPU in favor or responsiveness
+// - range is agressively designed burning some CPU in favor of responsiveness
 // - should reset start := 0 when some activity occured
 // - returns the current GetTickCount64 value
 function SleepStep(var start: Int64; terminated: PBoolean = nil): Int64;
 
 /// compute optimal sleep time as SleepStep, in 0/1/5/50/120-250 ms steps
-// - is agressively designed burning some CPU in favor or responsiveness
+// - is agressively designed burning some CPU in favor of responsiveness
 function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): PtrInt;
 
 /// low-level naming of a thread

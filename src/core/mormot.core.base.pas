@@ -1036,9 +1036,10 @@ function GetCardinalDef(P: PUtf8Char; Default: PtrUInt): PtrUInt;
 /// get the unsigned 32-bit integer value stored as Unicode string in P^
 function GetCardinalW(P: PWideChar): PtrUInt;
 
-/// get a boolean value stored as true/false text in P^
-// - would also recognize any non 0 integer as true
+/// get a boolean value stored as 'true'/'false' text in P^
+// - would also recognize any non '0' integer as true, or false if P = nil
 function GetBoolean(P: PUtf8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// get the 64-bit integer value stored in P^
 function GetInt64(P: PUtf8Char): Int64; overload;
@@ -1778,7 +1779,7 @@ function ObjArrayFind(const aObjArray; aCount: integer; aItem: TObject): PtrInt;
 
 /// wrapper to count all not nil items in a T*ObjArray dynamic array storage
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
-function ObjArrayCount(const aObjArray): integer;
+function ObjArrayNotNilCount(const aObjArray): integer;
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
@@ -4815,17 +4816,10 @@ end;
 
 function GetBoolean(P: PUtf8Char): boolean;
 begin
-  if P <> nil then
-    case PInteger(P)^ of
-      TRUE_LOW:
-        result := true;
-      FALSE_LOW:
-        result := false;
-    else
-      result := PWord(P)^ <> ord('0');
-    end
-  else
-    result := false;
+  result := (P <> nil) and
+            (PInteger(P)^ <> FALSE_LOW) and
+            ((PInteger(P)^ = TRUE_LOW) or
+             ((PInteger(P)^ and $ffff) <> ord('0')));
 end;
 
 function GetCardinalDef(P: PUtf8Char; Default: PtrUInt): PtrUInt;
@@ -7604,15 +7598,14 @@ begin
   result := PtrUIntScanIndex(pointer(aObjArray), aCount, PtrUInt(aItem));
 end;
 
-function ObjArrayCount(const aObjArray): integer;
+function ObjArrayNotNilCount(const aObjArray): integer;
 var
   i: PtrInt;
   a: TObjectDynArray absolute aObjArray;
 begin
   result := 0;
   for i := 0 to length(a) - 1 do
-    if a[i] <> nil then
-      inc(result);
+    inc(result, ord(a[i] <> nil));
 end;
 
 procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
