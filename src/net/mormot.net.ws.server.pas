@@ -110,8 +110,6 @@ type
   TWebSocketServerSocket = class(THttpServerSocket)
   protected
     fProcess: TWebSocketProcessServer; // set once upgraded
-    /// overriden to detect upgrade, or process WebSockets in the thread pool
-    procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); override;
   public
     /// ensure focConnectionClose is done before closing the connection
     procedure Close; override;
@@ -558,43 +556,6 @@ end;
 
 
 { TWebSocketServerSocket }
-
-procedure TWebSocketServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);
-var
-  freeme: boolean;
-  headertix: Int64;
-  res: THttpServerSocketGetRequestResult;
-begin
-  // from TSynThreadPoolTHttpServer.Task
-  freeme := true;
-  try
-    if Assigned(fProcess) then
-    begin
-      // check socket read/write and call fProcess next step
-      freeme := false;
-      exit;
-    end;
-    headertix := fServer.HeaderRetrieveAbortDelay;
-    if headertix > 0 then
-      headertix := headertix + GetTickCount64;
-    res := GetRequest({withbody=}false, headertix);
-    if (res = grHeaderReceived) and
-       (hfConnectionUpgrade in Http.HeaderFlags) and
-       KeepAliveClient and
-       IdemPropNameU(Method, 'GET') and
-       IdemPropNameU(Http.Upgrade, 'websocket') then
-    begin
-      // perform a WebSockets upgrade
-
-      res := grHeaderReceived;
-    end;
-    // regular HTTP request process
-    freeme := TaskProcessBody(aCaller, res);
-  finally
-    if freeme then
-      Free;
-  end;
-end;
 
 procedure TWebSocketServerSocket.Close;
 begin

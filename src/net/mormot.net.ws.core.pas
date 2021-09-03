@@ -9,6 +9,7 @@ unit mormot.net.ws.core;
    WebSockets Abstract Processing for Client and Server
    - WebSockets Frames Definitions
    - WebSockets Protocols Implementation
+   - WebSockets Asynchronous Frames Parsing
    - WebSockets Client and Server Shared Process
    
   *****************************************************************************
@@ -671,7 +672,6 @@ type
   TWebSocketProtocolUriClass = class of TWebSocketProtocolUri;
 
 
-
 { ******************** WebSockets Client and Server Shared Process }
 
   /// the current state of the WebSockets process
@@ -848,6 +848,48 @@ function ToText(mode: TWebSocketProcessNotifyCallback): PShortString; overload;
 function ToText(st: TWebSocketProcessState): PShortString; overload;
 
 
+
+{ ******************** WebSockets Asynchronous Frames Parsing }
+
+type
+  /// define our work memory buffer for low-level WebSockets frame headers
+  TFrameHeader = packed record
+    first: byte;
+    len8: byte;
+    len32: cardinal;
+    len64: cardinal;
+    mask: cardinal; // 0 indicates no payload masking
+  end;
+
+  /// states of the WebSockets parsing asynchronous machine
+  TWebProcessInFrameState = (
+    pfsHeader1,
+    pfsData1,
+    pfsHeaderN,
+    pfsDataN,
+    pfsDone,
+    pfsError);
+
+  /// asynchronous state machine to process WebSockets incoming frames
+  TWebProcessInFrame = object
+    hdr: TFrameHeader;
+    opcode: TWebSocketFrameOpCode;
+    masked: boolean;
+    st: TWebProcessInFrameState;
+    process: TWebSocketProcess;
+    outputframe: PWebSocketFrame;
+    len: integer;
+    data: RawByteString;
+    procedure Init(Owner: TWebSocketProcess; output: PWebSocketFrame);
+    function GetBytes(P: PAnsiChar; count: integer): boolean;
+    function GetHeader: boolean;
+    function GetData: boolean;
+    function Step(ErrorWithoutException: PInteger): TWebProcessInFrameState;
+  end;
+
+
+
+
 var
   /// if set, will log all WebSockets raw information
   // - see also TWebSocketProcessSettings.LogDetails and
@@ -903,6 +945,40 @@ begin
   SHA.Update(pointer(Base64), length(Base64));
   SHA.Update(@SALT[1], 36);
   SHA.Final(Digest);
+end;
+
+procedure ProcessMask(data: PCardinal; mask: cardinal; len: PtrInt);
+var
+  i, maskCount: PtrInt;
+begin
+  maskCount := len shr 2;
+  if maskCount <> 0 then
+    repeat
+      data^ := data^ xor mask;
+      inc(data);
+      dec(maskCount);
+    until maskCount = 0;
+  for i := 0 to (len and 3) - 1 do
+  begin
+    PByteArray(data)^[i] := PByteArray(data)^[i] xor mask;
+    mask := mask shr 8;
+  end;
+end;
+
+const
+  FRAME_HEAD_SEP = #1;
+
+procedure FrameInit(opcode: TWebSocketFrameOpCode;
+  const Content, ContentType: RawByteString; out frame: TWebSocketFrame);
+begin
+  frame.opcode := opcode;
+  if (ContentType <> '') and
+     (Content <> '') and
+     not IdemPChar(pointer(ContentType), 'TEXT/') and
+     IsContentCompressed(pointer(Content), length(Content)) then
+    frame.content := [fopAlreadyCompressed]
+  else
+    frame.content := [];
 end;
 
 
@@ -1514,22 +1590,6 @@ begin
   TWebSocketProtocolBinary(result).fSequencing := fSequencing;
   if fEncryption <> nil then
     result.fEncryption := fEncryption.Clone;
-end;
-
-const
-  FRAME_HEAD_SEP = #1;
-
-procedure FrameInit(opcode: TWebSocketFrameOpCode;
-  const Content, ContentType: RawByteString; out frame: TWebSocketFrame);
-begin
-  frame.opcode := opcode;
-  if (ContentType <> '') and
-     (Content <> '') and
-     not IdemPChar(pointer(ContentType), 'TEXT/') and
-     IsContentCompressed(pointer(Content), length(Content)) then
-    frame.content := [fopAlreadyCompressed]
-  else
-    frame.content := [];
 end;
 
 procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUtf8;
@@ -2588,58 +2648,150 @@ begin
         end;
 end;
 
-type
-  TFrameHeader = packed record
-    first: byte;
-    len8: byte;
-    len32: cardinal;
-    len64: cardinal;
-    mask: cardinal; // 0 indicates no payload masking
-  end;
-
-procedure ProcessMask(data: pointer; mask: cardinal; len: PtrInt);
+function TWebSocketProcess.GetFrame(out Frame: TWebSocketFrame;
+  ErrorWithoutException: PInteger): boolean;
 var
-  i, maskCount: PtrInt;
+  f: TWebProcessInFrame;
 begin
-  maskCount := len shr 2;
-  for i := 0 to maskCount - 1 do
-    PCardinalArray(data)^[i] := PCardinalArray(data)^[i] xor mask;
-  maskCount := maskCount shl 2;
-  for i := maskCount to maskCount + (len and 3) - 1 do
-  begin
-    PByteArray(data)^[i] := PByteArray(data)^[i] xor mask;
-    mask := mask shr 8;
+  f.Init(self, @Frame);
+  fSafeIn.Lock;
+  try
+    repeat
+      // blocking processing loop to perform all steps
+    until f.Step(ErrorWithoutException) in [pfsDone, pfsError];
+    result := f.st = pfsDone;
+  finally
+    fSafeIn.UnLock;
   end;
 end;
 
-type
-  // asynchronous state machine to process incoming frames
-  TWebProcessInFrameState = (
-    pfsHeader1,
-    pfsData1,
-    pfsHeaderN,
-    pfsDataN,
-    pfsDone,
-    pfsError);
-
-  TWebProcessInFrame = object
-    hdr: TFrameHeader;
-    opcode: TWebSocketFrameOpCode;
-    masked: boolean;
-    st: TWebProcessInFrameState;
-    process: TWebSocketProcess;
-    outputframe: PWebSocketFrame;
-    len: integer;
-    data: RawByteString;
-    procedure Init(Owner: TWebSocketProcess; output: PWebSocketFrame);
-    function GetBytes(P: PAnsiChar; count: integer): boolean;
-    function GetHeader: boolean;
-    function GetData: boolean;
-    function Step(ErrorWithoutException: PInteger): TWebProcessInFrameState;
+function TWebSocketProcess.SendFrame(var Frame: TWebSocketFrame): boolean;
+var
+  hdr: TFrameHeader;
+  hdrlen, len: cardinal;
+  tmp: TSynTempBuffer;
+begin
+  fSafeOut.Lock;
+  try
+    Log(Frame, 'SendFrame', sllTrace, true);
+    try
+      result := true;
+      if Frame.opcode = focConnectionClose then
+        fConnectionCloseWasSent := true; // to be done once on each end
+      if (fProtocol <> nil) and
+         (Frame.payload <> '') then
+        fProtocol.BeforeSendFrame(Frame);
+      len := Length(Frame.payload);
+      hdr.first := byte(Frame.opcode) or FRAME_OPCODE_FIN; // single frame
+      if len < FRAME_LEN_2BYTES then
+      begin
+        hdr.len8 := len or fMaskSentFrames;
+        hdrlen := 2; // opcode+len8
+      end
+      else if len < 65536 then
+      begin
+        hdr.len8 := FRAME_LEN_2BYTES or fMaskSentFrames;
+        hdr.len32 := swap(word(len)); // FPC expects explicit word() cast
+        hdrlen := 4; // opcode+len8+len32.low
+      end
+      else
+      begin
+        hdr.len8 := FRAME_LEN_8BYTES or fMaskSentFrames;
+        hdr.len64 := bswap32(len);
+        hdr.len32 := 0;
+        hdrlen := 10; // opcode+len8+len32+len64.low
+      end;
+      if fMaskSentFrames <> 0 then
+      begin
+        hdr.mask := Random32; // https://tools.ietf.org/html/rfc6455#section-10.3
+        ProcessMask(pointer(Frame.payload), hdr.mask, len);
+        inc(hdrlen, 4);
+      end;
+      tmp.Init(hdrlen + len); // avoid most memory allocations
+      try
+        MoveSmall(@hdr, tmp.buf, hdrlen);
+        if fMaskSentFrames <> 0 then
+          PInteger(PAnsiChar(tmp.buf) + hdrlen - 4)^ := hdr.mask;
+        MoveFast(pointer(Frame.payload)^, PAnsiChar(tmp.buf)[hdrlen], len);
+        if not SendBytes(tmp.buf, hdrlen + len) then
+          result := false;
+      finally
+        tmp.Done;
+      end;
+      SetLastPingTicks(not result);
+    except
+      result := false;
+    end;
+  finally
+    fSafeOut.UnLock;
   end;
+end;
+
+
+
+{ TWebCrtSocketProcess }
+
+constructor TWebCrtSocketProcess.Create(aSocket: TCrtSocket;
+  aProtocol: TWebSocketProtocol; aOwnerConnection: THttpServerConnectionID;
+  aOwnerThread: TSynThread; aSettings: PWebSocketProcessSettings;
+  const aProcessName: RawUtf8);
+begin
+  inherited Create(aProtocol, aOwnerConnection, aOwnerThread, aSettings, aProcessName);
+  fSocket := aSocket;
+end;
+
+function TWebCrtSocketProcess.CanGetFrame(TimeOut: cardinal;
+  ErrorWithoutException: PInteger): boolean;
+var
+  pending: integer;
+begin
+  if ErrorWithoutException <> nil then
+    ErrorWithoutException^ := 0;
+  pending := fSocket.SockInPending(TimeOut, {PendingAlsoInSocket=}true);
+  if pending < 0 then // socket error
+    if ErrorWithoutException <> nil then
+    begin
+      ErrorWithoutException^ := fSocket.LastLowSocketError;
+      result := false;
+      exit;
+    end
+    else
+      raise EWebSockets.CreateUtf8('SockInPending() Error % on %:% - from %',
+        [fSocket.LastLowSocketError, fSocket.Server, fSocket.Port, fProtocol.fRemoteIP]);
+  result := (pending >= 2);
+end;
+
+function TWebCrtSocketProcess.ReceiveBytes(P: PAnsiChar; count: integer): integer;
+begin
+  result := fSocket.SockInRead(P, count, {useonlysockin=}false);
+end;
+
+function TWebCrtSocketProcess.SendBytes(P: pointer; Len: integer): boolean;
+begin
+  result := fSocket.TrySndLow(P, Len);
+end;
+
+
+{ ******************** WebSockets Asynchronous Frames Parsing }
+
+{ TWebProcessInFrame }
+
+procedure TWebProcessInFrame.Init(owner: TWebSocketProcess; output: PWebSocketFrame);
+begin
+  process := owner;
+  outputframe := output;
+  st := pfsHeader1;
+  len := 0;
+end;
 
 function TWebProcessInFrame.GetBytes(P: PAnsiChar; count: integer): boolean;
 begin
+  if len > count then
+  begin
+    // we already got that much input data
+    result := true;
+    exit;
+  end;
   // SockInRead() below raise a ENetSock error on failure
   inc(len, process.ReceiveBytes(P + len, count - len));
   result := len = count;
@@ -2648,13 +2800,14 @@ end;
 function TWebProcessInFrame.GetHeader: boolean;
 begin
   result := false;
-  if len < 2 then
+  if len = 0 then
   begin
     data := '';
     FillCharFast(hdr, sizeof(hdr), 0);
-    if not GetBytes(@hdr, 2) then // first+len8
-      exit;
   end;
+  if (len < 2) and
+     not GetBytes(@hdr, 2) then // first+len8
+    exit;
   opcode := TWebSocketFrameOpCode(hdr.first and 15);
   masked := hdr.len8 and FRAME_LEN_MASK <> 0;
   if masked then
@@ -2676,8 +2829,8 @@ begin
     else
       hdr.len32 := bswap32(hdr.len64);
     if hdr.len32 > WebSocketsMaxFrameMB shl 20 then
-      raise EWebSockets.CreateUtf8('%.GetFrame: length should be < % MB', [process,
-        WebSocketsMaxFrameMB]);
+      raise EWebSockets.CreateUtf8('%.GetFrame: length = % should be < % MB',
+        [process, KB(hdr.len32), WebSocketsMaxFrameMB]);
   end;
   if masked then
   begin
@@ -2778,137 +2931,6 @@ begin
     end;
   result := st;
 end;
-
-procedure TWebProcessInFrame.Init(owner: TWebSocketProcess; output: PWebSocketFrame);
-begin
-  process := owner;
-  outputframe := output;
-  st := pfsHeader1;
-  len := 0;
-end;
-
-function TWebSocketProcess.GetFrame(out Frame: TWebSocketFrame;
-  ErrorWithoutException: PInteger): boolean;
-var
-  f: TWebProcessInFrame;
-begin
-  f.Init(self, @Frame);
-  fSafeIn.Lock;
-  try
-    repeat
-      // blocking processing loop to perform all steps
-    until f.Step(ErrorWithoutException) in [pfsDone, pfsError];
-    result := f.st = pfsDone;
-  finally
-    fSafeIn.UnLock;
-  end;
-end;
-
-function TWebSocketProcess.SendFrame(var Frame: TWebSocketFrame): boolean;
-var
-  hdr: TFrameHeader;
-  hdrlen, len: cardinal;
-  tmp: TSynTempBuffer;
-begin
-  fSafeOut.Lock;
-  try
-    Log(Frame, 'SendFrame', sllTrace, true);
-    try
-      result := true;
-      if Frame.opcode = focConnectionClose then
-        fConnectionCloseWasSent := true; // to be done once on each end
-      if (fProtocol <> nil) and
-         (Frame.payload <> '') then
-        fProtocol.BeforeSendFrame(Frame);
-      len := Length(Frame.payload);
-      hdr.first := byte(Frame.opcode) or FRAME_OPCODE_FIN; // single frame
-      if len < FRAME_LEN_2BYTES then
-      begin
-        hdr.len8 := len or fMaskSentFrames;
-        hdrlen := 2; // opcode+len8
-      end
-      else if len < 65536 then
-      begin
-        hdr.len8 := FRAME_LEN_2BYTES or fMaskSentFrames;
-        hdr.len32 := swap(word(len)); // FPC expects explicit word() cast
-        hdrlen := 4; // opcode+len8+len32.low
-      end
-      else
-      begin
-        hdr.len8 := FRAME_LEN_8BYTES or fMaskSentFrames;
-        hdr.len64 := bswap32(len);
-        hdr.len32 := 0;
-        hdrlen := 10; // opcode+len8+len32+len64.low
-      end;
-      if fMaskSentFrames <> 0 then
-      begin
-        hdr.mask := Random32; // https://tools.ietf.org/html/rfc6455#section-10.3
-        ProcessMask(pointer(Frame.payload), hdr.mask, len);
-        inc(hdrlen, 4);
-      end;
-      tmp.Init(hdrlen + len); // avoid most memory allocations
-      try
-        MoveSmall(@hdr, tmp.buf, hdrlen);
-        if fMaskSentFrames <> 0 then
-          PInteger(PAnsiChar(tmp.buf) + hdrlen - 4)^ := hdr.mask;
-        MoveFast(pointer(Frame.payload)^, PAnsiChar(tmp.buf)[hdrlen], len);
-        if not SendBytes(tmp.buf, hdrlen + len) then
-          result := false;
-      finally
-        tmp.Done;
-      end;
-      SetLastPingTicks(not result);
-    except
-      result := false;
-    end;
-  finally
-    fSafeOut.UnLock;
-  end;
-end;
-
-
-{ TWebCrtSocketProcess }
-
-constructor TWebCrtSocketProcess.Create(aSocket: TCrtSocket;
-  aProtocol: TWebSocketProtocol; aOwnerConnection: THttpServerConnectionID;
-  aOwnerThread: TSynThread; aSettings: PWebSocketProcessSettings;
-  const aProcessName: RawUtf8);
-begin
-  inherited Create(aProtocol, aOwnerConnection, aOwnerThread, aSettings, aProcessName);
-  fSocket := aSocket;
-end;
-
-function TWebCrtSocketProcess.CanGetFrame(TimeOut: cardinal;
-  ErrorWithoutException: PInteger): boolean;
-var
-  pending: integer;
-begin
-  if ErrorWithoutException <> nil then
-    ErrorWithoutException^ := 0;
-  pending := fSocket.SockInPending(TimeOut, {PendingAlsoInSocket=}true);
-  if pending < 0 then // socket error
-    if ErrorWithoutException <> nil then
-    begin
-      ErrorWithoutException^ := fSocket.LastLowSocketError;
-      result := false;
-      exit;
-    end
-    else
-      raise EWebSockets.CreateUtf8('SockInPending() Error % on %:% - from %',
-        [fSocket.LastLowSocketError, fSocket.Server, fSocket.Port, fProtocol.fRemoteIP]);
-  result := (pending >= 2);
-end;
-
-function TWebCrtSocketProcess.ReceiveBytes(P: PAnsiChar; count: integer): integer;
-begin
-  result := fSocket.SockInRead(P, count, {useonlysockin=}false);
-end;
-
-function TWebCrtSocketProcess.SendBytes(P: pointer; Len: integer): boolean;
-begin
-  result := fSocket.TrySndLow(P, Len);
-end;
-
 
 
 initialization
