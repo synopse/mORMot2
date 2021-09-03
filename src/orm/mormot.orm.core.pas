@@ -5588,7 +5588,12 @@ begin
     R := fCount - 1;
     repeat
       // fast O(log(n)) binary search using inlined StrIComp()
+      {$ifdef CPUX64}
+      result := L + R;
+      result := result shr 1;
+      {$else}
       result := (L + R) shr 1;
+      {$endif CPUX64}
       s := PtrUInt(aName);
       cmp := PtrInt(PtrUInt(fList[fOrderedByName[result]].Name)) - s;
       repeat

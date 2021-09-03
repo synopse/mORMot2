@@ -3191,7 +3191,7 @@ eol:      if P^ <= #13 then
                 (P^ <> #13);
           if P^ = #0 then
             goto eof;
-          break; // go to new line
+          break; // handle next line
         end
         else if P^ <> #0 then
           continue; // e.g. #9
@@ -3204,17 +3204,15 @@ eof:    result := nil; // reached P^=#0 -> not found
       inc(P);
       u := UpperName + 1;
       repeat
-        if u^ <> #0 then
-        begin
-          if table[P^] <> u^ then
-            goto eol;
-          inc(P);
-          inc(u);
-          continue;
-        end;
-        result := P; // if found, points just after UpperName
-        exit;
+        if u^ = #0 then
+          break
+        else if u^ <> table[P^] then
+          goto eol;
+        inc(P);
+        inc(u);
       until false;
+      result := P; // if found, points just after UpperName
+      exit;
     end;
   until false;
 end;
@@ -6467,7 +6465,12 @@ begin
     L := 0;
     result := -1; // return -1 if found
     repeat
+      {$ifdef CPUX64}
+      i := L + R;
+      i := i shr 1;
+      {$else}
       i := (L + R) shr 1;
+      {$endif CPUX64}
       cmp := Compare(P^[i], Value);
       if cmp = 0 then
         exit;
@@ -6491,7 +6494,12 @@ begin
   L := 0;
   if Assigned(Compare) and (R >= 0) then
     repeat
+      {$ifdef CPUX64}
+      result := L + R;
+      result := result shr 1;
+      {$else}
       result := (L + R) shr 1;
+      {$endif CPUX64}
       cmp := Compare(P^[result], Value);
       if cmp = 0 then
         exit;
@@ -6641,7 +6649,12 @@ begin
   L := 0;
   if 0 <= R then
     repeat
+      {$ifdef CPUX64}
+      result := L + R;
+      result := result shr 1;
+      {$else}
       result := (L + R) shr 1;
+      {$endif CPUX64}
       cmp := ItemComp(P^[SortedIndexes[result]], Value);
       if cmp = 0 then
       begin
