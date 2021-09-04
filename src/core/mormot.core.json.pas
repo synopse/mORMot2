@@ -941,7 +941,7 @@ type
     procedure InitFromNamesValues(const Names, Values: array of RawUtf8);
     /// search for a Name, return the index in List
     // - using fast O(1) hash algoritm
-    function Find(const aName: RawUtf8): integer;
+    function Find(const aName: RawUtf8): PtrInt;
     /// search for the first chars of a Name, return the index in List
     // - using O(n) calls of IdemPChar() function
     // - here aUpperName should be already uppercase, as expected by IdemPChar()
@@ -6363,7 +6363,7 @@ begin
             {$ifdef HASVARUSTRING}
             vtUnicodeString:
               AddJsonEscapeW(pointer(UnicodeString(VUnicodeString)),
-                length(UnicodeString(VUnicodeString)));
+                              length(UnicodeString(VUnicodeString)));
             {$endif HASVARUSTRING}
             vtPChar:
               AddJsonEscape(VPChar);
@@ -7910,7 +7910,7 @@ end;
 procedure TSynNameValue.Add(const aName, aValue: RawUtf8; aTag: PtrInt);
 var
   added: boolean;
-  i: integer;
+  i: PtrInt;
 begin
   i := DynArray.FindHashedForAdding(aName, added);
   with List[i] do
@@ -7929,7 +7929,7 @@ procedure TSynNameValue.InitFromIniSection(Section: PUtf8Char;
   const OnAdd: TOnSynNameValueNotify);
 var
   s: RawUtf8;
-  i: integer;
+  i: PtrInt;
 begin
   Init(false);
   fOnAdd := OnAdd;
@@ -7967,7 +7967,7 @@ end;
 
 procedure TSynNameValue.InitFromNamesValues(const Names, Values: array of RawUtf8);
 var
-  i: integer;
+  i: PtrInt;
 begin
   Init(false);
   if high(Names) <> high(Values) then
@@ -7979,25 +7979,27 @@ end;
 
 function TSynNameValue.InitFromJson(Json: PUtf8Char; aCaseSensitive: boolean): boolean;
 var
-  N, V: PUtf8Char;
+  P, N, V: PUtf8Char;
   nam, val: RawUtf8;
   Nlen, Vlen, c: integer;
   EndOfObject: AnsiChar;
 begin
   result := false;
   Init(aCaseSensitive);
-  if Json = nil then
+  P := Json;
+  if P = nil then
     exit;
-  while (Json^ <= ' ') and
-        (Json^ <> #0) do
-    inc(Json);
-  if Json^ <> '{' then
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
+  if P^ <> '{' then
     exit;
   repeat
-    inc(Json)
-  until (Json^ = #0) or
-        (Json^ > ' ');
-  c := JsonObjectPropCount(Json); // fast 900MB/s parsing
+    inc(P)
+  until (P^ = #0) or
+        (P^ > ' ');
+  Json := P;
+  c := JsonObjectPropCount(P); // fast 900MB/s parsing
   if c <= 0 then
     exit;
   DynArray.Capacity := c;
@@ -8026,7 +8028,7 @@ begin
     ptRawUtf8, @Count, not aCaseSensitive);
 end;
 
-function TSynNameValue.Find(const aName: RawUtf8): integer;
+function TSynNameValue.Find(const aName: RawUtf8): PtrInt;
 begin
   result := DynArray.FindHashed(aName);
 end;
@@ -8073,7 +8075,7 @@ end;
 
 function TSynNameValue.Value(const aName: RawUtf8; const aDefaultValue: RawUtf8): RawUtf8;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if @self = nil then
     i := -1
@@ -8087,7 +8089,8 @@ end;
 
 function TSynNameValue.ValueInt(const aName: RawUtf8; const aDefaultValue: Int64): Int64;
 var
-  i, err: integer;
+  i: PtrInt;
+  err: integer;
 begin
   i := DynArray.FindHashed(aName);
   if i < 0 then
@@ -8291,8 +8294,8 @@ begin
     begin
       VarClear(v{%H-});
       if ValueAsString or
-         not GetNumericVariantFromJson(pointer(List[i].Value), TVarData(v),
-               AllowVarDouble) then
+         not GetNumericVariantFromJson(
+               pointer(List[i].Value), TVarData(v), AllowVarDouble) then
         RawUtf8ToVariant(List[i].Value, v);
       ndx := dv.GetValueIndex(List[i].Name);
       if ndx < 0 then
@@ -8374,7 +8377,7 @@ end;
 
 function TSynCache.Find(const aKey: RawUtf8; aResultTag: PPtrInt): RawUtf8;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
   result := '';
   if self = nil then
@@ -8395,7 +8398,7 @@ end;
 
 function TSynCache.AddOrUpdate(const aKey, aValue: RawUtf8; aTag: PtrInt): boolean;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
   result := false;
   if self = nil then
@@ -8796,7 +8799,7 @@ end;
 function TSynDictionary.FindKeyFromValue(const aValue;
   out aKey; aUpdateTimeOut: boolean): boolean;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
   if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
@@ -9198,20 +9201,20 @@ begin
   end;
 end;
 
-class function TSynDictionary.OnCanDeleteSynPersistentLock(const aKey, aValue;
-  aIndex: integer): boolean;
+class function TSynDictionary.OnCanDeleteSynPersistentLock(
+  const aKey, aValue; aIndex: integer): boolean;
 begin
   result := not TSynPersistentLock(aValue).Safe^.IsLocked;
 end;
 
-class function TSynDictionary.OnCanDeleteSynPersistentLocked(const aKey, aValue;
-  aIndex: integer): boolean;
+class function TSynDictionary.OnCanDeleteSynPersistentLocked(
+  const aKey, aValue; aIndex: integer): boolean;
 begin
   result := not TSynPersistentLock(aValue).Safe.IsLocked;
 end;
 
-function TSynDictionary.SaveToBinary(NoCompression: boolean;
-  Algo: TAlgoCompress): RawByteString;
+function TSynDictionary.SaveToBinary(
+  NoCompression: boolean; Algo: TAlgoCompress): RawByteString;
 var
   tmp: TTextWriterStackBuffer;
   W: TBufferWriter;
@@ -9224,8 +9227,10 @@ begin
       exit;
     W := TBufferWriter.Create(tmp{%H-});
     try
-      RTTI_BINARYSAVE[rkDynArray](fKeys.Value, W, fKeys.Info.Info);
-      RTTI_BINARYSAVE[rkDynArray](fValues.Value, W, fValues.Info.Info);
+      DynArraySave(pointer(fKeys.Value),
+        @fSafe.Padding[DIC_KEYCOUNT].VInteger, W, fKeys.Info.Info);
+      DynArraySave(pointer(fValues.Value),
+        @fSafe.Padding[DIC_VALUECOUNT].VInteger, W, fValues.Info.Info);
       result := W.FlushAndCompress(NoCompression, Algo);
     finally
       W.Free;
