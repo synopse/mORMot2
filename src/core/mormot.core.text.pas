@@ -8975,8 +8975,12 @@ smlu32:   Res.Text := pointer(SmallUInt32Utf8[i]);
         goto done;
       end;
     vtInt64:
+      {$ifdef CPU64}
+      if PQWord(V.VInt64)^ <= high(SmallUInt32Utf8) then
+      {$else}
       if (PCardinalArray(V.VInt64)^[0] <= high(SmallUInt32Utf8)) and
          (PCardinalArray(V.VInt64)^[1] = 0) then
+      {$endif CPU64}
       begin
         i := V.VInt64^;
         goto smlu32;

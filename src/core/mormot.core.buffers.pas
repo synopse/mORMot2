@@ -4012,7 +4012,7 @@ procedure TBufferWriter.WriteVar(Data: pointer; DataLen: PtrInt);
 label
   wr;
 begin
-  if fPos + DataLen <= fBufLen16 then // inlined most common cases
+  if fPos + DataLen <= fBufLen16 then // could fit in buffer (most common case)
   begin
     if DataLen < $80 then // e.g. small strings
     begin

@@ -2954,14 +2954,13 @@ begin
       tix := SleepStep(start); // wait for all pending rows to be sent
     until (fBackgroundBatch[b] = nil) or
           (tix > timeout);
-    if ObjArrayNotNilCount(fBackgroundBatch) > 0 then
-      result := true
-    else
-    begin
-      result := Disable(AsyncBatchExecute);
-      if result then
-        ObjArrayClear(fBackgroundBatch, true);
-    end;
+    result := true;
+    for b := 0 to length(fBackgroundBatch) - 1 do
+      if fBackgroundBatch[b] <> nil then
+        exit; // there are still some pending batchs
+    result := Disable(AsyncBatchExecute);
+    if result then
+      ObjArrayClear(fBackgroundBatch, true); // all batches are done
   end;
 end;
 

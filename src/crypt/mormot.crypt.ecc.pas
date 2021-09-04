@@ -1213,7 +1213,7 @@ type
   // - will create an ephemeral ECC key pair for perfect forward security
   // - will use ECDH to compute a shared ephemeral session on both sides,
   // for AES-128 or AES-256 encryption, and HMAC with anti-replay - default
-  // algorithm will use fast and safe AES-CFB 128-bit encryption, with efficient
+  // algorithm will use fast and safe AES-CTR 128-bit encryption, with efficient
   // AES-CRC 256-bit MAC, and full hardware accelleration on Intel CPUs
   TEcdheProtocol = class(TInterfacedObjectLocked, IProtocol)
   protected
@@ -1230,7 +1230,8 @@ type
     // RX/TX sequence numbers against replay attack
     fkM: array[boolean] of THash256Rec;
     procedure SetIVAndMacNonce(aEncrypt: boolean);
-    procedure IncKM(aEncrypt: boolean); {$ifdef HASINLINE} inline; {$endif}
+    procedure IncKM(aEncrypt: boolean);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure ComputeMAC(aEncrypt: boolean; aEncrypted: pointer; aLen: integer;
       out aMAC: THash256Rec);
     // raw ECDHE functions used by ProcessHandshake
@@ -1417,21 +1418,44 @@ type
 const
   /// the TEcdheProtocol class to create depending on the asymetric side
   ECDHEPROT_CLASS: array[ {server=} boolean ] of TEcdheProtocolClass = (
-    TEcdheProtocolClient, TEcdheProtocolServer);
+    TEcdheProtocolClient,
+    TEcdheProtocolServer);
 
   /// how TEcdheProtocol.SharedSecret initialize the AES engines
   ECDHEPROT_EF2BITS: array[TEcdheEF] of integer = (
-    128, 128, 128, 128, 128,
-    256, 256, 256, 256, 256,
-    128, 256, 128, 256);
+    128,  // efAesCrc128
+    128,  // efAesCfb128
+    128,  // efAesOfb128
+    128,  // efAesCtr128
+    128,  // efAesCbc128
+    256,  // efAesCrc256
+    256,  // efAesCfb256
+    256,  // efAesOfb256
+    256,  // efAesCtr256
+    256,  // efAesCbc256
+    128,  // efAesGcm128
+    256,  // efAesGcm256
+    128,  // efAesCtc128
+    256); // efAesCtc256
 
   /// default MAC used for a given Encryption Function
   // - as used by TEcdheProtocol.Create/FromKey for its default MAC
   // - favor performance - you may force macHmacSha256 for cryptographic level
   ECDHEPROT_EF2MAC: array[TEcdheEF] of TEcdheMac = (
-    macDuringEF, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c,
-    macDuringEF, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c,
-    macDuringEF, macDuringEF, macDuringEF, macDuringEF);
+    macDuringEF,    // efAesCrc128
+    macHmacCrc32c,  // efAesCfb128
+    macHmacCrc32c,  // efAesOfb128
+    macHmacCrc32c,  // efAesCtr128
+    macHmacCrc32c,  // efAesCbc128
+    macDuringEF,    // efAesCrc256
+    macHmacCrc32c,  // efAesCfb256
+    macHmacCrc32c,  // efAesOfb256
+    macHmacCrc32c,  // efAesCtr256
+    macHmacCrc32c,  // efAesCbc256
+    macDuringEF,    // efAesGcm128
+    macDuringEF,    // efAesGcm256
+    macDuringEF,    // efAesCtc128
+    macDuringEF);   // efAesCtc256
 
 
 
@@ -3431,7 +3455,7 @@ begin
      (_FromKeySetCA <> nil) then
   begin
     fPKI := _FromKeySetCA;
-    inc(_FromKeySetCARefCount);
+    InterlockedIncrement(_FromKeySetCARefCount);
   end
   else
     fPKI := aPKI;
@@ -3462,7 +3486,7 @@ begin
       fPKI.Free
     else if (fPKI = _FromKeySetCA) and
             (_FromKeySetCARefCount > 0) then
-      dec(_FromKeySetCARefCount);
+      InterlockedDecrement(_FromKeySetCARefCount);
   if ownPrivate in fOwned then
     fPrivate.Free;
   inherited Destroy;
@@ -3525,7 +3549,7 @@ begin
      (_FromKeySetCA <> nil) then
   begin
     ca := _FromKeySetCA;
-    inc(_FromKeySetCARefCount);
+    InterlockedIncrement(_FromKeySetCARefCount);
   end;
   // compute priv: TEccCertificateSecret
   priv := nil;
@@ -3575,7 +3599,7 @@ class function TEcdheProtocol.FromPasswordSecureFile(
   const aPasswordSecureFile: RawUtf8; aServer: boolean;
   aAuth: TEcdheAuth; aEF: TEcdheEF; aRounds: integer): TEcdheProtocol;
 var
-  i: integer;
+  i: PtrInt;
   fn: TFileName;
   priv: TEccCertificateSecret;
 begin
@@ -3583,7 +3607,7 @@ begin
   // did we supply a fully qualified 'password#xxxx.private' key file name?
   if not EndWith(aPasswordSecureFile, '.PRIVATE') then
     exit;
-  for i := length(aPasswordSecureFile) downto 1 do
+  for i := length(aPasswordSecureFile) - 8 downto 1 do
     // PosExChar() fails if '#' appears within the password -> manual loop
     if aPasswordSecureFile[i] = '#' then
     begin
