@@ -1852,6 +1852,10 @@ type
     function HashOne(Item: pointer): cardinal;
       {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
       { not inlined to circumvent Delphi 2007=C1632, 2010=C1872, XE3=C2130 }
+    /// compare one given item from its index with a value
+    // - using either EventCompare() or Compare() functions
+    function Equals(Item: pointer; ndx: PtrInt): boolean;
+       {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
     /// retrieve the low-level hash of a given item
     function GetHashFromIndex(aIndex: PtrInt): cardinal;
   end;
@@ -8340,6 +8344,16 @@ begin
     result := 0; // will be ignored afterwards for sure
 end;
 
+function TDynArrayHasher.Equals(Item: pointer; ndx: PtrInt): boolean;
+begin
+  ndx := ndx * DynArray^.fInfo.Cache.ItemSize;
+  inc(ndx, PPtrInt(DynArray^.Value)^);
+  if Assigned(EventCompare) then
+    result := EventCompare(pointer(ndx)^, Item^) = 0
+  else
+    result := Compare(pointer(ndx)^, Item^) = 0;
+end;
+
 const
   // reduces memory consumption and enhances distribution at hash table growing
   _PRIMES: array[0..38 {$ifndef DYNARRAYHASH_PO2} + 15 {$endif}] of integer = (
@@ -8483,13 +8497,13 @@ begin
       {$endif DYNARRAYHASHCOLLISIONCOUNT}
       exit;
     end;
+    // comparison with item is faster than hash e.g. for huge strings
     with DynArray^ do
       P := PAnsiChar(Value^) + ndx * fInfo.Cache.ItemSize;
-    if Assigned(EventCompare) then
-      cmp := EventCompare(P^, Item^)
-    else
-      cmp := Compare(P^, Item^); // faster than hash e.g. for huge strings
-    if cmp = 0 then
+    if (not Assigned(EventCompare) and
+        (Compare(P^, Item^) = 0)) or
+       (Assigned(EventCompare) and
+        (EventCompare(P^, Item^) = 0)) then
     begin
       // found: returns the matching index
       if aHashTableIndex <> nil then
@@ -8615,17 +8629,17 @@ end;
 
 function TDynArrayHasher.FindBeforeDelete(Item: pointer): PtrInt;
 var
-  hc: cardinal;
-  ht: PtrInt;
+  h: cardinal;
+  ndx: PtrInt;
 begin
   if canHash in State then
   begin
-    hc := HashOne(Item);
-    result := FindOrNew(hc, Item, @ht);
+    h := HashOne(Item);
+    result := FindOrNew(h, Item, @ndx);
     if result < 0 then
       result := -1
     else
-      HashDelete(result, ht, hc);
+      HashDelete(result, ndx, h);
   end
   else
     result := Scan(Item);
