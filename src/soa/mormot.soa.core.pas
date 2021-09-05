@@ -632,7 +632,7 @@ type
       IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
     function GetMethodName(ListInterfaceMethodIndex: integer): RawUtf8;
     procedure CheckInterface(const aInterfaces: array of PRttiInfo);
-    function AddServiceInternal(aService: TServiceFactory): integer;
+    function AddServiceInternal(aService: TServiceFactory): PtrInt;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
     /// retrieve a service provider from its URI
     function GetService(const aUri: RawUtf8): TServiceFactory;
@@ -1311,7 +1311,7 @@ begin
     result := length(fInterface);
 end;
 
-function TServiceContainer.AddServiceInternal(aService: TServiceFactory): integer;
+function TServiceContainer.AddServiceInternal(aService: TServiceFactory): PtrInt;
 var
   MethodIndex: integer;
 

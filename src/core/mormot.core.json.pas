@@ -1170,7 +1170,7 @@ type
     fCompressAlgo: TAlgoCompress;
     fOptions: TSynDictionaryOptions;
     fOnCanDelete: TOnSynDictionaryCanDelete;
-    function InternalAddUpdate(aKey, aValue: pointer; aUpdate: boolean): integer;
+    function InternalAddUpdate(aKey, aValue: pointer; aUpdate: boolean): PtrInt;
     function InArray(const aKey, aArrayValue; aAction: TSynDictionaryInArray;
       aCompare: TDynArraySortCompare): boolean;
     procedure SetTimeouts;
@@ -1200,29 +1200,29 @@ type
     /// try to add a value associated with a primary key
     // - returns the index of the inserted item, -1 if aKey is already existing
     // - this method is thread-safe, since it will lock the instance
-    function Add(const aKey, aValue): integer;
+    function Add(const aKey, aValue): PtrInt;
     /// store a value associated with a primary key
     // - returns the index of the matching item
     // - if aKey does not exist, a new entry is added
     // - if aKey does exist, the existing entry is overriden with aValue
     // - this method is thread-safe, since it will lock the instance
-    function AddOrUpdate(const aKey, aValue): integer;
+    function AddOrUpdate(const aKey, aValue): PtrInt;
     /// clear the value associated via aKey
     // - does not delete the entry, but reset its value
     // - returns the index of the matching item, -1 if aKey was not found
     // - this method is thread-safe, since it will lock the instance
-    function Clear(const aKey): integer;
+    function Clear(const aKey): PtrInt;
     /// delete all key/value stored in the current instance
     procedure DeleteAll;
     /// delete a key/value association from its supplied aKey
     // - this would delete the entry, i.e. matching key and value pair
     // - returns the index of the deleted item, -1 if aKey was not found
     // - this method is thread-safe, since it will lock the instance
-    function Delete(const aKey): integer;
+    function Delete(const aKey): PtrInt;
     /// delete a key/value association from its internal index
     // - this method is not thread-safe: you should use fSafe.Lock/Unlock
     // e.g. then Find/FindValue to retrieve the index value
-    function DeleteAt(aIndex: integer): boolean;
+    function DeleteAt(aIndex: PtrInt): boolean;
     /// search and delete all deprecated items according to TimeoutSeconds
     // - returns how many items have been deleted
     // - you can call this method very often: it will ensure that the
@@ -1234,21 +1234,21 @@ type
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
     // - aUpdateTimeOut will update the associated timeout value of the entry
-    function Find(const aKey; aUpdateTimeOut: boolean = false): integer;
+    function Find(const aKey; aUpdateTimeOut: boolean = false): PtrInt;
     /// search of a primary key within the internal hashed dictionary
     // - returns a pointer to the matching item, nil if aKey was not found
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
     // - aUpdateTimeOut will update the associated timeout value of the entry
     function FindValue(const aKey; aUpdateTimeOut: boolean = false;
-      aIndex: PInteger = nil): pointer;
+      aIndex: PPtrInt = nil): pointer;
     /// search of a primary key within the internal hashed dictionary
     // - returns a pointer to the matching or already existing value item
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
     // - will update the associated timeout value of the entry, if applying
     function FindValueOrAdd(const aKey; var added: boolean;
-      aIndex: PInteger = nil): pointer;
+      aIndex: PPtrInt = nil): pointer;
     /// search of a stored value by its primary key, and return a local copy
     // - so this method is thread-safe
     // - returns TRUE if aKey was found, FALSE if no match exists
@@ -1288,7 +1288,7 @@ type
     /// touch the entry timeout field so that it won't be deprecated sooner
     // - this method is not thread-safe, and is expected to be execute e.g.
     // from a ForEach() TOnSynDictionary callback
-    procedure SetTimeoutAtIndex(aIndex: integer);
+    procedure SetTimeoutAtIndex(aIndex: PtrInt);
     /// search aArrayValue item in a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
     // - would search for aKey as primary key, then use TDynArray.Find
@@ -1384,10 +1384,10 @@ type
     function LoadFromBinary(const binary: RawByteString): boolean;
     /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLock(aValue).Safe.IsLocked
     class function OnCanDeleteSynPersistentLock(
-      const aKey, aValue; aIndex: integer): boolean;
+      const aKey, aValue; aIndex: PtrInt): boolean;
     /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLock(aValue).Safe.IsLocked
     class function OnCanDeleteSynPersistentLocked(
-      const aKey, aValue; aIndex: integer): boolean;
+      const aKey, aValue; aIndex: PtrInt): boolean;
     /// returns how many items are currently stored in this dictionary
     // - this method is thread-safe
     function Count: integer;
@@ -8644,7 +8644,7 @@ begin
 end;
 
 function TSynDictionary.InternalAddUpdate(
-  aKey, aValue: pointer; aUpdate: boolean): integer;
+  aKey, aValue: pointer; aUpdate: boolean): PtrInt;
 var
   added: boolean;
   tim: cardinal;
@@ -8671,7 +8671,7 @@ begin
     result := -1;
 end;
 
-function TSynDictionary.Add(const aKey, aValue): integer;
+function TSynDictionary.Add(const aKey, aValue): PtrInt;
 begin
   if doSingleThreaded in fOptions then
     result := InternalAddUpdate(@aKey, @aValue, {update=}false)
@@ -8686,7 +8686,7 @@ begin
   end;
 end;
 
-function TSynDictionary.AddOrUpdate(const aKey, aValue): integer;
+function TSynDictionary.AddOrUpdate(const aKey, aValue): PtrInt;
 begin
   if doSingleThreaded in fOptions then
     result := InternalAddUpdate(@aKey, @aValue, {update=}true)
@@ -8701,7 +8701,7 @@ begin
   end;
 end;
 
-function TSynDictionary.Clear(const aKey): integer;
+function TSynDictionary.Clear(const aKey): PtrInt;
 begin
   if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
@@ -8719,7 +8719,7 @@ begin
   end;
 end;
 
-function TSynDictionary.Delete(const aKey): integer;
+function TSynDictionary.Delete(const aKey): PtrInt;
 begin
   if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
@@ -8737,7 +8737,7 @@ begin
   end;
 end;
 
-function TSynDictionary.DeleteAt(aIndex: integer): boolean;
+function TSynDictionary.DeleteAt(aIndex: PtrInt): boolean;
 begin
   if cardinal(aIndex) < cardinal(fSafe.Padding[DIC_KEYCOUNT].VInteger) then
     // use Delete(aKey) to have efficient hash table update
@@ -8848,7 +8848,7 @@ begin
   result := InArray(aKey, aArrayValue, iaFindAndAddIfNotExisting, aCompare);
 end;
 
-function TSynDictionary.Find(const aKey; aUpdateTimeOut: boolean): integer;
+function TSynDictionary.Find(const aKey; aUpdateTimeOut: boolean): PtrInt;
 var
   tim: cardinal;
 begin
@@ -8867,7 +8867,7 @@ begin
 end;
 
 function TSynDictionary.FindValue(const aKey; aUpdateTimeOut: boolean;
-  aIndex: PInteger): pointer;
+  aIndex: PPtrInt): pointer;
 var
   ndx: PtrInt;
 begin
@@ -8881,9 +8881,9 @@ begin
 end;
 
 function TSynDictionary.FindValueOrAdd(const aKey; var added: boolean;
-  aIndex: PInteger): pointer;
+  aIndex: PPtrInt): pointer;
 var
-  ndx: integer;
+  ndx: PtrInt;
   tim: cardinal;
 begin
   tim := fSafe.Padding[DIC_TIMESEC].VInteger; // inlined tim := GetTimeout
@@ -8908,7 +8908,7 @@ end;
 function TSynDictionary.FindAndCopy(const aKey;
   var aValue; aUpdateTimeOut: boolean): boolean;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
   if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
@@ -8929,7 +8929,7 @@ end;
 
 function TSynDictionary.FindAndExtract(const aKey; var aValue): boolean;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
   if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
@@ -9063,7 +9063,7 @@ begin
   end;
 end;
 
-procedure TSynDictionary.SetTimeoutAtIndex(aIndex: integer);
+procedure TSynDictionary.SetTimeoutAtIndex(aIndex: PtrInt);
 var
   tim: cardinal;
 begin
@@ -9202,13 +9202,13 @@ begin
 end;
 
 class function TSynDictionary.OnCanDeleteSynPersistentLock(
-  const aKey, aValue; aIndex: integer): boolean;
+  const aKey, aValue; aIndex: PtrInt): boolean;
 begin
   result := not TSynPersistentLock(aValue).Safe^.IsLocked;
 end;
 
 class function TSynDictionary.OnCanDeleteSynPersistentLocked(
-  const aKey, aValue; aIndex: integer): boolean;
+  const aKey, aValue; aIndex: PtrInt): boolean;
 begin
   result := not TSynPersistentLock(aValue).Safe.IsLocked;
 end;
@@ -10093,7 +10093,7 @@ end;
 procedure JsonBufferToXML(P: PUtf8Char; const Header, NameSpace: RawUtf8;
   out result: RawUtf8);
 var
-  i, j, L: integer;
+  i, j, L: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
   if P = nil then

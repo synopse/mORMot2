@@ -1795,8 +1795,8 @@ type
     State: set of (hasHasher, canHash, moreMem);
     function HashTableIndex(aHashCode: PtrUInt): PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure HashAdd(aHashCode: cardinal; var result: integer);
-    procedure HashDelete(aArrayIndex, aHashTableIndex: integer; aHashCode: cardinal);
+    procedure HashAdd(aHashCode: cardinal; var result: PtrInt);
+    procedure HashDelete(aArrayIndex, aHashTableIndex: PtrInt; aHashCode: cardinal);
     procedure RaiseFatalCollision(const caller: RawUtf8; aHashCode: cardinal);
   public
     /// associated item comparison - may differ from DynArray^.Compare
@@ -1828,22 +1828,21 @@ type
     procedure SetEventHash(const event: TOnDynArrayHashOne);
     /// search for an element value inside the dynamic array without hashing
     // - trigger hashing if ScanCounter reaches CountTrigger*2
-    function Scan(Item: pointer): integer;
+    function Scan(Item: pointer): PtrInt;
     /// search for an element value inside the dynamic array with hashing
-    function Find(Item: pointer): integer; overload;
+    function Find(Item: pointer): PtrInt; overload;
     /// search for a hashed element value inside the dynamic array with hashing
-    function Find(Item: pointer; aHashCode: cardinal): integer; overload;
+    function Find(Item: pointer; aHashCode: cardinal): PtrInt; overload;
     /// search for a hash position inside the dynamic array with hashing
-    function Find(aHashCode: cardinal; aForAdd: boolean): integer; overload;
+    function Find(aHashCode: cardinal; aForAdd: boolean): PtrInt; overload;
     /// returns position in array, or next void index in HashTable[] as -(index+1)
-    function FindOrNew(aHashCode: cardinal; Item: pointer;
-      aHashTableIndex: PInteger = nil): integer;
+    function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt): PtrInt;
     /// search an hashed element value for adding, updating the internal hash table
     // - trigger hashing if Count reaches CountTrigger
     function FindBeforeAdd(Item: pointer; out wasAdded: boolean;
-      aHashCode: cardinal): integer;
+      aHashCode: cardinal): PtrInt;
     /// search and delete an element value, updating the internal hash table
-    function FindBeforeDelete(Item: pointer): integer;
+    function FindBeforeDelete(Item: pointer): PtrInt;
     /// reset the hash table - no rehash yet
     procedure Clear;
     /// full computation of the internal hash table
@@ -1893,7 +1892,7 @@ type
     function ItemPtr(index: PtrInt): pointer; inline;
     procedure ItemCopyAt(index: PtrInt; Dest: pointer); inline;
     // warning: you shall call ReHash() after manual Add/Delete
-    function Add(const Item): integer; inline;
+    function Add(const Item): PtrInt; inline;
     procedure Delete(aIndex: PtrInt); inline;
     function SaveTo: RawByteString; overload; inline;
     procedure SaveTo(W: TBufferWriter); overload; inline;
@@ -1963,19 +1962,19 @@ type
     // - Item must refer to a variable: e.g. you can't write FindHashed(i+10)
     // - will call fHashItem(Item,fHasher) to compute the needed hash
     // - returns -1 if not found, or the index in the dynamic array if found
-    function FindHashed(const Item): integer;
+    function FindHashed(const Item): PtrInt;
       {$ifdef FPC} inline; {$endif}
     /// search for an element value inside the dynamic array using its hash
     // - returns -1 if not found, or the index in the dynamic array if found
     // - aHashCode parameter constains an already hashed value of the item,
     // to be used e.g. after a call to HashFind()
-    function FindFromHash(const Item; aHashCode: cardinal): integer;
+    function FindFromHash(const Item; aHashCode: cardinal): PtrInt;
     /// search for an element value inside the dynamic array using hashing, and
     // fill ItemToFill with the found content
     // - return the index found (0..Count-1), or -1 if Item was not found
     // - ItemToFill should be of the type expected by the dynamic array, since
     // all its fields will be set on match
-    function FindHashedAndFill(var ItemToFill): integer;
+    function FindHashedAndFill(var ItemToFill): PtrInt;
     /// search for an element value inside the dynamic array using hashing, and
     // add a void entry to the array if was not found (unless noAddEntry is set)
     // - this method will use hashing for fast retrieval
@@ -1992,13 +1991,13 @@ type
     // not copied to the newly created entry in the array  - check
     // FindHashedAndUpdate() for a method actually copying Item fields
     function FindHashedForAdding(const Item; out wasAdded: boolean;
-      noAddEntry: boolean = false): integer; overload;
+      noAddEntry: boolean = false): PtrInt; overload;
     /// search for an element value inside the dynamic array using hashing, and
     // add a void entry to the array if was not found (unless noAddEntry is set)
-    // - overloaded method acepting an already hashed value of the item, to be used
-    // e.g. after a call to HashFind()
+    // - overloaded method accepting an already hashed value of the item, to be
+    // used e.g. after a call to HashFind()
     function FindHashedForAdding(const Item; out wasAdded: boolean;
-      aHashCode: cardinal; noAddEntry: boolean = false): integer; overload;
+      aHashCode: cardinal; noAddEntry: boolean = false): PtrInt; overload;
     /// ensure a given element name is unique, then add it to the array
     // - expected element layout is to have a RawUtf8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
@@ -2008,11 +2007,11 @@ type
     // - returns a pointer to the newly added element (to set other fields)
     function AddUniqueName(const aName: RawUtf8; const ExceptionMsg: RawUtf8;
       const ExceptionArgs: array of const;
-      aNewIndex: PInteger = nil): pointer; overload;
+      aNewIndex: PPtrInt = nil): pointer; overload;
     /// ensure a given element name is unique, then add it to the array
     // - just a wrapper to AddUniqueName(aName,'',[],aNewIndex)
     function AddUniqueName(const aName: RawUtf8;
-      aNewIndex: PInteger = nil): pointer; overload;
+      aNewIndex: PPtrInt = nil): pointer; overload;
     /// search for a given element name, make it unique, and add it to the array
     // - expected element layout is to have a RawUtf8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
@@ -2036,7 +2035,7 @@ type
     // - Item should be of the type expected by the dynamic array, since its
     // content will be copied into the dynamic array, and it must refer to a
     // variable: e.g. you can't write FindHashedAndUpdate(i+10)
-    function FindHashedAndUpdate(const Item; AddIfNotExisting: boolean): integer;
+    function FindHashedAndUpdate(const Item; AddIfNotExisting: boolean): PtrInt;
     /// search for an element value inside the dynamic array using hashing, and
     // delete it if matchs
     // - return the index deleted (0..Count-1), or -1 if Item was not found
@@ -2046,7 +2045,7 @@ type
     // write FindHashedAndDelete(i+10)
     // - it won't call slow ReHash but refresh the hash table as needed
     function FindHashedAndDelete(const Item; FillDeleted: pointer = nil;
-      noDeleteEntry: boolean = false): integer;
+      noDeleteEntry: boolean = false): PtrInt;
     /// will search for an element value inside the dynamic array without hashing
     // - is used internally when Count < HashCountTrigger
     // - is preferred to Find(), since EventCompare would be used if defined
@@ -2056,7 +2055,7 @@ type
     // - returns -1 if not found, or the index in the dynamic array if found
     // - an internal algorithm can switch to hashing if Scan() is called often,
     // even if the number of items is lower than HashCountTrigger
-    function Scan(const Item): integer;
+    function Scan(const Item): PtrInt;
     /// retrieve the hash value of a given item, from its index
     property Hash[aIndex: PtrInt]: cardinal
       read GetHashFromIndex;
@@ -8393,10 +8392,9 @@ begin
   {$endif DYNARRAYHASH_LEMIRE}
 end;
 
-function TDynArrayHasher.Find(aHashCode: cardinal; aForAdd: boolean): integer;
+function TDynArrayHasher.Find(aHashCode: cardinal; aForAdd: boolean): PtrInt;
 var
-  first, last: integer;
-  ndx, siz: PtrInt;
+  first, last, ndx, siz: PtrInt;
   P: PAnsiChar;
 begin
   P := DynArray^.Value^;
@@ -8446,9 +8444,10 @@ begin
 end;
 
 function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Item: pointer;
-  aHashTableIndex: PInteger): integer;
+  aHashTableIndex: PPtrInt): PtrInt;
 var
-  first, last, ndx, cmp: integer;
+  first, last, ndx: PtrInt;
+  cmp: integer;
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions: integer;
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
@@ -8476,26 +8475,27 @@ begin
     ndx := HashTable[result] - 1;  // index+1 was stored
     if ndx < 0 then
     begin
+      // not found: returns void index in HashTable[] as negative value
       result := -(result + 1);
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
       inc(CountCollisions, collisions);
       inc(CountCollisionsCurrent, collisions);
       {$endif DYNARRAYHASHCOLLISIONCOUNT}
-      exit; // not found: returns void index in HashTable[] as negative value
+      exit;
     end;
     with DynArray^ do
       P := PAnsiChar(Value^) + ndx * fInfo.Cache.ItemSize;
     if Assigned(EventCompare) then
       cmp := EventCompare(P^, Item^)
     else
-      cmp := Compare(P^, Item^);
+      cmp := Compare(P^, Item^); // faster than hash e.g. for huge strings
     if cmp = 0 then
     begin
-      // faster than hash e.g. for huge strings
+      // found: returns the matching index
       if aHashTableIndex <> nil then
         aHashTableIndex^ := result;
       result := ndx;
-      exit; // found: returns the matching index
+      exit;
     end;
     // hash or slot collision -> search next item
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
@@ -8515,7 +8515,7 @@ begin
   RaiseFatalCollision('FindOrNew', aHashCode);
 end;
 
-procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: integer);
+procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: PtrInt);
 var
   n: integer;
 begin
@@ -8536,10 +8536,10 @@ begin
 end; // on output: result holds the position in fValue[]
 
 
-procedure TDynArrayHasher.HashDelete(aArrayIndex, aHashTableIndex: integer;
+procedure TDynArrayHasher.HashDelete(aArrayIndex, aHashTableIndex: PtrInt;
   aHashCode: cardinal);
 var
-  first, next, last, ndx, i, n, s: PtrInt;
+  first, next, last, n, s, ndx, i: PtrInt;
   P: PAnsiChar;
   indexes: array[0..511] of integer; // to be rehashed  (seen always < 32)
 begin
@@ -8581,7 +8581,7 @@ begin
 end;
 
 function TDynArrayHasher.FindBeforeAdd(Item: pointer; out wasAdded: boolean;
-  aHashCode: cardinal): integer;
+  aHashCode: cardinal): PtrInt;
 var
   n: integer;
 begin
@@ -8613,10 +8613,10 @@ begin
   end;
 end;
 
-function TDynArrayHasher.FindBeforeDelete(Item: pointer): integer;
+function TDynArrayHasher.FindBeforeDelete(Item: pointer): PtrInt;
 var
   hc: cardinal;
-  ht: integer;
+  ht: PtrInt;
 begin
   if canHash in State then
   begin
@@ -8658,11 +8658,10 @@ begin
   Clear;
 end;
 
-function TDynArrayHasher.Scan(Item: pointer): integer;
+function TDynArrayHasher.Scan(Item: pointer): PtrInt;
 var
   P: PAnsiChar;
-  i, max: integer;
-  siz: PtrInt;
+  i, max, siz: PtrInt;
 begin
   result := -1;
   max := DynArray^.Count - 1;
@@ -8704,12 +8703,12 @@ begin
   end;
 end;
 
-function TDynArrayHasher.Find(Item: pointer): integer;
+function TDynArrayHasher.Find(Item: pointer): PtrInt;
 begin
   result := Find(Item, HashOne(Item));
 end;
 
-function TDynArrayHasher.Find(Item: pointer; aHashCode: cardinal): integer;
+function TDynArrayHasher.Find(Item: pointer; aHashCode: cardinal): PtrInt;
 begin
   result := FindOrNew(aHashCode, Item, nil); // fallback to Scan() if needed
   if result < 0 then
@@ -8718,7 +8717,7 @@ end;
 
 function TDynArrayHasher.ReHash(forced: boolean): integer;
 var
-  i, n, cap, siz, ndx: integer;
+  i, n, cap, siz, ndx: PtrInt;
   P: PAnsiChar;
   hc: cardinal;
 begin
@@ -8840,7 +8839,7 @@ begin
   InternalDynArray.SetCount(0);
 end;
 
-function TDynArrayHashed.Add(const Item): integer;
+function TDynArrayHashed.Add(const Item): PtrInt;
 begin
   result := InternalDynArray.Add(Item);
 end;
@@ -8926,34 +8925,34 @@ begin
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := fHash.Compare;
 end;
 
-function TDynArrayHashed.Scan(const Item): integer;
+function TDynArrayHashed.Scan(const Item): PtrInt;
 begin
   result := fHash.Scan(@Item);
 end;
 
-function TDynArrayHashed.FindHashed(const Item): integer;
+function TDynArrayHashed.FindHashed(const Item): PtrInt;
 begin
-  result := fHash.FindOrNew(fHash.HashOne(@Item), @Item);
+  result := fHash.FindOrNew(fHash.HashOne(@Item), @Item, nil);
   if result < 0 then
     result := -1; // for coherency with most methods
 end;
 
-function TDynArrayHashed.FindFromHash(const Item; aHashCode: cardinal): integer;
+function TDynArrayHashed.FindFromHash(const Item; aHashCode: cardinal): PtrInt;
 begin
   // overload FindHashed() trigger F2084 Internal Error: C2130 on Delphi XE3
-  result := fHash.FindOrNew(aHashCode, @Item); // fallback to Scan() if needed
+  result := fHash.FindOrNew(aHashCode, @Item, nil); // fallback to Scan() if needed
   if result < 0 then
     result := -1; // for coherency with most methods
 end;
 
 function TDynArrayHashed.FindHashedForAdding(const Item; out wasAdded: boolean;
-  noAddEntry: boolean): integer;
+  noAddEntry: boolean): PtrInt;
 begin
   result := FindHashedForAdding(Item, wasAdded, fHash.HashOne(@Item), noAddEntry);
 end;
 
 function TDynArrayHashed.FindHashedForAdding(const Item; out wasAdded: boolean;
-  aHashCode: cardinal; noAddEntry: boolean): integer;
+  aHashCode: cardinal; noAddEntry: boolean): PtrInt;
 begin
   result := fHash.FindBeforeAdd(@Item, wasAdded, aHashCode);
   if wasAdded and
@@ -8963,7 +8962,8 @@ end;
 
 function TDynArrayHashed.AddAndMakeUniqueName(aName: RawUtf8): pointer;
 var
-  ndx, j: integer;
+  ndx: PtrInt;
+  j: PtrUInt;
   added: boolean;
   aName_: RawUtf8;
 begin
@@ -8986,15 +8986,15 @@ begin
 end;
 
 function TDynArrayHashed.AddUniqueName(const aName: RawUtf8;
-  aNewIndex: PInteger): pointer;
+  aNewIndex: PPtrInt): pointer;
 begin
   result := AddUniqueName(aName, '', [], aNewIndex);
 end;
 
 function TDynArrayHashed.AddUniqueName(const aName: RawUtf8; const ExceptionMsg: RawUtf8;
-  const ExceptionArgs: array of const; aNewIndex: PInteger): pointer;
+  const ExceptionArgs: array of const; aNewIndex: PPtrInt): pointer;
 var
-  ndx: integer;
+  ndx: PtrInt;
   added: boolean;
 begin
   ndx := FindHashedForAdding(aName, added);
@@ -9011,9 +9011,9 @@ begin
     raise EDynArray.CreateUtf8(ExceptionMsg, ExceptionArgs);
 end;
 
-function TDynArrayHashed.FindHashedAndFill(var ItemToFill): integer;
+function TDynArrayHashed.FindHashedAndFill(var ItemToFill): PtrInt;
 begin
-  result := fHash.FindOrNew(fHash.HashOne(@ItemToFill), @ItemToFill);
+  result := fHash.FindOrNew(fHash.HashOne(@ItemToFill), @ItemToFill, nil);
   if result < 0 then
     result := -1
   else
@@ -9026,7 +9026,7 @@ begin
 end;
 
 function TDynArrayHashed.FindHashedAndUpdate(const Item;
-  AddIfNotExisting: boolean): integer;
+  AddIfNotExisting: boolean): PtrInt;
 var
   hc: cardinal;
 label
@@ -9035,7 +9035,7 @@ begin
   if canHash in fHash.State then
   begin
 doh:hc := fHash.HashOne(@Item);
-    result := fHash.FindOrNew(hc, @Item);
+    result := fHash.FindOrNew(hc, @Item, nil);
     if (result < 0) and
        AddIfNotExisting then
     begin
@@ -9063,7 +9063,7 @@ doh:hc := fHash.HashOne(@Item);
 end;
 
 function TDynArrayHashed.FindHashedAndDelete(const Item; FillDeleted: pointer;
-  noDeleteEntry: boolean): integer;
+  noDeleteEntry: boolean): PtrInt;
 begin
   result := fHash.FindBeforeDelete(@Item);
   if result >= 0 then
