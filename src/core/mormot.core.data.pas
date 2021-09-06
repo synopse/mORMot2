@@ -8461,7 +8461,6 @@ function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Item: pointer;
   aHashTableIndex: PPtrInt): PtrInt;
 var
   first, last, ndx: PtrInt;
-  cmp: integer;
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions: integer;
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
@@ -8729,16 +8728,76 @@ begin
     result := -1; // for coherency with most search methods
 end;
 
+type
+  TFastReHash = object // use a dedicated object for faster code
+    hc: cardinal;
+    first, last, siz: PtrInt;
+    count, collisions, ht: integer;
+    V, P: PAnsiChar;
+    procedure FastReHash(Hasher: PDynArrayHasher);
+  end;
+
+procedure TFastReHash.FastReHash(Hasher: PDynArrayHasher);
+var
+  fnd, ndx: PtrInt;
+begin
+  collisions := 0;
+  P := Hasher^.DynArray^.Value^;
+  siz := Hasher^.DynArray^.Info.Cache.ItemSize;
+  ht := 1; // store index + 1
+  repeat
+    if Assigned(Hasher^.EventHash) then
+      hc := Hasher^.EventHash(P^)
+    else
+      hc := Hasher^.HashItem(P^, Hasher^.Hasher);
+    // inlined FindOrNew()
+    ndx := Hasher^.HashTableIndex(hc);
+    first := ndx;
+    last := Hasher^.HashTableSize;
+    repeat
+      fnd := Hasher^.HashTable[ndx];
+      if fnd = 0 then
+      begin
+        Hasher^.HashTable[ndx] := ht; // use void entry
+        break;
+      end;
+      V := PAnsiChar(Hasher^.DynArray^.Value^) + (fnd - 1) * siz;
+      if (not Assigned(Hasher^.EventCompare) and
+          (Hasher^.Compare(V^, P^) = 0)) or
+         (Assigned(Hasher^.EventCompare) and
+          (Hasher^.EventCompare(V^, P^) = 0)) then
+      begin
+        inc(collisions);
+        break;
+      end;
+      inc(ndx);
+      if ndx = last then
+        // reached the end -> search from HashTable[0] to HashTable[first-1]
+        if ndx = first then
+          Hasher.RaiseFatalCollision('ReHash', hc)
+        else
+        begin
+          ndx := 0;
+          last := first;
+        end;
+    until false;
+    inc(P, siz); // next item
+    inc(ht);
+    dec(count);
+  until count = 0;
+end;
+
 function TDynArrayHasher.ReHash(forced: boolean): integer;
 var
-  i, n, cap, siz, ndx: PtrInt;
-  P: PAnsiChar;
-  hc: cardinal;
+  n, cap, siz: PtrInt;
+  work: TFastReHash;
 begin
   result := 0;
   // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
   n := DynArray^.Count;
   if not (Assigned(HashItem) or Assigned(EventHash)) or
+     ((@Compare = nil) and // not Assigned() seems to fail on FPC trunk
+      (@EventCompare = nil)) or
      (not forced and
       ((n = 0) or
        (n < CountTrigger))) then
@@ -8771,23 +8830,13 @@ begin
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   // fill HashTable[]=index+1 from all existing items
   include(State, canHash);   // needed before Find() below
-  P := DynArray^.Value^;
-  siz := DynArray^.Info.Cache.ItemSize;
-  for i := 1 to n do
-  begin
-    if Assigned(EventHash) then
-      hc := EventHash(P^)
-    else
-      hc := HashItem(P^, Hasher);
-    ndx := FindOrNew(hc, P, nil);
-    if ndx >= 0 then
-      // found duplicated value
-      inc(result)
-    else
-      // store index+1 (0 means void entry)
-      HashTable[-ndx - 1] := i;
-    inc(P, siz);
-  end;
+  work.Count := n;
+  work.FastReHash(@self);
+  result := work.collisions;
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  inc(CountCollisions, result);
+  inc(CountCollisionsCurrent, result);
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
 //QueryPerformanceMicroSeconds(t2); writeln(' newcol=',CountCollisionsCurrent,' ',
 //(CountCollisionsCurrent * 100) div cardinal(n), '%  ',MicroSecToString(t2-t1));
 end;
