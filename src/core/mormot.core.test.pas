@@ -220,7 +220,8 @@ type
     /// used by the published methods to run a test assertion, with a error
     // message computed via FormatUtf8()
     // - condition must equals TRUE to pass the test
-    procedure CheckUtf8(condition: boolean; const msg: RawUtf8; const args: array of const); overload;
+    procedure CheckUtf8(condition: boolean; const msg: RawUtf8;
+      const args: array of const); overload;
     /// used by published methods to start some timing on associated log
     // - call this once, before one or several consecutive CheckLogTime()
     // - warning: this method is not thread-safe
@@ -232,8 +233,8 @@ type
     // - condition must equals TRUE to pass the test
     // - the supplied message would be appended, with its timing
     // - warning: this method is not thread-safe
-    procedure CheckLogTime(condition: boolean; const msg: RawUtf8; const args: array of const;
-      level: TSynLogInfo = sllTrace);
+    procedure CheckLogTime(condition: boolean; const msg: RawUtf8;
+      const args: array of const; level: TSynLogInfo = sllTrace);
     /// used by the published methods to run test assertion against a Hash32() constant
     procedure CheckHash(const data: RawByteString; expectedhash32: cardinal;
       const msg: RawUtf8 = '');
@@ -269,7 +270,8 @@ type
       SizeInBytes: cardinal = 0; Timer: PPrecisionTimer = nil;
       OnlyLog: boolean = false): TSynMonitorOneMicroSec; overload;
     /// will add to the console a formatted message with a speed estimation
-    function NotifyTestSpeed(const ItemNameFmt: RawUtf8; const ItemNameArgs: array of const;
+    function NotifyTestSpeed(
+      const ItemNameFmt: RawUtf8; const ItemNameArgs: array of const;
       ItemCount: integer; SizeInBytes: cardinal = 0; Timer: PPrecisionTimer = nil;
       OnlyLog: boolean = false): TSynMonitorOneMicroSec; overload;
     /// append some text to the current console

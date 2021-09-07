@@ -6397,13 +6397,13 @@ begin
   begin
     json := sqlite3.value_text(argv[0]);
     FastSetString(tmp, json, StrLen(json));
-    doc.InitJsonInPlace(pointer(tmp), JSON_OPTIONS_FAST);
+    doc.InitJsonInPlace(pointer(tmp), JSON_FAST);
     v := doc.GetPVariantByPath(sqlite3.value_text(argv[1]));
     if v <> nil then
     begin
       json := sqlite3.value_text(argv[2]);
       FastSetString(tmp, json, StrLen(json));
-      VariantLoadJson(v^, pointer(tmp), nil, @JSON_OPTIONS[true]);
+      VariantLoadJson(v^, pointer(tmp), nil, @JSON_[mFast]);
       RawUtf8ToSQlite3Context(doc.ToJson, Context, false);
     end
     else

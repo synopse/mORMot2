@@ -512,7 +512,7 @@ begin
       raise EECCException.CreateUtf8('Incorrect file %', [fn]);
     if not doc.InitJson(json) then
       doc.InitObject(['pass', json,
-                      'rounds', DEFAULT_ECCROUNDS], JSON_OPTIONS_FAST);
+                      'rounds', DEFAULT_ECCROUNDS], JSON_FAST);
     authpass := doc.U['pass'];
     authround := doc.I['rounds'];
     result := doc.ToJson('', '', jsonHumanReadable);

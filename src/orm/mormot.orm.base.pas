@@ -908,7 +908,7 @@ function JsonGetID(P: PUtf8Char; out ID: TID): boolean;
 // - typeInfo may be used for oftBlobDynArray conversion to a TDocVariant array
 procedure ValueVarToVariant(Value: PUtf8Char; ValueLen: integer;
   fieldType: TOrmFieldType; var result: TVarData; createValueTempCopy: boolean;
-  typeInfo: PRttiInfo; options: TDocVariantOptions = JSON_OPTIONS_FAST);
+  typeInfo: PRttiInfo; options: TDocVariantOptions = JSON_FAST);
 
 
 { ****************** ORM Ready UTF-8 Comparison Functions }
@@ -1676,9 +1676,9 @@ type
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     procedure SetVariant(Instance: TObject; const Source: Variant); override;
     /// how this property will deal with its instances (including TDocVariant)
-    // - by default, contains JSON_OPTIONS_FAST for best performance - i.e.
+    // - by default, contains JSON_FAST for best performance - i.e.
     // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
-    // - set JSON_OPTIONS_FAST_EXTENDED (or include dvoSerializeAsExtendedJson)
+    // - set JSON_FAST_EXTENDED (or include dvoSerializeAsExtendedJson)
     // so that any TDocVariant nested field names will not be double-quoted,
     // saving some chars in the stored TEXT column and in the JSON escaped
     // transmitted data over REST, by writing '{name:"John",age:123}' instead of
@@ -2233,7 +2233,7 @@ type
     // - expand* methods will allow to return human-friendly representations
     procedure GetAsVariant(row, field: PtrInt; out value: variant;
       expandTimeLogAsText, expandEnumsAsText, expandHugeIDAsUniqueIdentifier: boolean;
-      options: TDocVariantOptions = JSON_OPTIONS_FAST);
+      options: TDocVariantOptions = JSON_FAST);
 
     /// retrieve a row value as a variant, ready to be accessed via late-binding
     // - Row parameter numbering starts from 1 to RowCount
@@ -2241,7 +2241,7 @@ type
     // field values of this row, uncoupled to the TOrmTable instance life time
     // - expand* methods will allow to return human-friendly representations
     procedure ToDocVariant(Row: PtrInt; out doc: variant;
-      options: TDocVariantOptions = JSON_OPTIONS_FAST;
+      options: TDocVariantOptions = JSON_FAST;
       expandTimeLogAsText: boolean = false; expandEnumsAsText: boolean = false;
       expandHugeIDAsUniqueIdentifier: boolean = false); overload;
     /// retrieve all row values as a dynamic array of variants, ready to be
@@ -6243,7 +6243,7 @@ begin
   GetDynArray(Instance, da);
   json := da.SaveToJson;
   VarClear(Dest);
-  TDocVariantData(Dest).InitJsonInPlace(pointer(json), JSON_OPTIONS_FAST);
+  TDocVariantData(Dest).InitJsonInPlace(pointer(json), JSON_FAST);
 end;
 
 procedure TOrmPropInfoRttiDynArray.SetVariant(Instance: TObject; const Source: Variant);
@@ -6396,7 +6396,7 @@ constructor TOrmPropInfoRttiVariant.Create(aPropInfo: PRttiProp;
 begin
   inherited;
   if aOrmFieldType = oftVariant then
-    fDocVariantOptions := JSON_OPTIONS_FAST
+    fDocVariantOptions := JSON_FAST
   else
     fOrmFieldType := oftNullable; // TNullable* will use fOrmFieldTypeStored
 end;
@@ -7334,7 +7334,7 @@ begin
                   time := UnixMSTimeToString(t.Value);
                 TDocVariantData(value).InitObject([
                   'Time', time,
-                  'Value', t.Value], JSON_OPTIONS_FAST);
+                  'Value', t.Value], JSON_FAST);
               end;
               exit;
             end;
@@ -7361,7 +7361,7 @@ begin
       expandHugeIDAsUniqueIdentifier, options);
   if length(fFieldNames) <> fFieldCount then
     InitFieldNames; // will reuse fFieldNames using COW between rows
-  TDocVariantData(doc).InitObjectFromVariants(fFieldNames, v, JSON_OPTIONS_FAST);
+  TDocVariantData(doc).InitObjectFromVariants(fFieldNames, v, JSON_FAST);
 end;
 
 var
@@ -7399,7 +7399,7 @@ var
   Values: TVariantDynArray;
 begin
   ToDocVariant(Values, readonly);
-  TDocVariantData(docarray).InitArrayFromVariants(Values, JSON_OPTIONS_FAST);
+  TDocVariantData(docarray).InitArrayFromVariants(Values, JSON_FAST);
 end;
 
 function TOrmTableAbstract.DeleteColumnValues(Field: PtrInt): boolean;

@@ -544,7 +544,7 @@ begin
      (ValueName = 'true') or
      (ValueName = 'false') or
      (ValueName = 'null') then
-    VariantLoadJson(result, ValueName, @JSON_OPTIONS[true])
+    VariantLoadJson(result, ValueName, @JSON_[mFast])
   else
   begin
     GetValueFromContext(ValueName, tmp);
@@ -581,7 +581,7 @@ var
       begin
         // {{helper 123}} or {{helper "constant"}} or {{helper [1,2,3]}}
         val.VType := varEmpty;
-        VariantLoadJson(variant(val), pointer(valnam), nil, @JSON_OPTIONS[true]);
+        VariantLoadJson(variant(val), pointer(valnam), nil, @JSON_[mFast]);
         valFree := true;
       end
       else
@@ -612,7 +612,7 @@ var
                    GetValueCopyFromContext(Copy(valnam, 1, j - 1)),
                    Copy(valnam, j, k - j),
                    GetValueCopyFromContext(Copy(valnam, k, maxInt))],
-                  JSON_OPTIONS[true]);
+                  JSON_FAST_FLOAT);
                 valFree := true;
                 break;
               end;
@@ -1393,7 +1393,7 @@ function TSynMustache.RenderJson(const Json: RawUtf8;
 var
   context: variant;
 begin
-  _Json(Json, context{%H-}, JSON_OPTIONS[true]);
+  _Json(Json, context{%H-}, JSON_FAST_FLOAT);
   result := Render(context, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 
@@ -1404,7 +1404,7 @@ function TSynMustache.RenderJson(const Json: RawUtf8;
 var
   context: variant;
 begin
-  _Json(FormatUtf8(Json, Args, Params, true), context{%H-}, JSON_OPTIONS[true]);
+  _Json(FormatUtf8(Json, Args, Params, true), context{%H-}, JSON_FAST_FLOAT);
   result := Render(context, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 

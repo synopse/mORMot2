@@ -2206,8 +2206,8 @@ type
     procedure AppendFillAsJsonArray(const FieldName: RawUtf8; W: TJsonSerializer;
       const Fields: TFieldBits = []);
     /// change TDocVariantData.Options for all variant published fields
-    // - may be used to replace e.g. JSON_OPTIONS_FAST_EXTENDED by JSON_OPTIONS_FAST
-    procedure ForceVariantFieldsOptions(aOptions: TDocVariantOptions = JSON_OPTIONS_FAST);
+    // - may be used to replace e.g. JSON_FAST_EXTENDED by JSON_FAST
+    procedure ForceVariantFieldsOptions(aOptions: TDocVariantOptions = JSON_FAST);
     /// write the field values into the binary buffer
     // - won't write the ID field (should be stored before, with the Count e.g.)
     procedure GetBinaryValues(W: TBufferWriter); overload;
@@ -3748,7 +3748,7 @@ type
     procedure SetMaxLengthFilterForTextFields(IndexIsUtf8Length: boolean = false);
     /// customize the TDocVariant options for all variant published properties
     // - will change the TOrmPropInfoRttiVariant.DocVariantOptions value
-    // - use e.g. as SetVariantFieldDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED)
+    // - use e.g. as SetVariantFieldDocVariantOptions(JSON_FAST_EXTENDED)
     // - see also TOrmNoCaseExtended root class
     procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
     /// return the UTF-8 encoded SQL statement source to alter the table for
@@ -4487,7 +4487,7 @@ type
     procedure SetMaxLengthFilterForAllTextFields(IndexIsUtf8Length: boolean = false);
     /// customize the TDocVariant options for all variant published properties
     // - will change the TOrmPropInfoRttiVariant.DocVariantOptions value
-    // - use e.g. as SetVariantFieldDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED)
+    // - use e.g. as SetVariantFieldDocVariantOptions(JSON_FAST_EXTENDED)
     // - see also TOrmNoCaseExtended root class
     procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
     /// force a given table to use a TSynUniqueIdentifierGenerator for its IDs
@@ -5270,23 +5270,23 @@ type
     class procedure InternalDefineModel(Props: TOrmProperties); override;
   end;
 
-  /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED variants
+  /// database records with NOCASE collation and JSON_FAST_EXTENDED variants
   // - abstract ancestor, from which you may inherit your own ORM classes
   TOrmNoCaseExtended = class(TOrmNoCase)
   protected
-    /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+    /// will call Props.SetVariantFieldsDocVariantOptions(JSON_FAST_EXTENDED);
     class procedure InternalDefineModel(Props: TOrmProperties); override;
   end;
 
-  /// database records with BINARY collation and JSON_OPTIONS_FAST_EXTENDED variants
+  /// database records with BINARY collation and JSON_FAST_EXTENDED variants
   // - abstract ancestor, from which you may inherit your own ORM classes
   TOrmCaseSensitiveExtended = class(TOrmCaseSensitive)
   protected
-    /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+    /// will call Props.SetVariantFieldsDocVariantOptions(JSON_FAST_EXTENDED);
     class procedure InternalDefineModel(Props: TOrmProperties); override;
   end;
 
-  /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED
+  /// database records with NOCASE collation and JSON_FAST_EXTENDED
   // variants, and itoNoIndex4TID option to avoid indexes on TID/T*ID properties
   // - abstract ancestor, from which you may inherit your own ORM classes
   TOrmNoCaseExtendedNoID = class(TOrmNoCaseExtended)
@@ -13253,7 +13253,7 @@ end;
 class procedure TOrmNoCaseExtended.InternalDefineModel(Props: TOrmProperties);
 begin
   inherited InternalDefineModel(Props); // set NOCASE collation
-  Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+  Props.SetVariantFieldsDocVariantOptions(JSON_FAST_EXTENDED);
 end;
 
 { TOrmCaseSensitiveExtended }
@@ -13262,7 +13262,7 @@ class procedure TOrmCaseSensitiveExtended.InternalDefineModel(
   Props: TOrmProperties);
 begin
   inherited InternalDefineModel(Props); // set BINARY collation
-  Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+  Props.SetVariantFieldsDocVariantOptions(JSON_FAST_EXTENDED);
 end;
 
 { TOrmNoCaseExtendedNoID }

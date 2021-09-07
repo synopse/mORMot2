@@ -1650,7 +1650,7 @@ end;
 
 function TSynMonitor.ComputeDetails: variant;
 begin
-  _Json(ComputeDetailsJson, result{%H-}, JSON_OPTIONS_FAST);
+  _Json(ComputeDetailsJson, result{%H-}, JSON_FAST);
 end;
 
 
@@ -2138,7 +2138,7 @@ begin
         if not IsZero(Values[Gran]) then
         begin
           // save non void values
-          val.InitArrayFrom(Values[Gran], JSON_OPTIONS_FAST);
+          val.InitArrayFrom(Values[Gran], JSON_FAST);
           data.AddValue(Name, Variant(val));
           val.Clear;
           // handle local cache

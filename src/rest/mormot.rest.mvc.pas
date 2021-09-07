@@ -56,8 +56,8 @@ uses
 
 const
   /// TDocVariantOptions for efficient MVC data context rendering
-  // - maps JSON_OPTIONS_FAST_EXTENDED with field names interning
-  JSON_OPTIONS_MVC =
+  // - maps JSON_FAST_EXTENDED with field names interning
+  JSON_MVC =
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoSerializeAsExtendedJson,
@@ -1393,7 +1393,7 @@ var
 begin
   // create a TDocVariant from the binary record content
   SaveJson(rec^, recrtti, TEXTWRITEROPTIONS_MUSTACHE, json);
-  TDocVariantData(result).InitJsonInPlace(pointer(json), JSON_OPTIONS_MVC);
+  TDocVariantData(result).InitJsonInPlace(pointer(json), JSON_MVC);
 end;
 
 function TMvcSessionAbstract.CheckAndRetrieveInfo(
@@ -1628,7 +1628,7 @@ begin
             // rendering, e.g. with fast Mustache {{template}}
             VarClear(renderContext);
             TDocVariantData(renderContext).InitJsonInPlace(
-              pointer(methodOutput), JSON_OPTIONS_MVC);
+              pointer(methodOutput), JSON_MVC);
             fApplication.GetViewInfo(fMethodIndex, info);
             _Safe(renderContext)^.AddValue('main', info);
             if fMethodIndex = fApplication.fFactoryErrorIndex then
@@ -1971,7 +1971,7 @@ begin
         if methodIndex >= 0 then
         begin
           method := @fApplication.fFactory.Methods[methodIndex];
-          inputContext := Ctxt.GetInputAsTDocVariant(JSON_OPTIONS_MVC, method);
+          inputContext := Ctxt.GetInputAsTDocVariant(JSON_MVC, method);
           if Assigned(fApplication.OnBeforeRender) then
             if not fApplication.OnBeforeRender(Ctxt, method, inputContext, renderer) then
               // aborted by this event handler

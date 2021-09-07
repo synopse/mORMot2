@@ -995,7 +995,7 @@ begin
                    (ValueType <> imvInterface) and
                    not IsDefault(Sender.Values[a]) then
                 begin
-                  W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
+                  W.AddShort(ParamName^); // in JSON_FAST_EXTENDED format
                   W.Add(':');
                   if vIsSpi in ValueKindAsm then
                     W.AddShorter('"****",')

@@ -1428,7 +1428,7 @@ begin
       doc.SetCount(T.RowCount);
       for row := 1 to T.RowCount do
         T.GetAsVariant(row, 0, doc.Values[row - 1], false, false, false,
-          JSON_OPTIONS_FAST);
+          JSON_FAST);
     finally
       T.Free;
     end;

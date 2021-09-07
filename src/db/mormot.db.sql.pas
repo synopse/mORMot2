@@ -727,7 +727,7 @@ type
     /// create a TDocVariant custom variant containing all columns values
     // - will create a "fast" TDocVariant object instance with all fields
     procedure RowDocVariant(out aDocument: variant;
-      aOptions: TDocVariantOptions = JSON_OPTIONS_FAST);
+      aOptions: TDocVariantOptions = JSON_FAST);
     /// return the associated statement instance
     function Instance: TSqlDBStatement;
     // return all rows content as a JSON string
@@ -2270,7 +2270,7 @@ type
     /// create a TDocVariant custom variant containing all columns values
     // - will create a "fast" TDocVariant object instance with all fields
     procedure RowDocVariant(out aDocument: variant;
-      aOptions: TDocVariantOptions = JSON_OPTIONS_FAST); virtual;
+      aOptions: TDocVariantOptions = JSON_FAST); virtual;
     /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures

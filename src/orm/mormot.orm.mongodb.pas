@@ -821,7 +821,7 @@ begin
   if aID <= 0 then
     exit;
   query := BsonVariant(['_id', aID]);
-  update.Init(JSON_OPTIONS_FAST);
+  update.Init(JSON_FAST);
   for f := 0 to fStoredClassRecordProps.Fields.Count - 1 do
   begin
     info := fStoredClassRecordProps.Fields.List[f];

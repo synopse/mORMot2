@@ -213,7 +213,7 @@ constructor TCommandLine.Create(const switches: variant;
   aNoConsole: boolean);
 begin
   inherited Create;
-  fValues.InitCopy(switches, JSON_OPTIONS_FAST);
+  fValues.InitCopy(switches, JSON_FAST);
   fNoPrompt := true;
   fNoConsole := aNoConsole;
 end;
@@ -222,7 +222,7 @@ constructor TCommandLine.Create(const NameValuePairs: array of const;
   aNoConsole: boolean);
 begin
   inherited Create;
-  fValues.InitObject(NameValuePairs, JSON_OPTIONS_FAST);
+  fValues.InitObject(NameValuePairs, JSON_FAST);
   fNoPrompt := true;
   fNoConsole := aNoConsole;
 end;

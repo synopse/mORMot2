@@ -2239,7 +2239,7 @@ begin
     if ForceOneInstance then
       result := docs[0]
     else
-      TDocVariantData(result).InitArrayFromVariants(docs, JSON_OPTIONS_FAST);
+      TDocVariantData(result).InitArrayFromVariants(docs, JSON_FAST);
 end;
 
 function TMongoConnection.GetDocumentsAndFree(Query: TMongoRequestQuery): variant;
@@ -2931,7 +2931,7 @@ var
       exit;
     if _Safe(res)^.GetAsPVariant('payload', bin) and
        BsonVariantType.ToBlob({%H-}bin^, payload) then
-      resp.InitCsv(pointer(payload), JSON_OPTIONS_FAST, '=', ',')
+      resp.InitCsv(pointer(payload), JSON_FAST, '=', ',')
     else
       err := 'missing or invalid returned payload';
   end;
@@ -3176,7 +3176,7 @@ begin
     'createUser', UserName,
     'pwd', PasswordDigest(UserName, Password),
     'digestPassword', false,
-    'roles', roles], JSON_OPTIONS_FAST);
+    'roles', roles], JSON_FAST);
   // note: passwordDigestor:"client" fails
   if client.ServerBuildInfoNumber >= 4000000 then
     usr.AddValue('mechanisms', _ArrFast(['SCRAM-SHA-1']));
@@ -3557,7 +3557,7 @@ begin
   result := FindDoc(BsonVariant(NameValuePairs), null, 1);
   if ReturnNewObjectIfNotFound and
      VarIsEmptyOrNull(result) then
-    TDocVariantData(result).InitObject(NameValuePairs, JSON_OPTIONS_FAST);
+    TDocVariantData(result).InitObject(NameValuePairs, JSON_FAST);
 end;
 
 procedure TMongoCollection.FindDocs(var result: TVariantDynArray;
@@ -3660,7 +3660,7 @@ procedure TMongoCollection.Insert(const Document: RawUtf8;
 var
   doc: variant;
 begin
-  _JsonFmt(Document, [], Params, JSON_OPTIONS_FAST, doc);
+  _JsonFmt(Document, [], Params, JSON_FAST, doc);
   EnsureDocumentHasID(TDocVariantData(doc), nil, DocumentObjectID);
   Insert([doc]);
 end;
@@ -3685,7 +3685,7 @@ procedure TMongoCollection.Save(const Document: RawUtf8;
 var
   doc: variant;
 begin
-  _JsonFmt(Document, [], Params, JSON_OPTIONS_FAST, doc);
+  _JsonFmt(Document, [], Params, JSON_FAST, doc);
   Save(doc, DocumentObjectID);
 end;
 

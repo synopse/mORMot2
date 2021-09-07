@@ -2152,7 +2152,7 @@ begin
             (P^ = #0));
       Check(Va = U);
       binary := VariantSave(Va);
-      Vb := VariantLoad(binary, @JSON_OPTIONS[true]);
+      Vb := VariantLoad(binary, @JSON_[mFast]);
       Check(Vb = U);
     finally
       Free;
@@ -3056,7 +3056,7 @@ begin
   timer.Start;
   for i := 1 to ITER do
   begin
-    dv.InitJson(people, JSON_OPTIONS_FAST);
+    dv.InitJson(people, JSON_FAST);
     Check(dv.count = count);
     dv.Clear; // to reuse dv
   end;
@@ -3064,7 +3064,7 @@ begin
   timer.Start;
   for i := 1 to ITER do
   begin
-    dv.InitJson(people, JSON_OPTIONS_FAST + [dvoJsonParseDoNotGuessCount]);
+    dv.InitJson(people, JSON_FAST + [dvoJsonParseDoNotGuessCount]);
     Check(dv.count = count);
     dv.Clear; // to reuse dv
   end;
@@ -3074,7 +3074,7 @@ begin
   timer.Start;
   for i := 1 to ITER do
   begin
-    dv.InitJson(people, JSON_OPTIONS_FAST + [dvoInternNames]);
+    dv.InitJson(people, JSON_FAST + [dvoInternNames]);
     Check(dv.count = count);
     dv.Clear; // to reuse dv
   end;
@@ -3286,7 +3286,7 @@ begin
       timer.Start;
       for i := 1 to ITER do
       begin
-        dv.InitJson(sample, JSON_OPTIONS_FAST_FLOAT);
+        dv.InitJson(sample, JSON_FAST_FLOAT);
         Check(dv.count = 3);
         dv.Clear; // to reuse dv
       end;
@@ -3295,7 +3295,7 @@ begin
       timer.Start;
       for i := 1 to ITER do
       begin
-        dv.InitJson(sample, JSON_OPTIONS_FAST +
+        dv.InitJson(sample, JSON_FAST +
           [dvoAllowDoubleValue, dvoJsonParseDoNotGuessCount]);
         Check(dv.count = 3);
         dv.Clear; // to reuse dv
@@ -3905,9 +3905,9 @@ begin
   u := VariantSaveMongoJson(o2, modNoMongo);
   CheckEqual(u, u2);
   bin := VariantSave(o2);
-  u := VariantSaveMongoJson(VariantLoad(bin, @JSON_OPTIONS[true]), modNoMongo);
+  u := VariantSaveMongoJson(VariantLoad(bin, @JSON_[mFast]), modNoMongo);
   CheckEqual(u, u2);
-  check(VariantSaveMongoJson(VariantLoad(bin, @JSON_OPTIONS[true]), modNoMongo)
+  check(VariantSaveMongoJson(VariantLoad(bin, @JSON_[mFast]), modNoMongo)
     = u2, 'twice to ensure bin is untouched');
   u := VariantSaveMongoJson(_Json('{id:ObjectId(),name:"John"}'), modNoMongo);
   Check(IdemPChar(Pointer(u), '{"ID":"'), 'ObjectId() constructor ');
@@ -4171,6 +4171,7 @@ var
     v: PVariant;
     d: PDocVariantData;
     f: TDocVariantFields;
+    j, j2: RawUtf8;
   begin
     vd.InitArray([1, 2, 3, 4]);
     for f in vd do
@@ -4198,7 +4199,9 @@ var
     v2.InitFast;
     for v in vd.Items do
       v2.AddItem(v^);
-    CheckEqual(vd.ToJson, v2.ToJson);
+    j := vd.ToJson;
+    j2 := v2.ToJson;
+    CheckEqual(j, j2);
     Check(vd.Equals(v2));
     v2.Clear;
     v2.InitFast;
@@ -4207,7 +4210,8 @@ var
       Check(DocVariantType.IsOfType(variant(d^)));
       v2.AddItem(variant(d^));
     end;
-    CheckEqual(v2.ToJson, '[{"a":1,"b":1},{"a":2,"b":2}]');
+    j2 := v2.ToJson;
+    CheckEqual(j2, '[{"a":1,"b":1},{"a":2,"b":2}]');
     vd.Clear;
     vd.InitJson('{a:1,b:2,c:3}');
     v2.Clear;
@@ -4241,6 +4245,7 @@ const
     '"TIMESTAMP_CALL":"2017-10-26T04:48:14"}]';
 var
   Doc, Doc2: TDocVariantData;
+  model, m2: TDocVariantModel;
   vr: TTVarRecDynArray;
   i, ndx: PtrInt;
   V, V1, V2: variant;
@@ -4255,6 +4260,8 @@ begin
   Check(not Doc.IsObject);
   Check(not Doc.IsArray);
   Check(variant(Doc)._kind = ord(dvUndefined));
+  Check(Doc.GetModel(model));
+  Check(model = mVoid);
   Doc.AddValue('name', 'Jonas');
   Doc.AddValue('birthyear', 1972);
   Check(Doc.Value['name'] = 'Jonas');
@@ -4270,6 +4277,8 @@ begin
   Check(not Doc.IsObject);
   Check(not Doc.IsArray);
   Check(variant(Doc)._kind = ord(dvUndefined));
+  Check(Doc.GetModel(model));
+  Check(model = mFast);
   Doc.AddValue('name', 'Jonas');
   Doc.AddValue('birthyear', 1972);
   Check(Doc.Value['name'] = 'Jonas');
@@ -4283,10 +4292,21 @@ begin
   Doc2.InitJson(Doc.ToJson);
   Check(Doc2.Equals(Doc));
   CheckDoc(Doc2);
+  Check(Doc2.GetModel(model));
+  Check(model = mVoid);
+  for m2 := low(m2) to high(m2) do
+  begin
+    Doc2.InitJson(Doc.ToJson, m2);
+    Check(Doc2.Equals(Doc));
+    Check(Doc2.GetModel(model));
+    Check(model = m2);
+  end;
   Doc.Clear;
   Doc.InitArray(['one', 2, 3.0]);
   Check(variant(Doc)._kind = ord(dvArray));
   Check(variant(Doc)._count = 3);
+  Check(Doc.GetModel(model));
+  Check(model = mVoid);
   if not CheckFailed(Doc.Count = 3) then
   begin
     Check(Doc.Values[0] = 'one');
@@ -4613,7 +4633,7 @@ begin
    '			"IsRequired": false' + #13#10 +
    '		}]' + #13#10 +
    '	}' + #13#10 +
-   '}', JSON_OPTIONS_FAST_FLOAT);
+   '}', JSON_FAST_FLOAT);
   Check(Doc.Count = 1);
   Check(Doc.Kind = dvObject);
   Check(Doc.IsObject);
@@ -4637,11 +4657,11 @@ begin
     _Safe(v)^.SaveToJsonFile(WorkDir + 'm1-saved0.json');
     VarClear(v); // release memory ASAP
     Doc.Clear;
-    Doc.InitJson(J, JSON_OPTIONS_FAST_FLOAT + [dvoSerializeAsExtendedJson]);
+    Doc.InitJson(J, JSON_FAST_FLOAT + [dvoSerializeAsExtendedJson]);
     CheckEqual(Doc.Count, 1);
     Doc.SaveToJsonFile(WorkDir + 'm1-saved1.json');
     Doc.Clear;
-    Doc.InitJsonInPlace(pointer(J), JSON_OPTIONS_FAST_FLOAT);
+    Doc.InitJsonInPlace(pointer(J), JSON_FAST_FLOAT);
     CheckEqual(Doc.Count, 1);
     Doc.SaveToJsonFile(WorkDir + 'm1-saved2.json');
     Doc.Clear;

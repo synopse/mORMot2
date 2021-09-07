@@ -1411,7 +1411,7 @@ asm
 @f:     movzx   ecx, byte ptr [eax] // first char comparison (quicksort speedup)
         sub     cl, byte ptr [edx]
         je      @s
-        movsx   eax, cl              // branchless execution on Quicksort
+        movsx   eax, cl              // branchless execution on Quicksort/ReHash
         ret
 @0:     xor     eax, eax
         ret

@@ -297,65 +297,117 @@ function CustomVariantToJson(W: TTextWriter; const Value: variant;
 
 { ************** TDocVariant Object/Array Document Holder with JSON support }
 
-const
-  /// some convenient TDocVariant options, as JSON_OPTIONS[CopiedByReference]
-  // - JSON_OPTIONS[false] is e.g. _Json() and _JsonFmt() functions default
-  // - JSON_OPTIONS[true] are used e.g. by _JsonFast() and _JsonFastFmt() functions
-  // - handle only currency for floating point values: use JSON_OPTIONS_FAST_FLOAT
-  // if you want to support double values, with potential precision loss
-  JSON_OPTIONS: array[boolean] of TDocVariantOptions = (
+type
+  /// JSON_[] constant convenient TDocVariant options
+  // - mVoid defines a safe (and slow) full-copy behavior with [] (no option)
+  // - mDefault defines a safe (and slow) full-copy behavior, returning null
+  // for unknown fields, as defined e.g. by _Json() and _JsonFmt() functions
+  // or JSON_OPTIONS[false]
+  // - mFast will copy-by-reference any TDocVariantData content, as defined
+  // e.g. by _JsonFast() and _JsonFastFmt() functions or JSON_OPTIONS[true]
+  // - mFastFloat will copy-by-reference and can parse floating points as double
+  // - mFastStrict will copy-by-reference and only parse strict (quoted) JSON,
+  // as defined by JSON_FAST_STRICT global variable
+  // - mFastExtended will copy-by-reference and write extended (unquoted) JSON,
+  // as defined by JSON_FAST_EXTENDED global variable
+  // - mFastExtendedIntern will copy-by-reference, write extended JSON and
+  // intern names and values, as defined by JSON_FAST_EXTENDEDINTERN variable
+  // - mNameValue will copy-by-reference and check field names case-sensitively,
+  // as defined by JSON_NAMEVALUE[false] global variable
+  // - mNameValueExtended will copy-by-reference, check field names
+  // case-sensitively and write extended (unquoted) JSON,
+  // as defined by JSON_NAMEVALUE[true] global variable
+  // - mNameValueIntern will copy-by-reference, check field names
+  // case-sensitively and intern names and values,
+  // as defined by JSON_NAMEVALUEINTERN[false] global variable
+  // - mNameValueInternExtended will copy-by-reference, check field names
+  // case-sensitively, write extended JSON and intern names and values,
+  // as defined by JSON_NAMEVALUEINTERN[true] global variable
+  TDocVariantModel = (
+    mVoid,
+    mDefault,
+    mFast,
+    mFastFloat,
+    mFastStrict,
+    mFastExtended,
+    mFastExtendedIntern,
+    mNameValue,
+    mNameValueExtended,
+    mNameValueIntern,
+    mNameValueInternExtended);
+
+var
+  /// some convenient TDocVariant options, e.g. as JSON_[fDefault]
+  JSON_: array[TDocVariantModel] of TDocVariantOptions = (
+  // mVoid
+    [],
+  // mDefault
     [dvoReturnNullForUnknownProperty],
+  // mFast
     [dvoReturnNullForUnknownProperty,
-     dvoValueCopiedByReference]);
-
-  /// same as JSON_OPTIONS[true], but can not be used as PDocVariantOptions
-  // - handle only currency for floating point values: use JSON_OPTIONS_FAST_FLOAT
-  // if you want to support double values, with potential precision loss
-  JSON_OPTIONS_FAST =
-    [dvoReturnNullForUnknownProperty, dvoValueCopiedByReference];
-
-  /// TDocVariant options which may be used for plain JSON parsing
-  // - this won't recognize any extended syntax
-  JSON_OPTIONS_FAST_STRICT: TDocVariantOptions =
+     dvoValueCopiedByReference],
+  // mFastFloat
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
-     dvoJsonParseDoNotTryCustomVariants];
+     dvoAllowDoubleValue],
+  // mFastStrict
+    [dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference,
+     dvoJsonParseDoNotTryCustomVariants],
+  // mFastExtended
+    [dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference,
+     dvoSerializeAsExtendedJson],
+  // mFastExtendedIntern
+    [dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference,
+     dvoSerializeAsExtendedJson,
+     dvoJsonParseDoNotTryCustomVariants,
+     dvoInternNames,
+     dvoInternValues],
+  // mNameValue
+     [dvoReturnNullForUnknownProperty,
+      dvoValueCopiedByReference,
+      dvoNameCaseSensitive],
+  // mNameValueExtended
+     [dvoReturnNullForUnknownProperty,
+      dvoValueCopiedByReference,
+      dvoNameCaseSensitive,
+      dvoSerializeAsExtendedJson],
+  // mNameValueIntern
+     [dvoReturnNullForUnknownProperty,
+      dvoValueCopiedByReference,
+      dvoNameCaseSensitive,
+      dvoInternNames,
+      dvoInternValues],
+  // mNameValueInternExtended
+     [dvoReturnNullForUnknownProperty,
+      dvoValueCopiedByReference,
+      dvoNameCaseSensitive,
+      dvoInternNames,
+      dvoInternValues,
+      dvoSerializeAsExtendedJson]
+    );
 
-  /// same as JSON_OPTIONS_FAST, but including dvoAllowDoubleValue for floating
+const
+  /// same as JSON_[mFast], but can not be used as PDocVariantOptions
+  // - handle only currency for floating point values: use JSON_FAST_FLOAT
+  // if you want to support double values, with potential precision loss
+  JSON_FAST =
+    [dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference];
+
+  /// same as JSON_FAST, but including dvoAllowDoubleValue for floating
   // point values parsing into double, with potential precision loss
-  JSON_OPTIONS_FAST_FLOAT =
+  JSON_FAST_FLOAT =
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoAllowDoubleValue];
 
-  /// TDocVariant options to be used for case-sensitive TSynNameValue-like
-  // storage, with optional extended JSON syntax serialization
-  // - consider using JSON_OPTIONS_FAST_EXTENDED for case-insensitive objects
-  JSON_OPTIONS_NAMEVALUE: array[boolean] of TDocVariantOptions = (
-    [dvoReturnNullForUnknownProperty,
-     dvoValueCopiedByReference,
-     dvoNameCaseSensitive],
-    [dvoReturnNullForUnknownProperty,
-     dvoValueCopiedByReference,
-     dvoNameCaseSensitive,
-     dvoSerializeAsExtendedJson]);
-
-  /// TDocVariant options to be used for case-sensitive TSynNameValue-like
-  // storage, RawUtf8 interning and optional extended JSON syntax serialization
-  // - consider using JSON_OPTIONS_FAST_EXTENDED for case-insensitive objects,
-  // or JSON_OPTIONS_NAMEVALUE[] if you don't expect names and values interning
-  JSON_OPTIONS_NAMEVALUEINTERN: array[boolean] of TDocVariantOptions = (
-    [dvoReturnNullForUnknownProperty,
-     dvoValueCopiedByReference,
-     dvoNameCaseSensitive,
-     dvoInternNames,
-     dvoInternValues],
-    [dvoReturnNullForUnknownProperty,
-     dvoValueCopiedByReference,
-     dvoNameCaseSensitive,
-     dvoInternNames,
-     dvoInternValues,
-     dvoSerializeAsExtendedJson]);
+var
+  /// TDocVariant options which may be used for plain JSON parsing
+  // - this won't recognize any extended syntax
+  JSON_FAST_STRICT: TDocVariantOptions;
 
   /// TDocVariant options to be used so that JSON serialization would
   // use the unquoted JSON syntax for field names
@@ -363,38 +415,60 @@ const
   // reduce the JSON escape process during storage in the database, by
   // customizing your TOrmModel instance:
   // !  (aModel.Props[TOrmMyRecord]['VariantProp'] as TOrmPropInfoRttiVariant).
-  // !    DocVariantOptions := JSON_OPTIONS_FAST_EXTENDED;
+  // !    DocVariantOptions := JSON_FAST_EXTENDED;
   // or - in a cleaner way - by overriding TOrm.InternalDefineModel():
   // ! class procedure TOrmMyRecord.InternalDefineModel(Props: TOrmProperties);
   // ! begin
   // !   (Props.Fields.ByName('VariantProp') as TOrmPropInfoRttiVariant).
-  // !     DocVariantOptions := JSON_OPTIONS_FAST_EXTENDED;
+  // !     DocVariantOptions := JSON_FAST_EXTENDED;
   // ! end;
   // or to set all variant fields at once:
   // ! class procedure TOrmMyRecord.InternalDefineModel(Props: TOrmProperties);
   // ! begin
-  // !   Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+  // !   Props.SetVariantFieldsDocVariantOptions(JSON_FAST_EXTENDED);
   // ! end;
-  // - consider using JSON_OPTIONS_NAMEVALUE[true] for case-sensitive
-  // TSynNameValue-like storage, or JSON_OPTIONS_FAST_EXTENDEDINTERN if you
+  // - consider using JSON_NAMEVALUE[true] for case-sensitive
+  // TSynNameValue-like storage, or JSON_FAST_EXTENDEDINTERN if you
   // expect RawUtf8 names and values interning
-  JSON_OPTIONS_FAST_EXTENDED: TDocVariantOptions =
-    [dvoReturnNullForUnknownProperty,
-     dvoValueCopiedByReference,
-     dvoSerializeAsExtendedJson];
+  JSON_FAST_EXTENDED: TDocVariantOptions;
 
   /// TDocVariant options for JSON serialization with efficient storage
   // - i.e. unquoted JSON syntax for field names and RawUtf8 interning
   // - may be used e.g. for efficient persistence of similar data
-  // - consider using JSON_OPTIONS_FAST_EXTENDED if you don't expect
+  // - consider using JSON_FAST_EXTENDED if you don't expect
   // RawUtf8 names and values interning, or need BSON variants parsing
-  JSON_OPTIONS_FAST_EXTENDEDINTERN: TDocVariantOptions =
-    [dvoReturnNullForUnknownProperty,
-     dvoValueCopiedByReference,
-     dvoSerializeAsExtendedJson,
-     dvoJsonParseDoNotTryCustomVariants,
-     dvoInternNames,
-     dvoInternValues];
+  JSON_FAST_EXTENDEDINTERN: TDocVariantOptions;
+
+  /// TDocVariant options to be used for case-sensitive TSynNameValue-like
+  // storage, with optional extended JSON syntax serialization
+  // - consider using JSON_FAST_EXTENDED for case-insensitive objects
+  JSON_NAMEVALUE: TDocVariantOptionsBool;
+
+  /// TDocVariant options to be used for case-sensitive TSynNameValue-like
+  // storage, RawUtf8 interning and optional extended JSON syntax serialization
+  // - consider using JSON_FAST_EXTENDED for case-insensitive objects,
+  // or JSON_NAMEVALUE[] if you don't expect names and values interning
+  JSON_NAMEVALUEINTERN: TDocVariantOptionsBool;
+
+  // - JSON_OPTIONS[false] is e.g. _Json() and _JsonFmt() functions default
+  // - JSON_OPTIONS[true] are used e.g. by _JsonFast() and _JsonFastFmt() functions
+  // - handle only currency for floating point values: use JSON_FAST_FLOAT/JSON_[mFastFloat]
+  // if you want to support double values, with potential precision loss
+  JSON_OPTIONS: TDocVariantOptionsBool;
+
+// some slightly more verbose backward compatible options
+{$ifndef PUREMORMOT2}
+  JSON_OPTIONS_FAST_STRICT: TDocVariantOptions absolute JSON_FAST_STRICT;
+  JSON_OPTIONS_NAMEVALUE: TDocVariantOptionsBool absolute JSON_NAMEVALUE;
+  JSON_OPTIONS_NAMEVALUEINTERN: TDocVariantOptionsBool absolute JSON_NAMEVALUEINTERN;
+  JSON_OPTIONS_FAST_EXTENDED: TDocVariantOptions absolute JSON_FAST_EXTENDED;
+  JSON_OPTIONS_FAST_EXTENDEDINTERN: TDocVariantOptions absolute JSON_FAST_EXTENDEDINTERN;
+
+const
+  JSON_OPTIONS_FAST = JSON_FAST;
+  JSON_OPTIONS_FAST_FLOAT = JSON_FAST_FLOAT;
+{$endif PUREMORMOT2}
+
 
 type
   /// pointer to a TDocVariant storage
@@ -470,7 +544,7 @@ type
       aOptions: TDocVariantOptions = []); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a variant instance to store per-reference document-based content
-    // - same as New(aValue,JSON_OPTIONS[true]);
+    // - same as New(aValue, JSON_FAST);
     // - to be used e.g. as
     // !var v: variant;
     // !begin
@@ -480,7 +554,7 @@ type
       aKind: TDocVariantKind = dvUndefined); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// ensure a variant is a TDocVariant instance
-    // - if aValue is not a TDocVariant, will create a new JSON_OPTIONS[true]
+    // - if aValue is not a TDocVariant, will create a new JSON_FAST
     class procedure IsOfTypeOrNewFast(var aValue: variant);
     /// initialize several variant instances to store document-based content
     // - replace several calls to TDocVariantData.InitFast
@@ -720,7 +794,7 @@ type
   public
     function MoveNext: Boolean; inline;
     function GetEnumerator: TDocVariantObjectsEnumerator; inline;
-    /// returns the current Value as pointer to the TDocVariantData
+    /// returns the current Value as pointer to each TDocVariantData object
     property Current: PDocVariantData
       read Value;
   end;
@@ -811,9 +885,15 @@ type
     // !end;
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure Init(aOptions: TDocVariantOptions = [];
-      aKind: TDocVariantKind = dvUndefined);
+      aKind: TDocVariantKind = dvUndefined); overload;
+    /// initialize a TDocVariantData to store some document-based content
+    // - use the options corresponding to the supplied TDocVariantModel
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    procedure Init(aModel: TDocVariantModel;
+      aKind: TDocVariantKind = dvUndefined); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// initialize a TDocVariantData to store per-reference document-based content
-    // - same as Doc.Init(JSON_OPTIONS[true]);
+    // - same as Doc.Init(JSON_FAST);
     // - can be used with a stack-allocated TDocVariantData variable:
     // !var Doc: TDocVariantData; // stack-allocated variable
     // !begin
@@ -846,7 +926,11 @@ type
     // - this method is called e.g. by _Obj() and _ObjFast() global functions
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitObject(const NameValuePairs: array of const;
-      aOptions: TDocVariantOptions = []);
+      aOptions: TDocVariantOptions = []); overload;
+    /// initialize a TDocVariantData to store document-based object content
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    procedure InitObject(const NameValuePairs: array of const;
+      Model: TDocVariantModel); overload;
     /// initialize a variant instance to store some document-based array content
     // - array will be initialized with data supplied as parameters, e.g.
     // !var Doc: TDocVariantData; // stack-allocated variable
@@ -869,7 +953,11 @@ type
     // - this method is called e.g. by _Arr() and _ArrFast() global functions
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitArray(const aItems: array of const;
-      aOptions: TDocVariantOptions = []);
+      aOptions: TDocVariantOptions = []); overload;
+    /// initialize a variant instance to store some document-based array content
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    procedure InitArray(const aItems: array of const;
+      aModel: TDocVariantModel); overload;
     /// initialize a variant instance to store some document-based array content
     // - array will be initialized with data supplied as variant dynamic array
     // - if Items is [], the variant will be set as null
@@ -932,16 +1020,23 @@ type
     // it will call the other overloaded InitJsonInPlace() method
     // - this method is called e.g. by _Json() and _JsonFast() global functions
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    // - handle only currency for floating point values: set JSON_OPTIONS_FAST_FLOAT
+    // - handle only currency for floating point values: set JSON_FAST_FLOAT
     // or dvoAllowDoubleValue option to support double, with potential precision loss
     function InitJson(const Json: RawUtf8;
-      aOptions: TDocVariantOptions = []): boolean;
+      aOptions: TDocVariantOptions = []): boolean; overload;
+    /// initialize a variant instance to store some document-based object content
+    // from a supplied JSON array or JSON object content
+    // - use the options corresponding to the supplied TDocVariantModel
+    // - a private copy of the incoming JSON buffer will be made
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    function InitJson(const Json: RawUtf8; aModel: TDocVariantModel): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// ensure a document-based variant instance will have one unique options set
     // - this will create a copy of the supplied TDocVariant instance, forcing
     // all nested events to have the same set of Options
     // - you can use this function to ensure that all internal properties of this
-    // variant will be copied e.g. per-reference (if you set JSON_OPTIONS[false])
-    // or per-value (if you set JSON_OPTIONS[false]) whatever options the nested
+    // variant will be copied e.g. per-reference (if you set JSON_[mDefault])
+    // or per-value (if you set JSON_[mDefault]) whatever options the nested
     // objects or arrays were created with
     // - will raise an EDocVariant if the supplied variant is not a TDocVariant
     // - you may rather use _Unique() or _UniqueFast() wrappers if you want to
@@ -989,9 +1084,13 @@ type
     /// check if the Document is an object - i.e. Kind = dvObject
     function IsObject: boolean;
       {$ifdef HASINLINE} inline; {$endif}
-      /// check if the Document is an array - i.e. Kind = dvArray
+    /// check if the Document is an array - i.e. Kind = dvArray
     function IsArray: boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// guess the TDocVariantModel corresponding to the current document Options
+    // - returns true if model has been found and set
+    // - returns false if no JSON_[] matches the current options
+    function GetModel(out model: TDocVariantModel): boolean;
     /// low-level method to force a number of items
     // - could be used to fast add items to the internal Values[]/Names[] arrays
     // - just set protected VCount field, do not resize the arrays: caller
@@ -1799,7 +1898,7 @@ var
   // - as used by inlined functions of TDocVariantData
   DocVariantVType: cardinal;
 
-  // will be properly filled in initialization section below
+  // defined here for inlining - properly filled in initialization section below
   DV_FAST: array[TDocVariantKind] of TVarData;
 
 
@@ -2007,20 +2106,20 @@ function _Json(const Json: RawUtf8; var Value: variant;
 
 /// initialize a variant instance to store some document-based object content
 // - this global function is an handy alias to:
-// ! Obj(NameValuePairs,JSON_OPTIONS[true]);
+// ! Obj(NameValuePairs, JSON_FAST);
 // - so all created objects and arrays will be handled by reference, for best
 // speed - but you should better write on the resulting variant tree with caution
 function _ObjFast(const NameValuePairs: array of const): variant; overload;
 
 /// initialize a variant instance to store any object as a TDocVariant
-// - is a wrapper around ObjectToVariant(aObject,result,aOptions)
+// - is a wrapper around ObjectToVariant(aObject, result, aOptions)
 function _ObjFast(aObject: TObject;
    aOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a variant instance to store some document-based array content
 // - this global function is an handy alias to:
-// ! _Array(Items,JSON_OPTIONS[true]);
+// ! _Array(Items, JSON_FAST);
 // - so all created objects and arrays will be handled by reference, for best
 // speed - but you should better write on the resulting variant tree with caution
 function _ArrFast(const Items: array of const): variant; overload;
@@ -2028,7 +2127,7 @@ function _ArrFast(const Items: array of const): variant; overload;
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content
 // - this global function is an handy alias to:
-// ! _Json(JSON,JSON_OPTIONS[true]);
+// ! _Json(JSON, JSON_FAST);
 // so it will return an Unassigned variant if JSON content was not correct
 // - so all created objects and arrays will be handled by reference, for best
 // speed - but you should better write on the resulting variant tree with caution
@@ -2047,13 +2146,13 @@ function _JsonFastFloat(const Json: RawUtf8): variant;
 
 /// initialize a variant instance to store some extended document-based content
 // - this global function is an handy alias to:
-// ! _Json(JSON,JSON_OPTIONS_FAST_EXTENDED);
+// ! _Json(JSON,JSON_FAST_EXTENDED);
 function _JsonFastExt(const Json: RawUtf8): variant;
 
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content, with parameters formating
 // - this global function is an handy alias e.g. to:
-// ! aVariant := _JsonFmt('{%:{$in:[?,?]}}',['type'],['food','snack'],JSON_OPTIONS[true]);
+// ! aVariant := _JsonFmt('{%:{$in:[?,?]}}',['type'],['food','snack'], JSON_FAST);
 // - so all created objects and arrays will be handled by reference, for best
 // speed - but you should better write on the resulting variant tree with caution
 // - in addition to the JSON RFC specification strict mode, this method will
@@ -2064,7 +2163,7 @@ function _JsonFastFmt(const Format: RawUtf8;
 /// ensure a document-based variant instance will have only per-value nested
 // objects or array documents
 // - is just a wrapper around:
-// ! TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS[false])
+// ! TDocVariantData(DocVariant).InitCopy(DocVariant, JSON_[mDefault])
 // - you can use this function to ensure that all internal properties of this
 // variant will be copied per-value whatever options the nested objects or
 // arrays were created with
@@ -2077,7 +2176,7 @@ procedure _Unique(var DocVariant: variant);
 /// ensure a document-based variant instance will have only per-value nested
 // objects or array documents
 // - is just a wrapper around:
-// ! TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS[true])
+// ! TDocVariantData(DocVariant).InitCopy(DocVariant, JSON_FAST)
 // - you can use this function to ensure that all internal properties of this
 // variant will be copied per-reference whatever options the nested objects or
 // arrays were created with
@@ -2090,7 +2189,7 @@ procedure _UniqueFast(var DocVariant: variant);
 
 /// return a full nested copy of a document-based variant instance
 // - is just a wrapper around:
-// ! TDocVariant.NewUnique(DocVariant,JSON_OPTIONS[false])
+// ! TDocVariant.NewUnique(DocVariant,JSON_[mDefault])
 // - you can use this function to ensure that all internal properties of this
 // variant will be copied per-value whatever options the nested objects or
 // arrays were created with: to be used on a value returned as varByRef
@@ -2104,7 +2203,7 @@ function _Copy(const DocVariant: variant): variant;
 
 /// return a full nested copy of a document-based variant instance
 // - is just a wrapper around:
-// ! TDocVariant.NewUnique(DocVariant,JSON_OPTIONS[true])
+// ! TDocVariant.NewUnique(DocVariant, JSON_FAST)
 // - you can use this function to ensure that all internal properties of this
 // variant will be copied per-value whatever options the nested objects or
 // arrays were created with: to be used on a value returned as varByRef
@@ -2275,12 +2374,12 @@ type
     procedure SetValue(const Name: RawUtf8; const Value: Variant);
   public
     /// initialize the thread-safe document with a fast TDocVariant
-    // - i.e. call Create(true) aka Create(JSON_OPTIONS[true])
+    // - i.e. call Create(true) aka Create(JSON_FAST)
     // - will be the TInterfacedObjectWithCustomCreate default constructor,
     // called e.g. during IoC/DI resolution
     constructor Create; overload; override;
-    /// initialize the thread-safe document storage
-    constructor Create(FastStorage: boolean); reintroduce; overload;
+    /// initialize the thread-safe document storage from a given template
+    constructor Create(options: TDocVariantModel); reintroduce; overload;
     /// initialize the thread-safe document storage with the corresponding options
     constructor Create(options: TDocVariantOptions); reintroduce; overload;
     /// finalize the storage
@@ -2348,7 +2447,7 @@ type
 // (if AllowDouble is true or dvoAllowDoubleValue is in TryCustomVariants^) or
 // string value (as RawUtf8), guessing the best numeric type according to the textual content,
 // and string in all other cases, except if TryCustomVariants points to some
-// options (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known
+// options (e.g. @JSON_[mFast] for fast instance) and input is a known
 // object or array, either encoded as strict-JSON (i.e. {..} or [..]),
 // or with some extended (e.g. BSON) syntax
 procedure GetVariantFromJson(Json: PUtf8Char; wasString: boolean;
@@ -2410,7 +2509,7 @@ function GetNextItemToVariant(var P: PUtf8Char;
 // - will instantiate either an integer, Int64, currency, double or string value
 // (as RawUtf8), guessing the best numeric type according to the textual content,
 // and string in all other cases, except TryCustomVariants points to some options
-// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// (e.g. @JSON_[mFast] for fast instance) and input is a known object or
 // array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
 // extended (e.g. BSON) syntax
 // - warning: the JSON buffer will be modified in-place during process - use
@@ -2425,7 +2524,7 @@ procedure JsonToVariantInPlace(var Value: Variant; Json: PUtf8Char;
 // - will instantiate either an integer, Int64, currency, double or string value
 // (as RawUtf8), guessing the best numeric type according to the textual content,
 // and string in all other cases, except TryCustomVariants points to some options
-// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// (e.g. @JSON_[mFast] for fast instance) and input is a known object or
 // array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
 // extended (e.g. BSON) syntax
 // - this overloaded procedure will make a temporary copy before JSON parsing
@@ -2439,7 +2538,7 @@ function JsonToVariant(const Json: RawUtf8;
 // - will instantiate either an integer, Int64, currency, double or string value
 // (as RawUtf8), guessing the best numeric type according to the textual content,
 // and string in all other cases, except TryCustomVariants points to some options
-// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// (e.g. @JSON_[mFast] for fast instance) and input is a known object or
 // array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
 // extended (e.g. BSON) syntax
 // - warning: the JSON buffer will be modified in-place during process - use
@@ -2454,7 +2553,7 @@ function VariantLoadJson(var Value: variant; Json: PUtf8Char;
 // - will instantiate either an integer, Int64, currency, double or string value
 // (as RawUtf8), guessing the best numeric type according to the textual content,
 // and string in all other cases, except TryCustomVariants points to some options
-// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// (e.g. @JSON_[mFast] for fast instance) and input is a known object or
 // array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
 // extended (e.g. BSON) syntax
 // - this overloaded procedure will make a temporary copy before JSON parsing
@@ -2468,7 +2567,7 @@ procedure VariantLoadJson(var Value: Variant; const Json: RawUtf8;
 // - will instantiate either an integer, Int64, currency, double or string value
 // (as RawUtf8), guessing the best numeric type according to the textual content,
 // and string in all other cases, except TryCustomVariants points to some options
-// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// (e.g. @JSON_[mFast] for fast instance) and input is a known object or
 // array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
 // extended (e.g. BSON) syntax
 // - this overloaded procedure will make a temporary copy before JSON parsing
@@ -2894,7 +2993,7 @@ function JsonToVariantDynArray(const Json: RawUtf8): TVariantDynArray;
 var
   tmp: TDocVariantData;
 begin
-  tmp.InitJson(Json, JSON_OPTIONS_FAST);
+  tmp.InitJson(Json, JSON_FAST);
   result := tmp.VValue;
 end;
 
@@ -2902,7 +3001,7 @@ function ValuesToVariantDynArray(const items: array of const): TVariantDynArray;
 var
   tmp: TDocVariantData;
 begin
-  tmp.InitArray(items, JSON_OPTIONS_FAST);
+  tmp.InitArray(items, JSON_FAST);
   result := tmp.VValue;
 end;
 
@@ -4054,7 +4153,7 @@ begin
   VarClear(result{%H-});
   json := ObjectToJson(Value, Options);
   if PDocVariantData(@result)^.InitJsonInPlace(
-      pointer(json), JSON_OPTIONS_FAST) = nil then
+      pointer(json), JSON_FAST) = nil then
     VarClear(result);
 end;
 
@@ -4331,6 +4430,11 @@ begin
   VCount := 0;
 end;
 
+procedure TDocVariantData.Init(aModel: TDocVariantModel; aKind: TDocVariantKind);
+begin
+  Init(JSON_[aModel], aKind);
+end;
+
 procedure TDocVariantData.InitFast(aKind: TDocVariantKind);
 begin
   TVarData(self) := DV_FAST[aKind];
@@ -4349,6 +4453,13 @@ procedure TDocVariantData.InitObject(const NameValuePairs: array of const;
   aOptions: TDocVariantOptions);
 begin
   Init(aOptions, dvObject);
+  AddNameValuesToObject(NameValuePairs);
+end;
+
+procedure TDocVariantData.InitObject(const NameValuePairs: array of const;
+  Model: TDocVariantModel);
+begin
+  Init(Model, dvObject);
   AddNameValuesToObject(NameValuePairs);
 end;
 
@@ -4457,6 +4568,12 @@ begin
         SetVariantByValue(tmp, VValue[arg]);
       end;
   end;
+end;
+
+procedure TDocVariantData.InitArray(const aItems: array of const;
+  aModel: TDocVariantModel);
+begin
+  InitArray(aItems, JSON_[aModel]);
 end;
 
 procedure TDocVariantData.InitArrayFromVariants(const aItems: TVariantDynArray;
@@ -4834,6 +4951,11 @@ begin
   end;
 end;
 
+function TDocVariantData.InitJson(const Json: RawUtf8; aModel: TDocVariantModel): boolean;
+begin
+  result := InitJson(Json, JSON_[aModel]);
+end;
+
 procedure TDocVariantData.InitCsv(aCsv: PUtf8Char; aOptions: TDocVariantOptions;
   NameValueSep, ItemSep: AnsiChar; DoTrim: boolean);
 var
@@ -4983,6 +5105,21 @@ begin
   Reset;
 end;
 
+function TDocVariantData.GetModel(out model: TDocVariantModel): boolean;
+var
+  ndx: PtrInt;
+begin
+  ndx := WordScanIndex(@JSON_[mVoid], ord(high(TDocVariantModel)) + 1,
+                       word(VOptions - [dvoIsArray, dvoIsObject]));
+  if ndx < 0 then
+    result := false
+  else
+  begin
+    model := TDocVariantModel(ndx);
+    result := true;
+  end;
+end;
+
 procedure TDocVariantData.SetCount(aCount: integer);
 begin
   VCount := aCount;
@@ -5067,9 +5204,9 @@ begin
     else
       result := 1   // Object, not Object
   else if Another.IsObject then
-      result := -1  // not Object, Object
-    else
-      result := 0;  // not Object, not Object
+    result := -1  // not Object, Object
+  else
+    result := 0;  // not Object, not Object
 end;
 
 function TDocVariantData.Equals(const Another: TDocVariantData;
@@ -7081,7 +7218,7 @@ begin
   begin
     // create new object
     VarClear(Obj);
-    TDocVariantData(Obj).InitObject([Name, Value], JSON_OPTIONS_FAST);
+    TDocVariantData(Obj).InitObject([Name, Value], JSON_FAST);
   end
 end;
 
@@ -7102,7 +7239,7 @@ begin
   begin
     // create new object
     VarClear(Obj);
-    TDocVariantData(Obj).InitObject(NameValuePairs, JSON_OPTIONS_FAST);
+    TDocVariantData(Obj).InitObject(NameValuePairs, JSON_FAST);
   end
 end;
 
@@ -7123,7 +7260,7 @@ end;
 function _ObjFast(const NameValuePairs: array of const): variant;
 begin
   VarClear(result{%H-});
-  TDocVariantData(result).InitObject(NameValuePairs, JSON_OPTIONS_FAST);
+  TDocVariantData(result).InitObject(NameValuePairs, JSON_FAST);
 end;
 
 function _ObjFast(aObject: TObject;
@@ -7135,7 +7272,7 @@ end;
 function _ArrFast(const Items: array of const): variant;
 begin
   VarClear(result{%H-});
-  TDocVariantData(result).InitArray(Items, JSON_OPTIONS_FAST);
+  TDocVariantData(result).InitArray(Items, JSON_FAST);
 end;
 
 function _Json(const Json: RawUtf8; Options: TDocVariantOptions): variant;
@@ -7145,17 +7282,17 @@ end;
 
 function _JsonFast(const Json: RawUtf8): variant;
 begin
-  _Json(Json, result, JSON_OPTIONS_FAST);
+  _Json(Json, result, JSON_FAST);
 end;
 
 function _JsonFastFloat(const Json: RawUtf8): variant;
 begin
-  _Json(Json, result, JSON_OPTIONS_FAST_FLOAT);
+  _Json(Json, result, JSON_FAST_FLOAT);
 end;
 
 function _JsonFastExt(const Json: RawUtf8): variant;
 begin
-  _Json(Json, result, JSON_OPTIONS_FAST_EXTENDED);
+  _Json(Json, result, JSON_FAST_EXTENDED);
 end;
 
 function _JsonFmt(const Format: RawUtf8; const Args, Params: array of const;
@@ -7177,7 +7314,7 @@ end;
 function _JsonFastFmt(const Format: RawUtf8;
   const Args, Params: array of const): variant;
 begin
-  _JsonFmt(Format, Args, Params, JSON_OPTIONS_FAST, result);
+  _JsonFmt(Format, Args, Params, JSON_FAST, result);
 end;
 
 function _Json(const Json: RawUtf8; var Value: variant;
@@ -7196,23 +7333,23 @@ end;
 procedure _Unique(var DocVariant: variant);
 begin
   // TDocVariantData(DocVariant): InitCopy() will check the DocVariant type
-  TDocVariantData(DocVariant).InitCopy(DocVariant, JSON_OPTIONS[false]);
+  TDocVariantData(DocVariant).InitCopy(DocVariant, JSON_[mDefault]);
 end;
 
 procedure _UniqueFast(var DocVariant: variant);
 begin
   // TDocVariantData(DocVariant): InitCopy() will check the DocVariant type
-  TDocVariantData(DocVariant).InitCopy(DocVariant, JSON_OPTIONS_FAST);
+  TDocVariantData(DocVariant).InitCopy(DocVariant, JSON_[mFast]);
 end;
 
 function _Copy(const DocVariant: variant): variant;
 begin
-  result := TDocVariant.NewUnique(DocVariant, JSON_OPTIONS[false]);
+  result := TDocVariant.NewUnique(DocVariant, JSON_[mDefault]);
 end;
 
 function _CopyFast(const DocVariant: variant): variant;
 begin
-  result := TDocVariant.NewUnique(DocVariant, JSON_OPTIONS_FAST);
+  result := TDocVariant.NewUnique(DocVariant, JSON_[mFast]);
 end;
 
 function _ByRef(const DocVariant: variant; Options: TDocVariantOptions): variant;
@@ -7235,12 +7372,12 @@ end;
 
 constructor TLockedDocVariant.Create;
 begin
-  Create(JSON_OPTIONS_FAST);
+  Create(JSON_FAST);
 end;
 
-constructor TLockedDocVariant.Create(FastStorage: boolean);
+constructor TLockedDocVariant.Create(options: TDocVariantModel);
 begin
-  Create(JSON_OPTIONS[FastStorage]);
+  Create(JSON_[options]);
 end;
 
 constructor TLockedDocVariant.Create(options: TDocVariantOptions);
@@ -7405,7 +7542,7 @@ begin
   VarClear(result);
   fLock.Enter;
   try
-    TDocVariantData(result).InitCopy(variant(fValue), JSON_OPTIONS_FAST);
+    TDocVariantData(result).InitCopy(variant(fValue), JSON_FAST);
   finally
     fLock.Leave;
   end;
@@ -8004,7 +8141,7 @@ procedure _BinaryVariantLoadAsJson(var Value: variant; Json: PUtf8Char;
   TryCustomVariant: pointer);
 begin
   if TryCustomVariant = nil then
-    TryCustomVariant := @JSON_OPTIONS[true];
+    TryCustomVariant := @JSON_[mFast];
   GetJsonToAnyVariant(Value, Json, nil, TryCustomVariant, {double=}true);
 end;
 
@@ -8265,9 +8402,16 @@ begin
   PCardinal(@DV_FAST[dvArray])^ := vt;
   PCardinal(@DV_FAST[dvObject])^ := vt;
   assert({%H-}SynVariantTypes[0].VarType = vt);
-  PDocVariantData(@DV_FAST[dvUndefined])^.VOptions := JSON_OPTIONS_FAST;
-  PDocVariantData(@DV_FAST[dvArray])^.VOptions := JSON_OPTIONS_FAST + [dvoIsArray];
-  PDocVariantData(@DV_FAST[dvObject])^.VOptions := JSON_OPTIONS_FAST + [dvoIsObject];
+  PDocVariantData(@DV_FAST[dvUndefined])^.VOptions := JSON_FAST;
+  PDocVariantData(@DV_FAST[dvArray])^.VOptions := JSON_FAST + [dvoIsArray];
+  PDocVariantData(@DV_FAST[dvObject])^.VOptions := JSON_FAST + [dvoIsObject];
+  // FPC allows to define variables with absolute JSON_[...] but Delphi doesn't
+  JSON_FAST_STRICT := JSON_[mFastStrict];
+  JSON_FAST_EXTENDED := JSON_[mFastExtended];
+  JSON_FAST_EXTENDEDINTERN := JSON_[mFastExtendedIntern];
+  JSON_NAMEVALUE := PDocVariantOptionsBool(@JSON_[mNameValue])^;
+  JSON_NAMEVALUEINTERN := PDocVariantOptionsBool(@JSON_[mNameValueIntern])^;
+  JSON_OPTIONS:= PDocVariantOptionsBool(@JSON_[mDefault])^;
   // redirect to the feature complete variant wrapper functions
   BinaryVariantLoadAsJson := _BinaryVariantLoadAsJson;
   VariantClearSeveral := _VariantClearSeveral;

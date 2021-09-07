@@ -3349,7 +3349,7 @@ str:    TVarData(res).vType := varString;
           if json.IsException then
             raise EQuickJS.Create(@self, 'JSContext.ToVariant');
           P := JS_ToCStringLen2(@self, @len, JSValueRaw(json), false);
-          VariantLoadJson(res, P, nil, @JSON_OPTIONS[true], {double=}true);
+          VariantLoadJson(res, P, nil, @JSON_[mFast], {double=}true);
         finally
           JS_FreeCString(@self, P);
           Free(json);

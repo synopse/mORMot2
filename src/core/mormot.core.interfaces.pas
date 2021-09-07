@@ -679,7 +679,7 @@ type
     property Contract: RawUtf8
       read fContract;
     /// how this interface will work with variants (including TDocVariant)
-    // - by default, contains JSON_OPTIONS_FAST for best performance - i.e.
+    // - by default, contains JSON_FAST for best performance - i.e.
     // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
     property DocVariantOptions: TDocVariantOptions
       read fDocVariantOptions write fDocVariantOptions;
@@ -2785,7 +2785,7 @@ begin
           VariantSaveJson(Value, twJsonEscape, json);
           dyn.LoadFromJson(pointer(json));
           json := dyn.SaveToJson(true);
-          _Json(json, Value, JSON_OPTIONS_FAST);
+          _Json(json, Value, JSON_FAST);
         finally
           dyn.Clear;
         end;
@@ -2798,7 +2798,7 @@ begin
           VariantSaveJson(Value, twJsonEscape, json);
           RecordLoadJson(rec[0], pointer(json), ArgRtti.Info);
           json := SaveJson(rec[0], ArgRtti.Info, {EnumSetsAsText=}true);
-          _Json(json, Value, JSON_OPTIONS_FAST);
+          _Json(json, Value, JSON_FAST);
         finally
           ArgRtti.ValueFinalize(pointer(rec));
         end;
@@ -3728,7 +3728,7 @@ begin
   if aInterface^.Kind <> rkInterface then
     raise EInterfaceFactory.CreateUtf8('%.Create: % is not an interface',
       [self, aInterface^.RawName]);
-  fDocVariantOptions := JSON_OPTIONS_FAST;
+  fDocVariantOptions := JSON_FAST;
   fInterfaceTypeInfo := aInterface;
   fInterfaceIID := aInterface^.InterfaceGuid^;
   if IsNullGuid(fInterfaceIID) then
@@ -5927,7 +5927,7 @@ begin
   if length(Ctxt.EventParams) = SizeOf(TInterfaceStubExecutesToLog) then
     with PInterfaceStubExecutesToLog(Ctxt.EventParams)^ do
       Log.Add.Log(LogLevel, '% %', [Ctxt.Method^.InterfaceDotMethodName,
-       Ctxt.InputAsDocVariant(Kind, JSON_OPTIONS_FAST_EXTENDED)]);
+       Ctxt.InputAsDocVariant(Kind, JSON_FAST_EXTENDED)]);
 end;
 
 function TInterfaceStub.Executes(aLog: TSynLogClass; aLogLevel: TSynLogInfo;

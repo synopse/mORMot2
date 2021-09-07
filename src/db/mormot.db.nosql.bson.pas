@@ -467,9 +467,9 @@ type
   // create a tree of TDocVariant custom kind of variant, able to access
   // to its nested properties via late-binding (asDocVariantPerReference being
   // also much faster in some cases - but less safe - than asDocVariantPerValue)
-  // - asDocVariantPerValue will set JSON_OPTIONS[false] settings:
+  // - asDocVariantPerValue will set JSON_[mDefault] settings:
   // ! [dvoReturnNullForUnknownProperty]
-  // - asDocVariantPerReference will set JSON_OPTIONS[true]/JSON_OPTIONS_FAST
+  // - asDocVariantPerReference will set JSON_[mFast]/JSON_FAST
   // settings:
   // ! [dvoValueCopiedByReference,dvoReturnNullForUnknownProperty]
   // - asDocVariantInternNamesPerValue and asDocVariantInternNamesPerReference

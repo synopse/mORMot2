@@ -1693,7 +1693,7 @@ var
 begin
   if self = nil then
     exit;
-  doc.Init(JSON_OPTIONS_FAST_EXTENDED, dvObject);
+  doc.Init(JSON_FAST_EXTENDED, dvObject);
   DB.Lock;
   try
     fStatementCache.SortCacheByTotalTime(ndx);

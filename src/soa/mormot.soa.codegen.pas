@@ -589,7 +589,7 @@ begin
   if {%H-}desc = '' then
     ResourceSynLZToRawByteString(WRAPPER_RESOURCENAME, desc);
   if desc <> '' then
-    fDescriptions.InitJsonInPlace(Pointer(desc), JSON_OPTIONS_FAST);
+    fDescriptions.InitJsonInPlace(Pointer(desc), JSON_FAST);
 end;
 
 function TWrapperContext.ContextNestedProperties(rtti: TRttiCustom;
@@ -2041,7 +2041,7 @@ begin
   if {%H-}desc = '' then
     ResourceSynLZToRawByteString(WRAPPER_RESOURCENAME, desc);
   if desc <> '' then
-    fDescriptions.InitJsonInPlace(pointer(desc), JSON_OPTIONS_FAST);
+    fDescriptions.InitJsonInPlace(pointer(desc), JSON_FAST);
 end;
 
 procedure TServiceClientCommandLine.Execute;

@@ -698,81 +698,83 @@ type
 
 { ********** RTTI Values Binary Serialization and Comparison }
 
-  type
-    /// possible options for a TDocVariant JSON/BSON document storage
-    // - defined in this unit to avoid circular reference with mormot.core.variants
-    // - dvoIsArray and dvoIsObject will store the "Kind: TDocVariantKind" state -
-    // you should never have to define these two options directly
-    // - dvoNameCaseSensitive will be used for every name lookup - here
-    // case-insensitivity is restricted to a-z A-Z 0-9 and _ characters
-    // - dvoCheckForDuplicatedNames will be used for method
-    // TDocVariantData.AddValue(), but not when setting properties at
-    // variant level: for consistency, "aVariant.AB := aValue" will replace
-    // any previous value for the name "AB"
-    // - dvoReturnNullForUnknownProperty will be used when retrieving any value
-    // from its name (for dvObject kind of instance), or index (for dvArray or
-    // dvObject kind of instance)
-    // - by default, internal values will be copied by-value from one variant
-    // instance to another, to ensure proper safety - but it may be too slow:
-    // if you set dvoValueCopiedByReference, the internal
-    // TDocVariantData.VValue/VName instances will be copied by-reference,
-    // to avoid memory allocations, BUT it may break internal process if you change
-    // some values in place (since VValue/VName and VCount won't match) - as such,
-    // if you set this option, ensure that you use the content as read-only
-    // - any registered custom types may have an extended JSON syntax (e.g.
-    // TBsonVariant does for MongoDB types), and will be searched during JSON
-    // parsing, unless dvoJsonParseDoNotTryCustomVariants is set (slightly faster)
-    // - the parser will try to guess the array or object size by pre-fetching
-    // some content: you can set dvoJsonParseDoNotGuessCount if your input has
-    // a lot of nested documents, and manual resize is preferred - this option
-    // will be forced by InitJson if a huge nest of objects is detected
-    // - by default, it will only handle direct JSON [array] of {object}: but if
-    // you define dvoJsonObjectParseWithinString, it will also try to un-escape
-    // a JSON string first, i.e. handle "[array]" or "{object}" content (may be
-    // used e.g. when JSON has been retrieved from a database TEXT column) - is
-    // used for instance by VariantLoadJson()
-    // - JSON serialization will follow the standard layout, unless
-    // dvoSerializeAsExtendedJson is set so that the property names would not
-    // be escaped with double quotes, writing '{name:"John",age:123}' instead of
-    // '{"name":"John","age":123}': this extended json layout is compatible with
-    // http://docs.mongodb.org/manual/reference/mongodb-extended-json and with
-    // TDocVariant JSON unserialization, also our SynCrossPlatformJSON unit, but
-    // NOT recognized by most JSON clients, like AJAX/JavaScript or C#/Java
-    // - by default, only integer/Int64/currency number values are allowed, unless
-    // dvoAllowDoubleValue is set and 32-bit floating-point conversion is tried,
-    // with potential loss of precision during the conversion
-    // - dvoInternNames and dvoInternValues will use shared TRawUtf8Interning
-    // instances to maintain a list of RawUtf8 names/values for all TDocVariant,
-    // so that redundant text content will be allocated only once on heap
-    TDocVariantOption = (
-       dvoIsArray,
-       dvoIsObject,
-       dvoNameCaseSensitive,
-       dvoCheckForDuplicatedNames,
-       dvoReturnNullForUnknownProperty,
-       dvoValueCopiedByReference,
-       dvoJsonParseDoNotTryCustomVariants,
-       dvoJsonParseDoNotGuessCount,
-       dvoJsonObjectParseWithinString,
-       dvoSerializeAsExtendedJson,
-       dvoAllowDoubleValue,
-       dvoInternNames,
-       dvoInternValues);
+type
+  /// possible options for a TDocVariant JSON/BSON document storage
+  // - defined in this unit to avoid circular reference with mormot.core.variants
+  // - dvoIsArray and dvoIsObject will store the "Kind: TDocVariantKind" state -
+  // you should never have to define these two options directly
+  // - dvoNameCaseSensitive will be used for every name lookup - here
+  // case-insensitivity is restricted to a-z A-Z 0-9 and _ characters
+  // - dvoCheckForDuplicatedNames will be used for method
+  // TDocVariantData.AddValue(), but not when setting properties at
+  // variant level: for consistency, "aVariant.AB := aValue" will replace
+  // any previous value for the name "AB"
+  // - dvoReturnNullForUnknownProperty will be used when retrieving any value
+  // from its name (for dvObject kind of instance), or index (for dvArray or
+  // dvObject kind of instance)
+  // - by default, internal values will be copied by-value from one variant
+  // instance to another, to ensure proper safety - but it may be too slow:
+  // if you set dvoValueCopiedByReference, the internal
+  // TDocVariantData.VValue/VName instances will be copied by-reference,
+  // to avoid memory allocations, BUT it may break internal process if you change
+  // some values in place (since VValue/VName and VCount won't match) - as such,
+  // if you set this option, ensure that you use the content as read-only
+  // - any registered custom types may have an extended JSON syntax (e.g.
+  // TBsonVariant does for MongoDB types), and will be searched during JSON
+  // parsing, unless dvoJsonParseDoNotTryCustomVariants is set (slightly faster)
+  // - the parser will try to guess the array or object size by pre-fetching
+  // some content: you can set dvoJsonParseDoNotGuessCount if your input has
+  // a lot of nested documents, and manual resize is preferred - this option
+  // will be forced by InitJson if a huge nest of objects is detected
+  // - by default, it will only handle direct JSON [array] of {object}: but if
+  // you define dvoJsonObjectParseWithinString, it will also try to un-escape
+  // a JSON string first, i.e. handle "[array]" or "{object}" content (may be
+  // used e.g. when JSON has been retrieved from a database TEXT column) - is
+  // used for instance by VariantLoadJson()
+  // - JSON serialization will follow the standard layout, unless
+  // dvoSerializeAsExtendedJson is set so that the property names would not
+  // be escaped with double quotes, writing '{name:"John",age:123}' instead of
+  // '{"name":"John","age":123}': this extended json layout is compatible with
+  // http://docs.mongodb.org/manual/reference/mongodb-extended-json and with
+  // TDocVariant JSON unserialization, also our SynCrossPlatformJSON unit, but
+  // NOT recognized by most JSON clients, like AJAX/JavaScript or C#/Java
+  // - by default, only integer/Int64/currency number values are allowed, unless
+  // dvoAllowDoubleValue is set and 32-bit floating-point conversion is tried,
+  // with potential loss of precision during the conversion
+  // - dvoInternNames and dvoInternValues will use shared TRawUtf8Interning
+  // instances to maintain a list of RawUtf8 names/values for all TDocVariant,
+  // so that redundant text content will be allocated only once on heap
+  // - see JSON_[TDocVariantModel] and all JSON_* constants as useful sets
+  TDocVariantOption = (
+    dvoIsArray,
+    dvoIsObject,
+    dvoNameCaseSensitive,
+    dvoCheckForDuplicatedNames,
+    dvoReturnNullForUnknownProperty,
+    dvoValueCopiedByReference,
+    dvoJsonParseDoNotTryCustomVariants,
+    dvoJsonParseDoNotGuessCount,
+    dvoJsonObjectParseWithinString,
+    dvoSerializeAsExtendedJson,
+    dvoAllowDoubleValue,
+    dvoInternNames,
+    dvoInternValues);
 
-    /// set of options for a TDocVariant storage
-    // - defined in this unit to avoid circular reference with mormot.core.variants
-    // - you can use JSON_OPTIONS[true] if you want to create a fast by-reference
-    // local document as with _ObjFast/_ArrFast/_JsonFast - i.e.
-    // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
-    // - when specifying the options, you should not include dvoIsArray nor
-    // dvoIsObject directly in the set, but explicitly define TDocVariantDataKind
-    TDocVariantOptions = set of TDocVariantOption;
+  /// set of options for a TDocVariant storage
+  // - defined in this unit to avoid circular reference with mormot.core.variants
+  // - see JSON_[TDocVariantModel] and all JSON_* constants as potential values
+  // - when specifying the options, you should not include dvoIsArray nor
+  // dvoIsObject directly in the set, but explicitly define TDocVariantDataKind
+  TDocVariantOptions = set of TDocVariantOption;
 
-    /// pointer to a set of options for a TDocVariant storage
-    // - defined in this unit to avoid circular reference with mormot.core.variants
-    // - you may use e.g. @JSON_OPTIONS[true], @JSON_OPTIONS[false],
-    // @JSON_OPTIONS_FAST_STRICT or @JSON_OPTIONS_FAST_EXTENDED
-    PDocVariantOptions = ^TDocVariantOptions;
+  /// pointer to a set of options for a TDocVariant storage
+  // - defined in this unit to avoid circular reference with mormot.core.variants
+  // - use e.g. @JSON_[mFast], @JSON_[mDefault], or any other TDocVariantModel
+  PDocVariantOptions = ^TDocVariantOptions;
+
+  /// a boolean array of TDocVariant storage options
+  TDocVariantOptionsBool = array[boolean] of TDocVariantOptions;
+  PDocVariantOptionsBool = ^TDocVariantOptionsBool;
 
 
 type
@@ -8063,10 +8065,10 @@ end;
 function HashAnsiString(Item: PAnsiChar; Hasher: THasher): cardinal;
 begin
   Item := PPointer(Item)^; // passed by reference
-  if Item = nil then
-    result := 0
+  if Item <> nil then
+    result := Hasher(0, Item, PStrLen(Item - _STRLEN)^)
   else
-    result := Hasher(0, Item, PStrLen(Item - _STRLEN)^);
+    result := 0;
 end;
 
 function HashAnsiStringI(Item: PUtf8Char; Hasher: THasher): cardinal;
@@ -8074,49 +8076,49 @@ var
   tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   Item := PPointer(Item)^;
-  if Item = nil then
-    result := 0
-  else
+  if Item <> nil then
     result := Hasher(0, tmp{%H-},
-      UpperCopy255Buf(tmp{%H-}, Item, PStrLen(Item - _STRLEN)^) - {%H-}tmp);
+      UpperCopy255Buf(tmp{%H-}, Item, PStrLen(Item - _STRLEN)^) - {%H-}tmp)
+  else
+    result := 0;
 end;
 
 function HashSynUnicode(Item: PSynUnicode; Hasher: THasher): cardinal;
 begin
-  if PtrUInt(Item^) = 0 then
-    result := 0
+  if PtrUInt(Item^) <> 0 then
+    result := Hasher(0, Pointer(Item^), Length(Item^) * 2)
   else
-    result := Hasher(0, Pointer(Item^), Length(Item^) * 2);
+    result := 0;
 end;
 
 function HashSynUnicodeI(Item: PSynUnicode; Hasher: THasher): cardinal;
 var
   tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
-  if PtrUInt(Item^) = 0 then
-    result := 0
+  if PtrUInt(Item^) <> 0 then
+    result := Hasher(0, tmp{%H-}, UpperCopy255W(tmp{%H-}, Item^) - {%H-}tmp)
   else
-    result := Hasher(0, tmp{%H-}, UpperCopy255W(tmp{%H-}, Item^) - {%H-}tmp);
+    result := 0;
 end;
 
 function HashWideString(Item: PWideString; Hasher: THasher): cardinal;
 begin
   // WideString internal size is in bytes, not WideChar
-  if PtrUInt(Item^) = 0 then
-    result := 0
+  if PtrUInt(Item^) <> 0 then
+    result := Hasher(0, Pointer(Item^), Length(Item^) * 2)
   else
-    result := Hasher(0, Pointer(Item^), Length(Item^) * 2);
+    result := 0;
 end;
 
 function HashWideStringI(Item: PWideString; Hasher: THasher): cardinal;
 var
   tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
-  if PtrUInt(Item^) = 0 then
-    result := 0
-  else
+  if PtrUInt(Item^) <> 0 then
     result := Hasher(0, tmp{%H-},
-      UpperCopy255W(tmp{%H-}, pointer(Item^), Length(Item^)) - {%H-}tmp);
+      UpperCopy255W(tmp{%H-}, pointer(Item^), Length(Item^)) - {%H-}tmp)
+  else
+    result := 0;
 end;
 
 function HashByte(Item: pointer; Hasher: THasher): cardinal;
@@ -8732,7 +8734,10 @@ type
   TFastReHash = object // use a dedicated object for faster code
     hc: cardinal;
     first, last, siz: PtrInt;
-    count, collisions, ht: integer;
+    count, duplicates, ht: integer;
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    collisions: integer;
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
     V, P: PAnsiChar;
     procedure FastReHash(Hasher: PDynArrayHasher);
   end;
@@ -8741,7 +8746,10 @@ procedure TFastReHash.FastReHash(Hasher: PDynArrayHasher);
 var
   fnd, ndx: PtrInt;
 begin
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions := 0;
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
+  duplicates := 0;
   P := Hasher^.DynArray^.Value^;
   siz := Hasher^.DynArray^.Info.Cache.ItemSize;
   ht := 1; // store index + 1
@@ -8751,9 +8759,9 @@ begin
     else
       hc := Hasher^.HashItem(P^, Hasher^.Hasher);
     // inlined FindOrNew()
+    last := Hasher^.HashTableSize;
     ndx := Hasher^.HashTableIndex(hc);
     first := ndx;
-    last := Hasher^.HashTableSize;
     repeat
       fnd := Hasher^.HashTable[ndx];
       if fnd = 0 then
@@ -8761,13 +8769,16 @@ begin
         Hasher^.HashTable[ndx] := ht; // use void entry
         break;
       end;
+      {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+      inc(collisions);
+      {$endif DYNARRAYHASHCOLLISIONCOUNT}
       V := PAnsiChar(Hasher^.DynArray^.Value^) + (fnd - 1) * siz;
       if (not Assigned(Hasher^.EventCompare) and
           (Hasher^.Compare(V^, P^) = 0)) or
          (Assigned(Hasher^.EventCompare) and
           (Hasher^.EventCompare(V^, P^) = 0)) then
       begin
-        inc(collisions);
+        inc(duplicates); // report but ignore duplicates
         break;
       end;
       inc(ndx);
@@ -8832,10 +8843,10 @@ begin
   include(State, canHash);   // needed before Find() below
   work.Count := n;
   work.FastReHash(@self);
-  result := work.collisions;
+  result := work.duplicates;
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-  inc(CountCollisions, result);
-  inc(CountCollisionsCurrent, result);
+  inc(CountCollisions, work.collisions);
+  inc(CountCollisionsCurrent, work.collisions);
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
 //QueryPerformanceMicroSeconds(t2); writeln(' newcol=',CountCollisionsCurrent,' ',
 //(CountCollisionsCurrent * 100) div cardinal(n), '%  ',MicroSecToString(t2-t1));

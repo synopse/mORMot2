@@ -401,7 +401,7 @@ begin
         'errorcount', count,
         'lasterror', error,
         'lasttime', NowUtcToString(true, 'T'),
-        'lastelapsed', timer.Stop], JSON_OPTIONS_FAST_EXTENDED);
+        'lastelapsed', timer.Stop], JSON_FAST_EXTENDED);
       pending.Output := variant(output);
       fClient.fSendNotificationsRest.ORM.Update(pending, 'Output', true);
       raise EServiceException.CreateUtf8(
@@ -527,7 +527,7 @@ function TServiceFactoryClient.Invoke(const aMethod: TInterfaceMethod;
     try
       pending.Method := aMethod.Uri;
       json := '[' + aParams + ']';
-      input.InitJsonInPlace(pointer(json), JSON_OPTIONS_FAST_EXTENDED);
+      input.InitJsonInPlace(pointer(json), JSON_FAST_EXTENDED);
       pending.Input := variant(input);
       if (aClientDrivenID <> nil) and
          (aClientDrivenID^ <> 0) then

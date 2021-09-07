@@ -6579,7 +6579,7 @@ procedure TTextWriter.AddJson(const Format: RawUtf8; const Args, Params: array o
 var
   temp: variant;
 begin
-  _JsonFmt(Format, Args, Params, JSON_OPTIONS_FAST, temp);
+  _JsonFmt(Format, Args, Params, JSON_FAST, temp);
   AddVariant(temp, twJsonEscape);
 end;
 
@@ -6765,7 +6765,7 @@ begin
   end
   else if jpoHandleCustomVariants in O then
   begin
-    DVO := JSON_OPTIONS_FAST;
+    DVO := JSON_FAST;
     CustomVariant := @DVO;
   end
   else
@@ -8250,7 +8250,7 @@ var
 begin
   if Count > 0 then
     begin
-      dv.Init(JSON_OPTIONS_NAMEVALUE[ExtendedJson], dvObject);
+      dv.Init(JSON_NAMEVALUE[ExtendedJson], dvObject);
       dv.SetCount(Count);
       dv.Capacity := Count;
       for ndx := 0 to Count - 1 do
@@ -8281,7 +8281,7 @@ var
   intvalues: TRawUtf8Interning;
 begin
   if dv.VarType <> DocVariantVType then
-    TDocVariant.New(DocVariant, JSON_OPTIONS_NAMEVALUE[ExtendedJson]);
+    TDocVariant.New(DocVariant, JSON_NAMEVALUE[ExtendedJson]);
   if ChangedProps <> nil then
     TDocVariant.New(ChangedProps^, dv.Options);
   if dvoInternValues in dv.Options then

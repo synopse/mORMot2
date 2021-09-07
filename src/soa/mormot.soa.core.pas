@@ -70,14 +70,14 @@ type
     property Method: RawUtf8
       read fMethod write fMethod;
     /// the input parameters, as a JSON document
-    // - will be stored in JSON_OPTIONS_FAST_EXTENDED format, i.e. with
+    // - will be stored in JSON_FAST_EXTENDED format, i.e. with
     // shortened field names, for smaller TEXT storage
     // - content may be searched using JsonGet/JsonHas SQL functions on a
     // SQlite3 storage, or with direct document query under MongoDB/PostgreSQL
     property Input: variant
       read fInput write fInput;
     /// the output parameters, as a JSON document, including result: for a function
-    // - will be stored in JSON_OPTIONS_FAST_EXTENDED format, i.e. with
+    // - will be stored in JSON_FAST_EXTENDED format, i.e. with
     // shortened field names, for smaller TEXT storage
     // - content may be searched using JsonGet/JsonHas SQL functions on a
     // SQlite3 storage, or with direct document query under MongoDB/PostgreSQL
@@ -973,11 +973,11 @@ begin
     if IDAsHexa then
       InitObject([
         'ID', Int64ToHex(fID),
-        MethodName, Method], JSON_OPTIONS_FAST)
+        MethodName, Method], JSON_FAST)
     else
       InitObject([
         'ID', fID,
-        MethodName, Method], JSON_OPTIONS_FAST);
+        MethodName, Method], JSON_FAST);
   m := Service.FindMethodIndex(Method);
   if m >= 0 then
     Service.Methods[m].ArgsAsDocVariantObject(

@@ -696,7 +696,7 @@ var
   payload: TDocVariantData;
 begin
   result := '';
-  payload.InitObject(DataNameValue, JSON_OPTIONS_FAST);
+  payload.InitObject(DataNameValue, JSON_FAST);
   if jrcIssuer in fClaims then
     if Issuer = '' then
       RaiseMissing(jrcIssuer)
@@ -949,7 +949,7 @@ begin
                   jrcAudience:
                     if JWT.reg[jrcAudience][1] = '[' then
                     begin
-                      aud.InitJson(JWT.reg[jrcAudience], JSON_OPTIONS_FAST);
+                      aud.InitJson(JWT.reg[jrcAudience], JSON_FAST);
                       if aud.Count = 0 then
                         exit;
                       for j := 0 to aud.Count - 1 do
@@ -989,7 +989,7 @@ begin
         if jrcData in excluded then
           continue; // caller didn't want to fill JWT.data
         include(JWT.claims, jrcData);
-        GetVariantFromJson(V, wasString, value, @JSON_OPTIONS[true],
+        GetVariantFromJson(V, wasString, value, @JSON_[mFast],
           joDoubleInData in fOptions, VLen);
         if JWT.data.Count = 0 then
           JWT.data.Capacity := cap;
@@ -1059,7 +1059,7 @@ begin
   begin
     VarClear(PayLoad^);
     temp2.Init(temp.buf, temp.len); // its own copy for in-place parsing
-    PDocVariantData(PayLoad)^.InitJsonInPlace(temp2.buf, JSON_OPTIONS_FAST);
+    PDocVariantData(PayLoad)^.InitJsonInPlace(temp2.buf, JSON_FAST);
     temp2.Done;
   end;
   repeat // avoid try..finally for temp.Done

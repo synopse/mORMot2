@@ -2448,7 +2448,7 @@ begin
   meta.InitObject([
     'name', ExtractFileName(FileToSign),
     'date', DateTimeToIso8601Text(FileAgeToDateTime(FileToSign))],
-    JSON_OPTIONS_FAST);
+    JSON_FAST);
   meta.AddNameValuesToObject(MetaNameValuePairs);
   doc.InitObject([
     'meta', variant(meta),
@@ -2456,7 +2456,7 @@ begin
     'md5', Md5(content),
     'sha256', Sha256DigestToString(sha),
     'sign', sign],
-    JSON_OPTIONS_FAST);
+    JSON_FAST);
   result := FileToSign + ECCCERTIFICATESIGN_FILEEXT;
   FileFromString(doc.ToJson('', '', jsonHumanReadable), result);
 end;
@@ -2799,7 +2799,7 @@ end;
 function TEccSignatureCertifiedFile.FromFileJson(const aFileContent: RawUtf8): boolean;
 begin
   fLowLevelInfo.Clear;
-  if not fLowLevelInfo.InitJson(aFileContent, JSON_OPTIONS_FAST) then
+  if not fLowLevelInfo.InitJson(aFileContent, JSON_FAST) then
   begin
     result := false;
     exit;
@@ -3359,7 +3359,7 @@ var
   values: TRawUtf8DynArray;
 begin
   result := false;
-  if doc.InitJson(cajsoncontent, JSON_OPTIONS_FAST) then
+  if doc.InitJson(cajsoncontent, JSON_FAST) then
   begin
     doc.GetAsDocVariantSafe('PublicBase64')^.ToRawUtf8DynArray(values);
     result := LoadFromArray(values);

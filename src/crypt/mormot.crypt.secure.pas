@@ -1903,7 +1903,7 @@ begin
     'Identifier', ProcessID,
     'Counter', Counter,
     'Value', Value,
-    'Hex', Int64ToHex(Value)], JSON_OPTIONS_FAST);
+    'Hex', Int64ToHex(Value)], JSON_FAST);
 end;
 
 function TSynUniqueIdentifierBits.Equal(
