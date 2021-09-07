@@ -3,6 +3,7 @@
   <Package Version="5">
     <Name Value="mormot2"/>
     <Author Value="A. Bouchez, Synopse"/>
+    <AutoUpdate Value="Manually"/>
     <CompilerOptions>
       <Version Value="11"/>
       <SearchPaths>
@@ -427,8 +428,5 @@
       <Version Value="2"/>
       <UseFileFilters Value="True"/>
     </PublishOptions>
-    <CustomOptions Items="ExternHelp" Version="2">
-      <_ExternHelp Items="Count"/>
-    </CustomOptions>
   </Package>
 </CONFIG>
