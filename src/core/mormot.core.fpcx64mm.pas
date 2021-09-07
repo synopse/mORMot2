@@ -97,6 +97,9 @@ unit mormot.core.fpcx64mm;
 // - e.g. to use this unit as a stand-alone C memory allocator
 {.$define FPCMM_STANDALONE}
 
+// this whole unit will compile as void
+// - may be defined e.g. when compiled as Design-Time Lazarus package
+{.$define FPCMM_DISABLE}
 
 interface
 
@@ -110,7 +113,7 @@ interface
   {$Q-} // disable overflow checking
   {$B-} // expect short circuit boolean
   {$ifdef CPUX64}
-    {$define FPC_CPUX64} // this unit is for FPC + x86_64 only
+    {$define FPCX64MM} // this unit is for FPC + x86_64 only
     {$asmmode Intel}
   {$endif CPUX64}
   {$ifdef FPCMM_BOOSTER}
@@ -127,8 +130,12 @@ interface
   {$endif FPCMM_SERVER}
 {$endif FPC}
 
+{$ifdef FPCMM_DISABLE}
+  {$undef FPCX64MM} // e.g. when compiled as Design-Time Lazarus package
+{$endif FPCMM_DISABLE}
 
-{$ifdef FPC_CPUX64}
+
+{$ifdef FPCX64MM}
 // this unit is available only for FPC + X86_64 CPU
 // other targets would compile as a void unit
 
@@ -283,7 +290,7 @@ procedure WriteHeapStatus(const context: shortstring = '';
 
 {$endif FPCMM_STANDALONE}
 
-{$endif FPC_CPUX64}
+{$endif FPCX64MM}
 
 
 
@@ -313,7 +320,7 @@ implementation
 
 }
 
-{$ifdef FPC_CPUX64}
+{$ifdef FPCX64MM}
 // this unit is available only for FPC + X86_64 CPU
 
 {$ifndef FPCMM_NOPAUSE}
@@ -2900,7 +2907,7 @@ finalization
 
 {$endif FPCMM_STANDALONE}
 
-{$endif FPC_CPUX64}
+{$endif FPCX64MM}
 
 end.
 
