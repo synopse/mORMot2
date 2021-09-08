@@ -8731,26 +8731,28 @@ begin
 end;
 
 type
-  TFastReHash = object // use a dedicated object for faster code
+  TFastReHash = object // dedicated object for better register allocation
     hc: cardinal;
-    first, last, siz: PtrInt;
+    values, first, last, siz: PtrInt;
     count, duplicates, ht: integer;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     collisions: integer;
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
-    V, P: PAnsiChar;
-    procedure FastReHash(Hasher: PDynArrayHasher);
+    P: PAnsiChar;
+    procedure Process(Hasher: PDynArrayHasher);
   end;
 
-procedure TFastReHash.FastReHash(Hasher: PDynArrayHasher);
+procedure TFastReHash.Process(Hasher: PDynArrayHasher);
 var
   fnd, ndx: PtrInt;
 begin
+  // should match FindOrNew() logic
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions := 0;
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   duplicates := 0;
   P := Hasher^.DynArray^.Value^;
+  values := PtrUInt(P);
   siz := Hasher^.DynArray^.Info.Cache.ItemSize;
   ht := 1; // store index + 1
   repeat
@@ -8758,25 +8760,24 @@ begin
       hc := Hasher^.EventHash(P^)
     else
       hc := Hasher^.HashItem(P^, Hasher^.Hasher);
-    // inlined FindOrNew()
-    last := Hasher^.HashTableSize;
     ndx := Hasher^.HashTableIndex(hc);
     first := ndx;
+    last := Hasher^.HashTableSize;
     repeat
-      fnd := Hasher^.HashTable[ndx];
+      fnd := Hasher^.HashTable[ndx]; // store index + 1
       if fnd = 0 then
       begin
-        Hasher^.HashTable[ndx] := ht; // use void entry
+        Hasher^.HashTable[ndx] := ht; // use void entry (most common case)
         break;
       end;
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
       inc(collisions);
       {$endif DYNARRAYHASHCOLLISIONCOUNT}
-      V := PAnsiChar(Hasher^.DynArray^.Value^) + (fnd - 1) * siz;
+      fnd := values + (fnd - 1) * siz;
       if (not Assigned(Hasher^.EventCompare) and
-          (Hasher^.Compare(V^, P^) = 0)) or
+          (Hasher^.Compare(pointer(fnd)^, P^) = 0)) or
          (Assigned(Hasher^.EventCompare) and
-          (Hasher^.EventCompare(V^, P^) = 0)) then
+          (Hasher^.EventCompare(pointer(fnd)^, P^) = 0)) then
       begin
         inc(duplicates); // report but ignore duplicates
         break;
@@ -8801,7 +8802,7 @@ end;
 function TDynArrayHasher.ReHash(forced: boolean): integer;
 var
   n, cap, siz: PtrInt;
-  work: TFastReHash;
+  fastrehash: TFastReHash;
 begin
   result := 0;
   // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
@@ -8841,12 +8842,12 @@ begin
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   // fill HashTable[]=index+1 from all existing items
   include(State, canHash);   // needed before Find() below
-  work.Count := n;
-  work.FastReHash(@self);
-  result := work.duplicates;
+  fastrehash.Count := n;
+  fastrehash.Process(@self);
+  result := fastrehash.duplicates;
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-  inc(CountCollisions, work.collisions);
-  inc(CountCollisionsCurrent, work.collisions);
+  inc(CountCollisions, fastrehash.collisions);
+  inc(CountCollisionsCurrent, fastrehash.collisions);
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
 //QueryPerformanceMicroSeconds(t2); writeln(' newcol=',CountCollisionsCurrent,' ',
 //(CountCollisionsCurrent * 100) div cardinal(n), '%  ',MicroSecToString(t2-t1));

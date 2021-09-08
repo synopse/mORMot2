@@ -1575,7 +1575,7 @@ type
       const aPaths: array of RawUtf8);
     /// delete a value/item in this document, from its index
     // - return TRUE on success, FALSE if the supplied index is not correct
-    function Delete(Index: integer): boolean; overload;
+    function Delete(Index: PtrInt): boolean; overload;
     /// delete a value/item in this document, from its name
     // - return TRUE on success, FALSE if the supplied name does not exist
     function Delete(const aName: RawUtf8): boolean; overload;
@@ -6074,7 +6074,9 @@ begin
   result := true;
 end;
 
-function TDocVariantData.Delete(Index: integer): boolean;
+function TDocVariantData.Delete(Index: PtrInt): boolean;
+var
+  n: PtrInt;
 begin
   if cardinal(Index) >= cardinal(VCount) then
     result := false
@@ -6090,14 +6092,15 @@ begin
     if PRefCnt(PAnsiChar(pointer(VValue)) - _DAREFCNT)^ > 1 then
       VValue := copy(VValue); // make unique
     VarClear(VValue[Index]);
-    if Index < VCount then
+    n := VCount - Index;
+    if n <> 0 then
     begin
       if VName <> nil then
       begin
-        MoveFast(VName[Index + 1], VName[Index], (VCount - Index) * SizeOf(pointer));
+        MoveFast(VName[Index + 1], VName[Index], n * SizeOf(pointer));
         PtrUInt(VName[VCount]) := 0; // avoid GPF
       end;
-      MoveFast(VValue[Index + 1], VValue[Index], (VCount - Index) * SizeOf(variant));
+      MoveFast(VValue[Index + 1], VValue[Index], n * SizeOf(variant));
       TVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
     end;
     result := true;
@@ -6120,14 +6123,8 @@ end;
 
 function TDocVariantData.DeleteByProp(const aPropName, aPropValue: RawUtf8;
   aPropValueCaseSensitive: boolean): boolean;
-var
-  ndx: integer;
 begin
-  ndx := SearchItemByProp(aPropName, aPropValue, aPropValueCaseSensitive);
-  if ndx < 0 then
-    result := false
-  else
-    result := Delete(ndx);
+  result := Delete(SearchItemByProp(aPropName, aPropValue, aPropValueCaseSensitive));
 end;
 
 function TDocVariantData.DeleteByValue(const aValue: Variant;
