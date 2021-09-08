@@ -6111,11 +6111,11 @@ end;
 
 function TDocVariantData.Delete(const aNames: array of RawUtf8): integer;
 var
-  i: PtrInt;
+  n: PtrInt;
 begin
   result := 0;
-  for i := 0 to high(aNames) do
-    inc(result, ord(Delete(aNames[i])));
+  for n := 0 to high(aNames) do
+    inc(result, ord(Delete(aNames[n])));
 end;
 
 function TDocVariantData.DeleteByProp(const aPropName, aPropValue: RawUtf8;

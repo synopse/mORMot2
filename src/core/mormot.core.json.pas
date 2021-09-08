@@ -3937,7 +3937,7 @@ begin
   end;
 end;
 
-function TryRemoveComment(P: PUtf8Char): PUtf8Char;
+function DoRemoveComment(P: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE} inline; {$endif}
 begin
   result := P + 1;
@@ -3957,7 +3957,7 @@ begin
         result[-1] := ' ';
         repeat
           if not (result^ in [#10, #13]) then
-            result^ := ' '; // keep CRLF for correct line numbering (e.g. for error)
+            result^ := ' '; // keep CRLF for line numbering (e.g. for error)
           inc(result);
           if PWord(result)^ = ord('*') + ord('/') shl 8 then
           begin
@@ -3986,16 +3986,17 @@ begin // replace comments by ' ' characters which will be ignored by parser
             inc(P);
           end;
         '/':
-          P := TryRemoveComment(P);
+          P := DoRemoveComment(P);
         ',':
-          begin // replace trailing comma by space for strict JSON parsers
+          begin
+            // replace trailing comma by space for strict JSON parsers
             PComma := P;
             repeat
               inc(P)
             until (P^ > ' ') or
                   (P^ = #0);
             if P^ = '/' then
-              P := TryRemoveComment(P);
+              P := DoRemoveComment(P);
             while (P^ <= ' ') and
                   (P^ <> #0) do
               inc(P);
