@@ -1579,6 +1579,9 @@ type
     /// delete a value/item in this document, from its name
     // - return TRUE on success, FALSE if the supplied name does not exist
     function Delete(const aName: RawUtf8): boolean; overload;
+    /// delete/filter some values/items in this document, from their name
+    // - return the number of deleted items
+    function Delete(const aNames: array of RawUtf8): integer; overload;
     /// delete a value in this document, by property name match
     // - {aPropName:aPropValue} will be searched within the stored array or
     // object, and the corresponding item will be deleted, on match
@@ -6104,6 +6107,15 @@ end;
 function TDocVariantData.Delete(const aName: RawUtf8): boolean;
 begin
   result := Delete(GetValueIndex(aName));
+end;
+
+function TDocVariantData.Delete(const aNames: array of RawUtf8): integer;
+var
+  i: PtrInt;
+begin
+  result := 0;
+  for i := 0 to high(aNames) do
+    inc(result, ord(Delete(aNames[i])));
 end;
 
 function TDocVariantData.DeleteByProp(const aPropName, aPropValue: RawUtf8;
