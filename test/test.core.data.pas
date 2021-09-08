@@ -4296,6 +4296,7 @@ begin
   Check(model = mVoid);
   for m2 := low(m2) to high(m2) do
   begin
+    Doc2.Clear;
     Doc2.InitJson(Doc.ToJson, m2);
     Check(Doc2.Equals(Doc));
     Check(Doc2.GetModel(model));
