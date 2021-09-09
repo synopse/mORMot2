@@ -2690,9 +2690,9 @@ procedure StartReport;
 begin
   if MemoryLeakReported then
     exit;
-  writeln;
+  writeln {$ifndef MSWINDOWS} (#27'[1;31m') {$endif}; // lightred posix console
   WriteHeapStatus('WARNING! THIS PROGRAM LEAKS MEMORY!'#13#10'Memory Status:');
-  writeln('Leaks Identified:');
+  writeln('Leaks Identified:' {$ifndef MSWINDOWS} + #27'[1;37m' {$endif});
   MemoryLeakReported := true;
 end;
 
