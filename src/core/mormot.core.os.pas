@@ -163,9 +163,20 @@ const
 
   /// the recognized Windows versions which are 32-bit
   WINDOWS_32 = [
-     w2000, wXP, wServer2003, wServer2003_R2, wVista, wServer2008,
-     wSeven, wServer2008_R2, wEight, wServer2012, wEightOne, wServer2012R2,
-     wTen, wServer2016];
+     w2000,
+     wXP,
+     wServer2003,
+     wServer2003_R2,
+     wVista,
+     wServer2008,
+     wSeven,
+     wServer2008_R2,
+     wEight,
+     wServer2012,
+     wEightOne,
+     wServer2012R2,
+     wTen,
+     wServer2016];
 
   /// translate one operating system (and distribution) into a its common name
   OS_NAME: array[TOperatingSystem] of RawUtf8 = (
@@ -215,7 +226,8 @@ const
 
   /// the operating systems items which actually have a Linux kernel
   OS_LINUX = [
-    osLinux, osArch .. osAndroid];
+    osLinux,
+    osArch .. osAndroid];
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};

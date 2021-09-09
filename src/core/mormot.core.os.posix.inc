@@ -2611,9 +2611,9 @@ begin
   {$ifdef CPUX64}
   {$ifdef OSLINUX}
   {$ifndef NOPATCHRTL}
+  {$ifndef FPC_USE_LIBC}
   // will avoid syscall e.g. for events timeout in cthreads.pp
   RedirectCode(@Linux.clock_gettime, @clock_gettime_c);
-  {$ifndef FPC_USE_LIBC}
   RedirectCode(@fpgettimeofday, @gettimeofday_c);
   {$endif FPC_USE_LIBC}
   {$endif NOPATCHRTL}
