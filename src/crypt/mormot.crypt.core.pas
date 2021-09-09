@@ -2637,10 +2637,14 @@ type
   // - is defined privately in the implementation section
   // - do NOT change this structure: it is fixed in the asm code
   TAesContext = packed record
-    RK: TKeyArray;   // Key (encr. or decr.) - should remain the first field
-    iv: THash128Rec; // IV or CTR used e.g. by TAesGcmEngine or TAesPrng
-    buf: TAesBlock;  // Work buffer used e.g. by TAesGcmEngine or AesNiTrailer()
-    DoBlock: TAesContextDoBlock; // main AES function
+    // Key (encr. or decr.) - should remain the first field
+    RK: TKeyArray;
+    // IV or CTR used e.g. by TAesGcmEngine or TAesPrng
+    iv: THash128Rec;
+    // Work buffer used e.g. by TAesGcmEngine or AesNiTrailer()
+    buf: TAesBlock;
+    // main AES function to process one 16-bytes block
+    DoBlock: TAesContextDoBlock;
     {$ifdef USEAESNI32}
     AesNi32: pointer; // xmm7 AES-NI encoding
     {$endif USEAESNI32}
@@ -3070,28 +3074,48 @@ begin
   dec(pk);
   for i := 1 to ctxt.Rounds - 1 do
   begin
-    t0 := t[s0 and $ff] xor t[$100 + s3 shr 8 and $ff] xor
-          t[$200 + s2 shr 16 and $ff] xor t[$300 + s1 shr 24];
-    t1 := t[s1 and $ff] xor t[$100 + s0 shr 8 and $ff] xor
-          t[$200 + s3 shr 16 and $ff] xor t[$300 + s2 shr 24];
-    t2 := t[s2 and $ff] xor t[$100 + s1 shr 8 and $ff] xor
-          t[$200 + s0 shr 16 and $ff] xor t[$300 + s3 shr 24];
-    s3 := t[s3 and $ff] xor t[$100 + s2 shr 8 and $ff] xor
-          t[$200 + s1 shr 16 and $ff] xor t[$300 + s0 shr 24] xor pk[3];
+    t0 := t[s0 and $ff] xor
+          t[$100 + s3 shr 8 and $ff] xor
+          t[$200 + s2 shr 16 and $ff] xor
+          t[$300 + s1 shr 24];
+    t1 := t[s1 and $ff] xor
+          t[$100 + s0 shr 8 and $ff] xor
+          t[$200 + s3 shr 16 and $ff] xor
+          t[$300 + s2 shr 24];
+    t2 := t[s2 and $ff] xor
+          t[$100 + s1 shr 8 and $ff] xor
+          t[$200 + s0 shr 16 and $ff] xor
+          t[$300 + s3 shr 24];
+    s3 := t[s3 and $ff] xor
+          t[$100 + s2 shr 8 and $ff] xor
+          t[$200 + s1 shr 16 and $ff] xor
+          t[$300 + s0 shr 24] xor pk[3];
     s0 := t0 xor pk[0];
     s1 := t1 xor pk[1];
     s2 := t2 xor pk[2];
     dec(pk);
   end;
   ib := @InvSBox;
-  bo[0] := ((ib[s0 and $ff]) xor (ib[s3 shr 8 and $ff]) shl 8 xor
-    (ib[s2 shr 16 and $ff]) shl 16 xor (ib[s1 shr 24]) shl 24) xor pk[0];
-  bo[1] := ((ib[s1 and $ff]) xor (ib[s0 shr 8 and $ff]) shl 8 xor
-    (ib[s3 shr 16 and $ff]) shl 16 xor (ib[s2 shr 24]) shl 24) xor pk[1];
-  bo[2] := ((ib[s2 and $ff]) xor (ib[s1 shr 8 and $ff]) shl 8 xor
-    (ib[s0 shr 16 and $ff]) shl 16 xor (ib[s3 shr 24]) shl 24) xor pk[2];
-  bo[3] := ((ib[s3 and $ff]) xor (ib[s2 shr 8 and $ff]) shl 8 xor
-    (ib[s1 shr 16 and $ff]) shl 16 xor (ib[s0 shr 24]) shl 24) xor pk[3];
+  bo[0] := ((ib[s0 and $ff]) xor
+            (ib[s3 shr 8 and $ff]) shl 8 xor
+            (ib[s2 shr 16 and $ff]) shl 16 xor
+            (ib[s1 shr 24]) shl 24) xor
+            pk[0];
+  bo[1] := ((ib[s1 and $ff]) xor
+            (ib[s0 shr 8 and $ff]) shl 8 xor
+            (ib[s3 shr 16 and $ff]) shl 16 xor
+            (ib[s2 shr 24]) shl 24) xor
+            pk[1];
+  bo[2] := ((ib[s2 and $ff]) xor
+            (ib[s1 shr 8 and $ff]) shl 8 xor
+            (ib[s0 shr 16 and $ff]) shl 16 xor
+            (ib[s3 shr 24]) shl 24) xor
+            pk[2];
+  bo[3] := ((ib[s3 and $ff]) xor
+            (ib[s2 shr 8 and $ff]) shl 8 xor
+            (ib[s1 shr 16 and $ff]) shl 16 xor
+            (ib[s0 shr 24]) shl 24) xor
+            pk[3];
 end;
 
 {$endif ASMX86}
@@ -3112,10 +3136,15 @@ begin
         pk^[4] := ((sb[(temp shr 8) and $ff])) xor
                   ((sb[(temp shr 16) and $ff]) shl 8) xor
                   ((sb[(temp shr 24)]) shl 16) xor
-                  ((sb[(temp) and $ff]) shl 24) xor pk^[0] xor RCon[i];
-        pk^[5] := pk^[1] xor pk^[4];
-        pk^[6] := pk^[2] xor pk^[5];
-        pk^[7] := pk^[3] xor pk^[6];
+                  ((sb[(temp) and $ff]) shl 24) xor
+                  pk^[0] xor
+                  RCon[i];
+        pk^[5] := pk^[1] xor
+                  pk^[4];
+        pk^[6] := pk^[2] xor
+                  pk^[5];
+        pk^[7] := pk^[3] xor
+                  pk^[6];
         inc(PByte(pk), 4 * 4);
       end;
     192:
@@ -3126,14 +3155,21 @@ begin
         pk^[6] := ((sb[(temp shr 8) and $ff])) xor
                   ((sb[(temp shr 16) and $ff]) shl 8) xor
                   ((sb[(temp shr 24)]) shl 16) xor
-                  ((sb[(temp) and $ff]) shl 24) xor pk^[0] xor RCon[i];
-        pk^[7] := pk^[1] xor pk^[6];
-        pk^[8] := pk^[2] xor pk^[7];
-        pk^[9] := pk^[3] xor pk^[8];
+                  ((sb[(temp) and $ff]) shl 24) xor
+                  pk^[0] xor
+                  RCon[i];
+        pk^[7] := pk^[1] xor
+                  pk^[6];
+        pk^[8] := pk^[2] xor
+                  pk^[7];
+        pk^[9] := pk^[3] xor
+                  pk^[8];
         if i = 7 then
           exit;
-        pk^[10] := pk^[4] xor pk^[9];
-        pk^[11] := pk^[5] xor pk^[10];
+        pk^[10] := pk^[4] xor
+                   pk^[9];
+        pk^[11] := pk^[5] xor
+                   pk^[10];
         inc(PByte(pk), 6 * 4);
       end;
   else // 256
@@ -3144,10 +3180,15 @@ begin
       pk^[8] := ((sb[(temp shr 8) and $ff])) xor
                 ((sb[(temp shr 16) and $ff]) shl 8) xor
                 ((sb[(temp shr 24)]) shl 16) xor
-                ((sb[(temp) and $ff]) shl 24) xor pk^[0] xor RCon[i];
-      pk^[9] := pk^[1] xor pk^[8];
-      pk^[10] := pk^[2] xor pk^[9];
-      pk^[11] := pk^[3] xor pk^[10];
+                ((sb[(temp) and $ff]) shl 24) xor
+                pk^[0] xor
+                RCon[i];
+      pk^[9] := pk^[1] xor
+                pk^[8];
+      pk^[10] := pk^[2] xor
+                 pk^[9];
+      pk^[11] := pk^[3] xor
+                 pk^[10];
       if i = 6 then
         exit;
       temp := pk^[11];
@@ -3155,10 +3196,14 @@ begin
       pk^[12] := ((sb[(temp) and $ff])) xor
                  ((sb[(temp shr 8) and $ff]) shl 8) xor
                  ((sb[(temp shr 16) and $ff]) shl 16) xor
-                 ((sb[(temp shr 24)]) shl 24) xor pk^[4];
-      pk^[13] := pk^[5] xor pk^[12];
-      pk^[14] := pk^[6] xor pk^[13];
-      pk^[15] := pk^[7] xor pk^[14];
+                 ((sb[(temp shr 24)]) shl 24) xor
+                 pk^[4];
+      pk^[13] := pk^[5] xor
+                 pk^[12];
+      pk^[14] := pk^[6] xor
+                 pk^[13];
+      pk^[15] := pk^[7] xor
+                 pk^[14];
       inc(PByte(pk), 8 * 4);
     end;
   end;
@@ -3177,17 +3222,25 @@ begin
     inc(PByte(k), 16);
     dec(rounds);
     x := k[0];
-    k[0] := t[$300 + sb[x shr 24]] xor t[$200 + sb[x shr 16 and $ff]] xor
-            t[$100 + sb[x shr 8 and $ff]] xor t[sb[x and $ff]];
+    k[0] := t[$300 + sb[x shr 24]] xor
+            t[$200 + sb[x shr 16 and $ff]] xor
+            t[$100 + sb[x shr 8 and $ff]] xor
+            t[sb[x and $ff]];
     x := k[1];
-    k[1] := t[$300 + sb[x shr 24]] xor t[$200 + sb[x shr 16 and $ff]] xor
-            t[$100 + sb[x shr 8 and $ff]] xor t[sb[x and $ff]];
+    k[1] := t[$300 + sb[x shr 24]] xor
+            t[$200 + sb[x shr 16 and $ff]] xor
+            t[$100 + sb[x shr 8 and $ff]] xor
+            t[sb[x and $ff]];
     x := k[2];
-    k[2] := t[$300 + sb[x shr 24]] xor t[$200 + sb[x shr 16 and $ff]] xor
-            t[$100 + sb[x shr 8 and $ff]] xor t[sb[x and $ff]];
+    k[2] := t[$300 + sb[x shr 24]] xor
+            t[$200 + sb[x shr 16 and $ff]] xor
+            t[$100 + sb[x shr 8 and $ff]] xor
+            t[sb[x and $ff]];
     x := k[3];
-    k[3] := t[$300 + sb[x shr 24]] xor t[$200 + sb[x shr 16 and $ff]] xor
-            t[$100 + sb[x shr 8 and $ff]] xor t[sb[x and $ff]];
+    k[3] := t[$300 + sb[x shr 24]] xor
+            t[$200 + sb[x shr 16 and $ff]] xor
+            t[$100 + sb[x shr 8 and $ff]] xor
+            t[sb[x and $ff]];
   until rounds = 1;
 end;
 
@@ -3592,10 +3645,13 @@ begin
     begin
       // inlined mul_x8()
       t := gft_le[x.c3 shr 24];
-      x.c3 := ((x.c3 shl 8) or  (x.c2 shr 24));
-      x.c2 := ((x.c2 shl 8) or  (x.c1 shr 24));
-      x.c1 := ((x.c1 shl 8) or  (x.c0 shr 24));
-      x.c0 := ((x.c0 shl 8) xor t);
+      x.c3 := (x.c3 shl 8) or
+              (x.c2 shr 24);
+      x.c2 := (x.c2 shl 8) or
+              (x.c1 shr 24);
+      x.c1 := (x.c1 shl 8) or
+              (x.c0 shr 24);
+      x.c0 := (x.c0 shl 8) xor t;
     end;
     for j := 0 to 7 do
     begin
@@ -5787,10 +5843,10 @@ var
 begin
   result := false;
   {$ifdef OSPOSIX}
-  dev := FileOpen('/dev/urandom', fmOpenRead);
+  dev := FileOpen('/dev/urandom', fmOpenRead); // non blocking on Linux and BSD
   if (dev <= 0) and
      AllowBlocking then
-    dev := FileOpen('/dev/random', fmOpenRead);
+    dev := FileOpen('/dev/random', fmOpenRead); // may block until reach entropy
   if dev > 0 then
     try
       rd := 32; // read up to 256 bits - see "man urandom" Usage paragraph
@@ -6138,7 +6194,7 @@ var
     QueryPerformanceMicroSeconds(data.d2); // set data.h1 low 64-bit
     aes.Encrypt(data.h0);
     XorEntropy(@data.h2); // DefaultHasher128(RdRand32+Rdtsc+Now+Random+CreateGUID)
-    XorEntropy(@data.h3);
+    CreateGUID(TGuid(data.h3)); // CoCreateGuid or from POSIX kernel
     QueryPerformanceMicroSeconds(data.d3); // set data.h1 high 64-bit
     aes.Encrypt(data.h1);
     sha3.Update(@data, SizeOf(data));
@@ -6160,20 +6216,27 @@ begin
     RandomBytes(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     aes.EncryptInit(data.h3, 128);
     if IsZero(GetEntropySeed) then
-      // retrieve System randomness once - even in gesUserOnly mode
+      // retrieve some System randomness once - even in gesUserOnly mode
       FillSystemRandom(@GetEntropySeed, SizeOf(GetEntropySeed), {block=}false);
     sha3.Update(@GetEntropySeed, SizeOf(GetEntropySeed));
-    sha3update;
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
     sha3.Update(Executable.ProgramFullSpec);
     data.h0 := Executable.Hash.b;
     sha3update;
+    {$ifdef OSLINUXANDROID}
+    // detailed CPU execution contexts and timing from Linux kernel
+    sha3.Update(StringFromFile('/proc/stat', {nosize=}true));
+    // read-only random UUID text like '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
+    sha3.Update(StringFromFile('/proc/sys/kernel/random/uuid', {nosize=}true));
+    sha3.Update(StringFromFile('/proc/sys/kernel/random/boot_id', {nosize=}true));
+    {$endif OSLINUXANDROID}
+    {$ifdef OSWINDOWS}
     if RetrieveSystemTimes(data.d0, data.d1, data.d2) then
-      sha3.Update(@data, SizeOf(data)) // from GetSystemTimes() WinAPI
-    else
-      sha3.Update(StringFromFile('/proc/stat', {nosize=}true)); // Linux kernel
+      sha3.Update(@data, SizeOf(data.d0) * 3); // from GetSystemTimes() WinAPI
+    {$else}
     sha3.Update(RetrieveLoadAvg); // may return '' e.g. on Windows
+    {$endif OSWINDOWS}
     GetMemoryInfo(mem, {withalloc=}true);
     sha3.Update(@mem, SizeOf(mem));
     sha3.Update(OSVersionText);
@@ -8483,7 +8546,7 @@ begin
   count := 55 - count;
   if count < 0 then
   begin
-    //  Padding forces an extra block
+    // Padding forces an extra block
     FillcharFast(p^, count + 8, 0);
     MD5Transform(buf, in_);
     p := @in_;
@@ -9323,8 +9386,9 @@ end;
 function TAesFullHeader.Calc(const Key; KeySize: cardinal): cardinal;
 begin
   result := Adler32Asm(KeySize, @Key, KeySize shr 3) xor
-    Te0[OriginalLen and $FF] xor Te1[SourceLen and $FF] xor
-    Td0[SomeSalt and $7FF];
+              Te0[OriginalLen and $FF] xor
+              Te1[SourceLen and $FF] xor
+              Td0[SomeSalt and $7FF];
 end;
 
 function TAesFull.EncodeDecode(const Key; KeySize, inLen: cardinal;
