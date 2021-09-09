@@ -2256,7 +2256,7 @@ type
     /// add some content to the Buffer, resizing it if needed
     procedure Append(const Text: RawUtf8; CRLF: boolean = false); overload;
       {$ifdef HASINLINE}inline;{$endif}
-   /// add some values as text to the Buffer, resizing it if needed
+    /// add some values as text to the Buffer, resizing it if needed
     procedure Append(const Args: array of const; CRLF: boolean = false); overload;
     /// check if Append(Bytes) would not need to resize the internal Buffer
     function CanAppend(Bytes: PtrInt): boolean;
@@ -2266,6 +2266,15 @@ type
     function Reserve(MaxSize: PtrInt): pointer;
     /// similar to delete(fBuffer, 1, FirstBytes)
     procedure Remove(FirstBytes: PtrInt);
+    /// move up to Count bytes from the internal Buffer into another place
+    // - returns how many bytes were available to be copied into Dest^
+    // - then remove the copied bytes from the internal Buffer/Len storage
+    function Extract(Dest: pointer; Count: PtrInt): PtrInt;
+    /// move up to Count bytes from the internal Buffer into another place
+    // - returns how many bytes were available to be copied into Dest^
+    // - don't move any byte, but just update the given Pos index
+    function ExtractAt(var Dest: PAnsiChar; var Count: PtrInt;
+      var Pos: PtrInt): PtrInt;
     /// similar to insert(P/PLen, fBuffer, Position + 1)
     // - could optionally include a #13#10 pattern between the two
     procedure Insert(P: pointer; PLen: PtrInt; Position: PtrInt = 0;
@@ -9883,6 +9892,39 @@ begin
       dec(fLen, FirstBytes);
       MoveFast(PByteArray(fBuffer)[FirstBytes], pointer(fBuffer)^, fLen);
     end;
+end;
+
+function TRawByteStringBuffer.Extract(Dest: pointer; Count: PtrInt): PtrInt;
+begin
+  result := fLen;
+  if Count < result then
+    result := Count;
+  if result <= 0 then
+    exit;
+  MoveFast(pointer(fBuffer)^, Dest^, result);
+  dec(fLen, result);
+  if fLen <> 0 then // keep trailing bytes for next call
+    MoveFast(PByteArray(fBuffer)[result], pointer(fBuffer)^, fLen);
+end;
+
+function TRawByteStringBuffer.ExtractAt(
+  var Dest: PAnsiChar; var Count: PtrInt; var Pos: PtrInt): PtrInt;
+begin
+  result := fLen - Pos;
+  if (result = 0) or
+     (Count = 0) then
+    exit;
+  if result > Count then
+    result := Count;
+  MoveFast(PByteArray(fBuffer)[Pos], Dest^, result);
+  inc(Pos, result);
+  if Pos = fLen then
+  begin
+    Reset; // all pending content has been read
+    Pos := 0;
+  end;
+  inc(Dest, result);
+  dec(Count, result);
 end;
 
 procedure TRawByteStringBuffer.Insert(P: pointer; PLen: PtrInt;
