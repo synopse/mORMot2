@@ -2717,14 +2717,14 @@ type
   public
     rs1, rs2, rs3, seedcount: cardinal;
     /// force an immediate seed of the generator from current system state
-    // - as executed by the Next method at thread startup, and after 2^20 values
+    // - as executed by the Next method at thread startup, and after 2^32 values
     // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
     procedure Seed(entropy: PByteArray; entropylen: PtrInt);
     /// compute the next 32-bit generated value with no Seed - internal call
     function RawNext: cardinal;
     /// compute the next 32-bit generated value
-    // - will automatically reseed after around 2^20 generated values, which is
-    // very conservative since this generator has a period of 2^88
+    // - will automatically reseed after around 2^32 generated values, which is
+    // huge but very conservative since this generator has a period of 2^88
     function Next: cardinal; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// compute the next 32-bit generated value, in range [0..max-1]
@@ -2735,7 +2735,7 @@ type
     /// compute a 64-bit floating point value
     function NextDouble: double;
     /// XOR some memory buffer with random bytes
-    procedure Fill(dest: PByte; count: integer);
+    procedure Fill(dest: pointer; count: integer);
     /// fill some string[size] with 7-bit ASCII random text
     procedure FillShort(var dest: shortstring; size: PtrUInt);
     /// fill some string[31] with 7-bit ASCII random text
@@ -2784,8 +2784,8 @@ procedure RandomBytes(Dest: PByte; Count: integer);
 procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
 {$endif PUREMORMOT2}
 
-/// seed the gsl_rng_taus2 Random32 generator
-// - by default, gsl_rng_taus2 generator is re-seeded every 2^20 values, which
+/// seed the thread-specific gsl_rng_taus2 Random32 generator
+// - by default, gsl_rng_taus2 generator is re-seeded every 2^32 values, which
 // is very conservative against the Pierre L'Ecuyer's algorithm period of 2^88
 // - you can specify some additional entropy buffer; note that calling this
 // function with the same entropy again WON'T seed the generator with the same
@@ -8865,7 +8865,7 @@ end;
 
 procedure XorEntropy(entropy: PBlock128);
 var
-  e: array[0..7] of THash128Rec;
+  e: array[0..5] of THash128Rec;
   lec: PLecuyer;
 begin
   e[0].b := _EntropyGlobal.b;
@@ -8887,14 +8887,15 @@ begin
     e[4].c2 := e[4].c2 xor RdRand32;
     e[4].c3 := e[4].c3 xor RdRand32;
   end;
-  e[5].Lo := e[5].Lo xor Rdtsc; // has changed in-between
+  e[0].Lo := e[0].Lo xor Rdtsc; // has changed in-between
   {$else}
   e[3].Hi := e[3].Hi xor GetTickCount64;   // always defined in FPC RTL
   unaligned(PDouble(@e[4].Lo)^) := Random; // from FPC RTL mtwist_u32rand
   unaligned(PDouble(@e[4].Hi)^) := Random;
   {$endif CPUINTEL}
-  CreateGUID(TGuid(e[6])); // FPC non Windows = Random
-  CreateGUID(TGuid(e[7]));
+  // Windows CoCreateGuid, Linux/proc/sys/kernel/random/uuid, FreeBSD uuidgen,
+  // /dev/urandom or RTL mtwist_u32rand
+  CreateGUID(TGuid(e[5]));
   DefaultHasher128(pointer(entropy), @e, SizeOf(e)); // may be AesNiHash128()
   _EntropyGlobal.c := entropy^; // forward security by reusing for the next call
 end;
@@ -8936,8 +8937,8 @@ end;
 
 function TLecuyer.Next: cardinal;
 begin
-  if seedcount and $fffff = 0 then
-    Seed(nil, 0) // seed at startup, and after 2^20 output data = 4MB
+  if seedcount = 0 then
+    Seed(nil, 0) // seed at startup, and after 2^32 of output data = 16 GB
   else
     inc(seedcount);
   result := RawNext;
@@ -8961,26 +8962,30 @@ begin
   result := Next * COEFF32; // 32-bit resolution is enough for our purpose
 end;
 
-procedure TLecuyer.Fill(dest: PByte; count: integer);
+procedure TLecuyer.Fill(dest: pointer; count: integer);
 var
   c: cardinal;
 begin
   if count <= 0 then
     exit;
-  c := Next;
+  c := seedcount;
+  inc(seedcount, cardinal(count));
+  if (c = 0) or
+     (c > seedcount) then // no 32-bit overflow
+    Seed(nil, 0); // seed at startup, and after 2^32 of output data = 16 GB
   repeat
     if count < 4 then
       break;
-    PCardinal(dest)^ := PCardinal(dest)^ xor c;
+    PCardinal(dest)^ := PCardinal(dest)^ xor RawNext;
     inc(PCardinal(dest));
     dec(count, 4);
     if count = 0 then
       exit;
-    c := RawNext; // no need to check the Seed within the loop
   until false;
+  c := RawNext;
   repeat
-    dest^ := dest^ xor c;
-    inc(dest);
+    PByte(dest)^ := PByte(dest)^ xor c;
+    inc(PByte(dest));
     c := c shr 8;
     dec(count);
   until count = 0;
@@ -9758,7 +9763,7 @@ var
   CWpoint: PCardinal;
   v, h, cached, t, tmax: PtrUInt;
   offset: TOffsets;
-  cache: array[0..4095] of cardinal; // 16KB+16KB=32KB on stack (48KB under Win64)
+  cache: array[0..4095] of cardinal; // 16KB+16KB=32KB on stack (48KB for cpu64)
 begin
   dst_beg := dst;
   // 1. store in_len
