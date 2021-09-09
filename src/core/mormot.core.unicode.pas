@@ -5881,7 +5881,7 @@ type
     IndexHi: array[0..271] of byte;
     IndexLo: array[0..8, 0..31] of byte;
     // branchless Unicode 10.0 uppercase folding using our internal tables
-    function Ucs4Upper(c: PtrUInt): Ucs4CodePoint;
+    function Ucs4Upper(c: PtrUInt): PtrUInt;
       {$ifdef HASINLINE} inline; {$endif}
   end;
   {$ifndef CPUX86NOTPIC}
@@ -6173,13 +6173,15 @@ var
       12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12));
   );
 
-function TUnicodeUpperTable.Ucs4Upper(c: PtrUInt): Ucs4CodePoint;
+function TUnicodeUpperTable.Ucs4Upper(c: PtrUInt): PtrUInt;
 var
   i: PtrUInt;
 begin
+  // branchless conversion of 0..UU_MAX = $10ffff Unicode codepoints
   i := c shr UU_BLOCK_HI;
-  result := Ucs4CodePoint(PtrInt(c) + Block[IndexLo[
-    IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO], c and UU_BLOCK_LO]);
+  result := PtrInt(c) +
+            Block[IndexLo[IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO],
+                  c and UU_BLOCK_LO];
 end;
 
 function Utf8UpperReference(S, D: PUtf8Char): PUtf8Char;

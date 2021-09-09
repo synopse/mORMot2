@@ -6191,31 +6191,85 @@ end;
 
 const
   // helper arrays to get the standard comparison/hash functions
-  PT_SORT: array[boolean, TRttiParserType] of TDynArraySortCompare = (
-    (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
-     SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
-     SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
+  PT_SORT: array[{caseins=}boolean, TRttiParserType] of TDynArraySortCompare = (
+    (nil,
+     nil,
+     SortDynArrayBoolean,
+     SortDynArrayByte,
+     SortDynArrayCardinal,
+     SortDynArrayInt64,
+     SortDynArrayDouble,
+     SortDynArrayExtended,
+     SortDynArrayInt64,
+     SortDynArrayInteger,
+     SortDynArrayQWord,
      {$ifdef CPUINTEL}SortDynArrayAnsiString{$else}SortDynArrayRawByteString{$endif},
-     SortDynArrayAnsiString, SortDynArrayAnsiString,
-     nil, SortDynArraySingle,
+     SortDynArrayAnsiString,
+     SortDynArrayAnsiString,
+     nil,
+     SortDynArraySingle,
      {$ifdef UNICODE}SortDynArrayString{$else}SortDynArrayAnsiString{$endif},
      SortDynArrayUnicodeString,
-     SortDynArrayDouble, SortDynArrayDouble, SortDynArray128, SortDynArray128,
-     SortDynArray256, SortDynArray512, SortDynArrayInt64, SortDynArrayInt64,
-     SortDynArrayUnicodeString, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariant,
-     SortDynArrayUnicodeString, SortDynArrayAnsiString, SortDynArrayWord,
-     nil, nil, nil, nil, nil, nil),
-   (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
-    SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
-    SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
+     SortDynArrayDouble,
+     SortDynArrayDouble,
+     SortDynArray128,
+     SortDynArray128,
+     SortDynArray256,
+     SortDynArray512,
+     SortDynArrayInt64,
+     SortDynArrayInt64,
+     SortDynArrayUnicodeString,
+     SortDynArrayInt64,
+     SortDynArrayInt64,
+     SortDynArrayVariant,
+     SortDynArrayUnicodeString,
+     SortDynArrayAnsiString,
+     SortDynArrayWord,
+     nil,
+     nil,
+     nil,
+     nil,
+     nil,
+     nil),
+   (nil,
+    nil,
+    SortDynArrayBoolean,
+    SortDynArrayByte,
+    SortDynArrayCardinal,
+    SortDynArrayInt64,
+    SortDynArrayDouble,
+    SortDynArrayExtended,
+    SortDynArrayInt64,
+    SortDynArrayInteger,
+    SortDynArrayQWord,
     {$ifdef CPUINTEL}SortDynArrayAnsiString{$else}SortDynArrayRawByteString{$endif},
-    SortDynArrayAnsiStringI, SortDynArrayAnsiStringI,
-    nil, SortDynArraySingle, SortDynArrayStringI, SortDynArrayUnicodeStringI,
-    SortDynArrayDouble, SortDynArrayDouble, SortDynArray128, SortDynArray128,
-    SortDynArray256, SortDynArray512, SortDynArrayInt64, SortDynArrayInt64,
-    SortDynArrayUnicodeStringI, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariantI,
-    SortDynArrayUnicodeStringI, SortDynArrayAnsiStringI, SortDynArrayWord,
-    nil, nil, nil, nil, nil, nil));
+    SortDynArrayAnsiStringI,
+    SortDynArrayAnsiStringI,
+    nil,
+    SortDynArraySingle,
+    SortDynArrayStringI,
+    SortDynArrayUnicodeStringI,
+    SortDynArrayDouble,
+    SortDynArrayDouble,
+    SortDynArray128,
+    SortDynArray128,
+    SortDynArray256,
+    SortDynArray512,
+    SortDynArrayInt64,
+    SortDynArrayInt64,
+    SortDynArrayUnicodeStringI,
+    SortDynArrayInt64,
+    SortDynArrayInt64,
+    SortDynArrayVariantI,
+    SortDynArrayUnicodeStringI,
+    SortDynArrayAnsiStringI,
+    SortDynArrayWord,
+    nil,
+    nil,
+    nil,
+    nil,
+    nil,
+    nil));
 
 { TDynArray }
 
@@ -6487,8 +6541,8 @@ end;
 
 function TDynArray.Delete(aIndex: PtrInt): boolean;
 var
-  n, len: PtrInt;
-  s: PtrUInt;
+  n: PtrInt;
+  s, len: PtrUInt;
   P: PAnsiChar;
   wassorted: boolean;
 begin
@@ -6506,16 +6560,16 @@ begin
   if (fInfo.ArrayRtti <> nil) and
      not fNoFinalize then
     fInfo.ArrayRtti.ValueFinalize(P); // also for T*ObjArray
-  if n > aIndex then
+  len := n - aIndex;
+  if len <> 0 then
   begin
-    len := PtrUInt(n - aIndex) * s;
+    len := len * s;
     MoveFast(P[s], P[0], len);
-    FillCharFast(P[len], s, 0);
-  end
-  else
-    FillCharFast(P^, s, 0);
+    inc(P, len);
+  end;
+  FillCharFast(P^, s, 0);
   wassorted := fSorted;
-  SetCount(n);
+  SetCount(n); // won't reallocate
   fSorted := wassorted; // deletion won't change the order
   result := true;
 end;
@@ -8244,22 +8298,85 @@ end;
 const
   // helper arrays to get the standard hash functions
   PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of pointer = (
-   (nil, nil, @HashByte, @HashByte, @HashInteger, @HashInt64, @HashInt64,
-    @HashExtended, @HashInt64, @HashInteger, @HashInt64, @HashAnsiString,
-    @HashAnsiString, @HashAnsiString, nil, @HashInteger,
+   (nil,
+    nil,
+    @HashByte,
+    @HashByte,
+    @HashInteger,
+    @HashInt64,
+    @HashInt64,
+    @HashExtended,
+    @HashInt64,
+    @HashInteger,
+    @HashInt64,
+    @HashAnsiString,
+    @HashAnsiString,
+    @HashAnsiString,
+    nil,
+    @HashInteger,
     {$ifdef UNICODE} @HashSynUnicode {$else} @HashAnsiString {$endif},
-    @HashSynUnicode, @HashInt64, @HashInt64, @Hash128, @Hash128, @Hash256, @Hash512,
-    @HashInt64, @HashInt64, @HashSynUnicode, @HashInt64, @HashInt64,
-    @HashVariant, @HashWideString, @HashAnsiString, @HashWord,
-    nil, nil, nil, nil, nil, nil),
-   (nil, nil, @HashByte, @HashByte, @HashInteger, @HashInt64, @HashInt64,
-    @HashExtended, @HashInt64, @HashInteger, @HashInt64, @HashAnsiString,
-    @HashAnsiStringI, @HashAnsiStringI, nil, @HashInteger,
+    @HashSynUnicode,
+    @HashInt64,
+    @HashInt64,
+    @Hash128,
+    @Hash128,
+    @Hash256,
+    @Hash512,
+    @HashInt64,
+    @HashInt64,
+    @HashSynUnicode,
+    @HashInt64,
+    @HashInt64,
+    @HashVariant,
+    @HashWideString,
+    @HashAnsiString,
+    @HashWord,
+    nil,
+    nil,
+    nil,
+    nil,
+    nil,
+    nil),
+   (nil,
+    nil,
+    @HashByte,
+    @HashByte,
+    @HashInteger,
+    @HashInt64,
+    @HashInt64,
+    @HashExtended,
+    @HashInt64,
+    @HashInteger,
+    @HashInt64,
+    @HashAnsiString,
+    @HashAnsiStringI,
+    @HashAnsiStringI,
+    nil,
+    @HashInteger,
     {$ifdef UNICODE} @HashSynUnicodeI {$else} @HashAnsiStringI {$endif},
-    @HashSynUnicodeI, @HashInt64, @HashInt64, @Hash128, @Hash128, @Hash256, @Hash512,
-    @HashInt64, @HashInt64, @HashSynUnicodeI, @HashInt64, @HashInt64,
-    @HashVariantI, @HashWideStringI, @HashAnsiStringI, @HashWord,
-    nil, nil, nil, nil, nil, nil));
+    @HashSynUnicodeI,
+    @HashInt64,
+    @HashInt64,
+    @Hash128,
+    @Hash128,
+    @Hash256,
+    @Hash512,
+    @HashInt64,
+    @HashInt64,
+    @HashSynUnicodeI,
+    @HashInt64,
+    @HashInt64,
+    @HashVariantI,
+    @HashWideStringI,
+    @HashAnsiStringI,
+    @HashWord,
+    nil,
+    nil,
+    nil,
+    nil,
+    nil,
+    nil));
+
   // default TDynArrayHasher.CountTrigger value
   DYNARRAY_COUNT_TRIGGER = 32;
 

@@ -157,19 +157,61 @@ const
   /// convert our TRttiKind to Delphi's TTypeKind enumerate
   // - used internally for cross-compiler TDynArray binary serialization
   FPCTODELPHI: array[TRttiKind] of TDelphiType = (
-    dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
-    dkSet, dkMethod, dkString, dkLString, dkLString,
-    dkWString, dkVariant, dkArray, dkRecord, dkInterface,
-    dkClass, dkRecord, dkWChar, dkEnumeration, dkInt64, dkInt64,
-    dkDynArray, dkInterface, dkProcedure, dkUString, dkWChar,
-    dkPointer, dkPointer, dkClassRef, dkPointer);
+    dkUnknown,
+    dkInteger,
+    dkChar,
+    dkEnumeration,
+    dkFloat,
+    dkSet,
+    dkMethod,
+    dkString,
+    dkLString,
+    dkLString,
+    dkWString,
+    dkVariant,
+    dkArray,
+    dkRecord,
+    dkInterface,
+    dkClass,
+    dkRecord,
+    dkWChar,
+    dkEnumeration,
+    dkInt64,
+    dkInt64,
+    dkDynArray,
+    dkInterface,
+    dkProcedure,
+    dkUString,
+    dkWChar,
+    dkPointer,
+    dkPointer,
+    dkClassRef,
+    dkPointer);
 
   /// convert Delphi's TTypeKind to our TRttiKind enumerate
   DELPHITOFPC: array[TDelphiType] of TRttiKind = (
-    rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat,
-    rkSString, rkSet, rkClass, rkMethod, rkWChar, rkLString, rkWString,
-    rkVariant, rkArray, rkRecord, rkInterface, rkInt64, rkDynArray,
-    rkUString, rkClassRef, rkPointer, rkProcVar);
+    rkUnknown,
+    rkInteger,
+    rkChar,
+    rkEnumeration,
+    rkFloat,
+    rkSString,
+    rkSet,
+    rkClass,
+    rkMethod,
+    rkWChar,
+    rkLString,
+    rkWString,
+    rkVariant,
+    rkArray,
+    rkRecord,
+    rkInterface,
+    rkInt64,
+    rkDynArray,
+    rkUString,
+    rkClassRef,
+    rkPointer,
+    rkProcVar);
 
 {$else}
 
@@ -203,8 +245,14 @@ const
 
 const
   /// potentially managed types in TRttiKind enumerates
-  rkManagedTypes = [rkLString, rkWstring, {$ifdef UNICODE} rkUstring, {$endif}
-                    rkArray, rkRecord, rkDynArray, rkInterface, rkVariant];
+  rkManagedTypes = [rkLString,
+                    rkWstring,
+                    {$ifdef UNICODE} rkUstring, {$endif}
+                    rkArray,
+                    rkRecord,
+                    rkDynArray,
+                    rkInterface,
+                    rkVariant];
   /// maps record or object in TTypeKind RTTI enumerates
   rkRecordTypes = [rkRecord];
 
@@ -212,13 +260,19 @@ const
 
   /// maps long string in TRttiKind RTTI enumerates
   rkStringTypes =
-    [rkLString, {$ifdef FPC} rkLStringOld, {$endif} rkWString
+    [rkLString,
+     {$ifdef FPC} rkLStringOld, {$endif}
+     rkWString
      {$ifdef HASVARUSTRING} , rkUString {$endif} ];
 
   /// maps types with proper TRttiProp.RttiOrd field
   // - i.e. rkOrdinalTypes excluding the 64-bit values
   rkHasRttiOrdTypes =
-    [rkInteger, rkChar, rkWChar, rkEnumeration, rkSet
+    [rkInteger,
+     rkChar,
+     rkWChar,
+     rkEnumeration,
+     rkSet
      {$ifdef FPC} , rkBool, rkUChar {$endif} ];
 
   /// maps 1, 8, 16, 32 and 64-bit ordinal in TRttiKind RTTI enumerates
@@ -233,7 +287,8 @@ const
   /// maps ordinal values which expect TRttiProp.GetInt64Prop/SetInt64Prop
   // - includes 64-bit ordinals
   rkGetInt64PropTypes =
-     [rkInt64 {$ifdef FPC} , rkQWord {$endif} ];
+     [rkInt64
+      {$ifdef FPC} , rkQWord {$endif} ];
 
   /// maps records or dynamic arrays
   rkRecordOrDynArrayTypes = rkRecordTypes + [rkDynArray];
@@ -246,11 +301,21 @@ const
 
   /// quick retrieve how many bytes an ordinal consist in
   ORDTYPE_SIZE: array[TRttiOrd] of byte = (
-    1, 1, 2, 2, 4, 4 {$ifdef FPC_NEWRTTI} , 8, 8 {$endif} );
+    1,
+    1,
+    2,
+    2,
+    4,
+    4
+    {$ifdef FPC_NEWRTTI} , 8, 8 {$endif} );
 
   /// quick retrieve how many bytes a floating-point consist in
   FLOATTYPE_SIZE: array[TRttiFloat] of byte = (
-    4, 8, {$ifdef TSYNEXTENDED80} 10 {$else} 8 {$endif}, 8, 8 );
+    4,
+    8,
+    {$ifdef TSYNEXTENDED80} 10 {$else} 8 {$endif},
+    8,
+    8 );
 
 
 type
@@ -1639,19 +1704,35 @@ const
   // - ptTimeLog and ptOrm are complex, since more than one TypeInfo() may
   // map to their TRttiParserType - see also TRttiParserComplexType
   ptComplexTypes =
-    [ptArray, ptRecord, ptCustom, ptTimeLog, ptOrm,
-     ptDynArray, ptEnumeration, ptSet, ptClass, ptInterface];
+    [ptArray,
+     ptRecord,
+     ptCustom,
+     ptTimeLog,
+     ptOrm,
+     ptDynArray,
+     ptEnumeration,
+     ptSet,
+     ptClass,
+     ptInterface];
 
   /// which TRttiParserType types don't need memory management
   ptUnmanagedTypes =
-    [ptBoolean..ptQWord, ptSingle, ptDateTime..ptTimeLog,
-     ptUnixTime, ptUnixMSTime, ptWord..ptClass];
+    [ptBoolean..ptQWord,
+     ptSingle,
+     ptDateTime..ptTimeLog,
+     ptUnixTime,
+     ptUnixMSTime,
+     ptWord..ptClass];
 
   /// which TRttiParserType types are (usually) serialized as JSON "text"
   // - actual serialization may depend e.g. on TTextWriterWriteObjectOptions
   ptStringTypes =
-    [ptRawByteString .. ptRawUtf8, ptString .. ptHash512, ptTimeLog,
-     ptUnicodeString, ptWideString, ptWinAnsi];
+    [ptRawByteString .. ptRawUtf8,
+     ptString .. ptHash512,
+     ptTimeLog,
+     ptUnicodeString,
+     ptWideString,
+     ptWinAnsi];
 
 var
   /// simple lookup to the plain RTTI type of most simple managed types
@@ -1671,30 +1752,103 @@ var
 
   /// simple lookup to the size in bytes of TRttiParserType values
   PT_SIZE: array[TRttiParserType] of byte = (
-    0, 0, 1, 1, 4, 8, 8, 8,
-    8, 4, 8, SizeOf(pointer), SizeOf(pointer), SizeOf(pointer),
-    0, 4, SizeOf(pointer), SizeOf(pointer), 8, 8,
-    16, 16, 32, 64, 8, 8, SizeOf(pointer), 8, 8,
-    SizeOf(variant), SizeOf(pointer), SizeOf(pointer), 2,
-    0, 0, SizeOf(pointer), SizeOf(pointer), SizeOf(pointer), 0);
+    0,
+    0,
+    1,
+    1,
+    4,
+    8,
+    8,
+    8,
+    8,
+    4,
+    8,
+    SizeOf(pointer),
+    SizeOf(pointer),
+    SizeOf(pointer),
+    0,
+    4,
+    SizeOf(pointer),
+    SizeOf(pointer),
+    8,
+    8,
+    16,
+    16,
+    32,
+    64,
+    8,
+    8,
+    SizeOf(pointer),
+    8,
+    8,
+    SizeOf(variant),
+    SizeOf(pointer),
+    SizeOf(pointer),
+    2,
+    0,
+    0,
+    SizeOf(pointer),
+    SizeOf(pointer),
+    SizeOf(pointer),
+    0 );
 
 const
   /// type definition name lookup to the TRttiParserType values
   // - ptComplexTypes types should see PTC_NAME[] constant
   PT_NAME: array[TRttiParserType] of RawUtf8 = (
-    '', '', 'boolean', 'byte', 'cardinal', 'currency', 'double', 'extended',
-    'Int64', 'integer', 'QWord', 'RawByteString', 'RawJson', 'RawUtf8',
-    '', 'single', 'string', 'SynUnicode', 'TDateTime', 'TDateTimeMS',
-    'TGUID', 'THash128', 'THash256', 'THash512', '', '', 'UnicodeString',
-    'TUnixTime', 'TUnixMSTime', 'variant', 'WideString', 'WinAnsi', 'word',
-    '', '', '', '', '', '');
+    '',
+    '',
+    'boolean',
+    'byte',
+    'cardinal',
+    'currency',
+    'double',
+    'extended',
+    'Int64',
+    'integer',
+    'QWord',
+    'RawByteString',
+    'RawJson',
+    'RawUtf8',
+    '',
+    'single',
+    'string',
+    'SynUnicode',
+    'TDateTime',
+    'TDateTimeMS',
+    'TGUID',
+    'THash128',
+    'THash256',
+    'THash512',
+    '',
+    '',
+    'UnicodeString',
+    'TUnixTime',
+    'TUnixMSTime',
+    'variant',
+    'WideString',
+    'WinAnsi',
+    'word',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '');
 
   /// type definition name lookup to the TRttiParserComplexType values
   // - for ptComplexTypes types, with PT_NAME[]=''
   // - ptcSpecificClassID returns '' since T....ID types are variable
   PTC_NAME: array[TRttiParserComplexType] of RawUtf8 = (
-    '', 'TTimeLog', 'TCreateTime', 'TModTime', 'TID', '',
-    'TRecordReference', 'TRecordReferenceToBeDeleted', 'TRecordVersion');
+    '',
+    'TTimeLog',
+    'TCreateTime',
+    'TModTime',
+    'TID',
+    '',
+    'TRecordReference',
+    'TRecordReferenceToBeDeleted',
+    'TRecordVersion');
 
 /// retrieve the text name of one TRttiParserType enumerate
 function ToText(t: TRttiParserType): PShortString; overload;
