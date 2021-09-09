@@ -513,6 +513,10 @@ begin
 end;
 
 procedure TTestCoreCrypto._TAesPNRG;
+var
+  timer: TPrecisionTimer;
+  i: integer;
+  big: RawByteString;
 begin
   check(TAesPrng.IsAvailable);
   check(TSystemPrng.IsAvailable);
@@ -520,6 +524,18 @@ begin
   {$ifdef USE_OPENSSL}
   Prng(TAesPrngOsl, 'OpenSSL');
   {$endif USE_OPENSSL}
+  // same benchmarks as in Prng()
+  timer.Start;
+  Check(Random32(0) = 0);
+  for i := 1 to 50000 do
+    Check(Random32(i) < cardinal(i));
+  for i := 0 to 50000 do
+    Check(Random32(maxInt - i) < cardinal(maxInt - i));
+  NotifyTestSpeed('Lecuyer Random32', [], 50000 * 2, 50000 * 8, @timer);
+  SetLength(big, 100000);
+  timer.Start;
+  RandomBytes(pointer(big), length(big));
+  NotifyTestSpeed('Lecuyer RandomBytes', [], 1, length(big), @timer);
 end;
 
 procedure TTestCoreCrypto.Prng(meta: TAesPrngClass; const name: RawUTF8);

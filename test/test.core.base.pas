@@ -2864,6 +2864,10 @@ begin
   Check(n > 20000 - 20, 'Random64');
   n := 100000 * 2 + 20000 * 2;
   NotifyTestSpeed('Random32', n, n * 4, @timer);
+  timer.Start;
+  for i := 1 to 100 do
+    RandomBytes(@c, SizeOf(c));
+  NotifyTestSpeed('RandomBytes', 0, SizeOf(c) * 100, @timer);
 end;
 
 procedure TTestCoreBase._TRawUtf8Interning;
