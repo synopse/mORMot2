@@ -1398,6 +1398,7 @@ type
   TAesPrngGetEntropySource = (
     gesSystemAndUser,
     gesSystemOnly,
+    gesSystemOnlyMayBlock,
     gesUserOnly);
 
   /// cryptographic pseudorandom number generator (CSPRNG) based on AES-256
@@ -1460,8 +1461,8 @@ type
     procedure Seed; override;
     /// retrieve some entropy bytes from the Operating System
     // - system entropy comes from CryptGenRandom API on Windows (which may be
-    // very slow), and /dev/urandom or /dev/random on Linux/POSIX (which may be
-    // blocking)
+    // very slow), and /dev/urandom or /dev/random on Linux/POSIX (which may
+    // block waiting from OS entropy if gesSystemOnlyMayBlock is set)
     // - user entropy comes from the output of a SHA-3 cryptographic SHAKE-256
     // generator in XOF mode, from several sources (timestamp, thread, hardware
     // and system information, mormot.core.base XorEntropy)
@@ -6177,36 +6178,23 @@ begin
 end;
 
 var
-  // some system-derivated reused seed for TAesPrng.GetEntropy
+  // some system-derivated forward-secure seed for TAesPrng.GetEntropy
   GetEntropySeed: THash128;
 
 class function TAesPrng.GetEntropy(
   Len: integer; Source: TAesPrngGetEntropySource): RawByteString;
 var
-  data: THash512Rec;
   fromos: RawByteString;
+  data: THash512Rec;
   mem: TMemoryInfo;
   sha3: TSha3;
-  aes: TAes; // used for entropy obfuscation
-
-  procedure sha3update; // keep incoming data.i0i1i2i3/d0d1/h0 content
-  begin
-    QueryPerformanceMicroSeconds(data.d2); // set data.h1 low 64-bit
-    aes.Encrypt(data.h0);
-    XorEntropy(@data.h2); // DefaultHasher128(RdRand32+Rdtsc+Now+Random+CreateGUID)
-    CreateGUID(TGuid(data.h3)); // CoCreateGuid or from POSIX kernel
-    QueryPerformanceMicroSeconds(data.d3); // set data.h1 high 64-bit
-    aes.Encrypt(data.h1);
-    sha3.Update(@data, SizeOf(data));
-  end;
-
 begin
   try
     // retrieve some initial entropy from OS
     SetLength(fromos, Len);
     if Source <> gesUserOnly then
-      FillSystemRandom(pointer(fromos), Len, {blocking=}Source = gesSystemOnly);
-    if Source = gesSystemOnly then
+      FillSystemRandom(pointer(fromos), Len, Source = gesSystemOnlyMayBlock);
+    if Source in [gesSystemOnly, gesSystemOnlyMayBlock] then
     begin
       result := fromos;
       exit;
@@ -6214,7 +6202,8 @@ begin
     // xor some explicit entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     RandomBytes(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
-    aes.EncryptInit(data.h3, 128);
+    sha3.Update(@data, SizeOf(data));
+    QueryPerformanceMicroSeconds(data.d2); // set data.h1 low 64-bit
     if IsZero(GetEntropySeed) then
       // retrieve some System randomness once - even in gesUserOnly mode
       FillSystemRandom(@GetEntropySeed, SizeOf(GetEntropySeed), {block=}false);
@@ -6222,31 +6211,28 @@ begin
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
     sha3.Update(Executable.ProgramFullSpec);
+    GetMemoryInfo(mem, {withalloc=}true);
+    sha3.Update(@mem, SizeOf(mem));
+    sha3.Update(OSVersionText);
     data.h0 := Executable.Hash.b;
-    sha3update;
+    XorEntropy(@data.h2); // DefaultHasher128(RdRand32+Rdtsc+Now+Random+CreateGUID)
+    DefaultHasher128(@GetEntropySeed, @data, SizeOf(data));
     {$ifdef OSLINUXANDROID}
     // detailed CPU execution contexts and timing from Linux kernel
     sha3.Update(StringFromFile('/proc/stat', {nosize=}true));
     // read-only random UUID text like '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
-    sha3.Update(StringFromFile('/proc/sys/kernel/random/uuid', {nosize=}true));
-    sha3.Update(StringFromFile('/proc/sys/kernel/random/boot_id', {nosize=}true));
+    sha3.Update(StringFromFile('/proc/sys/kernel/random/uuid', true));
+    sha3.Update(StringFromFile('/proc/sys/kernel/random/boot_id', true));
     {$endif OSLINUXANDROID}
+    QueryPerformanceMicroSeconds(data.d3); // set data.h1 high 64-bit
+    sha3.Update(@data, SizeOf(data));
     {$ifdef OSWINDOWS}
+    sha3.Update(@SystemInfo, SizeOf(SystemInfo));
     if RetrieveSystemTimes(data.d0, data.d1, data.d2) then
       sha3.Update(@data, SizeOf(data.d0) * 3); // from GetSystemTimes() WinAPI
     {$else}
-    sha3.Update(RetrieveLoadAvg); // may return '' e.g. on Windows
+    sha3.Update(RetrieveLoadAvg); // would return '' on Windows
     {$endif OSWINDOWS}
-    GetMemoryInfo(mem, {withalloc=}true);
-    sha3.Update(@mem, SizeOf(mem));
-    sha3.Update(OSVersionText);
-    sha3.Update(@SystemInfo, SizeOf(SystemInfo));
-    data.i0 := integer(HInstance);
-    data.i1 := PtrInt(GetCurrentThreadId);
-    data.i2 := PtrInt(MainThreadID);
-    data.i3 := integer(UnixMSTimeUtcFast);
-    sha3update;
-    DefaultHasher128(@GetEntropySeed, @data, SizeOf(data));
     result := sha3.Cypher(fromos); // = xor OS entropy using SHA-3 in XOF mode
   finally
     sha3.Done;
