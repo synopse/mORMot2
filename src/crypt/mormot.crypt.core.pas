@@ -1531,18 +1531,6 @@ var
   // random generator to be used, like TSystemPrng or TAesPrngOsl
   MainAesPrng: TAesPrngAbstract;
 
-/// low-level function returning some random binary from then available
-// Operating System pseudorandom source
-// - will call /dev/urandom or /dev/random under POSIX, and CryptGenRandom API
-// on Windows then return TRUE, or fallback to mormot.core.base gsl_rng_taus2
-// generator and return FALSE if the system API failed
-// - on POSIX, only up to 32 bytes (256 bits) bits are retrieved from /dev/urandom
-// or /dev/random as stated by "man urandom" Usage - then RandomBytes() padded
-// - you should not have to call this procedure, but faster and safer TAesPrng;
-// also consider the TSystemPrng class
-function FillSystemRandom(Buffer: PByteArray; Len: integer;
-  AllowBlocking: boolean): boolean;
-
 /// low-level anti-forensic diffusion of a memory buffer using SHA-256
 // - as used by TAesPrng.AFSplit and TAesPrng.AFUnSplit
 procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
@@ -5832,50 +5820,6 @@ end;
 
 { ************* AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG) }
 
-function FillSystemRandom(Buffer: PByteArray; Len: integer;
-  AllowBlocking: boolean): boolean;
-var
-  {$ifdef OSPOSIX}
-  rd, dev: integer;
-  {$endif OSPOSIX}
-  {$ifdef OSWINDOWS}
-  prov: HCRYPTPROV;
-  {$endif OSWINDOWS}
-begin
-  result := false;
-  {$ifdef OSPOSIX}
-  dev := FileOpen('/dev/urandom', fmOpenRead); // non blocking on Linux and BSD
-  if (dev <= 0) and
-     AllowBlocking then
-    dev := FileOpen('/dev/random', fmOpenRead); // may block until reach entropy
-  if dev > 0 then
-    try
-      rd := 32; // read up to 256 bits - see "man urandom" Usage paragraph
-      if Len <= 32 then
-        rd := Len;
-      result := (FileRead(dev, Buffer[0], rd) = rd);
-      if result and
-         (Len > 32) then
-        RandomBytes(@Buffer[32], Len - 32); // simple gsl_rng_taus2 padding
-    finally
-      FileClose(dev);
-    end;
-  {$endif OSPOSIX}
-  {$ifdef OSWINDOWS}
-  // warning: on some Windows versions, this could take up to 30 ms!
-  if CryptoApi.Available then
-    if CryptoApi.AcquireContextA(prov, nil, nil,
-      PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) then
-    begin
-      result := CryptoApi.GenRandom(prov, Len, Buffer);
-      CryptoApi.ReleaseContext(prov, 0);
-    end;
-  {$endif OSWINDOWS}
-  if not result then
-    // OS API call failed -> fallback to gsl_rng_taus2 generator
-    RandomBytes(pointer(Buffer), Len);
-end;
-
 procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 var
   sha: TSha256;
@@ -5892,7 +5836,7 @@ begin
     sha.Update(@iv, SizeOf(iv));
     sha.Update(buf, SizeOf(dig));
     sha.Final(PSha256Digest(buf)^);
-    inc(PByte(buf), SizeOf(dig));
+    inc(PSha256Digest(buf));
   end;
   dec(size, last * SizeOf(dig));
   if size = 0 then
@@ -6179,14 +6123,13 @@ end;
 
 var
   // some system-derivated forward-secure seed for TAesPrng.GetEntropy
-  GetEntropySeed: THash128;
+  _OSEntropySeed: THash128;
 
 class function TAesPrng.GetEntropy(
   Len: integer; Source: TAesPrngGetEntropySource): RawByteString;
 var
   fromos: RawByteString;
   data: THash512Rec;
-  mem: TMemoryInfo;
   sha3: TSha3;
 begin
   try
@@ -6199,41 +6142,33 @@ begin
       result := fromos;
       exit;
     end;
-    // xor some explicit entropy - it won't hurt
+    // XOR with some userland entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
+    // randomness and entropy from mormot.core.base
     RandomBytes(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     sha3.Update(@data, SizeOf(data));
-    QueryPerformanceMicroSeconds(data.d2); // set data.h1 low 64-bit
-    if IsZero(GetEntropySeed) then
-      // retrieve some System randomness once - even in gesUserOnly mode
-      FillSystemRandom(@GetEntropySeed, SizeOf(GetEntropySeed), {block=}false);
-    sha3.Update(@GetEntropySeed, SizeOf(GetEntropySeed));
+    XorEntropy(data); // RdRand32 + Rdtsc + Now + CreateGUID
+    sha3.Update(@data, SizeOf(data));
+    // include some official system-derivated entropy source
+    if IsZero(_OSEntropySeed) then
+      // retrieve kernel randomness once - even in gesUserOnly mode
+      FillSystemRandom(@_OSEntropySeed, SizeOf(_OSEntropySeed), {block=}false)
+    else
+      // forward security - may be using AesNiHash128
+      DefaultHasher128(@_OSEntropySeed, @data, SizeOf(data));
+    sha3.Update(@_OSEntropySeed, SizeOf(_OSEntropySeed));
+    // system/process information used as salt/padding from mormot.core.os
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
     sha3.Update(Executable.ProgramFullSpec);
-    GetMemoryInfo(mem, {withalloc=}true);
-    sha3.Update(@mem, SizeOf(mem));
+    sha3.Update(@Executable.Hash.b, SizeOf(Executable.Hash.b));
     sha3.Update(OSVersionText);
-    data.h0 := Executable.Hash.b;
-    XorEntropy(@data.h2); // DefaultHasher128(RdRand32+Rdtsc+Now+Random+CreateGUID)
-    DefaultHasher128(@GetEntropySeed, @data, SizeOf(data));
-    {$ifdef OSLINUXANDROID}
-    // detailed CPU execution contexts and timing from Linux kernel
-    sha3.Update(StringFromFile('/proc/stat', {nosize=}true));
-    // read-only random UUID text like '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
-    sha3.Update(StringFromFile('/proc/sys/kernel/random/uuid', true));
-    sha3.Update(StringFromFile('/proc/sys/kernel/random/boot_id', true));
-    {$endif OSLINUXANDROID}
-    QueryPerformanceMicroSeconds(data.d3); // set data.h1 high 64-bit
-    sha3.Update(@data, SizeOf(data));
-    {$ifdef OSWINDOWS}
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
-    if RetrieveSystemTimes(data.d0, data.d1, data.d2) then
-      sha3.Update(@data, SizeOf(data.d0) * 3); // from GetSystemTimes() WinAPI
-    {$else}
-    sha3.Update(RetrieveLoadAvg); // would return '' on Windows
-    {$endif OSWINDOWS}
-    result := sha3.Cypher(fromos); // = xor OS entropy using SHA-3 in XOF mode
+    // append low-level Operating System entropy from mormot.core.os
+    XorOSEntropy(data); // detailed system cpu and memory info + system random
+    sha3.Update(@data, SizeOf(data));
+    // XOR previously retrieved OS entropy using SHA-3 in 256-bit XOF mode
+    result := sha3.Cypher(fromos);
   finally
     sha3.Done;
     FillZero(fromos);
@@ -6528,7 +6463,7 @@ begin
       end;
       FillZero(key);
       {$ifdef OSWINDOWS}
-      // somewhat enhance privacy by using Windows API
+      // may probably enhance privacy by using Windows API
       key := CryptDataForCurrentUserDPAPI(key2, appsec, false);
       {$else}
       // chmod 400 + AES-CFB + AFUnSplit is enough for privacy on POSIX 
@@ -9818,7 +9753,6 @@ begin
     InterningHasher := @_AesNiHash32;
     DefaultHasher64 := @_AesNiHash64;
     DefaultHasher128 := @_AesNiHash128;
-    Random32Seed; // re-seed main FillRandom() with AesNiHash128 as hasher
   end;
   {$endif USEAESNIHASH}
   {$ifdef USEARMCRYPTO}

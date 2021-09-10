@@ -4931,7 +4931,7 @@ end;
 function _AesNiHash32(seed: cardinal; data: pointer; len: PtrUInt): cardinal;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // ecx/edi=seed, rdx/rsi=data, r8/rdx=len
-        movd    xmm0, seed // explicitly zeroing high bits for consistency
+        movd    xmm0, seed     // explicitly zeroing high bits for consistency
         jmp     _AesNiHashXmm0 // returns in both xmm0 and eax
 end;
 
@@ -5277,8 +5277,8 @@ function crc32c_sse42_aesni(crc: PtrUInt; buf: PAnsiChar; len: PtrUInt): cardina
         test    buf, buf
         jz      @0
         cmp     len, 64
-        jae     @big
-        // it is faster to use a direct 8-bytes loop for blocks < 64 bytes
+        ja      @big
+        // it is faster to use a direct 8-bytes loop for blocks <= 64 bytes
         shr     len, 3
         jz      @2
         {$ifdef FPC}
