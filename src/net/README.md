@@ -75,6 +75,12 @@ WebSockets Bidirectional Server
 - `TWebSocketProcessServer` Processing Class
 - `TWebSocketServerSocket` Bidirectional REST Server
 
+### mormot.net.ws.async
+
+Asynchronous WebSockets Bidirectional Server
+- `TWebSocketAsyncServer` Event-Driven HTTP/WebSockets Server
+- `TWebSocketAsyncServerRest` Bidirectional REST Server
+
 ### mormot.net.relay
 
 Secured Tunneling over WebSockets
