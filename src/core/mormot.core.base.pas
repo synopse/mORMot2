@@ -2410,7 +2410,6 @@ var
   CpuFeatures: TArmHwCaps;
 {$endif CPUARM3264}
 
-
 /// recognize a given ARM/AARCH64 CPU from its 12-bit hardware ID
 function ArmCpuType(id: word): TArmCpuType;
 
@@ -2819,14 +2818,14 @@ procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine
 procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 
-/// retrieve 128-bit of entropy, from system time and current execution state
-// - entropy is gathered using DefaultHasher128() - which may be AesNiHash128 -
-// over several sources like RTL Now(), Random(), CreateGUID(), current
-// gsl_rng_taus2 Lecuyer state, and RdRand32/Rdtsc low-level Intel opcodes
+/// retrieve 512-bit of entropy, from system time and current execution state
+// - entropy is gathered over several sources like RTL Now(), Random(), CreateGUID(),
+// current gsl_rng_taus2 Lecuyer state, and RdRand32/Rdtsc low-level Intel opcodes
+// - the resulting output is to be hashed - e.g. with DefaultHasher128
 // - execution is fast, but not enough as unique seed for a cryptographic PRNG:
-// TAesPrng.GetEntropy will call it several times as one of its entropy sources,
-// in addition to system-retrieved randomness
-procedure XorEntropy(entropy: PBlock128);
+// TAesPrng.GetEntropy will call it as one of its entropy sources, in addition
+// to system-retrieved randomness
+procedure XorEntropy(var e: THash512Rec);
 
 /// convert the endianness of a given unsigned 32-bit integer into BigEndian
 function bswap32(a: cardinal): cardinal;
@@ -2979,25 +2978,25 @@ function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
 /// logical OR of two memory buffers
 // - will perform on all buffer bytes:
 // ! Dest[i] := Dest[i] or Source[i];
-procedure OrMemory(Dest,Source: PByteArray; size: PtrInt);
+procedure OrMemory(Dest, Source: PByteArray; size: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical XOR of two memory buffers
 // - will perform on all buffer bytes:
 // ! Dest[i] := Dest[i] xor Source[i];
-procedure XorMemory(Dest,Source: PByteArray; size: PtrInt); overload;
+procedure XorMemory(Dest, Source: PByteArray; size: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical XOR of two memory buffers into a third
 // - will perform on all buffer bytes:
 // ! Dest[i] := Source1[i] xor Source2[i];
-procedure XorMemory(Dest,Source1,Source2: PByteArray; size: PtrInt); overload;
+procedure XorMemory(Dest, Source1, Source2: PByteArray; size: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical AND of two memory buffers
 // - will perform on all buffer bytes:
 // ! Dest[i] := Dest[i] and Source[i];
-procedure AndMemory(Dest,Source: PByteArray; size: PtrInt);
+procedure AndMemory(Dest, Source: PByteArray; size: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if all bytes equal zero
@@ -8880,7 +8879,7 @@ threadvar
   _Lecuyer: TLecuyer; // uses only 16 bytes per thread
 
 var
-  // to avoid replay attacks - shared by all threads for forward security
+  // cascaded 128-bit random to avoid replay attacks - shared by all threads
   _EntropyGlobal: THash128Rec;
 
 function Lecuyer: PLecuyer;
@@ -8888,64 +8887,70 @@ begin
   result := @_Lecuyer;
 end;
 
-procedure XorEntropy(entropy: PBlock128);
-var
-  e: array[0..5] of THash128Rec;
-  lec: PLecuyer;
+{$ifdef OSDARWIN} // FPC CreateGUID calls /dev/urandom which is not advised
+function mach_absolute_time: UInt64;
+  cdecl external 'c' name 'mach_absolute_time'; // in nanoseconds resolution
+
+procedure CreateGUID(var guid: TGUID);
 begin
-  e[0].b := _EntropyGlobal.b;
-  lec := @_Lecuyer; // contains 0 at thread startup, but won't hurt
-  e[1].c0 := e[1].c0 xor lec^.rs1; // perfect forward security
-  e[1].c1 := e[1].c1 xor lec^.rs2;
-  e[1].c2 := e[1].c2 xor lec^.rs3;
-  e[1].c3 := e[1].c3 xor lec^.seedcount;
-  e[2].c0 := e[2].c0 xor PtrUInt(lec); // a threadvar pointer is thread-specific
-  e[2].c1 := e[2].c1 xor PtrUInt(entropy);
+  guid.time_low := mach_absolute_time;
+  crc128c(@guid, SizeOf(guid), THash128(guid)); // good enough diffusion
+end;
+{$endif OSDARWIN}
+
+procedure XorEntropy(var e: THash512Rec);
+var
+  lec: PLecuyer;
+  i: PtrInt;
+begin
+  // note: we don't use RTL Random() here because it is not thread-safe
+  e.r[0].L := e.r[0].L xor _EntropyGlobal.L;
+  e.r[0].H := e.r[0].H xor _EntropyGlobal.H;
+  lec := @_Lecuyer; // lec^.rs#=0 at thread startup, but won't hurt
+  e.r[1].c0 := e.r[1].c0 xor lec^.rs1; // perfect forward security
+  e.r[1].c1 := e.r[1].c1 xor lec^.rs2;
+  e.r[1].c2 := e.r[1].c2 xor lec^.rs3;
+  e.r[1].c3 := e.r[1].c3 xor PtrUInt(lec); // any threadvar is thread-specific
+  // Windows CoCreateGuid, Linux/proc/sys/kernel/random/uuid, FreeBSD syscall,
+  // then fallback to /dev/urandom or RTL mtwist_u32rand - may be slow
+  CreateGUID(TGuid(e.r[2].b));
   // no mormot.core.os yet, so we can't use QueryPerformanceMicroSeconds()
-  unaligned(PDouble(@e[3].Lo)^) := Now * 2123923447; // cross-platform time
+  unaligned(PDouble(@e.r[3].Lo)^) := Now * 2123923447; // cross-platform time
   {$ifdef CPUINTEL} // use low-level Intel/AMD opcodes
-  e[3].Hi := e[3].Hi xor Rdtsc;
+  e.r[3].Lo := e.r[3].Lo xor Rdtsc;
   if cfRAND in CpuFeatures then
-  begin
-    e[4].c0 := e[4].c0 xor RdRand32;
-    e[4].c1 := e[4].c1 xor RdRand32;
-    e[4].c2 := e[4].c2 xor RdRand32;
-    e[4].c3 := e[4].c3 xor RdRand32;
-  end;
-  e[0].Lo := e[0].Lo xor Rdtsc; // has changed in-between
+    for i := 0 to 3 do
+      e.r[0].c[i] := e.r[0].c[i] xor RdRand32;
+  e.r[3].Hi := e.r[3].Hi xor Rdtsc; // has changed in-between
   {$else}
-  e[3].Hi := e[3].Hi xor GetTickCount64;   // always defined in FPC RTL
-  unaligned(PDouble(@e[4].Lo)^) := Random; // from FPC RTL mtwist_u32rand
-  unaligned(PDouble(@e[4].Hi)^) := Random;
+  e.r[3].Hi := e.r[3].Hi xor GetTickCount64; // always defined in FPC RTL
   {$endif CPUINTEL}
-  // Windows CoCreateGuid, Linux/proc/sys/kernel/random/uuid, FreeBSD uuidgen,
-  // /dev/urandom or RTL mtwist_u32rand
-  CreateGUID(TGuid(e[5]));
-  DefaultHasher128(pointer(entropy), @e, SizeOf(e)); // may be AesNiHash128()
-  _EntropyGlobal.c := entropy^; // forward security by reusing for the next call
+  crc128c(@e, SizeOf(e), _EntropyGlobal.b); // simple diffusion to move forward
 end;
 
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var
-  e: THash128Rec;
+  e: THash512Rec;
+  h: THash128Rec;
   i, j: PtrInt;
 begin
   if entropy <> nil then
     for i := 0 to entropylen - 1 do
     begin
-      j := i and 15;
+      j := i and 63;
       e.b[j] := {%H-}e.b[j] xor entropy^[i];
     end;
   repeat
-    XorEntropy(@e.c);
-    rs1 := rs1 xor e.c0 xor e.c3;
-    rs2 := rs2 xor e.c1;
-    rs3 := rs3 xor e.c2;
+    XorEntropy(e);
+    DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
+    rs1 := rs1 xor h.c0;
+    rs2 := rs2 xor h.c1;
+    rs3 := rs3 xor h.c2;
   until (rs1 > 1) and
         (rs2 > 7) and
         (rs3 > 15);
-  seedcount := 1;
-  for i := 1 to e.i3 and 15 do
+  seedcount := h.c3 shr 24; // may seed slightly before 2^32 of output data
+  for i := 1 to h.i3 and 7 do
     RawNext; // warm up
 end;
 
@@ -9263,7 +9268,6 @@ begin
     DefaultHasher := @crc32csse42;
     InterningHasher := @crc32csse42;
   end;
-  DefaultHasher128(@_EntropyGlobal, @CpuFeatures, SizeOf(CpuFeatures));
 end;
 
 {$else not CPUINTEL}
@@ -12034,12 +12038,13 @@ begin
       crc32ctab[n, i] := crc;
     end;
   end;
-  CreateGUID(TGuid(_EntropyGlobal)); // don't start XorEntropy() from scratch
   // setup minimalistic global functions - overriden by other core units
   VariantClearSeveral := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
   // initialize CPU-specific asm
   TestCpuFeatures;
+  // very fast on Windows - slower /proc file access on Linux
+  CreateGUID(TGuid(_EntropyGlobal));
 end;
 
 
