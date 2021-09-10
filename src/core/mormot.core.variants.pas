@@ -1630,15 +1630,18 @@ type
     // can specify @StrComp as comparer function for case-sensitive ordering
     // - once sorted, you can use GetVarData(..,Compare) or GetAs*(..,Compare)
     // methods for much faster O(log(n)) binary search
-    procedure SortByName(SortCompare: TUtf8Compare = nil);
+    procedure SortByName(SortCompare: TUtf8Compare = nil;
+      SortCompareReversed: boolean = false);
     /// sort the document object values by value using a comparison function
     // - work for both dvObject and dvArray documents
     // - will sort by UTF-8 text (VariantCompare) if no custom aCompare is supplied
-    procedure SortByValue(SortCompare: TVariantCompare = nil);
+    procedure SortByValue(SortCompare: TVariantCompare = nil;
+      SortCompareReversed: boolean = false);
     /// sort the document object values by value using a comparison method
     // - work for both dvObject and dvArray documents
     // - you should supply a TVariantComparer callback method
-    procedure SortByRow(const SortComparer: TVariantComparer);
+    procedure SortByRow(const SortComparer: TVariantComparer;
+      SortComparerReversed: boolean = false);
     /// sort the document array values by a field of some stored objet values
     // - do nothing if the document is not a dvArray, or if the items are no dvObject
     // - aValueCompare will be called with the aItemPropName values, not row
@@ -1656,6 +1659,9 @@ type
       aValueCompare: TVariantCompare = nil;
       const aValueCompareField: TVariantCompareField = nil;
       aValueCompareReverse: boolean = false; aNameSortedCompare: TUtf8Compare = nil);
+    /// inverse the order of Names and Values of this document
+    // - could be applied after a content sort if needed
+    procedure Reverse;
     /// create a TDocVariant object, from a selection of properties of this
     // document, by property name
     // - if the document is a dvObject, to reduction will be applied to all
@@ -5558,6 +5564,7 @@ type
     nameCompare: TUtf8Compare;
     valueCompare: TVariantCompare;
     valueComparer: TVariantComparer;
+    reversed: PtrInt;
     procedure SortByName(L, R: PtrInt);
     procedure SortByValue(L, R: PtrInt);
   end;
@@ -5574,9 +5581,9 @@ begin
       P := (L + R) shr 1;
       repeat
         pivot := names[P];
-        while nameCompare(names[I], pivot) < 0 do
+        while nameCompare(names[I], pivot) * reversed < 0 do
           inc(I);
-        while nameCompare(names[J], pivot) > 0 do
+        while nameCompare(names[J], pivot) * reversed > 0 do
           dec(J);
         if I <= J then
         begin
@@ -5623,16 +5630,16 @@ begin
         pivot := @values[P];
         if Assigned(valueCompare) then
         begin // called from SortByValue
-          while valueCompare(values[I], pivot^) < 0 do
+          while valueCompare(values[I], pivot^) * reversed < 0 do
             inc(I);
-          while valueCompare(values[J], pivot^) > 0 do
+          while valueCompare(values[J], pivot^) * reversed > 0 do
             dec(J);
         end
         else
         begin // called from SortByRow
-          while valueComparer(values[I], pivot^) < 0 do
+          while valueComparer(values[I], pivot^) * reversed < 0 do
             inc(I);
-          while valueComparer(values[J], pivot^) > 0 do
+          while valueComparer(values[J], pivot^) * reversed > 0 do
             dec(J);
         end;
         if I <= J then
@@ -5667,7 +5674,8 @@ begin
     until L >= R;
 end;
 
-procedure TDocVariantData.SortByName(SortCompare: TUtf8Compare);
+procedure TDocVariantData.SortByName(
+  SortCompare: TUtf8Compare; SortCompareReversed: boolean);
 var
   qs: TQuickSortDocVariant;
 begin
@@ -5680,10 +5688,15 @@ begin
     qs.nameCompare := @StrIComp;
   qs.names := pointer(VName);
   qs.values := pointer(VValue);
+  if SortCompareReversed then
+    qs.reversed := -1
+  else
+    qs.reversed := 1;
   qs.SortByName(0, VCount - 1);
 end;
 
-procedure TDocVariantData.SortByValue(SortCompare: TVariantCompare);
+procedure TDocVariantData.SortByValue(SortCompare: TVariantCompare;
+  SortCompareReversed: boolean);
 var
   qs: TQuickSortDocVariant;
 begin
@@ -5696,10 +5709,15 @@ begin
   qs.valueComparer := nil;
   qs.names := pointer(VName);
   qs.values := pointer(VValue);
+  if SortCompareReversed then
+    qs.reversed := -1
+  else
+    qs.reversed := 1;
   qs.SortByValue(0, VCount - 1);
 end;
 
-procedure TDocVariantData.SortByRow(const SortComparer: TVariantComparer);
+procedure TDocVariantData.SortByRow(const SortComparer: TVariantComparer;
+  SortComparerReversed: boolean);
 var
   qs: TQuickSortDocVariant;
 begin
@@ -5710,6 +5728,10 @@ begin
   qs.valueComparer := SortComparer;
   qs.names := pointer(VName);
   qs.values := pointer(VValue);
+  if SortComparerReversed then
+    qs.reversed := -1
+  else
+    qs.reversed := 1;
   qs.SortByValue(0, VCount - 1);
 end;
 
@@ -5911,6 +5933,15 @@ begin
   QS.Init(aItemPropNames, aNameSortedCompare);
   QS.Reverse := aValueCompareReverse;
   QS.Sort(0, VCount - 1);
+end;
+
+procedure TDocVariantData.Reverse;
+begin
+  if VCount <= 0 then
+    exit;
+  if VName <> nil then
+    DynArray(TypeInfo(TRawUtf8DynArray), VName, @VCount).Reverse;
+  DynArray(TypeInfo(TVariantDynArray), VValue, @VCount).Reverse;
 end;
 
 function TDocVariantData.Reduce(const aPropNames: array of RawUtf8;
