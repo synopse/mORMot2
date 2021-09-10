@@ -378,7 +378,8 @@ const
       {$elseif defined(VER320)} + ' 10.2 Tokyo'
       {$elseif defined(VER330)} + ' 10.3 Rio'
       {$elseif defined(VER340)} + ' 10.4 Sydney'
-      {$elseif defined(VER350)} + ' 11 Next'
+      {$elseif defined(VER350)} + ' 11 Alexandria'
+      {$elseif defined(VER360)} + ' 11.1 Next'
       {$ifend}
     {$endif CONDITIONALEXPRESSIONS}
   {$endif FPC}
