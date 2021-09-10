@@ -9279,8 +9279,8 @@ end;
 
 
 
-function DynArray(aTypeInfo: PRttiInfo; var aValue;
-  aCountPointer: PInteger): TDynArray;
+function DynArray(
+  aTypeInfo: PRttiInfo; var aValue; aCountPointer: PInteger): TDynArray;
 begin
   result.Init(aTypeInfo, aValue, aCountPointer);
 end;

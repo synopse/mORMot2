@@ -8878,25 +8878,24 @@ end;
 threadvar
   _Lecuyer: TLecuyer; // uses only 16 bytes per thread
 
-var
-  // cascaded 128-bit random to avoid replay attacks - shared by all threads
-  _EntropyGlobal: THash128Rec;
-
 function Lecuyer: PLecuyer;
 begin
   result := @_Lecuyer;
 end;
 
 {$ifdef OSDARWIN} // FPC CreateGUID calls /dev/urandom which is not advised
-function mach_absolute_time: UInt64;
-  cdecl external 'c' name 'mach_absolute_time'; // in nanoseconds resolution
+function mach_absolute_time: UInt64; cdecl external 'c';
 
 procedure CreateGUID(var guid: TGUID);
 begin
-  guid.time_low := mach_absolute_time;
+  guid.time_low := mach_absolute_time;  // monotonic time in nanoseconds
   crc128c(@guid, SizeOf(guid), THash128(guid)); // good enough diffusion
 end;
 {$endif OSDARWIN}
+
+var
+  // cascaded 128-bit random to avoid replay attacks - shared by all threads
+  _EntropyGlobal: THash128Rec;
 
 procedure XorEntropy(var e: THash512Rec);
 var
@@ -8904,6 +8903,8 @@ var
   i: PtrInt;
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
+  if _EntropyGlobal.L = 0 then
+    CreateGUID(TGuid(_EntropyGlobal)); // some rich initial value
   e.r[0].L := e.r[0].L xor _EntropyGlobal.L;
   e.r[0].H := e.r[0].H xor _EntropyGlobal.H;
   lec := @_Lecuyer; // lec^.rs#=0 at thread startup, but won't hurt
@@ -8937,7 +8938,7 @@ begin
   if entropy <> nil then
     for i := 0 to entropylen - 1 do
     begin
-      j := i and 63;
+      j := i and (SizeOf(e) - 1);
       e.b[j] := {%H-}e.b[j] xor entropy^[i];
     end;
   repeat
@@ -12043,8 +12044,6 @@ begin
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
   // initialize CPU-specific asm
   TestCpuFeatures;
-  // very fast on Windows - slower /proc file access on Linux
-  CreateGUID(TGuid(_EntropyGlobal));
 end;
 
 
