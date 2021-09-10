@@ -2343,48 +2343,73 @@ type
   TArmCpuImplementers = set of TArmCpuImplementer;
 
 
-{$ifdef CPUARM3264}
-
 type
-  {$ifdef CPUARM}
   /// 32-bit ARM Hardware capabilities
   // - merging AT_HWCAP and AT_HWCAP2 flags as reported by
   // github.com/torvalds/linux/blob/master/arch/arm/include/uapi/asm/hwcap.h
-  TArmHwCap = (
+  // - is defined on all platforms for cross-system use
+  TArm32HwCap = (
     // HWCAP_* constants
-    ahcSWP, ahcHALF, ahcTHUMB, ahc26BIT, ahcFAST_MULT, ahcFPA,
-    ahcVFP, ahcEDSP, ahcJAVA, ahcIWMMXT, ahcCRUNCH, ahcTHUMBEE,
-    ahcNEON, ahcVFPv3, ahcVFPv3D16, ahcTLS, ahcVFPv4, ahcIDIVA,
-    ahcIDIVT, ahcVFPD32, ahcLPAE, ahcEVTSTRM,
-    ahc22, ahc23, ahc24, ahc25, ahc26, ahc27, ahc28, ahc29, ahc30, ahc31,
+    arm32SWP, arm32HALF, arm32THUMB, arm3226BIT, arm32FAST_MULT, arm32FPA,
+    arm32VFP, arm32EDSP, arm32JAVA, arm32IWMMXT, arm32CRUNCH, arm32THUMBEE,
+    arm32NEON, arm32VFPv3, arm32VFPv3D16, arm32TLS, arm32VFPv4, arm32IDIVA,
+    arm32IDIVT, arm32VFPD32, arm32LPAE, arm32EVTSTRM,
+    arm32_22, arm32_23, arm32_24, arm32_25, arm32_26, arm32_27, arm32_28,
+    arm32_29, arm32_30, arm32_31,
     // HWCAP2_* constants
-    ahcAES, ahcPMULL, ahcSHA1, ahcSHA2, ahcCRC32);
-  {$endif CPUARM}
+    arm32AES, arm32PMULL, arm32SHA1, arm32SHA2, arm32CRC32);
+  TArm32HwCaps = set of TArm32HwCap;
 
-  {$ifdef CPUAARCH64}
   /// 64-bit AARCH64 Hardware capabilities
   // - merging AT_HWCAP and AT_HWCAP2 flags as reported by
   // github.com/torvalds/linux/blob/master/arch/arm64/include/uapi/asm/ahccap.h
-  TArmHwCap = (
+  // - is defined on all platforms for cross-system use
+  TArm64HwCap = (
     // HWCAP_* constants
-    ahcFP, ahcASIMD, ahcEVTSTRM, ahcAES, ahcPMULL, ahcSHA1, ahcSHA2, ahcCRC32,
-    ahcATOMICS, ahcFPHP, ahcASIMDHP, ahcCPUID, ahcASIMDRDM, ahcJSCVT, ahcFCMA,
-    ahcLRCPC, ahcDCPOP, ahcSHA3, ahcSM3, ahcSM4, ahcASIMDDP, ahcSHA512, ahcSVE,
-    ahcASIMDFHM, ahcDIT, ahcUSCAT, ahcILRCPC, ahcFLAGM, ahcSSBS, ahcSB, ahcPACA, ahcPACG,
+    arm64FP, arm64ASIMD, arm64EVTSTRM, arm64AES, arm64PMULL,
+    arm64SHA1, arm64SHA2, arm64CRC32, arm64ATOMICS, arm64FPHP, arm64ASIMDHP,
+    arm64CPUID, arm64ASIMDRDM, arm64JSCVT, arm64FCMA, arm64LRCPC, arm64DCPOP,
+    arm64SHA3, arm64SM3, arm64SM4, arm64ASIMDDP, arm64SHA512, arm64SVE,
+    arm64ASIMDFHM, arm64DIT, arm64USCAT, arm64ILRCPC, arm64FLAGM, arm64SSBS,
+    arm64SB, arm64PACA, arm64PACG,
     // HWCAP2_* constants
-    ahcDCPODP, ahcSVE2, ahcSVEAES, ahcSVEPMULL, ahcSVEBITPERM, ahcSVESHA3, ahcSVESM4,
-    ahcFLAGM2, ahcFRINT, ahcSVEI8MM, ahcSVEF32MM, ahcSVEF64MM, ahcSVEBF16, ahcI8MM,
-    ahcBF16, ahcDGH, ahcRNG, ahcBTI, ahcMTE);
-  {$endif CPUAARCH64}
+    arm64DCPODP, arm64SVE2, arm64SVEAES, arm64SVEPMULL, arm64SVEBITPERM,
+    arm64SVESHA3, arm64SVESM4, arm64FLAGM2, arm64FRINT, arm64SVEI8MM,
+    arm64SVEF32MM, arm64SVEF64MM, arm64SVEBF16, arm64I8MM,
+    arm64BF16, arm64DGH, arm64RNG, arm64BTI, arm64MTE);
+  TArm64HwCaps = set of TArm64HwCap;
 
-  TArmHwCaps = set of TArmHwCap;
+{$ifdef CPUARM}
+  TArmHwCap = TArm32HwCap;
+  TArmHwCaps = TArm32HwCaps;
 
+const
+  ahcAES   = arm32AES;
+  ahcPMULL = arm32PMULL;
+  ahcSHA1  = arm32SHA1;
+  ahcSHA2  = arm32SHA2;
+  ahcCRC32 = arm32CRC32;
+{$endif CPUARM}
+
+{$ifdef CPUAARCH64}
+  TArmHwCap = TArm64HwCap;
+  TArmHwCaps = TArm64HwCaps;
+
+const
+  ahcAES   = arm64AES;
+  ahcPMULL = arm64PMULL;
+  ahcSHA1  = arm64SHA1;
+  ahcSHA2  = arm64SHA2;
+  ahcCRC32 = arm64CRC32;
+{$endif CPUAARCH64}
+
+{$ifdef CPUARM3264}
 var
   /// the low-level ARM/AARCH64 CPU features retrieved from system.envp
   // - text from CpuInfoFeatures may not be accurate on oldest kernels
   CpuFeatures: TArmHwCaps;
-
 {$endif CPUARM3264}
+
 
 /// recognize a given ARM/AARCH64 CPU from its 12-bit hardware ID
 function ArmCpuType(id: word): TArmCpuType;
