@@ -11504,7 +11504,7 @@ end;
 
 procedure ExchgVariant(v1, v2: PPtrIntArray);
 var
-  c: PtrInt; // 32-bit:16bytes=4ptr 64-bit:24bytes=3ptr
+  c: PtrInt; // 32-bit: 16 bytes = 4 PtrInt; 64-bit: 24 bytes = 3 PtrInt
 begin
   c := v2[0];
   v2[0] := v1[0];

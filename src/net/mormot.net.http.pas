@@ -133,6 +133,7 @@ type
     hrsWaitProcessing,
     hrsSendBody,
     hrsResponseDone,
+    hrsUpgraded,
     hrsErrorPayloadTooLarge,
     hrsErrorMisuse,
     hrsErrorUnsupportedFormat,
@@ -258,6 +259,7 @@ type
     // - note that GetHeader(HeadersUnFiltered=false) will set ContentType field
     // but let HeaderGetValue('CONTENT-TYPE') return ''
     function HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
     /// initialize ContentStream/ContentLength from a given file name
     // - if CompressGz is set, would also try for a cached local FileName+'.gz'
     function ContentFromFile(const FileName: TFileName; CompressGz: integer): boolean;
@@ -1174,7 +1176,7 @@ begin
             // Headers end with a void line
             ParseHeader(st.Line, hroHeadersUnfiltered in Options)
           else
-          // Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
+          // we reached end of headers
           if hfTransferChunked in HeaderFlags then
             // process chunked body
             State := hrsGetBodyChunkedHexFirst
@@ -1182,6 +1184,7 @@ begin
             // regular process with explicit content-length
             State := hrsGetBodyContentLength
             // note: old HTTP/1.0 format with no Content-Length is unsupported
+            // because officially not defined in HTTP/1.1 RFC2616 4.3
           else
             // no body
             State := hrsWaitProcessing

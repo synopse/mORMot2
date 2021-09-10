@@ -453,10 +453,10 @@ begin
     if fTestClass.InheritsFrom(TRestHttpClientGeneric) then
     begin
       WebSocketLog := TSynLog;
-      fHttpServer := TRestHttpServer.Create(aPort, [fDataBase], '+', aHttp);
-      if aHttp = useBidirSocket then
-        fHttpServer.WebSocketsEnable(fDatabase, WS_KEY, WS_JSON, WS_BIN).
-          Settings.SetFullLog;
+      fHttpServer := TRestHttpServer.Create(aPort, [fDataBase], '+', aHttp, 32,
+        secNone, '', '', HTTPSERVER_DEFAULT_OPTIONS {+ [rsoLogVerbose]} );
+      if aHttp in HTTP_BIDIR then
+        fHttpServer.WebSocketsEnable(fDatabase, WS_KEY, WS_JSON, WS_BIN)^.SetFullLog;
     end;
   end;
   // 2. Perform the tests
@@ -587,7 +587,7 @@ end;
 
 procedure TTestMultiThreadProcess.Websockets;
 begin
-  Test(TRestHttpClientWebsockets, useBidirSocket);
+  Test(TRestHttpClientWebsockets, WEBSOCKETS_DEFAULT_MODE);
 end;
 
 {$ifdef USELIBCURL}

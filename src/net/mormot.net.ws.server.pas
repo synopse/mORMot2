@@ -345,7 +345,7 @@ var
 begin
   server := (fSocket as TWebSocketServerSocket).Server;
   result := THttpServerRequest.Create(
-    server, fOwnerConnection, fOwnerThread, fProtocol.ConnectionFlags);
+    server, fOwnerConnectionID, fOwnerThread, fProtocol.ConnectionFlags);
   RequestProcess :=  server.Request;
 end;
 
@@ -363,15 +363,15 @@ begin
   fSocketClass := TWebSocketServerSocket;
   fProcessClass := TWebSocketProcessServer;
   // initialize protocols and connections
+  fCanNotifyCallback := true;
   fWebSocketConnections := TSynObjectListLocked.Create({owned=}false);
   fProtocols := TWebSocketProtocolList.Create;
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
-  if ServerThreadPoolCount > 4 then
-    ServerThreadPoolCount := 4; // don't loose threads for nothing
   if aLogVerbose then
     fSettings.SetFullLog;
-  fCanNotifyCallback := true;
+  if ServerThreadPoolCount > 4 then
+    ServerThreadPoolCount := 4; // don't loose threads for nothing
   // start the server
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, HeadersUnFiltered, CreateSuspended);
@@ -478,7 +478,7 @@ begin
   if n > 0 then
     repeat
       result := c^;
-      if result.OwnerConnection = id then
+      if result.OwnerConnectionID = id then
         exit;
       inc(c);
       dec(n);
@@ -515,6 +515,7 @@ procedure TWebSocketServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
 var
   i, len, ids: integer;
   ws: PWebSocketProcessServer;
+  tix: cardinal;
   temp: TWebSocketFrame; // local copy since SendFrame() modifies the payload
   sorted: TSynTempBuffer;
 begin
@@ -531,6 +532,7 @@ begin
   temp.opcode := aFrame.opcode;
   temp.content := aFrame.content;
   len := length(aFrame.payload);
+  tix := GetTickCount64 shr 10;
   fWebSocketConnections.Safe.Lock;
   try
     ws := pointer(fWebSocketConnections.List);
@@ -540,10 +542,10 @@ begin
           // broadcast all
          ((ids < 0) or
           // branchless O(log(n)) asm on x86_64
-          (FastFindInt64Sorted(sorted.buf, ids, ws^.OwnerConnection) >= 0)) then
+          (FastFindInt64Sorted(sorted.buf, ids, ws^.OwnerConnectionID) >= 0)) then
       begin
         SetString(temp.payload, PAnsiChar(pointer(aFrame.payload)), len);
-        ws^.Outgoing.Push(temp); // non blocking asynchronous sending
+        ws^.Outgoing.Push(temp, tix); // non blocking asynchronous sending
       end;
       inc(ws);
     end;

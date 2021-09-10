@@ -491,7 +491,7 @@ begin
   frame.opcode := focBinary;
   frame.content := [fopAlreadyCompressed]; // it is probably encrypted
   frame.payload := msg;
-  process.Outgoing.Push(frame);
+  process.Outgoing.Push(frame, 0);
 end;
 
 procedure TTunnelRelayServerProtocol.ProcessIncomingFrame(

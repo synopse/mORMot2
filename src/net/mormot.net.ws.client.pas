@@ -335,7 +335,7 @@ begin
     else
     begin
       // send the REST request over WebSockets - both ends use NotifyCallback()
-      Ctxt := THttpServerRequest.Create(nil, fProcess.fOwnerConnection,
+      Ctxt := THttpServerRequest.Create(nil, fProcess.fOwnerConnectionID,
         fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags);
       try
         body := Data;

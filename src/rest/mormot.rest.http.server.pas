@@ -52,9 +52,10 @@ uses
   mormot.net.http,
   mormot.net.sock,
   mormot.net.server,
+  mormot.net.async,
   mormot.net.ws.core,
   mormot.net.ws.server,
-  mormot.net.async;
+  mormot.net.ws.async;
 
 
 { ************ TRestHttpServer RESTful Server }
@@ -84,12 +85,16 @@ type
   // - useBidirSocket will use the standard Sockets library but via the
   // TWebSocketServerRest class, allowing HTTP connection upgrade to the
   // WebSockets protocol, to enable immediate event callbacks in addition to
-  // the standard request/answer RESTful mode
+  // the standard request/answer RESTful mode with one thread per client
   // - useHttpAsync will use the Sockets library in event-driven mode,
   // with a thread poll for both single shot and kept alive connections
+  // - useBidirAsync will use TWebSocketAsyncServerRest in event-driven mode,
+  // using its thread poll for all its HTTP or WebSockets process
   // - in practice, useHttpSocket is good behind a reverse proxy defined in
-  // HTTP/1.0 mode, but useHttpAsync may scale much better in case of
+  // HTTP/1.0 mode, but useHttpAsync  may scale much better in case of
   // a lot of concurrent connections, especially kept-alive connections
+  // - useBidirSocket may be used for legacy reasons, if one thread per client
+  // is a good idea - but useBidirAsync may be preferred for proper scaling
   // - the first item should be the preferred one (see HTTP_DEFAULT_MODE)
   TRestHttpServerUse = (
     {$ifdef USEHTTPSYS}
@@ -100,7 +105,8 @@ type
     {$endif USEHTTPSYS}
     useHttpSocket,
     useBidirSocket,
-    useHttpAsync);
+    useHttpAsync,
+    useBidirAsync);
 
   /// available security options for TRestHttpServer.Create() constructor
   // - default secNone will use plain HTTP connection
@@ -131,9 +137,19 @@ const
     [useHttpApiRegisteringURI, useHttpApiRegisteringURIOnly];
 
   {$else}
-  HTTP_DEFAULT_MODE = useHttpSocket;
-  //HTTP_DEFAULT_MODE = useHttpAsync;
+  //HTTP_DEFAULT_MODE = useHttpSocket;
+  //
+  HTTP_DEFAULT_MODE = useHttpAsync;
   {$endif USEHTTPSYS}
+
+  /// the kind of HTTP server to be used by default for WebSockets support
+  // - will define the best available server class, depending on the platform
+//
+  WEBSOCKETS_DEFAULT_MODE = useBidirSocket;
+  //WEBSOCKETS_DEFAULT_MODE = useBidirAsync;
+
+  /// the TRestHttpServerUse which have bi-directional callback notifications
+  HTTP_BIDIR = [useBidirSocket, useBidirAsync];
 
 
 type
@@ -153,9 +169,8 @@ type
   // program setup for the desired port, or define a useHttpApiRegisteringURI
   // kind of server, in order to allow it for every user
   // - under Linux, only THttpServer is available
-  // - you can specify useBidirSocket kind of server (i.e. TWebSocketServerRest)
-  // if you want the HTTP protocol connection to be upgraded to a WebSockets
-  // mode, to allow immediate callbacks from the server to the client
+  // - you can specify WEBSOCKETS_DEFAULT_MODE = useBidirSocket/useBidirAsync
+  // kind of server to allow WebSockets upgrades and server-side notif callbacks
   // - just create it and it will serve SQL statements as UTF-8 JSON
   // - for a true AJAX server, expanded data is prefered - your code may contain:
   // ! DBServer.NoAjaxJson := false;
@@ -205,7 +220,7 @@ type
     // class must have an unique Model.Root value, to identify which TRestServer
     // instance must handle a particular request from its URI
     // - port is an RawUtf8/AnsiString, as expected by the WinSock API - in case
-    // of useHttpSocket, useBidirSocket or useHttpAsync kind of server, you should
+    // of useHttpSocket, useBidirSocket or useHttpAsync, useBidirAsync servers,
     // specify the public server address to bind to: e.g. '1.2.3.4:1234' - even
     // for http.sys, the public address could be used for TRestServer.SetPublicUri()
     // - aDomainName is the Urlprefix to be used for HttpAddUrl API call:
@@ -218,9 +233,9 @@ type
     // it will use by default optimized kernel-based http.sys server (useHttpApi),
     // optionally registering the URI (useHttpApiRegisteringURI) if needed,
     // or using the standard Sockets library (useHttpSocket), possibly in its
-    // WebSockets-friendly version (useBidirSocket - you shoud call the
+    // WebSockets-friendly version (useBidirSocket - then call the
     // WebSocketsEnable method to initialize the available protocols), or
-    // in its event-driven non-blocking version (useHttpAsync)
+    // in its event-driven non-blocking version (useHttpAsync/useBidirAsync)
     // - by default, the POrmAccessRights will be set to nil
     // - the aThreadPoolCount parameter will set the number of threads
     // to be initialized to handle incoming connections (default is 32, which
@@ -245,7 +260,7 @@ type
     // - raise a ERestHttpServer exception if binding failed
     // - specify one TRestServer server class to be used
     // - port is an RawUtf8, as expected by the WinSock API - in case of
-    // useHttpSocket, useBidirSocket or useHttpAsync kind of server, you should
+    // of useHttpSocket, useBidirSocket or useHttpAsync, useBidirAsync servers,
     // specify the public server address to bind to: e.g. '1.2.3.4:1234' - even
     // for http.sys, the public address could be used for TRestServer.SetPublicUri()
     // - aDomainName is the Urlprefix to be used for HttpAddUrl API call
@@ -336,7 +351,7 @@ type
     // aHttpServerSecurity=secSSL so that it would redirect https://localhost:port
     procedure RootRedirectToUri(const aRedirectedUri: RawUtf8;
       aRegisterUri: boolean = true; aHttps: boolean = false);
-    /// defines the WebSockets protocols to be used for useBidirSocket
+    /// defines the WebSockets protocols used by useBidirSocket/useBidirAsync
     // - i.e. 'synopsebinary' and optionally 'synopsejson' protocols
     // - if aWebSocketsURI is '', any URI would potentially upgrade; you can
     // specify an URI to limit the protocol upgrade to a single REST server
@@ -345,24 +360,24 @@ type
     // use AES-CFB 256 bits encryption
     // - if aWebSocketsAjax is TRUE, it will also register TWebSocketProtocolJson
     // so that AJAX applications would be able to connect to this server
-    // - this method does nothing if the associated HttpServer class is not a
-    // TWebSocketServerRest (i.e. this instance was not created as useBidirSocket)
+    // - this method does nothing if the associated HttpServer class does not
+    // support WebSockets, i.e. this instance isn't useBidirSocket/useBidirAsync
     function WebSocketsEnable(
       const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
       aWebSocketsAjax: boolean = false;
       aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
-        [pboSynLzCompress]): TWebSocketServerRest; overload;
-    /// defines the useBidirSocket WebSockets protocol to be used for a REST server
+        [pboSynLzCompress]): PWebSocketProcessSettings; overload;
+    /// defines the WebSockets protocols used by useBidirSocket/useBidirAsync
     // - same as the overloaded WebSocketsEnable() method, but the URI will be
     // forced to match the aServer.Model.Root value, as expected on the client
     // side by TRestHttpClientWebsockets.WebSocketsUpgrade()
     function WebSocketsEnable(aServer: TRestServer;
       const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean = false;
       aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
-        [pboSynLzCompress]): TWebSocketServerRest; overload;
+        [pboSynLzCompress]): PWebSocketProcessSettings; overload;
     /// the associated running HTTP server instance
-    // - either THttpApiServer (available only under Windows), THttpServer or
-    // TWebSocketServerRest (on any system)
+    // - either THttpApiServer (available only under Windows), THttpServer,
+    // TWebSocketServerRest or TWebSocketAsyncServerRest (on any system)
     property HttpServer: THttpServerGeneric
       read fHttpServer;
     /// the TCP/IP (address and) port on which this server is listening to
@@ -604,11 +619,12 @@ begin
 end;
 
 const
-  HTTPSERVERSOCKETCLASS: array[useHttpSocket .. high(TRestHttpServerUse)] of
-      THttpServerSocketGenericClass = (
+  HTTPSERVERSOCKETCLASS: array[
+      useHttpSocket .. high(TRestHttpServerUse)] of THttpServerSocketGenericClass = (
     THttpServer,
     TWebSocketServerRest,
-    THttpAsyncServer);
+    THttpAsyncServer,
+    TWebSocketAsyncServerRest);
 
 constructor TRestHttpServer.Create(const aPort: RawUtf8;
   const aServers: array of TRestServer; const aDomainName: RawUtf8;
@@ -1155,22 +1171,27 @@ end;
 function TRestHttpServer.WebSocketsEnable(
   const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
   aWebSocketsAjax: boolean;
-  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): TWebSocketServerRest;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): PWebSocketProcessSettings;
 begin
   if fHttpServer.InheritsFrom(TWebSocketServerRest) then
   begin
-    result := TWebSocketServerRest(fHttpServer);
-    result.WebSocketsEnable(aWebSocketsURI, aWebSocketsEncryptionKey,
-      aWebSocketsAjax, aWebSocketsBinaryOptions);
+    TWebSocketServerRest(fHttpServer).WebSocketsEnable(aWebSocketsURI,
+      aWebSocketsEncryptionKey, aWebSocketsAjax, aWebSocketsBinaryOptions);
+    result := TWebSocketServerRest(fHttpServer).Settings;
+  end else if fHttpServer.InheritsFrom(TWebSocketAsyncServerRest) then
+  begin
+    TWebSocketAsyncServerRest(fHttpServer).WebSocketsEnable(aWebSocketsURI,
+      aWebSocketsEncryptionKey, aWebSocketsAjax, aWebSocketsBinaryOptions);
+    result := TWebSocketAsyncServerRest(fHttpServer).Settings;
   end
   else
-    raise EWebSockets.CreateUtf8(
-      '%.WebSocketEnable(%): expected useBidirSocket', [self, ToText(fUse)^]);
+    raise EWebSockets.CreateUtf8('%.WebSocketEnable(%): expected ' +
+      'WEBSOCKETS_DEFAULT_MODE (useBidirSocket/useBidirAsync)', [self, ToText(fUse)^]);
 end;
 
 function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;
   const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
-  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): TWebSocketServerRest;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): PWebSocketProcessSettings;
 begin
   if (aServer = nil) or
      (DBServerFind(aServer) < 0) then
@@ -1201,7 +1222,7 @@ begin
         ctxt.Prepare(FormatUtf8('%/%/%', [aSender.Model.Root,
           aInterfaceDotMethodName, aFakeCallID]), 'POST', '',
           '[' + aParams + ']', '', '');
-        // fHttpServer.Callback() raises EHttpServer but for TWebSocketServerRest
+        // fHttpServer.Callback() raises EHttpServer but for bidir servers
         status := fHttpServer.Callback(ctxt, aResult = nil);
         if status = HTTP_SUCCESS then
         begin
@@ -1249,12 +1270,11 @@ var
   P: PUtf8Char;
   hostroot, host, root: RawUtf8;
   thrdcnt: integer;
-  websock: TWebSocketServerRest;
 begin
   if aDefinition = nil then
     raise ERestHttpServer.CreateUtf8('%.Create(aDefinition=nil)', [self]);
   if aDefinition.WebSocketPassword <> '' then
-    aForcedUse := useBidirSocket;
+    aForcedUse := WEBSOCKETS_DEFAULT_MODE; //= useBidirSocket/useBidirAsync
   if aDefinition.ThreadCount = 0 then
     thrdcnt := 32
   else
@@ -1300,10 +1320,8 @@ begin
       aServer.AuthenticationRegister(AUTH[a]);
     end;
   if aDefinition.WebSocketPassword <> '' then
-  begin
-    websock := WebSocketsEnable(aServer, aDefinition.PasswordPlain);
-    websock.Settings^.LoopDelay := aWebSocketsLoopDelay;
-  end;
+    WebSocketsEnable(aServer, aDefinition.PasswordPlain)^.
+      LoopDelay := aWebSocketsLoopDelay;
 end;
 
 

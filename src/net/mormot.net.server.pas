@@ -275,7 +275,7 @@ type
     property HttpQueueLength: cardinal
       read GetHttpQueueLength write SetHttpQueueLength;
     /// TRUE if the inherited class is able to handle callbacks
-    // - only TWebSocketServer has this ability by now
+    // - only TWebSocketServer/TWebSocketAsyncServer have this ability by now
     property CanNotifyCallback: boolean
       read fCanNotifyCallback;
     /// the value of a custom HTTP header containing the real client IP
@@ -321,8 +321,7 @@ type
   // - grTimeout is returned when HeaderRetrieveAbortDelay is reached
   // - grHeaderReceived is returned for GetRequest({withbody=}false)
   // - grBodyReceived is returned for GetRequest({withbody=}true)
-  // - grOwned indicates that this connection is now handled by another thread,
-  // e.g. asynchronous WebSockets or THttpAsyncServer kept alive connection
+  // - grUpgraded indicates that this connection was upgraded e.g. as WebSockets
   THttpServerSocketGetRequestResult = (
     grError,
     grException,
@@ -331,7 +330,7 @@ type
     grTimeout,
     grHeaderReceived,
     grBodyReceived,
-    grOwned);
+    grUpgraded);
 
   {$M+} // to have existing RTTI for published properties
   THttpServer = class;
@@ -485,6 +484,8 @@ type
     fHeadersUnFiltered: boolean;
     fExecuteMessage: string;
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
+    procedure IncStat(one: THttpServerSocketGetRequestResult);
+      {$ifdef HASINLINE} inline; {$endif}
     function OnNginxAllowSend(Context: THttpServerRequestAbstract;
       const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
@@ -585,11 +586,9 @@ type
     /// how many HTTP bodies have been processed
     property StatBodyProcessed: integer
       index grBodyReceived read GetStat;
-    /// how many HTTP connections were passed to an asynchronous handler
-    // - e.g. for background WebSockets processing after proper upgrade, or
-    // for kept alive THttpAsyncServer connections
-    property StatOwnedConnections: integer
-      index grOwned read GetStat;
+    /// how many HTTP connections were upgraded e.g. to WebSockets
+    property StatUpgraded: integer
+      index grUpgraded read GetStat;
   end;
 
   /// meta-class of our THttpServerSocketGeneric classes
@@ -1540,7 +1539,7 @@ end;
 constructor THttpServerSocketGeneric.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  aHeadersUnFiltered, CreateSuspended, aLogVerbose: boolean);
+  aHeadersUnFiltered: boolean; CreateSuspended: boolean; aLogVerbose: boolean);
 begin
   fSockPort := aPort;
   fServerKeepAliveTimeOut := KeepAliveTimeOut; // 30 seconds by default
@@ -1572,6 +1571,12 @@ function THttpServerSocketGeneric.GetStat(
   one: THttpServerSocketGetRequestResult): integer;
 begin
   result := fStats[one];
+end;
+
+procedure THttpServerSocketGeneric.IncStat(
+  one: THttpServerSocketGetRequestResult);
+begin
+  LockedInc32(@fStats[one]);
 end;
 
 function THttpServerSocketGeneric.OnNginxAllowSend(
@@ -2044,7 +2049,7 @@ begin
      fServer.Terminated  then
     exit;
   // properly get the incoming body and process the request
-  LockedInc32(@fServer.fStats[aHeaderResult]);
+  fServer.IncStat(aHeaderResult);
   case aHeaderResult of
     grHeaderReceived:
       begin
@@ -2067,7 +2072,7 @@ begin
              not HttpMethodWithNoBody(Method) then
           begin
             GetBody; // we need to get it now
-            LockedInc32(@fServer.fStats[grBodyReceived]);
+            fServer.IncStat(grBodyReceived);
           end;
           // multi-connection -> process now
           fServer.Process(self, RemoteConnectionID, aCaller);
@@ -2075,9 +2080,6 @@ begin
           // no Shutdown here: will be done client-side
         end;
       end;
-    grOwned:
-      // e.g. for asynchrounous WebSockets
-      result := false; // to ignore FreeAndNil(srvsock) below
   else if Assigned(fServer.Sock.OnLog) then
     fServer.Sock.OnLog(sllTrace, 'Task: close after GetRequest=% from %',
         [ToText(aHeaderResult)^, RemoteIP], self);
@@ -2312,12 +2314,12 @@ procedure THttpServerResp.Execute;
                    fServer.Terminated then
                   // server is down -> disconnect the client
                   exit;
-                LockedInc32(@fServer.fStats[res]);
+                fServer.IncStat(res);
                 case res of
                   grBodyReceived, grHeaderReceived:
                     begin
                       if res = grBodyReceived then
-                        LockedInc32(@fServer.fStats[grHeaderReceived]);
+                        fServer.IncStat(grHeaderReceived);
                       // calc answer and send response
                       fServer.Process(fServerSock, ConnectionID, self);
                       // keep connection only if necessary
@@ -2325,11 +2327,6 @@ procedure THttpServerResp.Execute;
                         break
                       else
                         exit;
-                    end;
-                  grOwned:
-                    begin
-                      fServerSock := nil; // will be freed by new owner
-                      exit;
                     end;
                 else
                   begin

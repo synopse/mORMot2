@@ -333,9 +333,10 @@ begin
   fServer.Server.CreateMissingTables;
   fBidirServer := TBidirServer.Create;
   check(fServer.ServiceDefine(fBidirServer, [IBidirService]) <> nil);
-  fHttpServer := TRestHttpServer.Create(HTTP_DEFAULTPORT, [], '+', useBidirSocket);
+  fHttpServer := TRestHttpServer.Create(
+    HTTP_DEFAULTPORT, [], '+', WEBSOCKETS_DEFAULT_MODE);
   check(fHttpServer.AddServer(fServer));
-  fHttpServer.WebSocketsEnable(fServer, WEBSOCKETS_KEY, true).Settings.SetFullLog;
+  fHttpServer.WebSocketsEnable(fServer, WEBSOCKETS_KEY, true)^.SetFullLog;
   //(fHttpServer.HttpServer as TWebSocketServer).HeartbeatDelay := 5000;
   port := Utf8ToInteger(HTTP_DEFAULTPORT);
   fPublicRelayClientsPort := ToUtf8(port + 1);

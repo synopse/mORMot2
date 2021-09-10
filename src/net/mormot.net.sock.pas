@@ -590,6 +590,7 @@ type
     property OnLog: TSynLogProc
       read fOnLog write fOnLog;
     /// callback called by GetOne when Idle
+    // - warning: any implementation should be very quick and non blocking
     property OnGetOneIdle: TOnPollSocketsIdle
       read fOnGetOneIdle write fOnGetOneIdle;
   published
@@ -2198,7 +2199,7 @@ begin
          (timeoutMS = 0) then
         exit;
       // wait a little for something to happen
-      tix := SleepStep(start, @fTerminated);
+      tix := SleepStep(start, @fTerminated); // 0/1/5/50/120-250 ms steps
       if endtix = 0 then
         endtix := start + timeoutMS
       else if Assigned(fOnGetOneIdle) then

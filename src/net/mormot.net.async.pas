@@ -255,6 +255,10 @@ type
 
   TAsyncConnections = class;
 
+  /// 32-bit type used to store GetTickCount64 div 1000 values
+  // - as used e.g. by TAsyncConnection.fLastOperation
+  TAsyncConnectionSec = type cardinal;
+
   /// abstract class to store one TAsyncConnections connection
   // - may implement e.g. WebSockets frames, or IoT binary protocol
   // - each connection will be identified by a TAsyncConnectionHandle integer
@@ -264,7 +268,7 @@ type
   TAsyncConnection = class(TSynPersistent)
   protected
     fHandle: TAsyncConnectionHandle;
-    fLastOperation: cardinal;
+    fLastOperation: TAsyncConnectionSec;
     fOwner: TAsyncConnections;
     fSlot: TPollSocketsSlot;
     fRemoteIP: RawUtf8;
@@ -291,7 +295,9 @@ type
     function AfterWrite: TPollAsyncSocketOnReadWrite; virtual;
     // called after TAsyncConnections.LastOperationIdleSeconds of no activity
     // - Sender.Write() could be used to send e.g. a hearbeat frame
-    procedure OnLastOperationIdle(IdleSeconds: cardinal); virtual;
+    // - should finish quickly and be non-blocking
+    // - returns true to log notified envents, false if nothing happened
+    function OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean; virtual;
     // called after TAsyncConnections.LastOperationReleaseMemorySeconds
     function ReleaseMemoryOnIdle: PtrInt; virtual;
   public
@@ -300,6 +306,9 @@ type
       const aRemoteIP: RawUtf8); reintroduce; virtual;
     /// finalize this instance, calling BeforeDestroy
     destructor Destroy; override;
+    /// read-only access to the associated connections list
+    property Owner: TAsyncConnections
+      read fOwner;
     /// read-only access to the socket number associated with this connection
     property Socket: TNetSocket
       read fSlot.socket;
@@ -422,7 +431,7 @@ type
     fLog: TSynLogClass;
     fLastHandle: integer;
     fOptions: TAsyncConnectionsOptions;
-    fLastOperationSec: cardinal;
+    fLastOperationSec: TAsyncConnectionSec;
     fLastOperationReleaseMemorySeconds: cardinal;
     fLastOperationIdleSeconds: cardinal;
     fThreadClients: record // used by TAsyncClient
@@ -433,9 +442,12 @@ type
     fIdleTix: Int64;
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
       out aConnection: TAsyncConnection): boolean; virtual;
-    function ConnectionAdd(aSocket: TNetSocket; aConnection: TAsyncConnection): boolean; virtual;
-    function ConnectionDelete(aHandle: TAsyncConnectionHandle): boolean; overload; virtual;
-    function ConnectionDelete(aConnection: TAsyncConnection; aIndex: integer): boolean; overload;
+    function ConnectionAdd(
+      aSocket: TNetSocket; aConnection: TAsyncConnection): boolean; virtual;
+    function ConnectionDelete(
+      aHandle: TAsyncConnectionHandle): boolean; overload; virtual;
+    function ConnectionDelete(
+      aConnection: TAsyncConnection; aIndex: integer): boolean; overload;
     procedure ThreadClientsConnect; // from fThreadClients
     procedure ThreadPollingWakeup(Events: integer);
     procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
@@ -459,6 +471,13 @@ type
     // ! try ... finally UnLock; end;
     function ConnectionFindLocked(aHandle: TAsyncConnectionHandle;
       aIndex: PInteger = nil): TAsyncConnection;
+    /// high-level access to a connection instance, from its handle
+    // - this method won't keep the main Lock so its handler should delay its
+    // destruction by a proper mechanism (flag/refcounting)
+    function ConnectionFind(aHandle: TAsyncConnectionHandle): TAsyncConnection;
+    /// low-level access to a connection instance, from its handle
+    // - caller should have called Lock before this method is done
+    function ConnectionSearch(aHandle: TAsyncConnectionHandle): TAsyncConnection;
     /// just a wrapper around fConnectionLock.Lock
     // - raise an exception if acoNoConnectionTrack option was defined
     procedure Lock;
@@ -487,6 +506,10 @@ type
     // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(...);
     procedure LogVerbose(connection: TAsyncConnection; const ident: RawUtf8;
       const frame: TRawByteStringBuffer); overload;
+    /// the current monotonic time elapsed, evaluated in seconds
+    // - IdleEverySecond will set GetTickCount64 div 1000
+    property LastOperationSec: TAsyncConnectionSec
+      read fLastOperationSec;
     /// allow idle connection to release its internal fSlot.rd/wr memory buffers
     // - default is 60 seconds, which is pretty conservative
     // - could be tuned in case of high numbers of concurrent connections and
@@ -629,8 +652,8 @@ type
   protected
     fHttp: THttpRequestContext;
     fServer: THttpAsyncServer;
-    fKeepAliveSec: cardinal;
-    fHeadersSec: cardinal;
+    fKeepAliveSec: TAsyncConnectionSec;
+    fHeadersSec: TAsyncConnectionSec;
     fRespStatus: integer;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
@@ -639,6 +662,7 @@ type
     function OnRead: TPollAsyncSocketOnReadWrite; override;
     // redirect to fHttp.ProcessWrite()
     function AfterWrite: TPollAsyncSocketOnReadWrite; override;
+    function DecodeHeaders: integer; virtual;
     function DoHeaders: TPollAsyncSocketOnReadWrite;
     function DoRequest: TPollAsyncSocketOnReadWrite;
   end;
@@ -656,6 +680,7 @@ type
     fAsync: THttpAsyncConnections;
     fCompressGz: integer;
     fHeadersDefaultBufferSize: integer;
+    fConnectionClass: TAsyncConnectionClass;
     function GetRegisterCompressGzStatic: boolean;
     procedure SetRegisterCompressGzStatic(Value: boolean);
     function GetHttpQueueLength: cardinal; override;
@@ -862,7 +887,8 @@ begin
     result := TryLock(writer);
     if result then
     begin
-      result := (socket <> nil) and not closing;
+      result := (socket <> nil) and
+                not closing;
       if not result then
         UnLock(writer);
       break; // acquired or socket closed
@@ -1364,8 +1390,9 @@ begin
   fSlot.Done;
 end;
 
-procedure TAsyncConnection.OnLastOperationIdle(IdleSeconds: cardinal);
+function TAsyncConnection.OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean;
 begin
+  result := false; // nothing happened
 end;
 
 function TAsyncConnection.ReleaseMemoryOnIdle: PtrInt;
@@ -1843,7 +1870,9 @@ begin
   if acoNoConnectionTrack in fOptions then
     raise EAsyncConnections.CreateUtf8('Unexpected %.ConnectionFindLocked', [self]);
   fConnectionLock.Lock;
+  {$ifdef HASFASTTRYFINALLY}
   try
+  {$endif HASFASTTRYFINALLY}
     i := fConnectionCount - 1;
     if i >= 0 then
     begin
@@ -1858,10 +1887,56 @@ begin
       {if acoVerboseLog in fOptions then
         DoLog(sllTrace, 'ConnectionFindLocked(%)=%', [aHandle, result], self);}
     end;
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     if result = nil then
       fConnectionLock.UnLock;
+  {$ifdef HASFASTTRYFINALLY}
   end;
+  {$endif HASFASTTRYFINALLY}
+end;
+
+function TAsyncConnections.ConnectionSearch(
+  aHandle: TAsyncConnectionHandle): TAsyncConnection;
+var
+  i: PtrInt;
+begin
+  // caller should have made fConnectionLock.Lock
+  result := nil;
+  if aHandle <= 0 then
+    exit;
+  i := FastFindConnection(pointer(fConnection), fConnectionCount - 1, aHandle);
+  if i >= 0 then
+  begin
+    result := fConnection[i];
+    if result.fSlot.closing or
+       (result.fSlot.socket = nil) then
+      result := nil; // too late
+  end;
+end;
+
+function TAsyncConnections.ConnectionFind(
+  aHandle: TAsyncConnectionHandle): TAsyncConnection;
+begin
+  result := nil;
+  if (self = nil) or
+     Terminated or
+     (aHandle <= 0) or
+     (acoNoConnectionTrack in fOptions) then
+    exit;
+  fConnectionLock.Lock;
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$endif HASFASTTRYFINALLY}
+    result := ConnectionSearch(aHandle);
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+    fConnectionLock.UnLock;
+  end;
+  {$else}
+  fConnectionLock.UnLock;
+  {$endif HASFASTTRYFINALLY}
 end;
 
 function TAsyncConnections.ConnectionRemove(
@@ -1956,7 +2031,6 @@ var
   notified, gced: PtrInt;
   allowed, gc: cardinal;
   c: TAsyncConnection;
-  log: ISynLog;
 begin
   if Terminated or
      (fConnectionCount = 0) then
@@ -1965,7 +2039,7 @@ begin
     exit;
   notified := 0;
   gced := 0;
-  fLastOperationSec := Qword(tix) div 1000; // we work at 32-bit second resolution here
+  fLastOperationSec := Qword(tix) div 1000; // 32-bit second resolution is enough
   allowed := fLastOperationIdleSeconds;
   if allowed <> 0 then
     allowed := fLastOperationSec - allowed;
@@ -1984,30 +2058,26 @@ begin
       end
       else
       begin
+        // check if some events should be triggerred on this inactive connection
         if (gc <> 0) and
            (c.fLastOperation < gc) then
           inc(gced, c.ReleaseMemoryOnIdle);
         if (allowed <> 0) and
            (c.fLastOperation < allowed) then
           try
-            if {%H-}log = nil then
-              if acoVerboseLog in fOptions then
-                log := fLog.Enter(self, 'IdleEverySecond');
-            c.OnLastOperationIdle(fLastOperationSec - c.fLastOperation);
-            inc(notified);
+            if c.OnLastOperationIdle(fLastOperationSec) then
+              inc(notified);
             if Terminated then
               break;
           except
           end;
       end;
     end;
-    if log <> nil then
-      log.Log(sllTrace, 'IdleEverySecond % notified=% GC=%',
-        [fConnectionClass, notified, KBNoSpace(gced)], self)
-    else if gced <> 0 then
-      if acoVerboseLog in fOptions then
-        DoLog(sllTrace, 'IdleEverySecond % GC=%',
-          [fConnectionClass, KBNoSpace(gced)], self);
+    if (acoVerboseLog in fOptions) and
+       ((notified <> 0) or
+        (gced <> 0)) then
+      DoLog(sllTrace, 'IdleEverySecond % notif=% GC=%',
+        [fConnectionClass, notified, KBNoSpace(gced)], self);
   finally
     fConnectionLock.UnLock;
   end;
@@ -2015,6 +2085,7 @@ end;
 
 procedure TAsyncConnections.ProcessIdleTix(Sender: TObject; NowTix: Int64);
 begin
+  // note: this method should be non-blocking and return quickly
   if not Terminated then
     if NowTix >= fIdleTix then
     begin
@@ -2280,7 +2351,8 @@ begin
           result := soClose;
         end;
       end;
-      if result <> soContinue then
+      if (result <> soContinue) or
+         (fHttp.State = hrsUpgraded) then
         break;
     end;
     {fOwner.DoLog(sllCustom2, 'OnRead % result=%', [ToText(fHttp.State)^, ord(result)], self);}
@@ -2330,7 +2402,6 @@ begin
           fHttp.Process.Clear; // CompressContentAndFinalizeHead may have set it
           HttpInit;
           result := soContinue;
-          LockedInc32(@fServer.fStats[grOwned]);
         end;
       end
   else
@@ -2342,6 +2413,26 @@ begin
   end;
 end;
 
+function THttpAsyncConnection.DecodeHeaders: integer;
+begin
+  result := HTTP_SUCCESS;
+  if (fServer.MaximumAllowedContentLength > 0) and
+     (fHttp.ContentLength > fServer.MaximumAllowedContentLength) then
+  begin
+    result := HTTP_PAYLOADTOOLARGE; // 413
+    fServer.IncStat(grOversizedPayload);
+  end else if (fHeadersSec > 0) and
+              (fServer.Async.fLastOperationSec > fHeadersSec) then
+  begin
+    result := HTTP_TIMEOUT; // 408 after Server.HeaderRetrieveAbortDelay ms
+    fServer.IncStat(grTimeout);
+  end
+  else if Assigned(fServer.OnBeforeBody) then
+    result := fServer.OnBeforeBody(
+      fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers, fHttp.ContentType,
+      fRemoteIP, fHttp.BearerToken, fHttp.ContentLength, {notls=}[]);
+end;
+
 function THttpAsyncConnection.DoHeaders: TPollAsyncSocketOnReadWrite;
 var
   status: integer;
@@ -2351,25 +2442,9 @@ begin
   if (nfHeadersParsed in fHttp.HeaderFlags) or
      not fHttp.ParseCommandAndHeader then
     exit;
-  fServer.ParseRemoteIPConnID(fHttp.Headers,
-    fRemoteIP, fRemoteConnID);
+  fServer.ParseRemoteIPConnID(fHttp.Headers, fRemoteIP, fRemoteConnID);
   // immediate reject of clearly invalid requests
-  status := HTTP_SUCCESS;
-  if (fServer.MaximumAllowedContentLength > 0) and
-     (fHttp.ContentLength > fServer.MaximumAllowedContentLength) then
-  begin
-    status := HTTP_PAYLOADTOOLARGE; // 413
-    LockedInc32(@fServer.fStats[grOversizedPayload]);
-  end else if (fHeadersSec > 0) and
-              (fLastOperation > fHeadersSec) then
-  begin
-    status := HTTP_TIMEOUT; // 408 after Server.HeaderRetrieveAbortDelay ms
-    LockedInc32(@fServer.fStats[grTimeout]);
-  end
-  else if Assigned(fServer.OnBeforeBody) then
-    status := fServer.OnBeforeBody(
-      fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers, fHttp.ContentType,
-      fRemoteIP, fHttp.BearerToken, fHttp.ContentLength, {notls=}[]);
+  status := DecodeHeaders; // may handle hfConnectionUpgrade when overriden
   if status <> HTTP_SUCCESS then
   begin
     // on fatal error direct reject and close the connection
@@ -2379,12 +2454,12 @@ begin
       [status, fHttp.Command, status, fHttp.Command],
       fHttp.CommandUri);
     fServer.fAsync.fClients.WriteString(self, fHttp.CommandUri); // no polling
-    LockedInc32(@fServer.fStats[grRejected]);
+    fServer.IncStat(grRejected);
     exit;
   end;
   // now THttpAsyncConnection.OnRead can get the body
-  LockedInc32(@fServer.fStats[grHeaderReceived]);
-  if (fHttp.State <> hrsWaitProcessing) and
+  fServer.IncStat(grHeaderReceived);
+  if not (fHttp.State in [hrsWaitProcessing, hrsUpgraded]) and
      HttpMethodWithNoBody(fHttp.CommandMethod) then
     // HEAD and OPTIONS are requests with Content-Length header but no body
     result := DoRequest
@@ -2400,7 +2475,7 @@ var
 begin
   // check the status
   if nfHeadersParsed in fHttp.HeaderFlags then
-    LockedInc32(@fServer.fStats[grBodyReceived])
+    fServer.IncStat(grBodyReceived)
   else
     begin
       // content-length was 0, so hrsGetBody* and DoHeaders() were not called
@@ -2433,7 +2508,7 @@ begin
           // intercept and return Internal Server Error 500
           req.RespStatus := HTTP_SERVERERROR;
           FormatString('%: %', [E, E.Message], err);
-          LockedInc32(@fServer.fStats[grException]);
+          fServer.IncStat(grException);
           // will keep soClose as result to shutdown the connection
         end;
     end;
@@ -2486,8 +2561,10 @@ begin
     aco := ASYNC_OPTION_PROD;   // default is to log only errors/warnings
   //include(aco, acoNoConnectionTrack);
   //include(aco, acoWritePollOnly);
+  if fConnectionClass = nil then
+    fConnectionClass := THttpAsyncConnection;
   fAsync := THttpAsyncConnections.Create(aPort, OnStart, OnStop,
-    THttpAsyncConnection, ProcessName, TSynLog, aco, ServerThreadPoolCount);
+    fConnectionClass, ProcessName, TSynLog, aco, ServerThreadPoolCount);
   fAsync.fAsyncServer := self;
   fExecuteState := fAsync.fExecuteState;
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,

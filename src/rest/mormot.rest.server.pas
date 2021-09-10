@@ -2202,7 +2202,8 @@ type
     // server side, so that RecordVersionSynchronizeStartSlave() will be able
     // to receive push notifications of any updates
     // - this method expects the communication channel to be bidirectional, e.g.
-    // a mormot.rest.http.server's TRestHttpServer in useBidirSocket mode
+    // a mormot.rest.http.server's TRestHttpServer in WEBSOCKETS_DEFAULT_MODE
+    // useBidirSocket/useBidirAsync mode
     function RecordVersionSynchronizeMasterStart(
       ByPassAuthentication: boolean = false): boolean;
     /// initiate asynchronous master/slave replication on a slave TRest
@@ -2237,7 +2238,8 @@ type
     // - the callback process will be blocking for the ORM write point of view:
     // so it should be as fast as possible, or asynchronous - note that regular
     // callbacks using WebSockets, as implemented by mormot.net.ws.core.server and
-    // mormot.rest.http.server's TRestHttpServer on useBidirSocket, are asynchronous
+    // mormot.rest.http.server's TRestHttpServer in WEBSOCKETS_DEFAULT_MODE
+    // useBidirSocket/useBidirAsync mode
     // - if the supplied RecordVersion is not the latest on the server side,
     // this method will return FALSE and the caller should synchronize again via
     // RecordVersionSynchronize() to avoid any missing update

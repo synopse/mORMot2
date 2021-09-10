@@ -679,7 +679,7 @@ var
     begin
       serv := TTestBidirectionalRemoteConnection(Test).HttpServer;
       Test.check(serv.AddServer(Master));
-      serv.WebSocketsEnable(Master, 'key2').Settings.SetFullLog;
+      serv.WebSocketsEnable(Master, 'key2')^.SetFullLog;
       ws := TRestHttpClientWebsockets.Create(
         '127.0.0.1', HTTP_DEFAULTPORT, TOrmModel.Create(Model));
       ws.Model.Owner := ws;
