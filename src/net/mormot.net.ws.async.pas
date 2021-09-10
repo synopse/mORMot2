@@ -170,6 +170,8 @@ type
       override;
   end;
 
+
+
 implementation
 
 
@@ -381,7 +383,7 @@ end;
 procedure TWebSocketAsyncServer.WebSocketBroadcast(const aFrame: TWebSocketFrame);
 var
   i, len, sec: PtrInt;
-  temp: TWebSocketFrame; // local copies since SendFrame() modifies the payload
+  temp: TWebSocketFrame; // local copy since SendFrame() modifies the payload
 begin
   if Terminated or
      not (aFrame.opcode in [focText, focBinary]) then
@@ -405,26 +407,29 @@ end;
 procedure TWebSocketAsyncServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
   const aClientsConnectionID: THttpServerConnectionIDDynArray);
 var
-  i, len, sec: PtrInt;
+  i, sec: PtrInt;
   c: TAsyncConnection;
-  temp: TWebSocketFrame; // local copy since SendFrame() modifies the payload
+  temp: TWebSocketFrameDynArray; // local copies since SendFrame() modifies it
 begin
   if Terminated or
      not (aFrame.opcode in [focText, focBinary]) then
     exit;
+  SetLength(temp, length(aClientsConnectionID)); // memory alloc outside Lock
+  for i := 0 to length(temp) - 1 do
+    with temp[i] do
+    begin
+      opcode := aFrame.opcode;
+      content := aFrame.content;
+      SetString(payload, PAnsiChar(pointer(aFrame.payload)), length(aFrame.payload));
+    end;
   sec := GetTickCount64 shr 10;
-  temp.opcode := aFrame.opcode;
-  temp.content := aFrame.content;
-  len := length(aFrame.payload);
   fAsync.Lock;
   try
     for i := 0 to length(aClientsConnectionID) - 1 do
     begin
       c := fAsync.ConnectionSearch(aClientsConnectionID[i]); // O(log(n)) search
-      if c = nil then
-        continue;
-      SetString(temp.payload, PAnsiChar(pointer(aFrame.payload)), len);
-      TWebSocketAsyncConnection(c).fProcess.Outgoing.Push(temp, sec);
+      if c <> nil then
+        TWebSocketAsyncConnection(c).fProcess.Outgoing.Push(temp[i], sec);
     end;
   finally
     fAsync.UnLock;
