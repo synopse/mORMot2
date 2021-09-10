@@ -1899,6 +1899,22 @@ function GetDiskInfo(var aDriveFolderOrFile: TFileName;
 // - returned partitions array is sorted by "mounted" ascending order
 function GetDiskPartitions: TDiskPartitions;
 
+/// call several Operating System APIs to gather 512-bit of entropy information
+procedure XorOSEntropy(var e: THash512Rec);
+
+/// low-level function returning some random binary from then available
+// Operating System pseudorandom source
+// - will call /dev/urandom or /dev/random under POSIX, and CryptGenRandom API
+// on Windows then return TRUE, or fallback to mormot.core.base gsl_rng_taus2
+// generator and return FALSE if the system API failed
+// - on POSIX, only up to 32 bytes (256 bits) bits are retrieved from /dev/urandom
+// or /dev/random as stated by "man urandom" Usage - then RandomBytes() padded
+// - so you may consider that the output Buffer is always filled with random
+// - you should not have to call this procedure, but faster and safer TAesPrng
+// from mormot.crypt.core - also consider the TSystemPrng class
+function FillSystemRandom(Buffer: PByteArray; Len: integer;
+  AllowBlocking: boolean): boolean;
+
 type
   /// available console colors
   TConsoleColor = (

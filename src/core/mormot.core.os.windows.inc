@@ -937,9 +937,9 @@ begin
     begin
       FileTimeToInt64(ftkrn, KernelTime);
       FileTimeToInt64(ftusr, UserTime);
-      FillCharFast(mem,SizeOf(mem),0);
+      FillCharFast(mem, SizeOf(mem), 0);
       mem.cb := SizeOf(mem);
-      if GetProcessMemoryInfo(h,mem,SizeOf(mem)) then
+      if GetProcessMemoryInfo(h, mem, SizeOf(mem)) then
       begin
         WorkKB := mem.WorkingSetSize shr 10;
         VirtualKB := mem.PagefileUsage shr 10;
@@ -949,6 +949,48 @@ begin
   finally
     CloseHandle(h);
   end;
+end;
+
+function CoCreateGuid(out guid: THash128Rec): HRESULT; stdcall; external 'ole32.dll';
+
+procedure XorOSEntropy(var e: THash512Rec);
+var
+  h: THash128Rec;
+begin
+  QueryPerformanceCounter(h.Lo);
+  e.i[0] := e.i[0] xor h.Lo;
+  RetrieveProcessInfo(GetCurrentProcessId, e.i[1], e.i[2], e.c[6], e.c[7]);
+  RetrieveSystemTimes(e.i[5], e.i[6], e.i[7]);
+  CoCreateGuid(h); // very fast on Windows - used to obfuscate system info
+  e.i[1] := e.i[1] xor h.Lo;
+  e.i[2] := e.i[2] xor h.Hi;
+  CoCreateGuid(h);
+  e.i[3] := e.i[3] xor h.Lo;
+  e.i[4] := e.i[4] xor h.Hi;
+  CoCreateGuid(h);
+  e.i[5] := e.i[5] xor h.Lo;
+  e.i[6] := e.i[6] xor h.Hi;
+  QueryPerformanceCounter(h.Lo); // is likely to have changed in-between
+  e.i[7] := e.i[7] xor h.Lo;
+end;
+
+function FillSystemRandom(Buffer: PByteArray; Len: integer;
+  AllowBlocking: boolean): boolean;
+var
+  prov: HCRYPTPROV;
+begin
+  result := false;
+  // warning: on some Windows versions, this could take up to 30 ms!
+  if CryptoApi.Available then
+    if CryptoApi.AcquireContextA(prov, nil, nil,
+      PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) then
+    begin
+      result := CryptoApi.GenRandom(prov, Len, Buffer);
+      CryptoApi.ReleaseContext(prov, 0);
+    end;
+  if not result then
+    // OS API call failed -> fallback to our Lecuyer's gsl_rng_taus2 generator
+    RandomBytes(pointer(Buffer), Len);
 end;
 
 function TProcessInfo.Init: boolean;

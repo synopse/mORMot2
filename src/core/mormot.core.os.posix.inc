@@ -582,9 +582,9 @@ var
   mach_timecoeff: double;
   mach_timenanosecond: boolean; // very likely to be TRUE on Intel CPUs
 
-procedure QueryPerformanceCounter(out Value: Int64);
+procedure QueryPerformanceNanosec(out Value: Int64);
 begin
-  // returns time in nano second resolution
+  // Win32-API like function which returns time in nano second resolution
   Value := mach_absolute_time;
   if mach_timeinfo.Denom = 1 then
     if mach_timeinfo.Numer = 1 then
@@ -603,7 +603,7 @@ begin
     Value := mach_absolute_time div THOUSAND
   else
   begin
-    QueryPerformanceCounter(Value);
+    QueryPerformanceNanosec(Value);
     Value := Value div THOUSAND; // ns to us
   end;
 end;
@@ -613,7 +613,7 @@ begin
   if mach_timenanosecond then
     result := mach_absolute_time
   else
-    QueryPerformanceCounter(result);
+    QueryPerformanceNanosec(result);
   result := result div MILLION; // ns to ms
 end;
 
@@ -715,7 +715,7 @@ var
 begin
   clock_gettime(CLOCK_MONOTONIC_PRECISE, @r);
   // convert from nanoseconds into microseconds
-  value := PtrUInt(r.tv_nsec) div THOUSAND + r.tv_sec * MILLION;
+  Value := PtrUInt(r.tv_nsec) div THOUSAND + r.tv_sec * MILLION;
 end;
 
 procedure GetSystemTime(out result: TSystemTime);
@@ -1129,37 +1129,6 @@ begin
   result := FpcCurrentThreadManager.TryEnterCriticalSection(cs);
   {$endif OSPTHREADS}
 end;
-
-{$ifdef OSBSDDARWIN}
-
-function fpsysctlhwint(hwid: cint): Int64;
-var mib: array[0..1] of cint;
-    len: cint;
-begin
-  result := 0;
-  mib[0] := CTL_HW;
-  mib[1] := hwid;
-  len := SizeOf(result);
-  fpsysctl(pointer(@mib), 2, @result, @len, nil, 0);
-end;
-
-function fpsysctlhwstr(hwid: cint; var temp: shortstring): pointer;
-var mib: array[0..1] of cint;
-    len: cint;
-begin
-  mib[0] := CTL_HW;
-  mib[1] := hwid;
-  FillCharFast(temp, SizeOf(temp), 0); // shortstring as 0-terminated buffer
-  len := SizeOf(temp);
-  fpsysctl(pointer(@mib), 2, @temp, @len, nil, 0);
-  if temp[0] <> #0 then
-    result := @temp
-  else
-    result := nil;
-end;
-
-{$endif OSBSDDARWIN}
-
 function GetFileOpenLimit(hard: boolean): integer;
 var
   limit: TRLIMIT;
@@ -1494,16 +1463,42 @@ begin
 end;
 
 {$ifdef OSBSDDARWIN}
-// https://kaashif.co.uk/2015/06/18/how-to-get-a-list-of-processes-on-openbsd-in-c/
 
 function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
 begin
-  result := nil;
+  result := nil; // not implemented yet on BSD/Darwin
+  // https://kaashif.co.uk/2015/06/18/how-to-get-a-list-of-processes-on-openbsd-in-c/
 end;
 
 function EnumProcessName(PID: cardinal): RawUtf8;
 begin
   result := '';
+end;
+
+function fpsysctlhwint(hwid: cint): Int64;
+var mib: array[0..1] of cint;
+    len: cint;
+begin
+  result := 0;
+  mib[0] := CTL_HW;
+  mib[1] := hwid;
+  len := SizeOf(result);
+  fpsysctl(pointer(@mib), 2, @result, @len, nil, 0);
+end;
+
+function fpsysctlhwstr(hwid: cint; var temp: shortstring): pointer;
+var mib: array[0..1] of cint;
+    len: cint;
+begin
+  mib[0] := CTL_HW;
+  mib[1] := hwid;
+  FillCharFast(temp, SizeOf(temp), 0); // shortstring as 0-terminated buffer
+  len := SizeOf(temp);
+  fpsysctl(pointer(@mib), 2, @temp, @len, nil, 0);
+  if temp[0] <> #0 then
+    result := @temp
+  else
+    result := nil;
 end;
 
 type
@@ -1520,6 +1515,38 @@ begin
     result := Format('%g %g %g', [avg[0], avg[1], avg[2]])
   else
     result := '';
+end;
+
+function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+begin
+  FillCharFast(info, SizeOf(info), 0);
+  info.memtotal := fpsysctlhwint(
+    {$ifdef OSDARWIN} HW_MEMSIZE {$else} HW_PHYSMEM {$endif});
+  info.memfree := info.memtotal - fpsysctlhwint(HW_USERMEM);
+  result := info.memtotal <> 0;// avoid div per 0 exception
+  if result then
+    info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
+end;
+
+procedure XorOSEntropy(var e: THash512Rec);
+var
+  avg: TLoadAvg;
+  mem: TMemoryInfo;
+  us: Int64;
+begin
+  QueryPerformanceMicroSeconds(us);
+  e.i[0] := e.i[0] xor us;
+  getloadavg(avg, 3);
+  DefaultHasher128(@e.h1, @avg, SizeOf(avg));
+  GetMemoryInfo(mem, {withalloc=}false);
+  DefaultHasher128(@e.h2, @mem, SizeOf(mem));
+  {$ifdef OSDARWIN} // FPC CreateGUID calls /dev/urandom which is not advised
+  e.i[6] := e.i[6] xor mach_absolute_time; // monotonic clock in nanoseconds
+  {$else}
+  CreateGuid(TGUID(e.h3)); // use e.g. FreeBSD syscall or /dev/urandom
+  {$endif OSDARWIN}
+  QueryPerformanceMicroSeconds(us); // should have changed in-between
+  e.i[7] := e.i[7] xor us;
 end;
 
 {$else}
@@ -1604,6 +1631,58 @@ begin
   result := StringFromFile('/proc/loadavg', {nosize=}true);
 end;
 
+function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+var
+  si: TSysInfo; // Linuxism
+  P: PUtf8Char;
+  mu: PtrUInt;
+begin
+  FillCharFast(info, SizeOf(info), 0);
+  result := SysInfo(@si) = 0;
+  mu := si.mem_unit;
+  if si.totalram <> 0 then // avoid div per 0 exception
+    info.percent := ((si.totalram - si.freeram) * 100) div si.totalram;
+  info.memtotal := si.totalram * mu;
+  info.memfree := si.freeram * mu;
+  info.filetotal := si.totalswap * mu;
+  info.filefree := si.freeswap * mu;
+  // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
+  if withalloc then
+  begin
+    // virtual memory information is not available under Linux
+    P := pointer(StringFromFile('/proc/self/statm', {hasnosize=}true));
+    info.allocreserved := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmSize
+    info.allocused := GetNextCardinal(P) * SystemInfo.dwPageSize;     // VmRSS
+  end;
+end;
+
+procedure DoHash128File(var h: THash128; const filename: TFileName);
+var
+  s: RawByteString;
+begin
+  s := StringFromFile(filename, {nosize=}true);
+  DefaultHasher128(@h, pointer(s), length(s)); // maybe AesNiHash128
+end;
+
+procedure XorOSEntropy(var e: THash512Rec);
+var
+  si: TSysInfo;  // Linuxism
+  rt: TTimeSpec; // with nanoseconds resolution
+begin
+  clock_gettime(CLOCK_MONOTONIC_PRECISE, @rt);
+  DefaultHasher128(@e.h0, @rt, SizeOf(rt));
+  SysInfo(@si); // uptime + loadavg + meminfo + numprocess
+  DefaultHasher128(@e.h0, @si, SizeOf(si));
+  // detailed CPU execution context and timing from Linux kernel
+  DoHash128File(e.h0, '/proc/self/statm');
+  DoHash128File(e.h1, '/proc/stat');
+  // read-only random UUID text like '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
+  DoHash128File(e.h2, '/proc/sys/kernel/random/uuid');
+  DoHash128File(e.h3, '/proc/sys/kernel/random/boot_id');
+  clock_gettime(CLOCK_MONOTONIC_PRECISE, @rt); // should have changed in-between
+  DefaultHasher128(@e.h3, @rt, SizeOf(rt));
+end;
+
 {$endif OSBSDDARWIN}
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
@@ -1657,43 +1736,33 @@ begin
   Idle := 100 - Kernel - User; // ensure sum is always 100%
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
 
-{$ifdef OSBSDDARWIN}
-function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
-begin
-  FillCharFast(info, SizeOf(info), 0);
-  info.memtotal := fpsysctlhwint(
-    {$ifdef OSDARWIN} HW_MEMSIZE {$else} HW_PHYSMEM {$endif});
-  info.memfree := info.memtotal - fpsysctlhwint(HW_USERMEM);
-  result := info.memtotal <> 0;// avoid div per 0 exception
-  if result then
-    info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
-end;
-{$else}
-function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+
+function FillSystemRandom(Buffer: PByteArray; Len: integer;
+  AllowBlocking: boolean): boolean;
 var
-  si: TSysInfo; // Linuxism
-  P: PUtf8Char;
-  mu: PtrUInt;
+  rd, dev: integer;
 begin
-  FillCharFast(info, SizeOf(info), 0);
-  result := SysInfo(@si) = 0;
-  mu := si.mem_unit;
-  if si.totalram <> 0 then // avoid div per 0 exception
-    info.percent := ((si.totalram - si.freeram) * 100) div si.totalram;
-  info.memtotal := si.totalram * mu;
-  info.memfree := si.freeram * mu;
-  info.filetotal := si.totalswap * mu;
-  info.filefree := si.freeswap * mu;
-  // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
-  if withalloc then
-  begin
-    // virtual memory information is not available under Linux
-    P := pointer(StringFromFile('/proc/self/statm', {hasnosize=}true));
-    info.allocreserved := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmSize
-    info.allocused := GetNextCardinal(P) * SystemInfo.dwPageSize;     // VmRSS
-  end;
+  result := false;
+  dev := FileOpen('/dev/urandom', fmOpenRead); // non blocking on Linux and BSD
+  if (dev <= 0) and
+     AllowBlocking then
+    dev := FileOpen('/dev/random', fmOpenRead); // may block until reach entropy
+  if dev > 0 then
+    try
+      rd := 32; // read up to 256 bits - see "man urandom" Usage paragraph
+      if Len <= 32 then
+        rd := Len;
+      result := (FileRead(dev, Buffer[0], rd) = rd);
+      if result and
+         (Len > 32) then
+        RandomBytes(@Buffer[32], Len - 32); // simple gsl_rng_taus2 padding
+    finally
+      FileClose(dev);
+    end;
+  if not result then
+    // OS API call failed -> fallback to our Lecuyer's gsl_rng_taus2 generator
+    RandomBytes(pointer(Buffer), Len);
 end;
-{$endif OSBSDDARWIN}
 
 function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   out aAvailableBytes, aFreeBytes, aTotalBytes: QWord): boolean;
