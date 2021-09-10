@@ -247,6 +247,8 @@ type
   // (will retry only once); this is faster, uses less resources (especialy
   // under Windows), and is the recommended way to implement a HTTP/1.1 server
   // - on any error (timeout, connection closed) will retry once to get the value
+  // - note that this client is not thread-safe: either use a critical section
+  // (as we do in TRestClientUri), or create one instance per thread
   // - don't forget to use Free procedure when you are finished
   THttpClientSocket = class(THttpSocket)
   protected
