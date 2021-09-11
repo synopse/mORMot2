@@ -183,7 +183,9 @@ constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
 var
   endtix: Int64;
 begin
-  fMaskSentFrames := FRAME_LEN_MASK; // https://tools.ietf.org/html/rfc6455#section-10.3
+  // https://tools.ietf.org/html/rfc6455#section-10.3
+  // client-to-server masking is mandatory (but not from server to client)
+  fMaskSentFrames := FRAME_LEN_MASK;
   inherited Create(aSender, aProtocol, 0, nil, @aSender.fSettings, aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
   fClientThread := TWebSocketProcessClientThread.Create(self);

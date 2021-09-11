@@ -85,6 +85,10 @@ type
       override; // called every 10 seconds
     function DecodeHeaders: integer; override;
     procedure BeforeDestroy; override;
+    // used e.g. by TWebSocketAsyncServer.WebSocketBroadcast
+    function SendDirect(const tmp: TSynTempBuffer;
+      opcode: TWebSocketFrameOpCode): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
 
   /// HTTP/WebSockets server using non-blocking sockets
@@ -107,16 +111,15 @@ type
     // so you should better not modify them once the server started
     function Settings: PWebSocketProcessSettings;
       {$ifdef HASINLINE}inline;{$endif}
-    /// will send a given frame to all connected clients
-    // - expect aFrame.opcode to be either focText or focBinary
-    // - will call TWebSocketProcess.Outgoing.Push for asynchronous sending
-    procedure WebSocketBroadcast(const aFrame: TWebSocketFrame); overload;
     /// will send a given frame to clients matching the supplied connection IDs
     // - expect aFrame.opcode to be either focText or focBinary
     // - WebSocketBroadcast(nil) will broadcast to all running websockets
-    // - will call TWebSocketProcess.Outgoing.Push for asynchronous sending
-    procedure WebSocketBroadcast(const aFrame: TWebSocketFrame;
-      const aClientsConnectionID: THttpServerConnectionIDDynArray); overload;
+    // - returns the number of sent frames
+    // - warning: the raw frame will be directly sent with no encoding (i.e.
+    // no encryption nor compression) so is to be used with raw protocols
+    // (e.g. to efficiently notify AJAX browsers)
+    function WebSocketBroadcast(const aFrame: TWebSocketFrame;
+      const aClientsConnectionID: THttpServerConnectionIDDynArray): integer;
     /// access to the protocol list handled by this server
     property WebSocketProtocols: TWebSocketProtocolList
       read fProtocols;
@@ -270,6 +273,20 @@ begin
   FreeAndNil(fProcess);
 end;
 
+function TWebSocketAsyncConnection.SendDirect(const tmp: TSynTempBuffer;
+  opcode: TWebSocketFrameOpCode): boolean;
+begin
+  if self = nil then
+    result := false
+  else
+  begin
+    result := fOwner.Write(self, tmp.buf, tmp.len, {timeout=}0);
+    if result and
+       (opcode = focConnectionClose) then
+      fProcess.fConnectionCloseWasSent := true;
+  end;
+end;
+
 
 { TWebSocketAsyncProcess }
 
@@ -381,61 +398,33 @@ begin
   result := @fSettings;
 end;
 
-procedure TWebSocketAsyncServer.WebSocketBroadcast(const aFrame: TWebSocketFrame);
+function TWebSocketAsyncServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
+  const aClientsConnectionID: THttpServerConnectionIDDynArray): integer;
 var
-  i, len, sec: PtrInt;
-  temp: TWebSocketFrame; // local copy since SendFrame() modifies the payload
+  i: PtrInt;
+  tmp: TSynTempBuffer;
 begin
+  result := 0;
   if Terminated or
-     not (aFrame.opcode in [focText, focBinary]) then
+     not (aFrame.opcode in [focText, focBinary, focConnectionClose]) then
     exit;
-  sec := GetTickCount64 shr 10;
-  temp.opcode := aFrame.opcode;
-  temp.content := aFrame.content;
-  len := length(aFrame.payload);
+  FrameSendEncode(aFrame, {mask=}0, tmp);
   fAsync.Lock;
   try
-    for i := 0 to fAsync.ConnectionCount - 1 do
-    begin
-      SetString(temp.payload, PAnsiChar(pointer(aFrame.payload)), len);
-      TWebSocketAsyncConnection(fAsync.Connection[i]).
-        fProcess.Outgoing.Push(temp, sec); // async sending
-    end;
+    if aClientsConnectionID = nil then
+      // broadcast to all connected clients
+      for i := 0 to fAsync.ConnectionCount - 1 do
+        inc(result, ord(TWebSocketAsyncConnection(fAsync.Connection[i]).
+           SendDirect(tmp, aFrame.opcode)))
+    else
+      // broadcast to some specified connected clients
+      for i := 0 to length(aClientsConnectionID) - 1 do
+        inc(result, ord(TWebSocketAsyncConnection(
+          fAsync.ConnectionSearch(aClientsConnectionID[i])). // O(log(n)) search
+            SendDirect(tmp, aFrame.opcode)));
   finally
     fAsync.UnLock;
-  end;
-end;
-
-procedure TWebSocketAsyncServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
-  const aClientsConnectionID: THttpServerConnectionIDDynArray);
-var
-  i, len, sec: PtrInt;
-  c: TAsyncConnection;
-  temp: TWebSocketFrameDynArray; // local copies since SendFrame() modifies it
-begin
-  if Terminated or
-     not (aFrame.opcode in [focText, focBinary]) then
-    exit;
-  len := length(aFrame.payload);
-  SetLength(temp, length(aClientsConnectionID)); // memory alloc outside Lock
-  for i := 0 to length(temp) - 1 do
-    with temp[i] do
-    begin
-      opcode := aFrame.opcode;
-      content := aFrame.content;
-      SetString(payload, PAnsiChar(pointer(aFrame.payload)), len);
-    end;
-  sec := GetTickCount64 shr 10;
-  fAsync.Lock;
-  try
-    for i := 0 to length(aClientsConnectionID) - 1 do
-    begin
-      c := fAsync.ConnectionSearch(aClientsConnectionID[i]); // O(log(n)) search
-      if c <> nil then
-        TWebSocketAsyncConnection(c).fProcess.Outgoing.Push(temp[i], sec);
-    end;
-  finally
-    fAsync.UnLock;
+    tmp.Done;
   end;
 end;
 

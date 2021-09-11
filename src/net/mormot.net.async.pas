@@ -202,7 +202,8 @@ type
     function Write(connection: TObject; const data; datalen: integer;
       timeout: integer = 5000): boolean; virtual;
     /// add some data to the asynchronous output buffer of a given connection
-    function WriteString(connection: TObject; const data: RawByteString): boolean;
+    function WriteString(connection: TObject; const data: RawByteString;
+      timeout: integer = 5000): boolean;
     /// one or several threads should execute this method
     // - thread-safe handle of any notified incoming packet
     function ProcessRead(const notif: TPollSocketResult): boolean;
@@ -492,10 +493,12 @@ type
     procedure EndConnection(connection: TAsyncConnection);
     /// add some data to the asynchronous output buffer of a given connection
     // - could be executed e.g. from a TAsyncConnection.OnRead method
-    function Write(connection: TAsyncConnection; const data; datalen: integer): boolean; overload;
+    function Write(connection: TAsyncConnection; const data; datalen: integer;
+      timeout: integer = 5000): boolean; overload;
     /// add some data to the asynchronous output buffer of a given connection
     // - could be executed e.g. from a TAsyncConnection.OnRead method
-    function Write(connection: TAsyncConnection; const data: RawByteString): boolean; overload;
+    function Write(connection: TAsyncConnection; const data: RawByteString;
+      timeout: integer = 5000): boolean; overload;
     /// log some binary data with proper escape
     // - can be executed from an TAsyncConnection.OnRead method to track content:
     // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(self,...);
@@ -1025,12 +1028,12 @@ begin
 end;
 
 function TPollAsyncSockets.WriteString(connection: TObject;
-  const data: RawByteString): boolean;
+  const data: RawByteString; timeout: integer): boolean;
 begin
   if self = nil then
     result := false
   else
-    result := Write(connection, pointer(data)^, length(data));
+    result := Write(connection, pointer(data)^, length(data), timeout);
 end;
 
 function TPollAsyncSockets.Write(connection: TObject; const data;
@@ -1122,7 +1125,8 @@ begin
   end
   else
   begin
-    // WaitLock() should always work - unless the connection is closing
+    // WaitLock() should always work - unless the connection is closing or
+    // several write operations collide (e.g. websockets broadcast + process)
     if fDebugLog <> nil then
       DoLog('Write: WaitLock failed % %', [pointer(connection), fWrite]);
     LockedDec32(@fProcessingWrite);
@@ -1990,16 +1994,16 @@ begin
 end;
 
 function TAsyncConnections.Write(connection: TAsyncConnection;
-  const data; datalen: integer): boolean;
+  const data; datalen, timeout: integer): boolean;
 begin
   if Terminated then
     result := false
   else
-    result := fClients.Write(connection, data, datalen);
+    result := fClients.Write(connection, data, datalen, timeout);
 end;
 
 function TAsyncConnections.Write(connection: TAsyncConnection;
-  const data: RawByteString): boolean;
+  const data: RawByteString; timeout: integer): boolean;
 begin
   if Terminated then
     result := false

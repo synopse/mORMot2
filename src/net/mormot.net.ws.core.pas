@@ -101,6 +101,8 @@ type
 
 const
   FRAME_OPCODE_FIN = 128;
+  // https://tools.ietf.org/html/rfc6455#section-10.3
+  // client-to-server masking is mandatory (but not from server to client)
   FRAME_LEN_MASK = 128;
   FRAME_LEN_2BYTES = 126;
   FRAME_LEN_8BYTES = 127;
@@ -113,6 +115,15 @@ function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
 /// low-level intitialization of a TWebSocketFrame for proper REST content
 procedure FrameInit(opcode: TWebSocketFrameOpCode;
   const Content, ContentType: RawByteString; out frame: TWebSocketFrame);
+
+/// low-level encoding of an output frame
+// - don't make any fProtocol.BeforeSendFrame virtual encoding (like
+// binary compression or encryption), but prepare the outgoing frame, ready
+// to be sent over the socket
+// - encoded buffer is a TSynTempBuffer to avoid most memory allocations
+// - caller should always finally perform an eventual ToSend.Done
+procedure FrameSendEncode(const Frame: TWebSocketFrame;
+  MaskSentFrames: cardinal; var ToSend: TSynTempBuffer);
 
 /// compute the SHA-1 signature of the given challenge
 procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSha1Digest);
@@ -985,6 +996,49 @@ begin
   else
     frame.content := [];
 end;
+
+procedure FrameSendEncode(const Frame: TWebSocketFrame;
+  MaskSentFrames: cardinal; var ToSend: TSynTempBuffer);
+var
+  hdr: TFrameHeader;
+  hdrlen, len: cardinal;
+begin
+  len := Length(Frame.payload);
+  hdr.first := byte(Frame.opcode) or FRAME_OPCODE_FIN; // single frame
+  if len < FRAME_LEN_2BYTES then
+  begin
+    hdr.len8 := len or MaskSentFrames;
+    hdrlen := 2; // opcode+len8
+  end
+  else if len < 65536 then
+  begin
+    hdr.len8 := FRAME_LEN_2BYTES or MaskSentFrames;
+    hdr.len32 := swap(word(len)); // FPC expects explicit word() cast
+    hdrlen := 4; // opcode+len8+len32.low
+  end
+  else
+  begin
+    hdr.len8 := FRAME_LEN_8BYTES or MaskSentFrames;
+    hdr.len64 := bswap32(len);
+    hdr.len32 := 0;
+    hdrlen := 10; // opcode+len8+len32+len64.low
+  end;
+  if MaskSentFrames <> 0 then
+  begin
+    // https://tools.ietf.org/html/rfc6455#section-10.3
+    // client-to-server masking is mandatory (but not from server to client)
+    hdr.mask := Random32;
+    ProcessMask(pointer(Frame.payload), hdr.mask, len);
+    inc(hdrlen, 4);
+  end;
+  ToSend.Init(hdrlen + len); // avoid most memory allocations
+  MoveSmall(@hdr, ToSend.buf, hdrlen);
+  if MaskSentFrames <> 0 then
+    // hdr.mask is not at the right position: append to actual end of header
+    PInteger(PAnsiChar(ToSend.buf) + hdrlen - 4)^ := hdr.mask;
+  MoveFast(pointer(Frame.payload)^, PAnsiChar(ToSend.buf)[hdrlen], len);
+end;
+
 
 
 { ******************** WebSockets Protocols Implementation }
@@ -2677,64 +2731,30 @@ end;
 
 function TWebSocketProcess.SendFrame(var Frame: TWebSocketFrame): boolean;
 var
-  hdr: TFrameHeader;
-  hdrlen, len: cardinal;
   tmp: TSynTempBuffer;
 begin
   EnterCriticalSection(fSafeOut);
   try
     Log(Frame, 'SendFrame', sllTrace, true);
     try
-      result := true;
       if Frame.opcode = focConnectionClose then
         fConnectionCloseWasSent := true; // to be done once on each end
       if (fProtocol <> nil) and
          (Frame.payload <> '') then
-        fProtocol.BeforeSendFrame(Frame);
-      len := Length(Frame.payload);
-      hdr.first := byte(Frame.opcode) or FRAME_OPCODE_FIN; // single frame
-      if len < FRAME_LEN_2BYTES then
-      begin
-        hdr.len8 := len or fMaskSentFrames;
-        hdrlen := 2; // opcode+len8
-      end
-      else if len < 65536 then
-      begin
-        hdr.len8 := FRAME_LEN_2BYTES or fMaskSentFrames;
-        hdr.len32 := swap(word(len)); // FPC expects explicit word() cast
-        hdrlen := 4; // opcode+len8+len32.low
-      end
-      else
-      begin
-        hdr.len8 := FRAME_LEN_8BYTES or fMaskSentFrames;
-        hdr.len64 := bswap32(len);
-        hdr.len32 := 0;
-        hdrlen := 10; // opcode+len8+len32+len64.low
-      end;
-      if fMaskSentFrames <> 0 then
-      begin
-        hdr.mask := Random32; // https://tools.ietf.org/html/rfc6455#section-10.3
-        ProcessMask(pointer(Frame.payload), hdr.mask, len);
-        inc(hdrlen, 4);
-      end;
-      tmp.Init(hdrlen + len); // avoid most memory allocations
+        fProtocol.BeforeSendFrame(Frame); // may encrypt/compress in-place
+      FrameSendEncode(Frame, fMaskSentFrames, tmp);
       try
-        MoveSmall(@hdr, tmp.buf, hdrlen);
-        if fMaskSentFrames <> 0 then
-          PInteger(PAnsiChar(tmp.buf) + hdrlen - 4)^ := hdr.mask;
-        MoveFast(pointer(Frame.payload)^, PAnsiChar(tmp.buf)[hdrlen], len);
-        if not SendBytes(tmp.buf, hdrlen + len) then
-          result := false;
+        result := SendBytes(tmp.buf, tmp.len);
       finally
         tmp.Done;
       end;
-      if not result then
-        MarkAsInvalid
-      else if not fNoLastSocketTicks then
-        SetLastPingTicks;
     except
       result := false;
     end;
+    if not result then
+      MarkAsInvalid
+    else if not fNoLastSocketTicks then
+      SetLastPingTicks;
   finally
     LeaveCriticalSection(fSafeOut);
   end;
@@ -2864,6 +2884,7 @@ begin
   if result then
   begin
     if hdr.mask <> 0 then
+      // client-to-server masking is mandatory (but not from server to client)
       ProcessMask(pointer(data), hdr.mask, hdr.len32);
     len := 0; // prepare next upcoming GetHeader
   end;
