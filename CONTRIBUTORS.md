@@ -35,10 +35,11 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Esteban Martin (EMartin)
 - Eugene Ilyin
 - Eva Freimann (EVaF)
-- Evan (eblaudy)
+- Evan Blaudy (eblaudy)
 - F-Vicente
 - Goran Despalatovic (gigo)
 - Hubert Touvet
+- Javierus TK
 - Jean-Baptiste Roussia (jbroussia)
 - Joe (jokusoft)
 - Johan Bontes
@@ -51,6 +52,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Marcos Douglas B. Santos (mdbs99)
 - Mario Moretti
 - Marius Maximus (mariuszekpl)
+- Martin Doyle
 - Martin Eckes
 - Martin Suer
 - Matkov
@@ -80,7 +82,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - SSoftPro
 - Stefan (itSDS)
 - Svetozar Belic (transmogrifix)
-- Transmogrifix
+- Tino Teuber
 - Uian2000
 - Vaclav
 - Vadim Orel
