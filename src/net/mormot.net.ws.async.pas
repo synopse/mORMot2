@@ -242,6 +242,7 @@ var
 begin
   result := inherited DecodeHeaders; // e.g. HTTP_TIMEOUT or OnBeforeBody()
   if (result = HTTP_SUCCESS) and
+     (fHttp.Upgrade <> '') and
      (hfConnectionUpgrade in fHttp.HeaderFlags) then
   begin
     // try to upgrade to one of the registered WebSockets protocol
@@ -391,6 +392,7 @@ begin
   sec := GetTickCount64 shr 10;
   temp.opcode := aFrame.opcode;
   temp.content := aFrame.content;
+  len := length(aFrame.payload);
   fAsync.Lock;
   try
     for i := 0 to fAsync.ConnectionCount - 1 do
@@ -407,20 +409,21 @@ end;
 procedure TWebSocketAsyncServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
   const aClientsConnectionID: THttpServerConnectionIDDynArray);
 var
-  i, sec: PtrInt;
+  i, len, sec: PtrInt;
   c: TAsyncConnection;
   temp: TWebSocketFrameDynArray; // local copies since SendFrame() modifies it
 begin
   if Terminated or
      not (aFrame.opcode in [focText, focBinary]) then
     exit;
+  len := length(aFrame.payload);
   SetLength(temp, length(aClientsConnectionID)); // memory alloc outside Lock
   for i := 0 to length(temp) - 1 do
     with temp[i] do
     begin
       opcode := aFrame.opcode;
       content := aFrame.content;
-      SetString(payload, PAnsiChar(pointer(aFrame.payload)), length(aFrame.payload));
+      SetString(payload, PAnsiChar(pointer(aFrame.payload)), len);
     end;
   sec := GetTickCount64 shr 10;
   fAsync.Lock;

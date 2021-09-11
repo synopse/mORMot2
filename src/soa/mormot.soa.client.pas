@@ -711,7 +711,9 @@ begin
     end
     else
     begin
-      if (JsonDecode(pointer(resp), ['result', 'id'], @Values, true) = nil) or
+      if (JsonDecode(pointer(resp), ['result', // 0
+                                     'id'      // 1
+                                    ], @Values, true) = nil) or
          ({%H-}Values[0].Value = nil) then
       begin
         // no "result":... layout
