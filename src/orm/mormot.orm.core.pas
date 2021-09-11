@@ -9030,7 +9030,7 @@ begin
   end;
   W.BlockBegin('{', Options);
   W.AddPropJSONInt64('RowID', TOrm(Instance).fID);
-  props := OrmProps.Fields;
+  props := TOrm(Instance).OrmProps.Fields;
   cur := pointer(props.List);
   n := props.Count;
   repeat
