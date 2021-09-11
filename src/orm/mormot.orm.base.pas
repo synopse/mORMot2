@@ -4373,6 +4373,7 @@ procedure TOrmPropInfoRtti.CopyProp(Source: TObject; DestInfo: TOrmPropInfo;
   Dest: TObject);
 var
   i: PtrInt;
+  destInfoRtti: TOrmPropInfoRtti;
 begin
   if (Source = nil) or
      (DestInfo = nil) or
@@ -4381,9 +4382,13 @@ begin
   if fFlattenedProps <> nil then
     for i := 0 to length(fFlattenedProps) - 1 do
       Source := fFlattenedProps[i].GetObjProp(Source);
-  if fFlattenedProps <> nil then
-    for i := 0 to length(fFlattenedProps) - 1 do
-      Dest := fFlattenedProps[i].GetObjProp(Dest);
+  if DestInfo is TOrmPropInfoRtti then
+  begin
+    destInfoRtti := TOrmPropInfoRtti(DestInfo);
+    if destInfoRtti.fFlattenedProps <> nil then
+      for i := 0 to length(destInfoRtti.fFlattenedProps) - 1 do
+        Dest := destInfoRtti.fFlattenedProps[i].GetObjProp(Dest);
+  end;
   inherited CopyProp(Source, DestInfo, Dest);
 end;
 
