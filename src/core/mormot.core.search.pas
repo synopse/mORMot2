@@ -5113,7 +5113,7 @@ begin
   tmp.Init(value);
   JsonDecode(tmp.buf, ['MaxLength', 'Utf8Length'], @V);
   fMaxLength := GetCardinalDef(V[0].value, 0);
-  fUtf8Length := V[1].Idem('1') or V[1].Idem('true');
+  fUtf8Length := V[1].ToBoolean;
   tmp.Done;
 end;
 
@@ -5193,7 +5193,7 @@ begin
   LowerCaseCopy(V[0].value, V[0].ValueLen, fAllowedTLD);
   LowerCaseCopy(V[1].value, V[1].ValueLen, fForbiddenTLD);
   LowerCaseCopy(V[2].value, V[2].ValueLen, fForbiddenDomains);
-  AnyTLD := V[3].Idem('1') or V[3].Idem('true');
+  AnyTLD := V[3].ToBoolean;
   tmp.Done;
 end;
 
@@ -5373,7 +5373,7 @@ begin
     for i := 0 to high(fProps) do
       fProps[i] := GetCardinalDef(V[i].value, fProps[i]);
     with V[high(V)] do
-      fUtf8Length := Idem('1') or Idem('true');
+      fUtf8Length := ToBoolean;
   finally
     tmp.Done;
   end;

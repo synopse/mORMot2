@@ -1486,6 +1486,8 @@ type
     /// convert the value into an unsigned integer
     function ToCardinal: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
+    /// returns true if Value is either '1' or 'true'
+    function ToBoolean: boolean;
     /// convert the ISO-8601 text value as TDateTime
     // - could have been written e.g. by DateTimeToIso8601Text()
     function Iso8601ToDateTime: TDateTime;
@@ -7768,6 +7770,12 @@ begin
              IdemPropNameUSameLenNotNull(pointer(Text), Value, ValueLen));
 end;
 
+function TValuePUtf8Char.ToBoolean: boolean;
+begin
+  result := (Value <> nil) and
+            ((PWord(Value)^ = ord('1')) or
+             (PCardinal(Value)^ = TRUE_LOW));
+end;
 
 procedure JsonDecode(var Json: RawUtf8; const Names: array of RawUtf8;
   Values: PValuePUtf8CharArray; HandleValuesAsObjectOrArray: boolean);
@@ -7808,7 +7816,7 @@ begin
     if name = nil then
       exit;  // invalid Json content
     value := GetJsonFieldOrObjectOrArray(P, nil, @EndOfObject,
-      HandleValuesAsObjectOrArray, true, @valuelen);
+      HandleValuesAsObjectOrArray, {normalizeboolean=}true, @valuelen);
     if not (EndOfObject in [',', '}']) then
       exit; // invalid item separator
     for i := 0 to n do
