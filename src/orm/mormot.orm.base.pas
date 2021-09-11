@@ -1187,7 +1187,7 @@ type
     /// copy a value from one instance to another property instance
     // - if the property has been flattened (for a TOrmPropInfoRtti), the real
     // Source/Dest instance will be used for the copy
-    procedure CopyProp(Source: TObject; DestInfo: TOrmPropInfo; Dest: TObject); virtual;
+    procedure CopyProp(Source: TObject; DestInfo: TOrmPropInfo; Dest: TObject);
     /// retrieve the property value into a Variant
     // - will set the Variant type to the best matching kind according to the
     // OrmFieldType type
@@ -1220,6 +1220,10 @@ type
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); virtual;
     /// returns an untyped pointer to the field property memory in a given instance
     function GetFieldAddr(Instance: TObject): pointer; virtual; abstract;
+    /// for pilSubClassesFlattening properties, compute the actual instance
+    // containing the property value
+    // - this abstract parent implementation returns the instance
+    function Flattened(Instance: TObject): TObject; virtual;
   end;
 
   /// class-reference type (metaclass) of a TOrmPropInfo information
@@ -1268,10 +1272,6 @@ type
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     /// retrieve the property field offset from RTTI
     function GetFieldAddr(Instance: TObject): pointer; override;
-    /// copy a value from one instance to another property instance
-    // - if the property has been flattened (for a TOrmPropInfoRtti), the real
-    // Source/Dest instance will be used for the copy
-    procedure CopyProp(Source: TObject; DestInfo: TOrmPropInfo; Dest: TObject); override;
     /// get the absolute reading property field offset from RTTI
     property GetterIsFieldPropOffset: PtrUInt
       read fGetterIsFieldPropOffset;
@@ -1281,7 +1281,7 @@ type
     /// for pilSubClassesFlattening properties, compute the actual instance
     // containing the property value
     // - if the property was not flattened, return the instance
-    function Flattened(Instance: TObject): TObject;
+    function Flattened(Instance: TObject): TObject; override;
     /// corresponding RTTI information
     property PropInfo: PRttiProp
       read fPropInfo;
@@ -4283,35 +4283,43 @@ begin
   end;
 end;
 
+procedure GenericCopy(Source, Dest: TObject; SourceInfo, DestInfo: TOrmPropInfo);
+var
+  tmp: RawUtf8;
+  wasString: boolean;
+  val: variant;
+begin
+  if (DestInfo.OrmFieldType = oftVariant) or
+     (SourceInfo.OrmFieldType = oftVariant) then
+  begin
+    // force (doc)variant JSON serialization, e.g. when mapping dynamic arrays
+    SourceInfo.GetVariant(Source, val);
+    DestInfo.SetVariant(Dest, val);
+    exit;
+  end;
+  SourceInfo.GetValueVar(Source, false, tmp, @wasString);
+  DestInfo.SetValueVar(Dest, tmp, wasString);
+end;
+
 procedure TOrmPropInfo.CopyProp(Source: TObject; DestInfo: TOrmPropInfo;
   Dest: TObject);
-
-  procedure GenericCopy;
-  var
-    tmp: RawUtf8;
-    wasString: boolean;
-    val: variant;
-  begin
-    // force JSON serialization, e.g. for dynamic arrays
-    if (DestInfo.OrmFieldType = oftVariant) or
-       (OrmFieldType = oftVariant) then
-    begin
-      GetVariant(Source, val);
-      DestInfo.SetVariant(Dest, val);
-      exit;
-    end;
-    GetValueVar(Source, false, tmp, @wasString);
-    DestInfo.SetValueVar(Dest, tmp, wasString);
-  end;
-
 begin
   if (Source <> nil) and
      (DestInfo <> nil) and
      (Dest <> nil) then
+  begin
+    Source := Flattened(Source);
+    Dest := DestInfo.Flattened(Dest);
     if DestInfo.ClassType = ClassType then
-      CopySameClassProp(Source, DestInfo, Dest)
+      CopySameClassProp(Source, DestInfo, Dest) // fast overriden method
     else
-      GenericCopy;
+      GenericCopy(Source, Dest, self, DestInfo);
+  end;
+end;
+
+function TOrmPropInfo.Flattened(Instance: TObject): TObject;
+begin
+  result := Instance;
 end;
 
 procedure TOrmPropInfo.CopyValue(Source, Dest: TObject);
@@ -4367,29 +4375,6 @@ begin
     result := nil
   else
     result := fPropInfo^.GetFieldAddr(Instance);
-end;
-
-procedure TOrmPropInfoRtti.CopyProp(Source: TObject; DestInfo: TOrmPropInfo;
-  Dest: TObject);
-var
-  i: PtrInt;
-  destInfoRtti: TOrmPropInfoRtti;
-begin
-  if (Source = nil) or
-     (DestInfo = nil) or
-     (Dest = nil) then
-    exit; // avoid GPF
-  if fFlattenedProps <> nil then
-    for i := 0 to length(fFlattenedProps) - 1 do
-      Source := fFlattenedProps[i].GetObjProp(Source);
-  if DestInfo is TOrmPropInfoRtti then
-  begin
-    destInfoRtti := TOrmPropInfoRtti(DestInfo);
-    if destInfoRtti.fFlattenedProps <> nil then
-      for i := 0 to length(destInfoRtti.fFlattenedProps) - 1 do
-        Dest := destInfoRtti.fFlattenedProps[i].GetObjProp(Dest);
-  end;
-  inherited CopyProp(Source, DestInfo, Dest);
 end;
 
 function TOrmPropInfoRtti.Flattened(Instance: TObject): TObject;
