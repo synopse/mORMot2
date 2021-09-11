@@ -1954,8 +1954,7 @@ end;
 
 function TRestStorageInMemoryUnique.EventCompare(const A, B): integer;
 begin
-  result := fPropInfo.CompareValue(
-    TOrm(A), TOrm(B), fCaseInsensitive);
+  result := fPropInfo.CompareValue(TOrm(A), TOrm(B), fCaseInsensitive);
 end;
 
 function TRestStorageInMemoryUnique.EventHash(const Elem): cardinal;
@@ -2590,7 +2589,7 @@ begin
     if P = nil then
       cmp := CompareInt64(v^.IDValue, id{%H-})
     else
-      cmp := P.CompareValue(v^, fSearchRec, CaseInsensitive);
+      cmp := P.CompareValue(v^, fSearchRec, CaseInsensitive); // fast override
     if cmp < 0 then
       found := WhereOp in [opNotEqualTo, opLessThan, opLessThanOrEqualTo]
     else if cmp > 0 then

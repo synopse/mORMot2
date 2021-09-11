@@ -1206,7 +1206,7 @@ type
     // handling RawUtf8 properties just like the SYSTEMNOCASE collation
     // - this method should match the case-sensitivity of GetHash()
     // - this default implementation will call GetValueVar() for slow comparison
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; virtual;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; virtual;
     /// retrieve an unsigned 32-bit hash of the corresponding property
     // - not all kind of properties are handled: only main types
     // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8-bit uppercase,
@@ -1319,7 +1319,7 @@ type
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
@@ -1383,7 +1383,7 @@ type
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
@@ -1426,7 +1426,7 @@ type
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
     procedure NormalizeValue(var Value: RawUtf8); override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
 
@@ -1447,7 +1447,7 @@ type
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
     procedure NormalizeValue(var Value: RawUtf8); override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
 
@@ -1462,8 +1462,7 @@ type
       RawByteString); override;
     procedure NormalizeValue(var Value: RawUtf8); override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean):
-      PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
   end;
 
   /// information about a AnsiString published property
@@ -1487,7 +1486,7 @@ type
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar; var temp:
       RawByteString); override;
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
   end;
@@ -1509,7 +1508,7 @@ type
       var temp: RawByteString); override;
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
   end;
@@ -1526,7 +1525,7 @@ type
       wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
 
@@ -1545,7 +1544,7 @@ type
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar; var temp:
       RawByteString); override;
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     procedure GetBlob(Instance: TObject; var Blob: RawByteString);
@@ -1567,7 +1566,7 @@ type
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
 
@@ -1591,7 +1590,7 @@ type
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); override;
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
   {$endif HASVARUSTRING}
@@ -1624,7 +1623,7 @@ type
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
@@ -1669,7 +1668,7 @@ type
       wasSqlString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
@@ -1782,7 +1781,7 @@ type
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
@@ -1822,7 +1821,7 @@ type
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
+    function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
@@ -4264,7 +4263,7 @@ begin
 end;
 
 function TOrmPropInfo.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 var
   tmp1, tmp2: RawUtf8;
 begin
@@ -4464,7 +4463,7 @@ procedure TOrmPropInfoRttiInt32.GetJsonValues(Instance: TObject; W: TTextWriter)
 var
   v: integer;
 begin
-  if fIntegerGetPropOffset then
+  if fIntegerGetPropOffset then // roSLong without any getter
     W.Add(PInteger(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
   else
   begin
@@ -4504,9 +4503,7 @@ begin
 end;
 
 function TOrmPropInfoRttiInt32.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var
-  A, B: integer;
+  CaseInsensitive: boolean): integer;
 begin
   if Item1 = Item2 then
     result := 0
@@ -4514,20 +4511,13 @@ begin
     result := -1
   else if Item2 = nil then
     result := 1
+  else if fIntegerGetPropOffset then
+    result := CompareInteger( // roSLong inlined comparison
+      PInteger(PtrUInt(Item1) + fGetterIsFieldPropOffset)^,
+      PInteger(PtrUInt(Item2) + fGetterIsFieldPropOffset)^)
   else
-  begin
-    if fIntegerGetPropOffset then
-    begin
-      A := PInteger(PtrUInt(Item1) + fGetterIsFieldPropOffset)^;
-      B := PInteger(PtrUInt(Item2) + fGetterIsFieldPropOffset)^;
-    end
-    else
-    begin
-      A := fPropInfo.GetOrdProp(Item1);
-      B := fPropInfo.GetOrdProp(Item2);
-    end;
-    result := CompareInteger(A, B);
-  end;
+    result := CompareInteger( // use RTTI for any other kind of integers
+      fPropInfo.GetOrdProp(Item1), fPropInfo.GetOrdProp(Item2));
 end;
 
 procedure TOrmPropInfoRttiInt32.SetBinary(Instance: TObject; var Read: TFastReader);
@@ -4813,7 +4803,7 @@ begin
 end;
 
 function TOrmPropInfoRttiInt64.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 var
   V1, V2: Int64;
 begin
@@ -4945,7 +4935,7 @@ begin
 end;
 
 function TOrmPropInfoRttiDouble.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 begin
   if Item1 = Item2 then
     result := 0
@@ -5062,7 +5052,7 @@ begin
 end;
 
 function TOrmPropInfoRttiCurrency.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 var
   V1, V2: currency;
 begin
@@ -5146,7 +5136,7 @@ begin
 end;
 
 function TOrmPropInfoRttiDateTime.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 const
   PRECISION: array[boolean] of double = (1 / SecsPerDay, 1 / MSecsPerDay);
 var
@@ -5431,7 +5421,7 @@ begin
 end;
 
 function TOrmPropInfoRttiAnsi.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 var
   tmp1, tmp2: RawByteString;
 begin
@@ -5611,7 +5601,7 @@ begin
 end;
 
 function TOrmPropInfoRttiRawUtf8.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 
   function CompareUTF8WithLocalTempCopy: PtrInt;
   var
@@ -5721,7 +5711,7 @@ begin
 end;
 
 function TOrmPropInfoRttiRawUnicode.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 var
   tmp1, tmp2: RawByteString;
 begin
@@ -5813,7 +5803,7 @@ begin
 end;
 
 function TOrmPropInfoRttiRawBlob.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 var
   tmp1, tmp2: RawByteString;
 begin
@@ -5828,7 +5818,7 @@ begin
     fPropInfo.GetLongStrProp(Item1, tmp1);
     fPropInfo.GetLongStrProp(Item2, tmp2);
     // BLOB is binary so always case sensitive
-    result := StrComp(pointer(tmp1), pointer(tmp2));
+    result := SortDynArrayRawByteString(tmp1, tmp2); // end with length() not #0
   end;
 end;
 
@@ -5948,7 +5938,7 @@ begin
 end;
 
 function TOrmPropInfoRttiWide.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 var
   tmp1, tmp2: WideString;
 begin
@@ -6053,7 +6043,7 @@ begin
 end;
 
 function TOrmPropInfoRttiUnicode.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 var
   tmp1, tmp2: UnicodeString;
 begin
@@ -6148,7 +6138,7 @@ end;
 
 procedure TOrmPropInfoRttiDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
 begin
-  // very fast assignment of fWrapper pre-initialized RTTI
+  // very fast assignment of pre-initialized RTTI
   result.InitRtti(fPropRtti, pointer(PtrUInt(Instance) + fGetterIsFieldPropOffset)^);
 end;
 
@@ -6252,7 +6242,7 @@ begin
 end;
 
 function TOrmPropInfoRttiDynArray.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 var
   da1, da2: TDynArray;
   i: PtrInt;
@@ -6459,7 +6449,7 @@ begin
 end;
 
 function TOrmPropInfoRttiVariant.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 
   function CompareWithLocalTempCopy: PtrInt;
   var
@@ -6669,7 +6659,7 @@ begin
 end;
 
 function TOrmPropInfoRecordRtti.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 begin
   if RecordEquals(GetFieldAddr(Item1)^, GetFieldAddr(Item2)^, fTypeInfo) then
     result := 0
@@ -6793,7 +6783,7 @@ begin
 end;
 
 function TOrmPropInfoRecordFixedSize.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
+  CaseInsensitive: boolean): integer;
 var
   i: PtrInt;
   P1, P2: PByteArray;
@@ -6810,7 +6800,7 @@ begin
     result := 0;
     P1 := GetFieldAddr(Item1);
     P2 := GetFieldAddr(Item2);
-    for i := 0 to fRecordSize - 1 do
+    for i := 0 to fRecordSize - 1 do // inlined per-byte binary compare
     begin
       result := P1^[i] - P2^[i];
       if result <> 0 then
