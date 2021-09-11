@@ -5006,7 +5006,11 @@ begin
       '%.ExecuteSoaByInterface invalid call', [self]);
   tmp.Init(Call.Inbody);
   try
-    JsonDecode(tmp.buf, ['method', 'params', 'id'], @values, true);
+    JsonDecode(tmp.buf, [
+      'method', // 0
+      'params', // 1
+      'id'      // 2
+      ], @values, true);
     if values[0].value = nil then // Method name required
       exit;
     values[0].ToUtf8(method);

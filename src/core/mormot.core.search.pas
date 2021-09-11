@@ -5111,7 +5111,10 @@ var
   tmp: TSynTempBuffer;
 begin
   tmp.Init(value);
-  JsonDecode(tmp.buf, ['MaxLength', 'Utf8Length'], @V);
+  JsonDecode(tmp.buf, [
+    'MaxLength', // 0
+    'Utf8Length' // 1
+    ], @V);
   fMaxLength := GetCardinalDef(V[0].value, 0);
   fUtf8Length := V[1].ToBoolean;
   tmp.Done;
@@ -5189,7 +5192,12 @@ var
 begin
   inherited;
   tmp.Init(value);
-  JsonDecode(tmp.buf, ['AllowedTLD', 'ForbiddenTLD', 'ForbiddenDomains', 'AnyTLD'], @V);
+  JsonDecode(tmp.buf, [
+    'AllowedTLD',        // 0
+    'ForbiddenTLD',      // 1
+    'ForbiddenDomains',  // 2
+    'AnyTLD'             // 3
+    ], @V);
   LowerCaseCopy(V[0].value, V[0].ValueLen, fAllowedTLD);
   LowerCaseCopy(V[1].value, V[1].ValueLen, fForbiddenTLD);
   LowerCaseCopy(V[2].value, V[2].ValueLen, fForbiddenDomains);
@@ -5365,11 +5373,24 @@ begin
     exit;
   tmp.Init(value);
   try
-    JsonDecode(tmp.buf, ['MinLength', 'MaxLength', 'MinAlphaCount',
-      'MinDigitCount', 'MinPunctCount', 'MinLowerCount', 'MinUpperCount',
-      'MinSpaceCount', 'MaxLeftTrimCount', 'MaxRightTrimCount', 'MaxAlphaCount',
-      'MaxDigitCount', 'MaxPunctCount', 'MaxLowerCount', 'MaxUpperCount',
-      'MaxSpaceCount', 'Utf8Length'], @V);
+    JsonDecode(tmp.buf, [
+      'MinLength',
+      'MaxLength',
+      'MinAlphaCount',
+      'MinDigitCount',
+      'MinPunctCount',
+      'MinLowerCount',
+      'MinUpperCount',
+      'MinSpaceCount',
+      'MaxLeftTrimCount',
+      'MaxRightTrimCount',
+      'MaxAlphaCount',
+      'MaxDigitCount',
+      'MaxPunctCount',
+      'MaxLowerCount',
+      'MaxUpperCount',
+      'MaxSpaceCount',
+      'Utf8Length'], @V);
     for i := 0 to high(fProps) do
       fProps[i] := GetCardinalDef(V[i].value, fProps[i]);
     with V[high(V)] do

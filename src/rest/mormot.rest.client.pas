@@ -1173,8 +1173,17 @@ var
 begin
   if (Sender.CallBackGet('auth', aNameValueParameters, resp) <> HTTP_SUCCESS) or
      (JsonDecode(pointer({%H-}resp),
-      ['result', 'data', 'server', 'version', 'logonid', 'logonname',
-       'logondisplay', 'logongroup', 'timeout', 'algo'], @values) = nil) then
+      ['result',        // 0
+       'data',          // 1
+       'server',        // 2
+       'version',       // 3
+       'logonid',       // 4
+       'logonname',     // 5
+       'logondisplay',  // 6
+       'logongroup',    // 7
+       'timeout',       // 8
+       'algo'           // 9
+      ], @values) = nil) then
   begin
     Sender.fSession.Data := ''; // reset temporary 'data' field
     result := ''; // error

@@ -864,7 +864,9 @@ begin
        (headerlen > 512) then
       exit;
     if not Base64UriToBin(tok, headerlen - 1, temp) or
-       (JsonDecode(temp.buf, ['alg', 'typ'], @head) = nil) or
+       (JsonDecode(temp.buf, ['alg', // 0
+                              'typ'  // 1
+                             ], @head) = nil) or
        not {%H-}head[0].Idem(fAlgorithm) or
        ((head[1].Value <> nil) and
         not head[1].Idem('JWT')) then
@@ -1063,7 +1065,12 @@ begin
     temp2.Done;
   end;
   repeat // avoid try..finally for temp.Done
-    if JsonDecode(temp.buf, ['iss', 'aud', 'exp', 'nbf', 'sub'], @V, true) = nil then
+    if JsonDecode(temp.buf, ['iss', // 0
+                             'aud', // 1
+                             'exp', // 2
+                             'nbf', // 3
+                             'sub'  // 4
+                            ], @V, true) = nil then
       break;
     result := jwtUnexpectedClaim;
     if ((ExpectedSubject <> '') and
