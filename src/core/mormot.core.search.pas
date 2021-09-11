@@ -5357,13 +5357,27 @@ end;
 
 procedure TSynValidateText.SetParameters(const value: RawUtf8);
 var
-  V: array[0..high(TSynValidateTextProps) + 1] of TValuePUtf8Char;
+  V: array[0..high(TSynValidateTextProps) + {Utf8Length} 1] of TValuePUtf8Char;
   i: integer;
   tmp: TSynTempBuffer;
 const
   DEFAULT: TSynValidateTextProps = (
-    1, maxInt, 0, 0, 0, 0, 0, 0, maxInt, maxInt, maxInt, maxInt, maxInt,
-    maxInt, maxInt, maxInt);
+    1,       //  MinLength
+    maxInt,  //  MaxLength
+    0,       //  MinAlphaCount
+    0,       //  MinDigitCount
+    0,       //  MinPunctCount
+    0,       //  MinLowerCount
+    0,       //  MinUpperCount
+    0,       //  MinSpaceCount
+    maxInt,  //  MaxLeftTrimCount
+    maxInt,  //  MaxRightTrimCount
+    maxInt,  //  MaxAlphaCount
+    maxInt,  //  MaxDigitCount
+    maxInt,  //  MaxPunctCount
+    maxInt,  //  MaxLowerCount
+    maxInt,  //  MaxUpperCount
+    maxInt); //  MaxSpaceCount
 begin
   if (MinLength = 0) and
      (MaxLength = 0) then  // if not previously set
@@ -5406,11 +5420,26 @@ end;
 procedure TSynValidatePassWord.SetParameters(const value: RawUtf8);
 const
   DEFAULT: TSynValidateTextProps = (
-    5, 20, 1, 1, 1, 1, 1, 0, maxInt, maxInt, maxInt, maxInt,
-    maxInt, maxInt, maxInt, 0);
+    5,        //  MinLength
+    20,       //  MaxLength
+    1,        //  MinAlphaCount
+    1,        //  MinDigitCount
+    1,        //  MinPunctCount
+    1,        //  MinLowerCount
+    1,        //  MinUpperCount
+    0,        //  MinSpaceCount
+    maxInt,   //  MaxLeftTrimCount
+    maxInt,   //  MaxRightTrimCount
+    maxInt,   //  MaxAlphaCount
+    maxInt,   //  MaxDigitCount
+    maxInt,   //  MaxPunctCount
+    maxInt,   //  MaxLowerCount
+    maxInt,   //  MaxUpperCount
+    0);       //  MaxSpaceCount
 begin
   // set default values for validating a strong password
   fProps := DEFAULT;
+  fUtf8Length := false;
   // read custom parameters
   inherited;
 end;
