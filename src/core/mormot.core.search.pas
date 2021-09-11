@@ -1301,20 +1301,19 @@ type
   // saved from a Windows system first)
   // - each time zone will be idendified by its TzId string, as defined by
   // Microsoft for its Windows Operating system
+  // - note that each instance is thread-safe
   TSynTimeZone = class
   protected
+    fLock: TRTLCriticalSection;
     fZone: TTimeZoneDataDynArray;
+    fZoneCount: integer;
     fZones: TDynArrayHashed;
     fLastZone: TTimeZoneID;
     fLastIndex: integer;
     fIds: TStringList;
     fDisplays: TStringList;
+    function FindZoneIndex(const TzId: TTimeZoneID): PtrInt;
   public
-    /// will retrieve the default shared TSynTimeZone instance
-    // - locally created via the CreateDefault constructor
-    // - this is the usual entry point for time zone process, calling e.g.
-    // $ aLocalTime := TSynTimeZone.Default.NowToLocal(aTimeZoneID);
-    class function Default: TSynTimeZone;
     /// initialize the internal storage
     // - but no data is available, until Load* methods are called
     constructor Create;
@@ -1326,6 +1325,10 @@ type
     constructor CreateDefault(dummycpp: integer = 0);
     /// finalize the instance
     destructor Destroy; override;
+    /// will retrieve the default shared TSynTimeZone instance
+    // - locally created via the CreateDefault constructor
+    // - see also the NowToLocal/LocalToUtc/UtcToLocal global functions
+    class function Default: TSynTimeZone;
     {$ifdef OSWINDOWS}
     /// read time zone information from the Windows registry
     procedure LoadFromRegistry;
@@ -1381,6 +1384,33 @@ type
     function Displays: TStrings;
   end;
 
+/// retrieve the time bias (in minutes) for a given date/time on a TzId
+// - will use a global shared thread-safe TSynTimeZone instance for the request
+function GetBiasForDateTime(const Value: TDateTime; const TzId: TTimeZoneID;
+  out Bias: integer; out HaveDaylight: boolean): boolean;
+
+/// retrieve the display text corresponding to a TzId
+// - returns '' if the supplied TzId is not recognized
+// - will use a global shared thread-safe TSynTimeZone instance for the request
+function GetDisplay(const TzId: TTimeZoneID): RawUtf8;
+
+/// compute the UTC date/time corrected for a given TzId
+// - will use a global shared thread-safe TSynTimeZone instance for the request
+function UtcToLocal(const UtcDateTime: TDateTime; const TzId: TTimeZoneID): TDateTime;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// compute the current date/time corrected for a given TzId
+// - will use a global shared thread-safe TSynTimeZone instance for the request
+function NowToLocal(const TzId: TTimeZoneID): TDateTime;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// compute the UTC date/time for a given local TzId value
+// - by definition, a local time may correspond to two UTC times, during the
+// time biais period, so the returned value is informative only, and any
+// stored value should be following UTC
+// - will use a global shared thread-safe TSynTimeZone instance for the request
+function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 implementation
@@ -5481,7 +5511,9 @@ end;
 
 constructor TSynTimeZone.Create;
 begin
-  fZones.InitSpecific(TypeInfo(TTimeZoneDataDynArray), fZone, ptRawUtf8);
+  fZones.InitSpecific(TypeInfo(TTimeZoneDataDynArray),
+    fZone, ptRawUtf8, @fZoneCount);
+  InitializeCriticalSection(fLock);
 end;
 
 constructor TSynTimeZone.CreateDefault;
@@ -5491,7 +5523,7 @@ begin
   LoadFromRegistry;
   {$else}
   LoadFromFile;
-  if fZones.Count = 0 then
+  if fZoneCount = 0 then
     LoadFromResource; // if no .tz file is available, try if bound to executable
   {$endif OSWINDOWS}
 end;
@@ -5501,6 +5533,7 @@ begin
   inherited Destroy;
   fIds.Free;
   fDisplays.Free;
+  DeleteCriticalSection(fLock);
 end;
 
 var
@@ -5523,7 +5556,12 @@ end;
 
 function TSynTimeZone.SaveToBuffer: RawByteString;
 begin
-  result := AlgoSynLZ.Compress(fZones.SaveTo);
+  EnterCriticalSection(fLock);
+  try
+    result := AlgoSynLZ.Compress(fZones.SaveTo);
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
 procedure TSynTimeZone.SaveToFile(const FileName: TFileName);
@@ -5539,10 +5577,15 @@ end;
 
 procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
 begin
-  fZones.LoadFromBinary(AlgoSynLZ.Decompress(Buffer));
-  fZones.ReHash;
-  FreeAndNil(fIds);
-  FreeAndNil(fDisplays);
+  EnterCriticalSection(fLock);
+  try
+    fZones.LoadFromBinary(AlgoSynLZ.Decompress(Buffer));
+    fZones.ReHash;
+    FreeAndNil(fIds);
+    FreeAndNil(fDisplays);
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
 procedure TSynTimeZone.LoadFromFile(const FileName: TFileName);
@@ -5623,14 +5666,40 @@ end;
 
 {$endif OSWINDOWS}
 
+function TSynTimeZone.FindZoneIndex(const TzId: TTimeZoneID): PtrInt;
+begin
+  if (self = nil) or
+     (TzId = '') then
+    result := -1
+  else
+  begin
+    EnterCriticalSection(fLock);
+    {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
+    try
+    {$endif HASFASTTRYFINALLY}
+      if TzId = fLastZone then
+        result := fLastIndex
+      else
+      begin
+        result := fZones.FindHashed(TzId);
+        fLastZone := TzId;
+        flastIndex := result;
+      end;
+    {$ifdef HASFASTTRYFINALLY}
+    finally
+    {$endif HASFASTTRYFINALLY}
+      LeaveCriticalSection(fLock);
+    {$ifdef HASFASTTRYFINALLY}
+    end;
+    {$endif HASFASTTRYFINALLY}
+  end;
+end;
+
 function TSynTimeZone.GetDisplay(const TzId: TTimeZoneID): RawUtf8;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
-  if self = nil then
-    ndx := -1
-  else
-    ndx := fZones.FindHashed(TzId);
+  ndx := FindZoneIndex(TzId);
   if ndx < 0 then
     if TzId = 'UTC' then // e.g. on XP
       result := TzId
@@ -5643,22 +5712,12 @@ end;
 function TSynTimeZone.GetBiasForDateTime(const Value: TDateTime;
   const TzId: TTimeZoneID; out Bias: integer; out HaveDaylight: boolean): boolean;
 var
-  ndx: integer;
+  ndx: PtrInt;
   d: TSynSystemTime;
   tzi: PTimeZoneInfo;
   std, dlt: TDateTime;
 begin
-  if (self = nil) or
-     (TzId = '') then
-    ndx := -1
-  else if TzId = fLastZone then
-    ndx := fLastIndex
-  else
-  begin
-    ndx := fZones.FindHashed(TzId);
-    fLastZone := TzId;
-    flastIndex := ndx;
-  end;
+  ndx := FindZoneIndex(TzId);
   if ndx < 0 then
   begin
     Bias := 0;
@@ -5756,5 +5815,38 @@ begin
   result := fDisplays;
 end;
 
+
+function GetBiasForDateTime(const Value: TDateTime; const TzId: TTimeZoneID;
+  out Bias: integer; out HaveDaylight: boolean): boolean;
+begin
+  result := TSynTimeZone.Default.
+    GetBiasForDateTime(Value, TzId, Bias, HaveDaylight);
+end;
+
+function GetDisplay(const TzId: TTimeZoneID): RawUtf8;
+begin
+  result := TSynTimeZone.Default.GetDisplay(TzId);
+end;
+
+function UtcToLocal(const UtcDateTime: TDateTime; const TzId: TTimeZoneID): TDateTime;
+begin
+  result := TSynTimeZone.Default.UtcToLocal(UtcDateTime, TzId);
+end;
+
+function NowToLocal(const TzId: TTimeZoneID): TDateTime;
+begin
+  result := TSynTimeZone.Default.NowToLocal(TzId);
+end;
+
+function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
+begin
+  result := TSynTimeZone.Default.LocalToUtc(LocalDateTime, TzId);
+end;
+
+
+initialization
+
+finalization
+  FreeAndNil(SharedSynTimeZone);
 
 end.
