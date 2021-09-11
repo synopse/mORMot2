@@ -6815,7 +6815,10 @@ begin
   begin
     _BL_DynArray(pointer(fValue), Read, Info.Info);
     if fCountP <> nil then // _BL_DynArray() set length -> reflect on Count
-      fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
+      if fValue^ = nil then
+        fCountP^ := 0
+      else
+        fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
   end;
 end;
 
@@ -6890,10 +6893,12 @@ begin
   SetCount(0); // faster to use our own routine now
   GetDataFromJson(fValue, P, EndOfObject, Info.Info,
     CustomVariantOptions, Tolerant);
-  if (fCountP <> nil) and
-     (fValue^ <> nil) then
+  if fCountP <> nil then
     // GetDataFromJson() set the array length, not the external count
-    fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
+    if fValue^ = nil then
+      fCountP^ := 0
+    else
+      fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
   result := P;
 end;
 
