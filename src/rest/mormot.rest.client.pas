@@ -1252,7 +1252,7 @@ class function TRestClientAuthenticationDefault.ClientComputeSessionKey(
   Sender: TRestClientUri; User: TAuthUser): RawUtf8;
 var
   aServerNonce, aClientNonce: RawUtf8;
-  rnd: THash256;
+  rnd: THash128;
 begin
   result := '';
   if User.LogonName = '' then
@@ -1260,8 +1260,9 @@ begin
   aServerNonce := Sender.CallBackGetResult('auth', ['username', User.LogonName]);
   if aServerNonce = '' then
     exit;
-  TAesPrng.Main.FillRandom(@rnd, SizeOf(rnd));
-  aClientNonce := BinToHexLower(@rnd, SizeOf(rnd));
+  TAesPrng.Main.FillRandom(rnd);
+  aClientNonce := CardinalToHexLower(OSVersionInt32) + '_' +
+                  BinToHexLower(@rnd, SizeOf(rnd)); // 160-bit nonce
   result := ClientGetSessionKey(Sender, User, [
     'username', User.LogonName,
     'password', Sha256(Sender.fModel.Root + aServerNonce + aClientNonce +

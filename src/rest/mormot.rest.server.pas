@@ -382,6 +382,10 @@ type
     /// the corresponding TAuthSession.User.LogonName value
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionUserName: RawUtf8;
+    /// the corresponding TAuthSession.RemoteOsVersion
+    // - is undefined if Session is 0 or 1 (no authentication running) or if
+    // the client was not using TRestClientAuthenticationDefault scheme
+    SessionOS: TOperatingSystemVersion;
     /// the static instance corresponding to the associated Table (if any)
     StaticOrm: TRestOrm;
     /// the kind of static instance corresponding to the associated Table (if any)
@@ -972,9 +976,11 @@ type
     fAccessRights: TOrmAccessRights;
     fMethods: TSynMonitorInputOutputObjArray;
     fInterfaces: TSynMonitorInputOutputObjArray;
+    fRemoteOsVersion: TOperatingSystemVersion;
     function GetUserName: RawUtf8;
     function GetUserID: TID;
     function GetGroupID: TID;
+    function GetRemoteOS: RawUtf8;
     procedure SaveTo(W: TBufferWriter); virtual;
     procedure ComputeProtectedValues; virtual;
   public
@@ -1031,6 +1037,10 @@ type
     // TRestServer.StatLevels property
     property Interfaces: TSynMonitorInputOutputObjArray
       read fInterfaces write fInterfaces;
+    /// the Client Operating System
+    // - as extracted from 'clientnonce' by TRestServerAuthenticationDefault.Auth
+    property RemoteOsVersion: TOperatingSystemVersion
+      read fRemoteOsVersion;
   published
     /// the session ID number, as text
     property ID: RawUtf8
@@ -1053,6 +1063,12 @@ type
     // - is extracted from SentHeaders properties
     property RemoteIP: RawUtf8
       read fRemoteIP;
+    /// the client Operating System, if sent from a mORMot 2 client
+    // - is extracted from 'clientnonce' by TRestServerAuthenticationDefault.Auth
+    // into RemoteOsVersion 32-bit flags
+    // - returns e.g. 'Windows 11 64-bit 22000' or 'Debian 5.4.0'
+    property RemoteOS: RawUtf8
+      read GetRemoteOS;
   end;
 
   /// class-reference type (metaclass) used to define overridden session instances
@@ -5099,17 +5115,21 @@ begin
         fSentHeaders := aCtxt.Call.InHead;
       ComputeProtectedValues;
       fRemoteIP := aCtxt.RemoteIP;
+      fRemoteOsVersion := aCtxt.SessionOS;
       if aCtxt.Log <> nil then
-        aCtxt.Log.Log(sllUserAuth, 'New [%] session %/% created at %/% running %',
+        aCtxt.Log.Log(sllUserAuth,
+          'New [%] session %/% created at %/% running % {%}',
           [User.GroupRights.Ident, User.LogonName, fIDCardinal, fRemoteIP,
-           aCtxt.Call^.LowLevelConnectionID, aCtxt.GetUserAgent], self);
+           aCtxt.Call^.LowLevelConnectionID, aCtxt.GetUserAgent,
+           ToTextOS(integer(fRemoteOsVersion))], self);
       exit; // create successfull
     end;
     // on error: set GroupRights back to a pseudo TAuthGroup = ID
     User.GroupRights.Free;
     User.GroupRights := GID;
   end;
-  raise ESecurityException.CreateUtf8('Invalid %.Create(%,%)', [self, aCtxt, aUser]);
+  raise ESecurityException.CreateUtf8(
+    'Invalid %.Create(%,%)', [self, aCtxt, aUser]);
 end;
 
 destructor TAuthSession.Destroy;
@@ -5155,8 +5175,14 @@ begin
     result := User.GroupRights.IDValue;
 end;
 
+function TAuthSession.GetRemoteOS: RawUtf8;
+begin
+  result := ToTextOS(integer(fRemoteOsVersion));
+end;
+
 const
-  TAUTHSESSION_MAGIC = 1;
+  TAUTHSESSION_MAGIC = 2;
+  // version 2 includes fRemoteOsVersion
 
 procedure TAuthSession.SaveTo(W: TBufferWriter);
 begin
@@ -5168,6 +5194,7 @@ begin
   fUser.GroupRights.GetBinaryValues(W);
   W.Write(fPrivateKey);
   W.Write(fSentHeaders);
+  W.Write4(integer(fRemoteOsVersion));
 end; // TODO: persist ORM/SOA stats? -> rather integrate them before saving
 
 constructor TAuthSession.CreateFrom(var Read: TFastReader; Server: TRestServer);
@@ -5185,6 +5212,7 @@ begin
   fUser.GroupRights.SetBinaryValues(Read);
   Read.VarUtf8(fPrivateKey);
   Read.VarUtf8(fSentHeaders);
+  integer(fRemoteOsVersion) := Read.Next4;
   ComputeProtectedValues;
   FindNameValue(fSentHeaders, HEADER_REMOTEIP_UPPER, fRemoteIP);
 end;
@@ -5492,12 +5520,12 @@ function TRestServerAuthenticationDefault.Auth(Ctxt: TRestServerUriContext): boo
 var
   uname, pwd, cltnonce: RawUtf8;
   usr: TAuthUser;
+  os: TOperatingSystemVersion;
 begin
   result := true;
   if AuthSessionRelease(Ctxt) then
     exit;
   uname := Ctxt.InputUtf8OrVoid['UserName'];
-  pwd := Ctxt.InputUtf8OrVoid['Password'];
   cltnonce := Ctxt.InputUtf8OrVoid['ClientNonce'];
   if (uname <> '') and
      (length(cltnonce) > 32) then
@@ -5506,7 +5534,14 @@ begin
     usr := GetUser(Ctxt, uname);
     if usr <> nil then
     try
+      // decode TRestClientAuthenticationDefault.ClientComputeSessionKey nonce
+      if (length(cltnonce) = (SizeOf(os) + SizeOf(TAesBlock)) * 2 + 1) and
+         (cltnonce[9] = '_') and
+         HexToBin(pointer(cltnonce), @os, SizeOf(os)) and
+         (os.os <= high(os.os)) then
+        Ctxt.SessionOS := os;
       // check if match TRestClientUri.SetUser() algorithm
+      pwd := Ctxt.InputUtf8OrVoid['Password'];
       if CheckPassword(Ctxt, usr, cltnonce, pwd) then
         // setup a new TAuthSession
         SessionCreate(Ctxt, usr)
@@ -6842,6 +6877,7 @@ begin
              (Ctxt.fRemoteIP = '') then
             Ctxt.fRemoteIP := result.RemoteIP;
           Ctxt.fSessionAccessRights := result.fAccessRights;
+          Ctxt.SessionOS := result.fRemoteOsVersion;
           Ctxt.Call^.RestAccessRights := @Ctxt.fSessionAccessRights;
           exit;
         end
