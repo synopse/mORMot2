@@ -1299,6 +1299,8 @@ type
   // - is able to retrieve accurate information from the Windows registry,
   // or from a binary compressed file on other platforms (which should have been
   // saved from a Windows system first)
+  // - for Linux/POSIX our mORMot 2 repository supplies a ready-to-use
+  // ! {$R mormot.tz.res}
   // - each time zone will be idendified by its TzId string, as defined by
   // Microsoft for its Windows Operating system
   // - note that each instance is thread-safe
@@ -1347,6 +1349,8 @@ type
     // then compile the resource as expected, with a brcc32 .rc entry:
     // ! TSynTimeZone 10 "TSynTimeZone.data"
     // - you can specify a library (dll) resource instance handle, if needed
+    // - for Linux/POSIX our mORMot 2 repository supplies a ready-to-use
+    // ! {$R mormot.tz.res}
     procedure LoadFromResource(Instance: THandle = 0);
     /// write then time zone information into a compressed file
     // - if no file name is supplied, a ExecutableName.tz file would be created
@@ -5516,7 +5520,7 @@ begin
   InitializeCriticalSection(fLock);
 end;
 
-constructor TSynTimeZone.CreateDefault;
+constructor TSynTimeZone.CreateDefault(dummycpp: integer);
 begin
   Create;
   {$ifdef OSWINDOWS}

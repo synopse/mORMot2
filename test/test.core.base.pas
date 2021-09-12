@@ -4985,6 +4985,8 @@ begin
 end;
 {$endif FPC}
 
+{$R ..\src\mormot.tz.res} // validate our supplied resource file
+
 procedure TTestCoreBase.TimeZones;
 var
   tz: TSynTimeZone;
@@ -4994,9 +4996,7 @@ var
   hdl, reload: boolean;
   buf: RawByteString;
   dt: TDateTime;
-  {$ifdef OSWINDOWS}
   local: TDateTime;
-  {$endif OSWINDOWS}
 
   procedure testBias(year, expected: integer);
   begin
@@ -5137,6 +5137,11 @@ begin
     check(tz.GetBiasForDateTime(dt, 'UTC', bias, hdl));
     check(bias = 0);
     check(not hdl);
+  {$else}
+  tz := TSynTimeZone.Create;
+  try
+    tz.LoadFromResource; // from mormot.tz.res as generated on Windows 10
+  {$endif OSWINDOWS}
     local := tz.UtcToLocal(dt, 'Romance Standard Time');
     check(not SameValue(local, dt), 'Paris never aligns with London');
     check(tz.GetBiasForDateTime(dt, 'Romance Standard Time', bias, hdl));
@@ -5153,7 +5158,6 @@ begin
   finally
     tz.Free;
   end;
-  {$endif OSWINDOWS}
 end;
 
 {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
