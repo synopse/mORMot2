@@ -44,7 +44,7 @@
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Release="1"/>
-    <Files Count="93">
+    <Files Count="94">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -417,6 +417,11 @@
         <Filename Value="../../src/soa/mormot.soa.server.pas"/>
         <UnitName Value="mormot.soa.server"/>
       </Item93>
+      <Item94>
+        <Filename Value="../../src/net/mormot.net.ws.async.pas"/>
+        <AddToUsesPkgSection Value="False"/>
+        <UnitName Value="mormot.net.ws.async"/>
+      </Item94>
     </Files>
     <UsageOptions>
       <IncludePath Value="$(PkgIncPath)"/>
