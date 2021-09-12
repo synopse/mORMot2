@@ -226,9 +226,42 @@ const
   // - may be used internally e.g. for a HTTP User-Agent header, as with
   // TFileVersion.UserAgent
   OS_INITIAL: array[TOperatingSystem] of AnsiChar = (
-    '?', 'W', 'L', 'X', 'B', 'P', 'A', 'a', 'D', 'F', 'G', 'K', 'M', 'm',
-    'n', 'N', 'U', 'S', 's', 'u', 'Y', 'T', 'C', 't', 'R', 'l', 'O', 'G',
-    'c', 'd', 'x', 'Z', 'r', 'p', 'J'); // for Android: J=JVM
+    '?', // Unknown
+    'W', // Windows
+    'L', // Linux
+    'X', // OSX
+    'B', // BSD
+    'P', // POSIX
+    'A', // Arch
+    'a', // Aurox
+    'D', // Debian
+    'F', // Fedora
+    'G', // Gentoo
+    'K', // Knoppix
+    'M', // Mint
+    'm', // Mandrake
+    'n', // Mandriva
+    'N', // Novell
+    'U', // Ubuntu
+    'S', // Slackware
+    's', // Solaris
+    'u', // Suse
+    'Y', // Synology
+    'T', // Trustix
+    'C', // Clear
+    't', // United
+    'R', // RedHat
+    'l', // LFS
+    'O', // Oracle
+    'G', // Mageia
+    'c', // CentOS
+    'd', // Cloud
+    'x', // Xen
+    'Z', // Amazon
+    'r', // CoreOS
+    'p', // Alpine
+    'J'  // Android (J=JVM)
+    );
 
   /// the operating systems items which actually have a Linux kernel
   OS_LINUX = [
@@ -558,6 +591,12 @@ type
   end;
 
 {$M-}
+
+/// quickly parse the TFileVersion.UserAgent content
+// - identify e.g. 'myprogram/3.1.0.2W' or 'myprogram/3.1.0.2W32' text
+function UserAgentParse(const UserAgent: RawUtf8;
+  out ProgramName, ProgramVersion: RawUtf8;
+  out OS: TOperatingSystem): boolean;
 
 type
   /// stores some global information about the current executable and computer
@@ -4000,6 +4039,37 @@ begin
   finally
     Free;
   end;
+end;
+
+function UserAgentParse(const UserAgent: RawUtf8;
+  out ProgramName, ProgramVersion: RawUtf8;
+  out OS: TOperatingSystem): boolean;
+var
+  i, v, vlen, o: PtrInt;
+begin
+  result := false;
+  ProgramName := Split(UserAgent, '/');
+  v := length(ProgramName);
+  if (v = 0) or
+     (UserAgent[v + 1] <> '/') then
+    exit;
+  inc(v, 2);
+  vlen := 0;
+  o := -1;
+  for i := v to length(UserAgent) do
+    if not (UserAgent[i] in ['0'..'9', '.']) then
+    begin
+      vlen := i - v; // vlen may be 0 if DetailedOrVoid was ''
+      if UserAgent[i + 1] in [#0, '3'] then // end with OS_INITIAL or '32' suffix
+        o := ByteScanIndex(pointer(@OS_INITIAL),
+          ord(high(TOperatingSystem)) + 1, ord(UserAgent[i]));
+      break;
+    end;
+  if o < 0 then
+    exit; // should end with OS_INITIAL[OS_KIND]]
+  os := TOperatingSystem(o);
+  ProgramVersion := copy(UserAgent, v, vlen);
+  result := true;
 end;
 
 procedure SetExecutableVersion(const aVersionText: RawUtf8);

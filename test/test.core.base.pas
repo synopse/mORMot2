@@ -5774,9 +5774,23 @@ procedure TTestCoreBase._TSynLogFile;
 
 var
   tmp: array[0..512] of AnsiChar;
-  msg: RawUtf8;
+  msg, n, v: RawUtf8;
+  os: TOperatingSystem;
   len: integer;
 begin
+  Check(not UserAgentParse('toto (mozilla)', n, v, os));
+  Check(UserAgentParse('myprogram/3.1.0.2W', n, v, os));
+  Check(n = 'myprogram');
+  Check(v = '3.1.0.2');
+  check(os = osWindows);
+  Check(UserAgentParse('mormot2tests/D', n, v, os));
+  Check(n = 'mormot2tests');
+  Check(v = '');
+  check(os = osDebian);
+  Check(UserAgentParse('myprogram/3.1.2W32', n, v, os));
+  Check(n = 'myprogram');
+  Check(v = '3.1.2');
+  check(os = osWindows);
   FillcharFast(tmp, sizeof(tmp), 1);
   len := SyslogMessage(sfAuth, ssCrit, 'test', '', '', tmp, sizeof(tmp), false);
   // Check(len=65); // <-- different for every PC, due to PC name differences
