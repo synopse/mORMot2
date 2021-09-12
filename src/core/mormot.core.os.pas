@@ -114,6 +114,8 @@ type
     wTen_64,
     wServer2016,
     wServer2016_64,
+    wEleven,
+    wEleven_64,
     wServer2019_64,
     wServer2022_64);
 
@@ -123,7 +125,8 @@ type
     osUnknown: (
       b: array[0..2] of byte);
     osWindows: (
-      win: TWindowsVersion);
+      win: TWindowsVersion;
+      winbuild: word);
     osLinux: (
       utsrelease: array[0..2] of byte);
   end;
@@ -158,6 +161,8 @@ const
     '10 64bit',
     'Server 2016',
     'Server 2016 64bit',
+    '11',
+    '11 64bit',
     'Server 2019 64bit',
     'Server 2022 64bit');
 
@@ -176,6 +181,7 @@ const
      wEightOne,
      wServer2012R2,
      wTen,
+     wEleven,
      wServer2016];
 
   /// translate one operating system (and distribution) into a its common name
@@ -336,7 +342,7 @@ function ToText(const osv: TOperatingSystemVersion): RawUtf8; overload;
 
 /// convert a 32-bit Operating System type into its full text representation
 // including the kernel revision (not the distribution version) on POSIX systems
-// - returns e.g. 'Windows Vista' or 'Ubuntu 5.4.0'
+// - returns e.g. 'Windows Vista', 'Windows 11 64-bit 22000' or 'Ubuntu 5.4.0'
 function ToTextOS(osint32: integer): RawUtf8;
 
 
@@ -2990,7 +2996,16 @@ function ToTextOS(osint32: integer): RawUtf8;
 var
   osv: TOperatingSystemVersion absolute osint32;
 begin
+  if osint32 = 0 then
+  begin
+    result := '';
+    exit;
+  end;
   result := ToText(osv);
+  if (osv.os = osWindows) and
+     (osv.winbuild <> 0) then
+    // include the Windows build number, e.g. 'Windows 11 64-bit 22000'
+    result := RawUtf8(Format('%s %d', [result, osv.winbuild]));
   if (osv.os >= osLinux) and
      (osv.utsrelease[2] <> 0) then
     // include the kernel number to the distribution name, e.g. 'Ubuntu 5.4.0'
@@ -3033,6 +3048,7 @@ begin
   assert(PByte(Func)^ = $e9);
 end;
 {$endif CPUINTEL}
+
 
 
 { ****************** Unicode, Time, File, Console, Library process }
@@ -4728,7 +4744,8 @@ initialization
   InitializeCriticalSection(AutoSlotsLock);
   InitializeUnit; // in mormot.core.os.posix/windows.inc files
   OSVersionShort := ToTextOS(OSVersionInt32);
-  SetExecutableVersion(0,0,0,0);
+  SetExecutableVersion(0, 0, 0, 0);
+  // minimal stubs which will be properly implemented in mormot.core.log.pas
   GetExecutableLocation := _GetExecutableLocation;
   SetThreadName := _SetThreadName;
 

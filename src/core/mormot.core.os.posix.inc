@@ -2599,8 +2599,8 @@ begin
   KernelRevision := GetNextCardinal(P) shl 16 +
                     GetNextCardinal(P) shl 8 +
                     GetNextCardinal(P);
-  OSVersionInt32 := integer(KernelRevision shl 8) +
-                    ord(OS_KIND);
+  OSVersion32.os := OS_KIND;
+  MoveSmall(@KernelRevision, @OSVersion32.utsrelease, SizeOf(OSVersion32.utsrelease));
   with SystemInfo.uts do
     OSVersionText := sysname + ' ' + release;
   if SystemInfo.release <> '' then

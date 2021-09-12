@@ -956,22 +956,35 @@ function CoCreateGuid(out guid: THash128Rec): HRESULT; stdcall; external 'ole32.
 procedure XorOSEntropy(var e: THash512Rec);
 var
   h: THash128Rec;
+  ft: packed record
+    krn, usr, p, e: TFileTime;
+  end;
+  mem: TProcessMemoryCounters;
 begin
-  QueryPerformanceCounter(h.Lo);
-  e.i[0] := e.i[0] xor h.Lo;
-  RetrieveProcessInfo(GetCurrentProcessId, e.i[1], e.i[2], e.c[6], e.c[7]);
-  RetrieveSystemTimes(e.i[5], e.i[6], e.i[7]);
+  QueryPerformanceCounter(h.Lo); // e.h3 xored with raw timestamps
+  e.i[6] := e.i[6] xor h.Lo;
+  GetProcessTimes(GetCurrentProcess, ft.p, ft.e, ft.krn, ft.usr);
+  DefaultHasher128(@e.h0, @ft, SizeOf(ft));
+  mem.cb := SizeOf(mem);
+  GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
+  DefaultHasher128(@e.h1, @mem, SizeOf(mem));
+  if Assigned(GetSystemTimes) then
+    GetSystemTimes(ft.usr, ft.p, ft.e);
+  DefaultHasher128(@e.h2, @ft, SizeOf(ft));
   CoCreateGuid(h); // very fast on Windows - used to obfuscate system info
-  e.i[1] := e.i[1] xor h.Lo;
-  e.i[2] := e.i[2] xor h.Hi;
+  e.i[0] := e.i[0] xor h.Lo;
+  e.i[1] := e.i[1] xor h.Hi;
   CoCreateGuid(h);
-  e.i[3] := e.i[3] xor h.Lo;
-  e.i[4] := e.i[4] xor h.Hi;
+  e.i[2] := e.i[2] xor h.Lo;
+  e.i[3] := e.i[3] xor h.Hi;
   CoCreateGuid(h);
-  e.i[5] := e.i[5] xor h.Lo;
-  e.i[6] := e.i[6] xor h.Hi;
+  e.i[4] := e.i[4] xor h.Lo;
+  e.i[5] := e.i[5] xor h.Hi;
+  CoCreateGuid(h);
+  e.i[6] := e.i[6] xor h.Lo;
+  e.i[7] := e.i[7] xor h.Hi;
   QueryPerformanceCounter(h.Lo); // is likely to have changed in-between
-  e.i[7] := e.i[7] xor h.Lo;
+  e.i[7] := e.i[7] xor h.Lo;     // e.h3 xored with raw timestamps
 end;
 
 function FillSystemRandom(Buffer: PByteArray; Len: integer;
@@ -3173,7 +3186,11 @@ begin
           else
             // https://stackoverflow.com/q/53393150
             Vers := wServer2019_64;
-    end;
+    end
+    else if (Vers = wTen) and
+            (OSVersionInfo.dwBuildNumber >= 22000) then
+      // waiting for an official mean of Windows 11 identification
+      Vers := wEleven;
     if (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64) and
        (Vers < wServer2019_64) then
       inc(Vers);   // e.g. wEight -> wEight64
@@ -3191,7 +3208,9 @@ begin
       OSVersionText := RawUtf8(Format(
         'Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers],
          wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber]));
-  OSVersionInt32 := (integer(Vers) shl 8) + ord(osWindows);
+  OSVersion32.os := osWindows;
+  OSVersion32.win := Vers;
+  OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
   h := Windows.LoadLibrary(ntdll);
   if h > 0 then
   begin
