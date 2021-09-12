@@ -202,7 +202,8 @@ begin
       if SavePasswordRounds = DEFAULT_ECCROUNDS then
         json := SavePassword
       else
-        json := JsonEncode(['pass', SavePassword, 'rounds', SavePasswordRounds]);
+        json := JsonEncode(['pass', SavePassword,
+                            'rounds', SavePasswordRounds]);
       bin := TAesPrng.Main.AFSplit(pointer(json)^, length(json), CHEAT_SPLIT);
       fn := Utf8ToString(secret.Serial) + CHEAT_FILEEXT;
       FileFromString(master.Encrypt(bin), fn);

@@ -3878,7 +3878,7 @@ begin
   result := pointer(Self);
   if result <> nil then
   begin
-    // inlined ClassPropertiesGet
+    // inlined Rtti.Find(ClassType)
     result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
     if result <> nil then
       // we know TRttiCustom is in the slot, and PrivateSlot as TSynLogFamily

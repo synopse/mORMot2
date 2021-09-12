@@ -2039,21 +2039,6 @@ procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
 procedure RedirectCode(Func, RedirectFunc: Pointer);
 {$endif CPUINTEL}
 
-/// search for a given class stored in an object vmtAutoTable Slot
-// - quickly returns the PropertiesClass instance for this class on success
-// - returns nil if no Properties was registered for this class; caller should
-// call ClassPropertiesAdd() to initialize
-function ClassPropertiesGet(ObjectClass: TClass): pointer;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// try to register a given Properties instance for a given class
-// - returns associated PropertiesInstance otherwise, which may not be the supplied
-// PropertiesInstance, if it has been registered by another thread in between -
-// it will free the supplied PropertiesInstance in this case, and return the existing
-function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
-  FreeExistingPropertiesInstance: boolean = true): TObject;
-
-
 
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }
 
@@ -3048,39 +3033,6 @@ begin
   assert(PByte(Func)^ = $e9);
 end;
 {$endif CPUINTEL}
-
-function ClassPropertiesGet(ObjectClass: TClass): pointer;
-begin
-  result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
-end;
-
-function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
-  FreeExistingPropertiesInstance: boolean): TObject;
-var
-  vmt: PPointer;
-begin
-  mormot.core.os.EnterCriticalSection(AutoSlotsLock);
-  try
-    vmt := Pointer(PAnsiChar(ObjectClass) + vmtAutoTable);
-    result := vmt^;
-    if result <> nil then
-    begin
-      // thread-safe registration
-      if FreeExistingPropertiesInstance and
-         (PropertiesInstance <> result) then
-        PropertiesInstance.Free;
-      exit;
-    end;
-    // actually store the properties into the unused VMT AutoTable slot
-    result := PropertiesInstance;
-    PatchCodePtrUInt(pointer(vmt), PtrUInt(result), {leaveunprotected=}true);
-    if vmt^ <> result then
-      raise EOSException.CreateFmt('ClassPropertiesAdd: mprotect failed for %s',
-        [ClassNameShort(ObjectClass)^]);
-  finally
-    mormot.core.os.LeaveCriticalSection(AutoSlotsLock);
-  end;
-end;
 
 
 { ****************** Unicode, Time, File, Console, Library process }

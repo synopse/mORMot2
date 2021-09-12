@@ -10161,7 +10161,7 @@ var
   n: integer;
   p: ^PRttiCustomProp;
 begin
-  // inlined ClassPropertiesGet
+  // inlined Rtti.RegisterClass()
   rtti := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
   if (rtti = nil) or
      not (rcfAutoCreateFields in rtti.Flags) then

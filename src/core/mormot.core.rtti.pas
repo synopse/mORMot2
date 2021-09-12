@@ -6730,14 +6730,16 @@ end;
 
 procedure TRttiCustom.SetValueClass(aClass: TClass; aInfo: PRttiInfo);
 var
-  vmt: TObject;
+  vmt: PPointer;
 begin
   fValueClass := aClass;
   // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
-  vmt := ClassPropertiesAdd(aClass, self, {freexist=}false);
-  if vmt <> self then
+  vmt := Pointer(PAnsiChar(aClass) + vmtAutoTable);
+  if vmt^ = nil then
+    PatchCodePtrUInt(pointer(vmt), PtrUInt(self), {leaveunprotected=}true);
+  if vmt^ <> self then
     raise ERttiException.CreateUtf8(
-      '%.SetValueClass(%): vmtAutoTable already set to %', [self, aClass, vmt]);
+      '%.SetValueClass(%): vmtAutoTable set to %', [self, aClass, vmt^]);
   // identify the most known class types
   if aClass.InheritsFrom(TCollection) then
     fValueRtlClass := vcCollection
@@ -7363,7 +7365,7 @@ begin
     until false;
   end
   else
-    // it is (slightly) faster to use the vmtAutoTable slot for classes
+    // direct lookup of the vmtAutoTable slot for classes
     result := PPointer(PAnsiChar(Info.RttiNonVoidClass.RttiClass) + vmtAutoTable)^;
 end;
 

@@ -3015,7 +3015,7 @@ end;
 
 class function TSynPersistent.RttiCustom: TRttiCustom;
 begin
-  // inlined ClassPropertiesGet: we know it is the first slot
+  // inlined Rtti.Find(ClassType): we know it is the first slot
   result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   // assert(result.InheritsFrom(TRttiCustom));
 end;

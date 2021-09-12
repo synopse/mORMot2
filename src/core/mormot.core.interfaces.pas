@@ -5314,7 +5314,7 @@ begin
      (fResolver = nil) then
     raise EInterfaceResolver.CreateUtf8(
       '%.AutoResolve with no prior registration', [self]);
-  // inlined ClassPropertiesGet
+  // inlined Rtti.RegisterClass()
   rtti := PPointer(PPAnsiChar(self)^ + vmtAutoTable)^;
   if (rtti = nil) or
      not (rcfAutoCreateFields in rtti.Flags) then

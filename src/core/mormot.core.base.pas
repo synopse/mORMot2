@@ -3102,7 +3102,7 @@ procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
 
 /// computation of our 128-bit CRC of a 128-bit binary buffer without SSE4.2
 // - to be used for regression tests only: crcblock will use the fastest
-// implementation available on the current CPU
+// implementation available on the current CPU (e.g. with SSE 4.2 or ARMv8)
 procedure crcblockfast(crc128, data128: PBlock128);
 
 /// compute a 128-bit CRC of any binary buffers
@@ -3137,8 +3137,8 @@ var
   // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
   // - its output won't match crc128c() value, which works on 8-bit input
   // - will use SSE 4.2 or ARMv8 hardware accelerated instruction, if available
-  // - is used e.g. by mormot.crypt.ecc's TEcdheProtocol.ComputeMAC for
-  // macCrc128c or TAesAbstractAead.MacCheckError
+  // - is used e.g. by crc32c128 or mormot.crypt.ecc's TEcdheProtocol.ComputeMAC
+  // for macCrc128c or TAesAbstractAead.MacCheckError
   crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
 
 /// compute CRC16-CCITT checkum on the supplied buffer
@@ -8938,7 +8938,7 @@ begin
   if entropy <> nil then
     for i := 0 to entropylen - 1 do
     begin
-      j := i and (SizeOf(e) - 1);
+      j := i and (SizeOf(e) - 1); // insert into the 64 bytes of e.b[]
       e.b[j] := {%H-}e.b[j] xor entropy^[i];
     end;
   repeat
