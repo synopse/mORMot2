@@ -5537,7 +5537,7 @@ begin
       // decode TRestClientAuthenticationDefault.ClientComputeSessionKey nonce
       if (length(cltnonce) = (SizeOf(os) + SizeOf(TAesBlock)) * 2 + 1) and
          (cltnonce[9] = '_') and
-         HexToBin(pointer(cltnonce), @os, SizeOf(os)) and
+         mormot.core.text.HexToBin(pointer(cltnonce), @os, SizeOf(os)) and
          (os.os <= high(os.os)) then
         Ctxt.SessionOS := os;
       // check if match TRestClientUri.SetUser() algorithm
