@@ -2857,17 +2857,19 @@ procedure TCurlHttp.InternalConnect(ConnectionTimeOut, SendTimeout,
   ReceiveTimeout: cardinal);
 const
   HTTPS: array[boolean] of string[1] = (
-    '', 's');
+    '',
+    's');
 begin
   if not IsAvailable then
     raise ECurlHttp.CreateFmt('No available %s', [LIBCURL_DLL]);
   fHandle := curl.easy_init;
   if curl.globalShare <> nil then
     curl.easy_setopt(fHandle, coShare, curl.globalShare);
-  ConnectionTimeOut := ConnectionTimeOut div 1000; // curl expects seconds
-  if ConnectionTimeOut = 0 then
-    ConnectionTimeOut := 1;
-  curl.easy_setopt(fHandle, coConnectTimeout, ConnectionTimeOut); // default=300 !
+  curl.easy_setopt(fHandle, coConnectTimeoutMs, ConnectionTimeOut); // default=300 !
+  if SendTimeout < ReceiveTimeout then
+    SendTimeout := ReceiveTimeout;
+  if SendTimeout <> 0 then // prevent send+receive forever
+    curl.easy_setopt(fHandle, coTimeoutMs, SendTimeout);
   // coTimeout=CURLOPT_TIMEOUT is global for the transfer, so shouldn't be used
   if fLayer = nlUnix then
     // see CURLOPT_UNIX_SOCKET_PATH doc
