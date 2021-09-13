@@ -381,7 +381,9 @@ begin
   DirectExecSql('ROLLBACK');
 end;
 
+
 { TSqlDBPostgresConnectionProperties }
+
 procedure TSqlDBPostgresConnectionProperties.GetForeignKeys;
 begin
   // TODO - how to get field we reference to? (currently consider this is "ID")

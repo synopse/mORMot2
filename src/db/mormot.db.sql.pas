@@ -3294,7 +3294,7 @@ end;
 function TSqlDBConnectionProperties.SharedTransaction(SessionID: cardinal;
   action: TSqlDBSharedTransactionAction): TSqlDBConnection;
 
-  procedure SetResultToSameConnection(index: integer);
+  procedure SetResultToSameConnection(index: PtrInt);
   begin
     result := ThreadSafeConnection;
     if result <> fSharedTransactions[index].Connection then
@@ -3303,7 +3303,7 @@ function TSqlDBConnectionProperties.SharedTransaction(SessionID: cardinal;
   end;
 
 var
-  i, n: integer;
+  i, n: PtrInt;
 begin
   n := Length(fSharedTransactions);
   try
@@ -3718,6 +3718,7 @@ begin
     if SQL = '' then
       exit;
     with Execute(SQL, []) do
+    begin
       while Step do
       begin
         F.ColumnName := TrimU(ColumnUtf8(0));
@@ -3733,6 +3734,8 @@ begin
           F.ColumnIndexed := true;
         FA.Add(F);
       end;
+      ReleaseRows;
+    end;
   end;
   SetLength(Fields, n);
 end;
@@ -3750,6 +3753,7 @@ begin
     exit;
   FA.Init(TypeInfo(TSqlDBIndexDefineDynArray), Indexes, @n);
   with Execute(SQL, []) do
+  begin
     while Step do
     begin
       F.IndexName := TrimU(ColumnUtf8(0));
@@ -3762,6 +3766,8 @@ begin
       F.IncludedColumns := TrimU(ColumnUtf8(7));
       FA.Add(F);
     end;
+    ReleaseRows;
+  end;
   SetLength(Indexes, n);
 end;
 
@@ -3779,6 +3785,7 @@ begin
       while Step do
         AddSortedRawUtf8(Procedures, count, TrimU(ColumnUtf8(0)));
       SetLength(Procedures, count);
+      ReleaseRows;
     end;
   except
     on Exception do
@@ -3801,6 +3808,7 @@ begin
   if SQL = '' then
     exit;
   with Execute(SQL, []) do
+  begin
     while Step do
     begin
       F.ColumnName := TrimU(ColumnUtf8(0));
@@ -3822,6 +3830,8 @@ begin
       end;
       FA.Add(F);
     end;
+    ReleaseRows;
+  end;
   SetLength(Parameters, n);
 end;
 
@@ -3847,6 +3857,7 @@ begin
           AddSortedRawUtf8(Tables, count, table);
       end;
       SetLength(Tables, count);
+      ReleaseRows;
     end;
   except
     on Exception do
@@ -3876,6 +3887,7 @@ begin
           AddSortedRawUtf8(Views, count, table);
       end;
       SetLength(Views, count);
+      ReleaseRows;
     end;
   except
     on Exception do
@@ -6696,8 +6708,11 @@ begin
   begin
     with fProperties do
       with Execute(fSqlGetServerTimestamp, []) do
+      begin
         if Step then
           fServerTimestampOffset := ColumnDateTime(0) - Current;
+        ReleaseRows;
+      end;
     if fServerTimestampOffset = 0 then
       fServerTimestampOffset := 0.000001; // request server only once
   end;
