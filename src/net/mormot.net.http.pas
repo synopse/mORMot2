@@ -1499,6 +1499,9 @@ begin
     end;
   // finalize the headers
   Http.ParseHeaderFinalize; // compute all meaningful headers
+  if Assigned(OnLog) then
+    OnLog(sllTrace, 'GetHeader % flags=% len=% %', [Http.Command,
+      byte(Http.HeaderFlags), Http.ContentLength, Http.ContentType], self);
 end;
 
 procedure THttpSocket.GetBody(DestStream: TStream);
@@ -1581,6 +1584,8 @@ begin
   else if (Http.ContentLength < 0) and // -1 means no Content-Length header
           IdemPChar(pointer(Http.Command), 'HTTP/1.0 200') then
   begin
+    if Assigned(OnLog) then
+      OnLog(sllTrace, 'GetBody deprecated loop', [], self);
     // body = either Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
     if SockIn <> nil then // client loop for compatibility with old servers
       while not eof(SockIn^) do
@@ -1601,6 +1606,8 @@ begin
   end;
   // optionaly uncompress content
   Http.UncompressData;
+  if Assigned(OnLog) then
+    OnLog(sllTrace, 'GetBody len=%', [Http.ContentLength], self);
   {$ifdef SYNCRTDEBUGLOW}
   TSynLog.Add.Log(sllCustom2, 'GetBody sock=% pending=% sockin=% len=% %',
     [fSock, SockInPending(0), PTextRec(SockIn)^.BufEnd - PTextRec(SockIn)^.bufpos,

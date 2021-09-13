@@ -1639,6 +1639,8 @@ begin
       if (ctxt.status = HTTP_UNAUTHORIZED) and
           Assigned(fOnAuthorize) then
       begin
+        if assigned(OnLog) then
+          OnLog(sllTrace, 'Request(% %)=%', [method, url, ctxt.status], self);
         if rAuth in ctxt.retry then
           break;
         include(ctxt.retry, rAuth);
@@ -1648,6 +1650,8 @@ begin
       else if (ctxt.status = HTTP_PROXYAUTHREQUIRED) and
           Assigned(fOnProxyAuthorize) then
       begin
+        if assigned(OnLog) then
+          OnLog(sllTrace, 'Request(% %)=%', [method, url, ctxt.status], self);
         if rAuthProxy in ctxt.retry then
           break;
         include(ctxt.retry, rAuthProxy);
@@ -1982,7 +1986,7 @@ begin
   finally
     FreeSecContext(sc);
     if Assigned(Sender.OnLog) then
-      Sender.OnLog(sllDebug, '%%', [OutHeader, Context.status], Sender);
+      Sender.OnLog(sllDebug, 'DoSspi %%', [OutHeader, Context.status], Sender);
     Context.header := bak;
   end;
   result := Context.status <> unauthstatus;
