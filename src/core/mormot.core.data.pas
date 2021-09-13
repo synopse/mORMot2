@@ -8854,17 +8854,18 @@ type
   TFastReHash = object // dedicated object for better register allocation
     hc: cardinal;
     values, first, last, siz: PtrInt;
-    count, duplicates, ht: integer;
+    duplicates, ht: integer;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     collisions: integer;
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
     P: PAnsiChar;
-    procedure Process(Hasher: PDynArrayHasher);
+    procedure Process(Hasher: PDynArrayHasher; count: integer);
   end;
 
-procedure TFastReHash.Process(Hasher: PDynArrayHasher);
+procedure TFastReHash.Process(Hasher: PDynArrayHasher; count: integer);
 var
   fnd, ndx: PtrInt;
+label nxt;
 begin
   // should match FindOrNew() logic
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
@@ -8876,7 +8877,7 @@ begin
   siz := Hasher^.DynArray^.Info.Cache.ItemSize;
   ht := 1; // store index + 1
   repeat
-    if Assigned(Hasher^.EventHash) then
+nxt:if Assigned(Hasher^.EventHash) then
       hc := Hasher^.EventHash(P^)
     else
       hc := Hasher^.HashItem(P^, Hasher^.Hasher);
@@ -8888,7 +8889,12 @@ begin
       if fnd = 0 then
       begin
         Hasher^.HashTable[ndx] := ht; // use void entry (most common case)
-        break;
+        inc(P, siz); // next item
+        inc(ht);
+        dec(count);
+        if count = 0 then
+          exit;
+        goto nxt;
       end;
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
       inc(collisions);
@@ -8962,8 +8968,7 @@ begin
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   // fill HashTable[]=index+1 from all existing items
   include(State, canHash);   // needed before Find() below
-  fastrehash.Count := n;
-  fastrehash.Process(@self);
+  fastrehash.Process(@self, n);
   result := fastrehash.duplicates;
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   inc(CountCollisions, fastrehash.collisions);

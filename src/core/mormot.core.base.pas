@@ -8931,7 +8931,9 @@ var
 procedure XorEntropy(var e: THash512Rec);
 var
   lec: PLecuyer;
+  {$ifdef CPUINTEL}
   i: PtrInt;
+  {$endif CPUINTEL}
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
   if _EntropyGlobal.L = 0 then
