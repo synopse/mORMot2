@@ -3,7 +3,6 @@
   <Package Version="5">
     <Name Value="mormot2"/>
     <Author Value="A. Bouchez, Synopse"/>
-    <AutoUpdate Value="OnRebuildingAll"/>
     <CompilerOptions>
       <Version Value="11"/>
       <SearchPaths>

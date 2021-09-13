@@ -1453,6 +1453,9 @@ var
 begin
   if SockIn = nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
+  if Assigned(OnLog) then
+    OnLog(sllTrace, 'RequestInternal % % flags=% retry=%',
+      [ctxt.method, ctxt.url, byte(Http.HeaderFlags), byte(ctxt.retry)], self);
   Http.Content := '';
   if (hfConnectionClose in Http.HeaderFlags) or
      (SockReceivePending(0) = cspSocketError) then
