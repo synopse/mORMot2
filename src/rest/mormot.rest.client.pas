@@ -2115,11 +2115,7 @@ begin
   fComputeSignature := TRestClientAuthenticationSignedUri.ComputeSignatureCrc32;
   fSession.ID := CONST_AUTHENTICATION_NOT_USED;
   fFakeCallbacks := TRestClientCallbacks.Create(self);
-  {$ifdef USELOCKERDEBUG}
-  fSafe := TAutoLockerDebug.Create(fLogClass, aModel.Root); // more verbose
-  {$else}
   fSafe := TAutoLocker.Create;
-  {$endif USELOCKERDEBUG}
   fServicesRouting := TRestClientRoutingRest;
   TRestOrmClientUri.Create(self); // asssign the URI-based ORM kernel
 end;

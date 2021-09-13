@@ -279,8 +279,6 @@ type
   // could define one published property of a mormot.core.interface.pas
   // TInjectableObject as IAutoLocker so that this class may be automatically
   // injected
-  // - you may use the inherited TAutoLockerDebug class to debug unexpected race
-  // conditions due to such critical sections
   // - consider inherit from high-level TSynPersistentLock or call low-level
   // fSafe := NewSynLocker / fSafe^.DoneAndFreemem instead
   TAutoLocker = class(TInterfacedObjectWithCustomCreate, IAutoLocker)

@@ -14,8 +14,8 @@
 
 {.$define USEPACKAGES}
 // define this if you compile the unit within a Delphi package
-// - it will avoid error like "[DCC Error] E2201 Need imported data reference ($G)
-// to access 'VarCopyProc'
+// - it will avoid error like "[DCC Error] E2201 Need imported data reference
+// ($G) to access 'VarCopyProc'"
 // - shall be set at the package options level, and left untouched by default
 // - note: you should probably also set "Generate DCUs only" in Project Options
 // -> Delphi Compiler -> Output C/C++ -> C/C++ output file generation
@@ -47,15 +47,6 @@
 // if defined, FPC RTL won't be patched on x86_64 with optimized asm
 // - you can enable it if you find out some compatibility problem
 
-{.$define USELOCKERDEBUG}
-// by default, some IAutoLocker instances would use TAutoLocker, unless this
-// conditional is defined to use more verbose TAutoLockerDebug
-// (may be used for race condition debugging, in multi-threaded apps)
-
-{.$define DISABLE_SSE42}
-// if defined, no SSE4.2 nor AES-NI instruction will be used, i.e. disable
-// all crc32c and aesenc/aesdec opcodes - is set for FPC DARWIN target
-
 {.$define WITH_ERMS}
 // you may define this to enable REP MOVSB/STOSB for x86_64 FillcharFast/MoveFast
 // if cfERMS flag is available in Intel's CpuFeatures
@@ -71,11 +62,12 @@
 // enable low-level logging of SQlite3 virtual table query planner costs
 // -> to be defined only for internal debugging
 
-{.$define VOIDSQLZEOS}
+{.$define NOSYNDBZEOS}
 // make mormot.db.sql.zeos.pas a "void" unit - defined for FPC/Lazarus packages only
 
 {.$define DISABLEAPPSQL}
-// mormot.db.sql external SQL DB won't be linked to the executable by mormot.app
+// mormot.db.sql external DB won't be linked to the executable by mormot.app
+
 {.$define DISABLEAPPNOSQL}
 // Mongo DB client won't be linked to the executable by mormot.app
 
@@ -87,6 +79,16 @@
 
 {.$define NOPOINTEROFFSET}
 // disable TOrmTable offsets on 64-bit if your memory is huge or fragmented
+
+{.$define ONLYUSEHTTPSOCKET}
+// is defined on POSIX but may be enabled on Windows if socket+SChannel is enough
+
+{.$define USE_OPENSSL}
+// is defined on POSIX (with late binding) but may be enabled on Windows too
+
+{.$define USELIBCURL}
+// define cross-platform libcurl for https
+// (when our native socket+OpenSSL/SChannel doesn't seem to be good enough)
 
 {.$define LIBCURLMULTI}
 // enable the more advanced "multi session" API functions of mormot.lib.curl
@@ -637,8 +639,6 @@
 
 {$ifdef OSWINDOWS}
 
-  {.$define ONLYUSEHTTPSOCKET} // better performance, but less integrated
-
   {$ifndef ONLYUSEHTTPSOCKET}
     {$define USEWININET}   // publish TWinINet/TWinHttp/TWinHttpAPI classes
     {$define USE_WINIOCP}  // I/O completion ports API is the best option under Windows
@@ -654,7 +654,7 @@
 
 {$ifdef OSPOSIX}
 
-  {$define ONLYUSEHTTPSOCKET} // efficient cross-platform Socket API
+  {$define ONLYUSEHTTPSOCKET} // efficient cross-platform Socket + OpenSSL API
 
   {$ifdef OSANDROID}
 
