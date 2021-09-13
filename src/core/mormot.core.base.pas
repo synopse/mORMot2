@@ -293,7 +293,7 @@ type
   PPPUtf8Char = ^PPUtf8Char;
 
   /// a Row/Col array of PUtf8Char, for containing sqlite3_get_table() result
-  TPUtf8CharArray = array[0 .. MaxInt div SizeOf(PUtf8Char) - 1 ] of PUtf8Char;
+  TPUtf8CharArray = array[ 0 .. MaxInt div SizeOf(PUtf8Char) - 1 ] of PUtf8Char;
   PPUtf8CharArray = ^TPUtf8CharArray;
 
   /// a dynamic array of PUtf8Char pointers
@@ -310,9 +310,9 @@ type
   /// a TVarData values array
   // - is not called TVarDataArray to avoid confusion with the corresponding
   // type already defined in RTL Variants.pas, and used for custom late-binding
-  TVarDataStaticArray = array[0 .. MaxInt div SizeOf(TVarData) - 1 ] of TVarData;
+  TVarDataStaticArray = array[ 0 .. MaxInt div SizeOf(TVarData) - 1 ] of TVarData;
   PVarDataStaticArray = ^TVarDataStaticArray;
-  TVariantArray = array[0 .. MaxInt div SizeOf(Variant) - 1 ] of Variant;
+  TVariantArray = array[ 0 .. MaxInt div SizeOf(Variant) - 1 ] of Variant;
   PVariantArray = ^TVariantArray;
   TVariantDynArray = array of variant;
   PPVariant = ^PVariant;
@@ -404,47 +404,47 @@ type
   PPInteger = ^PInteger;
   PPPointer = ^PPointer;
   PByteArray = ^TByteArray;
-  TByteArray = array[0 .. MaxInt - 1] of byte; // redefine here with {$R-}
+  TByteArray = array[ 0 .. MaxInt - 1 ] of byte; // redefine here with {$R-}
   PBooleanArray = ^TBooleanArray;
-  TBooleanArray = array[0 .. MaxInt - 1] of boolean;
+  TBooleanArray = array[ 0 .. MaxInt - 1 ] of boolean;
   PPWord = ^PWord;
-  TWordArray  = array[0 .. MaxInt div SizeOf(word) - 1 ] of word;
+  TWordArray  = array[ 0 .. MaxInt div SizeOf(word) - 1 ] of word;
   PWordArray = ^TWordArray;
-  TIntegerArray = array[0 .. MaxInt div SizeOf(integer) - 1 ] of integer;
+  TIntegerArray = array[ 0 .. MaxInt div SizeOf(integer) - 1 ] of integer;
   PIntegerArray = ^TIntegerArray;
   PIntegerArrayDynArray = array of PIntegerArray;
-  TPIntegerArray = array[0 .. MaxInt div SizeOf(PIntegerArray) - 1 ] of PInteger;
+  TPIntegerArray = array[ 0 .. MaxInt div SizeOf(PIntegerArray) - 1 ] of PInteger;
   PPIntegerArray = ^TPIntegerArray;
-  TCardinalArray = array[0 .. MaxInt div SizeOf(cardinal) - 1 ] of cardinal;
+  TCardinalArray = array[ 0 .. MaxInt div SizeOf(cardinal) - 1 ] of cardinal;
   PCardinalArray = ^TCardinalArray;
-  TInt64Array = array[0 .. MaxInt div SizeOf(Int64) - 1 ] of Int64;
+  TInt64Array = array[ 0 .. MaxInt div SizeOf(Int64) - 1 ] of Int64;
   PInt64Array = ^TInt64Array;
-  TQWordArray = array[0 .. MaxInt div SizeOf(QWord) - 1 ] of QWord;
+  TQWordArray = array[ 0 .. MaxInt div SizeOf(QWord) - 1 ] of QWord;
   PQWordArray = ^TQWordArray;
-  TPtrUIntArray = array[0 .. MaxInt div SizeOf(PtrUInt) - 1 ] of PtrUInt;
+  TPtrUIntArray = array[ 0 .. MaxInt div SizeOf(PtrUInt) - 1 ] of PtrUInt;
   PPtrUIntArray = ^TPtrUIntArray;
-  TSmallIntArray = array[0 .. MaxInt div SizeOf(SmallInt) - 1 ] of SmallInt;
+  TSmallIntArray = array[ 0 .. MaxInt div SizeOf(SmallInt) - 1 ] of SmallInt;
   PSmallIntArray = ^TSmallIntArray;
-  TSingleArray = array[0 .. MaxInt div SizeOf(Single) - 1 ] of Single;
+  TSingleArray = array[ 0 .. MaxInt div SizeOf(Single) - 1 ] of Single;
   PSingleArray = ^TSingleArray;
-  TDoubleArray = array[0 .. MaxInt div SizeOf(Double) - 1 ] of Double;
+  TDoubleArray = array[ 0 .. MaxInt div SizeOf(Double) - 1 ] of Double;
   PDoubleArray = ^TDoubleArray;
-  TDateTimeArray = array[0 .. MaxInt div SizeOf(TDateTime) - 1 ] of TDateTime;
+  TDateTimeArray = array[ 0 .. MaxInt div SizeOf(TDateTime) - 1 ] of TDateTime;
   PDateTimeArray = ^TDateTimeArray;
-  TPAnsiCharArray = array[0 .. MaxInt div SizeOf(PAnsiChar) - 1 ] of PAnsiChar;
+  TPAnsiCharArray = array[ 0 .. MaxInt div SizeOf(PAnsiChar) - 1 ] of PAnsiChar;
   PPAnsiCharArray = ^TPAnsiCharArray;
-  TRawUtf8Array = array[0 .. MaxInt div SizeOf(RawUtf8) - 1 ] of RawUtf8;
+  TRawUtf8Array = array[ 0 .. MaxInt div SizeOf(RawUtf8) - 1 ] of RawUtf8;
   PRawUtf8Array = ^TRawUtf8Array;
-  TRawByteStringArray = array[0 .. MaxInt div SizeOf(RawByteString) - 1 ] of RawByteString;
+  TRawByteStringArray = array[ 0 .. MaxInt div SizeOf(RawByteString) - 1 ] of RawByteString;
   PRawByteStringArray = ^TRawByteStringArray;
-  PShortStringArray = array[0 .. MaxInt div SizeOf(pointer) - 1 ] of PShortString;
-  TPointerArray = array [0 .. MaxInt div SizeOf(Pointer) - 1 ] of Pointer;
+  PShortStringArray = array[ 0 .. MaxInt div SizeOf(pointer) - 1 ] of PShortString;
+  TPointerArray = array[0 .. MaxInt div SizeOf(Pointer) - 1 ] of Pointer;
   PPointerArray = ^TPointerArray;
-  TClassArray = array[0 .. MaxInt div SizeOf(TClass) - 1 ] of TClass;
+  TClassArray = array[ 0 .. MaxInt div SizeOf(TClass) - 1 ] of TClass;
   PClassArray = ^TClassArray;
   TObjectArray = array [0 .. MaxInt div SizeOf(TObject) - 1 ] of TObject;
   PObjectArray = ^TObjectArray;
-  TPtrIntArray = array[0 .. MaxInt div SizeOf(PtrInt) - 1 ] of PtrInt;
+  TPtrIntArray = array[ 0 .. MaxInt div SizeOf(PtrInt) - 1 ] of PtrInt;
   PPtrIntArray = ^TPtrIntArray;
   PInt64Rec = ^Int64Rec;
   PLongRec = ^LongRec;
@@ -1943,7 +1943,7 @@ type
 
   /// map an infinite array of 128-bit hash values
   // - each item consumes 16 bytes of memory
-  THash128Array = array[0 .. maxInt div SizeOf(THash128) - 1] of THash128;
+  THash128Array = array[ 0 .. MaxInt div SizeOf(THash128) - 1 ] of THash128;
   /// pointer to an infinite array of 128-bit hash values
   PHash128Array = ^THash128Array;
   /// store several 128-bit hash values
@@ -1977,7 +1977,7 @@ type
 
   /// map an infinite array of 256-bit hash values
   // - each item consumes 32 bytes of memory
-  THash256Array = array[0 .. maxInt div SizeOf(THash256)- 1] of THash256;
+  THash256Array = array[ 0 .. MaxInt div SizeOf(THash256) - 1 ] of THash256;
   /// pointer to an infinite array of 256-bit hash values
   PHash256Array = ^THash256Array;
   /// store several 256-bit hash values
@@ -2013,7 +2013,7 @@ type
 
   /// map an infinite array of 512-bit hash values
   // - each item consumes 64 bytes of memory
-  THash512Array = array[0 .. maxInt div SizeOf(THash512) - 1] of THash512;
+  THash512Array = array[ 0 .. MaxInt div SizeOf(THash512) - 1 ] of THash512;
   /// pointer to an infinite array of 512-bit hash values
   PHash512Array = ^THash512Array;
   /// store several 512-bit hash values
@@ -2250,7 +2250,7 @@ type
   // - the compiler will generate bt/btr/bts opcodes
   TBits8 = set of 0..7;
   PBits8 = ^TBits8;
-  TBits8Array = array[0 .. MaxInt - 1] of TBits8;
+  TBits8Array = array[ 0 .. MaxInt - 1 ] of TBits8;
 
   /// fast access to 32-bit integer bits
   // - the compiler will generate bt/btr/bts opcodes
@@ -2693,6 +2693,11 @@ function StrLenW(S: PWideChar): PtrInt;
 // - source is expected to be not nil
 // - returns the beginning of next line, or nil if source^=#0 was reached
 function GotoNextLine(source: PUtf8Char): PUtf8Char;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast go to the first char <= #13
+// - source is expected to be not nil
+function GotoNextControlChar(source: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// return TRUE if the supplied buffer only contains 7-bits Ansi characters
@@ -8691,6 +8696,32 @@ begin
         end
       else
         exit;
+end;
+
+function GotoNextControlChar(source: PUtf8Char): PUtf8Char;
+label
+  _1, _2, _3; // ugly but faster
+begin
+  result := source;
+  repeat
+    if result[0] < #13 then
+      exit
+    else if result[1] < #13 then
+      goto _1
+    else if result[2] < #13 then
+      goto _2
+    else if result[3] < #13 then
+      goto _3
+    else
+    begin
+      inc(result, 4);
+      continue;
+    end;
+_3: inc(result);
+_2: inc(result);
+_1: inc(result);
+    exit;
+  until false;
 end;
 
 function GotoNextLine(source: PUtf8Char): PUtf8Char;
