@@ -2452,15 +2452,20 @@ begin
   if status <> HTTP_SUCCESS then
   begin
     // on fatal error direct reject and close the connection
-    // (use fHttp.Command* as temp variables to avoid local RawUtf8 allocation)
     StatusCodeToReason(status, fHttp.Command);
     FormatUtf8('HTTP/1.0 % %'#13#10#13#10'Server Rejected Request as % %',
       [status, fHttp.Command, status, fHttp.Command],
+      // (use fHttp.CommandUri as temp var to avoid local RawUtf8 allocation)
       fHttp.CommandUri);
     fServer.fAsync.fClients.WriteString(self, fHttp.CommandUri); // no polling
     fServer.IncStat(grRejected);
     exit;
   end;
+  // implement Expect: 100-Continue Header
+  if hfExpect100 in fHttp.HeaderFlags then
+    // client waits for the server to parse the headers and return 100
+    // before sending the request body
+    fServer.fAsync.fClients.WriteString(self, 'HTTP/1.1 100 Continue'#13#10#13#10);
   // now THttpAsyncConnection.OnRead can get the body
   fServer.IncStat(grHeaderReceived);
   if not (fHttp.State in [hrsWaitProcessing, hrsUpgraded]) and

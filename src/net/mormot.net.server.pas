@@ -2136,7 +2136,7 @@ begin
                          (fServer.ServerKeepAliveTimeOut > 0)) and
                         IdemPChar(P, 'HTTP/1.1');
     Http.Content := '';
-    // get headers and content
+    // get headers
     GetHeader(noheaderfilter);
     fServer.ParseRemoteIPConnID(Http.Headers, fRemoteIP, fRemoteConnectionID);
     if hfConnectionClose in Http.HeaderFlags then
@@ -2153,6 +2153,7 @@ begin
     end;
     if fServer <> nil then
     begin
+      // validate allowed PayLoad size and OnBeforeBody callback
       if (Http.ContentLength > 0) and
          (fServer.MaximumAllowedContentLength > 0) and
          (Http.ContentLength > fServer.MaximumAllowedContentLength) then
@@ -2187,6 +2188,12 @@ begin
         end;
       end;
     end;
+    // implement 'Expect: 100-Continue' Header
+    if hfExpect100 in Http.HeaderFlags then
+      // client waits for the server to parse the headers and return 100
+      // before sending the request body
+      SockSendFlush('HTTP/1.1 100 Continue'#13#10#13#10);
+    // now the server could retrieve the request body
     if withBody and
        not (hfConnectionUpgrade in Http.HeaderFlags) then
     begin

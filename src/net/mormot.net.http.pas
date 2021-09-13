@@ -155,7 +155,8 @@ type
     hfConnectionKeepAlive,
     hfHasRemoteIP,
     nfHeadersParsed,
-    hfContentStreamNeedFree);
+    hfContentStreamNeedFree,
+    hfExpect100);
 
   PHttpRequestContext = ^THttpRequestContext;
 
@@ -238,14 +239,13 @@ type
     CompressContentEncoding: integer;
     /// reset this request context to be used without any ProcessInit/Read/Write
     procedure Clear;
-    /// parse a HTTP header into Header and fill internal properties
+    /// parse a HTTP header text line into Header and fill internal properties
     // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
     // use directly the ContentLength/ContentType/ServerInternalState/Upgrade
     // and HeaderFlags fields since HeaderGetValue() would return ''
     // - force HeadersUnFiltered=true to store all headers including the
     // connection-related fields, but increase memory and reduce performance
-    // - returns the position of the end of the line, excluding trailing #13/#0
-    function ParseHeader(P: PUtf8Char; HeadersUnFiltered: boolean = false): PUtf8Char;
+    procedure ParseHeader(P: PUtf8Char; HeadersUnFiltered: boolean = false);
     /// to be called once all ParseHeader lines have been done to fill Headers
     // - also set CompressContentEncoding/CompressAcceptHeader from Compress[]
     // and Content-Encoding header value
@@ -828,7 +828,6 @@ begin
       exit;
   result := -1;
 end;
-
 
 procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8);
 var

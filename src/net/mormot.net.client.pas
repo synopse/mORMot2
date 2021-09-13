@@ -1505,15 +1505,6 @@ begin
             ctxt.status := HTTP_HTTPVERSIONNONSUPPORTED;
             exit;
           end;
-          while ctxt.status = HTTP_CONTINUE do
-          begin
-            repeat
-              // 100 CONTINUE is just to be ignored on client side
-              SockRecvLn(Http.Command);
-              P := pointer(Http.Command);
-            until IdemPChar(P, 'HTTP/1.'); // ignore up to next command
-            ctxt.status := GetCardinal(P + 9);
-          end;
           if P[7] = '0' then
             // HTTP/1.0 -> force connection close
             ctxt.KeepAlive := 0;
