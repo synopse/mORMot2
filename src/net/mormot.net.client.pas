@@ -216,21 +216,23 @@ type
     InStream, OutStream: TStream;
     KeepAlive: cardinal;
     OutStreamInitialPos: Int64;
-    retry: boolean;
+    retry: set of (rMain, rAuth, rAuthProxy);
   end;
 
   THttpClientSocket = class;
 
   /// callback used by THttpClientSocket.Request on HTTP_UNAUTHORIZED (401)
-  // - as set to OnAuthorize/OnProxyAuthorize
+  // or HTTP_PROXYAUTHREQUIRED (407) errors
+  // - as set to OnAuthorize/OnProxyAuthorize event properties
   // - Authenticate contains the "WWW-Authenticate" response header value
-  // - could e.g. set Sender.AuthBearer/BasicAuthUserPassword then retry
-  // the request with Sender.RequestInternal(Context)
+  // - could e.g. set Sender.AuthBearer/BasicAuthUserPassword then return
+  // true to let the caller try again with the new headers
+  // - if you return false, nothing happens and the 401 is reported back
   // - more complex schemes (like SSPI) could be implemented within the
   // callback - see e.g. THttpClientSocket.AuthorizeSspi class method
-  TOnHttpClientSocketAuthorize = procedure(Sender: THttpClientSocket;
+  TOnHttpClientSocketAuthorize = function(Sender: THttpClientSocket;
     var Context: TTHttpClientSocketRequestParams;
-    const Authenticate: RawUtf8) of object;
+    const Authenticate: RawUtf8): boolean of object;
 
   /// callback used by THttpClientSocket.Request before/after every request
   // - return true to continue execution, false to abort normal process
@@ -330,16 +332,16 @@ type
     {$ifdef DOMAINRESTAUTH}
     /// web authentication of the current logged user using Windows Security
     // Support Provider Interface (SSPI) or GSSAPI library on Linux
-    // - match the OnAuthorize callback signature
+    // - match the OnAuthorize: TOnHttpClientSocketAuthorize callback signature
     // - see also ClientForceSpn() and AuthorizeSspiSpn property
-    class procedure AuthorizeSspi(Sender: THttpClientSocket;
-      var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
+    class function AuthorizeSspi(Sender: THttpClientSocket;
+      var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
     /// web authentication of the current logged user using Windows Security
     // Support Provider Interface (SSPI) or GSSAPI library on Linux
-    // - match the OnProxyAuthorize callback signature
+    // - match the OnProxyAuthorize: TOnHttpClientSocketAuthorize signature
     // - see also ClientForceSpn() and AuthorizeSspiSpn property
-    class procedure ProxyAuthorizeSspi(Sender: THttpClientSocket;
-      var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
+    class function ProxyAuthorizeSspi(Sender: THttpClientSocket;
+      var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
     /// the Kerberos Service Principal Name, as registered in domain
     // - e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
     // - used by class procedure AuthorizeSspi/ProxyAuthorizeSspi callbacks
@@ -1424,8 +1426,8 @@ procedure THttpClientSocket.RequestInternal(
     if Assigned(OnLog) then
        OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=% on %:%',
          [ctxt.method, ctxt.url, msg, fSock.Socket, FatalError,
-          BOOL_STR[ctxt.retry], fServer, fPort], self);
-    if ctxt.retry then
+          BOOL_STR[rMain in ctxt.retry], fServer, fPort], self);
+    if rMain in ctxt.retry then
       // we should retry once -> return error only if failed twice
       ctxt.status := FatalError
     else
@@ -1435,7 +1437,7 @@ procedure THttpClientSocket.RequestInternal(
       try
         OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
         HttpStateReset;
-        ctxt.retry := true;
+        include(ctxt.retry, rMain);
         RequestInternal(ctxt);
       except
         on Exception do
@@ -1545,13 +1547,6 @@ begin
           else
             GetBody(nil);
         end;
-        // handle optional (proxy) authentication callbacks
-        if (ctxt.status = HTTP_UNAUTHORIZED) and
-            Assigned(fOnAuthorize) then
-          fOnAuthorize(self, ctxt, HeaderGetValue('WWW-AUTHENTICATE'))
-        else if (ctxt.status = HTTP_PROXYAUTHREQUIRED) and
-            Assigned(fOnProxyAuthorize) then
-          fOnProxyAuthorize(self, ctxt, HeaderGetValue('PROXY-AUTHENTICATE'));
         // successfully sent -> reset some fields for the next request
         if ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
           RequestClear;
@@ -1629,7 +1624,10 @@ begin
     ctxt.OutStreamInitialPos := OutStream.Position;
   ctxt.status := 0;
   ctxt.redirected := 0;
-  ctxt.retry := retry;
+  if retry then
+    ctxt.retry := [rMain]
+  else
+    ctxt.retry := [];
   if not Assigned(fOnBeforeRequest) or
      fOnBeforeRequest(self, ctxt) then
   begin
@@ -1637,12 +1635,35 @@ begin
     repeat
       // this will handle the actual request, with proper retrial
       RequestInternal(ctxt);
+      // handle optional (proxy) authentication callbacks
+      if (ctxt.status = HTTP_UNAUTHORIZED) and
+          Assigned(fOnAuthorize) then
+      begin
+        if rAuth in ctxt.retry then
+          break;
+        include(ctxt.retry, rAuth);
+        if fOnAuthorize(self, ctxt, HeaderGetValue('WWW-AUTHENTICATE')) then
+          continue;
+      end
+      else if (ctxt.status = HTTP_PROXYAUTHREQUIRED) and
+          Assigned(fOnProxyAuthorize) then
+      begin
+        if rAuthProxy in ctxt.retry then
+          break;
+        include(ctxt.retry, rAuthProxy);
+        if fOnProxyAuthorize(self, ctxt, HeaderGetValue('PROXY-AUTHENTICATE')) then
+          continue;
+      end;
       // handle redirection from returned headers
-      if (ctxt.redirected >= fRedirectMax) or
-         (ctxt.status < 300) or              // 300..399 are redirections
+      if (ctxt.status < 300) or              // 300..399 are redirections
          (ctxt.status = HTTP_NOTMODIFIED) or // but 304 is not
-         (ctxt.status > 399) then
+         (ctxt.status > 399) or              // 400.. are errors
+         (ctxt.redirected >= fRedirectMax) then
         break;
+      if retry then
+        ctxt.retry := [rMain]
+      else
+        ctxt.retry := [];
       ctxt.url := HeaderGetValue('LOCATION');
       if assigned(OnLog) then
         OnLog(sllTrace, 'Request % % redirected to %', [method, url, ctxt.url], self);
@@ -1930,20 +1951,23 @@ end;
 
 // see https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
 
-procedure DoSspi(Sender: THttpClientSocket;
+function DoSspi(Sender: THttpClientSocket;
   var Context: TTHttpClientSocketRequestParams;
-  const Authenticate, InHeaderUp, OutHeader: RawUtf8);
+  const Authenticate, InHeaderUp, OutHeader: RawUtf8): boolean;
 var
   sc: TSecContext;
   bak: RawUtf8;
+  unauthstatus: integer;
   datain, dataout: RawByteString;
 begin
+  result := false;
   if (Sender = nil) or
      not IdemPChar(pointer(Authenticate), pointer(SECPKGNAMEHTTP_UPPER)) then
     exit;
+  unauthstatus := Context.status;
+  bak := Context.header;
   InvalidateSecContext(sc, 0);
   try
-    bak := Context.header;
     repeat
       FindNameValue(Sender.Http.Headers, pointer(InHeaderUp), RawUtf8(datain));
       datain := Base64ToBin(TrimU(datain));
@@ -1954,31 +1978,34 @@ begin
       if bak <> '' then
         Context.header := Context.header + #13#10 + bak;
       Sender.RequestInternal(Context);
-    until Context.status <> HTTP_UNAUTHORIZED;
+    until Context.status <> unauthstatus;
   finally
     FreeSecContext(sc);
     if Assigned(Sender.OnLog) then
       Sender.OnLog(sllDebug, '%%', [OutHeader, Context.status], Sender);
     Context.header := bak;
   end;
+  result := Context.status <> unauthstatus;
 end;
 
-class procedure THttpClientSocket.AuthorizeSspi(Sender: THttpClientSocket;
-  var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
+class function THttpClientSocket.AuthorizeSspi(Sender: THttpClientSocket;
+  var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
 begin
-  if InitializeDomainAuth then // try to setup sspi/gssapi -> SECPKGNAMEHTTP
-    DoSspi(Sender, Context, Authenticate,
-      'WWW-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
-      'Authorization: ' + SECPKGNAMEHTTP + ' ');
+  result := InitializeDomainAuth and
+            // try to setup sspi/gssapi -> SECPKGNAMEHTTP
+            DoSspi(Sender, Context, Authenticate,
+              'WWW-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
+              'Authorization: ' + SECPKGNAMEHTTP + ' ');
 end;
 
-class procedure THttpClientSocket.ProxyAuthorizeSspi(Sender: THttpClientSocket;
-  var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
+class function THttpClientSocket.ProxyAuthorizeSspi(Sender: THttpClientSocket;
+  var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
 begin
-  if InitializeDomainAuth then // try to setup sspi/gssapi -> SECPKGNAMEHTTP
-    DoSspi(Sender, Context, Authenticate,
-      'PROXY-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
-      'Proxy-Authorization: ' + SECPKGNAMEHTTP + ' ');
+  result := InitializeDomainAuth and
+            // try to setup sspi/gssapi -> SECPKGNAMEHTTP
+            DoSspi(Sender, Context, Authenticate,
+              'PROXY-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
+              'Proxy-Authorization: ' + SECPKGNAMEHTTP + ' ');
 end;
 
 {$endif DOMAINRESTAUTH}
