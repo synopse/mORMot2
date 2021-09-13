@@ -1093,8 +1093,16 @@ function IdemPCharWithoutWhiteSpace(p: PUtf8Char; up: PAnsiChar): boolean;
 // - ignore case - upArray^ must be already Upper
 // - chars are compared as 7-bit Ansi only (no accentuated characters)
 // - warning: this function expects upArray[] items to have AT LEAST TWO
-// CHARS (it will use a fast comparison of initial 2 bytes)
+// CHARS (it will use a fast 16-bit comparison of initial 2 bytes)
 function IdemPCharArray(p: PUtf8Char; const upArray: array of PAnsiChar): integer; overload;
+
+/// returns the index of a matching beginning of p^ in nil-terminated up^ array
+// - returns -1 if no item matched
+// - ignore case - each up^ must be already Upper
+// - chars are compared as 7-bit Ansi only (no accentuated characters)
+// - warning: this function expects up^ items to have AT LEAST TWO CHARS
+// (it will use a fast 16-bit comparison of initial 2 bytes)
+function IdemPCharArray(p: PUtf8Char; up: PPAnsiChar): PtrInt; overload;
 
 /// returns the index of a matching beginning of p^ in upArray two characters
 // - returns -1 if no item matched
@@ -4355,6 +4363,54 @@ begin
         exit
       else
         inc(up);
+  end;
+  result := -1;
+end;
+
+function IdemPCharArray(p: PUtf8Char; up: PPAnsiChar): PtrInt;
+var
+  w: word;
+  u: PAnsiChar;
+  p2: PtrUInt;
+  c: byte;
+  {$ifdef CPUX86NOTPIC}
+  tab: TNormTableByte absolute NormToUpperAnsi7;
+  {$else}
+  tab: PByteArray; // faster on PIC/ARM and x86_64
+  {$endif CPUX86NOTPIC}
+begin
+  if p <> nil then
+  begin
+    // uppercase the first two p^ chars
+    {$ifndef CPUX86NOTPIC}
+    tab := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
+    w := tab[ord(p[0])] + tab[ord(p[1])] shl 8;
+    result := 0;
+    repeat
+      // quickly check the first 2 up^[result] chars
+      u := PPointerArray(up)[result];
+      if u = nil then
+        break
+      else if PWord(u)^ <> w then
+      begin
+        inc(result);
+        continue;
+      end;
+      // inlined if IdemPCharByte(tab, p + 2, up^ + 2) then exit
+      p2 := PtrUInt(p);
+      dec(p2, PtrUInt(u));
+      inc(u, 2);
+      repeat
+        c := PByte(u)^;
+        if c = 0 then
+          exit   // found IdemPChar(p^, up^[result])
+        else if tab[PtrUInt(u[p2])] <> c then
+          break; // at least one char doesn't match
+        inc(u);
+      until false;
+      inc(result);
+    until false;
   end;
   result := -1;
 end;

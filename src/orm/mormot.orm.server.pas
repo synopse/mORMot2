@@ -1118,6 +1118,14 @@ begin
       ID, FieldName, Increment);
 end;
 
+const
+  POSTMETHOD: array[0..4] of PAnsiChar = (
+    'POST',    // 0
+    'PUT',     // 1
+    'DELETE',  // 2
+    'SIMPLE',  // 3
+    nil);
+
 function TRestOrmServer.EngineBatchSend(Table: TOrmClass;
   var Data: RawUtf8; var Results: TIDDynArray;
   ExpectedResultsCount: integer): integer;
@@ -1265,8 +1273,7 @@ begin
         else
           RunningRest := RunStatic;
         // get CRUD method and associated Value/ID
-        case IdemPCharArray(Method, 'POPUDESI') of
-          // optimistic check of 2 first chars, ignoring e.g. any '@'
+        case IdemPCharArray(Method, @POSTMETHOD) of
           0:
             begin
               // '{"Table":[...,"POST",{object},...]}'

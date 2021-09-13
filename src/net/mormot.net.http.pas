@@ -566,6 +566,19 @@ begin
     result := 'Authorization: Bearer ' + AuthToken;
 end;
 
+const
+  TOBEPURGED: array[0..9] of PAnsiChar = (
+    'CONTENT-',
+    'CONNECTION:',
+    'KEEP-ALIVE:',
+    'TRANSFER-',
+    'X-POWERED',
+    'USER-AGENT',
+    'REMOTEIP:',
+    'HOST:',
+    'ACCEPT:',
+    nil);
+
 function PurgeHeaders(const headers: RawUtf8): RawUtf8;
 var
   pos: array[byte] of PUtf8Char;
@@ -583,16 +596,7 @@ begin
     if P^ = #0 then
       break;
     next := GotoNextLine(P);
-    if IdemPCharArray(P, [
-       'CONTENT-',
-       'CONNECTION:',
-       'KEEP-ALIVE:',
-       'TRANSFER-',
-       'X-POWERED',
-       'USER-AGENT',
-       'REMOTEIP:',
-       'HOST:',
-       'ACCEPT:']) < 0 then
+    if IdemPCharArray(P, @TOBEPURGED) < 0 then
     begin
       if n = high(len) then
         break;
@@ -834,8 +838,7 @@ begin
         (P^ <= ' ') do
     inc(P); // trim left
   B := P;
-  while P^ > #13 do // a header would never contain a control char
-    inc(P);
+  P := GotoNextControlChar(P);
   while (P > B) and
         (P[-1] <= ' ') do
     dec(P); // trim right
@@ -895,29 +898,42 @@ begin
   integer(CompressAcceptHeader) := 0;
 end;
 
-function THttpRequestContext.ParseHeader(P: PUtf8Char;
-  HeadersUnFiltered: boolean): PUtf8Char;
+const
+  PARSEDHEADERS: array[0..9] of PAnsiChar = (
+    'CONTENT-',                    // 0
+    'TRANSFER-ENCODING: CHUNKED',  // 1
+    'CONNECTION: ',                // 2
+    'ACCEPT-ENCODING:',            // 3
+    'UPGRADE:',                    // 4
+    'SERVER-INTERNALSTATE:',       // 5
+    'X-POWERED-BY:',               // 6
+    'EXPECT: 100',                 // 7
+    HEADER_BEARER_UPPER,           // 8
+    nil);
+  PARSEDHEADERS2: array[0..3] of PAnsiChar = (
+    'LENGTH:',    // 0
+    'TYPE:',      // 1
+    'ENCODING:',  // 2
+    nil);
+  PARSEDHEADERS3: array[0..3] of PAnsiChar = (
+    'CLOSE',      // 0
+    'UPGRADE',    // 1
+    'KEEP-ALIVE', // 2
+    nil);
+
+procedure THttpRequestContext.ParseHeader(P: PUtf8Char;
+  HeadersUnFiltered: boolean);
 var
   i, len: PtrInt;
+  P2: PUtf8Char;
 begin
-  result := P;
   if P = nil then
     exit; // avoid unexpected GPF in case of wrong usage
-  case IdemPCharArray(P, [
-      'CONTENT-',
-      'TRANSFER-ENCODING: CHUNKED',
-      'CONNECTION: ',
-      'ACCEPT-ENCODING:',
-      'UPGRADE:',
-      'SERVER-INTERNALSTATE:',
-      'X-POWERED-BY:',
-      HEADER_BEARER_UPPER]) of
+  P2 := P;
+  case IdemPCharArray(P, @PARSEDHEADERS) of
     0:
       // 'CONTENT-'
-      case IdemPCharArray(P + 8, [
-            'LENGTH:',
-            'TYPE:',
-            'ENCODING:']) of
+      case IdemPCharArray(P + 8, @PARSEDHEADERS2) of
         0:
           begin
             // 'CONTENT-LENGTH:'
@@ -943,13 +959,13 @@ begin
           begin
             // 'CONTENT-ENCODING:'
             P := GotoNextNotSpace(P + 17);
-            result := P;
+            P2 := P;
             while P^ > ' ' do
               inc(P); // no control char should appear in any header
-            len := P - result;
+            len := P - P2;
             if len <> 0 then
               for i := 0 to length(Compress) - 1 do
-                if IdemPropNameU(Compress[i].Name, result, len) then
+                if IdemPropNameU(Compress[i].Name, P2, len) then
                 begin
                   CompressContentEncoding := i;
                   break;
@@ -965,10 +981,7 @@ begin
       begin
         // 'CONNECTION: '
         inc(P, 12);
-        case IdemPCharArray(P, [
-              'CLOSE',
-              'UPGRADE',
-              'KEEP-ALIVE']) of
+        case IdemPCharArray(P, @PARSEDHEADERS3) of
           0:
             begin
               // 'CONNECTION: CLOSE'
@@ -1017,6 +1030,9 @@ begin
         GetTrimmed(P, XPoweredBy);
       end;
     7:
+      // Expect: 100-continue
+      include(HeaderFlags, hfExpect100);
+    8:
       // 'AUTHORIZATION: BEARER '
       begin
         inc(P, 22);
@@ -1024,17 +1040,14 @@ begin
         if BearerToken <> '' then
           // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
           HeadersUnFiltered := true;
-      end
+      end;
   else
     // unrecognized name should be stored in Headers
     HeadersUnFiltered := true;
   end;
-  while P^ > #13 do
-    inc(P); // no control char should appear in any header
   if HeadersUnFiltered then
     // store meaningful headers into WorkBuffer, if not already there
-    Head.Append(result, P - result, {crlf=}true);
-  result := P;
+    Head.Append(P2, GotoNextControlChar(P) - P2, {crlf=}true);
 end;
 
 function THttpRequestContext.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
@@ -1142,6 +1155,7 @@ begin
   if line <> nil then
     FastSetString(line^, st.Line, st.LineLen);
   result := true;
+  st.P := P; // will ensure below that st.line ends with #0
   // go to beginning of next line
   dec(Len);
   if (Len <> 0) and
@@ -1151,6 +1165,8 @@ begin
       dec(Len);
     end;
   inc(P);
+  st.P^ := #0;
+  // prepare for parsing the next line
   st.P := P;
   st.Len := Len;
 end;
@@ -1477,8 +1493,7 @@ begin
   // parse the headers
   HttpStateReset;
   if SockIn <> nil then
-    while true do
-    begin
+    repeat
       {$I-}
       readln(SockIn^, line);
       err := ioresult;
@@ -1488,15 +1503,14 @@ begin
       if line[0] = #0 then
         break; // HTTP headers end with a void line
       Http.ParseHeader(@line, HeadersUnFiltered);
-    end
-    else
-    while true do
-    begin
+    until false
+  else
+    repeat
       SockRecvLn(s);
       if s = '' then
         break;
       Http.ParseHeader(pointer(s), HeadersUnFiltered);
-    end;
+    until false;
   // finalize the headers
   Http.ParseHeaderFinalize; // compute all meaningful headers
   if Assigned(OnLog) then

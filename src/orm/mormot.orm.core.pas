@@ -10610,12 +10610,12 @@ begin
     result := false
   else if PropName[L] = ')' then
     case IdemPCharArray(pointer(PropName),
-       ['MAX(',
-        'MIN(',
-        'AVG(',
-        'SUM(',
-        'JSONGET(',
-        'JSONHAS(']) of
+       ['MAX(',         // 0
+        'MIN(',         // 1
+        'AVG(',         // 2
+        'SUM(',         // 3
+        'JSONGET(',     // 4
+        'JSONHAS(']) of // 5
       0..3:
         result := IsFieldName(copy(PropName, 5, L - 5));
       4..5:

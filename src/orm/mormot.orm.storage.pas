@@ -1564,8 +1564,12 @@ begin
   begin
     ClassToText(self, result);
     system.delete(result, 1, LEN[IdemPCharArray(pointer(result),
-      ['TSQLVIRTUALTABLE', 'TSQLVIRTUAL', 'TSQL',
-       'TORMVIRTUALTABLE', 'TORMVIRTUAL', 'TORM'])]);
+      ['TSQLVIRTUALTABLE',  // 0
+       'TSQLVIRTUAL',       // 1
+       'TSQL',              // 2
+       'TORMVIRTUALTABLE',  // 3
+       'TORMVIRTUAL',       // 4
+       'TORM'])]);          // 5
   end;
 end;
 

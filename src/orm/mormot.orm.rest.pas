@@ -87,7 +87,8 @@ type
 /// convert a string HTTP verb into its TUriMethod enumerate
 function ToMethod(const method: RawUtf8): TUriMethod;
 
-function ToText(m: TUriMethod): PShortString; overload;
+/// convert a TUriMethod enumerate to its #0 terminated uppercase text
+function MethodText(m: TUriMethod): PAnsiChar;
 
 
 {$ifdef PUREMORMOT2}
@@ -526,36 +527,51 @@ implementation
 
 { ************ Some definitions Used by TRestOrm Implementation }
 
-function ToMethod(const method: RawUtf8): TUriMethod;
 const
-  NAME: array[mGET..high(TUriMethod)] of string[10] = (
-    // sorted by occurence for in-order O(n) search
-    'GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'BEGIN', 'END', 'ABORT',
-    'LOCK', 'UNLOCK', 'STATE',  'OPTIONS', 'PROPFIND', 'PROPPATCH', 'TRACE',
-    'COPY', 'MKCOL', 'MOVE', 'PURGE', 'REPORT',  'MKACTIVITY', 'MKCALENDAR',
-    'CHECKOUT', 'MERGE', 'NOTIFY', 'PATCH', 'SEARCH', 'CONNECT');
-var
-  L: byte;
-  N: PByteArray;
+  METHODNAME: array[0..ord(high(TUriMethod))] of PAnsiChar = (
+    // sorted by occurence for in-order O(n) search via IdemPCharArray()
+    'GET',
+    'POST',
+    'PUT',
+    'DELETE',
+    'HEAD',
+    'BEGIN',
+    'END',
+    'ABORT',
+    'LOCK',
+    'UNLOCK',
+    'STATE',
+    'OPTIONS',
+    'PROPFIND',
+    'PROPPATCH',
+    'TRACE',
+    'COPY',
+    'MKCOL',
+    'MOVE',
+    'PURGE',
+    'REPORT',
+    'MKACTIVITY',
+    'MKCALENDAR',
+    'CHECKOUT',
+    'MERGE',
+    'NOTIFY',
+    'PATCH',
+    'SEARCH',
+    'CONNECT',
+    nil);
+
+function ToMethod(const method: RawUtf8): TUriMethod;
 begin
-  L := Length(method);
-  if (L > 0) and
-     (L < 11) then
-  begin
-    N := @NAME;
-    for result := low(NAME) to high(NAME) do
-      if (N^[0] = L) and
-         IdemPropNameUSameLenNotNull(pointer(@N^[1]), pointer(method), L) then
-        exit
-      else
-        inc(PByte(N), 11);
-  end;
-  result := mNone;
+  result := TUriMethod(IdemPCharArray(pointer(method), @METHODNAME) + 1);
 end;
 
-function ToText(m: TUriMethod): PShortString;
+function MethodText(m: TUriMethod): PAnsiChar;
 begin
-  result := GetEnumName(TypeInfo(TUriMethod), ord(m));
+  dec(m);
+  if cardinal(m) <= high(METHODNAME) then
+    result := METHODNAME[ord(m)]
+  else
+    result := nil;
 end;
 
 

@@ -2203,7 +2203,7 @@ begin
     exit; // nothing to add
   if fBatchMethod <> mPOST then
     raise EOrmBatchException.CreateUtf8('%.InternalBatchStop: BatchMethod=%',
-      [self, ToText(fBatchMethod)^]);
+      [self, MethodText(fBatchMethod)]);
   try
     if fBatchValuesCount <> fBatchIDCount then
       raise EOrmBatchException.CreateUtf8(

@@ -3635,7 +3635,9 @@ begin
   else if (NameLen > 4) and
           (Name[0] = '_') and
           IntGetPseudoProp(IdemPCharArray(@Name[1],
-            ['COUNT', 'KIND', 'JSON']), dv, variant(Dest)) then
+            ['COUNT',
+             'KIND',
+             'JSON']), dv, variant(Dest)) then
     result := true
   else
     result := dv.RetrieveValueOrRaiseException(pointer(Name), NameLen,

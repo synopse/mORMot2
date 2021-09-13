@@ -33,6 +33,7 @@ uses
   mormot.db.nosql.bson,
   mormot.orm.base,
   mormot.orm.core,
+  mormot.orm.rest,
   mormot.soa.core,
   mormot.rest.client,
   mormot.rest.server,
@@ -130,6 +131,7 @@ procedure TTestOrmCore._TOrmModel;
 var
   M: TOrmModel;
   U: TRestServerUri;
+  met: TUriMethod;
 begin
   M := TOrmModel.Create([TOrmTest]);
   try
@@ -156,6 +158,12 @@ begin
   Check(U.Address = 'addr');
   Check(U.Port = '');
   Check(U.Root = '');
+  Check(ToMethod('') = mNone);
+  Check(ToMethod('toto') = mNone);
+  Check(ToMethod('get') = mGET);
+  Check(ToMethod('CONNECT') = mCONNECT);
+  for met := low(met) to high(met) do
+    Check(ToMethod(RawUtf8(MethodText(met))) = met);
 end;
 
 procedure TTestOrmCore._TRestServerFullMemory;

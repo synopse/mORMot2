@@ -1598,7 +1598,7 @@ begin
         end;
     else
       raise EOrmException.CreateUtf8('%.InternalBatchStop(%) with BatchMethod=%',
-        [self, StoredClass, ToText(fBatchMethod)^]);
+        [self, StoredClass, MethodText(fBatchMethod)]);
     end;
   finally
     FreeAndNil(fBatchWriter);
