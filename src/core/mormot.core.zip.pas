@@ -814,6 +814,8 @@ begin
 end;
 
 function TSynZipCompressor.Write(const Buffer; Count: Longint): Longint;
+var
+  code: integer;
 begin
   if (self = nil) or
      not fInitialized or
@@ -829,9 +831,9 @@ begin
   while Z.Stream.avail_in > 0 do
   begin
     // compress pending data
-    Z.Check(Z.Compress(Z_NO_FLUSH), [Z_OK], 'TSynZipCompressor.Write');
+    code := Z.Check(Z.Compress(Z_NO_FLUSH), [Z_OK], 'TSynZipCompressor.Write');
     if Z.Stream.avail_out = 0 then
-      Z.DoFlush;
+      Z.DoFlush(code);
   end;
   Z.Stream.next_in := nil;
   Z.Stream.avail_in := 0;
@@ -846,8 +848,8 @@ begin
   while (Z.Check(Z.Compress(Z_FINISH),
           [Z_OK, Z_STREAM_END], 'TSynZipCompressor.Flush') <> Z_STREAM_END) and
         (Z.Stream.avail_out = 0) do
-    Z.DoFlush;
-  Z.DoFlush;
+    Z.DoFlush(Z_OK);
+  Z.DoFlush(Z_STREAM_END);
   fSizeOut := Z.Written;
 end;
 
@@ -890,10 +892,9 @@ begin
   while Z.Stream.avail_in > 0 do
   begin
     // uncompress pending data
-    Z.Check(Z.Uncompress(Z_NO_FLUSH), [Z_OK, Z_STREAM_END],
-      'TSynZipDecompressor.Write');
+    Z.Check(Z.Uncompress(Z_NO_FLUSH), [Z_OK, Z_STREAM_END], 'TSynZipDecompressor.Write');
     if Z.Stream.avail_out = 0 then
-      Z.DoFlush;
+      Z.DoFlush(Z_OK);
   end;
   Z.Stream.next_in := nil;
   Z.Stream.avail_in := 0;
@@ -908,8 +909,8 @@ begin
   while (Z.Check(Z.Uncompress(Z_FINISH),
           [Z_OK, Z_STREAM_END], 'TSynZipDecompressor.Flush') <> Z_STREAM_END) and
         (Z.Stream.avail_out = 0) do
-    Z.DoFlush;
-  Z.DoFlush;
+    Z.DoFlush(Z_OK);
+  Z.DoFlush(Z_STREAM_END);
   fSizeOut := Z.Written;
 end;
 
