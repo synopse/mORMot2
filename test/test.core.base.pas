@@ -4973,19 +4973,18 @@ begin
   check(tmp = '0002-00-00');
 end;
 
-{$ifdef FPC}
-function _LocalTimeToUniversal(LT: TDateTime; TZOffset: Integer): TDateTime;
+function LocalTimeToUniversal(LT: TDateTime; TZOffset: Integer): TDateTime;
 begin
+  result := EncodeTime(Abs(TZOffset) div 60, Abs(TZOffset) mod 60, 0, 0);
   if TZOffset > 0 then
-    result := LT - EncodeTime(TZOffset div 60, TZOffset mod 60, 0, 0)
-  else if (TZOffset < 0) then
-    result := LT + EncodeTime(Abs(TZOffset) div 60, Abs(TZOffset) mod 60, 0, 0)
+    result := LT - result
+  else if TZOffset < 0 then
+    result := LT + result
   else
     result := LT;
 end;
-{$endif FPC}
 
-{$R ..\src\mormot.tz.res} // validate our supplied resource file
+{$R ..\src\mormot.tz.res} // validate our Win10-generated resource file
 
 procedure TTestCoreBase.TimeZones;
 var
@@ -5005,6 +5004,7 @@ var
   end;
 
 begin
+  // validate low-level HTTP date parsing functions
   bias := -10;
   Check(not ParseTimeZone('', bias));
   CheckEqual(bias, -10);
@@ -5064,6 +5064,7 @@ begin
     'Sun, 06 Nov 2021 084937 east')), '');
   CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
     'Tue, 15 Nov 1994 12:45:26 Z')), '1994-11-15T12:45:26');
+  // validate common TSynTimeZone process
   tz := TSynTimeZone.Create;
   try
     check(tz.Zone = nil);
@@ -5121,15 +5122,14 @@ begin
   finally
     tz.Free;
   end;
+  // validate NowUtc / TimeZoneLocalBias
   dt := NowUtc;
-  {$ifdef FPC}
-  CheckSame(_LocalTimeToUniversal(Now(), -GetLocalTimeOffset) - dt, 0, 1E-2,
-    'NowUtc should not shift or truncate time');
-  {$endif FPC}
+  CheckSame(LocalTimeToUniversal(Now(), TimeZoneLocalBias) - dt, 0, 0.01,
+    'NowUtc should not shift nor truncate time in respect to RTL Now');
   sleep(200);
   Check(not SameValue(dt, NowUtc),
-    'NowUtc should not truncate time to 5 sec resolution');
-  {$ifdef OSWINDOWS}
+    'NowUtc should not truncate time (e.g. to 5 sec resolution)');
+  // validate zones taken from Windows registry or mormot.tz.res on POSIX
   tz := TSynTimeZone.CreateDefault;
   try
     local := tz.UtcToLocal(dt, 'UTC');
@@ -5137,16 +5137,11 @@ begin
     check(tz.GetBiasForDateTime(dt, 'UTC', bias, hdl));
     check(bias = 0);
     check(not hdl);
-  {$else}
-  tz := TSynTimeZone.Create;
-  try
-    tz.LoadFromResource; // from mormot.tz.res as generated on Windows 10
-  {$endif OSWINDOWS}
     local := tz.UtcToLocal(dt, 'Romance Standard Time');
     check(not SameValue(local, dt), 'Paris never aligns with London');
     check(tz.GetBiasForDateTime(dt, 'Romance Standard Time', bias, hdl));
     check(hdl);
-    check(bias < 0);
+    check(bias < 0, 'Paris is always ahead of London');
     buf := tz.SaveToBuffer;
   finally
     tz.Free;
