@@ -51,7 +51,8 @@ uses
   mormot.core.data,
   mormot.core.datetime,
   mormot.core.rtti,
-  mormot.core.json; // TSynDictionary for THttpRequestCached
+  mormot.core.json, // TSynDictionary for THttpRequestCached
+  mormot.core.perf;
 
 
 { ******************** THttpMultiPartStream for multipart/formdata HTTP POST }
@@ -1424,9 +1425,8 @@ procedure THttpClientSocket.RequestInternal(
     FormatUtf8(Fmt, Args, msg);
     //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
     if Assigned(OnLog) then
-       OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=% on %:%',
-         [ctxt.method, ctxt.url, msg, fSock.Socket, FatalError,
-          BOOL_STR[rMain in ctxt.retry], fServer, fPort], self);
+       OnLog(sllTrace, 'DoRetry % socket=% fatal=% retry=%',
+         [msg, fSock.Socket, FatalError, BOOL_STR[rMain in ctxt.retry]], self);
     if rMain in ctxt.retry then
       // we should retry once -> return error only if failed twice
       ctxt.status := FatalError
@@ -1450,12 +1450,16 @@ var
   P: PUtf8Char;
   pending: TCrtSocketPending;
   dat: RawByteString;
+  timer: TPrecisionTimer;
 begin
+  if Assigned(OnLog) then
+  begin
+    timer.Start;
+    OnLog(sllTrace, 'RequestInternal % %:%/% flags=% retry=%', [ctxt.method,
+      fServer, fPort, ctxt.url, ToText(Http.HeaderFlags), byte(ctxt.retry)], self);
+  end;
   if SockIn = nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
-  if Assigned(OnLog) then
-    OnLog(sllTrace, 'RequestInternal % % flags=% retry=%',
-      [ctxt.method, ctxt.url, byte(Http.HeaderFlags), byte(ctxt.retry)], self);
   Http.Content := '';
   if (hfConnectionClose in Http.HeaderFlags) or
      (SockReceivePending(0) = cspSocketError) then
@@ -1556,6 +1560,9 @@ begin
             raise;
       end;
     finally
+      if Assigned(OnLog) then
+         OnLog(sllTrace, 'RequestInternal status=% keepalive=% flags=% in %',
+           [ctxt.Status, ctxt.KeepAlive, ToText(Http.HeaderFlags), timer.Stop], self);
       if ctxt.KeepAlive = 0 then
         Close;
     end;

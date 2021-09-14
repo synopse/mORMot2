@@ -149,14 +149,14 @@ type
 
   /// map the presence of some HTTP headers for THttpRequestContext.HeaderFlags
   THttpRequestHeaderFlags = set of (
+    nfHeadersParsed,
     hfTransferChunked,
     hfConnectionClose,
     hfConnectionUpgrade,
     hfConnectionKeepAlive,
+    hfExpect100,
     hfHasRemoteIP,
-    nfHeadersParsed,
-    hfContentStreamNeedFree,
-    hfExpect100);
+    hfContentStreamNeedFree);
 
   PHttpRequestContext = ^THttpRequestContext;
 
@@ -308,6 +308,7 @@ const
   HTTP_REQUEST_FIRSTERROR = succ(hrsResponseDone);
 
 function ToText(st: THttpRequestState): PShortString; overload;
+function ToText(hf: THttpRequestHeaderFlags): TShort8; overload;
 
 
 { ******************** THttpSocket Implementing HTTP over plain sockets }
@@ -1483,6 +1484,28 @@ begin
   fBodyRetrieved := false;
 end;
 
+const
+  _FLAGS: PAnsiChar = 'ptcuk1if';
+
+function ToText(hf: THttpRequestHeaderFlags): TShort8;
+var
+  b: cardinal;
+  P: PAnsiChar;
+begin
+  b := byte(hf);
+  result[0] := #0;
+  P := _FLAGS;
+  repeat
+    if b and 1 <> 0 then
+    begin
+      inc(result[0]);
+      result[ord(result[0])] := P^;
+    end;
+    inc(P);
+    b := b shr 1;
+  until b = 0;
+end;
+
 procedure THttpSocket.GetHeader(HeadersUnFiltered: boolean);
 var
   s: RawUtf8;
@@ -1514,7 +1537,7 @@ begin
   Http.ParseHeaderFinalize; // compute all meaningful headers
   if Assigned(OnLog) then
     OnLog(sllTrace, 'GetHeader % flags=% len=% %', [Http.Command,
-      byte(Http.HeaderFlags), Http.ContentLength, Http.ContentType], self);
+      ToText(Http.HeaderFlags), Http.ContentLength, Http.ContentType], self);
 end;
 
 procedure THttpSocket.GetBody(DestStream: TStream);
