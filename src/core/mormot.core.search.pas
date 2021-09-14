@@ -5581,6 +5581,8 @@ end;
 
 procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
 begin
+  if Buffer = '' then
+   exit;
   EnterCriticalSection(fLock);
   try
     fZones.LoadFromBinary(AlgoSynLZ.Decompress(Buffer));
