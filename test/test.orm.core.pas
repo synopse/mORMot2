@@ -116,8 +116,8 @@ type
     procedure _TOrmSigned;
     /// test the TOrmModel class
     procedure _TOrmModel;
-    /// test a full in-memory server over Windows Messages
-    // - Under Linux, URIDll will be used instead due to lack of message loop
+    /// test a full in-memory server
+    // - use ExportServerGlobalLibraryRequest/TRestClientLibraryRequest for communication
     // - without any SQLite3 engine linked
     procedure _TRestServerFullMemory;
   end;
@@ -322,7 +322,8 @@ begin
               CheckVariantWith(Values[j], j + 1);
           T.Free;
         end;
-        dummy := TSynMustache.Parse('{{#items}}'#13#10'{{Int}}={{Test}}'#13#10'{{/items}}').
+        dummy := TSynMustache.Parse(
+          '{{#items}}'#13#10'{{Int}}={{Test}}'#13#10'{{/items}}').
           Render(Client.Orm.RetrieveDocVariantArray(TOrmTest, 'items', 'Int,Test'));
         check(IdemPChar(pointer(dummy), '1=1'#$D#$A'2=2'#$D#$A'3=3'#$D#$A'4=4'));
         CheckHash(dummy, $BC89CA72);
@@ -346,8 +347,9 @@ begin
         s := Client.Orm.OneFieldValues(TOrmTest, 'Test',
           FormatUtf8('ValWord=?', [], [110]));
         Check(s = '110');
-        Check(Client.Orm.UpdateField(TOrmTest, 'Unicode', ['110'], 'ValWord', [120]),
-          'update one field of a given record');
+        Check(Client.Orm.UpdateField(TOrmTest,
+          'Unicode', ['110'],
+          'ValWord', [120]), 'update one field of a given record');
         R := TOrmTest.Create(Client.Orm, 110);
         try
           R.CheckWith(self, 110, 10);
@@ -379,7 +381,7 @@ begin
             if (i = 200) or (i = 300) then
             begin
               R.FillWith(R.ID + 10);
-              Check(Client.Orm.Update(R, 'ValWord,ValDate'), 'update only 2 fields');
+              Check(Client.Orm.Update(R, 'ValWord,ValDate'), '2 fields update');
             end;
           end;
           Check(i = 10099);
@@ -387,7 +389,8 @@ begin
           R.Free;
         end;
         // note: SELECT .. IN ... is implemented via a TDocVariant
-        R := TOrmTest.CreateAndFillPrepare(Client.Orm, [200, 300], 'ValWord,ValDate,ID');
+        R := TOrmTest.CreateAndFillPrepare(
+          Client.Orm, [200, 300], 'ValWord,ValDate,ID');
         try
           i := 0;
           while R.FillOne do
@@ -395,14 +398,14 @@ begin
             inc(i);
             Check(R.ID >= 200);
             R.FillWith(R.ID + 10);
-            Check(Client.Orm.Update(R, 'ValWord,ValDate'), 'update only 2 fields');
+            Check(Client.Orm.Update(R, 'ValWord,ValDate'), '2 fields update');
           end;
           Check(i = 2);
         finally
           R.Free;
         end;
         n := 20000;
-        R := TOrmTest.create;
+        R := TOrmTest.Create;
         try
           for i := 10100 to n do
           begin

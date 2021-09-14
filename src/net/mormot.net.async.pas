@@ -2089,14 +2089,15 @@ end;
 
 procedure TAsyncConnections.ProcessIdleTix(Sender: TObject; NowTix: Int64);
 begin
-  // note: this method should be non-blocking and return quickly
+  // called from fClients.fWrite.OnGetOneIdle callback
   if not Terminated then
     if NowTix >= fIdleTix then
     begin
       IdleEverySecond(NowTix);
       fIdleTix := NowTix + 1000;
     end;
-end;
+  // note: this method should be non-blocking and return quickly
+ end;
 
 
 { TAsyncServer }

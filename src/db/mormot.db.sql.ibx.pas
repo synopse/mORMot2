@@ -93,7 +93,8 @@ type
     fCreateIfNotExists: boolean;
     procedure SetCreateDescendingPK(AValue: boolean);
   protected
-    function IbxSQLTypeToTSqlDBFieldType(aColMeta: IColumnMetaData): TSqlDBFieldType;
+    function IbxSQLTypeToTSqlDBFieldType(
+      const aColMeta: IColumnMetaData): TSqlDBFieldType;
     // Override to enable descending PK
     function SqlFieldCreate(const aField: TSqlDBColumnCreate;
       var aAddPrimaryKey: RawUtf8): RawUtf8; override;
@@ -355,9 +356,11 @@ end;
 function Param2Type(const aParam: ISQLParam): RawUtf8;
 begin
   case aParam.GetSQLType of
-    SQL_VARYING, SQL_TEXT:
+    SQL_VARYING,
+    SQL_TEXT:
        FormatUtf8('VARCHAR(%)', [aParam.GetSize], result);
-    SQL_DOUBLE, SQL_D_FLOAT:
+    SQL_DOUBLE,
+    SQL_D_FLOAT:
        result := 'DOUBLE PRECISION';
     SQL_FLOAT:
        result := 'FLOAT';
@@ -1069,18 +1072,27 @@ begin
 end;
 
 function TSqlDBIbxConnectionProperties.IbxSQLTypeToTSqlDBFieldType(
-  aColMeta: IColumnMetaData): TSqlDBFieldType;
+  const aColMeta: IColumnMetaData): TSqlDBFieldType;
 begin
   case aColMeta.GetSQLType of
     SQL_VARYING, SQL_TEXT:
       result := ftUtf8;
     SQL_DOUBLE, SQL_FLOAT:
       result := ftDouble;
-    SQL_TIMESTAMP, SQL_TIMESTAMP_TZ_EX, SQL_TIME_TZ_EX,
-    SQL_TIMESTAMP_TZ, SQL_TIME_TZ,SQL_TYPE_TIME, SQL_TYPE_DATE:
+    SQL_TIMESTAMP,
+    SQL_TIMESTAMP_TZ_EX,
+    SQL_TIME_TZ_EX,
+    SQL_TIMESTAMP_TZ,
+    SQL_TIME_TZ,
+    SQL_TYPE_TIME,
+    SQL_TYPE_DATE:
       result := ftDate;
-    SQL_BOOLEAN, SQL_LONG, SQL_SHORT,
-    SQL_D_FLOAT, SQL_QUAD, SQL_INT64:
+    SQL_BOOLEAN,
+    SQL_LONG,
+    SQL_SHORT,
+    SQL_D_FLOAT,
+    SQL_QUAD,
+    SQL_INT64:
       begin
         if aColMeta.getScale >= (-4) then
           result := ftCurrency
