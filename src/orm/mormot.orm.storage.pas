@@ -675,8 +675,6 @@ type
     fPropInfo: TOrmPropInfo;
     fCaseInsensitive: boolean;
     fLastFindHashCode: cardinal;
-    function EventCompare(const A,B): integer; // match TOnDynArraySortCompare
-    function EventHash(const Elem): cardinal;  // match TOnDynArrayHashOne
   public
     /// initialize a hash for a record array field
     // - aField maps the "stored AS_UNIQUE" published property
@@ -1949,21 +1947,24 @@ end;
 
 constructor TRestStorageInMemoryUnique.Create(aOwner: TRestStorageInMemory;
   aField: TOrmPropInfo);
+var
+  hash: TOnDynArrayHashOne;
+  cmp: TOnDynArraySortCompare;
 begin
   fOwner := aOwner;
   fPropInfo := aField;
   fCaseInsensitive := not (aBinaryCollation in aField.Attributes);
-  fHasher.Init(@fOwner.fValues, nil, EventHash, nil, nil, EventCompare, false);
-end;
-
-function TRestStorageInMemoryUnique.EventCompare(const A, B): integer;
-begin
-  result := fPropInfo.CompareValue(TOrm(A), TOrm(B), fCaseInsensitive);
-end;
-
-function TRestStorageInMemoryUnique.EventHash(const Elem): cardinal;
-begin
-  result := fPropInfo.GetHash(TOrm(Elem), fCaseInsensitive);
+  if fCaseInsensitive then
+  begin
+    hash := fPropInfo.EventHashI;
+    cmp := fPropInfo.EventCompareI;
+  end
+  else
+  begin
+    hash := fPropInfo.EventHash;
+    cmp := fPropInfo.EventCompare;
+  end;
+  fHasher.Init(@fOwner.fValues, nil, hash, nil, nil, cmp, false);
 end;
 
 function TRestStorageInMemoryUnique.Find(Rec: TOrm): integer;
@@ -2470,6 +2471,7 @@ begin
     v := GetInt64(pointer(WhereValue), err); // 64-bit for cardinal
     if err <> 0 then
       exit;
+    vp := pointer(fValue);
     nfo := TOrmPropInfoRtti(P).PropInfo;
     offs := TOrmPropInfoRtti(P).GetterIsFieldPropOffset;
     if offs <> 0 then
@@ -2479,9 +2481,8 @@ begin
       if ot in [roSLong, roULong] then
       begin
         // handle very common 32-bit integer field
-        vp := pointer(fValue);
         for i := 0 to fCount - 1 do
-          if (PCardinal(vp^ + offs)^ = PCardinal(@v)^) and
+          if (PCardinal(vp^ + offs)^ = cardinal(v)) and
              FoundOneAndReachedLimit then
             break
           else
@@ -2490,16 +2491,20 @@ begin
       else
         // inlined GetOrdProp() for 8-bit or 16-bit values
         for i := 0 to fCount - 1 do
-          if (FromRttiOrd(ot, pointer(PtrUInt(fValue[i]) + offs)) = v) and
+          if (FromRttiOrd(ot, pointer(vp^ + offs)) = v) and
              FoundOneAndReachedLimit then
-            break;
+            break
+          else
+            inc(vp);
     end
     else
       // has getter -> use GetOrdProp()
       for i := 0 to fCount - 1 do
-        if (nfo^.GetOrdProp(fValue[i]) = v) and
+        if (nfo^.GetOrdProp(pointer(vp^)) = v) and
            FoundOneAndReachedLimit then
-          break;
+          break
+        else
+          inc(vp);
   end
   else if P.InheritsFrom(TOrmPropInfoRttiInt64) then
   begin
@@ -2722,7 +2727,8 @@ begin
   // exact same format as TOrmTable.GetJsonValues()
   result := 0;
   if length(Stmt.Where) > 1 then
-    raise ERestStorage.CreateUtf8('%.GetJsonValues on % with Stmt.Where[]=%',
+    raise ERestStorage.CreateUtf8('%.GetJsonValues on % with Stmt.Where[]=% ' +
+      ' - our in-memory engine only supports a single WHERE clause operation',
       [self, fStoredClass, length(Stmt.Where)]);
   if Stmt.Where = nil then
     // no WHERE statement -> get all rows -> set rows count

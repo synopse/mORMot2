@@ -1224,6 +1224,14 @@ type
     // containing the property value
     // - this abstract parent implementation returns the instance
     function Flattened(Instance: TObject): TObject; virtual;
+    /// redirect TOnDynArraySortCompare callback to case-sensitive CompareValue()
+    function EventCompare(const A, B): integer;
+    /// redirect TOnDynArrayHashOne callback to case-sensitive GetHash()
+    function EventHash(const Elem): cardinal;
+    /// redirect TOnDynArraySortCompare callback to case-insensitive CompareValue()
+    function EventCompareI(const A, B): integer;
+    /// redirect TOnDynArrayHashOne to callback case-insensitive GetHash()
+    function EventHashI(const Elem): cardinal;
   end;
 
   /// class-reference type (metaclass) of a TOrmPropInfo information
@@ -4280,6 +4288,26 @@ begin
     GetValueVar(Item2, false, tmp2, nil);
     result := StrCompByCase[CaseInsensitive](pointer(tmp1), pointer(tmp2));
   end;
+end;
+
+function TOrmPropInfo.EventCompare(const A, B): integer;
+begin
+  result := CompareValue(TObject(A), TObject(B), {CaseInsensitive=}false);
+end;
+
+function TOrmPropInfo.EventHash(const Elem): cardinal;
+begin
+  result := GetHash(TObject(Elem), {CaseInsensitive=}false);
+end;
+
+function TOrmPropInfo.EventCompareI(const A, B): integer;
+begin
+  result := CompareValue(TObject(A), TObject(B), {CaseInsensitive=}true);
+end;
+
+function TOrmPropInfo.EventHashI(const Elem): cardinal;
+begin
+  result := GetHash(TObject(Elem), {CaseInsensitive=}true);
 end;
 
 procedure GenericCopy(Source, Dest: TObject; SourceInfo, DestInfo: TOrmPropInfo);
