@@ -1885,8 +1885,15 @@ begin
           if fProperties.ClassNameIs('TSqlDBIbxConnectionProperties') then
           begin
             // TSqlDBIbxConnectionProperties.SqlCreate handles desc index PK
-            result := true;
-            exit;
+            // Engine='IBX0' - asc PK + desc NDX as default dFirebird
+            // Engine='IBX1' - desc PK only
+            if fProperties.Engine='IBX1' then
+            begin
+              result := true;
+              exit;
+            end
+            else
+              Descending := true;
           end
           else
             Descending := true;

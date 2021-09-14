@@ -21,6 +21,7 @@ uses
   mormot.core.text,
   mormot.crypt.core,
   mormot.orm.core,
+  mormot.orm.base,
   mormot.rest.core,
   mormot.rest.server;
 
@@ -218,13 +219,17 @@ begin
     TOrmAuthor,
     TOrmTag,
     TOrmArticle,
-    TOrmComment,
-    TOrmArticleSearch],
+    TOrmComment
+    {$ifndef USEFIREBIRD}
+    ,TOrmArticleSearch
+    {$endif}],
     'blog');
   TOrmArticle.AddFilterNotVoidText(['Title', 'Content']);
   TOrmComment.AddFilterNotVoidText(['Title', 'Content']);
   TOrmTag.AddFilterNotVoidText(['Ident']);
+  {$ifndef USEFIREBIRD}
   result.Props[TOrmArticleSearch].FTS4WithoutContent(TOrmArticle);
+  {$endif}
 end;
 
 

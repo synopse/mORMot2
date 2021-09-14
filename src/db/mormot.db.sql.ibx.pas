@@ -77,6 +77,7 @@ uses
   mormot.core.perf,
   mormot.core.rtti,
   mormot.core.log,
+  mormot.core.buffers,
   mormot.db.core,
   mormot.db.sql;
 
@@ -245,6 +246,11 @@ type
     function ColumnUtf8(Col: integer): RawUtf8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;
+    /// append all columns values of the current Row to a JSON stream
+    // - will use WR.Expand to guess the expected output format
+    // - this overriden implementation will call fReultSet methods to avoid
+    // creating most temporary variable
+    procedure ColumnsToJson(WR: TJsonWriter); override;
   end;
 
 
@@ -500,7 +506,7 @@ var
                   ftUtf8:
                     iParam.AsString := UnQuoteSqlString(VArray[ndx]);
                   ftBlob:
-                    iParam.AsString:=VData[ndx];
+                    iParam.AsString:=VArray[ndx];
                   else
                     raise ESqlDBIbx.CreateUtf8(
                       '%.ExecutePrepared: Invalid type parameter #%', [self, ndx]);
@@ -823,6 +829,68 @@ begin
   result := fResultSet.Data[Col].GetAsString;
 end;
 
+procedure TSqlDBIbxStatement.ColumnsToJson(WR: TJsonWriter);
+var
+  col: integer;
+  s:   RawUtf8;
+  Len: NativeUInt; // required by Zeos for GetPAnsiChar out param (not PtrUInt)
+begin
+  if WR.Expand then
+    WR.Add('{');
+  for col := 0 to fColumnCount - 1 do
+  begin
+    if WR.Expand then
+      WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
+    if fResultSet.Data[Col].IsNull then
+      WR.AddNull
+    else
+    begin
+      case fColumns[col].ColumnType of
+        ftNull:
+          WR.AddNull;
+        ftInt64:
+          WR.Add(fResultSet.Data[col].AsInt64);
+        ftDouble:
+          WR.AddDouble(fResultSet.Data[col].AsDouble);
+        ftCurrency:
+          WR.AddCurr(fResultSet.Data[col].AsCurrency);
+        ftDate:
+          begin
+            WR.Add('"');
+            WR.AddDateTime(fResultSet.Data[col].GetAsDateTime,
+              fForceDateWithMS);
+            WR.Add('"');
+          end;
+        ftUtf8:
+          begin
+            WR.Add('"');
+            s := fResultSet.Data[col].GetAsString;
+            WR.AddJsonEscape(pointer(s), Len);
+            WR.Add('"');
+          end;
+        ftBlob:
+          begin
+            if fForceBlobAsNull then
+              WR.AddNull
+            else
+            begin
+              s := fResultSet.Data[col].GetAsString;
+              WR.WrBase64(pointer(s), length(s), true);
+            end;
+          end
+      else
+        raise ESqlDBException.CreateUtf8(
+          '%.ColumnsToJson: invalid ColumnType(#% "%")=%',
+          [self, col, fColumns[col].ColumnName, ord(fColumns[col].ColumnType)]);
+      end;
+    end;
+    WR.AddComma;
+  end;
+  WR.CancelLastComma; // cancel last ','
+  if WR.Expand then
+    WR.Add('}');
+end;
+
 
 { TSqlDBIbxConnection }
 
@@ -1100,7 +1168,12 @@ begin
           result := ftInt64;
       end;
     SQL_BLOB:
-      result := ftBlob;
+      begin
+        if aColMeta.getSubtype = isc_blob_text then
+          result := ftUtf8
+        else
+          result := ftBlob;
+      end
   else
     //    SQL_INT128, SQL_DEC_FIXED, SQL_DEC16, SQL_DEC34
     //    SQL_NULL, SQL_ARRAY
