@@ -1956,17 +1956,17 @@ end;
 
 // see https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
 
-function DoSspi(Sender: THttpClientSocket;
+procedure DoSspi(Sender: THttpClientSocket;
   var Context: TTHttpClientSocketRequestParams;
-  const Authenticate, InHeaderUp, OutHeader: RawUtf8): boolean;
+  const Authenticate, InHeaderUp, OutHeader: RawUtf8);
 var
   sc: TSecContext;
   bak: RawUtf8;
   unauthstatus: integer;
   datain, dataout: RawByteString;
 begin
-  result := false;
   if (Sender = nil) or
+     not InitializeDomainAuth or
      not IdemPChar(pointer(Authenticate), pointer(SECPKGNAMEHTTP_UPPER)) then
     exit;
   unauthstatus := Context.status;
@@ -1991,29 +1991,26 @@ begin
       Sender.OnLog(sllDebug, 'DoSspi %%', [OutHeader, Context.status], Sender);
     Context.header := bak;
   end;
-  result := Context.status <> unauthstatus;
 end;
 
 class function THttpClientSocket.AuthorizeSspi(Sender: THttpClientSocket;
   var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
 begin
-  if InitializeDomainAuth then
-    // try to setup sspi/gssapi -> SECPKGNAMEHTTP
-    DoSspi(Sender, Context, Authenticate,
-      'WWW-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
-      'Authorization: ' + SECPKGNAMEHTTP + ' ');
-  result := false; // eventual RequestInternal() was done within DoSspi()
+  // try to setup sspi/gssapi -> SECPKGNAMEHTTP
+  DoSspi(Sender, Context, Authenticate,
+    'WWW-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
+    'Authorization: ' + SECPKGNAMEHTTP + ' ');
+  result := false; // final RequestInternal() was done within DoSspi()
 end;
 
 class function THttpClientSocket.ProxyAuthorizeSspi(Sender: THttpClientSocket;
   var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
 begin
-  if InitializeDomainAuth then
-    // try to setup sspi/gssapi -> SECPKGNAMEHTTP
-    DoSspi(Sender, Context, Authenticate,
-      'PROXY-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
-      'Proxy-Authorization: ' + SECPKGNAMEHTTP + ' ');
-  result := false; // eventual RequestInternal() was done within DoSspi()
+  // try to setup sspi/gssapi -> SECPKGNAMEHTTP
+  DoSspi(Sender, Context, Authenticate,
+    'PROXY-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
+    'Proxy-Authorization: ' + SECPKGNAMEHTTP + ' ');
+  result := false; // final RequestInternal() was done within DoSspi()
 end;
 
 {$endif DOMAINRESTAUTH}
