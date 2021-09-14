@@ -83,6 +83,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Stefan (itSDS)
 - Svetozar Belic (transmogrifix)
 - Tino Teuber
+- TTomas (tom)
 - Uian2000
 - Vaclav
 - Vadim Orel

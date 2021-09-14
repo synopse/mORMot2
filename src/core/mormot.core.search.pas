@@ -1,4 +1,4 @@
-/// Framework Core Text Search Engines
+/// Framework Core Text, Binary and Time Search Engines
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.core.search;
