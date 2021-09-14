@@ -1491,40 +1491,88 @@ asm
         push    ebx
         mov     ebx, eax
         xor     eax, eax
-@by8:   sub     ecx, 8               // note: align 8/16 is not worth it here
+@by8:   sub     ecx, 8
         cmp     edx, dword ptr [ebx]
         setl    al
         sub     dword ptr [ebx], eax
-        cmp     edx, dword ptr [ebx+4H]
+        cmp     edx, dword ptr [ebx + 4H]
         setl    al
-        sub     dword ptr [ebx+4H], eax
-        cmp     edx, dword ptr [ebx+8H]
+        sub     dword ptr [ebx + 4H], eax
+        cmp     edx, dword ptr [ebx + 8H]
         setl    al
-        sub     dword ptr [ebx+8H], eax
-        cmp     edx, dword ptr [ebx+0CH]
+        sub     dword ptr [ebx + 8H], eax
+        cmp     edx, dword ptr [ebx + 0CH]
         setl    al
-        sub     dword ptr [ebx+0CH], eax
-        cmp     edx, dword ptr [ebx+10H]
+        sub     dword ptr [ebx + 0CH], eax
+        cmp     edx, dword ptr [ebx + 10H]
         setl    al
-        sub     dword ptr [ebx+10H], eax
-        cmp     edx, dword ptr [ebx+14H]
+        sub     dword ptr [ebx + 10H], eax
+        cmp     edx, dword ptr [ebx + 14H]
         setl    al
-        sub     dword ptr [ebx+14H], eax
-        cmp     edx, dword ptr [ebx+18H]
+        sub     dword ptr [ebx + 14H], eax
+        cmp     edx, dword ptr [ebx + 18H]
         setl    al
-        sub     dword ptr [ebx+18H], eax
-        cmp     edx, dword ptr [ebx+1CH]
+        sub     dword ptr [ebx + 18H], eax
+        cmp     edx, dword ptr [ebx + 1CH]
         setl    al
-        sub     dword ptr [ebx+1CH], eax
+        sub     dword ptr [ebx + 1CH], eax
         add     ebx, 32
         cmp     ecx, 8
         jge     @by8
         test    ecx, ecx
         jz      @ok
+        // trailing indexes (never appearing within DYNARRAYHASH_PO2 range)
 @by1:   cmp     edx, dword ptr [ebx]
         setl    al
         sub     dword ptr [ebx], eax
         add     ebx, 4
+        dec     ecx
+        jnz     @by1
+@ok:    pop     ebx
+end;
+
+procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: PtrInt);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        // eax=P dx=deleted ecx=count
+        push    ebx
+        mov     ebx, eax
+        xor     eax, eax
+@by8:   sub     ecx, 8
+        cmp     dx, word ptr [ebx]
+        setl    al
+        sub     word ptr [ebx], ax
+        cmp     dx, word ptr [ebx + 2]
+        setl    al
+        sub     word ptr [ebx + 2], ax
+        cmp     dx, word ptr [ebx + 4]
+        setl    al
+        sub     word ptr [ebx + 4], ax
+        cmp     dx, word ptr [ebx + 6]
+        setl    al
+        sub     word ptr [ebx + 6], ax
+        cmp     dx, word ptr [ebx + 8]
+        setl    al
+        sub     word ptr [ebx + 8], ax
+        cmp     dx, word ptr [ebx + 10]
+        setl    al
+        sub     word ptr [ebx + 10], ax
+        cmp     dx, word ptr [ebx + 12]
+        setl    al
+        sub     word ptr [ebx + 12], ax
+        cmp     dx, word ptr [ebx + 14]
+        setl    al
+        sub     word ptr [ebx + 14], ax
+        add     ebx, 16
+        cmp     ecx, 8
+        jge     @by8
+        test    ecx, ecx
+        jz      @ok
+        // trailing indexes (never appearing within DYNARRAYHASH_PO2 range)
+@by1:   cmp     dx, word ptr [ebx]
+        setl    al
+        sub     word ptr [ebx], ax
+        add     ebx, 2
         dec     ecx
         jnz     @by1
 @ok:    pop     ebx

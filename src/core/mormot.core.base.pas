@@ -3267,6 +3267,9 @@ function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUtf8;
 // defined in this unit to put this asm code in mormot.core.base.asmx64.inc
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
 
+/// DynArrayHashTableAdjust() version for 16-bit HashTable[]
+procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: PtrInt);
+
 
 { ************ Efficient Variant Values Conversion }
 
@@ -11490,6 +11493,7 @@ begin
 end;
 
 {$if not defined(CPUX64ASM) and not defined(CPUX86)} // fallback if no asm
+
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
 begin
   repeat
@@ -11510,6 +11514,28 @@ begin
     dec(P[count], ord(P[count] > deleted));
   end;
 end;
+
+procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: PtrInt);
+begin
+  repeat // branchless code is 10x faster than if :)
+    dec(count, 8);
+    dec(P[0], cardinal(P[0] > deleted));
+    dec(P[1], cardinal(P[1] > deleted));
+    dec(P[2], cardinal(P[2] > deleted));
+    dec(P[3], cardinal(P[3] > deleted));
+    dec(P[4], cardinal(P[4] > deleted));
+    dec(P[5], cardinal(P[5] > deleted));
+    dec(P[6], cardinal(P[6] > deleted));
+    dec(P[7], cardinal(P[7] > deleted));
+    P := @P[8];
+  until count < 8;
+  while count > 0 do
+  begin
+    dec(count);
+    dec(P[count], cardinal(P[count] > deleted));
+  end;
+end;
+
 {$ifend}
 
 procedure ExchgPointer(n1, n2: PPointer);

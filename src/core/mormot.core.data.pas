@@ -1854,8 +1854,8 @@ type
     /// initialize the hash table for a given dynamic array storage
     // - you can call this method several times, e.g. if aCaseInsensitive changed
     procedure Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
-     aEventHash: TOnDynArrayHashOne; aHasher: THasher; aCompare: TDynArraySortCompare;
-     aEventCompare: TOnDynArraySortCompare; aCaseInsensitive: boolean);
+     const aEventHash: TOnDynArrayHashOne; aHasher: THasher; aCompare: TDynArraySortCompare;
+     const aEventCompare: TOnDynArraySortCompare; aCaseInsensitive: boolean);
     /// initialize a known hash table for a given dynamic array storage
     // - you can call this method several times, e.g. if aCaseInsensitive changed
     procedure InitSpecific(aDynArray: PDynArray; aKind: TRttiParserType;
@@ -8403,8 +8403,8 @@ begin
 end;
 
 procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
-  aEventHash: TOnDynArrayHashOne; aHasher: THasher;
-  aCompare: TDynArraySortCompare; aEventCompare: TOnDynArraySortCompare;
+  const aEventHash: TOnDynArrayHashOne; aHasher: THasher;
+  aCompare: TDynArraySortCompare; const aEventCompare: TOnDynArraySortCompare;
   aCaseInsensitive: boolean);
 begin
   DynArray := aDynArray;
@@ -8698,27 +8698,6 @@ begin
     HashTableStore[result] := n + 1;
   result := n;
 end; // on output: result holds the position in fValue[]
-
-procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: PtrInt);
-begin
-  repeat // branchless code is 10x faster than if :)
-    dec(count, 8);
-    dec(P[0], cardinal(P[0] > deleted));
-    dec(P[1], cardinal(P[1] > deleted));
-    dec(P[2], cardinal(P[2] > deleted));
-    dec(P[3], cardinal(P[3] > deleted));
-    dec(P[4], cardinal(P[4] > deleted));
-    dec(P[5], cardinal(P[5] > deleted));
-    dec(P[6], cardinal(P[6] > deleted));
-    dec(P[7], cardinal(P[7] > deleted));
-    P := @P[8];
-  until count < 8;
-  while count > 0 do
-  begin
-    dec(count);
-    dec(P[count], cardinal(P[count] > deleted));
-  end;
-end;
 
 procedure TDynArrayHasher.HashDelete(aArrayIndex, aHashTableIndex: PtrInt;
   aHashCode: cardinal);

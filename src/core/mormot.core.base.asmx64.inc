@@ -678,11 +678,72 @@ procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: Ptr
         cmp     r8, 16
         jae     @sse2
         jmp     @2
-        // trailing indexes
+        // trailing indexes (never appearing within DYNARRAYHASH_PO2 range)
 @1:     sub     r8, 1
         cmp     dword ptr [rcx + r8 * 4], edx
         setg    al
         sub     dword ptr [rcx + r8 * 4], eax
+@2:     test    r8, r8
+        jnz     @1
+end;
+
+// DYNARRAYHASH_16BIT version for 16-bit HashTable[] - no AVX2 since count < 64K
+procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: PtrInt);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     eax, deleted
+        shl     eax, 16     // for pshufd (inline asm doesn't know about pshufw)
+        {$ifdef SYSVABI}
+        mov     r8, rdx
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$endif SYSVABI}
+        or      edx, eax    // edx = 32-bit of 2x 16-bit deleted
+        movq    xmm0, rdx   // xmm0 = 128-bit of 8x deleted
+        pshufd  xmm0, xmm0, 0
+        xor     eax, eax    // reset eax high bits for setg al below
+        test    cl, 1
+        jnz     @1  // paranoid: a dword dynamic array is always word-aligned
+        // ensure P is 128-bit aligned (for movaps)
+@align: test    cl, 15
+        jz      @sse2
+        cmp     word ptr [rcx], dx
+        setg    al                  // P[]>deleted -> al=1, 0 otherwise
+        sub     word ptr [rcx], ax // branchless dec(P[])
+        add     rcx, 2
+        sub     r8, 1
+        jmp     @align
+        // SSE2 process of 64 bytes (32 indexes) per loop iteration
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@sse2:  sub     r8, 32
+        movaps  xmm1, dqword [rcx]  // 4 x 128-bit process = 4 x 8 words
+        movaps  xmm3, dqword [rcx + 16]
+        movaps  xmm5, dqword [rcx + 32]
+        movaps  xmm7, dqword [rcx + 48]
+        movaps  xmm2, xmm1  // keep copy for paddd below
+        movaps  xmm4, xmm3
+        movaps  xmm6, xmm5
+        movaps  xmm8, xmm7
+        pcmpgtw xmm1, xmm0  // 8x compare P[]>deleted -> -1, 0 otherwise
+        pcmpgtw xmm3, xmm0
+        pcmpgtw xmm5, xmm0
+        pcmpgtw xmm7, xmm0
+        paddw   xmm1, xmm2  // 8x adjust by adding -1 / 0
+        paddw   xmm3, xmm4
+        paddw   xmm5, xmm6
+        paddw   xmm7, xmm8
+        movaps  dqword [rcx], xmm1  // 8x store back
+        movaps  dqword [rcx + 16], xmm3
+        movaps  dqword [rcx + 32], xmm5
+        movaps  dqword [rcx + 48], xmm7
+        add     rcx, 64
+        cmp     r8, 32
+        jae     @sse2
+        jmp     @2
+        // trailing indexes (never appearing within DYNARRAYHASH_PO2 range)
+@1:     sub     r8, 1
+        cmp     word ptr [rcx + r8 * 4], dx
+        setg    al
+        sub     word ptr [rcx + r8 * 4], ax
 @2:     test    r8, r8
         jnz     @1
 end;
