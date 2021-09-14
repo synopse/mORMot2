@@ -458,11 +458,16 @@ var
 
 // some slightly more verbose backward compatible options
 {$ifndef PUREMORMOT2}
-  JSON_OPTIONS_FAST_STRICT: TDocVariantOptions absolute JSON_FAST_STRICT;
-  JSON_OPTIONS_NAMEVALUE: TDocVariantOptionsBool absolute JSON_NAMEVALUE;
-  JSON_OPTIONS_NAMEVALUEINTERN: TDocVariantOptionsBool absolute JSON_NAMEVALUEINTERN;
-  JSON_OPTIONS_FAST_EXTENDED: TDocVariantOptions absolute JSON_FAST_EXTENDED;
-  JSON_OPTIONS_FAST_EXTENDEDINTERN: TDocVariantOptions absolute JSON_FAST_EXTENDEDINTERN;
+  JSON_OPTIONS_FAST_STRICT: TDocVariantOptions
+    absolute JSON_FAST_STRICT;
+  JSON_OPTIONS_NAMEVALUE: TDocVariantOptionsBool
+    absolute JSON_NAMEVALUE;
+  JSON_OPTIONS_NAMEVALUEINTERN: TDocVariantOptionsBool
+    absolute JSON_NAMEVALUEINTERN;
+  JSON_OPTIONS_FAST_EXTENDED: TDocVariantOptions
+    absolute JSON_FAST_EXTENDED;
+  JSON_OPTIONS_FAST_EXTENDEDINTERN: TDocVariantOptions
+    absolute JSON_FAST_EXTENDEDINTERN;
 
 const
   JSON_OPTIONS_FAST = JSON_FAST;
@@ -5118,10 +5123,11 @@ end;
 
 function TDocVariantData.GetModel(out model: TDocVariantModel): boolean;
 var
+  o: TDocVariantOptions;
   ndx: PtrInt;
 begin
-  ndx := WordScanIndex(@JSON_[mVoid], ord(high(TDocVariantModel)) + 1,
-                       word(VOptions - [dvoIsArray, dvoIsObject]));
+  o := VOptions - [dvoIsArray, dvoIsObject, dvoJsonParseDoNotGuessCount];
+  ndx := WordScanIndex(@JSON_, ord(high(TDocVariantModel)) + 1, word(o));
   if ndx < 0 then
     result := false
   else
