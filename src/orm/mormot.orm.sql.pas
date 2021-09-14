@@ -1882,7 +1882,14 @@ begin
           end;
         dFirebird:
           // see http://www.firebirdfaq.org/faq205
-          Descending := true;
+          if fProperties.ClassNameIs('TSqlDBIbxConnectionProperties') then
+          begin
+            // TSqlDBIbxConnectionProperties.SqlCreate handles desc index PK
+            result := true;
+            exit;
+          end
+          else
+            Descending := true;
       end;
     if not Descending then
     begin

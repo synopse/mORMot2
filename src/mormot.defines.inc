@@ -65,6 +65,9 @@
 {.$define NOSYNDBZEOS}
 // make mormot.db.sql.zeos.pas a "void" unit - defined for FPC/Lazarus packages only
 
+{.$define NOSYNDBIBX}
+// make mormot.db.sql.ibx.pas a "void" unit - defined for FPC/Lazarus packages only
+
 {.$define DISABLEAPPSQL}
 // mormot.db.sql external DB won't be linked to the executable by mormot.app
 

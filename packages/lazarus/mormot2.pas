@@ -21,7 +21,7 @@ uses
   mormot.db.rad.firedac, mormot.db.rad.nexusdb, mormot.db.rad.unidac, 
   mormot.db.raw.odbc, mormot.db.raw.oledb, mormot.db.raw.oracle, 
   mormot.db.raw.postgres, mormot.db.raw.sqlite3, mormot.db.raw.sqlite3.static, 
-  mormot.db.sql, mormot.db.sql.odbc, mormot.db.sql.oledb, 
+  mormot.db.sql, mormot.db.sql.ibx, mormot.db.sql.odbc, mormot.db.sql.oledb, 
   mormot.db.sql.oracle, mormot.db.sql.postgres, mormot.db.sql.sqlite3, 
   mormot.db.sql.zeos, mormot.lib.curl, mormot.lib.gssapi, mormot.lib.lizard, 
   mormot.lib.openssl11, mormot.lib.quickjs, mormot.lib.sspi, 
