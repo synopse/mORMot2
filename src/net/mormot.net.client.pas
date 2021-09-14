@@ -1638,7 +1638,7 @@ begin
         if rAuth in ctxt.retry then
           break;
         include(ctxt.retry, rAuth);
-        if fOnAuthorize(self, ctxt, HeaderGetValue('WWW-AUTHENTICATE')) then
+        if fOnAuthorize(self, ctxt, Http.HeaderGetValue('WWW-AUTHENTICATE')) then
           continue;
       end
       else if (ctxt.status = HTTP_PROXYAUTHREQUIRED) and
@@ -1649,7 +1649,7 @@ begin
         if rAuthProxy in ctxt.retry then
           break;
         include(ctxt.retry, rAuthProxy);
-        if fOnProxyAuthorize(self, ctxt, HeaderGetValue('PROXY-AUTHENTICATE')) then
+        if fOnProxyAuthorize(self, ctxt, Http.HeaderGetValue('PROXY-AUTHENTICATE')) then
           continue;
       end;
       // handle redirection from returned headers
@@ -1662,7 +1662,7 @@ begin
         ctxt.retry := [rMain]
       else
         ctxt.retry := [];
-      ctxt.url := HeaderGetValue('LOCATION');
+      ctxt.url := Http.HeaderGetValue('LOCATION');
       if assigned(OnLog) then
         OnLog(sllTrace, 'Request % % redirected to %', [method, url, ctxt.url], self);
       if IdemPChar(pointer(ctxt.url), 'HTTP') and
@@ -1746,7 +1746,7 @@ var
     partstream.Ended; // notify finished
     parthash := partstream.GetHash; // hash updated on each partstream.Write()
     FreeAndNil(partstream);
-    lastmod := HeaderGetValue('LAST-MODIFIED');
+    lastmod := Http.HeaderGetValue('LAST-MODIFIED');
     if HttpDateToDateTime(lastmod, modif, {local=}true) then
       FileSetDate(part, DateTimeToFileDate(modif));
   end;

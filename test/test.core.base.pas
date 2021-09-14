@@ -5158,6 +5158,7 @@ begin
   finally
     tz.Free;
   end;
+  CheckSame(local, UtcToLocal(dt, 'Romance Standard Time'));
 end;
 
 {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
