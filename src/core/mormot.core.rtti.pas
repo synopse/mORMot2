@@ -247,12 +247,15 @@ const
   /// potentially managed types in TRttiKind enumerates
   rkManagedTypes = [rkLString,
                     rkWstring,
-                    {$ifdef UNICODE} rkUstring, {$endif}
+                    {$ifdef UNICODE}
+                    rkUstring,
+                    {$endif UNICODE}
                     rkArray,
                     rkRecord,
                     rkDynArray,
                     rkInterface,
-                    rkVariant];
+                    rkVariant
+                   ];
   /// maps record or object in TTypeKind RTTI enumerates
   rkRecordTypes = [rkRecord];
 
@@ -261,9 +264,14 @@ const
   /// maps long string in TRttiKind RTTI enumerates
   rkStringTypes =
     [rkLString,
-     {$ifdef FPC} rkLStringOld, {$endif}
+     {$ifdef FPC}
+     rkLStringOld,
+     {$endif FPC}
+     {$ifdef HASVARUSTRING}
+     rkUString,
+     {$endif HASVARUSTRING}
      rkWString
-     {$ifdef HASVARUSTRING} , rkUString {$endif} ];
+    ];
 
   /// maps types with proper TRttiProp.RttiOrd field
   // - i.e. rkOrdinalTypes excluding the 64-bit values
@@ -271,24 +279,27 @@ const
     [rkInteger,
      rkChar,
      rkWChar,
+     {$ifdef FPC}
+     rkBool,
+     rkUChar,
+     {$endif FPC}
      rkEnumeration,
      rkSet
-     {$ifdef FPC} , rkBool, rkUChar {$endif} ];
+    ];
 
   /// maps 1, 8, 16, 32 and 64-bit ordinal in TRttiKind RTTI enumerates
   rkOrdinalTypes =
-    rkHasRttiOrdTypes + [{$ifdef FPC} rkQWord, {$endif} rkInt64];
+    rkHasRttiOrdTypes + [ {$ifdef FPC} rkQWord, {$endif} rkInt64 ];
 
   /// maps values which expect TRttiProp.GetOrdProp/SetOrdProp
   // - includes 32-bit ordinals and pointers
   rkGetOrdPropTypes =
-     rkHasRttiOrdTypes + [rkClass, rkDynArray, rkInterface];
+     rkHasRttiOrdTypes + [ rkClass, rkDynArray, rkInterface ];
 
   /// maps ordinal values which expect TRttiProp.GetInt64Prop/SetInt64Prop
   // - includes 64-bit ordinals
   rkGetInt64PropTypes =
-     [rkInt64
-      {$ifdef FPC} , rkQWord {$endif} ];
+     [rkInt64 {$ifdef FPC} , rkQWord {$endif} ];
 
   /// maps records or dynamic arrays
   rkRecordOrDynArrayTypes = rkRecordTypes + [rkDynArray];
@@ -2628,7 +2639,8 @@ begin
     roULong:
       result := PCardinal(P)^;
     {$ifdef FPC_NEWRTTI}
-    roSQWord, roUQWord:
+    roSQWord,
+    roUQWord:
       result := PInt64(P)^;
     {$endif FPC_NEWRTTI}
   else
@@ -2639,14 +2651,18 @@ end;
 procedure ToRttiOrd(o: TRttiOrd; P: pointer; Value: PtrInt);
 begin
   case o of
-    roUByte, roSByte:
+    roUByte,
+    roSByte:
       PByte(P)^ := Value;
-    roUWord, roSWord:
+    roUWord,
+    roSWord:
       PWord(P)^ := Value;
-    roULong, roSLong:
+    roULong,
+    roSLong:
       PCardinal(P)^ := Value;
     {$ifdef FPC_NEWRTTI}
-    roSQWord, roUQWord:
+    roSQWord,
+    roUQWord:
       PInt64(P)^ := Value;
     {$endif FPC_NEWRTTI}
   end;
@@ -3128,25 +3144,49 @@ end;
 function TRttiInfo.RttiSize: PtrInt;
 begin
   case Kind of
-    rkInteger, rkEnumeration, rkChar, rkWChar
-    {$ifdef FPC}, rkBool, rkUChar{$endif}:
+    {$ifdef FPC}
+    rkBool,
+    rkUChar,
+    {$endif FPC}
+    rkInteger,
+    rkEnumeration,
+    rkChar,
+    rkWChar:
       result := ORDTYPE_SIZE[TRttiOrd(GetTypeData(@self)^.OrdType)];
     rkSet:
       result := SetEnumSize;
     rkFloat:
       result := FLOATTYPE_SIZE[TRttiFloat(GetTypeData(@self)^.FloatType)];
-    rkLString, {$ifdef FPC} rkLStringOld, rkInterfaceRaw, {$endif}
-    {$ifdef HASVARUSTRING} rkUString, {$endif}
-    rkWString, rkClass, rkInterface, rkDynArray
-    {$ifdef FPC_OR_UNICODE} , rkClassRef, rkPointer {$endif}:
+    rkLString,
+    {$ifdef FPC}
+    rkLStringOld,
+    rkInterfaceRaw,
+    {$endif FPC}
+    {$ifdef HASVARUSTRING}
+    rkUString,
+    {$endif HASVARUSTRING}
+    {$ifdef FPC_OR_UNICODE}
+    rkClassRef,
+    rkPointer,
+    {$endif FPC_OR_UNICODE}
+    rkWString,
+    rkClass,
+    rkInterface,
+    rkDynArray:
       result := SizeOf(pointer);
-    rkInt64 {$ifdef FPC}, rkQWord{$endif}:
+    {$ifdef FPC}
+    rkQWord,
+    {$endif FPC}
+    rkInt64:
       result := 8;
     rkVariant:
       result := SizeOf(variant);
     rkArray:
       result := ArraySize;
-    rkRecord {$ifdef FPC}, rkObject {$endif}:
+    {$ifdef FPC}
+    rkObject,
+    {$endif FPC}
+    rkRecord:
       result := RecordSize;
     rkSString:
       result := GetTypeData(@self)^.MaxLength + 1;
@@ -4033,8 +4073,13 @@ function TRttiProp.GetOrdValue(Instance: TObject): Int64;
 begin
   if (Instance <> nil) and
      (@self <> nil) and
-     (TypeInfo^.Kind in [rkInteger, rkEnumeration, rkSet,
-       {$ifdef FPC}rkBool, {$endif} rkClass]) then
+     (TypeInfo^.Kind in [rkInteger,
+                         rkEnumeration,
+                         rkSet,
+                         {$ifdef FPC}
+                         rkBool,
+                         {$endif FPC}
+                         rkClass]) then
     result := GetOrdProp(Instance)
   else
     result := -1;
@@ -4045,10 +4090,20 @@ begin
   if (Instance <> nil) and
      (@self <> nil) then
     case TypeInfo^.Kind of
-      rkInteger, rkEnumeration, rkSet, rkChar, rkWChar,
-      rkClass {$ifdef FPC}, rkBool{$endif}:
+      rkInteger,
+      rkEnumeration,
+      {$ifdef FPC}
+      rkBool,
+      {$endif FPC}
+      rkSet,
+      rkChar,
+      rkWChar,
+      rkClass:
         result := GetOrdProp(Instance);
-      rkInt64 {$ifdef FPC}, rkQWord{$endif}:
+      {$ifdef FPC}
+      rkQWord,
+      {$endif FPC}
+      rkInt64:
         result := GetInt64Prop(Instance);
     else
       result := 0;
@@ -4106,7 +4161,7 @@ begin
   if (Instance <> nil) and
      (@self <> nil) and
      (TypeInfo^.Kind in [rkInteger, rkEnumeration, rkSet,
-       {$ifdef FPC}rkBool, {$endif}rkClass]) then
+                         {$ifdef FPC} rkBool, {$endif} rkClass]) then
     SetOrdProp(Instance, Value);
 end;
 
@@ -4115,10 +4170,20 @@ begin
   if (Instance <> nil) and
      (@self <> nil) then
     case TypeInfo^.Kind of
-      rkInteger, rkEnumeration, rkSet, rkChar, rkWChar,
-      rkClass {$ifdef FPC}, rkBool{$endif}:
+      rkInteger,
+      rkEnumeration,
+      {$ifdef FPC}
+      rkBool,
+      {$endif FPC}
+      rkSet,
+      rkChar,
+      rkWChar,
+      rkClass:
         SetOrdProp(Instance, Value);
-      rkInt64{$ifdef FPC}, rkQWord{$endif}:
+      {$ifdef FPC}
+      rkQWord,
+      {$endif FPC}
+      rkInt64:
         SetInt64Prop(Instance, Value);
     end;
 end;
@@ -5734,7 +5799,10 @@ begin
   end;
   case Info^.Kind of
     // FPC and Delphi will use a fast jmp table
-    {$ifdef FPC} rkLStringOld, {$endif} rkLString:
+  {$ifdef FPC}
+    rkLStringOld,
+  {$endif FPC}
+    rkLString:
       if (not FirstSearchByName) and
          (Info = TypeInfo(RawJson)) then
         result := ptRawJson
@@ -5762,7 +5830,11 @@ begin
       result := ptUnicodeString;
   {$endif HASVARUSTRING}
   {$ifdef FPC_OR_UNICODE}
-    {$ifdef UNICODE} rkProcedure, {$endif} rkClassRef, rkPointer:
+    {$ifdef UNICODE}
+    rkProcedure,
+    {$endif UNICODE}
+    rkClassRef,
+    rkPointer:
       result := ptPtrInt;
   {$endif FPC_OR_UNICODE}
     rkVariant:
@@ -5771,7 +5843,10 @@ begin
       result := ptArray;
     rkDynArray:
       result := ptDynArray;
-    rkRecord {$ifdef FPC}, rkObject {$endif}:
+  {$ifdef FPC}
+    rkObject,
+  {$endif FPC}
+    rkRecord:
       {$ifndef HASNOSTATICRTTI}
       if (not FirstSearchByName) and
          (Info = TypeInfo(TGuid)) then
@@ -5789,9 +5864,11 @@ begin
       result := ptInterface;
     rkInteger:
       case Info^.RttiOrd of
-        roSByte, roUByte:
+        roSByte,
+        roUByte:
           result := ptByte;
-        roSWord, roUWord:
+        roSWord,
+        roUWord:
           result := ptWord;
         roSLong:
           result := ptInteger;
@@ -6181,7 +6258,8 @@ begin
   varEmpty:
     // void Data or unsupported TRttiKind
     exit;
-  varInt64, varBoolean:
+  varInt64,
+  varBoolean:
     // rkInteger, rkBool using VInt64 for proper cardinal support
     RVD.Data.VInt64 := FromRttiOrd(Value.Cache.RttiOrd, Data);
   varWord64:
@@ -6191,7 +6269,8 @@ begin
         RVD.VType := varInt64;
       RVD.Data.VInt64 := PInt64(Data)^;
     end;
-  varDouble, varCurrency:
+  varDouble,
+  varCurrency:
     // copy those 64-bit types at binary level
     RVD.Data.VInt64 := PInt64(Data)^;
   varAny:
@@ -6228,7 +6307,8 @@ begin
   varEmpty:
     // unsupported TRttiKind
     exit;
-  varInt64, varBoolean:
+  varInt64,
+  varBoolean:
     // rkInteger, rkBool
     RVD.Data.VInt64 := Prop.GetOrdProp(Instance); // VInt64 for cardinal
   varWord64:
