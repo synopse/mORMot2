@@ -5123,11 +5123,11 @@ end;
 
 function TDocVariantData.GetModel(out model: TDocVariantModel): boolean;
 var
-  o: TDocVariantOptions;
+  opt: TDocVariantOptions;
   ndx: PtrInt;
 begin
-  o := VOptions - [dvoIsArray, dvoIsObject, dvoJsonParseDoNotGuessCount];
-  ndx := WordScanIndex(@JSON_, ord(high(TDocVariantModel)) + 1, word(o));
+  opt := VOptions - [dvoIsArray, dvoIsObject, dvoJsonParseDoNotGuessCount];
+  ndx := WordScanIndex(@JSON_, ord(high(TDocVariantModel)) + 1, word(opt));
   if ndx < 0 then
     result := false
   else
