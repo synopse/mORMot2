@@ -1763,6 +1763,43 @@ type
       read fCountP;
   end;
 
+
+
+{.$define DYNARRAYHASHCOLLISIONCOUNT} // to be defined also in test.core.base
+
+{$ifndef CPU32DELPHI} // Delphi Win32 compiler doesn't like Lemire algorithm
+
+  {$define DYNARRAYHASH_LEMIRE}
+  // use the Lemire 64-bit multiplication for faster hash reduction
+  // see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
+  // - generate more collisions with crc32c, but is always faster -> enabled
+
+{$endif CPU32DELPHI}
+
+// use Power-Of-Two sizes for smallest HashTables[], to reduce the hash with AND
+// - and Delphi Win32 has a not efficient 64-bit multiplication, anyway
+{$define DYNARRAYHASH_PO2}
+
+// use 16-bit Hash table when indexes fit in a word (array Capacity < 65535)
+// - to reduce memory consumption and slightly enhance CPU cache efficiency
+{$define DYNARRAYHASH_16BIT}
+
+{$ifdef DYNARRAYHASH_PO2}
+const
+  /// defined for inlining bitwise division in TDynArrayHasher.HashTableIndex
+  // - HashTableSize<=HASH_PO2 is expected to be a power of two (fast binary op);
+  // limit is set to 262,144 hash table slots (=1MB), for Capacity=131,072 items
+  // - above this limit, a set of increasing primes is used; using a prime as
+  // hashtable modulo enhances its distribution, especially for a weak hash function
+  // - 64-bit CPU and FPC can efficiently compute a prime reduction using Lemire
+  // algorithm, but power of two sizes still have a better practical performance
+  // for lower (and most common) content until it consumes too much memory
+  HASH_PO2 = 1 shl 18;
+{$endif DYNARRAYHASH_PO2}
+
+
+
+type
   /// function prototype to be used for hashing of a dynamic array element
   // - this function must use the supplied hasher on the Item data
   TDynArrayHashOne = function(const Item; Hasher: THasher): cardinal;
@@ -1770,8 +1807,6 @@ type
   /// event handler to be used for hashing of a dynamic array element
   // - can be set as an alternative to TDynArrayHashOne
   TOnDynArrayHashOne = function(const Item): cardinal of object;
-
-  {.$define DYNARRAYHASHCOLLISIONCOUNT} // to be defined also in test.core.base
 
   /// implements O(1) lookup to any dynamic array content
   // - this won't handle the storage process (like add/update), just efficiently
@@ -1787,12 +1822,13 @@ type
     DynArray: PDynArray;
     HashItem: TDynArrayHashOne;
     EventHash: TOnDynArrayHashOne;
-    HashTable: TIntegerDynArray; // store 0 for void entry, or Index+1
+    HashTableStore: TIntegerDynArray; // store 0 for void entry, or Index+1
     {$ifndef DYNARRAYHASHCOLLISIONCOUNT}
     HashTableSize: integer;
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
     ScanCounter: integer; // Scan()>=0 up to CountTrigger*2
-    State: set of (hasHasher, canHash, moreMem);
+    State: set of (hasHasher, canHash, moreMem
+      {$ifdef DYNARRAYHASH_16BIT} , hash16bit {$endif} );
     function HashTableIndex(aHashCode: PtrUInt): PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     procedure HashAdd(aHashCode: cardinal; var result: PtrInt);
@@ -2131,33 +2167,6 @@ function DynArraySortOne(Kind: TRttiParserType; CaseInsensitive: boolean): TDynA
 // - as used e.g. internally by TDynArray
 function DynArrayHashOne(Kind: TRttiParserType;
   CaseInsensitive: boolean = false): TDynArrayHashOne;
-
-{$ifndef CPU32DELPHI} // Delphi Win32 compiler doesn't like Lemire algorithm
-
-{$define DYNARRAYHASH_LEMIRE}
-// use the Lemire 64-bit multiplication for faster hash reduction
-// see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
-// - generate more collisions with crc32c, but is always faster -> enabled
-
-{$endif CPU32DELPHI}
-
-// use Power-Of-Two sizes for smallest HashTables[], to reduce the hash with AND
-// - and Delphi Win32 has a not efficient 64-bit multiplication, anyway
-{$define DYNARRAYHASH_PO2}
-
-
-{$ifdef DYNARRAYHASH_PO2}
-const
-  /// defined for inlining bitwise division in TDynArrayHasher.HashTableIndex
-  // - HashTableSize<=HASH_PO2 is expected to be a power of two (fast binary op);
-  // limit is set to 262,144 hash table slots (=1MB), for Capacity=131,072 items
-  // - above this limit, a set of increasing primes is used; using a prime as
-  // hashtable modulo enhances its distribution, especially for a weak hash function
-  // - 64-bit CPU and FPC can efficiently compute a prime reduction using Lemire
-  // algorithm, but power of two sizes still have a better practical performance
-  // for lower (and most common) content until it consumes too much memory
-  HASH_PO2 = 1 shl 18;
-{$endif DYNARRAYHASH_PO2}
 
 type
   /// thread-safe FIFO (First-In-First-Out) in-order queue of records
@@ -8447,11 +8456,12 @@ end;
 
 procedure TDynArrayHasher.Clear;
 begin
-  HashTable := nil;
+  HashTableStore := nil;
   HashTableSize := 0;
   ScanCounter := 0;
-  if Assigned(HashItem) or Assigned(EventHash) then
-    State := [hasHasher]
+  if Assigned(HashItem) or
+     Assigned(EventHash) then
+    byte(State) := 1 shl ord(hasHasher)
   else
     byte(State) := 0;
 end;
@@ -8552,7 +8562,13 @@ begin
   first := result;
   last := HashTableSize;
   repeat
-    ndx := HashTable[result] - 1; // index+1 was stored
+    {$ifdef DYNARRAYHASH_16BIT}
+    if hash16bit in State then
+      ndx := PWordArray(HashTableStore)[result]
+    else
+    {$endif DYNARRAYHASH_16BIT}
+      ndx := HashTableStore[result];
+    dec(ndx); // index+1 was stored
     if ndx < 0 then
     begin
       // found void entry
@@ -8607,11 +8623,18 @@ begin
   first := result;
   last := HashTableSize;
   repeat
-    ndx := HashTable[result] - 1;  // index+1 was stored
+    ndx := result;
+    {$ifdef DYNARRAYHASH_16BIT}
+    if hash16bit in State then
+      ndx := PWordArray(HashTableStore)[ndx]
+    else
+    {$endif DYNARRAYHASH_16BIT}
+      ndx := HashTableStore[ndx];
+    dec(ndx); // index+1 was stored
     if ndx < 0 then
     begin
       // not found: returns void index in HashTable[] as negative value
-      result := -(result + 1);
+      result := - (result + 1);
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
       inc(CountCollisions, collisions);
       inc(CountCollisionsCurrent, collisions);
@@ -8666,10 +8689,36 @@ begin
     if result >= 0 then
       RaiseFatalCollision('HashAdd', aHashCode);
   end;
-  HashTable[-result - 1] := n + 1; // store Index+1 (0 means void slot)
+  result := -result - 1; // store Index+1 (0 means void slot)
+  {$ifdef DYNARRAYHASH_16BIT}
+  if hash16bit in State then
+    PWordArray(HashTableStore)[result] := n + 1
+  else
+  {$endif DYNARRAYHASH_16BIT}
+    HashTableStore[result] := n + 1;
   result := n;
 end; // on output: result holds the position in fValue[]
 
+procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: PtrInt);
+begin
+  repeat // branchless code is 10x faster than if :)
+    dec(count, 8);
+    dec(P[0], cardinal(P[0] > deleted));
+    dec(P[1], cardinal(P[1] > deleted));
+    dec(P[2], cardinal(P[2] > deleted));
+    dec(P[3], cardinal(P[3] > deleted));
+    dec(P[4], cardinal(P[4] > deleted));
+    dec(P[5], cardinal(P[5] > deleted));
+    dec(P[6], cardinal(P[6] > deleted));
+    dec(P[7], cardinal(P[7] > deleted));
+    P := @P[8];
+  until count < 8;
+  while count > 0 do
+  begin
+    dec(count);
+    dec(P[count], cardinal(P[count] > deleted));
+  end;
+end;
 
 procedure TDynArrayHasher.HashDelete(aArrayIndex, aHashTableIndex: PtrInt;
   aHashCode: cardinal);
@@ -8684,7 +8733,12 @@ begin
   next := first;
   n := 0;
   repeat
-    HashTable[next] := 0; // Clear slots
+    {$ifdef DYNARRAYHASH_16BIT}
+    if hash16bit in State then
+      PWordArray(HashTableStore)[next] := 0
+    else
+    {$endif DYNARRAYHASH_16BIT}
+      HashTableStore[next] := 0; // Clear slots
     inc(next);
     if next = last then
       if next = first then
@@ -8694,7 +8748,13 @@ begin
         next := 0;
         last := first;
       end;
-    ndx := HashTable[next] - 1; // stored index+1
+    {$ifdef DYNARRAYHASH_16BIT}
+    if hash16bit in State then
+      ndx := PWordArray(HashTableStore)[next]
+    else
+    {$endif DYNARRAYHASH_16BIT}
+      ndx := HashTableStore[next];
+    dec(ndx); // stored index+1
     if ndx < 0 then
       break; // stop at void entry
     if n = high(indexes) then // paranoid (typical 0..23 range)
@@ -8708,11 +8768,25 @@ begin
   begin
     P := PAnsiChar(DynArray^.Value^) + {%H-}indexes[i] * s;
     ndx := FindOrNew(HashOne(P), P, nil);
-    if ndx < 0 then
-      HashTable[-ndx - 1] := indexes[i] + 1; // ignore ndx>=0 dups (like ReHash)
+    if ndx < 0 then // ignore ndx>=0 dups (like ReHash)
+    begin
+      ndx := -ndx - 1;     // compute the new slot position
+      n := indexes[i] + 1; // store index+1
+      {$ifdef DYNARRAYHASH_16BIT}
+      if hash16bit in State then
+        PWordArray(HashTableStore)[ndx] := n
+      else
+      {$endif DYNARRAYHASH_16BIT}
+        HashTableStore[ndx] := n;
+    end;
   end;
   // adjust all stored indexes (using SSE2/AVX2 on x86_64)
-  DynArrayHashTableAdjust(pointer(HashTable), aArrayIndex, HashTableSize);
+  {$ifdef DYNARRAYHASH_16BIT}
+  if hash16bit in State then
+    DynArrayHashTableAdjust16(pointer(HashTableStore), aArrayIndex, HashTableSize)
+  else
+  {$endif DYNARRAYHASH_16BIT}
+    DynArrayHashTableAdjust(pointer(HashTableStore), aArrayIndex, HashTableSize);
 end;
 
 function TDynArrayHasher.FindBeforeAdd(Item: pointer; out wasAdded: boolean;
@@ -8885,10 +8959,22 @@ nxt:if Assigned(Hasher^.EventHash) then
     first := ndx;
     last := Hasher^.HashTableSize;
     repeat
-      fnd := Hasher^.HashTable[ndx]; // store index + 1
+      {$ifdef DYNARRAYHASH_16BIT}
+      if hash16bit in Hasher^.State then
+        fnd := PWordArray(Hasher^.HashTableStore)[ndx] // store index + 1
+      else
+      {$endif DYNARRAYHASH_16BIT}
+        fnd := Hasher^.HashTableStore[ndx]; // store index + 1
       if fnd = 0 then
       begin
-        Hasher^.HashTable[ndx] := ht; // use void entry (most common case)
+        // we can use this void entry (most common case)
+        fnd := ht;
+        {$ifdef DYNARRAYHASH_16BIT}
+        if hash16bit in Hasher^.State then
+          PWordArray(Hasher^.HashTableStore)[ndx] := fnd
+        else
+        {$endif DYNARRAYHASH_16BIT}
+          Hasher^.HashTableStore[ndx] := fnd;
         inc(P, siz); // next item
         inc(ht);
         dec(count);
@@ -8962,7 +9048,16 @@ begin
     exit; // ReHash() was called with forced=false -> delay actual hashing
   Clear;
   HashTableSize := siz;
-  SetLength(HashTable, siz); // fill with 0 (void slot)
+  {$ifdef DYNARRAYHASH_16BIT}
+  if DynArray^.Capacity <= $ffff then
+  begin
+    include(State, hash16bit);
+    siz := (siz shr 1) {$ifndef DYNARRAYHASH_PO2} + 1 {$endif};
+  end
+  else
+    exclude(State, hash16bit);
+  {$endif DYNARRAYHASH_16BIT}
+  SetLength(HashTableStore, siz); // fill with 0 (void slot)
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   CountCollisionsCurrent := 0; // count collision for this HashTable[] only
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
