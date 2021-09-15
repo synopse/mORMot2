@@ -25,6 +25,7 @@ uses
   mormot.orm.core,
   mormot.rest.http.server,
   mormot.rest.sqlite3,
+  mormot.rest.server,
   mormot.core.log;
 
 
@@ -39,6 +40,8 @@ begin
   LogFamily := TSynLog.Family;
   LogFamily.Level := LOG_VERBOSE;
   LogFamily.PerThreadLog := ptIdentifiedInOnFile;
+  LogFamily.AutoFlushTimeOut := 5;
+  LogFamily.HighResolutionTimestamp := true;
   //LogFamily.EchoToConsole := LOG_VERBOSE;
   aModel := CreateModel;
   try
@@ -51,8 +54,8 @@ begin
       aApplication := TBlogApplication.Create;
       try
         aApplication.Start(aServer);
-        aHTTPServer := TRestHttpServer.Create('8092', aServer
-          {$ifdef USEHTTPSYS}, '+', useHttpApiRegisteringURI{$endif});
+        aHTTPServer := TRestHttpServer.Create('8092', aServer, '+',
+          HTTP_DEFAULT_MODE, nil, 16, secNone, '', '', HTTPSERVER_DEBUG_OPTIONS);
         try
           aHTTPServer.RootRedirectToURI('blog/default'); // redirect / to blog/default
           aServer.RootRedirectGet := 'blog/default';     // redirect blog to blog/default

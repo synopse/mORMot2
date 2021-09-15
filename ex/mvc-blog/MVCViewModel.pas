@@ -32,7 +32,6 @@ uses
   mormot.rest.sqlite3,
   mormot.orm.core,
   mormot.orm.base,
-  mormot.orm.rest,
   MVCModel;
 
 type
@@ -152,7 +151,7 @@ procedure TBlogApplication.Start(aServer: TRest);
 begin
   fDefaultData := TLockedDocVariant.Create;
   inherited Start(aServer, TypeInfo(IBlogApplication));
-  fHasFTS := True;
+  fHasFTS := true;
   // TRestOrmServer(TRestServer(aServer).Server).StaticVirtualTable[TOrmArticle]=nil;
   fTagsLookup.Init(RestModel.Orm);
   // publish IBlogApplication using Mustache Views (TMvcRunOnRestServer default)
@@ -168,6 +167,7 @@ begin
   (TMvcRunOnRestServer(fMainRunner).Views as TMvcViewsMustache).
     RegisterExpressionHelpers(['MonthToText'], [MonthToText]).
     RegisterExpressionHelpers(['TagToText'],   [TagToText]);
+  // data setup
   ComputeMinimalData;
   aServer.Orm.Cache.SetCache(TOrmAuthor);
   aServer.Orm.Cache.SetCache(TOrmArticle);
