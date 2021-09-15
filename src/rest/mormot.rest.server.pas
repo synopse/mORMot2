@@ -5537,7 +5537,7 @@ begin
       // decode TRestClientAuthenticationDefault.ClientComputeSessionKey nonce
       if (length(cltnonce) = (SizeOf(os) + SizeOf(TAesBlock)) * 2 + 1) and
          (cltnonce[9] = '_') and
-         mormot.core.text.HexToBin(pointer(cltnonce), @os, SizeOf(os)) and
+         HexDisplayToBin(pointer(cltnonce), @os, SizeOf(os)) and
          (os.os <= high(os.os)) then
         Ctxt.SessionOS := os;
       // check if match TRestClientUri.SetUser() algorithm
@@ -6117,6 +6117,8 @@ begin
   fAuthUserClass := TAuthUser;
   fAuthGroupClass := TAuthGroup;
   fModel := aModel; // we need this property ASAP
+  if fModel.TablesMax < 0 then
+    fOptions := [rsoNoTableURI, rsoNoInternalState]; // no table/state to send
   fSessionClass := TAuthSession;
   if aHandleUserAuthentication then
     // default mORMot authentication schemes
@@ -7395,7 +7397,8 @@ begin
         ctxt.Error(ctxt.CustomErrorMsg, Call.OutStatus);
     end;
     StatsAddSizeForCall(fStats, Call);
-    if (rsoNoInternalState in fOptions) and
+    if ((rsoNoInternalState in fOptions) or
+        (rsoNoTableURI in fOptions)) and
        (ctxt.Method <> mSTATE) then
       // reduce headers verbosity
       Call.OutInternalState := 0
