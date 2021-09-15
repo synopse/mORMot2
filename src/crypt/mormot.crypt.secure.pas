@@ -2312,7 +2312,7 @@ begin
   SessionSequence := Random32 and $7ffffff;
   // temporary secret for encryption
   CryptNonce := Random32;
-  TAesPrng.Main.FillRandom(@Crypt, sizeof(Crypt));
+  TAesPrng.Main.FillRandom(@Crypt, sizeof(Crypt)); // cryptographic randomness
   // temporary secret for checksum
   Secret := Random32;
 end;
