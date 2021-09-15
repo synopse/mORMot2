@@ -397,7 +397,7 @@ begin
   begin
     result := false;
     if ErrorWithoutException <> nil then
-      ErrorWithoutException^ := 1;
+      ErrorWithoutException^ := -2;
   end
   else
   begin
@@ -405,7 +405,7 @@ begin
     result := ((fConnection.fHttp.Process.Len - fProcessPos) +
                (fConnection.fSlot.rd.Len - fReadPos)) >= 2;
     if ErrorWithoutException <> nil then
-      ErrorWithoutException^ := 0;
+      ErrorWithoutException^ := 0; // no error
   end;
 end;
 

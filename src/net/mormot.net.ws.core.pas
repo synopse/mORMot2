@@ -764,10 +764,10 @@ type
     // - is defined separated to allow multi-thread pooling
     function CanGetFrame(TimeOut: cardinal;
       ErrorWithoutException: PInteger): boolean; virtual; abstract;
-    /// blocking process incoming WebSockets framing protocol
+    /// (blocking) process incoming WebSockets framing protocol
     // - CanGetFrame should have been called and returned true before
     // - will call overriden ReceiveBytes() for the actual communication
-    function GetFrame(out Frame: TWebSocketFrame;
+    function GetFrame(out Frame: TWebSocketFrame; Blocking: boolean;
       ErrorWithoutException: PInteger): boolean;
     /// process outgoing WebSockets framing protocol
     // - will call overriden SendBytes() for immediate transmission
@@ -2390,7 +2390,7 @@ begin
     error := 0;
     if not SendFrame(frame) or // immediate frame sending + wait 1s for ACK
        not CanGetFrame(1000, @error) or
-       not GetFrame(frame, @error) then
+       not GetFrame(frame, {blocking=}false, @error) then
       WebSocketLog.Add.Log(sllWarning,
         'Destroy: no focConnectionClose ACK %', [error], self);
   finally
@@ -2514,7 +2514,7 @@ begin
     LockedInc32(@fProcessCount); // flag currently processing
     try
       if CanGetFrame({timeout=}1, @sockerror) and
-         GetFrame(request, @sockerror) then
+         GetFrame(request, {blocking=}FrameProcessed = nil, @sockerror) then
       begin
         // we received a full frame
         if FrameProcessed <> nil then
@@ -2612,7 +2612,7 @@ begin
       fState := wpsRun;
       while (fOwnerThread = nil) or
             not fOwnerThread.Terminated do
-        if ProcessLoopStepReceive(nil) and
+        if ProcessLoopStepReceive({nonblockingflag=}nil) and
            ProcessLoopStepSend then
           HiResDelay(fLastSocketTicks)
         else
@@ -2808,16 +2808,20 @@ begin
 end;
 
 function TWebSocketProcess.GetFrame(out Frame: TWebSocketFrame;
-  ErrorWithoutException: PInteger): boolean;
+  Blocking: boolean; ErrorWithoutException: PInteger): boolean;
 var
   f: TWebProcessInFrame;
 begin
   f.Init(self, @Frame);
   EnterCriticalSection(fSafeIn);
   try
-    repeat
-      // blocking processing loop to perform all steps
-    until f.Step(ErrorWithoutException) in [pfsDone, pfsError];
+    if Blocking then
+      repeat
+        // blocking processing loop to perform all steps
+      until f.Step(ErrorWithoutException) in [pfsDone, pfsError]
+    else
+      // not blocking process
+      f.Step(ErrorWithoutException);
     result := f.st = pfsDone;
   finally
     LeaveCriticalSection(fSafeIn);
@@ -3028,7 +3032,7 @@ begin
             else
               raise EWebSockets.CreateUtf8('%.GetFrame: received %, expected %',
                 [process, _TWebSocketFrameOpCode[opcode]^,
-                _TWebSocketFrameOpCode[outputframe.opcode]^]);
+                 _TWebSocketFrameOpCode[outputframe.opcode]^]);
           end
           else
             st := pfsDataN

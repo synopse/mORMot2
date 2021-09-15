@@ -1465,6 +1465,7 @@ begin
     if (connection = nil) or
        (TAsyncConnection(connection).Handle = 0) then
     begin
+      // paranoid check - should be handled by TPollAsyncReadSockets.AddGC
       fOwner.DoLog(sllError,
         'SlotFromConnection() with dangling pointer %', [pointer(connection)], self);
       result := nil;
