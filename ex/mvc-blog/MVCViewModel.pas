@@ -31,6 +31,7 @@ uses
   mormot.rest.mvc,
   mormot.rest.sqlite3,
   mormot.orm.core,
+  mormot.orm.base,
   mormot.orm.rest,
   MVCModel;
 
@@ -133,6 +134,7 @@ type
     function ArticleCommit(
       ID: TID;
       const Title, Content: RawUtf8): TMvcAction;
+    property HasFts: boolean read fHasFts write fHasFts;
   end;
 
 implementation
