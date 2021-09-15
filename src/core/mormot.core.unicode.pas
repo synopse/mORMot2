@@ -6473,15 +6473,17 @@ begin
           else
           begin
             // fast Unicode 10.0 uppercase conversion
-            if result and $20 = 0 then
+            if result and $20 = 0 then // $0..$7ff common case
             begin
-              result := (result shl 6) + byte(u1[1]) - $3080; // $0..$7ff
+              result := tab.Ucs4Upper((result shl 6) + byte(u1[1]) - $3080);
               inc(u1, 2);
             end
             else
+            begin
               result := UTF8_TABLE.GetHighUtf8Ucs4(u1);
-            if result <= UU_MAX then
-              result := tab.Ucs4Upper(result);
+              if result <= UU_MAX then
+                result := tab.Ucs4Upper(result);
+            end;
           end;
           if c2 <= 127 then
           begin
@@ -6496,15 +6498,17 @@ begin
           end
           else
           begin
-            if c2 and $20 = 0 then
+            if c2 and $20 = 0 then // $0..$7ff common case
             begin
-              c2 := (c2 shl 6) + byte(u2[1]) - $3080; // process $0..$7ff
+              c2 := tab.Ucs4Upper((c2 shl 6) + byte(u2[1]) - $3080);
               inc(u2, 2);
             end
             else
+            begin
               c2 := UTF8_TABLE.GetHighUtf8Ucs4(u2);
-            if c2 <= UU_MAX then
-              c2 := tab.Ucs4Upper(c2);
+              if c2 <= UU_MAX then
+                c2 := tab.Ucs4Upper(c2);
+            end;
             dec(result, c2);
             if result <> 0 then
               exit;

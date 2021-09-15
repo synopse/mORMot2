@@ -1750,7 +1750,9 @@ type
     /// set a fixed buffer for the content
     // - emulated a memory-mapping from an existing buffer
     procedure Map(aBuffer: pointer; aBufferSize: PtrUInt); overload;
-    /// recognize the BOM of a text file - returns isAnsi if no BOM is available
+    /// recognize the BOM of a text file
+    // - BOM is common only with Microsoft products
+    // - returns isAnsi if no BOM is available - but may be UTF-8 e.g. on POSIX
     function TextFileKind: TTextFileKind;
     /// unmap the file
     procedure UnMap;
