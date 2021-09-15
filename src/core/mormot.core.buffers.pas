@@ -291,8 +291,8 @@ type
     // after crc32c hash
     // - avoid any memory allocation in case of a stored content - otherwise, would
     // uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
-    function Decompress(const Comp: RawByteString; out PlainLen: integer; var tmp: RawByteString;
-      Load: TAlgoCompressLoad = aclNormal): pointer; overload;
+    function Decompress(const Comp: RawByteString; out PlainLen: integer;
+      var tmp: RawByteString; Load: TAlgoCompressLoad = aclNormal): pointer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// uncompress a RawByteString memory buffer with crc32c hashing
     // - returns nil if crc32 hash failed, i.e. if the supplied Data is not correct
@@ -1700,24 +1700,21 @@ const
 // - for instance, Plural('row',100) returns '100 rows' with no heap allocation
 function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
 
-/// fast conversion from binary data to escaped text
+/// low-level fast conversion from binary data to escaped text
 // - non printable characters will be written as $xx hexadecimal codes
-// - will be #0 terminated, with '...' characters trailing on overflow
-// - ensure the destination buffer contains at least max*3+3 bytes, which is
+// - will be #0 terminated, with '...' characters trailing on dmax overflow
+// - ensure the destination buffer contains at least dmax bytes, which is
 // always the case when using LogEscape() and its local TLogEscape variable
-function EscapeBuffer(s, d: PAnsiChar; len, max: integer): PAnsiChar;
-
-const
-  /// maximum size, in bytes, of a TLogEscape / LogEscape() buffer
-  LOGESCAPELEN = 200;
+function EscapeBuffer(s: PAnsiChar; slen: integer;
+  d: PAnsiChar; dmax: integer): PAnsiChar;
 
 type
-  /// buffer to be allocated on stack when using LogEscape()
-  TLogEscape = array[0..LOGESCAPELEN * 3 + 5] of AnsiChar;
+  /// 512 bytes buffer to be allocated on stack when using LogEscape()
+  TLogEscape = array[0..511] of AnsiChar;
 
 /// fill TLogEscape stack buffer with the (hexadecimal) chars of the input binary
-// - up to LOGESCAPELEN (i.e. 200) bytes will be escaped and appended to a
-// Local temp: TLogEscape variable, using the EscapeBuffer() low-level function
+// - up to 512 bytes will be escaped and appended to a local temp: TLogEscape
+// variable, using the EscapeBuffer() low-level function
 // - you can then log the resulting escaped text by passing the returned
 // PAnsiChar as % parameter to a TSynLog.Log() method
 // - the "enabled" parameter can be assigned from a process option, avoiding to
@@ -1752,7 +1749,8 @@ function AnyTextFileToString(const FileName: TFileName;
 /// get text file contents (even UTF-16 or UTF-8) and convert it into an
 // Unicode string according to any BOM marker at the beginning of the file
 // - any file without any BOM marker will be interpreted as plain ASCII: in this
-// case, the current string code page is used (i.e. CurrentAnsiConvert class)
+// case, the current string code page is used (i.e. CurrentAnsiConvert class,
+// which is likely to be UTF-8 on a recent POSIX system)
 function AnyTextFileToSynUnicode(const FileName: TFileName;
   ForceUtf8: boolean = false): SynUnicode;
 
@@ -8310,18 +8308,15 @@ begin
   result[0] := AnsiChar(len);
 end;
 
-function EscapeBuffer(s, d: PAnsiChar; len, max: integer): PAnsiChar;
+function EscapeBuffer(s: PAnsiChar; slen: integer;
+  d: PAnsiChar; dmax: integer): PAnsiChar;
 var
   c: AnsiChar;
   tab: PWordArray;
 begin
-  if (len > 0) and
-     (max > 0) then
+  if (slen > 0) and
+     (dmax > 7) then
   begin
-    if len > max then
-      len := max
-    else
-      max := 0; // indicates not truncated
     tab := @TwoDigitsHexWBLower;
     repeat
       c := s^;
@@ -8331,6 +8326,7 @@ begin
       begin
         d^ := c;
         inc(d);
+        dec(dmax);
       end
       else
       begin
@@ -8338,14 +8334,16 @@ begin
         inc(d);
         PWord(d)^ := tab[ord(c)];
         inc(d, 2);
+        dec(dmax, 3);
       end;
-      dec(len);
-    until len = 0;
-    if max <> 0 then // mark truncated
-    begin
-      PCardinal(d)^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
-      inc(d, 3);
-    end;
+      if dmax <= 7 then // mark truncated
+      begin
+        PCardinal(d)^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
+        inc(d, 3);
+        break;
+      end;
+      dec(slen);
+    until slen = 0;
   end;
   d^ := #0;
   result := d;
@@ -8357,7 +8355,7 @@ begin
   if enabled then
   begin
     temp[0] := ' ';
-    EscapeBuffer(source, @temp[1], sourcelen, LOGESCAPELEN);
+    EscapeBuffer(source, sourcelen, @temp[1], SizeOf(temp) - 1);
   end
   else
     temp[0] := #0;
@@ -8374,21 +8372,22 @@ begin
   FastSetString(result, nil, sourcelen * 3); // worse case
   if sourcelen = 0 then
     exit;
-  sourcelen := EscapeBuffer(source, pointer(result), sourcelen, sourcelen * 3) - pointer(result);
+  sourcelen := EscapeBuffer(source, sourcelen,
+    pointer(result), sourcelen * 3) - pointer(result);
   // don't call the MM which may move the data -> just adjust length()
   PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := sourcelen;
 end;
 
 function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring;
 begin
-  result[0] := AnsiChar(EscapeBuffer(source,
-    @result[1], sourcelen, 80) - @result[1]);
+  result[0] := AnsiChar(
+    EscapeBuffer(source, sourcelen, @result[1], 255) - @result[1]);
 end;
 
 function EscapeToShort(const source: RawByteString): shortstring;
 begin
-  result[0] := AnsiChar(EscapeBuffer(pointer(source),
-    @result[1], length(source), 80) - @result[1]);
+  result[0] := AnsiChar(
+    EscapeBuffer(pointer(source), length(source), @result[1], 255) - @result[1]);
 end;
 
 function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUtf8: boolean): SynUnicode;
@@ -8409,8 +8408,7 @@ begin
           Utf8ToSynUnicode(PUtf8Char(pointer(PtrUInt(Map.Buffer) + 3)),
             Map.Size - 3, result);
         isAnsi:
-          result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer,
-            Map.Size);
+          result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer, Map.Size);
       end;
   finally
     Map.UnMap;
