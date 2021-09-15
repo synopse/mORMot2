@@ -285,8 +285,8 @@ type
     // - to be called when some bytes could be written to output socket
     procedure ProcessBody(var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
     /// should be done when the HTTP Server state machine is done
+    // - will check and process hfContentStreamNeedFree flag
     procedure ProcessDone;
-      {$ifdef HASINLINE} inline; {$endif}
   end;
 
 const
@@ -1422,7 +1422,7 @@ begin
       ContentEncoding := 'gzip';
       include(HeaderFlags, hfContentStreamNeedFree);
       result := true;
-      exit;
+      exit; // use the stream to bypass recompression
     end;
   end;
   ContentLength := FileSize(FileName);

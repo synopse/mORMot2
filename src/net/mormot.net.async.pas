@@ -2291,6 +2291,8 @@ begin
   if fServer <> nil then
   begin
     HttpInit;
+    fHttp.Compress := fServer.fCompress;
+    fHttp.CompressAcceptEncoding := fServer.fCompressAcceptEncoding;
     if fServer.ServerKeepAliveTimeOut >= 1000 then
       fKeepAliveSec := fServer.Async.fLastOperationSec +
                        fServer.ServerKeepAliveTimeOut div 1000;
@@ -2407,7 +2409,7 @@ begin
         else
         begin
           // kept alive connection -> reset the HTTP parser and continue
-          fHttp.ProcessDone; // ContentStream.Free
+          fHttp.ProcessDone;   // ContentStream.Free
           fHttp.Process.Clear; // CompressContentAndFinalizeHead may have set it
           HttpInit;
           result := soContinue;
