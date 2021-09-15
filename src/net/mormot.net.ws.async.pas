@@ -31,6 +31,7 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.buffers,
+  mormot.core.perf,
   mormot.crypt.core,
   mormot.crypt.ecc,
   mormot.crypt.secure, // IProtocol definition
@@ -72,6 +73,9 @@ type
     /// low level receive incoming WebSockets frame data over TCrtSocket
     // - in practice, just call fSocket.TrySndLow to send pending data
     function SendBytes(P: pointer; Len: PtrInt): boolean; override;
+    /// delayed process of outgoing WebSockets framing protocol
+    // - will notify TWebSocketAsyncConnections.ProcessIdleTix sending
+    procedure SendFrameAsync(const Frame: TWebSocketFrame); override;
   end;
 
   /// one HTTP/WebSockets server connection using non-blocking sockets
@@ -81,14 +85,28 @@ type
     fNextPingSec: TAsyncConnectionSec;
     function OnRead: TPollAsyncSocketOnReadWrite; override;
     function AfterWrite: TPollAsyncSocketOnReadWrite; override;
-    function OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean;
-      override; // called every 10 seconds
     function DecodeHeaders: integer; override;
     procedure BeforeDestroy; override;
+    // called every 10 seconds
+    function OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean; override;
     // used e.g. by TWebSocketAsyncServer.WebSocketBroadcast
     function SendDirect(const tmp: TSynTempBuffer;
       opcode: TWebSocketFrameOpCode): boolean;
       {$ifdef HASINLINE} inline; {$endif}
+  end;
+
+  /// handle HTTP/WebSockets server connections using non-blocking sockets
+  TWebSocketAsyncConnections = class(THttpAsyncConnections)
+  protected
+    // maintain a thread-safe list to minimize ProcessIdleTix time
+    fOutgoingLock: TRTLCriticalSection;
+    fOutgoingCount: integer;
+    fOutgoing: array of TWebSocketAsyncConnection;
+    procedure NotifyOutgoing(Connection: TWebSocketAsyncConnection);
+    procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); override;
+  public
+    /// finalize the HTTP/WebSockets Connections
+    destructor Destroy; override;
   end;
 
   /// HTTP/WebSockets server using non-blocking sockets
@@ -260,6 +278,7 @@ begin
         fProcess := TWebSocketAsyncProcess.Create(self, proto);
         TWebSocketAsyncServer(fServer).IncStat(grUpgraded);
         fProcess.ProcessStart; // OnClientConnected + focContinuation event
+        fProcess.fState := wpsRun;
       end
       else
         raise EWebSockets.CreateUtf8('%.DecodeHeaders: upgrade failed', [self]);
@@ -280,11 +299,70 @@ begin
     result := false
   else
   begin
-    result := fOwner.Write(self, tmp.buf, tmp.len, {timeout=}0);
+    result := fOwner.Write(self, tmp.buf^, tmp.len, {timeout=}0);
     if result and
        (opcode = focConnectionClose) then
       fProcess.fConnectionCloseWasSent := true;
   end;
+end;
+
+
+{ TWebSocketAsyncConnections }
+
+procedure TWebSocketAsyncConnections.NotifyOutgoing(
+  Connection: TWebSocketAsyncConnection);
+begin
+  EnterCriticalSection(fOutgoingLock);
+  ObjArrayAddOnce(fOutgoing, Connection, fOutgoingCount);
+  LeaveCriticalSection(fOutgoingLock);
+end;
+
+procedure TWebSocketAsyncConnections.ProcessIdleTix(Sender: TObject;
+  NowTix: Int64);
+var
+  i, conn, valid, sent, invalid: PtrInt;
+  timer: TPrecisionTimer;
+begin
+  if Terminated then
+    exit;
+  // inlined TAsyncConnections.ProcessIdleTix logic
+  if NowTix >= fIdleTix then
+  begin
+    IdleEverySecond(NowTix);
+    fIdleTix := NowTix + 1000;
+  end;
+  // send pending outgoing frames, with optional JumboFrame gathering
+  if fOutgoingCount = 0 then
+    exit;
+  timer.Start; // we monitor this loop, which should not be blocking
+  valid := 0;
+  invalid := 0;
+  EnterCriticalSection(fOutgoingLock);
+  try
+    conn := fOutgoingCount;
+    for i := 0 to conn - 1 do
+    begin
+      sent := fOutgoing[i].fProcess.SendPendingOutgoingFrames;
+      if sent < 0 then
+        inc(invalid)
+      else
+        inc(valid, sent);
+    end;
+    fOutgoingCount := 0;
+  finally
+    LeaveCriticalSection(fOutgoingLock);
+  end;
+  timer.Pause; // BeforeSendFrame encrypt/compress may have taken some time
+  if (invalid <> 0) or
+     (timer.TimeInMicroSec > 500) then // 0.5 ms seems responsive enough
+    DoLog(sllTrace, 'ProcessIdleTix conn=% valid=% invalid=% in %',
+      [conn, valid, invalid, timer.Time], self);
+end;
+
+destructor TWebSocketAsyncConnections.Destroy;
+begin
+  inherited Destroy;
+  DeleteCriticalSection(fOutgoingLock);
 end;
 
 
@@ -297,8 +375,8 @@ var
 begin
   serv := aConnection.fServer as TWebSocketAsyncServer;
   fNoLastSocketTicks := true; // aConnection.OnLastOperationIdle handles pings
-  inherited Create(aProtocol, aConnection.Handle,
-    nil, @serv.fSettings, serv.ProcessName);
+  inherited Create(
+    aProtocol, aConnection.Handle, nil, @serv.fSettings, serv.ProcessName);
   fConnection := aConnection;
 end;
 
@@ -363,7 +441,13 @@ end;
 function TWebSocketAsyncProcess.SendBytes(P: pointer; Len: PtrInt): boolean;
 begin
   // try to send all in non-blocking mode, or subscribe for biggest writes
-  result := fConnection.Owner.Write(fConnection, P, Len);
+  result := fConnection.Owner.Write(fConnection, P^, Len);
+end;
+
+procedure TWebSocketAsyncProcess.SendFrameAsync(const Frame: TWebSocketFrame);
+begin
+  inherited SendFrameAsync(Frame); // calls Outgoing.Push()
+  TWebSocketAsyncConnections(fConnection.fOwner).NotifyOutgoing(fConnection);
 end;
 
 
@@ -372,10 +456,11 @@ end;
 constructor TWebSocketAsyncServer.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  aHeadersUnFiltered, CreateSuspended, aLogVerbose: boolean);
+  aHeadersUnFiltered: boolean; CreateSuspended: boolean; aLogVerbose: boolean);
 begin
   // initialize protocols and connections
   fConnectionClass := TWebSocketAsyncConnection;
+  fConnectionsClass := TWebSocketAsyncConnections;
   fCanNotifyCallback := true;
   fProtocols := TWebSocketProtocolList.Create;
   fSettings.SetDefaults;
@@ -385,6 +470,7 @@ begin
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended, aLogVerbose);
   fAsync.LastOperationIdleSeconds := 10;
+  InitializeCriticalSection((fAsync as TWebSocketAsyncConnections).fOutgoingLock);
 end;
 
 destructor TWebSocketAsyncServer.Destroy;
@@ -411,6 +497,7 @@ begin
   FrameSendEncode(aFrame, {mask=}0, tmp);
   fAsync.Lock;
   try
+    // use TWebSocketAsyncConnection.SendDirect for non-blocking socket sending
     if aClientsConnectionID = nil then
       // broadcast to all connected clients
       for i := 0 to fAsync.ConnectionCount - 1 do

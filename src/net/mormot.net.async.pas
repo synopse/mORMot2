@@ -453,7 +453,7 @@ type
     procedure ThreadPollingWakeup(Events: integer);
     procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject);
-    procedure ProcessIdleTix(Sender: TObject; NowTix: Int64);
+    procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); virtual;
     procedure IdleEverySecond(tix: Int64);
   public
     /// initialize the multiple connections
@@ -677,6 +677,9 @@ type
     procedure SetExecuteState(state: THttpServerExecuteState); override;
   end;
 
+  /// meta-class of THttpAsyncConnections type
+  THttpAsyncConnectionsClass = class of THttpAsyncConnections;
+
   /// HTTP server using non-blocking sockets
   THttpAsyncServer = class(THttpServerSocketGeneric)
   protected
@@ -684,6 +687,7 @@ type
     fCompressGz: integer;
     fHeadersDefaultBufferSize: integer;
     fConnectionClass: TAsyncConnectionClass;
+    fConnectionsClass: THttpAsyncConnectionsClass;
     function GetRegisterCompressGzStatic: boolean;
     procedure SetRegisterCompressGzStatic(Value: boolean);
     function GetHttpQueueLength: cardinal; override;
@@ -2358,7 +2362,7 @@ begin
       end;
       if (result <> soContinue) or
          (fHttp.State = hrsUpgraded) then
-        break;
+        break; // rejected or upgraded
     end;
     {fOwner.DoLog(sllCustom2, 'OnRead % result=%', [ToText(fHttp.State)^, ord(result)], self);}
     // finalize the memory buffers
@@ -2462,17 +2466,19 @@ begin
     fServer.IncStat(grRejected);
     exit;
   end;
-  // implement Expect: 100-Continue Header
-  if hfExpect100 in fHttp.HeaderFlags then
-    // client waits for the server to parse the headers and return 100
-    // before sending the request body
-    fServer.fAsync.fClients.WriteString(self, 'HTTP/1.1 100 Continue'#13#10#13#10);
   // now THttpAsyncConnection.OnRead can get the body
   fServer.IncStat(grHeaderReceived);
   if not (fHttp.State in [hrsWaitProcessing, hrsUpgraded]) and
+     // HEAD and OPTIONS are requests with Content-Length header but no body
      HttpMethodWithNoBody(fHttp.CommandMethod) then
-    // HEAD and OPTIONS are requests with Content-Length header but no body
-    result := DoRequest
+  begin
+    // implement Expect: 100-Continue Header
+    if hfExpect100 in fHttp.HeaderFlags then
+      // client waits for the server to parse the headers and return 100
+      // before sending the request body
+      fServer.fAsync.fClients.WriteString(self, 'HTTP/1.1 100 Continue'#13#10#13#10);
+    result := DoRequest;
+  end
   else
     result := soContinue;
 end;
@@ -2490,8 +2496,9 @@ begin
     begin
       // content-length was 0, so hrsGetBody* and DoHeaders() were not called
       result := DoHeaders;
-      if result <> soContinue then
-        exit; // rejected
+      if (result <> soContinue) or
+         (fHttp.State = hrsUpgraded) then
+        exit; // rejected or upgraded
     end;
   // compute the HTTP/REST process
   result := soClose;
@@ -2573,7 +2580,9 @@ begin
   //include(aco, acoWritePollOnly);
   if fConnectionClass = nil then
     fConnectionClass := THttpAsyncConnection;
-  fAsync := THttpAsyncConnections.Create(aPort, OnStart, OnStop,
+  if fConnectionsClass = nil then
+    fConnectionsClass := THttpAsyncConnections;
+  fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
     fConnectionClass, ProcessName, TSynLog, aco, ServerThreadPoolCount);
   fAsync.fAsyncServer := self;
   fExecuteState := fAsync.fExecuteState;

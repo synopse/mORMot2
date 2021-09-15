@@ -735,7 +735,7 @@ type
     function HiResDelay(var start: Int64): Int64;
     procedure Log(const frame: TWebSocketFrame; const aMethodName: RawUtf8;
       aEvent: TSynLogInfo = sllTrace; DisableRemoteLog: boolean = false); virtual;
-    function SendPendingOutgoingFrames: boolean;
+    function SendPendingOutgoingFrames: integer;
   public
     /// initialize the WebSockets process on a given connection
     // - the supplied TWebSocketProtocol will be owned by this instance
@@ -765,10 +765,15 @@ type
     // - will call overriden ReceiveBytes() for the actual communication
     function GetFrame(out Frame: TWebSocketFrame;
       ErrorWithoutException: PInteger): boolean;
-    /// process outgoing WebSockets framing protocol -> to be overriden
-    // - will call overriden SendBytes() for the actual communication
-    // - use Outgoing.Push() to send frames asynchronously
+    /// process outgoing WebSockets framing protocol
+    // - will call overriden SendBytes() for immediate transmission
+    // - use SendFrameAsync() to send frames asynchronously S(with optional
+    // jumboframes gathering)
     function SendFrame(var Frame: TWebSocketFrame): boolean;
+    /// delayed process of outgoing WebSockets framing protocol
+    // - by default, store the frame in Outgoing.Push() internal list
+    // - some protocols could implement optional jumboframe gathering
+    procedure SendFrameAsync(const Frame: TWebSocketFrame); virtual;
     /// will push a request or notification to the other end of the connection
     // - caller should set the aRequest with the outgoing parameters, and
     // optionally receive a response from the other end
@@ -793,8 +798,7 @@ type
     property Incoming: TWebSocketFrameList
       read fIncoming;
     /// direct access to the low-level outgoing frame stack
-    // - call Outgoing.Push() to send frames asynchronously, with optional
-    // jumboframe gathering (if supported by the protocol)
+    // - you should not use this property, but SendFrameAsync() virtual method
     property Outgoing: TWebSocketFrameList
       read fOutgoing;
     /// the associated low-level processing thread
@@ -997,11 +1001,19 @@ begin
     frame.content := [];
 end;
 
-procedure FrameSendEncode(const Frame: TWebSocketFrame;
-  MaskSentFrames: cardinal; var ToSend: TSynTempBuffer);
-var
-  hdr: TFrameHeader;
-  hdrlen, len: cardinal;
+type
+  TWebSocketFrameEncoder = object
+    hdr: TFrameHeader;
+    hdrlen, len: cardinal;
+    function Prepare(const Frame: TWebSocketFrame; MaskSentFrames: cardinal): integer;
+    function Encode(const Frame: TWebSocketFrame; Dest: PAnsiChar): integer;
+  end;
+
+
+{ TWebSocketFrameEncoder }
+
+function TWebSocketFrameEncoder.Prepare(const Frame: TWebSocketFrame;
+  MaskSentFrames: cardinal): integer;
 begin
   len := Length(Frame.payload);
   hdr.first := byte(Frame.opcode) or FRAME_OPCODE_FIN; // single frame
@@ -1013,7 +1025,7 @@ begin
   else if len < 65536 then
   begin
     hdr.len8 := FRAME_LEN_2BYTES or MaskSentFrames;
-    hdr.len32 := swap(word(len)); // FPC expects explicit word() cast
+    hdr.len32 := swap(word(len)); // FPC requires explicit word() cast
     hdrlen := 4; // opcode+len8+len32.low
   end
   else
@@ -1027,16 +1039,37 @@ begin
   begin
     // https://tools.ietf.org/html/rfc6455#section-10.3
     // client-to-server masking is mandatory (but not from server to client)
-    hdr.mask := Random32;
-    ProcessMask(pointer(Frame.payload), hdr.mask, len);
+    repeat
+      hdr.mask := Random32;
+    until hdr.mask <> 0;
     inc(hdrlen, 4);
-  end;
-  ToSend.Init(hdrlen + len); // avoid most memory allocations
-  MoveSmall(@hdr, ToSend.buf, hdrlen);
-  if MaskSentFrames <> 0 then
+  end
+  else
+    hdr.mask := 0;
+  result := hdrlen + len;
+end;
+
+function TWebSocketFrameEncoder.Encode(
+  const Frame: TWebSocketFrame; Dest: PAnsiChar): integer;
+begin
+  MoveSmall(@hdr, Dest, hdrlen);
+  inc(Dest, hdrlen);
+  if hdr.mask <> 0 then
     // hdr.mask is not at the right position: append to actual end of header
-    PInteger(PAnsiChar(ToSend.buf) + hdrlen - 4)^ := hdr.mask;
-  MoveFast(pointer(Frame.payload)^, PAnsiChar(ToSend.buf)[hdrlen], len);
+    PInteger(Dest - 4)^ := hdr.mask;
+  MoveFast(pointer(Frame.payload)^, Dest^, len);
+  if hdr.mask <> 0 then
+    ProcessMask(pointer(Dest), hdr.mask, len); // only on client side
+  result := hdrlen + len;
+end;
+
+procedure FrameSendEncode(const Frame: TWebSocketFrame;
+  MaskSentFrames: cardinal; var ToSend: TSynTempBuffer);
+var
+  encoder: TWebSocketFrameEncoder;
+begin
+  ToSend.Init(encoder.Prepare(Frame, MaskSentFrames));
+  encoder.Encode(Frame, ToSend.buf);
 end;
 
 
@@ -1200,10 +1233,11 @@ begin
     result := false;
     FramesCount := 0;
     for i := 0 to n - 1 do
-      if Owner.SendFrame(Frames[i]) then
+      if Owner.SendFrame(Frames[i]) then // immediate frame sending
         Frames[i].payload := ''
       else
         exit;
+    Frames := nil;
   end;
   result := true;
 end;
@@ -1366,7 +1400,7 @@ begin
          noAnswer then
         exit;
       OutputToFrame(Ctxt, status, head, answer);
-      if not Sender.SendFrame(answer) then
+      if not Sender.SendFrame(answer) then // immediate frame sending
         FormatString('%.SendFrame error', [Sender], fLastError);
     finally
       Ctxt.Free;
@@ -1823,7 +1857,7 @@ begin
   dec(FramesCount);
   if FramesCount = 0 then
   begin
-    result := Owner.SendFrame(Frames[0]);
+    result := Owner.SendFrame(Frames[0]); // immediate frame sending
     exit;
   end;
   jumboFrame.opcode := focBinary;
@@ -1849,7 +1883,7 @@ begin
   end;
   FramesCount := 0;
   Frames := nil;
-  result := Owner.SendFrame(jumboFrame); // send all frames at once
+  result := Owner.SendFrame(jumboFrame); // immediate send all frames at once
 end;
 
 procedure TWebSocketProtocolBinary.ProcessIncomingFrame(
@@ -2294,7 +2328,7 @@ begin
     // send and acknowledge a focConnectionClose frame to notify the other end
     frame.opcode := focConnectionClose;
     error := 0;
-    if not SendFrame(frame) or
+    if not SendFrame(frame) or // immediate frame sending + wait 1s for ACK
        not CanGetFrame(1000, @error) or
        not GetFrame(frame, @error) then
       WebSocketLog.Add.Log(sllWarning,
@@ -2429,7 +2463,7 @@ begin
           focPing:
             begin
               request.opcode := focPong;
-              SendFrame(request);
+              SendFrame(request); // immediate frame sending
             end;
           focPong:
             ; // nothing to do
@@ -2442,7 +2476,7 @@ begin
               if fState = wpsRun then
               begin
                 fState := wpsClose; // will close the connection
-                SendFrame(request); // send back the frame as ACK
+                SendFrame(request); // immediate send back the frame as ACK
               end;
             end;
         end;
@@ -2472,7 +2506,7 @@ begin
   LockedInc32(@fProcessCount); // flag currently processing
   try
     request.opcode := focPing;
-    if not SendFrame(request) then
+    if not SendFrame(request) then // immediate frame sending
       if (fSettings.DisconnectAfterInvalidHeartbeatCount <> 0) and
          (fInvalidPingSendCount >=
            fSettings.DisconnectAfterInvalidHeartbeatCount) then
@@ -2495,7 +2529,7 @@ begin
       elapsed := LastPingDelay;
       if elapsed > fSettings.SendDelay then
         if (fOutgoing.Count > 0) and
-           not SendPendingOutgoingFrames then
+           (SendPendingOutgoingFrames < 0) then
           fState := wpsClose
         else if (fSettings.HeartbeatDelay <> 0) and
                 (elapsed > fSettings.HeartbeatDelay) then
@@ -2582,7 +2616,7 @@ begin
     wscNonBlockWithoutAnswer:
       begin
         // add to the internal sending list for asynchronous sending
-        fOutgoing.Push(request, 0);
+        SendFrameAsync(request); // with potential jumboframes gathering
         result := HTTP_SUCCESS;
         exit;
       end;
@@ -2621,7 +2655,7 @@ begin
        (WebSocketLog <> nil) then
       WebSocketLog.Add.Log(sllWarning,
         'NotifyCallback with fProcessCount=%', [i], self);
-    if not SendFrame(request) then
+    if not SendFrame(request) then // immediate frame sending
       exit;
     if aMode = wscBlockWithoutAnswer then
     begin
@@ -2661,16 +2695,17 @@ begin
   result := TWebSocketProtocolRest(fProtocol).FrameToOutput(answer, aRequest);
 end;
 
-function TWebSocketProcess.SendPendingOutgoingFrames: boolean;
+function TWebSocketProcess.SendPendingOutgoingFrames: integer;
 begin
-  result := false;
   fOutgoing.Safe.Lock;
   try
-    if fProtocol.SendFrames(self, fOutgoing.List, fOutgoing.Count) then
-      result := true
-    else
+    result := fOutgoing.Count;
+    if not fProtocol.SendFrames(self, fOutgoing.List, fOutgoing.Count) then
+    begin
       WebSocketLog.Add.Log(sllInfo,
         'SendPendingOutgoingFrames: SendFrames failed', self);
+      result := -1; // indicates error
+    end;
   finally
     fOutgoing.Safe.UnLock;
   end;
@@ -2744,7 +2779,7 @@ begin
         fProtocol.BeforeSendFrame(Frame); // may encrypt/compress in-place
       FrameSendEncode(Frame, fMaskSentFrames, tmp);
       try
-        result := SendBytes(tmp.buf, tmp.len);
+        result := SendBytes(tmp.buf, tmp.len); // immediate frame sending
       finally
         tmp.Done;
       end;
@@ -2760,6 +2795,10 @@ begin
   end;
 end;
 
+procedure TWebSocketProcess.SendFrameAsync(const Frame: TWebSocketFrame);
+begin
+  fOutgoing.Push(frame, 0);
+end;
 
 
 { TWebCrtSocketProcess }
@@ -2925,7 +2964,7 @@ begin
               WebSocketLog.Add.Log(sllDebug, 'GetFrame: received %, expected %',
                 [_TWebSocketFrameOpCode[opcode]^,
                  _TWebSocketFrameOpCode[outputframe.opcode]^], process);
-              ErrorWithoutException^ := maxInt;
+              ErrorWithoutException^ := -1;
             end
             else
               raise EWebSockets.CreateUtf8('%.GetFrame: received %, expected %',
