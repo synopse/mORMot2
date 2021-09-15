@@ -1750,7 +1750,11 @@ function ObjArrayAddCount(var aObjArray; aItem: TObject;
 // - if the object is already in the array (searching by address/reference,
 // not by content), return its current index in the dynamic array
 // - if the object does not appear in the array, add it at the end
-procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
+procedure ObjArrayAddOnce(var aObjArray; aItem: TObject); overload;
+
+/// wrapper to add once an item to a T*ObjArray dynamic array storage and Count
+procedure ObjArrayAddOnce(var aObjArray; aItem: TObject;
+  var aObjArrayCount: integer); overload;
 
 // - aSourceObjArray[] items are just copied to aDestObjArray, which remains untouched
 // - will first check if aSourceObjArray[] items are not already in aDestObjArray
@@ -7594,6 +7598,13 @@ begin
     SetLength(a, n + 1);
     a[n] := aItem;
   end;
+end;
+
+procedure ObjArrayAddOnce(var aObjArray; aItem: TObject;
+  var aObjArrayCount: integer);
+begin
+  if not PtrUIntScanExists(pointer(aObjArray), aObjArrayCount, PtrUInt(aItem)) then
+    ObjArrayAddCount(aObjArray, aItem, aObjArrayCount);
 end;
 
 function ObjArrayAddOnceFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
