@@ -506,7 +506,7 @@ var
                   ftUtf8:
                     iParam.AsString := UnQuoteSqlString(VArray[ndx]);
                   ftBlob:
-                    iParam.AsString:=VArray[ndx];
+                    iParam.AsString := VArray[ndx];
                   else
                     raise ESqlDBIbx.CreateUtf8(
                       '%.ExecutePrepared: Invalid type parameter #%', [self, ndx]);
@@ -833,7 +833,6 @@ procedure TSqlDBIbxStatement.ColumnsToJson(WR: TJsonWriter);
 var
   col: integer;
   s:   RawUtf8;
-  Len: NativeUInt; // required by Zeos for GetPAnsiChar out param (not PtrUInt)
 begin
   if WR.Expand then
     WR.Add('{');
@@ -865,7 +864,7 @@ begin
           begin
             WR.Add('"');
             s := fResultSet.Data[col].GetAsString;
-            WR.AddJsonEscape(pointer(s), Len);
+            WR.AddJsonEscape(pointer(s), length(s));
             WR.Add('"');
           end;
         ftBlob:
