@@ -8989,7 +8989,7 @@ begin
       e.b[j] := {%H-}e.b[j] xor entropy^[i];
     end;
   repeat
-    XorEntropy(e);
+    XorEntropy(e); // 512-bit from RdRand32 + Rdtsc + Now + CreateGUID
     DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
     rs1 := rs1 xor h.c0;
     rs2 := rs2 xor h.c1;

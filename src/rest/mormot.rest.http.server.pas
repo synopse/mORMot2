@@ -890,10 +890,8 @@ function TRestHttpServer.HttpApiAddUri(const aRoot, aDomainName: RawByteString;
 var
   err: integer;
   https: boolean;
-{$endif USEHTTPSYS}
 begin
-  result := ''; // no error
-  {$ifdef USEHTTPSYS}
+  result := '';
   if not fHttpServer.InheritsFrom(THttpApiServer) then
     exit;
   https := aSecurity = secSSL;
@@ -916,8 +914,12 @@ begin
   fLog.Add.Log(sllLastError, result, self);
   if aRaiseExceptionOnError then
     raise ERestHttpServer.CreateUtf8('%: %', [self, result]);
-  {$endif USEHTTPSYS}
 end;
+{$else}
+begin
+  result := ''; // do nothing, but no error
+end;
+{$endif USEHTTPSYS}
 
 function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var

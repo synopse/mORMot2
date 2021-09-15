@@ -1732,8 +1732,8 @@ begin
   if not result then
     exit;
   Kernel := {%H-}SimpleRoundTo2Digits((K * 100) / S);
-  User := {%H-}SimpleRoundTo2Digits((U * 100) / S);
-  Idle := 100 - Kernel - User; // ensure sum is always 100%
+  User   := {%H-}SimpleRoundTo2Digits((U * 100) / S);
+  Idle   := 100 - Kernel - User; // ensure sum is always 100%
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
 
 

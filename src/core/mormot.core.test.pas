@@ -876,10 +876,10 @@ begin
   last := paragraph;
   while WordCount > 0 do
   begin
-    rnd := Random32; // get 32-bit of randomness
+    rnd := Random32; // get 32 bits of randomness for up to 4 words
     for n := 0 to rnd and 3 do
     begin
-      // consume up to 20-bit from rnd
+      // consume up to 4*5 = 20 bits from rnd
       rnd := rnd shr 2;
       s := bla[rnd and 7];
       rnd := rnd shr 3;
@@ -893,13 +893,13 @@ begin
       dec(WordCount);
     end;
     WR.CancelLastChar(' ');
-    case rnd and 127 of // consume 7-bit
+    case rnd and 127 of // consume 7 bits
       0..4:
         begin
           if RandomInclude <> '' then
           begin
             WR.Add(' ');
-            WR.AddString(RandomInclude);
+            WR.AddString(RandomInclude); // 5/128 = 4% chance of text inclusion
           end;
           last := space;
         end;
