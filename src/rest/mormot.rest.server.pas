@@ -2642,6 +2642,12 @@ const
     [rsoCompressGZip,
      rsoCompressSynLZ];
 
+  /// TRestHttpServer processing options which may be used during raw debugging
+  HTTPSERVER_DEBUG_OPTIONS =
+    [rsoCompressGZip,
+     rsoCompressSynLZ,
+     rsoLogVerbose];
+
 
 
 // backward compatibility types redirections
@@ -4665,7 +4671,7 @@ begin
     if Handle304NotModified then
     begin
       FindNameValue(Call.InHead, 'IF-NONE-MATCH:', clienthash);
-      serverhash := '"' + DateTimeToIso8601(filetime, false, 'T', true) + '"';
+      UInt64ToUtf8(DateTimeToUnixTime(filetime), serverhash);
       Call.OutHead := Call.OutHead + #13#10'ETag: ' + serverhash;
       if clienthash = serverhash then
       begin

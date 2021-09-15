@@ -1291,7 +1291,9 @@ begin
     Utf8ToFileName(OutContent, fn);
     if not Assigned(OnSendFile) or
        not OnSendFile(self, fn) then
-      if not Context.ContentFromFile(fn, CompressGz) then
+      if Context.ContentFromFile(fn, CompressGz) then
+        OutContent := Context.Content
+      else
       begin
         FormatString('Impossible to find %', [fn], err);
         fRespStatus := HTTP_NOTFOUND;

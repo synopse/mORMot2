@@ -2274,7 +2274,7 @@ begin
   end;
   try
     I.Add(0, 0);
-    Check(false);
+    Check(false, 'dead code EInterfaceFactory');
   except
     on E: EInterfaceFactory do
       Check(Pos('TInterfaceStub returned error: expected exception',
@@ -2282,7 +2282,7 @@ begin
   end;
   try
     I.Add(1, 2);
-    Check(false);
+    Check(false, 'dead code ESynException');
   except
     on E: ESynException do
       Check(E.Message = 'expected exception', E.Message);
