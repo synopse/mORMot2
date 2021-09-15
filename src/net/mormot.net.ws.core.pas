@@ -439,6 +439,10 @@ type
     constructor Create(const aUri: RawUtf8); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
+    /// overriden method to compute and send all output as a single buffer
+    function SendFrames(Owner: TWebSocketProcess;
+      var Frames: TWebSocketFrameDynArray;
+      var FramesCount: integer): boolean; override;
   end;
 
   /// tune the 'synopsebin' protocol
@@ -1654,6 +1658,53 @@ begin
   txt := P;
   P := GotoEndOfJsonString(P);
   FastSetString(result, txt, P - txt);
+end;
+
+function TWebSocketProtocolJson.SendFrames(Owner: TWebSocketProcess;
+  var Frames: TWebSocketFrameDynArray;
+  var FramesCount: integer): boolean;
+var
+  enc: array of TWebSocketFrameEncoder;
+  i, len: PtrInt;
+  P: PAnsiChar;
+  tmp: TSynTempBuffer; // to avoid most memory allocation
+begin
+  if (FramesCount = 0) or
+     (Owner = nil) then
+  begin
+    result := true;
+    exit;
+  end;
+  if FramesCount = 1 then
+  begin
+    result := Owner.SendFrame(Frames[0]); // single frame sending
+    FramesCount := 0;
+    exit;
+  end;
+  SetLength(enc, FramesCount);
+  len := 0;
+  for i := 0 to FramesCount - 1 do
+    if Frames[i].opcode <> focText then
+      raise EWebSockets.CreateUtf8('%.SendFrames: unexpected %',
+        [self, ToText(Frames[i].opcode)])
+    else
+      inc(len, enc[i].Prepare(Frames[i], Owner.fMaskSentFrames));
+  P := tmp.Init(len);
+  try
+    for i := 0 to FramesCount - 1 do
+      inc(P, enc[i].Encode(Frames[i], P));
+    result := Owner.SendBytes(tmp.buf, tmp.len); // directly send at once
+    if (WebSocketLog <> nil) and
+       (logTextFrameContent in Owner.Settings.LogDetails) and
+       (sllTrace in WebSocketLog.Family.Level) then
+      WebSocketLog.Add.Log(sllTrace, 'SendFrames=% %',
+        [FramesCount * ord(result), KB(len)], self);
+  except
+    result := false;
+  end;
+  tmp.Done;
+  FramesCount := 0;
+  Frames := nil;
 end;
 
 
