@@ -705,7 +705,7 @@ type
       read fArchiveAfterDays write fArchiveAfterDays;
     /// the internal in-memory buffer size, in bytes
     // - this is the number of bytes kept in memory before flushing to the hard
-    // drive; you can call TSynLog.Flush method or set AutoFlushTimeOut to true
+    // drive; you can call TSynLog.Flush method or set AutoFlushTimeOut > 0
     // in order to force the writting to disk
     // - is set to 4096 by default (4 KB is the standard hard drive cluster size)
     property BufferSize: integer
@@ -4283,7 +4283,8 @@ begin
   EnterCriticalSection(GlobalThreadLock);
   try
     fWriter.FlushToStream;
-    if ForceDiskWrite and fWriterStream.InheritsFrom(TFileStream) then
+    if ForceDiskWrite and
+       fWriterStream.InheritsFrom(TFileStream) then
       FlushFileBuffers(TFileStream(fWriterStream).Handle);
     fFamily.StartAutoFlush;
   finally

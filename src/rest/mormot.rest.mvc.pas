@@ -1868,6 +1868,8 @@ begin
     TMvcViewsMustache(aViews).RegisterExpressionHelpersForTables(fRestServer);
   fStaticCache.Init({casesensitive=}true);
   fApplication.SetSession(TMvcSessionWithRestServer.Create(aApplication));
+  // no remote ORM access via REST
+  fRestServer.Options := fRestServer.Options + [rsoNoTableURI, rsoNoInternalState];
 end;
 
 function TMvcRunOnRestServer.AddStaticCache(const aFileName: TFileName;
@@ -2308,6 +2310,7 @@ end;
 
 initialization
   assert(sizeof(TMvcAction) = sizeof(TServiceCustomAnswer));
+  TSynLog.Family.ExceptionIgnore.Add(EMvcApplication);
 
 end.
 
