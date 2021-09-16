@@ -876,7 +876,7 @@ begin
   last := paragraph;
   while WordCount > 0 do
   begin
-    rnd := Random32; // get 32 bits of randomness for up to 4 words
+    rnd := Random32; // get 32 bits of randomness for up to 4 words per loop
     for n := 0 to rnd and 3 do
     begin
       // consume up to 4*5 = 20 bits from rnd

@@ -78,7 +78,7 @@ function FromVarUInt32(var Source: PByte; SourceMax: PByte;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a 32-bit variable-length integer buffer into a cardinal
-// - this version could be called if number is likely to be > $7f, so it
+// - this version could be called if number is likely to be > $7f, so if
 // inlining the first byte won't make any benefit
 function FromVarUInt32Big(var Source: PByte): cardinal;
 
@@ -1678,6 +1678,12 @@ procedure AppendBuffersToRawUtf8(var Text: RawUtf8; const Buffers: array of PUtf
 // - warning: the Buffer should contain enough space to store the Text, otherwise
 // you may encounter buffer overflows and random memory errors
 function AppendRawUtf8ToBuffer(Buffer: PUtf8Char; const Text: RawUtf8): PUtf8Char;
+
+/// fast add some characters from ane buffer into another buffer
+// - warning: the Buffer should contain enough space to store the Text, otherwise
+// you may encounter buffer overflows and random memory errors
+function AppendBufferToBuffer(Buffer: PUtf8Char; Text: pointer; Len: PtrInt): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast add text conversion of a 32-bit signed integer value into a given buffer
 // - warning: the Buffer should contain enough space to store the text, otherwise
@@ -8252,6 +8258,12 @@ begin
   L := PStrLen(P - _STRLEN)^;
   MoveSmall(P, Buffer, L);
   result := Buffer + L;
+end;
+
+function AppendBufferToBuffer(Buffer: PUtf8Char; Text: pointer; Len: PtrInt): PUtf8Char;
+begin
+  MoveFast(Text^, Buffer^, Len);
+  result := Buffer + Len;
 end;
 
 function AppendUInt32ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;

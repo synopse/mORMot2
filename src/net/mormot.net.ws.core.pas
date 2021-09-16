@@ -1574,11 +1574,29 @@ begin
   end;
 end;
 
+function CompareMemFast(P1, P2: PUtf8Char; L: PtrInt): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  c: AnsiChar;
+begin
+  result := false;
+  inc(P1, L); // here L is expected to be <> 0
+  inc(P2, L);
+  L := -L;
+  repeat
+    c := P1[L];
+    if c <> P2[L] then
+      exit;
+    inc(L);
+  until L = 0;
+  result := true;
+end;
+
 function TWebSocketProtocolJson.FrameData(const frame: TWebSocketFrame;
   const Head: RawUtf8; HeadFound: PRawUtf8): pointer;
 var
   P, txt: PUtf8Char;
-  len: integer;
+  len: PtrInt;
 begin
   result := nil;
   if (length(frame.payload) < 10) or
@@ -1598,7 +1616,7 @@ begin
   len := length(Head);
   if (P^ <> #0) and
      (P - txt >= len) and
-     CompareMemSmall(pointer(Head), txt, len) then
+     CompareMemFast(pointer(Head), txt, len) then
   begin
     result := P + 1;
     if HeadFound <> nil then
@@ -1755,28 +1773,34 @@ procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUtf8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
 var
-  item: TTempUtf8;
-  i: PtrInt;
-  W: TBufferWriter;
-  temp: TTextWriterStackBuffer; // 8KB
+  item: array[0..5] of TTempUtf8; // no memory allocation
+  it: PTempUtf8;
+  len, i: PtrInt;
+  P: PUtf8Char;
 begin
   FrameInit(focBinary, Content, ContentType, frame);
-  W := TBufferWriter.Create(temp{%H-});
-  try
-    W.WriteBinary(Head);
-    W.Write1(byte(FRAME_HEAD_SEP));
-    for i := 0 to high(Values) do
-      with Values[i] do
-      begin
-        VarRecToTempUtf8(Values[i], item);
-        W.WriteVar(item);
-      end;
-    W.Write(ContentType);
-    W.WriteBinary(Content);
-    frame.payload := W.FlushTo;
-  finally
-    W.Free;
+  len := length(Head) + SizeOf(FRAME_HEAD_SEP) +
+         ToVarUInt32LengthWithData(length(ContentType)) +
+         length(Content);
+  it := @item;
+  for i := 0 to high(Values) do
+  begin
+    VarRecToTempUtf8(Values[i], it^);
+    inc(len, ToVarUInt32LengthWithData(it^.Len));
+    inc(it);
   end;
+  SetString(frame.payload, nil, len);
+  P := AppendRawUtf8ToBuffer(pointer(frame.payload), Head);
+  P^ := FRAME_HEAD_SEP;
+  inc(P);
+  it := @item;
+  for i := 0 to high(Values) do
+  begin
+    P := pointer(ToVarUInt32(it^.Len, pointer(P)));
+    P := AppendBufferToBuffer(P, it^.Text, it^.Len);
+    inc(it);
+  end;
+  AppendRawUtf8ToBuffer(pointer(ToVarString(ContentType, pointer(P))), Content);
 end;
 
 function TWebSocketProtocolBinary.FrameData(const frame: TWebSocketFrame;
@@ -1789,7 +1813,7 @@ begin
   len := length(Head);
   if (frame.opcode = focBinary) and
      (length(frame.payload) >= len + 6) and
-     CompareMemSmall(pointer(Head), P, len) then
+     CompareMemFast(pointer(Head), P, len) then
   begin
     result := PosChar(P + len, FRAME_HEAD_SEP);
     if result <> nil then
