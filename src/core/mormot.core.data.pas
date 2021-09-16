@@ -1782,6 +1782,7 @@ type
 
 // use 16-bit Hash table when indexes fit in a word (array Capacity < 65535)
 // - to reduce memory consumption and slightly enhance CPU cache efficiency
+// - e.g. arrays of size 1..127 use only 256*2=512 bytes for their hash table
 {$define DYNARRAYHASH_16BIT}
 
 {$ifdef DYNARRAYHASH_PO2}
@@ -1827,9 +1828,11 @@ type
     HashTableSize: integer;
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
     ScanCounter: integer; // Scan()>=0 up to CountTrigger*2
-    State: set of (hasHasher, canHash, moreMem
+    State: set of (hasHasher, canHash
       {$ifdef DYNARRAYHASH_16BIT} , hash16bit {$endif} );
     function HashTableIndex(aHashCode: PtrUInt): PtrUInt;
+      {$ifdef HASINLINE}inline;{$endif}
+    function HashTableIndexToIndex(aHashTableIndex: PtrInt): PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     procedure HashAdd(aHashCode: cardinal; var result: PtrInt);
     procedure HashDelete(aArrayIndex, aHashTableIndex: PtrInt; aHashCode: cardinal);
@@ -8538,6 +8541,16 @@ begin
   {$endif DYNARRAYHASH_LEMIRE}
 end;
 
+function TDynArrayHasher.HashTableIndexToIndex(aHashTableIndex: PtrInt): PtrInt;
+begin
+  {$ifdef DYNARRAYHASH_16BIT}
+  if hash16bit in State then
+    result := PWordArray(HashTableStore)[aHashTableIndex]
+  else
+  {$endif DYNARRAYHASH_16BIT}
+    result := HashTableStore[aHashTableIndex];
+end;
+
 function TDynArrayHasher.Find(aHashCode: cardinal; aForAdd: boolean): PtrInt;
 var
   first, last, ndx, siz: PtrInt;
@@ -8562,13 +8575,7 @@ begin
   first := result;
   last := HashTableSize;
   repeat
-    {$ifdef DYNARRAYHASH_16BIT}
-    if hash16bit in State then
-      ndx := PWordArray(HashTableStore)[result]
-    else
-    {$endif DYNARRAYHASH_16BIT}
-      ndx := HashTableStore[result];
-    dec(ndx); // index+1 was stored
+    ndx := HashTableIndexToIndex(result) - 1; // index+1 was stored
     if ndx < 0 then
     begin
       // found void entry
@@ -8623,14 +8630,7 @@ begin
   first := result;
   last := HashTableSize;
   repeat
-    ndx := result;
-    {$ifdef DYNARRAYHASH_16BIT}
-    if hash16bit in State then
-      ndx := PWordArray(HashTableStore)[ndx]
-    else
-    {$endif DYNARRAYHASH_16BIT}
-      ndx := HashTableStore[ndx];
-    dec(ndx); // index+1 was stored
+    ndx := HashTableIndexToIndex(result) - 1; // index+1 was stored
     if ndx < 0 then
     begin
       // not found: returns void index in HashTable[] as negative value
@@ -8727,13 +8727,7 @@ begin
         next := 0;
         last := first;
       end;
-    {$ifdef DYNARRAYHASH_16BIT}
-    if hash16bit in State then
-      ndx := PWordArray(HashTableStore)[next]
-    else
-    {$endif DYNARRAYHASH_16BIT}
-      ndx := HashTableStore[next];
-    dec(ndx); // stored index+1
+    ndx := HashTableIndexToIndex(next) - 1; // index+1 was stored
     if ndx < 0 then
       break; // stop at void entry
     if n = high(indexes) then // paranoid (typical 0..23 range)
@@ -8918,7 +8912,8 @@ type
 procedure TFastReHash.Process(Hasher: PDynArrayHasher; count: integer);
 var
   fnd, ndx: PtrInt;
-label nxt;
+label
+  nxt, cont;
 begin
   // should match FindOrNew() logic
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
@@ -8930,7 +8925,7 @@ begin
   siz := Hasher^.DynArray^.Info.Cache.ItemSize;
   ht := 1; // store index + 1
   repeat
-nxt:if Assigned(Hasher^.EventHash) then
+nxt:if Assigned(Hasher^.EventHash) then // inlined HashOne()
       hc := Hasher^.EventHash(P^)
     else
       hc := Hasher^.HashItem(P^, Hasher^.Hasher);
@@ -8938,28 +8933,32 @@ nxt:if Assigned(Hasher^.EventHash) then
     first := ndx;
     last := Hasher^.HashTableSize;
     repeat
-      {$ifdef DYNARRAYHASH_16BIT}
+      {$ifdef DYNARRAYHASH_16BIT} // inlined HashTableIndexToIndex()
       if hash16bit in Hasher^.State then
-        fnd := PWordArray(Hasher^.HashTableStore)[ndx] // store index + 1
+      begin
+        fnd := PWordArray(Hasher^.HashTableStore)[ndx]; // store index + 1
+        if fnd = 0 then
+        begin
+          // we can use this void entry (most common case)
+          PWordArray(Hasher^.HashTableStore)[ndx] := ht;
+cont:     inc(P, siz); // next item
+          inc(ht);
+          dec(count);
+          if count = 0 then
+            exit;
+          goto nxt;
+        end;
+      end
       else
       {$endif DYNARRAYHASH_16BIT}
-        fnd := Hasher^.HashTableStore[ndx]; // store index + 1
-      if fnd = 0 then
       begin
-        // we can use this void entry (most common case)
-        fnd := ht;
-        {$ifdef DYNARRAYHASH_16BIT}
-        if hash16bit in Hasher^.State then
-          PWordArray(Hasher^.HashTableStore)[ndx] := fnd
-        else
-        {$endif DYNARRAYHASH_16BIT}
-          Hasher^.HashTableStore[ndx] := fnd;
-        inc(P, siz); // next item
-        inc(ht);
-        dec(count);
-        if count = 0 then
-          exit;
-        goto nxt;
+        fnd := Hasher^.HashTableStore[ndx]; // store index + 1
+        if fnd = 0 then
+        begin
+          // we can use this void entry (most common case)
+          Hasher^.HashTableStore[ndx] := ht;
+          goto cont;
+        end;
       end;
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
       inc(collisions);
@@ -9028,7 +9027,7 @@ begin
   Clear;
   HashTableSize := siz;
   {$ifdef DYNARRAYHASH_16BIT}
-  if DynArray^.Capacity <= $ffff then
+  if DynArray^.Capacity < $ffff then
   begin
     include(State, hash16bit);
     siz := (siz shr 1) {$ifndef DYNARRAYHASH_PO2} + 1 {$endif};
