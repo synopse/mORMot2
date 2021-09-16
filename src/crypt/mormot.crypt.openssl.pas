@@ -994,7 +994,7 @@ end;
 
 function GetMd(const Algorithm, Caller: RawUtf8): PEVP_MD;
 begin
-  EOpenSslAsymetric.CheckAvailable(nil, Caller);
+  EOpenSslAsymetric.CheckAvailable(nil, Utf8ToString(Caller));
   if Algorithm = 'null' then
     result := nil // e.g. for ed25519
   else
