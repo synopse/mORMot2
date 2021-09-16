@@ -1780,7 +1780,7 @@ var
 begin
   FrameInit(focBinary, Content, ContentType, frame);
   len := length(Head) + SizeOf(FRAME_HEAD_SEP) +
-         ToVarUInt32LengthWithData(length(ContentType)) +
+         PtrInt(ToVarUInt32LengthWithData(length(ContentType))) +
          length(Content);
   it := @item;
   for i := 0 to high(Values) do

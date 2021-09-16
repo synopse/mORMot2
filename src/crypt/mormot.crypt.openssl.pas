@@ -992,9 +992,9 @@ end;
 
 { ************** OpenSSL Asymetric Cryptography }
 
-function GetMd(const Algorithm, Caller: RawUtf8): PEVP_MD;
+function GetMd(const Algorithm: RawUtf8; const Caller: string): PEVP_MD;
 begin
-  EOpenSslAsymetric.CheckAvailable(nil, Utf8ToString(Caller));
+  EOpenSslAsymetric.CheckAvailable(nil, Caller);
   if Algorithm = 'null' then
     result := nil // e.g. for ed25519
   else
