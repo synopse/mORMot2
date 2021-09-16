@@ -8223,7 +8223,6 @@ end;
 
 { ************ Faster alternative to RTL standard functions }
 
-
 const
   // https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
   ARMCPU_ID: array[TArmCpuType] of word = (

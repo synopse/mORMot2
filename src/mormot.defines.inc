@@ -479,7 +479,7 @@
       {$define ISDELPHIXE7}
       {$ifdef CPU64}
         {$define CPUX64ASM} // e.g. XE4 SSE asm is buggy :(
-      {$endif}
+      {$endif CPU64}
     {$ifend}
     {$if CompilerVersion >= 29.0} // = Delphi XE8
       {$define ISDELPHIXE8}
@@ -506,8 +506,14 @@
     {$if CompilerVersion >= 34.0} // = Delphi 10.4
       {$define ISDELPHI104}
     {$ifend}
-    {$if CompilerVersion >= 35.0} // = Delphi 11
+    {$if CompilerVersion >= 35.0} // = Delphi 11 Alexandria
       {$define ISDELPHI11}
+      {$ifdef CPU64}
+        {.$define ASMX64AVX}  // initial AVX/AVX2/AVX512 support
+      {$endif CPU64}
+    {$ifend}
+    {$if CompilerVersion >= 36.0} // = Delphi 11.1
+      {$define ISDELPHI111}
     {$ifend}
   {$ifend CompilerVersion >= 17}
 
