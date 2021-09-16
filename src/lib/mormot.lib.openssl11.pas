@@ -2235,7 +2235,6 @@ var
   P: PPointerArray;
   api: PtrInt;
 begin
-  result := true;
   GlobalLock;
   try
     if openssl_initialized = osslAvailable then
@@ -3277,7 +3276,7 @@ begin
       end;
       if res <> X509_V_OK then
       begin
-        str(res, Context.LastError);
+        str(res, AnsiString(Context.LastError));
         if not Context.IgnoreCertificateErrors then
           EOpenSslClient.Check(self, 'AfterConnection getverifyresult',
             0, @Context.LastError);
