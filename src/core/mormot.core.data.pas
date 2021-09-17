@@ -7831,8 +7831,7 @@ begin
   else
   begin
     dec(p); // p^ = start of heap object
-    if (p^.refCnt >= 0) and
-       RefCntDecFree(p^.refCnt) then
+    if p^.refCnt <= 1 then
     begin
       // we own the dynamic array instance -> direct reallocation
       if (NewLength < OldLength) and
@@ -7847,13 +7846,28 @@ begin
     end
     else
     begin
-      // dynamic array already referenced elsewhere -> create copy
-      GetMem(p, NeededSize);
+      // dynamic array already referenced elsewhere -> create our own copy
       minLength := OldLength;
       if minLength > NewLength then
         minLength := NewLength;
-      CopySeveral(@PByteArray(p)[SizeOf(TDynArrayRec)], fValue^,
-        minLength, fInfo.Cache.ItemInfo, fInfo.Cache.ItemSize);
+      if fInfo.Cache.ItemInfo = nil then
+      begin
+        GetMem(p, NeededSize);
+        MoveFast(fValue^^, PByteArray(p)[SizeOf(TDynArrayRec)],
+          minLength * PtrUInt(fInfo.Cache.ItemSize));
+      end
+      else
+      begin
+        p := AllocMem(NeededSize);
+        OldLength := NewLength;    // no FillcharFast() below
+        CopySeveral(@PByteArray(p)[SizeOf(TDynArrayRec)], fValue^,
+          minLength, fInfo.Cache.ItemInfo, fInfo.Cache.ItemSize);
+      end;
+      // for thread safety, adjust the refcount after CopySeveral()
+      if fNoFinalize then
+        FastDynArrayClear(fValue, nil)
+      else // note: rcfObjArray should never appear with refcnt>1
+        FastDynArrayClear(fValue, fInfo.Cache.ItemInfo);
     end;
   end;
   // set refCnt=1 and new length to the heap header
