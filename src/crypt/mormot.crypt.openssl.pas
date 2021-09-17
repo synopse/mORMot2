@@ -1005,7 +1005,7 @@ begin
         result := EVP_get_digestbyname(pointer(Algorithm));
       if result = nil then
         raise EOpenSslAsymetric.CreateFmt(
-          '%: unknown [%] algorithm', [Caller, Algorithm]);
+          '%s: unknown [%s] algorithm', [Caller, Algorithm]);
     end;
 end;
 

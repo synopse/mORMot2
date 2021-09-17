@@ -5218,7 +5218,11 @@ begin
     end;
     offset := PtrUInt(fields.Size) - offset;
     if offset <> 0 then
+    begin
       MoveFast(Source^, Dest^, offset);
+      inc(Source, offset);
+      inc(Dest, offset);
+    end;
     dec(n);
   until n = 0;
 end;
@@ -5540,8 +5544,8 @@ var
 
 function _LStringCopy(Dest, Source: PRawByteString; Info: PRttiInfo): PtrInt;
 begin
-  if (Dest^ <> '') or
-     (Source^ <> '') then
+  if (Source^ <> '') or
+     (Dest^ <> '') then
     Dest^ := Source^;
   result := SizeOf(Source^);
 end;
@@ -5549,8 +5553,8 @@ end;
 {$ifdef HASVARUSTRING}
 function _UStringCopy(Dest, Source: PUnicodeString; Info: PRttiInfo): PtrInt;
 begin
-  if (Dest^ <> '') or
-     (Source^ <> '') then
+  if (Source^ <> '') or
+     (Dest^ <> '') then
     Dest^ := Source^;
   result := SizeOf(Source^);
 end;
@@ -5558,8 +5562,8 @@ end;
 
 function _WStringCopy(Dest, Source: PWideString; Info: PRttiInfo): PtrInt;
 begin
-  if (Dest^ <> '') or
-     (Source^ <> '') then
+  if (Source^ <> '') or
+     (Dest^ <> '') then
     Dest^ := Source^;
   result := SizeOf(Source^);
 end;
