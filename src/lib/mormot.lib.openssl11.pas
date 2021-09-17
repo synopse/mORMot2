@@ -2235,6 +2235,9 @@ var
   P: PPointerArray;
   api: PtrInt;
 begin
+  {$ifndef UNICODE}
+  result := false; // make old Delphi compilers happy
+  {$endif UNICODE}
   GlobalLock;
   try
     if openssl_initialized = osslAvailable then

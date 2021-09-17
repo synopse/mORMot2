@@ -46,6 +46,9 @@ type
   /// defined here to avoid explicit link to syncobjs in uses clause
   TEvent = syncobjs.TEvent;
 
+  /// a dynamic array of TThread
+  TThreadDynArray = array of TThread;
+
   /// exception class raised by this unit
   ESynThread = class(ESynException);
 

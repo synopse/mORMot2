@@ -866,8 +866,8 @@ begin
       // custom size in XOF mode
       fDigestSize := hashSize
     else
-      raise EOpenSslHash.CreateFmt('TOpenSslHash.Create: Incorrect hashSize ' +
-        'option passed to a non-XOF hash function "%s"', [Algorithm]);
+      raise EOpenSslHash.CreateFmt('TOpenSslHash.Create: Incorrect HashSize=' +
+        '%d to a non-XOF hash function "%s"', [HashSize, Algorithm]);
 end;
 
 procedure TOpenSslHash.Update(Data: pointer; DataLength: integer);
@@ -1068,7 +1068,7 @@ var
   ctx: PEVP_MD_CTX;
 begin
   result := false;
-  md := GetMd(Algorithm, 'OpenSslSign');
+  md := GetMd(Algorithm, 'OpenSslVerify');
   if (PublicKey = nil) or
      (PublicKeyLen <= 0) or
      (SignatureLen <= 0)  then
