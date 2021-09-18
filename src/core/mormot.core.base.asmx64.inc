@@ -139,10 +139,10 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         sfence
         jmp     @fwdend
         {$ifdef ASMX64AVX}
-@fwdavx:vmovups ymm2, oword ptr [src]  // first 32
+@fwdavx:vmovups ymm2, ymmword ptr [src]  // first 32
         lea     src, [src + rax - 32]
         lea     rax, [rax + dst - 32]
-        vmovups ymm1, oword ptr [src]  // last 32
+        vmovups ymm1, ymmword ptr [src]  // last 32
         mov     r10, rax
         neg     rax
         and     dst,  -32  // 32-byte aligned writes
@@ -150,17 +150,17 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         cmp     r8, NONTEMPORALSIZE
         ja      @favxn     // bypass cache for cnt>512KB
         align 16
-@favxr: vmovups ymm0, oword ptr [src + rax]  // regular loop
+@favxr: vmovups ymm0, ymmword ptr [src + rax]  // regular loop
         vmovaps [r10 + rax], ymm0
         add     rax, 32
         jl      @favxr
-@favxe: vmovups [r10], ymm1 // last 32
-        vmovups [r9], ymm2  // first 32
+@favxe: vmovups ymmword ptr [r10], ymm1 // last 32
+        vmovups ymmword ptr [r9], ymm2  // first 32
 // https://software.intel.com/en-us/articles/avoiding-avx-sse-transition-penalties
         vzeroupper
         ret
         align 16
-@favxn: vmovups ymm0, oword ptr [src + rax]  // non-temporal loop
+@favxn: vmovups ymm0, ymmword ptr [src + rax]  // non-temporal loop
         vmovntps [r10 + rax], ymm0
         add     rax, 32
         jl      @favxn
@@ -214,25 +214,25 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         {$ifdef ASMX64AVX}
 @bwdavx:sub     rax, 32
         mov     r9, rax
-        vmovups ymm2, oword ptr [src + rax]  // last 32
-        vmovups ymm1, oword ptr [src]        // first 32
+        vmovups ymm2, ymmword ptr [src + rax]  // last 32
+        vmovups ymm1, ymmword ptr [src]        // first 32
         add     rax, dst
         and     rax, -32  // 32-byte aligned writes
         sub     rax, dst
         cmp     r8, NONTEMPORALSIZE
         ja      @bavxn    // bypass cache for cnt>512KB
         align 16
-@bavxr: vmovups ymm0, oword ptr [src + rax]  // regular loop
-        vmovaps oword ptr [dst + rax], ymm0
+@bavxr: vmovups ymm0, ymmword ptr [src + rax]  // regular loop
+        vmovaps ymmword ptr [dst + rax], ymm0
         sub     rax, 32
         jg      @bavxr
-@bavxe: vmovups oword ptr [dst], ymm1       // first 32
-        vmovups oword ptr [dst + r9], ymm2  // last 32
+@bavxe: vmovups ymmword ptr [dst], ymm1       // first 32
+        vmovups ymmword ptr [dst + r9], ymm2  // last 32
         vzeroupper
         ret
         align 16
-@bavxn: vmovups ymm0, oword ptr [src + rax]  // non-temporal loop
-        vmovntps oword ptr [dst + rax], ymm0
+@bavxn: vmovups ymm0, ymmword ptr [src + rax]  // non-temporal loop
+        vmovntps xmmword ptr [dst + rax], ymm0
         sub     rax, 32
         jg      @bavxn
         sfence
@@ -374,11 +374,11 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @avxreg:vmovaps ymmword ptr [rdx + dst], ymm0  // regular loop
         add     dst, 32
         jnz     @avxreg
-@avxok: vmovups oword ptr [r8 - 32], ymm0  // last unaligned 32 bytes
+@avxok: vmovups ymmword ptr [r8 - 32], ymm0  // last unaligned 32 bytes
         vzeroupper
         ret
         align 16
-@avxnv: vmovntps oword ptr [rdx + dst], ymm0 // non-temporal loop
+@avxnv: vmovntps xmmword ptr [rdx + dst], ymm0 // non-temporal loop
         add      dst, 32
         jnz      @avxnv
         sfence
@@ -785,9 +785,9 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         // main processing loop, 64 bytes per iteration
         align 16
 @loop:  vmovdqu xmm6, xmmword ptr [rax + rsi]
-        vinserti128 ymm0, ymm6, xmmword ptr [rax + rsi + 10H], 01H
+        vinserti128 ymm0, ymm6, ymmword ptr [rax + rsi + 10H], 01H
         vmovdqu xmm6, xmmword ptr [rax + rsi + 20H]
-        vinserti128 ymm1, ymm6, xmmword ptr [rax + rsi + 30H], 01H
+        vinserti128 ymm1, ymm6, ymmword ptr [rax + rsi + 30H], 01H
         add     rsi, 64
         vpor    ymm4, ymm1, ymm0
         vpmovmskb rdx, ymm4 // check set MSB of each 64 bytes
