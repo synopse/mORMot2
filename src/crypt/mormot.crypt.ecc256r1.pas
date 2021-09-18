@@ -42,16 +42,20 @@ uses
 
   {$ifdef CPUX86}
     {$ifndef OSBSDDARWIN}
-      {$define ECC_STATICLIB_AVAILABLE}
-      {$define ECC_O2}  // gcc -g -O2 -c ecc.c
+      {$ifndef FPC_PIC} // our static .o was compiled without PIC
+        {$define ECC_STATICLIB_AVAILABLE}
+        {$define ECC_O2}  // gcc -g -O2 -c ecc.c
+      {$endif FPC_PIC}
     {$endif OSBSDDARWIN}
   {$endif CPUX86}
 
   {$ifdef CPUX64}
     {$ifndef OSANDROID}
     {$ifndef OSBSDDARWIN}
-      {$define ECC_STATICLIB_AVAILABLE}
-      {$define ECC_O2}  // gcc -g -O2 -c ecc.c
+      {$ifndef FPC_PIC} // our static .o was compiled without PIC
+        {$define ECC_STATICLIB_AVAILABLE}
+        {$define ECC_O2}  // gcc -g -O2 -c ecc.c
+      {$endif FPC_PIC}
     {$endif OSBSDDARWIN}
     {$endif OSANDROID}
   {$endif CPUX64}
