@@ -857,22 +857,26 @@ type
   // - stores a session ID, cookie name, and encryption and signature keys
   // - can optionally store any associated record as efficient binary
   // - it is NOT cryptographic secure, because cookies are not, but it is
-  // strong enough to avoid naive attacks, and uses less space than a JWT
+  // strong enough to avoid most attacks, and uses less space than a JWT
   {$ifdef USERECORDWITHMETHODS}
   TBinaryCookieGenerator = record
   {$else}
   TBinaryCookieGenerator = object
   {$endif USERECORDWITHMETHODS}
     /// the cookie name, used for storage in the client side HTTP headers
-    // - is not part of the Generate/Validate content
+    // - is not part of the Generate/Validate content, but could be used
+    // when the cookie is actually stored in HTTP headers
     CookieName: RawUtf8;
-    /// an increasing counter, to implement unique session ID
+    /// an increasing 31-bit counter, to implement unique session ID
     SessionSequence: TBinaryCookieGeneratorSessionID;
+    /// the random initial value of the SessionSequence counter
+    SessionSequenceStart: TBinaryCookieGeneratorSessionID;
     /// secret information, used for digital signature of the cookie content
     Secret: cardinal;
     /// random IV used as CTR on Crypt[] secret key
     CryptNonce: cardinal;
     /// used when Generate() has TimeOutMinutes=0
+    // - if equals 0, one month delay is used as "never expire"
     DefaultTimeOutMinutes: cardinal;
     /// private random secret, used for encryption of the cookie content
     Crypt: array[byte] of byte;
@@ -881,9 +885,9 @@ type
       DefaultSessionTimeOutMinutes: cardinal = 0);
     /// will initialize a new Base64Uri-encoded session cookie
     // - with an optional record data
-    // - will return the 32-bit internal session ID and
+    // - will return the 32-bit internal session ID and a Base64Uri cookie
     // - you can supply a time period, after which the session will expire -
-    // default is 1 hour, and could go up to
+    // default 0 will use DefaultTimeOutMinutes as supplied to Init()
     function Generate(out Cookie: RawUtf8; TimeOutMinutes: cardinal = 0;
       PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil): TBinaryCookieGeneratorSessionID;
@@ -891,8 +895,8 @@ type
     // - return the associated session/sequence number, 0 on error
     function Validate(const Cookie: RawUtf8;
       PRecordData: pointer = nil; PRecordTypeInfo: PRttiInfo = nil;
-      PExpires: PCardinal = nil;
-      PIssued: PCardinal = nil): TBinaryCookieGeneratorSessionID;
+      PExpires: PUnixTime = nil;
+      PIssued: PUnixTime = nil): TBinaryCookieGeneratorSessionID;
     /// allow the very same cookie to be recognized after server restart
     function Save: RawUtf8;
     /// unserialize the cookie generation context as serialized by Save
@@ -2309,12 +2313,14 @@ procedure TBinaryCookieGenerator.Init(const Name: RawUtf8;
 begin
   DefaultTimeOutMinutes := DefaultSessionTimeOutMinutes;
   CookieName := Name;
-  SessionSequence := Random32 and $7ffffff;
+  // initial random session ID, small enough to remain 31-bit > 0
+  SessionSequence := Random32 and $07ffffff;
+  SessionSequenceStart := SessionSequence;
+  // temporary secret for checksum
+  Secret := Random32;
   // temporary secret for encryption
   CryptNonce := Random32;
   TAesPrng.Main.FillRandom(@Crypt, sizeof(Crypt)); // cryptographic randomness
-  // temporary secret for checksum
-  Secret := Random32;
 end;
 
 type
@@ -2324,7 +2330,7 @@ type
       cryptnonce: cardinal; // ctr to cipher following bytes
       crc: cardinal;        // = 32-bit digital signature (DefaultHasher)
       session: integer;     // = jti claim
-      issued: cardinal;     // = iat claim (from UnixTimeUtc)
+      issued: cardinal;     // = iat claim (from UnixTimeUtc-UNIXTIME_MINIMAL)
       expires: cardinal;    // = exp claim
     end;
     data: array[0..2047] of byte; // optional record binary serialization
@@ -2350,7 +2356,7 @@ begin
     end;
     cc.head.cryptnonce := Random32;
     cc.head.session := result;
-    cc.head.issued := UnixTimeUtc;
+    cc.head.issued := UnixTimeUtc - UNIXTIME_MINIMAL;
     if TimeOutMinutes = 0 then
       TimeOutMinutes := DefaultTimeOutMinutes;
     if TimeOutMinutes = 0 then
@@ -2371,14 +2377,14 @@ end;
 
 function TBinaryCookieGenerator.Validate(const Cookie: RawUtf8;
   PRecordData: pointer; PRecordTypeInfo: PRttiInfo;
-  PExpires, PIssued: PCardinal): TBinaryCookieGeneratorSessionID;
+  PExpires, PIssued: PUnixTime): TBinaryCookieGeneratorSessionID;
 var
   clen, len: integer;
   now: cardinal;
   ccend: PAnsiChar;
   cc: TCookieContent;
 begin
-  result := 0; // parsing error
+  result := 0; // parsing/crc/timeout error
   if Cookie = '' then
     exit;
   clen := length(Cookie);
@@ -2387,18 +2393,19 @@ begin
      (len <= sizeof(cc)) and
      Base64uriDecode(pointer(Cookie), @cc, clen) then
   begin
-    XorMemoryCtr(@cc.head.crc, len - 4,
+    XorMemoryCtr(@cc.head.crc, len - SizeOf(cc.head.cryptnonce),
       {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
-    if (cardinal(cc.head.session) <= cardinal(SessionSequence)) then
+    if (cardinal(cc.head.session) >= cardinal(SessionSequenceStart)) and
+       (cardinal(cc.head.session) <= cardinal(SessionSequence)) and
+       (DefaultHasher(Secret, @cc.head.session, len - 8) = cc.head.crc) then
     begin
       if PExpires <> nil then
-        PExpires^ := cc.head.expires;
+        PExpires^ := cc.head.expires + UNIXTIME_MINIMAL;
       if PIssued <> nil then
-        PIssued^ := cc.head.issued;
-      now := UnixTimeUtc;
+        PIssued^ := cc.head.issued + UNIXTIME_MINIMAL;
+      now := UnixTimeUtc - UNIXTIME_MINIMAL;
       if (cc.head.issued <= now) and
-         (cc.head.expires >= now) and
-         (DefaultHasher(Secret, @cc.head.session, len - 8) = cc.head.crc) then
+         (cc.head.expires >= now) then
         if (PRecordData = nil) or
            (PRecordTypeInfo = nil) then
           result := cc.head.session
