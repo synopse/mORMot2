@@ -1763,103 +1763,103 @@ var
 
   /// simple lookup to the size in bytes of TRttiParserType values
   PT_SIZE: array[TRttiParserType] of byte = (
-    0,
-    0,
-    1,
-    1,
-    4,
-    8,
-    8,
-    8,
-    8,
-    4,
-    8,
-    SizeOf(pointer),
-    SizeOf(pointer),
-    SizeOf(pointer),
-    0,
-    4,
-    SizeOf(pointer),
-    SizeOf(pointer),
-    8,
-    8,
-    16,
-    16,
-    32,
-    64,
-    8,
-    8,
-    SizeOf(pointer),
-    8,
-    8,
-    SizeOf(variant),
-    SizeOf(pointer),
-    SizeOf(pointer),
-    2,
-    0,
-    0,
-    SizeOf(pointer),
-    SizeOf(pointer),
-    SizeOf(pointer),
-    0 );
+    0,                //  ptNone
+    0,                //  ptArray
+    1,                //  ptBoolean
+    1,                //  ptByte
+    4,                //  ptCardinal
+    8,                //  ptCurrency
+    8,                //  ptDouble
+    8,                //  ptExtended
+    8,                //  ptInt64
+    4,                //  ptInteger
+    8,                //  ptQWord
+    SizeOf(pointer),  //  ptRawByteString
+    SizeOf(pointer),  //  ptRawJson
+    SizeOf(pointer),  //  ptRawUtf8
+    0,                //  ptRecord
+    4,                //  ptSingle
+    SizeOf(pointer),  //  ptString
+    SizeOf(pointer),  //  ptSynUnicode
+    8,                //  ptDateTime
+    8,                //  ptDateTimeMS
+    16,               //  ptGuid
+    16,               //  ptHash128
+    32,               //  ptHash256
+    64,               //  ptHash512
+    8,                //  ptOrm
+    8,                //  ptTimeLog
+    SizeOf(pointer),  //  ptUnicodeString
+    8,                //  ptUnixTime
+    8,                //  ptUnixMSTime
+    SizeOf(variant),  //  ptVariant
+    SizeOf(pointer),  //  ptWideString
+    SizeOf(pointer),  //  ptWinAnsi
+    2,                //  ptWord
+    0,                //  ptEnumeration
+    0,                //  ptSet
+    SizeOf(pointer),  //  ptClass
+    SizeOf(pointer),  //  ptDynArray
+    SizeOf(pointer),  //  ptInterface
+    0 );              //  ptCustom
 
 const
   /// type definition name lookup to the TRttiParserType values
   // - ptComplexTypes types should see PTC_NAME[] constant
   PT_NAME: array[TRttiParserType] of RawUtf8 = (
-    '',
-    '',
-    'boolean',
-    'byte',
-    'cardinal',
-    'currency',
-    'double',
-    'extended',
-    'Int64',
-    'integer',
-    'QWord',
-    'RawByteString',
-    'RawJson',
-    'RawUtf8',
-    '',
-    'single',
-    'string',
-    'SynUnicode',
-    'TDateTime',
-    'TDateTimeMS',
-    'TGUID',
-    'THash128',
-    'THash256',
-    'THash512',
-    '',
-    '',
-    'UnicodeString',
-    'TUnixTime',
-    'TUnixMSTime',
-    'variant',
-    'WideString',
-    'WinAnsi',
-    'word',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '');
+    '',               //  ptNone
+    '',               //  ptArray
+    'boolean',        //  ptBoolean
+    'byte',           //  ptByte
+    'cardinal',       //  ptCardinal
+    'currency',       //  ptCurrency
+    'double',         //  ptDouble
+    'extended',       //  ptExtended
+    'Int64',          //  ptInt64
+    'integer',        //  ptInteger
+    'QWord',          //  ptQWord
+    'RawByteString',  //  ptRawByteString
+    'RawJson',        //  ptRawJson
+    'RawUtf8',        //  ptRawUtf8
+    '',               //  ptRecord
+    'single',         //  ptSingle
+    'string',         //  ptString
+    'SynUnicode',     //  ptSynUnicode
+    'TDateTime',      //  ptDateTime
+    'TDateTimeMS',    //  ptDateTimeMS
+    'TGUID',          //  ptGuid
+    'THash128',       //  ptHash128
+    'THash256',       //  ptHash256
+    'THash512',       //  ptHash512
+    '',               //  ptOrm
+    '',               //  ptTimeLog
+    'UnicodeString',  //  ptUnicodeString
+    'TUnixTime',      //  ptUnixTime
+    'TUnixMSTime',    //  ptUnixMSTime
+    'variant',        //  ptVariant
+    'WideString',     //  ptWideString
+    'WinAnsi',        //  ptWinAnsi
+    'word',           //  ptWord
+    '',               //  ptEnumeration
+    '',               //  ptSet
+    '',               //  ptClass
+    '',               //  ptDynArray
+    '',               //  ptInterface
+    '');              //  ptCustom
 
   /// type definition name lookup to the TRttiParserComplexType values
   // - for ptComplexTypes types, with PT_NAME[]=''
   // - ptcSpecificClassID returns '' since T....ID types are variable
   PTC_NAME: array[TRttiParserComplexType] of RawUtf8 = (
-    '',
-    'TTimeLog',
-    'TCreateTime',
-    'TModTime',
-    'TID',
-    '',
-    'TRecordReference',
-    'TRecordReferenceToBeDeleted',
-    'TRecordVersion');
+    '',                            // pctNone
+    'TTimeLog',                    // pctTimeLog
+    'TCreateTime',                 // pctCreateTime
+    'TModTime',                    // pctModTime
+    'TID',                         // pctID
+    '',                            // pctSpecificClassID
+    'TRecordReference',            // pctRecordReference
+    'TRecordReferenceToBeDeleted', // pctRecordReferenceToBeDeleted
+    'TRecordVersion');             // pctRecordVersion
 
 /// retrieve the text name of one TRttiParserType enumerate
 function ToText(t: TRttiParserType): PShortString; overload;
@@ -5516,28 +5516,57 @@ end;
 
 var
   PT_RANDOM: array[TRttiParserType] of pointer = (
-    // ptNone, ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency,
-    @_NoRandom, @_NoRandom, @_FillRandom, @_FillRandom, @_FillRandom, @_FillRandom,
-    // ptDouble, ptExtended, ptInt64, ptInteger, ptQWord,
-    @_DoubleRandom, @_NoRandom, @_FillRandom, @_FillRandom, @_FillRandom,
-    // ptRawByteString, ptRawJson, ptRawUtf8, ptRecord, ptSingle,
-    @_StringRandom, @_NoRandom, @_StringRandom, @_NoRandom, @_SingleRandom,
-    // ptString,
-    {$ifdef UNICODE} @_UStringRandom, {$else} @_StringRandom, {$endif}
-    // ptSynUnicode,
-    {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_WStringRandom {$endif},
-    // ptDateTime, ptDateTimeMS, ptGuid, ptHash128,
-    @_DateTimeRandom, @_DateTimeRandom, @_FillRandom, @_FillRandom,
-    // ptHash256, ptHash512, ptOrm, ptTimeLog,
-    @_FillRandom, @_FillRandom, @_NoRandom, @_FillRandom,
-    // ptUnicodeString,
-    {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_NoRandom {$endif},
-    // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString,
-    @_FillRandom, @_FillRandom, @_VariantRandom, @_WStringRandom,
-    // ptWinAnsi, ptWord, ptEnumeration, ptSet,
-    @_StringRandom, @_FillRandom, @_FillRandom, @_FillRandom,
-    // ptClass, ptDynArray, ptInterface, ptCustom
-    @_NoRandom, @_NoRandom, @_NoRandom, @_NoRandom);
+    @_NoRandom,       //  ptNone
+    @_NoRandom,       //  ptArray
+    @_FillRandom,     //  ptBoolean
+    @_FillRandom,     //  ptByte
+    @_FillRandom,     //  ptCardinal
+    @_FillRandom,     //  ptCurrency
+    @_DoubleRandom,   //  ptDouble
+    @_NoRandom,       //  ptExtended
+    @_FillRandom,     //  ptInt64
+    @_FillRandom,     //  ptInteger
+    @_FillRandom,     //  ptQWord
+    @_StringRandom,   //  ptRawByteString
+    @_NoRandom,       //  ptRawJson
+    @_StringRandom,   //  ptRawUtf8
+    @_NoRandom,       //  ptRecord
+    @_SingleRandom,   //  ptSingle
+    {$ifdef UNICODE}
+    @_UStringRandom,
+    {$else}           //  ptString
+    @_StringRandom,
+    {$endif UNICODE}
+    {$ifdef HASVARUSTRING}
+    @_UStringRandom,
+    {$else}           //  ptSynUnicode
+    @_WStringRandom,
+    {$endif HASVARUSTRING}
+    @_DateTimeRandom, //  ptDateTime
+    @_DateTimeRandom, //  ptDateTimeMS
+    @_FillRandom,     //  ptGuid
+    @_FillRandom,     //  ptHash128
+    @_FillRandom,     //  ptHash256
+    @_FillRandom,     //  ptHash512
+    @_NoRandom,       //  ptOrm
+    @_FillRandom,     //  ptTimeLog
+    {$ifdef HASVARUSTRING}
+    @_UStringRandom,
+    {$else}           //  ptUnicodeString
+    @_NoRandom,
+    {$endif HASVARUSTRING}
+    @_FillRandom,     //  ptUnixTime
+    @_FillRandom,     //  ptUnixMSTime
+    @_VariantRandom,  //  ptVariant
+    @_WStringRandom,  //  ptWideString
+    @_StringRandom,   //  ptWinAnsi
+    @_FillRandom,     //  ptWord
+    @_FillRandom,     //  ptEnumeration
+    @_FillRandom,     //  ptSet
+    @_NoRandom,       //  ptClass
+    @_NoRandom,       //  ptDynArray
+    @_NoRandom,       //  ptInterface
+    @_NoRandom);      //  ptCustom
 
 
 { RTTI_COPY[] implementation functions }

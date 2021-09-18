@@ -3691,18 +3691,35 @@ const
   /// map our available types for any SQL field property into variant values
   // - varNull will be used to store a true variant instance from JSON
   SQL_ELEMENTTYPES: array[TOrmFieldType] of word = (
- // oftUnknown, oftAnsiText, oftUtf8Text, oftEnumerate, oftSet,   oftInteger,
-    varEmpty, varString, varString, varInteger, varInt64, varInt64,
- // oftID, oftRecord, oftBoolean, oftFloat, oftDateTime,
-    varInt64, varInt64, varBoolean, varDouble, varDate,
- //  oftTimeLog, oftCurrency,  oftObject,
-    varInt64, varCurrency, varNull,
- // oftVariant, oftNullable, oftBlob, oftBlobDynArray,
-    varNull, varNull, varString, varNull,
- // oftBlobCustom, oftUtf8Custom, oftMany, oftModTime, oftCreateTime, oftTID,
-    varString, varString, varEmpty, varInt64, varInt64, varInt64,
- // oftRecordVersion, oftSessionUserID, oftDateTimeMS, oftUnixTime, oftUnixMSTime
-    varInt64, varInt64, varDate, varInt64, varInt64);
+    varEmpty,     // oftUnknown
+    varString,    // oftAnsiText
+    varString,    // oftUtf8Text
+    varInteger,   // oftEnumerate
+    varInt64,     // oftSet
+    varInt64,     // oftInteger
+    varInt64,     // oftID
+    varInt64,     // oftRecord
+    varBoolean,   // oftBoolean
+    varDouble,    // oftFloat
+    varDate,      // oftDateTime
+    varInt64,     // oftTimeLog
+    varCurrency,  // oftCurrency
+    varNull,      // oftObject
+    varNull,      // oftVariant
+    varNull,      // oftNullable
+    varString,    // oftBlob
+    varNull,      // oftBlobDynArray
+    varString,    // oftBlobCustom
+    varString,    // oftUtf8Custom
+    varEmpty,     // oftMany
+    varInt64,     // oftModTime
+    varInt64,     // oftCreateTime
+    varInt64,     // oftTID
+    varInt64,     // oftRecordVersion
+    varInt64,     // oftSessionUserID
+    varDate,      // oftDateTimeMS
+    varInt64,     // oftUnixTime
+    varInt64);    // oftUnixMSTime
 
   procedure Complex;
   var

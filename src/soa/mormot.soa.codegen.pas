@@ -384,18 +384,36 @@ type
     lngSwagger);
 
 const
-  CROSSPLATFORM_KIND: array[TOrmFieldType] of TCrossPlatformOrmFieldKind =( // oftUnknown, oftAnsiText, oftUtf8Text, oftEnumerate, oftSet,    oftInteger,
-    cpkDefault, cpkDefault, cpkDefault, cpkDefault, cpkDefault, cpkDefault,
- // oftID,     oftRecord,  oftBoolean, oftFloat,   oftDateTime,
-    cpkDefault, cpkDefault, cpkDefault, cpkDefault, cpkDateTime,
- // oftTimeLog,oftCurrency,
-    cpkTimeLog, cpkDefault,
- // oftObject,  oftVariant, oftNullable, oftBlob, oftBlobDynArray, oftBlobCustom,
-    cpkDefault, cpkVariant, cpkVariant, cpkBlob, cpkDefault, cpkDefault,
- // oftUtf8Custom,oftMany, oftModTime,  oftCreateTime, oftTID,   oftRecordVersion
-    cpkRecord, cpkDefault, cpkModTime, cpkCreateTime, cpkDefault, cpkDefault,
- // oftSessionUserID, oftDateTimeMS, oftUnixTime, oftUnixMStime
-    cpkDefault, cpkDateTime, cpkDefault, cpkDefault);
+  CROSSPLATFORM_KIND: array[TOrmFieldType] of TCrossPlatformOrmFieldKind =(
+    cpkDefault,    // oftUnknown
+    cpkDefault,    // oftAnsiText
+    cpkDefault,    // oftUtf8Text
+    cpkDefault,    // oftEnumerate
+    cpkDefault,    // oftSet
+    cpkDefault,    // oftInteger
+    cpkDefault,    // oftID
+    cpkDefault,    // oftRecord
+    cpkDefault,    // oftBoolean
+    cpkDefault,    // oftFloat
+    cpkDateTime,   // oftDateTime
+    cpkTimeLog,    // oftTimeLog
+    cpkDefault,    // oftCurrency
+    cpkDefault,    // oftObject
+    cpkVariant,    // oftVariant
+    cpkVariant,    // oftNullable
+    cpkBlob,       // oftBlob
+    cpkDefault,    // oftBlobDynArray
+    cpkDefault,    // oftBlobCustom
+    cpkRecord,     // oftUtf8Custom
+    cpkDefault,    // oftMany
+    cpkModTime,    // oftModTime
+    cpkCreateTime, // oftCreateTime
+    cpkDefault,    // oftTID
+    cpkDefault,    // oftRecordVersion
+    cpkDefault,    // oftSessionUserID
+    cpkDateTime,   // oftDateTimeMS
+    cpkDefault,    // oftUnixTime
+    cpkDefault);   // oftUnixMSTime
 
   SIZETODELPHI: array[0..8] of string[7] = (
     'integer', 'byte', 'word', 'integer',
@@ -411,8 +429,8 @@ const
   SWD32 = '{"type":"number","format":"float"}';
   SWD64 = '{"type":"number","format":"double"}';
 
-  { TODO: refactor TID and Int64 for JavaScript (integers truncated to 53-bit) }
-  TYPES_LANG: array[TWrapperLanguage, TWrapperType] of RawUtf8 =(
+  { TODO: refactor TID and Int64 for JavaScript? (integers truncated to 53-bit) }
+  TYPES_LANG: array[TWrapperLanguage, TWrapperType] of RawUtf8 = (
     // lngDelphi
     ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal', 'Int64',
     'UInt64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
@@ -450,7 +468,8 @@ const
     '', '', '', '', //wCustomAnswer, wRecord, wArray, wVariant
     '', SWI64, '', '' //wObject, wORM, wInterface, wRecordVersion
     ));
-  TYPES_ORM: array[TOrmFieldType] of TWrapperType = (wUnknown,        // oftUnknown
+  TYPES_ORM: array[TOrmFieldType] of TWrapperType = (
+    wUnknown,        // oftUnknown
     wString,         // oftAnsiText
     wRawUtf8,        // oftUtf8Text
     wEnum,           // oftEnumerate
@@ -481,69 +500,70 @@ const
     wUnknown);       // oftUnixMSTime
 
   TYPES_SIMPLE: array[TRttiParserType] of TWrapperType = (
-    wUnknown,  // ptNone
-    wArray,
-    wBoolean,
-    wByte,
-    wCardinal,
-    wCurrency,
-    wDouble,
-    wDouble,   // ptExtended
-    wInt64,
-    wInteger,
-    wQWord,
-    wBlob,
-    wRawJson,
-    wRawUtf8,
-    wRecord,
-    wSingle,
-    wString,
-    wRawUtf8,  // ptSynUnicode
-    wDateTime,
-    wDateTime, // ptDateTimeMS
-    wGUID,
-    wBlob,     // ptHash128
-    wBlob,     // ptHash256
-    wBlob,     // ptHash512
-    wID,
-    wTimeLog,
-    wRawUtf8,
-    wInt64,    // ptUnixTime
-    wInt64,    // ptUnixMSTime
-    wVariant,
-    wRawUtf8,  // ptWideString
-    wRawUtf8,  // ptWinAnsi
-    wWord,
-    wEnum,
-    wSet,
-    wUnknown,  // ptClass
-    wUnknown,  // ptDynArray
-    wUnknown,  // ptInterface
-    wUnknown); // ptCustom
+    wUnknown,  //  ptNone
+    wArray,    //  ptArray
+    wBoolean,  //  ptBoolean
+    wByte,     //  ptByte
+    wCardinal, //  ptCardinal
+    wCurrency, //  ptCurrency
+    wDouble,   //  ptDouble
+    wDouble,   //  ptExtended
+    wInt64,    //  ptInt64
+    wInteger,  //  ptInteger
+    wQWord,    //  ptQWord
+    wBlob,     //  ptRawByteString
+    wRawJson,  //  ptRawJson
+    wRawUtf8,  //  ptRawUtf8
+    wRecord,   //  ptRecord
+    wSingle,   //  ptSingle
+    wString,   //  ptString
+    wRawUtf8,  //  ptSynUnicode
+    wDateTime, //  ptDateTime
+    wDateTime, //  ptDateTimeMS
+    wGUID,     //  ptGuid
+    wBlob,     //  ptHash128
+    wBlob,     //  ptHash256
+    wBlob,     //  ptHash512
+    wID,       //  ptOrm
+    wTimeLog,  //  ptTimeLog
+    wRawUtf8,  //  ptUnicodeString
+    wInt64,    //  ptUnixTime
+    wInt64,    //  ptUnixMSTime
+    wVariant,  //  ptVariant
+    wRawUtf8,  //  ptWideString
+    wRawUtf8,  //  ptWinAnsi
+    wWord,     //  ptWord
+    wEnum,     //  ptEnumeration
+    wSet,      //  ptSet
+    wUnknown,  //  ptClass
+    wUnknown,  //  ptDynArray
+    wUnknown,  //  ptInterface
+    wUnknown); //  ptCustom
 
   TYPES_SOA: array[TInterfaceMethodValueType] of TWrapperType = (
-    wUnknown,
-    wUnknown,
-    wBoolean,
-    wEnum,
-    wSet,
-    wUnknown,
-    wUnknown,
-    wUnknown,
-    wDouble,
-    wDateTime,
-    wCurrency,
-    wRawUtf8,
-    wString,
-    wRawUtf8,
-    wRawUtf8,
-    wRawUtf8,
-    wRecord,
-    wVariant,
-    wObject,
-    wRawJson,
-    wArray,
-    wUnknown); // integers are wUnknown to force best type
+    wUnknown,  // imvNone
+    wUnknown,  // imvSelf
+    wBoolean,  // imvBoolean
+    wEnum,     // imvEnum
+    wSet,      // imvSet
+    wUnknown,  // imvInteger
+    wUnknown,  // imvCardinal
+    wUnknown,  // imvInt64
+    wDouble,   // imvDouble
+    wDateTime, // imvDateTime
+    wCurrency, // imvCurrency
+    wRawUtf8,  // imvRawUtf8
+    wString,   // imvString
+    wRawUtf8,  // imvRawByteString
+    wRawUtf8,  // imvWideString
+    wRawUtf8,  // imvBinary
+    wRecord,   // imvRecord
+    wVariant,  // imvVariant
+    wObject,   // imvObject
+    wRawJson,  // imvRawJson
+    wArray,    // imvDynArray
+    wUnknown); // imvInterface
+    // integers are wUnknown to force best type recognition
 
 type
   EWrapperContext = class(ESynException);
@@ -583,7 +603,13 @@ var
   desc: RawByteString;
 begin
   TDocVariant.NewFast([
-    @fORM, @fRecords, @fEnumerates, @fSets, @fArrays, @fUnits, @fDescriptions]);
+    @fORM,
+    @fRecords,
+    @fEnumerates,
+    @fSets,
+    @fArrays,
+    @fUnits,
+    @fDescriptions]);
   if aDescriptions <> '' then
     desc := StringFromFile(aDescriptions);
   if {%H-}desc = '' then
@@ -856,7 +882,9 @@ begin
     until src = nil;
   end;
   fServer := aServer;
-  TDocVariant.NewFast([@fields, @services]);
+  TDocVariant.NewFast([
+    @fields,
+    @services]);
   // compute ORM information
   for t := 0 to fServer.Model.TablesMax do
   begin

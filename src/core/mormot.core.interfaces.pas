@@ -2016,22 +2016,65 @@ const
 
   // ordinal values are stored within 64-bit buffer, and records in a RawUtf8
   ARGS_TO_VAR: array[TInterfaceMethodValueType] of TInterfaceMethodValueVar = (
-    imvvNone, imvvSelf, imvv64, imvv64, imvv64, imvv64, imvv64, imvv64, imvv64,
-    imvv64, imvv64, imvvRawUtf8, imvvString, imvvRawUtf8, imvvWideString, imvv64,
-    imvvRecord, imvvRecord, imvvObject, imvvRawUtf8, imvvDynArray, imvvInterface);
+    imvvNone,         // imvNone
+    imvvSelf,         // imvSelf
+    imvv64,           // imvBoolean
+    imvv64,           // imvEnum
+    imvv64,           // imvSet
+    imvv64,           // imvInteger
+    imvv64,           // imvCardinal
+    imvv64,           // imvInt64
+    imvv64,           // imvDouble
+    imvv64,           // imvDateTime
+    imvv64,           // imvCurrency
+    imvvRawUtf8,      // imvRawUtf8
+    imvvString,       // imvString
+    imvvRawUtf8,      // imvRawByteString
+    imvvWideString,   // imvWideString
+    imvv64,           // imvBinary
+    imvvRecord,       // imvRecord
+    imvvRecord,       // imvVariant
+    imvvObject,       // imvObject
+    imvvRawUtf8,      // imvRawJson
+    imvvDynArray,     // imvDynArray
+    imvvInterface);   // imvInterface
 
   {$ifdef CPU32}
   // parameters are always aligned to 8 bytes boundaries on 64-bit ABI
   ARGS_IN_STACK_SIZE: array[TInterfaceMethodValueType] of cardinal = (
-    0, POINTERBYTES, POINTERBYTES, POINTERBYTES, POINTERBYTES, POINTERBYTES,
-    POINTERBYTES, 8, 8, 8, 8, POINTERBYTES, POINTERBYTES, POINTERBYTES,
-    POINTERBYTES, 0, POINTERBYTES, POINTERBYTES, POINTERBYTES, POINTERBYTES,
-    POINTERBYTES, POINTERBYTES);
+    0,             // imvNone
+    POINTERBYTES,  // imvSelf
+    POINTERBYTES,  // imvBoolean
+    POINTERBYTES,  // imvEnum
+    POINTERBYTES,  // imvSet
+    POINTERBYTES,  // imvInteger
+    POINTERBYTES,  // imvCardinal
+    8,             // imvInt64
+    8,             // imvDouble
+    8,             // imvDateTime
+    8,             // imvCurrency
+    POINTERBYTES,  // imvRawUtf8
+    POINTERBYTES,  // imvString
+    POINTERBYTES,  // imvRawByteString
+    POINTERBYTES,  // imvWideString
+    0,             // imvBinary
+    POINTERBYTES,  // imvRecord
+    POINTERBYTES,  // imvVariant
+    POINTERBYTES,  // imvObject
+    POINTERBYTES,  // imvRawJson
+    POINTERBYTES,  // imvDynArray
+    POINTERBYTES); // imvInterface
   {$endif CPU32}
 
   ARGS_RESULT_BY_REF: TInterfaceMethodValueTypes =
-    [imvRawUtf8, imvRawJson, imvString, imvRawByteString, imvWideString,
-     imvRecord, imvVariant, imvDynArray];
+    [imvRawUtf8,
+     imvRawJson,
+     imvString,
+     imvRawByteString,
+     imvWideString,
+     imvRecord,
+     imvVariant,
+     imvDynArray];
 
 type
   /// map the stack memory layout at TInterfacedObjectFake.FakeCall()
@@ -2462,9 +2505,28 @@ const
     'in', 'both', 'out', 'out');
   // AnsiString (Delphi <2009) may loose data depending on the client
   ARGTYPETOJSON: array[TInterfaceMethodValueType] of string[8] = (
-    '??', 'self', 'boolean', '', '', 'integer', 'cardinal', 'int64',
-    'double', 'datetime', 'currency', 'utf8', 'utf8', 'utf8', 'utf8', 'utf8',
-    '', 'variant', '', 'json', '', '');
+    '??',       // imvNone
+    'self',     // imvSelf
+    'boolean',  // imvBoolean
+    '',         // imvEnum
+    '',         // imvSet
+    'integer',  // imvInteger
+    'cardinal', // imvCardinal
+    'int64',    // imvInt64
+    'double',   // imvDouble
+    'datetime', // imvDateTime
+    'currency', // imvCurrency
+    'utf8',     // imvRawUtf8
+    'utf8',     // imvString
+    'utf8',     // imvRawByteString
+    'utf8',     // imvWideString
+    'utf8',     // imvBinary
+    '',         // imvRecord
+    'variant',  // imvVariant
+    '',         // imvObject
+    'json',     // imvRawJson
+    '',         // imvDynArray
+    '');        // imvInterface
 begin
   WR.AddShort('{"argument":"');
   WR.AddShort(ParamName^);
@@ -3499,18 +3561,45 @@ const
     [imvRawUtf8..imvBinary, imvDateTime];
 
   _FROM_RTTI: array[TRttiParserType] of TInterfaceMethodValueType = (
-  // ptNone, ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
-    imvNone, imvNone, imvBoolean, imvNone, imvCardinal, imvCurrency, imvDouble, imvNone,
-  // ptInt64, ptInteger, ptQWord, ptRawByteString, ptRawJson, ptRawUtf8,
-    imvInt64, imvInteger, imvInt64, imvRawByteString, imvRawJson, imvRawUtf8,
-  // ptRecord, ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS,
-    imvRecord, imvDouble, imvString, imvSynUnicode, imvDateTime, imvDateTime,
-  // ptGuid, ptHash128, ptHash256, ptHash512, ptOrm, ptTimeLog, ptUnicodeString,
-    imvBinary, imvBinary, imvBinary, imvBinary, imvInt64, imvInt64, imvUnicodeString,
-  // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi, ptWord,
-    imvInt64, imvInt64, imvVariant, imvWideString, imvRawUtf8, imvNone,
-  // ptEnumeration, ptSet, ptClass, ptDynArray, ptInterface, ptCustom);
-    imvEnum, imvSet, imvObject, imvDynArray, imvInterface, imvNone);
+    imvNone,           //  ptNone
+    imvNone,           //  ptArray
+    imvBoolean,        //  ptBoolean
+    imvNone,           //  ptByte
+    imvCardinal,       //  ptCardinal
+    imvCurrency,       //  ptCurrency
+    imvDouble,         //  ptDouble
+    imvNone,           //  ptExtended
+    imvInt64,          //  ptInt64
+    imvInteger,        //  ptInteger
+    imvInt64,          //  ptQWord
+    imvRawByteString,  //  ptRawByteString
+    imvRawJson,        //  ptRawJson
+    imvRawUtf8,        //  ptRawUtf8
+    imvRecord,         //  ptRecord
+    imvDouble,         //  ptSingle
+    imvString,         //  ptString
+    imvSynUnicode,     //  ptSynUnicode
+    imvDateTime,       //  ptDateTime
+    imvDateTime,       //  ptDateTimeMS
+    imvBinary,         //  ptGuid
+    imvBinary,         //  ptHash128
+    imvBinary,         //  ptHash256
+    imvBinary,         //  ptHash512
+    imvInt64,          //  ptOrm
+    imvInt64,          //  ptTimeLog
+    imvUnicodeString,  //  ptUnicodeString
+    imvInt64,          //  ptUnixTime
+    imvInt64,          //  ptUnixMSTime
+    imvVariant,        //  ptVariant
+    imvWideString,     //  ptWideString
+    imvRawUtf8,        //  ptWinAnsi
+    imvNone,           //  ptWord
+    imvEnum,           //  ptEnumeration
+    imvSet,            //  ptSet
+    imvObject,         //  ptClass
+    imvDynArray,       //  ptDynArray
+    imvInterface,      //  ptInterface
+    imvNone);          //  ptCustom
 
 var
   InterfaceFactoryCache: TSynObjectListLocked;
