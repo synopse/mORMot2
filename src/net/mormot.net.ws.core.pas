@@ -2076,9 +2076,12 @@ begin
   inherited Destroy;
   if fGeneratorOwned then
     Dispose(fGenerator);
-  if (fRecordData <> nil) and
-     (fRecordTypeInfo <> nil) then
-    FastRecordClear(fRecordData, fRecordTypeInfo);
+  if fRecordData <> nil then
+  begin
+    if fRecordTypeInfo <> nil then
+      FastRecordClear(fRecordData, fRecordTypeInfo);
+    FreeMem(fRecordData);
+  end;
 end;
 
 function TWebSocketProtocolUri.Clone(

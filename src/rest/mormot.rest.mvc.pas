@@ -296,7 +296,7 @@ type
     // - can optionally retrieve the associated record Data parameter
     function CheckAndRetrieve(PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil;
-      PExpires: PCardinal = nil): integer; virtual; abstract;
+      PExpires: PUnixTime = nil): integer; virtual; abstract;
     /// retrieve the session information as a JSON object
     // - returned as a TDocVariant, including any associated record Data and
     // optionally its session ID
@@ -353,7 +353,7 @@ type
     // - will return the 32-bit internal session ID, or 0 if the cookie is invalid
     function CheckAndRetrieve(PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil;
-      PExpires: PCardinal = nil): integer; override;
+      PExpires: PUnixTime = nil): integer; override;
     /// clear the session
     // - by deleting the cookie on the client side
     procedure Finalize(PRecordTypeInfo: PRttiInfo = nil); override;
@@ -1448,7 +1448,7 @@ begin
 end;
 
 function TMvcSessionWithCookies.CheckAndRetrieve(PRecordData: pointer;
-  PRecordTypeInfo: PRttiInfo; PExpires: PCardinal): integer;
+  PRecordTypeInfo: PRttiInfo; PExpires: PUnixTime): integer;
 var
   cookie: RawUtf8;
 begin
