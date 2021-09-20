@@ -139,10 +139,10 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         sfence
         jmp     @fwdend
         {$ifdef ASMX64AVX}
-@fwdavx:vmovups ymm2, ymmword ptr [src]  // first 32
+@fwdavx:vmovups ymm2, yword ptr [src]  // first 32
         lea     src, [src + rax - 32]
         lea     rax, [rax + dst - 32]
-        vmovups ymm1, ymmword ptr [src]  // last 32
+        vmovups ymm1, yword ptr [src]  // last 32
         mov     r10, rax
         neg     rax
         and     dst,  -32  // 32-byte aligned writes
@@ -150,17 +150,17 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         cmp     r8, NONTEMPORALSIZE
         ja      @favxn     // bypass cache for cnt>512KB
         align 16
-@favxr: vmovups ymm0, ymmword ptr [src + rax]  // regular loop
+@favxr: vmovups ymm0, yword ptr [src + rax]  // regular loop
         vmovaps [r10 + rax], ymm0
         add     rax, 32
         jl      @favxr
-@favxe: vmovups ymmword ptr [r10], ymm1 // last 32
-        vmovups ymmword ptr [r9], ymm2  // first 32
+@favxe: vmovups yword ptr [r10], ymm1 // last 32
+        vmovups yword ptr [r9], ymm2  // first 32
 // https://software.intel.com/en-us/articles/avoiding-avx-sse-transition-penalties
         vzeroupper
         ret
         align 16
-@favxn: vmovups ymm0, ymmword ptr [src + rax]  // non-temporal loop
+@favxn: vmovups ymm0, yword ptr [src + rax]  // non-temporal loop
         vmovntps [r10 + rax], ymm0
         add     rax, 32
         jl      @favxn
@@ -214,25 +214,29 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         {$ifdef ASMX64AVX}
 @bwdavx:sub     rax, 32
         mov     r9, rax
-        vmovups ymm2, ymmword ptr [src + rax]  // last 32
-        vmovups ymm1, ymmword ptr [src]        // first 32
+        vmovups ymm2, yword ptr [src + rax]  // last 32
+        vmovups ymm1, yword ptr [src]        // first 32
         add     rax, dst
         and     rax, -32  // 32-byte aligned writes
         sub     rax, dst
         cmp     r8, NONTEMPORALSIZE
         ja      @bavxn    // bypass cache for cnt>512KB
         align 16
-@bavxr: vmovups ymm0, ymmword ptr [src + rax]  // regular loop
-        vmovaps ymmword ptr [dst + rax], ymm0
+@bavxr: vmovups ymm0, yword ptr [src + rax]  // regular loop
+        vmovaps yword ptr [dst + rax], ymm0
         sub     rax, 32
         jg      @bavxr
-@bavxe: vmovups ymmword ptr [dst], ymm1       // first 32
-        vmovups ymmword ptr [dst + r9], ymm2  // last 32
+@bavxe: vmovups yword ptr [dst], ymm1       // first 32
+        vmovups yword ptr [dst + r9], ymm2  // last 32
         vzeroupper
         ret
         align 16
-@bavxn: vmovups ymm0, ymmword ptr [src + rax]  // non-temporal loop
-        vmovntps xmmword ptr [dst + rax], ymm0
+@bavxn: vmovups ymm0, yword ptr [src + rax]  // non-temporal loop
+        {$ifdef WIN64ABI} // circumvent inline asm limitation with [dst + rax]
+        vmovntps [rdx + rax], ymm0 // rdx=dst on Win64
+        {$else}
+        vmovntps [rsi + rax], ymm0 // rsi=dst on POSIX
+        {$endif WIN64ABI}
         sub     rax, 32
         jg      @bavxn
         sfence
@@ -371,14 +375,14 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         cmp     r10, NONTEMPORALSIZE
         ja      @avxnv
         align 16
-@avxreg:vmovaps ymmword ptr [rdx + dst], ymm0  // regular loop
+@avxreg:vmovaps yword ptr [rdx + dst], ymm0  // regular loop
         add     dst, 32
         jnz     @avxreg
-@avxok: vmovups ymmword ptr [r8 - 32], ymm0  // last unaligned 32 bytes
+@avxok: vmovups yword ptr [r8 - 32], ymm0  // last unaligned 32 bytes
         vzeroupper
         ret
         align 16
-@avxnv: vmovntps xmmword ptr [rdx + dst], ymm0 // non-temporal loop
+@avxnv: vmovntps oword ptr [rdx + dst], ymm0 // non-temporal loop
         add      dst, 32
         jnz      @avxnv
         sfence
@@ -775,19 +779,19 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         sub     rcx, 64
         je      @small
         vpxor   xmm3, xmm3, xmm3
-        vmovdqa ymm7,  ymmword ptr [rip + @0f]
-        vmovdqa ymm15, ymmword ptr [rip + @_6]
+        vmovdqa ymm7,  yword ptr [rip + @0f]
+        vmovdqa ymm15, yword ptr [rip + @_6]
         xor     esi, esi
-        vmovdqa ymm14, ymmword ptr [rip + @_7]
-        vmovdqa ymm13, ymmword ptr [rip + @_8]
+        vmovdqa ymm14, yword ptr [rip + @_7]
+        vmovdqa ymm13, yword ptr [rip + @_8]
         vmovdqa ymm5, ymm3
         vmovdqa ymm2, ymm3
         // main processing loop, 64 bytes per iteration
         align 16
-@loop:  vmovdqu xmm6, xmmword ptr [rax + rsi]
-        vinserti128 ymm0, ymm6, ymmword ptr [rax + rsi + 10H], 01H
-        vmovdqu xmm6, xmmword ptr [rax + rsi + 20H]
-        vinserti128 ymm1, ymm6, ymmword ptr [rax + rsi + 30H], 01H
+@loop:  vmovdqu xmm6, oword ptr [rax + rsi]
+        vinserti128 ymm0, ymm6, yword ptr [rax + rsi + 10H], 01H
+        vmovdqu xmm6, oword ptr [rax + rsi + 20H]
+        vinserti128 ymm1, ymm6, yword ptr [rax + rsi + 30H], 01H
         add     rsi, 64
         vpor    ymm4, ymm1, ymm0
         vpmovmskb rdx, ymm4 // check set MSB of each 64 bytes
@@ -801,12 +805,12 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
 @trail: sub     rdi, rsi
         jz      @ended
         add     rsi, rax
-        vmovdqa xmm0, xmmword ptr [rip + @20]
+        vmovdqa xmm0, oword ptr [rip + @20]
         lea     rdx, qword ptr [rsp + 60H] // copy on stack with space padding
         sub     rsi, rdx
-        vmovdqa xmmword ptr [rdx], xmm0
-        vmovdqa xmmword ptr [rdx + 10H], xmm0
-        vmovdqa xmmword ptr [rdx + 20H], xmm0
+        vmovdqa oword ptr [rdx], xmm0
+        vmovdqa oword ptr [rdx + 10H], xmm0
+        vmovdqa oword ptr [rdx + 20H], xmm0
         vmovdqa xmmword ptr [rdx + 30H], xmm0
 @by8:   sub     rdi, 8
         jb      @by1
@@ -821,8 +825,8 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         add     rdx, 1
         sub     rdi, 1
         jnz     @sml
-@0:     vmovdqa ymm1, ymmword ptr [rsp + 60H]
-        vmovdqa ymm2, ymmword ptr [rsp + 80H]
+@0:     vmovdqa ymm1, yword ptr [rsp + 60H]
+        vmovdqa ymm2, yword ptr [rsp + 80H]
         vpor    ymm0, ymm1, ymm2
         vpmovmskb rax, ymm0 // check any set MSB
         test    eax, eax
@@ -851,18 +855,18 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vperm2i128 ymm3, ymm3, ymm0, 21H
         vpalignr ymm5, ymm0, ymm3, 0FH
         vpalignr ymm11, ymm0, ymm3, 0EH
-        vpsubusb ymm11, ymm11, ymmword ptr [rip + @_9]
+        vpsubusb ymm11, ymm11, yword ptr [rip + @_9]
         vpalignr ymm3, ymm0, ymm3, 0DH
         vperm2i128 ymm0, ymm0, ymm1, 21H
-        vpsubusb ymm3, ymm3, ymmword ptr [rip + @_10]
+        vpsubusb ymm3, ymm3, yword ptr [rip + @_10]
         vpalignr ymm8, ymm1, ymm0, 0FH
         vpsrlw  ymm10, ymm5, 4
         vpand   ymm5, ymm7, ymm5
         vpsrlw  ymm6, ymm8, 4
         vpalignr ymm4, ymm1, ymm0, 0EH
-        vpsubusb ymm4, ymm4, ymmword ptr [rip + @_9]
+        vpsubusb ymm4, ymm4, yword ptr [rip + @_9]
         vpalignr ymm0, ymm1, ymm0, 0DH
-        vpsubusb ymm0, ymm0, ymmword ptr [rip + @_10]
+        vpsubusb ymm0, ymm0, yword ptr [rip + @_10]
         vpand   ymm10, ymm10, ymm7
         vpand   ymm6, ymm6, ymm7
         vpand   ymm8, ymm7, ymm8
@@ -879,12 +883,12 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vpcmpgtb ymm3, ymm3, ymm11
         vpcmpgtb ymm0, ymm0, ymm11
         vpshufb ymm9, ymm13, ymm9
-        vpand   ymm3, ymm3, ymmword ptr [rip + @_11]
-        vpand   ymm0, ymm0, ymmword ptr [rip + @_11]
+        vpand   ymm3, ymm3, yword ptr [rip + @_11]
+        vpand   ymm0, ymm0, yword ptr [rip + @_11]
         vpshufb ymm12, ymm13, ymm12
         vpand   ymm6, ymm6, ymm8
         vpand   ymm9, ymm5, ymm9
-        vpsubusb ymm5, ymm1, ymmword ptr [rip + @_12]
+        vpsubusb ymm5, ymm1, yword ptr [rip + @_12]
         vpand   ymm12, ymm6, ymm12
         vpxor   ymm9, ymm3, ymm9
         vmovdqa ymm3, ymm1
@@ -897,21 +901,21 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         jmp     @trail
         // validate UTF-8 extra bytes from input ending
         align 8
-@last:  vmovdqa ymm5, ymmword ptr [rip + @0f]
+@last:  vmovdqa ymm5, yword ptr [rip + @0f]
         vperm2i128 ymm3, ymm3, ymm1, 21H
-        vmovdqa ymm9, ymmword ptr [rip + @_7]
+        vmovdqa ymm9, yword ptr [rip + @_7]
         vpsrlw  ymm11, ymm1, 4
         vpalignr ymm0, ymm1, ymm3, 0FH
-        vmovdqa ymm13, ymmword ptr [rip + @_10]
-        vmovdqa ymm14, ymmword ptr [rip + @_9]
+        vmovdqa ymm13, yword ptr [rip + @_10]
+        vmovdqa ymm14, yword ptr [rip + @_9]
         vpsrlw  ymm6, ymm0, 4
         vpand   ymm0, ymm5, ymm0
         vpand   ymm11, ymm11, ymm5
-        vmovdqa ymm7, ymmword ptr [rip + @_6]
+        vmovdqa ymm7, yword ptr [rip + @_6]
         vpshufb ymm10, ymm9, ymm0
         vpalignr ymm0, ymm1, ymm3, 0EH
         vpand   ymm6, ymm6, ymm5
-        vmovdqa ymm8, ymmword ptr [rip + @_8]
+        vmovdqa ymm8, yword ptr [rip + @_8]
         vpalignr ymm3, ymm1, ymm3, 0DH
         vperm2i128 ymm1, ymm1, ymm2, 21H
         vpsubusb ymm0, ymm0, ymm14
@@ -935,8 +939,8 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vpshufb ymm7, ymm7, ymm15
         vpor    ymm1, ymm3, ymm1
         vpshufb ymm8, ymm8, ymm5
-        vpsubusb ymm5, ymm2, ymmword ptr [rip + @_12]
-        vmovdqa ymm2, ymmword ptr [rip + @_11]
+        vpsubusb ymm5, ymm2, yword ptr [rip + @_12]
+        vmovdqa ymm2, yword ptr [rip + @_11]
         vpcmpgtb ymm1, ymm1, ymm12
         vpand   ymm6, ymm6, ymm10
         vpand   ymm7, ymm7, ymm9
