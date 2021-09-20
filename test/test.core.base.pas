@@ -1203,7 +1203,7 @@ const
 
   procedure TestCities;
   var
-    i: integer;
+    i: PtrInt;
   begin
     for i := 0 to ACities.Count - 1 do
       with Province.Cities[i] do

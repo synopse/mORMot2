@@ -85,7 +85,7 @@ function SingleTest(const s: RawByteString; TDig: TSha1Digest): boolean; overloa
 var
   SHA: TSha1;
   Digest: TSha1Digest;
-  i: integer;
+  i: PtrInt;
 begin
   // 1. Hash complete RawByteString
   SHA.Full(pointer(s), length(s), Digest);
@@ -141,7 +141,7 @@ procedure TTestCoreCrypto._SHA256;
   var
     SHA: TSha256;
     Digest: TSha256Digest;
-    i: integer;
+    i: PtrInt;
   begin
     // 1. Hash complete RawByteString
     SHA.Full(pointer(s), length(s), Digest);
@@ -178,7 +178,7 @@ procedure TTestCoreCrypto._SHA256;
     Digests: THash256DynArray;
     sign: TSynSigner;
     c: AnsiChar;
-    i: integer;
+    i: PtrInt;
     sha: TSha256;
   begin
     SingleTest('abc', D1);
@@ -319,7 +319,7 @@ const
   FOX: RawByteString = 'The quick brown fox jumps over the lazy dog';
 var
   dig: THash512Rec;
-  i: integer;
+  i: PtrInt;
   sha: TSha512;
   c: AnsiChar;
   temp: RawByteString;
@@ -427,7 +427,7 @@ var
   secret, data, encrypted: RawByteString;
   dig: THash256;
   h512: THash512Rec;
-  s, i: integer;
+  s, i: PtrInt;
   sign: TSynSigner;
 begin
   // validate against official NIST vectors
@@ -2007,7 +2007,7 @@ end;
 procedure TTestCoreCrypto._TBinaryCookieGenerator;
 var
   gen: TBinaryCookieGenerator;
-  i: integer;
+  i: PtrInt;
   bak: RawUtf8;
   timer: TPrecisionTimer;
   cook: array of RawUtf8;

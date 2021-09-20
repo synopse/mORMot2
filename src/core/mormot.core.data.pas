@@ -3819,7 +3819,8 @@ begin
     result := FindIniEntry(Content, Section, Name, DefaultValue);
 end;
 
-function UpdateIniNameValueInternal(var Content: RawUtf8; const NewValue, NewValueCRLF: RawUtf8;
+function UpdateIniNameValueInternal(var Content: RawUtf8;
+  const NewValue, NewValueCRLF: RawUtf8;
   var P: PUtf8Char; UpperName: PAnsiChar; UpperNameLength: integer): boolean;
 var
   PBeg: PUtf8Char;
@@ -3853,7 +3854,8 @@ begin
   result := false;
 end;
 
-function UpdateIniNameValue(var Content: RawUtf8; const Name, UpperName, NewValue: RawUtf8): boolean;
+function UpdateIniNameValue(var Content: RawUtf8;
+  const Name, UpperName, NewValue: RawUtf8): boolean;
 var
   P: PUtf8Char;
 begin
@@ -3874,7 +3876,8 @@ begin
   end;
 end;
 
-procedure UpdateIniEntry(var Content: RawUtf8; const Section, Name, Value: RawUtf8);
+procedure UpdateIniEntry(var Content: RawUtf8;
+  const Section, Name, Value: RawUtf8);
 const
   CRLF = #13#10;
 var
@@ -3885,7 +3888,8 @@ var
   UpperSection, UpperName: array[byte] of AnsiChar;
 begin
   UpperNameLength := length(Name);
-  PWord(UpperCopy255Buf(UpperName{%H-}, pointer(Name), UpperNameLength))^ := ord('=');
+  PWord(UpperCopy255Buf(
+    UpperName{%H-}, pointer(Name), UpperNameLength))^ := ord('=');
   inc(UpperNameLength);
   V := Value + CRLF;
   P := pointer(Content);
@@ -3898,7 +3902,8 @@ begin
     SectionFound := FindSectionFirstLine(P, UpperSection);
   end;
   if SectionFound and
-     UpdateIniNameValueInternal(Content, Value, V, P, @UpperName, UpperNameLength) then
+     UpdateIniNameValueInternal(
+       Content, Value, V, P, @UpperName, UpperNameLength) then
       exit;
   // 2. section or Name= entry not found: add Name=Value
   V := Name + '=' + V;
@@ -3917,7 +3922,8 @@ begin
   end;
 end;
 
-procedure UpdateIniEntryFile(const FileName: TFileName; const Section, Name, Value: RawUtf8);
+procedure UpdateIniEntryFile(const FileName: TFileName;
+  const Section, Name, Value: RawUtf8);
 var
   Content: RawUtf8;
 begin
@@ -3999,7 +4005,8 @@ begin
   {$endif HASFASTTRYFINALLY}
 end;
 
-procedure TRawUtf8InterningSlot.UniqueText(var aText: RawUtf8; aTextHash: cardinal);
+procedure TRawUtf8InterningSlot.UniqueText(
+  var aText: RawUtf8; aTextHash: cardinal);
 var
   i: PtrInt;
   added: boolean;
@@ -4198,7 +4205,8 @@ begin
   end;
 end;
 
-procedure TRawUtf8Interning.UniqueVariant(var aResult: variant; const aText: RawUtf8);
+procedure TRawUtf8Interning.UniqueVariant(
+  var aResult: variant; const aText: RawUtf8);
 begin
   ClearVariantForString(aResult);
   Unique(RawUtf8(TVarData(aResult).VAny), aText);
@@ -4667,7 +4675,8 @@ begin
   end;
 end;
 
-procedure TRawUtf8List.SaveToFile(const FileName: TFileName; const Delimiter: RawUtf8);
+procedure TRawUtf8List.SaveToFile(
+  const FileName: TFileName; const Delimiter: RawUtf8);
 var
   FS: TFileStream;
 begin
@@ -5163,7 +5172,7 @@ begin
 end;
 
 function DelphiType(Info: PRttiInfo): integer;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   // compatible with legacy TDynArray.SaveTo() format
   if Info = nil then
