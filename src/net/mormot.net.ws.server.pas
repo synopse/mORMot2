@@ -329,6 +329,7 @@ begin
     exit;
   frame.opcode := focText;
   frame.content := [];
+  frame.tix := 0;
   frame.payload := Json;
   result := Sender.SendFrame(frame)
 end;

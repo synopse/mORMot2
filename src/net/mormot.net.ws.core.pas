@@ -1545,6 +1545,7 @@ var
 begin
   frame.opcode := focText;
   frame.content := [];
+  frame.tix := 0;
   WR := TTextWriter.CreateOwnedStream(tmp);
   try
     WR.Add('{');
@@ -1945,6 +1946,7 @@ begin
   end;
   jumboFrame.opcode := focBinary;
   jumboFrame.content := [];
+  jumboFrame.tix := 0;
   len := sizeof(JUMBO_HEADER) + ToVarUInt32Length(FramesCount);
   for i := 0 to FramesCount do
     if Frames[i].opcode = focBinary then
@@ -1992,6 +1994,7 @@ begin
         jumboInfo := '';
       frame.opcode := focBinary;
       frame.content := [];
+      frame.tix := 0;
       frame.payload := FromVarString(P);
       Sender.Log(frame, FormatUtf8('GetSubFrame(%/%)', [i + 1, n + 1]));
       inherited ProcessIncomingFrame(Sender, frame, jumboInfo);
@@ -2414,6 +2417,8 @@ begin
     fState := wpsClose; // the connection is inactive from now on
     // send and acknowledge a focConnectionClose frame to notify the other end
     frame.opcode := focConnectionClose;
+    frame.content := [];
+    frame.tix := 0;
     error := 0;
     if not SendFrame(frame) or // immediate frame sending + wait 1s for ACK
        not CanGetFrame(1000, @error) or
@@ -2476,6 +2481,8 @@ begin
   end;
   //WebSocketLog.Add.Log(sllTrace, 'ProcessStart: callbacks', self);
   frame.opcode := focContinuation;
+  frame.content := [];
+  frame.tix := 0;
   if not Assigned(fProtocol.fOnBeforeIncomingFrame) or
      not fProtocol.fOnBeforeIncomingFrame(self, frame) then
     fProtocol.ProcessIncomingFrame(self, frame, ''); // any exception would abort
@@ -2489,6 +2496,8 @@ begin
   try
     WebSocketLog.Add.Log(sllTrace, 'ProcessStop: callbacks', self);
     frame.opcode := focConnectionClose;
+    frame.content := [];
+    frame.tix := 0;
     if not Assigned(fProtocol.fOnBeforeIncomingFrame) or
        not fProtocol.fOnBeforeIncomingFrame(self, frame) then
       fProtocol.ProcessIncomingFrame(self, frame, '');
@@ -2560,7 +2569,8 @@ begin
               fProtocol.ProcessIncomingFrame(self, request, '');
           focConnectionClose:
             begin
-              if fState = wpsRun then
+              if (fState = wpsRun) and
+                 not fConnectionCloseWasSent then
               begin
                 fState := wpsClose; // will close the connection
                 SendFrame(request); // immediate send back the frame as ACK
@@ -2593,6 +2603,8 @@ begin
   LockedInc32(@fProcessCount); // flag currently processing
   try
     request.opcode := focPing;
+    request.content := [];
+    request.tix := 0;
     if not SendFrame(request) then // immediate frame sending
       if (fSettings.DisconnectAfterInvalidHeartbeatCount <> 0) and
          (fInvalidPingSendCount >=

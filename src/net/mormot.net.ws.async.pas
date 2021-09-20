@@ -411,10 +411,10 @@ end;
 
 function TWebSocketAsyncProcess.ReceiveBytes(P: PAnsiChar; count: PtrInt): integer;
 begin
-  // first read from fHttp.Process / fProcessPos
+  // first read from fHttp.Process / fProcessPos (remaining from previous read)
   result := fConnection.fHttp.Process.ExtractAt(P, count, fProcessPos);
   if count <> 0 then
-    // try if we can get something from fSlot.rd / fReadPos
+    // try if we can get some more directly from fSlot.rd / fReadPos
     inc(result, fConnection.fSlot.rd.ExtractAt(P, count, fReadPos));
 end;
 
@@ -474,8 +474,18 @@ begin
 end;
 
 destructor TWebSocketAsyncServer.Destroy;
+var
+  closing: TWebSocketFrame;
+  log: ISynLog;
 begin
+  log := TSynLog.Enter(self, 'Destroy');
+  closing.opcode := focConnectionClose;
+  closing.content := [];
+  closing.tix := 0;
+  WebSocketBroadcast(closing, nil); // notify at once all client connections
+  log.Log(sllTrace, 'Destroy: WebSocketBroadcast(focConnectionClose) done', self);
   inherited Destroy; // close any pending connection
+  log.Log(sllTrace, 'Destroy: inherited THttpAsyncServer done', self);
   fProtocols.Free;
 end;
 

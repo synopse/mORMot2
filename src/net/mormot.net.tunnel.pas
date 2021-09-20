@@ -490,6 +490,7 @@ var
 begin
   frame.opcode := focBinary;
   frame.content := [fopAlreadyCompressed]; // it is probably encrypted
+  frame.tix := 0;
   frame.payload := msg;
   process.Outgoing.Push(frame, 0);
 end;

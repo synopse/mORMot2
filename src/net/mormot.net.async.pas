@@ -2595,8 +2595,10 @@ end;
 
 destructor THttpAsyncServer.Destroy;
 begin
-  FreeAndNil(fAsync);
+  Shutdown;
+  fAsync.Terminate;
   inherited Destroy;
+  FreeAndNil(fAsync);
 end;
 
 function THttpAsyncServer.GetRegisterCompressGzStatic: boolean;

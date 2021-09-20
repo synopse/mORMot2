@@ -2463,7 +2463,7 @@ begin
         fLastErrorMessage := StatusMsg
       else
         fLastErrorMessage := Call.OutBody;
-      InternalLog('% % returned % (%) with message  %',
+      InternalLog('% % returned % (%) with message %',
         [method, url, Call.OutStatus, StatusMsg, fLastErrorMessage], sllError);
       if Assigned(fOnFailed) then
         fOnFailed(self, nil, @Call);

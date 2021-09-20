@@ -696,6 +696,7 @@ begin
               Frame.opcode := focConnectionClose;
               Frame.content := [];
               Frame.payload := '';
+              Frame.tix := 0;
               fOwner.EncapsulateAndSend(Sender, 'noserver', Frame, connection);
               exit;
             end;
@@ -842,6 +843,7 @@ begin
   encapsulated.payload := AlgoSynLZ.Compress(encapsulated.payload, trigger);
   dest.opcode := focBinary;
   dest.content := [];
+  dest.tix := 0;
   if (Process.Protocol <> nil) and
      Process.Protocol.Encrypted then
     Process.Protocol.Encryption.Encrypt(encapsulated.payload, dest.payload)
