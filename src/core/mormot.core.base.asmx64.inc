@@ -959,7 +959,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @20:    dq 2020202020202020H
         dq 2020202020202020H
-{$ifdef FPC} align 32 {$else} .align 32 {$endif}
+{$ifdef FPC} align 32 {$else} {.align 32 Delphi doesn't allow this :(}  {$endif}
 @0f:    dq 0F0F0F0F0F0F0F0FH
         dq 0F0F0F0F0F0F0F0FH
         dq 0F0F0F0F0F0F0F0FH
