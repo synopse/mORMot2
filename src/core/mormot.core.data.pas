@@ -7872,7 +7872,7 @@ begin
         CopySeveral(@PByteArray(p)[SizeOf(TDynArrayRec)], fValue^,
           minLength, fInfo.Cache.ItemInfo, fInfo.Cache.ItemSize);
       end;
-      // for thread safety, adjust the refcount after CopySeveral()
+      // for thread safety, adjust the refcount after data copy
       if fNoFinalize then
         FastDynArrayClear(fValue, nil)
       else // note: rcfObjArray should never appear with refcnt>1

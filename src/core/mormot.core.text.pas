@@ -5000,9 +5000,12 @@ begin
 end;
 
 procedure TBaseWriter.CancelLastChar(aCharToCancel: AnsiChar);
+var
+  P: PUtf8Char;
 begin
-  if (B >= fTempBuf) and
-     (B^ = aCharToCancel) then
+  P := B;
+  if (P >= fTempBuf) and
+     (P^ = aCharToCancel) then
     dec(B);
 end;
 

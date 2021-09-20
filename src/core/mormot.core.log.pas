@@ -5356,6 +5356,7 @@ begin
   depth := fFamily.StackTraceLevel;
   if depth <> 0 then
     try
+      fWriter.Add(' ');
       for i := 0 to CaptureBacktrace(2, length(frames), @frames[0]) - 1 do
         if (i = 0) or
            (frames[i] <> frames[i - 1]) then
@@ -5366,6 +5367,7 @@ begin
             if depth = 0 then
               break;
           end;
+      fWriter.CancelLastChar(' ');
     except // don't let any unexpected GPF break the logging process
     end;
 end;
