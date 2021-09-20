@@ -54,7 +54,9 @@ type
     fConnection: TWebSocketAsyncConnection;
     fProcessPos: PtrInt;   // index in fConnection.fHttp.Process.Buffer/Len
     fReadPos: PtrInt;      // index in fConnection.fSlot.rd.Buffer/Len
-    procedure AfterOnRead; // manage Process+rd buffers
+    fOnRead: TWebProcessInFrame;
+    fOnReadFrame: TWebSocketFrame;
+    function OnRead: TPollAsyncSocketOnReadWrite;
     function ComputeContext(
       out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract; override;
   public
@@ -201,8 +203,6 @@ implementation
 { TWebSocketAsyncConnection }
 
 function TWebSocketAsyncConnection.OnRead: TPollAsyncSocketOnReadWrite;
-var
-  processed: boolean;
 begin
   if fProcess = nil then
   begin
@@ -213,25 +213,7 @@ begin
       exit;
   end;
   // process fSlot.rd incoming bytes into the current WebSockets protocol
-  try
-    result := soContinue;
-    repeat
-      // GetFrame + ProcessIncomingFrame (+ SendFrame)
-      if not fProcess.ProcessLoopStepReceive(@processed) then
-      begin
-        // returned false = fProcess.State <> wpsRun
-        result := soClose;
-        break;
-      end;
-    until not processed;
-    // manage remainging data in Process+rd buffers
-    if result = soContinue then
-      fProcess.AfterOnRead;
-  except
-    result := soClose;
-  end;
-  if result = soClose then
-    fProcess.ProcessStop; // OnClientDisconnected - called in read thread pool
+  result := fProcess.OnRead;
 end;
 
 function TWebSocketAsyncConnection.AfterWrite: TPollAsyncSocketOnReadWrite;
@@ -378,6 +360,7 @@ begin
   inherited Create(
     aProtocol, aConnection.Handle, nil, @serv.fSettings, serv.ProcessName);
   fConnection := aConnection;
+  fOnRead.Init(self, @fOnReadFrame);
 end;
 
 function TWebSocketAsyncProcess.ComputeContext(
@@ -403,7 +386,7 @@ begin
   begin
     // TimeOut is ignored with our non-blocking sockets
     result := ((fConnection.fHttp.Process.Len - fProcessPos) +
-               (fConnection.fSlot.rd.Len - fReadPos)) >= 2;
+               (fConnection.fSlot.rd.Len - fReadPos)) <> 0;
     if ErrorWithoutException <> nil then
       ErrorWithoutException^ := 0; // no error
   end;
@@ -418,25 +401,69 @@ begin
     inc(result, fConnection.fSlot.rd.ExtractAt(P, count, fReadPos));
 end;
 
-procedure TWebSocketAsyncProcess.AfterOnRead;
+function TWebSocketAsyncProcess.OnRead: TPollAsyncSocketOnReadWrite;
 var
+  processed: boolean;
   len: PtrInt;
 begin
-  // put remaining fSlot.rd content into fHttp.Process buffer
-  if fProcessPos <> 0 then
-  begin
-    fConnection.fHttp.Process.Remove(fProcessPos); // some input processed
-    fProcessPos := 0;
-  end;
-  len := fConnection.fSlot.rd.Len - fReadPos;
-  if len <> 0 then
-  begin
-    fConnection.fHttp.Process.Append(
-      PAnsiChar(fConnection.fSlot.rd.Buffer) + fReadPos, len);
-    fConnection.fSlot.rd.Reset;
-    fReadPos := 0;
-  end;
+  if fState <> wpsRun then
+    result := soClose
+  else
+    try
+      result := soContinue;
+      LockedInc32(@fProcessCount); // flag currently processing
+      try
+        // asynchronous ProcessLoopStepReceive() logic
+        // - ProcessLoopStepReceive/GetFrame can't be resumed so they fail
+        // when OS read buffers are full (which is common on Windows)
+        repeat
+          processed := false;
+          if fState = wpsRun then
+            if CanGetFrame({timeout=}0, nil) then
+              if fOnRead.Step(nil) = pfsDone then
+              begin
+                // we received a full frame
+                processed := true;
+                ProcessLoopReceived(fOnReadFrame); // SendFrame() if needed
+                fOnRead.data := '';
+                fOnRead.Init(self, @fOnReadFrame); // reset for next frame
+              end;
+          if (fOwnerThread <> nil) and
+             fOwnerThread.Terminated then
+            fState := wpsClose;
+          if fState <> wpsRun then
+          begin
+            result := soClose;
+            break;
+          end;
+        until not processed;
+        // manage remainging data in Process+rd buffers
+        if result = soContinue then
+        begin
+          if fProcessPos <> 0 then
+          begin
+            fConnection.fHttp.Process.Remove(fProcessPos); // remove processed
+            fProcessPos := 0;
+          end;
+          len := fConnection.fSlot.rd.Len - fReadPos;
+          if len <> 0 then
+          begin
+            fConnection.fHttp.Process.Append(
+              PAnsiChar(fConnection.fSlot.rd.Buffer) + fReadPos, len);
+            fConnection.fSlot.rd.Reset; // fSlot.rd was moved to fHttp.Process
+            fReadPos := 0;
+          end;
+        end;
+      finally
+        LockedDec32(@fProcessCount); // release flag
+      end;
+    except
+      result := soClose;
+    end;
+  if result = soClose then
+    ProcessStop; // OnClientDisconnected - called in read thread pool
 end;
+
 
 function TWebSocketAsyncProcess.SendBytes(P: pointer; Len: PtrInt): boolean;
 begin

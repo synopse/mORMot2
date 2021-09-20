@@ -728,6 +728,7 @@ type
     // called by ProcessLoop - TRUE=continue, FALSE=ended
     // - caller may have checked that some data is pending to read
     function ProcessLoopStepReceive(FrameProcessed: PBoolean): boolean;
+    procedure ProcessLoopReceived(var request: TWebSocketFrame);
     // called by ProcessLoop - TRUE=continue, FALSE=ended
     // - caller may check that LastPingDelay>fSettings.SendDelay and Socket is writable
     function ProcessLoopStepSend: boolean;
@@ -1780,7 +1781,7 @@ var
   P: PUtf8Char;
 begin
   FrameInit(focBinary, Content, ContentType, frame);
-  len := length(Head) + SizeOf(FRAME_HEAD_SEP) +
+  len := length(Head) + {FRAME_HEAD_SEP=} 1 +
          PtrInt(ToVarUInt32LengthWithData(length(ContentType))) +
          length(Content);
   it := @item;
@@ -2538,6 +2539,33 @@ begin
   result := GetTickCount64 - fLastSocketTicks;
 end;
 
+procedure TWebSocketProcess.ProcessLoopReceived(var request: TWebSocketFrame);
+begin
+  case request.opcode of
+    focPing:
+      begin
+        request.opcode := focPong;
+        SendFrame(request); // immediate pong frame sending
+      end;
+    focPong:
+      ; // nothing to do
+    focText, focBinary:
+      if not Assigned(fProtocol.fOnBeforeIncomingFrame) or
+         not fProtocol.fOnBeforeIncomingFrame(self, request) then
+        fProtocol.ProcessIncomingFrame(self, request, '');
+    focConnectionClose:
+      begin
+        if (fState = wpsRun) and
+           not fConnectionCloseWasSent then
+        begin
+          fState := wpsClose; // will close the connection
+          SendFrame(request); // immediate send back the frame as ACK
+        end;
+      end;
+  end;
+  request.payload := ''; // release memory ASAP
+end;
+
 function TWebSocketProcess.ProcessLoopStepReceive(FrameProcessed: PBoolean): boolean;
 var
   request: TWebSocketFrame;
@@ -2555,28 +2583,7 @@ begin
         // we received a full frame
         if FrameProcessed <> nil then
           FrameProcessed^ := true;
-        case request.opcode of
-          focPing:
-            begin
-              request.opcode := focPong;
-              SendFrame(request); // immediate frame sending
-            end;
-          focPong:
-            ; // nothing to do
-          focText, focBinary:
-            if not Assigned(fProtocol.fOnBeforeIncomingFrame) or
-               not fProtocol.fOnBeforeIncomingFrame(self, request) then
-              fProtocol.ProcessIncomingFrame(self, request, '');
-          focConnectionClose:
-            begin
-              if (fState = wpsRun) and
-                 not fConnectionCloseWasSent then
-              begin
-                fState := wpsClose; // will close the connection
-                SendFrame(request); // immediate send back the frame as ACK
-              end;
-            end;
-        end;
+        ProcessLoopReceived(request);
       end
       else if (fOwnerThread <> nil) and
               fOwnerThread.Terminated then
