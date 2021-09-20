@@ -301,7 +301,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @05:    mov     byte ptr [dst + 4], al
 @04:    mov     dword ptr [dst], eax
         ret
-{$ifdef FPC} align 8{$else} .align 8{$endif}
+{$ifdef FPC} align 8 {$else} .align 8{$endif}
 @abv32: jng     @00  // < 0
         movd    xmm0, eax
         lea     r8, [dst + cnt]        // r8 point to end
@@ -380,7 +380,11 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         vzeroupper
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@avxnv: vmovntps oword ptr [rdx + dst], ymm0 // non-temporal loop
+        {$ifdef WIN64}
+@avxnv: vmovntps [rdx + rcx], ymm0 // non-temporal loop - rcx=dst on Win64
+        {$else}
+@avxnv: vmovntps [rdx + rdi], ymm0 // non-temporal loop - rdi=dst on POSIX
+        {$endif WIN64}
         add      dst, 32
         jnz      @avxnv
         sfence
@@ -787,9 +791,9 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         // main processing loop, 64 bytes per iteration
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop:  vmovdqu xmm6, oword ptr [rax + rsi]
-        vinserti128 ymm0, ymm6, yword ptr [rax + rsi + 10H], 01H
+        vinserti128 ymm0, ymm6, [rax + rsi + 10H], 01H
         vmovdqu xmm6, oword ptr [rax + rsi + 20H]
-        vinserti128 ymm1, ymm6, yword ptr [rax + rsi + 30H], 01H
+        vinserti128 ymm1, ymm6, [rax + rsi + 30H], 01H
         add     rsi, 64
         vpor    ymm4, ymm1, ymm0
         vpmovmskb rdx, ymm4 // check set MSB of each 64 bytes
@@ -809,7 +813,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vmovdqa oword ptr [rdx], xmm0
         vmovdqa oword ptr [rdx + 10H], xmm0
         vmovdqa oword ptr [rdx + 20H], xmm0
-        vmovdqa xmmword ptr [rdx + 30H], xmm0
+        vmovdqa oword ptr [rdx + 30H], xmm0
 @by8:   sub     rdi, 8
         jb      @by1
         mov     rax, qword ptr [rsi + rdx]
@@ -847,7 +851,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vmovdqa ymm5, ymm4
         jmp     @trail
         // validate UTF-8 extra bytes from main loop
-        align 8
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @check: vpsrlw  ymm9, ymm0, 4
         vpsrlw  ymm12, ymm1, 4
         vperm2i128 ymm3, ymm3, ymm0, 21H
@@ -898,7 +902,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         ja      @loop
         jmp     @trail
         // validate UTF-8 extra bytes from input ending
-        align 8
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @last:  vmovdqa ymm5, yword ptr [rip + @0f]
         vperm2i128 ymm3, ymm3, ymm1, 21H
         vmovdqa ymm9, yword ptr [rip + @_7]
