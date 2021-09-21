@@ -1966,7 +1966,6 @@ var
   datain, dataout: RawByteString;
 begin
   if (Sender = nil) or
-     not InitializeDomainAuth or
      not IdemPChar(pointer(Authenticate), pointer(SECPKGNAMEHTTP_UPPER)) then
     exit;
   unauthstatus := Context.status;
@@ -1996,20 +1995,22 @@ end;
 class function THttpClientSocket.AuthorizeSspi(Sender: THttpClientSocket;
   var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
 begin
-  // try to setup sspi/gssapi -> SECPKGNAMEHTTP
-  DoSspi(Sender, Context, Authenticate,
-    'WWW-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
-    'Authorization: ' + SECPKGNAMEHTTP + ' ');
+  if InitializeDomainAuth then
+    // try to setup sspi/gssapi -> SECPKGNAMEHTTP
+    DoSspi(Sender, Context, Authenticate,
+      'WWW-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
+      'Authorization: ' + SECPKGNAMEHTTP + ' ');
   result := false; // final RequestInternal() was done within DoSspi()
 end;
 
 class function THttpClientSocket.ProxyAuthorizeSspi(Sender: THttpClientSocket;
   var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
 begin
-  // try to setup sspi/gssapi -> SECPKGNAMEHTTP
-  DoSspi(Sender, Context, Authenticate,
-    'PROXY-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
-    'Proxy-Authorization: ' + SECPKGNAMEHTTP + ' ');
+  if InitializeDomainAuth then
+    // try to setup sspi/gssapi -> SECPKGNAMEHTTP
+    DoSspi(Sender, Context, Authenticate,
+      'PROXY-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
+      'Proxy-Authorization: ' + SECPKGNAMEHTTP + ' ');
   result := false; // final RequestInternal() was done within DoSspi()
 end;
 
