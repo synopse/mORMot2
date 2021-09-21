@@ -481,6 +481,9 @@ type
   // be a good idea to use such a pointer via DocVariantData(aVariant)^ or
   // _Safe(aVariant)^ instead of TDocVariantData(aVariant),
   // if you are not sure how aVariant was allocated (may be not _Obj/_Json)
+  // - note: due to a local variable lifetime change in Delphi 11, don't use
+  // this function with a temporary variant (e.g. from TList<variant>.GetItem) -
+  // call _DV() and a local TDocVariantData instead of a PDocVariantData
   PDocVariantData = ^TDocVariantData;
 
   /// define the TDocVariant storage layout
@@ -1927,10 +1930,13 @@ function ToText(kind: TDocVariantKind): PShortString; overload;
 // ! TDocVariantData(aVarDoc.ArrayProp).Add('new item');
 // - so you can write the following:
 // ! DocVariantData(aVarDoc.ArrayProp).AddItem('new item');
+// - note: due to a local variable lifetime change in Delphi 11, don't use
+// this function with a temporary variant (e.g. from TList<variant>.GetItem) -
+// call _DV() and a local TDocVariantData instead of a PDocVariantData
 function DocVariantData(const DocVariant: variant): PDocVariantData;
 
 const
-  /// constant used e.g. by _Safe() overloaded functions
+  /// constant used e.g. by _Safe() and _DV() overloaded functions
   // - will be in code section of the exe, so will be read-only by design
   // - would have Kind=dvUndefined and Count=0, so _Safe() would return
   // a valid, but void document
@@ -1957,6 +1963,9 @@ const
 // !   dv := _Safe(aDocVariant);
 // !   for ndx := 0 to dv.Count-1 do // here Count=0 for the "fake" result
 // !     writeln(dv.Names[ndx]);
+// - note: due to a local variable lifetime change in Delphi 11, don't use
+// this function with a temporary variant (e.g. from TList<variant>.GetItem) -
+// call _DV() and a local TDocVariantData instead of a PDocVariantData
 function _Safe(const DocVariant: variant): PDocVariantData; overload;
   {$ifdef FPC}inline;{$endif} // Delphi has problems inlining this :(
 
@@ -1965,6 +1974,9 @@ function _Safe(const DocVariant: variant): PDocVariantData; overload;
 // instance, which may be of kind varByRef (e.g. when retrieved by late binding)
 // - will check the supplied document kind, i.e. either dvObject or dvArray and
 // raise a EDocVariant exception if it does not match
+// - note: due to a local variable lifetime change in Delphi 11, don't use
+// this function with a temporary variant (e.g. from TList<variant>.GetItem) -
+// call _DV() and a local TDocVariantData instead of a PDocVariantData
 function _Safe(const DocVariant: variant;
   ExpectedKind: TDocVariantKind): PDocVariantData; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -1975,20 +1987,46 @@ function _Safe(const DocVariant: variant;
 // (e.g. when retrieved by late binding)
 // - return false if the supplied Value is not a TDocVariant, but e.g. a string,
 // a number or another type of custom variant
-function _Safe(const Value: variant; out DV: PDocVariantData): boolean; overload;
+// - note: due to a local variable lifetime change in Delphi 11, don't use
+// this function with a temporary variant (e.g. from TList<variant>.GetItem) -
+// call _DV() and a local TDocVariantData instead of a PDocVariantData
+function _Safe(const DocVariant: variant; out DV: PDocVariantData): boolean; overload;
   {$ifdef FPC}inline;{$endif} // Delphi has problems inlining this :(
 
 /// direct access to a TDocVariantData array from a given variant instance
 // - return true and set DV with a pointer to the TDocVariantData
 // corresponding to the variant instance, if it is a dvArray
 // - return false if the supplied Value is not an array TDocVariant
+// - note: due to a local variable lifetime change in Delphi 11, don't use
+// this function with a temporary variant (e.g. from TList<variant>.GetItem) -
+// call _DV() and a local TDocVariantData instead of a PDocVariantData
 function _SafeArray(const Value: variant; out DV: PDocVariantData): boolean; overload;
 
 /// direct access to a TDocVariantData object from a given variant instance
 // - return true and set DV with a pointer to the TDocVariantData
 // corresponding to the variant instance, if it is a dvObject
 // - return false if the supplied Value is not an object TDocVariant
+// - note: due to a local variable lifetime change in Delphi 11, don't use
+// this function with a temporary variant (e.g. from TList<variant>.GetItem) -
+// call _DV() and a local TDocVariantData instead of a PDocVariantData
 function _SafeObject(const Value: variant; out DV: PDocVariantData): boolean; overload;
+
+/// direct copy of a TDocVariantData from a given variant instance
+// - slower, but maybe used instead of _Safe() e.g. on Delphi 11
+function _DV(const DocVariant: variant): TDocVariantData; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// direct copy of a TDocVariantData from a given variant instance
+// - slower, but maybe used instead of _Safe() e.g. on Delphi 11
+function _DV(const DocVariant: variant;
+  ExpectedKind: TDocVariantKind): TDocVariantData; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// direct copy of a TDocVariantData from a given variant instance
+// - slower, but maybe used instead of _Safe() e.g. on Delphi 11
+function _DV(const DocVariant: variant;
+  var DV: TDocVariantData): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a variant instance to store some document-based object content
 // - object will be initialized with data supplied two by two, as Name,Value
@@ -4077,7 +4115,7 @@ asm
 end;
 {$endif FPC_OR_UNICODE}
 
-function _Safe(const Value: variant; out DV: PDocVariantData): boolean;
+function _Safe(const DocVariant: variant; out DV: PDocVariantData): boolean;
 var
   docv, vt: cardinal;
   v: PDocVariantData;
@@ -4085,7 +4123,7 @@ label
   no;
 begin
   docv := DocVariantVType;
-  v := @Value;
+  v := @DocVariant;
   vt := v^.VType;
   if vt <> docv then
     if vt <> varVariantByRef then
@@ -4126,6 +4164,43 @@ begin
               _SafeObject(DocVariant, result) then
     exit;
   EDocVariant.RaiseSafe(ExpectedKind);
+end;
+
+function _DV(const DocVariant: variant): TDocVariantData;
+begin
+  result := _Safe(DocVariant)^;
+end;
+
+function _DV(const DocVariant: variant;
+  ExpectedKind: TDocVariantKind): TDocVariantData;
+begin
+  result := _Safe(DocVariant, ExpectedKind)^;
+end;
+
+function _DV(const DocVariant: variant; var DV: TDocVariantData): boolean;
+var
+  docv, vt: cardinal;
+  v: PDocVariantData;
+label
+  no;
+begin
+  docv := DocVariantVType;
+  v := @DocVariant;
+  vt := v^.VType;
+  if vt <> docv then
+    if vt <> varVariantByRef then
+    begin
+no:   result := false;
+      exit;
+    end
+    else
+    begin
+      v := PVarData(v)^.VPointer;
+      if cardinal(v^.VType) <> docv then
+        goto no;
+    end;
+  DV := v^;
+  result := true;
 end;
 
 function _Csv(const DocVariantOrString: variant): RawUtf8;
@@ -4286,7 +4361,7 @@ end;
 function TDocVariantEnumeratorState.MoveNext: Boolean;
 begin
    inc(Curr);
-   result := PtrUInt(Curr) < PtrUInt(After); // Void = nil<nil = false
+   result := PtrUInt(Curr) < PtrUInt(After); // Void = nil+1<nil = false
 end;
 
 { TDocVariantFieldsEnumerator }
