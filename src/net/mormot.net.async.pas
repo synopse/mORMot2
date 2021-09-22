@@ -2552,6 +2552,8 @@ begin
          (fHttp.State = hrsUpgraded) then
         exit; // rejected or upgraded
     end;
+  // optionaly uncompress content
+  fHttp.UncompressData;
   // compute the HTTP/REST process
   result := soClose;
   req := THttpServerRequest.Create(fServer, fRemoteConnID, {thread=}nil, []);

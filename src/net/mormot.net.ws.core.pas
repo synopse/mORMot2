@@ -2666,7 +2666,7 @@ begin
             not fOwnerThread.Terminated do
         if ProcessLoopStepReceive({nonblockingflag=}nil) and
            ProcessLoopStepSend then
-          HiResDelay(fLastSocketTicks)
+          HiResDelay(fLastSocketTicks) // 0/1/5/50/120-250 ms steps
         else
           break; // connection ended
     finally
@@ -2681,7 +2681,7 @@ function TWebSocketProcess.HiResDelay(var start: Int64): Int64;
 var
   delay: cardinal;
 begin
-  delay := SleepStepTime(start, result); // 0/1/5/50/120-250 ms steps
+  delay := SleepStepTime(start, result); // efficient 0/1/5/50/120-250 ms steps
   if (fSettings.LoopDelay <> 0) and
      (delay > fSettings.LoopDelay) then
     delay := fSettings.LoopDelay;
@@ -2742,11 +2742,11 @@ begin
         start := GetTickCount64;
         max := start + 30000; // never wait forever
         repeat
-          tix := HiResDelay(start);
+          tix := HiResDelay(start); // 0/1/5/50/120-250 ms steps
           if fState in [wpsDestroy, wpsClose] then
           begin
             WebSocketLog.Add.Log(sllError,
-              'NotifyCallback on closed connection', self);
+              'NotifyCallback wait previous on closed connection', self);
             exit;
           end;
           if fIncoming.AnswerToIgnore = 0 then
@@ -2778,7 +2778,7 @@ begin
     start := tix;
     max := fSettings.CallbackAnswerTimeOutMS;
     if max = 0 then
-      // never wait for ever
+      // never wait for ever: 30 seconds is the absolute maximum delay
       max := 30000
     else if max < 2000 then
       // 2 seconds minimal wait
@@ -2788,7 +2788,7 @@ begin
       if fState in [wpsDestroy, wpsClose] then
       begin
         WebSocketLog.Add.Log(sllError,
-          'NotifyCallback on closed connection', self);
+          'NotifyCallback answer wait on closed connection', self);
         exit;
       end
       else if tix > max then
@@ -2800,7 +2800,7 @@ begin
         exit; // returns HTTP_NOTFOUND
       end
       else
-        tix := HiResDelay(start);
+        tix := HiResDelay(start); // 0/1/5/50/120-250 ms steps
   finally
     LockedDec32(@fProcessCount);
   end;
