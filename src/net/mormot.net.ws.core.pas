@@ -576,8 +576,8 @@ type
     // - if returns, HTTP_SUCCESS caller should send the Response headers
     // and use the Protocol - or free it and close the connection
     function ServerUpgrade(const Http: THttpRequestContext;
-      const RemoteIp: RawUtf8; out Protocol: TWebSocketProtocol;
-      out Response: RawUtf8): integer;
+      const RemoteIp: RawUtf8; ConnectionID: THttpServerConnectionID;
+      out Protocol: TWebSocketProtocol; out Response: RawUtf8): integer;
   end;
 
   /// indicates which kind of process did occur in the main WebSockets loop
@@ -2264,6 +2264,7 @@ end;
 
 function TWebSocketProtocolList.ServerUpgrade(
   const Http: THttpRequestContext; const RemoteIp: RawUtf8;
+  ConnectionID: THttpServerConnectionID;
   out Protocol: TWebSocketProtocol; out Response: RawUtf8): integer;
 var
   uri, version, prot, subprot, key, extin, extout: RawUtf8;
@@ -2339,9 +2340,11 @@ begin
   FormatUtf8('HTTP/1.1 101 Switching Protocols'#13#10 +
              'Upgrade: websocket'#13#10 +
              'Connection: Upgrade'#13#10 +
+             'Sec-WebSocket-Connection-ID: %'#13#10 +
              'Sec-WebSocket-Protocol: %'#13#10 +
              '%Sec-WebSocket-Accept: %'#13#10#13#10,
-    [Protocol.Name, extout, BinToBase64Short(@Digest, sizeof(Digest))], Response);
+    [ConnectionID, Protocol.Name, extout,
+     BinToBase64Short(@Digest, sizeof(Digest))], Response);
   result := HTTP_SUCCESS;
   // on connection upgrade, will never be back to plain HTTP/1.1
 end;

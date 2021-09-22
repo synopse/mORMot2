@@ -388,7 +388,8 @@ begin
   sock := ClientSock as TWebSocketServerSocket;
   // validate the WebSockets upgrade handshake
   sock.KeepAliveClient := false; // close connection with WebSockets
-  result := fProtocols.ServerUpgrade(sock.Http, sock.RemoteIP, protocol, resp);
+  result := fProtocols.ServerUpgrade(sock.Http, sock.RemoteIP,
+    sock.RemoteConnectionID, protocol, resp);
   if result = HTTP_SUCCESS then
     if not sock.TrySndLow(pointer(resp), length(resp)) then
     begin

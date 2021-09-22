@@ -55,14 +55,21 @@ type
   TWebSocketProcessClient = class(TWebCrtSocketProcess)
   protected
     fClientThread: TWebSocketProcessClientThread;
+    fConnectionID: THttpServerConnectionID;
     function ComputeContext(
       out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract; override;
   public
     /// initialize the client process for a given THttpClientWebSockets
     constructor Create(aSender: THttpClientWebSockets;
+      aConnectionID: THttpServerConnectionID;
       aProtocol: TWebSocketProtocol; const aProcessName: RawUtf8); reintroduce; virtual;
     /// finalize the process
     destructor Destroy; override;
+  published
+    /// the server-side connection ID, as returned during 101 connection
+    // upgrade in 'Sec-WebSocket-Connection-ID' response header
+    property ConnectionID: THttpServerConnectionID
+      read fConnectionID;
   end;
 
   /// the current state of the client side processing thread
@@ -179,7 +186,8 @@ end;
 { TWebSocketProcessClient }
 
 constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
-  aProtocol: TWebSocketProtocol; const aProcessName: RawUtf8);
+  aConnectionID: THttpServerConnectionID; aProtocol: TWebSocketProtocol;
+  const aProcessName: RawUtf8);
 var
   endtix: Int64;
 begin
@@ -188,6 +196,7 @@ begin
   fMaskSentFrames := FRAME_LEN_MASK;
   inherited Create(aSender, aProtocol, 0, nil, @aSender.fSettings, aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
+  fConnectionID := aConnectionID;
   fClientThread := TWebSocketProcessClientThread.Create(self);
   endtix := GetTickCount64 + 5000;
   repeat // wait for TWebSocketProcess.ProcessLoop to initiate
@@ -470,7 +479,9 @@ begin
       else
         aProtocol.RemoteIP := Server;
       result := ''; // no error message = success
-      fProcess := TWebSocketProcessClient.Create(self, aProtocol, fProcessName);
+      fProcess := TWebSocketProcessClient.Create(self,
+        GetInt64(pointer(HeaderGetValue('SEC-WEBSOCKET-CONNECTION-ID'))),
+        aProtocol, fProcessName);
       aProtocol := nil; // protocol instance is owned by fProcess now
     except
       on E: Exception do
