@@ -414,7 +414,7 @@ begin
   finally
     DoDisconnect(sock);
     fWebSocketConnections.Remove(sock.fProcess);
-    FreeAndNil(sock.fProcess); // notify end of WebSockets
+    FreeAndNilSafe(sock.fProcess); // notify end of WebSockets
   end;
 end;
 
@@ -567,7 +567,7 @@ begin
      not fProcess.ConnectionCloseWasSent then
   begin
     WebSocketLog.Add.Log(sllTrace, 'Close: send focConnectionClose', self);
-    fProcess.Shutdown; // notify client with focConnectionClose
+    fProcess.Shutdown({waitforpong=}true); // notify client with focConnectionClose
   end;
   inherited Close;
 end;
@@ -575,7 +575,7 @@ end;
 destructor TWebSocketServerSocket.Destroy;
 begin
   inherited Destroy;
-  FreeAndNil(fProcess);
+  FreeAndNilSafe(fProcess);
 end;
 
 function TWebSocketServerSocket.NotifyCallback(Ctxt: THttpServerRequest;

@@ -787,7 +787,7 @@ type
     function NotifyCallback(aRequest: THttpServerRequestAbstract;
       aMode: TWebSocketProcessNotifyCallback): cardinal; virtual;
     /// send a focConnectionClose frame (if not already sent) and set wpsClose
-    procedure Shutdown;
+    procedure Shutdown(waitForPong: boolean);
     /// returns the current state of the underlying connection
     function State: TWebSocketProcessState;
     /// the associated 'Remote-IP' HTTP header value
@@ -2399,7 +2399,7 @@ begin
   InitializeCriticalSection(fSafeOut);
 end;
 
-procedure TWebSocketProcess.Shutdown;
+procedure TWebSocketProcess.Shutdown(waitForPong: boolean);
 var
   frame: TWebSocketFrame;
   error: integer;
@@ -2424,11 +2424,14 @@ begin
     frame.content := [];
     frame.tix := 0;
     error := 0;
-    if not SendFrame(frame) or // immediate frame sending + wait 1s for ACK
-       not CanGetFrame(1000, @error) or
-       not GetFrame(frame, {blocking=}false, @error) then
-      WebSocketLog.Add.Log(sllWarning,
-        'Destroy: no focConnectionClose ACK %', [error], self);
+    if not SendFrame(frame) then // immediate frame sending + wait 1s for ACK
+       WebSocketLog.Add.Log(sllWarning,
+         'Destroy: no focConnectionClose SendFrame', self)
+    else if waitForPong then
+      if not CanGetFrame(1000, @error) or
+         not GetFrame(frame, {blocking=}false, @error) then
+        WebSocketLog.Add.Log(sllWarning,
+          'Destroy: no focConnectionClose ACK %', [error], self);
   finally
     LockedDec32(@fProcessCount);
   end;
@@ -2447,15 +2450,15 @@ begin
     if log <> nil then
       log.Log(sllTrace,
         'Destroy: send focConnectionClose', self);
-    Shutdown;
+    Shutdown({waitforpong=}true);
   end;
   fState := wpsDestroy;
   if (fProcessCount > 0) or
      not fProcessEnded then
   begin
     if log <> nil then
-      log.Log(sllDebug,
-        'Destroy: wait for fProcessCount=%', [fProcessCount], self);
+      log.Log(sllDebug, 'Destroy: wait for fProcessCount=% fProcessEnded=%',
+          [fProcessCount, fProcessEnded], self);
     timeout := GetTickCount64 + 5000;
     repeat
       SleepHiRes(2);

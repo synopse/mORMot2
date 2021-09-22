@@ -555,7 +555,7 @@ begin
         AsynchSend(fReverse, request.payload);
     focConnectionClose:
        if fReverse <> nil then
-         fReverse.Shutdown;
+         fReverse.Shutdown({waitforpong=}true);
   end;
 end;
 

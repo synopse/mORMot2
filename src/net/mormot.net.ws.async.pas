@@ -68,7 +68,7 @@ type
     /// first step of the low level incoming WebSockets framing protocol over TCrtSocket
     // - in practice, just call fSocket.SockInPending to check for pending data
     function CanGetFrame(TimeOut: cardinal;
-      ErrorWithoutException: PInteger): boolean; override;
+                         ErrorWithoutException: PInteger): boolean; override;
     /// low level receive incoming WebSockets frame data over TCrtSocket
     // - in practice, just call fSocket.SockInRead to check for pending data
     function ReceiveBytes(P: PAnsiChar; count: PtrInt): integer; override;
@@ -87,6 +87,7 @@ type
     fNextPingSec: TAsyncConnectionSec;
     function OnRead: TPollAsyncSocketOnReadWrite; override;
     function AfterWrite: TPollAsyncSocketOnReadWrite; override;
+    procedure OnClose; override;
     function DecodeHeaders: integer; override;
     procedure BeforeDestroy; override;
     // called every 10 seconds
@@ -250,7 +251,7 @@ begin
   begin
     // try to upgrade to one of the registered WebSockets protocol
     result := (fServer as TWebSocketAsyncServer).fProtocols.
-      ServerUpgrade(fHttp, fRemoteIP, proto, resp);
+      ServerUpgrade(fHttp, fRemoteIP, fHandle, proto, resp);
     if result = HTTP_SUCCESS then
     begin
       fHttp.State := hrsUpgraded;
@@ -268,10 +269,26 @@ begin
   end;
 end;
 
+procedure TWebSocketAsyncConnection.OnClose;
+begin
+  // inherited OnClose; // do nothing
+  if fProcess = nil then
+    exit;
+  fProcess.Shutdown({waitforpong=}true); // send focConnectionClose
+  if not fProcess.fProcessEnded then
+    fProcess.ProcessStop; // there is no separated thread loop to wait for
+end;
+
 procedure TWebSocketAsyncConnection.BeforeDestroy;
 begin
+  if fProcess <> nil then
+  begin
+    fProcess.fConnectionCloseWasSent := true; // too late for focConnectionClose
+    if not fProcess.fProcessEnded then
+      fProcess.ProcessStop; // there is no separated thread loop to wait for
+  end;
   inherited BeforeDestroy;
-  FreeAndNil(fProcess);
+  FreeAndNilSafe(fProcess);
 end;
 
 function TWebSocketAsyncConnection.SendDirect(const tmp: TSynTempBuffer;
@@ -496,7 +513,7 @@ begin
     fSettings.SetFullLog;
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended, aLogVerbose);
-  fAsync.LastOperationIdleSeconds := 10;
+  fAsync.LastOperationIdleSeconds := 10; // 10 secs is good enough for ping/pong
   InitializeCriticalSection((fAsync as TWebSocketAsyncConnections).fOutgoingLock);
 end;
 
@@ -506,13 +523,18 @@ var
   log: ISynLog;
 begin
   log := TSynLog.Enter(self, 'Destroy');
+  // no more incoming request
+  Shutdown;
+  // notify at once all client connections - don't wait for answer
   closing.opcode := focConnectionClose;
   closing.content := [];
   closing.tix := 0;
-  WebSocketBroadcast(closing, nil); // notify at once all client connections
+  WebSocketBroadcast(closing, nil);
   log.Log(sllTrace, 'Destroy: WebSocketBroadcast(focConnectionClose) done', self);
-  inherited Destroy; // close any pending connection
+  // close any pending connection
+  inherited Destroy;
   log.Log(sllTrace, 'Destroy: inherited THttpAsyncServer done', self);
+  // release internal protocols list
   fProtocols.Free;
 end;
 
@@ -529,6 +551,7 @@ var
 begin
   result := 0;
   if Terminated or
+     (fAsync = nil) or
      not (aFrame.opcode in [focText, focBinary, focConnectionClose]) then
     exit;
   FrameSendEncode(aFrame, {mask=}0, tmp);
