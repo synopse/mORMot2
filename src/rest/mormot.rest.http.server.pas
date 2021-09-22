@@ -144,9 +144,10 @@ const
 
   /// the kind of HTTP server to be used by default for WebSockets support
   // - will define the best available server class, depending on the platform
-//
-  WEBSOCKETS_DEFAULT_MODE = useBidirSocket;
-  //WEBSOCKETS_DEFAULT_MODE = useBidirAsync;
+
+  //WEBSOCKETS_DEFAULT_MODE = useBidirSocket;
+  //
+  WEBSOCKETS_DEFAULT_MODE = useBidirAsync;
 
   /// the TRestHttpServerUse which have bi-directional callback notifications
   HTTP_BIDIR = [useBidirSocket, useBidirAsync];
@@ -707,7 +708,7 @@ begin
     begin
       log.Log(sllError, '% for % % at%  -> fallback to socket-based server',
         [E, ToText(aUse)^, fHttpServer, fDBServerNames], self);
-      FreeAndNil(fHttpServer); // if http.sys initialization failed
+      FreeAndNilSafe(fHttpServer); // if http.sys initialization failed
       if fUse in [useHttpApiOnly, useHttpApiRegisteringURIOnly] then
         // propagate fatal exception with no fallback to the sockets HTTP server
         raise;
@@ -771,7 +772,7 @@ begin
     log.Log(sllHttp, '% finalized for %',
       [fHttpServer, Plural('server', length(fDBServers))], self);
   Shutdown(true); // but don't call fDBServers[i].Server.Shutdown
-  FreeAndNil(fHttpServer);
+  FreeAndNilSafe(fHttpServer);
   inherited Destroy;
   fAccessControlAllowOriginsMatch.Free;
 end;

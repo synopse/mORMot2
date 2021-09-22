@@ -401,7 +401,7 @@ begin
         // free associated model only if it's owned by nobody
         m := nil;
       try
-        FreeAndNil(fOwnedServer);
+        FreeAndNilSafe(fOwnedServer);
         fServer := nil;
       finally
         m.Free;

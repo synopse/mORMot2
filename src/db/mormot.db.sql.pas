@@ -3250,7 +3250,7 @@ end;
 function TSqlDBConnectionProperties.GetMainConnection: TSqlDBConnection;
 begin
   if fMainConnection.IsOutdated(GetTickCount64) then
-    FreeAndNil(fMainConnection);
+    FreeAndNilSafe(fMainConnection);
   if fMainConnection = nil then
     fMainConnection := NewConnection;
   result := fMainConnection;
@@ -3268,7 +3268,7 @@ end;
 
 procedure TSqlDBConnectionProperties.ClearConnectionPool;
 begin
-  FreeAndNil(fMainConnection);
+  FreeAndNilSafe(fMainConnection);
 end;
 
 function TSqlDBConnectionProperties.NewThreadSafeStatement: TSqlDBStatement;
@@ -6638,7 +6638,7 @@ begin
       if Obj <> nil then
         for i := 0 to fCache.Count - 1 do
           TSqlDBStatement(Obj[i]).FRefCount := 0; // force clean release
-      FreeAndNil(fCache); // release all cached statements
+      FreeAndNilSafe(fCache); // release all cached statements
     finally
       InternalProcess(speNonActive);
     end;

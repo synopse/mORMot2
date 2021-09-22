@@ -4253,9 +4253,9 @@ begin
   EnterCriticalSection(GlobalThreadLock);
   try
     fWriter.FlushFinal;
-    FreeAndNil(fWriterEcho);
-    FreeAndNil(fWriter);
-    FreeAndNil(fWriterStream);
+    FreeAndNilSafe(fWriterEcho);
+    FreeAndNilSafe(fWriter);
+    FreeAndNilSafe(fWriterStream);
   finally
     LeaveCriticalSection(GlobalThreadLock);
   end;
@@ -7306,14 +7306,14 @@ begin
     AutoFlushThread.Terminate;
     AutoFlushThread.fEvent.SetEvent; // notify TAutoFlushThread.Execute
     AutoFlushThread.WaitFor;
-    FreeAndNil(AutoFlushThread);
+    FreeAndNilSafe(AutoFlushThread);
   end;
   ObjArrayClear(files); // TSynLogFamily are freed as TRttiCustom.Private
   {$ifdef FPC}
   if @BacktraceStrFunc = @BacktraceStrFpc then
     BacktraceStrFunc := SysBacktraceStr; // avoid instability
   {$endif FPC}
-  ExeInstanceDebugFile.Free;
+  FreeAndNilSafe(ExeInstanceDebugFile);
   DeleteCriticalSection(GlobalThreadLock);
 end;
 

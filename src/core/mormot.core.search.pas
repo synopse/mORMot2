@@ -5853,6 +5853,6 @@ end;
 initialization
 
 finalization
-  FreeAndNil(SharedSynTimeZone);
+  FreeAndNilSafe(SharedSynTimeZone);
 
 end.

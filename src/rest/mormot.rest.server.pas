@@ -6165,11 +6165,11 @@ begin
   fRecordVersionSlaveCallbacks := nil; // should be done before fServices.Free
   for i := 0 to fPublishedMethods.Count - 1 do
     fPublishedMethod[i].Stats.Free;
-  ObjArrayClear(fSessionAuthentication);
+  ObjArrayClear(fSessionAuthentication, {continueonexception=}true);
   fServer := nil; // for proper refcnt in inherited Destroy
   inherited Destroy; // calls fServices.Free which will update fStats
-  FreeAndNil(fJwtForUnauthenticatedRequest);
-  FreeAndNil(fStats);
+  FreeAndNilSafe(fJwtForUnauthenticatedRequest);
+  FreeAndNilSafe(fStats);
   fSessions.Free;
   fAssociatedServices.Free;
   if GlobalLibraryRequestServer = self then

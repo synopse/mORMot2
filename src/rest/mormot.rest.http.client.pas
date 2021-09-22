@@ -724,12 +724,8 @@ end;
 procedure TRestHttpClientSocket.InternalClose;
 begin
   if fSocket <> nil then
-  try
-    InternalLog('InternalClose: fSocket.Free', sllTrace);
-    FreeAndNil(fSocket);
-  except
-    ; // ignore any error here
-  end;
+  InternalLog('InternalClose: fSocket.Free', sllTrace);
+  FreeAndNilSafe(fSocket);
 end;
 
 function TRestHttpClientSocket.InternalRequest(const url, method: RawUtf8;
@@ -779,10 +775,7 @@ end;
 
 procedure TRestHttpClientRequest.InternalClose;
 begin
-  try
-    FreeAndNil(fRequest);
-  except
-  end;
+  FreeAndNilSafe(fRequest);
 end;
 
 function TRestHttpClientRequest.InternalRequest(const url, method: RawUtf8;

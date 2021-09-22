@@ -1844,9 +1844,9 @@ begin
     // abort any (unlikely) pending TRestBatch
     fOrm.AsyncBatchStop(nil);
   for cmd := Low(cmd) to high(cmd) do
-    FreeAndNil(fAcquireExecution[cmd]); // calls fOrmInstance.OnEndThread
-  FreeAndNil(fServices);
-  FreeAndNil(fRun); // after fAcquireExecution+fServices
+    FreeAndNilSafe(fAcquireExecution[cmd]); // calls fOrmInstance.OnEndThread
+  FreeAndNilSafe(fServices);
+  FreeAndNilSafe(fRun); // after fAcquireExecution+fServices
   if fOrmInstance <> nil then
     if (fOrm = nil) or
        (fOrmInstance.RefCount <> 1) then
@@ -1859,12 +1859,12 @@ begin
   if (fModel <> nil) and
      (fModel.Owner = self) then
     // make sure we are the Owner (TRestStorage has fModel<>nil e.g.)
-    FreeAndNil(fModel);
+    FreeAndNilSafe(fModel);
   // fPrivateGarbageCollector should be released in last position
   if fPrivateGarbageCollector <> nil then
   begin
     fPrivateGarbageCollector.ClearFromLast;
-    FreeAndNil(fPrivateGarbageCollector);
+    FreeAndNilSafe(fPrivateGarbageCollector);
   end;
   // call TObject.Destroy
   inherited Destroy;
@@ -3429,7 +3429,7 @@ begin
       fRest.fLogFamily := nil; // no log after fRest.EndCurrentThread(self)
       fRest.fLogClass := nil;
     end;
-    FreeAndNil(fRest);
+    FreeAndNilSafe(fRest);
   end;
   fSafe.Done;
   fEvent.Free;
@@ -3509,7 +3509,7 @@ end;
 destructor TRestRunThreads.Destroy;
 begin
   inherited Destroy;
-  FreeAndNil(fBackgroundTimer);
+  FreeAndNilSafe(fBackgroundTimer);
 end;
 
 function TRestRunThreads.EnsureBackgroundTimerExists: TRestBackgroundTimer;
@@ -3858,7 +3858,7 @@ begin
   begin
     result := fHistoryTable.Create;
     if not HistoryGet(Index, Event, Timestamp, result) then
-      FreeAndNil(result);
+      FreeAndNilSafe(result);
   end;
 end;
 
@@ -4000,7 +4000,7 @@ begin
   finally
     fHistoryUncompressed := '';
     fHistoryUncompressedOffset := nil;
-    FreeAndNil(fHistoryAdd);
+    FreeAndNilSafe(fHistoryAdd);
     fHistoryAddOffset := nil;
     fHistoryAddCount := 0;
   end;

@@ -5202,7 +5202,7 @@ begin
         // create a new instance of this registered implementation class
         new := e^.ImplementationClass.ClassNewInstance;
         if not GetInterfaceFromEntry(new , e^.InterfaceEntry, Obj) then
-          FreeAndNil(new); // avoid memory leak (paranoid)
+          FreeAndNilSafe(new); // avoid memory leak (paranoid)
       end;
     end;
   finally
@@ -5456,7 +5456,7 @@ begin
   inherited Destroy;
   CleanupInstance; // ensure creatures are released before their creator
   if fResolverOwned then
-    FreeAndNil(fResolver); // let the creator move away
+    FreeAndNilSafe(fResolver); // let the creator move away
 end;
 
 

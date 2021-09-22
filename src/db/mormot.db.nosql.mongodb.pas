@@ -2216,7 +2216,7 @@ end;
 
 procedure TMongoConnection.Close;
 begin
-  FreeAndNil(fSocket);
+  FreeAndNilSafe(fSocket);
 end;
 
 procedure TMongoConnection.GetDocumentsAndFree(Query: TMongoRequestQuery; var
@@ -2734,8 +2734,8 @@ var
   i: PtrInt;
 begin
   for i := 0 to high(fConnections) do
-    FreeAndNil(fConnections[i]);
-  FreeAndNil(fDatabases);
+    FreeAndNilSafe(fConnections[i]);
+  FreeAndNilSafe(fDatabases);
   inherited;
 end;
 
@@ -3162,7 +3162,7 @@ end;
 
 destructor TMongoDatabase.Destroy;
 begin
-  FreeAndNil(fCollections);
+  FreeAndNilSafe(fCollections);
   inherited;
 end;
 

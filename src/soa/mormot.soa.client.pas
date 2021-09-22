@@ -805,7 +805,7 @@ end;
 
 destructor TServiceFactoryClient.Destroy;
 begin
-  FreeAndNil(fSendNotificationsThread);
+  FreeAndNilSafe(fSendNotificationsThread);
   if fSharedInstance <> nil then
     if fSharedInstance.RefCount <> 1 then
       raise EServiceException.CreateUtf8(

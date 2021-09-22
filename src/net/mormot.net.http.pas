@@ -1400,7 +1400,7 @@ end;
 procedure THttpRequestContext.ProcessDone;
 begin
   if hfContentStreamNeedFree in HeaderFlags then
-    FreeAndNil(ContentStream);
+    FreeAndNilSafe(ContentStream);
 end;
 
 function THttpRequestContext.ContentFromFile(
@@ -1436,7 +1436,7 @@ begin
     // load smallest files (up to 1MB) in temp memory (and maybe compress them)
     SetLength(Content, ContentLength);
     ContentStream.Read(pointer(Content)^, ContentLength);
-    FreeAndNil(ContentStream);
+    FreeAndNilSafe(ContentStream);
   end
   else
     // stream existing big file by chunks

@@ -12683,7 +12683,7 @@ end;
 
 destructor TRestBatch.Destroy;
 begin
-  FreeAndNil(fBatch);
+  FreeAndNilSafe(fBatch);
   inherited;
 end;
 

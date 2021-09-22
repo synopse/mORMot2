@@ -1840,6 +1840,9 @@ procedure ObjArraysClear(const aObjArray: array of pointer);
 /// low-level function calling FreeAndNil(o^) successively n times
 procedure RawObjectsClear(o: PObject; n: integer);
 
+/// same as FreeAndNil() but catching and ignoring any exception
+// - only difference is that aObj is set to nil AFTER being destroyed
+procedure FreeAndNilSafe(var aObj);
 
 /// wrapper to add an item to a T*InterfaceArray dynamic array storage
 function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): PtrInt;
@@ -7712,6 +7715,17 @@ begin
       inc(o);
       dec(n);
     until n = 0;
+end;
+
+procedure FreeAndNilSafe(var aObj);
+begin
+  if TObject(aObj) = nil then
+    exit;
+  try
+    TObject(aObj).Destroy;
+  except
+  end;
+  TObject(aObj) := nil; // we could do it AFTER destroy
 end;
 
 procedure ObjArrayClear(var aObjArray);

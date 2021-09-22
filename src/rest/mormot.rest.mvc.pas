@@ -2281,7 +2281,7 @@ end;
 
 procedure TMvcApplication.SetSession(Value: TMvcSessionAbstract);
 begin
-  FreeAndNil(fSession);
+  FreeAndNilSafe(fSession);
   fSession := Value;
 end;
 

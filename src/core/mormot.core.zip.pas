@@ -2171,7 +2171,7 @@ end;
 destructor TZipRead.Destroy;
 begin
   fResource.Close;
-  FreeAndNil(fSource);
+  FreeAndNilSafe(fSource);
   inherited Destroy;
 end;
 
@@ -2566,7 +2566,7 @@ var
 begin
   result := false;
   if aOldLogFileName = '' then
-    FreeAndNil(EventArchiveZipWrite)
+    FreeAndNilSafe(EventArchiveZipWrite)
   else
   begin
     if not FileExists(aOldLogFileName) then

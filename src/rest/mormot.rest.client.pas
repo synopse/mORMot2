@@ -2132,7 +2132,7 @@ begin
   {$ifdef OSWINDOWS}
   fServiceNotificationMethodViaMessages.Wnd := 0; // disable notification
   {$endif OSWINDOWS}
-  FreeAndNil(fFakeCallbacks);
+  FreeAndNilSafe(fFakeCallbacks);
   try
     // unlock all still locked records by this client
     if fModel <> nil then
@@ -2153,13 +2153,13 @@ begin
     // release memory and associated classes
     if fRemoteLogClass <> nil then
     begin
-      FreeAndNil(fRemoteLogThread);
+      FreeAndNilSafe(fRemoteLogThread);
       ServerRemoteLogStop;
     end;
-    FreeAndNil(fSession.User);
+    FreeAndNilSafe(fSession.User);
     try
       inherited Destroy; // fModel.Free if owned by this TRest instance
-      FreeAndNil(fBackgroundThread); // should be done after fServices.Free
+      FreeAndNilSafe(fBackgroundThread); // should be done after fServices.Free
       fOnIdle := nil;
     finally
       InternalClose;
@@ -2200,7 +2200,7 @@ begin
     FillZero(fSession.Data);
     fSession.Data := '';
     fSession.ServerTimeout := 0;
-    FreeAndNil(fSession.User);
+    FreeAndNilSafe(fSession.User);
     fComputeSignature := TRestClientAuthenticationSignedUri.ComputeSignatureCrc32;
   end;
 end;
@@ -2984,7 +2984,7 @@ end;
 
 destructor TBlockingCallback.Destroy;
 begin
-  FreeAndNil(fProcess);
+  FreeAndNilSafe(fProcess);
   inherited Destroy;
 end;
 

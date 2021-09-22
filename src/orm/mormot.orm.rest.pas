@@ -599,12 +599,12 @@ end;
 
 destructor TRestOrm.Destroy;
 begin
-  FreeAndNil(fCache);
+  FreeAndNilSafe(fCache);
   inherited Destroy;
   if (fModel <> nil) and
      (fModel.Owner = self) then
     // make sure we are the Owner (TRestStorage has fModel<>nil e.g.)
-    FreeAndNil(fModel);
+    FreeAndNilSafe(fModel);
 end;
 
 procedure TRestOrm.BeginCurrentThread(Sender: TThread);

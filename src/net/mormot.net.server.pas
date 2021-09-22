@@ -1686,12 +1686,12 @@ begin
         SleepHiRes(10);
         EnterCriticalSection(fProcessCS);
       until mormot.core.os.GetTickCount64 > endtix;
-      FreeAndNil(fInternalHttpServerRespList);
+      FreeAndNilSafe(fInternalHttpServerRespList);
     end;
   finally
     LeaveCriticalSection(fProcessCS);
-    FreeAndNil(fThreadPool); // release all associated threads and I/O completion
-    FreeAndNil(fSock);
+    FreeAndNilSafe(fThreadPool); // release all associated threads
+    FreeAndNilSafe(fSock);
     inherited Destroy;       // direct Thread abort, no wait till ended
     DeleteCriticalSection(fProcessCS);
   end;
@@ -2401,7 +2401,7 @@ begin
             fOnThreadTerminate := nil;
           end;
       finally
-        FreeAndNil(fServerSock);
+        FreeAndNilSafe(fServerSock);
         // if Destroy happens before fServerSock.GetRequest() in Execute below
         fClientSock.ShutdownAndClose({rdwr=}false);
       end;
@@ -4147,7 +4147,7 @@ begin
   fGuard.Free;
   for i := 0 to Length(fRegisteredProtocols^) - 1 do
     fRegisteredProtocols^[i].doShutdown;
-  FreeAndNil(fThreadPoolServer);
+  FreeAndNilSafe(fThreadPoolServer);
   for i := 0 to Length(fRegisteredProtocols^) - 1 do
     fRegisteredProtocols^[i].Free;
   fRegisteredProtocols^ := nil;

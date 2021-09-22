@@ -397,7 +397,7 @@ end;
 destructor TRestStorageMongoDB.Destroy;
 begin
   inherited;
-  FreeAndNil(fBatchWriter);
+  FreeAndNilSafe(fBatchWriter);
   fEngineGenerator.Free;
   InternalLog('Destroy for % using %', [fStoredClass, Collection], sllInfo);
 end;
@@ -1601,7 +1601,7 @@ begin
         [self, StoredClass, MethodText(fBatchMethod)]);
     end;
   finally
-    FreeAndNil(fBatchWriter);
+    FreeAndNilSafe(fBatchWriter);
     fBatchIDs := nil;
     fBatchIDsCount := 0;
     fBatchMethod := mNone;
@@ -1722,7 +1722,7 @@ begin
         database, aOptions, aMongoDBIdentifier);
       result.PrivateGarbageCollector.Add(client); // connection owned by server
     except
-      FreeAndNil(result);
+      FreeAndNilSafe(result);
       client.Free; // avoid memory leak
     end;
   end

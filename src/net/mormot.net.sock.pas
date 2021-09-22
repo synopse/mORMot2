@@ -1778,7 +1778,7 @@ begin
       fOnLog(sllTrace, 'Destroy: ended as fGettingOne=%', [fGettingOne], self);
   end;
   for i := 0 to high(fPoll) do
-    FreeAndNil(fPoll[i]);
+    FreeAndNilSafe(fPoll[i]);
   if fUnsubscribeShouldShutdownSocket and
      (fSubscription.UnsubscribedCount > 0) then
   begin

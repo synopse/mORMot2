@@ -404,7 +404,7 @@ end;
 
 destructor TRestOrmClient.Destroy;
 begin
-  FreeAndNil(fBatchCurrent);
+  FreeAndNilSafe(fBatchCurrent);
   inherited Destroy; // fCache.Free
 end;
 
@@ -494,7 +494,7 @@ begin
   try
     result := BatchSend(fBatchCurrent, Results);
   finally
-    FreeAndNil(fBatchCurrent);
+    FreeAndNilSafe(fBatchCurrent);
   end
   else
     result := HTTP_BADREQUEST;
@@ -503,7 +503,7 @@ end;
 procedure TRestOrmClient.BatchAbort;
 begin
   if self <> nil then
-    FreeAndNil(fBatchCurrent);
+    FreeAndNilSafe(fBatchCurrent);
 end;
 
 function TRestOrmClient.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8;

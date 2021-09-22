@@ -2530,7 +2530,7 @@ begin
       result := CreateInMemoryServerForAllVirtualTables(
         aModel, aHandleAuthentication);
     except
-      FreeAndNil(result);
+      FreeAndNilSafe(result);
       props.Free;  // avoid memory leak
     end;
   end

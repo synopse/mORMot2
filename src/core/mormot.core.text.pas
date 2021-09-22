@@ -4889,7 +4889,7 @@ begin
   if fStream <> nil then
     if twoStreamIsOwned in fCustomOptions then
     begin
-      FreeAndNil(fStream);
+      FreeAndNilSafe(fStream);
       Exclude(fCustomOptions, twoStreamIsOwned);
     end;
   if aStream <> nil then

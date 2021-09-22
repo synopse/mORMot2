@@ -1060,7 +1060,7 @@ begin
     WaitForNotExecuting(100);
   end;
   inherited Destroy;
-  FreeAndNil(fProcessEvent);
+  FreeAndNilSafe(fProcessEvent);
 end;
 
 procedure TSynBackgroundThreadAbstract.SetExecuteLoopPause(dopause: boolean);
@@ -1116,7 +1116,7 @@ begin
   SetPendingProcess(flagDestroying);
   fProcessEvent.SetEvent;  // notify terminated
   fCallerEvent.WaitFor(INFINITE); // wait for actual termination
-  FreeAndNil(fCallerEvent);
+  FreeAndNilSafe(fCallerEvent);
   inherited Destroy;
   fPendingProcessLock.Done;
 end;
@@ -1236,7 +1236,7 @@ begin
   finally
     fParam := nil;
     fCallerThreadID := TThreadID(0);
-    FreeAndNil(fBackgroundException);
+    FreeAndNilSafe(fBackgroundException);
     SetPendingProcess(flagIdle);
     if Assigned(fOnIdle) then
       fOnIdle(self, -1); // notify finished
