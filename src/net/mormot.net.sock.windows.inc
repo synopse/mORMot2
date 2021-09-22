@@ -693,7 +693,6 @@ var
   rdp, wrp: PFDSet;
   ev: TPollSocketEvents;
   i: PtrInt;
-  pending: cardinal;
   sock: TNetSocket;
   rd, wr: TFDSet; // modified by select() -> local copy on stack
 begin
@@ -727,14 +726,19 @@ begin
     sock := fTagSocket[i];
     if (rdp <> nil) and
        FD_ISSET(sock, rd{%H-}) then
-    begin
-      if (IoctlSocket(TSocket(sock), FIONREAD, @pending) = NO_ERROR) and
-         ({%H-}pending = 0) then
-        // socket closed gracefully - see TCrtSocket.SockReceivePending
-        include(ev, pseClosed)
-      else
-        include(ev, pseRead);
-    end;
+    // on heavily multi-threaded process, select() may be triggerred but
+    // currently reading in another thread, so here IoctlSocket() would return
+    // pending=0 whereas the socket is actually NOT closed (seen on Windows 7)
+    // -> return pseRead now and let a single thread check for pending bytes and
+    // detect gracefully closed sockets e.g. in TPollAsyncSockets.ProcessRead
+    (*
+    if (IoctlSocket(TSocket(sock), FIONREAD, @pending) = NO_ERROR) and
+       ({%H-}pending = 0) then
+      // socket closed gracefully - see TCrtSocket.SockReceivePending
+      include(ev, pseClosed)
+    else
+    *)
+      include(ev, pseRead);
     if (wrp <> nil) and
        FD_ISSET(sock, wr{%H-}) then
       include(ev, pseWrite);

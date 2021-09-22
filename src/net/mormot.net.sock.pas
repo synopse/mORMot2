@@ -1025,9 +1025,9 @@ implementation
 {$endif OSPOSIX}
 
 const
-  // we don't use RTTI to avoid linking mormot.core.rtti.pas
+  // don't use RTTI to avoid mormot.core.rtti.pas and have better spelling
   _NR: array[TNetResult] of string[20] = (
-    'OK',
+    'Ok',
     'Retry',
     'No Socket',
     'Not Found',
@@ -1581,10 +1581,11 @@ begin
   else
   begin
     len := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
-    // Upon successful completion, recv() shall return the length of the message
-    // in bytes. If no messages are available to be received and the peer has
-    // performed an orderly shutdown, recv() shall return 0. Otherwise, -1 shall
-    // be returned and errno set to indicate the error. (man recv)
+    // man recv: Upon successful completion, recv() shall return the length of
+    // the message in bytes. If no messages are available to be received and the
+    // peer has performed an orderly shutdown, recv() shall return 0.
+    // Otherwise, -1 shall be returned and errno set to indicate the error,
+    // which may be nrRetry if no data is available.
     if len <= 0 then
       if len = 0 then
         result := nrClosed
