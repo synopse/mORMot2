@@ -623,13 +623,14 @@ begin
       'Callback(%) % on ConnectionID=% -> %',
       [Ctxt.Url, ToText(mode)^, Ctxt.ConnectionID, connection], self);
   end;
-  if connection <> nil then
+  if (connection <> nil) and
+     (TWebSocketAsyncConnection(connection).fProcess <> nil) then
   begin
     // this request is a websocket, on a non broken connection
     result := TWebSocketAsyncConnection(connection).fProcess.
                 NotifyCallback(Ctxt, mode);
-    // if connection is released on a background thread, NotifyCallback should
-    // check fProcess.fState and abort any waiting loop
+    // fProcess.NotifyCallback checks fProcess.fState and abort any waiting loop
+    // if the connection is released/closed in any background thread
   end
   else
     result := HTTP_NOTFOUND;
