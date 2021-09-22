@@ -3251,6 +3251,9 @@ function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
 /// raw SynLZ compression algorithm
 // - includes optimized x86/x64 asm version on Intel/AMD
 // - just redirects to SynLZcompress1pas on other CPUs
+// - note that SynLZ is not very good at compressing a lot of zeros: it excels
+// with somewhat already pre-encoded data like text, JSON or our mormot.core.data
+// binary serialization
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
   {$ifndef CPUINTEL} inline; {$endif}
 

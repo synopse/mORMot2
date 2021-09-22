@@ -1891,6 +1891,9 @@ begin
       fOwner.RecordVersionHandle(ooUpdate, TableModelIndex,
         decoder, props.RecordVersionField);
     sql := decoder.EncodeAsSql(true);
+    if sql = '' then
+      raise ERestStorage.CreateUtf8('%.MainEngineUpdate: invalid input [%]',
+        [self, EscapeToShort(SentData)]);
     result := ExecuteFmt('UPDATE % SET % WHERE RowID=:(%):',
       [props.SqlTableName, sql, ID]);
     InternalUpdateEvent(oeUpdate, TableModelIndex, ID, SentData, nil);

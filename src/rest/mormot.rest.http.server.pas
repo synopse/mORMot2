@@ -137,19 +137,17 @@ const
     [useHttpApiRegisteringURI, useHttpApiRegisteringURIOnly];
 
   {$else}
-  //HTTP_DEFAULT_MODE = useHttpSocket;
-  //
+  // - older useHttpSocket is less efficient than our new async server
   HTTP_DEFAULT_MODE = useHttpAsync;
   {$endif USEHTTPSYS}
 
   /// the kind of HTTP server to be used by default for WebSockets support
   // - will define the best available server class, depending on the platform
-
-  //WEBSOCKETS_DEFAULT_MODE = useBidirSocket;
-  //
+  // - useBidirSocket is less efficient and uses one thread per connection
   WEBSOCKETS_DEFAULT_MODE = useBidirAsync;
 
   /// the TRestHttpServerUse which have bi-directional callback notifications
+  // - i.e. the THttpServerGeneric classes with CanNotifyCallback=true
   HTTP_BIDIR = [useBidirSocket, useBidirAsync];
 
 
@@ -170,8 +168,8 @@ type
   // program setup for the desired port, or define a useHttpApiRegisteringURI
   // kind of server, in order to allow it for every user
   // - under Linux, only THttpServer is available
-  // - you can specify WEBSOCKETS_DEFAULT_MODE = useBidirSocket/useBidirAsync
-  // kind of server to allow WebSockets upgrades and server-side notif callbacks
+  // - you can specify WEBSOCKETS_DEFAULT_MODE (= useBidirAsync) kind of server
+  // to allow WebSockets upgrades and server-side notif callbacks
   // - just create it and it will serve SQL statements as UTF-8 JSON
   // - for a true AJAX server, expanded data is prefered - your code may contain:
   // ! DBServer.NoAjaxJson := false;
@@ -236,7 +234,7 @@ type
     // or using the standard Sockets library (useHttpSocket), possibly in its
     // WebSockets-friendly version (useBidirSocket - then call the
     // WebSocketsEnable method to initialize the available protocols), or
-    // in its event-driven non-blocking version (useHttpAsync/useBidirAsync)
+    // in its event-driven non-blocking versions (useHttpAsync/useBidirAsync)
     // - by default, the POrmAccessRights will be set to nil
     // - the aThreadPoolCount parameter will set the number of threads
     // to be initialized to handle incoming connections (default is 32, which
@@ -712,7 +710,7 @@ begin
       if fUse in [useHttpApiOnly, useHttpApiRegisteringURIOnly] then
         // propagate fatal exception with no fallback to the sockets HTTP server
         raise;
-      aUse := useHttpSocket;
+      aUse := useHttpSocket; // useHttpAsync seems less stable on Windows
     end;
   end;
   {$endif USEHTTPSYS}
@@ -1188,8 +1186,8 @@ begin
     result := TWebSocketAsyncServerRest(fHttpServer).Settings;
   end
   else
-    raise EWebSockets.CreateUtf8('%.WebSocketEnable(%): expected ' +
-      'WEBSOCKETS_DEFAULT_MODE (useBidirSocket/useBidirAsync)', [self, ToText(fUse)^]);
+    raise EWebSockets.CreateUtf8('%.WebSocketEnable(%): requires HTTP_BIDIR ' +
+      '(useBidirSocket or useBidirAsync)', [self, ToText(fUse)^]);
 end;
 
 function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;
@@ -1277,7 +1275,7 @@ begin
   if aDefinition = nil then
     raise ERestHttpServer.CreateUtf8('%.Create(aDefinition=nil)', [self]);
   if aDefinition.WebSocketPassword <> '' then
-    aForcedUse := WEBSOCKETS_DEFAULT_MODE; //= useBidirSocket/useBidirAsync
+    aForcedUse := WEBSOCKETS_DEFAULT_MODE; //= useBidirAsync
   if aDefinition.ThreadCount = 0 then
     thrdcnt := 32
   else
@@ -1315,7 +1313,7 @@ begin
   a := aDefinition.Authentication;
   if aServer.HandleAuthentication then
     if AUTH[a] = nil then
-      fLog.Add.Log(sllWarning, 'Ignored unsupported',
+      fLog.Add.Log(sllWarning, 'Create: Ignored unsupported',
         TypeInfo(TRestHttpServerRestAuthentication), a, self)
     else
     begin
