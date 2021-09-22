@@ -3319,7 +3319,7 @@ begin
         result := nrRetry;
       SSL_ERROR_ZERO_RETURN:
         // peer issued an SSL_shutdown -> keep fDoSslShutdown=true
-        result := nrFatalError;
+        result := nrClosed;
       else
         begin
           result := nrFatalError;

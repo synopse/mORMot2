@@ -3252,14 +3252,14 @@ begin
         res := fSock.Recv(Buffer, read);
       if res <> nrOK then
       begin
-        // no more to read, or socket issue?
+        // no more to read, or socket closed/broken
         {$ifdef SYNCRTDEBUGLOW}
         if Assigned(OnLog) then
           OnLog(sllCustom2, 'TrySockRecv: sock=% Recv=% %',
             [fSock.Socket, read, SocketErrorMessage], self);
         {$endif SYNCRTDEBUGLOW}
         if StopBeforeLength and
-           (res = nrRetry) then
+           (res = nrRetry) then // no more to read
           break;
         Close; // connection broken or socket closed gracefully
         exit;

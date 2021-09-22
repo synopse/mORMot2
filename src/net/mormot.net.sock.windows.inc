@@ -100,9 +100,9 @@ const
   INADDR_LOOPBACK  = $7F000001;
   INADDR_BROADCAST = $FFFFFFFF;
   INADDR_NONE      = $FFFFFFFF;
-  ADDR_ANY		 = INADDR_ANY;
-  INVALID_SOCKET		= TSocket(NOT(0));
-  SOCKET_ERROR			= -1;
+  ADDR_ANY	   = INADDR_ANY;
+  INVALID_SOCKET   = TSocket(NOT(0));
+  SOCKET_ERROR	   = -1;
 
 const
   IP_OPTIONS          = 1;
@@ -132,7 +132,7 @@ const
   SO_USELOOPBACK  = $0040;          { bypass hardware when possible }
   SO_LINGER       = $0080;          { linger on close if data present }
   SO_OOBINLINE    = $0100;          { leave received OOB data in line }
-  SO_DONTLINGER  =   $ff7f;
+  SO_DONTLINGER   = $ff7f;
   { Additional options }
   SO_SNDBUF       = $1001;          { send buffer size }
   SO_RCVBUF       = $1002;          { receive buffer size }
@@ -151,14 +151,14 @@ const
   SO_PROTOCOL_INFO  = SO_PROTOCOL_INFOA;
   PVD_CONFIG        = $3001;        { configuration info for service provider }
   { Option for opening sockets for synchronous access }
-  SO_OPENTYPE     = $7008;
   SO_SYNCHRONOUS_ALERT    = $10;
   SO_SYNCHRONOUS_NONALERT = $20;
   { Other NT-specific options }
-  SO_MAXDG        = $7009;
-  SO_MAXPATHDG    = $700A;
-  SO_UPDATE_ACCEPT_CONTEXT     = $700B;
-  SO_CONNECT_TIME = $700C;
+  SO_OPENTYPE              = $7008;
+  SO_MAXDG                 = $7009;
+  SO_MAXPATHDG             = $700A;
+  SO_UPDATE_ACCEPT_CONTEXT = $700B;
+  SO_CONNECT_TIME          = $700C;
 
   SOMAXCONN       = $7fffffff;
 
@@ -175,10 +175,10 @@ const
   NI_MAXHOST	   = 1025;
   NI_MAXSERV	   = 32;
   NI_NOFQDN 	   = $1;
-  NI_NUMERICHOST = $2;
+  NI_NUMERICHOST   = $2;
   NI_NAMEREQD	   = $4;
-  NI_NUMERICSERV = $8;
-  NI_DGRAM       = $10;
+  NI_NUMERICSERV   = $8;
+  NI_DGRAM         = $10;
 
 const
   SOCK_STREAM     = 1;               { stream socket }
@@ -564,13 +564,12 @@ begin
      ({%H-}rd.fd_count = 1) and
      (rd.fd_array[0] = sock) then
   begin
-    // Windows expects to check FIONREAD for graceful disconnection
     if ioctlsocket(sock, FIONREAD, @pending) <> NO_ERROR then
       include(result, neError)
-    else if pending > 0 then
-      include(result, neRead)
-    else
-      include(result, neClosed);
+    else 
+      include(result, neRead);
+    // FIONREAD is not enough on Windows for graceful disconnection
+    // -> return neRead and not neClosed if pending=0
   end;
   if (wrp <> nil) and
      ({%H-}wr.fd_count = 1) and
@@ -1246,7 +1245,8 @@ var
   end;
 
 begin
-  if fSessionClosed and (fDataCount = 0) then
+  if fSessionClosed and
+     (fDataCount = 0) then
   begin
     result := nrClosed;
     exit;
@@ -1262,9 +1262,14 @@ begin
         fInputSize - fInputCount, MSG_NOSIGNAL);
       if read <= 0 then
       begin
-        result := NetLastError; // may be nrRetry for WSATRY_AGAIN
-        if result = nrOK then
-          result := nrUnknownError;
+        if read = 0 then
+          result := nrClosed
+        else
+        begin
+          result := NetLastError; // may be nrRetry for WSATRY_AGAIN
+          if result = nrOK then
+            result := nrUnknownError;
+        end;
         exit;
       end;
       inc(fInputCount, read);
