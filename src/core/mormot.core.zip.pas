@@ -2495,13 +2495,14 @@ begin
         else
           LocalZipName := StringReplace(
             zipName, fZipNamePathDelimString, PathDelim, [rfReplaceAll]);
+        if not SafeFileName(LocalZipName) then
+          raise ESynZip.CreateUtf8('%.UnZip(%): unsafe file name ''%''',
+            [self, fFileName, LocalZipName]);
         Path := EnsureDirectoryExists(DestDir + ExtractFilePath(LocalZipName));
         if Path = '' then
           exit;
         Path := Path + ExtractFileName(LocalZipName);
       end;
-  if not SafeFileName(path) then
-    raise ESynZip.CreateUtf8('%.UnZip: unsafe file name ''%''', [self, Path]);
   if Entry[aIndex].dir^.IsFolder then
     result := EnsureDirectoryExists(Path) <> ''
   else
