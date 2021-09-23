@@ -286,11 +286,13 @@ end;
 procedure TSqlDBPostgresConnection.Connect;
 var
   log: ISynLog;
+  host, port: RawUtf8;
 begin
   log := SynDBLog.Enter(self, 'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   try
-    fPGConn := PQ.SetDBLogin(pointer(Properties.ServerName), nil, nil, nil,
+    Split(Properties.ServerName, ':', host, port);
+    fPGConn := PQ.SetDBLogin(pointer(host), pointer(port), nil, nil,
       pointer(Properties.DatabaseName), pointer(Properties.UserID),
       pointer(Properties.PassWord));
     if PQ.Status(fPGConn) = CONNECTION_BAD then
