@@ -2500,7 +2500,7 @@ begin
           exit;
         Path := Path + ExtractFileName(LocalZipName);
       end;
-  if Pos('..', Path) > 0 then
+  if not SafeFileName(path) then
     raise ESynZip.CreateUtf8('%.UnZip: unsafe file name ''%''', [self, Path]);
   if Entry[aIndex].dir^.IsFolder then
     result := EnsureDirectoryExists(Path) <> ''

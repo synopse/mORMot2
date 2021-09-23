@@ -1924,7 +1924,7 @@ begin
       else
         cached := #0;
       if cached = #0 then
-        if PosEx('..', rawFormat) > 0 then // avoid injection
+        if not SafeFileNameU(rawFormat) then // avoid injection
           // cached='' means HTTP_NOTFOUND
           cached := ''
         else

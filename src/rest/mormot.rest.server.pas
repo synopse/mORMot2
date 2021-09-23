@@ -4546,7 +4546,7 @@ end;
 function TRestServerUriContext.GetResourceFileName: TFileName;
 begin
   if (UriBlobFieldName = '') or
-     (PosEx('..', UriBlobFieldName) > 0) then
+     not SafeFileNameU(UriBlobFieldName) then
     // for security, disallow .. in the supplied file path
     result := ''
   else
@@ -4702,7 +4702,7 @@ var
 begin
   if UriBlobFieldName = '' then
     fileName := DefaultFileName
-  else if PosEx('..', UriBlobFieldName) > 0 then
+  else if not SafeFileNameU(UriBlobFieldName) then
     fileName := ''
   else
     Utf8ToFileName(StringReplaceChars(UriBlobFieldName, '/', PathDelim), filename);

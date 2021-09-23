@@ -1542,6 +1542,12 @@ procedure QueryPerformanceMicroSeconds(out Value: Int64);
 function ValidHandle(Handle: THandle): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check for unsafe '..' '/xxx' 'c:xxx' or '\\' patterns in a filename
+function SafeFileName(const FileName: TFileName): boolean;
+
+/// check for unsafe '..' '/xxx' 'c:xxx' or '\\' patterns in a filename
+function SafeFileNameU(const FileName: RawUtf8): boolean;
+
 /// get a file date and time, from its name
 // - returns 0 if file doesn't exist
 // - under Windows, will use GetFileAttributesEx fast API
@@ -3213,6 +3219,24 @@ end;
 function ValidHandle(Handle: THandle): boolean;
 begin
   result := PtrInt(Handle) > 0;
+end;
+
+function SafeFileName(const FileName: TFileName): boolean;
+begin
+  result := (FileName <> '') and
+            (FileName[1] <> '/') and
+            (PosExString('..', FileName) = 0) and
+            (PosExString(':', FileName) = 0) and
+            (PosExString('\\', FileName) = 0);
+end;
+
+function SafeFileNameU(const FileName: RawUtf8): boolean;
+begin
+  result := (FileName <> '') and
+            (FileName[1] <> '/') and
+            (PosEx('..', FileName) = 0) and
+            (PosEx(':', FileName) = 0) and
+            (PosEx('\\', FileName) = 0);
 end;
 
 procedure DisplayError(const fmt: string; const args: array of const);
