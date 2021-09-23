@@ -2479,42 +2479,40 @@ function TZipRead.UnZip(aIndex: integer; const DestDir: TFileName;
   DestDirIsFileName: boolean): boolean;
 var
   FS: TFileStream;
-  LocalZipName, Path: TFileName;
+  LocalZipName, Dest: TFileName;
   info: TFileInfoFull;
 begin
   result := false;
   if not RetrieveFileInfo(aIndex, info) then
     exit;
   if DestDirIsFileName then
-    Path := DestDir
-  else
-    with Entry[aIndex] do
-      begin
-        if fZipNamePathDelim = PathDelim then
-          LocalZipName := zipName
-        else
-          LocalZipName := StringReplace(
-            zipName, fZipNamePathDelimString, PathDelim, [rfReplaceAll]);
-        if not SafeFileName(LocalZipName) then
-          raise ESynZip.CreateUtf8('%.UnZip(%): unsafe file name ''%''',
-            [self, fFileName, LocalZipName]);
-        Path := EnsureDirectoryExists(DestDir + ExtractFilePath(LocalZipName));
-        if Path = '' then
-          exit;
-        Path := Path + ExtractFileName(LocalZipName);
-      end;
-  if Entry[aIndex].dir^.IsFolder then
-    result := EnsureDirectoryExists(Path) <> ''
+    Dest := DestDir
   else
   begin
-    FS := TFileStream.Create(Path, fmCreate);
+    LocalZipName := Entry[aIndex].zipName;
+    if fZipNamePathDelim <> PathDelim then
+      LocalZipName := StringReplace(
+        LocalZipName, fZipNamePathDelimString, PathDelim, [rfReplaceAll]);
+    if not SafeFileName(LocalZipName) then
+      raise ESynZip.CreateUtf8('%.UnZip(%): unsafe file name ''%''',
+        [self, fFileName, LocalZipName]);
+    Dest := EnsureDirectoryExists(DestDir + ExtractFilePath(LocalZipName));
+    if Dest = '' then
+      exit;
+    Dest := Dest + ExtractFileName(LocalZipName);
+  end;
+  if Entry[aIndex].dir^.IsFolder then
+    result := EnsureDirectoryExists(Dest) <> ''
+  else
+  begin
+    FS := TFileStream.Create(Dest, fmCreate);
     try
       result := UnZipStream(aIndex, info, FS);
     finally
       FS.Free;
     end;
   end;
-  FileSetDateFromWindowsTime(Path, info.f32.zlastMod);
+  FileSetDateFromWindowsTime(Dest, info.f32.zlastMod);
 end;
 
 function TZipRead.UnZipAll(DestDir: TFileName): integer;

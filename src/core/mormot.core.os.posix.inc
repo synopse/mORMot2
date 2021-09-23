@@ -831,13 +831,11 @@ end;
 function FileSetDateFromWindowsTime(const Dest: TFileName;
   WinTime: integer): boolean;
 var
-  date, time: TDateTime;
+  datetime: TDateTime;
 begin
-  with PLongRec(@WinTime)^ do
-  result :=
-    TryEncodeDate(Hi shr 9 + 1980, Hi shr 5 and 15, Hi and 31, date) and
-    TryEncodeTime(Lo shr 11, Lo shr 5 and 63, Lo and 31 shl 1, 0, time) and
-    (FileSetDate(Dest, DateTimeToFileDate(date + time)) = 0);
+  datetime := WindowsFileTimeToDateTime(WinTime);
+  result := (datetime <> 0) and
+            (FileSetDate(Dest, DateTimeToFileDate(datetime)) = 0);
 end;
 
 function FileAgeToWindowsTime(const FileName: TFileName): integer;

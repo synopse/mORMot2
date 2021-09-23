@@ -1553,9 +1553,6 @@ function SafeFileNameU(const FileName: RawUtf8): boolean;
 // - under Windows, will use GetFileAttributesEx fast API
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 
-/// low-level conversion of a TDateTime into a Windows File 32-bit TimeStamp
-function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
-
 /// get the date and time of one file into a Windows File 32-bit TimeStamp
 // - this cross-system function is used e.g. by mormot.core.zip which expects
 // Windows TimeStamps in its headers
@@ -1568,6 +1565,14 @@ function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
 // - this cross-system function is used e.g. by mormot.core.zip which expects
 // Windows TimeStamps in its headers
 function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
+
+/// convert a Windows File 32-bit TimeStamp into a regular TDateTime
+// - returns 0 if the conversion failed
+function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
+
+/// low-level conversion of a TDateTime into a Windows File 32-bit TimeStamp
+// - returns 0 if the conversion failed
+function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 
 /// reduce the visibility of a given file by setting its read/write attributes
 // - on POSIX, change attributes for the the owner, and reset group/world flags
@@ -3214,6 +3219,18 @@ begin
   else
     result := (s shr 1) or (m shl 5) or (h shl 11) or
       cardinal((DD shl 16) or (MM shl 21) or (cardinal(YY - 1980) shl 25));
+end;
+
+function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
+var
+  date, time: TDateTime;
+begin
+  with PLongRec(@WinTime)^ do
+  if TryEncodeDate(Hi shr 9 + 1980, Hi shr 5 and 15, Hi and 31, date) and
+     TryEncodeTime(Lo shr 11, Lo shr 5 and 63, Lo and 31 shl 1, 0, time) then
+    result := date + time
+  else
+    result := 0;
 end;
 
 function ValidHandle(Handle: THandle): boolean;
