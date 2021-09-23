@@ -1214,7 +1214,8 @@ end;
 
 function TFileHeader.IsFolder: boolean;
 begin
-  result := extFileAttr and $00000010 <> 0;
+  result := (@self <> nil) and
+            (extFileAttr and $00000010 <> 0);
 end;
 
 procedure TFileHeader.SetVersion(NeedZip64: boolean);
@@ -2484,26 +2485,31 @@ begin
   result := false;
   if not RetrieveFileInfo(aIndex, info) then
     exit;
-  with Entry[aIndex] do
-    if DestDirIsFileName then
-      Path := DestDir
-    else
-    begin
-      if fZipNamePathDelim = PathDelim then
-        LocalZipName := zipName
-      else
-        LocalZipName := StringReplace(
-          zipName, fZipNamePathDelimString, PathDelim, [rfReplaceAll]);
-      Path := EnsureDirectoryExists(DestDir + ExtractFilePath(LocalZipName));
-      if Path = '' then
-        exit;
-      Path := Path + ExtractFileName(LocalZipName);
+  if DestDirIsFileName then
+    Path := DestDir
+  else
+    with Entry[aIndex] do
+      begin
+        if fZipNamePathDelim = PathDelim then
+          LocalZipName := zipName
+        else
+          LocalZipName := StringReplace(
+            zipName, fZipNamePathDelimString, PathDelim, [rfReplaceAll]);
+        Path := EnsureDirectoryExists(DestDir + ExtractFilePath(LocalZipName));
+        if Path = '' then
+          exit;
+        Path := Path + ExtractFileName(LocalZipName);
+      end;
+  if Entry[aIndex].dir^.IsFolder then
+    result := EnsureDirectoryExists(Path) <> ''
+  else
+  begin
+    FS := TFileStream.Create(Path, fmCreate);
+    try
+      result := UnZipStream(aIndex, info, FS);
+    finally
+      FS.Free;
     end;
-  FS := TFileStream.Create(Path, fmCreate);
-  try
-    result := UnZipStream(aIndex, info, FS);
-  finally
-    FS.Free;
   end;
   FileSetDateFromWindowsTime(Path, info.f32.zlastMod);
 end;
