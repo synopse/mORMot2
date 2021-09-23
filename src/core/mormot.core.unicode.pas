@@ -1102,7 +1102,7 @@ function IdemPCharArray(p: PUtf8Char; const upArray: array of PAnsiChar): intege
 // - chars are compared as 7-bit Ansi only (no accentuated characters)
 // - warning: this function expects up^ items to have AT LEAST TWO CHARS
 // (it will use a fast 16-bit comparison of initial 2 bytes)
-function IdemPCharArray(p: PUtf8Char; up: PPAnsiChar): PtrInt; overload;
+function IdemPPChar(p: PUtf8Char; up: PPAnsiChar): PtrInt;
 
 /// returns the index of a matching beginning of p^ in upArray two characters
 // - returns -1 if no item matched
@@ -4367,7 +4367,7 @@ begin
   result := -1;
 end;
 
-function IdemPCharArray(p: PUtf8Char; up: PPAnsiChar): PtrInt;
+function IdemPPChar(p: PUtf8Char; up: PPAnsiChar): PtrInt;
 var
   w: word;
   u: PAnsiChar;

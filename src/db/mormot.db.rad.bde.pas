@@ -178,10 +178,10 @@ var
 
 constructor TSqlDBBDEConnection.Create(aProperties: TSqlDBConnectionProperties);
 const
-  PCHARS: array[0 .. 2] of PAnsiChar = (
-    'ORACLE','MSSQL','MSACCESS');
-  TYPES: array[-1 .. high(PCHARS)] of TSqlDBDefinition = (
-    dDefault,dOracle,dMSSQL,dJet);
+  PCHARS: array[0 .. 3] of PAnsiChar = (
+    'ORACLE', 'MSSQL', 'MSACCESS', nil);
+  TYPES: array[-1 .. high(PCHARS) - 1] of TSqlDBDefinition = (
+    dDefault, dOracle, dMSSQL, dJet);
 var alias: string;
 begin
   inherited Create(aProperties);
@@ -197,7 +197,7 @@ begin
   fDatabase.Params.Text := Format('USER NAME=%s'#13#10'PASSWORD=%s',
     [Utf8ToString(fProperties.UserID), Utf8ToString(fProperties.PassWord)]);
   fDbmsName := StringToUtf8(fSession.GetAliasDriverName(alias));
-  fDbms := TYPES[IdemPCharArray(pointer(fDbmsName), PCHARS)];
+  fDbms := TYPES[IdemPPChar(pointer(fDbmsName), @PCHARS)];
 end;
 
 procedure TSqlDBBDEConnection.Connect;

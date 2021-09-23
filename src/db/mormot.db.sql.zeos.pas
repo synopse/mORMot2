@@ -361,9 +361,10 @@ implementation
 constructor TSqlDBZeosConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 const
-  PCHARS: array[0..8] of PAnsiChar = ('ORACLE', 'FREETDS_MSSQL', 'MSSQL',
-    'INTERBASE', 'FIREBIRD', 'MYSQL', 'SQLITE', 'POSTGRESQL', 'JET');
-  TYPES: array[-1..high(PCHARS)] of TSqlDBDefinition = (
+  PCHARS: array[0 .. 9] of PAnsiChar = (
+    'ORACLE', 'FREETDS_MSSQL', 'MSSQL', 'INTERBASE', 'FIREBIRD', 'MYSQL',
+    'SQLITE', 'POSTGRESQL', 'JET', nil);
+  TYPES: array[-1 .. high(PCHARS) - 1] of TSqlDBDefinition = (
     dDefault, dOracle, dMSSQL, dMSSQL, dFirebird, dFirebird, dMySQL,
     dSQLite, dPostgreSQL, dJet {e.g. ADO[JET]} );
     // expecting Sybase + ASA support in TSqlDBDefinition
@@ -397,7 +398,7 @@ begin
     fUrl.Password := Utf8ToString(aPassWord);
   if fDbmsName = '' then
     StringToUtf8(fUrl.Protocol, fDbmsName);
-  CreateWithZURL(fUrl, TYPES[IdemPCharArray(pointer(fDbmsName), PCHARS)], true);
+  CreateWithZURL(fUrl, TYPES[IdemPPChar(pointer(fDbmsName), @PCHARS)], true);
 end;
 
 procedure TSqlDBZeosConnectionProperties.GetForeignKeys;

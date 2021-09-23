@@ -2150,7 +2150,7 @@ function HTTP_RESPONSE.AddCustomHeader(P: PUtf8Char;
   var UnknownHeaders: HTTP_UNKNOWN_HEADERS;
   ForceCustomHeader: boolean): PUtf8Char;
 const
-  KNOWNHEADERS: array[reqCacheControl..respWwwAuthenticate] of PAnsiChar = (
+  KNOWNHEADERS: array[reqCacheControl..succ(respWwwAuthenticate)] of PAnsiChar = (
     'CACHE-CONTROL:',
     'CONNECTION:',
     'DATE:',
@@ -2180,7 +2180,8 @@ const
     'SERVER:',
     'SET-COOKIE:',
     'VARY:',
-    'WWW-AUTHENTICATE:');
+    'WWW-AUTHENTICATE:',
+    nil);
 var
   UnknownName: PUtf8Char;
   i: integer;
@@ -2188,7 +2189,7 @@ begin
   if ForceCustomHeader then
     i := -1
   else
-    i := IdemPCharArray(P, KNOWNHEADERS);
+    i := IdemPPChar(P, @KNOWNHEADERS);
   // WebSockets need CONNECTION as unknown header
   if (i >= 0) and
      (THttpHeader(i) <> reqConnection) then

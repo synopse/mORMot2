@@ -528,8 +528,8 @@ implementation
 { ************ Some definitions Used by TRestOrm Implementation }
 
 const
+  // sorted by occurence for in-order O(n) search via IdemPPChar()
   METHODNAME: array[0..ord(high(TUriMethod))] of PAnsiChar = (
-    // sorted by occurence for in-order O(n) search via IdemPCharArray()
     'GET',
     'POST',
     'PUT',
@@ -562,7 +562,7 @@ const
 
 function ToMethod(const method: RawUtf8): TUriMethod;
 begin
-  result := TUriMethod(IdemPCharArray(pointer(method), @METHODNAME) + 1);
+  result := TUriMethod(IdemPPChar(pointer(method), @METHODNAME) + 1);
 end;
 
 function MethodText(m: TUriMethod): PAnsiChar;

@@ -530,7 +530,11 @@ begin
   fPreparedParamsCount := ReplaceParamsByNumbers(fSql, fSqlPrepared, '$');
   if (fPreparedParamsCount > 0) and
      (IdemPCharArray(pointer(fSqlPrepared),
-      ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'VALUES']) >= 0) then
+      ['SELECT',
+       'INSERT',
+       'UPDATE',
+       'DELETE',
+       'VALUES']) >= 0) then
   begin
     // preparable
     fCacheIndex := TSqlDBPostgresConnection(fConnection).PrepareCached(

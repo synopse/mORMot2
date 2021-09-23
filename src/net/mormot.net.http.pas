@@ -608,7 +608,7 @@ begin
     if P^ = #0 then
       break;
     next := GotoNextLine(P);
-    if IdemPCharArray(P, @TOBEPURGED) < 0 then
+    if IdemPPChar(P, @TOBEPURGED) < 0 then
     begin
       if n = high(len) then
         break;
@@ -943,10 +943,10 @@ begin
   if P = nil then
     exit; // avoid unexpected GPF in case of wrong usage
   P2 := P;
-  case IdemPCharArray(P, @PARSEDHEADERS) of
+  case IdemPPChar(P, @PARSEDHEADERS) of
     0:
       // 'CONTENT-'
-      case IdemPCharArray(P + 8, @PARSEDHEADERS2) of
+      case IdemPPChar(P + 8, @PARSEDHEADERS2) of
         0:
           begin
             // 'CONTENT-LENGTH:'
@@ -994,7 +994,7 @@ begin
       begin
         // 'CONNECTION: '
         inc(P, 12);
-        case IdemPCharArray(P, @PARSEDHEADERS3) of
+        case IdemPPChar(P, @PARSEDHEADERS3) of
           0:
             begin
               // 'CONNECTION: CLOSE'

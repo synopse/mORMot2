@@ -3105,12 +3105,18 @@ begin
   if fSqlGetServerTimestamp = '' then
     fSqlGetServerTimestamp := DB_SERVERTIME[db];
   case db of
-    dMSSQL, dJet:
+    dMSSQL,
+    dJet:
       fStoreVoidStringAsNull := true;
   end;
   if byte(fBatchSendingAbilities) = 0 then // if not already handled by driver
     case db of
-      dSQlite, dMySQL, dPostgreSQL, dNexusDB, dMSSQL, dDB2, // INSERT with multi VALUES
+      dSQlite,
+      dMySQL,
+      dPostgreSQL,
+      dNexusDB,
+      dMSSQL,
+      dDB2, // INSERT with multi VALUES
       //dFirebird,  EXECUTE BLOCK with params is slower (at least for embedded)
       dOracle:
         begin
@@ -3140,7 +3146,7 @@ function TSqlDBConnectionProperties.Execute(const aSql: RawUtf8;
 var
   Stmt: ISqlDBStatement;
 begin
-  Stmt := NewThreadSafeStatementPrepared(aSql, true, true);
+  Stmt := NewThreadSafeStatementPrepared(aSql, {expectres=}true, true);
   Stmt.ForceBlobAsNull := ForceBlobAsNull;
   Stmt.Bind(Params);
   Stmt.ExecutePrepared;
@@ -3157,7 +3163,7 @@ function TSqlDBConnectionProperties.ExecuteNoResult(const aSql: RawUtf8;
 var
   Stmt: ISqlDBStatement;
 begin
-  Stmt := NewThreadSafeStatementPrepared(aSql, false, true);
+  Stmt := NewThreadSafeStatementPrepared(aSql, {expectres=}false, true);
   Stmt.Bind(Params);
   Stmt.ExecutePrepared;
   try
@@ -3204,7 +3210,8 @@ begin
         sptDateTime:
           Query.BindDateTime(i + 1, Iso8601ToDateTime(Values[i]));
       else
-        raise ESqlDBException.CreateUtf8('%.PrepareInlined: Unrecognized parameter Type[%] = % in [%]',
+        raise ESqlDBException.CreateUtf8(
+          '%.PrepareInlined: Unrecognized parameter Type[%] = % in [%]',
           [self, i + 1, ord(Types[i]), aSql]);
       end;
   result := Query;
@@ -3323,7 +3330,8 @@ begin
                 (n - i) * sizeof(fSharedTransactions[0]));
               SetLength(fSharedTransactions, n);
               case action of
-                transCommitWithException, transCommitWithoutException:
+                transCommitWithException,
+                transCommitWithoutException:
                   result.Commit;
                 transRollback:
                   result.Rollback;
@@ -3939,7 +3947,8 @@ begin
   case fDbms of
     dSQLite:
       ProcName := aProcName;
-    dOracle, dFirebird:
+    dOracle,
+    dFirebird:
       begin
         // Firebird 3 has packages
         if lOccur = 2 then
@@ -3996,7 +4005,9 @@ begin
         '  a.table_owner=b.table_owner and a.table_name=b.table_name) index_count' +
         ' from sys.all_tab_columns c' +
         ' where c.owner like ''%'' and c.table_name like ''%'';';
-    dMSSQL, dMySQL, dPostgreSQL:
+    dMSSQL,
+    dMySQL,
+    dPostgreSQL:
       FMT :=
         'select COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION,' +
         ' NUMERIC_SCALE, 0 INDEX_COUNT' + // INDEX_COUNT=0 here (done via OleDB)
@@ -4106,7 +4117,9 @@ begin
         'from   sys.all_arguments a ' + 'where  a.owner like ''%''' +
         '  and  a.package_name like ''' + UpperCase(package) + '''' +
         '  and  a.object_name like ''%''' + ' order by position';
-    dMSSQL, dMySQL, dPostgreSQL:
+    dMSSQL,
+    dMySQL,
+    dPostgreSQL:
       FMT :=
         'select PARAMETER_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, PARAMETER_MODE ' +
         'from INFORMATION_SCHEMA.PARAMETERS ' +
@@ -4160,7 +4173,9 @@ begin
         '  when ''PACKAGE'' then P.OBJECT_NAME || ''.'' || P.PROCEDURE_NAME' +
         '  else P.OBJECT_NAME end NAME_ROUTINE ' + 'from SYS.ALL_PROCEDURES P '
         + 'where P.OWNER = ''%'' and P.SUBPROGRAM_ID > 0 ' + 'order by NAME_ROUTINE';
-    dMSSQL, dMySQL, dPostgreSQL:
+    dMSSQL,
+    dMySQL,
+    dPostgreSQL:
       FMT := 'select R.SPECIFIC_NAME NAME_ROUTINE ' +
         'from INFORMATION_SCHEMA.ROUTINES R ' +
         'where UPPER(R.SPECIFIC_SCHEMA) = ''%'' ' + 'order by NAME_ROUTINE';
@@ -4263,7 +4278,7 @@ function TSqlDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
   const
     DECIMAL = 18; // change it if you update PCHARS[] below before 'DECIMAL'
     NUMERIC = DECIMAL + 1;
-    PCHARS: array[0..55] of PAnsiChar = (
+    PCHARS: array[0..56] of PAnsiChar = (
       'TEXT COLLATE ISO8601', // should be before plain 'TEXT'
       'TEXT', 'CHAR', 'NCHAR', 'VARCHAR', 'NVARCHAR', 'CLOB', 'NCLOB', 'DBCLOB',
       'BIT', 'INT', 'BIGINT', 'DOUBLE', 'NUMBER', 'FLOAT', 'REAL', 'DECFLOAT',
@@ -4272,8 +4287,9 @@ function TSqlDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
       'YEAR', 'TINYTEXT', 'MEDIUMTEXT', 'NTEXT', 'XML', 'ENUM', 'SET',
       'UNIQUEIDENTIFIER', 'MONEY', 'SMALLMONEY', 'NUM', 'VARRAW', 'RAW',
       'LONG RAW', 'LONG VARRAW', 'TINYBLOB', 'MEDIUMBLOB', 'BYTEA', 'VARBIN',
-      'IMAGE', 'LONGBLOB', 'BINARY', 'VARBINARY', 'GRAPHIC', 'VARGRAPHIC', 'NULL');
-    Types: array[-1..high(PCHARS)] of TSqlDBFieldType = (
+      'IMAGE', 'LONGBLOB', 'BINARY', 'VARBINARY', 'GRAPHIC', 'VARGRAPHIC',
+      'NULL', nil);
+    Types: array[-1 .. high(PCHARS) - 1] of TSqlDBFieldType = (
       ftUnknown, ftDate,
       ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftInt64,
       ftInt64, ftInt64, ftDouble, ftDouble, ftDouble, ftDouble, ftDouble,
@@ -4286,12 +4302,12 @@ function TSqlDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
     ndx: integer;
   begin
     //assert(StrComp(PCHARS[DECIMAL],'DECIMAL')=0);
-    ndx := IdemPCharArray(pointer(aNativeType), PCHARS);
+    ndx := IdemPPChar(pointer(aNativeType), @PCHARS);
     if (aScale = 0) and
        (ndx in [DECIMAL, NUMERIC]) then
       result := ftInt64
     else
-      result := Types[ndx];
+      result := Types[ndx]; // Types[-1]=ftUnknown
   end;
 
   function ColumnTypeNativeToDBOracle: TSqlDBFieldType;
@@ -4314,8 +4330,8 @@ function TSqlDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
     else if IdemPChar(pointer(aNativeType), 'BINARY_') or
             IdemPropNameU(aNativeType, 'FLOAT') then
       result := ftDouble
-    else if IdemPropNameU(aNativeType, 'DATE') or IdemPChar(pointer(aNativeType),
-      'TIMESTAMP') then
+    else if IdemPropNameU(aNativeType, 'DATE') or
+            IdemPChar(pointer(aNativeType), 'TIMESTAMP') then
       result := ftDate
     else    // all other types will be converted to text
       result := ftUtf8;

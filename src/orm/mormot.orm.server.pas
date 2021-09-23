@@ -1273,7 +1273,7 @@ begin
         else
           RunningRest := RunStatic;
         // get CRUD method and associated Value/ID
-        case IdemPCharArray(Method, @POSTMETHOD) of
+        case IdemPPChar(Method, @POSTMETHOD) of
           0:
             begin
               // '{"Table":[...,"POST",{object},...]}'

@@ -3555,7 +3555,9 @@ begin
                   if not sqlisselect then
                    // needed for fStats.NotifyOrm(Method) below
                     Method := TUriMethod(IdemPCharArray(SqlBegin(pointer(sql)),
-                      ['INSERT', 'UPDATE', 'DELETE']) + 2); // -1+2 -> mGET=1
+                      ['INSERT',
+                       'UPDATE',
+                       'DELETE']) + 2); // -1+2 -> mGET=1
                 end;
               end;
             end;

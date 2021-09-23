@@ -282,17 +282,17 @@ uses
 
 procedure TSqlDBOdbcConnection.Connect;
 const
-  DBMS_NAMES: array[0..8] of PAnsiChar = (
+  DBMS_NAMES: array[0..9] of PAnsiChar = (
     'ORACLE', 'MICROSOFT SQL', 'ACCESS', 'MYSQL', 'SQLITE',
-    'FIREBIRD', 'INTERBASE', 'POSTGRE', 'INFORMIX');
-  DBMS_TYPES: array[-1..high(DBMS_NAMES)] of TSqlDBDefinition = (
+    'FIREBIRD', 'INTERBASE', 'POSTGRE', 'INFORMIX', nil);
+  DBMS_TYPES: array[-1..high(DBMS_NAMES) - 1] of TSqlDBDefinition = (
     dDefault, dOracle, dMSSQL, dJet, dMySQL, dSQLite,
     dFirebird, dFirebird, dPostgreSql, dInformix);
-  DRIVER_NAMES: array[0..21] of PAnsiChar = (
+  DRIVER_NAMES: array[0..22] of PAnsiChar = (
     'SQLSRV', 'LIBTDSODBC', 'IVSS', 'IVMSSS', 'PBSS', 'DB2CLI', 'LIBDB2',
     'IVDB2', 'PBDB2', 'MSDB2', 'CWBODBC', 'MYODBC', 'SQORA', 'MSORCL', 'PBOR',
-    'IVOR', 'ODBCFB', 'IB', 'SQLITE', 'PSQLODBC', 'NXODBCDRIVER', 'ICLIT09B');
-  DRIVER_TYPES: array[-1..high(DRIVER_NAMES)] of TSqlDBDefinition = (
+    'IVOR', 'ODBCFB', 'IB', 'SQLITE', 'PSQLODBC', 'NXODBCDRIVER', 'ICLIT09B', nil);
+  DRIVER_TYPES: array[-1..high(DRIVER_NAMES) - 1] of TSqlDBDefinition = (
     dDefault, dMSSQL, dMSSQL, dMSSQL, dMSSQL, dMSSQL, dDB2, dDB2, dDB2, dDB2,
     dDB2, dDB2, dMySQL, dOracle, dOracle, dOracle, dOracle, dFirebird,
     dFirebird, dSQLite, dPostgreSQL, dNexusDB, dInformix);
@@ -343,9 +343,9 @@ begin
     GetInfoString(fDbc, SQL_DBMS_NAME, fDbmsName);
     GetInfoString(fDbc, SQL_DBMS_VER, fDbmsVersion);
     // guess DBMS type from driver name or DBMS name
-    fDbms := DRIVER_TYPES[IdemPCharArray(pointer(fDriverName), DRIVER_NAMES)];
+    fDbms := DRIVER_TYPES[IdemPPChar(pointer(fDriverName), @DRIVER_NAMES)];
     if fDbms = dDefault then
-      fDbms := DBMS_TYPES[IdemPCharArray(pointer(fDbmsName), DBMS_NAMES)];
+      fDbms := DBMS_TYPES[IdemPPChar(pointer(fDbmsName), @DBMS_NAMES)];
     if fDbms = dDefault then
       raise EOdbcException.CreateUtf8(
         '%.Connect: unrecognized provider DbmsName=% DriverName=% DbmsVersion=%',
