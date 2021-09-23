@@ -190,7 +190,7 @@ type
     Head, Process: TRawByteStringBuffer;
     /// the current state of this HTTP context
     State: THttpRequestState;
-    /// map the presence of some HTTP headers, but retrieved during Request
+    /// map the presence of some HTTP headers, but retrieved during ParseHeader
     HeaderFlags: THttpRequestHeaderFlags;
     /// customize the HTTP process
     Options: THttpRequestOptions;
@@ -202,30 +202,32 @@ type
     CommandMethod: RawUtf8;
     /// the HTTP URI parsed from Command, e.g. '/path/to/resource'
     CommandUri: RawUtf8;
-    /// will contain all header lines after a Request
+    /// will contain all header lines after all ParseHeader
     // - use HeaderGetValue() to get one HTTP header item value by name
     Headers: RawUtf8;
-    /// same as HeaderGetValue('CONTENT-TYPE'), but retrieved during Request
+    /// same as HeaderGetValue('CONTENT-TYPE'), but retrieved during ParseHeader
     ContentType: RawUtf8;
-    /// same as HeaderGetValue('ACCEPT-ENCODING'), but retrieved during Request
+    /// same as HeaderGetValue('ACCEPT-ENCODING'), but retrieved during ParseHeader
     AcceptEncoding: RawUtf8;
-    /// same as HeaderGetValue('UPGRADE'), but retrieved during Request
+    /// same as HeaderGetValue('USER-AGENT'), but retrieved during ParseHeader
+    UserAgent: RawUtf8;
+    /// same as HeaderGetValue('UPGRADE'), but retrieved during ParseHeader
     Upgrade: RawUtf8;
     /// same as FindNameValue(aInHeaders, HEADER_BEARER_UPPER, ...),
-    // but retrieved during Request
+    // but retrieved during ParseHeader
     // - is the raw Token, excluding 'Authorization: Bearer ' trailing chars
     BearerToken: RawUtf8;
-    /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
+    /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during ParseHeader
     XPoweredBy: RawUtf8;
-    /// will contain the data retrieved from the server, after the Request
+    /// will contain the data retrieved from the server, after all ParseHeader
     Content: RawByteString;
-    /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during Request
+    /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during ParseHeader
     // - is overridden with real Content length during HTTP body retrieval
     ContentLength: Int64;
     /// stream-oriented alternative to the Content in-memory buffer
     // - is typically a TFileStream
     ContentStream: TStream;
-    /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved during Request
+    /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved by ParseHeader
     // - proprietary header, used with our RESTful ORM access
     ServerInternalState: integer;
     /// the known Content-Encoding compression methods
@@ -234,7 +236,7 @@ type
     CompressAcceptEncoding: RawUtf8;
     /// index of protocol in Compress[], from Accept-encoding
     CompressAcceptHeader: THttpSocketCompressSet;
-    /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved during Request
+    /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved by ParseHeader
     // and mapped into the Compress[] array
     CompressContentEncoding: integer;
     /// reset this request context to be used without any ProcessInit/Read/Write
@@ -349,11 +351,11 @@ type
     // - won't parse the ContentLength/ContentType/ServerInternalState/Upgrade
     // and HeaderFlags fields
     procedure HeaderSetText(const aText: RawUtf8; const aForcedContentType: RawUtf8 = '');
-    /// get all Header values at once, as CRLF delimited text
+    /// finalize all Http.Headers values
     // - you can optionally specify a value to be added as 'RemoteIP: ' header
     // - default GetHeader(HeadersUnFiltered=false) won't include the connection
     // related headers like ContentLength/ContentType/ServerInternalState/Upgrade
-    function HeaderGetText(const aRemoteIP: RawUtf8 = ''): RawUtf8;
+    procedure HeadersPrepare(const aRemoteIP: RawUtf8);
     /// HeaderGetValue('CONTENT-TYPE')='text/html', e.g.
     // - supplied aUpperName should be already uppercased
     // - note that GetHeader(HeadersUnFiltered=false) will set ContentType field
@@ -422,7 +424,7 @@ type
   // - hsrSecured is set if the transmission is encrypted or in-process,
   // using e.g. HTTPS/TLS or our proprietary AES/ECDHE algorithms
   // - hsrWebsockets communication was made using WebSockets
-  // - match TRestUriParamsLowLevelFlag in mormot.rest.core
+  // - should exactly match TRestUriParamsLowLevelFlag in mormot.rest.core
   THttpServerRequestFlag = (
     hsrHttps,
     hsrSecured,
@@ -464,6 +466,8 @@ type
     fInHeaders,
     fInContentType,
     fAuthenticatedUser,
+    fAuthBearer,
+    fUserAgent,
     fOutContentType,
     fOutCustomHeaders: RawUtf8;
     fInContent,
@@ -479,8 +483,9 @@ type
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
     procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
-      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8);
-        virtual; abstract;
+      const aInContent: RawByteString;
+      const aInContentType, aRemoteIP, aAuthBearer, aUserAgent: RawUtf8);
+      {$ifdef HASINLINE} inline; {$endif}
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(AppendedHeader: RawUtf8);
     /// input parameter containing the caller URI
@@ -522,6 +527,12 @@ type
     /// the client remote IP, as specified to Prepare()
     property RemoteIP: RawUtf8
       read fRemoteIP write fRemoteIP;
+    /// the "Bearer" HTTP header token, as specified to Prepare()
+    property AuthBearer: RawUtf8
+      read fAuthBearer write fAuthBearer;
+    /// the "User-Agent" HTTP header token, as specified to Prepare()
+    property UserAgent: RawUtf8
+      read fUserAgent write fUserAgent;
     /// a 31-bit sequential number identifying this instance on the server
     property RequestID: integer
       read fRequestID;
@@ -890,6 +901,7 @@ begin
   ContentType := '';
   Upgrade := '';
   BearerToken := '';
+  UserAgent := '';
   XPoweredBy := '';
   Content := '';
   ContentLength := -1;
@@ -899,7 +911,7 @@ begin
 end;
 
 const
-  PARSEDHEADERS: array[0..9] of PAnsiChar = (
+  PARSEDHEADERS: array[0..10] of PAnsiChar = (
     'CONTENT-',                    // 0
     'TRANSFER-ENCODING: CHUNKED',  // 1
     'CONNECTION: ',                // 2
@@ -909,6 +921,7 @@ const
     'X-POWERED-BY:',               // 6
     'EXPECT: 100',                 // 7
     HEADER_BEARER_UPPER,           // 8
+    'USER-AGENT:',                  // 9
     nil);
   PARSEDHEADERS2: array[0..3] of PAnsiChar = (
     'LENGTH:',    // 0
@@ -1033,14 +1046,20 @@ begin
       // Expect: 100-continue
       include(HeaderFlags, hfExpect100);
     8:
-      // 'AUTHORIZATION: BEARER '
       begin
+        // 'AUTHORIZATION: BEARER '
         inc(P, 22);
         GetTrimmed(P, BearerToken);
         if BearerToken <> '' then
           // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
           HeadersUnFiltered := true;
       end;
+    9:
+      begin
+        // 'USER-AGENT:'
+        inc(P, 11);
+        GetTrimmed(P, UserAgent);
+      end
   else
     // unrecognized name should be stored in Headers
     HeadersUnFiltered := true;
@@ -1678,7 +1697,7 @@ begin
     Http.Headers := Http.Headers + 'Content-Type: ' + aForcedContentType + #13#10;
 end;
 
-function THttpSocket.HeaderGetText(const aRemoteIP: RawUtf8): RawUtf8;
+procedure THttpSocket.HeadersPrepare(const aRemoteIP: RawUtf8);
 begin
   if (aRemoteIP <> '') and
      not (hfHasRemoteIP in Http.HeaderFlags) then
@@ -1687,7 +1706,6 @@ begin
     Http.Headers := Http.Headers + 'RemoteIP: ' + aRemoteIP + #13#10;
     include(Http.HeaderFlags, hfHasRemoteIP);
   end;
-  result := Http.Headers;
 end;
 
 function THttpSocket.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
@@ -1706,6 +1724,23 @@ end;
 { ******************** Abstract Server-Side Types used e.g. for Client-Server Protocol }
 
 { THttpServerRequestAbstract }
+
+procedure THttpServerRequestAbstract.Prepare(
+  const aUrl, aMethod, aInHeaders: RawUtf8; const aInContent: RawByteString;
+  const aInContentType, aRemoteIP, aAuthBearer, aUserAgent: RawUtf8);
+begin
+  fUrl := aUrl;
+  fMethod := aMethod;
+  fRemoteIP := aRemoteIP;
+  fInHeaders := aInHeaders;
+  fAuthBearer := aAuthBearer;
+  fUserAgent := aUserAgent;
+  fInContent := aInContent;
+  fInContentType := aInContentType;
+  fOutContent := '';
+  fOutContentType := '';
+  fOutCustomHeaders := '';
+end;
 
 procedure THttpServerRequestAbstract.AddInHeader(AppendedHeader: RawUtf8);
 begin

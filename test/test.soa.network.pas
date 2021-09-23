@@ -32,6 +32,7 @@ uses
   mormot.net.client,
   mormot.net.server,
   mormot.net.relay,
+  mormot.net.http,
   mormot.net.ws.core,
   mormot.net.ws.client,
   mormot.net.ws.server,
@@ -275,7 +276,7 @@ procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
     try
       for i := 1 to 100 do
       begin
-        C1.Prepare('url', 'POST', 'headers', content, contentType, '');
+        C1.Prepare('url', 'POST', 'headers', content, contentType, '', '', '');
         noAnswer1 := opcode = focBinary;
         noAnswer2 := not noAnswer1;
         TWebSocketProtocolRestHook(protocol).InputToFrame(C1, noAnswer1, frame, head);

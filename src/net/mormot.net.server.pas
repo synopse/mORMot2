@@ -55,41 +55,32 @@ type
   THttpServerRequest = class(THttpServerRequestAbstract)
   protected
     fServer: THttpServerGeneric;
-    {$ifdef OSWINDOWS}
-    fHttpApiRequest: Pointer;
-    fFullURL: SynUnicode;
-    {$endif OSWINDOWS}
+    {$ifdef USEWININET}
+    fHttpApiRequest: PHTTP_REQUEST;
+    function GetFullURL: SynUnicode;
+    {$endif USEWININET}
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
       aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
       aConnectionFlags: THttpServerRequestFlags); virtual;
-    /// prepare an incoming request
-    // - will set input parameters URL/Method/InHeaders/InContent/InContentType
-    // - will reset output parameters
-    procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
-      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8);
-        override;
     /// prepare one reusable HTTP State Machine for sending the response
     procedure SetupResponse(var Context: THttpRequestContext;
       const ServerName: RawUtf8; const ErrorMessage: string;
       const OnSendFile: TOnHttpServerSendFile;
       CompressGz, MaxSizeAtOnce: integer);
-    {$ifdef OSWINDOWS}
-    /// input parameter containing the caller Full URL
-    property FullURL: SynUnicode
-      read fFullURL;
-    {$endif OSWINDOWS}
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric
       read fServer;
-    {$ifdef OSWINDOWS}
+    {$ifdef USEWININET}
+    /// for THttpApiServer, input parameter containing the caller full URL
+    property FullURL: SynUnicode
+      read GetFullURL;
     /// for THttpApiServer, points to a PHTTP_REQUEST structure
-    // - not used by now for other kind of servers
-    property HttpApiRequest: Pointer
+    property HttpApiRequest: PHTTP_REQUEST
       read fHttpApiRequest;
-    {$endif OSWINDOWS}
+    {$endif USEWININET}
   end;
 
   /// abstract class to implement a server thread
@@ -1224,48 +1215,28 @@ implementation
 
 { THttpServerRequest }
 
+var
+  // global request counter if no THttpServer is defined
+  GlobalRequestID: integer;
+
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
   aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
   aConnectionFlags: THttpServerRequestFlags);
+var
+  id: PInteger;
 begin
   inherited Create;
   fServer := aServer;
   fConnectionID := aConnectionID;
   fConnectionThread := aConnectionThread;
   fConnectionFlags := aConnectionFlags;
-end;
-
-var
-  // global request counter if no THttpServer is defined
-  GlobalRequestID: integer;
-
-procedure THttpServerRequest.Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
-  const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8);
-var
-  id: PInteger;
-begin
   if fServer = nil then
     id := @GlobalRequestID
   else
     id := @fServer.fCurrentRequestID;
   fRequestID := InterLockedIncrement(id^);
-  if fRequestID = maxInt - 2048 then // ensure no overflow (31-bit range)
-    id^ := 0;
-  fUrl := aUrl;
-  fMethod := aMethod;
-  fRemoteIP := aRemoteIP;
-  if aRemoteIP <> '' then
-    if aInHeaders = '' then
-      fInHeaders := 'RemoteIP: ' + aRemoteIP
-    else
-      fInHeaders := aInHeaders + #13#10'RemoteIP: ' + aRemoteIP
-  else
-    fInHeaders := aInHeaders;
-  fInContent := aInContent;
-  fInContentType := aInContentType;
-  fOutContent := '';
-  fOutContentType := '';
-  fOutCustomHeaders := '';
+  if fRequestID = maxInt - 2048 then
+    id^ := 0; // ensure no overflow (31-bit range)
 end;
 
 procedure THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
@@ -1346,6 +1317,18 @@ begin
   // now TAsyncConnectionsSockets.Write(Head) should be called
 end;
 
+{$ifdef USEWININET}
+
+function THttpServerRequest.GetFullURL: SynUnicode;
+begin
+  if fHttpApiRequest = nil then
+    result := ''
+  else
+    SetString(result, fHttpApiRequest^.CookedUrl.pFullUrl,
+      fHttpApiRequest^.CookedUrl.FullUrlLength);
+end;
+
+{$endif USEWININET}
 
 
 { TServerGeneric }
@@ -1967,8 +1950,8 @@ begin
   try
     respsent := false;
     with ClientSock do
-      ctxt.Prepare(URL, Method, HeaderGetText(fRemoteIP),
-        Http.Content, Http.ContentType, '');
+      ctxt.Prepare(URL, Method, Http.Headers, Http.Content, Http.ContentType,
+        fRemoteIP, Http.BearerToken, Http.UserAgent);
     try
       cod := DoBeforeRequest(ctxt);
       if cod > 0 then
@@ -2108,7 +2091,7 @@ var
   P: PUtf8Char;
   status: cardinal;
   pending: integer;
-  reason, allheaders: RawUtf8;
+  reason: RawUtf8;
   noheaderfilter: boolean;
 begin
   result := grError;
@@ -2167,9 +2150,9 @@ begin
       end;
       if Assigned(fServer.OnBeforeBody) then
       begin
-        allheaders := HeaderGetText(fRemoteIP);
+        HeadersPrepare(fRemoteIP); // will include remote IP to Http.Headers
         status := fServer.OnBeforeBody(Http.CommandUri, Http.CommandMethod,
-          allheaders, Http.ContentType, fRemoteIP, Http.BearerToken,
+          Http.Headers, Http.ContentType, fRemoteIP, Http.BearerToken,
           Http.ContentLength, HTTPREMOTEFLAGS[TLS.Enabled]);
         {$ifdef SYNCRTDEBUGLOW}
         TSynLog.Add.Log(sllCustom2,
@@ -2629,7 +2612,7 @@ begin
   else
     EHttpApiServer.RaiseOnError(hCreateHttpHandle,
       Http.CreateHttpHandle(fReqQueue));
-  fReceiveBufferSize := 1048576; // i.e. 1 MB
+  fReceiveBufferSize := 1 shl 20; // i.e. 1 MB
   if not CreateSuspended then
     Suspended := False;
 end;
@@ -2734,25 +2717,43 @@ begin
     until false;
 end;
 
-procedure THttpApiServer.Execute;
 type
   TVerbText = array[hvOPTIONS..pred(hvMaximum)] of RawUtf8;
+
 const
   VERB_TEXT: TVerbText = (
-    'OPTIONS', 'GET', 'HEAD', 'POST', 'PUT', 'DELETE',
-    'TRACE', 'CONNECT', 'TRACK', 'MOVE', 'COPY', 'PROPFIND', 'PROPPATCH',
-    'MKCOL', 'LOCK', 'UNLOCK', 'SEARCH');
+    'OPTIONS',
+    'GET',
+    'HEAD',
+    'POST',
+    'PUT',
+    'DELETE',
+    'TRACE',
+    'CONNECT',
+    'TRACK',
+    'MOVE',
+    'COPY',
+    'PROPFIND',
+    'PROPPATCH',
+    'MKCOL',
+    'LOCK',
+    'UNLOCK',
+    'SEARCH');
+
+var
+  global_verbs: TVerbText; // to avoid memory allocation on Delphi
+
+procedure THttpApiServer.Execute;
 var
   req: PHTTP_REQUEST;
   reqid: HTTP_REQUEST_ID;
   reqbuf, respbuf: RawByteString;
-  remoteip, remoteconn, token: RawUtf8;
-  i, L: PtrInt;
-  P: PHTTP_UNKNOWN_HEADER;
-  flags, bytesread, bytessent: cardinal;
+  i: PtrInt;
+  bytesread, bytessent, flags: cardinal;
   err: HRESULT;
   compressset: THttpSocketCompressSet;
-  incontlen, incontlenchunk, incontlenread: cardinal;
+  incontlen: Qword;
+  incontlenchunk, incontlenread: cardinal;
   incontenc, inaccept, range: RawUtf8;
   outcontenc, outstat: RawUtf8;
   outstatcode, afterstatcode: cardinal;
@@ -2760,7 +2761,7 @@ var
   ctxt: THttpServerRequest;
   filehandle: THandle;
   reps: PHTTP_RESPONSE;
-  bufread, R: PUtf8Char;
+  bufread, V: PUtf8Char;
   heads: HTTP_UNKNOWN_HEADERs;
   rangestart, rangelen: ULONGLONG;
   outcontlen: ULARGE_INTEGER;
@@ -2768,7 +2769,6 @@ var
   datachunkfile: HTTP_DATA_CHUNK_FILEHANDLE;
   logdata: PHTTP_LOG_FIELDS_DATA;
   contrange: ShortString;
-  verbs: TVerbText; // to avoid memory allocation
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: string; E: Exception = nil);
   var
@@ -2793,6 +2793,9 @@ var
   end;
 
   function SendResponse: boolean;
+  var
+    R: PUtf8Char;
+    flags: cardinal;
   begin
     result := not Terminated; // true=success
     if not result then
@@ -2824,8 +2827,8 @@ var
           Referrer := pRawValue;
         end;
         ProtocolStatus := reps^.StatusCode;
-        ClientIp := pointer(remoteip);
-        ClientIpLength := length(remoteip);
+        ClientIp := pointer(ctxt.fRemoteIP);
+        ClientIpLength := length(ctxt.fRemoteip);
         Method := pointer(ctxt.fMethod);
         MethodLength := length(ctxt.fMethod);
         UserName := pointer(ctxt.fAuthenticatedUser);
@@ -2920,9 +2923,9 @@ var
           end;
       end;
       reps^.SetContent(datachunkmem, ctxt.OutContent, ctxt.OutContentType);
+      flags := GetSendResponseFlags(ctxt);
       EHttpApiServer.RaiseOnError(hSendHttpResponse,
-        Http.SendHttpResponse(fReqQueue, req^.RequestId,
-          getSendResponseFlags(ctxt), reps^, nil,
+        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, reps^, nil,
           bytessent, nil, 0, nil, fLogData));
     end;
   end;
@@ -2941,7 +2944,8 @@ begin
     SetLength(reqbuf, 16384 + sizeof(HTTP_REQUEST)); // req^ + 16 KB of headers
     req := pointer(reqbuf);
     logdata := pointer(fLogDataStorage);
-    verbs := VERB_TEXT;
+    if global_verbs[hvOPTIONS] = '' then
+      global_verbs := VERB_TEXT;
     ctxt := THttpServerRequest.Create(self, 0, self, []);
     // main loop reusing a single ctxt instance for this thread
     reqid := 0;
@@ -2950,9 +2954,13 @@ begin
       // release input/output body buffers ASAP
       ctxt.fInContent := '';
       ctxt.fOutContent := '';
+      ctxt.fOutContentType := '';
+      ctxt.fOutCustomHeaders := '';
       // reset authentication status & user between requests
       ctxt.fAuthenticationStatus := hraNone;
       ctxt.fAuthenticatedUser := '';
+      ctxt.fAuthBearer := '';
+      byte(ctxt.fConnectionFlags) := 0;
       // retrieve next pending request, and read its headers
       FillcharFast(req^, sizeof(HTTP_REQUEST), 0);
       err := Http.ReceiveHttpRequest(fReqQueue, reqid, 0,
@@ -2962,41 +2970,30 @@ begin
       case err of
         NO_ERROR:
           try
-            // parse method and headers
-            ctxt.fConnectionID := req^.ConnectionID;
+            // parse method and main headers as ctxt.Prepare() does
             ctxt.fHttpApiRequest := req;
-            SetString(ctxt.fFullURL, req^.CookedUrl.pFullUrl, req^.CookedUrl.FullUrlLength);
             FastSetString(ctxt.fUrl, req^.pRawUrl, req^.RawUrlLength);
-            if req^.Verb in [low(verbs)..high(verbs)] then
-              ctxt.fMethod := verbs[req^.Verb]
+            if req^.Verb in [low(global_verbs)..high(global_verbs)] then
+              ctxt.fMethod := global_verbs[req^.Verb]
             else
               FastSetString(ctxt.fMethod, req^.pUnknownVerb, req^.UnknownVerbLength);
             with req^.headers.KnownHeaders[reqContentType] do
               FastSetString(ctxt.fInContentType, pRawValue, RawValueLength);
+            with req^.headers.KnownHeaders[reqUserAgent] do
+              FastSetString(ctxt.fUserAgent, pRawValue, RawValueLength);
+            with req^.Headers.KnownHeaders[reqAuthorization] do
+              if (RawValueLength > 7) and
+                 IdemPChar(pointer(pRawValue), 'BEARER ') then
+                FastSetString(ctxt.fAuthBearer, pRawValue + 7, RawValueLength - 7);
             with req^.headers.KnownHeaders[reqAcceptEncoding] do
               FastSetString(inaccept, pRawValue, RawValueLength);
             compressset := ComputeContentEncoding(fCompress, pointer(inaccept));
             if req^.pSslInfo <> nil then
               ctxt.ConnectionFlags := [hsrHttps, hsrSecured];
-            ctxt.fInHeaders := RetrieveHeaders(req^, fRemoteIPHeaderUpper, remoteip);
-            // compute remote connection ID
-            L := length(fRemoteConnIDHeaderUpper);
-            if L <> 0 then
-            begin
-              P := req^.headers.pUnknownHeaders;
-              if P <> nil then
-                for i := 1 to req^.headers.UnknownHeaderCount do
-                  if (P^.NameLength = L) and
-                     IdemPChar(P^.pName, Pointer(fRemoteConnIDHeaderUpper)) then
-                  begin
-                    FastSetString(remoteconn, P^.pRawValue, P^.RawValueLength); // need #0 end
-                    R := pointer(remoteconn);
-                    ctxt.fConnectionID := GetNextNumber(R);
-                    break;
-                  end
-                  else
-                    inc(P);
-            end;
+            ctxt.fConnectionID := req^.ConnectionID;
+            ctxt.fInHeaders := RetrieveHeadersAndGetRemoteIPConnectionID(
+              req^, fRemoteIPHeaderUpper, fRemoteConnIDHeaderUpper,
+              {out} ctxt.fRemoteIP, PQword(@ctxt.fConnectionID)^);
             // retrieve any SetAuthenticationSchemes() information
             if byte(fAuthenticationSchemes) <> 0 then // set only with HTTP API 2.0
               for i := 0 to req^.RequestInfoCount - 1 do
@@ -3009,8 +3006,8 @@ begin
                           byte(ctxt.fAuthenticationStatus) := ord(AuthType) + 1;
                           if AccessToken <> 0 then
                           begin
-                            GetDomainUserNameFromToken(AccessToken, ctxt.fAuthenticatedUser);
                             // Per spec https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
+                            GetDomainUserNameFromToken(AccessToken, ctxt.fAuthenticatedUser);
                             // AccessToken lifecycle is application responsability and should be closed after use
                             CloseHandle(AccessToken);
                           end;
@@ -3018,9 +3015,12 @@ begin
                       HttpAuthStatusFailure:
                         ctxt.fAuthenticationStatus := hraFailed;
                     end;
+            // abort request if > MaximumAllowedContentLength or OnBeforeBody
             with req^.headers.KnownHeaders[reqContentLength] do
-              incontlen := GetCardinal(
-                pointer(pRawValue), pointer(pRawValue + RawValueLength));
+            begin
+              V := pointer(pRawValue);
+              SetQWord(V, V + RawValueLength, incontlen);
+            end;
             if (incontlen > 0) and
                (MaximumAllowedContentLength > 0) and
                (incontlen > MaximumAllowedContentLength) then
@@ -3030,14 +3030,9 @@ begin
             end;
             if Assigned(OnBeforeBody) then
             begin
-              with req^.Headers.KnownHeaders[reqAuthorization] do
-                if (RawValueLength > 7) and
-                   IdemPChar(pointer(pRawValue), 'BEARER ') then
-                  FastSetString(token, pRawValue + 7, RawValueLength - 7)
-                else
-                  token := '';
               err := OnBeforeBody(ctxt.fUrl, ctxt.fMethod, ctxt.fInHeaders,
-                ctxt.fInContentType, remoteip, token, incontlen, ctxt.ConnectionFlags);
+                ctxt.fInContentType, ctxt.fRemoteIP, ctxt.fAuthBearer, incontlen,
+                ctxt.ConnectionFlags);
               if err <> HTTP_SUCCESS then
               begin
                 SendError(err, 'Rejected');
@@ -3051,12 +3046,14 @@ begin
                 FastSetString(incontenc, pRawValue, RawValueLength);
               if incontlen <> 0 then
               begin
+                // receive body chunks
                 SetLength(ctxt.fInContent, incontlen);
                 bufread := pointer(ctxt.InContent);
                 incontlenread := 0;
                 repeat
                   bytesread := 0;
-                  if Http.Version.MajorVersion > 1 then // speed optimization for Vista+
+                  if Http.Version.MajorVersion > 1 then
+                    // speed optimization for Vista+
                     flags := HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER
                   else
                     flags := 0;
@@ -3064,8 +3061,8 @@ begin
                   if (fReceiveBufferSize >= 1024) and
                      (incontlenchunk > fReceiveBufferSize) then
                     incontlenchunk := fReceiveBufferSize;
-                  err := Http.ReceiveRequestEntityBody(fReqQueue, req^.RequestId,
-                    flags, bufread, incontlenchunk, bytesread);
+                  err := Http.ReceiveRequestEntityBody(fReqQueue,
+                    req^.RequestId, flags, bufread, incontlenchunk, bytesread);
                   if Terminated then
                     exit;
                   inc(incontlenread, bytesread);
@@ -3085,6 +3082,7 @@ begin
                   SendError(HTTP_NOTACCEPTABLE, SysErrorMessagePerModule(err, HTTPAPI_DLL));
                   continue;
                 end;
+                // optionally uncompress input body
                 if incontenc <> '' then
                   for i := 0 to high(fCompress) do
                     if fCompress[i].Name = incontenc then
@@ -3096,9 +3094,6 @@ begin
             end;
             try
               // compute response
-              ctxt.OutContent := '';
-              ctxt.OutContentType := '';
-              ctxt.OutCustomHeaders := '';
               FillcharFast(reps^, sizeof(reps^), 0);
               respsent := false;
               outstatcode := DoBeforeRequest(ctxt);
@@ -3106,7 +3101,7 @@ begin
                 if not SendResponse or
                    (outstatcode <> HTTP_ACCEPTED) then
                   continue;
-              outstatcode := Request(ctxt);
+              outstatcode := Request(ctxt); // call OnRequest for main process
               afterstatcode := DoAfterRequest(ctxt);
               if afterstatcode > 0 then
                 outstatcode := afterstatcode;

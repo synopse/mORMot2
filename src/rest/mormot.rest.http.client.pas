@@ -733,10 +733,10 @@ function TRestHttpClientSocket.InternalRequest(const url, method: RawUtf8;
 begin
   fLogFamily.SynLog.Log(sllTrace, 'InternalRequest % calling %(%).Request',
     [method, fSocket.ClassType, pointer(fSocket)], self);
-  result.Lo := fSocket.Request(url, method, KeepAliveMS, Header,
-    RawByteString(Data), DataType, false);
+  result.Lo := fSocket.Request(
+    url, method, KeepAliveMS, Header, RawByteString(Data), DataType, false);
   result.Hi := fSocket.Http.ServerInternalState;
-  Header := fSocket.HeaderGetText;
+  Header := fSocket.Http.Headers;
   Data := fSocket.Http.Content;
   fSocket.Http.Content := ''; // ensure RefCnt=1 to avoid body alloc+copy
 end;

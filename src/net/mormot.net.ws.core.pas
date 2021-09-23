@@ -1480,7 +1480,8 @@ begin
       InContentType := JSON_CONTENT_TYPE_VAR;
     if Method = '' then
       Method := 'POST';
-    Ctxt.Prepare(URL, Method, InHeaders, InContent, InContentType, fRemoteIP);
+    Ctxt.Prepare(URL, Method,
+      InHeaders, InContent, InContentType, fRemoteIP, '', '');
     aNoAnswer := NoAnswer = '1';
   end;
 end;

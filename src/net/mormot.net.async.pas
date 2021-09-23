@@ -2559,7 +2559,7 @@ begin
   req := THttpServerRequest.Create(fServer, fRemoteConnID, {thread=}nil, []);
   try
     req.Prepare(fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers,
-      fHttp.Content, fHttp.ContentType, fRemoteIP);
+      fHttp.Content, fHttp.ContentType, fRemoteIP, fHttp.BearerToken, fHttp.UserAgent);
     try
       req.RespStatus := fServer.DoBeforeRequest(req);
       if req.RespStatus > 0 then

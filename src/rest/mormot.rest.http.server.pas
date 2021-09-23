@@ -970,6 +970,9 @@ begin
     call.Init;
     call.LowLevelConnectionID := Ctxt.ConnectionID;
     call.LowLevelConnectionFlags := TRestUriParamsLowLevelFlags(Ctxt.ConnectionFlags);
+    call.LowLevelRemoteIP := Ctxt.RemoteIP;
+    call.LowLevelBearerToken := Ctxt.AuthBearer;
+    call.LowLevelUserAgent := Ctxt.UserAgent;
     if fHosts.Count > 0 then
     begin
       FindNameValue(Ctxt.InHeaders, 'HOST: ', hostroot);
@@ -1208,6 +1211,7 @@ function TRestHttpServer.NotifyCallback(aSender: TRestServer;
   aResult, aErrorMsg: PRawUtf8): boolean;
 var
   ctxt: THttpServerRequest;
+  url: RawUtf8;
   status: cardinal;
 begin
   result := false;
@@ -1220,9 +1224,9 @@ begin
       // -> checked in WebSocketsCallback/IsActiveWebSocket
       ctxt := THttpServerRequest.Create(nil, aConnectionID, nil, []);
       try
-        ctxt.Prepare(FormatUtf8('%/%/%', [aSender.Model.Root,
-          aInterfaceDotMethodName, aFakeCallID]), 'POST', '',
-          '[' + aParams + ']', '', '');
+        FormatUtf8('%/%/%',
+          [aSender.Model.Root, aInterfaceDotMethodName, aFakeCallID], url);
+        ctxt.Prepare(url, 'POST', '', '[' + aParams + ']', '', '', '', '');
         // fHttpServer.Callback() raises EHttpServer but for bidir servers
         status := fHttpServer.Callback(ctxt, aResult = nil);
         if status = HTTP_SUCCESS then

@@ -407,8 +407,7 @@ type
     // - this method could have been declared as protected, since it should
     // never be called outside the TRestServer.Uri() method workflow
     // - should set Call, and Method members
-    constructor Create(aServer: TRestServer;
-      const aCall: TRestUriParams); virtual;
+    constructor Create(aServer: TRestServer; const aCall: TRestUriParams); virtual;
     /// finalize the execution context
     destructor Destroy; override;
     /// validate mPost/mPut/mDelete action against those access rights
@@ -2698,6 +2697,9 @@ begin
   inherited Create;
   Server := aServer;
   Call := @aCall;
+  fRemoteIP := aCall.LowLevelRemoteIP;
+  fAuthenticationBearerToken := aCall.LowLevelBearerToken;
+  fUserAgent := aCall.LowLevelUserAgent;
   Method := ToMethod(aCall.Method);
   ThreadServer := PerThreadRunningContextAddress;
   ThreadServer^.Request := self;
@@ -4494,7 +4496,7 @@ begin
   if not result then
     Error('Invalid Bearer [%]', [ToText(JwtContent.result)^], HTTP_FORBIDDEN)
   else if (Server.fIPWhiteJWT <> nil) and
-          not Server.fIPWhiteJWT.Exists(RemoteIP) and
+          not Server.fIPWhiteJWT.Exists(GetRemoteIP) and
           (fRemoteIP <> '') and
           (fRemoteIP <> '127.0.0.1') then
   begin
@@ -5755,6 +5757,7 @@ begin
   InitializeDomainAuth;
   // initialize this authentication scheme
   inherited Create(aServer);
+  // TDynArray access to fSspiAuthContext[] by THttpServerConnectionID (ptInt64)
   fSspiAuthContexts.InitSpecific(TypeInfo(TSecContextDynArray),
     fSspiAuthContext, ptInt64, @fSspiAuthContextCount);
 end;
@@ -7684,6 +7687,7 @@ begin
   call.LowLevelConnectionID := PtrInt(GlobalLibraryRequestServer);
   call.LowLevelConnectionFlags := [llfSecured]; // in-process call
   call.InHead := 'RemoteIP: 127.0.0.1';
+  call.LowLevelRemoteIP := '127.0.0.1';
   if (Head <> nil) and
      (HeadLen <> 0) then
   begin

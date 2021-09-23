@@ -1083,7 +1083,7 @@ type
   // - llfSecured is set if the transmission is encrypted or in-process,
   // using e.g. HTTPS/TLS or our proprietary AES/ECDHE WebSockets algorithms
   // - llfWebsockets communication was made using WebSockets
-  // - match THttpServerRequestFlag from mormot.net.http.pas
+  // - should exactly match THttpServerRequestFlag from mormot.net.http.pas
   TRestUriParamsLowLevelFlag = (
     llfHttps,
     llfSecured,
@@ -1142,6 +1142,12 @@ type
     LowLevelConnectionID: Int64;
     /// low-level properties of the current connection
     LowLevelConnectionFlags: TRestUriParamsLowLevelFlags;
+    /// pre-parsed Remote IP of the current connection
+    LowLevelRemoteIP: RawUtf8;
+    /// pre-parsed "Bearer" HTTP header value
+    LowLevelBearerToken: RawUtf8;
+    /// pre-parsed "User-Agent" HTTP header value
+    LowLevelUserAgent: RawUtf8;
     /// initialize the non RawUtf8 values
     procedure Init; overload;
     /// initialize the input values

@@ -7025,7 +7025,7 @@ begin
             exit;
           inc(P, L);
           inc(result);
-        until result = n;
+        until result = n; // efficient loop on FPC/x86_64
       end;
     end
     else

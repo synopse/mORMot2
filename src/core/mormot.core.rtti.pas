@@ -626,7 +626,7 @@ type
   /// as returned by TRttiInfo.RecordAllFields
   TRttiRecordAllFields = array of TRttiRecordAllField;
 
-  /// quick identification of a RTTI value types
+  /// quick identification of some RTTI value types
   TRttiCacheFlag = (
     rcfQWord,
     rcfBoolean,

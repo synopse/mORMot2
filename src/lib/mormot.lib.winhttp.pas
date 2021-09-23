@@ -27,12 +27,12 @@ interface
 uses
   sysutils,
   classes,
+  Windows,
+  WinINet,
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,
-  mormot.net.sock,
-  Windows,
-  WinINet;
+  mormot.net.sock;
 
 
 { ******************** WinINet API Additional Wrappers }
@@ -1238,8 +1238,9 @@ function RegURL(aRoot, aPort: RawUtf8; Https: boolean;
   aDomainName: RawUtf8): SynUnicode;
 
 /// low-level adjustement of the HTTP_REQUEST headers
-function RetrieveHeaders(const Request: HTTP_REQUEST;
-  const RemoteIPHeadUp: RawUtf8; out RemoteIP: RawUtf8): RawUtf8;
+function RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
+  const RemoteIPHeadUp, ConnectionIDHeadUp: RawUtf8; out RemoteIP: RawUtf8;
+  var ConnectionID: QWord): RawUtf8;
 
 
 { ******************** winhttp.dll Windows API Definitions }
@@ -1917,13 +1918,15 @@ const
   REMOTEIP_HEADERLEN = 10;
   REMOTEIP_HEADER: string[REMOTEIP_HEADERLEN] = 'RemoteIP: ';
 
-function RetrieveHeaders(const Request: HTTP_REQUEST;
-  const RemoteIPHeadUp: RawUtf8; out RemoteIP: RawUtf8): RawUtf8;
+function RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
+  const RemoteIPHeadUp, ConnectionIDHeadUp: RawUtf8; out RemoteIP: RawUtf8;
+  var ConnectionID: QWord): RawUtf8;
 var
   i, L, Lip: integer;
   H: THttpHeader;
   P: PHTTP_UNKNOWN_HEADER;
   D: PAnsiChar;
+  V: PUtf8Char;
 begin
   assert(low(HTTP_KNOWNHEADERS) = low(Request.Headers.KnownHeaders));
   assert(high(HTTP_KNOWNHEADERS) = high(Request.Headers.KnownHeaders));
@@ -1935,7 +1938,7 @@ begin
     if P <> nil then
       for i := 1 to Request.Headers.UnknownHeaderCount do
         if (P^.NameLength = L) and
-           IdemPChar(P^.pName, Pointer(RemoteIPHeadUp)) then
+           IdemPChar(P^.pName, pointer(RemoteIPHeadUp)) then
         begin
           FastSetString(RemoteIP, P^.pRawValue, P^.RawValueLength);
           break;
@@ -1946,6 +1949,23 @@ begin
   if (RemoteIP = '') and
      (Request.Address.pRemoteAddress <> nil) then
     RemoteIP := Request.Address.pRemoteAddress.IP(RemoteIPLocalHostAsVoidInServers);
+  // extract connection ID
+  L := length(ConnectionIDHeadUp);
+  if L <> 0 then
+  begin
+    P := Request.Headers.pUnknownHeaders;
+    if P <> nil then
+      for i := 1 to Request.Headers.UnknownHeaderCount do
+        if (P^.NameLength = L) and
+           IdemPChar(P^.pName, pointer(ConnectionIDHeadUp)) then
+        begin
+          V := pointer(P^.pRawValue);
+          SetQWord(V, V + P^.RawValueLength, ConnectionID);
+          break;
+        end
+        else
+          inc(P);
+  end;
   // compute headers length
   Lip := length(RemoteIP);
   if Lip <> 0 then

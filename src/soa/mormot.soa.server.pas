@@ -1488,7 +1488,7 @@ begin
       [fServer, fServer.Model.Root, aMethod.InterfaceDotMethodName]);
   if fReleasedOnClientSide then
   begin
-    // there is no client side to call
+    // there is no client side to call any more
     if not IdemPropName(fFactory.InterfaceTypeInfo^.RawName, 'ISynLogCallback') then
       fServer.InternalLog('%.CallbackInvoke: % instance has been released on ' +
         'the client side, so I% callback notification was NOT sent', [self,
@@ -1509,6 +1509,7 @@ begin
   end
   else
   begin
+    // make the (maybe asynchronous) callback call from server to client
     if aMethod.ArgsOutputValuesCount = 0 then
       // no result -> asynchronous non blocking callback
       aResult := nil;

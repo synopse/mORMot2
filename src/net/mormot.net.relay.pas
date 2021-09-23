@@ -657,7 +657,7 @@ begin
           rest.contenttype := JSON_CONTENT_TYPE_VAR;
         rest.status := http.Request(rest.url, rest.method, {keepalive=}0,
           rest.headers, rest.content, rest.contenttype, {retry=}false);
-        SetRestFrame(Frame, rest.status, '', '', http.HeaderGetText,
+        SetRestFrame(Frame, rest.status, '', '', http.Http.Headers,
           http.Http.Content, http.Http.ContentType);
         log.Log(sllTrace, 'ProcessIncomingFrame: answered [%] %',
           [rest.status, KB(http.Http.Content)], self);

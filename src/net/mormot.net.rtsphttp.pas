@@ -276,7 +276,7 @@ begin
       begin
         if log <> nil then
           log.Log(sllTrace, 'ConnectionCreate received % % %',
-            [sock.Method, sock.URL, sock.HeaderGetText], self);
+            [sock.Method, sock.URL, sock.Http.Headers], self);
         cookie := sock.HeaderGetValue('X-SESSIONCOOKIE');
         if cookie = '' then
           exit;
@@ -344,7 +344,7 @@ begin
       else if log <> nil then
         log.Log(sllDebug, 'ConnectionCreate rejected % % % % % %',
           [ToText(parse)^, sock.Http.Command, sock, sock.Method, sock.URL,
-           sock.HeaderGetText], self);
+           sock.Http.Headers], self);
     finally
       sock.Free;
     end;

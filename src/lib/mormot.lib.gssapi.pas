@@ -293,7 +293,7 @@ function gss_compare_oid(oid1, oid2: gss_OID): boolean;
 
 type
   /// GSSAPI Auth context
-  // - first field should be an Int64 ID
+  // - first field should be an Int64 ID - typically a THttpServerConnectionID
   TSecContext = record
     ID: Int64;
     CredHandle: pointer;

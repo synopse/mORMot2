@@ -2062,7 +2062,7 @@ begin
     begin
       result := Http.Http.Content;
       if outHeaders <> nil then
-        outHeaders^ := Http.HeaderGetText;
+        outHeaders^ := Http.Http.Headers;
     end;
   finally
     Http.Free;
@@ -3112,7 +3112,7 @@ begin
       result := fHttp.Request(
         Uri.Address, Method, KeepAlive, Header, Data, DataType, true);
     fBody := fHttp.Http.Content;
-    fHeaders := fHttp.HeaderGetText;
+    fHeaders := fHttp.Http.Headers;
     if KeepAlive = 0 then
       FreeAndNil(fHttp);
   except
