@@ -1054,7 +1054,11 @@ procedure SetInt64(P: PUtf8Char; var result: Int64);
   {$ifdef CPU64}inline;{$endif}
 
 /// get the 64-bit unsigned integer value stored in P^
-procedure SetQWord(P: PUtf8Char; var result: QWord);
+procedure SetQWord(P: PUtf8Char; var result: QWord); overload;
+  {$ifdef CPU64}inline;{$endif}
+
+/// get the 64-bit unsigned integer value stored in P^
+procedure SetQWord(P, PEnd: PUtf8Char; var result: QWord); overload;
   {$ifdef CPU64}inline;{$endif}
 
 /// get the 64-bit signed integer value stored in P^
@@ -5001,28 +5005,30 @@ begin
 end;
 
 {$ifdef CPU64}
+// PtrInt/PtrUInt are already Int64/QWord
 
 procedure SetInt64(P: PUtf8Char; var result: Int64);
 begin
-  // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(P);
 end;
 
 procedure SetQWord(P: PUtf8Char; var result: QWord);
 begin
-  // PtrUInt is already QWord -> call PtrUInt version
   result := GetCardinal(P);
+end;
+
+procedure SetQWord(P, PEnd: PUtf8Char; var result: QWord);
+begin
+  result := GetCardinal(P, PEnd);
 end;
 
 function GetInt64(P: PUtf8Char): Int64;
 begin
-  // PtrInt is already int64 -> call previous version
   result := GetInteger(P);
 end;
 
 function GetInt64(P: PUtf8Char; var err: integer): Int64;
 begin
-  // PtrInt is already int64 -> call previous version
   result := GetInteger(P, err);
 end;
 
@@ -5112,6 +5118,56 @@ begin
     if PCardinal(@result)^ >= high(cardinal) div 10 then
     begin
       repeat // 64-bit loop
+        c := byte(P^) - 48;
+        if c > 9 then
+          break;
+        result := result shl 3 + result + result; // fast result := result*10
+        inc(result, c);
+        inc(P);
+      until false;
+      break;
+    end;
+  until false;
+end;
+
+procedure SetQWord(P, PEnd: PUtf8Char; var result: QWord);
+var
+  c: cardinal;
+begin
+  result := 0;
+  if (P = nil) or
+     (P >= PEnd) then
+    exit;
+  while P^ <= ' ' do
+    if P = PEnd then
+      exit
+    else
+      inc(P);
+  if P^ = '+' then
+    repeat
+      inc(P);
+      if P = PEnd then
+        exit;
+    until P^ <> ' ';
+  c := byte(P^) - 48;
+  if c > 9 then
+    exit;
+  PCardinal(@result)^ := c;
+  inc(P);
+  repeat // fast 32-bit loop
+    if P = PEnd then
+      break;
+    c := byte(P^) - 48;
+    if c > 9 then
+      break
+    else
+      PCardinal(@result)^ := PCardinal(@result)^ * 10 + c;
+    inc(P);
+    if PCardinal(@result)^ >= high(cardinal) div 10 then
+    begin
+      repeat // 64-bit loop
+        if P = PEnd then
+          exit;
         c := byte(P^) - 48;
         if c > 9 then
           break;

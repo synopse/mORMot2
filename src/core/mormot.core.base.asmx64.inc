@@ -1024,7 +1024,7 @@ end;
 
 function SortDynArrayInt64(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     r8, qword ptr [A]
+        mov     r8,  qword ptr [A]
         mov     rdx, qword ptr [B]
         xor     eax, eax
         xor     ecx, ecx
