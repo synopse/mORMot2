@@ -306,7 +306,8 @@ begin
       log.Log(sllDB, 'Connected to % % using % v%', [fProperties.ServerName,
         fProperties.DatabaseNameSafe, PQ.LibraryPath, PQ.LibVersion], self);
     end
-    else // to ensure no performance drop due to notice to console
+    else
+      // to ensure no performance drop due to notice to console
       PQ.SetNoticeProcessor(fPGConn, DummyNoticeProcessor, nil);
     inherited Connect; // notify any re-connection
   except

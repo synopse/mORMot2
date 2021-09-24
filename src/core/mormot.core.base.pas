@@ -3555,7 +3555,7 @@ function SortDynArrayUnicodeString(const A, B): integer;
 function SortDynArrayString(const A, B): integer;
 
 /// compare two "array of TFileName" elements, as file names
-// - i.e. with no case sensitivity, and grouped by file extension
+// - i.e. with no case sensitivity on Windows, and grouped by file extension
 // - the expected string type is the generic RTL string, i.e. TFileName
 // - calls internally GetFileNameWithoutExt() and AnsiCompareFileName()
 function SortDynArrayFileName(const A, B): integer;
@@ -5862,7 +5862,7 @@ begin
   {$endif CPU64}
 end;
 
-{$ifdef FPC}
+{$ifdef FPC} // some FPC-specific low-level code due to diverse compiler or RTL
 
 function TDynArrayRec.GetLength: TDALen;
 begin
