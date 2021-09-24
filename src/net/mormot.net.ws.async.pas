@@ -53,7 +53,7 @@ type
   protected
     fConnection: TWebSocketAsyncConnection;
     fProcessPos: PtrInt;   // index in fConnection.fHttp.Process.Buffer/Len
-    fReadPos: PtrInt;      // index in fConnection.fSlot.rd.Buffer/Len
+    fReadPos: PtrInt;      // index in fConnection.fRd.Buffer/Len
     fOnRead: TWebProcessInFrame;
     fOnReadFrame: TWebSocketFrame;
     function OnRead: TPollAsyncSocketOnReadWrite;
@@ -84,13 +84,12 @@ type
   TWebSocketAsyncConnection = class(THttpAsyncConnection)
   protected
     fProcess: TWebSocketAsyncProcess; // set once upgraded
-    fNextPingSec: TAsyncConnectionSec;
     function OnRead: TPollAsyncSocketOnReadWrite; override;
     function AfterWrite: TPollAsyncSocketOnReadWrite; override;
     procedure OnClose; override;
     function DecodeHeaders: integer; override;
     procedure BeforeDestroy; override;
-    // called every 10 seconds
+    // called every 10 seconds to check against HeartbeatDelay and send ping
     function OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean; override;
     // used e.g. by TWebSocketAsyncServer.WebSocketBroadcast
     function SendDirect(const tmp: TSynTempBuffer;
@@ -213,7 +212,7 @@ begin
        (fHttp.Process.Len = 0) then
       exit;
   end;
-  // process fSlot.rd incoming bytes into the current WebSockets protocol
+  // process fRd incoming bytes into the current WebSockets protocol
   result := fProcess.OnRead;
 end;
 
@@ -228,30 +227,27 @@ end;
 function TWebSocketAsyncConnection.OnLastOperationIdle(
   nowsec: TAsyncConnectionSec): boolean;
 var
-  delay: TAsyncConnectionSec; // HeartbeatDelay may be changed on the fly
+  delaysec: TAsyncConnectionSec; // HeartbeatDelay may be changed on the fly
 begin
   // this code is not blocking and very quick most of the time
   result := false;
-  delay := TWebSocketAsyncServer(fServer).fSettings.HeartbeatDelay shr 10;
-  if TAsyncConnectionSec(nowsec - fLastOperation) < delay then
+  delaysec := TWebSocketAsyncServer(fServer).fSettings.HeartbeatDelay shr 10;
+  if nowsec < delaysec + fLastOperation then
     exit;
-  fProcess.SendPing; // Write will change fLastOperation
+  fProcess.SendPing; // Write will change fWasActive, then fLastOperation
   result := true;
 end;
 
 function TWebSocketAsyncConnection.DecodeHeaders: integer;
-var
-  proto: TWebSocketProtocol;
-  resp: RawUtf8;
-begin
-  result := inherited DecodeHeaders; // e.g. HTTP_TIMEOUT or OnBeforeBody()
-  if (result = HTTP_SUCCESS) and
-     (fHttp.Upgrade <> '') and
-     (hfConnectionUpgrade in fHttp.HeaderFlags) then
+
+  procedure TryUpgrade;
+  var
+    proto: TWebSocketProtocol;
+    resp: RawUtf8;
   begin
     // try to upgrade to one of the registered WebSockets protocol
     result := (fServer as TWebSocketAsyncServer).fProtocols.
-      ServerUpgrade(fHttp, fRemoteIP, fHandle, proto, resp);
+      ServerUpgrade(fHttp, fRemoteIP, fHandle, {out:} proto, resp);
     if result = HTTP_SUCCESS then
     begin
       fHttp.State := hrsUpgraded;
@@ -267,6 +263,13 @@ begin
         raise EWebSockets.CreateUtf8('%.DecodeHeaders: upgrade failed', [self]);
     end;
   end;
+
+begin
+  result := inherited DecodeHeaders; // e.g. HTTP_TIMEOUT or OnBeforeBody()
+  if (result = HTTP_SUCCESS) and
+     (fHttp.Upgrade <> '') and
+     (hfConnectionUpgrade in fHttp.HeaderFlags) then
+    TryUpgrade;
 end;
 
 procedure TWebSocketAsyncConnection.OnClose;
@@ -391,9 +394,8 @@ end;
 function TWebSocketAsyncProcess.CanGetFrame(TimeOut: cardinal;
   ErrorWithoutException: PInteger): boolean;
 begin
-  // first read from fHttp.Process, then fSlot.rd
-  if (fConnection.Socket = nil) or
-     fConnection.fSlot.closing then
+  // first read from fHttp.Process, then fRd
+  if fConnection.IsClosed then
   begin
     result := false;
     if ErrorWithoutException <> nil then
@@ -403,7 +405,7 @@ begin
   begin
     // TimeOut is ignored with our non-blocking sockets
     result := ((fConnection.fHttp.Process.Len - fProcessPos) +
-               (fConnection.fSlot.rd.Len - fReadPos)) <> 0;
+               (fConnection.fRd.Len - fReadPos)) <> 0;
     if ErrorWithoutException <> nil then
       ErrorWithoutException^ := 0; // no error
   end;
@@ -414,8 +416,8 @@ begin
   // first read from fHttp.Process / fProcessPos (remaining from previous read)
   result := fConnection.fHttp.Process.ExtractAt(P, count, fProcessPos);
   if count <> 0 then
-    // try if we can get some more directly from fSlot.rd / fReadPos
-    inc(result, fConnection.fSlot.rd.ExtractAt(P, count, fReadPos));
+    // try if we can get some more directly from fRd / fReadPos
+    inc(result, fConnection.fRd.ExtractAt(P, count, fReadPos));
 end;
 
 function TWebSocketAsyncProcess.OnRead: TPollAsyncSocketOnReadWrite;
@@ -462,12 +464,12 @@ begin
             fConnection.fHttp.Process.Remove(fProcessPos); // remove processed
             fProcessPos := 0;
           end;
-          len := fConnection.fSlot.rd.Len - fReadPos;
+          len := fConnection.fRd.Len - fReadPos;
           if len <> 0 then
           begin
             fConnection.fHttp.Process.Append(
-              PAnsiChar(fConnection.fSlot.rd.Buffer) + fReadPos, len);
-            fConnection.fSlot.rd.Reset; // fSlot.rd was moved to fHttp.Process
+              PAnsiChar(fConnection.fRd.Buffer) + fReadPos, len);
+            fConnection.fRd.Reset; // fRd remains were moved to fHttp.Process
             fReadPos := 0;
           end;
         end;

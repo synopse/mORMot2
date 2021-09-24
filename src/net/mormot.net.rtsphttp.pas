@@ -133,11 +133,11 @@ implementation
 function TRtspConnection.OnRead: TPollAsyncSocketOnReadWrite;
 begin
   if acoVerboseLog in fOwner.Options then
-    fOwner.LogVerbose(self, 'Frame forwarded', fSlot.rd);
-  if fGetBlocking.TrySndLow(fSlot.rd.Buffer, fSlot.rd.Len) then
+    fOwner.LogVerbose(self, 'Frame forwarded', fRd);
+  if fGetBlocking.TrySndLow(fRd.Buffer, fRd.Len) then
   begin
     fOwner.Log.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
-      [Handle, fSlot.rd.Len], self);
+      [Handle, fRd.Len], self);
     result := soContinue;
   end
   else
@@ -147,7 +147,7 @@ begin
       [Handle, RemoteIP], self);
     result := soClose;
   end;
-  fSlot.rd.Reset;
+  fRd.Reset;
 end;
 
 procedure TRtspConnection.BeforeDestroy;
@@ -166,11 +166,11 @@ var
   rtsp: TAsyncConnection;
 begin
   result := soContinue;
-  fSlot.rd.AsText(b64);
+  fRd.AsText(b64);
   decoded := Base64ToBinSafe(TrimControlChars(b64));
   if decoded = '' then
     exit; // maybe some pending command chars
-  fSlot.rd.Reset;
+  fRd.Reset;
   rtsp := fOwner.ConnectionFindLocked(fRtspTag);
   if rtsp <> nil then
   try

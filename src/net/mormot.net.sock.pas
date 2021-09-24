@@ -412,6 +412,7 @@ type
   /// modifications notified by TPollSocketAbstract.WaitForModified
   TPollSocketResult = record
     /// opaque value as defined by TPollSocketAbstract.Subscribe
+    // - holds typically a TPollAsyncConnection instance
     tag: TPollSocketTag;
     /// the events which are notified
     events: TPollSocketEvents;

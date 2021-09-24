@@ -1324,7 +1324,8 @@ begin
   result := true; // notify the next main state change
 end;
 
-procedure THttpRequestContext.CompressContentAndFinalizeHead(MaxSizeAtOnce: integer);
+procedure THttpRequestContext.CompressContentAndFinalizeHead(
+  MaxSizeAtOnce: integer);
 begin
   // same logic than THttpSocket.CompressDataAndWriteHeaders below
   if (integer(CompressAcceptHeader) <> 0) and
