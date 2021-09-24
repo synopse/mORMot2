@@ -6354,8 +6354,13 @@ begin
     da.Clear
   else
   try
-    if (fObjArray = nil) and Base64MagicCheckAndDecode(Value, tmp, ValueLen) then
-      da.LoadFrom(tmp.buf, PAnsiChar(tmp.buf) + tmp.len)
+    if Base64MagicCheckAndDecode(Value, tmp, ValueLen) then
+    begin
+      if fObjArray = nil then
+        da.LoadFrom(tmp.buf, PAnsiChar(tmp.buf) + tmp.len)
+      else
+        da.LoadFromJson(tmp.buf, PAnsiChar(tmp.buf) + tmp.len);
+    end
     else
       da.LoadFromJson(tmp.Init(Value));
   finally
