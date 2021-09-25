@@ -510,39 +510,6 @@ implementation
 
 { TRestStorageExternal }
 
-const
-  ORM_TO_SqlDB: array[TOrmFieldType] of TSqlDBFieldType =
-    // ftUnknown is used for Int32 values, ftInt64 for Int64 values
-    (ftUnknown,   // oftUnknown
-     ftUtf8,      // oftAnsiText
-     ftUtf8,      // oftUtf8Text
-     ftUnknown,   // oftEnumerate
-     ftInt64,     // oftSet
-     ftInt64,     // oftInteger
-     ftInt64,     // oftID
-     ftInt64,     // oftRecord
-     ftUnknown,   // oftBoolean
-     ftDouble,    // oftFloat
-     ftDate,      // oftDateTime
-     ftInt64,     // oftTimeLog
-     ftCurrency,  // oftCurrency
-     ftUtf8,      // oftObject
-     ftUtf8,      // oftVariant
-     ftUtf8,      // oftNullable (retrieved from Prop.OrmFieldTypeStored)
-     ftBlob,      // oftBlob
-     ftBlob,      // oftBlobDynArray
-     ftBlob,      // oftBlobCustom
-     ftUtf8,      // oftUtf8Comp
-     ftInt64,     // oftMany
-     ftInt64,     // oftModTime
-     ftInt64,     // oftCreateTime
-     ftInt64,     // oftTID
-     ftInt64,     // oftRecordVersion
-     ftInt64,     // oftSessionUserID
-     ftDate,      // oftDateTimeMS
-     ftInt64,     // oftUnixTime
-     ftInt64);    // oftUnixMSTime
-
 constructor TRestStorageExternal.Create(aClass: TOrmClass; aServer: TRestOrmServer);
 
   procedure FieldsInternalInit;
@@ -571,20 +538,29 @@ constructor TRestStorageExternal.Create(aClass: TOrmClass; aServer: TRestOrmServ
   function PropInfoToExternalField(Prop: TOrmPropInfo;
     var Column: TSqlDBColumnCreate): boolean;
   begin
-    if Prop.ORMFieldType in [oftUnknown, oftMany] then
-    begin
-      // ignore unknown/virtual fields
-      result := false;
-      exit;
+    case Prop.OrmFieldType of
+      oftUnknown,
+      oftMany:
+        begin
+          // ignore unknown/virtual fields
+          result := false;
+          exit;
+        end;
+      // ftUnknown identify 32-bit values, ftInt64=SqlDBFieldType for 64-bit
+      oftEnumerate,
+      oftBoolean:
+        Column.DBType := ftUnknown;
+    else
+      // Prop may have identified e.g. T*ObjArray as ftUtf8
+      Column.DBType := Prop.SqlDBFieldType;
     end;
-    Column.DBType := ORM_TO_SqlDB[Prop.OrmFieldTypeStored];
-    Column.Name := fStoredClassMapping^.ExtFieldNames[Prop.PropertyIndex];
     if Column.DBType = ftUtf8 then
       Column.Width := Prop.FieldWidth
     else
       Column.Width := 0;
     Column.Unique := aIsUnique in Prop.Attributes;
     Column.PrimaryKey := false;
+    Column.Name := fStoredClassMapping^.ExtFieldNames[Prop.PropertyIndex];
     result := true;
   end;
 
