@@ -8544,7 +8544,11 @@ begin
   MoveFast(_NUM2, _VARDATACMP[false, varShortInt], SizeOf(_NUM2));
   _VARDATACMP[false, varBoolean] := @SortDynArrayWordBoolean;
   _VARDATACMP[true] := _VARDATACMP[false]; // =caseinsensitive
+  {$ifdef CPUINTEL}
   _VARDATACMP[false, varString] := @SortDynArrayAnsiString;
+  {$else}
+  _VARDATACMP[false, varString] := @SortDynArrayRawByteString;
+  {$endif CPUINTEL}
   _VARDATACMP[true,  varString] := @SortDynArrayAnsiStringI;
   _VARDATACMP[false, varOleStr] := @SortDynArrayUnicodeString;
   _VARDATACMP[true,  varOleStr] := @SortDynArrayUnicodeStringI;

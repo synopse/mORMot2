@@ -1113,6 +1113,16 @@ type
   /// event oriented version of TDynArraySortCompare
   TOnDynArraySortCompare = function(const A, B): integer of object;
 
+const
+  /// redirect to the proper SortDynArrayAnsiString/SortDynArrayAnsiStringI
+  SORT_LSTRING: array[{caseins=}boolean] of TDynArraySortCompare = (
+    {$ifdef CPUINTEL}
+    SortDynArrayAnsiString,
+    {$else}
+    SortDynArrayRawByteString,
+    {$endif CPUINTEL}
+    SortDynArrayAnsiStringI);
+
 {$ifndef PUREMORMOT2}
 
 type
@@ -5072,7 +5082,7 @@ var
   rf: TRttiFloat;
 begin
   rf := Info^.RttiFloat;
-  case rf of // branchless comparison
+  case rf of // efficient branchless comparison
     rfSingle:
       Compared := ord(PSingle(A)^ > PSingle(B)^) - ord(PSingle(A)^ < PSingle(B)^);
     rfDouble:
@@ -5157,9 +5167,15 @@ begin
   result := SizeOf(pointer);
 end;
 
-function _BC_LString(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_LString(A, B: PRawByteString; Info: PRttiInfo;
+  out Compared: integer): PtrInt;
 begin
-  compared := StrComp(A^, B^);
+  // StrComp() would fail for RawByteString
+  {$ifdef CPUINTEL}
+  compared := SortDynArrayAnsiString(A^, B^); // optimized asm using length()
+  {$else}
+  compared := SortDynArrayRawByteString(A^, B^);
+  {$endif CPUINTEL}
   result := SizeOf(pointer);
 end;
 
@@ -5440,7 +5456,7 @@ begin
     inc(f);
   end;
   offset := PtrUInt(fields.Size) - offset;
-  if offset > 0 then
+  if offset <> 0 then
     Dest.Write(Data, offset);
   result := fields.Size;
 end;
@@ -5476,7 +5492,7 @@ begin
     inc(f);
   end;
   offset := PtrUInt(fields.Size) - offset;
-  if offset > 0 then
+  if offset <> 0 then
     Source.Copy(Data, offset);
   result := fields.Size;
 end;
@@ -5492,34 +5508,36 @@ begin
   f := fields.Fields;
   fields.Fields := @RTTI_COMPARE[CaseInSensitive]; // reuse pointer slot on stack
   offset := 0;
-  while fields.Count <> 0 do
-  begin
-    dec(fields.Count);
-    Info := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
-    {$ifdef FPC_OLDRTTI}
-    if Info^.Kind in rkManagedTypes then
-    {$endif FPC_OLDRTTI}
-    begin
-      offset := f^.Offset - offset;
-      if offset <> 0 then
+  if fields.Count <> 0 then
+    repeat
+      dec(fields.Count);
+      Info := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
+      {$ifdef FPC_OLDRTTI}
+      if Info^.Kind in rkManagedTypes then
+      {$endif FPC_OLDRTTI}
       begin
-        result := MemCmp(pointer(A), pointer(B), offset); // binary comparison
-        if result <> 0 then
-          exit;
+        offset := f^.Offset - offset;
+        if offset <> 0 then
+        begin
+          result := MemCmp(pointer(A), pointer(B), offset); // binary comparison
+          if result <> 0 then
+            exit;
+          inc(A, offset);
+          inc(B, offset);
+        end;
+        offset := PRttiCompares(fields.Fields)[Info^.Kind](A, B, Info, result);
         inc(A, offset);
         inc(B, offset);
+        if result <> 0 then
+          exit;
+        inc(offset, f^.Offset);
       end;
-      offset := PRttiCompares(fields.Fields)[Info^.Kind](A, B, Info, result);
-      inc(A, offset);
-      inc(B, offset);
-      if result <> 0 then
-        exit;
-      inc(offset, f^.Offset);
-    end;
-    inc(f);
-  end;
+      inc(f);
+    until fields.Count = 0
+  else
+    result := 0;
   offset := PtrUInt(fields.Size) - offset;
-  if offset > 0 then
+  if offset <> 0 then
     result := MemCmp(pointer(A), pointer(B), offset); // trailing binary
 end;
 

@@ -1778,7 +1778,7 @@ type
   /// JSON-aware TRttiCustom class - used for global RttiCustom: TRttiCustomList
   TRttiJson = class(TRttiCustom)
   protected
-    fCompare: array[{CaseInsensitive:}boolean] of TRttiCompare;
+    fCompare: array[{CaseInsens:}boolean] of TRttiCompare; // for ValueCompare
     fIncludeReadOptions: TJsonParserOptions;
     fIncludeWriteOptions: TTextWriterWriteObjectOptions;
     // overriden for proper JSON process - set fJsonSave and fJsonLoad
@@ -9330,6 +9330,12 @@ begin
   result := SizeOf(pointer);
 end;
 
+function _BC_Default(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ComparePointer(A, B); // weak fallback
+  result := 0; // not used in TRttiJson.ValueCompare / fCompare[]
+end;
+
 function TRttiJson.SetParserType(aParser: TRttiParserType;
   aParserComplex: TRttiParserComplexType): TRttiCustom;
 var
@@ -9361,6 +9367,12 @@ begin
         fCompare[true] := RTTI_COMPARE[true][rkWString];
         fCompare[false] := RTTI_COMPARE[false][rkWString];
       end;
+    if not Assigned(fCompare[true]) then
+    begin
+      // fallback if not enough RTTI
+      fCompare[true] := @_BC_Default;
+      fCompare[false] := @_BC_Default;
+    end;
   end;
   // set class serialization and initialization
   if aParser = ptClass then
@@ -9482,10 +9494,7 @@ end;
 
 function TRttiJson.ValueCompare(Data, Other: pointer; CaseInsensitive: boolean): integer;
 begin
-  if Assigned(fCompare[CaseInsensitive]) then
-    fCompare[CaseInsensitive](Data, Other, Info, result)
-  else
-    result := ComparePointer(Data, Other);
+  fCompare[CaseInsensitive](Data, Other, Info, result); // at least _BC_Default
 end;
 
 function TRttiJson.ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt;

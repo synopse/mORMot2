@@ -321,21 +321,21 @@ const
 
   /// quick retrieve how many bytes an ordinal consist in
   ORDTYPE_SIZE: array[TRttiOrd] of byte = (
-    1,
-    1,
-    2,
-    2,
-    4,
-    4
-    {$ifdef FPC_NEWRTTI} , 8, 8 {$endif} );
+    1,                                      // roSByte
+    1,                                      // roUByte
+    2,                                      // roSWord
+    2,                                      // roUWord
+    4,                                      // roSLong
+    4                                       // roULong
+    {$ifdef FPC_NEWRTTI} , 8, 8 {$endif} ); // roSQWord, roUQWord
 
   /// quick retrieve how many bytes a floating-point consist in
   FLOATTYPE_SIZE: array[TRttiFloat] of byte = (
-    4,
-    8,
-    {$ifdef TSYNEXTENDED80} 10 {$else} 8 {$endif},
-    8,
-    8 );
+    4,                                             // rfSingle
+    8,                                             // rfDouble
+    {$ifdef TSYNEXTENDED80} 10 {$else} 8 {$endif}, // rfExtended
+    8,                                             // rfComp
+    8 );                                           // rfCurr
 
 
 type
@@ -2024,6 +2024,8 @@ type
     function ValueIsVoidGetter(Data: pointer): boolean;
     procedure GetValueDirect(Data: PByte; out RVD: TRttiVarData);
     procedure GetValueGetter(Instance: TObject; out RVD: TRttiVarData);
+    function CompareValueComplex(Data, Other: pointer;
+      OtherRtti: PRttiCustomProp; CaseInsensitive: boolean): integer;
   public
     /// contains standard TypeInfo/PRttiInfo of this field/property
     // - for instance, Value.Size contains its memory size in bytes
@@ -2066,8 +2068,10 @@ type
     function ValueIsVoid(Data: pointer): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// compare two properties values with proper getter method call
+    // - is likely to call Value.ValueCompare() which requires mormot.core.json
     function CompareValue(Data, Other: pointer; const OtherRtti: TRttiCustomProp;
       CaseInsensitive: boolean): integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append the field value as JSON with proper getter method call
     // - wrap GetValue() + AddVariant() over a temp TRttiVarData
     procedure AddValueJson(W: TBaseWriter; Data: pointer;
@@ -2393,6 +2397,7 @@ type
   PRttiCustomListPairs = ^TRttiCustomListPairs;
 
   /// internal structure for TRttiCustomList "hash table of the poor" (tm)
+  // - avoid link to mormot.core.data hash table, with a faster access
   // - consume e.g. around 50KB of memory on for all mormot2tests types
   TRttiCustomListHashTable = record
     /// for DoRegister thread-safety - no need of TSynLocker padding
@@ -6412,23 +6417,26 @@ begin
   end;
 end;
 
-function TRttiCustomProp.CompareValue(Data, Other: pointer;
-  const OtherRtti: TRttiCustomProp; CaseInsensitive: boolean): integer;
+function TRttiCustomProp.CompareValueComplex(Data, Other: pointer;
+  OtherRtti: PRttiCustomProp; CaseInsensitive: boolean): integer;
 var
   v1, v2: TRttiVarData;
 begin
   // direct comparison of ordinal values (rkClass is handled below)
   if (rcfHasRttiOrd in Value.Cache.Flags) and
      (rcfHasRttiOrd in OtherRtti.Value.Cache.Flags) then
-    if OffsetGet >= 0 then
+    if (OffsetGet >= 0) and
+       (OtherRtti.OffsetGet >= 0) then
       result := CompareInt64(
         FromRttiOrd(Value.Cache.RttiOrd, PAnsiChar(Data) + OffsetGet),
         FromRttiOrd(OtherRtti.Value.Cache.RttiOrd, PAnsiChar(Other) + OtherRtti.OffsetGet))
     else
-      result := CompareInt64(Prop.GetOrdProp(Data), OtherRtti.Prop.GetOrdProp(Other))
+      result := CompareInt64(
+        Prop.GetOrdProp(Data), OtherRtti.Prop.GetOrdProp(Other))
   else if (rcfGetInt64Prop in Value.Cache.Flags) and
           (rcfGetInt64Prop in OtherRtti.Value.Cache.Flags) then
-    if OffsetGet >= 0 then
+    if (OffsetGet >= 0) and
+       (OtherRtti.OffsetGet >= 0) then
       result := CompareInt64(PInt64(PAnsiChar(Data) + OffsetGet)^,
                              PInt64(PAnsiChar(Other) + OtherRtti.OffsetGet)^)
     else
@@ -6444,18 +6452,32 @@ begin
       // standard variant comparison function (from mormot.core.variants)
       result := SortDynArrayVariantComp(v1.Data, v2.Data, CaseInsensitive)
     else if (v1.Data.VType = v2.Data.VType) and
-            (v1.Prop = v2.Prop) then
+            (OtherRtti.Value = Value) then
       // v1 and v2 are both varAny, with the very same RTTI type -> use
       // mormot.core.json efficient comparison (also handle rkClass/TObject)
       result := Value.ValueCompare(v1.PropValue, v2.PropValue, CaseInsensitive)
     else
       // we don't know much about those fields: just compare the pointers
-      result := ComparePtrInt(PtrInt(v1.PropValue), PtrInt(v2.PropValue));
+      result := ComparePointer(v1.PropValue, v2.PropValue);
     if v1.NeedsClear then
       VarClearProc(v1.Data);
     if v2.NeedsClear then
       VarClearProc(v2.Data);
   end;
+end;
+
+function TRttiCustomProp.CompareValue(Data, Other: pointer;
+  const OtherRtti: TRttiCustomProp; CaseInsensitive: boolean): integer;
+begin
+  if (OtherRtti.Value = Value) and
+     (OffsetGet >= 0) and
+     (OtherRtti.OffsetGet >= 0) then
+    // two direct fields of the same type (this most common case is inlined)
+    result := Value.ValueCompare(PAnsiChar(Data) + OffsetGet,
+                PAnsiChar(Other) + OtherRtti.OffsetGet, CaseInsensitive)
+  else
+    // more complex properties comparison (not inlined)
+    result := CompareValueComplex(Data, Other, @OtherRtti, CaseInsensitive);
 end;
 
 
@@ -7448,7 +7470,7 @@ end;
 
 procedure TRttiCustomList.Init;
 begin
-  Table := AllocMem(SizeOf(Table^));
+  Table := AllocMem(SizeOf(Table^)); // 15KB zeroed hash table allocation
   InitializeCriticalSection(Table^.Lock);
   fGlobalClass := TRttiCustom;
 end;

@@ -6820,9 +6820,6 @@ end;
 
 function TOrmPropInfoRecordFixedSize.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
-var
-  i: PtrInt;
-  P1, P2: PByteArray;
 begin
   if (Item1 = Item2) or
      (fRecordSize = 0) then
@@ -6832,17 +6829,7 @@ begin
   else if Item2 = nil then
     result := 1
   else
-  begin
-    result := 0;
-    P1 := GetFieldAddr(Item1);
-    P2 := GetFieldAddr(Item2);
-    for i := 0 to fRecordSize - 1 do // inlined per-byte binary compare
-    begin
-      result := P1^[i] - P2^[i];
-      if result <> 0 then
-        exit;
-    end;
-  end;
+    result := MemCmp(GetFieldAddr(Item1), GetFieldAddr(Item2), fRecordSize);
 end;
 
 procedure TOrmPropInfoRecordFixedSize.SetBinary(Instance: TObject; var Read: TFastReader);
