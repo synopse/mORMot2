@@ -903,10 +903,19 @@ function BinaryEquals(A, B: pointer; Info: PRttiInfo; PSize: PInteger;
   Kinds: TRttiKinds; CaseInSensitive: boolean): boolean;
 
 /// comparison of two values by content, using RTTI
-function BinaryCompare(A, B: pointer; Info: PRttiInfo; CaseInSensitive: boolean): integer;
+function BinaryCompare(A, B: pointer; Info: PRttiInfo;
+  CaseInSensitive: boolean): integer; overload;
+
+/// comparison of two arrays of values by content, using RTTI
+function BinaryCompare(A, B: pointer; Info: PRttiInfo; Count: PtrInt;
+  CaseInSensitive: boolean): integer; overload;
 
 /// comparison of two TObject published properties, using RTTI
-function ObjectCompare(A, B: TObject; CaseInSensitive: boolean): integer;
+function ObjectCompare(A, B: TObject; CaseInSensitive: boolean): integer; overload;
+
+/// comparison of published properties of several TObject instances, using RTTI
+function ObjectCompare(A, B: PObject; Count: PtrInt;
+  CaseInsensitive: boolean = false): integer; overload;
 
 /// case-sensitive comparison of two TObject published properties, using RTTI
 function ObjectEquals(A, B: TObject): boolean;
@@ -1670,6 +1679,7 @@ type
     // - use the Compare() property function (if set) or using Info.Cache.ItemInfo
     // if available - and fallbacks to binary comparison
     function ItemEquals(A, B: pointer; CaseInSensitive: boolean = false): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// compare the content of two items, returning -1, 0 or +1s
     // - use the Compare() property function (if set) or using Info.Cache.ItemInfo
     // if available - and fallbacks to binary comparison
@@ -5291,8 +5301,7 @@ end;
 function DynArrayCompare(A, B: PAnsiChar; ExternalCountA, ExternalCountB: PInteger;
   Info: PRttiInfo; CaseInSensitive: boolean): integer;
 var
-  n1, n2, n, itemsize: PtrInt;
-  comp: TRttiCompare;
+  n1, n2, n: PtrInt;
 begin
   A := PPointer(A)^;
   B := PPointer(B)^;
@@ -5323,40 +5332,11 @@ begin
   if n > n2 then
     n := n2;
   if Info = TypeInfo(TObjectDynArray) then
-  begin
-    repeat
-      result := ObjectCompare(PPointer(A)^, PPointer(B)^, CaseInSensitive);
-      if result <> 0 then
-        exit;
-      inc(PPointer(A));
-      inc(PPointer(B));
-      dec(n);
-    until n = 0;
-  end
+    result := ObjectCompare(PObject(A), PObject(B), n, CaseInSensitive)
   else
-  begin
-    Info := Info^.DynArrayItemType(itemsize);
-    if Info = nil then
-      comp := nil
-    else
-      comp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
-    if Assigned(comp) then
-      repeat
-        itemsize := comp(A, B, Info, result);
-        inc(A, itemsize);
-        inc(B, itemsize);
-        if result <> 0 then
-          exit;
-        dec(n); // both items are equal -> continue to next items
-      until n = 0
-    else
-    begin // binary comparison with length
-      result := MemCmp(pointer(A), pointer(B), n * itemsize);
-      if result <> 0 then
-        exit;
-    end;
-  end;
-  result := n1 - n2;
+    result := BinaryCompare(A, B, Info^.DynArrayItemType, n, CaseInSensitive);
+  if result = 0 then
+    result := n1 - n2;
 end;
 
 function DynArrayAdd(TypeInfo: PRttiInfo; var DynArray; const Item): integer;
@@ -5607,42 +5587,20 @@ raw:Source.Copy(Data, result)
   end;
 end;
 
-function _ArrayCompare(A, B: PUtf8Char; Info: PRttiInfo; CaseInSensitive: boolean;
-  out ArraySize: PtrInt): integer;
-var
-  n, itemsize: PtrInt;
-  cmp: TRttiCompare;
-label
-  raw;
-begin
-  Info := Info^.ArrayItemType(n, ArraySize);
-  if Info = nil then
-raw:result := MemCmp(pointer(A), pointer(B), ArraySize) // binary comparison
-  else
-  begin
-    cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
-    if Assigned(cmp) then // paranoid check
-      repeat
-        itemsize := cmp(A, B, Info, result);
-        inc(A, itemsize);
-        inc(B, itemsize);
-        if result <> 0 then
-          exit;
-        dec(n);
-      until n = 0
-    else
-      goto raw;
-  end;
-end;
-
 function _BC_Array(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+var
+  n: PtrInt;
 begin
-  Compared := _ArrayCompare(A, B, Info, {caseinsens=}false, result);
+  Info := Info^.ArrayItemType(n, result);
+  Compared := BinaryCompare(A, B, Info, n, {CaseInSensitive=}false);
 end;
 
 function _BCI_Array(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+var
+  n: PtrInt;
 begin
-  Compared := _ArrayCompare(A, B, Info, {caseinsens=}true, result);
+  Info := Info^.ArrayItemType(n, result);
+  Compared := BinaryCompare(A, B, Info, n, {CaseInSensitive=}true);
 end;
 
 procedure _BS_VariantComplex(Data: PVariant; Dest: TBufferWriter);
@@ -5830,6 +5788,21 @@ begin
   result := ObjectCompare(A, B, {caseinsensitive=}true) = 0;
 end;
 
+function ObjectCompare(A, B: PObject; Count: PtrInt;
+  CaseInsensitive: boolean): integer;
+begin
+  if Count > 0 then
+    repeat
+      result := ObjectCompare(A^, B^, CaseInsensitive);
+      if result <> 0 then
+        exit;
+      inc(A);
+      inc(B);
+      dec(Count);
+    until Count = 0;
+  result := 0;
+end;
+
 
 function BinaryEquals(A, B: pointer; Info: PRttiInfo; PSize: PInteger;
   Kinds: TRttiKinds; CaseInSensitive: boolean): boolean;
@@ -5870,6 +5843,33 @@ begin
     result := 0;
 end;
 
+function BinaryCompare(A, B: pointer; Info: PRttiInfo; Count: PtrInt;
+  CaseInSensitive: boolean): integer;
+var
+  cmp: TRttiCompare;
+  siz: PtrInt;
+begin
+  if (A <> B) and
+     (Count > 0) then
+    if Info <> nil then
+    begin
+      cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
+      if Assigned(cmp) then
+        repeat
+          siz := cmp(A, B, Info, result);
+          inc(PAnsiChar(A), siz);
+          inc(PAnsiChar(B), siz);
+          dec(Count);
+        until Count = 0
+      else
+        result := MemCmp(A, B, Count * Info^.RttiSize);
+    end
+    else
+      result := ComparePointer(A, B)
+  else
+    result := 0;
+end;
+
 {$ifndef PUREMORMOT2}
 
 function BinarySaveLength(Data: pointer; Info: PRttiInfo; Len: PInteger;
@@ -5887,9 +5887,9 @@ begin
     W := TBufferWriter.Create(TFakeWriterStream, @temp, SizeOf(temp));
     try
       size := save(Data, W, Info);
-      result := W.TotalWritten;
       if Len <> nil then
         Len^ := size;
+      result := W.TotalWritten;
     finally
       W.Free;
     end;
@@ -6421,30 +6421,8 @@ begin
 end;
 
 function TDynArray.ItemEquals(A, B: pointer; CaseInSensitive: boolean): boolean;
-var
-  comp: TRttiCompare;
-  rtti: PRttiInfo;
-  cmp: integer;
-label
-  bin;
 begin
-  if Assigned(fCompare) then
-    result := fCompare(A^, B^) = 0
-  else if not(rcfArrayItemManaged in fInfo.Flags) then
-bin:// binary equality test
-    result := CompareMemFixed(@A, @B, fInfo.Cache.ItemSize)
-  else
-  begin
-    rtti := fInfo.Cache.ItemInfo;
-    comp := RTTI_COMPARE[CaseInsensitive, rtti.Kind];
-    if Assigned(comp) then
-    begin
-      comp(A, B, rtti, cmp);
-      result := cmp = 0;
-    end
-    else
-      goto bin;
-  end;
+  result := ItemCompare(A, B, CaseInSensitive) = 0;
 end;
 
 function TDynArray.ItemCompare(A, B: pointer; CaseInSensitive: boolean): integer;
@@ -6457,7 +6435,8 @@ begin
   if Assigned(fCompare) then
     result := fCompare(A^, B^)
   else if not(rcfArrayItemManaged in fInfo.Flags) then
-bin:result := MemCmp(A, B, fInfo.Cache.ItemSize) // binary compare with length
+bin: // fast binary comparison with length
+     result := MemCmp(A, B, fInfo.Cache.ItemSize)
   else
   begin
     rtti := fInfo.Cache.ItemInfo;
@@ -7695,11 +7674,11 @@ begin
     end;
   end
   else if not(rcfArrayItemManaged in fInfo.Flags) then
-    // binary comparison with length
+    // binary comparison with length (always CaseSensitive)
     result := MemCmp(fValue^, B.fValue^, n * fInfo.Cache.ItemSize)
   else if rcfObjArray in fInfo.Flags then
-    result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
-      fCountP, B.fCountP, TypeInfo(TObjectDynArray), casesensitive)
+    // T*ObjArray comparison of published properties
+    result := ObjectCompare(fValue^, B.fValue^, n, not CaseSensitive)
   else
     result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
       fCountP, B.fCountP, fInfo.Info, casesensitive);

@@ -1778,7 +1778,7 @@ type
   /// JSON-aware TRttiCustom class - used for global RttiCustom: TRttiCustomList
   TRttiJson = class(TRttiCustom)
   protected
-    fCompare: array[boolean] of TRttiCompare;
+    fCompare: array[{CaseInsensitive:}boolean] of TRttiCompare;
     fIncludeReadOptions: TJsonParserOptions;
     fIncludeWriteOptions: TTextWriterWriteObjectOptions;
     // overriden for proper JSON process - set fJsonSave and fJsonLoad
@@ -9340,8 +9340,8 @@ begin
   // set comparison functions
   if rcfObjArray in fFlags then
   begin
-    fCompare[true] := _BC_ObjArray;
-    fCompare[false] := _BCI_ObjArray;
+    fCompare[true] := _BCI_ObjArray;
+    fCompare[false] := _BC_ObjArray;
   end
   else
   begin
@@ -9351,7 +9351,7 @@ begin
       // RTTI_COMPARE[rkLString] is StrComp/StrIComp which is mostly fine
       if Cache.CodePage >= CP_RAWBLOB then
       begin
-        // should use RawByteString length, and ignore any #0
+        // should use RawByteString length, ignore any #0 or CaseInsensitive
         fCompare[true] := @_BC_RawByteString;
         fCompare[false] := @_BC_RawByteString;
       end
