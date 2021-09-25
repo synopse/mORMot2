@@ -331,7 +331,9 @@ const
   // - will be used e.g. for TSqlDBConnectionProperties.SqlFieldCreate()
   // - see TSqlDBFieldTypeDefinition documentation to find out the mapping
   DB_FIELDS: array[TSqlDBDefinition] of TSqlDBFieldTypeDefinition = (
-  // ftUnknown=int32, ftNull=UTF8, ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8, ftBlob
+  //   ftUnknown=int32, ftNull=UTF8, ftInt64, ftDouble, ftCurrency,
+  //   ftDate, ftUtf8, ftBlob
+
   // dUnknown
     (' INT', ' NVARCHAR(%)', ' BIGINT', ' DOUBLE', ' NUMERIC(19,4)',
     ' TIMESTAMP', ' CLOB', ' BLOB'),
@@ -3177,7 +3179,8 @@ function TSqlDBConnectionProperties.PrepareInlined(const aSql: RawUtf8;
   ExpectResults: boolean): ISqlDBStatement;
 var
   Query: ISqlDBStatement;
-  i, maxParam: integer;
+  i: PtrInt;
+  maxParam: integer;
   Types: TSqlParamTypeDynArray;
   Nulls: TFieldBits;
   Values: TRawUtf8DynArray;
@@ -3192,10 +3195,11 @@ begin
   if Query = nil then
     exit;
   for i := 0 to maxParam - 1 do
-    if i in Nulls then
+    if byte(i) in Nulls then
       Query.BindNull(i + 1)
     else
-      case Types[i] of // returned oftInteger,oftFloat,oftUtf8Text,oftBlob,oftUnknown
+      case Types[i] of
+        // returned oftInteger,oftFloat,oftUtf8Text,oftBlob,oftUnknown
         sptInteger:
           Query.Bind(i + 1, GetInt64(pointer(Values[i])));
         sptFloat:
@@ -4491,9 +4495,17 @@ begin
     result := result + ' UNIQUE'; // see http://www.w3schools.com/sql/sql_unique.asp
   if aField.PrimaryKey then
     case GetDbms of
-      dSQLite, dMSSQL, dOracle, dJet, dPostgreSQL, dFirebird, dNexusDB, dInformix:
+      dSQLite,
+      dMSSQL,
+      dOracle,
+      dJet,
+      dPostgreSQL,
+      dFirebird,
+      dNexusDB,
+      dInformix:
         result := result + ' PRIMARY KEY';
-      dDB2, dMySQL:
+      dDB2,
+      dMySQL:
         aAddPrimaryKey := aField.Name;
     end;
   result := aField.Name + result;
@@ -5321,7 +5333,7 @@ begin
           BindTextU(i, UnicodeStringToUtf8(UnicodeString(VUnicodeString)), IO);
         {$endif UNICODE}
         {$endif HASVARUSTRING}
-        vtboolean:
+        vtBoolean:
           if VBoolean then // normalize
             Bind(i, 1, IO)
           else

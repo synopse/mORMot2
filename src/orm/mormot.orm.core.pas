@@ -5731,105 +5731,97 @@ var
 begin
   if aPropInfo = nil then
     raise EOrmException.Create('Invalid TOrmPropInfoRttiCreateFrom(nil) call');
-  result := nil;
-  aOrmFieldType := oftUnknown;
   aType := aPropInfo^.TypeInfo;
-  if aType^.Kind = rkVariant then
-  begin
-    aOrmFieldType := NullableTypeToOrmFieldType(aType);
-    if aOrmFieldType <> oftUnknown then // handle oftNullable type
-      result := TOrmPropInfoRttiVariant.Create(aPropInfo, aPropIndex,
-        aOrmFieldType, aOptions);
-  end;
-  if result = nil then
-  begin
-    aOrmFieldType := GetOrmFieldType(aType); // guess from RTTI
-    C := nil;
-    if (OrmPropInfoRegistration = nil) or
-       not OrmPropInfoRegistration.FindAndCopy(aType, C) then
-      case aOrmFieldType of
-        oftUnknown,
-        oftBlobCustom:
-          ; // will raise an EOrmException
-        oftBoolean,
-        oftEnumerate:
-          C := TOrmPropInfoRttiEnum;
-        oftTimeLog,
-        oftModTime,
-        oftCreateTime:
-          // specific class for further use
-          C := TOrmPropInfoRttiTimeLog;
-        oftUnixTime:
-          // specific class for further use
-          C := TOrmPropInfoRttiUnixTime;
-        oftUnixMSTime:
-          C := TOrmPropInfoRttiUnixMSTime;
-        oftCurrency:
-          C := TOrmPropInfoRttiCurrency;
-        oftDateTime,
-        oftDateTimeMS:
-          C := TOrmPropInfoRttiDateTime;
-        oftID: // = TOrm(aID)
-          C := TOrmPropInfoRttiID;
-        oftTID:
-          // = TID or T*ID
-          C := TOrmPropInfoRttiTID;
-        oftSessionUserID:
-          C := TOrmPropInfoRttiInt64;
-        oftRecord:
-          // = TRecordReference/TRecordReferenceToBeDeleted
-          C := TOrmPropInfoRttiRecordReference;
-        oftRecordVersion:
-          C := TOrmPropInfoRttiRecordVersion;
-        oftMany:
-          C := TOrmPropInfoRttiMany;
-        oftObject:
-          C := TOrmPropInfoRttiObject;
-        oftVariant:
-          C := TOrmPropInfoRttiVariant;  // oftNullable already handle above
-        oftBlob:
-          C := TOrmPropInfoRttiRawBlob;
-        oftBlobDynArray:
-          C := TOrmPropInfoRttiDynArray;
-        oftUtf8Custom:
-          // will happen only for DELPHI XE5 and up
-          result := TOrmPropInfoCustomJson.Create(aPropInfo, aPropIndex);
-      else
-        case aType^.Kind of // retrieve matched type from RTTI binary level
-          rkInteger:
-            C := TOrmPropInfoRttiInt32;
-          rkSet:
-            C := TOrmPropInfoRttiSet;
-          rkChar,
-          rkWChar:
-            C := TOrmPropInfoRttiChar;
-          rkInt64
-          {$ifdef FPC}, rkQWord{$endif}:
-            C := TOrmPropInfoRttiInt64;
-          rkFloat:
-            if aType^.RttiFloat = rfDouble then
-              C := TOrmPropInfoRttiDouble;
-          rkLString:
-            case aType^.AnsiStringCodePage of
-              // recognize optimized UTF-8/UTF-16
-              CP_UTF8:
-                C := TOrmPropInfoRttiRawUtf8;
-              CP_UTF16:
-                C := TOrmPropInfoRttiRawUnicode;
-            else
-              C := TOrmPropInfoRttiAnsi; // will use the right TSynAnsiConvert
-            end;
-        {$ifdef HASVARUSTRING}
-          rkUString:
-            C := TOrmPropInfoRttiUnicode;
-        {$endif HASVARUSTRING}
-          rkWString:
-            C := TOrmPropInfoRttiWide;
+  aOrmFieldType := GetOrmFieldType(aType); // guess from RTTI
+  C := nil;
+  result := nil;
+  if (OrmPropInfoRegistration = nil) or
+     not OrmPropInfoRegistration.FindAndCopy(aType, C) then
+    // TypeInfo() was not in TOrmPropInfoRtti.RegisterTypeInfo -> use RTTI
+    case aOrmFieldType of
+      oftUnknown,
+      oftBlobCustom:
+        ; // will raise an EOrmException
+      oftBoolean,
+      oftEnumerate:
+        C := TOrmPropInfoRttiEnum;
+      oftTimeLog,
+      oftModTime,
+      oftCreateTime: // specific class for further use
+        C := TOrmPropInfoRttiTimeLog;
+      oftUnixTime:   // specific class for further use
+        C := TOrmPropInfoRttiUnixTime;
+      oftUnixMSTime:
+        C := TOrmPropInfoRttiUnixMSTime;
+      oftCurrency:
+        C := TOrmPropInfoRttiCurrency;
+      oftDateTime,
+      oftDateTimeMS:
+        C := TOrmPropInfoRttiDateTime;
+      oftID:    // = TOrm(aID)
+        C := TOrmPropInfoRttiID;
+      oftTID:   // = TID or T*ID
+        C := TOrmPropInfoRttiTID;
+      oftSessionUserID:
+        C := TOrmPropInfoRttiInt64;
+      oftRecord: // = TRecordReference/TRecordReferenceToBeDeleted
+        C := TOrmPropInfoRttiRecordReference;
+      oftRecordVersion:
+        C := TOrmPropInfoRttiRecordVersion;
+      oftMany:
+        C := TOrmPropInfoRttiMany;
+      oftObject:
+        C := TOrmPropInfoRttiObject;
+      oftVariant:
+        begin
+          aOrmFieldType := NullableTypeToOrmFieldType(aType);
+          if aOrmFieldType = oftUnknown then // no oftNullable type
+            aOrmFieldType := oftVariant; // a regular variant stored as JSON
+          C := TOrmPropInfoRttiVariant;
         end;
+      oftBlob:
+        C := TOrmPropInfoRttiRawBlob;
+      oftBlobDynArray:
+        C := TOrmPropInfoRttiDynArray;
+      oftUtf8Custom: // happens only for DELPHI XE5 and up
+        result := TOrmPropInfoCustomJson.Create(aPropInfo, aPropIndex);
+    else
+      case aType^.Kind of // retrieve more precise C class from RTTI
+        rkInteger:
+          C := TOrmPropInfoRttiInt32;
+        rkSet:
+          C := TOrmPropInfoRttiSet;
+        rkChar,
+        rkWChar:
+          C := TOrmPropInfoRttiChar;
+        {$ifdef FPC}
+        rkQWord,
+        {$endif FPC}
+        rkInt64:
+          C := TOrmPropInfoRttiInt64;
+        rkFloat:
+          if aType^.RttiFloat = rfDouble then
+            C := TOrmPropInfoRttiDouble;
+        rkLString:
+          case aType^.AnsiStringCodePage of
+            // recognize optimized UTF-8/UTF-16
+            CP_UTF8:
+              C := TOrmPropInfoRttiRawUtf8;
+            CP_UTF16:
+              C := TOrmPropInfoRttiRawUnicode;
+          else
+            C := TOrmPropInfoRttiAnsi; // will use the right TSynAnsiConvert
+          end;
+      {$ifdef HASVARUSTRING}
+        rkUString:
+          C := TOrmPropInfoRttiUnicode;
+      {$endif HASVARUSTRING}
+        rkWString:
+          C := TOrmPropInfoRttiWide;
       end;
-    if C <> nil then
-      result := C.Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  end;
+    end;
+  if C <> nil then
+    result := C.Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
   if result <> nil then
   begin
     if aFlattenedProps <> nil then
