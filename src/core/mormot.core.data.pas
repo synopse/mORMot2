@@ -859,9 +859,8 @@ function DynArrayLoadHeader(var Source: TFastReader;
 // - as called e.g. by TDynArray.Equals, using ExternalCountA/B optional parameter
 // - RTTI_COMPARE[true/false,rkDynArray] are wrappers to this, with ExternalCount=nil
 // - if Info=TypeInfo(TObjectDynArray) then will compare any T*ObjArray
-function DynArrayCompare(A, B: PAnsiChar;
-  ExternalCountA, ExternalCountB: PInteger; Info: PRttiInfo;
-  CaseInSensitive: boolean): integer; overload;
+function DynArrayCompare(A, B: PAnsiChar; ExternalCountA, ExternalCountB: PInteger;
+  Info: PRttiInfo; CaseInSensitive: boolean): integer; overload;
 
 /// wrapper around TDynArray.Add
 // - warning: the Item type is not checked at runtime, so should be as expected
@@ -875,7 +874,8 @@ function DynArrayDelete(TypeInfo: PRttiInfo; var DynArray; Index: PtrInt): boole
 /// compare two dynamic arrays by calling TDynArray.Equals
 // - if Info=TypeInfo(TObjectDynArray) then will compare any T*ObjArray
 function DynArrayEquals(TypeInfo: PRttiInfo; var Array1, Array2;
-  Array1Count: PInteger = nil; Array2Count: PInteger = nil): boolean;
+  Array1Count: PInteger = nil; Array2Count: PInteger = nil;
+  CaseInsensitive: boolean = false): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 {$ifdef FPCGENERICS}
@@ -5356,10 +5356,10 @@ begin
 end;
 
 function DynArrayEquals(TypeInfo: PRttiInfo; var Array1, Array2;
-  Array1Count, Array2Count: PInteger): boolean;
+  Array1Count, Array2Count: PInteger; CaseInsensitive: boolean): boolean;
 begin
   result := DynArrayCompare(@Array1, @Array2, Array1Count, Array2Count,
-    TypeInfo, {CaseSensitive=}true) = 0;
+    TypeInfo, CaseInsensitive) = 0;
 end;
 
 {$ifdef FPCGENERICS}
@@ -5385,27 +5385,27 @@ end;
 
 function _BC_DynArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := DynArrayCompare(A, B, nil, nil, Info, {casesens=}true);
+  Compared := DynArrayCompare(A, B, nil, nil, Info, {caseinsens=}false);
   result := SizeOf(pointer);
 end;
 
 function _BCI_DynArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := DynArrayCompare(A, B, nil, nil, Info, {casesens=}false);
+  Compared := DynArrayCompare(A, B, nil, nil, Info, {caseinsens=}true);
   result := SizeOf(pointer);
 end;
 
 function _BC_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
   Compared := DynArrayCompare(
-    A, B, nil, nil, TypeInfo(TObjectDynArray), {casesens=}true);
+    A, B, nil, nil, TypeInfo(TObjectDynArray), {caseinsens=}false);
   result := SizeOf(pointer);
 end;
 
 function _BCI_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
   Compared := DynArrayCompare(
-    A, B, nil, nil, TypeInfo(TObjectDynArray), {casesens=}false);
+    A, B, nil, nil, TypeInfo(TObjectDynArray), {caseinsens=}true);
   result := SizeOf(pointer);
 end;
 
@@ -5802,7 +5802,6 @@ begin
     until Count = 0;
   result := 0;
 end;
-
 
 function BinaryEquals(A, B: pointer; Info: PRttiInfo; PSize: PInteger;
   Kinds: TRttiKinds; CaseInSensitive: boolean): boolean;
@@ -7660,7 +7659,7 @@ begin
   if Assigned(fCompare) and
      not ignorecompare then
   begin
-    // use customized comparison
+    // use specified fCompare() function
     P1 := fValue^;
     P2 := B.fValue^;
     s := fInfo.Cache.ItemSize;
@@ -7680,8 +7679,8 @@ begin
     // T*ObjArray comparison of published properties
     result := ObjectCompare(fValue^, B.fValue^, n, not CaseSensitive)
   else
-    result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
-      fCountP, B.fCountP, fInfo.Info, casesensitive);
+    result := BinaryCompare(fValue^, B.fValue^, fInfo.Cache.ItemInfo, n,
+      not CaseSensitive);
 end;
 
 procedure TDynArray.Copy(Source: PDynArray; ObjArrayByRef: boolean);

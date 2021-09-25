@@ -6177,7 +6177,7 @@ begin
     fSqlDBFieldType := ftUtf8; // matches GetFieldSqlVar() below
   end;
   if fGetterIsFieldPropOffset = 0 then
-    raise EOrmException.CreateUtf8('%.Create(%) should be a field, not with getter!',
+    raise EOrmException.CreateUtf8('%.Create(%) should be a field, not a getter!',
       [self, fPropType^.Name]);
 end;
 
@@ -6290,7 +6290,7 @@ function TOrmPropInfoRttiDynArray.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
 var
   da1, da2: TDynArray;
-  i: PtrInt;
+  n: PtrInt;
 begin
   if Item1 = Item2 then
     result := 0
@@ -6302,23 +6302,14 @@ begin
   begin
     GetDynArray(Item1, da1);
     GetDynArray(Item2, da2);
-    result := da1.Count - da2.Count;
-    if result <> 0 then
-      exit;
-    result := PtrInt(Item1) - PtrInt(Item2); // pseudo comparison
-    if fObjArray <> nil then
-    begin
-      for i := 0 to da1.Count - 1 do
-      begin
-        result := ObjectCompare(PObjectArray(da1.Value^)[i],
-          PObjectArray(da2.Value^)[i], CaseInsensitive);
-        if result <> 0 then
-          exit;
-      end;
-    end
-    else if not da1.Equals(@da2) then
-      exit;
-    result := 0;
+    n := da1.Count;
+    result := n - da2.Count;
+    if result = 0 then
+      if fObjArray <> nil then
+        result := ObjectCompare(da1.Value^, da2.Value^, n, CaseInsensitive)
+      else
+        // compare using our fast RTTI functions
+        result := da1.Compares(@da2, {ignorecomp:}false, not CaseInsensitive);
   end;
 end;
 
