@@ -120,11 +120,20 @@ type
 
 const
   /// potentially managed types in TRttiKind enumerates
-  rkManagedTypes = [rkLStringOld, rkLString, rkWstring, rkUstring, rkArray,
-                    rkObject, rkRecord, rkDynArray, rkInterface, rkVariant];
+  rkManagedTypes = [rkLStringOld,
+                    rkLString,
+                    rkWstring,
+                    rkUstring,
+                    rkArray,
+                    rkObject,
+                    rkRecord,
+                    rkDynArray,
+                    rkInterface,
+                    rkVariant];
 
   /// maps record or object in TRttiKind enumerates
-  rkRecordTypes = [rkObject, rkRecord];
+  rkRecordTypes = [rkObject,
+                   rkRecord];
 
 type
   ///  TTypeKind enumerate as defined in Delphi 6 and up
@@ -2374,16 +2383,22 @@ type
   end;
   PRttiCustomListPair = ^TRttiCustomListPair;
 
+  /// efficient PRttiInfo/TRttiCustom pairs for TRttiCustomList hash table
+  TRttiCustomListPairs = record
+    /// speedup search by name e.g. from a loop
+    Last: TRttiCustom;
+    /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by Name[0..1]
+    Hash: array[0..RTTICUSTOMTYPEINFOHASH] of TRttiCustomListPair;
+  end;
+  PRttiCustomListPairs = ^TRttiCustomListPairs;
+
   /// internal structure for TRttiCustomList "hash table of the poor" (tm)
   // - consume e.g. around 50KB of memory on for all mormot2tests types
   TRttiCustomListHashTable = record
     /// for DoRegister thread-safety - no need of TSynLocker padding
     Lock: TRTLCriticalSection;
-    /// speedup search by name e.g. from a loop
-    LastPair: array[succ(low(TRttiKind)) .. high(TRttiKind)] of TRttiCustom;
-    /// store PRttiInfo/TRttiCustom pairs by TRttiKind.Kind+Name[0..1]
-    Pairs: array[succ(low(TRttiKind)) .. high(TRttiKind)] of
-           array[0..RTTICUSTOMTYPEINFOHASH] of TRttiCustomListPair;
+    /// per-Kind and per-Name hash table of PRttiInfo/TRttiCustom pairs
+    Pairs: array[succ(low(TRttiKind)) .. high(TRttiKind)] of TRttiCustomListPairs;
   end;
 
   /// maintain a thread-safe list of PRttiInfo/TRttiCustom/TRttiJson registration
@@ -7455,9 +7470,8 @@ begin
   if Info^.Kind <> rkClass then
   begin
     // our optimized "hash table of the poor" (tm) lookup
-    P := @Table^.Pairs[Info^.Kind,
-      (PtrUInt(Info.RawName[0]) xor PtrUInt(Info.RawName[1])) and
-      RTTICUSTOMTYPEINFOHASH];
+    P := @Table^.Pairs[Info^.Kind].Hash[(PtrUInt(Info.RawName[0]) xor
+           PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH];
     // note: we tried to include RawName[2] and $df, but with no gain
     result := pointer(P^.RttiInfoRttiCustom);
     if result = nil then
@@ -7490,17 +7504,17 @@ end;
 function FindNameInPairs(Pairs, PEnd: PPointerArray;
   Name: PUtf8Char; NameLen: PtrInt): TRttiCustom;
 var
-  s: PRttiInfo;
+  nfo: PRttiInfo;
 begin
   repeat
-    s := Pairs[0];
-    if ord(s^.RawName[0]) <> NameLen then
+    nfo := Pairs[0];
+    if ord(nfo^.RawName[0]) <> NameLen then
     begin
       Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
       if PAnsiChar(Pairs) >= PAnsiChar(PEnd) then
         break;
     end
-    else if not IdemPropNameUSameLenNotNull(Name, @s^.RawName[1], NameLen) then
+    else if not IdemPropNameUSameLenNotNull(Name, @nfo^.RawName[1], NameLen) then
     begin
       Pairs := @Pairs[2];
       if PAnsiChar(Pairs) >= PAnsiChar(PEnd) then
@@ -7518,26 +7532,27 @@ end;
 function TRttiCustomList.Find(Name: PUtf8Char; NameLen: PtrInt;
   Kind: TRttiKind): TRttiCustom;
 var
+  K: PRttiCustomListPairs;
   P: PRttiCustomListPair;
 begin
   if (Kind <> rkUnknown) and
      (Name <> nil) and
      (NameLen > 0) then
   begin
+    K := @Table^.Pairs[Kind];
     // try latest found value e.g. calling from JsonRetrieveObjectRttiCustom()
-    result := Table^.LastPair[Kind];
+    result := K^.Last;
     if (result <> nil) and
        IdemPropNameU(result.Name, Name, NameLen) then
       exit;
     // our optimized "hash table of the poor" (tm) lookup
-    P := @Table^.Pairs[Kind,
-      (PtrUInt(NameLen) xor PtrUInt(Name[0])) and RTTICUSTOMTYPEINFOHASH];
+    P := @K^.Hash[(PtrUInt(NameLen) xor PtrUInt(Name[0])) and RTTICUSTOMTYPEINFOHASH];
     result := pointer(P^.RttiInfoRttiCustom);
     if result <> nil then
     begin
       result := FindNameInPairs(pointer(result), P^.CurrentEnd, Name, NameLen);
       if result <> nil then
-        Table^.LastPair[Kind] := result;
+        K^.Last := result;
     end;
   end
   else
@@ -7574,18 +7589,22 @@ end;
 function TRttiCustomList.FindByArrayRtti(ElemInfo: PRttiInfo): TRttiCustom;
 var
   i: PtrInt;
+  k: PRttiCustomListPairs;
   p: PRttiCustomListPair;
   pp: PPointerArray;
 begin
   mormot.core.os.EnterCriticalSection(Table^.Lock);
   try
     if ElemInfo <> nil then
-      for i := 0 to high(Table^.Pairs[rkDynArray]) do
+    begin
+      k := @Table^.Pairs[rkDynArray];
+      for i := 0 to high(k^.Hash) do
       begin
-        p := @Table^.Pairs[rkDynArray, i];
+        p := @k.Hash[i];
         pp := pointer(p^.RttiInfoRttiCustom);
-        p := p^.CurrentEnd;
         if pp <> nil then
+        begin
+          p := p^.CurrentEnd;
           repeat
             result := pp[1]; // PRttiInfo/TRttiCustom pairs
             if (result.ArrayRtti <> nil) and
@@ -7593,7 +7612,9 @@ begin
               exit;
             pp := @pp[2];
           until PAnsiChar(pp) = PAnsiChar(p);
+        end;
       end;
+    end;
     result := nil;
   finally
     mormot.core.os.LeaveCriticalSection(Table^.Lock);
@@ -7712,7 +7733,7 @@ var
 begin // call is made within Lock..UnLock
   hash := (PtrUInt(Instance.Info.RawName[0]) xor
            PtrUInt(Instance.Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH;
-  P := @Table^.Pairs[Instance.Kind, hash];
+  P := @Table^.Pairs[Instance.Kind].Hash[hash];
   n := length(P^.RttiInfoRttiCustom);
   if (n = 0) or
      (@P^.RttiInfoRttiCustom[n] = P^.CurrentEnd) then
