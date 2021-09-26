@@ -16,6 +16,10 @@ unit mormot.db.sql.ibx;
 
   For low level connection, uses the MWA Software Firebird Pascal API package,
   (fbintf) part of IBX for Lazarus - https://www.mwasoftware.co.uk/fb-pascal-api
+  This version work with trunk version of IBX
+  svn co https://svn.mwasoftware.co.uk/public/ibx/trunk ibx
+  more details on https://forum.lazarus.freepascal.org/index.php/topic,56267.0.html
+  Only fbintf package need to be installed
 
   - With explicit StartTransaction (or Batch): all statements in connection
     are executed within this main transaction owned by the connection.
@@ -32,11 +36,6 @@ unit mormot.db.sql.ibx;
   - Batch is implemented for insert, update, delete using "execute block"
   - TODO Firebird4 API interface, with its new IBatch interface for insert/update
     also implemented in fbintf package.
-  - You must patch FB30Statement.pas and FB25Statement.pas of fbintf, waiting
-    for response from MWA Software. fbintf raise exception if Execute is
-    executed within a different transaction than the prepared transaction.
-    Just comment these lines in InternalExecute and InternalOpenCursor and rebuild package.
-    more details on https://forum.lazarus.freepascal.org/index.php/topic,56267.0.html
 }
 
 
@@ -94,8 +93,9 @@ type
     fCreateIfNotExists: boolean;
     procedure SetCreateDescendingPK(AValue: boolean);
   protected
-    function IbxSQLTypeToTSqlDBFieldType(
-      const aColMeta: IColumnMetaData): TSqlDBFieldType;
+    /// initialize fForeignKeys content with all foreign keys of this DB
+    // - do nothing by now
+    procedure GetForeignKeys; override;
     // Override to enable descending PK
     function SqlFieldCreate(const aField: TSqlDBColumnCreate;
       var aAddPrimaryKey: RawUtf8): RawUtf8; override;
@@ -152,7 +152,7 @@ type
     // Main Transaction used with Begin(Start)Transaction/Batch
     fTPB: ITPB;
     fTransaction: ITransaction;
-    function GenerateTPB: ITPB;
+    function GenerateTPB(aReadOnly: boolean = false): ITPB;
   public
     /// prepare a connection to a specified Firebird database server
     constructor Create(aProperties: TSqlDBConnectionProperties); override;
@@ -189,17 +189,29 @@ type
 
   /// implements a statement via a IBX/FB Pascal API database connection
   TSqlDBIbxStatement = class(TSqlDBStatementWithParamsAndColumns)
+  type
+    TColumnsMeta = record
+      SQLType: Cardinal;
+      CodePage: TSystemCodePage;
+      Scale: integer;
+      Subtype: integer;
+    end;
   protected
     fAutoStartCommitTrans: boolean;
     fStatement: IStatement;
     fResultSet: IResultSet;
     fResults: IResults;
+    fMeta: IMetaData;
+    fColumnsMeta: array of TColumnsMeta;
     // Internal Transaction used for all statements if not explicit StartTransaction/Batch
     // This transaction is Started and COMMIT after execution (auto commit)
     fInternalTPB: ITPB;
     fInternalTransaction: ITransaction;
+    fReadOnlyTransaction: boolean;
     procedure InternalStartTransaction;
     procedure InternalCommitTransaction;
+    procedure CheckColAndRowset(const Col: integer);
+    function IbxSQLTypeToTSqlDBFieldType(const aColMeta: TColumnsMeta): TSqlDBFieldType;
   public
     destructor Destroy; override;
     /// Prepare an UTF-8 encoded SQL statement
@@ -278,14 +290,14 @@ begin
       fInternalTransaction.Start(TACommit);
   end
   {$else}
-    fInternalTransaction.Start(TACommit)
+    fInternalTransaction.Start
   {$endif ZEOSTRANS}
   else
   begin
     if (fInternalTPB = nil) then
-       fInternalTPB := TSqlDBIbxConnection(Connection).GenerateTPB;
+      fInternalTPB := TSqlDBIbxConnection(Connection).GenerateTPB(fReadOnlyTransaction);
     fInternalTransaction := TSqlDBIbxConnection(Connection).Attachment.
-      StartTransaction(fInternalTPB, TACommit);
+      StartTransaction(fInternalTPB);
   end;
 end;
 
@@ -297,8 +309,65 @@ begin
     if fStatement.GetSQLStatementType in
          [SQLInsert, SQLUpdate, SQLDelete, SQLDDL, SQLSelectForUpdate,
           SQLSetGenerator] then
+      fInternalTransaction.CommitRetaining;
+  {$else}
+    fInternalTransaction.Commit;
   {$endif ZEOSTRANS}
-      fInternalTransaction.Commit;
+end;
+
+procedure TSqlDBIbxStatement.CheckColAndRowset(const Col: integer);
+begin
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
+    raise ESqlDBIbx.CreateUtf8('%.ColumnInt(%) ResultSet=%',
+      [self, Col, fResultSet]);
+end;
+
+function TSqlDBIbxStatement.IbxSQLTypeToTSqlDBFieldType(
+  const aColMeta: TColumnsMeta): TSqlDBFieldType;
+var i: integer;
+begin
+  case aColMeta.SQLType of
+    SQL_VARYING, SQL_TEXT:
+      result := ftUtf8;
+    SQL_DOUBLE, SQL_FLOAT:
+      result := ftDouble;
+    SQL_TIMESTAMP,
+    SQL_TIMESTAMP_TZ_EX,
+    SQL_TIME_TZ_EX,
+    SQL_TIMESTAMP_TZ,
+    SQL_TIME_TZ,
+    SQL_TYPE_TIME,
+    SQL_TYPE_DATE:
+      result := ftDate;
+    SQL_BOOLEAN,
+    SQL_LONG,
+    SQL_SHORT,
+    SQL_D_FLOAT,
+    SQL_INT64:
+      begin
+        i := aColMeta.Scale;
+        if i = 0 then
+          result := ftInt64
+        else
+        if i >= (-4) then
+          result := ftCurrency
+        else
+          result := ftDouble;
+      end;
+    SQL_BLOB:
+      begin
+        if aColMeta.Subtype = isc_blob_text then
+          result := ftUtf8
+        else
+          result := ftBlob;
+      end
+  else
+    //    SQL_INT128, SQL_DEC_FIXED, SQL_DEC16, SQL_DEC34
+    //    SQL_NULL, SQL_ARRAY, SQL_QUAD
+    raise ESqlDBIbx.CreateUtf8('%: unexpected TIbxType %', [self,
+      aColMeta.SQLType]);
+  end;
 end;
 
 destructor TSqlDBIbxStatement.Destroy;
@@ -322,12 +391,17 @@ procedure TSqlDBIbxStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean
 var
   con: TSqlDBIbxConnection;
   tr: ITransaction;
+  fColumnMetaData: IColumnMetaData;
+  i, n: integer;
+  name: string;
 begin
   SQLLogBegin(sllDB);
   if (fStatement <> nil) or
      (fResultSet <> nil) then
     raise ESqlDBIbx.CreateUtf8('%.Prepare() shall be called once', [self]);
   inherited Prepare(aSQL, ExpectResults); // connect if necessary
+  fReadOnlyTransaction := IdemPChar(pointer(fSQL), 'SELECT');
+
   con := (fConnection as TSqlDBIbxConnection);
   if not con.IsConnected then
     con.Connect;
@@ -345,6 +419,33 @@ begin
   end;
   fStatement := con.Attachment.Prepare(
     tr, {$ifdef UNICODE} Utf8ToString(fSQL) {$else} fSQL {$endif});
+  fStatement.SetStaleReferenceChecks(false);
+  fStatement.SetRetainInterfaces(true);
+
+  fColumnCount := 0;
+  fColumn.ReHash;
+
+  if ExpectResults then
+  begin
+    fMeta := fStatement.GetMetaData;
+    n := fMeta.getCount;
+    SetLength(fColumnsMeta, n);
+    fColumn.Capacity := n;
+    for i := 0 to n - 1 do
+    begin
+      fColumnMetaData := fMeta.getColumnMetaData(i);
+      fColumnsMeta[i].SQLType := fColumnMetaData.GetSQLType;
+      fColumnsMeta[i].CodePage := fColumnMetaData.getCodePage;
+      fColumnsMeta[i].Scale := fColumnMetaData.getScale;
+      fColumnsMeta[i].Subtype := fColumnMetaData.getSubtype;
+
+      name := fColumnMetaData.getName;
+      PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(
+        // Delphi<2009: already UTF-8 encoded due to controls_cp=CP_UTF8
+        {$ifdef UNICODE} StringToUtf8 {$endif}(name)))^.ColumnType :=
+          IbxSQLTypeToTSqlDBFieldType(fColumnsMeta[i]);
+    end;
+  end;
   SQLLogEnd;
 end;
 
@@ -375,18 +476,18 @@ begin
         result := 'INTEGER'
       else begin
         if aParam.getSubtype = 1 then
-          FormatUtf8('NUMERIC(9,%)', [aParam.getScale], result)
+          FormatUtf8('NUMERIC(9,%)', [-aParam.getScale], result)
         else
-          FormatUtf8('DECIMAL(9,%)', [aParam.getScale], result);
+          FormatUtf8('DECIMAL(9,%)', [-aParam.getScale], result);
       end;
     SQL_SHORT:
       if aParam.getScale = 0 then
         result := 'SMALLINT'
       else begin
         if aParam.getSubtype = 1 then
-          FormatUtf8('NUMERIC(4,%)', [aParam.getScale], result)
+          FormatUtf8('NUMERIC(4,%)', [-aParam.getScale], result)
         else
-          FormatUtf8('DECIMAL(4,%)', [aParam.getScale], result);
+          FormatUtf8('DECIMAL(4,%)', [-aParam.getScale], result);
       end;
     SQL_TIMESTAMP:
        result := 'TIMESTAMP';
@@ -406,9 +507,9 @@ begin
         result := 'BIGINT'
       else begin
         if aParam.getSubtype = 1 then
-          FormatUtf8('NUMERIC(18,%)', [aParam.getScale], result)
+          FormatUtf8('NUMERIC(18,%)', [-aParam.getScale], result)
         else
-          FormatUtf8('DECIMAL(18,%)', [aParam.getScale], result);
+          FormatUtf8('DECIMAL(18,%)', [-aParam.getScale], result);
       end;
     SQL_BOOLEAN:
        result := 'BOOLEAN';
@@ -432,15 +533,11 @@ var
   con: TSqlDBIbxConnection;
   iParams: ISQLParams;
   iParam : ISQLParam;
-  iMeta: IMetaData;
-  iColMeta: IColumnMetaData;
-  i, n: integer;
-  name: string;
-  Props: TSqlDBIbxConnectionProperties;
+  i: integer;
 
   procedure BlockArrayExecute;
   const
-    cMaxStm = 100;  // max statements in execute block, FB max is 255
+    cMaxStm = 50;  // max statements in execute block, FB max is 255
   var
     oldSQL: RawUTF8;
     aPar: TRawUtf8DynArray;
@@ -454,6 +551,7 @@ var
       newStatement := con.Attachment.Prepare(
         fStatement.GetTransaction,
         {$ifdef UNICODE} Utf8ToString(W.Text) {$else} W.Text {$endif});
+      newStatement.SetStaleReferenceChecks(false);
     end;
 
     procedure ExecuteBlockStatement;
@@ -483,11 +581,11 @@ var
             ftNull:
               // handle null column
               for iA := 0 to iEnd-iStart do
-                iParams.Params[iA * fParamCount + iP].SetIsNull(true);
+                iParams.getSQLParam(iA * fParamCount + iP).SetIsNull(true);
           else
             for iA := 0 to iEnd-iStart do
             begin
-              iParam := iParams.Params[iA * fParamCount + iP];
+              iParam := iParams.getSQLParam(iA * fParamCount + iP);
               ndx := iA + iStart;
               if VArray[ndx] = 'null' then
                 iParam.SetIsNull(true)
@@ -495,18 +593,18 @@ var
               begin
                 case VType of
                   ftDate:
-                    iParam.AsDateTime := Iso8601ToDateTimePUtf8Char(
-                      PUtf8Char(pointer(VArray[ndx])) + 1, Length(VArray[ndx]) - 2);
+                    iParam.SetAsDateTime(Iso8601ToDateTimePUtf8Char(
+                      PUtf8Char(pointer(VArray[ndx])) + 1, Length(VArray[ndx]) - 2));
                   ftInt64:
-                    iParam.AsInt64 := GetInt64(pointer(VArray[ndx]));
+                    iParam.SetAsInt64(GetInt64(pointer(VArray[ndx])));
                   ftDouble:
-                    iParam.AsDouble := GetExtended(pointer(VArray[ndx]));
+                    iParam.SetAsDouble(GetExtended(pointer(VArray[ndx])));
                   ftCurrency:
-                    iParam.AsCurrency := StrToCurrency(pointer(VArray[ndx]));
+                    iParam.SetAsCurrency(StrToCurrency(pointer(VArray[ndx])));
                   ftUtf8:
-                    iParam.AsString := UnQuoteSqlString(VArray[ndx]);
+                    iParam.SetAsString(UnQuoteSqlString(VArray[ndx]));
                   ftBlob:
-                    iParam.AsString := VArray[ndx];
+                    iParam.SetAsString(VArray[ndx]);
                   else
                     raise ESqlDBIbx.CreateUtf8(
                       '%.ExecutePrepared: Invalid type parameter #%', [self, ndx]);
@@ -591,7 +689,11 @@ begin
   begin
     InternalStartTransaction;
     if not fStatement.IsPrepared then
+    begin
       fStatement.Prepare(fInternalTransaction);
+      fStatement.SetStaleReferenceChecks(false);
+      fStatement.SetRetainInterfaces(true);
+    end;
   end;
   iParams := fStatement.GetSQLParams;
   if fParamsArrayCount > 0 then      // Array Bindings
@@ -614,37 +716,37 @@ begin
     for i := 0 to fParamCount - 1 do
     // set parameters as expected by FirebirdSQL
     begin
-      iParam := iParams.Params[i];
+      iParam := iParams.getSQLParam(i);
       with fParams[i] do
       begin
         case VType of
           ftUnknown,ftNull:
             begin
-              iParam.IsNull := True;
+              iParam.SetIsNull(True);
             end;
           ftDate:
             begin
-              iParam.AsDateTime := PDateTime(@VInt64)^;
+              iParam.SetAsDateTime(PDateTime(@VInt64)^);
             end;
           ftInt64:
             begin
-              iParam.AsInt64 := PInt64(@VInt64)^;
+              iParam.SetAsInt64(PInt64(@VInt64)^);
             end;
           ftDouble:
             begin
-              iParam.AsDouble := unaligned(PDouble(@VInt64)^);
+              iParam.SetAsDouble(unaligned(PDouble(@VInt64)^));
             end;
           ftCurrency:
             begin
-              iParam.AsCurrency := PCurrency(@VInt64)^;
+              iParam.SetAsCurrency(PCurrency(@VInt64)^);
             end;
           ftUtf8:
             begin
-              iParam.AsString := VData;
+              iParam.SetAsString(VData);
             end;
           ftBlob:
             begin
-              iParam.AsString := VData;
+              iParam.SetAsString(VData);
             end;
           else
             raise ESqlDBIbx.CreateUtf8(
@@ -654,8 +756,6 @@ begin
     end;
     if fExpectResults then
     begin
-      fColumnCount := 0;
-      fColumn.ReHash;
       fCurrentRow := -1;
       if fAutoStartCommitTrans then
         fResultSet := fStatement.OpenCursor(fInternalTransaction)
@@ -663,28 +763,11 @@ begin
         fResultSet := fStatement.OpenCursor(con.fTransaction);
       fResults := fResultSet;
       fResultSet.SetRetainInterfaces(true);
-      fResults.SetRetainInterfaces(true);
       if not fResultSet.IsEof then
         fCurrentRow:=0;
       if fResultSet = nil then
         SynDBLog.Add.Log(sllWarning,'Ibx.ExecutePrepared returned nil %',
-          [fSQL], self)
-      else
-      begin
-        Props := fConnection.Properties as TSqlDBIbxConnectionProperties;
-        iMeta := fStatement.GetMetaData;
-        n := iMeta.getCount;
-        fColumn.Capacity := n;
-        for i := 0 to n - 1 do
-        begin
-          iColMeta := iMeta.getColumnMetaData(i);
-          name := iColMeta.getName;
-          PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(
-            // Delphi<2009: already UTF-8 encoded due to controls_cp=CP_UTF8
-            {$ifdef UNICODE} StringToUtf8 {$endif}(name)))^.ColumnType :=
-              Props.IbxSQLTypeToTSqlDBFieldType(iColMeta);
-        end;
-      end;
+          [fSQL], self);
     end
     else
     begin
@@ -768,119 +851,177 @@ end;
 
 function TSqlDBIbxStatement.ColumnInt(Col: integer): Int64;
 begin
-  if (fResultSet = nil) or
-     (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBIbx.CreateUtf8('%.ColumnInt(%) ResultSet=%',
-      [self, Col, fResultSet]);
-  result := fResultSet.Data[Col].GetAsInt64;
+  CheckColAndRowset(Col);
+  result := fResults[Col].GetAsInt64;
 end;
 
 function TSqlDBIbxStatement.ColumnNull(Col: integer): boolean;
+var
+  len: SmallInt;
+  data: PByte;
 begin
-  if (fResultSet = nil) or
-     (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBIbx.CreateUtf8('%.ColumnNull(%) ResultSet=%',
-      [self, Col, fResultSet]);
-  result := fResultSet.Data[Col].GetIsNull;
+  CheckColAndRowset(Col);
+  fResultSet.GetData(Col, result, len, data);
 end;
 
 function TSqlDBIbxStatement.ColumnDouble(Col: integer): double;
 begin
-  if (fResultSet = nil) or
-     (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBIbx.CreateUtf8('%.ColumnDouble(%) ResultSet=%',
-      [self, Col, fResultSet]);
-  result := fResultSet.Data[Col].GetAsDouble;
+  CheckColAndRowset(Col);
+  result := fResults[Col].GetAsDouble;
 end;
 
 function TSqlDBIbxStatement.ColumnDateTime(Col: integer): TDateTime;
 begin
-  if (fResultSet = nil) or
-     (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBIbx.CreateUtf8('%.ColumnDateTime(%) ResultSet=%',
-      [self, Col, fResultSet]);
-  result := fResultSet.Data[Col].GetAsDateTime;
+  CheckColAndRowset(Col);
+  result := fResults[Col].GetAsDateTime;
 end;
 
 function TSqlDBIbxStatement.ColumnCurrency(Col: integer): currency;
+var
+  nul: boolean;
+  len: smallint;
+  data: PByte;
 begin
-  if (fResultSet = nil) or
-     (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBIbx.CreateUtf8('%.ColumnCurrency(%) ResultSet=%',
-      [self, Col, fResultSet]);
-  result := fResultSet.Data[Col].GetAsCurrency;
+  CheckColAndRowset(Col);
+  if fColumnsMeta[Col].Scale=-4 then
+  begin
+    fResults.GetData(Col, nul, len, data);
+    PInt64(@result)^ := PInt64(data)^;
+  end
+  else
+    result := fResults[Col].GetAsCurrency;
 end;
 
 function TSqlDBIbxStatement.ColumnUtf8(Col: integer): RawUtf8;
+var
+  nul: boolean;
+  len: smallint;
+  data: PByte;
 begin
-  if (fResultSet = nil) or
-     (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBIbx.CreateUtf8('%.ColumnUtf8(%) ResultSet=%',
-      [self, Col, fResultSet]);
-  result := fResultSet.Data[Col].GetAsString;
+  CheckColAndRowset(Col);
+  if fColumnsMeta[Col].CodePage=CP_UTF8 then
+  begin
+    fResults.GetData(Col, nul, len, data);
+    FastSetString(result, data, len);
+  end
+  else
+    result := fResults[Col].GetAsString;
 end;
 
 function TSqlDBIbxStatement.ColumnBlob(Col: integer): RawByteString;
 begin
-  if (fResultSet = nil) or
-     (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBIbx.CreateUtf8('%.ColumnBlob(%) ResultSet=%',
-      [self, Col, fResultSet]);
-  result := fResultSet.Data[Col].GetAsString;
+  CheckColAndRowset(Col);
+  result := fResults[Col].GetAsString;
 end;
 
 procedure TSqlDBIbxStatement.ColumnsToJson(WR: TJsonWriter);
 var
-  col: integer;
+  I, H, C: integer;
   s:   RawUtf8;
+  isNull: boolean;
+  len: smallint;
+  data: PByte;
 begin
   if WR.Expand then
     WR.Add('{');
-  for col := 0 to fColumnCount - 1 do
+  if Assigned(WR.Fields) then
+    H := High(WR.Fields) else
+    H := High(WR.ColNames);
+  for I := 0 to H do
   begin
+    if Pointer(WR.Fields) = nil then
+      C := I else
+      C := WR.Fields[I];
     if WR.Expand then
-      WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
-    if fResultSet.Data[Col].IsNull then
+      WR.AddString(WR.ColNames[I]); // add '"ColumnName":'
+    fResults.GetData(C, isNull, len, data);
+    if isNull then
       WR.AddNull
     else
     begin
-      case fColumns[col].ColumnType of
-        ftNull:
-          WR.AddNull;
-        ftInt64:
-          WR.Add(fResultSet.Data[col].AsInt64);
-        ftDouble:
-          WR.AddDouble(fResultSet.Data[col].AsDouble);
-        ftCurrency:
-          WR.AddCurr(fResultSet.Data[col].AsCurrency);
-        ftDate:
+      with fColumnsMeta[C] do
+      case SQLType of
+        SQL_VARYING, SQL_TEXT:
           begin
             WR.Add('"');
-            WR.AddDateTime(fResultSet.Data[col].GetAsDateTime,
+            if CodePage=CP_UTF8 then
+              WR.AddJsonEscape(data, len)
+            else
+            begin
+              s := fResults[C].AsString;
+              WR.AddJsonEscape(pointer(s), length(s));
+            end;
+            WR.Add('"');
+          end;
+        SQL_DOUBLE, SQL_D_FLOAT:
+          WR.AddDouble(PDouble(data)^);
+        SQL_FLOAT:
+          WR.AddSingle(PSingle(data)^);
+        SQL_TIMESTAMP,
+        SQL_TIMESTAMP_TZ_EX,
+        SQL_TIME_TZ_EX,
+        SQL_TIMESTAMP_TZ,
+        SQL_TIME_TZ,
+        SQL_TYPE_TIME,
+        SQL_TYPE_DATE:
+          begin
+            WR.Add('"');
+            WR.AddDateTime(fResults[C].GetAsDateTime,
               fForceDateWithMS);
             WR.Add('"');
           end;
-        ftUtf8:
+        SQL_BOOLEAN:
+          WR.Add(PByte(data)^ = 1);
+        SQL_LONG:
           begin
-            WR.Add('"');
-            s := fResultSet.Data[col].GetAsString;
-            WR.AddJsonEscape(pointer(s), length(s));
-            WR.Add('"');
+            if Scale=0 then
+              WR.Add(PInteger(data)^)
+            else
+              WR.AddDouble(fResults[C].GetAsDouble);
           end;
-        ftBlob:
+        SQL_SHORT:
+          begin
+            if Scale=0 then
+              WR.Add(PSmallInt(data)^)
+            else
+              WR.AddDouble(fResults[C].GetAsDouble);
+          end;
+        SQL_INT64:
+          begin
+            if Scale = 0 then
+              WR.Add(PInt64(data)^)
+            else
+            if Scale = (-4) then
+              WR.AddCurr64(PInt64(data))
+            else
+              WR.AddDouble(fResults[C].AsDouble);
+          end;
+        SQL_BLOB:
           begin
             if fForceBlobAsNull then
               WR.AddNull
             else
             begin
-              s := fResultSet.Data[col].GetAsString;
-              WR.WrBase64(pointer(s), length(s), true);
+              if Subtype = isc_blob_text then
+              begin
+                s := fResults[C].AsString;
+                WR.Add('"');
+                WR.AddJsonEscape(pointer(s), length(s));
+                WR.Add('"');
+              end
+              else
+              begin
+                s := fResults[C].GetAsString;
+                WR.WrBase64(pointer(s), length(s), true);
+              end;
             end;
           end
       else
+        //    SQL_INT128, SQL_DEC_FIXED, SQL_DEC16, SQL_DEC34
+        //    SQL_NULL, SQL_ARRAY, SQL_QUAD
         raise ESqlDBException.CreateUtf8(
           '%.ColumnsToJson: invalid ColumnType(#% "%")=%',
-          [self, col, fColumns[col].ColumnName, ord(fColumns[col].ColumnType)]);
+          [self, C, fColumns[C].ColumnName, ord(fColumns[C].ColumnType)]);
       end;
     end;
     WR.AddComma;
@@ -888,6 +1029,7 @@ begin
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then
     WR.Add('}');
+  //FileFromString(WR.Text, FormatUtf8('row%.json', [fResults[0].AsString]));
 end;
 
 
@@ -911,12 +1053,16 @@ begin
   result := fFirebirdAPI;
 end;
 
-function TSqlDBIbxConnection.GenerateTPB: ITPB;
+function TSqlDBIbxConnection.GenerateTPB(aReadOnly: boolean = false): ITPB;
 begin
   result := FirebirdAPI.AllocateTPB;
   result.Add(isc_tpb_read_committed);
   result.Add(isc_tpb_rec_version);
   result.Add(isc_tpb_nowait);
+  if aReadOnly then
+    result.Add(isc_tpb_read)
+  else
+    result.Add(isc_tpb_write);
 end;
 
 constructor TSqlDBIbxConnection.Create(aProperties: TSqlDBConnectionProperties);
@@ -953,14 +1099,15 @@ procedure TSqlDBIbxConnection.Connect;
 var
   DPB: IDPB;
   Status: IStatus;
+  log: ISynLog;
 
-  procedure GenerateDPB;
+  function GenerateDPB: IDPB;
   var
     i: PtrInt;
     ParamValue: string;
     DPBItem: IDPBItem;
   begin
-    DPB := FirebirdAPI.AllocateDPB;
+    result := FirebirdAPI.AllocateDPB;
     // Iterate through the textual database parameters, constructing
     // a DPB on-the-fly
     for i := 0 to fDBParams.Count - 1 do
@@ -969,7 +1116,7 @@ var
       // that the name is all lowercase with no leading 'isc_dpb_' prefix
       if Trim(fDBParams.Names[i]) = '' then
         continue;
-      DPBItem := DPB.AddByTypeName(fDBParams.Names[i]);
+      DPBItem := result.AddByTypeName(fDBParams.Names[i]);
       ParamValue := fDBParams.ValueFromIndex[i];
        // A database parameter either contains a string value (case 1)
        // or an Integer value (case 2) or no value at all (case 3)
@@ -1018,21 +1165,30 @@ var
   end;
 
 begin
+  log := SynDBLog.Enter(self, 'Connect');
   if fAttachment<>nil then
      raise ESqlDBIbx.CreateUtf8(
        '%.Connect() on % failed: Attachment<>nil',
        [self, fProperties.ServerName]);
-  GenerateDPB;
-  fAttachment := FirebirdAPI.OpenDatabase(fDBName,DPB,false);
+  DPB := GenerateDPB;
+  fAttachment := FirebirdAPI.OpenDatabase(fDBName, DPB, false);
   if fAttachment = nil then
   begin
     Status := FirebirdAPI.GetStatus;
     if (Status.GetSQLCode = -902) and
-       (Status.GetIBErrorCode = isc_io_error) and // Database not found
+       ((Status.GetIBErrorCode = isc_io_error) or
+        (Status.GetIBErrorCode = isc_network_error)) and // Database not found
        fCreateDbIfNotExists then
     begin
       DPB.Add(isc_dpb_set_db_SQL_dialect).AsByte := 3; // use SQL Dialect 3
+      if DPB.Find(isc_dpb_lc_ctype)=nil then
+        DPB.Add(isc_dpb_lc_ctype).AsString := 'UTF8';
       fAttachment := FirebirdAPI.CreateDatabase(fDBName,DPB, false);
+      if fAttachment=nil then
+      begin
+        DPB := GenerateDPB;
+        fAttachment := FirebirdAPI.OpenDatabase(fDBName,DPB,false);
+      end;
     end;
     if fAttachment = nil then
       raise ESqlDBIbx.CreateUtf8(
@@ -1047,6 +1203,12 @@ begin
   try
     inherited Disconnect; // flush any cached statement
   finally
+    if fTransaction <> nil then
+    begin
+      if fTransaction.InTransaction then
+        fTransaction.Commit;
+      fTransaction := nil;
+    end;
     if fAttachment <> nil then
     begin
       fAttachment.Disconnect(true);
@@ -1085,12 +1247,12 @@ begin
       raise ESqlDBIbx.CreateUtf8('Invalid %.StartTransaction: ' +
         'Transaction is Started/InTransactions', [self]);
     if fTransaction <> nil then
-      fTransaction.Start(TACommit)
+      fTransaction.Start
     else
     begin
       if fTPB = nil then
         fTPB := GenerateTPB;
-      fTransaction := fAttachment.StartTransaction(fTPB, TACommit);
+      fTransaction := fAttachment.StartTransaction(fTPB);
     end;
   except
     on E: Exception do
@@ -1134,51 +1296,13 @@ end;
 
 procedure TSqlDBIbxConnectionProperties.SetCreateDescendingPK(AValue: boolean);
 begin
-  fCreateDescendingPK:=AValue;
+  fCreateDescendingPK := AValue;
   fEngineName:=FormatUtf8('IBX%', [AValue]);
 end;
 
-function TSqlDBIbxConnectionProperties.IbxSQLTypeToTSqlDBFieldType(
-  const aColMeta: IColumnMetaData): TSqlDBFieldType;
+procedure TSqlDBIbxConnectionProperties.GetForeignKeys;
 begin
-  case aColMeta.GetSQLType of
-    SQL_VARYING, SQL_TEXT:
-      result := ftUtf8;
-    SQL_DOUBLE, SQL_FLOAT:
-      result := ftDouble;
-    SQL_TIMESTAMP,
-    SQL_TIMESTAMP_TZ_EX,
-    SQL_TIME_TZ_EX,
-    SQL_TIMESTAMP_TZ,
-    SQL_TIME_TZ,
-    SQL_TYPE_TIME,
-    SQL_TYPE_DATE:
-      result := ftDate;
-    SQL_BOOLEAN,
-    SQL_LONG,
-    SQL_SHORT,
-    SQL_D_FLOAT,
-    SQL_QUAD,
-    SQL_INT64:
-      begin
-        if aColMeta.getScale >= (-4) then
-          result := ftCurrency
-        else
-          result := ftInt64;
-      end;
-    SQL_BLOB:
-      begin
-        if aColMeta.getSubtype = isc_blob_text then
-          result := ftUtf8
-        else
-          result := ftBlob;
-      end
-  else
-    //    SQL_INT128, SQL_DEC_FIXED, SQL_DEC16, SQL_DEC34
-    //    SQL_NULL, SQL_ARRAY
-    raise ESqlDBIbx.CreateUtf8('%: unexpected TIbxType % "%"', [self,
-      aColMeta.GetSQLType, aColMeta.GetSQLTypeName]);
-  end;
+  { TODO : get FOREIGN KEYS }
 end;
 
 function TSqlDBIbxConnectionProperties.SqlFieldCreate(
@@ -1212,9 +1336,10 @@ begin
   SetCreateDescendingPK(false);
   fDbms := dFirebird;
   fBatchSendingAbilities := [cCreate, cUpdate, cDelete];
-  fBatchMaxSentAtOnce := 1000;  // iters <= 32767 for better performance
+  fBatchMaxSentAtOnce := 5000;  // iters <= 32767 for better performance
   if aServerName = '' then
     ThreadingMode := tmMainConnection;
+  fUseCache := true;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
 end;
 
@@ -1261,7 +1386,7 @@ begin
   begin
     result := result + ', PRIMARY KEY(' + AddPrimaryKey + ')';
     if fCreateDescendingPK then
-      result := result + ' using desc index PK_' + aTableName;
+      result := result + ' USING DESC INDEX PK_' + aTableName;
   end;
   result := 'CREATE TABLE ' + aTableName + ' (' + result + ')';
 end;
