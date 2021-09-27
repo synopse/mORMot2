@@ -187,15 +187,15 @@ type
       read fTransaction;
   end;
 
+  TColumnsMeta = record
+    SQLType: Cardinal;
+    CodePage: TSystemCodePage;
+    Scale: integer;
+    Subtype: integer;
+  end;
+
   /// implements a statement via a IBX/FB Pascal API database connection
   TSqlDBIbxStatement = class(TSqlDBStatementWithParamsAndColumns)
-  type
-    TColumnsMeta = record
-      SQLType: Cardinal;
-      CodePage: TSystemCodePage;
-      Scale: integer;
-      Subtype: integer;
-    end;
   protected
     fAutoStartCommitTrans: boolean;
     fStatement: IStatement;
