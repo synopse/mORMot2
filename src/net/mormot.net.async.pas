@@ -223,7 +223,7 @@ type
     // another thread (which is not possible from TPollAsyncSockets.Write),
     // up to timeout milliseconds
     function Write(connection: TPollAsyncConnection;
-      const data; datalen: integer; timeout: integer = 5000): boolean; virtual;
+      data: pointer; datalen: integer; timeout: integer = 5000): boolean; virtual;
     /// add some data to the asynchronous output buffer of a given connection
     function WriteString(connection: TPollAsyncConnection;
       const data: RawByteString; timeout: integer = 5000): boolean;
@@ -331,7 +331,7 @@ type
     // - this overriden method will also log the write operation if needed
     // - can be executed from an TAsyncConnection.OnRead method
     function Write(connection: TPollAsyncConnection;
-      const data; datalen: integer; timeout: integer = 5000): boolean; override;
+      data: pointer; datalen: integer; timeout: integer = 5000): boolean; override;
   published
     /// how many clients have been handled by the poll, from the beginning
     property Total: integer
@@ -472,12 +472,12 @@ type
     procedure EndConnection(connection: TAsyncConnection);
     /// add some data to the asynchronous output buffer of a given connection
     // - could be executed e.g. from a TAsyncConnection.OnRead method
-    function Write(connection: TAsyncConnection; const data; datalen: integer;
-      timeout: integer = 5000): boolean; overload;
+    function Write(connection: TAsyncConnection; data: pointer; datalen: integer;
+      timeout: integer = 5000): boolean;
     /// add some data to the asynchronous output buffer of a given connection
     // - could be executed e.g. from a TAsyncConnection.OnRead method
-    function Write(connection: TAsyncConnection; const data: RawByteString;
-      timeout: integer = 5000): boolean; overload;
+    function WriteString(connection: TAsyncConnection; const data: RawByteString;
+      timeout: integer = 5000): boolean;
     /// log some binary data with proper escape
     // - can be executed from an TAsyncConnection.OnRead method to track content:
     // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(self,...);
@@ -757,6 +757,11 @@ procedure TPollAsyncConnection.BeforeDestroy;
 begin
 end;
 
+function TPollAsyncConnection.AfterWrite: TPollAsyncSocketOnReadWrite;
+begin
+  result := soContinue;
+end;
+
 function TPollAsyncConnection.IsDangling: boolean;
 begin
   result := (self = nil) or
@@ -802,11 +807,6 @@ begin
     dec(fLockCounter[writer]);
     mormot.core.os.LeaveCriticalSection(fLocker[writer]);
   end;
-end;
-
-function TPollAsyncConnection.AfterWrite: TPollAsyncSocketOnReadWrite;
-begin
-  result := soContinue; // nothing to do by default
 end;
 
 procedure TPollAsyncConnection.OnClose;
@@ -1067,11 +1067,11 @@ begin
   if self = nil then
     result := false
   else
-    result := Write(connection, pointer(data)^, length(data), timeout);
+    result := Write(connection, pointer(data), length(data), timeout);
 end;
 
 function TPollAsyncSockets.Write(connection: TPollAsyncConnection;
-  const data; datalen: integer; timeout: integer): boolean;
+  data: pointer; datalen: integer; timeout: integer): boolean;
 var
   P: PByte;
   res: TNetResult;
@@ -1084,10 +1084,11 @@ begin
     exit;
   // try and wait for another ProcessWrite
   LockedInc32(@fProcessingWrite);
-  if connection.WaitLock(true, timeout) then
+  if connection.WaitLock({writer=}true, timeout) then
   try
+    DoLog('Write: WaitLock fProcessingWrite=%', [fProcessingWrite]);
     // we acquired the write lock: immediate or delayed/buffered sending
-    P := @data;
+    P := data;
     previous := connection.fWr.Len;
     if (previous = 0) and
        not (paoWritePollOnly in fOptions) then
@@ -1146,6 +1147,7 @@ begin
             [pointer(connection.Socket), connection.Handle, result, fWrite]);
       end;
   finally
+    DoLog('Write: finally fProcessingWrite=%', [fProcessingWrite]);
     if result then
       connection.UnLock({writer=}true)
     else
@@ -1161,6 +1163,7 @@ begin
       DoLog('Write: WaitLock failed % %', [pointer(connection), fWrite]);
     LockedDec32(@fProcessingWrite);
   end;
+  DoLog('Write: done fProcessingWrite=%', [fProcessingWrite]);
 end;
 
 procedure TPollAsyncSockets.UnlockAndCloseConnection(writer: boolean;
@@ -1299,48 +1302,50 @@ begin
      connection.IsClosed then
     exit;
   // we are now sure that the socket is writable and safe
+  sent := 0;
+  DoLog('ProcessWrite: fProcessingWrite=%', [fProcessingWrite]);
   LockedInc32(@fProcessingWrite);
   try
     res := nrOK;
-    if connection.WaitLock({writer=}true, 1000) then // paranoid check
+    if connection.WaitLock({writer=}true, {timeout=}0) then // no need to wait
     try
+      DoLog('ProcessWrite: Locked fProcessingWrite=%', [fProcessingWrite]);
       buflen := connection.fWr.Len;
-      if buflen <> 0 then
-      begin
-        buf := connection.fWr.Buffer;
-        sent := 0;
-        repeat
-          if fWrite.Terminated or
-             (connection.fSocket = nil) then
-            exit;
-          bufsent := buflen;
+      if buflen = 0 then
+        exit;
+      buf := connection.fWr.Buffer;
+      repeat
+        if fWrite.Terminated or
+           (connection.fSocket = nil) then
+          exit;
+        bufsent := buflen;
+        if fDebugLog <> nil then
+          timer.Start;
+        res := connection.fSocket.Send(buf, bufsent);
+        if fDebugLog <> nil then
+          DoLog('ProcessWrite send(%)=% %/%B in % % fProcessingWrite=%',
+            [pointer(connection.fSocket), ToText(res)^,
+             bufsent, buflen, timer.Stop, fWrite, fProcessingWrite]);
+        if connection.fSocket = nil then
+          exit; // Stop() called
+        if res = nrRetry then
+          break // may block, try later
+        else if res <> nrOk then
+        begin
+          fWrite.Unsubscribe(connection.fSocket, notif.tag);
+          connection.fWriteSubscribed := false;
           if fDebugLog <> nil then
-            timer.Start;
-          res := connection.fSocket.Send(buf, bufsent);
-          if fDebugLog <> nil then
-            DoLog('ProcessWrite send(%)=% %B in % %',
-              [pointer(connection.fSocket), ToText(res)^, bufsent, timer.Stop, fWrite]);
-          if connection.fSocket = nil then
-            exit; // Stop() called
-          if res = nrRetry then
-            break // may block, try later
-          else if res <> nrOk then
-          begin
-            fWrite.Unsubscribe(connection.fSocket, notif.tag);
-            connection.fWriteSubscribed := false;
-            if fDebugLog <> nil then
-              DoLog('Write % Unsubscribe(%,%) %', [ToText(res)^,
-                pointer(connection.fSocket), connection.Handle, fWrite]);
-            exit; // socket closed gracefully or unrecoverable error -> abort
-          end;
-          inc(fWriteCount);
-          inc(sent, bufsent);
-          inc(buf, bufsent);
-          dec(buflen, bufsent);
-        until buflen = 0;
-        inc(fWriteBytes, sent);
-        connection.fWr.Remove(sent); // is very likely to just set fWr.Len := 0
-      end;
+            DoLog('Write failed as % -> Unsubscribe(%,%) %', [ToText(res)^,
+              pointer(connection.fSocket), connection.Handle, fWrite]);
+          exit; // socket closed gracefully or unrecoverable error -> abort
+        end;
+        inc(fWriteCount);
+        inc(sent, bufsent);
+        inc(buf, bufsent);
+        dec(buflen, bufsent);
+      until buflen = 0;
+      inc(fWriteBytes, sent);
+      connection.fWr.Remove(sent); // is very likely to just set fWr.Len := 0
       if connection.fWr.Len = 0 then
       begin
         // no data any more to be sent - maybe call slot.fWr.Append
@@ -1348,8 +1353,8 @@ begin
           if connection.AfterWrite <> soContinue then
           begin
             if fDebugLog <> nil then
-              DoLog('ProcessWrite % closed by AfterWrite callback %',
-                [pointer(connection.fSocket), connection.Handle]);
+              DoLog('ProcessWrite % closed by AfterWrite handle=% sent=%',
+                [pointer(connection.fSocket), connection.Handle, sent]);
             connection.fWr.Clear;
             res := nrClosed;
           end;
@@ -1362,8 +1367,8 @@ begin
           fWrite.Unsubscribe(connection.fSocket, notif.tag);
           connection.fWriteSubscribed := false;
           if fDebugLog <> nil then
-            DoLog('Write Unsubscribe(sock=%,handle=%)=% %', [pointer(connection.fSocket),
-              connection.Handle, fWrite]);
+            DoLog('Write Unsubscribe(sock=%,handle=%)=% %',
+             [pointer(connection.fSocket), connection.Handle, fWrite]);
         end;
       end;
     finally
@@ -1375,7 +1380,7 @@ begin
     end
     // if already locked (unlikely) -> will try next time
     else if fDebugLog <> nil then
-      DoLog('ProcessWrite: WaitLock failed % %',
+      DoLog('ProcessWrite: WaitLock failed % % -> will retry later',
         [pointer(connection), fWrite]);
   finally
     LockedDec32(@fProcessingWrite);
@@ -1428,7 +1433,7 @@ begin
 end;
 
 function TAsyncConnectionsSockets.Write(connection: TPollAsyncConnection;
-  const data; datalen, timeout: integer): boolean;
+  data: pointer; datalen, timeout: integer): boolean;
 var
   tmp: TLogEscape;
 begin
@@ -1436,7 +1441,7 @@ begin
      not (acoNoLogWrite in fOwner.Options) then
     fOwner.DoLog(sllTrace, 'Write handle=% len=%%',
       [connection.Handle, datalen, LogEscape(
-        @data, datalen, tmp{%H-}, acoVerboseLog in fOwner.Options)], self);
+        data, datalen, tmp{%H-}, acoVerboseLog in fOwner.Options)], self);
   result := inherited Write(connection, data, datalen, timeout);
 end;
 
@@ -1936,7 +1941,7 @@ begin
 end;
 
 function TAsyncConnections.Write(connection: TAsyncConnection;
-  const data; datalen, timeout: integer): boolean;
+  data: pointer; datalen, timeout: integer): boolean;
 begin
   if Terminated then
     result := false
@@ -1944,13 +1949,13 @@ begin
     result := fClients.Write(connection, data, datalen, timeout);
 end;
 
-function TAsyncConnections.Write(connection: TAsyncConnection;
+function TAsyncConnections.WriteString(connection: TAsyncConnection;
   const data: RawByteString; timeout: integer): boolean;
 begin
   if Terminated then
     result := false
   else
-    result := fClients.WriteString(connection, data);
+    result := fClients.WriteString(connection, data, timeout);
 end;
 
 procedure TAsyncConnections.LogVerbose(connection: TAsyncConnection;
@@ -2321,44 +2326,47 @@ end;
 
 function THttpAsyncConnection.AfterWrite: TPollAsyncSocketOnReadWrite;
 begin
+  result := soContinue;
   if fOwner.fClients = nil then
     fHttp.State := hrsErrorMisuse;
   // compute next step
-  case fHttp.State of
-    hrsSendBody:
-      begin
-        // use the HTTP machine state to fill fWr with outgoing body data
-        fHttp.ProcessBody(fWr, fOwner.fClients.fSendBufferSize);
-        result := soContinue;
-      end;
-    hrsResponseDone:
-      begin
-        // all headers + body outgoing content was sent
-        if Assigned(fServer.fOnAfterResponse) then
-          try
-            fServer.fOnAfterResponse(
-              fHttp.CommandMethod, fHttp.CommandUri, fRemoteIP, fRespStatus);
-          except
-            include(fHttp.HeaderFlags, hfConnectionClose);
-          end;
-        if hfConnectionClose in fHttp.HeaderFlags then
-          // connection: close -> shutdown and clear the connection
-          result := soClose
-        else
-        begin
-          // kept alive connection -> reset the HTTP parser and continue
-          fHttp.ProcessDone;   // ContentStream.Free
-          fHttp.Process.Clear; // CompressContentAndFinalizeHead may have set it
-          HttpInit;
-          result := soContinue;
-        end;
-      end
-  else
-    begin
-      fOwner.DoLog(sllWarning, 'AfterWrite: unexpected %',
-        [ToText(fHttp.State)^], self);
-      result := soClose;
+  if fHttp.State = hrsSendBody then
+  begin
+    // use the HTTP machine state to fill fWr with outgoing body chunk
+    fHttp.ProcessBody(fWr, fOwner.fClients.fSendBufferSize);
+    fOwner.DoLog(sllTrace, 'AfterWrite SendBody ContentLength=% Wr=%',
+      [fHttp.ContentLength, fWr.Len], self);
+    if fHttp.ContentLength <> 0 then
+      // need to continue sending
+      exit;
+  end
+  else if fHttp.State <> hrsResponseDone then
+  begin
+    fOwner.DoLog(sllWarning, 'AfterWrite: unexpected %',
+      [ToText(fHttp.State)^], self);
+    result := soClose;
+    exit;
+  end;
+  // whole headers + body outgoing content was sent
+  fOwner.DoLog(sllTrace, 'AfterWrite Done ContentLength=% Wr=%',
+    [fHttp.ContentLength, fWr.Len], self);
+  if Assigned(fServer.fOnAfterResponse) then
+    try
+      fServer.fOnAfterResponse(
+        fHttp.CommandMethod, fHttp.CommandUri, fRemoteIP, fRespStatus);
+    except
+      include(fHttp.HeaderFlags, hfConnectionClose);
     end;
+  if hfConnectionClose in fHttp.HeaderFlags then
+    // connection: close -> shutdown and clear the connection
+    result := soClose
+  else
+  begin
+    // kept alive connection -> reset the HTTP parser and continue
+    fHttp.ProcessDone;   // ContentStream.Free
+    fHttp.Process.Clear; // CompressContentAndFinalizeHead may have set it
+    HttpInit;
+    result := soContinue;
   end;
 end;
 
@@ -2430,6 +2438,7 @@ function THttpAsyncConnection.DoRequest: TPollAsyncSocketOnReadWrite;
 var
   req: THttpServerRequest;
   cod: integer;
+  output: PRawByteStringBuffer;
   err: string;
 begin
   // check the status
@@ -2486,12 +2495,13 @@ begin
   finally
     req.Free;
   end;
-  // now try socket send() with headers (and small body as hrsResponseDone)
-  // then TPollAsyncSockets.ProcessWrite/subscribe if needed as hrsSendBody
+  // now try socket send() with headers (and small body if hrsResponseDone)
+  // then TPollAsyncSockets.ProcessWrite/subscribe if needed if hrsSendBody
   if fHttp.Head.Len <> 0 then
-    fServer.fAsync.fClients.Write(self, fHttp.Head.Buffer^, fHttp.Head.Len)
+    output := @fHttp.Head
   else
-    fServer.fAsync.fClients.Write(self, fHttp.Process.Buffer^, fHttp.Process.Len);
+    output := @fHttp.Process;
+  fServer.fAsync.fClients.Write(self, output.Buffer, output.Len, {timeout=}1000);
   // will call THttpAsyncConnection.AfterWrite once sent to finish/continue
 end;
 

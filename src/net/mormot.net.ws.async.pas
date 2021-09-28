@@ -251,7 +251,7 @@ function TWebSocketAsyncConnection.DecodeHeaders: integer;
     if result = HTTP_SUCCESS then
     begin
       fHttp.State := hrsUpgraded;
-      if fOwner.Write(self, resp) then
+      if fOwner.WriteString(self, resp, {timeout=}1000) then
       begin
         // if we reached here, we switched/upgraded to WebSockets bidir frames
         fProcess := TWebSocketAsyncProcess.Create(self, proto);
@@ -301,7 +301,8 @@ begin
     result := false
   else
   begin
-    result := fOwner.Write(self, tmp.buf^, tmp.len, {timeout=}0);
+    // use timeout=0 since WebSocketBroadcast() has a connection lock
+    result := fOwner.Write(self, tmp.buf, tmp.len, {timeout=}0);
     if result and
        (opcode = focConnectionClose) then
       fProcess.fConnectionCloseWasSent := true;
@@ -487,7 +488,7 @@ end;
 function TWebSocketAsyncProcess.SendBytes(P: pointer; Len: PtrInt): boolean;
 begin
   // try to send all in non-blocking mode, or subscribe for biggest writes
-  result := fConnection.Owner.Write(fConnection, P^, Len);
+  result := fConnection.Owner.Write(fConnection, P, Len, {timeout=}1000);
 end;
 
 procedure TWebSocketAsyncProcess.SendFrameAsync(const Frame: TWebSocketFrame);

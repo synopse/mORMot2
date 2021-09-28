@@ -174,7 +174,7 @@ begin
   rtsp := fOwner.ConnectionFindLocked(fRtspTag);
   if rtsp <> nil then
   try
-    fOwner.Write(rtsp, decoded); // async sending to RTSP server
+    fOwner.WriteString(rtsp, decoded); // async sending to RTSP server
     fOwner.Log.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
       [Handle, decoded], self);
   finally
