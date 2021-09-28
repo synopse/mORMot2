@@ -2366,11 +2366,13 @@ begin
     RaiseLastModuleError(winhttpdll, EWinHttp);
   if fHTTPS then
   begin
-    protocols := WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
+    protocols := {WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 or}
+                  WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
     // Windows 7 and newer supports TLS 1.1 & 1.2
     if OSVersion >= wSeven then
       protocols := protocols or
-        (WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2);
+        (WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 or
+         WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2);
     if not WinHttpApi.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
         @protocols, SizeOf(protocols)) then
       RaiseLastModuleError(winhttpdll, EWinHttp);
