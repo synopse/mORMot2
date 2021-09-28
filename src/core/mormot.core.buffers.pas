@@ -2289,6 +2289,9 @@ type
     procedure AsText(out Text: RawUtf8; Overhead: PtrInt = 0);
   end;
 
+  /// pointer reference to a TRawByteStringBuffer
+  PRawByteStringBuffer = ^TRawByteStringBuffer;
+
 
 implementation
 

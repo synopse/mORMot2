@@ -96,7 +96,7 @@ type
     // - could return sorClose to shutdown the socket, e.g. on parsing error
     function OnRead: TPollAsyncSocketOnReadWrite; virtual; abstract;
     /// this method is called when some data has been written to the socket
-    // - default implementation will do nothing
+    // - default implementation will do nothing - see e.g. TRtspConnection
     // - you may send data asynchronously using Connection.wr.Append()
     function AfterWrite: TPollAsyncSocketOnReadWrite; virtual;
     /// this method is called when the sockets is closing
@@ -734,7 +734,7 @@ begin
           // paranoid check: should have been properly unlocked
           TSynLog.DoLog(sllWarning, 'TPollAsyncConnection(%) Done locked: r=% w=%',
             [pointer(@self), fLockCounter[false], fLockCounter[true]], nil);
-          LeaveCriticalSection(fLocker[b]);
+          mormot.core.os.LeaveCriticalSection(fLocker[b]);
           dec(fLockCounter[b]);
         end;
         // on some OS, free the mutex in the same thread which created it
@@ -916,12 +916,12 @@ begin
   if fGCCount > 0 then
   begin
     // atomic copy of the shared AddGC() instances list
-    EnterCriticalSection(fPendingLock); // keep lock as short as possible
+    mormot.core.os.EnterCriticalSection(fPendingLock); // keep lock as short as possible
     fGC2 := fGC; // immediate ref-counting assignment
     fGCCount2 := fGCCount;
     fGC := nil;
     fGCCount := 0;
-    LeaveCriticalSection(fPendingLock);
+    mormot.core.os.LeaveCriticalSection(fPendingLock);
   end;
 end;
 
@@ -929,9 +929,9 @@ procedure TPollAsyncReadSockets.AddGC(tobefree: TObject);
 begin
   if Terminated then
     exit;
-  EnterCriticalSection(fPendingLock);
+  mormot.core.os.EnterCriticalSection(fPendingLock);
   ObjArrayAddCount(fGC, tobefree, fGCCount);
-  LeaveCriticalSection(fPendingLock);
+  mormot.core.os.LeaveCriticalSection(fPendingLock);
 end;
 
 

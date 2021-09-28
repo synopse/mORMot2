@@ -163,7 +163,8 @@ type
   PTerminated = ^boolean; // on FPC system.PBoolean doesn't exist :(
 
   /// convenient object-oriented wrapper around a socket connection
-  // - TNetSocket is a pointer to this, so TSocket(@self) is used for the OS API
+  // - encapsulate a cross-platform low-level access to the socket API
+  // - TNetSocket is a pointer to this, so TSocket(@self) is used for OS calls
   TNetSocketWrap = object
   private
     procedure SetOpt(prot, name: integer; value: pointer; valuelen: integer);
@@ -1566,8 +1567,8 @@ begin
   else
   begin
     len := mormot.net.sock.send(TSocket(@self), Buf, len, MSG_NOSIGNAL);
-    // Upon successful completion, send() shall return the number of bytes sent.
-    // Otherwise, -1 is returned and errno set to indicate the error. (man send)
+    // man send: Upon success, send() returns the number of bytes sent.
+    // Otherwise, -1 is returned and errno set to indicate the error.
     if len < 0 then
       result := NetLastError
     else

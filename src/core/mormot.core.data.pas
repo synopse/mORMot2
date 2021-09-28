@@ -5784,15 +5784,15 @@ begin
   end;
 end;
 
-function _BC_Object(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_Object(A, B: PObject; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := ObjectCompare(PPointer(A)^, PPointer(B)^, {caseinsens=}false);
+  Compared := ObjectCompare(A^, B^, {caseinsens=}false);
   result := SizeOf(pointer);
 end;
 
-function _BCI_Object(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BCI_Object(A, B: PObject; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := ObjectCompare(PPointer(A)^, PPointer(B)^, {caseinsens=}true);
+  Compared := ObjectCompare(A^, B^, {caseinsens=}true);
   result := SizeOf(pointer);
 end;
 

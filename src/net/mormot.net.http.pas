@@ -306,8 +306,8 @@ const
   HTTP_REQUEST_WRITE =
     [hrsSendBody];
 
-  /// when any later THttpRequestContext.State is a fatal HTTP error
-  HTTP_REQUEST_FIRSTERROR = succ(hrsResponseDone);
+  /// when this and following THttpRequestContext.State are fatal HTTP errors
+  HTTP_REQUEST_FIRSTERROR = hrsErrorPayloadTooLarge;
 
 function ToText(st: THttpRequestState): PShortString; overload;
 function ToText(hf: THttpRequestHeaderFlags): TShort8; overload;
@@ -1368,7 +1368,7 @@ begin
     begin
       if ContentLength + Head.Len < MaxSizeAtOnce then
       begin
-        // single socket send() is possible (body could fit the sending buffer)
+        // single socket send() is possible (body fits in the sending buffer)
         Process.Reserve(ContentLength + Head.Len);
         Process.Append(Head.Buffer, Head.Len);
         Process.Append(Content);
@@ -1390,7 +1390,7 @@ procedure THttpRequestContext.ProcessBody(
 var
   P: pointer;
 begin
-  // THttpAsyncConnection.DoRequest did send the headers
+  // THttpAsyncConnection.DoRequest did send the headers: now send body chunks
   if State <> hrsSendBody then
     exit;
   // send the body in the background, using polling up to socket.SendBufferSize
