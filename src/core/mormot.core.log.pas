@@ -5432,6 +5432,7 @@ procedure TSynLog.AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
     end;
     if PtrUInt(Stack) >= min_stack then
     try
+      fWriter.Add(' ');
       while PtrUInt(Stack) < max_stack do
       begin
         st := Stack^;
@@ -5468,9 +5469,13 @@ begin
     try
       logged := 0;
       n := RtlCaptureStackBackTrace(2, fFamily.StackTraceLevel, @BackTrace, nil);
-      for i := 0 to n - 1 do
-        if TDebugFile.Log(fWriter, BackTrace[i], false) then
-          inc(logged);
+      if n <> 0 then
+      begin
+        fWriter.Add(' ');
+        for i := 0 to n - 1 do
+          if TDebugFile.Log(fWriter, BackTrace[i], false) then
+            inc(logged);
+      end;
       if (logged < 2) and
          (fFamily.StackTraceUse <> stOnlyAPI) then
         AddStackManual(stack);
