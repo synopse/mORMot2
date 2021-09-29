@@ -531,7 +531,7 @@ begin
     {$endif USEHTTPSYS}
     SetLength(fDBServers, n + 1);
     SetDBServer(n, aServer, aSecurity, aRestAccessRights);
-    fDBServerNames := fDBServerNames + ' ' + aServer.Model.Root;
+    fDBServerNames := TrimU(fDBServerNames + ' ' + aServer.Model.Root);
     fHttpServer.ProcessName := fDBServerNames;
     result := true;
   finally
@@ -680,6 +680,7 @@ begin
         end;
     if ErrMsg <> '' then
       raise ERestHttpServer.CreateUtf8('%.Create(% ): %', [self, fDBServerNames, ErrMsg]);
+    fDBServerNames := TrimU(fDBServerNames);
     // associate before HTTP server is started, for TRestServer.BeginCurrentThread
     SetLength(fDBServers, length(aServers));
     for i := 0 to high(aServers) do
