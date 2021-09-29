@@ -346,7 +346,11 @@ begin
   // send pending outgoing frames, with optional JumboFrame gathering
   if fOutgoingCount = 0 then
     exit;
-  timer.Start; // we monitor this loop, which should not be blocking
+  if Assigned(fLog) and
+     (sllTrace in fLog.Family.Level) then
+    timer.Start // we monitor this loop, which should not be blocking
+  else
+    timer.Init; // no need to call high-precision timing API
   valid := 0;
   invalid := 0;
   EnterCriticalSection(fOutgoingLock);

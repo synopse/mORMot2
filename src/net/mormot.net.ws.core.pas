@@ -2826,38 +2826,40 @@ end;
 
 procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
   const aMethodName: RawUtf8; aEvent: TSynLogInfo; DisableRemoteLog: boolean);
-var
-  tmp: TLogEscape;
-  log: TSynLog;
-  len: integer;
+
+  procedure DoLog(log: TSynLog);
+  var
+    tmp: TLogEscape; // 512 bytes of temp buffer
+    len: integer;
+  begin
+    log.DisableRemoteLog(DisableRemoteLog);
+    try
+      if (frame.opcode = focText) and
+         (logTextFrameContent in fSettings.LogDetails) then
+        log.Log(aEvent, '% % % focText %',
+          [aMethodName, fProtocol.GetRemoteIP,
+           fProtocol.FrameType(frame), frame.PayLoad], self)
+      else
+      begin
+        len := length(frame.PayLoad);
+        log.Log(aEvent, '% % % % len=%%',
+         [aMethodName, fProtocol.GetRemoteIP, fProtocol.FrameType(frame),
+          _TWebSocketFrameOpCode[frame.opcode]^, len,
+          LogEscape(pointer(frame.PayLoad), len, tmp,
+            logBinaryFrameContent in fSettings.LogDetails)], self);
+      end;
+    finally
+      log.DisableRemoteLog(false);
+    end;
+  end;
+
 begin
   if WebSocketLog <> nil then
     with WebSocketLog.Family do
       if aEvent in Level then
         if (logHeartbeat in fSettings.LogDetails) or
            not (frame.opcode in [focPing, focPong]) then
-        begin
-          log := SynLog;
-          log.DisableRemoteLog(DisableRemoteLog);
-          try
-            if (frame.opcode = focText) and
-               (logTextFrameContent in fSettings.LogDetails) then
-              log.Log(aEvent, '% % % focText %',
-                [aMethodName, fProtocol.GetRemoteIP,
-                 protocol.FrameType(frame), frame.PayLoad], self)
-            else
-            begin
-              len := length(frame.PayLoad);
-              log.Log(aEvent, '% % % % len=%%',
-               [aMethodName, fProtocol.GetRemoteIP, protocol.FrameType(frame),
-                _TWebSocketFrameOpCode[frame.opcode]^, len,
-                LogEscape(pointer(frame.PayLoad), len, tmp,
-                  logBinaryFrameContent in fSettings.LogDetails)], self);
-            end;
-          finally
-            log.DisableRemoteLog(false);
-          end;
-        end;
+          DoLog(SynLog);
 end;
 
 function TWebSocketProcess.GetFrame(out Frame: TWebSocketFrame;

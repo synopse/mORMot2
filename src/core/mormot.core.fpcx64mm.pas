@@ -2228,6 +2228,7 @@ end;
 function _MemSize(P: pointer): PtrUInt;
 begin
   // AFAIK used only by fpc_AnsiStr_SetLength() in RTL
+  // also used by our static SQLite3 for its xSize() callback
   P := PPointer(PByte(P) - BlockHeaderSize)^;
   if (PtrUInt(P) and (IsMediumBlockFlag or IsLargeBlockFlag)) = 0 then
     result := PSmallBlockPoolHeader(PtrUInt(P) and DropSmallFlagsMask).

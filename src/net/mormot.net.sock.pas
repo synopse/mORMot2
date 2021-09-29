@@ -504,8 +504,8 @@ type
 
   // used internally by TPollSockets.Subscribe/Unsubscribe for thread safety
   TPollSocketsSubscription = record
-    Unsubscribed: TNetSocketDynArray;
-    UnsubscribedCount: integer;
+    Unsubscribe: TNetSocketDynArray;
+    UnsubscribeCount: integer;
     Subscribe: array of TPollSocketsSubscribe;
     SubscribeCount: PtrInt;
   end;
@@ -526,8 +526,8 @@ type
     fPollClass: TPollSocketClass;
     fOnLog: TSynLogProc;
     fOnGetOneIdle: TOnPollSocketsIdle;
-    fLastUnsubscribedTag: TPollSocketTagDynArray; // protected by fPendingLock
-    fLastUnsubscribedTagCount: integer;
+    fLastUnsubscribeTag: TPollSocketTagDynArray; // protected by fPendingLock
+    fLastUnsubscribeTagCount: integer;
     fUnsubscribeShouldShutdownSocket: boolean;
     fSubscription: TPollSocketsSubscription;
     fPollLock: TRTLCriticalSection;
@@ -606,6 +606,12 @@ type
     /// how many notified events are currently in the internal queue
     property PendingCount: PtrInt
       read fPending.Count;
+    /// how many connections are pending to be subscribed
+    property SubscribeCount: PtrInt
+      read fSubscription.SubscribeCount;
+    /// how many connections are pending to be unsubscribed
+    property UnsubscribeCount: integer
+      read fSubscription.UnsubscribeCount;
   end;
 
 
@@ -1790,13 +1796,13 @@ begin
   for i := 0 to high(fPoll) do
     FreeAndNilSafe(fPoll[i]);
   if fUnsubscribeShouldShutdownSocket and
-     (fSubscription.UnsubscribedCount > 0) then
+     (fSubscription.UnsubscribeCount > 0) then
   begin
     if Assigned(fOnLog) then
-      fOnLog(sllTrace, 'Destroy: shutdown UnsubscribedCount=%',
-        [fSubscription.UnsubscribedCount], self);
-    for i := 0 to fSubscription.UnsubscribedCount - 1 do
-       fSubscription.Unsubscribed[i].ShutdownAndClose({rdwr=}false);
+      fOnLog(sllTrace, 'Destroy: shutdown UnsubscribeCount=%',
+        [fSubscription.UnsubscribeCount], self);
+    for i := 0 to fSubscription.UnsubscribeCount - 1 do
+       fSubscription.Unsubscribe[i].ShutdownAndClose({rdwr=}false);
   end;
   DeleteCriticalSection(fPendingLock);
   DeleteCriticalSection(fPollLock);
@@ -1870,13 +1876,13 @@ begin
             [pointer(fnd^.tag), fPending.Count], self);
       end;
     end;
-    AddPtrUInt(fLastUnsubscribedTag, fLastUnsubscribedTagCount, tag);
+    AddPtrUInt(fLastUnsubscribeTag, fLastUnsubscribeTagCount, tag);
   finally
     mormot.core.os.LeaveCriticalSection(fPendingLock);
   end;
   mormot.core.os.EnterCriticalSection(fSubscriptionLock);
-  AddPtrUInt(TPtrUIntDynArray(fSubscription.Unsubscribed),
-    fSubscription.UnsubscribedCount, PtrUInt(socket));
+  AddPtrUInt(TPtrUIntDynArray(fSubscription.Unsubscribe),
+    fSubscription.UnsubscribeCount, PtrUInt(socket));
   mormot.core.os.LeaveCriticalSection(fSubscriptionLock);
 end;
 
@@ -1884,7 +1890,7 @@ procedure TPollSockets.NoMorePending;
 begin
   fPending.Count := 0; // reuse shared Events[] memory
   fPendingIndex := 0;
-  fLastUnsubscribedTagCount := 0;
+  fLastUnsubscribeTagCount := 0;
 end;
 
 function TPollSockets.IsValidPending(tag: TPollSocketTag): boolean;
@@ -1917,9 +1923,9 @@ begin
         inc(ndx);
         if (byte(notif.events) <> 0) and // Unsubscribe() may have reset to 0
            IsValidPending(notif.tag) and
-           ((fLastUnsubscribedTagCount = 0) or
-            not PtrUIntScanExists(pointer(fLastUnsubscribedTag),
-              fLastUnsubscribedTagCount, notif.tag)) then
+           ((fLastUnsubscribeTagCount = 0) or
+            not PtrUIntScanExists(pointer(fLastUnsubscribeTag),
+              fLastUnsubscribeTagCount, notif.tag)) then
         begin
           // there is a not-void event to return
           if Assigned(fOnLog) then
@@ -1935,10 +1941,10 @@ begin
       until ndx >= fPending.Count;
       {if Assigned(fOnLog) then
         fOnLog(sllTrace, 'GetOnePending(%): reset after reached #%/% lastuns=%',
-          [call, ndx, fPending.Count, fLastUnsubscribedTagCount], self);}
+          [call, ndx, fPending.Count, fLastUnsubscribeTagCount], self);}
       fPending.Count := 0; // reuse shared Events[] memory
       fPendingIndex := 0;
-      fLastUnsubscribedTagCount := 0;
+      fLastUnsubscribeTagCount := 0;
 ok: end;
   {$ifdef HASFASTTRYFINALLY}
   finally
@@ -2017,14 +2023,14 @@ begin
     try
     {$endif HASFASTTRYFINALLY}
       sub.SubscribeCount := fSubscription.SubscribeCount;
-      sub.UnsubscribedCount := fSubscription.UnsubscribedCount;
+      sub.UnsubscribeCount := fSubscription.UnsubscribeCount;
       if (sub.SubscribeCount <> 0) or
-         (sub.UnsubscribedCount <> 0) then
+         (sub.UnsubscribeCount <> 0) then
       begin
         MoveAndZero(@fSubscription, @sub, SizeOf(fSubscription));
         if Assigned(fOnLog) then
           fOnLog(sllTrace, 'PollForPendingEvents sub=% unsub=%',
-            [sub.SubscribeCount, sub.UnsubscribedCount], self);
+            [sub.SubscribeCount, sub.UnsubscribeCount], self);
       end;
     {$ifdef HASFASTTRYFINALLY}
     finally
@@ -2037,9 +2043,9 @@ begin
     mormot.core.os.EnterCriticalSection(fPollLock);
     try
       // first unsubscribe closed connections
-      for u := 0 to sub.UnsubscribedCount - 1 do
+      for u := 0 to sub.UnsubscribeCount - 1 do
       begin
-        sock := sub.Unsubscribed[u];
+        sock := sub.Unsubscribe[u];
         if not fUnsubscribeShouldShutdownSocket then
           for s := 0 to sub.SubscribeCount - 1 do
             if sub.Subscribe[s].socket = sock then
@@ -2100,7 +2106,7 @@ begin
       // eventually do the actual polling
       if fTerminated or
          (fCount = 0) then
-        exit; // nothing to track any more (all unsubscribed)
+        exit; // nothing to track any more (all Unsubscribe)
       n := length(fPoll);
       if n = 0 then
         exit;

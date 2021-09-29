@@ -544,6 +544,7 @@ type
     fMaxPending: integer;
     fMaxConnections: integer;
     fExecuteState: THttpServerExecuteState;
+    fSockPort: RawUtf8;
     procedure SetExecuteState(state: THttpServerExecuteState); virtual;
     procedure Execute; override;
   public
@@ -735,8 +736,8 @@ begin
         while fLockCounter[b] <> 0 do
         begin
           // paranoid check: should have been properly unlocked
-          TSynLog.DoLog(sllWarning, 'TPollAsyncConnection(%) Done locked: r=% w=%',
-            [pointer(@self), fLockCounter[false], fLockCounter[true]], nil);
+          {TSynLog.DoLog(sllWarning, 'TPollAsyncConnection(%) Done locked: r=% w=%',
+            [pointer(@self), fLockCounter[false], fLockCounter[true]], nil);}
           mormot.core.os.LeaveCriticalSection(fLockRW[b]);
           dec(fLockCounter[b]);
         end;
@@ -1098,8 +1099,8 @@ begin
   LockedInc32(@fProcessingWrite);
   if connection.WaitLock({writer=}true, timeout) then
   try
-    DoLog('Write: WaitLock fProcessingWrite=%', [fProcessingWrite]);
     // we acquired the write lock: immediate or delayed/buffered sending
+    //DoLog('Write: WaitLock fProcessingWrite=%', [fProcessingWrite]);
     P := data;
     previous := connection.fWr.Len;
     if (previous = 0) and
@@ -1118,8 +1119,8 @@ begin
         if res <> nrOK then
         begin
           if fDebugLog <> nil then
-            DoLog('Write: Send(%)=% handle=%', [pointer(connection.Socket),
-              ToText(res)^, connection.Handle]);
+            DoLog('Write: Send(%)=% len=% handle=%', [pointer(connection.Socket),
+              ToText(res)^, sent, connection.Handle]);
           exit;  // connection closed or broken -> abort
         end;
         inc(P, sent);
@@ -1159,7 +1160,7 @@ begin
             [pointer(connection.Socket), connection.Handle, result, fWrite]);
       end;
   finally
-    DoLog('Write: finally fProcessingWrite=%', [fProcessingWrite]);
+    //DoLog('Write: finally fProcessingWrite=%', [fProcessingWrite]);
     if result then
       connection.UnLock({writer=}true)
     else
@@ -1175,7 +1176,7 @@ begin
       DoLog('Write: WaitLock failed % %', [pointer(connection), fWrite]);
     LockedDec32(@fProcessingWrite);
   end;
-  DoLog('Write: done fProcessingWrite=%', [fProcessingWrite]);
+  //DoLog('Write: done fProcessingWrite=%', [fProcessingWrite]);
 end;
 
 procedure TPollAsyncSockets.UnlockAndCloseConnection(writer: boolean;
@@ -1317,13 +1318,13 @@ begin
     exit;
   // we are now sure that the socket is writable and safe
   sent := 0;
-  DoLog('ProcessWrite: fProcessingWrite=%', [fProcessingWrite]);
+  //DoLog('ProcessWrite: fProcessingWrite=%', [fProcessingWrite]);
   LockedInc32(@fProcessingWrite);
   try
     res := nrOK;
     if connection.WaitLock({writer=}true, {timeout=}0) then // no need to wait
     try
-      DoLog('ProcessWrite: Locked fProcessingWrite=%', [fProcessingWrite]);
+      //DoLog('ProcessWrite: Locked fProcessingWrite=%', [fProcessingWrite]);
       buflen := connection.fWr.Len;
       if buflen = 0 then
         exit;
@@ -1335,7 +1336,7 @@ begin
         bufsent := buflen;
         if fDebugLog <> nil then
           timer.Start;
-        // DoLog('ProcessWrite: before Send buflen=%', [bufsent]);
+        //DoLog('ProcessWrite: before Send buflen=%', [bufsent]);
         res := connection.fSocket.Send(buf, bufsent);
         if fDebugLog <> nil then
           DoLog('ProcessWrite send(%)=% %/%B in % % fProcessingWrite=%',
@@ -1494,67 +1495,68 @@ begin
   fOwner.NotifyThreadStart(self);
   try
     fExecuteStarted := true;
-    start := 0;
+    // implement parallel client connections for TAsyncClient
+    while not Terminated and
+          (fOwner.fThreadClients.Count > 0) and
+          (InterlockedDecrement(fOwner.fThreadClients.Count) >= 0) do
+      fOwner.ThreadClientsConnect;
+    // main TAsyncConnections read/write process
     while not Terminated and
           (fOwner.fClients <> nil) and
           (fOwner.fClients.fRead <> nil) do
     begin
-      // implement parallel client connections for TAsyncClient
-      if (fOwner.fThreadClients.Count > 0) and
-         (InterlockedDecrement(fOwner.fThreadClients.Count) >= 0) then
-        fOwner.ThreadClientsConnect
-      else
-        // main TAsyncConnections read/write process
-        case fProcess of
-          atpReadSingle:
-            // a single thread to rule them all: polling, reading and processing
-            if fOwner.fClients.fRead.GetOne(1000, n, notif) then
-              if not Terminated then
+      case fProcess of
+        atpReadSingle:
+          // a single thread to rule them all: polling, reading and processing
+          if fOwner.fClients.fRead.GetOne(1000, n, notif) then
+            if not Terminated then
+              fOwner.fClients.ProcessRead(notif);
+        atpReadPoll:
+          // main thread will just fill pending events from socket polls
+          // (no process because a faulty service would delay all reading)
+          begin
+            if fOwner.fClients.fRead.Count = 0 then
+              fEvent.WaitFor(INFINITE); // blocking until next accept()
+            start := 0; // back to SleepHiRes(0)
+            while not Terminated do
+            begin
+              pending := fOwner.fClients.fRead.PollForPendingEvents(0);
+              if Terminated then
+                break
+              else if pending = 0 then
+                // 0/1/10/50/150 ms steps, checking fThreadReadPoll from accept
+                SleepStep(start, @Terminated, fEvent)
+              else
+              begin
+                // process fOwner.fClients.fPending in atpReadPending threads
+                fOwner.ThreadPollingWakeup(pending);
+                // atpReadPending notifies fThreadReadPoll.fEvent when done
+                if Terminated or
+                   (fEvent.WaitFor(10) = wrSignaled) then
+                  break;
+              end;
+            end;
+          end;
+        atpReadPending:
+          begin
+            // secondary threads wait, then read and process pending events
+            fWaitForReadPending := true;
+            if fEvent.WaitFor(INFINITE) = wrSignaled then
+            begin
+              if Terminated then
+                break;
+              fWaitForReadPending := false;
+              while fOwner.fClients.fRead.GetOnePending(notif, n) and
+                    not Terminated do
                 fOwner.fClients.ProcessRead(notif);
-          atpReadPoll:
-            // main thread will just fill pending events from socket polls
-            // (no process because a faulty service would delay all reading)
-            begin
-              start := 0; // back to SleepHiRes(0)
-              repeat
-                pending := fOwner.fClients.fRead.PollForPendingEvents(0);
-                if Terminated then
-                  break
-                else if pending = 0 then
-                  // 0/1/10/50/150 ms steps checking fThreadReadPoll from accept
-                  SleepStep(start, @Terminated, fEvent)
-                else
-                begin
-                  // process fOwner.fClients.fPending in atpReadPending threads
-                  fOwner.ThreadPollingWakeup(pending);
-                  // last atpReadPending does fThreadReadPoll.fEvent.SetEvent
-                  if Terminated or
-                     (fEvent.WaitFor(10) = wrSignaled) then
-                    break;
-                end;
-              until Terminated;
+              // release atpReadPoll lock above
+              fOwner.fThreadReadPoll.fEvent.SetEvent;
             end;
-          atpReadPending:
-            begin
-              // secondary threads wait, then read and process pending events
-              fWaitForReadPending := true;
-              if fEvent.WaitFor(INFINITE) = wrSignaled then
-                if Terminated then
-                  break
-                else
-                begin
-                  fWaitForReadPending := false;
-                  while fOwner.fClients.fRead.GetOnePending(notif, n) and
-                        not Terminated do
-                    fOwner.fClients.ProcessRead(notif);
-                  // release atpReadPoll lock above
-                  fOwner.fThreadReadPoll.fEvent.SetEvent;
-                end;
-            end;
-        else
-          raise EAsyncConnections.CreateUtf8('%.Execute: unexpected fProcess=%',
-            [self, ord(fProcess)]);
-        end;
+          end;
+      else
+        raise EAsyncConnections.CreateUtf8('%.Execute: unexpected fProcess=%',
+          [self, ord(fProcess)]);
+      end;
     end;
     fOwner.DoLog(sllInfo, 'Execute: done %', [n], self);
   except
@@ -1999,7 +2001,7 @@ procedure TAsyncConnections.LogVerbose(connection: TPollAsyncConnection;
   const ident: RawUtf8; const identargs: array of const;
   frame: pointer; framelen: integer);
 var
-  tmp: TLogEscape;
+  tmp: TLogEscape; // 512 bytes of temp buffer
 begin
   if (acoVerboseLog in Options) and
      (fLog <> nil) then
@@ -2092,6 +2094,7 @@ constructor TAsyncServer.Create(const aPort: RawUtf8;
   const ProcessName: RawUtf8; aLog: TSynLogClass;
   aOptions: TAsyncConnectionsOptions; aThreadPoolCount: integer);
 begin
+  fSockPort := aPort;
   fServer := TCrtSocket.Bind(aPort);
   fMaxConnections := 7777777; // huge number for sure
   fMaxPending := 1000; // fair enough for pending requests
@@ -2139,6 +2142,7 @@ var
   sin: TNetAddr;
   ip: RawUtf8;
   start: Int64;
+  async: boolean;
 begin
   // Accept() incoming connections and Send() output packets in the background
   SetCurrentThreadName('AW %', [fProcessName]);
@@ -2146,11 +2150,7 @@ begin
   // constructor did bind fServer to the expected TCP port
   if fServer.Sock <> nil then
   try
-    // make Accept() non-blocking (and therefore also systemd-ready)
-    if not fServer.SockIsDefined or // paranoid (Bind would have raise an exception)
-       (fServer.Sock.MakeAsync <> nrOK) then
-      raise EAsyncConnections.CreateUtf8(
-        '%.Execute: %.Bind failed', [self, fServer]);
+    async := false; // first Accept() will be blocking
     // setup the main bound connection to be polling together with the writes
     if not fClients.fWrite.Subscribe(fServer.Sock, [pseRead], {notif.tag=} 0) then
       raise EAsyncConnections.CreateUtf8('%.Execute: subscribe accept?', [self]);
@@ -2160,59 +2160,66 @@ begin
     start := 0;
     while not Terminated do
     begin
-      if fClients.fWrite.GetOne(1000, 'AW', notif) then
-        if Terminated then
-          break
-        else if notif.tag = 0 then // no tag = main accept()
-        begin
-          repeat
-            // could we Accept one or several incoming connection(s)?
-            res := fServer.Sock.Accept(client, sin);
-            if Terminated or
-               (res = nrRetry) then
-              break;
-            if (fClients.fRead.Count > fMaxConnections) or
-               (fClients.fRead.PendingCount > fMaxPending) then
+      if not async then
+        notif.tag := 0 // first blocking accept()
+      else if not fClients.fWrite.GetOne(1000, 'AW', notif) then
+        continue;
+      if Terminated then
+        break;
+      if notif.tag = 0 then // no tag = main accept()
+      begin
+        repeat
+          // could we Accept one or several incoming connection(s)?
+          res := fServer.Sock.Accept(client, sin);
+          if Terminated or
+             (res = nrRetry) then
+            break;
+          if (fClients.fRead.Count > fMaxConnections) or
+             (fClients.fRead.PendingCount > fMaxPending) then
+          begin
+            // map THttpAsyncServer.HttpQueueLength property value
+            client.ShutdownAndClose({rdwr=}false); // e.g. for load balancing
+            res := nrTooManyConnections;
+          end;
+          if res <> nrOK then
+          begin
+            // failure (too many clients?) -> wait and retry
+            DoLog(sllWarning, 'Execute: Accept(%) failed as %',
+              [fServer.Port, ToText(res)^], self);
+            if res <> nrTooManyConnections then
+              // progressive wait (if not load-balancing, but socket error)
+              SleepStep(start, @Terminated);
+            break;
+          end;
+          if Terminated then
+            break;
+          // if we reached here, we have accepted a connection -> process
+          start := 0;
+          ip := sin.IP;
+          if not ConnectionCreate(client, ip, connection) then
+            client.ShutdownAndClose({rdwr=}false)
+          else if fClients.Start(connection) then
             begin
-              // map THttpAsyncServer.HttpQueueLength property value
-              client.ShutdownAndClose({rdwr=}false); // e.g. for load balancing
-              res := nrTooManyConnections;
-            end;
-            if res <> nrOK then
-            begin
-              // failure (too many clients?) -> wait and retry
-              DoLog(sllWarning, 'Execute: Accept(%) failed as %',
-                [fServer.Port, ToText(res)^], self);
-              if res <> nrTooManyConnections then
-                // progressive wait (if not load-balancing, but socket error)
-                SleepStep(start, @Terminated);
-              break;
-            end;
-            if Terminated then
-              break;
-            // if we reached here, we have accepted a connection -> process
-            start := 0;
-            ip := sin.IP;
-            if ConnectionCreate(client, ip, connection) then
-              if fClients.Start(connection) then
+              if fThreadReadPoll <> nil then
+                // release atpReadPoll lock to handle new subscription ASAP
+                fThreadReadPoll.fEvent.SetEvent;
+              if acoVerboseLog in fOptions then
+                DoLog(sllTrace, 'Execute: Accept(%)=%',
+                  [fServer.Port, connection], self);
+              if not async then
               begin
-                if fThreadReadPoll <> nil then
-                  // release atpReadPoll lock to handle new subscription ASAP
-                  fThreadReadPoll.fEvent.SetEvent;
-                if acoVerboseLog in fOptions then
-                  DoLog(sllTrace, 'Execute: Accept(%)=%',
-                    [fServer.Port, connection], self);
-              end
-              else
-                connection.Free
-            else
-              client.ShutdownAndClose({rdwr=}false);
-          until Terminated;
-        end
-        else
-          // this was a pseWrite notification -> try to send pending data
-          // here connection = TObject(notif.tag)
-          fClients.ProcessWrite(notif);
+                fServer.Sock.MakeAsync; // share thread with Writes
+                async := true;
+              end;
+            end
+            else if connection <> nil then // connection=nil for custom list
+              ConnectionDelete(connection.Handle);
+        until Terminated;
+      end
+      else
+        // this was a pseWrite notification -> try to send pending data
+        // here connection = TObject(notif.tag)
+        fClients.ProcessWrite(notif);
     end;
   except
     on E: Exception do
