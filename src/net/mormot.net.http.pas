@@ -1410,10 +1410,12 @@ begin
       inc(ContentPos, MaxSize);
     end;
     dec(ContentLength, MaxSize);
-    if ContentLength = 0 then
-      State := hrsResponseDone;
   end
+  else if ContentLength = 0 then
+    // we just finished background ProcessWrite of the last chunk
+    State := hrsResponseDone
   else
+    // paranoid check
     raise EHttpSocket.CreateUtf8('ProcessWrite: len=%', [MaxSize]);
 end;
 
