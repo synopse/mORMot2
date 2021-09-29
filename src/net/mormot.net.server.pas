@@ -1740,13 +1740,6 @@ begin
   // main server process loop
   try
     fSock := TCrtSocket.Bind(fSockPort); // BIND + LISTEN
-    {$ifdef OSLINUX}
-    // in case started by systemd (port=''), listening socket is created by
-    // another process and do not interrupt when it got a signal. So we need to
-    // set a timeout to unlock accept() periodically and check for termination
-    if fSockPort = '' then // external socket
-      fSock.ReceiveTimeout := 1000; // unblock accept every second
-    {$endif OSLINUX}
     fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid (Bind would have raise an exception)
       raise EHttpServer.CreateUtf8('%.Execute: %.Bind failed', [self, fSock]);

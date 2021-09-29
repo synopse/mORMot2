@@ -2606,6 +2606,13 @@ begin
   end;
   // next line will raise exception on error
   OpenBind(s{%H-}, p{%H-}, {dobind=}true, {tls=}false, aLayer, {%H-}TNetSocket(aSock));
+  {$ifdef OSLINUX}
+  // in case started by systemd (port=''), listening socket is created by
+  // another process and do not interrupt when it got a signal. So we need to
+  // set a timeout to unlock accept() periodically and check for termination
+  if aAddress = '' then // external socket
+    ReceiveTimeout := 1000; // unblock accept every second
+  {$endif OSLINUX}
 end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8;
