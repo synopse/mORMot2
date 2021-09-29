@@ -108,6 +108,12 @@ type
     procedure NotifyOutgoing(Connection: TWebSocketAsyncConnection);
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); override;
   public
+    /// create an event-driven HTTP/WebSockets Server
+    constructor Create(const aPort: RawUtf8;
+      const OnStart, OnStop: TOnNotifyThread;
+      aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
+      aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
+      aThreadPoolCount: integer); override;
     /// finalize the HTTP/WebSockets Connections
     destructor Destroy; override;
   end;
@@ -321,6 +327,24 @@ end;
 
 { TWebSocketAsyncConnections }
 
+constructor TWebSocketAsyncConnections.Create(const aPort: RawUtf8;
+  const OnStart, OnStop: TOnNotifyThread;
+  aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
+  aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
+  aThreadPoolCount: integer);
+begin
+  InitializeCriticalSection(fOutgoingLock);
+  inherited Create(aPort, OnStart, OnStop, aConnectionClass, ProcessName,
+    aLog, aOptions, aThreadPoolCount);
+  fLastOperationIdleSeconds := 10; // 10 secs is good enough for ping/pong
+end;
+
+destructor TWebSocketAsyncConnections.Destroy;
+begin
+  inherited Destroy;
+  DeleteCriticalSection(fOutgoingLock);
+end;
+
 procedure TWebSocketAsyncConnections.NotifyOutgoing(
   Connection: TWebSocketAsyncConnection);
 begin
@@ -373,12 +397,6 @@ begin
      (timer.TimeInMicroSec > 500) then // 0.5 ms seems responsive enough
     DoLog(sllTrace, 'ProcessIdleTix conn=% valid=% invalid=% in %',
       [conn, valid, invalid, timer.Time], self);
-end;
-
-destructor TWebSocketAsyncConnections.Destroy;
-begin
-  inherited Destroy;
-  DeleteCriticalSection(fOutgoingLock);
 end;
 
 
@@ -529,8 +547,6 @@ begin
     fSettings.SetFullLog;
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended, aLogVerbose);
-  fAsync.LastOperationIdleSeconds := 10; // 10 secs is good enough for ping/pong
-  InitializeCriticalSection((fAsync as TWebSocketAsyncConnections).fOutgoingLock);
 end;
 
 destructor TWebSocketAsyncServer.Destroy;
