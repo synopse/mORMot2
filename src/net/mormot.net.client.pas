@@ -1579,6 +1579,11 @@ begin
     SockSend([method, ' /', url, ' HTTP/1.1'])
   else
     SockSend([method, ' ', url, ' HTTP/1.1']);
+  {$ifdef OSPOSIX}
+  if SocketLayer = nlUnix then
+    SockSend('Host: unix')
+  else
+  {$endif OSPOSIX}
   if Port = DEFAULT_PORT[TLS.Enabled] then
     SockSend(['Host: ', Server])
   else
