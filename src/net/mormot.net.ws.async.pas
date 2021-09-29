@@ -545,6 +545,7 @@ begin
   fSettings.HeartbeatDelay := 20000;
   if aLogVerbose then
     fSettings.SetFullLog;
+  // start the HTTP/WebSockets server threads
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended, aLogVerbose);
 end;

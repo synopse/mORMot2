@@ -930,7 +930,7 @@ begin
   if fGCCount > 0 then
   begin
     // atomic copy of the shared AddGC() instances list
-    mormot.core.os.EnterCriticalSection(fPendingLock); // keep lock as short as possible
+    mormot.core.os.EnterCriticalSection(fPendingLock); // keep lock short
     fGC2 := fGC; // immediate ref-counting assignment
     fGCCount2 := fGCCount;
     fGC := nil;
@@ -2679,7 +2679,7 @@ begin
   if fAsync = nil then
     exit;
   try
-    fAsync.DoLog(sllTrace, 'Execute: main loop', [], self);
+    fAsync.DoLog(sllTrace, 'Execute: main W loop', [], self);
     while not Terminated and
           not fAsync.Terminated do
       if fAsync.fClients.fWrite.GetOne(1000, 'W', notif) then
