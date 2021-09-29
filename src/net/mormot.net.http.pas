@@ -1345,7 +1345,9 @@ begin
   if (ContentType <> '') and
      (ContentType <> STATICFILE_CONTENT_TYPE) then
     Head.Append(['Content-Type: ', ContentType], {crlf=}true);
-  if not (hfConnectionClose in HeaderFlags) then
+  if hfConnectionClose in HeaderFlags then
+    Head.Append('Connection: Close', {crlf=}true)
+  else
   begin
     if CompressAcceptEncoding <> '' then
       Head.Append(CompressAcceptEncoding, {crlf=}true);

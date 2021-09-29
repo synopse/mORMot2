@@ -2529,18 +2529,18 @@ begin
         end;
     end;
     // prepare the response for the HTTP state machine
-    req.SetupResponse(fHttp, fServer.ServerName, err,
-      fServer.OnSendFile, fServer.fCompressGz,
-      fServer.fAsync.fClients.fSendBufferSize);
-    fRespStatus := req.RespStatus;
     if (fKeepAliveSec > 0) and
        not (hfConnectionClose in fHttp.HeaderFlags) and
        (fServer.Async.fLastOperationSec > fKeepAliveSec) then
     begin
       fOwner.DoLog(sllTrace, 'DoRequest KeepAlive %>%: close connnection',
         [fServer.Async.fLastOperationSec, fKeepAliveSec], self);
-      include(fHttp.HeaderFlags, hfConnectionClose);
+      include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
     end;
+    req.SetupResponse(fHttp, fServer.ServerName, err,
+      fServer.OnSendFile, fServer.fCompressGz,
+      fServer.fAsync.fClients.fSendBufferSize);
+    fRespStatus := req.RespStatus;
   finally
     req.Free;
   end;
