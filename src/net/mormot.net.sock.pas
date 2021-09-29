@@ -524,14 +524,15 @@ type
     fGettingOne: integer;
     fTerminated: boolean;
     fPollClass: TPollSocketClass;
-    fPollLock: TRTLCriticalSection;
-    fPendingLock: TRTLCriticalSection;
     fOnLog: TSynLogProc;
     fOnGetOneIdle: TOnPollSocketsIdle;
-    fLastUnsubscribedTag: TPollSocketTagDynArray;
+    fLastUnsubscribedTag: TPollSocketTagDynArray; // protected by fPendingLock
     fLastUnsubscribedTagCount: integer;
-    fSubscription: TPollSocketsSubscription;
     fUnsubscribeShouldShutdownSocket: boolean;
+    fSubscription: TPollSocketsSubscription;
+    fPollLock: TRTLCriticalSection;
+    fPendingLock: TRTLCriticalSection;
+    fSubscriptionLock: TRTLCriticalSection; // dedicated not to block Accept()
     procedure NoMorePending; {$ifdef HASINLINE} inline; {$endif}
     function IsValidPending(tag: TPollSocketTag): boolean; virtual;
   public
@@ -1523,6 +1524,11 @@ begin
     else
     begin
       clientsocket := TNetSocket(sock);
+      {$ifdef OSWINDOWS}
+      // on Windows, default buffers are of 8KB :(
+      clientsocket.SetRecvBufferSize(65536);
+      clientsocket.SetSendBufferSize(65536);
+      {$endif OSWINDOWS}
       result := nrOK;
     end;
   end;
@@ -1754,6 +1760,7 @@ begin
   inherited Create;
   InitializeCriticalSection(fPendingLock);
   InitializeCriticalSection(fPollLock);
+  InitializeCriticalSection(fSubscriptionLock);
   if aPollClass = nil then
     fPollClass := PollSocketClass
   else
@@ -1793,6 +1800,7 @@ begin
   end;
   DeleteCriticalSection(fPendingLock);
   DeleteCriticalSection(fPollLock);
+  DeleteCriticalSection(fSubscriptionLock);
   inherited Destroy;
 end;
 
@@ -1811,7 +1819,7 @@ begin
   one.socket := socket;
   one.tag := tag;
   one.events := events;
-  mormot.core.os.EnterCriticalSection(fPendingLock);
+  mormot.core.os.EnterCriticalSection(fSubscriptionLock);
   try
     n := fSubscription.SubscribeCount;
     if n = length(fSubscription.Subscribe) then
@@ -1819,7 +1827,7 @@ begin
     fSubscription.Subscribe[n] := one;
     fSubscription.SubscribeCount := n + 1;
   finally
-    mormot.core.os.LeaveCriticalSection(fPendingLock);
+    mormot.core.os.LeaveCriticalSection(fSubscriptionLock);
   end;
   result := true;
 end;
@@ -1863,11 +1871,13 @@ begin
       end;
     end;
     AddPtrUInt(fLastUnsubscribedTag, fLastUnsubscribedTagCount, tag);
-    AddPtrUInt(TPtrUIntDynArray(fSubscription.Unsubscribed),
-      fSubscription.UnsubscribedCount, PtrUInt(socket));
   finally
     mormot.core.os.LeaveCriticalSection(fPendingLock);
   end;
+  mormot.core.os.EnterCriticalSection(fSubscriptionLock);
+  AddPtrUInt(TPtrUIntDynArray(fSubscription.Unsubscribed),
+    fSubscription.UnsubscribedCount, PtrUInt(socket));
+  mormot.core.os.LeaveCriticalSection(fSubscriptionLock);
 end;
 
 procedure TPollSockets.NoMorePending;
@@ -1991,10 +2001,21 @@ begin
     // thread-safe get the pending (un)subscriptions
     last := -1;
     new.Count := 0;
-    mormot.core.os.EnterCriticalSection(fPendingLock);
-    try
+    if fPending.Count = 0 then
+    begin
+      mormot.core.os.EnterCriticalSection(fPendingLock);
       if fPending.Count = 0 then
-        new.Events := fPending.Events; // reuse the main dynamic array
+      begin
+        // reuse the main dynamic array
+        pointer(new.Events) := pointer(fPending.Events); // inlined MoveAndZero
+        pointer(fPending.Events) := nil;
+      end;
+      mormot.core.os.LeaveCriticalSection(fPendingLock);
+    end;
+    mormot.core.os.EnterCriticalSection(fSubscriptionLock);
+    {$ifdef HASFASTTRYFINALLY}
+    try
+    {$endif HASFASTTRYFINALLY}
       sub.SubscribeCount := fSubscription.SubscribeCount;
       sub.UnsubscribedCount := fSubscription.UnsubscribedCount;
       if (sub.SubscribeCount <> 0) or
@@ -2005,9 +2026,13 @@ begin
           fOnLog(sllTrace, 'PollForPendingEvents sub=% unsub=%',
             [sub.SubscribeCount, sub.UnsubscribedCount], self);
       end;
+    {$ifdef HASFASTTRYFINALLY}
     finally
-      mormot.core.os.LeaveCriticalSection(fPendingLock);
+    {$endif HASFASTTRYFINALLY}
+      mormot.core.os.LeaveCriticalSection(fSubscriptionLock);
+    {$ifdef HASFASTTRYFINALLY}
     end;
+    {$endif HASFASTTRYFINALLY}
     // use fPoll[] to retrieve any pending notifications
     mormot.core.os.EnterCriticalSection(fPollLock);
     try
@@ -2189,7 +2214,7 @@ begin
       if fTerminated then
         exit;
       if fPending.Count = 0 then
-        PollForPendingEvents({timeoutMS=}0);
+        PollForPendingEvents({timeoutMS=}10);
       if fTerminated then
         exit;
       if GetOnePending(notif, call) then
