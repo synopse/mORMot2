@@ -1219,7 +1219,8 @@ end;
 
 function DateTimeToIso8601(D: TDateTime; Expanded: boolean;
   FirstChar: AnsiChar; WithMS: boolean; QuotedChar: AnsiChar): RawUtf8;
-var tmp: array[0 .. 31] of AnsiChar;
+var
+  tmp: array[0 .. 31] of AnsiChar;
 begin
   // D=0 is handled in DateTimeToIso8601Text()
   FastSetString(result, @tmp,

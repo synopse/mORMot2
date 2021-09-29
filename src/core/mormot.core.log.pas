@@ -5705,7 +5705,7 @@ begin
     if ELevel <> sllNone then
       FormatUtf8('% % at %: % [%]', [_LogInfoCaption[ELevel], EClass,
         GetInstanceDebugFile.FindLocationShort(EAddr),
-        DateTimeToIsoString(ETimestamp / SecsPerDay + UnixDateDelta),
+        UnixTimeToString(ETimestamp, {expanded=}true, ' '),
         StringToUtf8(info.Message)], result)
     else
       result := '';

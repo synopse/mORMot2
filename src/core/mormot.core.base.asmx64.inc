@@ -1580,7 +1580,7 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
           jz      @eq
 @less2:   // less than 2 bytes left
           test    L, L
-          jz      @eq                     // no bytes left
+          jz      @eq                    // no bytes left
           jmp     @last                  // one byte left
 @diff:    // difference found: find position
           bsf     eax, eax
@@ -1591,7 +1591,7 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
           ret
 @last2:   // difference in byte 0 or 1
           neg     al
-          sbb     L, -1             // add 1 to L if al == 0
+          sbb     L, -1                  // add 1 to L if al == 0
           jmp     @last
 @eq:      // equal
           xor     eax, eax
