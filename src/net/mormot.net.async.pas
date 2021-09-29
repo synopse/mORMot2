@@ -62,11 +62,13 @@ type
     /// Lock/Unlock R/W thread acquisition
     // - our first implementation attempted a simple atomic counter, but failed
     // on AARCH64 CPU so now TRTLCriticalSection is used - and is fast enough
-    fLocker: array[boolean] of TRTLCriticalSection;
+    fLockRW: array[boolean] of TRTLCriticalSection;
     /// current number of nested TryLock/WaitLock calls
     fLockCounter: array[boolean] of integer;
     /// atomically incremented during WaitLock()
     fWaitCounter: integer;
+    /// false for a single lock (default), true to separate read/write locks
+    fLockMax: boolean;
     /// flag set by TAsyncConnections.IdleEverySecond to purge rd/wr unused buffers
     // - avoid to call the GetTickCount64 system API for every activity
     fWasActive: boolean;
@@ -80,7 +82,8 @@ type
     fWr: TRawByteStringBuffer;
     /// this method is called when the instance is connected to a poll
     // - overriding this method is cheaper than the plain Create destructor
-    /// - default implementation initializes the locker[] mutexes
+    // - default implementation initializes the locker[] mutexes
+    // - you may inherit and set fLockMax := true before if two locks are needed
     procedure AfterCreate; virtual;
     /// this method is called when the instance is about to be deleted from a poll
     // - overriding this method is cheaper than the plain Destroy destructor
@@ -714,8 +717,6 @@ end;
 constructor TPollAsyncConnection.Create;
 begin
   inherited Create; // RTTI ininialization
-  InitializeCriticalSection(fLocker[false]);
-  InitializeCriticalSection(fLocker[true]);
   AfterCreate;
 end;
 
@@ -726,19 +727,19 @@ begin
   try
     BeforeDestroy;
     // ensure all locks are properly released
-    for b := false to true do
-      if fLockCounter[b] >= 0 then
+    for b := false to fLockMax do
+      if fLockCounter[b] >= 0 then // set to -1 if already deleted
       begin
         while fLockCounter[b] <> 0 do
         begin
           // paranoid check: should have been properly unlocked
           TSynLog.DoLog(sllWarning, 'TPollAsyncConnection(%) Done locked: r=% w=%',
             [pointer(@self), fLockCounter[false], fLockCounter[true]], nil);
-          mormot.core.os.LeaveCriticalSection(fLocker[b]);
+          mormot.core.os.LeaveCriticalSection(fLockRW[b]);
           dec(fLockCounter[b]);
         end;
         // on some OS, free the mutex in the same thread which created it
-        DeleteCriticalSection(fLocker[b]);
+        DeleteCriticalSection(fLockRW[b]);
         fLockCounter[b] := -1; // call DeleteCriticalSection() only once
       end;
     // finalize the instance
@@ -750,7 +751,11 @@ begin
 end;
 
 procedure TPollAsyncConnection.AfterCreate;
+var
+  b: boolean;
 begin
+  for b := false to fLockMax do
+    InitializeCriticalSection(fLockRW[b]);
 end;
 
 procedure TPollAsyncConnection.BeforeDestroy;
@@ -778,9 +783,10 @@ end;
 
 function TPollAsyncConnection.TryLock(writer: boolean): boolean;
 begin
+  if not fLockMax then
+    writer := false; // there is a single lock
   if (fSocket <> nil) and
-     (fLockCounter[writer] = 0) and
-     (mormot.core.os.TryEnterCriticalSection(fLocker[writer]) <> 0) then
+     (mormot.core.os.TryEnterCriticalSection(fLockRW[writer]) <> 0) then
   begin
     fWasActive := true;
     inc(fLockCounter[writer]);
@@ -792,20 +798,24 @@ end;
 
 procedure TPollAsyncConnection.UnLock(writer: boolean);
 begin
+  if not fLockMax then
+    writer := false; // there is a single lock
   if (@self <> nil) and
      (fLockCounter[writer] > 0) then
   begin
     dec(fLockCounter[writer]);
-    mormot.core.os.LeaveCriticalSection(fLocker[writer]);
+    mormot.core.os.LeaveCriticalSection(fLockRW[writer]);
   end;
 end;
 
 procedure TPollAsyncConnection.UnLockFinal(writer: boolean);
 begin
+  if not fLockMax then
+    writer := false; // there is a single lock
   while fLockCounter[writer] > 0 do
   begin
     dec(fLockCounter[writer]);
-    mormot.core.os.LeaveCriticalSection(fLocker[writer]);
+    mormot.core.os.LeaveCriticalSection(fLockRW[writer]);
   end;
 end;
 
