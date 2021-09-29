@@ -360,7 +360,7 @@ var
   BiosInfoText: RawUtf8;
 
   {$ifdef OSLINUXANDROID}
-  /// contains the "Features:" value of Linux /proc/cpuinfo
+  /// contains the Flags: or Features: value of Linux /proc/cpuinfo
   CpuInfoFeatures: RawUtf8;
   {$endif OSLINUXANDROID}
 
@@ -2372,8 +2372,10 @@ function SleepHiRes(ms: cardinal; var terminated: boolean;
 /// call SleepHiRes() taking count of the activity, in 0/1/5/50/120-250 ms steps
 // - range is agressively designed burning some CPU in favor of responsiveness
 // - should reset start := 0 when some activity occured
+// - would optionally return if terminated^ is set, or event is signaled
 // - returns the current GetTickCount64 value
-function SleepStep(var start: Int64; terminated: PBoolean = nil): Int64;
+function SleepStep(var start: Int64; terminated: PBoolean = nil;
+  event: TEvent = nil): Int64;
 
 /// compute optimal sleep time as 0/1/5/50 then 120-250 ms steps
 // - is agressively designed burning some CPU in favor of responsiveness
@@ -4159,13 +4161,15 @@ begin
     ProgramFullSpec := RawUtf8(Format('%s %s (%s)', [ProgramFileName,
       Version.Detailed, Version.BuildDateTimeString]));
     Hash.c0 := Version.Version32;
-    {$ifdef CPUINTEL}
-    Hash.c0 := crc32c(Hash.c0, @CpuFeatures, SizeOf(CpuFeatures));
-    {$else}
     {$ifdef OSLINUXANDROID}
     Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoFeatures), length(CpuInfoFeatures));
+    {$else}
+    {$ifdef CPUINTELARM}
+    Hash.c0 := crc32c(Hash.c0, @CpuFeatures, SizeOf(CpuFeatures));
+    {$else}
+    Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoText), length(CpuInfoText));
     {$endif OSLINUXANDROID}
-    {$endif CPUINTEL}
+    {$endif CPUINTELARM}
     Hash.c0 := crc32c(Hash.c0, pointer(Host), length(Host));
     Hash.c1 := crc32c(Hash.c0, pointer(User), length(User));
     Hash.c2 := crc32c(Hash.c1, pointer(ProgramFullSpec), length(ProgramFullSpec));
@@ -4232,7 +4236,7 @@ begin
     endtix^ := tix + result;
 end;
 
-function SleepStep(var start: Int64; terminated: PBoolean): Int64;
+function SleepStep(var start: Int64; terminated: PBoolean; event: TEvent): Int64;
 var
   ms: integer;
   endtix: Int64;
@@ -4240,13 +4244,21 @@ begin
   ms := SleepStepTime(start, result, @endtix);
   if (ms < 10) or
      (terminated = nil) then
-    SleepHiRes(ms) // < 16 ms is a pious wish on Windows anyway
+    if (ms = 0) or
+       (event = nil) then
+      SleepHiRes(ms) // < 16 ms is a pious wish on Windows anyway
+    else
+      event.WaitFor(ms)
   else
     repeat
-      SleepHiRes(10); // on Windows, HW clock resolution is around 16 ms
+      if event = nil then
+        SleepHiRes(10) // on Windows, HW clock resolution is around 16 ms
+      else if event.WaitFor(10) = wrSignaled then
+        ms := 0;
       result := GetTickCount64;
-    until terminated^ or
-          (result > endtix);
+    until (ms = 0) or
+          terminated^ or
+          (result >= endtix);
 end;
 
 function SleepHiRes(ms: cardinal; var terminated: boolean;
