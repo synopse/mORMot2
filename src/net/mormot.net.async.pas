@@ -544,6 +544,7 @@ type
     fMaxPending: integer;
     fMaxConnections: integer;
     fExecuteState: THttpServerExecuteState;
+    fExecuteAcceptOnly: boolean; // writes in another thread (THttpAsyncServer)
     fSockPort: RawUtf8;
     procedure SetExecuteState(state: THttpServerExecuteState); virtual;
     procedure Execute; override;
@@ -1616,7 +1617,7 @@ begin
     fClients.fWrite.OnLog := fLog.DoLog;
   end;
   fOptions := aOptions;
-  // prepare but don't start the main accept + write/send thread
+  // prepare this main thread: fThreads[] requires proper fOwner.OnStart/OnStop
   inherited Create({suspended=}false, OnStart, OnStop, ProcessName);
   // initiate the read/receive thread(s)
   fThreadPoolCount := aThreadPoolCount;
@@ -1630,11 +1631,11 @@ begin
     for i := 1 to aThreadPoolCount - 1 do
       fThreads[i] := TAsyncConnectionsThread.Create(self, atpReadPending, i);
   end;
-  tix := mormot.core.os.GetTickCount64 + 1000;
+  tix := mormot.core.os.GetTickCount64 + 7000;
   repeat
      if AllThreadsStarted then
        break;
-     SleepHiRes(0);
+     SleepHiRes(1);
   until mormot.core.os.GetTickCount64 > tix;
   // caller will start the main thread
   log.Log(sllTrace, 'Create: started % threads', [fThreadPoolCount + 1], self);
@@ -2114,22 +2115,34 @@ destructor TAsyncServer.Destroy;
 var
   endtix: Int64;
   touchandgo: TNetSocket; // paranoid ensure Accept() is released
+  host, port: RawUtf8;
 begin
   Terminate;
   endtix := mormot.core.os.GetTickCount64 + 10000;
   if fServer <> nil then
   begin
-    fServer.Close; // shutdown the socket to unlock Accept() in Execute
-    if NewSocket('127.0.0.1', fServer.Port, nlTcp, false,
+    host := fServer.Server; // will also work for nlUnix
+    if fServer.SocketLayer <> nlUnix then
+    begin
+      if host = '0.0.0.0' then
+        host := '127.0.0.1';
+      port := fSockPort;
+    end;
+    if NewSocket(host, port{%H-}, fServer.SocketLayer, false,
          10, 0, 0, 0, touchandgo) = nrOk then
       touchandgo.ShutdownAndClose(false);
+    fServer.Close; // shutdown the socket to unlock Accept() in Execute
   end;
   //DoLog(sllTrace, 'Destroy before inherited', [], self);
   inherited Destroy;
-  //DoLog(sllTrace, 'Destroy before sleep', [], self);
-  while (fExecuteState = esRunning) and
-        (mormot.core.os.GetTickCount64 < endtix) do
-    SleepHiRes(1); // wait for Execute to be finalized (unlikely)
+  if fExecuteState = esRunning then
+  begin
+    DoLog(sllTrace, 'Destroy before sleep', [], self);
+    repeat
+      SleepHiRes(1); // wait for Execute to be finalized (unlikely)
+    until (fExecuteState <> esRunning) or
+          (mormot.core.os.GetTickCount64 > endtix);
+  end;
   FreeAndNilSafe(fServer);
   DoLog(sllTrace, 'Destroy finished', [], self);
 end;
@@ -2152,24 +2165,27 @@ var
   start: Int64;
   async: boolean;
 begin
-  // Accept() incoming connections and Send() output packets in the background
+  // Accept() incoming connections [and Send() output packets in the background]
   SetCurrentThreadName('AW %', [fProcessName]);
   NotifyThreadStart(self);
   // constructor did bind fServer to the expected TCP port
   if fServer.Sock <> nil then
   try
-    async := false; // first Accept() will be blocking
-    // setup the main bound connection to be polling together with the writes
-    if not fClients.fWrite.Subscribe(fServer.Sock, [pseRead], {notif.tag=} 0) then
-      raise EAsyncConnections.CreateUtf8('%.Execute: subscribe accept?', [self]);
-    fClients.fWrite.PollForPendingEvents(0); // actually subscribe
-    // main socket accept/send processing loop
     SetExecuteState(esRunning);
+    if not fExecuteAcceptOnly then
+    begin
+      // setup the main bound connection to be polling together with the writes
+      if not fClients.fWrite.Subscribe(fServer.Sock, [pseRead], {notif.tag=} 0) then
+        raise EAsyncConnections.CreateUtf8('%.Execute: subscribe accept?', [self]);
+      fClients.fWrite.PollForPendingEvents(0); // actually subscribe
+    end;
+    // main socket accept/send processing loop
+    async := false; // first Accept() will be blocking
     start := 0;
     while not Terminated do
     begin
       if not async then
-        notif.tag := 0 // first blocking accept()
+        notif.tag := 0 // blocking accept()
       else if not fClients.fWrite.GetOne(1000, 'AW', notif) then
         continue;
       if Terminated then
@@ -2214,7 +2230,8 @@ begin
               if acoVerboseLog in fOptions then
                 DoLog(sllTrace, 'Execute: Accept(%)=%',
                   [fServer.Port, connection], self);
-              if not async then
+              if (not async) and
+                 not fExecuteAcceptOnly then
               begin
                 fServer.Sock.MakeAsync; // share thread with Writes
                 async := true;
@@ -2574,6 +2591,8 @@ end;
 
 procedure THttpAsyncConnections.SetExecuteState(state: THttpServerExecuteState);
 begin
+  if State = esRunning then
+    fExecuteAcceptOnly := true; // THttpAsyncServer.Execute will do the writes
   inherited SetExecuteState(state);
   if fAsyncServer <> nil then
     fAsyncServer.fExecuteState := state; // reflect for WaitStarted()
@@ -2610,7 +2629,7 @@ begin
   fExecuteState := fAsync.fExecuteState;
   // launch this TThread instance, but as suspended since Execute is void
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
-    KeepAliveTimeOut, aHeadersUnFiltered, {suspended=}true);
+    KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended);
 end;
 
 destructor THttpAsyncServer.Destroy;
@@ -2650,8 +2669,29 @@ begin
 end;
 
 procedure THttpAsyncServer.Execute;
+var
+  notif: TPollSocketResult;
 begin
-  // this method is never called, because Create did Suspended=true
+  // Send() output packets in the background
+  SetCurrentThreadName('W %', [fAsync.fProcessName]);
+  NotifyThreadStart(self);
+  WaitStarted(10);
+  if fAsync = nil then
+    exit;
+  try
+    fAsync.DoLog(sllTrace, 'Execute: main loop', [], self);
+    while not Terminated and
+          not fAsync.Terminated do
+      if fAsync.fClients.fWrite.GetOne(1000, 'W', notif) then
+        fAsync.fClients.ProcessWrite(notif);
+  except
+    on E: Exception do
+      // callback exceptions should all be catched: so we assume that any
+      // exception in mORMot code should be considered as fatal
+      fAsync.DoLog(sllWarning, 'Execute raised uncatched % -> terminate %',
+        [E.ClassType, fAsync.fProcessName], self);
+  end;
+  fAsync.DoLog(sllInfo, 'Execute: done W %', [fAsync.fProcessName], self);
 end;
 
 
