@@ -355,6 +355,7 @@ type
     fOwner: TAsyncConnections;
     fProcess: TAsyncConnectionsThreadProcess;
     fWaitForReadPending: boolean;
+    fExecuteStarted: boolean;
     fExecuteFinished: boolean;
     fIndex: integer;
     fEvent: TEvent;
@@ -423,6 +424,7 @@ type
     end;
     fConnectionLock: TSynLocker;
     fIdleTix: Int64;
+    function AllThreadsStarted: boolean; virtual;
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
       out aConnection: TAsyncConnection): boolean; virtual;
     function ConnectionAdd(
@@ -1333,6 +1335,7 @@ begin
         bufsent := buflen;
         if fDebugLog <> nil then
           timer.Start;
+        // DoLog('ProcessWrite: before Send buflen=%', [bufsent]);
         res := connection.fSocket.Send(buf, bufsent);
         if fDebugLog <> nil then
           DoLog('ProcessWrite send(%)=% %/%B in % % fProcessingWrite=%',
@@ -1470,7 +1473,7 @@ begin
   fIndex := aIndex;
   fEvent := TEvent.Create(nil, false, false, '');
   fOnThreadTerminate := fOwner.fOnThreadTerminate;
-  inherited Create(false);
+  inherited Create({suspended=}false);
 end;
 
 destructor TAsyncConnectionsThread.Destroy;
@@ -1490,6 +1493,7 @@ begin
   SetCurrentThreadName(n);
   fOwner.NotifyThreadStart(self);
   try
+    fExecuteStarted := true;
     start := 0;
     while not Terminated and
           (fOwner.fClients <> nil) and
@@ -1513,11 +1517,12 @@ begin
             begin
               start := 0; // back to SleepHiRes(0)
               repeat
-                pending := fOwner.fClients.fRead.PollForPendingEvents(10);
+                pending := fOwner.fClients.fRead.PollForPendingEvents(0);
                 if Terminated then
                   break
                 else if pending = 0 then
-                  SleepStep(start, @Terminated) // 0/1/10/50/150 ms steps
+                  // 0/1/10/50/150 ms steps checking fThreadReadPoll from accept
+                  SleepStep(start, @Terminated, fEvent)
                 else
                 begin
                   // process fOwner.fClients.fPending in atpReadPending threads
@@ -1569,6 +1574,7 @@ constructor TAsyncConnections.Create(const OnStart, OnStop: TOnNotifyThread;
   aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions; aThreadPoolCount: integer);
 var
   i: PtrInt;
+  tix: Int64;
   opt: TPollAsyncSocketsOptions;
   {%H-}log: ISynLog;
 begin
@@ -1600,8 +1606,10 @@ begin
     fClients.fWrite.OnLog := fLog.DoLog;
   end;
   fOptions := aOptions;
+  // prepare but don't start the main accept + write/send thread
+  inherited Create({suspended=}false, OnStart, OnStop, ProcessName);
+  // initiate the read/receive thread(s)
   fThreadPoolCount := aThreadPoolCount;
-  inherited Create(false, OnStart, OnStop, ProcessName);
   SetLength(fThreads, fThreadPoolCount);
   if aThreadPoolCount = 1 then
     fThreads[0] := TAsyncConnectionsThread.Create(self, atpReadSingle, 0)
@@ -1612,6 +1620,25 @@ begin
     for i := 1 to aThreadPoolCount - 1 do
       fThreads[i] := TAsyncConnectionsThread.Create(self, atpReadPending, i);
   end;
+  tix := mormot.core.os.GetTickCount64 + 1000;
+  repeat
+     if AllThreadsStarted then
+       break;
+     SleepHiRes(0);
+  until mormot.core.os.GetTickCount64 > tix;
+  // caller will start the main thread
+  log.Log(sllTrace, 'Create: started % threads', [fThreadPoolCount + 1], self);
+end;
+
+function TAsyncConnections.AllThreadsStarted: boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  for i := 0 to high(fThreads) do
+    if not fThreads[i].fExecuteStarted then
+      exit;
+  result := true;
 end;
 
 destructor TAsyncConnections.Destroy;
@@ -2125,7 +2152,9 @@ begin
       raise EAsyncConnections.CreateUtf8(
         '%.Execute: %.Bind failed', [self, fServer]);
     // setup the main bound connection to be polling together with the writes
-    fClients.fWrite.Subscribe(fServer.Sock, [pseRead], {notif.tag=} 0);
+    if not fClients.fWrite.Subscribe(fServer.Sock, [pseRead], {notif.tag=} 0) then
+      raise EAsyncConnections.CreateUtf8('%.Execute: subscribe accept?', [self]);
+    fClients.fWrite.PollForPendingEvents(0); // actually subscribe
     // main socket accept/send processing loop
     SetExecuteState(esRunning);
     start := 0;
@@ -2134,7 +2163,7 @@ begin
       if fClients.fWrite.GetOne(1000, 'AW', notif) then
         if Terminated then
           break
-        else if notif.tag = 0 then // no tag = no connection = main accept()
+        else if notif.tag = 0 then // no tag = main accept()
         begin
           repeat
             // could we Accept one or several incoming connection(s)?
@@ -2352,8 +2381,8 @@ begin
     fHttp.ProcessBody(fWr, fOwner.fClients.fSendBufferSize);
     fOwner.DoLog(sllTrace, 'AfterWrite SendBody ContentLength=% Wr=%',
       [fHttp.ContentLength, fWr.Len], self);
-    if fHttp.ContentLength <> 0 then
-      // need to continue sending
+    if fWr.Len <> 0 then
+      // need to continue background sending
       exit;
   end
   else if fHttp.State <> hrsResponseDone then
