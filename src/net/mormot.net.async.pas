@@ -1572,6 +1572,7 @@ begin
   if aThreadPoolCount <= 0 then
     aThreadPoolCount := 1;
   fLastOperationReleaseMemorySeconds := 60;
+  fLastOperationSec := Qword(GetTickCount64) div 1000; // need something ASAP
   fLog := aLog;
   fConnectionClass := aConnectionClass;
   if not (acoNoConnectionTrack in aOptions) then
