@@ -133,7 +133,7 @@ implementation
 function TRtspConnection.OnRead: TPollAsyncSocketOnReadWrite;
 begin
   if acoVerboseLog in fOwner.Options then
-    fOwner.LogVerbose(self, 'Frame forwarded', fRd);
+    fOwner.LogVerbose(self, 'Frame forwarded', [], fRd);
   if fGetBlocking.TrySndLow(fRd.Buffer, fRd.Len) then
   begin
     fOwner.Log.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',

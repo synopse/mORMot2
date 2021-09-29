@@ -484,13 +484,13 @@ type
     /// log some binary data with proper escape
     // - can be executed from an TAsyncConnection.OnRead method to track content:
     // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(self,...);
-    procedure LogVerbose(connection: TAsyncConnection; const ident: RawUtf8;
-      frame: pointer; framelen: integer); overload;
+    procedure LogVerbose(connection: TPollAsyncConnection; const ident: RawUtf8;
+      const identargs: array of const; frame: pointer; framelen: integer); overload;
     /// log some binary data with proper escape
     // - can be executed from an TAsyncConnection.OnRead method to track content:
     // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(...);
-    procedure LogVerbose(connection: TAsyncConnection; const ident: RawUtf8;
-      const frame: TRawByteStringBuffer); overload;
+    procedure LogVerbose(connection: TPollAsyncConnection; const ident: RawUtf8;
+      const identargs: array of const; const frame: TRawByteStringBuffer); overload;
     /// the current monotonic time elapsed, evaluated in seconds
     // - IdleEverySecond will set GetTickCount64 div 1000
     property LastOperationSec: TAsyncConnectionSec
@@ -1250,7 +1250,7 @@ begin
       // we were notified that there may be some pending input data
       added := 0;
       if connection.TryLock({writer=}false) then
-      // thread-safe read is mandatory since PollForPendingEvents+GetOnePending
+      // GetOnePending may be from several threads -> ensure locked
       begin
         repeat
           if fRead.Terminated or
@@ -1277,17 +1277,19 @@ begin
           inc(added, recved);
         until recved < SizeOf(temp);
         if added > 0 then
+        begin
+          inc(fReadCount);
+          inc(fReadBytes, added);
           try
-            // process the incoming data
-            result := true;
-            inc(fReadCount);
-            inc(fReadBytes, added);
+            // process connection.fRd incoming data (outside of the lock)
             if connection.OnRead = soClose then
-              UnlockAndCloseConnection(false, connection, 'OnRead abort');
+              UnlockAndCloseConnection(false, connection, 'ProcessRead OnRead');
+            result := true;
           except
-            UnlockAndCloseConnection(false, connection, 'ProcessRead except');
+            UnlockAndCloseConnection(false, connection, 'ProcessRead OnRead/E');
           end;
-        connection.UnLock(false); // UnlockSlotAndCloseConnection may set slot=nil
+        end;
+        connection.UnLock(false); // UnlockSlotAndCloseConnection set slot=nil
       end
       else if fDebugLog <> nil then
         DoLog('ProcessRead: TryLock failed % %', [connection, fRead]);
@@ -1444,14 +1446,11 @@ end;
 
 function TAsyncConnectionsSockets.Write(connection: TPollAsyncConnection;
   data: pointer; datalen, timeout: integer): boolean;
-var
-  tmp: TLogEscape;
 begin
   if (fOwner.fLog <> nil) and
+     (acoVerboseLog in fOwner.Options) and
      not (acoNoLogWrite in fOwner.Options) then
-    fOwner.DoLog(sllTrace, 'Write handle=% len=%%',
-      [connection.Handle, datalen, LogEscape(
-        data, datalen, tmp{%H-}, acoVerboseLog in fOwner.Options)], self);
+    fOwner.LogVerbose(TAsyncConnection(connection), 'Write', [], data, datalen);
   result := inherited Write(connection, data, datalen, timeout);
 end;
 
@@ -1969,22 +1968,23 @@ begin
     result := fClients.WriteString(connection, data, timeout);
 end;
 
-procedure TAsyncConnections.LogVerbose(connection: TAsyncConnection;
-  const ident: RawUtf8; frame: pointer; framelen: integer);
+procedure TAsyncConnections.LogVerbose(connection: TPollAsyncConnection;
+  const ident: RawUtf8; const identargs: array of const;
+  frame: pointer; framelen: integer);
 var
   tmp: TLogEscape;
 begin
-  if not (acoNoLogRead in Options) and
-     (acoVerboseLog in Options) and
+  if (acoVerboseLog in Options) and
      (fLog <> nil) then
     DoLog(sllTrace, '% len=%%',
-      [ident, framelen, LogEscape(frame, framelen, tmp{%H-})], connection);
+      [FormatToShort(ident, identargs), framelen,
+       LogEscape(frame, framelen, tmp{%H-})], connection);
 end;
 
-procedure TAsyncConnections.LogVerbose(connection: TAsyncConnection;
-  const ident: RawUtf8; const frame: TRawByteStringBuffer);
+procedure TAsyncConnections.LogVerbose(connection: TPollAsyncConnection;
+  const ident: RawUtf8; const identargs: array of const; const frame: TRawByteStringBuffer);
 begin
-  LogVerbose(connection, ident, frame.Buffer, frame.Len)
+  LogVerbose(connection, ident, identargs, frame.Buffer, frame.Len)
 end;
 
 procedure TAsyncConnections.IdleEverySecond(tix: Int64);
@@ -2086,19 +2086,21 @@ begin
          10, 0, 0, 0, touchandgo) = nrOk then
       touchandgo.ShutdownAndClose(false);
   end;
-  DoLog(sllDebug, 'Destroy before inherited', [], self);
+  //DoLog(sllTrace, 'Destroy before inherited', [], self);
   inherited Destroy;
-  DoLog(sllDebug, 'Destroy before sleep', [], self);
+  //DoLog(sllTrace, 'Destroy before sleep', [], self);
   while (fExecuteState = esRunning) and
         (mormot.core.os.GetTickCount64 < endtix) do
     SleepHiRes(1); // wait for Execute to be finalized (unlikely)
-  fServer.Free;
-  DoLog(sllDebug, 'Destroy finished', [], self);
+  FreeAndNilSafe(fServer);
+  DoLog(sllTrace, 'Destroy finished', [], self);
 end;
 
 procedure TAsyncServer.SetExecuteState(state: THttpServerExecuteState);
 begin
   fExecuteState := State;
+  DoLog(sllInfo, 'Execute: State=%',
+    [GetEnumName(TypeInfo(THttpServerExecuteState), ord(state))^], self);
 end;
 
 procedure TAsyncServer.Execute;
@@ -2273,7 +2275,10 @@ function THttpAsyncConnection.OnRead: TPollAsyncSocketOnReadWrite;
 var
   st: TProcessParseLine;
 begin
-  {fOwner.DoLog(sllCustom2, 'OnRead % len=%', [ToText(fHttp.State)^, fRd.Len], self);}
+  if (fOwner.fLog <> nil) and
+     (acoVerboseLog in fOwner.Options) and
+     not (acoNoLogRead in fOwner.Options) then
+    fOwner.LogVerbose(self, 'OnRead %', [ToText(fHttp.State)^], fRd);
   result := soClose;
   if fOwner.fClients = nil then
     fHttp.State := hrsErrorMisuse
@@ -2359,8 +2364,8 @@ begin
     exit;
   end;
   // whole headers + body outgoing content was sent
-  fOwner.DoLog(sllTrace, 'AfterWrite Done ContentLength=% Wr=%',
-    [fHttp.ContentLength, fWr.Len], self);
+  fOwner.DoLog(sllTrace, 'AfterWrite Done ContentLength=% Wr=% Flags=%',
+    [fHttp.ContentLength, fWr.Len, ToText(fHttp.HeaderFlags)], self);
   if Assigned(fServer.fOnAfterResponse) then
     try
       fServer.fOnAfterResponse(
@@ -2502,7 +2507,11 @@ begin
     if (fKeepAliveSec > 0) and
        not (hfConnectionClose in fHttp.HeaderFlags) and
        (fServer.Async.fLastOperationSec > fKeepAliveSec) then
+    begin
+      fOwner.DoLog(sllTrace, 'DoRequest KeepAlive %>%: close connnection',
+        [fServer.Async.fLastOperationSec, fKeepAliveSec], self);
       include(fHttp.HeaderFlags, hfConnectionClose);
+    end;
   finally
     req.Free;
   end;
@@ -2550,7 +2559,7 @@ begin
     fConnectionClass := THttpAsyncConnection;
   if fConnectionsClass = nil then
     fConnectionsClass := THttpAsyncConnections;
-  // start the actual thread-pooled connections async server
+  // bind and start the actual thread-pooled connections async server
   fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
     fConnectionClass, ProcessName, TSynLog, aco, ServerThreadPoolCount);
   fAsync.fAsyncServer := self;
