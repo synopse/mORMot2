@@ -4351,25 +4351,21 @@ procedure RandomGuid(out result: TGUID);
 begin // see https://datatracker.ietf.org/doc/html/rfc4122#section-4.4
   RandomBytes(@result, SizeOf(TGUID));
   result.D3 := (result.D3 and $0FFF) + $4000; // version bits 12-15 = 4 (random)
-  result.D4[0] := result.D4[0] and $3F;
-  inc(result.D4[0], $80);                     // reserved bits 6-7 = 0 and 1
+  result.D4[0] := byte(result.D4[0] and $3F) + $80; // reserved bits 6-7 = 1
 end;
 
 function NextGrow(capacity: integer): integer;
 begin
   // algorithm similar to TFPList.Expand for the increasing ranges
   result := capacity;
-  if result < 128 shl 20 then
-    if result < 8 shl 20 then
-      if result <= 128 then
-        if result > 8 then
-          inc(result, 16)
-        else
-          inc(result, 4)
-      else
-        inc(result, result shr 2)
-    else
-      inc(result, result shr 3)
+  if result < 8 then
+    inc(result, 4) // faster for smaller capacity (called often)
+  else if result <= 128 then
+    inc(result, 16)
+  else if result < 8 shl 20 then
+    inc(result, result shr 2)
+  else if result < 128 shl 20 then
+    inc(result, result shr 3)
   else
     inc(result, 16 shl 20);
 end;
