@@ -202,7 +202,6 @@ type
     fStatementMaxParam: integer;
     fStatementLastException: RawUtf8;
     fStatementTruncateSqlLogLen: integer;
-    fStatementPreparedSelectQueryPlan: boolean;
     /// check if a VACUUM statement is possible
     // - VACUUM in fact DISCONNECT all virtual modules (sounds like a SQLite3
     // design problem), so calling it during process could break the engine
@@ -374,10 +373,6 @@ type
     // - typical value is 2048 (2KB), which will avoid any heap allocation
     property StatementTruncateSqlLogLen: integer
       read fStatementTruncateSqlLogLen write fStatementTruncateSqlLogLen;
-    /// executes (therefore log) the QUERY PLAN for each prepared statement
-    property StatementPreparedSelectQueryPlan: boolean
-      read fStatementPreparedSelectQueryPlan
-      write fStatementPreparedSelectQueryPlan;
   published
     /// associated database
     property DB: TSqlDataBase
@@ -1098,6 +1093,7 @@ end;
 procedure TRestOrmServerDB.PrepareStatement(Cached: boolean);
 var
   wasprepared: boolean;
+  plan: RawUtf8;
   timer: PPPrecisionTimer;
 begin
   fStaticStatementTimer.Start;
@@ -1117,13 +1113,14 @@ begin
     timer := nil;
   fStatement := fStatementCache.Prepare(fStatementGenericSql, @wasprepared,
     timer, @fStatementMonitor);
-  if wasprepared then
+  if wasprepared and
+     (fRest <> nil) and
+     (fRest.LogFamily <> nil) and
+     (sllDB in fRest.LogFamily.Level) then
   begin
-    InternalLog('prepared % % %', [fStaticStatementTimer.Stop,
-      DB.FileNameWithoutPath, fStatementGenericSql], sllDB);
-    if fStatementPreparedSelectQueryPlan then
-      DB.ExecuteJson('explain query plan ' +
-        StringReplaceChars(fStatementGenericSql, '?', '1'), {expand=}true);
+    plan := DB.ExplainQueryPlan(fStatementGenericSql); // included in timer
+    InternalLog('prepared % % %  %', [fStaticStatementTimer.Stop,
+      DB.FileNameWithoutPath, fStatementGenericSql, plan], sllDB);
   end;
   if timer = nil then
   begin
