@@ -4371,7 +4371,8 @@ type
     // - by default, won't write more than 512MB of JSON, to avoid OutOfMemory
     // - returns the number of data rows added to JSON (excluding the headers)
     function Execute(aDB: TSqlite3DB; const aSql: RawUtf8; Json: TStream;
-      Expand: boolean = false; MaxMemory: PtrUInt = 512 shl 20): PtrInt; overload;
+      Expand: boolean = false; MaxMemory: PtrUInt = 512 shl 20;
+      Options: TTextWriterOptions = []): PtrInt; overload;
     /// Execute one SQL statement which return the results in JSON format
     // - use internally Execute() above with a TRawByteStringStream, and return a string
     // - BLOB field value is saved as Base64, e.g. '"\uFFF0base64encodedbinary"'
@@ -4381,7 +4382,7 @@ type
     // - if any error occurs, the ESqlite3Exception is handled and '' is returned
     function ExecuteJson(aDB: TSqlite3DB; const aSql: RawUtf8;
       Expand: boolean = false; aResultCount: PPtrInt = nil;
-      MaxMemory: PtrUInt = 512 shl 20): RawUtf8;
+      MaxMemory: PtrUInt = 512 shl 20; Options: TTextWriterOptions = []): RawUtf8;
     /// Execute all SQL statements in the aSql UTF-8 encoded string, results will
     // be written as ANSI text in OutFile
     procedure ExecuteDebug(aDB: TSqlite3DB; const aSql: RawUtf8;
@@ -7764,7 +7765,8 @@ begin
 end;
 
 function TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
-  Json: TStream; Expand: boolean; MaxMemory: PtrUInt): PtrInt;
+  Json: TStream; Expand: boolean; MaxMemory: PtrUInt;
+  Options: TTextWriterOptions): PtrInt;
 // expand=true: [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
 // expand=false: { "FieldCount":2,"Values":["col1","col2",val11,"val12",val21,..] }
 var
@@ -7775,6 +7777,7 @@ begin
   result := 0;
   W := TJsonWriter.Create(Json, Expand, false, nil, 0, @tmp);
   try
+    W.CustomOptions := W.CustomOptions + Options;
     // prepare the SQL request
     if aSql <> '' then // if not already prepared, reset and bound by caller
       Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
@@ -7845,7 +7848,8 @@ begin
           n := FieldCount - 1;
           for i := 0 to n do
           begin
-            write(OutFile, FieldA(i));
+            write(OutFile,
+              {$ifdef OSWINDOWS} FieldA {$else} FieldUtf8 {$endif}(i));
             if i < n then
               write(OutFile, '|');
           end;
@@ -7861,7 +7865,8 @@ end;
 {$I+}
 
 function TSqlRequest.ExecuteJson(aDB: TSqlite3DB; const aSql: RawUtf8;
-  Expand: boolean; aResultCount: PPtrInt; MaxMemory: PtrUInt): RawUtf8;
+  Expand: boolean; aResultCount: PPtrInt; MaxMemory: PtrUInt;
+  Options: TTextWriterOptions): RawUtf8;
 var
   Stream: TRawByteStringStream;
   RowCount: PtrInt;
@@ -7870,7 +7875,7 @@ begin
   try
     try
       // create JSON data in Stream
-      RowCount := Execute(aDB, aSql, Stream, Expand, MaxMemory);
+      RowCount := Execute(aDB, aSql, Stream, Expand, MaxMemory, Options);
       if aResultCount <> nil then
         aResultCount^ := RowCount;
       result := Stream.DataString;
@@ -8132,6 +8137,8 @@ end;
 procedure TSqlRequest.FieldsToJson(WR: TJsonWriter; DoNotFetchBlobs: boolean);
 var
   i: PtrInt;
+  P: PUtf8Char;
+  typ: integer;
 begin
   if Request = 0 then
     raise ESqlite3Exception.Create(RequestDB, SQLITE_MISUSE, 'FieldsToJson');
@@ -8139,9 +8146,34 @@ begin
     WR.Add('{');
   for i := 0 to FieldCount - 1 do
   begin
+    typ := sqlite3.column_type(Request, i); // fast evaluation: type may vary
+    P := nil;
+    if twoIgnoreDefaultInRecord in WR.CustomOptions then
+    begin
+      case typ of
+        SQLITE_BLOB:
+          if DoNotFetchBlobs or
+             (sqlite3.column_bytes(Request, i) = 0) then
+            continue;
+        SQLITE_NULL:
+          continue;
+        SQLITE_INTEGER:
+          if sqlite3.column_int64(Request, i) = 0 then
+            continue;
+        SQLITE_FLOAT:
+          if sqlite3.column_double(Request, i) = 0 then
+            continue;
+        SQLITE_TEXT:
+          begin
+            P := sqlite3.column_text(Request, i);
+            if P = nil then
+              continue;
+          end;
+      end;
+    end;
     if WR.Expand then
       WR.AddString(WR.ColNames[i]); // '"'+ColNames[]+'":'
-    case sqlite3.column_type(Request, i) of // fast evaluation: type may vary
+    case typ of
       SQLITE_BLOB:
         if DoNotFetchBlobs then
           WR.AddShort('null')
@@ -8157,7 +8189,9 @@ begin
       SQLITE_TEXT:
         begin
           WR.Add('"');
-          WR.AddJsonEscape(sqlite3.column_text(Request, i), 0);
+          if P = nil then
+            P := sqlite3.column_text(Request, i);
+          WR.AddJsonEscape(P, 0);
           WR.Add('"');
         end;
     end; // case ColTypes[]
