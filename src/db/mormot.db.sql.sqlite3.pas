@@ -141,9 +141,9 @@ type
   TSqlDBSQLite3Statement = class(TSqlDBStatement)
   protected
     fStatement: TSqlRequest;
-    fShouldLogSQL: boolean; // sllSQL in SynDBLog.Level -> set fLogSQLValues[]
     fLogSQLValues: TVariantDynArray;
     fUpdateCount: integer;
+    fShouldLogSQL: boolean; // sllSQL in SynDBLog.Level -> set fLogSQLValues[]
     // retrieve the inlined value of a given parameter, e.g. 1 or 'name'
     procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
       MaxCharCount: integer); override;
@@ -712,17 +712,19 @@ end;
 
 procedure TSqlDBSQLite3Statement.Reset;
 begin
-  fStatement.Reset;
+  fStatement.Reset; // should be done now
   fUpdateCount := 0;
   // fStatement.BindReset; // slow down the process, and is not mandatory
   ReleaseRows;
-  SetLength(fLogSQLValues, fParamCount);
+  if fShouldLogSQL then
+    SetLength(fLogSQLValues, fParamCount);
   inherited Reset;
 end;
 
 procedure TSqlDBSQLite3Statement.ReleaseRows;
 begin
-  VariantDynArrayClear(fLogSQLValues);
+  if fShouldLogSQL then
+    VariantDynArrayClear(fLogSQLValues);
   inherited ReleaseRows;
 end;
 

@@ -6231,7 +6231,7 @@ begin
         ComputeSqlWithInlinedParams;
     end
     else
-      result := nil;
+      result := nil; // fSqlLogLog=nil if this level is disabled
   fSqlLogLog := result;
   {$endif SYNDB_SILENCE}
 end;
@@ -6247,7 +6247,7 @@ begin
   result := fSqlLogTimer.LastTimeInMicroSec;
   {$else}
   result := 0;
-  if fSqlLogLog = nil then
+  if fSqlLogLog = nil then // fSqlLogLog=nil if this level is disabled
     exit;
   tmp[0] := #0;
   if fSqlLogLevel = sllSQL then
