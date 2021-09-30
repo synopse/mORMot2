@@ -156,7 +156,6 @@ function StringReplaceTabs(const Source, TabText: RawUtf8): RawUtf8;
 // quotes ('). A single quote within the string can be encoded by putting two
 // single quotes in a row - as in Pascal."
 function QuotedStr(const S: RawUtf8; Quote: AnsiChar = ''''): RawUtf8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// format a text content with SQL-like quotes
 procedure QuotedStr(const S: RawUtf8; Quote: AnsiChar; var result: RawUtf8); overload;
@@ -2917,8 +2916,8 @@ var
   c: AnsiChar;
 begin
   nquote := 0;
-  {$ifdef FPC} // will use fast FPC SSE version
-  quote1 := IndexByte(P^, PLen, byte(Quote));
+  {$ifdef FPC}
+  quote1 := IndexByte(P^, PLen, byte(Quote)); // to use fast FPC RTL SSE2 asm
   if quote1 >= 0 then
     for i := quote1 to PLen - 1 do
       if P[i] = Quote then
@@ -2946,11 +2945,12 @@ begin
   begin
     MoveFast(P^, R^, quote1);
     inc(R, quote1);
-    inc(quote1, PtrInt(P)); // trick for reusing a register on FPC
+    inc(PLen, PtrInt(PtrUInt(P))); // efficient use of registers on FPC
+    inc(quote1, PtrInt(PtrUInt(P)));
     repeat
-      c := PAnsiChar(quote1)^;
-      if c = #0 then
+      if quote1 = PLen then
         break;
+      c := PAnsiChar(quote1)^;
       inc(quote1);
       R^ := c;
       inc(R);
