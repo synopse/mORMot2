@@ -741,28 +741,27 @@ var
   res: TSqlVar;
 begin
   result := SQLITE_ERROR;
-  with TOrmVirtualTableCursor(pVtabCursor.pInstance) do
-    if Column(-1, res) then
-    begin
-      case res.VType of
-        ftInt64:
-          pRowid := res.VInt64;
-        ftDouble:
-          pRowid := trunc(res.VDouble);
-        ftCurrency:
-          pRowid := trunc(res.VCurrency);
-        ftUtf8:
-          pRowid := GetInt64(res.VText);
-      else
-        begin
-          Notify('vt_Rowid res=%', [ord(res.VType)]);
-          exit;
-        end;
-      end;
-      result := SQLITE_OK;
-    end
+  if TOrmVirtualTableCursor(pVtabCursor.pInstance).Column(-1, res) then
+  begin
+    case res.VType of
+      ftInt64:
+        pRowid := res.VInt64;
+      ftDouble:
+        pRowid := trunc(res.VDouble);
+      ftCurrency:
+        pRowid := trunc(res.VCurrency);
+      ftUtf8:
+        pRowid := GetInt64(res.VText);
     else
-      Notify('vt_Rowid Column', []);
+      begin
+        Notify('vt_Rowid res=%', [ord(res.VType)]);
+        exit;
+      end;
+    end;
+    result := SQLITE_OK;
+  end
+  else
+    Notify('vt_Rowid Column', []);
 end;
 
 function vt_Update(var pVTab: TSqlite3VTab; nArg: integer;
@@ -1201,10 +1200,16 @@ begin
     if fStatement <> nil then
     begin
       if fStatement = @fStaticStatement then
+        // dedicated statement should be closed
         fStaticStatement.Close
-      else if (fStatementMaxParam <> 0) or
-              ForceBindReset then
-        fStatement^.BindReset; // release bound RawUtf8 ASAP
+      else
+      begin
+        // clean the reused statement
+        fStatement^.Reset; // ensure e.g. any virtual cursor is closed ASAP
+        if (fStatementMaxParam <> 0) or
+           ForceBindReset then
+          fStatement^.BindReset; // early release bound blobs
+      end;
       fStatement := nil;
     end;
     fStatementSql := '';
@@ -1925,7 +1930,7 @@ begin
         repeat
         until fStatement^.Step <> SQLITE_ROW; // Execute
         GetAndPrepareStatementRelease(nil, 'stored % in ID=%',
-          [KB(BlobData), aID], true);
+          [KB(BlobData), aID], {bindreset=}true);
         result := true;
       except
         on E: Exception do
@@ -2092,7 +2097,7 @@ begin
             repeat
             until fStatement^.Step <> SQLITE_ROW; // Execute
             GetAndPrepareStatementRelease(nil, 'stored % in ID=%',
-              [KB(size), Value.ID], true);
+              [KB(size), Value.ID], {bindreset=}true);
             result := true;
           except
             on E: Exception do
