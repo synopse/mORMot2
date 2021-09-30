@@ -4522,6 +4522,7 @@ type
   /// used to retrieve a SQLite3 prepared statement
   TSqlStatementCache = record
     /// associated SQL statement
+    // - should be the first field for propery Caches: TDynArrayHashed search
     StatementSql: RawUtf8;
     /// associated prepared statement, ready to be executed after binding
     Statement: TSqlRequest;
@@ -4545,6 +4546,8 @@ type
     Cache: TSqlStatementCacheDynArray;
     /// current number of items in the Cache[] array
     Count: integer;
+    /// index in Cache[] of the last Prepare() call
+    LastPrepared: integer;
     /// hashing wrapper associated to the Cache[] array
     Caches: TDynArrayHashed;
     /// the associated SQLite3 database instance
@@ -8341,39 +8344,41 @@ function TSqlStatementCached.Prepare(const GenericSql: RawUtf8;
   ExecutionMonitor: PSynMonitor): PSqlRequest;
 var
   added: boolean;
-  ndx: integer;
+  c: ^TSqlStatementCache;
 begin
-  ndx := Caches.FindHashedForAdding(GenericSql, added);
-  with Cache[ndx] do
+  if (LastPrepared >= Count) or
+     (Cache[LastPrepared].StatementSql <> GenericSql) then
+    LastPrepared := Caches.FindHashedForAdding(GenericSql, added)
+  else
+    added := false; // occurs e.g. on multiple insert
+  c := @Cache[LastPrepared];
+  if added then
   begin
-    if added then
-    begin
-      StatementSql := GenericSql;
-      Statement.Prepare(DB, GenericSql);
-      Timer  := TSynMonitor.Create;
-      if WasPrepared <> nil then
-        WasPrepared^ := true;
-    end
-    else
-    begin
-      if Timer = nil then
-        // there was a Statement.Prepare exception on previous call
-        raise ESqlite3Exception.CreateUtf8(
-          'TSqlStatementCached.Prepare failed [%]', [GenericSql]);
-      if Statement.Request <> 0 then
-        Statement.Reset;
-      if WasPrepared <> nil then
-        WasPrepared^ := false;
-    end;
-    if ExecutionTimer <> nil then
-    begin
-      Timer.ProcessStartTask;
-      ExecutionTimer^ := @Timer.InternalTimer;
-      if ExecutionMonitor <> nil then
-        ExecutionMonitor^ := Timer;
-    end;
-    result := @Statement;
+    c^.StatementSql := GenericSql;
+    c^.Statement.Prepare(DB, GenericSql);
+    c^.Timer := TSynMonitor.Create;
+    if WasPrepared <> nil then
+      WasPrepared^ := true;
+  end
+  else
+  begin
+    if c^.Timer = nil then
+      // there was a Statement.Prepare exception on previous call
+      raise ESqlite3Exception.CreateUtf8(
+        'TSqlStatementCached.Prepare failed [%]', [GenericSql]);
+    if c^.Statement.Request <> 0 then
+      c^.Statement.Reset;
+    if WasPrepared <> nil then
+      WasPrepared^ := false;
   end;
+  if ExecutionTimer <> nil then
+  begin
+    c^.Timer.ProcessStartTask;
+    ExecutionTimer^ := @c^.Timer.InternalTimer;
+    if ExecutionMonitor <> nil then
+      ExecutionMonitor^ := c^.Timer;
+  end;
+  result := @c^.Statement;
 end;
 
 procedure TSqlStatementCached.ReleaseAllDBStatements;
