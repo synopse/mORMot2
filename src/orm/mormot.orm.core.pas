@@ -4148,7 +4148,12 @@ type
     // - if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN (-1), appends RowIDFieldName
     // - on error (i.e. if FieldIndex is out of range) will return TRUE
     // - otherwise, will return FALSE and append the external field name to Text
-    function AppendFieldName(FieldIndex: integer; var Text: RawUtf8): boolean;
+    function AppendFieldName(FieldIndex: integer; var Text: RawUtf8): boolean; overload;
+    /// append a field name to a TTextWriter instance
+    // - if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN (-1), appends RowIDFieldName
+    // - on error (i.e. if FieldIndex is out of range) will return TRUE
+    // - otherwise, will return FALSE and append the external field name to Text
+    function AppendFieldName(FieldIndex: integer; WR: TTextWriter): boolean; overload;
     /// return the field name as RawUtf8 value
     // - if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN (-1), appends RowIDFieldName
     // - otherwise, will return the external field name
@@ -12250,9 +12255,23 @@ begin
   if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then
     Text := Text + RowIDFieldName
   else if cardinal(FieldIndex) >= cardinal(Length(ExtFieldNames)) then
+    // FieldIndex out of range
     result := true
-  else // FieldIndex out of range
+  else
     Text := Text + ExtFieldNames[FieldIndex];
+end;
+
+function TOrmPropertiesMapping.AppendFieldName(FieldIndex: integer;
+  WR: TTextWriter): boolean;
+begin
+  result := false; // success
+  if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then
+    WR.AddString(RowIDFieldName)
+  else if cardinal(FieldIndex) >= cardinal(Length(ExtFieldNames)) then
+    // FieldIndex out of range
+    result := true
+  else
+    WR.AddString(ExtFieldNames[FieldIndex]);
 end;
 
 function TOrmPropertiesMapping.FieldNameByIndex(FieldIndex: integer): RawUtf8;
@@ -12260,8 +12279,9 @@ begin
   if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then
     result := RowIDFieldName
   else if cardinal(FieldIndex) >= cardinal(Length(ExtFieldNames)) then
+    // FieldIndex out of range
     result := ''
-  else // FieldIndex out of range
+  else
     result := ExtFieldNames[FieldIndex];
 end;
 

@@ -2203,9 +2203,20 @@ end;
 
 function TOrmVirtualTableCursorExternal.HasData: boolean;
 begin
-  result := (self <> nil) and
-            (fStatement <> nil) and
-            fHasData;
+  if (self = nil) or
+     (fStatement = nil) then
+    result := false
+  else if fHasData then
+    result := true
+  else
+  begin
+    if fStatement <> nil then
+    begin
+      fStatement.ReleaseRows;
+      fStatement := nil; // need to release statement ASAP for proper reuse
+    end;
+    result := false;
+  end;
 end;
 
 function TOrmVirtualTableCursorExternal.Next: boolean;
@@ -2213,12 +2224,17 @@ begin
   result := false;
   if (self <> nil) and
      (fStatement <> nil) then
-  try
-    fHasData := fStatement.Step;
-    result := true; // success (may be with no more data)
-  except
-    HandleClearPoolOnConnectionIssue;
-  end;
+    try
+      fHasData := fStatement.Step;
+      if not fHasData then
+      begin
+        fStatement.ReleaseRows;
+        fStatement := nil; // need to release statement ASAP for proper reuse
+      end;
+      result := true; // success (may be with no more data)
+    except
+      HandleClearPoolOnConnectionIssue;
+    end;
 end;
 
 function TOrmVirtualTableCursorExternal.Search(
