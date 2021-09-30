@@ -856,6 +856,13 @@ function GetJsonObjectAsSql(var P: PUtf8Char; const Fields: TRawUtf8DynArray;
 function GetJsonObjectAsSql(const Json: RawUtf8; Update, InlinedParams: boolean;
   RowID: TID = 0; ReplaceRowIDWithID: boolean = false): RawUtf8; overload;
 
+/// encode as a SQL-ready (multi) INSERT statement with ? as values
+// - follow the SQLite3 syntax: INSERT INTO .. VALUES (..),(..),(..),..
+// - same logic as TJsonObjectDecoder.EncodeAsSqlPrepared
+procedure EncodeMultiInsertSQL(const TableName: RawUtf8;
+  const Fields: TRawUtf8DynArray; BatchOptions: TRestBatchOptions;
+  RowCount: integer; var result: RawUtf8);
+
 const
   FIELDCOUNT_PATTERN: PUtf8Char = '{"fieldCount":'; // PatternLen = 14 chars
   ROWCOUNT_PATTERN: PUtf8Char   = ',"rowCount":';   // PatternLen = 12 chars
@@ -3209,6 +3216,55 @@ begin
   SetLength(Fields, FieldCount);
   for i := 0 to FieldCount - 1 do
     Fields[i] := FieldNames[i];
+end;
+
+procedure EncodeMultiInsertSQL(const TableName: RawUtf8;
+  const Fields: TRawUtf8DynArray; BatchOptions: TRestBatchOptions;
+  RowCount: integer; var result: RawUtf8);
+var
+  f, n: PtrInt;
+  W: TTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    if boInsertOrIgnore in BatchOptions then
+      W.AddShort('insert or ignore into ')
+    else if boInsertOrReplace in BatchOptions then
+      W.AddShort('insert or replace into ')
+    else
+      W.AddShort('insert into ');
+    W.AddString(TableName);
+    n := length(Fields);
+    if n = 0 then
+      W.AddShort(' default values')
+    else
+    begin
+      W.Add(' ', '(');
+      for f := 0 to n - 1 do
+      begin
+        // append 'COL1,COL2'
+        W.AddString(Fields[f]);
+        W.AddComma;
+      end;
+      W.CancelLastComma;
+      W.AddShort(') values (');
+      W.AddStrings('?,', n);
+      while RowCount > 1 do
+      begin
+        // INSERT INTO .. VALUES (..),(..),(..),..
+        W.CancelLastComma;
+        W.AddShorter('),(');
+        W.AddStrings('?,', n);
+        dec(RowCount);
+      end;
+      W.CancelLastComma;
+      W.Add(')');
+    end;
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
 end;
 
 {$ifdef ISDELPHI20062007}

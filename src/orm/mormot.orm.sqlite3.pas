@@ -2189,11 +2189,11 @@ procedure TRestOrmServerDB.InternalBatchStop;
 const
   MAX_PARAMS = 500; // pragmatic value (theoritical limit is 999)
 var
-  ndx, r, prop, fieldcount, valuescount, rowcount, valuesfirstrow: integer;
-  f: PtrInt;
+  fieldcount, valuescount, rowcount, lastrowcount, firstrow, prop: integer;
+  ndx, r, f: PtrInt;
   P: PUtf8Char;
-  sql: RawUtf8;
-  decodesaved, updateeventneeded: boolean;
+  sql, logsql: RawUtf8;
+  decodesaved, updateeventneeded, fieldschanged: boolean;
   fields, values: TRawUtf8DynArray;
   valuesnull: TByteDynArray;
   types: TSqlDBFieldTypeDynArray;
@@ -2234,9 +2234,11 @@ begin
     end;
     // parse input JSON and gather multi-INSERT statements up to MAX_PARAMS
     decodesaved := true;
+    fieldschanged := false;
     valuescount := 0;
     rowcount := 0;
-    valuesfirstrow := 0;
+    lastrowcount := 0;
+    firstrow := 0;
     SetLength(valuesnull, (MAX_PARAMS shr 3) + 1);
     SetLength(values, 32);
     fields := nil; // makes compiler happy
@@ -2249,6 +2251,7 @@ begin
         try
           if updateeventneeded then
           begin
+            // temp parsing copy before reuse in InternalUpdateEvent() callback
             tmp.Init(fBatchValues[ndx]);
             P := tmp.buf;
           end
@@ -2259,7 +2262,7 @@ begin
               '%.InternalBatchStop: fBatchValues[%]=''''', [self, ndx]);
           while P^ in [#1..' ', '{', '['] do
             inc(P);
-          decode.decode(P, nil, pNonQuoted, fBatchID[ndx]);
+          decode.Decode(P, nil, pNonQuoted, fBatchID[ndx]);
           if props.RecordVersionField <> nil then
             fOwner.RecordVersionHandle(ooInsert, fBatchTableIndex,
               decode, props.RecordVersionField);
@@ -2271,9 +2274,9 @@ begin
         end;
         if fields = nil then
         begin
-          // parse the JSON and get the corresponding fields + sql once
+          // parse the JSON, check the corresponding fields once
           decode.AssignFieldNamesTo(fields);
-          fieldcount := decode.fieldcount;
+          fieldcount := decode.FieldCount;
           SetLength(types, fieldcount);
           for f := 0 to fieldcount - 1 do
           begin
@@ -2286,8 +2289,11 @@ begin
           end;
         end
         else if not decode.SameFieldNames(fields) then
+        begin
           // this item would break the sql statement
-          break
+          fieldschanged := true;
+          break;
+        end
         else if valuescount + fieldcount > MAX_PARAMS then
           // this item would bound too many params
           break;
@@ -2304,13 +2310,20 @@ begin
         decodesaved := true;
       until ndx = fBatchValuesCount;
       // INSERT values[] into the DB
+      if (sql = '') or
+         (rowcount <> lastrowcount) then
+      begin
+        FormatUtf8('% multi insert into %(%)', [rowcount,
+          props.SqlTableName, RawUtf8ArrayToCsv(fields)], logsql);
+        EncodeMultiInsertSQL(
+          props.SqlTableName, fields, fBatchOptions, rowcount, sql);
+        lastrowcount := rowcount;
+      end;
       DB.LockAndFlushCache;
       try
         try
-          FormatUtf8('% multi insert into %(%)', // small readable log
-            [rowcount, props.SqlTableName, decode.GetFieldNames], fStatementSql);
-          fStatementGenericSql := decode.EncodeAsSqlPrepared(
-            props.SqlTableName, ooInsert, '', fBatchOptions, rowcount);
+          fStatementSql := logsql;
+          fStatementGenericSql  := sql;
           PrepareStatement({cached=}(rowcount < 5) or
                                     (valuescount + fieldcount > MAX_PARAMS));
           prop := 0;
@@ -2336,10 +2349,10 @@ begin
           repeat
           until fStatement^.Step <> SQLITE_ROW; // ESqlite3Exception on error
           if updateeventneeded then
-            for r := valuesfirstrow to valuesfirstrow + rowcount - 1 do
+            for r := firstrow to firstrow + rowcount - 1 do
               InternalUpdateEvent(oeAdd, fBatchTableIndex,
                 fBatchID[r], fBatchValues[r], nil);
-          inc(valuesfirstrow, rowcount);
+          inc(firstrow, rowcount);
           GetAndPrepareStatementRelease;
         except
           on E: Exception do
@@ -2351,15 +2364,20 @@ begin
       finally
         DB.UnLock;
       end;
+      if fieldschanged then
+      begin
+        sql := '';
+        logsql := '';
+        fieldschanged := false;
+      end;
       FillcharFast(valuesnull[0], (valuescount shr 3) + 1, 0);
       valuescount := 0;
       rowcount := 0;
       fields := nil; // force new sql statement and values[]
     until decodesaved and
           (ndx = fBatchValuesCount);
-    if valuesfirstrow <> fBatchValuesCount then
-      raise EOrmBatchException.CreateUtf8(
-        '%.InternalBatchStop(valuesfirstrow)', [self]);
+    if firstrow <> fBatchValuesCount then
+      raise EOrmBatchException.CreateUtf8('%.InternalBatchStop(firstrow)', [self]);
   finally
     fBatchMethod := mNone;
     fBatchValuesCount := 0;

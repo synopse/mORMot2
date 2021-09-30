@@ -5805,7 +5805,7 @@ begin
     // write rows data
     {$ifdef SYNDB_SILENCE}
     fSqlLogTimer.Resume; // log fetch duration
-    {$endif}
+    {$endif SYNDB_SILENCE}
     while Step do
     begin
       ColumnsToJson(W);
@@ -5818,7 +5818,7 @@ begin
     end;
     {$ifdef SYNDB_SILENCE}
     fSqlLogTimer.Pause;
-    {$endif}
+    {$endif SYNDB_SILENCE}
     ReleaseRows;
     if (result = 0) and
        W.Expand then
@@ -5882,7 +5882,7 @@ begin
     // add CSV rows
     {$ifdef SYNDB_SILENCE}
     fSqlLogTimer.Resume;
-    {$endif}
+    {$endif SYNDB_SILENCE}
     while Step do
     begin
       for F := 0 to FMax do
@@ -5936,7 +5936,7 @@ begin
     end;
     {$ifdef SYNDB_SILENCE}
     fSqlLogTimer.Pause;
-    {$endif}
+    {$endif SYNDB_SILENCE}
     ReleaseRows;
     W.FlushFinal;
   finally
@@ -6221,7 +6221,7 @@ begin
     fSqlLogTimer.Resume;
   {$ifdef SYNDB_SILENCE}
   result := nil;
-  {$else}
+  {$else SYNDB_SILENCE}
   result := SynDBLog.Add;
   if result <> nil then
     if level in result.Family.Level then
@@ -6240,7 +6240,7 @@ function TSqlDBStatement.SqlLogEnd(msg: PShortString): Int64;
 {$ifndef SYNDB_SILENCE}
 var
   tmp: TShort16;
-{$endif}
+{$endif SYNDB_SILENCE}
 begin
   fSqlLogTimer.Pause;
   {$ifdef SYNDB_SILENCE}
@@ -6270,7 +6270,7 @@ begin
   end;
   result := fSqlLogTimer.LastTimeInMicroSec;
   fSqlLogLog := nil;
-  {$endif}
+  {$endif SYNDB_SILENCE}
 end;
 
 function TSqlDBStatement.SqlLogEnd(const Fmt: RawUtf8;
@@ -6285,7 +6285,7 @@ begin
     exit;
   if Fmt <> '' then
     FormatShort(Fmt, Args, tmp);
-  {$endif}
+  {$endif SYNDB_SILENCE}
   result := SqlLogEnd(@tmp);
 end;
 
@@ -6796,7 +6796,7 @@ var
         with SynDBLog.Add do
           if [sllSQL, sllDB, sllException, sllError] * Family.Level <> [] then
             LogLines(sllSQL, pointer(Stmt.SqlWithInlinedParams), self, '--');
-        {$endif}
+        {$endif SYNDB_SILENCE}
         Stmt.Free;
         result := nil;
         StringToUtf8(E.Message, fErrorMessage);
