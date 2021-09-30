@@ -2201,6 +2201,7 @@ var
   decode: TJsonObjectDecoder;
   tmp: TSynTempBuffer;
 begin
+  // generate efficient multi-INSERT statements
   if (fBatchValuesCount = 0) or
      (fBatchTableIndex < 0) then
     exit; // nothing to add
@@ -2230,6 +2231,7 @@ begin
           fBatchID[0], fBatchValues[0], nil);
       exit;
     end;
+    // parse input JSON and gather multi-INSERT statements up to MAX_PARAMS
     decodesaved := true;
     valuescount := 0;
     rowcount := 0;
@@ -2268,10 +2270,11 @@ begin
         end;
         if fields = nil then
         begin
+          // parse the JSON and get the corresponding fields + sql once
           decode.AssignFieldNamesTo(fields);
           fieldcount := decode.fieldcount;
-          sql := decode.EncodeAsSqlPrepared(props.SqlTableName, ooInsert, '',
-            fBatchOptions);
+          sql := decode.EncodeAsSqlPrepared(
+            props.SqlTableName, ooInsert, '', fBatchOptions);
           SetLength(types, fieldcount);
           for f := 0 to fieldcount - 1 do
           begin
@@ -2303,16 +2306,17 @@ begin
         decodesaved := true;
       until ndx = fBatchValuesCount;
       // INSERT values[] into the DB
+      FormatUtf8('% multi %', [rowcount, sql], fStatementSql); // readable log
+      if rowcount > 1 then
+        // compute INSERT .. VALUES (..),(..),(..),..
+        sql := sql + ',' + CsvOfValue(
+          '(' + CsvOfValue('?', fieldcount) + ')', rowcount - 1);
+      fStatementGenericSql := sql; // full log on error
       DB.LockAndFlushCache;
       try
         try
-          FormatUtf8('% multi %', [rowcount, sql], fStatementSql);
-          if rowcount > 1 then
-            sql := sql + ',' +
-              CsvOfValue('(' + CsvOfValue('?', fieldcount) + ')', rowcount - 1);
-          fStatementGenericSql := sql; // full log on error
-          PrepareStatement((rowcount < 5) or
-                           (valuescount + fieldcount > MAX_PARAMS));
+          PrepareStatement({cached=}(rowcount < 5) or
+                                    (valuescount + fieldcount > MAX_PARAMS));
           prop := 0;
           for f := 0 to valuescount - 1 do
           begin

@@ -4793,10 +4793,10 @@ var
             AddComma;
           end;
           CancelLastComma;
-          AddShort(') VALUES');
+          AddShort(') VALUES ');
           for r := 1 to rowcount do
           begin
-            Add(' ', '(');
+            Add('(');
             for f := 0 to maxf do
               Add('?', ',');
             CancelLastComma;
