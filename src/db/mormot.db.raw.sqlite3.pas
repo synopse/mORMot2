@@ -4856,6 +4856,10 @@ type
     // - the BLOB data is encoded as '"\uFFF0base64encodedbinary"'
     function ExecuteJson(const aSql: RawUtf8; Expand: boolean = false;
       aResultCount: PPtrInt = nil): RawUtf8;
+    /// returns the EXPLAIN QUERY PLAN raw text of a given SQL statement
+    // - the result layout is not fixed, and subject to change from one release
+    // of SQLite to the next: so we expand it as extended JSON
+    function ExplainQueryPlan(const aSql: RawUtf8): RawUtf8;
     /// begin a transaction
     // - Execute SQL statements with Execute() procedure below
     // - must be ended with Commit on success
@@ -6759,6 +6763,22 @@ begin
     UnLockJson(result, Count);
     fLog.Add.Log(sllSQL, '% % returned % bytes %', [Timer.Stop,
       FileNameWithoutPath, length(result), aSql], self);
+  end;
+end;
+
+function TSqlDataBase.ExplainQueryPlan(const aSql: RawUtf8): RawUtf8;
+var
+  R: TSqlRequest;
+  cnt: integer;
+begin
+  Lock; // don't cache the result since usually called once
+  try
+    result := R.ExecuteJson(DB, 'explain query plan ' + aSql, true, @cnt, 4096,
+      [twoForceJsonExtended, twoIgnoreDefaultInRecord]);
+    if cnt = 0 then
+      result := ''; // no query plan
+  finally
+    UnLock;
   end;
 end;
 
