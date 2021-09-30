@@ -237,6 +237,7 @@ type
     /// create or retrieve from the cache a TSqlRequest instance in fStatement
     // - called e.g. by GetAndPrepareStatement()
     procedure PrepareStatement(Cached: boolean);
+    procedure PrepareCachedStatement(const SQL: RawUtf8; ExpectedParams: integer);
   public
     /// overridden methods for direct sqlite3 database engine call:
     function MainEngineList(const SQL: RawUtf8; ForceAjax: boolean;
@@ -1129,10 +1130,23 @@ begin
   end;
 end;
 
+procedure TRestOrmServerDB.PrepareCachedStatement(const SQL: RawUtf8;
+  ExpectedParams: integer);
+begin
+  fStatementSql := SQL;
+  fStatementGenericSql := SQL;
+  fStatementMaxParam := 1;
+  PrepareStatement({cached=}true);
+  if fStatement^.ParamCount <> ExpectedParams then
+    raise EOrmException.CreateUtf8(
+      '%.PrepareCachedStatement(%) recognized % params, and % for SQLite3',
+      [self, SQL, ExpectedParams, fStatement^.ParamCount]);
+end;
+
 procedure TRestOrmServerDB.GetAndPrepareStatement(const SQL: RawUtf8;
   ForceCacheStatement: boolean);
 var
-  i, sqlite3param: PtrInt;
+  i: PtrInt;
   types: TSqlParamTypeDynArray;
   nulls: TFieldBits;
   values: TRawUtf8DynArray;
@@ -1145,11 +1159,10 @@ begin
   // bind parameters
   if fStatementMaxParam = 0 then
     exit; // no valid :(...): inlined parameter found -> manual bind
-  sqlite3param := sqlite3.bind_parameter_count(fStatement^.Request);
-  if sqlite3param <> fStatementMaxParam then
+  if fStatement^.ParamCount <> fStatementMaxParam then
     raise EOrmException.CreateUtf8(
       '%.GetAndPrepareStatement(%) recognized % params, and % for SQLite3',
-      [self, fStatementGenericSql, fStatementMaxParam, sqlite3param]);
+      [self, fStatementGenericSql, fStatementMaxParam, fStatement^.ParamCount]);
   for i := 0 to fStatementMaxParam - 1 do
     if byte(i) in nulls then
       fStatement^.BindNull(i + 1)
@@ -1757,17 +1770,23 @@ end;
 
 function TRestOrmServerDB.MainEngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
-var
-  sqlwhere: RawUtf8;
 begin
+  // faster direct access with no ID inlining
   result := '';
   if (ID < 0) or
-     (TableModelIndex < 0) then
+     (TableModelIndex < 0) or
+     (DB = nil) then
     exit;
-  with Model.TableProps[TableModelIndex] do
-    FormatUtf8('SELECT % FROM % WHERE RowID=:(%):;',
-      [SQL.TableSimpleFields[true, false], Props.SqlTableName, ID], sqlwhere);
-  result := EngineList(sqlwhere, {ForceAjax=}true); // ForceAjax -> '[{...}]'#10
+  // we don't use DB.LockJson() cache because we have already a per-ID cache
+  DB.Lock;
+  try
+    PrepareCachedStatement(Model.TableProps[TableModelIndex].SQL.SelectOneWithID, 1);
+    fStatement^.Bind(1, ID);
+    result := fStatement^.ExecuteJson(DB.DB, '', true);
+  finally
+    GetAndPrepareStatementRelease(nil, 'id=%', [ID]);
+    DB.UnLock;
+  end;
   if result <> '' then
     if IsNotAjaxJson(pointer(result)) then
       // '{"fieldCount":2,"values":["ID","FirstName"]}'#$A -> ID not found
@@ -1788,31 +1807,26 @@ begin
      not BlobField^.IsRawBlob then
     exit;
   // retrieve the BLOB using sql
+  FormatUtf8('SELECT % FROM % WHERE RowID=?', [BlobField^.NameUtf8,
+    Model.TableProps[TableModelIndex].Props.SqlTableName], sql);
+  DB.Lock;
   try
-    sql := FormatUtf8('SELECT % FROM % WHERE RowID=?',
-      [BlobField^.NameUtf8, Model.TableProps[TableModelIndex].Props.SqlTableName],
-      [aID]);
-    DB.Lock(sql); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
     try
-      GetAndPrepareStatement(sql, true);
-      try
-        if (fStatement^.FieldCount = 1) and
-           (fStatement^.Step = SQLITE_ROW) then
-        begin
-          BlobData := fStatement^.FieldBlob(0);
-          result := true;
-        end;
-        GetAndPrepareStatementRelease(nil, KB(BlobData));
-      except
-        on E: Exception do
-          GetAndPrepareStatementRelease(E);
+      PrepareCachedStatement(sql, 1);
+      fStatement^.Bind(1, aID);
+      if (fStatement^.FieldCount = 1) and
+         (fStatement^.Step = SQLITE_ROW) then
+      begin
+        BlobData := fStatement^.FieldBlob(0);
+        result := true;
       end;
-    finally
-      DB.UnLock;
+      GetAndPrepareStatementRelease(nil, 'id=% len=%', [aID, KB(BlobData)]);
+    except
+      on E: Exception do
+        GetAndPrepareStatementRelease(E);
     end;
-  except
-    on ESqlite3Exception do
-      result := false;
+  finally
+    DB.UnLock;
   end;
 end;
 

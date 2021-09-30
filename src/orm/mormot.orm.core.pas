@@ -11971,6 +11971,8 @@ begin
   SQL.SelectAllWithID := SQL.SelectAllWithRowID;
   if IdemPChar(PUtf8Char(pointer(SQL.SelectAllWithID)) + 7, 'ROWID') then
     delete(SQL.SelectAllWithID, 8, 3); // 'SELECT RowID,..' -> 'SELECT ID,'
+  SQL.SelectOneWithID := FormatUtf8('SELECT % FROM % WHERE RowID=?',
+    [SQL.TableSimpleFields[true, false], Props.SqlTableName]);
 end;
 
 function TOrmModelProperties.SqlFromSelectWhere(

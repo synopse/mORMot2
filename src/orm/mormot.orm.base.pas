@@ -660,12 +660,15 @@ type
     // - returns 'ID,COL1,COL2' with all COL* set to simple field names if withID is true
     // - returns 'Table.ID,Table.COL1,Table.COL2' if withTableName and withID are true
     TableSimpleFields: array[boolean, boolean] of RawUtf8;
-    /// the SQL statement for reading all simple fields and RowID
+    /// the SQL statement for reading all simple fields and RowID of all rows
     // - to be checked if we may safely call EngineList()
     SelectAllWithRowID: RawUtf8;
-    /// the SQL statement for reading all simple fields with ID
+    /// the SQL statement for reading all simple fields with ID of all rows
     // - to be checked if we may safely call EngineList()
     SelectAllWithID: RawUtf8;
+    /// the SQL statement for reading all simple fields of a given ID
+    // - as used e.g. by TRestOrmServerDB.MainEngineRetrieve
+    SelectOneWithID: RawUtf8;
     /// the JOINed SQL statement for reading all fields with ID, including
     // nested TOrm pre-allocated instances
     // - is '' if there is no nested TOrm
