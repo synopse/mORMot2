@@ -312,6 +312,8 @@ var
   ID_TXT: RawUtf8;
   ROWID_TXT: RawUtf8;
 
+function ToText(op: TSqlCompareOperator): PShortString; overload;
+
 
 // backward compatibility types redirections
 {$ifndef PUREMORMOT2}
@@ -1411,6 +1413,11 @@ begin
     result := ftNull
   else
     result := VariantVTypeToSqlDBFieldType(TextToVariantNumberType(json));
+end;
+
+function ToText(op: TSqlCompareOperator): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSqlCompareOperator), ord(op));
 end;
 
 

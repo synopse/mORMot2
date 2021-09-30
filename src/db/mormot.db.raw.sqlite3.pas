@@ -1460,10 +1460,10 @@ type
   // - Each module implementation will define the content of a cursor structure
   // to suit its own needs.
   // - This superclass exists in order to define fields of the cursor that are
-  // common to all implementationsThis structure therefore contains a pInstance
-  // field, which will be used to store a class instance handling the virtual
-  // table as a pure class: the TOrmVirtualTableModule class will use
-  // it internally
+  // common to all implementations
+  // - This structure therefore contains a pInstance field, which will be used
+  // to store a class instance handling the virtual table as a TObject: the
+  // TOrmVirtualTableModule class will use it internally
   TSqlite3VTabCursor = record
     /// Virtual table of this cursor
     pVtab: PSqlite3VTab;
@@ -1566,7 +1566,7 @@ type
     // - For every successful call to this method, the SQLite core will later
     // invoke the xClose method to destroy the allocated cursor.
     // - The xOpen method need not initialize the pVtab field of the ppCursor structure.
-    // The SQLite core will take care of that chore automatically.
+    // The SQLite core will take care of that automatically.
     // - A virtual table implementation must be able to support an arbitrary number
     // of simultaneously open cursors.
     // - When initially opened, the cursor is in an undefined state. The SQLite core
@@ -3253,6 +3253,7 @@ type
       Param: integer; Value: TSqlite3Value): integer; cdecl;
 
     /// Reset All Bindings On A Prepared Statement
+    // - the reset() API doesn't clear the binding
     clear_bindings: function(S: TSqlite3Statement): integer; cdecl;
 
     /// Number Of SQL Parameters for a prepared statement
@@ -4272,6 +4273,7 @@ type
     fRequest: TSqlite3Statement;
     fNextSQL: PUtf8Char;
     fFieldCount: integer;
+    fResetDone: boolean; // to make Reset re-entrant
     function GetReadOnly: boolean;
     function GetParamCount: integer;
 
@@ -4303,7 +4305,7 @@ type
     // - return SQLITE_OK on success, or the previous Step error code
     function Reset: integer;
     /// Execute all SQL statements already prepared by a call to Prepare()
-    // - the statement is closed
+    // - Close is always called internally
     // - raise an ESqlite3Exception on any error
     procedure ExecuteAll; overload;
     /// Execute all SQL statements in the aSql UTF-8 encoded string
@@ -4312,7 +4314,7 @@ type
     // - raise an ESqlite3Exception on any error
     procedure ExecuteAll(aDB: TSqlite3DB; const aSql: RawUtf8); overload;
     /// Execute one SQL statement already prepared by a call to Prepare()
-    // - the statement is closed
+    // - Close is always called internally
     // - raise an ESqlite3Exception on any error
     procedure Execute; overload;
     /// Execute one SQL statement in the aSql UTF-8 encoded string
@@ -4330,6 +4332,7 @@ type
     // - this statement must get (at least) one field/column result of INTEGER
     // - return result as a dynamic array of Int64 in aValues[]
     // - return count of row in integer function result (may be < length(aValues))
+    // - Close is always called internally
     // - raise an ESqlite3Exception on any error
     function Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
       var aValues: TInt64DynArray): integer; overload;
@@ -4337,12 +4340,14 @@ type
     // - Execute the first statement in aSql
     // - this statement must get (at least) one field/column result of INTEGER
     // - return result as an unique Int64 in aValue
+    // - Close is always called internally
     // - raise an ESqlite3Exception on any error
     procedure Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
       out aValue: Int64); overload;
     /// Execute a SQL statement which return one TEXT value from the aSql UTF-8 encoded string
     // - Execute the first statement in aSql
     // - this statement must get (at least) one field/column result of TEXT
+    // - Close is always called internally
     // - raise an ESqlite3Exception on any error
     procedure Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
       out aValue: RawUtf8); overload;
@@ -4351,13 +4356,15 @@ type
     // - this statement must get (at least) one field/column result of TEXT
     // - return result as a dynamic array of RawUtf8 in aValues[]
     // - return count of row in integer function result (may be < length(aValues))
+    // - Close is always called internally
     // - raise an ESqlite3Exception on any error
     function Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
       var aValues: TRawUtf8DynArray): integer; overload;
     /// Execute one SQL statement which return the results in JSON format
     // - JSON format is more compact than XML and well supported
     // - Execute the first statement in aSql
-    // - if SQL is '', the statement should have been prepared, reset and bound if necessary
+    // - if SQL is '', the statement should have been prepared, reset and bound
+    // if necessary - if SQL <> '' then the statement would be closed internally
     // - raise an ESqlite3Exception on any error
     // - JSON data is added to TStream, with UTF-8 encoding
     // - if Expand is true, JSON data is an array of objects, for direct use
@@ -4375,10 +4382,9 @@ type
       Options: TTextWriterOptions = []): PtrInt; overload;
     /// Execute one SQL statement which return the results in JSON format
     // - use internally Execute() above with a TRawByteStringStream, and return a string
-    // - BLOB field value is saved as Base64, e.g. '"\uFFF0base64encodedbinary"'
     // - returns the number of data rows added to JSON (excluding the headers)
     // in the integer variable mapped by aResultCount (if any)
-    // - by default, won't write more than 512MB of JSON, to avoid OutOfMemory
+    // - by default, won't write more than 512MB of JSON, to avoid EOutOfMemory
     // - if any error occurs, the ESqlite3Exception is handled and '' is returned
     function ExecuteJson(aDB: TSqlite3DB; const aSql: RawUtf8;
       Expand: boolean = false; aResultCount: PPtrInt = nil;
@@ -8069,6 +8075,7 @@ var
 begin
   fDB := DB;
   fRequest := 0;
+  fResetDone := false;
   if DB = 0 then
     raise ESqlite3Exception.Create(DB, SQLITE_CANTOPEN, SQL);
   saved := SetFpuFlags(ffLibrary);
@@ -8127,10 +8134,16 @@ begin
   if Request = 0 then
     raise ESqlite3Exception.Create(
       'TSqlRequest.Reset called with no previous Request');
+  if fResetDone then
+  begin
+    result := SQLITE_OK;
+    exit;
+  end;
   saved := SetFpuFlags(ffLibrary);
-  // no check here since it was PREVIOUS state
+  // no check here since it is in PREVIOUS execution error state
   result := sqlite3.reset(Request);
   ResetFpuFlags(saved);
+  fResetDone := true;
 end;
 
 function TSqlRequest.Step: integer;
@@ -8139,6 +8152,7 @@ var
 begin
   if Request = 0 then
     raise ESqlite3Exception.Create(RequestDB, SQLITE_MISUSE, 'Step');
+  fResetDone := false;
   saved := SetFpuFlags(ffLibrary);
   try
     result := sqlite3_check(RequestDB, sqlite3.step(Request), 'Step');
