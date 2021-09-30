@@ -2192,6 +2192,7 @@ var
   ndx, r, prop, fieldcount, valuescount, rowcount, valuesfirstrow: integer;
   f: PtrInt;
   P: PUtf8Char;
+  sql: RawUtf8;
   decodesaved, updateeventneeded: boolean;
   fields, values: TRawUtf8DynArray;
   valuesnull: TByteDynArray;
@@ -2220,12 +2221,12 @@ begin
       if props.RecordVersionField <> nil then
         fOwner.RecordVersionHandle(
           ooInsert, fBatchTableIndex, decode, props.RecordVersionField);
-      fStatementGenericSql := 'INSERT INTO ' + props.SqlTableName +
+      sql := 'INSERT INTO ' + props.SqlTableName +
         decode.EncodeAsSql({update=}false) + ';';
-      if not InternalExecute(fStatementGenericSql, {cache=}true) then
+      if not InternalExecute(sql, {cache=}true) then
         // just like ESqlite3Exception below
         raise EOrmBatchException.CreateUtf8(
-          '%.InternalBatchStop failed on %', [self, fStatementGenericSql]);
+          '%.InternalBatchStop failed on %', [self, sql]);
       if updateeventneeded then
         InternalUpdateEvent(oeAdd, fBatchTableIndex,
           fBatchID[0], fBatchValues[0], nil);
@@ -2287,10 +2288,9 @@ begin
         else if not decode.SameFieldNames(fields) then
           // this item would break the sql statement
           break
-        else
-          if valuescount + fieldcount > MAX_PARAMS then
-            // this item would bound too many params
-            break;
+        else if valuescount + fieldcount > MAX_PARAMS then
+          // this item would bound too many params
+          break;
         // if we reached here, we can add this row to values[]
         if valuescount + fieldcount > length(values) then
           SetLength(values, MAX_PARAMS);
@@ -2304,13 +2304,13 @@ begin
         decodesaved := true;
       until ndx = fBatchValuesCount;
       // INSERT values[] into the DB
-      fStatementGenericSql := decode.EncodeAsSqlPrepared(
-        props.SqlTableName, ooInsert, '', fBatchOptions, rowcount);
-      FormatUtf8('% multi insert into %(%)', // small readable log
-        [rowcount, props.SqlTableName, decode.GetFieldNames], fStatementSql);
       DB.LockAndFlushCache;
       try
         try
+          FormatUtf8('% multi insert into %(%)', // small readable log
+            [rowcount, props.SqlTableName, decode.GetFieldNames], fStatementSql);
+          fStatementGenericSql := decode.EncodeAsSqlPrepared(
+            props.SqlTableName, ooInsert, '', fBatchOptions, rowcount);
           PrepareStatement({cached=}(rowcount < 5) or
                                     (valuescount + fieldcount > MAX_PARAMS));
           prop := 0;
