@@ -2196,7 +2196,6 @@ var
   fields, values: TRawUtf8DynArray;
   valuesnull: TByteDynArray;
   types: TSqlDBFieldTypeDynArray;
-  sql: RawUtf8;
   props: TOrmProperties;
   decode: TJsonObjectDecoder;
   tmp: TSynTempBuffer;
@@ -2216,16 +2215,17 @@ begin
     props := fModel.Tables[fBatchTableIndex].OrmProps;
     if fBatchValuesCount = 1 then
     begin
-      // handle single record insert
+      // handle single record insert (with inlined parameters)
       decode.Decode(fBatchValues[0], nil, pInlined, fBatchID[0]);
       if props.RecordVersionField <> nil then
         fOwner.RecordVersionHandle(
           ooInsert, fBatchTableIndex, decode, props.RecordVersionField);
-      sql := 'INSERT INTO ' + props.SqlTableName + decode.EncodeAsSql(False) + ';';
-      if not InternalExecute(sql, true) then
+      fStatementGenericSql := 'INSERT INTO ' + props.SqlTableName +
+        decode.EncodeAsSql({update=}false) + ';';
+      if not InternalExecute(fStatementGenericSql, {cache=}true) then
         // just like ESqlite3Exception below
         raise EOrmBatchException.CreateUtf8(
-          '%.InternalBatchStop failed on %', [self, sql]);
+          '%.InternalBatchStop failed on %', [self, fStatementGenericSql]);
       if updateeventneeded then
         InternalUpdateEvent(oeAdd, fBatchTableIndex,
           fBatchID[0], fBatchValues[0], nil);
@@ -2255,7 +2255,7 @@ begin
             P := pointer(fBatchValues[ndx]);
           if P = nil then
             raise EOrmBatchException.CreateUtf8(
-              '%.InternalBatchStop: fBatchValues[%]=""', [self, ndx]);
+              '%.InternalBatchStop: fBatchValues[%]=''''', [self, ndx]);
           while P^ in [#1..' ', '{', '['] do
             inc(P);
           decode.decode(P, nil, pNonQuoted, fBatchID[ndx]);
@@ -2273,8 +2273,6 @@ begin
           // parse the JSON and get the corresponding fields + sql once
           decode.AssignFieldNamesTo(fields);
           fieldcount := decode.fieldcount;
-          sql := decode.EncodeAsSqlPrepared(
-            props.SqlTableName, ooInsert, '', fBatchOptions);
           SetLength(types, fieldcount);
           for f := 0 to fieldcount - 1 do
           begin
@@ -2306,12 +2304,10 @@ begin
         decodesaved := true;
       until ndx = fBatchValuesCount;
       // INSERT values[] into the DB
-      FormatUtf8('% multi %', [rowcount, sql], fStatementSql); // readable log
-      if rowcount > 1 then
-        // compute INSERT .. VALUES (..),(..),(..),..
-        sql := sql + ',' + CsvOfValue(
-          '(' + CsvOfValue('?', fieldcount) + ')', rowcount - 1);
-      fStatementGenericSql := sql; // full log on error
+      fStatementGenericSql := decode.EncodeAsSqlPrepared(
+        props.SqlTableName, ooInsert, '', fBatchOptions, rowcount);
+      FormatUtf8('% multi insert into %(%)', // small readable log
+        [rowcount, props.SqlTableName, decode.GetFieldNames], fStatementSql);
       DB.LockAndFlushCache;
       try
         try
