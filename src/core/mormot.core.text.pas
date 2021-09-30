@@ -426,7 +426,7 @@ function GetBitCsv(const Bits; BitsCount: integer): RawUtf8;
 /// decode next CSV hexadecimal string from P, nil if no more or not matching BinBytes
 // - Bin is filled with 0 if the supplied CSV content is invalid
 // - if Sep is #0, it will read the hexadecimal chars until a whitespace is reached
-function GetNextItemHexDisplayToBin(var P: PUtf8Char; Bin: PByte; BinBytes: integer;
+function GetNextItemHexDisplayToBin(var P: PUtf8Char; Bin: PByte; BinBytes: PtrInt;
   Sep: AnsiChar = ','): boolean;
 
 type
@@ -971,7 +971,7 @@ type
     /// append several UTF-8 strings
     procedure AddStrings(const Text: array of RawUtf8); overload;
     /// append an UTF-8 string several times
-    procedure AddStrings(const Text: RawUtf8; count: integer); overload;
+    procedure AddStrings(const Text: RawUtf8; count: PtrInt); overload;
     /// append a ShortString
     procedure AddShort(const Text: ShortString);
     /// append a TShort8 - Text should be not '', and up to 8 chars long
@@ -1056,14 +1056,14 @@ type
     // - using this function with Bin^ as an integer value will serialize it
     // in big-endian order (most-significant byte first), as used by humans
     // - up to the internal buffer bytes may be converted
-    procedure AddBinToHexDisplay(Bin: pointer; BinBytes: integer);
+    procedure AddBinToHexDisplay(Bin: pointer; BinBytes: PtrInt);
     /// fast conversion from binary data into MSB hexa chars
     // - up to the internal buffer bytes may be converted
-    procedure AddBinToHexDisplayLower(Bin: pointer; BinBytes: integer;
+    procedure AddBinToHexDisplayLower(Bin: pointer; BinBytes: PtrInt;
       QuotedChar: AnsiChar = #0);
     /// fast conversion from binary data into quoted MSB lowercase hexa chars
     // - up to the internal buffer bytes may be converted
-    procedure AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
+    procedure AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: PtrInt);
       {$ifdef HASINLINE}inline;{$endif}
     /// append a Value as significant hexadecimal text
     // - expects BinBytes to be > 0
@@ -2100,10 +2100,10 @@ var
 // - return false if any invalid (non hexa) char is found in Hex^
 // - using this function with Bin^ as an integer value will decode in big-endian
 // order (most-signignifican byte first)
-function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean; overload;
+function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: PtrInt): boolean; overload;
 
 /// fast conversion with no validity check from hexa chars into binary data
-procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: integer);
+procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: PtrInt);
 
 /// fast conversion from one hexa char pair into a 8-bit AnsiChar
 // - return false if any invalid (non hexa) char is found in Hex^
@@ -2113,7 +2113,7 @@ function HexToCharValid(Hex: PAnsiChar): boolean;
 
 /// fast check if the supplied Hex buffer is an hexadecimal representation
 // of a binary buffer of a given number of bytes
-function IsHex(const Hex: RawByteString; BinBytes: integer): boolean;
+function IsHex(const Hex: RawByteString; BinBytes: PtrInt): boolean;
 
 /// fast conversion from one hexa char pair into a 8-bit AnsiChar
 // - return false if any invalid (non hexa) char is found in Hex^
@@ -2134,7 +2134,7 @@ function HexToWideChar(Hex: PUtf8Char): cardinal;
 // enough space for at least BinBytes*2 chars
 // - using this function with BinBytes^ as an integer value will encode it
 // in low-endian order (less-signignifican byte first): don't use it for display
-procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
+procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: PtrInt); overload;
 
 /// fast conversion from hexa chars into binary data
 function HexToBin(const Hex: RawUtf8): RawByteString; overload;
@@ -2143,35 +2143,35 @@ function HexToBin(const Hex: RawUtf8): RawByteString; overload;
 function BinToHex(const Bin: RawByteString): RawUtf8; overload;
 
 /// fast conversion from binary data into hexa chars
-function BinToHex(Bin: PAnsiChar; BinBytes: integer): RawUtf8; overload;
+function BinToHex(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8; overload;
 
 /// fast conversion from binary data into hexa chars, ready to be displayed
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
 // enough space for at least BinBytes*2 chars
 // - using this function with Bin^ as an integer value will encode it
 // in big-endian order (most-signignifican byte first): use it for display
-procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
+procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: PtrInt); overload;
 
 /// fast conversion from binary data into hexa chars, ready to be displayed
-function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUtf8; overload;
+function BinToHexDisplay(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8; overload;
 
 /// fast conversion from binary data into lowercase hexa chars
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
 // enough space for at least BinBytes*2 chars
 // - using this function with BinBytes^ as an integer value will encode it
 // in low-endian order (less-signignifican byte first): don't use it for display
-procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
+procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt); overload;
 
 /// fast conversion from binary data into lowercase hexa chars
 function BinToHexLower(const Bin: RawByteString): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from binary data into lowercase hexa chars
-function BinToHexLower(Bin: PAnsiChar; BinBytes: integer): RawUtf8; overload;
+function BinToHexLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from binary data into lowercase hexa chars
-procedure BinToHexLower(Bin: PAnsiChar; BinBytes: integer; var result: RawUtf8); overload;
+procedure BinToHexLower(Bin: PAnsiChar; BinBytes: PtrInt; var result: RawUtf8); overload;
 
 /// fast conversion from binary data into lowercase hexa chars
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
@@ -2181,17 +2181,17 @@ procedure BinToHexLower(Bin: PAnsiChar; BinBytes: integer; var result: RawUtf8);
 procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt); overload;
 
 /// fast conversion from binary data into lowercase hexa chars
-function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUtf8; overload;
+function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8; overload;
 
 /// fast conversion from up to 127 bytes of binary data into lowercase hexa chars
-function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: integer): shortstring;
+function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: PtrInt): shortstring;
 
 /// fast conversion from up to 64-bit of binary data into lowercase hexa chars
-function BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: integer): TShort16;
+function BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: PtrInt): TShort16;
 
 /// fast conversion from binary data into hexa lowercase chars, ready to be
 // used as a convenient TFileName prefix
-function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: integer): TFileName;
+function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: PtrInt): TFileName;
 
 /// append one byte as hexadecimal char pairs, into a text buffer
 function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
@@ -2255,7 +2255,7 @@ function Int64ToHexShort(aInt64: Int64): TShort16; overload;
 function Int64ToHexString(aInt64: Int64): string;
 
 /// fast conversion from hexa chars in reverse order into a binary buffer
-function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
+function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: PtrInt): boolean;
 
 /// fast conversion from hexa chars in reverse order into a cardinal
 // - reverse function of CardinalToHex()
@@ -3868,7 +3868,7 @@ begin
 end;
 
 function GetNextItemHexDisplayToBin(var P: PUtf8Char;
-  Bin: PByte; BinBytes: integer; Sep: AnsiChar): boolean;
+  Bin: PByte; BinBytes: PtrInt; Sep: AnsiChar): boolean;
 var
   S: PUtf8Char;
   len: integer;
@@ -3974,7 +3974,7 @@ end;
 
 function CsvOfValue(const Value: RawUtf8; Count: cardinal; const Sep: RawUtf8): RawUtf8;
 var
-  ValueLen, SepLen: cardinal;
+  ValueLen, SepLen: PtrUInt;
   i: cardinal;
   P: PAnsiChar;
 begin
@@ -3988,19 +3988,30 @@ begin
   P := pointer(result);
   i := 1;
   repeat
-    if ValueLen > 0 then
+    if ValueLen = 1 then
     begin
-      MoveSmall(Pointer(Value), P, ValueLen);
+      P^ := Value[1]; // optimized for the Value='?' common case
+      inc(P);
+    end
+    else
+    begin
+      MoveFast(Pointer(Value)^, P^, ValueLen);
       inc(P, ValueLen);
     end;
     if i = Count then
       break;
-    if SepLen > 0 then
+    if SepLen = 1 then
     begin
-      MoveSmall(Pointer(Sep), P, SepLen);
+      P^ := Sep[1]; // optimized for the Sep=',' most common case
+      inc(P);
+      inc(i);
+    end
+    else if SepLen > 0 then
+    begin
+      MoveFast(Pointer(Sep)^, P^, SepLen);
       inc(P, SepLen);
+      inc(i);
     end;
-    inc(i);
   until false;
   // assert(P-pointer(result)=length(result));
 end;
@@ -4949,7 +4960,7 @@ begin
     TRawByteStringStream(fStream).DataString := text
   else
     fStream.WriteBuffer(pointer(text)^, length(text));
-  fTotalFileSize := fInitialStreamPosition + cardinal(length(text));
+  fTotalFileSize := fInitialStreamPosition + PtrUInt(length(text));
 end;
 
 procedure TBaseWriter.SetText(out result: RawUtf8; reformat: TTextWriterJsonFormat);
@@ -5836,28 +5847,29 @@ begin
     AddString(Text[i]);
 end;
 
-procedure TBaseWriter.AddStrings(const Text: RawUtf8; count: integer);
+procedure TBaseWriter.AddStrings(const Text: RawUtf8; count: PtrInt);
 var
-  i, L: integer;
+  i, L, siz: PtrInt;
 begin
   L := length(Text);
-  if L > 0 then
-    if L * count > fTempBufSize then
+  siz := L * count;
+  if siz > 0 then
+    if siz > fTempBufSize then
       for i := 1 to count do
-        AddString(Text)
+        AddString(Text) // would overfill our buffer -> manual append
     else
     begin
-      if BEnd - B <= L * count then
+      if BEnd - B <= siz then
         FlushToStream;
       for i := 1 to count do
       begin
-        MoveFast(pointer(Text)^, B[1], L);
+        MoveFast(pointer(Text)^, B[1], L); // direct in-memory append
         inc(B, L);
       end;
     end;
 end;
 
-procedure TBaseWriter.AddBinToHexDisplay(Bin: pointer; BinBytes: integer);
+procedure TBaseWriter.AddBinToHexDisplay(Bin: pointer; BinBytes: PtrInt);
 begin
   if cardinal(BinBytes * 2 - 1) >= cardinal(fTempBufSize) then
     exit;
@@ -5867,7 +5879,7 @@ begin
   inc(B, BinBytes * 2);
 end;
 
-procedure TBaseWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: integer;
+procedure TBaseWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: PtrInt;
   QuotedChar: AnsiChar);
 begin
   if cardinal(BinBytes * 2 + 1) >= cardinal(fTempBufSize) then
@@ -5888,7 +5900,7 @@ begin
     dec(B);
 end;
 
-procedure TBaseWriter.AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
+procedure TBaseWriter.AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: PtrInt);
 begin
   AddBinToHexDisplayLower(Bin, BinBytes, '"');
 end;
@@ -9758,7 +9770,7 @@ end;
 
 { **************** Hexadecimal Text And Binary Conversion }
 
-procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: integer);
+procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
 var {$ifdef CPUX86NOTPIC}
     tab: TAnsiCharToWord absolute TwoDigitsHexW;
     {$else}
@@ -9786,7 +9798,7 @@ begin
   mormot.core.text.BinToHex(pointer(Bin), pointer(result), L);
 end;
 
-function BinToHex(Bin: PAnsiChar; BinBytes: integer): RawUtf8;
+function BinToHex(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
 begin
   FastSetString(result, nil, BinBytes * 2);
   mormot.core.text.BinToHex(Bin, pointer(result), BinBytes);
@@ -9813,7 +9825,7 @@ begin
   result := P + 2;
 end;
 
-procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer);
+procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
 var {$ifdef CPUX86NOTPIC}
     tab: TAnsiCharToWord absolute TwoDigitsHexW;
     {$else}
@@ -9833,13 +9845,13 @@ begin
     until BinBytes = 0;
 end;
 
-function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUtf8;
+function BinToHexDisplay(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
 begin
   FastSetString(result, nil, BinBytes * 2);
   BinToHexDisplay(Bin, pointer(result), BinBytes);
 end;
 
-procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: integer);
+procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
 var {$ifdef CPUX86NOTPIC}
     tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
     {$else}
@@ -9863,13 +9875,13 @@ begin
   BinToHexLower(pointer(Bin), length(Bin), result);
 end;
 
-procedure BinToHexLower(Bin: PAnsiChar; BinBytes: integer; var result: RawUtf8);
+procedure BinToHexLower(Bin: PAnsiChar; BinBytes: PtrInt; var result: RawUtf8);
 begin
   FastSetString(result, nil, BinBytes * 2);
   BinToHexLower(Bin, pointer(result), BinBytes);
 end;
 
-function BinToHexLower(Bin: PAnsiChar; BinBytes: integer): RawUtf8;
+function BinToHexLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
 begin
   BinToHexLower(Bin, BinBytes, result);
 end;
@@ -9897,13 +9909,13 @@ begin
   until BinBytes = 0;
 end;
 
-function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUtf8;
+function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
 begin
   FastSetString(result, nil, BinBytes * 2);
   BinToHexDisplayLower(Bin, pointer(result), BinBytes);
 end;
 
-function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: integer): shortstring;
+function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: PtrInt): shortstring;
 begin
   if BinBytes > 127 then
     BinBytes := 127;
@@ -9911,7 +9923,7 @@ begin
   BinToHexDisplayLower(Bin, @result[1], BinBytes);
 end;
 
-function BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: integer): TShort16;
+function BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: PtrInt): TShort16;
 begin
   if BinBytes > 8 then
     BinBytes := 8;
@@ -9920,7 +9932,7 @@ begin
 end;
 
 {$ifdef UNICODE}
-function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: integer): TFileName;
+function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: PtrInt): TFileName;
 var
   temp: TSynTempBuffer;
 begin
@@ -9930,7 +9942,7 @@ begin
   temp.Done;
 end;
 {$else}
-function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: integer): TFileName;
+function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: PtrInt): TFileName;
 begin
   SetString(result, nil, BinBytes * 2);
   BinToHexDisplayLower(Bin, pointer(result), BinBytes);
@@ -10010,7 +10022,7 @@ begin
   Ansi7ToString(@temp[1], ord(temp[0]), result);
 end;
 
-function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
+function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: PtrInt): boolean;
 var
   b, c: byte;
   {$ifdef CPUX86NOTPIC}
@@ -10064,7 +10076,7 @@ begin
     result := 0;
 end;
 
-function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
+function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: PtrInt): boolean;
 var
   b, c: byte;
   {$ifdef CPUX86NOTPIC}
@@ -10103,7 +10115,7 @@ begin
   result := true; // conversion OK
 end;
 
-procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: integer);
+procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: PtrInt);
 var
   {$ifdef CPUX86NOTPIC}
   tab: THexToDualByte absolute ConvertHexToBin;
@@ -10126,7 +10138,7 @@ begin
     until BinBytes = 0;
 end;
 
-function IsHex(const Hex: RawByteString; BinBytes: integer): boolean;
+function IsHex(const Hex: RawByteString; BinBytes: PtrInt): boolean;
 begin
   result := (length(Hex) = BinBytes * 2) and
     mormot.core.text.HexToBin(pointer(Hex), nil, BinBytes);
