@@ -1280,8 +1280,9 @@ begin
           if err <> '' then
             Ctxt.Error('%', [err], HTTP_NOTACCEPTABLE)
           else
-            Error('execution failed (probably due to bad input parameters)',
-              HTTP_NOTACCEPTABLE);
+            Error('execution failed (probably due to bad input parameters: ' +
+               'e.g. did you initialize your input record(s)?)',
+               HTTP_NOTACCEPTABLE);
           exit;
         end;
         Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
