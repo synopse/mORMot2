@@ -151,7 +151,6 @@ function StringReplaceChars(const Source: RawUtf8; OldChar, NewChar: AnsiChar): 
 function StringReplaceTabs(const Source, TabText: RawUtf8): RawUtf8;
 
 /// format a text content with SQL-like quotes
-// - UTF-8 version of the function available in SysUtils
 // - this function implements what is specified in the official SQLite3
 // documentation: "A string constant is formed by enclosing the string in single
 // quotes ('). A single quote within the string can be encoded by putting two
@@ -160,12 +159,11 @@ function QuotedStr(const S: RawUtf8; Quote: AnsiChar = ''''): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// format a text content with SQL-like quotes
-// - UTF-8 version of the function available in SysUtils
-// - this function implements what is specified in the official SQLite3
-// documentation: "A string constant is formed by enclosing the string in single
-// quotes ('). A single quote within the string can be encoded by putting two
-// single quotes in a row - as in Pascal."
 procedure QuotedStr(const S: RawUtf8; Quote: AnsiChar; var result: RawUtf8); overload;
+
+/// format a text buffer with SQL-like quotes
+procedure QuotedStr(P: PUtf8Char; PLen: PtrInt; Quote: AnsiChar;
+  var result: RawUtf8); overload;
 
 /// unquote a SQL-compatible string
 // - the first character in P^ must be either ' or " then internal double quotes
@@ -517,7 +515,7 @@ procedure CsvToRawUtf8DynArray(const Csv, Sep, SepEnd: RawUtf8;
 
 /// return the corresponding CSV text from a dynamic array of UTF-8 strings
 function RawUtf8ArrayToCsv(const Values: array of RawUtf8;
-  const Sep: RawUtf8 = ','): RawUtf8;
+  const Sep: RawUtf8 = ','; HighValues: integer = -1): RawUtf8;
 
 /// return the corresponding CSV quoted text from a dynamic array of UTF-8 strings
 // - apply QuoteStr() function to each Values[] item
@@ -2886,18 +2884,15 @@ end;
 
 function QuotedStr(const S: RawUtf8; Quote: AnsiChar): RawUtf8;
 begin
-  QuotedStr(S, Quote, result);
+  QuotedStr(pointer(S), length(S), Quote, result);
 end;
 
 procedure QuotedStr(const S: RawUtf8; Quote: AnsiChar; var result: RawUtf8);
 var
-  i, L, quote1, nquote: PtrInt;
-  P, R: PUtf8Char;
+  P: PUtf8Char;
   tmp: pointer; // will hold a RawUtf8 with no try..finally exception block
-  c: AnsiChar;
 begin
   tmp := nil;
-  L := length(S);
   P := pointer(S);
   if (P <> nil) and
      (P = pointer(result)) then
@@ -2905,16 +2900,32 @@ begin
     RawUtf8(tmp) := S; // make private ref-counted copy for QuotedStr(U,'"',U)
     P := pointer(tmp);
   end;
+  QuotedStr(P, length(S), Quote, result);
+  if tmp <> nil then
+    {$ifdef FPC}
+    FastAssignNew(tmp);
+    {$else}
+    RawUtf8(tmp) := '';
+    {$endif FPC}
+end;
+
+procedure QuotedStr(P: PUtf8Char; PLen: PtrInt; Quote: AnsiChar;
+  var result: RawUtf8);
+var
+  i, quote1, nquote: PtrInt;
+  R: PUtf8Char;
+  c: AnsiChar;
+begin
   nquote := 0;
   {$ifdef FPC} // will use fast FPC SSE version
-  quote1 := IndexByte(P^, L, byte(Quote));
+  quote1 := IndexByte(P^, PLen, byte(Quote));
   if quote1 >= 0 then
-    for i := quote1 to L - 1 do
+    for i := quote1 to PLen - 1 do
       if P[i] = Quote then
         inc(nquote);
   {$else}
   quote1 := 0;
-  for i := 0 to L - 1 do
+  for i := 0 to PLen - 1 do
     if P[i] = Quote then
     begin
       if nquote = 0 then
@@ -2922,14 +2933,14 @@ begin
       inc(nquote);
     end;
   {$endif FPC}
-  FastSetString(result, nil, L + nquote + 2);
+  FastSetString(result, nil, PLen + nquote + 2);
   R := pointer(result);
   R^ := Quote;
   inc(R);
   if nquote = 0 then
   begin
-    MoveFast(P^, R^, L);
-    R[L] := Quote;
+    MoveFast(P^, R^, PLen);
+    R[PLen] := Quote;
   end
   else
   begin
@@ -2950,12 +2961,6 @@ begin
     until false;
     R^ := Quote;
   end;
-  if tmp <> nil then
-    {$ifdef FPC}
-    FastAssignNew(tmp);
-    {$else}
-    RawUtf8(tmp) := '';
-    {$endif FPC}
 end;
 
 function GotoEndOfQuotedString(P: PUtf8Char): PUtf8Char;
@@ -4428,17 +4433,20 @@ begin
   result := true;
 end;
 
-function RawUtf8ArrayToCsv(const Values: array of RawUtf8; const Sep: RawUtf8): RawUtf8;
+function RawUtf8ArrayToCsv(const Values: array of RawUtf8; const Sep: RawUtf8;
+  HighValues: integer): RawUtf8;
 var
   i, len, seplen, L: integer;
   P: PAnsiChar;
 begin
   result := '';
-  if high(Values) < 0 then
+  if HighValues < 0 then
+    HighValues := high(Values);
+  if HighValues < 0 then
     exit;
   seplen := length(Sep);
-  len := seplen * high(Values);
-  for i := 0 to high(Values) do
+  len := seplen * HighValues;
+  for i := 0 to HighValues do
     inc(len, length(Values[i]));
   FastSetString(result, nil, len);
   P := pointer(result);
@@ -4450,7 +4458,7 @@ begin
       MoveFast(pointer(Values[i])^, P^, L);
       inc(P, L);
     end;
-    if i = high(Values) then
+    if i = HighValues then
       Break;
     if seplen > 0 then
     begin
@@ -4469,7 +4477,7 @@ var
 begin
   SetLength(tmp, length(Values));
   for i := 0 to High(Values) do
-    tmp[i] := QuotedStr(Values[i], Quote);
+    QuotedStr(Values[i], Quote, tmp[i]);
   result := RawUtf8ArrayToCsv(tmp, Sep);
 end;
 
@@ -5973,7 +5981,7 @@ begin
       Q := PosChar(Text, Quote); // fast SSE2 asm on x86_64
       if Q = nil then
       begin
-        AddNoJsonEscape(Text, PUtf8Char(TextLen) - Text);
+        AddNoJsonEscape(Text, PUtf8Char(TextLen) - Text); // no double quote
         break;
       end;
       inc(Q); // include first Quote

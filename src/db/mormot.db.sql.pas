@@ -7438,9 +7438,9 @@ begin
               fConnection.Properties.StoreVoidStringAsNull then
               VArray[fParamsArrayCount] := 'null'
             else
-              VArray[fParamsArrayCount] := QuotedStr(VArray[fParamsArrayCount]);
+              QuotedStr(VArray[fParamsArrayCount], '''', VArray[fParamsArrayCount]);
           ftDate:
-            VArray[fParamsArrayCount] := QuotedStr(VArray[fParamsArrayCount]);
+            QuotedStr(VArray[fParamsArrayCount], '''', VArray[fParamsArrayCount]);
         end;
       end;
     end;

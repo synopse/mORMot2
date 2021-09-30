@@ -808,8 +808,10 @@ type
     // - Occasion can be only ooInsert or ooUpdate
     // - for ooUpdate, will create UPDATE ... SET ... where UpdateIDFieldName=?
     // - you can specify some options, e.g. boInsertOrIgnore for ooInsert
+    // - MultiInsertRowCount would generate INSERT .. VALUES (..),(..),(..),..
     function EncodeAsSqlPrepared(const TableName: RawUtf8; Occasion: TOrmOccasion;
-      const UpdateIDFieldName: RawUtf8; BatchOptions: TRestBatchOptions): RawUtf8;
+      const UpdateIDFieldName: RawUtf8; BatchOptions: TRestBatchOptions;
+      MultiInsertRowCount: integer = 1): RawUtf8;
     /// encode the FieldNames/FieldValues[] as a JSON object
     procedure EncodeAsJson(out result: RawUtf8);
     /// set the specified array to the fields names
@@ -820,6 +822,8 @@ type
     function SameFieldNames(const Fields: TRawUtf8DynArray): boolean;
     /// search for a field name in the current identified FieldNames[]
     function FindFieldName(const FieldName: RawUtf8): PtrInt;
+    /// returns the decoded field names as CSV text
+    function GetFieldNames: RawUtf8;
   end;
 
 
@@ -2963,17 +2967,18 @@ procedure GetJsonArrayOrObjectAsQuotedStr(P: PUtf8Char; out PDest: PUtf8Char;
 var
   Beg: PUtf8Char;
 begin
-  result := '';
   PDest := nil;
   Beg := P;
   P := GotoEndJsonItem(P); // quick go to end of array of object
   if P = nil then
+  begin
+    result := '';
     exit;
+  end;
   if EndOfObject <> nil then
     EndOfObject^ := P^;
-  P^ := #0; // so Beg will be a valid ASCIIZ string
   PDest := P + 1;
-  QuotedStr(Beg, '''', result);
+  QuotedStr(Beg, P - Beg, '''', result);
 end;
 
 procedure TJsonObjectDecoder.Decode(var P: PUtf8Char;
@@ -3015,94 +3020,79 @@ var
         P := res + 1;
       end;
     end
+    else if res^ in ['{', '['] then
+    begin
+      // handle nested object or array e.g. for custom variant types
+      if res^ = '{' then
+        FieldTypeApproximation[ndx] := ftaObject
+      else
+        FieldTypeApproximation[ndx] := ftaArray;
+      if Params = pNonQuoted then
+        GetJsonArrayOrObject(res, P, @EndOfObject, FieldValues[ndx])
+      else
+        GetJsonArrayOrObjectAsQuotedStr(res, P, @EndOfObject, FieldValues[ndx]);
+    end
     else
     begin
-      // first check if nested object or array
-      case res^ of // handle JSON {object} or [array] in P
-        '{':
-          begin
-            // will work e.g. for custom variant types
-            FieldTypeApproximation[ndx] := ftaObject;
-            if Params = pNonQuoted then
-              GetJsonArrayOrObject(res, P, @EndOfObject, FieldValues[ndx])
-            else
-              GetJsonArrayOrObjectAsQuotedStr(res, P, @EndOfObject, FieldValues[ndx]);
-          end;
-        '[':
-          begin
-            // will work e.g. for custom variant types
-            FieldTypeApproximation[ndx] := ftaArray;
-            if Params = pNonQuoted then
-              GetJsonArrayOrObject(res, P, @EndOfObject, FieldValues[ndx])
-            else
-              GetJsonArrayOrObjectAsQuotedStr(res, P, @EndOfObject, FieldValues[ndx]);
-          end;
-      else
+      // handle JSON string, number or false/true in P
+      res := GetJsonField(res, P, @wasString, @EndOfObject, @resLen);
+      if wasString then
+      begin
+        c := PInteger(res)^ and $00ffffff;
+        if c = JSON_BASE64_MAGIC_C then
         begin
-          // handle JSON string, number or false/true in P
-          res := GetJsonField(res, P, @wasString, @EndOfObject, @resLen);
-          if wasString then
+          FieldTypeApproximation[ndx] := ftaBlob;
+          case Params of
+            pInlined: // untouched -> recognized as BLOB in SqlParamContent()
+              QuotedStr(res, reslen, '''', FieldValues[ndx]);
+          { pQuoted: // \uFFF0base64encodedbinary -> 'X''hexaencodedbinary'''
+            // if not inlined, it can be used directly in INSERT/UPDATE statements
+            Base64MagicToBlob(res+3,FieldValues[ndx]);
+            pNonQuoted: }
+          else // returned directly as RawByteString
+            Base64ToBin(PAnsiChar(res) + 3, resLen - 3,
+              RawByteString(FieldValues[ndx]));
+          end;
+        end
+        else
+        begin
+          if c = JSON_SQLDATE_MAGIC_C then
           begin
-            c := PInteger(res)^ and $00ffffff;
-            if c = JSON_BASE64_MAGIC_C then
-            begin
-              FieldTypeApproximation[ndx] := ftaBlob;
-              case Params of
-                pInlined: // untouched -> recognized as BLOB in SqlParamContent()
-                  QuotedStr(res, '''', FieldValues[ndx]);
-              { pQuoted: // \uFFF0base64encodedbinary -> 'X''hexaencodedbinary'''
-                // if not inlined, it can be used directly in INSERT/UPDATE statements
-                Base64MagicToBlob(res+3,FieldValues[ndx]);
-                pNonQuoted: }
-              else // returned directly as RawByteString
-                Base64ToBin(PAnsiChar(res) + 3, resLen - 3,
-                  RawByteString(FieldValues[ndx]));
-              end;
-            end
-            else
-            begin
-              if c = JSON_SQLDATE_MAGIC_C then
-              begin
-                FieldTypeApproximation[ndx] := ftaDate;
-                inc(res, 3); // ignore \uFFF1 magic marker
-              end
-              else
-                FieldTypeApproximation[ndx] := ftaString;
-              // regular string content
-              if Params = pNonQuoted then
-                // returned directly as RawUtf8
-                FastSetString(FieldValues[ndx], res, resLen)
-              else
-                 { escape SQL strings, cf. the official SQLite3 documentation:
-                "A string is formed by enclosing the string in single quotes (').
-                 A single quote within the string can be encoded by putting two
-                 single quotes in a row - as in Pascal." }
-                QuotedStr(res, '''', FieldValues[ndx]);
-            end;
-          end
-          else if res = nil then
-          begin
-            FieldTypeApproximation[ndx] := ftaNull;
-            FieldValues[ndx] := NULL_STR_VAR;
-          end
-          else // avoid GPF, but will return invalid SQL
-          // non string params (numeric or false/true) are passed untouched
-          if PInteger(res)^ = FALSE_LOW then
-          begin
-            FieldValues[ndx] := SmallUInt32Utf8[0];
-            FieldTypeApproximation[ndx] := ftaBoolean;
-          end
-          else if PInteger(res)^ = TRUE_LOW then
-          begin
-            FieldValues[ndx] := SmallUInt32Utf8[1];
-            FieldTypeApproximation[ndx] := ftaBoolean;
+            FieldTypeApproximation[ndx] := ftaDate;
+            inc(res, 3); // ignore \uFFF1 magic marker
           end
           else
-          begin
-            FastSetString(FieldValues[ndx], res, resLen);
-            FieldTypeApproximation[ndx] := ftaNumber;
-          end;
+            FieldTypeApproximation[ndx] := ftaString;
+          // regular string content
+          if Params = pNonQuoted then
+            // returned directly as RawUtf8
+            FastSetString(FieldValues[ndx], res, resLen)
+          else
+            // single-quote SQL strings as in the official SQLite3 documentation
+            QuotedStr(res, reslen, '''', FieldValues[ndx]);
         end;
+      end
+      else if res = nil then
+      begin
+        FieldTypeApproximation[ndx] := ftaNull;
+        FieldValues[ndx] := NULL_STR_VAR;
+      end
+      else // avoid GPF, but will return invalid SQL
+      // non string params (numeric or false/true) are passed untouched
+      if PInteger(res)^ = FALSE_LOW then
+      begin
+        FieldValues[ndx] := SmallUInt32Utf8[0];
+        FieldTypeApproximation[ndx] := ftaBoolean;
+      end
+      else if PInteger(res)^ = TRUE_LOW then
+      begin
+        FieldValues[ndx] := SmallUInt32Utf8[1];
+        FieldTypeApproximation[ndx] := ftaBoolean;
+      end
+      else
+      begin
+        FastSetString(FieldValues[ndx], res, resLen);
+        FieldTypeApproximation[ndx] := ftaNumber;
       end;
     end;
   end;
@@ -3120,7 +3110,7 @@ begin
   InlinedParams := Params;
   if pointer(Fields) = nil then
   begin
-    // get "COL1"="VAL1" pairs, stopping at '}' or ']'
+    // get "COL1":"VAL1" pairs, stopping at '}' or ']'
     DecodedFieldNames := @FieldNames;
     if RowID > 0 then
     begin
@@ -3231,7 +3221,7 @@ const
 
 function TJsonObjectDecoder.EncodeAsSqlPrepared(const TableName: RawUtf8;
   Occasion: TOrmOccasion; const UpdateIDFieldName: RawUtf8;
-  BatchOptions: TRestBatchOptions): RawUtf8;
+  BatchOptions: TRestBatchOptions; MultiInsertRowCount: integer): RawUtf8;
 var
   f: PtrInt;
   W: TTextWriter;
@@ -3324,8 +3314,18 @@ begin
                 W.AddShorter('[]),');
               end
             else
-              // regular INSERT statement
+            begin
+              // regular (multi) INSERT statement - e.g. for SQLite3
               W.AddStrings('?,', FieldCount);
+              while MultiInsertRowCount > 1 do
+              begin
+                // INSERT INTO .. VALUES (..),(..),(..),..
+                W.CancelLastComma;
+                W.AddShorter('),(');
+                W.AddStrings('?,', FieldCount);
+                dec(MultiInsertRowCount);
+              end;
+            end;
             W.CancelLastComma;
             W.Add(')');
           end;
@@ -3439,6 +3439,14 @@ begin
     if IdemPropNameU(FieldNames[result], FieldName) then
       exit;
   result := -1;
+end;
+
+function TJsonObjectDecoder.GetFieldNames: RawUtf8;
+begin
+  if FieldCount = 0 then
+    result := ''
+  else
+    result := RawUtf8ArrayToCsv(FieldNames, ',', FieldCount - 1);
 end;
 
 procedure TJsonObjectDecoder.AddFieldValue(const FieldName, FieldValue: RawUtf8;

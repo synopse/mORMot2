@@ -2590,7 +2590,7 @@ type
     State: TJsonGotoEndParserState;
     ExpectStandard: boolean;
     JsonFirst: PJsonTokens;
-    Max: PUtf8Char;
+    Max: PUtf8Char; // checking Max after each comma is good enough
     StackCount, RootCount: integer;
     // 500 nested documents seem enough in practice
     Stack: array[0..500] of TJsonGotoEndParserState;
@@ -2627,9 +2627,9 @@ end;
 function TJsonGotoEndParser.GotoEnd(P: PUtf8Char): PUtf8Char;
 var
   n: PtrInt;
-{$ifndef CPUX86}
+  {$ifndef CPUX86}
   JsonSet: PJsonCharSet; // will use a register for this lookup table
-{$endif CPUX86}
+  {$endif CPUX86}
 label
   prop, stop, assign;
 begin
