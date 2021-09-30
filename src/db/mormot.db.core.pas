@@ -1821,21 +1821,24 @@ begin
   QuotedStrJson(value, result, ':(', '):');
 end;
 
+const
+  SELECT_STMT: array[0..6] of PAnsiChar = (
+    'SELECT',
+    'EXPLAIN ',
+    'VACUUM',
+    'PRAGMA',
+    'WITH',
+    'EXECUTE',
+    nil);
 
 function IsSelect(P: PUtf8Char; SelectClause: PRawUtf8): boolean;
 var
   from: PUtf8Char;
 begin
+  P := SqlBegin(P);
   if P <> nil then
   begin
-    P := SqlBegin(P);
-    case IdemPCharArray(P,
-      ['SELECT',
-       'EXPLAIN ',
-       'VACUUM',
-       'PRAGMA',
-       'WITH',
-       'EXECUTE']) of
+    case IdemPPChar(P, @SELECT_STMT) of
       0:
         // SELECT SelectClause^ FROM ...
         if (P[6] <= ' ') and
