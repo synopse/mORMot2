@@ -249,7 +249,7 @@ type
     procedure EngineAddForceSelectMaxID;
     /// compute the SQL query corresponding to a prepared request
     // - can be used internally e.g. for debugging purposes
-    function ComputeSql(const Prepared: TOrmVirtualTablePrepared): RawUtf8;
+    function ComputeSql(var Prepared: TOrmVirtualTablePrepared): RawUtf8;
 
     /// retrieve the REST server instance corresponding to an external TOrm
     // - just map aServer.StaticVirtualTable[] and will return nil if not
@@ -327,7 +327,7 @@ type
     // SQL statement calling the external DB engine
     // - will create the internal fStatement from a SQL query, bind the
     // parameters, then execute it, ready to be accessed via HasData/Next
-    function Search(const Prepared: TOrmVirtualTablePrepared): boolean; override;
+    function Search(var Prepared: TOrmVirtualTablePrepared): boolean; override;
     /// called to retrieve a column value of the current data row
     // - if aColumn=VIRTUAL_TABLE_ROWID_COLUMN(-1), will return the row ID
     // as varInt64 into aResult
@@ -741,8 +741,10 @@ begin
     if (Stmt.SqlStatement = '') or // parsing failed
       not IdemPropNameU(Stmt.TableName, fStoredClassRecordProps.SqlTableName) then
     begin
+      {$ifdef SQLVIRTUALLOGS}
       InternalLog('AdaptSqlForEngineList: complex statement -> switch to ' +
         'SQLite3 virtual engine - check efficiency', [], sllDebug);
+      {$endif SQLVIRTUALLOGS}
       exit;
     end;
     if Stmt.Offset <> 0 then
@@ -2104,55 +2106,101 @@ begin
   StorageUnLock;
 end;
 
+{.$define SQLVIRTUALLOGS}
+
 const
-  SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of RawUtf8 = (
-    '=?', '<>?', '<?', '<=?', '>?', '>=?');
+  SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of string[3] = (
+    '=?',
+    '<>?',
+    '<?',
+    '<=?',
+    '>?',
+    '>=?');
 
 function TRestStorageExternal.ComputeSql(
-  const Prepared: TOrmVirtualTablePrepared): RawUtf8;
+  var Prepared: TOrmVirtualTablePrepared): RawUtf8;
 var
+  WR: TTextWriter;
   i: PtrInt;
-  constraint: POrmVirtualTablePreparedConstraint;
+  tmp: TTextWriterStackBuffer;
+  where: POrmVirtualTablePreparedConstraint;
+  order: ^TOrmVirtualTablePreparedOrderBy;
   {$ifdef SQLVIRTUALLOGS}
   log: RawUtf8;
   {$endif SQLVIRTUALLOGS}
 begin
-  result := fSelectAllDirectSQL;
-  for i := 0 to Prepared.WhereCount - 1 do
+  if (Prepared.WhereCount = 0) and
+     (Prepared.OrderByCount = 0) then
   begin
-    constraint := @Prepared.Where[i];
-    {$ifdef SQLVIRTUALLOGS}
-    log := FormatUtf8('% [column=% oper=%]', [log, constraint^.Column,
-      ToText(constraint^.Operation)^]);
-    {$endif SQLVIRTUALLOGS}
-    if constraint^.Operation > high(SQL_OPER_WITH_PARAM) then
-      exit; // invalid specified operator -> abort search
-    if i = 0 then
-      result := result + ' where '
-    else
-      result := result + ' and ';
-    if fStoredClassMapping^.AppendFieldName(constraint^.Column, result) then
-      // invalid column index -> abort search
-      exit;
-    result := result + SQL_OPER_WITH_PARAM[constraint^.Operation];
+    result := fSelectAllDirectSQL; // if Prepared is not supported -> full scan
+    exit;
   end;
-  // e.g. 'select FirstName,..,ID from PeopleExternal where FirstName=? and LastName=?'
-  for i := 0 to Prepared.OrderByCount - 1 do
-    with Prepared.OrderBy[i] do
+  result := '';
+  WR := TTextWriter.CreateOwnedStream(tmp);
+  try
+    WR.AddString(fSelectAllDirectSQL);
+    where := @Prepared.Where;
+    for i := 0 to Prepared.WhereCount - 1 do
     begin
+      {$ifdef SQLVIRTUALLOGS}
+      log := FormatUtf8('% [column=% oper=% omitcheck=%]',
+        [log, where^.Column, ToText(where^.Operation)^, where^.OmitCheck]);
+      {$endif SQLVIRTUALLOGS}
+      if where^.Operation > high(SQL_OPER_WITH_PARAM) then
+      begin
+        {$ifdef SQLVIRTUALLOGS}
+        log := log + ':UNSUPPORTED';
+        {$endif SQLVIRTUALLOGS}
+        fRest.InternalLog('ComputeSql: unsupported %',
+          [ToText(where^.Operation)^], sllWarning);
+        where^.OmitCheck := false; // unsupported operator -> manual search
+        continue;
+      end;
       if i = 0 then
-        result := result + ' order by '
+        WR.AddShorter(' where ')
       else
-        result := result + ', ';
-      if fStoredClassMapping^.AppendFieldName(Column, result) then
-        // invalid column index -> abort search
+        WR.AddShorter(' and ');
+      if fStoredClassMapping^.AppendFieldName(where^.Column, WR) then
+      begin
+        // invalid "where" column index -> abort search and return ''
+        fRest.InternalLog('ComputeSql: unknown where %',
+          [where^.Column], sllWarning);
         exit;
-      if Desc then
-        result := result + ' desc';
+      end;
+      WR.AddShorter(SQL_OPER_WITH_PARAM[where^.Operation]);
+      inc(where);
     end;
-  {$ifdef SQLVIRTUALLOGS}
-  SQLite3Log.Add.Log(sllDebug, 'ComputeSql [%] %', [result, log], self);
-  {$endif SQLVIRTUALLOGS}
+    // e.g. 'select FirstName,..,ID from PeopleExternal where FirstName=? and LastName=?'
+    order := @Prepared.OrderBy;
+    for i := 0 to Prepared.OrderByCount - 1 do
+    begin
+      {$ifdef SQLVIRTUALLOGS}
+      log := FormatUtf8('% [column=% desc=%]', [log, order^.Column, order^.Desc]);
+      {$endif SQLVIRTUALLOGS}
+      if i = 0 then
+        WR.AddShort(' order by ')
+      else
+        WR.Add(',', ' ');
+      if fStoredClassMapping^.AppendFieldName(order^.Column, WR) then
+      begin
+        // invalid "order" column index -> abort search and return ''
+        fRest.InternalLog('ComputeSql: unknown order %',
+          [order^.Column], sllWarning);
+        exit;
+      end;
+      if order^.Desc then
+        WR.AddShorter(' desc');
+      inc(order);
+    end;
+    WR.SetText(result);
+  finally
+    WR.Free;
+    {$ifdef SQLVIRTUALLOGS}
+    fRest.InternalLog('ComputeSql [%] [omitorder=% cost=% rows=%]%',
+      [result, Prepared.OmitOrderBy, Prepared.EstimatedCost,
+       Prepared.EstimatedRows, log], sllDB);
+    {$endif SQLVIRTUALLOGS}
+  end;
 end;
 
 
@@ -2173,8 +2221,9 @@ end;
 
 destructor TOrmVirtualTableCursorExternal.Destroy;
 begin
+  // TSynLog.Add.Log(sllCustom2, 'Destroy', self);
   if fStatement <> nil then
-    fStatement.ReleaseRows;
+    fStatement.ReleaseRows; // if not already done in HasData
   inherited Destroy;
 end;
 
@@ -2238,7 +2287,7 @@ begin
 end;
 
 function TOrmVirtualTableCursorExternal.Search(
-  const Prepared: TOrmVirtualTablePrepared): boolean;
+  var Prepared: TOrmVirtualTablePrepared): boolean;
 var
   i: PtrInt;
   storage: TRestStorageExternal;
@@ -2265,6 +2314,7 @@ begin
         fStatement.ExecutePrepared;
         result := Next; // on execution success, go to the first row
       end;
+      storage.LogFamily.SynLog.Log(sllSQL, 'Search %', [fSql], self);
     except
       self.HandleClearPoolOnConnectionIssue;
     end;

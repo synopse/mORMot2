@@ -146,9 +146,11 @@ type
 
   /// the WHERE and ORDER BY statements as set by TOrmVirtualTable.Prepare
   // - Where[] and OrderBy[] are fixed sized arrays, for fast and easy code
-  //{$ifdef USERECORDWITHMETHODS}TOrmVirtualTablePrepared = record{$else}
-    TOrmVirtualTablePrepared = object
-  //{$endif USERECORDWITHMETHODS}
+  {$ifdef USERECORDWITHMETHODS}
+  TOrmVirtualTablePrepared = record
+  {$else}
+  TOrmVirtualTablePrepared = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// number of WHERE statement parameters in Where[] array
     WhereCount: integer;
@@ -449,7 +451,7 @@ type
     // - should move cursor to first row of matching data
     // - should return false on low-level database error (but true in case of a
     // valid call, even if HasData will return false, i.e. no data match)
-    function Search(const Prepared: TOrmVirtualTablePrepared): boolean; virtual; abstract;
+    function Search(var Prepared: TOrmVirtualTablePrepared): boolean; virtual; abstract;
     /// called after Search() to check if there is data to be retrieved
     // - should return false if reached the end of matching data
     function HasData: boolean; virtual; abstract;
@@ -480,7 +482,7 @@ type
     function Next: boolean; override;
     /// called to begin a search in the virtual table
     // - this no-op version will mark EOF, i.e. fCurrent=0 and fMax=-1
-    function Search(const Prepared: TOrmVirtualTablePrepared): boolean; override;
+    function Search(var Prepared: TOrmVirtualTablePrepared): boolean; override;
   end;
 
 
@@ -1094,7 +1096,7 @@ type
     // valid call, even if HasData will return false, i.e. no data match)
     // - only handled WHERE clause is for "ID = value" - other request will
     // return all records in ID order, and let the database engine handle it
-    function Search(const Prepared: TOrmVirtualTablePrepared): boolean; override;
+    function Search(var Prepared: TOrmVirtualTablePrepared): boolean; override;
     /// called to retrieve a column value of the current data row into a TSqlVar
     // - if aColumn=-1, will return the row ID as varInt64 into aResult
     // - will return false in case of an error, true on success
@@ -1204,7 +1206,7 @@ type
   TOrmVirtualTableCursorLog = class(TOrmVirtualTableCursorIndex)
   public
     /// called to begin a search in the virtual table
-    function Search(const Prepared: TOrmVirtualTablePrepared): boolean; override;
+    function Search(var Prepared: TOrmVirtualTablePrepared): boolean; override;
     /// called to retrieve a column value of the current data row as TSqlVar
     function Column(aColumn: integer; var aResult: TSqlVar): boolean; override;
   end;
@@ -1684,7 +1686,7 @@ begin
 end;
 
 function TOrmVirtualTableCursorIndex.Search(
-  const Prepared: TOrmVirtualTablePrepared): boolean;
+  var Prepared: TOrmVirtualTablePrepared): boolean;
 begin
   fCurrent := 0; // mark EOF by default
   fMax := -1;
@@ -4040,7 +4042,7 @@ begin
 end;
 
 function TOrmVirtualTableCursorJson.Search(
-  const Prepared: TOrmVirtualTablePrepared): boolean;
+  var Prepared: TOrmVirtualTablePrepared): boolean;
 var
   store: TRestStorageInMemory;
 begin
@@ -4283,7 +4285,7 @@ begin
 end;
 
 function TOrmVirtualTableCursorLog.Search(
-  const Prepared: TOrmVirtualTablePrepared): boolean;
+  var Prepared: TOrmVirtualTablePrepared): boolean;
 begin
   result := inherited Search(Prepared); // mark EOF by default
   if result then
