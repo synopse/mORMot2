@@ -3098,6 +3098,7 @@ begin
   // compute unquoted string length
   PBeg := P;
   internalquote := 0;
+  P := PosChar(P, quote); // fast SSE2 search on x86_64
   repeat
     if P^ = #0 then
       break;
