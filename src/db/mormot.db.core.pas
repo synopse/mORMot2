@@ -62,8 +62,14 @@ const
   {$endif MAX_SQLFIELDS_192}
   {$endif MAX_SQLFIELDS_128}
 
-  /// sometimes, the ID field is included in a bits set
+  /// sometimes, the ID field is external to the bits set
   MAX_SQLFIELDS_INCLUDINGID = MAX_SQLFIELDS + 1;
+
+  /// maximum number of bound parameters to a SQLite3 statement
+  // - empirical value, used e.g. for mormot.orm.sqlite3 Batch multi-insert
+  // - matches DB_PARAMSMAX[dSQLite] as defined in mormot.db.sql
+  // - the theoritical limit equals 999, but this number seems good enough
+  MAX_SQLPARAMS = 200;
 
 
 type

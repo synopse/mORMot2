@@ -7706,6 +7706,8 @@ end;
 
 function TSqlRequest.ExecuteNoException(aDB: TSqlite3DB;
   const aSql: RawUtf8): boolean;
+var
+  res: integer;
 begin
   // avoid sqlite3_check() calls for no ESqlite3Exception
   result := false;
@@ -7713,9 +7715,11 @@ begin
      (aSql <> '') then
   try
     if not (Prepare(aDB, aSql, {noexcept=}true) in SQLITE_ERRORS) and
-       (Request <> 0) and
-       not (sqlite3.step(Request) in SQLITE_ERRORS) then
-      result := true;
+       (Request <> 0) then
+    begin
+      res := sqlite3.step(Request);
+      result := not (res in SQLITE_ERRORS);
+    end;
   finally
     Close; // always release statement, even if done normally in Execute
   end;

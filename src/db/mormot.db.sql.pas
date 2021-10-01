@@ -4951,24 +4951,8 @@ begin
     raise ESqlDBException.CreateUtf8('Invalid %.MultipleValuesInsert(%) call',
       [self, TableName]);
   batchRowCount := 0;
-  paramCountLimit := 0;
+  paramCountLimit := DB_PARAMSMAX[Props.fDbms];
   case Props.fDbms of
-    // values below were done empirically, assuring < 667 (maximum :AA..:ZZ)
-    // see http://stackoverflow.com/a/6582902 for theoritical high limits
-    dSQlite:
-      paramCountLimit := 200;  // theoritical=999
-    dMySQL:
-      paramCountLimit := 500;  // theoritical=60000
-    dPostgreSQL:
-      paramCountLimit := 500;  // theoritical=34000
-    dOracle:
-      paramCountLimit := 500;  // empirical value (from ODBC)
-    dMSSQL:
-      paramCountLimit := 500;  // theoritical=2100
-    dDB2:
-      paramCountLimit := 500;  // empirical value (from ODBC)
-    dNexusDB:
-      paramCountLimit := 100;  // empirical limit (above is slower)
     dFirebird:
       begin
         // compute from max sql statement size of 32KB
