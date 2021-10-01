@@ -2781,7 +2781,7 @@ begin
       else
       begin
         StartReport;
-        writeln(' medium block leak of ', K(size), 'B');
+        writeln(' medium block leak of ', size, ' bytes (', K(size), 'B)');
       end;
     inc(block, size);
   until false;
@@ -2865,7 +2865,7 @@ begin
     size := large.BlockSizeAndFlags and DropMediumAndLargeFlagsMask;
     {$ifdef FPCMM_REPORTMEMORYLEAKS}
     StartReport;
-    writeln(' large block leak of ', K(size), 'B');
+    writeln(' large block leak of ', size, ' bytes (', K(size), 'B)');
     {$endif FPCMM_REPORTMEMORYLEAKS}
     nextlarge := large.NextLargeBlockHeader;
     FreeLarge(large, size);
