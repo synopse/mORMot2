@@ -3088,21 +3088,21 @@ var
   PBeg, PS: PUtf8Char;
   internalquote: PtrInt;
 begin
+  result := nil;
   if P = nil then
-  begin
-    result := nil;
     exit;
-  end;
   quote := P^; // " or '
   inc(P);
   // compute unquoted string length
   PBeg := P;
   internalquote := 0;
   P := PosChar(P, quote); // fast SSE2 search on x86_64
-  repeat
+  if P = nil then
+    exit; // we need at least an ending quote
+  while true do
     if P^ = #0 then
-      break;
-    if P^ <> quote then
+      exit // where is my quote?
+    else if P^ <> quote then
       inc(P)
     else if P[1] = quote then
     begin
@@ -3111,12 +3111,6 @@ begin
     end
     else
       break; // end quote
-  until false;
-  if P^ = #0 then
-  begin
-    result := nil; // end of string before end quote -> incorrect
-    exit;
-  end;
   // create unquoted string
   if internalquote = 0 then
     // no quote within
