@@ -662,7 +662,7 @@ type
   TSqlDBRowVariantType = class(TSynInvokeableVariantType)
   protected
     function IntGet(var Dest: TVarData; const Instance: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt): boolean; override;
+      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
   end;
 
   {$M+}
@@ -3182,7 +3182,8 @@ end;
 { TSqlDBRowVariantType }
 
 function TSqlDBRowVariantType.IntGet(var Dest: TVarData;
-  const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
+  const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt;
+  NoException: boolean): boolean;
 var
   smt: TSqlDBStatement;
   col: RawUtf8;

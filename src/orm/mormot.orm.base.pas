@@ -2681,7 +2681,7 @@ type
   TOrmTableRowVariant = class(TSynInvokeableVariantType)
   protected
     function IntGet(var Dest: TVarData; const Instance: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt): boolean; override;
+      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
   public
     /// customization of variant into JSON serialization
     procedure ToJson(W: TTextWriter; const Value: variant); override;
@@ -9345,7 +9345,7 @@ end;
 { TOrmTableRowVariant }
 
 function TOrmTableRowVariant.IntGet(var Dest: TVarData; const Instance: TVarData;
-  Name: PAnsiChar; NameLen: PtrInt): boolean;
+  Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean;
 var
   r, f: integer;
   rv: TOrmTableRowVariantData absolute Instance;
@@ -9363,7 +9363,7 @@ begin
   f := rv.VTable.FieldIndex(PUtf8Char(Name));
   result := f >= 0;
   if f >= 0 then
-    rv.VTable.GetVariant(r, f, Variant(Dest));
+    rv.VTable.GetVariant(r, f, PVariant(@Dest)^);
 end;
 
 procedure TOrmTableRowVariant.Cast(var Dest: TVarData; const Source: TVarData);
