@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
   <ProjectOptions>
-    <Version Value="11"/>
+    <Version Value="12"/>
     <PathDelim Value="\"/>
     <General>
       <Flags>
         <MainUnitHasCreateFormStatements Value="False"/>
         <MainUnitHasTitleStatement Value="False"/>
         <MainUnitHasScaledStatement Value="False"/>
+        <CompatibilityMode Value="True"/>
       </Flags>
       <SessionStorage Value="InProjectDir"/>
-      <MainUnit Value="0"/>
       <Title Value="PerfTestConsole"/>
       <ResourceType Value="res"/>
     </General>
@@ -104,11 +104,15 @@
             </Options>
           </Linking>
           <Other>
-            <CustomOptions Value="-dFPC_X64MM"/>
-            <OtherDefines Count="3">
+            <CustomOptions Value="-dFPC_X64MM
+-dFPCMM_REPORTMEMORYLEAKS
+-dFPCMM_DEBUG"/>
+            <OtherDefines Count="5">
               <Define0 Value="LEGACYFIREBIRDAPIONLY"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="USEFIREBIRD3API"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="FPCMM_DEBUG"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -120,7 +124,6 @@
     </PublishOptions>
     <RunParams>
       <FormatVersion Value="2"/>
-      <Modes Count="0"/>
     </RunParams>
     <RequiredPackages Count="1">
       <Item1>
@@ -164,11 +167,6 @@
         </Win32>
       </Options>
     </Linking>
-    <Other>
-      <OtherDefines Count="1">
-        <Define0 Value="LEGACYFIREBIRDAPIONLY"/>
-      </OtherDefines>
-    </Other>
   </CompilerOptions>
   <Debugging>
     <Exceptions Count="3">

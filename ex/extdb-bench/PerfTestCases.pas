@@ -4,6 +4,11 @@ interface
 
 {$I mormot.defines.inc}
 
+{$ifdef FPC}
+  {$WARN 5089 off} // uninitialized managed variables 
+  {$WARN 5091 off} // uninitialized managed variables
+{$endif FPC}
+
 // enable/disable third-party libraries
 {.$define USENEXUSDB}
 {.$define USEBDE}
@@ -47,6 +52,7 @@ uses
   mormot.orm.base,
   mormot.orm.sql,
   mormot.orm.storage,
+  mormot.rest.core,
   mormot.rest.sqlite3,
   mormot.rest.memserver,
   mormot.db.sql,
@@ -184,13 +190,14 @@ type
     RunTimer: TPrecisionTimer;
     SQlite3Mode: TSQLSynchronousMode;
     SQlite3Lock: TSQLLockingMode;
-    Client: TSQLRestClientDB;
+    Client: TRestClientDB;
+    Server: TRestServerDB;
     DBFileName: TFileName;
     DBPassword: RawUTF8;
     ValueLastName, ValueFirstName: TRawUTF8DynArray;
     Res: TIDDynArray;
     Flags: set of (dbIsFile, dbInMemory, dbInMemoryVirtual, dbPropIsMemory,
-      dbPropUntouched, dbDropTable);
+      dbPropUntouched, dbDropTable, dbSlowInsert);
     procedure Setup; override;
     procedure Cleanup; override;
     procedure MethodSetup; override;
@@ -236,7 +243,11 @@ type
 
   TTestSqliteExternal = class(TTestDatabaseExternalAbstract)
   protected
+    fn: TFileName;
+    sm: TSQLSynchronousMode;
+    lm:  TSQLLockingMode;
     procedure ClientCreate; override;
+    procedure RunExternalSqlite(Mode: TSQLSynchronousMode; Lock: TSQLLockingMode);
   published
     procedure ExternalSqliteFileFull;
     procedure ExternalSqliteFileOff;
@@ -281,15 +292,18 @@ type
     procedure ZeosFirebird;
     {$endif}
   end;
+
   {$endif USEFIREBIRDEMB}
 
+  
 implementation
 
 {$ifdef USEFIREBIRDEMB}
+
 { TTestFirebird }
 
 const
-  /// Plese, configure parameters for firebird connection
+  /// Please configure parameters for firebird connection
   {$ifdef CPU64}
 //  cFIREBIRDEMBEDDEDDLL = '';
   cFIREBIRDEMBEDDEDDLL = 'C:\Firebird\Firebird3_64\fbclient.dll';
@@ -385,7 +399,7 @@ var
   time: RawUTF8;
   rate: QWord;
   i: PtrInt;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   // Insertion tests
   Num := '1';
@@ -459,12 +473,9 @@ begin
     log := nil;
     log := TSynLog.Enter('% Read Direct=%',
       [Owner.CurrentMethodInfo^.IdentTestName, BOOL_STR[UseDirect]],self);
-    with Client.Server do
-    begin
-      Cache.Flush; // fair benchmark
-      DB.CacheFlush; // fair benchmark (16100 rows/s->456000 with cache!)
-      Server.SetStaticVirtualTableDirect(UseDirect);
-    end;
+    Server.Cache.Flush; // fair benchmark
+    Server.DB.CacheFlush; // fair benchmark (16100 rows/s->456000 with cache!)
+    Server.Server.SetStaticVirtualTableDirect(UseDirect);
     RunTimer.Start;
     Value.ClearProperties;
     Check(Value.FillPrepare(Client.Orm, 'order by RowId'), 'FillPrepare');
@@ -503,11 +514,12 @@ begin
     fn := DBFileName
   else
     fn := SQLITE_MEMORY_DATABASE_NAME;
-  Client := TSQLRestClientDB.Create(ModelCreate, nil, fn, TSQLRestServerDB,
+  Client := TRestClientDB.Create(ModelCreate, nil, fn, TRestServerDB,
     {auth=}false, DBPassword);
   Client.Model.Owner := Client;
-  Client.Server.DB.Synchronous := SQlite3Mode;
-  Client.Server.DB.LockingMode := SQlite3Lock;
+  Server := (Client as TRestClientDB).Server;
+  Server.DB.Synchronous := SQlite3Mode;
+  Server.DB.LockingMode := SQlite3Lock;
 end;
 
 procedure TTestDatabaseAbstract.ClientFree;
@@ -528,14 +540,14 @@ begin
   ClientCreate;
   if CheckFailed(Client <> nil,'Client?') then
     exit; // avoid GPF
-  Client.Server.CreateMissingTables;
-  ChangeStart := Client.OrmInstance.GetServerTimestamp; // use by ValueCheck
+  Server.CreateMissingTables;
+  ChangeStart := Server.OrmInstance.GetServerTimestamp; // use by ValueCheck
   if Stat.CreateTableTime='' then
     Stat.CreateTableTime := RunTimer.Stop;
-  if (SQlite3Mode = smFull) and not UseTransactions then // full synch is slow
-    Stat.NumberOfElements := 500
+  if (dbSlowInsert in Flags) and not UseTransactions then // full synch is slow
+    Stat.NumberOfElements := 200
   else
-    Stat.NumberOfElements := 5000;
+    Stat.NumberOfElements := 10000;
   SetLength(ValueLastName, Stat.NumberOfElements);
   SetLength(ValueFirstName, Stat.NumberOfElements);
   for i := 0 to Stat.NumberOfElements - 1 do
@@ -564,7 +576,7 @@ begin
     forceID := i and 3=1;
     if forceID then
       if {$ifdef UNIK}(dbInMemory in Flags) or {$endif} (Res[i-1] = 0) then
-        forceID := false // not yet in TSQLRestStorageInMemory.AddOne
+        forceID := false // not yet in TRestStorageInMemory.AddOne
       else
         Value.IDValue := Res[i-1]+1;
     if UseBatch then
@@ -610,6 +622,8 @@ end;
 procedure TTestDirectSqliteEngine.RunModeLock(Mode: TSQLSynchronousMode; Lock: TSQLLockingMode);
 begin
   Flags := [dbIsFile];
+  if Mode = smFull then
+    include(Flags, dbSlowInsert);
   inherited RunModeLock(Mode, Lock);
 end;
 
@@ -689,7 +703,7 @@ begin
   begin
     // drop only if table exist
     Props.GetTableNames(lTables);
-    if FindRawUtf8(lTables, 'SAMPLERECORD')<>-1 then
+    if FindPropName(lTables, 'SAMPLERECORD')>=0 then
     begin
       Props.ClearConnectionPool;
       Props.ThreadSafeConnection.Disconnect;
@@ -708,7 +722,7 @@ end;
 
 procedure TTestDatabaseExternalAbstract.RunExternal(P: TSQLDBConnectionProperties);
 begin
-  Flags := [dbPropUntouched, dbDropTable];
+  Flags := Flags + [dbPropUntouched, dbDropTable, dbPropIsMemory];
   Props := P;
   try
     Props.ThreadSafeConnection.Connect;
@@ -723,38 +737,56 @@ end;
 { TTestSqliteExternal }
 
 procedure TTestSqliteExternal.ClientCreate;
+var
+  P: TSqlDBSQLite3ConnectionProperties;
 begin
-  if dbPropIsMemory in Flags then
-    DBFileName := SQLITE_MEMORY_DATABASE_NAME;
-  if not (dbPropUntouched in Flags) then
-    Props := TSQLDBSQLite3ConnectionProperties.Create(DBFileName, '', '', '');
-  with TSQLDBSQLite3Connection(Props.MainConnection) do
+  Exclude(Flags, dbDropTable);
+  if fn <> SQLITE_MEMORY_DATABASE_NAME then
   begin
-    Synchronous := SQlite3Mode;
-    LockingMode := SQlite3Lock;
+    DeleteFile(fn);
+    P := TSqlDBSQLite3ConnectionProperties.Create(fn, '', '', '');
+    P.MainSQLite3DB.Synchronous := sm;
+    P.MainSQLite3DB.LockingMode := lm;
+    Props := P;
   end;
   inherited ClientCreate;
 end;
 
+procedure TTestSqliteExternal.RunExternalSqlite(Mode: TSQLSynchronousMode;
+  Lock: TSQLLockingMode);
+begin
+  if dbPropIsMemory in Flags then
+    fn := SQLITE_MEMORY_DATABASE_NAME
+  else
+    fn := FormatString('%db%%.db',[ExeVersion.ProgramFilePath, PathDelim,
+      Owner.CurrentMethodInfo^.MethodName]);
+  sm := Mode;
+  lm := Lock;
+  if Mode = smFull then
+    include(Flags, dbSlowInsert);
+  Flags := Flags + [dbPropIsMemory];
+  RunTests;
+end;
+
 procedure TTestSqliteExternal.ExternalSqliteFileFull;
 begin
-  RunModeLock(smFull, lmNormal);
+  RunExternalSqlite(smFull, lmNormal);
 end;
 
 procedure TTestSqliteExternal.ExternalSqliteFileOff;
 begin
-  RunModeLock(smOff, lmNormal);
+  RunExternalSqlite(smOff, lmNormal);
 end;
 
 procedure TTestSqliteExternal.ExternalSqliteFileOffExc;
 begin
-  RunModeLock(smOff, lmExclusive);
+  RunExternalSqlite(smOff, lmExclusive);
 end;
 
 procedure TTestSqliteExternal.ExternalSqliteInMemory;
 begin
   Flags := [dbPropIsMemory];
-  RunTests;
+  RunExternalSqlite(smOff, lmExclusive);
 end;
 
 
@@ -908,8 +940,6 @@ var Stat: ^TStatArray;
   var j: integer;
       fmt,s: RawUTF8;
   begin
-    fmt := '';
-    s := '';
     for j := 2 to length(v) do
       fmt := fmt+'%,';
     fmt := fmt+'%|';
@@ -945,14 +975,8 @@ var Stat: ^TStatArray;
     Doc := Doc+'|%'#13#10;
   end;
 var i,j: integer;
+    fn: TFileName;
 begin
-  Doc  := '';
-  Cat1 := '';
-  Cat2 := '';
-  txt  := '';
-  Eng1 := '';
-  Eng2 := '';
-  Rows := [];
   // introducting text
   Stat := pointer(Stats.List);
   s := FormatUTF8('Running tests using Synopse mORMot framework %, '+
@@ -1039,7 +1063,9 @@ begin
   PicEnd(Cat1);
   // save to local files
   FileFromString(Doc,ChangeFileExt(ExeVersion.ProgramFileName,'.doc'));
-  FileFromString(cons+'[/code]',ChangeFileExt(ExeVersion.ProgramFileName,'.txt'));
+  fn := ChangeFileExt(ExeVersion.ProgramFileName,'.txt');
+  RenameFile(fn, ChangeFileExt(fn, string(DateTimeToFileShort(Now))+'.txt'));
+  FileFromString(cons+'[/code]', fn);
   FileFromString('<html><body>'#13#10+s,ChangeFileExt(ExeVersion.ProgramFileName,'.htm'));
 end;
 
