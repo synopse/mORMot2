@@ -4260,13 +4260,19 @@ begin
        (event = nil) then
       SleepHiRes(ms) // < 16 ms is a pious wish on Windows anyway
     else
-      event.WaitFor(ms)
+    begin
+      if event.WaitFor(ms) = wrSignaled then
+        start := 0; // make more reactive once signaled
+    end
   else
     repeat
       if event = nil then
         SleepHiRes(10) // on Windows, HW clock resolution is around 16 ms
       else if event.WaitFor(10) = wrSignaled then
-        ms := 0;
+      begin
+        start := 0; // more reactive
+        ms := 0; // and quit
+      end;
       result := GetTickCount64;
     until (ms = 0) or
           terminated^ or
