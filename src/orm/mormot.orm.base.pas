@@ -3055,7 +3055,8 @@ var
         begin
           FieldTypeApproximation[ndx] := ftaBlob;
           case Params of
-            pInlined: // untouched -> recognized as BLOB in SqlParamContent()
+            pInlined:
+              // untouched -> recognized as BLOB by TExtractInlineParameters
               QuotedStr(res, reslen, '''', FieldValues[ndx]);
           { pQuoted: // \uFFF0base64encodedbinary -> 'X''hexaencodedbinary'''
             // if not inlined, it can be used directly in INSERT/UPDATE statements

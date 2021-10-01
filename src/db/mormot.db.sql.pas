@@ -3305,44 +3305,34 @@ function TSqlDBConnectionProperties.PrepareInlined(const aSql: RawUtf8;
 var
   Query: ISqlDBStatement;
   i: PtrInt;
-  maxParam: integer;
-  Types: TSqlParamTypeDynArray;
-  Nulls: TFieldBits;
-  Values: TRawUtf8DynArray;
-  GenericSql: RawUtf8;
+  decoder: TExtractInlineParameters;
 begin
   result := nil; // returns nil interface on error
   if self = nil then
     exit;
   // convert inlined :(1234): parameters into Values[] for Bind*() calls
-  GenericSql := ExtractInlineParameters(aSql, Types, Values, maxParam, Nulls);
-  Query := NewThreadSafeStatementPrepared(GenericSql, ExpectResults, true);
+  decoder.Parse(aSql);
+  Query := NewThreadSafeStatementPrepared(decoder.GenericSql, ExpectResults, true);
   if Query = nil then
     exit;
-  for i := 0 to maxParam - 1 do
-    if byte(i) in Nulls then
-      Query.BindNull(i + 1)
-    else
-      case Types[i] of
-        // returned oftInteger,oftFloat,oftUtf8Text,oftBlob,oftUnknown
-        sptInteger:
-          Query.Bind(i + 1, GetInt64(pointer(Values[i])));
-        sptFloat:
-          Query.Bind(i + 1, GetExtended(pointer(Values[i])));
-        sptText:
-          Query.BindTextU(i + 1, Values[i]);
-        sptBlob:
-          if Values[i] = '' then
-            Query.BindNull(i + 1)
-          else
-            Query.BindBlob(i + 1, pointer(Values[i]), length(Values[i]));
-        sptDateTime:
-          Query.BindDateTime(i + 1, Iso8601ToDateTime(Values[i]));
-      else
-        raise ESqlDBException.CreateUtf8(
-          '%.PrepareInlined: Unrecognized parameter Type[%] = % in [%]',
-          [self, i + 1, ord(Types[i]), aSql]);
-      end;
+  for i := 0 to decoder.Count - 1 do
+    case decoder.Types[i] of
+      sptNull:
+        Query.BindNull(i + 1);
+      sptInteger:
+        Query.Bind(i + 1, GetInt64(pointer(decoder.Values[i])));
+      sptFloat:
+        Query.Bind(i + 1, GetExtended(pointer(decoder.Values[i])));
+      sptText:
+        Query.BindTextU(i + 1, decoder.Values[i]);
+      sptBlob:
+        if decoder.Values[i] = '' then
+          Query.BindNull(i + 1)
+        else
+          Query.BindBlob(i + 1, pointer(decoder.Values[i]), length(decoder.Values[i]));
+      sptDateTime:
+        Query.BindDateTime(i + 1, Iso8601ToDateTime(decoder.Values[i]));
+    end;
   result := Query;
 end;
 

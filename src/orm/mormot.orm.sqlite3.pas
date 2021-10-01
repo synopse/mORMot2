@@ -1147,14 +1147,13 @@ procedure TRestOrmServerDB.GetAndPrepareStatement(const SQL: RawUtf8;
   ForceCacheStatement: boolean);
 var
   i: PtrInt;
-  types: TSqlParamTypeDynArray;
-  nulls: TFieldBits;
-  values: TRawUtf8DynArray;
+  decoder: TExtractInlineParameters;
 begin
   // prepare statement
   fStatementSql := SQL;
-  fStatementGenericSql := ExtractInlineParameters(
-    SQL, types, values, fStatementMaxParam, nulls);
+  decoder.Parse(SQL);
+  fStatementGenericSql := decoder.GenericSql;
+  fStatementMaxParam := decoder.Count;
   PrepareStatement(ForceCacheStatement or (fStatementMaxParam <> 0));
   // bind parameters
   if fStatementMaxParam = 0 then
@@ -1164,20 +1163,19 @@ begin
       '%.GetAndPrepareStatement(%) recognized % params, and % for SQLite3',
       [self, fStatementGenericSql, fStatementMaxParam, fStatement^.ParamCount]);
   for i := 0 to fStatementMaxParam - 1 do
-    if byte(i) in nulls then
-      fStatement^.BindNull(i + 1)
-    else
-      case types[i] of
-        sptDateTime, // date/time are stored as ISO-8601 TEXT in SQLite3
-        sptText:
-          fStatement^.Bind(i + 1, values[i]);
-        sptBlob:
-          fStatement^.BindBlob(i + 1, values[i]);
-        sptInteger:
-          fStatement^.Bind(i + 1, GetInt64(pointer(values[i])));
-        sptFloat:
-          fStatement^.Bind(i + 1, GetExtended(pointer(values[i])));
-      end;
+    case decoder.Types[i] of
+      sptNull:
+        fStatement^.BindNull(i + 1);
+      sptDateTime, // date/time are stored as ISO-8601 TEXT in SQLite3
+      sptText:
+        fStatement^.Bind(i + 1, decoder.Values[i]);
+      sptBlob:
+        fStatement^.BindBlob(i + 1, decoder.Values[i]);
+      sptInteger:
+        fStatement^.Bind(i + 1, GetInt64(pointer(decoder.Values[i])));
+      sptFloat:
+        fStatement^.Bind(i + 1, GetExtended(pointer(decoder.Values[i])));
+    end;
 end;
 
 procedure TRestOrmServerDB.GetAndPrepareStatementRelease(E: Exception;

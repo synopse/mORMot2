@@ -69,10 +69,13 @@ const
   // - empirical value, used e.g. for mormot.orm.sqlite3 Batch multi-insert
   // - matches DB_PARAMSMAX[dSQLite] as defined in mormot.db.sql
   // - the theoritical limit equals 999, but this number seems good enough
-  MAX_SQLPARAMS = 200;
+  MAX_SQLPARAMS = 500;
 
 
 type
+  /// the exception class raised by this unit
+  ESynDBException = class(ESynException);
+
   /// handled field/parameter/column types for abstract database access
   // - this will map JSON-compatible low-level database-level access types, not
   // high-level object pascal types as TOrmFieldType defined in
@@ -169,20 +172,6 @@ type
   /// used to store field indexes in a Table
   // - same as TFieldBits, but allowing to store the proper order
   TFieldIndexDynArray = array of TFieldIndex;
-
-  /// generic parameter types, as recognized by SqlParamContent() and
-  // ExtractInlineParameters() functions
-  TSqlParamType = (
-    sptUnknown,
-    sptInteger,
-    sptFloat,
-    sptText,
-    sptBlob,
-    sptDateTime);
-
-  /// array of parameter types, as recognized by SqlParamContent() and
-  // ExtractInlineParameters() functions
-  TSqlParamTypeDynArray = array of TSqlParamType;
 
 
 const
@@ -601,7 +590,7 @@ function NullableUtf8TextToValue(const V: TNullableUtf8Text): RawUtf8; overload;
 /// convert a date to a ISO-8601 string format for SQL '?' inlined parameters
 // - will return the date encoded as '\uFFF1YYYY-MM-DD' - therefore
 // ':("\uFFF12012-05-04"):' pattern will be recognized as a oftDateTime
-// inline parameter in  SqlParamContent() / ExtractInlineParameters() functions
+// inline parameter by the TExtractInlineParameters decoder
 // (JSON_SQLDATE_MAGIC_C will be used as prefix to create '\uFFF1...' pattern)
 // - to be used e.g. as in:
 // ! aRec.CreateAndFillPrepare(Client,'Datum=?',[DateToSql(EncodeDate(2012,5,4))]);
@@ -610,7 +599,7 @@ function DateToSql(Date: TDateTime): RawUtf8; overload;
 /// convert a date to a ISO-8601 string format for SQL '?' inlined parameters
 // - will return the date encoded as '\uFFF1YYYY-MM-DD' - therefore
 // ':("\uFFF12012-05-04"):' pattern will be recognized as a oftDateTime
-// inline parameter in  SqlParamContent() / ExtractInlineParameters() functions
+// inline parameter by the TExtractInlineParameters decoder
 // (JSON_SQLDATE_MAGIC_C will be used as prefix to create '\uFFF1...' pattern)
 // - to be used e.g. as in:
 // ! aRec.CreateAndFillPrepare(Client,'Datum=?',[DateToSql(2012,5,4)]);
@@ -638,7 +627,7 @@ function SqlToDateTime(const ParamValueWithMagic: RawUtf8): TDateTime;
 // - follows the same pattern as DateToSql or DateTimeToSql functions, i.e.
 // will return the date or time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss' -
 // therefore ':("\uFFF12012-05-04T20:12:13"):' pattern will be recognized as a
-// oftDateTime inline parameter in  SqlParamContent() / ExtractInlineParameters()
+// oftDateTime inline parameter by the TExtractInlineParameters decoder
 // (JSON_SQLDATE_MAGIC_C will be used as prefix to create '\uFFF1...' pattern)
 // - to be used e.g. as in:
 // ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSql(TimeLogNow)]);
@@ -649,7 +638,7 @@ function TimeLogToSql(const Timestamp: TTimeLog): RawUtf8;
 // - follows the same pattern as DateToSql or DateTimeToSql functions, i.e.
 // will return the date or time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss' -
 // therefore ':("\uFFF12012-05-04T20:12:13"):' pattern will be recognized as a
-// oftDateTime inline parameter in  SqlParamContent() / ExtractInlineParameters()
+// oftDateTime inline parameter by the TExtractInlineParameters decoder
 // (JSON_SQLDATE_MAGIC_C will be used as prefix to create '\uFFF1...' pattern)
 // - in practice, just append the JSON_BASE64_MAGIC_C prefix to the supplied text
 function Iso8601ToSql(const S: RawByteString): RawUtf8;
@@ -658,35 +647,56 @@ function Iso8601ToSql(const S: RawByteString): RawUtf8;
 
 { ************ SQL Parameters Inlining and Processing }
 
-/// parse an UTF-8 SQL value, as encoded in our inlined :(....): format
-// - used e.g. by ExtractInlineParameters() to un-inline a SQL statement
-// - oftInteger is returned for an INTEGER value, e.g. :(1234):
-// - oftFloat is returned for any floating point value (i.e. some digits
-// separated by a '.' character), e.g. :(12.34): or :(12E-34):
-// - oftUtf8Text is returned for :("text"): or :('text'):, with double quoting
-// inside the value
-// - oftBlob will be recognized from the ':("\uFFF0base64encodedbinary"):'
-// pattern, and return raw binary (for direct blob parameter assignment)
-// - oftDateTime will be recognized from ':(\uFFF1"2012-05-04"):' pattern,
-// i.e. JSON_SQLDATE_MAGIC_C-prefixed string as returned by DateToSql() or
-// DateTimeToSql() functions
-// - oftUnknown is returned on invalid content, or if wasNull is set to TRUE
-// - if ParamValue is not nil, the pointing RawUtf8 string is set with the
-// value inside :(...): without double quoting in case of oftUtf8Text
-// - wasNull is set to TRUE if P was ':(null):' and ParamType is oftUnknwown
-function SqlParamContent(P: PUtf8Char; out ParamType: TSqlParamType;
-  out ParamValue: RawUtf8; out wasNull: boolean): PUtf8Char;
+type
+  /// generic parameter types, as recognized by TExtractInlineParameters.Parse
+  TSqlParamType = (
+    sptNull,
+    sptInteger,
+    sptFloat,
+    sptText,
+    sptBlob,
+    sptDateTime);
 
-/// this function will extract inlined :(1234): parameters into Types[]/Values[]
-// - will return the generic SQL statement with ? place holders for inlined
-// parameters and setting Values/Nulls with SqlParamContent() decoded content
-// - will set maxParam=0 in case of no inlined parameters
-// - recognized types are sptInteger, sptFloat, sptDateTime ('\uFFF1...'),
-// sptUtf8Text and sptBlob ('\uFFF0...')
-// - sptUnknown is returned on invalid content
-function ExtractInlineParameters(const SQL: RawUtf8;
-  var Types: TSqlParamTypeDynArray; var Values: TRawUtf8DynArray;
-  var maxParam: integer; var Nulls: TFieldBits): RawUtf8;
+  /// extract inlined :(1234): parameters into Types[]/Values[]
+  {$ifdef USERECORDWITHMETHODS}
+  TExtractInlineParameters = record
+  {$else}
+  TExtractInlineParameters = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// Values[0..Count-1] contains the unquoted parameters raw values
+    Values: TRawUtf8DynArray;
+    /// generic SQL statement with ? place holders for each inlined parameter
+    GenericSql: RawUtf8;
+    /// the number of parsed parameters, as filled in Values/Types
+    Count: integer;
+    /// the SQL type associated with each Values[]
+    // - recognized types are sptInteger, sptFloat, sptUtf8Text, sptDateTime
+    // (marked with '\uFFF1...' trailer) and sptBlob (with '\uFFF0...' trailer)
+    // - store sptNull for NULL value
+    Types: array[0..MAX_SQLFIELDS - 1] of TSqlParamType;
+    /// parse and extract inlined :(1234): parameters
+    // - fill Values[0..Count-1] Types[0..Count-1] Nulls and compute the
+    // associated GenericSQL with ? place-holders
+    // - if SQL as incorrect :(....): inlined parameters, will just copy SQL to
+    // GenericSQL and set Count=0
+    procedure Parse(const SQL: RawUtf8);
+    /// parse one UTF-8 SQL value, as encoded in our inlined :(....): format
+    // - low-level function called by Parse() into Values[Count] and Types[Count]
+    // - oftInteger is set for an INTEGER value, e.g. :(1234):
+    // - oftFloat is set for any floating point value (i.e. some digits
+    // separated by a '.' character), e.g. :(12.34): or :(12E-34):
+    // - oftUtf8Text is set for :("text"): or :('text'):, with double quoting
+    // inside the value
+    // - oftBlob will be recognized from the ':("\uFFF0base64encodedbinary"):'
+    // pattern, and set raw binary (for direct blob parameter assignment)
+    // - oftDateTime will be recognized from ':(\uFFF1"2012-05-04"):' pattern,
+    // i.e. JSON_SQLDATE_MAGIC_C-prefixed string as returned by DateToSql() or
+    // DateTimeToSql() functions, and set as ISO-8601 date/time text
+    // - oftUnknown is set from a NULL value
+    // - P=nil is returned on invalid content
+    function ParseNext(P: PUtf8Char): PUtf8Char;
+  end;
 
 /// returns a 64-bit value as inlined ':(1234):' text
 function InlineParameter(ID: Int64): shortstring; overload;
@@ -794,7 +804,7 @@ type
     // to the generated JSON stream (for faster unserialization of huge content)
     procedure AddColumns(aKnownRowsCount: integer = 0);
     /// allow to change on the fly an expanded format column layout
-    // - by definition, a non expanded format will raise a ESynException
+    // - by definition, a non expanded format will raise a ESynDBException
     // - caller should then set ColNames[] and run AddColumns()
     procedure ChangeExpandedFields(aWithID: boolean;
       const aFields: TFieldIndexDynArray); overload;
@@ -1186,7 +1196,7 @@ var
 begin
   n := 0;
   if MaxLength > MAX_SQLFIELDS then
-    raise ESynException.CreateUtf8('FieldBitsToIndex(MaxLength=%)', [MaxLength]);
+    raise ESynDBException.CreateUtf8('FieldBitsToIndex(MaxLength=%)', [MaxLength]);
   for i := 0 to MaxLength - 1 do
     if byte(i) in Fields then
     begin
@@ -1688,167 +1698,6 @@ end;
 
 { ************ SQL Parameters Inlining and Processing }
 
-function SqlParamContent(P: PUtf8Char; out ParamType: TSqlParamType;
-  out ParamValue: RawUtf8; out wasNull: boolean): PUtf8Char;
-var
-  PBeg: PAnsiChar;
-  L: integer;
-  c: cardinal;
-begin
-  ParamType := sptUnknown;
-  wasNull := false;
-  result := nil;
-  if P = nil then
-    exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  case P^ of
-    '''',
-    '"':
-      begin
-        P := UnQuoteSqlStringVar(P, ParamValue);
-        if P = nil then
-          // not a valid quoted string (e.g. unexpected end in middle of it)
-          exit;
-        ParamType := sptText;
-        L := length(ParamValue) - 3;
-        if L > 0 then
-        begin
-          c := PInteger(ParamValue)^ and $00ffffff;
-          if c = JSON_BASE64_MAGIC_C then
-          begin
-            // ':("\uFFF0base64encodedbinary"):' format -> decode
-            Base64MagicDecode(ParamValue); // wrapper function to avoid temp. string
-            ParamType := sptBlob;
-          end
-          else if (c = JSON_SQLDATE_MAGIC_C) and
-                  IsIso8601(PUtf8Char(pointer(ParamValue)) + 3, L) then
-          begin
-            // handle ':("\uFFF112012-05-04"):' format
-            Delete(ParamValue, 1, 3);   // return only ISO-8601 text
-            ParamType := sptDateTime;   // identified as Date/Time
-          end;
-        end;
-      end;
-    '-',
-    '+',
-    '0'..'9': // allow 0 or + in SQL
-      begin
-        // check if P^ is a true numerical value
-        PBeg := pointer(P);
-        ParamType := sptInteger;
-        repeat
-          inc(P)
-        until not (P^ in ['0'..'9']); // check digits
-        if P^ = '.' then
-        begin
-          inc(P);
-          if P^ in ['0'..'9'] then
-          begin
-            ParamType := sptFloat;
-            repeat
-              inc(P)
-            until not (P^ in ['0'..'9']); // check fractional digits
-          end
-          else
-          begin
-            ParamType := sptUnknown; // invalid '23023.' value
-            exit;
-          end;
-        end;
-        if byte(P^) and $DF = ord('E') then
-        begin
-          ParamType := sptFloat;
-          inc(P);
-          if P^ = '+' then
-            inc(P)
-          else if P^ = '-' then
-            inc(P);
-          while P^ in ['0'..'9'] do
-            inc(P);
-        end;
-        FastSetString(ParamValue, PBeg, P - PBeg);
-      end;
-    'n':
-      if PInteger(P)^ = NULL_LOW then
-      begin
-        inc(P, 4);
-        wasNull := true;
-      end
-      else
-        exit; // invalid content (only :(null): expected)
-  else
-    exit; // invalid content
-  end;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  if PWord(P)^ <> Ord(')') + Ord(':') shl 8 then
-    // we expect finishing with P^ pointing at '):'
-    ParamType := sptUnknown
-  else
-    // result<>nil only if value content in P^
-    result := P + 2;
-end;
-
-function ExtractInlineParameters(const SQL: RawUtf8;
-  var Types: TSqlParamTypeDynArray; var Values: TRawUtf8DynArray;
-  var maxParam: integer; var Nulls: TFieldBits): RawUtf8;
-var
-  ppBeg: integer;
-  P, Gen: PUtf8Char;
-  wasNull: boolean;
-begin
-  maxParam := 0;
-  FillZero(Nulls);
-  ppBeg := PosEx(RawUtf8(':('), SQL, 1);
-  if (ppBeg = 0) or
-     (PosEx(RawUtf8('):'), SQL, ppBeg + 2) = 0) then
-  begin
-    // SQL code with no valid :(...): internal parameters -> leave maxParam=0
-    result := SQL;
-    exit;
-  end;
-  // compute GenericSql from SQL, converting :(...): into ?
-  FastSetString(result, pointer(SQL), length(SQL)); // private copy for unescape
-  P := pointer(result); // in-place string unescape (keep SQL untouched)
-  Gen := P + ppBeg - 1; // Gen^ just before :(
-  inc(P, ppBeg + 1);    // P^ just after :(
-  repeat
-    Gen^ := '?'; // replace :(...): by ?
-    inc(Gen);
-    if length(Values) <= maxParam then
-      SetLength(Values, maxParam + 16);
-    if length(Types) <= maxParam then
-      SetLength(Types, maxParam + 64);
-    P := SqlParamContent(P, Types[maxParam], Values[maxParam], wasNull);
-    if P = nil then
-    begin
-      maxParam := 0;
-      result := SQL;
-      exit; // any invalid parameter -> try direct SQL
-    end;
-    if wasNull then
-      include(Nulls, maxParam);
-    while (P^ <> #0) and
-          (PWord(P)^ <> Ord(':') + Ord('(') shl 8) do
-    begin
-      Gen^ := P^;
-      inc(Gen);
-      inc(P);
-    end;
-    if P^ = #0 then
-      break;
-    inc(P, 2);
-    inc(maxParam);
-  until false;
-  // return generic SQL statement, with ? place-holders and params in Values[]
-  Gen^ := #0; // as SetLength(), but with no memory realloc
-  PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := Gen - pointer(result);
-  inc(maxParam);
-end;
-
 function InlineParameter(ID: Int64): shortstring;
 begin
   FormatShort(':(%):', [ID], result);
@@ -2161,6 +2010,160 @@ begin
 end;
 
 
+{ TExtractInlineParameters }
+
+procedure TExtractInlineParameters.Parse(const SQL: RawUtf8);
+var
+  ppBeg: integer;
+  P, Gen: PUtf8Char;
+begin
+  Count := 0;
+  ppBeg := PosEx(RawUtf8(':('), SQL, 1);
+  if (ppBeg = 0) or
+     (PosEx(RawUtf8('):'), SQL, ppBeg + 2) = 0) then
+  begin
+    // SQL code with no valid :(...): internal parameters -> leave Count=0
+    GenericSQL := SQL;
+    exit;
+  end;
+  // compute GenericSql from SQL, converting :(...): into ?
+  FastSetString(GenericSQL, pointer(SQL), length(SQL)); // private copy
+  P := pointer(GenericSQL); // in-place string unescape (keep SQL untouched)
+  Gen := P + ppBeg - 1; // Gen^ just before :(
+  inc(P, ppBeg + 1);    // P^ just after :(
+  repeat
+    if Count = high(Types) then
+      raise ESynDBException.CreateUtf8('Too many parameters in %', [SQL]);
+    Gen^ := '?'; // replace :(...): by ?
+    inc(Gen);
+    if length(Values) <= Count then
+      SetLength(Values, Count + 16);
+    P := ParseNext(P);
+    if P = nil then
+    begin
+      Count := 0;
+      GenericSQL := SQL;
+      exit; // any invalid parameter -> try direct SQL
+    end;
+    while (P^ <> #0) and
+          (PWord(P)^ <> Ord(':') + Ord('(') shl 8) do
+    begin
+      Gen^ := P^;
+      inc(Gen);
+      inc(P);
+    end;
+    if P^ = #0 then
+      break;
+    inc(P, 2);
+    inc(Count);
+  until false;
+  // return generic SQL statement, with ? place-holders and params in Values[]
+  Gen^ := #0; // as SetLength(), but with no memory realloc
+  PStrLen(PAnsiChar(pointer(GenericSQL)) - _STRLEN)^ := Gen - pointer(GenericSQL);
+  inc(Count);
+end;
+
+function TExtractInlineParameters.ParseNext(P: PUtf8Char): PUtf8Char;
+var
+  PBeg: PAnsiChar;
+  L: integer;
+  c: cardinal;
+  spt: TSqlParamType;
+begin
+  result := nil; // indicates parsing error
+  if P = nil then
+    exit;
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
+  case P^ of
+    '''',
+    '"':
+      begin
+        P := UnQuoteSqlStringVar(P, Values[Count]);
+        if P = nil then
+          // not a valid quoted string (e.g. unexpected end in middle of it)
+          exit;
+        spt := sptText;
+        L := length(Values[Count]) - 3;
+        if L > 0 then
+        begin
+          c := PInteger(Values[Count])^ and $00ffffff;
+          if c = JSON_BASE64_MAGIC_C then
+          begin
+            // ':("\uFFF0base64encodedbinary"):' format -> decode
+            Base64MagicDecode(Values[Count]); // in-place to avoid temp. string
+            spt := sptBlob;
+          end
+          else if (c = JSON_SQLDATE_MAGIC_C) and
+                  IsIso8601(PUtf8Char(pointer(Values[Count])) + 3, L) then
+          begin
+            // handle ':("\uFFF112012-05-04"):' format
+            Delete(Values[Count], 1, 3);   // return only ISO-8601 text
+            spt := sptDateTime;   // identified as Date/Time
+          end;
+        end;
+      end;
+    '-',
+    '+',
+    '0'..'9': // allow 0 or + in SQL
+      begin
+        // check if P^ is a true numerical value
+        PBeg := pointer(P);
+        spt := sptInteger;
+        repeat
+          inc(P)
+        until not (P^ in ['0'..'9']); // check digits
+        if P^ = '.' then
+        begin
+          inc(P);
+          if P^ in ['0'..'9'] then
+          begin
+            spt := sptFloat;
+            repeat
+              inc(P)
+            until not (P^ in ['0'..'9']); // check fractional digits
+          end
+          else
+            exit;
+        end;
+        if byte(P^) and $DF = ord('E') then
+        begin
+          spt := sptFloat;
+          inc(P);
+          if P^ = '+' then
+            inc(P)
+          else if P^ = '-' then
+            inc(P);
+          while P^ in ['0'..'9'] do
+            inc(P);
+        end;
+        FastSetString(Values[Count], PBeg, P - PBeg);
+      end;
+    'n':
+      if PInteger(P)^ = NULL_LOW then
+      begin
+        spt := sptNull;
+        inc(P, 4);
+      end
+      else
+        exit; // invalid content (only :(null): expected)
+  else
+    exit; // invalid content
+  end;
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
+  if (P[0] <> ')') or
+     (P[1] <> ':') then
+    // we expect finishing with P^ pointing at '):'
+    exit;
+  // result<>nil only if value content was successfully decoded
+  result := P + 2;
+  Types[Count] := spt;
+end;
+
+
 
 { ************ TJsonWriter Specialized for Database Export }
 
@@ -2243,7 +2246,7 @@ procedure TJsonWriter.ChangeExpandedFields(aWithID: boolean;
   const aFields: TFieldIndexDynArray);
 begin
   if not Expand then
-    raise ESynException.CreateUtf8(
+    raise ESynDBException.CreateUtf8(
       '%.ChangeExpandedFields() called with Expanded=false', [self]);
   fWithID := aWithID;
   fFields := aFields;
