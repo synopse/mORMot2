@@ -8182,31 +8182,33 @@ begin
   begin
     typ := sqlite3.column_type(Request, i); // fast evaluation: type may vary
     P := nil;
-    if twoIgnoreDefaultInRecord in WR.CustomOptions then
-    begin
-      case typ of
-        SQLITE_BLOB:
-          if DoNotFetchBlobs or
-             (sqlite3.column_bytes(Request, i) = 0) then
-            continue;
-        SQLITE_NULL:
-          continue;
-        SQLITE_INTEGER:
-          if sqlite3.column_int64(Request, i) = 0 then
-            continue;
-        SQLITE_FLOAT:
-          if sqlite3.column_double(Request, i) = 0 then
-            continue;
-        SQLITE_TEXT:
-          begin
-            P := sqlite3.column_text(Request, i);
-            if P = nil then
-              continue;
-          end;
-      end;
-    end;
     if WR.Expand then
+    begin
+      if twoIgnoreDefaultInRecord in WR.CustomOptions then
+      begin
+        case typ of
+          SQLITE_BLOB:
+            if DoNotFetchBlobs or
+               (sqlite3.column_bytes(Request, i) = 0) then
+              continue;
+          SQLITE_NULL:
+            continue;
+          SQLITE_INTEGER:
+            if sqlite3.column_int64(Request, i) = 0 then
+              continue;
+          SQLITE_FLOAT:
+            if sqlite3.column_double(Request, i) = 0 then
+              continue;
+          SQLITE_TEXT:
+            begin
+              P := sqlite3.column_text(Request, i);
+              if P = nil then
+                continue;
+            end;
+        end;
+      end;
       WR.AddString(WR.ColNames[i]); // '"'+ColNames[]+'":'
+    end;
     case typ of
       SQLITE_BLOB:
         if DoNotFetchBlobs then
