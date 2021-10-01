@@ -2110,12 +2110,12 @@ end;
 
 const
   SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of string[3] = (
-    '=?',
-    '<>?',
-    '<?',
-    '<=?',
-    '>?',
-    '>=?');
+    '=?',      // soEqualTo
+    '<>?',     // soNotEqualTo
+    '<?',      // soLessThan
+    '<=?',     // soLessThanOrEqualTo
+    '>?',      // soGreaterThan
+    '>=?');    // soGreaterThanOrEqualTo
 
 function TRestStorageExternal.ComputeSql(
   var Prepared: TOrmVirtualTablePrepared): RawUtf8;
@@ -2151,8 +2151,8 @@ begin
         {$ifdef SQLVIRTUALLOGS}
         log := log + ':UNSUPPORTED';
         {$endif SQLVIRTUALLOGS}
-        fRest.InternalLog('ComputeSql: unsupported %',
-          [ToText(where^.Operation)^], sllWarning);
+        fRest.InternalLog('ComputeSql: unsupported % on column %',
+          [ToText(where^.Operation)^, where^.Column], sllWarning);
         where^.OmitCheck := false; // unsupported operator -> manual search
         continue;
       end;
@@ -2163,8 +2163,8 @@ begin
       if fStoredClassMapping^.AppendFieldName(where^.Column, WR) then
       begin
         // invalid "where" column index -> abort search and return ''
-        fRest.InternalLog('ComputeSql: unknown where %',
-          [where^.Column], sllWarning);
+        fRest.InternalLog('ComputeSql: unknown where % % ? column',
+          [where^.Column, SQL_OPER_WITH_PARAM[where^.Operation]], sllWarning);
         exit;
       end;
       WR.AddShorter(SQL_OPER_WITH_PARAM[where^.Operation]);
@@ -2184,7 +2184,7 @@ begin
       if fStoredClassMapping^.AppendFieldName(order^.Column, WR) then
       begin
         // invalid "order" column index -> abort search and return ''
-        fRest.InternalLog('ComputeSql: unknown order %',
+        fRest.InternalLog('ComputeSql: unknown order % collumn',
           [order^.Column], sllWarning);
         exit;
       end;

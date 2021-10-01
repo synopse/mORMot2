@@ -83,8 +83,8 @@ type
   // NULL, INTEGER, REAL, TEXT, BLOB (with the addition of a ftCurrency and
   // ftDate type, for better support of most DB engines)
   // see @http://www.sqlite.org/datatype3.html
-  // - the only string type handled here uses UTF-8 encoding (implemented
-  // using our RawUtf8 type), for cross-Delphi true Unicode process
+  // - the only string type handled here uses UTF-8 encoding (implemented using
+  // our RawUtf8 type), for full Unicode process on all compilers and targets
   TSqlDBFieldType = (
     ftUnknown,
     ftNull,
@@ -191,6 +191,7 @@ const
     [ftInt64, ftDouble, ftCurrency, ftDate];
 
   /// conversion matrix from TSqlDBFieldType into VCL/LCL variant type
+  // - will use varSynUnicode to enhance Delphi and Windows compatibility
   MAP_FIELDTYPE2VARTYPE: array[TSqlDBFieldType] of Word = (
     varEmpty,       // ftUnknown
     varNull,        // ftNull

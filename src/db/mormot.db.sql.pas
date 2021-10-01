@@ -497,7 +497,6 @@ const
     500,            // dDB2          empirical value (from ODBC)
     0);             // dInformix
 
-
   /// the known SQL statement to retrieve the server date and time
   // - contains '' for the engines with local time
   DB_SERVERTIME: array[TSqlDBDefinition] of RawUtf8 = (
@@ -581,7 +580,8 @@ const
 
   /// where the DESC clause shall be used for a CREATE INDEX statement
   // - only identified syntax exception is for FireBird
-  DB_SQLDESENDINGINDEXPOS: array[TSqlDBDefinition] of (posWithColumn, posGlobalBefore) =
+  DB_SQLDESENDINGINDEXPOS: array[TSqlDBDefinition] of
+    (posWithColumn, posGlobalBefore) =
     (posWithColumn,   // dUnknown
      posWithColumn,   // dDefault
      posWithColumn,   // dOracle
@@ -597,16 +597,16 @@ const
 
   /// the SQL text corresponding to the identified WHERE operators for a SELECT
   DB_SQLOPERATOR: array[opEqualTo..opLike] of RawUtf8 = (
-    '=',
-    '<>',
-    '<',
-    '<=',
-    '>',
-    '>=',
-    ' in ',
-    ' is null',
-    ' is not null',
-    ' like ');
+    '=',            // opEqualTo
+    '<>',           // opNotEqualTo
+    '<',            // opLessThan
+    '<=',           // opLessThanOrEqualTo
+    '>',            // opGreaterThan
+    '>=',           // opGreaterThanOrEqualTo
+    ' in ',         // opIn
+    ' is null',     // opIsNull
+    ' is not null', // opIsNotNull
+    ' like ');      // opLike
 
 
 /// retrieve the text of a given Database SQL dialect enumeration
