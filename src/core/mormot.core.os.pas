@@ -284,7 +284,7 @@ const
     {$else} {$ifdef OSLINUX}
       'Linux';
     {$else}
-       'Posix';
+      'Posix';
     {$endif OSLINUX}
     {$endif OSANDROID}
     {$endif OSBSD}
@@ -372,6 +372,10 @@ var
 /// convert an Operating System type into its text representation
 // - returns e.g. 'Windows Vista' or 'Ubuntu'
 function ToText(const osv: TOperatingSystemVersion): RawUtf8; overload;
+
+/// convert an Operating System type into its one-word text representation
+// - returns e.g. 'Vista' or 'Ubuntu'
+function ToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
 
 /// convert a 32-bit Operating System type into its full text representation
 // including the kernel revision (not the distribution version) on POSIX systems
@@ -3042,6 +3046,14 @@ function ToText(const osv: TOperatingSystemVersion): RawUtf8;
 begin
   if osv.os = osWindows then
     result := 'Windows ' + WINDOWS_NAME[osv.win]
+  else
+    result := OS_NAME[osv.os];
+end;
+
+function ToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
+begin
+  if osv.os = osWindows then
+    result := WINDOWS_NAME[osv.win]
   else
     result := OS_NAME[osv.os];
 end;
