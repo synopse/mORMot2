@@ -219,6 +219,7 @@ type
     fBatchIDMax: TID;
     fBatchValues: TRawUtf8DynArray;
     fBatchValuesCount: integer;
+    fJsonDecoder: TJsonObjectDecoder;
     /// retrieve a TSqlRequest instance in fStatement
     // - will set @fStaticStatement if no :(%): internal parameters appear:
     // in this case, the TSqlRequest.Close method must be called
@@ -1888,7 +1889,6 @@ function TRestOrmServerDB.MainEngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUtf8): boolean;
 var
   props: TOrmProperties;
-  decoder: TJsonObjectDecoder;
   sql: RawUtf8;
 begin
   if (TableModelIndex < 0) or
@@ -1901,11 +1901,12 @@ begin
   begin
     // this sql statement use :(inlined params): for all values
     props := fModel.TableProps[TableModelIndex].Props;
-    decoder.Decode(SentData, nil, pInlined, ID, false);
+    fJsonDecoder.Decode(SentData, nil, pInlined, ID, false);
     if props.RecordVersionField <> nil then
       fOwner.RecordVersionHandle(ooUpdate, TableModelIndex,
-        decoder, props.RecordVersionField);
-    sql := decoder.EncodeAsSql('', '', {update=}true);
+        fJsonDecoder, props.RecordVersionField);
+    sql := fJsonDecoder.EncodeAsSql('', '', {update=}true);
+    Finalize(fJsonDecoder); // release temp values memory ASAP
     if sql = '' then
       raise ERestStorage.CreateUtf8('%.MainEngineUpdate: invalid input [%]',
         [self, EscapeToShort(SentData)]);
