@@ -213,7 +213,7 @@ type
       CallDesc: PCallDesc; Params: Pointer); override;
     /// override those abstract methods for getter/setter implementation
     function IntGet(var Dest: TVarData; const Instance: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt): boolean; virtual;
+      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; virtual;
     function IntSet(const Instance, Value: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; virtual;
   public
@@ -538,7 +538,7 @@ type
     function CreateInternValues: TRawUtf8Interning;
     /// fast getter implementation
     function IntGet(var Dest: TVarData; const Instance: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt): boolean; override;
+      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
     /// fast setter implementation
     function IntSet(const Instance, Value: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; override;
@@ -3281,7 +3281,8 @@ end;
 {$endif ISDELPHI}
 
 function TSynInvokeableVariantType.{%H-}IntGet(var Dest: TVarData;
-  const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
+  const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt;
+  NoException: boolean): boolean;
 begin
   raise ESynVariant.CreateUtf8('Unexpected %.IntGet(%): this kind of ' +
     'custom variant does not support sub-fields', [self, Name]);
@@ -3353,7 +3354,7 @@ begin
   if (Dest <> nil) and
      (n = 0) and
      (CallDesc^.CallType in [DISPATCH_METHOD, DISPATCH_PROPERTYGET]) and
-     IntGet(Dest^, Source, nameptr, namelen) then
+     IntGet(Dest^, Source, nameptr, namelen, {noexception=}false) then
     exit;
   Ansi7ToString(pointer(nameptr), namelen, name);
   if n > 0 then
@@ -3563,8 +3564,8 @@ begin
     end;
     tmp := v; // v will be modified in-place
     TRttiVarData(v).VType := varEmpty; // IntGet() would clear it otherwise!
-    if not handler.IntGet(v, tmp, @itemName[1], ord(itemName[0])) then
-      exit; // property not found
+    if not handler.IntGet(v, tmp, @itemName[1], ord(itemName[0]), {noexc=}true) then
+      exit; // property not found (no exception should be raised in Lookup)
     repeat
       vt := v.VType;
       if vt <> varVariantByRef then
@@ -3669,9 +3670,10 @@ begin
 end;
 
 function TDocVariant.IntGet(var Dest: TVarData; const Instance: TVarData;
-  Name: PAnsiChar; NameLen: PtrInt): boolean;
+  Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean;
 var
   dv: TDocVariantData absolute Instance;
+  ndx: integer;
 begin
   if Name = nil then
     result := false
@@ -3683,8 +3685,24 @@ begin
              'JSON']), dv, variant(Dest)) then
     result := true
   else
-    result := dv.RetrieveValueOrRaiseException(pointer(Name), NameLen,
-      dvoNameCaseSensitive in dv.VOptions, PVariant(@Dest)^, {byref=}true);
+  begin
+    ndx := dv.GetValueIndex(pointer(Name), NameLen,
+      dvoNameCaseSensitive in dv.VOptions);
+    if ndx < 0 then
+      if NoException or
+         (dvoReturnNullForUnknownProperty in dv.VOptions) then
+      begin
+        SetVariantNull(PVariant(@Dest)^);
+        result := false;
+      end
+      else
+        raise EDocVariant.CreateUtf8('[%] property not found', [Name])
+    else
+    begin
+      SetVariantByRef(dv.VValue[ndx], PVariant(@Dest)^);
+      result := true;
+    end;
+  end;
 end;
 
 function TDocVariant.IntSet(const Instance, Value: TVarData;
