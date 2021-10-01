@@ -1360,12 +1360,14 @@ var
 begin
   for i := 0 to high(Model.TableProps) do
     case Model.TableProps[i].Kind of
-      ovkRTree, ovkRTreeInteger:
+      ovkRTree,
+      ovkRTreeInteger:
         // register all RTREE associated *_in() SQL functions
         sqlite3_check(DB.DB, sqlite3.create_function_v2(
           DB.DB, pointer(TOrmRTreeClass(Model.Tables[i]).RTreeSQLFunctionName),
           2, SQLITE_ANY, Model.Tables[i], InternalRTreeIn, nil, nil, nil));
-      ovkCustomForcedID, ovkCustomAutoID:
+      ovkCustomForcedID,
+      ovkCustomAutoID:
         begin
           // register once each TOrmVirtualTableModuleServerDB
           module := pointer(fModel.VirtualTableModule(fModel.Tables[i]));
@@ -2202,8 +2204,6 @@ begin
 end;
 
 procedure TRestOrmServerDB.InternalBatchStop;
-const
-  MAX_PARAMS = 500; // pragmatic value (theoritical limit is 999)
 var
   fieldcount, valuescount, rowcount, lastrowcount, firstrow, prop: integer;
   ndx, r, f: PtrInt;
@@ -2255,7 +2255,7 @@ begin
     rowcount := 0;
     lastrowcount := 0;
     firstrow := 0;
-    SetLength(valuesnull, (MAX_PARAMS shr 3) + 1);
+    SetLength(valuesnull, (MAX_SQLPARAMS shr 3) + 1);
     SetLength(values, 32);
     fields := nil; // makes compiler happy
     fieldcount := 0;
@@ -2310,12 +2310,12 @@ begin
           fieldschanged := true;
           break;
         end
-        else if valuescount + fieldcount > MAX_PARAMS then
+        else if valuescount + fieldcount > MAX_SQLPARAMS then
           // this item would bound too many params
           break;
         // if we reached here, we can add this row to values[]
         if valuescount + fieldcount > length(values) then
-          SetLength(values, MAX_PARAMS);
+          SetLength(values, MAX_SQLPARAMS);
         for f := 0 to fieldcount - 1 do
           if decode.FieldTypeApproximation[f] = ftaNull then
             SetBitPtr(pointer(valuesnull), valuescount + f)
@@ -2341,7 +2341,7 @@ begin
           fStatementSql := logsql;
           fStatementGenericSql  := sql;
           PrepareStatement({cached=}(rowcount < 5) or
-                                    (valuescount + fieldcount > MAX_PARAMS));
+                                    (valuescount + fieldcount > MAX_SQLPARAMS));
           prop := 0;
           for f := 0 to valuescount - 1 do
           begin
@@ -2351,7 +2351,8 @@ begin
               case types[prop] of
                 ftInt64:
                   fStatement^.Bind(f + 1, GetInt64(pointer(values[f])));
-                ftDouble, ftCurrency:
+                ftDouble,
+                ftCurrency:
                   fStatement^.Bind(f + 1, GetExtended(pointer(values[f])));
                 ftDate, ftUtf8:
                   fStatement^.Bind(f + 1, values[f]);

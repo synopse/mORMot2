@@ -1327,7 +1327,8 @@ begin
   begin
     result := true;
     case vt of
-      varDouble, varDate:
+      varDouble,
+      varDate:
         Value := TVarData(V).VDouble;
       varSingle:
         Value := TVarData(V).VSingle;
@@ -1797,7 +1798,8 @@ begin
   repeat
     P := GotoNextNotSpace(P);
     case P^ of
-      'A'..'Z', 'a'..'z':
+      'A'..'Z',
+      'a'..'z':
         if not ParseMonth(P, Month) then
           P := GotoNextSpace(P);
       '0'..'9':

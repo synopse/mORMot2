@@ -181,15 +181,19 @@ type
 
 const
   /// TSqlDBFieldType kind of columns which have a fixed width
-  FIXEDLENGTH_SqlDBFIELDTYPE =
+  FIXEDLENGTH_SQLDBFIELDTYPE =
     [ftInt64, ftDouble, ftCurrency, ftDate];
 
-  /// conversion matrix from TSqlDBFieldType into variant type
+  /// conversion matrix from TSqlDBFieldType into VCL/LCL variant type
   MAP_FIELDTYPE2VARTYPE: array[TSqlDBFieldType] of Word = (
-    varEmpty, varNull, varInt64, varDouble, varCurrency, varDate,
-    varSynUnicode, varString);
-// ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8, ftBlob
-
+    varEmpty,       // ftUnknown
+    varNull,        // ftNull
+    varInt64,       // ftInt64
+    varDouble,      // ftDouble
+    varCurrency,    // ftCurrency
+    varDate,        // ftDate
+    varSynUnicode,  // ftUtf8
+    varString);     // ftBlob
 
 /// retrieve the text of a given Database field type enumeration
 // - see also TSqlDBFieldTypeToString() function
@@ -305,8 +309,14 @@ const
   /// convert identified field types into high-level ORM types
   // - as will be implemented in TOrm classes
   SqlDBFIELDTYPE_TO_DELPHITYPE: array[TSqlDBFieldType] of RawUtf8 = (
-    '???','???',
-    'Int64', 'Double', 'Currency', 'TDateTime', 'RawUtf8', 'RawBlob');
+    '???',        // ftUnknown
+    '???',        // ftNull
+    'Int64',      // ftInt64
+    'Double',     // ftDouble
+    'Currency',   // ftCurrency
+    'TDateTime',  // ftDate
+    'RawUtf8',    // ftUtf8
+    'RawBlob');   // ftBlob
 
 var
   ID_TXT: RawUtf8;
@@ -833,6 +843,7 @@ type
      opLike,
      opContains,
      opFunction);
+
   /// a set of operators recognized by a TSelectStatement where clause
   TSelectStatementOperators = set of TSelectStatementOperator;
 
@@ -1291,7 +1302,8 @@ begin
       VariantToSqlVar(PVariant(VPointer)^, temp, Output)
     else
       case VType of
-        varEmpty, varNull:
+        varEmpty,
+        varNull:
           Output.VType := ftNull;
         varByte:
           begin
@@ -1308,7 +1320,8 @@ begin
             Output.VType := ftInt64;
             Output.VInt64 := VLongWord;
           end;
-        varWord64, varInt64:
+        varWord64,
+        varInt64:
           begin
             Output.VType := ftInt64;
             Output.VInt64 := VInt64;
@@ -1370,10 +1383,18 @@ begin
   case VType of
     varNull:
       result := ftNull;
-    varShortInt, varWord, varLongWord,
-    varSmallInt, varByte, varBoolean, varInteger, varInt64, varWord64:
+    varShortInt,
+    varWord,
+    varLongWord,
+    varSmallInt,
+    varByte,
+    varBoolean,
+    varInteger,
+    varInt64,
+    varWord64:
       result := ftInt64;
-    varSingle, varDouble:
+    varSingle,
+    varDouble:
       result := ftDouble;
     varDate:
       result := ftDate;
@@ -1676,7 +1697,8 @@ begin
         (P^ <> #0) do
     inc(P);
   case P^ of
-    '''', '"':
+    '''',
+    '"':
       begin
         P := UnQuoteSqlStringVar(P, ParamValue);
         if P = nil then
@@ -1702,7 +1724,9 @@ begin
           end;
         end;
       end;
-    '-', '+', '0'..'9': // allow 0 or + in SQL
+    '-',
+    '+',
+    '0'..'9': // allow 0 or + in SQL
       begin
         // check if P^ is a true numerical value
         PBeg := pointer(P);
@@ -1867,7 +1891,8 @@ begin
       1:
         // EXPLAIN ...
         result := true;
-      2, 3:
+      2,
+      3:
         // VACUUM or PRAGMA
         result := P[6] in [#0..' ', ';'];
       4:
@@ -2506,9 +2531,11 @@ var
          end
          else
            exit;
-      'i', 'I':
+      'i',
+      'I':
         case P[1] of
-          's', 'S':
+          's',
+          'S':
             begin
               P := GotoNextNotSpace(P + 2);
               if IdemPChar(P, 'NULL') then
@@ -2533,7 +2560,8 @@ var
               end;
               exit;
             end;
-          'n', 'N':
+          'n',
+          'N':
             begin
               Where.Operation := opIn;
               P := GotoNextNotSpace(P + 2);
@@ -2555,7 +2583,8 @@ var
               exit;
             end;
         end; // 'i','I':
-      'l', 'L':
+      'l',
+      'L':
         if IdemPChar(P + 1, 'IKE') then
         begin
           inc(P, 3);

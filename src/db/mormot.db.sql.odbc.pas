@@ -615,7 +615,7 @@ begin
   Col.ColumnDataSize := Indicator;
   if Status <> SQL_SUCCESS then
     if Status = SQL_SUCCESS_WITH_INFO then
-      if Col.ColumnType in FIXEDLENGTH_SqlDBFIELDTYPE then
+      if Col.ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE then
         Status := SQL_SUCCESS
       else // allow rounding problem
       if IsTruncated then
@@ -650,7 +650,7 @@ begin
       SQL_NULL_DATA:
         Col.ColumnDataState := colNull;
       SQL_NO_TOTAL:
-        if Col.ColumnType in FIXEDLENGTH_SqlDBFIELDTYPE then
+        if Col.ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE then
           Col.ColumnDataState := colDataFilled
         else
           raise EOdbcException.CreateUtf8('%.GetCol: [%] column has no size', [self,

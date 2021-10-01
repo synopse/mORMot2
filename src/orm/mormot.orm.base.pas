@@ -651,6 +651,8 @@ type
 
   /// pre-computed SQL statements for ORM operations for a given
   // TOrmModelProperties instance
+  // - those statements will work for internal tables, not for external
+  // tables with mapped table or fields names
   TOrmModelPropertiesSql = record
     /// the simple field names in a SQL SELECT compatible format: 'COL1,COL2' e.g.
     // - format is

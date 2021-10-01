@@ -3955,7 +3955,7 @@ type
     property SqlTableNameUpperWithDot: RawUtf8
       read fSqlTableNameUpperWithDot;
     /// returns 'COL1,COL2' with all COL* set to simple field names
-    // - same value as SqlTableSimpleFields[false,false]
+    // - same value as Sql.TableSimpleFields[false,false]
     // - this won't change depending on the ORM settings: so it can be safely
     // computed here and not in TOrmModelProperties
     // - used e.g. by TOrm.GetSqlValues
@@ -4293,7 +4293,7 @@ type
     /// define if is a normal table ( ovkSQLite3), an FTS/R-Tree virtual
     // table or a custom TOrmVirtualTable*ID (rCustomForcedID/rCustomAutoID)
     // - when set, all internal SQL statements will be (re)created, depending of
-    // the expected ID/RowID column name expected (i.e. SqlTableSimpleFields[]
+    // the expected ID/RowID column name expected (i.e. Sql.TableSimpleFields[]
     // and SqlSelectAll[] - SQLUpdateSet and SQLInsertSet do not include ID)
     property Kind: TOrmVirtualKind
       read fKind write SetKind default ovkSQLite3;
@@ -10098,7 +10098,7 @@ begin
   SetLength(fDynArrayFields, MAX_SQLFIELDS);
   SetLength(fBlobCustomFields, MAX_SQLFIELDS);
   SetLength(fBlobFields, MAX_SQLFIELDS);
-  SetLength(SimpleFieldSelect, MAX_SQLFIELDS + 1); // [0] is ID
+  SetLength(SimpleFieldSelect, MAX_SQLFIELDS_INCLUDINGID); // [0] is ID
   MainField[false] := -1;
   MainField[true] := -1;
   nMany := 0;

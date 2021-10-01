@@ -234,7 +234,7 @@ type
     /// may contain the current status of the column value
     // - for mormot.db.sql.odbc: state of the latest SqlGetData() call
     ColumnDataState: TSqlDBStatementGetCol;
-    /// may contain the current column size for not FIXEDLENGTH_SqlDBFIELDTYPE
+    /// may contain the current column size for not FIXEDLENGTH_SQLDBFIELDTYPE
     // - for mormot.db.sql.odbc: size (in bytes) in corresponding fColData[]
     // - TSqlDBProxyStatement: the actual maximum column size
     ColumnDataSize: integer;
@@ -329,83 +329,191 @@ type
 const
   /// the known column data types corresponding to our TSqlDBFieldType types
   // - will be used e.g. for TSqlDBConnectionProperties.SqlFieldCreate()
-  // - see TSqlDBFieldTypeDefinition documentation to find out the mapping
+  // - see TSqlDBFieldTypeDefinition documentation to find out the mapping:
+  // ftUnknown will be used for 32-bit integers, and ftNull for UTF-8 text
   DB_FIELDS: array[TSqlDBDefinition] of TSqlDBFieldTypeDefinition = (
-  //   ftUnknown=int32, ftNull=UTF8, ftInt64, ftDouble, ftCurrency,
-  //   ftDate, ftUtf8, ftBlob
 
   // dUnknown
-    (' INT', ' NVARCHAR(%)', ' BIGINT', ' DOUBLE', ' NUMERIC(19,4)',
-    ' TIMESTAMP', ' CLOB', ' BLOB'),
+    (' INT',             // ftUnknown = int32
+     ' NVARCHAR(%)',     // ftNull    = UTF-8
+     ' BIGINT',          // ftInt64
+     ' DOUBLE',          // ftDouble
+     ' NUMERIC(19,4)',   // ftCurrency
+     ' TIMESTAMP',       // ftDate
+     ' CLOB',            // ftUtf8
+     ' BLOB'),           // ftBlob
 
   // dDefault
-    (' INT', ' NVARCHAR(%)', ' BIGINT', ' DOUBLE', ' NUMERIC(19,4)',
-    ' TIMESTAMP', ' CLOB', ' BLOB'),
+    (' INT',              // ftUnknown = int32
+     ' NVARCHAR(%)',      // ftNull    = UTF-8
+     ' BIGINT',           // ftInt64
+     ' DOUBLE',           // ftDouble
+     ' NUMERIC(19,4)',    // ftCurrency
+     ' TIMESTAMP',        // ftDate
+     ' CLOB',             // ftUtf8
+     ' BLOB'),            // ftBlob
 
   // dOracle
-    (' NUMBER(22,0)', ' NVARCHAR2(%)', ' NUMBER(22,0)', ' BINARY_DOUBLE',
-    ' NUMBER(19,4)', ' DATE', ' NCLOB', ' BLOB'),
+    (' NUMBER(22,0)',      // ftUnknown = int32
+     ' NVARCHAR2(%)',      // ftNull    = UTF-8
+     ' NUMBER(22,0)',      // ftInt64
+     ' BINARY_DOUBLE',     // ftDouble
+     ' NUMBER(19,4)',      // ftCurrency
+     ' DATE',              // ftDate
+     ' NCLOB',             // ftUtf8
+     ' BLOB'),             // ftBlob
     // NCLOB (National Character Large Object) is an Oracle data type that can hold
     // up to 4 GB of character data. It's similar to a CLOB, but characters are
     // stored in a NLS or multibyte national character set (like NVARCHAR2)
 
   // dMSSQL
-    (' int', ' nvarchar(%)', ' bigint', ' float', ' money', ' datetime',
-    ' nvarchar(max)', ' varbinary(max)'),
+    (' int',                // ftUnknown = int32
+     ' nvarchar(%)',        // ftNull    = UTF-8
+     ' bigint',             // ftInt64
+     ' float',              // ftDouble
+     ' money',              // ftCurrency
+     ' datetime',           // ftDate
+     ' nvarchar(max)',      // ftUtf8
+     ' varbinary(max)'),    // ftBlob
 
   // dJet
-    (' Long', ' VarChar(%)', ' Decimal(19,0)', ' Double', ' Currency',
-    ' DateTime', ' LongText', ' LongBinary'),
+    (' Long',                // ftUnknown = int32
+     ' VarChar(%)',          // ftNull    = UTF-8
+     ' Decimal(19,0)',       // ftInt64
+     ' Double',              // ftDouble
+     ' Currency',            // ftCurrency
+     ' DateTime',            // ftDate
+     ' LongText',            // ftUtf8
+     ' LongBinary'),         // ftBlob
 
   // dMySQL
-    (' int', ' varchar(%) character set utf8', ' bigint', ' double',
-    ' decimal(19,4)', ' datetime', ' mediumtext character set utf8', ' mediumblob'),
+    (' int',                             // ftUnknown = int32
+     ' varchar(%) character set utf8',   // ftNull    = UTF-8
+     ' bigint',                          // ftInt64
+     ' double',                          // ftDouble
+     ' decimal(19,4)',                   // ftCurrency
+     ' datetime',                        // ftDate
+     ' mediumtext character set utf8',   // ftUtf8
+     ' mediumblob'),                     // ftBlob
 
   // dSQLite
-    (' INTEGER', ' TEXT', ' INTEGER', ' FLOAT', ' FLOAT', ' TEXT', ' TEXT', ' BLOB'),
+    (' INTEGER',              // ftUnknown = int32
+     ' TEXT',                 // ftNull    = UTF-8
+     ' INTEGER',              // ftInt64
+     ' FLOAT',                // ftDouble
+     ' FLOAT',                // ftCurrency
+     ' TEXT',                 // ftDate
+     ' TEXT',                 // ftUtf8
+     ' BLOB'),                // ftBlob
 
   // dFirebird
-    (' INTEGER', ' VARCHAR(%) CHARACTER SET UTF8', ' BIGINT', ' FLOAT',
-    ' DECIMAL(18,4)', ' TIMESTAMP',
-    ' BLOB SUB_TYPE 1 SEGMENT SIZE 2000 CHARACTER SET UTF8',
-    ' BLOB SUB_TYPE 0 SEGMENT SIZE 2000'),
+    (' INTEGER',                                // ftUnknown = int32
+     ' VARCHAR(%) CHARACTER SET UTF8',          // ftNull    = UTF-8
+     ' BIGINT',                                 // ftInt64
+     ' FLOAT',                                  // ftDouble
+     ' DECIMAL(18,4)',                          // ftCurrency
+     ' TIMESTAMP',                              // ftDate
+     ' BLOB SUB_TYPE 1 SEGMENT SIZE 2000 ' +    // ftUtf8
+        'CHARACTER SET UTF8',
+     ' BLOB SUB_TYPE 0 SEGMENT SIZE 2000'),     // ftBlob
    // about BLOB: http://www.ibphoenix.com/resources/documents/general/doc_54
 
   // dNexusDB
-    (' INTEGER', ' NVARCHAR(%)', ' LARGEINT', ' REAL', ' MONEY', ' DATETIME',
-    ' NCLOB', ' BLOB'),
+    (' INTEGER',               // ftUnknown = int32
+     ' NVARCHAR(%)',           // ftNull    = UTF-8
+     ' LARGEINT',              // ftInt64
+     ' REAL',                  // ftDouble
+     ' MONEY',                 // ftCurrency
+     ' DATETIME',              // ftDate
+     ' NCLOB',                 // ftUtf8
+     ' BLOB'),                 // ftBlob
     // VARCHAR(%) CODEPAGE 65001 just did not work well with Delphi<2009
 
   // dPostgreSQL
-    (' INTEGER', ' TEXT', ' BIGINT', ' DOUBLE PRECISION', ' NUMERIC(19,4)',
-    ' TIMESTAMP', ' TEXT', ' BYTEA'),
+    (' INTEGER',                // ftUnknown = int32
+     ' TEXT',                   // ftNull    = UTF-8
+     ' BIGINT',                 // ftInt64
+     ' DOUBLE PRECISION',       // ftDouble
+     ' NUMERIC(19,4)',          // ftCurrency
+     ' TIMESTAMP',              // ftDate
+     ' TEXT',                   // ftUtf8
+     ' BYTEA'),                 // ftBlob
     // like SQLite3, we will create TEXT column instead of VARCHAR(%), as stated
     // by http://www.postgresql.org/docs/current/static/datatype-character.html
 
   // dDB2 (for CCSID Unicode tables)
-    (' int', ' varchar(%)', ' bigint', ' real', ' decimal(19,4)', ' timestamp',
-    ' clob', ' blob'),
-    { note: bigint needs 9.1 and up }
+    (' int',                     // ftUnknown = int32
+     ' varchar(%)',              // ftNull    = UTF-8
+     ' bigint',                  // ftInt64
+     ' real',                    // ftDouble
+     ' decimal(19,4)',           // ftCurrency
+     ' timestamp',               // ftDate
+     ' clob',                    // ftUtf8
+     ' blob'),                   // ftBlob
+    // note: bigint needs 9.1 and up
 
   // dInformix
-    (' int', ' lvarchar(%)', ' bigint', ' smallfloat', ' decimal(19,4)',
-    ' datetime year to fraction(3)', ' clob', ' blob'));
+    (' int',                            // ftUnknown = int32
+     ' lvarchar(%)',                    // ftNull    = UTF-8
+     ' bigint',                         // ftInt64
+     ' smallfloat',                     // ftDouble
+     ' decimal(19,4)',                  // ftCurrency
+     ' datetime year to fraction(3)',   // ftDate
+     ' clob',                           // ftUtf8
+     ' blob'));                         // ftBlob
 
   /// the known column data types corresponding to our TSqlDBFieldType types
   // - will be used e.g. for TSqlDBConnectionProperties.SqlFieldCreate()
   // - SQLite3 doesn't expect any field length, neither PostgreSQL, so set to 0
   DB_FIELDSMAX: array[TSqlDBDefinition] of cardinal = (
-    1000, 1000, 1333, { =4000/3 since WideChar is up to 3 bytes in UTF-8 }
-    4000, 255, 4000, 0, 32760, 32767, 0, 32700, 32700);
+    1000,   // dUnknown
+    1000,   // dDefault
+    1333,   // dOracle        =4000/3 since WideChar is up to 3 bytes in UTF-8
+    4000,   // dMSSQL
+    255,    // dJet
+    4000,   // dMySQL
+    0,      // dSQLite
+    32760,  // dFirebird
+    32767,  // dNexusDB
+    0,      // dPostgreSQL
+    32700,  // dDB2
+    32700); // dInformix
+
+  /// the maximum number of bound parameters to a SQL statement
+  // - will be used e.g. for Batch process multi-insert
+  // - those values were done empirically, assuring < 676 (maximum :AA..:ZZ)
+  // see http://stackoverflow.com/a/6582902 for theoritical high limits
+  DB_PARAMSMAX: array[TSqlDBDefinition] of cardinal = (
+    0,              // dUnknown
+    0,              // dDefault
+    500,            // dOracle       empirical value (from ODBC)
+    500,            // dMSSQL        theoritical=2100
+    0,              // dJet
+    500,            // dMySQL        theoritical=60000
+    MAX_SQLPARAMS,  // dSQLite       theoritical=999 - see mormot.orm.sqlite3
+    0,              // dFirebird
+    100,            // dNexusDB      empirical limit (above is slower)
+    500,            // dPostgreSQL   theoritical=34000
+    500,            // dDB2          empirical value (from ODBC)
+    0);             // dInformix
+
 
   /// the known SQL statement to retrieve the server date and time
+  // - contains '' for the engines with local time
   DB_SERVERTIME: array[TSqlDBDefinition] of RawUtf8 = (
-    '', '', // return local server time by default
-    'select sysdate from dual', 'select GETDATE()', '', // Jet is local -> return local time
-    'SELECT NOW()', '', // SQlite is local -> return local time
-    'select current_timestamp from rdb$database', 'SELECT CURRENT_TIMESTAMP',
-    'SELECT LOCALTIMESTAMP', 'select current timestamp from sysibm.sysdummy1',
-    'select CURRENT YEAR TO FRACTION(3) from SYSTABLES where tabid = 1');
+    '',                                                // dUnknown
+    '',                                                // dDefault
+    'select sysdate from dual',                        // dOracle
+    'select GETDATE()',                                // dMSSQL
+    '',                                                // dJet
+    'SELECT NOW()',                                    // dMySQL
+    '',                                                // dSQLite
+    'select current_timestamp from rdb$database',      // dFirebird
+    'SELECT CURRENT_TIMESTAMP',                        // dNexusDB
+    'SELECT LOCALTIMESTAMP',                           // dPostgreSQL
+    'select current timestamp from sysibm.sysdummy1',  // dDB2
+    'select CURRENT YEAR TO FRACTION(3) ' +            // dInformix
+       'from SYSTABLES where tabid = 1');
 
 const
   /// the known SQL syntax to limit the number of returned rows in a SELECT
@@ -474,14 +582,31 @@ const
   /// where the DESC clause shall be used for a CREATE INDEX statement
   // - only identified syntax exception is for FireBird
   DB_SQLDESENDINGINDEXPOS: array[TSqlDBDefinition] of (posWithColumn, posGlobalBefore) =
-    (posWithColumn, posWithColumn, posWithColumn, posWithColumn, posWithColumn,
-     posWithColumn, posWithColumn, posGlobalBefore, posWithColumn,
-     posWithColumn, posWithColumn, posWithColumn);
+    (posWithColumn,   // dUnknown
+     posWithColumn,   // dDefault
+     posWithColumn,   // dOracle
+     posWithColumn,   // dMSSQL
+     posWithColumn,   // dJet
+     posWithColumn,   // dMySQL
+     posWithColumn,   // dSQLite
+     posGlobalBefore, // dFirebird
+     posWithColumn,   // dNexusDB
+     posWithColumn,   // dPostgreSQL
+     posWithColumn,   // dDB2
+     posWithColumn);  // dInformix
 
   /// the SQL text corresponding to the identified WHERE operators for a SELECT
   DB_SQLOPERATOR: array[opEqualTo..opLike] of RawUtf8 = (
-    '=', '<>', '<', '<=', '>', '>=',
-    ' in ', ' is null', ' is not null', ' like ');
+    '=',
+    '<>',
+    '<',
+    '<=',
+    '>',
+    '>=',
+    ' in ',
+    ' is null',
+    ' is not null',
+    ' like ');
 
 
 /// retrieve the text of a given Database SQL dialect enumeration
@@ -5394,7 +5519,8 @@ begin
         end;
       varInteger:
         Bind(Param, VInteger, IO);
-      varInt64, varWord64:
+      varInt64,
+      varWord64:
         Bind(Param, VInt64, IO);
       varSingle:
         Bind(Param, VSingle, IO);

@@ -662,9 +662,9 @@ begin
     exit; // execution done in Step()
   if fShouldLogSQL then
     SqlLogBegin(sllSQL);
-  try  // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
+  try
+    // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
     repeat // Execute all steps of the first statement
-
     until fStatement.Step <> SQLITE_ROW;
     fUpdateCount := DB.LastChangeCount;
   finally
