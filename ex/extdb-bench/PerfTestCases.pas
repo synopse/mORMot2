@@ -4,11 +4,6 @@ interface
 
 {$I mormot.defines.inc}
 
-{$ifdef FPC}
-  {$WARN 5089 off} // uninitialized managed variables 
-  {$WARN 5091 off} // uninitialized managed variables
-{$endif FPC}
-
 // enable/disable third-party libraries
 {.$define USENEXUSDB}
 {.$define USEBDE}
@@ -148,7 +143,7 @@ type
     property ClientCloseTime: RawUTF8 read fClientCloseTime;
   end;
 
-  TSQLRecordSample = class(TSQLRecord)
+  TOrmSample = class(TOrm)
   private
     fFirstName: RawUTF8;
     fLastName: RawUTF8;
@@ -157,14 +152,20 @@ type
     fLastChange: TModTime;
     fCreatedAt: TCreateTime;
   published
-    property FirstName: RawUTF8 index 40 read fFirstName write fFirstName
+    property FirstName: RawUTF8 index 40
+      read fFirstName write fFirstName
       {$ifdef UNIK}stored AS_UNIQUE{$endif};
-    property LastName: RawUTF8 index 40 read fLastName write fLastName
+    property LastName: RawUTF8 index 40
+      read fLastName write fLastName
       {$ifdef UNIK}stored AS_UNIQUE{$endif};
-    property Amount: Currency read fAmount write fAmount;
-    property BirthDate: TDateTime read fBirthDate write fBirthDate;
-    property LastChange: TModTime read fLastChange write fLastChange;
-    property CreatedAt: TCreateTime read fCreatedAt write fCreatedAt;
+    property Amount: Currency
+      read fAmount write fAmount;
+    property BirthDate: TDateTime
+      read fBirthDate write fBirthDate;
+    property LastChange: TModTime
+      read fLastChange write fLastChange;
+    property CreatedAt: TCreateTime
+      read fCreatedAt write fCreatedAt;
   end;
 
 
@@ -183,7 +184,7 @@ type
   TTestDatabaseAbstract = class(TSynTestCase)
   protected
     Main: TTestDatabaseBenchmark;
-    Value: TSQLRecordSample;
+    Value: TOrmSample;
     Stat: TStat;
     Namee, Num: RawUTF8;
     ChangeStart: TTimeLog;
@@ -191,6 +192,7 @@ type
     SQlite3Mode: TSQLSynchronousMode;
     SQlite3Lock: TSQLLockingMode;
     Client: TRestClientDB;
+    Orm: IRestOrmClient;
     Server: TRestServerDB;
     DBFileName: TFileName;
     DBPassword: RawUTF8;
@@ -203,7 +205,7 @@ type
     procedure MethodSetup; override;
     procedure MethodCleanup; override;
     procedure RunTests; virtual;
-    function ModelCreate: TSQLModel; virtual;
+    function ModelCreate: TOrmModel; virtual;
     procedure ClientCreate; virtual;
     procedure ClientFree; virtual;
     procedure RunWrites(UseTransactions, UseBatch: boolean); virtual;
@@ -224,7 +226,7 @@ type
 
   TTestInMemoryEngine = class(TTestDatabaseAbstract)
   protected
-    function ModelCreate: TSQLModel; override;
+    function ModelCreate: TOrmModel; override;
     procedure ClientCreate; override;
   published
     procedure InMemoryStatic;
@@ -234,7 +236,7 @@ type
   TTestDatabaseExternalAbstract = class(TTestDatabaseAbstract)
   protected
     Props: TSQLDBConnectionProperties;
-    function ModelCreate: TSQLModel; override;
+    function ModelCreate: TOrmModel; override;
     procedure ClientCreate; override;
     procedure ClientFree; override;
     procedure RunExternal(P: TSQLDBConnectionProperties); virtual;
@@ -356,13 +358,14 @@ end;
 
 {$endif USEFIREBIRDEMB}
 
+
 { TTestDatabaseAbstract }
 
 procedure TTestDatabaseAbstract.Setup;
 begin
-  EnsureDirectoryExists(ExeVersion.ProgramFilePath + 'db');
+  EnsureDirectoryExists(Executable.ProgramFilePath + 'db');
   Main := Owner as TTestDatabaseBenchmark;
-  Value := TSQLRecordSample.Create;
+  Value := TOrmSample.Create;
   Namee := 'Name/ ';
   UniqueRawUTF8(Namee); // FPC does not call it
   PWord(@Namee[4])^ := $a9c3;  // some 'e'acute to test UTF-8 encoding
@@ -445,7 +448,7 @@ begin
   RunTimer.Start;
   for i := 0 to Stat.NumberOfElements-1 do
   begin
-    Client.Retrieve(Res[i],Value);
+    Orm.Retrieve(Res[i],Value);
     ValueCheck(i);
   end;
   NotifyTestSpeed('read one',Stat.NumberOfElements,0,@RunTimer);
@@ -473,7 +476,7 @@ begin
     log := nil;
     log := TSynLog.Enter('% Read Direct=%',
       [Owner.CurrentMethodInfo^.IdentTestName, BOOL_STR[UseDirect]],self);
-    Server.Cache.Flush; // fair benchmark
+    Server.Server.Cache.Flush; // fair benchmark
     Server.DB.CacheFlush; // fair benchmark (16100 rows/s->456000 with cache!)
     Server.Server.SetStaticVirtualTableDirect(UseDirect);
     RunTimer.Start;
@@ -501,9 +504,9 @@ begin
   end;
 end;
 
-function TTestDatabaseAbstract.ModelCreate: TSQLModel;
+function TTestDatabaseAbstract.ModelCreate: TOrmModel;
 begin
-  result := TSQLModel.Create([TSQLRecordSample]);
+  result := TOrmModel.Create([TOrmSample]);
 end;
 
 procedure TTestDatabaseAbstract.ClientCreate;
@@ -517,6 +520,7 @@ begin
   Client := TRestClientDB.Create(ModelCreate, nil, fn, TRestServerDB,
     {auth=}false, DBPassword);
   Client.Model.Owner := Client;
+  Orm := Client.Client;
   Server := (Client as TRestClientDB).Server;
   Server.DB.Synchronous := SQlite3Mode;
   Server.DB.LockingMode := SQlite3Lock;
@@ -524,6 +528,7 @@ end;
 
 procedure TTestDatabaseAbstract.ClientFree;
 begin
+  Orm := nil; // to be freed before Client
   FreeAndNil(Client);
 end;
 
@@ -532,7 +537,7 @@ var
   i: PtrInt;
   forceID: boolean;
 begin
-  DBFileName := FormatString('%db%%.%.db',[ExeVersion.ProgramFilePath, PathDelim,
+  DBFileName := FormatString('%db%%.%.db',[Executable.ProgramFilePath, PathDelim,
     Owner.CurrentMethodInfo^.MethodName, Num]);
   if FileExists(DBFileName) then
     DeleteFile(DBFileName);
@@ -540,7 +545,7 @@ begin
   ClientCreate;
   if CheckFailed(Client <> nil,'Client?') then
     exit; // avoid GPF
-  Server.CreateMissingTables;
+  Server.Server.CreateMissingTables;
   ChangeStart := Server.OrmInstance.GetServerTimestamp; // use by ValueCheck
   if Stat.CreateTableTime='' then
     Stat.CreateTableTime := RunTimer.Stop;
@@ -561,9 +566,9 @@ begin
     end;
   RunTimer.Start;
   if UseTransactions then
-    Client.TransactionBegin(TSQLRecordSample, Client.SessionID);
+    Orm.TransactionBegin(TOrmSample, Client.SessionID);
   if UseBatch then
-    Client.BatchStart(TSQLRecordSample)
+    Orm.BatchStart(TOrmSample)
   else
     if length(Res)<Stat.NumberOfElements then
       SetLength(Res,Stat.NumberOfElements);
@@ -580,19 +585,19 @@ begin
       else
         Value.IDValue := Res[i-1]+1;
     if UseBatch then
-      Check(Client.BatchAdd(Value,true,forceID)>=0)
+      Check(Orm.BatchAdd(Value,true,forceID)>=0)
     else
     begin
-      Res[i] := Client.Add(Value,true,forceID);
+      Res[i] := Orm.Add(Value,true,forceID);
       Check(Res[i]>0,'Add');
     end;
   end;
   if UseBatch then
-    Check(Client.BatchSend(Res)=HTTP_SUCCESS);
+    Check(Orm.BatchSend(Res)=HTTP_SUCCESS);
   if UseTransactions then
-    Client.Commit(Client.SessionID);
+    Orm.Commit(Client.SessionID);
   Value.ClearProperties;
-  Check(Client.Retrieve(Res[1],Value),'One Retrieve after Add');
+  Check(Orm.Retrieve(Res[1],Value),'One Retrieve after Add');
   ValueCheck(1);
 end;
 
@@ -658,20 +663,20 @@ end;
 
 { TTestInMemoryEngine }
 
-function TTestInMemoryEngine.ModelCreate: TSQLModel;
+function TTestInMemoryEngine.ModelCreate: TOrmModel;
 begin
   result := inherited ModelCreate;
   // registration should be done BEFORE Client is initialized
   if dbInMemoryVirtual in Flags then
-    result.VirtualTableRegister(TSQLRecordSample, TOrmVirtualTableBinary)
+    result.VirtualTableRegister(TOrmSample, TOrmVirtualTableBinary)
 end;
 
 procedure TTestInMemoryEngine.ClientCreate;
 begin
   inherited ClientCreate;
   if not (dbInMemoryVirtual in Flags) then
-    StaticDataCreate(Client.Server.OrmInstance, TSQLRecordSample, DBFileName, true);
-//    Client.Server.StaticDataCreate(TSQLRecordSample, DBFileName, {binary=}true);
+    StaticDataCreate(Client.Server.OrmInstance, TOrmSample, DBFileName, true);
+//    Client.Server.StaticDataCreate(TOrmSample, DBFileName, {binary=}true);
 end;
 
 procedure TTestInMemoryEngine.InMemoryStatic;
@@ -689,11 +694,11 @@ end;
 
 { TTestDatabaseExternalAbstract }
 
-function TTestDatabaseExternalAbstract.ModelCreate: TSQLModel;
+function TTestDatabaseExternalAbstract.ModelCreate: TOrmModel;
 begin
   result := inherited ModelCreate;
   // registration should be done BEFORE Client is initialized
-  VirtualTableExternalRegister(result, TSQLRecordSample, Props, 'SampleRecord');
+  VirtualTableExternalRegister(result, TOrmSample, Props, 'SampleRecord');
 end;
 
 procedure TTestDatabaseExternalAbstract.ClientCreate;
@@ -758,7 +763,7 @@ begin
   if dbPropIsMemory in Flags then
     fn := SQLITE_MEMORY_DATABASE_NAME
   else
-    fn := FormatString('%db%%.db',[ExeVersion.ProgramFilePath, PathDelim,
+    fn := FormatString('%db%%.db',[Executable.ProgramFilePath, PathDelim,
       Owner.CurrentMethodInfo^.MethodName]);
   sm := Mode;
   lm := Lock;
@@ -853,7 +858,7 @@ var
   fn: TFileName;
 begin
   Stats := TSynObjectList.Create;
-  fn := ChangeFileExt(ExeVersion.ProgramFileName, '.ini');
+  fn := ChangeFileExt(Executable.ProgramFileName, '.ini');
   if FileExists(fn) then
     Ini := StringFromFile(fn)
   else
@@ -975,7 +980,6 @@ var Stat: ^TStatArray;
     Doc := Doc+'|%'#13#10;
   end;
 var i,j: integer;
-    fn: TFileName;
 begin
   // introducting text
   Stat := pointer(Stats.List);
@@ -1062,11 +1066,12 @@ begin
     txt := txt+Int32ToUtf8(Stat[i].ReadAllDirectRate)+',';
   PicEnd(Cat1);
   // save to local files
-  FileFromString(Doc,ChangeFileExt(ExeVersion.ProgramFileName,'.doc'));
-  fn := ChangeFileExt(ExeVersion.ProgramFileName,'.txt');
-  RenameFile(fn, ChangeFileExt(fn, string(DateTimeToFileShort(Now))+'.txt'));
-  FileFromString(cons+'[/code]', fn);
-  FileFromString('<html><body>'#13#10+s,ChangeFileExt(ExeVersion.ProgramFileName,'.htm'));
+  FileFromString(Doc,ChangeFileExt(Executable.ProgramFileName,'.doc'));
+  FileFromString(cons+'[/code]', ChangeFileExt(Executable.ProgramFileName,'.txt'));
+  s := '<html><body>'#13#10+s;
+  FileFromString(s,ChangeFileExt(Executable.ProgramFileName,'.htm'));
+  FileFromString(s,FormatString('%%-%%.html', [EnsureDirectoryExists(
+    Executable.ProgramFilePath+ 'reports'), DateTimeToFileShort(Now), COMP_TEXT, OS_TEXT]));
 end;
 
 procedure TTestDatabaseBenchmark.DirectDatabaseAccess;
