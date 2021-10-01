@@ -803,6 +803,11 @@ type
     // - if aKnownRowsCount is not null, a "rowCount":... item will be added
     // to the generated JSON stream (for faster unserialization of huge content)
     procedure AddColumns(aKnownRowsCount: integer = 0);
+    /// write or init field names for appropriate JSON Expand later use
+    // - accept a name directly supplied by the DB provider
+    // - if Expand is true, will set ColNames[] with the expected format
+    // - on non-expanded format, will directly write aColName to W
+    procedure AddColumn(aColName: PUtf8Char; aColIndex, aColCount: PtrInt);
     /// allow to change on the fly an expanded format column layout
     // - by definition, a non expanded format will raise a ESynDBException
     // - caller should then set ColNames[] and run AddColumns()
@@ -2213,10 +2218,10 @@ begin
   if fExpand then
   begin
     if twoForceJsonExtended in CustomOptions then
-      for i := 0 to High(ColNames) do
+      for i := 0 to length(ColNames) - 1 do
         ColNames[i] := ColNames[i] + ':'
     else
-      for i := 0 to High(ColNames) do
+      for i := 0 to length(ColNames) - 1 do
         ColNames[i] := '"' + ColNames[i] + '":';
   end
   else
@@ -2230,15 +2235,60 @@ begin
     end;
     AddShort(',"values":["');
     // first row is FieldNames
-    for i := 0 to High(ColNames) do
+    for i := 0 to length(ColNames) - 1 do
     begin
       AddString(ColNames[i]);
-      AddNoJsonEscape(PAnsiChar('","'), 3);
+      AddShorter('","');
     end;
     CancelLastChar('"');
-    fStartDataPosition := fStream.Position {%H-}+ (B - fTempBuf);
+    fStartDataPosition := fStream.Position + PtrInt(B - fTempBuf);
      // B := buf-1 at startup -> need ',val11' position in
      // "values":["col1","col2",val11,' i.e. current pos without the ','
+  end;
+end;
+
+procedure TJsonWriter.AddColumn(aColName: PUtf8Char; aColIndex, aColCount: PtrInt);
+var
+  len: PtrInt;
+  P: PUtf8Char;
+begin
+  len := StrLen(aColName);
+  if fExpand then
+  begin
+    if aColIndex = 0 then // non-expanded mode doesn't use ColNames[]
+      SetLength(ColNames, aColCount);
+    FastSetString(ColNames[aColIndex], nil,
+      len + 3 - ord(twoForceJsonExtended in CustomOptions) * 2);
+    P := pointer(ColNames[aColIndex]);
+    if twoForceJsonExtended in CustomOptions then
+      MoveFast(aColName^, P^, len)  // extended JSON unquoted field names
+    else
+    begin
+      P[0] := '"';
+      inc(P);
+      MoveFast(aColName^, P^, len); // regular JSON quoted field name
+      P[len] := '"';
+      inc(P);
+    end;
+    P[len] := ':';
+  end
+  else
+  begin
+    if aColIndex = 0 then
+    begin
+      AddShort('{"fieldCount":');
+      Add(aColCount);
+      AddShort(',"values":["');
+      // first row is FieldNames in non-expanded format
+    end;
+    AddNoJsonEscape(aColName, len);
+    if aColIndex = aColCount - 1 then
+    begin
+      // last AddColumn() call would finalize the non-expanded header
+      Add('"' , ',');
+      fStartDataPosition := fStream.Position + PtrInt(B - fTempBuf);
+    end else
+      AddShorter('","');
   end;
 end;
 

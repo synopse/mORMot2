@@ -7816,15 +7816,13 @@ begin
       W.CancelAllVoid;
       exit;
     end;
-    // get col names and types
-    SetLength(W.ColNames, FieldCount);
+    // directly assign column names from SQlite3 API into W
     for i := 0 to FieldCount - 1 do
-      W.ColNames[i] := sqlite3.column_name(Request, i);
-    W.AddColumns; // write or init field names for appropriate Json Expand
+      W.AddColumn(sqlite3.column_name(Request, i), i, FieldCount);
     if Expand then
       W.Add('[');
     // write rows data
-    repeat
+    while true do
       case Step of
         SQLITE_ROW:
           begin
@@ -7839,16 +7837,14 @@ begin
         SQLITE_DONE:
           break;
       end;
-    until false;
     if (result = 0) and
        W.Expand then
     begin
       // we want the field names at least, even with no data: allow RowCount=0
-      W.Expand := false; //  {"FieldCount":2,"Values":["col1","col2"]}
+      W.Expand := false; //  {"FieldCount":2,"Values":["col1","col2"]} format
       W.CancelAll;
       for i := 0 to FieldCount - 1 do
-        W.ColNames[i] := sqlite3.column_name(Request, i);
-      W.AddColumns;
+        W.AddColumn(sqlite3.column_name(Request, i), i, FieldCount);
     end;
     W.EndJsonObject(0, result);
   finally
