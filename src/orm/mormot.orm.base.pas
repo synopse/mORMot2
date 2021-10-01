@@ -806,7 +806,7 @@ type
     // - if InlinedParams was TRUE, it will create prepared parameters like
     // 'COL1=:("VAL1"):, COL2=:(VAL2):'
     // - called by GetJsonObjectAsSql() function or TRestStorageExternal
-    function EncodeAsSql(Update: boolean): RawUtf8;
+    function EncodeAsSql(const Prefix1, Prefix2: RawUtf8; Update: boolean): RawUtf8;
     /// encode as a SQL-ready INSERT or UPDATE statement with ? as values
     // - after a successfull call to Decode()
     // - FieldValues[] content will be ignored
@@ -3405,7 +3405,8 @@ end;
   {$WARNINGS ON}
 {$endif ISDELPHI20062007}
 
-function TJsonObjectDecoder.EncodeAsSql(Update: boolean): RawUtf8;
+function TJsonObjectDecoder.EncodeAsSql(
+  const Prefix1, Prefix2: RawUtf8; Update: boolean): RawUtf8;
 var
   f: PtrInt;
   W: TTextWriter;
@@ -3428,6 +3429,8 @@ begin
     exit;
   W := TTextWriter.CreateOwnedStream(temp);
   try
+    W.AddString(Prefix1);
+    W.AddString(Prefix2);
     if Update then
     begin
       for f := 0 to FieldCount - 1 do
@@ -3532,7 +3535,7 @@ var
   Decoder: TJsonObjectDecoder;
 begin
   Decoder.Decode(P, Fields, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
-  result := Decoder.EncodeAsSql(Update);
+  result := Decoder.EncodeAsSql('', '', Update);
 end;
 
 function GetJsonObjectAsSql(const Json: RawUtf8; Update, InlinedParams: boolean;
@@ -3541,7 +3544,7 @@ var
   Decoder: TJsonObjectDecoder;
 begin
   Decoder.Decode(Json, nil, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
-  result := Decoder.EncodeAsSql(Update);
+  result := Decoder.EncodeAsSql('', '', Update);
 end;
 
 function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;

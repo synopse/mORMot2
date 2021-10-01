@@ -1313,9 +1313,8 @@ begin
     end;
     exit;
   end;
-  sql := 'INSERT INTO ' + sql;
   if TrimU(SentData) = '' then
-    sql := sql + ' DEFAULT VALUES;'
+    sql := 'INSERT INTO ' + sql + ' DEFAULT VALUES;'
   else
   begin
     JsonGetID(pointer(SentData), result);
@@ -1324,7 +1323,7 @@ begin
        (props.RecordVersionField <> nil) then
       fOwner.RecordVersionHandle(ooInsert, TableModelIndex, decoder,
         props.RecordVersionField);
-    sql := sql + decoder.EncodeAsSql(false) + ';';
+    sql := decoder.EncodeAsSql('INSERT INTO ', sql, {update=}false);
   end;
   if InternalExecute(sql, true, nil, nil, nil, PInt64(@result)) then
     InternalUpdateEvent(oeAdd, TableModelIndex, result, SentData, nil);
@@ -1908,7 +1907,7 @@ begin
     if props.RecordVersionField <> nil then
       fOwner.RecordVersionHandle(ooUpdate, TableModelIndex,
         decoder, props.RecordVersionField);
-    sql := decoder.EncodeAsSql(true);
+    sql := decoder.EncodeAsSql('', '', {update=}true);
     if sql = '' then
       raise ERestStorage.CreateUtf8('%.MainEngineUpdate: invalid input [%]',
         [self, EscapeToShort(SentData)]);
@@ -2237,8 +2236,7 @@ begin
       if props.RecordVersionField <> nil then
         fOwner.RecordVersionHandle(
           ooInsert, fBatchTableIndex, decode, props.RecordVersionField);
-      sql := 'INSERT INTO ' + props.SqlTableName +
-        decode.EncodeAsSql({update=}false) + ';';
+      sql := decode.EncodeAsSql('INSERT INTO ', props.SqlTableName, {update=}false);
       if not InternalExecute(sql, {cache=}true) then
         // just like ESqlite3Exception below
         raise EOrmBatchException.CreateUtf8(
