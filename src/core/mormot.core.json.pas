@@ -8432,8 +8432,9 @@ end;
 function TSynCache.Reset: boolean;
 begin
   result := false;
-  if self = nil then
-    exit; // avoid GPF
+  if (self = nil) or
+     (fNameValue.Count = 0) then
+    exit; // avoid GPF or a lock for nothing
   fSafe.Lock;
   try
     if Count <> 0 then
