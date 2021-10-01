@@ -481,8 +481,9 @@ const
 
   /// the maximum number of bound parameters to a SQL statement
   // - will be used e.g. for Batch process multi-insert
-  // - those values were done empirically, assuring < 676 (maximum :AA..:ZZ)
-  // see http://stackoverflow.com/a/6582902 for theoritical high limits
+  // - those values were done empirically, assuring total count is < 656,
+  // which is the maximum within :AA..:ZZ range, excuding 20 reserved keywords
+  // - see http://stackoverflow.com/a/6582902 for theoritical high limits
   DB_PARAMSMAX: array[TSqlDBDefinition] of cardinal = (
     0,              // dUnknown
     0,              // dDefault
@@ -626,7 +627,7 @@ function TrimLeftSchema(const TableName: RawUtf8): RawUtf8;
 /// replace all '?' in the SQL statement with named parameters like :AA :AB..
 // - returns the number of ? parameters found within aSql
 // - won't generate any SQL keyword parameters (e.g. :AS :OF :BY), to be
-// compliant with Oracle OCI expectations
+// compliant with Oracle OCI expectations - allow up to 656 parameters
 // - any ending ';' character is deleted, unless aStripSemicolon is unset
 function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
   aStripSemicolon: boolean = true): integer;
@@ -1971,20 +1972,20 @@ type
   // and Column*() methods
   TSqlDBStatement = class(TInterfacedObject, ISqlDBRows, ISqlDBStatement)
   protected
-    fStripSemicolon: boolean;
     fConnection: TSqlDBConnection;
     fSql: RawUtf8;
-    fExpectResults: boolean;
     fParamCount: integer;
     fColumnCount: integer;
     fTotalRowsRetrieved: integer;
     fCurrentRow: integer;
+    fStripSemicolon: boolean;
+    fExpectResults: boolean;
     fForceBlobAsNull: boolean;
     fForceDateWithMS: boolean;
     fDbms: TSqlDBDefinition;
     {$ifndef SYNDB_SILENCE}
-    fSqlLogLog: TSynLog;
     fSqlLogLevel: TSynLogInfo;
+    fSqlLogLog: TSynLog;
     {$endif SYNDB_SILENCE}
     fSqlWithInlinedParams: RawUtf8;
     fSqlLogTimer: TPrecisionTimer;
@@ -2000,6 +2001,7 @@ type
     /// raise an exception if Col is out of range according to fColumnCount
     procedure CheckCol(Col: integer);
       {$ifdef HASINLINE}inline;{$endif}
+    procedure CheckColInvalid(Col: integer);
     /// will set a Int64/Double/Currency/TDateTime/RawUtf8/TBlobData Dest variable
     // from a given column value
     // - internal conversion will use a temporary Variant and ColumnToVariant method
@@ -2920,7 +2922,8 @@ begin
           if c[1] = 'Z' then
           begin
             if c[2] = 'Z' then
-              raise ESqlDBException.Create('Parameters :AA to :ZZ');
+              raise ESqlDBException.Create(
+                'Only 656 parameters in :AA to :ZZ range');
             c[1] := 'A';
             inc(c[2]);
           end
@@ -4792,11 +4795,11 @@ var
   sql: RawUtf8;
   sqlcached: boolean;
   prevrowcount: integer;
-  maxf: integer;
+  maxf: PtrInt;
 
   procedure ComputeSql(rowcount, offset: integer);
   var
-    f, r, p, len: integer;
+    f, r, p, len: PtrInt;
     tmp: TTextWriterStackBuffer;
   begin
     if (fDbms <> dFireBird) and
@@ -4928,8 +4931,8 @@ var
   end;
 
 var
-  batchRowCount, paramCountLimit: integer;
-  currentRow, f, p, i, sqllen: integer;
+  batchRowCount, paramCountLimit, currentRow, sqllen, p: integer;
+  f, i: PtrInt;
   Stmt: TSqlDBStatement;
   Query: ISqlDBStatement;
 begin
@@ -5589,8 +5592,13 @@ procedure TSqlDBStatement.CheckCol(Col: integer);
 begin
   if (self = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBException.CreateUtf8(
-      'Invalid call to %.Column*(Col=%)', [self, Col]);
+    CheckColInvalid(Col);
+end;
+
+procedure TSqlDBStatement.CheckColInvalid(Col: integer);
+begin
+  raise ESqlDBException.CreateUtf8(
+    'Invalid call to %.Column*(Col=%)', [self, Col]);
 end;
 
 function TSqlDBStatement.GetForceBlobAsNull: boolean;
