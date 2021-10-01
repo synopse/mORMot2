@@ -28,9 +28,13 @@ interface
   {$undef USEJET}     // MS Access / JET is not available under Win64
 {$endif}
 
+{$ifndef OSWINDOWS}
+  {$undef USENEXUSDB}
+  {$undef USEJET}
+{$endif OSWINDOWS}
+
 // if defined, will create two "stored false" properties, to test UNIQUE columns
 {.$define UNIK}
-
 
 uses
   {$I mormot.uses.inc}
@@ -56,108 +60,145 @@ uses
   mormot.db.raw.sqlite3.static,
   mormot.db.proxy,
   mormot.core.log,
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   mormot.db.sql.oledb,
   mormot.db.rad,
   {$endif}
   mormot.db.sql.odbc,
   {$ifdef USENEXUSDB}
-    mormot.db.rad.nexusdb,
+  mormot.db.rad.nexusdb,
   {$endif}
   {$ifdef USEBDE}
-    mormot.db.rad.bde,
+  mormot.db.rad.bde,
   {$endif}
   {$ifdef USEUNIDAC}
-    mormot.db.rad.unidac,
-    SQLiteUniProvider, InterbaseUniProvider, OracleUniProvider, DB2UniProvider,
-    SQLServerUniProvider, PostgreSQLUniProvider, MySqlUniProvider,
+  mormot.db.rad.unidac,
+  SQLiteUniProvider,
+  InterbaseUniProvider,
+  OracleUniProvider,
+  DB2UniProvider,
+  SQLServerUniProvider,
+  PostgreSQLUniProvider,
+  MySqlUniProvider,
   {$endif}
   {$ifdef USEZEOS}
-    mormot.db.sql.zeos,
+  mormot.db.sql.zeos,
   {$endif}
   {$ifdef USEIBX}
-    mormot.db.sql.ibx,
+  mormot.db.sql.ibx,
   {$endif}
   {$ifdef USEFIREDAC}
-    mormot.db.rad.firedac,
-    {$ifdef ISDELPHIXE5}
-    FireDAC.Phys.Oracle, FireDAC.Phys.MSAcc, FireDAC.Phys.MSSQL, FireDAC.Phys.MySQL,
-    FireDAC.Phys.SQLite, FireDAC.Phys.IB, FireDAC.Phys.PG, FireDAC.Phys.DB2,
-    {$else}
-    uADPhysOracle, uADPhysMSAcc, uADPhysMSSQL,
-    uADPhysSQLite, uADPhysIB, uADPhysPG, uADPhysDB2, uADPhysMySQL,
-    {$endif}
+  mormot.db.rad.firedac,
+  {$ifdef ISDELPHIXE5}
+  FireDAC.Phys.Oracle,
+  FireDAC.Phys.MSAcc,
+  FireDAC.Phys.MSSQL,
+  FireDAC.Phys.MySQL,
+  FireDAC.Phys.SQLite,
+  FireDAC.Phys.IB,
+  FireDAC.Phys.PG,
+  FireDAC.Phys.DB2,
+  {$else}
+  uADPhysOracle,
+  uADPhysMSAcc,
+  uADPhysMSSQL,
+  uADPhysSQLite,
+  uADPhysIB,
+  uADPhysPG,
+  uADPhysDB2,
+  uADPhysMySQL,
+  {$endif}
   {$endif}
   {$ifdef USEMONGODB}
-    mormot.db.nosql.mongodb, //SynMongoDB, mORMotMongoDB,
+  mormot.db.nosql.mongodb,
   {$endif}
   mormot.db.core;
 
 type
   TStat = class(TSynPersistent)
   private
-    fCreateTable: RawUTF8;
+    fCreateTable: RawUtf8;
     fNumberOfElements: integer;
-    fInsertTime: RawUTF8;
-    fEngine: RawUTF8;
-    fClientCloseTime: RawUTF8;
+    fInsertTime: RawUtf8;
+    fEngine: RawUtf8;
+    fClientCloseTime: RawUtf8;
     fInsertRate: integer;
-    fReadOneByOneTime: RawUTF8;
+    fReadOneByOneTime: RawUtf8;
     fReadOneByOneRate: integer;
     fInsertBatchTransactionRate: integer;
     fInsertTransactionRate: integer;
     fInsertBatchRate: integer;
-    fInsertBatchTransactionTime: RawUTF8;
-    fInsertTransactionTime: RawUTF8;
-    fInsertBatchTime: RawUTF8;
+    fInsertBatchTransactionTime: RawUtf8;
+    fInsertTransactionTime: RawUtf8;
+    fInsertBatchTime: RawUtf8;
     fReadAllVirtualRate: integer;
     fReadAllDirectRate: integer;
-    fReadAllDirectTime: RawUTF8;
-    fReadAllVirtualTime: RawUTF8;
+    fReadAllDirectTime: RawUtf8;
+    fReadAllVirtualTime: RawUtf8;
     {$ifdef UNIK}
     fReadOneByNameRate: integer;
-    fReadOneByNameTime: RawUTF8;
-    {$endif}
+    fReadOneByNameTime: RawUtf8;
+    {$endif UNIK}
   published
-    property Engine: RawUTF8 read fEngine;
-    property CreateTableTime: RawUTF8 read fCreateTable write fCreateTable;
-    property NumberOfElements: integer read fNumberOfElements write fNumberOfElements;
-    property InsertTime: RawUTF8 read fInsertTime;
-    property InsertRate: integer read fInsertRate;
-    property InsertBatchTime: RawUTF8 read fInsertBatchTime;
-    property InsertBatchRate: integer read fInsertBatchRate;
-    property InsertTransactionTime: RawUTF8 read fInsertTransactionTime;
-    property InsertTransactionRate: integer read fInsertTransactionRate;
-    property InsertBatchTransactionTime: RawUTF8 read fInsertBatchTransactionTime;
-    property InsertBatchTransactionRate: integer read fInsertBatchTransactionRate;
-    property ReadOneByOneTime: RawUTF8 read fReadOneByOneTime;
-    property ReadOneByOneRate: integer read fReadOneByOneRate;
+    property Engine: RawUtf8
+      read fEngine;
+    property CreateTableTime: RawUtf8
+      read fCreateTable write fCreateTable;
+    property NumberOfElements: integer
+      read fNumberOfElements write fNumberOfElements;
+    property InsertTime: RawUtf8
+      read fInsertTime;
+    property InsertRate: integer
+      read fInsertRate;
+    property InsertBatchTime: RawUtf8
+      read fInsertBatchTime;
+    property InsertBatchRate: integer
+      read fInsertBatchRate;
+    property InsertTransactionTime: RawUtf8
+      read fInsertTransactionTime;
+    property InsertTransactionRate: integer
+      read fInsertTransactionRate;
+    property InsertBatchTransactionTime: RawUtf8
+      read fInsertBatchTransactionTime;
+    property InsertBatchTransactionRate: integer
+      read fInsertBatchTransactionRate;
+    property ReadOneByOneTime: RawUtf8
+      read fReadOneByOneTime;
+    property ReadOneByOneRate: integer
+      read fReadOneByOneRate;
     {$ifdef UNIK}
-    property ReadOneByNameTime: RawUTF8 read fReadOneByNameTime;
-    property ReadOneByNameRate: integer read fReadOneByNameRate;
+    property ReadOneByNameTime: RawUtf8
+      read fReadOneByNameTime;
+    property ReadOneByNameRate: integer
+      read fReadOneByNameRate;
     {$endif}
-    property ReadAllVirtualTime: RawUTF8 read fReadAllVirtualTime;
-    property ReadAllVirtualRate: integer read fReadAllVirtualRate;
-    property ReadAllDirectTime: RawUTF8 read fReadAllDirectTime;
-    property ReadAllDirectRate: integer read fReadAllDirectRate;
-    property ClientCloseTime: RawUTF8 read fClientCloseTime;
+    property ReadAllVirtualTime: RawUtf8
+      read fReadAllVirtualTime;
+    property ReadAllVirtualRate: integer
+      read fReadAllVirtualRate;
+    property ReadAllDirectTime: RawUtf8
+      read fReadAllDirectTime;
+    property ReadAllDirectRate: integer
+      read fReadAllDirectRate;
+    property ClientCloseTime: RawUtf8
+      read fClientCloseTime;
   end;
 
   TOrmSample = class(TOrm)
   private
-    fFirstName: RawUTF8;
-    fLastName: RawUTF8;
+    fFirstName: RawUtf8;
+    fLastName: RawUtf8;
     fAmount: Currency;
     fBirthDate: TDateTime;
     fLastChange: TModTime;
     fCreatedAt: TCreateTime;
   published
-    property FirstName: RawUTF8 index 40
+    property FirstName: RawUtf8 index 40
       read fFirstName write fFirstName
-      {$ifdef UNIK}stored AS_UNIQUE{$endif};
-    property LastName: RawUTF8 index 40
+      {$ifdef UNIK} stored AS_UNIQUE{$endif};
+    property LastName: RawUtf8 index 40
       read fLastName write fLastName
-      {$ifdef UNIK}stored AS_UNIQUE{$endif};
+      {$ifdef UNIK} stored AS_UNIQUE{$endif};
     property Amount: Currency
       read fAmount write fAmount;
     property BirthDate: TDateTime
@@ -168,10 +209,9 @@ type
       read fCreatedAt write fCreatedAt;
   end;
 
-
   TTestDatabaseBenchmark = class(TSynTestsLogged)
   public
-    Ini: RawUTF8;
+    Ini: RawUtf8;
     Stats: TSynObjectList;
     constructor Create(const Ident: string = ''); override;
     destructor Destroy; override;
@@ -181,12 +221,21 @@ type
     procedure ExternalDatabaseAccess;
   end;
 
+  TTestDatabaseFlags = set of (
+    dbIsFile,
+    dbInMemory,
+    dbInMemoryVirtual,
+    dbPropIsMemory,
+    dbPropUntouched,
+    dbDropTable,
+    dbSlowInsert);
+
   TTestDatabaseAbstract = class(TSynTestCase)
   protected
     Main: TTestDatabaseBenchmark;
     Value: TOrmSample;
     Stat: TStat;
-    Namee, Num: RawUTF8;
+    Namee, Num: RawUtf8;
     ChangeStart: TTimeLog;
     RunTimer: TPrecisionTimer;
     SQlite3Mode: TSQLSynchronousMode;
@@ -195,11 +244,10 @@ type
     Orm: IRestOrmClient;
     Server: TRestServerDB;
     DBFileName: TFileName;
-    DBPassword: RawUTF8;
-    ValueLastName, ValueFirstName: TRawUTF8DynArray;
+    DBPassword: RawUtf8;
+    ValueLastName, ValueFirstName: TRawUtf8DynArray;
     Res: TIDDynArray;
-    Flags: set of (dbIsFile, dbInMemory, dbInMemoryVirtual, dbPropIsMemory,
-      dbPropUntouched, dbDropTable, dbSlowInsert);
+    Flags: TTestDatabaseFlags;
     procedure Setup; override;
     procedure Cleanup; override;
     procedure MethodSetup; override;
@@ -247,7 +295,7 @@ type
   protected
     fn: TFileName;
     sm: TSQLSynchronousMode;
-    lm:  TSQLLockingMode;
+    lm: TSQLLockingMode;
     procedure ClientCreate; override;
     procedure RunExternalSqlite(Mode: TSQLSynchronousMode; Lock: TSQLLockingMode);
   published
@@ -265,9 +313,9 @@ type
     procedure ClientCreate; override;
     procedure ClientFree; override;
   published
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     procedure RemoteSqliteWinHTTP;
-    {$endif}
+    {$endif OSWINDOWS}
     procedure RemoteSqliteSocket;
   end;
 
@@ -297,7 +345,8 @@ type
 
   {$endif USEFIREBIRDEMB}
 
-  
+
+
 implementation
 
 {$ifdef USEFIREBIRDEMB}
@@ -329,29 +378,25 @@ begin
   Flags := [dbPropUntouched, dbDropTable];
 //  if FileExists(cFirebirdDBFileZeos) then
 //    DeleteFile(cFirebirdDBFileZeos);
-  RunExternal(TSqlDBZeosConnectionProperties.Create( 'zdbc:firebird://'+cFirebirdServerZeos+
-         '/'+cFirebirdDBFileZeos+
-         '?username='+cUserName+
-         ';password='+cPassword+
-         ';LibLocation='+cFIREBIRDEMBEDDEDDLL,
-         '', '', '' ));
+  RunExternal(TSqlDBZeosConnectionProperties.Create('zdbc:firebird://' +
+    cFirebirdServerZeos + '/' + cFirebirdDBFileZeos + '?username=' + cUserName +
+    ';password=' + cPassword + ';LibLocation=' + cFIREBIRDEMBEDDEDDLL, '', '', ''));
 end;
 {$endif USEZEOS}
 
 {$ifdef USEIBX}
+
 procedure TTestFirebird.IbxFirebird;
-var lProps: TSqlDBIbxConnectionProperties;
+var
+  lProps: TSqlDBIbxConnectionProperties;
 begin
-  Flags:=Flags-[dbPropUntouched, dbDropTable];
+  Flags := Flags - [dbPropUntouched, dbDropTable];
 //  if FileExists(cFirebirdDBFileIbx) then
 //    DeleteFile(cFirebirdDBFileIbx);
-  lProps := TSqlDBIbxConnectionProperties.Create(
-         cFirebirdServerIbx,
-         cFirebirdDBFileIbx,
-         cUserName,
-         cPassword);
+  lProps := TSqlDBIbxConnectionProperties.Create(cFirebirdServerIbx,
+    cFirebirdDBFileIbx, cUserName, cPassword);
   lProps.FirebirdLibraryPathName := cFIREBIRDEMBEDDEDDLL;
-  lProps.CreateDescendingPK:=True;
+  lProps.CreateDescendingPK := True;
   RunExternal(lProps);
 end;
 {$endif USEIBX}
@@ -367,14 +412,15 @@ begin
   Main := Owner as TTestDatabaseBenchmark;
   Value := TOrmSample.Create;
   Namee := 'Name/ ';
-  UniqueRawUTF8(Namee); // FPC does not call it
+  UniqueRawUtf8(Namee);        // FPC does not call it
   PWord(@Namee[4])^ := $a9c3;  // some 'e'acute to test UTF-8 encoding
-  SQlite3Mode := smOff; // fastest mode by default
+  SQlite3Mode := smOff;        // fastest SQlite3 modes by default
   SQlite3Lock := lmExclusive;
 end;
 
 procedure TTestDatabaseAbstract.Cleanup;
-begin // warning: this method could be called several times after a single Setup
+begin
+  // warning: this method could be called several times after a single Setup
   FreeAndNil(Value);
 end;
 
@@ -396,10 +442,14 @@ end;
 
 procedure TTestDatabaseAbstract.RunTests;
 const
-  _ID: array['1'..'4'] of RawUTF8 = ('', ' batch', ' trans', ' batch trans');
+  _ID: array['1'..'4'] of RawUtf8 = (
+    '',
+    ' batch',
+    ' trans',
+    ' batch trans');
 var
   trans, batch, UseDirect: boolean;
-  time: RawUTF8;
+  time: RawUtf8;
   rate: QWord;
   i: PtrInt;
   {%H-}log: ISynLog;
@@ -409,64 +459,67 @@ begin
   for trans := false to true do
     for batch := false to true do
     begin
-      log := TSynLog.Enter('% Insert%',[Owner.CurrentMethodInfo^.IdentTestName,
-        _ID[Num[1]]],self);
+      log := TSynLog.Enter('% Insert%',
+        [Owner.CurrentMethodInfo^.IdentTestName, _ID[Num[1]]], self);
       RunWrites(trans, batch);
-      NotifyTestSpeed('insert%',[_ID[Num[1]]],Stat.NumberOfElements,0,@RunTimer);
+      NotifyTestSpeed('insert%',
+        [_ID[Num[1]]], Stat.NumberOfElements, 0, @RunTimer);
       time := RunTimer.LastTime;
       rate := RunTimer.PerSec(Stat.NumberOfElements);
       log := nil;
       case Num[1] of
-      '1':
-        begin
-          Stat.fInsertTime := time;
-          Stat.fInsertRate := rate;
-        end;
-      '2':
-        begin
-          Stat.fInsertBatchTime := time;
-          Stat.fInsertBatchRate := rate;
-        end;
-      '3':
-        begin
-          Stat.fInsertTransactionTime := time;
-          Stat.fInsertTransactionRate := rate;
-        end;
-      '4':
-        begin
-          Stat.fInsertBatchTransactionTime := time;
-          Stat.fInsertBatchTransactionRate := rate;
-          break; // still need Client for Read tests
-        end;
+        '1':
+          begin
+            Stat.fInsertTime := time;
+            Stat.fInsertRate := rate;
+          end;
+        '2':
+          begin
+            Stat.fInsertBatchTime := time;
+            Stat.fInsertBatchRate := rate;
+          end;
+        '3':
+          begin
+            Stat.fInsertTransactionTime := time;
+            Stat.fInsertTransactionRate := rate;
+          end;
+        '4':
+          begin
+            Stat.fInsertBatchTransactionTime := time;
+            Stat.fInsertBatchTransactionRate := rate;
+            break; // still need Client for Read tests
+          end;
       end;
       inc(Num[1]);
       ClientFree;
     end;
   // Read tests
-  log := TSynLog.Enter('% Read One',[Owner.CurrentMethodInfo^.IdentTestName],self);
+  log := TSynLog.Enter('% Read One',
+    [Owner.CurrentMethodInfo^.IdentTestName], self);
   Value.ClearProperties;
   RunTimer.Start;
-  for i := 0 to Stat.NumberOfElements-1 do
+  for i := 0 to Stat.NumberOfElements - 1 do
   begin
-    Orm.Retrieve(Res[i],Value);
+    Orm.Retrieve(Res[i], Value);
     ValueCheck(i);
   end;
-  NotifyTestSpeed('read one',Stat.NumberOfElements,0,@RunTimer);
+  NotifyTestSpeed('read one', Stat.NumberOfElements, 0, @RunTimer);
   Stat.fReadOneByOneTime := RunTimer.LastTime;
   Stat.fReadOneByOneRate := RunTimer.PerSec(Stat.NumberOfElements);
   log := nil;
   {$ifdef UNIK}
   // one by one retrieve values using Name property
-  log := TSynLog.Enter('% Read Unique',[Owner.CurrentMethodInfo^.IdentTestName],self);
+  log := TSynLog.Enter('% Read Unique',
+    [Owner.CurrentMethodInfo^.IdentTestName], self);
   RunTimer.Start;
-  for i := 0 to Stat.NumberOfElements-1 do
+  for i := 0 to Stat.NumberOfElements - 1 do
   begin
-    Client.Retrieve('LastName=?',[],[ValueLastName[i]],Value);
-    Check((Value.IDValue=Res[i]) and
-      (PInt64(@Value.Amount)^=(i+1)*100) and
-      (Value.LastChange>=ChangeStart));
+    Client.Retrieve('LastName=?', [], [ValueLastName[i]], Value);
+    Check((Value.IDValue = Res[i]) and
+          (PInt64(@Value.Amount)^ = (i + 1) * 100) and
+          (Value.LastChange >= ChangeStart));
   end;
-  NotifyTestSpeed('read unique',Stat.NumberOfElements,0,@RunTimer);
+  NotifyTestSpeed('read unique', Stat.NumberOfElements, 0, @RunTimer);
   Stat.fReadOneByNameTime := RunTimer.LastTime;
   Stat.fReadOneByNameRate := RunTimer.PerSec(Stat.NumberOfElements);
   {$endif UNIK}
@@ -475,7 +528,7 @@ begin
   begin
     log := nil;
     log := TSynLog.Enter('% Read Direct=%',
-      [Owner.CurrentMethodInfo^.IdentTestName, BOOL_STR[UseDirect]],self);
+      [Owner.CurrentMethodInfo^.IdentTestName, BOOL_STR[UseDirect]], self);
     Server.Server.Cache.Flush; // fair benchmark
     Server.DB.CacheFlush; // fair benchmark (16100 rows/s->456000 with cache!)
     Server.Server.SetStaticVirtualTableDirect(UseDirect);
@@ -489,15 +542,16 @@ begin
       ValueCheck(i);
       inc(i);
     end;
-    CheckEqual(i,Stat.NumberOfElements,'FillOne');
+    CheckEqual(i, Stat.NumberOfElements, 'FillOne');
     if UseDirect then
     begin
-      NotifyTestSpeed('read direct',Stat.NumberOfElements,0,@RunTimer);
+      NotifyTestSpeed('read direct', Stat.NumberOfElements, 0, @RunTimer);
       Stat.fReadAllDirectTime := RunTimer.LastTime;
       Stat.fReadAllDirectRate := RunTimer.PerSec(Stat.NumberOfElements);
-    end else
+    end
+    else
     begin
-      NotifyTestSpeed('read virtual',Stat.NumberOfElements,0,@RunTimer);
+      NotifyTestSpeed('read virtual', Stat.NumberOfElements, 0, @RunTimer);
       Stat.fReadAllVirtualTime := RunTimer.LastTime;
       Stat.fReadAllVirtualRate := RunTimer.PerSec(Stat.NumberOfElements);
     end;
@@ -537,17 +591,17 @@ var
   i: PtrInt;
   forceID: boolean;
 begin
-  DBFileName := FormatString('%db%%.%.db',[Executable.ProgramFilePath, PathDelim,
-    Owner.CurrentMethodInfo^.MethodName, Num]);
+  DBFileName := FormatString('%db%%.%.db', [Executable.ProgramFilePath,
+    PathDelim, Owner.CurrentMethodInfo^.MethodName, Num]);
   if FileExists(DBFileName) then
     DeleteFile(DBFileName);
   RunTimer.Start;
   ClientCreate;
-  if CheckFailed(Client <> nil,'Client?') then
+  if CheckFailed(Client <> nil, 'Client?') then
     exit; // avoid GPF
   Server.Server.CreateMissingTables;
   ChangeStart := Server.OrmInstance.GetServerTimestamp; // use by ValueCheck
-  if Stat.CreateTableTime='' then
+  if Stat.CreateTableTime = '' then
     Stat.CreateTableTime := RunTimer.Stop;
   if (dbSlowInsert in Flags) and not UseTransactions then // full synch is slow
     Stat.NumberOfElements := 200
@@ -561,7 +615,7 @@ begin
       UInt32ToUtf8(i + 1, ValueLastName[i]);
       {$ifndef UNIK}
       if i <> 100 then // test https://synopse.info/fossil/info/e8c211062e
-      {$endif}
+      {$endif UNIK}
         ValueFirstName[i] := Namee + ValueLastName[i];
     end;
   RunTimer.Start;
@@ -569,42 +623,42 @@ begin
     Orm.TransactionBegin(TOrmSample, Client.SessionID);
   if UseBatch then
     Orm.BatchStart(TOrmSample)
-  else
-    if length(Res)<Stat.NumberOfElements then
-      SetLength(Res,Stat.NumberOfElements);
-  for i := 0 to Stat.NumberOfElements-1 do
+  else if length(Res) < Stat.NumberOfElements then
+    SetLength(Res, Stat.NumberOfElements);
+  for i := 0 to Stat.NumberOfElements - 1 do
   begin
-    Value.Amount := (i+1)*0.01;
+    Value.Amount := (i + 1) * 0.01;
     Value.LastName := ValueLastName[i];
     Value.FirstName := ValueFirstName[i];
-    Value.BirthDate := i+1;
-    forceID := i and 3=1;
+    Value.BirthDate := i + 1;
+    forceID := i and 3 = 1;
     if forceID then
-      if {$ifdef UNIK}(dbInMemory in Flags) or {$endif} (Res[i-1] = 0) then
+      if {$ifdef UNIK} (dbInMemory in Flags) or {$endif UNIK}
+         (Res[i - 1] = 0) then
         forceID := false // not yet in TRestStorageInMemory.AddOne
       else
-        Value.IDValue := Res[i-1]+1;
+        Value.IDValue := Res[i - 1] + 1;
     if UseBatch then
-      Check(Orm.BatchAdd(Value,true,forceID)>=0)
+      Check(Orm.BatchAdd(Value, true, forceID) >= 0)
     else
     begin
-      Res[i] := Orm.Add(Value,true,forceID);
-      Check(Res[i]>0,'Add');
+      Res[i] := Orm.Add(Value, true, forceID);
+      Check(Res[i] > 0, 'Add');
     end;
   end;
   if UseBatch then
-    Check(Orm.BatchSend(Res)=HTTP_SUCCESS);
+    Check(Orm.BatchSend(Res) = HTTP_SUCCESS);
   if UseTransactions then
     Orm.Commit(Client.SessionID);
   Value.ClearProperties;
-  Check(Orm.Retrieve(Res[1],Value),'One Retrieve after Add');
+  Check(Orm.Retrieve(Res[1], Value), 'One Retrieve after Add');
   ValueCheck(1);
 end;
 
 procedure TTestDatabaseAbstract.ValueCheck(i: PtrInt);
 begin
   CheckEqual(Value.IDValue, Res[i], 'ID');
-  CheckEqual(PInt64(@Value.Amount)^, (i+1)*100, 'Amount');
+  CheckEqual(PInt64(@Value.Amount)^, (i + 1) * 100, 'Amount');
   Check(Value.LastChange >= ChangeStart, 'LastChange');
   CheckEqual(Value.FirstName, ValueFirstName[i], 'FirstName');
   Value.IDValue := 0;
@@ -613,8 +667,8 @@ begin
   Value.LastChange := 0;
 end;
 
-procedure TTestDatabaseAbstract.RunModeLock(Mode: TSQLSynchronousMode;
-  Lock: TSQLLockingMode);
+procedure TTestDatabaseAbstract.RunModeLock(Mode: TSQLSynchronousMode; Lock:
+  TSQLLockingMode);
 begin
   SQlite3Mode := Mode;
   SQlite3Lock := Lock;
@@ -624,7 +678,8 @@ end;
 
 { TTestDirectSqliteEngine }
 
-procedure TTestDirectSqliteEngine.RunModeLock(Mode: TSQLSynchronousMode; Lock: TSQLLockingMode);
+procedure TTestDirectSqliteEngine.RunModeLock(
+  Mode: TSQLSynchronousMode; Lock: TSQLLockingMode);
 begin
   Flags := [dbIsFile];
   if Mode = smFull then
@@ -676,7 +731,6 @@ begin
   inherited ClientCreate;
   if not (dbInMemoryVirtual in Flags) then
     StaticDataCreate(Client.Server.OrmInstance, TOrmSample, DBFileName, true);
-//    Client.Server.StaticDataCreate(TOrmSample, DBFileName, {binary=}true);
 end;
 
 procedure TTestInMemoryEngine.InMemoryStatic;
@@ -702,13 +756,14 @@ begin
 end;
 
 procedure TTestDatabaseExternalAbstract.ClientCreate;
-var lTables: TRawUtf8DynArray;
+var
+  lTables: TRawUtf8DynArray;
 begin
   if (Props <> nil) and (dbDropTable in Flags) then
   begin
     // drop only if table exist
     Props.GetTableNames(lTables);
-    if FindPropName(lTables, 'SAMPLERECORD')>=0 then
+    if FindPropName(lTables, 'SAMPLERECORD') >= 0 then
     begin
       Props.ClearConnectionPool;
       Props.ThreadSafeConnection.Disconnect;
@@ -721,7 +776,7 @@ end;
 procedure TTestDatabaseExternalAbstract.ClientFree;
 begin
   inherited ClientFree;
-  if not(dbPropUntouched in Flags) then
+  if not (dbPropUntouched in Flags) then
     FreeAndNil(Props);
 end;
 
@@ -757,13 +812,13 @@ begin
   inherited ClientCreate;
 end;
 
-procedure TTestSqliteExternal.RunExternalSqlite(Mode: TSQLSynchronousMode;
-  Lock: TSQLLockingMode);
+procedure TTestSqliteExternal.RunExternalSqlite(Mode: TSQLSynchronousMode; Lock:
+  TSQLLockingMode);
 begin
   if dbPropIsMemory in Flags then
     fn := SQLITE_MEMORY_DATABASE_NAME
   else
-    fn := FormatString('%db%%.db',[Executable.ProgramFilePath, PathDelim,
+    fn := FormatString('%db%%.db', [Executable.ProgramFilePath, PathDelim,
       Owner.CurrentMethodInfo^.MethodName]);
   sm := Mode;
   lm := Lock;
@@ -799,10 +854,14 @@ end;
 
 procedure TTestSqliteRemote.ClientCreate;
 begin
-  RemoteProps := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME, '', '', '');
+  // initialize a fast in-memory SQLite3 remote server
+  RemoteProps := TSQLDBSQLite3ConnectionProperties.Create(
+    SQLITE_MEMORY_DATABASE_NAME, '', '', '');
   RemoteProps.MainSQLite3DB.Synchronous := SQlite3Mode;
   RemoteProps.MainSQLite3DB.LockingMode := SQlite3Lock;
-  RemoteServer := TSQLDBServerRemote.Create(RemoteProps, 'root', '8888', 'user', 'password');
+  RemoteServer := TSQLDBServerRemote.Create(
+    RemoteProps, 'root', '8888', 'user', 'password');
+  // we actually connect to this DB using our remote binary protocol over HTTP
   Props := RemoteClient.Create('localhost:8888', 'root', 'user', 'password');
   inherited ClientCreate;
 end;
@@ -820,13 +879,13 @@ begin
   RunTests;
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 procedure TTestSqliteRemote.RemoteSqliteWinHTTP;
 begin
   RemoteClient := TSQLDBWinHTTPConnectionProperties;
   RunTests;
 end;
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 
 {$ifdef USELOCALPOSTGRESQL}
@@ -836,15 +895,16 @@ end;
 procedure TTestPostgresql._SynDBPostgres;
 begin
   RunExternal(TSQLDBPostgresConnectionProperties.Create(
-    'localhost','postgres','postgres','docker'));
+    'localhost', 'postgres', 'postgres', 'docker'));
 end;
 
 
 {$ifdef USEZEOS}
 procedure TTestPostgresql.ZeosPostgres;
 begin
-  RunExternal(TSQLDBZEOSConnectionProperties.Create(TSQLDBZEOSConnectionProperties.URI(
-    dPostgreSQL,'localhost','libpq.so.5',false),'postgres','postgres','docker'));
+  RunExternal(TSQLDBZEOSConnectionProperties.Create(
+    TSQLDBZEOSConnectionProperties.URI(dPostgreSQL, 'localhost', 'libpq.so.5', false),
+    'postgres', 'postgres', 'docker'));
 end;
 {$endif}
 
@@ -874,204 +934,251 @@ begin
 end;
 
 procedure TTestDatabaseBenchmark.SaveStats;
-type TStatArray = array[0..1000] of TStat;
-var Stat: ^TStatArray;
-    mode,s,txt: RawUTF8;
-    m,nCat, col1len: integer;
-    max,Cat1,Cat2,Eng1,Eng2,Eng: RawUTF8;
-    Rows: TRawUTF8DynArray;
-    Doc, Cons: RawUTF8;
-  procedure SetCategories(const Title: RawUTF8; const Cat: array of RawUTF8);
-  var i: integer;
+type
+  TStatArray = array[0..1000] of TStat;
+var
+  Stat: ^TStatArray;
+  mode, s, txt: RawUtf8;
+  m, nCat, col1len: integer;
+  max, Cat1, Cat2, Eng1, Eng2, Eng: RawUtf8;
+  Rows: TRawUtf8DynArray;
+  Doc, Cons: RawUtf8;
+
+  procedure SetCategories(const Title: RawUtf8; const Cat: array of RawUtf8);
+  var
+    i: integer;
   begin
     mode := UrlEncode(Title);
-    s := s+'<h1>'+copy(Title,1,posEx(' (',Title)-1)+'</h1>'#13#10;
+    s := s + '<h1>' + copy(Title, 1, posEx(' (', Title) - 1) + '</h1>'#13#10;
     max := Int32ToUtf8(m);
     nCat := length(Cat);
     Cat1 := '';
     Cat2 := '';
-    SetLength(Rows,Stats.Count+1);
+    SetLength(Rows, Stats.Count + 1);
     Rows[0] := '<td>&nbsp;</td>';
-    cons := cons+#13#10+Title+#13#10+StringOfChar(' ',col1len+2);
-    for i := 0 to high(Cat) do begin
-      Rows[0] := Rows[0]+'<td><b>'+Cat[i]+'</b></td>';
-      Cat1 := Cat1+UrlEncode(Cat[i])+'|';
-      Cat2 := Cat2+UrlEncode(Cat[high(Cat)-i])+'|';
-      cons := cons+Cat[i];
-      if i<>high(Cat) then
-        cons := cons+StringOfChar(' ',12-length(Cat[i]));
+    Cons := Cons + #13#10 + Title + #13#10 + StringOfChar(' ', col1len + 2);
+    for i := 0 to high(Cat) do
+    begin
+      Rows[0] := Rows[0] + '<td><b>' + Cat[i] + '</b></td>';
+      Cat1 := Cat1 + UrlEncode(Cat[i]) + '|';
+      Cat2 := Cat2 + UrlEncode(Cat[high(Cat) - i]) + '|';
+      Cons := Cons + Cat[i];
+      if i <> high(Cat) then
+        Cons := Cons + StringOfChar(' ', 12 - length(Cat[i]));
     end;
-    cons := cons+#13#10;
-    SetLength(Cat1,length(Cat1)-1);
-    SetLength(Cat2,length(Cat2)-1);
+    Cons := Cons + #13#10;
+    SetLength(Cat1, length(Cat1) - 1);
+    SetLength(Cat2, length(Cat2) - 1);
     Eng1 := '';
     Eng2 := '';
-    for i := 0 to Stats.Count-1 do begin
+    for i := 0 to Stats.Count - 1 do
+    begin
       Eng := Stat[i].Engine;
      { j := PosEx(' ',Eng);
       if j>0 then begin
         Delete(Eng,j,1);
         insert('<br>',Eng,j);
       end;}
-      Rows[i+1] := '<td><b>'+Eng+'</b></td>';
-      Eng1 := Eng1+UrlEncode(Stat[i].Engine)+'|';
-      Eng2 := Eng2+UrlEncode(Stat[Stats.Count-1-i].Engine)+'|';
+      Rows[i + 1] := '<td><b>' + Eng + '</b></td>';
+      Eng1 := Eng1 + UrlEncode(Stat[i].Engine) + '|';
+      Eng2 := Eng2 + UrlEncode(Stat[Stats.Count - 1 - i].Engine) + '|';
     end;
-    SetLength(Eng1,length(Eng1)-1);
-    SetLength(Eng2,length(Eng2)-1);
+    SetLength(Eng1, length(Eng1) - 1);
+    SetLength(Eng2, length(Eng2) - 1);
   end;
-  procedure Pic1(const Leg: RawUTF8; n: integer);
-  var i: integer;
+
+  procedure Pic1(const Leg: RawUtf8; n: integer);
+  var
+    i: integer;
   begin
-    txt := 'http://chart.apis.google.com/chart?chtt='+mode+'&chxl=1:|'+Leg+
-      '&chxt=x,y&chbh=a&chs=600x500&cht=bhg&chco=';
+    txt := 'http://chart.apis.google.com/chart?chtt=' + mode + '&chxl=1:|' +
+     Leg + '&chxt=x,y&chbh=a&chs=600x500&cht=bhg&chco=';
   //  for i := 1 to 5 do txt := txt+IntToHex($309F30+i*$010101,3)+',';
   //  txt[length(txt)] := '&';
   //    '3D7930,3D8930,309F30,6070F0,5070E0,40C355,65D055,80C1A2,F05050,F0A280'+
-    txt := txt+'3D7930,3D8930,309F30,40C355&';//,6070F0,5070E0,65D055,80C1A2,3D7930,3D8930,F05050,F04050,F04040,F01040,F0A280&';
-    txt := txt+'chxr=0,0,'+max+'&chds=';
+    txt := txt + '3D7930,3D8930,309F30,40C355&';
+    //,6070F0,5070E0,65D055,80C1A2,3D7930,3D8930,F05050,F04050,F04040,F01040,F0A280&';
+    txt := txt + 'chxr=0,0,' + max + '&chds=';
     for i := 1 to n do
-      txt := txt+'0,'+max+',';
+      txt := txt + '0,' + max + ',';
     txt[length(txt)] := '&';
-    txt := txt+'chd=t:';
+    txt := txt + 'chd=t:';
   end;
-  procedure PicEnd(const Legend: RawUTF8);
+
+  procedure PicEnd(const Legend: RawUtf8);
   begin
     txt[length(txt)] := '&';
-    s := s+'<p><img src='+txt+'chdl='+Legend+'></p>'#13#10;
+    s := s + '<p><img src=' + txt + 'chdl=' + Legend + '></p>'#13#10;
     txt := '';
   end;
-  procedure SetValues(var Rows: RawUTF8; const eng: RawUTF8; const v: array of const);
-  var j: integer;
-      fmt,s: RawUTF8;
+
+  procedure SetValues(var Rows: RawUtf8; const eng: RawUtf8; const v: array of const);
+  var
+    j: integer;
+    fmt, s: RawUtf8;
   begin
     for j := 2 to length(v) do
-      fmt := fmt+'%,';
-    fmt := fmt+'%|';
-    txt := txt+FormatUTF8(fmt,v);
+      fmt := fmt + '%,';
+    fmt := fmt + '%|';
+    txt := txt + FormatUTF8(fmt, v);
     fmt := '';
     for j := 1 to length(v) do
-      fmt := fmt+'<td>%</td>';
-    Rows := Rows+FormatUTF8(fmt,v);
-    fmt := eng+StringOfChar(' ',col1len-length(eng)+2);
-    for j := 0 to high(v) do begin
-      VarRecToUTF8(v[j],s);
-      if j<>high(v) then
-        s := s+StringOfChar(' ',12-length(s));
-      fmt := fmt+s;
+      fmt := fmt + '<td>%</td>';
+    Rows := Rows + FormatUTF8(fmt, v);
+    fmt := eng + StringOfChar(' ', col1len - length(eng) + 2);
+    for j := 0 to high(v) do
+    begin
+      VarRecToUTF8(v[j], s);
+      if j <> high(v) then
+        s := s + StringOfChar(' ', 12 - length(s));
+      fmt := fmt + s;
     end;
-    cons := cons+fmt+#13#10;
+    Cons := Cons + fmt + #13#10;
   end;
+
   procedure Table;
-  var i: integer;
+  var
+    i: integer;
   begin
-    s := s+'<p><table>';
+    s := s + '<p><table>';
     for i := 0 to High(Rows) do
-      s := s+'<tr align=center>'+Rows[i]+'</tr>'#13#10;
-    s := s+'</table></p>';
-    Doc := Doc+'|%30';
+      s := s + '<tr align=center>' + Rows[i] + '</tr>'#13#10;
+    s := s + '</table></p>';
+    Doc := Doc + '|%30';
     for i := 1 to nCat do
-      Doc := Doc+'%15';
-    Doc := Doc+#13#10;
-    for i := 0 to High(Rows) do begin
-      Doc := Doc+StringReplaceAll(Rows[i], ['</td>','', '</tr>','', '<tr align=center>','',
-        '</b>','}', '</td>','', '<b>','{\b ', '<td>','|', '&nbsp;',''])+#13#10;
+      Doc := Doc + '%15';
+    Doc := Doc + #13#10;
+    for i := 0 to High(Rows) do
+    begin
+      Doc := Doc + StringReplaceAll(Rows[i], [
+        '</td>', '',
+        '</tr>', '',
+        '<tr align=center>', '',
+        '</b>', '}',
+        '</td>', '',
+        '<b>', '{\b ',
+        '<td>', '|',
+        '&nbsp;', '']) + #13#10;
     end;
-    Doc := Doc+'|%'#13#10;
+    Doc := Doc + '|%'#13#10;
   end;
-var i,j: integer;
+
+var
+  i, j: integer;
 begin
   // introducting text
   Stat := pointer(Stats.List);
-  s := FormatUTF8('Running tests using Synopse mORMot framework %, '+
+  s := FormatUTF8('Running tests using Synopse mORMot framework %, ' +
     'compiled with %, against SQLite %, on %, at %.',
     [SYNOPSE_FRAMEWORK_VERSION, COMPILER_VERSION, SQLite3.libversion,
      OSVersionText, NowToString]);
-  cons := '[code]'#13#10+s+#13#10#13#10;
-  s := '<p>'+s+'</p>';
+  Cons := '[code]'#13#10 + s + #13#10#13#10;
+  s := '<p>' + s + '</p>';
   // compute max Insertion rate value for charts
   m := 0;
   col1len := 0;
-  for i := 0 to Stats.Count-1 do
-    with Stat[i] do begin
-      if InsertRate>m then m := InsertRate;
-      if InsertBatchRate>m then m := InsertBatchRate;
-      if InsertTransactionRate>m then m := InsertTransactionRate;
-      if InsertBatchTransactionRate>m then m := InsertBatchTransactionRate;
+  for i := 0 to Stats.Count - 1 do
+    with Stat[i] do
+    begin
+      if InsertRate > m then
+        m := InsertRate;
+      if InsertBatchRate > m then
+        m := InsertBatchRate;
+      if InsertTransactionRate > m then
+        m := InsertTransactionRate;
+      if InsertBatchTransactionRate > m then
+        m := InsertBatchTransactionRate;
       j := length(Engine);
-      if j>col1len then
+      if j > col1len then
         col1len := j;
     end;
   // Insertion Categories
-  SetCategories('Insertion speed (rows/second)',['Direct','Batch','Trans','Batch Trans']);
+  SetCategories('Insertion speed (rows/second)',
+    ['Direct', 'Batch', 'Trans', 'Batch Trans']);
   // Insertion per-Engine Values and Chart
-  Pic1(Cat2,5);
-  for i := 0 to Stats.Count-1 do
-  with Stat[i] do
-    SetValues(Rows[i+1], Engine,
-      [InsertRate,InsertBatchRate,InsertTransactionRate,InsertBatchTransactionRate]);
+  Pic1(Cat2, 5);
+  for i := 0 to Stats.Count - 1 do
+    with Stat[i] do
+      SetValues(Rows[i + 1], Engine, [InsertRate, InsertBatchRate,
+        InsertTransactionRate, InsertBatchTransactionRate]);
   Table;
   PicEnd(Eng1);
   // Insertion per-Category Chart
-  Pic1(Eng2,Stats.Count);
-  for i := 0 to Stats.Count-1 do
-    txt := txt+Int32ToUtf8(Stat[i].InsertRate)+',';
+  Pic1(Eng2, Stats.Count);
+  for i := 0 to Stats.Count - 1 do
+    txt := txt + Int32ToUtf8(Stat[i].InsertRate) + ',';
   txt[length(txt)] := '|';
-  for i := 0 to Stats.Count-1 do
-    txt := txt+Int32ToUtf8(Stat[i].InsertBatchRate)+',';
+  for i := 0 to Stats.Count - 1 do
+    txt := txt + Int32ToUtf8(Stat[i].InsertBatchRate) + ',';
   txt[length(txt)] := '|';
-  for i := 0 to Stats.Count-1 do
-    txt := txt+Int32ToUtf8(Stat[i].InsertTransactionRate)+',';
+  for i := 0 to Stats.Count - 1 do
+    txt := txt + Int32ToUtf8(Stat[i].InsertTransactionRate) + ',';
   txt[length(txt)] := '|';
-  for i := 0 to Stats.Count-1 do
-    txt := txt+Int32ToUtf8(Stat[i].InsertBatchTransactionRate)+',';
+  for i := 0 to Stats.Count - 1 do
+    txt := txt + Int32ToUtf8(Stat[i].InsertBatchTransactionRate) + ',';
   PicEnd(Cat1);
   // compute max Reading rate value for charts
   m := 0;
-  for i := 0 to Stats.Count-1 do
-    with Stat[i] do begin
-      if ReadOneByOneRate>m then m := ReadOneByOneRate;
+  for i := 0 to Stats.Count - 1 do
+    with Stat[i] do
+    begin
+      if ReadOneByOneRate > m then
+        m := ReadOneByOneRate;
       {$ifdef UNIK}
-      if ReadOneByNameRate>m then m := ReadOneByNameRate;
-      {$endif}
-      if ReadAllVirtualRate>m then m := ReadAllVirtualRate;
-      if ReadAllDirectRate>m then m := ReadAllDirectRate;
+      if ReadOneByNameRate > m then
+        m := ReadOneByNameRate;
+      {$endif UNIK}
+      if ReadAllVirtualRate > m then
+        m := ReadAllVirtualRate;
+      if ReadAllDirectRate > m then
+        m := ReadAllDirectRate;
     end;
   // Reading Categories
-  SetCategories('Read speed (rows/second)',['By one',
-    {$ifdef UNIK}'By name',{$endif}'All Virtual','All Direct']);
+  SetCategories('Read speed (rows/second)',
+    ['By one',
+     {$ifdef UNIK}
+     'By name',
+     {$endif}
+     'All Virtual',
+     'All Direct']);
   // Reading per-Engine Values and Chart
-  Pic1(Cat2,{$ifdef UNIK}4{$else}3{$endif});
-  for i := 0 to Stats.Count-1 do
+  {$ifdef UNIK}
+  Pic1(Cat2, 4);
+  {$else}
+  Pic1(Cat2, 3);
+  {$endif UNIK}
+  for i := 0 to Stats.Count - 1 do
     with Stat[i] do
-      SetValues(Rows[i+1], Engine,
-        [ReadOneByOneRate,{$ifdef UNIK}ReadOneByNameRate,{$endif}
-          ReadAllVirtualRate,ReadAllDirectRate]);
+      SetValues(Rows[i + 1], Engine, [ReadOneByOneRate, {$ifdef UNIK}
+        ReadOneByNameRate, {$endif}
+        ReadAllVirtualRate, ReadAllDirectRate]);
   Table;
   PicEnd(Eng1);
   // Reading per-Category Chart
-  Pic1(Eng2,Stats.Count);
-  for i := 0 to Stats.Count-1 do
-    txt := txt+Int32ToUtf8(Stat[i].ReadOneByOneRate)+',';
+  Pic1(Eng2, Stats.Count);
+  for i := 0 to Stats.Count - 1 do
+    txt := txt + Int32ToUtf8(Stat[i].ReadOneByOneRate) + ',';
   txt[length(txt)] := '|';
   {$ifdef UNIK}
-  for i := 0 to Stats.Count-1 do
-    txt := txt+Int32ToUtf8(Stat[i].ReadOneByNameRate)+',';
+  for i := 0 to Stats.Count - 1 do
+    txt := txt + Int32ToUtf8(Stat[i].ReadOneByNameRate) + ',';
   txt[length(txt)] := '|';
   {$endif}
-  for i := 0 to Stats.Count-1 do
-    txt := txt+Int32ToUtf8(Stat[i].ReadAllVirtualRate)+',';
+  for i := 0 to Stats.Count - 1 do
+    txt := txt + Int32ToUtf8(Stat[i].ReadAllVirtualRate) + ',';
   txt[length(txt)] := '|';
-  for i := 0 to Stats.Count-1 do
-    txt := txt+Int32ToUtf8(Stat[i].ReadAllDirectRate)+',';
+  for i := 0 to Stats.Count - 1 do
+    txt := txt + Int32ToUtf8(Stat[i].ReadAllDirectRate) + ',';
   PicEnd(Cat1);
   // save to local files
-  FileFromString(Doc,ChangeFileExt(Executable.ProgramFileName,'.doc'));
-  FileFromString(cons+'[/code]', ChangeFileExt(Executable.ProgramFileName,'.txt'));
-  s := '<html><body>'#13#10+s;
-  FileFromString(s,ChangeFileExt(Executable.ProgramFileName,'.htm'));
-  FileFromString(s,FormatString('%%-%%.html', [EnsureDirectoryExists(
-    Executable.ProgramFilePath+ 'reports'), DateTimeToFileShort(Now), COMP_TEXT, OS_TEXT]));
+  FileFromString(Doc, ChangeFileExt(Executable.ProgramFileName, '.doc'));
+  FileFromString(Cons + '[/code]',
+    ChangeFileExt(Executable.ProgramFileName, '.txt'));
+  s := '<html><body>'#13#10 + s;
+  FileFromString(s, ChangeFileExt(Executable.ProgramFileName, '.htm'));
+  FileFromString(s, FormatString('%%-%%.html',
+    [EnsureDirectoryExists(Executable.ProgramFilePath + 'reports'),
+     DateTimeToFileShort(Now), COMP_TEXT, OS_TEXT]));
 end;
 
 procedure TTestDatabaseBenchmark.DirectDatabaseAccess;
@@ -1094,5 +1201,5 @@ begin
   {$endif}
 end;
 
-
 end.
+
