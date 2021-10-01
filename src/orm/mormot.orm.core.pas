@@ -8116,7 +8116,7 @@ begin
     GetJsonValues(Json);
     // end the Json object
     if not Json.Expand then
-      Json.AddNoJsonEscape(PAnsiChar(']}'), 2);
+      Json.Add(']', '}');
     Json.FlushFinal;
   finally
     Json.Free;

@@ -227,7 +227,7 @@ type
     function PrepareVacuum(const aSql: RawUtf8): boolean;
   protected
     fBatch: PRestOrmServerDBBatch;
-    fJsonDecoder: TJsonObjectDecoder;
+    fJsonDecoder: TJsonObjectDecoder; // protected by execOrmWrite lock
     /// retrieve a TSqlRequest instance in fStatement
     // - will set @fStaticStatement if no :(%): internal parameters appear:
     // in this case, the TSqlRequest.Close method must be called
@@ -1326,6 +1326,7 @@ begin
   else
   begin
     JsonGetID(pointer(SentData), result);
+    fRest.AcquireExecution[execOrmWrite].Safe.Lock; // protect fJsonDecoder
     fJsonDecoder.Decode(SentData, nil, pInlined, result, false);
     if (fOwner <> nil) and
        (props.RecordVersionField <> nil) then
@@ -1333,6 +1334,7 @@ begin
         props.RecordVersionField);
     sql := fJsonDecoder.EncodeAsSql('INSERT INTO ', sql, {update=}false);
     Finalize(fJsonDecoder); // release temp values memory ASAP
+    fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
   end;
   if InternalExecute(sql, true, nil, nil, nil, PInt64(@result)) then
     InternalUpdateEvent(oeAdd, TableModelIndex, result, SentData, nil);
@@ -1913,12 +1915,14 @@ begin
   begin
     // this sql statement use :(inlined params): for all values
     props := fModel.TableProps[TableModelIndex].Props;
+    fRest.AcquireExecution[execOrmWrite].Safe.Lock; // protect fJsonDecoder
     fJsonDecoder.Decode(SentData, nil, pInlined, ID, false);
     if props.RecordVersionField <> nil then
       fOwner.RecordVersionHandle(ooUpdate, TableModelIndex,
         fJsonDecoder, props.RecordVersionField);
     sql := fJsonDecoder.EncodeAsSql('', '', {update=}true);
     Finalize(fJsonDecoder); // release temp values memory ASAP
+    fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
     if sql = '' then
       raise ERestStorage.CreateUtf8('%.MainEngineUpdate: invalid input [%]',
         [self, EscapeToShort(SentData)]);
