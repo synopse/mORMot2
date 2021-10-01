@@ -184,6 +184,21 @@ type
 
 { *********** TRestOrmServerDB REST ORM Engine over SQLite3 }
 
+  /// low-level internal structure used by TRestOrmServerDB for its Batch process
+  TRestOrmServerDBBatch = record
+    Method: TUriMethod;
+    Options: TRestBatchOptions;
+    TableIndex: integer;
+    ID: TIDDynArray;
+    IDCount: integer;
+    IDMax: TID;
+    Values: TRawUtf8DynArray;
+    ValuesCount: integer;
+    Types: array[0..MAX_SQLFIELDS - 1] of TSqlDBFieldType;
+    Temp: TSynTempBuffer;
+  end;
+  PRestOrmServerDBBatch = ^TRestOrmServerDBBatch;
+
   TRestOrmServerDB = class(TRestOrmServer)
   protected
     /// access to the associated SQLite3 database engine
@@ -211,14 +226,7 @@ type
     // in this case, VACUUM will be a no-op
     function PrepareVacuum(const aSql: RawUtf8): boolean;
   protected
-    fBatchMethod: TUriMethod;
-    fBatchOptions: TRestBatchOptions;
-    fBatchTableIndex: integer;
-    fBatchID: TIDDynArray;
-    fBatchIDCount: integer;
-    fBatchIDMax: TID;
-    fBatchValues: TRawUtf8DynArray;
-    fBatchValuesCount: integer;
+    fBatch: PRestOrmServerDBBatch;
     fJsonDecoder: TJsonObjectDecoder;
     /// retrieve a TSqlRequest instance in fStatement
     // - will set @fStaticStatement if no :(%): internal parameters appear:
@@ -1271,44 +1279,45 @@ function TRestOrmServerDB.MainEngineAdd(TableModelIndex: integer;
 var
   props: TOrmProperties;
   sql: RawUtf8;
-  decoder: TJsonObjectDecoder;
+  b: PRestOrmServerDBBatch;
 begin
   result := 0;
   if TableModelIndex < 0 then
     exit;
   props := fModel.TableProps[TableModelIndex].Props;
   sql := props.SqlTableName;
-  if fBatchMethod <> mNone then
+  b := fBatch;
+  if b^.Method <> mNone then
   begin
     result := 0; // indicates error
     if SentData = '' then
       InternalLog('BATCH with MainEngineAdd(%,SentData="") -> ' +
         'DEFAULT VALUES not implemented', [sql], sllError)
-    else if (fBatchMethod = mPOST) and
-            (fBatchIDMax >= 0) and
-            ((fBatchTableIndex < 0) or
-             (fBatchTableIndex = TableModelIndex)) then
+    else if (b^.Method = mPOST) and
+            (b^.IDMax >= 0) and
+            ((b^.TableIndex < 0) or
+             (b^.TableIndex = TableModelIndex)) then
     begin
-      fBatchTableIndex := TableModelIndex;
+      b^.TableIndex := TableModelIndex;
       if JsonGetID(pointer(SentData), result) then
       begin
-        if result > fBatchIDMax then
-          fBatchIDMax := result;
+        if result > b^.IDMax then
+          b^.IDMax := result;
       end
       else
       begin
-        if fBatchIDMax = 0 then
+        if b^.IDMax = 0 then
         begin
-          fBatchIDMax := TableMaxID(props.Table);
-          if fBatchIDMax < 0 then
+          b^.IDMax := TableMaxID(props.Table);
+          if b^.IDMax < 0 then
             // will force error for whole BATCH block
             exit;
         end;
-        inc(fBatchIDMax);
-        result := fBatchIDMax;
+        inc(b^.IDMax);
+        result := b^.IDMax;
       end;
-      AddID(fBatchID, fBatchIDCount, result);
-      AddRawUtf8(fBatchValues, fBatchValuesCount, SentData);
+      AddID(b^.ID, b^.IDCount, result);
+      AddRawUtf8(b^.Values, b^.ValuesCount, SentData);
     end;
     exit;
   end;
@@ -1317,12 +1326,13 @@ begin
   else
   begin
     JsonGetID(pointer(SentData), result);
-    decoder.Decode(SentData, nil, pInlined, result, false);
+    fJsonDecoder.Decode(SentData, nil, pInlined, result, false);
     if (fOwner <> nil) and
        (props.RecordVersionField <> nil) then
-      fOwner.RecordVersionHandle(ooInsert, TableModelIndex, decoder,
+      fOwner.RecordVersionHandle(ooInsert, TableModelIndex, fJsonDecoder,
         props.RecordVersionField);
-    sql := decoder.EncodeAsSql('INSERT INTO ', sql, {update=}false);
+    sql := fJsonDecoder.EncodeAsSql('INSERT INTO ', sql, {update=}false);
+    Finalize(fJsonDecoder); // release temp values memory ASAP
   end;
   if InternalExecute(sql, true, nil, nil, nil, PInt64(@result)) then
     InternalUpdateEvent(oeAdd, TableModelIndex, result, SentData, nil);
@@ -1519,6 +1529,7 @@ begin
     InternalState := 1;
     fDB.InternalState := @InternalState; // to update our own InternalState
   end;
+  fBatch := AllocMem(SizeOf(fBatch^));
   inherited Create(aRest);
   InitializeEngine;
 end;
@@ -1557,6 +1568,7 @@ begin
       finally
         fOwnedDB.Free; // do nothing if DB<>fOwnedDB
       end;
+      Dispose(fBatch);
     end;
 end;
 
@@ -2185,64 +2197,63 @@ function TRestOrmServerDB.InternalBatchStart(Method: TUriMethod;
   BatchOptions: TRestBatchOptions): boolean;
 begin
   result := false; // means BATCH mode not supported
-  if Method = mPOST then
-  begin
-    // POST=ADD=INSERT -> MainEngineAdd() to fBatchValues[]
-    if (fBatchMethod <> mNone) or
-       (fBatchValuesCount <> 0) or
-       (fBatchIDCount <> 0) then
-      raise EOrmBatchException.CreateUtf8(
-        '%.InternalBatchStop should have been called', [self]);
-    fBatchMethod := Method;
-    fBatchOptions := BatchOptions;
-    fBatchTableIndex := -1;
-    fBatchIDMax := 0; // MainEngineAdd() will search for max(id)
-    result := true; // means BATCH mode is supported
-  end;
+  if Method <> mPOST then
+    exit;
+  // POST=ADD=INSERT -> MainEngineAdd() to Values[]
+  if (fBatch^.Method <> mNone) or
+     (fBatch^.ValuesCount <> 0) or
+     (fBatch^.IDCount <> 0) then
+    raise EOrmBatchException.CreateUtf8(
+      '%.InternalBatchStop should have been called', [self]);
+  fBatch^.Method := Method;
+  fBatch^.Options := BatchOptions;
+  fBatch^.TableIndex := -1;
+  fBatch^.IDMax := 0; // MainEngineAdd() will search for max(id)
+  result := true; // means BATCH mode is supported
 end;
 
 procedure TRestOrmServerDB.InternalBatchStop;
 var
   fieldcount, valuescount, rowcount, lastrowcount, firstrow, prop: integer;
-  ndx, r, f: PtrInt;
+  ndx, r, f, lastvaluesnull: PtrInt;
   P: PUtf8Char;
   sql, logsql: RawUtf8;
   decodesaved, updateeventneeded, fieldschanged: boolean;
   fields, values: TRawUtf8DynArray;
   valuesnull: TByteDynArray;
-  types: TSqlDBFieldTypeDynArray;
   props: TOrmProperties;
-  decode: TJsonObjectDecoder;
-  tmp: TSynTempBuffer;
+  b: PRestOrmServerDBBatch;
 begin
   // generate efficient multi-INSERT statements
-  if (fBatchValuesCount = 0) or
-     (fBatchTableIndex < 0) then
+  b := fBatch;
+  if (b^.ValuesCount = 0) or
+     (b^.TableIndex < 0) then
     exit; // nothing to add
-  if fBatchMethod <> mPOST then
+  if b^.Method <> mPOST then
     raise EOrmBatchException.CreateUtf8('%.InternalBatchStop: BatchMethod=%',
-      [self, MethodText(fBatchMethod)]);
+      [self, MethodText(b^.Method)]);
   try
-    if fBatchValuesCount <> fBatchIDCount then
+    if b^.ValuesCount <> b^.IDCount then
       raise EOrmBatchException.CreateUtf8(
         '%.InternalBatchStop(*Count?)', [self]);
-    updateeventneeded := InternalUpdateEventNeeded(fBatchTableIndex);
-    props := fModel.Tables[fBatchTableIndex].OrmProps;
-    if fBatchValuesCount = 1 then
+    updateeventneeded := InternalUpdateEventNeeded(b^.TableIndex);
+    props := fModel.Tables[b^.TableIndex].OrmProps;
+    if b^.ValuesCount = 1 then
     begin
       // handle single record insert (with inlined parameters)
-      decode.Decode(fBatchValues[0], nil, pInlined, fBatchID[0]);
+      fJsonDecoder.Decode(b^.Values[0], nil, pInlined, b^.ID[0]);
       if props.RecordVersionField <> nil then
         fOwner.RecordVersionHandle(
-          ooInsert, fBatchTableIndex, decode, props.RecordVersionField);
-      sql := decode.EncodeAsSql('INSERT INTO ', props.SqlTableName, {update=}false);
+          ooInsert, b^.TableIndex, fJsonDecoder, props.RecordVersionField);
+      sql := fJsonDecoder.EncodeAsSql(
+        'INSERT INTO ', props.SqlTableName, {update=}false);
       if not InternalExecute(sql, {cache=}true) then
         // just like ESqlite3Exception below
         raise EOrmBatchException.CreateUtf8(
           '%.InternalBatchStop failed on %', [self, sql]);
       if updateeventneeded then
-        InternalUpdateEvent(oeAdd, fBatchTableIndex,
-          fBatchID[0], fBatchValues[0], nil);
+        InternalUpdateEvent(oeAdd, b^.TableIndex,
+          b^.ID[0], b^.Values[0], nil);
       exit;
     end;
     // parse input JSON and gather multi-INSERT statements up to MAX_PARAMS
@@ -2253,6 +2264,7 @@ begin
     lastrowcount := 0;
     firstrow := 0;
     SetLength(valuesnull, (MAX_SQLPARAMS shr 3) + 1);
+    lastvaluesnull := -1;
     SetLength(values, 32);
     fields := nil; // makes compiler happy
     fieldcount := 0;
@@ -2265,43 +2277,42 @@ begin
           if updateeventneeded then
           begin
             // temp parsing copy before reuse in InternalUpdateEvent() callback
-            tmp.Init(fBatchValues[ndx]);
-            P := tmp.buf;
+            b^.Temp.Init(b^.Values[ndx]);
+            P := b^.Temp.buf;
           end
           else
-            P := pointer(fBatchValues[ndx]);
+            P := pointer(b^.Values[ndx]);
           if P = nil then
             raise EOrmBatchException.CreateUtf8(
-              '%.InternalBatchStop: fBatchValues[%]=''''', [self, ndx]);
+              '%.InternalBatchStop: b^.Values[%]=''''', [self, ndx]);
           while P^ in [#1..' ', '{', '['] do
             inc(P);
-          decode.Decode(P, nil, pNonQuoted, fBatchID[ndx]);
+          fJsonDecoder.Decode(P, nil, pNonQuoted, b^.ID[ndx]);
           if props.RecordVersionField <> nil then
-            fOwner.RecordVersionHandle(ooInsert, fBatchTableIndex,
-              decode, props.RecordVersionField);
+            fOwner.RecordVersionHandle(ooInsert, b^.TableIndex,
+              fJsonDecoder, props.RecordVersionField);
           inc(ndx);
           decodesaved := false;
         finally
           if updateeventneeded then
-            tmp.Done;
+            b^.Temp.Done;
         end;
         if fields = nil then
         begin
           // parse the JSON, check the corresponding fields once
-          decode.AssignFieldNamesTo(fields);
-          fieldcount := decode.FieldCount;
-          SetLength(types, fieldcount);
+          fJsonDecoder.AssignFieldNamesTo(fields);
+          fieldcount := fJsonDecoder.FieldCount;
           for f := 0 to fieldcount - 1 do
           begin
-            prop := props.fields.IndexByNameOrExcept(decode.FieldNames[f]);
+            prop := props.fields.IndexByNameOrExcept(fields[f]);
             if prop < 0 then
               // RowID
-              types[f] := ftInt64
+              b^.Types[f] := ftInt64
             else
-              types[f] := props.fields.List[prop].SqlDBFieldType;
+              b^.Types[f] := props.fields.List[prop].SqlDBFieldType;
           end;
         end
-        else if not decode.SameFieldNames(fields) then
+        else if not fJsonDecoder.SameFieldNames(fields) then
         begin
           // this item would break the sql statement
           fieldschanged := true;
@@ -2314,14 +2325,17 @@ begin
         if valuescount + fieldcount > length(values) then
           SetLength(values, MAX_SQLPARAMS);
         for f := 0 to fieldcount - 1 do
-          if decode.FieldTypeApproximation[f] = ftaNull then
-            SetBitPtr(pointer(valuesnull), valuescount + f)
+          if fJsonDecoder.FieldTypeApproximation[f] = ftaNull then
+          begin
+            lastvaluesnull := valuescount + f;
+            SetBitPtr(pointer(valuesnull), lastvaluesnull);
+          end
           else
-            values[valuescount + f] := decode.FieldValues[f];
+            values[valuescount + f] := fJsonDecoder.FieldValues[f];
         inc(valuescount, fieldcount);
         inc(rowcount);
         decodesaved := true;
-      until ndx = fBatchValuesCount;
+      until ndx = b^.ValuesCount;
       // INSERT values[] into the DB
       if (sql = '') or
          (rowcount <> lastrowcount) then
@@ -2329,7 +2343,7 @@ begin
         FormatUtf8('% multi insert into %(%)', [rowcount,
           props.SqlTableName, RawUtf8ArrayToCsv(fields)], logsql);
         EncodeMultiInsertSQL(
-          props.SqlTableName, fields, fBatchOptions, rowcount, sql);
+          props.SqlTableName, fields, b^.Options, rowcount, sql);
         lastrowcount := rowcount;
       end;
       DB.LockAndFlushCache;
@@ -2345,7 +2359,7 @@ begin
             if GetBitPtr(pointer(valuesnull), f) then
               fStatement^.BindNull(f + 1)
             else
-              case types[prop] of
+              case b^.Types[prop] of
                 ftInt64:
                   fStatement^.Bind(f + 1, GetInt64(pointer(values[f])));
                 ftDouble,
@@ -2364,8 +2378,8 @@ begin
           until fStatement^.Step <> SQLITE_ROW; // ESqlite3Exception on error
           if updateeventneeded then
             for r := firstrow to firstrow + rowcount - 1 do
-              InternalUpdateEvent(oeAdd, fBatchTableIndex,
-                fBatchID[r], fBatchValues[r], nil);
+              InternalUpdateEvent(oeAdd, b^.TableIndex,
+                b^.ID[r], b^.Values[r], nil);
           inc(firstrow, rowcount);
           GetAndPrepareStatementRelease;
         except
@@ -2384,20 +2398,25 @@ begin
         logsql := '';
         fieldschanged := false;
       end;
-      FillcharFast(valuesnull[0], (valuescount shr 3) + 1, 0);
+      if lastvaluesnull >= 0 then
+      begin
+        FillcharFast(valuesnull[0], (lastvaluesnull shr 3) + 1, 0);
+        lastvaluesnull := -1;
+      end;
       valuescount := 0;
       rowcount := 0;
       fields := nil; // force new sql statement and values[]
     until decodesaved and
-          (ndx = fBatchValuesCount);
-    if firstrow <> fBatchValuesCount then
+          (ndx = b^.ValuesCount);
+    if firstrow <> b^.ValuesCount then
       raise EOrmBatchException.CreateUtf8('%.InternalBatchStop(firstrow)', [self]);
   finally
-    fBatchMethod := mNone;
-    fBatchValuesCount := 0;
-    fBatchValues := nil;
-    fBatchIDCount := 0;
-    fBatchID := nil;
+    b^.Method := mNone;
+    b^.ValuesCount := 0;
+    b^.Values := nil;
+    b^.IDCount := 0;
+    b^.ID := nil;
+    Finalize(fJsonDecoder); // release temp values memory ASAP
   end;
 end;
 
