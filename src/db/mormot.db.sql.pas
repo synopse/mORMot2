@@ -1645,6 +1645,9 @@ type
     /// determine if the SQL statement can be cached
     // - used by TSqlDBConnection.NewStatementPrepared() for handling cache
     function IsCachable(P: PUtf8Char): boolean; virtual;
+    /// check if a primary key has already an index
+    // - can specify if it is ascending only, which is not the case for Firebird
+    function IsPrimaryKeyIndexed(var AscendingOnly: boolean): boolean; virtual;
     /// return the database engine name, as computed from the class name
     // - 'TSqlDBConnectionProperties' will be trimmed left side of the class name
     class function EngineName: RawUtf8;
@@ -3556,6 +3559,31 @@ begin
     result := false;
 end;
 
+function TSqlDBConnectionProperties.IsPrimaryKeyIndexed(
+  var AscendingOnly: boolean): boolean;
+begin
+  // our ORM expects an index to quickly run "select max(RowID)"
+  result := false;
+  case GetDbms of
+    dSQLite,
+    dPostgreSQL,
+    dMSSQL,
+    dMySQL,
+    dOracle,
+    dNexusDB:
+      // most DB create an implicit index on their primary key,
+      // which is fine for max(RowID)
+      result := true;
+    dFirebird:
+      // Firebird only creates an ASC index by default on its primary key
+      // so max(RowID) is slow - see http://www.firebirdfaq.org/faq205
+      // -> need to create a separated DESC index
+      AscendingOnly := true;
+      // note: TSqlDBIbxConnectionProperties overrides this method
+      // and support a CreateDescendingPK property to create a DESC index only
+  end;
+end;
+
 class function TSqlDBConnectionProperties.GetFieldDefinition(
   const Column: TSqlDBColumnDefine): RawUtf8;
 begin
@@ -3816,7 +3844,7 @@ begin
       with Execute('PRAGMA table_info(`' + aTableName + '`)', []) do
         while Step do
         begin
-        // cid=0,name=1,type=2,notnull=3,dflt_value=4,pk=5
+          // cid=0,name=1,type=2,notnull=3,dflt_value=4,pk=5
           F.ColumnName := ColumnUtf8(1);
           F.ColumnTypeNative := ColumnUtf8(2);
           F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative, 0);

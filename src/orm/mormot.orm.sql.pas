@@ -1834,11 +1834,11 @@ var
   SQL: RawUtf8;
   ExtFieldNames: TRawUtf8DynArray;
   IntFieldIndex: TIntegerDynArray;
-  Descending: boolean;
+  NeedDesc: boolean;
   i, n, extfield: PtrInt;
 begin
   result := false;
-  Descending := false;
+  NeedDesc := false;
   n := length(FieldNames);
   if (self = nil) or
      (fProperties = nil) or
@@ -1850,33 +1850,14 @@ begin
   if n = 1 then
   begin
     // handle case of index over a single column
-    if IntFieldIndex[0] < 0 then // ID/RowID?
-      case fProperties.Dbms of
-        dSQLite, dPostgreSQL, dMSSQL, dMySQL, dOracle, dNexusDB:
-          begin
-            // most DB create an implicit index on primary key
-            result := true;
-            exit;
-          end;
-        dFirebird:
-          // see http://www.firebirdfaq.org/faq205
-          if fProperties.ClassNameIs('TSqlDBIbxConnectionProperties') then
-          begin
-            // TSqlDBIbxConnectionProperties.SqlCreate handles desc index PK
-            // Engine='IBX0' - asc PK + desc NDX as default dFirebird
-            // Engine='IBX1' - desc PK only
-            if fProperties.Engine='IBX1' then
-            begin
-              result := true;
-              exit;
-            end
-            else
-              Descending := true;
-          end
-          else
-            Descending := true;
-      end;
-    if not Descending then
+    if (IntFieldIndex[0] < 0) and // ID/RowID?
+      fProperties.IsPrimaryKeyIndexed(NeedDesc) then
+    begin
+      // most DB create an implicit index on primary key
+      result := true;
+      exit;
+    end;
+    if not NeedDesc then
     begin
       // we identify just if indexed, not the order
       extfield := fFieldsInternalToExternal[IntFieldIndex[0] + 1];
@@ -1899,7 +1880,7 @@ begin
       begin
         if i = 0 then
           exit; // impossible to create an index with no field!
-        SetLength(ExtFieldNames, i); // truncate index to the last indexable field
+        SetLength(ExtFieldNames, i); // truncate to the last indexable field
         break;
       end;
     end;
