@@ -46,14 +46,17 @@ uses
   mormot.core.datetime,
   mormot.core.os,
   mormot.core.perf,
+  mormot.core.unicode,
   mormot.core.test,
   mormot.orm.core,
   mormot.orm.base,
   mormot.orm.sql,
   mormot.orm.storage,
+  mormot.orm.rest,
   mormot.rest.core,
   mormot.rest.sqlite3,
   mormot.rest.memserver,
+  mormot.rest.server,
   mormot.db.sql,
   mormot.db.sql.sqlite3,
   mormot.db.raw.sqlite3,
@@ -249,9 +252,9 @@ type
     Res: TIDDynArray;
     Flags: TTestDatabaseFlags;
     procedure Setup; override;
-    procedure Cleanup; override;
+    procedure CleanUp; override;
     procedure MethodSetup; override;
-    procedure MethodCleanup; override;
+    procedure MethodCleanUp; override;
     procedure RunTests; virtual;
     function ModelCreate: TOrmModel; virtual;
     procedure ClientCreate; virtual;
@@ -804,7 +807,7 @@ begin
   if fn <> SQLITE_MEMORY_DATABASE_NAME then
   begin
     DeleteFile(fn);
-    P := TSqlDBSQLite3ConnectionProperties.Create(fn, '', '', '');
+    P := TSqlDBSQLite3ConnectionProperties.Create(StringToUtf8(fn), '', '', '');
     P.MainSQLite3DB.Synchronous := sm;
     P.MainSQLite3DB.LockingMode := lm;
     Props := P;
@@ -956,7 +959,7 @@ var
     Cat2 := '';
     SetLength(Rows, Stats.Count + 1);
     Rows[0] := '<td>&nbsp;</td>';
-    Cons := Cons + #13#10 + Title + #13#10 + StringOfChar(' ', col1len + 2);
+    Cons := Cons + #13#10 + Title + #13#10 + RawUtf8OfChar(' ', col1len + 2);
     for i := 0 to high(Cat) do
     begin
       Rows[0] := Rows[0] + '<td><b>' + Cat[i] + '</b></td>';
@@ -964,7 +967,7 @@ var
       Cat2 := Cat2 + UrlEncode(Cat[high(Cat) - i]) + '|';
       Cons := Cons + Cat[i];
       if i <> high(Cat) then
-        Cons := Cons + StringOfChar(' ', 12 - length(Cat[i]));
+        Cons := Cons + RawUtf8OfChar(' ', 12 - length(Cat[i]));
     end;
     Cons := Cons + #13#10;
     SetLength(Cat1, length(Cat1) - 1);
@@ -1025,12 +1028,12 @@ var
     for j := 1 to length(v) do
       fmt := fmt + '<td>%</td>';
     Rows := Rows + FormatUTF8(fmt, v);
-    fmt := eng + StringOfChar(' ', col1len - length(eng) + 2);
+    fmt := eng + RawUtf8OfChar(' ', col1len - length(eng) + 2);
     for j := 0 to high(v) do
     begin
       VarRecToUTF8(v[j], s);
       if j <> high(v) then
-        s := s + StringOfChar(' ', 12 - length(s));
+        s := s + RawUtf8OfChar(' ', 12 - length(s));
       fmt := fmt + s;
     end;
     Cons := Cons + fmt + #13#10;
