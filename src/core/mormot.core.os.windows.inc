@@ -521,7 +521,8 @@ const
   cSetThreadNameException = $406D1388;
 
   // https://docs.microsoft.com/en-us/archive/blogs/yizhang/interpreting-hresults-returned-from-netclr-0x8013xxxx
-  DOTNET_EXCEPTIONNAME: array[0..83] of PUtf8Char = (
+  // see also https://referencesource.microsoft.com/#mscorlib/system/__hresults.cs
+  DOTNET_EXCEPTIONNAME: array[0..91] of PUtf8Char = (
     'Access',                            // $8013151A
     'AmbiguousMatch',                    // $8000211D
     'appdomainUnloaded',                 // $80131015
@@ -544,7 +545,7 @@ const
     'DuplicateWaitObject',               // $80131529
     'EndOfStream',                       // $00801338
     'EntryPointNotFound',                // $80131522
-    'CoreConnectionError',               // $80131500 - name is ours
+    '',                                  // $80131500 - name is plain Exception
     'ExecutionEngine',                   // $80131506
     'External',                          // $80004005
     'FieldAccess',                       // $80131507
@@ -605,9 +606,17 @@ const
     'InClassConstructor',                // $80131543
     'KeyNotFound',                       // $80131577
     'InsufficientStack',                 // $80131578
-    'InsufficientMemory');               // $8013153D
+    'InsufficientMemory',                // $8013153D
+    'Verification',                      // $8013150D
+    'HostProtection',                    // $80131640
+    'MinGrantFailed',                    // $80131417
+    'Crypto',                            // $80131430
+    'CryptoUnexOper',                    // $80131431
+    'Overflow',                          // $8002000a
+    'InvalidName',                       // $80131047
+    'TypeMismatch');                     // $80028ca0
 
-  DOTNET_EXCEPTIONHRESULT: array[0..83] of cardinal = (
+  DOTNET_EXCEPTIONHRESULT: array[0..91] of cardinal = (
     $8013151A,
     $8000211D,
     $80131015,
@@ -691,7 +700,15 @@ const
     $80131543,
     $80131577,
     $80131578,
-    $8013153D);
+    $8013153D,
+    $8013150D,
+    $80131640,
+    $80131417,
+    $80131430,
+    $80131431,
+    $8002000a,
+    $80131047,
+    $80028ca0);
 
 type
   // avoid linking of ComObj.pas just for EOleSysError
