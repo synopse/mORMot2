@@ -278,10 +278,17 @@ type
      cConsole,
      cKill);
 
-procedure TSynDaemon.CommandLine(aAutoStart: boolean);
 const
   CMD_CHR: array[cHelp .. cKill] of AnsiChar = (
-    'H', 'I', 'R', 'F', 'U', 'C', 'K');
+    'H',  // cHelp
+    'I',  // cInstall
+    'R',  // cRun
+    'F',  // cFork
+    'U',  // cUninstall
+    'C',  // cConsole
+    'K'); // cKill
+
+procedure TSynDaemon.CommandLine(aAutoStart: boolean);
 var
   cmd, c: TExecuteCommandLineCmd;
   p: PUtf8Char;
@@ -393,12 +400,12 @@ begin
       end;
     if cmd = cNone then
       byte(cmd) := ord(cVersion) +
-        IdemPCharArray(p, ['VERS',
-                           'VERB',
-                           'START',
-                           'STOP',
-                           'STAT',
-                           'SILENTK']);
+        IdemPCharArray(p, ['VERS',      // cVersion
+                           'VERB',      // cVerbose
+                           'START',     // cStart
+                           'STOP',      // cStop
+                           'STAT',      // cState
+                           'SILENTK']); // cSilentKill
     end;
   try
     case cmd of
@@ -483,7 +490,10 @@ begin
         with fSettings do
           Show(TServiceController.Install(ServiceName, ServiceDisplayName,
             ServiceDescription, aAutoStart, '', ServiceDependencies) <> ssNotInstalled);
-      cStart, cStop, cUninstall, cState:
+      cStart,
+      cStop,
+      cUninstall,
+      cState:
         begin
           ctrl := TServiceController.CreateOpenService(
                     '', '', fSettings.ServiceName);

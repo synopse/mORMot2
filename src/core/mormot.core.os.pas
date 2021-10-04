@@ -3539,7 +3539,7 @@ begin
       backuplasterror := GetLastError;
       backuphandler := _RawLogException;
       try
-        _RawLogException := nil; // disable exception
+        _RawLogException := nil; // disable nested exception
         ctxt.EClass := PPointer(Obj)^;
         ctxt.EInstance := Exception(Obj);
         ctxt.EAddr := PtrUInt(Addr);
