@@ -27,15 +27,14 @@ unit mormot.db.sql.ibx;
     own proper transaction on prepare, and COMMIT them after execution or
     Eof or ReleaseRows. This implements a software-simulated "auto commit".
     Each internal transaction is owned by the associated Statement.
-  - if TSqlDBIbxConnectionProperties.CreateDescendingPK is set to True (Default
-    is False), it will create only one descending PK index using statement:
+  - if TSqlDBIbxConnectionProperties.CreateDescendingOnlyPK is forced to True,
+    it will create only one descending PK index using this statement:
       PRIMARY KEY(ID) using desc index PK_TableName
     default dFirebird create two indexes on ID, one ascending, second descending
-    nedded for select max(ID) - TRestStorageExternal.CreateSqlMultiIndex
-    will detect the properties classname - see http://www.firebirdfaq.org/faq205
+    nedded for select max(ID) - see http://www.firebirdfaq.org/faq205
   - Batch is implemented for insert, update, delete using "execute block"
-  - TODO Firebird4 API interface, with its new IBatch interface for insert/update
-    also implemented in fbintf package.
+  - TODO: Firebird4 API interface, with its new IBatch interface for
+    insert/update also implemented in fbintf package.
 }
 
 
@@ -64,7 +63,7 @@ uses
   classes,
   variants,
   // main IBX/FB Pascal API units
-  IB,
+  //IB,
   // mORMot 2 units
   mormot.core.base,
   mormot.core.os,
@@ -86,13 +85,12 @@ type
 
   /// implement properties shared by IBX/FB Pascal API connections
   TSqlDBIbxConnectionProperties = class(TSqlDBConnectionPropertiesThreadSafe)
-  private
-    fCreateDescendingPK: boolean;
+  protected
+    fCreateDescendingOnlyPK: boolean;
     fFirebirdLibraryPathName: string;
     fIbxDBParams: TStringList;
     fCreateIfNotExists: boolean;
-    procedure SetCreateDescendingPK(AValue: boolean);
-  protected
+    procedure SetCreateDescendingOnlyPK(AValue: boolean);
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - do nothing by now
     procedure GetForeignKeys; override;
@@ -114,34 +112,34 @@ type
     // - caller is responsible of freeing this instance
     // - this overridden method will create an TSqlDBIbxConnection instance
     function NewConnection: TSqlDBConnection; override;
-    // Override to enable descending PK
+    /// method overriden to support our CreateDescendingOnlyPK property
     function SqlCreate(const aTableName: RawUtf8;
       const aFields: TSqlDBColumnCreateDynArray; aAddID: boolean): RawUtf8; override;
+    /// method overriden to support our CreateDescendingOnlyPK property
+    function IsPrimaryKeyIndexed(var AscendingOnly: boolean): boolean; override;
   published
-    /// Full file path name to firebird client dll (fbclient.dll), default ''
+    /// full file path name to the firebird client dll (fbclient.dll), default ''
     property FirebirdLibraryPathName: RawUtf8
       read fFirebirdLibraryPathName write fFirebirdLibraryPathName;
-    // You can add additional DB Params, see documentation in IBX/FB Pascal API
+    /// optional low-levl IBX DB Params, see documentation in IBX/FB Pascal API
     property IbxDBParams: TStringList
       read fIbxDBParams;
-    // Create database file if not exists, default is True
+    /// create the database file if not exists, default is True
     property CreateIfNotExists: boolean
       read fCreateIfNotExists;
-    // All firebird mormot drivers create ascending PK index on ID and
-    // another descending index on ID
-    // - see http://www.firebirdfaq.org/faq205
-    // - Having two indexes on same column slow down any insert, updata, delete
-    // - Setting CreateDescendingPK := True driver will create only one
-    // descending PK index using this statement:
-    // $ PRIMARY KEY(ID) using desc index PK_TableName
-    property CreateDescendingPK: boolean
-      read fCreateDescendingPK write SetCreateDescendingPK;
+    /// force to create only a DESC index on primary key, for best performance
+    // - the default mORMot behavior is to create both ascending and descending
+    // indexes on the ID primary key: it is needed because only an ascending
+    // index is created on FireBird PK, and max(ID) is slow - see
+    // http://www.firebirdfaq.org/faq205
+    // - but having two indexes on same column slow down database writes
+    // - forcing this property to True will create only one descending PK index
+    property CreateDescendingOnlyPK: boolean
+      read fCreateDescendingOnlyPK write SetCreateDescendingOnlyPK;
   end;
 
   /// implements a connection via the IBX/FB Pascal API access layer
   TSqlDBIbxConnection = class(TSqlDBConnectionThreadSafe)
-  private
-    function GetFirebirdAPI: IFirebirdAPI;
   protected
     fFbLibraryPathName: string;
     fDBParams: TStringList;
@@ -152,6 +150,7 @@ type
     // Main Transaction used with Begin(Start)Transaction/Batch
     fTPB: ITPB;
     fTransaction: ITransaction;
+    function GetFirebirdAPI: IFirebirdAPI;
     function GenerateTPB(aReadOnly: boolean = false): ITPB;
   public
     /// prepare a connection to a specified Firebird database server
@@ -187,7 +186,7 @@ type
       read fTransaction;
   end;
 
-  TColumnsMeta = record
+  TIBXColumnsMeta = record
     SQLType: Cardinal;
     CodePage: TSystemCodePage;
     Scale: integer;
@@ -202,7 +201,7 @@ type
     fResultSet: IResultSet;
     fResults: IResults;
     fMeta: IMetaData;
-    fColumnsMeta: array of TColumnsMeta;
+    fColumnsMeta: array of TIBXColumnsMeta;
     // Internal Transaction used for all statements if not explicit StartTransaction/Batch
     // This transaction is Started and COMMIT after execution (auto commit)
     fInternalTPB: ITPB;
@@ -210,8 +209,10 @@ type
     fReadOnlyTransaction: boolean;
     procedure InternalStartTransaction;
     procedure InternalCommitTransaction;
+    procedure ErrorColAndRowset(const Col: integer);
     procedure CheckColAndRowset(const Col: integer);
-    function IbxSQLTypeToTSqlDBFieldType(const aColMeta: TColumnsMeta): TSqlDBFieldType;
+      {$ifdef HASINLINE} inline; {$endif}
+    function IbxSQLTypeToTSqlDBFieldType(const aColMeta: TIBXColumnsMeta): TSqlDBFieldType;
   public
     destructor Destroy; override;
     /// Prepare an UTF-8 encoded SQL statement
@@ -319,18 +320,26 @@ procedure TSqlDBIbxStatement.CheckColAndRowset(const Col: integer);
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBIbx.CreateUtf8('%.ColumnInt(%) ResultSet=%',
-      [self, Col, fResultSet]);
+    ErrorColAndRowset(Col);
+end;
+
+procedure TSqlDBIbxStatement.ErrorColAndRowset(const Col: integer);
+begin
+  raise ESqlDBIbx.CreateUtf8('%.ColumnInt(%) ResultSet=%',
+    [self, Col, fResultSet]);
 end;
 
 function TSqlDBIbxStatement.IbxSQLTypeToTSqlDBFieldType(
-  const aColMeta: TColumnsMeta): TSqlDBFieldType;
-var i: integer;
+  const aColMeta: TIBXColumnsMeta): TSqlDBFieldType;
+var
+  scale: integer;
 begin
   case aColMeta.SQLType of
-    SQL_VARYING, SQL_TEXT:
+    SQL_VARYING,
+    SQL_TEXT:
       result := ftUtf8;
-    SQL_DOUBLE, SQL_FLOAT:
+    SQL_DOUBLE,
+    SQL_FLOAT:
       result := ftDouble;
     SQL_TIMESTAMP,
     SQL_TIMESTAMP_TZ_EX,
@@ -346,11 +355,11 @@ begin
     SQL_D_FLOAT,
     SQL_INT64:
       begin
-        i := aColMeta.Scale;
-        if i = 0 then
+        scale := aColMeta.Scale;
+        if scale = 0 then
           result := ftInt64
         else
-        if i >= (-4) then
+        if scale >= -4 then
           result := ftCurrency
         else
           result := ftDouble;
@@ -361,12 +370,12 @@ begin
           result := ftUtf8
         else
           result := ftBlob;
-      end
+      end;
   else
-    //    SQL_INT128, SQL_DEC_FIXED, SQL_DEC16, SQL_DEC34
-    //    SQL_NULL, SQL_ARRAY, SQL_QUAD
-    raise ESqlDBIbx.CreateUtf8('%: unexpected TIbxType %', [self,
-      aColMeta.SQLType]);
+    // SQL_INT128, SQL_DEC_FIXED, SQL_DEC16, SQL_DEC34
+    // SQL_NULL, SQL_ARRAY, SQL_QUAD
+    raise ESqlDBIbx.CreateUtf8('%: unexpected TIbxType %',
+      [self, aColMeta.SQLType]);
   end;
 end;
 
@@ -392,7 +401,7 @@ var
   con: TSqlDBIbxConnection;
   tr: ITransaction;
   fColumnMetaData: IColumnMetaData;
-  i, n: integer;
+  i, n: PtrInt;
   name: string;
 begin
   SQLLogBegin(sllDB);
@@ -401,7 +410,6 @@ begin
     raise ESqlDBIbx.CreateUtf8('%.Prepare() shall be called once', [self]);
   inherited Prepare(aSQL, ExpectResults); // connect if necessary
   fReadOnlyTransaction := IdemPChar(pointer(fSQL), 'SELECT');
-
   con := (fConnection as TSqlDBIbxConnection);
   if not con.IsConnected then
     con.Connect;
@@ -421,10 +429,8 @@ begin
     tr, {$ifdef UNICODE} Utf8ToString(fSQL) {$else} fSQL {$endif});
   fStatement.SetStaleReferenceChecks(false);
   fStatement.SetRetainInterfaces(true);
-
   fColumnCount := 0;
   fColumn.ReHash;
-
   if ExpectResults then
   begin
     fMeta := fStatement.GetMetaData;
@@ -438,7 +444,6 @@ begin
       fColumnsMeta[i].CodePage := fColumnMetaData.getCodePage;
       fColumnsMeta[i].Scale := fColumnMetaData.getScale;
       fColumnsMeta[i].Subtype := fColumnMetaData.getSubtype;
-
       name := fColumnMetaData.getName;
       PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(
         // Delphi<2009: already UTF-8 encoded due to controls_cp=CP_UTF8
@@ -474,7 +479,8 @@ begin
     SQL_LONG:
       if aParam.getScale = 0 then
         result := 'INTEGER'
-      else begin
+      else
+      begin
         if aParam.getSubtype = 1 then
           FormatUtf8('NUMERIC(9,%)', [-aParam.getScale], result)
         else
@@ -483,7 +489,8 @@ begin
     SQL_SHORT:
       if aParam.getScale = 0 then
         result := 'SMALLINT'
-      else begin
+      else
+      begin
         if aParam.getSubtype = 1 then
           FormatUtf8('NUMERIC(4,%)', [-aParam.getScale], result)
         else
@@ -496,8 +503,8 @@ begin
         result := 'BLOB SUB_TYPE TEXT'
       else
         result := 'BLOB';
-    //SQL_ARRAY                      = 540;
-    //SQL_QUAD                       = 550;
+    //SQL_ARRAY = 540;
+    //SQL_QUAD  = 550;
     SQL_TYPE_TIME:
        result := 'TIME';
     SQL_TYPE_DATE:
@@ -505,7 +512,8 @@ begin
     SQL_INT64: // IB7
       if aParam.getScale = 0 then
         result := 'BIGINT'
-      else begin
+      else
+      begin
         if aParam.getSubtype = 1 then
           FormatUtf8('NUMERIC(18,%)', [-aParam.getScale], result)
         else
@@ -526,7 +534,6 @@ begin
   else
     result := b;
 end;
-
 
 procedure TSqlDBIbxStatement.ExecutePrepared;
 var
@@ -556,7 +563,7 @@ var
 
     procedure ExecuteBlockStatement;
     var
-      iP, iA, ndx: integer;
+      iP, iA, ndx: PtrInt;
     begin
       // Bind Params
       iParams := newStatement.GetSQLParams;
@@ -583,7 +590,7 @@ var
               for iA := 0 to iEnd-iStart do
                 iParams.getSQLParam(iA * fParamCount + iP).SetIsNull(true);
           else
-            for iA := 0 to iEnd-iStart do
+            for iA := 0 to iEnd - iStart do
             begin
               iParam := iParams.getSQLParam(iA * fParamCount + iP);
               ndx := iA + iStart;
@@ -720,37 +727,24 @@ begin
       with fParams[i] do
       begin
         case VType of
-          ftUnknown,ftNull:
-            begin
-              iParam.SetIsNull(True);
-            end;
+          ftUnknown,
+          ftNull:
+            iParam.SetIsNull(True);
           ftDate:
-            begin
-              iParam.SetAsDateTime(PDateTime(@VInt64)^);
-            end;
+            iParam.SetAsDateTime(PDateTime(@VInt64)^);
           ftInt64:
-            begin
-              iParam.SetAsInt64(PInt64(@VInt64)^);
-            end;
+            iParam.SetAsInt64(PInt64(@VInt64)^);
           ftDouble:
-            begin
-              iParam.SetAsDouble(unaligned(PDouble(@VInt64)^));
-            end;
+            iParam.SetAsDouble(unaligned(PDouble(@VInt64)^));
           ftCurrency:
-            begin
-              iParam.SetAsCurrency(PCurrency(@VInt64)^);
-            end;
+            iParam.SetAsCurrency(PCurrency(@VInt64)^);
           ftUtf8:
-            begin
-              iParam.SetAsString(VData);
-            end;
+            iParam.SetAsString(VData);
           ftBlob:
-            begin
-              iParam.SetAsString(VData);
-            end;
-          else
-            raise ESqlDBIbx.CreateUtf8(
-              '%.ExecutePrepared: Invalid type parameter #%', [self, i]);
+            iParam.SetAsString(VData);
+        else
+          raise ESqlDBIbx.CreateUtf8(
+            '%.ExecutePrepared: Invalid type parameter #%', [self, i]);
         end;
       end;
     end;
@@ -883,7 +877,7 @@ var
   data: PByte;
 begin
   CheckColAndRowset(Col);
-  if fColumnsMeta[Col].Scale=-4 then
+  if fColumnsMeta[Col].Scale = -4 then
   begin
     fResults.GetData(Col, nul, len, data);
     PInt64(@result)^ := PInt64(data)^;
@@ -925,12 +919,14 @@ begin
   if WR.Expand then
     WR.Add('{');
   if Assigned(WR.Fields) then
-    H := High(WR.Fields) else
+    H := High(WR.Fields)
+  else
     H := High(WR.ColNames);
   for I := 0 to H do
   begin
     if Pointer(WR.Fields) = nil then
-      C := I else
+      C := I
+    else
       C := WR.Fields[I];
     if WR.Expand then
       WR.AddString(WR.ColNames[I]); // add '"ColumnName":'
@@ -941,10 +937,11 @@ begin
     begin
       with fColumnsMeta[C] do
       case SQLType of
-        SQL_VARYING, SQL_TEXT:
+        SQL_VARYING,
+        SQL_TEXT:
           begin
             WR.Add('"');
-            if CodePage=CP_UTF8 then
+            if CodePage = CP_UTF8 then
               WR.AddJsonEscape(data, len)
             else
             begin
@@ -953,7 +950,8 @@ begin
             end;
             WR.Add('"');
           end;
-        SQL_DOUBLE, SQL_D_FLOAT:
+        SQL_DOUBLE,
+        SQL_D_FLOAT:
           WR.AddDouble(PDouble(data)^);
         SQL_FLOAT:
           WR.AddSingle(PSingle(data)^);
@@ -966,15 +964,14 @@ begin
         SQL_TYPE_DATE:
           begin
             WR.Add('"');
-            WR.AddDateTime(fResults[C].GetAsDateTime,
-              fForceDateWithMS);
+            WR.AddDateTime(fResults[C].GetAsDateTime, fForceDateWithMS);
             WR.Add('"');
           end;
         SQL_BOOLEAN:
           WR.Add(PByte(data)^ = 1);
         SQL_LONG:
           begin
-            if Scale=0 then
+            if Scale = 0 then
               WR.Add(PInteger(data)^)
             else
               WR.AddDouble(fResults[C].GetAsDouble);
@@ -1017,10 +1014,10 @@ begin
             end;
           end
       else
-        //    SQL_INT128, SQL_DEC_FIXED, SQL_DEC16, SQL_DEC34
-        //    SQL_NULL, SQL_ARRAY, SQL_QUAD
+        // SQL_INT128, SQL_DEC_FIXED, SQL_DEC16, SQL_DEC34
+        // SQL_NULL, SQL_ARRAY, SQL_QUAD
         raise ESqlDBException.CreateUtf8(
-          '%.ColumnsToJson: invalid ColumnType(#% "%")=%',
+          '%.ColumnsToJson: unexpected ColumnType(#% "%")=%',
           [self, C, fColumns[C].ColumnName, ord(fColumns[C].ColumnType)]);
       end;
     end;
@@ -1294,10 +1291,29 @@ end;
 
 { TSqlDBIbxConnectionProperties }
 
-procedure TSqlDBIbxConnectionProperties.SetCreateDescendingPK(AValue: boolean);
+function TSqlDBIbxConnectionProperties.IsPrimaryKeyIndexed(
+  var AscendingOnly: boolean): boolean;
 begin
-  fCreateDescendingPK := AValue;
-  fEngineName:=FormatUtf8('IBX%', [AValue]);
+  if fCreateDescendingOnlyPK then
+    // SqlCreate() did already generate the needed DESC index
+    // -> TRestStorageExternal.CreateSqlMultiIndex() has nothing to do
+    result := true
+  else
+  begin
+    // Firebird only creates an ASC index by default on its primary key
+    // so max(RowID) is slow - see http://www.firebirdfaq.org/faq205
+    // -> need to create a separated DESC index
+    AscendingOnly := true;
+    result := false;
+  end;
+end;
+
+procedure TSqlDBIbxConnectionProperties.SetCreateDescendingOnlyPK(AValue: boolean);
+begin
+  // Engine='IBX0' - asc PK + desc NDX (our ORM default on dFirebird)
+  // Engine='IBX1' - desc PK only (included in SqlCreate)
+  fCreateDescendingOnlyPK := AValue;
+  fEngineName := FormatUtf8('IBX%', [AValue]);
 end;
 
 procedure TSqlDBIbxConnectionProperties.GetForeignKeys;
@@ -1320,7 +1336,7 @@ begin
     result := result + ' UNIQUE'; // see http://www.w3schools.com/sql/sql_unique.asp
   if aField.PrimaryKey then
   begin
-    if fCreateDescendingPK then
+    if fCreateDescendingOnlyPK then
       aAddPrimaryKey := aField.Name
     else
       result := result + ' PRIMARY KEY';
@@ -1333,7 +1349,7 @@ constructor TSqlDBIbxConnectionProperties.Create(const aServerName,
 begin
   fIbxDBParams := TStringList.Create;
   fCreateIfNotExists := true;
-  SetCreateDescendingPK(false);
+  SetCreateDescendingOnlyPK(false);
   fDbms := dFirebird;
   fBatchSendingAbilities := [cCreate, cUpdate, cDelete];
   fBatchMaxSentAtOnce := 5000;  // iters <= 32767 for better performance
@@ -1385,7 +1401,7 @@ begin
   if AddPrimaryKey <> '' then
   begin
     result := result + ', PRIMARY KEY(' + AddPrimaryKey + ')';
-    if fCreateDescendingPK then
+    if fCreateDescendingOnlyPK then
       result := result + ' USING DESC INDEX PK_' + aTableName;
   end;
   result := 'CREATE TABLE ' + aTableName + ' (' + result + ')';
