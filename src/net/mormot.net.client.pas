@@ -825,6 +825,7 @@ type
   // back-end server applications that require access to an HTTP client stack
   TWinHttp = class(TWinHttpApi)
   protected
+    function InternalGetProtocols: cardinal; virtual;
     // those internal methods will raise an EOSError exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
       ReceiveTimeout: cardinal); override;
@@ -2343,41 +2344,45 @@ end;
 
 { TWinHttp }
 
+function TWinHttp.InternalGetProtocols: cardinal;
+begin
+  // WINHTTP_FLAG_SECURE_PROTOCOL_SSL2 and WINHTTP_FLAG_SECURE_PROTOCOL_SSL3
+  // are unsafe, disabled at Windows level, therefore never supplied
+  result := WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
+  // Windows 7 and newer support TLS 1.1 & 1.2
+  if OSVersion >= wSeven then
+    result := result or
+              WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 or
+              WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+end;
+
 procedure TWinHttp.InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
 var
-  OpenType: integer;
   Callback: WINHTTP_STATUS_CALLBACK;
   CallbackRes: PtrInt absolute Callback; // for FPC compatibility
-  // MPV - don't know why, but if I pass WINHTTP_FLAG_SECURE_PROTOCOL_SSL2
-  // flag also, TLS1.2 does not work
-  protocols: cardinal;
+  access, protocols: cardinal;
 begin
   if fProxyName = '' then
     if OSVersion >= wEightOne then
-      // Windows 8.1 and newer
-      OpenType := WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY
+      access := WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY // Windows 8.1 and newer
     else
-      OpenType := WINHTTP_ACCESS_TYPE_NO_PROXY
+      access := WINHTTP_ACCESS_TYPE_NO_PROXY
   else
-    OpenType := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
+    access := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
   fSession := WinHttpApi.Open(
-    pointer(Utf8ToSynUnicode(fExtendedOptions.UserAgent)), OpenType,
-    pointer(Utf8ToSynUnicode(fProxyName)), pointer(Utf8ToSynUnicode(fProxyByPass)), 0);
+    pointer(Utf8ToSynUnicode(fExtendedOptions.UserAgent)),
+    access,
+    pointer(Utf8ToSynUnicode(fProxyName)),
+    pointer(Utf8ToSynUnicode(fProxyByPass)), 0);
   if fSession = nil then
     RaiseLastModuleError(winhttpdll, EWinHttp);
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
   if not WinHttpApi.SetTimeouts(fSession, HTTP_DEFAULT_RESOLVETIMEOUT,
-    ConnectionTimeOut, SendTimeout, ReceiveTimeout) then
+     ConnectionTimeOut, SendTimeout, ReceiveTimeout) then
     RaiseLastModuleError(winhttpdll, EWinHttp);
   if fHTTPS then
   begin
-    protocols := {WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 or}
-                  WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
-    // Windows 7 and newer supports TLS 1.1 & 1.2
-    if OSVersion >= wSeven then
-      protocols := protocols or
-        (WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 or
-         WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2);
+    protocols := InternalGetProtocols;
     if not WinHttpApi.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
         @protocols, SizeOf(protocols)) then
       RaiseLastModuleError(winhttpdll, EWinHttp);
@@ -2386,8 +2391,8 @@ begin
     if CallbackRes = WINHTTP_INVALID_STATUS_CALLBACK then
       RaiseLastModuleError(winhttpdll, EWinHttp);
   end;
-  fConnection := WinHttpApi.Connect(fSession, pointer(Utf8ToSynUnicode(fServer)),
-    fPort, 0);
+  fConnection := WinHttpApi.Connect(
+    fSession, pointer(Utf8ToSynUnicode(fServer)), fPort, 0);
   if fConnection = nil then
     RaiseLastModuleError(winhttpdll, EWinHttp);
 end;
