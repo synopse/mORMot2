@@ -1132,7 +1132,7 @@ begin
   if TTextRec(fSaveToFile).Handle = 0 then
     CreateSaveToFile;
   Color(ccLightCyan);
-  TextLn([#13#10'   ', Ident, #13#10'  ', StringOfChar('-', length(Ident) + 2)]);
+  TextLn([#13#10'   ', Ident, #13#10'  ', RawUtf8OfChar('-', length(Ident) + 2)]);
   RunTimer.Start;
   Randomize;
   fFailed := nil;

@@ -150,6 +150,9 @@ function StringReplaceChars(const Source: RawUtf8; OldChar, NewChar: AnsiChar): 
 /// fast replace of all #9 chars by a given string
 function StringReplaceTabs(const Source, TabText: RawUtf8): RawUtf8;
 
+/// UTF-8 dedicated (and faster) alternative to StringOfChar((Ch,Count))
+function RawUtf8OfChar(Ch: AnsiChar; Count: integer): RawUtf8;
+
 /// format a text content with SQL-like quotes
 // - this function implements what is specified in the official SQLite3
 // documentation: "A string constant is formed by enclosing the string in single
@@ -2879,6 +2882,17 @@ begin
   end;
   FastSetString(result, nil, L + n * pred(ttl));
   Process(pointer(Source), pointer(result), pointer(TabText), ttl);
+end;
+
+function RawUtf8OfChar(Ch: AnsiChar; Count: integer): RawUtf8;
+begin
+  if Count <= 0 then
+    FastAssignNew(result)
+  else
+  begin
+    FastSetString(result, nil, Count);
+    FillCharFast(pointer(result)^, Count, byte(Ch));
+  end;
 end;
 
 function QuotedStr(const S: RawUtf8; Quote: AnsiChar): RawUtf8;

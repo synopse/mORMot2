@@ -193,7 +193,7 @@ type
   // - those statements can be prepared on the client side, but by default we
   // enabled the OCI-side statement cache, not to reinvent the wheel this time
   // - note that bound OUT ftUtf8 parameters will need to be pre-allocated
-  // before calling - e.g. via BindTextU(StringOfChar(3000),paramOut)
+  // before calling - e.g. via BindTextU(RawUtf8OfChar(3000),paramOut)
   // - you can also bind an TInt64DynArray or TRawUtf8DynArray as parameter to
   // be assigned later as an OCI_OBJECT so that you may write such statements:
   // ! var arr: TInt64DynArray = [1, 2, 3];

@@ -587,7 +587,7 @@ begin
   EnsureInExpectedThread;
   Result.Header := TEXT_CONTENT_TYPE_HEADER;
   if n.Real = maxInt then
-    Result.Content := StringOfChar(AnsiChar('-'), 600)
+    Result.Content := RawUtf8OfChar('-', 600)
   else
     Result.Content := FormatUtf8('%,%', [n.Real, n.Imaginary]);
 end;
@@ -850,9 +850,9 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
     Check(Str2[2] = 'GHIJK');
     Check(Str2[3] = 'one,two,three');
     Check(Str2[4] = '');
-    s := StringToUtf8(StringOfChar(#1, 100));
+    s := RawUtf8OfChar(#1, 100);
     check(I.DirectCall(s) = 100);
-    s := StringToUtf8(StringOfChar('-', 600));
+    s := RawUtf8OfChar('-', 600);
     t := length(I.RepeatJsonArray(s, 100));
     checkutf8(t = 1 + 100 * 603, 'RawJson %', [KB(t)]);
     t := length(I.RepeatTextArray(s, 100));

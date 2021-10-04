@@ -187,7 +187,7 @@ begin
     exit; // should be called once
   fExternalModel := TOrmModel.Create([TOrmPeopleExt, TOrmOnlyBlob, TOrmTestJoin,
     TOrmASource, TOrmADest, TOrmADests, TOrmPeople, TOrmMyHistory]);
-  ReplaceParamsByNames(ToUtf8(StringOfChar('?', 200)), sql);
+  ReplaceParamsByNames(RawUtf8OfChar('?', 200), sql);
   CheckHash(sql, $AD27D1E0, 'excludes :IF :OF');
 end;
 

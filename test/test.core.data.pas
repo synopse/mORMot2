@@ -2350,7 +2350,7 @@ begin
     check(not IsValidJson('{ { }}', strict));
     check(not IsValidJson('nulle', strict));
     check(not IsValidJson('trye', strict));
-    check(not IsValidJson(RawUtf8(StringOfChar('[', 2000)), strict));
+    check(not IsValidJson(RawUtf8OfChar('[', 2000), strict));
     // some false positive content (fast but not perfect)
     check(IsValidJson('{"123":123.4e1.0}', strict)); 
     check(IsValidJson('[ -01001, ,- , , ,42.e]', strict));
@@ -5507,9 +5507,9 @@ var
 begin
   for i := 1 to 200 do
   begin
-    s := AlgoSynLZ.Compress(StringOfChar(AnsiChar(i), i));
+    s := AlgoSynLZ.Compress(RawUtf8OfChar(AnsiChar(i), i));
     t := AlgoSynLZ.Decompress(s);
-    Check(t = StringOfChar(AnsiChar(i), i));
+    Check(t = RawUtf8OfChar(AnsiChar(i), i));
   end;
   rle := 'hello' + Spaces(10000) + 'hello' + Spaces(1000) + 'world';
   s := AlgoSynLZ.Compress(rle);
@@ -5521,7 +5521,7 @@ begin
   Check(t = rle);
   for i := 0 to 1000 do
   begin
-    s := StringOfChar(AnsiChar(' '), 20);
+    s := RawUtf8OfChar(' ', 20);
     t := RandomTextParagraph(i, '.', s);
     SetString(s, PAnsiChar(pointer(t)), length(t)); // =UniqueString
     Check(CompressSynLZ(s, true) = 'synlz');
@@ -5575,8 +5575,8 @@ procedure TTestCoreCompression._TAlgoCompress;
       exit;
     for i := 1 to 50 do
     begin
-      t := StringOfChar(AnsiChar(i), i){%H-}+{%H-}t;
-      s := StringOfChar(AnsiChar(i), i){%H-}+{%H-}s;
+      t := RawUtf8OfChar(AnsiChar(i), i){%H-}+{%H-}t;
+      s := RawUtf8OfChar(AnsiChar(i), i){%H-}+{%H-}s;
       Check(algo.Decompress(algo.Compress(s)) = t);
     end;
     plain := 0;

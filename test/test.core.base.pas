@@ -5209,7 +5209,7 @@ begin
   Check(not IdemPropNameU('ABcFG', ''));
   Check(IdemPropNameU('', ''));
   for i := 0 to 100 do
-    Check(IdemPropNameU(RawUtf8(StringOfChar('a', i)), RawUtf8(StringOfChar('A', i))));
+    Check(IdemPropNameU(RawUtf8OfChar('a', i), RawUtf8OfChar('A', i)));
   Check(UpperCaseU('abcd') = 'ABCD');
   Check(IdemPropNameU('abcDe', abcde, 5));
   Check(not IdemPropNameU('abcD', abcde, 5));
@@ -5793,7 +5793,7 @@ begin
   tmp[len] := #0;
   Check(IdemPChar(PUtf8Char(@tmp), PAnsiChar('<34>1 ')));
   Check(PosEx(' - - - test', tmp) = len - 10);
-  msg := RawUtf8(StringOfChar('+', 300));
+  msg := RawUtf8OfChar('+', 300);
   len := SyslogMessage(sfLocal4, ssNotice, msg, 'proc', 'msg', tmp, 300, false);
   Check(IdemPChar(PUtf8Char(@tmp), PAnsiChar('<165>1 ')));
   Check(PosEx(' proc msg - ++++', tmp) > 1);

@@ -825,6 +825,7 @@ type
   // back-end server applications that require access to an HTTP client stack
   TWinHttp = class(TWinHttpApi)
   protected
+    // you can override this method e.g. to disable/enable some protocols
     function InternalGetProtocols: cardinal; virtual;
     // those internal methods will raise an EOSError exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,

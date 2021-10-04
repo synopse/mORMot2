@@ -1157,7 +1157,7 @@ begin
     'propName', prop.Name,
     'fullPropName', fullName], result);
   if level > 0 then
-    _ObjAddProp('nestedIdentation', StringOfChar(' ', level * 2), result);
+    _ObjAddProp('nestedIdentation', RawUtf8OfChar(' ', level * 2), result);
   case prop.Value.Parser of
     ptRecord:
       _ObjAddProps([

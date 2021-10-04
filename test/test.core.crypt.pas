@@ -1489,7 +1489,7 @@ begin
         iv.L := $1234567890abcdef;
         iv.H := $0fedcba987654321;
         FillZero(THash256(mac));
-        st := RawUtf8(StringOfChar('x', 50));
+        st := RawUtf8OfChar('x', 50);
         // create a TAesAbstract instance and validate it
         one := MODES[m].Create(pointer(st)^, ks);
         try
