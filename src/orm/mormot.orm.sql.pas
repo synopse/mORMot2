@@ -122,7 +122,7 @@ type
     // BATCH sending uses TEXT storage for direct sending to database driver
     fBatchIDs: TIDDynArray;
     fBatchValues: TRawUtf8DynArray;
-    // some sub-functions used by Create() during table initialization
+    // some sub-functions used by Create() during DB initialization
     procedure InitializeExternalDB(const log: ISynLog);
     procedure GetFields(const log: ISynLog);
     procedure FieldsInternalInit;
@@ -636,7 +636,7 @@ var
   i, f: PtrInt;
   nfo: TOrmPropInfo;
   Field: TSqlDBColumnCreate;
-  TableCreated, FieldAdded, TableModified: boolean;
+  TableCreated, TableModified: boolean;
   CreateColumns: TSqlDBColumnCreateDynArray;
   options: TOrmPropertiesMappingOptions;
 begin
@@ -732,22 +732,22 @@ begin
               begin
                 SQL := fProperties.SqlAddColumn(fTableName, Field);
                 if Assigned(fOnEngineAddColumn) then
-                  FieldAdded := fOnEngineAddColumn(self, Field, SQL)
+                begin
+                  if fOnEngineAddColumn(self, Field, SQL) then
+                    TableModified := true; // don't raise ERestStorage from here
+                end
                 else if SQL <> '' then
-                  FieldAdded := ExecuteDirect(pointer(SQL), [], [], false) <> nil
-                else
-                  FieldAdded := false;
-                if FieldAdded then
-                  TableModified := true
-                else
-                  raise ERestStorage.CreateUtf8(
-                    '%.Create: %: unable to create external missing field %.% - SQL="%"',
-                    [self, StoredClass, fTableName, Fields.List[f].Name, SQL]);
+                  if ExecuteDirect(pointer(SQL), [], [], false) <> nil then
+                    TableModified := true
+                  else
+                    raise ERestStorage.CreateUtf8('%.Create: %: ' +
+                      'unable to create external missing field %.% - SQL="%"',
+                      [self, StoredClass, fTableName, Fields.List[f].Name, SQL]);
               end;
             end;
       if TableModified then
       begin
-        // get from DB after ALTER TABLE
+        // retrieve raw field information from DB after ALTER TABLE
         GetFields(log);
         FieldsInternalInit;
       end;
@@ -1773,9 +1773,7 @@ begin
       stmt.ForceDateWithMS := true;
     stmt.ExecutePrepared;
     if IdemPChar(SqlFormat, 'DROP TABLE ') then
-    begin
       fEngineLockedMaxID := 0;
-    end;
     result := stmt;
   except
     stmt := nil;
