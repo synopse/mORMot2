@@ -606,7 +606,8 @@ type
   // e.g. writing col1:...,col2:... instead of "col1":...,"col2"...
   // - boPostNoSimpleFields will avoid to send a TRestBach.Add() with simple
   // fields as "SIMPLE":[val1,val2...] or "SIMPLE@tablename":[val1,val2...],
-  // without the field names
+  // without the field names - could be set for backward compatibility with an
+  // old mORMot 1 server (client-side only: transmitted but not used on server)
   // - boPutNoCacheFlush won't force the associated Cache entry to be flushed:
   // it is up to the caller to ensure cache coherency
   // - boRollbackOnError will raise an exception and Rollback any transaction

@@ -12821,12 +12821,22 @@ begin // '{"Table":[...,"PUT",{object},...]}'
   inc(fUpdateCount);
 end;
 
+type
+  TRestBatchEncoding = (
+    encPost,
+    encSimple);
+
+const
+  BATCH_VERB: array[TRestBatchEncoding] of TShort8 = (
+    '"POST',
+    '"SIMPLE');
+
 function TRestBatch.Add(Value: TOrm; SendData, ForceID: boolean;
   const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 var
   Props: TOrmProperties;
   FieldBits: TFieldBits;
-  PostSimpleFields: boolean;
+  Encoding: TRestBatchEncoding;
   f: PtrInt;
 begin
   result := -1;
@@ -12845,15 +12855,10 @@ begin
      not ForceID and
      IsZero(CustomFields) and
      not (boPostNoSimpleFields in fOptions) then
-  begin
-    PostSimpleFields := true;
-    fBatch.AddShorter('"SIMPLE');
-  end
+    Encoding := encSimple
   else
-  begin
-    PostSimpleFields := false;
-    fBatch.AddShorter('"POST');
-  end;
+    Encoding := encPost;
+  fBatch.AddShorter(BATCH_VERB[Encoding]);
   if fTable <> nil then  // '{"Table":[...,"POST",{object},...]}'
     fBatch.AddShorter('",')
   else
@@ -12875,19 +12880,21 @@ begin
     fTablePreviousSendData := POrmClass(Value)^;
     if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
       Value.ComputeFieldsBeforeWrite(fRest, oeAdd);
-    if PostSimpleFields then
-    begin
-      fBatch.Add('[');
-      for f := 0 to length(Props.SimpleFields) - 1 do
-      begin
-        Props.SimpleFields[f].GetJsonValues(Value, fBatch);
-        fBatch.AddComma;
-      end;
-      fBatch.CancelLastComma;
-      fBatch.Add(']');
-    end
-    else
-      Value.GetJsonValues(fBatch);
+    case Encoding of
+      encPost:
+        Value.GetJsonValues(fBatch);
+      encSimple:
+        begin
+          fBatch.Add('[');
+          for f := 0 to length(Props.SimpleFields) - 1 do
+          begin
+            Props.SimpleFields[f].GetJsonValues(Value, fBatch);
+            fBatch.AddComma;
+          end;
+          fBatch.CancelLastComma;
+          fBatch.Add(']');
+        end
+    end;
     if fCalledWithinRest and ForceID then
       fRest.CacheOrNil.Notify(Value, ooInsert);
   end
