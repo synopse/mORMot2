@@ -481,9 +481,9 @@ function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
         sar     r10, 63         // r10=0 if val>=0 or -1 if val<0
         xor     rdx, r10
         sub     rdx, r10        // rdx=abs(val)
-        cmp     rdx, 10
-        jb      @3              // direct process of common val<10
         mov     rax, rdx
+        cmp     rdx, 10
+        jb      @1              // direct process of common val<10
         lea     r8, [rip + TwoDigitLookup]
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @s:     lea     rcx, [rcx - 2]
@@ -510,11 +510,6 @@ function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
         mov     byte ptr [rcx - 1], '-'
         mov     [rcx], ax
         lea     rax, [rcx + r10]           // includes '-' if val<0
-        ret
-@3:     or      dl, '0'
-        mov     byte ptr [rcx - 2], '-'
-        mov     [rcx - 1], dl
-        lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
 end;
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
@@ -522,10 +517,12 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         {$ifndef WIN64ABI}
         mov     rcx, rdi
         mov     rdx, rsi
+        mov     rax, rsi
+        {$else}
+        mov     rax, rdx
         {$endif WIN64ABI}
         cmp     rdx, 10
-        jb      @3  // direct process of common val<10
-        mov     rax, rdx
+        jb      @1  // direct process of common val<10
         lea     r8, [rip + TwoDigitLookup]
 @s:     lea     rcx, [rcx - 2]
         cmp     rax, 100
@@ -550,10 +547,6 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 @2:     movzx   eax, word ptr [r8 + rax * 2]
         mov     [rcx], ax
         mov     rax, rcx
-        ret
-@3:     lea     rax, [rcx - 1]
-        or      dl, '0'
-        mov     [rax], dl
 end;
 
 {$endif ASMX64}
