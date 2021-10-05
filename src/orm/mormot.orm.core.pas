@@ -2541,6 +2541,8 @@ type
     // - return true on success, but be aware that the field list must match
     // the field layout, otherwise if may return true but will corrupt data
     function SimplePropertiesFill(const aSimpleFields: array of const): boolean;
+    /// set the simple fields from a JSON array of values
+    function SimplePropertiesFillFromArray(Json: PUtf8Char): boolean;
     /// initialize a TDynArray wrapper to map dynamic array property values
     // - if the field name is not existing or not a dynamic array, result.IsVoid
     // will be TRUE
@@ -8468,11 +8470,31 @@ begin
       begin
         for i := 0 to high(aSimpleFields) do
         begin
-          VarRecToUtf8(aSimpleFields[i], tmp); // will work for every handled type
+          VarRecToUtf8(aSimpleFields[i], tmp); // will work for every type
           SimpleFields[i].SetValueVar(self, tmp, false);
         end;
         result := True;
       end;
+end;
+
+function TOrm.SimplePropertiesFillFromArray(Json: PUtf8Char): boolean;
+var
+  i: PtrInt;
+  val: PUtf8Char;
+  vallen: integer;
+  wasstring: boolean;
+begin
+  result := false;
+  Json := GotoNextNotSpace(Json);
+  if Json^ <> '[' then
+    exit;
+  inc(Json);
+  with Orm do
+    for i := 0 to length(SimpleFields) - 1 do
+    begin
+      val := GetJsonFieldOrObjectOrArray(Json, @wasstring, nil, true, true, @vallen);
+      SimpleFields[i].SetValue(self, val, vallen, wasstring);
+    end;
 end;
 
 constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
