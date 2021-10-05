@@ -195,7 +195,7 @@ type
     // overridden method returning TRUE for next calls to EngineAdd/Update/Delete
     // will properly handle operations until InternalBatchStop is called
     // BatchOptions is ignored with external DB (syntax are too much specific)
-    function InternalBatchStart(Method: TUriMethod;
+    function InternalBatchStart(Encoding: TRestBatchEncoding;
       BatchOptions: TRestBatchOptions): boolean; override;
     // internal method called by TRestServer.RunBatch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
@@ -1007,13 +1007,16 @@ begin
   result := fEngineLockedMaxID;
 end;
 
-function TRestStorageExternal.InternalBatchStart(Method: TUriMethod;
+function TRestStorageExternal.InternalBatchStart(Encoding: TRestBatchEncoding;
   BatchOptions: TRestBatchOptions): boolean;
 const
   BATCH: array[mPOST..mDELETE] of TSqlDBStatementCRUD = (
     cCreate, cUpdate, cDelete);
+var
+  Method: TUriMethod;
 begin
   result := false; // means BATCH mode not supported
+  Method := BATCH_METHOD[Encoding];
   if (self <> nil) and
      (Method in [mPOST..mDELETE]) and
      (BATCH[Method] in fProperties.BatchSendingAbilities) then
@@ -1069,7 +1072,8 @@ begin
     BatchEnd := fBatchCount - 1;
     repeat
       case fBatchMethod of
-        mPost, mPut:
+        mPost,
+        mPut:
           begin
             assert(fBatchIDs <> nil);
             BatchEnd := fBatchCount - 1;
@@ -1160,7 +1164,8 @@ begin
           Query := fProperties.NewThreadSafeStatementPrepared(
             SQL, {results=}false, {except=}true);
           case fBatchMethod of
-            mPost, mPut:
+            mPost,
+            mPut:
               for i := 0 to high(Values) do
                 Query.BindArray(i + 1, Types[i], Values[i], n);
             mDelete:

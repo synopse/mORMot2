@@ -517,7 +517,7 @@ const
 
 const
   /// the known SQL syntax to limit the number of returned rows in a SELECT
-  // - Positon indicates if should be included within the WHERE clause,
+  // - Position indicates if should be included within the WHERE clause,
   // at the beginning of the SQL statement, or at the end of the SQL statement
   // - InsertFmt will replace '%' with the maximum number of lines to be retrieved
   // - used by TSqlDBConnectionProperties.AdaptSqlLimitForEngineList()

@@ -172,7 +172,7 @@ type
     // overridden method returning TRUE for next calls to EngineAdd/Delete
     // will properly handle operations until InternalBatchStop is called
     // BatchOptions is ignored with MongoDB (yet)
-    function InternalBatchStart(Method: TUriMethod;
+    function InternalBatchStart(Encoding: TRestBatchEncoding;
       BatchOptions: TRestBatchOptions): boolean; override;
     // internal method called by TRestServer.RunBatch() to process fast
     // BULK sending to remote MongoDB database
@@ -1547,11 +1547,11 @@ begin
   result := false; // it is a NO SQL engine, we said! :)
 end;
 
-function TRestStorageMongoDB.InternalBatchStart(Method: TUriMethod;
+function TRestStorageMongoDB.InternalBatchStart(Encoding: TRestBatchEncoding;
   BatchOptions: TRestBatchOptions): boolean;
 begin
   result := false; // means BATCH mode not supported
-  if Method in [mPOST, mDELETE] then
+  if Encoding in [encPost, encSimple, encSimpleID, encDelete] then
   begin
     StorageLock(true, 'InternalBatchStart'); // protected by try..finally in TRestServer.RunBatch
     try
@@ -1560,13 +1560,11 @@ begin
         raise EOrmException.CreateUtf8(
           '%.InternalBatchStop should have been called', [self]);
       fBatchIDsCount := 0;
-      fBatchMethod := Method;
-      case Method of
+      fBatchMethod := BATCH_METHOD[Encoding];
+      case fBatchMethod of
         mPOST:
           // POST=ADD=INSERT -> EngineAdd() will add to fBatchWriter
           fBatchWriter := TBsonWriter.Create(TRawByteStringStream);
-        //mDELETE:
-          // EngineDelete() will add deleted ID to fBatchIDs[]
       end;
       result := true; // means BATCH mode is supported
     finally

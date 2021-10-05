@@ -84,6 +84,15 @@ type
   /// set of available HTTP methods transmitted between client and server
   TUriMethods = set of TUriMethod;
 
+const
+  /// convert a TRestBatch encoding scheme into the corresponding ORM TUriMethod
+  BATCH_METHOD: array[TRestBatchEncoding] of TUriMethod = (
+    mPOST,     // encPost
+    mPOST,     // encSimple
+    mPOST,     // encSimpleID
+    mPUT,      // encPut
+    mDELETE);  // encDelete
+
 /// convert a string HTTP verb into its TUriMethod enumerate
 function ToMethod(const method: RawUtf8): TUriMethod;
 
@@ -235,7 +244,7 @@ type
     // - an overridden method returning TRUE shall ensure that calls to
     // EngineAdd / EngineUpdate / EngineDelete (depending of supplied Method)
     // will properly handle operations until InternalBatchStop() is called
-    function InternalBatchStart(Method: TUriMethod;
+    function InternalBatchStart(Encoding: TRestBatchEncoding;
       BatchOptions: TRestBatchOptions): boolean; virtual;
     /// internal method called by TRestServer.Batch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
@@ -244,6 +253,16 @@ type
     // - InternalBatchStart/Stop may safely use a lock for multithreading:
     // implementation in TRestServer.Batch use a try..finally block
     procedure InternalBatchStop; virtual;
+    /// internal method called by TRestServer.Batch() to process SIMPLE input
+    // - this default implementation returns 0 for regular POST-like process
+    // - an optimized storage engine could override it to process the Sent
+    // JSON array values directly from the memory buffer
+    // - called first with Sent=nil to return either false (not
+    // supported) or true (supported)
+    // - called a second time with the proper Sent, returning
+    // the computed (encSimple) or extracted (encSimpleID) ID
+    function InternalBatchDirect(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer; Sent: PUtf8Char): TID; virtual;
   public
     // ------- TRestOrm main methods
     /// initialize the class, and associated to a TRest and its TOrmModel
@@ -1992,7 +2011,7 @@ begin
   result := true;
 end;
 
-function TRestOrm.InternalBatchStart(Method: TUriMethod;
+function TRestOrm.InternalBatchStart(Encoding: TRestBatchEncoding;
   BatchOptions: TRestBatchOptions): boolean;
 begin
   result := false;
@@ -2001,6 +2020,12 @@ end;
 procedure TRestOrm.InternalBatchStop;
 begin
   raise EOrmException.CreateUtf8('Unexpected %.InternalBatchStop',[self]);
+end;
+
+function TRestOrm.InternalBatchDirect(Encoding: TRestBatchEncoding;
+  RunTableIndex: integer; Sent: PUtf8Char): TID;
+begin
+  result := 0; // this engine does NOT support optimized SIMPLE multi-insert
 end;
 
 function TRestOrm.Delete(Table: TOrmClass; const SqlWhere: RawUtf8): boolean;

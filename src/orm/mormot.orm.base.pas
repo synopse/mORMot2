@@ -604,26 +604,37 @@ type
   // plain 'INSERT' - by now, only the direct SQLite3 engine supports it
   // - boExtendedJson will force the JSON to unquote the column names,
   // e.g. writing col1:...,col2:... instead of "col1":...,"col2"...
-  // - boPostNoSimpleFields will avoid to send a TRestBach.Add() with simple
-  // fields as "SIMPLE":[val1,val2...] or "SIMPLE@tablename":[val1,val2...],
-  // without the field names - could be set for backward compatibility with an
-  // old mORMot 1 server (client-side only: transmitted but not used on server)
+  // - boPostNoSimpleFields (client-side only) will avoid to send a
+  // TRestBach.Add() with simple fields as "SIMPLE":[val1,val2...] or
+  // "SIMPLE@tablename":[val1,val2...], without the field names - for
+  // backward compatibility with very old mORMot 1 servers
   // - boPutNoCacheFlush won't force the associated Cache entry to be flushed:
   // it is up to the caller to ensure cache coherency
   // - boRollbackOnError will raise an exception and Rollback any transaction
   // if any step failed - default if to continue batch processs, but setting
   // a value <> 200/HTTP_SUCCESS in Results[]
+  // - boOldEncoding (client-side only) will force the mORMot 1 more verbose
+  // encoding - for backward compatibility
   TRestBatchOption = (
     boInsertOrIgnore,
     boInsertOrReplace,
     boExtendedJson,
     boPostNoSimpleFields,
     boPutNoCacheFlush,
-    boRollbackOnError);
+    boRollbackOnError,
+    boOldEncoding);
 
   /// a set of options for TRest.BatchStart() process
   // - TJsonObjectDecoder will use it to compute the corresponding SQL
   TRestBatchOptions = set of TRestBatchOption;
+
+  /// internal kind of encoding for one TRestBatch.Add/Update/Delete action
+  TRestBatchEncoding = (
+    encPost,
+    encSimple,
+    encSimpleID,
+    encPut,
+    encDelete);
 
   /// how TOrmModel.UriMatch() will compare an URI
   // - will allow to make a difference about case-sensitivity
@@ -649,6 +660,28 @@ type
     ovkRTreeInteger,
     ovkCustomForcedID,
     ovkCustomAutoID);
+
+  /// the kind of fields to be available in a Table resulting of
+  // a TOrmMany.DestGetJoinedTable() method call
+  // - Source fields are not available, because they will be always the same for
+  // a same SourceID, and they should be available from the TOrm which
+  // hold the TOrmMany instance
+  // - jkDestID and jkPivotID will retrieve only DestTable.ID and PivotTable.ID
+  // - jkDestFields will retrieve DestTable.* simple fields, or the fields
+  // specified by aCustomFieldsCsv (the Dest table name will be added: e.g.
+  // for aCustomFieldsCsv='One,Two', will retrieve DestTable.One, DestTable.Two)
+  // - jkPivotFields will retrieve PivotTable.* simple fields, or the fields
+  // specified by aCustomFieldsCsv (the Pivot table name will be added: e.g.
+  // for aCustomFieldsCsv='One,Two', will retrieve PivotTable.One, PivotTable.Two)
+  // - jkPivotAndDestAllFields for PivotTable.* and DestTable.* simple fields,
+  // or will retrieve the specified aCustomFieldsCsv fields (with
+  // the table name associated: e.g. 'PivotTable.One, DestTable.Two')
+  TOrmManyJoinKind = (
+    jkDestID,
+    jkPivotID,
+    jkDestFields,
+    jkPivotFields,
+    jkPivotAndDestFields);
 
   /// pre-computed SQL statements for ORM operations for a given
   // TOrmModelProperties instance
@@ -712,6 +745,36 @@ type
     rpmMissingFieldNameCaseSensitive,
     rpmQuoteFieldName,
     rpmClearPoolOnConnectionIssue);
+
+
+const
+  /// if the TOrmVirtual table kind is a FTS virtual table
+  IS_FTS =
+    [ovkFTS3, ovkFTS4, ovkFTS5];
+
+  /// if the TOrmVirtual table kind is not an embedded type
+  // - can be set for a TOrm after a VirtualTableExternalRegister call
+  IS_CUSTOM_VIRTUAL =
+    [ovkCustomForcedID, ovkCustomAutoID];
+
+  /// if the TOrmVirtual table kind expects the ID to be set on INSERT
+  INSERT_WITH_ID =
+    [ovkFTS3, ovkFTS4, ovkFTS5, ovkRTree, ovkRTreeInteger, ovkCustomForcedID];
+
+  /// if a TOrmVirtualTablePreparedConstraint.Column is to be ignored
+  VIRTUAL_TABLE_IGNORE_COLUMN = -2;
+
+  /// if a TOrmVirtualTablePreparedConstraint.Column points to the RowID
+  VIRTUAL_TABLE_ROWID_COLUMN = -1;
+
+var
+  /// late-binding return of TOrmVirtualTableClass.ModuleName
+  // - link mormot.orm.storage.pas unit for properly set this value
+  GetVirtualTableModuleName: function(VirtualTableClass: TClass): RawUtf8;
+
+function ToText(enc: TRestBatchEncoding): PShortString; overload;
+function ToText(vk: TOrmVirtualKind): PShortString; overload;
+
 
 { ************ JSON Object Decoder and SQL Generation }
 
@@ -865,9 +928,10 @@ function GetJsonObjectAsSql(const Json: RawUtf8; Update, InlinedParams: boolean;
 /// encode as a SQL-ready (multi) INSERT statement with ? as values
 // - follow the SQLite3 syntax: INSERT INTO .. VALUES (..),(..),(..),..
 // - same logic as TJsonObjectDecoder.EncodeAsSqlPrepared
-procedure EncodeMultiInsertSQL(const TableName: RawUtf8;
-  const Fields: TRawUtf8DynArray; BatchOptions: TRestBatchOptions;
-  RowCount: integer; var result: RawUtf8);
+procedure EncodeMultiInsertSQLite3(const TableName: RawUtf8;
+  const Fields: TRawUtf8DynArray; const FieldsCsvNoID: RawUtf8;
+  BatchOptions: TRestBatchOptions; FieldCount, RowCount: integer;
+  var result: RawUtf8);
 
 const
   FIELDCOUNT_PATTERN: PUtf8Char = '{"fieldCount":'; // PatternLen = 14 chars
@@ -1192,7 +1256,7 @@ type
     /// set a field value from a TSqlVar value
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; virtual;
     /// returns TRUE if value is 0 or ''
-    function IsValueVoid(Instance: TObject): boolean;
+    function IsValueVoid(Instance: TObject): boolean; virtual;
     /// append the property value into a binary buffer
     procedure GetBinary(Instance: TObject; W: TBufferWriter); virtual; abstract;
     /// read the property value from a binary buffer
@@ -2948,6 +3012,17 @@ begin
     result := oftUnknown;
 end;
 
+function ToText(enc: TRestBatchEncoding): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TRestBatchEncoding), ord(enc));
+end;
+
+function ToText(vk: TOrmVirtualKind): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TOrmVirtualKind), ord(vk));
+end;
+
+
 
 { ************ JSON Object Decoder and SQL Generation }
 
@@ -3059,11 +3134,8 @@ var
             pInlined:
               // untouched -> recognized as BLOB by TExtractInlineParameters
               QuotedStr(res, reslen, '''', FieldValues[ndx]);
-          { pQuoted: // \uFFF0base64encodedbinary -> 'X''hexaencodedbinary'''
-            // if not inlined, it can be used directly in INSERT/UPDATE statements
-            Base64MagicToBlob(res+3,FieldValues[ndx]);
-            pNonQuoted: }
-          else // returned directly as RawByteString
+          else
+            // returned directly as RawByteString (e.g. for INSERT/UPDATE)
             Base64ToBin(PAnsiChar(res) + 3, resLen - 3,
               RawByteString(FieldValues[ndx]));
           end;
@@ -3128,7 +3200,7 @@ begin
     DecodedFieldNames := @FieldNames;
     if RowID > 0 then
     begin
-      // insert explicit RowID
+      // insert explicit RowID as first parameter
       if ReplaceRowIDWithID then
         FieldNames[0] := ID_TXT
       else
@@ -3225,11 +3297,12 @@ begin
     Fields[i] := FieldNames[i];
 end;
 
-procedure EncodeMultiInsertSQL(const TableName: RawUtf8;
-  const Fields: TRawUtf8DynArray; BatchOptions: TRestBatchOptions;
-  RowCount: integer; var result: RawUtf8);
+procedure EncodeMultiInsertSQLite3(const TableName: RawUtf8;
+  const Fields: TRawUtf8DynArray; const FieldsCsvNoID: RawUtf8;
+  BatchOptions: TRestBatchOptions; FieldCount, RowCount: integer;
+  var result: RawUtf8);
 var
-  f, n: PtrInt;
+  f: PtrInt;
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
@@ -3242,27 +3315,32 @@ begin
     else
       W.AddShort('insert into ');
     W.AddString(TableName);
-    n := length(Fields);
-    if n = 0 then
+    if FieldCount = 0 then
       W.AddShort(' default values')
     else
     begin
       W.Add(' ', '(');
-      for f := 0 to n - 1 do
+      if FieldsCsvNoID <> '' then
       begin
-        // append 'COL1,COL2'
-        W.AddString(Fields[f]);
-        W.AddComma;
-      end;
+        W.AddShorter('RowID,');
+        W.AddString(FieldsCsvNoID);
+      end
+      else
+        for f := 0 to FieldCount - 1 do
+        begin
+          // append 'COL1,COL2'
+          W.AddString(Fields[f]);
+          W.AddComma;
+        end;
       W.CancelLastComma;
       W.AddShort(') values (');
-      W.AddStrings('?,', n);
+      W.AddStrings('?,', FieldCount);
       while RowCount > 1 do
       begin
         // INSERT INTO .. VALUES (..),(..),(..),..
         W.CancelLastComma;
         W.AddShorter('),(');
-        W.AddStrings('?,', n);
+        W.AddStrings('?,', FieldCount);
         dec(RowCount);
       end;
       W.CancelLastComma;
@@ -3710,7 +3788,8 @@ end;
 
 function JsonGetID(P: PUtf8Char; out ID: TID): boolean;
 begin
-  if (P <> nil) and NextNotSpaceCharIs(P, '{') then
+  if (P <> nil) and
+     NextNotSpaceCharIs(P, '{') then
     if NextNotSpaceCharIs(P, '"') then
       result := StartWithQuotedID(P, ID)
     else
