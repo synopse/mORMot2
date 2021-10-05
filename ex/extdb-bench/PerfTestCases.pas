@@ -634,7 +634,7 @@ begin
     Value.LastName := ValueLastName[i];
     Value.FirstName := ValueFirstName[i];
     Value.BirthDate := i + 1;
-    forceID := i and 3 = 1;
+    forceID := false; //forceID := i and 3 = 1;
     if forceID then
       if {$ifdef UNIK} (dbInMemory in Flags) or {$endif UNIK}
          (Res[i - 1] = 0) then
@@ -642,7 +642,7 @@ begin
       else
         Value.IDValue := Res[i - 1] + 1;
     if UseBatch then
-      Check(Orm.BatchAdd(Value, true, forceID) >= 0)
+      Check(Orm.BatchAdd(Value, {senddata=}true, forceID) >= 0)
     else
     begin
       Res[i] := Orm.Add(Value, true, forceID);
