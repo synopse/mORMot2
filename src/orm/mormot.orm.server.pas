@@ -221,7 +221,7 @@ type
     // but be aware it may be the first step to break the stateless architecture
     // of the framework
     function InternalUpdateEvent(aEvent: TOrmEvent; aTableIndex: integer; aID: TID;
-      const aSentData: RawUtf8; aIsBlobFields: PFieldBits): boolean; virtual;
+      const aSentData: RawUtf8; aIsBlobFields: PFieldBits; aRec: TOrm): boolean; virtual;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
@@ -315,7 +315,7 @@ type
     /// check if OnUpdateEvent or change tracked has been defined for this table
     // - is used internally e.g. by TRestServerDB.MainEngineUpdateField to
     // ensure that the updated ID fields will be computed as expected
-    function InternalUpdateEventNeeded(aTableIndex: integer): boolean;
+    function InternalUpdateEventNeeded(aEvent: TOrmEvent; aTableIndex: integer): boolean;
     /// will compute the next monotonic value for a TRecordVersion field
     function RecordVersionCompute: TRecordVersion;
     /// read only access to the current monotonic value for a TRecordVersion field
@@ -1256,6 +1256,7 @@ begin
     byte(batchOptions) := 0;
   timer.Start;
   CurrentContext := ServiceRunningContext^.Request;
+  Method := nil;
   MethodTable := nil;
   RunningBatchRest := nil;
   RunningBatchTable := nil;
@@ -1387,7 +1388,8 @@ begin
                     Encoding, RunTableIndex, nil) <> 0) and
                  (Sent^ = '[')  then
                 // this storage engine allows direct multi-insert from JSON
-                // (see e.g. TRestOrmServerDB.InternalBatchSimple)
+                // (see e.g. TRestOrmServerDB.InternalBatchDirect
+                //  or TRestStorageTOrm.InternalBatchDirect)
                 SimpleValue := GetJsonFieldOrObjectOrArray(
                   Sent, nil, @EndOfObject, true)
               else
@@ -1791,12 +1793,15 @@ begin
   end;
 end;
 
-function TRestOrmServer.InternalUpdateEventNeeded(aTableIndex: integer): boolean;
+function TRestOrmServer.InternalUpdateEventNeeded(aEvent: TOrmEvent; 
+  aTableIndex: integer): boolean;
 begin
   result := (self <> nil) and
     (Assigned(OnUpdateEvent) or
      ((cardinal(aTableIndex) < cardinal(fTrackChangesHistoryTableIndexCount)) and
-      (fTrackChangesHistoryTableIndex[aTableIndex] >= 0)));
+      (fTrackChangesHistoryTableIndex[aTableIndex] >= 0))) or
+     ((aEvent = oeUpdateBlob) and
+      Assigned(OnBlobUpdateEvent));
 end;
 
 procedure SetStaticTable(aTableIndex, aTableCount: integer; aStatic: TRestOrm;
@@ -1891,12 +1896,12 @@ end;
 
 function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;
   aTableIndex: integer; aID: TID; const aSentData: RawUtf8;
-  aIsBlobFields: PFieldBits): boolean;
+  aIsBlobFields: PFieldBits; aRec: TOrm): boolean;
 
   procedure DoTrackChanges(TableHistoryIndex: integer);
   var
     TableHistoryClass: TOrmHistoryClass;
-    json: RawUtf8;
+    json, data: RawUtf8;
     event: TOrmHistoryEvent;
   begin
     case aEvent of
@@ -1911,10 +1916,14 @@ function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;
     end;
     TableHistoryClass := TOrmHistoryClass(
       fModel.Tables[TableHistoryIndex]);
+    data := aSentData;
+    if (data = '') and
+       (aRec <> nil) then
+      data := aRec.GetJsonValues(True, False, EVENT2OCCASION[aEvent]);
     TableHistoryClass.InitializeFields([
       'ModifiedRecord', aTableIndex + aID shl 6,
       'event', ord(event),
-      'SentDataJson', aSentData,
+      'SentDataJson', data,
       'Timestamp', GetServerTimestamp], json);
     fRest.AcquireExecution[execOrmWrite].Safe.Lock; // avoid race condition
     try // low-level Add(TOrmHistory) without cache

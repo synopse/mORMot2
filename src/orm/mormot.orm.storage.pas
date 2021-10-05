@@ -632,6 +632,10 @@ type
       const SentData: RawUtf8): TID; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID;
       const SentData: RawUtf8): boolean; override;
+    /// internal method called by TRestServer.Batch() to process SIMPLE input
+    // - overriden for optimized multi-insert of the supplied JSON array values
+    function InternalBatchDirect(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer; Sent: PUtf8Char): TID; override;
     /// manual Add of a TOrm
     // - returns the ID created on success
     // - returns -1 on failure (not UNIQUE field value e.g.)
@@ -1391,6 +1395,10 @@ type
 
 function ToText(t: TOrmVirtualTableTransaction): PShortString; overload;
 
+/// extract the ID from first value of the encSimpleID input JSON
+// - and move Sent^ to a fake '[' with the first real simple parameter
+function BatchExtractSimpleID(var Sent: PUtf8Char): TID;
+
 
 implementation
 
@@ -1891,6 +1899,63 @@ begin
   end;
 end;
 
+function BatchExtractSimpleID(var Sent: PUtf8Char): TID;
+begin
+  if Sent^ = '[' then
+    inc(Sent);
+  result := GetInt64(GetJsonField(Sent, Sent));
+  if Sent = nil then
+  begin
+    result := 0; // clearly invalid input
+    exit;
+  end;
+  dec(Sent);
+  Sent^ := '['; // ignore the first field (stored in fBatch.ID)
+end;
+
+function TRestStorageTOrm.InternalBatchDirect(Encoding: TRestBatchEncoding;
+  RunTableIndex: integer; Sent: PUtf8Char): TID;
+var
+  rec: TOrm;
+begin
+  result := 0; // unsupported
+  if not (Encoding in [encSimple, encSimpleID]) then
+    exit;
+  if Sent = nil then
+  begin
+    // called first with Sent=nil
+    result := 1; // supported
+    exit;
+  end;
+  // called a second time with the proper Sent, returning added ID
+  // same logic than EngineAdd() but with no memory allocation
+  if Encoding = encSimpleID then
+  begin
+    // extract the ID from first value of the input JSON
+    result := BatchExtractSimpleID(Sent);
+    if Sent = nil then
+      exit; // invalid input
+  end;
+  rec := fStoredClass.Create;
+  try
+    if rec.SimplePropertiesFillFromArray(Sent) then
+    begin
+      rec.IDValue := result;
+      StorageLock(true, 'InternalBatchDirect');
+      try
+        result := AddOne(rec, rec.IDValue > 0, '');
+      finally
+        StorageUnLock;
+      end;
+    end
+    else
+      result := 0;
+  finally
+    if result <= 0 then
+      rec.Free; // on success, rec is owned by fValue: TObjectList
+  end;
+end;
+
 function TRestStorageTOrm.EngineUpdate(TableModelIndex: integer;
   ID: TID; const SentData: RawUtf8): boolean;
 var
@@ -2101,9 +2166,9 @@ begin
     raise ERestStorage.CreateUtf8('%.AddOne % failed', [self, Rec]); // paranoid
   result := Rec.IDValue; // success
   fModified := true;
-  if Owner <> nil then
-    Owner.InternalUpdateEvent(oeAdd, fStoredClassProps.TableIndex,
-      result, SentData, nil);
+  if (Owner <> nil) then
+    Owner.InternalUpdateEvent(
+      oeAdd, fStoredClassProps.TableIndex, result, SentData, nil, Rec);
 end;
 
 function TRestStorageInMemory.UniqueFieldsUpdateOK(aRec: TOrm;
@@ -2210,7 +2275,7 @@ begin
     if Owner <> nil then
       // notify BEFORE deletion
       Owner.InternalUpdateEvent(oeDelete, fStoredClassProps.TableIndex,
-        rec.IDValue, '', nil);
+        rec.IDValue, '', nil, nil);
     for f := 0 to high(fUnique) do
       if byte(f) in fIsUnique then
         if fUnique[f].Hasher.FindBeforeDelete(@rec) < aIndex then
@@ -3516,7 +3581,7 @@ begin
         if {%H-}SetValueJson = '' then
           JsonEncodeNameSQLValue(P.Name, SetValue, SetValueJson);
         Owner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
-          rec.IDValue, SetValueJson, nil);
+          rec.IDValue, SetValueJson, nil, nil);
       end;
     end;
     fModified := true;
@@ -3568,7 +3633,7 @@ begin
     result := true;
     if Owner <> nil then
       Owner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
-        ID, SentData, nil);
+        ID, SentData, nil, nil);
   finally
     StorageUnLock;
   end;
@@ -3598,7 +3663,7 @@ begin
     result := true;
     if Owner <> nil then
       Owner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
-        Rec.IDValue, SentData, nil);
+        Rec.IDValue, SentData, nil, nil);
   finally
     StorageUnLock;
   end;
@@ -3640,7 +3705,7 @@ begin
     result := true;
     if Owner <> nil then
       Owner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
-        ID, fValue[i].GetJsonValues(True, False, ooUpdate), nil);
+        ID, fValue[i].GetJsonValues(True, False, ooUpdate), nil, nil);
   finally
     StorageUnLock;
   end;
@@ -3716,7 +3781,7 @@ begin
     begin
       fStoredClassRecordProps.FieldBitsFromBlobField(BlobField, AffectedField);
       Owner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex,
-        aID, '', @AffectedField);
+        aID, '', @AffectedField, nil);
     end;
     fModified := true;
     result := true;
@@ -3746,7 +3811,7 @@ begin
           BlobFields[f].CopyValue(Value, fValue[i]);
         if Owner <> nil then
           Owner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex,
-            Value.IDValue, '', @fStoredClassRecordProps.FieldBits[oftBlob]);
+            Value.IDValue, '', @fStoredClassRecordProps.FieldBits[oftBlob], nil);
         fModified := true;
         result := true;
       finally

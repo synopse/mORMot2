@@ -1358,7 +1358,7 @@ begin
     fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
   end;
   if InternalExecute(sql, true, nil, nil, nil, PInt64(@result)) then
-    InternalUpdateEvent(oeAdd, TableModelIndex, result, SentData, nil);
+    InternalUpdateEvent(oeAdd, TableModelIndex, result, SentData, nil, nil);
 end;
 
 procedure InternalRTreeIn(Context: TSqlite3FunctionContext;
@@ -1506,7 +1506,7 @@ begin
   else
   begin
     // notify BEFORE deletion
-    InternalUpdateEvent(oeDelete, TableModelIndex, ID, '', nil);
+    InternalUpdateEvent(oeDelete, TableModelIndex, ID, '', nil, nil);
     result := ExecuteFmt('DELETE FROM % WHERE RowID=:(%):;',
       [fModel.TableProps[TableModelIndex].Props.SqlTableName, ID]);
   end;
@@ -1525,7 +1525,7 @@ begin
   begin
     // notify BEFORE deletion
     for i := 0 to high(IDs) do
-      InternalUpdateEvent(oeDelete, TableModelIndex, IDs[i], '', nil);
+      InternalUpdateEvent(oeDelete, TableModelIndex, IDs[i], '', nil, nil);
     if IdemPChar(pointer(SqlWhere), 'LIMIT ') or
        IdemPChar(pointer(SqlWhere), 'ORDER BY ') then
       // LIMIT is not handled by SQLite3 when built from amalgamation
@@ -1950,7 +1950,7 @@ begin
         [self, EscapeToShort(SentData)]);
     result := ExecuteFmt('UPDATE % SET % WHERE RowID=:(%):',
       [props.SqlTableName, sql, ID]);
-    InternalUpdateEvent(oeUpdate, TableModelIndex, ID, SentData, nil);
+    InternalUpdateEvent(oeUpdate, TableModelIndex, ID, SentData, nil, nil);
   end;
 end;
 
@@ -1992,7 +1992,7 @@ begin
       DB.UnLock;
     end;
     props.FieldBitsFromBlobField(BlobField, affectedfields);
-    InternalUpdateEvent(oeUpdateBlob, TableModelIndex, aID, '', @affectedfields);
+    InternalUpdateEvent(oeUpdateBlob, TableModelIndex, aID, '', @affectedfields, nil);
   except
     on ESqlite3Exception do
       result := false;
@@ -2013,7 +2013,7 @@ begin
   props := Model.TableProps[TableModelIndex].Props;
   if props.Fields.IndexByName(FieldName) < 0 then
     Exit;
-  if InternalUpdateEventNeeded(TableModelIndex) or
+  if InternalUpdateEventNeeded(oeUpdate, TableModelIndex) or
      (props.RecordVersionField <> nil) then
     result := OneFieldValue(props.Table, FieldName, 'ID=?', [], [ID], value) and
       UpdateField(props.Table, ID, FieldName, [value + Increment])
@@ -2049,7 +2049,7 @@ begin
     exit
   else
     whereid := 0;
-  if InternalUpdateEventNeeded(TableModelIndex) or
+  if InternalUpdateEventNeeded(oeUpdate, TableModelIndex) or
      (props.RecordVersionField <> nil) then
   begin
     if whereid > 0 then
@@ -2094,7 +2094,7 @@ begin
       exit;
     JsonEncodeNameSQLValue(SetFieldName, SetValue, json);
     for i := 0 to high(ID) do
-      InternalUpdateEvent(oeUpdate, TableModelIndex, ID[i], json, nil);
+      InternalUpdateEvent(oeUpdate, TableModelIndex, ID[i], json, nil, nil);
   end
   else if (whereid > 0) and
           not RecordCanBeUpdated(props.Table, whereid, oeUpdate) then
@@ -2159,7 +2159,7 @@ begin
           DB.UnLock;
         end;
         InternalUpdateEvent(oeUpdateBlob, tableindex, Value.ID, '',
-          @FieldBits[oftBlob]);
+          @FieldBits[oftBlob], nil);
       end
       else
         result := true; // as TRestOrm.UpdateblobFields()
@@ -2228,7 +2228,7 @@ begin
     exit;
   end;
   // encPost: MainEngineAdd() to Values[]
-  // encSimple/encSimpleID: InternalBatchSimple() to Simples[]
+  // encSimple/encSimpleID: InternalBatchDirect() to Simples[]
   if (fBatch^.ValuesCount <> 0) or
      (fBatch^.IDCount <> 0) then
     raise EOrmBatchException.CreateUtf8(
@@ -2267,7 +2267,7 @@ begin
     if b^.ValuesCount <> b^.IDCount then
       raise EOrmBatchException.CreateUtf8(
         '%.InternalBatchStop(*Count?)', [self]);
-    updateeventneeded := InternalUpdateEventNeeded(b^.TableIndex);
+    updateeventneeded := InternalUpdateEventNeeded(oeAdd, b^.TableIndex);
     props := fModel.Tables[b^.TableIndex].OrmProps;
     if b^.ValuesCount = 1 then
     begin
@@ -2291,7 +2291,7 @@ begin
         raise EOrmBatchException.CreateUtf8(
           '%.InternalBatchStop failed on %', [self, sql]);
       if updateeventneeded then
-        InternalUpdateEvent(oeAdd, b^.TableIndex, b^.ID[0], b^.Values[0], nil);
+        InternalUpdateEvent(oeAdd, b^.TableIndex, b^.ID[0], b^.Values[0], nil, nil);
       exit;
     end;
     // parse input JSON and gather multi-INSERT statements up to MAX_PARAMS
@@ -2523,7 +2523,7 @@ begin
             for r := firstrow to firstrow + rowcount - 1 do
             begin
               if updateeventneeded then
-                InternalUpdateEvent(oeAdd, b^.TableIndex, b^.ID[r], b^.Values[r], nil);
+                InternalUpdateEvent(oeAdd, b^.TableIndex, b^.ID[r], b^.Values[r], nil, nil);
               b^.Values[r] := ''; // release memory ASAP
             end;
           inc(firstrow, rowcount);
@@ -2586,16 +2586,9 @@ begin
   if Encoding = encSimpleID then
   begin
     // extract the ID from first value of the input JSON
-    if Sent^ = '[' then
-      inc(Sent);
-    result := GetInt64(GetJsonField(Sent, Sent));
+    result := BatchExtractSimpleID(Sent);
     if Sent = nil then
-    begin
-      result := 0; // clearly invalid input
-      exit;
-    end;
-    dec(Sent);
-    Sent^ := '['; // ignore the first field (stored in fBatch.ID)
+      exit; // invalid input
   end;
   // compute ID from Max(ID) if was not set by encSimpleID
   PrepareBatchAdd(self, RunTableIndex, result);

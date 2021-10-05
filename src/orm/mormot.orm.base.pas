@@ -414,6 +414,12 @@ const
   INITIALIZETABLE_NOINDEX: TOrmInitializeTableOptions =
     [itoNoIndex4ID.. itoNoIndex4RecordVersion];
 
+  EVENT2OCCASION: array[TOrmEvent] of TOrmOccasion = (
+    ooInsert,    // oeAdd
+    ooUpdate,    // oeUpdate
+    ooDelete,    // oeDelete
+    ooUpdate);   // oeUpdateBlob
+
 
 // backward compatibility types redirections
 {$ifndef PUREMORMOT2}

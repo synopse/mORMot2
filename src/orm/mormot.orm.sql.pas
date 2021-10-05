@@ -1062,7 +1062,7 @@ begin
       // notify BEFORE deletion
       for i := 0 to fBatchCount - 1 do
         Owner.InternalUpdateEvent(
-          oeDelete, fStoredClassProps.TableIndex, fBatchIDs[i], '', nil);
+          oeDelete, fStoredClassProps.TableIndex, fBatchIDs[i], '', nil, nil);
     with fProperties do
       if BatchMaxSentAtOnce > 0 then
         max := BatchMaxSentAtOnce
@@ -1203,7 +1203,7 @@ begin
           NotifySQLEvent := oeUpdate;
         for i := 0 to fBatchCount - 1 do
           Owner.InternalUpdateEvent(NotifySQLEvent,
-            fStoredClassProps.TableIndex, fBatchIDs[i], fBatchValues[i], nil);
+            fStoredClassProps.TableIndex, fBatchIDs[i], fBatchValues[i], nil, nil);
       end;
       Owner.FlushInternalDBCache;
     end;
@@ -1267,7 +1267,8 @@ begin
          (Owner <> nil) then
       begin
         if EngineAddForcedID = 0 then // only worth it if result is a true ID
-          Owner.InternalUpdateEvent(oeAdd, TableModelIndex, result, SentData, nil);
+          Owner.InternalUpdateEvent(
+            oeAdd, TableModelIndex, result, SentData, nil, nil);
         Owner.FlushInternalDBCache;
       end;
     end;
@@ -1296,7 +1297,8 @@ begin
     if result and
        (Owner <> nil) then
     begin
-      Owner.InternalUpdateEvent(oeUpdate, TableModelIndex, ID, SentData, nil);
+      Owner.InternalUpdateEvent(
+        oeUpdate, TableModelIndex, ID, SentData, nil, nil);
       Owner.FlushInternalDBCache;
     end;
   end;
@@ -1322,7 +1324,7 @@ begin
   begin
     // regular deletion
     if Owner <> nil then // notify BEFORE deletion
-      Owner.InternalUpdateEvent(oeDelete, TableModelIndex, ID, '', nil);
+      Owner.InternalUpdateEvent(oeDelete, TableModelIndex, ID, '', nil, nil);
     result := ExecuteDirect('delete from % where %=?',
       [fTableName, fStoredClassMapping^.RowIDFieldName], [ID], false) <> nil;
     if result and
@@ -1357,7 +1359,7 @@ begin
     // regular deletion
     if Owner <> nil then // notify BEFORE deletion
       for i := 0 to n - 1 do
-        Owner.InternalUpdateEvent(oeDelete, TableModelIndex, IDs[i], '', nil);
+        Owner.InternalUpdateEvent(oeDelete, TableModelIndex, IDs[i], '', nil, nil);
     rowid := fStoredClassMapping^.RowIDFieldName;
     pos := 0;
     repeat
@@ -1551,7 +1553,7 @@ begin
       if result and
          (Owner <> nil) then
       begin
-        if Owner.InternalUpdateEventNeeded(TableModelIndex) then
+        if Owner.InternalUpdateEventNeeded(oeUpdate, TableModelIndex) then
         begin
           rows := ExecuteInlined('select % from % where %=:(%):',
             [RowIDFieldName, fTableName, ExtWhereFieldName, WhereValue], true);
@@ -1560,7 +1562,7 @@ begin
           JsonEncodeNameSQLValue(SetFieldName, SetValue, json);
           while rows.Step do
             Owner.InternalUpdateEvent(
-              oeUpdate, TableModelIndex, rows.ColumnInt(0), json, nil);
+              oeUpdate, TableModelIndex, rows.ColumnInt(0), json, nil, nil);
           rows.ReleaseRows;
         end;
         Owner.FlushInternalDBCache;
@@ -1581,7 +1583,7 @@ begin
      (Model.Tables[TableModelIndex] <> fStoredClass) then
     exit;
   if (Owner <> nil) and
-     Owner.InternalUpdateEventNeeded(TableModelIndex) then
+     Owner.InternalUpdateEventNeeded(oeUpdate, TableModelIndex) then
     result :=
       OneFieldValue(fStoredClass, FieldName, 'ID=?', [], [ID], Value) and
       UpdateField(fStoredClass, ID, FieldName, [Value + Increment])
@@ -1634,7 +1636,7 @@ begin
       begin
         fStoredClassRecordProps.FieldBitsFromBlobField(BlobField, AffectedField);
         Owner.InternalUpdateEvent(
-          oeUpdateBlob, TableModelIndex, aID, '', @AffectedField);
+          oeUpdateBlob, TableModelIndex, aID, '', @AffectedField, nil);
         Owner.FlushInternalDBCache;
       end;
       result := true; // success
@@ -1674,7 +1676,7 @@ begin
            (Owner <> nil) then
         begin
           Owner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex,
-            aID, '', @fStoredClassRecordProps.FieldBits[oftBlob]);
+            aID, '', @fStoredClassRecordProps.FieldBits[oftBlob], nil);
           Owner.FlushInternalDBCache;
         end;
       end

@@ -663,7 +663,7 @@ begin
       fCollection.Insert([variant(doc)]);
       if Owner <> nil then
       begin
-        Owner.InternalUpdateEvent(oeAdd, TableModelIndex, result, SentData, nil);
+        Owner.InternalUpdateEvent(oeAdd, TableModelIndex, result, SentData, nil, nil);
         Owner.FlushInternalDBCache;
       end;
     end;
@@ -691,7 +691,7 @@ begin
     fCollection.Update(query, update);
     if Owner <> nil then
     begin
-      Owner.InternalUpdateEvent(oeUpdate, TableModelIndex, ID, SentData, nil);
+      Owner.InternalUpdateEvent(oeUpdate, TableModelIndex, ID, SentData, nil, nil);
       Owner.FlushInternalDBCache;
     end;
     result := true;
@@ -725,13 +725,13 @@ begin
     fCollection.Update(query, update);
     if Owner <> nil then
     begin
-      if Owner.InternalUpdateEventNeeded(TableModelIndex) and
+      if Owner.InternalUpdateEventNeeded(oeUpdate, TableModelIndex) and
          id.Init(fCollection.FindBson(query, BsonVariant(['_id', 1]))) then
       begin
         JsonEncodeNameSQLValue(SetFieldName, SetValue, json);
         while id.Next do
           Owner.InternalUpdateEvent(oeUpdate, TableModelIndex,
-            id.Item.DocItemToInteger('_id'), json, nil);
+            id.Item.DocItemToInteger('_id'), json, nil, nil);
       end;
       Owner.FlushInternalDBCache;
     end;
@@ -752,7 +752,7 @@ begin
      (Model.Tables[TableModelIndex] <> fStoredClass) then
     exit;
   if (Owner <> nil) and
-     Owner.InternalUpdateEventNeeded(TableModelIndex) then
+     Owner.InternalUpdateEventNeeded(oeUpdate, TableModelIndex) then
     result := OneFieldValue(fStoredClass, FieldName, 'ID=?', [], [ID], Value) and
               UpdateField(fStoredClass, ID, FieldName, [Value + Increment])
   else
@@ -794,7 +794,7 @@ begin
     begin
       fStoredClassRecordProps.FieldBitsFromBlobField(BlobField, AffectedField);
       Owner.InternalUpdateEvent(oeUpdateBlob, TableModelIndex, aID, '',
-        @AffectedField);
+        @AffectedField, nil);
       Owner.FlushInternalDBCache;
     end;
     result := true;
@@ -838,7 +838,7 @@ begin
     if Owner <> nil then
     begin
       Owner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex, aID,
-        '', @fStoredClassRecordProps.FieldBits[oftBlob]);
+        '', @fStoredClassRecordProps.FieldBits[oftBlob], nil);
       Owner.FlushInternalDBCache;
     end;
     result := true;
@@ -866,7 +866,7 @@ begin
       if Owner <> nil then
       begin
         // notify BEFORE deletion
-        Owner.InternalUpdateEvent(oeDelete, TableModelIndex, ID, '', nil);
+        Owner.InternalUpdateEvent(oeDelete, TableModelIndex, ID, '', nil, nil);
         Owner.FlushInternalDBCache;
       end;
       fCollection.RemoveOne(ID);
@@ -891,7 +891,7 @@ begin
   try
     if Owner <> nil then // notify BEFORE deletion
       for i := 0 to high(IDs) do
-        Owner.InternalUpdateEvent(oeDelete, TableModelIndex, IDs[i], '', nil);
+        Owner.InternalUpdateEvent(oeDelete, TableModelIndex, IDs[i], '', nil, nil);
     fCollection.Remove(
       BsonVariant(['_id',
         BsonVariant(['$in', BsonVariantFromInt64s(TInt64DynArray(IDs))])]));

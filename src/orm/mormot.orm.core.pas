@@ -8495,6 +8495,7 @@ begin
       val := GetJsonFieldOrObjectOrArray(Json, @wasstring, nil, true, true, @vallen);
       SimpleFields[i].SetValue(self, val, vallen, wasstring);
     end;
+  result := json <> nil;
 end;
 
 constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
