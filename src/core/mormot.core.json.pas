@@ -591,7 +591,7 @@ type
     // a comma (',')
     procedure AddPropJsonString(const PropName: shortstring; const Text: RawUtf8);
     /// append a JSON field name, followed by a number value and a comma (',')
-    procedure AddPropJSONInt64(const PropName: shortstring; Value: Int64);
+    procedure AddPropJsonInt64(const PropName: shortstring; Value: Int64);
     /// append CR+LF (#13#10) chars and #9 indentation
     // - will also flush any fBlockComment
     procedure AddCRAndIndent; override;
@@ -1500,6 +1500,7 @@ type
   TValuePUtf8CharArray =
     array[0 .. maxInt div SizeOf(TValuePUtf8Char) - 1] of TValuePUtf8Char;
   PValuePUtf8CharArray = ^TValuePUtf8CharArray;
+  TValuePUtf8CharDynArray = array of TValuePUtf8Char;
 
   /// store one name/value pair of raw UTF-8 content, from a JSON buffer
   // - used e.g. by JsonDecode() overloaded function or UrlEncodeJsonObject()
@@ -5217,7 +5218,7 @@ begin
   AddComma;
 end;
 
-procedure TTextWriter.AddPropJSONInt64(const PropName: shortstring;
+procedure TTextWriter.AddPropJsonInt64(const PropName: shortstring;
   Value: Int64);
 begin
   AddProp(@PropName[1], ord(PropName[0]));

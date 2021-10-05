@@ -2539,16 +2539,16 @@ begin
     WR.AddShort(ARGTYPETOJSON[ValueType]);
 {$ifdef SOA_DEBUG}
   WR.Add('"', ',');
-  WR.AddPropJSONInt64('index', IndexVar);
+  WR.AddPropJsonInt64('index', IndexVar);
   WR.AddPropJsonString('var',
     GetEnumNameTrimed(TypeInfo(TInterfaceMethodValueVar), ValueVar));
-  WR.AddPropJSONInt64('stackoffset', InStackOffset);
-  WR.AddPropJSONInt64('reg', RegisterIdent);
-  WR.AddPropJSONInt64('fpreg', FPRegisterIdent);
-  WR.AddPropJSONInt64('stacksize', SizeInStack);
-  WR.AddPropJSONInt64('storsize', SizeInStorage);
+  WR.AddPropJsonInt64('stackoffset', InStackOffset);
+  WR.AddPropJsonInt64('reg', RegisterIdent);
+  WR.AddPropJsonInt64('fpreg', FPRegisterIdent);
+  WR.AddPropJsonInt64('stacksize', SizeInStack);
+  WR.AddPropJsonInt64('storsize', SizeInStorage);
   if ValueType = imvBinary then
-    WR.AddPropJSONInt64('binsize', SizeInBinary);
+    WR.AddPropJsonInt64('binsize', SizeInBinary);
   WR.AddPropName('asm');
   WR.AddString(GetSetNameCsv(TypeInfo(TInterfaceMethodValueAsm), ValueKindAsm));
   WR.AddShort('}', ',');

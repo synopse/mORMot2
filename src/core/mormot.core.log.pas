@@ -5116,7 +5116,7 @@ begin
           // WriteObject() requires TTextWriter from mormot.core.json.pas
           fWriter.AddInstancePointer(Instance, #0, {unit=}true, {ptr=}true)
         else
-          // by definition, JSON object is serialized on the same line
+          // by definition, a JSON object is serialized on the same line
           fWriter.WriteObject(Instance, [woFullExpand]);
     end
     else
