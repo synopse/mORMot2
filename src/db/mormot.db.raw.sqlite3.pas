@@ -4159,7 +4159,7 @@ function ErrorCodeToText(err: TSqlite3ErrorCode): RawUtf8;
 // - raise a ESqlite3Exception if the result state is within SQLITE_ERRORS
 // - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.)
 function sqlite3_check(DB: TSqlite3DB; aResult: integer;
-  const SQL: RawUtf8=''): integer;
+  const SQL: RawUtf8 = ''): integer;
 
 var
   /// global access to linked SQLite3 library API calls
@@ -4439,6 +4439,14 @@ type
     // - this function will use copy-on-write assignment of Value, with no memory
     // allocation, then let sqlite3InternalFreeRawByteString release the variable
     procedure Bind(Param: integer; const Value: RawUtf8); overload;
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
+    // - raise an ESqlite3Exception on any error
+    // - this function will directly call sqlite3.bind_text() and let SQLite3
+    // makes its copy (as SQLITE_TRANSIENT) unless BindStatic is supplied (as
+    // SQLITE_STATIC) if you are sure Value will be valid until the query ends
+    procedure BindU(Param: integer; Value: PUtf8Char; ValueLen: PtrInt;
+      BindStatic: boolean = false);
     /// bind a generic VCL string to a parameter
     // - with versions prior to Delphi 2009, you may loose some content here:
     // Bind(Param: integer; Value: RawUtf8) is the prefered method
@@ -4588,7 +4596,7 @@ type
     // information (e.g. TReferenceDynArray will declare 'ReferenceDynArray')
     constructor Create(aFunction: TSqlFunctionFunc;
       aFunctionParametersCount: integer;
-      const aFunctionName: RawUtf8=''); reintroduce;
+      const aFunctionName: RawUtf8 = ''); reintroduce;
     /// the internal function prototype
     // - ready to be assigned to sqlite3.create_function() xFunc parameter
     property InternalFunction: TSqlFunctionFunc
@@ -7561,24 +7569,44 @@ end;
 procedure TSqlRequest.Bind(Param: integer; const Value: RawUtf8);
 var
   tmp: pointer;
+  res: integer;
 begin
   // note that the official SQLite3 documentation is missleading:
   // sqlite3.bind_text(Text_bytes) must EXCLUDE the null terminator, otherwise a
   // #0 is appended to all column values -> so length(Value) is needed below
   if pointer(Value) = nil then
     // avoid to bind '' as null
-    sqlite3_check(RequestDB,
-      sqlite3.bind_text(Request, Param, @NULCHAR, 0, SQLITE_STATIC))
+    res := sqlite3.bind_text(Request, Param, @NULCHAR, 0, SQLITE_STATIC)
   else
   begin
     // assign RawUtf8 value by reference, to avoid memory allocation
     tmp := nil;
     RawByteString(tmp) := Value;
     // sqlite3InternalFreeRawByteString will decrease RefCount
-    sqlite3_check(RequestDB,
-      sqlite3.bind_text(Request, Param, tmp, length(Value),
-        sqlite3InternalFreeRawByteString), 'bind_text');
+    res := sqlite3.bind_text(Request, Param, tmp, length(Value),
+      sqlite3InternalFreeRawByteString);
   end;
+  sqlite3_check(RequestDB, res, 'bind_text');
+end;
+
+const
+  TRANSIENT_STATIC: array[boolean] of TSqlDestroyPtr = (
+    SQLITE_TRANSIENT,
+    SQLITE_STATIC);
+
+procedure TSqlRequest.BindU(Param: integer; Value: PUtf8Char; ValueLen: PtrInt;
+  BindStatic: boolean);
+var
+  res: integer;
+begin
+  if Value = nil then
+    // avoid to bind '' as null
+    res := sqlite3.bind_text(
+      Request, Param, @NULCHAR, 0, SQLITE_STATIC)
+  else
+    res := sqlite3.bind_text(
+      Request, Param, Value, ValueLen, TRANSIENT_STATIC[BindStatic]);
+  sqlite3_check(RequestDB, res, 'BindU');
 end;
 
 procedure TSqlRequest.BindS(Param: integer; const Value: string);
@@ -7601,7 +7629,7 @@ begin
   len := CurrentAnsiConvert.AnsiBufferToUtf8(P, pointer(Value), len) - P;
   {$endif UNICODE}
   sqlite3_check(RequestDB,
-    sqlite3.bind_text(Request, Param, P, len, @sqlite3InternalFree), 'bind_text');
+    sqlite3.bind_text(Request, Param, P, len, @sqlite3InternalFree), 'BindS');
 end;
 
 procedure TSqlRequest.Bind(Param: integer; Data: pointer; Size: integer);
@@ -7631,7 +7659,8 @@ end;
 
 procedure TSqlRequest.BindNull(Param: integer);
 begin
-  sqlite3_check(RequestDB, sqlite3.bind_null(Request, Param));
+  sqlite3_check(RequestDB,
+    sqlite3.bind_null(Request, Param), 'bind_null');
 end;
 
 procedure TSqlRequest.BindReset;
@@ -7642,7 +7671,8 @@ end;
 
 procedure TSqlRequest.BindZero(Param, Size: integer);
 begin
-  sqlite3_check(RequestDB, sqlite3.bind_zeroblob(Request, Param, Size));
+  sqlite3_check(RequestDB,
+    sqlite3.bind_zeroblob(Request, Param, Size), 'bind_zeroblob');
 end;
 
 procedure TSqlRequest.Close;
@@ -8155,7 +8185,8 @@ begin
   fResetDone := false;
   saved := SetFpuFlags(ffLibrary);
   try
-    result := sqlite3_check(RequestDB, sqlite3.step(Request), 'Step');
+    result := sqlite3_check(RequestDB,
+      sqlite3.step(Request), 'Step');
   finally
     ResetFpuFlags(saved);
   end;
@@ -8255,8 +8286,9 @@ constructor TSqlBlobStream.Create(aDB: TSqlite3DB; const DBName, TableName,
 begin
   fDB := aDB;
   fWritable := ReadWrite;
-  sqlite3_check(aDB, sqlite3.blob_open(aDB, pointer(DBName), pointer(TableName),
-    pointer(ColumnName), RowID, integer(ReadWrite), fBlob), 'blob_open');
+  sqlite3_check(aDB,
+    sqlite3.blob_open(aDB, pointer(DBName), pointer(TableName),
+      pointer(ColumnName), RowID, integer(ReadWrite), fBlob), 'blob_open');
   fSize := sqlite3.blob_bytes(fBlob);
 end;
 
@@ -8274,7 +8306,8 @@ begin
   if result <> 0 then
   begin
     // warning: sqlite3.blob_read() seems to work with 32-bit position only
-    sqlite3_check(fDB, sqlite3.blob_read(fBlob, Buffer, result, fPosition));
+    sqlite3_check(fDB,
+      sqlite3.blob_read(fBlob, Buffer, result, fPosition), 'blob_read');
     inc(fPosition, result);
   end;
 end;
@@ -8303,7 +8336,8 @@ procedure TSqlBlobStream.ChangeRow(RowID: Int64);
 begin
   if not Assigned(sqlite3.blob_reopen) then
     raise ESqlite3Exception.Create('blob_reopen API not available');
-  sqlite3_check(fDB, sqlite3.blob_reopen(fBlob, RowID), 'blob_reopen');
+  sqlite3_check(fDB,
+    sqlite3.blob_reopen(fBlob, RowID), 'blob_reopen');
   fPosition := 0;
   fSize := sqlite3.blob_bytes(fBlob);
 end;
@@ -8315,7 +8349,8 @@ begin
     result := Count; // write only inside the Blob size
   if result <> 0 then
   begin
-    sqlite3_check(fDB, sqlite3.blob_write(fBlob, Buffer, result, fPosition));
+    sqlite3_check(fDB,
+      sqlite3.blob_write(fBlob, Buffer, result, fPosition), 'blob_write');
     inc(fPosition, result);
   end;
 end;
