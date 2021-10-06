@@ -2464,7 +2464,8 @@ begin
       else
         fLastErrorMessage := Call.OutBody;
       InternalLog('% % returned % (%) with message %',
-        [method, url, Call.OutStatus, StatusMsg, fLastErrorMessage], sllError);
+        [method, url, Call.OutStatus, StatusMsg, fLastErrorMessage],
+        LOG_TRACEERROR[Call.OutStatus <> HTTP_NOTFOUND]); // 404 is not fatal
       if Assigned(fOnFailed) then
         fOnFailed(self, nil, @Call);
     end;
