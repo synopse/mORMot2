@@ -656,11 +656,11 @@ type
     function GetOne(aID: TID): TOrm; virtual; abstract;
     /// manual Update of a TOrm field values
     // - Rec.ID specifies which record is to be updated
-    // - will update all properties, including BLOB fields and such
+    // - will update bit-wise Fields specified properties
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
     // - method available since a TRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TRestOrmServer
-    function UpdateOne(Rec: TOrm;
+    function UpdateOne(Rec: TOrm; const Fields: TFieldBits;
       const SentData: RawUtf8): boolean; overload; virtual; abstract;
     /// manual Update of a TOrm field values from an array of TSqlVar
     // - will update all properties, including BLOB fields and such
@@ -863,11 +863,11 @@ type
     function GetOne(aID: TID): TOrm; override;
     /// manual Update of a TOrm field values
     // - Rec.ID specifies which record is to be updated
-    // - will update all properties, including BLOB fields and such
+    // - will update bit-wise Fields specified properties
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
     // - method available since a TRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TRestOrmServer
-    function UpdateOne(Rec: TOrm;
+    function UpdateOne(Rec: TOrm; const Fields: TFieldBits;
       const SentData: RawUtf8): boolean; override;
     /// manual Update of a TOrm field values from a TSqlVar array
     // - will update all properties, including BLOB fields and such
@@ -1961,9 +1961,8 @@ function TRestStorageTOrm.EngineUpdate(TableModelIndex: integer;
   ID: TID; const SentData: RawUtf8): boolean;
 var
   rec: TOrm;
+  fields: TFieldBits; // to handle partial fields update
 begin
-  // this implementation won't handle partial fields update (e.g. BatchUpdate
-  // after FillPrepare) - but TRestStorageInMemory.EngineUpdate will
   if (ID <= 0) or
      (TableModelIndex <> fStoredClassProps.TableIndex) then
   begin
@@ -1974,9 +1973,9 @@ begin
   try
     rec := fStoredClass.Create;
     try
-      rec.FillFrom(SentData);
+      rec.FillFrom(SentData, @fields);
       rec.IDValue := ID;
-      result := UpdateOne(rec, SentData);
+      result := UpdateOne(rec, fields, SentData);
     finally
       rec.Free;
     end;
@@ -2001,7 +2000,8 @@ begin
     try
       rec.SetFieldSqlVars(Values);
       rec.IDValue := ID;
-      result := UpdateOne(rec, rec.GetJsonValues(true, False, ooUpdate));
+      result := UpdateOne(rec, rec.Orm.CopiableFieldsBits,
+        rec.GetJsonValues(true, False, ooUpdate));
     finally
       rec.Free;
     end;
@@ -3640,10 +3640,12 @@ begin
   end;
 end;
 
-function TRestStorageInMemory.UpdateOne(Rec: TOrm;
+function TRestStorageInMemory.UpdateOne(Rec: TOrm; const Fields: TFieldBits;
   const SentData: RawUtf8): boolean;
 var
-  i: PtrInt;
+  i, f: PtrInt;
+  dest: TOrm;
+  nfo: TOrmPropInfoList;
 begin
   result := false;
   if (Rec = nil) or
@@ -3659,7 +3661,11 @@ begin
     if (fUnique <> nil) and
        not UniqueFieldsUpdateOK(Rec, i) then
       exit;
-    CopyObject(Rec, fValue[i]);
+    dest := fValue[i];
+    nfo := fStoredClassRecordProps.Fields;
+    for f := 0 to nfo.Count - 1 do
+      if GetBitPtr(@Fields, f) then
+        nfo.List[f].CopyValue(Rec, dest);
     fModified := true;
     result := true;
     if Owner <> nil then
