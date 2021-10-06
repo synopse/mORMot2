@@ -91,7 +91,7 @@ type
 
 { ***************** TServiceFactoryClient Service Provider }
 
-    /// a service provider implemented on the client side
+  /// a service provider implemented on the client side
   // - each registered interface has its own TServiceFactoryClient instance,
   // available as one TSqlServiceContainerClient item from TRest.Services property
   // - will emulate "fake" implementation class instance of a given interface

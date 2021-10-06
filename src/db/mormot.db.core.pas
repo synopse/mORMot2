@@ -2241,7 +2241,7 @@ begin
       AddShorter('","');
     end;
     CancelLastChar('"');
-    fStartDataPosition := fStream.Position + PtrInt(B - fTempBuf);
+    fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
      // B := buf-1 at startup -> need ',val11' position in
      // "values":["col1","col2",val11,' i.e. current pos without the ','
   end;
@@ -2286,7 +2286,7 @@ begin
     begin
       // last AddColumn() call would finalize the non-expanded header
       Add('"' , ',');
-      fStartDataPosition := fStream.Position + PtrInt(B - fTempBuf);
+      fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
     end else
       AddShorter('","');
   end;
