@@ -89,7 +89,8 @@ const
   BATCH_METHOD: array[TRestBatchEncoding] of TUriMethod = (
     mPOST,     // encPost
     mPOST,     // encSimple
-    mPOST,     // encSimpleID
+    mPOST,     // encPostHex
+    mPOST,     // encPostHexID
     mPUT,      // encPut
     mDELETE);  // encDelete
 
@@ -262,7 +263,8 @@ type
     // - called a second time with the proper Sent, returning
     // the computed (encSimple) or extracted (encSimpleID) ID
     function InternalBatchDirect(Encoding: TRestBatchEncoding;
-      RunTableIndex: integer; Sent: PUtf8Char): TID; virtual;
+      RunTableIndex: integer; const Fields: TFieldBits;
+      Sent: PUtf8Char): TID; virtual;
   public
     // ------- TRestOrm main methods
     /// initialize the class, and associated to a TRest and its TOrmModel
@@ -2023,7 +2025,7 @@ begin
 end;
 
 function TRestOrm.InternalBatchDirect(Encoding: TRestBatchEncoding;
-  RunTableIndex: integer; Sent: PUtf8Char): TID;
+  RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
 begin
   result := 0; // this engine does NOT support optimized SIMPLE multi-insert
 end;

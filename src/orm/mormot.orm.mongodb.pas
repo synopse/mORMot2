@@ -1551,9 +1551,10 @@ function TRestStorageMongoDB.InternalBatchStart(Encoding: TRestBatchEncoding;
   BatchOptions: TRestBatchOptions): boolean;
 begin
   result := false; // means BATCH mode not supported
-  if Encoding in [encPost, encSimple, encSimpleID, encDelete] then
+  if Encoding in [encPost, encDelete] then
   begin
-    StorageLock(true, 'InternalBatchStart'); // protected by try..finally in TRestServer.RunBatch
+    // lock is protected by try..finally in TRestServer.RunBatch
+    StorageLock(true, 'InternalBatchStart');
     try
       if (fBatchMethod <> mNone) or
          (fBatchWriter <> nil) then

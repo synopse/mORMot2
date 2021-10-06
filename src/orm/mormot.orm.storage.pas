@@ -635,7 +635,8 @@ type
     /// internal method called by TRestServer.Batch() to process SIMPLE input
     // - overriden for optimized multi-insert of the supplied JSON array values
     function InternalBatchDirect(Encoding: TRestBatchEncoding;
-      RunTableIndex: integer; Sent: PUtf8Char): TID; override;
+      RunTableIndex: integer; const Fields: TFieldBits;
+      Sent: PUtf8Char): TID; override;
     /// manual Add of a TOrm
     // - returns the ID created on success
     // - returns -1 on failure (not UNIQUE field value e.g.)
@@ -1914,12 +1915,12 @@ begin
 end;
 
 function TRestStorageTOrm.InternalBatchDirect(Encoding: TRestBatchEncoding;
-  RunTableIndex: integer; Sent: PUtf8Char): TID;
+  RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
 var
   rec: TOrm;
 begin
   result := 0; // unsupported
-  if not (Encoding in [encSimple, encSimpleID]) then
+  if not (Encoding in BATCH_SIMPLE) then
     exit;
   if Sent = nil then
   begin
@@ -1929,7 +1930,7 @@ begin
   end;
   // called a second time with the proper Sent, returning added ID
   // same logic than EngineAdd() but with no memory allocation
-  if Encoding = encSimpleID then
+  if Encoding = encPostHexID then
   begin
     // extract the ID from first value of the input JSON
     result := BatchExtractSimpleID(Sent);
@@ -1938,12 +1939,12 @@ begin
   end;
   rec := fStoredClass.Create;
   try
-    if rec.SimplePropertiesFillFromArray(Sent) then
+    if rec.FillFromArray(Fields, Sent) then
     begin
       rec.IDValue := result;
       StorageLock(true, 'InternalBatchDirect');
       try
-        result := AddOne(rec, rec.IDValue > 0, '');
+        result := AddOne(rec, result > 0, ''); // no SentData
       finally
         StorageUnLock;
       end;

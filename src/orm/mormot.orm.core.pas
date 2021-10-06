@@ -2542,7 +2542,7 @@ type
     // the field layout, otherwise if may return true but will corrupt data
     function SimplePropertiesFill(const aSimpleFields: array of const): boolean;
     /// set the simple fields from a JSON array of values
-    function SimplePropertiesFillFromArray(Json: PUtf8Char): boolean;
+    function FillFromArray(const Fields: TFieldBits; Json: PUtf8Char): boolean;
     /// initialize a TDynArray wrapper to map dynamic array property values
     // - if the field name is not existing or not a dynamic array, result.IsVoid
     // will be TRUE
@@ -3546,6 +3546,15 @@ type
       read GetItem;
   end;
 
+  TOrmPropertiesModelEntry = record
+    /// one associated model
+    Model: TOrmModel;
+    /// the index in the Model.Tables[] array
+    TableIndex: PtrInt;
+    /// associated ORM parameters
+    Properties: TOrmModelProperties;
+  end;
+
   /// some information about a given TOrm class properties
   // - used internally by TOrm, via a global cache handled by this unit:
   // you can access to each record's properties via TOrm.OrmProps class
@@ -3582,14 +3591,7 @@ type
     fWeakZeroClass: TObject;
     /// the associated TOrmModel instances
     // - e.g. allow almost O(1) search of a TOrmClass in a model
-    fModel: array of record
-      /// one associated model
-      Model: TOrmModel;
-      /// the index in the Model.Tables[] array
-      TableIndex: PtrInt;
-      /// associated ORM parameters
-      Properties: TOrmModelProperties;
-    end;
+    fModel: array of TOrmPropertiesModelEntry;
     fModelMax: integer;
     fCustomCollation: TRawUtf8DynArray;
     /// add an entry in fModel[] / fModelMax
@@ -3768,7 +3770,11 @@ type
     function CheckBinaryHeader(var R: TFastReader): boolean;
     /// convert a JSON array of simple field values into a matching JSON object
     function SaveSimpleFieldsFromJsonArray(var P: PUtf8Char; ID: TID;
-      var EndOfObject: AnsiChar; ExtendedJson, FirstIsID: boolean): RawUtf8;
+      EndOfObject: PAnsiChar; ExtendedJson, FirstIsID: boolean): RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// convert a JSON array of simple field values into a matching JSON object
+    function SaveFieldsFromJsonArray(var P: PUtf8Char; const Bits: TFieldBits;
+      ID: TID; EndOfObject: PAnsiChar; ExtendedJson, FirstIsID: boolean): RawUtf8;
 
     /// register a custom filter (transformation) or validation rule to
     // the TSQMRecord class for a specified field
@@ -4758,9 +4764,6 @@ type
     fTable: TOrmClass;
     fTableIndex: integer;
     fBatchCount: integer;
-    fPreviousTable: TOrmClass;
-    fPreviousEncoding: TRestBatchEncoding;
-    fPreviousTableMatch: boolean;
     fOptions: TRestBatchOptions;
     fDeletedRecordRef: TIDDynArray;
     fDeletedCount: integer;
@@ -4769,11 +4772,16 @@ type
     fDeleteCount: integer;
     fAutomaticTransactionPerRow: cardinal;
     fOnWrite: TOnBatchWrite;
+    fPreviousTableMatch: boolean;
+    fPreviousTable: TOrmClass;
+    fPreviousEncoding: TRestBatchEncoding;
+    fPreviousFields: TFieldBits;
     function GetCount: integer; {$ifdef HASINLINE} inline; {$endif}
     function GetSizeBytes: cardinal;
     procedure SetExpandedJsonWriter(Props: TOrmProperties;
       ForceResetFields, withID: boolean; const WrittenFields: TFieldBits);
-    procedure Encode(EncodedTable: TOrmClass; Encoding: TRestBatchEncoding; ID: TID);
+    procedure Encode(EncodedTable: TOrmClass; Encoding: TRestBatchEncoding;
+      Fields: PFieldBits = nil; ID: TID = 0);
   public
     /// begin a BATCH sequence to speed up huge database changes
     // - each call to normal Add/Update/Delete methods will create a Server request,
@@ -4953,6 +4961,14 @@ type
 
 /// compute the SQL field names, used to create a SQLite3 virtual table
 function GetVirtualTableSqlCreate(Props: TOrmProperties): RawUtf8;
+
+/// encode as a SQL-ready (multi) INSERT statement with ? as values
+// - follow the SQLite3 syntax: INSERT INTO .. VALUES (..),(..),(..),..
+// - same logic as TJsonObjectDecoder.EncodeAsSqlPrepared
+procedure EncodeMultiInsertSQLite3(Props: TOrmProperties;
+  const FieldNames: TRawUtf8DynArray; FieldBits: PFieldBits;
+  BatchOptions: TRestBatchOptions; FieldCount, RowCount: integer;
+  var result: RawUtf8);
 
 /// TDynArraySortCompare compatible function, sorting by TOrm.ID
 function TOrmDynArrayCompare(const Item1, Item2): integer;
@@ -6076,6 +6092,66 @@ begin
     result := ');'
   else
     PWord(@result[length(result) - 1])^ := ord(')') + ord(';') shl 8;
+end;
+
+procedure EncodeMultiInsertSQLite3(Props: TOrmProperties;
+  const FieldNames: TRawUtf8DynArray; FieldBits: PFieldBits;
+  BatchOptions: TRestBatchOptions; FieldCount, RowCount: integer;
+  var result: RawUtf8);
+var
+  f: PtrInt;
+  W: TTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    if boInsertOrIgnore in BatchOptions then
+      W.AddShort('insert or ignore into ')
+    else if boInsertOrReplace in BatchOptions then
+      W.AddShort('insert or replace into ')
+    else
+      W.AddShort('insert into ');
+    W.AddString(Props.SqlTableName);
+    if FieldCount = 0 then
+      W.AddShort(' default values')
+    else
+    begin
+      W.Add(' ', '(');
+      if FieldBits <> nil then
+      begin
+        W.AddShorter('RowID,'); // first is always the ID
+        for f := 0 to Props.Fields.Count - 1 do
+          if GetBitPtr(FieldBits, f) then
+          begin
+            W.AddString(Props.Fields.List[f].Name);
+            W.AddComma;
+          end;
+      end
+      else
+        for f := 0 to FieldCount - 1 do
+        begin
+          // append 'COL1,COL2'
+          W.AddString(FieldNames[f]);
+          W.AddComma;
+        end;
+      W.CancelLastComma;
+      W.AddShort(') values (');
+      W.AddStrings('?,', FieldCount);
+      while RowCount > 1 do
+      begin
+        // INSERT INTO .. VALUES (..),(..),(..),..
+        W.CancelLastComma;
+        W.AddShorter('),(');
+        W.AddStrings('?,', FieldCount);
+        dec(RowCount);
+      end;
+      W.CancelLastComma;
+      W.Add(')');
+    end;
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
 end;
 
 
@@ -8477,25 +8553,27 @@ begin
       end;
 end;
 
-function TOrm.SimplePropertiesFillFromArray(Json: PUtf8Char): boolean;
+function TOrm.FillFromArray(const Fields: TFieldBits; Json: PUtf8Char): boolean;
 var
   i: PtrInt;
   val: PUtf8Char;
   vallen: integer;
   wasstring: boolean;
+  props: TOrmPropInfoList;
 begin
   result := false;
   Json := GotoNextNotSpace(Json);
   if Json^ <> '[' then
     exit;
   inc(Json);
-  with Orm do
-    for i := 0 to length(SimpleFields) - 1 do
+  props := Orm.Fields;
+  for i := 0 to props.Count - 1 do
+    if GetBitPtr(@Fields, i) then
     begin
       val := GetJsonFieldOrObjectOrArray(Json, @wasstring, nil, true, true, @vallen);
-      SimpleFields[i].SetValue(self, val, vallen, wasstring);
+      props.List[i].SetValue(self, val, vallen, wasstring);
     end;
-  result := json <> nil;
+  result := Json <> nil;
 end;
 
 constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
@@ -10475,7 +10553,14 @@ begin
 end;
 
 function TOrmProperties.SaveSimpleFieldsFromJsonArray(var P: PUtf8Char;
-  ID: TID; var EndOfObject: AnsiChar; ExtendedJson, FirstIsID: boolean): RawUtf8;
+  ID: TID; EndOfObject: PAnsiChar; ExtendedJson, FirstIsID: boolean): RawUtf8;
+begin
+  SaveFieldsFromJsonArray(P, SimpleFieldsBits[ooInsert],
+    ID, EndOfObject, ExtendedJson, FirstIsID);
+end;
+
+function TOrmProperties.SaveFieldsFromJsonArray(var P: PUtf8Char; const Bits: TFieldBits;
+  ID: TID; EndOfObject: PAnsiChar; ExtendedJson, FirstIsID: boolean): RawUtf8;
 var
   i: PtrInt;
   W: TJsonSerializer;
@@ -10498,37 +10583,35 @@ begin
     ID := GetInt64(GetJsonField(P, P));
   W := TJsonSerializer.CreateOwnedStream(temp);
   try
+    if ExtendedJson then
+      W.CustomOptions := W.CustomOptions + [twoForceJsonExtended];
     W.Add('{');
     if ID <> 0 then
       W.AddPropJsonInt64('ID', ID);
-    for i := 0 to length(SimpleFields) - 1 do
-    begin
-      if ExtendedJson then
+    for i := 0 to Fields.Count - 1 do
+      if GetBitPtr(@Bits, i) then
       begin
-        W.AddString(SimpleFields[i].Name);
-        W.Add(':');
-      end
-      else
-        W.AddFieldName(SimpleFields[i].Name);
-      Start := P;
-      P := GotoEndJsonItem(P);
-      if (P = nil) or
-         not (P^ in [',', ']']) then
-        exit;
-      W.AddNoJsonEscape(Start, P - Start);
-      W.AddComma;
-      repeat
-        inc(P)
-      until (P^ > ' ') or
-            (P^ = #0);
-    end;
+        W.AddFieldName(Fields.List[i].Name);
+        Start := P;
+        P := GotoEndJsonItem(P);
+        if (P = nil) or
+           not (P^ in [',', ']']) then
+          exit;
+        W.AddNoJsonEscape(Start, P - Start);
+        W.AddComma;
+        repeat
+          inc(P)
+        until (P^ > ' ') or
+              (P^ = #0);
+      end;
     W.CancelLastComma;
     W.Add('}');
     W.SetText(result);
   finally
     W.Free;
   end;
-  EndOfObject := P^;
+  if EndOfObject <> nil then
+    EndOfObject^ := P^;
   if P^ <> #0 then
     repeat
       inc(P)
@@ -11339,6 +11422,7 @@ function TOrmModel.GetTableIndex(aTable: TOrmClass): PtrInt;
 var
   i: PtrInt;
   Props: TOrmProperties;
+  m: ^TOrmPropertiesModelEntry;
   c: POrmClass;
 begin
   if (self <> nil) and
@@ -11347,14 +11431,18 @@ begin
     Props := aTable.OrmProps;
     if (Props <> nil) and
        (Props.fModelMax < fTablesMax) then
+    begin
       // fastest O(1) search in all registered models (if worth it)
+      m := pointer(Props.fModel);
       for i := 0 to Props.fModelMax do
-        with Props.fModel[i] do
-          if Model = self then
-          begin
-            result := TableIndex; // almost always loop-free
-            exit;
-          end;
+        if m^.Model = self then
+        begin
+          result := m^.TableIndex; // almost always loop-free
+          exit;
+        end
+        else
+          inc(m);
+    end;
     // manual search e.g. if fModel[] is not yet set
     c := pointer(Tables);
     for result := 0 to fTablesMax do
@@ -11381,9 +11469,6 @@ function TOrmModel.GetTableIndexExisting(aTable: TOrmClass): PtrInt;
 begin
   if self = nil then
     raise EModelException.Create('nil.GetTableIndexExisting');
-  if aTable = nil then
-    raise EModelException.CreateUtf8(
-      '%.GetTableIndexExisting(nil) for root=%', [self, Root]);
   result := GetTableIndex(aTable);
   if result < 0 then
     raise EModelException.CreateUtf8('% is not part of % root=%',
@@ -12716,7 +12801,7 @@ begin
   end;
   fOptions := Options;
   Options := Options -
-    [boExtendedJson, boPostNoSimpleFields, boOldEncoding]; // client-side only
+    [boExtendedJson, boPostNoSimpleFields, boNoModelEncoding]; // client-side only
   if byte(Options) <> 0 then
   begin
     fBatch.AddShort('"options",');
@@ -12776,7 +12861,7 @@ begin // '{"Table":[...,"POST",{object},...]}'
   if (fBatch = nil) or
      (fTable = nil) then
     raise EOrmBatchException.CreateUtf8('%.RawAdd %', [self, SentData]);
-  Encode(fTable, encPost, 0);
+  Encode(fTable, encPost);
   fBatch.AddString(SentData);
   fBatch.AddComma;
   result := fBatchCount;
@@ -12791,7 +12876,7 @@ begin // '{"Table":[...,"PUT",{object},...]}'
   if (fBatch = nil) or
      (fTable = nil) then
     raise EOrmBatchException.CreateUtf8('%.RawUpdate % %', [self, ID, SentData]);
-  Encode(fTable, encPut, 0);
+  Encode(fTable, encPut);
   if JsonGetID(pointer(SentData), sentID) then
     if sentID <> ID then
       raise EOrmBatchException.CreateUtf8('%.RawUpdate ID=% <> %', [self, ID, SentData])
@@ -12812,27 +12897,36 @@ end;
 
 const
   BATCH_VERB: array[TRestBatchEncoding] of TShort8 = (
-    '"POST',
-    '"SIMPLE',
-    '"SIMPLID',
-    '"PUT',
-    '"DELETE');
+    '"POST',    // encPost
+    '"SIMPLE',  // encSimple
+    '"',        // encPostHex
+    '"i',       // encPostHexID
+    '"PUT',     // encPut
+    '"DELETE'); // encDelete
 
 procedure TRestBatch.Encode(EncodedTable: TOrmClass;
-  Encoding: TRestBatchEncoding; ID: TID);
+  Encoding: TRestBatchEncoding; Fields: PFieldBits; ID: TID);
 begin
   if (fTable <> nil) and
      (EncodedTable <> fTable) then
     raise EOrmBatchException.CreateUtf8('% %" with % whereas expects %',
       [self, BATCH_VERB[Encoding], EncodedTable, fTable]);
   fPreviousTableMatch := fPreviousTable = EncodedTable;
-  if (boOldEncoding in fOptions) or
+  if (boNoModelEncoding in fOptions) or
      (fPreviousTable <> EncodedTable) or
-     (fPreviousEncoding <> Encoding) then
+     (fPreviousEncoding <> Encoding) or
+     ((Fields <> nil) and
+      not IsEqual(Fields^, fPreviousFields)) then
   begin // allow "POST",{obj1},{obj2} or "SIMPLE",[v1],[v2] or "DELETE",id1,id2
     fPreviousTable := EncodedTable;
     fPreviousEncoding := Encoding;
+    if Fields <> nil then
+      fPreviousFields := Fields^;
     fBatch.AddShorter(BATCH_VERB[Encoding]);
+    if Encoding in [encPostHex, encPostHexID] then
+    begin
+      fBatch.AddBinToHexDisplayMinChars(Fields, SizeOf(Fields^));
+    end;
     if fTable <> nil then
       fBatch.AddShorter('",') // '{"Table":[...,"POST",{object},...]}'
     else
@@ -12865,19 +12959,22 @@ begin
      (fBatch = nil) then
     exit; // invalid parameters, or not opened BATCH sequence
   props := Value.Orm;
+  // ensure ForceID is properly set
   if SendData and
-     (fModel.props[POrmClass(Value)^].Kind in INSERT_WITH_ID) then
+     (fModel.Props[POrmClass(Value)^].Kind in INSERT_WITH_ID) then
     ForceID := true; // same format as TRestClient.Add
   if ForceID and
      (Value.IDValue = 0) then
     ForceID := false;
-  encoding := encPost; // versatile "POST"/"POST@table" format by default
+  // compute actual fields bits
   if IsZero(CustomFields) then
     fields := props.SimpleFieldsBits[ooInsert]
-  else if DoNotAutoComputeFields then
-    fields := CustomFields
   else
-    fields := CustomFields + props.ComputeBeforeAddFieldsBits;
+  begin
+    fields := CustomFields * props.CopiableFieldsBits; // reduce from ALL_FIELDS
+    if not DoNotAutoComputeFields then
+      fields := fields + props.ComputeBeforeAddFieldsBits;
+  end;
   blob := pointer(props.BlobFields);
   if blob <> nil then
     for f := 1 to length(props.BlobFields) do
@@ -12887,14 +12984,20 @@ begin
         exclude(fields, blob^.PropertyIndex); // don't send null
       inc(blob);
     end;
+  // guess best encoding
+  encoding := encPost; // versatile "POST"/"POST@table" format by default
   if SendData and
-     IsEqual(fields, props.SimpleFieldsBits[ooInsert]) and
      not (boPostNoSimpleFields in fOptions) then
-    if not ForceID then
-      encoding := encSimple // SIMPLE",[values..
-    else if not (boOldEncoding in fOptions) then
-      encoding := encSimpleID; // "SIMPLID",[id,values...
-  Encode(POrmClass(Value)^, encoding, 0);
+    if not ForceID and
+       IsEqual(fields, props.SimpleFieldsBits[ooInsert]) then
+      encoding := encSimple // SIMPLE",[values.. is mORMot 1 compatible
+    else if not (boNoModelEncoding in fOptions) then
+      if ForceID then
+        encoding := encPostHexID
+      else
+        encoding := encPostHex;
+  // append the data as JSON
+  Encode(POrmClass(Value)^, encoding, @fields);
   if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
     Value.ComputeFieldsBeforeWrite(fRest, oeAdd);
   if SendData then
@@ -12902,23 +13005,27 @@ begin
     case encoding of
       encPost:
         begin
-          SetExpandedJsonWriter(props, fPreviousTableMatch, ForceID, fields{%H-});
+          SetExpandedJsonWriter(props, not fPreviousTableMatch, ForceID, fields);
           Value.GetJsonValues(fBatch);
         end;
       encSimple,
-      encSimpleID:
+      encPostHex,
+      encPostHexID:
         begin
           fBatch.Add('[');
-          if encoding = encSimpleID then
+          if encoding = encPostHexID then
           begin
             fBatch.Add(Value.IDValue);
             fBatch.AddComma;
           end;
-          nfo := pointer(props.SimpleFields);
-          for f := 1 to length(props.SimpleFields) do
+          nfo := pointer(props.Fields.List);
+          for f := 0 to props.Fields.Count - 1 do
           begin
-            nfo^.GetJsonValues(Value, fBatch);
-            fBatch.AddComma;
+            if GetBitPtr(@fields, f) then
+            begin
+              nfo^.GetJsonValues(Value, fBatch);
+              fBatch.AddComma;
+            end;
             inc(nfo);
           end;
           fBatch.CancelLastComma;
@@ -12950,7 +13057,7 @@ begin
     exit;
   end;
   AddID(fDeletedRecordRef, fDeletedCount, fModel.RecordReference(Table, ID));
-  Encode(Table, encDelete, ID);
+  Encode(Table, encDelete, nil, ID);
   result := fBatchCount;
   inc(fBatchCount);
   inc(fDeleteCount);
@@ -12969,7 +13076,7 @@ begin
     exit;
   end;
   AddID(fDeletedRecordRef, fDeletedCount, RecordReference(fTableIndex, ID));
-  Encode(fTable, encDelete, ID);
+  Encode(fTable, encDelete, nil, ID);
   result := fBatchCount;
   inc(fBatchCount);
   inc(fDeleteCount);
@@ -12991,7 +13098,7 @@ begin
   if (Value.IDValue <= 0) or
      not fRest.RecordCanBeUpdated(Value.RecordClass, Value.IDValue, oeUpdate) then
     exit; // invalid parameters, or not opened BATCH sequence
-  Encode(POrmClass(Value)^, encPut, 0);
+  Encode(POrmClass(Value)^, encPut);
   Props := Value.Orm;
   if POrmClass(Value)^ = fTable then
     tableIndex := fTableIndex

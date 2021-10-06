@@ -195,6 +195,8 @@ type
     Values: TRawUtf8DynArray;
     ValuesCount: integer;
     Simples: TPUtf8CharDynArray;
+    SimpleFieldsCount: integer;
+    SimpleFields: TFieldBits;
     Types: array[0..MAX_SQLFIELDS - 1] of TSqlDBFieldType;
     PostValues: array[0..MAX_SQLPARAMS - 1] of RawUtf8;
     Temp: TSynTempBuffer;
@@ -291,7 +293,8 @@ type
     /// internal method called by TRestServer.Batch() to process SIMPLE input
     // - overriden for optimized multi-insert of the supplied JSON array values
     function InternalBatchDirect(Encoding: TRestBatchEncoding;
-      RunTableIndex: integer; Sent: PUtf8Char): TID; override;
+      RunTableIndex: integer; const Fields: TFieldBits;
+      Sent: PUtf8Char): TID; override;
     /// reset the cache if necessary
     procedure SetNoAjaxJson(const Value: boolean); override;
   public
@@ -1289,7 +1292,7 @@ var
   b: PRestOrmServerDBBatch;
 begin
   b := Sender.fBatch;
-  if (b^.Encoding in [encPost, encSimple, encSimpleID]) and
+  if (b^.Encoding in BATCH_INSERT) and
      (b^.IDMax >= 0) and
      ((b^.TableIndex < 0) or
       (b^.TableIndex = TableModelIndex)) then
@@ -2222,7 +2225,7 @@ end;
 function TRestOrmServerDB.InternalBatchStart(Encoding: TRestBatchEncoding;
   BatchOptions: TRestBatchOptions): boolean;
 begin
-  if not (Encoding in [encPost, encSimple, encSimpleID]) then
+  if not (Encoding in BATCH_INSERT) then
   begin
     result := false; // means BATCH mode not supported
     exit;
@@ -2248,19 +2251,18 @@ var
   P, val: PUtf8Char;
   v, sql, logsql: RawUtf8;
   decodedsaved, updateeventneeded, fieldschanged, wasstring: boolean;
-  fields: TRawUtf8DynArray;
+  fieldnames: TRawUtf8DynArray;
   valuesnull: TByteDynArray;
   props: TOrmProperties;
   b: PRestOrmServerDBBatch;
   encoding: TRestBatchEncoding;
-  endofobject: AnsiChar;
 begin
   // generate efficient multi-INSERT statements
   b := fBatch;
   if (b^.ValuesCount = 0) or
      (b^.TableIndex < 0) then
     exit; // nothing to add
-  if not (b^.Encoding in [encPost, encSimple, encSimpleID]) then
+  if not (b^.Encoding in BATCH_INSERT) then
     raise EOrmBatchException.CreateUtf8('%.InternalBatchStop: Encoding=%',
       [self, ToText(b^.Encoding)^]);
   try
@@ -2276,9 +2278,10 @@ begin
         encPost:
           v := b^.Values[0];
         encSimple,
-        encSimpleID:
-          v := props.SaveSimpleFieldsFromJsonArray(
-            b^.Simples[0], 0, endofobject, true, b^.Encoding = encSimpleID);
+        encPostHex,
+        encPostHexID:
+          v := props.SaveFieldsFromJsonArray(
+            b^.Simples[0], b^.SimpleFields, 0, nil, true, false);
       end;
       fJsonDecoder.Decode(v, nil, pInlined, b^.ID[0]);
       if props.RecordVersionField <> nil then
@@ -2291,7 +2294,7 @@ begin
         raise EOrmBatchException.CreateUtf8(
           '%.InternalBatchStop failed on %', [self, sql]);
       if updateeventneeded then
-        InternalUpdateEvent(oeAdd, b^.TableIndex, b^.ID[0], b^.Values[0], nil, nil);
+        InternalUpdateEvent(oeAdd, b^.TableIndex, b^.ID[0], v, nil, nil);
       exit;
     end;
     // parse input JSON and gather multi-INSERT statements up to MAX_PARAMS
@@ -2302,14 +2305,14 @@ begin
     lastrowcount := 0;
     firstrow := 0;
     lastvaluesnull := -1;
-    fields := nil; // makes compiler happy
+    fieldnames := nil; // makes compiler happy
     fieldcount := 0;
     ndx := 0;
     repeat
       repeat
         // decode a row
         encoding := b^.Encoding;
-        if encoding in [encSimple, encSimpleID] then
+        if encoding in BATCH_SIMPLE then
           if updateeventneeded or
              (props.RecordVersionField <> nil) then
           begin
@@ -2318,16 +2321,16 @@ begin
             begin
               if length(b^.Values) < b^.ValuesCount then
                 SetLength(b^.Values, b^.ValuesCount);
-              b^.Values[ndx] := props.SaveSimpleFieldsFromJsonArray(
-                b^.Simples[ndx], b^.ID[ndx], endofobject, true, false);
+              b^.Values[ndx] := props.SaveFieldsFromJsonArray(
+                b^.Simples[ndx], b^.SimpleFields, b^.ID[ndx], nil, true, false);
               encoding := encPost;
             end;
           end
           else
           begin
             // in-place parsing of the JSON array of simple fields
-            fieldcount := length(props.SimpleFields);
-            if valuescount + fieldcount + 1 > MAX_SQLPARAMS then
+            fieldcount := b^.SimpleFieldsCount; // includes trailing ID
+            if valuescount + fieldcount > MAX_SQLPARAMS then
             begin
               // this item would bound too many params
               decodedsaved := false;
@@ -2340,7 +2343,7 @@ begin
               b^.ID[rowcount] := b^.ID[ndx];
             end;
             inc(ndx);
-            inc(valuescount, fieldcount + 1);
+            inc(valuescount, fieldcount);
             inc(rowcount);
             if ndx = b^.ValuesCount then
               break;
@@ -2373,21 +2376,21 @@ begin
             fOwner.RecordVersionHandle(ooInsert, b^.TableIndex,
               fJsonDecoder, props.RecordVersionField);
         end;
-        if fields = nil then
+        if fieldnames = nil then
         begin
           // parse the JSON, check the corresponding fields once
-          fJsonDecoder.AssignFieldNamesTo(fields);
+          fJsonDecoder.AssignFieldNamesTo(fieldnames);
           fieldcount := fJsonDecoder.FieldCount;
           for f := 0 to fieldcount - 1 do
           begin
-            arg := props.fields.IndexByNameOrExcept(fields[f]);
+            arg := props.fields.IndexByNameOrExcept(fieldnames[f]);
             if arg < 0 then
               b^.Types[f] := ftInt64 // RowID
             else
               b^.Types[f] := props.fields.List[arg].SqlDBFieldType;
           end;
         end
-        else if not fJsonDecoder.SameFieldNames(fields) then
+        else if not fJsonDecoder.SameFieldNames(fieldnames) then
         begin
           // this item would break the sql statement
           fieldschanged := true;
@@ -2415,19 +2418,18 @@ begin
       if (sql = '') or
          (rowcount <> lastrowcount) then
       begin
-        if encoding in [encSimple, encSimpleID] then
+        if encoding in BATCH_SIMPLE then
         begin
           FormatUtf8('% multi insert into %(%)', [rowcount,
             props.SqlTableName, props.SqlTableSimpleFieldsNoRowID], logsql);
-          EncodeMultiInsertSQLite3(props.SqlTableName, {fields=}nil,
-            props.SqlTableSimpleFieldsNoRowID, b^.Options,
-            fieldcount + 1, rowcount, sql);
+          EncodeMultiInsertSQLite3(props, {fieldnames=}nil, @b^.SimpleFields,
+            b^.Options, fieldcount, rowcount, sql);
         end
         else
         begin
           FormatUtf8('% multi insert into %(%)', [rowcount,
-            props.SqlTableName, RawUtf8ArrayToCsv(fields)], logsql);
-          EncodeMultiInsertSQLite3(props.SqlTableName, fields, '',
+            props.SqlTableName, RawUtf8ArrayToCsv(fieldnames)], logsql);
+          EncodeMultiInsertSQLite3(props, fieldnames, {fieldbits=}nil,
             b^.Options, fieldcount, rowcount, sql);
         end;
         lastrowcount := rowcount;
@@ -2441,7 +2443,8 @@ begin
           arg := 0;
           case encoding of
             encSimple,
-            encSimpleID:
+            encPostHex,
+            encPostHexID:
               // direct in-place decoding of the JSON array of simple fields
               for row := 0 to rowcount - 1 do
               begin
@@ -2451,43 +2454,49 @@ begin
                 inc(P);
                 inc(arg);
                 fStatement^.Bind(arg, b^.ID[row]); // first parameter is RowID
-                nfo := pointer(props.SimpleFields);
-                for f := 1 to fieldcount do
+                nfo := pointer(props.Fields.List);
+                for f := 0 to props.Fields.Count - 1 do
                 begin
-                  inc(arg);
-                  val := GetJsonFieldOrObjectOrArray(
-                    P, @wasstring, @endofobject, true, true, @vallen);
-                  if (val = nil) and
-                     not wasstring then
-                    fStatement^.BindNull(arg)
-                  else
-                    case nfo^.SqlDBFieldType of
-                      ftInt64:
-                        fStatement^.Bind(arg, GetInt64(val));
-                      ftDouble,
-                      ftCurrency:
-                        fStatement^.Bind(arg, GetExtended(val));
-                      ftDate,
-                      ftUtf8:
-                        begin
-                          if (vallen > 3) and
-                             (PCardinal(val)^  and $00ffffff = JSON_SQLDATE_MAGIC_C) then
+                  if GetBitPtr(@b^.SimpleFields, f) then
+                  begin
+                    inc(arg);
+                    val := GetJsonFieldOrObjectOrArray(
+                      P, @wasstring, nil, true, true, @vallen);
+                    if (val = nil) and
+                       not wasstring then
+                      fStatement^.BindNull(arg)
+                    else
+                      case nfo^.SqlDBFieldType of
+                        ftInt64:
+                          fStatement^.Bind(arg, GetInt64(val));
+                        ftDouble,
+                        ftCurrency:
+                          fStatement^.Bind(arg, GetExtended(val));
+                        ftDate,
+                        ftUtf8:
                           begin
-                            inc(val, 3);
-                            dec(vallen, 3);
+                            if (vallen > 3) and
+                               (PCardinal(val)^  and $00ffffff =
+                                 JSON_SQLDATE_MAGIC_C) then
+                            begin
+                              inc(val, 3);
+                              dec(vallen, 3);
+                            end;
+                            fStatement^.BindU(arg, val, vallen, {static=}true);
                           end;
-                          fStatement^.BindU(arg, val, vallen, {static=}true);
-                        end;
-                      ftBlob:
-                        begin
-                          if (vallen > 3) and
-                             (PCardinal(val)^ and $00ffffff = JSON_BASE64_MAGIC_C) then
-                            Base64ToBin(PAnsiChar(val) + 3, vallen - 3, RawByteString(v))
-                          else
-                            FastSetString(v, val, vallen);
-                          fStatement^.BindBlob(arg, v);
-                        end;
-                    end;
+                        ftBlob:
+                          begin
+                            if (vallen > 3) and
+                               (PCardinal(val)^ and $00ffffff =
+                                 JSON_BASE64_MAGIC_C) then
+                              Base64ToBin(
+                                PAnsiChar(val) + 3, vallen - 3, RawByteString(v))
+                            else
+                              FastSetString(v, val, vallen);
+                            fStatement^.BindBlob(arg, v);
+                          end;
+                      end;
+                  end;
                   inc(nfo);
                 end;
               end;
@@ -2551,7 +2560,7 @@ begin
       end;
       valuescount := 0;
       rowcount := 0;
-      fields := nil; // force new sql statement and values[]
+      fieldnames := nil; // force new sql statement and values[]
     until (ndx = b^.ValuesCount) and
           decodedsaved;
     if firstrow <> b^.ValuesCount then
@@ -2563,15 +2572,17 @@ begin
     b^.Values := nil;
     b^.ID := nil;
     b^.Simples := nil;
+    b^.SimpleFieldsCount := 0;
+    FillZero(b^.SimpleFields);
     Finalize(fJsonDecoder); // release temp values memory ASAP
   end;
 end;
 
 function TRestOrmServerDB.InternalBatchDirect(Encoding: TRestBatchEncoding;
-  RunTableIndex: integer; Sent: PUtf8Char): TID;
+  RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
 begin
   result := 0; // unsupported
-  if not (Encoding in [encSimple, encSimpleID]) then
+  if not (Encoding in BATCH_SIMPLE) then
     exit;
   if Sent = nil then
   begin
@@ -2581,9 +2592,9 @@ begin
       result := 1;
     exit;
   end;
-  // called a second time with the proper Sent, returning added ID
+  // called a second time with the proper Sent JSON, returning added ID
   // same logic than MainEngineAdd() but with no memory allocation
-  if Encoding = encSimpleID then
+  if Encoding = encPostHexID then
   begin
     // extract the ID from first value of the input JSON
     result := BatchExtractSimpleID(Sent);
@@ -2594,7 +2605,12 @@ begin
   PrepareBatchAdd(self, RunTableIndex, result);
   if result <> 0 then
   begin
-    AddID(fBatch.ID, fBatch.IDCount, result);
+    if fBatch^.SimpleFieldsCount = 0 then
+    begin
+      fBatch^.SimpleFields := Fields;
+      fBatch^.SimpleFieldsCount := GetBitsCount(Fields, SizeOf(Fields)) + 1;
+    end;
+    AddID(fBatch^.ID, fBatch^.IDCount, result);
     ObjArrayAddCount(fBatch^.Simples, pointer(Sent), fBatch^.ValuesCount);
   end;
 end;
