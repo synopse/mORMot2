@@ -183,10 +183,10 @@ type
     // - aWebSocketsEncryptionKey format follows TWebSocketProtocol.SetEncryptKey
     // - if aWebSocketsAjax is TRUE, it will also register TWebSocketProtocolJson
     // so that AJAX applications would be able to connect to this server
-    procedure WebSocketsEnable(
-      const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
-      aWebSocketsAjax: boolean = false;
-      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress]);
+    function WebSocketsEnable(const aWebSocketsURI,
+      aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean = false;
+      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
+        [pboSynLzCompress]): pointer; override;
     /// server can send a request back to the client, when the connection has
     // been upgraded to WebSocket
     // - InURL/InMethod/InContent properties are input parameters (InContentType
@@ -624,17 +624,16 @@ begin
   WebSocketsEnable(aWebSocketsURI, aWebSocketsEncryptionKey, aWebSocketsAjax);
 end;
 
-procedure TWebSocketAsyncServerRest.WebSocketsEnable(const aWebSocketsURI,
+function TWebSocketAsyncServerRest.WebSocketsEnable(const aWebSocketsURI,
   aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
-  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions);
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): pointer;
 begin
-  if self = nil then
-    exit;
   fProtocols.AddOnce(TWebSocketProtocolBinary.Create(
     aWebSocketsURI, {server=}true, aWebSocketsEncryptionKey,
     @fSettings, aWebSocketsBinaryOptions));
   if aWebSocketsAjax then
     fProtocols.AddOnce(TWebSocketProtocolJson.Create(aWebSocketsURI));
+  result := @fSettings;
 end;
 
 function TWebSocketAsyncServerRest.Callback(Ctxt: THttpServerRequest;

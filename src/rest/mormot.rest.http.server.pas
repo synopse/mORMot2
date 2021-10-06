@@ -359,7 +359,7 @@ type
     // use AES-CFB 256 bits encryption
     // - if aWebSocketsAjax is TRUE, it will also register TWebSocketProtocolJson
     // so that AJAX applications would be able to connect to this server
-    // - this method does nothing if the associated HttpServer class does not
+    // - this method raise an EHttpServer if the associated server class does not
     // support WebSockets, i.e. this instance isn't useBidirSocket/useBidirAsync
     function WebSocketsEnable(
       const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
@@ -620,10 +620,10 @@ end;
 const
   HTTPSERVERSOCKETCLASS: array[
       useHttpSocket .. high(TRestHttpServerUse)] of THttpServerSocketGenericClass = (
-    THttpServer,
-    TWebSocketServerRest,
-    THttpAsyncServer,
-    TWebSocketAsyncServerRest);
+    THttpServer,                 // useHttpSocket
+    TWebSocketServerRest,        // useBidirSocket
+    THttpAsyncServer,            // useHttpAsync
+    TWebSocketAsyncServerRest);  // useBidirAsync
 
 constructor TRestHttpServer.Create(const aPort: RawUtf8;
   const aServers: array of TRestServer; const aDomainName: RawUtf8;
@@ -1178,20 +1178,10 @@ function TRestHttpServer.WebSocketsEnable(
   aWebSocketsAjax: boolean;
   aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): PWebSocketProcessSettings;
 begin
-  if fHttpServer.InheritsFrom(TWebSocketServerRest) then
-  begin
-    TWebSocketServerRest(fHttpServer).WebSocketsEnable(aWebSocketsURI,
-      aWebSocketsEncryptionKey, aWebSocketsAjax, aWebSocketsBinaryOptions);
-    result := TWebSocketServerRest(fHttpServer).Settings;
-  end else if fHttpServer.InheritsFrom(TWebSocketAsyncServerRest) then
-  begin
-    TWebSocketAsyncServerRest(fHttpServer).WebSocketsEnable(aWebSocketsURI,
-      aWebSocketsEncryptionKey, aWebSocketsAjax, aWebSocketsBinaryOptions);
-    result := TWebSocketAsyncServerRest(fHttpServer).Settings;
-  end
-  else
-    raise EWebSockets.CreateUtf8('%.WebSocketEnable(%): requires HTTP_BIDIR ' +
-      '(useBidirSocket or useBidirAsync)', [self, ToText(fUse)^]);
+  // will raise an EHttpServer exception if not supported
+  result := (fHttpServer as THttpServerSocketGeneric).WebSocketsEnable(
+    aWebSocketsURI, aWebSocketsEncryptionKey, aWebSocketsAjax,
+    aWebSocketsBinaryOptions);
 end;
 
 function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;

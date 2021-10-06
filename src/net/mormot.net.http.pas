@@ -65,6 +65,18 @@ type
   // - filled from ACCEPT-ENCODING: header value
   THttpSocketCompressSet = set of 0..31;
 
+  /// tune the 'synopsebin' protocol
+  // - pboCompress will compress all frames payload using SynLZ
+  // - pboNoLocalHostCompress won't compress frames on the loopback (127.0.0.1)
+  // - pboNoLocalHostEncrypt won't encrypt frames on the loopback (127.0.0.1)
+  TWebSocketProtocolBinaryOption = (
+    pboSynLzCompress,
+    pboNoLocalHostCompress,
+    pboNoLocalHostEncrypt);
+
+  /// how TWebSocketProtocolBinary implements the 'synopsebin' protocol
+  // - should match on both client and server ends
+  TWebSocketProtocolBinaryOptions = set of TWebSocketProtocolBinaryOption;
 
 /// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
 // - will detect most used compressible content (like 'text/*' or

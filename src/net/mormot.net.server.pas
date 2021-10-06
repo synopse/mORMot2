@@ -504,6 +504,14 @@ type
       const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
       KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
       CreateSuspended: boolean = false; aLogVerbose: boolean = false); reintroduce; virtual;
+    /// defines the WebSockets protocols to be used for this Server
+    // - this default implementation will raise an exception
+    // - returns the associated PWebSocketProcessSettings reference on success
+    function WebSocketsEnable(
+      const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
+      aWebSocketsAjax: boolean = false;
+      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
+        [pboSynLzCompress]): pointer; virtual;
     /// ensure the HTTP server thread is actually bound to the specified port
     // - TCrtSocket.Bind() occurs in the background in the Execute method: you
     // should call and check this method result just after THttpServer.Create
@@ -1534,6 +1542,14 @@ begin
   fProcessName := ProcessName; // TSynThreadPoolTHttpServer needs it now
   fHeadersUnFiltered := aHeadersUnFiltered;
   inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
+end;
+
+function THttpServerSocketGeneric.WebSocketsEnable(const aWebSocketsURI,
+  aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): pointer;
+begin
+  raise EHttpServer.CreateUtf8('Unexpected %.WebSocketEnable: requires ' +
+    'HTTP_BIDIR (useBidirSocket or useBidirAsync) kind of server', [self]);
 end;
 
 procedure THttpServerSocketGeneric.WaitStarted(Seconds: integer);

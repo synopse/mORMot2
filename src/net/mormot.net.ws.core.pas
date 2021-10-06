@@ -445,19 +445,6 @@ type
       var FramesCount: integer): boolean; override;
   end;
 
-  /// tune the 'synopsebin' protocol
-  // - pboCompress will compress all frames payload using SynLZ
-  // - pboNoLocalHostCompress won't compress frames on the loopback (127.0.0.1)
-  // - pboNoLocalHostEncrypt won't encrypt frames on the loopback (127.0.0.1)
-  TWebSocketProtocolBinaryOption = (
-    pboSynLzCompress,
-    pboNoLocalHostCompress,
-    pboNoLocalHostEncrypt);
-
-  /// how TWebSocketProtocolBinary implements the 'synopsebin' protocol
-  // - should match on both client and server ends
-  TWebSocketProtocolBinaryOptions = set of TWebSocketProtocolBinaryOption;
-
 
   /// handle a REST application-level WebSockets protocol using compressed and
   // optionally AES-CTR encrypted binary
