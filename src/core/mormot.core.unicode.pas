@@ -555,7 +555,7 @@ var
 // - you can optionally specify a maximum size, in bytes (this won't reallocate
 // the string, but just add a #0 at some point in the UTF-8 buffer)
 // - could allow logging of parsed input e.g. after an exception
-procedure UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: integer = maxInt);
+procedure UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: PtrInt = maxInt);
 
 /// conversion of a wide char into a WinAnsi (CodePage 1252) char
 // - return '?' for an unknown WideChar in code page 1252
@@ -4041,9 +4041,9 @@ end;
 
 {$endif HASVARUSTRING}
 
-procedure UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: integer);
+procedure UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: PtrInt);
 var
-  i: integer;
+  i: PtrInt;
 begin
   i := length(u);
   if i > MaxSize then
