@@ -304,7 +304,7 @@ const
 
   /// convert identified field types into high-level ORM types
   // - as will be implemented in TOrm classes
-  SqlDBFIELDTYPE_TO_DELPHITYPE: array[TSqlDBFieldType] of RawUtf8 = (
+  SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSqlDBFieldType] of RawUtf8 = (
     '???',        // ftUnknown
     '???',        // ftNull
     'Int64',      // ftInt64

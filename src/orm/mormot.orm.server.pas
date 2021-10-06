@@ -1317,7 +1317,7 @@ begin
               '%.EngineBatchSend: "..@Table" expected', [self]);
         end;
         // get CRUD method and associated Value/ID
-        case PWord(Method)^ of
+        case PWord(Method)^ of // enough to check the first 2 chars
           ord('P') + ord('O') shl 8:
             begin
               // '{"Table":[...,"POST",{object},...]}'
@@ -1374,7 +1374,7 @@ begin
               // '{"Table":[...,"SIMPLE",[values...' or '[...,"SIMPLE@Table"...
               ID := 0; // no ID is never transmitted with "SIMPLE" fields
               Encoding := encSimple;
-              RunFields := RunTable.OrmProps.SimpleFieldsBits[soInsert];
+              RunFields := RunTable.OrmProps.SimpleFieldsBits[ooInsert];
             end;
         else
           begin

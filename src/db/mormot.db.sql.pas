@@ -3620,8 +3620,6 @@ end;
 var
   DB_KEYWORDS: array[TSqlDBDefinition] of TRawUtf8DynArray;
 
-class function TSqlDBConnectionProperties.IsSqlKeyword(aDB: TSqlDBDefinition;
-  aWord: RawUtf8): boolean;
 const
   /// CSV of the known reserved keywords per database engine, in alphabetic order
   DB_KEYWORDS_CSV: array[TSqlDBDefinition] of PUtf8Char = (
@@ -3779,6 +3777,9 @@ const
     'whiledescribe,withdescriptor,withoutdeter',
   // dInformix specific keywords (in addition to dDefault)
     '');
+
+class function TSqlDBConnectionProperties.IsSqlKeyword(aDB: TSqlDBDefinition;
+  aWord: RawUtf8): boolean;
 var
   db: TSqlDBDefinition;
 begin
