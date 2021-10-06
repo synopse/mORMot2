@@ -423,7 +423,7 @@ var
   Instance: array[0..2] of record
     Model: TOrmModel;
     Database: TRestServerDB;
-    Client: TRestHttpClient;
+    Client: TRestHttpClientGeneric;
   end;
   i: integer;
   Rec: TOrmPeople;
@@ -451,7 +451,11 @@ begin
     // initialize the clients
     for i := 0 to high(Instance) do
       with Instance[i] do
-        Client := TRestHttpClient.Create('127.0.0.1', HTTP_DEFAULTPORT, Model);
+      begin
+        Client := TRestHttpClient.Create(
+          '127.0.0.1', HTTP_DEFAULTPORT, TOrmModel.Create(Model));
+        Client.Model.Owner := Client;
+      end;
     // fill remotely all TRestServerDB instances
     for i := 0 to high(Instance) do
       with Instance[i] do

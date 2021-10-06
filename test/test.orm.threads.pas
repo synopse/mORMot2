@@ -524,11 +524,11 @@ begin
         break
       else
       {$endif HAS_NAMEDPIPES}
-      {$ifdef CPUARM3264}
+      {$ifdef CPUARM32}
       if fTestClass = TRestHttpClientWebsockets then
         break
       else
-      {$endif CPUARM3264}
+      {$endif CPUARM32}
         fRunningThreadCount := 10
     else
     {$ifdef HAS_MESSAGES}
@@ -587,7 +587,8 @@ end;
 
 procedure TTestMultiThreadProcess.Websockets;
 begin
-  Test(TRestHttpClientWebsockets, WEBSOCKETS_DEFAULT_MODE);
+  // use a specific port, especially on Windows where http.sys may locked it
+  Test(TRestHttpClientWebsockets, WEBSOCKETS_DEFAULT_MODE, amLocked, '8888');
 end;
 
 {$ifdef USELIBCURL}

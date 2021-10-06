@@ -1471,7 +1471,7 @@ end;
 
 procedure TTestServiceOrientedArchitecture.Security;
 
-  procedure Test(Expected: TOrmFieldTables; const msg: string);
+  procedure Test(Expected: TOrmTableBits; const msg: string);
 
     function Ask(const Method, Params: RawUtf8): RawUtf8;
     var

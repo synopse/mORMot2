@@ -540,7 +540,7 @@ begin
   fConnectionClass := TWebSocketAsyncConnection;
   fConnectionsClass := TWebSocketAsyncConnections;
   fCanNotifyCallback := true;
-  fProtocols := TWebSocketProtocolList.Create;
+  fProtocols := TWebSocketProtocolList.Create(@fSettings);
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
   if aLogVerbose then
