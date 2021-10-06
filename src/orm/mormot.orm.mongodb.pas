@@ -1622,7 +1622,7 @@ function StaticMongoDBRegister(aClass: TOrmClass; aServer: TRestOrmServer;
   aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUtf8;
   aMapAutoFieldsIntoSmallerLength: boolean): TRestStorageMongoDB;
 var
-  Props: TOrmModelProperties;
+  props: TOrmModelProperties;
 begin
   result := nil;
   if (aServer = nil) or
@@ -1633,17 +1633,17 @@ begin
     aMongoDatabase.Client.SetLog(aServer.LogClass);
   with aServer.LogClass.Enter do
   begin
-    Props := aServer.Model.Props[aClass];
-    if Props = nil then
+    props := aServer.Model.Props[aClass];
+    if props = nil then
       // if aClass is not part of the model
       exit;
     if aMongoCollectionName = '' then
-      aMongoCollectionName := Props.Props.SqlTableName;
-    Props.ExternalDB.Init(aClass, aMongoCollectionName,
+      aMongoCollectionName := props.Props.SqlTableName;
+    props.ExternalDB.Init(aClass, aMongoCollectionName,
       aMongoDatabase.CollectionOrCreate[aMongoCollectionName], true, []);
-    Props.ExternalDB.MapField('ID', '_id');
+    props.ExternalDB.MapField('ID', '_id');
     result := TRestStorageMongoDB.Create(aClass, aServer);
-    aServer.StaticTableSetup(Props.TableIndex, result, sStaticDataTable);
+    aServer.StaticTableSetup(props.TableIndex, result, sStaticDataTable);
   end;
 end;
 

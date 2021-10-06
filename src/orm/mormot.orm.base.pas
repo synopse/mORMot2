@@ -80,7 +80,7 @@ type
   EOrmException = class(ESynException);
 
   /// used to store bit set for all available Tables in a Database Model
-  TOrmFieldTables = set of 0..MAX_TABLES - 1;
+  TOrmTableBits = set of 0..MAX_TABLES - 1;
 
   /// a reference to another record in any table in the database Model
   // - stored as a 64-bit signed integer (just like the TID type)

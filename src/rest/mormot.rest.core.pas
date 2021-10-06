@@ -966,7 +966,7 @@ type
       const FieldName: RawUtf8; Options: TOrmInitializeTableOptions); override;
     /// corresponding TOrmAccessRights for this authentication group
     // - content is converted into/from text format via AccessRight DB property
-    // (so it will be not fixed e.g. by the binary TOrmFieldTables layout, i.e.
+    // (so it will be not fixed e.g. by the binary TOrmTableBits layout, i.e.
     // the MAX_TABLES constant value)
     property SqlAccessRights: TOrmAccessRights
       read GetOrmAccessRights write SetOrmAccessRights;
@@ -3240,9 +3240,9 @@ begin
         UserID := Server.Add(G, true);
         G.Ident := 'Guest';
         A.AllowRemoteExecute := [];
-        FillcharFast(A.POST, SizeOf(TOrmFieldTables), 0); // R/O access
-        FillcharFast(A.PUT, SizeOf(TOrmFieldTables), 0);
-        FillcharFast(A.DELETE, SizeOf(TOrmFieldTables), 0);
+        FillcharFast(A.POST, SizeOf(TOrmTableBits), 0); // R/O access
+        FillcharFast(A.PUT, SizeOf(TOrmTableBits), 0);
+        FillcharFast(A.DELETE, SizeOf(TOrmTableBits), 0);
         G.SqlAccessRights := A;
         G.SessionTimeout := AuthGuestGroupDefaultTimeout;
         Server.Add(G, true);

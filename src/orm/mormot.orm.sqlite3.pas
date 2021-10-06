@@ -1420,7 +1420,7 @@ procedure TRestOrmServerDB.CreateMissingTables(user_version: cardinal;
 var
   t, f, nt, nf: PtrInt;
   tablesatcreation, fieldsatcreation: TRawUtf8DynArray;
-  tablecreated: TOrmFieldTables;
+  tablecreated: TOrmTableBits;
   sqladd: RawUtf8;
 begin
   if DB.TransactionActive then
@@ -1431,7 +1431,7 @@ begin
   fDB.Log.Add.Log(sllDB, 'CreateMissingTables on %', [fDB], self);
   fDB.Log.Add.Log(sllDB, 'GetTables', TypeInfo(TRawUtf8DynArray),
     tablesatcreation, self);
-  FillcharFast(tablecreated, sizeof(TOrmFieldTables), 0);
+  FillcharFast(tablecreated, sizeof(TOrmTableBits), 0);
   try
     // create not static and not existing tables
     for t := 0 to high(Model.Tables) do
@@ -1482,7 +1482,7 @@ begin
     if user_version <> 0 then
       DB.user_version := user_version;
     // initialize new tables AFTER creation of ALL tables
-    if not IsZero(@tablecreated, sizeof(TOrmFieldTables)) then
+    if not IsZero(@tablecreated, sizeof(TOrmTableBits)) then
       for t := 0 to high(Model.Tables) do
         if byte(t) in tablecreated then
           if not (Model.TableProps[t].Kind in IS_CUSTOM_VIRTUAL) or

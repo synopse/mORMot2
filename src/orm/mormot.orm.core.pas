@@ -5126,15 +5126,15 @@ type
     // by overriding the TRestServer.Uri() method
     // - if the REST request is LOCK, the PUT access bits will be read instead
     // of the GET bits value
-    GET: TOrmFieldTables;
+    GET: TOrmTableBits;
     /// POST method (create record) table access bits
-    POST: TOrmFieldTables;
+    POST: TOrmTableBits;
     /// PUT method (update record) table access bits
     // - if the REST request is LOCK, the PUT access bits will be read instead
     // of the GET bits value
-    PUT: TOrmFieldTables;
+    PUT: TOrmTableBits;
     /// DELETE method (delete record) table access bits
-    DELETE: TOrmFieldTables;
+    DELETE: TOrmTableBits;
     /// wrapper method which can be used to set the CRUD abilities over a table
     // - C=Create, R=Read, U=Update, D=Delete rights
     procedure Edit(aTableIndex: integer;
@@ -5298,7 +5298,7 @@ type
   TSqlAccessRights = TOrmAccessRights;
   PSqlAccessRights = POrmAccessRights;
   TSqlFieldType = TOrmFieldType;
-  TSqlFieldTables = TOrmFieldTables;
+  TSqlFieldTables = TOrmTableBits;
   TSqlModel = TOrmModel;
   TSqlModelProperties = TOrmModelProperties;
   TSqlModelPropertiesObjArray = TOrmModelPropertiesObjArray;
@@ -11875,7 +11875,6 @@ var
   i, j: PtrInt;
 begin
   for i := 0 to fTablesMax do
-  begin
     with TableProps[i].Props do
     begin
       EnterCriticalSection(fLock); // may be called from several threads at once
@@ -11893,7 +11892,6 @@ begin
         LeaveCriticalSection(fLock);
       end;
     end;
-  end;
   ObjArrayClear(fIDGenerator);
   inherited;
 end;
