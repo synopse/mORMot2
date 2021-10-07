@@ -32,6 +32,7 @@ uses
   mormot.net.client,
   mormot.net.server,
   mormot.net.relay,
+  mormot.net.http,
   mormot.net.ws.core,
   mormot.net.ws.client,
   mormot.net.ws.server,
@@ -574,13 +575,13 @@ end;
 
 procedure TTestMultiThreadProcess.TCPSockets;
 begin
-  Test(TRestHttpClientSocket, useHttpSocket);
+  Test(TRestHttpClientSocket, useHttpAsync);
 end;
 
 {$ifdef OSPOSIX}
 procedure TTestMultiThreadProcess.UnixDomainSockets;
 begin
-  Test(TRestHttpClientSocket, useHttpSocket, amLocked,
+  Test(TRestHttpClientSocket, useHttpAsync, amLocked,
     'unix:' + RawUtf8(ChangeFileExt(Executable.ProgramFileName, '.sock')));
 end;
 {$endif OSPOSIX}
@@ -594,7 +595,7 @@ end;
 {$ifdef USELIBCURL}
 procedure TTestMultiThreadProcess._libcurl;
 begin
-  Test(TRestHttpClientCurl, useHttpSocket);
+  Test(TRestHttpClientCurl, useHttpAsync);
 end;
 {$endif USELIBCURL}
 
