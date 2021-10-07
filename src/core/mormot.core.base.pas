@@ -4926,19 +4926,19 @@ end;
 
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 var
-  digit: byte;
+  remdigit: integer;
   frac, exp: PtrInt;
   c: AnsiChar;
   flags: set of (fNeg, fNegExp, fValid);
-  v: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
+  v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
 label
   e;
 begin
   byte(flags) := 0;
-  v := 0;
+  v64 := 0;
   frac := 0;
   if P = nil then
-    goto e;
+    goto e; // will return 0 but err=1
   c := P^;
   if c = ' ' then
     repeat
@@ -4956,26 +4956,26 @@ begin
     c := P^;
     include(flags, fNeg);
   end;
-  digit := 18; // max Int64 resolution
+  remdigit := 19; // max Int64 resolution
   repeat
     inc(P);
     if (c >= '0') and
        (c <= '9') then
     begin
-      if digit <> 0 then
+      dec(remdigit);
+      if remdigit >= 0 then // over-required digits are just ignored
       begin
         dec(c, ord('0'));
         {$ifdef CPU64}
-        v := v * 10;
+        v64 := v64 * 10;
         {$else}
-        v := v shl 3 + v + v;
+        v64 := v64 shl 3 + v64 + v64;
         {$endif CPU64}
-        inc(v, byte(c));
-        dec(digit); // over-required digits are just ignored
+        inc(v64, byte(c));
+        c := P^;
         include(flags, fValid);
         if frac <> 0 then
           dec(frac); // digits after '.'
-        c := P^;
         continue;
       end;
       if frac >= 0 then
@@ -4986,7 +4986,7 @@ begin
     if c <> '.' then
       break;
     if frac > 0 then
-      goto e;
+      goto e; // will return partial value but err=1
     dec(frac);
     c := P^;
   until false;
@@ -5032,7 +5032,7 @@ e:  err := 1; // return the (partial) value even if not ended with #0
     result := HugePower10(frac);
   if fNeg in flags then
     result := result * POW10[33]; // * -1
-  result := result * v;
+  result := result * v64;
 end;
 
 {$endif CPU32DELPHI}
