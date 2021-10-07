@@ -814,8 +814,8 @@ function TRestOrmServer.RecordVersionSynchronizeSlave(
   Table: TOrmClass; const Master: IRestOrm; ChunkRowLimit: integer;
   const OnWrite: TOnBatchWrite): TRecordVersion;
 var
-  Writer: TRestBatch;
-  IDs: TIDDynArray;
+  batch: TRestBatch;
+  ids: TIDDynArray;
   status: integer;
   {%H-}log: ISynLog;
 begin
@@ -824,27 +824,27 @@ begin
   if fRecordVersionMax = 0 then
     InternalRecordVersionMaxFromExisting(nil);
   repeat
-    Writer := RecordVersionSynchronizeSlaveToBatch(Table, Master,
+    batch := RecordVersionSynchronizeSlaveToBatch(Table, Master,
       fRecordVersionMax, ChunkRowLimit, OnWrite);
-    if Writer = nil then
+    if batch = nil then
       // error
       exit;
-    if Writer.Count = 0 then
+    if batch.Count = 0 then
     begin
       // nothing new (e.g. reached last chunk)
       result := fRecordVersionMax;
-      Writer.Free;
+      batch.Free;
       break;
     end;
     try
       fRest.AcquireExecution[execOrmWrite].Safe.Lock;
       fRecordVersionDeleteIgnore := true;
-      status := BatchSend(Writer, IDs);
+      status := BatchSend(batch, ids);
       if status = HTTP_SUCCESS then
       begin
         InternalLog(
           'RecordVersionSynchronize(%) Added=% Updated=% Deleted=% on %',
-          [Table, Writer.AddCount, Writer.UpdateCount, Writer.DeleteCount,
+          [Table, batch.AddCount, batch.UpdateCount, batch.DeleteCount,
            Master], sllDebug);
         if ChunkRowLimit = 0 then
         begin
@@ -862,7 +862,7 @@ begin
     finally
       fRecordVersionDeleteIgnore := false;
       fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
-      Writer.Free;
+      batch.Free;
     end;
   until false; // continue synch until nothing new is found
 end;
@@ -871,115 +871,114 @@ function TRestOrmServer.RecordVersionSynchronizeSlaveToBatch(
   Table: TOrmClass; const Master: IRestOrm; var RecordVersion: TRecordVersion;
   MaxRowLimit: integer; const OnWrite: TOnBatchWrite): TRestBatch;
 var
-  TableIndex, SourceTableIndex, UpdatedRow, DeletedRow: integer;
-  Props: TOrmProperties;
-  Where: RawUtf8;
-  UpdatedVersion, DeletedVersion: TRecordVersion;
-  ListUpdated, ListDeleted: TOrmTable;
-  Rec: TOrm;
-  DeletedMinID: TID;
-  Deleted: TOrmTableDeleted;
+  tableindex, sourcetableindex, updatedrow, deletedrow: integer;
+  props: TOrmProperties;
+  where: RawUtf8;
+  updatedversion, deletedversion: TRecordVersion;
+  listupdated, listdeleted: TOrmTable;
+  rec: TOrm;
+  deletedminid: TID;
+  deleted: TOrmTableDeleted;
   {%H-}log: ISynLog;
 begin
-  log := fRest.LogClass.Enter('RecordVersionSynchronizeSlaveToBatch %',
-    [Table], self);
+  log := fRest.LogClass.Enter(
+    'RecordVersionSynchronizeSlaveToBatch % vers=% maxrow=%',
+    [Table, RecordVersion, MaxRowLimit], self);
   result := nil;
   if Master = nil then
     raise EOrmException.CreateUtf8(
       '%.RecordVersionSynchronizeSlaveToBatch(Master=nil)', [self]);
-  TableIndex := Model.GetTableIndexExisting(Table);
-  SourceTableIndex := Master.Model.GetTableIndexExisting(Table); // <>TableIndex?
-  Props := Model.TableProps[TableIndex].Props;
-  if Props.RecordVersionField = nil then
+  tableindex := Model.GetTableIndexExisting(Table);
+  sourcetableindex := Master.Model.GetTableIndexExisting(Table); // <>tableindex?
+  props := Model.TableProps[tableindex].props;
+  if props.RecordVersionField = nil then
     raise EOrmException.CreateUtf8(
       '%.RecordVersionSynchronizeSlaveToBatch(%) with no TRecordVersion field',
       [self, Table]);
   fRest.AcquireExecution[execOrmWrite].Safe.Lock;
   try
-    Where := '%>? order by %';
+    where := '%>? order by %';
     if MaxRowLimit > 0 then
-      Where := FormatUtf8('% limit %', [Where, MaxRowLimit]);
-    ListUpdated := Master.MultiFieldValues(Table, '*', Where,
-      [Props.RecordVersionField.Name, Props.RecordVersionField.Name],
+      where := FormatUtf8('% limit %', [where, MaxRowLimit]);
+    listupdated := Master.MultiFieldValues(Table, '*', where,
+      [props.RecordVersionField.Name, props.RecordVersionField.Name],
       [RecordVersion]);
-    if ListUpdated = nil then
+    if listupdated = nil then
       exit; // DB error
-    ListDeleted := nil;
+    listdeleted := nil;
     try
-      DeletedMinID :=
-        Int64(SourceTableIndex) shl ORMVERSION_DELETEID_SHIFT;
-      Where := 'ID>? and ID<? order by ID';
+      deletedminid := Int64(sourcetableindex) shl ORMVERSION_DELETEID_SHIFT;
+      where := 'ID>? and ID<? order by ID';
       if MaxRowLimit > 0 then
-        Where := FormatUtf8('% limit %', [Where, MaxRowLimit]);
-      ListDeleted := Master.MultiFieldValues(fOrmVersionDeleteTable,
-        'ID,Deleted', Where, [DeletedMinID + RecordVersion,
-         DeletedMinID + ORMVERSION_DELETEID_RANGE]);
-      if ListDeleted = nil then
+        where := FormatUtf8('% limit %', [where, MaxRowLimit]);
+      listdeleted := Master.MultiFieldValues(fOrmVersionDeleteTable,
+        'ID,Deleted', where, [deletedminid + RecordVersion,
+         deletedminid + ORMVERSION_DELETEID_RANGE]);
+      if listdeleted = nil then
         exit; // DB error
       result := TRestBatch.Create(self, nil, 10000);
       result.OnWrite := OnWrite;
-      if (ListUpdated.RowCount = 0) and
-         (ListDeleted.RowCount = 0) then
+      if (listupdated.RowCount = 0) and
+         (listdeleted.RowCount = 0) then
         // nothing new -> returns void TRestBach with Count=0
         exit;
-      Rec := Table.Create;
-      Deleted := fOrmVersionDeleteTable.Create;
+      rec := Table.Create;
+      deleted := fOrmVersionDeleteTable.Create;
       try
-        Rec.FillPrepare(ListUpdated);
-        Deleted.FillPrepare(ListDeleted);
-        UpdatedRow := 1;
-        DeletedRow := 1;
-        UpdatedVersion := 0;
-        DeletedVersion := 0;
+        rec.FillPrepare(listupdated);
+        deleted.FillPrepare(listdeleted);
+        updatedrow := 1;
+        deletedrow := 1;
+        updatedversion := 0;
+        deletedversion := 0;
         repeat
           // compute all changes in increasing version order
-          if UpdatedVersion = 0 then
-            if UpdatedRow <= ListUpdated.RowCount then
+          if updatedversion = 0 then
+            if updatedrow <= listupdated.RowCount then
             begin
-              Rec.FillRow(UpdatedRow);
-              UpdatedVersion := Props.RecordVersionField.PropInfo.GetInt64Prop(Rec);
-              inc(UpdatedRow);
+              rec.FillRow(updatedrow);
+              updatedversion := props.RecordVersionField.PropInfo.GetInt64Prop(rec);
+              inc(updatedrow);
             end;
-          if DeletedVersion = 0 then
-            if DeletedRow <= ListDeleted.RowCount then
+          if deletedversion = 0 then
+            if deletedrow <= listdeleted.RowCount then
             begin
-              Deleted.FillRow(DeletedRow);
-              DeletedVersion := Deleted.IDValue and
-                pred(ORMVERSION_DELETEID_RANGE);
-              inc(DeletedRow);
+              deleted.FillRow(deletedrow);
+              deletedversion := deleted.IDValue and pred(ORMVERSION_DELETEID_RANGE);
+              inc(deletedrow);
             end;
-          if (UpdatedVersion = 0) and
-             (DeletedVersion = 0) then
+          if (updatedversion = 0) and
+             (deletedversion = 0) then
             break; // no more update available
-          if (UpdatedVersion > 0) and
-             ((DeletedVersion = 0) or
-              (UpdatedVersion < DeletedVersion)) then
+          if (updatedversion > 0) and
+             ((deletedversion = 0) or
+              (updatedversion < deletedversion)) then
           begin
             if (RecordVersion = 0) or
-               (OneFieldValue(Table, 'ID', Rec.IDValue) = '') then
-              result.Add(Rec, true, true, Rec.FillContext.TableMapFields, true)
+               (OneFieldValue(Table, 'ID', rec.IDValue) = '') then
+              result.Add(rec, true, true, rec.FillContext.TableMapFields, true)
             else
-              result.Update(Rec, [], true);
-            RecordVersion := UpdatedVersion;
-            UpdatedVersion := 0;
+              result.Update(rec, [], true);
+            RecordVersion := updatedversion;
+            updatedversion := 0;
           end
-          else if DeletedVersion > 0 then
+          else if deletedversion > 0 then
           begin
-            result.Delete(Table, Deleted.Deleted);
-            Deleted.IDValue := DeletedVersion + // local ID follows current Model
-              Int64(TableIndex) shl ORMVERSION_DELETEID_SHIFT;
-            result.Add(Deleted, true, true, [], true);
-            RecordVersion := DeletedVersion;
-            DeletedVersion := 0;
+            result.Delete(Table, deleted.deleted);
+            deleted.IDValue := deletedversion + // local ID follows current Model
+              Int64(tableindex) shl ORMVERSION_DELETEID_SHIFT;
+            result.Add(deleted, true, true, [], true);
+            RecordVersion := deletedversion;
+            deletedversion := 0;
           end;
         until false;
       finally
-        Deleted.Free;
-        Rec.Free;
+        deleted.Free;
+        rec.Free;
       end;
     finally
-      ListUpdated.Free;
-      ListDeleted.Free;
+      listupdated.Free;
+      listdeleted.Free;
     end;
   finally
     fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
@@ -1148,57 +1147,57 @@ function TRestOrmServer.EngineBatchSend(Table: TOrmClass;
   var Data: RawUtf8; var Results: TIDDynArray;
   ExpectedResultsCount: integer): integer;
 var
-  EndOfObject: AnsiChar;
-  wasString, OK: boolean;
-  TableName, Value, ErrMsg: RawUtf8;
-  Encoding, RunningBatchEncoding: TRestBatchEncoding;
-  RunningBatchRest, RunningRest: TRestOrm;
-  Sent, Method, MethodTable, SimpleValue: PUtf8Char;
+  endofobject: AnsiChar;
+  wasstring, ok: boolean;
+  tablename, value, errmsg: RawUtf8;
+  encoding, runningbatchencoding: TRestBatchEncoding;
+  runningbatchrest, runningrest: TRestOrm;
+  sent, cmd, cmdtable, simplevalue: PUtf8Char;
   P: PAnsiChar;
-  AutomaticTransactionPerRow, RowCountForCurrentTransaction: cardinal;
-  RunTableTransactions: array of TRestOrm;
-  RunMainTransaction: boolean;
-  ID: TID;
-  Count, Errors: integer;
-  timeoutTix: Int64;
-  batchOptions: TRestBatchOptions;
-  RunTable, RunningBatchTable: TOrmClass;
-  RunTableIndex, i, TableIndex: integer;
-  RunStatic: TRestOrm;
-  RunStaticKind: TRestServerKind;
-  CurrentContext: TRestServerUriContext;
+  transperrow, rowcountpercurrtrans: cardinal;
+  runtabletrans: array of TRestOrm;
+  runmaintrans: boolean;
+  id: TID;
+  count, errors: integer;
+  timeouttix: Int64;
+  batchoptions: TRestBatchOptions;
+  runtable, runningbatchtable: TOrmClass;
+  runtableindex, i, tableindex: integer;
+  runstatic: TRestOrm;
+  runstatickind: TRestServerKind;
+  uricontext: TRestServerUriContext;
   timer: TPrecisionTimer;
-  RunFields: TFieldBits;
+  runfields: TFieldBits;
   counts: array[TRestBatchEncoding] of cardinal;
 
   procedure PerformAutomaticCommit;
   var
     i: PtrInt;
   begin
-    if RunningBatchRest <> nil then
+    if runningbatchrest <> nil then
     begin
-      RunningBatchRest.InternalBatchStop; // send pending rows before commit
-      RunningBatchRest := nil;
-      RunningBatchTable := nil;
+      runningbatchrest.InternalBatchStop; // send pending rows before commit
+      runningbatchrest := nil;
+      runningbatchtable := nil;
     end;
-    for i := 0 to high(RunTableTransactions) do
-      if RunTableTransactions[i] <> nil then
+    for i := 0 to high(runtabletrans) do
+      if runtabletrans[i] <> nil then
       begin
-        RunTableTransactions[i].Commit(CONST_AUTHENTICATION_NOT_USED, true);
-        if RunTableTransactions[i] = self then
-          RunMainTransaction := false;
-        RunTableTransactions[i] := nil; // to acquire and begin a new transaction
+        runtabletrans[i].Commit(CONST_AUTHENTICATION_NOT_USED, true);
+        if runtabletrans[i] = self then
+          runmaintrans := false;
+        runtabletrans[i] := nil; // to acquire and begin a new transaction
       end;
-    RowCountForCurrentTransaction := 0;
+    rowcountpercurrtrans := 0;
   end;
 
   function IsNotAllowed: boolean;
     {$ifdef FPC} inline; {$endif}
   begin
-    result := (CurrentContext <> nil) and
-              (CurrentContext.Command = execOrmWrite) and
-              not CurrentContext.CanExecuteOrmWrite(BATCH_METHOD[Encoding],
-      RunTable, RunTableIndex, ID, CurrentContext.Call.RestAccessRights^);
+    result := (uricontext <> nil) and
+              (uricontext.Command = execOrmWrite) and
+              not uricontext.CanExecuteOrmWrite(BATCH_METHOD[encoding],
+      runtable, runtableindex, id, uricontext.Call.RestAccessRights^);
   end;
 
 var
@@ -1206,60 +1205,60 @@ var
 begin
   log := fRest.LogClass.Enter('EngineBatchSend % inlen=%',
     [Table, length(Data)], self);
-  log.Log(sllCustom2, Data, self, 100 shl 10);
-  Sent := pointer(Data); // will be parsed therefore in-place modified
-  if Sent = nil then
+  //log.Log(sllCustom2, Data, self, 100 shl 10);
+  sent := pointer(Data); // will be parsed therefore in-place modified
+  if sent = nil then
     raise EOrmBatchException.CreateUtf8(
       '%.EngineBatchSend(%,"")', [self, Table]);
   if Table <> nil then
   begin
-    TableIndex := fModel.GetTableIndexExisting(Table);
+    tableindex := fModel.GetTableIndexExisting(Table);
     // unserialize expected sequence array as '{"Table":["cmd",values,...]}'
-    if not NextNotSpaceCharIs(Sent, '{') then
+    if not NextNotSpaceCharIs(sent, '{') then
       raise EOrmBatchException.CreateUtf8('%.EngineBatchSend: Missing {', [self]);
-    TableName := GetJsonPropName(Sent);
-    if (TableName = '') or
-       (Sent = nil) or
-       not IdemPropNameU(TableName,
-         fModel.TableProps[TableIndex].Props.SqlTableName) then
+    tablename := GetJsonPropName(sent);
+    if (tablename = '') or
+       (sent = nil) or
+       not IdemPropNameU(tablename,
+         fModel.TableProps[tableindex].Props.SqlTableName) then
       raise EOrmBatchException.CreateUtf8(
-        '%.EngineBatchSend(%): Wrong "Table":"%"', [self, Table, TableName]);
+        '%.EngineBatchSend(%): Wrong "Table":"%"', [self, Table, tablename]);
   end
   else
     // or '["cmd@Table":values,...]'
-    TableIndex := -1;
-  if not NextNotSpaceCharIs(Sent, '[') then
+    tableindex := -1;
+  if not NextNotSpaceCharIs(sent, '[') then
     raise EOrmBatchException.CreateUtf8(
       '%.EngineBatchSend: Missing [', [self]);
-  if IdemPChar(Sent, '"AUTOMATICTRANSACTIONPERROW",') then
+  if IdemPChar(sent, '"AUTOMATICTRANSACTIONPERROW",') then
   begin
-    inc(Sent, 29);
-    AutomaticTransactionPerRow := GetNextItemCardinal(Sent, ',');
+    inc(sent, 29);
+    transperrow := GetNextItemCardinal(sent, ',');
   end
   else
-    AutomaticTransactionPerRow := 0;
-  SetLength(RunTableTransactions, fModel.TablesMax + 1);
-  RunMainTransaction := false;
-  RowCountForCurrentTransaction := 0;
-  if IdemPChar(Sent, '"OPTIONS",') then
+    transperrow := 0;
+  SetLength(runtabletrans, fModel.TablesMax + 1);
+  runmaintrans := false;
+  rowcountpercurrtrans := 0;
+  if IdemPChar(sent, '"OPTIONS",') then
   begin
-    inc(Sent, 10);
-    byte(batchOptions) := GetNextItemCardinal(Sent, ',');
+    inc(sent, 10);
+    byte(batchoptions) := GetNextItemCardinal(sent, ',');
   end
   else
-    byte(batchOptions) := 0;
+    byte(batchoptions) := 0;
   timer.Start;
-  CurrentContext := ServiceRunningContext^.Request;
-  Method := nil;
-  RunningBatchRest := nil;
-  RunningBatchTable := nil;
-  RunningBatchEncoding := encPost;
-  RunningRest := nil;
-  RunStatic := nil;
-  RunTableIndex := -1;
-  Count := 0;
-  Errors := 0;
-  FillZero(RunFields);
+  uricontext := ServiceRunningContext^.Request;
+  cmd := nil;
+  runningbatchrest := nil;
+  runningbatchtable := nil;
+  runningbatchencoding := encPost;
+  runningrest := nil;
+  runstatic := nil;
+  runtableindex := -1;
+  count := 0;
+  errors := 0;
+  FillZero(runfields);
   FillCharFast(counts, SizeOf(counts), 0);
   fRest.AcquireExecution[execOrmWrite].Safe.Lock; // multi thread protection
   // try..except to intercept any error
@@ -1269,324 +1268,325 @@ begin
       // main loop: process one POST/PUT/DELETE per iteration
       // "POST",{object}  "SIMPLE",[values]  "PUT",{object}  "DELETE",id
       repeat
-        // retrieve method name and associated (static) table
-        if Sent = nil then
+        // retrieve cmd name and associated (static) table
+        if sent = nil then
           raise EOrmBatchException.CreateUtf8(
             '%.EngineBatchSend: unexpected end of input', [self]);
-        Sent := GotoNextNotSpace(Sent);
-        if Sent^ = '"' then
+        sent := GotoNextNotSpace(sent);
+        if sent^ = '"' then
         begin
-          Method := GetJsonField(Sent, Sent);
-          if (Sent = nil) or
-             (Method = nil) then
+          cmd := GetJsonField(sent, sent);
+          if (sent = nil) or
+             (cmd = nil) then
             raise EOrmBatchException.CreateUtf8(
               '%.EngineBatchSend: Missing CMD', [self]);
-          if TableIndex >= 0 then
+          if tableindex >= 0 then
           begin
             // e.g. '{"Table":[...,"POST",{object},...]}'
-            RunTableIndex := TableIndex;
-            RunTable := Table;
+            runtableindex := tableindex;
+            runtable := Table;
           end
           else
           begin
             // e.g. '[...,"POST@Table",{object},...]'
-            MethodTable := PosChar(Method, '@');
-            if MethodTable <> nil then
+            cmdtable := PosChar(cmd, '@');
+            if cmdtable <> nil then
             begin
-              MethodTable^ := #0; // isolate 'POST' or 'hex'/'ihex' prefix
-              RunTableIndex := fModel.GetTableIndexPtr(MethodTable + 1);
-              if RunTableIndex < 0 then
+              cmdtable^ := #0; // isolate 'POST' or 'hex'/'ihex' prefix
+              runtableindex := fModel.GetTableIndexPtr(cmdtable + 1);
+              if runtableindex < 0 then
                 raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: Unknown %', [self, MethodTable]);
-              RunTable := fModel.Tables[RunTableIndex];
+                  '%.EngineBatchSend: Unknown %', [self, cmdtable]);
+              runtable := fModel.Tables[runtableindex];
             end;
           end;
-          RunStatic := GetStaticTableIndex(RunTableIndex, RunStaticKind);
-          if RunStatic = nil then
-            RunningRest := self
+          runstatic := GetStaticTableIndex(runtableindex, runstatickind);
+          if runstatic = nil then
+            runningrest := self
           else
-            RunningRest := RunStatic;
+            runningrest := runstatic;
         end
         else
         begin
           // allow "POST",{obj1},{obj2} or "SIMPLE",[v1],[v2] or "DELETE",id1,id2
           // (never appearing if boNoModelEncoding was set on Client side)
-          if RunTableIndex < 0 then
+          if (runtableindex < 0) or
+             (cmd = nil) then
             // plain "POST",{object} should reuse the previous table
             raise EOrmBatchException.CreateUtf8(
               '%.EngineBatchSend: "..@Table" expected', [self]);
         end;
-        // get CRUD method and associated Value/ID
-        case PWord(Method)^ of // enough to check the first 2 chars
+        // get CRUD cmd and associated value/id
+        case PWord(cmd)^ of // enough to check the first 2 chars
           ord('P') + ord('O') shl 8:
             begin
               // '{"Table":[...,"POST",{object},...]}'
               // or '[...,"POST@Table",{object},...]'
-              Encoding := encPost;
-              Value := JsonGetObject(Sent, @ID, EndOfObject, true);
-              if Sent = nil then
+              encoding := encPost;
+              value := JsonGetObject(sent, @id, endofobject, true);
+              if sent = nil then
                 raise EOrmBatchException.CreateUtf8(
                   '%.EngineBatchSend: Wrong POST', [self]);
               if IsNotAllowed then
                 raise EOrmBatchException.CreateUtf8(
                   '%.EngineBatchSend: POST/Add not allowed on %',
-                  [self, RunTable]);
-              if not RecordCanBeUpdated(RunTable, ID, oeAdd, @ErrMsg) then
+                  [self, runtable]);
+              if not RecordCanBeUpdated(runtable, id, oeAdd, @errmsg) then
                 raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: POST impossible: %', [self, ErrMsg]);
+                  '%.EngineBatchSend: POST impossible: %', [self, errmsg]);
             end;
           ord('P') + ord('U') shl 8:
             begin
               // '{"Table":[...,"PUT",{object},...]}'
               // or '[...,"PUT@Table",{object},...]'
-              Encoding := encPut;
-              Value := JsonGetObject(Sent, @ID, EndOfObject, false);
-              if (Sent = nil) or
-                 (Value = '') or
-                 (ID <= 0) then
+              encoding := encPut;
+              value := JsonGetObject(sent, @id, endofobject, false);
+              if (sent = nil) or
+                 (value = '') or
+                 (id <= 0) then
                 raise EOrmBatchException.CreateUtf8(
                   '%.EngineBatchSend: Wrong PUT', [self]);
               if IsNotAllowed then
                 raise EOrmBatchException.CreateUtf8(
                   '%.EngineBatchSend: PUT/Update not allowed on %',
-                  [self, RunTable]);
+                  [self, runtable]);
             end;
           ord('D') + ord('E') shl 8:
             begin
-              // '{"Table":[...,"DELETE",ID,...]}'
-              // or '[...,"DELETE@Table",ID,...]'
-              Encoding := encDelete;
-              ID := GetInt64(GetJsonField(Sent, Sent, @wasString, @EndOfObject));
-              if (ID <= 0) or
-                 wasString then
+              // '{"Table":[...,"DELETE",id,...]}'
+              // or '[...,"DELETE@Table",id,...]'
+              encoding := encDelete;
+              id := GetInt64(GetJsonField(sent, sent, @wasstring, @endofobject));
+              if (id <= 0) or
+                 wasstring then
                 raise EOrmBatchException.CreateUtf8(
                   '%.EngineBatchSend: Wrong DELETE', [self]);
               if IsNotAllowed then
                 raise EOrmBatchException.CreateUtf8(
                   '%.EngineBatchSend: DELETE not allowed on %',
-                  [self, RunTable]);
-              if not RecordCanBeUpdated(RunTable, ID, oeDelete, @ErrMsg) then
+                  [self, runtable]);
+              if not RecordCanBeUpdated(runtable, id, oeDelete, @errmsg) then
                 raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: DELETE impossible [%]', [self, ErrMsg]);
+                  '%.EngineBatchSend: DELETE impossible [%]', [self, errmsg]);
             end;
           ord('S') + ord('I') shl 8:
             begin
               // '{"Table":[...,"SIMPLE",[values...' or '[...,"SIMPLE@Table"...
-              ID := 0; // no ID is never transmitted with "SIMPLE" fields
-              Encoding := encSimple;
-              RunFields := RunTable.OrmProps.SimpleFieldsBits[ooInsert];
+              id := 0; // no id is never transmitted with "SIMPLE" fields
+              encoding := encSimple;
+              runfields := runtable.OrmProps.SimpleFieldsBits[ooInsert];
             end;
         else
           begin
-            ID := 0; // no ID by default
-            Encoding := encPostHex;   // "hex",[...] or "hex@Table",[...]
-            FillZero(RunFields);
-            P := pointer(Method);
+            id := 0; // no id by default
+            encoding := encPostHex;   // "hex",[...] or "hex@Table",[...]
+            FillZero(runfields);
+            P := pointer(cmd);
             if P^ = 'i' then // "ihex",[id,...] or "ihex@Table",[id,...]
             begin
-              Encoding := encPostHexID;
+              encoding := encPostHexID;
               inc(P);
             end;
-            if not HexDisplayToBin(P, @RunFields, StrLen(P) shr 1) then
+            if not HexDisplayToBin(P, @runfields, StrLen(P) shr 1) then
               raise EOrmBatchException.CreateUtf8(
-                '%.EngineBatchSend: Unknown [%] method', [self, Method]);
+                '%.EngineBatchSend: Unknown [%] cmd', [self, cmd]);
           end;
         end;
-        if Encoding in BATCH_SIMPLE then
+        if encoding in BATCH_SIMPLE then
         begin
-          // first InternalBatchDirect(Sent=nil) call to check if supported
-          if (RunningRest.InternalBatchDirect(
-               Encoding, RunTableIndex, RunFields, nil) <> 0) and
-             (Sent^ = '[')  then
+          // first InternalBatchDirect(sent=nil) call to check if supported
+          if (runningrest.InternalBatchDirect(
+               encoding, runtableindex, runfields, nil) <> 0) and
+             (sent^ = '[')  then
             // this storage engine allows direct multi-insert from JSON
             // (see e.g. TRestOrmServerDB.InternalBatchDirect
             //  or TRestStorageTOrm.InternalBatchDirect)
-            SimpleValue := GetJsonFieldOrObjectOrArray(
-              Sent, nil, @EndOfObject, true)
+            simplevalue := GetJsonFieldOrObjectOrArray(
+              sent, nil, @endofobject, true)
           else
           begin
             // convert input array into a JSON object as regular "POST"
-            Value := fModel.TableProps[RunTableIndex].Props.
-              SaveFieldsFromJsonArray(Sent, RunFields, 0, @EndOfObject,
-              {extendedjson=}true, {firstisid=}Encoding = encPostHexID);
-            Encoding := encPost;
-            if (Sent = nil) or
-               (Value = '') then
+            value := fModel.TableProps[runtableindex].Props.
+              SaveFieldsFromJsonArray(sent, runfields, 0, @endofobject,
+              {extendedjson=}true, {firstisid=}encoding = encPostHexID);
+            encoding := encPost;
+            if (sent = nil) or
+               (value = '') then
               raise EOrmBatchException.CreateUtf8(
                 '%.EngineBatchSend: Wrong SIMPLE', [self]);
           end;
           if IsNotAllowed then
             raise EOrmBatchException.CreateUtf8(
               '%.EngineBatchSend: SIMPLE/Add not allowed on %',
-              [self, RunTable]);
-          if not RecordCanBeUpdated(RunTable, 0, oeAdd, @ErrMsg) then
+              [self, runtable]);
+          if not RecordCanBeUpdated(runtable, 0, oeAdd, @errmsg) then
             raise EOrmBatchException.CreateUtf8(
-              '%.EngineBatchSend: SIMPLE/Add impossible: %', [self, ErrMsg]);
+              '%.EngineBatchSend: SIMPLE/Add impossible: %', [self, errmsg]);
         end;
-        if (Count = 0) and
-           (EndOfObject = ']') then
+        if (count = 0) and
+           (endofobject = ']') then
         begin
           // single operation do not need a transaction nor InternalBatchStart/Stop
-          AutomaticTransactionPerRow := 0;
+          transperrow := 0;
           SetLength(Results, 1);
-          if Encoding in BATCH_SIMPLE then
+          if encoding in BATCH_SIMPLE then
           begin
             // InternalBatchDirect requires InternalBatchStart -> POST fallback
-            Value := fModel.TableProps[RunTableIndex].Props.
-              SaveFieldsFromJsonArray(SimpleValue, RunFields, 0, nil,
-              {extendedjson=}true, {firstisid=}Encoding = encPostHexID);
-            Encoding := encPost;
+            value := fModel.TableProps[runtableindex].Props.
+              SaveFieldsFromJsonArray(simplevalue, runfields, 0, nil,
+              {extendedjson=}true, {firstisid=}encoding = encPostHexID);
+            encoding := encPost;
           end;
         end
         else
         begin
           // handle auto-committed transaction process
-          if AutomaticTransactionPerRow > 0 then
+          if transperrow > 0 then
           begin
-            if RowCountForCurrentTransaction = AutomaticTransactionPerRow then
-              // reached AutomaticTransactionPerRow chunk
+            if rowcountpercurrtrans = transperrow then
+              // reached transperrow chunk
               PerformAutomaticCommit;
-            inc(RowCountForCurrentTransaction);
-            if RunTableTransactions[RunTableIndex] = nil then
+            inc(rowcountpercurrtrans);
+            if runtabletrans[runtableindex] = nil then
               // initiate transaction for this table if not started yet
-              if (RunStatic <> nil) or
-                 not RunMainTransaction then
+              if (runstatic <> nil) or
+                 not runmaintrans then
               begin
-                timeoutTix := GetTickCount64 + 2000;
+                timeouttix := GetTickCount64 + 2000;
                 repeat
-                  if RunningRest.TransactionBegin(
-                    RunTable, CONST_AUTHENTICATION_NOT_USED) then
+                  if runningrest.TransactionBegin(
+                    runtable, CONST_AUTHENTICATION_NOT_USED) then
                   begin
                     // acquired transaction
-                    RunTableTransactions[RunTableIndex] := RunningRest;
-                    if RunStatic = nil then
-                      RunMainTransaction := true;
+                    runtabletrans[runtableindex] := runningrest;
+                    if runstatic = nil then
+                      runmaintrans := true;
                     Break;
                   end;
-                  if GetTickCount64 > timeoutTix then
+                  if GetTickCount64 > timeouttix then
                     raise EOrmBatchException.CreateUtf8(
                       '%.EngineBatchSend: %.TransactionBegin timeout',
-                      [self, RunningRest]);
+                      [self, runningrest]);
                   SleepHiRes(1); // retry in 1 ms
                 until (fOwner <> nil) and
                       (fOwner.ShutdownRequested);
               end;
           end;
-          // handle batch pending request sending (if table or method changed)
-          if (RunningBatchRest <> nil) and
-             ((RunTable <> RunningBatchTable) or
-              (RunningBatchEncoding <> Encoding)) then
+          // handle batch pending request sending (if table or cmd changed)
+          if (runningbatchrest <> nil) and
+             ((runtable <> runningbatchtable) or
+              (runningbatchencoding <> encoding)) then
           begin
-            RunningBatchRest.InternalBatchStop; // send pending statements
-            RunningBatchRest := nil;
-            RunningBatchTable := nil;
+            runningbatchrest.InternalBatchStop; // send pending statements
+            runningbatchrest := nil;
+            runningbatchtable := nil;
           end;
-          if (RunStatic <> nil) and
-             (RunStatic <> RunningBatchRest) and
-             RunStatic.InternalBatchStart(Encoding, batchOptions) then
+          if (runstatic <> nil) and
+             (runstatic <> runningbatchrest) and
+             runstatic.InternalBatchStart(encoding, batchoptions) then
           begin
-            RunningBatchRest := RunStatic;
-            RunningBatchTable := RunTable;
-            RunningBatchEncoding := Encoding;
+            runningbatchrest := runstatic;
+            runningbatchtable := runtable;
+            runningbatchencoding := encoding;
           end
           else
-          if (RunningBatchRest = nil) and
-             (RunStatic = nil) and
-             InternalBatchStart(Encoding, batchOptions) then
+          if (runningbatchrest = nil) and
+             (runstatic = nil) and
+             InternalBatchStart(encoding, batchoptions) then
           begin
-            RunningBatchRest := self; // e.g. multi-insert in main SQlite3 engine
-            RunningBatchTable := RunTable;
-            RunningBatchEncoding := Encoding;
+            runningbatchrest := self; // e.g. multi-insert in main SQlite3 engine
+            runningbatchtable := runtable;
+            runningbatchencoding := encoding;
           end;
-          if Count >= length(Results) then
-            SetLength(Results, NextGrow(Count));
+          if count >= length(Results) then
+            SetLength(Results, NextGrow(count));
         end;
-        // process CRUD method operation
-        OK := false;
-        Results[Count] := HTTP_NOTMODIFIED;
-        case Encoding of
+        // process CRUD cmd operation
+        ok := false;
+        Results[count] := HTTP_NOTMODIFIED;
+        case encoding of
           encPost:
             begin
-              ID := EngineAdd(RunTableIndex, Value);
-              Results[Count] := ID;
-              if ID <> 0 then
+              id := EngineAdd(runtableindex, value);
+              Results[count] := id;
+              if id <> 0 then
               begin
                 if fCache <> nil then
-                  fCache.Notify(RunTableIndex, ID, Value, ooInsert);
-                OK := true;
+                  fCache.Notify(runtableindex, id, value, ooInsert);
+                ok := true;
               end;
             end;
           encSimple,
           encPostHex,
           encPostHexID:
             begin
-              ID := RunningRest.InternalBatchDirect(
-                Encoding, RunTableIndex, RunFields, SimpleValue);
-              Results[Count] := ID;
-              if ID <> 0 then
-                OK := true;
-              // no ready-to-used Value -> no fCache notification
+              id := runningrest.InternalBatchDirect(
+                encoding, runtableindex, runfields, simplevalue);
+              Results[count] := id;
+              if id <> 0 then
+                ok := true;
+              // no ready-to-used value -> no fCache notification
             end;
           encPut:
-            if EngineUpdate(RunTableIndex, ID, Value) then
+            if EngineUpdate(runtableindex, id, value) then
             begin
-              Results[Count] := HTTP_SUCCESS; // 200 OK
-              OK := true;
+              Results[count] := HTTP_SUCCESS; // 200 ok
+              ok := true;
               if fCache <> nil then
-                // JSON Value may be uncomplete -> delete from cache
-                if not (boPutNoCacheFlush in batchOptions) then
-                  fCache.NotifyDeletion(RunTableIndex, ID);
+                // JSON value may be uncomplete -> delete from cache
+                if not (boPutNoCacheFlush in batchoptions) then
+                  fCache.NotifyDeletion(runtableindex, id);
             end;
           encDelete:
-            if EngineDelete(RunTableIndex, ID) then
+            if EngineDelete(runtableindex, id) then
             begin
               if fCache <> nil then
-                fCache.NotifyDeletion(RunTableIndex, ID);
-              if (RunningBatchRest <> nil) or
-                 AfterDeleteForceCoherency(RunTableIndex, ID) then
+                fCache.NotifyDeletion(runtableindex, id);
+              if (runningbatchrest <> nil) or
+                 AfterDeleteForceCoherency(runtableindex, id) then
               begin
-                Results[Count] := HTTP_SUCCESS; // 200 OK
-                OK := true;
+                Results[count] := HTTP_SUCCESS; // 200 ok
+                ok := true;
               end;
             end;
         end;
-        if not OK then
-          if boRollbackOnError in batchOptions then
+        if not ok then
+          if boRollbackOnError in batchoptions then
             raise EOrmBatchException.CreateUtf8(
               '%.EngineBatchSend: Results[%]=% on % %',
-              [self, Count, Results[Count], Method, RunTable])
+              [self, count, Results[count], cmd, runtable])
           else
-            inc(Errors);
-        inc(Count);
-        inc(counts[Encoding]);
-      until EndOfObject = ']';
-      if (AutomaticTransactionPerRow > 0) and
-         (RowCountForCurrentTransaction > 0) then
+            inc(errors);
+        inc(count);
+        inc(counts[encoding]);
+      until endofobject = ']';
+      if (transperrow > 0) and
+         (rowcountpercurrtrans > 0) then
         // send pending rows within transaction
         PerformAutomaticCommit;
     finally
       try
-        if RunningBatchRest <> nil then
+        if runningbatchrest <> nil then
           // send pending rows, and release Safe.Lock
-          RunningBatchRest.InternalBatchStop;
+          runningbatchrest.InternalBatchStop;
       finally
         fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
-        log.Log(LOG_TRACEERROR[Errors <> 0], 'EngineBatchSend json=% count=% ' +
+        log.Log(LOG_TRACEERROR[errors <> 0], 'EngineBatchSend json=% count=% ' +
           'errors=% post=% simple=% hex=% hexid=% put=% delete=% % %/s',
-          [KB(Data), Count, Errors, counts[encPost], counts[encSimple],
+          [KB(Data), count, errors, counts[encPost], counts[encSimple],
            counts[encPostHex], counts[encPostHexID], counts[encPut],
-           counts[encDelete], timer.Stop, timer.PerSec(Count)], self);
+           counts[encDelete], timer.Stop, timer.PerSec(count)], self);
       end;
     end;
   except
     on E: Exception do
     begin
-      if (AutomaticTransactionPerRow > 0) and
-         (RowCountForCurrentTransaction > 0) then
+      if (transperrow > 0) and
+         (rowcountpercurrtrans > 0) then
       begin
-        for i := 0 to high(RunTableTransactions) do
-          if RunTableTransactions[i] <> nil then
-            RunTableTransactions[i].RollBack(CONST_AUTHENTICATION_NOT_USED);
+        for i := 0 to high(runtabletrans) do
+          if runtabletrans[i] <> nil then
+            runtabletrans[i].RollBack(CONST_AUTHENTICATION_NOT_USED);
         UniqueRawUtf8ZeroToTilde(Data, 1 shl 16);
         log.Log(sllWarning, '% -> PARTIAL rollback of latest auto-committed ' +
           'transaction data=%', [E, Data]);
@@ -1597,17 +1597,17 @@ begin
   if Table <> nil then
   begin
     // '{"Table":["cmd":values,...]}' format
-    if Sent = nil then
+    if sent = nil then
       raise EOrmBatchException.CreateUtf8(
         '%.EngineBatchSend: % Truncated', [self, Table]);
-    while not (Sent^ in ['}', #0]) do
-      inc(Sent);
-    if Sent^ <> '}' then
+    while not (sent^ in ['}', #0]) do
+      inc(sent);
+    if sent^ <> '}' then
       raise EOrmBatchException.CreateUtf8(
         '%.EngineBatchSend(%): Missing }', [self, Table]);
   end;
-  // if we reached here, process was OK
-  SetLength(Results, Count);
+  // if we reached here, process was ok
+  SetLength(Results, count);
   result := HTTP_SUCCESS;
 end;
 
@@ -1615,7 +1615,7 @@ procedure TRestOrmServer.TrackChanges(const aTable: array of TOrmClass;
   aTableHistory: TOrmClass; aMaxHistoryRowBeforeBlob,
   aMaxHistoryRowPerRecord, aMaxUncompressedBlobSize: integer);
 var
-  t, tableIndex, TableHistoryIndex: PtrInt;
+  t, tableindex, tablehistoryindex: PtrInt;
 begin
   if (self = nil) or
      (high(aTable) < 0) then
@@ -1626,24 +1626,24 @@ begin
       [self, aTableHistory]);
   if aMaxHistoryRowBeforeBlob <= 0 then
     // disable change tracking
-    TableHistoryIndex := -1
+    tablehistoryindex := -1
   else
   begin
     if aTableHistory = nil then
       aTableHistory := TOrmHistory;
-    TableHistoryIndex := fModel.GetTableIndexExisting(aTableHistory);
+    tablehistoryindex := fModel.GetTableIndexExisting(aTableHistory);
   end;
   for t := 0 to high(aTable) do
   begin
-    tableIndex := fModel.GetTableIndexExisting(aTable[t]);
+    tableindex := fModel.GetTableIndexExisting(aTable[t]);
     if aTable[t].InheritsFrom(TOrmHistory) then
       raise EOrmException.CreateUtf8(
         '%.TrackChanges([%]) not allowed', [self, aTable[t]]);
-    if cardinal(tableIndex) < cardinal(fTrackChangesHistoryTableIndexCount) then
+    if cardinal(tableindex) < cardinal(fTrackChangesHistoryTableIndexCount) then
     begin
-      fTrackChangesHistoryTableIndex[tableIndex] := TableHistoryIndex;
-      if TableHistoryIndex >= 0 then
-        with fTrackChangesHistory[TableHistoryIndex] do
+      fTrackChangesHistoryTableIndex[tableindex] := tablehistoryindex;
+      if tablehistoryindex >= 0 then
+        with fTrackChangesHistory[tablehistoryindex] do
         begin
           if CurrentRow = 0 then
             CurrentRow := TableRowCount(aTableHistory);
@@ -1657,15 +1657,15 @@ end;
 
 procedure TRestOrmServer.TrackChangesFlush(aTableHistory: TOrmClass);
 var
-  HistBlob: TOrmHistory;
-  Rec: TOrm;
-  HistJson: TOrmHistory;
-  WhereClause, json: RawUtf8;
-  HistID, ModifiedRecord: TInt64DynArray;
-  TableHistoryIndex, i, HistIDCount, n: PtrInt;
-  ModifRecord, ModifRecordCount, MaxRevisionJson: integer;
+  histblob: TOrmHistory;
+  rec: TOrm;
+  histjson: TOrmHistory;
+  where, json: RawUtf8;
+  histid, modifiedrec: TInt64DynArray;
+  tablehistoryindex, i, histidcount, n: PtrInt;
+  modifrec, modifreccount, maxrevision: integer;
   T: TOrmTable;
-  {%H-}{%H-}log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   log := fRest.LogClass.Enter('TrackChangesFlush(%)', [aTableHistory], self);
   if (aTableHistory = nil) or
@@ -1675,133 +1675,132 @@ begin
   fRest.AcquireExecution[execOrmWrite].Safe.Lock; // avoid race condition
   try
     // low-level Add(TOrmHistory) without cache
-    TableHistoryIndex := fModel.GetTableIndexExisting(aTableHistory);
-    MaxRevisionJson := fTrackChangesHistory[TableHistoryIndex].MaxRevisionJson;
-    if MaxRevisionJson <= 0 then
-      MaxRevisionJson := 10;
+    tablehistoryindex := fModel.GetTableIndexExisting(aTableHistory);
+    maxrevision := fTrackChangesHistory[tablehistoryindex].MaxRevisionJson;
+    if maxrevision <= 0 then
+      maxrevision := 10;
     // we will compress into BLOB only when we got more than 10 revisions of a record
     T := MultiFieldValues(aTableHistory, 'RowID,ModifiedRecord',
       'Event<>%', [ord(heArchiveBlob)], []);
     try
-      T.GetRowValues(T.FieldIndexID, HistID);
-      T.GetRowValues(T.FieldIndex('ModifiedRecord'), ModifiedRecord);
+      T.GetRowValues(T.FieldIndexID, histid);
+      T.GetRowValues(T.FieldIndex('ModifiedRecord'), modifiedrec);
     finally
       T.Free;
     end;
-    QuickSortInt64(pointer(ModifiedRecord), pointer(HistID),
-      0, high(ModifiedRecord));
-    ModifRecord := 0;
-    ModifRecordCount := 0;
+    QuickSortInt64(pointer(modifiedrec), pointer(histid),
+      0, high(modifiedrec));
+    modifrec := 0;
+    modifreccount := 0;
     n := 0;
-    HistIDCount := 0;
-    for i := 0 to high(ModifiedRecord) do
+    histidcount := 0;
+    for i := 0 to high(modifiedrec) do
     begin
-      if (ModifiedRecord[i] = 0) or
-         (HistID[i] = 0) then
+      if (modifiedrec[i] = 0) or
+         (histid[i] = 0) then
         raise EOrmException.CreateUtf8('%.TrackChangesFlush: Invalid %.ID=%',
-          [self, aTableHistory, HistID[i]]);
-      if ModifiedRecord[i] <> ModifRecord then
+          [self, aTableHistory, histid[i]]);
+      if modifiedrec[i] <> modifrec then
       begin
-        if ModifRecordCount > MaxRevisionJson then
-          HistIDCount := n
+        if modifreccount > maxrevision then
+          histidcount := n
         else
-          n := HistIDCount;
-        ModifRecord := ModifiedRecord[i];
-        ModifRecordCount := 1;
+          n := histidcount;
+        modifrec := modifiedrec[i];
+        modifreccount := 1;
       end
       else
-        inc(ModifRecordCount);
-      HistID[n] := HistID[i];
+        inc(modifreccount);
+      histid[n] := histid[i];
       inc(n);
     end;
-    if ModifRecordCount > MaxRevisionJson then
-      HistIDCount := n;
-    if HistIDCount = 0 then
+    if modifreccount > maxrevision then
+      histidcount := n;
+    if histidcount = 0 then
       exit; // nothing to compress
-    QuickSortInt64(Pointer(HistID), 0, HistIDCount - 1);
-    WhereClause := Int64DynArrayToCsv(Pointer(HistID), HistIDCount,
-      'RowID in (', ')');
+    QuickSortInt64(Pointer(histid), 0, histidcount - 1);
+    where := Int64DynArrayToCsv(Pointer(histid), histidcount, 'RowID in (', ')');
     { following SQL can be very slow with external tables, and won't work
       with TRestStorageInMemory -> manual process instead
-    WhereClause := FormatUtf8('ModifiedRecord in (select ModifiedRecord from '+
-        '(select ModifiedRecord, count(*) NumItems from % group by ModifiedRecord) '+
-        'where NumItems>% order by ModifiedRecord) and History is null',
-        [aTableHistory.SqlTableName,MaxRevisionJson]); }
-    Rec := nil;
-    HistBlob := nil;
-    HistJson := TOrmHistoryClass(aTableHistory).CreateAndFillPrepare(self, WhereClause);
+    where := FormatUtf8('ModifiedRecord in (select ModifiedRecord from ' +
+      '(select ModifiedRecord, count(*) NumItems from % group by ModifiedRecord) ' +
+      'where NumItems>% order by ModifiedRecord) and History is null',
+      [aTableHistory.SqlTableName, maxrevision]); }
+    rec := nil;
+    histblob := nil;
+    histjson := TOrmHistoryClass(aTableHistory).CreateAndFillPrepare(self, where);
     try
-      HistBlob := aTableHistory.Create as TOrmHistory;
-      while HistJson.FillOne do
+      histblob := aTableHistory.Create as TOrmHistory;
+      while histjson.FillOne do
       begin
-        if HistJson.ModifiedRecord <> HistBlob.ModifiedRecord then
+        if histjson.ModifiedRecord <> histblob.ModifiedRecord then
         begin
-          if HistBlob.ModifiedRecord <> 0 then
-            HistBlob.HistorySave(self, Rec);
-          FreeAndNil(Rec);
-          HistBlob.History := '';
-          HistBlob.IDValue := 0;
-          HistBlob.Event := heArchiveBlob;
+          if histblob.ModifiedRecord <> 0 then
+            histblob.HistorySave(self, rec);
+          FreeAndNil(rec);
+          histblob.History := '';
+          histblob.IDValue := 0;
+          histblob.Event := heArchiveBlob;
           if not Retrieve('ModifiedRecord=? and Event=%',
-              [ord(heArchiveBlob)], [HistJson.ModifiedRecord], HistBlob) then
-            HistBlob.ModifiedRecord := HistJson.ModifiedRecord
+              [ord(heArchiveBlob)], [histjson.ModifiedRecord], histblob) then
+            histblob.ModifiedRecord := histjson.ModifiedRecord
           else
-            RetrieveBlobFields(HistBlob);
-          if not HistBlob.HistoryOpen(fModel) then
+            RetrieveBlobFields(histblob);
+          if not histblob.HistoryOpen(fModel) then
           begin
             InternalLog('Invalid %.History BLOB content for ID=%: % ' +
               'layout may have changed -> flush any previous content',
-              [HistBlob.RecordClass, HistBlob.IDValue,
-               HistJson.ModifiedTable(fModel)], sllError);
-            HistBlob.IDValue := 0;
+              [histblob.RecordClass, histblob.IDValue,
+               histjson.ModifiedTable(fModel)], sllError);
+            histblob.IDValue := 0;
           end;
-          if HistBlob.IDValue <> 0 then
-            // allow changes appending to HistBlob
-            Rec := HistBlob.HistoryGetLast
+          if histblob.IDValue <> 0 then
+            // allow changes appending to histblob
+            rec := histblob.HistoryGetLast
           else
           begin
-            // HistBlob.fID=0 -> no previous BLOB content
+            // histblob.fID=0 -> no previous BLOB content
             json := JsonEncode([
-              'ModifiedRecord', HistJson.ModifiedRecord,
+              'ModifiedRecord', histjson.ModifiedRecord,
               'Timestamp', GetServerTimestamp,
               'Event', ord(heArchiveBlob)]);
-            if HistJson.Event = heAdd then
+            if histjson.Event = heAdd then
             begin
               // allow versioning from scratch
-              HistBlob.IDValue := EngineAdd(TableHistoryIndex, json);
-              Rec := HistJson.ModifiedTable(fModel).Create;
-              HistBlob.HistoryOpen(fModel);
+              histblob.IDValue := EngineAdd(tablehistoryindex, json);
+              rec := histjson.ModifiedTable(fModel).Create;
+              histblob.HistoryOpen(fModel);
             end
             else
             begin
-              Rec := Retrieve(HistJson.ModifiedRecord);
-              if Rec <> nil then
+              rec := Retrieve(histjson.ModifiedRecord);
+              if rec <> nil then
               try
                 // initialize BLOB with latest revision
-                HistBlob.IDValue := EngineAdd(TableHistoryIndex, json);
-                HistBlob.HistoryOpen(fModel);
-                HistBlob.HistoryAdd(Rec, HistJson);
+                histblob.IDValue := EngineAdd(tablehistoryindex, json);
+                histblob.HistoryOpen(fModel);
+                histblob.HistoryAdd(rec, histjson);
               finally
-                FreeAndNil(Rec); // ignore partial SentDataJson for this record
+                FreeAndNil(rec); // ignore partial SentDataJson for this record
               end;
             end;
           end;
         end;
-        if (Rec = nil) or
-           (HistBlob.IDValue = 0) then
+        if (rec = nil) or
+           (histblob.IDValue = 0) then
           // only append modifications to BLOB if valid
           continue;
-        Rec.FillFrom(pointer(HistJson.SentDataJson));
-        HistBlob.HistoryAdd(Rec, HistJson);
+        rec.FillFrom(pointer(histjson.SentDataJson));
+        histblob.HistoryAdd(rec, histjson);
       end;
-      if HistBlob.ModifiedRecord <> 0 then
-        HistBlob.HistorySave(self, Rec);
-      SetLength(HistID, HistIDCount);
-      EngineDeleteWhere(TableHistoryIndex, WhereClause, TIDDynArray(HistID));
+      if histblob.ModifiedRecord <> 0 then
+        histblob.HistorySave(self, rec);
+      SetLength(histid, histidcount);
+      EngineDeleteWhere(tablehistoryindex, where, TIDDynArray(histid));
     finally
-      HistJson.Free;
-      HistBlob.Free;
-      Rec.Free;
+      histjson.Free;
+      histblob.Free;
+      rec.Free;
     end;
   finally
     fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
@@ -1915,7 +1914,7 @@ function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;
 
   procedure DoTrackChanges(TableHistoryIndex: integer);
   var
-    TableHistoryClass: TOrmHistoryClass;
+    histclass: TOrmHistoryClass;
     json, data: RawUtf8;
     event: TOrmHistoryEvent;
   begin
@@ -1929,15 +1928,14 @@ function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;
     else
       exit;
     end;
-    TableHistoryClass := TOrmHistoryClass(
-      fModel.Tables[TableHistoryIndex]);
+    histclass := TOrmHistoryClass(fModel.Tables[TableHistoryIndex]);
     data := aSentData;
     if (data = '') and
        (aRec <> nil) then
       data := aRec.GetJsonValues(True, False, EVENT2OCCASION[aEvent]);
-    TableHistoryClass.InitializeFields([
+    histclass.InitializeFields([
       'ModifiedRecord', aTableIndex + aID shl 6,
-      'event', ord(event),
+      'Event', ord(event),
       'SentDataJson', data,
       'Timestamp', GetServerTimestamp], json);
     fRest.AcquireExecution[execOrmWrite].Safe.Lock; // avoid race condition
@@ -1948,7 +1946,7 @@ function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;
            fTrackChangesHistory[TableHistoryIndex].MaxSentDataJsonRow then
       begin
         // gather & compress TOrmHistory.SentDataJson into History BLOB
-        TrackChangesFlush(TableHistoryClass);
+        TrackChangesFlush(histclass);
         fTrackChangesHistory[TableHistoryIndex].CurrentRow := 0;
       end
       else
@@ -1960,7 +1958,7 @@ function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;
   end;
 
 var
-  TableHistoryIndex: integer;
+  histtableindex: integer;
 begin
   if aID <= 0 then
     result := false
@@ -1977,9 +1975,9 @@ begin
     // track simple fields modification
     if cardinal(aTableIndex) < cardinal(fTrackChangesHistoryTableIndexCount) then
     begin
-      TableHistoryIndex := fTrackChangesHistoryTableIndex[aTableIndex];
-      if TableHistoryIndex >= 0 then
-        DoTrackChanges(TableHistoryIndex);
+      histtableindex := fTrackChangesHistoryTableIndex[aTableIndex];
+      if histtableindex >= 0 then
+        DoTrackChanges(histtableindex);
     end;
     if Assigned(OnUpdateEvent) then
       result := OnUpdateEvent(Owner, aEvent,
@@ -1996,7 +1994,7 @@ function TRestOrmServer.AfterDeleteForceCoherency(aTableIndex: integer;
   var
     W: RawUtf8;
     cascadeOK: boolean;
-    Rest: TRestOrm;
+    rest: TRestOrm;
   begin
     // set Field=0 or delete row where Field references aID
     if Where = 0 then
@@ -2007,10 +2005,10 @@ function TRestOrmServer.AfterDeleteForceCoherency(aTableIndex: integer;
         Ref^.FieldType.Name + '=:(' + W + '):')
     else
     begin
-      Rest := GetStaticTableIndex(Ref^.TableIndex);
-      if Rest <> nil then
+      rest := GetStaticTableIndex(Ref^.TableIndex);
+      if rest <> nil then
         // fast direct call
-        cascadeOK := Rest.EngineUpdateField(Ref^.TableIndex,
+        cascadeOK := rest.EngineUpdateField(Ref^.TableIndex,
           Ref^.FieldType.Name, '0', Ref^.FieldType.Name, W)
       else
         cascadeOK := MainEngineUpdateField(Ref^.TableIndex,
@@ -2023,30 +2021,30 @@ function TRestOrmServer.AfterDeleteForceCoherency(aTableIndex: integer;
 
 var
   i: integer;
-  Ref: POrmModelReference;
+  ref: POrmModelReference;
 begin
-  Ref := pointer(fModel.RecordReferences);
-  if Ref <> nil then
+  ref := pointer(fModel.RecordReferences);
+  if ref <> nil then
   begin
     for i := 1 to length(fModel.RecordReferences) do
     begin
-      if Ref^.FieldTableIndex = -2 then
+      if ref^.FieldTableIndex = -2 then
         // lazy initialization
-        Ref^.FieldTableIndex := fModel.GetTableIndexSafe(Ref^.FieldTable, false);
-      case Ref^.FieldType.OrmFieldType of
+        ref^.FieldTableIndex := fModel.GetTableIndexSafe(ref^.FieldTable, false);
+      case ref^.FieldType.OrmFieldType of
         oftRecord:
           // TRecordReference published field
-          PerformCascade(RecordReference(aTableIndex, aID), Ref);
+          PerformCascade(RecordReference(aTableIndex, aID), ref);
         oftID:
           // TOrm published field
-          if Ref^.FieldTableIndex = aTableIndex then
-            PerformCascade(aID, Ref);
+          if ref^.FieldTableIndex = aTableIndex then
+            PerformCascade(aID, ref);
         oftTID:
           // TTableID = type TID published field
-          if Ref^.FieldTableIndex = aTableIndex then
-            PerformCascade(aID, Ref);
+          if ref^.FieldTableIndex = aTableIndex then
+            PerformCascade(aID, ref);
       end;
-      inc(Ref);
+      inc(ref);
     end;
   end;
   result := true; // success even if no match found, or some cascade warnings
@@ -2095,31 +2093,31 @@ function TRestOrmServer.CreateSqlMultiIndex(Table: TOrmClass;
   const FieldNames: array of RawUtf8; Unique: boolean;
   IndexName: RawUtf8): boolean;
 var
-  SQL: RawUtf8;
-  i, TableIndex: PtrInt;
-  Props: TOrmProperties;
-  Rest: TRestOrm;
+  sql: RawUtf8;
+  i, tableindex: PtrInt;
+  props: TOrmProperties;
+  rest: TRestOrm;
 begin
   result := false;
   if high(FieldNames) < 0 then
     // avoid endless loop for TRestStorage with no overridden method
     exit;
-  TableIndex := fModel.GetTableIndexExisting(Table);
-  Rest := nil;
-  if TableIndex >= 0 then
+  tableindex := fModel.GetTableIndexExisting(Table);
+  rest := nil;
+  if tableindex >= 0 then
   begin
     // bypass fVirtualTableDirect
-    if PtrUInt(TableIndex) < PtrUInt(length(fStaticData)) then
-      Rest := fStaticData[TableIndex];
-    if (Rest = nil) and
+    if PtrUInt(tableindex) < PtrUInt(length(fStaticData)) then
+      rest := fStaticData[tableindex];
+    if (rest = nil) and
        (fStaticVirtualTable <> nil) then
-      Rest := fStaticVirtualTable[TableIndex];
+      rest := fStaticVirtualTable[tableindex];
   end;
-  if (Rest <> nil) and
-     Rest.InheritsFrom(TRestStorage) then
+  if (rest <> nil) and
+     rest.InheritsFrom(TRestStorage) then
   begin
     // create the index on the static table (e.g. for external DB)
-    result := TRestStorage(Rest).CreateSqlMultiIndex(
+    result := TRestStorage(rest).CreateSqlMultiIndex(
       Table, FieldNames, Unique, IndexName);
     exit;
   end;
@@ -2130,28 +2128,28 @@ begin
     result := true;
     exit;
   end;
-  Props := fModel.TableProps[TableIndex].Props;
+  props := fModel.TableProps[tableindex].props;
   for i := 0 to high(FieldNames) do
     if not IsRowID(pointer(FieldNames[i])) then
-      if Props.Fields.IndexByName(FieldNames[i]) < 0 then
+      if props.Fields.IndexByName(FieldNames[i]) < 0 then
         // wrong field name
         exit;
   if Unique then
-    SQL := 'UNIQUE '
+    sql := 'UNIQUE '
   else
-    SQL := '';
+    sql := '';
   if IndexName = '' then
   begin
     IndexName := RawUtf8ArrayToCsv(FieldNames, '');
-    if length(IndexName) + length(Props.SqlTableName) > 64 then
+    if length(IndexName) + length(props.SqlTableName) > 64 then
       // avoid reaching potential identifier name size limit
-      IndexName := crc32cUtf8ToHex(Props.SqlTableName) +
+      IndexName := crc32cUtf8ToHex(props.SqlTableName) +
                    crc32cUtf8ToHex(IndexName);
   end;
-  SQL := FormatUtf8('CREATE %INDEX IF NOT EXISTS Index%% ON %(%);',
-    [SQL, Props.SqlTableName, IndexName, Props.SqlTableName,
+  sql := FormatUtf8('CREATE %INDEX IF NOT EXISTS Index%% ON %(%);',
+    [sql, props.SqlTableName, IndexName, props.SqlTableName,
      RawUtf8ArrayToCsv(FieldNames, ',')]);
-  result := EngineExecute(SQL);
+  result := EngineExecute(sql);
 end;
 
 function TRestOrmServer.IsInternalSQLite3Table(aTableIndex: integer): boolean;
@@ -2209,26 +2207,26 @@ end;
 function TRestOrmServer.Delete(Table: TOrmClass;
   const SqlWhere: RawUtf8): boolean;
 var
-  IDs: TIDDynArray;
-  TableIndex, i: PtrInt;
+  ids: TIDDynArray;
+  tableindex, i: PtrInt;
 begin
-  result := InternalDeleteNotifyAndGetIDs(Table, SqlWhere, IDs);
-  if (IDs = nil) or
+  result := InternalDeleteNotifyAndGetIDs(Table, SqlWhere, ids);
+  if (ids = nil) or
      not result then
     // nothing to delete
     exit;
-  TableIndex := Model.GetTableIndexExisting(Table);
+  tableindex := Model.GetTableIndexExisting(Table);
   fRest.AcquireExecution[execOrmWrite].Safe.Lock;
   try
     // may be within a batch in another thread
-    result := EngineDeleteWhere(TableIndex, SqlWhere, IDs);
+    result := EngineDeleteWhere(tableindex, SqlWhere, ids);
   finally
     fRest.AcquireExecution[execOrmWrite].Safe.Unlock;
   end;
   if result then
     // force relational database coherency (i.e. our FOREIGN KEY implementation)
-    for i := 0 to high(IDs) do
-      AfterDeleteForceCoherency(TableIndex, IDs[i]);
+    for i := 0 to high(ids) do
+      AfterDeleteForceCoherency(tableindex, ids[i]);
 end;
 
 function TRestOrmServer.TableRowCount(Table: TOrmClass): Int64;

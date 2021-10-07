@@ -1484,7 +1484,7 @@ type
 implementation
 
 uses
-  mormot.orm.rest; // avoid circular references
+  mormot.orm.rest; // to avoid circular references
 
 
 { ************ Customize REST Execution }
