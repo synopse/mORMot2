@@ -589,20 +589,6 @@ asm
         pop     edi
 end;
 
-function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
-{$ifdef FPC}nostackframe; assembler;{$endif}
-asm
-        push    eax
-        call    IntegerScan
-        pop     edx
-        test    eax, eax
-        jnz     @e
-        dec     eax // returns -1
-        ret
-@e:     sub     eax, edx
-        shr     eax, 2
-end;
-
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm

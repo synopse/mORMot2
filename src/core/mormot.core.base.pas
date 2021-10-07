@@ -1268,6 +1268,12 @@ function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardin
 // - return index of P^[index]=Value
 // - return -1 if Value was not found
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast search of an unsigned integer in an integer array
+// - returns true if P^=Value within Count entries
+// - returns false if Value was not found
+function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
 
 /// fast search of an integer position in a 64-bit integer array
 // - Count is the number of Int64 entries in P^
@@ -1280,6 +1286,7 @@ function Int64Scan(P: PInt64Array; Count: PtrInt; const Value: Int64): PInt64;
 // - returns index of P^[index]=Value
 // - returns -1 if Value was not found
 function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of an integer position in an unsigned 64-bit integer array
 // - Count is the number of QWord entries in P^
@@ -1287,11 +1294,6 @@ function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrI
 // - returns -1 if Value was not found
 function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
-
-/// fast search of an unsigned integer in an integer array
-// - returns true if P^=Value within Count entries
-// - returns false if Value was not found
-function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
 
 /// fast search of an integer value in a 64-bit integer array
 // - returns true if P^=Value within Count entries
@@ -1304,6 +1306,7 @@ function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boo
 // - return index of P^[index]=Value
 // - return -1 if Value was not found
 function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of a pointer-sized unsigned integer in an pointer-sized integer array
 // - Count is the number of pointer-sized integer entries in P^
@@ -5258,12 +5261,24 @@ end;
 
 {$endif FPC_OR_UNICODE}
 
+function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
+begin
+  result := PtrUInt(IntegerScan(P, Count, Value));
+  if result = 0 then
+    dec(result)
+  else
+  begin
+    dec(result, PtrUInt(P));
+    result := result shr 2;
+  end;
+end;
+
 function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
 begin
   if P <> nil then
   begin
     result := true;
-    Count := PtrInt(@P[Count - 4]);
+    Count := PtrUInt(@P[Count - 4]);
     repeat
       if PtrUInt(P) > PtrUInt(Count) then
         break;
@@ -5291,7 +5306,7 @@ begin
   result := nil;
   if P = nil then
     exit;
-  Count := PtrInt(@P[Count - 4]);
+  Count := PtrUInt(@P[Count - 4]);
   repeat
     if PtrUInt(P) > PtrUInt(Count) then
       break;
@@ -5327,51 +5342,14 @@ end;
 
 function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrInt;
 begin
-  result := 0;
-  dec(Count, 8);
-  if P <> nil then
+  result := PtrUInt(Int64Scan(P, Count, Value));
+  if result = 0 then
+    dec(result)
+  else
   begin
-    repeat
-      if result > Count then
-        break;
-      if P^[result] <> Value then
-        if P^[result + 1] <> Value then
-          if P^[result + 2] <> Value then
-            if P^[result + 3] <> Value then
-              if P^[result + 4] <> Value then
-                if P^[result + 5] <> Value then
-                  if P^[result + 6] <> Value then
-                    if P^[result + 7] <> Value then
-                    begin
-                      inc(result, 8);
-                      continue;
-                    end
-                    else
-                      inc(result, 7)
-                  else
-                    inc(result, 6)
-                else
-                  inc(result, 5)
-              else
-                inc(result, 4)
-            else
-              inc(result, 3)
-          else
-            inc(result, 2)
-        else
-          inc(result);
-      exit;
-    until false;
-    inc(Count, 8);
-    repeat
-      if result >= Count then
-        break;
-      if P^[result] = Value then
-        exit;
-      inc(result);
-    until false;
+    dec(result, PtrUInt(P));
+    result := result shr 3;
   end;
-  result := -1;
 end;
 
 function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrInt;
@@ -9627,49 +9605,12 @@ zero:
 end;
 {$endif CPUX64}
 
-function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
-begin
-  result := 0;
-  dec(Count, 4);
-  if P <> nil then
-  begin
-    repeat
-      if result > Count then
-        break;
-      if P^[result] <> Value then
-        if P^[result + 1] <> Value then
-          if P^[result + 2] <> Value then
-            if P^[result + 3] <> Value then
-            begin
-              inc(result, 4);
-              continue;
-            end
-            else
-              inc(result, 3)
-          else
-            inc(result, 2)
-        else
-          inc(result);
-      exit;
-    until false;
-    inc(Count, 4);
-    repeat
-      if result >= Count then
-        break;
-      if P^[result] = Value then
-        exit;
-      inc(result);
-    until false;
-  end;
-  result := -1;
-end;
-
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
 begin
   result := nil;
   if P = nil then
     exit;
-  Count := PtrInt(@P[Count - 4]);
+  Count := PtrUInt(@P[Count - 4]);
   repeat
     if PtrUInt(P) > PtrUInt(Count) then
       break;

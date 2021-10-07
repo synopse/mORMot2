@@ -572,8 +572,8 @@ type
   TWrapperContext = class
   protected
     fServer: TRestServer;
-    fORM, fRecords, fEnumerates, fSets, fArrays,
-     fUnits, fDescriptions: TDocVariantData;
+    fORM, fRecords, fEnumerates, fSets, fArrays: TDocVariantData;
+    fUnits, fDescriptions: TDocVariantData;
     fSOA: variant;
     fSourcePath: TFileNameDynArray;
     fHasAnyRecord: boolean;
@@ -667,7 +667,8 @@ var
       raise EWrapperContext.CreateUtf8(
         '%.RegisterType(%): no RTTI', [typAsName^, typName]);
     case typ of
-      wEnum, wSet:
+      wEnum,
+      wSet:
         // include (untrimed) identifier: values[] may be trimmed at mustache level
         info := _JsonFastFmt('{name:?,values:%}',
           [rtti.Cache.EnumInfo^.GetEnumNameAllAsJsonArray(false)], [typName]);
@@ -717,7 +718,8 @@ begin
       typ := TYPES_SIMPLE[rtti.Parser];
       if typ = wUnknown then
         case rtti.Kind of
-          rkRecord {$ifdef FPC}, rkObject{$endif}:
+          rkRecord
+          {$ifdef FPC}, rkObject{$endif}:
             typ := wRecord;
           rkInterface:
             typ := wInterface;
@@ -760,9 +762,22 @@ begin
         AddUnit(rtti.Info^.RttiClass^.UnitName^, @result);
     end;
   case typ of
-    wBoolean, wByte, wWord, wInteger, wCardinal, wInt64, wQWord, wID,
-    wReference, wTimeLog, wModTime, wCreateTime, wSingle, wDouble,
-    wRawUtf8, wString:
+    wBoolean,
+    wByte,
+    wWord,
+    wInteger,
+    wCardinal,
+    wInt64,
+    wQWord,
+    wID,
+    wReference,
+    wTimeLog,
+    wModTime,
+    wCreateTime,
+    wSingle,
+    wDouble,
+    wRawUtf8,
+    wString:
       ; // simple types have no special marshalling
     wDateTime:
       _ObjAddProps(['isDateTime', true,
