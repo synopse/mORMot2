@@ -19,7 +19,7 @@ unit mormot.core.base;
     - Sorting/Comparison Functions
     - Some Convenient TStream descendants and File access functions
     - Faster Alternative to RTL Standard Functions
-    - Raw Shared Constants / Types Definitions
+    - Raw Shared Types Definitions
 
    Aim of those types and functions is to be cross-platform and cross-compiler,
   without any dependency but the main FPC/Delphi RTL. It also detects the
@@ -627,8 +627,16 @@ function ToByte(value: cardinal): cardinal; inline;
 {$endif CPUARM}
 
 const
+  /// used to mark the end of ASCIIZ buffer, or return a void shortstring
+  NULCHAR: AnsiChar = #0;
+
   /// a TGUID containing '{00000000-0000-0000-0000-00000000000}'
   GUID_NULL: TGUID = ({%H-});
+
+  NULL_LOW   = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
+  FALSE_LOW  = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
+  FALSE_LOW2 = ord('a') + ord('l') shl 8 + ord('s') shl 16 + ord('e') shl 24;
+  TRUE_LOW   = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24;
 
 /// fill a GUID with 0
 procedure FillZero(var result: TGUID); overload;
@@ -1296,7 +1304,6 @@ function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boo
 // - return index of P^[index]=Value
 // - return -1 if Value was not found
 function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of a pointer-sized unsigned integer in an pointer-sized integer array
 // - Count is the number of pointer-sized integer entries in P^
@@ -1326,16 +1333,6 @@ function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
 // - return -1 if Value was not found
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
-
-/// fast search of a binary value position in a fixed-size array
-// - Count is the number of entries in P^[]
-// - return index of P^[index]=Elem^, comparing ElemSize bytes
-// - return -1 if Value was not found
-function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
-
-/// fast search of a binary value position in a fixed-size array
-// - Count is the number of entries in P^[]
-function AnyScanExists(P, Elem: pointer; Count, ElemSize: PtrInt): boolean;
 
 /// sort an integer array, low values first
 procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt); overload;
@@ -1370,25 +1367,6 @@ procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
 
 /// sort a double array, low values first
 procedure QuickSortDouble(ID: PDoubleArray; L, R: PtrInt);
-
-type
-  /// event handler called by NotifySortedIntegerChanges()
-  // - Sender is an opaque const value, maybe a TObject or any pointer
-  TOnNotifySortedIntegerChange = procedure(const Sender; Value: integer) of object;
-
-/// compares two 32-bit signed sorted integer arrays, and call event handlers
-// to notify the corresponding modifications in an O(n) time
-// - items in both old[] and new[] arrays are required to be sorted
-procedure NotifySortedIntegerChanges(old, new: PIntegerArray; oldn, newn: PtrInt;
-  const added, deleted: TOnNotifySortedIntegerChange; const sender);
-
-/// copy an integer array, then sort it, low values first
-procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
-  var Dest: TIntegerDynArray);
-
-/// copy an integer array, then sort it, low values first
-procedure CopyAndSortInt64(Values: PInt64Array; ValuesCount: integer;
-  var Dest: TInt64DynArray);
 
 /// fast O(log(n)) binary search of an integer value in a sorted integer array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
@@ -1520,31 +1498,6 @@ procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
 procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Index: PtrInt); overload;
 
-/// remove some 32-bit integer from Values[]
-// - Excluded is declared as var, since it will be sorted in-place during process
-// if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
-procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
-  ExcludedSortSize: integer = 32);
-
-/// ensure some 32-bit integer from Values[] will only contain Included[]
-// - Included is declared as var, since it will be sorted in-place during process
-// if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
-procedure IncludeInteger(var Values, Included: TIntegerDynArray;
-  IncludedSortSize: integer = 32);
-
-/// sort and remove any 32-bit duplicated integer from Values[]
-procedure DeduplicateInteger(var Values: TIntegerDynArray); overload;
-
-/// sort and remove any 32-bit duplicated integer from Values[]
-// - returns the new Values[] length
-function DeduplicateInteger(var Values: TIntegerDynArray; Count: PtrInt): PtrInt; overload;
-
-/// low-level function called by DeduplicateInteger()
-function DeduplicateIntegerSorted(val: PIntegerArray; last: PtrInt): PtrInt;
-
-/// create a new 32-bit integer dynamic array with the values from another one
-procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
-
 /// delete any 16-bit integer in Values[]
 procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
 
@@ -1555,48 +1508,8 @@ procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
 procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: integer;
   Index: PtrInt); overload;
 
-/// remove some 64-bit integer from Values[]
-// - Excluded is declared as var, since it will be sorted in-place during process
-// if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
-procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
-  ExcludedSortSize: integer = 32);
-
-/// ensure some 64-bit integer from Values[] will only contain Included[]
-// - Included is declared as var, since it will be sorted in-place during process
-// if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
-procedure IncludeInt64(var Values, Included: TInt64DynArray;
-  IncludedSortSize: integer = 32);
-
-/// sort and remove any 64-bit duplicated integer from Values[]
-procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
-
-/// sort and remove any 64-bit duplicated integer from Values[]
-// - returns the new Values[] length
-function DeduplicateInt64(var Values: TInt64DynArray; Count: PtrInt): PtrInt; overload;
-
-/// low-level function called by DeduplicateInt64()
-// - warning: caller should ensure that last>0
-function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
-
-/// create a new 64-bit integer dynamic array with the values from another one
-procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
-
-/// find the maximum 32-bit integer in Values[]
-function MaxInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt;
-  MaxStart: integer = -1): integer;
-
-/// sum all 32-bit integers in Values[]
-function SumInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt): integer;
-
-/// fill already allocated Reversed[] so that Reversed[Values[i]]=i
-procedure Reverse(const Values: TIntegerDynArray; ValuesCount: PtrInt;
-  Reversed: PIntegerArray);
-
 /// fill some values with i,i+1,i+2...i+Count-1
 procedure FillIncreasing(Values: PIntegerArray; StartValue: integer; Count: PtrUInt);
-
-/// copy some Int64 values into an unsigned integer array
-procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: PtrInt);
 
 /// quick helper to initialize a dynamic array of integer from some constants
 // - can be used e.g. as:
@@ -1673,17 +1586,6 @@ type
     function IndexOf(aValue: integer): PtrInt; {$ifdef HASINLINE}inline;{$endif}
   end;
   PSortedIntegerArray = ^TSortedIntegerArray;
-
-  /// comparison function as expected by MedianQuickSelect()
-  // - should return TRUE if Values[IndexA]>Values[IndexB]
-  TOnValueGreater = function(IndexA,IndexB: PtrInt): boolean of object;
-
-/// compute the median of an integer serie of values, using "Quickselect"
-// - based on the algorithm described in "Numerical recipes in C", Second Edition,
-// translated from Nicolas Devillard's C code: http://ndevilla.free.fr/median/median
-// - warning: the supplied integer array is modified in-place during the process,
-// and won't be fully sorted on output (this is no QuickSort alternative)
-function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
 
 /// compute GCD of two integers using substraction-based Euclidean algorithm
 function gcd(a, b: cardinal): cardinal;
@@ -2324,37 +2226,6 @@ type
   /// all CPU features flags, as retrieved from an Intel/AMD CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
 
-
-  /// the recognized ARM/AARCH64 CPU types
-  // - https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
-  // - is defined on all platforms for cross-system use
-  TArmCpuType = (
-    actUnknown,
-    actARM810, actARM920, actARM922, actARM926, actARM940, actARM946, actARM966,
-    actARM1020, actARM1022, actARM1026, actARM11MPCore, actARM1136, actARM1156,
-    actARM1176, actCortexA5, actCortexA7, actCortexA8, actCortexA9, actCortexA12,
-    actCortexA15, actCortexA17, actCortexR4, actCortexR5, actCortexR7,
-    actCortexR8, actCortexM0, actCortexM1, actCortexM3, actCortexM4, actCortexM7,
-    actCortexM0P, actCortexA32, actCortexA53, actCortexA35, actCortexA55,
-    actCortexA65, actCortexA57, actCortexA72, actCortexA73, actCortexA75,
-    actCortexA76, actNeoverseN1, actCortexA77, actCortexA76AE, actCortexR52,
-    actCortexM23, actCortexM33, actCortexA78, actCortexA78AE, actNeoverseE1,
-    actCortexA78C);
-  /// a set of recognized ARM/AARCH64 CPU types
-  TArmCpuTypes = set of TArmCpuType;
-
-  /// the recognized ARM/AARCH64 CPU hardware implementers
-  // - https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
-  TArmCpuImplementer = (
-    aciUnknown,
-    aciARM, aciBroadcom, aciCavium, aciDEC, aciFUJITSU, aciHiSilicon,
-    aciInfineon, aciMotorola, aciNVIDIA, aciAPM, aciQualcomm, aciSamsung,
-    aciMarvell, aciApple, aciFaraday, aciIntel, aciAmpere);
-  /// a set of recognized ARM/AARCH64 CPU hardware implementers
-  TArmCpuImplementers = set of TArmCpuImplementer;
-
-
-type
   /// 32-bit ARM Hardware capabilities
   // - merging AT_HWCAP and AT_HWCAP2 flags as reported by
   // github.com/torvalds/linux/blob/master/arch/arm/include/uapi/asm/hwcap.h
@@ -2420,18 +2291,6 @@ var
   // - text from CpuInfoFeatures may not be accurate on oldest kernels
   CpuFeatures: TArmHwCaps;
 {$endif CPUARM3264}
-
-/// recognize a given ARM/AARCH64 CPU from its 12-bit hardware ID
-function ArmCpuType(id: word): TArmCpuType;
-
-/// recognize a given ARM/AARCH64 CPU type name from its 12-bit hardware ID
-function ArmCpuTypeName(act: TArmCpuType; id: word): RawUtf8;
-
-/// recognize a given ARM/AARCH64 CPU implementer from its 8-bit hardware ID
-function ArmCpuImplementer(id: byte): TArmCpuImplementer;
-
-/// recognize a given ARM/AARCH64 CPU implementer name from its 8-bit hardware ID
-function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word): RawUtf8;
 
 {$ifdef CPUINTEL}
 
@@ -2728,24 +2587,6 @@ function IsAnsiCompatible(const Text: RawByteString): boolean; overload;
 function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean; overload;
 
 
-/// compute the file name, including its path if supplied, but without its extension
-// - e.g. GetFileNameWithoutExt('/var/toto.ext') = '/var/toto'
-// - may optionally return the extracted extension, as '.ext'
-function GetFileNameWithoutExt(const FileName: TFileName;
-  Extension: PFileName = nil): TFileName;
-
-/// creates a directory if not already existing
-// - returns the full expanded directory name, including trailing path delimiter
-// - returns '' on error, unless RaiseExceptionOnCreationFailure is true
-function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean = false): TFileName;
-
-{$ifdef ISDELPHI20062007}
-/// compatibility function defined to avoid hints on buggy Delphi 2006/2007
-function AnsiCompareFileName(const S1, S2 : TFileName): integer;
-{$endif ISDELPHI20062007}
-
-
 type
   /// low-level object implementing a 32-bit Pierre L'Ecuyer software generator
   // - cross-compiler and cross-platform efficient randomness generator, very
@@ -2981,16 +2822,6 @@ type
     procedure Done(EndBuf: pointer; var Dest: RawUtf8); overload;
   end;
 
-/// compute the median of a serie of values, using "Quickselect"
-// - based on the algorithm described in "Numerical recipes in C", Second Edition
-// - expect the values information to be available from a comparison callback
-// - this version will use a temporary index list to exchange items order
-// (supplied as a TSynTempBuffer), so won't change the supplied values themself
-// - see also function MedianQuickSelectInteger() for PIntegerArray values
-// - returns the index of the median Value
-function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
-  var TempBuffer: TSynTempBuffer): integer;
-
 /// logical OR of two memory buffers
 // - will perform on all buffer bytes:
 // ! Dest[i] := Dest[i] or Source[i];
@@ -3032,6 +2863,9 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
   {$ifndef CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
   
 type
+  TCrc32tab = array[0..7, byte] of cardinal;
+  PCrc32tab = ^TCrc32tab;
+
   /// function prototype to be used for 32-bit hashing of an element
   // - it must return a cardinal hash, with as less collision as possible
   // - is the function signature of DefaultHasher and InterningHasher
@@ -3046,11 +2880,6 @@ type
   // - the input hash buffer is used as seed, and contains the 128-bit result
   // - is the function signature of DefaultHasher128
   THasher128 = procedure(hash: PHash128; buf: PAnsiChar; len: cardinal);
-
-
-type
-  TCrc32tab = array[0..7, byte] of cardinal;
-  PCrc32tab = ^TCrc32tab;
 
 var
   /// 8KB tables used by crc32cfast() function
@@ -3554,12 +3383,6 @@ function SortDynArrayUnicodeString(const A, B): integer;
 // - the expected string type is the generic VCL string
 function SortDynArrayString(const A, B): integer;
 
-/// compare two "array of TFileName" elements, as file names
-// - i.e. with no case sensitivity on Windows, and grouped by file extension
-// - the expected string type is the generic RTL string, i.e. TFileName
-// - calls internally GetFileNameWithoutExt() and AnsiCompareFileName()
-function SortDynArrayFileName(const A, B): integer;
-
 /// compare two "array of variant" elements, with case sensitivity
 // - just a wrapper around SortDynArrayVariantComp(A,B,false)
 function SortDynArrayVariant(const A, B): integer;
@@ -3594,20 +3417,6 @@ procedure Exchg(P1, P2: PAnsiChar; count: PtrInt);
 type
   /// a dynamic array of TStream instances
   TStreamDynArray = array of TStream;
-
-  /// a fake TStream, which will just count the number of bytes written
-  TFakeWriterStream = class(TStream)
-  protected
-    fWritten: Int64;
-    {$ifdef FPC}
-    function GetPosition: Int64; override;
-    {$endif FPC}
-  public
-    function Read(var Buffer; Count: Longint): Longint; override;
-    function Write(const Buffer; Count: Longint): Longint; override;
-    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
-    function Seek(Offset: Longint; Origin: Word): Longint; override;
-  end;
 
   {$M+}
   /// TStream with a protected fPosition field
@@ -3675,244 +3484,8 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
-  TNestedStream = record
-    Stream: TStream;
-    Start, Stop: Int64;
-  end;
-
-  /// TStream allowing to read from some nested TStream instances
-  TNestedStreamReader = class(TStreamWithPosition)
-  protected
-    fSize: Int64;
-    fNested: array of TNestedStream;
-    fContentRead: ^TNestedStream;
-    function GetSize: Int64; override;
-  public
-    /// overriden method to call Flush on rewind, i.e. if position is set to 0
-    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
-    /// finalize the nested TStream instance
-    destructor Destroy; override;
-    /// append a nested TStream instance
-    // - you could use a TFileStream here for efficient chunked reading
-    function NewStream(Stream: TStream): TStream;
-    /// get the last TRawByteStringStream, or append a new one if needed
-    function ForText: TRawByteStringStream;
-    /// append some text or content to an internal TRawByteStringStream
-    // - is the easy way to append some text or data to the internal buffers
-    procedure Append(const Content: RawByteString);
-    /// you should call this method before any Read() call
-    // - is also called when you execute Seek(0, soBeginning)
-    procedure Flush; virtual;
-    /// will read up to Count bytes from the internal nested TStream
-    function Read(var Buffer; Count: Longint): Longint; override;
-    /// this TStream is read-only: calling this method will raise an exception
-    function Write(const Buffer; Count: Longint): Longint; override;
-  end;
-
 
 { ************ Raw Shared Constants / Types Definitions }
-
-const
-  /// void HTTP Status Code (not a standard value, for internal use only)
-  HTTP_NONE = 0;
-  /// HTTP Status Code for "Continue"
-  HTTP_CONTINUE = 100;
-  /// HTTP Status Code for "Switching Protocols"
-  HTTP_SWITCHINGPROTOCOLS = 101;
-  /// HTTP Status Code for "Success"
-  HTTP_SUCCESS = 200;
-  /// HTTP Status Code for "Created"
-  HTTP_CREATED = 201;
-  /// HTTP Status Code for "Accepted"
-  HTTP_ACCEPTED = 202;
-  /// HTTP Status Code for "Non-Authoritative Information"
-  HTTP_NONAUTHORIZEDINFO = 203;
-  /// HTTP Status Code for "No Content"
-  HTTP_NOCONTENT = 204;
-  /// HTTP Status Code for "Reset Content"
-  HTTP_RESETCONTENT = 205;
-  /// HTTP Status Code for "Partial Content"
-  HTTP_PARTIALCONTENT = 206;
-  /// HTTP Status Code for "Multiple Choices"
-  HTTP_MULTIPLECHOICES = 300;
-  /// HTTP Status Code for "Moved Permanently"
-  HTTP_MOVEDPERMANENTLY = 301;
-  /// HTTP Status Code for "Found"
-  HTTP_FOUND = 302;
-  /// HTTP Status Code for "See Other"
-  HTTP_SEEOTHER = 303;
-  /// HTTP Status Code for "Not Modified"
-  HTTP_NOTMODIFIED = 304;
-  /// HTTP Status Code for "Use Proxy"
-  HTTP_USEPROXY = 305;
-  /// HTTP Status Code for "Temporary Redirect"
-  HTTP_TEMPORARYREDIRECT = 307;
-  /// HTTP Status Code for "Bad Request"
-  HTTP_BADREQUEST = 400;
-  /// HTTP Status Code for "Unauthorized"
-  HTTP_UNAUTHORIZED = 401;
-  /// HTTP Status Code for "Forbidden"
-  HTTP_FORBIDDEN = 403;
-  /// HTTP Status Code for "Not Found"
-  HTTP_NOTFOUND = 404;
-  // HTTP Status Code for "Method Not Allowed"
-  HTTP_NOTALLOWED = 405;
-  // HTTP Status Code for "Not Acceptable"
-  HTTP_NOTACCEPTABLE = 406;
-  // HTTP Status Code for "Proxy Authentication Required"
-  HTTP_PROXYAUTHREQUIRED = 407;
-  /// HTTP Status Code for "Request Time-out"
-  HTTP_TIMEOUT = 408;
-  /// HTTP Status Code for "Conflict"
-  HTTP_CONFLICT = 409;
-  /// HTTP Status Code for "Payload Too Large"
-  HTTP_PAYLOADTOOLARGE = 413;
-  /// HTTP Status Code for "Range Not Satisfiable"
-  HTTP_RANGENOTSATISFIABLE = 416;
-  /// HTTP Status Code for "Internal Server Error"
-  HTTP_SERVERERROR = 500;
-  /// HTTP Status Code for "Not Implemented"
-  HTTP_NOTIMPLEMENTED = 501;
-  /// HTTP Status Code for "Bad Gateway"
-  HTTP_BADGATEWAY = 502;
-  /// HTTP Status Code for "Service Unavailable"
-  HTTP_UNAVAILABLE = 503;
-  /// HTTP Status Code for "Gateway Timeout"
-  HTTP_GATEWAYTIMEOUT = 504;
-  /// HTTP Status Code for "HTTP Version Not Supported"
-  HTTP_HTTPVERSIONNONSUPPORTED = 505;
-
-  NULL_LOW   = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
-  FALSE_LOW  = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
-  FALSE_LOW2 = ord('a') + ord('l') shl 8 + ord('s') shl 16 + ord('e') shl 24;
-  TRUE_LOW   = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24;
-
-  /// HTTP header name for the content type, as defined in the corresponding RFC
-  HEADER_CONTENT_TYPE = 'Content-Type: ';
-
-  /// HTTP header name for the content type, in upper case
-  // - as defined in the corresponding RFC
-  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
-  HEADER_CONTENT_TYPE_UPPER = 'CONTENT-TYPE: ';
-
-  /// HTTP header name for the client IP, in upper case
-  // - as defined in our HTTP server classes
-  // - could be used e.g. with IdemPChar() to retrieve the remote IP address
-  HEADER_REMOTEIP_UPPER = 'REMOTEIP: ';
-
-  /// HTTP header name for the authorization token, in upper case
-  // - could be used e.g. with IdemPChar() to retrieve a JWT value
-  // - will detect header computed e.g. by motmot.net.http's
-  // AuthorizationBearer()
-  HEADER_BEARER_UPPER = 'AUTHORIZATION: BEARER ';
-
-  /// MIME content type used for JSON communication (as used by the Microsoft
-  // WCF framework and the YUI framework)
-  JSON_CONTENT_TYPE = 'application/json; charset=UTF-8';
-
-  /// HTTP header for MIME content type used for plain JSON
-  // - i.e. 'Content-Type: application/json; charset=UTF-8'
-  JSON_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + JSON_CONTENT_TYPE;
-
-  /// MIME content type used for plain JSON, in upper case
-  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
-  JSON_CONTENT_TYPE_UPPER = 'APPLICATION/JSON';
-
-  /// HTTP header for MIME content type used for plain JSON, in upper case
-  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
-  JSON_CONTENT_TYPE_HEADER_UPPER =
-    HEADER_CONTENT_TYPE_UPPER + JSON_CONTENT_TYPE_UPPER;
-
-  /// MIME content type used for plain UTF-8 text
-  TEXT_CONTENT_TYPE = 'text/plain; charset=UTF-8';
-
-  /// HTTP header for MIME content type used for plain UTF-8 text
-  TEXT_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + TEXT_CONTENT_TYPE;
-
-  /// MIME content type used for UTF-8 encoded HTML
-  HTML_CONTENT_TYPE = 'text/html; charset=UTF-8';
-
-  /// HTTP header for MIME content type used for UTF-8 encoded HTML
-  HTML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + HTML_CONTENT_TYPE;
-
-  /// MIME content type used for UTF-8 encoded XML
-  XML_CONTENT_TYPE = 'text/xml; charset=UTF-8';
-
-  /// HTTP header for MIME content type used for UTF-8 encoded XML
-  XML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + XML_CONTENT_TYPE;
-
-  /// MIME content type used for raw binary data
-  BINARY_CONTENT_TYPE = 'application/octet-stream';
-
-  /// MIME content type used for raw binary data, in upper case
-  BINARY_CONTENT_TYPE_UPPER = 'APPLICATION/OCTET-STREAM';
-
-  /// HTTP header for MIME content type used for raw binary data
-  BINARY_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + BINARY_CONTENT_TYPE;
-
-  /// MIME content type used for a JPEG picture
-  JPEG_CONTENT_TYPE = 'image/jpeg';
-
-  /// internal HTTP content-type for efficient static file sending
-  // - detected e.g. by http.sys' THttpApiServer.Request or via the NGINX
-  // X-Accel-Redirect header's THttpServer.Process (see
-  // THttpServer.NginxSendFileFrom) for direct sending with no local bufferring
-  // - the OutCustomHeader should contain the proper 'Content-type: ....'
-  // corresponding to the file (e.g. by calling GetMimeContentType() function)
-  STATICFILE_CONTENT_TYPE = '!STATICFILE';
-
-  /// internal HTTP content-type Header for efficient static file sending
-  STATICFILE_CONTENT_TYPE_HEADER =
-    HEADER_CONTENT_TYPE + STATICFILE_CONTENT_TYPE;
-
-  /// uppercase version of HTTP header for static file content serving
-  STATICFILE_CONTENT_TYPE_HEADER_UPPPER =
-    HEADER_CONTENT_TYPE_UPPER + STATICFILE_CONTENT_TYPE;
-
-  /// used to notify e.g. the THttpServerRequest not to wait for any response
-  // from the client
-  // - is not to be used in normal HTTP process, but may be used e.g. by
-  // TWebSocketProtocolRest.ProcessFrame() to avoid to wait for an incoming
-  // response from the other endpoint
-  NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
-
-  /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
-  // - can be used e.g. in logs, or anything accepting a shortstring
-  BOOL_STR: array[boolean] of string[7] = (
-    'false', 'true');
-
-  /// the JavaScript-like values of non-number IEEE constants
-  // - as recognized by FloatToShortNan, and used by TBaseWriter.Add()
-  // when serializing such single/double/extended floating-point values
-  JSON_NAN: array[TFloatNan] of string[11] = (
-    '0', '"NaN"', '"Infinity"', '"-Infinity"');
-
-  /// used to mark the end of ASCIIZ buffer, or return a void shortstring
-  NULCHAR: AnsiChar = #0;
-
-var
-  /// MIME content type used for JSON communication
-  // - i.e. 'application/json; charset=UTF-8'
-  // - this global will be initialized with JSON_CONTENT_TYPE constant, to
-  // avoid a memory allocation each time it is assigned to a variable
-  JSON_CONTENT_TYPE_VAR: RawUtf8;
-
-  /// HTTP header for MIME content type used for plain JSON
-  // - this global will be initialized with JSON_CONTENT_TYPE_HEADER constant,
-  // to avoid a memory allocation each time it is assigned to a variable
-  JSON_CONTENT_TYPE_HEADER_VAR: RawUtf8;
-
-  /// can be used to avoid a memory allocation for res := 'null'
-  // - this global will be initialized with 'null' constant, to
-  // avoid a memory allocation each time it is assigned to a variable
-  NULL_STR_VAR: RawUtf8;
-
-  /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
-  // - can be used when a RawUtf8 string is expected
-  // - this global will be initialized with 'false' and 'true' constants, to
-  // avoid a memory allocation each time it is assigned to a variable
-  BOOL_UTF8: array[boolean] of RawUtf8;
-
 
   { some types defined here, but implemented in mormot.core.datetime or
     mormot.core.log, so that they may be used and identified by
@@ -3921,7 +3494,7 @@ var
 type
   /// the available logging events, as handled by mormot.core.log
   // - defined in mormot.core.base so that it may be used by the core units,
-  // even if mormot.core.log is not involved
+  // even if mormot.core.log is not explicitely linked
   // - sllInfo will log general information events
   // - sllDebug will log detailed debugging information
   // - sllTrace will log low-level step by step debugging information
@@ -4044,31 +3617,6 @@ type
   PUnixMSTime = ^TUnixMSTime;
   /// dynamic array of timestamps stored as millisecond-based Unix Time
   TUnixMSTimeDynArray = array of TUnixMSTime;
-
-/// retrieve the HTTP reason text from its integer code
-// - e.g. StatusCodeToReason(200)='OK'
-// - as defined in http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-// - see also StatusCodeToErrorMsg() from mormot.core.text if you need
-// the HTTP error as both integer and text, returned as shortstring
-function StatusCodeToReason(Code: cardinal): RawUtf8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// retrieve the HTTP reason text from its integer code
-// - as defined in http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-procedure StatusCodeToReason(Code: cardinal; var Reason: RawUtf8); overload;
-
-/// returns true for successful HTTP status codes, i.e. in 200..399 range
-// - will map mainly SUCCESS (200), CREATED (201), NOCONTENT (204),
-// PARTIALCONTENT (206), NOTMODIFIED (304) or TEMPORARYREDIRECT (307) codes
-// - any HTTP status not part of this range will be identified as erronous
-// request in the internal server statistics
-function StatusCodeIsSuccess(Code: integer): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// check the supplied HTTP header to not contain more than one EOL
-// - to avoid unexpected HTTP body injection, e.g. from unsafe business code
-function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrInt): boolean;
-
 
 
 implementation
@@ -5922,84 +5470,6 @@ end;
 {$endif FPC}
 
 
-function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
-begin
-  case ElemSize of
-    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
-    1:
-      result := ByteScanIndex(P, Count, PByte(Elem)^);
-    2:
-      result := WordScanIndex(P, Count, PWord(Elem)^);
-    4:
-      result := IntegerScanIndex(P, Count, PInteger(Elem)^);
-    8:
-      result := Int64ScanIndex(P, Count, PInt64(Elem)^);
-    // small ElemSize version (<SizeOf(PtrInt))
-    3, 5..7:
-      begin
-        for result := 0 to Count - 1 do
-          if CompareMemSmall(P, Elem, ElemSize) then
-            exit
-          else
-            inc(PByte(P), ElemSize);
-        result := -1;
-      end;
-  else
-    begin
-      // generic binary comparison (fast with inlined CompareMemSmall)
-      for result := 0 to Count - 1 do
-        if (PInt64(P)^ = PInt64(Elem)^) and // not better using a local Int64 var
-           CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(Elem) + 8, ElemSize - 8) then
-          exit
-        else
-          inc(PByte(P), ElemSize);
-      result := -1;
-    end;
-  end;
-end;
-
-function AnyScanExists(P, Elem: pointer; Count, ElemSize: PtrInt): boolean;
-begin
-  case ElemSize of
-    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
-    1:
-      result := ByteScanIndex(P, Count, PInteger(Elem)^) >= 0;
-    2:
-      result := WordScanIndex(P, Count, PInteger(Elem)^) >= 0;
-    4:
-      result := IntegerScanExists(P, Count, PInteger(Elem)^);
-    8:
-      result := Int64ScanExists(P, Count, PInt64(Elem)^);
-    // small ElemSize version (<SizeOf(PtrInt))
-    3, 5..7:
-      begin
-        result := true;
-        if Count > 0 then
-          repeat
-            if CompareMemSmall(P, Elem, ElemSize) then
-              exit;
-            inc(PByte(P), ElemSize);
-            dec(Count);
-          until Count = 0;
-        result := false;
-      end;
-  else
-    begin
-      // generic binary comparison (fast with leading 64-bit comparison)
-      result := true;
-      if Count > 0 then
-        repeat
-          if (PInt64(P)^ = PInt64(Elem)^) and
-             CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(Elem) + 8, ElemSize - 8) then
-            exit;
-          inc(PByte(P), ElemSize);
-          dec(Count);
-        until Count = 0;
-      result := false;
-    end;
-  end;
-end;
-
 function AddInteger(var Values: TIntegerDynArray; Value: integer; NoDuplicates: boolean): boolean;
 var
   n: PtrInt;
@@ -6209,330 +5679,6 @@ begin
   dec(ValuesCount);
 end;
 
-procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray; ExcludedSortSize: integer);
-var
-  i, v, x, n: PtrInt;
-begin
-  if (Values = nil) or
-     (Excluded = nil) then
-    exit; // nothing to exclude
-  if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
-    Values := copy(Values); // make unique
-  if PRefCnt(PtrUInt(Excluded) - _DAREFCNT)^ > 1 then
-    Excluded := copy(Excluded);
-  v := Length(Values);
-  n := 0;
-  x := Length(Excluded);
-  if (x > ExcludedSortSize) or
-     (v > ExcludedSortSize) then
-  begin
-    // sort if worth it
-    dec(x);
-    QuickSortInteger(pointer(Excluded), 0, x);
-    for i := 0 to v - 1 do
-      if FastFindIntegerSorted(pointer(Excluded), x, Values[i]) < 0 then
-      begin
-        if n <> i then
-          Values[n] := Values[i];
-        inc(n);
-      end;
-  end
-  else
-    for i := 0 to v - 1 do
-      if not IntegerScanExists(pointer(Excluded), x, Values[i]) then
-      begin
-        if n <> i then
-          Values[n] := Values[i];
-        inc(n);
-      end;
-  if n <> v then
-    SetLength(Values, n);
-end;
-
-procedure IncludeInteger(var Values, Included: TIntegerDynArray; IncludedSortSize: integer);
-var
-  i, v, x, n: PtrInt;
-begin
-  if (Values = nil) or
-     (Included = nil) then
-  begin
-    Values := nil;
-    exit;
-  end;
-  if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
-    Values := copy(Values); // make unique
-  if PRefCnt(PtrUInt(Included) - _DAREFCNT)^ > 1 then
-    Included := copy(Included);
-  v := Length(Values);
-  n := 0;
-  x := Length(Included);
-  if (x > IncludedSortSize) or
-     (v > IncludedSortSize) then
-  begin
-    // sort if worth it
-    dec(x);
-    QuickSortInteger(pointer(Included), 0, x);
-    for i := 0 to v - 1 do
-      if FastFindIntegerSorted(pointer(Included), x, Values[i]) >= 0 then
-      begin
-        if n <> i then
-          Values[n] := Values[i];
-        inc(n);
-      end;
-  end
-  else
-    for i := 0 to v - 1 do
-      if IntegerScanExists(pointer(Included), x, Values[i]) then
-      begin
-        if n <> i then
-          Values[n] := Values[i];
-        inc(n);
-      end;
-  if n <> v then
-    SetLength(Values, n);
-end;
-
-procedure ExcludeInt64(var Values, Excluded: TInt64DynArray; ExcludedSortSize: integer);
-var
-  i, v, x, n: PtrInt;
-begin
-  if (Values = nil) or
-     (Excluded = nil) then
-    exit; // nothing to exclude
-  v := Length(Values);
-  n := 0;
-  x := Length(Excluded);
-  if (x > ExcludedSortSize) or
-     (v > ExcludedSortSize) then
-  begin
-    // sort if worth it
-    dec(x);
-    QuickSortInt64(pointer(Excluded), 0, x);
-    for i := 0 to v - 1 do
-      if FastFindInt64Sorted(pointer(Excluded), x, Values[i]) < 0 then
-      begin
-        if n <> i then
-          Values[n] := Values[i];
-        inc(n);
-      end;
-  end
-  else
-    for i := 0 to v - 1 do
-      if not Int64ScanExists(pointer(Excluded), x, Values[i]) then
-      begin
-        if n <> i then
-          Values[n] := Values[i];
-        inc(n);
-      end;
-  if n <> v then
-    SetLength(Values, n);
-end;
-
-procedure IncludeInt64(var Values, Included: TInt64DynArray; IncludedSortSize: integer);
-var
-  i, v, x, n: PtrInt;
-begin
-  if (Values = nil) or
-     (Included = nil) then
-  begin
-    Values := nil;
-    exit;
-  end;
-  v := Length(Values);
-  n := 0;
-  x := Length(Included);
-  if (x > IncludedSortSize) or
-     (v > IncludedSortSize) then
-  begin
-    // sort if worth it
-    dec(x);
-    QuickSortInt64(pointer(Included), 0, x);
-    for i := 0 to v - 1 do
-      if FastFindInt64Sorted(pointer(Included), x, Values[i]) >= 0 then
-      begin
-        if n <> i then
-          Values[n] := Values[i];
-        inc(n);
-      end;
-  end
-  else
-    for i := 0 to v - 1 do
-      if Int64ScanExists(pointer(Included), x, Values[i]) then
-      begin
-        if n <> i then
-          Values[n] := Values[i];
-        inc(n);
-      end;
-  if n <> v then
-    SetLength(Values, n);
-end;
-
-procedure DeduplicateInteger(var Values: TIntegerDynArray);
-begin
-  DeduplicateInteger(Values, Length(Values));
-end;
-
-function DeduplicateIntegerSorted(val: PIntegerArray; last: PtrInt): PtrInt;
-var
-  i: PtrInt;
-begin
-  // sub-function for better code generation
-  i := 0;
-  repeat // here last>0 so i<last
-    if val[i] = val[i + 1] then
-      break;
-    inc(i);
-    if i <> last then
-      continue;
-    result := i;
-    exit;
-  until false;
-  result := i;
-  inc(i);
-  if i <> last then
-  begin
-    repeat
-      if val[i] <> val[i + 1] then
-      begin
-        val[result] := val[i];
-        inc(result);
-      end;
-      inc(i);
-    until i = last;
-    val[result] := val[i];
-  end;
-end;
-
-function DeduplicateInteger(var Values: TIntegerDynArray; Count: PtrInt): PtrInt;
-begin
-  result := Count;
-  dec(Count);
-  if Count > 0 then
-  begin
-    QuickSortInteger(pointer(Values), 0, Count);
-    result := DeduplicateIntegerSorted(pointer(Values), Count) + 1;
-  end;
-  if result <> Length(Values) then
-    SetLength(Values, result);
-end;
-
-procedure DeduplicateInt64(var Values: TInt64DynArray);
-begin
-  DeduplicateInt64(Values, Length(Values));
-end;
-
-function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
-var
-  i: PtrInt;
-begin
-  // sub-function for better code generation
-  i := 0;
-  repeat // here last>0 so i<last
-    if val[i] = val[i + 1] then
-      break;
-    inc(i);
-    if i <> last then
-      continue;
-    result := i;
-    exit;
-  until false;
-  result := i;
-  inc(i);
-  if i <> last then
-  begin
-    repeat
-      if val[i] <> val[i + 1] then
-      begin
-        val[result] := val[i];
-        inc(result);
-      end;
-      inc(i);
-    until i = last;
-    val[result] := val[i];
-  end;
-end;
-
-function DeduplicateInt64(var Values: TInt64DynArray; Count: PtrInt): PtrInt;
-begin
-  result := Count;
-  dec(Count);
-  if Count > 0 then
-  begin
-    QuickSortInt64(pointer(Values), 0, Count);
-    result := DeduplicateInt64Sorted(pointer(Values), Count) + 1;
-  end;
-  if result <> Length(Values) then
-    SetLength(Values, result);
-end;
-
-procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
-var
-  n: integer;
-begin
-  n := Length(Source);
-  SetLength(Dest, n);
-  MoveFast(Source[0], Dest[0], n * SizeOf(integer));
-end;
-
-procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
-var
-  n: integer;
-begin
-  n := Length(Source);
-  SetLength(Dest, n);
-  MoveFast(Source[0], Dest[0], n * SizeOf(Int64));
-end;
-
-function MaxInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt; MaxStart: integer): integer;
-var
-  i: PtrInt;
-  v: integer;
-begin
-  result := MaxStart;
-  for i := 0 to ValuesCount - 1 do
-  begin
-    v := Values[i];
-    if v > result then
-      result := v; // movca branchless opcode on FPC
-  end;
-end;
-
-function SumInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt): integer;
-var
-  i: PtrInt;
-begin
-  result := 0;
-  for i := 0 to ValuesCount - 1 do
-    inc(result, Values[i]);
-end;
-
-procedure Reverse(const Values: TIntegerDynArray; ValuesCount: PtrInt; Reversed: PIntegerArray);
-var
-  i: PtrInt;
-begin
-  i := 0;
-  if ValuesCount >= 4 then
-  begin
-    dec(ValuesCount, 4);
-    while i < ValuesCount do
-    begin
-      // faster pipelined version
-      Reversed[Values[i]] := i;
-      Reversed[Values[i + 1]] := i + 1;
-      Reversed[Values[i + 2]] := i + 2;
-      Reversed[Values[i + 3]] := i + 3;
-      inc(i, 4);
-    end;
-    inc(ValuesCount, 4);
-  end;
-  while i < ValuesCount do
-  begin
-    Reversed[Values[i]] := i;
-    inc(i);
-  end;
-  //for i := 0 to Count-1 do Assert(Reverse[Orig[i]]=i);
-end;
-
 procedure FillIncreasing(Values: PIntegerArray; StartValue: integer; Count: PtrUInt);
 var
   i: PtrUInt;
@@ -6547,14 +5693,6 @@ begin
         Values[i] := StartValue;
         inc(StartValue);
       end;
-end;
-
-procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: PtrInt);
-var
-  i: PtrInt;
-begin
-  for i := 0 to Count - 1 do
-    Values32[i] := Values64[i];
 end;
 
 procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt);
@@ -6964,59 +6102,6 @@ begin
   {$endif CPU64}
 end;
 
-procedure NotifySortedIntegerChanges(old, new: PIntegerArray; oldn, newn: PtrInt;
-  const added, deleted: TOnNotifySortedIntegerChange; const sender);
-var
-  o, n: PtrInt;
-begin
-  o := 0;
-  n := 0;
-  repeat
-    while (n < newn) and
-          (o < oldn) and
-          (old[o] = new[n]) do
-    begin
-      inc(o);
-      inc(n);
-    end;
-    while (o < oldn) and
-          ((n >= newn) or
-           (old[o] < new[n])) do
-    begin
-      if Assigned(deleted) then
-        deleted(sender, old[o]);
-      inc(o);
-    end;
-    while (n < newn) and
-          ((o >= oldn) or
-           (new[n] < old[o])) do
-    begin
-      if Assigned(added) then
-        added(sender, new[n]);
-      inc(n);
-    end;
-  until (o >= oldn) and
-        (n >= newn);
-end;
-
-procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
-  var Dest: TIntegerDynArray);
-begin
-  if ValuesCount > Length(Dest) then
-    SetLength(Dest, ValuesCount);
-  MoveFast(Values^[0], Dest[0], ValuesCount * SizeOf(integer));
-  QuickSortInteger(pointer(Dest), 0, ValuesCount - 1);
-end;
-
-procedure CopyAndSortInt64(Values: PInt64Array; ValuesCount: integer;
-  var Dest: TInt64DynArray);
-begin
-  if ValuesCount > Length(Dest) then
-    SetLength(Dest, ValuesCount);
-  MoveFast(Values^[0], Dest[0], ValuesCount * SizeOf(Int64));
-  QuickSortInt64(pointer(Dest), 0, ValuesCount - 1);
-end;
-
 function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt;
 begin
   result := FastFindIntegerSorted(pointer(Values), Length(Values) - 1, Value);
@@ -7316,152 +6401,6 @@ begin
   SetLength(result, Length(Values));
   for i := 0 to high(Values) do
     result[i] := Values[i];
-end;
-
-procedure Exchg32(var A, B: integer); {$ifdef HASINLINE}inline;{$endif}
-var
-  tmp: integer;
-begin
-  tmp := A;
-  A := B;
-  B := tmp;
-end;
-
-function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
-var
-  low, high, median, middle, ll, hh: PtrInt;
-begin
-  if n = 0 then
-  begin
-    result := 0;
-    exit;
-  end;
-  if n = 1 then
-  begin
-    result := Values[0];
-    exit;
-  end;
-  low := 0;
-  high := n - 1;
-  median := high shr 1;
-  repeat
-    if high <= low then
-    begin
-      // one item left
-      result := Values[median];
-      exit;
-    end;
-    if high = low + 1 then
-    begin
-      // two items -> return the smallest (not average)
-      if Values[low] > Values[high] then
-        Exchg32(Values[low], Values[high]);
-      result := Values[median];
-      exit;
-    end;
-    // find median of low, middle and high items; swap into position low
-    middle := (low + high) shr 1;
-    if Values[middle] > Values[high] then
-      Exchg32(Values[middle], Values[high]);
-    if Values[low] > Values[high] then
-      Exchg32(Values[low], Values[high]);
-    if Values[middle] > Values[low] then
-      Exchg32(Values[middle], Values[low]);
-    // swap low item (now in position middle) into position (low+1)
-    Exchg32(Values[middle], Values[low + 1]);
-    // nibble from each end towards middle, swapping items when stuck
-    ll := low + 1;
-    hh := high;
-    repeat
-      repeat
-        inc(ll);
-      until not (Values[low] > Values[ll]);
-      repeat
-        dec(hh);
-      until not (Values[hh] > Values[low]);
-      if hh < ll then
-        break;
-      Exchg32(Values[ll], Values[hh]);
-    until false;
-    // swap middle item (in position low) back into correct position
-    Exchg32(Values[low], Values[hh]);
-    // next active partition
-    if hh <= median then
-      low := ll;
-    if hh >= median then
-      high := hh - 1;
-  until false;
-end;
-
-function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
-  var TempBuffer: TSynTempBuffer): integer;
-var
-  low, high, middle, median, ll, hh: PtrInt;
-  tmp: integer;
-  ndx: PIntegerArray;
-begin
-  if n <= 1 then
-  begin
-    TempBuffer.buf := nil; // avoid GPF in TempBuffer.Done
-    result := 0;
-    exit;
-  end;
-  low := 0;
-  high := n - 1;
-  ndx := TempBuffer.InitIncreasing(n * 4); // no heap alloacation until n>1024
-  median := high shr 1;
-  repeat
-    if high <= low then
-    begin
-      // one item left
-      result := ndx[median];
-      {%H-}TempBuffer.Done;
-      exit;
-    end;
-    if high = low + 1 then
-    begin
-      // two items -> return the smallest (not average)
-      if OnCompare(ndx[low], ndx[high]) then
-        Exchg32(ndx[low], ndx[high]);
-      result := ndx[median];
-      {%H-}TempBuffer.Done;
-      exit;
-    end;
-    // find median of low, middle and high items; swap into position low
-    middle := (low + high) shr 1;
-    if OnCompare(ndx[middle], ndx[high]) then
-      Exchg32(ndx[middle], ndx[high]);
-    if OnCompare(ndx[low], ndx[high]) then
-      Exchg32(ndx[low], ndx[high]);
-    if OnCompare(ndx[middle], ndx[low]) then
-      Exchg32(ndx[middle], ndx[low]);
-    // swap low item (now in position middle) into position (low+1)
-    Exchg32(ndx[middle], ndx[low + 1]);
-    // nibble from each end towards middle, swapping items when stuck
-    ll := low + 1;
-    hh := high;
-    repeat
-      tmp := ndx[low];
-      repeat
-        inc(ll);
-      until not OnCompare(tmp, ndx[ll]);
-      repeat
-        dec(hh);
-      until not OnCompare(ndx[hh], tmp);
-      if hh < ll then
-        break;
-      tmp := ndx[ll];
-      ndx[ll] := ndx[hh];
-      ndx[hh] := tmp; // Exchg32(ndx[ll],ndx[hh]);
-    until false;
-    // swap middle item (in position low) back into correct position
-    Exchg32(ndx[low], ndx[hh]);
-    // next active partition
-    if hh <= median then
-      low := ll;
-    if hh >= median then
-      high := hh - 1;
-  until false;
 end;
 
 function gcd(a, b: cardinal): cardinal;
@@ -8292,70 +7231,6 @@ end;
 
 { ************ Faster alternative to RTL standard functions }
 
-const
-  // https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
-  ARMCPU_ID: array[TArmCpuType] of word = (
-    0,
-    $0810, $0920, $0922, $0926, $0940, $0946, $0966, $0a20, $0a22, $0a26, $0b02,
-    $0b36, $0b56, $0b76, $0c05, $0c07, $0c08, $0c09, $0c0d, $0c0f, $0c0e, $0c14,
-    $0c15, $0c17, $0c18, $0c20, $0c21, $0c23, $0c24, $0c27, $0c60, $0d01, $0d03,
-    $0d04, $0d05, $0d06, $0d07, $0d08, $0d09, $0d0a, $0d0b, $0d0c, $0d0d, $0d0e,
-    $0d13, $0d20, $0d21, $0d41, $0d42, $0d4a, $0d4b);
-  ARMCPU_IMPL: array[TArmCpuImplementer] of byte = (
-    0,
-    $41, $42, $43, $44, $46, $48, $49, $4d, $4e, $50, $51, $53, $56,
-    $61, $66, $69, $c0);
-  ARMCPU_ID_TXT: array[TArmCpuType] of RawUtf8 = (
-     '',
-     'ARM810', 'ARM920', 'ARM922', 'ARM926', 'ARM940', 'ARM946', 'ARM966',
-     'ARM1020', 'ARM1022', 'ARM1026', 'ARM11 MPCore', 'ARM1136', 'ARM1156',
-     'ARM1176', 'Cortex-A5', 'Cortex-A7', 'Cortex-A8', 'Cortex-A9',
-     'Cortex-A17',{Originally A12} 'Cortex-A15', 'Cortex-A17', 'Cortex-R4',
-     'Cortex-R5', 'Cortex-R7', 'Cortex-R8', 'Cortex-M0', 'Cortex-M1',
-     'Cortex-M3', 'Cortex-M4', 'Cortex-M7', 'Cortex-M0+', 'Cortex-A32',
-     'Cortex-A53', 'Cortex-A35', 'Cortex-A55', 'Cortex-A65', 'Cortex-A57',
-     'Cortex-A72', 'Cortex-A73', 'Cortex-A75', 'Cortex-A76', 'Neoverse-N1',
-     'Cortex-A77', 'Cortex-A76AE', 'Cortex-R52', 'Cortex-M23', 'Cortex-M33',
-     'Cortex-A78', 'Cortex-A78AE', 'Neoverse-E1', 'Cortex-A78C');
-  ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of RawUtf8 = (
-      '',
-      'ARM', 'Broadcom', 'Cavium', 'DEC', 'FUJITSU', 'HiSilicon', 'Infineon',
-      'Motorola/Freescale', 'NVIDIA', 'APM', 'Qualcomm', 'Samsung', 'Marvell',
-      'Apple', 'Faraday', 'Intel', 'Ampere');
-
-function ArmCpuType(id: word): TArmCpuType;
-begin
-  for result := low(TArmCpuType) to high(TArmCpuType) do
-    if ARMCPU_ID[result] = id then
-      exit;
-  result := actUnknown;
-end;
-
-function ArmCpuTypeName(act: TArmCpuType; id: word): RawUtf8;
-begin
-  if act = actUnknown then
-    result := 'ARM 0x' + RawUtf8(IntToHex(id, 3))
-  else
-    result := ARMCPU_ID_TXT[act];
-end;
-
-function ArmCpuImplementer(id: byte): TArmCpuImplementer;
-begin
-  for result := low(TArmCpuImplementer) to high(TArmCpuImplementer) do
-    if ARMCPU_IMPL[result] = id then
-      exit;
-  result := aciUnknown;
-end;
-
-function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word): RawUtf8;
-begin
-  if aci = aciUnknown then
-    result := 'HW 0x' + RawUtf8(IntToHex(id, 2))
-  else
-    result := ARMCPU_IMPL_TXT[aci];
-end;
-
-
 {$ifndef CPUX86} // those functions have their own PIC-compatible x86 asm version
 
 function StrLenSafe(S: pointer): PtrInt;
@@ -8920,50 +7795,6 @@ begin
     until Len = 0;
   result := true;
 end;
-
-function GetFileNameWithoutExt(const FileName: TFileName; Extension: PFileName): TFileName;
-var
-  i, max: PtrInt;
-begin
-  i := length(FileName);
-  max := i - 16;
-  while (i > 0) and
-        not (cardinal(FileName[i]) in [ord('\'), ord('/'), ord('.')]) and
-        (i >= max) do
-    dec(i);
-  if (i = 0) or
-     (FileName[i] <> '.') then
-  begin
-    result := FileName;
-    if Extension <> nil then
-      Extension^ := '';
-  end
-  else
-  begin
-    result := copy(FileName, 1, i - 1);
-    if Extension <> nil then
-      Extension^ := copy(FileName, i, 20);
-  end;
-end;
-
-function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean): TFileName;
-begin
-  result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
-  if not DirectoryExists(result) then
-    if not ForceDirectories(result) then
-      if not RaiseExceptionOnCreationFailure then
-        result := ''
-      else
-        raise Exception.CreateFmt('Impossible to create folder %s', [result]);
-end;
-
-{$ifdef ISDELPHI20062007} // circumvent Delphi 2007 RTL inlining issue
-function AnsiCompareFileName(const S1, S2 : TFileName): integer;
-begin
-  result := SysUtils.AnsiCompareFileName(S1,S2);
-end;
-{$endif ISDELPHI20062007}
 
 procedure FillZero(var dest; count: PtrInt);
 begin
@@ -11511,19 +10342,6 @@ begin
   {$endif UNICODE}
 end;
 
-function SortDynArrayFileName(const A, B): integer;
-var
-  Aname, Aext, Bname, Bext: TFileName;
-begin
-  // code below is not very fast, but correct ;)
-  Aname := GetFileNameWithoutExt(string(A), @Aext);
-  Bname := GetFileNameWithoutExt(string(B), @Bext);
-  result := AnsiCompareFileName(Aext, Bext);
-  if result = 0 then
-    // if both extensions matches, compare by filename
-    result := AnsiCompareFileName(Aname, Bname);
-end;
-
 function SortDynArrayUnicodeString(const A, B): integer;
 begin
   // works for tkWString and tkUString
@@ -11688,52 +10506,6 @@ end;
 
 { ************ Some Convenient TStream descendants }
 
-{ TFakeWriterStream }
-
-function TFakeWriterStream.Read(var Buffer; Count: Longint): Longint;
-begin
-  // do nothing
-  result := Count;
-end;
-
-function TFakeWriterStream.Write(const Buffer; Count: Longint): Longint;
-begin
-  // do nothing
-  inc(fWritten, Count);
-  result := Count;
-end;
-
-{$ifdef FPC}
-function TFakeWriterStream.GetPosition: Int64;
-begin
-  result := fWritten;
-end;
-{$endif FPC}
-
-function TFakeWriterStream.Seek(Offset: Longint; Origin: Word): Longint;
-begin
-  result := Seek(Offset, TSeekOrigin(Origin));
-end;
-
-function TFakeWriterStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
-begin
-  case Origin of
-    soBeginning:
-      result := Offset;
-    soEnd:
-      result := fWritten - Offset;
-    else
-      result := fWritten + Offset;
-  end;
-  if result > fWritten then
-    result := fWritten
-  else if result < 0 then
-    result := 0
-  else if result < fWritten then
-    fWritten := result;
-end;
-
-
 { TStreamWithPosition }
 
 {$ifdef FPC}
@@ -11756,8 +10528,8 @@ begin
         result := Offset;
       soEnd:
         result := size - Offset;
-      else
-        result := fPosition + Offset;
+    else
+      result := fPosition + Offset;
     end;
     if result > size then
       result := size
@@ -11865,287 +10637,6 @@ begin
 end;
 
 
-{ TNestedStreamReader }
-
-destructor TNestedStreamReader.Destroy;
-var
-  i: PtrInt;
-begin
-  inherited Destroy;
-  for i := 0 to length(fNested) - 1 do
-    fNested[i].Stream.Free;
-end;
-
-function TNestedStreamReader.GetSize: Int64;
-begin
-  result := fSize; // Flush should have been called
-end;
-
-function TNestedStreamReader.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
-begin
-  if (Offset = 0) and
-     (Origin = soBeginning) then
-    Flush; // allow to read the file again, and set nested stream sizes
-  result := inherited Seek(Offset, Origin);
-end;
-
-function TNestedStreamReader.NewStream(Stream: TStream): TStream;
-var
-  n: PtrInt;
-begin
-  n := length(fNested);
-  SetLength(fNested, n + 1);
-  fNested[n].Stream := Stream;
-  result := Stream; // allow simple fluent calls
-end;
-
-function TNestedStreamReader.ForText: TRawByteStringStream;
-var
-  n: PtrInt;
-begin
-  n := length(fNested);
-  if n <> 0 then
-  begin
-    result := pointer(fNested[n - 1].Stream);
-    if PClass(result)^ = TRawByteStringStream then
-      exit;
-  end;
-  result := TRawByteStringStream.Create;
-  NewStream(result);
-end;
-
-procedure TNestedStreamReader.Append(const Content: RawByteString);
-begin
-  with ForText do
-    DataString := DataString + Content; // the fast and easy way
-end;
-
-procedure TNestedStreamReader.Flush;
-var
-  i, n: PtrInt;
-begin
-  fContentRead := pointer(fNested);
-  fSize := 0;
-  n := length(fNested);
-  for i := 0 to n - 1 do
-    with fNested[i] do
-    begin
-      Stream.Seek(0, soBeginning);
-      Start := fSize;
-      inc(fSize, Stream.Size); // to allow proper Seek() + Read()
-      Stop := fSize;
-    end;
-end;
-
-function TNestedStreamReader.Read(var Buffer; Count: Longint): Longint;
-var
-  s, m: ^TNestedStream;
-  P: PByte;
-  rd: LongInt;
-begin
-  result := 0;
-  s := pointer(fContentRead);
-  if s = nil then
-    exit; // Flush was not called
-  P := @Buffer;
-  m := @fNested[length(fNested)];
-  while (Count > 0) and
-        (fPosition < fSize) do
-  begin
-    if (PtrUInt(s) >= PtrUInt(m)) or
-       (fPosition >= s^.Stop) or
-       (fPosition < s^.Start) then
-    begin
-      inc(s); // optimize forward reading (most common case)
-      if (PtrUInt(s) >= PtrUInt(m)) or
-         (fPosition >= s^.Stop) or
-         (fPosition < s^.Start) then
-      begin
-        // handle random Seek() call - brute force is enough (seldom used)
-        s := pointer(fNested);
-        repeat
-          if fPosition >= s^.Start then
-            break;
-          inc(s);
-        until PtrUInt(s) >= PtrUInt(m);
-        if PtrUInt(s) >= PtrUInt(m) then
-          break; // paranoid (we know fPosition < fSize)
-      end;
-    end;
-    rd := s^.Stream.Read(P^, Count);
-    if rd <= 0 then
-    begin
-      // read from next section(s) until we got Count bytes
-      inc(s);
-      if PtrUInt(s) >= PtrUInt(m) then
-        break;
-      continue;
-    end;
-    dec(Count, rd);
-    inc(P, rd);
-    inc(fPosition, rd);
-    inc(result, rd);
-  end;
-  fContentRead := pointer(s);
-end;
-
-function TNestedStreamReader.{%H-}Write(const Buffer; Count: Longint): Longint;
-begin
-  raise EStreamError.Create('Unexpected TNestedStreamReader.Write');
-end;
-
-
-{ ************ Raw Shared Constants / Types Definitions }
-
-var
-  // live cache array to avoid memory allocations
-  ReasonCache: array[1..5, 0..13] of RawUtf8;
-
-procedure StatusCode2Reason(Code: cardinal; var Reason: RawUtf8);
-begin
-  case Code of
-    HTTP_CONTINUE:
-      Reason := 'Continue';
-    HTTP_SWITCHINGPROTOCOLS:
-      Reason := 'Switching Protocols';
-    HTTP_SUCCESS:
-      Reason := 'OK';
-    HTTP_CREATED:
-      Reason := 'Created';
-    HTTP_ACCEPTED:
-      Reason := 'Accepted';
-    HTTP_NONAUTHORIZEDINFO:
-      Reason := 'Non-Authoritative Information';
-    HTTP_NOCONTENT:
-      Reason := 'No Content';
-    HTTP_RESETCONTENT:
-      Reason := 'Reset Content';
-    HTTP_PARTIALCONTENT:
-      Reason := 'Partial Content';
-    207:
-      Reason := 'Multi-Status';
-    HTTP_MULTIPLECHOICES:
-      Reason := 'Multiple Choices';
-    HTTP_MOVEDPERMANENTLY:
-      Reason := 'Moved Permanently';
-    HTTP_FOUND:
-      Reason := 'Found';
-    HTTP_SEEOTHER:
-      Reason := 'See Other';
-    HTTP_NOTMODIFIED:
-      Reason := 'Not Modified';
-    HTTP_USEPROXY:
-      Reason := 'Use Proxy';
-    HTTP_TEMPORARYREDIRECT:
-      Reason := 'Temporary Redirect';
-    308:
-      Reason := 'Permanent Redirect';
-    HTTP_BADREQUEST:
-      Reason := 'Bad Request';
-    HTTP_UNAUTHORIZED:
-      Reason := 'Unauthorized';
-    HTTP_FORBIDDEN:
-      Reason := 'Forbidden';
-    HTTP_NOTFOUND:
-      Reason := 'Not Found';
-    HTTP_NOTALLOWED:
-      Reason := 'Method Not Allowed';
-    HTTP_NOTACCEPTABLE:
-      Reason := 'Not Acceptable';
-    HTTP_PROXYAUTHREQUIRED:
-      Reason := 'Proxy Authentication Required';
-    HTTP_TIMEOUT:
-      Reason := 'Request Timeout';
-    HTTP_CONFLICT:
-      Reason := 'Conflict';
-    410:
-      Reason := 'Gone';
-    411:
-      Reason := 'Length Required';
-    412:
-      Reason := 'Precondition Failed';
-    HTTP_PAYLOADTOOLARGE:
-      Reason := 'Payload Too Large';
-    414:
-      Reason := 'URI Too Long';
-    415:
-      Reason := 'Unsupported Media Type';
-    HTTP_RANGENOTSATISFIABLE:
-      Reason := 'Requested Range Not Satisfiable';
-    426:
-      Reason := 'Upgrade Required';
-    HTTP_SERVERERROR:
-      Reason := 'Internal Server Error';
-    HTTP_NOTIMPLEMENTED:
-      Reason := 'Not Implemented';
-    HTTP_BADGATEWAY:
-      Reason := 'Bad Gateway';
-    HTTP_UNAVAILABLE:
-      Reason := 'Service Unavailable';
-    HTTP_GATEWAYTIMEOUT:
-      Reason := 'Gateway Timeout';
-    HTTP_HTTPVERSIONNONSUPPORTED:
-      Reason := 'HTTP Version Not Supported';
-    511:
-      Reason := 'Network Authentication Required';
-  else
-    Reason := 'Invalid Request';
-  end;
-end;
-
-function StatusCodeToReason(Code: cardinal): RawUtf8;
-begin
-  StatusCodeToReason(Code, result);
-end;
-
-procedure StatusCodeToReason(Code: cardinal; var Reason: RawUtf8);
-var
-  Hi, Lo: cardinal;
-begin
-  if Code = 200 then
-  begin
-    Hi := 2; // optimistic approach :)
-    Lo := 0;
-    Reason := ReasonCache[2, 0];
-  end
-  else
-  begin
-    Hi := Code div 100;
-    Lo := Code - Hi * 100;
-    if not ((Hi in [1..5]) and
-            (Lo in [0..13])) then
-    begin
-      Hi := 5;
-      Lo := 13; // returns cached 'Invalid Request'
-    end;
-    Reason := ReasonCache[Hi, Lo];
-  end;
-  if Reason <> '' then
-    exit;
-  StatusCode2Reason(Code, Reason);
-  ReasonCache[Hi, Lo] := Reason;
-end;
-
-function StatusCodeIsSuccess(Code: integer): boolean;
-begin
-  result := (Code >= HTTP_SUCCESS) and
-            (Code < HTTP_BADREQUEST); // 200..399
-end;
-
-function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrInt): boolean;
-var
-  i: PtrInt;
-begin
-  result := true;
-  for i := 0 to headlen - 3 do
-    if (PInteger(head + i)^ = $0a0d0a0d) or
-       (PWord(head + i)^ = $0d0d) or
-       (PWord(head + i)^ = $0a0a) then
-      exit;
-  result := false;
-end;
-
-
 
 procedure InitializeUnit;
 var
@@ -12153,11 +10644,6 @@ var
   crc: cardinal;
 begin
   // initialize internal constants
-  JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
-  JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
-  NULL_STR_VAR := 'null';
-  BOOL_UTF8[false] := 'false';
-  BOOL_UTF8[true] := 'true';
   for i := 0 to 255 do
   begin
     crc := i;

@@ -28,6 +28,7 @@ uses
   classes,
   variants,
   mormot.core.base,
+  mormot.core.os,
   mormot.core.buffers,
   mormot.core.unicode,
   mormot.core.text,

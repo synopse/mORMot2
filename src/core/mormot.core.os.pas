@@ -7,6 +7,7 @@ unit mormot.core.os;
   *****************************************************************************
 
   Cross-platform functions shared by all framework units
+  - Some Cross-System Type and Constant Definitions
   - Gather Operating System Information
   - Operating System Specific Types (e.g. TWinRegistry)
   - Unicode, Time, File, Console, Library process
@@ -38,6 +39,228 @@ uses
   types,
   sysutils,
   mormot.core.base;
+
+
+{ ****************** Some Cross-System Type and Constant Definitions }
+
+const
+  /// void HTTP Status Code (not a standard value, for internal use only)
+  HTTP_NONE = 0;
+  /// HTTP Status Code for "Continue"
+  HTTP_CONTINUE = 100;
+  /// HTTP Status Code for "Switching Protocols"
+  HTTP_SWITCHINGPROTOCOLS = 101;
+  /// HTTP Status Code for "Success"
+  HTTP_SUCCESS = 200;
+  /// HTTP Status Code for "Created"
+  HTTP_CREATED = 201;
+  /// HTTP Status Code for "Accepted"
+  HTTP_ACCEPTED = 202;
+  /// HTTP Status Code for "Non-Authoritative Information"
+  HTTP_NONAUTHORIZEDINFO = 203;
+  /// HTTP Status Code for "No Content"
+  HTTP_NOCONTENT = 204;
+  /// HTTP Status Code for "Reset Content"
+  HTTP_RESETCONTENT = 205;
+  /// HTTP Status Code for "Partial Content"
+  HTTP_PARTIALCONTENT = 206;
+  /// HTTP Status Code for "Multiple Choices"
+  HTTP_MULTIPLECHOICES = 300;
+  /// HTTP Status Code for "Moved Permanently"
+  HTTP_MOVEDPERMANENTLY = 301;
+  /// HTTP Status Code for "Found"
+  HTTP_FOUND = 302;
+  /// HTTP Status Code for "See Other"
+  HTTP_SEEOTHER = 303;
+  /// HTTP Status Code for "Not Modified"
+  HTTP_NOTMODIFIED = 304;
+  /// HTTP Status Code for "Use Proxy"
+  HTTP_USEPROXY = 305;
+  /// HTTP Status Code for "Temporary Redirect"
+  HTTP_TEMPORARYREDIRECT = 307;
+  /// HTTP Status Code for "Bad Request"
+  HTTP_BADREQUEST = 400;
+  /// HTTP Status Code for "Unauthorized"
+  HTTP_UNAUTHORIZED = 401;
+  /// HTTP Status Code for "Forbidden"
+  HTTP_FORBIDDEN = 403;
+  /// HTTP Status Code for "Not Found"
+  HTTP_NOTFOUND = 404;
+  // HTTP Status Code for "Method Not Allowed"
+  HTTP_NOTALLOWED = 405;
+  // HTTP Status Code for "Not Acceptable"
+  HTTP_NOTACCEPTABLE = 406;
+  // HTTP Status Code for "Proxy Authentication Required"
+  HTTP_PROXYAUTHREQUIRED = 407;
+  /// HTTP Status Code for "Request Time-out"
+  HTTP_TIMEOUT = 408;
+  /// HTTP Status Code for "Conflict"
+  HTTP_CONFLICT = 409;
+  /// HTTP Status Code for "Payload Too Large"
+  HTTP_PAYLOADTOOLARGE = 413;
+  /// HTTP Status Code for "Range Not Satisfiable"
+  HTTP_RANGENOTSATISFIABLE = 416;
+  /// HTTP Status Code for "Internal Server Error"
+  HTTP_SERVERERROR = 500;
+  /// HTTP Status Code for "Not Implemented"
+  HTTP_NOTIMPLEMENTED = 501;
+  /// HTTP Status Code for "Bad Gateway"
+  HTTP_BADGATEWAY = 502;
+  /// HTTP Status Code for "Service Unavailable"
+  HTTP_UNAVAILABLE = 503;
+  /// HTTP Status Code for "Gateway Timeout"
+  HTTP_GATEWAYTIMEOUT = 504;
+  /// HTTP Status Code for "HTTP Version Not Supported"
+  HTTP_HTTPVERSIONNONSUPPORTED = 505;
+
+/// retrieve the HTTP reason text from its integer code
+// - e.g. StatusCodeToReason(200)='OK'
+// - as defined in http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+// - see also StatusCodeToErrorMsg() from mormot.core.text if you need
+// the HTTP error as both integer and text, returned as shortstring
+function StatusCodeToReason(Code: cardinal): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// retrieve the HTTP reason text from its integer code
+// - as defined in http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+procedure StatusCodeToReason(Code: cardinal; var Reason: RawUtf8); overload;
+
+/// returns true for successful HTTP status codes, i.e. in 200..399 range
+// - will map mainly SUCCESS (200), CREATED (201), NOCONTENT (204),
+// PARTIALCONTENT (206), NOTMODIFIED (304) or TEMPORARYREDIRECT (307) codes
+// - any HTTP status not part of this range will be identified as erronous
+// request in the internal server statistics
+function StatusCodeIsSuccess(Code: integer): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// check the supplied HTTP header to not contain more than one EOL
+// - to avoid unexpected HTTP body injection, e.g. from unsafe business code
+function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrInt): boolean;
+
+
+const
+  /// HTTP header name for the content type, as defined in the corresponding RFC
+  HEADER_CONTENT_TYPE = 'Content-Type: ';
+
+  /// HTTP header name for the content type, in upper case
+  // - as defined in the corresponding RFC
+  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
+  HEADER_CONTENT_TYPE_UPPER = 'CONTENT-TYPE: ';
+
+  /// HTTP header name for the client IP, in upper case
+  // - as defined in our HTTP server classes
+  // - could be used e.g. with IdemPChar() to retrieve the remote IP address
+  HEADER_REMOTEIP_UPPER = 'REMOTEIP: ';
+
+  /// HTTP header name for the authorization token, in upper case
+  // - could be used e.g. with IdemPChar() to retrieve a JWT value
+  // - will detect header computed e.g. by motmot.net.http's
+  // AuthorizationBearer()
+  HEADER_BEARER_UPPER = 'AUTHORIZATION: BEARER ';
+
+  /// MIME content type used for JSON communication (as used by the Microsoft
+  // WCF framework and the YUI framework)
+  JSON_CONTENT_TYPE = 'application/json; charset=UTF-8';
+
+  /// HTTP header for MIME content type used for plain JSON
+  // - i.e. 'Content-Type: application/json; charset=UTF-8'
+  JSON_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + JSON_CONTENT_TYPE;
+
+  /// MIME content type used for plain JSON, in upper case
+  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
+  JSON_CONTENT_TYPE_UPPER = 'APPLICATION/JSON';
+
+  /// HTTP header for MIME content type used for plain JSON, in upper case
+  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
+  JSON_CONTENT_TYPE_HEADER_UPPER =
+    HEADER_CONTENT_TYPE_UPPER + JSON_CONTENT_TYPE_UPPER;
+
+  /// MIME content type used for plain UTF-8 text
+  TEXT_CONTENT_TYPE = 'text/plain; charset=UTF-8';
+
+  /// HTTP header for MIME content type used for plain UTF-8 text
+  TEXT_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + TEXT_CONTENT_TYPE;
+
+  /// MIME content type used for UTF-8 encoded HTML
+  HTML_CONTENT_TYPE = 'text/html; charset=UTF-8';
+
+  /// HTTP header for MIME content type used for UTF-8 encoded HTML
+  HTML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + HTML_CONTENT_TYPE;
+
+  /// MIME content type used for UTF-8 encoded XML
+  XML_CONTENT_TYPE = 'text/xml; charset=UTF-8';
+
+  /// HTTP header for MIME content type used for UTF-8 encoded XML
+  XML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + XML_CONTENT_TYPE;
+
+  /// MIME content type used for raw binary data
+  BINARY_CONTENT_TYPE = 'application/octet-stream';
+
+  /// MIME content type used for raw binary data, in upper case
+  BINARY_CONTENT_TYPE_UPPER = 'APPLICATION/OCTET-STREAM';
+
+  /// HTTP header for MIME content type used for raw binary data
+  BINARY_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + BINARY_CONTENT_TYPE;
+
+  /// MIME content type used for a JPEG picture
+  JPEG_CONTENT_TYPE = 'image/jpeg';
+
+  /// internal HTTP content-type for efficient static file sending
+  // - detected e.g. by http.sys' THttpApiServer.Request or via the NGINX
+  // X-Accel-Redirect header's THttpServer.Process (see
+  // THttpServer.NginxSendFileFrom) for direct sending with no local bufferring
+  // - the OutCustomHeader should contain the proper 'Content-type: ....'
+  // corresponding to the file (e.g. by calling GetMimeContentType() function)
+  STATICFILE_CONTENT_TYPE = '!STATICFILE';
+
+  /// internal HTTP content-type Header for efficient static file sending
+  STATICFILE_CONTENT_TYPE_HEADER =
+    HEADER_CONTENT_TYPE + STATICFILE_CONTENT_TYPE;
+
+  /// uppercase version of HTTP header for static file content serving
+  STATICFILE_CONTENT_TYPE_HEADER_UPPPER =
+    HEADER_CONTENT_TYPE_UPPER + STATICFILE_CONTENT_TYPE;
+
+  /// used to notify e.g. the THttpServerRequest not to wait for any response
+  // from the client
+  // - is not to be used in normal HTTP process, but may be used e.g. by
+  // TWebSocketProtocolRest.ProcessFrame() to avoid to wait for an incoming
+  // response from the other endpoint
+  NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
+
+  /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
+  // - can be used e.g. in logs, or anything accepting a shortstring
+  BOOL_STR: array[boolean] of string[7] = (
+    'false', 'true');
+
+  /// the JavaScript-like values of non-number IEEE constants
+  // - as recognized by FloatToShortNan, and used by TBaseWriter.Add()
+  // when serializing such single/double/extended floating-point values
+  JSON_NAN: array[TFloatNan] of string[11] = (
+    '0', '"NaN"', '"Infinity"', '"-Infinity"');
+
+var
+  /// MIME content type used for JSON communication
+  // - i.e. 'application/json; charset=UTF-8'
+  // - this global will be initialized with JSON_CONTENT_TYPE constant, to
+  // avoid a memory allocation each time it is assigned to a variable
+  JSON_CONTENT_TYPE_VAR: RawUtf8;
+
+  /// HTTP header for MIME content type used for plain JSON
+  // - this global will be initialized with JSON_CONTENT_TYPE_HEADER constant,
+  // to avoid a memory allocation each time it is assigned to a variable
+  JSON_CONTENT_TYPE_HEADER_VAR: RawUtf8;
+
+  /// can be used to avoid a memory allocation for res := 'null'
+  // - this global will be initialized with 'null' constant, to
+  // avoid a memory allocation each time it is assigned to a variable
+  NULL_STR_VAR: RawUtf8;
+
+  /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
+  // - can be used when a RawUtf8 string is expected
+  // - this global will be initialized with 'false' and 'true' constants, to
+  // avoid a memory allocation each time it is assigned to a variable
+  BOOL_UTF8: array[boolean] of RawUtf8;
 
 
 { ****************** Gather Operating System Information }
@@ -381,6 +604,102 @@ function ToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
 // including the kernel revision (not the distribution version) on POSIX systems
 // - returns e.g. 'Windows Vista', 'Windows 11 64-bit 22000' or 'Ubuntu 5.4.0'
 function ToTextOS(osint32: integer): RawUtf8;
+
+type
+  /// the recognized ARM/AARCH64 CPU types
+  // - https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
+  // - is defined on all platforms for cross-system use
+  TArmCpuType = (
+    actUnknown,
+    actARM810,
+    actARM920,
+    actARM922,
+    actARM926,
+    actARM940,
+    actARM946,
+    actARM966,
+    actARM1020,
+    actARM1022,
+    actARM1026,
+    actARM11MPCore,
+    actARM1136,
+    actARM1156,
+    actARM1176,
+    actCortexA5,
+    actCortexA7,
+    actCortexA8,
+    actCortexA9,
+    actCortexA12,
+    actCortexA15,
+    actCortexA17,
+    actCortexR4,
+    actCortexR5,
+    actCortexR7,
+    actCortexR8,
+    actCortexM0,
+    actCortexM1,
+    actCortexM3,
+    actCortexM4,
+    actCortexM7,
+    actCortexM0P,
+    actCortexA32,
+    actCortexA53,
+    actCortexA35,
+    actCortexA55,
+    actCortexA65,
+    actCortexA57,
+    actCortexA72,
+    actCortexA73,
+    actCortexA75,
+    actCortexA76,
+    actNeoverseN1,
+    actCortexA77,
+    actCortexA76AE,
+    actCortexR52,
+    actCortexM23,
+    actCortexM33,
+    actCortexA78,
+    actCortexA78AE,
+    actNeoverseE1,
+    actCortexA78C);
+  /// a set of recognized ARM/AARCH64 CPU types
+  TArmCpuTypes = set of TArmCpuType;
+
+  /// the recognized ARM/AARCH64 CPU hardware implementers
+  // - https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
+  TArmCpuImplementer = (
+    aciUnknown,
+    aciARM,
+    aciBroadcom,
+    aciCavium,
+    aciDEC,
+    aciFUJITSU,
+    aciHiSilicon,
+    aciInfineon,
+    aciMotorola,
+    aciNVIDIA,
+    aciAPM,
+    aciQualcomm,
+    aciSamsung,
+    aciMarvell,
+    aciApple,
+    aciFaraday,
+    aciIntel,
+    aciAmpere);
+  /// a set of recognized ARM/AARCH64 CPU hardware implementers
+  TArmCpuImplementers = set of TArmCpuImplementer;
+
+/// recognize a given ARM/AARCH64 CPU from its 12-bit hardware ID
+function ArmCpuType(id: word): TArmCpuType;
+
+/// recognize a given ARM/AARCH64 CPU type name from its 12-bit hardware ID
+function ArmCpuTypeName(act: TArmCpuType; id: word): RawUtf8;
+
+/// recognize a given ARM/AARCH64 CPU implementer from its 8-bit hardware ID
+function ArmCpuImplementer(id: byte): TArmCpuImplementer;
+
+/// recognize a given ARM/AARCH64 CPU implementer name from its 8-bit hardware ID
+function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word): RawUtf8;
 
 
 const
@@ -1709,6 +2028,29 @@ function FileFromString(const Content: RawByteString; const FileName: TFileName;
 /// compute an unique temporary file name
 // - following 'exename_123.tmp' pattern, in the system temporary folder
 function TemporaryFileName: TFileName;
+
+/// compute the file name, including its path if supplied, but without its extension
+// - e.g. GetFileNameWithoutExt('/var/toto.ext') = '/var/toto'
+// - may optionally return the extracted extension, as '.ext'
+function GetFileNameWithoutExt(const FileName: TFileName;
+  Extension: PFileName = nil): TFileName;
+
+/// compare two "array of TFileName" elements, as file names
+// - i.e. with no case sensitivity on Windows, and grouped by file extension
+// - the expected string type is the generic RTL string, i.e. TFileName
+// - calls internally GetFileNameWithoutExt() and AnsiCompareFileName()
+function SortDynArrayFileName(const A, B): integer;
+
+{$ifdef ISDELPHI20062007}
+/// compatibility function defined to avoid hints on buggy Delphi 2006/2007
+function AnsiCompareFileName(const S1, S2 : TFileName): integer;
+{$endif ISDELPHI20062007}
+
+/// creates a directory if not already existing
+// - returns the full expanded directory name, including trailing path delimiter
+// - returns '' on error, unless RaiseExceptionOnCreationFailure is true
+function EnsureDirectoryExists(const Directory: TFileName;
+  RaiseExceptionOnCreationFailure: boolean = false): TFileName;
 
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion
@@ -3040,6 +3382,157 @@ implementation
 {$endif OSWINDOWS}
 
 
+{ ****************** Some Cross-System Type and Constant Definitions }
+
+var
+  // live cache array to avoid memory allocations
+  ReasonCache: array[1..5, 0..13] of RawUtf8;
+
+procedure StatusCode2Reason(Code: cardinal; var Reason: RawUtf8);
+begin
+  case Code of
+    HTTP_CONTINUE:
+      Reason := 'Continue';
+    HTTP_SWITCHINGPROTOCOLS:
+      Reason := 'Switching Protocols';
+    HTTP_SUCCESS:
+      Reason := 'OK';
+    HTTP_CREATED:
+      Reason := 'Created';
+    HTTP_ACCEPTED:
+      Reason := 'Accepted';
+    HTTP_NONAUTHORIZEDINFO:
+      Reason := 'Non-Authoritative Information';
+    HTTP_NOCONTENT:
+      Reason := 'No Content';
+    HTTP_RESETCONTENT:
+      Reason := 'Reset Content';
+    HTTP_PARTIALCONTENT:
+      Reason := 'Partial Content';
+    207:
+      Reason := 'Multi-Status';
+    HTTP_MULTIPLECHOICES:
+      Reason := 'Multiple Choices';
+    HTTP_MOVEDPERMANENTLY:
+      Reason := 'Moved Permanently';
+    HTTP_FOUND:
+      Reason := 'Found';
+    HTTP_SEEOTHER:
+      Reason := 'See Other';
+    HTTP_NOTMODIFIED:
+      Reason := 'Not Modified';
+    HTTP_USEPROXY:
+      Reason := 'Use Proxy';
+    HTTP_TEMPORARYREDIRECT:
+      Reason := 'Temporary Redirect';
+    308:
+      Reason := 'Permanent Redirect';
+    HTTP_BADREQUEST:
+      Reason := 'Bad Request';
+    HTTP_UNAUTHORIZED:
+      Reason := 'Unauthorized';
+    HTTP_FORBIDDEN:
+      Reason := 'Forbidden';
+    HTTP_NOTFOUND:
+      Reason := 'Not Found';
+    HTTP_NOTALLOWED:
+      Reason := 'Method Not Allowed';
+    HTTP_NOTACCEPTABLE:
+      Reason := 'Not Acceptable';
+    HTTP_PROXYAUTHREQUIRED:
+      Reason := 'Proxy Authentication Required';
+    HTTP_TIMEOUT:
+      Reason := 'Request Timeout';
+    HTTP_CONFLICT:
+      Reason := 'Conflict';
+    410:
+      Reason := 'Gone';
+    411:
+      Reason := 'Length Required';
+    412:
+      Reason := 'Precondition Failed';
+    HTTP_PAYLOADTOOLARGE:
+      Reason := 'Payload Too Large';
+    414:
+      Reason := 'URI Too Long';
+    415:
+      Reason := 'Unsupported Media Type';
+    HTTP_RANGENOTSATISFIABLE:
+      Reason := 'Requested Range Not Satisfiable';
+    426:
+      Reason := 'Upgrade Required';
+    HTTP_SERVERERROR:
+      Reason := 'Internal Server Error';
+    HTTP_NOTIMPLEMENTED:
+      Reason := 'Not Implemented';
+    HTTP_BADGATEWAY:
+      Reason := 'Bad Gateway';
+    HTTP_UNAVAILABLE:
+      Reason := 'Service Unavailable';
+    HTTP_GATEWAYTIMEOUT:
+      Reason := 'Gateway Timeout';
+    HTTP_HTTPVERSIONNONSUPPORTED:
+      Reason := 'HTTP Version Not Supported';
+    511:
+      Reason := 'Network Authentication Required';
+  else
+    Reason := 'Invalid Request';
+  end;
+end;
+
+function StatusCodeToReason(Code: cardinal): RawUtf8;
+begin
+  StatusCodeToReason(Code, result);
+end;
+
+procedure StatusCodeToReason(Code: cardinal; var Reason: RawUtf8);
+var
+  Hi, Lo: cardinal;
+begin
+  if Code = 200 then
+  begin
+    Hi := 2; // optimistic approach :)
+    Lo := 0;
+    Reason := ReasonCache[2, 0];
+  end
+  else
+  begin
+    Hi := Code div 100;
+    Lo := Code - Hi * 100;
+    if not ((Hi in [1..5]) and
+            (Lo in [0..13])) then
+    begin
+      Hi := 5;
+      Lo := 13; // returns cached 'Invalid Request'
+    end;
+    Reason := ReasonCache[Hi, Lo];
+  end;
+  if Reason <> '' then
+    exit;
+  StatusCode2Reason(Code, Reason);
+  ReasonCache[Hi, Lo] := Reason;
+end;
+
+function StatusCodeIsSuccess(Code: integer): boolean;
+begin
+  result := (Code >= HTTP_SUCCESS) and
+            (Code < HTTP_BADREQUEST); // 200..399
+end;
+
+function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrInt): boolean;
+var
+  i: PtrInt;
+begin
+  result := true;
+  for i := 0 to headlen - 3 do
+    if (PInteger(head + i)^ = $0a0d0a0d) or
+       (PWord(head + i)^ = $0d0d) or
+       (PWord(head + i)^ = $0a0a) then
+      exit;
+  result := false;
+end;
+
+
 { ****************** Gather Operating System Information }
 
 function ToText(const osv: TOperatingSystemVersion): RawUtf8;
@@ -3077,6 +3570,133 @@ begin
     // include the kernel number to the distribution name, e.g. 'Ubuntu 5.4.0'
     result := RawUtf8(Format('%s %d.%d.%d', [result, osv.utsrelease[2],
       osv.utsrelease[1], osv.utsrelease[0]]));
+end;
+
+const
+  // https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
+  ARMCPU_ID: array[TArmCpuType] of word = (
+    0,      // actUnknown
+    $0810,  // actARM810
+    $0920,  // actARM920
+    $0922,  // actARM922
+    $0926,  // actARM926
+    $0940,  // actARM940
+    $0946,  // actARM946
+    $0966,  // actARM966
+    $0a20,  // actARM1020
+    $0a22,  // actARM1022
+    $0a26,  // actARM1026
+    $0b02,  // actARM11MPCore
+    $0b36,  // actARM1136
+    $0b56,  // actARM1156
+    $0b76,  // actARM1176
+    $0c05,  // actCortexA5
+    $0c07,  // actCortexA7
+    $0c08,  // actCortexA8
+    $0c09,  // actCortexA9
+    $0c0d,  // actCortexA12
+    $0c0f,  // actCortexA15
+    $0c0e,  // actCortexA17
+    $0c14,  // actCortexR4
+    $0c15,  // actCortexR5
+    $0c17,  // actCortexR7
+    $0c18,  // actCortexR8
+    $0c20,  // actCortexM0
+    $0c21,  // actCortexM1
+    $0c23,  // actCortexM3
+    $0c24,  // actCortexM4
+    $0c27,  // actCortexM7
+    $0c60,  // actCortexM0P
+    $0d01,  // actCortexA32
+    $0d03,  // actCortexA53
+    $0d04,  // actCortexA35
+    $0d05,  // actCortexA55
+    $0d06,  // actCortexA65
+    $0d07,  // actCortexA57
+    $0d08,  // actCortexA72
+    $0d09,  // actCortexA73
+    $0d0a,  // actCortexA75
+    $0d0b,  // actCortexA76
+    $0d0c,  // actNeoverseN1
+    $0d0d,  // actCortexA77
+    $0d0e,  // actCortexA76AE
+    $0d13,  // actCortexR52
+    $0d20,  // actCortexM23
+    $0d21,  // actCortexM33
+    $0d41,  // actCortexA78
+    $0d42,  // actCortexA78AE
+    $0d4a,  // actNeoverseE1
+    $0d4b); // actCortexA78C
+
+  ARMCPU_IMPL: array[TArmCpuImplementer] of byte = (
+    0,    // aciUnknown
+    $41,  // aciARM
+    $42,  // aciBroadcom
+    $43,  // aciCavium
+    $44,  // aciDEC
+    $46,  // aciFUJITSU
+    $48,  // aciHiSilicon
+    $49,  // aciInfineon
+    $4d,  // aciMotorola
+    $4e,  // aciNVIDIA
+    $50,  // aciAPM
+    $51,  // aciQualcomm
+    $53,  // aciSamsung
+    $56,  // aciMarvell
+    $61,  // aciApple
+    $66,  // aciFaraday
+    $69,  // aciIntel
+    $c0); // aciAmpere
+
+  ARMCPU_ID_TXT: array[TArmCpuType] of RawUtf8 = (
+     '',
+     'ARM810', 'ARM920', 'ARM922', 'ARM926', 'ARM940', 'ARM946', 'ARM966',
+     'ARM1020', 'ARM1022', 'ARM1026', 'ARM11 MPCore', 'ARM1136', 'ARM1156',
+     'ARM1176', 'Cortex-A5', 'Cortex-A7', 'Cortex-A8', 'Cortex-A9',
+     'Cortex-A17',{Originally A12} 'Cortex-A15', 'Cortex-A17', 'Cortex-R4',
+     'Cortex-R5', 'Cortex-R7', 'Cortex-R8', 'Cortex-M0', 'Cortex-M1',
+     'Cortex-M3', 'Cortex-M4', 'Cortex-M7', 'Cortex-M0+', 'Cortex-A32',
+     'Cortex-A53', 'Cortex-A35', 'Cortex-A55', 'Cortex-A65', 'Cortex-A57',
+     'Cortex-A72', 'Cortex-A73', 'Cortex-A75', 'Cortex-A76', 'Neoverse-N1',
+     'Cortex-A77', 'Cortex-A76AE', 'Cortex-R52', 'Cortex-M23', 'Cortex-M33',
+     'Cortex-A78', 'Cortex-A78AE', 'Neoverse-E1', 'Cortex-A78C');
+
+  ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of RawUtf8 = (
+      '',
+      'ARM', 'Broadcom', 'Cavium', 'DEC', 'FUJITSU', 'HiSilicon', 'Infineon',
+      'Motorola/Freescale', 'NVIDIA', 'APM', 'Qualcomm', 'Samsung', 'Marvell',
+      'Apple', 'Faraday', 'Intel', 'Ampere');
+
+function ArmCpuType(id: word): TArmCpuType;
+begin
+  for result := low(TArmCpuType) to high(TArmCpuType) do
+    if ARMCPU_ID[result] = id then
+      exit;
+  result := actUnknown;
+end;
+
+function ArmCpuTypeName(act: TArmCpuType; id: word): RawUtf8;
+begin
+  if act = actUnknown then
+    result := 'ARM 0x' + RawUtf8(IntToHex(id, 3))
+  else
+    result := ARMCPU_ID_TXT[act];
+end;
+
+function ArmCpuImplementer(id: byte): TArmCpuImplementer;
+begin
+  for result := low(TArmCpuImplementer) to high(TArmCpuImplementer) do
+    if ARMCPU_IMPL[result] = id then
+      exit;
+  result := aciUnknown;
+end;
+
+function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word): RawUtf8;
+begin
+  if aci = aciUnknown then
+    result := 'HW 0x' + RawUtf8(IntToHex(id, 2))
+  else
+    result := ARMCPU_IMPL_TXT[aci];
 end;
 
 
@@ -3423,6 +4043,63 @@ begin
     dec(retry); // no endless loop
   until retry = 0;
   raise EOSException.Create('TemporaryFileName failed');
+end;
+
+function GetFileNameWithoutExt(const FileName: TFileName; Extension: PFileName): TFileName;
+var
+  i, max: PtrInt;
+begin
+  i := length(FileName);
+  max := i - 16;
+  while (i > 0) and
+        not (cardinal(FileName[i]) in [ord('\'), ord('/'), ord('.')]) and
+        (i >= max) do
+    dec(i);
+  if (i = 0) or
+     (FileName[i] <> '.') then
+  begin
+    result := FileName;
+    if Extension <> nil then
+      Extension^ := '';
+  end
+  else
+  begin
+    result := copy(FileName, 1, i - 1);
+    if Extension <> nil then
+      Extension^ := copy(FileName, i, 20);
+  end;
+end;
+
+function SortDynArrayFileName(const A, B): integer;
+var
+  Aname, Aext, Bname, Bext: TFileName;
+begin
+  // code below is not very fast, but correct ;)
+  Aname := GetFileNameWithoutExt(string(A), @Aext);
+  Bname := GetFileNameWithoutExt(string(B), @Bext);
+  result := AnsiCompareFileName(Aext, Bext);
+  if result = 0 then
+    // if both extensions matches, compare by filename
+    result := AnsiCompareFileName(Aname, Bname);
+end;
+
+{$ifdef ISDELPHI20062007} // circumvent Delphi 2007 RTL inlining issue
+function AnsiCompareFileName(const S1, S2 : TFileName): integer;
+begin
+  result := SysUtils.AnsiCompareFileName(S1,S2);
+end;
+{$endif ISDELPHI20062007}
+
+function EnsureDirectoryExists(const Directory: TFileName;
+  RaiseExceptionOnCreationFailure: boolean): TFileName;
+begin
+  result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
+  if not DirectoryExists(result) then
+    if not ForceDirectories(result) then
+      if not RaiseExceptionOnCreationFailure then
+        result := ''
+      else
+        raise Exception.CreateFmt('Impossible to create folder %s', [result]);
 end;
 
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName;
@@ -4888,6 +5565,11 @@ initialization
   InitializeUnit; // in mormot.core.os.posix/windows.inc files
   OSVersionShort := ToTextOS(OSVersionInt32);
   SetExecutableVersion(0, 0, 0, 0);
+  JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
+  JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
+  NULL_STR_VAR := 'null';
+  BOOL_UTF8[false] := 'false';
+  BOOL_UTF8[true] := 'true';
   // minimal stubs which will be properly implemented in mormot.core.log.pas
   GetExecutableLocation := _GetExecutableLocation;
   SetThreadName := _SetThreadName;

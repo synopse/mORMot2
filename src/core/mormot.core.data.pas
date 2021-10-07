@@ -13,6 +13,7 @@ unit mormot.core.data;
     - INI Files and In-memory Access
     - Efficient RTTI Values Binary Serialization and Comparison
     - TDynArray, TDynArrayHashed and TSynQueue Wrappers
+    - Integer Arrays Extended Process
     - RawUtf8 String Values Interning and TRawUtf8List
 
   *****************************************************************************
@@ -2191,6 +2192,7 @@ function DynArraySortOne(Kind: TRttiParserType; CaseInsensitive: boolean): TDynA
 function DynArrayHashOne(Kind: TRttiParserType;
   CaseInsensitive: boolean = false): TDynArrayHashOne;
 
+
 type
   /// thread-safe FIFO (First-In-First-Out) in-order queue of records
   // - uses internally a TDynArray storage, with a sliding algorithm, more
@@ -2286,6 +2288,125 @@ type
     function Pending: boolean;
   end;
 
+
+{ *************** Integer Arrays Extended Process }
+
+type
+  /// event handler called by NotifySortedIntegerChanges()
+  // - Sender is an opaque const value, maybe a TObject or any pointer
+  TOnNotifySortedIntegerChange = procedure(const Sender; Value: integer) of object;
+
+/// compares two 32-bit signed sorted integer arrays, and call event handlers
+// to notify the corresponding modifications in an O(n) time
+// - items in both old[] and new[] arrays are required to be sorted
+procedure NotifySortedIntegerChanges(old, new: PIntegerArray; oldn, newn: PtrInt;
+  const added, deleted: TOnNotifySortedIntegerChange; const sender);
+
+/// copy an integer array, then sort it, low values first
+procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
+  var Dest: TIntegerDynArray);
+
+/// copy an integer array, then sort it, low values first
+procedure CopyAndSortInt64(Values: PInt64Array; ValuesCount: integer;
+  var Dest: TInt64DynArray);
+
+/// remove some 32-bit integer from Values[]
+// - Excluded is declared as var, since it will be sorted in-place during process
+// if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
+procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
+  ExcludedSortSize: integer = 32);
+
+/// ensure some 32-bit integer from Values[] will only contain Included[]
+// - Included is declared as var, since it will be sorted in-place during process
+// if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
+procedure IncludeInteger(var Values, Included: TIntegerDynArray;
+  IncludedSortSize: integer = 32);
+
+/// sort and remove any 32-bit duplicated integer from Values[]
+procedure DeduplicateInteger(var Values: TIntegerDynArray); overload;
+
+/// sort and remove any 32-bit duplicated integer from Values[]
+// - returns the new Values[] length
+function DeduplicateInteger(var Values: TIntegerDynArray; Count: PtrInt): PtrInt; overload;
+
+/// low-level function called by DeduplicateInteger()
+function DeduplicateIntegerSorted(val: PIntegerArray; last: PtrInt): PtrInt;
+
+/// create a new 32-bit integer dynamic array with the values from another one
+procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
+
+/// remove some 64-bit integer from Values[]
+// - Excluded is declared as var, since it will be sorted in-place during process
+// if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
+procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
+  ExcludedSortSize: integer = 32);
+
+/// ensure some 64-bit integer from Values[] will only contain Included[]
+// - Included is declared as var, since it will be sorted in-place during process
+// if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
+procedure IncludeInt64(var Values, Included: TInt64DynArray;
+  IncludedSortSize: integer = 32);
+
+/// sort and remove any 64-bit duplicated integer from Values[]
+procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
+
+/// sort and remove any 64-bit duplicated integer from Values[]
+// - returns the new Values[] length
+function DeduplicateInt64(var Values: TInt64DynArray; Count: PtrInt): PtrInt; overload;
+
+/// low-level function called by DeduplicateInt64()
+// - warning: caller should ensure that last>0
+function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
+
+/// create a new 64-bit integer dynamic array with the values from another one
+procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
+
+/// find the maximum 32-bit integer in Values[]
+function MaxInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt;
+  MaxStart: integer = -1): integer;
+
+/// sum all 32-bit integers in Values[]
+function SumInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt): integer;
+
+/// fill already allocated Reversed[] so that Reversed[Values[i]]=i
+procedure Reverse(const Values: TIntegerDynArray; ValuesCount: PtrInt;
+  Reversed: PIntegerArray);
+
+/// copy some Int64 values into an unsigned integer array
+procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: PtrInt);
+
+type
+  /// comparison function as expected by MedianQuickSelect()
+  // - should return TRUE if Values[IndexA]>Values[IndexB]
+  TOnValueGreater = function(IndexA, IndexB: PtrInt): boolean of object;
+
+/// compute the median of a serie of values, using "Quickselect"
+// - based on the algorithm described in "Numerical recipes in C", Second Edition
+// - expect the values information to be available from a comparison callback
+// - this version will use a temporary index list to exchange items order
+// (supplied as a TSynTempBuffer), so won't change the supplied values themself
+// - see also function MedianQuickSelectInteger() for PIntegerArray values
+// - returns the index of the median Value
+function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
+  var TempBuffer: TSynTempBuffer): integer;
+
+/// compute the median of an integer serie of values, using "Quickselect"
+// - based on the algorithm described in "Numerical recipes in C", Second Edition,
+// translated from Nicolas Devillard's C code: http://ndevilla.free.fr/median/median
+// - warning: the supplied integer array is modified in-place during the process,
+// and won't be fully sorted on output (this is no QuickSort alternative)
+function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
+
+
+/// fast search of a binary value position in a fixed-size array
+// - Count is the number of entries in P^[]
+// - return index of P^[index]=Elem^, comparing ElemSize bytes
+// - return -1 if Value was not found
+function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
+
+/// fast search of a binary value position in a fixed-size array
+// - Count is the number of entries in P^[]
+function AnyScanExists(P, Elem: pointer; Count, ElemSize: PtrInt): boolean;
 
 
 { ************ INI Files and In-memory Access }
@@ -6228,84 +6349,89 @@ end;
 const
   // helper arrays to get the standard comparison/hash functions
   PT_SORT: array[{caseins=}boolean, TRttiParserType] of TDynArraySortCompare = (
-    (nil,
-     nil,
-     SortDynArrayBoolean,
-     SortDynArrayByte,
-     SortDynArrayCardinal,
-     SortDynArrayInt64,
-     SortDynArrayDouble,
-     SortDynArrayExtended,
-     SortDynArrayInt64,
-     SortDynArrayInteger,
-     SortDynArrayQWord,
-     {$ifdef CPUINTEL}SortDynArrayAnsiString{$else}SortDynArrayRawByteString{$endif},
-     SortDynArrayAnsiString,
-     SortDynArrayAnsiString,
-     nil,
-     SortDynArraySingle,
-     {$ifdef UNICODE}SortDynArrayString{$else}SortDynArrayAnsiString{$endif},
-     SortDynArrayUnicodeString,
-     SortDynArrayDouble,
-     SortDynArrayDouble,
-     SortDynArray128,
-     SortDynArray128,
-     SortDynArray256,
-     SortDynArray512,
-     SortDynArrayInt64,
-     SortDynArrayInt64,
-     SortDynArrayUnicodeString,
-     SortDynArrayInt64,
-     SortDynArrayInt64,
-     SortDynArrayVariant,
-     SortDynArrayUnicodeString,
-     SortDynArrayAnsiString,
-     SortDynArrayWord,
-     nil,
-     nil,
-     nil,
-     nil,
-     nil,
-     nil),
-   (nil,
-    nil,
-    SortDynArrayBoolean,
-    SortDynArrayByte,
-    SortDynArrayCardinal,
-    SortDynArrayInt64,
-    SortDynArrayDouble,
-    SortDynArrayExtended,
-    SortDynArrayInt64,
-    SortDynArrayInteger,
-    SortDynArrayQWord,
-    {$ifdef CPUINTEL}SortDynArrayAnsiString{$else}SortDynArrayRawByteString{$endif},
-    SortDynArrayAnsiStringI,
-    SortDynArrayAnsiStringI,
-    nil,
-    SortDynArraySingle,
-    SortDynArrayStringI,
-    SortDynArrayUnicodeStringI,
-    SortDynArrayDouble,
-    SortDynArrayDouble,
-    SortDynArray128,
-    SortDynArray128,
-    SortDynArray256,
-    SortDynArray512,
-    SortDynArrayInt64,
-    SortDynArrayInt64,
-    SortDynArrayUnicodeStringI,
-    SortDynArrayInt64,
-    SortDynArrayInt64,
-    SortDynArrayVariantI,
-    SortDynArrayUnicodeStringI,
-    SortDynArrayAnsiStringI,
-    SortDynArrayWord,
-    nil,
-    nil,
-    nil,
-    nil,
-    nil,
-    nil));
+    // case sensitive comparison/sort functions:
+    (nil,                       //  ptNone
+     nil,                       //  ptArray
+     SortDynArrayBoolean,       //  ptBoolean
+     SortDynArrayByte,          //  ptByte
+     SortDynArrayCardinal,      //  ptCardinal
+     SortDynArrayInt64,         //  ptCurrency
+     SortDynArrayDouble,        //  ptDouble
+     SortDynArrayExtended,      //  ptExtended
+     SortDynArrayInt64,         //  ptInt64
+     SortDynArrayInteger,       //  ptInteger
+     SortDynArrayQWord,         //  ptQWord
+     {$ifdef CPUINTEL}SortDynArrayAnsiString
+     {$else}SortDynArrayRawByteString{$endif}, //  ptRawByteString
+     SortDynArrayAnsiString,    //  ptRawJson
+     SortDynArrayAnsiString,    //  ptRawUtf8
+     nil,                       //  ptRecord
+     SortDynArraySingle,        //  ptSingle
+     {$ifdef UNICODE}SortDynArrayString
+     {$else}SortDynArrayAnsiString{$endif}, //  ptString
+     SortDynArrayUnicodeString, //  ptSynUnicode
+     SortDynArrayDouble,        //  ptDateTime
+     SortDynArrayDouble,        //  ptDateTimeMS
+     SortDynArray128,           //  ptGuid
+     SortDynArray128,           //  ptHash128
+     SortDynArray256,           //  ptHash256
+     SortDynArray512,           //  ptHash512
+     SortDynArrayInt64,         //  ptOrm
+     SortDynArrayInt64,         //  ptTimeLog
+     SortDynArrayUnicodeString, //  ptUnicodeString
+     SortDynArrayInt64,         //  ptUnixTime
+     SortDynArrayInt64,         //  ptUnixMSTime
+     SortDynArrayVariant,       //  ptVariant
+     SortDynArrayUnicodeString, //  ptWideString
+     SortDynArrayAnsiString,    //  ptWinAnsi
+     SortDynArrayWord,          //  ptWord
+     nil,                       //  ptEnumeration
+     nil,                       //  ptSet
+     nil,                       //  ptClass
+     nil,                       //  ptDynArray
+     nil,                       //  ptInterface
+     nil),                      //  ptCustom
+   // case sensitive comparison/sort functions:
+   (nil,                        //  ptNone
+    nil,                        //  ptArray
+    SortDynArrayBoolean,        //  ptBoolean
+    SortDynArrayByte,           //  ptByte
+    SortDynArrayCardinal,       //  ptCardinal
+    SortDynArrayInt64,          //  ptCurrency
+    SortDynArrayDouble,         //  ptDouble
+    SortDynArrayExtended,       //  ptExtended
+    SortDynArrayInt64,          //  ptInt64
+    SortDynArrayInteger,        //  ptInteger
+    SortDynArrayQWord,          //  ptQWord
+    {$ifdef CPUINTEL}SortDynArrayAnsiString
+    {$else}SortDynArrayRawByteString{$endif}, //  ptRawByteString
+    SortDynArrayAnsiStringI,    //  ptRawJson
+    SortDynArrayAnsiStringI,    //  ptRawUtf8
+    nil,                        //  ptRecord
+    SortDynArraySingle,         //  ptSingle
+    SortDynArrayStringI,        //  ptString
+    SortDynArrayUnicodeStringI, //  ptSynUnicode
+    SortDynArrayDouble,         //  ptDateTime
+    SortDynArrayDouble,         //  ptDateTimeMS
+    SortDynArray128,            //  ptGuid
+    SortDynArray128,            //  ptHash128
+    SortDynArray256,            //  ptHash256
+    SortDynArray512,            //  ptHash512
+    SortDynArrayInt64,          //  ptOrm
+    SortDynArrayInt64,          //  ptTimeLog
+    SortDynArrayUnicodeStringI, //  ptUnicodeString
+    SortDynArrayInt64,          //  ptUnixTime
+    SortDynArrayInt64,          //  ptUnixMSTime
+    SortDynArrayVariantI,       //  ptVariant
+    SortDynArrayUnicodeStringI, //  ptWideString
+    SortDynArrayAnsiStringI,    //  ptWinAnsi
+    SortDynArrayWord,           //  ptWord
+    nil,                        //  ptEnumeration
+    nil,                        //  ptSet
+    nil,                        //  ptClass
+    nil,                        //  ptDynArray
+    nil,                        //  ptInterface
+    nil));                      //  ptCustom
 
 { TDynArray }
 
@@ -8332,84 +8458,86 @@ end;
 const
   // helper arrays to get the standard hash functions
   PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of pointer = (
-   (nil,
-    nil,
-    @HashByte,
-    @HashByte,
-    @HashInteger,
-    @HashInt64,
-    @HashInt64,
-    @HashExtended,
-    @HashInt64,
-    @HashInteger,
-    @HashInt64,
-    @HashAnsiString,
-    @HashAnsiString,
-    @HashAnsiString,
-    nil,
-    @HashInteger,
-    {$ifdef UNICODE} @HashSynUnicode {$else} @HashAnsiString {$endif},
-    @HashSynUnicode,
-    @HashInt64,
-    @HashInt64,
-    @Hash128,
-    @Hash128,
-    @Hash256,
-    @Hash512,
-    @HashInt64,
-    @HashInt64,
-    @HashSynUnicode,
-    @HashInt64,
-    @HashInt64,
-    @HashVariant,
-    @HashWideString,
-    @HashAnsiString,
-    @HashWord,
-    nil,
-    nil,
-    nil,
-    nil,
-    nil,
-    nil),
-   (nil,
-    nil,
-    @HashByte,
-    @HashByte,
-    @HashInteger,
-    @HashInt64,
-    @HashInt64,
-    @HashExtended,
-    @HashInt64,
-    @HashInteger,
-    @HashInt64,
-    @HashAnsiString,
-    @HashAnsiStringI,
-    @HashAnsiStringI,
-    nil,
-    @HashInteger,
-    {$ifdef UNICODE} @HashSynUnicodeI {$else} @HashAnsiStringI {$endif},
-    @HashSynUnicodeI,
-    @HashInt64,
-    @HashInt64,
-    @Hash128,
-    @Hash128,
-    @Hash256,
-    @Hash512,
-    @HashInt64,
-    @HashInt64,
-    @HashSynUnicodeI,
-    @HashInt64,
-    @HashInt64,
-    @HashVariantI,
-    @HashWideStringI,
-    @HashAnsiStringI,
-    @HashWord,
-    nil,
-    nil,
-    nil,
-    nil,
-    nil,
-    nil));
+   // case sensitive hash functions:
+   (nil,                     //  ptNone
+    nil,                     //  ptArray
+    @HashByte,               //  ptBoolean
+    @HashByte,               //  ptByte
+    @HashInteger,            //  ptCardinal
+    @HashInt64,              //  ptCurrency
+    @HashInt64,              //  ptDouble
+    @HashExtended,           //  ptExtended
+    @HashInt64,              //  ptInt64
+    @HashInteger,            //  ptInteger
+    @HashInt64,              //  ptQWord
+    @HashAnsiString,         //  ptRawByteString
+    @HashAnsiString,         //  ptRawJson
+    @HashAnsiString,         //  ptRawUtf8
+    nil,                     //  ptRecord
+    @HashInteger,            //  ptSingle
+    {$ifdef UNICODE} @HashSynUnicode {$else} @HashAnsiString {$endif}, //  ptString
+    @HashSynUnicode,         //  ptSynUnicode
+    @HashInt64,              //  ptDateTime
+    @HashInt64,              //  ptDateTimeMS
+    @Hash128,                //  ptGuid
+    @Hash128,                //  ptHash128
+    @Hash256,                //  ptHash256
+    @Hash512,                //  ptHash512
+    @HashInt64,              //  ptOrm
+    @HashInt64,              //  ptTimeLog
+    @HashSynUnicode,         //  ptUnicodeString
+    @HashInt64,              //  ptUnixTime
+    @HashInt64,              //  ptUnixMSTime
+    @HashVariant,            //  ptVariant
+    @HashWideString,         //  ptWideString
+    @HashAnsiString,         //  ptWinAnsi
+    @HashWord,               //  ptWord
+    nil,                     //  ptEnumeration
+    nil,                     //  ptSet
+    nil,                     //  ptClass
+    nil,                     //  ptDynArray
+    nil,                     //  ptInterface
+    nil),                    //  ptCustom
+   // case insensitive hash functions:
+   (nil,                     //  ptNone
+    nil,                     //  ptArray
+    @HashByte,               //  ptBoolean
+    @HashByte,               //  ptByte
+    @HashInteger,            //  ptCardinal
+    @HashInt64,              //  ptCurrency
+    @HashInt64,              //  ptDouble
+    @HashExtended,           //  ptExtended
+    @HashInt64,              //  ptInt64
+    @HashInteger,            //  ptInteger
+    @HashInt64,              //  ptQWord
+    @HashAnsiString,         //  ptRawByteString
+    @HashAnsiStringI,        //  ptRawJson
+    @HashAnsiStringI,        //  ptRawUtf8
+    nil,                     //  ptRecord
+    @HashInteger,            //  ptSingle
+    {$ifdef UNICODE} @HashSynUnicodeI {$else} @HashAnsiStringI {$endif}, //  ptString
+    @HashSynUnicodeI,        //  ptSynUnicode
+    @HashInt64,              //  ptDateTime
+    @HashInt64,              //  ptDateTimeMS
+    @Hash128,                //  ptGuid
+    @Hash128,                //  ptHash128
+    @Hash256,                //  ptHash256
+    @Hash512,                //  ptHash512
+    @HashInt64,              //  ptOrm
+    @HashInt64,              //  ptTimeLog
+    @HashSynUnicodeI,        //  ptUnicodeString
+    @HashInt64,              //  ptUnixTime
+    @HashInt64,              //  ptUnixMSTime
+    @HashVariantI,           //  ptVariant
+    @HashWideStringI,        //  ptWideString
+    @HashAnsiStringI,        //  ptWinAnsi
+    @HashWord,               //  ptWord
+    nil,                     //  ptEnumeration
+    nil,                     //  ptSet
+    nil,                     //  ptClass
+    nil,                     //  ptDynArray
+    nil,                     //  ptInterface
+    nil));                   //  ptCustom
 
   // default TDynArrayHasher.CountTrigger value
   DYNARRAY_COUNT_TRIGGER = 32;
@@ -9760,6 +9888,617 @@ begin
 end;
 
 
+{ *************** Integer Arrays Extended Process }
+
+procedure Exchg32(var A, B: integer); {$ifdef HASINLINE}inline;{$endif}
+var
+  tmp: integer;
+begin
+  tmp := A;
+  A := B;
+  B := tmp;
+end;
+
+function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
+var
+  low, high, median, middle, ll, hh: PtrInt;
+begin
+  if n = 0 then
+  begin
+    result := 0;
+    exit;
+  end;
+  if n = 1 then
+  begin
+    result := Values[0];
+    exit;
+  end;
+  low := 0;
+  high := n - 1;
+  median := high shr 1;
+  repeat
+    if high <= low then
+    begin
+      // one item left
+      result := Values[median];
+      exit;
+    end;
+    if high = low + 1 then
+    begin
+      // two items -> return the smallest (not average)
+      if Values[low] > Values[high] then
+        Exchg32(Values[low], Values[high]);
+      result := Values[median];
+      exit;
+    end;
+    // find median of low, middle and high items; swap into position low
+    middle := (low + high) shr 1;
+    if Values[middle] > Values[high] then
+      Exchg32(Values[middle], Values[high]);
+    if Values[low] > Values[high] then
+      Exchg32(Values[low], Values[high]);
+    if Values[middle] > Values[low] then
+      Exchg32(Values[middle], Values[low]);
+    // swap low item (now in position middle) into position (low+1)
+    Exchg32(Values[middle], Values[low + 1]);
+    // nibble from each end towards middle, swapping items when stuck
+    ll := low + 1;
+    hh := high;
+    repeat
+      repeat
+        inc(ll);
+      until not (Values[low] > Values[ll]);
+      repeat
+        dec(hh);
+      until not (Values[hh] > Values[low]);
+      if hh < ll then
+        break;
+      Exchg32(Values[ll], Values[hh]);
+    until false;
+    // swap middle item (in position low) back into correct position
+    Exchg32(Values[low], Values[hh]);
+    // next active partition
+    if hh <= median then
+      low := ll;
+    if hh >= median then
+      high := hh - 1;
+  until false;
+end;
+
+function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
+  var TempBuffer: TSynTempBuffer): integer;
+var
+  low, high, middle, median, ll, hh: PtrInt;
+  tmp: integer;
+  ndx: PIntegerArray;
+begin
+  if n <= 1 then
+  begin
+    TempBuffer.buf := nil; // avoid GPF in TempBuffer.Done
+    result := 0;
+    exit;
+  end;
+  low := 0;
+  high := n - 1;
+  ndx := TempBuffer.InitIncreasing(n * 4); // no heap alloacation until n>1024
+  median := high shr 1;
+  repeat
+    if high <= low then
+    begin
+      // one item left
+      result := ndx[median];
+      {%H-}TempBuffer.Done;
+      exit;
+    end;
+    if high = low + 1 then
+    begin
+      // two items -> return the smallest (not average)
+      if OnCompare(ndx[low], ndx[high]) then
+        Exchg32(ndx[low], ndx[high]);
+      result := ndx[median];
+      {%H-}TempBuffer.Done;
+      exit;
+    end;
+    // find median of low, middle and high items; swap into position low
+    middle := (low + high) shr 1;
+    if OnCompare(ndx[middle], ndx[high]) then
+      Exchg32(ndx[middle], ndx[high]);
+    if OnCompare(ndx[low], ndx[high]) then
+      Exchg32(ndx[low], ndx[high]);
+    if OnCompare(ndx[middle], ndx[low]) then
+      Exchg32(ndx[middle], ndx[low]);
+    // swap low item (now in position middle) into position (low+1)
+    Exchg32(ndx[middle], ndx[low + 1]);
+    // nibble from each end towards middle, swapping items when stuck
+    ll := low + 1;
+    hh := high;
+    repeat
+      tmp := ndx[low];
+      repeat
+        inc(ll);
+      until not OnCompare(tmp, ndx[ll]);
+      repeat
+        dec(hh);
+      until not OnCompare(ndx[hh], tmp);
+      if hh < ll then
+        break;
+      tmp := ndx[ll];
+      ndx[ll] := ndx[hh];
+      ndx[hh] := tmp; // Exchg32(ndx[ll],ndx[hh]);
+    until false;
+    // swap middle item (in position low) back into correct position
+    Exchg32(ndx[low], ndx[hh]);
+    // next active partition
+    if hh <= median then
+      low := ll;
+    if hh >= median then
+      high := hh - 1;
+  until false;
+end;
+
+procedure NotifySortedIntegerChanges(old, new: PIntegerArray; oldn, newn: PtrInt;
+  const added, deleted: TOnNotifySortedIntegerChange; const sender);
+var
+  o, n: PtrInt;
+begin
+  o := 0;
+  n := 0;
+  repeat
+    while (n < newn) and
+          (o < oldn) and
+          (old[o] = new[n]) do
+    begin
+      inc(o);
+      inc(n);
+    end;
+    while (o < oldn) and
+          ((n >= newn) or
+           (old[o] < new[n])) do
+    begin
+      if Assigned(deleted) then
+        deleted(sender, old[o]);
+      inc(o);
+    end;
+    while (n < newn) and
+          ((o >= oldn) or
+           (new[n] < old[o])) do
+    begin
+      if Assigned(added) then
+        added(sender, new[n]);
+      inc(n);
+    end;
+  until (o >= oldn) and
+        (n >= newn);
+end;
+
+procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
+  var Dest: TIntegerDynArray);
+begin
+  if ValuesCount > Length(Dest) then
+    SetLength(Dest, ValuesCount);
+  MoveFast(Values^[0], Dest[0], ValuesCount * SizeOf(integer));
+  QuickSortInteger(pointer(Dest), 0, ValuesCount - 1);
+end;
+
+procedure CopyAndSortInt64(Values: PInt64Array; ValuesCount: integer;
+  var Dest: TInt64DynArray);
+begin
+  if ValuesCount > Length(Dest) then
+    SetLength(Dest, ValuesCount);
+  MoveFast(Values^[0], Dest[0], ValuesCount * SizeOf(Int64));
+  QuickSortInt64(pointer(Dest), 0, ValuesCount - 1);
+end;
+
+procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray; ExcludedSortSize: integer);
+var
+  i, v, x, n: PtrInt;
+begin
+  if (Values = nil) or
+     (Excluded = nil) then
+    exit; // nothing to exclude
+  if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
+    Values := copy(Values); // make unique
+  if PRefCnt(PtrUInt(Excluded) - _DAREFCNT)^ > 1 then
+    Excluded := copy(Excluded);
+  v := Length(Values);
+  n := 0;
+  x := Length(Excluded);
+  if (x > ExcludedSortSize) or
+     (v > ExcludedSortSize) then
+  begin
+    // sort if worth it
+    dec(x);
+    QuickSortInteger(pointer(Excluded), 0, x);
+    for i := 0 to v - 1 do
+      if FastFindIntegerSorted(pointer(Excluded), x, Values[i]) < 0 then
+      begin
+        if n <> i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end
+  else
+    for i := 0 to v - 1 do
+      if not IntegerScanExists(pointer(Excluded), x, Values[i]) then
+      begin
+        if n <> i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  if n <> v then
+    SetLength(Values, n);
+end;
+
+procedure IncludeInteger(var Values, Included: TIntegerDynArray; IncludedSortSize: integer);
+var
+  i, v, x, n: PtrInt;
+begin
+  if (Values = nil) or
+     (Included = nil) then
+  begin
+    Values := nil;
+    exit;
+  end;
+  if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
+    Values := copy(Values); // make unique
+  if PRefCnt(PtrUInt(Included) - _DAREFCNT)^ > 1 then
+    Included := copy(Included);
+  v := Length(Values);
+  n := 0;
+  x := Length(Included);
+  if (x > IncludedSortSize) or
+     (v > IncludedSortSize) then
+  begin
+    // sort if worth it
+    dec(x);
+    QuickSortInteger(pointer(Included), 0, x);
+    for i := 0 to v - 1 do
+      if FastFindIntegerSorted(pointer(Included), x, Values[i]) >= 0 then
+      begin
+        if n <> i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end
+  else
+    for i := 0 to v - 1 do
+      if IntegerScanExists(pointer(Included), x, Values[i]) then
+      begin
+        if n <> i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  if n <> v then
+    SetLength(Values, n);
+end;
+
+procedure ExcludeInt64(var Values, Excluded: TInt64DynArray; ExcludedSortSize: integer);
+var
+  i, v, x, n: PtrInt;
+begin
+  if (Values = nil) or
+     (Excluded = nil) then
+    exit; // nothing to exclude
+  v := Length(Values);
+  n := 0;
+  x := Length(Excluded);
+  if (x > ExcludedSortSize) or
+     (v > ExcludedSortSize) then
+  begin
+    // sort if worth it
+    dec(x);
+    QuickSortInt64(pointer(Excluded), 0, x);
+    for i := 0 to v - 1 do
+      if FastFindInt64Sorted(pointer(Excluded), x, Values[i]) < 0 then
+      begin
+        if n <> i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end
+  else
+    for i := 0 to v - 1 do
+      if not Int64ScanExists(pointer(Excluded), x, Values[i]) then
+      begin
+        if n <> i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  if n <> v then
+    SetLength(Values, n);
+end;
+
+procedure IncludeInt64(var Values, Included: TInt64DynArray; IncludedSortSize: integer);
+var
+  i, v, x, n: PtrInt;
+begin
+  if (Values = nil) or
+     (Included = nil) then
+  begin
+    Values := nil;
+    exit;
+  end;
+  v := Length(Values);
+  n := 0;
+  x := Length(Included);
+  if (x > IncludedSortSize) or
+     (v > IncludedSortSize) then
+  begin
+    // sort if worth it
+    dec(x);
+    QuickSortInt64(pointer(Included), 0, x);
+    for i := 0 to v - 1 do
+      if FastFindInt64Sorted(pointer(Included), x, Values[i]) >= 0 then
+      begin
+        if n <> i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end
+  else
+    for i := 0 to v - 1 do
+      if Int64ScanExists(pointer(Included), x, Values[i]) then
+      begin
+        if n <> i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  if n <> v then
+    SetLength(Values, n);
+end;
+
+procedure DeduplicateInteger(var Values: TIntegerDynArray);
+begin
+  DeduplicateInteger(Values, Length(Values));
+end;
+
+function DeduplicateIntegerSorted(val: PIntegerArray; last: PtrInt): PtrInt;
+var
+  i: PtrInt;
+begin
+  // sub-function for better code generation
+  i := 0;
+  repeat // here last>0 so i<last
+    if val[i] = val[i + 1] then
+      break;
+    inc(i);
+    if i <> last then
+      continue;
+    result := i;
+    exit;
+  until false;
+  result := i;
+  inc(i);
+  if i <> last then
+  begin
+    repeat
+      if val[i] <> val[i + 1] then
+      begin
+        val[result] := val[i];
+        inc(result);
+      end;
+      inc(i);
+    until i = last;
+    val[result] := val[i];
+  end;
+end;
+
+function DeduplicateInteger(var Values: TIntegerDynArray; Count: PtrInt): PtrInt;
+begin
+  result := Count;
+  dec(Count);
+  if Count > 0 then
+  begin
+    QuickSortInteger(pointer(Values), 0, Count);
+    result := DeduplicateIntegerSorted(pointer(Values), Count) + 1;
+  end;
+  if result <> Length(Values) then
+    SetLength(Values, result);
+end;
+
+procedure DeduplicateInt64(var Values: TInt64DynArray);
+begin
+  DeduplicateInt64(Values, Length(Values));
+end;
+
+function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
+var
+  i: PtrInt;
+begin
+  // sub-function for better code generation
+  i := 0;
+  repeat // here last>0 so i<last
+    if val[i] = val[i + 1] then
+      break;
+    inc(i);
+    if i <> last then
+      continue;
+    result := i;
+    exit;
+  until false;
+  result := i;
+  inc(i);
+  if i <> last then
+  begin
+    repeat
+      if val[i] <> val[i + 1] then
+      begin
+        val[result] := val[i];
+        inc(result);
+      end;
+      inc(i);
+    until i = last;
+    val[result] := val[i];
+  end;
+end;
+
+function DeduplicateInt64(var Values: TInt64DynArray; Count: PtrInt): PtrInt;
+begin
+  result := Count;
+  dec(Count);
+  if Count > 0 then
+  begin
+    QuickSortInt64(pointer(Values), 0, Count);
+    result := DeduplicateInt64Sorted(pointer(Values), Count) + 1;
+  end;
+  if result <> Length(Values) then
+    SetLength(Values, result);
+end;
+
+procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
+var
+  n: integer;
+begin
+  n := Length(Source);
+  SetLength(Dest, n);
+  MoveFast(Source[0], Dest[0], n * SizeOf(integer));
+end;
+
+procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
+var
+  n: integer;
+begin
+  n := Length(Source);
+  SetLength(Dest, n);
+  MoveFast(Source[0], Dest[0], n * SizeOf(Int64));
+end;
+
+function MaxInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt; MaxStart: integer): integer;
+var
+  i: PtrInt;
+  v: integer;
+begin
+  result := MaxStart;
+  for i := 0 to ValuesCount - 1 do
+  begin
+    v := Values[i];
+    if v > result then
+      result := v; // movca branchless opcode on FPC
+  end;
+end;
+
+function SumInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt): integer;
+var
+  i: PtrInt;
+begin
+  result := 0;
+  for i := 0 to ValuesCount - 1 do
+    inc(result, Values[i]);
+end;
+
+procedure Reverse(const Values: TIntegerDynArray; ValuesCount: PtrInt; Reversed: PIntegerArray);
+var
+  i: PtrInt;
+begin
+  i := 0;
+  if ValuesCount >= 4 then
+  begin
+    dec(ValuesCount, 4);
+    while i < ValuesCount do
+    begin
+      // faster pipelined version
+      Reversed[Values[i]] := i;
+      Reversed[Values[i + 1]] := i + 1;
+      Reversed[Values[i + 2]] := i + 2;
+      Reversed[Values[i + 3]] := i + 3;
+      inc(i, 4);
+    end;
+    inc(ValuesCount, 4);
+  end;
+  while i < ValuesCount do
+  begin
+    Reversed[Values[i]] := i;
+    inc(i);
+  end;
+  //for i := 0 to Count-1 do Assert(Reverse[Orig[i]]=i);
+end;
+
+procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: PtrInt);
+var
+  i: PtrInt;
+begin
+  for i := 0 to Count - 1 do
+    Values32[i] := Values64[i];
+end;
+
+function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
+begin
+  case ElemSize of
+    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
+    1:
+      result := ByteScanIndex(P, Count, PByte(Elem)^);
+    2:
+      result := WordScanIndex(P, Count, PWord(Elem)^);
+    4:
+      result := IntegerScanIndex(P, Count, PInteger(Elem)^);
+    8:
+      result := Int64ScanIndex(P, Count, PInt64(Elem)^);
+    // small ElemSize version (<SizeOf(PtrInt))
+    3, 5..7:
+      begin
+        for result := 0 to Count - 1 do
+          if CompareMemSmall(P, Elem, ElemSize) then
+            exit
+          else
+            inc(PByte(P), ElemSize);
+        result := -1;
+      end;
+  else
+    begin
+      // generic binary comparison (fast with inlined CompareMemSmall)
+      for result := 0 to Count - 1 do
+        if (PInt64(P)^ = PInt64(Elem)^) and // not better using a local Int64 var
+           CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(Elem) + 8, ElemSize - 8) then
+          exit
+        else
+          inc(PByte(P), ElemSize);
+      result := -1;
+    end;
+  end;
+end;
+
+function AnyScanExists(P, Elem: pointer; Count, ElemSize: PtrInt): boolean;
+begin
+  case ElemSize of
+    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
+    1:
+      result := ByteScanIndex(P, Count, PInteger(Elem)^) >= 0;
+    2:
+      result := WordScanIndex(P, Count, PInteger(Elem)^) >= 0;
+    4:
+      result := IntegerScanExists(P, Count, PInteger(Elem)^);
+    8:
+      result := Int64ScanExists(P, Count, PInt64(Elem)^);
+    // small ElemSize version (<SizeOf(PtrInt))
+    3, 5..7:
+      begin
+        result := true;
+        if Count > 0 then
+          repeat
+            if CompareMemSmall(P, Elem, ElemSize) then
+              exit;
+            inc(PByte(P), ElemSize);
+            dec(Count);
+          until Count = 0;
+        result := false;
+      end;
+  else
+    begin
+      // generic binary comparison (fast with leading 64-bit comparison)
+      result := true;
+      if Count > 0 then
+        repeat
+          if (PInt64(P)^ = PInt64(Elem)^) and
+             CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(Elem) + 8, ElemSize - 8) then
+            exit;
+          inc(PByte(P), ElemSize);
+          dec(Count);
+        until Count = 0;
+      result := false;
+    end;
+  end;
+end;
+
 
 
 procedure InitializeUnit;
@@ -9769,15 +10508,20 @@ begin
   // initialize RTTI binary persistence and comparison
   for k := succ(low(k)) to high(k) do
     case k of
-      rkInteger, rkEnumeration, rkSet,
-      rkChar, rkWChar {$ifdef FPC}, rkBool{$endif}:
+      rkInteger,
+      rkEnumeration,
+      rkSet,
+      rkChar,
+      rkWChar
+      {$ifdef FPC}, rkBool{$endif}:
         begin
           RTTI_BINARYSAVE[k] := @_BS_Ord;
           RTTI_BINARYLOAD[k] := @_BL_Ord;
           RTTI_COMPARE[false, k] := @_BC_Ord;
           RTTI_COMPARE[true, k] := @_BC_Ord;
         end;
-      {$ifdef FPC} rkQWord, {$endif} rkInt64:
+      {$ifdef FPC} rkQWord, {$endif}
+      rkInt64:
         begin
           RTTI_BINARYSAVE[k] := @_BS_64;
           RTTI_BINARYLOAD[k] := @_BL_64;
@@ -9814,7 +10558,8 @@ begin
           RTTI_COMPARE[false, k] := @_BC_WString;
           RTTI_COMPARE[true, k] := @_BCI_WString;
         end;
-      {$ifdef FPC} rkObject, {$endif} rkRecord:
+      {$ifdef FPC} rkObject, {$endif}
+      rkRecord:
         begin
           RTTI_BINARYSAVE[k] := @_BS_Record;
           RTTI_BINARYLOAD[k] := @_BL_Record;

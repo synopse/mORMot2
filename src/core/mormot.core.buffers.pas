@@ -1946,6 +1946,54 @@ type
     class function GetHashFileExt: RawUtf8; override;
   end;
 
+  /// a fake TStream, which will just count the number of bytes written
+  TFakeWriterStream = class(TStream)
+  protected
+    fWritten: Int64;
+    {$ifdef FPC}
+    function GetPosition: Int64; override;
+    {$endif FPC}
+  public
+    function Read(var Buffer; Count: Longint): Longint; override;
+    function Write(const Buffer; Count: Longint): Longint; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    function Seek(Offset: Longint; Origin: Word): Longint; override;
+  end;
+
+  TNestedStream = record
+    Stream: TStream;
+    Start, Stop: Int64;
+  end;
+
+  /// TStream allowing to read from some nested TStream instances
+  TNestedStreamReader = class(TStreamWithPosition)
+  protected
+    fSize: Int64;
+    fNested: array of TNestedStream;
+    fContentRead: ^TNestedStream;
+    function GetSize: Int64; override;
+  public
+    /// overriden method to call Flush on rewind, i.e. if position is set to 0
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    /// finalize the nested TStream instance
+    destructor Destroy; override;
+    /// append a nested TStream instance
+    // - you could use a TFileStream here for efficient chunked reading
+    function NewStream(Stream: TStream): TStream;
+    /// get the last TRawByteStringStream, or append a new one if needed
+    function ForText: TRawByteStringStream;
+    /// append some text or content to an internal TRawByteStringStream
+    // - is the easy way to append some text or data to the internal buffers
+    procedure Append(const Content: RawByteString);
+    /// you should call this method before any Read() call
+    // - is also called when you execute Seek(0, soBeginning)
+    procedure Flush; virtual;
+    /// will read up to Count bytes from the internal nested TStream
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// this TStream is read-only: calling this method will raise an exception
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
 
 /// compute the crc32c checksum of a given file
 // - this function maps the THashFile signature
@@ -8872,6 +8920,181 @@ begin
   result := '.crc32c';
 end;
 
+
+{ TFakeWriterStream }
+
+function TFakeWriterStream.Read(var Buffer; Count: Longint): Longint;
+begin
+  // do nothing
+  result := Count;
+end;
+
+function TFakeWriterStream.Write(const Buffer; Count: Longint): Longint;
+begin
+  // do nothing
+  inc(fWritten, Count);
+  result := Count;
+end;
+
+{$ifdef FPC}
+function TFakeWriterStream.GetPosition: Int64;
+begin
+  result := fWritten;
+end;
+{$endif FPC}
+
+function TFakeWriterStream.Seek(Offset: Longint; Origin: Word): Longint;
+begin
+  result := Seek(Offset, TSeekOrigin(Origin));
+end;
+
+function TFakeWriterStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  case Origin of
+    soBeginning:
+      result := Offset;
+    soEnd:
+      result := fWritten - Offset;
+    else
+      result := fWritten + Offset;
+  end;
+  if result > fWritten then
+    result := fWritten
+  else if result < 0 then
+    result := 0
+  else if result < fWritten then
+    fWritten := result;
+end;
+
+
+{ TNestedStreamReader }
+
+destructor TNestedStreamReader.Destroy;
+var
+  i: PtrInt;
+begin
+  inherited Destroy;
+  for i := 0 to length(fNested) - 1 do
+    fNested[i].Stream.Free;
+end;
+
+function TNestedStreamReader.GetSize: Int64;
+begin
+  result := fSize; // Flush should have been called
+end;
+
+function TNestedStreamReader.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  if (Offset = 0) and
+     (Origin = soBeginning) then
+    Flush; // allow to read the file again, and set nested stream sizes
+  result := inherited Seek(Offset, Origin);
+end;
+
+function TNestedStreamReader.NewStream(Stream: TStream): TStream;
+var
+  n: PtrInt;
+begin
+  n := length(fNested);
+  SetLength(fNested, n + 1);
+  fNested[n].Stream := Stream;
+  result := Stream; // allow simple fluent calls
+end;
+
+function TNestedStreamReader.ForText: TRawByteStringStream;
+var
+  n: PtrInt;
+begin
+  n := length(fNested);
+  if n <> 0 then
+  begin
+    result := pointer(fNested[n - 1].Stream);
+    if PClass(result)^ = TRawByteStringStream then
+      exit;
+  end;
+  result := TRawByteStringStream.Create;
+  NewStream(result);
+end;
+
+procedure TNestedStreamReader.Append(const Content: RawByteString);
+begin
+  with ForText do
+    DataString := DataString + Content; // the fast and easy way
+end;
+
+procedure TNestedStreamReader.Flush;
+var
+  i, n: PtrInt;
+begin
+  fContentRead := pointer(fNested);
+  fSize := 0;
+  n := length(fNested);
+  for i := 0 to n - 1 do
+    with fNested[i] do
+    begin
+      Stream.Seek(0, soBeginning);
+      Start := fSize;
+      inc(fSize, Stream.Size); // to allow proper Seek() + Read()
+      Stop := fSize;
+    end;
+end;
+
+function TNestedStreamReader.Read(var Buffer; Count: Longint): Longint;
+var
+  s, m: ^TNestedStream;
+  P: PByte;
+  rd: LongInt;
+begin
+  result := 0;
+  s := pointer(fContentRead);
+  if s = nil then
+    exit; // Flush was not called
+  P := @Buffer;
+  m := @fNested[length(fNested)];
+  while (Count > 0) and
+        (fPosition < fSize) do
+  begin
+    if (PtrUInt(s) >= PtrUInt(m)) or
+       (fPosition >= s^.Stop) or
+       (fPosition < s^.Start) then
+    begin
+      inc(s); // optimize forward reading (most common case)
+      if (PtrUInt(s) >= PtrUInt(m)) or
+         (fPosition >= s^.Stop) or
+         (fPosition < s^.Start) then
+      begin
+        // handle random Seek() call - brute force is enough (seldom used)
+        s := pointer(fNested);
+        repeat
+          if fPosition >= s^.Start then
+            break;
+          inc(s);
+        until PtrUInt(s) >= PtrUInt(m);
+        if PtrUInt(s) >= PtrUInt(m) then
+          break; // paranoid (we know fPosition < fSize)
+      end;
+    end;
+    rd := s^.Stream.Read(P^, Count);
+    if rd <= 0 then
+    begin
+      // read from next section(s) until we got Count bytes
+      inc(s);
+      if PtrUInt(s) >= PtrUInt(m) then
+        break;
+      continue;
+    end;
+    dec(Count, rd);
+    inc(P, rd);
+    inc(fPosition, rd);
+    inc(result, rd);
+  end;
+  fContentRead := pointer(s);
+end;
+
+function TNestedStreamReader.{%H-}Write(const Buffer; Count: Longint): Longint;
+begin
+  raise EStreamError.Create('Unexpected TNestedStreamReader.Write');
+end;
 
 
 function HashFile(const FileName: TFileName; Hasher: THasher): cardinal;
