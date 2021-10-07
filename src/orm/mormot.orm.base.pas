@@ -15,6 +15,7 @@ unit mormot.orm.base;
    - Abstract TOrmTableAbstract Parent Class
    - TOrmTableRowVariant Custom Variant Type
    - TOrmLocks and TRestCacheEntry Basic Structures
+   - Abstract TOrmPropertiesAbstract Parent Class
 
   *****************************************************************************
 }
@@ -513,42 +514,9 @@ const
 /// detect ORM equivalency from TypeInfo(TNullable*) RTTI
 function NullableTypeToOrmFieldType(aType: PRttiInfo): TOrmFieldType;
 
-const
-  SQLFIELDTYPETODBFIELDTYPE: array[TOrmFieldType] of TSqlDBFieldType = (
-    ftUnknown,   // oftUnknown
-    ftUtf8,      // oftAnsiText
-    ftUtf8,      // oftUtf8Text
-    ftInt64,     // oftEnumerate
-    ftInt64,     // oftSet
-    ftInt64,     // oftInteger
-    ftInt64,     // oftID = TOrm(aID)
-    ftInt64,     // oftRecord = TRecordReference = RecordRef
-    ftInt64,     // oftBoolean
-    ftDouble,    // oftFloat
-    ftDate,      // oftDateTime
-    ftInt64,     // oftTimeLog
-    ftCurrency,  // oftCurrency
-    ftUtf8,      // oftObject
-    ftUtf8,      // oftVariant
-    ftNull,      // oftNullable
-    ftBlob,      // oftBlob
-    ftBlob,      // oftBlobDynArray
-    ftBlob,      // oftBlobCustom
-    ftUtf8,      // oftUtf8Custom
-    ftUnknown,   // oftMany
-    ftInt64,     // oftModTime
-    ftInt64,     // oftCreateTime
-    ftInt64,     // oftTID
-    ftInt64,     // oftRecordVersion = TRecordVersion
-    ftInt64,     // oftSessionUserID
-    ftDate,      // oftDateTimeMS
-    ftInt64,     // oftUnixTime = TUnixTime
-    ftInt64);    // oftUnixMSTime = TUnixMSTime
-
 /// convert a ORM field type and associated RTTI into a DB data type
 function OrmFieldTypeToDBField(aOrmFieldType: TOrmFieldType;
   aTypeInfo: PRttiInfo): TSqlDBFieldType;
-  {$ifdef HASINLINE}inline;{$endif}
 
 function ToText(ft: TOrmFieldType): PShortString; overload;
 function ToText(e: TOrmEvent): PShortString; overload;
@@ -1156,8 +1124,7 @@ type
       Dest: TObject); virtual;
   public
     /// initialize the internal fields
-    // - should not be called directly, but with dedicated class methods like
-    // global function TOrmPropInfoRttiCreateFrom() or overridden constructors
+    // - not called directly, but from TOrmPropInfoRtti.CreateFrom() factory
     constructor Create(const aName: RawUtf8; aOrmFieldType: TOrmFieldType;
       aAttributes: TOrmPropInfoAttributes; aFieldWidth, aPropertyIndex: integer);
       reintroduce; virtual;
@@ -1348,16 +1315,19 @@ type
     function GetRttiCustomProp(Instance: TObject): PRttiCustomProp;
       {$ifdef HASINLINE}inline;{$endif}
   public
+    /// main factory of a TOrmPropInfo instance retrieved from RTTI
+    class function CreateFrom(aPropInfo: PRttiProp; aPropIndex: integer;
+      aOptions: TOrmPropInfoListOptions;
+      const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
+    /// initialize the internal fields
+    // - not usually called directly, but from CreateFrom() factory
+    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
+      aOrmFieldType: TOrmFieldType;
+      aOptions: TOrmPropInfoListOptions); reintroduce; virtual;
     /// register this class corresponding to the RTTI TypeInfo() pointer
     // - could be used e.g. to define custom serialization and process of
     // any custom type
     class procedure RegisterTypeInfo(aTypeInfo: PRttiInfo);
-    /// initialize the internal fields
-    // - should not be called directly, but with dedicated class methods like
-    // the global function TOrmPropInfoCreateFrom()
-    constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOrmFieldType: TOrmFieldType;
-      aOptions: TOrmPropInfoListOptions); reintroduce; virtual;
     /// retrieve the property value into a Variant
     // - will set the Variant type to the best matching kind according to the
     // OrmFieldType type
@@ -2178,14 +2148,6 @@ function ClassOrmFieldType(info: PRttiInfo): TOrmFieldType;
 /// get the SQL type of this type, as managed with the database driver
 function GetOrmFieldType(Info: PRttiInfo): TOrmFieldType;
 
-/// this meta-constructor will create an instance of the exact descendant
-// of the specified property RTTI
-// - it will raise an EOrmException in case of an unhandled type
-function TOrmPropInfoRttiCreateFrom(
-  aPropInfo: PRttiProp; aPropIndex: integer; aOptions: TOrmPropInfoListOptions;
-  const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
-
-
 
 { ************ Abstract TOrmTableAbstract Parent Class }
 
@@ -2979,6 +2941,391 @@ type
   TRestCacheEntryDynArray = array of TRestCacheEntry;
 
 
+
+{ *********************** Abstract TOrmPropertiesAbstract Parent Class }
+
+
+  /// parent used to store some information about a given TOrm class properties
+  // - is fully implemented in mormot.orm.core by the final TOrmProperties class
+  TOrmPropertiesAbstract = class
+  protected
+    fLock: TRTLCriticalSection;
+    fTableRtti: TRttiJson;
+    fHasNotSimpleFields: boolean;
+    fDynArrayFieldsHasObjArray: boolean;
+    fHasTypeFields: TOrmFieldTypes;
+    fFields: TOrmPropInfoList;
+    fSimpleFields: TOrmPropInfoObjArray;
+    fSqlTableName: RawUtf8;
+    fCopiableFields: TOrmPropInfoObjArray;
+    fDynArrayFields: TOrmPropInfoRttiDynArrayObjArray;
+    fBlobCustomFields: TOrmPropInfoCustomDynArray;
+    fBlobFields: TOrmPropInfoRttiRawBlobDynArray;
+    fManyFields: TOrmPropInfoRttiManyObjArray;
+    fRecordManySourceProp: TOrmPropInfoRttiInstance;
+    fRecordManyDestProp: TOrmPropInfoRttiInstance;
+    fSqlTableNameUpperWithDot: RawUtf8;
+    fSqlFillPrepareMany: RawUtf8;
+    fSqlTableSimpleFieldsNoRowID: RawUtf8;
+    fSqlTableUpdateBlobFields: RawUtf8;
+    fSqlTableRetrieveBlobFields: RawUtf8;
+    fSqlTableRetrieveAllFields: RawUtf8;
+    fRecordVersionField: TOrmPropInfoRttiRecordVersion;
+    fWeakZeroClass: TObject;
+    fCustomCollation: TRawUtf8DynArray;
+  public
+    /// initialize the list - mainly its lock
+    constructor Create;
+    /// finalize the list - mainly its lock
+    destructor Destroy; override;
+
+    /// return TRUE if the given name is either ID/RowID, either a property name
+    function IsFieldName(const PropName: RawUtf8): boolean;
+    /// return TRUE if the given name is either ID/RowID, either a property name,
+    // or an aggregate function (MAX/MIN/AVG/SUM) on a valid property name
+    function IsFieldNameOrFunction(const PropName: RawUtf8): boolean;
+    /// set all bits corresponding to the supplied field names
+    // - returns TRUE on success, FALSE if any field name is not existing
+    function FieldBitsFrom(const aFields: array of PUtf8Char;
+      var Bits: TFieldBits): boolean; overload;
+    /// set all bits corresponding to the supplied field names
+    // - returns the matching fields set
+    function FieldBitsFrom(const aFields: array of PUtf8Char): TFieldBits; overload;
+    /// set all bits corresponding to the supplied CSV field names
+    // - returns TRUE on success, FALSE if any field name is not existing
+    function FieldBitsFromCsv(const aFieldsCsv: RawUtf8;
+      var Bits: TFieldBits): boolean; overload;
+    /// set all bits corresponding to the supplied CSV field names, including ID
+    // - returns TRUE on success, FALSE if any field name is not existing
+    // - this overloaded method will identify ID/RowID field name, and set
+    // withID output parameter according to its presence
+    // - if aFieldsCsv='*', Bits will contain all simple fields, and withID=true
+    function FieldBitsFromCsv(const aFieldsCsv: RawUtf8; var Bits: TFieldBits;
+      out withID: boolean): boolean; overload;
+    /// set all bits corresponding to the supplied CSV field names
+    // - returns the matching fields set
+    function FieldBitsFromCsv(const aFieldsCsv: RawUtf8): TFieldBits; overload;
+    /// set all simple bits corresponding to the simple fields, excluding some
+    // - could be a convenient alternative to FieldBitsFromCsv() if only some
+    // fields are to be excluded
+    // - returns the matching fields set
+    function FieldBitsFromExcludingCsv(const aFieldsCsv: RawUtf8;
+      aOccasion: TOrmOccasion = ooSelect): TFieldBits;
+    /// set all bits corresponding to the supplied BLOB field type information
+    // - returns TRUE on success, FALSE if blob field is not recognized
+    function FieldBitsFromBlobField(aBlobField: PRttiProp;
+      var Bits: TFieldBits): boolean;
+    /// compute the CSV field names text from a set of bits
+    function CsvFromFieldBits(const Bits: TFieldBits): RawUtf8;
+    /// set all field indexes corresponding to the supplied field names
+    // - returns TRUE on success, FALSE if any field name is not existing
+    function FieldIndexDynArrayFromRawUtf8(const aFields: array of RawUtf8;
+      var Indexes: TFieldIndexDynArray): boolean; overload;
+    /// set all field indexes corresponding to the supplied field names
+    // - returns the matching fields set
+    function FieldIndexDynArrayFromRawUtf8(
+      const aFields: array of RawUtf8): TFieldIndexDynArray; overload;
+    /// set all field indexes corresponding to the supplied CSV field names
+    // - returns TRUE on success, FALSE if any field name is not existing
+    function FieldIndexDynArrayFromCsv(const aFieldsCsv: RawUtf8;
+      var Indexes: TFieldIndexDynArray): boolean; overload;
+    /// set all field indexes corresponding to the supplied CSV field names
+    // - returns the matching fields set
+    function FieldIndexDynArrayFromCsv(
+      const aFieldsCsv: RawUtf8): TFieldIndexDynArray; overload;
+    /// set all field indexes corresponding to the supplied BLOB field type information
+    // - returns TRUE on success, FALSE if blob field is not recognized
+    function FieldIndexDynArrayFromBlobField(aBlobField: PRttiProp;
+      var Indexes: TFieldIndexDynArray): boolean;
+    /// retrieve a Field property RTTI information from a Property Name
+    // - this version returns nil if the property is not a BLOB field
+    function BlobFieldPropFromRawUtf8(const PropName: RawUtf8): PRttiProp;
+    /// retrieve a Field property RTTI information from a Property Name
+    // - this version returns nil if the property is not a BLOB field
+    function BlobFieldPropFromUtf8(PropName: PUtf8Char; PropNameLen: integer): PRttiProp;
+
+    /// append a field name to a RawUtf8 Text buffer
+    // - if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN (-1), appends 'RowID' or
+    // 'ID' (if ForceNoRowID=TRUE) to Text
+    // - on error (i.e. if FieldIndex is out of range) will return TRUE
+    // - otherwise, will return FALSE and append the field name to Text
+    function AppendFieldName(FieldIndex: integer; var Text: RawUtf8;
+      ForceNoRowID: boolean): boolean;
+    /// return the first unique property of kind RawUtf8
+    // - this property is mainly the "Name" property, i.e. the one with
+    // "stored AS_UNIQUE" (i.e. "stored false") definition on most TOrm
+    // - if ReturnFirstIfNoUnique is TRUE and no unique property is found,
+    // the first RawUtf8 property is returned anyway
+    // - returns '' if no matching field was found
+    function MainFieldName(ReturnFirstIfNoUnique: boolean = false): RawUtf8;
+    /// return the SQLite3 field datatype for each specified field
+    // - set to '' for fields with no column created in the database (e.g. oftMany)
+    // - returns e.g. ' INTEGER, ' or ' TEXT COLLATE SYSTEMNOCASE, '
+    function OrmFieldTypeToSql(FieldIndex: integer): RawUtf8;
+    /// return the UTF-8 encoded SQL statement source to alter the table for
+    //  adding the specified field
+    // - returns something like 'ALTER TABLE tablename ADD COLUMN coldef UNIQUE'
+    function SqlAddField(FieldIndex: integer): RawUtf8;
+    /// set a custom SQlite3 text column collation for a specified field
+    // - can be used e.g. to override the default COLLATE SYSTEMNOCASE of RawUtf8
+    // - collations defined within our mormot.db.raw.sqlite3 unit are the SQLite3
+    // standard BINARY, NOCASE, RTRIM and our custom SYSTEMNOCASE, UNICODENOCASE,
+    // ISO8601, WIN32CASE, WIN32NOCASE alternatives
+    // - do nothing if FieldIndex is not valid, and returns false
+    // - could be set in overridden class procedure TOrm.InternalDefineModel
+    // so that it will be common to all database models, for both client and server
+    function SetCustomCollation(FieldIndex: integer;
+      const aCollationName: RawUtf8): boolean; overload;
+    /// set a custom SQlite3 text column collation for a specified field
+    // - overloaded method which expects the field to be named
+    function SetCustomCollation(const aFieldName, aCollationName: RawUtf8): boolean; overload;
+    /// set a custom SQlite3 text column collation for a given field type
+    // - can be used e.g. to override ALL default COLLATE SYSTEMNOCASE of RawUtf8,
+    // or the default COLLATE ISO8601 of TDateTime, and let the generated SQLite3
+    // file be available outside the scope of mORMot's SQLite3 engine
+    // - collations defined within our mormot.db.raw.sqlite3 unit are the SQLite3
+    // standard BINARY, NOCASE, RTRIM and our custom SYSTEMNOCASE, UNICODENOCASE,
+    // ISO8601, WIN32CASE, WIN32NOCASE alternatives
+    // - could be set in overridden class procedure TOrm.InternalDefineModel
+    // so that it will be common to all database models, for both client and server
+    // - note that you may inherit from TOrmNoCase to use the NOCASE
+    // standard SQLite3 collation for all descendant ORM objects
+    procedure SetCustomCollationForAll(aFieldType: TOrmFieldType;
+      const aCollationName: RawUtf8);
+    /// customize the TDocVariant options for all variant published properties
+    // - will change the TOrmPropInfoRttiVariant.DocVariantOptions value
+    // - use e.g. as SetVariantFieldDocVariantOptions(JSON_FAST_EXTENDED)
+    // - see also TOrmNoCaseExtended root class
+    procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
+
+    /// create a TJsonWriter, ready to be filled with TOrm.GetJsonValues
+    // - you can use TOrmProperties.FieldBitsFromCsv() or
+    // TOrmProperties.FieldBitsFromRawUtf8() to compute aFields
+    function CreateJsonWriter(Json: TStream; Expand, withID: boolean;
+      const aFields: TFieldBits; KnownRowsCount: integer;
+      aBufSize: integer = 8192): TJsonSerializer; overload;
+    /// create a TJsonWriter, ready to be filled with TOrm.GetJsonValues(W)
+    // - you can use TOrmProperties.FieldBitsFromCsv() or
+    // TOrmProperties.FieldBitsFromRawUtf8() to compute aFields
+    function CreateJsonWriter(Json: TStream; Expand, withID: boolean;
+      const aFields: TFieldIndexDynArray; KnownRowsCount: integer;
+      aBufSize: integer = 8192): TJsonSerializer; overload;
+    /// create a TJsonWriter, ready to be filled with TOrm.GetJsonValues(W)
+    // - this overloaded method will call FieldBitsFromCsv(aFieldsCsv,bits,withID)
+    // to retrieve the bits just like a SELECT (i.e. '*' for simple fields)
+    function CreateJsonWriter(Json: TStream; Expand: boolean;
+      const aFieldsCsv: RawUtf8; KnownRowsCount: integer;
+      aBufSize: integer = 8192): TJsonSerializer; overload;
+    /// set the W.ColNames[] array content + W.AddColumns
+    procedure SetJsonWriterColumnNames(W: TJsonSerializer; KnownRowsCount: integer);
+    /// save the TOrm RTTI into a binary header
+    // - used e.g. by TRestStorageInMemory.SaveToBinary()
+    procedure SaveBinaryHeader(W: TBufferWriter);
+    /// ensure that the TOrm RTTI matches the supplied binary header
+    // - used e.g. by TRestStorageInMemory.LoadFromBinary()
+    function CheckBinaryHeader(var R: TFastReader): boolean;
+    /// convert a JSON array of simple field values into a matching JSON object
+    function SaveSimpleFieldsFromJsonArray(var P: PUtf8Char; ID: TID;
+      EndOfObject: PAnsiChar; ExtendedJson, FirstIsID: boolean): RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// convert a JSON array of simple field values into a matching JSON object
+    function SaveFieldsFromJsonArray(var P: PUtf8Char; const Bits: TFieldBits;
+      ID: TID; EndOfObject: PAnsiChar; ExtendedJson, FirstIsID: boolean): RawUtf8;
+
+    /// add a custom unmanaged fixed-size record property
+    // - simple kind of records (i.e. those not containing reference-counted
+    // members) do not have RTTI generated, at least in older versions of Delphi
+    // - use this method within TOrm.InternalRegisterCustomProperties
+    // overridden method to define a custom record property with no
+    // reference-counted types within (like strings) - typical use may be TGUID
+    // - main parameters are the record size, in bytes, and the property pointer
+    // - add an TOrmPropInfoRecordFixedSize instance to the internal list
+    // - if aData2Text/aText2Data parameters are not defined, it will fallback
+    // to TOrmPropInfo.BinaryToText() simple text Base64 encoding
+    // - can be used to override the default TOrm corresponding method:
+    // !class procedure TOrmMyRecord.InternalRegisterCustomProperties(
+    // !  Props: TOrmProperties);
+    // !begin
+    // !  Props.RegisterCustomFixedSizeRecordProperty(self, SizeOf(TMyRec),
+    // !    'RecField', @TOrmMyRecord(nil).fRecField, [], SizeOf(TMyRec));
+    // !end;
+    procedure RegisterCustomFixedSizeRecordProperty(aTable: TClass;
+      aRecordSize: cardinal; const aName: RawUtf8; aPropertyPointer: pointer;
+      aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer;
+      aData2Text: TOnSqlPropInfoRecord2Text = nil;
+      aText2Data: TOnSqlPropInfoRecord2Data = nil);
+    /// add a custom record property from its RTTI definition
+    // - handle any kind of record with TypeInfo() generated
+    // - use this method within InternalRegisterCustomProperties overridden method
+    // to define a custom record property containing reference-counted types
+    // - main parameters are the record RTTI information, and the property pointer
+    // - add an TOrmPropInfoRecordRtti instance to the internal list
+    // - can be used as such:
+    // !class procedure TOrmMyRecord.InternalRegisterCustomProperties(
+    // !  Props: TOrmProperties);
+    // !begin
+    // !  Props.RegisterCustomRttiRecordProperty(self, TypeInfo(TMyRec),
+    // !    'RecField', @TOrmMyRecord(nil).fRecField);
+    // !end;
+    procedure RegisterCustomRttiRecordProperty(aTable: TClass;
+      aRecordInfo: PRttiInfo; const aName: RawUtf8; aPropertyPointer: pointer;
+      aAttributes: TOrmPropInfoAttributes = []; aFieldWidth: integer = 0;
+      aData2Text: TOnSqlPropInfoRecord2Text = nil;
+      aText2Data: TOnSqlPropInfoRecord2Data = nil);
+    /// add a custom property from its RTTI definition stored as JSON
+    // - handle any kind of record with TypeInfo() generated
+    // - use this method within InternalRegisterCustomProperties overridden method
+    // to define a custom record property containing reference-counted types
+    // - main parameters are the record RTTI information, and the property pointer
+    // - add an TOrmPropInfoCustomJson instance to the internal list
+    // - can be used as such:
+    // !class procedure TOrmMyRecord.InternalRegisterCustomProperties(
+    // !  Props: TOrmProperties);
+    // !begin
+    // !  Props.RegisterCustomPropertyFromRtti(self, TypeInfo(TMyRec),
+    // !    'RecField', @TOrmMyRecord(nil).fRecField);
+    // !end;
+    procedure RegisterCustomPropertyFromRtti(aTable: TClass;
+      aTypeInfo: PRttiInfo; const aName: RawUtf8; aPropertyPointer: pointer;
+      aAttributes: TOrmPropInfoAttributes = []; aFieldWidth: integer = 0);
+    /// add a custom property from its type name, stored as JSON
+    // - handle any kind of registered record, including TGUID
+    // - use this method within InternalRegisterCustomProperties overridden method
+    // to define a custom record property containing reference-counted types
+    // - main parameters are the record RTTI information, and the property pointer
+    // - add an TOrmPropInfoCustomJson instance to the internal list
+    // - can be used as such:
+    // !class procedure TOrmMyRecord.InternalRegisterCustomProperties(
+    // !  Props: TOrmProperties);
+    // !begin
+    // !  Props.RegisterCustomPropertyFromTypeName(self, 'TGUID', 'GUID',
+    // !    @TOrmMyRecord(nil).fGUID, [aIsUnique], 38);
+    // !end;
+    procedure RegisterCustomPropertyFromTypeName(aTable: TClass;
+      const aTypeName, aName: RawUtf8; aPropertyPointer: pointer;
+      aAttributes: TOrmPropInfoAttributes = []; aFieldWidth: integer = 0);
+
+    /// fast access to the RTTI properties attribute
+    property TableRtti: TRttiJson
+      read fTableRtti;
+    /// if this class has any BLOB or TOrmRecordMany fields
+    // - i.e. some fields to be ignored
+    property HasNotSimpleFields: boolean
+      read fHasNotSimpleFields;
+    /// set of field types appearing in this record
+    property HasTypeFields: TOrmFieldTypes
+      read fHasTypeFields;
+    /// list all fields, as retrieved from RTTI
+    property Fields: TOrmPropInfoList
+      read fFields;
+    /// list all "simple" fields of this TOrm
+    // - by default, the RawBlob and TOrmMany fields are not included
+    // into this set: they must be read specificaly (in order to spare
+    // bandwidth for BLOBs)
+    // - dynamic arrays belong to simple fields: they are sent with other
+    // properties content
+    // - match inverted NOT_SIMPLE_FIELDS mask
+    property SimpleFields: TOrmPropInfoObjArray
+      read fSimpleFields;
+    /// list all fields which can be copied from one TOrm instance to another
+    // - match COPIABLE_FIELDS mask, i.e. all fields except oftMany
+    property CopiableFields: TOrmPropInfoObjArray
+      read fCopiableFields;
+    /// list all TOrmMany fields of this TOrm
+    property ManyFields: TOrmPropInfoRttiManyObjArray
+      read fManyFields;
+
+    /// list of all oftBlobDynArray fields of this TOrm
+    property DynArrayFields: TOrmPropInfoRttiDynArrayObjArray
+      read fDynArrayFields;
+    /// TRUE if any of the oftBlobDynArray fields of this TOrm is a T*ObjArray
+    // - used e.g. by TOrm.Destroy to release all owned nested instances
+    property DynArrayFieldsHasObjArray: boolean
+      read fDynArrayFieldsHasObjArray;
+    /// list of all oftBlobCustom fields of this TOrm
+    // - have been defined e.g. as TOrmPropInfoCustom custom definition
+    property BlobCustomFields: TOrmPropInfoCustomDynArray
+      read fBlobCustomFields;
+    /// list all BLOB fields of this TOrm
+    // - i.e. generic oftBlob fields (not oftBlobDynArray, oftBlobCustom nor
+    // oftBlobRecord)
+    property BlobFields: TOrmPropInfoRttiRawBlobDynArray
+      read fBlobFields;
+    /// for a TOrmMany class, points to the Source property RTTI
+    property RecordManySourceProp: TOrmPropInfoRttiInstance
+      read fRecordManySourceProp;
+    /// for a TOrmMany class, points to the Dest property RTTI
+    property RecordManyDestProp: TOrmPropInfoRttiInstance
+      read fRecordManyDestProp;
+    /// points to any TRecordVersion field
+    // - contains nil if no such oftRecordVersion field do exist
+    // - will be used by low-level storage engine to compute and store the
+    // monotonic version number during any write operation
+    property RecordVersionField: TOrmPropInfoRttiRecordVersion
+      read fRecordVersionField;
+    /// the Table name in the database in uppercase with a final '.'
+    // - e.g. 'TEST.' for TOrmTest class
+    // - can be used with IdemPChar() for fast check of a table name
+    property SqlTableNameUpperWithDot: RawUtf8
+      read fSqlTableNameUpperWithDot;
+    /// returns 'COL1,COL2' with all COL* set to simple field names
+    // - same value as Sql.TableSimpleFields[false,false]
+    // - this won't change depending on the ORM settings: so it can be safely
+    // computed here and not in TOrmModelProperties
+    // - used e.g. by TOrm.GetSqlValues
+    property SqlTableSimpleFieldsNoRowID: RawUtf8
+      read fSqlTableSimpleFieldsNoRowID;
+    /// returns 'COL1=?,COL2=?' with all BLOB columns names
+    // - used e.g. by TRestServerDB.UpdateBlobFields()
+    property SqlTableUpdateBlobFields: RawUtf8
+      read fSqlTableUpdateBlobFields;
+    /// returns 'COL1,COL2' with all BLOB columns names
+    // - used e.g. by TRestServerDB.RetrieveBlobFields()
+    property SqlTableRetrieveBlobFields: RawUtf8
+      read fSqlTableRetrieveBlobFields;
+  public
+    /// bit set to 1 for indicating each TOrmFieldType fields of this TOrm
+    FieldBits: array[TOrmFieldType] of TFieldBits;
+    /// bit set to 1 for indicating TModTime/TSessionUserID fields
+    // of this TOrm (leaving TCreateTime untouched)
+    // - as applied before an UPDATE
+    // - i.e. oftModTime and oftSessionUserID fields
+    ComputeBeforeUpdateFieldsBits: TFieldBits;
+    /// bit set to 1 for indicating TModTime/TCreateTime/TSessionUserID fields
+    // of this TOrm
+    // - as applied before an INSERT
+    // - i.e. oftModTime, oftCreateTime and oftSessionUserID fields
+    ComputeBeforeAddFieldsBits: TFieldBits;
+    /// bit set to 1 for indicating fields to export, i.e. "simple" fields
+    // - this array will handle special cases, like the TCreateTime fields
+    // which shall not be included in ooUpdate but ooInsert and ooSelect e.g.
+    SimpleFieldsBits: array[TOrmOccasion] of TFieldBits;
+    /// number of fields to export, i.e. "simple" fields
+    // - this array will handle special cases, like the TCreateTime fields
+    // which shall not be included in ooUpdate but ooInsert and ooSelect e.g.
+    SimpleFieldsCount: array[TOrmOccasion] of integer;
+    /// "simple" fields SELECT expressions for TSelectStatement.Create parsing
+    SimpleFieldSelect: TSelectStatementSelectDynArray;
+    /// bit set to 1 for an unique field
+    // - an unique field is defined as "stored AS_UNIQUE" (i.e. "stored false")
+    // in its property definition
+    IsUniqueFieldsBits: TFieldBits;
+    /// bit set to 1 for the smallest simple fields
+    // - i.e. excluding non only oftBlob and oftMany, but also oftVariant,
+    // oftBlobDynArray, oftBlobCustom and oftUtf8Custom fields
+    // - may be used to minimize the transmitted content, e.g. when serializing
+    // to JSON for the essential information
+    SmallFieldsBits: TFieldBits;
+    /// bit set to 1 for the all fields storing some data
+    // - match COPIABLE_FIELDS mask, i.e. all fields except oftMany
+    CopiableFieldsBits: TFieldBits;
+    /// contains the main field index (e.g. mostly 'Name')
+    // - the [boolean] is for [ReturnFirstIfNoUnique] version
+    // - contains -1 if no field matches
+    MainField: array[boolean] of integer;
+    /// count of coordinate fields of a TOrmRTree, before auxiliary columns
+    RTreeCoordBoundaryFields: integer;
+  end;
 
 implementation
 
@@ -4250,7 +4597,92 @@ end;
 
 { ************ TOrmPropInfo ORM / RTTI Classes }
 
+const
+  SQLFIELDTYPETODBFIELDTYPE: array[TOrmFieldType] of TSqlDBFieldType = (
+    ftUnknown,   // oftUnknown
+    ftUtf8,      // oftAnsiText
+    ftUtf8,      // oftUtf8Text
+    ftInt64,     // oftEnumerate
+    ftInt64,     // oftSet
+    ftInt64,     // oftInteger
+    ftInt64,     // oftID = TOrm(aID)
+    ftInt64,     // oftRecord = TRecordReference = RecordRef
+    ftInt64,     // oftBoolean
+    ftDouble,    // oftFloat
+    ftDate,      // oftDateTime
+    ftInt64,     // oftTimeLog
+    ftCurrency,  // oftCurrency
+    ftUtf8,      // oftObject
+    ftUtf8,      // oftVariant
+    ftNull,      // oftNullable
+    ftBlob,      // oftBlob
+    ftBlob,      // oftBlobDynArray
+    ftBlob,      // oftBlobCustom
+    ftUtf8,      // oftUtf8Custom
+    ftUnknown,   // oftMany
+    ftInt64,     // oftModTime
+    ftInt64,     // oftCreateTime
+    ftInt64,     // oftTID
+    ftInt64,     // oftRecordVersion = TRecordVersion
+    ftInt64,     // oftSessionUserID
+    ftDate,      // oftDateTimeMS
+    ftInt64,     // oftUnixTime = TUnixTime
+    ftInt64);    // oftUnixMSTime = TUnixMSTime
+
+  /// simple wrapper from each SQL used type into SQLite3 field datatype
+  DEFAULT_ORMFIELDTYPETOSQL: array[TOrmFieldType] of RawUtf8 = (
+    '',                              // oftUnknown - '' = no column created
+    ' TEXT COLLATE NOCASE, ',        // oftAnsiText
+    ' TEXT COLLATE SYSTEMNOCASE, ',  // oftUtf8Text
+    ' INTEGER, ',                    // oftEnumerate
+    ' INTEGER, ',                    // oftSet
+    ' INTEGER, ',                    // oftInteger
+    ' INTEGER, ',                    // oftID = TOrm(aID)
+    ' INTEGER, ',                    // oftRecord = TRecordReference
+    ' INTEGER, ',                    // oftBoolean
+    ' FLOAT, ',                      // oftFloat
+    ' TEXT COLLATE ISO8601, ',       // oftDateTime
+    ' INTEGER, ',                    // oftTimeLog
+    ' FLOAT, ',                      // oftCurrency
+    ' TEXT COLLATE BINARY, ',        // oftObject
+    ' TEXT COLLATE BINARY, ',        // oftVariant
+    ' TEXT COLLATE NOCASE, ',        // oftNullable (from OrmFieldTypeStored)
+    ' BLOB, ',                       // oftBlob
+    ' BLOB, ',                       // oftBlobDynArray
+    ' BLOB, ',                       // oftBlobCustom
+    ' TEXT COLLATE NOCASE, ',        // oftUtf8Custom
+    '',                              // oftMany - '' = no column created
+    ' INTEGER, ',                    // oftModTime
+    ' INTEGER, ',                    // oftCreateTime
+    ' INTEGER, ',                    // oftTID
+    ' INTEGER, ',                    // oftRecordVersion
+    ' INTEGER, ',                    // oftSessionUserID
+    ' TEXT COLLATE ISO8601, ',       // oftDateTimeMS
+    ' INTEGER, ',                    // oftUnixTime
+    ' INTEGER, ');                   // oftUnixMSTime
+
+
 { TOrmPropInfo }
+
+constructor TOrmPropInfo.Create(const aName: RawUtf8; aOrmFieldType:
+  TOrmFieldType; aAttributes: TOrmPropInfoAttributes;
+  aFieldWidth, aPropertyIndex: integer);
+begin
+  if aName = '' then
+    raise EOrmException.CreateUtf8('Void name for %.Create', [self]);
+  if aAuxiliaryRTreeField in aAttributes then
+    // '_NormalField' -> 'NormalField'
+    fName := copy(aName, 2, MaxInt)
+  else
+    fName := aName;
+  fNameUnflattened := fName;
+  fOrmFieldType := aOrmFieldType;
+  fOrmFieldTypeStored := aOrmFieldType;
+  fSqlDBFieldType := SQLFIELDTYPETODBFIELDTYPE[fOrmFieldTypeStored];
+  fAttributes := aAttributes;
+  fFieldWidth := aFieldWidth;
+  fPropertyIndex := aPropertyIndex;
+end;
 
 const
   NULL_SHORTSTRING: string[1] = '';
@@ -4300,66 +4732,6 @@ begin
       // JSON content is e.g. '\uFFF0base64encodedbinary'
       Value := BinToBase64WithMagic(Value);
   end;
-end;
-
-function NullableTypeToOrmFieldType(aType: PRttiInfo): TOrmFieldType;
-begin
-  if aType <> nil then
-    if aType <> TypeInfo(TNullableInteger) then
-      if aType <> TypeInfo(TNullableUtf8Text) then
-        if aType <> TypeInfo(TNullableBoolean) then
-          if aType <> TypeInfo(TNullableFloat) then
-            if aType <> TypeInfo(TNullableCurrency) then
-              if aType <> TypeInfo(TNullableDateTime) then
-                if aType <> TypeInfo(TNullableTimeLog) then
-                begin
-                  result := oftUnknown;
-                  exit;
-                end
-                else
-                  result := oftTimeLog
-              else
-                result := oftDateTime
-            else
-              result := oftCurrency
-          else
-            result := oftFloat
-        else
-          result := oftBoolean
-      else
-        result := oftUtf8Text
-    else
-      result := oftInteger
-  else
-    result := oftUnknown;
-end;
-
-function OrmFieldTypeToDBField(aOrmFieldType: TOrmFieldType;
-  aTypeInfo: PRttiInfo): TSqlDBFieldType;
-begin
-  if aOrmFieldType = oftNullable then
-    aOrmFieldType := NullableTypeToOrmFieldType(aTypeInfo);
-  result := SQLFIELDTYPETODBFIELDTYPE[aOrmFieldType];
-end;
-
-constructor TOrmPropInfo.Create(const aName: RawUtf8; aOrmFieldType:
-  TOrmFieldType; aAttributes: TOrmPropInfoAttributes;
-  aFieldWidth, aPropertyIndex: integer);
-begin
-  if aName = '' then
-    raise EOrmException.CreateUtf8('Void name for %.Create', [self]);
-  if aAuxiliaryRTreeField in aAttributes then
-    // '_NormalField' -> 'NormalField'
-    fName := copy(aName, 2, MaxInt)
-  else
-    fName := aName;
-  fNameUnflattened := fName;
-  fOrmFieldType := aOrmFieldType;
-  fOrmFieldTypeStored := aOrmFieldType;
-  fSqlDBFieldType := SQLFIELDTYPETODBFIELDTYPE[fOrmFieldTypeStored];
-  fAttributes := aAttributes;
-  fFieldWidth := aFieldWidth;
-  fPropertyIndex := aPropertyIndex;
 end;
 
 function TOrmPropInfo.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
@@ -4604,6 +4976,172 @@ begin
   OrmPropInfoRegistration.AddOrUpdate(aTypeInfo, self);
 end;
 
+constructor TOrmPropInfoRtti.Create(aPropInfo: PRttiProp; aPropIndex: integer;
+  aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
+var
+  attrib: TOrmPropInfoAttributes;
+  call: TMethod;
+begin
+  byte(attrib) := 0;
+  if aPropInfo^.IsStored(nil) = AS_UNIQUE then
+    Include(attrib, aIsUnique); // property MyProperty: RawUtf8 stored AS_UNIQUE;
+  if (pilAuxiliaryFields in aOptions) and
+     (aPropInfo^.Name^[1] = '_') then
+    Include(attrib, aAuxiliaryRTreeField);
+  inherited Create(aPropInfo^.NameUtf8, aOrmFieldType, attrib, aPropInfo^.Index,
+    aPropIndex); // property MyProperty: RawUtf8 index 10; -> FieldWidth=10
+  fPropInfo := aPropInfo;
+  fPropType := aPropInfo^.TypeInfo;
+  fPropRtti := Rtti.RegisterType(fPropType) as TRttiJson;
+  if fPropRtti = nil then
+    raise EOrmException.CreateUtf8('%.Create(%): unknown type',
+      [self, aPropInfo^.Name^]);
+  if aPropInfo.Setter(nil, @call) = rpcField then
+    fSetterIsFieldPropOffset := PtrInt(call.Data);
+  if aPropInfo.GetterIsField then
+  begin
+    fGetterIsFieldPropOffset := PtrUInt(fPropInfo.GetterAddr(nil));
+    if fGetterIsFieldPropOffset = fSetterIsFieldPropOffset then
+      fInPlaceCopySameClassPropOffset := fGetterIsFieldPropOffset;
+  end;
+end;
+
+class function TOrmPropInfoRtti.CreateFrom(aPropInfo: PRttiProp;
+  aPropIndex: integer; aOptions: TOrmPropInfoListOptions;
+  const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
+var
+  aOrmFieldType: TOrmFieldType;
+  aType: PRttiInfo;
+  C: TOrmPropInfoRttiClass;
+
+  procedure FlattenedPropNameSet;
+  var
+    i, max: PtrInt;
+    res: TOrmPropInfoRttiInstance absolute result;
+  begin // Address.Street1 -> Address_Street1
+    res.fFlattenedProps := aFlattenedProps;
+    res.fNameUnflattened := result.Name;
+    max := high(aFlattenedProps);
+    for i := max downto 0 do
+      res.fNameUnflattened :=
+        ToUtf8(aFlattenedProps[i]^.Name^) + '.' + result.NameUnflattened;
+    if (max >= 0) and
+       (aFlattenedProps[max]^.TypeInfo^.ClassFieldCount(
+         {withoutgetter=}pilIgnoreIfGetter in aOptions) = 1) then
+    begin
+      // Birth.Date -> Birth or Address.Country.Iso -> Address_Country
+      res.fName := ToUtf8(aFlattenedProps[max]^.Name^);
+      dec(max);
+    end;
+    for i := max downto 0 do
+      res.fName := ToUtf8(aFlattenedProps[i]^.Name^) + '_' + result.Name;
+  end;
+
+begin
+  if aPropInfo = nil then
+    raise EOrmException.Create('Invalid TOrmPropInfoRttiCreateFrom(nil) call');
+  aType := aPropInfo^.TypeInfo;
+  aOrmFieldType := GetOrmFieldType(aType); // guess from RTTI
+  C := nil;
+  result := nil;
+  if (OrmPropInfoRegistration = nil) or
+     not OrmPropInfoRegistration.FindAndCopy(aType, C) then
+    // TypeInfo() was not in TOrmPropInfoRtti.RegisterTypeInfo -> use RTTI
+    case aOrmFieldType of
+      oftUnknown,
+      oftBlobCustom:
+        ; // will raise an EOrmException
+      oftBoolean,
+      oftEnumerate:
+        C := TOrmPropInfoRttiEnum;
+      oftTimeLog,
+      oftModTime,
+      oftCreateTime: // specific class for further use
+        C := TOrmPropInfoRttiTimeLog;
+      oftUnixTime:   // specific class for further use
+        C := TOrmPropInfoRttiUnixTime;
+      oftUnixMSTime:
+        C := TOrmPropInfoRttiUnixMSTime;
+      oftCurrency:
+        C := TOrmPropInfoRttiCurrency;
+      oftDateTime,
+      oftDateTimeMS:
+        C := TOrmPropInfoRttiDateTime;
+      oftID:    // = TOrm(aID)
+        C := TOrmPropInfoRttiIDClass;  // = mormot.orm.core TOrmPropInfoRttiID
+      oftTID:   // = TID or T*ID
+        C := TOrmPropInfoRttiTIDClass; // = mormot.orm.core TOrmPropInfoRttiTID
+      oftSessionUserID:
+        C := TOrmPropInfoRttiInt64;
+      oftRecord: // = TRecordReference/TRecordReferenceToBeDeleted
+        C := TOrmPropInfoRttiRecordReference;
+      oftRecordVersion:
+        C := TOrmPropInfoRttiRecordVersion;
+      oftMany:
+        C := TOrmPropInfoRttiMany;
+      oftObject:
+        C := TOrmPropInfoRttiObject;
+      oftVariant:
+        begin
+          aOrmFieldType := NullableTypeToOrmFieldType(aType);
+          if aOrmFieldType = oftUnknown then // no oftNullable type
+            aOrmFieldType := oftVariant;     // = regular variant stored as JSON
+          C := TOrmPropInfoRttiVariant;
+        end;
+      oftBlob:
+        C := TOrmPropInfoRttiRawBlob;
+      oftBlobDynArray:
+        C := TOrmPropInfoRttiDynArray;
+      oftUtf8Custom: // happens only for DELPHI XE5 and up
+        result := TOrmPropInfoCustomJson.Create(aPropInfo, aPropIndex);
+    else
+      case aType^.Kind of // guess most precise class from RTTI
+        rkInteger:
+          C := TOrmPropInfoRttiInt32;
+        rkSet:
+          C := TOrmPropInfoRttiSet;
+        rkChar,
+        rkWChar:
+          C := TOrmPropInfoRttiChar;
+        {$ifdef FPC}
+        rkQWord,
+        {$endif FPC}
+        rkInt64:
+          C := TOrmPropInfoRttiInt64;
+        rkFloat:
+          if aType^.RttiFloat = rfDouble then
+            C := TOrmPropInfoRttiDouble;
+        rkLString:
+          case aType^.AnsiStringCodePage of
+            // recognize optimized UTF-8/UTF-16
+            CP_UTF8:
+              C := TOrmPropInfoRttiRawUtf8;
+            CP_UTF16:
+              C := TOrmPropInfoRttiRawUnicode;
+          else
+            C := TOrmPropInfoRttiAnsi; // will use the right TSynAnsiConvert
+          end;
+      {$ifdef HASVARUSTRING}
+        rkUString:
+          C := TOrmPropInfoRttiUnicode;
+      {$endif HASVARUSTRING}
+        rkWString:
+          C := TOrmPropInfoRttiWide;
+      end;
+    end;
+  if C <> nil then
+    result := C.Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
+  if result <> nil then
+  begin
+    if aFlattenedProps <> nil then
+      FlattenedPropNameSet;
+  end
+  else if pilRaiseEOrmExceptionIfNotHandled in aOptions then
+    raise EOrmException.CreateUtf8(
+      'TOrmPropInfoRttiCreateFrom: Unhandled %/% type for property %',
+      [ToText(aOrmFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name^]);
+end;
+
 function TOrmPropInfoRtti.GetSqlFieldRttiTypeName: RawUtf8;
 begin
   result := ToUtf8(fPropType^.Name^);
@@ -4641,36 +5179,6 @@ begin
   GetValueVar(Instance, true, temp, nil);
   ValueVarToVariant(pointer(temp), length(temp), fOrmFieldTypeStored,
     TVarData(Dest), false, fPropInfo^.TypeInfo);
-end;
-
-constructor TOrmPropInfoRtti.Create(aPropInfo: PRttiProp; aPropIndex: integer;
-  aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
-var
-  attrib: TOrmPropInfoAttributes;
-  call: TMethod;
-begin
-  byte(attrib) := 0;
-  if aPropInfo^.IsStored(nil) = AS_UNIQUE then
-    Include(attrib, aIsUnique); // property MyProperty: RawUtf8 stored AS_UNIQUE;
-  if (pilAuxiliaryFields in aOptions) and
-     (aPropInfo^.Name^[1] = '_') then
-    Include(attrib, aAuxiliaryRTreeField);
-  inherited Create(aPropInfo^.NameUtf8, aOrmFieldType, attrib, aPropInfo^.Index,
-    aPropIndex); // property MyProperty: RawUtf8 index 10; -> FieldWidth=10
-  fPropInfo := aPropInfo;
-  fPropType := aPropInfo^.TypeInfo;
-  fPropRtti := Rtti.RegisterType(fPropType) as TRttiJson;
-  if fPropRtti = nil then
-    raise EOrmException.CreateUtf8('%.Create(%): unknown type',
-      [self, aPropInfo^.Name^]);
-  if aPropInfo.Setter(nil, @call) = rpcField then
-    fSetterIsFieldPropOffset := PtrInt(call.Data);
-  if aPropInfo.GetterIsField then
-  begin
-    fGetterIsFieldPropOffset := PtrUInt(fPropInfo.GetterAddr(nil));
-    if fGetterIsFieldPropOffset = fSetterIsFieldPropOffset then
-      fInPlaceCopySameClassPropOffset := fGetterIsFieldPropOffset;
-  end;
 end;
 
 
@@ -5640,11 +6148,11 @@ end;
 function TOrmPropInfoRttiAnsi.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
+  Up: array[byte] of AnsiChar; // temp stack buffer (no heap allocation)
   Value: RawByteString;
 begin
   fPropInfo.GetLongStrProp(Instance, Value);
-  if CaseInsensitive then
+  if CaseInsensitive then // 255 max chars is enough to avoid hashing collisions
     if fEngine.CodePage = CODEPAGE_US then
       result := DefaultHasher(0, Up{%H-}, UpperCopyWin255(Up{%H-}, Value) - {%H-}Up)
     else
@@ -6258,7 +6766,7 @@ end;
 function TOrmPropInfoRttiUnicode.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
+  Up: array[byte] of AnsiChar; // avoid heap allocation - 255 chars is enough
   Value: UnicodeString;
 begin
   fPropInfo.GetUnicodeStrProp(Instance, Value);
@@ -7260,7 +7768,7 @@ begin
     end
     else if not (pilIgnoreIfGetter in fOptions) or
             p^.GetterIsField then
-      Add(TOrmPropInfoRttiCreateFrom(p, Count, fOptions, aFlattenedProps));
+      Add(TOrmPropInfoRtti.CreateFrom(p, Count, fOptions, aFlattenedProps));
     p := p^.Next;
   end;
 end;
@@ -7276,7 +7784,7 @@ begin
     InternalAddParentsFirst(GetClassParent(aClassType));
   for i := 1 to GetRttiProp(aClassType, p) do
   begin
-    Add(TOrmPropInfoRttiCreateFrom(p, Count, fOptions, nil));
+    Add(TOrmPropInfoRtti.CreateFrom(p, Count, fOptions, nil));
     p := p^.Next;
   end;
 end;
@@ -7513,7 +8021,7 @@ begin
   end
   else
   begin
-    // faster O(log(n)) binary search
+    // direct - and faster - O(log(n)) binary search
     result := IndexByName(pointer(aName));
     if result >= 0 then
       exit;
@@ -7535,38 +8043,35 @@ begin
   repeat
     // unrolled several InheritsFrom() calls
     C := CT^.RttiClass;
-    if C = T[0] then
+    if C = T[0] then         // TObject
       // loop over all parent classes until root TObject is reached
       break;
-    if C <> T[1] then
-      if C <> T[2] then
-        if (C <> T[3]) and
-           (C <> T[4]) and
-           (C <> T[5]) and
-           (C <> T[6]) then
+    if C <> T[1] then        // TOrmMany
+      if C <> T[2] then      // TOrm
+        if (C <> T[3]) and   // TRawUtf8List
+           (C <> T[4]) and   // TStrings
+           (C <> T[5]) and   // TObjectList
+           (C <> T[6]) then  // TCollection
         begin
           if CT^.PropCount > 0 then
             // identify any class with published properties as oftObject
-            result := oftObject;
             // but continue searching for any known class
+            result := oftObject;
           CT := CT^.ParentInfo.RttiClass;
           continue;
         end
         else
         begin
-          // T[3..6]=TRawUtf8List,TStrings,TObjectList,TCollection
           result := oftObject;
           break;
         end
       else
       begin
-        // T[2]=TOrm
         result := oftID; // TOrm field is pointer(RecordID), not an Instance
         break;
       end
     else
     begin
-      // T[1]=TOrmMany
       result := oftMany; // no data is stored here, but in a pivot table
       break;
     end;
@@ -7747,142 +8252,45 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
   end;
 end;
 
-function TOrmPropInfoRttiCreateFrom(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOptions: TOrmPropInfoListOptions;
-  const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
-var
-  aOrmFieldType: TOrmFieldType;
-  aType: PRttiInfo;
-  C: TOrmPropInfoRttiClass;
-
-  procedure FlattenedPropNameSet;
-  var
-    i, max: PtrInt;
-    res: TOrmPropInfoRttiInstance absolute result;
-  begin // Address.Street1 -> Address_Street1
-    res.fFlattenedProps := aFlattenedProps;
-    res.fNameUnflattened := result.Name;
-    max := high(aFlattenedProps);
-    for i := max downto 0 do
-      res.fNameUnflattened :=
-        ToUtf8(aFlattenedProps[i]^.Name^) + '.' + result.NameUnflattened;
-    if (max >= 0) and
-       (aFlattenedProps[max]^.TypeInfo^.ClassFieldCount(
-         {withoutgetter=}pilIgnoreIfGetter in aOptions) = 1) then
-    begin
-      // Birth.Date -> Birth or Address.Country.Iso -> Address_Country
-      res.fName := ToUtf8(aFlattenedProps[max]^.Name^);
-      dec(max);
-    end;
-    for i := max downto 0 do
-      res.fName := ToUtf8(aFlattenedProps[i]^.Name^) + '_' + result.Name;
-  end;
-
+function NullableTypeToOrmFieldType(aType: PRttiInfo): TOrmFieldType;
 begin
-  if aPropInfo = nil then
-    raise EOrmException.Create('Invalid TOrmPropInfoRttiCreateFrom(nil) call');
-  aType := aPropInfo^.TypeInfo;
-  aOrmFieldType := GetOrmFieldType(aType); // guess from RTTI
-  C := nil;
-  result := nil;
-  if (OrmPropInfoRegistration = nil) or
-     not OrmPropInfoRegistration.FindAndCopy(aType, C) then
-    // TypeInfo() was not in TOrmPropInfoRtti.RegisterTypeInfo -> use RTTI
-    case aOrmFieldType of
-      oftUnknown,
-      oftBlobCustom:
-        ; // will raise an EOrmException
-      oftBoolean,
-      oftEnumerate:
-        C := TOrmPropInfoRttiEnum;
-      oftTimeLog,
-      oftModTime,
-      oftCreateTime: // specific class for further use
-        C := TOrmPropInfoRttiTimeLog;
-      oftUnixTime:   // specific class for further use
-        C := TOrmPropInfoRttiUnixTime;
-      oftUnixMSTime:
-        C := TOrmPropInfoRttiUnixMSTime;
-      oftCurrency:
-        C := TOrmPropInfoRttiCurrency;
-      oftDateTime,
-      oftDateTimeMS:
-        C := TOrmPropInfoRttiDateTime;
-      oftID:    // = TOrm(aID)
-        C := TOrmPropInfoRttiIDClass; // mormot.orm.core TOrmPropInfoRttiID
-      oftTID:   // = TID or T*ID
-        C := TOrmPropInfoRttiTIDClass; // mormot.orm.core TOrmPropInfoRttiTID
-      oftSessionUserID:
-        C := TOrmPropInfoRttiInt64;
-      oftRecord: // = TRecordReference/TRecordReferenceToBeDeleted
-        C := TOrmPropInfoRttiRecordReference;
-      oftRecordVersion:
-        C := TOrmPropInfoRttiRecordVersion;
-      oftMany:
-        C := TOrmPropInfoRttiMany;
-      oftObject:
-        C := TOrmPropInfoRttiObject;
-      oftVariant:
-        begin
-          aOrmFieldType := NullableTypeToOrmFieldType(aType);
-          if aOrmFieldType = oftUnknown then // no oftNullable type
-            aOrmFieldType := oftVariant; // a regular variant stored as JSON
-          C := TOrmPropInfoRttiVariant;
-        end;
-      oftBlob:
-        C := TOrmPropInfoRttiRawBlob;
-      oftBlobDynArray:
-        C := TOrmPropInfoRttiDynArray;
-      oftUtf8Custom: // happens only for DELPHI XE5 and up
-        result := TOrmPropInfoCustomJson.Create(aPropInfo, aPropIndex);
-    else
-      case aType^.Kind of // retrieve more precise C class from RTTI
-        rkInteger:
-          C := TOrmPropInfoRttiInt32;
-        rkSet:
-          C := TOrmPropInfoRttiSet;
-        rkChar,
-        rkWChar:
-          C := TOrmPropInfoRttiChar;
-        {$ifdef FPC}
-        rkQWord,
-        {$endif FPC}
-        rkInt64:
-          C := TOrmPropInfoRttiInt64;
-        rkFloat:
-          if aType^.RttiFloat = rfDouble then
-            C := TOrmPropInfoRttiDouble;
-        rkLString:
-          case aType^.AnsiStringCodePage of
-            // recognize optimized UTF-8/UTF-16
-            CP_UTF8:
-              C := TOrmPropInfoRttiRawUtf8;
-            CP_UTF16:
-              C := TOrmPropInfoRttiRawUnicode;
+  if aType <> nil then
+    if aType <> TypeInfo(TNullableInteger) then
+      if aType <> TypeInfo(TNullableUtf8Text) then
+        if aType <> TypeInfo(TNullableBoolean) then
+          if aType <> TypeInfo(TNullableFloat) then
+            if aType <> TypeInfo(TNullableCurrency) then
+              if aType <> TypeInfo(TNullableDateTime) then
+                if aType <> TypeInfo(TNullableTimeLog) then
+                begin
+                  result := oftUnknown;
+                  exit;
+                end
+                else
+                  result := oftTimeLog
+              else
+                result := oftDateTime
+            else
+              result := oftCurrency
           else
-            C := TOrmPropInfoRttiAnsi; // will use the right TSynAnsiConvert
-          end;
-      {$ifdef HASVARUSTRING}
-        rkUString:
-          C := TOrmPropInfoRttiUnicode;
-      {$endif HASVARUSTRING}
-        rkWString:
-          C := TOrmPropInfoRttiWide;
-      end;
-    end;
-  if C <> nil then
-    result := C.Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  if result <> nil then
-  begin
-    if aFlattenedProps <> nil then
-      FlattenedPropNameSet;
-  end
-  else if pilRaiseEOrmExceptionIfNotHandled in aOptions then
-    raise EOrmException.CreateUtf8(
-      'TOrmPropInfoRttiCreateFrom: Unhandled %/% type for property %',
-      [ToText(aOrmFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name^]);
+            result := oftFloat
+        else
+          result := oftBoolean
+      else
+        result := oftUtf8Text
+    else
+      result := oftInteger
+  else
+    result := oftUnknown;
 end;
 
+function OrmFieldTypeToDBField(aOrmFieldType: TOrmFieldType;
+  aTypeInfo: PRttiInfo): TSqlDBFieldType;
+begin
+  if aOrmFieldType = oftNullable then
+    aOrmFieldType := NullableTypeToOrmFieldType(aTypeInfo);
+  result := SQLFIELDTYPETODBFIELDTYPE[aOrmFieldType];
+end;
 
 
 { ************ Abstract TOrmTableAbstract Parent Class }
@@ -10473,6 +10881,597 @@ begin
       LeaveCriticalSection(Mutex);
     end;
   end;
+end;
+
+
+{ *********************** Abstract TOrmPropertiesAbstract Parent Class }
+
+constructor TOrmPropertiesAbstract.Create;
+begin
+  InitializeCriticalSection(fLock);
+  fSqlTableRetrieveAllFields := ID_TXT;
+  SetLength(fManyFields, MAX_SQLFIELDS);
+  SetLength(fSimpleFields, MAX_SQLFIELDS);
+  SetLength(fCopiableFields, MAX_SQLFIELDS);
+  SetLength(fDynArrayFields, MAX_SQLFIELDS);
+  SetLength(fBlobCustomFields, MAX_SQLFIELDS);
+  SetLength(fBlobFields, MAX_SQLFIELDS);
+  SetLength(SimpleFieldSelect, MAX_SQLFIELDS_INCLUDINGID); // [0] is ID
+  MainField[false] := -1;
+  MainField[true] := -1;
+end;
+
+destructor TOrmPropertiesAbstract.Destroy;
+begin
+  inherited Destroy;
+  DeleteCriticalSection(fLock);
+end;
+
+function TOrmPropertiesAbstract.BlobFieldPropFromRawUtf8(const PropName: RawUtf8): PRttiProp;
+var
+  i: PtrInt;
+begin
+  if (self <> nil) and
+     (PropName <> '') then
+    for i := 0 to high(BlobFields) do
+      if IdemPropNameU(BlobFields[i].Name, PropName) then
+      begin
+        result := BlobFields[i].PropInfo;
+        exit;
+      end;
+  result := nil;
+end;
+
+function TOrmPropertiesAbstract.BlobFieldPropFromUtf8(PropName: PUtf8Char;
+  PropNameLen: integer): PRttiProp;
+var
+  i: PtrInt;
+begin
+  if (self <> nil) and
+     (PropName <> '') then
+    for i := 0 to high(BlobFields) do
+      if IdemPropName(BlobFields[i].PropInfo^.Name^, PropName, PropNameLen) then
+      begin
+        result := BlobFields[i].PropInfo;
+        exit;
+      end;
+  result := nil;
+end;
+
+function TOrmPropertiesAbstract.OrmFieldTypeToSql(FieldIndex: integer): RawUtf8;
+begin
+  if (self = nil) or
+    (cardinal(FieldIndex) >= cardinal(Fields.Count)) then
+    result := ''
+  else if (FieldIndex < length(fCustomCollation)) and
+          (fCustomCollation[FieldIndex] <> '') then
+    result := ' TEXT COLLATE ' + fCustomCollation[FieldIndex] + ', '
+  else
+    result := DEFAULT_ORMFIELDTYPETOSQL[Fields.List[FieldIndex].OrmFieldTypeStored];
+end;
+
+function TOrmPropertiesAbstract.SetCustomCollation(FieldIndex: integer;
+  const aCollationName: RawUtf8): boolean;
+begin
+  result := (self <> nil) and
+            (cardinal(FieldIndex) < cardinal(Fields.Count));
+  if result then
+  begin
+    if Fields.Count > length(fCustomCollation) then
+      SetLength(fCustomCollation, Fields.Count);
+    fCustomCollation[FieldIndex] := aCollationName;
+    with Fields.List[FieldIndex] do
+    begin
+      Attributes := Attributes - [aBinaryCollation, aUnicodeNoCaseCollation];
+      if IdemPropNameU(aCollationName, 'BINARY') then
+        Attributes := Attributes + [aBinaryCollation]
+      else if IdemPropNameU(aCollationName, 'UNICODENOCASE') then
+        Attributes := Attributes + [aUnicodeNoCaseCollation];
+    end;
+  end;
+end;
+
+function TOrmPropertiesAbstract.SetCustomCollation(
+  const aFieldName, aCollationName: RawUtf8): boolean;
+begin
+  result := SetCustomCollation(Fields.IndexByNameOrExcept(aFieldName), aCollationName);
+end;
+
+procedure TOrmPropertiesAbstract.SetCustomCollationForAll(aFieldType: TOrmFieldType;
+  const aCollationName: RawUtf8);
+var
+  i: PtrInt;
+begin
+  if (self <> nil) and
+     not (aFieldType in [oftUnknown, oftMany]) then
+    for i := 0 to Fields.Count - 1 do
+      if Fields.List[i].OrmFieldTypeStored = aFieldType then
+        SetCustomCollation(i, aCollationName);
+end;
+
+procedure TOrmPropertiesAbstract.SetVariantFieldsDocVariantOptions(
+  const Options: TDocVariantOptions);
+var
+  i: PtrInt;
+begin
+  if self <> nil then
+    for i := 0 to Fields.Count - 1 do
+      if (Fields.List[i].OrmFieldType = oftVariant) and
+         Fields.List[i].InheritsFrom(TOrmPropInfoRttiVariant) then
+        TOrmPropInfoRttiVariant(Fields.List[i]).DocVariantOptions := Options;
+end;
+
+function TOrmPropertiesAbstract.SqlAddField(FieldIndex: integer): RawUtf8;
+begin
+  result := OrmFieldTypeToSql(FieldIndex);
+  if result = '' then
+    exit; // some fields won't have any column created in the database
+  result := FormatUtf8('ALTER TABLE % ADD COLUMN %%',
+    [fSqlTableName, Fields.List[FieldIndex].Name, result]);
+  if FieldIndex in IsUniqueFieldsBits then
+    insert(' UNIQUE', result, length(result) - 1);
+  result[length(result) - 1] := ';' // OrmFieldTypeToSql[] ends with ','
+end;
+
+procedure TOrmPropertiesAbstract.SetJsonWriterColumnNames(W: TJsonSerializer;
+  KnownRowsCount: integer);
+var
+  i, n, nf: PtrInt;
+begin
+  // get col count overhead
+  if W.withID then
+    n := 1
+  else
+    n := 0;
+  // set col names
+  nf := Length(W.Fields);
+  SetLength(W.ColNames, nf + n);
+  if W.withID then
+    W.ColNames[0] := ROWID_TXT; // works for both normal and FTS3 records
+  for i := 0 to nf - 1 do
+  begin
+    W.ColNames[n] := Fields.List[W.Fields[i]].Name;
+    inc(n);
+  end;
+  // write or init field names for appropriate JSON Expand
+  W.AddColumns(KnownRowsCount);
+end;
+
+function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream;
+  Expand, withID: boolean; const aFields: TFieldBits;
+  KnownRowsCount, aBufSize: integer): TJsonSerializer;
+begin
+  result := CreateJsonWriter(Json, Expand, withID,
+    FieldBitsToIndex(aFields, Fields.Count), KnownRowsCount, aBufSize);
+end;
+
+function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream;
+  Expand, withID: boolean; const aFields: TFieldIndexDynArray;
+  KnownRowsCount, aBufSize: integer): TJsonSerializer;
+begin
+  if (self = nil) or
+     ((Fields.Count = 0) and not withID) then  // no data
+    result := nil
+  else
+  begin
+    result := TJsonSerializer.Create(Json, Expand, withID, aFields, aBufSize);
+    SetJsonWriterColumnNames(result, KnownRowsCount);
+  end;
+end;
+
+function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream; Expand: boolean;
+  const aFieldsCsv: RawUtf8; KnownRowsCount, aBufSize: integer): TJsonSerializer;
+var
+  withID: boolean;
+  bits: TFieldBits;
+begin
+  FieldBitsFromCsv(aFieldsCsv, bits, withID);
+  result := CreateJsonWriter(Json, Expand, withID, bits, KnownRowsCount, aBufSize);
+end;
+
+function TOrmPropertiesAbstract.SaveSimpleFieldsFromJsonArray(var P: PUtf8Char;
+  ID: TID; EndOfObject: PAnsiChar; ExtendedJson, FirstIsID: boolean): RawUtf8;
+begin
+  SaveFieldsFromJsonArray(P, SimpleFieldsBits[ooInsert],
+    ID, EndOfObject, ExtendedJson, FirstIsID);
+end;
+
+function TOrmPropertiesAbstract.SaveFieldsFromJsonArray(var P: PUtf8Char; const Bits: TFieldBits;
+  ID: TID; EndOfObject: PAnsiChar; ExtendedJson, FirstIsID: boolean): RawUtf8;
+var
+  i: PtrInt;
+  W: TJsonSerializer;
+  Start: PUtf8Char;
+  temp: TTextWriterStackBuffer;
+begin
+  result := '';
+  if P = nil then
+    exit;
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
+  if P^ <> '[' then
+    exit;
+  repeat
+    inc(P)
+  until (P^ > ' ') or
+        (P^ = #0);
+  if FirstIsID then
+    ID := GetInt64(GetJsonField(P, P));
+  W := TJsonSerializer.CreateOwnedStream(temp);
+  try
+    if ExtendedJson then
+      W.CustomOptions := W.CustomOptions + [twoForceJsonExtended];
+    W.Add('{');
+    if ID <> 0 then
+      W.AddPropJsonInt64('ID', ID);
+    for i := 0 to Fields.Count - 1 do
+      if GetBitPtr(@Bits, i) then
+      begin
+        W.AddFieldName(Fields.List[i].Name);
+        Start := P;
+        P := GotoEndJsonItem(P);
+        if (P = nil) or
+           not (P^ in [',', ']']) then
+          exit;
+        W.AddNoJsonEscape(Start, P - Start);
+        W.AddComma;
+        repeat
+          inc(P)
+        until (P^ > ' ') or
+              (P^ = #0);
+      end;
+    W.CancelLastComma;
+    W.Add('}');
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+  if EndOfObject <> nil then
+    EndOfObject^ := P^;
+  if P^ <> #0 then
+    repeat
+      inc(P)
+    until (P^ > ' ') or
+          (P^ = #0);
+end;
+
+procedure TOrmPropertiesAbstract.SaveBinaryHeader(W: TBufferWriter);
+var
+  i: PtrInt;
+  FieldNames: TRawUtf8DynArray;
+begin
+  W.Write(fSqlTableName);
+  SetLength(FieldNames, Fields.Count);
+  for i := 0 to Fields.Count - 1 do
+    FieldNames[i] := Fields.List[i].Name;
+  W.WriteRawUtf8DynArray(FieldNames, Fields.Count);
+  for i := 0 to Fields.Count - 1 do
+    W.Write(@Fields.List[i].OrmFieldType, SizeOf(TOrmFieldType));
+end;
+
+function TOrmPropertiesAbstract.CheckBinaryHeader(var R: TFastReader): boolean;
+var
+  n, i: PtrInt;
+  FieldNames: TRawUtf8DynArray;
+  FieldTypes: array[0..MAX_SQLFIELDS - 1] of TOrmFieldType;
+begin
+  result := false;
+  if (R.VarUtf8 <> fSqlTableName) or
+     (R.ReadVarRawUtf8DynArray(FieldNames) <> Fields.Count) then
+    exit;
+  n := SizeOf(TOrmFieldType) * Fields.Count;
+  if not R.CopySafe(@FieldTypes, n) then
+    exit;
+  for i := 0 to Fields.Count - 1 do
+    with Fields.List[i] do
+      if (Name <> FieldNames[i]) or
+         (OrmFieldType <> FieldTypes[i]) then
+        exit;
+  result := true;
+end;
+
+function TOrmPropertiesAbstract.IsFieldName(const PropName: RawUtf8): boolean;
+begin
+  result := (PropName <> '') and
+            (isRowID(pointer(PropName)) or
+    (Fields.IndexByName(pointer(PropName)) >= 0));
+end;
+
+function TOrmPropertiesAbstract.IsFieldNameOrFunction(const PropName: RawUtf8): boolean;
+var
+  L: integer;
+begin
+  L := length(PropName);
+  if (L = 0) or
+     (self = nil) then
+    result := false
+  else if PropName[L] = ')' then
+    case IdemPCharArray(pointer(PropName),
+       ['MAX(',         // 0
+        'MIN(',         // 1
+        'AVG(',         // 2
+        'SUM(',         // 3
+        'JSONGET(',     // 4
+        'JSONHAS(']) of // 5
+      0..3:
+        result := IsFieldName(copy(PropName, 5, L - 5));
+      4..5:
+        result := IsFieldName(copy(PropName, 9, PosExChar(',', PropName) - 9));
+    else
+      result := IsFieldName(PropName);
+    end
+  else
+    result := IsFieldName(PropName);
+end;
+
+function TOrmPropertiesAbstract.FieldBitsFromBlobField(aBlobField: PRttiProp;
+  var Bits: TFieldBits): boolean;
+var
+  f: PtrInt;
+begin
+  FillZero(Bits);
+  if self <> nil then
+    for f := 0 to high(BlobFields) do
+      if BlobFields[f].PropInfo = aBlobField then
+      begin
+        Include(Bits, BlobFields[f].PropertyIndex);
+        result := true;
+        exit;
+      end;
+  result := false;
+end;
+
+function TOrmPropertiesAbstract.FieldBitsFromCsv(const aFieldsCsv: RawUtf8;
+  var Bits: TFieldBits): boolean;
+var
+  ndx: integer;
+  P: PUtf8Char;
+  FieldName: ShortString;
+begin
+  FillZero(Bits);
+  result := false;
+  if self = nil then
+    exit;
+  P := pointer(aFieldsCsv);
+  while P <> nil do
+  begin
+    GetNextItemShortString(P, FieldName); // FieldName ends with #0
+    ndx := Fields.IndexByName(@FieldName[1]);
+    if ndx < 0 then
+      exit; // invalid field name
+    include(Bits, ndx);
+  end;
+  result := true;
+end;
+
+function TOrmPropertiesAbstract.FieldBitsFromCsv(const aFieldsCsv: RawUtf8;
+  var Bits: TFieldBits; out withID: boolean): boolean;
+var
+  ndx: integer;
+  P: PUtf8Char;
+  FieldName: ShortString;
+begin
+  if (aFieldsCsv = '*') and
+     (self <> nil) then
+  begin
+    Bits := SimpleFieldsBits[ooSelect];
+    withID := true;
+    result := true;
+    exit;
+  end;
+  FillZero(Bits);
+  withID := false;
+  result := false;
+  if self = nil then
+    exit;
+  P := pointer(aFieldsCsv);
+  while P <> nil do
+  begin
+    GetNextItemShortString(P, FieldName); // FieldName ends with #0
+    if IsRowIDShort(FieldName) then
+    begin
+      withID := true;
+      continue;
+    end;
+    ndx := Fields.IndexByName(@FieldName[1]);
+    if ndx < 0 then
+      exit; // invalid field name
+    include(Bits, ndx);
+  end;
+  result := true;
+end;
+
+function TOrmPropertiesAbstract.FieldBitsFromCsv(const aFieldsCsv: RawUtf8): TFieldBits;
+begin
+  if not FieldBitsFromCsv(aFieldsCsv, result) then
+    FillZero(result);
+end;
+
+function TOrmPropertiesAbstract.FieldBitsFromExcludingCsv(
+  const aFieldsCsv: RawUtf8; aOccasion: TOrmOccasion): TFieldBits;
+var
+  excluded: TFieldBits;
+begin
+  result := SimpleFieldsBits[aOccasion];
+  if FieldBitsFromCsv(aFieldsCsv, excluded) then
+    result := result - excluded;
+end;
+
+function TOrmPropertiesAbstract.FieldBitsFrom(
+  const aFields: array of PUtf8Char; var Bits: TFieldBits): boolean;
+var
+  f, ndx: PtrInt;
+begin
+  FillZero(Bits);
+  result := false;
+  if self = nil then
+    exit;
+  for f := 0 to high(aFields) do
+  begin
+    ndx := Fields.IndexByName(aFields[f]);
+    if ndx < 0 then
+      exit; // invalid field name
+    include(Bits, ndx);
+  end;
+  result := true;
+end;
+
+function TOrmPropertiesAbstract.FieldBitsFrom(
+  const aFields: array of PUtf8Char): TFieldBits;
+begin
+  if not FieldBitsFrom(aFields, result) then
+    FillZero(result);
+end;
+
+function TOrmPropertiesAbstract.CsvFromFieldBits(const Bits: TFieldBits): RawUtf8;
+var
+  f: PtrInt;
+  W: TTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    for f := 0 to Fields.Count - 1 do
+      if byte(f) in Bits then
+      begin
+        W.AddString(Fields.List[f].Name);
+        W.AddComma;
+      end;
+    W.CancelLastComma;
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+function TOrmPropertiesAbstract.FieldIndexDynArrayFromRawUtf8(
+  const aFields: array of RawUtf8; var Indexes: TFieldIndexDynArray): boolean;
+var
+  f, ndx: PtrInt;
+begin
+  result := false;
+  if self = nil then
+    exit;
+  for f := 0 to high(aFields) do
+  begin
+    ndx := Fields.IndexByName(pointer(aFields[f]));
+    if ndx < 0 then
+      exit; // invalid field name
+    AddFieldIndex(Indexes, ndx);
+  end;
+  result := true;
+end;
+
+function TOrmPropertiesAbstract.FieldIndexDynArrayFromRawUtf8(
+  const aFields: array of RawUtf8): TFieldIndexDynArray;
+begin
+  if not FieldIndexDynArrayFromRawUtf8(aFields, result) then
+    result := nil;
+end;
+
+function TOrmPropertiesAbstract.FieldIndexDynArrayFromCsv(
+  const aFieldsCsv: RawUtf8; var Indexes: TFieldIndexDynArray): boolean;
+var
+  ndx: integer;
+  P: PUtf8Char;
+  FieldName: ShortString;
+begin
+  result := false;
+  if self = nil then
+    exit;
+  P := pointer(aFieldsCsv);
+  while P <> nil do
+  begin
+    GetNextItemShortString(P, FieldName); // FieldName ends with #0
+    ndx := Fields.IndexByName(@FieldName[1]);
+    if ndx < 0 then
+      exit; // invalid field name
+    AddFieldIndex(Indexes, ndx);
+  end;
+  result := true;
+end;
+
+function TOrmPropertiesAbstract.FieldIndexDynArrayFromCsv(
+  const aFieldsCsv: RawUtf8): TFieldIndexDynArray;
+begin
+  if not FieldIndexDynArrayFromCsv(aFieldsCsv, result) then
+    result := nil;
+end;
+
+function TOrmPropertiesAbstract.FieldIndexDynArrayFromBlobField(
+  aBlobField: PRttiProp; var Indexes: TFieldIndexDynArray): boolean;
+var
+  f: PtrInt;
+begin
+  if self <> nil then
+    for f := 0 to high(BlobFields) do
+      if BlobFields[f].PropInfo = aBlobField then
+      begin
+        AddFieldIndex(Indexes, BlobFields[f].PropertyIndex);
+        result := true;
+        exit;
+      end;
+  result := false;
+end;
+
+function TOrmPropertiesAbstract.AppendFieldName(FieldIndex: integer;
+  var Text: RawUtf8; ForceNoRowID: boolean): boolean;
+begin
+  result := false; // success
+  if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then
+    if ForceNoRowID then
+      Text := Text + 'ID'
+    else
+      Text := Text + 'RowID'
+  else if (self = nil) or
+          (cardinal(FieldIndex) >= cardinal(Fields.Count)) then
+    result := true
+  else
+    Text := Text + Fields.List[FieldIndex].Name;
+end;
+
+function TOrmPropertiesAbstract.MainFieldName(ReturnFirstIfNoUnique: boolean): RawUtf8;
+begin
+  if (self = nil) or
+     (MainField[ReturnFirstIfNoUnique] < 0) then
+    result := ''
+  else
+    result := Fields.List[MainField[ReturnFirstIfNoUnique]].Name;
+end;
+
+procedure TOrmPropertiesAbstract.RegisterCustomFixedSizeRecordProperty(
+  aTable: TClass; aRecordSize: cardinal; const aName: RawUtf8;
+  aPropertyPointer: pointer; aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer;
+  aData2Text: TOnSqlPropInfoRecord2Text; aText2Data: TOnSqlPropInfoRecord2Data);
+begin
+  Fields.Add(TOrmPropInfoRecordFixedSize.Create(aRecordSize, aName, Fields.Count,
+    aPropertyPointer, aAttributes, aFieldWidth, aData2Text, aText2Data));
+end;
+
+procedure TOrmPropertiesAbstract.RegisterCustomRttiRecordProperty(aTable: TClass;
+  aRecordInfo: PRttiInfo; const aName: RawUtf8; aPropertyPointer: pointer;
+  aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer;
+  aData2Text: TOnSqlPropInfoRecord2Text; aText2Data: TOnSqlPropInfoRecord2Data);
+begin
+  Fields.Add(TOrmPropInfoRecordRtti.Create(aRecordInfo, aName, Fields.Count,
+    aPropertyPointer, aAttributes, aFieldWidth, aData2Text, aText2Data));
+end;
+
+procedure TOrmPropertiesAbstract.RegisterCustomPropertyFromRtti(aTable: TClass;
+  aTypeInfo: PRttiInfo; const aName: RawUtf8; aPropertyPointer: pointer;
+  aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer);
+begin
+  Fields.Add(TOrmPropInfoCustomJson.Create(aTypeInfo, aName, Fields.Count,
+    aPropertyPointer, aAttributes, aFieldWidth));
+end;
+
+procedure TOrmPropertiesAbstract.RegisterCustomPropertyFromTypeName(aTable: TClass;
+  const aTypeName, aName: RawUtf8; aPropertyPointer: pointer;
+  aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer);
+begin
+  Fields.Add(TOrmPropInfoCustomJson.Create(aTypeName, aName, Fields.Count,
+    aPropertyPointer, aAttributes, aFieldWidth));
 end;
 
 
