@@ -3472,80 +3472,8 @@ type
 
   { -------------------- TOrmProperties Definitions }
 
-  /// handle a read-only list of fields information for published properties
-  // - is mainly used by our ORM for TOrm RTTI, but may be used for
-  // any TPersistent
-  TOrmPropInfoList = class
-  protected
-    fList: TOrmPropInfoObjArray;
-    fCount: integer;
-    fTable: TClass; // TOrmClass
-    fOptions: TOrmPropInfoListOptions;
-    fOrderedByName: TIntegerDynArray;
-    function GetItem(aIndex: PtrInt): TOrmPropInfo;
-    procedure QuickSortByName(L, R: PtrInt);
-    procedure InternalAddParentsFirst(aClassType: TClass); overload;
-    procedure InternalAddParentsFirst(aClassType: TClass;
-      aFlattenedProps: PRttiPropDynArray); overload;
-  public
-    /// initialize the list from a given class RTTI
-    constructor Create(aTable: TClass; aOptions: TOrmPropInfoListOptions);
-    /// release internal list items
-    destructor Destroy; override;
-    /// add a TOrmPropInfo to the list
-    function Add(aItem: TOrmPropInfo): integer;
-    /// find an item in the list using O(log(n)) binary search
-    // - returns nil if not found
-    function ByRawUtf8Name(const aName: RawUtf8): TOrmPropInfo; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// find an item in the list using O(log(n)) binary search
-    // - returns nil if not found
-    function ByName(aName: PUtf8Char): TOrmPropInfo; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// find an item in the list using O(log(n)) binary search
-    // - returns -1 if not found
-    function IndexByName(const aName: RawUtf8): integer; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// find an item in the list using O(log(n)) binary search
-    // - returns -1 if not found
-    function IndexByName(aName: PUtf8Char): PtrInt; overload;
-    /// find an item by name in the list, including RowID/ID
-    // - will identify 'ID' / 'RowID' field name as -1
-    // - raise an EOrmException if not found in the internal list
-    function IndexByNameOrExcept(const aName: RawUtf8): integer;
-    /// find an item by name in the list, including RowID/ID
-    // - will identify 'ID' / 'RowID' field name as -1
-    // - raise an EOrmException if not found in the internal list
-    // - aName is not defined as "const aName" since it is made an ASCIIZ
-    function IndexByNameOrExceptShort(aName: ShortString): integer;
-    /// find one or several items by name in the list, including RowID/ID
-    // - will identify 'ID' / 'RowID' field name as -1
-    // - raise an EOrmException if not found in the internal list
-    procedure IndexesByNamesOrExcept(const aNames: array of RawUtf8;
-      const aIndexes: array of PInteger);
-    /// find an item in the list, searching by unflattened name
-    // - for a flattened property, you may for instance call
-    // IndexByNameUnflattenedOrExcept('Address.Country.Iso')
-    // instead of IndexByNameOrExcept('Address_Country')
-    // - won't identify 'ID' / 'RowID' field names, just List[].
-    // - raise an EOrmException if not found in the internal list
-    function IndexByNameUnflattenedOrExcept(const aName: RawUtf8): integer;
-    /// fill a TRawUtf8DynArray instance from the field names
-    // - excluding ID
-    procedure NamesToRawUtf8DynArray(var Names: TRawUtf8DynArray);
-    /// returns the number of TOrmPropInfo in the list
-    property Count: integer
-      read fCount;
-    /// quick access to the TOrmPropInfo list
-    // - note that length(List) may not equal Count, since is its capacity
-    property List: TOrmPropInfoObjArray
-      read fList;
-    /// read-only retrieval of a TOrmPropInfo item
-    // - will raise an exception if out of range
-    property Items[aIndex: PtrInt]: TOrmPropInfo
-      read GetItem;
-  end;
-
+  /// used by TOrmProperties to store internally its associated TModel instances
+  // - allow almost O(1) search of a TOrmClass in a model
   TOrmPropertiesModelEntry = record
     /// one associated model
     Model: TOrmModel;
@@ -3576,8 +3504,8 @@ type
     fJoinedFieldsTable: TOrmClassDynArray;
     fDynArrayFields: TOrmPropInfoRttiDynArrayObjArray;
     fDynArrayFieldsHasObjArray: boolean;
-    fBlobCustomFields: TOrmPropInfoObjArray;
-    fBlobFields: TOrmPropInfoRttiObjArray;
+    fBlobCustomFields: TOrmPropInfoCustomDynArray;
+    fBlobFields: TOrmPropInfoRttiRawBlobDynArray;
     fFilters: TSynFilterOrValidateObjArrayArray;
     fRecordManySourceProp: TOrmPropInfoRttiInstance;
     fRecordManyDestProp: TOrmPropInfoRttiInstance;
@@ -3589,9 +3517,7 @@ type
     fSqlTableRetrieveAllFields: RawUtf8;
     fRecordVersionField: TOrmPropInfoRttiRecordVersion;
     fWeakZeroClass: TObject;
-    /// the associated TOrmModel instances
-    // - e.g. allow almost O(1) search of a TOrmClass in a model
-    fModel: array of TOrmPropertiesModelEntry;
+    fModel: array of TOrmPropertiesModelEntry; // associated TOrmModel instances
     fModelMax: integer;
     fCustomCollation: TRawUtf8DynArray;
     /// add an entry in fModel[] / fModelMax
@@ -3914,12 +3840,12 @@ type
       read fDynArrayFieldsHasObjArray;
     /// list of all oftBlobCustom fields of this TOrm
     // - have been defined e.g. as TOrmPropInfoCustom custom definition
-    property BlobCustomFields: TOrmPropInfoObjArray
+    property BlobCustomFields: TOrmPropInfoCustomDynArray
       read fBlobCustomFields;
     /// list all BLOB fields of this TOrm
     // - i.e. generic oftBlob fields (not oftBlobDynArray, oftBlobCustom nor
     // oftBlobRecord)
-    property BlobFields: TOrmPropInfoRttiObjArray
+    property BlobFields: TOrmPropInfoRttiRawBlobDynArray
       read fBlobFields;
     /// all TSynFilter or TSynValidate instances registered per each field
     // - since validation and filtering are used within some CPU-consuming
@@ -4987,20 +4913,6 @@ function RecordReference(aTableIndex: cardinal; aID: TID): TRecordReference; ove
 /// convert a dynamic array of TRecordReference into its corresponding IDs
 procedure RecordRefToID(var aArray: TInt64DynArray);
 
-/// get the SQL type of this class type
-// - returns either oftObject, oftID, oftMany or oftUnknown
-function ClassOrmFieldType(info: PRttiInfo): TOrmFieldType;
-
-/// get the SQL type of this type, as managed with the database driver
-function GetOrmFieldType(Info: PRttiInfo): TOrmFieldType;
-
-/// this meta-constructor will create an instance of the exact descendant
-// of the specified property RTTI
-// - it will raise an EOrmException in case of an unhandled type
-function TOrmPropInfoRttiCreateFrom(
-  aPropInfo: PRttiProp; aPropIndex: integer; aOptions: TOrmPropInfoListOptions;
-  const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
-
 
 { ************ TSynValidateRest TSynValidateUniqueField Definitions }
 
@@ -5372,448 +5284,7 @@ end;
 
 
 
-{ TOrmPropInfoList }
-
-constructor TOrmPropInfoList.Create(aTable: TClass; aOptions: TOrmPropInfoListOptions);
-begin
-  fTable := aTable;
-  fOptions := aOptions;
-  if aTable.InheritsFrom(TOrmRTreeAbstract) then
-    include(fOptions, pilAuxiliaryFields);
-  if pilSubClassesFlattening in fOptions then
-    InternalAddParentsFirst(aTable, nil)
-  else
-    InternalAddParentsFirst(aTable);
-end;
-
-destructor TOrmPropInfoList.Destroy;
-var
-  i: PtrInt;
-begin
-  for i := 0 to fCount - 1 do
-    fList[i].Free;
-  inherited;
-end;
-
-// we don't use TRttiCustom.Props but the raw RTTI which doesn't include fID
-
-procedure TOrmPropInfoList.InternalAddParentsFirst(aClassType: TClass;
-  aFlattenedProps: PRttiPropDynArray);
-var
-  p: PRttiProp;
-  i, prev: integer;
-begin
-  if aClassType = nil then
-    exit; // no RTTI information (e.g. reached TObject level)
-  // recursive call to include all parent properties first
-  if not (pilSingleHierarchyLevel in fOptions) then
-    InternalAddParentsFirst(GetClassParent(aClassType), aFlattenedProps);
-  // append this level of class hierarchy
-  for i := 1 to GetRttiProp(aClassType, p) do
-  begin
-    if (p^.TypeInfo^.Kind = rkClass) and
-       (ClassOrmFieldType(p^.TypeInfo) in [oftObject, oftUnknown]) then
-    begin
-      prev := PtrArrayAdd(aFlattenedProps, p);
-      InternalAddParentsFirst(p^.TypeInfo^.RttiClass^.RttiClass, aFlattenedProps);
-      SetLength(aFlattenedProps, prev);
-    end
-    else if not (pilIgnoreIfGetter in fOptions) or p^.GetterIsField then
-      Add(TOrmPropInfoRttiCreateFrom(p, Count, fOptions, aFlattenedProps));
-    p := p^.Next;
-  end;
-end;
-
-procedure TOrmPropInfoList.InternalAddParentsFirst(aClassType: TClass);
-var
-  p: PRttiProp;
-  i: integer;
-begin
-  if aClassType = nil then
-    exit; // no RTTI information (e.g. reached TObject level)
-  if not (pilSingleHierarchyLevel in fOptions) then
-    InternalAddParentsFirst(GetClassParent(aClassType));
-  for i := 1 to GetRttiProp(aClassType, p) do
-  begin
-    Add(TOrmPropInfoRttiCreateFrom(p, Count, fOptions, nil));
-    p := p^.Next;
-  end;
-end;
-
-function TOrmPropInfoList.Add(aItem: TOrmPropInfo): integer;
-var
-  f: PtrInt;
-begin
-  if aItem = nil then
-  begin
-    result := -1;
-    exit;
-  end;
-  // check that this property is not an ID/RowID (handled separately)
-  if IsRowID(pointer(aItem.Name)) and
-     not (pilAllowIDFields in fOptions) then
-    raise EModelException.CreateUtf8(
-      '%.Add: % should not include a [%] published property', [self, fTable, aItem.Name]);
-  // check that this property name is not already defined
-  for f := 0 to fCount - 1 do
-    if IdemPropNameU(fList[f].Name, aItem.Name) then
-      raise EModelException.CreateUtf8(
-        '%.Add: % has duplicated name [%]', [self, fTable, aItem.Name]);
-  // add to the internal list
-  result := fCount;
-  if result >= length(fList) then
-    SetLength(fList, NextGrow(result));
-  inc(fCount);
-  fList[result] := aItem;
-  fOrderedByName := nil; // force recompute sorted name array
-end;
-
-function TOrmPropInfoList.GetItem(aIndex: PtrInt): TOrmPropInfo;
-begin
-  if PtrUInt(aIndex) >= PtrUInt(fCount) then
-    raise EOrmException.Create('Invalid TOrmPropInfoList index');
-  result := fList[aIndex];
-end;
-
-procedure TOrmPropInfoList.QuickSortByName(L, R: PtrInt);
-var
-  I, J, P, tmp: PtrInt;
-  pivot: PUtf8Char;
-begin
-  if L < R then
-    repeat
-      I := L;
-      J := R;
-      P := (L + R) shr 1;
-      repeat
-        pivot := pointer(fList[fOrderedByName[P]].Name);
-        while StrIComp(pointer(fList[fOrderedByName[I]].Name), pivot) < 0 do
-          inc(I);
-        while StrIComp(pointer(fList[fOrderedByName[J]].Name), pivot) > 0 do
-          dec(J);
-        if I <= J then
-        begin
-          tmp := fOrderedByName[J];
-          fOrderedByName[J] := fOrderedByName[I];
-          fOrderedByName[I] := tmp;
-          if P = I then
-            P := J
-          else if P = J then
-            P := I;
-          inc(I);
-          dec(J);
-        end;
-      until I > J;
-      if J - L < R - I then
-      begin
-        // use recursion only for smaller range
-        if L < J then
-          QuickSortByName(L, J);
-        L := I;
-      end
-      else
-      begin
-        if I < R then
-          QuickSortByName(I, R);
-        R := J;
-      end;
-    until L >= R;
-end;
-
-function TOrmPropInfoList.ByRawUtf8Name(const aName: RawUtf8): TOrmPropInfo;
-var
-  i: PtrInt;
-begin
-  i := IndexByName(pointer(aName));
-  if i < 0 then
-    result := nil
-  else
-    result := fList[i];
-end;
-
-function TOrmPropInfoList.ByName(aName: PUtf8Char): TOrmPropInfo;
-var
-  i: PtrInt;
-begin
-  i := IndexByName(aName);
-  if i < 0 then
-    result := nil
-  else
-    result := fList[i];
-end;
-
-function TOrmPropInfoList.IndexByName(aName: PUtf8Char): PtrInt;
-var
-  cmp, L, R, s: PtrInt;
-  C1, C2: byte; // integer/PtrInt are actually slower on FPC
-  {$ifdef CPUX86NOTPIC}
-  table: TNormTableByte absolute NormToUpperAnsi7Byte;
-  {$else}
-  table: PByteArray;
-  {$endif CPUX86NOTPIC}
-begin
-  if (self <> nil) and
-     (aName <> nil) and
-     (fCount > 0) then
-  begin
-    if fOrderedByName = nil then
-    begin
-      // initialize once the ordered lookup indexes, for binary search
-      SetLength(fOrderedByName, fCount);
-      FillIncreasing(pointer(fOrderedByName), 0, fCount);
-      QuickSortByName(0, fCount - 1);
-    end;
-    {$ifndef CPUX86NOTPIC}
-    table := @NormToUpperAnsi7Byte;
-    {$endif CPUX86NOTPIC}
-    L := 0;
-    R := fCount - 1;
-    repeat
-      // fast O(log(n)) binary search using inlined StrIComp()
-      {$ifdef CPUX64}
-      result := L + R;
-      result := result shr 1;
-      {$else}
-      result := (L + R) shr 1;
-      {$endif CPUX64}
-      s := PtrUInt(aName);
-      cmp := PtrInt(PtrUInt(fList[fOrderedByName[result]].Name)) - s;
-      repeat
-        C1 := table[PByteArray(s)[0]];
-        C2 := table[PByteArray(s)[cmp]];
-        inc(s);
-      until (C1 = 0) or
-            (C1 <> C2);
-      if C1 = C2 then // reached ending #0 on both names
-      begin
-        result := fOrderedByName[result];
-        exit;
-      end;
-      cmp := result + 1; // compile as 2 branchless cmovc/cmovnc on FPC
-      dec(result);
-      if C1 > C2 then
-        L := cmp
-      else
-        R := result;
-    until L > R;
-  end;
-  result := -1;
-end;
-
-function TOrmPropInfoList.IndexByName(const aName: RawUtf8): integer;
-begin
-  result := IndexByName(pointer(aName));
-end;
-
-function TOrmPropInfoList.IndexByNameOrExceptShort(aName: ShortString): integer;
-begin
-  if IsRowIDShort(aName) then
-    result := -1
-  else
-  begin
-    aName[ord(aName[0]) + 1] := #0; // make ASCIIZ
-    result := IndexByName(@aName[1]); // fast O(log(n)) binary search
-    if result < 0 then
-      raise EOrmException.CreateUtf8(
-        '%.IndexByNameOrExceptShort(%): unkwnown in %', [self, aName, fTable]);
-  end;
-end;
-
-function TOrmPropInfoList.IndexByNameOrExcept(const aName: RawUtf8): integer;
-begin
-  if IsRowID(pointer(aName)) then
-    result := -1
-  else
-  begin
-    result := IndexByName(pointer(aName)); // fast O(log(n)) binary search
-    if result < 0 then
-      raise EOrmException.CreateUtf8(
-        '%.IndexByNameOrExcept(%): unkwnown field in %', [self, aName, fTable]);
-  end;
-end;
-
-procedure TOrmPropInfoList.IndexesByNamesOrExcept(const aNames: array of RawUtf8;
-  const aIndexes: array of PInteger);
-var
-  i: PtrInt;
-begin
-  if high(aNames) <> high(aIndexes) then
-    raise EOrmException.CreateUtf8('%.IndexesByNamesOrExcept(?)', [self]);
-  for i := 0 to high(aNames) do
-    if aIndexes[i] = nil then
-      raise EOrmException.CreateUtf8('%.IndexesByNamesOrExcept(aIndexes[%]=nil)',
-        [self, aNames[i]])
-    else
-      aIndexes[i]^ := IndexByNameOrExcept(aNames[i]);
-end;
-
-procedure TOrmPropInfoList.NamesToRawUtf8DynArray(var Names: TRawUtf8DynArray);
-var
-  i: PtrInt;
-begin
-  SetLength(Names, Count);
-  for i := 0 to Count - 1 do
-    Names[i] := fList[i].Name;
-end;
-
-function TOrmPropInfoList.IndexByNameUnflattenedOrExcept(const aName: RawUtf8): integer;
-begin
-  if pilSubClassesFlattening in fOptions then
-  begin
-    // O(n) iteration over unflattened field names
-    for result := 0 to Count - 1 do
-      if IdemPropNameU(List[result].NameUnflattened, aName) then
-        exit;
-  end
-  else
-  begin
-    // faster O(log(n)) binary search
-    result := IndexByName(pointer(aName));
-    if result >= 0 then
-      exit;
-  end;
-  raise EOrmException.CreateUtf8(
-    '%.IndexByNameUnflattenedOrExcept(%): unkwnown field in %', [self, aName, fTable]);
-end;
-
-
 { ************ TOrmModel TOrmTable IRestOrm Core Definitions }
-
-function TOrmPropInfoRttiCreateFrom(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOptions: TOrmPropInfoListOptions;
-  const aFlattenedProps: PRttiPropDynArray): TOrmPropInfo;
-var
-  aOrmFieldType: TOrmFieldType;
-  aType: PRttiInfo;
-  C: TOrmPropInfoRttiClass;
-
-  procedure FlattenedPropNameSet;
-  var
-    i, max: PtrInt;
-    res: TOrmPropInfoRttiID absolute result;
-  begin // Address.Street1 -> Address_Street1
-    res.fFlattenedProps := aFlattenedProps;
-    res.fNameUnflattened := result.Name;
-    max := high(aFlattenedProps);
-    for i := max downto 0 do
-      res.fNameUnflattened :=
-        ToUtf8(aFlattenedProps[i]^.Name^) + '.' + result.NameUnflattened;
-    if (max >= 0) and
-       (aFlattenedProps[max]^.TypeInfo^.ClassFieldCount(
-         {withoutgetter=}pilIgnoreIfGetter in aOptions) = 1) then
-    begin
-      // Birth.Date -> Birth or Address.Country.Iso -> Address_Country
-      res.fName := ToUtf8(aFlattenedProps[max]^.Name^);
-      dec(max);
-    end;
-    for i := max downto 0 do
-      res.fName := ToUtf8(aFlattenedProps[i]^.Name^) + '_' + result.Name;
-  end;
-
-begin
-  if aPropInfo = nil then
-    raise EOrmException.Create('Invalid TOrmPropInfoRttiCreateFrom(nil) call');
-  aType := aPropInfo^.TypeInfo;
-  aOrmFieldType := GetOrmFieldType(aType); // guess from RTTI
-  C := nil;
-  result := nil;
-  if (OrmPropInfoRegistration = nil) or
-     not OrmPropInfoRegistration.FindAndCopy(aType, C) then
-    // TypeInfo() was not in TOrmPropInfoRtti.RegisterTypeInfo -> use RTTI
-    case aOrmFieldType of
-      oftUnknown,
-      oftBlobCustom:
-        ; // will raise an EOrmException
-      oftBoolean,
-      oftEnumerate:
-        C := TOrmPropInfoRttiEnum;
-      oftTimeLog,
-      oftModTime,
-      oftCreateTime: // specific class for further use
-        C := TOrmPropInfoRttiTimeLog;
-      oftUnixTime:   // specific class for further use
-        C := TOrmPropInfoRttiUnixTime;
-      oftUnixMSTime:
-        C := TOrmPropInfoRttiUnixMSTime;
-      oftCurrency:
-        C := TOrmPropInfoRttiCurrency;
-      oftDateTime,
-      oftDateTimeMS:
-        C := TOrmPropInfoRttiDateTime;
-      oftID:    // = TOrm(aID)
-        C := TOrmPropInfoRttiID;
-      oftTID:   // = TID or T*ID
-        C := TOrmPropInfoRttiTID;
-      oftSessionUserID:
-        C := TOrmPropInfoRttiInt64;
-      oftRecord: // = TRecordReference/TRecordReferenceToBeDeleted
-        C := TOrmPropInfoRttiRecordReference;
-      oftRecordVersion:
-        C := TOrmPropInfoRttiRecordVersion;
-      oftMany:
-        C := TOrmPropInfoRttiMany;
-      oftObject:
-        C := TOrmPropInfoRttiObject;
-      oftVariant:
-        begin
-          aOrmFieldType := NullableTypeToOrmFieldType(aType);
-          if aOrmFieldType = oftUnknown then // no oftNullable type
-            aOrmFieldType := oftVariant; // a regular variant stored as JSON
-          C := TOrmPropInfoRttiVariant;
-        end;
-      oftBlob:
-        C := TOrmPropInfoRttiRawBlob;
-      oftBlobDynArray:
-        C := TOrmPropInfoRttiDynArray;
-      oftUtf8Custom: // happens only for DELPHI XE5 and up
-        result := TOrmPropInfoCustomJson.Create(aPropInfo, aPropIndex);
-    else
-      case aType^.Kind of // retrieve more precise C class from RTTI
-        rkInteger:
-          C := TOrmPropInfoRttiInt32;
-        rkSet:
-          C := TOrmPropInfoRttiSet;
-        rkChar,
-        rkWChar:
-          C := TOrmPropInfoRttiChar;
-        {$ifdef FPC}
-        rkQWord,
-        {$endif FPC}
-        rkInt64:
-          C := TOrmPropInfoRttiInt64;
-        rkFloat:
-          if aType^.RttiFloat = rfDouble then
-            C := TOrmPropInfoRttiDouble;
-        rkLString:
-          case aType^.AnsiStringCodePage of
-            // recognize optimized UTF-8/UTF-16
-            CP_UTF8:
-              C := TOrmPropInfoRttiRawUtf8;
-            CP_UTF16:
-              C := TOrmPropInfoRttiRawUnicode;
-          else
-            C := TOrmPropInfoRttiAnsi; // will use the right TSynAnsiConvert
-          end;
-      {$ifdef HASVARUSTRING}
-        rkUString:
-          C := TOrmPropInfoRttiUnicode;
-      {$endif HASVARUSTRING}
-        rkWString:
-          C := TOrmPropInfoRttiWide;
-      end;
-    end;
-  if C <> nil then
-    result := C.Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  if result <> nil then
-  begin
-    if aFlattenedProps <> nil then
-      FlattenedPropNameSet;
-  end
-  else if pilRaiseEOrmExceptionIfNotHandled in aOptions then
-    raise EOrmException.CreateUtf8(
-      'TOrmPropInfoRttiCreateFrom: Unhandled %/% type for property %',
-      [ToText(aOrmFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name^]);
-end;
 
 {$ifdef CPUX64}
 
@@ -5844,234 +5315,6 @@ end;
 function TOrmDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 begin
   result := Hasher(0, pointer(@TOrm(Elem).fID), SizeOf(TID));
-end;
-
-function ClassOrmFieldType(info: PRttiInfo): TOrmFieldType;
-const
-  T_: array[0..6] of TClass = (
-    // efficient access to the classes to be recognized
-    TObject, TOrmMany, TOrm, TRawUtf8List, TStrings, TObjectList, TCollection);
-var
-  CT: PRttiClass;
-  C: TClass;
-  T: PClassArray; // for better code generation (especially on x86_64)
-begin
-  CT := info.RttiClass;
-  T := @T_;
-  result := oftUnknown;
-  repeat
-    // unrolled several InheritsFrom() calls
-    C := CT^.RttiClass;
-    if C = T[0] then
-      // loop over all parent classes until root TObject is reached
-      break;
-    if C <> T[1] then
-      if C <> T[2] then
-        if (C <> T[3]) and
-           (C <> T[4]) and
-           (C <> T[5]) and
-           (C <> T[6]) then
-        begin
-          if CT^.PropCount > 0 then
-            // identify any class with published properties as oftObject
-            result := oftObject;
-            // but continue searching for any known class
-          CT := CT^.ParentInfo.RttiClass;
-          continue;
-        end
-        else
-        begin
-          // T[3..6]=TRawUtf8List,TStrings,TObjectList,TCollection
-          result := oftObject;
-          break;
-        end
-      else
-      begin
-        // T[2]=TOrm
-        result := oftID; // TOrm field is pointer(RecordID), not an Instance
-        break;
-      end
-    else
-    begin
-      // T[1]=TOrmMany
-      result := oftMany; // no data is stored here, but in a pivot table
-      break;
-    end;
-  until false;
-end;
-
-function GetOrmFieldType(Info: PRttiInfo): TOrmFieldType;
-begin // very fast, thanks to the TypeInfo() compiler-generated function
-  case Info^.Kind of
-    rkInteger:
-      begin
-        result := oftInteger; // works also for otSQWord,otUQWord
-        exit; // direct exit is faster in generated asm code
-      end;
-    rkInt64:
-      if (Info = TypeInfo(TRecordReference)) or
-         (Info = TypeInfo(TRecordReferenceToBeDeleted)) then
-      begin
-        result := oftRecord;
-        exit;
-      end
-      else if Info = TypeInfo(TCreateTime) then
-      begin
-        result := oftCreateTime;
-        exit;
-      end
-      else if Info = TypeInfo(TModTime) then
-      begin
-        result := oftModTime;
-        exit;
-      end
-      else if Info = TypeInfo(TTimeLog) then
-      begin
-        result := oftTimeLog;
-        exit;
-      end
-      else if Info = TypeInfo(TUnixTime) then
-      begin
-        result := oftUnixTime;
-        exit;
-      end
-      else if Info = TypeInfo(TUnixMSTime) then
-      begin
-        result := oftUnixMSTime;
-        exit;
-      end
-      else if Info = TypeInfo(TID) then
-      begin
-        result := oftTID;
-        exit;
-      end
-      else if Info = TypeInfo(TSessionUserID) then
-      begin
-        result := oftSessionUserID;
-        exit;
-      end
-      else if Info = TypeInfo(TRecordVersion) then
-      begin
-        result := oftRecordVersion;
-        exit;
-      end
-      else if (ord(Info^.RawName[1]) and $df = ord('T')) and
-        // T...ID pattern in type name -> TID
-        (PWord(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf =
-           ord('I') + ord('D') shl 8) then
-      begin
-        result := oftTID;
-        exit;
-      end
-      else
-      begin
-        result := oftInteger;
-        exit;
-      end;
-    {$ifdef FPC}
-    rkBool:
-      begin
-        result := oftBoolean;
-        exit;
-      end;
-    rkQWord:
-      begin
-        result := oftInteger;
-        exit;
-      end;
-    {$endif FPC}
-    rkSet:
-      begin
-        result := oftSet;
-        exit;
-      end;
-    rkEnumeration:
-      if Info.IsBoolean then
-      begin // also circumvent a Delphi RTTI bug
-        result := oftBoolean;
-        exit;
-      end
-      else
-      begin
-        result := oftEnumerate;
-        exit;
-      end;
-    rkFloat:
-      if Info.IsCurrency then
-      begin
-        result := oftCurrency;
-        exit;
-      end
-      else if Info = TypeInfo(TDateTime) then
-      begin
-        result := oftDateTime;
-        exit;
-      end
-      else if Info = TypeInfo(TDateTimeMS) then
-      begin
-        result := oftDateTimeMS;
-        exit;
-      end
-      else
-      begin
-        result := oftFloat;
-        exit;
-      end;
-    rkLString:
-      // do not use AnsiStringCodePage since AnsiString = GetAcp may change
-      if (Info = TypeInfo(RawBlob)) or
-         (Info = TypeInfo(RawByteString)) then
-      begin
-        result := oftBlob;
-        exit;
-      end
-      else if Info = TypeInfo(WinAnsiString) then
-      begin
-        result := oftAnsiText;
-        exit;
-      end
-      else
-      begin
-        result := oftUtf8Text; // CP_UTF8,CP_UTF16 and any other to UTF-8 text
-        exit;
-      end;
-    {$ifdef HASVARUSTRING} rkUString, {$endif}
-    rkChar,
-    rkWChar,
-    rkWString:
-      begin
-        result := oftUtf8Text;
-        exit;
-      end;
-    rkDynArray:
-      begin
-        result := oftBlobDynArray;
-        exit;
-      end;
-    {$ifdef PUBLISHRECORD}
-    rkRecord {$ifdef FPC}, rkObject{$endif}:
-      begin
-        result := oftUtf8Custom;
-        exit;
-      end;
-    {$endif PUBLISHRECORD}
-    rkVariant:
-      begin // this function does not need to handle oftNullable
-        result := oftVariant;
-        exit;
-      end;
-    rkClass:
-      begin
-        result := ClassOrmFieldType(Info);
-        exit;
-      end;
-    // note: tkString (shortstring) and tkInterface not handled
-  else
-    begin
-      result := oftUnknown;
-      exit;
-    end;
-  end;
 end;
 
 function GetVirtualTableSqlCreate(Props: TOrmProperties): RawUtf8;
@@ -7497,7 +6740,7 @@ var
   f: PtrInt;
 begin
   // create new instance
-  result := RecordClass.Create;
+  result := POrmClass(self)^.Create;
   // copy properties content
   result.fID := fID;
   with Orm do
@@ -7509,7 +6752,7 @@ function TOrm.CreateCopy(const CustomFields: TFieldBits): TOrm;
 var
   f: PtrInt;
 begin
-  result := RecordClass.Create;
+  result := POrmClass(self)^.Create;
   // copy properties content
   result.fID := fID;
   with Orm do
@@ -10117,6 +9360,7 @@ var
   nMany, nORM, nSimple, nDynArray, nBlob, nBlobCustom, nCopiableFields: integer;
   isTOrmMany: boolean;
   F: TOrmPropInfo;
+  opt: TOrmPropInfoListOptions;
 label
   Simple, Small, Copiabl;
 begin
@@ -10137,13 +9381,16 @@ begin
   if nProps > MAX_SQLFIELDS_INCLUDINGID then
     raise EModelException.CreateUtf8('% has too many fields: %>=%',
       [Table, nProps, MAX_SQLFIELDS]);
-  fFields := TOrmPropInfoList.Create(aTable, [pilRaiseEOrmExceptionIfNotHandled]);
+  opt := [pilRaiseEOrmExceptionIfNotHandled];
+  if aTable.InheritsFrom(TOrmRTreeAbstract) then
+    include(opt, pilAuxiliaryFields);
+  fFields := TOrmPropInfoList.Create(aTable, opt);
   aTable.InternalRegisterCustomProperties(self);
   if Fields.Count > MAX_SQLFIELDS_INCLUDINGID then
     raise EModelException.CreateUtf8(
       '% has too many fields after InternalRegisterCustomProperties(%): %>=%',
       [Table, self, Fields.Count, MAX_SQLFIELDS]);
-  SetLength(Fields.fList, Fields.Count);
+  Fields.SetCapacity(Fields.Count);
   // generate some internal lookup information
   fSqlTableRetrieveAllFields := ID_TXT;
   SetLength(fManyFields, MAX_SQLFIELDS);
@@ -10199,7 +9446,7 @@ begin
         end;
       oftBlob:
         begin
-          BlobFields[nBlob] := F as TOrmPropInfoRtti;
+          BlobFields[nBlob] := F as TOrmPropInfoRttiRawBlob;
           inc(nBlob);
           fSqlTableUpdateBlobFields := fSqlTableUpdateBlobFields + F.Name + '=?,';
           fSqlTableRetrieveBlobFields := fSqlTableRetrieveBlobFields + F.Name + ',';
@@ -10239,7 +9486,7 @@ begin
       oftBlobCustom,
       oftUtf8Custom:
         begin
-          BlobCustomFields[nBlobCustom] := F;
+          BlobCustomFields[nBlobCustom] := F as TOrmPropInfoCustom;
           inc(nBlobCustom);
           goto Simple;
         end;
@@ -10752,8 +9999,7 @@ begin
   P := pointer(aFieldsCsv);
   while P <> nil do
   begin
-    GetNextItemShortString(P, FieldName);
-    FieldName[ord(FieldName[0]) + 1] := #0; // make PUtf8Char
+    GetNextItemShortString(P, FieldName); // FieldName ends with #0
     ndx := Fields.IndexByName(@FieldName[1]);
     if ndx < 0 then
       exit; // invalid field name
@@ -10785,13 +10031,12 @@ begin
   P := pointer(aFieldsCsv);
   while P <> nil do
   begin
-    GetNextItemShortString(P, FieldName);
+    GetNextItemShortString(P, FieldName); // FieldName ends with #0
     if IsRowIDShort(FieldName) then
     begin
       withID := true;
       continue;
     end;
-    FieldName[ord(FieldName[0]) + 1] := #0; // make PUtf8Char
     ndx := Fields.IndexByName(@FieldName[1]);
     if ndx < 0 then
       exit; // invalid field name
@@ -10901,8 +10146,7 @@ begin
   P := pointer(aFieldsCsv);
   while P <> nil do
   begin
-    GetNextItemShortString(P, FieldName);
-    FieldName[ord(FieldName[0]) + 1] := #0; // make PUtf8Char
+    GetNextItemShortString(P, FieldName); // FieldName ends with #0
     ndx := Fields.IndexByName(@FieldName[1]);
     if ndx < 0 then
       exit; // invalid field name
@@ -12969,19 +12213,21 @@ begin
     fields := props.SimpleFieldsBits[ooInsert]
   else
   begin
-    fields := CustomFields * props.CopiableFieldsBits; // reduce from ALL_FIELDS
+    fields := CustomFields * props.CopiableFieldsBits; // refine from ALL_FIELDS
     if not DoNotAutoComputeFields then
       fields := fields + props.ComputeBeforeAddFieldsBits;
   end;
   blob := pointer(props.BlobFields);
-  if blob <> nil then
+  if blob <> nil then // no need to send any null: default blob value
     for f := 1 to length(props.BlobFields) do
     begin
       if (blob^.PropertyIndex in fields) and
          blob^.IsNull(Value) then
-        exclude(fields, blob^.PropertyIndex); // don't send null
+        exclude(fields, blob^.PropertyIndex);
       inc(blob);
     end;
+  if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
+    Value.ComputeFieldsBeforeWrite(fRest, oeAdd);
   // guess best encoding
   encoding := encPost; // versatile "POST"/"POST@table" format by default
   if SendData and
@@ -12996,8 +12242,6 @@ begin
         encoding := encPostHex;
   // append the data as JSON
   Encode(POrmClass(Value)^, encoding, @fields);
-  if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
-    Value.ComputeFieldsBeforeWrite(fRest, oeAdd);
   if SendData then
   begin
     case encoding of
@@ -13086,47 +12330,49 @@ function TRestBatch.Update(Value: TOrm; const CustomFields: TFieldBits;
   DoNotAutoComputeFields, ForceCacheUpdate: boolean): integer;
 var
   Props: TOrmProperties;
-  FieldBits: TFieldBits;
-  tableIndex: integer;
+  fields: TFieldBits;
+  tableindex: integer;
 begin
   result := -1;
   if (Value = nil) or
-     (fBatch = nil) then
-    exit;
-  if (Value.IDValue <= 0) or
-     not fRest.RecordCanBeUpdated(Value.RecordClass, Value.IDValue, oeUpdate) then
+     (fBatch = nil) or
+     (Value.IDValue <= 0) or
+     not fRest.RecordCanBeUpdated(POrmClass(Value)^, Value.IDValue, oeUpdate) then
     exit; // invalid parameters, or not opened BATCH sequence
-  Encode(POrmClass(Value)^, encPut);
   Props := Value.Orm;
-  if POrmClass(Value)^ = fTable then
-    tableIndex := fTableIndex
-  else
-    tableIndex := fModel.GetTableIndexExisting(Props.Table);
   // same format as TRest.Update, BUT including the ID
   if IsZero(CustomFields) then
-    Value.FillContext.ComputeSetUpdatedFieldBits(Props, FieldBits)
-  else if DoNotAutoComputeFields then
-    FieldBits := CustomFields * Props.CopiableFieldsBits
+    Value.FillContext.ComputeSetUpdatedFieldBits(Props, fields)
   else
-    FieldBits := CustomFields * Props.CopiableFieldsBits + Props.FieldBits[oftModTime];
-  SetExpandedJsonWriter(Props, fPreviousTableMatch, {withID=}true, FieldBits);
+  begin
+    fields := CustomFields * Props.CopiableFieldsBits; // refine from ALL_FIELDS
+    if not DoNotAutoComputeFields then
+      fields := fields + Props.FieldBits[oftModTime];
+  end;
+  Encode(POrmClass(Value)^, encPut);
+  SetExpandedJsonWriter(Props, not fPreviousTableMatch, {withID=}true, fields);
   if not DoNotAutoComputeFields then
     Value.ComputeFieldsBeforeWrite(fRest, oeUpdate); // update oftModTime fields
   Value.GetJsonValues(fBatch);
   fBatch.AddComma;
   if fCalledWithinRest and
-     (FieldBits - Props.SimpleFieldsBits[ooUpdate] = []) then
+     (fields - Props.SimpleFieldsBits[ooUpdate] = []) then
     ForceCacheUpdate := true; // safe to update the cache with supplied values
   if ForceCacheUpdate then
     fRest.CacheOrNil.Notify(Value, ooUpdate)
   else
+  begin
     // may not contain all cached fields -> delete from cache
-    AddID(fDeletedRecordRef, fDeletedCount, RecordReference(tableIndex, Value.IDValue));
+    tableindex := fTableIndex;
+    if POrmClass(Value)^ <> fTable then
+      tableindex := fModel.GetTableIndexExisting(Props.Table);
+    AddID(fDeletedRecordRef, fDeletedCount, RecordReference(tableindex, Value.IDValue));
+  end;
   result := fBatchCount;
   inc(fBatchCount);
   inc(fUpdateCount);
   if Assigned(fOnWrite) then
-    fOnWrite(self, ooUpdate, POrmClass(Value)^, Value.IDValue, Value, FieldBits);
+    fOnWrite(self, ooUpdate, POrmClass(Value)^, Value.IDValue, Value, fields);
 end;
 
 function TRestBatch.Update(Value: TOrm; const CustomCsvFields: RawUtf8;
@@ -13285,7 +12531,7 @@ begin
       where := where + fFieldNames[i] + '=:(' +
         QuotedStr(aProcessRec.GetFieldValue(fFieldNames[i]), '''') + '):';
     end;
-    SetID(aProcessRest.OneFieldValue(aProcessRec.RecordClass, 'ID', where), aID{%H-});
+    SetID(aProcessRest.OneFieldValue(POrmClass(aProcessRec)^, 'ID', where), aID{%H-});
     if (aID > 0) and
        (aID <> aProcessRec.fID) then
     begin
@@ -13412,6 +12658,11 @@ end;
 
 
 initialization
+  // some injection to mormot.orm.base
+  TOrmPropInfoRttiIDClass := TOrmPropInfoRttiID;
+  TOrmPropInfoRttiTIDClass := TOrmPropInfoRttiTID;
+  CLASSORMFIELDTYPELIST[1] := TOrmMany;
+  CLASSORMFIELDTYPELIST[2] := TOrm;
   // FPC and modern Delphi do have RTTI for array of class
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(
