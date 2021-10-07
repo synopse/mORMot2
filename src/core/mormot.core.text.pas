@@ -3072,7 +3072,7 @@ var
   tab: PTextCharSet;
 begin
   tab := @TEXT_CHARS;
-  P := GotoNextSqlIdentifier(P, tab);
+  P := GotoNextSqlIdentifier(P, tab); // handle /*comment*/
   B := P;
   while tcIdentifier in tab[P^] do
     inc(P); // go to end of ['_', '0'..'9', 'a'..'z', 'A'..'Z'] chars

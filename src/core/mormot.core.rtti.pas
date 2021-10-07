@@ -7145,17 +7145,18 @@ begin
   end;
 end;
 
-function TRttiCustom.{%H-}ValueCompare(Data, Other: pointer; CaseInsensitive: boolean): integer;
+function TRttiCustom.{%H-}ValueCompare(Data, Other: pointer;
+  CaseInsensitive: boolean): integer;
 begin
-  raise ERttiException.CreateUtf8('%.ValueCompare not implemented -> please ' +
-    'include mormot.core.json unit to register TRttiJson', [self]);
+  raise ERttiException.CreateUtf8('%.ValueCompare not implemented -> ' +
+    'please include mormot.core.json unit to register TRttiJson', [self]);
 end;
 
 function TRttiCustom.{%H-}ValueToVariant(Data: pointer;
   out Dest: TVarData): PtrInt;
 begin
-  raise ERttiException.CreateUtf8('%.ValueToVariant not implemented -> please ' +
-    'include mormot.core.json unit to register TRttiJson', [self]);
+  raise ERttiException.CreateUtf8('%.ValueToVariant not implemented -> ' +
+    'please include mormot.core.json unit to register TRttiJson', [self]);
 end;
 
 procedure TRttiCustom.ValueRandom(Data: pointer);
