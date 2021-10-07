@@ -8267,8 +8267,8 @@ begin
       begin
         dv.Names[ndx] := List[ndx].Name;
         if ValueAsString or
-           not GetNumericVariantFromJson(pointer(List[ndx].Value),
-             TVarData(dv.Values[ndx]), AllowVarDouble) then
+           not GetVariantFromNotStringJson(pointer(List[ndx].Value),
+              TVarData(dv.Values[ndx]), AllowVarDouble) then
           RawUtf8ToVariant(List[ndx].Value, dv.Values[ndx]);
       end;
     end
@@ -8304,8 +8304,8 @@ begin
     begin
       VarClear(v{%H-});
       if ValueAsString or
-         not GetNumericVariantFromJson(
-               pointer(List[i].Value), TVarData(v), AllowVarDouble) then
+         not GetVariantFromNotStringJson(
+            pointer(List[i].Value), TVarData(v), AllowVarDouble) then
         RawUtf8ToVariant(List[i].Value, v);
       ndx := dv.GetValueIndex(List[i].Name);
       if ndx < 0 then

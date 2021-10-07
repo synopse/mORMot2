@@ -339,54 +339,54 @@ type
 var
   /// some convenient TDocVariant options, e.g. as JSON_[fDefault]
   JSON_: array[TDocVariantModel] of TDocVariantOptions = (
-  // mVoid
+    // mVoid
     [],
-  // mDefault
+    // mDefault
     [dvoReturnNullForUnknownProperty],
-  // mFast
+    // mFast
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference],
-  // mFastFloat
+    // mFastFloat
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoAllowDoubleValue],
-  // mFastStrict
+    // mFastStrict
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoJsonParseDoNotTryCustomVariants],
-  // mFastExtended
+    // mFastExtended
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoSerializeAsExtendedJson],
-  // mFastExtendedIntern
+    // mFastExtendedIntern
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoSerializeAsExtendedJson,
      dvoJsonParseDoNotTryCustomVariants,
      dvoInternNames,
      dvoInternValues],
-  // mNameValue
-     [dvoReturnNullForUnknownProperty,
-      dvoValueCopiedByReference,
-      dvoNameCaseSensitive],
-  // mNameValueExtended
-     [dvoReturnNullForUnknownProperty,
-      dvoValueCopiedByReference,
-      dvoNameCaseSensitive,
-      dvoSerializeAsExtendedJson],
-  // mNameValueIntern
-     [dvoReturnNullForUnknownProperty,
-      dvoValueCopiedByReference,
-      dvoNameCaseSensitive,
-      dvoInternNames,
-      dvoInternValues],
-  // mNameValueInternExtended
-     [dvoReturnNullForUnknownProperty,
-      dvoValueCopiedByReference,
-      dvoNameCaseSensitive,
-      dvoInternNames,
-      dvoInternValues,
-      dvoSerializeAsExtendedJson]
+    // mNameValue
+    [dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference,
+     dvoNameCaseSensitive],
+    // mNameValueExtended
+    [dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference,
+     dvoNameCaseSensitive,
+     dvoSerializeAsExtendedJson],
+    // mNameValueIntern
+    [dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference,
+     dvoNameCaseSensitive,
+     dvoInternNames,
+     dvoInternValues],
+    // mNameValueInternExtended
+    [dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference,
+     dvoNameCaseSensitive,
+     dvoInternNames,
+     dvoInternValues,
+     dvoSerializeAsExtendedJson]
     );
 
 const
@@ -2533,16 +2533,21 @@ function TextToVariantNumberType(Json: PUtf8Char): cardinal;
 // - warning: supplied JSON is expected to be not nil
 function TextToVariantNumberTypeNoDouble(Json: PUtf8Char): cardinal;
 
-/// low-level function to set a numerical variant from an unescaped JSON number
-// - returns TRUE if TextToVariantNumberType/TextToVariantNumberTypeNoDouble(JSON)
-// identified it as a number and set Value to the corresponding content
-// - returns FALSE if JSON is a string, or null/true/false
+/// low-level function to parse a variant from an unescaped JSON number
+// - returns the position after the number, and set Value to the corresponding content
+// - returns nil if JSON is a string, or null/true/false
+// - matches TextToVariantNumberType/TextToVariantNumberTypeNoDouble() logic
+// - see GetVariantFromNotStringJson() to check the whole Json input
 function GetNumericVariantFromJson(Json: PUtf8Char;
-  var Value: TVarData; AllowVarDouble: boolean): boolean;
+  var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
 
- /// return a variant, may be containing a RawUtf8 stored within this class
+/// convert some UTF-8 into a variant, detecting JSON numbers or constants
+procedure TextToVariant(const aValue: RawUtf8; AllowVarDouble: boolean;
+  out aDest: variant);
+
+/// return a variant, may be containing a RawUtf8 stored within this class
 // - similar to TextToVariant(), but with string interning
-// - first try with GetNumericVariantFromJson(), then fallback to
+// - first try with GetVariantFromNotStringJson(), then fallback to
 // RawUtf8ToVariant() with string variable interning
 procedure UniqueVariant(Interning: TRawUtf8Interning;
   var aResult: variant; aText: PUtf8Char; aTextLen: PtrInt;
@@ -2550,7 +2555,7 @@ procedure UniqueVariant(Interning: TRawUtf8Interning;
 
 /// convert the next CSV item from an UTF-8 encoded text buffer
 // into a variant number or RawUtf8 varString
-// - first try with GetNumericVariantFromJson(), then fallback to RawUtf8ToVariant
+// - first try with GetVariantFromNotStringJson(), then fallback to RawUtf8ToVariant
 // - is a wrapper around GetNextItem() + TextToVariant()
 function GetNextItemToVariant(var P: PUtf8Char;
   out Value: Variant; Sep: AnsiChar = ',';
@@ -5502,8 +5507,8 @@ begin
   if result < 0 then
     result := InternalAdd(aName);
   VarClear(VValue[result]);
-  if not GetNumericVariantFromJson(pointer(aValue),
-          TVarData(VValue[result]), AllowVarDouble) then
+  if not GetVariantFromNotStringJson(pointer(aValue),
+         TVarData(VValue[result]), AllowVarDouble) then
     if dvoInternValues in VOptions then
       DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
     else
@@ -5582,7 +5587,7 @@ function TDocVariantData.AddItemFromText(const aValue: RawUtf8;
   AllowVarDouble: boolean; aIndex: integer): integer;
 begin
   result := InternalAdd('', aIndex);
-  if not GetNumericVariantFromJson(pointer(aValue),
+  if not GetVariantFromNotStringJson(pointer(aValue),
            TVarData(VValue[result]), AllowVarDouble) then
     if dvoInternValues in VOptions then
       DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
@@ -7748,10 +7753,15 @@ begin
     TRttiVarData(Value).VType := varBoolean;
     Value.VInteger := ord(true);
   end
-  else if not GetNumericVariantFromJson(Json, Value, AllowDouble) then
+  else
   begin
-    result := false;
-    exit;
+    Json := GetNumericVariantFromJson(Json, Value, AllowDouble);
+    if (Json = nil) or
+       (GotoNextNotSpace(Json)^ <> #0) then
+    begin
+      result := false;
+      exit;
+    end;
   end;
   result := true;
 end;
@@ -7779,48 +7789,62 @@ var
   V: TVarData absolute Value;
   n, Plen: integer;
   t: ^TSynInvokeableVariantType;
-  P, P2, P3: PUtf8Char;
+  P, PBeg: PUtf8Char;
   EndOfObject2: AnsiChar;
   wasParsedWithinString: boolean;
   wasString: boolean;
 label
-  parse, parsed, astext;
+  parse, parsed, astext, endobj;
 begin
-  VarClear(Value);
+  VarClearProc(V);
   if EndOfObject <> nil then
     EndOfObject^ := ' ';
+  if (Options <> nil) and
+     (dvoAllowDoubleValue in Options^) then
+    AllowDouble := true;
+  wasParsedWithinString := false;
   P := Json;
-  if Options = nil then
-    goto parse; // no complex variant -> direct process
-  if dvoAllowDoubleValue in Options^ then
-    AllowDouble := true; // for GetVariantFromNotStringJson() below
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);
-  wasParsedWithinString := false;
   case JSON_TOKENS[P^] of
     jtFirstDigit:  // '-', '0'..'9': numbers are directly processed
       begin
-        P2 := P;
-        P := GotoEndOfJsonNumber(P, P3{%H-});
+        PBeg := P;
+        P := GetNumericVariantFromJson(P, V, AllowDouble);
+        if P <> nil then
+        begin
+          // we parsed a full number as variant
+endobj:   while (P^ <= ' ') and
+                (P^ <> #0) do
+            inc(P);
+          if EndOfObject <> nil then
+            EndOfObject^ := P^;
+          if P^ <> #0 then
+            inc(P);
+          Json := P;
+          exit;
+        end;
+        // not a supported number
+        if AllowDouble then
+        begin
+          Json := nil; // we expected the precision to be enough
+          exit;
+        end;
+        // it may be a double value, but we didn't allow them -> store as text
+        P := PBeg;
+        while jcDigitFloatChar in JSON_CHARS[P^] do
+          inc(P); // #0, ',', ']', '}'
+        PLen := P - PBeg;
+        P := GotoNextNotSpace(P);
         if EndOfObject <> nil then
           EndOfObject^ := P^;
-        if P3^ <> #0 then
-          P3^ := #0; // make asciiz
-        if not GetNumericVariantFromJson(P2, V, AllowDouble) then
-        begin
-          P := P2;
-          PLen := P3 - P;
-          goto astext; // too big number is stored as text
-        end;
-        if (P = P3) or
-           (P^ <> #0) then
-          inc(P);
-        Json := P;
-        exit;
+        inc(P, ord(P^ <> #0));
+        goto astext;
       end;
     jtDoubleQuote:
-      if dvoJsonObjectParseWithinString in Options^ then
+      if (Options <>nil) and
+         (dvoJsonObjectParseWithinString in Options^) then
       begin
         P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
         EndOfObject := nil;
@@ -7840,31 +7864,53 @@ astext:   TRttiVarData(V).VType := varString;
         exit;
       end;
     jtNullFirstChar:
-      if PInteger(P)^ = NULL_LOW then
-        goto parse;
+      if (PInteger(P)^ = NULL_LOW) and
+         (jcEndOfJsonValueField in JSON_CHARS[P[4]]) then
+      begin
+        TRttiVarData(V).VType := varNull;
+        inc(P, 4);
+        goto endobj;
+      end;
     jtFalseFirstChar:
-      if PInteger(P)^ = FALSE_LOW then
-        goto parse;
+      if (PInteger(P + 1)^ = FALSE_LOW2) and
+         (jcEndOfJsonValueField in JSON_CHARS[P[5]]) then
+      begin
+        TRttiVarData(V).VType := varBoolean;
+        V.VInteger := ord(false);
+        inc(P, 5);
+        goto endobj;
+      end;
     jtTrueFirstChar:
-      if PInteger(P)^ = TRUE_LOW then
-        goto parse;
+      if (PInteger(P)^ = TRUE_LOW) and
+         (jcEndOfJsonValueField in JSON_CHARS[P[4]]) then
+      begin
+        TRttiVarData(V).VType := varBoolean;
+        V.VInteger := ord(true);
+        inc(P, 4);
+        goto endobj;
+      end;
   end;
   // if we reach here, input Json may be some complex value
+  if Options = nil then
+  begin
+    Json := nil;
+    exit; // clearly invalid basic JSON
+  end;
   t := pointer(SynVariantTryJsonTypes);
   if (t <> nil) and
      not (dvoJsonParseDoNotTryCustomVariants in Options^) then
   begin
     n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF; // call all TryJsonToVariant()
     repeat
-      P2 := P;
+      PBeg := P;
       // currently, only implemented by mormot.db.nosql.bson BsonVariantType
-      if t^.TryJsonToVariant(P2, Value, @EndOfObject2) then
+      if t^.TryJsonToVariant(PBeg, Value, @EndOfObject2) then
       begin
         if not wasParsedWithinString then
         begin
           if EndOfObject <> nil then
             EndOfObject^ := EndOfObject2;
-          Json := P2;
+          Json := PBeg;
         end;
         exit;
       end;
@@ -8036,10 +8082,10 @@ exponent:         inc(Json); // inlined custom GetInteger()
 end;
 
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
-  AllowVarDouble: boolean): boolean;
+  AllowVarDouble: boolean): PUtf8Char;
 var
   // logic below is extracted from mormot.core.base.pas' GetExtended()
-  digit: integer;
+  remdigit: integer;
   frac, exp: PtrInt;
   c: AnsiChar;
   flags: set of (fNeg, fNegExp, fValid);
@@ -8047,7 +8093,7 @@ var
   d: double;
 begin
   // parse input text as number into v64, frac, digit, exp
-  result := false;
+  result := nil; // indicates parsing error
   byte(flags) := 0;
   v64 := 0;
   frac := 0;
@@ -8056,22 +8102,22 @@ begin
   c := Json^;
   if c = '-' then // note: '+xxx' is not valid Json so is not handled here
   begin
+    c := Json[1];
     inc(Json);
-    c := Json^;
     include(flags, fNeg);
   end;
   if (c = '0') and
-     ((Json[1] <> '.') and
-      (Json[1] <> #0)) then // '012' is not Json, but '0.xx' and '0' are
+     (Json[1] >= '0') and
+     (Json[1] <= '9') then // '012' is not Json, but '0.xx' and '0' are
     exit;
-  digit := 19; // max Int64 resolution
+  remdigit := 19; // max Int64 resolution
   repeat
-    inc(Json);
     if (c >= '0') and
        (c <= '9') then
     begin
-      dec(digit); // over-required digits are just ignored
-      if digit >= 0 then
+      inc(Json);
+      dec(remdigit); // over-required digits are just ignored
+      if remdigit >= 0 then
       begin
         dec(c, ord('0'));
         {$ifdef CPU64}
@@ -8079,35 +8125,36 @@ begin
         {$else}
         v64 := v64 shl 3 + v64 + v64;
         {$endif CPU64}
-        inc(v64, integer(c));
+        inc(v64, byte(c));
+        c := Json^;
         include(flags, fValid);
         if frac <> 0 then
           dec(frac); // frac<0 for digits after '.'
-        c := Json^;
         continue;
       end;
+      c := Json^;
       if frac >= 0 then
         inc(frac); // frac>0 to handle #############00000
-      c := Json^;
       continue;
     end;
     if c <> '.' then
       break;
-    if frac > 0 then
+    c := Json[1];
+    if (frac > 0) or
+       (c = #0) then // avoid ##.
       exit;
+    inc(json);
     dec(frac);
-    c := Json^;
-    if c = #0 then
-      exit; // invalid '123.'
   until false;
   if frac < 0 then
     inc(frac); // adjust digits after '.'
   if (c = 'E') or
      (c = 'e') then
   begin
+    c := Json[1];
+    inc(Json);
     exp := 0;
     exclude(flags, fValid);
-    c := Json^;
     if c = '+' then
       inc(Json)
     else if c = '-' then
@@ -8117,10 +8164,10 @@ begin
     end;
     repeat
       c := Json^;
-      inc(Json);
       if (c < '0') or
          (c > '9') then
         break;
+      inc(Json);
       dec(c, ord('0'));
       exp := (exp * 10) + byte(c);
       include(flags, fValid);
@@ -8130,19 +8177,17 @@ begin
     else
       inc(frac, exp);
   end;
-  if (c <> #0) or
-     (not (fValid in flags) and
-      (c = #0)) then
+  if not (fValid in flags) then
     exit;
   if fNeg in flags then
     v64 := -v64;
-  // now v64, frac, digit, exp contain the parsed number
+  // now v64, frac, digit, exp contain number parsed from Json
   if (frac = 0) and
-     (digit >= 0) then
+     (remdigit >= 0) then
   begin
     // return an integer or Int64 value
     Value.VInt64 := v64;
-    if digit <= 9 then
+    if remdigit <= 9 then
       TRttiVarData(Value).VType := varInt64
     else
       TRttiVarData(Value).VType := varInteger;
@@ -8177,7 +8222,7 @@ begin
       d := HugePower10(frac);
     Value.VDouble := d * v64;
   end;
-  result := true;
+  result := Json; // returns the first char after then parsed number
 end;
 
 procedure UniqueVariant(Interning: TRawUtf8Interning; var aResult: variant;
@@ -8185,8 +8230,8 @@ procedure UniqueVariant(Interning: TRawUtf8Interning; var aResult: variant;
 var
   tmp: RawUtf8;
 begin
-  if not GetNumericVariantFromJson(
-    aText, TVarData(aResult), aAllowVarDouble) then
+  if not GetVariantFromNotStringJson(
+           aText, TVarData(aResult), aAllowVarDouble) then
   begin
     FastSetString(tmp, aText, aTextLen);
     if Interning = nil then
@@ -8222,8 +8267,8 @@ end;
 procedure TextToVariant(const aValue: RawUtf8; AllowVarDouble: boolean;
   out aDest: variant);
 begin
-  if not GetNumericVariantFromJson(
-     pointer(aValue), TVarData(aDest), AllowVarDouble) then
+  if not GetVariantFromNotStringJson(
+           pointer(aValue), TVarData(aDest), AllowVarDouble) then
     RawUtf8ToVariant(aValue, aDest);
 end;
 
@@ -8237,8 +8282,8 @@ begin
   else
   begin
     GetNextItem(P, Sep, temp);
-    if not GetNumericVariantFromJson(
-        pointer(temp), TVarData(Value), AllowDouble) then
+    if not GetVariantFromNotStringJson(
+             pointer(temp), TVarData(Value), AllowDouble) then
       RawUtf8ToVariant(temp, Value);
     result := true;
   end;
@@ -8551,7 +8596,7 @@ begin
   JSON_FAST_EXTENDEDINTERN := JSON_[mFastExtendedIntern];
   JSON_NAMEVALUE := PDocVariantOptionsBool(@JSON_[mNameValue])^;
   JSON_NAMEVALUEINTERN := PDocVariantOptionsBool(@JSON_[mNameValueIntern])^;
-  JSON_OPTIONS:= PDocVariantOptionsBool(@JSON_[mDefault])^;
+  JSON_OPTIONS := PDocVariantOptionsBool(@JSON_[mDefault])^;
   // redirect to the feature complete variant wrapper functions
   BinaryVariantLoadAsJson := _BinaryVariantLoadAsJson;
   VariantClearSeveral := _VariantClearSeveral;

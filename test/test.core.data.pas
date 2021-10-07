@@ -353,6 +353,15 @@ begin
   Check(v = 123);
   GetVariantFromJson('0123', False, v, nil);
   Check(vd.VType = varString);
+  GetVariantFromJson('-', False, v, nil);
+  Check(vd.VType = varString);
+  Check(v = '-');
+  GetVariantFromJson('-e', False, v, nil);
+  Check(vd.VType = varString);
+  Check(v = '-e');
+  GetVariantFromJson('-0', False, v, nil);
+  Check(vd.VType = varInteger);
+  Check(v = 0);
   GetVariantFromJson('-123', False, v, nil);
   Check(vd.VType = varInteger);
   Check(v = -123);
@@ -424,6 +433,12 @@ begin
   GetVariantFromJson('-123.123ee2', False, v, nil, true);
   Check(vd.VType = varString);
   Check(v = '-123.123ee2');
+  GetVariantFromJson('1e', False, v, nil);
+  Check(vd.VType = varString);
+  Check(v = '1e');
+  GetVariantFromJson('1e0', False, v, nil);
+  Check(vd.VType = varInteger);
+  Check(v = 1);
   GetVariantFromJson('1-123.12', False, v, nil);
   Check(vd.VType = varString);
   Check(v = '1-123.12');

@@ -740,16 +740,17 @@ procedure TTestCoreCrypto._JWT;
     check(jwt.data.B['http://example.com/is_root']);
     check((jwt.reg[jrcIssuedAt] <> '') = (jrcIssuedAt in one.Claims));
     check((jwt.reg[jrcJWTID] <> '') = (jrcJWTID in one.Claims));
-    for i := 1 to 1000 do
-    begin
-      Finalize(jwt);
-      FillCharFast(jwt, sizeof(jwt), 0);
-      check(jwt.reg[jrcIssuer] = '');
-      one.Verify(t, jwt);
-      check(jwt.result = jwtValid, 'from cache');
-      check(jwt.reg[jrcIssuer] = 'joe');
-      check((jwt.reg[jrcJWTID] <> '') = (jrcJWTID in one.Claims));
-    end;
+    if jwt.result = jwtValid then
+      for i := 1 to 1000 do
+      begin
+        Finalize(jwt);
+        FillCharFast(jwt, sizeof(jwt), 0);
+        check(jwt.reg[jrcIssuer] = '');
+        one.Verify(t, jwt);
+        check(jwt.result = jwtValid, 'from cache');
+        check(jwt.reg[jrcIssuer] = 'joe');
+        check((jwt.reg[jrcJWTID] <> '') = (jrcJWTID in one.Claims));
+      end;
     if (one.Algorithm <> 'none') and
        (t[length(t)] in ['1'..'9', 'B'..'Z', 'b'..'z']) then
     begin

@@ -2184,10 +2184,8 @@ var
     P := GotoNextNotSpace(P + 1);
     if EndOfObject <> nil then
       EndOfObject^ := P^;
-    if P^ <> #0 then
-      Json := P + 1
-    else
-      Json := P;
+    inc(P, ord(P^ <> #0));
+    Json := P;
     case kind of
       betObjectID, betRegEx, betDecimal128:
         begin

@@ -3712,8 +3712,8 @@ begin
     P := UnQuoteSqlStringVar(P, result);
     if P = nil then
       result := ''
-    else if P^ <> #0 then
-      inc(P);
+    else
+      inc(P, ord(P^ <> #0));
   end
   else
     GetNextItem(P, Sep, result);
