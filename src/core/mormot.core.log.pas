@@ -220,82 +220,187 @@ const
   /// contains the logging levels for which stack trace should be dumped
   // - which are mainly exceptions or application errors
   LOG_STACKTRACE: TSynLogInfos =
-    [sllException, sllExceptionOS, sllLastError, sllError, sllDDDError];
+    [sllException,
+     sllExceptionOS,
+     sllLastError,
+     sllError,
+     sllDDDError];
 
   /// the text equivalency of each logging level, as written in the log file
   // - PCardinal(@LOG_LEVEL_TEXT[L][3])^ will be used for fast level matching
   // so text must be unique for characters [3..6] -> e.g. 'UST4'
   LOG_LEVEL_TEXT: array[TSynLogInfo] of string[7] = (
-    '       ', ' info  ', ' debug ', ' trace ', ' warn  ', ' ERROR ',
-    '  +    ', '  -    ', ' OSERR ', ' EXC   ', ' EXCOS ', ' mem   ',
-    ' stack ', ' fail  ', ' SQL   ', ' cache ', ' res   ', ' DB    ',
-    ' http  ', ' clnt  ', ' srvr  ', ' call  ', ' ret   ', ' auth  ',
-    ' cust1 ', ' cust2 ', ' cust3 ', ' cust4 ', ' rotat ', ' dddER ',
-    ' dddIN ', ' mon   ');
+    '       ',  // sllNone
+    ' info  ',  // sllInfo
+    ' debug ',  // sllDebug
+    ' trace ',  // sllTrace
+    ' warn  ',  // sllWarning
+    ' ERROR ',  // sllError
+    '  +    ',  // sllEnter
+    '  -    ',  // sllLeave
+    ' OSERR ',  // sllLastError
+    ' EXC   ',  // sllException
+    ' EXCOS ',  // sllExceptionOS
+    ' mem   ',  // sllMemory
+    ' stack ',  // sllStackTrace
+    ' fail  ',  // sllFail
+    ' SQL   ',  // sllSQL
+    ' cache ',  // sllCache
+    ' res   ',  // sllResult
+    ' DB    ',  // sllDB
+    ' http  ',  // sllHTTP
+    ' clnt  ',  // sllClient
+    ' srvr  ',  // sllServer
+    ' call  ',  // sllServiceCall
+    ' ret   ',  // sllServiceReturn
+    ' auth  ',  // sllUserAuth
+    ' cust1 ',  // sllCustom1
+    ' cust2 ',  // sllCustom2
+    ' cust3 ',  // sllCustom3
+    ' cust4 ',  // sllCustom4
+    ' rotat ',  // sllNewRun
+    ' dddER ',  // sllDDDError
+    ' dddIN ',  // sllDDDInfo
+    ' mon   '); // sllMonitoring
 
   /// RGB colors corresponding to each logging level
   // - matches the TColor values, as used by the VCL
+  // - first array is for the background, second is for the text (black/white)
   LOG_LEVEL_COLORS: array[boolean, TSynLogInfo] of integer = (
-   ($FFFFFF, $DCC0C0, $DCDCDC, $C0C0C0, $8080C0, $8080FF, $C0DCC0, $DCDCC0,
- // sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave,
-    $C0C0F0, $C080FF, $C080F0, $C080C0, $C080C0,
- // sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
-    $4040FF, $B08080, $B0B080, $8080DC, $80DC80, $DC8080, $DCFF00, $DCD000,
- // sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-    $DCDC80, $DC80DC, $DCDCDC,
- //  sllServiceCall, sllServiceReturn, sllUserAuth,
-    $D0D0D0, $D0D0DC, $D0D0C0, $D0D0E0, $20E0D0, $8080FF, $DCCDCD, $C0C0C0),
-//  sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun, sllDDDError,sllDDDInfo
-    ($000000, $000000, $000000, $000000, $000000, $FFFFFF, $000000, $000000,
-     $FFFFFF, $FFFFFF, $FFFFFF, $000000, $000000,
-     $FFFFFF, $FFFFFF, $000000, $FFFFFF, $000000, $000000, $000000, $000000,
-     $000000, $000000, $000000,
-     $000000, $000000, $000000, $000000, $000000, $FFFFFF, $000000, $000000));
+   ($FFFFFF,  // sllNone
+    $DCC0C0,  // sllInfo
+    $DCDCDC,  // sllDebug
+    $C0C0C0,  // sllTrace
+    $8080C0,  // sllWarning
+    $8080FF,  // sllError
+    $C0DCC0,  // sllEnter
+    $DCDCC0,  // sllLeave
+    $C0C0F0,  // sllLastError
+    $C080FF,  // sllException
+    $C080F0,  // sllExceptionOS
+    $C080C0,  // sllMemory
+    $C080C0,  // sllStackTrace
+    $4040FF,  // sllFail
+    $B08080,  // sllSQL
+    $B0B080,  // sllCache
+    $8080DC,  // sllResult
+    $80DC80,  // sllDB
+    $DC8080,  // sllHTTP
+    $DCFF00,  // sllClient
+    $DCD000,  // sllServer
+    $DCDC80,  // sllServiceCall
+    $DC80DC,  // sllServiceReturn
+    $DCDCDC,  // sllUserAuth
+    $D0D0D0,  // sllCustom1
+    $D0D0DC,  // sllCustom2
+    $D0D0C0,  // sllCustom3
+    $D0D0E0,  // sllCustom4
+    $20E0D0,  // sllNewRun
+    $8080FF,  // sllDDDError
+    $DCCDCD,  // sllDDDInfo
+    $C0C0C0), // sllMonitoring
+    // black/white text corresponding to each colored background:
+   ($000000,  // sllNone
+    $000000,  // sllInfo
+    $000000,  // sllDebug
+    $000000,  // sllTrace
+    $000000,  // sllWarning
+    $FFFFFF,  // sllError
+    $000000,  // sllEnter
+    $000000,  // sllLeave
+    $FFFFFF,  // sllLastError
+    $FFFFFF,  // sllException
+    $FFFFFF,  // sllExceptionOS
+    $000000,  // sllMemory
+    $000000,  // sllStackTrace
+    $FFFFFF,  // sllFail
+    $FFFFFF,  // sllSQL
+    $000000,  // sllCache
+    $FFFFFF,  // sllResult
+    $000000,  // sllDB
+    $000000,  // sllHTTP
+    $000000,  // sllClient
+    $000000,  // sllServer
+    $000000,  // sllServiceCall
+    $000000,  // sllServiceReturn
+    $000000,  // sllUserAuth
+    $000000,  // sllCustom1
+    $000000,  // sllCustom2
+    $000000,  // sllCustom3
+    $000000,  // sllCustom4
+    $000000,  // sllNewRun
+    $FFFFFF,  // sllDDDError
+    $000000,  // sllDDDInfo
+    $000000));// sllMonitoring
 
   /// console colors corresponding to each logging level
   // - to be used with mormot.core.os TextColor()
   LOG_CONSOLE_COLORS: array[TSynLogInfo] of TConsoleColor = (
-  //  sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave
-    ccLightGray, ccWhite, ccLightGray, ccLightBlue, ccBrown, ccLightRed, ccGreen, ccGreen,
-  //  sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
-    ccLightRed, ccLightRed, ccLightRed, ccLightGray, ccCyan,
-  //  sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-    ccLightRed, ccBrown, ccBlue, ccLightCyan, ccMagenta, ccCyan, ccLightCyan, ccLightCyan,
-  //  sllServiceCall, sllServiceReturn, sllUserAuth,
-    ccLightMagenta, ccLightMagenta, ccMagenta,
-  //  sllCustom1, sllCustom2, sllCustom3, sllCustom4,
-    ccLightGray, ccLightGray, ccLightGray, ccLightGray,
-  //  sllNewRun, sllDDDError, sllDDDInfo, sllMonitoring
-    ccLightMagenta, ccLightRed, ccWhite, ccLightBlue);
+    ccLightGray,    // sllNone
+    ccWhite,        // sllInfo
+    ccLightGray,    // sllDebug
+    ccLightBlue,    // sllTrace
+    ccBrown,        // sllWarning
+    ccLightRed,     // sllError
+    ccGreen,        // sllEnter
+    ccGreen,        // sllLeave
+    ccLightRed,     // sllLastError
+    ccLightRed,     // sllException
+    ccLightRed,     // sllExceptionOS
+    ccLightGray,    // sllMemory
+    ccCyan,         // sllStackTrace
+    ccLightRed,     // sllFail
+    ccBrown,        // sllSQL
+    ccBlue,         // sllCache
+    ccLightCyan,    // sllResult
+    ccMagenta,      // sllDB
+    ccCyan,         // sllHTTP
+    ccLightCyan,    // sllClient
+    ccLightCyan,    // sllServer
+    ccLightMagenta, // sllServiceCall
+    ccLightMagenta, // sllServiceReturn
+    ccMagenta,      // sllUserAuth
+    ccLightGray,    // sllCustom1
+    ccLightGray,    // sllCustom2
+    ccLightGray,    // sllCustom3
+    ccLightGray,    // sllCustom4
+    ccLightMagenta, // sllNewRun
+    ccLightRed,     // sllDDDError
+    ccWhite,        // sllDDDInfo
+    ccLightBlue);   // sllMonitoring
 
   /// how TLogFilter map TSynLogInfo events
   LOG_FILTER: array[TSynLogFilter] of TSynLogInfos = (
-    [],
-    [succ(sllNone)..high(TSynLogInfo)],
-    [sllError, sllLastError, sllException, sllExceptionOS],
-    [sllException, sllExceptionOS],
-    [sllEnter, sllLeave],
-    [sllSQL, sllCache, sllDB],
-    [sllClient, sllServer, sllServiceCall, sllServiceReturn],
-    [sllDebug, sllTrace, sllEnter],
-    [sllCustom1..sllCustom4],
-    [sllDDDError, sllDDDInfo]);
+    [],                                                       // lfNone
+    [succ(sllNone)..high(TSynLogInfo)],                       // lfAll
+    [sllError, sllLastError, sllException, sllExceptionOS],   // lfErrors
+    [sllException, sllExceptionOS],                           // lfExceptions
+    [sllEnter, sllLeave],                                     // lfProfile
+    [sllSQL, sllCache, sllDB],                                // lfDatabase
+    [sllClient, sllServer, sllServiceCall, sllServiceReturn], // lfClientServer
+    [sllDebug, sllTrace, sllEnter],                           // lfDebug
+    [sllCustom1..sllCustom4],                                 // lfCustom
+    [sllDDDError, sllDDDInfo]);                               // lfDDD
 
   /// may be used to log as Debug or Error event, depending on an Error: boolean
   LOG_DEBUGERROR: array[boolean] of TSynLogInfo = (
-    sllDebug, sllError);
+    sllDebug,
+    sllError);
 
   /// may be used to log as Trace or Warning event, depending on an Error: boolean
   LOG_TRACEWARNING: array[boolean] of TSynLogInfo = (
-    sllTrace, sllWarning);
+    sllTrace,
+    sllWarning);
 
   /// may be used to log as Trace or Error event, depending on an Error: boolean
   LOG_TRACEERROR: array[boolean] of TSynLogInfo = (
-    sllTrace, sllError);
+    sllTrace,
+    sllError);
 
   /// may be used to log as Info or Warning event, depending on an Error: boolean
   LOG_INFOWARNING: array[boolean] of TSynLogInfo = (
-    sllInfo, sllWarning);
+    sllInfo,
+    sllWarning);
 
 /// returns the trimmed text value of a logging level
 // - i.e. 'Warning' for sllWarning
@@ -1686,20 +1791,38 @@ type
 const
   /// used to convert a TSynLog event level into a syslog message severity
   LOG_TO_SYSLOG: array[TSynLogInfo] of TSyslogSeverity = (
-     ssDebug, ssInfo, ssDebug, ssDebug, ssNotice, ssWarn,
-    // sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
-     ssDebug, ssDebug,
-    // sllEnter, sllLeave,
-    ssWarn, ssErr, ssErr, ssDebug, ssDebug,
-    // sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
-    ssNotice, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug,
-    // sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-    ssDebug, ssDebug, ssDebug,
-    // sllServiceCall, sllServiceReturn, sllUserAuth,
-    ssDebug, ssDebug, ssDebug, ssDebug, ssNotice,
-    // sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun,
-    ssWarn, ssInfo, ssDebug);
-    // sllDDDError, sllDDDInfo, sllMonitoring);
+    ssDebug,   // sllNone
+    ssInfo,    // sllInfo
+    ssDebug,   // sllDebug
+    ssDebug,   // sllTrace
+    ssNotice,  // sllWarning
+    ssWarn,    // sllError
+    ssDebug,   // sllEnter
+    ssDebug,   // sllLeave
+    ssWarn,    // sllLastError
+    ssErr,     // sllException
+    ssErr,     // sllExceptionOS
+    ssDebug,   // sllMemory
+    ssDebug,   // sllStackTrace
+    ssNotice,  // sllFail
+    ssDebug,   // sllSQL
+    ssDebug,   // sllCache
+    ssDebug,   // sllResult
+    ssDebug,   // sllDB
+    ssDebug,   // sllHTTP
+    ssDebug,   // sllClient
+    ssDebug,   // sllServer
+    ssDebug,   // sllServiceCall
+    ssDebug,   // sllServiceReturn
+    ssDebug,   // sllUserAuth
+    ssDebug,   // sllCustom1
+    ssDebug,   // sllCustom2
+    ssDebug,   // sllCustom3
+    ssDebug,   // sllCustom4
+    ssNotice,  // sllNewRun
+    ssWarn,    // sllDDDError
+    ssInfo,    // sllDDDInfo
+    ssDebug);  // sllMonitoring
 
 /// append some information to a syslog message memory buffer
 // - following https://tools.ietf.org/html/rfc5424 specifications

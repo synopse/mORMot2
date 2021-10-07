@@ -400,7 +400,9 @@ function GetFileNameExtIndex(const FileName, CsvExt: TFileName): integer;
 
 /// return next CSV string from P, nil if no more
 // - output text would be trimmed from any left or right space
-procedure GetNextItemShortString(var P: PUtf8Char; out Dest: ShortString; Sep: AnsiChar = ',');
+// - will always append a trailing #0 - excluded from Dest length (0..254)
+procedure GetNextItemShortString(var P: PUtf8Char;
+  out Dest: ShortString; Sep: AnsiChar = ',');
 
 /// append some text lines with the supplied Values[]
 // - if any Values[] item is '', no line is added
@@ -3854,22 +3856,19 @@ begin
     while (S^ <= ' ') and (S^ <> #0) do
       inc(S);
     P := S;
-    if (S^ <> #0) and
-       (S^ <> Sep) then
-      repeat
-        inc(S);
-      until (S^ = #0) or
-        (S^ = Sep);
+    while (S^ <> Sep) and (S^ <> #0) do
+      inc(S);
     len := S - P;
     repeat
       dec(len);
     until (len < 0) or
           not (P[len] in [#1..' ']); // trim right spaces
-    if len >= 255 then
-      len := 255
+    if len >= 254 then
+      len := 254 // leave space for trailing #0
     else
       inc(len);
     Dest[0] := AnsiChar(len);
+    Dest[len + 1] := #0; // trailing #0
     if len > 0 then
       MoveSmall(P, @Dest[1], len);
     if S^ <> #0 then
@@ -3878,7 +3877,7 @@ begin
       P := nil;
   end
   else
-    Dest[0] := #0;
+    PCardinal(@Dest)^ := 0; // trailing #0
 end;
 
 function GetNextItemHexDisplayToBin(var P: PUtf8Char;

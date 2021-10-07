@@ -3550,10 +3550,9 @@ begin
   repeat
     if vt < varFirstCustom then
       exit; // we need a complex type to lookup
-    GetNextItemShortString(FullName, itemName, '.');
-    if itemName[0] in [#0, #255] then
+    GetNextItemShortString(FullName, itemName, '.'); // itemName ends with #0
+    if itemName[0] in [#0, #254] then
       exit;
-    itemName[ord(itemName[0]) + 1] := #0; // ensure is ASCIIZ
     if vt = VarType then
       handler := self
     else
