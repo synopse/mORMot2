@@ -2251,7 +2251,7 @@ end;
 
 procedure TJsonWriter.AddColumn(aColName: PUtf8Char; aColIndex, aColCount: PtrInt);
 var
-  len: PtrInt;
+  len, collen: PtrInt;
   P: PUtf8Char;
 begin
   len := StrLen(aColName);
@@ -2259,8 +2259,10 @@ begin
   begin
     if aColIndex = 0 then // non-expanded mode doesn't use ColNames[]
       SetLength(ColNames, aColCount);
-    FastSetString(ColNames[aColIndex], nil,
-      len + 3 - ord(twoForceJsonExtended in CustomOptions) * 2);
+    collen := len + 1;
+    if not (twoForceJsonExtended in CustomOptions) then
+      inc(collen, 2);
+    FastSetString(ColNames[aColIndex], nil, collen);
     P := pointer(ColNames[aColIndex]);
     if twoForceJsonExtended in CustomOptions then
       MoveFast(aColName^, P^, len)  // extended JSON unquoted field names
