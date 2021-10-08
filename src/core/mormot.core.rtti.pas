@@ -1908,6 +1908,8 @@ function TypeInfoToStandardParserType(Info: PRttiInfo;
 /// recognize most simple types and return their known dynamic array RTTI
 // - returns nil if we don't know any dynamic array for this type
 // - ExpectExactElemInfo=true ensure that result's ArrayRtti.Info = ElemInfo
+// - mainly used by IList<T> and IKeyValue<T> to guess the dynamic array
+// associated with the T item type
 function TypeInfoToDynArrayTypeInfo(ElemInfo: PRttiInfo;
   ExpectExactElemInfo: boolean; ParserType: PRttiParserType = nil): PRttiInfo;
 
@@ -1926,7 +1928,7 @@ function DynArrayItemTypeLen(const DynArrayTypeName: RawUtf8): PtrInt;
 { ************** RTTI-based Registration for Custom JSON Parsing }
 
 const
-  /// TRttiCustomList stores its TypeInfo() by PRttiInfo.Kind + Name[0..1]
+  /// TRttiCustomList stores its TypeInfo() by PRttiInfo.Kind + Name[0][1]
   // - optimized "hash table of the poor" (tm) for Find(TypeInfo) and Find(Name)
   // - should be a bit mask (i.e. power of two minus 1)
   // - the fact that we use modulo 32 makes Find(Name) case insensitive :)
@@ -2391,7 +2393,7 @@ type
   TRttiCustomListPairs = record
     /// speedup search by name e.g. from a loop
     Last: TRttiCustom;
-    /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by Name[0..1]
+    /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by Name[0][1]
     Hash: array[0..RTTICUSTOMTYPEINFOHASH] of TRttiCustomListPair;
   end;
   PRttiCustomListPairs = ^TRttiCustomListPairs;
@@ -2409,7 +2411,7 @@ type
   /// maintain a thread-safe list of PRttiInfo/TRttiCustom/TRttiJson registration
   TRttiCustomList = object
   private
-    // store PRttiInfo/TRttiCustom pairs by TRttiKind.Kind+Name[0..1]
+    // store PRttiInfo/TRttiCustom pairs by TRttiKind.Kind+Name[0][1]
     Table: ^TRttiCustomListHashTable;
     // used to release memory used by registered customizations
     Instances: array of TRttiCustom;
@@ -5759,9 +5761,9 @@ const
   // fast branchless O(log(N)) binary search on x86_64
   SORTEDNAMES: array[0..SORTEDMAX] of PUtf8Char = (
     'ARRAY', 'BOOLEAN', 'BYTE', 'CARDINAL', 'CURRENCY', 'DOUBLE', 'EXTENDED',
-    'INT64', 'INTEGER', 'INTERFACE', 'LONGINT', 'LONGWORD', 'PTRINT', 'PTRUINT', 'QWORD',
-    'RAWBLOB', 'RAWBYTESTRING', 'RAWJSON', 'RAWUTF8', 'RECORD', 'SINGLE',
-    'SPIUTF8', 'STRING', 'SYNUNICODE',
+    'INT64', 'INTEGER', 'INTERFACE', 'LONGINT', 'LONGWORD', 'PTRINT', 'PTRUINT',
+    'QWORD', 'RAWBLOB', 'RAWBYTESTRING', 'RAWJSON', 'RAWUTF8', 'RECORD',
+    'SINGLE', 'SPIUTF8', 'STRING', 'SYNUNICODE',
     'TCREATETIME', 'TDATETIME', 'TDATETIMEMS', 'TGUID', 'THASH128', 'THASH256',
     'THASH512', 'TID', 'TMODTIME', 'TRECORDREFERENCE', 'TRECORDREFERENCETOBEDELETED',
     'TRECORDVERSION', 'TTIMELOG', 'TUNIXMSTIME', 'TUNIXTIME',
@@ -5769,20 +5771,24 @@ const
   // warning: recognized types should match at binary storage level!
   SORTEDTYPES: array[0..SORTEDMAX] of TRttiParserType = (
     ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
-    ptInt64, ptInteger, ptInterface, ptInteger, ptCardinal, ptPtrInt, ptPtrUInt, ptQWord,
-    ptRawByteString, ptRawByteString, ptRawJson, ptRawUtf8, ptRecord, ptSingle,
-    ptRawUtf8, ptString, ptSynUnicode,
+    ptInt64, ptInteger, ptInterface, ptInteger, ptCardinal, ptPtrInt, ptPtrUInt,
+    ptQWord, ptRawByteString, ptRawByteString, ptRawJson, ptRawUtf8, ptRecord,
+    ptSingle, ptRawUtf8, ptString, ptSynUnicode,
     ptTimeLog, ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256,
-    ptHash512, ptOrm, ptTimeLog, ptOrm, ptOrm, ptOrm, ptUnixMSTime,
-    ptUnixTime, ptTimeLog, ptUnicodeString,
-    ptRawUtf8, ptVariant, ptWideString, ptWord);
+// 'THASH512','TID','TMODTIME','TRECORDREFERENCE','TRECORDREFERENCETOBEDELETED'
+    ptHash512, ptOrm, ptTimeLog, ptOrm, ptOrm,
+//'TRECORDVERSION','TTIMELOG','TUNIXMSTIME','TUNIXTIME'
+    ptOrm, ptTimeLog, ptUnixMSTime, ptUnixTime,
+    ptUnicodeString, ptRawUtf8, ptVariant, ptWideString, ptWord);
   SORTEDCOMPLEX: array[0..SORTEDMAX] of TRttiParserComplexType = (
     pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
     pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
     pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
     pctCreateTime, pctNone, pctNone, pctNone, pctNone, pctNone,
+// 'THASH512','TID','TMODTIME','TRECORDREFERENCE','TRECORDREFERENCETOBEDELETED'
     pctNone, pctID, pctModTime, pctRecordReference, pctRecordReferenceToBeDeleted,
-    pctRecordVersion, pctNone, pctTimeLog, pctNone, 
+//'TRECORDVERSION','TTIMELOG','TUNIXMSTIME','TUNIXTIME'
+    pctRecordVersion, pctTimeLog, pctNone, pctNone,
     pctNone, pctNone, pctNone, pctNone, pctNone);
 var
   ndx: PtrInt;
@@ -6031,6 +6037,7 @@ var
   parser: TRttiParserType;
   rc: TRttiCustom;
 begin
+  // O(1) search of most simple TRttiParserType types from RTTI
   parser := TypeInfoToStandardParserType(ElemInfo, {byname=}false);
   if parser = ptArray then
     parser := SizeToDynArrayKind(ElemInfo^.ArraySize);
@@ -6047,7 +6054,8 @@ begin
        (rc.ArrayRtti.Info = ElemInfo) then
       exit;
   end;
-  rc := Rtti.FindByArrayRtti(ElemInfo); // search in registered rkDynArray
+  // O(n) search in registered rkDynArray for complex types (e.g. ptRecord)
+  rc := Rtti.FindByArrayRtti(ElemInfo);
   if rc <> nil then
   begin
     if ParserType <> nil then
@@ -7528,7 +7536,7 @@ function FindNameInPairs(Pairs, PEnd: PPointerArray;
   Name: PUtf8Char; NameLen: PtrInt): TRttiCustom;
 var
   nfo: PRttiInfo;
-begin
+begin // FPC generates very optimized asm from inlining IdemPropNameUSameLen
   repeat
     nfo := Pairs[0];
     if ord(nfo^.RawName[0]) <> NameLen then
@@ -7566,7 +7574,8 @@ begin
     // try latest found value e.g. calling from JsonRetrieveObjectRttiCustom()
     result := K^.Last;
     if (result <> nil) and
-       IdemPropNameU(result.Name, Name, NameLen) then
+       (PStrLen(PAnsiChar(pointer(result.Name)) - _STRLEN)^ = NameLen) and
+       IdemPropNameUSameLenNotNull(pointer(result.Name), Name, NameLen) then
       exit;
     // our optimized "hash table of the poor" (tm) lookup
     P := @K^.Hash[(PtrUInt(NameLen) xor PtrUInt(Name[0])) and RTTICUSTOMTYPEINFOHASH];
