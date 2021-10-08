@@ -663,7 +663,7 @@ begin
       SQL := fProperties.SqlCreate(fTableName, CreateColumns, false);
       if Assigned(fProperties.OnTableCreate) then
         TableCreated := fProperties.OnTableCreate(
-          fProperties, fTableName, CreateColumns, SQL)
+          fProperties, fTableName, fStoredClass, CreateColumns, SQL)
       else if SQL <> '' then
         TableCreated := ExecuteDirect(pointer(SQL), [], [], false) <> nil;
       if TableCreated then
@@ -698,7 +698,7 @@ begin
                 if Assigned(fProperties.OnTableAddColumn) then
                 begin
                   if fProperties.OnTableAddColumn(
-                      fProperties, fTableName, Field, SQL) then
+                      fProperties, fTableName, fStoredClass, Field, SQL) then
                     TableModified := true; // don't raise ERestStorage from here
                 end
                 else if SQL <> '' then
@@ -1917,7 +1917,7 @@ begin
     fTableName, ExtFieldNames, Unique, NeedDesc, IndexName);
   if Assigned(fProperties.OnTableCreateMultiIndex) then
     result := fProperties.OnTableCreateMultiIndex(
-      fProperties, fTableName, FieldNames, Unique, IndexName, SQL)
+      fProperties, fTableName, fStoredClass, FieldNames, Unique, IndexName, SQL)
   else if SQL <> '' then
     result := ExecuteDirect(pointer(SQL), [], [], false) <> nil;
   if not result then
