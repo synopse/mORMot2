@@ -10096,9 +10096,9 @@ begin
   if (Values = nil) or
      (Excluded = nil) then
     exit; // nothing to exclude
-  if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
+  if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
     Values := copy(Values); // make unique
-  if PRefCnt(PtrUInt(Excluded) - _DAREFCNT)^ > 1 then
+  if PRefCnt(PAnsiChar(Excluded) - _DAREFCNT)^ > 1 then
     Excluded := copy(Excluded);
   v := Length(Values);
   n := 0;
@@ -10139,9 +10139,9 @@ begin
     Values := nil;
     exit;
   end;
-  if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
+  if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
     Values := copy(Values); // make unique
-  if PRefCnt(PtrUInt(Included) - _DAREFCNT)^ > 1 then
+  if PRefCnt(PAnsiChar(Included) - _DAREFCNT)^ > 1 then
     Included := copy(Included);
   v := Length(Values);
   n := 0;

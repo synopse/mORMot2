@@ -6847,7 +6847,7 @@ begin
   else
   begin
     dec(n);
-    if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
+    if PRefCnt(PAnsiChar(pointer(Values)) - _DAREFCNT)^ > 1 then
       Values := copy(Values); // make unique
     Values[Index] := ''; // avoid GPF
     if n > Index then
@@ -6873,7 +6873,7 @@ begin
   begin
     dec(n);
     ValuesCount := n;
-    if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
+    if PRefCnt(PAnsiChar(pointer(Values)) - _DAREFCNT)^ > 1 then
       Values := copy(Values); // make unique
     Values[Index] := ''; // avoid GPF
     dec(n, Index);

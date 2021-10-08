@@ -5583,7 +5583,7 @@ begin
   dec(n);
   if n > Index then
   begin
-    if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
+    if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
       Values := copy(Values); // make unique
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(Word));
   end;
@@ -5600,7 +5600,7 @@ begin
   dec(n);
   if n > Index then
   begin
-    if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
+    if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
       Values := copy(Values); // make unique
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(integer));
   end;
@@ -5617,7 +5617,7 @@ begin
   dec(n, Index + 1);
   if n > 0 then
   begin
-    if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
+    if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
       Values := copy(Values); // make unique
     MoveFast(Values[Index + 1], Values[Index], n * SizeOf(integer));
   end;
@@ -5634,7 +5634,7 @@ begin
   dec(n);
   if n > Index then
   begin
-    if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
+    if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
       Values := copy(Values); // make unique
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(Int64));
   end;
@@ -5651,7 +5651,7 @@ begin
   dec(n, Index + 1);
   if n > 0 then
   begin
-    if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
+    if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
       Values := copy(Values); // make unique
     MoveFast(Values[Index + 1], Values[Index], n * SizeOf(Int64));
   end;
