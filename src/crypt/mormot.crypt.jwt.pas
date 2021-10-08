@@ -991,7 +991,7 @@ begin
         if jrcData in excluded then
           continue; // caller didn't want to fill JWT.data
         include(JWT.claims, jrcData);
-        GetVariantFromJson(V, wasString, value, @JSON_[mFast],
+        GetVariantFromJsonField(V, wasString, value, @JSON_[mFast],
           joDoubleInData in fOptions, VLen);
         if JWT.data.Count = 0 then
           JWT.data.Capacity := cap;

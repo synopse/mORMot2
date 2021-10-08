@@ -5543,11 +5543,14 @@ begin
       end;
     end
     else
+    begin
       // JSON simple types (text, numbers) would be converted via a variant
-      if VariantLoadJson(tmp, start, nil, nil) = nil then
+      GetJsonToAnyVariant(tmp, start, nil, nil, {allowdouble=}true);
+      if start = nil then
         sqlite3.result_null(Context)
       else
         VariantToSQlite3Context(tmp, Context);
+    end;
   end;
 end;
 
@@ -6419,18 +6422,21 @@ begin
   begin
     json := sqlite3.value_text(argv[0]);
     FastSetString(tmp, json, StrLen(json));
-    doc.InitJsonInPlace(pointer(tmp), JSON_FAST);
+    doc.InitJsonInPlace(pointer(tmp), JSON_FAST_FLOAT);
     v := doc.GetPVariantByPath(sqlite3.value_text(argv[1]));
     if v <> nil then
     begin
+      // update the field, then return whole JSON
       json := sqlite3.value_text(argv[2]);
       FastSetString(tmp, json, StrLen(json));
-      VariantLoadJson(v^, pointer(tmp), nil, @JSON_[mFast]);
+      json := pointer(tmp);
+      GetJsonToAnyVariant(v^, json, nil, @JSON_[mFastFloat], false);
       RawUtf8ToSQlite3Context(doc.ToJson, Context, false);
     end
     else
     begin
-      FastSetString(tmp, json, StrLen(json));
+      // field was not found: just return whole untouched JSON
+      FastSetString(tmp, json, StrLen(json)); // doc.InitJsonInPlace modified it
       RawUtf8ToSQlite3Context(tmp, Context, false);
     end;
   end;

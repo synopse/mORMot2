@@ -4245,17 +4245,12 @@ var
   v: RawUtf8;
 begin
   GetInputByName(ParamName, '', v);
-  GetVariantFromJson(pointer(v), false, result{%H-}, nil,
-    fInputAllowDouble, length(v));
+  VariantLoadJson(result, v, nil, fInputAllowDouble);
 end;
 
 function TRestServerUriContext.GetInputOrVoid(const ParamName: RawUtf8): variant;
-var
-  v: RawUtf8;
 begin
-  v := GetInputUtf8OrVoid(ParamName);
-  GetVariantFromJson(pointer(v), false, result{%H-}, nil,
-    fInputAllowDouble, length(v));
+  VariantLoadJson(result, GetInputUtf8OrVoid(ParamName), nil, fInputAllowDouble);
 end;
 
 function TRestServerUriContext.InputOrError(const ParamName: RawUtf8;
@@ -4263,10 +4258,8 @@ function TRestServerUriContext.InputOrError(const ParamName: RawUtf8;
 var
   v: RawUtf8;
 begin
-  result := InputUtf8OrError(ParamName, v, ErrorMessageForMissingParameter);
-  if result then
-    GetVariantFromJson(pointer(v), false, Value, nil,
-      fInputAllowDouble, length(v));
+  result := InputUtf8OrError(ParamName, v, ErrorMessageForMissingParameter) and
+            VariantLoadJson(Value, v, nil, fInputAllowDouble);
 end;
 
 function TRestServerUriContext.GetInputAsTDocVariant(
@@ -4296,7 +4289,7 @@ begin
       end
       else
         forcestring := false;
-      GetVariantFromJson(pointer(fInput[ndx * 2 + 1]), forcestring, v,
+      GetVariantFromJsonField(pointer(fInput[ndx * 2 + 1]), forcestring, v,
         @Options, fInputAllowDouble, length(fInput[ndx * 2 + 1]));
       res.AddValue(name, v);
     end;

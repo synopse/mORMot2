@@ -3478,9 +3478,8 @@ var
   P, classname: PUtf8Char;
   classnamelen: integer;
 begin
-  // at input, Json^ = '{'
   result := nil;
-  P := GotoNextNotSpace(Json + 1);
+  P := GotoNextNotSpace(Json + 1); // at input, Json^ = '{'
   tab := @NormToUpperAnsi7;
   if IdemPChar(P, '"CLASSNAME":', tab) then
     inc(P, 12)
@@ -7149,7 +7148,7 @@ end;
 
 procedure _JL_Variant(Data: PVariant; var Ctxt: TJsonParserContext);
 begin
-  Ctxt.Json := VariantLoadJson(Data^, Ctxt.Json, @Ctxt.EndOfObject,
+  GetJsonToAnyVariant(Data^, Ctxt.Json, @Ctxt.EndOfObject,
     Ctxt.CustomVariant, jpoAllowDouble in Ctxt.Options);
   Ctxt.Valid := Ctxt.Json <> nil;
 end;

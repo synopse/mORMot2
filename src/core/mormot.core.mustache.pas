@@ -581,7 +581,7 @@ var
       begin
         // {{helper 123}} or {{helper "constant"}} or {{helper [1,2,3]}}
         val.VType := varEmpty;
-        VariantLoadJson(variant(val), pointer(valnam), nil, @JSON_[mFast]);
+        JsonToVariantInPlace(variant(val), pointer(valnam), JSON_FAST_FLOAT);
         valFree := true;
       end
       else

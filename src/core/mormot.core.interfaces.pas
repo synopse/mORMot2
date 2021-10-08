@@ -2783,9 +2783,9 @@ begin
       DestValue := PVariant(V)^;
   else
     begin
-      // use generic AddJson() method
+      // use generic AddJson() method for complex "..." content
       AsJson(tmp, V);
-      VariantLoadJson(DestValue, pointer(tmp), nil, @Options);
+      JsonToVariantInPlace(DestValue, pointer(tmp), Options);
     end;
   end;
 end;
@@ -5641,7 +5641,8 @@ begin
   try
     P := tmp.buf;
     for i := 0 to fMethod^.ArgsInputValuesCount - 1 do
-      P := VariantLoadJson(fInput[i], P, nil, @aSender.fInterface.DocVariantOptions);
+      GetJsonToAnyVariant(
+        fInput[i], P, nil, @aSender.fInterface.DocVariantOptions, false);
   finally
     tmp.Done;
   end;

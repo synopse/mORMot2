@@ -281,6 +281,7 @@ function VariantTypeToSqlDBFieldType(const V: Variant): TSqlDBFieldType;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// guess the correct TSqlDBFieldType from the UTF-8 representation of a value
+// - won't recognize ftDate nor ftUtf8 prefixes, just TextToVariantNumberType()
 function TextToSqlDBFieldType(json: PUtf8Char): TSqlDBFieldType;
 
 type
@@ -2477,7 +2478,7 @@ var
         inc(P);
       until P^ in [#0..' ', ';', ')', ','];
       SetString(Where.Value, B, P - B);
-      Where.ValueVariant := VariantLoadJson(Where.Value);
+      VariantLoadJson(Where.ValueVariant, Where.Value);
       Where.ValueInteger := GetInteger(pointer(Where.Value), err);
     end;
     if PWord(P)^ = ord(')') + ord(':') shl 8 then

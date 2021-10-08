@@ -4294,7 +4294,7 @@ const
         tmp.Init(Value, ValueLen);
         Value := tmp.buf;
       end;
-      GetVariantFromJson(Value, false, variant(result), @options, false, ValueLen);
+      GetJsonToAnyVariant(variant(result), Value, nil, @options, false);
     finally
       tmp.Done;
     end;
@@ -7057,7 +7057,8 @@ begin
     da.Clear
   else
   try
-    if (fObjArray = nil) and Base64MagicCheckAndDecode(Value, tmp, ValueLen) then
+    if (fObjArray = nil) and
+       Base64MagicCheckAndDecode(Value, tmp, ValueLen) then
       da.LoadFrom(tmp.buf, PAnsiChar(tmp.buf) + tmp.len)
     else
       da.LoadFromJson(tmp.Init(Value));
@@ -7267,13 +7268,13 @@ begin
           TVarData(V).VDate := Iso8601ToDateTimePUtf8Char(Value, ValueLen);
         end
         else
-          GetVariantFromJson(tmp.buf, wasString, V, nil, false, ValueLen)
+          GetVariantFromJsonField(tmp.buf, wasString, V, nil, false, ValueLen)
       else
       begin
         if wasString and
            (GotoNextNotSpace(Value)^ in ['{', '[']) then
           wasString := false; // allow to create a TDocVariant stored as DB text
-        GetVariantFromJson(tmp.buf, wasString, V, @DocVariantOptions,false, ValueLen);
+        GetVariantFromJsonField(tmp.buf, wasString, V, @DocVariantOptions,false, ValueLen);
       end;
     finally
       tmp.Done;

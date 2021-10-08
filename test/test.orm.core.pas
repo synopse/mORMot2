@@ -622,10 +622,10 @@ begin
     s2 := 'Int=1234567890123456, Test=''' + T.Test + ''', Unicode=''' + T.Test +
       ''', Ansi=''' + T.Test + ''', ValFloat=3.141592653, ValWord=1203, ' +
       'ValDate=''2009-03-10T21:19:36'', Next=0';
-    Check(s = s2 + ', ValVariant=''' + T.Test + '''');
+    CheckEqual(s, s2 + ', ValVariant=''' + T.Test + '''');
     T.ValVariant := _Json('{name:"John",int:1234}');
     s := T.GetSqlSet;
-    Check(s = s2 + ', ValVariant=''{"name":"John","int":1234}''',
+    CheckEqual(s, s2 + ', ValVariant=''{"name":"John","int":1234}''',
       'JSON object as text');
     s := T.GetJsonValues(true, true, ooSelect);
     Check(s = s1 + ',"ValVariant":{"name":"John","int":1234}}');
