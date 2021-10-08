@@ -4283,7 +4283,7 @@ const
          (typeInfo <> nil) and
          (Value <> nil) and
          (Value^ <> '[') and
-         Base64MagicCheckAndDecode(Value, tmp) then
+         Base64MagicCheckAndDecode(Value, tmp, ValueLen) then
       begin
         da := DynArrayBlobSaveJson(typeInfo, tmp.buf);
         Value := pointer(da);
