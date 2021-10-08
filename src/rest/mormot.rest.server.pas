@@ -316,7 +316,8 @@ type
     // sicPerThread
     ServiceInstanceID: TID;
     /// the current execution context of an interface-based service
-    // - maps to Service.fExecution[InterfaceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT]
+    // - maps to
+    //! Service.fExecution[InterfaceMethodIndex - Length(SERVICE_PSEUDO_METHOD)]
     ServiceExecution: PServiceFactoryExecution;
     /// the current execution options of an interface-based service
     // - contain ServiceExecution.Options including optNoLogInput/optNoLogOutput
@@ -3340,7 +3341,7 @@ var
   m: PtrInt;
 begin
   // expects Service, ServiceParameters, ServiceMethod(Index) to be set
-  m := ServiceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT;
+  m := ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
   if m >= 0 then
   begin
     if ServiceMethod = nil then
@@ -4874,7 +4875,7 @@ begin
         Service := TServiceFactoryServer(InterfaceService);
         ServiceMethodIndex := InterfaceMethodIndex;
         fServiceListInterfaceMethodIndex := i;
-        i := ServiceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT;
+        i := ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
         if i >= 0 then
           ServiceMethod := @Service.InterfaceFactory.Methods[i];
         ServiceInstanceID := GetInteger(pointer(UriBlobFieldName));
@@ -4893,7 +4894,7 @@ begin
         else
         begin
           ServiceMethod := @Service.InterfaceFactory.Methods[ServiceMethodIndex];
-          inc(ServiceMethodIndex, SERVICE_PSEUDO_METHOD_COUNT);
+          inc(ServiceMethodIndex, Length(SERVICE_PSEUDO_METHOD));
           fServiceListInterfaceMethodIndex := -1;
           ServiceInstanceID := GetInteger(pointer(clientdrivenid));
         end;
@@ -5038,7 +5039,7 @@ begin
     ServiceInstanceID := values[2].ToCardinal; // retrieve "id":ClientDrivenID
     ServiceMethodIndex := Service.InterfaceFactory.FindMethodIndex(method);
     if ServiceMethodIndex >= 0 then
-      inc(ServiceMethodIndex, SERVICE_PSEUDO_METHOD_COUNT)
+      inc(ServiceMethodIndex, Length(SERVICE_PSEUDO_METHOD))
     else
     begin
       for m := low(TServiceInternalMethod) to high(TServiceInternalMethod) do
@@ -7259,7 +7260,7 @@ begin
     for i := 0 to Services.Count - 1 do
       with TServiceFactoryServer(Services.InterfaceList[i].service) do
         if InstanceCreation = sicPerThread then
-          InternalInstanceRetrieve(inst, ord(imFree), 0);
+          RetrieveInstance(inst, ord(imFree), 0);
   end;
   with PServiceRunningContext(PerThreadRunningContextAddress)^ do
     if RunningThread <> nil then

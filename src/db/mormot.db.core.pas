@@ -808,7 +808,7 @@ type
     /// write or init field names for appropriate JSON Expand later use
     // - accept a name directly supplied by the DB provider
     // - if Expand is true, will set ColNames[] with the expected format
-    // - on non-expanded format, will directly write aColName to W
+    // - on Expand=false format, will directly write aColName to W
     procedure AddColumn(aColName: PUtf8Char; aColIndex, aColCount: PtrInt);
     /// allow to change on the fly an expanded format column layout
     // - by definition, a non expanded format will raise a ESynDBException

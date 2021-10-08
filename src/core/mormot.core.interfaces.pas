@@ -498,10 +498,6 @@ const
     '_signature_',
     '_instance_');
 
-  /// how many pseudo methods are assigned to TInterfaceFactory
-  // - equals currently 4
-  SERVICE_PSEUDO_METHOD_COUNT = Length(SERVICE_PSEUDO_METHOD);
-
 type
   {$M+}
   TInterfaceFactory = class;
@@ -4303,11 +4299,11 @@ begin
   if (MethodIndex < 0) or
      (self = nil) then
     result := ''
-  else if MethodIndex < SERVICE_PSEUDO_METHOD_COUNT then
+  else if MethodIndex < Length(SERVICE_PSEUDO_METHOD) then
     result := SERVICE_PSEUDO_METHOD[TServiceInternalMethod(MethodIndex)]
   else
   begin
-    dec(MethodIndex, SERVICE_PSEUDO_METHOD_COUNT);
+    dec(MethodIndex, Length(SERVICE_PSEUDO_METHOD));
     if cardinal(MethodIndex) < MethodsCount then
       result := fMethods[MethodIndex].Uri
     else
@@ -6555,7 +6551,9 @@ type
   end;
 
   TBackgroundLauncherAction = (
-    doCallMethod, doInstanceRelease, doThreadMethod);
+    doCallMethod,
+    doInstanceRelease,
+    doThreadMethod);
 
   PBackgroundLauncher = ^TBackgroundLauncher;
   TBackgroundLauncher = record
@@ -6572,7 +6570,7 @@ type
 procedure TInterfacedObjectHooked.InternalRelease;
 begin
   if self <> nil then
-    IInterface(self)._Release; // call the release interface
+    IInterface(self)._Release; // call the release interface to dec(RefCount)
 end;
 
 procedure BackgroundExecuteProc(Call: pointer); forward;

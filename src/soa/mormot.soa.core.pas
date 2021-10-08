@@ -1344,7 +1344,7 @@ begin
   // add associated methods - first SERVICE_PSEUDO_METHOD[], then from interface
   aUri := aUri + '.';
   MethodIndex := 0;
-  for internal := Low(TServiceInternalMethod) to High(TServiceInternalMethod) do
+  for internal := Low(internal) to High(internal) do
     AddOne(aUri + SERVICE_PSEUDO_METHOD[internal]);
   for m := 0 to aService.fInterface.MethodsCount - 1 do
     AddOne(aUri + aService.fInterface.Methods[m].Uri);
@@ -1393,7 +1393,7 @@ end;
 procedure TServiceContainer.SetInterfaceMethodBits(MethodNamesCsv: PUtf8Char;
   IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
 var
-  i, n: PtrInt;
+  i, n, m: PtrInt;
   method: RawUtf8;
 begin
   FillCharFast(bits, SizeOf(bits), 0);
@@ -1402,7 +1402,7 @@ begin
     raise EServiceException.CreateUtf8('%.SetInterfaceMethodBits: n=%', [self, n]);
   if IncludePseudoMethods then
     for i := 0 to n - 1 do
-      if fInterfaceMethod[i].InterfaceMethodIndex < SERVICE_PSEUDO_METHOD_COUNT then
+      if fInterfaceMethod[i].InterfaceMethodIndex < Length(SERVICE_PSEUDO_METHOD) then
         include(bits, i);
   while MethodNamesCsv <> nil do
   begin
@@ -1411,10 +1411,12 @@ begin
     begin
       for i := 0 to n - 1 do
         with fInterfaceMethod[i] do // O(n) search is fast enough here
-          if (InterfaceMethodIndex >= SERVICE_PSEUDO_METHOD_COUNT) and
-             IdemPropNameU(method, InterfaceService.fInterface.Methods[
-              InterfaceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT].Uri) then
+        begin
+          m := InterfaceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
+          if (m >= 0) and
+             IdemPropNameU(method, InterfaceService.fInterface.Methods[m].Uri) then
             include(bits, i);
+        end;
     end
     else
     begin

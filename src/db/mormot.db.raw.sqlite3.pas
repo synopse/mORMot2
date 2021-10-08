@@ -8244,6 +8244,7 @@ begin
             end;
         end;
       end;
+      // if we reached here, there is some field value to append
       WR.AddString(WR.ColNames[i]); // '"'+ColNames[]+'":'
     end;
     case typ of

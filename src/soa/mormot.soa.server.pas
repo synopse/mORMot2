@@ -254,12 +254,12 @@ type
     // this service
     function RunOnAllInstances(const aEvent: TOnServiceFactoryServerOne;
       var aOpaque): integer;
-    /// get an implementation Inst.Instance for the given Inst.InstanceID
+    /// low-level get an implementation Inst.Instance for the given Inst.InstanceID
     // - is called by ExecuteMethod() in sicClientDriven mode
     // - returns -1 on error, or aMethodIndex for successfull execution,
     // e.g. 0 after {"method":"_free_".. call
     // - otherwise, fill Inst.Instance with the matching implementation (or nil)
-    function InternalInstanceRetrieve(var Inst: TServiceFactoryServerInstance;
+    function RetrieveInstance(var Inst: TServiceFactoryServerInstance;
       aMethodIndex, aSession: integer): integer;
     /// define the the instance life time-out, in seconds
     function SetTimeoutSec(value: cardinal): TServiceFactoryServerAbstract; override;
@@ -621,7 +621,11 @@ begin
               '%.Create: % is no implementation of I%',
               [self, fSharedInstance, fInterfaceUri]);
       end;
-    sicClientDriven, sicPerSession, sicPerUser, sicPerGroup, sicPerThread:
+    sicClientDriven,
+    sicPerSession,
+    sicPerUser,
+    sicPerGroup,
+    sicPerThread:
       if (aTimeOutSec = 0) and
          (InstanceCreation <> sicPerThread) then
         fInstanceCreation := sicSingle
@@ -713,10 +717,10 @@ begin
         result := true;
       end;
     sicPerThread:
-      begin
+      begin // use Length(SERVICE_PSEUDO_METHOD) to create an instance if none
         Inst.Instance := nil;
         Inst.InstanceID := PtrUInt(GetCurrentThreadId);
-        if (InternalInstanceRetrieve(Inst, SERVICE_PSEUDO_METHOD_COUNT, 0) >= 0) and
+        if (RetrieveInstance(Inst, Length(SERVICE_PSEUDO_METHOD), 0) >= 0) and
            (Inst.Instance <> nil) then
           result := GetInterfaceFromEntry(Inst.Instance,
             fImplementationClassInterfaceEntry, Obj);
@@ -820,7 +824,7 @@ begin
             Assigned(Factory.fBackgroundThread) then
       BackgroundExecuteInstanceRelease(Obj, Factory.fBackgroundThread)
     else
-      IInterface(Obj)._Release;
+      IInterface(Obj)._Release; // dec(RefCount) + Free if 0
   except
     on E: Exception do
       Factory.RestServer.Internallog('SafeFreeInstance: Ignored % exception ' +
@@ -828,7 +832,7 @@ begin
   end;
 end;
 
-function TServiceFactoryServer.InternalInstanceRetrieve(
+function TServiceFactoryServer.RetrieveInstance(
   var Inst: TServiceFactoryServerInstance;
   aMethodIndex, aSession: integer): integer;
 
@@ -844,7 +848,7 @@ function TServiceFactoryServer.InternalInstanceRetrieve(
     result := aMethodIndex; // notify caller
     inc(fInstanceCount);
     fRestServer.InternalLog(
-      '%.InternalInstanceRetrieve: Adding %(%) instance (id=%) count=%',
+      '%.RetrieveInstance: Adding %(%) instance (id=%) count=%',
       [ClassType, fInterfaceUri, pointer(Inst.Instance), Inst.InstanceID,
        fInstanceCount], sllDebug);
     P := pointer(fInstance);
@@ -877,7 +881,7 @@ begin
         if (P^.InstanceID <> 0) and
            (Inst.LastAccess64 > P^.LastAccess64 + fInstanceTimeOut) then
         begin
-          fRestServer.InternalLog('%.InternalInstanceRetrieve: Delete %(%) ' +
+          fRestServer.InternalLog('%.RetrieveInstance: Delete %(%) ' +
             'instance (id=%) after % minutes timeout (max % minutes)',
             [ClassType, fInterfaceUri, pointer(Inst.Instance), P^.InstanceID,
              (Inst.LastAccess64 - P^.LastAccess64) div 60000,
@@ -891,7 +895,7 @@ begin
     begin
       // initialize a new sicClientDriven instance
       if (InstanceCreation <> sicClientDriven) or
-         ((cardinal(aMethodIndex - SERVICE_PSEUDO_METHOD_COUNT) >=
+         ((cardinal(aMethodIndex - Length(SERVICE_PSEUDO_METHOD)) >=
            fInterface.MethodsCount) and
           (aMethodIndex <> ord(imInstance))) then
         exit;
@@ -924,7 +928,7 @@ begin
       end;
       // add any new session/user/group/thread instance if necessary
       if (InstanceCreation <> sicClientDriven) and
-         (cardinal(aMethodIndex - SERVICE_PSEUDO_METHOD_COUNT) <
+         (cardinal(aMethodIndex - Length(SERVICE_PSEUDO_METHOD)) <
            fInterface.MethodsCount) then
         AddNew;
     end;
@@ -1133,7 +1137,11 @@ begin
       Inst.Instance := CreateInstance(true);
     sicShared:
       Inst.Instance := fSharedInstance;
-    sicClientDriven, sicPerSession, sicPerUser, sicPerGroup, sicPerThread:
+    sicClientDriven,
+    sicPerSession,
+    sicPerUser,
+    sicPerGroup,
+    sicPerThread:
       begin
         case InstanceCreation of
           sicClientDriven:
@@ -1157,7 +1165,7 @@ begin
             exit;
           end;
         end;
-        case InternalInstanceRetrieve(Inst, Ctxt.ServiceMethodIndex, Ctxt.Session) of
+        case RetrieveInstance(Inst, Ctxt.ServiceMethodIndex, Ctxt.Session) of
           ord(imFree):
             begin
               // {"method":"_free_", "params":[], "id":1234}
@@ -1189,7 +1197,7 @@ begin
   stats := nil;
   if mlInterfaces in fRestServer.StatLevels then
   begin
-    m := Ctxt.ServiceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT;
+    m := Ctxt.ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
     if m >= 0 then
     begin
       stats := fStats[m];
@@ -1605,7 +1613,7 @@ begin
         sicPerSession:
           begin
             inst.InstanceID := aSessionID;
-            fact.InternalInstanceRetrieve(inst, ord(imFree), aSessionID);
+            fact.RetrieveInstance(inst, ord(imFree), aSessionID);
           end;
         sicClientDriven:
           begin
@@ -1745,7 +1753,7 @@ begin
             @fake.fService.fExecution[Ctxt.ServiceMethodIndex];
           Ctxt.ServiceExecutionOptions := Ctxt.ServiceExecution.Options;
           Ctxt.Service := fake.fService;
-          inc(Ctxt.ServiceMethodIndex, SERVICE_PSEUDO_METHOD_COUNT);
+          inc(Ctxt.ServiceMethodIndex, Length(SERVICE_PSEUDO_METHOD));
           fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
           Ctxt.ServiceParameters := pointer(FormatUtf8('[%,"%"]',
             [PtrInt(PtrUInt(fake.fFakeInterface)), Values[0].Name]));
@@ -1940,7 +1948,7 @@ begin
          not (byte(i) in {%H-}excluded) then
       begin
         include(methods, fInterfaceMethod[i].
-          InterfaceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT);
+          InterfaceMethodIndex - Length(SERVICE_PSEUDO_METHOD));
         somemethods := true;
       end;
       inc(i);
