@@ -1114,8 +1114,8 @@ end;
 procedure TRestOrmServerDB.PrepareStatement(Cached: boolean);
 var
   wasprepared: boolean;
-  plan: RawUtf8;
   timer: PPPrecisionTimer;
+  plan: RawJson;
 begin
   fStaticStatementTimer.Start;
   if not Cached then
@@ -1133,16 +1133,13 @@ begin
   else
     timer := nil;
   fStatement := fStatementCache.Prepare(fStatementGenericSql, @wasprepared,
-    timer, @fStatementMonitor);
+    timer, @fStatementMonitor, @plan);
   if wasprepared and
      (fRest <> nil) and
      (fRest.LogFamily <> nil) and
      (sllDB in fRest.LogFamily.Level) then
-  begin
-    plan := DB.ExplainQueryPlan(fStatementGenericSql); // included in timer
     InternalLog('prepared % % %  %', [fStaticStatementTimer.Stop,
       DB.FileNameWithoutPath, fStatementGenericSql, plan], sllDB);
-  end;
   if timer = nil then
   begin
     fStaticStatementTimer.Start;

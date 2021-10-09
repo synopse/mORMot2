@@ -4534,6 +4534,16 @@ type
       read GetParamCount;
   end;
 
+  /// used to track a SQLite3 prepared statement execution, including query plan
+  TSynMonitorStatement = class(TSynMonitor)
+  protected
+    fQueryPlan: RawJson;
+  published
+    /// the QUERY PLAN, stored as JSON
+    property QueryPlan: RawJson
+      read fQueryPlan write fQueryPlan;
+  end;
+
   /// used to retrieve a SQLite3 prepared statement
   TSqlStatementCache = record
     /// associated SQL statement
@@ -4542,7 +4552,7 @@ type
     /// associated prepared statement, ready to be executed after binding
     Statement: TSqlRequest;
     /// used to monitor execution time
-    Timer: TSynMonitor;
+    Timer: TSynMonitorStatement;
   end;
   /// used to store all prepared statement
   TSqlStatementCacheDynArray = array of TSqlStatementCache;
@@ -4573,7 +4583,8 @@ type
     /// add or retrieve a generic SQL (with ? parameters) statement from cache
     function Prepare(const GenericSql: RawUtf8; WasPrepared: PBoolean = nil;
       ExecutionTimer: PPPrecisionTimer = nil;
-      ExecutionMonitor: PSynMonitor = nil): PSqlRequest;
+      ExecutionMonitor: PSynMonitor = nil;
+      ExecutionPlan: PRawJson = nil): PSqlRequest;
     /// used internally to release all prepared statements from Cache[]
     procedure ReleaseAllDBStatements;
     /// could be used e.g. for statistics
@@ -6786,17 +6797,22 @@ begin
   end;
 end;
 
-function TSqlDataBase.ExplainQueryPlan(const aSql: RawUtf8): RawUtf8;
+function DirectExplainQueryPlan(DB: TSqlite3DB; const aSql: RawUtf8): RawUtf8;
 var
   R: TSqlRequest;
   cnt: integer;
 begin
+  result := R.ExecuteJson(DB, 'explain query plan ' + aSql, true, @cnt, 4096,
+    [twoForceJsonExtended, twoIgnoreDefaultInRecord]);
+  if cnt = 0 then
+    result := ''; // no query plan
+end;
+
+function TSqlDataBase.ExplainQueryPlan(const aSql: RawUtf8): RawUtf8;
+begin
   Lock; // don't cache the result since usually called once
   try
-    result := R.ExecuteJson(DB, 'explain query plan ' + aSql, true, @cnt, 4096,
-      [twoForceJsonExtended, twoIgnoreDefaultInRecord]);
-    if cnt = 0 then
-      result := ''; // no query plan
+    result := DirectExplainQueryPlan(DB, aSql);
   finally
     UnLock;
   end;
@@ -8453,7 +8469,7 @@ end;
 
 function TSqlStatementCached.Prepare(const GenericSql: RawUtf8;
   WasPrepared: PBoolean; ExecutionTimer: PPPrecisionTimer;
-  ExecutionMonitor: PSynMonitor): PSqlRequest;
+  ExecutionMonitor: PSynMonitor; ExecutionPlan: PRawJson): PSqlRequest;
 var
   added: boolean;
   c: ^TSqlStatementCache;
@@ -8468,9 +8484,12 @@ begin
   begin
     c^.StatementSql := GenericSql;
     c^.Statement.Prepare(DB, GenericSql);
-    c^.Timer := TSynMonitor.Create;
+    c^.Timer := TSynMonitorStatement.Create;
+    c^.Timer.QueryPlan := DirectExplainQueryPlan(DB, GenericSql);
     if WasPrepared <> nil then
       WasPrepared^ := true;
+    if ExecutionPlan <> nil then
+      ExecutionPlan^ := c^.Timer.QueryPlan;
   end
   else
   begin
