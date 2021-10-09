@@ -2265,16 +2265,17 @@ begin
     FastSetString(ColNames[aColIndex], nil, collen);
     P := pointer(ColNames[aColIndex]);
     if twoForceJsonExtended in CustomOptions then
+    begin
+      P[len] := ':';
       MoveFast(aColName^, P^, len)  // extended JSON unquoted field names
+    end
     else
     begin
       P[0] := '"';
       inc(P);
+      PWord(P + len)^ := ord('"') + ord(':') shl 8;
       MoveFast(aColName^, P^, len); // regular JSON quoted field name
-      P[len] := '"';
-      inc(P);
     end;
-    P[len] := ':';
   end
   else
   begin
