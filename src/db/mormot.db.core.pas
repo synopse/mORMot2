@@ -2250,32 +2250,15 @@ begin
 end;
 
 procedure TJsonWriter.AddColumn(aColName: PUtf8Char; aColIndex, aColCount: PtrInt);
-var
-  len, collen: PtrInt;
-  P: PUtf8Char;
+const
+  FMT: array[boolean] of RawUtf8 = ('"%":', '%:');
 begin
-  len := StrLen(aColName);
   if fExpand then
   begin
     if aColIndex = 0 then // non-expanded mode doesn't use ColNames[]
       SetLength(ColNames, aColCount);
-    collen := len + 1;
-    if not (twoForceJsonExtended in CustomOptions) then
-      inc(collen, 2);
-    FastSetString(ColNames[aColIndex], nil, collen);
-    P := pointer(ColNames[aColIndex]);
-    if twoForceJsonExtended in CustomOptions then
-    begin
-      P[len] := ':';
-      MoveFast(aColName^, P^, len)  // extended JSON unquoted field names
-    end
-    else
-    begin
-      P[0] := '"';
-      inc(P);
-      PWord(P + len)^ := ord('"') + ord(':') shl 8;
-      MoveFast(aColName^, P^, len); // regular JSON quoted field name
-    end;
+    FormatUtf8(FMT[twoForceJsonExtended in CustomOptions], [aColName],
+      ColNames[aColIndex]);
   end
   else
   begin
@@ -2286,7 +2269,7 @@ begin
       AddShort(',"values":["');
       // first row is FieldNames in non-expanded format
     end;
-    AddNoJsonEscape(aColName, len);
+    AddNoJsonEscape(aColName, StrLen(aColName));
     if aColIndex = aColCount - 1 then
     begin
       // last AddColumn() call would finalize the non-expanded header
