@@ -5696,73 +5696,76 @@ begin
   log := GlobalCurrentHandleExceptionSynLog;
   EnterCriticalSection(GlobalThreadLock);
   try
-    if (log = nil) or
-       not log.fFamily.fHandleExceptions then
-      log := GetHandleExceptionSynLog;
-    if (log = nil) or
-       not (Ctxt.ELevel in log.fFamily.Level) or
-       (log.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass) >= 0) then
-    begin
-      log := nil;
-      exit;
-    end;
-    log.GetThreadContextAndDisableExceptions;
-    if Assigned(log.fFamily.OnBeforeException) then
-      if log.fFamily.OnBeforeException(Ctxt, log.fThreadContext^.ThreadName) then
-        // intercepted by custom callback
-        exit;
-    log.LogHeader(Ctxt.ELevel);
-    if GlobalLastExceptionIndex = MAX_EXCEPTHISTORY then
-      GlobalLastExceptionIndex := 0
-    else
-      inc(GlobalLastExceptionIndex);
-    info := @GlobalLastException[GlobalLastExceptionIndex];
-    info^.Context := Ctxt;
-    if (Ctxt.ELevel = sllException) and
-       (Ctxt.EInstance <> nil) then
-    begin
-      info^.Message := Ctxt.EInstance.Message;
-      if Ctxt.EInstance.InheritsFrom(ESynException) then
-      begin
-        ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
-        if ESynException(Ctxt.EInstance).CustomLog(log.fWriter, Ctxt) then
-          goto fin;
-        goto adr; // CustomLog() included DefaultSynLogExceptionToStr()
-      end;
-    end
-    else
-      info^.Message := '';
-    if DefaultSynLogExceptionToStr(log.fWriter, Ctxt) then
-      goto fin;
-adr:with log.fWriter do
-    begin
-      Add(' ', '[');
-      AddShort(CurrentThreadName); // fThreadContext^.ThreadName may be ''
-      AddShorter('] at ');
-    end;
     try
-      TDebugFile.Log(log.fWriter, Ctxt.EAddr, {notcode=}true, {symbol=}false);
-      {$ifdef FPC}
-      // we rely on the stack trace supplied by FPC RTL
-      for i := 0 to Ctxt.EStackCount - 1 do
-        if (i = 0) or
-           (Ctxt.EStack[i] <> Ctxt.EStack[i - 1]) then
-          TDebugFile.Log(log.fWriter, Ctxt.EStack[i], {notcode=}false, {symbol=}false);
-      {$else}
-      {$ifdef CPUX86} // stack frame OK only for RTLUnwindProc by now
-      log.AddStackTrace(Ctxt.ELevel, Ctxt.EStack);
-      {$endif CPUX86}
-      {$endif FPC}
-    except // paranoid
+      if (log = nil) or
+         not log.fFamily.fHandleExceptions then
+        log := GetHandleExceptionSynLog;
+      if (log = nil) or
+         not (Ctxt.ELevel in log.fFamily.Level) or
+         (log.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass) >= 0) then
+      begin
+        log := nil; // no GetThreadContextAndDisableExceptions -> no restore
+        exit;
+      end;
+      log.GetThreadContextAndDisableExceptions;
+      if Assigned(log.fFamily.OnBeforeException) then
+        if log.fFamily.OnBeforeException(Ctxt, log.fThreadContext^.ThreadName) then
+          // intercepted by custom callback
+          exit;
+      log.LogHeader(Ctxt.ELevel);
+      if GlobalLastExceptionIndex = MAX_EXCEPTHISTORY then
+        GlobalLastExceptionIndex := 0
+      else
+        inc(GlobalLastExceptionIndex);
+      info := @GlobalLastException[GlobalLastExceptionIndex];
+      info^.Context := Ctxt;
+      if (Ctxt.ELevel = sllException) and
+         (Ctxt.EInstance <> nil) then
+      begin
+        info^.Message := Ctxt.EInstance.Message;
+        if Ctxt.EInstance.InheritsFrom(ESynException) then
+        begin
+          ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
+          if ESynException(Ctxt.EInstance).CustomLog(log.fWriter, Ctxt) then
+            goto fin;
+          goto adr; // CustomLog() included DefaultSynLogExceptionToStr()
+        end;
+      end
+      else
+        info^.Message := '';
+      if DefaultSynLogExceptionToStr(log.fWriter, Ctxt) then
+        goto fin;
+  adr:with log.fWriter do
+      begin
+        Add(' ', '[');
+        AddShort(CurrentThreadName); // fThreadContext^.ThreadName may be ''
+        AddShorter('] at ');
+      end;
+      try
+        TDebugFile.Log(log.fWriter, Ctxt.EAddr, {notcode=}true, {symbol=}false);
+        {$ifdef FPC}
+        // we rely on the stack trace supplied by FPC RTL
+        for i := 0 to Ctxt.EStackCount - 1 do
+          if (i = 0) or
+             (Ctxt.EStack[i] <> Ctxt.EStack[i - 1]) then
+            TDebugFile.Log(log.fWriter, Ctxt.EStack[i], {notcode=}false, {symbol=}false);
+        {$else}
+        {$ifdef CPUX86} // stack frame OK only for RTLUnwindProc by now
+        log.AddStackTrace(Ctxt.ELevel, Ctxt.EStack);
+        {$endif CPUX86}
+        {$endif FPC}
+      except // paranoid
+      end;
+  fin:log.fWriterEcho.AddEndOfLine(log.fCurrentLevel);
+      log.fWriter.FlushToStream; // exceptions available on disk ASAP
+    except
+      // any nested exception should never be propagated to the OS caller
     end;
-fin:log.fWriterEcho.AddEndOfLine(log.fCurrentLevel);
-    log.fWriter.FlushToStream; // exceptions available on disk ASAP
-  except
-    // any nested exception should never be propagated to the OS caller
+  finally
+    if log <> nil then
+      log.fExceptionIgnoreThreadVar^ := log.fExceptionIgnoredBackup;
+    LeaveCriticalSection(GlobalThreadLock);
   end;
-  if log <> nil then
-    log.fExceptionIgnoreThreadVar^ := log.fExceptionIgnoredBackup;
-  LeaveCriticalSection(GlobalThreadLock);
 end;
 
 function GetLastException(out info: TSynLogExceptionInfo): boolean;
