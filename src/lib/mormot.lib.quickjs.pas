@@ -71,6 +71,7 @@ uses
   mormot.core.text,
   mormot.core.json,
   mormot.core.datetime,
+  mormot.core.data,
   mormot.core.variants;
 
 {$ifdef JS_STRICT_NAN_BOXING}

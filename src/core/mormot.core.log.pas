@@ -5735,7 +5735,7 @@ begin
         info^.Message := '';
       if DefaultSynLogExceptionToStr(log.fWriter, Ctxt) then
         goto fin;
-  adr:with log.fWriter do
+adr:  with log.fWriter do
       begin
         Add(' ', '[');
         AddShort(CurrentThreadName); // fThreadContext^.ThreadName may be ''
@@ -5756,7 +5756,7 @@ begin
         {$endif FPC}
       except // paranoid
       end;
-  fin:log.fWriterEcho.AddEndOfLine(log.fCurrentLevel);
+fin:  log.fWriterEcho.AddEndOfLine(log.fCurrentLevel);
       log.fWriter.FlushToStream; // exceptions available on disk ASAP
     except
       // any nested exception should never be propagated to the OS caller
