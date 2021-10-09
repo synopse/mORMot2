@@ -278,6 +278,7 @@ type
 
   PRawUnicode = ^RawUnicode;
   PRawJson = ^RawJson;
+  PPRawJson = ^PRawJson;
   PRawUtf8 = ^RawUtf8;
   PPRawUtf8 = ^PRawUtf8;
   PWinAnsiString = ^WinAnsiString;

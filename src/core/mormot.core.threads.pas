@@ -1010,7 +1010,8 @@ begin
   fThreadName := aThreadName;
   fOnBeforeExecute := OnBeforeExecute;
   fOnAfterExecute := OnAfterExecute;
-  inherited Create(CreateSuspended{$ifdef FPC}, 512 * 1024{$endif}); // DefaultStackSize=512KB
+  inherited Create(CreateSuspended
+    {$ifdef FPC}, 512 * 1024{$endif}); // StackSize=512KB (instead of FPC 4MB)
 end;
 
 {$ifndef HASTTHREADSTART}
@@ -1121,7 +1122,8 @@ begin
   fPendingProcessLock.Done;
 end;
 
-function TSynBackgroundThreadMethodAbstract.GetPendingProcess: TSynBackgroundThreadProcessStep;
+function TSynBackgroundThreadMethodAbstract.GetPendingProcess: 
+  TSynBackgroundThreadProcessStep;
 begin
   fPendingProcessLock.Lock;
   result := fPendingProcessFlag;
@@ -1178,7 +1180,8 @@ begin
   end;
 end;
 
-function TSynBackgroundThreadMethodAbstract.AcquireThread: TSynBackgroundThreadProcessStep;
+function TSynBackgroundThreadMethodAbstract.AcquireThread:
+  TSynBackgroundThreadProcessStep;
 begin
   fPendingProcessLock.Lock;
   try
