@@ -471,7 +471,6 @@ type
     fNginxSendFileFrom: array of TFileName;
     fSockPort: RawUtf8;
     fHeaderRetrieveAbortDelay: cardinal;
-    fExecuteState: THttpServerExecuteState;
     fHeadersUnFiltered: boolean;
     fExecuteMessage: string;
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
@@ -481,6 +480,7 @@ type
       const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetApiVersion: RawUtf8; override;
+    function GetExecuteState: THttpServerExecuteState; virtual; abstract;
   public
     /// create a Server Thread, ready to be bound and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -551,7 +551,7 @@ type
       read fOnSendFile write fOnSendFile;
     /// the low-level thread execution thread
     property ExecuteState: THttpServerExecuteState
-      read fExecuteState write fExecuteState;
+      read GetExecuteState;
   published
     /// the bound TCP port, as specified to Create() constructor
     property SockPort: RawUtf8
@@ -621,6 +621,8 @@ type
     fThreadRespClass: THttpServerRespClass;
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
+    fExecuteState: THttpServerExecuteState;
+    function GetExecuteState: THttpServerExecuteState; override;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     procedure InternalHttpServerRespListAdd(resp: THttpServerResp);
@@ -1559,7 +1561,7 @@ begin
   tix := mormot.core.os.GetTickCount64 + Seconds * 1000; // never wait forever
   repeat
     if Terminated or
-       (fExecuteState in [esRunning, esFinished]) then
+       (GetExecuteState in [esRunning, esFinished]) then
       exit;
     Sleep(1); // warning: waits typically 1-15 ms on Windows
     if mormot.core.os.GetTickCount64 > tix then
@@ -1626,10 +1628,10 @@ end;
 
 { THttpServer }
 
-constructor THttpServer.Create(const aPort: RawUtf8;
-  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
-  ServerThreadPoolCount, KeepAliveTimeOut: integer;
-  aHeadersUnFiltered, CreateSuspended, aLogVerbose: boolean);
+constructor THttpServer.Create(const aPort: RawUtf8; const OnStart,
+  OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+  ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
+  aHeadersUnFiltered: boolean; CreateSuspended: boolean; aLogVerbose: boolean);
 begin
   fInternalHttpServerRespList := TSynList.Create;
   InitializeCriticalSection(fProcessCS);
@@ -1694,6 +1696,11 @@ begin
     inherited Destroy;       // direct Thread abort, no wait till ended
     DeleteCriticalSection(fProcessCS);
   end;
+end;
+
+function THttpServer.GetExecuteState: THttpServerExecuteState;
+begin
+  result := fExecuteState;
 end;
 
 function THttpServer.GetHttpQueueLength: cardinal;

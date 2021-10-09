@@ -546,7 +546,7 @@ type
     fExecuteState: THttpServerExecuteState;
     fExecuteAcceptOnly: boolean; // writes in another thread (THttpAsyncServer)
     fSockPort: RawUtf8;
-    procedure SetExecuteState(state: THttpServerExecuteState); virtual;
+    procedure SetExecuteState(State: THttpServerExecuteState); virtual;
     procedure Execute; override;
   public
     /// run the TCP server, listening on a supplied IP port
@@ -661,7 +661,7 @@ type
   THttpAsyncConnections = class(TAsyncServer)
   protected
     fAsyncServer: THttpAsyncServer;
-    procedure SetExecuteState(state: THttpServerExecuteState); override;
+    procedure SetExecuteState(State: THttpServerExecuteState); override;
   end;
 
   /// meta-class of THttpAsyncConnections type
@@ -679,7 +679,9 @@ type
     procedure SetRegisterCompressGzStatic(Value: boolean);
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
-    procedure Execute; override; // void method
+    function GetExecuteState: THttpServerExecuteState; override;
+    // the main thread will Send output packets in the background
+    procedure Execute; override;
   public
     /// create an event-driven HTTP Server
     constructor Create(const aPort: RawUtf8;
@@ -2147,11 +2149,11 @@ begin
   DoLog(sllTrace, 'Destroy finished', [], self);
 end;
 
-procedure TAsyncServer.SetExecuteState(state: THttpServerExecuteState);
+procedure TAsyncServer.SetExecuteState(State: THttpServerExecuteState);
 begin
   fExecuteState := State;
   DoLog(sllInfo, 'Execute: State=%',
-    [GetEnumName(TypeInfo(THttpServerExecuteState), ord(state))^], self);
+    [GetEnumName(TypeInfo(THttpServerExecuteState), ord(State))^], self);
 end;
 
 procedure TAsyncServer.Execute;
@@ -2244,6 +2246,7 @@ begin
       else
         // this was a pseWrite notification -> try to send pending data
         // here connection = TObject(notif.tag)
+        // - never executed if fExecuteAcceptOnly=true (THttpAsyncServer)
         fClients.ProcessWrite(notif);
     end;
   except
@@ -2589,22 +2592,21 @@ end;
 
 { THttpAsyncConnections }
 
-procedure THttpAsyncConnections.SetExecuteState(state: THttpServerExecuteState);
+procedure THttpAsyncConnections.SetExecuteState(State: THttpServerExecuteState);
 begin
   if State = esRunning then
+    // SetExecuteState(esRunning) is done by TAsyncServer.Execute once started
     fExecuteAcceptOnly := true; // THttpAsyncServer.Execute will do the writes
   inherited SetExecuteState(state);
-  if fAsyncServer <> nil then
-    fAsyncServer.fExecuteState := state; // reflect for WaitStarted()
 end;
 
 
 { THttpAsyncServer }
 
-constructor THttpAsyncServer.Create(const aPort: RawUtf8;
-  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+constructor THttpAsyncServer.Create(const aPort: RawUtf8; const OnStart,
+  OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  aHeadersUnFiltered, CreateSuspended, aLogVerbose: boolean);
+  aHeadersUnFiltered: boolean; CreateSuspended: boolean; aLogVerbose: boolean);
 var
   aco: TAsyncConnectionsOptions;
 begin
@@ -2626,7 +2628,6 @@ begin
   fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
     fConnectionClass, ProcessName, TSynLog, aco, ServerThreadPoolCount);
   fAsync.fAsyncServer := self;
-  fExecuteState := fAsync.fExecuteState;
   // launch this TThread instance, but as suspended since Execute is void
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended);
@@ -2643,6 +2644,11 @@ begin
   inherited Destroy;
   // finalize all thread-pooled connections
   FreeAndNilSafe(fAsync);
+end;
+
+function THttpAsyncServer.GetExecuteState: THttpServerExecuteState;
+begin
+  result := fAsync.fExecuteState; // state comes from THttpAsyncConnections
 end;
 
 function THttpAsyncServer.GetRegisterCompressGzStatic: boolean;
