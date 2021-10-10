@@ -1967,14 +1967,14 @@ begin
   currentTime := UnixTimeUtc; // under Windows faster than GetTickCount64
   fSafe.Lock;
   try
-    if currentTime > fUnixCreateTime then
+    if currentTime > fUnixCreateTime then // time may have been tweaked: compare
     begin
       fUnixCreateTime := currentTime;
       fLastCounter := 0; // reset
     end;
     if fLastCounter = $7fff then
     begin
-      // collision (unlikely) -> cheat on timestamp
+      // collide if more than 32768 per second (unlikely) -> tweak the timestamp
       inc(fUnixCreateTime);
       fLastCounter := 0;
     end
@@ -1995,12 +1995,12 @@ end;
 
 function TSynUniqueIdentifierGenerator.GetComputedCount: Int64;
 begin
-  result := fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT];
+  result := fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VInt64;
 end;
 
 function TSynUniqueIdentifierGenerator.GetCollisions: Int64;
 begin
-  result := fSafe.LockedInt64[SYNUNIQUEGEN_COLLISIONCOUNT];
+  result := fSafe.Padding[SYNUNIQUEGEN_COLLISIONCOUNT].VInt64;
 end;
 
 procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(
@@ -2086,8 +2086,8 @@ type // compute a 24 hexadecimal chars (96 bits) obfuscated pseudo file name
 function TSynUniqueIdentifierGenerator.ToObfuscated(
   const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
 var
-  block: THash128Rec;
-  bits: TSynUniqueIdentifierObfuscatedBits absolute block;
+  block: THash128Rec; // 128-bit
+  bits: TSynUniqueIdentifierObfuscatedBits absolute block; // 64+32 = 96-bit
   key: cardinal;
 begin
   result := '';
@@ -2102,7 +2102,7 @@ begin
   if self <> nil then
     if fCryptoAesE.Initialized then
     begin
-      block.c3 := fCryptoCRC; // used as IV during AES permutation
+      block.c3 := fCryptoCRC; // last 32-bit used as IV during AES permutation
       fCryptoAesE.Encrypt(block.b);
       result := BinToHexLower(@block, SizeOf(block)); // 32 hexa chars
       exit;
