@@ -2605,7 +2605,7 @@ begin
     if fBatch^.SimpleFieldsCount = 0 then
     begin
       fBatch^.SimpleFields := Fields;
-      fBatch^.SimpleFieldsCount := GetBitsCount(Fields, SizeOf(Fields)) + 1;
+      fBatch^.SimpleFieldsCount := GetBitsCount(Fields, SizeOf(Fields) shl 3) + 1;
     end;
     AddID(fBatch^.ID, fBatch^.IDCount, result);
     ObjArrayAddCount(fBatch^.Simples, pointer(Sent), fBatch^.ValuesCount);
