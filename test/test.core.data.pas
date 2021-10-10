@@ -534,8 +534,7 @@ end;
 
 type
   TMustacheTest = packed record
-    desc: string;
-    template, expected: RawUtf8;
+    desc, template, expected: RawUtf8;
     data, partials: variant;
   end;
 
@@ -544,7 +543,7 @@ type
   end;
 
 const
-  __TMustacheTest = 'desc string template,expected RawUtf8 data,partials variant';
+  __TMustacheTest = 'desc,template,expected RawUtf8 data,partials variant';
   __TMustacheTests = 'tests array of TMustacheTest';
   MUSTACHE_SPECS: array[0..4] of TFileName = (
     'interpolation', 'comments', 'sections', 'inverted', 'partials');
@@ -778,7 +777,7 @@ begin
           continue; // we don't indent each line of the expanded partials (yet)
         mustache := TSynMustache.Parse(template);
         html := mustache.Render(data, TSynMustachePartials.CreateOwned(partials));
-        Check(html = expected, desc);
+        CheckEqual(html, expected, desc);
       end;
   end;
   Rtti.RegisterFromText(TypeInfo(TMustacheTest), '');
