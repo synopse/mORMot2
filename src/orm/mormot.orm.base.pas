@@ -2991,6 +2991,11 @@ type
     /// set all bits corresponding to the supplied field names
     // - returns the matching fields set
     function FieldBitsFrom(const aFields: array of PUtf8Char): TFieldBits; overload;
+    {$ifndef PUREMORMOT2}
+    function FieldBitsFromRawUtf8(const aFields: array of RawUtf8): TFieldBits; overload;
+    function FieldBitsFromRawUtf8(const aFields: array of RawUtf8;
+      var Bits: TFieldBits): boolean; overload;
+    {$endif PUREMORMOT2}
     /// set all bits corresponding to the supplied CSV field names
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldBitsFromCsv(const aFieldsCsv: RawUtf8;
@@ -3100,13 +3105,13 @@ type
 
     /// create a TJsonWriter, ready to be filled with TOrm.GetJsonValues
     // - you can use TOrmProperties.FieldBitsFromCsv() or
-    // TOrmProperties.FieldBitsFromRawUtf8() to compute aFields
+    // TOrmProperties.FieldBitsFrom() to compute aFields
     function CreateJsonWriter(Json: TStream; Expand, withID: boolean;
       const aFields: TFieldBits; KnownRowsCount: integer;
       aBufSize: integer = 8192): TJsonSerializer; overload;
     /// create a TJsonWriter, ready to be filled with TOrm.GetJsonValues(W)
     // - you can use TOrmProperties.FieldBitsFromCsv() or
-    // TOrmProperties.FieldBitsFromRawUtf8() to compute aFields
+    // TOrmProperties.FieldBitsFrom() to compute aFields
     function CreateJsonWriter(Json: TStream; Expand, withID: boolean;
       const aFields: TFieldIndexDynArray; KnownRowsCount: integer;
       aBufSize: integer = 8192): TJsonSerializer; overload;
@@ -11324,6 +11329,21 @@ begin
   if not FieldBitsFrom(aFields, result) then
     FillZero(result);
 end;
+
+{$ifndef PUREMORMOT2}
+function TOrmPropertiesAbstract.FieldBitsFromRawUtf8(
+  const aFields: array of RawUtf8): TFieldBits;
+begin
+  if not FieldBitsFromRawUtf8(aFields, result) then
+    FillZero(result);
+end;
+
+function TOrmPropertiesAbstract.FieldBitsFromRawUtf8(
+  const aFields: array of RawUtf8; var Bits: TFieldBits): boolean;
+begin
+  result := FieldBitsFromRawUtf8(aFields, Bits);
+end;
+{$endif PUREMORMOT2}
 
 function TOrmPropertiesAbstract.CsvFromFieldBits(const Bits: TFieldBits): RawUtf8;
 var

@@ -742,7 +742,7 @@ type
     // specify your own set of fields to be transmitted (including BLOBs, even
     // if they will be Base64-encoded within the JSON content) - CustomFields
     // could be computed by TOrmProperties.FieldBitsFromCsv()
-    // or TOrmProperties.FieldBitsFromRawUtf8()
+    // or TOrmProperties.FieldBitsFrom()
     // - this method will always compute and send any TModTime fields
     // - this method will call EngineUpdate() to perform the request
     function Update(Value: TOrm; const CustomFields: TFieldBits = [];
@@ -4397,7 +4397,7 @@ type
     // you can specify your own set of fields to be transmitted when SendData=TRUE
     // (including BLOBs, even if they will be Base64-encoded within JSON content) -
     // CustomFields could be computed by TOrmProperties.FieldBitsFromCsv()
-    // or TOrmProperties.FieldBitsFromRawUtf8(), or by setting ALL_FIELDS
+    // or TOrmProperties.FieldBitsFrom(), or by setting ALL_FIELDS
     // - this method will always compute and send TCreateTime/TModTime fields
     function Add(Value: TOrm; SendData: boolean; ForceID: boolean = false;
       const CustomFields: TFieldBits = []; DoNotAutoComputeFields: boolean = false): integer;
@@ -4415,7 +4415,7 @@ type
     // specify your own set of fields to be transmitted (including BLOBs, even
     // if they will be Base64-encoded within the JSON content) - CustomFields
     // could be computed by TOrmProperties.FieldBitsFromCsv()
-    // or TOrmProperties.FieldBitsFromRawUtf8()
+    // or TOrmProperties.FieldBitsFrom()
     // - this method will always compute and send any TModTime fields, unless
     // DoNotAutoComputeFields is set to true
     // - if not all fields are specified, will reset the cache entry associated
@@ -6070,7 +6070,7 @@ end;
 
 function TOrm.Orm: TOrmProperties;
 begin
-  // we know TRttiCustom is in the slot, and PrivateSlot as TOrmProperties
+  // we know TRttiCustom is in the slot, and PrivateSlot is TOrmProperties
   result := PRttiCustom(PPAnsiChar(self)^ + vmtAutoTable)^.PrivateSlot;
 end;
 
