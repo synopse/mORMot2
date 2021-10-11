@@ -6538,21 +6538,30 @@ begin
      (rcfHasRttiOrd in OtherRtti.Value.Cache.Flags) then
     if (OffsetGet >= 0) and
        (OtherRtti.OffsetGet >= 0) then
-      result := CompareInt64(
-        FromRttiOrd(Value.Cache.RttiOrd, PAnsiChar(Data) + OffsetGet),
-        FromRttiOrd(OtherRtti.Value.Cache.RttiOrd, PAnsiChar(Other) + OtherRtti.OffsetGet))
+    begin
+      v1.Data.VInt64 := FromRttiOrd(
+        Value.Cache.RttiOrd, PAnsiChar(Data) + OffsetGet);
+      v2.Data.VInt64 := FromRttiOrd(
+        OtherRtti.Value.Cache.RttiOrd, PAnsiChar(Other) + OtherRtti.OffsetGet);
+    end
     else
-      result := CompareInt64(
-        Prop.GetOrdProp(Data), OtherRtti.Prop.GetOrdProp(Other))
+    begin
+      v1.Data.VInt64 := Prop.GetOrdProp(Data);
+      v2.Data.VInt64 := OtherRtti.Prop.GetOrdProp(Other);
+    end
   else if (rcfGetInt64Prop in Value.Cache.Flags) and
           (rcfGetInt64Prop in OtherRtti.Value.Cache.Flags) then
     if (OffsetGet >= 0) and
        (OtherRtti.OffsetGet >= 0) then
-      result := CompareInt64(PInt64(PAnsiChar(Data) + OffsetGet)^,
-                             PInt64(PAnsiChar(Other) + OtherRtti.OffsetGet)^)
+    begin
+      v1.Data.VInt64 := PInt64(PAnsiChar(Data) + OffsetGet)^;
+      v2.Data.VInt64 := PInt64(PAnsiChar(Other) + OtherRtti.OffsetGet)^;
+    end
     else
-      result := CompareInt64(Prop.GetInt64Prop(Data),
-                             OtherRtti.Prop.GetInt64Prop(Other))
+    begin
+      v1.Data.VInt64 := Prop.GetInt64Prop(Data);
+      v2.Data.VInt64 := OtherRtti.Prop.GetInt64Prop(Other);
+    end
   else
   // comparison using temporary TRttiVarData (using varByRef if possible)
   begin
@@ -6574,7 +6583,9 @@ begin
       VarClearProc(v1.Data);
     if v2.NeedsClear then
       VarClearProc(v2.Data);
+    exit;
   end;
+  result := CompareInt64(v1.Data.VInt64, v2.Data.VInt64);
 end;
 
 function TRttiCustomProp.CompareValue(Data, Other: pointer;
@@ -6959,16 +6970,17 @@ begin
   begin
     n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
     repeat
-      if (p^.OffsetGet < 0) or
-         (p^.OffsetSet < 0) then
-      begin
-        // there is a getter or a setter -> use local temporary value
-        p^.GetValue(Source, v);
-        p^.SetValue(Dest, v, {andclear=}true);
-      end
-      else
-        // direct content copy from the fields memory buffers
-        p^.Value.ValueCopy(Dest + p^.OffsetSet, Source + p^.OffsetGet);
+      with p^ do
+        if (OffsetGet < 0) or
+           (OffsetSet < 0) then
+        begin
+          // there is a getter or a setter -> use local temporary value
+          GetValue(Source, v);
+          SetValue(Dest, v, {andclear=}true);
+        end
+        else
+          // direct content copy from the fields memory buffers
+          Value.ValueCopy(Dest + OffsetSet, Source + OffsetGet);
       inc(p);
       dec(n);
     until n = 0;
