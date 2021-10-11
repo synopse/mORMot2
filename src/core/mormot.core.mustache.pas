@@ -602,7 +602,9 @@ var
                 valFree := true;
                 break;
               end;
-            '<', '>', '=':
+            '<',
+            '>',
+            '=':
               begin
                 // {{#if .=123}} -> {{#if .,"=",123}}
                 k := j + 1;
@@ -923,8 +925,12 @@ begin
     aStart := fScanStart;
     aEnd := fScanEnd;
     case aKind of
-      mtComment, mtSection, mtSectionEnd, mtInvertedSection,
-      mtSetDelimiter, mtPartial:
+      mtComment,
+      mtSection,
+      mtSectionEnd,
+      mtInvertedSection,
+      mtSetDelimiter,
+      mtPartial:
         begin
           // (indented) standalone lines should be removed from the template
           if aKind <> mtPartial then
@@ -953,7 +959,9 @@ begin
                       dec(TextLen);
             end;
         end;
-      mtVariable, mtVariableUnescape, mtVariableUnescapeAmp:
+      mtVariable,
+      mtVariableUnescape,
+      mtVariableUnescapeAmp:
         begin
           // handle JSON object/array with nested }
           // e.g. as {{helper [{a:{a:1,b:2}}]}}
@@ -991,7 +999,9 @@ begin
     Kind := aKind;
     SectionOppositeIndex := -1;
     case aKind of
-      mtText, mtComment, mtTranslate:
+      mtText,
+      mtComment,
+      mtTranslate:
         begin
           TextStart := aStart;
           TextLen := aEnd - aStart;
@@ -1148,7 +1158,9 @@ begin
   for i := 0 to fTagCount - 1 do
     with fTemplate.fTags[i] do
       case Kind of
-        mtSection, mtInvertedSection, mtSetPartial:
+        mtSection,
+        mtInvertedSection,
+        mtSetPartial:
           begin
             inc(secCount);
             if secCount > fTemplate.fSectionMaxCount then
@@ -1156,7 +1168,9 @@ begin
             secLevel := 1;
             for j := i + 1 to fTagCount - 1 do
               case fTemplate.fTags[j].Kind of
-                mtSection, mtInvertedSection, mtSetPartial:
+                mtSection,
+                mtInvertedSection,
+                mtSetPartial:
                   inc(secLevel);
                 mtSectionEnd:
                   begin
@@ -1291,7 +1305,8 @@ begin
               Context.fWriter.AddNoJsonEscape(TextStart, TextLen);
           mtVariable:
             Context.AppendValue(Value, false);
-          mtVariableUnescape, mtVariableUnescapeAmp:
+          mtVariableUnescape,
+          mtVariableUnescapeAmp:
             Context.AppendValue(Value, true);
           mtSection:
             case Context.AppendSection(Value) of
@@ -1740,7 +1755,7 @@ var
   wasString: boolean;
 begin
   // {{#if .<>""}} or {{#if .,"=",123}}
-  SetVariantNull(Result{%H-});
+  SetVariantNull(result{%H-});
   with _Safe(Value)^ do
     if IsArray and
        (Count = 3) then
@@ -1753,22 +1768,22 @@ begin
         case PWord(oper)^ of
           ord('='):
             if cmp = 0 then
-              Result := True;
+              result := True;
           ord('>'):
             if cmp > 0 then
-              Result := True;
+              result := True;
           ord('<'):
             if cmp < 0 then
-              Result := True;
+              result := True;
           ord('>') + ord('=') shl 8:
             if cmp >= 0 then
-              Result := True;
+              result := True;
           ord('<') + ord('=') shl 8:
             if cmp <= 0 then
-              Result := True;
+              result := True;
           ord('<') + ord('>') shl 8:
             if cmp <> 0 then
-              Result := True;
+              result := True;
         end;
       end;
     end;
