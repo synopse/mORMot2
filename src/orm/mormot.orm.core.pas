@@ -1560,8 +1560,6 @@ type
     function TableMapFields: TFieldBits;
   end;
 
-
-
   /// root class for defining and mapping database records
   // - inherits a class from TOrm, and add published properties to describe
   // the table columns (see TPropInfo for SQL and Delphi type mapping/conversion)
@@ -1575,11 +1573,10 @@ type
   // - consider inherit from TOrmNoCase and TOrmNoCaseExtended if
   // you expect regular NOCASE collation and smaller (but not standard JSON)
   // variant fields persistence
-  TOrm = class(TObjectWithCustomCreate)
+  TOrm = class(TObjectWithID)
   { note that every TOrm has an Instance size of 20 bytes (on 32-bit)
     for private and protected fields (such as fID or fFill e.g.) }
   protected
-    fID: TID;
     /// used by FillPrepare() and corresponding Fill*() methods
     fFill: TOrmFill;
     /// internal properties getters (using fProps data for speed)
@@ -1588,7 +1585,7 @@ type
     function GetFillCurrentRow: integer;
     function GetFillReachedEnd: boolean;
     function GetTable: TOrmTable;
-    /// will register the "ID":... field value for proper JSON serialization
+    /// register RttiJsonRead/RttiJsonWrite callbacks for custom serialization
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
     /// fake nested TOrm classes would be serialized as integer
     function IsPropClassInstance(Prop: PRttiCustomProp): boolean; virtual;
@@ -1822,12 +1819,12 @@ type
     procedure ComputeFieldsBeforeWrite(const aRest: IRestOrm;
       aOccasion: TOrmEvent); virtual;
 
-    /// this constructor initializes the record
+    /// this constructor initializes the ORM record
     // - auto-instanciate any TOrmMany instance defined in published properties
     // - override this method if you want to use some internal objects (e.g.
     // TStringList or TCollection as published property)
     constructor Create; overload; override;
-    /// this constructor initializes the record and set the simple fields
+    /// this constructor initializes the ORM record and set the simple fields
     // with the supplied values
     // - the aSimpleFields parameters must follow explicitly the order of
     // published properties of the aTable class, excepting the RawBlob and
@@ -2561,10 +2558,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     {$endif PUREMORMOT2}
 
-    /// this property gives direct access to the class instance ID
-    // - not defined as "published" since RttiCustomSetParser did register it
-    property IDValue: TID
-      read fID write fID;
     /// this property stores the record's integer ID
     // - if this TOrm is not a instance, but a field value in a published
     //  property of type oftID (i.e. TOrm(aID)), this method will try
@@ -6327,7 +6320,7 @@ end;
 
 constructor TOrm.Create;
 begin
-  with OrmProps do
+  with OrmProps do // don't call inherited Create but OrmProps custom setup
     if pointer(ManyFields) <> nil then
       // auto-instanciate any TOrmMany instance
       ManyFieldsCreate(self, pointer(ManyFields));
@@ -7859,8 +7852,7 @@ var
   read: TOnClassJsonRead;
   write: TOnClassJsonWrite;
 begin
-  Rtti.Props.Add(
-    TypeInfo(TID), PtrInt(@TOrm(nil).fID), 'ID', {first=}true);
+  inherited RttiCustomSetParser(Rtti); // register fID as 'ID' field
   read := RttiJsonRead; // enhanced parsing using Fields.SetValue/GetJsonValues
   Rtti.JsonReader := TMethod(read);
   write := RttiJsonWrite;
