@@ -9657,10 +9657,10 @@ end;
 
 
 procedure _GetDataFromJson(Data: pointer; var Json: PUtf8Char;
-  EndOfObject: PUtf8Char; TypeInfo: PRttiInfo;
+  EndOfObject: PUtf8Char; Rtti: TRttiCustom;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 begin
-  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(Data, Json, EndOfObject,
+  (Rtti as TRttiJson).ValueLoadJson(Data, Json, EndOfObject,
     JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
 end;
 

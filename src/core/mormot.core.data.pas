@@ -1096,7 +1096,7 @@ var
   // - link mormot.core.json.pas to have a working implementation
   // - rather call LoadJson() from mormot.core.json than this low-level function
   GetDataFromJson: procedure(Data: pointer; var Json: PUtf8Char;
-    EndOfObject: PUtf8Char; TypeInfo: PRttiInfo;
+    EndOfObject: PUtf8Char; Rtti: TRttiCustom;
     CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 
 type
@@ -7021,7 +7021,7 @@ begin
 end;
 
 procedure _GetDataFromJson(Data: pointer; var Json: PUtf8Char;
-  EndOfObject: PUtf8Char; TypeInfo: PRttiInfo;
+  EndOfObject: PUtf8Char; Rtti: TRttiCustom;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 begin
   raise ERttiException.Create('GetDataFromJson() not implemented - ' +
@@ -7032,8 +7032,7 @@ function TDynArray.LoadFromJson(P: PUtf8Char; EndOfObject: PUtf8Char;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): PUtf8Char;
 begin
   SetCount(0); // faster to use our own routine now
-  GetDataFromJson(fValue, P, EndOfObject, Info.Info,
-    CustomVariantOptions, Tolerant);
+  GetDataFromJson(fValue, P, EndOfObject, Info, CustomVariantOptions, Tolerant);
   if fCountP <> nil then
     // GetDataFromJson() set the array length, not the external count
     if fValue^ = nil then
