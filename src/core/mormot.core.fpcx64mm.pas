@@ -14,7 +14,7 @@ unit mormot.core.fpcx64mm;
     - deep asm refactoring for cross-platform, compactness and efficiency
     - can report detailed statistics (with threads contention and memory leaks)
     - mremap() makes large block ReallocMem a breeze on Linux :)
-    - inlined SSE2 movaps loop is more efficient that subfunction(s)
+    - inlined SSE2 movaps loop or ERMS are more efficient that subfunction(s)
     - lockless round-robin of tiny blocks (<=128/256 bytes) for better scaling
     - can separate the small/tiny blocks from medium blocks allocation arena
     - optional lockless bin list to avoid freemem() thread contention
@@ -43,8 +43,8 @@ unit mormot.core.fpcx64mm;
 // by default, we target LCL/console mono-threaded apps to replace the RTL MM
 // - you may define FPCMM_SERVER or even FPCMM_BOOST for a service/daemon
 
-// set FPCMM_DEBUG, FPCMM_ASSUMEMULTITHREAD and FPCMM_SMALLNOTWITHMEDIUM
-// - those flags target well a multi-threaded service
+// target a multi-threaded service on a modern CPU
+// - set FPCMM_DEBUG FPCMM_ASSUMEMULTITHREAD FPCMM_ERMS FPCMM_SMALLNOTWITHMEDIUM
 // - consider FPCMM_BOOST to try even more aggressive settings
 {.$define FPCMM_SERVER}
 
@@ -99,6 +99,10 @@ unit mormot.core.fpcx64mm;
 // - it would use a little more memory, but medium pool is less likely to sleep
 {.$define FPCMM_SMALLNOTWITHMEDIUM}
 
+// use "rep movsb/stosb" ERMS for blocks > 256 bytes instead of SSE2 "movaps"
+// - ERMS is available since Ivy Bridge (and shouldn't slow down older CPUs)
+{.$define FPCMM_ERMS}
+
 // will export libc-like functions, and not replace the FPC MM
 // - e.g. to use this unit as a stand-alone C memory allocator
 {.$define FPCMM_STANDALONE}
@@ -130,11 +134,13 @@ interface
     {$undef FPCMM_SERVER}
     {$define FPCMM_ASSUMEMULTITHREAD}
     {$define FPCMM_SMALLNOTWITHMEDIUM}
+    {$define FPCMM_ERMS}
   {$endif FPCMM_BOOST}
   {$ifdef FPCMM_SERVER}
     {$define FPCMM_DEBUG}
     {$define FPCMM_ASSUMEMULTITHREAD}
     {$define FPCMM_SMALLNOTWITHMEDIUM}
+    {$define FPCMM_ERMS}
   {$endif FPCMM_SERVER}
 {$endif FPC}
 
@@ -602,6 +608,10 @@ const
     OptimalSmallBlockPoolSizeUpperLimit + MinimumMediumBlockSize;
   LargeBlockGranularity = 65536;
   MediumInPlaceDownsizeLimit = MinimumMediumBlockSize div 4;
+  {$ifdef FPCMM_ERMS}
+  // see https://stackoverflow.com/a/43837564/458259 for timing on several CPUs
+  ErmsMinSize = 256;
+  {$endif FPCMM_ERMS}
 
   IsFreeBlockFlag = 1;
   IsMediumBlockFlag = 2;
@@ -1997,20 +2007,22 @@ asm
 @MoveFreeMem:
         // copy and free: rax=New r14=P rbx=size-8
         push    rax
+        {$ifdef FPCMM_ERMS}
+        cmp     rbx, ErmsMinSize
+        jae     @erms
+        {$endif FPCMM_ERMS}
         lea     rcx, [r14 + rbx]
         lea     rdx, [rax + rbx]
         neg     rbx
         jns     @Last8
         align   16
-@MoveBy16:
-        movaps  xmm0, oword ptr [rcx + rbx]
+@By16:  movaps  xmm0, oword ptr [rcx + rbx]
         movaps  oword ptr [rdx + rbx], xmm0
         add     rbx, 16
-        js      @MoveBy16
+        js      @By16
 @Last8: mov     rax, qword ptr [rcx + rbx]
         mov     qword ptr [rdx + rbx], rax
-@DoFree:
-        mov     P, r14
+@DoFree:mov     P, r14
         call    _FreeMem
         pop     rax
 @Done:  pop     rcx
@@ -2022,6 +2034,17 @@ asm
         {$endif MSWINDOWS}
         mov     qword ptr [rcx], rax // store new pointer in var P
         ret
+        {$ifdef FPCMM_ERMS}
+@erms:  push    rsi
+        push    rdi
+        mov     rsi, r14
+        mov     rdi, rax
+        lea     rcx, [rbx + 8]
+        rep movsb
+        pop     rdi
+        pop     rsi
+        jmp     @DoFree
+        {$endif FPCMM_ERMS}
 @NotASmallBlock:
         // Is this a medium block or a large block?
         test    cl, IsFreeBlockFlag + IsLargeBlockFlag
@@ -2175,7 +2198,7 @@ asm
         and     eax, edi
         // Round up to the nearest block size granularity
         lea     rax, [rax + rdx + BlockHeaderSize + MediumBlockGranularity - 1 - MediumBlockSizeOffset]
-        and     eax,  - MediumBlockGranularity
+        and     eax, -MediumBlockGranularity
         add     eax, MediumBlockSizeOffset
         // Calculate the size of the second split and check if it fits
         lea     rdx, [rsi + BlockHeaderSize]
@@ -2248,6 +2271,10 @@ asm
         // Large blocks from mmap/VirtualAlloc are already zero filled
         cmp     rbx, MaximumMediumBlockSize - BlockHeaderSize
         jae     @Done
+        {$ifdef FPCMM_ERMS}
+        cmp     rbx, ErmsMinSize
+        jae     @erms
+        {$endif FPCMM_ERMS}
         neg     rbx
         pxor    xmm0, xmm0
         align   16
@@ -2259,6 +2286,22 @@ asm
 @LastQ: xor     rcx, rcx
         mov     qword ptr [rdx], rcx
 @Done:  pop     rbx
+        {$ifdef FPCMM_ERMS}
+        ret
+@erms:  push    rax
+        push    rdi
+        xor     eax, eax
+        mov     rdi, rdx
+        sub     rdi, rbx
+        mov     rcx, rbx
+        cld
+        rep stosb
+        xor     ecx, ecx
+        pop     rdi
+        pop     rax
+        pop     rbx
+        mov     qword ptr [rdx], rcx
+        {$endif FPCMM_ERMS}
 end;
 
 function _MemSize(P: pointer): PtrUInt;
@@ -2512,6 +2555,7 @@ begin
       {$ifdef FPCMM_SLEEPTSC}          + ' rdtsc'       {$endif}
       {$ifdef FPCMM_NOMREMAP}          + ' nomremap'    {$endif}
       {$ifdef FPCMM_SMALLNOTWITHMEDIUM}+ ' smallpool'   {$endif}
+      {$ifdef FPCMM_ERMS}              + ' erms'        {$endif}
       {$ifdef FPCMM_DEBUG}             + ' debug'       {$endif}
       {$ifdef FPCMM_REPORTMEMORYLEAKS} + ' repmemleak'  {$endif});
   with CurrentHeapStatus do
