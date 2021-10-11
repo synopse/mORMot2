@@ -458,11 +458,14 @@ type
   TOnClientFailed = procedure(Sender: TRestClientUri; E: Exception;
     Call: PRestUriParams) of object;
 
+  /// 31-bit positive identifier of an interface callback, as sent to the server
+  TRestClientCallbackID = type integer;
+
   /// store information about registered interface callbacks
   TRestClientCallbackItem = record
     /// the identifier of the callback, as sent to the server side
     // - computed from TRestClientUriCallbacks.fCurrentID counter
-    ID: integer;
+    ID: TRestClientCallbackID;
     /// weak pointer typecast to the associated IInvokable variable
     Instance: pointer;
     //// information about the associated IInvokable
@@ -477,7 +480,7 @@ type
   /// store the references to active interface callbacks on a REST Client
   TRestClientCallbacks = class(TSynPersistentLock)
   protected
-    fCurrentID: integer;
+    fCurrentID: integer; // thread-safe TRestClientCallbackID sequence generator
     function UnRegisterByIndex(index: integer): boolean;
   public
     /// the associated REST instance
@@ -489,15 +492,17 @@ type
     /// initialize the storage list
     constructor Create(aOwner: TRestClientUri); reintroduce;
     /// register a callback event interface instance from a new computed ID
-    function DoRegister(aInstance: pointer; aFactory: TInterfaceFactory): integer; overload;
+    function DoRegister(aInstance: pointer;
+      aFactory: TInterfaceFactory): TRestClientCallbackID; overload;
     /// register a callback event interface instance from its supplied ID
-    procedure DoRegister(aID: integer; aInstance: pointer; aFactory: TInterfaceFactory); overload;
+    procedure DoRegister(aID: TRestClientCallbackID; aInstance: pointer;
+      aFactory: TInterfaceFactory); overload;
     /// delete all callback events from the internal list, as specified by its instance
     // - note that the same IInvokable instance may be registered for several IDs
     function UnRegister(aInstance: pointer): boolean; overload;
     /// find the index of the ID in the internal list
     // - warning: this method should be called within Safe.Lock/Safe.Unlock
-    function FindIndex(aID: integer): integer;
+    function FindIndex(aID: TRestClientCallbackID): PtrInt;
     /// find a matching callback
     // - will call FindIndex(aItem.ID) within Safe.Lock/Safe.Unlock
     // - returns TRUE if aItem.ID was found and aItem filled, FALSE otherwise
@@ -505,7 +510,7 @@ type
     /// find a matching entry
     // - will call FindIndex(aID) within Safe.Lock/Safe.Unlock
     // - returns TRUE if aID was found and aInstance/aFactory set, FALSE otherwise
-    function FindAndRelease(aID: integer): boolean;
+    function FindAndRelease(aID: TRestClientCallbackID): boolean;
   end;
 
   /// signature e.g. of the TRestClientUri.OnSetUser event handler
@@ -785,9 +790,9 @@ type
     // internal methods used by mormot.soa.client
     function FakeCallbackRegister(Sender: TServiceFactory;
       const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
-      ParamValue: Pointer): integer; virtual;
+      ParamValue: Pointer): TRestClientCallbackID; virtual;
     function FakeCallbackUnregister(Factory: TInterfaceFactory;
-      FakeCallbackID: integer; Instance: pointer): boolean; virtual;
+      FakeCallbackID: TRestClientCallbackID; Instance: pointer): boolean; virtual;
     property FakeCallbacks: TRestClientCallbacks
       read fFakeCallbacks;
 
@@ -1615,45 +1620,43 @@ begin
   Owner := aOwner;
 end;
 
-function TRestClientCallbacks.FindIndex(aID: integer): integer;
+function TRestClientCallbacks.FindIndex(aID: TRestClientCallbackID): PtrInt;
+var
+  P: PRestClientCallbackItem;
 begin
   if self <> nil then
+  begin
+    P := pointer(List);
     for result := 0 to Count - 1 do
-      if List[result].ID = aID then
-        exit;
+      if P^.ID = aID then
+        exit
+      else
+        inc(P);
+  end;
   result := -1;
 end;
 
 function TRestClientCallbacks.FindEntry(
   var aItem: TRestClientCallbackItem): boolean;
 var
-  i: integer;
-  P: PRestClientCallbackItem;
+  i: PtrInt;
 begin
   result := false;
   if self = nil then
     exit;
   fSafe.Lock;
   try
-    P := pointer(List);
-    for i := 1 to Count do
-      if P^.ID = aItem.ID then
-      begin
-        if P^.Instance <> nil then
-        begin
-          result := true;
-          aItem := P^;
-        end;
-        exit;
-      end
-      else
-        inc(P);
+    i := FindIndex(aItem.ID);
+    if i < 0 then
+      exit;
+    result := true;
+    aItem := List[i];
   finally
     Safe.UnLock;
   end;
 end;
 
-function TRestClientCallbacks.FindAndRelease(aID: integer): boolean;
+function TRestClientCallbacks.FindAndRelease(aID: TRestClientCallbackID): boolean;
 var
   i: PtrInt;
 begin
@@ -1665,7 +1668,7 @@ begin
     i := FindIndex(aID);
     if i < 0 then
       exit;
-    List[i].ReleasedFromServer := True;
+    List[i].ReleasedFromServer := True; // just flag it -> delay deletion
   finally
     Safe.UnLock;
   end;
@@ -1711,8 +1714,8 @@ begin
   end;
 end;
 
-procedure TRestClientCallbacks.DoRegister(aID: integer; aInstance: pointer;
-  aFactory: TInterfaceFactory);
+procedure TRestClientCallbacks.DoRegister(aID: TRestClientCallbackID;
+  aInstance: pointer; aFactory: TInterfaceFactory);
 begin
   if aID <= 0 then
     exit;
@@ -1733,7 +1736,7 @@ begin
 end;
 
 function TRestClientCallbacks.DoRegister(aInstance: pointer;
-  aFactory: TInterfaceFactory): integer;
+  aFactory: TInterfaceFactory): TRestClientCallbackID;
 begin
   result := InterlockedIncrement(fCurrentID);
   DoRegister(result, aInstance, aFactory);
@@ -1905,7 +1908,7 @@ end;
 
 function TRestClientUri.{%H-}FakeCallbackRegister(Sender: TServiceFactory;
   const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
-  ParamValue: Pointer): integer;
+  ParamValue: Pointer): TRestClientCallbackID;
 begin
   raise EServiceException.CreateUtf8('% does not support interface parameters ' +
     'for %.%(%: %): consider using another kind of client',
@@ -1913,8 +1916,8 @@ begin
      ParamInfo.ParamName^, ParamInfo.ArgTypeName^]);
 end;
 
-function TRestClientUri.{%H-}FakeCallbackUnregister(
-  Factory: TInterfaceFactory; FakeCallbackID: integer; Instance: pointer): boolean;
+function TRestClientUri.{%H-}FakeCallbackUnregister(Factory: TInterfaceFactory;
+  FakeCallbackID: TRestClientCallbackID; Instance: pointer): boolean;
 begin
   raise EServiceException.CreateUtf8(
     '% does not support % callbacks: consider using another kind of client',

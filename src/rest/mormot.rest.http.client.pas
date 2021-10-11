@@ -354,10 +354,10 @@ type
     /// used to handle an interface parameter as SOA callback
     function FakeCallbackRegister(Sender: TServiceFactory;
       const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
-      ParamValue: Pointer): integer; override;
+      ParamValue: Pointer): TRestClientCallbackID; override;
     /// used to finalize an interface parameter as SOA callback
     function FakeCallbackUnregister(Factory: TInterfaceFactory;
-      FakeCallbackID: integer; Instance: pointer): boolean; override;
+      FakeCallbackID: TRestClientCallbackID; Instance: pointer): boolean; override;
     /// this event will be executed just after the HTTP client has been
     // upgraded to the expected WebSockets protocol
     // - supplied Sender parameter will be this TRestHttpClientWebsockets instance
@@ -843,7 +843,7 @@ end;
 
 function TRestHttpClientWebsockets.FakeCallbackRegister(Sender: TServiceFactory;
   const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
-  ParamValue: Pointer): integer;
+  ParamValue: Pointer): TRestClientCallbackID;
 begin
   if WebSockets = nil then
     raise EServiceException.CreateUtf8('Missing %.WebSocketsUpgrade() call ' +
@@ -858,7 +858,7 @@ begin
 end;
 
 function TRestHttpClientWebsockets.FakeCallbackUnregister(
-  Factory: TInterfaceFactory; FakeCallbackID: integer;
+  Factory: TInterfaceFactory; FakeCallbackID: TRestClientCallbackID;
   Instance: pointer): boolean;
 var
   body, head, resp: RawUtf8;
