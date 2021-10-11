@@ -3030,7 +3030,7 @@ end;
 
 var
   // FastVarDataComp() efficient lookup for per-VType comparison function
-  _VARDATACMP: array[boolean, 0 .. $102 {varUString}] of TDynArraySortCompare;
+  _VARDATACMP: array[0 .. $102 {varUString}, boolean] of TDynArraySortCompare;
 
 function VariantCompAsUtf8(const A, B: variant; caseInsensitive: boolean): integer;
 // need to serialize both as UTF-8 text/JSON
@@ -3070,9 +3070,9 @@ begin
     bt := varNull;
   if at = bt then
     // optimized comparison if A and B share the same type (most common case)
-    if at <= high(_VARDATACMP[false]) then
+    if at <= high(_VARDATACMP) then
     begin
-      sametypecomp := _VARDATACMP[caseInsensitive, at];
+      sametypecomp := _VARDATACMP[at, caseInsensitive];
       if Assigned(sametypecomp) then
         result := sametypecomp(A^.VAny, B^.VAny)
       else
@@ -3080,10 +3080,10 @@ rtl:    result := VariantCompSimple(PVariant(A)^, PVariant(B)^)
     end
     else if at = varStringByRef then
       // e.g. from TRttiVarData / TRttiCustomProp.CompareValue
-      result := _VARDATACMP[caseInsensitive, varString](
+      result := _VARDATACMP[varString, caseInsensitive](
         PPointer(A^.VAny)^, PPointer(B^.VAny)^)
     else if at = varSynUnicode or varByRef then
-      result := _VARDATACMP[caseInsensitive, varSynUnicode](
+      result := _VARDATACMP[varSynUnicode, caseInsensitive](
          PPointer(A^.VAny)^, PPointer(B^.VAny)^)
     else if at < varFirstCustom then
       goto rtl
@@ -8486,6 +8486,7 @@ procedure InitializeUnit;
 var
   vm: TVariantManager; // available since Delphi 7
   vt: cardinal;
+  ins: boolean;
   {$ifdef FPC}
   test: variant;
   {$endif FPC}
@@ -8513,21 +8514,23 @@ begin
   VariantClearSeveral := _VariantClearSeveral;
   SortDynArrayVariantComp := pointer(@FastVarDataComp);
   // setup FastVarDataComp() efficient lookup comparison functions
-  MoveFast(_NUM1, _VARDATACMP[false, varEmpty], SizeOf(_NUM1));
-  MoveFast(_NUM2, _VARDATACMP[false, varShortInt], SizeOf(_NUM2));
-  _VARDATACMP[false, varBoolean] := @SortDynArrayWordBoolean;
-  _VARDATACMP[true] := _VARDATACMP[false]; // =caseinsensitive
+  for ins := false to true do
+  begin
+    MoveFast(_NUM1, _VARDATACMP[varEmpty, ins], SizeOf(_NUM1));
+    MoveFast(_NUM2, _VARDATACMP[varShortInt, ins], SizeOf(_NUM2));
+    _VARDATACMP[varBoolean, ins] := @SortDynArrayWordBoolean;
+  end;
   {$ifdef CPUINTEL}
-  _VARDATACMP[false, varString] := @SortDynArrayAnsiString;
+  _VARDATACMP[varString, false] := @SortDynArrayAnsiString;
   {$else}
-  _VARDATACMP[false, varString] := @SortDynArrayRawByteString;
+  _VARDATACMP[varString, false] := @SortDynArrayRawByteString;
   {$endif CPUINTEL}
-  _VARDATACMP[true,  varString] := @SortDynArrayAnsiStringI;
-  _VARDATACMP[false, varOleStr] := @SortDynArrayUnicodeString;
-  _VARDATACMP[true,  varOleStr] := @SortDynArrayUnicodeStringI;
+  _VARDATACMP[varString, true]  := @SortDynArrayAnsiStringI;
+  _VARDATACMP[varOleStr, false] := @SortDynArrayUnicodeString;
+  _VARDATACMP[varOleStr, true]  := @SortDynArrayUnicodeStringI;
   {$ifdef HASVARUSTRING}
-  _VARDATACMP[false, varUString] := @SortDynArrayUnicodeString;
-  _VARDATACMP[true,  varUString] := @SortDynArrayUnicodeStringI;
+  _VARDATACMP[varUString, false] := @SortDynArrayUnicodeString;
+  _VARDATACMP[varUString, true]  := @SortDynArrayUnicodeStringI;
   {$endif HASVARUSTRING}
   // patch DispInvoke for performance and to circumvent RTL inconsistencies
   GetVariantManager(vm);
