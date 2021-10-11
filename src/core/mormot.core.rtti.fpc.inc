@@ -241,8 +241,8 @@ begin
         exit(PBoolean(PtrUInt(Instance) + PtrUInt(StoredProc))^);
       ptVirtual:
         call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(StoredProc))^;
-      else
-        call.Code := pointer(StoredProc);
+    else
+      call.Code := pointer(StoredProc);
     end;
     call.Data := Instance;
     if integer(PropProcs) and (1 shl 6) <> 0 then
@@ -826,6 +826,7 @@ end;
 {$ifdef FPC_HAS_CPSTRING} // optimized for systemcodepage=CP_UTF8
 
 {$ifdef FPC_X64MM}
+
 procedure _ansistr_setlength_new(var s: RawByteString; len: PtrInt; cp: cardinal);
 var
   p, new: PAnsiChar;
@@ -866,6 +867,7 @@ asm
         mov     qword ptr [rax].TStrRec.length, len
         mov     byte ptr [rax + len + _STRRECSIZE], 0
 end;
+
 {$endif FPC_X64MM}
 
 procedure _ansistr_concat_convert(var dest: RawByteString;

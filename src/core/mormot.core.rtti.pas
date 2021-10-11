@@ -726,7 +726,7 @@ type
     /// efficiently copy any (managed) type value
     // - do nothing for unmanaged types (e.g. integer)
     // - if you are sure that your type is managed, you may call directly
-    // $ RTTI_COPY[Info^.Kind](Dest, Source, Info);
+    // $ RTTI_MANAGEDCOPY[Info^.Kind](Dest, Source, Info);
     procedure Copy(Dest, Source: pointer);
       {$ifdef HASINLINE}inline;{$endif}
     /// compute extended information about this RTTI type
@@ -1605,7 +1605,7 @@ function DynArrayNew(Dest: PPointer; Count, ItemSize: PtrInt): pointer;
 function DynArrayGrow(Dest: PPointer; Count, ItemSize: PtrInt): PAnsiChar;
 
 /// create a dynamic array from another one
-// - same as RTTI_COPY[rkDynArray] but with an optional external source count
+// - same as RTTI_MANAGEDCOPY[rkDynArray] but with an optional external source count
 procedure DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo;
   SourceExtCount: PInteger);
 
@@ -1623,10 +1623,10 @@ type
   PRttiFinalizers = ^TRttiFinalizers;
 
   /// internal function handler for copying a managed type value
-  // - i.e. the kind of functions called via RTTI_COPY[] lookup table
+  // - i.e. the kind of functions called via RTTI_MANAGEDCOPY[] lookup table
   TRttiCopier = function(Dest, Source: pointer; Info: PRttiInfo): PtrInt;
 
-  /// the type of RTTI_COPY[] efficient lookup table
+  /// the type of RTTI_MANAGEDCOPY[] efficient lookup table
   TRttiCopiers = array[TRttiKind] of TRttiCopier;
   PRttiCopiers = ^TRttiCopiers;
 
@@ -1639,8 +1639,8 @@ var
 
   /// lookup table of copy function for managed types
   // - as used by TRttiInfo.Copy() inlined method
-  // - RTTI_COPY[...]=nil for unmanaged types (e.g. rkOrdinalTypes)
-  RTTI_COPY: TRttiCopiers;
+  // - RTTI_MANAGEDCOPY[...]=nil for unmanaged types (e.g. rkOrdinalTypes)
+  RTTI_MANAGEDCOPY: TRttiCopiers;
 
 
 { ************** RTTI Value Types used for JSON Parsing }
@@ -2061,9 +2061,11 @@ type
     procedure GetValue(Data: pointer; out RVD: TRttiVarData);
       {$ifdef HASINLINE}inline;{$endif}
     /// set a field value to a given TVarData-like content
-    // - optionally check and apply RVD.NeedsClear flag
+    // - optionally check and apply RVD.NeedsClear flag (leave it as true if
+    // RVD comes from GetValue)
     // - not implemented for Prop = nil (i.e. rkRecord/rkObject nested field)
-    procedure SetValue(Data: pointer; var RVD: TRttiVarData; andclear: boolean);
+    procedure SetValue(Data: pointer; var RVD: TRttiVarData;
+      andclear: boolean = true);
     /// check if the Value equals the default property set in source code
     // - caller should have checked that PropDefault <> NO_DEFAULT
     function ValueIsDefault(Data: pointer): boolean;
@@ -3217,7 +3219,7 @@ procedure TRttiInfo.Copy(Dest, Source: pointer);
 var
   cop: TRttiCopier;
 begin
-  cop := RTTI_COPY[Kind];
+  cop := RTTI_MANAGEDCOPY[Kind];
   if Assigned(cop) then
     cop(Dest, Source, @self);
 end;
@@ -3361,6 +3363,7 @@ var
   /// conversion table from TRttiKind to TRttiVarData.VType
   // - rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkArray are
   // identified as varAny with TVarData.VAny pointing to the actual value
+  // - rkChar,rkWChar,rkSString converted into temporary RawUtf8 as varUnknown
   RTTI_TO_VARTYPE: array[TRttiKind] of cardinal;
 
 procedure TRttiInfo.ComputeCache(out Cache: TRttiCache);
@@ -4333,29 +4336,30 @@ var
   {$endif HASVARUSTRING}
 begin
   case TypeInfo^.Kind of
-    rkChar, rkWChar:
-    begin
-      v := GetOrdProp(Instance);
-      if TypeInfo^.Kind = rkChar then
-        FastSetString(Value, @v, {ansicharcount=}1)
-      else
-        RawUnicodeToUtf8(@v, {widecharcount=}1, Value);
-    end;
+    rkChar,
+    rkWChar:
+      begin
+        v := GetOrdProp(Instance);
+        if TypeInfo^.Kind = rkChar then
+          FastSetString(Value, @v, {ansicharcount=}1)
+        else
+          RawUnicodeToUtf8(@v, {widecharcount=}1, Value);
+      end;
     rkSString:
       GetShortStrProp(Instance, Value);
     rkLString:
       GetLongStrProp(Instance, RawByteString(Value));
     rkWString:
-    begin
-      GetWideStrProp(Instance, WS);
-      RawUnicodeToUtf8(pointer(WS), length(WS), Value);
-    end;
+      begin
+        GetWideStrProp(Instance, WS);
+        RawUnicodeToUtf8(pointer(WS), length(WS), Value);
+      end;
     {$ifdef HASVARUSTRING}
     rkUString:
-    begin
-      GetUnicodeStrProp(Instance, US);
-      RawUnicodeToUtf8(pointer(US), length(US), Value);
-    end;
+      begin
+        GetUnicodeStrProp(Instance, US);
+        RawUnicodeToUtf8(pointer(US), length(US), Value);
+      end;
     {$endif HASVARUSTRING}
   else
     Value := '';
@@ -4369,19 +4373,20 @@ var
 begin
   result := true;
   case TypeInfo^.Kind of
-    rkChar, rkWChar:
-    begin
-      if Value = '' then
-        v := 0
-      else if TypeInfo^.Kind = rkChar then
-        v := ord(Value[1])
-      else
+    rkChar,
+    rkWChar:
       begin
-        P := pointer(Value);
-        v := NextUtf8Ucs4(P);
+        if Value = '' then
+          v := 0
+        else if TypeInfo^.Kind = rkChar then
+          v := ord(Value[1])
+        else
+        begin
+          P := pointer(Value);
+          v := NextUtf8Ucs4(P);
+        end;
+        SetOrdProp(Instance, v);
       end;
-      SetOrdProp(Instance, v);
-    end;
     rkLString:
       SetLongStrProp(Instance, Value);
     rkWString:
@@ -5291,7 +5296,7 @@ end;
 procedure RecordCopy(var Dest; const Source; Info: PRttiInfo);
 begin
   if Info^.Kind in rkRecordTypes then
-    RTTI_COPY[rkRecord](@Dest, @Source, Info);
+    RTTI_MANAGEDCOPY[rkRecord](@Dest, @Source, Info);
 end;
 
 procedure _RecordCopySeveral(Dest, Source: PAnsiChar; n: PtrInt; Info: PRttiInfo);
@@ -5321,7 +5326,7 @@ begin
             inc(Source, offset);
             inc(Dest, offset);
           end;
-          offset := RTTI_COPY[p^.Kind](Dest, Source, p);
+          offset := RTTI_MANAGEDCOPY[p^.Kind](Dest, Source, p);
           inc(Source, offset);
           inc(Dest, offset);
           inc(offset, f^.Offset);
@@ -5358,7 +5363,7 @@ raw:  MoveFast(Source^, Dest^, ItemSize * SourceCount)
     else
     begin
       // loop the TRttiCopier function over all items
-      cop := RTTI_COPY[ItemInfo^.Kind];
+      cop := RTTI_MANAGEDCOPY[ItemInfo^.Kind];
       if Assigned(cop) then
         repeat
           elemsize := cop(Dest, Source, ItemInfo);
@@ -5683,7 +5688,7 @@ var
     @_NoRandom);      //  ptCustom
 
 
-{ RTTI_COPY[] implementation functions }
+{ RTTI_MANAGEDCOPY[] implementation functions }
 
 function _LStringCopy(Dest, Source: PRawByteString; Info: PRttiInfo): PtrInt;
 begin
@@ -5774,7 +5779,7 @@ var
 begin
   Info^.RecordManagedFields(fields);
   f := fields.Fields;
-  cop := @RTTI_COPY; 
+  cop := @RTTI_MANAGEDCOPY;
   offset := 0;
   while fields.Count <> 0 do
   begin
@@ -5822,7 +5827,7 @@ begin
 raw:MoveFast(Source^, Dest^, result)
   else
   begin
-    cop := RTTI_COPY[Info^.Kind];
+    cop := RTTI_MANAGEDCOPY[Info^.Kind];
     if Assigned(cop) then
       repeat
         itemsize := cop(Dest ,Source, Info);
@@ -6388,12 +6393,20 @@ begin
   begin
     GetValueGetter(Data, rvd);
     case rvd.DataType of
-      varEmpty, varNull:
+      varEmpty,
+      varNull:
         result := true;
-      varAny, varUnknown, varString, varOleStr
+      varAny,
+      varUnknown,
+      varString,
+      varOleStr
       {$ifdef HASVARUSTRING}, varUString {$endif}:
         result := rvd.Data.VAny = nil;
-      varInt64, varWord64, varDouble, varCurrency, varBoolean:
+      varInt64,
+      varWord64,
+      varDouble,
+      varCurrency,
+      varBoolean:
         result := rvd.Data.VInt64 = 0;
     else
       result := false;
@@ -7075,7 +7088,7 @@ begin
   end;
   // initialize processing callbacks
   fFinalize := RTTI_FINALIZE[fCache.Kind];
-  fCopy := RTTI_COPY[fCache.Kind];
+  fCopy := RTTI_MANAGEDCOPY[fCache.Kind];
   pt := TypeInfoToStandardParserType(aInfo, {byname=}true, @pct);
   SetParserType(pt, pct);
 end;
@@ -8336,47 +8349,53 @@ begin
   RTTI_FINALIZE[rkRecord]    := @FastRecordClear;
   RTTI_FINALIZE[rkInterface] := @_InterfaceClear;
   RTTI_FINALIZE[rkDynArray]  := @_DynArrayClear;
-  RTTI_COPY[rkLString]   := @_LStringCopy;
-  RTTI_COPY[rkWString]   := @_WStringCopy;
-  RTTI_COPY[rkVariant]   := @_VariantCopy;
-  RTTI_COPY[rkArray]     := @_ArrayCopy;
-  RTTI_COPY[rkRecord]    := @_RecordCopy;
-  RTTI_COPY[rkInterface] := @_InterfaceCopy;
-  RTTI_COPY[rkDynArray]  := @_DynArrayCopy;
   RTTI_TO_VARTYPE[rkInteger] := varInt64;
   RTTI_TO_VARTYPE[rkInt64]   := varWord64;
   RTTI_TO_VARTYPE[rkFloat]   := varDouble;
   RTTI_TO_VARTYPE[rkLString] := varString;
   RTTI_TO_VARTYPE[rkWString] := varOleStr;
   RTTI_TO_VARTYPE[rkVariant] := varVariant;
-  RTTI_TO_VARTYPE[rkChar]    := varUnknown; // allocate temp RawUtf8 -> varString
+  RTTI_TO_VARTYPE[rkChar]    := varUnknown; // to use temp RawUtf8 -> varString
   RTTI_TO_VARTYPE[rkWChar]   := varUnknown;
   RTTI_TO_VARTYPE[rkSString] := varUnknown;
+  RTTI_MANAGEDCOPY[rkLString]   := @_LStringCopy;
+  RTTI_MANAGEDCOPY[rkWString]   := @_WStringCopy;
+  RTTI_MANAGEDCOPY[rkVariant]   := @_VariantCopy;
+  RTTI_MANAGEDCOPY[rkArray]     := @_ArrayCopy;
+  RTTI_MANAGEDCOPY[rkRecord]    := @_RecordCopy;
+  RTTI_MANAGEDCOPY[rkInterface] := @_InterfaceCopy;
+  RTTI_MANAGEDCOPY[rkDynArray]  := @_DynArrayCopy;
   {$ifdef HASVARUSTRING}
   RTTI_FINALIZE[rkUString]   := @_StringClear; // share same PStrRec layout
-  RTTI_COPY[rkUString]       := @_UStringCopy;
   RTTI_TO_VARTYPE[rkUString] := varUString;
+  RTTI_MANAGEDCOPY[rkUString] := @_UStringCopy;
   {$endif HASVARUSTRING}
   {$ifdef FPC}
   RTTI_FINALIZE[rkLStringOld] := @_StringClear;
   RTTI_FINALIZE[rkObject]     := @FastRecordClear;
-  RTTI_COPY[rkLStringOld]     := @_LStringCopy;
-  RTTI_COPY[rkObject]         := @_RecordCopy;
   RTTI_TO_VARTYPE[rkBool]       := varBoolean;
   RTTI_TO_VARTYPE[rkQWord]      := varWord64;
   RTTI_TO_VARTYPE[rkLStringOld] := varString;
   RTTI_TO_VARTYPE[rkObject]     := varAny;
+  RTTI_MANAGEDCOPY[rkLStringOld] := @_LStringCopy;
+  RTTI_MANAGEDCOPY[rkObject]     := @_RecordCopy;
   {$endif FPC}
   for k := low(k) to high(k) do
   begin
     // paranoid checks
     if Assigned(RTTI_FINALIZE[k]) <> (k in rkManagedTypes) then
       raise ERttiException.CreateUtf8('Unexpected RTTI_FINALIZE[%]', [ToText(k)^]);
-    if Assigned(RTTI_COPY[k]) <> (k in rkManagedTypes) then
-      raise ERttiException.CreateUtf8('Unexpected RTTI_COPY[%]', [ToText(k)^]);
+    if Assigned(RTTI_MANAGEDCOPY[k]) <> (k in rkManagedTypes) then
+      raise ERttiException.CreateUtf8('Unexpected RTTI_MANAGEDCOPY[%]', [ToText(k)^]);
     // TTextWriter.AddRttiVarData for TRttiCustomProp.GetValueDirect/GetValueGetter
     case k of
-      rkEnumeration, rkSet, rkDynArray, rkClass, rkInterface, rkRecord, rkArray:
+      rkEnumeration,
+      rkSet,
+      rkDynArray,
+      rkClass,
+      rkInterface,
+      rkRecord,
+      rkArray:
         RTTI_TO_VARTYPE[k] := varAny;
     end;
   end;
