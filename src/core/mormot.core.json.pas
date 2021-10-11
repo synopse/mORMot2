@@ -9398,6 +9398,7 @@ begin
       begin
         fClassNewInstance := @_New_ObjectWithCustomCreate;
         // allow any kind of customization for TObjectWithCustomCreate children
+        // - is used e.g. by TOrm or TObjectWithID
         TCCHookClass(fValueClass).RttiCustomSetParser(self);
       end
       else if C = TSynObjectList then

@@ -346,67 +346,6 @@ type
 { ************ TSynPersistent* TSyn*List TSynLocker classes }
 
 type
-  {$M+}
-  /// abstract parent class with published properties and a virtual constructor
-  // - is the parent of both TSynPersistent and TOrm classes
-  TObjectWithCustomCreate = class(TObject)
-  protected
-    /// called by TRttiJson.SetParserType when this class is registered
-    // - used e.g. to register TOrm.ID field which is not published as RTTI
-    // - in TSynPersistent descendants, can change the Rtti.JsonSave callback
-    // if needed, or e.g. set rcfHookWrite flag to call RttiBeforeWriteObject
-    // and RttiAfterWriteObject, rcfHookWriteProperty for RttiWritePropertyValue
-    // and/or rcfHookRead for RttiBeforeReadObject or RttiAfterReadObject methods
-    // (disabled by default not to slow down the serialization process)
-    class procedure RttiCustomSetParser(Rtti: TRttiCustom); virtual;
-    // called before TTextWriter.WriteObject() serialize this instance as JSON
-    // - triggered if RttiCustomSetParser defined the rcfHookWrite flag
-    // - you can return true if your method made the serialization
-    // - this default implementation just returns false, to continue serializing
-    // - TSynMonitor will change the serialization Options for this instance
-    function RttiBeforeWriteObject(W: TBaseWriter;
-      var Options: TTextWriterWriteObjectOptions): boolean; virtual;
-    // called by TTextWriter.WriteObject() to serialize one published property value
-    // - triggered if RttiCustomSetParser defined the rcfHookWriteProperty flag
-    // - is overriden in TOrm/TOrmMany to detect "fake" instances
-    // or by TSynPersistentWithPassword to hide the password field value
-    // - should return true if a property has been written, false (which is the
-    // default) if the property is to be serialized as usual
-    function RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
-      Options: TTextWriterWriteObjectOptions): boolean; virtual;
-    /// called after TTextWriter.WriteObject() serialized this instance as JSON
-    // - triggered if RttiCustomSetParser defined the rcfHookWrite flag
-    // - execute just before W.BlockEnd('}')
-    procedure RttiAfterWriteObject(W: TBaseWriter;
-      Options: TTextWriterWriteObjectOptions); virtual;
-    /// called to unserialize this instance from JSON
-    // - triggered if RttiCustomSetParser defined the rcfHookRead flag
-    // - you can return true if your method made the unserialization
-    // - this default implementation just returns false, to continue processing
-    // - opaque Ctxt is a PJsonParserContext instance
-    function RttiBeforeReadObject(Ctxt: pointer): boolean; virtual;
-    /// called to unserialize of property of this instance from JSON
-    // - triggered if RttiCustomSetParser defined the rcfHookReadProperty flag
-    // - you can return true if your method made the unserialization
-    // - this default implementation just returns false, to continue processing
-    // - opaque Ctxt is a PJsonParserContext instance
-    function RttiBeforeReadPropertyValue(Ctxt: pointer;
-      Prop: PRttiCustomProp): boolean; virtual;
-    /// called after this instance as been unserialized from JSON
-    // - triggered if RttiCustomSetParser defined the rcfHookRead flag
-    procedure RttiAfterReadObject; virtual;
-  public
-    /// virtual constructor called at instance creation
-    // - is declared as virtual so that inherited classes may have a root
-    // constructor to override
-    // - will be recognized by our RTTI serialization/initialization process
-    constructor Create; virtual; abstract;
-  end;
-
-  /// used to determine the exact class type of a TObjectWithCustomCreate
-  // - allow to create instances using its virtual constructor
-  TObjectWithCustomCreateClass = class of TObjectWithCustomCreate;
-
   /// our own empowered TPersistent-like parent class
   // - TPersistent has an unexpected speed overhead due a giant lock introduced
   // to manage property name fixup resolution (which we won't use outside the VCL)
@@ -445,6 +384,7 @@ type
   /// used to determine the exact class type of a TSynPersistent
   TSynPersistentClass = class of TSynPersistent;
 
+  {$M+}
   /// simple and efficient TList, without any notification
   // - regular TList has an internal notification mechanism which slows down
   // basic process, and can't be easily inherited
@@ -483,9 +423,8 @@ type
     property Items[index: integer]: pointer
       read Get; default;
   end;
-  PSynList = ^TSynList;
-
   {$M-}
+  PSynList = ^TSynList;
 
   /// simple and efficient TObjectList, without any notification
   TSynObjectList = class(TSynList)
@@ -695,7 +634,7 @@ type
 
 
 
-{ ********** RTTI Values Binary Serialization and Comparison }
+{ ********** Efficient RTTI Values Binary Serialization and Comparison }
 
 type
   /// possible options for a TDocVariant JSON/BSON document storage
@@ -3114,48 +3053,6 @@ end;
 
 { ************ TSynPersistent* / TSyn*List / TSynLocker classes }
 
-{ TObjectWithCustomCreate }
-
-class procedure TObjectWithCustomCreate.RttiCustomSetParser(Rtti: TRttiCustom);
-begin
-  // do nothing by default
-end;
-
-function TObjectWithCustomCreate.RttiBeforeWriteObject(W: TBaseWriter;
-  var Options: TTextWriterWriteObjectOptions): boolean;
-begin
-  result := false; // default JSON serialization
-end;
-
-function TObjectWithCustomCreate.RttiWritePropertyValue(W: TBaseWriter;
-  Prop: PRttiCustomProp; Options: TTextWriterWriteObjectOptions): boolean;
-begin
-  result := false; // default JSON serializaiton
-end;
-
-procedure TObjectWithCustomCreate.RttiAfterWriteObject(W: TBaseWriter;
-  Options: TTextWriterWriteObjectOptions);
-begin
-  // nothing to do
-end;
-
-function TObjectWithCustomCreate.RttiBeforeReadObject(Ctxt: pointer): boolean;
-begin
-  result := false; // default JSON unserialization
-end;
-
-function TObjectWithCustomCreate.RttiBeforeReadPropertyValue(
-  Ctxt: pointer; Prop: PRttiCustomProp): boolean;
-begin
-  result := false; // default JSON unserialization
-end;
-
-procedure TObjectWithCustomCreate.RttiAfterReadObject;
-begin
-  // nothing to do
-end;
-
-
 { TSynPersistent }
 
 constructor TSynPersistent.Create;
@@ -5144,7 +5041,7 @@ begin
 end;
 
 
-{ ********** RTTI Values Binary Serialization and Comparison }
+{ ********** Efficient RTTI Values Binary Serialization and Comparison }
 
 function _BS_Ord(Data: pointer; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
 begin
@@ -10517,7 +10414,7 @@ begin
           RTTI_BINARYSAVE[k] := @_BS_Ord;
           RTTI_BINARYLOAD[k] := @_BL_Ord;
           RTTI_COMPARE[false, k] := @_BC_Ord;
-          RTTI_COMPARE[true, k] := @_BC_Ord;
+          RTTI_COMPARE[true,  k] := @_BC_Ord;
         end;
       {$ifdef FPC} rkQWord, {$endif}
       rkInt64:
@@ -10525,21 +10422,21 @@ begin
           RTTI_BINARYSAVE[k] := @_BS_64;
           RTTI_BINARYLOAD[k] := @_BL_64;
           RTTI_COMPARE[false, k] := @_BC_64;
-          RTTI_COMPARE[true, k] := @_BC_64;
+          RTTI_COMPARE[true,  k] := @_BC_64;
         end;
       rkFloat:
         begin
           RTTI_BINARYSAVE[k] := @_BS_Float;
           RTTI_BINARYLOAD[k] := @_BS_Float;
           RTTI_COMPARE[false, k] := @_BC_Float;
-          RTTI_COMPARE[true, k] := @_BC_Float;
+          RTTI_COMPARE[true,  k] := @_BC_Float;
         end;
       rkLString:
         begin
           RTTI_BINARYSAVE[k] := @_BS_String;
           RTTI_BINARYLOAD[k] := @_BL_LString;
           RTTI_COMPARE[false, k] := @_BC_LString;
-          RTTI_COMPARE[true, k] := @_BCI_LString;
+          RTTI_COMPARE[true,  k] := @_BCI_LString;
         end;
       {$ifdef HASVARUSTRING}
       rkUString:
@@ -10547,7 +10444,7 @@ begin
           RTTI_BINARYSAVE[k] := @_BS_UString;
           RTTI_BINARYLOAD[k] := @_BL_UString;
           RTTI_COMPARE[false, k] := @_BC_WString;
-          RTTI_COMPARE[true, k] := @_BCI_WString;
+          RTTI_COMPARE[true,  k] := @_BCI_WString;
         end;
       {$endif HASVARUSTRING}
       rkWString:
@@ -10555,7 +10452,7 @@ begin
           RTTI_BINARYSAVE[k] := @_BS_WString;
           RTTI_BINARYLOAD[k] := @_BL_WString;
           RTTI_COMPARE[false, k] := @_BC_WString;
-          RTTI_COMPARE[true, k] := @_BCI_WString;
+          RTTI_COMPARE[true,  k] := @_BCI_WString;
         end;
       {$ifdef FPC} rkObject, {$endif}
       rkRecord:
@@ -10563,33 +10460,33 @@ begin
           RTTI_BINARYSAVE[k] := @_BS_Record;
           RTTI_BINARYLOAD[k] := @_BL_Record;
           RTTI_COMPARE[false, k] := @_BC_Record;
-          RTTI_COMPARE[true, k] := @_BCI_Record;
+          RTTI_COMPARE[true,  k] := @_BCI_Record;
         end;
       rkDynArray:
         begin
           RTTI_BINARYSAVE[k] := @_BS_DynArray;
           RTTI_BINARYLOAD[k] := @_BL_DynArray;
           RTTI_COMPARE[false, k] := @_BC_DynArray;
-          RTTI_COMPARE[true, k] := @_BCI_DynArray;
+          RTTI_COMPARE[true,  k] := @_BCI_DynArray;
         end;
       rkArray:
         begin
           RTTI_BINARYSAVE[k] := @_BS_Array;
           RTTI_BINARYLOAD[k] := @_BL_Array;
           RTTI_COMPARE[false, k] := @_BC_Array;
-          RTTI_COMPARE[true, k] := @_BCI_Array;
+          RTTI_COMPARE[true,  k] := @_BCI_Array;
         end;
       rkVariant:
         begin
           RTTI_BINARYSAVE[k] := @_BS_Variant;
           RTTI_BINARYLOAD[k] := @_BL_Variant;
           RTTI_COMPARE[false, k] := @_BC_Variant;
-          RTTI_COMPARE[true, k] := @_BCI_Variant;
+          RTTI_COMPARE[true,  k] := @_BCI_Variant;
         end;
       rkClass:
         begin
           RTTI_COMPARE[false, k] := @_BC_Object;
-          RTTI_COMPARE[true, k] := @_BCI_Object;
+          RTTI_COMPARE[true,  k] := @_BCI_Object;
         end;
         // unsupported types will contain nil
     end;

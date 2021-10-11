@@ -15,6 +15,7 @@ unit mormot.core.rtti;
     - Managed Types Finalization, Random or Copy
     - RTTI Value Types used for JSON Parsing
     - RTTI-based Registration for Custom JSON Parsing
+    - High Level TObjectWithID and TObjectWithCustomCreate Class Types
     - Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly
 
      Purpose of this unit is to avoid any direct use of TypInfo.pas RTL unit,
@@ -2631,12 +2632,103 @@ var
   Rtti: TRttiCustomList;
 
 
+{ *********** High Level TObjectWithID and TObjectWithCustomCreate Class Types }
+
+type
+  {$M+}
+  /// abstract parent class with published properties and a virtual constructor
+  // - is the parent of both TSynPersistent and TOrm classes
+  // - also features some protected virtual methods for custom RTTI/JSON process
+  TObjectWithCustomCreate = class(TObject)
+  protected
+    /// called by TRttiJson.SetParserType when this class is registered
+    // - used e.g. to register TOrm.ID field which is not published as RTTI
+    // - in TSynPersistent descendants, can change the Rtti.JsonSave callback
+    // if needed, or e.g. set rcfHookWrite flag to call RttiBeforeWriteObject
+    // and RttiAfterWriteObject, rcfHookWriteProperty for RttiWritePropertyValue
+    // and/or rcfHookRead for RttiBeforeReadObject or RttiAfterReadObject methods
+    // (disabled by default not to slow down the serialization process)
+    class procedure RttiCustomSetParser(Rtti: TRttiCustom); virtual;
+    // called before TTextWriter.WriteObject() serialize this instance as JSON
+    // - triggered if RttiCustomSetParser defined the rcfHookWrite flag
+    // - you can return true if your method made the serialization
+    // - this default implementation just returns false, to continue serializing
+    // - TSynMonitor will change the serialization Options for this instance
+    function RttiBeforeWriteObject(W: TBaseWriter;
+      var Options: TTextWriterWriteObjectOptions): boolean; virtual;
+    // called by TTextWriter.WriteObject() to serialize one published property value
+    // - triggered if RttiCustomSetParser defined the rcfHookWriteProperty flag
+    // - is overriden in TOrm/TOrmMany to detect "fake" instances
+    // or by TSynPersistentWithPassword to hide the password field value
+    // - should return true if a property has been written, false (which is the
+    // default) if the property is to be serialized as usual
+    function RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
+      Options: TTextWriterWriteObjectOptions): boolean; virtual;
+    /// called after TTextWriter.WriteObject() serialized this instance as JSON
+    // - triggered if RttiCustomSetParser defined the rcfHookWrite flag
+    // - execute just before W.BlockEnd('}')
+    procedure RttiAfterWriteObject(W: TBaseWriter;
+      Options: TTextWriterWriteObjectOptions); virtual;
+    /// called to unserialize this instance from JSON
+    // - triggered if RttiCustomSetParser defined the rcfHookRead flag
+    // - you can return true if your method made the unserialization
+    // - this default implementation just returns false, to continue processing
+    // - opaque Ctxt is a PJsonParserContext instance
+    function RttiBeforeReadObject(Ctxt: pointer): boolean; virtual;
+    /// called to unserialize of property of this instance from JSON
+    // - triggered if RttiCustomSetParser defined the rcfHookReadProperty flag
+    // - you can return true if your method made the unserialization
+    // - this default implementation just returns false, to continue processing
+    // - opaque Ctxt is a PJsonParserContext instance
+    function RttiBeforeReadPropertyValue(Ctxt: pointer;
+      Prop: PRttiCustomProp): boolean; virtual;
+    /// called after this instance as been unserialized from JSON
+    // - triggered if RttiCustomSetParser defined the rcfHookRead flag
+    procedure RttiAfterReadObject; virtual;
+  public
+    /// virtual constructor called at instance creation
+    // - is declared as virtual so that inherited classes may have a root
+    // constructor to override
+    // - will be recognized by our RTTI serialization/initialization process
+    constructor Create; virtual; abstract;
+  end;
+  {$M-}
+
+  /// used to determine the exact class type of a TObjectWithCustomCreate
+  // - allow to create instances using its virtual constructor
+  TObjectWithCustomCreateClass = class of TObjectWithCustomCreate;
+
+  /// root class of an object with a 64-bit ID primary key
+  // - is the parent of mormot.orm.core's TOrm, but you could use it e.g. on
+  // client side to avoid a dependency to all ORM process, but still have the
+  // proper published fields and use it in SOA - with a single conditional over
+  // your class definition to inherit either from TOrm or from TObjectWithID
+  TObjectWithID = class(TObjectWithCustomCreate)
+  protected
+    fID: TID;
+    /// will register the "ID":... field value for proper JSON serialization
+    class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
+  public
+    /// this constructor initializes the instance
+    // - will register the class type to the Rtti global list
+    constructor Create; overload; override;
+    /// this property gives direct access to the class instance ID
+    // - not defined as "published" since RttiCustomSetParser did register it
+    property IDValue: TID
+      read fID write fID;
+  end;
+
+  /// used to determine the exact class type of a TObjectWithID
+  TObjectWithIDClass = class of TObjectWithID;
+
+
+
 implementation
 
 {$ifdef FPC_X64MM}
 {$ifdef CPUX64}
 uses
-  mormot.core.fpcx64mm; // for direct call of _getmem/_freemem x86_64 asm
+  mormot.core.fpcx64mm; // for direct call of _getmem/_freemem in x86_64 asm
 {$else}
   {$undef FPC_X64MM}
 {$endif CPUX64}
@@ -8171,6 +8263,65 @@ begin
         exit;
   end;
   result := true;
+end;
+
+
+{ *********** High Level TObjectWithID and TObjectWithCustomCreate Class Types }
+
+{ TObjectWithCustomCreate }
+
+class procedure TObjectWithCustomCreate.RttiCustomSetParser(Rtti: TRttiCustom);
+begin
+  // do nothing by default
+end;
+
+function TObjectWithCustomCreate.RttiBeforeWriteObject(W: TBaseWriter;
+  var Options: TTextWriterWriteObjectOptions): boolean;
+begin
+  result := false; // default JSON serialization
+end;
+
+function TObjectWithCustomCreate.RttiWritePropertyValue(W: TBaseWriter;
+  Prop: PRttiCustomProp; Options: TTextWriterWriteObjectOptions): boolean;
+begin
+  result := false; // default JSON serializaiton
+end;
+
+procedure TObjectWithCustomCreate.RttiAfterWriteObject(W: TBaseWriter;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  // nothing to do
+end;
+
+function TObjectWithCustomCreate.RttiBeforeReadObject(Ctxt: pointer): boolean;
+begin
+  result := false; // default JSON unserialization
+end;
+
+function TObjectWithCustomCreate.RttiBeforeReadPropertyValue(
+  Ctxt: pointer; Prop: PRttiCustomProp): boolean;
+begin
+  result := false; // default JSON unserialization
+end;
+
+procedure TObjectWithCustomCreate.RttiAfterReadObject;
+begin
+  // nothing to do
+end;
+
+
+{ TObjectWithID }
+
+constructor TObjectWithID.Create;
+begin
+  if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
+    Rtti.RegisterClass(self); // ensure TRttiCustom is set
+end;
+
+class procedure TObjectWithID.RttiCustomSetParser(Rtti: TRttiCustom);
+begin
+  Rtti.Props.Add(
+    TypeInfo(TID), PtrInt(@TObjectWithID(nil).fID), 'ID', {first=}true);
 end;
 
 
