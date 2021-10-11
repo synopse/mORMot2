@@ -637,7 +637,7 @@ const
   {$endif FPCMM_PAUSE}
   {$else}
   // pause with constant spinning counts (empirical values from fastmm4-avx)
-  SpinMediumLockCount = 5000;
+  SpinMediumLockCount = 2500;
   SpinLargeLockCount = 5000;
   {$ifdef FPCMM_PAUSE}
   SpinSmallGetmemLockCount = 500;
@@ -785,7 +785,7 @@ asm
   lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
         je      @ok
         jmp     @sp
-@rc:    push    rsi // preserve POSIX ABI registers
+@rc:    push    rsi // preserve POSIX and Win64 ABI registers
         push    rdi
         push    r10
         push    r11
@@ -1169,8 +1169,12 @@ asm
 @NextTinyBlockArena:
         dec     edx
         jnz     @TinyBlockArenaLoop
-        // Also try the default SmallBlockInfo.Small[]
+        // Also try the default SmallBlockInfo.Small[] and its next size
         lea     rbx, [r8 + rcx]
+        mov     eax, $100
+  lock  cmpxchg byte ptr [rbx].TSmallBlockType.BlockTypeLocked, ah
+        je      @GotLockOnSmallBlockType
+        add     rbx, SizeOf(TSmallBlockType)
         mov     eax, $100
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.BlockTypeLocked, ah
         je      @GotLockOnSmallBlockType
@@ -2035,14 +2039,10 @@ asm
         mov     qword ptr [rcx], rax // store new pointer in var P
         ret
         {$ifdef FPCMM_ERMS}
-@erms:  push    rsi
-        push    rdi
-        mov     rsi, r14
+@erms:  mov     rsi, r14
         mov     rdi, rax
         lea     rcx, [rbx + 8]
         rep movsb
-        pop     rdi
-        pop     rsi
         jmp     @DoFree
         {$endif FPCMM_ERMS}
 @NotASmallBlock:
@@ -2288,16 +2288,20 @@ asm
 @Done:  pop     rbx
         {$ifdef FPCMM_ERMS}
         ret
-@erms:  push    rax
+@erms:  mov     rdi, rdx
+        push    rax
+        {$ifdef MSWINDOWS}
         push    rdi
+        {$endif MSWINDOWS}
         xor     eax, eax
-        mov     rdi, rdx
         sub     rdi, rbx
         mov     rcx, rbx
         cld
         rep stosb
         xor     ecx, ecx
+        {$ifdef MSWINDOWS}
         pop     rdi
+        {$endif MSWINDOWS}
         pop     rax
         pop     rbx
         mov     qword ptr [rdx], rcx
