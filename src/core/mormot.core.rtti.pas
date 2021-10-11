@@ -6442,12 +6442,10 @@ begin
       Value.Info.StringToUtf8(Data, RawUtf8(RVD.Data.VAny));
     end;
   else
-    // varString or varVariant which could be returned by reference
+    // varString, varVariant, varOleStr, varUString are returned by reference
     begin
-      RVD.Data.VAny := Data;
-      if (Value.Kind = rkVariant) or
-         (PPointer(Data)^ <> nil) then
-        RVD.VType := RVD.VType or varByRef
+      RVD.Data.VAny := Data; // return the pointer to the value
+      RVD.VType := RVD.VType or varByRef // and access it by reference
     end;
   end;
 end;
