@@ -4214,18 +4214,21 @@ end;
 
 function IdemPropNameU(const P1, P2: RawUtf8): boolean;
 var
-  L: PtrInt;
+  L: TStrLen;
 begin
-  if (PtrUInt(P1) <> 0) and
-     (PtrUInt(P2) <> 0) then
-  begin
-    L := PStrLen(PAnsiChar(pointer(P1)) - _STRLEN)^;
-    result := (PStrLen(PAnsiChar(pointer(P2)) - _STRLEN)^ = L) and
-              ((PByte(P1)^ xor PByte(P2)^) and $df = 0) and
-              IdemPropNameUSameLenNotNull(pointer(P1), pointer(P2), L);
-  end
+  if pointer(P1) <> pointer(P2) then
+    if (PtrUInt(P1) <> 0) and
+       (PtrUInt(P2) <> 0) then
+    begin
+      L := PStrLen(PAnsiChar(pointer(P1)) - _STRLEN)^;
+      result := (PStrLen(PAnsiChar(pointer(P2)) - _STRLEN)^ = L) and
+                ((PByte(P1)^ xor PByte(P2)^) and $df = 0) and
+                IdemPropNameUSameLenNotNull(pointer(P1), pointer(P2), L);
+    end
+    else
+      result := false
   else
-    result := pointer(P1) = pointer(P2);
+    result := true;
 end;
 
 function IdemPChar(p: PUtf8Char; up: PAnsiChar): boolean;
