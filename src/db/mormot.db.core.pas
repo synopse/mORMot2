@@ -273,7 +273,7 @@ procedure VariantToSqlVar(const Input: variant; var temp: RawByteString;
 // - will transform into a UTF-8, between double quotes for string values
 procedure VariantToInlineValue(const V: Variant; var result: RawUtf8);
 
-/// guess the correct TSqlDBFieldType from a variant type
+/// guess the correct TSqlDBFieldType from a raw variant type
 function VariantVTypeToSqlDBFieldType(VType: cardinal): TSqlDBFieldType;
 
 /// guess the correct TSqlDBFieldType from a variant value

@@ -10,7 +10,6 @@ This folder holds the User Interface related features of the *mORMot* Open Sourc
 ### mormot.ui.rad
 
 Efficient Read/Only `TDataSet` for VCL/LCL/FMX UI
-- Cross-Compiler `TSynVirtualDataSet` Read/Only Data Access
-- Database-Aware BCD Values Support
+- Cross-Compiler `TVirtualDataSet` Read/Only Data Access
 - JSON and Variants `TDataSet` Support
 

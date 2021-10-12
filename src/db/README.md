@@ -25,7 +25,7 @@ There are several ways of access your data with our framework:
 - `mormot.db.core.pas` for SQL and NoSQL high-level shared definitions;
 - `mormot.db.raw.*.pas` units define Direct access to the database servers;
 - `mormot.db.sql.*.pas` units give access to SQL databases;
-- `mormot.db.rad.*.pas` units publishing `TDataSet` third-party SQL libraries;
+- `mormot.db.rad.*.pas` units interfacing `TDataSet` third-party SQL libraries like FireDac;
 - `mormot.db.nosql.*.pas` units give access to NoSQL databases, like *MongoDB*.
 
 For cross-databases support, `mormot.db.sql.zeos.pas` is the preferred way. But you also have direct access to MSSQL via *ODBC/OleDB*, Oracle via *OCI*, or PostgreSQL via *libpq*, to reduce the dependency chain.
@@ -64,7 +64,7 @@ And the associated `mormot.db.sql.*.pas` / `mormot.db.raw.*.pas` units for ODBC,
 
 Parent Classes for `TDataSet` / `DB.pas` Database Access
 - Shared Wrappers Around `DB.pas` Classes and Functions
-- `TSynVirtualDataSet` and `TDocVariantArrayDataSet` Classes
+- Database-Aware BCD Values Support
 - `mormot.db.sql` Abstract Connection for `DB.pas TDataSet`
 
 And the associated `mormot.db.rad.*.pas` units for FireDac, UniDac, BDE, NexusDB.

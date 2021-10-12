@@ -7,8 +7,7 @@ unit mormot.ui.rad;
   *****************************************************************************
 
    Efficient Read/Only TDataSet for VCL/LCL/FMX UI
-    - Cross-Compiler TSynVirtualDataSet Read/Only Data Access
-    - Database-Aware BCD Values Support
+    - Cross-Compiler TVirtualDataSet Read/Only Data Access
     - JSON and Variants TDataSet Support
 
   *****************************************************************************
@@ -32,34 +31,26 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.db.core,
+  mormot.db.rad,
   {$ifdef ISDELPHIXE2}
-  System.Generics.Collections,
-  Data.DB,
-  Data.FMTBcd;
+  Data.DB;
   {$else}
-  DB,
-  FMTBcd;
+  DB;
   {$endif ISDELPHIXE2}
 
 
 
-{************ Cross-Compiler TSynVirtualDataSet Read/Only Data Access }
+{************ Cross-Compiler TVirtualDataSet Read/Only Data Access }
 
 type
   /// exception class raised by this unit
-  ESynVirtualDataSet = class(ESynException);
-
-  {$ifndef UNICODE} // defined as TRecordBuffer = PByte in newer DB.pas
-  TRecordBuffer = PChar;
-  {$endif UNICODE}
-
-  PDateTimeRec = ^TDateTimeRec;
+  EVirtualDataSet = class(ESynException);
 
   /// read-only virtual TDataSet able to access any content
   // - inherited classes should override InternalOpen, InternalInitFieldDefs,
   // GetRecordCount, GetRowFieldData abstract virtual methods, and optionally
   // SearchForField
-  TSynVirtualDataSet = class(TDataSet)
+  TVirtualDataSet = class(TDataSet)
   protected
     fCurrentRow: integer;
     fIsCursorOpen: boolean;
@@ -122,7 +113,7 @@ type
     {$endif UNICODE}
     /// searching a dataset for a specified record and making it the active record
     // - will call SearchForField protected virtual method for actual lookup
-    function Locate(const KeyFields: string; const KeyValues: Variant;
+    function Locate(const KeyFields: string; const KeyValues: variant;
       Options: TLocateOptions): boolean; override;
   published
     property Active;
@@ -150,77 +141,26 @@ type
     property OnPostError;
   end;
 
-const
-  /// map the LCL/VCL string type, depending on the Delphi compiler version
-  {$ifdef UNICODE}
-  ftDefaultVCLString = ftWideString;
-  {$else}
-  ftDefaultVCLString = ftString;
-  {$endif UNICODE}
-  /// if you prefer LCL/Lazarus
-  ftDefaultLCLString = ftDefaultVCLString;
-
-  /// map the best ft*Memo type available, depending on the Delphi compiler version
-  {$ifdef HASDBFTWIDE}
-  ftDefaultMemo = ftWideMemo;
-  {$else}
-  ftDefaultMemo = ftMemo;
-  {$endif HASDBFTWIDE}
-
-
-{************ Database-Aware BCD Values Support }
-
-/// append a TBcd value as text to the output buffer
-// - very optimized for speed
-procedure AddBcd(WR: TBaseWriter; const AValue: TBcd);
-
-type
-  /// a string buffer, used by InternalBcdToBuffer to store its output text
-  TBcdBuffer = array[0..66] of AnsiChar;
-
-/// convert a TBcd value as text to the output buffer
-// - buffer is to be TBcdBuffer, i.e. a static array[0..66] of AnsiChar
-// - returns the resulting text start in PBeg, and the length as function result
-// - does not handle negative sign and 0 value - see AddBcd() function use case
-// - very optimized for speed
-function InternalBcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
-  var PBeg: PAnsiChar): integer;
-
-/// convert a TBcd value into a currency
-// - purepascal version included in latest Delphi versions is slower than this
-function BcdToCurr(const AValue: TBcd; var Curr: Currency): boolean;
-
-/// convert a TBcd value into a RawUtf8 text
-// - will call fast InternalBcdToBuffer function
-procedure BcdToUtf8(const AValue: TBcd; var result: RawUtf8); overload;
-
-/// convert a TBcd value into a RawUtf8 text
-// - will call fast InternalBcdToBuffer function
-function BcdToUtf8(const AValue: TBcd): RawUtf8; overload;
-  {$ifdef HASINLINE} inline;{$endif}
-
-/// convert a TBcd value into a LCL/VCL string text
-// - will call fast InternalBcdToBuffer function
-function BcdToString(const AValue: TBcd): string;
-
 
 {************ JSON and Variants TDataSet Support }
 
 /// export all rows of a TDataSet into JSON
 // - will work for any kind of TDataSet
-function DataSetToJson(Data: TDataSet): RawUtf8;
+function DataSetToJson(Data: TDataSet): RawJson;
 
 type
+  TDocVariantArrayDataSetColumn = record
+    Name: RawUtf8;
+    FieldType: TSqlDBFieldType;
+  end;
+
   /// read-only virtual TDataSet able to access a dynamic array of TDocVariant
   // - could be used e.g. from the result of TMongoCollection.FindDocs() to
   // avoid most temporary conversion into JSON or TClientDataSet buffers
-  TDocVariantArrayDataSet = class(TSynVirtualDataSet)
+  TDocVariantArrayDataSet = class(TVirtualDataSet)
   protected
     fValues: TVariantDynArray;
-    fColumns: array of record
-      Name: RawUtf8;
-      FieldType: TSqlDBFieldType;
-    end;
+    fColumns: array of TDocVariantArrayDataSetColumn;
     fValuesCount: integer;
     fTemp64: Int64;
     fTempUtf8: RawUtf8;
@@ -267,14 +207,14 @@ function DocVariantToDataSet(aOwner: TComponent;
 implementation
 
 
-{************ Cross-Compiler TSynVirtualDataSet Read/Only Data Access }
+{************ Cross-Compiler TVirtualDataSet Read/Only Data Access }
 
 var
   GlobalDataSetCount: integer;
 
 type
   /// define how a single row is identified
-  // - for TSynVirtualDataSet, it is just the row index (starting at 0)
+  // - for TVirtualDataSet, it is just the row index (starting at 0)
   TRecInfoIdentifier = integer;
   PRecInfoIdentifier = ^TRecInfoIdentifier;
 
@@ -292,44 +232,44 @@ type
   end;
 
 
-{ TSynVirtualDataSet }
+{ TVirtualDataSet }
 
-constructor TSynVirtualDataSet.Create(Owner: TComponent);
+constructor TVirtualDataSet.Create(Owner: TComponent);
 begin
   inherited Create(Owner);
   inc(GlobalDataSetCount);
   Name := ClassName + IntToStr(GlobalDataSetCount); // force unique name
 end;
 
-function TSynVirtualDataSet.AllocRecordBuffer: TRecordBuffer;
+function TVirtualDataSet.AllocRecordBuffer: TRecordBuffer;
 begin
   result := AllocMem(SizeOf(TRecInfo));
 end;
 
-procedure TSynVirtualDataSet.FreeRecordBuffer(var Buffer: TRecordBuffer);
+procedure TVirtualDataSet.FreeRecordBuffer(var Buffer: TRecordBuffer);
 begin
   FreeMem(Buffer);
   Buffer := nil;
 end;
 
-procedure TSynVirtualDataSet.GetBookmarkData(
+procedure TVirtualDataSet.GetBookmarkData(
   Buffer: TRecordBuffer; Data: pointer);
 begin
   PRecInfoIdentifier(Data)^ := PRecInfo(Buffer)^.Bookmark;
 end;
 
-function TSynVirtualDataSet.GetBookmarkFlag(Buffer: TRecordBuffer): TBookmarkFlag;
+function TVirtualDataSet.GetBookmarkFlag(Buffer: TRecordBuffer): TBookmarkFlag;
 begin
   result := PRecInfo(Buffer)^.BookmarkFlag;
 end;
 
-function TSynVirtualDataSet.GetCanModify: boolean;
+function TVirtualDataSet.GetCanModify: boolean;
 begin
   result := false; // we define a READ-ONLY TDataSet
 end;
 
 {$ifndef UNICODE}
-function TSynVirtualDataSet.GetFieldData(Field: TField; Buffer: pointer;
+function TVirtualDataSet.GetFieldData(Field: TField; Buffer: pointer;
   NativeFormat: boolean): boolean;
 begin
   if Field.DataType in [ftWideString] then
@@ -340,12 +280,12 @@ end;
 
 {$ifdef ISDELPHIXE3}
 {$ifdef ISDELPHIXE4}
-function TSynVirtualDataSet.GetFieldData(Field: TField; var Buffer: TValueBuffer): boolean;
+function TVirtualDataSet.GetFieldData(Field: TField; var Buffer: TValueBuffer): boolean;
 {$else}
-function TSynVirtualDataSet.GetFieldData(Field: TField; Buffer: TValueBuffer): boolean;
+function TVirtualDataSet.GetFieldData(Field: TField; Buffer: TValueBuffer): boolean;
 {$endif ISDELPHIXE4}
 {$else}
-function TSynVirtualDataSet.GetFieldData(Field: TField; Buffer: pointer): boolean;
+function TVirtualDataSet.GetFieldData(Field: TField; Buffer: pointer): boolean;
 {$endif ISDELPHIXE3}
 var
   Data, Dest: pointer;
@@ -361,7 +301,7 @@ begin
   if OnlyTestForNull or
      not result then
     exit;
-  Dest := pointer(Buffer); // works also if Buffer is [var] TValueBuffer
+  Dest := pointer(Buffer); // works also if Buffer is [var] TValueBuffer=TArray<byte>
   case Field.DataType of // Data^ points to Int64,Double,Blob,Utf8
     ftBoolean:
       PWordBool(Dest)^ := PBoolean(Data)^;
@@ -420,14 +360,14 @@ begin
       end;
   // ftBlob,ftMemo,ftWideMemo should be retrieved by CreateBlobStream()
   else
-    raise ESynVirtualDataSet.CreateUtf8(
+    raise EVirtualDataSet.CreateUtf8(
       '%.GetFieldData unhandled DataType=% (%)',
       [self, GetEnumName(TypeInfo(TFieldType), ord(Field.DataType))^,
        ord(Field.DataType)]);
   end;
 end;
 
-function TSynVirtualDataSet.GetBlobStream(Field: TField;
+function TVirtualDataSet.GetBlobStream(Field: TField;
   RowIndex: integer): TStream;
 var
   Data: pointer;
@@ -440,36 +380,38 @@ begin
     case Field.DataType of
       ftBlob:
         result := TSynMemoryStream.Create(Data, DataLen);
-      ftMemo, ftString:
-        result := TRawByteStringStream.Create(CurrentAnsiConvert.Utf8BufferToAnsi
-          (Data, DataLen));
+      ftMemo,
+      ftString:
+        result := TRawByteStringStream.Create(
+          CurrentAnsiConvert.Utf8BufferToAnsi(Data, DataLen));
       {$ifdef HASDBFTWIDE}
       ftWideMemo,
       {$endif HASDBFTWIDE}
       ftWideString:
-        result := TRawByteStringStream.Create(Utf8DecodeToRawUnicode(Data, DataLen));
+        result := TRawByteStringStream.Create(
+          Utf8DecodeToRawUnicode(Data, DataLen));
     else
-      raise ESynVirtualDataSet.CreateUtf8('%.CreateBlobStream DataType=%',
+      raise EVirtualDataSet.CreateUtf8('%.CreateBlobStream DataType=%',
         [self, ord(Field.DataType)]);
     end;
 end;
 
-function TSynVirtualDataSet.CreateBlobStream(Field: TField;
+function TVirtualDataSet.CreateBlobStream(Field: TField;
   Mode: TBlobStreamMode): TStream;
 begin
   if Mode <> bmRead then
-    raise ESynVirtualDataSet.CreateUtf8('% BLOB should be ReadOnly', [self]);
+    raise EVirtualDataSet.CreateUtf8('% BLOB should be ReadOnly', [self]);
   result := GetBlobStream(Field, PRecInfo(ActiveBuffer).RowIndentifier);
   if result = nil then
     result := TSynMemoryStream.Create; // null BLOB returns a void TStream
 end;
 
-function TSynVirtualDataSet.GetRecNo: integer;
+function TVirtualDataSet.GetRecNo: integer;
 begin
   result := fCurrentRow + 1;
 end;
 
-function TSynVirtualDataSet.GetRecord(Buffer: TRecordBuffer; GetMode: TGetMode;
+function TVirtualDataSet.GetRecord(Buffer: TRecordBuffer; GetMode: TGetMode;
   DoCheck: boolean): TGetResult;
 begin
   result := grOK;
@@ -499,12 +441,12 @@ begin
     end;
 end;
 
-function TSynVirtualDataSet.GetRecordSize: Word;
+function TVirtualDataSet.GetRecordSize: Word;
 begin
   result := SizeOf(TRecInfoIdentifier); // excluding Bookmark information
 end;
 
-procedure TSynVirtualDataSet.InternalClose;
+procedure TVirtualDataSet.InternalClose;
 begin
   BindFields(false);
   {$ifdef ISDELPHIXE6}
@@ -516,17 +458,17 @@ begin
   fIsCursorOpen := False;
 end;
 
-procedure TSynVirtualDataSet.InternalFirst;
+procedure TVirtualDataSet.InternalFirst;
 begin
   fCurrentRow := -1;
 end;
 
-procedure TSynVirtualDataSet.InternalGotoBookmark(Bookmark: pointer);
+procedure TVirtualDataSet.InternalGotoBookmark(Bookmark: pointer);
 begin
   fCurrentRow := PRecInfoIdentifier(Bookmark)^;
 end;
 
-procedure TSynVirtualDataSet.InternalHandleException;
+procedure TVirtualDataSet.InternalHandleException;
 begin
   if Assigned(Classes.ApplicationHandleException) then
     Classes.ApplicationHandleException(ExceptObject)
@@ -534,17 +476,17 @@ begin
     SysUtils.ShowException(ExceptObject, ExceptAddr);
 end;
 
-procedure TSynVirtualDataSet.InternalInitRecord(Buffer: TRecordBuffer);
+procedure TVirtualDataSet.InternalInitRecord(Buffer: TRecordBuffer);
 begin
   FillcharFast(Buffer^, SizeOf(TRecInfo), 0);
 end;
 
-procedure TSynVirtualDataSet.InternalLast;
+procedure TVirtualDataSet.InternalLast;
 begin
   fCurrentRow := GetRecordCount;
 end;
 
-procedure TSynVirtualDataSet.InternalOpen;
+procedure TVirtualDataSet.InternalOpen;
 begin
   BookmarkSize := SizeOf(TRecInfo) - SizeOf(TRecInfoIdentifier);
   InternalInitFieldDefs;
@@ -559,36 +501,36 @@ begin
   fIsCursorOpen := True;
 end;
 
-procedure TSynVirtualDataSet.InternalSetToRecord(Buffer: TRecordBuffer);
+procedure TVirtualDataSet.InternalSetToRecord(Buffer: TRecordBuffer);
 begin
   fCurrentRow := PRecInfo(Buffer).RowIndentifier;
 end;
 
-function TSynVirtualDataSet.IsCursorOpen: boolean;
+function TVirtualDataSet.IsCursorOpen: boolean;
 begin
   result := fIsCursorOpen;
 end;
 
-procedure TSynVirtualDataSet.SetBookmarkData(
+procedure TVirtualDataSet.SetBookmarkData(
   Buffer: TRecordBuffer; Data: pointer);
 begin
   PRecInfo(Buffer)^.Bookmark := PRecInfoIdentifier(Data)^;
 end;
 
-procedure TSynVirtualDataSet.SetBookmarkFlag(
+procedure TVirtualDataSet.SetBookmarkFlag(
   Buffer: TRecordBuffer; Value: TBookmarkFlag);
 begin
   PRecInfo(Buffer)^.BookmarkFlag := Value;
 end;
 
-procedure TSynVirtualDataSet.SetRecNo(Value: integer);
+procedure TVirtualDataSet.SetRecNo(Value: integer);
 begin
   CheckBrowseMode;
   if Value <> RecNo then
   begin
     dec(Value);
     if cardinal(Value) >= cardinal(GetRecordCount) then
-      raise ESynVirtualDataSet.CreateUtf8(
+      raise EVirtualDataSet.CreateUtf8(
         '%.SetRecNo(%) with Count=%', [self, Value + 1, GetRecordCount]);
     DoBeforeScroll;
     fCurrentRow := Value;
@@ -597,36 +539,29 @@ begin
   end;
 end;
 
-function TSynVirtualDataSet.SearchForField(const aLookupFieldName: RawUtf8;
+function TVirtualDataSet.SearchForField(const aLookupFieldName: RawUtf8;
   const aLookupValue: variant; aOptions: TLocateOptions): integer;
 begin
   result := 0; // nothing found
 end;
 
-type
-  {$ifdef ISDELPHIXE4}
-  TFieldList = TList<TField>;
-  {$else}
-  TFieldList = TList;
-  {$endif ISDELPHIXE4}
-
-function TSynVirtualDataSet.Locate(const KeyFields: string; const KeyValues:
-  Variant; Options: TLocateOptions): boolean;
+function TVirtualDataSet.Locate(const KeyFields: string;
+  const KeyValues: variant; Options: TLocateOptions): boolean;
 var
   i, l, h, found: integer;
-  FieldList: TFieldList;
+  fields: TDatasetGetFieldList;
 begin
   CheckActive;
   result := true;
   if not IsEmpty then
     if VarIsArray(KeyValues) then
     begin
-      FieldList := TFieldList.Create;
+      fields := TDatasetGetFieldList.Create;
       try
-        GetFieldList(FieldList, KeyFields);
+        GetFieldList(fields, KeyFields);
         l := VarArrayLowBound(KeyValues, 1);
         h := VarArrayHighBound(KeyValues, 1);
-        if (FieldList.Count = 1) and
+        if (fields.Count = 1) and
            (l < h) then
         begin
           found := SearchForField(StringToUtf8(KeyFields), KeyValues, Options);
@@ -637,10 +572,10 @@ begin
           end;
         end
         else
-          for i := 0 to FieldList.Count - 1 do
+          for i := 0 to fields.Count - 1 do
           begin
             found := SearchForField(
-              StringToUtf8(TField(FieldList[i]).FieldName),
+              StringToUtf8(TField(fields[i]).FieldName),
               KeyValues[l + i], Options);
             if found > 0 then
             begin
@@ -649,7 +584,7 @@ begin
             end;
           end;
       finally
-        FieldList.Free;
+        fields.Free;
       end;
     end
     else
@@ -671,137 +606,15 @@ type
     fBcd: TBcd;
   end;
 
-class procedure TSynVirtualDataSet.BcdWrite(const aWriter: TBaseWriter; const aValue);
+class procedure TVirtualDataSet.BcdWrite(const aWriter: TBaseWriter; const aValue);
 begin
   AddBcd(aWriter, TFMTBcdData(TVarData(aValue).VPointer).fBcd);
 end;
 
 
-{ ************ Database-Aware BCD Values Support }
-
-function InternalBcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
-  var PBeg: PAnsiChar): integer;
-var
-  i, DecimalPos: integer;
-  P, Frac: PByte;
-  PEnd: PAnsiChar;
-begin
-  result := 0;
-  if AValue.Precision = 0 then
-    exit;
-  DecimalPos := AValue.Precision - (AValue.SignSpecialPlaces and $3F);
-  P := @ADest;
-  Frac := @AValue.Fraction;
-  // convert TBcd digits into text
-  for i := 0 to AValue.Precision - 1 do
-  begin
-    if i = DecimalPos then
-      if i = 0 then
-      begin
-        PWord(P)^ := ord('0') + ord('.') shl 8;
-        inc(P, 2);
-      end
-      else
-      begin
-        P^ := ord('.');
-        inc(P);
-      end;
-    if (i and 1) = 0 then
-      P^ := ((Frac^ and $F0) shr 4) + ord('0')
-    else
-    begin
-      P^ := ((Frac^ and $0F)) + ord('0');
-      inc(Frac);
-    end;
-    inc(P);
-  end;
-  // remove trailing 0 after decimal
-  if AValue.Precision > DecimalPos then
-  begin
-    repeat
-      dec(P)
-    until (P^ <> ord('0')) or
-          (P = @ADest);
-    PEnd := pointer(P);
-    if PEnd^ <> '.' then
-      inc(PEnd);
-  end
-  else
-    PEnd := pointer(P);
-  PEnd^ := #0;
-  // remove leading 0
-  PBeg := @ADest;
-  while (PBeg[0] = '0') and
-        (PBeg[1] in ['0'..'9']) do
-    inc(PBeg);
-  result := PEnd - PBeg;
-end;
-
-procedure AddBcd(WR: TBaseWriter; const AValue: TBcd);
-var
-  len: integer;
-  PBeg: PAnsiChar;
-  tmp: TBcdBuffer;
-begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
-  if len <= 0 then
-    WR.Add('0')
-  else
-  begin
-    if AValue.SignSpecialPlaces and $80 = $80 then
-      WR.Add('-');
-    WR.AddNoJsonEscape(PBeg, len);
-  end;
-end;
-
-function BcdToCurr(const AValue: TBcd; var Curr: Currency): boolean;
-var
-  len: integer;
-  PBeg: PAnsiChar;
-  tmp: TBcdBuffer;
-begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
-  if len <= 0 then
-    Curr := 0
-  else
-  begin
-    PInt64(@Curr)^ := StrToCurr64(pointer(PBeg));
-    if AValue.SignSpecialPlaces and $80 = $80 then
-      Curr := -Curr;
-  end;
-  result := true;
-end;
-
-procedure BcdToUtf8(const AValue: TBcd; var result: RawUtf8);
-var
-  len: integer;
-  PBeg: PAnsiChar;
-  tmp: TBcdBuffer;
-begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
-  FastSetString(result, PBeg, len);
-end;
-
-function BcdToUtf8(const AValue: TBcd): RawUtf8;
-begin
-  BcdToUtf8(AValue, result);
-end;
-
-function BcdToString(const AValue: TBcd): string;
-var
-  len: integer;
-  PBeg: PAnsiChar;
-  tmp: TBcdBuffer;
-begin
-  len := InternalBcdToBuffer(AValue, tmp, PBeg);
-  Ansi7ToString(PWinAnsiChar(PBeg), len, result);
-end;
-
-
-
 { ************ JSON and Variants TDataSet Support }
 
-function DataSetToJson(Data: TDataSet): RawUtf8;
+function DataSetToJson(Data: TDataSet): RawJson;
 var
   W: TJsonWriter;
   f: PtrInt;
@@ -828,7 +641,7 @@ begin
         W.AddString(W.ColNames[f]);
         with Data.Fields[f] do
           if IsNull then
-            W.AddShort('null')
+            W.AddNull
           else
             case DataType of
               ftBoolean:
@@ -838,8 +651,8 @@ begin
               ftWord,
               ftAutoInc:
                 W.Add(AsInteger);
-              ftLargeint:
-                W.Add(TLargeintField(Data.Fields[f]).AsLargeInt);
+              ftLargeInt:
+                W.Add(TLargeIntField(Data.Fields[f]).AsLargeInt);
               ftFloat,
               ftCurrency: // TCurrencyField is sadly a TFloatField
                 W.Add(AsFloat, TFloatField(Data.Fields[f]).Precision);
@@ -924,7 +737,7 @@ begin
     until Data.Eof;
     W.CancelLastComma;
     W.Add(']');
-    W.SetText(result);
+    W.SetText(RawUtf8(result));
   finally
     W.Free;
   end;
@@ -940,6 +753,7 @@ constructor TDocVariantArrayDataSet.Create(Owner: TComponent;
 var
   n, ndx, j: PtrInt;
   first: PDocVariantData;
+  c: ^TDocVariantArrayDataSetColumn;
 begin
   fValues := Data;
   fValuesCount := DataCount;
@@ -948,13 +762,15 @@ begin
   begin
     // some columns name/type information has been supplied
     if n <> length(ColumnTypes) then
-      raise ESynVirtualDataSet.CreateUtf8(
+      raise EVirtualDataSet.CreateUtf8(
         '%.Create(ColumnNames<>ColumnTypes)', [self]);
     SetLength(fColumns, n);
+    c := pointer(fColumns);
     for ndx := 0 to n - 1 do
     begin
-      fColumns[ndx].Name := ColumnNames[ndx];
-      fColumns[ndx].FieldType := ColumnTypes[ndx];
+      c^.Name := ColumnNames[ndx];
+      c^.FieldType := ColumnTypes[ndx];
+      inc(c);
     end;
   end
   else if fValues <> nil then
@@ -962,16 +778,19 @@ begin
     // guess columns name/type from the first supplied TDocVariant
     first := _Safe(fValues[0], dvObject);
     SetLength(fColumns, first^.Count);
+    c := pointer(fColumns);
     for ndx := 0 to first^.Count - 1 do
     begin
-      fColumns[ndx].Name := first^.Names[ndx];
-      fColumns[ndx].FieldType := VariantTypeToSqlDBFieldType(first^.Values[ndx]);
-      case fColumns[ndx].FieldType of
+      c^.Name := first^.Names[ndx];
+      c^.FieldType := VariantTypeToSqlDBFieldType(first^.Values[ndx]);
+      case c^.FieldType of
         mormot.db.core.ftNull:
-          fColumns[ndx].FieldType := mormot.db.core.ftBlob;
+          c^.FieldType := mormot.db.core.ftBlob;
         mormot.db.core.ftCurrency:
-          fColumns[ndx].FieldType := mormot.db.core.ftDouble;
-        mormot.db.core.ftInt64: // ensure type coherency of whole column
+          // TCurrencyField is a TFloatField
+          c^.FieldType := mormot.db.core.ftDouble;
+        mormot.db.core.ftInt64:
+          // ensure type coherency of whole column
           for j := 1 to first^.Count - 1 do
             if j >= fValuesCount then
               break
@@ -979,16 +798,17 @@ begin
               // ensure objects are consistent
               with _Safe(fValues[j], dvObject)^ do
                 if (ndx < Length(Names)) and
-                   IdemPropNameU(Names[ndx], fColumns[ndx].Name) and
+                   IdemPropNameU(Names[ndx], c^.Name) and
                    (VariantTypeToSqlDBFieldType(Values[ndx]) in
                      [mormot.db.core.ftNull,
                       mormot.db.core.ftDouble,
                       mormot.db.core.ftCurrency]) then
                   begin
-                    fColumns[ndx].FieldType := mormot.db.core.ftDouble;
+                    c^.FieldType := mormot.db.core.ftDouble;
                     break;
                   end;
       end;
+      inc(c);
     end;
   end;
   inherited Create(Owner);
@@ -1056,7 +876,7 @@ begin
 end;
 
 const
-  TYPESTODB: array[TSqlDBFieldType] of TFieldType =(
+  TO_DB: array[TSqlDBFieldType] of TFieldType =(
     ftWideString, // ftUnknown
     ftWideString, // ftNull
     ftLargeint,   // ftInt64
@@ -1079,7 +899,7 @@ begin
     else
       siz := 0;
     Utf8ToStringVar(fColumns[f].Name, fieldname);
-    FieldDefs.Add(fieldname, TYPESTODB[fColumns[f].FieldType], siz);
+    FieldDefs.Add(fieldname, TO_DB[fColumns[f].FieldType], siz);
   end;
 end;
 

@@ -8271,7 +8271,7 @@ begin
           WR.WrBase64(pointer(sqlite3.column_blob(Request, i)),
             sqlite3.column_bytes(Request, i), {withMagic=}true);
       SQLITE_NULL:
-        WR.AddShort('null'); // returned also for ""
+        WR.AddNull; // returned also for ""
       SQLITE_INTEGER:
         WR.Add(sqlite3.column_int64(Request, i));
       SQLITE_FLOAT:
