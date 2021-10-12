@@ -6,7 +6,7 @@ unit mormot.ui.rad;
 {
   *****************************************************************************
 
-   Efficient Read/Only TDataSet for VCL/LCL/FMX UI
+   Efficient Read/Only Abstract TDataSet for VCL/LCL/FMX UI
     - Cross-Compiler TVirtualDataSet Read/Only Data Access
     - JSON and Variants TDataSet Support
 
@@ -188,7 +188,11 @@ type
 function VariantsToDataSet(aOwner: TComponent;
   const Data: TVariantDynArray; DataCount: integer;
   const ColumnNames: array of RawUtf8;
-  const ColumnTypes: array of TSqlDBFieldType): TDocVariantArrayDataSet;
+  const ColumnTypes: array of TSqlDBFieldType): TDocVariantArrayDataSet; overload;
+
+/// convert a dynamic array of TDocVariant result into a LCL/VCL DataSet
+function VariantsToDataSet(aOwner: TComponent;
+  const Data: TVariantDynArray): TDocVariantArrayDataSet; overload;
 
 /// convert a TDocVariant array and associated columns name/type
 // into a LCL/VCL TDataSet
@@ -288,74 +292,74 @@ function TVirtualDataSet.GetFieldData(Field: TField; Buffer: TValueBuffer): bool
 function TVirtualDataSet.GetFieldData(Field: TField; Buffer: pointer): boolean;
 {$endif ISDELPHIXE3}
 var
-  Data, Dest: pointer;
-  RowIndex, DataLen, MaxLen: integer;
-  Temp: RawByteString;
-  OnlyTestForNull: boolean;
-  TS: TTimeStamp;
+  data, dest: pointer;
+  ndx, len, maxlen: integer;
+  tmp: RawByteString;
+  onlytestfornull: boolean;
+  ts: TTimeStamp;
 begin
-  OnlyTestForNull := (Buffer = nil);
-  RowIndex := PRecInfo(ActiveBuffer).RowIndentifier;
-  Data := GetRowFieldData(Field, RowIndex, DataLen, OnlyTestForNull);
-  result := Data <> nil; // null field or out-of-range RowIndex/Field
-  if OnlyTestForNull or
+  onlytestfornull := (Buffer = nil);
+  ndx := PRecInfo(ActiveBuffer).RowIndentifier;
+  data := GetRowFieldData(Field, ndx, len, onlytestfornull);
+  result := data <> nil; // null field or out-of-range ndx/Field
+  if onlytestfornull or
      not result then
     exit;
-  Dest := pointer(Buffer); // works also if Buffer is [var] TValueBuffer=TArray<byte>
-  case Field.DataType of // Data^ points to Int64,Double,Blob,Utf8
+  dest := pointer(Buffer); // works also if Buffer is [var] TValueBuffer=TArray<byte>
+  case Field.DataType of // data^ points to Int64,Double,Blob,Utf8
     ftBoolean:
-      PWordBool(Dest)^ := PBoolean(Data)^;
+      PWordBool(dest)^ := PBoolean(data)^;
     ftInteger:
-      PInteger(Dest)^ := PInteger(Data)^;
+      PInteger(dest)^ := PInteger(data)^;
     ftLargeint,
     ftFloat,
     ftCurrency:
-      PInt64(Dest)^ := PInt64(Data)^;
+      PInt64(dest)^ := PInt64(data)^;
     ftDate,
     ftTime,
     ftDateTime:
-      if PDateTime(Data)^ = 0 then // handle 30/12/1899 date as NULL
+      if PDateTime(data)^ = 0 then // handle 30/12/1899 date as NULL
         result := false
       else
       begin
-        // inlined DataConvert(Field,Data,Dest,true)
-        TS := DateTimeToTimeStamp(PDateTime(Data)^);
+        // inlined DataConvert(Field,data,dest,true)
+        ts := DateTimeToTimeStamp(PDateTime(data)^);
         case Field.DataType of
           ftDate:
-            PDateTimeRec(Dest)^.Date := TS.Date;
+            PDateTimeRec(dest)^.Date := ts.Date;
           ftTime:
-            PDateTimeRec(Dest)^.Time := TS.Time;
+            PDateTimeRec(dest)^.Time := ts.Time;
           ftDateTime:
-            if (TS.Time < 0) or
-               (TS.Date <= 0) then // matches ValidateTimeStamp() expectations
+            if (ts.Time < 0) or
+               (ts.Date <= 0) then // matches ValidateTimeStamp() expectations
               result := false
             else
-              PDateTimeRec(Dest)^.DateTime := TimeStampToMSecs(TS);
+              PDateTimeRec(dest)^.DateTime := TimeStampToMSecs(ts);
         end; // see NativeToDateTime/DateTimeToNative in TDataSet.DataConvert
       end;
     ftString:
       begin
-        if DataLen <> 0 then
+        if len <> 0 then
         begin
-          CurrentAnsiConvert.Utf8BufferToAnsi(Data, DataLen, Temp);
-          DataLen := length(Temp);
-          MaxLen := Field.DataSize - 1; // without trailing #0
-          if DataLen > MaxLen then
-            DataLen := MaxLen;
-          MoveFast(pointer(Temp)^, Dest^, DataLen);
+          CurrentAnsiConvert.Utf8BufferToAnsi(data, len, tmp);
+          len := length(tmp);
+          maxlen := Field.DataSize - 1; // without trailing #0
+          if len > maxlen then
+            len := maxlen;
+          MoveFast(pointer(tmp)^, dest^, len);
         end;
-        PAnsiChar(Dest)[DataLen] := #0;
+        PAnsiChar(dest)[len] := #0;
       end;
     ftWideString:
       begin
-        {$ifdef ISDELPHI2007ANDUP} // here Dest = PWideChar[] of DataSize bytes
-        if DataLen = 0 then
-          PWideChar(Dest)^ := #0
+        {$ifdef ISDELPHI2007ANDUP} // here dest = PWideChar[] of DataSize bytes
+        if len = 0 then
+          PWideChar(dest)^ := #0
         else
-          Utf8ToWideChar(Dest, Data, (Field.DataSize - 2) shr 1, DataLen);
+          Utf8ToWideChar(dest, data, (Field.DataSize - 2) shr 1, len);
         {$else}
-        // here Dest is PWideString
-        Utf8ToWideString(Data, DataLen, WideString(Dest^));
+        // here dest is PWideString
+        Utf8ToWideString(data, len, WideString(dest^));
         {$endif ISDELPHI2007ANDUP}
       end;
   // ftBlob,ftMemo,ftWideMemo should be retrieved by CreateBlobStream()
@@ -370,26 +374,26 @@ end;
 function TVirtualDataSet.GetBlobStream(Field: TField;
   RowIndex: integer): TStream;
 var
-  Data: pointer;
-  DataLen: integer;
+  data: pointer;
+  len: integer;
 begin
-  Data := GetRowFieldData(Field, RowIndex, DataLen, false);
-  if Data = nil then // should point to Blob or Utf8 data
+  data := GetRowFieldData(Field, RowIndex, len, false);
+  if data = nil then // should point to Blob or Utf8 data
     result := nil
   else
     case Field.DataType of
       ftBlob:
-        result := TSynMemoryStream.Create(Data, DataLen);
+        result := TSynMemoryStream.Create(data, len);
       ftMemo,
       ftString:
         result := TRawByteStringStream.Create(
-          CurrentAnsiConvert.Utf8BufferToAnsi(Data, DataLen));
+          CurrentAnsiConvert.Utf8BufferToAnsi(data, len));
       {$ifdef HASDBFTWIDE}
       ftWideMemo,
       {$endif HASDBFTWIDE}
       ftWideString:
         result := TRawByteStringStream.Create(
-          Utf8DecodeToRawUnicode(Data, DataLen));
+          Utf8DecodeToRawUnicode(data, len));
     else
       raise EVirtualDataSet.CreateUtf8('%.CreateBlobStream DataType=%',
         [self, ord(Field.DataType)]);
@@ -822,14 +826,14 @@ end;
 function TDocVariantArrayDataSet.GetRowFieldData(Field: TField;
   RowIndex: integer; out ResultLen: integer; OnlyCheckNull: boolean): pointer;
 var
-  F, ndx: PtrInt;
-  wasString: boolean;
+  f, ndx: PtrInt;
+  wasstring: boolean;
 begin
   result := nil;
-  F := Field.Index;
+  f := Field.Index;
   if (cardinal(RowIndex) < cardinal(fValuesCount)) and
-     (cardinal(F) < cardinal(length(fColumns))) and
-     not (fColumns[F].FieldType in
+     (cardinal(f) < cardinal(length(fColumns))) and
+     not (fColumns[f].FieldType in
            [mormot.db.core.ftNull,
             mormot.db.core.ftUnknown,
             mormot.db.core.ftCurrency]) then
@@ -837,10 +841,10 @@ begin
       if (Kind = dvObject) and
          (Count > 0) then
       begin
-        if IdemPropNameU(fColumns[F].Name, Names[F]) then
-          ndx := F // optimistic match
+        if IdemPropNameU(fColumns[f].Name, Names[f]) then
+          ndx := f // optimistic match
         else
-          ndx := GetValueIndex(fColumns[F].Name);
+          ndx := GetValueIndex(fColumns[f].Name);
         if ndx >= 0 then
           if VarIsEmptyOrNull(Values[ndx]) then
             exit
@@ -848,7 +852,7 @@ begin
           begin
             result := @fTemp64;
             if not OnlyCheckNull then
-              case fColumns[F].FieldType of
+              case fColumns[f].FieldType of
                 mormot.db.core.ftInt64:
                   VariantToInt64(Values[ndx], fTemp64);
                 mormot.db.core.ftDouble,
@@ -856,13 +860,13 @@ begin
                   VariantToDouble(Values[ndx], unaligned(PDouble(@fTemp64)^));
                 mormot.db.core.ftUtf8:
                   begin
-                    VariantToUtf8(Values[ndx], fTempUtf8, wasString);
+                    VariantToUtf8(Values[ndx], fTempUtf8, wasstring);
                     result := pointer(fTempUtf8);
                     ResultLen := length(fTempUtf8);
                   end;
                 mormot.db.core.ftBlob:
                   begin
-                    VariantToUtf8(Values[ndx], fTempUtf8, wasString);
+                    VariantToUtf8(Values[ndx], fTempUtf8, wasstring);
                     if Base64MagicCheckAndDecode(
                          pointer(fTempUtf8), length(fTempUtf8), fTempBlob) then
                     begin
@@ -941,6 +945,12 @@ begin
   result.Open;
 end;
 
+function VariantsToDataSet(aOwner: TComponent;
+  const Data: TVariantDynArray): TDocVariantArrayDataSet;
+begin
+  result := VariantsToDataSet(aOwner, Data, length(Data), [], []);
+end;
+
 function DocVariantToDataSet(aOwner: TComponent;
   const DocVariant: variant;
   const ColumnNames: array of RawUtf8;
@@ -962,7 +972,6 @@ begin
 end;
 
 
-initialization
 
 
 end.

@@ -35,7 +35,7 @@ uses
   mormot.rest.http.server, mormot.rest.memserver, mormot.rest.mvc, 
   mormot.rest.server, mormot.rest.sqlite3, mormot.script.core, 
   mormot.script.quickjs, mormot.soa.client, mormot.soa.codegen, 
-  mormot.soa.core, mormot.soa.server, mormot.ui.rad;
+  mormot.soa.core, mormot.soa.server, mormot.ui.rad, mormot.ui.sql;
 
 implementation
 
