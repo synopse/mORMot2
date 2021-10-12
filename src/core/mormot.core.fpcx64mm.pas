@@ -99,8 +99,9 @@ unit mormot.core.fpcx64mm;
 // - it would use a little more memory, but medium pool is less likely to sleep
 {.$define FPCMM_SMALLNOTWITHMEDIUM}
 
-// use "rep movsb/stosb" ERMS for blocks > 256 bytes instead of SSE2 "movaps"
-// - ERMS is available since Ivy Bridge (and shouldn't slow down older CPUs)
+// use "rep movsb/stosd" ERMS for blocks > 256 bytes instead of SSE2 "movaps"
+// - ERMS is available since Ivy Bridge, and we use "movaps" for smallest blocks
+// (to not slow down older CPUs), so it is safe to enable this on Server HW
 {.$define FPCMM_ERMS}
 
 // will export libc-like functions, and not replace the FPC MM
@@ -608,10 +609,6 @@ const
     OptimalSmallBlockPoolSizeUpperLimit + MinimumMediumBlockSize;
   LargeBlockGranularity = 65536;
   MediumInPlaceDownsizeLimit = MinimumMediumBlockSize div 4;
-  {$ifdef FPCMM_ERMS}
-  // see https://stackoverflow.com/a/43837564/458259 for timing on several CPUs
-  ErmsMinSize = 256;
-  {$endif FPCMM_ERMS}
 
   IsFreeBlockFlag = 1;
   IsMediumBlockFlag = 2;
@@ -647,6 +644,13 @@ const
   {$endif FPCMM_LOCKLESSFREE}
   {$endif FPCMM_PAUSE}
   {$endif FPCMM_SLEEPTSC}
+
+  {$ifdef FPCMM_ERMS}
+  // pre-ERMS expects at least 256 bytes, IvyBridge+ with ERMS is good from 64
+  // see https://stackoverflow.com/a/43837564/458259 for explanations and timing
+  // -> "movaps xmm0" loop is used up to 256 bytes of data: good on all CPUs
+  ErmsMinSize = 256;
+  {$endif FPCMM_ERMS}
 
 type
   PSmallBlockPoolHeader = ^TSmallBlockPoolHeader;
@@ -2012,7 +2016,7 @@ asm
         // copy and free: rax=New r14=P rbx=size-8
         push    rax
         {$ifdef FPCMM_ERMS}
-        cmp     rbx, ErmsMinSize
+        cmp     rbx, ErmsMinSize // startup cost of 0..255 bytes
         jae     @erms
         {$endif FPCMM_ERMS}
         lea     rcx, [r14 + rbx]
@@ -2039,7 +2043,8 @@ asm
         mov     qword ptr [rcx], rax // store new pointer in var P
         ret
         {$ifdef FPCMM_ERMS}
-@erms:  mov     rsi, r14
+@erms:  cld
+        mov     rsi, r14
         mov     rdi, rax
         lea     rcx, [rbx + 8]
         rep movsb
@@ -2272,13 +2277,13 @@ asm
         cmp     rbx, MaximumMediumBlockSize - BlockHeaderSize
         jae     @Done
         {$ifdef FPCMM_ERMS}
-        cmp     rbx, ErmsMinSize
+        cmp     rbx, ErmsMinSize // startup cost of 0..255 bytes
         jae     @erms
         {$endif FPCMM_ERMS}
         neg     rbx
         pxor    xmm0, xmm0
         align   16
-@FillLoop: // non-temporal movntdq not needed when size <256KB (small/medium)
+@FillLoop: // non-temporal movntdq not needed with small/medium size
         movaps  oword ptr [rdx + rbx], xmm0
         add     rbx, 16
         js      @FillLoop
@@ -2288,23 +2293,24 @@ asm
 @Done:  pop     rbx
         {$ifdef FPCMM_ERMS}
         ret
-@erms:  mov     rdi, rdx
+        // ERMS has a startup cost, but "rep stosd" is fast enough on all CPUs
+@erms:  mov     rcx, rbx
         push    rax
         {$ifdef MSWINDOWS}
         push    rdi
         {$endif MSWINDOWS}
+        cld
+        mov     rdi, rdx
         xor     eax, eax
         sub     rdi, rbx
-        mov     rcx, rbx
-        cld
-        rep stosb
-        xor     ecx, ecx
+        shr     ecx, 2
+        mov     qword ptr [rdx], rax
+        rep stosd
         {$ifdef MSWINDOWS}
         pop     rdi
         {$endif MSWINDOWS}
         pop     rax
         pop     rbx
-        mov     qword ptr [rdx], rcx
         {$endif FPCMM_ERMS}
 end;
 

@@ -19,7 +19,9 @@
 
 {$ifdef WITH_ERMS}
 var
-  // "rep stosb/movsb" enabled for len >= 512 on ERMSB CPUs
+  // "rep stosb/movsb" enabled for len >= 4096 on ERMSB CPUs
+  // it has been reported that "on 32-bit strings have to be at least 4KB"
+  // see https://stackoverflow.com/a/43837564/458259 for explanations and timing
   ERMSB_MIN_SIZE: integer = maxInt; // maxInt = disabled by default
   {$define WITH_ERMSASM} // include "rep movsb" asm blocks 
 {$endif WITH_ERMS}

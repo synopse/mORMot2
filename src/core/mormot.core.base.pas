@@ -2385,8 +2385,8 @@ function BSRqword(const q: Qword): cardinal;
 
 type
   /// most common x86_64 CPU abilities, used e.g. by FillCharFast/MoveFast
-  // - cpuERMS is slightly slower than cpuAVX so is not available by default
-  // - cpuHaswell identify Intel/AMD AVX2+BMI support at Haswell level
+  // - cpuERMS is ignored (slower than our movnt code, and not cpuid in VMs)
+  // - cpuHaswell identifies Intel/AMD AVX2+BMI support at Haswell level
   TX64CpuFeatures = set of (
     cpuAVX, cpuAVX2 {$ifdef WITH_ERMS}, cpuERMS{$endif}, cpuHaswell);
 
@@ -8159,7 +8159,8 @@ begin
     end;
   {$ifdef ASMX64}
   {$ifdef WITH_ERMS}
-  if cfERMS in CpuFeatures then // actually slower than our AVX code -> disabled
+  // actually slower than our movnt code, and not cpuid in VMs -> ignored
+  if cfERMS in CpuFeatures then
     include(CPUIDX64, cpuERMS);
   {$endif WITH_ERMS}
   if cfAVX in CpuFeatures then
@@ -8180,7 +8181,7 @@ begin
     // but MoveFast() is likely to abort -> recompile with HASNOSSE2 conditional
     // or ensure mormot.core.os is used so that it will redirect to RTL Move()
   else if cfERMS in CpuFeatures then
-    ERMSB_MIN_SIZE := 511; // slightly more efficient than SSE2 movntdq
+    ERMSB_MIN_SIZE := 4096; // "on 32-bit strings have to be at least 4KB"
   {$endif WITH_ERMS}
   {$endif HASNOSSE2}
   if cfSSE2 in CpuFeatures then

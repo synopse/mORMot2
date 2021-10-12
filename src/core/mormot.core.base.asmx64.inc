@@ -29,6 +29,7 @@ const
   -> Delphi RTL is slower than FPC's, and it doesn't support AVX assembly yet
   -> cpuERMS - of little benefit - is disabled, unless WITH_ERMS is defined
   https://blog.synopse.info?post/2020/02/17/New-move/fillchar-optimized-sse2/avx-asm-version
+  and https://stackoverflow.com/a/43837564/458259 for explanations and timing
 }
 
 // these stand-alone functions will use CPUIDX64 global to adjust the algorithm
