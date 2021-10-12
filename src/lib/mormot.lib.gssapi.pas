@@ -835,8 +835,7 @@ function ServerDomainFind(const aOld: RawUtf8): PtrInt;
 begin
   for result := 0 to length(ServerDomainMap) - 1 do
     with ServerDomainMap[result] do
-      if (length(Old) = length(aOld)) and
-         IdemPChar(pointer(aOld), pointer(Old)) then
+      if IdemPropNameU(Old, aOld) then
         exit;
   result := -1;
 end;
@@ -887,8 +886,7 @@ begin
     DomainLen := StrLen(DomainStart);
     for i := 0 to high(ServerDomainMap) do
       with ServerDomainMap[i] do
-        if (length(Old) = DomainLen) and
-           IdemPChar(DomainStart, pointer(Old)) then
+        if IdemPropNameU(Old, DomainStart, DomainLen) then
         begin
           Domain := New;
           break;
