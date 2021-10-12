@@ -648,7 +648,8 @@ const
   {$ifdef FPCMM_ERMS}
   // pre-ERMS expects at least 256 bytes, IvyBridge+ with ERMS is good from 64
   // see https://stackoverflow.com/a/43837564/458259 for explanations and timing
-  // -> "movaps xmm0" loop is used up to 256 bytes of data: good on all CPUs
+  // -> "movaps" loop is used up to 256 bytes of data: good on all CPUs
+  // -> "movntdq" loop is used for large blocks: always faster than ERMS
   ErmsMinSize = 256;
   {$endif FPCMM_ERMS}
 
@@ -1542,7 +1543,7 @@ asm
         // Is this bin now empty?
         cmp     rdi, rax
         jne     @MediumBinNotEmptyForMedium
-        // edx = bin group number, ecx = bin number, rdi = @bin, rsi = free block, ebx = block size
+        // edx=bingroupnumber, ecx=binnumber, rdi=@bin, rsi=freeblock, ebx=blocksize
         // Flag this bin and group as empty
         mov     eax,  - 2
         mov     r11d, [r10 + TMediumBlockInfo.BinGroupBitmap]
