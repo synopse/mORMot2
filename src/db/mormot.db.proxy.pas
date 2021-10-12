@@ -1417,6 +1417,7 @@ end;
 procedure TSqlDBProxyStatementAbstract.ColumnsToBinary(W: TBufferWriter;
   Null: pointer; const ColTypes: TSqlDBFieldTypeDynArray);
 begin
+  // just transmit the existing raw binary, which is in the right format
   W.Write(fDataCurrentRowValuesStart, fDataCurrentRowValuesSize);
 end;
 

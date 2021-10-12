@@ -287,6 +287,8 @@ const
   FETCHALLTOBINARY_MAGIC = 1;
 
 
+
+
 { ************ Define Database Engine Specific Behavior }
 
 type
@@ -618,7 +620,9 @@ function ToText(Dbms: TSqlDBDefinition): PShortString; overload;
 { ************ General SQL Processing Functions }
 
 /// function helper logging some column truncation information text
-procedure LogTruncatedColumn(const Col: TSqlDBColumnProperty);
+// - is called by low-level mormot.db.sql.* providers when the driver notifies
+// that a column content has been truncated when retrieved
+procedure LogTruncatedColumn(Sender: TObject; const Col: TSqlDBColumnProperty);
 
 /// retrieve a table name without any left schema
 // - e.g. TrimLeftSchema('SCHEMA.TABLENAME')='TABLENAME'
@@ -646,6 +650,7 @@ function ReplaceParamsByNumbers(const aSql: RawUtf8; var aNewSql: RawUtf8;
 // 'one','t"wo' -> '{"one","t\"wo"}'   and  1,2,3 -> '{1,2,3}'
 // - as used e.g. by PostgreSQL library
 function BoundArrayToJsonArray(const Values: TRawUtf8DynArray): RawUtf8;
+
 
 
 { ************ Abstract SQL DB Classes and Interfaces }
@@ -2059,9 +2064,9 @@ type
     /// return the associated statement instance for a ISqlDBRows interface
     function Instance: TSqlDBStatement;
     /// wrappers to compute sllSQL/sllDB SQL context with a local timer
-    function SqlLogBegin(level: TSynLogInfo): TSynLog;
+    function SqlLogBegin(Level: TSynLogInfo): TSynLog;
     function SqlLogEnd(const Fmt: RawUtf8; const Args: array of const): Int64; overload;
-    function SqlLogEnd(msg: PShortString = nil): Int64; overload;
+    function SqlLogEnd(Msg: PShortString = nil): Int64; overload;
   public
     /// create a statement instance
     constructor Create(aConnection: TSqlDBConnection); virtual;
@@ -2884,9 +2889,9 @@ implementation
 
 { ************ General SQL Processing Functions }
 
-procedure LogTruncatedColumn(const Col: TSqlDBColumnProperty);
+procedure LogTruncatedColumn(Sender: TObject; const Col: TSqlDBColumnProperty);
 begin
-  SynDBLog.Add.Log(sllDB, 'Truncated column %', Col.ColumnName);
+  SynDBLog.Add.Log(sllDB, 'Truncated column %', [Col.ColumnName], Sender);
 end;
 
 function TrimLeftSchema(const TableName: RawUtf8): RawUtf8;
@@ -2906,6 +2911,9 @@ begin
     result := copy(TableName, j, maxInt);
 end;
 
+const
+  SQL_KEYWORDS_BY2: array[0..19] of AnsiChar = 'ASATBYIFINISOFONORTO';
+
 function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
   aStripSemicolon: boolean): integer;
 var
@@ -2913,8 +2921,6 @@ var
   P: PAnsiChar;
   c: array[0..3] of AnsiChar;
   tmp: RawUtf8;
-const
-  SQL_KEYWORDS: array[0..19] of AnsiChar = 'ASATBYIFINISOFONORTO';
 begin
   result := 0;
   L := Length(aSql);
@@ -2971,7 +2977,8 @@ begin
           end
           else
             inc(c[1]);
-        until WordScanIndex(@SQL_KEYWORDS, length(SQL_KEYWORDS) shr 1, PWord(@c[1])^) < 0;
+        until WordScanIndex(@SQL_KEYWORDS_BY2, length(SQL_KEYWORDS_BY2) shr 1,
+                PWord(@c[1])^) < 0;
         inc(result);
         inc(i); // jump '?'
       until i = L;
@@ -3317,13 +3324,13 @@ end;
 function TSqlDBConnectionProperties.Execute(const aSql: RawUtf8;
   const Params: array of const; RowsVariant: PVariant; ForceBlobAsNull: boolean): ISqlDBRows;
 var
-  Stmt: ISqlDBStatement;
+  stmt: ISqlDBStatement;
 begin
-  Stmt := NewThreadSafeStatementPrepared(aSql, {expectres=}true, true);
-  Stmt.ForceBlobAsNull := ForceBlobAsNull;
-  Stmt.Bind(Params);
-  Stmt.ExecutePrepared;
-  result := Stmt;
+  stmt := NewThreadSafeStatementPrepared(aSql, {expectres=}true, true);
+  stmt.ForceBlobAsNull := ForceBlobAsNull;
+  stmt.Bind(Params);
+  stmt.ExecutePrepared;
+  result := stmt;
   if RowsVariant <> nil then
     if result = nil then
       SetVariantNull(RowsVariant^)
@@ -3334,13 +3341,13 @@ end;
 function TSqlDBConnectionProperties.ExecuteNoResult(const aSql: RawUtf8;
   const Params: array of const): integer;
 var
-  Stmt: ISqlDBStatement;
+  stmt: ISqlDBStatement;
 begin
-  Stmt := NewThreadSafeStatementPrepared(aSql, {expectres=}false, true);
-  Stmt.Bind(Params);
-  Stmt.ExecutePrepared;
+  stmt := NewThreadSafeStatementPrepared(aSql, {expectres=}false, true);
+  stmt.Bind(Params);
+  stmt.ExecutePrepared;
   try
-    result := Stmt.UpdateCount;
+    result := stmt.UpdateCount;
   except // may occur e.g. for Firebird's CREATE DATABASE
     result := 0;
   end;
@@ -3349,7 +3356,7 @@ end;
 function TSqlDBConnectionProperties.PrepareInlined(const aSql: RawUtf8;
   ExpectResults: boolean): ISqlDBStatement;
 var
-  Query: ISqlDBStatement;
+  stmt: ISqlDBStatement;
   i: PtrInt;
   decoder: TExtractInlineParameters;
 begin
@@ -3358,28 +3365,29 @@ begin
     exit;
   // convert inlined :(1234): parameters into Values[] for Bind*() calls
   decoder.Parse(aSql);
-  Query := NewThreadSafeStatementPrepared(decoder.GenericSql, ExpectResults, true);
-  if Query = nil then
+  stmt := NewThreadSafeStatementPrepared(decoder.GenericSql, ExpectResults, true);
+  if stmt = nil then
     exit;
+  // bind the inlined parameters
   for i := 0 to decoder.Count - 1 do
     case decoder.Types[i] of
       sptNull:
-        Query.BindNull(i + 1);
+        stmt.BindNull(i + 1);
       sptInteger:
-        Query.Bind(i + 1, GetInt64(pointer(decoder.Values[i])));
+        stmt.Bind(i + 1, GetInt64(pointer(decoder.Values[i])));
       sptFloat:
-        Query.Bind(i + 1, GetExtended(pointer(decoder.Values[i])));
+        stmt.Bind(i + 1, GetExtended(pointer(decoder.Values[i])));
       sptText:
-        Query.BindTextU(i + 1, decoder.Values[i]);
+        stmt.BindTextU(i + 1, decoder.Values[i]);
       sptBlob:
         if decoder.Values[i] = '' then
-          Query.BindNull(i + 1)
+          stmt.BindNull(i + 1)
         else
-          Query.BindBlob(i + 1, pointer(decoder.Values[i]), length(decoder.Values[i]));
+          stmt.BindBlob(i + 1, pointer(decoder.Values[i]), length(decoder.Values[i]));
       sptDateTime:
-        Query.BindDateTime(i + 1, Iso8601ToDateTime(decoder.Values[i]));
+        stmt.BindDateTime(i + 1, Iso8601ToDateTime(decoder.Values[i]));
     end;
-  result := Query;
+  result := stmt;
 end;
 
 function TSqlDBConnectionProperties.PrepareInlined(const SqlFormat: RawUtf8;
@@ -3391,16 +3399,16 @@ end;
 function TSqlDBConnectionProperties.ExecuteInlined(const aSql: RawUtf8;
   ExpectResults: boolean): ISqlDBRows;
 var
-  Query: ISqlDBStatement;
+  stmt: ISqlDBStatement;
 begin
   result := nil; // returns nil interface on error
   if self = nil then
     exit;
-  Query := PrepareInlined(aSql, ExpectResults);
-  if Query = nil then
+  stmt := PrepareInlined(aSql, ExpectResults);
+  if stmt = nil then
     exit; // e.g. invalid aSql
-  Query.ExecutePrepared;
-  result := Query;
+  stmt.ExecutePrepared;
+  result := stmt;
 end;
 
 function TSqlDBConnectionProperties.ExecuteInlined(const SqlFormat: RawUtf8;
@@ -3559,7 +3567,7 @@ end;
 
 function TSqlDBConnectionProperties.IsCachable(P: PUtf8Char): boolean;
 var
-  NoWhere: boolean;
+  hasnowhereclause: boolean;
 begin
   // cachable if with ? parameter or SELECT without WHERE clause
   if (P <> nil) and
@@ -3567,8 +3575,8 @@ begin
   begin
     while P^ in [#1..' '] do
       inc(P);
-    NoWhere := IdemPChar(P, 'SELECT ');
-    if NoWhere or
+    hasnowhereclause := IdemPChar(P, 'SELECT ');
+    if hasnowhereclause or
        not (IdemPChar(P, 'CREATE ') or
             IdemPChar(P, 'ALTER ')) then
     begin
@@ -3588,11 +3596,11 @@ begin
           exit
         else if (P^ = ' ') and
                 IdemPChar(P + 1, 'WHERE ') then
-          NoWhere := false;
+          hasnowhereclause := false;
         inc(P);
       end;
     end;
-    result := NoWhere;
+    result := hasnowhereclause;
   end
   else
     result := false;
@@ -3641,8 +3649,8 @@ begin
   end;
 end;
 
-class function TSqlDBConnectionProperties.GetFieldORMDefinition(const Column:
-  TSqlDBColumnDefine): RawUtf8;
+class function TSqlDBConnectionProperties.GetFieldORMDefinition(
+  const Column: TSqlDBColumnDefine): RawUtf8;
 begin
   // 'Name: RawUtf8 index 20 read fName write fName;';
   with Column do
@@ -3848,20 +3856,20 @@ end;
 procedure TSqlDBConnectionProperties.GetFieldDefinitions(
   const aTableName: RawUtf8; out Fields: TRawUtf8DynArray; WithForeignKeys: boolean);
 var
-  F: TSqlDBColumnDefineDynArray;
-  Ref: RawUtf8;
+  f: TSqlDBColumnDefineDynArray;
+  ref: RawUtf8;
   i: integer;
 begin
-  GetFields(aTableName, F);
-  SetLength(Fields, length(F));
-  for i := 0 to high(F) do
+  GetFields(aTableName, f);
+  SetLength(Fields, length(f));
+  for i := 0 to high(f) do
   begin
-    Fields[i] := GetFieldDefinition(F[i]);
+    Fields[i] := GetFieldDefinition(f[i]);
     if WithForeignKeys then
     begin
-      Ref := GetForeignKey(aTableName, F[i].ColumnName);
-      if Ref <> '' then
-        Fields[i] := Fields[i] + ' % ' + Ref;
+      ref := GetForeignKey(aTableName, f[i].ColumnName);
+      if ref <> '' then
+        Fields[i] := Fields[i] + ' % ' + ref;
     end;
   end;
 end;
@@ -3869,14 +3877,14 @@ end;
 procedure TSqlDBConnectionProperties.GetFields(const aTableName: RawUtf8;
   out Fields: TSqlDBColumnDefineDynArray);
 var
-  SQL: RawUtf8;
+  sql: RawUtf8;
   n, i: integer;
-  F: TSqlDBColumnDefine;
-  FA: TDynArray;
+  f: TSqlDBColumnDefine;
+  fa: TDynArray;
 begin
-  FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
-  FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
-  FillCharFast(F, sizeof(F), 0);
+  fa.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
+  fa.Compare := SortDynArrayAnsiStringI; // fa.Find() case insensitive
+  FillCharFast(f, sizeof(f), 0);
   if fDbms = dSQLite then
   begin
     // SQLite3 has a specific PRAGMA metadata query
@@ -3885,11 +3893,11 @@ begin
         while Step do
         begin
           // cid=0,name=1,type=2,notnull=3,dflt_value=4,pk=5
-          F.ColumnName := ColumnUtf8(1);
-          F.ColumnTypeNative := ColumnUtf8(2);
-          F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative, 0);
-          F.ColumnIndexed := (ColumnInt(5) = 1); // by definition for SQLite3
-          FA.Add(F);
+          f.ColumnName := ColumnUtf8(1);
+          f.ColumnTypeNative := ColumnUtf8(2);
+          f.ColumnType := ColumnTypeNativeToDB(f.ColumnTypeNative, 0);
+          f.ColumnIndexed := (ColumnInt(5) = 1); // by definition for SQLite3
+          fa.Add(f);
         end;
     except
       on Exception do
@@ -3901,8 +3909,8 @@ begin
           with Execute('PRAGMA index_info(' + ColumnUtf8(1) + ')', []) do
             while Step do
             begin
-              F.ColumnName := ColumnUtf8(2); // seqno=0,cid=1,name=2
-              i := FA.Find(F);
+              f.ColumnName := ColumnUtf8(2); // seqno=0,cid=1,name=2
+              i := fa.Find(f);
               if i >= 0 then
                 Fields[i].ColumnIndexed := true;
             end;
@@ -3913,25 +3921,25 @@ begin
   end
   else
   begin
-    SQL := SqlGetField(aTableName);
-    if SQL = '' then
+    sql := SqlGetField(aTableName);
+    if sql = '' then
       exit;
-    with Execute(SQL, []) do
+    with Execute(sql, []) do
     begin
       while Step do
       begin
-        F.ColumnName := TrimU(ColumnUtf8(0));
-        F.ColumnTypeNative := TrimU(ColumnUtf8(1));
-        F.ColumnLength := ColumnInt(2);
-        F.ColumnPrecision := ColumnInt(3);
+        f.ColumnName := TrimU(ColumnUtf8(0));
+        f.ColumnTypeNative := TrimU(ColumnUtf8(1));
+        f.ColumnLength := ColumnInt(2);
+        f.ColumnPrecision := ColumnInt(3);
         if ColumnNull(4) then // e.g. for plain NUMERIC in Oracle
-          F.ColumnScale := -1
+          f.ColumnScale := -1
         else
-          F.ColumnScale := ColumnInt(4);
-        F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative, F.ColumnScale);
+          f.ColumnScale := ColumnInt(4);
+        f.ColumnType := ColumnTypeNativeToDB(f.ColumnTypeNative, f.ColumnScale);
         if ColumnInt(5) > 0 then
-          F.ColumnIndexed := true;
-        FA.Add(F);
+          f.ColumnIndexed := true;
+        fa.Add(f);
       end;
       ReleaseRows;
     end;
@@ -3942,28 +3950,28 @@ end;
 procedure TSqlDBConnectionProperties.GetIndexes(const aTableName: RawUtf8;
   out Indexes: TSqlDBIndexDefineDynArray);
 var
-  SQL: RawUtf8;
+  sql: RawUtf8;
   n: integer;
-  F: TSqlDBIndexDefine;
-  FA: TDynArray;
+  f: TSqlDBIndexDefine;
+  fa: TDynArray;
 begin
-  SQL := SqlGetIndex(aTableName);
-  if SQL = '' then
+  sql := SqlGetIndex(aTableName);
+  if sql = '' then
     exit;
-  FA.Init(TypeInfo(TSqlDBIndexDefineDynArray), Indexes, @n);
-  with Execute(SQL, []) do
+  fa.Init(TypeInfo(TSqlDBIndexDefineDynArray), Indexes, @n);
+  with Execute(sql, []) do
   begin
     while Step do
     begin
-      F.IndexName := TrimU(ColumnUtf8(0));
-      F.IsUnique := ColumnInt(1) > 0;
-      F.TypeDesc := TrimU(ColumnUtf8(2));
-      F.IsPrimaryKey := ColumnInt(3) > 0;
-      F.IsUniqueConstraint := ColumnInt(4) > 0;
-      F.Filter := TrimU(ColumnUtf8(5));
-      F.KeyColumns := TrimU(ColumnUtf8(6));
-      F.IncludedColumns := TrimU(ColumnUtf8(7));
-      FA.Add(F);
+      f.IndexName := TrimU(ColumnUtf8(0));
+      f.IsUnique := ColumnInt(1) > 0;
+      f.TypeDesc := TrimU(ColumnUtf8(2));
+      f.IsPrimaryKey := ColumnInt(3) > 0;
+      f.IsUniqueConstraint := ColumnInt(4) > 0;
+      f.Filter := TrimU(ColumnUtf8(5));
+      f.KeyColumns := TrimU(ColumnUtf8(6));
+      f.IncludedColumns := TrimU(ColumnUtf8(7));
+      fa.Add(f);
     end;
     ReleaseRows;
   end;
@@ -3972,13 +3980,13 @@ end;
 
 procedure TSqlDBConnectionProperties.GetProcedureNames(out Procedures: TRawUtf8DynArray);
 var
-  SQL: RawUtf8;
+  sql: RawUtf8;
   count: integer;
 begin
-  SQL := SqlGetProcedure;
-  if SQL <> '' then
+  sql := SqlGetProcedure;
+  if sql <> '' then
   try
-    with Execute(SQL, []) do
+    with Execute(sql, []) do
     begin
       count := 0;
       while Step do
@@ -3988,46 +3996,46 @@ begin
     end;
   except
     on Exception do
-      SetLength(Procedures, 0); // if the supplied SQL query is wrong, just ignore
+      SetLength(Procedures, 0); // if the supplied sql query is wrong, just ignore
   end;
 end;
 
 procedure TSqlDBConnectionProperties.GetProcedureParameters(
   const aProcName: RawUtf8; out Parameters: TSqlDBProcColumnDefineDynArray);
 var
-  SQL: RawUtf8;
+  sql: RawUtf8;
   n: integer;
-  F: TSqlDBProcColumnDefine;
-  FA: TDynArray;
+  f: TSqlDBProcColumnDefine;
+  fa: TDynArray;
 begin
-  FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Parameters, @n);
-  FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
-  FillcharFast(F, sizeof(F), 0);
-  SQL := SqlGetParameter(aProcName);
-  if SQL = '' then
+  fa.Init(TypeInfo(TSqlDBColumnDefineDynArray), Parameters, @n);
+  fa.Compare := SortDynArrayAnsiStringI; // fa.Find() case insensitive
+  FillcharFast(f, sizeof(f), 0);
+  sql := SqlGetParameter(aProcName);
+  if sql = '' then
     exit;
-  with Execute(SQL, []) do
+  with Execute(sql, []) do
   begin
     while Step do
     begin
-      F.ColumnName := TrimU(ColumnUtf8(0));
-      F.ColumnTypeNative := TrimU(ColumnUtf8(1));
-      F.ColumnLength := ColumnInt(2);
-      F.ColumnPrecision := ColumnInt(3);
+      f.ColumnName := TrimU(ColumnUtf8(0));
+      f.ColumnTypeNative := TrimU(ColumnUtf8(1));
+      f.ColumnLength := ColumnInt(2);
+      f.ColumnPrecision := ColumnInt(3);
       if ColumnNull(4) then // e.g. for plain NUMERIC in Oracle
-        F.ColumnScale := -1
+        f.ColumnScale := -1
       else
-        F.ColumnScale := ColumnInt(4);
-      F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative, F.ColumnScale);
+        f.ColumnScale := ColumnInt(4);
+      f.ColumnType := ColumnTypeNativeToDB(f.ColumnTypeNative, f.ColumnScale);
       case FindCsvIndex('IN,OUT,INOUT', ColumnUtf8(5), ',', false) of
         0:
-          F.ColumnParamType := paramIn;
+          f.ColumnParamType := paramIn;
         2:
-          F.ColumnParamType := paramInOut;
+          f.ColumnParamType := paramInOut;
       else // any other is assumed as out
-        F.ColumnParamType := paramOut;
+        f.ColumnParamType := paramOut;
       end;
-      FA.Add(F);
+      fa.Add(f);
     end;
     ReleaseRows;
   end;
@@ -4036,16 +4044,16 @@ end;
 
 procedure TSqlDBConnectionProperties.GetTableNames(out Tables: TRawUtf8DynArray);
 var
-  SQL, table, checkschema: RawUtf8;
+  sql, table, checkschema: RawUtf8;
   count: integer;
 begin
-  SQL := SqlGetTableNames;
-  if SQL <> '' then
+  sql := SqlGetTableNames;
+  if sql <> '' then
   try
     if FilterTableViewSchemaName and
        (fForcedSchemaName <> '') then
       checkschema := UpperCase(fForcedSchemaName) + '.';
-    with Execute(SQL, []) do
+    with Execute(sql, []) do
     begin
       count := 0;
       while Step do
@@ -4060,22 +4068,22 @@ begin
     end;
   except
     on Exception do
-      SetLength(Tables, 0); // if the supplied SQL query is wrong, just ignore
+      SetLength(Tables, 0); // if the supplied sql query is wrong, just ignore
   end;
 end;
 
 procedure TSqlDBConnectionProperties.GetViewNames(out Views: TRawUtf8DynArray);
 var
-  SQL, table, checkschema: RawUtf8;
+  sql, table, checkschema: RawUtf8;
   count: integer;
 begin
-  SQL := SqlGetViewNames;
-  if SQL <> '' then
+  sql := SqlGetViewNames;
+  if sql <> '' then
   try
     if FilterTableViewSchemaName and
        (fForcedSchemaName <> '') then
       checkschema := UpperCase(fForcedSchemaName) + '.';
-    with Execute(SQL, []) do
+    with Execute(sql, []) do
     begin
       count := 0;
       while Step do
@@ -4090,12 +4098,12 @@ begin
     end;
   except
     on Exception do
-      SetLength(Views, 0); // if the supplied SQL query is wrong, just ignore
+      SetLength(Views, 0); // if the supplied sql query is wrong, just ignore
   end;
 end;
 
-procedure TSqlDBConnectionProperties.SqlSplitTableName(const aTableName: RawUtf8;
-  out Owner, Table: RawUtf8);
+procedure TSqlDBConnectionProperties.SqlSplitTableName(
+  const aTableName: RawUtf8; out Owner, Table: RawUtf8);
 begin
   case fDbms of
     dSQLite:
@@ -4123,13 +4131,13 @@ end;
 procedure TSqlDBConnectionProperties.SqlSplitProcedureName(
   const aProcName: RawUtf8; out Owner, package, ProcName: RawUtf8);
 var
-  lOccur, i: integer;
+  dotcount, i: PtrInt;
 begin
-  lOccur := 0;
+  dotcount := 0;
   for i := 1 to length(aProcName) do
     if aProcName[i] = '.' then
-      inc(lOccur);
-  if lOccur = 0 then
+      inc(dotcount);
+  if dotcount = 0 then
   begin
     ProcName := aProcName;
     SetSchemaNameToOwner(Owner);
@@ -4142,7 +4150,7 @@ begin
     dFirebird:
       begin
         // Firebird 3 has packages
-        if lOccur = 2 then
+        if dotcount = 2 then
         begin
           // OWNER.PACKAGE.PROCNAME
           Split(aProcName, '.', Owner, package);
@@ -4170,7 +4178,8 @@ begin
   end;
 end;
 
-function TSqlDBConnectionProperties.SqlFullTableName(const aTableName: RawUtf8): RawUtf8;
+function TSqlDBConnectionProperties.SqlFullTableName(
+  const aTableName: RawUtf8): RawUtf8;
 begin
   if (aTableName <> '') and
      (fForcedSchemaName <> '') and
@@ -4180,15 +4189,15 @@ begin
     result := aTableName;
 end;
 
-function TSqlDBConnectionProperties.SqlGetField(const aTableName: RawUtf8): RawUtf8;
+function TSqlDBConnectionProperties.SqlGetField(
+  const aTableName: RawUtf8): RawUtf8;
 var
-  Owner, Table: RawUtf8;
-  FMT: RawUtf8;
+  owner, table, fmt: RawUtf8;
 begin
   result := '';
   case GetDbms of
     dOracle:
-      FMT :=
+      fmt :=
         'select c.column_name, c.data_type, c.data_length, c.data_precision, c.data_scale, ' +
         ' (select count(*) from sys.all_indexes a, sys.all_ind_columns b' +
         '  where a.table_owner=c.owner and a.table_name=c.table_name and b.column_name=c.column_name' +
@@ -4199,7 +4208,7 @@ begin
     dMSSQL,
     dMySQL,
     dPostgreSQL:
-      FMT :=
+      fmt :=
         'select COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION,' +
         ' NUMERIC_SCALE, 0 INDEX_COUNT' + // INDEX_COUNT=0 here (done via OleDB)
         ' from INFORMATION_SCHEMA.COLUMNS' +
@@ -4228,19 +4237,19 @@ begin
   else
     exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver
   end;
-  SqlSplitTableName(aTableName, Owner, Table);
-  FormatUtf8(FMT, [UpperCase(Owner), UpperCase(Table)], result);
+  SqlSplitTableName(aTableName, owner, table);
+  FormatUtf8(fmt, [UpperCase(owner), UpperCase(table)], result);
 end;
 
 function TSqlDBConnectionProperties.SqlGetIndex(const aTableName: RawUtf8): RawUtf8;
 var
-  Owner, Table: RawUtf8;
-  FMT: RawUtf8;
+  owner, table: RawUtf8;
+  fmt: RawUtf8;
 begin
   result := '';
   case GetDbms of
     dOracle:
-      FMT :=
+      fmt :=
         'select  index_name, decode(max(uniqueness),''NONUNIQUE'',0,1) as is_unique, ' +
         ' max(index_type) as type_desc, 0 as is_primary_key, 0 as unique_constraint, ' +
         ' cast(null as varchar(100)) as index_filter, ' +
@@ -4253,7 +4262,7 @@ begin
         ') start with rn = 1 connect by prior rn = rn - 1 and prior index_name = index_name ' +
         'group by index_name order by index_name';
     dMSSQL:
-      FMT :=
+      fmt :=
         'select i.name as index_name, i.is_unique, i.type_desc, is_primary_key, is_unique_constraint, ' +
         '  i.filter_definition as index_filter, key_columns, included_columns as included_columns, ' +
         '  t.name as table_name ' + 'from ' +
@@ -4271,7 +4280,7 @@ begin
         '   ),1,1,'''') as included_columns) AS ic ' +
         'where t.type = ''U'' and t.name like ''%''';
     dFirebird:
-      FMT :=
+      fmt :=
         'select i.rdb$index_name, i.rdb$unique_flag, i.rdb$index_type, case rc.rdb$constraint_type ' +
         ' when ''PRIMARY KEY'' then 1 else 0 end as is_primary_key, 0 as unique_constraint, ' +
         ' null as index_filter, (select list(trim(rdb$field_name), '', '') from ' +
@@ -4285,25 +4294,25 @@ begin
   else
     exit; // others (e.g. dMySQL or dDB2) will retrieve info from (ODBC) driver
   end;
-  Split(aTableName, '.', Owner, Table);
-  if Table = '' then
+  Split(aTableName, '.', owner, table);
+  if table = '' then
   begin
-    Table := Owner;
-    Owner := UserID;
+    table := owner;
+    owner := UserID;
   end;
-  FormatUtf8(FMT, [UpperCase(Table)], result);
+  FormatUtf8(fmt, [UpperCase(table)], result);
 end;
 
 function TSqlDBConnectionProperties.SqlGetParameter(const aProcName: RawUtf8): RawUtf8;
 var
-  Owner, package, Proc: RawUtf8;
-  FMT: RawUtf8;
+  owner, package, proc: RawUtf8;
+  fmt: RawUtf8;
 begin
   result := '';
-  SqlSplitProcedureName(aProcName, Owner, package, Proc);
+  SqlSplitProcedureName(aProcName, owner, package, proc);
   case GetDbms of
     dOracle:
-      FMT :=
+      fmt :=
         'select a.argument_name, a.data_type, a.char_length, a.data_precision, a.data_scale, a.in_out ' +
         'from   sys.all_arguments a ' + 'where  a.owner like ''%''' +
         '  and  a.package_name like ''' + UpperCase(package) + '''' +
@@ -4311,7 +4320,7 @@ begin
     dMSSQL,
     dMySQL,
     dPostgreSQL:
-      FMT :=
+      fmt :=
         'select PARAMETER_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, PARAMETER_MODE ' +
         'from INFORMATION_SCHEMA.PARAMETERS ' +
         'where UPPER(SPECIFIC_SCHEMA) = ''%'' and UPPER(SPECIFIC_NAME) = ''%''' +
@@ -4325,7 +4334,7 @@ begin
             ' case a.rdb$parameter_type when 0 then ''IN'' else ''OUT'' end ' +
             'from rdb$procedure_parameters a, rdb$fields b ' +
             'where b.rdb$field_name = a.rdb$field_source and a.rdb$procedure_name = ''' +
-            UpperCase(Proc) + ''' ' + 'order by a.rdb$parameter_number'
+            UpperCase(proc) + ''' ' + 'order by a.rdb$parameter_number'
         else
           result :=
             'select a.rdb$parameter_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
@@ -4334,7 +4343,7 @@ begin
             'from rdb$procedure_parameters a, rdb$fields b ' +
             'where b.rdb$field_name = a.rdb$field_source and a.rdb$package_name = ''' +
             UpperCase(package) + ''' ' + '  and a.rdb$procedure_name = ''' +
-            UpperCase(Proc) + ''' ' + 'order by a.rdb$parameter_number';
+            UpperCase(proc) + ''' ' + 'order by a.rdb$parameter_number';
         exit;
       end;
     dNexusDB:
@@ -4350,28 +4359,28 @@ begin
   else
     exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver
   end;
-  FormatUtf8(FMT, [UpperCase(Owner), UpperCase(Proc)], result);
+  FormatUtf8(fmt, [UpperCase(owner), UpperCase(proc)], result);
 end;
 
 function TSqlDBConnectionProperties.SqlGetProcedure: RawUtf8;
 var
-  FMT, Owner: RawUtf8;
+  fmt, owner: RawUtf8;
 begin
   result := '';
   case GetDbms of
     dOracle:
-      FMT := 'select' + '  case P.OBJECT_TYPE' +
+      fmt := 'select' + '  case P.OBJECT_TYPE' +
         '  when ''PACKAGE'' then P.OBJECT_NAME || ''.'' || P.PROCEDURE_NAME' +
         '  else P.OBJECT_NAME end NAME_ROUTINE ' + 'from SYS.ALL_PROCEDURES P '
-        + 'where P.OWNER = ''%'' and P.SUBPROGRAM_ID > 0 ' + 'order by NAME_ROUTINE';
+        + 'where P.owner = ''%'' and P.SUBPROGRAM_ID > 0 ' + 'order by NAME_ROUTINE';
     dMSSQL,
     dMySQL,
     dPostgreSQL:
-      FMT := 'select R.SPECIFIC_NAME NAME_ROUTINE ' +
+      fmt := 'select R.SPECIFIC_NAME NAME_ROUTINE ' +
         'from INFORMATION_SCHEMA.ROUTINES R ' +
         'where UPPER(R.SPECIFIC_SCHEMA) = ''%'' ' + 'order by NAME_ROUTINE';
     dFirebird:
-      FMT := 'select P.RDB$PROCEDURE_NAME NAME_ROUTINE ' +
+      fmt := 'select P.RDB$PROCEDURE_NAME NAME_ROUTINE ' +
         'from RDB$PROCEDURES P ' + 'where P.RDB$OWNER_NAME = ''%'' ' +
         'order by NAME_ROUTINE';
     dNexusDB:
@@ -4384,8 +4393,8 @@ begin
   else
     exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver
   end;
-  SetSchemaNameToOwner(Owner);
-  FormatUtf8(FMT, [UpperCase(Owner)], result);
+  SetSchemaNameToOwner(owner);
+  FormatUtf8(fmt, [UpperCase(owner)], result);
 end;
 
 function TSqlDBConnectionProperties.SqlGetTableNames: RawUtf8;
@@ -4444,8 +4453,8 @@ begin
   end;
 end;
 
-function TSqlDBConnectionProperties.SqlCreateDatabase(const aDatabaseName:
-  RawUtf8; aDefaultPageSize: integer): RawUtf8;
+function TSqlDBConnectionProperties.SqlCreateDatabase(
+  const aDatabaseName: RawUtf8; aDefaultPageSize: integer): RawUtf8;
 begin
   case GetDbms of
     dFirebird:
@@ -4462,8 +4471,8 @@ begin
   end;
 end;
 
-function TSqlDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
-  RawUtf8; aScale: integer): TSqlDBFieldType;
+function TSqlDBConnectionProperties.ColumnTypeNativeToDB(
+  const aNativeType: RawUtf8; aScale: integer): TSqlDBFieldType;
 
   function ColumnTypeNativeDefault: TSqlDBFieldType;
   const
@@ -4490,12 +4499,13 @@ function TSqlDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
       ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob,
       ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftNull);
   var
-    ndx: integer;
+    ndx: PtrInt;
   begin
     //assert(StrComp(PCHARS[DECIMAL],'DECIMAL')=0);
     ndx := IdemPPChar(pointer(aNativeType), @PCHARS);
     if (aScale = 0) and
-       (ndx in [DECIMAL, NUMERIC]) then
+       ((ndx = DECIMAL) or
+        (ndx = NUMERIC)) then
       result := ftInt64
     else
       result := Types[ndx]; // Types[-1]=ftUnknown
@@ -4600,7 +4610,7 @@ end;
 
 function TSqlDBConnectionProperties.SqlIso8601ToDate(const Iso8601: RawUtf8): RawUtf8;
 
-  function TrimTInIso: RawUtf8;
+  function DoTrimT: RawUtf8;
   begin
     result := Iso8601;
     if (length(result) > 10) and
@@ -4611,15 +4621,15 @@ function TSqlDBConnectionProperties.SqlIso8601ToDate(const Iso8601: RawUtf8): Ra
 begin
   case GetDbms of
     dSQLite:
-      result := TrimTInIso;
+      result := DoTrimT;
     dOracle:
-      result := 'to_date(''' + TrimTInIso + ''',''YYYY-MM-DD HH24:MI:SS'')';
+      result := 'to_date(''' + DoTrimT + ''',''YYYY-MM-DD HH24:MI:SS'')';
     dNexusDB:
       result := 'DATE ' + Iso8601;
     dDB2:
-      result := 'TIMESTAMP ''' + TrimTInIso + '''';
+      result := 'TIMESTAMP ''' + DoTrimT + '''';
     dPostgreSQL:
-      result := '''' + TrimTInIso + '''';
+      result := '''' + DoTrimT + '''';
   else
     result := '''' + Iso8601 + '''';
   end;
@@ -4634,9 +4644,9 @@ function TSqlDBConnectionProperties.SqlCreate(const aTableName: RawUtf8;
   const aFields: TSqlDBColumnCreateDynArray; aAddID: boolean): RawUtf8;
 var
   i: integer;
-  F: RawUtf8;
-  FieldID: TSqlDBColumnCreate;
-  AddPrimaryKey: RawUtf8;
+  f: RawUtf8;
+  col: TSqlDBColumnCreate;
+  addprimarykey: RawUtf8;
 begin
   // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
   result := '';
@@ -4644,22 +4654,22 @@ begin
     exit; // nothing to create
   if aAddID then
   begin
-    FieldID.DBType := ftInt64;
-    FieldID.Name := ID_TXT;
-    FieldID.Unique := true;
-    FieldID.NonNullable := true;
-    FieldID.PrimaryKey := true;
-    result := SqlFieldCreate(FieldID, AddPrimaryKey) + ',';
+    col.DBType := ftInt64;
+    col.Name := ID_TXT;
+    col.Unique := true;
+    col.NonNullable := true;
+    col.PrimaryKey := true;
+    result := SqlFieldCreate(col, addprimarykey) + ',';
   end;
   for i := 0 to high(aFields) do
   begin
-    F := SqlFieldCreate(aFields[i], AddPrimaryKey);
+    f := SqlFieldCreate(aFields[i], addprimarykey);
     if i <> high(aFields) then
-      F := F + ',';
-    result := result + F;
+      f := f + ',';
+    result := result + f;
   end;
-  if AddPrimaryKey <> '' then
-    result := result + ', PRIMARY KEY(' + AddPrimaryKey + ')';
+  if addprimarykey <> '' then
+    result := result + ', PRIMARY KEY(' + addprimarykey + ')';
   result := 'CREATE TABLE ' + aTableName + ' (' + result + ')';
   case GetDbms of
     dDB2:
@@ -4667,8 +4677,8 @@ begin
   end;
 end;
 
-function TSqlDBConnectionProperties.SqlFieldCreate(const aField:
-  TSqlDBColumnCreate; var aAddPrimaryKey: RawUtf8): RawUtf8;
+function TSqlDBConnectionProperties.SqlFieldCreate(
+  const aField: TSqlDBColumnCreate; var aAddPrimaryKey: RawUtf8): RawUtf8;
 begin
   if (aField.DBType = ftUtf8) and
      (cardinal(aField.Width - 1) < fSqlCreateFieldMax) then
@@ -4701,10 +4711,10 @@ end;
 function TSqlDBConnectionProperties.SqlAddColumn(const aTableName: RawUtf8;
   const aField: TSqlDBColumnCreate): RawUtf8;
 var
-  AddPrimaryKey: RawUtf8;
+  addprimarykey: RawUtf8;
 begin
-  FormatUtf8('ALTER TABLE % ADD %', [aTableName,
-    SqlFieldCreate(aField, AddPrimaryKey)], result);
+  FormatUtf8('ALTER TABLE % ADD %',
+    [aTableName, SqlFieldCreate(aField, addprimarykey)], result);
 end;
 
 function TSqlDBConnectionProperties.SqlAddIndex(const aTableName: RawUtf8;
@@ -4714,7 +4724,7 @@ const
   CREATNDXIFNE: array[boolean] of RawUtf8 = (
     '', 'IF NOT EXISTS ');
 var
-  IndexName, FieldsCsv, ColsDesc, Owner, Table: RawUtf8;
+  indexname, fieldscsv, coldesc, owner, table: RawUtf8;
 begin
   result := '';
   if (self = nil) or
@@ -4725,68 +4735,68 @@ begin
     result := 'UNIQUE ';
   if aIndexName = '' then
   begin
-    SqlSplitTableName(aTableName, Owner, Table);
-    if (Owner <> '') and
+    SqlSplitTableName(aTableName, owner, table);
+    if (owner <> '') and
        not (fDbms in [dMSSQL, dPostgreSQL, dMySQL, dFirebird, dDB2, dInformix]) then
       // some DB engines do not expect any schema in the index name
-      IndexName := Owner + '.';
-    FieldsCsv := RawUtf8ArrayToCsv(aFieldNames, '');
-    if length(FieldsCsv) + length(Table) > 27 then
+      indexname := owner + '.';
+    fieldscsv := RawUtf8ArrayToCsv(aFieldNames, '');
+    if length(fieldscsv) + length(table) > 27 then
       // sounds like if some DB limit the identifier length to 32 chars
-      IndexName := {%H-}IndexName + 'INDEX' + crc32cUtf8ToHex(Table) +
-        crc32cUtf8ToHex(FieldsCsv)
+      indexname := {%H-}indexname + 'INDEX' + crc32cUtf8ToHex(table) +
+        crc32cUtf8ToHex(fieldscsv)
     else
-      IndexName := IndexName + 'NDX' + Table + FieldsCsv;
+      indexname := indexname + 'NDX' + table + fieldscsv;
   end
   else
-    IndexName := aIndexName;
+    indexname := aIndexName;
   if aDescending then
     case DB_SQLDESENDINGINDEXPOS[GetDbms] of
       posGlobalBefore:
         result := result + 'DESC ';
       posWithColumn:
-        ColsDesc := RawUtf8ArrayToCsv(aFieldNames, ' DESC,') + ' DESC';
+        coldesc := RawUtf8ArrayToCsv(aFieldNames, ' DESC,') + ' DESC';
     end;
-  if {%H-}ColsDesc = '' then
-    ColsDesc := RawUtf8ArrayToCsv(aFieldNames, ',');
+  if {%H-}coldesc = '' then
+    coldesc := RawUtf8ArrayToCsv(aFieldNames, ',');
   result := FormatUtf8('CREATE %INDEX %% ON %(%)', [result,
     CREATNDXIFNE[GetDbms in DB_HANDLECREATEINDEXIFNOTEXISTS],
-    IndexName, aTableName, ColsDesc]);
+    indexname, aTableName, coldesc]);
 end;
 
 function TSqlDBConnectionProperties.SqlTableName(const aTableName: RawUtf8): RawUtf8;
 var
-  BeginQuoteChar, EndQuoteChar: RawUtf8;
-  UseQuote: boolean;
+  beginquote, endquote: RawUtf8;
+  needquote: boolean;
 begin
-  BeginQuoteChar := '"';
-  EndQuoteChar := '"';
-  UseQuote := PosExChar(' ', aTableName) > 0;
+  beginquote := '"';
+  endquote := '"';
+  needquote := PosExChar(' ', aTableName) > 0;
   case fDbms of
     dPostgresql:
       if PosExChar('.', aTableName) = 0 then
-        UseQuote := true; // quote if not schema.identifier format
+        needquote := true; // quote if not schema.identifier format
     dMySQL:
       begin
-        BeginQuoteChar := '`';  // backtick/grave accent
-        EndQuoteChar := '`';
+        beginquote := '`';  // backtick/grave accent
+        endquote := '`';
       end;
     dJet:
       begin  // note: dMSSQL may SET IDENTIFIER ON to use doublequotes
-        BeginQuoteChar := '[';
-        EndQuoteChar := ']';
+        beginquote := '[';
+        endquote := ']';
       end;
     dSQLite:
       begin
         if PosExChar('.', aTableName) > 0 then
-          UseQuote := true;
-        BeginQuoteChar := '`';  // backtick/grave accent
-        EndQuoteChar := '`';
+          needquote := true;
+        beginquote := '`';  // backtick/grave accent
+        endquote := '`';
       end;
   end;
-  if UseQuote and
-     (PosEx(BeginQuoteChar, aTableName) = 0) then
-    result := BeginQuoteChar + aTableName + EndQuoteChar
+  if needquote and
+     (PosEx(beginquote, aTableName) = 0) then
+    result := beginquote + aTableName + endquote
   else
     result := aTableName;
 end;
@@ -4794,19 +4804,19 @@ end;
 procedure TSqlDBConnectionProperties.GetIndexesAndSetFieldsColumnIndexed(
   const aTableName: RawUtf8; var Fields: TSqlDBColumnDefineDynArray);
 var
-  i, j: integer;
-  ColName: RawUtf8;
-  Indexes: TSqlDBIndexDefineDynArray;
+  i, j: PtrInt;
+  colname: RawUtf8;
+  indexes: TSqlDBIndexDefineDynArray;
 begin
   if Fields = nil then
     exit;
-  GetIndexes(aTableName, Indexes);
-  for i := 0 to high(Indexes) do
+  GetIndexes(aTableName, indexes);
+  for i := 0 to high(indexes) do
   begin
-    ColName := TrimU(GetCsvItem(pointer(Indexes[i].KeyColumns), 0));
-    if ColName <> '' then
+    colname := TrimU(GetCsvItem(pointer(indexes[i].KeyColumns), 0));
+    if colname <> '' then
       for j := 0 to high(Fields) do
-        if IdemPropNameU(Fields[j].ColumnName, ColName) then
+        if IdemPropNameU(Fields[j].ColumnName, colname) then
         begin
           Fields[j].ColumnIndexed := true;
           break;
@@ -5002,8 +5012,8 @@ var
 var
   batchRowCount, paramCountLimit, currentRow, sqllen, p: integer;
   f, i: PtrInt;
-  Stmt: TSqlDBStatement;
-  Query: ISqlDBStatement;
+  stmt: TSqlDBStatement;
+  query: ISqlDBStatement;
 begin
   maxf := length(FieldNames);     // e.g. 2 fields
   if (Props = nil) or
@@ -5049,36 +5059,36 @@ begin
       sqlcached := false; // truncate number of parameters should not be unique
     end;
     if sqlcached then
-      Query := Props.NewThreadSafeStatementPrepared(sql, false)
+      query := Props.NewThreadSafeStatementPrepared(sql, false)
     else
     begin
-      Stmt := Props.NewThreadSafeStatement;
+      stmt := Props.NewThreadSafeStatement;
       try
-        Stmt.Prepare(sql, false);
-        Query := Stmt; // Stmt will be released by Query := nil below
+        stmt.Prepare(sql, false);
+        query := stmt; // stmt will be released by query := nil below
       except
         on Exception do
-          Stmt.Free; // avoid memory leak in case of invalid sql statement
-        // exception leaves Query=nil to raise exception
+          stmt.Free; // avoid memory leak in case of invalid sql statement
+        // exception leaves query=nil to raise exception
       end;
     end;
-    if Query = nil then
+    if query = nil then
       raise ESqlDBException.CreateUtf8(
-        '%.MultipleValuesInsert: Query=nil for [%]', [self, sql]);
+        '%.MultipleValuesInsert: query=nil for [%]', [self, sql]);
     try
       p := 1;
       for i := 1 to prevrowcount do
       begin
         for f := 0 to maxf do
         begin
-          Query.Bind(p, FieldTypes[f], FieldValues[f, currentRow], false);
+          query.Bind(p, FieldTypes[f], FieldValues[f, currentRow], false);
           inc(p);
         end;
         inc(currentRow);
       end;
-      Query.ExecutePrepared;
+      query.ExecutePrepared;
     finally
-      Query := nil; // will release the uncached local Stmt, if applying
+      query := nil; // will release the uncached local stmt, if applying
     end;
   until currentRow = RowCount;
 end;
@@ -5230,13 +5240,13 @@ end;
 
 class function TSqlDBConnectionProperties.EngineName: RawUtf8;
 var
-  L: integer;
+  L: PtrInt;
 begin
   result := '';
   if self = nil then
     exit;
   ClassToText(self, result);
-  if IdemPChar(pointer(result), 'TSqlDB') then
+  if IdemPChar(pointer(result), 'TSQLDB') then
     Delete(result, 1, 6)
   else if result[1] = 'T' then
     Delete(result, 1, 1);
@@ -5266,10 +5276,10 @@ end;
 
 function TSqlDBConnectionProperties.GetDbmsName: RawUtf8;
 var
-  PS: PShortString;
+  ps: PShortString;
 begin
-  PS := ToText(GetDbms);
-  FastSetString(result, @PS^[2], ord(PS^[0]) - 1);
+  ps := ToText(GetDbms);
+  FastSetString(result, @ps^[2], ord(ps^[0]) - 1);
 end;
 
 function TSqlDBConnectionProperties.GetDatabaseNameSafe: RawUtf8;
@@ -5291,7 +5301,8 @@ begin
   ObjArrayAddOnce(GlobalDefinitions, TObject(self)); // TClass stored as TObject
 end;
 
-procedure TSqlDBConnectionProperties.DefinitionTo(Definition: TSynConnectionDefinition);
+procedure TSqlDBConnectionProperties.DefinitionTo(
+  Definition: TSynConnectionDefinition);
 begin
   if Definition = nil then
     exit;
@@ -5304,15 +5315,15 @@ end;
 
 function TSqlDBConnectionProperties.DefinitionToJson(Key: cardinal): RawUtf8;
 var
-  Definition: TSynConnectionDefinition;
+  def: TSynConnectionDefinition;
 begin
-  Definition := TSynConnectionDefinition.Create;
+  def := TSynConnectionDefinition.Create;
   try
-    Definition.Key := Key;
-    DefinitionTo(Definition);
-    result := Definition.SaveToJson;
+    def.Key := Key;
+    DefinitionTo(def);
+    result := def.SaveToJson;
   finally
-    Definition.Free;
+    def.Free;
   end;
 end;
 
@@ -5339,26 +5350,26 @@ end;
 class function TSqlDBConnectionProperties.CreateFrom(
   aDefinition: TSynConnectionDefinition): TSqlDBConnectionProperties;
 var
-  C: TSqlDBConnectionPropertiesClass;
+  c: TSqlDBConnectionPropertiesClass;
 begin
-  C := ClassFrom(aDefinition);
-  if C = nil then
+  c := ClassFrom(aDefinition);
+  if c = nil then
     raise ESqlDBException.CreateUtf8('%.CreateFrom: unknown % class - please ' +
       'add a reference to its implementation unit', [self, aDefinition.Kind]);
-  result := C.Create(aDefinition.ServerName, aDefinition.DatabaseName,
+  result := c.Create(aDefinition.ServerName, aDefinition.DatabaseName,
     aDefinition.User, aDefinition.PassWordPlain);
 end;
 
 class function TSqlDBConnectionProperties.CreateFromJson(
   const aJsonDefinition: RawUtf8; aKey: cardinal): TSqlDBConnectionProperties;
 var
-  Definition: TSynConnectionDefinition;
+  def: TSynConnectionDefinition;
 begin
-  Definition := TSynConnectionDefinition.CreateFromJson(aJsonDefinition, aKey);
+  def := TSynConnectionDefinition.CreateFromJson(aJsonDefinition, aKey);
   try
-    result := CreateFrom(Definition);
+    result := CreateFrom(def);
   finally
-    Definition.Free;
+    def.Free;
   end;
 end;
 
@@ -5456,9 +5467,11 @@ begin
                (PCardinal(VString)^ and $ffffff = JSON_BASE64_MAGIC_C));
 end;
 
-procedure TSqlDBStatement.Bind(const Params: array of const; IO: TSqlDBParamInOutType);
+procedure TSqlDBStatement.Bind(const Params: array of const;
+  IO: TSqlDBParamInOutType);
 var
-  i, c: integer;
+  i: PtrInt;
+  c: integer;
 begin
   for i := 1 to high(Params) + 1 do
     with Params[i - 1] do // bind parameter index starts at 1
@@ -6121,68 +6134,69 @@ begin
   end;
 end;
 
-function TSqlDBStatement.FetchAllAsJson(Expanded: boolean; ReturnedRowCount:
-  PPtrInt): RawUtf8;
+function TSqlDBStatement.FetchAllAsJson(
+  Expanded: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 var
-  Stream: TRawByteStringStream;
+  stream: TRawByteStringStream;
   RowCount: PtrInt;
 begin
-  Stream := TRawByteStringStream.Create;
+  stream := TRawByteStringStream.Create;
   try
-    RowCount := FetchAllToJson(Stream, Expanded);
+    RowCount := FetchAllToJson(stream, Expanded);
     if ReturnedRowCount <> nil then
       ReturnedRowCount^ := RowCount;
-    result := Stream.DataString;
+    result := stream.DataString;
   finally
-    Stream.Free;
+    stream.Free;
   end;
 end;
 
 procedure TSqlDBStatement.ColumnsToBinary(W: TBufferWriter; Null: pointer;
   const ColTypes: TSqlDBFieldTypeDynArray);
 var
-  F: integer;
-  VDouble: double;
-  VCurrency: currency absolute VDouble;
-  VDateTime: TDateTime absolute VDouble;
+  f: PtrInt;
+  vdouble: double;
+  vcurrency: currency absolute vdouble;
+  vdatetime: TDateTime absolute vdouble;
   ft: TSqlDBFieldType;
 begin
-  for F := 0 to length(ColTypes) - 1 do
-    if not GetBitPtr(Null, F) then
+  for f := 0 to length(ColTypes) - 1 do
+    if (Null = nil) or
+       not GetBitPtr(Null, f) then
     begin
-      ft := ColTypes[F];
+      ft := ColTypes[f];
       if ft < ftInt64 then
       begin
         // ftUnknown,ftNull
-        ft := ColumnType(F); // per-row column type (SQLite3 only)
+        ft := ColumnType(f); // per-row column type (SQLite3 only)
         W.Write1(ord(ft));
       end;
       case ft of
         ftInt64:
-          W.WriteVarInt64(ColumnInt(F));
+          W.WriteVarInt64(ColumnInt(f));
         ftDouble:
           begin
-            VDouble := ColumnDouble(F);
-            W.Write(@VDouble, sizeof(VDouble));
+            vdouble := ColumnDouble(f);
+            W.Write(@vdouble, sizeof(vdouble));
           end;
         ftCurrency:
           begin
-            VCurrency := ColumnCurrency(F);
-            W.Write(@VCurrency, sizeof(VCurrency));
+            vcurrency := ColumnCurrency(f);
+            W.Write(@vcurrency, sizeof(vcurrency));
           end;
         ftDate:
           begin
-            VDateTime := ColumnDateTime(F);
-            W.Write(@VDateTime, sizeof(VDateTime));
+            vdatetime := ColumnDateTime(f);
+            W.Write(@vdatetime, sizeof(vdatetime));
           end;
         ftUtf8:
-          W.Write(ColumnUtf8(F));
+          W.Write(ColumnUtf8(f));
         ftBlob:
-          W.Write(ColumnBlob(F));
+          W.Write(ColumnBlob(f));
       else
         raise ESqlDBException.CreateUtf8(
           '%.ColumnsToBinary: Invalid ColumnType(%)=%',
-          [self, ColumnName(F), ord(ft)]);
+          [self, ColumnName(f), ord(ft)]);
       end;
     end;
 end;
@@ -6190,13 +6204,13 @@ end;
 function TSqlDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
   DataRowPosition: PCardinalDynArray): cardinal;
 var
-  F, FMax, FieldSize, NullRowSize: integer;
-  StartPos: Int64;
+  f, fmax, fieldsize, nullrowlast: integer;
+  startpos: Int64;
   maxmem: PtrUInt;
   W: TBufferWriter;
   ft: TSqlDBFieldType;
-  ColTypes: TSqlDBFieldTypeDynArray;
-  Null: TByteDynArray;
+  coltypes: TSqlDBFieldTypeDynArray;
+  nullbits: TByteDynArray;
   tmp: TTextWriterStackBuffer;
 begin
   result := 0;
@@ -6204,30 +6218,29 @@ begin
   W := TBufferWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
     W.WriteVarUInt32(FETCHALLTOBINARY_MAGIC);
-    FMax := ColumnCount;
-    W.WriteVarUInt32(FMax);
-    if FMax > 0 then
+    fmax := ColumnCount;
+    W.WriteVarUInt32(fmax);
+    if fmax > 0 then
     begin
       // write column description
-      SetLength(ColTypes, FMax);
-      dec(FMax);
-      for F := 0 to FMax do
+      SetLength(coltypes, fmax);
+      dec(fmax);
+      for f := 0 to fmax do
       begin
-        W.Write(ColumnName(F));
-        ft := ColumnType(F, @FieldSize);
+        W.Write(ColumnName(f));
+        ft := ColumnType(f, @fieldsize);
         if (ft = ftUnknown) and
            (currentRow = 0) and
            Step then
-          ft := ColumnType(F, @FieldSize); // e.g. SQLite3 -> fetch and guess
-        ColTypes[F] := ft;
+          ft := ColumnType(f, @fieldsize); // e.g. SQLite3 -> fetch and guess
+        coltypes[f] := ft;
         W.Write1(ord(ft));
-        W.WriteVarUInt32(FieldSize);
+        W.WriteVarUInt32(fieldsize);
       end;
       // initialize null handling
-      SetLength(Null, (FMax shr 3) + 1);
-      NullRowSize := 0;
+      nullrowlast := 0;
       // save all data rows
-      StartPos := W.TotalWritten;
+      startpos := W.TotalWritten;
       if (currentRow = 1) or
          Step then // Step may already be done (e.g. TQuery.Open)
         repeat
@@ -6236,29 +6249,31 @@ begin
           begin
             if Length(DataRowPosition^) <= integer(result) then
               SetLength(DataRowPosition^, NextGrow(result));
-            DataRowPosition^[result] := W.TotalWritten - StartPos;
+            DataRowPosition^[result] := W.TotalWritten - startpos;
           end;
           // first write null columns flags
-          if NullRowSize > 0 then
+          if nullrowlast > 0 then
           begin
-            FillCharFast(Null[0], NullRowSize, 0);
-            NullRowSize := 0;
+            FillCharFast(nullbits[0], nullrowlast, 0);
+            nullrowlast := 0;
           end;
-          for F := 0 to FMax do
-            if ColumnNull(F) then
+          for f := 0 to fmax do
+            if ColumnNull(f) then
             begin
-              SetBitPtr(pointer(Null), F);
-              NullRowSize := (F shr 3) + 1;
+              if nullbits = nil then
+                SetLength(nullbits, (fmax shr 3) + 1);
+              SetBitPtr(pointer(nullbits), f);
+              nullrowlast := (f shr 3) + 1;
             end;
-          if NullRowSize > 0 then
+          if nullrowlast > 0 then
           begin
-            W.WriteVarUInt32(NullRowSize);
-            W.Write(pointer(Null), NullRowSize);
+            W.WriteVarUInt32(nullrowlast);
+            W.Write(pointer(nullbits), nullrowlast);
           end
           else
             W.Write1(0); // = W.WriteVarUInt32(0)
           // then write data values
-          ColumnsToBinary(W, pointer(Null), ColTypes);
+          ColumnsToBinary(W, pointer(nullbits), coltypes);
           inc(result);
           if (MaxRowCount > 0) and
              (result >= MaxRowCount) then
@@ -6390,9 +6405,9 @@ begin
   result := Self;
 end;
 
-function TSqlDBStatement.SqlLogBegin(level: TSynLogInfo): TSynLog;
+function TSqlDBStatement.SqlLogBegin(Level: TSynLogInfo): TSynLog;
 begin
-  if level = sllDB then // prepare
+  if Level = sllDB then // prepare
     fSqlLogTimer.Start
   else
     fSqlLogTimer.Resume;
@@ -6401,19 +6416,19 @@ begin
   {$else SYNDB_SILENCE}
   result := SynDBLog.Add;
   if result <> nil then
-    if level in result.Family.Level then
+    if Level in result.Family.Level then
     begin
-      fSqlLogLevel := level;
-      if level = sllSQL then
+      fSqlLogLevel := Level;
+      if Level = sllSQL then
         ComputeSqlWithInlinedParams;
     end
     else
-      result := nil; // fSqlLogLog=nil if this level is disabled
+      result := nil; // fSqlLogLog=nil if this Level is disabled
   fSqlLogLog := result;
   {$endif SYNDB_SILENCE}
 end;
 
-function TSqlDBStatement.SqlLogEnd(msg: PShortString): Int64;
+function TSqlDBStatement.SqlLogEnd(Msg: PShortString): Int64;
 {$ifndef SYNDB_SILENCE}
 var
   tmp: TShort16;
@@ -6429,21 +6444,21 @@ begin
   tmp[0] := #0;
   if fSqlLogLevel = sllSQL then
   begin
-    if msg = nil then
+    if Msg = nil then
     begin
       if not fExpectResults then
         FormatShort16(' wr=%', [UpdateCount], tmp);
-      msg := @tmp;
+      Msg := @tmp;
     end;
     fSqlLogLog.Log(fSqlLogLevel, 'ExecutePrepared %% %',
-      [fSqlLogTimer.Time, msg^, fSqlWithInlinedParams], self)
+      [fSqlLogTimer.Time, Msg^, fSqlWithInlinedParams], self)
   end
   else
   begin
-    if msg = nil then
-      msg := @tmp;
+    if Msg = nil then
+      Msg := @tmp;
     fSqlLogLog.Log(fSqlLogLevel, 'Prepare %% %',
-      [fSqlLogTimer.Stop, msg^, fSql], self);
+      [fSqlLogTimer.Stop, Msg^, fSql], self);
   end;
   result := fSqlLogTimer.LastTimeInMicroSec;
   fSqlLogLog := nil;
@@ -6625,7 +6640,7 @@ end;
 procedure TSqlDBStatement.RowDocVariant(out aDocument: variant;
   aOptions: TDocVariantOptions);
 var
-  n, F: integer;
+  n, F: PtrInt;
   names: TRawUtf8DynArray;
   values: TVariantDynArray;
 begin
@@ -6642,7 +6657,7 @@ end;
 
 procedure TSqlDBStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 var
-  L: integer;
+  L: PtrInt;
 begin
   Connection.InternalProcess(speActive);
   try
@@ -6808,7 +6823,7 @@ end;
 
 procedure TSqlDBConnection.Connect;
 var
-  i: integer;
+  i: PtrInt;
 begin
   inc(fTotalConnectionCount);
   InternalProcess(speConnected);
@@ -6832,17 +6847,17 @@ end;
 procedure TSqlDBConnection.Disconnect;
 var
   i: PtrInt;
-  Obj: PPointerArray;
+  obj: PPointerArray;
 begin
   InternalProcess(speDisconnected);
   if fCache <> nil then
   begin
     InternalProcess(speActive);
     try
-      Obj := fCache.ObjectPtr;
-      if Obj <> nil then
+      obj := fCache.ObjectPtr;
+      if obj <> nil then
         for i := 0 to fCache.Count - 1 do
-          TSqlDBStatement(Obj[i]).FRefCount := 0; // force clean release
+          TSqlDBStatement(obj[i]).FRefCount := 0; // force clean release
       FreeAndNilSafe(fCache); // release all cached statements
     finally
       InternalProcess(speNonActive);
@@ -6905,9 +6920,9 @@ end;
 
 function TSqlDBConnection.GetServerDateTime: TDateTime;
 var
-  Current: TDateTime;
+  current: TDateTime;
 begin
-  Current := NowUtc; // so won't conflict with any potential time zone change
+  current := NowUtc; // so won't conflict with any potential time zone change
   if (fServerTimestampOffset = 0) and
      (fProperties.fSqlGetServerTimestamp <> '') then
   begin
@@ -6915,13 +6930,13 @@ begin
       with Execute(fSqlGetServerTimestamp, []) do
       begin
         if Step then
-          fServerTimestampOffset := ColumnDateTime(0) - Current;
+          fServerTimestampOffset := ColumnDateTime(0) - current;
         ReleaseRows;
       end;
     if fServerTimestampOffset = 0 then
       fServerTimestampOffset := 0.000001; // request server only once
   end;
-  result := Current + fServerTimestampOffset;
+  result := current + fServerTimestampOffset;
 end;
 
 function TSqlDBConnection.GetLastErrorWasAboutConnection: boolean;
@@ -6936,33 +6951,33 @@ function TSqlDBConnection.NewStatementPrepared(const aSql: RawUtf8;
   ExpectResults: boolean; RaiseExceptionOnError: boolean;
   AllowReconnect: boolean): ISqlDBStatement;
 var
-  Stmt: TSqlDBStatement;
-  ToCache: boolean;
+  stmt: TSqlDBStatement;
+  tocache: boolean;
   ndx, altern: integer;
-  cachedSql: RawUtf8;
+  cachedsql: RawUtf8;
 
   procedure TryPrepare(doraise: boolean);
   var
-    Stmt: TSqlDBStatement;
+    stmt: TSqlDBStatement;
   begin
-    Stmt := nil;
+    stmt := nil;
     try
       InternalProcess(speActive);
       try
-        Stmt := NewStatement;
-        Stmt.Prepare(aSql, ExpectResults);
-        if ToCache then
+        stmt := NewStatement;
+        stmt.Prepare(aSql, ExpectResults);
+        if tocache then
         begin
           if fCache = nil then
             fCache := TRawUtf8List.CreateEx(
               [fObjectsOwned, fNoDuplicate, fCaseSensitive]);
-          if fCache.AddObject(cachedSql, Stmt) >= 0 then
-            Stmt._AddRef
+          if fCache.AddObject(cachedsql, stmt) >= 0 then
+            stmt._AddRef
           else // will be owned by fCache.Objects[]
             SynDBLog.Add.Log(sllWarning, 'NewStatementPrepared: unexpected ' +
-              'cache duplicate for %', [Stmt.SqlWithInlinedParams], self);
+              'cache duplicate for %', [stmt.SqlWithInlinedParams], self);
         end;
-        result := Stmt;
+        result := stmt;
       finally
         InternalProcess(speNonActive);
       end;
@@ -6972,9 +6987,9 @@ var
         {$ifndef SYNDB_SILENCE}
         with SynDBLog.Add do
           if [sllSQL, sllDB, sllException, sllError] * Family.Level <> [] then
-            LogLines(sllSQL, pointer(Stmt.SqlWithInlinedParams), self, '--');
+            LogLines(sllSQL, pointer(stmt.SqlWithInlinedParams), self, '--');
         {$endif SYNDB_SILENCE}
-        Stmt.Free;
+        stmt.Free;
         result := nil;
         StringToUtf8(E.Message, fErrorMessage);
         fErrorException := PPointer(E)^;
@@ -6991,48 +7006,48 @@ begin
   if length(aSql) < 5 then
     exit;
   // first check if could be retrieved from cache
-  cachedSql := aSql;
-  ToCache := fProperties.IsCachable(Pointer(aSql));
-  if ToCache and
+  cachedsql := aSql;
+  tocache := fProperties.IsCachable(Pointer(aSql));
+  if tocache and
      (fCache <> nil) then
   begin
-    ndx := fCache.IndexOf(cachedSql);
+    ndx := fCache.IndexOf(cachedsql);
     if ndx >= 0 then
     begin
-      Stmt := fCache.Objects[ndx];
-      if Stmt.RefCount = 1 then
+      stmt := fCache.Objects[ndx];
+      if stmt.RefCount = 1 then
       begin
         // ensure statement is not currently in use
-        result := Stmt; // acquire the statement
-        Stmt.Reset;
+        result := stmt; // acquire the statement
+        stmt.Reset;
         exit;
       end
       else
       begin
         // in use -> create cached alternatives
-        ToCache := false; // if all slots are used, won't cache this statement
+        tocache := false; // if all slots are used, won't cache this statement
         if fProperties.StatementCacheReplicates = 0 then
           SynDBLog.Add.Log(sllWarning,
             'NewStatementPrepared: cached statement still in use ' +
-            '-> you should release ISqlDBStatement ASAP [%]', [cachedSql], self)
+            '-> you should release ISqlDBStatement ASAP [%]', [cachedsql], self)
         else
           for altern := 1 to fProperties.StatementCacheReplicates do
           begin
-            cachedSql := aSql + RawUtf8(AnsiChar(altern)); // safe SQL duplicate
-            ndx := fCache.IndexOf(cachedSql);
+            cachedsql := aSql + RawUtf8(AnsiChar(altern)); // safe SQL duplicate
+            ndx := fCache.IndexOf(cachedsql);
             if ndx >= 0 then
             begin
-              Stmt := fCache.Objects[ndx];
-              if Stmt.RefCount = 1 then
+              stmt := fCache.Objects[ndx];
+              if stmt.RefCount = 1 then
               begin
-                result := Stmt;
-                Stmt.Reset;
+                result := stmt;
+                stmt.Reset;
                 exit;
               end;
             end
             else
             begin
-              ToCache := true; // cache the statement in this void slot
+              tocache := true; // cache the statement in this void slot
               break;
             end;
           end;
@@ -7098,62 +7113,62 @@ function TSqlDBConnection.NewTableFromRows(const TableName: RawUtf8;
   Rows: TSqlDBStatement; WithinTransaction: boolean;
   ColumnForcedTypes: TSqlDBFieldTypeDynArray): integer;
 var
-  Fields: TSqlDBColumnCreateDynArray;
-  aTableName, sql: RawUtf8;
-  Tables: TRawUtf8DynArray;
-  Ins: TSqlDBStatement;
-  i, n: integer;
+  fields: TSqlDBColumnCreateDynArray;
+  tableu, sql: RawUtf8;
+  tables: TRawUtf8DynArray;
+  stmt: TSqlDBStatement;
+  i, n: PtrInt;
 begin
   result := 0;
   if (self = nil) or
      (Rows = nil) or
      (Rows.ColumnCount = 0) then
     exit;
-  aTableName := Properties.SqlTableName(TableName);
+  tableu := Properties.SqlTableName(TableName);
   if WithinTransaction then
     StartTransaction; // MUCH faster within a transaction
   try
-    Ins := nil;
+    stmt := nil;
     InternalProcess(speActive);
     try
       while Rows.Step do
       begin
         // init when first row of data is available
-        if Ins = nil then
+        if stmt = nil then
         begin
-          sql := Rows.ColumnsToSqlInsert(aTableName, Fields);
-          n := length(Fields);
+          sql := Rows.ColumnsToSqlInsert(tableu, fields);
+          n := length(fields);
           if Length(ColumnForcedTypes) <> n then
           begin
             SetLength(ColumnForcedTypes, n);
             for i := 0 to n - 1 do
-              case Fields[i].DBType of
+              case fields[i].DBType of
                 ftUnknown:
                   ColumnForcedTypes[i] := ftInt64;
                 ftNull:
                   ColumnForcedTypes[i] := ftBlob; // assume NULL is a BLOB
               else
-                ColumnForcedTypes[i] := Fields[i].DBType;
+                ColumnForcedTypes[i] := fields[i].DBType;
               end;
           end;
-          Properties.GetTableNames(Tables);
-          if FindRawUtf8(Tables, TableName, false) < 0 then
+          Properties.GetTableNames(tables);
+          if FindRawUtf8(tables, TableName, false) < 0 then
             with Properties do
-              ExecuteNoResult(SqlCreate(aTableName, Fields, false), []);
-          Ins := NewStatement;
-          Ins.Prepare(sql, false);
+              ExecuteNoResult(SqlCreate(tableu, fields, false), []);
+          stmt := NewStatement;
+          stmt.Prepare(sql, false);
         end;
         Rows.ReleaseRows;
         // write row data
-        Ins.BindFromRows(ColumnForcedTypes, Rows);
-        Ins.ExecutePrepared;
-        Ins.Reset;
+        stmt.BindFromRows(ColumnForcedTypes, Rows);
+        stmt.ExecutePrepared;
+        stmt.Reset;
         inc(result);
       end;
       if WithinTransaction then
         Commit;
     finally
-      Ins.Free;
+      stmt.Free;
       InternalProcess(speNonActive);
     end;
   except
@@ -7188,8 +7203,8 @@ begin
   end;
 end;
 
-constructor TSqlDBConnectionPropertiesThreadSafe.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUtf8);
+constructor TSqlDBConnectionPropertiesThreadSafe.Create(
+  const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   fConnectionPool := TSynObjectListLocked.Create;
   fLatestConnectionRetrievedInPool := -1;
@@ -7519,25 +7534,25 @@ procedure TSqlDBStatementWithParams.BindArray(Param: integer;
   ParamType: TSqlDBFieldType; const Values: TRawUtf8DynArray; ValuesCount: integer);
 var
   i: PtrInt;
-  ChangeFirstChar: AnsiChar;
+  timeseparator: AnsiChar;
   p: PSqlDBParam;
 begin
   inherited; // raise an exception in case of invalid parameter
   if fConnection = nil then
-    ChangeFirstChar := 'T'
+    timeseparator := 'T'
   else
-    ChangeFirstChar := Connection.Properties.DateTimeFirstChar;
+    timeseparator := Connection.Properties.DateTimeFirstChar;
   p := CheckParam(Param, ParamType, paramIn);
   p^.VInt64 := ValuesCount;
   p^.VArray := Values; // immediate COW reference-counted assignment
   if (ParamType = ftDate) and
-     (ChangeFirstChar <> 'T') then
+     (timeseparator <> 'T') then
     for i := 0 to ValuesCount - 1 do // fix e.g. for PostgreSQL
       if (p^.VArray[i] <> '') and
          (p^.VArray[i][1] = '''') then
-        // not only replace 'T'->ChangeFirstChar, but force expanded format
+        // not only replace 'T'->timeseparator, but force expanded format
         DateTimeToIso8601(Iso8601ToDateTime(p^.VArray[i]),
-          {expanded=}true, ChangeFirstChar, {ms=}fForceDateWithMS, '''');
+          {expanded=}true, timeseparator, {ms=}fForceDateWithMS, '''');
   fParamsArrayCount := ValuesCount;
 end;
 
@@ -7548,7 +7563,7 @@ var
   StoreVoidStringAsNull: boolean;
 begin
   StoreVoidStringAsNull := (fConnection <> nil) and
-    fConnection.Properties.StoreVoidStringAsNull;
+                           fConnection.Properties.StoreVoidStringAsNull;
   with CheckParam(Param, ftUtf8, paramIn, length(Values))^ do
     for i := 0 to high(Values) do
       if StoreVoidStringAsNull and
@@ -7592,9 +7607,12 @@ end;
 procedure TSqlDBStatementWithParams.BindArrayRow(const aValues: array of const);
 var
   i: PtrInt;
+  StoreVoidStringAsNull: boolean;
 begin
   if length(aValues) <> fParamCount then
     raise ESqlDBException.CreateFmt('Invalid %.BindArrayRow call', [self]);
+  StoreVoidStringAsNull := (fConnection <> nil) and
+                           fConnection.Properties.StoreVoidStringAsNull;
   for i := 0 to high(aValues) do
     with fParams[i] do
     begin
@@ -7610,9 +7628,8 @@ begin
         VarRecToUtf8(aValues[i], VArray[fParamsArrayCount]);
         case VType of
           ftUtf8:
-            if (VArray[fParamsArrayCount] = '') and
-               (fConnection <> nil) and
-              fConnection.Properties.StoreVoidStringAsNull then
+            if StoreVoidStringAsNull and
+               (VArray[fParamsArrayCount] = '') then
               VArray[fParamsArrayCount] := 'null'
             else
               QuotedStr(VArray[fParamsArrayCount], '''', VArray[fParamsArrayCount]);

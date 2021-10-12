@@ -948,7 +948,7 @@ begin
       else
       begin
         if indicator <> 0 then
-          LogTruncatedColumn(fColumns[col]);
+          LogTruncatedColumn(self, fColumns[col]);
         V := @fRowBuffer[ColumnAttr + fRowFetchedCurrent * ColumnValueDBSize];
         case ColumnType of
           ftInt64:
@@ -1936,7 +1936,7 @@ begin
     0:
       exit; // OK
   else
-    LogTruncatedColumn(Column^);
+    LogTruncatedColumn(self, Column^);
   end;
 end;
 

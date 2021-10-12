@@ -857,7 +857,7 @@ begin
     stIsNull:
       result := nil;
     stTruncated:
-      LogTruncatedColumn(Column^);
+      LogTruncatedColumn(self, Column^);
   else
     LogStatusError(PColumnValue(result)^.Status, Column);
   end;
@@ -1168,7 +1168,7 @@ Write:    case ColumnType of
           WR.AddNull;
         stTruncated:
           begin
-            LogTruncatedColumn(fColumns[col]);
+            LogTruncatedColumn(self, fColumns[col]);
             goto Write;
           end;
       else
