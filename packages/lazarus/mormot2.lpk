@@ -8,7 +8,7 @@
       <SearchPaths>
         <IncludeFiles Value="../../src;../../src/core;../../src/net"/>
         <Libraries Value="../../static/$(TargetCPU)-$(TargetOS)"/>
-        <OtherUnitFiles Value="../../src/app;../../src/core;../../src/crypt;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/script"/>
+        <OtherUnitFiles Value="../../src/app;../../src/core;../../src/crypt;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/script;../../src/ui"/>
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
       <CodeGeneration>
@@ -32,20 +32,21 @@
         <CustomOptions Value="-dNOSYNDBZEOS
 -dNOSYNDBIBX
 -dFPCMM_REPORTMEMORYLEAKS
--dFPCMM_DEBUG"/>
-        <OtherDefines Count="5">
+-dFPCMM_SERVER"/>
+        <OtherDefines Count="6">
           <Define0 Value="NOSYNDBZEOS"/>
           <Define1 Value="FPCMM_REPORTMEMORYLEAKS"/>
           <Define2 Value="FPCMM_DEBUG"/>
           <Define3 Value="FPCMM_ASSUMEMULTITHREAD"/>
           <Define4 Value="NOSYNDBIBX"/>
+          <Define5 Value="FPCMM_SERVER"/>
         </OtherDefines>
       </Other>
     </CompilerOptions>
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Release="1"/>
-    <Files Count="95">
+    <Files Count="96">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -427,6 +428,10 @@
         <Filename Value="../../src/soa/mormot.soa.server.pas"/>
         <UnitName Value="mormot.soa.server"/>
       </Item95>
+      <Item96>
+        <Filename Value="../../src/ui/mormot.ui.rad.pas"/>
+        <UnitName Value="mormot.ui.rad"/>
+      </Item96>
     </Files>
     <UsageOptions>
       <IncludePath Value="$(PkgIncPath)"/>
