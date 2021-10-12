@@ -5946,7 +5946,7 @@ begin
     W := TBufferWriter.Create(TFakeWriterStream, Dest, 1 shl 30);
     try
       Len := save(Data, W, Info);
-      result := Dest + W.BufferPosition; // Dest was a 1GB temporary buffer :)
+      result := Dest + W.BufferPosition; // Dest as a 1GB temporary buffer :)
     finally
       W.Free;
     end;

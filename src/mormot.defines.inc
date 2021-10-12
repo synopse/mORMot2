@@ -133,6 +133,7 @@
   {$define NODELPHIASM}   // avoid e.g. low-level System.@LStrFromPCharLen calls
   {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
   {$define HASITERATORS}
+  {$define HASDBFTWIDE}
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
@@ -425,6 +426,7 @@
     {$if CompilerVersion > 18}
       {$define ISDELPHI2007ANDUP} // = Delphi 2007 or newer
       {$define HASITERATORS}
+      {$define HASDBFTWIDE}
     {$ifend}
     {$if CompilerVersion = 20}   // = Delphi 2009
       {$define ISDELPHI2009}     // to circumvent some specific bugs

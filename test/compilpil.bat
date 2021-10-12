@@ -12,7 +12,7 @@ if "%lib2%"==""   set lib2=d:\dev\lib2
 if "%bin%"==""    set bin=c:\temp\tempbuild
 if "%target%"=="" set target=win32
 
-set units=%lib2%\src\core;%lib2%\src\net;%lib2%\src\lib;%lib2%\src\db;%lib2%\src\rest;%lib2%\src\soa;%lib2%\src\crypt;%lib2%\src\script;%lib2%\src\orm;%lib2%\src\app
+set units=%lib2%\src\core;%lib2%\src\net;%lib2%\src\lib;%lib2%\src\db;%lib2%\src\rest;%lib2%\src\soa;%lib2%\src\crypt;%lib2%\src\script;%lib2%\src\orm;%lib2%\src\app;%lib2%\src\ui
 set sw=-B -Q -GD -R%lib2%\src -I%lib2%\src;%lib2%\src\core -U%units% -E%bin%\exe -N%bin%\dcu -NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;System.Win
 rem -O%lib2%\static\delphi 
 
