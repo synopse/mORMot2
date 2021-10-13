@@ -371,15 +371,22 @@ type
           - SizeOf(TBsonElementType) - SizeOf(TBsonObjectID)] of byte;
       {$ifdef fpc} {$pop} {$else} {$hints on} {$endif}
         VObjectID: TBsonObjectID);
-      betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimestamp,
-      betJSScope, betDecimal128:
+      betBinary,
+      betDoc,
+      betArray,
+      betRegEx,
+      betDeprecatedDbptr,
+      betTimestamp,
+      betJSScope,
+      betDecimal128:
         (
         /// store the raw binary content as a RawByteString (or TBsonDocument for
         // betDoc/betArray, i.e. the "int32 e_list #0" standard layout)
         // - you have to use RawByteString(VBlob) when accessing this field
         // - e.g. for betRegEx, it will contain raw [cstring cstring] content
         VBlob: pointer;);
-      betJS, betDeprecatedSymbol:
+      betJS,
+      betDeprecatedSymbol:
         (
         /// store here a RawUtf8 with the associated text
         // - you have to use RawUF8(VText) when accessing this field
@@ -542,19 +549,25 @@ type
     // - not all Kind are handled here, only any complex data
     Data: record
       case TBsonElementType of
-        betFloat, betBoolean, betInt32, betDateTime, betInt64:
+        betFloat,
+        betBoolean,
+        betInt32,
+        betDateTime,
+        betInt64:
           (
           /// this variable is not to be used directly, but for some internal
           // temporary storage, e.g. with FromVariant()
           // - use P*(Element)^ typecast instead
           InternalStorage: Int64;);
-        betString, betJS:
+        betString,
+        betJS:
           (
           /// points to the #0 ending string
           Text: PUtf8Char;
           /// number of bytes in Text (excluding trailing #0)
           TextLen: integer;);
-        betDoc, betArray:
+        betDoc,
+        betArray:
           (
           /// points to a "e_list #0" standard layout
           DocList: PByte;);
@@ -2187,7 +2200,9 @@ var
     inc(P, ord(P^ <> #0));
     Json := P;
     case kind of
-      betObjectID, betRegEx, betDecimal128:
+      betObjectID,
+      betRegEx,
+      betDecimal128:
         begin
           // see TBsonWriter.BsonWrite()
           bsonvalue.VType := VarType;
@@ -2669,9 +2684,11 @@ begin
       res.VDouble := unaligned(PDouble(Element)^);
     betString:
       FastSetString(RawUtf8(res.VAny), Data.Text, Data.TextLen);
-    betJS, betDeprecatedSymbol:
+    betJS,
+    betDeprecatedSymbol:
       FastSetString(RawUtf8(resBSON.VText), Data.Text, Data.TextLen);
-    betDoc, betArray:
+    betDoc,
+    betArray:
       if DocArrayConversion = asBsonVariant then
         SetString(TBsonDocument(resBSON.VBlob), PAnsiChar(Element), ElementBytes)
       else
@@ -2679,7 +2696,12 @@ begin
         BsonItemsToDocVariant(Kind, Data.DocList, TDocVariantData(result), DocArrayConversion);
         exit;
       end;
-    betBinary, betRegEx, betDeprecatedDbptr, betJSScope, betTimestamp, betDecimal128:
+    betBinary,
+    betRegEx,
+    betDeprecatedDbptr,
+    betJSScope,
+    betTimestamp,
+    betDecimal128:
       SetString(RawByteString(resBSON.VBlob), PAnsiChar(Element), ElementBytes);
     betObjectID:
       resBSON.VObjectID := PBsonObjectID(Element)^;
@@ -2789,13 +2811,16 @@ begin
   case integer(Kind) of
     ord(betFloat):
       W.AddDouble(unaligned(PDouble(Element)^));
-    ord(betString), ord(betJS), ord(betDeprecatedSymbol):
+    ord(betString),
+    ord(betJS),
+    ord(betDeprecatedSymbol):
       begin
         W.Add('"');
         W.AddJsonEscape(Data.Text, Data.TextLen);
         W.Add('"');
       end;
-    ord(betDoc), ord(betArray):
+    ord(betDoc),
+    ord(betArray):
       BsonListToJson(Data.DocList, Kind, W, Mode);
     ord(betObjectID):
       begin
@@ -2881,8 +2906,8 @@ regex:      W.AddShort(BSON_JSON_REGEX[0]);
     betMaxKey:
       W.AddShort(BSON_JSON_MAXKEY[Mode = modMongoShell]);
   else
-    raise EBsonException.CreateUtf8('TBsonElement.AddMongoJson: unexpected type %',
-      [integer(Kind)]);
+    raise EBsonException.CreateUtf8(
+      'TBsonElement.AddMongoJson: unexpected type %', [integer(Kind)]);
   end;
 end;
 
@@ -2910,7 +2935,8 @@ begin
   NameLen := length(aName);
   vt := v.VType;
   case vt of
-    0..varDate, varBoolean..high(ELEMKIND):
+    0..varDate,
+    varBoolean..high(ELEMKIND):
       begin
         // simple types
         Element := @Data.InternalStorage;
@@ -3007,7 +3033,8 @@ str:    Kind := betString;
           [ToText(Kind)^]);
     end
     else
-      raise EBsonException.CreateUtf8('TBsonElement.FromVariant(VType=%)', [v.VType]);
+      raise EBsonException.CreateUtf8(
+        'TBsonElement.FromVariant(VType=%)', [v.VType]);
   end;
 end;
 
@@ -3033,7 +3060,9 @@ begin
   // see http://bsonspec.org/#/specification
   Element := bson;
   case Kind of // handle variable-size storage
-    betString, betJS, betDeprecatedSymbol:
+    betString,
+    betJS,
+    betDeprecatedSymbol:
       begin
         // "\x02" e_name string
         ElementBytes := PInteger(bson)^ + sizeof(integer); // int32 (byte*) "\x00"
@@ -3041,7 +3070,8 @@ begin
         inc(bson, sizeof(integer));
         Data.Text := pointer(bson);
       end;
-    betDoc, betArray:
+    betDoc,
+    betArray:
       begin
         // "\x03" e_name document
         ElementBytes := PInteger(bson)^;
@@ -3087,6 +3117,8 @@ begin
 end;
 
 function TBsonElement.FromNext(var BSON: PByte): boolean;
+var
+  P: PUtf8Char;
 begin
   if BSON = nil then
   begin
@@ -3097,12 +3129,14 @@ begin
   case integer(Kind) of
     ord(betEOF):
       result := false;
-    ord(betFloat)..ord(betDecimal128), betMinKey, betMaxKey:
+    ord(betFloat)..ord(betDecimal128),
+    betMinKey,
+    betMaxKey:
       begin
-        inc(BSON);
-        Name := PUtf8Char(BSON);
-        NameLen := StrLen(PUtf8Char(BSON));
-        inc(BSON, NameLen + 1);
+        P := PUtf8Char(BSON) + 1;
+        Name := P;
+        NameLen := StrLen(P);
+        BSON := pointer(P + NameLen + 1);
         FromBson(BSON);
         if ElementBytes < 0 then
           raise EBsonException.CreateUtf8(
@@ -3431,10 +3465,16 @@ begin
       BsonWrite(name, value.VExtended^);
     vtVariant:
       BsonWriteVariant(name, value.VVariant^);
-    vtInt64{$ifdef FPC}, vtQWord{$endif}:
+    {$ifdef FPC} vtQWord, {$endif}
+    vtInt64:
       BsonWrite(name, value.VInt64^);
-    vtString, vtAnsiString, {$ifdef HASVARUSTRING}vtUnicodeString, {$endif}
-    vtPChar, vtChar, vtWideChar, vtWideString:
+    vtString,
+    vtAnsiString,
+    {$ifdef HASVARUSTRING} vtUnicodeString, {$endif}
+    vtPChar,
+    vtChar,
+    vtWideChar,
+    vtWideString:
       begin
         VarRecToTempUtf8(value, tmp);
         BsonWriteString(name, tmp.Text, tmp.Len);
@@ -3442,7 +3482,8 @@ begin
           RawUtf8(tmp.TempRawUtf8) := '';
       end;
   else
-    raise EBsonException.CreateUtf8('%.BsonWrite(TVarRec.VType=%)', [self, value.VType]);
+    raise EBsonException.CreateUtf8(
+      '%.BsonWrite(TVarRec.VType=%)', [self, value.VType]);
   end;
 end;
 
@@ -3473,7 +3514,8 @@ procedure TBsonWriter.BsonWriteVariant(const name: RawUtf8; const value: variant
           json := pointer(temp);
           BsonWriteFromJson(name, json, nil);
           if json = nil then
-            raise EBsonException.CreateUtf8('%.BsonWriteVariant(VType=%)', [self, VType]);
+            raise EBsonException.CreateUtf8(
+              '%.BsonWriteVariant(VType=%)', [self, VType]);
         end;
       end;
   end;
@@ -3483,7 +3525,8 @@ var
 begin
   with TVarData(value) do
     case VType of
-      varEmpty, varNull:
+      varEmpty,
+      varNull:
         BsonWrite(name, betNull);
       varSmallint:
         BsonWrite(name, VSmallInt);
@@ -3499,7 +3542,8 @@ begin
         BsonWrite(name, VBoolean);
       varInteger:
         BsonWrite(name, VInteger);
-      varWord64, varInt64:
+      varWord64,
+      varInt64:
         BsonWrite(name, VInt64);
       varSingle:
         BsonWrite(name, VSingle);
@@ -3537,7 +3581,8 @@ begin
   BsonDocumentBegin;
   if doc.VarType > varNull then // null,empty will write {}
     if doc.VarType <> DocVariantType.VarType then
-      raise EBsonException.CreateUtf8('%.BsonWriteDoc(VType=%)', [self, doc.VarType])
+      raise EBsonException.CreateUtf8(
+        '%.BsonWriteDoc(VType=%)', [self, doc.VarType])
     else
       for i := 0 to doc.Count - 1 do
       begin
@@ -3547,8 +3592,8 @@ begin
           UInt32ToUtf8(i, Name);
         BsonWriteVariant(Name, doc.Values[i]);
         if TotalWritten > BSON_MAXDOCUMENTSIZE then
-          raise EBsonException.CreateUtf8('%.BsonWriteDoc(size=%>max %)', [self,
-            TotalWritten, BSON_MAXDOCUMENTSIZE]);
+          raise EBsonException.CreateUtf8('%.BsonWriteDoc(size=%>max %)',
+            [self, TotalWritten, BSON_MAXDOCUMENTSIZE]);
       end;
   BsonDocumentEnd;
 end;
@@ -3784,8 +3829,8 @@ begin
       end;
     end;
   if TotalWritten > BSON_MAXDOCUMENTSIZE then
-    raise EBsonException.CreateUtf8('%.BsonWriteDoc(size=% > max=%)', [self,
-      TotalWritten, BSON_MAXDOCUMENTSIZE]);
+    raise EBsonException.CreateUtf8('%.BsonWriteDoc(size=% > max=%)',
+      [self, TotalWritten, BSON_MAXDOCUMENTSIZE]);
 end;
 
 function TBsonWriter.BsonWriteDocFromJson(Json: PUtf8Char; aEndOfObject:
@@ -3841,7 +3886,8 @@ begin
               exit; // invalid content
           until EndOfObject = '}';
       end;
-    'n', 'N':
+    'n',
+    'N':
       if IdemPChar(Json + 1, 'ULL') then
       begin
         // append null as {}

@@ -101,6 +101,7 @@ type
     fBatchWriter: TBsonWriter;
     fBatchIDs: TIDDynArray;
     fBatchIDsCount: integer;
+    fStorageTemp: PTextWriterStackBuffer;
     function EngineNextID: TID;
     function DocFromJson(const Json: RawUtf8; Occasion: TOrmOccasion;
       var Doc: TDocVariantData): TID;
@@ -399,6 +400,7 @@ begin
   inherited;
   FreeAndNilSafe(fBatchWriter);
   fEngineGenerator.Free;
+  Freemem(fStorageTemp);
   InternalLog('Destroy for % using %', [fStoredClass, Collection], sllInfo);
 end;
 
@@ -1149,7 +1151,8 @@ begin
       inc(result);
     end;
   end;
-  if (result = 0) and W.Expand then
+  if (result = 0) and
+     W.Expand then
   begin
     // we want the field names at least, even with no data
     W.Expand := false; //  {"fieldCount":2,"values":["col1","col2"]}
@@ -1491,7 +1494,7 @@ begin
             // e.g. SELECT Distinct(Age),max(RowID) FROM TableName GROUP BY Age
             ComputeAggregate
         else
-          // save rows as JSON from returned BSON
+        // save rows as JSON from returned BSON
         if ComputeQuery then
         begin
           if Stmt.HasSelectSubFields then
@@ -1505,9 +1508,11 @@ begin
           Res := fCollection.FindBson(Query, Projection, limit, Stmt.Offset);
           MS := TRawByteStringStream.Create;
           try
+            if fStorageTemp = nil then
+              Getmem(fStorageTemp, SizeOf(fStorageTemp^));
             W := fStoredClassRecordProps.CreateJsonWriter(MS,
               ForceAjax or (Owner = nil) or not Owner.Owner.NoAjaxJson,
-              withID, bits, 0);
+              withID, bits, {rowcounts=}0, 0, fStorageTemp);
             try
               ResCount := GetJsonValues(Res, extFieldNames, W);
               result := MS.DataString;

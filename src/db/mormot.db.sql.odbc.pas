@@ -1340,8 +1340,10 @@ begin
           F.ColumnLength := stmt.ColumnInt(6);
           F.ColumnScale := stmt.ColumnInt(8);
           F.ColumnPrecision := stmt.ColumnInt(9);
-          F.ColumnType := ODBCColumnToFieldType(datatype, F.ColumnPrecision, F.ColumnScale);
-          F.ColumnIndexed := (fDbms in [dFirebird, dDB2]) and IsRowID(pointer(F.ColumnName));
+          F.ColumnType := ODBCColumnToFieldType(
+            datatype, F.ColumnPrecision, F.ColumnScale);
+          F.ColumnIndexed := (fDbms in [dFirebird, dDB2]) and
+                             IsRowID(pointer(F.ColumnName));
           // ID UNIQUE field create an implicit index
           FA.Add(F);
         until not stmt.Step;
@@ -1355,8 +1357,8 @@ begin
       stmt := TSqlDBOdbcStatement.Create(MainConnection);
       try
         stmt.AllocStatement;
-        status := ODBC.StatisticsA(stmt.fStatement, nil, 0, pointer(schema), SQL_NTS,
-          pointer(table), SQL_NTS, SQL_INDEX_ALL, SQL_QUICK);
+        status := ODBC.StatisticsA(stmt.fStatement, nil, 0, pointer(schema),
+          SQL_NTS, pointer(table), SQL_NTS, SQL_INDEX_ALL, SQL_QUICK);
         if status <> SQL_SUCCESS then // e.g. driver does not support schema
           status := ODBC.StatisticsA(stmt.fStatement, nil, 0, nil, 0,
             pointer(table), SQL_NTS, SQL_INDEX_ALL, SQL_QUICK);
