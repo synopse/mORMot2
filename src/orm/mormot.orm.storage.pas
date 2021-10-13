@@ -2862,7 +2862,8 @@ begin
                 end
                 else
                   goto err;
-        opIsNull, opIsNotNull:
+        opIsNull,
+        opIsNotNull:
           if Stmt.Where[0].Field > 0 then
           begin
             Prop := fStoredClassRecordProps.Fields.List[Stmt.Where[0].Field - 1];
