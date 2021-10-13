@@ -3649,9 +3649,9 @@ begin
     if DocumentObjectID <> nil then
       DocumentObjectID^ := id;
   end
-  else if DocumentObjectID <> nil then
-    if not DocumentObjectID^.FromVariant(v^) then
-      DocumentObjectID^.Init;
+  else if (DocumentObjectID <> nil) and
+          not DocumentObjectID^.FromVariant(v^) then
+    DocumentObjectID^.Init;
   if oid <> nil then
     oid^ := v;
 end;

@@ -251,7 +251,7 @@ type
     Counter: TBson24;
     /// set all internal fields to zero
     procedure Init;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// ObjectID content be filled with some unique values
     // - this implementation is thread-safe
     procedure ComputeNew;
