@@ -289,20 +289,20 @@ implementation
 function InternalBcdToBuffer(const AValue: TBcd; out ADest: TBcdBuffer;
   var PBeg: PAnsiChar): integer;
 var
-  i, DecimalPos: integer;
-  P, Frac: PByte;
+  i, decpos: integer;
+  P, frac: PByte;
   PEnd: PAnsiChar;
 begin
   result := 0;
   if AValue.Precision = 0 then
     exit;
-  DecimalPos := AValue.Precision - (AValue.SignSpecialPlaces and $3F);
+  decpos := AValue.Precision - (AValue.SignSpecialPlaces and $3F);
   P := @ADest;
-  Frac := @AValue.Fraction;
+  frac := @AValue.Fraction;
   // convert TBcd digits into text
   for i := 0 to AValue.Precision - 1 do
   begin
-    if i = DecimalPos then
+    if i = decpos then
       if i = 0 then
       begin
         PWord(P)^ := ord('0') + ord('.') shl 8;
@@ -314,16 +314,16 @@ begin
         inc(P);
       end;
     if (i and 1) = 0 then
-      P^ := ((Frac^ and $F0) shr 4) + ord('0')
+      P^ := ((frac^ and $F0) shr 4) + ord('0')
     else
     begin
-      P^ := ((Frac^ and $0F)) + ord('0');
-      inc(Frac);
+      P^ := ((frac^ and $0F)) + ord('0');
+      inc(frac);
     end;
     inc(P);
   end;
   // remove trailing 0 after decimal
-  if AValue.Precision > DecimalPos then
+  if AValue.Precision > decpos then
   begin
     repeat
       dec(P)
@@ -346,7 +346,7 @@ end;
 
 procedure AddBcd(WR: TBaseWriter; const AValue: TBcd);
 var
-  len: integer;
+  len: PtrInt;
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
@@ -363,7 +363,7 @@ end;
 
 function BcdToCurr(const AValue: TBcd; var Curr: Currency): boolean;
 var
-  len: integer;
+  len: PtrInt;
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
@@ -381,7 +381,7 @@ end;
 
 procedure BcdToUtf8(const AValue: TBcd; var result: RawUtf8);
 var
-  len: integer;
+  len: PtrInt;
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
@@ -396,7 +396,7 @@ end;
 
 function BcdToString(const AValue: TBcd): string;
 var
-  len: integer;
+  len: PtrInt;
   PBeg: PAnsiChar;
   tmp: TBcdBuffer;
 begin
@@ -427,44 +427,46 @@ end;
 
 function TSqlDBDatasetStatementAbstract.ColumnBlob(Col: integer): RawByteString;
 var
-  Str: TStream;
+  strm: TStream;
+  f: TField;
 begin
   result := '';
   CheckCol(Col);
-  with fColumns[Col] do
-    if TField(ColumnAttr).IsNull then
-      exit
-    else if TField(ColumnAttr).IsBlob then
-    begin
-      Str := TField(ColumnAttr).DataSet.CreateBlobStream(
-        TField(ColumnAttr), bmRead);
-      try
-        if Str.Size > 0 then
-        begin
-          SetLength(result, Str.Size);
-          Str.Read(pointer(result)^, Str.Size);
-        end;
-      finally
-        Str.Free;
+  f := TField(fColumns[Col].ColumnAttr);
+  if f.IsNull then
+    exit;
+  if f.IsBlob then
+  begin
+    strm := f.DataSet.CreateBlobStream(f, bmRead);
+    try
+      if strm.Size > 0 then
+      begin
+        SetLength(result, strm.Size);
+        strm.Read(pointer(result)^, strm.Size);
       end;
-    end
-    else
-    begin
-      SetLength(result, TField(ColumnAttr).DataSize);
-      TField(ColumnAttr).GetData(pointer(result), {nativeformat=}true);
+    finally
+      strm.Free;
     end;
+  end
+  else
+  begin
+    SetLength(result, f.DataSize);
+    f.GetData(pointer(result), {nativeformat=}true);
+  end;
 end;
 
 function TSqlDBDatasetStatementAbstract.ColumnCurrency(Col: integer): currency;
+var
+  f: TField;
 begin
   CheckCol(Col);
-  with fColumns[Col] do
-    if TField(ColumnAttr).IsNull then
-      result := 0
-    else if TField(ColumnAttr).DataType in [ftBCD, ftFMTBcd] then
-      BCDToCurr(TField(ColumnAttr).AsBCD, result)
-    else
-      result := TField(ColumnAttr).AsCurrency;
+  f := TField(fColumns[Col].ColumnAttr);
+  if f.IsNull then
+    result := 0
+  else if f.DataType in [ftBCD, ftFMTBcd] then
+    BCDToCurr(f.AsBCD, result)
+  else
+    result := f.AsCurrency;
 end;
 
 function TSqlDBDatasetStatementAbstract.ColumnDateTime(Col: integer): TDateTime;
@@ -529,8 +531,8 @@ end;
 
 constructor TSqlDBDatasetStatementAbstract.Create(aConnection: TSqlDBConnection);
 begin
-  fForceUseWideString :=
-    (aConnection.Properties as TSqlDBDatasetConnectionProperties).ForceUseWideString;
+  fForceUseWideString := (aConnection.Properties
+    as TSqlDBDatasetConnectionProperties).ForceUseWideString;
   inherited Create(aConnection);
   try
     DatasetCreate;
@@ -549,24 +551,26 @@ end;
 procedure TSqlDBDatasetStatementAbstract.Prepare(const aSQL: RawUtf8;
   ExpectResults: boolean);
 var
-  oSQL: RawUtf8;
+  sqlu: RawUtf8;
 begin
   SQLLogBegin(sllDB);
   if fPrepared then
-    raise ESqlDBDataset.CreateUtf8('%.Prepare() shall be called once', [self]);
+    raise ESqlDBDataset.CreateUtf8(
+      '%.Prepare(%) shall be called once', [self, aSQL]);
   inherited Prepare(aSQL, ExpectResults); // connect if necessary
-  fPreparedParamsCount := ReplaceParamsByNames(aSQL, oSQL);
-  fPrepared := DatasetPrepare(Utf8ToString(oSQL));
+  fPreparedParamsCount := ReplaceParamsByNames(aSQL, sqlu);
+  fPrepared := DatasetPrepare(Utf8ToString(sqlu));
   SQLLogEnd;
   if not fPrepared then
-    raise ESqlDBDataset.CreateUtf8('%.DatasetPrepare not prepared', [self]);
+    raise ESqlDBDataset.CreateUtf8(
+      '%.Prepare: DatasetPrepare(%) failed', [self, sqlu]);
 end;
 
 procedure TSqlDBDatasetStatementAbstract.ExecutePrepared;
 var
-  i, p: integer;
-  lArrayIndex: integer;
-  Field: TField;
+  i, arrndx: integer;
+  p: PtrInt;
+  field: TField;
 begin
   SQLLogBegin(sllSQL);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
@@ -575,13 +579,13 @@ begin
     raise ESqlDBDataset.CreateUtf8(
       '%.ExecutePrepared expected % bound parameters, got %',
       [self, fPreparedParamsCount, fParamCount]);
-  lArrayIndex := -1; // either Bind() or BindArray() with no Array DML support
+  arrndx := -1; // either Bind() or BindArray() with no Array DML support
   repeat
     if (not fDatasetSupportBatchBinding) and
        (fParamsArrayCount > 0) then
-      inc(lArrayIndex); // enable BindArray() emulation
+      inc(arrndx); // enable BindArray() emulation
     for p := 0 to fParamCount - 1 do
-      DatasetBindSqlParam(lArrayIndex, p, fParams[p]);
+      DatasetBindSqlParam(arrndx, p, fParams[p]);
     // 2. Execute query (within a loop for BATCH mode)
     if fExpectResults then
     begin
@@ -592,15 +596,15 @@ begin
       fColumn.Capacity := fQuery.FieldCount;
       for i := 0 to fQuery.FieldCount - 1 do
       begin
-        Field := DatasetField(i);
+        field := DatasetField(i);
         with PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(
-              StringToUtf8(Field.FieldName)))^ do
+              StringToUtf8(field.FieldName)))^ do
         begin
-          ColumnAttr := PtrUInt(Field);
-          ColumnType := ColumnTypeNativeToDB(Field.DataType);
-          if Field.InheritsFrom(TLargeintField) then
+          ColumnAttr := PtrUInt(field);
+          ColumnType := ColumnTypeNativeToDB(field.DataType);
+          if field.InheritsFrom(TLargeintField) then
             ColumnValueDBType := IsTLargeIntField
-          else if Field.InheritsFrom(TWideStringField) then
+          else if field.InheritsFrom(TWideStringField) then
             ColumnValueDBType := IsTWideStringField
           else
             ColumnValueDBType := 0;
@@ -610,7 +614,7 @@ begin
     else
       DatasetExecSQL;
   until fDatasetSupportBatchBinding or
-        (lArrayIndex = fParamsArrayCount - 1);
+        (arrndx = fParamsArrayCount - 1);
   // 3. handle out parameters
   if fParamCount > 0 then
     if fParamsArrayCount > 0 then
@@ -654,8 +658,8 @@ begin
   inherited ReleaseRows;
 end;
 
-function TSqlDBDatasetStatementAbstract.SqlParamTypeToDBParamType(IO:
-  TSqlDBParamInOutType): TParamType;
+function TSqlDBDatasetStatementAbstract.SqlParamTypeToDBParamType(
+  IO: TSqlDBParamInOutType): TParamType;
 begin
   case IO of
     paramIn:
@@ -669,8 +673,8 @@ begin
   end;
 end;
 
-function TSqlDBDatasetStatementAbstract.ColumnTypeNativeToDB(aNativeType:
-  TFieldType): TSqlDBFieldType;
+function TSqlDBDatasetStatementAbstract.ColumnTypeNativeToDB(
+  aNativeType: TFieldType): TSqlDBFieldType;
 begin
   case aNativeType of
   {$ifdef UNICODE}
@@ -736,7 +740,7 @@ end;
 
 procedure TSqlDBDatasetStatementAbstract.ColumnsToJson(WR: TJsonWriter);
 var
-  col: integer;
+  col: PtrInt;
   f: TField;
   blob: RawByteString;
 begin
@@ -828,11 +832,11 @@ begin
         mormot.db.core.ftNull:
           begin
             P.Clear;
-          {$ifdef UNICODE}
+            {$ifdef UNICODE}
             P.AsBlob := nil; // avoid type errors when a blob field is adressed
-          {$else}
+            {$else}
             P.AsString := '';
-          {$endif UNICODE}
+            {$endif UNICODE}
           end;
         mormot.db.core.ftInt64:
           begin
@@ -840,9 +844,9 @@ begin
               I64 := GetInt64(pointer(VArray[aArrayIndex]))
             else
               I64 := VInt64;
-          {$ifdef UNICODE}
+            {$ifdef UNICODE}
             P.AsLargeInt := I64;
-          {$else}
+            {$else}
             if (PInt64Rec(@I64)^.Hi = 0) or
                (PInt64Rec(@I64)^.Hi = cardinal(-1)) then
               P.AsInteger := I64
@@ -851,7 +855,7 @@ begin
               P.AsFloat := I64
             else
               P.Value := I64;
-          {$endif UNICODE}
+            {$endif UNICODE}
           end;
         mormot.db.core.ftDouble:
           if aArrayIndex >= 0 then
@@ -914,40 +918,41 @@ end;
 procedure TSqlDBDatasetStatement.DataSetOutSqlParam(const aParamIndex: integer;
   var aParam: TSqlDBParam);
 var
-  Par: TParam;
+  par: TParam;
   {$ifdef UNICODE}
-  tmpBytes: TBytes;
+  tmp: TBytes;
   {$endif UNICODE}
 begin
-  Par := fQueryParams[aParamIndex];
+  par := fQueryParams[aParamIndex];
   case aParam.VType of
     mormot.db.core.ftInt64:
-    {$ifdef UNICODE}
-      aParam.VInt64 := Par.AsLargeInt;
-    {$else}
-      aParam.VInt64 := trunc(Par.AsFloat);
-    {$endif UNICODE}
+      {$ifdef UNICODE}
+      aParam.VInt64 := par.AsLargeInt;
+      {$else}
+      aParam.VInt64 := trunc(par.AsFloat);
+      {$endif UNICODE}
     mormot.db.core.ftDouble:
-      unaligned(PDouble(@aParam.VInt64)^) := Par.AsFloat;
+      unaligned(PDouble(@aParam.VInt64)^) := par.AsFloat;
     mormot.db.core.ftCurrency:
-      PCurrency(@aParam.VInt64)^ := Par.AsCurrency;
+      PCurrency(@aParam.VInt64)^ := par.AsCurrency;
     mormot.db.core.ftDate:
-      PDateTime(@aParam.VInt64)^ := Par.AsDateTime;
+      PDateTime(@aParam.VInt64)^ := par.AsDateTime;
     mormot.db.core.ftUtf8:
-      aParam.VData := StringToUtf8(Par.AsString);
+      aParam.VData := StringToUtf8(par.AsString);
     mormot.db.core.ftBlob:
       begin
-      {$ifdef UNICODE}
-        tmpBytes := Par.AsBlob;
-        SetString(aParam.VData, PAnsiChar(pointer(tmpBytes)), Length(tmpBytes));
-      {$else}
-        aParam.VData := Par.AsString;
-      {$endif UNICODE}
+        {$ifdef UNICODE}
+        tmp := par.AsBlob;
+        SetString(aParam.VData, PAnsiChar(pointer(tmp)), Length(tmp));
+        {$else}
+        aParam.VData := par.AsString;
+        {$endif UNICODE}
       end;
   end;
 end;
 
-procedure TSqlDBDatasetStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
+procedure TSqlDBDatasetStatement.Prepare(
+  const aSQL: RawUtf8; ExpectResults: boolean);
 begin
   inherited;
   if fPreparedParamsCount <> fQueryParams.Count then
