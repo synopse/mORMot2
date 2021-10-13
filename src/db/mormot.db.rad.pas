@@ -80,9 +80,6 @@ type
 
 {************ Database-Aware BCD Values Support }
 
-type
-  TBcd = FMTBcd.TBCD;
-
 /// append a TBcd value as text to the output buffer
 // - very optimized for speed
 procedure AddBcd(WR: TBaseWriter; const AValue: TBcd);

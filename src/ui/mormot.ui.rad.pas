@@ -33,9 +33,11 @@ uses
   mormot.db.core,
   mormot.db.rad,
   {$ifdef ISDELPHIXE2}
-  Data.DB;
+  Data.DB,
+  Data.FMTBcd;
   {$else}
-  DB;
+  DB,
+  FMTBcd;
   {$endif ISDELPHIXE2}
 
 
