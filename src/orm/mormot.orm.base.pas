@@ -3107,20 +3107,21 @@ type
     // - you can use TOrmProperties.FieldBitsFromCsv() or
     // TOrmProperties.FieldBitsFrom() to compute aFields
     function CreateJsonWriter(Json: TStream; Expand, withID: boolean;
-      const aFields: TFieldBits; KnownRowsCount: integer;
-      aBufSize: integer = 8192): TJsonSerializer; overload;
+      const aFields: TFieldBits; KnownRowsCount: integer; aBufSize: integer = 8192;
+      aStackBuffer: PTextWriterStackBuffer = nil): TJsonSerializer; overload;
     /// create a TJsonWriter, ready to be filled with TOrm.GetJsonValues(W)
     // - you can use TOrmProperties.FieldBitsFromCsv() or
     // TOrmProperties.FieldBitsFrom() to compute aFields
     function CreateJsonWriter(Json: TStream; Expand, withID: boolean;
       const aFields: TFieldIndexDynArray; KnownRowsCount: integer;
-      aBufSize: integer = 8192): TJsonSerializer; overload;
+      aBufSize: integer = 8192;
+      aStackBuffer: PTextWriterStackBuffer = nil): TJsonSerializer; overload;
     /// create a TJsonWriter, ready to be filled with TOrm.GetJsonValues(W)
     // - this overloaded method will call FieldBitsFromCsv(aFieldsCsv,bits,withID)
     // to retrieve the bits just like a SELECT (i.e. '*' for simple fields)
     function CreateJsonWriter(Json: TStream; Expand: boolean;
-      const aFieldsCsv: RawUtf8; KnownRowsCount: integer;
-      aBufSize: integer = 8192): TJsonSerializer; overload;
+      const aFieldsCsv: RawUtf8; KnownRowsCount: integer; aBufSize: integer = 8192;
+      aStackBuffer: PTextWriterStackBuffer = nil): TJsonSerializer; overload;
     /// set the W.ColNames[] array content + W.AddColumns
     procedure SetJsonWriterColumnNames(W: TJsonSerializer; KnownRowsCount: integer);
     /// save the TOrm RTTI into a binary header
@@ -11043,36 +11044,39 @@ begin
   W.AddColumns(KnownRowsCount);
 end;
 
-function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream;
-  Expand, withID: boolean; const aFields: TFieldBits;
-  KnownRowsCount, aBufSize: integer): TJsonSerializer;
+function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream; Expand,
+  withID: boolean; const aFields: TFieldBits; KnownRowsCount, aBufSize: integer;
+  aStackBuffer: PTextWriterStackBuffer): TJsonSerializer;
 begin
-  result := CreateJsonWriter(Json, Expand, withID,
-    FieldBitsToIndex(aFields, Fields.Count), KnownRowsCount, aBufSize);
+  result := CreateJsonWriter(Json, Expand, withID, FieldBitsToIndex(
+    aFields, Fields.Count), KnownRowsCount, aBufSize, aStackBuffer);
 end;
 
-function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream;
-  Expand, withID: boolean; const aFields: TFieldIndexDynArray;
-  KnownRowsCount, aBufSize: integer): TJsonSerializer;
+function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream; Expand,
+  withID: boolean; const aFields: TFieldIndexDynArray; KnownRowsCount,
+  aBufSize: integer; aStackBuffer: PTextWriterStackBuffer): TJsonSerializer;
 begin
   if (self = nil) or
      ((Fields.Count = 0) and not withID) then  // no data
     result := nil
   else
   begin
-    result := TJsonSerializer.Create(Json, Expand, withID, aFields, aBufSize);
+    result := TJsonSerializer.Create(
+      Json, Expand, withID, aFields, aBufSize, aStackBuffer);
     SetJsonWriterColumnNames(result, KnownRowsCount);
   end;
 end;
 
 function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream; Expand: boolean;
-  const aFieldsCsv: RawUtf8; KnownRowsCount, aBufSize: integer): TJsonSerializer;
+  const aFieldsCsv: RawUtf8; KnownRowsCount, aBufSize: integer;
+  aStackBuffer: PTextWriterStackBuffer): TJsonSerializer;
 var
   withID: boolean;
   bits: TFieldBits;
 begin
   FieldBitsFromCsv(aFieldsCsv, bits, withID);
-  result := CreateJsonWriter(Json, Expand, withID, bits, KnownRowsCount, aBufSize);
+  result := CreateJsonWriter(
+    Json, Expand, withID, bits, KnownRowsCount, aBufSize, aStackBuffer);
 end;
 
 function TOrmPropertiesAbstract.SaveSimpleFieldsFromJsonArray(var P: PUtf8Char;

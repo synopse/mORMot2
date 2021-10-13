@@ -411,7 +411,7 @@ type
     constructor Create(aServer: TRestServer; const aCall: TRestUriParams); virtual;
     /// finalize the execution context
     destructor Destroy; override;
-    /// validate mPost/mPut/mDelete action against those access rights
+    /// validate mPOST/mPUT/mDELETE action against those access rights
     // - used by TRestServerUriContext.ExecuteOrmWrite and
     // TRestServer.EngineBatchSend methods for proper security checks
     function CanExecuteOrmWrite(Method: TUriMethod;
@@ -3037,7 +3037,8 @@ begin
         end;
       amMainThread:
         BackgroundExecuteThreadMethod(method, nil);
-      amBackgroundThread, amBackgroundORMSharedThread:
+      amBackgroundThread,
+      amBackgroundORMSharedThread:
         begin
           if Thread = nil then
             Thread := Server.Run.NewBackgroundThreadMethod('% % %',
@@ -3421,7 +3422,7 @@ begin
           (Table = Server.fAuthUserClass) and
           (TableID = SessionUser) and
           (reUserCanChangeOwnPassword in Rights.AllowRemoteExecute)));
-    mDelete:
+    mDELETE:
       result := (Table <> nil) and
         (TableIndex in Rights.DELETE) and
         ((TableID > 0) or
@@ -3438,6 +3439,7 @@ procedure TRestServerUriContext.ExecuteOrmGet;
     W: TJsonSerializer;
     bits: TFieldBits;
     withid: boolean;
+    tmp: TTextWriterStackBuffer;
   begin
     // force plain standard JSON output for AJAX clients
     if (FieldsCsv = '') or
@@ -3449,8 +3451,8 @@ procedure TRestServerUriContext.ExecuteOrmGet;
       exit;
     rec := Table.CreateAndFillPrepare(Call.OutBody);
     try
-      W := TableModelProps.Props.CreateJsonWriter(
-        TRawByteStringStream.Create, true, FieldsCsv, {knownrows=}0);
+      W := TableModelProps.Props.CreateJsonWriter(TRawByteStringStream.Create,
+        true, FieldsCsv, {knownrows=}0, 0, @tmp);
       try
         W.CustomOptions := W.CustomOptions + [twoForceJsonStandard]; // regular JSON
         W.OrmOptions := Options; // will do the magic
@@ -3480,7 +3482,8 @@ var
   blob: PRttiProp;
 begin
   case Method of
-    mLOCK, mGET:
+    mLOCK,
+    mGET:
       begin
         if Table = nil then
         begin
@@ -5926,7 +5929,8 @@ begin
   fSafe^.Lock;
   try
     case aMethod of
-      mGET, mLOCK:
+      mGET,
+      mLOCK:
         inc(fRead);
       mPOST:
         inc(fCreated);

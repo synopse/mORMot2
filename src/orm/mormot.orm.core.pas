@@ -7028,12 +7028,13 @@ procedure TOrm.GetJsonValues(Json: TStream; Expand, withID: boolean;
   Occasion: TOrmOccasion; OrmOptions: TJsonSerializerOrmOptions);
 var
   serializer: TJsonSerializer;
+  tmp: TTextWriterStackBuffer;
 begin
   if self = nil then
     exit;
   with Orm do
     serializer := CreateJsonWriter(Json, Expand, withID,
-      SimpleFieldsBits[Occasion], {knownrows=}0);
+      SimpleFieldsBits[Occasion], {knownrows=}0, 0, @tmp);
   serializer.OrmOptions := OrmOptions;
   GetJsonValuesAndFree(serializer);
 end;
@@ -7043,10 +7044,12 @@ function TOrm.GetJsonValues(Expand, withID: boolean;
 var
   J: TRawByteStringStream;
   serializer: TJsonSerializer;
+  tmp: TTextWriterStackBuffer;
 begin
   J := TRawByteStringStream.Create;
   try
-    serializer := Orm.CreateJsonWriter(J, Expand, withID, Fields, {knownrows=}0);
+    serializer := Orm.CreateJsonWriter(J, Expand, withID, Fields,
+      {knownrows=}0, 0, @tmp);
     serializer.OrmOptions := OrmOptions;
     GetJsonValuesAndFree(serializer);
     result := J.DataString;
@@ -7072,7 +7075,8 @@ function TOrm.GetJsonValues(Expand, withID: boolean;
 var
   J: TRawByteStringStream;
 begin
-  if not withID and IsZero(Orm.SimpleFieldsBits[Occasion]) then
+  if not withID and
+     IsZero(Orm.SimpleFieldsBits[Occasion]) then
     // no simple field to write -> quick return
     result := ''
   else
