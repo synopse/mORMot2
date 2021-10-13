@@ -59,9 +59,9 @@ type
     fTemp64: Int64;
     fTempBlob: RawBlob;
     procedure InternalInitFieldDefs; override;
-    function GetRecordCount: Integer; override;
+    function GetRecordCount: integer; override;
     function GetRowFieldData(Field: TField; RowIndex: integer;
-      out ResultLen: Integer; OnlyCheckNull: boolean): pointer; override;
+      out ResultLen: integer; OnlyCheckNull: boolean): pointer; override;
     function SearchForField(const aLookupFieldName: RawUtf8;
       const aLookupValue: variant; aOptions: TLocateOptions): integer; override;
   public
@@ -141,7 +141,7 @@ type
   TDBFieldDef = record
     FieldName: string;
     DBType: TFieldType;
-    DBSize: Integer;
+    DBSize: integer;
     SqlType: TOrmFieldType;
     SqlIndex: integer;
     FieldType: POrmTableFieldType;
@@ -267,7 +267,7 @@ begin
     FreeAndNil(fTable);
 end;
 
-function TOrmTableDataSet.GetRecordCount: Integer;
+function TOrmTableDataSet.GetRecordCount: integer;
 begin
   if fTable <> nil then
     result := fTable.RowCount
@@ -276,7 +276,7 @@ begin
 end;
 
 function TOrmTableDataSet.GetRowFieldData(Field: TField; RowIndex: integer;
-  out ResultLen: Integer; OnlyCheckNull: boolean): pointer;
+  out ResultLen: integer; OnlyCheckNull: boolean): pointer;
 var
   info: POrmTableFieldType;
   f: integer;
@@ -346,10 +346,10 @@ begin
   end;
 end;
 
-function TOrmTableDataSet.SearchForField(const aLookupFieldName: RawUtf8; const
-  aLookupValue: variant; aOptions: TLocateOptions): integer;
+function TOrmTableDataSet.SearchForField(const aLookupFieldName: RawUtf8;
+  const aLookupValue: variant; aOptions: TLocateOptions): integer;
 var
-  f: integer;
+  f: PtrInt;
   val: RawUtf8;
 begin
   f := Table.FieldIndex(aLookupFieldName);
@@ -361,7 +361,8 @@ begin
     if loPartialKey in aOptions then
       result := Table.SearchFieldIdemPChar(val, f)
     else
-      result := Table.SearchFieldEquals(val, f, 1, not (loCaseInsensitive in aOptions));
+      result := Table.SearchFieldEquals(
+        val, f, 1, not (loCaseInsensitive in aOptions));
   end;
 end;
 
@@ -375,7 +376,8 @@ var
   sstream, dstream: TStream;
   P: PUtf8Char;
 begin
-  if (aField <> nil) and (aRow > 0) then
+  if (aField <> nil) and
+     (aRow > 0) then
     with DBFieldDef do
     begin
       P := aTable.Get(aRow, SqlIndex);
@@ -416,7 +418,8 @@ begin
           oftBlob:
             begin
               blob := BlobToRawBlob(P);
-              if (blob = '') or (aDataSet = nil) then
+              if (blob = '') or
+                 (aDataSet = nil) then
                 aField.Clear
               else
               begin
@@ -435,7 +438,8 @@ begin
             end;
           oftUtf8Text:
             if aField.DataType = ftWideString then
-              TWideStringField(aField).Value := aTable.GetSynUnicode(aRow, SqlIndex)
+              TWideStringField(aField).Value :=
+                aTable.GetSynUnicode(aRow, SqlIndex)
             else
               aField.AsString := aTable.GetString(aRow, SqlIndex);
         else
@@ -501,7 +505,8 @@ begin
         oftUtf8Text:
           begin
             DBSize := aTable.FieldLengthMax(aField, true);
-            {$ifndef UNICODE} // for Delphi 2009+ TWideStringField = UnicodeString!
+            {$ifndef UNICODE}
+            // for Delphi 2009+ TWideStringField = UnicodeString!
             if aForceWideString then
               DBType := ftWideString
             else

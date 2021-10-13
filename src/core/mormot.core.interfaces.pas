@@ -3096,8 +3096,9 @@ begin
   end;
 end;
 
-procedure TInterfaceMethod.ArgsAsDocVariantObject(const ArgsParams: TDocVariantData;
-  var ArgsObject: TDocVariantData; Input: boolean);
+procedure TInterfaceMethod.ArgsAsDocVariantObject(
+  const ArgsParams: TDocVariantData; var ArgsObject: TDocVariantData;
+  Input: boolean);
 var
   a, n: PtrInt;
 begin

@@ -9835,7 +9835,8 @@ end;
 procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 begin
   case integer(TVarData(Value).VType) of
-    varEmpty, varNull:
+    varEmpty,
+    varNull:
       Dest := '';
     varString:
       Dest := RawByteString(TVarData(Value).VAny);
@@ -9891,7 +9892,9 @@ begin
         Dest := PVarData(TVarData(Source).VPointer)^;
         result := true;
       end;
-    varEmpty..varDate, varBoolean, varShortInt..varWord64:
+    varEmpty..varDate,
+    varBoolean,
+    varShortInt..varWord64:
       begin
         PCardinal(@Dest)^ := typ;
         Dest.VInt64 := PInt64(TVarData(Source).VAny)^;
@@ -9929,7 +9932,8 @@ begin
   vd := VarDataFromVariant(V);
   repeat
     case cardinal(vd^.VType) of
-      varNull, varEmpty:
+      varNull,
+      varEmpty:
         Value := 0;
       varBoolean:
         if vd^.VBoolean then
@@ -9963,7 +9967,12 @@ begin
           Value := vd^.VInt64
         else
           exit;
-      varDouble, varDate, varSingle, varCurrency, varString, varOleStr:
+      varDouble,
+      varDate,
+      varSingle,
+      varCurrency,
+      varString,
+      varOleStr:
         exit;
     else
       begin
@@ -9986,18 +9995,22 @@ begin
   vd := VarDataFromVariant(V);
   result := true;
   case cardinal(vd^.VType) of
-    varEmpty, varNull:
+    varEmpty,
+    varNull:
       Value := 0;
-    varDouble, varDate:
+    varDouble,
+    varDate:
       Value := vd^.VDouble;
     varSingle:
       Value := vd^.VSingle;
     varCurrency:
       CurrencyToDouble(@vd^.VCurrency, Value);
-    varDouble or varByRef, varDate or varByRef:
+    varDouble or varByRef,
+    varDate or varByRef:
       Value := unaligned(PDouble(vd^.VAny)^);
     varSingle or varByRef:
-      Value := {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}unaligned{$endif}(PSingle(vd^.VAny)^);
+      Value := {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}unaligned{$endif}(
+        PSingle(vd^.VAny)^);
     varCurrency or varByRef:
       CurrencyToDouble(vd^.VAny, Value);
   else
@@ -10022,13 +10035,15 @@ begin
   vd := VarDataFromVariant(V);
   result := true;
   case cardinal(vd^.VType) of
-    varDouble, varDate:
+    varDouble,
+    varDate:
       DoubleToCurrency(vd^.VDouble, Value);
     varSingle:
       DoubleToCurrency(vd^.VSingle, Value);
     varCurrency:
       Value := PCurrency(@vd^.VCurrency)^;
-    varDouble or varByRef, varDate or varByRef:
+    varDouble or varByRef,
+    varDate or varByRef:
       DoubleToCurrency(PDouble(vd^.VAny)^, Value);
     varSingle or varByRef:
       DoubleToCurrency(PSingle(vd^.VAny)^, Value);
@@ -10050,7 +10065,8 @@ begin
   vd := VarDataFromVariant(V);
   repeat
     case cardinal(vd^.VType) of
-      varEmpty, varNull:
+      varEmpty,
+      varNull:
         begin
           result := false;
           exit;
@@ -10092,7 +10108,8 @@ begin
   vd := VarDataFromVariant(V);
   repeat
     case cardinal(vd^.VType) of
-      varNull, varEmpty:
+      varNull,
+      varEmpty:
         Value := 0;
       varBoolean:
         if vd^.VBoolean then

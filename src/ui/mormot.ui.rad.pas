@@ -153,6 +153,7 @@ type
     Name: RawUtf8;
     FieldType: TSqlDBFieldType;
   end;
+  PDocVariantArrayDataSetColumn = ^TDocVariantArrayDataSetColumn;
 
   /// read-only virtual TDataSet able to access a dynamic array of TDocVariant
   // - could be used e.g. from the result of TMongoCollection.FindDocs() to
@@ -757,7 +758,7 @@ constructor TDocVariantArrayDataSet.Create(Owner: TComponent;
 var
   n, ndx, j: PtrInt;
   first: PDocVariantData;
-  c: ^TDocVariantArrayDataSetColumn;
+  col: PDocVariantArrayDataSetColumn;
 begin
   fValues := Data;
   fValuesCount := DataCount;
@@ -769,12 +770,12 @@ begin
       raise EVirtualDataSet.CreateUtf8(
         '%.Create(ColumnNames<>ColumnTypes)', [self]);
     SetLength(fColumns, n);
-    c := pointer(fColumns);
+    col := pointer(fColumns);
     for ndx := 0 to n - 1 do
     begin
-      c^.Name := ColumnNames[ndx];
-      c^.FieldType := ColumnTypes[ndx];
-      inc(c);
+      col^.Name := ColumnNames[ndx];
+      col^.FieldType := ColumnTypes[ndx];
+      inc(col);
     end;
   end
   else if fValues <> nil then
@@ -782,17 +783,17 @@ begin
     // guess columns name/type from the first supplied TDocVariant
     first := _Safe(fValues[0], dvObject);
     SetLength(fColumns, first^.Count);
-    c := pointer(fColumns);
+    col := pointer(fColumns);
     for ndx := 0 to first^.Count - 1 do
     begin
-      c^.Name := first^.Names[ndx];
-      c^.FieldType := VariantTypeToSqlDBFieldType(first^.Values[ndx]);
-      case c^.FieldType of
+      col^.Name := first^.Names[ndx];
+      col^.FieldType := VariantTypeToSqlDBFieldType(first^.Values[ndx]);
+      case col^.FieldType of
         mormot.db.core.ftNull:
-          c^.FieldType := mormot.db.core.ftBlob;
+          col^.FieldType := mormot.db.core.ftBlob;
         mormot.db.core.ftCurrency:
           // TCurrencyField is a TFloatField
-          c^.FieldType := mormot.db.core.ftDouble;
+          col^.FieldType := mormot.db.core.ftDouble;
         mormot.db.core.ftInt64:
           // ensure type coherency of whole column
           for j := 1 to first^.Count - 1 do
@@ -802,17 +803,17 @@ begin
               // ensure objects are consistent
               with _Safe(fValues[j], dvObject)^ do
                 if (ndx < Length(Names)) and
-                   IdemPropNameU(Names[ndx], c^.Name) and
+                   IdemPropNameU(Names[ndx], col^.Name) and
                    (VariantTypeToSqlDBFieldType(Values[ndx]) in
                      [mormot.db.core.ftNull,
                       mormot.db.core.ftDouble,
                       mormot.db.core.ftCurrency]) then
                   begin
-                    c^.FieldType := mormot.db.core.ftDouble;
+                    col^.FieldType := mormot.db.core.ftDouble;
                     break;
                   end;
       end;
-      inc(c);
+      inc(col);
     end;
   end;
   inherited Create(Owner);
@@ -828,55 +829,63 @@ function TDocVariantArrayDataSet.GetRowFieldData(Field: TField;
 var
   f, ndx: PtrInt;
   wasstring: boolean;
+  col: PDocVariantArrayDataSetColumn;
+  dv: PDocVariantData;
+  v: PVariant;
 begin
-  result := nil;
+  result := nil; // default is null on error
   f := Field.Index;
-  if (cardinal(RowIndex) < cardinal(fValuesCount)) and
-     (cardinal(f) < cardinal(length(fColumns))) and
-     not (fColumns[f].FieldType in
+  if (cardinal(RowIndex) >= cardinal(fValuesCount)) or
+     (cardinal(f) >= cardinal(length(fColumns))) then
+    exit;
+  col := @fColumns[f];
+  if col^.FieldType in
            [mormot.db.core.ftNull,
             mormot.db.core.ftUnknown,
-            mormot.db.core.ftCurrency]) then
-    with _Safe(fValues[RowIndex])^ do
-      if (Kind = dvObject) and
-         (Count > 0) then
-      begin
-        if IdemPropNameU(fColumns[f].Name, Names[f]) then
-          ndx := f // optimistic match
-        else
-          ndx := GetValueIndex(fColumns[f].Name);
-        if ndx >= 0 then
-          if VarIsEmptyOrNull(Values[ndx]) then
-            exit
-          else
+            mormot.db.core.ftCurrency] then
+    exit;
+  if not _SafeObject(fValues[RowIndex], dv) or
+     (dv^.Count = 0) then
+    exit;
+  if IdemPropNameU(col^.Name, dv^.Names[f]) then
+    ndx := f // optimistic match when fields are in-order (most common case)
+  else
+  begin
+    ndx := dv^.GetValueIndex(col^.Name);
+    if ndx < 0 then
+      exit;
+  end;
+  v := @dv^.Values[ndx];
+  if VarIsEmptyOrNull(v^) then
+    exit
+  else
+  begin
+    result := @fTemp64;
+    if not OnlyCheckNull then
+      case col^.FieldType of
+        mormot.db.core.ftInt64:
+          VariantToInt64(v^, fTemp64);
+        mormot.db.core.ftDouble,
+        mormot.db.core.ftDate:
+          VariantToDouble(v^, unaligned(PDouble(@fTemp64)^));
+        mormot.db.core.ftUtf8:
           begin
-            result := @fTemp64;
-            if not OnlyCheckNull then
-              case fColumns[f].FieldType of
-                mormot.db.core.ftInt64:
-                  VariantToInt64(Values[ndx], fTemp64);
-                mormot.db.core.ftDouble,
-                mormot.db.core.ftDate:
-                  VariantToDouble(Values[ndx], unaligned(PDouble(@fTemp64)^));
-                mormot.db.core.ftUtf8:
-                  begin
-                    VariantToUtf8(Values[ndx], fTempUtf8, wasstring);
-                    result := pointer(fTempUtf8);
-                    ResultLen := length(fTempUtf8);
-                  end;
-                mormot.db.core.ftBlob:
-                  begin
-                    VariantToUtf8(Values[ndx], fTempUtf8, wasstring);
-                    if Base64MagicCheckAndDecode(
-                         pointer(fTempUtf8), length(fTempUtf8), fTempBlob) then
-                    begin
-                      result := pointer(fTempBlob);
-                      ResultLen := length(fTempBlob);
-                    end;
-                  end;
-              end;
+            VariantToUtf8(v^, fTempUtf8, wasstring);
+            result := pointer(fTempUtf8);
+            ResultLen := length(fTempUtf8);
+          end;
+        mormot.db.core.ftBlob:
+          begin
+            VariantToUtf8(v^, fTempUtf8, wasstring);
+            if Base64MagicCheckAndDecode(
+                 pointer(fTempUtf8), length(fTempUtf8), fTempBlob) then
+            begin
+              result := pointer(fTempBlob);
+              ResultLen := length(fTempBlob);
+            end;
           end;
       end;
+  end;
 end;
 
 const
@@ -892,18 +901,18 @@ const
 
 procedure TDocVariantArrayDataSet.InternalInitFieldDefs;
 var
-  f, siz: PtrInt;
+  f, fieldsiz: PtrInt;
   fieldname: string;
 begin
   FieldDefs.Clear;
   for f := 0 to high(fColumns) do
   begin
     if fColumns[f].FieldType = ftUtf8 then
-      siz := 16
+      fieldsiz := 16
     else
-      siz := 0;
+      fieldsiz := 0;
     Utf8ToStringVar(fColumns[f].Name, fieldname);
-    FieldDefs.Add(fieldname, TO_DB[fColumns[f].FieldType], siz);
+    FieldDefs.Add(fieldname, TO_DB[fColumns[f].FieldType], fieldsiz);
   end;
 end;
 
@@ -916,9 +925,7 @@ var
 begin
   f := -1; // allows O(1) field lookup for invariant object columns
   for result := 1 to fValuesCount do
-  begin
-    v := _Safe(fValues[result - 1]);
-    if (v^.Kind = dvObject) and
+    if _SafeObject(fValues[result - 1], v) and
        (v^.Count > 0) then
     begin
       if (cardinal(f) >= cardinal(v^.Count)) or
@@ -930,7 +937,6 @@ begin
            loCaseInsensitive in aOptions) = 0) then
         exit;
     end;
-  end;
   result := 0;
 end;
 
