@@ -9,15 +9,8 @@ unit mormot.core.fpcx64mm;
     A Multi-thread Friendly Memory Manager for FPC written in x86_64 assembly
     - targetting Linux (and Windows) multi-threaded Services
     - only for FPC on the x86_64 target - use the RTL MM on Delphi or ARM
-    - based on FastMM4 proven algorithms by Pierre le Riche
-    - code has been reduced to the only necessary featureset for production
-    - deep asm refactoring for cross-platform, compactness and efficiency
+    - based on proven FastMM4 by Pierre le Riche - with tuning and enhancements
     - can report detailed statistics (with threads contention and memory leaks)
-    - mremap() makes large block ReallocMem a breeze on Linux :)
-    - inlined SSE2 movaps loop or ERMS are more efficient that subfunction(s)
-    - lockless round-robin of tiny blocks (<=128/256 bytes) for better scaling
-    - can separate the small/tiny blocks from medium blocks allocation arena
-    - optional lockless bin list to avoid freemem() thread contention
     - three app modes: default mono-thread friendly, FPCMM_SERVER or FPCMM_BOOST
 
     Usage: include this unit as the very first in your FPC project uses clause
@@ -44,7 +37,8 @@ unit mormot.core.fpcx64mm;
 // - you may define FPCMM_SERVER or even FPCMM_BOOST for a service/daemon
 
 // target a multi-threaded service on a modern CPU
-// - set FPCMM_DEBUG FPCMM_ASSUMEMULTITHREAD FPCMM_ERMS FPCMM_SMALLNOTWITHMEDIUM
+// - define FPCMM_DEBUG, FPCMM_ASSUMEMULTITHREAD, FPCMM_ERMS, FPCMM_LOCKLESSFREE
+// and FPCMM_SMALLNOTWITHMEDIUM
 // - consider FPCMM_BOOST to try even more aggressive settings
 {.$define FPCMM_SERVER}
 
@@ -86,8 +80,7 @@ unit mormot.core.fpcx64mm;
 // let Freemem multi-thread contention use a lockless algorithm
 // - on contention, Freemem won't yield the thread using an OS call, but fill
 // an internal Bin list which will be released when the lock becomes available
-// - from our tests on high thread contention, this may be slower on Linux, but
-// sometimes slightly faster on Win64 (in a VM at least)
+// - beneficial from our tests on high thread contention (HTTP/REST server)
 {.$define FPCMM_LOCKLESSFREE}
 
 // won't use mremap but a regular getmem/move/freemem pattern
@@ -129,20 +122,20 @@ interface
   {$endif CPUX64}
   {$ifdef FPCMM_BOOSTER}
     {$define FPCMM_BOOST}
-    {$undef FPCMM_DEBUG} // when performance matters more than stats
   {$endif FPCMM_BOOSTER}
   {$ifdef FPCMM_BOOST}
-    {$undef FPCMM_SERVER}
-    {$define FPCMM_ASSUMEMULTITHREAD}
-    {$define FPCMM_SMALLNOTWITHMEDIUM}
-    {$define FPCMM_ERMS}
+    {$define FPCMM_SERVER}
   {$endif FPCMM_BOOST}
   {$ifdef FPCMM_SERVER}
     {$define FPCMM_DEBUG}
     {$define FPCMM_ASSUMEMULTITHREAD}
+    {$define FPCMM_LOCKLESSFREE}
     {$define FPCMM_SMALLNOTWITHMEDIUM}
     {$define FPCMM_ERMS}
   {$endif FPCMM_SERVER}
+  {$ifdef FPCMM_BOOSTER}
+    {$undef FPCMM_DEBUG} // when performance matters more than stats
+  {$endif FPCMM_BOOSTER}
 {$endif FPC}
 
 {$ifdef FPCMM_DISABLE}
@@ -197,7 +190,7 @@ type
     SleepCycles: PtrUInt;
     {$endif FPCMM_SLEEPTSC}
     {$ifdef FPCMM_LOCKLESSFREE}
-    /// how many types Freemem() did spin to acquire its lock-less bin list
+    /// how many times Freemem() did spin to acquire its lock-less bin list
     SmallFreememLockLessSpin: PtrUInt;
     {$endif FPCMM_LOCKLESSFREE}
     {$endif FPCMM_DEBUG}
@@ -315,26 +308,37 @@ procedure WriteHeapStatus(const context: shortstring = '';
 implementation
 
 {
-   High-level Algorithms Description
-  -----------------------------------
+   High-level Allocation Strategy Description
+  --------------------------------------------
 
   The allocator handles the following families of memory blocks:
-  - TINY <= 128 B (or <= 256 B for FPCMM_BOOST) - not existing in FastMM4
-    Round-robin distribution into several arenas, fed from medium blocks
+  - TINY <= 128 B (<= 256 B for FPCMM_BOOST)
+    Round-robin distribution into several arenas, fed from shared tiny/small pool
     (fair scaling from multi-threaded calls, with no threadvar nor GC involved)
   - SMALL <= 2600 B
-    Single arena per block size, fed from medium blocks
+    One arena per block size, fed from shared tiny/small pool
   - MEDIUM <= 256 KB
-    Pool of bitmap-marked chunks, fed from 1MB of OS mmap/virtualalloc
+    Separated pool of bitmap-marked chunks, fed from 1MB of OS mmap/virtualalloc
   - LARGE  > 256 KB
     Directly fed from OS mmap/virtualalloc with mremap when growing
 
+  The original FastMM4 was enhanced as such, especially in FPCMM_SERVER mode:
+  - x86_64 code was refactored and tuned in regard to 2020's hardware;
+  - Inlined SSE2 movaps loop or ERMS are more efficient that subfunction(s);
+  - New Round-robin thread-friendly arenas of Tiny blocks;
+  - Tiny and Small blocks are fed from their own pool, not the medium pool;
+  - Additional bin list to reduce Freemem() thread contention;
+  - Memory Leaks and Thread Contention tracked with almost no performance loss;
+  - On Linux, mremap is used for efficient realloc of large blocks.
+
   About locking:
-  - Tiny and Small blocks have their own per-size lock, in every arena
-  - Medium and Large blocks have one giant lock each (seldom used)
-  - SwitchToThread/FpNanoSleep OS call is done after initial spinning
-  - FPCMM_LOCKLESSFREE reduces OS calls on Freemem() thread contention
-  - FPCMM_DEBUG / WriteHeapStatus allow to identify the lock contention
+  - Tiny and Small blocks have their own per-size lock;
+  - Tiny and Small blocks have one giant lock when fedding from their pool;
+  - Medium blocks have one giant lock over their own pool;
+  - Large blocks have one giant lock over mmap/virtualalloc system calls;
+  - SwitchToThread/FpNanoSleep OS call is done after initial spinning;
+  - FPCMM_LOCKLESSFREE reduces Freemem() thread contention;
+  - FPCMM_DEBUG / WriteHeapStatus can identify the lock contention(s).
 
 }
 
@@ -556,18 +560,20 @@ end;
 { ********* Constants and Data Structures Definitions }
 
 const
-  {$ifdef FPCMM_BOOST} // someimtes the more arenas, the better multi-threadable
+  // (sometimes) the more arenas, the better multi-threadable
   {$ifdef FPCMM_BOOSTER}
-  NumTinyBlockTypesPO2 = 4;
+  NumTinyBlockTypesPO2  = 4;
   NumTinyBlockArenasPO2 = 5; // will probably end up with Medium lock contention
   {$else}
-  NumTinyBlockTypesPO2 = 4;  // tiny are <= 256 bytes
-  NumTinyBlockArenasPO2 = 4; // 16 + 1 arenas
+    {$ifdef FPCMM_BOOST}
+    NumTinyBlockTypesPO2  = 4; // tiny are <= 256 bytes
+    NumTinyBlockArenasPO2 = 4; // 16 + 1 arenas
+    {$else}
+    // default (or FPCMM_SERVER) settings
+    NumTinyBlockTypesPO2  = 3; // multiple arenas for tiny blocks <= 128 bytes
+    NumTinyBlockArenasPO2 = 3; // 8 round-robin arenas + 1 main by default
+    {$endif FPCMM_BOOST}
   {$endif FPCMM_BOOSTER}
-  {$else}
-  NumTinyBlockTypesPO2 = 3;  // multiple arenas for tiny blocks <= 128 bytes
-  NumTinyBlockArenasPO2 = 3; // 8 round-robin arenas + 1 main by default
-  {$endif FPCMM_BOOST}
 
   NumSmallBlockTypes = 46;
   MaximumSmallBlockSize = 2608;
@@ -585,10 +591,10 @@ const
   SmallBlockDownsizeCheckAdder = 64;
   SmallBlockUpsizeAdder = 32;
   {$ifdef FPCMM_LOCKLESSFREE}
-  SmallBlockTypePO2 = 8; // SizeOf(TSmallBlockType)=256
-  SmallBlockBinCount = (((1 shl SmallBlockTypePO2) - 64) div 8) - 1;
+  SmallBlockTypePO2 = 8;  // SizeOf(TSmallBlockType)=256 with Bin list
+  SmallBlockBinCount = (((1 shl SmallBlockTypePO2) - 64) div 8) - 1; // =23
   {$else}
-  SmallBlockTypePO2 = 6;
+  SmallBlockTypePO2 = 6;  // SizeOf(TSmallBlockType)=64
   {$endif FPCMM_LOCKLESSFREE}
 
   MediumBlockPoolSizeMem = 20 * 64 * 1024;
@@ -640,7 +646,7 @@ const
   SpinSmallGetmemLockCount = 500;
   SpinSmallFreememLockCount = 500;
   {$ifdef FPCMM_LOCKLESSFREE}
-  SpinSmallFreememBinCount = 1000;
+  SpinSmallFreememBinCount = 500;
   {$endif FPCMM_LOCKLESSFREE}
   {$endif FPCMM_PAUSE}
   {$endif FPCMM_SLEEPTSC}
@@ -649,7 +655,7 @@ const
   // pre-ERMS expects at least 256 bytes, IvyBridge+ with ERMS is good from 64
   // see https://stackoverflow.com/a/43837564/458259 for explanations and timing
   // -> "movaps" loop is used up to 256 bytes of data: good on all CPUs
-  // -> "movntdq" loop is used for large blocks: always faster than ERMS
+  // -> "movntdq" is used for large blocks on Windows: always faster than ERMS
   ErmsMinSize = 256;
   {$endif FPCMM_ERMS}
 
@@ -672,7 +678,7 @@ type
     FreememCount: cardinal;
     GetmemSleepCount: cardinal;
     FreememSleepCount: cardinal;
-    {$ifdef FPCMM_LOCKLESSFREE} // 192 optional bytes for FreeMem Bin
+    {$ifdef FPCMM_LOCKLESSFREE} // 192 optional bytes for FreeMem Bin = 13KB
     BinLocked: boolean;
     BinCount: byte;
     BinSpinCount: cardinal;
@@ -1777,7 +1783,7 @@ asm
         dec     byte ptr [rbx].TSmallBlockType.BinCount
         mov     byte ptr [rbx].TSmallBlockType.BinLocked, false
         mov     rdx, [rcx - BlockHeaderSize]
-        jmp     FreeSmallLocked
+        jmp     FreeSmallLocked // loop until BinCount=0
 @NoBin: mov     byte ptr [rbx].TSmallBlockType.BinLocked, false
 @BinAlreadyLocked:
         mov     byte ptr [rbx].TSmallBlockType.BlockTypeLocked, false
@@ -1877,8 +1883,8 @@ asm
         pop     rdx
         {$endif FPCMM_SLEEPTSC}
         {$endif FPCMM_PAUSE}
-        {$ifdef FPCMM_DEBUG}
-        inc     dword ptr [rbx].TSmallBlockType.BinSpinCount // no lock (informative only)
+        {$ifdef FPCMM_DEBUG} // no lock (informative only)
+        inc     dword ptr [rbx].TSmallBlockType.BinSpinCount
         {$endif FPCMM_DEBUG}
         jmp     @LockBlockTypeSleep
 @BinLocked:
@@ -2558,8 +2564,10 @@ begin
   if compilationflags then
     writeln(' Flags: '
       {$ifdef FPCMM_BOOSTER}           + 'BOOSTER '     {$else}
-        {$ifdef FPCMM_BOOST}           + 'BOOST '       {$endif} {$endif}
-      {$ifdef FPCMM_SERVER}            + 'SERVER '      {$endif}
+        {$ifdef FPCMM_BOOST}           + 'BOOST '       {$else}
+          {$ifdef FPCMM_SERVER}        + 'SERVER '      {$endif}
+        {$endif}
+      {$endif}
       {$ifdef FPCMM_ASSUMEMULTITHREAD} + ' assumulthrd' {$endif}
       {$ifdef FPCMM_LOCKLESSFREE}      + ' lockless'    {$endif}
       {$ifdef FPCMM_PAUSE}             + ' pause'       {$endif}
