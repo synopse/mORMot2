@@ -1476,7 +1476,8 @@ var
   L, ErrNum: integer;
 begin
   case Status of
-    OCI_ERROR, OCI_SUCCESS_WITH_INFO:
+    OCI_ERROR,
+    OCI_SUCCESS_WITH_INFO:
       begin
         tmp[0] := #0;
         ErrorGet(ErrorHandle, 1, nil, ErrNum, tmp, sizeof(tmp), OCI_HTYPE_ERROR);

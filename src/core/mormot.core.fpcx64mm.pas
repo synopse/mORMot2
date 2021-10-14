@@ -326,12 +326,13 @@ implementation
     Directly fed from OS mmap/virtualalloc with mremap when growing
 
   The original FastMM4 was enhanced as such, especially in FPCMM_SERVER mode:
+  - FPC compatibility, even on POSIX/Linux, also for its specific API behavior;
   - x86_64 code was refactored and tuned in regard to 2020's hardware;
   - Inlined SSE2 movaps loop or ERMS are more efficient that subfunction(s);
-  - New Round-robin thread-friendly arenas of Tiny blocks;
-  - Tiny and Small blocks are fed from their own pool, not the medium pool;
-  - Additional bin list to reduce Freemem() thread contention;
-  - Memory Leaks and Thread Contention tracked with almost no performance loss;
+  - New round-robin thread-friendly arenas of tiny blocks;
+  - Tiny and small blocks can fed from their own pool, not the medium pool;
+  - Additional bin list to reduce small/tiny Freemem() thread contention;
+  - Memory leaks and thread sleep tracked with almost no performance loss;
   - On Linux, mremap is used for efficient realloc of large blocks.
 
   About locking:

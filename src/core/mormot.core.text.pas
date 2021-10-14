@@ -1002,9 +1002,9 @@ type
     // - same algorithm than AddString(QuotedStr()) - without memory allocation,
     // and with an optional maximum text length (truncated with ending '...')
     // - this function implements what is specified in the official SQLite3
-    // documentation: "A string constant is formed by enclosing the string in single
-    // quotes ('). A single quote within the string can be encoded by putting two
-    // single quotes in a row - as in Pascal."
+    // documentation: "A string constant is formed by enclosing the string in
+    // single quotes ('). A single quote within the string can be encoded by
+    // putting two single quotes in a row - as in Pascal."
     procedure AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt; Quote: AnsiChar;
       TextMaxLen: PtrInt = 0);
     /// append some chars, escaping all HTML special chars as expected
