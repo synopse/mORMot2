@@ -737,6 +737,7 @@ type
     fUnique: array of TRestStorageInMemoryUnique;
     fMaxID: TID;
     fValues: TDynArrayHashed; // hashed by ID
+    fTempBuffer: PTextWriterStackBuffer;
     function UniqueFieldsUpdateOK(aRec: TOrm; aUpdateIndex: integer): boolean;
     function GetItem(Index: integer): TOrm;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2097,6 +2098,8 @@ begin
   ObjArrayClear(fUnique);
   fValues.Clear; // to free all stored TOrm instances
   fSearchRec.Free;
+  if fTempBuffer <> nil then
+    FreeMem(fTempBuffer);
   inherited Destroy;
 end;
 
@@ -2614,8 +2617,8 @@ end;
 
 function TRestStorageInMemory.FindWhere(WhereField: integer;
   const WhereValue: RawUtf8; WhereOp: TSelectStatementOperator;
-  const OnFind: TOnFindWhereEqual; Dest: pointer; FoundLimit,
-  FoundOffset: integer; CaseInsensitive: boolean): PtrInt;
+  const OnFind: TOnFindWhereEqual; Dest: pointer;
+  FoundLimit, FoundOffset: integer; CaseInsensitive: boolean): PtrInt;
 var
   P: TOrmPropInfo;
   cmp: integer;
@@ -2789,27 +2792,34 @@ var
   Prop: TOrmPropInfo;
   bits: TFieldBits;
   withID: boolean;
+  tmp: PTextWriterStackBuffer;
 label
   err;
 begin
   // exact same format as TOrmTable.GetJsonValues()
   result := 0;
   if length(Stmt.Where) > 1 then
-    raise ERestStorage.CreateUtf8('%.GetJsonValues on % with Stmt.Where[]=% ' +
-      ' - our in-memory engine only supports a single WHERE clause operation',
+    raise ERestStorage.CreateUtf8('%.GetJsonValues on % with Stmt.Where[]=%:' +
+      ' our in-memory engine only supports a single WHERE clause operation',
       [self, fStoredClass, length(Stmt.Where)]);
+  if fTempBuffer = nil then
+    GetMem(fTempBuffer, SizeOf(fTempBuffer^)); // 8KB pre-allocated buffer
+  tmp := fTempBuffer; // aBufSize=65500 is ignored if tmp<>nil
   if Stmt.Where = nil then
-    // no WHERE statement -> get all rows -> set rows count
+    // no WHERE statement -> get all rows -> guess rows count
     if (Stmt.Limit > 0) and
        (fCount > Stmt.Limit) then
       KnownRowsCount := Stmt.Limit
     else
-      KnownRowsCount := fCount
+    begin
+      KnownRowsCount := fCount;
+      tmp := nil; // 64KB heap buffer when getting all rows - 8KB otherwise
+    end
   else
     KnownRowsCount := 0;
   Stmt.SelectFieldBits(bits, withID);
-  W := fStoredClassRecordProps.CreateJsonWriter(Stream, Expand, withID,
-    bits, KnownRowsCount, {bufsize=}256 shl 10);
+  W := fStoredClassRecordProps.CreateJsonWriter(
+    Stream, Expand, withID, bits, KnownRowsCount, 65500, tmp);
   if W <> nil then
   try
     if Expand then
@@ -2845,7 +2855,7 @@ begin
              (Stmt.Offset > 0) then
             goto err
           else
-            with _Safe(Stmt.Where[0].ValueVariant)^ do
+            with _Safe(Stmt.Where[0].ValueVariant, dvArray)^ do
               for ndx := 0 to Count - 1 do
                 if VariantToInt64(Values[ndx], id) then
                 begin
