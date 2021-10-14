@@ -2980,7 +2980,7 @@ type
     destructor Destroy; override;
 
     /// return TRUE if the given name is either ID/RowID, either a property name
-    function IsFieldName(const PropName: RawUtf8): boolean;
+    function IsFieldName(PropName: PUtf8Char): boolean;
     /// return TRUE if the given name is either ID/RowID, either a property name,
     // or an aggregate function (MAX/MIN/AVG/SUM) on a valid property name
     function IsFieldNameOrFunction(const PropName: RawUtf8): boolean;
@@ -11181,38 +11181,60 @@ begin
   result := true;
 end;
 
-function TOrmPropertiesAbstract.IsFieldName(const PropName: RawUtf8): boolean;
+function TOrmPropertiesAbstract.IsFieldName(PropName: PUtf8Char): boolean;
 begin
-  result := (PropName <> '') and
-            (isRowID(pointer(PropName)) or
-    (Fields.IndexByName(pointer(PropName)) >= 0));
+  result := (PropName <> nil) and
+            (IsRowID(PropName) or
+             (Fields.IndexByName(PropName) >= 0));
 end;
+
+const
+  FUNCS: array[0..6] of PAnsiChar = (
+    'MAX(',         // 0
+    'MIN(',         // 1
+    'AVG(',         // 2
+    'SUM(',         // 3
+    'JSONGET(',     // 4
+    'JSONHAS(',     // 5
+    nil);
 
 function TOrmPropertiesAbstract.IsFieldNameOrFunction(const PropName: RawUtf8): boolean;
 var
   L: integer;
+  P, P2: PUtf8Char;
+  tmp: shortstring; // no heap allocation
 begin
+  result := false;
   L := length(PropName);
   if (L = 0) or
      (self = nil) then
-    result := false
-  else if PropName[L] = ')' then
-    case IdemPCharArray(pointer(PropName),
-       ['MAX(',         // 0
-        'MIN(',         // 1
-        'AVG(',         // 2
-        'SUM(',         // 3
-        'JSONGET(',     // 4
-        'JSONHAS(']) of // 5
+    exit;
+  P := pointer(PropName);
+  if P[L - 1] = ')' then
+  begin
+    case IdemPPChar(P, @FUNCS) of
       0..3:
-        result := IsFieldName(copy(PropName, 5, L - 5));
+        begin
+          inc(P, 4);
+          P2 := PosChar(P, ')');
+        end;
       4..5:
-        result := IsFieldName(copy(PropName, 9, PosExChar(',', PropName) - 9));
+        begin
+          inc(P, 8);
+          P2 := PosChar(P, ',');
+        end;
     else
-      result := IsFieldName(PropName);
-    end
+      exit;
+    end;
+    if P2 <> nil then
+    begin
+      SetString(tmp, PAnsiChar(P), P2 - P);
+      tmp[ord(tmp[0]) + 1] := #0;
+      result := IsFieldName(@tmp[1]);
+    end;
+  end
   else
-    result := IsFieldName(PropName);
+    result := IsFieldName(P);
 end;
 
 function TOrmPropertiesAbstract.FieldBitsFromBlobField(aBlobField: PRttiProp;

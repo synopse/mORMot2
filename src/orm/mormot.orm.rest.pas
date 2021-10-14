@@ -653,7 +653,7 @@ begin
         result := SqlFromSelect(SqlTableName, SqlTableRetrieveAllFields, WhereClause, '')
       else if (PosExChar(',', FieldNames) = 0) and
               (PosExChar('(', FieldNames) = 0) and
-              not IsFieldName(FieldNames) then
+              not IsFieldName(pointer(FieldNames)) then
         // prevent SQL error
         result := ''
       else
