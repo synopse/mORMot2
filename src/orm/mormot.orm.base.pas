@@ -2202,6 +2202,9 @@ type
     {$ifndef NOPOINTEROFFSET} // reduce memory consumption by half on 64-bit CPU
     fDataStart: PUtf8Char;
     {$endif NOPOINTEROFFSET}
+    {$ifndef NOTORMTABLELEN}
+    fLen: TIntegerDynArray;
+    {$endif NOTORMTABLELEN}
     fFieldType: array of TOrmTableFieldType;
     fFieldTypeAllRows: boolean;
     fOwnerMustFree: boolean; // if owner TOrm should free it
@@ -2222,7 +2225,11 @@ type
     fOwnedRecords: TSynObjectList; // holds NewRecord() returned instances
     function GetResults(Offset: PtrInt): PUtf8Char; // low-level data access
       {$ifdef HASINLINE}inline;{$endif}
-    procedure SetResults(Offset: PtrInt; Value: PUtf8Char);
+    function GetResultsLen(Offset: PtrInt): integer; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetResultsLen(Offset: PtrInt; P: PUtf8Char): integer; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure SetResults(Offset: PtrInt; Value: PUtf8Char; ValueLen: integer);
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetResultsSafe(Offset: PtrInt; Value: PUtf8Char);
       {$ifdef HASINLINE}{$ifdef NOPOINTEROFFSET}inline;{$endif}{$endif}
@@ -2253,6 +2260,9 @@ type
     // or nil if the corresponding JSON was null or ""
     // - if Row and Fields are not correct, returns nil
     function Get(Row, Field: PtrInt): PUtf8Char; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read-only access to a particular field UTF-8 value and length
+    function Get(Row, Field: PtrInt; out Len: integer): PUtf8Char; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as RawUtf8 text
     function GetU(Row, Field: PtrInt): RawUtf8; overload;
@@ -2432,11 +2442,11 @@ type
     // - RowFirst and RowLast can be used to ask for a specified row extent
     // of the returned data (by default, all rows are retrieved)
     // - IDBinarySize will force the ID field to be stored as hexadecimal text
-    procedure GetJsonValues(W: TJsonWriter;
-      RowFirst: PtrInt = 0; RowLast: PtrInt= 0; IDBinarySize: integer = 0); overload;
+    procedure GetJsonValues(W: TJsonWriter; RowFirst: PtrInt = 0;
+      RowLast: PtrInt = 0; IDBinarySize: integer = 0); overload;
     /// same as the overloaded method, but appending an array to a TStream
-    procedure GetJsonValues(Json: TStream; Expand: boolean;
-      RowFirst: PtrInt = 0; RowLast: PtrInt = 0; IDBinarySize: integer = 0); overload;
+    procedure GetJsonValues(Json: TStream; Expand: boolean; RowFirst: PtrInt = 0;
+      RowLast: PtrInt = 0; IDBinarySize: integer = 0); overload;
     /// same as the overloaded method, but returning result into a RawUtf8
     function GetJsonValues(Expand: boolean; IDBinarySize: integer = 0;
       BufferSize: integer = 0): RawUtf8; overload;
@@ -2681,11 +2691,11 @@ type
     /// read-only access to a particular field value, as UTF-8 encoded buffer
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to Get() method, but for the current Step
-    function FieldBuffer(FieldIndex: PtrInt): PUtf8Char; overload;
+    function FieldBuffer(FieldIndex: PtrInt; Len: PInteger = nil): PUtf8Char; overload;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to Get() method, but for the current Step
-    function FieldBuffer(const FieldName: RawUtf8): PUtf8Char; overload;
+    function FieldBuffer(const FieldName: RawUtf8; Len: PInteger = nil): PUtf8Char; overload;
     /// read-only access to a particular field value, as integer
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetAsInteger() method, but for the current Step
@@ -2750,9 +2760,18 @@ type
     property FieldCount: PtrInt
       read fFieldCount;
     /// raw access to the data values memory pointers
-    // - you should rather use the Get*() methods
-    property Results[Offset: PtrInt]: PUtf8Char read
-      GetResults write SetResultsSafe;
+    // - you should rather use the Get*() methods which can use the length
+    property Results[Offset: PtrInt]: PUtf8Char
+      read GetResults write SetResultsSafe;
+    /// raw access to the data values UTF-8 length
+    // - you should rather use the Get*() methods instead of Results+ResultsLen
+    {$ifdef NOTORMTABLELEN}
+    property ResultsLen[Offset: PtrInt]: integer
+      read GetResultsLen;
+    {$else}
+    property ResultsLen: TIntegerDynArray
+      read fLen;
+    {$endif NOTORMTABLELEN}
     /// read-only access to the ID/RowID field index
     property FieldIndexID: integer
       read fFieldIndexID;
@@ -8317,8 +8336,30 @@ begin
   {$endif NOPOINTEROFFSET}
 end;
 
-procedure TOrmTableAbstract.SetResults(Offset: PtrInt; Value: PUtf8Char);
+function TOrmTableAbstract.GetResultsLen(Offset: PtrInt; P: PUtf8Char): integer;
 begin
+  {$ifdef NOTORMTABLELEN}
+  result := StrLen(P);
+  {$else}
+  result := fLen[Offset];
+  {$endif NOTORMTABLELEN}
+end;
+
+function TOrmTableAbstract.GetResultsLen(Offset: PtrInt): integer;
+begin
+  {$ifdef NOTORMTABLELEN}
+  result := StrLen(GetResults(Offset));
+  {$else}
+  result := fLen[Offset];
+  {$endif NOTORMTABLELEN}
+end;
+
+procedure TOrmTableAbstract.SetResults(
+  Offset: PtrInt; Value: PUtf8Char; ValueLen: integer);
+begin
+  {$ifndef NOTORMTABLELEN}
+  fLen[Offset] := ValueLen;
+  {$endif NOTORMTABLELEN}
   {$ifdef NOPOINTEROFFSET}
   fData[Offset] := Value;
   {$else}
@@ -8330,6 +8371,10 @@ end;
 
 procedure TOrmTableAbstract.SetResultsSafe(Offset: PtrInt; Value: PUtf8Char);
 begin
+  {$ifndef NOTORMTABLELEN}
+  if fLen <> nil then
+    fLen[Offset] := StrLen(Value);
+  {$endif NOTORMTABLELEN}
   {$ifdef NOPOINTEROFFSET}
   fData[Offset] := Value;
   {$else}
@@ -8556,7 +8601,7 @@ begin
     if IsRowID(P) then // normalize RowID field name to 'ID'
       fFieldNames[f] := ID_TXT
     else
-      FastSetString(fFieldNames[f], P, StrLen(P));
+      FastSetString(fFieldNames[f], P, GetResultsLen(f, P));
   end;
   if fFieldCount >= ORMTABLE_FIELDNAMEORDERED then
     QuickSortIndexedPUtf8Char(pointer(fFieldNames), fFieldCount, fFieldNameOrder);
@@ -8581,7 +8626,8 @@ begin
     exit; // out of range
   if fFieldType = nil then
     InitFieldTypes;
-  V := GetResults(row * fFieldCount + field);
+  row := row * fFieldCount + field;
+  V := GetResults(row);
   with fFieldType[field] do
     if expandHugeIDAsUniqueIdentifier and
        (field = fFieldIndexID) then
@@ -8632,7 +8678,7 @@ begin
               exit;
             end;
         end;
-      ValueVarToVariant(V, StrLen(V), ContentType, TVarData(value), true,
+      ValueVarToVariant(V, GetResultsLen(row, V), ContentType, TVarData(value), true,
         ContentTypeInfo, options);
     end;
 end;
@@ -8706,7 +8752,7 @@ begin
     for i := 1 to fRowCount do
     begin
       inc(Field, fFieldCount); // next row - ignore first row = field names
-      SetResults(Field, nil);
+      SetResults(Field, nil, 0);
     end;
     result := true;
   end;
@@ -8839,12 +8885,12 @@ begin
           oft := oftUtf8Text;
           for r := 1 to fRowCount do
           begin
-            U := Results[f];
+            U := GetResults(f);
             if U = nil then  // search for a non void column
               inc(f, fFieldCount)
             else
             begin
-              len := StrLen(U);
+              len := GetResultsLen(f, U);
               tlog := Iso8601ToTimeLogPUtf8Char(U, len);
               if tlog <> 0 then
                 if (byte(len) in [8, 10]) and
@@ -8944,15 +8990,41 @@ begin
   end;
 end;
 
+function TOrmTableAbstract.Get(Row, Field: PtrInt; out Len: integer): PUtf8Char;
+begin
+  if (self = nil) or
+     (fData = nil) or
+     (PtrUInt(Row) > PtrUInt(fRowCount)) or
+     (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
+    result := nil
+  else
+  begin
+    Row := Row * fFieldCount + Field;
+    {$ifdef NOPOINTEROFFSET} // inlined GetResults() for Delphi 7
+    result := fData[Row];
+    {$else}
+    result := PUtf8Char(PtrInt(fData[Row]));
+    if result <> nil then
+      inc(result, PtrUInt(fDataStart));
+    {$endif NOPOINTEROFFSET}
+    {$ifdef NOTORMTABLELEN}
+    Len := StrLen(result);
+    {$else}
+    Len := fLen[Row];
+    {$endif NOTORMTABLELEN}
+  end;
+end;
+
 function TOrmTableAbstract.GetU(Row, Field: PtrInt): RawUtf8;
 var
   P: PUtf8Char;
+  PLen: integer;
 begin
-  P := Get(Row, Field);
+  P := Get(Row, Field, PLen);
   if P = nil then
     FastAssignNew(result)
   else
-    FastSetString(result, P, StrLen(P));
+    FastSetString(result, P, PLen);
 end;
 
 function TOrmTableAbstract.Get(Row: PtrInt; const FieldName: RawUtf8): PUtf8Char;
@@ -9051,26 +9123,28 @@ end;
 function TOrmTableAbstract.GetString(Row, Field: PtrInt): string;
 var
   U: PUtf8Char;
+  ULen: integer;
 begin
-  U := Get(Row, Field);
+  U := Get(Row, Field, ULen);
   if U = nil then
     result := ''
   else
     {$ifdef UNICODE}
-    Utf8DecodeToUnicodeString(U, StrLen(U), result);
+    Utf8DecodeToUnicodeString(U, ULen, result);
     {$else}
-    CurrentAnsiConvert.Utf8BufferToAnsi(U, StrLen(U), RawByteString(result));
+    CurrentAnsiConvert.Utf8BufferToAnsi(U, ULen, RawByteString(result));
     {$endif UNICODE}
 end;
 
 function TOrmTableAbstract.GetSynUnicode(Row, Field: PtrInt): SynUnicode;
 var
   U: PUtf8Char;
+  ULen: integer;
 begin
   result := '';
-  U := Get(Row, Field);
+  U := Get(Row, Field, ULen);
   if U <> nil then
-    Utf8ToSynUnicode(U, StrLen(U), result);
+    Utf8ToSynUnicode(U, ULen, result);
 end;
 
 function TOrmTableAbstract.GetCaption(Row, Field: PtrInt): string;
@@ -9098,7 +9172,8 @@ begin
   result := Iso8601ToDateTimePUtf8Char(Get(Row, Field), 0)
 end;
 
-function TOrmTableAbstract.GetRowValues(Field: PtrInt; out Values: TRawUtf8DynArray): integer;
+function TOrmTableAbstract.GetRowValues(Field: PtrInt;
+  out Values: TRawUtf8DynArray): integer;
 var
   i: PtrInt;
   U: PUtf8Char;
@@ -9113,7 +9188,7 @@ begin
   begin
     inc(Field, fFieldCount); // next row - ignore first row = field names
     U := GetResults(Field);
-    FastSetString(Values[i], U, StrLen(U));
+    FastSetString(Values[i], U, GetResultsLen(Field, U));
   end;
   result := fRowCount;
 end;
@@ -9139,8 +9214,7 @@ end;
 function TOrmTableAbstract.GetRowLengths(Field: PtrInt; var LenStore: TSynTempBuffer): integer;
 var
   len: PInteger;
-  i: integer;
-  l, n: PtrInt;
+  i, l, n: integer;
 begin
   result := 0;
   if (self = nil) or
@@ -9155,13 +9229,11 @@ begin
   for i := 1 to fRowCount do
   begin
     inc(Field, n); // next row - ignore first row = field names
-    {$ifdef NOPOINTEROFFSET} // len^ := StrLen(GetResults(Field));
-    l := StrLen(fData[Field]);
+    {$ifdef NOTORMTABLELEN}
+    l := StrLen(GetResults(Field));
     {$else}
-    l := fData[Field];
-    if l <> 0 then
-      l := StrLen(@fDataStart[l]);
-    {$endif NOPOINTEROFFSET}
+    l := fLen[Field];
+    {$endif NOTORMTABLELEN}
     len^ := l;
     inc(result, l);
     inc(len);
@@ -9268,13 +9340,17 @@ begin
           ftInt64,
           ftDouble,
           ftCurrency:
-nostr:      W.AddNoJsonEscape(U, StrLen(U));
+nostr:      {$ifdef NOTORMTABLELEN}
+            W.AddNoJsonEscape(U, StrLen(U));
+            {$else}
+            W.AddNoJsonEscape(U, fLen[o]);
+            {$endif NOTORMTABLELEN}
           ftDate,
           ftUtf8,
           ftBlob:
             begin
 str:          W.Add('"');
-              W.AddJsonEscape(U);
+              W.AddJsonEscape(U, 0); // Len=0 is slightly faster
               W.Add('"');
             end;
         else
@@ -9337,8 +9413,7 @@ procedure TOrmTableAbstract.GetCsvValues(Dest: TStream; Tab: boolean; CommaSep: 
   AddBOM: boolean; RowFirst, RowLast: PtrInt);
 var
   U: PUtf8Char;
-  F, R, FMax: PtrInt;
-  o: PtrInt;
+  F, R, FMax, o, len: PtrInt;
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
@@ -9368,14 +9443,11 @@ begin
         for F := 0 to FMax do
         begin
           U := GetResults(o);
+          len := GetResultsLen(o, U);
           if Tab or not IsStringJson(U) then
-            W.AddNoJsonEscape(U, StrLen(U))
+            W.AddNoJsonEscape(U, len)
           else
-          begin
-            W.Add('"');
-            W.AddNoJsonEscape(U, StrLen(U));
-            W.Add('"');
-          end;
+            W.AddQuotedStr(U, len, '"');
           if F = FMax then
             W.AddCR
           else
@@ -10155,7 +10227,8 @@ begin
   POrmTableRowVariantData(RowVariant)^.VRow := -1; // follow fStepRow
 end;
 
-function TOrmTableAbstract.FieldBuffer(FieldIndex: PtrInt): PUtf8Char;
+function TOrmTableAbstract.FieldBuffer(
+  FieldIndex: PtrInt; Len: PInteger): PUtf8Char;
 begin
   if (self = nil) or
      (PtrUInt(FieldIndex) >= PtrUInt(fFieldCount)) then
@@ -10165,10 +10238,18 @@ begin
      (fStepRow > fRowCount) then
     raise EOrmTable.CreateUtf8('%.FieldBuffer(%): no previous Step',
       [self, FieldIndex]);
-  result := Results[fStepRow * FieldCount + FieldIndex];
+  inc(FieldIndex, fStepRow * FieldCount);
+  result := GetResults(FieldIndex);
+  if Len <> nil then
+    {$ifdef NOTORMTABLELEN}
+    Len^ := StrLen(result);
+    {$else}
+    Len^ := fLen[FieldIndex];
+    {$endif NOTORMTABLELEN}
 end;
 
-function TOrmTableAbstract.FieldBuffer(const FieldName: RawUtf8): PUtf8Char;
+function TOrmTableAbstract.FieldBuffer(
+  const FieldName: RawUtf8; Len: PInteger): PUtf8Char;
 var
   i: integer;
 begin
@@ -10180,7 +10261,14 @@ begin
      (fStepRow > fRowCount) then
     raise EOrmTable.CreateUtf8('%.FieldBuffer(%): no previous Step',
       [self, FieldName]);
-  result := Results[fStepRow * FieldCount + i];
+  inc(i, fStepRow * FieldCount);
+  result := GetResults(i);
+  if Len <> nil then
+    {$ifdef NOTORMTABLELEN}
+    Len^ := StrLen(result);
+    {$else}
+    Len^ := fLen[i];
+    {$endif NOTORMTABLELEN}
 end;
 
 function TOrmTableAbstract.FieldAsInteger(FieldIndex: PtrInt): Int64;
@@ -10206,33 +10294,37 @@ end;
 function TOrmTableAbstract.FieldAsRawUtf8(FieldIndex: PtrInt): RawUtf8;
 var
   buf: PUtf8Char;
+  buflen: integer;
 begin
-  buf := FieldBuffer(FieldIndex);
-  FastSetString(result, buf, StrLen(buf));
+  buf := FieldBuffer(FieldIndex, @buflen);
+  FastSetString(result, buf, buflen);
 end;
 
 function TOrmTableAbstract.FieldAsRawUtf8(const FieldName: RawUtf8): RawUtf8;
 var
   buf: PUtf8Char;
+  buflen: integer;
 begin
-  buf := FieldBuffer(FieldName);
-  FastSetString(result, buf, StrLen(buf));
+  buf := FieldBuffer(FieldName, @buflen);
+  FastSetString(result, buf, buflen);
 end;
 
 function TOrmTableAbstract.FieldAsString(FieldIndex: PtrInt): string;
 var
   buf: PUtf8Char;
+  buflen: integer;
 begin
-  buf := FieldBuffer(FieldIndex);
-  Utf8DecodeToString(buf, StrLen(buf), result);
+  buf := FieldBuffer(FieldIndex, @buflen);
+  Utf8DecodeToString(buf, buflen, result);
 end;
 
 function TOrmTableAbstract.FieldAsString(const FieldName: RawUtf8): string;
 var
   buf: PUtf8Char;
+  buflen: integer;
 begin
-  buf := FieldBuffer(FieldName);
-  Utf8DecodeToString(buf, StrLen(buf), result);
+  buf := FieldBuffer(FieldName, @buflen);
+  Utf8DecodeToString(buf, buflen, result);
 end;
 
 function TOrmTableAbstract.Field(FieldIndex: PtrInt): variant;
@@ -10407,14 +10499,18 @@ begin
         end
         else
         begin
-          // compute by reading all data rows
+          // compute by checking all data rows length
           o := fFieldCount + Field;
           for i := 1 to fRowCount do
           begin
+            {$ifdef NOTORMTABLELEN}
             len := StrLen(GetResults(o));
+            {$else}
+            len := fLen[o];
+            {$endif NOTORMTABLELEN}
             if len > result then
               result := len;
-            inc(o, fFieldCount);
+            inc(o, fFieldCount); // next row
           end;
         end;
         ContentSize := result;
@@ -10519,14 +10615,15 @@ var
   aType: TOrmFieldType;
   info: POrmTableFieldType;
   U: PUtf8Char;
+  ULen: integer;
 begin
   if Row = 0 then // Field Name
     RawUtf8ToVariant(GetU(0, Field), result)
   else
   begin
     aType := FieldType(Field, info);
-    U := Get(Row, Field);
-    ValueVarToVariant(U, StrLen(U), aType, TVarData(result), true, info.ContentTypeInfo);
+    U := Get(Row, Field, ULen);
+    ValueVarToVariant(U, ULen, aType, TVarData(result), true, info.ContentTypeInfo);
   end;
 end;
 

@@ -282,12 +282,12 @@ var
   f: integer;
   P: PUtf8Char;
 label
-  Txt;
+  txt;
 begin
   result := nil;
   f := Field.Index;
   inc(RowIndex); // first TOrmTable row are field names
-  P := fTable.Get(RowIndex, f);
+  P := fTable.Get(RowIndex, f, ResultLen);
   if P = nil then // null field or out-of-range RowIndex/f -> result := nil
     exit;
   result := @fTemp64; // let result point to Int64, Double or TDatetime
@@ -307,7 +307,7 @@ begin
       if info^.ContentTypeInfo = nil then
         SetInt64(P, fTemp64)
       else
-        goto Txt;
+        goto txt;
     oftDateTime,
     oftDateTimeMS:
       unaligned(PDouble(@fTemp64)^) := Iso8601ToDateTimePUtf8Char(P, 0);
@@ -326,10 +326,7 @@ begin
         ResultLen := length(fTempBlob);
       end;
   else
-    begin // e.g. oftUtf8Text
-Txt:  result := P;
-      ResultLen := StrLen(P);
-    end;
+txt: result := P; // e.g. oftUtf8Text
   end;
 end;
 

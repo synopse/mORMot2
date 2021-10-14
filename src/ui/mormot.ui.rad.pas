@@ -244,8 +244,8 @@ type
 constructor TVirtualDataSet.Create(Owner: TComponent);
 begin
   inherited Create(Owner);
-  inc(GlobalDataSetCount);
-  Name := ClassName + IntToStr(GlobalDataSetCount); // force unique name
+  // ensure unique component name
+  Name := ClassName + IntToStr(InterlockedIncrement(GlobalDataSetCount)); 
 end;
 
 function TVirtualDataSet.AllocRecordBuffer: TRecordBuffer;

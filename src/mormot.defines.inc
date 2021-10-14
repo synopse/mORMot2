@@ -85,6 +85,9 @@
 {.$define NOPOINTEROFFSET}
 // disable TOrmTable offsets on 64-bit if your memory is huge or fragmented
 
+{.$define NOTORMTABLELEN}
+// disable TOrmTable internal fLen[] pre-computed table - may save some memory
+
 {.$define ONLYUSEHTTPSOCKET}
 // is defined on POSIX but may be enabled on Windows if socket+SChannel is enough
 

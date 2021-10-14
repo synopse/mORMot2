@@ -916,6 +916,7 @@ var
   n, i: PtrInt;
   T: TOrmTable;
   P: PUtf8Char;
+  PLen: integer;
 begin
   result := false;
   n := length(FieldName);
@@ -937,7 +938,8 @@ begin
             SQL := 'SELECT ' + FieldName[i]
           else
             SQL := SQL + ',' + FieldName[i];
-        SQL := SQL + ' FROM ' + SqlTableName + SqlFromWhere(WhereClause) + ' LIMIT 1';
+        SQL := SQL + ' FROM ' + SqlTableName + SqlFromWhere(WhereClause) +
+                     ' LIMIT 1';
       end;
       T := ExecuteList([Table], SQL);
       if T <> nil then
@@ -948,8 +950,8 @@ begin
         // get field values from the first (and unique) row
         for i := 0 to T.FieldCount - 1 do
         begin
-          P := T.Get(1, i);
-          FastSetString(FieldValue[i], P, StrLen(P));
+          P := T.Get(1, i, PLen);
+          FastSetString(FieldValue[i], P, PLen);
         end;
         result := true;
       finally
@@ -962,8 +964,8 @@ function TRestOrm.MultiFieldValue(Table: TOrmClass;
   const FieldName: array of RawUtf8; var FieldValue: array of RawUtf8;
   WhereID: TID): boolean;
 begin
-  result := MultiFieldValue(Table, FieldName, FieldValue, 'RowID=:(' +
-    Int64ToUtf8(WhereID) + '):');
+  result := MultiFieldValue(Table, FieldName, FieldValue,
+    'RowID=:(' + Int64ToUtf8(WhereID) + '):');
 end;
 
 function TRestOrm.OneFieldValues(Table: TOrmClass;
@@ -1017,7 +1019,8 @@ begin
               exit;
             end;
           end;
-        'i', 'I':
+        'i',
+        'I':
           if P[1] in ['n', 'N'] then
           begin
             // SELECT RowID from Table where RowID in [1,2,3]
@@ -1056,7 +1059,6 @@ function TRestOrm.OneFieldValues(Table: TOrmClass;
   const FieldName, WhereClause, Separator: RawUtf8): RawUtf8;
 var
   i, Len, SepLen, L: PtrInt;
-  Lens: TIntegerDynArray;
   T: TOrmTable;
   P: PUtf8Char;
 begin
@@ -1068,21 +1070,16 @@ begin
        (T.RowCount <= 0) then
       exit;
     // calculate row values CSV needed memory
-    SetLength(Lens, T.RowCount);
     SepLen := length(Separator);
     Len := SepLen * (T.RowCount - 1);
     for i := 1 to T.RowCount do
-    begin
-      L := StrLen(T.Results[i]); // ignore fResults[0] i.e. field name
-      inc(Len, L);
-      Lens[i - 1] := L;
-    end;
+      inc(Len, T.ResultsLen[i]); // ignore Results[0] i.e. field name
     SetLength(result, Len);
     // add row values as CSV
     P := pointer(result);
     i := 1;
     repeat
-      L := Lens[i - 1];
+      L := T.ResultsLen[i];
       if L <> 0 then
       begin
         MoveFast(T.Results[i]^, P^, L);
@@ -1090,7 +1087,7 @@ begin
       end;
       if i = T.RowCount then
         break;
-      MoveFast(pointer(Separator)^, P^, SepLen);
+      MoveSmall(pointer(Separator), P, SepLen);
       inc(P, SepLen);
       inc(i);
     until false;
@@ -2400,37 +2397,56 @@ end;
 function TOrmTableWritable.AddField(const FieldName: RawUtf8): integer;
 var
   prev: TOrmTableJsonDataArray;
-  rowlen, i: integer;
+  {$ifndef NOTORMTABLELEN}
+  prevlen: TIntegerDynArray;
+  {$endif NOTORMTABLELEN}
+  rowlen, i, n: PtrInt;
   S, D: PByte;
 begin
   if (FieldName = '') or
      (FieldIndex(FieldName) >= 0) then
     raise EOrmTable.CreateUtf8('%.AddField(%) invalid fieldname', [self, FieldName]);
+  // register the new field
   result := fFieldCount;
   inc(fFieldCount);
   SetLength(fFieldNames, fFieldCount);
   fFieldNames[result] := FieldName;
+  QuickSortIndexedPUtf8Char(pointer(fFieldNames), fFieldCount, fFieldNameOrder);
+  // prepare internal storage
   prev := fJsonData;
   fJsonData := nil;
-  SetLength(fJsonData, (fRowCount + 1) * fFieldCount);
+  {$ifndef NOTORMTABLELEN}
+  prevlen := fLen;
+  fLen := nil; // SetResultsSafe() won't try to set fLen[]
+  {$endif NOTORMTABLELEN}
+  n := (fRowCount + 1) * fFieldCount;
+  // adjust data rows
+  SetLength(fJsonData, n);
   fData := pointer(fJsonData);
+  SetResultsSafe(result, pointer(FieldName)); // set new field name in row=0
   S := pointer(prev);
   D := pointer(fJsonData);
   rowlen := result * SizeOf(fJsonData[0]);
-  // copy first row (fields names) + add new field name
-  MoveFast(S^, D^, rowlen);
-  inc(S, rowlen);
-  inc(D, rowlen);
-  SetResultsSafe(result, pointer(fFieldNames[result]));
-  inc(D, SizeOf(fJsonData[0]));
-  QuickSortIndexedPUtf8Char(pointer(fFieldNames), fFieldCount, fFieldNameOrder);
-  // copy data rows
-  for i := 1 to fRowCount do
+  for i := 0 to fRowCount do
   begin
     MoveFast(S^, D^, rowlen);
     inc(S, rowlen);
     inc(D, rowlen + SizeOf(fJsonData[0])); // leave new field value as D^=nil
   end;
+  {$ifndef NOTORMTABLELEN}
+  // also adjust the internal fLen[] array
+  SetLength(fLen, n);
+  fLen[result] := length(fFieldNames[result]); // we know the new field length
+  S := pointer(prevlen);
+  D := pointer(fLen);
+  rowlen := result shl 2;
+  for i := 0 to fRowCount do
+  begin
+    MoveFast(S^, D^, rowlen);
+    inc(S, rowlen);
+    inc(D, rowlen + 4); // leave new field value as fLen[]=0
+  end;
+  {$endif NOTORMTABLELEN}
 end;
 
 procedure TOrmTableWritable.Update(Row: PtrInt; const FieldName, Value: RawUtf8);

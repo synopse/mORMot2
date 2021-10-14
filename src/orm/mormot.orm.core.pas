@@ -5855,7 +5855,8 @@ function TOrmTableJson.ParseAndConvert(Buffer: PUtf8Char; BufferLen: integer): b
 var
   i, max, resmax, f: PtrInt;
   EndOfObject: AnsiChar;
-  P: PUtf8Char;
+  P, V: PUtf8Char;
+  VLen: integer;
   wasString: boolean;
 begin
   result := false; // error on parsing
@@ -5884,21 +5885,29 @@ begin
     // 2. initialize and fill fResults[] PPUtf8CharArray memory
     max := (fRowCount + 1) * fFieldCount;
     SetLength(fJsonData, max);
+    {$ifndef NOTORMTABLELEN}
+    SetLength(fLen, max);
+    {$endif NOTORMTABLELEN}
     fData := pointer(fJsonData);
     // unescape+zeroify JSONData + fill fResults[] to proper place
     dec(max);
     for i := 0 to fFieldCount - 1 do
     begin
-      SetResults(i, GetJsonField(P, P, @wasString));
+      V := GetJsonField(P, P, @wasString, nil, @VLen);
+      SetResults(i, V, VLen);
       if not wasString then
         exit; // should start with field names
+      if (fFieldIndexID < 0) and
+         IsRowID(V) then
+        fFieldIndexID := i;
     end;
     f := 0;
     for i := fFieldCount to max do
     begin
       // get a field value
-      SetResults(i, GetJsonFieldOrObjectOrArray(P, @wasString, nil, true
-         {$ifndef NOPOINTEROFFSET} , {normalizebool=}false {$endif}));
+      V := GetJsonFieldOrObjectOrArray(P, @wasString, nil,
+        {handleobjarra=}true, {normalizebool=}false, @VLen);
+      SetResults(i, V, VLen);
       if (P = nil) and
          (i <> max) then
         // failure (GetRowCountNotExpanded should have detected it)
@@ -5942,6 +5951,9 @@ begin
     max := fFieldCount; // index to start storing values in fResults[]
     resmax := max * 2;  // field names + 1 data row by default = 1 object
     SetLength(fJsonData, resmax);
+    {$ifndef NOTORMTABLELEN}
+    SetLength(fLen, resmax);
+    {$endif NOTORMTABLELEN}
     fData := pointer(fJsonData); // needed for SetResults() below
     fRowCount := 0;
     repeat
@@ -5951,7 +5963,11 @@ begin
         if fRowCount = 0 then
         begin
           // get field name from 1st Row
-          SetResults(f, GetJsonPropName(P));
+          V := GetJsonPropName(P, @VLen);
+          if (fFieldIndexID < 0) and
+             IsRowID(V) then
+            fFieldIndexID := f;
+          SetResults(f, V, VLen);
           if P = nil then
             break;
         end
@@ -5967,10 +5983,14 @@ begin
         begin // check space inside loop for GPF security
           resmax := NextGrow(resmax);
           SetLength(fJsonData, resmax);
+          {$ifndef NOTORMTABLELEN}
+          SetLength(fLen, resmax);
+          {$endif NOTORMTABLELEN}
           fData := pointer(fJsonData);
         end;
-        SetResults(max, GetJsonFieldOrObjectOrArray(P, @wasString, @EndOfObject,
-          {handleobjectarray=}true, {normbool=}false{no SetResults overflow}));
+        V := GetJsonFieldOrObjectOrArray(P, @wasString, @EndOfObject,
+          {handleobjectarray=}true, {normbool=}false, @VLen);
+        SetResults(max, V, VLen);
         if P = nil then
         begin
           // unexpected end
@@ -6009,17 +6029,14 @@ begin
     begin
       // field count must be the same for all objects
       fJsonData := nil;
+      {$ifndef NOTORMTABLELEN}
+      fLen := nil;
+      {$endif NOTORMTABLELEN}
       fFieldCount := 0;
       fRowCount := 0;
       exit; // data field layout is not consistent: should never happen
     end;
   end;
-  for i := 0 to fFieldCount - 1 do
-    if IsRowID(Results[i]) then
-    begin
-      fFieldIndexID := i;
-      break;
-    end;
   result := true; // if we reached here, means successfull conversion from P^
 end;
 
@@ -6159,7 +6176,7 @@ end;
 function TOrmFill.Fill(aRow: integer; aDest: TOrm): boolean;
 var
   D: TOrm;
-  f: PtrInt;
+  f, i: PtrInt;
   P: PUtf8Char;
 begin
   if (self = nil) or
@@ -6176,11 +6193,14 @@ begin
           D := aDest
         else
           D := Dest;
-        P := Table.GetResults(aRow + TableIndex);
+        i := aRow + TableIndex; // field index in this TOrmTable
+        P := Table.GetResults(i);
         if DestField = nil then
           SetID(P, D.fID)
         else
-          DestField.SetValue(D, P, StrLen(P), TableIndex in fTable.fFieldParsedAsString);
+          DestField.SetValue(D, P,
+            {$ifdef NOTORMTABLELEN} StrLen(P) {$else} fTable.fLen[i] {$endif},
+            {wasstring=}TableIndex in fTable.fFieldParsedAsString);
       end;
     result := True;
   end;
@@ -7844,7 +7864,7 @@ begin
   end;
   { assert(T.FieldCount=SqlFieldsCount);
     for i := 0 to SqlFieldsCount-1 do
-      assert(IdemPropNameU(SqlFields[i].sql,T.fResults[i],StrLen(T.fResults[i]))); }
+      assert(IdemPropNameU(SqlFields[i].sql,T.fResults[i],T.fLen[i])); }
   fFill.fTable := T;
   T.OwnerMustFree := true;
   fFill.fFillCurrentRow := 1; // point to first data row (0 is field names)
@@ -9766,7 +9786,7 @@ begin // use length(SqlTableName)
 end;
 
 function TOrmModel.GetTableIndexPtr(SqlTableName: PUtf8Char): PtrInt;
-begin // use StrLen(SqlTableName)
+begin
   if (self <> nil) and
      (SqlTableName <> nil) then
   begin
