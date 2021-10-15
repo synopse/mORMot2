@@ -819,7 +819,7 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
       Str2[0] := 'ABC';
       Str2[1] := 'DEF';
       Str2[2] := 'GHIJK';
-      FillCharFast(Rec1, sizeof(Rec1), 0);
+      FillCharFast(Rec1, SizeOf(Rec1), 0);
       Rec1.Features := [vtTransaction, vtSavePoint];
       Rec1.FileExtension := Executable.ProgramFileName;
       Rec2.ID := i1;
@@ -1092,7 +1092,7 @@ var
   stat: TSynMonitorInputOutput;
 begin
  // exit;
-  FillCharFast(Inst, sizeof(Inst), 0);
+  FillCharFast(Inst, SizeOf(Inst), 0);
   GlobalInterfaceTestMode := itmClient;
   if aRunInOtherThread then
     if optExecLockedPerInterface in aOptions then
@@ -1170,7 +1170,7 @@ procedure TTestServiceOrientedArchitecture.DirectCall;
 var
   Inst: TTestServiceInstances;
 begin
-  FillCharFast(Inst, sizeof(Inst), 0); // all Expected..ID=0
+  FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
   Inst.I := TServiceCalculator.Create;
   Inst.CC := TServiceComplexCalculator.Create;
   Inst.CN := TServiceComplexNumber.Create;
@@ -1187,7 +1187,7 @@ procedure TTestServiceOrientedArchitecture.ServerSide;
 var
   Inst: TTestServiceInstances;
 begin
-  FillCharFast(Inst, sizeof(Inst), 0); // all Expected..ID=0
+  FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
   if CheckFailed(fModel <> nil) or
      CheckFailed(fClient <> nil) or
      CheckFailed(fClient.Server.Services.Count = 7) or
@@ -1645,7 +1645,7 @@ begin
   HTTPServer := TRestHttpServer.Create(HTTP_DEFAULTPORT, [fClient.Server], '+',
     HTTP_DEFAULT_MODE, 8, secNone);
   try
-    FillCharFast(Inst, sizeof(Inst), 0); // all Expected..ID=0
+    FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
     HTTPClient := TRestHttpClient.Create('127.0.0.1', HTTP_DEFAULTPORT, fModel);
     try
       HTTPClient.ServicePublishOwnInterfaces :=

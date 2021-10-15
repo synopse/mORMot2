@@ -467,7 +467,7 @@ begin
     i := popcnt(u);
   NotifyTestSpeed('FPC', N, N shl POINTERSHR, @timer, {onlylog=}true);
   {$endif FPC}
-  FillcharFast(Bits, sizeof(Bits), 0);
+  FillcharFast(Bits, SizeOf(Bits), 0);
   for i := 0 to high(Bits) * 8 + 7 do
   begin
     Check(not GetBit(Bits, i));
@@ -2176,9 +2176,9 @@ var
   A, B, C: TR;
   i, j: PtrInt;
 begin
-  FillCharFast(A, sizeof(A), 0);
-  FillCharFast(B, sizeof(B), 0);
-  FillCharFast(C, sizeof(C), 0);
+  FillCharFast(A, SizeOf(A), 0);
+  FillCharFast(B, SizeOf(B), 0);
+  FillCharFast(C, SizeOf(C), 0);
   for i := 0 to High(A.Bulk) do
     A.Bulk[i] := i;
   A.S1 := 'one';
@@ -2223,7 +2223,7 @@ begin
     Check(CompareMemSmall(@A.Bulk, @B.Bulk, i));
   for i := 0 to High(B.Bulk) do
     Check(CompareMemFixed(@A.Bulk, @B.Bulk, i));
-  FillCharFast(A.Bulk, sizeof(A.Bulk), 255);
+  FillCharFast(A.Bulk, SizeOf(A.Bulk), 255);
   for i := 0 to High(B.Bulk) do
     Check(CompareMem(@A.Bulk, @B.Bulk, i) = (i = 0));
   for i := 0 to High(B.Bulk) do
@@ -2308,9 +2308,9 @@ begin
     s := RandomString(j);
     Check(UrlDecode(UrlEncode(s)) = s, string(s));
   end;
-  utf := BinToBase64Uri(@GUID, sizeof(GUID));
+  utf := BinToBase64Uri(@GUID, SizeOf(GUID));
   Check(utf = '00amyWGct0y_ze4lIsj2Mw');
-  FillCharFast(Guid2, sizeof(Guid2), 0);
+  FillCharFast(Guid2, SizeOf(Guid2), 0);
   Check(Base64uriToBin(utf, @Guid2, SizeOf(Guid2)));
   Check(IsEqualGuid(Guid2, GUID));
   Check(IsEqualGuid(@Guid2, @GUID));
@@ -2371,7 +2371,7 @@ begin
     Check(st = mormot.core.unicode.Utf8ToString(s));
     st[Random32(38) + 1] := ' ';
     g2 := StringToGuid(st);
-    Check(IsZero(@g2, sizeof(g2)));
+    Check(IsZero(@g2, SizeOf(g2)));
     Check(TextToGuid(@s[2], @g2)^ = '}');
     Check(IsEqualGuid(g2, g));
     Check(IsEqualGuid(@g2, @g));
@@ -2382,7 +2382,7 @@ begin
   end;
   // oldest Delphi can't compile TypeInfo(TGUID) -> use PT_INFO[ptGuid]
   s := RecordSaveJson(g, PT_INFO[ptGuid]);
-  FillCharFast(g2, sizeof(g2), 0);
+  FillCharFast(g2, SizeOf(g2), 0);
   Check(RecordLoadJson(g2, pointer(s), PT_INFO[ptGuid]) <> nil);
   Check(IsEqualGuid(g2, g));
   FillCharFast(h, SizeOf(h), 1);
@@ -4580,7 +4580,7 @@ begin
     WS := Utf8ToWideString(U);
     Check(length(WS) = length(Unic) shr 1);
     if WS <> '' then
-      Check(CompareMem(pointer(WS), pointer(Unic), length(WS) * sizeof(WideChar)));
+      Check(CompareMem(pointer(WS), pointer(Unic), length(WS) * SizeOf(WideChar)));
     Check(integer(Utf8ToUnicodeLength(Pointer(U))) = length(WS));
     SU := Utf8ToSynUnicode(U);
     Check(length(SU) = length(Unic) shr 1);
@@ -5068,7 +5068,7 @@ begin
   tz := TSynTimeZone.Create;
   try
     check(tz.Zone = nil);
-    FillCharFast(d, sizeof(d), 0);
+    FillCharFast(d, SizeOf(d), 0);
     for i := 0 to 40 do
     begin
       UInt32ToUtf8(i, RawUtf8(d.id));
@@ -5787,8 +5787,8 @@ begin
   Check(n = 'myprogram');
   Check(v = '3.1.2');
   check(os = osWindows);
-  FillcharFast(tmp, sizeof(tmp), 1);
-  len := SyslogMessage(sfAuth, ssCrit, 'test', '', '', tmp, sizeof(tmp), false);
+  FillcharFast(tmp, SizeOf(tmp), 1);
+  len := SyslogMessage(sfAuth, ssCrit, 'test', '', '', tmp, SizeOf(tmp), false);
   // Check(len=65); // <-- different for every PC, due to PC name differences
   tmp[len] := #0;
   Check(IdemPChar(PUtf8Char(@tmp), PAnsiChar('<34>1 ')));
@@ -6467,36 +6467,36 @@ begin
     Check(b.Inserted = 0);
     CheckLogTimeStart;
     for i := 1 to SIZ do
-      Check(not b.MayExist(@i, sizeof(i)));
+      Check(not b.MayExist(@i, SizeOf(i)));
     CheckLogTime(b.Inserted = 0, 'MayExists(%)=false', [SIZ]);
     for i := 1 to 1000 do
-      b.Insert(@i, sizeof(i));
+      b.Insert(@i, SizeOf(i));
     CheckLogTime(b.Inserted = 1000, 'Insert(%)', [b.Inserted]);
     sav1000 := b.SaveTo;
     CheckLogTime(sav1000 <> '', 'b.SaveTo(%) len=%', [b.Inserted, kb(sav1000)]);
     for i := 1001 to SIZ do
-      b.Insert(@i, sizeof(i));
+      b.Insert(@i, SizeOf(i));
     CheckLogTime(b.Inserted = SIZ, 'Insert(%)', [SIZ - 1000]);
     savSIZ := b.SaveTo;
     CheckLogTime(length(savSIZ) > length(sav1000), 'b.SaveTo(%) len=%', [SIZ, kb
       (savSIZ)]);
     for i := 1 to SIZ do
-      Check(b.MayExist(@i, sizeof(i)));
+      Check(b.MayExist(@i, SizeOf(i)));
     CheckLogTime(b.Inserted = SIZ, 'MayExists(%)=true', [SIZ]);
     n := 0;
     for i := SIZ + 1 to SIZ + SIZ shr 5 do
-      if b.MayExist(@i, sizeof(i)) then
+      if b.MayExist(@i, SizeOf(i)) then
         inc(n);
     falsepositive := (n * 100) / (SIZ shr 5);
     CheckLogTime(falsepositive < 1, 'falsepositive=%', [falsepositive]);
     b.Reset;
     CheckLogTime(b.Inserted = 0, 'b.Reset', []);
     for i := 1 to SIZ do
-      Check(not b.MayExist(@i, sizeof(i)));
+      Check(not b.MayExist(@i, SizeOf(i)));
     CheckLogTime(b.Inserted = 0, 'MayExists(%)=false', [SIZ]);
     CheckLogTime(b.LoadFrom(sav1000), 'b.LoadFrom(%)', [1000]);
     for i := 1 to 1000 do
-      Check(b.MayExist(@i, sizeof(i)));
+      Check(b.MayExist(@i, SizeOf(i)));
     CheckLogTime(b.Inserted = 1000, 'MayExists(%)=true', [1000]);
   finally
     b.Free;
@@ -6510,7 +6510,7 @@ begin
     Check(d1.Bits > d1.Size shl 3);
     Check(d1.HashFunctions = 7);
     for i := 1 to SIZ do
-      Check(d1.MayExist(@i, sizeof(i)));
+      Check(d1.MayExist(@i, SizeOf(i)));
     CheckLogTime(d1.Inserted = SIZ, 'MayExists(%)=true', [SIZ]);
     d2 := TSynBloomFilterDiff.Create;
     try
@@ -6526,10 +6526,10 @@ begin
         Check(d2.Revision = d1.Revision);
         Check(d2.Size = d1.Size);
         for i := 1 to n do
-          Check(d2.MayExist(@i, sizeof(i)));
+          Check(d2.MayExist(@i, SizeOf(i)));
         CheckLogTime(d2.Inserted = cardinal(n), 'MayExists(%)=true', [n]);
         for i := n + 1 to n + 1000 do
-          d1.Insert(@i, sizeof(i));
+          d1.Insert(@i, SizeOf(i));
         CheckLogTime(d2.Revision <> d1.Revision, 'd1.Insert(%)', [1000]);
         savSIZ := d1.SaveToDiff(d2.Revision);
         CheckLogTime(savSIZ <> '', 'd1.SaveToDiff(%) len=%', [d2.Revision, kb(savSIZ)]);
@@ -6539,7 +6539,7 @@ begin
         Check(d2.Revision = d1.Revision);
         inc(n, 1000);
         for i := 1 to n do
-          Check(d2.MayExist(@i, sizeof(i)));
+          Check(d2.MayExist(@i, SizeOf(i)));
         CheckLogTime(d2.Inserted = cardinal(n), 'MayExists(%)=true', [n]);
         Check(d2.Inserted = cardinal(n));
         if j = 2 then

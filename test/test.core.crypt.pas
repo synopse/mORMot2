@@ -249,23 +249,23 @@ var
 begin
   rc4.Init(Test1, 8);
   rc4.Encrypt(Test1, dat, 8);
-  Check(CompareMem(@dat, @Res1, sizeof(Res1)));
+  Check(CompareMem(@dat, @Res1, SizeOf(Res1)));
   rc4.Init(Key2, 4);
   rc4.Encrypt(Test2, dat, 10);
-  Check(CompareMem(@dat, @Res2, sizeof(Res2)));
-  rc4.Init(Key1, sizeof(Key1));
-  rc4.Encrypt(InDat, dat, sizeof(InDat));
-  Check(CompareMem(@dat, @OutDat, sizeof(OutDat)));
-  rc4.Init(Key1, sizeof(Key1));
+  Check(CompareMem(@dat, @Res2, SizeOf(Res2)));
+  rc4.Init(Key1, SizeOf(Key1));
+  rc4.Encrypt(InDat, dat, SizeOf(InDat));
+  Check(CompareMem(@dat, @OutDat, SizeOf(OutDat)));
+  rc4.Init(Key1, SizeOf(Key1));
   bak := rc4;
-  rc4.Encrypt(InDat, dat, sizeof(InDat));
-  Check(CompareMem(@dat, @OutDat, sizeof(OutDat)));
+  rc4.Encrypt(InDat, dat, SizeOf(InDat));
+  Check(CompareMem(@dat, @OutDat, SizeOf(OutDat)));
   rc4 := bak;
-  rc4.Encrypt(InDat, dat, sizeof(InDat));
-  Check(CompareMem(@dat, @OutDat, sizeof(OutDat)));
+  rc4.Encrypt(InDat, dat, SizeOf(InDat));
+  Check(CompareMem(@dat, @OutDat, SizeOf(OutDat)));
   rc4 := bak;
-  rc4.Encrypt(OutDat, dat, sizeof(InDat));
-  Check(CompareMem(@dat, @InDat, sizeof(OutDat)));
+  rc4.Encrypt(OutDat, dat, SizeOf(InDat));
+  Check(CompareMem(@dat, @InDat, SizeOf(OutDat)));
   key := RandomString(100);
   for ks := 1 to 10 do
   begin
@@ -557,7 +557,7 @@ begin
   p.FillRandom(b1);
   p.FillRandom(b2);
   Check(not IsEqual(b1, b2));
-  Check(not CompareMem(@b1, @b2, sizeof(b1)));
+  Check(not CompareMem(@b1, @b2, SizeOf(b1)));
   clo := 0;
   chi := 0;
   dlo := 0;
@@ -570,7 +570,7 @@ begin
     a1.FillRandom(b1);
     a2.FillRandom(b2);
     Check(not IsEqual(b1, b2));
-    Check(not CompareMem(@b1, @b2, sizeof(b1)));
+    Check(not CompareMem(@b1, @b2, SizeOf(b1)));
     Check(a1.FillRandom(0) = '');
     Check(a1.FillRandomHex(0) = '');
     for i := 1 to 2000 do
@@ -744,7 +744,7 @@ procedure TTestCoreCrypto._JWT;
       for i := 1 to 1000 do
       begin
         Finalize(jwt);
-        FillCharFast(jwt, sizeof(jwt), 0);
+        FillCharFast(jwt, SizeOf(jwt), 0);
         check(jwt.reg[jrcIssuer] = '');
         one.Verify(t, jwt);
         check(jwt.result = jwtValid, 'from cache');
@@ -958,7 +958,7 @@ begin
   SHAKE128.InitCypher('secret', SHAKE_128);
   SHAKE256.InitCypher('secret', SHAKE_256);
   RC4.InitSha3(dig, SizeOf(dig));
-  FillCharFast(time, sizeof(time), 0);
+  FillCharFast(time, SizeOf(time), 0);
   size := 0;
   n := 0;
   for s := 0 to high(SIZ) do
@@ -1616,7 +1616,7 @@ begin
         A.Done;
         Timer[noaesni].Pause;
         CheckUtf8(IsEqual(p, s), 'encrypt/decrypt ks=% %<>%', [ks, p[0], s[0]]);
-        Check(CompareMem(@p, @s, sizeof(p)));
+        Check(CompareMem(@p, @s, SizeOf(p)));
       end;
       iv.c3 := $e0ffffff; // to trigger an explicit CTR overflow
       for m := low(MODES) to high(MODES) do
@@ -1906,26 +1906,26 @@ begin
   end;
   Check(CompareMem(@buf32, @buf, SizeOf(buf32)));
   Check(CompareMem(@tag32, @tag, SizeOf(tag32)));
-  test(@T01, 16, K01, 8 * sizeof(K01), @I01, sizeof(I01), nil, 0,
-       @C01, sizeof(C01), @P01, 01);
-  test(@T02, 16, K02, 8 * sizeof(K02), @I02, sizeof(I02), @H02, sizeof(H02),
+  test(@T01, 16, K01, 8 * SizeOf(K01), @I01, SizeOf(I01), nil, 0,
+       @C01, SizeOf(C01), @P01, 01);
+  test(@T02, 16, K02, 8 * SizeOf(K02), @I02, SizeOf(I02), @H02, SizeOf(H02),
        nil, 0, nil, 02);
-  test(@T03, 16, K03, 8 * sizeof(K03), @I03, sizeof(I03), @H03, sizeof(H03),
-       @C03, sizeof(C03), @P03, 03);
-  test(@T04, 16, K04, 8 * sizeof(K04), @I04, sizeof(I04), nil, 0,
-       @C04, sizeof(C04), @P04, 04);
-  test(@T05, 16, K05, 8 * sizeof(K05), @I05, sizeof(I05), @H05, sizeof(H05),
-       @C05, sizeof(C05), @P05, 05);
-  test(@T07, 16, K07, 8 * sizeof(K07), @I07, sizeof(I07), @H07, sizeof(H07),
-       @C07, sizeof(C07), @P07, 07);
-  test(@T08, 16, K08, 8 * sizeof(K08), @I08, sizeof(I08), @H08, sizeof(H08),
-       @C08, sizeof(C08), @P08, 08);
-  test(@T09, 16, K09, 8 * sizeof(K09), @I09, sizeof(I09), @H09, sizeof(H09),
-       @C09, sizeof(C09), @P09, 09);
-  test(@T10, 16, K10, 8 * sizeof(K10), @I10, sizeof(I10), nil, 0, @C10,
-       sizeof(C10), @P10, 10);
-  test(@T11, 16, K11, 8 * sizeof(K11), @I11, sizeof(I11), @H11, sizeof(H11),
-       @C11, sizeof(C11), @P11, 11);
+  test(@T03, 16, K03, 8 * SizeOf(K03), @I03, SizeOf(I03), @H03, SizeOf(H03),
+       @C03, SizeOf(C03), @P03, 03);
+  test(@T04, 16, K04, 8 * SizeOf(K04), @I04, SizeOf(I04), nil, 0,
+       @C04, SizeOf(C04), @P04, 04);
+  test(@T05, 16, K05, 8 * SizeOf(K05), @I05, SizeOf(I05), @H05, SizeOf(H05),
+       @C05, SizeOf(C05), @P05, 05);
+  test(@T07, 16, K07, 8 * SizeOf(K07), @I07, SizeOf(I07), @H07, SizeOf(H07),
+       @C07, SizeOf(C07), @P07, 07);
+  test(@T08, 16, K08, 8 * SizeOf(K08), @I08, SizeOf(I08), @H08, SizeOf(H08),
+       @C08, SizeOf(C08), @P08, 08);
+  test(@T09, 16, K09, 8 * SizeOf(K09), @I09, SizeOf(I09), @H09, SizeOf(H09),
+       @C09, SizeOf(C09), @P09, 09);
+  test(@T10, 16, K10, 8 * SizeOf(K10), @I10, SizeOf(I10), nil, 0, @C10,
+       SizeOf(C10), @P10, 10);
+  test(@T11, 16, K11, 8 * SizeOf(K11), @I11, SizeOf(I11), @H11, SizeOf(H11),
+       @C11, SizeOf(C11), @P11, 11);
 end;
 
 {$ifndef PUREMORMOT2}
@@ -1971,7 +1971,7 @@ begin
     md.Final(dig);
     md.Full(pointer(tmp), n, dig2);
     check(IsEqual(dig, dig2));
-    check(CompareMem(@dig, @dig2, sizeof(dig)));
+    check(CompareMem(@dig, @dig2, SizeOf(dig)));
   end;
 end;
 

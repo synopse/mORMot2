@@ -82,44 +82,44 @@ begin
   SetLength(pub, ECC_COUNT);
   SetLength(priv, ECC_COUNT);
   SetLength(sign, ECC_COUNT);
-  TAesPrng.Main.FillRandom(@hash, sizeof(hash));
+  TAesPrng.Main.FillRandom(@hash, SizeOf(hash));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     'DC5B79BD481E536DD8075D06C18D42B25B557B4671017BA2A26102B69FD9B70A'),
-    @pr1, sizeof(pr1)));
+    @pr1, SizeOf(pr1)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '024698753E25650A3129320A7DDBA43D56051F4BEE3653897960A61FBC92AB24A5'),
-    @pu1, sizeof(pu1)));
+    @pu1, SizeOf(pu1)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     'CFA96FAC873F522897000815BE96338DE8D355D5F495DD5C5A4FEF0AEDB66D5B'),
-    @pr2, sizeof(pr2)));
+    @pr2, SizeOf(pr2)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '0298D0D01FCE73146C10CD05E08BEA573BEE4EFC56D5EBAAC64B32672C8FAC1502'),
-    @pu2, sizeof(pu2)));
+    @pu2, SizeOf(pu2)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '9509D00BBBA2308445BC73311C3887E935183F65D361D4C39E2FA432B7168599'),
-    @h1, sizeof(h1)));
+    @h1, SizeOf(h1)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     'F04CD0AA3D40433C51F35D07DBF4E11C91C922791A8BA7B930B5C30716D8B26E4B65EFBF' +
-    'BDC0526A94ABDAA31130248F0413AC33D5BFA903E09847AAF42FD043'), @si1, sizeof(si1)));
+    'BDC0526A94ABDAA31130248F0413AC33D5BFA903E09847AAF42FD043'), @si1, SizeOf(si1)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '3366C112F95B2F52836171CAD3F3441C4B3C75348859092B200DE5024CB0C91B'),
-    @h2, sizeof(h2)));
+    @h2, SizeOf(h2)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     'EEEF6F1D0A590BFC72B9D7DC0DB4BF36A8928DA2B8078FEE567808BB082525438CF68546' +
-    '26E17FBB28528450E50E43AB2598ED2CD3ACC7B43865BEB843452713'), @si2, sizeof(si2)));
+    '26E17FBB28528450E50E43AB2598ED2CD3ACC7B43865BEB843452713'), @si2, SizeOf(si2)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '51A0C8018EC725F9B9F821D826FEEC4CAE8843066685522F1961D25935EAA39E'),
-    @s1, sizeof(s1)));
+    @s1, SizeOf(s1)));
   Check(Ecc256r1Verify(pu1, h1, si1));
   Check(Ecc256r1Verify(pu2, h2, si2));
   FillZero(s2);
   Check(Ecc256r1SharedSecret(pu1, pr2, s2));
   Check(IsEqual(s1, s2));
-  Check(CompareMem(@s1, @s2, sizeof(s1)));
+  Check(CompareMem(@s1, @s2, SizeOf(s1)));
   FillZero(s3);
   Check(Ecc256r1SharedSecret(pu2, pr1, s3));
   Check(IsEqual(s1, s3));
-  Check(CompareMem(@s1, @s3, sizeof(s1)));
+  Check(CompareMem(@s1, @s3, SizeOf(s1)));
   Check(ecdsa_verify_pas(pu1, h1, si1));
   Check(ecdsa_verify_pas(pu2, h2, si2));
   FillZero(s2);
@@ -449,7 +449,7 @@ begin
           check(I['Size'] = length(text));
           check(U['recipient'] = issuer);
           check(U['Recipientserial'] = id);
-          check(length(U['RandomPublicKey']) = sizeof(TEccPublicKey) * 2);
+          check(length(U['RandomPublicKey']) = SizeOf(TEccPublicKey) * 2);
           check(U['Algorithm'] = ShortStringToAnsi7String(
             ToText(ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ)^));
           check(O['Signature']^.VarType = varNull, 'not signed');
@@ -484,14 +484,14 @@ begin
           check(I['Size'] = length(text));
           check(U['recipient'] = issuer);
           check(U['Recipientserial'] = id);
-          check(length(U['RandomPublicKey']) = sizeof(TEccPublicKey) * 2);
+          check(length(U['RandomPublicKey']) = SizeOf(TEccPublicKey) * 2);
           check(U['Algorithm'] = 'ecaPBKDF2_HMAC_SHA256_AES128_CTR');
           check(O['Signature']^.I['Version'] = 1, 'signed');
           check(O['Signature']^.U['AuthoritySerial'] = id, 'serial');
           check(B['Meta']);
         end;
         check(PosEx(StringFromFile(rawfn), StringFromFile(crypt)) =
-                sizeof(TEciesHeader) + 1);
+                SizeOf(TEciesHeader) + 1);
         DeleteFile(plainfn);
         Exec([
           'file', crypt,

@@ -1427,8 +1427,8 @@ var
       exit; // avoid GPF e.g. on Windows XP where https is broken
     TRttiJson.RegisterFromText(TypeInfo(TTestCustomJsonGitHub),
       __TTestCustomJsonGitHub, ro, wo);
-    FillCharFast(git, sizeof(git), 0);
-    FillCharFast(git2, sizeof(git2), 0);
+    FillCharFast(git, SizeOf(git), 0);
+    FillCharFast(git2, SizeOf(git2), 0);
     U := zendframeworkJson; // need unique string for procedure re-entrance
     check(IsValidJson(U));
     Check(DynArrayLoadJson(
@@ -1535,10 +1535,10 @@ var
     Finalize(JR2);
     Finalize(JA);
     Finalize(JA2);
-    FillCharFast(JR, sizeof(JR), 0);
-    FillCharFast(JR2, sizeof(JR2), 0);
-    FillCharFast(JA, sizeof(JA), 0);
-    FillCharFast(JA2, sizeof(JA2), 0);
+    FillCharFast(JR, SizeOf(JR), 0);
+    FillCharFast(JR2, SizeOf(JR2), 0);
+    FillCharFast(JA, SizeOf(JA), 0);
+    FillCharFast(JA2, SizeOf(JA2), 0);
     U := RecordSaveJson(JR, TypeInfo(TTestCustomJsonRecord));
     CheckEqual(U, '{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
     check(IsValidJson(U));
@@ -1674,7 +1674,7 @@ var
     check(IsValidJson(J));
 
     Finalize(JAS);
-    FillCharFast(JAS, sizeof(JAS), 0);
+    FillCharFast(JAS, SizeOf(JAS), 0);
     U := RecordSaveJson(JAS, TypeInfo(TTestCustomJsonArraySimple));
     CheckEqual(U, '{"A":0,"B":0,"C":[],"D":"","E":[],"H":""}');
     check(IsValidJson(U));
@@ -1699,7 +1699,7 @@ var
     check(IsValidJson(U));
 
     Finalize(JAV);
-    FillCharFast(JAV, sizeof(JAV), 0);
+    FillCharFast(JAV, SizeOf(JAV), 0);
     U := RecordSaveJson(JAV, TypeInfo(TTestCustomJsonArrayVariant));
     CheckEqual(U, '{"A":0,"B":0,"C":[],"D":""}');
     check(IsValidJson(U));
@@ -1776,7 +1776,7 @@ var
     owv.Free;
 
     Finalize(Cache);
-    FillCharFast(Cache, sizeof(Cache), 0);
+    FillCharFast(Cache, SizeOf(Cache), 0);
     U := RecordSaveJson(Cache, TypeInfo(TRestCacheEntryValue));
     CheckEqual(U, '{"ID":0,"Timestamp512":0,"Tag":0,"Json":""}');
     check(IsValidJson(U));
@@ -1803,9 +1803,9 @@ var
     Check(Cache.Tag = 12);
 
     {$ifdef ISDELPHI2010}
-    FillCharFast(nav, sizeof(nav), 0);
-    FillCharFast(nav2, sizeof(nav2), 1);
-    Check(not CompareMem(@nav, @nav2, sizeof(nav)));
+    FillCharFast(nav, SizeOf(nav), 0);
+    FillCharFast(nav2, SizeOf(nav2), 1);
+    Check(not CompareMem(@nav, @nav2, SizeOf(nav)));
     Check(nav2.MaxRows <> 0);
     check(nav2.EOF);
     U := RecordSaveJson(nav, TypeInfo(TConsultaNav));
@@ -1816,15 +1816,15 @@ var
     check(not nav2.EOF);
     J := RecordSaveJson(nav2, TypeInfo(TConsultaNav));
     CheckEqual(J, RecordSaveJson(nav, TypeInfo(TConsultaNav)));
-    Check(CompareMem(@nav, @nav2, sizeof(nav)));
+    Check(CompareMem(@nav, @nav2, SizeOf(nav)));
     Finalize(nrtti);
-    FillCharFast(nrtti, sizeof(nrtti), 0);
+    FillCharFast(nrtti, SizeOf(nrtti), 0);
     U := RecordSaveJson(nrtti, TypeInfo(TNewRtti));
     CheckEqual(U,
       '{"Number":0,"StaticArray":[{"Name":"","Single":0,"Double":0},' +
       '{"Name":"","Single":0,"Double":0}],"Int":[0,0,0,0,0]}');
     Finalize(nrtti2);
-    FillCharFast(nrtti2, sizeof(nrtti2), 0);
+    FillCharFast(nrtti2, SizeOf(nrtti2), 0);
     Check(RecordLoadJson(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
     J := RecordSaveJson(nrtti2, TypeInfo(TNewRtti));
     CheckEqual(J, RecordSaveJson(nrtti, TypeInfo(TNewRtti)));
@@ -1845,7 +1845,7 @@ var
       '{"Number":1,"StaticArray":[{"Name":"one","Single":1.5,"Double":1.7},' +
       '{"Name":"two","Single":2.5,"Double":2.7}],"Int":[1,2,3,4,5]}');
     Finalize(nrtti2);
-    FillCharFast(nrtti2, sizeof(nrtti2), 0);
+    FillCharFast(nrtti2, SizeOf(nrtti2), 0);
     Check(RecordLoadJson(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
     J := RecordSaveJson(nrtti2, TypeInfo(TNewRtti));
     CheckEqual(J, RecordSaveJson(nrtti, TypeInfo(TNewRtti)));
@@ -2756,7 +2756,7 @@ begin
   CheckEqual(U,
     '{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}]}');
   Finalize(JA);
-  FillCharFast(JA, sizeof(JA), 0);
+  FillCharFast(JA, SizeOf(JA), 0);
   RecordLoadJson(JA, pointer(U), TypeInfo(TTestCustomJsonArrayWithoutF));
   Check(JA.A = 100);
   Check(JA.D = '');
@@ -2770,7 +2770,7 @@ begin
   Check(IsValidJson(U));
   Check(length(JA.E) = 2);
   Finalize(JA);
-  FillCharFast(JA, sizeof(JA), 0);
+  FillCharFast(JA, SizeOf(JA), 0);
   RecordLoadJson(JA, pointer(U), TypeInfo(TTestCustomJsonArrayWithoutF));
   Check(length(JA.E) = 2);
   Check(JA.D = '1234');
@@ -2801,7 +2801,7 @@ begin
     __TTestCustomJson2Title, [], [woHumanReadable]);
   TRttiJson.RegisterFromText(TypeInfo(TTestCustomJson2), __TTestCustomJson2, [],
     [woHumanReadable]);
-  FillCharFast(Trans, sizeof(Trans), 0);
+  FillCharFast(Trans, SizeOf(Trans), 0);
   U := RecordSaveJson(Trans, TypeInfo(TTestCustomJson2));
   Check(IsValidJson(U));
   CheckEqual(U,  #13#10'{'#13#10#9'"Transactions": '#13#10#9'['#13#10#9']'#13#10'}');
@@ -2828,10 +2828,10 @@ begin
 
   Parser := TRttiJson.RegisterFromText(TypeInfo(TTestCustomDiscogs),
     __TTestCustomDiscogs, [jpoIgnoreUnknownProperty], []);
-  FillCharFast(Disco, sizeof(Disco), 0);
-  Check(PtrUInt(@Disco.releases) - PtrUInt(@Disco) = 3 * sizeof(integer));
-  Check(sizeof(Disco.releases[0]) = 5 * sizeof(Pointer) + 2 * sizeof(integer));
-  Check(sizeof(Disco) = sizeof(Pointer) + 3 * sizeof(integer));
+  FillCharFast(Disco, SizeOf(Disco), 0);
+  Check(PtrUInt(@Disco.releases) - PtrUInt(@Disco) = 3 * SizeOf(integer));
+  Check(SizeOf(Disco.releases[0]) = 5 * SizeOf(Pointer) + 2 * SizeOf(integer));
+  Check(SizeOf(Disco) = SizeOf(Pointer) + 3 * SizeOf(integer));
   U := RecordSaveJson(Disco, TypeInfo(TTestCustomDiscogs));
   CheckEqual(U, '{"pagination":{"per_page":0,"items":0,"page":0},"releases":[]}');
   U := JsonReformat(discogsJson, jsonCompact);
@@ -2848,7 +2848,7 @@ begin
   Check(IsValidJson(U));
   FileFromString(U, WorkDir + 'discoExtract.json');
   Finalize(Disco);
-  FillCharFast(Disco, sizeof(Disco), 0);
+  FillCharFast(Disco, SizeOf(Disco), 0);
   U := '{"pagination":{"per_page":1},"releases":[{"title":"TEST","id":10}]}';
   Check(IsValidJson(U));
   RecordLoadJson(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
@@ -2860,7 +2860,7 @@ begin
     Check(Disco.releases[0].id = 10);
   end;
   Finalize(Disco);
-  FillCharFast(Disco, sizeof(Disco), 0);
+  FillCharFast(Disco, SizeOf(Disco), 0);
   U := '{"pagination":{},"releases":[{"Id":10},{"TITle":"blabla"}]}';
   Check(IsValidJson(U));
   RecordLoadJson(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
@@ -2904,7 +2904,7 @@ begin
     CheckEqual(U,
       '{"Enabled":false,"Name":"","Offense":{"damage":{"min":10,"max":0},' +
       '"attackspeed":{"min":0,"max":100}}}');
-    FillcharFast(Enemy.Off, sizeof(Enemy.Off), 0);
+    FillcharFast(Enemy.Off, SizeOf(Enemy.Off), 0);
     check(Enemy.Off.Damage.Min = 0);
     check(Enemy.Off.AttackSpeed.Max = 0);
     JsonToObject(Enemy, pointer(U), Valid);
@@ -5352,7 +5352,7 @@ var
             SizeOf(TFileInfo) - SizeOf(Entry[i].dir^.fileInfo.extraLen)));
       i := NameToIndex('REP1\ONE.exe');
       Check(i = 0, '0');
-      FillcharFast(info, sizeof(info), 0);
+      FillcharFast(info, SizeOf(info), 0);
       Check(RetrieveFileInfo(i, info), 'info');
       Check(integer(info.f64.zfullSize) = length(Data), 'siz');
       Check(info.f32.zcrc32 = crc0, 'crc0');
