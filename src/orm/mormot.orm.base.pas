@@ -8,7 +8,6 @@ unit mormot.orm.base;
 
    Low-Level Basic Types and Definitions for our RESTful ORM
    - Shared ORM/JSON Fields and Values Definitions
-   - JSON Object Decoder and SQL Generation
    - ORM Ready UTF-8 Comparison Functions
    - TJsonSerializer Class for TOrm Serialization
    - TOrmPropInfo ORM / RTTI Classes
@@ -523,32 +522,6 @@ function ToText(e: TOrmEvent): PShortString; overload;
 function ToText(he: TOrmHistoryEvent): PShortString; overload;
 function ToText(o: TOrmOccasion): PShortString; overload;
 
-/// cast a TID into a TOrm instance
-// - just like pointer(Value) but cross-platform and more explicit
-function CastID(Value: TID): pointer;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// similar to AddInt64() function, but for a TIDDynArray
-// - some random GPF were identified with AddInt64(TInt64DynArray(Values),...)
-// with the Delphi Win64 compiler
-procedure AddID(var Values: TIDDynArray; var ValuesCount: integer;
-  Value: TID); overload;
-
-/// similar to AddInt64() function, but for a TIDDynArray
-// - some random GPF were identified with AddInt64(TInt64DynArray(Values),...)
-// with the Delphi Win64 compiler
-procedure AddID(var Values: TIDDynArray; Value: TID); overload;
-
-/// set the TID (=64-bit integer) value from the numerical text stored in P^
-// - just a redirection to SetInt64()
-procedure SetID(P: PUtf8Char; var result: TID); overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// set the TID (=64-bit integer) value from the numerical text stored in U
-// - just a redirection to SetInt64()
-procedure SetID(const U: RawByteString; var result: TID); overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
 /// guess the content type of an UTF-8 encoded field value, as used in TOrmTable.Get()
 // - if P if nil or 'null', return oftUnknown
 // - otherwise, guess its type from its value characters
@@ -757,201 +730,17 @@ function ToText(enc: TRestBatchEncoding): PShortString; overload;
 function ToText(vk: TOrmVirtualKind): PShortString; overload;
 
 
-{ ************ JSON Object Decoder and SQL Generation }
-
-type
-  /// define how TJsonObjectDecoder.Decode() will handle JSON string values
-  TJsonObjectDecoderParams = (
-    pInlined,
-    pQuoted,
-    pNonQuoted);
-
-  /// define how TJsonObjectDecoder.FieldTypeApproximation[] is identified
-  TJsonObjectDecoderFieldType = (
-    ftaNumber,
-    ftaBoolean,
-    ftaString,
-    ftaDate,
-    ftaNull,
-    ftaBlob,
-    ftaObject,
-    ftaArray);
-
-  /// exception class raised by TJsonObjectDecoder
-  EJsonObjectDecoder = class(ESynException);
-
-  /// JSON object decoding and SQL generation, in the context of ORM process
-  // - this is the main process for marshalling JSON into SQL statements
-  // - used e.g. by GetJsonObjectAsSql() function or ExecuteFromJson and
-  // InternalBatchStop methods
-  {$ifdef USERECORDWITHMETHODS}
-  TJsonObjectDecoder = record
-  {$else}
-  TJsonObjectDecoder = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    /// contains the decoded field names
-    FieldNames: array[0..MAX_SQLFIELDS - 1] of RawUtf8;
-    /// contains the decoded field values
-    FieldValues: array[0..MAX_SQLFIELDS - 1] of RawUtf8;
-    /// Decode() will set each field type approximation
-    // - will recognize also JSON_BASE64_MAGIC_C/JSON_SQLDATE_MAGIC_C prefix
-    FieldTypeApproximation:
-      array[0..MAX_SQLFIELDS - 1] of TJsonObjectDecoderFieldType;
-    /// number of fields decoded in FieldNames[] and FieldValues[]
-    FieldCount: integer;
-    /// set to TRUE if parameters are to be :(...): inlined
-    InlinedParams: TJsonObjectDecoderParams;
-    /// internal pointer over field names to be used after Decode() call
-    // - either FieldNames, either Fields[] array as defined in Decode(), or
-    // external names as set by TRestStorageExternal.JsonDecodedPrepareToSql
-    DecodedFieldNames: PRawUtf8Array;
-    /// the ID=.. value as sent within the JSON object supplied to Decode()
-    DecodedRowID: TID;
-    /// internal pointer over field types to be used after Decode() call
-    // - to create 'INSERT INTO ... SELECT UNNEST(...)' or 'UPDATE ... FROM
-    // SELECT UNNEST(...)' statements for very efficient bulk writes in a
-    // PostgreSQL database
-    // - as set by TRestStorageExternal.JsonDecodedPrepareToSql when
-    // cPostgreBulkArray flag is detected - for mormot.db.sql.postgres.pas
-    DecodedFieldTypesToUnnest: PSqlDBFieldTypeArray;
-    /// decode the JSON object fields into FieldNames[] and FieldValues[]
-    // - if Fields=nil, P should be a true JSON object, i.e. defined
-    // as "COL1"="VAL1" pairs, stopping at '}' or ']'; otherwise, Fields[]
-    // contains column names and expects a JSON array as "VAL1","VAL2".. in P
-    // - P should be after the initial '{' or '[' character, i.e. at first field
-    // - P returns the next object start or nil on unexpected end of input
-    // - P^ buffer will let the JSON be decoded in-place, so consider using
-    // the overloaded Decode(Json: RawUtf8; ...) method
-    // - FieldValues[] strings will be quoted and/or inlined depending on Params
-    // - if RowID is set, a RowID column will be added within the returned content
-    procedure Decode(var P: PUtf8Char; const Fields: TRawUtf8DynArray;
-      Params: TJsonObjectDecoderParams; const RowID: TID = 0;
-      ReplaceRowIDWithID: boolean = false); overload;
-    /// decode the JSON object fields into FieldNames[] and FieldValues[]
-    // - overloaded method expecting a RawUtf8 buffer, making a private copy
-    // of the JSON content to avoid unexpected in-place modification, then
-    // calling Decode(P: PUtf8Char) to perform the process
-    procedure Decode(const Json: RawUtf8; const Fields: TRawUtf8DynArray;
-      Params: TJsonObjectDecoderParams; const RowID: TID = 0;
-      ReplaceRowIDWithID: boolean = false); overload;
-    /// can be used after Decode() to add a new field in FieldNames/FieldValues
-    // - so that EncodeAsSql() will include this field in the generated SQL
-    // - caller should ensure that the FieldName is not already defined in
-    // FieldNames[] (e.g. when the TRecordVersion field is forced)
-    // - the caller should ensure that the supplied FieldValue will match
-    // the quoting/inlining expectations of Decode(TJsonObjectDecoderParams) -
-    // e.g. that string values are quoted if needed
-    procedure AddFieldValue(const FieldName, FieldValue: RawUtf8;
-      FieldType: TJsonObjectDecoderFieldType);
-    /// encode as a SQL-ready INSERT or UPDATE statement
-    // - after a successfull call to Decode()
-    // - escape SQL strings, according to the official SQLite3 documentation
-    // (i.e. ' inside a string is stored as '')
-    // - if InlinedParams was TRUE, it will create prepared parameters like
-    // 'COL1=:("VAL1"):, COL2=:(VAL2):'
-    // - called by GetJsonObjectAsSql() function or TRestStorageExternal
-    function EncodeAsSql(const Prefix1, Prefix2: RawUtf8; Update: boolean): RawUtf8;
-    /// encode as a SQL-ready INSERT or UPDATE statement with ? as values
-    // - after a successfull call to Decode()
-    // - FieldValues[] content will be ignored
-    // - Occasion can be only ooInsert or ooUpdate
-    // - for ooUpdate, will create UPDATE ... SET ... where UpdateIDFieldName=?
-    // - you can specify some options, e.g. boInsertOrIgnore for ooInsert
-    // - MultiInsertRowCount would generate INSERT .. VALUES (..),(..),(..),..
-    function EncodeAsSqlPrepared(const TableName: RawUtf8; Occasion: TOrmOccasion;
-      const UpdateIDFieldName: RawUtf8; BatchOptions: TRestBatchOptions;
-      MultiInsertRowCount: integer = 1): RawUtf8;
-    /// encode the FieldNames/FieldValues[] as a JSON object
-    procedure EncodeAsJson(out result: RawUtf8);
-    /// set the specified array to the fields names
-    // - after a successfull call to Decode()
-    procedure AssignFieldNamesTo(var Fields: TRawUtf8DynArray);
-    /// returns TRUE if the specified array match the decoded fields names
-    // - after a successfull call to Decode()
-    function SameFieldNames(const Fields: TRawUtf8DynArray): boolean;
-    /// search for a field name in the current identified FieldNames[]
-    function FindFieldName(const FieldName: RawUtf8): PtrInt;
-    /// returns the decoded field names as CSV text
-    function GetFieldNames: RawUtf8;
-  end;
-
-
-/// decode JSON fields object into an UTF-8 encoded SQL-ready statement
-// - this function decodes in the P^ buffer memory itself (no memory allocation
-// or copy), for faster process - so take care that it is an unique string
-// - P should be after the initial '{' or '[' character, i.e. at first field
-// - P contains the next object start or nil on unexpected end of input
-// - if Fields is void, expects expanded "COL1"="VAL1" pairs in P^, stopping at '}' or ']'
-// - otherwise, Fields[] contains the column names and expects "VAL1","VAL2".. in P^
-// - returns 'COL1="VAL1", COL2=VAL2' if UPDATE is true (UPDATE SET format)
-// - returns '(COL1, COL2) VALUES ("VAL1", VAL2)' otherwise (INSERT format)
-// - escape SQL strings, according to the official SQLite3 documentation
-// (i.e. ' inside a string is stored as '')
-// - if InlinedParams is set, will create prepared parameters like
-// 'COL1=:("VAL1"):, COL2=:(VAL2):'
-// - if RowID is set, a RowID column will be added within the returned content
-function GetJsonObjectAsSql(var P: PUtf8Char; const Fields: TRawUtf8DynArray;
-  Update, InlinedParams: boolean; RowID: TID = 0;
-  ReplaceRowIDWithID: boolean = false): RawUtf8; overload;
-
-/// decode JSON fields object into an UTF-8 encoded SQL-ready statement
-// - is used e.g. by TRestServerDB.EngineAdd/EngineUpdate methods
-// - expect a regular JSON expanded object as "COL1"="VAL1",...} pairs
-// - make its own temporary copy of JSON data before calling GetJsonObjectAsSql() above
-// - returns 'COL1="VAL1", COL2=VAL2' if UPDATE is true (UPDATE SET format)
-// - returns '(COL1, COL2) VALUES ("VAL1", VAL2)' otherwise (INSERT format)
-// - if InlinedParams is set, will create prepared parameters like 'COL2=:(VAL2):'
-// - if RowID is set, a RowID column will be added within the returned content
-function GetJsonObjectAsSql(const Json: RawUtf8; Update, InlinedParams: boolean;
-  RowID: TID = 0; ReplaceRowIDWithID: boolean = false): RawUtf8; overload;
-
-const
-  FIELDCOUNT_PATTERN: PUtf8Char = '{"fieldCount":'; // PatternLen = 14 chars
-  ROWCOUNT_PATTERN: PUtf8Char   = ',"rowCount":';   // PatternLen = 12 chars
-  VALUES_PATTERN: PUtf8Char     = ',"values":[';    // PatternLen = 11 chars
-
-/// quickly check if an UTF-8 buffer start with the supplied Pattern
-// - PatternLen is at least 8 bytes long, typically FIELDCOUNT_PATTERN,
-// ROWCOUNT_PATTERN or VALUES_PATTERN constants
-function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// get the FIRST field value of the FIRST row, from a JSON content
-// - e.g. useful to get an ID without converting a JSON content into a TOrmTableJson
-function UnJsonFirstField(var P: PUtf8Char): RawUtf8;
-
-/// returns TRUE if the JSON content is in expanded format
-// - i.e. as plain [{"ID":10,"FirstName":"John","LastName":"Smith"}...]
-// - i.e. not as '{"fieldCount":3,"values":["ID","FirstName","LastName",...']}
-function IsNotAjaxJson(P: PUtf8Char): boolean;
-
-/// efficient retrieval of the number of rows in non-expanded layout
-// - search for "rowCount": at the end of the JSON buffer
-function NotExpandedBufferRowCountPos(P, PEnd: PUtf8Char): PUtf8Char;
-
-/// parse JSON content in not-expanded format
-// - i.e. stored as '{"fieldCount":3,"values":["ID","FirstName","LastName",...']}
-// - search and extract "fieldCount" and "rowCount" field information
-function IsNotExpandedBuffer(var P: PUtf8Char; PEnd: PUtf8Char;
-  var FieldCount, RowCount: PtrInt): boolean;
-
-/// retrieve a JSON '{"Name":Value,....}' object
-// - P is nil in return in case of an invalid object
-// - returns the UTF-8 encoded JSON object, including first '{' and last '}'
-// - if ExtractID is set, it will contain the "ID":203 field value, and this
-// field won't be included in the resulting UTF-8 encoded JSON object unless
-// KeepIDField is true
-// - this function expects this "ID" property to be the FIRST in the
-// "Name":Value pairs, as generated by TOrm.GetJsonValues(W)
-function JsonGetObject(var P: PUtf8Char; ExtractID: PID;
-  var EndOfObject: AnsiChar; KeepIDField: boolean): RawUtf8;
-
-/// retrieve the ID/RowID field of a JSON object
-// - this function expects this "ID" property to be the FIRST in the
-// "Name":Value pairs, as generated by TOrm.GetJsonValues(W)
-// - returns TRUE if a ID/RowID>0 has been found, and set ID with the value
-function JsonGetID(P: PUtf8Char; out ID: TID): boolean;
+/// encode as a SQL-ready INSERT or UPDATE statement with ? as values
+// - after a successfull call to Decode()
+// - FieldValues[] content will be ignored
+// - Occasion can be only ooInsert or ooUpdate
+// - for ooUpdate, will create UPDATE ... SET ... where UpdateIDFieldName=?
+// - you can specify some options, e.g. boInsertOrIgnore for ooInsert
+// - MultiInsertRowCount would generate INSERT .. VALUES (..),(..),(..),..
+function EncodeAsSqlPrepared(const Decoder: TJsonObjectDecoder;
+  const TableName: RawUtf8; Occasion: TOrmOccasion;
+  const UpdateIDFieldName: RawUtf8; BatchOptions: TRestBatchOptions;
+  MultiInsertRowCount: integer = 1): RawUtf8;
 
 /// low-level function used to convert a JSON Value into a variant,
 // according to the property type
@@ -2455,7 +2244,7 @@ type
     // - you can customize the ',' separator - use e.g. the global ListSeparator
     // variable (from SysUtils) to reflect the current system definition (some
     // country use ',' as decimal separator, for instance our "douce France")
-    // - AddBOM will add a UTF-8 byte Order Mark at the beginning of the content
+    // - AddBOM will add a UTF-8 Byte Order Mark at the beginning of the content
     procedure GetCsvValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar = ',';
       AddBOM: boolean = false; RowFirst: PtrInt = 0; RowLast: PtrInt = 0); overload;
     /// save the table as CSV format, into a string variable
@@ -2463,7 +2252,7 @@ type
     // - you can customize the ',' separator - use e.g. the global ListSeparator
     // variable (from SysUtils) to reflect the current system definition (some
     // country use ',' as decimal separator, for instance our "douce France")
-    // - AddBOM will add a UTF-8 byte Order Mark at the beginning of the content
+    // - AddBOM will add a UTF-8 Byte Order Mark at the beginning of the content
     function GetCsvValues(Tab: boolean; CommaSep: AnsiChar = ',';
       AddBOM: boolean = false; RowFirst: PtrInt = 0; RowLast: PtrInt = 0): RawUtf8; overload;
     /// save the table in 'schemas-microsoft-com:rowset' XML format
@@ -3377,50 +3166,6 @@ begin
   result := GetEnumName(TypeInfo(TOrmOccasion), ord(o));
 end;
 
-function CastID(Value: TID): pointer;
-begin
-  result := pointer(PtrUInt(PtrInt(Value)));
-end;
-
-procedure AddID(var Values: TIDDynArray; var ValuesCount: integer; Value: TID);
-begin
-  if ValuesCount = length(Values) then
-    SetLength(Values, NextGrow(ValuesCount));
-  Values[ValuesCount] := Value;
-  inc(ValuesCount);
-end;
-
-procedure AddID(var Values: TIDDynArray; Value: TID);
-var
-  n: PtrInt;
-begin
-  n := length(Values);
-  SetLength(Values, n + 1);
-  Values[n] := Value;
-end;
-
-procedure SetID(P: PUtf8Char; var result: TID);
-begin
-{$ifdef CPU64} // PtrInt is already int64 -> call PtrInt version
-  result := GetInteger(P);
-{$else}
-  {$ifdef VER3_0} // FPC issue workaround
-  SetInt64(P, result);
-  {$else}
-  SetInt64(P, PInt64(@result)^);
-  {$endif}
-{$endif CPU64}
-end;
-
-procedure SetID(const U: RawByteString; var result: TID);
-begin
-{$ifdef CPU64} // PtrInt is already int64 -> call PtrInt version
-  result := GetInteger(pointer(U));
-{$else}
-  SetID(pointer(U), result);
-{$endif CPU64}
-end;
-
 function Utf8ContentNumberType(P: PUtf8Char): TOrmFieldType;
 begin
   if (P = nil) or
@@ -3502,279 +3247,6 @@ end;
 
 
 
-{ ************ JSON Object Decoder and SQL Generation }
-
-{ TJsonObjectDecoder }
-
-const
-  ENDOFJSONFIELD = [',', ']', '}', ':'];
-
-procedure GetJsonArrayOrObject(P: PUtf8Char; out PDest: PUtf8Char;
-  EndOfObject: PUtf8Char; var result: RawUtf8);
-var
-  Beg: PUtf8Char;
-begin
-  PDest := nil;
-  Beg := P;
-  P := GotoEndJsonItem(P); // quick go to end of array of object
-  if P = nil then
-  begin
-    result := '';
-    exit;
-  end;
-  if EndOfObject <> nil then
-    EndOfObject^ := P^;
-  PDest := P + 1;
-  FastSetString(result, Beg, P - Beg);
-end;
-
-procedure GetJsonArrayOrObjectAsQuotedStr(P: PUtf8Char; out PDest: PUtf8Char;
-  EndOfObject: PUtf8Char; var result: RawUtf8);
-var
-  Beg: PUtf8Char;
-begin
-  PDest := nil;
-  Beg := P;
-  P := GotoEndJsonItem(P); // quick go to end of array of object
-  if P = nil then
-  begin
-    result := '';
-    exit;
-  end;
-  if EndOfObject <> nil then
-    EndOfObject^ := P^;
-  PDest := P + 1;
-  QuotedStr(Beg, P - Beg, '''', result);
-end;
-
-procedure TJsonObjectDecoder.Decode(var P: PUtf8Char;
-  const Fields: TRawUtf8DynArray; Params: TJsonObjectDecoderParams;
-  const RowID: TID; ReplaceRowIDWithID: boolean);
-var
-  EndOfObject: AnsiChar;
-
-  procedure GetSqlValue(ndx: PtrInt);
-  var
-    wasString: boolean;
-    res: PUtf8Char;
-    resLen, c: integer;
-  begin
-    res := P;
-    if res = nil then
-    begin
-      FieldTypeApproximation[ndx] := ftaNull;
-      FieldValues[ndx] := NULL_STR_VAR;
-      exit;
-    end;
-    while res^ in [#1..' '] do
-      inc(res);
-    if (PInteger(res)^ = NULL_LOW) and
-       (res[4] in [#0, #9, #10, #13, ' ', ',', '}', ']']) then
-    begin
-      /// GetJsonField('null') returns '' -> check here to make a diff with '""'
-      FieldTypeApproximation[ndx] := ftaNull;
-      FieldValues[ndx] := NULL_STR_VAR;
-      inc(res, 4);
-      while res^ in [#1..' '] do
-        inc(res);
-      if res^ = #0 then
-        P := nil
-      else
-      begin
-        EndOfObject := res^;
-        res^ := #0;
-        P := res + 1;
-      end;
-    end
-    else if res^ in ['{', '['] then
-    begin
-      // handle nested object or array e.g. for custom variant types
-      if res^ = '{' then
-        FieldTypeApproximation[ndx] := ftaObject
-      else
-        FieldTypeApproximation[ndx] := ftaArray;
-      if Params = pNonQuoted then
-        GetJsonArrayOrObject(res, P, @EndOfObject, FieldValues[ndx])
-      else
-        GetJsonArrayOrObjectAsQuotedStr(res, P, @EndOfObject, FieldValues[ndx]);
-    end
-    else
-    begin
-      // handle JSON string, number or false/true in P
-      res := GetJsonField(res, P, @wasString, @EndOfObject, @resLen);
-      if wasString then
-      begin
-        c := PInteger(res)^ and $00ffffff;
-        if c = JSON_BASE64_MAGIC_C then
-        begin
-          FieldTypeApproximation[ndx] := ftaBlob;
-          case Params of
-            pInlined:
-              // untouched -> recognized as BLOB by TExtractInlineParameters
-              QuotedStr(res, reslen, '''', FieldValues[ndx]);
-          else
-            // returned directly as RawByteString (e.g. for INSERT/UPDATE)
-            Base64ToBin(PAnsiChar(res) + 3, resLen - 3,
-              RawByteString(FieldValues[ndx]));
-          end;
-        end
-        else
-        begin
-          if c = JSON_SQLDATE_MAGIC_C then
-          begin
-            FieldTypeApproximation[ndx] := ftaDate;
-            inc(res, 3); // ignore \uFFF1 magic marker
-          end
-          else
-            FieldTypeApproximation[ndx] := ftaString;
-          // regular string content
-          if Params = pNonQuoted then
-            // returned directly as RawUtf8
-            FastSetString(FieldValues[ndx], res, resLen)
-          else
-            // single-quote SQL strings as in the official SQLite3 documentation
-            QuotedStr(res, reslen, '''', FieldValues[ndx]);
-        end;
-      end
-      else if res = nil then
-      begin
-        FieldTypeApproximation[ndx] := ftaNull;
-        FieldValues[ndx] := NULL_STR_VAR;
-      end
-      else // avoid GPF, but will return invalid SQL
-      // non string params (numeric or false/true) are passed untouched
-      if PInteger(res)^ = FALSE_LOW then
-      begin
-        FieldValues[ndx] := SmallUInt32Utf8[0];
-        FieldTypeApproximation[ndx] := ftaBoolean;
-      end
-      else if PInteger(res)^ = TRUE_LOW then
-      begin
-        FieldValues[ndx] := SmallUInt32Utf8[1];
-        FieldTypeApproximation[ndx] := ftaBoolean;
-      end
-      else
-      begin
-        FastSetString(FieldValues[ndx], res, resLen);
-        FieldTypeApproximation[ndx] := ftaNumber;
-      end;
-    end;
-  end;
-
-var
-  FN: PUtf8Char;
-  F, FNlen: integer;
-  FieldIsRowID: boolean;
-begin
-  FieldCount := 0;
-  DecodedRowID := 0;
-  DecodedFieldTypesToUnnest := nil;
-  FillCharFast(FieldTypeApproximation, SizeOf(FieldTypeApproximation),
-    ord(ftaNumber{TID}));
-  InlinedParams := Params;
-  if pointer(Fields) = nil then
-  begin
-    // get "COL1":"VAL1" pairs, stopping at '}' or ']'
-    DecodedFieldNames := @FieldNames;
-    if RowID > 0 then
-    begin
-      // insert explicit RowID as first parameter
-      if ReplaceRowIDWithID then
-        FieldNames[0] := ID_TXT
-      else
-        FieldNames[0] := ROWID_TXT;
-      Int64ToUtf8(RowID, FieldValues[0]);
-      FieldCount := 1;
-      DecodedRowID := RowID;
-    end;
-    repeat
-      if P = nil then
-        break;
-      FN := GetJsonPropName(P, @FNlen);
-      if (FN = nil) or
-         (P = nil) then
-        break; // invalid JSON field name
-      FieldIsRowID := IsRowId(FN);
-      if FieldIsRowID then
-        if RowID > 0 then
-        begin
-          GetJsonField(P, P, nil, @EndOfObject); // ignore this if explicit RowID
-          if EndOfObject in [#0, '}', ']'] then
-            break
-          else
-            continue;
-        end
-        else if ReplaceRowIDWithID then
-        begin
-          FN := pointer(ID_TXT);
-          FNlen := 2;
-        end;
-      FastSetString(FieldNames[FieldCount], FN, FNlen);
-      GetSqlValue(FieldCount); // update EndOfObject
-      if FieldIsRowID then
-        SetID(FieldValues[FieldCount], DecodedRowID);
-      inc(FieldCount);
-      if FieldCount = MAX_SQLFIELDS then
-        raise EJsonObjectDecoder.Create('Too many inlines in TJsonObjectDecoder');
-    until {%H-}EndOfObject in [#0, '}', ']'];
-  end
-  else
-  begin
-    // get "VAL1","VAL2"...
-    if P = nil then
-      exit;
-    if RowID > 0 then
-      raise EJsonObjectDecoder.Create('TJsonObjectDecoder(expanded) won''t handle RowID');
-    if length(Fields) > MAX_SQLFIELDS then
-      raise EJsonObjectDecoder.Create('Too many inlines in TJsonObjectDecoder');
-    DecodedFieldNames := pointer(Fields);
-    FieldCount := length(Fields);
-    for F := 0 to FieldCount - 1 do
-      GetSqlValue(F); // update EndOfObject
-  end;
-end;
-
-procedure TJsonObjectDecoder.Decode(const Json: RawUtf8;
-  const Fields: TRawUtf8DynArray; Params: TJsonObjectDecoderParams;
-  const RowID: TID; ReplaceRowIDWithID: boolean);
-var
-  tmp: TSynTempBuffer;
-  P: PUtf8Char;
-begin
-  tmp.Init(Json);
-  try
-    P := tmp.buf;
-    if P <> nil then
-      while P^ in [#1..' ', '{', '['] do
-        inc(P);
-    Decode(P, Fields, Params, RowID, ReplaceRowIDWithID);
-  finally
-    tmp.Done;
-  end;
-end;
-
-function TJsonObjectDecoder.SameFieldNames(const Fields: TRawUtf8DynArray): boolean;
-var
-  i: PtrInt;
-begin
-  result := false;
-  if length(Fields) <> FieldCount then
-    exit;
-  for i := 0 to FieldCount - 1 do
-    if not IdemPropNameU(Fields[i], FieldNames[i]) then
-      exit;
-  result := true;
-end;
-
-procedure TJsonObjectDecoder.AssignFieldNamesTo(var Fields: TRawUtf8DynArray);
-var
-  i: PtrInt;
-begin
-  SetLength(Fields, FieldCount);
-  for i := 0 to FieldCount - 1 do
-    Fields[i] := FieldNames[i];
-end;
-
 {$ifdef ISDELPHI20062007}
   {$WARNINGS OFF} // circumvent Delphi 2007 false positive warning
 {$endif ISDELPHI20062007}
@@ -3783,9 +3255,10 @@ const
   PG_FT: array[TSqlDBFieldType] of string[9] = (
     'int4', 'text', 'int8', 'float8', 'numeric', 'timestamp', 'text', 'bytea');
 
-function TJsonObjectDecoder.EncodeAsSqlPrepared(const TableName: RawUtf8;
-  Occasion: TOrmOccasion; const UpdateIDFieldName: RawUtf8;
-  BatchOptions: TRestBatchOptions; MultiInsertRowCount: integer): RawUtf8;
+function EncodeAsSqlPrepared(const Decoder: TJsonObjectDecoder;
+  const TableName: RawUtf8; Occasion: TOrmOccasion;
+  const UpdateIDFieldName: RawUtf8; BatchOptions: TRestBatchOptions;
+  MultiInsertRowCount: integer): RawUtf8;
 var
   f: PtrInt;
   W: TTextWriter;
@@ -3796,33 +3269,33 @@ begin
     case Occasion of
       ooUpdate:
         begin
-          if FieldCount = 0 then
+          if Decoder.FieldCount = 0 then
             raise EJsonObjectDecoder.Create('Invalid EncodeAsSqlPrepared(0)');
           W.AddShorter('update ');
           W.AddString(TableName);
-          if DecodedFieldTypesToUnnest <> nil then
+          if Decoder.DecodedFieldTypesToUnnest <> nil then
           begin
             // PostgreSQL bulk update via nested array binding
             W.AddShort(' as t set ');
-            for f := 0 to FieldCount - 1 do
+            for f := 0 to Decoder.FieldCount - 1 do
             begin
-              W.AddString(DecodedFieldNames^[f]);
+              W.AddString(Decoder.DecodedFieldNames^[f]);
               W.AddShorter('=v.');
-              W.AddString(DecodedFieldNames^[f]);
+              W.AddString(Decoder.DecodedFieldNames^[f]);
               W.AddComma;
             end;
             W.CancelLastComma;
             W.AddShort(' from ( select');
-            for f := 0 to FieldCount - 1 do
+            for f := 0 to Decoder.FieldCount - 1 do
             begin
               W.AddShort(' unnest(?::');
-              W.AddShort(PG_FT[DecodedFieldTypesToUnnest^[f]]);
+              W.AddShort(PG_FT[Decoder.DecodedFieldTypesToUnnest^[f]]);
               W.AddShorter('[]),');
             end;
             W.AddShort(' unnest(?::int8[]) ) as v('); // last param is ID
-            for f := 0 to FieldCount - 1 do
+            for f := 0 to Decoder.FieldCount - 1 do
             begin
-              W.AddString(DecodedFieldNames^[f]);
+              W.AddString(Decoder.DecodedFieldNames^[f]);
               W.AddComma;
             end;
             W.AddString(UpdateIDFieldName);
@@ -3835,10 +3308,10 @@ begin
           begin
             // regular UPDATE statement
             W.AddShorter(' set ');
-            for f := 0 to FieldCount - 1 do
+            for f := 0 to Decoder.FieldCount - 1 do
             begin
               // append 'COL1=?,COL2=?'
-              W.AddString(DecodedFieldNames^[f]);
+              W.AddString(Decoder.DecodedFieldNames^[f]);
               W.AddShorter('=?,');
             end;
             W.CancelLastComma;
@@ -3856,37 +3329,37 @@ begin
           else
             W.AddShort('insert into ');
           W.AddString(TableName);
-          if FieldCount = 0 then
+          if Decoder.FieldCount = 0 then
             W.AddShort(' default values')
           else
           begin
             W.Add(' ', '(');
-            for f := 0 to FieldCount - 1 do
+            for f := 0 to Decoder.FieldCount - 1 do
             begin
               // append 'COL1,COL2'
-              W.AddString(DecodedFieldNames^[f]);
+              W.AddString(Decoder.DecodedFieldNames^[f]);
               W.AddComma;
             end;
             W.CancelLastComma;
             W.AddShort(') values (');
-            if DecodedFieldTypesToUnnest <> nil then
+            if Decoder.DecodedFieldTypesToUnnest <> nil then
               // PostgreSQL bulk insert via nested array binding
-              for f := 0 to FieldCount - 1 do
+              for f := 0 to Decoder.FieldCount - 1 do
               begin
                 W.AddShort('unnest(?::');
-                W.AddShort(PG_FT[DecodedFieldTypesToUnnest^[f]]);
+                W.AddShort(PG_FT[Decoder.DecodedFieldTypesToUnnest^[f]]);
                 W.AddShorter('[]),');
               end
             else
             begin
               // regular (multi) INSERT statement - e.g. for SQLite3
-              W.AddStrings('?,', FieldCount);
+              W.AddStrings('?,', Decoder.FieldCount);
               while MultiInsertRowCount > 1 do
               begin
                 // INSERT INTO .. VALUES (..),(..),(..),..
                 W.CancelLastComma;
                 W.AddShorter('),(');
-                W.AddStrings('?,', FieldCount);
+                W.AddStrings('?,', Decoder.FieldCount);
                 dec(MultiInsertRowCount);
               end;
             end;
@@ -3907,358 +3380,6 @@ end;
 {$ifdef ISDELPHI20062007}
   {$WARNINGS ON}
 {$endif ISDELPHI20062007}
-
-function TJsonObjectDecoder.EncodeAsSql(
-  const Prefix1, Prefix2: RawUtf8; Update: boolean): RawUtf8;
-var
-  f: PtrInt;
-  W: TTextWriter;
-  temp: TTextWriterStackBuffer;
-
-  procedure AddValue;
-  begin
-    if InlinedParams = pInlined then
-      W.AddShorter(':(');
-    W.AddString(FieldValues[f]);
-    if InlinedParams = pInlined then
-      W.AddShorter('):,')
-    else
-      W.AddComma;
-  end;
-
-begin
-  result := '';
-  if FieldCount = 0 then
-    exit;
-  W := TTextWriter.CreateOwnedStream(temp);
-  try
-    W.AddString(Prefix1);
-    W.AddString(Prefix2);
-    if Update then
-    begin
-      for f := 0 to FieldCount - 1 do
-        // append 'COL1=...,COL2=...'
-        if not IsRowID(pointer(DecodedFieldNames^[f])) then
-        begin
-          W.AddString(DecodedFieldNames^[f]);
-          W.Add('=');
-          AddValue;
-        end;
-      W.CancelLastComma;
-    end
-    else
-    begin
-      // returns ' (COL1,COL2) VALUES ('VAL1',VAL2)'
-      W.Add(' ', '(');
-      for f := 0 to FieldCount - 1 do
-      begin
-        // append 'COL1,COL2'
-        W.AddString(DecodedFieldNames^[f]);
-        W.AddComma;
-      end;
-      W.CancelLastComma;
-      W.AddShort(') VALUES (');
-      for f := 0 to FieldCount - 1 do
-        AddValue;
-      W.CancelLastComma;
-      W.Add(')');
-    end;
-    W.SetText(result);
-  finally
-    W.Free;
-  end;
-end;
-
-procedure TJsonObjectDecoder.EncodeAsJson(out result: RawUtf8);
-var
-  f: PtrInt;
-  W: TTextWriter;
-  temp: TTextWriterStackBuffer;
-begin
-  if FieldCount = 0 then
-    exit;
-  W := TTextWriter.CreateOwnedStream(temp);
-  try
-    W.Add('{');
-    for f := 0 to FieldCount - 1 do
-    begin
-      W.AddFieldName(DecodedFieldNames^[f]);
-      if FieldTypeApproximation[f] in [ftaBlob, ftaDate, ftaString] then
-        if InlinedParams = pNonQuoted then
-          W.AddJsonString(FieldValues[f])
-        else
-          W.AddQuotedStringAsJson(FieldValues[f])
-      else
-        W.AddString(FieldValues[f]);
-      W.AddComma;
-    end;
-    W.CancelLastComma;
-    W.Add('}');
-    W.SetText(result);
-  finally
-    W.Free;
-  end;
-end;
-
-function TJsonObjectDecoder.FindFieldName(const FieldName: RawUtf8): PtrInt;
-begin
-  for result := 0 to FieldCount - 1 do
-    if IdemPropNameU(FieldNames[result], FieldName) then
-      exit;
-  result := -1;
-end;
-
-function TJsonObjectDecoder.GetFieldNames: RawUtf8;
-begin
-  if FieldCount = 0 then
-    result := ''
-  else
-    result := RawUtf8ArrayToCsv(FieldNames, ',', FieldCount - 1);
-end;
-
-procedure TJsonObjectDecoder.AddFieldValue(const FieldName, FieldValue: RawUtf8;
-  FieldType: TJsonObjectDecoderFieldType);
-begin
-  if FieldCount = MAX_SQLFIELDS then
-    raise EJsonObjectDecoder.CreateUtf8(
-      'Too many fields for TJsonObjectDecoder.AddField(%) max=%',
-      [FieldName, MAX_SQLFIELDS]);
-  FieldNames[FieldCount] := FieldName;
-  FieldValues[FieldCount] := FieldValue;
-  FieldTypeApproximation[FieldCount] := FieldType;
-  inc(FieldCount);
-end;
-
-const
-  FROMINLINED: array[boolean] of TJsonObjectDecoderParams = (pQuoted, pInlined);
-
-function GetJsonObjectAsSql(var P: PUtf8Char; const Fields: TRawUtf8DynArray;
-  Update, InlinedParams: boolean; RowID: TID; ReplaceRowIDWithID: boolean): RawUtf8;
-var
-  Decoder: TJsonObjectDecoder;
-begin
-  Decoder.Decode(P, Fields, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
-  result := Decoder.EncodeAsSql('', '', Update);
-end;
-
-function GetJsonObjectAsSql(const Json: RawUtf8; Update, InlinedParams: boolean;
-  RowID: TID; ReplaceRowIDWithID: boolean): RawUtf8;
-var
-  Decoder: TJsonObjectDecoder;
-begin
-  Decoder.Decode(Json, nil, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
-  result := Decoder.EncodeAsSql('', '', Update);
-end;
-
-function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
-var
-  i: PtrInt;
-begin // PatternLen is at least 8 bytes long
-  result := false;
-  if P = nil then
-    exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  if PPtrInt(P)^ = PPtrInt(Pattern)^ then
-  begin
-    for i := SizeOf(PtrInt) to PatternLen - 1 do
-      if P[i] <> Pattern[i] then
-        exit;
-    inc(P, PatternLen);
-    result := true;
-  end;
-end;
-
-function UnJsonFirstField(var P: PUtf8Char): RawUtf8;
-// expand=true: [ {"col1":val11} ] -> val11
-// expand=false: { "fieldCount":1,"values":["col1",val11] } -> vall11
-begin
-  result := '';
-  if P = nil then
-    exit;
-  if Expect(P, FIELDCOUNT_PATTERN, 14) then
-  begin
-    // not expanded format
-    if GetNextItemCardinal(P) <> 1 then
-      exit; // wrong field count
-    while P^ <> '[' do
-      if P^ = #0 then
-        exit
-      else
-        inc(P); // go to ["col1"
-    inc(P); // go to "col1"
-  end
-  else
-  begin
-    // expanded format
-    while P^ <> '[' do
-      if P^ = #0 then
-        exit
-      else
-        inc(P); // need an array of objects
-    repeat
-      inc(P);
-      if P^ = #0 then
-        exit;
-    until P^ = '{'; // go to object begining
-  end;
-  if GetJsonPropName(P) <> nil then // ignore field name
-    result := GetJsonField(P, P); // get field value
-end;
-
-function IsNotAjaxJson(P: PUtf8Char): boolean;
-begin
-  result := Expect(P, FIELDCOUNT_PATTERN, 14);
-end;
-
-function NotExpandedBufferRowCountPos(P, PEnd: PUtf8Char): PUtf8Char;
-var
-  i: PtrInt;
-begin
-  // search for "rowCount": at the end of the JSON buffer
-  result := nil;
-  if (PEnd <> nil) and
-     (PEnd - P > 24) then
-    for i := 1 to 24 do
-      case PEnd[-i] of
-        ']',
-        ',':
-          exit;
-        ':':
-          begin
-            if CompareMemFixed(PEnd - i - 11, pointer(ROWCOUNT_PATTERN), 11) then
-              result := PEnd - i + 1;
-            exit;
-          end;
-      end;
-end;
-
-function IsNotExpandedBuffer(var P: PUtf8Char; PEnd: PUtf8Char;
-  var FieldCount, RowCount: PtrInt): boolean;
-var
-  RowCountPos: PUtf8Char;
-begin
-  if not Expect(P, FIELDCOUNT_PATTERN, 14) then
-  begin
-    result := false;
-    exit;
-  end;
-  FieldCount := GetNextItemCardinal(P, #0);
-  if Expect(P, ROWCOUNT_PATTERN, 12) then
-    RowCount := GetNextItemCardinal(P, #0) // initial "rowCount":xxxx
-  else
-  begin
-    RowCountPos := NotExpandedBufferRowCountPos(P, PEnd);
-    if RowCountPos = nil then
-      RowCount := -1                        // no "rowCount":xxxx
-    else
-      RowCount := GetCardinal(RowCountPos); // trailing "rowCount":xxxx
-  end;
-  result := (FieldCount <> 0) and Expect(P, VALUES_PATTERN, 11);
-  if result and
-     (RowCount < 0) then
-  begin
-    RowCount := JsonArrayCount(P, PEnd) div FieldCount; // 900MB/s browse
-    if RowCount <= 0 then
-      RowCount := -1; // bad format -> no data
-  end;
-end;
-
-function StartWithQuotedID(P: PUtf8Char; out ID: TID): boolean;
-begin
-  if PCardinal(P)^ and $ffffdfdf =
-       ord('I') + ord('D') shl 8 + ord('"') shl 16 + ord(':') shl 24 then
-  begin
-    SetID(P + 4, ID{%H-});
-    result := ID > 0;
-    exit;
-  end
-  else if (PCardinalArray(P)^[0] and $dfdfdfdf =
-           ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
-         (PCardinalArray(P)^[1] and $ffffdf =
-           ord('D') + ord('"') shl 8 + ord(':') shl 16) then
-  begin
-    SetID(P + 7, ID);
-    result := ID > 0;
-    exit;
-  end;
-  ID := 0;
-  result := false;
-end;
-
-function StartWithID(P: PUtf8Char; out ID: TID): boolean;
-begin
-  if PCardinal(P)^ and $ffdfdf =
-       ord('I') + ord('D') shl 8 + ord(':') shl 16 then
-  begin
-    SetID(P + 3, ID{%H-});
-    result := ID > 0;
-    exit;
-  end
-  else if (PCardinalArray(P)^[0] and $dfdfdfdf =
-           ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
-          (PCardinalArray(P)^[1] and $ffdf =
-           ord('D') + ord(':') shl 8) then
-  begin
-    SetID(P + 6, ID);
-    result := ID > 0;
-    exit;
-  end;
-  ID := 0;
-  result := false;
-end;
-
-function JsonGetID(P: PUtf8Char; out ID: TID): boolean;
-begin
-  if (P <> nil) and
-     NextNotSpaceCharIs(P, '{') then
-    if NextNotSpaceCharIs(P, '"') then
-      result := StartWithQuotedID(P, ID)
-    else
-      result := StartWithID(P, ID)
-  else
-  begin
-    ID := 0;
-    result := false;
-  end;
-end;
-
-function JsonGetObject(var P: PUtf8Char; ExtractID: PID;
-  var EndOfObject: AnsiChar; KeepIDField: boolean): RawUtf8;
-var
-  Beg, PC: PUtf8Char;
-begin
-  result := '';
-  if P = nil then
-    exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  if P^ <> '{' then
-    exit;
-  Beg := P;
-  P := GotoEndJsonItem(Beg);
-  if (P <> nil) and not (P^ in ENDOFJSONFIELD) then
-    P := nil;
-  if P <> nil then
-  begin
-    EndOfObject := P^;
-    inc(P); // ignore end of object, i.e. ',' or ']'
-    if ExtractID <> nil then
-      if JsonGetID(Beg, ExtractID^) and
-         not KeepIDField then
-      begin
-        PC := PosChar(Beg, ','); // ignore the '"ID":203,' pair
-        if PC = nil then
-          exit;
-        PC^ := '{';
-        FastSetString(result, PC, P - PC - 1);
-        exit;
-      end;
-    FastSetString(result, Beg, P - Beg - 1);
-  end;
-end;
 
 procedure ValueVarToVariant(Value: PUtf8Char; ValueLen: integer;
   fieldType: TOrmFieldType; var result: TVarData; createValueTempCopy: boolean;
@@ -9441,8 +8562,8 @@ begin
   end;
 end;
 
-procedure TOrmTableAbstract.GetCsvValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar;
-  AddBOM: boolean; RowFirst, RowLast: PtrInt);
+procedure TOrmTableAbstract.GetCsvValues(Dest: TStream; Tab: boolean;
+  CommaSep: AnsiChar; AddBOM: boolean; RowFirst, RowLast: PtrInt);
 var
   U: PUtf8Char;
   F, R, FMax, o, len: PtrInt;
@@ -9461,7 +8582,7 @@ begin
   W := TTextWriter.Create(Dest, @temp, SizeOf(temp));
   try
     if AddBOM then
-      W.AddShorter(#$ef#$bb#$bf); // add UTF-8 byte Order Mark
+      W.AddShorter(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
     if Tab then
       CommaSep := #9;
     FMax := FieldCount - 1;
@@ -11155,9 +10276,12 @@ end;
 function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream; Expand,
   withID: boolean; const aFields: TFieldBits; KnownRowsCount, aBufSize: integer;
   aStackBuffer: PTextWriterStackBuffer): TJsonSerializer;
+var
+  f: TFieldIndexDynArray;
 begin
-  result := CreateJsonWriter(Json, Expand, withID, FieldBitsToIndex(
-    aFields, Fields.Count), KnownRowsCount, aBufSize, aStackBuffer);
+  FieldBitsToIndex(aFields, f, Fields.Count);
+  result := CreateJsonWriter(
+    Json, Expand, withID, f, KnownRowsCount, aBufSize, aStackBuffer);
 end;
 
 function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream; Expand,
@@ -11182,9 +10306,11 @@ var
   withID: boolean;
   bits: TFieldBits;
 begin
-  FieldBitsFromCsv(aFieldsCsv, bits, withID);
-  result := CreateJsonWriter(
-    Json, Expand, withID, bits, KnownRowsCount, aBufSize, aStackBuffer);
+  if FieldBitsFromCsv(aFieldsCsv, bits, withID) then
+    result := CreateJsonWriter(
+      Json, Expand, withID, bits, KnownRowsCount, aBufSize, aStackBuffer)
+  else
+    result := nil;
 end;
 
 function TOrmPropertiesAbstract.SaveSimpleFieldsFromJsonArray(var P: PUtf8Char;

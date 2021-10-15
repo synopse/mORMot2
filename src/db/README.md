@@ -46,6 +46,8 @@ Shared Types and Definitions for Database Access
 - SQL Parameters Inlining and Processing
 - `TJSONWriter` Specialized for Database Export
 - `TSelectStatement` SQL SELECT Parser
+- JSON Object Decoder and SQL Generation
+- `TID` Processing Functions
 
 This unit is used by both `mormot.db.*` units and `mormot.orm.*` units.
 

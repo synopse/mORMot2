@@ -21,7 +21,6 @@ This folder hosts the *RESTful ORM* high-level features of the *mORMot* Open Sou
 
 Low-Level Basic Types and Definitions for our RESTful ORM
 - Shared ORM/JSON Fields and Values Definitions
-- JSON Object Decoder and SQL Generation
 - ORM Ready UTF-8 Comparison Functions
 - `TJsonSerializer` Class for `TOrm` Serialization
 - `TOrmPropInfo` ORM / RTTI Classes

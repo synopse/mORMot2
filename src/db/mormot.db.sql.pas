@@ -2492,7 +2492,7 @@ type
     // - you can customize the ',' separator - use e.g. the global ListSeparator
     // variable (from SysUtils) to reflect the current system definition (some
     // country use ',' as decimal separator, for instance our "douce France")
-    // - AddBOM will add a UTF-8 byte Order Mark at the beginning of the content
+    // - AddBOM will add a UTF-8 Byte Order Mark at the beginning of the content
     // - BLOB fields will be appended as "blob" with no data
     // - returns the number of row data returned
     function FetchAllToCsvValues(Dest: TStream; Tab: boolean;
