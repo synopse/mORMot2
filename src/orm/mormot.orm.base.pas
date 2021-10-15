@@ -2393,7 +2393,7 @@ type
     // LenStore.Done to release any temp memory
     // - returns 0 if Field is invalid or no data is stored in this TOrmTable -
     // don't call LenStore.Done in this case
-    function GetRowLengths(Field: PtrInt; var LenStore: TSynTempBuffer): integer;
+    function GetRowLengths(Field: PtrInt; LenStore: PSynTempBuffer): integer;
     /// retrieve a field value as a variant
     // - returns null if the row/field is incorrect
     // - expand* methods will allow to return human-friendly representations
@@ -8979,11 +8979,11 @@ begin
     result := nil
   else
   begin
-    Row := Row * fFieldCount + Field;
+    inc(Field, Row * fFieldCount);
     {$ifdef NOPOINTEROFFSET} // inlined GetResults() for Delphi 7
-    result := fData[Row];
+    result := fData[Field];
     {$else}
-    result := PUtf8Char(PtrInt(fData[Row]));
+    result := PUtf8Char(PtrInt(fData[Field]));
     if result <> nil then
       inc(result, PtrUInt(fDataStart));
     {$endif NOPOINTEROFFSET}
@@ -8999,18 +8999,18 @@ begin
     result := nil
   else
   begin
-    Row := Row * fFieldCount + Field;
+    inc(Field, Row * fFieldCount);
     {$ifdef NOPOINTEROFFSET} // inlined GetResults() for Delphi 7
-    result := fData[Row];
+    result := fData[Field];
     {$else}
-    result := PUtf8Char(PtrInt(fData[Row]));
+    result := PUtf8Char(PtrInt(fData[Field]));
     if result <> nil then
       inc(result, PtrUInt(fDataStart));
     {$endif NOPOINTEROFFSET}
     {$ifdef NOTORMTABLELEN}
     Len := StrLen(result);
     {$else}
-    Len := fLen[Row];
+    Len := fLen[Field];
     {$endif NOTORMTABLELEN}
   end;
 end;
@@ -9211,20 +9211,25 @@ begin
   result := fRowCount;
 end;
 
-function TOrmTableAbstract.GetRowLengths(Field: PtrInt; var LenStore: TSynTempBuffer): integer;
+function TOrmTableAbstract.GetRowLengths(Field: PtrInt; LenStore: PSynTempBuffer): integer;
 var
   len: PInteger;
-  i, l, n: integer;
+  i, l: integer;
+  n: PtrInt;
 begin
   result := 0;
   if (self = nil) or
      (PtrUInt(Field) > PtrUInt(fFieldCount)) or
      (fRowCount = 0) then
   begin
-    LenStore.buf := nil; // avoid GPF in LenStore.Done
+    if LenStore <> nil then
+      LenStore^.buf := nil; // avoid GPF in LenStore.Done
     exit;
   end;
-  len := LenStore.Init(fRowCount * SizeOf(integer));
+  if LenStore = nil then
+    len := nil
+  else
+    len := LenStore.Init(fRowCount * SizeOf(integer));
   n := fFieldCount;
   for i := 1 to fRowCount do
   begin
@@ -9234,20 +9239,24 @@ begin
     {$else}
     l := fLen[Field];
     {$endif NOTORMTABLELEN}
-    len^ := l;
+    if len <> nil then
+    begin
+      len^ := l;
+      inc(len);
+    end;
     inc(result, l);
-    inc(len);
   end;
 end;
 
 function TOrmTableAbstract.GetRowValues(Field: PtrInt; const Sep, Head, Trail: RawUtf8): RawUtf8;
 var
-  i, L, SepLen: integer;
-  P: PUtf8Char;
-  len: PInteger;
-  tmp: TSynTempBuffer;
+  n, L, SepLen: integer;
+  i: PtrInt;
+  P, U: PUtf8Char;
 begin
-  L := GetRowLengths(Field, tmp);
+  L := 0;
+  for i := 1 to fRowCount do
+    inc(L, ResultsLen[i]);
   if L = 0 then
   begin
     result := Head + Trail;
@@ -9257,23 +9266,25 @@ begin
   inc(L, length(Head) + SepLen * (fRowCount - 1) + length(Trail));
   FastSetString(result, nil, L);
   P := AppendRawUtf8ToBuffer(pointer(result), Head);
-  len := tmp.buf;
-  for i := 2 to fRowCount do
-  begin
+  n := fRowCount;
+  repeat
     inc(Field, fFieldCount); // next row - ignore first row = field names
-    MoveFast(GetResults(Field)^, P^, len^);
-    inc(P, len^);
-    inc(len);
-    if SepLen > 0 then
-    begin
-      MoveSmall(pointer(Sep), P, SepLen);
-      inc(P, SepLen);
-    end;
-  end;
-  MoveFast(GetResults(Field + fFieldCount)^, P^, len^); // last row without Sep
-  if Trail <> '' then
-    MoveFast(pointer(Trail)^, P[len^], length(Trail));
-  tmp.Done;
+    U := GetResults(Field);
+    {$ifdef NOTORMTABLELEN}
+    i := StrLen(U);
+    {$else}
+    i := fLen[Field];
+    {$endif NOTORMTABLELEN}
+    MoveFast(U^, P^, i);
+    inc(P, i);
+    dec(n);
+    if n = 0 then
+      break;
+    if SepLen = 0 then
+      continue;
+    MoveFast(pointer(Sep)^, P^, SepLen); // MoveSmall() won't be inlined anyway
+    inc(P, SepLen);
+  until false;
 end;
 
 procedure TOrmTableAbstract.GetJsonValues(W: TJsonWriter; RowFirst, RowLast: PtrInt;
