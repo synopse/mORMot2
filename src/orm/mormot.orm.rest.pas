@@ -1087,8 +1087,11 @@ begin
       end;
       if i = T.RowCount then
         break;
-      MoveSmall(pointer(Separator), P, SepLen);
-      inc(P, SepLen);
+      if SepLen <> 0 then
+      begin
+        MoveSmall(pointer(Separator), P, SepLen);
+        inc(P, SepLen);
+      end;
       inc(i);
     until false;
     //assert(P-pointer(result)=Len);
