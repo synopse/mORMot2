@@ -761,6 +761,7 @@ type
     procedure OutHeadFromCookie;
     /// event raised by ExecuteMethod() for interface parameters
     // - match TInterfaceMethodInternalExecuteCallback signature
+    // - redirect to TServiceContainerServer.GetFakeCallback
     procedure ExecuteCallback(var Par: PUtf8Char; ParamInterfaceInfo: TRttiJson;
       out Obj); virtual;
   end;
@@ -3113,18 +3114,19 @@ var
   fakeid: PtrInt;
 begin
   if not Assigned(Server.OnNotifyCallback) then
-    raise EServiceException.CreateUtf8(
-      '% does not implement callbacks for I%',
-      [Server,ParamInterfaceInfo.Name]);
+    raise EServiceException.CreateUtf8('% does not implement callbacks for I%',
+      [Server, ParamInterfaceInfo.Name]);
+  // Par is the callback ID transmitted from the client side
   fakeid := GetInteger(GetJsonField(Par, Par)); // GetInteger returns a PtrInt
   if Par = nil then
-    Par := @NULCHAR; // allow e.g. '[12345]'
+    Par := @NULCHAR; // allow e.g. '[12345]' (single interface parameter)
   if (fakeid = 0) or
      (ParamInterfaceInfo.Info = TypeInfo(IInvokable)) then
   begin
-    pointer(Obj) := pointer(fakeid); // Obj = IInvokable(fakeid)
+    pointer(Obj) := pointer(fakeid); // special call Obj = IInvokable(fakeid)
     exit;
   end;
+  // let TServiceContainerServer
   (Server.Services as TServiceContainerServer).GetFakeCallback(
     self, ParamInterfaceInfo.Info, fakeid, Obj);
 end;

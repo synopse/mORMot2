@@ -1427,6 +1427,12 @@ type
   /// used to keep track of all stubbed methods calls
   TInterfaceStubLogDynArray = array of TInterfaceStubLog;
 
+  /// how TInterfacedObjectFake identify each instance
+  // - match the ID used in sicClientDriven mode of a service
+  // - match the TInterfacedObjectFakeServer 32-bit identifier of a callback
+  TInterfacedObjectFakeID = type cardinal;
+  PInterfacedObjectFakeID = ^TInterfacedObjectFakeID;
+
   /// used to stub an interface implementation
   // - define the expected workflow in a fluent interface using Executes /
   // Fails / Returns / Raises
@@ -1455,12 +1461,12 @@ type
       const aErrorMsgFmt: RawUtf8; const aErrorMsgArgs: array of const): boolean; virtual;
     // match TOnFakeInstanceInvoke callback signature
     function Invoke(const aMethod: TInterfaceMethod; const aParams: RawUtf8;
-      aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
+      aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean;
     // will launch InternalCheck() process if some expectations defined by
     // ExpectsCount() are not met, i.e. raise an exception for TInterfaceStub
     // or notify the associated test case for TInterfaceMock
-    procedure InstanceDestroyed(aClientDrivenID: cardinal);
+    procedure InstanceDestroyed(aFakeID: TInterfacedObjectFakeID);
     procedure IntSetOptions(Options: TInterfaceStubOptions); virtual;
     procedure IntCheckCount(aMethodIndex, aComputed: cardinal;
       aOperator: TInterfaceStubRuleOperator; aCount: cardinal);
@@ -2175,13 +2181,14 @@ type
   // - aClientDrivenID can be set optionally to specify e.g. an URI-level session
   TOnFakeInstanceInvoke = function(const aMethod: TInterfaceMethod;
     const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
-    aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean of object;
+    aFakeID: PInterfacedObjectFakeID;
+    aServiceCustomAnswer: PServiceCustomAnswer): boolean of object;
 
   /// event called when destroying a TInterfaceFactory's fake instance
   /// - this method will be run when the fake class instance is destroyed
   // (e.g. if aInstanceCreation is sicClientDriven, to notify the server
   // than the client life time just finished)
-  TOnFakeInstanceDestroy = procedure(aClientDrivenID: cardinal) of object;
+  TOnFakeInstanceDestroy = procedure(aFakeID: TInterfacedObjectFakeID) of object;
 
   /// how TInterfacedObjectFake will perform its execution
   // - by default, fInvoke() will receive standard JSON content, unless
@@ -2202,7 +2209,7 @@ type
     fOptions: TInterfacedObjectFakeOptions;
     fInvoke: TOnFakeInstanceInvoke;
     fNotifyDestroy: TOnFakeInstanceDestroy;
-    fClientDrivenID: cardinal;
+    fFakeID: TInterfacedObjectFakeID;
     fServiceFactory: TObject; // holds a TServiceFactory instance
     // the JITed asm stubs will redirect to these JSON-oriented process
     procedure FakeCallGetJsonFromStack(
@@ -2221,9 +2228,11 @@ type
     /// release the remote server instance (in sicClientDriven mode);
     destructor Destroy; override;
   published
-    /// the ID used in sicClientDriven mode
-    property ClientDrivenID: cardinal
-      read fClientDrivenID;
+    /// how TInterfacedObjectFake identify this instance
+    // - match the ID used in sicClientDriven mode of a service
+    // - match the TInterfacedObjectFakeServer 32-bit identifier of a callback
+    property FakeID: TInterfacedObjectFakeID
+      read fFakeID;
   end;
 
   /// abstract class defining a FakeInvoke() virtual method via a
@@ -2234,7 +2243,7 @@ type
     fName: RawUtf8;
     // default abstract method will do nothing but log the call
     function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUtf8;
-      aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
+      aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
   end;
 
@@ -2443,7 +2452,8 @@ type
     /// set from output TServiceCustomAnswer.Status result parameter
     property ServiceCustomAnswerStatus: cardinal
       read fServiceCustomAnswerStatus write fServiceCustomAnswerStatus;
-    /// points e.g. to TRestServerUriContext.ExecuteCallback
+    /// points e.g. to TRestServerUriContext.ExecuteCallback which
+    // redirects to TServiceContainerServer.GetFakeCallback
     property OnCallback: TOnInterfaceMethodExecuteCallback
       read fOnCallback write fOnCallback;
     /// allow to use an instance-specific temporary TJsonSerializer
@@ -3363,7 +3373,7 @@ var
 begin
   if Assigned(fNotifyDestroy) then
   try // release server instance
-    fNotifyDestroy(fClientDrivenID);
+    fNotifyDestroy(fFakeID);
   except
     on E: Exception do
     begin
@@ -3522,7 +3532,7 @@ begin
   FakeCallGetJsonFromStack(ctxt, InputJson);
   // call remote server or stub implementation using JSON input/output
   if not fInvoke(ctxt.Method^, InputJson,
-      @OutputJson, @Error, @fClientDrivenID, ctxt.ServiceCustomAnswerPoint) then
+      @OutputJson, @Error, @fFakeID, ctxt.ServiceCustomAnswerPoint) then
     FakeCallRaiseError(ctxt, '''%''', [Error]);
   // unserialize var/out/result parameters from OutputJson array/object
   if ctxt.ServiceCustomAnswerPoint = nil then
@@ -3833,7 +3843,7 @@ begin
   AddMethodsFromTypeInfo(aInterface); // from RTTI or generated code
   if fMethodsCount = 0 then
     raise EInterfaceFactory.CreateUtf8('%.Create(%): interface has ' +
-      'no RTTI - should inherit from IInvokable or add some methods',
+      'no RTTI - it should inherit from IInvokable or add some methods',
       [self, fInterfaceName]);
   if MethodsCount > MAX_METHOD_COUNT then
     raise EInterfaceFactory.CreateUtf8(
@@ -4006,10 +4016,13 @@ begin
       if ValueType in _SMV_STRING then
         Include(ValueKindAsm, vIsString);
       case ValueType of
-        imvInteger, imvCardinal, imvInt64:
+        imvInteger,
+        imvCardinal,
+        imvInt64:
           if rcfQWord in ArgRtti.Cache.Flags then
             Include(ValueKindAsm,vIsQword);
-        imvDouble, imvDateTime:
+        imvDouble,
+        imvDateTime:
           begin
             {$ifdef HAS_FPREG}
             ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
@@ -4031,9 +4044,13 @@ begin
       case ValueType of
         imvBoolean:
           SizeInStorage := 1;
-        imvInteger, imvCardinal:
+        imvInteger,
+        imvCardinal:
           SizeInStorage := 4;
-        imvInt64, imvDouble, imvDateTime, imvCurrency:
+        imvInt64,
+        imvDouble,
+        imvDateTime,
+        imvCurrency:
           SizeInStorage := 8;
         imvEnum:
           SizeInStorage := ArgRtti.Cache.EnumInfo.SizeInStorageAsEnum;
@@ -5896,7 +5913,7 @@ begin
     [fInterface.Methods[aMethodIndex].Uri, ToText(aOperator)^, aCount, aComputed]);
 end;
 
-procedure TInterfaceStub.InstanceDestroyed(aClientDrivenID: cardinal);
+procedure TInterfaceStub.InstanceDestroyed(aFakeID: TInterfacedObjectFakeID);
 var
   m, r, asmndx: integer;
   num: cardinal;
@@ -6184,7 +6201,8 @@ end;
 
 function TInterfaceStub.Invoke(const aMethod: TInterfaceMethod;
   const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
-  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+  aFakeID: PInterfacedObjectFakeID;
+  aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
   ndx: cardinal;
   rule: integer;
@@ -7505,6 +7523,8 @@ begin
         case ValueType of
           imvInterface:
             if Assigned(OnCallback) then
+              // retrieve TRestServerUriContext.ExecuteCallback fake interface
+              // via TServiceContainerServer.GetFakeCallback
               OnCallback(Par, ArgRtti, fInterfaces[IndexVar])
             else
               raise EInterfaceFactory.CreateUtf8('OnCallback=nil for %(%: %)',
@@ -7580,7 +7600,7 @@ end;
 
 function TInterfacedObjectFakeCallback.FakeInvoke(
   const aMethod: TInterfaceMethod; const aParams: RawUtf8;
-  aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
+  aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
   aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 begin
   if fLogClass <> nil then

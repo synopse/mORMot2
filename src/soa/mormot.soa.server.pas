@@ -1439,7 +1439,7 @@ type
     fRaiseExceptionOnInvokeError: boolean;
     function CallbackInvoke(const aMethod: TInterfaceMethod;
       const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
-      aClientDrivenID: PCardinal;
+      aFakeID: PInterfacedObjectFakeID;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
   public
     constructor Create(aRequest: TRestServerUriContext;
@@ -1459,7 +1459,7 @@ begin
   fServer := aRequest.Server;
   fService := aRequest.Service as TServiceFactoryServer;
   fLowLevelConnectionID := aRequest.Call^.LowLevelConnectionID;
-  fClientDrivenID := aFakeID;
+  fFakeID := aFakeID;
   inherited Create(aFactory, nil, opt, CallbackInvoke, nil);
   Get(fFakeInterface);
 end;
@@ -1470,7 +1470,7 @@ begin
   begin
     // may be called asynchronously AFTER server is down
     fServer.InternalLog('%(%:%).Destroy I%',
-      [ClassType, pointer(self), fClientDrivenID, fService.InterfaceUri]);
+      [ClassType, pointer(self), fFakeID, fService.InterfaceUri]);
     if fServer.Services <> nil then
       with fServer.Services as TServiceContainerServer do
         if fFakeCallbacks <> nil then
@@ -1481,7 +1481,7 @@ end;
 
 function TInterfacedObjectFakeServer.CallbackInvoke(
   const aMethod: TInterfaceMethod; const aParams: RawUtf8;
-  aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
+  aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
   aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 begin
   // here aClientDrivenID^ = FakeCall ID
@@ -1523,7 +1523,7 @@ begin
       // no result -> asynchronous non blocking callback
       aResult := nil;
     result := fServer.OnNotifyCallback(fServer, aMethod.InterfaceDotMethodName,
-      aParams, fLowLevelConnectionID, aClientDrivenID^, aResult, aErrorMsg);
+      aParams, fLowLevelConnectionID, aFakeID^, aResult, aErrorMsg);
   end;
 end;
 
@@ -1669,7 +1669,7 @@ end;
 procedure TServiceContainerServer.FakeCallbackRemove(aFakeInstance: TObject);
 var
   i: PtrInt;
-  callbackID: cardinal;
+  callbackID: TInterfacedObjectFakeID;
   connectionID: Int64;
   fake: TInterfacedObjectFakeServer;
 begin
@@ -1687,7 +1687,7 @@ begin
       if not fake.fReleasedOnClientSide then
       begin
         connectionID := fake.fLowLevelConnectionID;
-        callbackID := fake.ClientDrivenID;
+        callbackID := fake.FakeID;
         if Assigned(OnCallbackReleasedOnServerSide) then
           OnCallbackReleasedOnServerSide(self, fake, fake.fFakeInterface);
       end;
@@ -1708,7 +1708,7 @@ var
   i: PtrInt;
   fake: TInterfacedObjectFakeServer;
   connectionID: Int64;
-  fakeID: PtrUInt;
+  fakeID: TInterfacedObjectFakeID;
   Values: TNameValuePUtf8CharDynArray;
   withLog: boolean; // avoid stack overflow
 begin
@@ -1737,7 +1737,7 @@ begin
     begin
       fake := fFakeCallbacks.List[i];
       if (fake.fLowLevelConnectionID = connectionID) and
-         (fake.ClientDrivenID = fakeID) then
+         (fake.FakeID = fakeID) then
       begin
         fake.fReleasedOnClientSide := true;
         if Assigned(OnCallbackReleasedOnClientSide) then
@@ -1813,23 +1813,22 @@ begin
   FakeCallbackAdd(instance);
 end;
 
+procedure AppendWithSpace(var dest: shortstring; const source: shortstring);
+var
+  d, s: PtrInt;
+begin
+  d := ord(dest[0]);
+  s := ord(source[0]);
+  if d + s < 254 then
+  begin
+    dest[d + 1] := ' ';
+    MoveFast(source[1], dest[d + 2], s);
+    inc(dest[0], s + 1);
+  end;
+end;
+
 class function TServiceContainerServer.CallbackReleasedOnClientSide(
   const callback: IInterface; callbacktext: PShortString): boolean;
-
-  procedure Append(var dest: shortstring; const source: shortstring);
-  var
-    d, s: integer;
-  begin
-    d := ord(dest[0]);
-    s := ord(source[0]);
-    if d + s < 254 then
-    begin
-      dest[d + 1] := ' ';
-      MoveFast(source[1], dest[d + 2], s);
-      inc(dest[0], s + 1);
-    end;
-  end;
-
 var
   instance: TObject;
 begin
@@ -1839,7 +1838,7 @@ begin
   else
   begin
     if callbacktext <> nil then
-      Append(callbacktext^, ClassNameShort(instance)^);
+      AppendWithSpace(callbacktext^, ClassNameShort(instance)^);
     result := (instance.ClassType = TInterfacedObjectFakeServer) and
               TInterfacedObjectFakeServer(instance).fReleasedOnClientSide;
   end;

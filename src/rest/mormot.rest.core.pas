@@ -1532,7 +1532,7 @@ type
     fList: TInterfacedObjectMultiList;
     fCallBackUnRegisterNeeded: boolean;
     function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUtf8;
-      aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
+      aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
   public
     constructor Create(aRest: TRest; aFactory: TInterfaceFactory;
@@ -1682,14 +1682,14 @@ end;
 
 function TInterfacedObjectMulti.FakeInvoke(const aMethod: TInterfaceMethod;
   const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
-  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+  aFakeID: PInterfacedObjectFakeID; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
   i: Ptrint;
   exec: TInterfaceMethodExecute;
   instances: TPointerDynArray;
 begin
-  result := inherited FakeInvoke(aMethod, aParams, aResult, aErrorMsg,
-    aClientDrivenID, aServiceCustomAnswer);
+  result := inherited FakeInvoke(
+    aMethod, aParams, aResult, aErrorMsg, aFakeID, aServiceCustomAnswer);
   if not result or
      (fList.fDestCount = 0) then
     exit;
@@ -2701,7 +2701,7 @@ type
     fDest: IInvokable;
     fOnResult: TOnAsyncRedirectResult;
     function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUtf8;
-      aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
+      aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
   public
     constructor Create(aTimer: TRestBackgroundTimer; aFactory:
@@ -2733,13 +2733,14 @@ end;
 
 function TInterfacedObjectAsync.FakeInvoke(const aMethod: TInterfaceMethod;
   const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
-  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+  aFakeID: PInterfacedObjectFakeID;
+  aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
   msg: RawUtf8;
   call: TInterfacedObjectAsyncCall;
 begin
-  result := inherited FakeInvoke(aMethod, aParams, aResult, aErrorMsg,
-    aClientDrivenID, aServiceCustomAnswer);
+  result := inherited FakeInvoke(
+    aMethod, aParams, aResult, aErrorMsg, aFakeID, aServiceCustomAnswer);
   if not result then
     exit;
   call.Method := @aMethod;
