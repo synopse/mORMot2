@@ -1689,8 +1689,11 @@ begin
     if CustomCsvFields = '*' then
       // FieldBitsFromCsv('*') will use [ooSelect]
       f := SimpleFieldsBits[ooInsert]
-    else
-      f := FieldBitsFromCsv(CustomCsvFields);
+    else if not FieldBitsFromCsv(CustomCsvFields, f) then
+    begin
+      result := 0; // one of the csv field name is invalid
+      exit;
+    end;
   result := InternalAdd(Value, true, @f, ForceID, DoNotAutoComputeFields);
 end;
 
@@ -1801,13 +1804,15 @@ end;
 
 function TRestOrm.Update(Value: TOrm; const CustomCsvFields: RawUtf8;
   DoNotAutoComputeFields: boolean): boolean;
+var
+  bits: TFieldBits;
 begin
   if (self = nil) or
-     (Value = nil) then
+     (Value = nil) or
+     not Value.Orm.FieldBitsFromCsv(CustomCsvFields, bits) then
     result := false
   else
-    result := Update(Value, Value.Orm.FieldBitsFromCsv(CustomCsvFields),
-      DoNotAutoComputeFields);
+    result := Update(Value, bits, DoNotAutoComputeFields);
 end;
 
 function TRestOrm.Update(aTable: TOrmClass; aID: TID;

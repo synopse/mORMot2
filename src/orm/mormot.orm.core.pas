@@ -10400,12 +10400,12 @@ end;
 function TOrmPropertiesMapping.MapFields(
   const InternalExternalPairs: array of RawUtf8): POrmPropertiesMapping;
 var
-  i, int: PtrInt;
+  i, f: PtrInt;
 begin
   for i := 0 to (length(InternalExternalPairs) shr 1) - 1 do
   begin
-    int := fProps.Fields.IndexByNameOrExcept(InternalExternalPairs[i * 2]);
-    if int < 0 then
+    f := fProps.Fields.IndexByNameOrExcept(InternalExternalPairs[i * 2]);
+    if f < 0 then
     begin
       fRowIDFieldName := InternalExternalPairs[i * 2 + 1];
       if IdemPropNameU(fRowIDFieldName, 'ID') then
@@ -10415,12 +10415,12 @@ begin
     end
     else
     begin
-      fExtFieldNames[int] := InternalExternalPairs[i * 2 + 1];
-      fExtFieldNamesUnQuotedSQL[int] := UnQuotedSQLSymbolName(fExtFieldNames[int]);
-      if IdemPropNameU(fExtFieldNames[int], fProps.Fields.List[int].Name) then
-        include(fFieldNamesMatchInternal, int + 1)
+      fExtFieldNames[f] := InternalExternalPairs[i * 2 + 1];
+      fExtFieldNamesUnQuotedSQL[f] := UnQuotedSQLSymbolName(fExtFieldNames[f]);
+      if IdemPropNameU(fExtFieldNames[f], fProps.Fields.List[f].Name) then
+        include(fFieldNamesMatchInternal, f + 1)
       else // [0]=ID  [1..n]=fields[i-1]
-        exclude(fFieldNamesMatchInternal, int + 1);
+        exclude(fFieldNamesMatchInternal, f + 1);
     end;
   end;
   inc(fMappingVersion);
@@ -10521,24 +10521,24 @@ end;
 function TOrmPropertiesMapping.InternalToExternal(
   const FieldName: RawUtf8): RawUtf8;
 var
-  int: PtrInt;
+  f: PtrInt;
 begin
-  int := fProps.Fields.IndexByNameOrExcept(FieldName);
-  if int < 0 then
+  f := fProps.Fields.IndexByNameOrExcept(FieldName);
+  if f < 0 then
     result := RowIDFieldName
   else
-    result := fExtFieldNames[int];
+    result := fExtFieldNames[f];
 end;
 
 function TOrmPropertiesMapping.InternalToExternal(BlobField: PRttiProp): RawUtf8;
 var
-  int: PtrInt;
+  f: PtrInt;
 begin
-  int := fProps.Fields.IndexByNameOrExceptShort(BlobField.Name^);
-  if int < 0 then
+  f := fProps.Fields.IndexByNameOrExceptShort(BlobField.Name^);
+  if f < 0 then
     result := RowIDFieldName
   else
-    result := fExtFieldNames[int];
+    result := fExtFieldNames[f];
 end;
 
 function TOrmPropertiesMapping.InternalCsvToExternalCsv(
@@ -11421,13 +11421,15 @@ end;
 
 function TRestBatch.Update(Value: TOrm; const CustomCsvFields: RawUtf8;
   DoNotAutoComputeFields, ForceCacheUpdate: boolean): integer;
+var
+  bits: TFieldBits;
 begin
   if (Value = nil) or
-     (fBatch = nil) then
+     (fBatch = nil) or
+     not Value.Orm.FieldBitsFromCsv(CustomCsvFields, bits) then
     result := -1
   else
-    result := Update(Value, Value.Orm.FieldBitsFromCsv(CustomCsvFields),
-      DoNotAutoComputeFields, ForceCacheUpdate);
+    result := Update(Value, bits, DoNotAutoComputeFields, ForceCacheUpdate);
 end;
 
 function TRestBatch.PrepareForSending(out Data: RawUtf8): boolean;

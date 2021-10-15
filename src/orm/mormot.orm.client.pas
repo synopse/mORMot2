@@ -452,16 +452,18 @@ end;
 
 function TRestOrmClient.BatchUpdate(Value: TOrm; const CustomFieldsCsv: RawUtf8;
   DoNotAutoComputeFields: boolean): integer;
+var
+  bits: TFieldBits;
 begin
   if (self = nil) or
      (Value = nil) or
      (fBatchCurrent = nil) or
      (Value.IDValue <= 0) or
-     not BeforeUpdateEvent(Value) then
+     not BeforeUpdateEvent(Value) or
+     not Value.Orm.FieldBitsFromCsv(CustomFieldsCsv, bits) then
     result := -1
   else
-    result := fBatchCurrent.Update(Value,
-      Value.Orm.FieldBitsFromCsv(CustomFieldsCsv), DoNotAutoComputeFields);
+    result := fBatchCurrent.Update(Value, bits, DoNotAutoComputeFields);
 end;
 
 function TRestOrmClient.BatchDelete(ID: TID): integer;

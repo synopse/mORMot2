@@ -520,7 +520,7 @@ implementation
 
 procedure TRestStorageExternal.FieldsInternalInit;
 var
-  i, n, int: PtrInt;
+  i, n, f: PtrInt;
 begin
   n := length(fFieldsExternal);
   SetLength(fFieldsExternalToInternal, n);
@@ -531,12 +531,12 @@ begin
       fFieldsInternalToExternal[i] := -1;
     for i := 0 to n - 1 do
     begin
-      int := ExternalToInternalIndex(fFieldsExternal[i].ColumnName);
-      fFieldsExternalToInternal[i] := int;
-      inc(int);
-      if int >= 0 then
+      f := ExternalToInternalIndex(fFieldsExternal[i].ColumnName);
+      fFieldsExternalToInternal[i] := f;
+      inc(f);
+      if f >= 0 then
         // fFieldsInternalToExternal[0]=RowID, then follows fFieldsExternal[]
-        fFieldsInternalToExternal[int] := i;
+        fFieldsInternalToExternal[f] := i;
     end;
   end;
 end;
@@ -2098,7 +2098,7 @@ begin
     // efficient mormot.db.sql.postgres array binding
     // e.g. via 'insert into ... values (unnest...)'
     Decoder.DecodedFieldTypesToUnnest := @Types;
-  result := Decoder.EncodeAsSqlPrepared(fTableName, Occasion,
+  result := EncodeAsSqlPrepared(Decoder, fTableName, Occasion,
     fStoredClassMapping^.RowIDFieldName, BatchOptions);
   if Occasion = ooUpdate then
     if Decoder.FieldCount = MAX_SQLFIELDS then
