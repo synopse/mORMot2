@@ -70,6 +70,7 @@ procedure TrimLeftLines(var S: RawUtf8);
 
 /// trim some trailing and ending chars
 // - if S is unique (RefCnt=1), will modify the RawUtf8 in place
+// - faster alternative to S := copy(S, Left + 1, length(S) - Left - Right)
 procedure TrimChars(var S: RawUtf8; Left, Right: PtrInt);
 
 /// split a RawUtf8 string into two strings, according to SepStr separator
@@ -2606,11 +2607,11 @@ begin
     begin
       PStrLen(P - _STRLEN)^ := Right; // we can modify it in-place
       if Left <> 0 then
-        MoveFast(P[Left], pointer(s)^, Right);
+        MoveFast(P[Left], P^, Right);
       P[Right] := #0;
     end
     else
-      FastSetString(s, P + Left, Right) // create a new unique string
+      FastSetString(S, P + Left, Right) // create a new unique string
   else
     FastAssignNew(S);
 end;

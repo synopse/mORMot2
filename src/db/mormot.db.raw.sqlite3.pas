@@ -6237,7 +6237,7 @@ var
   seplen, txtlen: PtrInt;
 begin
   if argc = 2 then
-    with PConcatRec(sqlite3.aggregate_context(Context, sizeof(TConcatRec)))^ do
+    with PConcatRec(sqlite3.aggregate_context(Context, SizeOf(TConcatRec)))^ do
     begin
       // +1 below for adding a final #0
       txt := sqlite3.value_text(argv[0]);
@@ -6261,7 +6261,7 @@ end;
 
 procedure InternalConcatFinal(Context: TSqlite3FunctionContext); cdecl;
 begin
-  with PConcatRec(sqlite3.aggregate_context(Context, sizeof(TConcatRec)))^ do
+  with PConcatRec(sqlite3.aggregate_context(Context, SizeOf(TConcatRec)))^ do
     // sqlite3InternalFree will call Freemem(PConcatRec()^.result)
     sqlite3.result_text(Context, result, resultlen + 1, sqlite3InternalFree);
 end;
@@ -8693,7 +8693,7 @@ begin
     result := false
   else
   begin
-    result := (FileRead(F, Header, sizeof(Header)) = SizeOf(Header)) and
+    result := (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
               (Header.d0 = SQLITE_FILE_HEADER128.Lo) and
               // don't check header 8..15 (may equal encrypted bytes 16..23)
               (Header.b[21] = 64) and

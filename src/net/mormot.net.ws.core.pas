@@ -1360,7 +1360,7 @@ begin
   dec(Count);
   if i < Count then
   begin
-    MoveFast(List[i + 1], List[i], (Count - i) * sizeof(List[i]));
+    MoveFast(List[i + 1], List[i], (Count - i) * SizeOf(List[i]));
     pointer(List[Count].payload) := nil;
   end;
 end;
@@ -1936,7 +1936,7 @@ begin
   jumboFrame.opcode := focBinary;
   jumboFrame.content := [];
   jumboFrame.tix := 0;
-  len := sizeof(JUMBO_HEADER) + ToVarUInt32Length(FramesCount);
+  len := SizeOf(JUMBO_HEADER) + ToVarUInt32Length(FramesCount);
   for i := 0 to FramesCount do
     if Frames[i].opcode = focBinary then
       inc(len, ToVarUInt32LengthWithData(length(Frames[i].payload)))
@@ -2332,7 +2332,7 @@ begin
              'Sec-WebSocket-Protocol: %'#13#10 +
              '%Sec-WebSocket-Accept: %'#13#10#13#10,
     [ConnectionID, Protocol.Name, extout,
-     BinToBase64Short(@Digest, sizeof(Digest))], Response);
+     BinToBase64Short(@Digest, SizeOf(Digest))], Response);
   result := HTTP_SUCCESS;
   // on connection upgrade, will never be back to plain HTTP/1.1
 end;
@@ -2982,7 +2982,7 @@ begin
   if len = 0 then
   begin
     data := '';
-    FillCharFast(hdr, sizeof(hdr), 0);
+    FillCharFast(hdr, SizeOf(hdr), 0);
   end;
   if not HasBytes(@hdr, 2) then // first+len8
     exit;

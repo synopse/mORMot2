@@ -2099,7 +2099,7 @@ end;
 procedure HTTP_RESPONSE.SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY;
   const Content: RawByteString; const ContentType: RawUtf8);
 begin
-  FillcharFast(DataChunk, sizeof(DataChunk), 0);
+  FillcharFast(DataChunk, SizeOf(DataChunk), 0);
   if ContentType <> '' then
   begin
     Headers.KnownHeaders[reqContentType].RawValueLength := length(ContentType);
@@ -2581,27 +2581,27 @@ const
 initialization
   Assert(
     {$ifdef CPU64}
-    (sizeof(HTTP_REQUEST) = 864) and
-    (sizeof(HTTP_SSL_INFO) = 48) and
-    (sizeof(HTTP_DATA_CHUNK_INMEMORY) = 32) and
-    (sizeof(HTTP_DATA_CHUNK_FILEHANDLE) = 32) and
-    (sizeof(HTTP_REQUEST_HEADERS) = 688) and
-    (sizeof(HTTP_RESPONSE_HEADERS) = 512) and
-    (sizeof(HTTP_COOKED_URL) = 40) and
-    (sizeof(HTTP_RESPONSE) = 568) and
+    (SizeOf(HTTP_REQUEST) = 864) and
+    (SizeOf(HTTP_SSL_INFO) = 48) and
+    (SizeOf(HTTP_DATA_CHUNK_INMEMORY) = 32) and
+    (SizeOf(HTTP_DATA_CHUNK_FILEHANDLE) = 32) and
+    (SizeOf(HTTP_REQUEST_HEADERS) = 688) and
+    (SizeOf(HTTP_RESPONSE_HEADERS) = 512) and
+    (SizeOf(HTTP_COOKED_URL) = 40) and
+    (SizeOf(HTTP_RESPONSE) = 568) and
     {$else}
-    (sizeof(HTTP_REQUEST) = 472) and
-    (sizeof(HTTP_SSL_INFO) = 28) and
-    (sizeof(HTTP_DATA_CHUNK_INMEMORY) = 24) and
-    (sizeof(HTTP_DATA_CHUNK_FILEHANDLE) = 32) and
-    (sizeof(HTTP_RESPONSE) = 288) and
-    (sizeof(HTTP_REQUEST_HEADERS) = 344) and
-    (sizeof(HTTP_RESPONSE_HEADERS) = 256) and
-    (sizeof(HTTP_COOKED_URL) = 24) and
+    (SizeOf(HTTP_REQUEST) = 472) and
+    (SizeOf(HTTP_SSL_INFO) = 28) and
+    (SizeOf(HTTP_DATA_CHUNK_INMEMORY) = 24) and
+    (SizeOf(HTTP_DATA_CHUNK_FILEHANDLE) = 32) and
+    (SizeOf(HTTP_RESPONSE) = 288) and
+    (SizeOf(HTTP_REQUEST_HEADERS) = 344) and
+    (SizeOf(HTTP_RESPONSE_HEADERS) = 256) and
+    (SizeOf(HTTP_COOKED_URL) = 24) and
     {$endif CPU64}
     (ord(reqUserAgent) = 40) and
     (ord(respLocation) = 23) and
-    (sizeof(THttpHeader) = 4) and
+    (SizeOf(THttpHeader) = 4) and
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS) = HTTP_LOG_FIELD_SUB_STATUS)
   );
   WinHttpApiInitialize({RaiseOnError=}false);

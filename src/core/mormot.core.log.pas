@@ -1447,7 +1447,7 @@ type
   // - i.e. map all sllEnter/sllLeave event in the .log file
   TSynLogFileProcDynArray = array of TSynLogFileProc;
 
-  TSynLogFileProcArray = array[0..(MaxInt div sizeof(TSynLogFileProc)) - 1] of TSynLogFileProc;
+  TSynLogFileProcArray = array[0..(MaxInt div SizeOf(TSynLogFileProc)) - 1] of TSynLogFileProc;
   PSynLogFileProcArray = ^TSynLogFileProcArray;
 
   /// used by TSynLogFile.LogProcSort method
@@ -2286,15 +2286,15 @@ begin
   header32.unit_length := read.Next4;
   isdwarf64 := header32.unit_length = $ffffffff;
   if isdwarf64 then
-    unitlen := read.Next8 + sizeof(header64.magic) + sizeof(header64.unit_length)
+    unitlen := read.Next8 + SizeOf(header64.magic) + SizeOf(header64.unit_length)
   else
-    unitlen := header32.unit_length + sizeof(header32.unit_length);
+    unitlen := header32.unit_length + SizeOf(header32.unit_length);
   result := file_offset + unitlen;
   // process debug_line header
   ReadInit(file_offset, unitlen);
   if header32.unit_length <> $ffffffff then
   begin
-    read.Copy(@header32, sizeof(header32));
+    read.Copy(@header32, SizeOf(header32));
     header64.magic := $ffffffff;
     header64.unit_length := header32.unit_length;
     header64.version := header32.version;
@@ -2304,17 +2304,17 @@ begin
     header64.line_base := header32.line_base;
     header64.line_range := header32.line_range;
     header64.opcode_base := header32.opcode_base;
-    headerlen := sizeof(header32.version) + sizeof(header32.unit_length) +
-      sizeof(header32.length) + header32.length;
+    headerlen := SizeOf(header32.version) + SizeOf(header32.unit_length) +
+      SizeOf(header32.length) + header32.length;
   end
   else
   begin
-    read.Copy(@header64, sizeof(header64));
-    headerlen := sizeof(header64.magic) + sizeof(header64.unit_length) +
-      sizeof(header64.version) + sizeof(header64.length) + header64.length;
+    read.Copy(@header64, SizeOf(header64));
+    headerlen := SizeOf(header64.magic) + SizeOf(header64.unit_length) +
+      SizeOf(header64.version) + SizeOf(header64.length) + header64.length;
   end;
   // read opcode parameter count table
-  FillcharFast(numoptable, sizeof(numoptable), 0);
+  FillcharFast(numoptable, SizeOf(numoptable), 0);
   read.Copy(@numoptable, header64.opcode_base - 1);
   // read directory and file names
   dirsn := 0;
@@ -2490,15 +2490,15 @@ begin
   header32.unit_length := read.Next4;
   isdwarf64 := header32.unit_length = $ffffffff;
   if isdwarf64 then
-    unit_length := read.Next8 + sizeof(header64.magic) + sizeof(header64.unit_length)
+    unit_length := read.Next8 + SizeOf(header64.magic) + SizeOf(header64.unit_length)
   else
-    unit_length := header32.unit_length + sizeof(header32.unit_length);
+    unit_length := header32.unit_length + SizeOf(header32.unit_length);
   result := file_offset + unit_length;
   ReadInit(file_offset, unit_length);
   // process debug_info header
   if not isdwarf64 then
   begin
-    read.Copy(@header32, sizeof(header32));
+    read.Copy(@header32, SizeOf(header32));
     header64.magic := $ffffffff;
     header64.unit_length := header32.unit_length;
     header64.version := header32.version;
@@ -2506,7 +2506,7 @@ begin
     header64.address_size := header32.address_size;
   end
   else
-    read.Copy(@header64, sizeof(header64));
+    read.Copy(@header64, SizeOf(header64));
   // read the debug_abbrev section corresponding to this debug_info section
   ReadAbbrevTable(DebugAbbrevSectionOffset + header64.debug_abbrev_offset,
     DebugAbbrevSectionSize);
@@ -2720,7 +2720,7 @@ var
          ord('0') + ord('0') shl 8 + ord('0') shl 16 + ord('1') shl 24) and
        (P[4] = ':') then
     begin
-      if not HexDisplayToBin(PAnsiChar(P) + 5, @Ptr, sizeof(Ptr)) then
+      if not HexDisplayToBin(PAnsiChar(P) + 5, @Ptr, SizeOf(Ptr)) then
         exit;
       while (P < PEnd) and
             (P^ > ' ') do
@@ -4233,7 +4233,7 @@ begin
   // hashing algorithm should match TSynLog.GetThreadContextInternal
   if fFamily.fPerThreadLog = ptNoThreadProcess then
     exit;
-  FillcharFast(fThreadHash[0], MAXLOGTHREAD * sizeof(fThreadHash[0]), 0);
+  FillcharFast(fThreadHash[0], MAXLOGTHREAD * SizeOf(fThreadHash[0]), 0);
   ctxt := pointer(fThreadContexts);
   for i := 1 to fThreadContextCount do // i > 0 to be stored in fThreadHash[]
   begin
@@ -5105,7 +5105,7 @@ begin
   begin
     QueryPerformanceMicroSeconds(fCurrentTimestamp);
     dec(fCurrentTimestamp, fStartTimestamp);
-    fWriter.AddBinToHexDisplay(@fCurrentTimestamp, sizeof(fCurrentTimestamp));
+    fWriter.AddBinToHexDisplay(@fCurrentTimestamp, SizeOf(fCurrentTimestamp));
   end
   else
     fWriter.AddCurrentLogTime(fFamily.LocalTimestamp);
@@ -6141,7 +6141,7 @@ begin
     else
       result := 0;
   end
-  else if HexDisplayToBin(fLines[aIndex], @Timestamp, sizeof(Timestamp)) then
+  else if HexDisplayToBin(fLines[aIndex], @Timestamp, SizeOf(Timestamp)) then
     result := fStartDateTime + (Timestamp / fFreqPerDay)
   else
     result := 0;
@@ -6407,9 +6407,9 @@ begin
                 else
                 begin
                   HexDisplayToBin(fLines[fLogProcNatural[i].index],
-                    @TSEnter, sizeof(TSEnter));
+                    @TSEnter, SizeOf(TSEnter));
                   HexDisplayToBin(fLines[j],
-                    @TSLeave, sizeof(TSLeave));
+                    @TSLeave, SizeOf(TSLeave));
                   fLogProcNatural[i].Time :=
                     ((TSLeave - TSEnter) * (1000 * 1000)) div fFreq;
                 end;

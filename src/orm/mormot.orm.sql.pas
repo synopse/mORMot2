@@ -691,7 +691,7 @@ begin
             begin
               // add new missing Field
               Finalize(Field);
-              FillcharFast(Field, sizeof(Field), 0);
+              FillcharFast(Field, SizeOf(Field), 0);
               if PropInfoToExternalField(Fields.List[f], Field) then
               begin
                 SQL := fProperties.SqlAddColumn(fTableName, Field);

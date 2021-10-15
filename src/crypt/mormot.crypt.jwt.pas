@@ -1301,7 +1301,7 @@ var
   hash: TSha256Digest;
 begin
   JWT.result := jwtInvalidSignature;
-  if length(signature) <> sizeof(TEccSignature) then
+  if length(signature) <> SizeOf(TEccSignature) then
     exit;
   sha.Full(pointer(headpayload), length(headpayload), hash);
   if Ecc256r1Verify(fCertificate.Content.Signed.PublicKey, hash, PEccSignature(signature)^) then
@@ -1321,7 +1321,7 @@ begin
   sha.Full(pointer(headpayload), length(headpayload), hash);
   if not Ecc256r1Sign(TEccCertificateSecret(fCertificate).PrivateKey, hash, sign) then
     raise EECCException.CreateUtf8('%.ComputeSignature: ecdsa_sign?', [self]);
-  result := BinToBase64Uri(@sign, sizeof(sign));
+  result := BinToBase64Uri(@sign, SizeOf(sign));
 end;
 
 

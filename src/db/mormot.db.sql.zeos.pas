@@ -697,7 +697,7 @@ begin
       meta.AddEscapeCharToWildcards(sTableName), '');
     FA.InitSpecific(TypeInfo(TSqlDBColumnDefineDynArray), Fields,
       ptRawUtf8, @n, {caseinsens=}true);
-    FillCharFast(F, sizeof(F), 0);
+    FillCharFast(F, SizeOf(F), 0);
     while res.Next do
     begin
       {$ifdef ZEOS72UP}
@@ -954,7 +954,7 @@ begin
     SetLength(fDateDynArray, fDynArraySize[ftDate]);
     SetLength(fUtf8DynArray, fDynArraySize[ftUtf8]);
     SetLength(fBlobDynArray, fDynArraySize[ftBlob]);
-    FillcharFast(ndx, sizeof(ndx), 0);
+    FillcharFast(ndx, SizeOf(ndx), 0);
     for p := 0 to fParamCount - 1 do
     begin
       if fParams[p].VInt64 <> fParamsArrayCount then

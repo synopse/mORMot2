@@ -592,7 +592,7 @@ const
 
   /// cross-compiler negative offset to TStrRec.refCnt field
   // - to be used inlined e.g. as PRefCnt(p - _STRREFCNT)^
-  _STRREFCNT = Sizeof(TRefCnt) + _STRLEN;
+  _STRREFCNT = SizeOf(TRefCnt) + _STRLEN;
 
   /// cross-compiler negative offset to TDynArrayRec.high/length field
   // - to be used inlined e.g. as
@@ -605,7 +605,7 @@ const
   
   /// cross-compiler negative offset to TDynArrayRec.refCnt field
   // - to be used inlined e.g. as PRefCnt(PAnsiChar(Values) - _DAREFCNT)^
-  _DAREFCNT = Sizeof(TRefCnt) + _DALEN;
+  _DAREFCNT = SizeOf(TRefCnt) + _DALEN;
 
   /// in-memory string process will allow up to 800 MB
   // - used as high limit e.g. for TBufferWriter over a TRawByteStringStream
@@ -2472,7 +2472,7 @@ function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
 function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): boolean; inline;
 {$else}
 /// a CompareMem()-like function designed for small and fixed-sized content
-// - here, Length is expected to be a constant value - typically from sizeof() -
+// - here, Length is expected to be a constant value - typically from SizeOf() -
 // so that inlining has better performance than calling the CompareMem() function
 var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): boolean = CompareMem;
 {$endif HASINLINE}
@@ -7405,7 +7405,7 @@ begin
       pointer(Str)^, PStrLen(PtrUInt(Str) - _STRLEN)^, byte(Chr)) + 1
   else
   {$else} // Delphi "for" loop is faster when not inlined
-    for result := 1 to PInteger(PtrInt(Str) - sizeof(integer))^ do
+    for result := 1 to PInteger(PtrInt(Str) - SizeOf(integer))^ do
       if Str[result] = Chr then
         exit;
   {$endif FPC}
@@ -8748,8 +8748,8 @@ begin
   CWbit := 0;
   CWpoint := pointer(dst);
   PCardinal(dst)^ := 0;
-  inc(dst, sizeof(CWpoint^));
-  FillCharFast(offset, sizeof(offset), 0); // fast 16KB reset to 0
+  inc(dst, SizeOf(CWpoint^));
+  FillCharFast(offset, SizeOf(offset), 0); // fast 16KB reset to 0
   // 1. main loop to search using hash[]
   if src <= src_endmatch then
     repeat
@@ -8809,7 +8809,7 @@ begin
       begin
         CWpoint := pointer(dst);
         PCardinal(dst)^ := 0;
-        inc(dst, sizeof(CWpoint^));
+        inc(dst, SizeOf(CWpoint^));
         CWbit := 0;
         if src <= src_endmatch then
           continue

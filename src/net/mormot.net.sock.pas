@@ -2876,15 +2876,15 @@ begin
     exit; // initialization already occured
   if InputBufferSize < SOCKMINBUFSIZE then
     InputBufferSize := SOCKMINBUFSIZE;
-  GetMem(fSockIn, sizeof(TTextRec) + InputBufferSize);
-  FillCharFast(SockIn^, sizeof(TTextRec), 0);
+  GetMem(fSockIn, SizeOf(TTextRec) + InputBufferSize);
+  FillCharFast(SockIn^, SizeOf(TTextRec), 0);
   with TTextRec(SockIn^) do
   begin
     PCrtSocket(@UserData)^ := self;
     Mode := fmClosed;
     // ignore internal Buffer[], which is not trailing on latest Delphi and FPC
     BufSize := InputBufferSize;
-    BufPtr := pointer(PAnsiChar(SockIn) + sizeof(TTextRec));
+    BufPtr := pointer(PAnsiChar(SockIn) + SizeOf(TTextRec));
     OpenFunc := @OpenSock;
     Handle := {$ifdef FPC}THandle{$endif}(-1);
   end;
@@ -2898,14 +2898,14 @@ begin
     exit; // initialization already occured
   if OutputBufferSize < SOCKMINBUFSIZE then
     OutputBufferSize := SOCKMINBUFSIZE;
-  GetMem(fSockOut, sizeof(TTextRec) + OutputBufferSize);
-  FillCharFast(SockOut^, sizeof(TTextRec), 0);
+  GetMem(fSockOut, SizeOf(TTextRec) + OutputBufferSize);
+  FillCharFast(SockOut^, SizeOf(TTextRec), 0);
   with TTextRec(SockOut^) do
   begin
     PCrtSocket(@UserData)^ := self;
     Mode := fmClosed;
     BufSize := OutputBufferSize;
-    BufPtr := pointer(PAnsiChar(SockIn) + sizeof(TTextRec)); // ignore Buffer[] (Delphi 2009+)
+    BufPtr := pointer(PAnsiChar(SockIn) + SizeOf(TTextRec)); // ignore Buffer[] (Delphi 2009+)
     OpenFunc := @OpenSock;
     Handle := {$ifdef FPC}THandle{$endif}(-1);
   end;

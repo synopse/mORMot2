@@ -2925,13 +2925,13 @@ begin
   begin
     result := MaxValue;
     if result < 8 then
-      result := sizeof(byte)
+      result := SizeOf(byte)
     else if result < 16 then
-      result := sizeof(word)
+      result := SizeOf(word)
     else if result < 32 then
-      result := sizeof(cardinal)
+      result := SizeOf(cardinal)
     else if result < 64 then
-      result := sizeof(QWord)
+      result := SizeOf(QWord)
     else
       result := 0;
   end

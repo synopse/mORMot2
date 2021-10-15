@@ -765,7 +765,7 @@ begin
   FileSeek64(F, 1024, soFromBeginning);
   while Posi < Size do
   begin
-    R := FileRead(F, Buf, sizeof(Buf)); // read buffer
+    R := FileRead(F, Buf, SizeOf(Buf)); // read buffer
     if R < 0 then
       break; // stop on any read error
     if OldPassWord <> '' then

@@ -789,7 +789,7 @@ begin
   if CompressionLevel > 9 then
     CompressionLevel := 9; // libdeflate allows additional 10,11,12 level
   result := deflateInit2_(Stream, CompressionLevel, Z_DEFLATED, bits,
-    DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, sizeof(Stream)) >= 0;
+    DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, SizeOf(Stream)) >= 0;
   if FlushBufferOwned and
      not result then
   begin

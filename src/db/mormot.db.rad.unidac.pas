@@ -304,7 +304,7 @@ begin
   try
     FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
     FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
-    FillCharFast(F, sizeof(F), 0);
+    FillCharFast(F, SizeOf(F), 0);
     meta.MetaDataKind := 'Columns';
     Split(aTableName, '.', Owner, Table);
     if Table = '' then
@@ -362,7 +362,7 @@ var
 begin
   Indexes := nil;
   FA.Init(TypeInfo(TSqlDBIndexDefineDynArray), Indexes, @n);
-  FillCharFast(F, sizeof(F), 0);
+  FillCharFast(F, SizeOf(F), 0);
   meta := (MainConnection as TSqlDBUniDACConnection).fDatabase.CreateMetaData;
   indexs := (MainConnection as TSqlDBUniDACConnection).fDatabase.CreateMetaData;
   try

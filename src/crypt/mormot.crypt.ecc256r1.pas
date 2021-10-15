@@ -65,7 +65,7 @@ uses
 const
   /// the size of the 256-bit memory structure used for secp256r1
   // - map 32 bytes of memory
-  ECC_BYTES = sizeof(THash256);
+  ECC_BYTES = SizeOf(THash256);
 
 type
   /// store a public key for ECC secp256r1 cryptography
@@ -1968,9 +1968,9 @@ begin
   begin
     tmp[0] := Issuer;
     tmp[1][0] := 0; // add a trailing #0 as expected for trailing bits
-    result := BaudotToAscii(@tmp, sizeof(Issuer));
+    result := BaudotToAscii(@tmp, SizeOf(Issuer));
     if result = '' then
-      result := mormot.core.text.BinToHex(@Issuer, sizeof(Issuer));
+      result := mormot.core.text.BinToHex(@Issuer, SizeOf(Issuer));
   end;
 end;
 
@@ -1982,9 +1982,9 @@ begin
   FillZero(THash128(Issuer));
   baudot := AsciiToBaudot(Text);
   len := length(baudot);
-  result := len > sizeof(Issuer);
+  result := len > SizeOf(Issuer);
   if result then // truncated
-    len := sizeof(Issuer);
+    len := SizeOf(Issuer);
   MoveFast(pointer(baudot)^, Issuer, len);
 end;
 
@@ -1998,10 +1998,10 @@ end;
 
 function EccID(const Text: RawUtf8; out ID: TEccCertificateID): boolean;
 begin
-  if length(Text) <> sizeof(ID) * 2 then
+  if length(Text) <> SizeOf(ID) * 2 then
     result := false
   else
-    result := mormot.core.text.HexToBin(pointer(Text), @ID, sizeof(ID));
+    result := mormot.core.text.HexToBin(pointer(Text), @ID, SizeOf(ID));
 end;
 
 function EccCheck(const content: TEccCertificateContent): boolean;
@@ -2013,12 +2013,12 @@ begin
        IsZero(Issuer) or
        IsZero(AuthoritySerial) or
        IsZero(AuthorityIssuer) or
-       IsZero(@PublicKey, sizeof(PublicKey)) or
-       IsZero(@content.Signature, sizeof(content.Signature)) then
+       IsZero(@PublicKey, SizeOf(PublicKey)) or
+       IsZero(@content.Signature, SizeOf(content.Signature)) then
       result := false
     else
       result := (content.Version in [1]) and
-        (fnv32(0, @content, sizeof(content) - 4) = content.CRC);
+        (fnv32(0, @content, SizeOf(content) - 4) = content.CRC);
 end;
 
 function EccCheckDate(const content: TEccCertificateContent): boolean;
@@ -2048,14 +2048,14 @@ begin
             (content.Date <> 0) and
             not IsZero(content.AuthoritySerial) and
             not IsZero(content.AuthorityIssuer) and
-            not IsZero(@content.Signature, sizeof(content.Signature));
+            not IsZero(@content.Signature, SizeOf(content.Signature));
 end;
 
 function EccSign(const base64: RawUtf8;
   out content: TEccSignatureCertifiedContent): boolean;
 begin
   result := Base64ToBin(
-    pointer(base64), @content, length(base64), sizeof(content));
+    pointer(base64), @content, length(base64), SizeOf(content));
 end;
 
 const
@@ -2129,17 +2129,17 @@ end;
 function EccText(const sign: TEccSignatureCertifiedContent): RawUtf8;
 begin
   if EccCheck(sign) then
-    result := BinToBase64(@sign, sizeof(sign))
+    result := BinToBase64(@sign, SizeOf(sign))
   else
     result := '';
 end;
 
 function EccText(const sign: TEccSignature): RawUtf8;
 begin
-  if IsZero(@sign, sizeof(sign)) then
+  if IsZero(@sign, SizeOf(sign)) then
     result := ''
   else
-    result := BinToBase64(@sign, sizeof(sign));
+    result := BinToBase64(@sign, SizeOf(sign));
 end;
 
 function EccVerify(const sign: TEccSignatureCertifiedContent;
@@ -2165,7 +2165,7 @@ end;
 
 initialization
   assert(NUM_ECC_DIGITS = 4);
-  assert(sizeof(TEccCertificateContent) = 173); // on all platforms/compilers
+  assert(SizeOf(TEccCertificateContent) = 173); // on all platforms/compilers
   RegisterFunctions;
 
 end.

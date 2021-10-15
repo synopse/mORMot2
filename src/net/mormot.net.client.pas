@@ -2418,7 +2418,7 @@ begin
   begin
     Flags := WINHTTP_DISABLE_KEEP_ALIVE;
     if not WinHttpApi.SetOption(
-       fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags, sizeOf(Flags)) then
+       fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags, SizeOf(Flags)) then
       RaiseLastModuleError(winhttpdll, EWinHttp);
   end;
 end;
@@ -2551,7 +2551,7 @@ function TWinHttp.InternalGetInfo32(Info: cardinal): cardinal;
 var
   dwSize, dwIndex: cardinal;
 begin
-  dwSize := sizeof(result);
+  dwSize := SizeOf(result);
   dwIndex := 0;
   Info := Info or WINHTTP_QUERY_FLAG_NUMBER;
   if not WinHttpApi.QueryHeaders(fRequest, Info, nil, @result, dwSize, dwIndex) then
@@ -2716,7 +2716,7 @@ function TWinINet.InternalGetInfo32(Info: cardinal): cardinal;
 var
   dwSize, dwIndex: cardinal;
 begin
-  dwSize := sizeof(result);
+  dwSize := SizeOf(result);
   dwIndex := 0;
   Info := Info or HTTP_QUERY_FLAG_NUMBER;
   if not HttpQueryInfoA(fRequest, Info, @result, dwSize, dwIndex) then

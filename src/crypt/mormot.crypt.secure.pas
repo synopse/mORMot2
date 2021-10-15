@@ -2288,9 +2288,9 @@ end;
 procedure XorMemoryCtr(data: PCardinal; size: PtrUInt; ctr: cardinal;
   key256bytes: PCardinalArray);
 begin
-  while size >= sizeof(cardinal) do
+  while size >= SizeOf(cardinal) do
   begin
-    dec(size, sizeof(cardinal));
+    dec(size, SizeOf(cardinal));
     data^ := data^ xor key256bytes[ctr and $3f] xor ctr;
     inc(data);
     ctr := ((ctr xor (ctr shr 15)) * 2246822519); // prime-number ctr diffusion
@@ -2320,7 +2320,7 @@ begin
   Secret := Random32;
   // temporary secret for encryption
   CryptNonce := Random32;
-  TAesPrng.Main.FillRandom(@Crypt, sizeof(Crypt)); // cryptographic randomness
+  TAesPrng.Main.FillRandom(@Crypt, SizeOf(Crypt)); // cryptographic randomness
 end;
 
 type
@@ -2350,7 +2350,7 @@ begin
        (PRecordTypeInfo <> nil) then
     begin
       BinarySave(PRecordData, tmp, PRecordTypeInfo, rkRecordTypes);
-      if tmp.len > sizeof(cc.data) then
+      if tmp.len > SizeOf(cc.data) then
         // all cookies storage should be < 4K
         raise ESynException.Create('TBinaryCookieGenerator: Too Big Too Fat');
     end;
@@ -2365,7 +2365,7 @@ begin
     cc.head.expires := cc.head.issued + TimeOutMinutes * 60;
     if tmp.len > 0 then
       MoveFast(tmp.buf^, cc.data, tmp.len);
-    inc(tmp.len, sizeof(cc.head));
+    inc(tmp.len, SizeOf(cc.head));
     cc.head.crc := DefaultHasher(Secret, @cc.head.session, tmp.len - 8);
     XorMemoryCtr(@cc.head.crc, tmp.len - 4,
       {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
@@ -2389,8 +2389,8 @@ begin
     exit;
   clen := length(Cookie);
   len := Base64uriToBinLength(clen);
-  if (len >= sizeof(cc.head)) and
-     (len <= sizeof(cc)) and
+  if (len >= SizeOf(cc.head)) and
+     (len <= SizeOf(cc)) and
      Base64uriDecode(pointer(Cookie), @cc, clen) then
   begin
     XorMemoryCtr(@cc.head.crc, len - SizeOf(cc.head.cryptnonce),
@@ -2409,7 +2409,7 @@ begin
         if (PRecordData = nil) or
            (PRecordTypeInfo = nil) then
           result := cc.head.session
-        else if len > sizeof(cc.head) then
+        else if len > SizeOf(cc.head) then
         begin
           ccend := PAnsiChar(@cc) + len;
           if BinaryLoad(PRecordData, @cc.data, PRecordTypeInfo,

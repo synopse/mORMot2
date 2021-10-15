@@ -1193,7 +1193,7 @@ asm
 @TinyBlockArenaLoop:
         mov     eax, SizeOf(TTinyBlockTypes)
   lock  xadd    dword ptr [r8 + TSmallBlockInfo.TinyCurrentArena], eax
-        and     eax, (NumTinyBlockArenas * Sizeof(TTinyBlockTypes)) - 1
+        and     eax, (NumTinyBlockArenas * SizeOf(TTinyBlockTypes)) - 1
         add     rax, rcx
         lea     rbx, [r8 + rax].TSmallBlockInfo.Tiny
         mov     eax, $100

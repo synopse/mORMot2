@@ -1074,7 +1074,7 @@ function TRestStorageMongoDB.GetJsonValues(const Res: TBsonDocument;
       if o1ndx < itemcount then
       begin
         // O(1) optimistic search
-        result := @PAnsiChar(item)[o1ndx * sizeof(item^)];
+        result := @PAnsiChar(item)[o1ndx * SizeOf(item^)];
         if (result^.NameLen = aNameLen) and
            IdemPropNameUSameLenNotNull(pointer(aName), result^.name, aNameLen) then
           exit;

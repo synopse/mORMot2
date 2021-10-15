@@ -25,7 +25,7 @@ end;
 
 function AlignToPtr(p: pointer): pointer; // not exported by typinfo.pp
 begin
-  result := align(p, sizeof(p));
+  result := align(p, SizeOf(p));
 end;
 
 // use complex AlignTypeData() inlined function from typinfo.pp

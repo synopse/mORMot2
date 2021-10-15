@@ -1199,7 +1199,7 @@ constructor TMvcViewsMustache.Create(aInterface: PRttiInfo;
 var
   params: TMvcViewsMustacheParameters;
 begin
-  FillcharFast(params, sizeof(params), 0);
+  FillcharFast(params, SizeOf(params), 0);
   params.FileTimestampMonitorAfterSeconds := 5;
   params.ExtensionForNotExistingTemplate := aExtensionForNotExistingTemplate;
   params.Helpers := TSynMustache.HelpersGetStandardList;
@@ -2309,7 +2309,7 @@ end;
 
 
 initialization
-  assert(sizeof(TMvcAction) = sizeof(TServiceCustomAnswer));
+  assert(SizeOf(TMvcAction) = SizeOf(TServiceCustomAnswer));
   TSynLog.Family.ExceptionIgnore.Add(EMvcApplication);
 
 end.

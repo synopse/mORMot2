@@ -2546,18 +2546,18 @@ begin
       EHttpApiServer.RaiseOnError(hInitialize,
         Http.Initialize(Http.Version, HTTP_INITIALIZE_CONFIG));
       try
-        FillcharFast(cfg, sizeof(cfg), 0);
+        FillcharFast(cfg, SizeOf(cfg), 0);
         cfg.KeyDesc.pUrlPrefix := pointer(prefix);
         // first delete any existing information
         err := Http.DeleteServiceConfiguration(
-          0, hscUrlAclInfo, @cfg, Sizeof(cfg));
+          0, hscUrlAclInfo, @cfg, SizeOf(cfg));
         // then add authorization rule
         if not OnlyDelete then
         begin
           cfg.KeyDesc.pUrlPrefix := pointer(prefix);
           cfg.ParamDesc.pStringSecurityDescriptor := HTTPADDURLSECDESC;
           err := Http.SetServiceConfiguration(
-            0, hscUrlAclInfo, @cfg, Sizeof(cfg));
+            0, hscUrlAclInfo, @cfg, SizeOf(cfg));
         end;
         if (err <> NO_ERROR) and
            (err <> ERROR_ALREADY_EXISTS) then
@@ -2604,7 +2604,7 @@ constructor THttpApiServer.Create(CreateSuspended: boolean;
 var
   binding: HTTP_BINDING_INFO;
 begin
-  SetLength(fLogDataStorage, sizeof(HTTP_LOG_FIELDS_DATA)); // should be done 1st
+  SetLength(fLogDataStorage, SizeOf(HTTP_LOG_FIELDS_DATA)); // should be done 1st
   inherited Create({suspended=}true, OnStart, OnStop, ProcessName);
   HttpApiInitialize; // will raise an exception in case of failure
   EHttpApiServer.RaiseOnError(hInitialize,
@@ -2635,7 +2635,7 @@ end;
 
 constructor THttpApiServer.CreateClone(From: THttpApiServer);
 begin
-  SetLength(fLogDataStorage, sizeof(HTTP_LOG_FIELDS_DATA));
+  SetLength(fLogDataStorage, SizeOf(HTTP_LOG_FIELDS_DATA));
   fOwner := From;
   fReqQueue := From.fReqQueue;
   fOnRequest := From.fOnRequest;
@@ -2955,9 +2955,9 @@ begin
     NotifyThreadStart(self);
     // reserve working buffers
     SetLength(heads, 64);
-    SetLength(respbuf, sizeof(HTTP_RESPONSE));
+    SetLength(respbuf, SizeOf(HTTP_RESPONSE));
     reps := pointer(respbuf);
-    SetLength(reqbuf, 16384 + sizeof(HTTP_REQUEST)); // req^ + 16 KB of headers
+    SetLength(reqbuf, 16384 + SizeOf(HTTP_REQUEST)); // req^ + 16 KB of headers
     req := pointer(reqbuf);
     logdata := pointer(fLogDataStorage);
     if global_verbs[hvOPTIONS] = '' then
@@ -2978,7 +2978,7 @@ begin
       ctxt.fAuthBearer := '';
       byte(ctxt.fConnectionFlags) := 0;
       // retrieve next pending request, and read its headers
-      FillcharFast(req^, sizeof(HTTP_REQUEST), 0);
+      FillcharFast(req^, SizeOf(HTTP_REQUEST), 0);
       err := Http.ReceiveHttpRequest(fReqQueue, reqid, 0,
         req^, length(reqbuf), bytesread);
       if Terminated then
@@ -3110,7 +3110,7 @@ begin
             end;
             try
               // compute response
-              FillcharFast(reps^, sizeof(reps^), 0);
+              FillcharFast(reps^, SizeOf(reps^), 0);
               respsent := false;
               outstatcode := DoBeforeRequest(ctxt);
               if outstatcode > 0 then
@@ -3176,7 +3176,7 @@ begin
     else
       EHttpApiServer.RaiseOnError(hQueryRequestQueueProperty,
         Http.QueryRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
-          @result, sizeof(result), 0, @len, nil));
+          @result, SizeOf(result), 0, @len, nil));
   end;
 end;
 
@@ -3188,7 +3188,7 @@ begin
      (fReqQueue <> 0) then
     EHttpApiServer.RaiseOnError(hSetRequestQueueProperty,
       Http.SetRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
-        @aValue, sizeof(aValue), 0, nil));
+        @aValue, SizeOf(aValue), 0, nil));
 end;
 
 function THttpApiServer.GetRegisteredUrl: SynUnicode;

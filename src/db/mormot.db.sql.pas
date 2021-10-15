@@ -3500,7 +3500,7 @@ begin
             begin
               dec(n);
               MoveFast(fSharedTransactions[i + 1], fSharedTransactions[i],
-                (n - i) * sizeof(fSharedTransactions[0]));
+                (n - i) * SizeOf(fSharedTransactions[0]));
               SetLength(fSharedTransactions, n);
               case action of
                 transCommitWithException,
@@ -3884,7 +3884,7 @@ var
 begin
   fa.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
   fa.Compare := SortDynArrayAnsiStringI; // fa.Find() case insensitive
-  FillCharFast(f, sizeof(f), 0);
+  FillCharFast(f, SizeOf(f), 0);
   if fDbms = dSQLite then
   begin
     // SQLite3 has a specific PRAGMA metadata query
@@ -4010,7 +4010,7 @@ var
 begin
   fa.Init(TypeInfo(TSqlDBColumnDefineDynArray), Parameters, @n);
   fa.Compare := SortDynArrayAnsiStringI; // fa.Find() case insensitive
-  FillcharFast(f, sizeof(f), 0);
+  FillcharFast(f, SizeOf(f), 0);
   sql := SqlGetParameter(aProcName);
   if sql = '' then
     exit;
@@ -6177,17 +6177,17 @@ begin
         ftDouble:
           begin
             vdouble := ColumnDouble(f);
-            W.Write(@vdouble, sizeof(vdouble));
+            W.Write(@vdouble, SizeOf(vdouble));
           end;
         ftCurrency:
           begin
             vcurrency := ColumnCurrency(f);
-            W.Write(@vcurrency, sizeof(vcurrency));
+            W.Write(@vcurrency, SizeOf(vcurrency));
           end;
         ftDate:
           begin
             vdatetime := ColumnDateTime(f);
-            W.Write(@vdatetime, sizeof(vdatetime));
+            W.Write(@vdatetime, SizeOf(vdatetime));
           end;
         ftUtf8:
           W.Write(ColumnUtf8(f));
@@ -7756,7 +7756,7 @@ const
     'ColumnType TSqlDBFieldType ColumnIndexed boolean';
 
 initialization
-  assert(SizeOf(TSqlDBColumnProperty) = sizeof(PtrUInt) * 2 + 20);
+  assert(SizeOf(TSqlDBColumnProperty) = SizeOf(PtrUInt) * 2 + 20);
   Rtti.RegisterType(TypeInfo(TSqlDBFieldType));
   Rtti.RegisterFromText(TypeInfo(TSqlDBColumnDefine), __TSqlDBColumnDefine);
 

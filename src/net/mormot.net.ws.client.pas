@@ -429,7 +429,7 @@ begin
       aProtocol.OnBeforeIncomingFrame := fOnBeforeIncomingFrame;
       RequestSendHeader(aWebSocketsURI, 'GET');
       TAesPrng.Main.FillRandom(key);
-      bin1 := BinToBase64(@key, sizeof(key));
+      bin1 := BinToBase64(@key, SizeOf(key));
       SockSend(['Content-Length: 0'#13#10 +
                 'Connection: Upgrade'#13#10 +
                 'Upgrade: websocket'#13#10 +
@@ -457,7 +457,7 @@ begin
       result := 'Invalid HTTP Upgrade Accept Challenge';
       ComputeChallenge(bin1, digest1);
       bin2 := HeaderGetValue('SEC-WEBSOCKET-ACCEPT');
-      if not Base64ToBin(pointer(bin2), @digest2, length(bin2), sizeof(digest2)) or
+      if not Base64ToBin(pointer(bin2), @digest2, length(bin2), SizeOf(digest2)) or
          not IsEqual(digest1, digest2) then
         exit;
       if extout <> '' then

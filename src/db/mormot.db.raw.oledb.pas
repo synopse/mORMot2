@@ -878,7 +878,7 @@ var
   i: PtrInt;
   rec: TIDListRec; // pseudo record to compute offset within TIDListRec
 begin
-  FillcharFast(rec, sizeof(rec), 0); // makes Win64 compiler happy
+  FillcharFast(rec, SizeOf(rec), 0); // makes Win64 compiler happy
   pBindingsList[0].pTypeInfo := nil;
   pBindingsList[0].pObject := nil;
   pBindingsList[0].pBindExt := nil;
@@ -890,13 +890,13 @@ begin
   case fType of
     ftInt64:
       begin
-        pBindingsList[0].cbMaxLen := sizeof(int64);
+        pBindingsList[0].cbMaxLen := SizeOf(int64);
         pBindingsList[0].obValue := PAnsiChar(@rec.IDVal) - pointer(@rec);
         pBindingsList[0].wType := DBTYPE_I8;
       end;
     ftUtf8:
       begin
-        pBindingsList[0].cbMaxLen := sizeof(PWideChar); //Check bind ''
+        pBindingsList[0].cbMaxLen := SizeOf(PWideChar); //Check bind ''
         for i := 0 to Length(farr) - 1 do
           if Length(farr[i]) * SizeOf(WideChar) > integer(pBindingsList[0].cbMaxLen) then
             pBindingsList[0].cbMaxLen := Length(farr[i]) * SizeOf(WideChar);
@@ -995,7 +995,7 @@ begin
     result := false
   else
   begin
-    result := (FileRead(F, Header, sizeof(Header)) = SizeOf(Header)) and
+    result := (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
       IdemPChar(@Header[4], 'STANDARD JET');
     FileClose(F);
   end;

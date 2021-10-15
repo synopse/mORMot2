@@ -1311,7 +1311,7 @@ begin
   system.assign(fSaveToFile, FN);
   rewrite(fSaveToFile);
   if IOResult <> 0 then
-    FillCharFast(fSaveToFile, sizeof(fSaveToFile), 0);
+    FillCharFast(fSaveToFile, SizeOf(fSaveToFile), 0);
 end;
 
 procedure TSynTests.SaveToText(var aDest: System.Text);

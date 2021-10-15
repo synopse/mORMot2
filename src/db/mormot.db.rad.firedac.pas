@@ -327,7 +327,7 @@ begin
     meta.Connection := (MainConnection as TSqlDBFireDACConnection).fDatabase;
     FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
     FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
-    FillCharFast(F, sizeof(F), 0);
+    FillCharFast(F, SizeOf(F), 0);
     meta.MetaInfoKind := mkTableFields;
     meta.ObjectName := Utf8ToString(UpperCase(aTableName));
     meta.Open;
@@ -366,7 +366,7 @@ const
 begin
   TableName := Utf8ToString(UpperCase(aTableName));
   FA.Init(TypeInfo(TSqlDBIndexDefineDynArray), Indexes, @n);
-  FillCharFast(F, sizeof(F), 0);
+  FillCharFast(F, SizeOf(F), 0);
   meta := TADMetaInfoQuery.Create(nil);
   indexs := TADMetaInfoQuery.Create(nil);
   try

@@ -595,7 +595,7 @@ begin
     exit;
   dec(FDSet.fd_count);
   if i < FDSet.fd_count then
-    MoveFast(FDSet.fd_array[i + 1], FDSet.fd_array[i], (FDSet.fd_count - i) * sizeof(TSocket));
+    MoveFast(FDSet.fd_array[i + 1], FDSet.fd_array[i], (FDSet.fd_count - i) * SizeOf(TSocket));
 end;
 
 procedure FD_SET(Socket: TNetSocket; var FDSet: TFDSet);
@@ -676,8 +676,8 @@ begin
     n := fCount - i;
     if n > 0 then
     begin
-      MoveFast(fTagSocket[i + 1], fTagSocket[i], n * sizeof(fTagSocket[i]));
-      MoveFast(fTagTag[i + 1], fTagTag[i], n * sizeof(fTagTag[i]));
+      MoveFast(fTagSocket[i + 1], fTagSocket[i], n * SizeOf(fTagSocket[i]));
+      MoveFast(fTagTag[i + 1], fTagTag[i], n * SizeOf(fTagTag[i]));
     end;
     if fCount = 0 then
       fHighestSocket := nil;

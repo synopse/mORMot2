@@ -206,7 +206,7 @@ type
     /// define if parameter can be retrieved after a stored procedure execution
     VInOut: TSqlDBParamInOutType;
     // so that VInt64 will be 8 bytes aligned
-    VFill: array[sizeof(TSqlDBFieldType)+sizeof(TSqlDBParamInOutType)+sizeof(integer)..
+    VFill: array[SizeOf(TSqlDBFieldType)+SizeOf(TSqlDBParamInOutType)+SizeOf(integer)..
       SizeOf(Int64)-1] of byte;
   end;
   {$ifdef CPU64}
@@ -914,7 +914,7 @@ begin
           SetString(result, P, V^.Length + 1);
         end;
     else
-      SetString(result, PAnsiChar(@V^.Int64), sizeof(Int64));
+      SetString(result, PAnsiChar(@V^.Int64), SizeOf(Int64));
     end;
 end;
 
@@ -1352,7 +1352,7 @@ begin
         begin
           BI^.pwszDataSourceType := Pointer(TABLE_PARAM_DATASOURCE);
           B^.wType := DBTYPE_TABLE;
-          B^.cbMaxLen := sizeof(IUnknown);
+          B^.cbMaxLen := SizeOf(IUnknown);
           B^.pObject := @dbObjTVP;
           B^.obValue := PAnsiChar(@P^.VIUnknown) - pointer(fParams);
           case P^.VType of
@@ -1381,7 +1381,7 @@ begin
                 BI.dwFlags := BI^.dwFlags or DBPARAMFLAGS_ISNULLABLE;
               end;
             ftInt64, ftDouble, ftCurrency, ftDate:            // those types match the VInt64 binary representation :)
-              B^.cbMaxLen := sizeof(Int64);
+              B^.cbMaxLen := SizeOf(Int64);
             ftBlob:
               begin
                 // sent as DBTYPE_BYREF mapping directly RawByteString VBlob content
@@ -1397,13 +1397,13 @@ begin
                 if P^.VText = '' then
                 begin
                   B^.wType := DBTYPE_WSTR; // '' -> bind one #0 wide char
-                  B^.cbMaxLen := sizeof(WideChar);
+                  B^.cbMaxLen := SizeOf(WideChar);
                 end
                 else
                 begin
                   // mapping directly the WideString VText content
                   B^.wType := DBTYPE_BSTR; // DBTYPE_WSTR just doesn't work :(
-                  B^.cbMaxLen := sizeof(Pointer);
+                  B^.cbMaxLen := SizeOf(Pointer);
                   BI^.ulParamSize := length(P^.VText);
                 end;
               end;
@@ -1671,22 +1671,22 @@ begin
       B^.iOrdinal := nfo^.iOrdinal;
       B^.eParamIO := DBPARAMIO_NOTPARAM;
       B^.obStatus := result;
-      inc(result, sizeof(PtrInt)); // TColumnValue.Status
+      inc(result, SizeOf(PtrInt)); // TColumnValue.Status
       B^.wType := FIELDTYPE2OLEDB[Col^.ColumnType];
       case Col^.ColumnType of
         ftInt64, ftDouble, ftCurrency, ftDate:
           begin
-            inc(result, sizeof(PtrUInt)); // ignore TColumnValue.Length
+            inc(result, SizeOf(PtrUInt)); // ignore TColumnValue.Length
             B^.dwPart := DBPART_STATUS or DBPART_VALUE;
             B^.obValue := result;
-            B^.cbMaxLen := sizeof(Int64);
-            inc(result, sizeof(Int64));
+            B^.cbMaxLen := SizeOf(Int64);
+            inc(result, SizeOf(Int64));
           end;
         ftUtf8, ftBlob:
           begin
             B^.dwPart := DBPART_STATUS or DBPART_VALUE or DBPART_LENGTH;
             B^.obLength := result; // need length field in fRowSetData[]
-            inc(result, sizeof(PtrUInt)); // TColumnValue.Length
+            inc(result, SizeOf(PtrUInt)); // TColumnValue.Length
             B^.obValue := result;
             if nfo^.ulColumnSize < MAXCOLUMNSIZE then
             begin
@@ -1716,11 +1716,11 @@ begin
               // get huge content by pointer (includes DBTYPE_BYREF)
               fHasColumnValueInlined := true;
               Col^.ColumnValueInlined := false;
-              B^.cbMaxLen := sizeof(Pointer); // value=pointer in fRowSetData[]
+              B^.cbMaxLen := SizeOf(Pointer); // value=pointer in fRowSetData[]
               if AlignDataInternalBuffer then
                 inc(result, 8)
               else
-                inc(result, sizeof(Pointer));
+                inc(result, SizeOf(Pointer));
             end;
           end;
       else

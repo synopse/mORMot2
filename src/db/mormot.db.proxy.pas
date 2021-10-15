@@ -865,7 +865,7 @@ var
     len: PtrInt;
   begin
     len := Length(msgout);
-    SetLength(msgout, len + sizeof(Int64));
+    SetLength(msgout, len + SizeOf(Int64));
     PInt64(@PByteArray(msgout)[len])^ := value;
   end;
 
@@ -888,7 +888,7 @@ begin
     if not Authenticate.SessionExists(header.SessionID) then
       raise ESqlDBRemote.Create('You do not have the right to be here');
   P := pointer(msgin);
-  inc(P, sizeof(header^));
+  inc(P, SizeOf(header^));
   try
     msgout := copy(msgin, 1, SizeOf(header^));
     case header.Command of
@@ -1124,7 +1124,7 @@ begin
   header.Magic := REMOTE_MAGIC;
   header.SessionID := fCurrentSession;
   header.Command := Command;
-  SetString(msgin, PAnsiChar(@header), sizeof(header));
+  SetString(msgin, PAnsiChar(@header), SizeOf(header));
   case Command of
     cGetToken,
     cConnect,
@@ -1158,7 +1158,7 @@ begin
      (outheader.Magic <> REMOTE_MAGIC) then
     raise ESqlDBRemote.CreateUtf8('Incorrect %.Process() magic/version', [self]);
   msg := pointer(msgout);
-  inc(msg, sizeof(header));
+  inc(msg, SizeOf(header));
   case outheader.Command of
     cGetToken,
     cServerTimestamp:
@@ -1178,7 +1178,7 @@ begin
     cGetForeignKeys:
       outnamevalue.SetBlobDataPtr(msg);
     cExecute, cExecuteToBinary, cExecuteToJson, cExecuteToExpandedJson:
-      FastSetString(oututf8, msg, length(msgout) - sizeof(header));
+      FastSetString(oututf8, msg, length(msgout) - SizeOf(header));
     cExceptionRaised: // msgout is ExceptionClassName+#0+ExceptionMessage
       raise ESqlDBRemote.CreateUtf8('%.Process(%): server raised % with ''%''',
         [self, ToText(Command)^, msg, msg + StrLen(msg) + 1]);
@@ -1307,7 +1307,7 @@ begin
   repeat
     if DataLen <= 5 then
       break; // to raise ESqlDBRemote
-    fDataRowCount := PInteger(PAnsiChar(Data) + (DataLen - sizeof(integer)))^;
+    fDataRowCount := PInteger(PAnsiChar(Data) + (DataLen - SizeOf(integer)))^;
     magic := FromVarUInt32(Data);
     if magic <> FETCHALLTOBINARY_MAGIC then
       break; // corrupted
@@ -1592,7 +1592,7 @@ begin
     ftDouble,
     ftCurrency,
     ftDate:
-      SetString(result, PAnsiChar({%H-}data), sizeof(Int64));
+      SetString(result, PAnsiChar({%H-}data), SizeOf(Int64));
     ftBlob,
     ftUtf8:
       with FromVarBlob(data) do

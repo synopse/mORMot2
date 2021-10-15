@@ -1882,7 +1882,7 @@ begin
   n := length(CursorIDs);
   Write4(n);
   SetLength(fCursors, n);
-  n := n * sizeof(Int64);
+  n := n * SizeOf(Int64);
   MoveFast(CursorIDs[0], fCursors[0], n);
   Write(pointer(fCursors), n);
 end;
@@ -1913,9 +1913,9 @@ begin
   Len := length(ReplyMessage);
   with PMongoReplyHeader(ReplyMessage)^ do
   begin
-    if (Len < sizeof(TMongoReplyHeader)) or
+    if (Len < SizeOf(TMongoReplyHeader)) or
        (Header.MessageLength <> Len) or
-       (sizeof(TMongoReplyHeader) + NumberReturned * 5 > Len) then
+       (SizeOf(TMongoReplyHeader) + NumberReturned * 5 > Len) then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(len=%)', [Len]);
     if Header.OpCode <> WIRE_OPCODES[opReply] then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(OpCode=%)', [Header.OpCode]);
@@ -1927,7 +1927,7 @@ begin
     fNumberReturned := NumberReturned;
   end;
   fReply := ReplyMessage;
-  fFirstDocument := PAnsiChar(pointer(fReply)) + sizeof(TMongoReplyHeader);
+  fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoReplyHeader);
   Rewind;
   fLatestDocIndex := -1;
 end;
@@ -2111,7 +2111,7 @@ begin
   Rewind;
   while Next(b) do
   begin
-    inc(b, sizeof(integer)); // points to the "e_list" of "int32 e_list #0"
+    inc(b, SizeOf(integer)); // points to the "e_list" of "int32 e_list #0"
     BSONListToJson(b, betDoc, W, Mode);
     W.AddComma;
     if (MaxSize > 0) and
@@ -2161,7 +2161,7 @@ end;
 
 const
   /// message big enough to retrieve the maximum MongoDB document size
-  MONGODB_MAXMESSAGESIZE = BSON_MAXDOCUMENTSIZE + sizeof(TMongoReplyHeader);
+  MONGODB_MAXMESSAGESIZE = BSON_MAXDOCUMENTSIZE + SizeOf(TMongoReplyHeader);
 
 constructor TMongoConnection.Create(const aClient: TMongoClient;
   const aServerAddress: RawUtf8; aServerPort: integer);
@@ -2482,7 +2482,7 @@ var
 begin
   if self = nil then
     raise EMongoRequestException.Create('Connection=nil', self, Request);
-  FillCharFast(Header, sizeof(Header), 0);
+  FillCharFast(Header, SizeOf(Header), 0);
   try
     Lock;
     if Send(Request) then
@@ -2499,8 +2499,8 @@ begin
           [self, Header.MessageLength], self, Request);
       SetLength(result, Header.MessageLength);
       PMongoWireHeader(result)^ := Header;
-      DataLen := Header.MessageLength - sizeof(Header);
-      if not fSocket.TrySockRecv(@PByteArray(result)[sizeof(Header)], DataLen) then
+      DataLen := Header.MessageLength - SizeOf(Header);
+      if not fSocket.TrySockRecv(@PByteArray(result)[SizeOf(Header)], DataLen) then
       try
         Close;
       finally
@@ -2512,13 +2512,13 @@ begin
         ord(opMsgOld):
           if Client.Log <> nil then
             Client.Log.Log(sllWarning, 'Msg (deprecated) from MongoDB: %',
-              [BsonToJson(@PByteArray(result)[sizeof(Header)], betDoc, DataLen,
+              [BsonToJson(@PByteArray(result)[SizeOf(Header)], betDoc, DataLen,
                modMongoShell)], Request);
         ord(opMsg):
           // TODO: parse https://docs.mongodb.com/manual/reference/mongodb-wire-protocol/#op-msg
           if Client.Log <> nil then
             Client.Log.Log(sllWarning, 'Msg from MongoDB: %',
-              [EscapeToShort(@PByteArray(result)[sizeof(Header)], DataLen)], Request);
+              [EscapeToShort(@PByteArray(result)[SizeOf(Header)], DataLen)], Request);
       end;
     end;
     // if we reached here, this is due to a socket error or an unexpeted opcode
@@ -2976,7 +2976,7 @@ begin
     // https://tools.ietf.org/html/rfc5802#section-5
     user := StringReplaceAll(UserName, ['=', '=3D', ',', '=2C']);
     TAesPrng.Main.FillRandom(rnd);
-    nonce := BinToBase64(@rnd, sizeof(rnd));
+    nonce := BinToBase64(@rnd, SizeOf(rnd));
     FormatUtf8('n=%,r=%', [user, nonce], first);
     BsonVariantType.FromBinary('n,,' + first, bbtGeneric, bson);
     err := fConnections[ConnectionIndex].RunCommand(DatabaseName,
@@ -3750,7 +3750,7 @@ end;
 
 
 initialization
-  Assert(sizeof(TMongoReplyHeader) = 36);
+  Assert(SizeOf(TMongoReplyHeader) = 36);
 
 end.
 

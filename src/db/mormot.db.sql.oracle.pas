@@ -1395,18 +1395,18 @@ begin
                 ftDate:
                   begin
                     VDBType := SQLT_DAT;
-                    SetString(VData, nil, fParamsArrayCount * sizeof(TOracleDate));
+                    SetString(VData, nil, fParamsArrayCount * SizeOf(TOracleDate));
                     oData := pointer(VData);
-                    oLength := sizeof(TOracleDate);
+                    oLength := SizeOf(TOracleDate);
                   end;
                 ftInt64:
                   if OCI.SupportsInt64Params then
                   begin
                     // starting with 11.2, OCI supports NUMBER conversion to/from Int64
                     VDBType := SQLT_INT;
-                    SetString(VData, nil, fParamsArrayCount * sizeof(Int64));
+                    SetString(VData, nil, fParamsArrayCount * SizeOf(Int64));
                     oData := pointer(VData);
-                    oLength := sizeof(Int64);
+                    oLength := SizeOf(Int64);
                   end;
                   // prior to 11.2, we will stay with the default SQLT_STR type
                 ftUtf8:
@@ -1445,7 +1445,7 @@ begin
                         end;
                       ftBlob:
                         begin
-                          L := length(VArray[j]) + sizeof(integer);
+                          L := length(VArray[j]) + SizeOf(integer);
                           if L * fParamsArrayCount > MAX_INLINED_PARAM_SIZE then
                             raise ESqlDBOracle.CreateUtf8(
                               '%.ExecutePrepared: Array parameter #% BLOB too big',
@@ -1498,7 +1498,7 @@ begin
         else
         begin
           // 1.2. One row DML optimized binding
-          FillcharFast(Int32, sizeof(Int32), 0);
+          FillcharFast(Int32, SizeOf(Int32), 0);
           SetLength(oIndicator, fParamCount);
           SetLength(ociArrays, fParamCount);
           for i := 0 to fParamCount - 1 do
@@ -1525,7 +1525,7 @@ begin
                   ociArrays[ociArraysCount]),
                 fError);
               inc(ociArraysCount);
-              SetString(param.VData, nil, Length(param.VArray) * sizeof(Int64));
+              SetString(param.VData, nil, Length(param.VArray) * SizeOf(Int64));
               oData := pointer(param.VData);
               for j := 0 to Length(param.VArray) - 1 do
                 case param.VType of
@@ -1534,7 +1534,7 @@ begin
                       SetInt64(pointer(param.Varray[j]), oDataINT^[j]);
                       OCI.Check(nil, self,
                         OCI.NumberFromInt(fError, @oDataINT[j],
-                          sizeof(Int64), OCI_NUMBER_SIGNED, num_val),
+                          SizeOf(Int64), OCI_NUMBER_SIGNED, num_val),
                         fError);
                       OCI.Check(nil, self,
                         OCI.CollAppend(Env, fError, @num_val,
@@ -1575,7 +1575,7 @@ begin
                 end
                 else
                 begin
-                  oLength := sizeof(Int64);
+                  oLength := SizeOf(Int64);
                   oData := @VInt64;
                   case VType of
                     ftUnknown:
@@ -1590,7 +1590,7 @@ begin
                             HandleAlloc(Env, PPointer(oData)^,
                               OCI_HTYPE_STMT, 0, nil),
                             fError);
-                        oLength := sizeof(pointer);
+                        oLength := SizeOf(pointer);
                       end;
                     ftInt64:
                       if OCI.SupportsInt64Params then
@@ -1635,9 +1635,9 @@ begin
                       begin
                         VDBType := SQLT_TIMESTAMP; // SQLT_DAT is wrong within WHERE clause
                         oOCIDateTime := DateTimeToDescriptor(PDateTime(@VInt64)^);
-                        SetString(VData, PAnsiChar(@oOCIDateTime), sizeof(oOCIDateTime));
+                        SetString(VData, PAnsiChar(@oOCIDateTime), SizeOf(oOCIDateTime));
                         oData := pointer(VData);
-                        oLength := sizeof(oOCIDateTime);
+                        oLength := SizeOf(oOCIDateTime);
                       end
                       else
                       begin
@@ -1679,13 +1679,13 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                               'blob length exceeds max size for parameter #%',
                               [self, KB(oLength), i + 1]);
                           UniqueString(VData); // for thread-safety
-                          PInteger(PtrInt(VData) - sizeof(integer))^ := oLength;
+                          PInteger(PtrInt(VData) - SizeOf(integer))^ := oLength;
                           if {%H-}wasStringHacked = nil then
                             SetLength(wasStringHacked, fParamCount shr 3 + 1);
                           SetBitPtr(pointer(wasStringHacked), i); // for unpatching below
                           {$endif FPC_64}
-                          oData := Pointer(PtrInt(VData) - sizeof(integer));
-                          Inc(oLength, sizeof(integer));
+                          oData := Pointer(PtrInt(VData) - SizeOf(integer));
+                          Inc(oLength, SizeOf(integer));
                         end;
                       end;
                   else
@@ -1727,7 +1727,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
       if wasStringHacked <> nil then // restore patched strings length ASAP
         for i := 0 to fParamCount - 1 do
           if GetBitPtr(pointer(wasStringHacked), i) then
-            PInteger(PtrInt(fParams[i].VData) - sizeof(integer))^ := 0;
+            PInteger(PtrInt(fParams[i].VData) - SizeOf(integer))^ := 0;
       {$endif FPC_64}
       for i := 0 to ociArraysCount - 1 do
         OCI.Check(nil, self,
@@ -1988,7 +1988,7 @@ begin
       fError);
     ColCount := 0;
     AttrGet(fStatement, OCI_HTYPE_STMT, @ColCount, nil, OCI_ATTR_PARAM_COUNT, fError);
-    RowSize := ColCount * sizeof(sb2); // space for indicators
+    RowSize := ColCount * SizeOf(sb2); // space for indicators
     ColumnLongTypes := [];
     fColumn.Capacity := ColCount;
     for i := 1 to ColCount do
@@ -2032,7 +2032,7 @@ begin
               ColumnType := ftUtf8;
               ColumnValueInlined := false;
               ColumnValueDBType := SQLT_CLOB;
-              ColumnValueDBSize := sizeof(POCILobLocator);
+              ColumnValueDBSize := SizeOf(POCILobLocator);
               include(ColumnLongTypes, hasLOB);
             end;
           SQLT_RID,
@@ -2051,13 +2051,13 @@ begin
             begin
               ColumnType := ftDouble;
               ColumnValueDBType := SQLT_BDOUBLE;
-              ColumnValueDBSize := sizeof(Double);
+              ColumnValueDBSize := SizeOf(Double);
             end;
           SQLT_NUM:
             begin
               oScale := 5; // OCI_ATTR_PRECISION is always 38 (on Oracle 11g) :(
               AttrGet(oHandle, OCI_DTYPE_PARAM, @oScale, nil, OCI_ATTR_SCALE, fError);
-              ColumnValueDBSize := sizeof(Double);
+              ColumnValueDBSize := SizeOf(Double);
               case oScale of
                {0: if (major_version>11) or
                       ((major_version=11) and
@@ -2096,7 +2096,7 @@ begin
             begin
               ColumnType := ftInt64;
               ColumnValueDBType := SQLT_INT;
-              ColumnValueDBSize := sizeof(Int64);
+              ColumnValueDBSize := SizeOf(Int64);
             end;
           SQLT_DAT,
           SQLT_DATE,
@@ -2108,7 +2108,7 @@ begin
             begin
               ColumnType := ftDate;
               ColumnValueDBType := SQLT_DAT;
-              ColumnValueDBSize := sizeof(TOracleDate);
+              ColumnValueDBSize := SizeOf(TOracleDate);
             end;
           SQLT_INTERVAL_YM,
           SQLT_INTERVAL_DS:
@@ -2132,7 +2132,7 @@ begin
               ColumnType := ftBlob;
               ColumnValueInlined := false;
               ColumnValueDBType := SQLT_BLOB;
-              ColumnValueDBSize := sizeof(POCILobLocator);
+              ColumnValueDBSize := SizeOf(POCILobLocator);
               if fForceBlobAsNull then
                 ColumnType := ftNull
               else
@@ -2144,7 +2144,7 @@ begin
               ColumnType := ftNull;
               ColumnValueInlined := false;
               ColumnValueDBType := SQLT_RSET;
-              ColumnValueDBSize := sizeof(POCIStmt);
+              ColumnValueDBSize := SizeOf(POCIStmt);
               include(ColumnLongTypes, hasCURS);
             end;
         else
@@ -2225,7 +2225,7 @@ begin
     fRowBufferCount := fRowCount; // fRowCount may be set to 0: avoid leaking
     // fRowBuffer[] contains Indicators[] + Col0[] + Col1[] + Col2[]...
     Indicators := pointer(fRowBuffer);
-    RowSize := fRowBufferCount * ColCount * sizeof(sb2);
+    RowSize := fRowBufferCount * ColCount * SizeOf(sb2);
     for i := 0 to ColCount - 1 do
       with fColumns[i] do
       begin
@@ -2281,10 +2281,10 @@ begin
             end;
         end;
         inc(RowSize, fRowBufferCount * ColumnValueDBSize);
-        inc(Indicators, fRowBufferCount * sizeof(sb2));
+        inc(Indicators, fRowBufferCount * SizeOf(sb2));
       end;
     assert(PtrUInt(Indicators - pointer(fRowBuffer)) = fRowBufferCount *
-      ColCount * sizeof(sb2));
+      ColCount * SizeOf(sb2));
     assert(RowSize <= fInternalBufferSize);
   end;
 end;

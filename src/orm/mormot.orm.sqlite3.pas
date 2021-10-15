@@ -499,13 +499,13 @@ begin
     result := SQLITE_ERROR;
     exit;
   end;
-  ppVTab := sqlite3.malloc(sizeof(TSqlite3VTab));
+  ppVTab := sqlite3.malloc(SizeOf(TSqlite3VTab));
   if ppVTab = nil then
   begin
     result := SQLITE_NOMEM;
     exit;
   end;
-  FillcharFast(ppVTab^, sizeof(ppVTab^), 0);
+  FillcharFast(ppVTab^, SizeOf(ppVTab^), 0);
   try
     table := module.TableClass.Create(
       module, RawUtf8(argv[2]), argc - 3, @argv[3]);
@@ -573,7 +573,7 @@ begin
     Notify('nOrderBy=% nConstraint=%', [pInfo.nOrderBy, pInfo.nConstraint]);
     exit;
   end;
-  prepared := sqlite3.malloc(sizeof(TOrmVirtualTablePrepared));
+  prepared := sqlite3.malloc(SizeOf(TOrmVirtualTablePrepared));
   try
     // encode the incoming parameters into prepared^ record
     prepared^.WhereCount := pInfo.nConstraint;
@@ -609,10 +609,10 @@ begin
     prepared^.OmitOrderBy := false;
     if pInfo.nOrderBy > 0 then
     begin
-      assert(sizeof(TOrmVirtualTablePreparedOrderBy) = sizeof(TSqlite3IndexOrderBy));
+      assert(SizeOf(TOrmVirtualTablePreparedOrderBy) = SizeOf(TSqlite3IndexOrderBy));
       prepared^.OrderByCount := pInfo.nOrderBy;
       MoveFast(pInfo.aOrderBy^[0], prepared^.OrderBy[0],
-        pInfo.nOrderBy * sizeof(prepared^.OrderBy[0]));
+        pInfo.nOrderBy * SizeOf(prepared^.OrderBy[0]));
     end
     else
       prepared^.OrderByCount := 0;
@@ -627,7 +627,7 @@ begin
         if i <> n then
           // expression needed for Search() method to be moved at [n]
           MoveFast(prepared^.Where[i], prepared^.Where[n],
-            sizeof(prepared^.Where[i]));
+            SizeOf(prepared^.Where[i]));
         inc(n);
         pInfo.aConstraintUsage[i].argvIndex := n;
         pInfo.aConstraintUsage[i].omit := prepared^.Where[i].OmitCheck;
@@ -697,7 +697,7 @@ function vt_Open(var pVTab: TSqlite3VTab;
 var
   table: TOrmVirtualTable;
 begin
-  ppCursor := sqlite3.malloc(sizeof(TSqlite3VTabCursor));
+  ppCursor := sqlite3.malloc(SizeOf(TSqlite3VTabCursor));
   if ppCursor = nil then
   begin
     result := SQLITE_NOMEM;
@@ -924,7 +924,7 @@ begin
     raise ERestStorage.CreateUtf8('aDB=nil at %.SetDB()', [self]);
   if fDB <> nil then
     raise ERestStorage.CreateUtf8('fDB<>nil at %.SetDB()', [self]);
-  FillCharFast(fModule, sizeof(fModule), 0);
+  FillCharFast(fModule, SizeOf(fModule), 0);
   fModule.iVersion := 1;
   fModule.xCreate := vt_Create;
   fModule.xConnect := vt_Create;
@@ -1428,7 +1428,7 @@ begin
   fDB.Log.Add.Log(sllDB, 'CreateMissingTables on %', [fDB], self);
   fDB.Log.Add.Log(sllDB, 'GetTables', TypeInfo(TRawUtf8DynArray),
     tablesatcreation, self);
-  FillcharFast(tablecreated, sizeof(TOrmTableBits), 0);
+  FillcharFast(tablecreated, SizeOf(TOrmTableBits), 0);
   try
     // create not static and not existing tables
     for t := 0 to high(Model.Tables) do
@@ -1479,7 +1479,7 @@ begin
     if user_version <> 0 then
       DB.user_version := user_version;
     // initialize new tables AFTER creation of ALL tables
-    if not IsZero(@tablecreated, sizeof(TOrmTableBits)) then
+    if not IsZero(@tablecreated, SizeOf(TOrmTableBits)) then
       for t := 0 to high(Model.Tables) do
         if byte(t) in tablecreated then
           if not (Model.TableProps[t].Kind in IS_CUSTOM_VIRTUAL) or
@@ -1602,7 +1602,7 @@ begin
   if result then
     exit;
   result := (fStaticVirtualTable = nil) or
-    IsZero(fStaticVirtualTable, length(fStaticVirtualTable) * sizeof(pointer));
+    IsZero(fStaticVirtualTable, length(fStaticVirtualTable) * SizeOf(pointer));
   if result then
     // VACUUM will fail if there are one or more active SQL statements
     fStatementCache.ReleaseAllDBStatements;
