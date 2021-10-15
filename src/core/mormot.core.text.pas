@@ -2434,6 +2434,11 @@ function RawUtf8ToGuid(const text: RawByteString): TGUID;
 // - uses RawByteString for byte storage, whatever the codepage is
 function StreamToRawByteString(aStream: TStream): RawByteString;
 
+/// iterative function to retrieve the new content appended to a stream
+// - aPosition should be set to 0 before the initial call
+function StreamChangeToRawByteString(
+  aStream: TStream; var aPosition: Int64): RawByteString;
+
 /// create a TStream from a string content
 // - uses RawByteString for byte storage, whatever the codepage is
 // - in fact, the returned TStream is a TRawByteString instance, since this
@@ -2442,8 +2447,8 @@ function StreamToRawByteString(aStream: TStream): RawByteString;
 function RawByteStringToStream(const aString: RawByteString): TStream;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// read an UTF-8 text from a TStream
-// - format is Length(integer):Text, i.e. the one used by WriteStringToStream
+/// read UTF-8 text from a TStream saved with len prefix by WriteStringToStream
+// - format is Length(integer):Text - use StreamToRawByteString for raw data
 // - will return '' if there is no such text in the stream
 // - you can set a MaxAllowedSize value, if you know how long the size should be
 // - it will read from the current position in S: so if you just write into S,
@@ -2454,8 +2459,8 @@ function RawByteStringToStream(const aString: RawByteString): TStream;
 function ReadStringFromStream(S: TStream;
   MaxAllowedSize: integer = 255): RawUtf8;
 
-/// write an UTF-8 text into a TStream
-// - format is Length(integer):Text, i.e. the one used by ReadStringFromStream
+/// write an UTF-8 text into a TStream with a len prefix - see ReadStringFromStream
+// - format is Length(integer):Text - use RawByteStringToStream for raw data
 function WriteStringToStream(S: TStream; const Text: RawUtf8): boolean;
 
 
@@ -4523,8 +4528,8 @@ end;
 
 function IntegerDynArrayToCsv(Values: PIntegerArray; ValuesCount: integer;
   const Prefix, Suffix: RawUtf8; InlinedValue: boolean): RawUtf8;
-type
-  TInts16 = packed array[word] of string[15]; // shortstring are faster (no heap allocation)
+type // shortstrings are faster (no heap allocation)
+  TInts16 = packed array[word] of string[15];
 var
   i, L, Len: PtrInt;
   tmp: array[0..15] of AnsiChar;
@@ -10630,6 +10635,24 @@ begin
   SetLength(result, size);
   aStream.Read(pointer(result)^, size);
   aStream.Position := current;
+end;
+
+function StreamChangeToRawByteString(aStream: TStream; var aPosition: Int64): RawByteString;
+var
+  current, size: Int64;
+begin
+  result := '';
+  if aStream = nil then
+    exit;
+  size := aStream.Size - aPosition;
+  if size <= 0 then
+    exit; // nothing new
+  SetLength(result, size);
+  current := aStream.Position;
+  aStream.Position := aPosition;
+  aStream.Read(pointer(result)^, size);
+  aStream.Position := current;
+  aPosition := current;
 end;
 
 function RawByteStringToStream(const aString: RawByteString): TStream;
