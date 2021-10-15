@@ -404,6 +404,10 @@ type
     // a local shortstring variable, e.g. for logging/debug purposes
     class function CallbackReleasedOnClientSide(const callback: IInterface;
       callbacktext: PShortString = nil): boolean; overload;
+    /// replace the connection ID of callbacks after a reconnection
+    // - returns the number of callbacks changed
+    function FakeCallbackReplaceConnectionID(
+      aConnectionIDOld, aConnectionIDNew: Int64): integer;
     /// register a callback interface which will be called each time a write
     // operation is performed on a given TOrm with a TRecordVersion field
     // - called e.g. by TRestServer.RecordVersionSynchronizeSubscribeMaster
@@ -1841,6 +1845,33 @@ begin
       AppendWithSpace(callbacktext^, ClassNameShort(instance)^);
     result := (instance.ClassType = TInterfacedObjectFakeServer) and
               TInterfacedObjectFakeServer(instance).fReleasedOnClientSide;
+  end;
+end;
+
+function TServiceContainerServer.FakeCallbackReplaceConnectionID(
+  aConnectionIDOld, aConnectionIDNew: Int64): integer;
+var
+  i: integer;
+  serv: ^TInterfacedObjectFakeServer;
+begin
+  result := 0;
+  if (fFakeCallbacks = nil) or
+     (aConnectionIDOld = aConnectionIDNew) then
+    exit;
+  fFakeCallbacks.Safe.Lock;
+  try
+    serv := pointer(fFakeCallbacks.List);
+    for i := 1 to fFakeCallbacks.Count do
+    begin
+      if serv^.fLowLevelConnectionID = aConnectionIDOld then
+      begin
+        serv^.fLowLevelConnectionID := aConnectionIDNew;
+        inc(result);
+      end;
+      inc(serv);
+    end;
+  finally
+    fFakeCallbacks.Safe.UnLock;
   end;
 end;
 
