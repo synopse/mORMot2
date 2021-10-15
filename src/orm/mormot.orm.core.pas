@@ -1472,6 +1472,18 @@ type
   TOrmCheckTableName = (
     ctnNoCheck, ctnMustExist, ctnTrimExisting);
 
+  /// used internally by TOrmFill for its field mapping
+  TOrmFillTableMap = record
+    /// the class instance to be filled from the TOrmTable
+    // - can be a TOrmMany instance after FillPrepareMany() method call
+    Dest: TOrm;
+    /// the published property RTTI to be filled from the TOrmTable
+    // - is nil for the RowID/ID field
+    DestField: TOrmPropInfo;
+    /// the column index in this TOrmTable
+    TableIndex: integer;
+  end;
+
   /// internal data used by TOrm.FillPrepare()/FillPrepareMany() methods
   // - using a dedicated class will reduce memory usage for each TOrm
   // instance (which won't need these properties most of the time)
@@ -1488,16 +1500,7 @@ type
     fTableMapRecordManyInstances: TOrmManyObjArray;
     /// map the published fields index
     // - calculated in FillPrepare() or FillPrepareMany() methods
-    fTableMap: array of record
-      /// the class instance to be filled from the TOrmTable
-      // - can be a TOrmMany instance after FillPrepareMany() method call
-      Dest: TOrm;
-      /// the published property RTTI to be filled from the TOrmTable
-      // - is nil for the RowID/ID field
-      DestField: TOrmPropInfo;
-      /// the column index in this TOrmTable
-      TableIndex: integer;
-    end;
+    fTableMap: array of TOrmFillTableMap;
     /// mark all mapped or TModTime fields
     fTableMapFields: TFieldBits;
     /// if Joined instances were initialized via TOrm.CreateJoined()
@@ -6138,13 +6141,13 @@ begin
     if IsRowID(pointer(aFieldName)) then
       AddMap(aRecord, nil, aIndex)
     else
-      with aRecord.OrmProps do
+      with aRecord.Orm.Fields do
       begin
-        aFieldIndex := Fields.IndexByName(aFieldName);
+        aFieldIndex := IndexByName(aFieldName);
         if aFieldIndex >= 0 then
         begin // only map if column name is a valid field
           include(fTableMapFields, aFieldIndex);
-          AddMap(aRecord, Fields.List[aFieldIndex], aIndex);
+          AddMap(aRecord, List[aFieldIndex], aIndex);
         end;
       end;
 end;
@@ -6176,8 +6179,9 @@ end;
 function TOrmFill.Fill(aRow: integer; aDest: TOrm): boolean;
 var
   D: TOrm;
-  f, i: PtrInt;
+  f, offs: PtrInt;
   P: PUtf8Char;
+  map: ^TOrmFillTableMap;
 begin
   if (self = nil) or
      (Table = nil) or
@@ -6186,22 +6190,22 @@ begin
   else
   begin
     aRow := aRow * Table.fFieldCount;
+    map := pointer(fTableMap);
     for f := 0 to fTableMapCount - 1 do
-      with fTableMap[f] do
-      begin
-        if aDest <> nil then
-          D := aDest
-        else
-          D := Dest;
-        i := aRow + TableIndex; // field index in this TOrmTable
-        P := Table.GetResults(i);
-        if DestField = nil then
-          SetID(P, D.fID)
-        else
-          DestField.SetValue(D, P,
-            {$ifdef NOTORMTABLELEN} StrLen(P) {$else} fTable.fLen[i] {$endif},
-            {wasstring=}TableIndex in fTable.fFieldParsedAsString);
-      end;
+    begin
+      D := aDest;
+      if D = nil then
+        D := map^.Dest;
+      offs := aRow + map^.TableIndex;
+      P := Table.GetResults(offs);
+      if map^.DestField = nil then
+        SetID(P, D.fID)
+      else
+        map^.DestField.SetValue(D, P,
+          {$ifdef NOTORMTABLELEN} StrLen(P) {$else} fTable.fLen[offs] {$endif},
+          {wasstring=}map^.TableIndex in fTable.fFieldParsedAsString);
+      inc(map);
+    end;
     result := True;
   end;
 end;
@@ -6224,6 +6228,7 @@ procedure TOrmFill.Map(aRecord: TOrm; aTable: TOrmTable;
 var
   f: PtrInt;
   ColumnName: PUtf8Char;
+  ColumnNameLen: integer;
   FieldName: RawUtf8;
   Props: TOrmProperties;
 begin
@@ -6235,15 +6240,15 @@ begin
   Props := aRecord.Orm;
   for f := 0 to aTable.FieldCount - 1 do
   begin
-    ColumnName := aTable.Results[f];
+    ColumnName := aTable.Get(0, f, ColumnNameLen);
     if aCheckTableName = ctnNoCheck then
-      Utf8ToRawUtf8(ColumnName, FieldName)
+      FastSetString(FieldName, ColumnName, ColumnNameLen)
     else if IdemPChar(ColumnName, pointer(Props.SqlTableNameUpperWithDot)) then
       Utf8ToRawUtf8(ColumnName + length(Props.SqlTableNameUpperWithDot), FieldName)
     else if aCheckTableName = ctnMustExist then
       continue
     else
-      Utf8ToRawUtf8(ColumnName, FieldName);
+      FastSetString(FieldName, ColumnName, ColumnNameLen);
     AddMap(aRecord, FieldName, f);
   end;
   fFillCurrentRow := 1; // point to first data row (0 is field names)
@@ -6491,9 +6496,9 @@ begin
       if (FieldName = '') or IsRowID(pointer(FieldName)) then
         Server.CreateSqlIndex(self, 'ID', true); // for external tables
     // automatic column indexation of fields which are commonly searched by value
-    with OrmProps do
-      for f := 0 to Fields.Count - 1 do
-        with Fields.List[f] do
+    with OrmProps.Fields do
+      for f := 0 to Count - 1 do
+        with List[f] do
           if (FieldName = '') or
              IdemPropNameU(FieldName, Name) then
             if ((aIsUnique in Attributes) and
@@ -6521,7 +6526,7 @@ end;
 procedure TOrm.FillFrom(aRecord: TOrm; const aRecordFieldBits: TFieldBits);
 var
   i, f: PtrInt;
-  S, D: TOrmProperties;
+  S, D: TOrmPropInfoList;
   SP: TOrmPropInfo;
   wasString: boolean;
   tmp: RawUtf8;
@@ -6530,32 +6535,32 @@ begin
      (aRecord = nil) or
      IsZero(aRecordFieldBits) then
     exit;
-  D := Orm;
+  D := Orm.Fields;
   if POrmClass(aRecord)^.InheritsFrom(POrmClass(self)^) then
   begin
     // fast atttribution for two sibbling classes
     if POrmClass(aRecord)^ = POrmClass(self)^ then
       fID := aRecord.fID; // same class -> ID values will match
-    for f := 0 to D.Fields.Count - 1 do
+    for f := 0 to D.Count - 1 do
       if byte(f) in aRecordFieldBits then
-        D.Fields.List[f].CopyValue(aRecord, self);
+        D.List[f].CopyValue(aRecord, self);
     exit;
   end;
   // two diverse tables -> don't copy ID, and per-name field lookup
-  S := aRecord.OrmProps;
-  for i := 0 to S.Fields.Count - 1 do
+  S := aRecord.OrmProps.Fields;
+  for i := 0 to S.Count - 1 do
     if byte(i) in aRecordFieldBits then
     begin
-      SP := S.Fields.List[i];
-      if D.Fields.List[i].Name = SP.Name then
+      SP := S.List[i];
+      if D.List[i].Name = SP.Name then
         // optimistic match
         f := i
       else
-        f := D.Fields.IndexByName(SP.Name);
+        f := D.IndexByName(SP.Name);
       if f >= 0 then
       begin
         SP.GetValueVar(aRecord, False, tmp, @wasString);
-        D.Fields.List[f].SetValueVar(self, tmp, wasString);
+        D.List[f].SetValueVar(self, tmp, wasString);
       end;
     end;
 end;
@@ -6646,7 +6651,8 @@ begin
       F[i] := GetJsonField(P, P);
     for i := 0 to n do
     begin
-      Value := GetJsonFieldOrObjectOrArray(P, @wasString, nil, true, true, @ValueLen);
+      Value := GetJsonFieldOrObjectOrArray(
+        P, @wasString, nil, true, true, @ValueLen);
       FillValue({%H-}F[i], Value, ValueLen, wasString, FieldBits);
     end;
   end
@@ -6659,7 +6665,8 @@ begin
       if (Prop = nil) or
          (P = nil) then
         break;
-      Value := GetJsonFieldOrObjectOrArray(P, @wasString, nil, true, true, @ValueLen);
+      Value := GetJsonFieldOrObjectOrArray(
+        P, @wasString, nil, true, true, @ValueLen);
       FillValue(Prop, Value, ValueLen, wasString, FieldBits);
     until P = nil;
   end;
@@ -7974,7 +7981,7 @@ begin
   end;
   W.BlockBegin('{', Options);
   W.AddPropJsonInt64('RowID', TOrm(Instance).fID);
-  props := TOrm(Instance).OrmProps.Fields;
+  props := TOrm(Instance).Orm.Fields;
   cur := pointer(props.List);
   n := props.Count;
   repeat
