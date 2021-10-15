@@ -8321,7 +8321,28 @@ end;
 
 { ************ Abstract TOrmTableAbstract Parent Class }
 
-{ TOrmTable }
+{ TOrmTableAbstract }
+
+constructor TOrmTableAbstract.Create(const aSql: RawUtf8);
+begin
+  fQuerySql := aSql;
+  fFieldIndexID := -1;
+  fQueryTableIndexFromSql := -2; // indicates not searched
+end;
+
+constructor TOrmTableAbstract.CreateWithColumnTypes(
+  const ColumnTypes: array of TOrmFieldType; const aSql: RawUtf8);
+begin
+  Create(aSql);
+  SetLength(fQueryColumnTypes, length(ColumnTypes));
+  MoveFast(ColumnTypes[0], fQueryColumnTypes[0], length(ColumnTypes) * SizeOf(TOrmFieldType));
+end;
+
+destructor TOrmTableAbstract.Destroy;
+begin
+  fOwnedRecords.Free;
+  inherited Destroy;
+end;
 
 function TOrmTableAbstract.GetResults(Offset: PtrInt): PUtf8Char;
 begin
@@ -9499,7 +9520,7 @@ var
   o: PtrInt;
   U: PUtf8Char;
 begin
-  W := TTextWriter.Create(Dest, 32768);
+  W := TTextWriter.Create(Dest, 65536);
   try
     W.AddShort('<xml xmlns:s="uuid:BDC6E3F0-6DA3-11d1-A2A3-00AA00C14882" ' +
       'xmlns:dt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882" ' +
@@ -10189,27 +10210,6 @@ end;
 function TOrmTableAbstract.SortCompare(Field: integer): TUtf8Compare;
 begin
   result := OrmFieldTypeComp[FieldType(Field)];
-end;
-
-constructor TOrmTableAbstract.Create(const aSql: RawUtf8);
-begin
-  fQuerySql := aSql;
-  fFieldIndexID := -1;
-  fQueryTableIndexFromSql := -2; // indicates not searched
-end;
-
-constructor TOrmTableAbstract.CreateWithColumnTypes(
-  const ColumnTypes: array of TOrmFieldType; const aSql: RawUtf8);
-begin
-  Create(aSql);
-  SetLength(fQueryColumnTypes, length(ColumnTypes));
-  MoveFast(ColumnTypes[0], fQueryColumnTypes[0], length(ColumnTypes) * SizeOf(TOrmFieldType));
-end;
-
-destructor TOrmTableAbstract.Destroy;
-begin
-  fOwnedRecords.Free;
-  inherited Destroy;
 end;
 
 function TOrmTableAbstract.Step(SeekFirst: boolean; RowVariant: PVariant): boolean;

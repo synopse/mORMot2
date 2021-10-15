@@ -3886,37 +3886,43 @@ end;
 
 procedure GetNextItemShortString(var P: PUtf8Char; out Dest: ShortString; Sep: AnsiChar);
 var
-  S: PUtf8Char;
+  S, D: PUtf8Char;
+  c: AnsiChar;
   len: PtrInt;
 begin
   S := P;
-  if S <> nil then
+  D := @Dest; // better FPC codegen with a dedicated variable
+  if S = nil then
+    PCardinal(D)^ := 0 // Dest='' with trailing #0
+  else
   begin
     while (S^ <= ' ') and (S^ <> #0) do
       inc(S);
-    P := S;
-    while (S^ <> Sep) and (S^ <> #0) do
-      inc(S);
-    len := S - P;
+    len := 0;
     repeat
-      dec(len);
-    until (len < 0) or
-          not (P[len] in [#1..' ']); // trim right spaces
-    if len >= 254 then
-      len := 254 // leave space for trailing #0
-    else
-      inc(len);
-    Dest[0] := AnsiChar(len);
-    Dest[len + 1] := #0; // trailing #0
-    if len > 0 then
-      MoveSmall(P, @Dest[1], len);
-    if S^ <> #0 then
-      P := S + 1
-    else
-      P := nil;
-  end
-  else
-    PCardinal(@Dest)^ := 0; // trailing #0
+      c := S^;
+      inc(S);
+      if c = Sep then
+        break;
+      if c <> #0 then
+      begin
+        if len < 254 then
+        begin
+          inc(len);
+          D[len] := c;
+        end;
+        continue;
+      end;
+      S := nil; // end of input
+      break;
+    until false;
+    while (len <> 0) and
+          (D[len] < ' ') do
+      dec(len); // trim right space
+    D[0] := AnsiChar(len);
+    D[len + 1] := #0; // trailing #0
+    P := S;
+  end;
 end;
 
 function GetNextItemHexDisplayToBin(var P: PUtf8Char;

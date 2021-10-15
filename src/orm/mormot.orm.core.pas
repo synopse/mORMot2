@@ -9385,7 +9385,7 @@ begin
     end;
   if Props.Props.JoinedFieldsTable <> nil then
   begin
-    W := TTextWriter.CreateOwnedStream;
+    W := TTextWriter.CreateOwnedStream(1024);
     try
       W.AddShorter('SELECT ');
       // JoinedFieldsTable[0] is the class itself
