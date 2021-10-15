@@ -68,6 +68,10 @@ function TrimRight(const S: RawUtf8): RawUtf8;
 // - modification is made in-place so S will be modified
 procedure TrimLeftLines(var S: RawUtf8);
 
+/// trim some trailing and ending chars
+// - if S is unique (RefCnt=1), will modify the RawUtf8 in place
+procedure TrimChars(var S: RawUtf8; Left, Right: PtrInt);
+
 /// split a RawUtf8 string into two strings, according to SepStr separator
 // - if SepStr is not found, LeftStr=Str and RightStr=''
 // - if ToUpperCase is TRUE, then LeftStr and RightStr will be made uppercase
@@ -2580,6 +2584,35 @@ begin
     S := ''
   else
     PStrLen(PtrUInt(S) - _STRLEN)^ := D - pointer(S); // no SetLength needed
+end;
+
+procedure TrimChars(var S: RawUtf8; Left, Right: PtrInt);
+var
+  P: PUtf8Char;
+begin
+  P := pointer(S);
+  if P = nil then
+    exit;
+  if Left < 0 then
+    Left := 0;
+  if Right < 0 then
+    Right := 0;
+  inc(Right, Left);
+  if Right = 0 then
+    exit; // nothing to trim
+  Right := PStrLen(P - _STRLEN)^ - Right; // compute new length
+  if Right > 0 then
+    if PRefCnt(P - _STRREFCNT)^ = 1 then
+    begin
+      PStrLen(P - _STRLEN)^ := Right; // we can modify it in-place
+      if Left <> 0 then
+        MoveFast(P[Left], pointer(s)^, Right);
+      P[Right] := #0;
+    end
+    else
+      FastSetString(s, P + Left, Right) // create a new unique string
+  else
+    FastAssignNew(S);
 end;
 
 function SplitRight(const Str: RawUtf8; SepChar: AnsiChar; LeftStr: PRawUtf8): RawUtf8;

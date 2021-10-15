@@ -388,7 +388,7 @@ begin
     if (params <> '') and
        (params[1] = '[') then
       // trim [..] for URI call
-      params := copy(params, 2, length(params) - 2);
+      TrimChars(params, 1, 1);
     client := pending.Session;
     if not fClient.InternalInvoke(
       pending.Method, params, nil, @error, @client, nil, fRemote) then
@@ -823,9 +823,9 @@ begin
   if InternalInvoke(SERVICE_PSEUDO_METHOD[imSignature], '', @result) and
      (result <> '') then
     if result[1] = '[' then
-      result := copy(result, 2, length(result) - 2)
+      TrimChars(result, 1, 1)
     else if IdemPChar(pointer(result), '{"SIGNATURE":') then
-      result := copy(result, 14, length(result) - 14);
+      TrimChars(result, 13, 1);
 end;
 
 function TServiceFactoryClient.Get(out Obj): boolean;

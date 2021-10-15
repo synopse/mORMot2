@@ -4750,7 +4750,7 @@ begin
   if Index = 0 then
     result := ''
   else
-    result := copy(result, Index + 1, maxInt);
+    TrimChars(result, Index, 0);
 end;
 
 function TRawUtf8List.IndexOfName(const Name: RawUtf8): PtrInt;

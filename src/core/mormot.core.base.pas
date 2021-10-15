@@ -2826,6 +2826,7 @@ type
     /// finalize the temporary storage, and create a RawUtf8 string from it
     procedure Done(EndBuf: pointer; var Dest: RawUtf8); overload;
   end;
+  PSynTempBuffer = ^TSynTempBuffer;
 
 /// logical OR of two memory buffers
 // - will perform on all buffer bytes:

@@ -3681,7 +3681,7 @@ begin
               exit
             else
               // LIKE '%a%' -> /a/
-              like := copy(like, 2, len - 2)
+              TrimChars(like, 1, 1)
           else
             // LIKE '%a'  -> /a$/
             like := copy(like, 2, len - 1) + '$'

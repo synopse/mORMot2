@@ -1816,7 +1816,8 @@ begin
   // we don't use DB.LockJson() cache because we have already a per-ID cache
   DB.Lock;
   try
-    PrepareCachedStatement(Model.TableProps[TableModelIndex].SQL.SelectOneWithID, 1);
+    PrepareCachedStatement(
+      Model.TableProps[TableModelIndex].SQL.SelectOneWithID, 1);
     fStatement^.Bind(1, ID);
     result := fStatement^.ExecuteJson(DB.DB, '', true);
   finally
@@ -1829,7 +1830,7 @@ begin
       result := ''
     else
       // list '[{...}]'#10 -> object '{...}'
-      result := copy(result, 2, length(result) - 3);
+      TrimChars(result, 1, 2);
 end;
 
 function TRestOrmServerDB.MainEngineRetrieveBlob(TableModelIndex: integer;

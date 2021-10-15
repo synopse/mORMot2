@@ -607,7 +607,7 @@ begin
       resp := TrimU(resp);
       if (resp <> '') and
          (resp[1] = '[') then // '[{....}]' -> '{...}'
-        resp := copy(resp, 2, length(resp) - 2);
+        TrimChars(resp, 1, 1);
       if original <> resp then
       begin
         // did the content really change?

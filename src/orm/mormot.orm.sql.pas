@@ -1386,7 +1386,7 @@ begin
       result := ''
     else
       // list '[{...}]'#10 -> object '{...}'
-      result := copy(result, 2, length(result) - 3);
+      TrimChars(result, 1, 2);
   except
     Stmt := nil;
     HandleClearPoolOnConnectionIssue;
