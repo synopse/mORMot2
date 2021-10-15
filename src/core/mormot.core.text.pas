@@ -9334,11 +9334,7 @@ var
 begin
   d := @blocks;
   repeat
-    {$ifdef HASINLINE}
-    MoveSmall(d^.Text, Dest, d^.Len);
-    {$else}
-    MoveFast(d^.Text^, Dest^, d^.Len);
-    {$endif HASINLINE}
+    MoveFast(d^.Text^, Dest^, d^.Len); // no MoveSmall() - may be huge result
     inc(Dest, d^.Len);
     if d^.TempRawUtf8 <> nil then
       {$ifdef FPC}
@@ -9363,11 +9359,7 @@ begin
         if PtrUInt(Dest) + PtrUInt(d^.Len) > Max then
         begin
           // avoid buffer overflow
-          {$ifdef HASINLINE}
-          MoveSmall(d^.Text, Dest, Max - PtrUInt(Dest));
-          {$else}
           MoveFast(d^.Text^, Dest^, Max - PtrUInt(Dest));
-          {$endif HASINLINE}
           repeat
             if d^.TempRawUtf8 <> nil then
               {$ifdef FPC}
@@ -9381,7 +9373,7 @@ begin
           exit;
         end;
         {$ifdef HASINLINE}
-        MoveSmall(d^.Text, Dest, d^.Len);
+        MoveSmall(d^.Text, Dest, d^.Len); // shortstring are small in practice
         {$else}
         MoveFast(d^.Text^, Dest^, d^.Len);
         {$endif HASINLINE}

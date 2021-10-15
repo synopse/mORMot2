@@ -1052,7 +1052,7 @@ end;
 function TWebSocketFrameEncoder.Encode(
   const Frame: TWebSocketFrame; Dest: PAnsiChar): integer;
 begin
-  MoveSmall(@hdr, Dest, hdrlen);
+  MoveSmall(@hdr, Dest, hdrlen);  // 2/4 bytes for small/common frames
   inc(Dest, hdrlen);
   if hdr.mask <> 0 then
     // hdr.mask is not at the right position: append to actual end of header
