@@ -497,7 +497,9 @@ function ODBCColumnToFieldType(DataType, ColumnPrecision, ColumnScale: integer):
 begin
   // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8, ftBlob
   case DataType of
-    SQL_DECIMAL, SQL_NUMERIC, SQL_FLOAT:
+    SQL_DECIMAL,
+    SQL_NUMERIC,
+    SQL_FLOAT:
       begin
         result := ftDouble;
         if ColumnPrecision = 10 then
@@ -528,9 +530,14 @@ const
   // - text columns to SQL_C_WCHAR (for proper UTF-8 data retrieval)
   // - BLOB columns to SQL_C_BINARY
   ODBC_TYPE_TOC: array[TSqlDBFieldType] of ShortInt = (
-    SQL_C_CHAR, SQL_C_CHAR, SQL_C_CHAR, SQL_C_CHAR, SQL_C_CHAR,
-    SQL_C_TYPE_TIMESTAMP, SQL_C_WCHAR, SQL_C_BINARY);
-   // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8, ftBlob
+    SQL_C_CHAR,            // ftUnknown
+    SQL_C_CHAR,            // ftNull
+    SQL_C_CHAR,            // ftInt64
+    SQL_C_CHAR,            // ftDouble
+    SQL_C_CHAR,            // ftCurrency
+    SQL_C_TYPE_TIMESTAMP,  // ftDate
+    SQL_C_WCHAR,           // ftUtf8
+    SQL_C_BINARY);         // ftBlob
 
 procedure TSqlDBOdbcStatement.BindColumns;
 var
@@ -640,7 +647,8 @@ begin
       CheckStatus;
   if Indicator >= 0 then
     case Status of
-      SQL_SUCCESS, SQL_NO_DATA:
+      SQL_SUCCESS,
+      SQL_NO_DATA:
         Col.ColumnDataState := colDataFilled;
     else
       RaiseError;
@@ -691,7 +699,8 @@ begin
   case R of
     SQL_NO_DATA:
       result := false; // no more results
-    SQL_SUCCESS, SQL_SUCCESS_WITH_INFO:
+    SQL_SUCCESS,
+    SQL_SUCCESS_WITH_INFO:
       result := true; // got next
   else
     begin
@@ -810,7 +819,8 @@ begin
         case ColumnType of
           ftInt64:
             WR.AddNoJsonEscape(Pointer(fColData[col]));  // already as SQL_C_CHAR
-          ftDouble, ftCurrency:
+          ftDouble,
+          ftCurrency:
             WR.AddFloatStr(Pointer(fColData[col]));      // already as SQL_C_CHAR
           ftDate:
             WR.AddNoJsonEscape(@tmp,
@@ -856,13 +866,15 @@ end;
 
 const
   NULWCHAR: WideChar = #0;
+  ODBC_IOTYPE_TO_PARAM: array[TSqlDBParamInOutType] of ShortInt = (
+    SQL_PARAM_INPUT,          // paramIn
+    SQL_PARAM_OUTPUT,         // paramOut
+    SQL_PARAM_INPUT_OUTPUT);  // paramInOut
+
+  IDList_type:  PWideChar = 'IDList';
+  StrList_type: PWideChar = 'StrList';
 
 procedure TSqlDBOdbcStatement.ExecutePrepared;
-const
-  ODBC_IOTYPE_TO_PARAM: array[TSqlDBParamInOutType] of ShortInt = (
-    SQL_PARAM_INPUT, SQL_PARAM_OUTPUT, SQL_PARAM_INPUT_OUTPUT);
-  IDList_type: WideString = 'IDList';
-  StrList_type: WideString = 'StrList';
 
   function CType2SQL(CDataType: integer): integer;
   begin
@@ -965,7 +977,7 @@ begin
                 '%.ExecutePrepared: Unsupported array parameter type #%',
                 [self, p + 1]);
             end;
-            BufferSize := Length(WideString(ParameterValue)) * SizeOf(WideChar);
+            BufferSize := StrLenW(ParameterValue) * SizeOf(WideChar);
             StrLen_or_Ind[p] := Length(VArray);
           end
           else
@@ -985,7 +997,8 @@ begin
               ftDouble:
                 begin
                   CValueType := SQL_C_DOUBLE;
-                  if (fDbms = dMSSQL) and (VInOut=paramIn) and
+                  if (fDbms = dMSSQL) and
+                     (VInOut = paramIn) and
                      (unaligned(PDouble(@VInt64)^) > -1) and
                      (unaligned(PDouble(@VInt64)^) < 1) then
                   begin
@@ -1252,7 +1265,8 @@ begin
     case status of
       SQL_NO_DATA:
         exit;
-      SQL_SUCCESS, SQL_SUCCESS_WITH_INFO:
+      SQL_SUCCESS,
+      SQL_SUCCESS_WITH_INFO:
         begin
           // ignore WITH_INFO messages
           fCurrentRow := sav + 1;
@@ -1531,9 +1545,9 @@ begin
   if Parameters <> nil then
     exit; // already retrieved directly from engine
   SqlSplitProcedureName(aProcName, schem, pack, proc);
-  proc := UpperCase(proc);
-  pack := UpperCase(pack);
-  schem := UpperCase(schem);
+  UpperCaseSelf(proc);
+  UpperCaseSelf(pack);
+  UpperCaseSelf(schem);
   if pack <> '' then
     proc := pack + '.' + proc;
   try

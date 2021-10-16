@@ -60,6 +60,7 @@ function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
 // - fast inlined process for any number < 128
 // - use overloaded FromVarUInt32() or FromVarUInt32Safe() with a SourceMax
 // pointer to avoid any potential buffer overflow
+// - use FromVarUInt32Big() is the content is likely to be >= 128
 function FromVarUInt32(var Source: PByte): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 

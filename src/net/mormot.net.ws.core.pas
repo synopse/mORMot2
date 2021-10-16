@@ -1421,26 +1421,26 @@ begin
     Sender.fIncoming.Push(request, 0);
 end;
 
-// by convention, defaults are POST and JSON, to reduce frame size for SOA calls
-
 procedure TWebSocketProtocolRest.InputToFrame(Ctxt: THttpServerRequestAbstract;
   aNoAnswer: boolean; out request: TWebSocketFrame; out head: RawUtf8);
 var
   Method, InContentType: RawByteString;
   seq: integer;
 begin
+  // by convention, defaults are POST and JSON, to reduce frame size for SOA
   if not IdemPropNameU(Ctxt.Method, 'POST') then
     Method := Ctxt.Method;
   if (Ctxt.InContent <> '') and
      (Ctxt.InContentType <> '') and
      not IdemPropNameU(Ctxt.InContentType, JSON_CONTENT_TYPE) then
     InContentType := Ctxt.InContentType;
+  // compute the WebSockets frame and corresponding response header
   if fSequencing then
   begin
     seq := InterlockedIncrement(fSequence);
-    SetLength(head, 7); // safe overlap after 16,777,216 frames
+    SetLength(head, 7); // rxxxxxx = safe overlap after 16,777,216 frames
     PAnsiChar(pointer(head))^ := 'r';
-    BinToHexDisplay(@seq, PAnsiChar(pointer(head)) + 1, 3);
+    BinToHexDisplayLower(@seq, PAnsiChar(pointer(head)) + 1, 3);
   end
   else
     head := 'request';
@@ -1462,13 +1462,15 @@ begin
     [@Method, @URL, @InHeaders, @NoAnswer], InContentType, InContent);
   if result then
   begin
+    // by convention, defaults are POST and JSON, to reduce frame size for SOA
     if (InContentType = '') and
        (InContent <> '') then
       InContentType := JSON_CONTENT_TYPE_VAR;
     if Method = '' then
       Method := 'POST';
-    Ctxt.Prepare(URL, Method,
-      InHeaders, InContent, InContentType, fRemoteIP, '', '');
+    // return the decoded WebSockets frame as a regular HTTP request
+    Ctxt.Prepare(
+      URL, Method, InHeaders, InContent, InContentType, fRemoteIP, '', '');
     aNoAnswer := NoAnswer = '1';
   end;
 end;

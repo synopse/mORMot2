@@ -2864,13 +2864,10 @@ end;
 
 function Adler32SelfTest: boolean;
 begin
-  result :=
-  {$ifndef PUREPASCAL}
-    (Adler32Asm(1, @Te0, SizeOf(Te0)) = $BCBEFE10) and
-    (Adler32Asm(7, @Te1, SizeOf(Te1) - 3) = $DA91FDBE) and
-  {$endif}
-    (Adler32Pas(1, @Te0, SizeOf(Te0)) = $BCBEFE10) and
-    (Adler32Pas(7, @Te1, SizeOf(Te1) - 3) = $DA91FDBE);
+  result := (Adler32Asm(1, @Te0, SizeOf(Te0)) = $BCBEFE10) and
+            (Adler32Asm(7, @Te1, SizeOf(Te1) - 3) = $DA91FDBE) and
+            (Adler32Pas(1, @Te0, SizeOf(Te0)) = $BCBEFE10) and
+            (Adler32Pas(7, @Te1, SizeOf(Te1) - 3) = $DA91FDBE);
 end;
 
 {$ifndef CPUINTEL}

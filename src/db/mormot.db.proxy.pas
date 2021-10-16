@@ -1959,7 +1959,8 @@ procedure TSqlDBHttpConnectionPropertiesAbstract.SetServerName(
 begin
   fKeepAliveMS := 60000;
   if not fUri.From(aServerName) then
-    raise ESqlDBRemote.CreateUtf8('%.Create: expect a valid URI in aServerName="%"',
+    raise ESqlDBRemote.CreateUtf8(
+      '%.Create: expect a valid URI in aServerName=[%]',
       [self, aServerName]);
   if fUri.Port = '' then
     fUri.Port := SYNDB_DEFAULT_HTTP_PORT;

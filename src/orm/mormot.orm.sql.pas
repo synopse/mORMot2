@@ -98,7 +98,7 @@ type
     fBatchValues: TRawUtf8DynArray;
     // some sub-functions used by Create() during DB initialization
     procedure InitializeExternalDB(const log: ISynLog);
-    procedure GetFields(const log: ISynLog);
+    procedure LogFields(const log: ISynLog);
     procedure FieldsInternalInit;
     function FieldsExternalIndexOf(
       const ColName: RawUtf8; CaseSensitive: boolean): PtrInt;
@@ -570,7 +570,7 @@ begin
   result := true;
 end;
 
-procedure TRestStorageExternal.GetFields(const log: ISynLog);
+procedure TRestStorageExternal.LogFields(const log: ISynLog);
 begin
   fProperties.GetFields(UnQuotedSQLSymbolName(fTableName), fFieldsExternal);
   log.Log(sllDebug, 'GetFields', TypeInfo(TSqlDBColumnDefineDynArray),
@@ -639,7 +639,7 @@ begin
   end;
   // create corresponding external table if necessary, and retrieve its fields info
   TableCreated := false;
-  GetFields(log);
+  LogFields(log);
   if not (rpmNoCreateMissingTable in options) then
     if fFieldsExternal = nil then
     begin
@@ -668,11 +668,11 @@ begin
         TableCreated := ExecuteDirect(pointer(SQL), [], [], false) <> nil;
       if TableCreated then
       begin
-        GetFields(log);
+        LogFields(log);
         if fFieldsExternal = nil then
           raise ERestStorage.CreateUtf8(
-            '%.Create: external table creation % failed:  GetFields() ' +
-            'returned nil - SQL="%"', [self, StoredClass, fTableName, SQL]);
+            '%.Create: external table creation % failed: GetFields() ' +
+            'returned nil - SQL=[%]', [self, StoredClass, fTableName, SQL]);
       end;
     end;
   FieldsInternalInit;
@@ -706,14 +706,14 @@ begin
                     TableModified := true
                   else
                     raise ERestStorage.CreateUtf8('%.Create: %: ' +
-                      'unable to create external missing field %.% - SQL="%"',
+                      'unable to create external missing field %.% - SQL=[%]',
                       [self, StoredClass, fTableName, Fields.List[f].Name, SQL]);
               end;
             end;
       if TableModified then
       begin
         // retrieve raw field information from DB after ALTER TABLE
-        GetFields(log);
+        LogFields(log);
         FieldsInternalInit;
       end;
     end;
