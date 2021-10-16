@@ -5176,16 +5176,19 @@ function TOrmTable.FieldPropFromTables(const PropName: RawUtf8;
 
 var
   i, t: PtrInt;
+  P: PUtf8Char;
 begin
   TableIndex := -1;
   result := oftUnknown;
+  P := pointer(PropName);
   if fQueryTableIndexFromSql = -2 then
   begin
-    fQueryTableIndexFromSql := -1;
+    fQueryTableIndexFromSql := -1; // search once to set fQueryTableIndexFromSql
     if (fQueryTables <> nil) and
        (QueryTableNameFromSql <> '') then
       for i := 0 to length(fQueryTables) - 1 do
-        if IdemPropNameU(fQueryTables[i].SqlTableName, fQueryTableNameFromSql) then
+        if IdemPropNameU(
+             fQueryTables[i].OrmProps.SqlTableName, fQueryTableNameFromSql) then
         begin
           fQueryTableIndexFromSql := i;
           break;
@@ -5193,12 +5196,12 @@ begin
   end;
   if fQueryTableIndexFromSql >= 0 then
   begin
-    SearchInQueryTables(pointer(PropName), fQueryTableIndexFromSql);
+    SearchInQueryTables(P, fQueryTableIndexFromSql);
     if result <> oftUnknown then
       exit;
   end;
   if length(fQueryTables) = 1 then
-    SearchInQueryTables(pointer(PropName), 0)
+    SearchInQueryTables(P, 0)
   else
   begin
     i := PosExChar('.', PropName) - 1;
@@ -5206,7 +5209,7 @@ begin
       // no 'ClassName.PropertyName' format: find first exact property name
       for t := 0 to high(fQueryTables) do
       begin
-        SearchInQueryTables(pointer(PropName), t);
+        SearchInQueryTables(P, t);
         if result <> oftUnknown then
           exit;
       end
@@ -5214,10 +5217,9 @@ begin
       // handle property names as 'ClassName.PropertyName'
       for t := 0 to high(fQueryTables) do
         if fQueryTables[t] <> nil then // avoid GPF
-          if IdemPropNameU(fQueryTables[t].OrmProps.SqlTableName,
-            pointer(PropName), i) then
+          if IdemPropNameU(fQueryTables[t].OrmProps.SqlTableName, P, i) then
           begin
-            SearchInQueryTables(@PropName[i + 2], t);
+            SearchInQueryTables(P + i + 1, t);
             exit;
           end;
   end;
@@ -5247,7 +5249,7 @@ end;
 constructor TOrmTable.CreateFromTables(const Tables: array of TOrmClass;
   const aSql: RawUtf8);
 var
-  n: integer;
+  n: PtrInt;
 begin
   Create(aSql);
   n := length(Tables);

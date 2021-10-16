@@ -7752,9 +7752,10 @@ end;
 
 
 const
-  __TSqlDBColumnDefine = 'ColumnName,ColumnTypeNative RawUtf8 ' +
-    'ColumnLength,ColumnPrecision,ColumnScale PtrInt ' +
-    'ColumnType TSqlDBFieldType ColumnIndexed boolean';
+  // used e.g. by TRestStorageExternal.LogFields() to log external columns info
+  __TSqlDBColumnDefine = 'ColumnName,ColumnTypeNative:RawUtf8 ' +
+    'ColumnLength,ColumnPrecision,ColumnScale:PtrInt ' +
+    'ColumnType:TSqlDBFieldType ColumnIndexed:boolean';
 
 initialization
   assert(SizeOf(TSqlDBColumnProperty) = SizeOf(PtrUInt) * 2 + 20);

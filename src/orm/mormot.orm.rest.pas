@@ -505,7 +505,9 @@ type
   protected
     fNewValues: TRawUtf8DynArray;
     fNewValuesCount: integer;
+    fNewValuesRowsCount: integer;
     fNewValuesInterning: TRawUtf8Interning;
+    fNewValuesRows: TIntegerDynArray;
   public
     /// modify a field value in-place, using a RawUtf8 text value
     procedure Update(Row, Field: PtrInt; const Value: RawUtf8); overload;
@@ -523,7 +525,7 @@ type
     // - returns the internal index of the newly created field
     function AddField(const FieldName: RawUtf8; FieldType: TOrmFieldType;
       FieldTypeInfo: pointer = nil; FieldSize: integer = -1): integer; overload;
-    /// define a new field to be stored in this table
+    /// define a TOrm property to be stored as new table field
     // - returns the internal index of the newly created field
     function AddField(const FieldName: RawUtf8; FieldTable: TOrmClass;
       const FieldTableName: RawUtf8 = ''): integer; overload;
@@ -537,9 +539,18 @@ type
     property NewValuesInterning: TRawUtf8Interning
       read fNewValuesInterning write fNewValuesInterning;
     /// how many values have been written via Update() overloaded methods
-    // - is not used if NewValuesInterning was defined
+    // - is not updated if NewValuesInterning was defined
     property NewValuesCount: integer
       read fNewValuesCount;
+    /// the rows numbers (1..RowCount) which have been modified by Update()
+    // - Join() and AddField() are not tracked by this list - just Update()
+    // - the numbers are stored in increasing order
+    // - use NewValuesRows[0..NewValuesRows - 1] to track the modified rows
+    property NewValuesRows: TIntegerDynArray
+      read fNewValuesRows;
+    /// how many rows (0..RowCount) have been modified by Update()
+    property NewValuesRowsCount: integer
+      read fNewValuesRowsCount;
   end;
 
 
@@ -2472,16 +2483,19 @@ begin
      (Row > fRowCount) or
      (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
     exit;
-  Row := Row * fFieldCount + Field;
-  U := GetResults(Row);
-  if StrComp(U, pointer(Value)) <> 0 then
-    if fNewValuesInterning <> nil then
-      SetResultsSafe(Row, pointer(fNewValuesInterning.Unique(Value)))
-    else
-    begin
-      AddRawUtf8(fNewValues, fNewValuesCount, Value);
-      SetResultsSafe(Row, pointer(Value));
-    end;
+  inc(Field, Row * fFieldCount);
+  U := GetResults(Field);
+  if StrComp(U, pointer(Value)) = 0 then
+    exit;
+  if fNewValuesInterning <> nil then
+    U := pointer(fNewValuesInterning.Unique(Value))
+  else
+  begin
+    AddRawUtf8(fNewValues, fNewValuesCount, Value);
+    U := pointer(Value);
+  end;
+  SetResultsSafe(Field, U);
+  AddSortedInteger(fNewValuesRows, fNewValuesRowsCount, Row); // O(log(N)) lookup
 end;
 
 function TOrmTableWritable.AddField(const FieldName: RawUtf8;
