@@ -458,6 +458,10 @@ type
     // - default value is 16384 bytes, minimal allowed size is 8192
     property RowBufferSize: integer
       read fRowBufferSize write SetRowBufferSize;
+    /// direct access to the columns description
+    // - gives more details than the default ColumnType() function
+    property Columns: TSqlDBColumnPropertyDynArray
+      read fColumns;
   end;
 
 
@@ -1875,7 +1879,7 @@ procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement; aResult:
   var
     ErrorInfo, ErrorInfoDetails: IErrorInfo;
     ErrorRecords: IErrorRecords;
-    i: integer;
+    i: PtrInt;
     Desc: WideString;
     ErrorCount: cardinal;
     E: Exception;
