@@ -948,6 +948,8 @@ type
 
   /// lookup table used for fast case conversion
   TNormTableByte = packed array[byte] of byte;
+  /// pointer to a lookup table used for fast case conversion
+  PNormTableByte = ^TNormTableByte;
 
 var
   /// lookup table used for fast case conversion to uppercase
@@ -1197,8 +1199,12 @@ function StrCompL(P1, P2: pointer; L: PtrInt; Default: PtrInt = 0): PtrInt;
 function StrCompIL(P1, P2: pointer; L: PtrInt; Default: PtrInt = 0): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// use our fast version of StrIComp(), to be used with PUtf8Char/PAnsiChar
+/// our fast version of StrIComp(), to be used with PUtf8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// StrIComp-like function with a lookup table and Str1/Str2 expected not nil
+function StrICompNotNil(Str1, Str2: pointer; Up: PNormTableByte): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
@@ -4777,6 +4783,23 @@ begin
     exit;
   until false;
   result := Default;
+end;
+
+function StrICompNotNil(Str1, Str2: pointer; Up: PNormTableByte): PtrInt;
+var
+  C1, C2: byte; // integer/PtrInt are actually slower on FPC
+begin
+  result := PtrInt(PtrUInt(Str2)) - PtrInt(PtrUInt(Str1));
+  if result <> 0 then
+  begin
+    repeat
+      C1 := Up[PByteArray(Str1)[0]];
+      C2 := Up[PByteArray(Str1)[result]];
+      inc(PByte(Str1));
+    until (C1 = 0) or
+          (C1 <> C2);
+    result := C1 - C2;
+  end;
 end;
 
 function StrIComp(Str1, Str2: pointer): PtrInt;

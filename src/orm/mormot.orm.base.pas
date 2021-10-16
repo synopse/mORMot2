@@ -7565,6 +7565,7 @@ const
 function TOrmTableAbstract.FieldIndex(FieldName: PUtf8Char): PtrInt;
 var
   P: PPUtf8CharArray;
+  up: PNormTableByte;
 begin
   if (self <> nil) and
      (fData <> nil) and
@@ -7579,8 +7580,9 @@ begin
       P := pointer(fFieldNames);
       if fFieldCount < ORMTABLE_FIELDNAMEORDERED then
       begin
+        up := @NormToUpperAnsi7Byte;
         for result := 0 to fFieldCount - 1 do
-          if StrIComp(P[result], FieldName) = 0 then // very efficient inlining
+          if StrICompNotNil(P[result], FieldName, up) = 0 then // good inlining
             exit;
         result := -1;
       end
@@ -7936,7 +7938,7 @@ begin
   if fFieldType = nil then
     InitFieldTypes
   else if Field >= length(fFieldType) then
-    SetLength(fFieldType, Field + 1); // e.g. from TOrmTableWritable.AddField
+    SetLength(fFieldType, Field + 1); // e.g. after TOrmTableWritable.AddField
   with fFieldType[Field] do
   begin
     ContentType := FieldType;
