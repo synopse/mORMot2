@@ -2782,10 +2782,6 @@ type
     // by which the results were computed (it will use RTTI for column typing)
     constructor CreateFromTables(const Tables: array of TOrmClass;
       const aSql: RawUtf8);
-    /// copy the parameters of a TOrmTable into this instance
-    // - the Results[] remain in the source TOrmTable: source TOrmTable has not
-    // to be destroyed before this TOrmTable
-    procedure Assign(source: TOrmTable);
     /// read-only access to a particular field value, as VCL text
     // - Client is used to display TRecordReference via the associated TOrmModel
     // - returns the Field Type
@@ -5260,16 +5256,6 @@ begin
     SetLength(fQueryTables, n);
     MoveFast(Tables[0], fQueryTables[0], n * SizeOf(TClass));
   end;
-end;
-
-procedure TOrmTable.Assign(source: TOrmTable);
-begin
-  fData := source.fData;
-  {$ifndef NOPOINTEROFFSET}
-  fDataStart := source.fDataStart;
-  {$endif NOPOINTEROFFSET}
-  fRowCount := source.fRowCount;
-  fFieldCount := source.fFieldCount;
 end;
 
 function TOrmTable.QueryRecordType: TOrmClass;
@@ -9522,8 +9508,9 @@ var
 begin
   for i := 1 to length(aRoot) do // allow RFC URI + '/' for URI-fragment
     if not (aRoot[i] in ['0'..'9', 'a'..'z', 'A'..'Z', '_', '-', '.', '~', ' ', '/']) then
-      raise EModelException.CreateUtf8('%.Root="%" contains URI unfriendly chars',
-        [self, aRoot]);
+      raise EModelException.CreateUtf8(
+        '%.Root=[%] contains URI unfriendly char #% [%]',
+        [self, aRoot, ord(aRoot[i]), aRoot[i]]);
   if (aRoot <> '') and
      (aRoot[length(aRoot)] = '/') then
     fRoot := copy(aRoot, 1, Length(aRoot) - 1)
@@ -9538,7 +9525,7 @@ var
   N, i: PtrInt;
 begin
   N := length(Tables);
-  if N > SizeOf(SUPERVISOR_ACCESS_RIGHTS.Get) * 8 then // TOrmAccessRights bits size
+  if N > SizeOf(SUPERVISOR_ACCESS_RIGHTS.Get) * 8 then // TOrmAccessRights bits
     raise EModelException.CreateUtf8('% % has too many Tables: %>%',
       [self, aRoot, N, SizeOf(SUPERVISOR_ACCESS_RIGHTS.Get) * 8]); // e.g. N>64
   // set the Tables to be associated with this Model, as TOrm classes
@@ -9570,70 +9557,6 @@ begin
     result := false
   else
     result := aFieldIndex in TableProps[i].Props.IsUniqueFieldsBits;
-end;
-
-function GetTableNameFromSqlSelect(const SQL: RawUtf8;
-  EnsureUniqueTableInFrom: boolean): RawUtf8;
-var
-  i, j, k: integer;
-begin
-  i := PosI(' FROM ', SQL);
-  if i > 0 then
-  begin
-    inc(i, 6);
-    while SQL[i] in [#1..' '] do
-      inc(i);
-    j := 0;
-    while tcIdentifier in TEXT_CHARS[SQL[i + j]] do
-      inc(j);
-    if cardinal(j - 1) < 64 then
-    begin
-      k := i + j;
-      while SQL[k] in [#1..' '] do
-        inc(k);
-      if not EnsureUniqueTableInFrom or
-         (SQL[k] <> ',') then
-      begin
-        FastSetString(result, PAnsiChar(PtrInt(SQL) + i - 1), j);
-        exit;
-      end;
-    end;
-  end;
-  result := '';
-end;
-
-function GetTableNamesFromSqlSelect(const SQL: RawUtf8): TRawUtf8DynArray;
-var
-  i, j, k, n: integer;
-begin
-  result := nil;
-  n := 0;
-  i := PosI(' FROM ', SQL);
-  if i > 0 then
-  begin
-    inc(i, 6);
-    repeat
-      while SQL[i] in [#1..' '] do
-        inc(i);
-      j := 0;
-      while tcIdentifier in TEXT_CHARS[SQL[i + j]] do
-        inc(j);
-      if cardinal(j - 1) > 64 then
-      begin
-        result := nil;
-        exit; // seems too big
-      end;
-      k := i + j;
-      while SQL[k] in [#1..' '] do
-        inc(k);
-      SetLength(result, n + 1);
-      FastSetString(result[n], PAnsiChar(PtrInt(SQL) + i - 1), j);
-      inc(n);
-      if SQL[k] <> ',' then
-        break;
-      i := k + 1;
-    until false;
-  end;
 end;
 
 function TOrmModel.GetTableIndexFromSqlSelect(const SQL: RawUtf8;

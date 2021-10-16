@@ -1080,7 +1080,7 @@ type
   TOrmPropInfoClass = class of TOrmPropInfo;
 
   /// define how the published properties RTTI is to be interpreted
-  // - i.e. how TOrmPropInfoList.Create() and TOrmPropInfoRttiCreateFrom()
+  // - i.e. how TOrmPropInfoList.Create() and TOrmPropInfoRtti.CreateFrom()
   // will handle the incoming RTTI
   TOrmPropInfoListOptions = set of (
     pilRaiseEOrmExceptionIfNotHandled,
@@ -2040,6 +2040,11 @@ type
       const aSql: RawUtf8);
     /// free associated memory and owned records
     destructor Destroy; override;
+    /// copy basic reading parameters of a TOrmTable into this instance
+    // - only work for basic Get() or Results[] access
+    // - the Results[] remain in the source TOrmTable: source TOrmTable has to
+    // remain available (i.e. not destroyed) before this TOrmTable
+    procedure AssignRead(source: TOrmTableAbstract); virtual;
 
     /// read-only access to the ID of a particular row
     // - returns 0 if no RowID field exists (i.e. FieldIndexID < 0)
@@ -4185,7 +4190,7 @@ var
 
 begin
   if aPropInfo = nil then
-    raise EOrmException.Create('Invalid TOrmPropInfoRttiCreateFrom(nil) call');
+    raise EOrmException.CreateUtf8('Invalid %.CreateFrom(nil) call', [self]);
   aType := aPropInfo^.TypeInfo;
   aOrmFieldType := GetOrmFieldType(aType); // guess from RTTI
   C := nil;
@@ -4284,8 +4289,8 @@ begin
   end
   else if pilRaiseEOrmExceptionIfNotHandled in aOptions then
     raise EOrmException.CreateUtf8(
-      'TOrmPropInfoRttiCreateFrom: Unhandled %/% type for property %',
-      [ToText(aOrmFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name^]);
+      '%.CreateFrom: Unhandled %/% type for property %',
+      [self, ToText(aOrmFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name^]);
 end;
 
 function TOrmPropInfoRtti.GetSqlFieldRttiTypeName: RawUtf8;
@@ -7191,8 +7196,7 @@ begin
     // unrolled several InheritsFrom() calls
     C := CT^.RttiClass;
     if C = T[0] then         // TObject
-      // loop over all parent classes until root TObject is reached
-      break;
+      break; // loop over all parent classes until root TObject is reached
     if C <> T[1] then        // TOrmMany
       if C <> T[2] then      // TOrm
         if (C <> T[3]) and   // TRawUtf8List
@@ -7463,6 +7467,21 @@ destructor TOrmTableAbstract.Destroy;
 begin
   fOwnedRecords.Free;
   inherited Destroy;
+end;
+
+procedure TOrmTableAbstract.AssignRead(source: TOrmTableAbstract);
+begin
+  fData := source.fData;
+  {$ifndef NOPOINTEROFFSET}
+  fDataStart := source.fDataStart;
+  {$endif NOPOINTEROFFSET}
+  {$ifndef NOTORMTABLELEN}
+  fLen := source.fLen;
+  {$endif NOTORMTABLELEN}
+  fRowCount := source.fRowCount;
+  fFieldCount := source.fFieldCount;
+  fFieldType := source.fFieldType;
+  fFieldIndexID := source.fFieldIndexID;
 end;
 
 function TOrmTableAbstract.GetResults(Offset: PtrInt): PUtf8Char;
@@ -8630,10 +8649,8 @@ end;
 procedure TOrmTableAbstract.GetMSRowSetValues(Dest: TStream; RowFirst, RowLast: PtrInt);
 const
   FIELDTYPE_TOXML: array[TSqlDBFieldType] of RawUtf8 = (
-  // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency,
     '', '', ' dt:type="i8"', ' dt:type="float"',
     ' dt:type="number" rs:dbtype="currency"',
-  // ftDate, ftUtf8, ftBlob
     ' dt:type="dateTime"', ' dt:type="string"', ' dt:type="bin.hex"');
 var
   W: TTextWriter;
