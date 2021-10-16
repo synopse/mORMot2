@@ -223,6 +223,7 @@ type
     // - for TSqlDBOdbcStatement: used to store the DataType as returned
     // by ODBC.DescribeColW() - use private ODBC_TYPE_TO[ColumnType] to
     // retrieve the marshalled type used during column retrieval
+    // - for TSqlDBOleDBStatement: used to store the DBTYPE value
     // - for TSqlDBFirebirdStatement: used to store XSQLVAR.sqltype
     // - for TSqlDBDatasetStatement: indicates the TField class type, i.e.
     // 0=TField, 1=TLargeIntField, 2=TWideStringField

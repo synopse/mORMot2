@@ -277,7 +277,7 @@ type
     constructor Create(aConnection: TSqlDBConnection); override;
     /// release all associated memory and COM objects
     destructor Destroy; override;
-    /// retrieve column information from a supplied IRowSet
+    /// internal method to retrieve column information from a supplied IRowSet
     // - is used e.g. by TSqlDBOleDBStatement.Execute or to retrieve metadata columns
     // - raise an exception on error
     procedure FromRowSet(RowSet: IRowSet);
@@ -444,6 +444,7 @@ type
     // since Delphi 2009: you may not loose any data during charset conversion
     // - a ftBlob content will be mapped into a TBlobData AnsiString variant
     function ColumnToVariant(Col: integer; var Value: Variant): TSqlDBFieldType; override;
+
     /// just map the original Collection into a TSqlDBOleDBConnection class
     property OleDBConnection: TSqlDBOleDBConnection
       read fOleDBConnection;
@@ -811,13 +812,14 @@ type
       1:
         (Double: double);
       2:
-        (        case integer of
-          0:
-            (VData: array[0..0] of byte);
-          1:
-            (VWideChar: PWideChar);
-          2:
-            (VAnsiChar: PAnsiChar)
+        (
+          case integer of
+            0:
+              (VData: array[0..0] of byte);
+            1:
+              (VWideChar: PWideChar);
+            2:
+              (VAnsiChar: PAnsiChar)
         );
   end;
 
@@ -828,16 +830,12 @@ procedure TSqlDBOleDBStatement.LogStatusError(Status: integer;
 var
   msg: RawUtf8;
 begin
-  {$ifndef PUREPASCAL}
   if cardinal(Status) <= cardinal(ord(high(TSqlDBOleDBStatus))) then
     msg := UnCamelCase(TrimLeftLowerCaseShort(
-     GetEnumName(TypeInfo(TSqlDBOleDBStatus), Status)))
-  else
-  {$else}
-    Int32ToUtf8(Status, msg);
-  {$endif}
-  SynDBLog.Add.Log(sllError, 'Invalid [%] status for column [%] at row % for %',
-    [{%H-}msg, Column^.ColumnName, fCurrentRow, fSql], self);
+     GetEnumName(TypeInfo(TSqlDBOleDBStatus), Status)));
+  SynDBLog.Add.Log(sllError,
+    'Invalid [%] % status for column [%] at row % for %',
+    [{%H-}msg, Status, Column^.ColumnName, fCurrentRow, fSql], self);
 end;
 
 function TSqlDBOleDBStatement.GetCol(Col: integer;
@@ -1071,7 +1069,10 @@ begin
   begin
     VType := MAP_FIELDTYPE2VARTYPE[result];
     case result of
-      ftInt64, ftDouble, ftCurrency, ftDate:
+      ftInt64,
+      ftDouble,
+      ftCurrency,
+      ftDate:
         VInt64 := V^.Int64; // copy 64 bit content
       ftUtf8:
         begin
@@ -1220,18 +1221,31 @@ end;
 
 const
   PARAMTYPE2OLEDB: array[TSqlDBParamInOutType] of DBPARAMIO = (
-    DBPARAMIO_INPUT, DBPARAMIO_OUTPUT, DBPARAMIO_INPUT or DBPARAMIO_OUTPUT);
+    DBPARAMIO_INPUT,                       // paramIn
+    DBPARAMIO_OUTPUT,                      // paramOut
+    DBPARAMIO_INPUT or DBPARAMIO_OUTPUT);  // paramInOut
 
   FIELDTYPE2OLEDB: array[TSqlDBFieldType] of DBTYPE = (
-    DBTYPE_EMPTY, DBTYPE_I4, DBTYPE_I8, DBTYPE_R8, DBTYPE_CY, DBTYPE_DATE,
-    DBTYPE_WSTR or DBTYPE_BYREF, DBTYPE_BYTES or DBTYPE_BYREF);
+    DBTYPE_EMPTY,                  // ftUnknown
+    DBTYPE_I4,                     // ftNull
+    DBTYPE_I8,                     // ftInt64
+    DBTYPE_R8,                     // ftDouble
+    DBTYPE_CY,                     // ftCurrency
+    DBTYPE_DATE,                   // ftDate
+    DBTYPE_WSTR or DBTYPE_BYREF,   // ftUtf8
+    DBTYPE_BYTES or DBTYPE_BYREF); // ftBlob
 
   FIELDTYPE2OLEDBTYPE_NAME: array[TSqlDBFieldType] of WideString = (
-     '', 'DBTYPE_I4', 'DBTYPE_I8', 'DBTYPE_R8', 'DBTYPE_CY', 'DBTYPE_DATE',
-    'DBTYPE_WVARCHAR', 'DBTYPE_BINARY');
-// ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8, ftBlob
+     '',                 // ftUnknown
+     'DBTYPE_I4',        // ftNull
+     'DBTYPE_I8',        // ftInt64
+     'DBTYPE_R8',        // ftDouble
+     'DBTYPE_CY',        // ftCurrency
+     'DBTYPE_DATE',      // ftDate
+     'DBTYPE_WVARCHAR',  // ftUtf8
+     'DBTYPE_BINARY');   // ftBlob
 
-  TABLE_PARAM_DATASOURCE: WideString = 'table';
+  TABLE_PARAM_DATASOURCE: PWideChar = 'table';
 
 procedure TSqlDBOleDBStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 var
@@ -1308,7 +1322,8 @@ begin
       for i := 0 to fParamCount - 1 do
         case fParams[i].VType of
           ftUnknown:
-            raise EOleDBException.CreateUtf8('%.Execute: missing #% bound parameter for [%]',
+            raise EOleDBException.CreateUtf8(
+              '%.Execute: missing #% bound parameter for [%]',
               [self, i + 1, fSql]);
         end;
       P := pointer(fParams);
@@ -1380,7 +1395,11 @@ begin
                 BI.pwszDataSourceType := 'DBTYPE_WVARCHAR';
                 BI.dwFlags := BI^.dwFlags or DBPARAMFLAGS_ISNULLABLE;
               end;
-            ftInt64, ftDouble, ftCurrency, ftDate:            // those types match the VInt64 binary representation :)
+            ftInt64,
+            ftDouble,
+            ftCurrency,
+            ftDate:
+              // those types match the VInt64 binary representation :)
               B^.cbMaxLen := SizeOf(Int64);
             ftBlob:
               begin
@@ -1668,13 +1687,17 @@ begin
       Col^.ColumnNonNullable := nfo^.dwFlags and DBCOLUMNFLAGS_MAYBENULL = 0;
       Col^.ColumnAttr := result; // offset of status[-length]-value in fRowSetData[]
       Col^.ColumnValueInlined := true;
+      Col^.ColumnValueDBType := nfo^.wType;
       B^.iOrdinal := nfo^.iOrdinal;
       B^.eParamIO := DBPARAMIO_NOTPARAM;
       B^.obStatus := result;
       inc(result, SizeOf(PtrInt)); // TColumnValue.Status
       B^.wType := FIELDTYPE2OLEDB[Col^.ColumnType];
       case Col^.ColumnType of
-        ftInt64, ftDouble, ftCurrency, ftDate:
+        ftInt64,
+        ftDouble,
+        ftCurrency,
+        ftDate:
           begin
             inc(result, SizeOf(PtrUInt)); // ignore TColumnValue.Length
             B^.dwPart := DBPART_STATUS or DBPART_VALUE;
@@ -1682,7 +1705,8 @@ begin
             B^.cbMaxLen := SizeOf(Int64);
             inc(result, SizeOf(Int64));
           end;
-        ftUtf8, ftBlob:
+        ftUtf8,
+        ftBlob:
           begin
             B^.dwPart := DBPART_STATUS or DBPART_VALUE or DBPART_LENGTH;
             B^.obLength := result; // need length field in fRowSetData[]
@@ -1697,7 +1721,9 @@ begin
               if Col^.ColumnType = ftUtf8 then
               begin
                 case nfo^.wType of
-                  DBTYPE_STR, DBTYPE_BSTR, DBTYPE_WSTR:
+                  DBTYPE_STR,
+                  DBTYPE_BSTR,
+                  DBTYPE_WSTR:
                     len := len * 2; // ulColumnSize = WideChar count
                   DBTYPE_GUID:
                     len := 78;
@@ -2084,6 +2110,17 @@ begin
   end;
 end;
 
+const
+  DBTYPE_DISPLAY: array[TSqlDBFieldType] of RawUtf8 = (
+    '???',      // ftUnknown
+    'null',     // ftNull
+    'int',      // ftInt64
+    'double',   // ftDouble
+    'currency', // ftCurrency
+    'date',     // ftDate
+    'nvarchar', // ftUtf8
+    'blob');    // ftBlob
+
 procedure TSqlDBOleDBConnectionProperties.GetFields(const aTableName: RawUtf8;
   out Fields: TSqlDBColumnDefineDynArray);
 var
@@ -2092,9 +2129,6 @@ var
   n, i: integer;
   F: TSqlDBColumnDefine;
   FA: TDynArray;
-const
-  DBTYPE_DISPLAY: array[TSqlDBFieldType] of RawUtf8 = ('???', 'null', 'int',
-    'double', 'currency', 'date', 'nvarchar', 'blob');
 begin
   inherited; // first try from SQL, if any (faster)
   if Fields <> nil then
@@ -2166,11 +2200,11 @@ begin
         FromRowSet(Rows);
         while Step do
           fForeignKeys.Add(TrimU(ColumnUtf8('FK_TABLE_SCHEMA')) + '.' +
-            TrimU(ColumnUtf8('FK_TABLE_NAME')) + '.' +
-              TrimU(ColumnUtf8('FK_COLUMN_NAME')),
-            TrimU(ColumnUtf8('PK_TABLE_SCHEMA')) + '.' +
-              TrimU(ColumnUtf8('PK_TABLE_NAME')) + '.' +
-              TrimU(ColumnUtf8('PK_COLUMN_NAME')));
+                           TrimU(ColumnUtf8('FK_TABLE_NAME')) + '.' +
+                           TrimU(ColumnUtf8('FK_COLUMN_NAME')),
+                           TrimU(ColumnUtf8('PK_TABLE_SCHEMA')) + '.' +
+                           TrimU(ColumnUtf8('PK_TABLE_NAME')) + '.' +
+                           TrimU(ColumnUtf8('PK_COLUMN_NAME')));
       finally
         Free;
       end;
