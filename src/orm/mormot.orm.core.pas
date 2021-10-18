@@ -1468,7 +1468,8 @@ type
 
   { -------------------- TOrm Definitions }
 
-  /// the possible options for handling table names
+  /// the possible options for handling table names in TOrmFill
+  // - ctnTrimExisting is set e.g. by TOrmMany.DestGetJoined
   TOrmCheckTableName = (
     ctnNoCheck,
     ctnMustExist,
@@ -1517,8 +1518,7 @@ type
       aIndex: integer);
     /// add a property to the fTableMap[] array
     // - aIndex is the column index in TOrmTable
-    procedure AddMapFromName(aRecord: TOrm; aFieldName: PUtf8Char;
-      aIndex: integer);
+    procedure AddMapFromName(aRecord: TOrm; aName: PUtf8Char; aIndex: integer);
     /// add all simple property names, with  to the fTableMap[] array
     // - will map ID/RowID, then all simple fields of this TOrm
     // - aIndex is the column index in TOrmTable
@@ -1529,8 +1529,7 @@ type
     destructor Destroy; override;
     /// map all columns of a TOrmTable to a record mapping
     // - this is the main entry point of this class
-    procedure Map(aRecord: TOrm; aTable: TOrmTable;
-      aCheckTableName: TOrmCheckTableName);
+    procedure Map(aRecord: TOrm; aTable: TOrmTable; aCheckTableName: TOrmCheckTableName);
     /// reset the mapping
     // - is called e.g. by TOrm.FillClose
     // - will free any previous Table if necessary
@@ -1545,6 +1544,9 @@ type
     // - will return Props.SimpleFieldsBits[ooUpdate] if no fill is in process
     procedure ComputeSetUpdatedFieldBits(Props: TOrmProperties;
       out Bits: TFieldBits);
+    /// retrieved the mapped information from the table field/column index
+    // - returns nil if not found
+    function TableFieldIndexToMap(TableField: integer): POrmFillTableMap;
     /// the TOrmTable stated as FillPrepare() parameter
     // - the internal temporary table is stored here for TOrmMany
     // - this instance is freed by TOrm.Destroy if fTable.OwnerMustFree=true
@@ -6125,23 +6127,22 @@ begin
   end;
 end;
 
-procedure TOrmFill.AddMapFromName(aRecord: TOrm; aFieldName: PUtf8Char;
-  aIndex: integer);
+procedure TOrmFill.AddMapFromName(aRecord: TOrm; aName: PUtf8Char; aIndex: integer);
 var
-  aFieldIndex: integer;
+  i: PtrInt;
 begin
   if (self <> nil) and
      (aRecord <> nil) then
-    if IsRowID(aFieldName) then
+    if IsRowID(aName) then
       AddMap(aRecord, nil, aIndex)
     else
       with aRecord.Orm.Fields do
       begin
-        aFieldIndex := IndexByName(aFieldName);
-        if aFieldIndex >= 0 then
+        i := IndexByName(aName);
+        if i >= 0 then
         begin // only map if column name is a valid field
-          include(fTableMapFields, aFieldIndex);
-          AddMap(aRecord, List[aFieldIndex], aIndex);
+          include(fTableMapFields, i);
+          AddMap(aRecord, List[i], aIndex);
         end;
       end;
 end;
@@ -6218,6 +6219,19 @@ begin
     Bits := Props.SimpleFieldsBits[ooUpdate];
 end;
 
+function TOrmFill.TableFieldIndexToMap(TableField: integer): POrmFillTableMap;
+var
+  i: integer;
+begin
+  result := pointer(fTableMap);
+  for i := 1 to fTableMapCount do
+    if result^.TableIndex = TableField then
+      exit
+    else
+      inc(result);
+  result := nil;
+end;
+
 procedure TOrmFill.Map(aRecord: TOrm; aTable: TOrmTable;
   aCheckTableName: TOrmCheckTableName);
 var
@@ -6230,11 +6244,14 @@ begin
   fTable := aTable;
   if aTable.fData = nil then
     exit; // void content
-  props := aRecord.Orm;
+  if aCheckTableName <> ctnNoCheck then
+    props := aRecord.Orm // ctnTrimExisting set e.g. by TOrmMany.DestGetJoined
+  else
+    props := nil;
   for f := 0 to aTable.FieldCount - 1 do
   begin
     fieldname := aTable.Results[f];
-    if aCheckTableName <> ctnNoCheck then
+    if props <> nil then
       if IdemPChar(fieldname, pointer(props.SqlTableNameUpperWithDot)) then
         inc(fieldname, length(props.SqlTableNameUpperWithDot))
       else if aCheckTableName = ctnMustExist then
