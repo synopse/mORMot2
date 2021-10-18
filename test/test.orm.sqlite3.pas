@@ -722,7 +722,7 @@ begin
       Master.Free; // test TRestServer.InternalRecordVersionMaxFromExisting
       MasterAccess.Free;
       CreateMaster(false);
-      MasterAccess.Client.BatchStart(TOrmPeopleVersioned, 10000);
+      MasterAccess.Client.BatchStart(TOrmPeopleVersioned);
       while Rec.FillOne do
         // fast add via Batch
         Test.check(MasterAccess.Client.BatchAdd(Rec, true, true) >= 0);
@@ -1459,7 +1459,7 @@ var
       end;
       for i := 0 to high(ids) do
       begin
-        ClientDist.Client.BatchStart(TOrmPeople);
+        ClientDist.Client.BatchStart(TOrmPeople, {autotrans=}0);
         ClientDist.Client.BatchDelete(ids[i]);
         check(ClientDist.Client.BatchSend(res) = HTTP_SUCCESS);
         check(length(res) = 1);
@@ -1799,7 +1799,7 @@ begin
               // test BATCH sequence usage
               if ClientDist.Orm.TransactionBegin(TOrmPeople) then
               try
-                check(ClientDist.Client.BatchStart(TOrmPeople, 5000));
+                check(ClientDist.Client.BatchStart(TOrmPeople));
                 n := 0;
                 for i := 0 to aStatic.Count - 1 do
                   if i and 7 = 0 then

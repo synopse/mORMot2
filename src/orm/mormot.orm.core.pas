@@ -1231,16 +1231,18 @@ type
     // TRestBatch instance and the overloaded IRestOrm.BatchSend() method
     // - call BatchStartAny() or set the aTable parameter to nil if you want to
     // use any kind of TOrm objects within the process, not a single one
+    // - force AutomaticTransactionPerRow=0 if TransactionBegin() has been called
+    // - WARNING: on mORMot 1, AutomaticTransactionPerRow was 0 which was slower
     function BatchStart(aTable: TOrmClass;
-      AutomaticTransactionPerRow: cardinal = 0;
-      Options: TRestBatchOptions = []): boolean; 
+      AutomaticTransactionPerRow: cardinal = 10000;
+      Options: TRestBatchOptions = [boExtendedJson]): boolean; 
     /// begin a BATCH sequence to speed up huge database change for any table
     // - will call the BatchStart() method with aTable = nil so that you may be
     // able to use any kind of TOrm class within the process
     // - is a wrapper around TRestBatch.Create() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
     function BatchStartAny(AutomaticTransactionPerRow: cardinal;
-      Options: TRestBatchOptions = []): boolean;
+      Options: TRestBatchOptions = [boExtendedJson]): boolean;
     /// create a new member in current BATCH sequence
     // - is a wrapper around TRestBatch.Add() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe

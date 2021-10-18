@@ -112,11 +112,10 @@ type
     /// overridden method which will call ClientRetrieve()
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
     /// implements IRestOrmClient methods with an internal TRestBatch instance
-    function BatchStart(aTable: TOrmClass;
-      AutomaticTransactionPerRow: cardinal = 0;
-      Options: TRestBatchOptions = []): boolean; virtual;
+    function BatchStart(aTable: TOrmClass; AutomaticTransactionPerRow: cardinal;
+      Options: TRestBatchOptions): boolean; virtual;
     function BatchStartAny(AutomaticTransactionPerRow: cardinal;
-      Options: TRestBatchOptions = []): boolean;
+      Options: TRestBatchOptions): boolean;
     function BatchAdd(Value: TOrm; SendData: boolean; ForceID: boolean = false;
       const CustomFields: TFieldBits = []): integer;
     function BatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];

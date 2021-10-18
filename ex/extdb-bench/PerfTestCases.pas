@@ -625,7 +625,7 @@ begin
   if UseTransactions then
     Orm.TransactionBegin(TOrmSample, Client.SessionID);
   if UseBatch then
-    Orm.BatchStart(TOrmSample)
+    Orm.BatchStart(TOrmSample, {autotrans=}0)
   else if length(Res) < Stat.NumberOfElements then
     SetLength(Res, Stat.NumberOfElements);
   for i := 0 to Stat.NumberOfElements - 1 do
