@@ -1120,7 +1120,7 @@ function Base64ToBinLengthSafe(sp: PAnsiChar; len: PtrInt): PtrInt;
 /// direct low-level decoding of a Base64 encoded buffer
 // - here len is the number of 4 chars chunks in sp input
 // - deprecated low-level function: use Base64ToBin/Base64ToBinSafe instead
-function Base64Decode(sp,rp: PAnsiChar; len: PtrInt): boolean;
+function Base64Decode(sp, rp: PAnsiChar; len: PtrInt): boolean;
 
 /// fast conversion from binary data into Base64-like URI-compatible encoded text
 // - in comparison to Base64 standard encoding, will trim any right-sided '='

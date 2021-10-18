@@ -634,8 +634,10 @@ type
     procedure BinarySaveBase64(Data: pointer; Info: PRttiInfo;
       Kinds: TRttiKinds; withMagic: boolean; withCrc: boolean = false);
     /// append some values at once
-    // - text values (e.g. RawUtf8) will be escaped as JSON
+    // - text values (e.g. RawUtf8) will be escaped as JSON by default
     procedure Add(const Values: array of const); overload;
+    /// append some values at once with custom escaping
+    procedure Add(const Values: array of const; Escape: TTextWriterKind); overload;
     /// append an array of integers as CSV
     procedure AddCsvInteger(const Integers: array of integer); overload;
     /// append an array of doubles as CSV
@@ -5749,6 +5751,14 @@ var
 begin
   for i := 0 to high(Values) do
     AddJsonEscape(Values[i]);
+end;
+
+procedure TTextWriter.Add(const Values: array of const; Escape: TTextWriterKind);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(Values) do
+    Add(Values[i], Escape);
 end;
 
 procedure TTextWriter.AddQuotedStringAsJson(const QuotedString: RawUtf8);
