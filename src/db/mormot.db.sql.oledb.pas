@@ -1197,31 +1197,6 @@ begin
 end;
 
 const
-  PARAMTYPE2OLEDB: array[TSqlDBParamInOutType] of DBPARAMIO = (
-    DBPARAMIO_INPUT,                       // paramIn
-    DBPARAMIO_OUTPUT,                      // paramOut
-    DBPARAMIO_INPUT or DBPARAMIO_OUTPUT);  // paramInOut
-
-  FIELDTYPE2OLEDB: array[TSqlDBFieldType] of DBTYPE = (
-    DBTYPE_EMPTY,                  // ftUnknown
-    DBTYPE_I4,                     // ftNull
-    DBTYPE_I8,                     // ftInt64
-    DBTYPE_R8,                     // ftDouble
-    DBTYPE_CY,                     // ftCurrency
-    DBTYPE_DATE,                   // ftDate
-    DBTYPE_WSTR or DBTYPE_BYREF,   // ftUtf8
-    DBTYPE_BYTES or DBTYPE_BYREF); // ftBlob
-
-  FIELDTYPE2OLEDBTYPE_NAME: array[TSqlDBFieldType] of WideString = (
-     '',                 // ftUnknown
-     'DBTYPE_I4',        // ftNull
-     'DBTYPE_I8',        // ftInt64
-     'DBTYPE_R8',        // ftDouble
-     'DBTYPE_CY',        // ftCurrency
-     'DBTYPE_DATE',      // ftDate
-     'DBTYPE_WVARCHAR',  // ftUtf8
-     'DBTYPE_BINARY');   // ftBlob
-
   TABLE_PARAM_DATASOURCE: PWideChar = 'table';
 
 procedure TSqlDBOleDBStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
@@ -1771,7 +1746,8 @@ begin
     // retrieve initialization parameters from connection string
     OleCheck(CoCreateInstance(CLSID_MSDAINITIALIZE, nil, CLSCTX_INPROC_SERVER,
       IID_IDataInitialize, DataInitialize));
-    OleCheck(DataInitialize.GetDataSource(nil, CLSCTX_INPROC_SERVER, pointer(OleDBProperties.ConnectionString),
+    OleCheck(DataInitialize.GetDataSource(nil, CLSCTX_INPROC_SERVER,
+      pointer(OleDBProperties.ConnectionString),
       IID_IDBInitialize, IUnknown(fDBInitialize)));
     DataInitialize := nil;
     // open the connection to the DB
@@ -1800,7 +1776,7 @@ constructor TSqlDBOleDBConnection.Create(aProperties: TSqlDBConnectionProperties
 var
   {%H-}log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'Create');
+  log := SynDBLog.Enter(self, 'Create');
   if not aProperties.InheritsFrom(TSqlDBOleDBConnectionProperties) then
     raise EOleDBException.CreateUtf8('Invalid %.Create(%)', [self, aProperties]);
   fOleDBProperties := TSqlDBOleDBConnectionProperties(aProperties);
@@ -1813,15 +1789,15 @@ destructor TSqlDBOleDBConnection.Destroy;
 var
   log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'Destroy');
+  log := SynDBLog.Enter(self, 'Destroy');
   try
     inherited Destroy; // call Disconnect;
     fMalloc := nil;
     CoUninit;
   except
     on E: Exception do
-      if Log <> nil then
-        Log.Log(sllError, E);
+      if log <> nil then
+        log.Log(sllError, E);
   end;
 end;
 
@@ -1829,7 +1805,7 @@ procedure TSqlDBOleDBConnection.Disconnect;
 var
   {%H-}log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'Disconnect');
+  log := SynDBLog.Enter(self, 'Disconnect');
   try
     inherited Disconnect; // flush any cached statement
   finally
@@ -1853,8 +1829,8 @@ begin
   result := TSqlDBOleDBStatement.Create(self);
 end;
 
-procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement; aResult:
-  HRESULT; const aStatus: TCardinalDynArray);
+procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement;
+  aResult: HRESULT; const aStatus: TCardinalDynArray);
 
   procedure EnhancedTest;
   var
@@ -1881,7 +1857,8 @@ procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement; aResult:
           OleCheck(ErrorInfoDetails.GetDescription(Desc));
           if fOleDBErrorMessage <> '' then
             fOleDBErrorMessage := fOleDBErrorMessage + '  ';
-          fOleDBErrorMessage := fOleDBErrorMessage + UnicodeBufferToString(pointer(Desc));
+          fOleDBErrorMessage := fOleDBErrorMessage +
+            UnicodeBufferToString(pointer(Desc));
           ErrorInfoDetails := nil;
         end;
     end;
@@ -1954,7 +1931,7 @@ procedure TSqlDBOleDBConnection.Rollback;
 var
   {%H-}log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'Rollback');
+  log := SynDBLog.Enter(self, 'Rollback');
   if assigned(fTransaction) then
   begin
     inherited Rollback;
@@ -1966,7 +1943,7 @@ procedure TSqlDBOleDBConnection.StartTransaction;
 var
   {%H-}log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'StartTransaction');
+  log := SynDBLog.Enter(self, 'StartTransaction');
   if assigned(fTransaction) then
   begin
     inherited StartTransaction;
@@ -1988,7 +1965,7 @@ var
   tmp: PWideChar;
   log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'ConnectionStringDialog');
+  log := SynDBLog.Enter(self, 'ConnectionStringDialog');
   result := false;
   if self <> nil then
   try
@@ -2012,13 +1989,13 @@ begin
             fConnectionString := tmp;
             if tmp <> nil then
               CoTaskMemFree(tmp);
-            if Log <> nil then
-              Log.Log(sllDB, 'New connection settings set', self);
+            if log <> nil then
+              log.log(sllDB, 'New connection settings set', self);
             result := true;
           end;
         DB_E_CANCELED:
-          if Log <> nil then
-            Log.Log(sllDB, 'Canceled', self);
+          if log <> nil then
+            log.log(sllDB, 'Canceled', self);
       else
         OleCheck(res);
       end;
@@ -2048,7 +2025,8 @@ begin
       result := false;
     end;
     SynDBLog.Add.Log(sllDB, 'CreateDatabase for [%] returned %',
-      [ConnectionString, ord(result)], self);
+      [SanitizeFromPassword(SynUnicodeToUtf8(fConnectionString)),
+       ord(result)], self);
   finally
     DB := null;
     Catalog := nil;
@@ -2438,7 +2416,8 @@ begin
   fProviderName := 'MSDASQL'; // we could have left it void - never mind
   inherited SetInternalProperties;
   if fDriver <> '' then
-    fConnectionString := Utf8ToSynUnicode('Driver=' + fDriver + ';') + fConnectionString;
+    fConnectionString := Utf8ToSynUnicode('Driver=' + fDriver + ';') +
+      fConnectionString;
 end;
 
 

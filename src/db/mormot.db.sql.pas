@@ -742,7 +742,7 @@ type
     // - FieldSize can be set to store the size in chars of a ftUtf8 column
     // (0 means BLOB kind of TEXT column)
     function ColumnType(Col: integer; FieldSize: PInteger = nil): TSqlDBFieldType;
-    /// returns TRUE if the column contains NULL
+    /// returns TRUE if the column contains NULL, first Col is 0
     function ColumnNull(Col: integer): boolean;
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; overload;
@@ -1682,6 +1682,8 @@ type
     /// check if a primary key has already an index
     // - can specify if it is ascending only, which is not the case for Firebird
     function IsPrimaryKeyIndexed(var AscendingOnly: boolean): boolean; virtual;
+    /// would replace any matching Password value content from supplied text
+    function SanitizeFromPassword(const S: RawUtf8): RawUtf8;
     /// return the database engine name, as computed from the class name
     // - 'TSqlDBConnectionProperties' will be trimmed left side of the class name
     class function EngineName: RawUtf8;
@@ -2152,7 +2154,8 @@ type
     /// bind an array of fields from an existing SQL statement
     // - can be used e.g. after ColumnsToSqlInsert() method call for fast data
     // conversion between tables
-    procedure BindFromRows(const Fields: TSqlDBFieldTypeDynArray; Rows: TSqlDBStatement);
+    procedure BindFromRows(
+      const Fields: TSqlDBFieldTypeDynArray; Rows: TSqlDBStatement);
     /// bind a special CURSOR parameter to be returned as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
@@ -2342,7 +2345,7 @@ type
     // (0 means BLOB kind of TEXT column)
     function ColumnType(Col: integer;
       FieldSize: PInteger = nil): TSqlDBFieldType; virtual; abstract;
-    /// returns TRUE if the column contains NULL
+    /// returns TRUE if the column contains NULL, first Col is 0
     function ColumnNull(Col: integer): boolean; virtual; abstract;
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; overload; virtual; abstract;
@@ -5283,9 +5286,14 @@ begin
   FastSetString(result, @ps^[2], ord(ps^[0]) - 1);
 end;
 
+function TSqlDBConnectionProperties.SanitizeFromPassword(const S: RawUtf8): RawUtf8;
+begin
+  result := StringReplaceAll(S, fPassWord, '***');
+end;
+
 function TSqlDBConnectionProperties.GetDatabaseNameSafe: RawUtf8;
 begin
-  result := StringReplaceAll(fDatabaseName, PassWord, '***');
+  result := SanitizeFromPassword(fDatabaseName);
 end;
 
 function TSqlDBConnectionProperties.SqlLimitClause(AStmt: TSelectStatement):
@@ -6178,17 +6186,17 @@ begin
         ftDouble:
           begin
             vdouble := ColumnDouble(f);
-            W.Write(@vdouble, SizeOf(vdouble));
+            W.Write8(@vdouble);
           end;
         ftCurrency:
           begin
             vcurrency := ColumnCurrency(f);
-            W.Write(@vcurrency, SizeOf(vcurrency));
+            W.Write8(@vcurrency);
           end;
         ftDate:
           begin
             vdatetime := ColumnDateTime(f);
-            W.Write(@vdatetime, SizeOf(vdatetime));
+            W.Write8(@vdatetime);
           end;
         ftUtf8:
           W.Write(ColumnUtf8(f));
@@ -6702,7 +6710,8 @@ end;
 function TSqlDBStatement.ColumnsToSqlInsert(const TableName: RawUtf8;
   var Fields: TSqlDBColumnCreateDynArray): RawUtf8;
 var
-  F, size: integer;
+  F: PtrInt;
+  size: integer;
 begin
   result := '';
   if (self = nil) or
@@ -6727,6 +6736,7 @@ begin
     end;
     result := result + Fields[F].Name + ',';
   end;
+
   result[length(result)] := ')';
   result := result + ' values (';
   for F := 0 to high(Fields) do
