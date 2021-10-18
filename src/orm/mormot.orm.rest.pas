@@ -507,7 +507,8 @@ type
     fNewValuesCount: integer;
     fNewValuesRowsCount: integer;
     fNewValuesInterning: TRawUtf8Interning;
-    fNewValuesRows: TIntegerDynArray;
+    fNewValuesRows, fNewValuesFields: TIntegerDynArray;
+    fNoUpdateTracking: boolean;
   public
     /// modify a field value in-place, using a RawUtf8 text value
     procedure Update(Row, Field: PtrInt; const Value: RawUtf8); overload;
@@ -545,12 +546,22 @@ type
     /// the rows numbers (1..RowCount) which have been modified by Update()
     // - Join() and AddField() are not tracked by this list - just Update()
     // - the numbers are stored in increasing order
-    // - use NewValuesRows[0..NewValuesRows - 1] to track the modified rows
+    // - track the modified rows using NewValuesRows[0..NewValuesRows - 1] and
+    // NewValuesFields[0..NewValuesRows - 1] - unless NoUpdateTracking was set
     property NewValuesRows: TIntegerDynArray
       read fNewValuesRows;
     /// how many rows (0..RowCount) have been modified by Update()
     property NewValuesRowsCount: integer
       read fNewValuesRowsCount;
+    /// 32-bit field bits which have been modified by Update()
+    // - Join() and AddField() are not tracked by this list - just Update()
+    // - follow NewValuesRows[0..NewValuesRows - 1] row numbers
+    // - if more than 32 field indexes were updated, contains 0
+    property NewValuesFields: TIntegerDynArray
+      read fNewValuesFields;
+    /// if NewValuesRows/NewValuesFields should not be tracked during Update()
+    property NoUpdateTracking: boolean
+      read fNoUpdateTracking write fNoUpdateTracking;
   end;
 
 
@@ -2476,7 +2487,9 @@ end;
 procedure TOrmTableWritable.Update(Row, Field: PtrInt; const Value: RawUtf8);
 var
   U: PUtf8Char;
+  n: PtrInt;
 begin
+  // update the content
   if (self = nil) or
      (fData = nil) or
      (Row <= 0) or
@@ -2486,7 +2499,7 @@ begin
   inc(Field, Row * fFieldCount);
   U := GetResults(Field);
   if StrComp(U, pointer(Value)) = 0 then
-    exit;
+    exit; // nothing was changed
   if fNewValuesInterning <> nil then
     U := pointer(fNewValuesInterning.Unique(Value))
   else
@@ -2495,7 +2508,24 @@ begin
     U := pointer(Value);
   end;
   SetResultsSafe(Field, U);
-  AddSortedInteger(fNewValuesRows, fNewValuesRowsCount, Row); // O(log(N)) lookup
+  // track Update() modifications via NewValuesRows[]/NewValuesFields[]
+  if fNoUpdateTracking then
+    exit;
+  if Field > 32 then
+    Field := 0 // too many fields -> all fields should be notified
+  else
+    Field := integer(1) shl Field;
+  n := AddSortedInteger(fNewValuesRows, fNewValuesRowsCount, Row,
+    @fNewValuesFields); // O(log(N)) lookup
+  if n >= 0 then
+    // first time we updated this row
+    fNewValuesFields[n] := Field
+  else
+  begin
+    // update the CoValues/fNewValuesFields modified field bits
+    n := -(n + 1);  // returned -(foundindex+1)
+    fNewValuesFields[n] := fNewValuesFields[n] or Field;
+  end;
 end;
 
 function TOrmTableWritable.AddField(const FieldName: RawUtf8;
