@@ -2250,7 +2250,7 @@ procedure TTestSqliteMemory._TOrmTableWritable;
       f := w.FieldIndex('YearOfBirth');
       Check(f >= 0);
       n := 0;
-      for r := 1 to w.RowCount do
+      for r := w.RowCount downto 1 do // downto = validate in-order rows update
         if r and 3 = 0 then
         begin
           w.Update(r, f, UInt32ToUtf8(1700 + r shr 3));
@@ -2264,11 +2264,18 @@ procedure TTestSqliteMemory._TOrmTableWritable;
       CheckHash(json, $91DBF8CA, 'boOnlyObjects');
       json := w.UpdatesToJson([], ts.Value);
       Check(IsValidJson(json, {strict=}true));
-      CheckHash(json, $49679790, '');
+      CheckHash(json, $D2740BF6, '');
       json := w.UpdatesToJson([boExtendedJson], ts.Value);
+      Check(IsValidJson(json, {strict=}true));
+      Check(IsValidJson(json, {strict=}false));
+      CheckHash(json, $D2740BF6, 'boExtendedJson');
+      json := w.UpdatesToJson([boNoModelEncoding], ts.Value);
+      Check(IsValidJson(json, {strict=}true));
+      CheckHash(json, $49679790, '');
+      json := w.UpdatesToJson([boExtendedJson, boNoModelEncoding], ts.Value);
       Check(not IsValidJson(json, {strict=}true));
       Check(IsValidJson(json, {strict=}false));
-      CheckHash(json, $82B63D9D, 'boExtendedJson');
+      CheckHash(json, $82B63D9D, 'boExtendedJson2');
     finally
       w.Free;
       intern.Free;

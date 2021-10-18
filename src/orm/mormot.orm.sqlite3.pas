@@ -197,6 +197,8 @@ type
     Simples: TPUtf8CharDynArray;
     SimpleFieldsCount: integer;
     SimpleFields: TFieldBits;
+    UpdateSql: RawUtf8;
+    UpdateFieldsCount: integer;
     Types: array[0..MAX_SQLFIELDS - 1] of TSqlDBFieldType;
     PostValues: array[0..MAX_SQLPARAMS - 1] of RawUtf8;
     Temp: TSynTempBuffer;
@@ -2220,6 +2222,59 @@ begin
   end;
 end;
 
+function BindDirect(Props: TOrmPropInfoList; var P: PUtf8Char; Stmt: PSqlRequest;
+  const Fields: TFieldBits; firstarg: integer): integer;
+var
+  f: PtrInt;
+  nfo: POrmPropInfo;
+  val: PUtf8Char;
+  len: integer;
+  wasstring: boolean;
+begin
+  P := GotoNextNotSpace(P);
+  if P^ <> '[' then
+    raise EOrmBatchException.Create('Invalid simple batch');
+  inc(P);
+  result := firstarg;
+  nfo := pointer(Props.List);
+  for f := 0 to Props.Count - 1 do
+  begin
+    if GetBitPtr(@Fields, f) then
+    begin
+      inc(result);
+      // regular in-place JSON decoding
+      val := GetJsonFieldOrObjectOrArray(P, @wasstring, nil, true, true, @len);
+      if (val = nil) and
+         not wasstring then
+        Stmt^.BindNull(result)
+      else
+        case nfo^.SqlDBFieldType of
+          ftInt64:
+            Stmt^.Bind(result, GetInt64(val));
+          ftDouble,
+          ftCurrency:
+            Stmt^.Bind(result, GetExtended(val));
+          ftDate,
+          ftUtf8:
+            begin
+              if (len > 3) and
+                 (PCardinal(val)^  and $00ffffff = JSON_SQLDATE_MAGIC_C) then
+              begin
+                inc(val, 3);
+                dec(len, 3);
+              end;
+              // direct text/iso8601 parameter binding
+              Stmt^.BindU(result, val, len, {static=}true);
+            end;
+          ftBlob:
+            // with in-place Base64-decoding
+            Stmt^.BindBlobDecode(result, pointer(val), len, {static=}true);
+        end;
+    end;
+    inc(nfo);
+  end;
+end;
+
 function TRestOrmServerDB.InternalBatchStart(Encoding: TRestBatchEncoding;
   BatchOptions: TRestBatchOptions): boolean;
 begin
@@ -2229,7 +2284,7 @@ begin
     exit;
   end;
   // encPost: MainEngineAdd() to Values[]
-  // encSimple/encSimpleID: InternalBatchDirect() to Simples[]
+  // BATCH_DIRECT: InternalBatchDirect() to SimpleFields[]
   if (fBatch^.ValuesCount <> 0) or
      (fBatch^.IDCount <> 0) then
     raise EOrmBatchException.CreateUtf8(
@@ -2243,12 +2298,11 @@ end;
 
 procedure TRestOrmServerDB.InternalBatchStop;
 var
-  fieldcount, valuescount, rowcount, lastrowcount, firstrow, arg, vallen: integer;
+  fieldcount, valuescount, rowcount, lastrowcount, firstrow, arg: integer;
   ndx, r, f, row, lastvaluesnull: PtrInt;
-  nfo: ^TOrmPropInfo;
-  P, val: PUtf8Char;
+  P: PUtf8Char;
   v, sql, logsql: RawUtf8;
-  decodedsaved, updateeventneeded, fieldschanged, wasstring: boolean;
+  decodedsaved, updateeventneeded, fieldschanged: boolean;
   fieldnames: TRawUtf8DynArray;
   valuesnull: TByteDynArray;
   props: TOrmProperties;
@@ -2279,7 +2333,7 @@ begin
         encPostHex,
         encPostHexID:
           v := props.SaveFieldsFromJsonArray(
-            b^.Simples[0], b^.SimpleFields, 0, nil, true, false);
+            b^.Simples[0], b^.SimpleFields, nil, nil, true, false, false);
       end;
       fJsonDecoder.Decode(v, nil, pInlined, b^.ID[0]);
       if props.RecordVersionField <> nil then
@@ -2310,7 +2364,7 @@ begin
       repeat
         // decode a row
         encoding := b^.Encoding;
-        if encoding in BATCH_SIMPLE then
+        if encoding in BATCH_DIRECT_ADD then
           if updateeventneeded or
              (props.RecordVersionField <> nil) then
           begin
@@ -2319,8 +2373,8 @@ begin
             begin
               if length(b^.Values) < b^.ValuesCount then
                 SetLength(b^.Values, b^.ValuesCount);
-              b^.Values[ndx] := props.SaveFieldsFromJsonArray(
-                b^.Simples[ndx], b^.SimpleFields, b^.ID[ndx], nil, true, false);
+              b^.Values[ndx] := props.SaveFieldsFromJsonArray(b^.Simples[ndx],
+                b^.SimpleFields, @b^.ID[ndx], nil, true, false, false);
               encoding := encPost;
             end;
           end
@@ -2416,7 +2470,7 @@ begin
       if (sql = '') or
          (rowcount <> lastrowcount) then
       begin
-        if encoding in BATCH_SIMPLE then
+        if encoding in BATCH_DIRECT_ADD then
         begin
           FormatUtf8('% multi insert into %(%)', [rowcount,
             props.SqlTableName, props.SqlTableSimpleFieldsNoRowID], logsql);
@@ -2446,57 +2500,10 @@ begin
               // direct in-place decoding of the JSON array of simple fields
               for row := 0 to rowcount - 1 do
               begin
-                P := GotoNextNotSpace(b^.Simples[row]);
-                if P^ <> '[' then
-                  raise EOrmBatchException.Create('Invalid simple batch');
-                inc(P);
                 inc(arg);
                 fStatement^.Bind(arg, b^.ID[row]); // first parameter is RowID
-                nfo := pointer(props.Fields.List);
-                for f := 0 to props.Fields.Count - 1 do
-                begin
-                  if GetBitPtr(@b^.SimpleFields, f) then
-                  begin
-                    inc(arg);
-                    val := GetJsonFieldOrObjectOrArray(
-                      P, @wasstring, nil, true, true, @vallen);
-                    if (val = nil) and
-                       not wasstring then
-                      fStatement^.BindNull(arg)
-                    else
-                      case nfo^.SqlDBFieldType of
-                        ftInt64:
-                          fStatement^.Bind(arg, GetInt64(val));
-                        ftDouble,
-                        ftCurrency:
-                          fStatement^.Bind(arg, GetExtended(val));
-                        ftDate,
-                        ftUtf8:
-                          begin
-                            if (vallen > 3) and
-                               (PCardinal(val)^  and $00ffffff =
-                                 JSON_SQLDATE_MAGIC_C) then
-                            begin
-                              inc(val, 3);
-                              dec(vallen, 3);
-                            end;
-                            fStatement^.BindU(arg, val, vallen, {static=}true);
-                          end;
-                        ftBlob:
-                          begin
-                            if (vallen > 3) and
-                               (PCardinal(val)^ and $00ffffff =
-                                 JSON_BASE64_MAGIC_C) then
-                              Base64ToBin(
-                                PAnsiChar(val) + 3, vallen - 3, RawByteString(v))
-                            else
-                              FastSetString(v, val, vallen);
-                            fStatement^.BindBlob(arg, v);
-                          end;
-                      end;
-                  end;
-                  inc(nfo);
-                end;
+                arg := BindDirect(props.Fields,
+                  b^.Simples[row], fStatement, b^.SimpleFields, arg);
               end;
             encPost:
               // the JSON object has been decoded into PostValues[]
@@ -2576,30 +2583,84 @@ begin
   end;
 end;
 
+function ProcessPutHexID(DB: TRestOrmServerDB; const Fields: TFieldBits;
+  Props: TOrmProperties; Sent: PUtf8Char): TID;
+var
+  b: PRestOrmServerDBBatch;
+  arg: integer;
+begin
+  b := DB.fBatch;
+  if not IsEqual(b^.SimpleFields, Fields) then
+  begin
+    b^.SimpleFields := Fields;
+    b^.UpdateFieldsCount := GetBitsCount(Fields, Props.Fields.Count) + 1;
+    Props.CsvFromFieldBits(['update ', Props.SqlTableName, ' set '],
+      Fields, '=?', [' where RowID=?'], b^.UpdateSql);
+  end;
+  DB.DB.LockAndFlushCache;
+  try
+    DB.PrepareCachedStatement(b^.UpdateSql, b^.UpdateFieldsCount);
+    try
+      arg := BindDirect(Props.Fields, Sent, DB.fStatement, Fields, 0);
+      if Sent <> nil then
+        DB.fStatement.Bind(arg + 1, GetNextItemInt64(Sent, ']'));
+      if Sent = nil then
+      begin
+        DB.InternalLog('InternalBatchDirect: encPutHexID JSON', sllError);
+        result := HTTP_BADREQUEST;
+        exit;
+      end;
+      repeat
+      until DB.fStatement.Step <> SQLITE_ROW; // Execute
+      DB.GetAndPrepareStatementRelease;
+      result := HTTP_SUCCESS;
+    except
+      on E: Exception do
+      begin
+        DB.GetAndPrepareStatementRelease(E);
+        result := HTTP_NOTFOUND;
+      end;
+    end;
+  finally
+    DB.DB.UnLock;
+  end;
+end;
+
 function TRestOrmServerDB.InternalBatchDirect(Encoding: TRestBatchEncoding;
   RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
 begin
   result := 0; // unsupported
-  if not (Encoding in BATCH_SIMPLE) then
+  if not (Encoding in BATCH_DIRECT) then
     exit;
   if Sent = nil then
   begin
     // called first with Sent=nil: is it a static or virtual table?
     if GetStaticTableIndex(RunTableIndex) = nil then
       // supported (plain SQLite3 table in the main database)
-      result := 1;
+      if (Encoding <> encPutHexID) or
+         not InternalUpdateEventNeeded(oeUpdate, RunTableIndex) then
+        result := 1;
     exit;
   end;
   // called a second time with the proper Sent JSON, returning added ID
   // same logic than MainEngineAdd() but with no memory allocation
-  if Encoding = encPostHexID then
-  begin
-    // extract the ID from first value of the input JSON
-    result := BatchExtractSimpleID(Sent);
-    if Sent = nil then
-      exit; // invalid input
+  case Encoding of
+    encPostHexID:
+      begin
+        // extract the ID from first value of the input JSON
+        result := BatchExtractSimpleID(Sent);
+        if Sent = nil then
+          exit; // invalid input
+      end;
+    encPutHexID:
+      begin
+        // efficient execution of UPDATE
+        result := ProcessPutHexID(
+          self, Fields, fModel.TableProps[RunTableIndex].Props, Sent);
+        exit;
+      end;
   end;
-  // compute ID from Max(ID) if was not set by encSimpleID
+  // compute ID from Max(ID) if was not set by encPostHexID
   PrepareBatchAdd(self, RunTableIndex, result);
   if result <> 0 then
   begin
