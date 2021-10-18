@@ -4463,6 +4463,10 @@ type
     // - this function will use copy-on-write assignment of Data, with no memory
     // allocation, then let sqlite3InternalFreeRawByteString release the variable
     procedure BindBlob(Param: integer; const Data: RawByteString);
+    /// bind a Blob buffer to a parameter, decoding any JSON_BASE64_MAGIC
+    // - warning: content will be Base64-decoded directly within Val buffer
+    procedure BindBlobDecode(Param: integer; Val: PAnsiChar; Len: PtrInt;
+      BindStatic: boolean = false);
     /// bind a Blob TCustomMemoryStream buffer to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESqlite3Exception on any error
@@ -7672,6 +7676,25 @@ begin
   sqlite3_check(RequestDB,
     sqlite3.bind_blob(Request, Param, tmp, length(Data),
       sqlite3InternalFreeRawByteString), 'bind_blob');
+end;
+
+procedure TSqlRequest.BindBlobDecode(Param: integer;
+  Val: PAnsiChar; Len: PtrInt; BindStatic: boolean);
+var
+  b64len: integer;
+begin
+  b64len := Len - 3;
+  if (b64len > 0) and
+     (PCardinal(Val)^ and $00ffffff = JSON_BASE64_MAGIC_C) then
+  begin
+    Len := Base64ToBinLength(Val + 3, b64len); // in-place Base64 decoding
+    if not Base64Decode(Val + 3, Val, b64len shr 2) then
+      Len := 0; // bind nothing on decoding error
+  end;
+  // if no \uFFF0 prefix: bind directly Val/Len content as blob
+  sqlite3_check(RequestDB,
+    sqlite3.bind_blob(Request, Param, Val, Len, TRANSIENT_STATIC[BindStatic]),
+    'bind_blob');
 end;
 
 procedure TSqlRequest.Bind(Param: integer; Data: TCustomMemoryStream);
