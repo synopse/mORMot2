@@ -1471,11 +1471,11 @@ type
   { -------------------- TOrm Definitions }
 
   /// the possible options for handling table names in TOrmFill
-  // - ctnTrimExisting is set e.g. by TOrmMany.DestGetJoined
+  // - ctnTrimmed is set e.g. by TOrmMany.DestGetJoined
   TOrmCheckTableName = (
     ctnNoCheck,
-    ctnMustExist,
-    ctnTrimExisting);
+    ctnMandatory,
+    ctnTrimmed);
 
   /// used internally by TOrmFill for its field mapping
   TOrmFillTableMap = record
@@ -1542,10 +1542,13 @@ type
     // - use the mapping prepared with Map() method
     // - can specify a destination record to be filled instead of main Dest
     function Fill(aRow: integer; aDest: TOrm = nil): boolean;
-    /// used to compute the updated field bits during a fill
+    /// compute the updated ORM field bits during a fill
     // - will return Props.SimpleFieldsBits[ooUpdate] if no fill is in process
     procedure ComputeSetUpdatedFieldBits(Props: TOrmProperties;
       out Bits: TFieldBits);
+    /// compute the updated ORM field indexes during a fill
+    // - set -1 for the ID/RowID or an unknown field
+    procedure ComputeSetUpdatedFieldIndexes(var Props: TIntegerDynArray);
     /// retrieved the mapped information from the table field/column index
     // - returns nil if not found
     function TableFieldIndexToMap(TableField: integer): POrmFillTableMap;
@@ -1830,7 +1833,7 @@ type
     // back the content to the remote Server: therefore, TModTime / TCreateTime
     // fields are a pure client ORM feature - it won't work directly at REST level
     procedure ComputeFieldsBeforeWrite(const aRest: IRestOrm;
-      aOccasion: TOrmEvent); virtual;
+      aOccasion: TOrmEvent; aServerTimeStamp: TTimeLog = 0); virtual;
 
     /// this constructor initializes the ORM record
     // - auto-instanciate any TOrmMany instance defined in published properties
@@ -4320,8 +4323,8 @@ type
     fModel: TOrmModel;
     fInternalBufferSize: integer;
     fCalledWithinRest: boolean;
+    fPreviousTableMatch: boolean;
     fBatch: TJsonSerializer;
-    fBatchFields: TFieldBits;
     fTable: TOrmClass;
     fTableIndex: integer;
     fBatchCount: integer;
@@ -4333,7 +4336,7 @@ type
     fDeleteCount: integer;
     fAutomaticTransactionPerRow: cardinal;
     fOnWrite: TOnBatchWrite;
-    fPreviousTableMatch: boolean;
+    fBatchFields: TFieldBits;
     fPreviousTable: TOrmClass;
     fPreviousEncoding: TRestBatchEncoding;
     fPreviousFields: TFieldBits;
@@ -4492,8 +4495,8 @@ type
   TRestBatchLocked = class(TRestBatch)
   protected
     fResetTix: Int64;
-    fSafe: TSynLocker;
     fThreshold: integer;
+    fSafe: TSynLocker;
   public
     /// initialize the BATCH instance
     constructor CreateNoRest(aModel: TOrmModel; aTable: TOrmClass;
@@ -6234,6 +6237,22 @@ begin
   result := nil;
 end;
 
+procedure TOrmFill.ComputeSetUpdatedFieldIndexes(var Props: TIntegerDynArray);
+var
+  i: integer;
+  map: POrmFillTableMap;
+begin
+  SetLength(Props, fTable.FieldCount);
+  FillCharFast(pointer(Props)^, fTable.FieldCount * SizeOf(integer), 255); // -1
+  map := pointer(fTableMap);
+  for i := 1 to fTableMapCount do // no need to call TableFieldIndexToMap()
+  begin
+    if map^.DestField <> nil then
+      Props[map^.TableIndex] := map^.DestField.PropertyIndex;
+    inc(map);
+  end;
+end;
+
 procedure TOrmFill.Map(aRecord: TOrm; aTable: TOrmTable;
   aCheckTableName: TOrmCheckTableName);
 var
@@ -6246,17 +6265,16 @@ begin
   fTable := aTable;
   if aTable.fData = nil then
     exit; // void content
+  props := nil;
   if aCheckTableName <> ctnNoCheck then
-    props := aRecord.Orm // ctnTrimExisting set e.g. by TOrmMany.DestGetJoined
-  else
-    props := nil;
+    props := aRecord.Orm; // e.g. ctnTrimmed from TOrmMany.DestGetJoined
   for f := 0 to aTable.FieldCount - 1 do
   begin
     fieldname := aTable.Results[f];
     if props <> nil then
       if IdemPChar(fieldname, pointer(props.SqlTableNameUpperWithDot)) then
         inc(fieldname, length(props.SqlTableNameUpperWithDot))
-      else if aCheckTableName = ctnMustExist then
+      else if aCheckTableName = ctnMandatory then
         continue;
     AddMapFromName(aRecord, fieldname, f);
   end;
@@ -8453,15 +8471,14 @@ begin
 end;
 
 procedure TOrm.ComputeFieldsBeforeWrite(const aRest: IRestOrm;
-  aOccasion: TOrmEvent);
+  aOccasion: TOrmEvent; aServerTimeStamp: TTimeLog);
 var
   f: PtrInt;
   types: TOrmFieldTypes;
-  i64: Int64;
+  sess: TID;
   p: TOrmPropInfo;
 begin
-  if (self <> nil) and
-     (aRest <> nil) then
+  if self <> nil then
     with Orm do
     begin
       integer(types) := 0;
@@ -8472,23 +8489,25 @@ begin
         include(types, oftCreateTime);
       if integer(types) <> 0 then
       begin
-        i64 := aRest.GetServerTimestamp;
+        if aServerTimeStamp = 0 then
+          aServerTimeStamp := aRest.GetServerTimestamp;
         for f := 0 to Fields.Count - 1 do
         begin
           p := Fields.List[f];
           if p.OrmFieldType in types then
-            TOrmPropInfoRttiInt64(p).PropInfo.SetInt64Prop(self, i64);
+            TOrmPropInfoRttiInt64(p).PropInfo.SetInt64Prop(self, aServerTimeStamp);
         end;
       end;
-      if oftSessionUserID in HasTypeFields then
+      if (oftSessionUserID in HasTypeFields) and
+         Assigned(aRest) then
       begin
-        i64 := aRest.GetCurrentSessionUserID;
-        if i64 <> 0 then
+        sess := aRest.GetCurrentSessionUserID;
+        if sess <> 0 then
           for f := 0 to Fields.Count - 1 do
           begin
             p := Fields.List[f];
             if p.OrmFieldType = oftSessionUserID then
-              TOrmPropInfoRttiInt64(p).PropInfo.SetInt64Prop(self, i64);
+              TOrmPropInfoRttiInt64(p).PropInfo.SetInt64Prop(self, sess);
           end;
       end;
     end;
@@ -8626,7 +8645,7 @@ begin
   begin
     result := TOrmClass(Orm.fRecordManyDestProp.ObjectClass).Create;
     aTable.OwnerMustFree := true;
-    result.FillPrepare(aTable, ctnTrimExisting);
+    result.FillPrepare(aTable, ctnTrimmed);
   end;
 end;
 
