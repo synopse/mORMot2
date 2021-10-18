@@ -6181,7 +6181,7 @@ end;
 
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var
-  L, i: PtrInt;
+  L: PtrInt;
   cmp: integer;
 begin
   if R < 0 then
@@ -6190,22 +6190,22 @@ begin
   begin
     L := 0;
     repeat
-      i := (L + R) shr 1;
-      cmp := P^[i] - Value;
+      result := (L + R) shr 1;
+      cmp := P^[result] - Value;
       if cmp = 0 then
       begin
         result := -result - 1; // return -(foundindex+1) if already exists
         exit;
       end;
       if cmp < 0 then
-        L := i + 1
+        L := result + 1
       else
-        R := i - 1;
+        R := result - 1;
     until L > R;
-    while (i >= 0) and
-          (P^[i] >= Value) do
-      dec(i);
-    result := i + 1; // return the index where to insert
+    while (result >= 0) and
+          (P^[result] >= Value) do
+      dec(result);
+    result := result + 1; // return the index where to insert
   end;
 end;
 
