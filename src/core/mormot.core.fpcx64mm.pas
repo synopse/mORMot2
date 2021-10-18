@@ -93,6 +93,7 @@ unit mormot.core.fpcx64mm;
 
 // force the tiny/small blocks to be in their own arena, not with medium blocks
 // - would use a little more memory, but medium pool is less likely to sleep
+// - not defined for FPCMM_SERVER because no performance difference was found
 {.$define FPCMM_SMALLNOTWITHMEDIUM}
 
 // use "rep movsb/stosd" ERMS for blocks > 256 bytes instead of SSE2 "movaps"
@@ -326,7 +327,7 @@ implementation
     Directly fed from OS mmap/virtualalloc with mremap when growing
 
   The original FastMM4 was enhanced as such, especially in FPCMM_SERVER mode:
-  - FPC compatibility, even on POSIX/Linux, also for its specific API behavior;
+  - FPC compatibility, even on POSIX/Linux, also for FPC specific API behavior;
   - x86_64 code was refactored and tuned in regard to 2020's hardware;
   - Inlined SSE2 movaps loop or ERMS are more efficient that subfunction(s);
   - New round-robin thread-friendly arenas of tiny blocks;
@@ -1850,7 +1851,7 @@ asm
         dec     byte ptr [rbx].TSmallBlockType.BinCount
         mov     byte ptr [rbx].TSmallBlockType.BinLocked, false
         mov     rdx, [rcx - BlockHeaderSize]
-        jmp     FreeSmallLocked // loop until BinCount=0
+        jmp     FreeSmallLocked // loop until BinCount=0 or BinLocked
 @NoBin: mov     byte ptr [rbx].TSmallBlockType.BinLocked, false
 @BinAlreadyLocked:
         mov     byte ptr [rbx].TSmallBlockType.Locked, false

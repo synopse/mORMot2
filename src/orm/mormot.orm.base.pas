@@ -5576,21 +5576,19 @@ end;
 
 procedure TOrmPropInfoRttiRawUtf8.SetValue(Instance: TObject; Value: PUtf8Char;
   ValueLen: PtrInt; wasString: boolean);
-
-  procedure NeedSub;
-  var
-    tmp: RawUtf8;
-  begin
-    if Value <> nil then
-      FastSetString(tmp, Value, ValueLen);
-    fPropInfo.SetLongStrProp(Instance, tmp);
-  end;
-
+var
+  tmp: pointer;
 begin
   if fSetterIsFieldPropOffset <> 0 then
     FastSetString(PRawUtf8(PtrUInt(Instance) + fSetterIsFieldPropOffset)^, Value, ValueLen)
   else
-    NeedSub;
+  begin
+    tmp := nil; // manual initialization/finalization with no hidden try/finally
+    if Value <> nil then
+      FastSetString(RawUtf8(tmp), Value, ValueLen);
+    fPropInfo.SetLongStrProp(Instance, RawUtf8(tmp));
+    FastAssignNew(tmp);
+  end;
 end;
 
 procedure TOrmPropInfoRttiRawUtf8.SetValueVar(Instance: TObject;
