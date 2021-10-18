@@ -7957,7 +7957,7 @@ end;
 
 class procedure TOrm.RttiJsonRead(var Context: TJsonParserContext; Instance: TObject);
 var
-  cur: ^TOrmPropInfo;
+  cur: POrmPropInfo;
   f: TOrmPropInfo;
   props: TOrmPropInfoList;
   name: PUtf8Char;
@@ -8000,7 +8000,7 @@ end;
 class procedure TOrm.RttiJsonWrite(W: TTextWriter; Instance: TObject;
   Options: TTextWriterWriteObjectOptions);
 var
-  cur: ^TOrmPropInfo;
+  cur: POrmPropInfo;
   props: TOrmPropInfoList;
   n: integer;
 begin
@@ -11059,7 +11059,10 @@ begin
   fAutomaticTransactionPerRow := AutomaticTransactionPerRow;
   fOptions := Options;
   if boOnlyObjects in Options then
+  begin
+    include(fOptions, boNoModelEncoding); // we expect no JSON array
     exit;
+  end;
   if AutomaticTransactionPerRow > 0 then
   begin // should be the first command
     fBatch.AddShort('"automaticTransactionPerRow",');
@@ -11167,6 +11170,7 @@ const
     '"',        // encPostHex
     '"i',       // encPostHexID
     '"PUT',     // encPut
+    '"u',       // encPutHex
     '"DELETE'); // encDelete
 
 procedure TRestBatch.Encode(EncodedTable: TOrmClass;
@@ -11177,7 +11181,7 @@ begin
     raise EOrmBatchException.CreateUtf8('% %" with % whereas expects %',
       [self, BATCH_VERB[Encoding], EncodedTable, fTable]);
   fPreviousTableMatch := fPreviousTable = EncodedTable;
-  if (boNoModelEncoding in fOptions) or
+  if (boPostNoSimpleFields in fOptions) or
      (fPreviousTable <> EncodedTable) or
      (fPreviousEncoding <> Encoding) or
      ((Fields <> nil) and
@@ -11190,10 +11194,8 @@ begin
     if not (boOnlyObjects in fOptions) then
     begin
       fBatch.AddShorter(BATCH_VERB[Encoding]);
-      if Encoding in [encPostHex, encPostHexID] then
-      begin
+      if Encoding in [encPostHex, encPostHexID, encPutHexID] then
         fBatch.AddBinToHexDisplayMinChars(Fields, SizeOf(Fields^));
-      end;
       if fTable <> nil then
         fBatch.AddShorter('",') // '{"Table":[...,"POST",{object},...]}'
       else
@@ -11219,7 +11221,7 @@ var
   encoding: TRestBatchEncoding;
   blob: ^TOrmPropInfoRttiRawBlob;
   f: PtrInt;
-  nfo: ^TOrmPropInfo;
+  nfo: POrmPropInfo;
 begin
   result := -1;
   if (self = nil) or
@@ -11362,9 +11364,11 @@ end;
 function TRestBatch.Update(Value: TOrm; const CustomFields: TFieldBits;
   DoNotAutoComputeFields, ForceCacheUpdate: boolean): integer;
 var
-  Props: TOrmProperties;
+  props: TOrmProperties;
   fields: TFieldBits;
   tableindex: integer;
+  nfo: POrmPropInfo;
+  f: PtrInt;
 begin
   result := -1;
   if (Value = nil) or
@@ -11373,26 +11377,50 @@ begin
      (Assigned(fRest) and
       not fRest.RecordCanBeUpdated(POrmClass(Value)^, Value.IDValue, oeUpdate)) then
     exit; // invalid parameters, or not opened BATCH sequence
-  Props := Value.Orm;
+  props := Value.Orm;
+  // compute actual fields bits
   if not Assigned(fRest) then
     DoNotAutoComputeFields := true; // no IRestOrm.GetServerTimestamp  available
   // same format as TRest.Update, BUT including the ID
   if IsZero(CustomFields) then
-    Value.FillContext.ComputeSetUpdatedFieldBits(Props, fields)
+    Value.FillContext.ComputeSetUpdatedFieldBits(props, fields)
   else
   begin
-    fields := CustomFields * Props.CopiableFieldsBits; // refine from ALL_FIELDS
+    fields := CustomFields * props.CopiableFieldsBits; // refine from ALL_FIELDS
     if not DoNotAutoComputeFields then
-      fields := fields + Props.FieldBits[oftModTime];
+      fields := fields + props.FieldBits[oftModTime];
   end;
-  Encode(POrmClass(Value)^, encPut);
-  SetExpandedJsonWriter(Props, not fPreviousTableMatch, {withID=}true, fields);
-  if not DoNotAutoComputeFields then
-    Value.ComputeFieldsBeforeWrite(fRest, oeUpdate); // update oftModTime fields
-  Value.GetJsonValues(fBatch);
+  // append the udpated fields as JSON
+  if boNoModelEncoding in fOptions then
+  begin
+    // versatile "PUT"/"PUT@table":{...} format as compatibility fallback
+    Encode(POrmClass(Value)^, encPut);
+    SetExpandedJsonWriter(props, not fPreviousTableMatch, {withID=}true, fields);
+    if not DoNotAutoComputeFields then
+      Value.ComputeFieldsBeforeWrite(fRest, oeUpdate); // update oftModTime fields
+    Value.GetJsonValues(fBatch);
+  end
+  else
+  begin
+    // new "uhex"/"uhex@table":[...,id] format
+    Encode(POrmClass(Value)^, encPutHexID, @fields);
+    fBatch.Add('[');
+    nfo := pointer(props.Fields.List);
+    for f := 0 to props.Fields.Count - 1 do
+    begin
+      if GetBitPtr(@fields, f) then
+      begin
+        nfo^.GetJsonValues(Value, fBatch);
+        fBatch.AddComma;
+      end;
+      inc(nfo);
+    end;
+    fBatch.Add(Value.IDValue); // RowID should be the latest
+    fBatch.Add(']');
+  end;
   fBatch.AddComma;
   if fCalledWithinRest and
-     (fields - Props.SimpleFieldsBits[ooUpdate] = []) then
+     (fields - props.SimpleFieldsBits[ooUpdate] = []) then
     ForceCacheUpdate := true; // safe to update the cache with supplied values
   if ForceCacheUpdate then
     fRest.CacheOrNil.Notify(Value, ooUpdate)
@@ -11401,7 +11429,7 @@ begin
     // may not contain all cached fields -> delete from cache
     tableindex := fTableIndex;
     if POrmClass(Value)^ <> fTable then
-      tableindex := fModel.GetTableIndexExisting(Props.Table);
+      tableindex := fModel.GetTableIndexExisting(props.Table);
     AddID(fDeletedRecordRef, fDeletedCount, RecordReference(tableindex, Value.IDValue));
   end;
   result := fBatchCount;

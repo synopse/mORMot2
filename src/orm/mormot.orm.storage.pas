@@ -1397,7 +1397,7 @@ type
 
 function ToText(t: TOrmVirtualTableTransaction): PShortString; overload;
 
-/// extract the ID from first value of the encSimpleID input JSON
+/// extract the ID from first value of the encPostHexID input JSON
 // - and move Sent^ to a fake '[' with the first real simple parameter
 function BatchExtractSimpleID(var Sent: PUtf8Char): TID;
 
@@ -1921,7 +1921,7 @@ var
   rec: TOrm;
 begin
   result := 0; // unsupported
-  if not (Encoding in BATCH_SIMPLE) then
+  if not (Encoding in BATCH_DIRECT_ADD) then
     exit;
   if Sent = nil then
   begin

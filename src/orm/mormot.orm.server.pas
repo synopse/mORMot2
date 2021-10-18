@@ -1382,60 +1382,74 @@ begin
             encoding := encPostHex;   // "hex",[...] or "hex@Table",[...]
             FillZero(runfields);
             P := pointer(cmd);
-            if P^ = 'i' then // "ihex",[id,...] or "ihex@Table",[id,...]
-            begin
-              encoding := encPostHexID;
-              inc(P);
+            case P^ of
+              'i': // "ihex",[id,...] or "ihex@Table",[id,...]
+                begin
+                  encoding := encPostHexID;
+                  inc(P);
+                end;
+              'u':
+                begin // "uhex",[...,id] or "uhex@Table",[...,id]
+                  encoding := encPutHexID;
+                  inc(P);
+                end;
             end;
             if not HexDisplayToBin(P, @runfields, StrLen(P) shr 1) then
               raise EOrmBatchException.CreateUtf8(
                 '%.EngineBatchSend: Unknown [%] cmd', [self, cmd]);
           end;
         end;
-        if encoding in BATCH_SIMPLE then
+        if encoding in BATCH_DIRECT then
         begin
           // first InternalBatchDirect(sent=nil) call to check if supported
           if (runningrest.InternalBatchDirect(
                encoding, runtableindex, runfields, nil) <> 0) and
              (sent^ = '[')  then
-            // this storage engine allows direct multi-insert from JSON
+            // this storage engine allows direct JSON array process
             // (see e.g. TRestOrmServerDB.InternalBatchDirect
             //  or TRestStorageTOrm.InternalBatchDirect)
             simplevalue := GetJsonFieldOrObjectOrArray(
               sent, nil, @endofobject, true)
           else
           begin
-            // convert input array into a JSON object as regular "POST"
+            // convert input array into a JSON object as regular "POST"/"PUT"
             value := fModel.TableProps[runtableindex].Props.
-              SaveFieldsFromJsonArray(sent, runfields, 0, @endofobject,
-              {extendedjson=}true, {firstisid=}encoding = encPostHexID);
-            encoding := encPost;
+              SaveFieldsFromJsonArray(sent, runfields, @id, @endofobject,
+              {extendedjson=}true, {firstisid=}encoding = encPostHexID,
+              {lastisid=}encoding = encPutHexID);
+            if encoding = encPutHexID then
+              encoding := encPut
+            else
+              encoding := encPost;
             if (sent = nil) or
                (value = '') then
               raise EOrmBatchException.CreateUtf8(
-                '%.EngineBatchSend: Wrong SIMPLE', [self]);
+                '%.EngineBatchSend: % incorrect format', [self, cmd]);
           end;
           if IsNotAllowed then
             raise EOrmBatchException.CreateUtf8(
-              '%.EngineBatchSend: SIMPLE/Add not allowed on %',
-              [self, runtable]);
-          if not RecordCanBeUpdated(runtable, 0, oeAdd, @errmsg) then
+              '%.EngineBatchSend: % not allowed on %', [self, cmd, runtable]);
+          if not RecordCanBeUpdated(runtable, 0, BATCH_EVENT[encoding], @errmsg) then
             raise EOrmBatchException.CreateUtf8(
-              '%.EngineBatchSend: SIMPLE/Add impossible: %', [self, errmsg]);
+              '%.EngineBatchSend: % impossible: %', [self, cmd, errmsg]);
         end;
         if (count = 0) and
            (endofobject = ']') then
         begin
-          // single operation do not need a transaction nor InternalBatchStart/Stop
+          // single op do not need a transaction nor InternalBatchStart/Stop
           transperrow := 0;
           SetLength(Results, 1);
-          if encoding in BATCH_SIMPLE then
+          if encoding in BATCH_DIRECT then
           begin
             // InternalBatchDirect requires InternalBatchStart -> POST fallback
             value := fModel.TableProps[runtableindex].Props.
-              SaveFieldsFromJsonArray(simplevalue, runfields, 0, nil,
-              {extendedjson=}true, {firstisid=}encoding = encPostHexID);
-            encoding := encPost;
+              SaveFieldsFromJsonArray(simplevalue, runfields, @id, nil,
+              {extendedjson=}true, {firstisid=}encoding in BATCH_DIRECT_ID,
+              {lastisid=}encoding = encPutHexID);
+            if encoding = encPutHexID then
+              encoding := encPut
+            else
+              encoding := encPost;
           end;
         end
         else
@@ -1518,8 +1532,11 @@ begin
             end;
           encSimple,
           encPostHex,
-          encPostHexID:
+          encPostHexID,
+          encPutHexID:
             begin
+              // second InternalBatchDirect() call should process the operation
+              // (may be delayed for multi-insert in InternalBatchStop)
               id := runningrest.InternalBatchDirect(
                 encoding, runtableindex, runfields, simplevalue);
               Results[count] := id;

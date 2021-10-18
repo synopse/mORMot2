@@ -92,7 +92,18 @@ const
     mPOST,     // encPostHex
     mPOST,     // encPostHexID
     mPUT,      // encPut
+    mPUT,      // encPutHex
     mDELETE);  // encDelete
+
+  /// convert a TRestBatch encoding scheme into the corresponding ORM TUriMethod
+  BATCH_EVENT: array[TRestBatchEncoding] of TOrmEvent = (
+    oeAdd,     // encPost
+    oeAdd,     // encSimple
+    oeAdd,     // encPostHex
+    oeAdd,     // encPostHexID
+    oeUpdate,  // encPut
+    oeUpdate,  // encPutHex
+    oeDelete); // encDelete
 
 /// convert a string HTTP verb into its TUriMethod enumerate
 function ToMethod(const method: RawUtf8): TUriMethod;
@@ -255,13 +266,12 @@ type
     // implementation in TRestServer.Batch use a try..finally block
     procedure InternalBatchStop; virtual;
     /// internal method called by TRestServer.Batch() to process SIMPLE input
-    // - this default implementation returns 0 for regular POST-like process
     // - an optimized storage engine could override it to process the Sent
     // JSON array values directly from the memory buffer
-    // - called first with Sent=nil to return either false (not
-    // supported) or true (supported)
-    // - called a second time with the proper Sent, returning
-    // the computed (encSimple) or extracted (encSimpleID) ID
+    // - called first with Sent=nil to return either false (unsupported - which
+    // is what this default method does) or true (supported in overriden method)
+    // - called a second time with the proper Sent JSON array of values,
+    // returning the inserted ID or 200 after proper update
     function InternalBatchDirect(Encoding: TRestBatchEncoding;
       RunTableIndex: integer; const Fields: TFieldBits;
       Sent: PUtf8Char): TID; virtual;
