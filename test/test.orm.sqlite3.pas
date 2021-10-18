@@ -2202,13 +2202,15 @@ procedure TTestSqliteMemory._TOrmTableWritable;
   var
     s1, s2: TOrmTableJson;
     w: TOrmTableWritable;
-    f, r: integer;
+    json: RawJson;
+    ts: TTimeLogBits;
+    f, r, n: integer;
   begin
     s1 := TOrmTableJson.CreateFromTables([TOrmPeople], '', JS);
     s2 := TOrmTableJson.CreateFromTables([TOrmPeople], '', JS);
     w := TOrmTableWritable.CreateFromTables([TOrmPeople], '', JS);
     try // merge the same data twice, and validate duplicated columns
-      w.NewValuesInterning := intern;
+      w.UpdatedValuesInterning := intern;
       CheckEqual(w.RowCount, s1.RowCount);
       CheckEqual(w.FieldCount, s1.FieldCount);
       w.Join(s2, 'rowid', 'ID'); // s2 will be sorted -> keep s1 untouched
@@ -2240,6 +2242,34 @@ procedure TTestSqliteMemory._TOrmTableWritable;
     finally
       s1.Free;
       s2.Free;
+      w.Free;
+    end;
+    w := TOrmTableWritable.CreateFromTables([TOrmPeopleTimed], '', JS);
+    try
+      w.UpdatedValuesInterning := intern;
+      f := w.FieldIndex('YearOfBirth');
+      Check(f >= 0);
+      n := 0;
+      for r := 1 to w.RowCount do
+        if r and 3 = 0 then
+        begin
+          w.Update(r, f, UInt32ToUtf8(1700 + r shr 3));
+          inc(n);
+        end;
+      CheckEqual(w.UpdatedRowsCount, n, 'UpdatedRows');
+      ts.From('20211030T18:00:00');
+      Check(ts.Value <> 0);
+      json := w.UpdatesToJson([boOnlyObjects], ts.Value);
+      Check(IsValidJson(json, {strict=}true));
+      CheckHash(json, $91DBF8CA, 'boOnlyObjects');
+      json := w.UpdatesToJson([], ts.Value);
+      Check(IsValidJson(json, {strict=}true));
+      CheckHash(json, $49679790, '');
+      json := w.UpdatesToJson([boExtendedJson], ts.Value);
+      Check(not IsValidJson(json, {strict=}true));
+      Check(IsValidJson(json, {strict=}false));
+      CheckHash(json, $82B63D9D, 'boExtendedJson');
+    finally
       w.Free;
       intern.Free;
     end;

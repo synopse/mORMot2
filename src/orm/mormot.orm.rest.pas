@@ -503,11 +503,11 @@ type
   // and add some new fields on the fly, even joined from another TOrmTable
   TOrmTableWritable = class(TOrmTableJson)
   protected
-    fNewValues: TRawUtf8DynArray;
-    fNewValuesCount: integer;
-    fNewValuesRowsCount: integer;
-    fNewValuesInterning: TRawUtf8Interning;
-    fNewValuesRows, fNewValuesFields: TIntegerDynArray;
+    fUpdatedValues: TRawUtf8DynArray;
+    fUpdatedValuesCount: integer;
+    fUpdatedRowsCount: integer;
+    fUpdatedValuesInterning: TRawUtf8Interning;
+    fUpdatedRows, fUpdatedRowsFields: TIntegerDynArray;
     fNoUpdateTracking: boolean;
   public
     /// modify a field value in-place, using a RawUtf8 text value
@@ -536,30 +536,42 @@ type
     // should remain available as long as you use this TOrmTableWritable
     // - warning: will call From.SortFields(FromKeyField) for faster process
     procedure Join(From: TOrmTable; const FromKeyField, KeyField: RawUtf8);
+    /// append tracked Update() values to a BATCH process
+    // - will only work if this table has a single associated TOrmClass
+    function UpdatesToBatch(Batch: TRestBatch;
+      aServerTimeStamp: TTimeLog = 0): integer;
+    /// generate a JSON of tracked Update() values
+    // - will only work if this table has a single associated TOrmClass
+    // - BATCH-compatible JSON is possible if boOnlyObjects is not part
+    // of the supplied options, e.g. as [boExtendedJson] - in this context any
+    // TModTime field will be processed; set aServerTimeStamp e.g. from
+    // TRestClientUri.GetServerTimestamp, if TimeLogNowUtc is not enough
+    function UpdatesToJson(aOptions: TRestBatchOptions = [boOnlyObjects];
+      aServerTimeStamp: TTimeLog = 0): RawJson;
     /// optionaly de-duplicate Update() values
-    property NewValuesInterning: TRawUtf8Interning
-      read fNewValuesInterning write fNewValuesInterning;
+    property UpdatedValuesInterning: TRawUtf8Interning
+      read fUpdatedValuesInterning write fUpdatedValuesInterning;
     /// how many values have been written via Update() overloaded methods
-    // - is not updated if NewValuesInterning was defined
-    property NewValuesCount: integer
-      read fNewValuesCount;
+    // - is not updated if UpdatedValuesInterning was defined
+    property UpdatedValuesCount: integer
+      read fUpdatedValuesCount;
     /// the rows numbers (1..RowCount) which have been modified by Update()
     // - Join() and AddField() are not tracked by this list - just Update()
     // - the numbers are stored in increasing order
-    // - track the modified rows using NewValuesRows[0..NewValuesRows - 1] and
-    // NewValuesFields[0..NewValuesRows - 1] - unless NoUpdateTracking was set
-    property NewValuesRows: TIntegerDynArray
-      read fNewValuesRows;
+    // - track the modified rows using UpdatedRows[0..UpdatedRowsCount - 1] and
+    // UpdatedRowsFields[0..UpdatedRowsCount - 1] - unless NoUpdateTracking was set
+    property UpdatedRows: TIntegerDynArray
+      read fUpdatedRows;
     /// how many rows (0..RowCount) have been modified by Update()
-    property NewValuesRowsCount: integer
-      read fNewValuesRowsCount;
+    property UpdatedRowsCount: integer
+      read fUpdatedRowsCount;
     /// 32-bit field bits which have been modified by Update()
     // - Join() and AddField() are not tracked by this list - just Update()
-    // - follow NewValuesRows[0..NewValuesRows - 1] row numbers
+    // - follow UpdatedRows[0..UpdatedRowsCount - 1] row numbers
     // - if more than 32 field indexes were updated, contains 0
-    property NewValuesFields: TIntegerDynArray
-      read fNewValuesFields;
-    /// if NewValuesRows/NewValuesFields should not be tracked during Update()
+    property UpdatedRowsFields: TIntegerDynArray
+      read fUpdatedRowsFields;
+    /// if UpdatedRows/UpdatedRowsFields should not be tracked during Update()
     property NoUpdateTracking: boolean
       read fNoUpdateTracking write fNoUpdateTracking;
   end;
@@ -2488,6 +2500,7 @@ procedure TOrmTableWritable.Update(Row, Field: PtrInt; const Value: RawUtf8);
 var
   U: PUtf8Char;
   n: PtrInt;
+  f: integer;
 begin
   // update the content
   if (self = nil) or
@@ -2496,36 +2509,32 @@ begin
      (Row > fRowCount) or
      (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
     exit;
+  f := 1 shl integer(Field); // =0 -> too many fields -> notify all fields
   inc(Field, Row * fFieldCount);
   U := GetResults(Field);
   if StrComp(U, pointer(Value)) = 0 then
     exit; // nothing was changed
-  if fNewValuesInterning <> nil then
-    U := pointer(fNewValuesInterning.Unique(Value))
+  if fUpdatedValuesInterning <> nil then
+    U := pointer(fUpdatedValuesInterning.Unique(Value))
   else
   begin
-    AddRawUtf8(fNewValues, fNewValuesCount, Value);
+    AddRawUtf8(fUpdatedValues, fUpdatedValuesCount, Value);
     U := pointer(Value);
   end;
   SetResultsSafe(Field, U);
-  // track Update() modifications via NewValuesRows[]/NewValuesFields[]
+  // track Update() modifications via UpdatedRows[]/UpdatedRowsFields[]
   if fNoUpdateTracking then
     exit;
-  if Field > 32 then
-    Field := 0 // too many fields -> all fields should be notified
-  else
-    Field := integer(1) shl Field;
-  n := AddSortedInteger(fNewValuesRows, fNewValuesRowsCount, Row,
-    @fNewValuesFields); // O(log(N)) lookup
-  if n >= 0 then
-    // first time we updated this row
-    fNewValuesFields[n] := Field
-  else
+  n := AddSortedInteger(fUpdatedRows, fUpdatedRowsCount, Row,
+    @fUpdatedRowsFields); // O(log(N)) lookup
+  if n < 0 then
   begin
-    // update the CoValues/fNewValuesFields modified field bits
+    // update the CoValues/fUpdatedRowsFields modified field bits
     n := -(n + 1);  // returned -(foundindex+1)
-    fNewValuesFields[n] := fNewValuesFields[n] or Field;
+    if f <> 0 then
+      f := f or fUpdatedRowsFields[n];
   end;
+  fUpdatedRowsFields[n] := f
 end;
 
 function TOrmTableWritable.AddField(const FieldName: RawUtf8;
@@ -2623,6 +2632,93 @@ begin
           SetResultsSafe(ndx + new[f], From.Results[k + f]);
     end;
     inc(ndx, FieldCount);
+  end;
+end;
+
+function TOrmTableWritable.UpdatesToBatch(
+  Batch: TRestBatch; aServerTimeStamp: TTimeLog): integer;
+var
+  c: TOrmClass;
+  rec: TOrm;
+  r: PtrInt;
+  def, def32, bits: TFieldBits;
+  props: TIntegerDynArray;
+  upd, updlast, b, f, p: integer;
+begin
+  result := 0;
+  c := QueryRecordType;
+  if (Batch = nil) or
+     (fUpdatedRowsCount = 0) or
+     (c = nil) then
+    exit;
+  rec := c.Create;
+  try
+    rec.FillPrepare(self);
+    rec.FillContext.ComputeSetUpdatedFieldIndexes(props);
+    with rec.Orm do
+      if (oftModTime in HasTypeFields) and
+         not (boOnlyObjects in Batch.Options) then
+      begin
+        // pre-compute once any TModTime field
+        if aServerTimeStamp = 0 then
+          if Assigned(Batch.Rest) then
+            aServerTimeStamp := Batch.Rest.GetServerTimestamp
+          else
+            aServerTimeStamp := TimeLogNowUtc; // e.g. from UpdatesToJson()
+        def := FieldBits[oftModTime];
+        rec.ComputeFieldsBeforeWrite(nil, oeUpdate, aServerTimeStamp);
+      end
+      else
+        FillZero(def);
+    def32 := rec.FillContext.TableMapFields;
+    updlast := 0; // recompute bits only if changed from previous rec
+    for r := 0 to fUpdatedRowsCount - 1 do
+    begin
+      rec.FillContext.Fill(fUpdatedRows[r]);
+      if rec.IDValue = 0 then
+        raise EOrmTable.CreateUtf8('%.UpdatesToBatch: no %.ID map', [self, c]);
+      upd := fUpdatedRowsFields[r];
+      if upd = 0 then // more than 32 fields -> send all mapped
+        bits := def32
+      else if upd <> updlast then
+      begin
+        updlast := upd;
+        bits := def;
+        b := 1;
+        for f := 0 to fFieldCount - 1 do
+        begin
+          if upd and b <> 0 then
+          begin
+            p := props[f];
+            if p < 0 then
+              raise EOrmTable.CreateUtf8(
+                '%.UpdatesToBatch: Unexpected %.%', [self, c, Results[f]]);
+            include(bits, p);
+          end;
+          b := b shl 1;
+        end;
+      end;
+      if Batch.Update(rec, bits, {donotautocompute:}true) < 0 then
+        raise EOrmTable.CreateUtf8(
+          '%.UpdatesToBatch: Batch.Update % failed', [self, rec]);
+      inc(result);
+    end;
+  finally
+    rec.Free;
+  end;
+end;
+
+function TOrmTableWritable.UpdatesToJson(
+  aOptions: TRestBatchOptions; aServerTimeStamp: TTimeLog): RawJson;
+var
+  b: TRestBatch;
+begin
+  b := TRestBatch.CreateNoRest(nil, QueryRecordType, 10000, aOptions);
+  try
+    UpdatesToBatch(b, aServerTimeStamp);
+    b.PrepareForSending(RawUtf8(result));
+  finally
+    b.Free;
   end;
 end;
 

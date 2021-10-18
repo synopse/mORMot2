@@ -4467,6 +4467,9 @@ type
     /// read only access to the associated TOrmModel instance
     property Model: TOrmModel
       read fModel;
+    /// the processing options as supplied to the constructor
+    property Options: TRestBatchOptions
+      read fOptions;
     /// how many times Add() has been called for this BATCH process
     property AddCount: integer
       read fAddCount;
@@ -11440,6 +11443,7 @@ begin
       fBatch.CancelLastComma;
       fBatch.Add(']');
       if (fTable <> nil) and
+         (fModel <> nil) and
          not (boOnlyObjects in fOptions) then
         fBatch.Add('}'); // end sequence array '{"Table":["cmd":values,...]}'
       fBatch.SetText(Data);

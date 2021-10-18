@@ -30,6 +30,7 @@ uses
   mormot.net.http,
   mormot.net.client,
   mormot.db.core,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.rest.client;
 
@@ -115,6 +116,14 @@ type
     class function Sum(aClient: TRestClientUri; a, b: double; Method2: boolean): double;
   end;
   TOrmPeopleObjArray = array of TOrmPeople;
+
+  TOrmPeopleTimed = class(TOrmPeople)
+  private
+    fModif: TModTime;
+  published
+    property Modif: TModTime
+      read fModif write fModif;
+  end;
 
   /// a record used to test dynamic array serialization
   TFV = packed record
