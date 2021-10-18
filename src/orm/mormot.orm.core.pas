@@ -1470,7 +1470,9 @@ type
 
   /// the possible options for handling table names
   TOrmCheckTableName = (
-    ctnNoCheck, ctnMustExist, ctnTrimExisting);
+    ctnNoCheck,
+    ctnMustExist,
+    ctnTrimExisting);
 
   /// used internally by TOrmFill for its field mapping
   TOrmFillTableMap = record
@@ -1483,6 +1485,7 @@ type
     /// the column index in this TOrmTable
     TableIndex: integer;
   end;
+  POrmFillTableMap = ^TOrmFillTableMap;
 
   /// internal data used by TOrm.FillPrepare()/FillPrepareMany() methods
   // - using a dedicated class will reduce memory usage for each TOrm
@@ -1511,11 +1514,11 @@ type
     /// add a property to the fTableMap[] array
     // - aIndex is the column index in TOrmTable
     procedure AddMap(aRecord: TOrm; aField: TOrmPropInfo;
-      aIndex: integer); overload;
+      aIndex: integer);
     /// add a property to the fTableMap[] array
     // - aIndex is the column index in TOrmTable
-    procedure AddMap(aRecord: TOrm; const aFieldName: RawUtf8;
-      aIndex: integer); overload;
+    procedure AddMapFromName(aRecord: TOrm; aFieldName: PUtf8Char;
+      aIndex: integer);
     /// add all simple property names, with  to the fTableMap[] array
     // - will map ID/RowID, then all simple fields of this TOrm
     // - aIndex is the column index in TOrmTable
@@ -1547,6 +1550,9 @@ type
     // - this instance is freed by TOrm.Destroy if fTable.OwnerMustFree=true
     property Table: TOrmTable
       read fTable;
+    /// how many fields are currently mapped
+    property TableMapCount: integer
+      read fTableMapCount;
     /// the current Row during a Loop
     property FillCurrentRow: integer
       read fFillCurrentRow;
@@ -6119,14 +6125,14 @@ begin
   end;
 end;
 
-procedure TOrmFill.AddMap(aRecord: TOrm; const aFieldName: RawUtf8;
+procedure TOrmFill.AddMapFromName(aRecord: TOrm; aFieldName: PUtf8Char;
   aIndex: integer);
 var
   aFieldIndex: integer;
 begin
   if (self <> nil) and
      (aRecord <> nil) then
-    if IsRowID(pointer(aFieldName)) then
+    if IsRowID(aFieldName) then
       AddMap(aRecord, nil, aIndex)
     else
       with aRecord.Orm.Fields do
@@ -6167,9 +6173,10 @@ end;
 function TOrmFill.Fill(aRow: integer; aDest: TOrm): boolean;
 var
   D: TOrm;
-  f, offs: PtrInt;
+  f: integer;
+  offs: PtrInt;
   P: PUtf8Char;
-  map: ^TOrmFillTableMap;
+  map: POrmFillTableMap;
 begin
   if (self = nil) or
      (Table = nil) or
@@ -6215,29 +6222,24 @@ procedure TOrmFill.Map(aRecord: TOrm; aTable: TOrmTable;
   aCheckTableName: TOrmCheckTableName);
 var
   f: PtrInt;
-  ColumnName: PUtf8Char;
-  ColumnNameLen: integer;
-  FieldName: RawUtf8;
-  Props: TOrmProperties;
+  fieldname: PUtf8Char;
+  props: TOrmProperties;
 begin
   if aTable = nil then // avoid any GPF
     exit;
   fTable := aTable;
   if aTable.fData = nil then
     exit; // void content
-  Props := aRecord.Orm;
+  props := aRecord.Orm;
   for f := 0 to aTable.FieldCount - 1 do
   begin
-    ColumnName := aTable.Get(0, f, ColumnNameLen);
-    if aCheckTableName = ctnNoCheck then
-      FastSetString(FieldName, ColumnName, ColumnNameLen)
-    else if IdemPChar(ColumnName, pointer(Props.SqlTableNameUpperWithDot)) then
-      Utf8ToRawUtf8(ColumnName + length(Props.SqlTableNameUpperWithDot), FieldName)
-    else if aCheckTableName = ctnMustExist then
-      continue
-    else
-      FastSetString(FieldName, ColumnName, ColumnNameLen);
-    AddMap(aRecord, FieldName, f);
+    fieldname := aTable.Results[f];
+    if aCheckTableName <> ctnNoCheck then
+      if IdemPChar(fieldname, pointer(props.SqlTableNameUpperWithDot)) then
+        inc(fieldname, length(props.SqlTableNameUpperWithDot))
+      else if aCheckTableName = ctnMustExist then
+        continue;
+    AddMapFromName(aRecord, fieldname, f);
   end;
   fFillCurrentRow := 1; // point to first data row (0 is field names)
 end;
