@@ -270,18 +270,18 @@ function GetNextStringLineToRawUnicode(var P: PChar): RawUnicode;
 function TrimLeftLowerCase(const V: RawUtf8): PUtf8Char;
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
-// - return an RawUtf8 string: enumeration names are pure 7bit ANSI with Delphi 7
+// - return an RawUtf8 string: enumeration names are pure 7-bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
 function TrimLeftLowerCaseShort(V: PShortString): RawUtf8;
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
-// - return a shortstring: enumeration names are pure 7bit ANSI with Delphi 7
+// - return a shortstring: enumeration names are pure 7-bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
 function TrimLeftLowerCaseToShort(V: PShortString): ShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
-// - return a shortstring: enumeration names are pure 7bit ANSI with Delphi 7
+// - return a shortstring: enumeration names are pure 7-bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
 procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString); overload;
 
@@ -312,8 +312,8 @@ function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: int
 // 'Email12' will return 'Email 12'
 // - '_' char is transformed into ' - '
 // - '__' chars are transformed into ': '
-// - return an RawUtf8 string: enumeration names are pure 7bit ANSI with Delphi 7
-// to 2007, and UTF-8 encoded with Delphi 2009+
+// - return an RawUtf8 string: enumeration names are pure 7-bit ANSI with Delphi
+// up to 2007, and UTF-8 encoded with Delphi 2009+
 function UnCamelCase(const S: RawUtf8): RawUtf8; overload;
 
 /// convert a CamelCase string into a space separated one
@@ -325,7 +325,7 @@ function UnCamelCase(const S: RawUtf8): RawUtf8; overload;
 // 'Email12' will return 'Email 12'
 // - return the char count written into D^
 // - D^ and P^ are expected to be UTF-8 encoded: enumeration and property names
-// are pure 7bit ANSI with Delphi 7 to 2007, and UTF-8 encoded with Delphi 2009+
+// are pure 7-bit ANSI with Delphi 7 to 2007, and UTF-8 encoded with Delphi 2009+
 // - '_' char is transformed into ' - '
 // - '__' chars are transformed into ': '
 function UnCamelCase(D, P: PUtf8Char): integer; overload;

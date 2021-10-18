@@ -1415,18 +1415,17 @@ function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: Pointer): Ptr
 
 /// retrieve the index where to insert an integer value in a sorted integer array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
-// - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
+// - returns -(foundindex+1) i.e. <0 if the specified Value was found
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 
 /// retrieve the index where to insert a word value in a sorted word array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
-// - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
+// - returns -(foundindex+1) i.e. <0 if the specified Value was found
 function FastLocateWordSorted(P: PWordArray; R: integer; Value: word): PtrInt;
 
 /// add an integer value in a sorted dynamic array of integers
 // - returns the index where the Value was added successfully in Values[]
-// - returns -1 if the specified Value was already present in Values[]
-//  (we must avoid any duplicate for O(log(n)) binary search)
+// - returns -(foundindex+1) i.e. <0 if the specified Value was already present
 // - if CoValues is set, its content will be moved to allow inserting a new
 // value at CoValues[result] position
 function AddSortedInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
@@ -6190,12 +6189,14 @@ begin
   else
   begin
     L := 0;
-    result := -1; // return -1 if found
     repeat
       i := (L + R) shr 1;
       cmp := P^[i] - Value;
       if cmp = 0 then
+      begin
+        result := -result - 1; // return -(foundindex+1) if already exists
         exit;
+      end;
       if cmp < 0 then
         L := i + 1
       else
@@ -6241,7 +6242,7 @@ function AddSortedInteger(var Values: TIntegerDynArray; var ValuesCount: integer
   Value: integer; CoValues: PIntegerDynArray): PtrInt;
 begin
   result := FastLocateIntegerSorted(pointer(Values), ValuesCount - 1, Value);
-  if result >= 0 then // if Value exists -> fails
+  if result >= 0 then // if Value exists -> fails and return -(foundindex+1)
     result := InsertInteger(Values, ValuesCount, Value, result, CoValues);
 end;
 
@@ -6252,12 +6253,10 @@ var
 begin
   ValuesCount := Length(Values);
   result := FastLocateIntegerSorted(pointer(Values), ValuesCount - 1, Value);
-  if result >= 0 then
-  begin
-    // if Value exists -> fails
-    SetLength(Values, ValuesCount + 1); // manual size increase
-    result := InsertInteger(Values, ValuesCount, Value, result, CoValues);
-  end;
+  if result < 0 then
+    exit; // Value exists -> fails and return -(foundindex+1)
+  SetLength(Values, ValuesCount + 1); // manual size increase
+  result := InsertInteger(Values, ValuesCount, Value, result, CoValues);
 end;
 
 function InsertInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
