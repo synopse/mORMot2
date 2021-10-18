@@ -6,7 +6,8 @@ unit mormot.db.sql.oledb;
 {
   *****************************************************************************
 
-   Efficient SQL Database Connection via OleDB 
+   Efficient SQL Database Connection via OleDB
+    - Some Low-Level OleDB / ORM Constants
     - TSqlDBOleDBConnection* and TSqlDBOleDBStatement Classes
     - Database Engine Specific OleDB Connection Classes
 
@@ -39,6 +40,35 @@ uses
   mormot.db.core,
   mormot.db.sql,
   mormot.db.raw.oledb;
+
+
+{ ************ Some Low-Level OleDB / ORM Constants }
+
+const
+  PARAMTYPE2OLEDB: array[TSqlDBParamInOutType] of DBPARAMIO = (
+    DBPARAMIO_INPUT,                       // paramIn
+    DBPARAMIO_OUTPUT,                      // paramOut
+    DBPARAMIO_INPUT or DBPARAMIO_OUTPUT);  // paramInOut
+
+  FIELDTYPE2OLEDB: array[TSqlDBFieldType] of DBTYPE = (
+    DBTYPE_EMPTY,                  // ftUnknown
+    DBTYPE_I4,                     // ftNull
+    DBTYPE_I8,                     // ftInt64
+    DBTYPE_R8,                     // ftDouble
+    DBTYPE_CY,                     // ftCurrency
+    DBTYPE_DATE,                   // ftDate
+    DBTYPE_WSTR or DBTYPE_BYREF,   // ftUtf8
+    DBTYPE_BYTES or DBTYPE_BYREF); // ftBlob
+
+  FIELDTYPE2OLEDBTYPE_NAME: array[TSqlDBFieldType] of WideString = (
+     '',                 // ftUnknown
+     'DBTYPE_I4',        // ftNull
+     'DBTYPE_I8',        // ftInt64
+     'DBTYPE_R8',        // ftDouble
+     'DBTYPE_CY',        // ftCurrency
+     'DBTYPE_DATE',      // ftDate
+     'DBTYPE_WVARCHAR',  // ftUtf8
+     'DBTYPE_BINARY');   // ftBlob
 
 
 { ************ TSqlDBOleDBConnection* and TSqlDBOleDBStatement Classes }
