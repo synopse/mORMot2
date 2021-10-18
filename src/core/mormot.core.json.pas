@@ -3870,7 +3870,8 @@ begin
               if ending^ <> ',' then
                 break;
               propNameFound := '';
-              start := JsonObjectItem(GotoNextNotSpace(ending + 1), objName, @propNameFound);
+              start := JsonObjectItem(
+                GotoNextNotSpace(ending + 1), objName, @propNameFound);
             until start = nil;
             break;
           end

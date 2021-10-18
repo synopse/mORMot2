@@ -4346,41 +4346,40 @@ type
   public
     /// begin a BATCH sequence to speed up huge database changes
     // - each call to normal Add/Update/Delete methods will create a Server request,
-    //   therefore can be slow (e.g. if the remote server has bad ping timing)
+    // therefore can be slow (e.g. if the remote server has bad ping timing)
     // - start a BATCH sequence using this method, then call BatchAdd() BatchUpdate()
-    //   or BatchDelete() methods to make some changes to the database
+    // or BatchDelete() methods to make some changes to the database
     // - when BatchSend will be called, all the sequence transactions will be sent
-    //   as one to the remote server, i.e. in one URI request
+    // as one to the remote server, i.e. in one URI request
     // - if BatchAbort is called instead, all pending BatchAdd/Update/Delete
-    //   transactions will be aborted, i.e. ignored
+    // transactions will be aborted, i.e. ignored
     // - expect one TOrmClass as parameter, which will be used for the whole
-    //   sequence (in this case, you can't mix classes in the same BATCH sequence)
+    // sequence (in this case, you can't mix classes in the same BATCH sequence)
     // - if no TOrmClass is supplied, the BATCH sequence will allow any
-    //   kind of individual record in BatchAdd/BatchUpdate/BatchDelete
+    // kind of individual record in BatchAdd/BatchUpdate/BatchDelete
     // - return TRUE on success, FALSE if aTable is incorrect or a previous BATCH
-    //   sequence was already initiated
-    // - should normally be used inside a Transaction block: there is no automated
-    //   TransactionBegin..Commit/RollBack generated in the BATCH sequence if
-    //   you leave the default AutomaticTransactionPerRow=0 parameter - but
-    //   this may be a concern with a lot of concurrent clients
-    // - you should better set AutomaticTransactionPerRow > 0 to execute all
-    //   BATCH processes within an unique transaction grouped by a given number
-    //   of rows, on the server side - set AutomaticTransactionPerRow=maxInt if
-    //   you want one huge transaction, or set a convenient value (e.g. 10000)
-    //   depending on the back-end database engine abilities, if you want to
-    //   retain the transaction log file small enough for the database engine
+    // sequence was already initiated
+    // - you may set AutomaticTransactionPerRow=0 inside a Transaction block: no
+    // automated TransactionBegin..Commit/RollBack will be generated
     // - BatchOptions could be set to tune the SQL execution, e.g. force INSERT
-    //   OR IGNORE on internal SQLite3 engine
+    // OR IGNORE on internal SQLite3 engine
     // - InternalBufferSize could be set to some high value (e.g. 10 shl 20),
-    //   if you expect a very high number of rows in this BATCH
+    // if you expect a very high number of rows in this BATCH
     constructor Create(const aRest: IRestOrm; aTable: TOrmClass;
-      AutomaticTransactionPerRow: cardinal = 0; Options: TRestBatchOptions = [];
-      InternalBufferSize: cardinal = 65536; CalledWithinRest: boolean = false); virtual;
+      AutomaticTransactionPerRow: cardinal = 10000;
+      Options: TRestBatchOptions = [boExtendedJson];
+      InternalBufferSize: cardinal = 65536; CalledWithinRest: boolean = false);
+    /// begin a BATCH sequence to speed up huge database changes with no IRestOrm
+    // - could be done e.g. on client side with no remote REST ORM access
+    constructor CreateNoRest(aModel: TOrmModel; aTable: TOrmClass;
+      AutomaticTransactionPerRow: cardinal = 10000;
+      Options: TRestBatchOptions = [boExtendedJson];
+      InternalBufferSize: cardinal = 65536); virtual;
     /// finalize the BATCH instance
     destructor Destroy; override;
     /// reset the BATCH sequence so that you can re-use the same TRestBatch
     procedure Reset(aTable: TOrmClass; AutomaticTransactionPerRow: cardinal = 0;
-      Options: TRestBatchOptions = []); overload; virtual;
+      Options: TRestBatchOptions = [boExtendedJson]); overload; virtual;
     /// reset the BATCH sequence to its previous state
     // - could be used to prepare a next chunk of values, after a call to
     // TRest.BatchSend
@@ -4497,19 +4496,20 @@ type
     fThreshold: integer;
   public
     /// initialize the BATCH instance
-    constructor Create(const aRest: IRestOrm; aTable: TOrmClass;
-      AutomaticTransactionPerRow: cardinal = 0; Options: TRestBatchOptions = [];
-      InternalBufferSize: cardinal = 65536; CalledWithinRest: boolean = false); override;
+    constructor CreateNoRest(aModel: TOrmModel; aTable: TOrmClass;
+      AutomaticTransactionPerRow: cardinal = 10000;
+      Options: TRestBatchOptions = [boExtendedJson];
+      InternalBufferSize: cardinal = 65536); override;
     /// finalize the BATCH instance
     destructor Destroy; override;
     /// reset the BATCH sequence so that you can re-use the same TRestBatch
-    procedure Reset(aTable: TOrmClass;
-      AutomaticTransactionPerRow: cardinal = 0; Options: TRestBatchOptions = []); override;
+    procedure Reset(aTable: TOrmClass; AutomaticTransactionPerRow: cardinal = 0;
+      Options: TRestBatchOptions = [boExtendedJson]); override;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker
       read fSafe;
-    /// property set to the current GetTickCount64 value when Reset is called
+    /// property set to the current GetTickCount64 value when Reset was called
     property ResetTix: Int64
       read fResetTix write fResetTix;
     /// may be used to store a number of rows to flush the content
@@ -10985,11 +10985,19 @@ begin
   if aRest = nil then
     raise EOrmBatchException.CreateUtf8('%.Create(aRest=nil)', [self]);
   fRest := aRest;
-  fModel := fRest.Model;
+  fCalledWithinRest := CalledWithinRest;
+  CreateNoRest(fRest.Model, aTable, AutomaticTransactionPerRow, Options,
+    InternalBufferSize);
+end;
+
+constructor TRestBatch.CreateNoRest(aModel: TOrmModel; aTable: TOrmClass;
+  AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions;
+  InternalBufferSize: cardinal);
+begin
+  fModel := aModel;
   if InternalBufferSize < 4096 then
     InternalBufferSize := 4096;
   fInternalBufferSize := InternalBufferSize;
-  fCalledWithinRest := CalledWithinRest;
   Reset(aTable, AutomaticTransactionPerRow, Options);
 end;
 
@@ -11015,7 +11023,9 @@ begin
   fTable := aTable;
   if boExtendedJson in Options then
     fBatch.CustomOptions := fBatch.CustomOptions + [twoForceJsonExtended];
-  if aTable <> nil then
+  if (aTable <> nil) and
+     (fModel <> nil) and
+     not (boOnlyObjects in fOptions) then
   begin
     fTableIndex := fModel.GetTableIndexExisting(aTable);
     fBatch.Add('{'); // sending data is '{"Table":["cmd":values,...]}'
@@ -11025,15 +11035,16 @@ begin
     fTableIndex := -1;
   fBatch.Add('[');
   fAutomaticTransactionPerRow := AutomaticTransactionPerRow;
+  fOptions := Options;
+  if boOnlyObjects in Options then
+    exit;
   if AutomaticTransactionPerRow > 0 then
   begin // should be the first command
     fBatch.AddShort('"automaticTransactionPerRow",');
     fBatch.Add(AutomaticTransactionPerRow);
     fBatch.AddComma;
   end;
-  fOptions := Options;
-  Options := Options -
-    [boExtendedJson, boPostNoSimpleFields, boNoModelEncoding]; // client-side only
+  Options := Options - BATCH_OPTIONS_CLIENTONLY;
   if byte(Options) <> 0 then
   begin
     fBatch.AddShort('"options",');
@@ -11154,18 +11165,21 @@ begin
     fPreviousEncoding := Encoding;
     if Fields <> nil then
       fPreviousFields := Fields^;
-    fBatch.AddShorter(BATCH_VERB[Encoding]);
-    if Encoding in [encPostHex, encPostHexID] then
+    if not (boOnlyObjects in fOptions) then
     begin
-      fBatch.AddBinToHexDisplayMinChars(Fields, SizeOf(Fields^));
-    end;
-    if fTable <> nil then
-      fBatch.AddShorter('",') // '{"Table":[...,"POST",{object},...]}'
-    else
-    begin
-      fBatch.Add('@'); // '[...,"POST@Table",{object}',...]'
-      fBatch.AddString(EncodedTable.OrmProps.SqlTableName);
-      fBatch.Add('"', ',');
+      fBatch.AddShorter(BATCH_VERB[Encoding]);
+      if Encoding in [encPostHex, encPostHexID] then
+      begin
+        fBatch.AddBinToHexDisplayMinChars(Fields, SizeOf(Fields^));
+      end;
+      if fTable <> nil then
+        fBatch.AddShorter('",') // '{"Table":[...,"POST",{object},...]}'
+      else
+      begin
+        fBatch.Add('@'); // '[...,"POST@Table",{object}',...]'
+        fBatch.AddString(EncodedTable.OrmProps.SqlTableName);
+        fBatch.Add('"', ',');
+      end;
     end;
   end;
   if ID <> 0 then
@@ -11193,12 +11207,15 @@ begin
   props := Value.Orm;
   // ensure ForceID is properly set
   if SendData and
-     (fModel.Props[POrmClass(Value)^].Kind in INSERT_WITH_ID) then
+     ((fModel = nil) or
+      (fModel.Props[POrmClass(Value)^].Kind in INSERT_WITH_ID)) then
     ForceID := true; // same format as TRestClient.Add
   if ForceID and
      (Value.IDValue = 0) then
     ForceID := false;
   // compute actual fields bits
+  if not Assigned(fRest) then
+    DoNotAutoComputeFields := true; // no IRestOrm.GetServerTimestamp  available
   if IsZero(CustomFields) then
     fields := props.SimpleFieldsBits[ooInsert]
   else
@@ -11283,12 +11300,14 @@ begin
      (fBatch = nil) or
      (Table = nil) or
      (ID <= 0) or
-     not fRest.RecordCanBeUpdated(Table, ID, oeDelete) then
+     (Assigned(fRest) and
+      not fRest.RecordCanBeUpdated(Table, ID, oeDelete)) then
   begin
     result := -1; // invalid parameters, or not opened BATCH sequence
     exit;
   end;
-  AddID(fDeletedRecordRef, fDeletedCount, fModel.RecordReference(Table, ID));
+  if Assigned(fRest) then
+    AddID(fDeletedRecordRef, fDeletedCount, fModel.RecordReference(Table, ID));
   Encode(Table, encDelete, nil, ID);
   result := fBatchCount;
   inc(fBatchCount);
@@ -11302,12 +11321,14 @@ begin
   if (self = nil) or
      (fTable = nil) or
      (ID <= 0) or
-     not fRest.RecordCanBeUpdated(fTable, ID, oeDelete) then
+     (Assigned(fRest) and
+      not fRest.RecordCanBeUpdated(Table, ID, oeDelete)) then
   begin
     result := -1; // invalid parameters, or not opened BATCH sequence
     exit;
   end;
-  AddID(fDeletedRecordRef, fDeletedCount, RecordReference(fTableIndex, ID));
+  if Assigned(fRest) then
+    AddID(fDeletedRecordRef, fDeletedCount, RecordReference(fTableIndex, ID));
   Encode(fTable, encDelete, nil, ID);
   result := fBatchCount;
   inc(fBatchCount);
@@ -11327,9 +11348,12 @@ begin
   if (Value = nil) or
      (fBatch = nil) or
      (Value.IDValue <= 0) or
-     not fRest.RecordCanBeUpdated(POrmClass(Value)^, Value.IDValue, oeUpdate) then
+     (Assigned(fRest) and
+      not fRest.RecordCanBeUpdated(POrmClass(Value)^, Value.IDValue, oeUpdate)) then
     exit; // invalid parameters, or not opened BATCH sequence
   Props := Value.Orm;
+  if not Assigned(fRest) then
+    DoNotAutoComputeFields := true; // no IRestOrm.GetServerTimestamp  available
   // same format as TRest.Update, BUT including the ID
   if IsZero(CustomFields) then
     Value.FillContext.ComputeSetUpdatedFieldBits(Props, fields)
@@ -11350,7 +11374,7 @@ begin
     ForceCacheUpdate := true; // safe to update the cache with supplied values
   if ForceCacheUpdate then
     fRest.CacheOrNil.Notify(Value, ooUpdate)
-  else
+  else if Assigned(fRest) then
   begin
     // may not contain all cached fields -> delete from cache
     tableindex := fTableIndex;
@@ -11389,13 +11413,15 @@ begin
   begin
     if fBatchCount > 0 then
     begin // if something to send
-      for i := 0 to fDeletedCount - 1 do
-        if fDeletedRecordRef[i] <> 0 then
-          fRest.CacheOrNil.NotifyDeletion(
-            fDeletedRecordRef[i] and 63, fDeletedRecordRef[i] shr 6);
+      if Assigned(fRest) then
+        for i := 0 to fDeletedCount - 1 do
+          if fDeletedRecordRef[i] <> 0 then
+            fRest.CacheOrNil.NotifyDeletion(
+              fDeletedRecordRef[i] and 63, fDeletedRecordRef[i] shr 6);
       fBatch.CancelLastComma;
       fBatch.Add(']');
-      if fTable <> nil then
+      if (fTable <> nil) and
+         not (boOnlyObjects in fOptions) then
         fBatch.Add('}'); // end sequence array '{"Table":["cmd":values,...]}'
       fBatch.SetText(Data);
     end;
@@ -11406,13 +11432,12 @@ end;
 
 { TRestBatchLocked }
 
-constructor TRestBatchLocked.Create(const aRest: IRestOrm;
-  aTable: TOrmClass; AutomaticTransactionPerRow: cardinal;
-  Options: TRestBatchOptions; InternalBufferSize: cardinal;
-  CalledWithinRest: boolean);
+constructor TRestBatchLocked.CreateNoRest(aModel: TOrmModel; aTable: TOrmClass;
+  AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions;
+  InternalBufferSize: cardinal);
 begin
-  inherited Create(aRest, aTable, AutomaticTransactionPerRow,
-    Options, InternalBufferSize, CalledWithinRest);
+  inherited CreateNoRest(
+    aModel, aTable, AutomaticTransactionPerRow, Options, InternalBufferSize);
   fSafe.Init;
 end;
 
