@@ -691,6 +691,7 @@ type
     function Find(Rec: TOrm): integer;
     /// called by TRestStorageInMemory.AddOne after a precious Find()
     function AddedAfterFind(Rec: TOrm): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// the corresponding field RTTI
     property PropInfo: TOrmPropInfo
       read fPropInfo;
@@ -734,7 +735,7 @@ type
     fUnSortedID: boolean;
     fSearchRec: TOrm; // temporary record to store the searched value
     fBasicUpperSqlSelect: array[boolean] of RawUtf8;
-    fUnique: array of TRestStorageInMemoryUnique;
+    fUnique, fUniquePerField: array of TRestStorageInMemoryUnique;
     fMaxID: TID;
     fValues: TDynArrayHashed; // hashed by ID
     fTempBuffer: PTextWriterStackBuffer;
@@ -2067,7 +2068,8 @@ end;
 constructor TRestStorageInMemory.Create(aClass: TOrmClass;
   aServer: TRestOrmServer; const aFileName: TFileName; aBinaryFile: boolean);
 var
-  f: PtrInt;
+  f, n: PtrInt;
+  fields: TOrmPropInfoList;
 begin
   inherited Create(aClass, aServer);
   if (fStoredClassProps <> nil) and
@@ -2090,14 +2092,21 @@ begin
       fBasicUpperSqlSelect[true] :=
         StringReplaceAll(fBasicUpperSqlSelect[false], ' ROWID,', ' ID,');
     end;
-  if not IsZero(fIsUnique) then
-    with fStoredClassRecordProps.Fields do
-    begin
-      SetLength(fUnique, Count);
-      for f := 0 to Count - 1 do
-        if byte(f) in fIsUnique then
-          fUnique[f] := TRestStorageInMemoryUnique.Create(self, List[f]);
-    end;
+  fields := fStoredClassRecordProps.Fields;
+  n := GetBitsCount(fIsUnique, fields.Count);
+  if n > 0 then
+  begin
+    SetLength(fUnique, n);
+    SetLength(fUniquePerField, fields.Count);
+    n := 0;
+    for f := 0 to fields.Count - 1 do
+      if byte(f) in fIsUnique then
+      begin
+        fUnique[n] := TRestStorageInMemoryUnique.Create(self, fields.List[f]);
+        fUniquePerField[f] := fUnique[n];
+        inc(n);
+      end;
+  end;
   ReloadFromFile;
 end;
 
@@ -2135,16 +2144,15 @@ begin
     exit;
   // ensure no duplicated ID or unique field
   for f := 0 to length(fUnique) - 1 do
-    if fUnique[f] <> nil then
+  begin
+    ndx := fUnique[f].Find(Rec);
+    if ndx >= 0 then
     begin
-      ndx := fUnique[f].Find(Rec);
-      if ndx >= 0 then
-      begin
-        InternalLog('AddOne: non unique %.% on % %',
-          [fStoredClass, fUnique[f].PropInfo.Name, fValue[ndx], Rec], sllDB);
-        exit;
-      end;
+      InternalLog('AddOne: non unique %.% on % %',
+        [fStoredClass, fUnique[f].PropInfo.Name, fValue[ndx], Rec], sllDB);
+      exit;
     end;
+  end;
   if ForceID then
   begin
     if Rec.IDValue <= 0 then
@@ -2167,11 +2175,10 @@ begin
     Rec.IDValue := fMaxID;
   end;
   // update internal hash tables and add to internal list
-  for f := 0 to high(fUnique) do
-    if fUnique[f] <> nil then
-      if not fUnique[f].AddedAfterFind(Rec) then // paranoid
-        raise ERestStorage.CreateUtf8('%.AddOne on %.%',
-          [self, Rec, fUnique[f].PropInfo.Name]);
+  for f := 0 to length(fUnique) - 1 do
+    if not fUnique[f].AddedAfterFind(Rec) then // paranoid
+      raise ERestStorage.CreateUtf8('%.AddOne on %.%',
+        [self, Rec, fUnique[f].PropInfo.Name]);
   ndx := fValues.FindHashedForAdding(Rec, added);
   if added then
     fValue[ndx] := Rec
@@ -2191,19 +2198,19 @@ var
 begin
   result := false;
   for f := 0 to length(fUnique) - 1 do
-    if (fUnique[f] <> nil) and
-       ((aFields = nil) or
-        (byte(f) in aFields^)) then
-    begin
-      ndx := fUnique[f].Find(aRec);
-      if (ndx >= 0) and
-         (ndx <> aUpdateIndex) then
+    with fUnique[f] do
+      if (aFields = nil) or
+          (byte(PropInfo.PropertyIndex) in aFields^) then
       begin
-        InternalLog('UniqueFieldsUpdateOK failed on % for %',
-          [fUnique[f].PropInfo.Name, aRec], sllDB);
-        exit;
+        ndx := Find(aRec);
+        if (ndx >= 0) and
+           (ndx <> aUpdateIndex) then
+        begin
+          InternalLog('UniqueFieldsUpdateOK failed on % for %',
+            [PropInfo.Name, aRec], sllDB);
+          exit;
+        end;
       end;
-    end;
   result := true;
 end;
 
@@ -2292,10 +2299,9 @@ begin
       Owner.InternalUpdateEvent(oeDelete, fStoredClassProps.TableIndex,
         rec.IDValue, '', nil, nil);
     for f := 0 to length(fUnique) - 1 do
-      if fUnique[f] <> nil then
-        if fUnique[f].Hasher.FindBeforeDelete(@rec) < aIndex then
-          raise ERestStorage.CreateUtf8('%.DeleteOne(%) failed on %',
-            [self, aIndex, fUnique[f].PropInfo.Name]);
+      if fUnique[f].Hasher.FindBeforeDelete(@rec) < aIndex then
+        raise ERestStorage.CreateUtf8('%.DeleteOne(%) failed on %',
+          [self, aIndex, fUnique[f].PropInfo.Name]);
     if fValues.FindHashedAndDelete(rec) <> aIndex then
       raise ERestStorage.CreateUtf8('%.DeleteOne(%) failed', [self, aIndex]);
     if fMaxID = 0 then
@@ -2534,7 +2540,7 @@ begin
     begin
       // omit first FoundOffset rows
       P.SetValueVar(fSearchRec, WhereValue, false); // private copy for comparison
-      i := fUnique[WhereField].Find(fSearchRec);
+      i := fUniquePerField[WhereField].Find(fSearchRec);
       if i >= 0 then
       begin
         if Assigned(OnFind) then
@@ -3063,8 +3069,7 @@ begin
     begin
       timer.Start;
       for f := 0 to length(fUnique) - 1 do
-        if fUnique[f] <> nil then
-          fUnique[f].Hasher.Clear;
+        fUnique[f].Hasher.Clear;
       fValues.Hasher.Clear;
       fValues.Clear;
       if andUpdateFile then
@@ -3110,15 +3115,14 @@ begin
     dupfield := ID_TXT
   else
     for f := 0 to length(fUnique) - 1 do
-      if fUnique[f] <> nil then
+    begin
+      dup := fUnique[f].Hasher.ReHash({forced=}true);
+      if dup > 0 then
       begin
-        dup := fUnique[f].Hasher.ReHash({forced=}true);
-        if dup > 0 then
-        begin
-          dupfield := fUnique[f].PropInfo.Name;
-          break;
-        end;
+        dupfield := fUnique[f].PropInfo.Name;
+        break;
       end;
+    end;
   if dup > 0 then
   begin
     DropValues({andupdatefile=}false);
@@ -4167,7 +4171,7 @@ begin
           begin
             store.fStoredClassRecordProps.Fields.List[Column].SetFieldSqlVar(
               store.fSearchRec, Value);
-            fMax := store.fUnique[Column].Find(store.fSearchRec);
+            fMax := store.fUniquePerField[Column].Find(store.fSearchRec);
             if fMax >= 0 then
               fCurrent := fMax; // value found with O(1) search
           end;
