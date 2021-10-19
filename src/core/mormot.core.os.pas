@@ -1575,24 +1575,6 @@ procedure UnixTimeToLocalTime(I64: Int64; out Local: TSystemTime);
   {$define OSPTHREADS} // direct pthread calls were tested on Linux only
 {$endif OSLINUX}
 
-{$ifdef USELIBRARY}
-  {$undef OSPTHREADS} // direct pthread calls fails when compiled as .so itself
-{$endif USELIBRARY}
-
-var
-  // globally defined for proper inlined calls
-  // - slight performance gain to inline our own GetCurrentThreadId,
-  // EnterCriticalSection and LeaveCriticalSection RTL-like functions
-{$ifdef OSPTHREADS}
-  pthread_self: function: pointer; cdecl;
-  pthread_mutex_lock: function(mutex: pointer): integer; cdecl;
-  pthread_mutex_unlock: function(mutex: pointer): integer; cdecl;
-  pthread_mutex_trylock: function(mutex: pointer): integer; cdecl;
-  pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
-{$else}
-  FpcCurrentThreadManager: TThreadManager;
-{$endif OSPTHREADS}
-
 {$endif OSWINDOWS}
 
 /// raw cross-platform library loading function
@@ -1626,26 +1608,26 @@ procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
-{$ifndef OSWINDOWS}
+{$ifdef OSPOSIX}
 
 /// returns the unique ID of the current running thread
-// - defined in mormot.core.os for inlined FpcCurrentThreadManager/pthread call
-function GetCurrentThreadId: TThreadID; inline;
+// - defined in mormot.core.os for inlined FpcCurrentThreadManager call
+var GetCurrentThreadId: function: TThreadID;
 
 /// enter a Critical Section (Lock)
-// - defined in mormot.core.os for inlined FpcCurrentThreadManager/pthread call
-procedure EnterCriticalSection(var cs: TRTLCriticalSection); inline;
+// - defined in mormot.core.os for inlined FpcCurrentThreadManager call
+var EnterCriticalSection: procedure(var cs: TRTLCriticalSection);
 
 /// leave a Critical Section (UnLock)
-// - defined in mormot.core.os for inlined FpcCurrentThreadManager/pthread call
-procedure LeaveCriticalSection(var cs: TRTLCriticalSection); inline;
+// - defined in mormot.core.os for inlined FpcCurrentThreadManager call
+var LeaveCriticalSection: procedure(var cs: TRTLCriticalSection);
 
 /// leave a Critical Section (UnLock)
 // - returns 1 if the lock was acquired, or 0 if the mutex is already locked
-// - defined in mormot.core.os for inlined FpcCurrentThreadManager/pthread call
-function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer; inline;
+// - defined in mormot.core.os for inlined FpcCurrentThreadManager call
+var TryEnterCriticalSection: function(var cs: TRTLCriticalSection): integer;
 
-{$endif OSWINDOWS}
+{$endif OSPOSIX}
 
 /// returns TRUE if the supplied mutex has been initialized
 // - will check if the supplied mutex is void (i.e. all filled with 0 bytes)

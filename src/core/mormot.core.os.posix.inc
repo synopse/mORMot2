@@ -745,8 +745,11 @@ begin
 end;
 
 {$ifdef OSPTHREADS}
+
 var
   {%H-}pthread: pointer;
+  pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
+
 {$endif OSPTHREADS}
 
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
@@ -781,7 +784,11 @@ begin
   trunc[L] := #0;
   {$ifdef OSPTHREADS} // see https://stackoverflow.com/a/7989973
   if Assigned(pthread_setname_np) then
+  try
     pthread_setname_np(pointer(ThreadID), @trunc[0]);
+  except
+    ; // ignore any exception (pthread confusion with its static version?)
+  end;
   {$endif OSPTHREADS}
 end;
 
@@ -1088,45 +1095,6 @@ begin
   DoneCriticalSection(cs);
 end;
 
-function GetCurrentThreadId: TThreadID;
-begin
-  {$ifdef OSPTHREADS} // inlined direct pthread API call
-  result := TThreadID(pthread_self);
-  {$else}
-  result := FpcCurrentThreadManager.GetCurrentThreadId;
-  {$endif OSPTHREADS}
-end;
-
-procedure EnterCriticalSection(var cs: TRTLCriticalSection);
-begin
-  {$ifdef OSPTHREADS}
-  pthread_mutex_lock(@cs);
-  {$else}
-  FpcCurrentThreadManager.EnterCriticalSection(cs);
-  {$endif OSPTHREADS}
-end;
-
-procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
-begin
-  {$ifdef OSPTHREADS}
-  pthread_mutex_unlock(@cs);
-  {$else}
-  FpcCurrentThreadManager.LeaveCriticalSection(cs);
-  {$endif OSPTHREADS}
-end;
-
-function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer;
-begin
-  {$ifdef OSPTHREADS}
-  result := pthread_mutex_trylock(@cs);
-  if result = 0 then // pthread success
-    result := 1
-  else
-    result := 0;
-  {$else}
-  result := FpcCurrentThreadManager.TryEnterCriticalSection(cs);
-  {$endif OSPTHREADS}
-end;
 function GetFileOpenLimit(hard: boolean): integer;
 var
   limit: TRLIMIT;
@@ -2454,6 +2422,7 @@ var
   SR: TSearchRec;
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
+  tm: TThreadManager;
 begin
   // retrieve Kernel and Hardware information
   stdoutIsTTY := (IsATTY(StdOutputHandle) = 1) and
@@ -2613,9 +2582,6 @@ begin
   if CpuInfoText = '' then
     CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
-  {$ifndef OSPTHREADS}
-  GetThreadManager(FpcCurrentThreadManager); // for inlined calls
-  {$endif OSPTHREADS}
   TimeZoneLocalBias := -GetLocalTimeOffset;
   {$ifdef OSDARWIN}
   mach_timebase_info(mach_timeinfo);
@@ -2641,15 +2607,17 @@ begin
       [PAnsiChar(@uts.release), fpgeterrno]);
   // direct access to the pthread library if possible (Linux only)
   {$ifdef OSPTHREADS}
+  // mutex_lock() is blocking when dlopen run from a .so: cthreads uses both
+  // both static and dynamic linking, which is really confusing to our code
+  // -> we don't open libpthread but we
   pthread := dlopen('libpthread.so.0', RTLD_LAZY);
   if pthread <> nil then
-  begin
-    @pthread_self          := dlsym(pthread, 'pthread_self');
-    @pthread_setname_np    := dlsym(pthread, 'pthread_setname_np');
-    @pthread_mutex_lock    := dlsym(pthread, 'pthread_mutex_lock');
-    @pthread_mutex_unlock  := dlsym(pthread, 'pthread_mutex_unlock');
-    @pthread_mutex_trylock := dlsym(pthread, 'pthread_mutex_trylock');
-  end;
+    @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
+  GetThreadManager(tm); // for inlined RTL calls (avoid one level of redirection)
+  @GetCurrentThreadId      := @tm.GetCurrentThreadId;
+  @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
+  @EnterCriticalSection    := @tm.EnterCriticalSection;
+  @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   {$endif OSPTHREADS}
   // redirect some syscall FPC RTL functions to faster vDSO libc variant
   {$ifdef CPUARM3264}
