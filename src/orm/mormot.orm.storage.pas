@@ -738,7 +738,8 @@ type
     fMaxID: TID;
     fValues: TDynArrayHashed; // hashed by ID
     fTempBuffer: PTextWriterStackBuffer;
-    function UniqueFieldsUpdateOK(aRec: TOrm; aUpdateIndex: integer): boolean;
+    function UniqueFieldsUpdateOK(aRec: TOrm; aUpdateIndex: integer;
+      aFields: PFieldBits): boolean;
     function GetItem(Index: integer): TOrm;
       {$ifdef HASINLINE}inline;{$endif}
     function GetID(Index: integer): TID;
@@ -1919,9 +1920,10 @@ function TRestStorageTOrm.InternalBatchDirect(Encoding: TRestBatchEncoding;
   RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
 var
   rec: TOrm;
+  id: TID;
 begin
   result := 0; // unsupported
-  if not (Encoding in BATCH_DIRECT_ADD) then
+  if not (Encoding in BATCH_DIRECT) then
     exit;
   if Sent = nil then
   begin
@@ -1929,32 +1931,39 @@ begin
     result := 1; // supported
     exit;
   end;
-  // called a second time with the proper Sent, returning added ID
-  // same logic than EngineAdd() but with no memory allocation
-  if Encoding = encPostHexID then
+  // called a second time with the proper JSON array
+  if Encoding in [encPutHexID, encPostHexID] then
   begin
-    // extract the ID from first value of the input JSON
-    result := BatchExtractSimpleID(Sent);
-    if Sent = nil then
+    id := BatchExtractSimpleID(Sent);
+    if (Sent = nil) or
+       (id <= 0) then
       exit; // invalid input
-  end;
+  end
+  else
+    id := 0;
+  // same logic than EngineAdd/EngineUpdate but with no memory alloc
   rec := fStoredClass.Create;
   try
     if rec.FillFromArray(Fields, Sent) then
     begin
-      rec.IDValue := result;
+      rec.IDValue := id;
       StorageLock(true, 'InternalBatchDirect');
       try
-        result := AddOne(rec, result > 0, ''); // no SentData
+        if Encoding = encPutHexID then
+          if UpdateOne(rec, Fields, '') then // no SentData
+            result := HTTP_SUCCESS
+          else
+            result := HTTP_NOTFOUND
+        else
+          result := AddOne(rec, id > 0, ''); // no SentData
       finally
         StorageUnLock;
       end;
-    end
-    else
-      result := 0;
+    end;
   finally
-    if result <= 0 then
-      rec.Free; // on success, rec is owned by fValue: TObjectList
+    if (Encoding = encPutHexID) or
+       (result <= 0) then
+      rec.Free; // on AddOne success, rec is owned by fValue: TObjectList
   end;
 end;
 
@@ -1995,19 +2004,19 @@ begin
     result := false; // mark error
     exit;
   end;
-  StorageLock(true, 'UpdateOne');
+  rec := fStoredClass.Create;
   try
-    rec := fStoredClass.Create;
+    rec.SetFieldSqlVars(Values);
+    rec.IDValue := ID;
+    StorageLock(true, 'UpdateOne');
     try
-      rec.SetFieldSqlVars(Values);
-      rec.IDValue := ID;
       result := UpdateOne(rec, rec.Orm.CopiableFieldsBits,
         rec.GetJsonValues(true, False, ooUpdate));
     finally
-      rec.Free;
+      StorageUnLock;
     end;
   finally
-    StorageUnLock;
+    rec.Free;
   end;
 end;
 
@@ -2125,8 +2134,8 @@ begin
      (Rec = nil) then
     exit;
   // ensure no duplicated ID or unique field
-  for f := 0 to high(fUnique) do
-    if byte(f) in fIsUnique then
+  for f := 0 to length(fUnique) - 1 do
+    if fUnique[f] <> nil then
     begin
       ndx := fUnique[f].Find(Rec);
       if ndx >= 0 then
@@ -2159,7 +2168,7 @@ begin
   end;
   // update internal hash tables and add to internal list
   for f := 0 to high(fUnique) do
-    if byte(f) in fIsUnique then
+    if fUnique[f] <> nil then
       if not fUnique[f].AddedAfterFind(Rec) then // paranoid
         raise ERestStorage.CreateUtf8('%.AddOne on %.%',
           [self, Rec, fUnique[f].PropInfo.Name]);
@@ -2176,13 +2185,15 @@ begin
 end;
 
 function TRestStorageInMemory.UniqueFieldsUpdateOK(aRec: TOrm;
-  aUpdateIndex: integer): boolean;
+  aUpdateIndex: integer; aFields: PFieldBits): boolean;
 var
   f, ndx: PtrInt;
 begin
   result := false;
-  for f := 0 to high(fUnique) do
-    if byte(f) in fIsUnique then
+  for f := 0 to length(fUnique) - 1 do
+    if (fUnique[f] <> nil) and
+       ((aFields = nil) or
+        (byte(f) in aFields^)) then
     begin
       ndx := fUnique[f].Find(aRec);
       if (ndx >= 0) and
@@ -2280,8 +2291,8 @@ begin
       // notify BEFORE deletion
       Owner.InternalUpdateEvent(oeDelete, fStoredClassProps.TableIndex,
         rec.IDValue, '', nil, nil);
-    for f := 0 to high(fUnique) do
-      if byte(f) in fIsUnique then
+    for f := 0 to length(fUnique) - 1 do
+      if fUnique[f] <> nil then
         if fUnique[f].Hasher.FindBeforeDelete(@rec) < aIndex then
           raise ERestStorage.CreateUtf8('%.DeleteOne(%) failed on %',
             [self, aIndex, fUnique[f].PropInfo.Name]);
@@ -3051,8 +3062,8 @@ begin
     if fCount > 0 then
     begin
       timer.Start;
-      for f := 0 to high(fUnique) do
-        if byte(f) in fIsUnique then
+      for f := 0 to length(fUnique) - 1 do
+        if fUnique[f] <> nil then
           fUnique[f].Hasher.Clear;
       fValues.Hasher.Clear;
       fValues.Clear;
@@ -3098,8 +3109,8 @@ begin
   if dup > 0 then
     dupfield := ID_TXT
   else
-    for f := 0 to high(fUnique) do
-      if byte(f) in fIsUnique then
+    for f := 0 to length(fUnique) - 1 do
+      if fUnique[f] <> nil then
       begin
         dup := fUnique[f].Hasher.ReHash({forced=}true);
         if dup > 0 then
@@ -3609,6 +3620,7 @@ function TRestStorageInMemory.EngineUpdate(TableModelIndex: integer; ID: TID;
 var
   i: PtrInt;
   rec: TOrm;
+  modified: TFieldBits;
 begin
   result := false;
   if (ID < 0) or
@@ -3628,9 +3640,9 @@ begin
     if fUnique <> nil then
     begin
       // use temp rec to ensure no collision when updated Unique field
-      rec := fValue[i].CreateCopy; // copy since can be a partial update
-      rec.FillFrom(SentData);      // overwrite updated properties
-      if not UniqueFieldsUpdateOK(rec, i) then
+      rec := fValue[i].CreateCopy;       // copy since can be a partial update
+      rec.FillFrom(SentData, @modified); // overwrite updated properties
+      if not UniqueFieldsUpdateOK(rec, i, @modified) then
       begin
         rec.Free;
         exit;
@@ -3670,7 +3682,7 @@ begin
        not RecordCanBeUpdated(fStoredClass, Rec.IDValue, oeUpdate) then
       exit;
     if (fUnique <> nil) and
-       not UniqueFieldsUpdateOK(Rec, i) then
+       not UniqueFieldsUpdateOK(Rec, i, @Fields) then
       exit;
     dest := fValue[i];
     nfo := fStoredClassRecordProps.Fields;
@@ -3707,7 +3719,7 @@ begin
       // use temp rec to ensure no collision when updated Unique field
       rec := fValue[i].CreateCopy; // copy since can be a partial update
       if not rec.SetFieldSqlVars(Values) or
-         not UniqueFieldsUpdateOK(rec, i) then
+         not UniqueFieldsUpdateOK(rec, i, nil) then
       begin
         rec.Free;
         exit;
