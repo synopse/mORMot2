@@ -1575,6 +1575,10 @@ procedure UnixTimeToLocalTime(I64: Int64; out Local: TSystemTime);
   {$define OSPTHREADS} // direct pthread calls were tested on Linux only
 {$endif OSLINUX}
 
+{$ifdef USELIBRARY}
+  {$undef OSPTHREADS} // direct pthread calls fails when compiled as .so itself
+{$endif USELIBRARY}
+
 var
   // globally defined for proper inlined calls
   // - slight performance gain to inline our own GetCurrentThreadId,

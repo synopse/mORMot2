@@ -20,6 +20,10 @@
 // - note: you should probably also set "Generate DCUs only" in Project Options
 // -> Delphi Compiler -> Output C/C++ -> C/C++ output file generation
 
+{.$define USELIBRARY}
+// define this if you compile the unit within a .dll / .so library
+// - especially needed to avoid .so linking issues with cthreads on POSIX
+
 {.$define PUREMORMOT2}
 // if defined, no mORMot 1.18 compatilibity types nor functions would be enabled
 // - by default, existing projects should (almost) compile with mORMot 2
