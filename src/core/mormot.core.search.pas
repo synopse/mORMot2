@@ -1359,7 +1359,7 @@ type
     function SaveToBuffer: RawByteString;
     /// retrieve the time bias (in minutes) for a given date/time on a TzId
     function GetBiasForDateTime(const Value: TDateTime; const TzId: TTimeZoneID;
-      out Bias: integer; out HaveDaylight: boolean): boolean;
+      out Bias: integer; out HaveDaylight: boolean; ValueIsUtc: boolean = false): boolean;
     /// retrieve the display text corresponding to a TzId
     // - returns '' if the supplied TzId is not recognized
     function GetDisplay(const TzId: TTimeZoneID): RawUtf8;
@@ -1391,7 +1391,7 @@ type
 /// retrieve the time bias (in minutes) for a given date/time on a TzId
 // - will use a global shared thread-safe TSynTimeZone instance for the request
 function GetBiasForDateTime(const Value: TDateTime; const TzId: TTimeZoneID;
-  out Bias: integer; out HaveDaylight: boolean): boolean;
+  out Bias: integer; out HaveDaylight: boolean; ValueIsUtc: boolean = false): boolean;
 
 /// retrieve the display text corresponding to a TzId
 // - returns '' if the supplied TzId is not recognized
@@ -5716,7 +5716,8 @@ begin
 end;
 
 function TSynTimeZone.GetBiasForDateTime(const Value: TDateTime;
-  const TzId: TTimeZoneID; out Bias: integer; out HaveDaylight: boolean): boolean;
+  const TzId: TTimeZoneID; out Bias: integer; out HaveDaylight: boolean;
+  ValueIsUtc: boolean): boolean;
 var
   ndx: PtrInt;
   d: TSynSystemTime;
@@ -5743,6 +5744,13 @@ begin
     HaveDaylight := true;
     std := tzi.change_time_std.EncodeForTimeChange(d.Year);
     dlt := tzi.change_time_dlt.EncodeForTimeChange(d.Year);
+    if ValueIsUtc then
+    begin
+      // Std shifts by the DST bias to convert to UTC
+      std := ((std * MinsPerDay) + tzi.Bias + tzi.bias_dlt) / MinsPerDay;
+      // Dst shifts by the STD bias
+      dlt := ((dlt * MinsPerDay) + tzi.Bias + tzi.bias_std) / MinsPerDay;
+    end;
     if std < dlt then
       if (std <= Value) and
          (Value < dlt) then
@@ -5769,7 +5777,7 @@ begin
     result := UtcDateTime
   else
   begin
-    GetBiasForDateTime(UtcDateTime, TzId, Bias, HaveDaylight);
+    GetBiasForDateTime(UtcDateTime, TzId, Bias, HaveDaylight, {fromutc=}true);
     result := ((UtcDateTime * MinsPerDay) - Bias) / MinsPerDay;
   end;
 end;
@@ -5823,10 +5831,10 @@ end;
 
 
 function GetBiasForDateTime(const Value: TDateTime; const TzId: TTimeZoneID;
-  out Bias: integer; out HaveDaylight: boolean): boolean;
+  out Bias: integer; out HaveDaylight: boolean; ValueIsUtc: boolean): boolean;
 begin
   result := TSynTimeZone.Default.
-    GetBiasForDateTime(Value, TzId, Bias, HaveDaylight);
+    GetBiasForDateTime(Value, TzId, Bias, HaveDaylight, ValueIsUtc);
 end;
 
 function GetDisplay(const TzId: TTimeZoneID): RawUtf8;
