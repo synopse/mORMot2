@@ -2583,6 +2583,11 @@ begin
     CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
+  GetThreadManager(tm); // for inlined RTL calls (avoid one level of redirection)
+  @GetCurrentThreadId      := @tm.GetCurrentThreadId;
+  @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
+  @EnterCriticalSection    := @tm.EnterCriticalSection;
+  @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   {$ifdef OSDARWIN}
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
@@ -2613,11 +2618,6 @@ begin
   pthread := dlopen('libpthread.so.0', RTLD_LAZY);
   if pthread <> nil then
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
-  GetThreadManager(tm); // for inlined RTL calls (avoid one level of redirection)
-  @GetCurrentThreadId      := @tm.GetCurrentThreadId;
-  @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
-  @EnterCriticalSection    := @tm.EnterCriticalSection;
-  @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   {$endif OSPTHREADS}
   // redirect some syscall FPC RTL functions to faster vDSO libc variant
   {$ifdef CPUARM3264}
