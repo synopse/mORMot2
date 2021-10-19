@@ -2613,9 +2613,9 @@ begin
   if CpuInfoText = '' then
     CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
-  {$ifndef OSLINUX}
+  {$ifndef OSPTHREADS}
   GetThreadManager(FpcCurrentThreadManager); // for inlined calls
-  {$endif OSLINUX}
+  {$endif OSPTHREADS}
   TimeZoneLocalBias := -GetLocalTimeOffset;
   {$ifdef OSDARWIN}
   mach_timebase_info(mach_timeinfo);
