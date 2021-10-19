@@ -1149,6 +1149,7 @@ function TRestOrmServer.EngineBatchSend(Table: TOrmClass;
 var
   endofobject: AnsiChar;
   wasstring, ok: boolean;
+  fmt: TSaveFieldsAsObject;
   tablename, value, errmsg: RawUtf8;
   encoding, runningbatchencoding: TRestBatchEncoding;
   runningbatchrest, runningrest: TRestOrm;
@@ -1389,7 +1390,7 @@ begin
                   inc(P);
                 end;
               'u':
-                begin // "uhex",[...,id] or "uhex@Table",[...,id]
+                begin // "uhex",[id,...] or "uhex@Table",[id,...]
                   encoding := encPutHexID;
                   inc(P);
                 end;
@@ -1413,10 +1414,14 @@ begin
           else
           begin
             // convert input array into a JSON object as regular "POST"/"PUT"
+            if encoding = encPostHexID then
+              fmt := [sfoExtendedJson, sfoStartWithID, sfoPutIDFirst]
+            else if encoding = encPutHexID then
+              fmt := [sfoExtendedJson, sfoStartWithID]
+            else
+              fmt := [sfoExtendedJson];
             value := fModel.TableProps[runtableindex].Props.
-              SaveFieldsFromJsonArray(sent, runfields, @id, @endofobject,
-              {extendedjson=}true, {firstisid=}encoding = encPostHexID,
-              {lastisid=}encoding = encPutHexID);
+              SaveFieldsFromJsonArray(sent, runfields, @id, @endofobject, fmt);
             if encoding = encPutHexID then
               encoding := encPut
             else
@@ -1441,11 +1446,13 @@ begin
           SetLength(Results, 1);
           if encoding in BATCH_DIRECT then
           begin
-            // InternalBatchDirect requires InternalBatchStart -> POST fallback
+            // InternalBatchDirect requires InternalBatchStart -> object fallback
+            if encoding in BATCH_DIRECT_ID then
+              fmt := [sfoExtendedJson, sfoStartWithID, sfoPutIDFirst]
+            else
+              fmt := [sfoExtendedJson];
             value := fModel.TableProps[runtableindex].Props.
-              SaveFieldsFromJsonArray(simplevalue, runfields, @id, nil,
-              {extendedjson=}true, {firstisid=}encoding in BATCH_DIRECT_ID,
-              {lastisid=}encoding = encPutHexID);
+              SaveFieldsFromJsonArray(simplevalue, runfields, @id, nil, fmt);
             if encoding = encPutHexID then
               encoding := encPut
             else

@@ -2554,7 +2554,7 @@ type
     // - return true on success, but be aware that the field list must match
     // the field layout, otherwise if may return true but will corrupt data
     function SimplePropertiesFill(const aSimpleFields: array of const): boolean;
-    /// set the simple fields from a JSON array of values
+    /// set the simple fields from a JSON array of values - after the initial [
     function FillFromArray(const Fields: TFieldBits; Json: PUtf8Char): boolean;
     /// initialize a TDynArray wrapper to map dynamic array property values
     // - if the field name is not existing or not a dynamic array, result.IsVoid
@@ -11402,9 +11402,11 @@ begin
   end
   else
   begin
-    // new "uhex"/"uhex@table":[...,id] format
+    // new "uhex"/"uhex@table":[id,...] format
     Encode(POrmClass(Value)^, encPutHexID, @fields);
     fBatch.Add('[');
+    fBatch.Add(Value.IDValue); // RowID should be the first
+    fBatch.AddComma;
     nfo := pointer(props.Fields.List);
     for f := 0 to props.Fields.Count - 1 do
     begin
@@ -11415,7 +11417,7 @@ begin
       end;
       inc(nfo);
     end;
-    fBatch.Add(Value.IDValue); // RowID should be the latest
+    fBatch.CancelLastComma;
     fBatch.Add(']');
   end;
   fBatch.AddComma;

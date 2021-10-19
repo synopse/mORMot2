@@ -1180,14 +1180,14 @@ begin
             Check(RExt.CreatedAt <= Updated);
             if i mod 100 = 0 then
             begin
-              Check(RExt.YearOfBirth = RExt.YearOfDeath, 'Update');
-              Check(RExt.LastChange >= Updated);
+              Check(RExt.YearOfBirth = RExt.YearOfDeath, 'Update1');
+              Check(RExt.LastChange >= Updated, 'LastChange1');
             end
             else
             begin
-              Check(RExt.YearOfBirth <> RExt.YearOfDeath, 'Update');
+              Check(RExt.YearOfBirth <> RExt.YearOfDeath, 'Update2');
               Check(RExt.LastChange >= Start);
-              Check(RExt.LastChange <= Updated);
+              Check(RExt.LastChange <= Updated, 'LastChange2');
             end;
           end;
         end;

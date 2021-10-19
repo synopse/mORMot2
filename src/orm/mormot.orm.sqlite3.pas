@@ -2223,7 +2223,7 @@ begin
 end;
 
 function BindDirect(Props: TOrmPropInfoList; var P: PUtf8Char; Stmt: PSqlRequest;
-  const Fields: TFieldBits; firstarg: integer): integer;
+  const Fields: TFieldBits; firstarg: integer; id: PID): integer;
 var
   f: PtrInt;
   nfo: POrmPropInfo;
@@ -2235,6 +2235,8 @@ begin
   if P^ <> '[' then
     raise EOrmBatchException.Create('Invalid simple batch');
   inc(P);
+  if id <> nil then
+    id^ := GetNextItemInt64(P);
   result := firstarg;
   nfo := pointer(Props.List);
   for f := 0 to Props.Count - 1 do
@@ -2333,7 +2335,7 @@ begin
         encPostHex,
         encPostHexID:
           v := props.SaveFieldsFromJsonArray(
-            b^.Simples[0], b^.SimpleFields, nil, nil, true, false, false);
+            b^.Simples[0], b^.SimpleFields, nil, nil, [sfoExtendedJson]);
       end;
       fJsonDecoder.Decode(v, nil, pInlined, b^.ID[0]);
       if props.RecordVersionField <> nil then
@@ -2374,7 +2376,7 @@ begin
               if length(b^.Values) < b^.ValuesCount then
                 SetLength(b^.Values, b^.ValuesCount);
               b^.Values[ndx] := props.SaveFieldsFromJsonArray(b^.Simples[ndx],
-                b^.SimpleFields, @b^.ID[ndx], nil, true, false, false);
+                b^.SimpleFields, @b^.ID[ndx], nil, [sfoExtendedJson]);
               encoding := encPost;
             end;
           end
@@ -2503,7 +2505,7 @@ begin
                 inc(arg);
                 fStatement^.Bind(arg, b^.ID[row]); // first parameter is RowID
                 arg := BindDirect(props.Fields,
-                  b^.Simples[row], fStatement, b^.SimpleFields, arg);
+                  b^.Simples[row], fStatement, b^.SimpleFields, arg, nil);
               end;
             encPost:
               // the JSON object has been decoded into PostValues[]
@@ -2588,6 +2590,7 @@ function ProcessPutHexID(DB: TRestOrmServerDB; const Fields: TFieldBits;
 var
   b: PRestOrmServerDBBatch;
   arg: integer;
+  id: TID;
 begin
   b := DB.fBatch;
   if not IsEqual(b^.SimpleFields, Fields) then
@@ -2601,9 +2604,9 @@ begin
   try
     DB.PrepareCachedStatement(b^.UpdateSql, b^.UpdateFieldsCount);
     try
-      arg := BindDirect(Props.Fields, Sent, DB.fStatement, Fields, 0);
+      arg := BindDirect(Props.Fields, Sent, DB.fStatement, Fields, 0, @id);
       if Sent <> nil then
-        DB.fStatement.Bind(arg + 1, GetNextItemInt64(Sent, ']'));
+        DB.fStatement.Bind(arg + 1, id);
       if Sent = nil then
       begin
         DB.InternalLog('InternalBatchDirect: encPutHexID JSON', sllError);

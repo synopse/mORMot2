@@ -2773,6 +2773,13 @@ type
 
 { *********************** Abstract TOrmPropertiesAbstract Parent Class }
 
+  /// custom layout of TOrmProperties.SaveFieldsFromJsonArray output JSON object
+  TSaveFieldsAsObject = set of (
+    sfoExtendedJson,
+    sfoStartWithID,
+    sfoEndWithID,
+    sfoPutIDFirst,
+    sfoPutIDLast);
 
   /// parent used to store some information about a given TOrm class properties
   // - is fully implemented in mormot.orm.core by the final TOrmProperties class
@@ -2963,11 +2970,11 @@ type
     function CheckBinaryHeader(var R: TFastReader): boolean;
     /// convert a JSON array of simple field values into a matching JSON object
     function SaveSimpleFieldsFromJsonArray(var P: PUtf8Char; ID: PID;
-      EndOfObject: PAnsiChar; ExtendedJson, FirstIsID, LastIsID: boolean): RawUtf8;
+      EndOfObject: PAnsiChar; Format: TSaveFieldsAsObject): RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     /// convert a JSON array of simple field values into a matching JSON object
     function SaveFieldsFromJsonArray(var P: PUtf8Char; const Bits: TFieldBits;
-      ID: PID; EndOfObject: PAnsiChar; ExtendedJson, FirstIsID, LastIsID: boolean): RawUtf8;
+      ID: PID; EndOfObject: PAnsiChar; Format: TSaveFieldsAsObject): RawUtf8;
 
     /// add a custom unmanaged fixed-size record property
     // - simple kind of records (i.e. those not containing reference-counted
@@ -10349,15 +10356,15 @@ begin
 end;
 
 function TOrmPropertiesAbstract.SaveSimpleFieldsFromJsonArray(var P: PUtf8Char;
-  ID: PID; EndOfObject: PAnsiChar; ExtendedJson, FirstIsID, LastIsID: boolean): RawUtf8;
+  ID: PID; EndOfObject: PAnsiChar; Format: TSaveFieldsAsObject): RawUtf8;
 begin
   SaveFieldsFromJsonArray(P, SimpleFieldsBits[ooInsert],
-    ID, EndOfObject, ExtendedJson, FirstIsID, LastIsID);
+    ID, EndOfObject, Format);
 end;
 
 function TOrmPropertiesAbstract.SaveFieldsFromJsonArray(var P: PUtf8Char;
   const Bits: TFieldBits; ID: PID; EndOfObject: PAnsiChar;
-  ExtendedJson, FirstIsID, LastIsID: boolean): RawUtf8;
+  Format: TSaveFieldsAsObject): RawUtf8;
 var
   i: PtrInt;
   decoded: TID;
@@ -10381,14 +10388,15 @@ begin
     decoded := 0
   else
     decoded := ID^;
-  if FirstIsID then
+  if sfoStartWithID in Format then
     decoded := GetInt64(GetJsonField(P, P));
   W := TJsonSerializer.CreateOwnedStream(temp);
   try
-    if ExtendedJson then
+    if sfoExtendedJson in Format then
       W.CustomOptions := W.CustomOptions + [twoForceJsonExtended];
     W.Add('{');
-    if decoded <> 0 then
+    if (decoded <> 0) and
+       (sfoPutIDFirst in Format) then
       W.AddPropJsonInt64('ID', decoded);
     for i := 0 to Fields.Count - 1 do
       if GetBitPtr(@Bits, i) then
@@ -10406,14 +10414,17 @@ begin
         until (P^ > ' ') or
               (P^ = #0);
       end;
+    if sfoEndWithID in Format then
+      decoded := GetInt64(GetJsonField(P, P));
+    if (decoded <> 0) and
+       (sfoPutIDLast in Format) then
+      W.AddPropJsonInt64('ID', decoded);
     W.CancelLastComma;
     W.Add('}');
     W.SetText(result);
   finally
     W.Free;
   end;
-  if LastIsID then
-    decoded := GetInt64(GetJsonField(P, P));
   if (ID <> nil) and
      (decoded <> 0) then
     ID^ := decoded;

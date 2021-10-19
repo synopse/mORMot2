@@ -742,8 +742,8 @@ begin
       begin
         // asynchronous synchronization via websockets
         Test.check(Master.RecordVersionSynchronizeMasterStart(true));
-        Test.check(Slave2.RecordVersionSynchronizeSlaveStart(TOrmPeopleVersioned,
-          MasterAccess, nil));
+        Test.check(Slave2.RecordVersionSynchronizeSlaveStart(
+          TOrmPeopleVersioned, MasterAccess, nil));
       end
       else
       begin
@@ -2264,11 +2264,11 @@ procedure TTestSqliteMemory._TOrmTableWritable;
       CheckHash(json, $91DBF8CA, 'boOnlyObjects');
       json := w.UpdatesToJson([], ts.Value);
       Check(IsValidJson(json, {strict=}true));
-      CheckHash(json, $D2740BF6, '');
+      CheckHash(json, $6B9E0BE3, '');
       json := w.UpdatesToJson([boExtendedJson], ts.Value);
       Check(IsValidJson(json, {strict=}true));
       Check(IsValidJson(json, {strict=}false));
-      CheckHash(json, $D2740BF6, 'boExtendedJson');
+      CheckHash(json, $6B9E0BE3, 'boExtendedJson');
       json := w.UpdatesToJson([boNoModelEncoding], ts.Value);
       Check(IsValidJson(json, {strict=}true));
       CheckHash(json, $49679790, '');
