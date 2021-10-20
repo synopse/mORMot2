@@ -1217,7 +1217,7 @@ var
   JA, JA2: TTestCustomJsonArray;
   JAS: TTestCustomJsonArraySimple;
   JAV: TTestCustomJsonArrayVariant;
-  GDtoObject: TDtoObject;
+  GDtoObject, G2: TDtoObject;
   owv: TObjectWithVariant;
   Trans: TTestCustomJson2;
   Disco: TTestCustomDiscogs;
@@ -1739,8 +1739,20 @@ var
     end;
     Check(JAV.D = '4');
     GDtoObject := TDtoObject.Create;
+    G2 := TDtoObject.Create;
+    Check(IsObjectDefaultOrVoid(GDtoObject));
+    Check(IsObjectDefaultOrVoid(G2));
+    Check(ObjectEquals(G2, GDtoObject));
     U := '{"SomeField":"Test"}';
     Check(ObjectLoadJson(GDtoObject, U, nil, []), 'nestedvariant1');
+    Check(not ObjectEquals(G2, GDtoObject));
+    Check(not IsObjectDefaultOrVoid(GDtoObject));
+    Check(IsObjectDefaultOrVoid(G2));
+    RawUtf8ToVariant('Test', va);
+    Check(SetValueObject(G2, 'SomeField', va));
+    Check(not SetValueObject(G2, 'SomeNonExistingField', va));
+    Check(ObjectEquals(G2, GDtoObject));
+    Check(not IsObjectDefaultOrVoid(G2));
     J := ObjectToJson(GDtoObject, []);
     CheckEqual(J, '{"NestedObject":{"FieldString":"","FieldInteger":0,' +
       '"FieldVariant":null},"SomeField":"Test"}');
@@ -1751,6 +1763,15 @@ var
       'nestedvariant2');
     J := ObjectToJson(GDtoObject, [woDontStoreVoid]);
     CheckEqual(J, U);
+    Check(G2.NestedObject.FieldInteger = 0);
+    Check(SetValueObject(G2, 'nestedobject.fieldinteger', 10));
+    Check(G2.NestedObject.FieldInteger = 10);
+    ClearObject(G2);
+    ClearObject(GDtoObject);
+    Check(IsObjectDefaultOrVoid(GDtoObject));
+    Check(IsObjectDefaultOrVoid(G2));
+    Check(ObjectEquals(G2, GDtoObject));
+    G2.Free;
     GDtoObject.Free;
     owv := TObjectWithVariant.Create;
     J := ObjectToJson(owv);

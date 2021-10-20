@@ -1181,13 +1181,15 @@ begin
             if i mod 100 = 0 then
             begin
               Check(RExt.YearOfBirth = RExt.YearOfDeath, 'Update1');
-              Check(RExt.LastChange >= Updated, 'LastChange1');
+              CheckUtf8(RExt.LastChange >= Updated, 'LastChange1 %>=%',
+                [RExt.LastChange, Updated]);
             end
             else
             begin
               Check(RExt.YearOfBirth <> RExt.YearOfDeath, 'Update2');
               Check(RExt.LastChange >= Start);
-              Check(RExt.LastChange <= Updated, 'LastChange2');
+              CheckUtf8(RExt.LastChange <= Updated, 'LastChange2 %<=%',
+                [RExt.LastChange, Updated]);
             end;
           end;
         end;
