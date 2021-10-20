@@ -139,6 +139,8 @@ type
       out CustomerData: TCustomerData): Boolean;
     //// validate TOrm transmission
     procedure FillPeople(var People: TOrmPeople);
+    //// validate array of TOrm transmission
+    procedure FillPeoples(n: integer; out People: TOrmPeopleObjArray);
     {$ifndef CPUAARCH64} // FPC doesn't follow the AARCH64 ABI -> fixme
     {$ifndef HASNOSTATICRTTI}
     /// validate simple record transmission
@@ -358,6 +360,7 @@ type
     function GetCustomer(CustomerId: Integer;
       out CustomerData: TCustomerData): Boolean;
     procedure FillPeople(var People: TOrmPeople);
+    procedure FillPeoples(n: integer; out People: TOrmPeopleObjArray);
   end;
 
   TServiceComplexNumber = class(TInterfacedObject, IComplexNumber)
@@ -624,8 +627,27 @@ end;
 
 procedure TServiceComplexCalculator.FillPeople(var People: TOrmPeople);
 begin
-  People.LastName := FormatUtf8('Last %', [People.ID]);
+  People.LastName  := FormatUtf8('Last %', [People.ID]);
   People.FirstName := FormatUtf8('First %', [People.ID]);
+end;
+
+procedure TServiceComplexCalculator.FillPeoples(
+  n: integer; out People: TOrmPeopleObjArray);
+var
+  i: PtrInt;
+  p: TOrmPeople;
+begin
+  SetLength(People, n);
+  for i := 0 to n - 1 do
+  begin
+    p := TOrmPeople.Create;
+    p.IDValue := i;
+    p.FirstName := UInt32ToUtf8(i);
+    p.LastName := 'Last';
+    p.YearOfBirth := 1982 + i;
+    p.YearOfDeath := 1992 + i;
+    People[i] := p;
+  end;
 end;
 
 procedure TServiceComplexCalculator.Collections(Item: TCollTest;
@@ -863,6 +885,7 @@ var
   s: RawUtf8;
   data: TCustomerData;
   people: TOrmPeople;
+  peoples: TOrmPeopleObjArray;
   cust: TServiceCustomAnswer;
   c: cardinal;
   n1, n2: double;
@@ -961,6 +984,19 @@ begin
       finally
         people.Free;
       end;
+      n := c and 7; // not too much data
+      Inst.CC.FillPeoples(n, peoples);
+      Check(length(peoples) = n);
+      for j := 0 to n - 1 do
+        with peoples[j] do
+        begin
+          CheckEqual(IDValue, j);
+          CheckEqual(FirstName, UInt32ToUtf8(j));
+          CheckEqual(LastName, 'Last');
+          CheckEqual(YearOfBirth, 1982 + j);
+          CheckEqual(YearOfDeath, 1992 + j);
+        end;
+      ObjArrayClear(peoples);
       {$ifndef CPUAARCH64} // FPC doesn't follow the AARCH64 ABI -> fixme
       {$ifndef HASNOSTATICRTTI}
       Nav.MaxRows := c;
