@@ -2699,11 +2699,16 @@ begin
   vt := TVarData(V).VType;
   with TVarData(V) do
     case vt of
-      varEmpty, varNull:
+      varEmpty,
+      varNull:
         result := true;
       varBoolean:
         result := not VBoolean;
-      varString, varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
+      {$ifdef HASVARUSTRING}
+      varUString,
+      {$endif HASVARUSTRING}
+      varString,
+      varOleStr:
         result := VAny = nil;
       varDate:
         result := VInt64 = 0;
@@ -2763,7 +2768,9 @@ begin
     vt := s^.VType;
   end;
   case vt of
-    varEmpty..varDate, varBoolean, varShortInt..varWord64:
+    varEmpty..varDate,
+    varBoolean,
+    varShortInt..varWord64:
       begin
         dt := vt;
         d.VInt64 := s^.VInt64;
@@ -2780,8 +2787,12 @@ begin
         d.VAny := nil;
         RawByteString(d.VAny) := PRawByteString(s^.VAny)^;
       end;
-    {$ifdef HASVARUSTRING} varUString, varUStringByRef, {$endif}
-    varOleStr, varOleStrByRef:
+    {$ifdef HASVARUSTRING}
+    varUString,
+    varUStringByRef,
+    {$endif HASVARUSTRING}
+    varOleStr,
+    varOleStrByRef:
       begin
         dt := varString;
         d.VAny := nil;
@@ -2904,14 +2915,15 @@ begin
   vt := TVarData(V).VType;
   with TVarData(V) do
     case vt of
-      varEmpty, varNull:
+      varEmpty,
+      varNull:
         result := ''; // default VariantToUtf8(null)='null'
       {$ifdef UNICODE} // not HASVARUSTRING: here we handle string=UnicodeString
       varUString:
         result := UnicodeString(VAny);
-      else
-        if vt = varUStringByRef then
-          result := PUnicodeString(VAny)^
+    else
+      if vt = varUStringByRef then
+        result := PUnicodeString(VAny)^
       {$endif UNICODE}
       else
       begin
@@ -2989,7 +3001,12 @@ begin
       {$ifdef HASVARUSTRING}
       vtUnicodeString,
       {$endif HASVARUSTRING}
-      vtWideString, vtString, vtPChar, vtChar, vtWideChar, vtClass:
+      vtWideString,
+      vtString,
+      vtPChar,
+      vtChar,
+      vtWideChar,
+      vtClass:
         begin
           VType := varString;
           VString := nil; // avoid GPF on next line
@@ -3138,7 +3155,8 @@ begin
   vt := TVarData(V).VType;
   with TVarData(V) do
     case vt of
-      varEmpty, varNull:
+      varEmpty,
+      varNull:
         result := Str = '';
       varBoolean:
         result := VBoolean = (Str <> '');
@@ -4982,7 +5000,8 @@ begin
           // no SetLength(VValue/VNAme,VCount) if NextGrow() on huge input
         end;
       end;
-    'n', 'N':
+    'n',
+    'N':
       begin
         if IdemPChar(Json + 1, 'ULL') then
         begin
@@ -8024,7 +8043,8 @@ begin
             case Json^ of
               #0:
                 result := varDouble;
-              'e', 'E':
+              'e',
+              'E':
                 begin
 exponent:         inc(Json); // inlined custom GetInteger()
                   start := Json;
@@ -8064,7 +8084,8 @@ exponent:         inc(Json); // inlined custom GetInteger()
                 end;
             end;
           end;
-      'e', 'E':
+      'e',
+      'E':
         goto exponent;
     end;
   end;

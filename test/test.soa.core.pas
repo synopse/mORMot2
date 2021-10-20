@@ -569,7 +569,9 @@ end;
 procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
-    itmDirect, itmClient, itmMainThread:
+    itmDirect,
+    itmClient,
+    itmMainThread:
       {$ifdef OSANDROID}
       // On Android, processes never run in the mainthread
       ;
@@ -577,7 +579,9 @@ begin
       if GetThreadID <> PtrUInt(MainThreadID) then
         raise Exception.Create('Shall be in main thread');
       {$endif OSANDROID}
-    itmPerInterfaceThread, itmHttp, itmLocked:
+    itmPerInterfaceThread,
+    itmHttp,
+    itmLocked:
       if GetThreadID = PtrUInt(MainThreadID) then
         raise Exception.Create('Shall NOT be in main thread')
       else if ServiceRunningContext.RunningThread = nil then
@@ -916,7 +920,8 @@ begin
   case GlobalInterfaceTestMode of
     itmMainThread:
       Check(Inst.CC.GetCurrentThreadID = PtrUInt(MainThreadID));
-    itmPerInterfaceThread, itmLocked:
+    itmPerInterfaceThread,
+    itmLocked:
       Check(Inst.CC.GetCurrentThreadID <> PtrUInt(MainThreadID));
   end;
   TestCalculator(Inst.I);
@@ -1082,13 +1087,15 @@ begin
         Check(Inst.CT.GetCurrentRunningThreadID = 0);
         Check(Inst.CT.GetContextServiceInstanceID = 0);
       end;
-    itmClient, itmPerInterfaceThread:
+    itmClient,
+    itmPerInterfaceThread:
       begin
         Check(x = y);
         Check(Inst.CT.GetCurrentRunningThreadID = 0);
         Check(Inst.CT.GetContextServiceInstanceID <> 0);
       end;
-    itmLocked, itmMainThread:
+    itmLocked,
+    itmMainThread:
       begin
         Check(x = y);
         Check(Inst.CT.GetCurrentRunningThreadID <> 0);
