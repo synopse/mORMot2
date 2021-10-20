@@ -2049,6 +2049,15 @@ function _Obj(const NameValuePairs: array of const;
 // - this function will also ensure that ensure Obj is not stored by reference,
 // but as a true TDocVariantData
 procedure _ObjAddProp(const Name: RawUtf8; const Value: variant;
+  var Obj: variant); overload;
+
+/// add a document property value to a document-based object content
+procedure _ObjAddProp(const Name: RawUtf8; const Value: TDocVariantData;
+  var Obj: variant); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// add a RawUtf8 property value to a document-based object content
+procedure _ObjAddPropU(const Name: RawUtf8; const Value: RawUtf8;
   var Obj: variant);
 
 /// add some property values to a document-based object content
@@ -7366,6 +7375,21 @@ begin
     VarClear(Obj);
     TDocVariantData(Obj).InitObject([Name, Value], JSON_FAST);
   end
+end;
+
+procedure _ObjAddProp(const Name: RawUtf8; const Value: TDocVariantData;
+  var Obj: variant);
+begin
+  _ObjAddProp(Name, variant(Value), Obj);
+end;
+
+procedure _ObjAddPropU(const Name: RawUtf8; const Value: RawUtf8;
+  var Obj: variant);
+var
+  v: variant;
+begin
+  RawUtf8ToVariant(Value, v);
+  _ObjAddProp(Name, v, Obj);
 end;
 
 procedure _ObjAddProps(const NameValuePairs: array of const;

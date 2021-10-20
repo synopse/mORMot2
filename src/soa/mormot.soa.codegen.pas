@@ -674,7 +674,8 @@ var
           [rtti.Cache.EnumInfo^.GetEnumNameAllAsJsonArray(false)], [typName]);
       wRecord:
         if rtti.Props.Count <> 0 then
-          info := _ObjFast(['name', typName,
+          info := _ObjFast([
+            'name',   typName,
             'fields', ContextNestedProperties(rtti, parentName)]);
       wArray:
         begin
@@ -745,12 +746,12 @@ begin
   // generate basic context as TDocVariant fields
   result := _ObjFast([
     'typeWrapper', typAsName^,
-    'typeSource', typName,
-    'typeDelphi', VarName(lngDelphi),
-    'typePascal', VarName(lngPascal),
-    'typeCS', VarName(lngCS),
-    'typeJava', VarName(lngJava),
-    'typeTS', VarName(lngTypeScript),
+    'typeSource',  typName,
+    'typeDelphi',  VarName(lngDelphi),
+    'typePascal',  VarName(lngPascal),
+    'typeCS',      VarName(lngCS),
+    'typeJava',    VarName(lngJava),
+    'typeTS',      VarName(lngTypeScript),
     'typeSwagger', VarName(lngSwagger)]);
   if self = nil then
     // no need to have full info if called e.g. from MVC
@@ -938,7 +939,7 @@ begin
       if nfo.FieldWidth > 0 then
         _ObjAddProp('width', nfo.FieldWidth, field);
       if f < nfoList.Count - 1 then
-        _ObjAddProp('comma', ',', field)
+        _ObjAddPropU('comma', ',', field)
       else
         // may conflict with rec.comma otherwise
         _ObjAddProp('comma', null, field);
@@ -971,31 +972,32 @@ begin
       with srv do
         rec := _ObjFast([
           'uri', uri,
-          'interfaceUri', InterfaceUri,
-          'interfaceMangledUri', InterfaceMangledUri,
-          'interfaceName', InterfaceFactory.InterfaceTypeInfo^.RawName,
-          'GUID', GuidToRawUtf8(InterfaceFactory.InterfaceIID),
-          'contractExpected', UnQuoteSqlString(ContractExpected),
-          'instanceCreation', ord(InstanceCreation),
+          'interfaceUri',         InterfaceUri,
+          'interfaceMangledUri',  InterfaceMangledUri,
+          'interfaceName',        InterfaceFactory.InterfaceTypeInfo^.RawName,
+          'GUID',                 GuidToRawUtf8(InterfaceFactory.InterfaceIID),
+          'contractExpected',     UnQuoteSqlString(ContractExpected),
+          'instanceCreation',     ord(InstanceCreation),
           'instanceCreationName', GetEnumNameTrimed(
             TypeInfo(TServiceInstanceImplementation), ord(InstanceCreation)),
-          'methods', ContextFromMethods(InterfaceFactory),
+          'methods',              ContextFromMethods(InterfaceFactory),
           'bypassAuthentication', ByPassAuthentication,
-          'resultAsJsonObject', ResultAsJsonObject,
+          'resultAsJsonObject',   ResultAsJsonObject,
           'resultAsJsonObjectWithoutResult',
             ResultAsJsonObjectWithoutResult and
             (InstanceCreation in SERVICE_IMPLEMENTATION_NOID),
-          'resultAsXMLObject', ResultAsXMLObject,
-          'timeoutSec', TimeoutSec,
+          'resultAsXMLObject',    ResultAsXMLObject,
+          'timeoutSec',           TimeoutSec,
           'serviceDescription',
-            fDescriptions.GetValueOrNull(InterfaceFactory.InterfaceName)]);
+            fDescriptions.GetValueOrNull(InterfaceFactory.InterfaceName)
+        ]);
       if srv.InstanceCreation = sicClientDriven then
         rec.isClientDriven := true;
       services.AddItem(rec);
     end;
     fSOA := _ObjFast([
-      'enabled', True,
-      'services', variant(services),
+      'enabled',          True,
+      'services',         variant(services),
       'expectMangledUri', fServer.Services.ExpectMangledUri]);
   end;
 end;
@@ -1018,7 +1020,7 @@ begin
         TInterfaceFactory(interfaces.List[i]).InterfaceTypeInfo^.RawName,
       'methods', ContextFromMethods(interfaces.List[i])]));
   fSOA := _ObjFast([
-    'enabled', true,
+    'enabled',  true,
     'services', variant(services)]);
 end;
 
@@ -1055,22 +1057,22 @@ begin
         _ObjAddProp('dirResult', true, arg);
     end;
     if a < meth.ArgsNotResultLast then
-      _ObjAddProp('commaArg', '; ', arg);
+      _ObjAddPropU('commaArg', '; ', arg);
     if a = high(meth.Args) then
       _ObjAddProp('isArgLast', true, arg);
     if (meth.args[a].ValueDirection in [imdConst, imdVar]) and
        (a < meth.ArgsInLast) then
-      _ObjAddProp('commaInSingle', ',', arg);
+      _ObjAddPropU('commaInSingle', ',', arg);
     if (meth.args[a].ValueDirection in [imdVar, imdOut]) and
        (a < meth.ArgsOutNotResultLast)
       then
-      _ObjAddProp('commaOut', '; ', arg);
+      _ObjAddPropU('commaOut', '; ', arg);
     if meth.args[a].ValueDirection <> imdConst then
     begin
       _ObjAddProps(['indexOutResult', UInt32ToUtf8(r) + ']'], arg);
       inc(r);
       if a < meth.ArgsOutLast then
-        _ObjAddProp('commaOutResult', '; ', arg);
+        _ObjAddPropU('commaOutResult', '; ', arg);
     end;
     TDocVariantData(result).AddItem(arg);
   end;
@@ -1087,10 +1089,10 @@ begin
   with meth do
   begin
     result := _ObjFast([
-      'methodName', uri,
-      'methodIndex', ExecutionMethodIndex,
-      'verb', VERB_DELPHI[ArgsResultIndex >= 0],
-      'args', ContextArgsFromMethod(meth),
+      'methodName',      uri,
+      'methodIndex',     ExecutionMethodIndex,
+      'verb',            VERB_DELPHI[ArgsResultIndex >= 0],
+      'args',            ContextArgsFromMethod(meth),
       'argsOutputCount', ArgsOutputValuesCount]);
     if self <> nil then
     begin
@@ -1126,7 +1128,7 @@ begin
     exit;
   RawUtf8ToVariant(@aUnitName[1], ord(aUnitName[0]), unitName);
   if addAsProperty <> nil then
-    _ObjAddProp('unitName', unitName, addAsProperty^);
+    _ObjAddPropU('unitName', unitName, addAsProperty^);
   if (self = nil) or
      (fUnits.SearchItemByValue(unitName) >= 0) then
     // already registered
@@ -1172,14 +1174,14 @@ begin
     'propName', prop.Name,
     'fullPropName', fullName], result);
   if level > 0 then
-    _ObjAddProp('nestedIdentation', RawUtf8OfChar(' ', level * 2), result);
+    _ObjAddPropU('nestedIdentation', RawUtf8OfChar(' ', level * 2), result);
   case prop.Value.Parser of
     ptRecord:
       _ObjAddProps([
         'isSimple', null,
         'nestedRecord', _ObjFast([
           'nestedRecord', null,
-          'fields', ContextNestedProperties(prop.Value, fullName)])], result);
+          'fields',  ContextNestedProperties(prop.Value, fullName)])], result);
     ptArray:
       _ObjAddProps([
         'isSimple', null,
@@ -1217,48 +1219,49 @@ var
 begin
   // compute the Model information as JSON
   result := _ObjFast([
-    'time', NowToString,
-    'year', CurrentYear,
+    'time',          NowToString,
+    'year',          CurrentYear,
     'mORMotVersion', SYNOPSE_FRAMEWORK_VERSION,
     'Executable', VarStringOrNull(StringToUtf8(Executable.Version.DetailedOrVoid)),
-    'exeInfo', Executable.Version.VersionInfo,
-    'exeName', Executable.ProgramName,
-    'hasorm', fORM.Count > 0,
-    'orm', variant(fORM),
-    'soa', fSOA]);
+    'exeInfo',       Executable.Version.VersionInfo,
+    'exeName',       Executable.ProgramName,
+    'hasorm',        fORM.Count > 0,
+    'orm',           variant(fORM),
+    'soa',           fSOA]);
   if fServer <> nil then
-    _ObjAddProps(['root', fServer.Model.Root], result);
+    _ObjAddProps([
+      'root', fServer.Model.Root], result);
   if fHasAnyRecord then
     _ObjAddProp('ORMWithRecords', true, result);
   if fRecords.Count > 0 then
   begin
     AddDescription(fRecords, 'name', 'recordDescription');
-    _ObjAddProps(['records', variant(fRecords),
+    _ObjAddProps(['records',     variant(fRecords),
                   'withRecords', true,
                   'withHelpers', true], result);
   end;
   if fEnumerates.Count > 0 then
   begin
     AddDescription(fEnumerates, 'name', 'enumDescription');
-    _ObjAddProps(['enumerates', variant(fEnumerates),
+    _ObjAddProps(['enumerates',     variant(fEnumerates),
                   'withEnumerates', true,
-                  'withHelpers', true], result);
+                  'withHelpers',    true], result);
   end;
   if fSets.Count > 0 then
   begin
     AddDescription(fSets, 'name', 'setDescription');
-    _ObjAddProps(['sets', variant(fSets),
-                  'withsets', true,
+    _ObjAddProps(['sets',        variant(fSets),
+                  'withsets',    true,
                   'withHelpers', true], result);
   end;
   if fArrays.Count > 0 then
   begin
-    _ObjAddProps(['arrays', variant(fArrays),
-                  'withArrays', true,
+    _ObjAddProps(['arrays',      variant(fArrays),
+                  'withArrays',  true,
                   'withHelpers', true], result);
   end;
   if fUnits.Count > 0 then
-    _ObjAddProp('units', variant(fUnits), result);
+    _ObjAddProp('units', fUnits, result);
   // add the first supported authentication class type as default
   if fServer <> nil then
     for s := 0 to fServer.AuthenticationSchemesCount - 1 do
@@ -1331,10 +1334,10 @@ begin
       _ObjAddProps(['protocol', 'https',
                     'https', true], context)
     else
-      _ObjAddProp('protocol', 'http', context);
+      _ObjAddPropU('protocol', 'http', context);
     host := Ctxt.InHeader['host'];
     if host <> '' then
-      _ObjAddProp('host', host, context);
+      _ObjAddPropU('host', host, context);
     port := GetInteger(pointer(split(host, ':', host)));
     if port = 0 then
       port := 80;

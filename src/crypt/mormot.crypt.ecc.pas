@@ -1585,7 +1585,7 @@ begin
     if sign.Check then
     begin
       s := sign.ToVariant;
-      _ObjAddProp('ECDSA', EccText(head.sign.Signature), s);
+      _ObjAddPropU('ECDSA', EccText(head.sign.Signature), s);
     end;
   finally
     sign.Free;
