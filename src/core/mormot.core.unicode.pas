@@ -4132,19 +4132,18 @@ begin
   {$endif CPUX86}
   pointer(P1P2Len) := @P1[P1P2Len - SizeOf(cardinal)];
   dec(PtrUInt(P2), PtrUInt(P1));
-  if P1P2Len >= PtrInt(PtrUInt(P1)) then
-    repeat // compare 4 Bytes per loop
-      if (PCardinal(P1)^ xor PCardinal(@P2[PtrUInt(P1)])^) and $dfdfdfdf <> 0 then
-        goto zero;
+  while PtrUInt(P1P2Len) >= PtrUInt(P1) do
+    // compare 4 Bytes per loop
+    if (PCardinal(P1)^ xor PCardinal(@P2[PtrUInt(P1)])^) and $dfdfdfdf <> 0 then
+      goto zero
+    else
       inc(PCardinal(P1));
-    until P1P2Len < PtrInt(PtrUInt(P1));
   inc(P1P2Len, SizeOf(cardinal));
-  if PtrInt(PtrUInt(P1)) < P1P2Len then
-    repeat
-      if (ord(P1^) xor ord(P2[PtrUInt(P1)])) and $df <> 0 then
-        goto zero;
+  while PtrUInt(P1) < PtrUInt(P1P2Len) do
+    if (ord(P1^) xor ord(P2[PtrUInt(P1)])) and $df <> 0 then
+      goto zero
+    else
       inc(PByte(P1));
-    until PtrInt(PtrUInt(P1)) >= P1P2Len;
   result := true;
   exit;
 zero:

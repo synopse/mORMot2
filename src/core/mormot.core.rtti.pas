@@ -6300,19 +6300,18 @@ begin // inlined IdemPropNameUSameLenNotNull()
     exit;
   pointer(Len) := @PUtf8Char(n)[Len - SizeOf(cardinal)];
   dec(PtrUInt(P), PtrUInt(n));
-  if Len >= PtrInt(PtrUInt(n)) then
-    repeat // compare 4 Bytes per loop
-      if (PCardinal(n)^ xor PCardinal(P + PtrUInt(n))^) and $dfdfdfdf <> 0 then
-        exit;
+  while PtrUInt(n) < PtrUInt(Len) do
+    // compare 4 Bytes per loop
+    if (PCardinal(n)^ xor PCardinal(P + PtrUInt(n))^) and $dfdfdfdf <> 0 then
+      exit
+    else
       inc(PCardinal(n));
-    until Len < PtrInt(PtrUInt(n));
   inc(Len, SizeOf(cardinal));
-  if PtrInt(PtrUInt(n)) < Len then
-    repeat
-      if (ord(n^) xor ord(P[PtrUInt(n)])) and $df <> 0 then
-        exit;
+  while PtrUInt(n) < PtrUInt(Len) do
+    if (ord(n^) xor ord(P[PtrUInt(n)])) and $df <> 0 then
+      exit
+    else
       inc(PByte(n));
-    until PtrInt(PtrUInt(n)) >= Len;
   result := true;
 end;
 
@@ -8280,7 +8279,7 @@ begin
       exit;
     p := rc.Props.Find(@n[1], ord(n[0]));
     if p = nil then
-      exit;
+      exit; // incorrect path (property not found)
     if paf = nil then
       break; // we reached the full path
     if (p^.Value.Kind <> rkClass) or
