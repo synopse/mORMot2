@@ -1353,7 +1353,11 @@ procedure CopyCollection(Source, Dest: TCollection);
 // properties values for a TPersistent/TSynPersistent
 // - set only the values set as "property ... default ..." at class type level
 // - will also reset the published properties of the nested classes
-procedure SetDefaultValuesObject(Value: TObject);
+procedure SetDefaultValuesObject(Instance: TObject);
+
+/// set any (potentially nested) object property by path
+function SetValueObject(Instance: TObject; const Path: RawUtf8;
+  const Value: variant): boolean;
 
 /// returns TRUE on a nil instance or if all its published properties are default/0
 // - calls internally TPropInfo.IsDefaultOrVoid()
@@ -3660,7 +3664,10 @@ var
   u: RawUtf8;
 begin
   result := false; // invalid or unsupported type
-  k := TypeInfo.Kind;
+  if (@self = nil) or
+     (Instance = nil) then
+    exit;
+  k := TypeInfo^.Kind;
   if k in rkOrdinalTypes then
     if VariantToInt64(Value, v64) then
       SetInt64Value(Instance, v64)
@@ -8224,37 +8231,71 @@ begin
   end;
 end;
 
-procedure SetDefaultValuesObject(Value: TObject);
+procedure SetDefaultValuesObject(Instance: TObject);
 var
-  rtticustom: TRttiCustom;
+  rc: TRttiCustom;
   p: PRttiCustomProp;
   i: integer;
 begin
-  if Value = nil then
+  if Instance = nil then
     exit;
-  rtticustom := Rtti.RegisterClass(Value.ClassType);
-  p := pointer(rtticustom.Props.List);
-  for i := 1 to rtticustom.Props.Count do
+  rc := Rtti.RegisterClass(Instance.ClassType);
+  p := pointer(rc.Props.List);
+  for i := 1 to rc.Props.Count do
   begin
     if p^.Value.Kind = rkClass then
-      SetDefaultValuesObject(p^.Prop.GetObjProp(Value))
+      SetDefaultValuesObject(p^.Prop.GetObjProp(Instance))
     else if p^.OrdinalDefault <> NO_DEFAULT then
-      p^.Prop.SetInt64Value(Value, p^.OrdinalDefault);
+      p^.Prop.SetInt64Value(Instance, p^.OrdinalDefault);
     inc(p);
   end;
 end;
 
+function SetValueObject(Instance: TObject; const Path: RawUtf8;
+  const Value: variant): boolean;
+var
+  rc: TRttiCustom;
+  p: PRttiCustomProp;
+  paf: PUtf8Char;
+  n: ShortString;
+begin
+  result := false;
+  paf := pointer(Path);
+  if (Instance = nil) or
+     (paf = nil) then
+    exit;
+  rc := Rtti.RegisterClass(Instance.ClassType);
+  repeat
+    GetNextItemShortString(paf, n, '.');
+    if n[0] in [#0, #254] then
+      exit;
+    p := rc.Props.Find(@n[1], ord(n[0]));
+    if p = nil then
+      exit;
+    if paf = nil then
+      break; // we reached the full path
+    if (p^.Value.Kind <> rkClass) or
+       (p^.Prop = nil) then
+      exit;
+    Instance := p^.Prop^.GetObjProp(Instance); // go one nested class level
+    if Instance = nil then
+      exit;
+    rc := p^.Value;
+  until false;
+  result := p^.Prop^.SetValue(Instance, Value);
+end;
+
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean);
 var
-  rtticustom: TRttiCustom;
+  rc: TRttiCustom;
   p: PRttiCustomProp;
   i: integer;
 begin
   if Value = nil then
     exit;
-  rtticustom := Rtti.RegisterClass(Value.ClassType);
-  p := pointer(rtticustom.Props.List);
-  for i := 1 to rtticustom.Props.Count do
+  rc := Rtti.RegisterClass(Value.ClassType);
+  p := pointer(rc.Props.List);
+  for i := 1 to rc.Props.Count do
   begin
     if not FreeAndNilNestedObjects and
        (p^.Value.Kind = rkClass) then
@@ -8270,16 +8311,16 @@ end;
 
 function IsObjectDefaultOrVoid(Value: TObject): boolean;
 var
-  rtticustom: TRttiCustom;
+  rc: TRttiCustom;
   p: PRttiCustomProp;
   i: integer;
 begin
   if Value <> nil then
   begin
     result := false;
-    rtticustom := Rtti.RegisterClass(Value.ClassType);
-    p := pointer(rtticustom.Props.List);
-    for i := 1 to rtticustom.Props.Count do
+    rc := Rtti.RegisterClass(Value.ClassType);
+    p := pointer(rc.Props.List);
+    for i := 1 to rc.Props.Count do
       if p^.ValueIsVoid(Value) then
         inc(p)
       else
