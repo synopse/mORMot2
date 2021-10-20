@@ -2240,8 +2240,8 @@ type
     // initialize from fProps, with no associated RTTI - and calls DoRegister()
     // - will create a "fake" rkRecord/rkDynArray PRttiInfo (TypeName may be '')
     procedure NoRttiSetAndRegister(ParserType: TRttiParserType;
-      const TypeName: RawUtf8; DynArrayElemType: TRttiCustom;
-      NoRegister: boolean);
+      const TypeName: RawUtf8; DynArrayElemType: TRttiCustom = nil;
+      NoRegister: boolean = false);
     // called by ValueFinalize() for dynamic array defined from text
     procedure NoRttiArrayFinalize(Data: PAnsiChar);
     /// initialize this Value process for Parser and Parser Complex kinds
@@ -2406,8 +2406,8 @@ type
   PRttiCustomListPairs = ^TRttiCustomListPairs;
 
   /// internal structure for TRttiCustomList "hash table of the poor" (tm)
-  // - avoid link to mormot.core.data hash table, with a faster access
-  // - consume e.g. around 50KB of memory on for all mormot2tests types
+  // - avoid link to mormot.core.data hash table, with a fast access
+  // - consume e.g. around 50KB of memory for all mormot2tests types
   TRttiCustomListHashTable = record
     /// for DoRegister thread-safety - no need of TSynLocker padding
     Lock: TRTLCriticalSection;
@@ -6292,13 +6292,12 @@ end;
 function TRttiCustomProp.NameMatch(P: PUtf8Char; Len: PtrInt): boolean;
 var
   n: PUtf8Char;
-begin
+begin // inlined IdemPropNameUSameLenNotNull()
   result := false;
   n := pointer(Name);
   if (n = nil) or
      (PStrLen(n - _STRLEN)^ <> Len) then
     exit;
-  {$ifdef FPC} // Delphi is not efficient at inlining this
   pointer(Len) := @PUtf8Char(n)[Len - SizeOf(cardinal)];
   dec(PtrUInt(P), PtrUInt(n));
   if Len >= PtrInt(PtrUInt(n)) then
@@ -6315,9 +6314,6 @@ begin
       inc(PByte(n));
     until PtrInt(PtrUInt(n)) >= Len;
   result := true;
-  {$else}
-  result := IdemPropNameUSameLenNotNull(n, P, Len)
-  {$endif FPC}
 end;
 
 procedure TRttiCustomProp.GetValue(Data: pointer; out RVD: TRttiVarData);
@@ -7172,7 +7168,7 @@ begin
   SetLength(fNoRttiInfo, length(TypeName) + 64); // all filled with zeros
   fCache.Info := pointer(fNoRttiInfo);
   fCache.Info.Kind := fCache.Kind;
-  if TypeName = '' then
+  if TypeName = '' then // we need some name to search for
     fCache.Info.RawName := BinToHexDisplayLowerShort(@self, SizeOf(pointer))
   else
     fCache.Info.RawName := TypeName;
@@ -7658,26 +7654,39 @@ function FindNameInPairs(Pairs, PEnd: PPointerArray;
   Name: PUtf8Char; NameLen: PtrInt): TRttiCustom;
 var
   nfo: PRttiInfo;
-begin // FPC generates very optimized asm from inlining IdemPropNameUSameLen
+  p1, p2: PUtf8Char;
+label
+  no;
+begin
   repeat
     nfo := Pairs[0];
     if ord(nfo^.RawName[0]) <> NameLen then
     begin
-      Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
+no:   Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
       if PAnsiChar(Pairs) >= PAnsiChar(PEnd) then
         break;
-    end
-    else if not IdemPropNameUSameLenNotNull(Name, @nfo^.RawName[1], NameLen) then
-    begin
-      Pairs := @Pairs[2];
-      if PAnsiChar(Pairs) >= PAnsiChar(PEnd) then
-        break;
-    end
-    else
-    begin
-      result := Pairs[1];  // found
-      exit;
+      continue;
     end;
+    // inlined IdemPropNameUSameLenNotNull
+    p1 := @nfo^.RawName[1];
+    p2 := Name;
+    nfo := pointer(@p1[NameLen - SizeOf(cardinal)]);
+    dec(p2, PtrUInt(p1));
+    while PtrUInt(nfo) >= PtrUInt(p1) do
+      // compare 4 Bytes per loop
+      if (PCardinal(p1)^ xor PCardinal(@p2[PtrUInt(p1)])^) and $dfdfdfdf <> 0 then
+        goto no
+      else
+        inc(PCardinal(p1));
+    inc(PCardinal(nfo));
+    while PtrUInt(p1) < PtrUInt(nfo) do
+      // remaining bytes
+      if (ord(p1^) xor ord(p2[PtrUInt(p1)])) and $df <> 0 then
+        goto no
+      else
+        inc(PByte(p1));
+    result := Pairs[1];  // found
+    exit;
   until false;
   result := nil; // not found
 end;
@@ -7834,7 +7843,7 @@ begin
         exit; // already registered in the background
       result := GlobalClass.Create(nil);
       result.SetValueClass(ObjectClass, nil);
-      result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass), nil, {noreg=}false);
+      result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
       GetTypeData(result.fCache.Info)^.ClassType := ObjectClass;
     finally
       mormot.core.os.LeaveCriticalSection(Table^.Lock);
@@ -7917,7 +7926,7 @@ begin
       'some types have been registered as % before % has been loaded and ' +
       'initialized - please put % in the uses clause where you register '+
       'your [ %] types, in addition to mormot.core.rtti',
-      [Count, RttiClass, fGlobalClass, newunit, newunit, regtypes]);
+      [Count, RttiClass, fGlobalClass, newunit^, newunit^, regtypes]);
   end;
   fGlobalClass := RttiClass;
 end;
@@ -8125,7 +8134,7 @@ begin
     P := pointer(RttiDefinition);
     result.SetPropsFromText(P, eeNothing, {NoRegister=}false);
     if new then
-      result.NoRttiSetAndRegister(ptRecord, TypeName, nil, {NoRegister=}false);
+      result.NoRttiSetAndRegister(ptRecord, TypeName);
   finally
     mormot.core.os.LeaveCriticalSection(Table^.Lock);
   end;
