@@ -6276,38 +6276,59 @@ begin
             (VCount = 0);
 end;
 
-function FindNonVoidRawUtf8(n: PPUtf8Char; name: PUtf8Char; len: TStrLen;
+function FindNonVoidRawUtf8(n: PPUtf8CharArray; name: PUtf8Char; len: TStrLen;
   count: PtrInt): PtrInt;
 var
   p: PUtf8Char;
 begin
   // FPC does proper inlining in this loop
-  for result := 0 to count - 1 do
-  begin
-    p := n^; // all VName[]<>'' so p=n^<>nil
+  result := 0;
+  repeat
+    p := n[result]; // all VName[]<>'' so p=n^<>nil
     if (PStrLen(p - _STRLEN)^ = len) and
        CompareMemFixed(p, name, len) then
-      exit
-    else
-      inc(n);
-  end;
+      exit;
+    inc(result);
+    dec(count);
+  until count = 0;
   result := -1;
 end;
 
-function FindNonVoidRawUtf8I(n: PPUtf8Char; name: PUtf8Char; len: TStrLen;
+function FindNonVoidRawUtf8I(n: PPUtf8CharArray; name: PUtf8Char; len: TStrLen;
   count: PtrInt): PtrInt;
 var
-  p: PUtf8Char;
+  p1, p2, l: PUtf8Char;
+label
+  no;
 begin
-  for result := 0 to count - 1 do
-  begin
-    p := n^; // all VName[]<>'' so p=n^<>nil
-    if (PStrLen(p - _STRLEN)^ = len) and
-       IdemPropNameUSameLenNotNull(p, name, len) then
-      exit
-    else
-      inc(n);
-  end;
+  result := 0;
+  p2 := name;
+  repeat
+    // inlined IdemPropNameUSameLenNotNull(p, name, len)
+    p1 := n[result]; // all VName[]<>'' so p1<>nil
+    if PStrLen(p1 - _STRLEN)^ = len then
+    begin
+      l := @p1[len - SizeOf(cardinal)];
+      dec(p2, PtrUInt(p1));
+      while PtrUInt(l) >= PtrUInt(p1) do
+        // compare 4 Bytes per loop
+        if (PCardinal(p1)^ xor PCardinal(@p2[PtrUInt(p1)])^) and $dfdfdfdf <> 0 then
+          goto no
+        else
+          inc(PCardinal(p1));
+      inc(PCardinal(l));
+      while PtrUInt(p1) < PtrUInt(l) do
+        // remaining bytes
+        if (ord(p1^) xor ord(p2[PtrUInt(p1)])) and $df <> 0 then
+          goto no
+        else
+          inc(PByte(p1));
+      exit; // match found
+no:   p2 := name;
+    end;
+    inc(result);
+    dec(count);
+  until count = 0;
   result := -1;
 end;
 

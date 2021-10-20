@@ -6554,7 +6554,7 @@ begin
         L := i + 1
       else
         R := i - 1;
-    until (L > R);
+    until L > R;
     while (i >= 0) and (Compare(P^[i], Value) >= 0) do
       dec(i);
     result := i + 1; // return the index where to insert
@@ -6667,7 +6667,8 @@ begin
     begin
       L := 0;
       repeat
-        result := (L + R) shr 1;
+        result := L + R;
+        result := result shr 1;
         piv := pointer(P^[result]);
         if piv <> nil then
         begin
