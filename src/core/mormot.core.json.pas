@@ -6832,12 +6832,16 @@ begin
 end;
 
 procedure TJsonParserContext.ParseEndOfObject;
+var
+  P: PUtf8Char;
 begin
   if Valid then
   begin
-    if Json^ <> #0 then
-      Json := mormot.core.json.ParseEndOfObject(Json, EndOfObject);
-    Valid := Json <> nil;
+    P := Json;
+    if P^ <> #0 then
+      P := mormot.core.json.ParseEndOfObject(P, EndOfObject);
+    Json := P;
+    Valid := P <> nil;
   end;
 end;
 
@@ -7243,33 +7247,34 @@ end;
 
 procedure _JL_RttiCustomProps(Data: PAnsiChar; var Ctxt: TJsonParserContext);
 var
+  j: PUtf8Char;
   root: TRttiJson;
   p: integer;
   prop: PRttiCustomProp;
   propname: PUtf8Char;
   propnamelen: integer;
 label
-  nxt, any;
+  no, nxt, any;
 begin
   // regular JSON unserialization using nested fields/properties
-  Ctxt.Json := GotoNextNotSpace(Ctxt.Json);
-  if Ctxt.Json^ <> '{' then
+  j := GotoNextNotSpace(Ctxt.Json);
+  if j^ <> '{' then
   begin
-    Ctxt.Valid := false;
+no: Ctxt.Valid := false;
     exit;
   end;
-  Ctxt.Json := GotoNextNotSpace(Ctxt.Json + 1);
-  if Ctxt.Json^ <> '}' then
+  j := GotoNextNotSpace(j + 1);
+  if j^ <> '}' then
   begin
+    Ctxt.Json := j;
     root := pointer(Ctxt.Info); // Ctxt.Info overriden in JsonLoadProp()
     prop := pointer(root.Props.List);
     for p := 1 to root.Props.Count do
     begin
 nxt:  propname := GetJsonPropName(Ctxt.Json, @propnamelen);
-      Ctxt.Valid := (Ctxt.Json <> nil) and
-                    (propname <> nil);
-      if not Ctxt.Valid then
-        break;
+      if (Ctxt.Json = nil) or
+         (propname = nil) then
+        goto no;
       // O(1) optimistic process of the property name, following RTTI order
       if prop^.NameMatch(propname, propnamelen) then
         if JsonLoadProp(Data, prop^, Ctxt) then
@@ -7284,10 +7289,9 @@ nxt:  propname := GetJsonPropName(Ctxt.Json, @propnamelen);
       begin
         // woStoreClassName was used -> just ignore the class name
         Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject);
-        Ctxt.Valid := Ctxt.Json <> nil;
-        if Ctxt.Valid then
+        if Ctxt.Json <> nil then
           goto nxt;
-        break;
+        goto no;
       end
       else
       begin
@@ -7300,19 +7304,20 @@ nxt:  propname := GetJsonPropName(Ctxt.Json, @propnamelen);
                (jpoIgnoreUnknownProperty in Ctxt.Options) then
             begin
               Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject);
-              Ctxt.Valid := Ctxt.Json <> nil;
+              if Ctxt.Json = nil then
+                goto no;
             end
             else
-              Ctxt.Valid := false
-          else
-            Ctxt.Valid := JsonLoadProp(Data, prop^, Ctxt);
-          if (not Ctxt.Valid) or
-             (Ctxt.EndOfObject = '}') then
+              goto no
+          else if not JsonLoadProp(Data, prop^, Ctxt) then
+            goto no;
+          if Ctxt.EndOfObject = '}' then
              break;
 any:      propname := GetJsonPropName(Ctxt.Json, @propnamelen);
-          Ctxt.Valid := (Ctxt.Json <> nil) and
-                        (propname <> nil);
-        until not Ctxt.Valid;
+          if (Ctxt.Json = nil) or
+             (propname = nil) then
+            goto no;
+        until false;
         break;
       end;
     end;
@@ -7321,14 +7326,11 @@ any:      propname := GetJsonPropName(Ctxt.Json, @propnamelen);
        ((rcfReadIgnoreUnknownFields in root.Flags) or
         (jpoIgnoreUnknownProperty in Ctxt.Options)) then
       goto any;
-    Ctxt.ParseEndOfObject; // mimics GetJsonField() - set Ctxt.EndOfObject
     Ctxt.Info := root; // restore
   end
-  else
-  begin
-    inc(Ctxt.Json);
-    Ctxt.ParseEndOfObject;
-  end
+  else // {}
+    Ctxt.Json := j + 1;
+  Ctxt.ParseEndOfObject; // mimics GetJsonField() - set Ctxt.EndOfObject
 end;
 
 procedure _JL_RttiCustom(Data: PAnsiChar; var Ctxt: TJsonParserContext);
