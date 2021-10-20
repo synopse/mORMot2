@@ -1838,10 +1838,12 @@ begin
   end;
   biasedexp := exp + BSON_DECIMAL128_EXPONENT_BIAS;
   if (sign.H shr 49) and 1 <> 0 then
-    Bits.hi := (QWord(3) shl 61) or ((biasedexp and $3fff) shl 47) or
+    Bits.hi := (QWord(3) shl 61) or
+               ((biasedexp and $3fff) shl 47) or
                (sign.H and $7fffffffffff)
   else
-    Bits.hi := ((biasedexp and $3fff) shl 49) or (sign.H and $1ffffffffffff);
+    Bits.hi := ((biasedexp and $3fff) shl 49) or
+               (sign.H and $1ffffffffffff);
   Bits.lo := sign.L;
   if negative in flags then
     Bits.c[3] := Bits.c[3] or $80000000;
@@ -1977,7 +1979,8 @@ function TBsonObjectID.Equal(const Another: variant): boolean;
 var
   oid2: TBsonObjectID;
 begin
-  result := oid2.FromVariant(Another) and Equal(oid2);
+  result := oid2.FromVariant(Another) and
+            Equal(oid2);
 end;
 
 function TBsonObjectID.CreateDateTime: TDateTime;

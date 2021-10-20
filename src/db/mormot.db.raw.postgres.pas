@@ -213,11 +213,29 @@ implementation
 
 const
   PQ_ENTRIES: array[0..22] of PAnsiChar = (
-    'PQlibVersion', 'PQisthreadsafe', 'PQsetdbLogin', 'PQstatus', 'PQfinish',
-    'PQresultStatus', 'PQresultErrorField', 'PQerrorMessage', 'PQsetNoticeProcessor',
-    'PQclear', 'PQfreemem', 'PQexec', 'PQprepare', 'PQexecPrepared', 'PQexecParams',
-    'PQnfields', 'PQntuples', 'PQcmdTuples', 'PQfname', 'PQftype', 'PQgetvalue',
-    'PQgetlength', 'PQgetisnull');
+    'PQlibVersion',
+    'PQisthreadsafe',
+    'PQsetdbLogin',
+    'PQstatus',
+    'PQfinish',
+    'PQresultStatus',
+    'PQresultErrorField',
+    'PQerrorMessage',
+    'PQsetNoticeProcessor',
+    'PQclear',
+    'PQfreemem',
+    'PQexec',
+    'PQprepare',
+    'PQexecPrepared',
+    'PQexecParams',
+    'PQnfields',
+    'PQntuples',
+    'PQcmdTuples',
+    'PQfname',
+    'PQftype',
+    'PQgetvalue',
+    'PQgetlength',
+    'PQgetisnull');
 
 
 { TSqlDBPostgresLib }

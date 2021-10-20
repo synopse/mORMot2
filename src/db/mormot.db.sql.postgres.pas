@@ -202,13 +202,13 @@ uses
   mormot.crypt.core,  // libpq requires named prepared statements = use SHA-256
   mormot.db.raw.postgres; // raw libpq library API access
 
-{ ************ TSqlDBPostgreConnection* and TSqlDBPostgreStatement Classes }
 
+{ ************ TSqlDBPostgreConnection* and TSqlDBPostgreStatement Classes }
 
 { TSqlDBPostgresConnection }
 
-function TSqlDBPostgresConnection.PrepareCached(const aSql: RawUtf8; aParamCount: integer;
-  out aName: RawUtf8): integer;
+function TSqlDBPostgresConnection.PrepareCached(
+  const aSql: RawUtf8; aParamCount: integer; out aName: RawUtf8): integer;
 var
   dig: TSha256Digest;
 begin
@@ -232,7 +232,8 @@ begin
     PQ.Exec(fPGConn, pointer(SQL)));
 end;
 
-procedure TSqlDBPostgresConnection.DirectExecSql(const SQL: RawUtf8; out Value: RawUtf8);
+procedure TSqlDBPostgresConnection.DirectExecSql(
+  const SQL: RawUtf8; out Value: RawUtf8);
 var
   res: PPGresult;
 begin
@@ -314,7 +315,8 @@ begin
     on E: Exception do
     begin
       if log <> nil then
-        log.Log(sllError, 'Connect: % on %', [E, Properties.DatabaseNameSafe], self);
+        log.Log(sllError, 'Connect: % on %',
+          [E, Properties.DatabaseNameSafe], self);
       Disconnect; // clean up on fail
       raise;
     end;
@@ -351,7 +353,8 @@ begin
   log := SynDBLog.Enter(self, 'StartTransaction');
   if TransactionCount > 0 then
     raise ESqlDBPostgres.CreateUtf8('Invalid %.StartTransaction: nested ' +
-      'transactions are not supported by the Postgres - use SAVEPOINT instead', [self]);
+      'transactions are not supported by the Postgres - use SAVEPOINT instead',
+      [self]);
   try
     inherited StartTransaction;
     DirectExecSql('START TRANSACTION');
@@ -359,7 +362,8 @@ begin
     on E: Exception do
     begin
       if log <> nil then
-        log.Log(sllError, 'StartTransaction: % on %', [E, Properties.DatabaseNameSafe], self);
+        log.Log(sllError, 'StartTransaction: % on %',
+          [E, Properties.DatabaseNameSafe], self);
       if fTransactionCount > 0 then
         Dec(fTransactionCount);
       raise;
@@ -444,7 +448,8 @@ begin
   result := TSqlDBPostgresConnection.Create(self);
 end;
 
-function TSqlDBPostgresConnectionProperties.Oid2FieldType(cOID: cardinal): TSqlDBFieldType;
+function TSqlDBPostgresConnectionProperties.Oid2FieldType(
+  cOID: cardinal): TSqlDBFieldType;
 var
   i: PtrInt;
 begin
@@ -508,7 +513,8 @@ begin
   CheckCol(Col);
   if (fRes = nil) or
      (fResStatus <> PGRES_TUPLES_OK) then
-    raise ESqlDBPostgres.CreateUtf8('%.Execute not called before Column*', [self]);
+    raise ESqlDBPostgres.CreateUtf8(
+      '%.Execute not called before Column*', [self]);
 end;
 
 destructor TSqlDBPostgresStatement.Destroy;
@@ -522,7 +528,17 @@ end;
 
 // see https://www.postgresql.org/docs/9.3/libpq-exec.html
 
-procedure TSqlDBPostgresStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
+const
+  PREP_SQL: array[0..5] of PAnsiChar = (
+    'SELECT',
+    'INSERT',
+    'UPDATE',
+    'DELETE',
+    'VALUES',
+    nil);
+
+procedure TSqlDBPostgresStatement.Prepare(
+  const aSql: RawUtf8; ExpectResults: boolean);
 begin
   SqlLogBegin(sllDB);
   if aSql = '' then
@@ -530,14 +546,9 @@ begin
   inherited Prepare(aSql, ExpectResults); // will strip last ;
   fPreparedParamsCount := ReplaceParamsByNumbers(fSql, fSqlPrepared, '$');
   if (fPreparedParamsCount > 0) and
-     (IdemPCharArray(pointer(fSqlPrepared),
-      ['SELECT',
-       'INSERT',
-       'UPDATE',
-       'DELETE',
-       'VALUES']) >= 0) then
+     (IdemPPChar(pointer(fSqlPrepared), @PREP_SQL) >= 0) then
   begin
-    // preparable
+    // preparable statement
     fCacheIndex := TSqlDBPostgresConnection(fConnection).PrepareCached(
       fSqlPrepared, fPreparedParamsCount, fPreparedStmtName);
     SqlLogEnd(' name=% cache=%', [fPreparedStmtName, fCacheIndex]);
@@ -572,7 +583,12 @@ begin
     p := @fParams[i];
     if p^.VArray <> nil then
     begin
-      if not (p^.VType in [ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8]) then
+      if not (p^.VType in [
+           ftInt64,
+           ftDouble,
+           ftCurrency,
+           ftDate,
+           ftUtf8]) then
         raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Invalid array ' +
           'type % on bound parameter #%', [Self, ToText(p^.VType)^, i]);
       p^.VData := BoundArrayToJsonArray(p^.VArray);
@@ -609,13 +625,15 @@ begin
   end;
   c := TSqlDBPostgresConnection(Connection);
   if fPreparedStmtName <> '' then
-    fRes := PQ.ExecPrepared(c.fPGConn, pointer(fPreparedStmtName), fPreparedParamsCount,
-      pointer(fPGParams), pointer(fPGparamLengths), pointer(fPGParamFormats), PGFMT_TEXT)
+    fRes := PQ.ExecPrepared(c.fPGConn, pointer(fPreparedStmtName),
+      fPreparedParamsCount, pointer(fPGParams), pointer(fPGparamLengths),
+      pointer(fPGParamFormats), PGFMT_TEXT)
   else if fPreparedParamsCount = 0 then
     // PQexec handles multiple SQL commands
     fRes := PQ.Exec(c.fPGConn, pointer(fSqlPrepared)) else
-    fRes := PQ.ExecParams(c.fPGConn, pointer(fSqlPrepared), fPreparedParamsCount, nil,
-      pointer(fPGParams), pointer(fPGparamLengths), pointer(fPGParamFormats), PGFMT_TEXT);
+    fRes := PQ.ExecParams(c.fPGConn, pointer(fSqlPrepared),
+      fPreparedParamsCount, nil, pointer(fPGParams), pointer(fPGparamLengths),
+      pointer(fPGParamFormats), PGFMT_TEXT);
   PQ.Check(c.fPGConn, fRes, @fRes, {forceClean=}false);
   fResStatus := PQ.ResultStatus(fRes);
   if fExpectResults then
@@ -625,8 +643,8 @@ begin
       // paranoid check
       PQ.Clear(fRes);
       fRes := nil;
-      raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: result expected but ' +
-        'statement did not return tuples', [self]);
+      raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: result expected ' +
+        'but statement did not return tuples', [self]);
     end;
     fTotalRowsRetrieved := PQ.ntuples(fRes);
     fCurrentRow := -1;
@@ -654,7 +672,8 @@ function TSqlDBPostgresStatement.Step(SeekFirst: boolean): boolean;
 begin
   if (fRes = nil) or
      (fResStatus <> PGRES_TUPLES_OK) then
-    raise ESqlDBPostgres.CreateUtf8('%.Execute should be called before Step', [self]);
+    raise ESqlDBPostgres.CreateUtf8(
+      '%.Execute should be called before Step', [self]);
   if SeekFirst then
     fCurrentRow := -1;
   result := fCurrentRow + 1 < fTotalRowsRetrieved;
@@ -744,7 +763,9 @@ begin
       case ColumnType of
         ftNull:
           WR.AddNull;
-        ftInt64, ftDouble, ftCurrency:
+        ftInt64,
+        ftDouble,
+        ftCurrency:
           WR.AddNoJsonEscape(P, PQ.GetLength(fRes, fCurrentRow, col));
         ftUtf8:
           if (ColumnAttr = JSONOID) or
@@ -772,7 +793,8 @@ begin
             WR.WrBase64(P, BlobInPlaceDecode(P,
               PQ.GetLength(fRes, fCurrentRow, col)), {withmagic=}true);
         else
-          raise ESqlDBPostgres.CreateUtf8('%.ColumnsToJson: %?', [self, ToText(ColumnType)^]);
+          raise ESqlDBPostgres.CreateUtf8('%.ColumnsToJson: %?',
+            [self, ToText(ColumnType)^]);
       end;
     end;
     WR.AddComma;

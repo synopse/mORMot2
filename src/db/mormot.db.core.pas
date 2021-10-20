@@ -1699,7 +1699,8 @@ end;
 function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): boolean;
 begin
   Value := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToInt64(PVariant(@V)^, Value);
+  result := not VarDataIsEmptyOrNull(@V) and
+            VariantToInt64(PVariant(@V)^, Value);
 end;
 
 function NullableIntegerToValue(const V: TNullableInteger): Int64;
@@ -1722,7 +1723,8 @@ end;
 function NullableBooleanToValue(const V: TNullableBoolean; out Value: boolean): boolean;
 begin
   Value := false;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToBoolean(PVariant(@V)^, Value);
+  result := not VarDataIsEmptyOrNull(@V) and
+            VariantToBoolean(PVariant(@V)^, Value);
 end;
 
 function NullableBooleanToValue(const V: TNullableBoolean): boolean;
@@ -1745,7 +1747,8 @@ end;
 function NullableFloatToValue(const V: TNullableFloat; out Value: Double): boolean;
 begin
   PInt64(@Value)^ := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToDouble(PVariant(@V)^, Value);
+  result := not VarDataIsEmptyOrNull(@V) and
+            VariantToDouble(PVariant(@V)^, Value);
 end;
 
 function NullableFloatToValue(const V: TNullableFloat): Double;
@@ -1769,7 +1772,8 @@ function NullableCurrencyToValue(const V: TNullableCurrency;
   out Value: currency): boolean;
 begin
   PInt64(@Value)^ := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToCurrency(PVariant(@V)^, Value);
+  result := not VarDataIsEmptyOrNull(@V) and
+            VariantToCurrency(PVariant(@V)^, Value);
 end;
 
 function NullableCurrencyToValue(const V: TNullableCurrency): currency;
@@ -1840,7 +1844,8 @@ end;
 
 function NullableUtf8TextToValue(const V: TNullableUtf8Text; out Value: RawUtf8): boolean;
 begin
-  result := not VarDataIsEmptyOrNull(@V) and VariantToUtf8(PVariant(@V)^, Value);
+  result := not VarDataIsEmptyOrNull(@V) and
+            VariantToUtf8(PVariant(@V)^, Value);
 end;
 
 function NullableUtf8TextToValue(const V: TNullableUtf8Text): RawUtf8;
@@ -3652,7 +3657,8 @@ begin
     else
       RowCount := GetCardinal(RowCountPos); // trailing "rowCount":xxxx
   end;
-  result := (FieldCount <> 0) and Expect(P, VALUES_PATTERN, 11);
+  result := (FieldCount <> 0) and
+            Expect(P, VALUES_PATTERN, 11);
   if result and
      (RowCount < 0) then
   begin
@@ -3736,7 +3742,8 @@ begin
     exit;
   Beg := P;
   P := GotoEndJsonItem(Beg);
-  if (P <> nil) and not (P^ in ENDOFJSONFIELD) then
+  if (P <> nil) and
+     not (P^ in ENDOFJSONFIELD) then
     P := nil;
   if P <> nil then
   begin
