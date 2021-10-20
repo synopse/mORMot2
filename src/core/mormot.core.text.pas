@@ -1382,7 +1382,7 @@ function FastLocatePUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt;
 function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt;
   Value: PUtf8Char): PtrInt; overload;
 
-/// retrieve the index where is located a PUtf8Char in a sorted uppercase PUtf8Char array
+/// retrieve the index where is located a PUtf8Char in a sorted uppercase array
 // - P[] array is expected to be already uppercased
 // - searched Value is converted to uppercase before search via UpperCopy255Buf(),
 // so is expected to be short, i.e. length < 250

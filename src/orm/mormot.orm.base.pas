@@ -1866,7 +1866,7 @@ type
     fCount: integer;
     fTable: TClass; // TOrmClass
     fOptions: TOrmPropInfoListOptions;
-    fOrderedByName: TIntegerDynArray;
+    fOrderedByName: TByteDynArray;
     function GetItem(aIndex: PtrInt): TOrmPropInfo;
     procedure QuickSortByName(L, R: PtrInt);
     procedure InternalAddParentsFirst(aClassType: TClass); overload;
@@ -1877,10 +1877,10 @@ type
     constructor Create(aTable: TClass; aOptions: TOrmPropInfoListOptions);
     /// release internal list items
     destructor Destroy; override;
-    /// set the length of the internal List[] array
-    procedure SetCapacity(aLength: integer);
     /// add a TOrmPropInfo to the list
     function Add(aItem: TOrmPropInfo): integer;
+    /// set the length of the internal List[] array and the sorted names
+    procedure AfterAdd;
     /// find an item in the list using O(log(n)) binary search
     // - returns nil if not found
     function ByRawUtf8Name(const aName: RawUtf8): TOrmPropInfo; overload;
@@ -6964,9 +6964,16 @@ begin
   end;
 end;
 
-procedure TOrmPropInfoList.SetCapacity(aLength: integer);
+procedure TOrmPropInfoList.AfterAdd;
+var
+  i: PtrInt;
 begin
-  SetLength(fList, aLength);
+  SetLength(fList, fCount);
+  // initialize once the ordered lookup indexes, for binary search
+  SetLength(fOrderedByName, fCount);
+  for i := 0 to fCount - 1 do
+    fOrderedByName[i] := i;
+  QuickSortByName(0, fCount - 1);
 end;
 
 function TOrmPropInfoList.Add(aItem: TOrmPropInfo): integer;
@@ -7006,7 +7013,8 @@ end;
 
 procedure TOrmPropInfoList.QuickSortByName(L, R: PtrInt);
 var
-  I, J, P, tmp: PtrInt;
+  I, J, P: PtrInt;
+  tmp: byte;
   pivot: PUtf8Char;
 begin
   if L < R then
@@ -7073,25 +7081,21 @@ end;
 
 function TOrmPropInfoList.IndexByName(aName: PUtf8Char): PtrInt;
 var
-  cmp, L, R, s: PtrInt;
+  cmp, L, R: PtrInt;
+  s: PByteArray;
   C1, C2: byte; // integer/PtrInt are actually slower on FPC
   {$ifdef CPUX86NOTPIC}
   table: TNormTableByte absolute NormToUpperAnsi7Byte;
   {$else}
   table: PByteArray;
   {$endif CPUX86NOTPIC}
+label
+  end1;
 begin
   if (self <> nil) and
      (aName <> nil) and
      (fCount > 0) then
   begin
-    if fOrderedByName = nil then
-    begin
-      // initialize once the ordered lookup indexes, for binary search
-      SetLength(fOrderedByName, fCount);
-      FillIncreasing(pointer(fOrderedByName), 0, fCount);
-      QuickSortByName(0, fCount - 1);
-    end;
     {$ifndef CPUX86NOTPIC}
     table := @NormToUpperAnsi7Byte;
     {$endif CPUX86NOTPIC}
@@ -7105,26 +7109,30 @@ begin
       {$else}
       result := (L + R) shr 1;
       {$endif CPUX64}
-      s := PtrUInt(aName);
-      cmp := PtrInt(PtrUInt(fList[fOrderedByName[result]].Name)) - s;
+      s := pointer(aName);
+      cmp := PtrUInt(fList[fOrderedByName[result]].Name);
+      dec(cmp, PtrUInt(s));
       repeat
-        C1 := table[PByteArray(s)[0]];
-        C2 := table[PByteArray(s)[cmp]];
-        inc(s);
-      until (C1 = 0) or
-            (C1 <> C2);
-      if C1 = C2 then // reached ending #0 on both names
-      begin
-        result := fOrderedByName[result];
-        exit;
-      end;
+        C1 := table[s[0]];
+        C2 := table[s[cmp]];
+        s := @s[1];
+        if C1 = 0 then
+          goto end1;
+      until C1 <> C2;
       cmp := result + 1; // compile as 2 branchless cmovc/cmovnc on FPC
       dec(result);
       if C1 > C2 then
         L := cmp
       else
         R := result;
-    until L > R;
+      if L > R then
+        break;
+      continue;
+end1: if C2 <> 0 then
+        break;
+      result := fOrderedByName[result]; // reached ending #0 on both names
+      exit;
+    until false;
   end;
   result := -1;
 end;

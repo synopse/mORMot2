@@ -9077,7 +9077,7 @@ begin
     raise EModelException.CreateUtf8(
       '% has too many fields after InternalRegisterCustomProperties(%): %>=%',
       [Table, self, Fields.Count, MAX_SQLFIELDS]);
-  Fields.SetCapacity(Fields.Count);
+  Fields.AfterAdd;
   // generate some internal lookup information
   SetLength(fJoinedFields, MAX_SQLFIELDS);
   nMany := 0;
