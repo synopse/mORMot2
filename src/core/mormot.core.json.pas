@@ -7386,11 +7386,17 @@ var
   c: cardinal;
 begin
   P := Ctxt.Json;
-  if P <> nil then
+  if P <> nil then // in-place replace trailing RowID -> ID for unserialization
   begin
-    P := GotoNextNotSpace(P);
-    if P^ = '{' then begin
-      P := GotoNextNotSpace(P + 1);
+    while (P^ <= ' ') and
+          (P^ <> #0) do
+      inc(P);
+    if P^ = '{' then
+    begin
+      repeat
+        inc(P);
+      until (P^ > ' ') or
+            (P^ = #0);
       c := PCardinal(P)^ and $dfdfdfff;
       if (c = ord('"') + ord('R') shl 8 + ord('O') shl 16 + ord('W') shl 24) and
          (PCardinal(P + 4)^ and $ffdfdf = ord('I') + ord('D') shl 8 + ord('"') shl 16) then
@@ -9476,7 +9482,7 @@ begin
         fClassNewInstance := @_New_Object
       else
       begin
-        // this block will continue with the parent class
+        // customize JSON serialization
         if C = TSynList then
           fJsonSave := @_JS_TSynList
         else if C = TRawUtf8List then
@@ -9486,7 +9492,7 @@ begin
         end
         else if C = TObjectWithID then
           fJsonLoad := @_JL_RttiObjectWithID; // also accepts "RowID" field
-        C := C.ClassParent;
+        C := C.ClassParent; // continue with the parent class
         continue;
       end;
       break; // we reached the root supported class
