@@ -1179,6 +1179,8 @@ type
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
+    function GetValueInt32(Instance: TObject): integer;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
       wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
@@ -1245,6 +1247,8 @@ type
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
       wasString: boolean); override;
+    function GetValueInt64(Instance: TObject): Int64;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetValueInt64(Instance: TObject; V64: Int64);
       {$ifdef HASINLINE} inline; {$endif}
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
@@ -1342,6 +1346,8 @@ type
     fEngine: TSynAnsiConvert;
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
+    procedure GetValuePointer(Instance: TObject; out Value: pointer);
+      {$ifdef HASINLINE} inline; {$endif}
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
@@ -3842,8 +3848,8 @@ const
 
 { TOrmPropInfo }
 
-constructor TOrmPropInfo.Create(const aName: RawUtf8; aOrmFieldType:
-  TOrmFieldType; aAttributes: TOrmPropInfoAttributes;
+constructor TOrmPropInfo.Create(const aName: RawUtf8;
+  aOrmFieldType: TOrmFieldType; aAttributes: TOrmPropInfoAttributes;
   aFieldWidth, aPropertyIndex: integer);
 begin
   if aName = '' then
@@ -4373,16 +4379,23 @@ begin
     fIntegerSetPropOffset := fSetterIsFieldPropOffset <> 0;
 end;
 
+function TOrmPropInfoRttiInt32.GetValueInt32(Instance: TObject): integer;
+begin
+  if fIntegerGetPropOffset then // roSLong without any getter
+    result := PInteger(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
+  else
+    result := fPropInfo.GetOrdProp(Instance);
+end;
+
 procedure TOrmPropInfoRttiInt32.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 begin
-  TOrmPropInfoRttiInt32(DestInfo).fPropInfo.SetOrdProp(
-    Dest, fPropInfo.GetOrdProp(Source));
+  TOrmPropInfoRttiInt32(DestInfo).fPropInfo.SetOrdProp(Dest, GetValueInt32(Source));
 end;
 
 procedure TOrmPropInfoRttiInt32.GetBinary(Instance: TObject; W: TBufferWriter);
 begin
-  W.WriteVarUInt32(cardinal(fPropInfo.GetOrdProp(Instance)));
+  W.WriteVarUInt32(cardinal(GetValueInt32(Instance)));
 end;
 
 function TOrmPropInfoRttiInt32.GetHash(Instance: TObject;
@@ -4390,7 +4403,7 @@ function TOrmPropInfoRttiInt32.GetHash(Instance: TObject;
 var
   v: integer;
 begin
-  v := fPropInfo.GetOrdProp(Instance);
+  v := GetValueInt32(Instance);
   result := DefaultHasher(0, @v, 4);
 end;
 
@@ -4402,7 +4415,7 @@ begin
     W.Add(PInteger(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
   else
   begin
-    v := fPropInfo.GetOrdProp(Instance);
+    v := GetValueInt32(Instance);
     if fUnsigned then
       W.AddU(cardinal(v))
     else
@@ -4417,7 +4430,7 @@ var
 begin
   if wasSqlString <> nil then
     wasSqlString^ := false;
-  v := fPropInfo.GetOrdProp(Instance);
+  v := GetValueInt32(Instance);
   if fUnsigned then
     UInt32ToUtf8(cardinal(v), result)
   else
@@ -4491,7 +4504,7 @@ var
 begin
   aValue.Options := [];
   aValue.VType := ftInt64;
-  v := fPropInfo.GetOrdProp(Instance);
+  v := GetValueInt32(Instance);
   if fUnsigned then
     aValue.VInt64 := cardinal(v)
   else
@@ -4664,6 +4677,14 @@ begin
     fPropInfo.SetInt64Prop(Instance, V64);
 end;
 
+function TOrmPropInfoRttiInt64.GetValueInt64(Instance: TObject): Int64;
+begin
+  if fGetterIsFieldPropOffset <> 0 then
+    result := PInt64(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
+  else
+    result := fPropInfo.GetInt64Prop(Instance);
+end;
+
 procedure TOrmPropInfoRttiInt64.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 begin
@@ -4683,10 +4704,7 @@ function TOrmPropInfoRttiInt64.GetHash(Instance: TObject;
 var
   V64: Int64;
 begin
-  if fGetterIsFieldPropOffset <> 0 then
-    V64 := PInt64(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
-  else
-    V64 := fPropInfo.GetInt64Prop(Instance);
+  V64 := GetValueInt64(Instance);
   result := DefaultHasher(0, @V64, SizeOf(V64));
 end;
 
@@ -4694,10 +4712,7 @@ procedure TOrmPropInfoRttiInt64.GetJsonValues(Instance: TObject; W: TTextWriter)
 var
   V64: Int64;
 begin
-  if fGetterIsFieldPropOffset <> 0 then
-    V64 := PInt64(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
-  else
-    V64 := fPropInfo.GetInt64Prop(Instance);
+  V64 := GetValueInt64(Instance);
   if fIsQWord then
     W.AddQ(V64)
   else
@@ -4711,10 +4726,7 @@ var
 begin
   if wasSqlString <> nil then
     wasSqlString^ := false;
-  if fGetterIsFieldPropOffset <> 0 then
-    V64 := PInt64(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
-  else
-    V64 := fPropInfo.GetInt64Prop(Instance);
+  V64 := GetValueInt64(Instance);
   if fIsQWord then
     UInt64ToUtf8(V64, result)
   else
@@ -5302,6 +5314,18 @@ begin
   fEngine := fPropRtti.Cache.Engine;
 end;
 
+procedure TOrmPropInfoRttiAnsi.GetValuePointer(
+  Instance: TObject; out Value: pointer);
+begin
+  if fGetterIsFieldPropOffset <> 0 then
+    Value := PPointer(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
+  else
+  begin
+    Value := nil;
+    fPropInfo.GetLongStrProp(Instance, RawByteString(Value));
+  end;
+end; // caller should make FastAssignNew(tmp) if offset = 0
+
 procedure TOrmPropInfoRttiAnsi.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 var
@@ -5321,10 +5345,12 @@ end;
 
 procedure TOrmPropInfoRttiAnsi.GetBinary(Instance: TObject; W: TBufferWriter);
 var
-  Value: RawByteString;
+  tmp: pointer;
 begin
-  fPropInfo.GetLongStrProp(Instance, Value);
-  W.Write(Value);
+  GetValuePointer(Instance, tmp);
+  W.Write(RawByteString(tmp));
+  if fGetterIsFieldPropOffset = 0 then
+    FastAssignNew(tmp);
 end;
 
 function TOrmPropInfoRttiAnsi.GetHash(Instance: TObject;
@@ -5351,7 +5377,7 @@ begin
   if wasSqlString <> nil then
     wasSqlString^ := true;
   fPropInfo.GetLongStrProp(Instance, tmp);
-  result := fEngine.AnsiBufferToRawUtf8(pointer(tmp), length(tmp));
+  result := fEngine.AnsiToUtf8(tmp);
 end;
 
 procedure TOrmPropInfoRttiAnsi.NormalizeValue(var Value: RawUtf8);
@@ -5398,8 +5424,8 @@ begin
     fPropInfo.SetLongStrProp(Instance, fEngine.Utf8BufferToAnsi(Value, ValueLen));
 end;
 
-procedure TOrmPropInfoRttiAnsi.SetValueVar(Instance: TObject; const Value:
-  RawUtf8; wasString: boolean);
+procedure TOrmPropInfoRttiAnsi.SetValueVar(Instance: TObject;
+  const Value: RawUtf8; wasString: boolean);
 begin
   fPropInfo.SetLongStrProp(Instance, fEngine.Utf8ToAnsi(Value));
 end;
@@ -5461,40 +5487,46 @@ end;
 procedure TOrmPropInfoRttiRawUtf8.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 var
-  Value: RawByteString;
+  tmp: pointer;
 begin
-  // don't know why, but fInPlaceCopySameClassPropOffset trick leaks memory :(
-  fPropInfo.GetLongStrProp(Source, Value);
-  TOrmPropInfoRttiRawUtf8(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
+  GetValuePointer(Source, tmp);
+  TOrmPropInfoRttiRawUtf8(DestInfo).fPropInfo.SetLongStrProp(
+    Dest, RawByteString(tmp));
+  if fGetterIsFieldPropOffset = 0 then
+    FastAssignNew(tmp);
 end;
 
 function TOrmPropInfoRttiRawUtf8.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   Up: array[byte] of AnsiChar; // avoid slow heap allocation
-  Value: RawByteString;
+  tmp: pointer;
 begin
-  fPropInfo.GetLongStrProp(Instance, Value);
+  GetValuePointer(Instance, tmp);
   if CaseInsensitive then
-    result := DefaultHasher(0, Up{%H-}, Utf8UpperCopy255(Up{%H-}, Value) - {%H-}Up)
+    result := DefaultHasher(0, Up{%H-}, Utf8UpperCopy255(Up{%H-}, RawUtf8(tmp)) - {%H-}Up)
   else
-    result := DefaultHasher(0, pointer(Value), length(Value));
+    result := DefaultHasher(0, tmp, length(RawUtf8(tmp)));
+  if fGetterIsFieldPropOffset = 0 then
+    FastAssignNew(tmp);
 end;
 
 procedure TOrmPropInfoRttiRawUtf8.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
-  tmp: RawByteString;
+  tmp: pointer;
 begin
-  fPropInfo.GetLongStrProp(Instance, tmp);
+  GetValuePointer(Instance, tmp);
   if fPropType = TypeInfo(RawJson) then
-    W.AddRawJson(tmp)
+    W.AddRawJson(RawByteString(tmp))
   else
   begin
     W.Add('"');
-    if tmp <> '' then
-      W.AddJsonEscape(pointer(tmp));
+    if tmp <> nil then
+      W.AddJsonEscape(tmp);
     W.Add('"');
   end;
+  if fGetterIsFieldPropOffset = 0 then
+    FastAssignNew(tmp);
 end;
 
 procedure TOrmPropInfoRttiRawUtf8.GetValueVar(Instance: TObject; ToSql: boolean;
@@ -5541,21 +5573,6 @@ end;
 
 function TOrmPropInfoRttiRawUtf8.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
-
-  function CompareUTF8WithLocalTempCopy: PtrInt;
-  var
-    tmp1, tmp2: RawByteString;
-  begin
-    fPropInfo.GetLongStrProp(Item1, tmp1);
-    fPropInfo.GetLongStrProp(Item2, tmp2);
-    if aUnicodeNoCaseCollation in Attributes then
-      result := Utf8ICompReference(pointer(tmp1), pointer(tmp2))
-    else if CaseInsensitive then
-      result := Utf8IComp(pointer(tmp1), pointer(tmp2))
-    else
-      result := StrComp(pointer(tmp1), pointer(tmp2));
-  end;
-
 var
   offs: PtrUInt;
   p1, p2: pointer;
@@ -5570,20 +5587,29 @@ begin
   begin
     offs := fGetterIsFieldPropOffset;
     if offs <> 0 then
-    begin
-      // avoid any temporary variable
+    begin // avoid any temporary variable
       p1 := PPointer(PtrUInt(Item1) + offs)^;
       p2 := PPointer(PtrUInt(Item2) + offs)^;
-      if CaseInsensitive then
-        if aUnicodeNoCaseCollation in Attributes then
-          result := Utf8ICompReference(p1, p2)
-        else
-          result := Utf8IComp(p1, p2)
-      else
-        result := StrComp(p1, p2);
     end
     else
-      result := CompareUTF8WithLocalTempCopy;
+    begin
+      p1 := nil; // manual RawByteString lifetime
+      p2 := nil;
+      fPropInfo.GetLongStrProp(Item1, RawByteString(p1));
+      fPropInfo.GetLongStrProp(Item2, RawByteString(p2));
+    end;
+    if CaseInsensitive then
+      if aUnicodeNoCaseCollation in Attributes then
+        result := Utf8ICompReference(p1, p2)
+      else
+        result := Utf8IComp(p1, p2)
+    else
+      result := StrComp(p1, p2);
+    if fGetterIsFieldPropOffset = 0 then
+    begin
+      FastAssignNew(p1);
+      FastAssignNew(p2);
+    end;
   end;
 end;
 
@@ -5726,10 +5752,12 @@ end;
 
 function TOrmPropInfoRttiRawBlob.IsNull(Instance: TObject): boolean;
 var
-  Blob: RawByteString;
+  tmp: pointer;
 begin
-  fPropInfo.GetLongStrProp(Instance, Blob);
-  result := (Blob = '');
+  GetValuePointer(Instance, tmp);
+  result := (tmp = nil);
+  if fGetterIsFieldPropOffset = 0 then
+    FastAssignNew(tmp);
 end;
 
 procedure TOrmPropInfoRttiRawBlob.GetValueVar(Instance: TObject; ToSql: boolean;
@@ -6519,6 +6547,20 @@ end;
 
 { TOrmPropInfoRecordRtti }
 
+constructor TOrmPropInfoRecordRtti.Create(aRecordInfo: PRttiInfo;
+  const aName: RawUtf8; aPropertyIndex: integer; aPropertyPointer: pointer;
+  aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer; aData2Text:
+  TOnSqlPropInfoRecord2Text; aText2Data: TOnSqlPropInfoRecord2Data);
+begin
+  if (aRecordInfo = nil) or
+     not (aRecordInfo^.Kind in rkRecordTypes) then
+    raise EOrmException.CreateUtf8(
+      '%.Create: Invalid type information for %', [self, aName]);
+  inherited Create(aName, oftBlobCustom, aAttributes, aFieldWidth,
+    aPropertyIndex, aPropertyPointer, aData2Text, aText2Data);
+  fTypeInfo := aRecordInfo;
+end;
+
 procedure TOrmPropInfoRecordRtti.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 begin
@@ -6535,20 +6577,6 @@ begin
     result := inherited GetSqlFieldRttiTypeName
   else
     result := ToUtf8(fTypeInfo^.RawName);
-end;
-
-constructor TOrmPropInfoRecordRtti.Create(aRecordInfo: PRttiInfo;
-  const aName: RawUtf8; aPropertyIndex: integer; aPropertyPointer: pointer;
-  aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer; aData2Text:
-  TOnSqlPropInfoRecord2Text; aText2Data: TOnSqlPropInfoRecord2Data);
-begin
-  if (aRecordInfo = nil) or
-     not (aRecordInfo^.Kind in rkRecordTypes) then
-    raise EOrmException.CreateUtf8(
-      '%.Create: Invalid type information for %', [self, aName]);
-  inherited Create(aName, oftBlobCustom, aAttributes, aFieldWidth,
-    aPropertyIndex, aPropertyPointer, aData2Text, aText2Data);
-  fTypeInfo := aRecordInfo;
 end;
 
 procedure TOrmPropInfoRecordRtti.GetBinary(Instance: TObject; W: TBufferWriter);

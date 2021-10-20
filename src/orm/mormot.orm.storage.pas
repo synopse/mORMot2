@@ -971,18 +971,16 @@ type
     // function over each stored item to implement < <= <> > >= search
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function FindWhere(WhereField: integer; const WhereValue: RawUtf8;
-      WhereOp: TSelectStatementOperator;
-      const OnFind: TOnFindWhereEqual; Dest: pointer;
-      FoundLimit, FoundOffset: integer;
+      WhereOp: TSelectStatementOperator; const OnFind: TOnFindWhereEqual;
+      Dest: pointer; FoundLimit, FoundOffset: integer;
       CaseInsensitive: boolean = true): PtrInt; overload;
     /// comparison lookup of the WhereValue in a field, specified by name
     // - this method won't use any index but brute force using the comparison
     // function over each stored item to implement < <= <> > >= search
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function FindWhere(const WhereFieldName, WhereValue: RawUtf8;
-      WhereOp: TSelectStatementOperator;
-      const OnFind: TOnFindWhereEqual; Dest: pointer;
-      FoundLimit, FoundOffset: integer;
+      WhereOp: TSelectStatementOperator; const OnFind: TOnFindWhereEqual;
+      Dest: pointer; FoundLimit, FoundOffset: integer;
       CaseInsensitive: boolean = true): PtrInt; overload;
     /// search the maximum value of a given column
     // - will only handle integer/Int64 kind of column
@@ -992,20 +990,15 @@ type
     procedure ForEach(WillModifyContent: boolean;
       const OnEachProcess: TOnFindWhereEqual; Dest: pointer);
     /// low-level TOnFindWhereEqual callback doing nothing
-    class procedure DoNothingEvent(aDest: pointer;
-      aRec: TOrm; aIndex: integer);
+    class procedure DoNothingEvent(aDest: pointer; aRec: TOrm; aIndex: integer);
     /// low-level TOnFindWhereEqual callback making PPointer(aDest)^ := aRec
-    class procedure DoInstanceEvent(aDest: pointer;
-      aRec: TOrm; aIndex: integer);
+    class procedure DoInstanceEvent(aDest: pointer; aRec: TOrm; aIndex: integer);
     /// low-level TOnFindWhereEqual callback making PInteger(aDest)^ := aIndex
-    class procedure DoIndexEvent(aDest: pointer;
-      aRec: TOrm; aIndex: integer);
+    class procedure DoIndexEvent(aDest: pointer; aRec: TOrm; aIndex: integer);
     /// low-level TOnFindWhereEqual callback making PPointer(aDest)^ := aRec.CreateCopy
-    class procedure DoCopyEvent(aDest: pointer;
-      aRec: TOrm; aIndex: integer);
+    class procedure DoCopyEvent(aDest: pointer; aRec: TOrm; aIndex: integer);
     /// low-level TOnFindWhereEqual callback calling TSynList(aDest).Add(aRec)
-    class procedure DoAddToListEvent(aDest: pointer;
-      aRec: TOrm; aIndex: integer);
+    class procedure DoAddToListEvent(aDest: pointer; aRec: TOrm; aIndex: integer);
     /// read-only access to the TOrm values, storing the data
     // - this returns directly the item class instance stored in memory: if you
     // change the content, it will affect the internal data - so for instance
@@ -2553,7 +2546,8 @@ begin
   // full scan optimized search for a specified value
   found := 0;
   if P.InheritsFrom(TOrmPropInfoRttiInt32) and
-     (TOrmPropInfoRttiInt32(P).PropRtti.Kind in [rkInteger, rkEnumeration, rkSet]) then
+     (TOrmPropInfoRttiInt32(P).PropRtti.Kind in
+        [rkInteger, rkEnumeration, rkSet]) then
   begin
     // search 8/16/32-bit properties
     v := GetInt64(pointer(WhereValue), err); // 64-bit for cardinal
@@ -2736,7 +2730,6 @@ function TRestStorageInMemory.FindMax(WhereField: integer;
   out max: Int64): boolean;
 var
   P: TOrmPropInfo;
-  nfo: PRttiProp;
   i: PtrInt;
   v: Int64;
 begin
@@ -2758,10 +2751,9 @@ begin
   P := fStoredClassRecordProps.Fields.List[WhereField];
   if P.InheritsFrom(TOrmPropInfoRttiInt32) then
   begin
-    nfo := TOrmPropInfoRtti(P).PropInfo;
     for i := 0 to fCount - 1 do
     begin
-      v := nfo.GetOrdProp(fValue[i]);
+      v := TOrmPropInfoRttiInt32(P).GetValueInt32(fValue[i]);
       if v > max then
         max := v;
     end;
@@ -2769,10 +2761,9 @@ begin
   end
   else if P.InheritsFrom(TOrmPropInfoRttiInt64) then
   begin
-    nfo := TOrmPropInfoRtti(P).PropInfo;
     for i := 0 to fCount - 1 do
     begin
-      v := nfo.GetInt64Prop(fValue[i]);
+      v := TOrmPropInfoRttiInt64(P).GetValueInt64(fValue[i]);
       if v > max then
         max := v;
     end;
