@@ -1245,6 +1245,8 @@ type
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
       wasString: boolean); override;
+    procedure SetValueInt64(Instance: TObject; V64: Int64);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
@@ -4654,11 +4656,18 @@ begin
   fIsQWord := fPropType^.IsQword;
 end;
 
+procedure TOrmPropInfoRttiInt64.SetValueInt64(Instance: TObject; V64: Int64);
+begin
+  if fSetterIsFieldPropOffset <> 0 then
+    PInt64(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := V64
+  else
+    fPropInfo.SetInt64Prop(Instance, V64);
+end;
+
 procedure TOrmPropInfoRttiInt64.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 begin
-  TOrmPropInfoRttiInt64(DestInfo).fPropInfo.SetInt64Prop(
-    Dest, fPropInfo.GetInt64Prop(Source));
+  TOrmPropInfoRttiInt64(DestInfo).SetValueInt64(Dest, fPropInfo.GetInt64Prop(Source));
 end;
 
 procedure TOrmPropInfoRttiInt64.GetBinary(Instance: TObject; W: TBufferWriter);
@@ -4767,7 +4776,7 @@ end;
 
 procedure TOrmPropInfoRttiInt64.SetBinary(Instance: TObject; var Read: TFastReader);
 begin
-  fPropInfo.SetInt64Prop(Instance, Int64(Read.Next8));
+  SetValueInt64(Instance, Int64(Read.Next8));
 end;
 
 procedure TOrmPropInfoRttiInt64.SetValue(Instance: TObject; Value: PUtf8Char;
@@ -4779,10 +4788,7 @@ begin
     SetQWord(Value, PQword(@V64)^)
   else
     SetInt64(Value, V64{%H-});
-  if fSetterIsFieldPropOffset <> 0 then
-    PInt64(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := V64
-  else
-    fPropInfo.SetInt64Prop(Instance, V64);
+  SetValueInt64(Instance, V64);
 end;
 
 function TOrmPropInfoRttiInt64.SetFieldSqlVar(Instance: TObject;
@@ -4790,7 +4796,7 @@ function TOrmPropInfoRttiInt64.SetFieldSqlVar(Instance: TObject;
 begin
   if aValue.VType = ftInt64 then
   begin
-    fPropInfo.SetInt64Prop(Instance, aValue.VInt64);
+    SetValueInt64(Instance, aValue.VInt64);
     result := true;
   end
   else

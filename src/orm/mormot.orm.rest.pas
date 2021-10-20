@@ -1813,7 +1813,7 @@ begin
   end;
   t := fModel.GetTableIndexExisting(POrmClass(Value)^);
   if not DoNotAutoComputeFields then
-    Value.ComputeFieldsBeforeWrite(self, oeUpdate); // update oftModTime fields
+    Value.ComputeFieldsBeforeWrite(self, oeUpdate); // update TModTime fields
   if IsZero(CustomFields) then
     if (Value.FillContext <> nil) and
        (Value.FillContext.Table <> nil) and
