@@ -8479,7 +8479,7 @@ var
   f: PtrInt;
   types: TOrmFieldTypes;
   sess: TID;
-  p: TOrmPropInfo;
+  p: TOrmPropInfoRttiInt64;
 begin
   if self <> nil then
     with Orm do
@@ -8493,12 +8493,15 @@ begin
       if integer(types) <> 0 then
       begin
         if aServerTimeStamp = 0 then
-          aServerTimeStamp := aRest.GetServerTimestamp;
+          if Assigned(aRest) then
+            aServerTimeStamp := aRest.GetServerTimestamp
+          else
+            aServerTimeStamp := TimeLogNowUtc; // fallback to in-process time
         for f := 0 to Fields.Count - 1 do
         begin
-          p := Fields.List[f];
+          p := pointer(Fields.List[f]);
           if p.OrmFieldType in types then
-            TOrmPropInfoRttiInt64(p).PropInfo.SetInt64Prop(self, aServerTimeStamp);
+            p.SetValueInt64(self, aServerTimeStamp);
         end;
       end;
       if (oftSessionUserID in HasTypeFields) and
@@ -8508,9 +8511,9 @@ begin
         if sess <> 0 then
           for f := 0 to Fields.Count - 1 do
           begin
-            p := Fields.List[f];
+            p := pointer(Fields.List[f]);
             if p.OrmFieldType = oftSessionUserID then
-              TOrmPropInfoRttiInt64(p).PropInfo.SetInt64Prop(self, sess);
+              p.SetValueInt64(self, sess);
           end;
       end;
     end;
@@ -11238,8 +11241,6 @@ begin
      (Value.IDValue = 0) then
     ForceID := false;
   // compute actual fields bits
-  if not Assigned(fRest) then
-    DoNotAutoComputeFields := true; // no IRestOrm.GetServerTimestamp  available
   if IsZero(CustomFields) then
     fields := props.SimpleFieldsBits[ooInsert]
   else
@@ -11378,10 +11379,7 @@ begin
       not fRest.RecordCanBeUpdated(POrmClass(Value)^, Value.IDValue, oeUpdate)) then
     exit; // invalid parameters, or not opened BATCH sequence
   props := Value.Orm;
-  // compute actual fields bits
-  if not Assigned(fRest) then
-    DoNotAutoComputeFields := true; // no IRestOrm.GetServerTimestamp  available
-  // same format as TRest.Update, BUT including the ID
+  // compute actual fields bits - same format as TRest.Update, BUT including ID
   if IsZero(CustomFields) then
     Value.FillContext.ComputeSetUpdatedFieldBits(props, fields)
   else
@@ -11391,13 +11389,13 @@ begin
       fields := fields + props.FieldBits[oftModTime];
   end;
   // append the udpated fields as JSON
+  if not DoNotAutoComputeFields then
+    Value.ComputeFieldsBeforeWrite(fRest, oeUpdate); // compute TModTime fields
   if boNoModelEncoding in fOptions then
   begin
     // versatile "PUT"/"PUT@table":{...} format as compatibility fallback
     Encode(POrmClass(Value)^, encPut);
     SetExpandedJsonWriter(props, not fPreviousTableMatch, {withID=}true, fields);
-    if not DoNotAutoComputeFields then
-      Value.ComputeFieldsBeforeWrite(fRest, oeUpdate); // update oftModTime fields
     Value.GetJsonValues(fBatch);
   end
   else
