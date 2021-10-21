@@ -8752,7 +8752,6 @@ begin
   result := true; // error
 end;
 
-
 procedure VariantToUtf8(const V: Variant; var result: RawUtf8;
   var wasString: boolean);
 var
@@ -8925,7 +8924,8 @@ begin
   case V.VType of
     vtInteger:
       value := V.VInteger;
-    vtInt64 {$ifdef FPC}, vtQWord{$endif}:
+    {$ifdef FPC} vtQWord, {$endif}
+    vtInt64:
       value := V.VInt64^;
     vtBoolean:
       if V.VBoolean then
@@ -9544,7 +9544,7 @@ type
 const
   TXT: array[{nospace:}boolean, TUnits] of RawUtf8 = (
     (' KB', ' MB', ' GB', ' TB', ' PB', ' EB', '% B'),
-    ('KB',  'MB',  'GB',  'TB',  'PB',  'EB', '%B'));
+    ( 'KB',  'MB',  'GB',  'TB',  'PB',  'EB', '%B'));
 var
   hi, rem: cardinal;
   u: TUnits;
@@ -9825,11 +9825,12 @@ end;
 { **************** Hexadecimal Text And Binary Conversion }
 
 procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
-var {$ifdef CPUX86NOTPIC}
-    tab: TAnsiCharToWord absolute TwoDigitsHexW;
-    {$else}
-    tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif CPUX86NOTPIC}
+var
+  {$ifdef CPUX86NOTPIC}
+  tab: TAnsiCharToWord absolute TwoDigitsHexW;
+  {$else}
+  tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
+  {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC}
   tab := @TwoDigitsHexW;
@@ -9880,11 +9881,12 @@ begin
 end;
 
 procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
-var {$ifdef CPUX86NOTPIC}
-    tab: TAnsiCharToWord absolute TwoDigitsHexW;
-    {$else}
-    tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif CPUX86NOTPIC}
+var
+  {$ifdef CPUX86NOTPIC}
+  tab: TAnsiCharToWord absolute TwoDigitsHexW;
+  {$else}
+  tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
+  {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC}
   tab := @TwoDigitsHexW;
@@ -9906,11 +9908,12 @@ begin
 end;
 
 procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
-var {$ifdef CPUX86NOTPIC}
-    tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
-    {$else}
-    tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif CPUX86NOTPIC}
+var
+  {$ifdef CPUX86NOTPIC}
+  tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
+  {$else}
+  tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
+  {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC}
   tab := @TwoDigitsHexWLower;
@@ -9941,11 +9944,12 @@ begin
 end;
 
 procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
-var {$ifdef CPUX86NOTPIC}
-     tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
-    {$else}
-     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif CPUX86NOTPIC}
+var
+  {$ifdef CPUX86NOTPIC}
+  tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
+  {$else}
+  tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
+  {$endif CPUX86NOTPIC}
 begin
   if (Bin = nil) or
      (Hex = nil) or
@@ -10735,14 +10739,14 @@ var
   B: PByteArray;
   tmp: array[0..15] of AnsiChar;
 const
-  HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
+  HexChars:      array[0..15] of AnsiChar = '0123456789ABCDEF';
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 begin
   // initialize internal lookup tables for various text conversions
   for i := 0 to 255 do
   begin
-    TwoDigitsHex[i][1] := HexChars[i shr 4];
-    TwoDigitsHex[i][2] := HexChars[i and $f];
+    TwoDigitsHex[i][1]      := HexChars[i shr 4];
+    TwoDigitsHex[i][2]      := HexChars[i and $f];
     TwoDigitsHexLower[i][1] := HexCharsLower[i shr 4];
     TwoDigitsHexLower[i][2] := HexCharsLower[i and $f];
   end;

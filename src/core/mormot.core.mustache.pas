@@ -727,8 +727,8 @@ begin
     end;
 end;
 
-function TSynMustacheContextVariant.AppendSection(const ValueName: RawUtf8):
-  TSynMustacheSectionType;
+function TSynMustacheContextVariant.AppendSection(
+  const ValueName: RawUtf8): TSynMustacheSectionType;
 var
   Value: TVarData;
 begin
@@ -836,8 +836,8 @@ begin
     result := -1;
 end;
 
-class function TSynMustachePartials.CreateOwned(const Partials: variant):
-  TSynMustachePartials;
+class function TSynMustachePartials.CreateOwned(
+  const Partials: variant): TSynMustachePartials;
 var
   p: PtrInt;
 begin
@@ -1514,15 +1514,47 @@ var
 class function TSynMustache.HelpersGetStandardList: TSynMustacheHelpers;
 begin
   if HelpersStandardList = nil then
-    HelperAdd(HelpersStandardList, [
-      'DateTimeToText', 'DateToText', 'DateFmt', 'TimeLogToText', 'JsonQuote',
-      'JsonQuoteUri', 'ToJson', 'MarkdownToHtml', 'SimpleToHtml', 'WikiToHtml',
-      'BlobToBase64', 'EnumTrim', 'EnumTrimRight', 'PowerOfTwo', 'Equals',
-      'If', 'NewGuid', 'ExtractFileName', 'Lower', 'Upper'], [
-      DateTimeToText, DateToText, DateFmt, TimeLogToText, JsonQuote,
-      JsonQuoteUri, ToJson, MarkdownToHtml, SimpleToHtml, WikiToHtml,
-      BlobToBase64, EnumTrim, EnumTrimRight, PowerOfTwo, Equals_,
-      If_, NewGuid, ExtractFileName, Lower, Upper]);
+    HelperAdd(HelpersStandardList,
+     ['DateTimeToText',
+      'DateToText',
+      'DateFmt',
+      'TimeLogToText',
+      'JsonQuote',
+      'JsonQuoteUri',
+      'ToJson',
+      'MarkdownToHtml',
+      'SimpleToHtml',
+      'WikiToHtml',
+      'BlobToBase64',
+      'EnumTrim',
+      'EnumTrimRight',
+      'PowerOfTwo',
+      'Equals',
+      'If',
+      'NewGuid',
+      'ExtractFileName',
+      'Lower',
+      'Upper'],
+     [DateTimeToText,
+      DateToText,
+      DateFmt,
+      TimeLogToText,
+      JsonQuote,
+      JsonQuoteUri,
+      ToJson,
+      MarkdownToHtml,
+      SimpleToHtml,
+      WikiToHtml,
+      BlobToBase64,
+      EnumTrim,
+      EnumTrimRight,
+      PowerOfTwo,
+      Equals_,
+      If_,
+      NewGuid,
+      ExtractFileName,
+      Lower,
+      Upper]);
   result := HelpersStandardList;
 end;
 

@@ -933,7 +933,7 @@ const
     'X-POWERED-BY:',               // 6
     'EXPECT: 100',                 // 7
     HEADER_BEARER_UPPER,           // 8
-    'USER-AGENT:',                  // 9
+    'USER-AGENT:',                 // 9
     nil);
   PARSEDHEADERS2: array[0..3] of PAnsiChar = (
     'LENGTH:',    // 0

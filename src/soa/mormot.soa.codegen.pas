@@ -781,8 +781,8 @@ begin
     wString:
       ; // simple types have no special marshalling
     wDateTime:
-      _ObjAddProps(['isDateTime', true,
-                    'toVariant', 'DateTimeToIso8601',
+      _ObjAddProps(['isDateTime',  true,
+                    'toVariant',   'DateTimeToIso8601',
                     'fromVariant', 'Iso8601ToDateTime'], result);
     wRecordVersion:
       _ObjAddProp('isRecordVersion', true, result);
@@ -794,15 +794,15 @@ begin
       _ObjAddProp('isJson', true, result);
     wEnum:
       begin
-        _ObjAddProps(['isEnum', true,
-                      'toVariant', 'ord',
+        _ObjAddProps(['isEnum',      true,
+                      'toVariant',   'ord',
                       'fromVariant', 'Variant2' + typName], result);
         if self <> nil then
           RegisterType(fEnumerates);
       end;
     wSet:
       begin
-        _ObjAddProps(['isSet', true,
+        _ObjAddProps(['isSet',      true,
                       'toVariant',
                         SIZETODELPHI[rtti.Cache.EnumInfo.SizeInStorageAsSet],
                       'fromVariant', typName], result);
@@ -810,17 +810,17 @@ begin
           RegisterType(fSets);
       end;
     wGUID:
-      _ObjAddProps(['toVariant', 'GuidToVariant',
+      _ObjAddProps(['toVariant',   'GuidToVariant',
                     'fromVariant', 'VariantToGuid'], result);
     wCustomAnswer:
-      _ObjAddProps(['toVariant', 'HttpBodyToVariant',
+      _ObjAddProps(['toVariant',   'HttpBodyToVariant',
                     'fromVariant', 'VariantToHttpBody'], result);
     wRecord:
       begin
         _ObjAddProp('isRecord', true, result);
         if rtti <> nil then
         begin
-          _ObjAddProps(['toVariant', typName + '2Variant',
+          _ObjAddProps(['toVariant',   typName + '2Variant',
                         'fromVariant', 'Variant2' + typName], result);
           if self <> nil then
             RegisterType(fRecords);
@@ -833,13 +833,13 @@ begin
         raise EWrapperContext.CreateUtf8(
           '%.ContextFromRtti: % should be part of the model', [self, typName])
       else
-        _ObjAddProps(['isSQLRecord', true,
+        _ObjAddProps(['isSQLRecord',  true,
                       'isOrm', true], result);
     wObject:
       begin
         _ObjAddProp('isObject', true, result);
         if rtti <> nil then
-          _ObjAddProps(['toVariant', 'ObjectToVariant',
+          _ObjAddProps(['toVariant',   'ObjectToVariant',
                         'fromVariant', typName + '.CreateFromVariant'], result);
       end;
     wArray:
@@ -847,15 +847,15 @@ begin
         _ObjAddProp('isArray', true, result);
         if rtti <> nil then
         begin
-          _ObjAddProps(['toVariant', typName + '2Variant',
+          _ObjAddProps(['toVariant',   typName + '2Variant',
                         'fromVariant', 'Variant2' + typName], result);
           if self <> nil then
             RegisterType(fArrays);
         end;
       end;
     wBlob:
-      _ObjAddProps(['isBlob', true,
-                    'toVariant', 'BlobToVariant',
+      _ObjAddProps(['isBlob',      true,
+                    'toVariant',   'BlobToVariant',
                     'fromVariant', 'VariantToBlob'], result);
     wInterface:
       _ObjAddProp('isInterface', true, result);
@@ -927,13 +927,13 @@ begin
         raise EWrapperContext.CreateUtf8('Unexpected type % for %.%',
           [nfo, fServer.Model.Tables[t], nfo.Name]);
       kind := CROSSPLATFORM_KIND[nfo.OrmFieldType];
-      _ObjAddProps(['index', f + 1,
-                    'name', nfo.Name,
-                    'sql', ord(nfo.OrmFieldType),
-                    'sqlName', nfo.OrmFieldTypeName^,
-                    'typeKind', ord(kind),
+      _ObjAddProps(['index',        f + 1,
+                    'name',         nfo.Name,
+                    'sql',          ord(nfo.OrmFieldType),
+                    'sqlName',      nfo.OrmFieldTypeName^,
+                    'typeKind',     ord(kind),
                     'typeKindName', CROSSPLATFORMKIND_TEXT[kind],
-                    'attr', byte(nfo.Attributes)], field);
+                    'attr',         byte(nfo.Attributes)], field);
       if aIsUnique in nfo.Attributes then
         _ObjAddProp('unique', true, field);
       if nfo.FieldWidth > 0 then
@@ -1044,10 +1044,10 @@ begin
     begin
       arg := ContextFromRtti(TYPES_SOA[ValueType], ArgRtti);
       _ObjAddProps([
-        'argName', ParamName^,
-        'argType', ArgTypeName^,
-        'arg.dir', ord(ValueDirection),
-        'dirName', DIRTODELPHI[ValueDirection],
+        'argName',  ParamName^,
+        'argType',  ArgTypeName^,
+        'arg.dir',  ord(ValueDirection),
+        'dirName',  DIRTODELPHI[ValueDirection],
         'dirNoOut', DIRTOSMS[ValueDirection]], arg);
       if ValueDirection in [imdConst, imdVar] then
         _ObjAddProp('dirInput', true, arg);
@@ -1171,20 +1171,20 @@ begin
   end;
   result := ContextFromRtti(wUnknown, prop.Value, '', fullName);
   _ObjAddProps([
-    'propName', prop.Name,
+    'propName',     prop.Name,
     'fullPropName', fullName], result);
   if level > 0 then
     _ObjAddPropU('nestedIdentation', RawUtf8OfChar(' ', level * 2), result);
   case prop.Value.Parser of
     ptRecord:
       _ObjAddProps([
-        'isSimple', null,
+        'isSimple',    null,
         'nestedRecord', _ObjFast([
           'nestedRecord', null,
           'fields',  ContextNestedProperties(prop.Value, fullName)])], result);
     ptArray:
       _ObjAddProps([
-        'isSimple', null,
+        'isSimple',          null,
         'nestedRecordArray', _ObjFast([
           'nestedRecordArray', null,
           'fields', ContextNestedProperties(prop.Value, fullName)])], result);
@@ -1332,7 +1332,7 @@ begin
     context.uri := Ctxt.UriWithoutSignature;
     if llfHttps in Ctxt.Call^.LowLevelConnectionFlags then
       _ObjAddProps(['protocol', 'https',
-                    'https', true], context)
+                    'https',    true], context)
     else
       _ObjAddPropU('protocol', 'http', context);
     host := Ctxt.InHeader['host'];
@@ -1408,7 +1408,7 @@ begin
   else
   begin
     _ObjAddProps(['templateName', templateName,
-                  'filename', unitName], context);
+                  'filename',     unitName], context);
     result := TSynMustache.Parse(template).Render(
       context, nil, TSynMustache.HelpersGetStandardList, nil, true);
   end;
@@ -1770,18 +1770,18 @@ begin
         [services[i]]);
     context := ContextFromModel(server);
     _ObjAddProps([
-      'filename', FileName,
-      'projectname', ProjectName,
-      'exeName', Executable.ProgramName,
-      'User', Executable.User,
-      'calltype', CallType,
+      'filename',     FileName,
+      'projectname',  ProjectName,
+      'exeName',      Executable.ProgramName,
+      'User',         Executable.User,
+      'calltype',     CallType,
       'callfunction', CallFunction,
-      'exception', ExceptionType,
+      'exception',    ExceptionType,
       'defaultdelay', DefaultDelay], context);
     if high(units) >= 0 then
       _Safe(context)^.O['units']^.AddItems(units);
     if Key <> '' then
-      _ObjAddProps(['asynchkey', Key,
+      _ObjAddProps(['asynchkey',     Key,
                     'asynchkeytype', KeyType], context);
     _ObjAddProps(additionalcontext, context);
     for i := 0 to high(services) do
