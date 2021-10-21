@@ -5061,6 +5061,7 @@ var
   sc, sb: PtrUInt;
   i: PtrInt;
 begin
+  W.AddShort(FPCMM_FLAGS);
   s := CurrentHeapStatus;
   small := GetSmallBlockStatus(10, obTotal, @sc, @sb);
   W.Add('  Small: %=%/%=%',

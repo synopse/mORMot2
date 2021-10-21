@@ -233,6 +233,14 @@ function _MemSize(P: pointer): PtrUInt; inline;
 
 /// retrieve high-level statistics about the current memory manager state
 // - see also GetSmallBlockContention for detailed small blocks information
+// - standard GetHeapStatus and GetFPCHeapStatus gives less accurate information
+// (only CurrHeapSize and MaxHeapSize are set), since we don't track "free" heap
+// bytes: I can't figure how "free" memory is relevant nowadays - on 21th century
+// Operating Systems, memory is virtual, and reserved/mapped by the OS but
+// physically hosted in the HW RAM chips only when written the first time -
+// GetHeapStatus information made sense on MSDOS with fixed 640KB of RAM
+// - note that FPC GetHeapStatus and GetFPCHeapStatus is only about the
+// current thread (irrelevant for sure) whereas CurrentHeapStatus is global
 function CurrentHeapStatus: TMMStatus;
 
 
@@ -302,6 +310,27 @@ function GetSmallBlockContention(
 procedure WriteHeapStatus(const context: shortstring = '';
   smallblockstatuscount: integer = 8; smallblockcontentioncount: integer = 8;
   compilationflags: boolean = false);
+
+const
+  /// human readable information about how our MM was built
+  // - similar to WriteHeapStatus(compilationflags=true) output
+  FPCMM_FLAGS = ' '
+    {$ifdef FPCMM_BOOSTER}           + 'BOOSTER '     {$else}
+      {$ifdef FPCMM_BOOST}           + 'BOOST '       {$else}
+        {$ifdef FPCMM_SERVER}        + 'SERVER '      {$endif}
+      {$endif}
+    {$endif}
+    {$ifdef FPCMM_ASSUMEMULTITHREAD} + ' assumulthrd' {$endif}
+    {$ifdef FPCMM_LOCKLESSFREE}      + ' lockless'    {$endif}
+    {$ifdef FPCMM_PAUSE}             + ' pause'       {$endif}
+    {$ifdef FPCMM_SLEEPTSC}          + ' rdtsc'       {$endif}
+    {$ifdef LINUX}
+      {$ifdef FPCMM_NOMREMAP}        + ' nomremap'    {$endif}
+    {$endif LINUX}
+    {$ifdef FPCMM_SMALLNOTWITHMEDIUM}+ ' smallpool'   {$endif}
+    {$ifdef FPCMM_ERMS}              + ' erms'        {$endif}
+    {$ifdef FPCMM_DEBUG}             + ' debug'       {$endif}
+    {$ifdef FPCMM_REPORTMEMORYLEAKS} + ' repmemleak'  {$endif};
 
 {$endif FPCMM_STANDALONE}
 
@@ -2426,14 +2455,24 @@ end;
 
 {$else}
 
+function _GetFPCHeapStatus: TFPCHeapStatus;
+var
+  mm: PMMStatus;
+begin
+  mm := @HeapStatus;
+  result.MaxHeapSize := mm^.Medium.PeakBytes + mm^.Large.PeakBytes;
+  result.MaxHeapUsed := result.MaxHeapSize;
+  result.CurrHeapSize := mm^.Medium.CurrentBytes + mm^.Large.CurrentBytes;
+  result.CurrHeapUsed := result.CurrHeapSize;
+  result.CurrHeapFree := 0;
+end;
+
 function _GetHeapStatus: THeapStatus;
 begin
   FillChar(result, sizeof(result), 0);
-end;
-
-function _GetFPCHeapStatus: TFPCHeapStatus;
-begin
-  FillChar(result, sizeof(result), 0);
+  with HeapStatus do
+    result.TotalAllocated := Medium.CurrentBytes + Large.CurrentBytes;
+  result.TotalAddrSpace := result.TotalAllocated;
 end;
 
 type
@@ -2630,23 +2669,7 @@ begin
   if context[0] <> #0 then
     writeln(context);
   if compilationflags then
-    writeln(' Flags: '
-      {$ifdef FPCMM_BOOSTER}           + 'BOOSTER '     {$else}
-        {$ifdef FPCMM_BOOST}           + 'BOOST '       {$else}
-          {$ifdef FPCMM_SERVER}        + 'SERVER '      {$endif}
-        {$endif}
-      {$endif}
-      {$ifdef FPCMM_ASSUMEMULTITHREAD} + ' assumulthrd' {$endif}
-      {$ifdef FPCMM_LOCKLESSFREE}      + ' lockless'    {$endif}
-      {$ifdef FPCMM_PAUSE}             + ' pause'       {$endif}
-      {$ifdef FPCMM_SLEEPTSC}          + ' rdtsc'       {$endif}
-      {$ifdef LINUX}
-        {$ifdef FPCMM_NOMREMAP}        + ' nomremap'    {$endif}
-      {$endif LINUX}
-      {$ifdef FPCMM_SMALLNOTWITHMEDIUM}+ ' smallpool'   {$endif}
-      {$ifdef FPCMM_ERMS}              + ' erms'        {$endif}
-      {$ifdef FPCMM_DEBUG}             + ' debug'       {$endif}
-      {$ifdef FPCMM_REPORTMEMORYLEAKS} + ' repmemleak'  {$endif});
+    writeln(' Flags:' + FPCMM_FLAGS);
   with CurrentHeapStatus do
   begin
     writeln(' Small:  blocks=', K(SmallBlocks), ' size=', K(SmallBlocksSize),
