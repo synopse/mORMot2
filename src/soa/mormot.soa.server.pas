@@ -1534,6 +1534,28 @@ end;
 
 { TServiceContainerServer }
 
+constructor TServiceContainerServer.Create(aOwner: TInterfaceResolver);
+begin
+  inherited Create(aOwner);
+  fRestServer := aOwner as TRestServer;
+  fSessionTimeout := 30 * 60; // 30 minutes by default
+end;
+
+destructor TServiceContainerServer.Destroy;
+var
+  i: PtrInt;
+begin
+  if fFakeCallbacks <> nil then
+  begin
+    for i := 0 to fFakeCallbacks.Count - 1 do
+      // prevent GPF in Destroy
+      TInterfacedObjectFakeServer(fFakeCallbacks.List[i]).fServer := nil;
+    FreeAndNil(fFakeCallbacks); // do not own objects
+  end;
+  fRecordVersionCallback := nil; // done after fFakeCallbacks[].fServer := nil
+  inherited Destroy;
+end;
+
 function TServiceContainerServer.AddImplementation(
   aImplementationClass: TInterfacedClass; const aInterfaces: array of PRttiInfo;
   aInstanceCreation: TServiceInstanceImplementation;
@@ -1637,28 +1659,6 @@ begin
           end;
       end;
   end;
-end;
-
-constructor TServiceContainerServer.Create(aOwner: TInterfaceResolver);
-begin
-  inherited Create(aOwner);
-  fRestServer := aOwner as TRestServer;
-  fSessionTimeout := 30 * 60; // 30 minutes by default
-end;
-
-destructor TServiceContainerServer.Destroy;
-var
-  i: PtrInt;
-begin
-  if fFakeCallbacks <> nil then
-  begin
-    for i := 0 to fFakeCallbacks.Count - 1 do
-      // prevent GPF in Destroy
-      TInterfacedObjectFakeServer(fFakeCallbacks.List[i]).fServer := nil;
-    FreeAndNil(fFakeCallbacks); // do not own objects
-  end;
-  fRecordVersionCallback := nil; // done after fFakeCallbacks[].fServer := nil
-  inherited Destroy;
 end;
 
 procedure TServiceContainerServer.FakeCallbackAdd(aFakeInstance: TObject);
@@ -1848,11 +1848,26 @@ begin
   end;
 end;
 
+function FakeCallbackReplaceID(list: PPointer; n: integer; old, new: Int64): integer;
+var
+  fake: TInterfacedObjectFakeServer;
+begin
+  result := 0;
+  if n <> 0 then
+    repeat
+      fake := list^;
+      if fake.fLowLevelConnectionID = old then
+      begin
+        fake.fLowLevelConnectionID := new;
+        inc(result);
+      end;
+      inc(list);
+      dec(n);
+    until n = 0;
+end;
+
 function TServiceContainerServer.FakeCallbackReplaceConnectionID(
   aConnectionIDOld, aConnectionIDNew: Int64): integer;
-var
-  i: integer;
-  serv: ^TInterfacedObjectFakeServer;
 begin
   result := 0;
   if (fFakeCallbacks = nil) or
@@ -1860,16 +1875,8 @@ begin
     exit;
   fFakeCallbacks.Safe.Lock;
   try
-    serv := pointer(fFakeCallbacks.List);
-    for i := 1 to fFakeCallbacks.Count do
-    begin
-      if serv^.fLowLevelConnectionID = aConnectionIDOld then
-      begin
-        serv^.fLowLevelConnectionID := aConnectionIDNew;
-        inc(result);
-      end;
-      inc(serv);
-    end;
+    FakeCallbackReplaceID(pointer(fFakeCallbacks.List), fFakeCallbacks.Count,
+      aConnectionIDOld, aConnectionIDNew);
   finally
     fFakeCallbacks.Safe.UnLock;
   end;
