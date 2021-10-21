@@ -1321,7 +1321,7 @@ procedure mul64x64(const left, right: QWord; out product: THash128Rec);
         mul     rsi
         {$endif WIN64ABI}
         mov     qword ptr [r8], rax
-        mov     qword ptr [r8+8], rdx
+        mov     qword ptr [r8 + 8], rdx
 end;
 
 function bswap32(a: cardinal): cardinal;

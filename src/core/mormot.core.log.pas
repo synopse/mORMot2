@@ -1429,7 +1429,7 @@ function EventArchiveSynLZ(
 var
   /// define how .synlz files are compressed by TSynLog.PerformRotation
   // - assigned to AlgoSynLZ by default which is the fastest for logs
-  // - but you may set AlgoLizardFast or AlgoLizardHuffman as alternatives
+  // - you may set AlgoLizardFast or AlgoLizardHuffman as alternatives
   // (default AlgoLizard is much slower and less efficient on logs)
   // - consider AlgoDeflate which gives the best compression ratio and is also
   // very fast if libdeflate is available (e.g. on FPC x86_64)

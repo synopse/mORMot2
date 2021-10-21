@@ -2087,8 +2087,11 @@ procedure RcuPtr(var src, dst);
 procedure Rcu(var src, dst; len: integer);
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
+{$ifdef CPUINTEL}
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
-  {$ifndef CPUINTEL}inline;{$endif}
+{$else}
+procedure mul64x64(constref left, right: QWord; out product: THash128Rec); inline;
+{$endif CPUINTEL}
 
 
 { ************ Low-level Functions Manipulating Bits }
@@ -8475,7 +8478,7 @@ begin
   {$endif CPU64}
 end;
 
-procedure mul64x64(const left, right: QWord; out product: THash128Rec);
+procedure mul64x64(constref left, right: QWord; out product: THash128Rec);
 var
   l: TQWordRec absolute left;
   r: TQWordRec absolute right;

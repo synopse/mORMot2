@@ -139,7 +139,7 @@ begin
   Check(ecc_make_key_pas(pub[0], priv[0])); // also validate our pascal code
   timer.Start;
   for i := 1 to ECC_COUNT - 1 do
-    Check(Ecc256r1MakeKey(pub[i], priv[i]));
+    Check(Ecc256r1MakeKey(pub[i], priv[i])); // may be OpenSSL
   NotifyTestSpeed('Ecc256r1MakeKey', ECC_COUNT - 1, 0, @timer);
   timer.Start;
   for i := 0 to ECC_COUNT - 2 do
