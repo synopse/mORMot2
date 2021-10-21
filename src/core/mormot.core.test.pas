@@ -1336,7 +1336,11 @@ begin
     Level := withLogs;
     PerThreadLog := ptIdentifiedInOnFile;
     HighResolutionTimestamp := true;
-    //RotateFileCount := 5; RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
+    if Level = LOG_VERBOSE then
+    begin
+      RotateFileCount := 10;
+      RotateFileSizeKB := 100*1024; // rotate verbose logs by 100MB files
+    end;
     //DestinationPath := Executable.ProgramFilePath + 'logs'; // should exist
   end;
   // testing is performed by some dedicated classes defined in the caller units
