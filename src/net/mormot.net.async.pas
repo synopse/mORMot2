@@ -1854,8 +1854,8 @@ begin
   result := -1
 end;
 
-function TAsyncConnections.ConnectionFindLocked(aHandle: TPollAsyncConnectionHandle;
-  aIndex: PInteger): TAsyncConnection;
+function TAsyncConnections.ConnectionFindLocked(
+  aHandle: TPollAsyncConnectionHandle; aIndex: PInteger): TAsyncConnection;
 var
   i: PtrInt;
 begin

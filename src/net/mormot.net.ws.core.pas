@@ -141,7 +141,8 @@ type
   TWebSocketProcessSettingsLogDetails = set of (
     logHeartbeat,
     logTextFrameContent,
-    logBinaryFrameContent);
+    logBinaryFrameContent,
+    logCallback);
 
   /// parameters to be used for WebSockets processing
   // - those settings are used by all protocols running on a given
@@ -192,6 +193,7 @@ type
     // - set logHeartbeat if you want the ping/pong frames to be logged
     // - set logTextFrameContent if you want the text frame content to be logged
     // - set logBinaryFrameContent if you want the binary frame content to be logged
+    // - set logCallback for each TWebSocketAsyncServerRest callback notification
     // - used only if WebSocketLog global variable is set to a TSynLog class
     LogDetails: TWebSocketProcessSettingsLogDetails;
     /// TWebSocketProtocol.SetEncryptKey PBKDF2-SHA-3 salt for TProtocolAes
@@ -2368,6 +2370,7 @@ end;
 procedure TWebSocketProcessSettings.SetFullLog;
 begin
   LogDetails := [logHeartbeat, logTextFrameContent, logBinaryFrameContent];
+  // logCallback is debug-focused and for TWebSocketAsyncServerRest only
 end;
 
 

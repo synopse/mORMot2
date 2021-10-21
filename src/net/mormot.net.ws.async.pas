@@ -651,9 +651,11 @@ begin
   else
   begin
     connection := fAsync.ConnectionFind(Ctxt.ConnectionID); // O(log(n)) lookup
-    WebSocketLog.Add.Log(LOG_TRACEERROR[connection = nil],
-      'Callback(%) % on ConnectionID=% -> %',
-      [Ctxt.Url, ToText(mode)^, Ctxt.ConnectionID, connection], self);
+    if (connection = nil) or
+       (logCallback in fSettings.LogDetails) then
+      WebSocketLog.Add.Log(LOG_TRACEERROR[connection = nil],
+        'Callback(%) % on ConnectionID=% -> %',
+        [Ctxt.Url, ToText(mode)^, Ctxt.ConnectionID, connection], self);
   end;
   if (connection <> nil) and
      (TWebSocketAsyncConnection(connection).fProcess <> nil) then
