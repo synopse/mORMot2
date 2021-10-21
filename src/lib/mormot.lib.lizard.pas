@@ -225,7 +225,7 @@ var
   AlgoLizardHuffman: TAlgoCompress;
 
 
-/// a TSynLogArchiveEvent handler which will compress older .log files
+/// a TSynLogArchiveEvent handler which will archive and compress .log files
 // using our proprietary AlgoLizardFast format
 // - resulting file will have the .synlz extension and will be located
 // in the aDestinationPath directory, i.e. TSynLogFamily.ArchivePath+'\log\YYYYMM\'

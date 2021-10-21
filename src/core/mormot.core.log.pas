@@ -1426,6 +1426,16 @@ function EventArchiveDelete(
 function EventArchiveSynLZ(
   const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
+var
+  /// define how .synlz files are compressed by TSynLog.PerformRotation
+  // - assigned to AlgoSynLZ by default which is the fastest for logs
+  // - but you may set AlgoLizardFast or AlgoLizardHuffman as alternatives
+  // (default AlgoLizard is much slower and less efficient on logs)
+  // - consider AlgoDeflate which gives the best compression ratio and is also
+  // very fast if libdeflate is available (e.g. on FPC x86_64)
+  // - note that compression itself is run in the logging background thread
+  LogCompressAlgo: TAlgoCompress;
+
 
 { ************** Efficient .log File Access via TSynLogFile }
 
@@ -3528,6 +3538,7 @@ type
   TAutoFlushThread = class(TThread)
   protected
     fEvent: TEvent;
+    fToCompress: TFileName;
     procedure Execute; override;
   public
     constructor Create; reintroduce;
@@ -3553,12 +3564,23 @@ end;
 procedure TAutoFlushThread.Execute;
 var
   i: PtrInt;
+  tmp: TFileName;
   files: TSynLogDynArray; // thread-safe local copy
 begin
   repeat
     fEvent.WaitFor(1000);
     if Terminated then
       break;
+    if fToCompress <> '' then
+    begin
+      // background (SynLZ) compression from TSynLog.PerformRotation
+      tmp := fToCompress + '.tmp';
+      RenameFile(fToCompress, tmp);
+      LogCompressAlgo.FileCompress(tmp, fToCompress, LOG_MAGIC, true);
+      DeleteFile(tmp);
+      fToCompress := '';
+      continue; // this was not a per-second regular event
+    end;
     EnterCriticalSection(GlobalThreadLock);
     try
       if Terminated or
@@ -5123,7 +5145,7 @@ begin
     LogFileInit;
   if not (sllEnter in fFamily.Level) and
      (Level in fFamily.fLevelStackTrace) then
-    // to investigate: if no Enter/Leave, then no recursion -> dead code?
+    // needed for pure ManualEnter with no Enter/Leave
     for i := 0 to fThreadContext^.RecursionCount - 1 do
     begin
       fWriter.AddChars(' ', i + 24 - byte(fFamily.HighResolutionTimestamp));
@@ -5134,8 +5156,9 @@ begin
     fWriter.AddInt18ToChars3(fThreadIndex);
   fCurrentLevel := Level;
   fWriter.AddShorter(LOG_LEVEL_TEXT[Level]);
-  fWriter.AddChars(#9, fThreadContext^.RecursionCount -
-    byte(Level in [sllEnter, sllLeave]));
+  i := fThreadContext^.RecursionCount;
+  if i > 0 then
+    fWriter.AddChars(#9, i - byte(Level in [sllEnter, sllLeave]));
   case Level of // handle additional information for some special error levels
     sllMemory:
       AddMemoryStats;
@@ -5150,7 +5173,8 @@ var
 begin
   CloseLogFile;
   currentMaxSynLZ := 0;
-  if not (assigned(fFamily.fOnRotate) and fFamily.fOnRotate(self, fFileName)) then
+  if not (assigned(fFamily.fOnRotate) and
+     fFamily.fOnRotate(self, fFileName)) then
   begin
     if fFamily.fRotateFileCount > 1 then
     begin
@@ -5166,7 +5190,16 @@ begin
         DeleteFile(FN[currentMaxSynLZ - 1]); // delete e.g. '9.synlz'
       for i := fFamily.fRotateFileCount - 2 downto 1 do
         RenameFile(FN[i - 1], FN[i]); // e.g. '8.synlz' -> '9.synlz'
-      AlgoSynLZ.FileCompress(fFileName, FN[0], LOG_MAGIC, true); // -> '1.synlz'
+      if (AutoFlushThread <> nil) and
+         (AutoFlushThread.fToCompress = '') and
+         RenameFile(fFileName, FN[0]) then
+      begin
+        AutoFlushThread.fToCompress := FN[0]; // background compression
+        AutoFlushThread.fEvent.SetEvent;
+      end
+      else
+        // blocking compression in the processing thread
+        LogCompressAlgo.FileCompress(fFileName, FN[0], LOG_MAGIC, true);
     end;
     DeleteFile(fFileName);
   end;
@@ -7417,6 +7450,7 @@ begin
   SetThreadName := _SetThreadName;
   SetCurrentThreadName('MainThread');
   GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
+  LogCompressAlgo := AlgoSynLZ; // very fast and efficient on logs
   //writeln(BacktraceStrFpc(Get_pc_addr));
   //writeln(GetExecutableLocation(get_caller_addr(get_frame)));
   //writeln(GetInstanceDebugFile.FindLocationShort(PtrUInt(@TDynArray.InitFrom)));
