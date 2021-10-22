@@ -7124,7 +7124,7 @@ var
   table: PByteArray;
   {$endif CPUX86NOTPIC}
 label
-  end1;
+  end1, no;
 begin
   if (self <> nil) and
      (aName <> nil) and
@@ -7153,7 +7153,7 @@ begin
         if C1 = 0 then
           goto end1;
       until C1 <> C2;
-      cmp := result + 1; // compile as 2 branchless cmovc/cmovnc on FPC
+no:   cmp := result + 1; // compile as 2 branchless cmovc/cmovnc on FPC
       dec(result);
       if C1 > C2 then
         L := cmp
@@ -7163,7 +7163,7 @@ begin
         break;
       continue;
 end1: if C2 <> 0 then
-        break;
+        goto no;
       result := fOrderedByName[result]; // reached ending #0 on both names
       exit;
     until false;
