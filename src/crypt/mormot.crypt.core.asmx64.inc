@@ -1611,6 +1611,112 @@ function gf2_multiply(x, y, m, bits: PtrUInt): PtrUInt;
         jne     @s
 end;
 
+function _add256(out Output; const Left, Right): PtrUInt;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=Output rdx/rsi=Left r8/rdx=Right
+        mov    r9,  qword ptr [Left]
+        mov    r10, qword ptr [Left + 8]
+        mov    r11, qword ptr [Left + 16]
+        mov    rax, qword ptr [Left + 24]
+        add    r9,  qword ptr [Right]
+        adc    r10, qword ptr [Right + 8]
+        adc    r11, qword ptr [Right + 16]
+        adc    rax, qword ptr [Right + 24]
+        mov    qword ptr [Output], r9
+        mov    qword ptr [Output + 8], r10
+        mov    qword ptr [Output + 16], r11
+        mov    qword ptr [Output+ 24], rax
+        mov    eax, 0  // xor eax,eax is shorter but would change the carry
+        adc    eax, eax
+end;
+
+function _sub256(out Output; const Left, Right): PtrUInt;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=Output rdx/rsi=Left r8/rdx=Right
+        mov    r9,  qword ptr [Left]
+        mov    r10, qword ptr [Left + 8]
+        mov    r11, qword ptr [Left + 16]
+        mov    rax, qword ptr [Left + 24]
+        sub    r9,  qword ptr [Right]
+        sbb    r10, qword ptr [Right + 8]
+        sbb    r11, qword ptr [Right + 16]
+        sbb    rax, qword ptr [Right + 24]
+        mov    qword ptr [Output], r9
+        mov    qword ptr [Output + 8], r10
+        mov    qword ptr [Output + 16], r11
+        mov    qword ptr [Output+ 24], rax
+        mov    eax, 0  // xor eax,eax is shorter but would change the carry
+        adc    eax, eax
+end;
+
+procedure _mult128(const l, r; out product);
+  {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=l rdx/rsi=r r8/rdx=product
+        // -> preserve rdx, which is used as result by mul opcode
+        {$ifdef WIN64ABI}
+        push   rsi
+        mov    rsi, r
+        {$else}
+        mov    r8, product
+        {$endif WIN64ABI}
+        // t1.V := l.L * r.L;
+        xor    r9, r9
+        mov    rdx, qword ptr [rsi].THash128Rec.L
+        mov    rax, qword ptr [l].THash128Rec.L
+        mul    rdx
+        mov    r10, qword ptr [rsi].THash128Rec.L
+        mov    qword ptr [r8].THash256Rec.L.L, rax
+        mov    r11, rdx
+        // t2.V := l.H * r.L + t1.H;
+        mov    rax, qword ptr [l].THash128Rec.H
+        mul    r10
+        add    r11, rax
+        adc    rdx, r9
+        mov    r10, rdx
+        // t3.V := l.L * r.H + t2.L;
+        mov    rax, qword ptr [l].THash128Rec.L
+        mul    qword ptr [rsi].THash128Rec.H
+        add    rax, r11
+        adc    rdx, r9
+        mov    qword ptr [r8].THash256Rec.L.H, rax
+        mov    r11, rdx
+        // product.H := l.H * r.H + t2.H + t3.H;
+        mov    rax, qword ptr [l].THash128Rec.H
+        mul    qword ptr [rsi].THash128Rec.H
+        add    rax, r10
+        adc    rdx, r9
+        add    rax, r11
+        adc    rdx, r9
+        mov    qword ptr [r8].THash256Rec.H.L, rax
+        mov    qword ptr [r8].THash256Rec.H.H, rdx
+        // product.L := t3.V shl 64 or t1.L;
+        {$ifdef WIN64ABI}
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
+procedure _inc64(var Value; var Added);
+  {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=Value rdx/rsi=Added
+        mov    rax, qword ptr [Added]
+        xor    rdx, rdx
+        add    qword ptr [Value], rax
+        adc    qword ptr [Value + 8], rdx
+end;
+
+procedure _inc128(var Value; var Added);
+  {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=Value rdx/rsi=Added
+        mov    rax, qword ptr [Added]
+        mov    rdx, qword ptr [Added + 8]
+        xor    r8, r8
+        add    qword ptr [Value], rax
+        adc    qword ptr [Value + 8], rdx
+        adc    qword ptr [Value + 16], r8
+        adc    qword ptr [Value + 24], r8
+end;
+
+
 procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
 // see https://synopse.info/forum/viewtopic.php?id=4369 for asm numbers
 {

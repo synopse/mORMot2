@@ -176,6 +176,29 @@ procedure RawSha256Compress(var Hash; Data: pointer);
 /// entry point of the raw SHA-512 transform function - may be used for low-level use
 procedure RawSha512Compress(var Hash; Data: pointer);
 
+
+{$ifdef CPUINTEL}
+
+/// optimized 256-bit addition written in i386/x86_64 asm - used by ecc256r1
+function _add256(out Output; const Left, Right): PtrUInt;
+
+/// optimized 256-bit substraction written in i386/x86_64 asm - used by ecc256r1
+function _sub256(out Output; const Left, Right): PtrUInt;
+
+/// optimized 128-bit addition written in i386/x86_64 asm - used by ecc256r1
+procedure _inc128(var Value; var Added);
+
+/// optimized 64-bit addition written in i386/x86_64 asm - used by ecc256r1
+procedure _inc64(var Value; var Added);
+
+{$ifdef CPUX64}
+/// 128-to-256-bit multiplication written in x86_64 asm - used by ecc256r1
+procedure _mult128(const l, r; out product);
+{$endif CPUX64}
+
+{$endif CPUINTEL}
+
+
 var
   /// 32-bit truncation of Go runtime aeshash, using aesni opcode
   // - just a wrapper around AesNiHash128() with proper 32-bit zeroing

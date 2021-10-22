@@ -868,6 +868,128 @@ asm     // eax=x edx=y ecx=m
         pop     esi
 end;
 
+function _add256(out Output; const Left, Right): PtrUInt;
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        push   ebp
+        mov    ebx, dword ptr [Left]
+        mov    esi, dword ptr [Left + 4]
+        mov    edi, dword ptr [Left + 8]
+        mov    ebp, dword ptr [Left + 12]
+        add    ebx, dword ptr [Right]
+        adc    esi, dword ptr [Right + 4]
+        adc    edi, dword ptr [Right + 8]
+        adc    ebp, dword ptr [Right + 12]
+        mov    dword ptr [Output], ebx
+        mov    dword ptr [Output + 4], esi
+        mov    dword ptr [Output + 8], edi
+        mov    dword ptr [Output + 12], ebp
+        mov    ebx, dword ptr [Left + 16]
+        mov    esi, dword ptr [Left + 20]
+        mov    edi, dword ptr [Left + 24]
+        mov    ebp, dword ptr [Left + 28]
+        adc    ebx, dword ptr [Right + 16]
+        adc    esi, dword ptr [Right + 20]
+        adc    edi, dword ptr [Right + 24]
+        adc    ebp, dword ptr [Right + 28]
+        mov    dword ptr [Output + 16], ebx
+        mov    dword ptr [Output + 20], esi
+        mov    dword ptr [Output + 24], edi
+        mov    dword ptr [Output + 28], ebp
+        mov    eax, 0  // xor eax,eax is shorter but would change the carry
+        adc    eax, eax
+        pop    ebp
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
+function _sub256(out Output; const Left, Right): PtrUInt;
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        push   ebp
+        mov    ebx, dword ptr [Left]
+        mov    esi, dword ptr [Left + 4]
+        mov    edi, dword ptr [Left + 8]
+        mov    ebp, dword ptr [Left + 12]
+        sub    ebx, dword ptr [Right]
+        sbb    esi, dword ptr [Right + 4]
+        sbb    edi, dword ptr [Right + 8]
+        sbb    ebp, dword ptr [Right + 12]
+        mov    dword ptr [Output], ebx
+        mov    dword ptr [Output + 4], esi
+        mov    dword ptr [Output + 8], edi
+        mov    dword ptr [Output + 12], ebp
+        mov    ebx, dword ptr [Left + 16]
+        mov    esi, dword ptr [Left + 20]
+        mov    edi, dword ptr [Left + 24]
+        mov    ebp, dword ptr [Left + 28]
+        sbb    ebx, dword ptr [Right + 16]
+        sbb    esi, dword ptr [Right + 20]
+        sbb    edi, dword ptr [Right + 24]
+        sbb    ebp, dword ptr [Right + 28]
+        mov    dword ptr [Output + 16], ebx
+        mov    dword ptr [Output + 20], esi
+        mov    dword ptr [Output + 24], edi
+        mov    dword ptr [Output + 28], ebp
+        mov    eax, 0  // xor eax,eax is shorter but would change the carry
+        adc    eax, eax
+        pop    ebp
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
+procedure _inc64(var Value; var Added);
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        mov    ebx, dword ptr [Added]
+        mov    esi, dword ptr [Added + 4]
+        xor    edi, edi
+        add    dword ptr [Value], ebx
+        adc    dword ptr [Value + 4], esi
+        adc    dword ptr [Value + 8], edi
+        adc    dword ptr [Value + 12], edi
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
+procedure _inc128(var Value; var Added);
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        push   ebp
+        mov    ebx, dword ptr [Added]
+        mov    esi, dword ptr [Added + 4]
+        mov    edi, dword ptr [Added + 8]
+        mov    ebp, dword ptr [Added + 12]
+        xor    Added, Added
+        add    dword ptr [Value], ebx
+        adc    dword ptr [Value + 4], esi
+        adc    dword ptr [Value + 8], edi
+        adc    dword ptr [Value + 12], ebp
+        adc    dword ptr [Value + 16], Added
+        adc    dword ptr [Value + 20], Added
+        adc    dword ptr [Value + 24], Added
+        adc    dword ptr [Value + 28], Added
+        pop    ebp
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
 procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // W=eax Buf=edx
