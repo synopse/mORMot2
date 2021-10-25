@@ -199,7 +199,8 @@ type
     {$endif FPCMM_LOCKLESSFREE}
     {$endif FPCMM_DEBUG}
     /// how many times the Operating System Sleep/NanoSleep API was called
-    // - in a perfect world, should be as small as possible
+    // - in a perfect world, should be as small as possible: mormot2tests run as
+    // SleepCount=0 when FPCMM_LOCKLESSFREE is defined (FPCMM_SERVER default)
     SleepCount: PtrUInt;
     /// how many times Getmem() did block and wait for a tiny/small block
     // - see also GetSmallBlockContention() for more detailed information
@@ -539,7 +540,7 @@ end;
 
 { ********* Some Assembly Helpers }
 
-procedure NotifyMediumLargeAlloc(var Arena: TMMStatusArena; Size: PtrUInt);
+procedure NotifyArenaAlloc(var Arena: TMMStatusArena; Size: PtrUInt);
   nostackframe; assembler;
 asm
         {$ifdef FPCMM_DEBUG}
@@ -1017,7 +1018,7 @@ begin
     result := pointer(PByte(new) + MediumBlockPoolSize - BlockSize);
     Info.LastSequentiallyFed := result;
     PPtrUInt(PByte(result) - BlockHeaderSize)^ := BlockSize or IsMediumBlockFlag;
-    NotifyMediumLargeAlloc(HeapStatus.Medium, MediumBlockPoolSizeMem);
+    NotifyArenaAlloc(HeapStatus.Medium, MediumBlockPoolSizeMem);
   end
   else
   begin
@@ -1080,7 +1081,7 @@ begin
     {$endif FPCMM_NOMREMAP}
   if header <> nil then
   begin
-    NotifyMediumLargeAlloc(HeapStatus.Large, blocksize);
+    NotifyArenaAlloc(HeapStatus.Large, blocksize);
     if existing <> nil then
       NotifyMediumLargeFree(HeapStatus.Large, oldsize);
     header.BlockSizeAndFlags := blocksize or IsLargeBlockFlag;
@@ -2460,7 +2461,11 @@ var
   mm: PMMStatus;
 begin
   mm := @HeapStatus;
+  {$ifdef FPCMM_DEBUG}
   result.MaxHeapSize := mm^.Medium.PeakBytes + mm^.Large.PeakBytes;
+  {$else}
+  result.MaxHeapSize := 0;
+  {$endif FPCMM_DEBUG}
   result.MaxHeapUsed := result.MaxHeapSize;
   result.CurrHeapSize := mm^.Medium.CurrentBytes + mm^.Large.CurrentBytes;
   result.CurrHeapUsed := result.CurrHeapSize;
@@ -2653,8 +2658,9 @@ begin
     'B/', K(arena.CumulativeBytes), 'B ');
   {$ifdef FPCMM_DEBUG}
   write('   peak=', K(arena.PeakBytes),
-    'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
-    ' alloc=', K(arena.CumulativeAlloc), ' free=', K(arena.CumulativeFree));
+      'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
+         ' alloc=', K(arena.CumulativeAlloc),
+          ' free=', K(arena.CumulativeFree));
   {$endif FPCMM_DEBUG}
   writeln(' sleep=', K(arena.SleepCount));
 end;
