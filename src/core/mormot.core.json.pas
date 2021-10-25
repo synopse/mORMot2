@@ -7394,7 +7394,6 @@ end;
 procedure _JL_RttiObjectWithID(Data: PAnsiChar; var Ctxt: TJsonParserContext);
 var
   P: PUtf8Char;
-  c: cardinal;
 begin
   P := Ctxt.Json;
   if P <> nil then // in-place replace trailing RowID -> ID for unserialization
@@ -7408,15 +7407,16 @@ begin
         inc(P);
       until (P^ > ' ') or
             (P^ = #0);
-      c := PCardinal(P)^ and $dfdfdfff;
-      if (c = ord('"') + ord('R') shl 8 + ord('O') shl 16 + ord('W') shl 24) and
-         (PCardinal(P + 4)^ and $ffdfdf = ord('I') + ord('D') shl 8 + ord('"') shl 16) then
+      if PInt64(P)^ and $00ffdfdfdfdfdfff = // case insensitive search
+        ord('"') + ord('R') shl 8 + ord('O') shl 16 + ord('W') shl 24 +
+        Int64(ord('I')) shl 32 + Int64(ord('D')) shl 40 + Int64(ord('"')) shl 48 then
       begin // "RowID" -> __{"ID"
         PCardinal(P)^ := $2020 + ord('{') shl 16 + ord('"') shl 24;
         Ctxt.Json := P + 2;
       end
-      else if (c = ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
-              (PCardinal(P + 4)^ and $dfdf = ord('D') + ord(':') shl 8) then
+      else if PInt64(P)^ and $0000ffdfdfdfdfdf =
+        ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24 +
+        Int64(ord('D')) shl 32 + Int64(ord(':')) shl 40 then
       begin // RowID: -> __{ID:
         PCardinal(P)^ := $2020 + ord('{') shl 16 + ord('I') shl 24;
         Ctxt.Json := P + 2;
