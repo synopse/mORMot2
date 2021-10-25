@@ -7997,6 +7997,10 @@ begin
   Context.ParseEndOfObject;
 end;
 
+const
+  ID_JSON: array[boolean] of string[7] = (
+    'RowID', 'ID'); // see also TJsonSerializer.SetOrmOptions: Ajax requires ID
+
 class procedure TOrm.RttiJsonWrite(W: TTextWriter; Instance: TObject;
   Options: TTextWriterWriteObjectOptions);
 var
@@ -8010,7 +8014,7 @@ begin
     exit;
   end;
   W.BlockBegin('{', Options);
-  W.AddPropJsonInt64('RowID', TOrm(Instance).fID);
+  W.AddPropJsonInt64(ID_JSON[woIDAsIDstr in Options], TOrm(Instance).fID);
   props := TOrm(Instance).Orm.Fields;
   cur := pointer(props.List);
   n := props.Count;
