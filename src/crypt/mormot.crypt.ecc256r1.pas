@@ -122,6 +122,23 @@ var
   Ecc256r1Verify: function(const pub: TEccPublicKey; const hash: TEccHash;
     const sign: TEccSignature): boolean;
 
+  /// decompress a secp256r1 curve public key
+  // - could be used before calling Ecc256r1VerifyUncomp()
+  // - direct low-level access to the our pascal version - no OpenSSL yet
+  Ecc256r1Uncompress: procedure(const Compressed: TEccPublicKey;
+    out Uncompressed: TEccPublicKeyUncompressed);
+
+  /// verify an ECDSA signature using an uncompressed public supplied
+  // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
+  // - direct low-level access to the our pascal version - no OpenSSL yet
+  // - returns true if the supplied signature is valid
+  // - returns false if an error occurred
+  // - this function is thread-safe and does not perform any memory allocation
+  // - it is slightly faster than plain Ecc256r1Verify() using TEccPublicKey,
+  // since public key doesn't need to be uncompressed
+  Ecc256r1VerifyUncomp: function(const PublicKey: TEccPublicKeyUncompressed;
+    const Hash: TEccHash; const Signature: TEccSignature): boolean;
+
 
 /// pascal function to create a secp256r1 public/private key pair
 function ecc_make_key_pas(out PublicKey: TEccPublicKey;
@@ -158,9 +175,49 @@ function ecdsa_verify_uncompressed_pas(const PublicKey: TEccPublicKeyUncompresse
 /// uncompress a public key for ECC secp256r1 cryptography
 // - convert from its compressed form with its standard byte header
 // (33 bytes of memory) into uncompressed/flat form (64 bytes of memory)
-procedure ecc_uncompress_key_pas(const Compressed: TEccPublicKey; out
-  Uncompressed: TEccPublicKeyUncompressed);
+procedure ecc_uncompress_key_pas(const Compressed: TEccPublicKey;
+  out Uncompressed: TEccPublicKeyUncompressed);
 
+
+type
+  /// verification of a ECDSA signature using ECC secp256r1 cryptography
+  // - this class encapsultate the public key storage in the native form of
+  // the cryptographic library, which may be this unit pascal or OpenSSL
+  // - it is therefore slightly faster than Ecc256r1Verify()
+  TEcc256r1VerifyAbstract = class
+  public
+    /// initialize the verifier with a given ECC compressed public key
+    constructor Create(const pub: TEccPublicKey); virtual; abstract;
+    /// validate a signature against a hash using ECC
+    function Verify(const hash: TEccHash; const sign: TEccSignature): boolean;
+      virtual; abstract;
+  end;
+
+  /// meta-clas of ECDSA signature verification class
+  TEcc256r1VerifyClass = class of TEcc256r1VerifyAbstract;
+
+  /// pascal verification of a ECDSA signature using ECC secp256r1 cryptography
+  // - as implemented by ecdsa_verify_uncompressed_pas() in this unit
+  TEcc256r1VerifyPas = class(TEcc256r1VerifyAbstract)
+  protected
+    fPub: TEccPublicKeyUncompressed;
+  public
+    /// initialize the verifier with a given ECC compressed public key
+    constructor Create(const pub: TEccPublicKey); override;
+    /// finalize this instance
+    destructor Destroy; override;
+    /// validate a signature against a hash using ECC
+    function Verify(const hash: TEccHash; const sign: TEccSignature): boolean;
+      override;
+  end;
+
+
+var
+  /// fastest available class to be used to verify a ECDSA signature
+  // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
+  // - direct low-level access to our pascal/asm version, or OpenSSL wrappers
+  // - as used e.g. by TJwtES256 high-level JWT processing class
+  TEcc256r1Verify: TEcc256r1VerifyClass = TEcc256r1VerifyPas;
 
 
 { ***************** Middle-Level Certificate-based Public Key Cryptography }
@@ -987,7 +1044,8 @@ end;
 // our CPU-neutral 256-bit unrolled version, mapping mul64x64() pattern
 // - in practice, only faster (and enabled) on i386 and x86_64
 
-{$ifndef CPUX64} // mormot.crytp.core.asmx64.inc offers faster _mult128() asm
+// mormot.crytp.core.asmx64.inc offers faster _mult128() asm
+{$ifndef CPUX64}
 
 {$ifdef FPC} // Delphi is not good at inlining and computing this function
 
@@ -1680,6 +1738,26 @@ begin
 end;
 
 
+{ TEcc256r1VerifyPas }
+
+constructor TEcc256r1VerifyPas.Create(const pub: TEccPublicKey);
+begin
+  EccPointDecompress(TEccPoint(fPub), @pub);
+end;
+
+destructor TEcc256r1VerifyPas.Destroy;
+begin
+  inherited Destroy;
+  FillZero(THash512(fPub));
+end;
+
+function TEcc256r1VerifyPas.Verify(const hash: TEccHash;
+  const sign: TEccSignature): boolean;
+begin
+  result := ecdsa_verify_uncompressed_pas(fPub, Hash, sign);
+end;
+
+
 
 { ***************** Middle-Level Certificate-based Public Key Cryptography }
 
@@ -2007,6 +2085,8 @@ initialization
   @Ecc256r1SharedSecret := @ecdh_shared_secret_pas;
   @Ecc256r1Sign := @ecdsa_sign_pas;
   @Ecc256r1Verify := @ecdsa_verify_pas;
+  @Ecc256r1Uncompress := @ecc_uncompress_key_pas;
+  @Ecc256r1VerifyUncomp := @ecdsa_verify_uncompressed_pas;
 
 end.
 

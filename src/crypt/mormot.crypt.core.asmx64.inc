@@ -1661,10 +1661,9 @@ procedure _mult128(const l, r; out product);
         {$endif WIN64ABI}
         // t1.V := l.L * r.L;
         xor    r9, r9
-        mov    rdx, qword ptr [rsi].THash128Rec.L
-        mov    rax, qword ptr [l].THash128Rec.L
-        mul    rdx
         mov    r10, qword ptr [rsi].THash128Rec.L
+        mov    rax, qword ptr [l].THash128Rec.L
+        mul    r10
         mov    qword ptr [r8].THash256Rec.L.L, rax
         mov    r11, rdx
         // t2.V := l.H * r.L + t1.H;

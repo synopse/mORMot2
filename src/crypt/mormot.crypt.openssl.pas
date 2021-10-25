@@ -392,7 +392,22 @@ function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
 function ecdh_shared_secret_osl(const PublicKey: TEccPublicKey;
   const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 
-
+type
+  /// OpenSSL verification of a ECDSA signature using ECC secp256r1 cryptography
+  // - assigned to TEcc256r1Verify global meta-class at startup
+  TEcc256r1VerifyOsl = class(TEcc256r1VerifyAbstract)
+  protected
+    fKey: PEC_KEY;
+    fPoint: PEC_POINT;
+  public
+    /// initialize the verifier with a given ECC compressed public key
+    constructor Create(const pub: TEccPublicKey); override;
+    /// finalize this instance
+    destructor Destroy; override;
+    /// validate a signature against a hash using ECC
+    function Verify(const hash: TEccHash; const sign: TEccSignature): boolean;
+      override;
+  end;
 
 { ************** JWT Implementation using any OpenSSL Algorithm }
 
@@ -467,6 +482,9 @@ type
   TJwtAbstractOslClass = class of TJwtAbstractOsl;
 
   /// implements 'ES256' secp256r1 ECC algorithm over SHA-256 using OpenSSL
+  // - note that our TJwtES256 class pre-computes the public key so is faster:
+  //  TJwtES256:    100 ES256 in 6.90ms i.e. 14.1K/s, aver. 69us
+  //  TJwtES256Osl: 100 ES256 in 9.56ms i.e. 10.2K/s, aver. 95us
   TJwtES256Osl = class(TJwtAbstractOsl)
   protected
     procedure SetAlgorithms; override;
@@ -1328,6 +1346,35 @@ begin
 end;
 
 
+{ TEcc256r1VerifyOsl }
+
+constructor TEcc256r1VerifyOsl.Create(const pub: TEccPublicKey);
+begin
+  EOpenSslAsymetric.CheckAvailable(PClass(self)^, 'Create');
+  if not NewPrime256v1Key(fKey) or
+     not PublicKeyToPoint(pub, fPoint) or
+     (EC_KEY_set_public_key(fKey, fPoint) <> OPENSSLSUCCESS) then
+    raise EOpenSslAsymetric.CreateFmt('%s.Create failed', [ClassNameShort(self)^]);
+end;
+
+destructor TEcc256r1VerifyOsl.Destroy;
+begin
+  EC_POINT_free(fPoint);
+  EC_KEY_free(fKey);
+  inherited Destroy;
+end;
+
+function TEcc256r1VerifyOsl.Verify(const hash: TEccHash;
+  const sign: TEccSignature): boolean;
+var
+  derlen: integer;
+  der: TEccSignatureDer;
+begin
+  derlen := EccSignToDer(sign, der);
+  result := ECDSA_verify(0, @hash, SizeOf(hash), @der, derlen, fKey) = OPENSSLSUCCESS;
+end;
+
+
 { ************** JWT Implementation using any OpenSSL Algorithm }
 
 { TJwtOpenSsl }
@@ -1558,6 +1605,7 @@ begin
   @Ecc256r1Sign := @ecdsa_sign_osl;
   @Ecc256r1Verify := @ecdsa_verify_osl;
   @Ecc256r1SharedSecret := @ecdh_shared_secret_osl;
+  TEcc256r1Verify := TEcc256r1VerifyOsl;
 end;
 
 
