@@ -845,7 +845,7 @@ type
   // - e.g. if properties storing JSON should be serialized as an object, and not
   // escaped as a string (which is the default, matching ORM column storage)
   // - if an additional "ID_str":"12345" field should be added to the standard
-  // "ID":12345 field, which may exceed 53-bit integer precision of JavsCript
+  // "ID":12345 field, which may exceed 53-bit integer precision of JavaScript
   TJsonSerializerOrmOption = (
     jwoAsJsonNotAsString,
     jwoID_str);
@@ -1181,6 +1181,8 @@ type
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
     function GetValueInt32(Instance: TObject): integer;
       {$ifdef HASINLINE} inline; {$endif}
+    procedure SetValueInt32(Instance: TObject; Value: integer);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
       wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
@@ -1290,6 +1292,10 @@ type
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
+    function GetValueDouble(Instance: TObject): double;
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure SetValueDouble(Instance: TObject; V: double);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
       wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
@@ -1311,6 +1317,10 @@ type
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
+    function GetValueCurrency(Instance: TObject): currency;
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure SetValueCurrency(Instance: TObject; V: currency);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
       wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
@@ -1344,6 +1354,8 @@ type
   TOrmPropInfoRttiAnsi = class(TOrmPropInfoRtti)
   protected
     fEngine: TSynAnsiConvert;
+    procedure CopySameClassPropRaw(Source: TObject; DestInfo: TOrmPropInfo;
+      Dest: TObject);
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
     procedure GetValuePointer(Instance: TObject; out Value: pointer);
@@ -3738,7 +3750,8 @@ end;
 procedure TJsonSerializer.SetOrmOptions(Value: TJsonSerializerOrmOptions);
 begin
   fOrmOptions := Value;
-  if Value * [jwoAsJsonNotAsString, jwoID_str] <> [] then
+  if (jwoAsJsonNotAsString in Value) or
+     (jwoID_str in Value) then
     if (ColNames <> nil) and
        (ColNames[0] = '"RowID":') then
       ColNames[0] := '"ID":'; // as expected by AJAX
@@ -4387,10 +4400,18 @@ begin
     result := fPropInfo.GetOrdProp(Instance);
 end;
 
+procedure TOrmPropInfoRttiInt32.SetValueInt32(Instance: TObject; Value: integer);
+begin
+  if fIntegerGetPropOffset then // roSLong without any getter
+    PInteger(PtrUInt(Instance) + fGetterIsFieldPropOffset)^ := Value
+  else
+    fPropInfo.SetOrdProp(Instance, Value);
+end;
+
 procedure TOrmPropInfoRttiInt32.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 begin
-  TOrmPropInfoRttiInt32(DestInfo).fPropInfo.SetOrdProp(Dest, GetValueInt32(Source));
+  TOrmPropInfoRttiInt32(DestInfo).SetValueInt32(Dest, GetValueInt32(Source));
 end;
 
 procedure TOrmPropInfoRttiInt32.GetBinary(Instance: TObject; W: TBufferWriter);
@@ -4470,19 +4491,13 @@ end;
 
 procedure TOrmPropInfoRttiInt32.SetBinary(Instance: TObject; var Read: TFastReader);
 begin
-  fPropInfo.SetOrdProp(Instance, Read.VarUInt32);
+  SetValueInt32(Instance, Read.VarUInt32);
 end;
 
 procedure TOrmPropInfoRttiInt32.SetValue(Instance: TObject; Value: PUtf8Char;
   ValueLen: PtrInt; wasString: boolean);
-var
-  i32: integer;
 begin
-  i32 := GetInteger(Value);
-  if fIntegerSetPropOffset then
-    PInteger(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := i32
-  else
-    fPropInfo.SetOrdProp(Instance, i32);
+  SetValueInt32(Instance, GetInteger(Value));
 end;
 
 function TOrmPropInfoRttiInt32.SetFieldSqlVar(Instance: TObject;
@@ -4688,14 +4703,14 @@ end;
 procedure TOrmPropInfoRttiInt64.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 begin
-  TOrmPropInfoRttiInt64(DestInfo).SetValueInt64(Dest, fPropInfo.GetInt64Prop(Source));
+  TOrmPropInfoRttiInt64(DestInfo).SetValueInt64(Dest, GetValueInt64(Source));
 end;
 
 procedure TOrmPropInfoRttiInt64.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   V64: Int64;
 begin
-  V64 := fPropInfo.GetInt64Prop(Instance);
+  V64 := GetValueInt64(Instance);
   W.Write(@V64, SizeOf(Int64));
 end;
 
@@ -4769,7 +4784,7 @@ begin
     result := 1
   else
   begin
-    if fGetterIsFieldPropOffset <> 0 then
+    if fGetterIsFieldPropOffset <> 0 then // inlined dual GetValueInt64()
     begin
       V1 := PInt64(PtrUInt(Item1) + fGetterIsFieldPropOffset)^;
       V2 := PInt64(PtrUInt(Item2) + fGetterIsFieldPropOffset)^;
@@ -4820,34 +4835,43 @@ procedure TOrmPropInfoRttiInt64.GetFieldSqlVar(Instance: TObject;
 begin
   aValue.Options := [];
   aValue.VType := ftInt64;
-  aValue.VInt64 := fPropInfo.GetInt64Prop(Instance);
+  aValue.VInt64 := GetValueInt64(Instance);
 end;
 
 
 { TOrmPropInfoRttiDouble }
 
+function TOrmPropInfoRttiDouble.GetValueDouble(Instance: TObject): double;
+begin
+  if fGetterIsFieldPropOffset <> 0 then
+    result := unaligned(PDouble(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
+  else
+    result := fPropInfo.GetDoubleProp(Instance);
+end;
+
+procedure TOrmPropInfoRttiDouble.SetValueDouble(Instance: TObject; V: double);
+begin
+  if fSetterIsFieldPropOffset <> 0 then
+    unaligned(PDouble(PtrUInt(Instance) + fSetterIsFieldPropOffset)^) := V
+  else
+    fPropInfo.SetDoubleProp(Instance, V);
+end;
+
 procedure TOrmPropInfoRttiDouble.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 begin
-  TOrmPropInfoRttiDouble(DestInfo).fPropInfo.SetDoubleProp(
-    Dest, fPropInfo.GetDoubleProp(Source));
+  TOrmPropInfoRttiDouble(DestInfo).SetValueDouble(Dest, GetValueDouble(Source));
 end;
 
 procedure TOrmPropInfoRttiDouble.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  V: double;
 begin
-  if fGetterIsFieldPropOffset <> 0 then
-    V := unaligned(PDouble(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
-  else
-    V := fPropInfo.GetDoubleProp(Instance);
-  W.AddDouble(V);
+  W.AddDouble(GetValueDouble(Instance));
 end;
 
 procedure TOrmPropInfoRttiDouble.GetValueVar(Instance: TObject; ToSql: boolean;
   var result: RawUtf8; wasSqlString: PBoolean);
 begin
-  DoubleToStr(fPropInfo.GetDoubleProp(Instance), result);
+  DoubleToStr(GetValueDouble(Instance), result);
   if wasSqlString <> nil then
     wasSqlString^ := (result = '') or
                      not (result[1] in ['0'..'9']);
@@ -4879,10 +4903,7 @@ begin
     if err <> 0 then
       V := 0;
   end;
-  if fSetterIsFieldPropOffset <> 0 then
-    unaligned(PDouble(PtrUInt(Instance) + fSetterIsFieldPropOffset)^) := V
-  else
-    fPropInfo.SetDoubleProp(Instance, V);
+  SetValueDouble(Instance, V);
 end;
 
 function TOrmPropInfoRttiDouble.CompareValue(Item1, Item2: TObject;
@@ -4895,8 +4916,7 @@ begin
   else if Item2 = nil then
     result := 1
   else
-    result := CompareFloat(
-      fPropInfo.GetDoubleProp(Item1), fPropInfo.GetDoubleProp(Item2));
+    result := CompareFloat(GetValueDouble(Item1), GetValueDouble(Item2));
 end;
 
 function TOrmPropInfoRttiDouble.GetHash(Instance: TObject;
@@ -4904,7 +4924,7 @@ function TOrmPropInfoRttiDouble.GetHash(Instance: TObject;
 var
   V: double;
 begin
-  V := fPropInfo.GetDoubleProp(Instance);
+  V := GetValueDouble(Instance);
   result := DefaultHasher(0, @V, SizeOf(V));
 end;
 
@@ -4912,7 +4932,7 @@ procedure TOrmPropInfoRttiDouble.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   V: double;
 begin
-  V := fPropInfo.GetDoubleProp(Instance);
+  V := GetValueDouble(Instance);
   W.Write(@V, SizeOf(V));
 end;
 
@@ -4921,7 +4941,7 @@ var
   V: double;
 begin
   Read.Copy(@V, SizeOf(V));
-  fPropInfo.SetDoubleProp(Instance, V);
+  SetValueDouble(Instance, V);
 end;
 
 function TOrmPropInfoRttiDouble.SetFieldSqlVar(Instance: TObject;
@@ -4942,7 +4962,7 @@ begin
       exit;
     end;
   end;
-  fPropInfo.SetDoubleProp(Instance, V);
+  SetValueDouble(Instance, V);
   result := true;
 end;
 
@@ -4951,38 +4971,45 @@ procedure TOrmPropInfoRttiDouble.GetFieldSqlVar(Instance: TObject;
 begin
   aValue.Options := [];
   aValue.VType := ftDouble;
-  aValue.VDouble := fPropInfo.GetDoubleProp(Instance);
+  aValue.VDouble := GetValueDouble(Instance);
 end;
 
 
 { TOrmPropInfoRttiCurrency }
 
+function TOrmPropInfoRttiCurrency.GetValueCurrency(Instance: TObject): Currency;
+begin
+  if fGetterIsFieldPropOffset <> 0 then
+    result := PCurrency(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
+  else
+    fPropInfo.GetCurrencyProp(Instance, result);
+end;
+
+procedure TOrmPropInfoRttiCurrency.SetValueCurrency(Instance: TObject; V: Currency);
+begin
+  if fSetterIsFieldPropOffset <> 0 then
+    PCurrency(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := V
+  else
+    fPropInfo.SetCurrencyProp(Instance, V);
+end;
+
 procedure TOrmPropInfoRttiCurrency.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  curr: currency;
 begin
-  fPropInfo.GetCurrencyProp(Source, curr);
-  TOrmPropInfoRttiCurrency(DestInfo).fPropInfo.SetCurrencyProp(Dest, curr);
+  TOrmPropInfoRttiCurrency(DestInfo).SetValueCurrency(Dest, GetValueCurrency(Source));
 end;
 
 procedure TOrmPropInfoRttiCurrency.GetJsonValues(Instance: TObject; W: TTextWriter);
-var
-  curr: currency;
 begin
-  fPropInfo.GetCurrencyProp(Instance, curr);
-  W.AddCurr(curr);
+  W.AddCurr(GetValueCurrency(Instance));
 end;
 
 procedure TOrmPropInfoRttiCurrency.GetValueVar(Instance: TObject; ToSql: boolean;
   var result: RawUtf8; wasSqlString: PBoolean);
-var
-  curr: currency;
 begin
   if wasSqlString <> nil then
     wasSqlString^ := false;
-  fPropInfo.GetCurrencyProp(Instance, curr);
-  result := CurrencyToStr(curr);
+  result := CurrencyToStr(GetValueCurrency(Instance));
 end;
 
 procedure TOrmPropInfoRttiCurrency.NormalizeValue(var Value: RawUtf8);
@@ -4992,14 +5019,8 @@ end;
 
 procedure TOrmPropInfoRttiCurrency.SetValue(Instance: TObject; Value: PUtf8Char;
   ValueLen: PtrInt; wasString: boolean);
-var
-  tmp: Int64;
 begin
-  tmp := StrToCurr64(Value, nil);
-  if fSetterIsFieldPropOffset <> 0 then
-    PInt64(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := tmp
-  else
-    fPropInfo.SetCurrencyProp(Instance, PCurrency(@tmp)^);
+  SetValueCurrency(Instance, StrToCurr64(Value, nil));
 end;
 
 function TOrmPropInfoRttiCurrency.CompareValue(Item1, Item2: TObject;
@@ -5015,8 +5036,8 @@ begin
     result := 1
   else
   begin
-    fPropInfo.GetCurrencyProp(Item1, V1);
-    fPropInfo.GetCurrencyProp(Item2, V2);
+    V1 := GetValueCurrency(Item1);
+    V2 := GetValueCurrency(Item2);
     result := CompareInt64(PInt64(@V1)^, PInt64(@V2)^);
   end;
 end;
@@ -5026,7 +5047,7 @@ function TOrmPropInfoRttiCurrency.GetHash(Instance: TObject;
 var
   V: currency;
 begin
-  fPropInfo.GetCurrencyProp(Instance, V);
+  V := GetValueCurrency(Instance);
   result := DefaultHasher(0, @V, SizeOf(V));
 end;
 
@@ -5035,7 +5056,7 @@ procedure TOrmPropInfoRttiCurrency.GetFieldSqlVar(Instance: TObject;
 begin
   aValue.Options := [];
   aValue.VType := ftCurrency;
-  fPropInfo.GetCurrencyProp(Instance, aValue.VCurrency);
+  aValue.VCurrency := GetValueCurrency(Instance);
 end;
 
 function TOrmPropInfoRttiCurrency.SetFieldSqlVar(Instance: TObject;
@@ -5044,7 +5065,8 @@ var
   V: currency;
 begin
   case aValue.VType of
-    ftDouble, ftDate:
+    ftDouble,
+    ftDate:
       V := aValue.VDouble;
     ftInt64:
       V := aValue.VInt64;
@@ -5052,11 +5074,11 @@ begin
       V := aValue.VCurrency;
   else
     begin
-      result := inherited SetFieldSqlVar(Instance, aValue);
+      result := inherited SetFieldSqlVar(Instance, aValue); // need conversion
       exit;
     end;
   end;
-  fPropInfo.SetCurrencyProp(Instance, PCurrency(@V)^);
+  SetValueCurrency(Instance, PCurrency(@V)^);
   result := true;
 end;
 
@@ -5064,7 +5086,7 @@ procedure TOrmPropInfoRttiCurrency.GetBinary(Instance: TObject; W: TBufferWriter
 var
   V: currency;
 begin
-  fPropInfo.GetCurrencyProp(Instance, V);
+  V := GetValueCurrency(Instance);
   W.Write(@V, SizeOf(V));
 end;
 
@@ -5073,7 +5095,7 @@ var
   V: currency;
 begin
   Read.Copy(@V, SizeOf(V));
-  fPropInfo.SetCurrencyProp(Instance, V);
+  SetValueCurrency(Instance, V);
 end;
 
 
@@ -5082,7 +5104,7 @@ end;
 procedure TOrmPropInfoRttiDateTime.GetJsonValues(Instance: TObject; W: TTextWriter);
 begin
   W.Add('"');
-  W.AddDateTime(fPropInfo.GetDoubleProp(Instance), fOrmFieldType = oftDateTimeMS);
+  W.AddDateTime(GetValueDouble(Instance), fOrmFieldType = oftDateTimeMS);
   W.Add('"');
 end;
 
@@ -5101,8 +5123,8 @@ begin
     result := 1
   else
   begin
-    V1 := fPropInfo.GetDoubleProp(Item1);
-    V2 := fPropInfo.GetDoubleProp(Item2);
+    V1 := GetValueDouble(Item1);
+    V2 := GetValueDouble(Item2);
     if mormot.core.base.SameValue(V1, V2, PRECISION[fOrmFieldType = oftDateTimeMS]) then
       result := 0
     else if V1 > V2 then
@@ -5117,7 +5139,7 @@ procedure TOrmPropInfoRttiDateTime.GetValueVar(Instance: TObject; ToSql: boolean
 begin
   if wasSqlString <> nil then
     wasSqlString^ := true;
-  DateTimeToIso8601TextVar(fPropInfo.GetDoubleProp(Instance), 'T', result,
+  DateTimeToIso8601TextVar(GetValueDouble(Instance), 'T', result,
     fOrmFieldType = oftDateTimeMS);
 end;
 
@@ -5133,10 +5155,7 @@ var
   V: TDateTime;
 begin
   Iso8601ToDateTimePUtf8CharVar(Value, ValueLen, V);
-  if fSetterIsFieldPropOffset <> 0 then
-    unaligned(PDouble(PtrUInt(Instance) + fSetterIsFieldPropOffset)^) := V
-  else
-    fPropInfo.SetDoubleProp(Instance, V);
+  SetValueDouble(Instance, V);
 end;
 
 procedure TOrmPropInfoRttiDateTime.GetFieldSqlVar(Instance: TObject;
@@ -5147,7 +5166,7 @@ begin
   else
     aValue.Options := [];
   aValue.VType := ftDate;
-  aValue.VDouble := fPropInfo.GetDoubleProp(Instance);
+  aValue.VDouble := GetValueDouble(Instance);
 end;
 
 
@@ -5326,21 +5345,34 @@ begin
   end;
 end; // caller should make FastAssignNew(tmp) if offset = 0
 
-procedure TOrmPropInfoRttiAnsi.CopySameClassProp(Source: TObject;
+procedure TOrmPropInfoRttiAnsi.CopySameClassPropRaw(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 var
-  Value: RawByteString;
+  tmp: pointer;
 begin
-  if TOrmPropInfoRttiAnsi(DestInfo).fEngine = fEngine then
-  begin
-    fPropInfo.GetLongStrProp(Source, Value);
-    TOrmPropInfoRttiAnsi(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
-  end
-  else
+  GetValuePointer(Source, tmp);
+  TOrmPropInfoRttiRawUtf8(DestInfo).fPropInfo.SetLongStrProp(
+    Dest, RawByteString(tmp));
+  if fGetterIsFieldPropOffset = 0 then
+    FastAssignNew(tmp);
+end;
+
+procedure TOrmPropInfoRttiAnsi.CopySameClassProp(Source: TObject;
+  DestInfo: TOrmPropInfo; Dest: TObject);
+
+  procedure NeedConversion;
+  var
+    Value: RawByteString;
   begin
     GetValueVar(Source, false, RawUtf8(Value), nil);
     DestInfo.SetValueVar(Dest, Value, true);
   end;
+
+begin
+  if TOrmPropInfoRttiAnsi(DestInfo).fEngine = fEngine then
+    CopySameClassPropRaw(Source, DestInfo, Dest)
+  else
+    NeedConversion;
 end;
 
 procedure TOrmPropInfoRttiAnsi.GetBinary(Instance: TObject; W: TBufferWriter);
@@ -5486,14 +5518,8 @@ end;
 
 procedure TOrmPropInfoRttiRawUtf8.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  tmp: pointer;
 begin
-  GetValuePointer(Source, tmp);
-  TOrmPropInfoRttiRawUtf8(DestInfo).fPropInfo.SetLongStrProp(
-    Dest, RawByteString(tmp));
-  if fGetterIsFieldPropOffset = 0 then
-    FastAssignNew(tmp);
+  CopySameClassPropRaw(Source, DestInfo, Dest);
 end;
 
 function TOrmPropInfoRttiRawUtf8.GetHash(Instance: TObject;
@@ -5641,11 +5667,8 @@ end;
 
 procedure TOrmPropInfoRttiRawUnicode.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  Value: RawByteString;
 begin
-  fPropInfo.GetLongStrProp(Source, Value);
-  TOrmPropInfoRttiRawUnicode(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
+  CopySameClassPropRaw(Source, DestInfo, Dest);
 end;
 
 function TOrmPropInfoRttiRawUnicode.GetHash(Instance: TObject;
@@ -5715,11 +5738,8 @@ end;
 
 procedure TOrmPropInfoRttiRawBlob.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
-var
-  Value: RawByteString;
 begin
-  fPropInfo.GetLongStrProp(Source, Value);
-  TOrmPropInfoRttiRawBlob(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
+  CopySameClassPropRaw(Source, DestInfo, Dest);
 end;
 
 function TOrmPropInfoRttiRawBlob.GetHash(Instance: TObject;
@@ -5734,10 +5754,12 @@ end;
 
 procedure TOrmPropInfoRttiRawBlob.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
-  tmp: RawByteString;
+  tmp: pointer;
 begin
-  fPropInfo.GetLongStrProp(Instance, tmp);
-  W.WrBase64(pointer(tmp), length(tmp), true);
+  GetValuePointer(Instance, tmp);
+  W.WrBase64(tmp, length(RawByteString(tmp)), true);
+  if fGetterIsFieldPropOffset = 0 then
+    FastAssignNew(tmp);
 end;
 
 procedure TOrmPropInfoRttiRawBlob.GetBlob(Instance: TObject; var Blob: RawByteString);
@@ -10338,13 +10360,9 @@ procedure TOrmPropertiesAbstract.SetJsonWriterColumnNames(W: TJsonSerializer;
 var
   i, n, nf: PtrInt;
 begin
-  // get col count overhead
-  if W.withID then
-    n := 1
-  else
-    n := 0;
   // set col names
   nf := Length(W.Fields);
+  n := ord(W.withID);
   SetLength(W.ColNames, nf + n);
   if W.withID then
     W.ColNames[0] := ROWID_TXT; // works for both normal and FTS3 records
