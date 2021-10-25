@@ -599,6 +599,15 @@ begin
   VLI[3] := 0;
 end;
 
+procedure _set1(out VLI: TVLI);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  VLI[0] := 1;
+  VLI[1] := 0;
+  VLI[2] := 0;
+  VLI[3] := 0;
+end;
+
 function _isZero(const VLI: TVLI): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 begin
@@ -644,6 +653,15 @@ begin
     inc(result);
     digit := digit shr 1;
   until digit = 0;
+end;
+
+procedure _mv(out Dest: TVLI; const Source: TVLI);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  Dest[0] := Source[0];
+  Dest[1] := Source[1];
+  Dest[2] := Source[2];
+  Dest[3] := Source[3];
 end;
 
 // returns sign of Left - Right
@@ -794,11 +812,11 @@ end;
 {$endif CPU32}
 
 {$define ECC_ORIGINALMULT}
-// original mult() is slightly faster than our unrolled version on most CPUs
+// original mult() is slightly faster than our unrolled version without asm
 
 {$ifdef CPUINTEL}
   {$undef ECC_ORIGINALMULT}
-  // on i386/x64, our new unrolled mult() with asm faster - especially on FPC
+  // on i386/x64, our new unrolled mult() with asm is faster - especially on FPC
 {$endif CPUINTEL}
 
 // Intel/AMD asm is located in mormot.crypt.core.pas and .inc associated files
@@ -1110,7 +1128,7 @@ end;
 procedure _square(out Output: TVLIDUAL; const Left: TVLI);
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  _mult(Output, Left, Left);
+  _mult(Output, Left, Left); // it is faster to reuse the same _mult()
 end;
 
 {$endif ECC_ORIGINALMULT}
@@ -1144,11 +1162,11 @@ end;
 // from http://www.nsa.gov/ia/_files/nist-routines.pdf
 procedure _mmod_fast(out Output: TVLI; var p_product: TVLIDUAL);
 var
-  carry: integer;
+  carry: PtrInt;
   tmp: TVLI;
 begin
   // t
-  Output := p_product.L;
+  _mv(Output, p_product.L);
   // s1
   tmp[0] := 0;
   tmp[1] := p_product.U64[5] and $FFFFFFFF00000000;
@@ -1233,7 +1251,7 @@ end;
 // https://labs.oracle.com/techrep/2001/smli_tr-2001-95.pdf
 procedure _modInv(out Output: TVLI; const Input, Modulo: TVLI);
 var
-  a, b, u, v: TVLI;
+  a, b, v: TVLI;
   carry: PtrUInt;
   cmp: integer;
 begin
@@ -1242,29 +1260,28 @@ begin
     _clear(Output);
     exit;
   end;
-  a := Input;
-  b := Modulo;
-  u := _1;
+  _mv(a, Input);
+  _mv(b, Modulo);
+  _set1(Output);
   _clear(v);
-  while true do
-  begin
+  repeat
     cmp := _cmp(a, b);
     if cmp = 0 then
       break;
     carry := 0;
-    if (byte(a[0]) and 1) = 0 then
+    if (cardinal(a[0]) and 1) = 0 then
     begin
       _rshift1(a);
-      if (byte(u[0]) and 1) = 1 then
-        carry := _add256(u, u, Modulo);
-      _rshift1(u);
+      if (cardinal(Output[0]) and 1) = 1 then
+        carry := _add256(Output, Output, Modulo);
+      _rshift1(Output);
       if carry <> 0 then
-        THash256(u)[ECC_BYTES - 1] := THash256(u)[ECC_BYTES - 1] or $80;
+        THash256(Output)[ECC_BYTES - 1] := THash256(Output)[ECC_BYTES - 1] or $80;
     end
-    else if (byte(b[0]) and 1) = 0 then
+    else if (cardinal(b[0]) and 1) = 0 then
     begin
       _rshift1(b);
-      if (byte(v[0]) and 1) = 1 then
+      if (cardinal(v[0]) and 1) = 1 then
         carry := _add256(v, v, Modulo);
       _rshift1(v);
       if carry <> 0 then
@@ -1274,30 +1291,29 @@ begin
     begin
       _sub256(a, a, b);
       _rshift1(a);
-      if _cmp(u, v) < 0 then
-        _add256(u, u, Modulo);
-      _sub256(u, u, v);
-      if (byte(u[0]) and 1) = 1 then
-        carry := _add256(u, u, Modulo);
-      _rshift1(u);
+      if _cmp(Output, v) < 0 then
+        _add256(Output, Output, Modulo);
+      _sub256(Output, Output, v);
+      if (cardinal(Output[0]) and 1) = 1 then
+        carry := _add256(Output, Output, Modulo);
+      _rshift1(Output);
       if carry <> 0 then
-        THash256(u)[ECC_BYTES - 1] := THash256(u)[ECC_BYTES - 1] or $80;
+        THash256(Output)[ECC_BYTES - 1] := THash256(Output)[ECC_BYTES - 1] or $80;
     end
     else
     begin
       _sub256(b, b, a);
       _rshift1(b);
-      if _cmp(v, u) < 0 then
+      if _cmp(v, Output) < 0 then
         _add256(v, v, Modulo);
-      _sub256(v, v, u);
-      if (byte(v[0]) and 1) = 1 then
+      _sub256(v, v, Output);
+      if (cardinal(v[0]) and 1) = 1 then
         carry := _add256(v, v, Modulo);
       _rshift1(v);
       if carry > 0 then
         THash256(v)[ECC_BYTES - 1] := THash256(v)[ECC_BYTES - 1] or $80;
     end;
-  end;
-  Output := u;
+  until false;
 end;
 
 // Point multiplication algorithm using Montgomery's ladder with co-Z coordinates.
@@ -1338,9 +1354,9 @@ begin
   _modSub(t5, t5, Z1, Curve_P_32); // t5 = A - x3
   _modMult_fast(X1, X1, t5);       // t1 = B * (A - x3)
   _modSub(t4, X1, t4, Curve_P_32); // t4 = B * (A - x3) - y1^4 = y3
-  X1 := Z1;
-  Z1 := Y1;
-  Y1 := t4;
+  _mv(X1, Z1);
+  _mv(Z1, Y1);
+  _mv(Y1, t4);
 end;
 
 // Modify (x1, y1) => (x1 * z^2, y1 * z^3)
@@ -1359,12 +1375,11 @@ procedure _XYcZ_initial_double(var X1, Y1, X2, Y2: TVLI; InitialZ: PVLI);
 var
   z: TVLI;
 begin
-  X2 := X1;
-  Y2 := Y1;
-  if InitialZ <> nil then
-    z := InitialZ^
-  else
-    z := _1;
+  _mv(X2, X1);
+  _mv(Y2, Y1);
+  if InitialZ = nil then
+    InitialZ := @_1;
+  _mv(z, InitialZ^);
   _apply_z(X1, Y1, z);
   EccPointDoubleJacobian(X1, Y1, z);
   _apply_z(X2, Y2, z);
@@ -1391,7 +1406,7 @@ begin
   _modSub(X2, X1, t5, Curve_P_32); // t3 = B - x3
   _modMult_fast(Y2, Y2, X2);       // t4 = (y2 - y1)*(B - x3)
   _modSub(Y2, Y2, Y1, Curve_P_32); // t4 = y3
-  X2 := t5;
+  _mv(X2, t5);
 end;
 
 // Input P = (x1, y1, Z), Q = (x2, y2, Z)
@@ -1421,7 +1436,7 @@ begin
   _modSub(t6, t7, X1, Curve_P_32); // t6 = x3' - B
   _modMult_fast(t6, t6, t5);       // t6 = (y2 + y1)*(x3' - B)
   _modSub(Y1, t6, Y1, Curve_P_32); // t2 = y3'
-  X1 := t7;
+  _mv(X1, t7);
 end;
 
 procedure EccPointMult(out Output: TEccPoint; const Point: TEccPoint;
@@ -1432,8 +1447,8 @@ var
   i, nb: PtrInt;
 begin
   // R0 and R1
-  Rx[1] := Point.x;
-  Ry[1] := Point.y;
+  _mv(Rx[1], Point.x);
+  _mv(Ry[1], Point.y);
   _XYcZ_initial_double(Rx[1], Ry[1], Rx[0], Ry[0], InitialZ);
   for i := _numBits(Scalar) - 2 downto 1 do
   begin
@@ -1453,8 +1468,8 @@ begin
   // End 1/Z calculation
   _XYcZ_add(Rx[nb], Ry[nb], Rx[1 - nb], Ry[1 - nb]);
   _apply_z(Rx[0], Ry[0], z);
-  Output.x := Rx[0];
-  Output.y := Ry[0];
+  _mv(Output.x, Rx[0]);
+  _mv(Output.y, Ry[0]);
 end;
 
 // Compute a = sqrt(a) (mod curve_p)
@@ -1463,7 +1478,7 @@ var
   i: integer;
   p1, result: TVLI;
 begin
-  result := _1;
+  _set1(result);
   // Since curve_p == 3 (mod 4) for all supported curves, we can compute
   // sqrt(a) = a^((curve_p + 1) / 4) (mod curve_p)
   _add256(p1, Curve_P_32, _1); // p1 = curve_p + 1
@@ -1473,7 +1488,7 @@ begin
     if GetBitPtr(@p1, i) then
       _modMult_fast(result, result, a);
   end;
-  a := result;
+  _mv(a, result);
 end;
 
 procedure _bswap256(dest, source: PQWordArray);
@@ -1583,7 +1598,7 @@ begin
   if prodbits < modbits then
   begin
     // l_product < p_mod
-    Output := product.L;
+    _mv(Output, product.L);
     exit;
   end;
   // Shift p_mod by (LeftBits - modbits). This multiplies p_mod by the largest
@@ -1596,7 +1611,7 @@ begin
   if bits > 0 then
     modbig.U64[digits + NUM_ECC_DIGITS] := _lshift(v^, Modulo, bits)
   else
-    v^ := Modulo;
+    _mv(v^, Modulo);
   // Subtract all multiples of Modulo to get the remainder
   while (prodbits > NUM_ECC_DIGITS * 64) or
         (_cmp(modbig.L, Modulo) >= 0) do
@@ -1617,7 +1632,7 @@ begin
       modbig.U64[NUM_ECC_DIGITS - 1] := modbig.U64[NUM_ECC_DIGITS - 1] or carry;
     dec(prodbits);
   end;
-  Output := product.L;
+  _mv(Output, product.L);
 end;
 
 function ecdsa_sign_pas(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
@@ -1681,10 +1696,10 @@ begin
   _modMult(u1, u1, z, Curve_N_32);  // u1 = e/s
   _modMult(u2, l_r, z, Curve_N_32); // u2 = r/s
   // calculate l_sum = G + Q
-  sumpt.x := pub.x;
-  sumpt.y := pub.y;
-  tx := Curve_G_32.x;
-  ty := Curve_G_32.y;
+  _mv(sumpt.x, pub.x);
+  _mv(sumpt.y, pub.y);
+  _mv(tx, Curve_G_32.x);
+  _mv(ty, Curve_G_32.y);
   _modSub(z, sumpt.x, tx, Curve_P_32);    // Z = x2 - x1
   _XYcZ_add(tx, ty, sumpt.x, sumpt.y);
   _modInv(z, z, Curve_P_32);              // Z = 1/Z
@@ -1701,9 +1716,9 @@ begin
   index := ord(GetBitPtr(@u1, numbits - 1)) +
            ord(GetBitPtr(@u2, numbits - 1)) * 2;
   pt := pts[index];
-  rx := pt.x;
-  ry := pt.y;
-  z := _1;
+  _mv(rx, pt.x);
+  _mv(ry, pt.y);
+  _set1(z);
   for i := numbits - 2 downto 0 do
   begin
     EccPointDoubleJacobian(rx, ry, z);
@@ -1712,8 +1727,8 @@ begin
     pt := pts[index];
     if pt <> nil then
     begin
-      tx := pt.x;
-      ty := pt.y;
+      _mv(tx, pt.x);
+      _mv(ty, pt.y);
       _apply_z(tx, ty, z);
       _modSub(tz, rx, tx, Curve_P_32); // Z = x2 - x1
       _XYcZ_add(tx, ty, rx, ry);
