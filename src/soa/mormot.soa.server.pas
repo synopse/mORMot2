@@ -1706,10 +1706,24 @@ begin
         '', connectionID, callbackID, nil, nil);
 end;
 
+function FakeCallbackFind(list: PPointer; n: integer;
+  conn: Int64; id: TInterfacedObjectFakeID): TInterfacedObjectFakeServer;
+begin
+  if n <> 0 then
+    repeat
+      result := list^;
+      inc(list);
+      if (result.fLowLevelConnectionID = conn) and
+         (result.FakeID = id) then
+          exit;
+      dec(n);
+    until n = 0;
+  result := nil;
+end;
+
 procedure TServiceContainerServer.FakeCallbackRelease(
   Ctxt: TRestServerUriContext);
 var
-  i: PtrInt;
   fake: TInterfacedObjectFakeServer;
   connectionID: Int64;
   fakeID: TInterfacedObjectFakeID;
@@ -1735,42 +1749,38 @@ begin
     // avoid stack overflow ;)
     fRestServer.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
       [ClassType, fakeID, Values[0].Name], sllDebug);
+  fFakeCallbacks.Safe.Lock;
   try
-    fFakeCallbacks.Safe.Lock;
-    for i := 0 to fFakeCallbacks.Count - 1 do
+    fake := FakeCallbackFind(
+      pointer(fFakeCallbacks), fFakeCallbacks.Count, connectionID, fakeID);
+    if fake <> nil then
     begin
-      fake := fFakeCallbacks.List[i];
-      if (fake.fLowLevelConnectionID = connectionID) and
-         (fake.FakeID = fakeID) then
+      fake.fReleasedOnClientSide := true;
+      if Assigned(OnCallbackReleasedOnClientSide) then
+        OnCallbackReleasedOnClientSide(self, fake, fake.fFakeInterface);
+      if fake.fService.fInterface.MethodIndexCallbackReleased >= 0 then
       begin
-        fake.fReleasedOnClientSide := true;
-        if Assigned(OnCallbackReleasedOnClientSide) then
-          OnCallbackReleasedOnClientSide(self, fake, fake.fFakeInterface);
-        if fake.fService.fInterface.MethodIndexCallbackReleased >= 0 then
-        begin
-          // emulate a call to CallbackReleased(callback,'ICallbackName')
-          Ctxt.ServiceMethodIndex :=
-            fake.fService.fInterface.MethodIndexCallbackReleased;
-          Ctxt.ServiceMethod :=
-            @fake.fService.fInterface.Methods[Ctxt.ServiceMethodIndex];
-          Ctxt.ServiceExecution :=
-            @fake.fService.fExecution[Ctxt.ServiceMethodIndex];
-          Ctxt.ServiceExecutionOptions := Ctxt.ServiceExecution.Options;
-          Ctxt.Service := fake.fService;
-          inc(Ctxt.ServiceMethodIndex, Length(SERVICE_PSEUDO_METHOD));
-          fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
-          Ctxt.ServiceParameters := pointer(FormatUtf8('[%,"%"]',
-            [PtrInt(PtrUInt(fake.fFakeInterface)), Values[0].Name]));
-          fake.fService.ExecuteMethod(Ctxt);
-          if withLog then
-            fRestServer.InternalLog('I%() returned %',
-              [PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName,
-               Ctxt.Call^.OutStatus], sllDebug);
-        end
-        else
-          Ctxt.Success;
-        exit;
-      end;
+        // emulate a call to CallbackReleased(callback,'ICallbackName')
+        Ctxt.ServiceMethodIndex :=
+          fake.fService.fInterface.MethodIndexCallbackReleased;
+        Ctxt.ServiceMethod :=
+          @fake.fService.fInterface.Methods[Ctxt.ServiceMethodIndex];
+        Ctxt.ServiceExecution :=
+          @fake.fService.fExecution[Ctxt.ServiceMethodIndex];
+        Ctxt.ServiceExecutionOptions := Ctxt.ServiceExecution.Options;
+        Ctxt.Service := fake.fService;
+        inc(Ctxt.ServiceMethodIndex, Length(SERVICE_PSEUDO_METHOD));
+        fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
+        Ctxt.ServiceParameters := pointer(FormatUtf8('[%,"%"]',
+          [PtrInt(PtrUInt(fake.fFakeInterface)), Values[0].Name]));
+        fake.fService.ExecuteMethod(Ctxt);
+        if withLog then
+          fRestServer.InternalLog('I%() returned %',
+            [PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName,
+             Ctxt.Call^.OutStatus], sllDebug);
+      end
+      else
+        Ctxt.Success;
     end;
   finally
     fFakeCallbacks.Safe.UnLock;
@@ -1856,12 +1866,12 @@ begin
   if n <> 0 then
     repeat
       fake := list^;
+      inc(list);
       if fake.fLowLevelConnectionID = old then
       begin
         fake.fLowLevelConnectionID := new;
         inc(result);
       end;
-      inc(list);
       dec(n);
     until n = 0;
 end;
@@ -1875,8 +1885,8 @@ begin
     exit;
   fFakeCallbacks.Safe.Lock;
   try
-    FakeCallbackReplaceID(pointer(fFakeCallbacks.List), fFakeCallbacks.Count,
-      aConnectionIDOld, aConnectionIDNew);
+    result := FakeCallbackReplaceID(pointer(fFakeCallbacks.List),
+      fFakeCallbacks.Count, aConnectionIDOld, aConnectionIDNew);
   finally
     fFakeCallbacks.Safe.UnLock;
   end;
