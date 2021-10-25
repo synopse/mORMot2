@@ -715,7 +715,7 @@ begin
       if (JsonDecode(pointer(resp), ['result', // 0
                                      'id'      // 1
                                     ], @Values, true) = nil) or
-         ({%H-}Values[0].Value = nil) then
+         ({%H-}Values[0].Text = nil) then
       begin
         // no "result":... layout
         if aErrorMsg <> nil then
@@ -729,7 +729,7 @@ begin
       if aResult <> nil then
         Values[0].ToUtf8(aResult^);
       if (aFakeID <> nil) and
-         (Values[1].Value <> nil) then
+         (Values[1].Text <> nil) then
         // keep ID if no "id":...
         aFakeID^ := Values[1].ToCardinal;
     end;

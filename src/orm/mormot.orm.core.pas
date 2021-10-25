@@ -11572,7 +11572,7 @@ begin
   tmp.Init(Value);
   try
     JsonDecode(tmp.buf, ['FieldNames'], @V, True);
-    CsvToRawUtf8DynArray(V[0].Value, fFieldNames);
+    CsvToRawUtf8DynArray(V[0].Text, fFieldNames);
   finally
     tmp.Done;
   end;

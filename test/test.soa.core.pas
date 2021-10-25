@@ -1841,7 +1841,7 @@ begin
   // {"ID":1786554763,"Timestamp":323618765,"Json":"D:\\TestSQL3.exe"}
   if Context.ParseObject(['ID', 'Timestamp', 'Json'], @Values) then
   begin
-    V.ID := GetInt64(Values[0].Value);
+    V.ID := Values[0].ToInt64;
     V.Timestamp512 := Values[1].ToCardinal;
     Values[2].ToUtf8(V.Json);
   end;

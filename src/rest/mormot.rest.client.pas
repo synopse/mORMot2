@@ -1167,28 +1167,30 @@ end;
 
 { TRestClientAuthentication }
 
+const
+  AUTH_N: array[0..9] of PUtf8Char = (
+    'result',        // 0
+    'data',          // 1
+    'server',        // 2
+    'version',       // 3
+    'logonid',       // 4
+    'logonname',     // 5
+    'logondisplay',  // 6
+    'logongroup',    // 7
+    'timeout',       // 8
+    'algo');         // 9
+
 class function TRestClientAuthentication.ClientGetSessionKey(
   Sender: TRestClientUri; User: TAuthUser;
   const aNameValueParameters: array of const): RawUtf8;
 var
   resp: RawUtf8;
-  values: array[0..9] of TValuePUtf8Char;
+  values: array[0..high(AUTH_N)] of TValuePUtf8Char;
   a: integer;
   algo: TRestAuthenticationSignedUriAlgo absolute a;
 begin
   if (Sender.CallBackGet('auth', aNameValueParameters, resp) <> HTTP_SUCCESS) or
-     (JsonDecode(pointer({%H-}resp),
-      ['result',        // 0
-       'data',          // 1
-       'server',        // 2
-       'version',       // 3
-       'logonid',       // 4
-       'logonname',     // 5
-       'logondisplay',  // 6
-       'logongroup',    // 7
-       'timeout',       // 8
-       'algo'           // 9
-      ], @values) = nil) then
+     (JsonDecode(pointer({%H-}resp), @AUTH_N, length(AUTH_N), @values) = nil) then
   begin
     Sender.fSession.Data := ''; // reset temporary 'data' field
     result := ''; // error
@@ -1196,10 +1198,10 @@ begin
   else
   begin
     values[0].ToUtf8(result);
-    Base64ToBin(PAnsiChar(values[1].Value), values[1].ValueLen, Sender.fSession.Data);
+    Base64ToBin(PAnsiChar(values[1].Text), values[1].Len, Sender.fSession.Data);
     values[2].ToUtf8(Sender.fSession.Server);
     values[3].ToUtf8(Sender.fSession.Version);
-    User.IDValue := GetInt64(values[4].Value);
+    User.IDValue := values[4].ToInt64;
     User.LogonName := values[5].ToUtf8; // set/fix using values from server
     User.DisplayName := values[6].ToUtf8;
     User.GroupRights := pointer(values[7].ToInteger);
@@ -1207,7 +1209,7 @@ begin
     if Sender.fSession.ServerTimeout <= 0 then
       Sender.fSession.ServerTimeout := 60; // default 1 hour if not suppplied
     a := GetEnumNameValueTrimmed(TypeInfo(TRestAuthenticationSignedUriAlgo),
-      values[9].Value, values[9].ValueLen);
+      values[9].Text, values[9].Len);
     if a >= 0 then
       Sender.fComputeSignature :=
         TRestClientAuthenticationSignedUri.GetComputeSignature(algo);

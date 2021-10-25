@@ -5149,7 +5149,7 @@ begin
     'MaxLength', // 0
     'Utf8Length' // 1
     ], @V);
-  fMaxLength := GetCardinalDef(V[0].value, 0);
+  fMaxLength := V[0].ToCardinal(0);
   fUtf8Length := V[1].ToBoolean;
   tmp.Done;
 end;
@@ -5232,9 +5232,9 @@ begin
     'ForbiddenDomains',  // 2
     'AnyTLD'             // 3
     ], @V);
-  LowerCaseCopy(V[0].value, V[0].ValueLen, fAllowedTLD);
-  LowerCaseCopy(V[1].value, V[1].ValueLen, fForbiddenTLD);
-  LowerCaseCopy(V[2].value, V[2].ValueLen, fForbiddenDomains);
+  LowerCaseCopy(V[0].Text, V[0].Len, fAllowedTLD);
+  LowerCaseCopy(V[1].Text, V[1].Len, fForbiddenTLD);
+  LowerCaseCopy(V[2].Text, V[2].Len, fForbiddenDomains);
   AnyTLD := V[3].ToBoolean;
   tmp.Done;
 end;
@@ -5392,7 +5392,7 @@ end;
 procedure TSynValidateText.SetParameters(const value: RawUtf8);
 var
   V: array[0..high(TSynValidateTextProps) + {Utf8Length} 1] of TValuePUtf8Char;
-  i: integer;
+  i: PtrInt;
   tmp: TSynTempBuffer;
 const
   DEFAULT: TSynValidateTextProps = (
@@ -5440,7 +5440,7 @@ begin
       'MaxSpaceCount',
       'Utf8Length'], @V);
     for i := 0 to high(fProps) do
-      fProps[i] := GetCardinalDef(V[i].value, fProps[i]);
+      fProps[i] := V[i].ToCardinal(fProps[i]);
     with V[high(V)] do
       fUtf8Length := ToBoolean;
   finally

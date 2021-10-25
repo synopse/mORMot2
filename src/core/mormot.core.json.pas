@@ -1470,11 +1470,11 @@ type
   TValuePUtf8Char = object
   public
     /// a pointer to the actual UTF-8 text
-    Value: PUtf8Char;
+    Text: PUtf8Char;
     /// how many UTF-8 bytes are stored in Value
-    ValueLen: PtrInt;
+    Len: PtrInt;
     /// convert the value into a UTF-8 string
-    procedure ToUtf8(var Text: RawUtf8); overload;
+    procedure ToUtf8(var Value: RawUtf8); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// convert the value into a UTF-8 string
     function ToUtf8: RawUtf8; overload;
@@ -1486,7 +1486,13 @@ type
     function ToInteger: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// convert the value into an unsigned integer
-    function ToCardinal: PtrUInt;
+    function ToCardinal: PtrUInt; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the value into an unsigned integer
+    function ToCardinal(Def: PtrUInt): PtrUInt; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the value into a 64-bit signed integer
+    function ToInt64: Int64;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns true if Value is either '1' or 'true'
     function ToBoolean: boolean;
@@ -1495,7 +1501,7 @@ type
     function Iso8601ToDateTime: TDateTime;
       {$ifdef HASINLINE}inline;{$endif}
     /// will call IdemPropNameU() over the stored text Value
-    function Idem(const Text: RawUtf8): boolean;
+    function Idem(const Value: RawUtf8): boolean;
       {$ifdef HASINLINE}inline;{$endif}
   end;
   /// used e.g. by JsonDecode() overloaded function to returns values
@@ -1508,14 +1514,10 @@ type
   // - used e.g. by JsonDecode() overloaded function or UrlEncodeJsonObject()
   // to returns names/values
   TNameValuePUtf8Char = record
-    /// a pointer to the actual UTF-8 name text
-    Name: PUtf8Char;
-    /// a pointer to the actual UTF-8 value text
-    Value: PUtf8Char;
-    /// how many UTF-8 bytes are stored in Name (should be integer, not PtrInt)
-    NameLen: integer;
-    /// how many UTF-8 bytes are stored in Value
-    ValueLen: integer;
+    /// pointer and length to the actual UTF-8 name text
+    Name: TValuePUtf8Char;
+    /// pointer and length to the actual UTF-8 value text
+    Value: TValuePUtf8Char;
   end;
 
   /// used e.g. by JsonDecode() overloaded function to returns name/value pairs
@@ -1554,6 +1556,13 @@ procedure JsonDecode(var Json: RawJson; const Names: array of RawUtf8;
 // - if ValuesLen is set, ValuesLen[] will contain the length of each Values[]
 // - returns a pointer to the next content item in the JSON buffer
 function JsonDecode(P: PUtf8Char; const Names: array of RawUtf8;
+  Values: PValuePUtf8CharArray;
+  HandleValuesAsObjectOrArray: boolean = false): PUtf8Char; overload;
+
+/// decode the supplied UTF-8 JSON content for the supplied names
+// - overloaded function expecting the names supplied as a constant array
+// - slightly faster than the one using "const Names: array of RawUtf8"
+function JsonDecode(P: PUtf8Char; Names: PPUtf8CharArray; NamesCount: integer;
   Values: PValuePUtf8CharArray;
   HandleValuesAsObjectOrArray: boolean = false): PUtf8Char; overload;
 
@@ -4140,18 +4149,18 @@ begin
           with Params[i] do
           begin
             for j := 0 to high(PropNamesToIgnore) do
-              if IdemPropNameU(PropNamesToIgnore[j], Name, NameLen) then
+              if IdemPropNameU(PropNamesToIgnore[j], Name.Text, Name.Len) then
               begin
-                NameLen := 0;
+                Name.Len := 0;
                 break;
               end;
-            if NameLen = 0 then
+            if Name.Len = 0 then
               continue;
             if IncludeQueryDelimiter then
               Add(sep);
-            AddNoJsonEscape(Name, NameLen);
+            AddNoJsonEscape(Name.Text, Name.Len);
             Add('=');
-            AddString(UrlEncode(Value));
+            AddString(UrlEncode(Value.Text));
             sep := '&';
             IncludeQueryDelimiter := true;
           end;
@@ -7781,48 +7790,58 @@ var
 
 { TValuePUtf8Char }
 
-procedure TValuePUtf8Char.ToUtf8(var Text: RawUtf8);
+procedure TValuePUtf8Char.ToUtf8(var Value: RawUtf8);
 begin
-  FastSetString(Text, Value, ValueLen);
+  FastSetString(Value, Text, Len);
 end;
 
 function TValuePUtf8Char.ToUtf8: RawUtf8;
 begin
-  FastSetString(result, Value, ValueLen);
+  FastSetString(result, Text, Len);
 end;
 
 function TValuePUtf8Char.ToString: string;
 begin
-  Utf8DecodeToString(Value, ValueLen, result);
+  Utf8DecodeToString(Text, Len, result);
 end;
 
 function TValuePUtf8Char.ToInteger: PtrInt;
 begin
-  result := GetInteger(Value);
+  result := GetInteger(Text);
 end;
 
 function TValuePUtf8Char.ToCardinal: PtrUInt;
 begin
-  result := GetCardinal(Value);
+  result := GetCardinal(Text);
+end;
+
+function TValuePUtf8Char.ToCardinal(Def: PtrUInt): PtrUInt;
+begin
+  result := GetCardinalDef(Text, Def);
+end;
+
+function TValuePUtf8Char.ToInt64: Int64;
+begin
+  SetInt64(Text, result{%H-});
 end;
 
 function TValuePUtf8Char.Iso8601ToDateTime: TDateTime;
 begin
-  result := Iso8601ToDateTimePUtf8Char(Value, ValueLen);
+  result := Iso8601ToDateTimePUtf8Char(Text, Len);
 end;
 
-function TValuePUtf8Char.Idem(const Text: RawUtf8): boolean;
+function TValuePUtf8Char.Idem(const Value: RawUtf8): boolean;
 begin
-  result := (length(Text) = ValueLen) and
-            ((ValueLen = 0) or
-             IdemPropNameUSameLenNotNull(pointer(Text), Value, ValueLen));
+  result := (length(Value) = Len) and
+            ((Len = 0) or
+             IdemPropNameUSameLenNotNull(pointer(Value), Text, Len));
 end;
 
 function TValuePUtf8Char.ToBoolean: boolean;
 begin
-  result := (Value <> nil) and
-            ((PWord(Value)^ = ord('1')) or
-             (PCardinal(Value)^ = TRUE_LOW));
+  result := (Text <> nil) and
+            ((PWord(Text)^ = ord('1')) or
+             (PCardinal(Text)^ = TRUE_LOW));
 end;
 
 procedure JsonDecode(var Json: RawUtf8; const Names: array of RawUtf8;
@@ -7837,10 +7856,10 @@ begin
   JsonDecode(UniqueRawUtf8(RawUtf8(Json)), Names, Values, HandleValuesAsObjectOrArray);
 end;
 
-function JsonDecode(P: PUtf8Char; const Names: array of RawUtf8;
+function JsonDecode(P: PUtf8Char; Names: PPUtf8CharArray; NamesCount: integer;
   Values: PValuePUtf8CharArray; HandleValuesAsObjectOrArray: boolean): PUtf8Char;
 var
-  n, i: PtrInt;
+  i: PtrInt;
   namelen, valuelen: integer;
   name, value: PUtf8Char;
   EndOfObject: AnsiChar;
@@ -7848,9 +7867,8 @@ begin
   result := nil;
   if Values = nil then
     exit; // avoid GPF
-  n := length(Names);
-  FillCharFast(Values[0], n * SizeOf(Values[0]), 0);
-  dec(n);
+  FillCharFast(Values[0], NamesCount * SizeOf(Values[0]), 0);
+  dec(NamesCount);
   if P = nil then
     exit;
   while P^ <> '{' do
@@ -7867,12 +7885,12 @@ begin
       HandleValuesAsObjectOrArray, {normalizeboolean=}true, @valuelen);
     if not (EndOfObject in [',', '}']) then
       exit; // invalid item separator
-    for i := 0 to n do
-      if (Values[i].value = nil) and
+    for i := 0 to NamesCount do
+      if (Values[i].Text = nil) and
          IdemPropNameU(Names[i], name, namelen) then
       begin
-        Values[i].value := value;
-        Values[i].valuelen := valuelen;
+        Values[i].Text := value;
+        Values[i].Len := valuelen;
         break;
       end;
   until (P = nil) or
@@ -7881,6 +7899,13 @@ begin
     result := @NULCHAR
   else
     result := P;
+end;
+
+function JsonDecode(P: PUtf8Char; const Names: array of RawUtf8;
+  Values: PValuePUtf8CharArray; HandleValuesAsObjectOrArray: boolean): PUtf8Char;
+begin
+  result := JsonDecode(P, @Names[0], high(Names) + 1,
+    Values, HandleValuesAsObjectOrArray);
 end;
 
 function JsonDecode(var Json: RawUtf8; const aName: RawUtf8; WasString: PBoolean;
@@ -7938,11 +7963,11 @@ begin
         inc(P);
     inc(P); // jump {
     repeat
-      field.Name := GetJsonPropName(P, @field.NameLen);
-      if field.Name = nil then
+      field.Name.Text := GetJsonPropName(P, @field.Name.Len);
+      if field.Name.Text = nil then
         exit;  // invalid JSON content
-      field.Value := GetJsonFieldOrObjectOrArray(P, nil, @EndOfObject,
-        HandleValuesAsObjectOrArray, true, @field.ValueLen);
+      field.Value.Text := GetJsonFieldOrObjectOrArray(P, nil, @EndOfObject,
+        HandleValuesAsObjectOrArray, true, @field.Value.Len);
       if not (EndOfObject in [',', '}']) then
         exit; // invalid item separator
       if n = length(Values) then

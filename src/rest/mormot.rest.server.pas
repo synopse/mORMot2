@@ -5018,6 +5018,12 @@ begin
   // ServiceMethodIndex will be retrieved from "method": in body
 end;
 
+const
+  RPC_NAMES: array[0..2] of PUtf8Char = (
+    'method', // 0
+    'params', // 1
+    'id');    // 2
+
 procedure TRestServerRoutingJsonRpc.ExecuteSoaByInterface;
 var
   method: RawUtf8;
@@ -5032,15 +5038,11 @@ begin
       '%.ExecuteSoaByInterface invalid call', [self]);
   tmp.Init(Call.Inbody);
   try
-    JsonDecode(tmp.buf, [
-      'method', // 0
-      'params', // 1
-      'id'      // 2
-      ], @values, true);
-    if values[0].value = nil then // Method name required
+    JsonDecode(tmp.buf, @RPC_NAMES, length(RPC_NAMES), @values, true);
+    if values[0].Text = nil then // Method name required
       exit;
     values[0].ToUtf8(method);
-    ServiceParameters := values[1].value;
+    ServiceParameters := values[1].Text;
     ServiceInstanceID := values[2].ToCardinal; // retrieve "id":ClientDrivenID
     ServiceMethodIndex := Service.InterfaceFactory.FindMethodIndex(method);
     if ServiceMethodIndex >= 0 then

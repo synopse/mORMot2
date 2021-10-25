@@ -1008,8 +1008,8 @@ var
   V: array[0..1] of TValuePUtf8Char;
 begin
   JsonDecode(Value, ['damage', 'attackspeed'], @V, true);
-  RangeFromJson(Off.Damage, V[0].Value);
-  RangeFromJson(Off.AttackSpeed, V[1].Value);
+  RangeFromJson(Off.Damage, V[0].Text);
+  RangeFromJson(Off.AttackSpeed, V[1].Text);
 end;
 
 type
@@ -2035,18 +2035,18 @@ begin
   CheckEqual(J, '{"name":"john","year":1982,"pi":3.14159}');
   check(IsValidJson(J));
   JsonDecode(J, ['year', 'pi', 'john', 'name'], @V);
-  Check(V[0].Value = '1982');
-  Check(V[1].Value = '3.14159');
-  Check(V[2].Value = nil);
-  Check(V[3].Value = 'john');
+  Check(V[0].Text = '1982');
+  Check(V[1].Text = '3.14159');
+  Check(V[2].Text = nil);
+  Check(V[3].Text = 'john');
   J := '{surrogate:"\uD801\uDC00"}'; // see https://en.wikipedia.org/wiki/CESU-8
   check(IsValidJson(J));
   JsonDecode(J, ['surrogate'], @V);
-  Check(V[0].ValueLen = 4);
-  Check(V[0].Value[0] = #$F0);
-  Check(V[0].Value[1] = #$90);
-  Check(V[0].Value[2] = #$90);
-  Check(V[0].Value[3] = #$80);
+  Check(V[0].Len = 4);
+  Check(V[0].Text[0] = #$F0);
+  Check(V[0].Text[1] = #$90);
+  Check(V[0].Text[2] = #$90);
+  Check(V[0].Text[3] = #$80);
   J := JsonEncode(['name', 'john', 'ab', '[', 'a', 'b', ']']);
   check(IsValidJson(J));
   CheckEqual(J, '{"name":"john","ab":["a","b"]}');
@@ -2143,11 +2143,11 @@ begin
     JsonDecode(J, ['U', 'R', 'A', 'FOO'], @V);
     V[0].ToUtf8(U2);
     Check(U2 = U);
-    Check(SameValue(GetExtended(V[1].Value, err), r));
-    Check(not IsString(V[2].Value));
-    Check(not IsStringJson(V[2].Value));
+    Check(SameValue(GetExtended(V[1].Text, err), r));
+    Check(not IsString(V[2].Text));
+    Check(not IsStringJson(V[2].Text));
     Check(V[2].ToInteger = a);
-    Check(V[3].Value = nil);
+    Check(V[3].Text = nil);
     J := BinToBase64WithMagic(U);
     check(PInteger(J)^ and $00ffffff = JSON_BASE64_MAGIC_C);
     RB := BlobToRawBlob(pointer(J));

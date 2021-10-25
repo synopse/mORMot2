@@ -857,6 +857,11 @@ begin
   JWT.result := jwtValid;
 end;
 
+const
+  JWT_HEAD: array[0..1] of PUtf8Char = (
+    'alg',  // 0
+    'typ'); // 1
+
 procedure TJwtAbstract.Parse(const Token: RawUtf8; var JWT: TJwtContent;
   out headpayload: RawUtf8; out signature: RawByteString; excluded: TJwtClaims);
 var
@@ -868,7 +873,7 @@ var
   claim: TJwtClaim;
   requiredclaims: TJwtClaims;
   value: variant;
-  head: array[0..1] of TValuePUtf8Char;
+  head: array[0..high(JWT_HEAD)] of TValuePUtf8Char;
   aud: TDocVariantData;
   tok: PAnsiChar absolute Token;
   temp: TSynTempBuffer;
@@ -894,11 +899,9 @@ begin
        (headerlen > 512) then
       exit;
     if not Base64UriToBin(tok, headerlen - 1, temp) or
-       (JsonDecode(temp.buf, ['alg', // 0
-                              'typ'  // 1
-                             ], @head) = nil) or
+       (JsonDecode(temp.buf, @JWT_HEAD, length(JWT_HEAD), @head) = nil) or
        not {%H-}head[0].Idem(fAlgorithm) or
-       ((head[1].Value <> nil) and
+       ((head[1].Text <> nil) and
         not head[1].Idem('JWT')) then
       headerlen := 0;
     temp.Done;
@@ -1050,13 +1053,21 @@ begin
   result := JWT.result = jwtValid;
 end;
 
+const
+  JWT_PLD: array[0..4] of PUtf8Char = (
+    'iss',  // 0
+    'aud',  // 1
+    'exp',  // 2
+    'nbf',  // 3
+    'sub'); // 4
+
 class function TJwtAbstract.VerifyPayload(const Token,
   ExpectedAlgo, ExpectedSubject, ExpectedIssuer, ExpectedAudience: RawUtf8;
   Expiration: PUnixTime; Signature: PRawUtf8; Payload: PVariant;
   IgnoreTime: boolean; NotBeforeDelta: TUnixTime): TJwtResult;
 var
   P, B: PUtf8Char;
-  V: array[0..4] of TValuePUtf8Char;
+  V: array[0..high(JWT_PLD)] of TValuePUtf8Char;
   now, time: PtrUInt;
   temp, temp2: TSynTempBuffer;
 begin
@@ -1068,9 +1079,9 @@ begin
   begin
     B := pointer(Token);
     if not Base64UriToBin(PAnsiChar(B), P - B, temp) or
-       (JsonDecode(temp.buf, ['alg'], @V, false) = nil) or
+       (JsonDecode(temp.buf, @JWT_HEAD, 1, @V, false) = nil) or
        ((ExpectedAlgo <> '') and
-        not IdemPropNameU(ExpectedAlgo, {%H-}V[0].Value, {%H-}V[0].ValueLen)) then
+        not {%H-}V[0].Idem(ExpectedAlgo)) then
       B := nil;
     temp.Done;
     if B = nil then
@@ -1095,12 +1106,7 @@ begin
     temp2.Done;
   end;
   repeat // avoid try..finally for temp.Done
-    if JsonDecode(temp.buf, ['iss', // 0
-                             'aud', // 1
-                             'exp', // 2
-                             'nbf', // 3
-                             'sub'  // 4
-                            ], @V, true) = nil then
+    if JsonDecode(temp.buf, @JWT_PLD, length(JWT_PLD), @V, true) = nil then
       break;
     result := jwtUnexpectedClaim;
     if ((ExpectedSubject <> '') and
@@ -1114,11 +1120,11 @@ begin
       break;
     if Expiration <> nil then
       Expiration^ := 0;
-    if (V[2].value <> nil) or
-       (V[3].value <> nil) then
+    if (V[2].Text <> nil) or
+       (V[3].Text <> nil) then
     begin
       now := UnixTimeUtc;
-      if V[2].value <> nil then
+      if V[2].Text <> nil then
       begin
         time := V[2].ToCardinal;
         result := jwtExpired;
@@ -1129,7 +1135,7 @@ begin
           Expiration^ := time;
       end;
       if not IgnoreTime and
-         (V[3].value <> nil) then
+         (V[3].Text <> nil) then
       begin
         time := V[3].ToCardinal;
         result := jwtNotBeforeFailed;

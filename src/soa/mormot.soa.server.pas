@@ -1738,17 +1738,16 @@ begin
   JsonDecode(pointer(Ctxt.Call^.InBody), Values);
   if length(Values) <> 1 then
     exit;
-  fakeID := GetCardinal(Values[0].value);
+  fakeID := Values[0].Value.ToCardinal;
   if (fakeID = 0) or
      (connectionID = 0) or
-     (Values[0].Name = nil) then
+     (Values[0].Name.Text = nil) then
     exit;
-  withLog := not IdemPropNameU('ISynLogCallback',
-    Values[0].Name, Values[0].NameLen);
+  withLog := not Values[0].Name.Idem('ISynLogCallback');
   if withLog then
     // avoid stack overflow ;)
     fRestServer.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
-      [ClassType, fakeID, Values[0].Name], sllDebug);
+      [ClassType, fakeID, Values[0].Name.Text], sllDebug);
   fFakeCallbacks.Safe.Lock;
   try
     fake := FakeCallbackFind(
@@ -1772,7 +1771,7 @@ begin
         inc(Ctxt.ServiceMethodIndex, Length(SERVICE_PSEUDO_METHOD));
         fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
         Ctxt.ServiceParameters := pointer(FormatUtf8('[%,"%"]',
-          [PtrInt(PtrUInt(fake.fFakeInterface)), Values[0].Name]));
+          [PtrInt(PtrUInt(fake.fFakeInterface)), Values[0].Name.Text]));
         fake.fService.ExecuteMethod(Ctxt);
         if withLog then
           fRestServer.InternalLog('I%() returned %',
