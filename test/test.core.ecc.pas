@@ -39,6 +39,7 @@ type
   TTestCoreEcc = class(TSynTestCase)
   protected
     pub: array of TEccPublicKey;
+    pubunc: array of TEccPublicKeyUncompressed;
     priv: array of TEccPrivateKey;
     sign: array of TEccSignature;
     hash: TEccHash;
@@ -80,6 +81,7 @@ var
   s1, s2, s3: TEccSecretKey;
 begin
   SetLength(pub, ECC_COUNT);
+  SetLength(pubunc, ECC_COUNT);
   SetLength(priv, ECC_COUNT);
   SetLength(sign, ECC_COUNT);
   TAesPrng.Main.FillRandom(@hash, SizeOf(hash));
@@ -141,17 +143,28 @@ begin
   for i := 1 to ECC_COUNT - 1 do
     Check(Ecc256r1MakeKey(pub[i], priv[i])); // may be OpenSSL
   NotifyTestSpeed('Ecc256r1MakeKey', ECC_COUNT - 1, 0, @timer);
+  ecc_uncompress_key_pas(pub[0], pubunc[0]); // also validate our pascal code
+  timer.Start;
+  for i := 1 to ECC_COUNT - 1 do
+    Ecc256r1Uncompress(pub[i], pubunc[i]); // may be OpenSSL
+  NotifyTestSpeed('Ecc256r1Uncompress', ECC_COUNT - 1, 0, @timer);
   timer.Start;
   for i := 0 to ECC_COUNT - 2 do
     Check(Ecc256r1Sign(priv[i], hash, sign[i]));
   NotifyTestSpeed('Ecc256r1Sign', ECC_COUNT - 1, 0, @timer);
-  Check(ecdsa_sign_pas(priv[ECC_COUNT - 1], hash, sign[ECC_COUNT - 1]));
+  Check(ecdsa_sign_pas(priv[ECC_COUNT - 1], hash, sign[ECC_COUNT - 1]), 's');
   Check(ecdsa_verify_pas(pub[7], hash, sign[7]));
   timer.Start;
   for i := 0 to ECC_COUNT - 1 do
     if i <> 7 then
       check(Ecc256r1Verify(pub[i], hash, sign[i]));
   NotifyTestSpeed('Ecc256r1Verify', ECC_COUNT - 1, 0, @timer);
+  Check(ecdsa_verify_uncompressed_pas(pubunc[7], hash, sign[7]), 'vu');
+  timer.Start;
+  for i := 0 to ECC_COUNT - 1 do
+    if i <> 7 then
+      check(Ecc256r1VerifyUncomp(pubunc[i], hash, sign[i]));
+  NotifyTestSpeed('Ecc256r1VerifyUncomp', ECC_COUNT - 1, 0, @timer);
   timer.Start;
   for i := 0 to ECC_COUNT - 2 do
   begin

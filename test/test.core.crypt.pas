@@ -232,14 +232,14 @@ end;
 
 procedure TTestCoreCrypto._RC4;
 const
-  Key1: array[0..4] of byte = ($61, $8A, $63, $D2, $FB);
-  InDat: array[0..4] of byte = ($DC, $EE, $4C, $F9, $2C);
+  Key1:   array[0..4] of byte = ($61, $8A, $63, $D2, $FB);
+  InDat:  array[0..4] of byte = ($DC, $EE, $4C, $F9, $2C);
   OutDat: array[0..4] of byte = ($F1, $38, $29, $C9, $DE);
-  Test1: array[0..7] of byte = ($01, $23, $45, $67, $89, $ab, $cd, $ef);
-  Res1: array[0..7] of byte = ($75, $b7, $87, $80, $99, $e0, $c5, $96);
-  Key2: array[0..3] of byte = ($ef, $01, $23, $45);
-  Test2: array[0..9] of byte = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-  Res2: array[0..9] of byte = ($d6, $a1, $41, $a7, $ec, $3c, $38, $df, $bd, $61);
+  Test1:  array[0..7] of byte = ($01, $23, $45, $67, $89, $ab, $cd, $ef);
+  Res1:   array[0..7] of byte = ($75, $b7, $87, $80, $99, $e0, $c5, $96);
+  Key2:   array[0..3] of byte = ($ef, $01, $23, $45);
+  Test2:  array[0..9] of byte = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  Res2:   array[0..9] of byte = ($d6, $a1, $41, $a7, $ec, $3c, $38, $df, $bd, $61);
 var
   rc4, ref: TRC4;
   dat: array[0..9] of byte;
@@ -791,9 +791,16 @@ procedure TTestCoreCrypto._JWT;
 {$ifdef USE_OPENSSL}
 const
   OSSL_JWT: array[0..10] of TJwtAbstractOslClass = (
-    TJwtRS256Osl, TJwtRS384Osl, TJwtRS512Osl,
-    TJwtPS256Osl, TJwtPS384Osl, TJwtPS512Osl,
-    TJwtES256Osl, TJwtES384Osl, TJwtES512Osl, TJwtES256KOsl,
+    TJwtRS256Osl,
+    TJwtRS384Osl,
+    TJwtRS512Osl,
+    TJwtPS256Osl,
+    TJwtPS384Osl,
+    TJwtPS512Osl,
+    TJwtES256Osl,
+    TJwtES384Osl,
+    TJwtES512Osl,
+    TJwtES256KOsl,
     TJwtEdDSAOsl);
 var
   priv, pub: RawByteString;
