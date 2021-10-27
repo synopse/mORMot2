@@ -1391,6 +1391,7 @@ function BaudotToAscii(const Baudot: RawByteString): RawUtf8; overload;
 
 /// encode a string to be compatible with URI encoding
 function UrlEncode(const svar: RawUtf8): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// encode a string to be compatible with URI encoding
 function UrlEncode(Text: PUtf8Char): RawUtf8; overload;

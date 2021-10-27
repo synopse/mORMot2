@@ -7230,7 +7230,7 @@ begin
   result := RawUtf8ArrayToCsv(tmp, Separator);
 end;
 
-procedure TDocVariantData.ToTextPairsVar(out result: RawUtf8;
+procedure TDocVariantData.ToTextPairsVar(out Result: RawUtf8;
   const NameValueSep, ItemSep: RawUtf8; escape: TTextWriterKind);
 var
   ndx: PtrInt;
@@ -7252,7 +7252,7 @@ begin
           break;
         AddString(ItemSep);
       until false;
-      SetText(result);
+      SetText(Result);
     finally
       Free;
     end;
