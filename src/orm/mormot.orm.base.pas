@@ -10610,7 +10610,7 @@ function TOrmPropertiesAbstract.FieldBitsFromCsv(const aFieldsCsv: RawUtf8;
 var
   ndx: integer;
   P: PUtf8Char;
-  FieldName: ShortString;
+  n: ShortString;
 begin
   FillZero(Bits);
   result := false;
@@ -10619,8 +10619,8 @@ begin
   P := pointer(aFieldsCsv);
   while P <> nil do
   begin
-    GetNextItemShortString(P, FieldName); // FieldName ends with #0
-    ndx := Fields.IndexByName(@FieldName[1]);
+    GetNextItemShortString(P, @n); // n ends with #0
+    ndx := Fields.IndexByName(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
     include(Bits, ndx);
@@ -10633,7 +10633,7 @@ function TOrmPropertiesAbstract.FieldBitsFromCsv(const aFieldsCsv: RawUtf8;
 var
   ndx: integer;
   P: PUtf8Char;
-  FieldName: ShortString;
+  n: ShortString;
 begin
   if (aFieldsCsv = '*') and
      (self <> nil) then
@@ -10651,13 +10651,13 @@ begin
   P := pointer(aFieldsCsv);
   while P <> nil do
   begin
-    GetNextItemShortString(P, FieldName); // FieldName ends with #0
-    if IsRowIDShort(FieldName) then
+    GetNextItemShortString(P, @n); // n ends with #0
+    if IsRowIDShort(n) then
     begin
       withID := true;
       continue;
     end;
-    ndx := Fields.IndexByName(@FieldName[1]);
+    ndx := Fields.IndexByName(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
     include(Bits, ndx);
@@ -10779,7 +10779,7 @@ function TOrmPropertiesAbstract.FieldIndexDynArrayFromCsv(
 var
   ndx: integer;
   P: PUtf8Char;
-  FieldName: ShortString;
+  n: ShortString;
 begin
   result := false;
   if self = nil then
@@ -10787,8 +10787,8 @@ begin
   P := pointer(aFieldsCsv);
   while P <> nil do
   begin
-    GetNextItemShortString(P, FieldName); // FieldName ends with #0
-    ndx := Fields.IndexByName(@FieldName[1]);
+    GetNextItemShortString(P, @n); // n ends with #0
+    ndx := Fields.IndexByName(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
     AddFieldIndex(Indexes, ndx);

@@ -4288,6 +4288,8 @@ var
   Doc, Doc2: TDocVariantData;
   model, m2: TDocVariantModel;
   vr: TTVarRecDynArray;
+  dv: PDocVariantData;
+  pv: PVariant;
   i, ndx: PtrInt;
   V, V1, V2: variant;
   s, j: RawUtf8;
@@ -4572,6 +4574,19 @@ begin
   Check(Doc.SetValueByPath('people.age', 31));
   Check(not Doc.SetValueByPath('people2.name', 'toto'));
   check(Doc.ToJson = '{"people":{"age":31}}');
+  Check(Doc.SetValueByPath('people2.name', 'toto', {create=}true));
+  check(Doc.ToJson = '{"people":{"age":31},"people2":{"name":"toto"}}');
+  check(not Doc.GetDocVariantByPath('Peopl2', dv));
+  check(Doc.GetDocVariantByPath('People2', dv));
+  checkEqual(dv^.ToJson, '{"name":"toto"}');
+  pv := Doc.GetPVariantByPath('people2.NAME');
+  check(pv <> nil);
+  check(pv^ = 'toto');
+  Check(Doc.DeleteByPath('people2.Name'));
+  checkEqual(Doc.ToJson, '{"people":{"age":31},"people2":{}}');
+  Check(not Doc.DeleteByPath('people22'));
+  Check(Doc.DeleteByPath('people2'));
+  checkEqual(Doc.ToJson, '{"people":{"age":31}}');
   check(Doc.O['people'].ToJson = '{"age":31}');
   check(Doc.O['people2'].ToJson = 'null');
   Doc.O_['people2'].AddValue('name', 'titi');
