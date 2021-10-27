@@ -233,7 +233,7 @@ type
   TEccCertificateIssuer = type THash128;
 
   /// used to store a date in a TEccCertificate
-  // - i.e. 16-bit number of days since 1 August 2016
+  // - i.e. 16-bit number of days since 1 August 2016 - up to 2195
   // - use NowEccDate, EccDate(), EccToDateTime() or EccText() functions
   TEccDate = word;
 
@@ -497,10 +497,10 @@ implementation
  - mORMot .obj  98 Ecc256r1SharedSecret in 201.53ms i.e. 486/s, aver. 2.05ms
 
  Some Numbers on Linux x86_64:
- - mORMot  300 Ecc256r1MakeKey in 86.18ms i.e. 3.4K/s, aver. 287us
- - mORMot  300 Ecc256r1Sign in 90.92ms i.e. 3.2K/s, aver. 303us
- - mORMot  300 Ecc256r1Verify in 110.59ms i.e. 2.6K/s, aver. 368us
- - mORMot  598 Ecc256r1SharedSecret in 180.78ms i.e. 3.2K/s, aver. 302us
+ - mORMot  300 Ecc256r1MakeKey in 77.86ms i.e. 3.7K/s, aver. 259us
+ - mORMot  300 Ecc256r1Sign in 82.83ms i.e. 3.5K/s, aver. 276us
+ - mORMot  300 Ecc256r1Verify in 99.93ms i.e. 2.9K/s, aver. 333us
+ - mORMot  598 Ecc256r1SharedSecret in 171.76ms i.e. 3.4K/s, aver. 287us
 
  - OpenSSL 300 Ecc256r1MakeKey in   5.09ms i.e. 57.5K/s, aver. 16us
  - OpenSSL 300 Ecc256r1Sign in   7.97ms i.e. 36.7K/s, aver. 26us
@@ -520,798 +520,308 @@ implementation
 }
 
 const
-  NUM_ECC_DIGITS = ECC_BYTES div 8; // = compute with 4 x 64-bit blocks
+  ECC_QUAD = ECC_BYTES div 8; // = compute with 4 x 64-bit blocks
 
 type
-  // we use UInt64 instead of QWord
-  TVLI = array[0..NUM_ECC_DIGITS - 1] of UInt64;
-  PVLI = ^TVLI;
-
-  TVLIDUAL = record
-    case integer of
-    0: (
-      L,
-      H: TVLI);
-    1: (
-      Lo,
-      Hi: THash256Rec);
-    2: (
-      U64: array[0..(2 * NUM_ECC_DIGITS) - 1] of UInt64);
-  end;
-
   TEccPoint = record
-    x, y: TVLI;
+    x, y: THash256Rec;
   end;
   PEccPoint = ^TEccPoint;
 
 const
-  MAX_TRIES = 16;
+  Curve_P_32: THash256Rec = (
+   q: (QWord($FFFFFFFFFFFFFFFF),
+       QWord($00000000FFFFFFFF),
+       QWord($0000000000000000),
+       QWord($FFFFFFFF00000001)));
 
-  Curve_P_32: TVLI = (
-    UInt64($FFFFFFFFFFFFFFFF),
-    UInt64($00000000FFFFFFFF),
-    UInt64($0000000000000000),
-    UInt64($FFFFFFFF00000001));
-
-  Curve_B_32: TVLI = (
-    UInt64($3BCE3C3E27D2604B),
-    UInt64($651D06B0CC53B0F6),
-    UInt64($B3EBBD55769886BC),
-    UInt64($5AC635D8AA3A93E7));
+  Curve_B_32: THash256Rec = (
+    q: (QWord($3BCE3C3E27D2604B),
+        QWord($651D06B0CC53B0F6),
+        QWord($B3EBBD55769886BC),
+        QWord($5AC635D8AA3A93E7)));
 
   Curve_G_32: TEccPoint = (
-    x: (UInt64($F4A13945D898C296),
-        UInt64($77037D812DEB33A0),
-        UInt64($F8BCE6E563A440F2),
-        UInt64($6B17D1F2E12C4247));
-    y: (UInt64($CBB6406837BF51F5),
-        UInt64($2BCE33576B315ECE),
-        UInt64($8EE7EB4A7C0F9E16),
-        UInt64($4FE342E2FE1A7F9B)));
+    x: (q:
+        (QWord($F4A13945D898C296),
+         QWord($77037D812DEB33A0),
+         QWord($F8BCE6E563A440F2),
+         QWord($6B17D1F2E12C4247)));
+    y: (q:
+        (QWord($CBB6406837BF51F5),
+         QWord($2BCE33576B315ECE),
+         QWord($8EE7EB4A7C0F9E16),
+         QWord($4FE342E2FE1A7F9B))));
 
-  Curve_N_32: TVLI = (
-    UInt64($F3B9CAC2FC632551),
-    UInt64($BCE6FAADA7179E84),
-    UInt64($FFFFFFFFFFFFFFFF),
-    UInt64($FFFFFFFF00000000));
+  Curve_N_32: THash256Rec = (
+    q: (QWord($F3B9CAC2FC632551),
+        QWord($BCE6FAADA7179E84),
+        QWord($FFFFFFFFFFFFFFFF),
+        QWord($FFFFFFFF00000000)));
 
-  _1: TVLI = (1,
-              0,
-              0,
-              0);
+  _1: THash256Rec = (q: (1, 0, 0, 0));
 
-  _3: TVLI = (3,
-              0,
-              0,
-              0);
+  _3: THash256Rec = (q: (3, 0, 0, 0));
 
-  _11: TVLI = (UInt64($0101010101010101),
-               UInt64($0101010101010101),
-               UInt64($0101010101010101),
-               UInt64($0101010101010101));
+  _11: THash256Rec = (q: (QWord($0101010101010101),
+                          QWord($0101010101010101),
+                          QWord($0101010101010101),
+                          QWord($0101010101010101)));
 
-procedure _clear(out VLI: TVLI);
+procedure _set1(out V: THash256Rec);
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  VLI[0] := 0;
-  VLI[1] := 0;
-  VLI[2] := 0;
-  VLI[3] := 0;
+  V.Q[0] := 1;
+  V.Q[1] := 0;
+  V.Q[2] := 0;
+  V.Q[3] := 0;
 end;
 
-procedure _set1(out VLI: TVLI);
+function _isZero(const V: THash256Rec): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  VLI[0] := 1;
-  VLI[1] := 0;
-  VLI[2] := 0;
-  VLI[3] := 0;
+  result := (V.Q[0] = 0) and
+            (V.Q[1] = 0) and
+            (V.Q[2] = 0) and
+            (V.Q[3] = 0);
 end;
 
-function _isZero(const VLI: TVLI): boolean;
+function _equals(const Left, Right: THash256Rec): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := (VLI[0] = 0) and
-            (VLI[1] = 0) and
-            (VLI[2] = 0) and
-            (VLI[3] = 0);
+  result := (Left.Q[0] = Right.Q[0]) and
+            (Left.Q[1] = Right.Q[1]) and
+            (Left.Q[2] = Right.Q[2]) and
+            (Left.Q[3] = Right.Q[3]);
 end;
 
-function _equals(const Left, Right: TVLI): boolean;
+procedure _mv(out Dest: THash256Rec; const Source: THash256Rec);
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := (Left[0] = Right[0]) and
-            (Left[1] = Right[1]) and
-            (Left[2] = Right[2]) and
-            (Left[3] = Right[3]);
-end;
-
-// counts the number of bits required for VLI
-function _numBits(const VLI: TVLI): integer;
-  {$ifdef CPU64}inline;{$endif}
-var
-  digit: UInt64;
-begin
-  result := 3 * 64;
-  digit := VLI[3];
-  if digit = 0 then
-  begin
-    if VLI[2] <> 0 then
-      result := 2
-    else if VLI[1] <> 0 then
-      result := 1
-    else
-    begin
-      result := 0;
-      if VLI[0] = 0 then
-        exit;
-    end;
-    digit := VLI[result];
-    result := result shl 6;
-  end;
-  repeat
-    inc(result);
-    digit := digit shr 1;
-  until digit = 0;
-end;
-
-procedure _mv(out Dest: TVLI; const Source: TVLI);
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  Dest[0] := Source[0];
-  Dest[1] := Source[1];
-  Dest[2] := Source[2];
-  Dest[3] := Source[3];
-end;
-
-// returns sign of Left - Right
-function _cmp(const Left, Right: TVLI): integer;
-  {$ifdef HASINLINE}inline;{$endif}
-var
-  l, r: UInt64;
-begin
-  l := Left[3];
-  r := Right[3];
-  result := ord(l > r) - ord(l < r);
-  if result <> 0 then
-    exit;
-  l := Left[2];
-  r := Right[2];
-  result := ord(l > r) - ord(l < r);
-  if result <> 0 then
-    exit;
-  l := Left[1];
-  r := Right[1];
-  result := ord(l > r) - ord(l < r);
-  if result <> 0 then
-    exit;
-  l := Left[0];
-  r := Right[0];
-  result := ord(l > r) - ord(l < r);
-end;
-
-// computes Output = Input shl Shift, returning carry
-// can modify in place (if Output == Input). 0 < Shift < 64
-function _lshift(var Output: TVLI; const Input: TVLI; Shift: integer): UInt64;
-var
-  temp: UInt64;
-  rev: integer;
-begin
-  rev := 64 - Shift;
-  result := Input[0] shr rev;
-  Output[0] := Input[0] shl Shift;
-  temp := Input[1];
-  Output[1] := (temp shl Shift) or result;
-  result := temp shr rev;
-  temp := Input[2];
-  Output[2] := (temp shl Shift) or result;
-  result := temp shr rev;
-  temp := Input[3];
-  Output[3] := (temp shl Shift) or result;
-  result := temp shr rev;
-end;
-
-{$ifdef CPU32}
-
-procedure _rshift1(var VLI64: TVLI);
-var
-  VLI: TCardinalArray absolute VLI64;
-  carry, temp: cardinal;
-begin
-  carry := VLI[7] shl 31;
-  VLI[7] := VLI[7] shr 1;
-  temp := VLI[6];
-  VLI[6] := (temp shr 1) or carry;
-  carry := temp shl 31;
-  temp := VLI[5];
-  VLI[5] := (temp shr 1) or carry;
-  carry := temp shl 31;
-  temp := VLI[4];
-  VLI[4] := (temp shr 1) or carry;
-  carry := temp shl 31;
-  temp := VLI[3];
-  VLI[3] := (temp shr 1) or carry;
-  carry := temp shl 31;
-  temp := VLI[2];
-  VLI[2] := (temp shr 1) or carry;
-  carry := temp shl 31;
-  temp := VLI[1];
-  VLI[1] := (temp shr 1) or carry;
-  carry := temp shl 31;
-  temp := VLI[0];
-  VLI[0] := (temp shr 1) or carry;
-end;
-
-function _lshift1(var VLI64: TVLI): cardinal;
-var
-  VLI: TCardinalArray absolute VLI64;
-  temp: cardinal;
-begin
-  result := VLI[0] shr 31;
-  VLI[0] := VLI[0] shl 1;
-  temp := VLI[1];
-  VLI[1] := (temp shl 1) or result;
-  result := temp shr 31;
-  temp := VLI[2];
-  VLI[2] := (temp shl 1) or result;
-  result := temp shr 31;
-  temp := VLI[3];
-  VLI[3] := (temp shl 1) or result;
-  result := temp shr 31;
-  temp := VLI[4];
-  VLI[4] := (temp shl 1) or result;
-  result := temp shr 31;
-  temp := VLI[5];
-  VLI[5] := (temp shl 1) or result;
-  result := temp shr 31;
-  temp := VLI[6];
-  VLI[6] := (temp shl 1) or result;
-  result := temp shr 31;
-  temp := VLI[7];
-  VLI[7] := (temp shl 1) or result;
-  result := temp shr 31;
-end;
-
-{$else}
-
-procedure _rshift1(var VLI: TVLI);
-  {$ifdef HASINLINE}inline;{$endif}
-var
-  carry, temp: UInt64;
-begin
-  carry := VLI[3] shl 63;
-  VLI[3] := VLI[3] shr 1;
-  temp := VLI[2];
-  VLI[2] := (temp shr 1) or carry;
-  carry := temp shl 63;
-  temp := VLI[1];
-  VLI[1] := (temp shr 1) or carry;
-  carry := temp shl 63;
-  temp := VLI[0];
-  VLI[0] := (temp shr 1) or carry;
-end;
-
-function _lshift1(var VLI: TVLI): UInt64;
-  {$ifdef HASINLINE}inline;{$endif}
-var
-  temp: UInt64;
-begin
-  result := VLI[0] shr 63;
-  VLI[0] := VLI[0] shl 1;
-  temp := VLI[1];
-  VLI[1] := (temp shl 1) or result;
-  result := temp shr 63;
-  temp := VLI[2];
-  VLI[2] := (temp shl 1) or result;
-  result := temp shr 63;
-  temp := VLI[3];
-  VLI[3] := (temp shl 1) or result;
-  result := temp shr 63;
-end;
-
-{$endif CPU32}
-
-{$define ECC_ORIGINALMULT}
-// original mult() is slightly faster than our unrolled version without asm
-
-{$ifdef CPUINTEL}
-  {$undef ECC_ORIGINALMULT}
-  // on i386/x64, our new unrolled mult() with asm is faster - especially on FPC
-{$endif CPUINTEL}
-
-// Intel/AMD asm is located in mormot.crypt.core.pas and .inc associated files
-{$ifndef CPUINTEL}
-
-type
-  TVLIHALF = array[byte] of {$ifdef CPU32} word {$else} cardinal {$endif};
-
-const
-  TVLIHALFSHIFTADD = SizeOf(pointer) * 4;      // 32 or 16
-  TVLIHALFSHIFTSUB = SizeOf(pointer) * 8 - 1;  // 63 or 31
-
-// computes Output = Left + Right, returning carry. Can modify in place
-function _add256(out Output: TVLI; const Left, Right: TVLI): PtrUInt;
-  {$ifdef CPU64} inline; {$endif CPU64}
-var
-  l: TVLIHALF absolute Left; // branchless operation over half registers
-  r: TVLIHALF absolute Right;
-  o: TVLIHALF absolute Output;
-begin
-  result := PtrUInt(l[0]) + r[0];
-  o[0] := result;
-  result := PtrUInt(l[1]) + r[1] + (result shr TVLIHALFSHIFTADD);
-  o[1] := result;
-  result := PtrUInt(l[2]) + r[2] + (result shr TVLIHALFSHIFTADD);
-  o[2] := result;
-  result := PtrUInt(l[3]) + r[3] + (result shr TVLIHALFSHIFTADD);
-  o[3] := result;
-  result := PtrUInt(l[4]) + r[4] + (result shr TVLIHALFSHIFTADD);
-  o[4] := result;
-  result := PtrUInt(l[5]) + r[5] + (result shr TVLIHALFSHIFTADD);
-  o[5] := result;
-  result := PtrUInt(l[6]) + r[6] + (result shr TVLIHALFSHIFTADD);
-  o[6] := result;
-  result := PtrUInt(l[7]) + r[7] + (result shr TVLIHALFSHIFTADD);
-  o[7] := result;
   {$ifdef CPU32}
-  result := PtrUInt(l[8]) + r[8] + (result shr TVLIHALFSHIFTADD);
-  o[8] := result;
-  result := PtrUInt(l[9]) + r[9] + (result shr TVLIHALFSHIFTADD);
-  o[9] := result;
-  result := PtrUInt(l[10]) + r[10] + (result shr TVLIHALFSHIFTADD);
-  o[10] := result;
-  result := PtrUInt(l[11]) + r[11] + (result shr TVLIHALFSHIFTADD);
-  o[11] := result;
-  result := PtrUInt(l[12]) + r[12] + (result shr TVLIHALFSHIFTADD);
-  o[12] := result;
-  result := PtrUInt(l[13]) + r[13] + (result shr TVLIHALFSHIFTADD);
-  o[13] := result;
-  result := PtrUInt(l[14]) + r[14] + (result shr TVLIHALFSHIFTADD);
-  o[14] := result;
-  result := PtrUInt(l[15]) + r[15] + (result shr TVLIHALFSHIFTADD);
-  o[15] := result;
+  Dest := Source;
+  {$else}
+  Dest.Q[0] := Source.Q[0];
+  Dest.Q[1] := Source.Q[1];
+  Dest.Q[2] := Source.Q[2];
+  Dest.Q[3] := Source.Q[3];
   {$endif CPU32}
-  result := result shr TVLIHALFSHIFTADD;
 end;
-
-// computes Output = Left - Right, returning borrow. Can modify in place.
-function _sub256(out Output: TVLI; const Left, Right: TVLI): PtrUInt;
-  {$ifdef CPU64} inline; {$endif CPU64}
-var
-  l: TVLIHALF absolute Left; // branchless operation over half registers
-  r: TVLIHALF absolute Right;
-  o: TVLIHALF absolute Output;
-begin
-  result := PtrUInt(l[0]) - r[0];
-  o[0] := result;
-  result := PtrUInt(l[1]) - r[1] - (result shr TVLIHALFSHIFTSUB);
-  o[1] := result;
-  result := PtrUInt(l[2]) - r[2] - (result shr TVLIHALFSHIFTSUB);
-  o[2] := result;
-  result := PtrUInt(l[3]) - r[3] - (result shr TVLIHALFSHIFTSUB);
-  o[3] := result;
-  result := PtrUInt(l[4]) - r[4] - (result shr TVLIHALFSHIFTSUB);
-  o[4] := result;
-  result := PtrUInt(l[5]) - r[5] - (result shr TVLIHALFSHIFTSUB);
-  o[5] := result;
-  result := PtrUInt(l[6]) - r[6] - (result shr TVLIHALFSHIFTSUB);
-  o[6] := result;
-  result := PtrUInt(l[7]) - r[7] - (result shr TVLIHALFSHIFTSUB);
-  o[7] := result;
-  {$ifdef CPU32}
-  result := PtrUInt(l[8]) - r[8] - (result shr TVLIHALFSHIFTSUB);
-  o[8] := result;
-  result := PtrUInt(l[9]) - r[9] - (result shr TVLIHALFSHIFTSUB);
-  o[9] := result;
-  result := PtrUInt(l[10]) - r[10] - (result shr TVLIHALFSHIFTSUB);
-  o[10] := result;
-  result := PtrUInt(l[11]) - r[11] - (result shr TVLIHALFSHIFTSUB);
-  o[11] := result;
-  result := PtrUInt(l[12]) - r[12] - (result shr TVLIHALFSHIFTSUB);
-  o[12] := result;
-  result := PtrUInt(l[13]) - r[13] - (result shr TVLIHALFSHIFTSUB);
-  o[13] := result;
-  result := PtrUInt(l[14]) - r[14] - (result shr TVLIHALFSHIFTSUB);
-  o[14] := result;
-  result := PtrUInt(l[15]) - r[15] - (result shr TVLIHALFSHIFTSUB);
-  o[15] := result;
-  {$endif CPU32}
-  result := result shr TVLIHALFSHIFTSUB;
-end;
-
-{$ifndef ECC_ORIGINALMULT}
-
-procedure _inc64(var Value: THash128Rec; var Added: QWord);
-  {$ifdef CPU64} inline; {$else} unsupported {$endif CPU64}
-var
-  r: TVLIHALF absolute Added; // branchless operation over half registers
-  o: TVLIHALF absolute Value;
-  c: PtrUInt;
-begin
-  c := PtrUInt(o[0]) + r[0];
-  o[0] := c;
-  c := PtrUInt(o[1]) + r[1] + (c shr TVLIHALFSHIFTADD);
-  o[1] := c;
-  c := PtrUInt(o[2]) + (c shr TVLIHALFSHIFTADD);
-  o[2] := c;
-  c := PtrUInt(o[3]) + (c shr TVLIHALFSHIFTADD);
-  o[3] := c;
-end;
-
-procedure _inc128(var Value: THash256Rec; var Added: THash128Rec);
-  {$ifdef CPU64} inline; {$else} unsupported {$endif CPU64}
-var
-  r: TVLIHALF absolute Added; // branchless operation over half registers
-  o: TVLIHALF absolute Value;
-  c: PtrUInt;
-begin
-  c := PtrUInt(o[0]) + r[0];
-  o[0] := c;
-  c := PtrUInt(o[1]) + r[1] + (c shr TVLIHALFSHIFTADD);
-  o[1] := c;
-  c := PtrUInt(o[2]) + r[2] + (c shr TVLIHALFSHIFTADD);
-  o[2] := c;
-  c := PtrUInt(o[3]) + r[3] + (c shr TVLIHALFSHIFTADD);
-  o[3] := c;
-  c := PtrUInt(o[4]) + (c shr TVLIHALFSHIFTADD);
-  o[4] := c;
-  c := PtrUInt(o[5]) + (c shr TVLIHALFSHIFTADD);
-  o[5] := c;
-  c := PtrUInt(o[6]) + (c shr TVLIHALFSHIFTADD);
-  o[6] := c;
-  c := PtrUInt(o[7]) + (c shr TVLIHALFSHIFTADD);
-  o[7] := c;
-end;
-
-{$endif ECC_ORIGINALMULT}
-
-{$endif CPUINTEL}
-
-
-{$ifdef ECC_ORIGINALMULT}
-
-// original 256-bit rolled multiplication as proposed in micro-ecc
-
-procedure _mult(out Output: TVLIDUAL; const Left, Right: TVLI);
-var
-  i, k, min: PtrInt;
-  product: THash128Rec;
-  carry, prev, rlo, rhi: UInt64;
-  l, r: ^UInt64;
-begin
-  rlo := 0;
-  rhi := 0;
-  min := 0;
-  // Compute each digit of Output in sequence, maintaining the carries
-  for k := 0 to 2 * NUM_ECC_DIGITS - 2 do
-  begin
-    carry := 0;
-    if k >= NUM_ECC_DIGITS then
-    begin
-      i := k + (1 - NUM_ECC_DIGITS);
-      l := @Left[i];
-      r := @Right[k - i];
-      min := i;
-    end
-    else
-    begin
-      l := @Left[0];
-      r := @Right[k];
-    end;
-    for i := min to k do
-    begin
-      if i >= NUM_ECC_DIGITS then
-        break;
-      mul64x64(l^, r^, product);
-      prev := rlo;
-      inc(rlo, product.L);
-      inc(rhi, product.H);
-      inc(rhi, ord(rlo < prev));
-      inc(carry, ord(rhi < product.H));
-      inc(l);
-      dec(r);
-    end;
-    Output.U64[k] := rlo;
-    rlo := rhi;
-    rhi := carry;
-  end;
-  Output.U64[NUM_ECC_DIGITS * 2 - 1] := rlo;
-end;
-
-procedure _square(out Output: TVLIDUAL; const Left: TVLI);
-var
-  i, j, k, min: PtrInt;
-  product: THash128Rec;
-  carry, prev, rlo, rhi: UInt64;
-begin
-  rlo := 0;
-  rhi := 0;
-  min := 0;
-  for k := 0 to 2 * NUM_ECC_DIGITS - 2 do
-  begin
-    carry := 0;
-    if k >= NUM_ECC_DIGITS then
-      min := k + (1 - NUM_ECC_DIGITS);
-    for i := min to k do
-    begin
-      j := k - i;
-      if i > j then
-        break;
-      mul64x64(Left[i], Left[j], product);
-      if i < j then
-      begin
-        inc(carry, product.H shr 63);
-        product.H := (product.H shl 1) or (product.L shr 63);
-        product.L := product.L shl 1;
-      end;
-      prev := rlo;
-      inc(rlo, product.L);
-      inc(rhi, product.H);
-      inc(rhi, ord(rlo < prev));
-      inc(carry, ord(rhi < product.H));
-    end;
-    Output.U64[k] := rlo;
-    rlo := rhi;
-    rhi := carry;
-  end;
-  Output.U64[NUM_ECC_DIGITS * 2 - 1] := rlo;
-end;
-
-{$else}
-
-// our CPU-neutral 256-bit unrolled version, mapping mul64x64() pattern
-// - in practice, only faster (and enabled) on i386 and x86_64
-
-// mormot.crytp.core.asmx64.inc offers faster _mult128() asm
-{$ifndef CPUX64}
-
-{$ifdef FPC} // Delphi is not good at inlining and computing this function
-
-procedure _mult64(l, r: PQWordRec; out product: THash128Rec); inline;
-var
-  t1, t2, t3: TQWordRec;
-begin
-  t1.V := QWord(l.L) * r.L;
-  t2.V := QWord(l.H) * r.L + t1.H;
-  t3.V := QWord(l.L) * r.H + t2.L;
-  product.H := QWord(l.H) * r.H + t2.H + t3.H;
-  product.L := t3.V shl 32 or t1.L;
-end;
-
-{$else} // we better use mormot.core.base asm on Delphi
-
-procedure _mult64(left, right: PQWord; out product: THash128Rec);
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  mul64x64(left^, right^, product);
-end;
-
-{$endif FPC}
-
-procedure _mult128(const l, r: THash128Rec; out product: THash256Rec);
-  {$ifdef HASINLINE}inline;{$endif}
-var
-  t1, t2, t3: THash128Rec;
-begin
-  _mult64(@l.L, @r.L, t1);  // t1.V := l.L * r.L;
-  _mult64(@l.H, @r.L, t2);
-  _inc64(t2, t1.H);         // t2.V := l.H * r.L + t1.H;
-  _mult64(@l.L, @r.H, t3);
-  _inc64(t3, t2.L);         // t3.V := l.L * r.H + t2.L;
-  _mult64(@l.H, @r.H, product.h);
-  _inc64(product.H, t2.H);
-  _inc64(product.H, t3.H);  // product.H := l.H * r.H + t2.H + t3.H;
-  product.L.L := t1.L;
-  product.L.H := t3.L;      // product.L := t3.V shl 64 or t1.L;
-end;
-
-{$endif CPUX64}
-
-procedure _mult(out Output: TVLIDUAL; const Left, Right: TVLI);
-var
-  t1, t2, t3: THash256Rec;
-  l: THash256Rec absolute Left;
-  r: THash256Rec absolute Right;
-begin
-  _mult128(l.L, r.L, t1);   // t1.V := l.L * r.L;
-  _mult128(l.H, r.L, t2);
-  _inc128(t2, t1.H);        // t2.V := l.H * r.L + t1.H;
-  _mult128(l.L, r.H, t3);
-  _inc128(t3, t2.L);        // t3.V := l.L * r.H + t2.L;
-  _mult128(l.H, r.H, Output.Hi);
-  _inc128(Output.Hi, t2.H);
-  _inc128(Output.Hi, t3.H); // Output.H := l.H * r.H + t2.H + t3.H;
-  Output.Lo.L := t1.L;
-  Output.Lo.H := t3.L;      // product.L := t3.V shl 128 or t1.L;
-end;
-
-procedure _square(out Output: TVLIDUAL; const Left: TVLI);
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  _mult(Output, Left, Left); // it is faster to reuse the same _mult()
-end;
-
-{$endif ECC_ORIGINALMULT}
 
 
 // computes result = (Left + Right) mod Modulo
 // assumes that p_left < p_mod and p_right < p_mod, p_result != p_mod
-procedure _modAdd(var Output: TVLI; const Left, Right, Modulo: TVLI);
+procedure _modAddP(var Output: THash256Rec; const Left, Right: THash256Rec);
   {$ifdef HASINLINE}inline;{$endif}
 begin
   if (_add256(Output, Left, Right) <> 0) or
-     (_cmp(Output, Modulo) >= 0) then
+     (_cmp256(Output, Curve_P_32) >= 0) then
     // result > Modulo (result = Modulo + Remainder),
     // so subtract Modulo to get remainder
-    _sub256(Output, Output, Modulo);
+    _dec256(Output, Curve_P_32);
 end;
 
-// computes result = (Left - Right) mod Modulo.
-// assumes that Left < Modulo and Right < Modulo, result != Modulo
-procedure _modSub(out Output: TVLI; const Left, Right, Modulo: TVLI);
+procedure _modAddN(var Output: THash256Rec; const Left, Right: THash256Rec);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  if (_add256(Output, Left, Right) <> 0) or
+     (_cmp256(Output, Curve_N_32) >= 0) then
+    // result > Modulo (result = Modulo + Remainder),
+    // so subtract Modulo to get remainder
+    _dec256(Output, Curve_N_32);
+end;
+
+// computes result = (Left - Right) mod Curve_P_32.
+// assumes that Left < Curve_P_32 and Right < Curve_P_32 , result != Curve_P_32
+procedure _modSubP(out Output: THash256Rec; const Left, Right: THash256Rec);
   {$ifdef HASINLINE}inline;{$endif}
 begin
   if _sub256(Output, Left, Right) <> 0 then
     // In this case, Output == -diff == (max int) - diff.
     // Since -x mod d == d - x, we can get the correct result
     // from Output + Modulo (with overflow)
-    _add256(Output, Output, Modulo);
+    _inc256(Output, Curve_P_32);
 end;
 
-// computes result = Product mod Curve
+// computes result = Product mod Curve_P_32
 // from http://www.nsa.gov/ia/_files/nist-routines.pdf
-procedure _mmod_fast(out Output: TVLI; var p_product: TVLIDUAL);
+procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
 var
   carry: PtrInt;
-  tmp: TVLI;
+  tmp: THash256Rec;
 begin
   // t
-  _mv(Output, p_product.L);
+  _mv(Output, Product.L);
+  if _isZero(Product.H) and
+     (_cmp256(Curve_P_32, Product.L) > 0) then
+    exit; // no modulo to apply
   // s1
-  tmp[0] := 0;
-  tmp[1] := p_product.U64[5] and $FFFFFFFF00000000;
-  tmp[2] := p_product.U64[6];
-  tmp[3] := p_product.U64[7];
+  tmp.Q[0] := 0;
+  {$ifdef CPU32}
+  tmp.C[2] := 0;
+  tmp.C[3] := Product.C[11];
+  {$else}
+  tmp.Q[1] := Product.Q[5] and $FFFFFFFF00000000;
+  {$endif CPU32}
+  tmp.Q[2] := Product.Q[6];
+  tmp.Q[3] := Product.Q[7];
   carry := _lshift1(tmp);
-  inc(carry, _add256(Output, Output, tmp));
+  inc(carry, _inc256(Output, tmp));
   // s2
-  tmp[1] := p_product.U64[6] shl 32;
-  tmp[2] := (p_product.U64[6] shr 32) or (p_product.U64[7] shl 32);
-  tmp[3] := p_product.U64[7] shr 32;
+  tmp.Q[1] := Product.Q[6] shl 32;
+  tmp.Q[2] := (Product.Q[6] shr 32) or (Product.Q[7] shl 32);
+  tmp.Q[3] := Product.Q[7] shr 32;
   inc(carry, _lshift1(tmp));
-  inc(carry, _add256(Output, Output, tmp));
+  inc(carry, _inc256(Output, tmp));
   // s3
-  tmp[0] := p_product.U64[4];
-  tmp[1] := p_product.U64[5] and $FFFFFFFF;
-  tmp[2] := 0;
-  tmp[3] := p_product.U64[7];
-  inc(carry, _add256(Output, Output, tmp));
+  tmp.Q[0] := Product.Q[4];
+  tmp.Q[1] := Product.Q[5] and $FFFFFFFF;
+  tmp.Q[2] := 0;
+  tmp.Q[3] := Product.Q[7];
+  inc(carry, _inc256(Output, tmp));
   // s4
-  tmp[0] := (p_product.U64[4] shr 32) or (p_product.U64[5] shl 32);
-  tmp[1] := (p_product.U64[5] shr 32) or (p_product.U64[6] and $FFFFFFFF00000000);
-  tmp[2] := p_product.U64[7];
-  tmp[3] := (p_product.U64[6] shr 32) or (p_product.U64[4] shl 32);
-  inc(carry, _add256(Output, Output, tmp));
+  tmp.Q[0] := (Product.Q[4] shr 32) or (Product.Q[5] shl 32);
+  {$ifdef CPU32}
+  tmp.C[2] := Product.C[11];
+  tmp.C[3] := Product.C[13];
+  {$else}
+  tmp.Q[1] := (Product.Q[5] shr 32) or (Product.Q[6] and $FFFFFFFF00000000);
+  {$endif CPU32}
+  tmp.Q[2] := Product.Q[7];
+  tmp.Q[3] := (Product.Q[6] shr 32) or (Product.Q[4] shl 32);
+  inc(carry, _inc256(Output, tmp));
   // d1
-  tmp[0] := (p_product.U64[5] shr 32) or (p_product.U64[6] shl 32);
-  tmp[1] := (p_product.U64[6] shr 32);
-  tmp[2] := 0;
-  tmp[3] := (p_product.U64[4] and $FFFFFFFF) or (p_product.U64[5] shl 32);
-  dec(carry, _sub256(Output, Output, tmp));
+  tmp.Q[0] := (Product.Q[5] shr 32) or (Product.Q[6] shl 32);
+  tmp.Q[1] := (Product.Q[6] shr 32);
+  tmp.Q[2] := 0;
+  tmp.Q[3] := (Product.Q[4] and $FFFFFFFF) or (Product.Q[5] shl 32);
+  dec(carry, _dec256(Output, tmp));
   // d2
-  tmp[0] := p_product.U64[6];
-  tmp[1] := p_product.U64[7];
-  tmp[2] := 0;
-  tmp[3] := (p_product.U64[4] shr 32) or (p_product.U64[5] and $FFFFFFFF00000000);
-  dec(carry, _sub256(Output, Output, tmp));
+  tmp.Q[0] := Product.Q[6];
+  tmp.Q[1] := Product.Q[7];
+  tmp.Q[2] := 0;
+  {$ifdef CPU32}
+  tmp.C[6] := Product.C[9];
+  tmp.C[7] := Product.C[11];
+  {$else}
+  tmp.Q[3] := (Product.Q[4] shr 32) or (Product.Q[5] and $FFFFFFFF00000000);
+  {$endif CPU32}
+  dec(carry, _dec256(Output, tmp));
   // d3
-  tmp[0] := (p_product.U64[6] shr 32) or (p_product.U64[7] shl 32);
-  tmp[1] := (p_product.U64[7] shr 32) or (p_product.U64[4] shl 32);
-  tmp[2] := (p_product.U64[4] shr 32) or (p_product.U64[5] shl 32);
-  tmp[3] := (p_product.U64[6] shl 32);
-  dec(carry, _sub256(Output, Output, tmp));
+  tmp.Q[0] := (Product.Q[6] shr 32) or (Product.Q[7] shl 32);
+  tmp.Q[1] := (Product.Q[7] shr 32) or (Product.Q[4] shl 32);
+  tmp.Q[2] := (Product.Q[4] shr 32) or (Product.Q[5] shl 32);
+  tmp.Q[3] := (Product.Q[6] shl 32);
+  dec(carry, _dec256(Output, tmp));
   // d4
-  tmp[0] := p_product.U64[7];
-  tmp[1] := p_product.U64[4] and $FFFFFFFF00000000;
-  tmp[2] := p_product.U64[5];
-  tmp[3] := p_product.U64[6] and $FFFFFFFF00000000;
-  dec(carry, _sub256(Output, Output, tmp));
+  tmp.Q[0] := Product.Q[7];
+  tmp.Q[2] := Product.Q[5];
+  {$ifdef CPU32}
+  tmp.C[2] := 0;
+  tmp.C[3] := Product.C[9];
+  tmp.C[6] := 0;
+  tmp.C[7] := Product.C[13];
+  {$else}
+  tmp.Q[1] := Product.Q[4] and $FFFFFFFF00000000;
+  tmp.Q[3] := Product.Q[6] and $FFFFFFFF00000000;
+  {$endif CPU32}
+  dec(carry, _dec256(Output, tmp));
   if carry < 0 then
     repeat
-      inc(carry, _add256(Output, Output, Curve_P_32));
+      inc(carry, _inc256(Output, Curve_P_32));
     until carry >= 0
   else
     while (carry <> 0) or
-          (_cmp(Curve_P_32, Output) <= 0) do
-      dec(carry, _sub256(Output, Output, Curve_P_32));
+          (_cmp256(Curve_P_32, Output) <= 0) do
+      dec(carry, _dec256(Output, Curve_P_32));
 end;
 
 // computes result = (Left * Right) mod Curve
-procedure _modMult_fast(out Output: TVLI; const Left, Right: TVLI);
+procedure _modMultP(out Output: THash256Rec; const Left, Right: THash256Rec);
   {$ifdef HASINLINE}inline;{$endif}
 var
-  product: TVLIDUAL;
+  product: THash512Rec;
 begin
-  _mult(product, Left, Right);
-  _mmod_fast(Output, product);
+  _mult256(product, Left, Right);
+  _mmodP(Output, product);
 end;
 
 // computes result = Left^2 mod Curve
-procedure _modSquare_fast(out Output: TVLI; const Left: TVLI);
+procedure _modSquareP(out Output: THash256Rec; const Left: THash256Rec);
   {$ifdef HASINLINE}inline;{$endif}
 var
-  product: TVLIDUAL;
+  product: THash512Rec;
 begin
-  _square(product, Left);
-  _mmod_fast(Output, product);
+  _square256(product, Left);
+  _mmodP(Output, product);
 end;
 
 // computes result = (1 / p_input) mod Modulo. All VLIs are the same size
 // See "From Euclid's GCD to Montgomery Multiplication to the Great Divide"
 // https://labs.oracle.com/techrep/2001/smli_tr-2001-95.pdf
-procedure _modInv(out Output: TVLI; const Input, Modulo: TVLI);
+procedure _modInv(out Output: THash256Rec; const Input, Modulo: THash256Rec);
 var
-  a, b, v: TVLI;
+  a, b, v: THash256Rec;
   carry: PtrUInt;
   cmp: integer;
 begin
   if _isZero(Input) then
   begin
-    _clear(Output);
+    FillZero(Output.b);
     exit;
   end;
   _mv(a, Input);
   _mv(b, Modulo);
   _set1(Output);
-  _clear(v);
+  FillZero(v.b);
   repeat
-    cmp := _cmp(a, b);
+    cmp := _cmp256(a, b);
     if cmp = 0 then
       break;
     carry := 0;
-    if (cardinal(a[0]) and 1) = 0 then
+    if (a.C[0] and 1) = 0 then
     begin
       _rshift1(a);
-      if (cardinal(Output[0]) and 1) = 1 then
-        carry := _add256(Output, Output, Modulo);
+      if (Output.C[0] and 1) = 1 then
+        carry := _inc256(Output, Modulo);
       _rshift1(Output);
       if carry <> 0 then
-        THash256(Output)[ECC_BYTES - 1] := THash256(Output)[ECC_BYTES - 1] or $80;
+        Output.B[ECC_BYTES - 1] := Output.B[ECC_BYTES - 1] or $80;
     end
-    else if (cardinal(b[0]) and 1) = 0 then
+    else if (b.C[0] and 1) = 0 then
     begin
       _rshift1(b);
-      if (cardinal(v[0]) and 1) = 1 then
+      if (v.C[0] and 1) = 1 then
         carry := _add256(v, v, Modulo);
       _rshift1(v);
       if carry <> 0 then
-        THash256(v)[ECC_BYTES - 1] := THash256(v)[ECC_BYTES - 1] or $80;
+        v.B[ECC_BYTES - 1] := v.B[ECC_BYTES - 1] or $80;
     end
     else if cmp > 0 then
     begin
-      _sub256(a, a, b);
+      _dec256(a, b);
       _rshift1(a);
-      if _cmp(Output, v) < 0 then
-        _add256(Output, Output, Modulo);
-      _sub256(Output, Output, v);
-      if (cardinal(Output[0]) and 1) = 1 then
-        carry := _add256(Output, Output, Modulo);
+      if _cmp256(Output, v) < 0 then
+        _inc256(Output, Modulo);
+      _dec256(Output, v);
+      if (Output.C[0] and 1) = 1 then
+        carry := _inc256(Output, Modulo);
       _rshift1(Output);
       if carry <> 0 then
-        THash256(Output)[ECC_BYTES - 1] := THash256(Output)[ECC_BYTES - 1] or $80;
+        Output.B[ECC_BYTES - 1] := Output.B[ECC_BYTES - 1] or $80;
     end
     else
     begin
-      _sub256(b, b, a);
+      _dec256(b, a);
       _rshift1(b);
-      if _cmp(v, Output) < 0 then
-        _add256(v, v, Modulo);
-      _sub256(v, v, Output);
-      if (cardinal(v[0]) and 1) = 1 then
-        carry := _add256(v, v, Modulo);
+      if _cmp256(v, Output) < 0 then
+        _inc256(v, Modulo);
+      _dec256(v, Output);
+      if (v.C[0] and 1) = 1 then
+        carry := _inc256(v, Modulo);
       _rshift1(v);
       if carry > 0 then
-        THash256(v)[ECC_BYTES - 1] := THash256(v)[ECC_BYTES - 1] or $80;
+        v.B[ECC_BYTES - 1] := v.B[ECC_BYTES - 1] or $80;
     end;
   until false;
 end;
@@ -1320,60 +830,61 @@ end;
 // From http://eprint.iacr.org/2011/338.pdf
 
 // Double in place
-procedure EccPointDoubleJacobian(var X1, Y1, Z1: TVLI);
+procedure EccPointDoubleJacobian(var X1, Y1, Z1: THash256Rec);
 var
-  carry: UInt64;
-  t4, t5: TVLI;
+  carry: QWord;
+  t4, t5: THash256Rec;
 begin
   // t1 = X, t2 = Y, t3 = Z
   if _isZero(Z1) then
     exit;
-  _modSquare_fast(t4, Y1);         // t4 = y1^2
-  _modMult_fast(t5, X1, t4);       // t5 = x1*y1^2 = A
-  _modSquare_fast(t4, t4);         // t4 = y1^4
-  _modMult_fast(Y1, Y1, Z1);       // t2 = y1*z1 = z3
-  _modSquare_fast(Z1, Z1);         // t3 = z1^2
-  _modAdd(X1, X1, Z1, Curve_P_32); // t1 = x1 + z1^2
-  _modAdd(Z1, Z1, Z1, Curve_P_32); // t3 = 2*z1^2
-  _modSub(Z1, X1, Z1, Curve_P_32); // t3 = x1 - z1^2
-  _modMult_fast(X1, X1, Z1);       // t1 = x1^2 - z1^4
-  _modAdd(Z1, X1, X1, Curve_P_32); // t3 = 2*(x1^2 - z1^4)
-  _modAdd(X1, X1, Z1, Curve_P_32); // t1 = 3*(x1^2 - z1^4)
+  _modSquareP(t4, Y1);         // t4 = y1^2
+  _modMultP(t5, X1, t4);       // t5 = x1*y1^2 = A
+  _modSquareP(t4, t4);         // t4 = y1^4
+  _modMultP(Y1, Y1, Z1);       // t2 = y1*z1 = z3
+  _modSquareP(Z1, Z1);         // t3 = z1^2
+  _modAddP(X1, X1, Z1);        // t1 = x1 + z1^2
+  _modAddP(Z1, Z1, Z1);        // t3 = 2*z1^2
+  _modSubP(Z1, X1, Z1);        // t3 = x1 - z1^2
+  _modMultP(X1, X1, Z1);       // t1 = x1^2 - z1^4
+  _modAddP(Z1, X1, X1);        // t3 = 2*(x1^2 - z1^4)
+  _modAddP(X1, X1, Z1);        // t1 = 3*(x1^2 - z1^4)
   if GetBitPtr(@X1, 0) then
   begin
-    carry := _add256(X1, X1, Curve_P_32);
+    carry := _inc256(X1, Curve_P_32);
     _rshift1(X1);
-    X1[NUM_ECC_DIGITS - 1] := X1[NUM_ECC_DIGITS - 1] or (carry shl 63);
+    X1.Q[ECC_QUAD - 1] := X1.Q[ECC_QUAD - 1] or (carry shl 63);
   end
   else
     _rshift1(X1);
   // t1 = 3/2*(x1^2 - z1^4) = B
-  _modSquare_fast(Z1, X1);         // t3 = B^2
-  _modSub(Z1, Z1, t5, Curve_P_32); // t3 = B^2 - A
-  _modSub(Z1, Z1, t5, Curve_P_32); // t3 = B^2 - 2A = x3
-  _modSub(t5, t5, Z1, Curve_P_32); // t5 = A - x3
-  _modMult_fast(X1, X1, t5);       // t1 = B * (A - x3)
-  _modSub(t4, X1, t4, Curve_P_32); // t4 = B * (A - x3) - y1^4 = y3
+  _modSquareP(Z1, X1);         // t3 = B^2
+  _modSubP(Z1, Z1, t5);        // t3 = B^2 - A
+  _modSubP(Z1, Z1, t5);        // t3 = B^2 - 2A = x3
+  _modSubP(t5, t5, Z1);        // t5 = A - x3
+  _modMultP(X1, X1, t5);       // t1 = B * (A - x3)
+  _modSubP(t4, X1, t4);        // t4 = B * (A - x3) - y1^4 = y3
   _mv(X1, Z1);
   _mv(Z1, Y1);
   _mv(Y1, t4);
 end;
 
 // Modify (x1, y1) => (x1 * z^2, y1 * z^3)
-procedure _apply_z(var X1, Y1, Z: TVLI);
+procedure _apply_z(var X1, Y1, Z: THash256Rec);
 var
-  t1: TVLI;
+  t1: THash256Rec;
 begin
-  _modSquare_fast(t1, Z);        // z^2
-  _modMult_fast(X1, X1, t1);     // x1 * z^2
-  _modMult_fast(t1, t1, Z);      // z^3
-  _modMult_fast(Y1, Y1, t1);     // y1 * z^3
+  _modSquareP(t1, Z);        // z^2
+  _modMultP(X1, X1, t1);     // x1 * z^2
+  _modMultP(t1, t1, Z);      // z^3
+  _modMultP(Y1, Y1, t1);     // y1 * z^3
 end;
 
 // P = (x1, y1) => 2P, (x2, y2) => P'
-procedure _XYcZ_initial_double(var X1, Y1, X2, Y2: TVLI; InitialZ: PVLI);
+procedure _XYcZ_initial_double(var X1, Y1, X2, Y2: THash256Rec;
+  InitialZ: PHash256Rec);
 var
-  z: TVLI;
+  z: THash256Rec;
 begin
   _mv(X2, X1);
   _mv(Y2, Y1);
@@ -1387,70 +898,70 @@ end;
 
 // Input P = (x1, y1, Z), Q = (x2, y2, Z)
 // Output P' = (x1', y1', Z3), P + Q = (x3, y3, Z3)
-// or P => P', Q => P + Q
-procedure _XYcZ_add(var X1, Y1, X2, Y2: TVLI);
+//     or P => P', Q => P + Q
+procedure _XYcZ_add(var X1, Y1, X2, Y2: THash256Rec);
 var
-  t5: TVLI;
+  t5: THash256Rec;
 begin
   // t1 = X1, t2 = Y1, t3 = X2, t4 = Y2
-  _modSub(t5, X2, X1, Curve_P_32); // t5 = x2 - x1
-  _modSquare_fast(t5, t5);         // t5 = (x2 - x1)^2 = A
-  _modMult_fast(X1, X1, t5);       // t1 = x1*A = B
-  _modMult_fast(X2, X2, t5);       // t3 = x2*A = C
-  _modSub(Y2, Y2, Y1, Curve_P_32); // t4 = y2 - y1
-  _modSquare_fast(t5, Y2);         // t5 = (y2 - y1)^2 = D
-  _modSub(t5, t5, X1, Curve_P_32); // t5 = D - B
-  _modSub(t5, t5, X2, Curve_P_32); // t5 = D - B - C = x3
-  _modSub(X2, X2, X1, Curve_P_32); // t3 = C - B
-  _modMult_fast(Y1, Y1, X2);       // t2 = y1*(C - B)
-  _modSub(X2, X1, t5, Curve_P_32); // t3 = B - x3
-  _modMult_fast(Y2, Y2, X2);       // t4 = (y2 - y1)*(B - x3)
-  _modSub(Y2, Y2, Y1, Curve_P_32); // t4 = y3
+  _modSubP(t5, X2, X1);        // t5 = x2 - x1
+  _modSquareP(t5, t5);         // t5 = (x2 - x1)^2 = A
+  _modMultP(X1, X1, t5);       // t1 = x1*A = B
+  _modMultP(X2, X2, t5);       // t3 = x2*A = C
+  _modSubP(Y2, Y2, Y1);        // t4 = y2 - y1
+  _modSquareP(t5, Y2);         // t5 = (y2 - y1)^2 = D
+  _modSubP(t5, t5, X1);        // t5 = D - B
+  _modSubP(t5, t5, X2);        // t5 = D - B - C = x3
+  _modSubP(X2, X2, X1);        // t3 = C - B
+  _modMultP(Y1, Y1, X2);       // t2 = y1*(C - B)
+  _modSubP(X2, X1, t5);        // t3 = B - x3
+  _modMultP(Y2, Y2, X2);       // t4 = (y2 - y1)*(B - x3)
+  _modSubP(Y2, Y2, Y1);        // t4 = y3
   _mv(X2, t5);
 end;
 
 // Input P = (x1, y1, Z), Q = (x2, y2, Z)
 //  Output P + Q = (x3, y3, Z3), P - Q = (x3', y3', Z3)
-//  or P => P - Q, Q => P + Q
-procedure _XYcZ_addC(var X1, Y1, X2, Y2: TVLI);
+//      or P => P - Q, Q => P + Q
+procedure _XYcZ_addC(var X1, Y1, X2, Y2: THash256Rec);
 var
-  t5, t6, t7: TVLI;
+  t5, t6, t7: THash256Rec;
 begin
   // t1 = X1, t2 = Y1, t3 = X2, t4 = Y2
-  _modSub(t5, X2, X1, Curve_P_32); // t5 = x2 - x1
-  _modSquare_fast(t5, t5);         // t5 = (x2 - x1)^2 = A
-  _modMult_fast(X1, X1, t5);       // t1 = x1*A = B
-  _modMult_fast(X2, X2, t5);       // t3 = x2*A = C
-  _modAdd(t5, Y2, Y1, Curve_P_32); // t4 = y2 + y1
-  _modSub(Y2, Y2, Y1, Curve_P_32); // t4 = y2 - y1
-  _modSub(t6, X2, X1, Curve_P_32); // t6 = C - B
-  _modMult_fast(Y1, Y1, t6);       // t2 = y1 * (C - B)
-  _modAdd(t6, X1, X2, Curve_P_32); // t6 = B + C
-  _modSquare_fast(X2, Y2);         // t3 = (y2 - y1)^2
-  _modSub(X2, X2, t6, Curve_P_32); // t3 = x3
-  _modSub(t7, X1, X2, Curve_P_32); // t7 = B - x3
-  _modMult_fast(Y2, Y2, t7);       // t4 = (y2 - y1)*(B - x3)
-  _modSub(Y2, Y2, Y1, Curve_P_32); // t4 = y3
-  _modSquare_fast(t7, t5);         // t7 = (y2 + y1)^2 = F
-  _modSub(t7, t7, t6, Curve_P_32); // t7 = x3'
-  _modSub(t6, t7, X1, Curve_P_32); // t6 = x3' - B
-  _modMult_fast(t6, t6, t5);       // t6 = (y2 + y1)*(x3' - B)
-  _modSub(Y1, t6, Y1, Curve_P_32); // t2 = y3'
+  _modSubP(t5, X2, X1);        // t5 = x2 - x1
+  _modSquareP(t5, t5);         // t5 = (x2 - x1)^2 = A
+  _modMultP(X1, X1, t5);       // t1 = x1*A = B
+  _modMultP(X2, X2, t5);       // t3 = x2*A = C
+  _modAddP(t5, Y2, Y1);        // t4 = y2 + y1
+  _modSubP(Y2, Y2, Y1);        // t4 = y2 - y1
+  _modSubP(t6, X2, X1);        // t6 = C - B
+  _modMultP(Y1, Y1, t6);       // t2 = y1 * (C - B)
+  _modAddP(t6, X1, X2);        // t6 = B + C
+  _modSquareP(X2, Y2);         // t3 = (y2 - y1)^2
+  _modSubP(X2, X2, t6);        // t3 = x3
+  _modSubP(t7, X1, X2);        // t7 = B - x3
+  _modMultP(Y2, Y2, t7);       // t4 = (y2 - y1)*(B - x3)
+  _modSubP(Y2, Y2, Y1);        // t4 = y3
+  _modSquareP(t7, t5);         // t7 = (y2 + y1)^2 = F
+  _modSubP(t7, t7, t6);        // t7 = x3'
+  _modSubP(t6, t7, X1);        // t6 = x3' - B
+  _modMultP(t6, t6, t5);       // t6 = (y2 + y1)*(x3' - B)
+  _modSubP(Y1, t6, Y1);        // t2 = y3'
   _mv(X1, t7);
 end;
 
 procedure EccPointMult(out Output: TEccPoint; const Point: TEccPoint;
-  const Scalar: TVLI; InitialZ: PVLI);
+  const Scalar: THash256Rec; InitialZ: PHash256Rec);
 var
-  Rx, Ry: array[0..1] of TVLI;
-  z: TVLI;
+  Rx, Ry: array[0..1] of THash256Rec;
+  z: THash256Rec;
   i, nb: PtrInt;
 begin
   // R0 and R1
   _mv(Rx[1], Point.x);
   _mv(Ry[1], Point.y);
   _XYcZ_initial_double(Rx[1], Ry[1], Rx[0], Ry[0], InitialZ);
-  for i := _numBits(Scalar) - 2 downto 1 do
+  for i := _numbits256(Scalar) - 2 downto 1 do
   begin
     nb := ord(not GetBitPtr(@Scalar, i));
     _XYcZ_addC(Rx[1 - nb], Ry[1 - nb], Rx[nb], Ry[nb]);
@@ -1459,12 +970,12 @@ begin
   nb := ord(not GetBitPtr(@Scalar, 0));
   _XYcZ_addC(Rx[1 - nb], Ry[1 - nb], Rx[nb], Ry[nb]);
   // Find final 1/Z value
-  _modSub(z, Rx[1], Rx[0], Curve_P_32);  // X1 - X0
-  _modMult_fast(z, z, Ry[1 - nb]);       // Yb * (X1 - X0)
-  _modMult_fast(z, z, Point.x);          // xP * Yb * (X1 - X0)
-  _modInv(z, z, Curve_P_32);             // 1 / (xP * Yb * (X1 - X0))
-  _modMult_fast(z, z, Point.y);          // yP / (xP * Yb * (X1 - X0))
-  _modMult_fast(z, z, Rx[1 - nb]);       // Xb * yP / (xP * Yb * (X1 - X0))
+  _modSubP(z, Rx[1], Rx[0]);         // X1 - X0
+  _modMultP(z, z, Ry[1 - nb]);       // Yb * (X1 - X0)
+  _modMultP(z, z, Point.x);          // xP * Yb * (X1 - X0)
+  _modInv(z, z, Curve_P_32);         // 1 / (xP * Yb * (X1 - X0))
+  _modMultP(z, z, Point.y);          // yP / (xP * Yb * (X1 - X0))
+  _modMultP(z, z, Rx[1 - nb]);       // Xb * yP / (xP * Yb * (X1 - X0))
   // End 1/Z calculation
   _XYcZ_add(Rx[nb], Ry[nb], Rx[1 - nb], Ry[1 - nb]);
   _apply_z(Rx[0], Ry[0], z);
@@ -1473,20 +984,20 @@ begin
 end;
 
 // Compute a = sqrt(a) (mod curve_p)
-procedure ModSqrt(var a: TVLI);
+procedure ModSqrt(var a: THash256Rec);
 var
   i: integer;
-  p1, result: TVLI;
+  p1, result: THash256Rec;
 begin
   _set1(result);
   // Since curve_p == 3 (mod 4) for all supported curves, we can compute
   // sqrt(a) = a^((curve_p + 1) / 4) (mod curve_p)
   _add256(p1, Curve_P_32, _1); // p1 = curve_p + 1
-  for i := _numBits(p1) - 1 downto 2 do
+  for i := _numbits256(p1) - 1 downto 2 do
   begin
-    _modSquare_fast(result, result);
+    _modSquareP(result, result);
     if GetBitPtr(@p1, i) then
-      _modMult_fast(result, result, a);
+      _modMultP(result, result, a);
   end;
   _mv(a, result);
 end;
@@ -1500,32 +1011,35 @@ begin
   dest[3] := bswap64(source[0]);
 end;
 
-procedure EccPointDecompress(out Point: TEccPoint; Compressed: PByteArray);
+procedure EccPointDecompress(out Point: TEccPoint; const Compressed: TEccPublicKey);
 begin
   _bswap256(@Point.x, @Compressed[1]);
-  _modSquare_fast(Point.y, Point.x);                  // y = x^2
-  _modSub(Point.y, Point.y, _3, Curve_P_32);          // y = x^2 - 3
-  _modMult_fast(Point.y, Point.y, Point.x);           // y = x^3 - 3x
-  _modAdd(Point.y, Point.y, Curve_B_32, Curve_P_32);  // y = x^3 - 3x + b
+  _modSquareP(Point.y, Point.x);           // y = x^2
+  _modSubP(Point.y, Point.y, _3);          // y = x^2 - 3
+  _modMultP(Point.y, Point.y, Point.x);    // y = x^3 - 3x
+  _modAddP(Point.y, Point.y, Curve_B_32);  // y = x^3 - 3x + b
   ModSqrt(Point.y);
-  if (Point.y[0] and $01) <> (Compressed[0] and $01) then
+  if (Point.y.C[0] and 1) <> (cardinal(Compressed[0]) and 1) then
     _sub256(Point.y, Curve_P_32, Point.y);
 end;
+
+const
+  MAX_TRIES = 16; // work almost always on the first trial with TAesPrng
 
 function ecc_make_key_pas(out PublicKey: TEccPublicKey;
   out PrivateKey: TEccPrivateKey): boolean;
 var
-  priv: TVLI;
+  priv: THash256Rec;
   pub: TEccPoint;
   tries: integer;
 begin
   result := false;
-  tries := 0;
+  tries := MAX_TRIES;
   repeat
-    inc(tries);
-    TAesPrng.Fill(THash256(priv));
-    if tries >= MAX_TRIES then
+    dec(tries);
+    if tries = 0 then
       exit;
+    TAesPrng.Fill(THash256(priv));
     if _isZero(priv) or
        _equals(priv, _1) or
        _equals(priv, _11) then
@@ -1533,41 +1047,40 @@ begin
     // Make sure the private key is in the range [1, n - 1]
     // For the supported curves, n is always large enough that we only need
     // to subtract once at most
-    if _cmp(Curve_N_32, priv) <= 0 then
-      _sub256(priv, priv, Curve_N_32);
+    if _cmp256(Curve_N_32, priv) <= 0 then
+      _dec256(priv, Curve_N_32);
     EccPointMult(pub, Curve_G_32, priv, nil);
   until not (_isZero({%H-}pub.x) and _isZero(pub.y));
   _bswap256(@PrivateKey, @priv);
   _bswap256(@PublicKey[1], @pub.x);
-  PublicKey[0] := 2 + (pub.y[0] and $01);
+  PublicKey[0] := 2 + (pub.y.B[0] and 1); // standard header for compressed form
   result := true;
-  _clear(priv); // erase sensitive information from stack
-  _clear(pub.x);
-  _clear(pub.y);
+  FillZero(priv.b); // erase sensitive information from stack
+  FillZero(THash512(pub));
 end;
 
-function ecdh_shared_secret_uncompressed_pas(const PublicPoint: TEccPublicKeyUncompressed;
+function ecdh_shared_secret_uncompressed_pas(
+  const PublicPoint: TEccPublicKeyUncompressed;
   const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 var
-  pric: TVLI;
+  priv: THash256Rec;
   product: TEccPoint;
-  rnd: TVLI;
+  rnd: THash256Rec;
 begin
   TAesPrng.Fill(THash256(rnd));
-  _bswap256(@pric, @PrivateKey);
-  EccPointMult(product, TEccPoint(PublicPoint), pric, @rnd);
+  _bswap256(@priv, @PrivateKey);
+  EccPointMult(product, TEccPoint(PublicPoint), priv, @rnd);
   _bswap256(@Secret, @product.x);
   result := not (_isZero(product.x) and _isZero(product.y));
-  _clear(product.x); // erase sensitive information from stack
-  _clear(product.y);
-  _clear(pric);
-  _clear(rnd);
+  FillZero(priv.b); // erase sensitive information from stack
+  FillZero(rnd.b);
+  FillZero(THash512(product));
 end;
 
 procedure ecc_uncompress_key_pas(const Compressed: TEccPublicKey;
   out Uncompressed: TEccPublicKeyUncompressed);
 begin
-  EccPointDecompress(TEccPoint(Uncompressed), @Compressed);
+  EccPointDecompress(TEccPoint(Uncompressed), Compressed);
 end;
 
 function ecdh_shared_secret_pas(const PublicKey: TEccPublicKey;
@@ -1575,26 +1088,27 @@ function ecdh_shared_secret_pas(const PublicKey: TEccPublicKey;
 var
   pub: TEccPublicKeyUncompressed;
 begin
-  EccPointDecompress(TEccPoint(pub), @PublicKey);
+  EccPointDecompress(TEccPoint(pub), PublicKey);
   result := ecdh_shared_secret_uncompressed_pas(pub, PrivateKey, Secret);
 end;
 
-// computes result = (Left * Right) mod Modulo
-procedure _modMult(out Output: TVLI; const Left, Right, Modulo: TVLI);
+// computes result = (Left * Right) mod Curve_N_32
+procedure _modMultN(out Output: THash256Rec; const Left, Right: THash256Rec);
 var
-  carry: UInt64;
+  carry: QWord;
   cmp: integer;
-  modbig, product: TVLIDUAL;
-  digits, bits, prodbits, modbits: integer;
-  v: PVLI;
+  modbig, product: THash512Rec;
+  digits, bits, prodbits: integer;
+  v: PHash256Rec;
+const
+  modbits = 256; // _numBits(Curve_N_32);
 begin
-  modbits := _numBits(Modulo);
-  _mult(product, Left, Right);
-  prodbits := _numBits(product.H);
+  _mult256(product, Left, Right);
+  prodbits := _numbits256(product.H);
   if prodbits <> 0 then
-    inc(prodbits, NUM_ECC_DIGITS * 64)
+    inc(prodbits, ECC_QUAD * 64)
   else
-    prodbits := _numBits(product.L);
+    prodbits := _numbits256(product.L);
   if prodbits < modbits then
   begin
     // l_product < p_mod
@@ -1603,33 +1117,32 @@ begin
   end;
   // Shift p_mod by (LeftBits - modbits). This multiplies p_mod by the largest
   // power of two possible while still resulting in a number less than p_left
-  _clear(modbig.L);
-  _clear(modbig.H);
+  FillZero(modbig.b);
   digits := (prodbits - modbits) shr 6;
   bits   := (prodbits - modbits) and 63;
-  v := @modbig.U64[digits];
+  v := @modbig.Q[digits];
   if bits > 0 then
-    modbig.U64[digits + NUM_ECC_DIGITS] := _lshift(v^, Modulo, bits)
+    modbig.Q[digits + ECC_QUAD] := _lshift(v^, Curve_N_32, bits)
   else
-    _mv(v^, Modulo);
+    _mv(v^, Curve_N_32);
   // Subtract all multiples of Modulo to get the remainder
-  while (prodbits > NUM_ECC_DIGITS * 64) or
-        (_cmp(modbig.L, Modulo) >= 0) do
+  while (prodbits > ECC_QUAD * 64) or
+        (_cmp256(modbig.L, Curve_N_32) >= 0) do
   begin
-    cmp := _cmp(modbig.H, product.H);
+    cmp := _cmp256(modbig.H, product.H);
     if (cmp < 0) or
        ((cmp = 0) and
-        (_cmp(modbig.L, product.L) <= 0)) then
+        (_cmp256(modbig.L, product.L) <= 0)) then
     begin
-      if _sub256(product.L, product.L, modbig.L) <> 0 then
-        _sub256(product.H, product.H, _1); // borrow
-      _sub256(product.H, product.H, modbig.H);
+      if _dec256(product.L, modbig.L) <> 0 then
+        _dec256(product.H, _1); // borrow
+      _dec256(product.H, modbig.H);
     end;
-    carry := (modbig.U64[NUM_ECC_DIGITS] and $01) shl 63;
+    carry := (modbig.Q[ECC_QUAD] and 1) shl 63;
     _rshift1(modbig.H);
     _rshift1(modbig.L);
     if carry <> 0 then
-      modbig.U64[NUM_ECC_DIGITS - 1] := modbig.U64[NUM_ECC_DIGITS - 1] or carry;
+      modbig.Q[ECC_QUAD - 1] := modbig.Q[ECC_QUAD - 1] or carry;
     dec(prodbits);
   end;
   _mv(Output, product.L);
@@ -1638,7 +1151,7 @@ end;
 function ecdsa_sign_pas(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
   out Signature: TEccSignature): boolean;
 var
-  k, temp, S: TVLI;
+  k, temp, S: THash256Rec;
   P: TEccPoint;
   tries: integer;
 begin
@@ -1653,21 +1166,21 @@ begin
        _equals(k, _1) or
        _equals(k, _11) then
       continue;
-    if _cmp(Curve_N_32, k) <= 0 then
-      _sub256(k, k, Curve_N_32);
+    if _cmp256(Curve_N_32, k) <= 0 then
+      _dec256(k, Curve_N_32);
     // temp = k * G
     EccPointMult(P, Curve_G_32, k, nil);
     // r = x1 (mod n)
-    if _cmp(Curve_N_32, P.x) <= 0 then
-      _sub256(P.x, P.x, Curve_N_32);
+    if _cmp256(Curve_N_32, P.x) <= 0 then
+      _dec256(P.x, Curve_N_32);
   until not _isZero({%H-}P.x);
   _bswap256(@Signature, @P.x);
   _bswap256(@temp, @PrivateKey);
-  _modMult(S, P.x, temp, Curve_N_32); // s = r*d
+  _modMultN(S, P.x, temp);     // s = r*d
   _bswap256(@temp, @Hash);
-  _modAdd(S, temp, S, Curve_N_32);    // s = e + r*d
-  _modInv(k, k, Curve_N_32);          // k = 1 / k
-  _modMult(S, S, k, Curve_N_32);      // s = (e + r*d) / k
+  _modAddN(S, temp, S);        // s = e + r*d
+  _modInv(k, k, Curve_N_32);   // k = 1 / k
+  _modMultN(S, S, k);          // s = (e + r*d) / k
   _bswap256(@Signature[ECC_BYTES], @S);
   result := true;
 end;
@@ -1680,27 +1193,27 @@ var
   sumpt: TEccPoint;
   pt: PEccPoint;
   pts: array[0..3] of PEccPoint;
-  rx, ry, tx, ty, tz, l_r, l_s, u1, u2, z: TVLI;
+  rx, ry, tx, ty, tz, l_r, l_s, u1, u2, z: THash256Rec;
 begin
   result := false;
   _bswap256(@l_r, @Signature);
   _bswap256(@l_s, @Signature[ECC_BYTES]);
   if _isZero(l_r) or
      _isZero(l_s) or
-     (_cmp(Curve_N_32, l_r) <= 0) or
-     (_cmp(Curve_N_32, l_s) <= 0) then
+     (_cmp256(Curve_N_32, l_r) <= 0) or
+     (_cmp256(Curve_N_32, l_s) <= 0) then
     exit; // r, s must be <> 0 and < n
   // calculate u1 and u2
   _modInv(z, l_s, Curve_N_32);      // Z = s^-1
   _bswap256(@u1, @Hash);
-  _modMult(u1, u1, z, Curve_N_32);  // u1 = e/s
-  _modMult(u2, l_r, z, Curve_N_32); // u2 = r/s
+  _modMultN(u1, u1, z);             // u1 = e/s
+  _modMultN(u2, l_r, z);            // u2 = r/s
   // calculate l_sum = G + Q
   _mv(sumpt.x, pub.x);
   _mv(sumpt.y, pub.y);
   _mv(tx, Curve_G_32.x);
   _mv(ty, Curve_G_32.y);
-  _modSub(z, sumpt.x, tx, Curve_P_32);    // Z = x2 - x1
+  _modSubP(z, sumpt.x, tx);               // Z = x2 - x1
   _XYcZ_add(tx, ty, sumpt.x, sumpt.y);
   _modInv(z, z, Curve_P_32);              // Z = 1/Z
   _apply_z(sumpt.x, sumpt.y, z);
@@ -1709,15 +1222,15 @@ begin
   pts[1] := @Curve_G_32;
   pts[2] := @pub;
   pts[3] := @sumpt;
-  numbits := _numBits(u1);
-  index := _numBits(u2);
+  numbits := _numbits256(u1);
+  index := _numbits256(u2);
   if index > numbits then
     numbits := index;
   index := ord(GetBitPtr(@u1, numbits - 1)) +
            ord(GetBitPtr(@u2, numbits - 1)) * 2;
   pt := pts[index];
-  _mv(rx, pt.x);
-  _mv(ry, pt.y);
+  _mv(rx, pt^.x);
+  _mv(ry, pt^.y);
   _set1(z);
   for i := numbits - 2 downto 0 do
   begin
@@ -1727,20 +1240,20 @@ begin
     pt := pts[index];
     if pt <> nil then
     begin
-      _mv(tx, pt.x);
-      _mv(ty, pt.y);
+      _mv(tx, pt^.x);
+      _mv(ty, pt^.y);
       _apply_z(tx, ty, z);
-      _modSub(tz, rx, tx, Curve_P_32); // Z = x2 - x1
+      _modSubP(tz, rx, tx); // Z = x2 - x1
       _XYcZ_add(tx, ty, rx, ry);
-      _modMult_fast(z, z, tz);
+      _modMultP(z, z, tz);
     end;
   end;
   _modInv(z, z, Curve_P_32); // Z = 1/Z
   _apply_z(rx, ry, z);
   // v = x1 (mod n)
-  if _cmp(Curve_N_32, rx) <= 0 then
-    _sub256(rx, rx, Curve_N_32);
-  result := IsEqual(THash256(rx), THash256(l_r)); // Accept only if v == r
+  if _cmp256(Curve_N_32, rx) <= 0 then
+    _dec256(rx, Curve_N_32);
+  result := IsEqual(rx.b, l_r.b); // Accept only if v == r
 end;
 
 function ecdsa_verify_pas(const PublicKey: TEccPublicKey; const Hash: TEccHash;
@@ -1748,7 +1261,7 @@ function ecdsa_verify_pas(const PublicKey: TEccPublicKey; const Hash: TEccHash;
 var
   pub: TEccPublicKeyUncompressed;
 begin
-  EccPointDecompress(TEccPoint(pub), @PublicKey);
+  EccPointDecompress(TEccPoint(pub), PublicKey);
   result := ecdsa_verify_uncompressed_pas(pub, Hash, Signature);
 end;
 
@@ -1757,7 +1270,7 @@ end;
 
 constructor TEcc256r1VerifyPas.Create(const pub: TEccPublicKey);
 begin
-  EccPointDecompress(TEccPoint(fPub), @pub);
+  EccPointDecompress(TEccPoint(fPub), pub);
 end;
 
 destructor TEcc256r1VerifyPas.Destroy;
@@ -1945,7 +1458,7 @@ begin
       result := false
     else
       result := (content.Version in [1]) and
-        (fnv32(0, @content, SizeOf(content) - 4) = content.CRC);
+                (fnv32(0, @content, SizeOf(content) - 4) = content.CRC);
 end;
 
 function EccCheckDate(const content: TEccCertificateContent): boolean;
@@ -2009,8 +1522,8 @@ end;
 function EccSignToDer(const sign: TEccSignature;
   out der: TEccSignatureDer): integer;
 begin
-  if _isZero(PVLI(@sign[0])^) or
-     _isZero(PVLI(@sign[ECC_BYTES])^) then
+  if _isZero(PHash256Rec(@sign[0])^) or
+     _isZero(PHash256Rec(@sign[ECC_BYTES])^) then
     result := 0
   else
   begin
@@ -2026,7 +1539,7 @@ var
   pos: PtrUInt;
 begin
   result := nil;
-  _clear(PVLI(sig)^);
+  FillZero(PHash256(sig)^);
   if (P = nil) or
      (P[0] <> DER_INTEGER) then
     exit;
@@ -2092,8 +1605,7 @@ end;
 
 
 initialization
-  assert(NUM_ECC_DIGITS = 4);
-  assert(SizeOf(TVLIDUAL) = SizeOf(TVLI) * 2);
+  assert(ECC_QUAD = 4);
   assert(SizeOf(TEccCertificateContent) = 173); // on all platforms/compilers
   // register our branchless pascal code by default
   @Ecc256r1MakeKey := @ecc_make_key_pas;
