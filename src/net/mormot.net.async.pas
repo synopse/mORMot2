@@ -397,7 +397,7 @@ type
   // - internal TAsyncConnectionsSockets will handle high-performance process
   // of a high number of long-living simultaneous connections
   // - will use a TAsyncConnection inherited class to maintain connection state
-  // - don't use this abstract class but either TAsyncServer or TAsyncClients
+  // - don't use this abstract class but either TAsyncServer or TAsyncClient
   // - under Linux/POSIX, check your "ulimit -H -n" value: one socket consumes
   // two file descriptors: you may better add the following line to your
   // /etc/limits.conf or /etc/security/limits.conf system file:
@@ -2175,12 +2175,11 @@ begin
   try
     SetExecuteState(esRunning);
     if not fExecuteAcceptOnly then
-    begin
       // setup the main bound connection to be polling together with the writes
-      if not fClients.fWrite.Subscribe(fServer.Sock, [pseRead], {notif.tag=} 0) then
+      if fClients.fWrite.Subscribe(fServer.Sock, [pseRead], {notif.tag=} 0) then
+        fClients.fWrite.PollForPendingEvents(0) // actually subscribe
+      else
         raise EAsyncConnections.CreateUtf8('%.Execute: subscribe accept?', [self]);
-      fClients.fWrite.PollForPendingEvents(0); // actually subscribe
-    end;
     // main socket accept/send processing loop
     async := false; // first Accept() will be blocking
     start := 0;
