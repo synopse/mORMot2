@@ -1897,6 +1897,7 @@ type
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - O_['prop'] would add a new property if there is none existing, or
     // overwrite an existing property which is not a dvObject
+    // - the new property object would inherit from the Options of this instance
     property O_[const aName: RawUtf8]: PDocVariantData
       read GetObjectOrAddByName;
     /// direct access to a dvObject existing dvArray property from its name
@@ -1910,6 +1911,7 @@ type
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - A_['prop'] would add a new property if there is none existing, or
     // overwrite an existing property which is not a dvArray
+    // - the new property array would inherit from the Options of this instance
     property A_[const aName: RawUtf8]: PDocVariantData
       read GetArrayOrAddByName;
     /// direct access to a dvArray's TDocVariant property from its index
@@ -7406,7 +7408,7 @@ begin
   begin
     result := @VValue[ndx];
     VarClear(PVariant(result)^);
-    result^.InitFast(aKind);
+    result^.Init(VOptions, aKind);
   end;
 end;
 
