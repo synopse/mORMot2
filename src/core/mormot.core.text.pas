@@ -406,8 +406,8 @@ function GetFileNameExtIndex(const FileName, CsvExt: TFileName): integer;
 /// return next CSV string from P, nil if no more
 // - output text would be trimmed from any left or right space
 // - will always append a trailing #0 - excluded from Dest length (0..254)
-procedure GetNextItemShortString(var P: PUtf8Char;
-  out Dest: ShortString; Sep: AnsiChar = ',');
+procedure GetNextItemShortString(var P: PUtf8Char; Dest: PShortString;
+  Sep: AnsiChar = ',');
 
 /// append some text lines with the supplied Values[]
 // - if any Values[] item is '', no line is added
@@ -3884,14 +3884,14 @@ begin
   end;
 end;
 
-procedure GetNextItemShortString(var P: PUtf8Char; out Dest: ShortString; Sep: AnsiChar);
+procedure GetNextItemShortString(var P: PUtf8Char; Dest: PShortString; Sep: AnsiChar);
 var
   S, D: PUtf8Char;
   c: AnsiChar;
   len: PtrInt;
 begin
   S := P;
-  D := @Dest; // better FPC codegen with a dedicated variable
+  D := pointer(Dest); // better FPC codegen with a dedicated variable
   if S = nil then
     PCardinal(D)^ := 0 // Dest='' with trailing #0
   else

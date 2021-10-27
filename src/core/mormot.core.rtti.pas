@@ -8274,7 +8274,7 @@ begin
     exit;
   rc := Rtti.RegisterClass(Instance.ClassType);
   repeat
-    GetNextItemShortString(paf, n, '.');
+    GetNextItemShortString(paf, @n, '.');
     if n[0] in [#0, #254] then
       exit;
     p := rc.Props.Find(@n[1], ord(n[0]));
