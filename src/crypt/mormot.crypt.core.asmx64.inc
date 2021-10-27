@@ -1729,6 +1729,137 @@ asm
         {$endif WIN64ABI}
 end;
 
+procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
+  {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=Output rdx/rsi=Left r8/rdx=Right
+        {$ifdef WIN64ABI}
+        push    rdi
+        push    rsi
+        mov     rdi, Output
+        {$endif WIN64ABI}
+        push    r15
+        push    r14
+        push    r13
+        push    r12
+        mov     r12, qword ptr [Right]
+        mov     r13, qword ptr [Right + 8H]
+        mov     r14, qword ptr [Right + 10H]
+        mov     r15, qword ptr [Right + 18H]
+        mov     r8,  qword ptr [Left]
+        mov     r9,  qword ptr [Left + 8H]
+        mov     r10, qword ptr [Left + 10H]
+        mov     r11, qword ptr [Left + 18H]
+        xor     rsi, rsi
+        mov     rax, r8
+        mul     r12
+        mov     qword ptr [rdi], rax
+        mov     rcx, rdx
+        mov     rax, r9
+        mul     r12
+        add     rax, rcx
+        adc     rdx, rsi
+        mov     qword ptr [rdi + 8H], rax
+        mov     rcx, rdx
+        mov     rax, r10
+        mul     r12
+        add     rax, rcx
+        adc     rdx, rsi
+        mov     qword ptr [rdi + 10H], rax
+        mov     rcx, rdx
+        mov     rax, r11
+        mul     r12
+        add     rax, rcx
+        adc     rdx, rsi
+        mov     qword ptr [rdi + 18H], rax
+        mov     qword ptr [rdi + 20H], rdx
+        mov     rax, r8
+        mul     r13
+        add     qword ptr [rdi + 8H], rax
+        adc     rdx, rsi
+        mov     rcx, rdx
+        mov     rax, r9
+        mul     r13
+        add     rax, rcx
+        adc     rdx, rsi
+        add     qword ptr [rdi + 10H], rax
+        adc     rdx, rsi
+        mov     rcx, rdx
+        mov     rax, r10
+        mul     r13
+        add     rax, rcx
+        adc     rdx, rsi
+        add     qword ptr [rdi + 18H], rax
+        adc     rdx, rsi
+        mov     rcx, rdx
+        mov     rax, r11
+        mul     r13
+        add     rax, rcx
+        adc     rdx, rsi
+        add     qword ptr [rdi + 20H], rax
+        adc     rdx, rsi
+        mov     qword ptr [rdi + 28H], rdx
+        mov     rax, r8
+        mul     r14
+        add     qword ptr [rdi + 10H], rax
+        adc     rdx, rsi
+        mov     rcx, rdx
+        mov     rax, r9
+        mul     r14
+        add     rax, rcx
+        adc     rdx, rsi
+        add     qword ptr [rdi + 18H], rax
+        adc     rdx, rsi
+        mov     rcx, rdx
+        mov     rax, r10
+        mul     r14
+        add     rax, rcx
+        adc     rdx, rsi
+        add     qword ptr [rdi + 20H], rax
+        adc     rdx, rsi
+        mov     rcx, rdx
+        mov     rax, r11
+        mul     r14
+        add     rax, rcx
+        adc     rdx, rsi
+        add     qword ptr [rdi + 28H], rax
+        adc     rdx, rsi
+        mov     qword ptr [rdi + 30H], rdx
+        mov     rax, r8
+        mul     r15
+        add     qword ptr [rdi + 18H], rax
+        adc     rdx, rsi
+        mov     rcx, rdx
+        mov     rax, r9
+        mul     r15
+        add     rax, rcx
+        adc     rdx, rsi
+        add     qword ptr [rdi + 20H], rax
+        adc     rdx, rsi
+        mov     rcx, rdx
+        mov     rax, r10
+        mul     r15
+        add     rax, rcx
+        adc     rdx, rsi
+        add     qword ptr [rdi + 28H], rax
+        adc     rdx, rsi
+        mov     rcx, rdx
+        mov     rax, r11
+        mul     r15
+        add     rax, rcx
+        adc     rdx, rsi
+        add     qword ptr [rdi + 30H], rax
+        adc     rdx, rsi
+        mov     qword ptr [rdi + 38H], rdx
+        pop     r12
+        pop     r13
+        pop     r14
+        pop     r15
+        {$ifdef WIN64ABI}
+        pop     rsi
+        pop     rdi
+        {$endif WIN64ABI}
+end;
+
 procedure _inc64(var Value: THash128Rec; var Added: QWord);
   {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Added

@@ -497,10 +497,10 @@ implementation
  - mORMot .obj  98 Ecc256r1SharedSecret in 201.53ms i.e. 486/s, aver. 2.05ms
 
  Some Numbers on Linux x86_64:
- - mORMot  300 Ecc256r1MakeKey in 77.86ms i.e. 3.7K/s, aver. 259us
- - mORMot  300 Ecc256r1Sign in 82.83ms i.e. 3.5K/s, aver. 276us
- - mORMot  300 Ecc256r1Verify in 99.93ms i.e. 2.9K/s, aver. 333us
- - mORMot  598 Ecc256r1SharedSecret in 171.76ms i.e. 3.4K/s, aver. 287us
+ - mORMot  300 Ecc256r1MakeKey in 76.59ms i.e. 3.8K/s, aver. 255us
+ - mORMot  300 Ecc256r1Sign in 79.21ms i.e. 3.7K/s, aver. 264us
+ - mORMot  300 Ecc256r1Verify in 95.70ms i.e. 3K/s, aver. 319us
+ - mORMot  598 Ecc256r1SharedSecret in 158.93ms i.e. 3.6K/s, aver. 265us
 
  - OpenSSL 300 Ecc256r1MakeKey in   5.09ms i.e. 57.5K/s, aver. 16us
  - OpenSSL 300 Ecc256r1Sign in   7.97ms i.e. 36.7K/s, aver. 26us

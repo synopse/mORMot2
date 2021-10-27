@@ -237,11 +237,12 @@ procedure _mult128({$ifdef FPC}constref{$else}const{$endif} l, r: THash128Rec;
   out product: THash256Rec);
   {$ifndef CPUINTEL} inline; {$endif}
 
-/// 256-to-512-bit multiplication - used by ecc256r1
+/// 256-to-512-bit multiplication (with x86_64 asm) - used by ecc256r1
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
 
 /// 256-to-512-bit ^2 computation - used by ecc256r1
 procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
+  {$ifdef CPUX64}inline;{$endif}
 
 /// returns sign of 256-bit Left - Right
 function _cmp256(const Left, Right: THash256Rec): integer;
@@ -3274,7 +3275,14 @@ end;
 
 {$endif CPUINTEL}
 
-{$ifndef CPUX64}
+{$ifdef CPUX64}
+
+procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
+begin
+  _mult256(Output, Left, Left);
+end;
+
+{$else}
 
 {$ifdef FPC} // Delphi is not good at inlining and computing this function
 
@@ -3317,8 +3325,6 @@ begin
   product.L.H := t1.L;      // product.L := t3.V shl 64 or t1.L;
 end;
 
-{$endif CPUX64}
-
 {$ifndef ECC_ORIGINALMULT}
 
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
@@ -3354,6 +3360,8 @@ begin
 end;
 
 {$endif ECC_ORIGINALMULT}
+
+{$endif CPUX64}
 
 {$ifdef CPU32}
 
