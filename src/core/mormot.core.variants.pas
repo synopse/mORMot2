@@ -880,6 +880,8 @@ type
     function GetArrayExistingByName(const aName: RawUtf8): PDocVariantData;
     function GetArrayOrAddByName(const aName: RawUtf8): PDocVariantData;
     function GetAsDocVariantByIndex(aIndex: integer): PDocVariantData;
+    function InternalAdd(aName: PUtf8Char; aNameLen: integer): integer; overload;
+    procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
     procedure ClearFast;
   public
     /// initialize a TDocVariantData to store some document-based content
@@ -1129,7 +1131,7 @@ type
     // - you can specify an optional aIndex value to Insert instead of Add
     // - warning: FPC optimizer is confused by Values[InternalAdd(name)] so
     // you should call InternalAdd() in an explicit previous step
-    function InternalAdd(const aName: RawUtf8; aIndex: integer = -1): integer;
+    function InternalAdd(const aName: RawUtf8; aIndex: integer = -1): integer; overload;
     {$ifdef HASITERATORS}
     /// an enumerator able to compile "for .. in dv do" statements
     // - returns pointers over all Names[] and Values[]
@@ -1419,17 +1421,17 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
-    // - it will return Unassigned if the path does match the supplied aPath
+    // - it will return Unassigned if there is no item at the supplied aPath
     function GetValueByPath(const aPath: RawUtf8): variant; overload;
     /// retrieve a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
-    // - it will return FALSE if the path does not match the supplied aPath
+    // - returns FALSE if there is no item at the supplied aPath
     // - returns TRUE and set the found value in aValue
     function GetValueByPath(const aPath: RawUtf8;
       out aValue: variant): boolean; overload;
     /// retrieve a value, given its path
     // - path is defined as a list of names, e.g. ['doc','glossary','title']
-    // - it will return Unassigned if the path does not match the data
+    // - returns Unassigned if there is no item at the supplied aPath
     // - this method will only handle nested TDocVariant values: use the
     // slightly slower GetValueByPath() overloaded method, if any nested object
     // may be of another type (e.g. a TBsonVariant)
@@ -1480,6 +1482,11 @@ type
     /// set an item in this document from its index
     // - raise an EDocVariant if the supplied Index is not in 0..Count-1 range
     procedure SetValueOrRaiseException(Index: integer; const NewValue: variant);
+    /// set a value, given its path
+    // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
+    // - returns FALSE if there is no item to be set at the supplied aPath
+    // - returns TRUE and set the found value in aValue
+    function SetValueByPath(const aPath: RawUtf8; const aValue: variant): boolean;
 
     /// add a value in this document
     // - if aName is set, if dvoCheckForDuplicatedNames option is set, any
@@ -1576,7 +1583,7 @@ type
     procedure AddOrUpdateFrom(const aDocVariant: Variant;
       aOnlyAddMissing: boolean = false);
     /// add one or several properties, specified by path, from another object
-    // - path are defined as a dotted name-space, e.g. 'doc.glossary.title'
+    // - path are defined as open array, e.g. ['doc','glossary','title']
     // - matching values would be added as root values, with the path as name
     // - instance and supplied aSource should be a dvObject
     procedure AddByPath(const aSource: TDocVariantData;
@@ -3718,9 +3725,7 @@ begin
     FastSetString(aName, Name, NameLen);
     ndx := dv.InternalAdd(aName);
   end;
-  SetVariantByValue(variant(Value), dv.VValue[ndx]);
-  if dvoInternValues in dv.VOptions then
-    DocVariantType.InternValues.UniqueVariant(dv.VValue[ndx]);
+  dv.InternalSetValue(ndx, variant(Value));
 end;
 
 function TDocVariant.IterateCount(const V: TVarData): integer;
@@ -4507,6 +4512,13 @@ begin
   result := fInternValues;
 end;
 
+procedure TDocVariantData.InternalSetValue(aIndex: PtrInt; const aValue: variant);
+begin
+  SetVariantByValue(aValue, VValue[aIndex]); // caller ensured that aIndex is OK
+  if dvoInternValues in VOptions then
+    DocVariantType.InternValues.UniqueVariant(VValue[aIndex]);
+end;
+
 procedure TDocVariantData.SetOptions(const opt: TDocVariantOptions);
 begin
   VOptions := (opt - [dvoIsArray, dvoIsObject]) +
@@ -4666,7 +4678,7 @@ begin
       for arg := 0 to high(aItems) do
       begin
         VarRecToVariant(aItems[arg], tmp);
-        SetVariantByValue(tmp, VValue[arg]);
+        InternalSetValue(arg, tmp);
       end;
   end;
 end;
@@ -5318,6 +5330,14 @@ begin
   result := Compare(Another, CaseInsensitive) = 0;
 end;
 
+function TDocVariantData.InternalAdd(aName: PUtf8Char; aNameLen: integer): integer;
+var
+  tmp: RawUtf8; // so that the caller won't need to reserve such a temp var
+begin
+  FastSetString(tmp, aName, aNameLen);
+  result := InternalAdd(tmp);
+end;
+
 function TDocVariantData.InternalAdd(
   const aName: RawUtf8; aIndex: integer): integer;
 var
@@ -5567,9 +5587,7 @@ end;
 function TDocVariantData.AddItem(const aValue: variant; aIndex: integer): integer;
 begin
   result := InternalAdd('', aIndex);
-  SetVariantByValue(aValue, VValue[result]);
-  if dvoInternValues in VOptions then
-    DocVariantType.InternValues.UniqueVariant(VValue[result]);
+  InternalSetValue(result, aValue);
 end;
 
 function TDocVariantData.AddItemFromText(const aValue: RawUtf8;
@@ -6860,6 +6878,34 @@ begin
     VValue[Index] := NewValue;
 end;
 
+function TDocVariantData.SetValueByPath(const aPath: RawUtf8;
+  const aValue: variant): boolean;
+var
+  P: PUtf8Char;
+  v: PDocVariantData;
+  ndx: PtrInt;
+  n: ShortString;
+begin
+  result := false;
+  P := pointer(aPath);
+  v := @self;
+  repeat
+    GetNextItemShortString(P, n, '.');
+    if n[0] in [#0, #254] then
+      exit;
+    ndx := v^.GetValueIndex(@n[1], ord(n[0]), dvoNameCaseSensitive in v^.VOptions);
+    if P = nil then
+      break; // we reached the last item of the path, which is the value to set
+    if (ndx < 0) or
+       not _SafeObject(v^.VValue[ndx], v) then
+      exit; // incorrect path
+  until false;
+  if ndx < 0 then
+    ndx := v^.InternalAdd(@n[1], ord(n[0]));
+  v^.InternalSetValue(ndx, aValue);
+  result := true;
+end;
+
 procedure TDocVariantData.RetrieveNameOrRaiseException(
   Index: integer; var Dest: RawUtf8);
 begin
@@ -6953,9 +6999,7 @@ begin
       ndx := GetValueIndex(Name);
       if ndx < 0 then
         ndx := InternalAdd(Name);
-      SetVariantByValue(aValue, VValue[ndx]);
-      if dvoInternValues in VOptions then
-        DocVariantType.InternValues.UniqueVariant(VValue[ndx]);
+      InternalSetValue(ndx, aValue);
     end
     else
       SetValueOrRaiseException(
@@ -6983,9 +7027,7 @@ begin
     if OnlyAddMissing then
       exit;
   end;
-  SetVariantByValue(aValue, VValue[result]);
-  if dvoInternValues in VOptions then
-    DocVariantType.InternValues.UniqueVariant(VValue[result]);
+  InternalSetValue(result, aValue);
 end;
 
 function TDocVariantData.ToJson(const Prefix, Suffix: RawUtf8;
