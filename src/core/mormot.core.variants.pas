@@ -882,6 +882,7 @@ type
     function GetAsDocVariantByIndex(aIndex: integer): PDocVariantData;
     function InternalAdd(aName: PUtf8Char; aNameLen: integer): integer; overload;
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
+    function InternalNextPath(var P: PUtf8Char; aName: PShortString): PtrInt;
     procedure ClearFast;
   public
     /// initialize a TDocVariantData to store some document-based content
@@ -1602,6 +1603,10 @@ type
     /// delete/filter some values/items in this document, from their name
     // - return the number of deleted items
     function Delete(const aNames: array of RawUtf8): integer; overload;
+    /// delete a value/item in this document, from its name
+    // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
+    // - return TRUE on success, FALSE if the supplied name does not exist
+    function DeleteByPath(const aPath: RawUtf8): boolean;
     /// delete a value in this document, by property name match
     // - {aPropName:aPropValue} will be searched within the stored array or
     // object, and the corresponding item will be deleted, on match
@@ -3542,7 +3547,7 @@ var
   handler: TSynInvokeableVariantType;
   v, tmp: TVarData; // PVarData wouldn't store e.g. RowID/count
   vt: cardinal;
-  itemName: ShortString;
+  n: ShortString;
 begin
   TRttiVarData(Dest).VType := varEmpty; // left to Unassigned if not found
   v := Instance;
@@ -3555,8 +3560,8 @@ begin
   repeat
     if vt < varFirstCustom then
       exit; // we need a complex type to lookup
-    GetNextItemShortString(FullName, itemName, '.'); // itemName ends with #0
-    if itemName[0] in [#0, #254] then
+    GetNextItemShortString(FullName, @n, '.'); // n ends with #0
+    if n[0] in [#0, #254] then
       exit;
     if vt = VarType then
       handler := self
@@ -3568,7 +3573,7 @@ begin
     end;
     tmp := v; // v will be modified in-place
     TRttiVarData(v).VType := varEmpty; // IntGet() would clear it otherwise!
-    if not handler.IntGet(v, tmp, @itemName[1], ord(itemName[0]), {noexc=}true) then
+    if not handler.IntGet(v, tmp, @n[1], ord(n[0]), {noexc=}true) then
       exit; // property not found (no exception should be raised in Lookup)
     repeat
       vt := v.VType;
@@ -4550,8 +4555,8 @@ begin
     else
       include(aOptions, dvoIsObject);
   opt := word(aOptions);
-  TRttiVarData(self).VType := DocVariantVType + opt shl 16;
-  pointer(VName) := nil; // reset garbage content -> explicit Clear call needed
+  TRttiVarData(self).VType := DocVariantVType + opt shl 16; // VType+VOptions
+  pointer(VName) := nil; // to avoid GPF
   pointer(VValue) := nil;
   VCount := 0;
 end;
@@ -6277,6 +6282,41 @@ begin
     inc(result, ord(Delete(aNames[n])));
 end;
 
+function TDocVariantData.InternalNextPath(
+  var P: PUtf8Char; aName: PShortString): PtrInt;
+begin
+  GetNextItemShortString(P, aName, '.');
+  if aName^[0] in [#0, #254] then
+    result := -1
+  else
+    result := GetValueIndex(@aName^[1], ord(aName^[0]),
+      dvoNameCaseSensitive in VOptions);
+end;
+
+function TDocVariantData.DeleteByPath(const aPath: RawUtf8): boolean;
+var
+  P: PUtf8Char;
+  v: PDocVariantData;
+  ndx: PtrInt;
+  n: ShortString;
+begin
+  result := false;
+  if IsArray then
+    exit;
+  P := pointer(aPath);
+  v := @self;
+  repeat
+    ndx := v^.InternalNextPath(P, @n);
+    if P = nil then
+    begin
+      // we reached the last item of the path, which is to be deleted
+      result := v^.Delete(ndx);
+      exit;
+    end;
+  until (ndx < 0) or
+       not _SafeObject(v^.VValue[ndx], v);
+end;
+
 function TDocVariantData.DeleteByProp(const aPropName, aPropValue: RawUtf8;
   aPropValueCaseSensitive: boolean): boolean;
 begin
@@ -6700,29 +6740,31 @@ end;
 
 function TDocVariantData.GetPVariantByPath(const aPath: RawUtf8): PVariant;
 var
-  p: PUtf8Char;
-  item: RawUtf8;
-  par: PVariant;
+  P: PUtf8Char;
+  ndx: PtrInt;
+  n: shortstring;
 begin
-  result := nil;
   if (cardinal(VType) <> DocVariantVType) or
      (aPath = '') or
      (not IsObject) or
-     (count = 0) then
+     (VCount = 0) then
+  begin
+    result := nil;
     exit;
-  par := @self;
-  p := pointer(aPath);
+  end;
+  result := @self;
+  P := pointer(aPath);
   repeat
-    GetNextItem(p, '.', item);
-    if _Safe(par^).GetAsPVariant(item, result) then
-      par := result
-    else
+    with _Safe(result^)^ do
     begin
+      ndx := InternalNextPath(P, @n);
       result := nil;
-      exit;
+      if ndx < 0 then
+        exit;
+      result := @VValue[ndx];
     end;
-  until p = nil;
-  // if we reached here, we have par=result=found item
+  until P = nil;
+  // if we reached here, we have result=found item
 end;
 
 function TDocVariantData.GetDocVariantByPath(const aPath: RawUtf8;
@@ -6905,14 +6947,19 @@ begin
   P := pointer(aPath);
   v := @self;
   repeat
-    GetNextItemShortString(P, n, '.');
-    if n[0] in [#0, #254] then
-      exit;
-    ndx := v^.GetValueIndex(@n[1], ord(n[0]), dvoNameCaseSensitive in v^.VOptions);
+    ndx := v^.InternalNextPath(P, @n);
     if P = nil then
       break; // we reached the last item of the path, which is the value to set
-    if (ndx < 0) or
-       not _SafeObject(v^.VValue[ndx], v) then
+    if ndx < 0 then
+      if aCreateIfNotExisting then
+      begin
+        ndx := v^.InternalAdd(@n[1], ord(n[0])); // in two steps for FPC
+        v := @v^.VValue[ndx];
+        v^.InitClone(self); // same as root
+      end
+      else
+        exit
+    else if not _SafeObject(v^.VValue[ndx], v) then
       exit; // incorrect path
   until false;
   if ndx < 0 then
