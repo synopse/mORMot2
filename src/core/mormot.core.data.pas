@@ -700,7 +700,8 @@ type
 
   /// set of options for a TDocVariant storage
   // - defined in this unit to avoid circular reference with mormot.core.variants
-  // - see JSON_[TDocVariantModel] and all JSON_* constants as potential values
+  // - see JSON_[TDocVariantModel] and all JSON_* constants (e.g. JSON_FAST or
+  // JSON_FAST_FLOAT) as potential values
   // - when specifying the options, you should not include dvoIsArray nor
   // dvoIsObject directly in the set, but explicitly define TDocVariantDataKind
   TDocVariantOptions = set of TDocVariantOption;

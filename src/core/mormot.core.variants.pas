@@ -1040,8 +1040,17 @@ type
     // - use the options corresponding to the supplied TDocVariantModel
     // - a private copy of the incoming JSON buffer will be made
     // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - handle only currency for floating point values unless you set mFastFloat
     function InitJson(const Json: RawUtf8; aModel: TDocVariantModel): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// initialize a variant instance to store some document-based object content
+    // from a file containing some JSON array or JSON object
+    // - file may have been serialized using the SaveToJsonFile() method
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - handle only currency for floating point values: set JSON_FAST_FLOAT
+    // or dvoAllowDoubleValue option to support double, with potential precision loss
+    function InitJsonFromFile(const FileName: TFileName;
+      aOptions: TDocVariantOptions = []): boolean;
     /// ensure a document-based variant instance will have one unique options set
     // - this will create a copy of the supplied TDocVariant instance, forcing
     // all nested events to have the same set of Options
@@ -1211,6 +1220,7 @@ type
     function ToJson(const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
       Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
     /// save a document as UTF-8 encoded JSON file
+    // - you may then use InitJsonFromFile() to load and parse this file
     procedure SaveToJsonFile(const FileName: TFileName);
     /// save an array of objects as UTF-8 encoded non expanded layout JSON
     // - returned content would be a JSON object in mORMot's TOrmTable non
@@ -5088,6 +5098,12 @@ end;
 function TDocVariantData.InitJson(const Json: RawUtf8; aModel: TDocVariantModel): boolean;
 begin
   result := InitJson(Json, JSON_[aModel]);
+end;
+
+function TDocVariantData.InitJsonFromFile(const FileName: TFileName;
+  aOptions: TDocVariantOptions): boolean;
+begin
+  result := InitJsonInPlace(pointer(StringFromFile(FileName)), aOptions) <> nil;
 end;
 
 procedure TDocVariantData.InitCsv(aCsv: PUtf8Char; aOptions: TDocVariantOptions;
