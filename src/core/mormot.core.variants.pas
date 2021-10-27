@@ -1487,9 +1487,11 @@ type
     procedure SetValueOrRaiseException(Index: integer; const NewValue: variant);
     /// set a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
+    // - aCreateIfNotExisting=true will force missing nested objects creation
     // - returns FALSE if there is no item to be set at the supplied aPath
     // - returns TRUE and set the found value in aValue
-    function SetValueByPath(const aPath: RawUtf8; const aValue: variant): boolean;
+    function SetValueByPath(const aPath: RawUtf8; const aValue: variant;
+      aCreateIfNotExisting: boolean = false): boolean;
 
     /// add a value in this document
     // - if aName is set, if dvoCheckForDuplicatedNames option is set, any
@@ -6890,7 +6892,7 @@ begin
 end;
 
 function TDocVariantData.SetValueByPath(const aPath: RawUtf8;
-  const aValue: variant): boolean;
+  const aValue: variant; aCreateIfNotExisting: boolean): boolean;
 var
   P: PUtf8Char;
   v: PDocVariantData;
@@ -6898,6 +6900,8 @@ var
   n: ShortString;
 begin
   result := false;
+  if IsArray then
+    exit;
   P := pointer(aPath);
   v := @self;
   repeat
