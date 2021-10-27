@@ -868,7 +868,7 @@ asm     // eax=x edx=y ecx=m
         pop     esi
 end;
 
-function _add256(out Output; const Left, Right): PtrUInt;
+function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
   {$ifdef FPC}nostackframe; assembler; {$endif}
 asm
         push   ebx
@@ -907,7 +907,38 @@ asm
         pop    ebx
 end;
 
-function _sub256(out Output; const Left, Right): PtrUInt;
+function _inc256(var Value: THash256Rec; const Added: THash256Rec): PtrUInt;
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        push   ebp
+        mov    ebx, dword ptr [Added]
+        mov    esi, dword ptr [Added + 4]
+        mov    edi, dword ptr [Added + 8]
+        mov    ebp, dword ptr [Added + 12]
+        add    dword ptr [Value], ebx
+        adc    dword ptr [Value + 4], esi
+        adc    dword ptr [Value + 8], edi
+        adc    dword ptr [Value + 12], ebp
+        mov    ebx, dword ptr [Added + 16]
+        mov    esi, dword ptr [Added + 20]
+        mov    edi, dword ptr [Added + 24]
+        mov    ebp, dword ptr [Added + 28]
+        adc    dword ptr [Value + 16], ebx
+        adc    dword ptr [Value + 20], esi
+        adc    dword ptr [Value + 24], edi
+        adc    dword ptr [Value + 28], ebp
+        mov    eax, 0  // xor eax,eax is shorter but would change the carry
+        adc    eax, eax
+        pop    ebp
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
+function _sub256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
   {$ifdef FPC}nostackframe; assembler; {$endif}
 asm
         push   ebx
@@ -946,7 +977,38 @@ asm
         pop    ebx
 end;
 
-procedure _inc64(var Value; var Added);
+function _dec256(var Value: THash256Rec; const Subs: THash256Rec): PtrUInt;
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+          push   ebx
+          push   esi
+          push   edi
+          push   ebp
+          mov    ebx, dword ptr [Subs]
+          mov    esi, dword ptr [Subs + 4]
+          mov    edi, dword ptr [Subs + 8]
+          mov    ebp, dword ptr [Subs + 12]
+          sub    dword ptr [Value], ebx
+          sbb    dword ptr [Value + 4], esi
+          sbb    dword ptr [Value + 8], edi
+          sbb    dword ptr [Value + 12], ebp
+          mov    ebx, dword ptr [Subs + 16]
+          mov    esi, dword ptr [Subs + 20]
+          mov    edi, dword ptr [Subs + 24]
+          mov    ebp, dword ptr [Subs + 28]
+          sbb    dword ptr [Value + 16], ebx
+          sbb    dword ptr [Value + 20], esi
+          sbb    dword ptr [Value + 24], edi
+          sbb    dword ptr [Value + 28], ebp
+          mov    eax, 0  // xor eax,eax is shorter but would change the carry
+          adc    eax, eax
+          pop    ebp
+          pop    edi
+          pop    esi
+          pop    ebx
+end;
+
+procedure _inc64(var Value: THash128Rec; var Added: QWord);
   {$ifdef FPC}nostackframe; assembler; {$endif}
 asm
         push   ebx
@@ -964,7 +1026,7 @@ asm
         pop    ebx
 end;
 
-procedure _inc128(var Value; var Added);
+procedure _inc128(var Value: THash256Rec; var Added: THash128Rec);
   {$ifdef FPC}nostackframe; assembler; {$endif}
 asm
         push   ebx

@@ -19,6 +19,7 @@ Legal Notice: as stated by [our licensing terms](../../LICENCE.md), make sure th
 
 High-Performance Cryptographic features shared by all framework units
 - Low-Level Memory Buffers Helper Functions
+- 256-bit BigInt Low-Level Computation for ECC
 - AES Encoding/Decoding with optimized asm and AES-NI/CLMUL support
 - AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG)
 - SHA-2 SHA-3 Secure Hashing

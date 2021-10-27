@@ -8,6 +8,7 @@ unit mormot.crypt.core;
 
    High-Performance Cryptographic Features shared by all framework units
     - Low-Level Memory Buffers Helper Functions
+    - 256-bit BigInt Low-Level Computation for ECC
     - AES Encoding/Decoding with optimized asm and AES-NI/CLMUL support
     - AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG)
     - SHA-2 SHA-3 Secure Hashing
@@ -176,29 +177,6 @@ procedure RawSha256Compress(var Hash; Data: pointer);
 /// entry point of the raw SHA-512 transform function - may be used for low-level use
 procedure RawSha512Compress(var Hash; Data: pointer);
 
-
-{$ifdef CPUINTEL}
-
-/// optimized 256-bit addition written in i386/x86_64 asm - used by ecc256r1
-function _add256(out Output; const Left, Right): PtrUInt;
-
-/// optimized 256-bit substraction written in i386/x86_64 asm - used by ecc256r1
-function _sub256(out Output; const Left, Right): PtrUInt;
-
-/// optimized 128-bit addition written in i386/x86_64 asm - used by ecc256r1
-procedure _inc128(var Value; var Added);
-
-/// optimized 64-bit addition written in i386/x86_64 asm - used by ecc256r1
-procedure _inc64(var Value; var Added);
-
-{$ifdef CPUX64}
-/// 128-to-256-bit multiplication written in x86_64 asm - used by ecc256r1
-procedure _mult128(const l, r; out product);
-{$endif CPUX64}
-
-{$endif CPUINTEL}
-
-
 var
   /// 32-bit truncation of Go runtime aeshash, using aesni opcode
   // - just a wrapper around AesNiHash128() with proper 32-bit zeroing
@@ -226,6 +204,64 @@ var
   // a random AES key is computed to prevent DOS attack on forged input
   // - DefaultHasher128() is assigned to this function, when available on the CPU
   AesNiHash128: procedure(hash: PHash128; data: pointer; len: PtrUInt);
+
+
+{ *************** 256-bit BigInt Low-Level Computation for ECC }
+
+/// optimized 256-bit addition (with Intel/AMD asm) - used by ecc256r1
+function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// optimized 256-bit substraction (with Intel/AMD asm) - used by ecc256r1
+function _sub256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// optimized 256-bit addition (with Intel/AMD asm) - used by ecc256r1
+function _inc256(var Value: THash256Rec; const Added: THash256Rec): PtrUInt;
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// optimized 256-bit substraction (with Intel/AMD asm) - used by ecc256r1
+function _dec256(var Value: THash256Rec; const Subs: THash256Rec): PtrUInt;
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// optimized 128-bit addition (with Intel/AMD asm) - used by ecc256r1
+procedure _inc128(var Value: THash256Rec; var Added: THash128Rec);
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// optimized 64-bit addition (with Intel/AMD asm) - used by ecc256r1
+procedure _inc64(var Value: THash128Rec; var Added: QWord);
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// 128-to-256-bit multiplication (with Intel/AMD asm) - used by ecc256r1
+procedure _mult128({$ifdef FPC}constref{$else}const{$endif} l, r: THash128Rec;
+  out product: THash256Rec);
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// 256-to-512-bit multiplication - used by ecc256r1
+procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
+
+/// 256-to-512-bit ^2 computation - used by ecc256r1
+procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
+
+/// returns sign of 256-bit Left - Right
+function _cmp256(const Left, Right: THash256Rec): integer;
+  {$ifdef CPU64}inline;{$endif}
+
+/// right shift of 1 bit of a 256-bit value
+procedure _rshift1(var V: THash256Rec);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// left shift of 1 bit of a 256-bit value
+function _lshift1(var V: THash256Rec): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+// computes Output = Input shl Shift, returning carry, of a 256-bit value
+// - can modify in place (if Output == Input). 0 < Shift < 64
+function _lshift(var Output: THash256Rec; const Input: THash256Rec; Shift: integer): QWord;
+
+/// compute the highest bit set of a 256-bit value
+function _numbits256(const V: THash256Rec): integer;
+  {$ifdef FPC}inline;{$endif}
 
 
 { *************** AES Encoding/Decoding with optimized asm and AES-NI support }
@@ -2893,6 +2929,9 @@ begin
             (Adler32Pas(7, @Te1, SizeOf(Te1) - 3) = $DA91FDBE);
 end;
 
+
+{ *************** 256-bit BigInt Low-Level Computation for ECC }
+
 {$ifndef CPUINTEL}
 
 procedure bswap256(s, d: PIntegerArray);
@@ -2935,7 +2974,621 @@ begin
   {$endif FPC}
 end;
 
+type
+  THalf = array[byte] of {$ifdef CPU32} word {$else} cardinal {$endif};
+
+// computes Output = Left + Right, returning carry. Can modify in place
+function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
+const
+  HALFSHIFTADD = SizeOf(pointer) * 4; // 32 or 16
+var
+  l: THalf absolute Left; // branchless operation over half registers
+  r: THalf absolute Right;
+  o: THalf absolute Output;
+begin
+  result := PtrUInt(l[0]) + r[0];
+  o[0] := result;
+  result := PtrUInt(l[1]) + r[1] + (result shr HALFSHIFTADD);
+  o[1] := result;
+  result := PtrUInt(l[2]) + r[2] + (result shr HALFSHIFTADD);
+  o[2] := result;
+  result := PtrUInt(l[3]) + r[3] + (result shr HALFSHIFTADD);
+  o[3] := result;
+  result := PtrUInt(l[4]) + r[4] + (result shr HALFSHIFTADD);
+  o[4] := result;
+  result := PtrUInt(l[5]) + r[5] + (result shr HALFSHIFTADD);
+  o[5] := result;
+  result := PtrUInt(l[6]) + r[6] + (result shr HALFSHIFTADD);
+  o[6] := result;
+  result := PtrUInt(l[7]) + r[7] + (result shr HALFSHIFTADD);
+  o[7] := result;
+  {$ifdef CPU32}
+  result := PtrUInt(l[8]) + r[8] + (result shr HALFSHIFTADD);
+  o[8] := result;
+  result := PtrUInt(l[9]) + r[9] + (result shr HALFSHIFTADD);
+  o[9] := result;
+  result := PtrUInt(l[10]) + r[10] + (result shr HALFSHIFTADD);
+  o[10] := result;
+  result := PtrUInt(l[11]) + r[11] + (result shr HALFSHIFTADD);
+  o[11] := result;
+  result := PtrUInt(l[12]) + r[12] + (result shr HALFSHIFTADD);
+  o[12] := result;
+  result := PtrUInt(l[13]) + r[13] + (result shr HALFSHIFTADD);
+  o[13] := result;
+  result := PtrUInt(l[14]) + r[14] + (result shr HALFSHIFTADD);
+  o[14] := result;
+  result := PtrUInt(l[15]) + r[15] + (result shr HALFSHIFTADD);
+  o[15] := result;
+  {$endif CPU32}
+  result := result shr HALFSHIFTADD;
+end;
+
+{$ifdef CPU32}
+
+function _inc256(var Value: THash256Rec; const Added: THash256Rec): PtrUInt;
+begin
+  result := _add256(Value, Value, Added);
+end;
+
+{$else}
+
+function _inc256(var Value: THash256Rec; const Added: THash256Rec): PtrUInt;
+begin
+  result := PtrUInt(Value.c[0]) + Added.c[0];
+  Value.c[0] := result;
+  result := PtrUInt(Value.c[1]) + Added.c[1] + (result shr 32);
+  Value.c[1] := result;
+  result := PtrUInt(Value.c[2]) + Added.c[2] + (result shr 32);
+  Value.c[2] := result;
+  result := PtrUInt(Value.c[3]) + Added.c[3] + (result shr 32);
+  Value.c[3] := result;
+  result := PtrUInt(Value.c[4]) + Added.c[4] + (result shr 32);
+  Value.c[4] := result;
+  result := PtrUInt(Value.c[5]) + Added.c[5] + (result shr 32);
+  Value.c[5] := result;
+  result := PtrUInt(Value.c[6]) + Added.c[6] + (result shr 32);
+  Value.c[6] := result;
+  result := PtrUInt(Value.c[7]) + Added.c[7] + (result shr 32);
+  Value.c[7] := result;
+  result := result shr 32;
+end;
+
+{$endif CPU32}
+
+// computes Output = Left - Right, returning borrow. Can modify in place.
+function _sub256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
+const
+  HALFSHIFTSUB = SizeOf(pointer) * 8 - 1;  // 63 or 31
+var
+  l: THalf absolute Left; // branchless operation over half registers
+  r: THalf absolute Right;
+  o: THalf absolute Output;
+begin
+  result := PtrUInt(l[0]) - r[0];
+  o[0] := result;
+  result := PtrUInt(l[1]) - r[1] - (result shr HALFSHIFTSUB);
+  o[1] := result;
+  result := PtrUInt(l[2]) - r[2] - (result shr HALFSHIFTSUB);
+  o[2] := result;
+  result := PtrUInt(l[3]) - r[3] - (result shr HALFSHIFTSUB);
+  o[3] := result;
+  result := PtrUInt(l[4]) - r[4] - (result shr HALFSHIFTSUB);
+  o[4] := result;
+  result := PtrUInt(l[5]) - r[5] - (result shr HALFSHIFTSUB);
+  o[5] := result;
+  result := PtrUInt(l[6]) - r[6] - (result shr HALFSHIFTSUB);
+  o[6] := result;
+  result := PtrUInt(l[7]) - r[7] - (result shr HALFSHIFTSUB);
+  o[7] := result;
+  {$ifdef CPU32}
+  result := PtrUInt(l[8]) - r[8] - (result shr HALFSHIFTSUB);
+  o[8] := result;
+  result := PtrUInt(l[9]) - r[9] - (result shr HALFSHIFTSUB);
+  o[9] := result;
+  result := PtrUInt(l[10]) - r[10] - (result shr HALFSHIFTSUB);
+  o[10] := result;
+  result := PtrUInt(l[11]) - r[11] - (result shr HALFSHIFTSUB);
+  o[11] := result;
+  result := PtrUInt(l[12]) - r[12] - (result shr HALFSHIFTSUB);
+  o[12] := result;
+  result := PtrUInt(l[13]) - r[13] - (result shr HALFSHIFTSUB);
+  o[13] := result;
+  result := PtrUInt(l[14]) - r[14] - (result shr HALFSHIFTSUB);
+  o[14] := result;
+  result := PtrUInt(l[15]) - r[15] - (result shr HALFSHIFTSUB);
+  o[15] := result;
+  {$endif CPU32}
+  result := result shr HALFSHIFTSUB;
+end;
+
+function _dec256(var Value: THash256Rec; const Subs: THash256Rec): PtrUInt;
+begin
+  result := _sub256(Value, Value, Subs);
+end;
+
+procedure _inc64(var Value: THash128Rec; var Added: QWord);
+const
+  HALFSHIFTADD = SizeOf(pointer) * 4; // 32 or 16
+var
+  r: THalf absolute Added; // branchless operation over half registers
+  o: THalf absolute Value;
+  c: PtrUInt;
+begin
+  c := PtrUInt(o[0]) + r[0];
+  o[0] := c;
+  c := PtrUInt(o[1]) + r[1] + (c shr HALFSHIFTADD);
+  o[1] := c;
+  c := PtrUInt(o[2]) + (c shr HALFSHIFTADD);
+  o[2] := c;
+  c := PtrUInt(o[3]) + (c shr HALFSHIFTADD);
+  o[3] := c;
+  {$ifdef CPU32}
+  c := PtrUInt(o[4]) + (c shr HALFSHIFTADD);
+  o[4] := c;
+  c := PtrUInt(o[5]) + (c shr HALFSHIFTADD);
+  o[5] := c;
+  c := PtrUInt(o[6]) + (c shr HALFSHIFTADD);
+  o[6] := c;
+  c := PtrUInt(o[7]) + (c shr HALFSHIFTADD);
+  o[7] := c;
+  {$endif CPU32}
+end;
+
+procedure _inc128(var Value: THash256Rec; var Added: THash128Rec);
+const
+  HALFSHIFTADD = SizeOf(pointer) * 4; // 32 or 16
+var
+  r: THalf absolute Added; // branchless operation over half registers
+  o: THalf absolute Value;
+  c: PtrUInt;
+begin
+  c := PtrUInt(o[0]) + r[0];
+  o[0] := c;
+  c := PtrUInt(o[1]) + r[1] + (c shr HALFSHIFTADD);
+  o[1] := c;
+  c := PtrUInt(o[2]) + r[2] + (c shr HALFSHIFTADD);
+  o[2] := c;
+  c := PtrUInt(o[3]) + r[3] + (c shr HALFSHIFTADD);
+  o[3] := c;
+  c := PtrUInt(o[4]) + (c shr HALFSHIFTADD);
+  o[4] := c;
+  c := PtrUInt(o[5]) + (c shr HALFSHIFTADD);
+  o[5] := c;
+  c := PtrUInt(o[6]) + (c shr HALFSHIFTADD);
+  o[6] := c;
+  c := PtrUInt(o[7]) + (c shr HALFSHIFTADD);
+  o[7] := c;
+  {$ifdef CPU32}
+  c := PtrUInt(o[8]) + (c shr HALFSHIFTADD);
+  o[8] := c;
+  c := PtrUInt(o[9]) + (c shr HALFSHIFTADD);
+  o[9] := c;
+  c := PtrUInt(o[10]) + (c shr HALFSHIFTADD);
+  o[10] := c;
+  c := PtrUInt(o[11]) + (c shr HALFSHIFTADD);
+  o[11] := c;
+  c := PtrUInt(o[12]) + (c shr HALFSHIFTADD);
+  o[12] := c;
+  c := PtrUInt(o[13]) + (c shr HALFSHIFTADD);
+  o[13] := c;
+  c := PtrUInt(o[14]) + (c shr HALFSHIFTADD);
+  o[14] := c;
+  c := PtrUInt(o[15]) + (c shr HALFSHIFTADD);
+  o[15] := c;
+  {$endif CPU32}
+end;
+
+{$define ECC_ORIGINALMULT}
+// original mult() is slightly faster than our unrolled version without asm
+
+{$ifdef ECC_ORIGINALMULT}
+
+// original 256-bit rolled multiplication as proposed in micro-ecc
+
+procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
+var
+  i, k, min: PtrInt;
+  product: THash128Rec;
+  carry, prev, rlo, rhi: UInt64; // force UInt64 comparisons
+  l, r: ^UInt64;
+begin
+  rlo := 0;
+  rhi := 0;
+  min := 0;
+  // Compute each digit of Output in sequence, maintaining the carries
+  for k := 0 to 6 do
+  begin
+    carry := 0;
+    if k >= 4 then
+    begin
+      i := k + (1 - 4);
+      l := @Left.Q[i];
+      r := @Right.Q[k - i];
+      min := i;
+    end
+    else
+    begin
+      l := @Left.Q[0];
+      r := @Right.Q[k];
+    end;
+    for i := min to k do
+    begin
+      if i >= 4 then
+        break;
+      mul64x64(l^, r^, product);
+      prev := rlo;
+      inc(rlo, product.L);
+      inc(rhi, product.H);
+      inc(rhi, ord(rlo < prev));
+      inc(carry, ord(rhi < product.H));
+      inc(l);
+      dec(r);
+    end;
+    Output.Q[k] := rlo;
+    rlo := rhi;
+    rhi := carry;
+  end;
+  Output.Q[7] := rlo;
+end;
+
+procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
+var
+  i, j, k, min: PtrInt;
+  product: THash128Rec;
+  carry, prev, rlo, rhi: UInt64; // force UInt64 comparisons
+begin
+  rlo := 0;
+  rhi := 0;
+  min := 0;
+  for k := 0 to 2 * 4 - 2 do
+  begin
+    carry := 0;
+    if k >= 4 then
+      min := k + (1 - 4);
+    for i := min to k do
+    begin
+      j := k - i;
+      if i > j then
+        break;
+      mul64x64(Left.Q[i], Left.Q[j], product);
+      if i < j then
+      begin
+        inc(carry, product.H shr 63);
+        product.H := (product.H shl 1) or (product.L shr 63);
+        product.L := product.L shl 1;
+      end;
+      prev := rlo;
+      inc(rlo, product.L);
+      inc(rhi, product.H);
+      inc(rhi, ord(rlo < prev));
+      inc(carry, ord(rhi < product.H));
+    end;
+    Output.Q[k] := rlo;
+    rlo := rhi;
+    rhi := carry;
+  end;
+  Output.Q[4 * 2 - 1] := rlo;
+end;
+
+{$endif ECC_ORIGINALMULT}
+
 {$endif CPUINTEL}
+
+{$ifndef CPUX64}
+
+{$ifdef FPC} // Delphi is not good at inlining and computing this function
+
+procedure _mult64(l, r: PQWordRec; out product: THash128Rec); inline;
+var
+  t1, t2: TQWordRec;
+begin
+  t1.V := QWord(l.L) * r.L;
+  product.c0 := t1.L;
+  t2.V := QWord(l.H) * r.L + t1.H;
+  t1.V := QWord(l.L) * r.H + t2.L;
+  product.H := QWord(l.H) * r.H + t2.H + t1.H;
+  product.c1 := t1.V;
+end;
+
+{$else} // we better use mormot.core.base asm on Delphi
+
+procedure _mult64(left, right: PQWord; out product: THash128Rec);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  mul64x64(left^, right^, product);
+end;
+
+{$endif FPC}
+
+procedure _mult128({$ifdef FPC}constref{$else}const{$endif} l, r: THash128Rec;
+  out product: THash256Rec);
+var
+  t1, t2: THash128Rec;
+begin
+  _mult64(@l.L, @r.L, t1);  // t1.V := l.L * r.L;
+  product.L.L := t1.L;
+  _mult64(@l.H, @r.L, t2);
+  _inc64(t2, t1.H);         // t2.V := l.H * r.L + t1.H;
+  _mult64(@l.L, @r.H, t1);
+  _inc64(t1, t2.L);         // t1.V := l.L * r.H + t2.L;
+  _mult64(@l.H, @r.H, product.h);
+  _inc64(product.H, t2.H);
+  _inc64(product.H, t1.H);  // product.H := l.H * r.H + t2.H + t1.H;
+  product.L.H := t1.L;      // product.L := t3.V shl 64 or t1.L;
+end;
+
+{$endif CPUX64}
+
+{$ifndef ECC_ORIGINALMULT}
+
+procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
+var
+  t1, t2: THash256Rec;
+begin
+  _mult128(Left.L, Right.L, t1); // t1.V := Left.L * Right.L;
+  Output.L.Lo := t1.Lo;
+  _mult128(Left.H, Right.L, t2);
+  _inc128(t2, t1.H);             // t2.V := Left.H * Right.L + t1.H;
+  _mult128(Left.L, Right.H, t1);
+  _inc128(t1, t2.L);             // t3.V := Left.L * Right.H + t2.L;
+  _mult128(Left.H, Right.H, Output.H);
+  _inc128(Output.H, t2.H);
+  _inc128(Output.H, t1.H);       // Output.H := Left.H * Right.H + t2.H + t3.H;
+  Output.L.Hi := t1.Lo;          // Output.L := t3.V shl 128 or t1.L;
+end;
+
+procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
+var
+  t1, t2: THash256Rec;
+begin
+  _mult128(Left.L, Left.L, t1);  // t1.V := Left.L * Left.L;
+  Output.L.Lo := t1.Lo;
+  _mult128(Left.H, Left.L, t2);
+  _inc128(t2, t1.H);             // t2.V := Left.H * Left.L + t1.H;
+  _mult128(Left.L, Left.H, t1);
+  _inc128(t1, t2.L);             // t3.V := Left.L * Left.H + t2.L;
+  _mult128(Left.H, Left.H, Output.H);
+  _inc128(Output.H, t2.H);
+  _inc128(Output.H, t1.H);       // Output.H := Left.H * Left.H + t2.H + t3.H;
+  Output.L.Hi := t1.Lo;          // Output.L := t3.V shl 128 or t1.L;
+end;
+
+{$endif ECC_ORIGINALMULT}
+
+{$ifdef CPU32}
+
+function _cmp256(const Left, Right: THash256Rec): integer;
+var
+  l, r: cardinal;
+begin
+  l := Left.C[7];
+  r := Right.C[7];
+  result := ord(l > r) - ord(l < r);
+  if result <> 0 then
+    exit;
+  l := Left.C[6];
+  r := Right.C[6];
+  result := ord(l > r) - ord(l < r);
+  if result <> 0 then
+    exit;
+  l := Left.C[5];
+  r := Right.C[5];
+  result := ord(l > r) - ord(l < r);
+  if result <> 0 then
+    exit;
+  l := Left.C[4];
+  r := Right.C[4];
+  result := ord(l > r) - ord(l < r);
+  if result <> 0 then
+    exit;
+  l := Left.C[3];
+  r := Right.C[3];
+  result := ord(l > r) - ord(l < r);
+  if result <> 0 then
+    exit;
+  l := Left.C[2];
+  r := Right.C[2];
+  result := ord(l > r) - ord(l < r);
+  if result <> 0 then
+    exit;
+  l := Left.C[1];
+  r := Right.C[1];
+  result := ord(l > r) - ord(l < r);
+  if result <> 0 then
+    exit;
+  l := Left.C[0];
+  r := Right.C[0];
+  result := ord(l > r) - ord(l < r);
+end;
+
+procedure _rshift1(var V: THash256Rec);
+var
+  carry, temp: PtrUInt;
+begin
+  carry := V.C[7] shl 31;
+  V.C[7] := V.C[7] shr 1;
+  temp := V.C[6];
+  V.C[6] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := V.C[5];
+  V.C[5] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := V.C[4];
+  V.C[4] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := V.C[3];
+  V.C[3] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := V.C[2];
+  V.C[2] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := V.C[1];
+  V.C[1] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := V.C[0];
+  V.C[0] := (temp shr 1) or carry;
+end;
+
+function _lshift1(var V: THash256Rec): PtrUInt;
+var
+  temp: PtrUInt;
+begin
+  result := V.C[0] shr 31;
+  V.C[0] := V.C[0] shl 1;
+  temp := V.C[1];
+  V.C[1] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := V.C[2];
+  V.C[2] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := V.C[3];
+  V.C[3] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := V.C[4];
+  V.C[4] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := V.C[5];
+  V.C[5] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := V.C[6];
+  V.C[6] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := V.C[7];
+  V.C[7] := (temp shl 1) or result;
+  result := temp shr 31;
+end;
+
+{$else}
+
+function _cmp256(const Left, Right: THash256Rec): integer;
+var
+  l, r: QWord;
+begin
+  l := Left.Q[3];
+  r := Right.Q[3];
+  result := ord(l > r) - ord(l < r);
+  if result <> 0 then
+    exit;
+  l := Left.Q[2];
+  r := Right.Q[2];
+  result := ord(l > r) - ord(l < r);
+  if result <> 0 then
+    exit;
+  l := Left.Q[1];
+  r := Right.Q[1];
+  result := ord(l > r) - ord(l < r);
+  if result <> 0 then
+    exit;
+  l := Left.Q[0];
+  r := Right.Q[0];
+  result := ord(l > r) - ord(l < r);
+end;
+
+procedure _rshift1(var V: THash256Rec);
+var
+  carry, temp: PtrUInt;
+begin
+  carry := V.Q[3] shl 63;
+  V.Q[3] := V.Q[3] shr 1;
+  temp := V.Q[2];
+  V.Q[2] := (temp shr 1) or carry;
+  carry := temp shl 63;
+  temp := V.Q[1];
+  V.Q[1] := (temp shr 1) or carry;
+  carry := temp shl 63;
+  temp := V.Q[0];
+  V.Q[0] := (temp shr 1) or carry;
+end;
+
+function _lshift1(var V: THash256Rec): PtrUInt;
+var
+  temp: PtrUInt;
+begin
+  result := V.Q[0] shr 63;
+  V.Q[0] := V.Q[0] shl 1;
+  temp := V.Q[1];
+  V.Q[1] := (temp shl 1) or result;
+  result := temp shr 63;
+  temp := V.Q[2];
+  V.Q[2] := (temp shl 1) or result;
+  result := temp shr 63;
+  temp := V.Q[3];
+  V.Q[3] := (temp shl 1) or result;
+  result := temp shr 63;
+end;
+
+{$endif CPU32}
+
+function _lshift(var Output: THash256Rec; const Input: THash256Rec;
+  Shift: integer): QWord;
+var
+  temp: QWord;
+  rev: integer;
+begin
+  rev := 64 - Shift;
+  result := Input.Q[0] shr rev;
+  Output.Q[0] := Input.Q[0] shl Shift;
+  temp := Input.Q[1];
+  Output.Q[1] := (temp shl Shift) or result;
+  result := temp shr rev;
+  temp := Input.Q[2];
+  Output.Q[2] := (temp shl Shift) or result;
+  result := temp shr rev;
+  temp := Input.Q[3];
+  Output.Q[3] := (temp shl Shift) or result;
+  result := temp shr rev;
+end;
+
+{$ifdef FPC}
+function _numbits256(const V: THash256Rec): integer;
+begin
+  result := BsrQWord(V.Q[3]) + 1; // use fast BSR intrinsic (returns 255 if 0)
+  if byte(result) = 0 then
+  begin
+    result := BsrQWord(V.Q[2]) + 1;
+    if byte(result) = 0 then
+    begin
+      result := BsrQWord(V.Q[1]) + 1;
+      if byte(result) = 0 then
+        result := BsrQWord(V.Q[0])
+      else
+        inc(result, 64);
+    end
+    else
+      inc(result, 2 * 64);
+  end
+  else
+    inc(result, 3 * 64);
+end;
+{$else}
+function _numbits256(const V: THash256Rec): integer;
+var
+  digit: QWord;
+begin
+  digit := V.Q[3];
+  if digit = 0 then
+  begin
+    if V.Q[2] <> 0 then
+      result := 2
+    else if V.Q[1] <> 0 then
+      result := 1
+    else
+    begin
+      result := 0;
+      if V.Q[0] = 0 then
+        exit;
+    end;
+    digit := V.Q[result];
+    result := result shl 6;
+  end
+  else
+    result := 3 shl 6;
+  repeat
+    inc(result);
+    digit := digit shr 1;
+  until digit = 0;
+end;
+{$endif FPC}
 
 
 { ********************* AES Encoding/Decoding }

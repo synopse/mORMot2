@@ -1966,8 +1966,10 @@ type
   10: (
        i: array[0..7] of Int64);
   11: (
-       r: array[0..3] of THash128Rec);
+       q: array[0..7] of QWord);
   12: (
+       r: array[0..3] of THash128Rec);
+  13: (
        l, h: THash256Rec);
   end;
   /// pointer to 512-bit hash map variable record
@@ -7811,11 +7813,11 @@ begin
 end;
 
 {$ifdef OSDARWIN} // FPC CreateGUID calls /dev/urandom which is not advised
-function mach_absolute_time: UInt64; cdecl external 'c';
+function mach_absolute_time: Int64; cdecl external 'c';
 
 procedure CreateGUID(var guid: TGUID);
 begin
-  guid.time_low := mach_absolute_time;  // monotonic time in nanoseconds
+  PInt64(@guid)^ := mach_absolute_time;  // monotonic time in nanoseconds
   crc128c(@guid, SizeOf(guid), THash128(guid)); // good enough diffusion
 end;
 {$endif OSDARWIN}
@@ -8482,14 +8484,15 @@ procedure mul64x64(constref left, right: QWord; out product: THash128Rec);
 var
   l: TQWordRec absolute left;
   r: TQWordRec absolute right;
-  t1, t2, t3: TQWordRec;
+  t1, t2: TQWordRec;
 begin
   // CPU-neutral implementation
   t1.V := QWord(l.L) * r.L;
+  product.c0 := t1.L;
   t2.V := QWord(l.H) * r.L + t1.H;
-  t3.V := QWord(l.L) * r.H + t2.L;
-  product.H := QWord(l.H) * r.H + t2.H + t3.H;
-  product.L := t3.V shl 32 or t1.L;
+  t1.V := QWord(l.L) * r.H + t2.L;
+  product.H := QWord(l.H) * r.H + t2.H + t1.H;
+  product.c1 := t1.V;
 end;
 
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
