@@ -3521,9 +3521,9 @@ procedure TTestCoreBase.NumericalConversions;
     d: double;
     err: integer;
   begin
-    ExtendedToShort(a, v, DOUBLE_PRECISION);
+    ExtendedToShort(@a, v, DOUBLE_PRECISION);
     CheckEqual(a, expected, 'ExtendedToShort');
-    DoubleToShort(a, v);
+    DoubleToShort(@a, v);
     CheckEqual(a, expected, 'DoubleToShort');
     a[ord(a[0]) + 1] := #0;
     d := GetExtended(@a[1], err);
@@ -3602,7 +3602,7 @@ begin
   d := 3.141592653 / 1.0573623912;
   for i := 1 to n do
   begin
-    DoubleToShort(a, d);
+    DoubleToShort(@a, d);
     inc(crc, ord(a[0]));
     d := d * 1.0038265263;
   end;
@@ -4051,11 +4051,11 @@ begin
     if (i < 9000) or
        (i > 9999) then
     begin
-      a[0] := AnsiChar(ExtendedToShort(a, d, DOUBLE_PRECISION));
-      a2[0] := AnsiChar(DoubleToShort(a2, d));
+      a[0] := AnsiChar(ExtendedToShort(@a, d, DOUBLE_PRECISION));
+      a2[0] := AnsiChar(DoubleToShort(@a2, d));
       Check(a = a2);
-      a[0] := AnsiChar(ExtendedToShortNoExp(a, d, DOUBLE_PRECISION));
-      a2[0] := AnsiChar(DoubleToShortNoExp(a2, d));
+      a[0] := AnsiChar(ExtendedToShortNoExp(@a, d, DOUBLE_PRECISION));
+      a2[0] := AnsiChar(DoubleToShortNoExp(@a2, d));
       Check(a = a2);
       CheckEqual(TestAddFloatStr(s), s);
       Check(not SameValue(e + 1, d));

@@ -1562,7 +1562,7 @@ function Curr64ToString(Value: Int64): string;
 // - DOUBLE_PRECISION will redirect to DoubleToShort() and its faster Fabian
 // Loitsch's Grisu algorithm if available
 // - returns the count of chars stored into S, i.e. length(S)
-function ExtendedToShort(var S: ShortString;
+function ExtendedToShort(S: PShortString;
   Value: TSynExtended; Precision: integer): integer;
 
 /// convert a floating-point value to its numerical text equivalency without
@@ -1570,7 +1570,7 @@ function ExtendedToShort(var S: ShortString;
 // - DOUBLE_PRECISION will redirect to DoubleToShortNoExp() and its faster Fabian
 // Loitsch's Grisu algorithm if available - or calls str(Value:0:precision,S)
 // - returns the count of chars stored into S, i.e. length(S)
-function ExtendedToShortNoExp(var S: ShortString; Value: TSynExtended;
+function ExtendedToShortNoExp(S: PShortString; Value: TSynExtended;
   Precision: integer): integer;
 
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
@@ -1596,7 +1596,7 @@ procedure ExtendedToStr(Value: TSynExtended; Precision: integer;
 // - returns the number as text (stored into tmp variable), or "Infinity",
 // "-Infinity", and "NaN" for corresponding IEEE special values
 // - result is a PShortString either over tmp, or JSON_NAN[]
-function FloatToJsonNan(const s: ShortString): PShortString;
+function FloatToJsonNan(s: PShortString): PShortString;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a floating-point value to its JSON text equivalency
@@ -1606,7 +1606,7 @@ function FloatToJsonNan(const s: ShortString): PShortString;
 // - returns the number as text (stored into tmp variable), or "Infinity",
 // "-Infinity", and "NaN" for corresponding IEEE special values
 // - result is a PShortString either over tmp, or JSON_NAN[]
-function ExtendedToJson(var tmp: ShortString; Value: TSynExtended;
+function ExtendedToJson(tmp: PShortString; Value: TSynExtended;
   Precision: integer; NoExp: boolean): PShortString;
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
@@ -1614,7 +1614,7 @@ function ExtendedToJson(var tmp: ShortString; Value: TSynExtended;
 // - on other platforms, i.e. Delphi Win64 and all FPC targets, will use our own
 // faster Fabian Loitsch's Grisu algorithm implementation
 // - returns the count of chars stored into S, i.e. length(S)
-function DoubleToShort(var S: ShortString; const Value: double): integer;
+function DoubleToShort(S: PShortString; const Value: double): integer;
   {$ifdef FPC}inline;{$endif}
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
@@ -1623,7 +1623,7 @@ function DoubleToShort(var S: ShortString; const Value: double): integer;
 // - on other platforms, i.e. Delphi Win64 and all FPC targets, will use our own
 // faster Fabian Loitsch's Grisu algorithm implementation
 // - returns the count of chars stored into S, i.e. length(S)
-function DoubleToShortNoExp(var S: ShortString; const Value: double): integer;
+function DoubleToShortNoExp(S: PShortString; const Value: double): integer;
   {$ifdef FPC}inline;{$endif}
 
 {$ifdef DOUBLETOSHORT_USEGRISU}
@@ -1654,7 +1654,7 @@ procedure DoubleToAscii(min_width, frac_digits: integer;
 // - returns the number as text (stored into tmp variable), or "Infinity",
 // "-Infinity", and "NaN" for corresponding IEEE special values
 // - result is a PShortString either over tmp, or JSON_NAN[]
-function DoubleToJson(var tmp: ShortString; Value: double;
+function DoubleToJson(tmp: PShortString; Value: double;
   NoExp: boolean): PShortString;
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
@@ -5252,21 +5252,21 @@ procedure TBaseWriter.Add(Value: Extended; precision: integer; noexp: boolean);
 var
   tmp: ShortString;
 begin
-  AddShort(ExtendedToJson(tmp, Value, precision, noexp)^);
+  AddShort(ExtendedToJson(@tmp, Value, precision, noexp)^);
 end;
 
 procedure TBaseWriter.AddDouble(Value: double; noexp: boolean);
 var
   tmp: ShortString;
 begin
-  AddShort(DoubleToJson(tmp, Value, noexp)^);
+  AddShort(DoubleToJson(@tmp, Value, noexp)^);
 end;
 
 procedure TBaseWriter.AddSingle(Value: single; noexp: boolean);
 var
   tmp: ShortString;
 begin
-  AddShort(ExtendedToJson(tmp, Value, SINGLE_PRECISION, noexp)^);
+  AddShort(ExtendedToJson(@tmp, Value, SINGLE_PRECISION, noexp)^);
 end;
 
 procedure TBaseWriter.Add(Value: boolean);
@@ -7273,7 +7273,7 @@ begin
   if Value = 0 then
     result := '0'
   else
-    Ansi7ToString(PWinAnsiChar(@tmp[1]), DoubleToShort(tmp, Value), result);
+    Ansi7ToString(PWinAnsiChar(@tmp[1]), DoubleToShort(@tmp, Value), result);
 end;
 
 function Curr64ToString(Value: Int64): string;
@@ -7335,7 +7335,7 @@ begin
   if Value = 0 then
     result := '0'
   else
-    SetString(result, PAnsiChar(@tmp[1]), DoubleToShort(tmp, Value));
+    SetString(result, PAnsiChar(@tmp[1]), DoubleToShort(@tmp, Value));
 end;
 
 function Curr64ToString(Value: Int64): string;
@@ -7441,17 +7441,17 @@ begin
     until false;
 end;
 
-function ExtendedToShortNoExp(var S: ShortString; Value: TSynExtended;
+function ExtendedToShortNoExp(S: PShortString; Value: TSynExtended;
   Precision: integer): integer;
 begin
   {$ifdef DOUBLETOSHORT_USEGRISU}
   if Precision = DOUBLE_PRECISION then
-    DoubleToAscii(0, DOUBLE_PRECISION, Value, @S)
+    DoubleToAscii(0, DOUBLE_PRECISION, Value, pointer(S))
   else
   {$endif DOUBLETOSHORT_USEGRISU}
-    str(Value: 0: Precision, S); // not str(Value:0,S) -> '  0.0E+0000'
-  result := FloatStringNoExp(@S, Precision);
-  S[0] := AnsiChar(result);
+    str(Value: 0: Precision, S^); // not str(Value:0,S) -> '  0.0E+0000'
+  result := FloatStringNoExp(pointer(S), Precision);
+  S^[0] := AnsiChar(result);
 end;
 
 const // range when to switch into scientific notation - minimal 6 digits
@@ -7465,7 +7465,7 @@ const // range when to switch into scientific notation - minimal 6 digits
   {$endif TSYNEXTENDED80}
 
 {$ifdef EXTENDEDTOSHORT_USESTR}
-function ExtendedToShort(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
+function ExtendedToShort(S: PShortString; Value: TSynExtended; Precision: integer): integer;
 var
   scientificneeded: boolean;
   valueabs: TSynExtended;
@@ -7479,7 +7479,7 @@ begin
   {$endif DOUBLETOSHORT_USEGRISU}
   if Value = 0 then
   begin
-    PWord(@S)^ := 1 + ord('0') shl 8;
+    PWord(S)^ := 1 + ord('0') shl 8;
     result := 1;
     exit;
   end;
@@ -7506,37 +7506,37 @@ begin
     scientificneeded := true;
   if scientificneeded then
   begin
-    str(Value, S);
-    if S[1] = ' ' then
+    str(Value, S^);
+    if S^[1] = ' ' then
     begin
-      dec(S[0]);
-      MoveSmall(@S[2], @S[1], ord(S[0]));
+      dec(S^[0]);
+      MoveSmall(@S^[2], @S^[1], ord(S^[0]));
     end;
-    result := ord(S[0]);
+    result := ord(S^[0]);
   end
   else
   begin
-    str(Value: 0:Precision, S); // not str(Value:0,S) -> '  0.0E+0000'
-    result := FloatStringNoExp(@S, Precision);
-    S[0] := AnsiChar(result);
+    str(Value: 0:Precision, S^); // not str(Value:0,S) -> '  0.0E+0000'
+    result := FloatStringNoExp(pointer(S), Precision);
+    S^[0] := AnsiChar(result);
   end;
 end;
 
 {$else not EXTENDEDTOSHORT_USESTR}
 
-function ExtendedToShort(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
+function ExtendedToShort(S: PShortString; Value: TSynExtended; Precision: integer): integer;
 {$ifdef UNICODE}
 var
   i: PtrInt;
 {$endif UNICODE}
 begin
   // use ffGeneral: see https://synopse.info/forum/viewtopic.php?pid=442#p442
-  result := FloatToText(PChar(@S[1]), Value, fvExtended, ffGeneral, Precision, 0, SettingsUS);
+  result := FloatToText(PChar(@S^[1]), Value, fvExtended, ffGeneral, Precision, 0, SettingsUS);
   {$ifdef UNICODE} // FloatToText(PWideChar) is faster than FloatToText(PAnsiChar)
   for i := 1 to result do
-    PByteArray(@S)[i] := PWordArray(PtrInt(@S) - 1)[i];
+    PByteArray(S)[i] := PWordArray(PtrInt(S) - 1)[i];
   {$endif UNICODE}
-  S[0] := AnsiChar(result);
+  S^[0] := AnsiChar(result);
 end;
 
 {$endif EXTENDEDTOSHORT_USESTR}
@@ -7594,12 +7594,12 @@ begin
   if Value = 0 then
     result := SmallUInt32Utf8[0]
   else
-    FastSetString(result, @tmp[1], ExtendedToShort(tmp, Value, Precision));
+    FastSetString(result, @tmp[1], ExtendedToShort(@tmp, Value, Precision));
 end;
 
-function FloatToJsonNan(const s: ShortString): PShortString;
+function FloatToJsonNan(s: PShortString): PShortString;
 begin
-  case PInteger(@s)^ and $ffdfdfdf of
+  case PInteger(s)^ and $ffdfdfdf of
     3 + ord('N') shl 8 + ord('A') shl 16 + ord('N') shl 24:
       result := @JSON_NAN[fnNan];
     3 + ord('I') shl 8 + ord('N') shl 16 + ord('F') shl 24,
@@ -7608,11 +7608,11 @@ begin
     4 + ord('-') shl 8 + ord('I') shl 16 + ord('N') shl 24:
       result := @JSON_NAN[fnNegInf];
   else
-    result := @s;
+    result := s;
   end;
 end;
 
-function ExtendedToJson(var tmp: ShortString; Value: TSynExtended;
+function ExtendedToJson(tmp: PShortString; Value: TSynExtended;
   Precision: integer; NoExp: boolean): PShortString;
 begin
   if Value = 0 then
@@ -8549,7 +8549,7 @@ begin
     dot_pos - c_mk.e10 - 1);
 end;
 
-function DoubleToShort(var S: ShortString; const Value: double): integer;
+function DoubleToShort(S: PShortString; const Value: double): integer;
 var
   valueabs: double;
 begin
@@ -8558,35 +8558,35 @@ begin
      (valueabs < DOUBLE_LO) then
   begin
     // = str(Value,S) for scientific notation
-    DoubleToAscii(C_NO_MIN_WIDTH, -1, Value, @S);
-    result := ord(S[0]);
+    DoubleToAscii(C_NO_MIN_WIDTH, -1, Value, pointer(S));
+    result := ord(S^[0]);
   end
   else
     result := DoubleToShortNoExp(S, Value);
 end;
 
-function DoubleToShortNoExp(var S: ShortString; const Value: double): integer;
+function DoubleToShortNoExp(S: PShortString; const Value: double): integer;
 begin
-  DoubleToAscii(0, DOUBLE_PRECISION, Value, @S); // = str(Value:0:DOUBLE_PRECISION,S)
-  result := FloatStringNoExp(@S, DOUBLE_PRECISION);
-  S[0] := AnsiChar(result);
+  DoubleToAscii(0, DOUBLE_PRECISION, Value, pointer(S)); // = str(Value:0:15,S^)
+  result := FloatStringNoExp(pointer(S), DOUBLE_PRECISION);
+  S^[0] := AnsiChar(result);
 end;
 
 {$else} // use regular Extended version
 
-function DoubleToShort(var S: ShortString; const Value: double): integer;
+function DoubleToShort(S: PShortString; const Value: double): integer;
 begin
   result := ExtendedToShort(S, Value, DOUBLE_PRECISION);
 end;
 
-function DoubleToShortNoExp(var S: ShortString; const Value: double): integer;
+function DoubleToShortNoExp(S: PShortString; const Value: double): integer;
 begin
   result := ExtendedToShortNoExp(S, Value, DOUBLE_PRECISION);
 end;
 
 {$endif DOUBLETOSHORT_USEGRISU}
 
-function DoubleToJson(var tmp: ShortString; Value: double;
+function DoubleToJson(tmp: PShortString; Value: double;
   NoExp: boolean): PShortString;
 begin
   if Value = 0 then
@@ -8613,7 +8613,7 @@ begin
   if Value = 0 then
     result := SmallUInt32Utf8[0]
   else
-    FastSetString(result, @tmp[1], DoubleToShort(tmp{%H-}, Value));
+    FastSetString(result, @tmp[1], DoubleToShort(@tmp, Value));
 end;
 
 function FloatStrCopy(s, d: PUtf8Char): PUtf8Char;
@@ -8675,7 +8675,6 @@ begin
     until false;
   result := d;
 end;
-
 
 function Char2ToByte(P: PUtf8Char; out Value: cardinal;
    ConvertHexToBinTab: PByteArray): boolean;

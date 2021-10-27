@@ -1345,9 +1345,9 @@ var
 begin
   if (precision <= 0) or
      (precision = DOUBLE_PRECISION) then
-    tmp[0] := AnsiChar(DoubleToShort(tmp, value))
+    tmp[0] := AnsiChar(DoubleToShort(@tmp, value))
   else
-    tmp[0] := AnsiChar(ExtendedToShort(tmp, value, precision));
+    tmp[0] := AnsiChar(ExtendedToShort(@tmp, value, precision));
   result := true;
   case FloatToShortNan(tmp) of
     fnNan:
