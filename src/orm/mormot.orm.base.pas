@@ -1031,7 +1031,8 @@ type
       var temp: RawByteString); virtual;
     /// set a field value from a TSqlVar value
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; virtual;
-    /// returns TRUE if value is 0 or ''
+    /// returns TRUE if value is 0, '' or null
+    // - used e.g. by TOrm.GetNonVoidFields or TRestStorageInMemory IS (NOT) NULL
     function IsValueVoid(Instance: TObject): boolean; virtual;
     /// append the property value into a binary buffer
     procedure GetBinary(Instance: TObject; W: TBufferWriter); virtual; abstract;
@@ -1195,6 +1196,7 @@ type
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
+    function IsValueVoid(Instance: TObject): boolean; override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
   end;
 
@@ -1263,6 +1265,7 @@ type
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
+    function IsValueVoid(Instance: TObject): boolean; override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
   end;
 
@@ -1306,6 +1309,7 @@ type
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
     procedure NormalizeValue(var Value: RawUtf8); override;
+    function IsValueVoid(Instance: TObject): boolean; override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
@@ -1331,6 +1335,7 @@ type
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
     procedure NormalizeValue(var Value: RawUtf8); override;
+    function IsValueVoid(Instance: TObject): boolean; override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
@@ -1378,6 +1383,7 @@ type
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
+    function IsValueVoid(Instance: TObject): boolean; override;
   end;
 
   /// information about a RawUtf8 published property
@@ -1438,7 +1444,6 @@ type
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     procedure GetBlob(Instance: TObject; var Blob: RawByteString);
     procedure SetBlob(Instance: TObject; const Blob: RawByteString);
-    function IsNull(Instance: TObject): boolean;
   end;
   TOrmPropInfoRttiRawBlobDynArray = array of TOrmPropInfoRttiRawBlob;
 
@@ -1516,6 +1521,7 @@ type
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
+    function IsValueVoid(Instance: TObject): boolean; override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     procedure SetVariant(Instance: TObject; const Source: Variant); override;
@@ -1561,6 +1567,7 @@ type
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
+    function IsValueVoid(Instance: TObject): boolean; override;
     procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     procedure SetVariant(Instance: TObject; const Source: Variant); override;
@@ -1812,6 +1819,7 @@ type
     /// direct access to the property class instance
     procedure SetInstance(Instance, Value: TObject);
       {$ifdef HASINLINE}inline;{$endif}
+    function IsValueVoid(Instance: TObject): boolean; override;
     /// direct access to the property class
     // - can be used e.g. for TOrmMany properties
     property ObjectClass: TClass
@@ -4471,6 +4479,11 @@ begin
     Int32ToUtf8(v, Value);
 end;
 
+function TOrmPropInfoRttiInt32.IsValueVoid(Instance: TObject): boolean;
+begin
+  result := GetValueInt32(Instance) = 0;
+end;
+
 function TOrmPropInfoRttiInt32.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
 begin
@@ -4771,6 +4784,11 @@ begin
   end;
 end;
 
+function TOrmPropInfoRttiInt64.IsValueVoid(Instance: TObject): boolean;
+begin
+  result := GetValueInt64(Instance) = 0;
+end;
+
 function TOrmPropInfoRttiInt64.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
 var
@@ -4889,6 +4907,11 @@ begin
     DoubleToStr(VFloat, Value);
 end;
 
+function TOrmPropInfoRttiDouble.IsValueVoid(Instance: TObject): boolean;
+begin
+  result := GetValueDouble(Instance) = 0;
+end;
+
 procedure TOrmPropInfoRttiDouble.SetValue(Instance: TObject; Value: PUtf8Char;
   ValueLen: PtrInt; wasString: boolean);
 var
@@ -4977,7 +5000,7 @@ end;
 
 { TOrmPropInfoRttiCurrency }
 
-function TOrmPropInfoRttiCurrency.GetValueCurrency(Instance: TObject): Currency;
+function TOrmPropInfoRttiCurrency.GetValueCurrency(Instance: TObject): currency;
 begin
   if fGetterIsFieldPropOffset <> 0 then
     result := PCurrency(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
@@ -4985,7 +5008,8 @@ begin
     fPropInfo.GetCurrencyProp(Instance, result);
 end;
 
-procedure TOrmPropInfoRttiCurrency.SetValueCurrency(Instance: TObject; V: Currency);
+procedure TOrmPropInfoRttiCurrency.SetValueCurrency(Instance: TObject;
+  V: currency);
 begin
   if fSetterIsFieldPropOffset <> 0 then
     PCurrency(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := V
@@ -5015,6 +5039,11 @@ end;
 procedure TOrmPropInfoRttiCurrency.NormalizeValue(var Value: RawUtf8);
 begin
   Value := Curr64ToStr(StrToCurr64(pointer(Value)));
+end;
+
+function TOrmPropInfoRttiCurrency.IsValueVoid(Instance: TObject): boolean;
+begin
+  result := GetValueCurrency(Instance) = 0;
 end;
 
 procedure TOrmPropInfoRttiCurrency.SetValue(Instance: TObject; Value: PUtf8Char;
@@ -5219,6 +5248,11 @@ begin
     fPropInfo.SetOrdProp(Instance, PtrInt(Value));
 end;
 
+function TOrmPropInfoRttiInstance.IsValueVoid(Instance: TObject): boolean;
+begin
+  result := GetInstance(Instance) = nil;
+end;
+
 
 { TOrmPropInfoRttiRecordReference }
 
@@ -5415,6 +5449,16 @@ end;
 procedure TOrmPropInfoRttiAnsi.NormalizeValue(var Value: RawUtf8);
 begin
   // do nothing: should already be UTF-8 encoded
+end;
+
+function TOrmPropInfoRttiAnsi.IsValueVoid(Instance: TObject): boolean;
+var
+  tmp: pointer;
+begin
+  GetValuePointer(Instance, tmp);
+  result := (tmp = nil);
+  if fGetterIsFieldPropOffset = 0 then
+    FastAssignNew(tmp);
 end;
 
 function TOrmPropInfoRttiAnsi.CompareValue(Item1, Item2: TObject;
@@ -5770,16 +5814,6 @@ end;
 procedure TOrmPropInfoRttiRawBlob.SetBlob(Instance: TObject; const Blob: RawByteString);
 begin
   fPropInfo.SetLongStrProp(Instance, Blob);
-end;
-
-function TOrmPropInfoRttiRawBlob.IsNull(Instance: TObject): boolean;
-var
-  tmp: pointer;
-begin
-  GetValuePointer(Instance, tmp);
-  result := (tmp = nil);
-  if fGetterIsFieldPropOffset = 0 then
-    FastAssignNew(tmp);
 end;
 
 procedure TOrmPropInfoRttiRawBlob.GetValueVar(Instance: TObject; ToSql: boolean;
@@ -6228,6 +6262,11 @@ begin
   // do nothing: should already be normalized
 end;
 
+function TOrmPropInfoRttiDynArray.IsValueVoid(Instance: TObject): boolean;
+begin
+  result := PPointer(PtrUInt(Instance) + fGetterIsFieldPropOffset)^ = nil;
+end;
+
 function TOrmPropInfoRttiDynArray.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
 var
@@ -6377,8 +6416,8 @@ begin
   BinarySave(@value, fPropType, W);
 end;
 
-function TOrmPropInfoRttiVariant.GetHash(Instance: TObject; CaseInsensitive:
-  boolean): cardinal;
+function TOrmPropInfoRttiVariant.GetHash(Instance: TObject;
+  CaseInsensitive: boolean): cardinal;
 var
   value: Variant;
 begin
@@ -6427,18 +6466,25 @@ begin
   // content should be already normalized
 end;
 
+function TOrmPropInfoRttiVariant.IsValueVoid(Instance: TObject): boolean;
+var
+  value: TVarData;
+begin
+  if fGetterIsFieldPropOffset <> 0 then // avoid any temporary variable
+    result := VarIsEmptyOrNull(PVariant(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
+  else
+  begin
+    PCardinal(@value)^ := varEmpty;
+    fPropInfo.GetVariantProp(Instance, variant(value), {byref=}true);
+    result := VarIsEmptyOrNull(variant(value));
+    VarClearProc(value);
+  end;
+end;
+
 function TOrmPropInfoRttiVariant.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
-
-  function CompareWithLocalTempCopy: PtrInt;
-  var
-    V1, V2: variant;
-  begin
-    fPropInfo.GetVariantProp(Item1, V1, {byref=}true);
-    fPropInfo.GetVariantProp(Item2, V2, {byref=}true);
-    result := FastVarDataComp(@V1, @V2, CaseInsensitive);
-  end;
-
+var
+  V1, V2: TVarData;
 begin
   if Item1 = Item2 then
     result := 0
@@ -6447,10 +6493,19 @@ begin
   else if Item2 = nil then
     result := 1
   else if fGetterIsFieldPropOffset <> 0 then // avoid any temporary variable
-    result := FastVarDataComp(PVarData(PtrUInt(Item1) + fGetterIsFieldPropOffset),
+    result := FastVarDataComp(
+            PVarData(PtrUInt(Item1) + fGetterIsFieldPropOffset),
             PVarData(PtrUInt(Item2) + fGetterIsFieldPropOffset), CaseInsensitive)
   else
-    result := CompareWithLocalTempCopy;
+  begin
+    PCardinal(@V1)^ := varEmpty;
+    PCardinal(@V2)^ := varEmpty;
+    fPropInfo.GetVariantProp(Item1, variant(V1), {byref=}true);
+    fPropInfo.GetVariantProp(Item2, variant(V2), {byref=}true);
+    result := FastVarDataComp(@V1, @V2, CaseInsensitive);
+    VarClearProc(V1);
+    VarClearProc(V2);
+  end;
 end;
 
 procedure TOrmPropInfoRttiVariant.SetBinary(Instance: TObject; var Read: TFastReader);

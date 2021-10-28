@@ -11258,7 +11258,7 @@ begin
     for f := 1 to length(props.BlobFields) do
     begin
       if (blob^.PropertyIndex in fields) and
-         blob^.IsNull(Value) then
+         blob^.IsValueVoid(Value) then
         exclude(fields, blob^.PropertyIndex);
       inc(blob);
     end;

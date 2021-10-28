@@ -2885,22 +2885,17 @@ begin
           if Stmt.Where[0].Field > 0 then
           begin
             Prop := fStoredClassRecordProps.Fields.List[Stmt.Where[0].Field - 1];
-            if Prop.InheritsFrom(TOrmPropInfoRttiRawBlob) then
-            begin
-              IsNull := Stmt.Where[0].Operation = opIsNull;
-              for ndx := 0 to fCount - 1 do
-                if TOrmPropInfoRttiRawBlob(Prop).IsNull(fValue[ndx]) = IsNull then
-                begin
-                  fValue[ndx].GetJsonValues(W);
-                  W.AddComma;
-                  inc(result);
-                  if (Stmt.Limit > 0) and
-                    (result >= Stmt.Limit) then
-                    break;
-                end;
-            end
-            else
-              goto err;
+            IsNull := Stmt.Where[0].Operation = opIsNull;
+            for ndx := 0 to fCount - 1 do
+              if Prop.IsValueVoid(fValue[ndx]) = IsNull then
+              begin
+                fValue[ndx].GetJsonValues(W);
+                W.AddComma;
+                inc(result);
+                if (Stmt.Limit > 0) and
+                  (result >= Stmt.Limit) then
+                  break;
+              end;
           end
           else
             goto err;
