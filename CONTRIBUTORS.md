@@ -36,6 +36,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Eugene Ilyin
 - Eva Freimann (EVaF)
 - Evan Blaudy (eblaudy)
+- FeelAirSlow
 - F-Vicente
 - Goran Despalatovic (gigo)
 - Hubert Touvet
