@@ -859,7 +859,6 @@ type
     function GetOrAddIndexByName(const aName: RawUtf8): integer;
       {$ifdef HASINLINE}inline;{$endif}
     function GetOrAddPVariantByName(const aName: RawUtf8): PVariant;
-      {$ifdef HASINLINE}inline;{$endif}
     function GetPVariantByName(const aName: RawUtf8): PVariant;
     function GetRawUtf8ByName(const aName: RawUtf8): RawUtf8;
     procedure SetRawUtf8ByName(const aName, aValue: RawUtf8);
@@ -1595,8 +1594,10 @@ type
     /// add one or several values from another document
     // - supplied document should be of the same kind than the current one,
     // otherwise nothing is added
+    // - for an object, dvoCheckForDuplicatedNames flag is used: use
+    // AddOrUpdateFrom() to force objects merging
     procedure AddFrom(const aDocVariant: Variant);
-    /// add or update or on several valeus from another object
+    /// merge (i.e. add or update) several values from another object
     // - current document should be an object
     procedure AddOrUpdateFrom(const aDocVariant: Variant;
       aOnlyAddMissing: boolean = false);
@@ -3085,9 +3086,52 @@ begin
 end;
 
 
+function SortDynArrayEmptyNull(const A, B): integer;
+begin
+  result := 0; // VType=varEmpty/varNull are always equal
+end;
+
+function SortDynArrayWordBoolean(const A, B): integer;
+begin
+  if WordBool(A) then // normalize
+    if WordBool(B) then
+      result := 0
+    else
+      result := 1
+  else if WordBool(B) then
+    result := -1
+  else
+    result := 0;
+end;
+
 var
+  _CMP2SORT: array[0..18] of TDynArraySortCompare = (
+    nil,                         // 0
+    SortDynArrayEmptyNull,       // 1
+    SortDynArraySmallInt,        // 2
+    SortDynArrayInteger,         // 3
+    SortDynArraySingle,          // 4
+    SortDynArrayDouble,          // 5
+    SortDynArrayInt64,           // 6
+    SortDynArrayDouble,          // 7
+    SortDynArrayShortInt,        // 8
+    SortDynArrayByte,            // 9
+    SortDynArrayWord,            // 10
+    SortDynArrayCardinal,        // 11
+    SortDynArrayInt64,           // 12
+    SortDynArrayQWord,           // 13
+    SortDynArrayWordBoolean,     // 14
+    {$ifdef CPUINTEL}
+    SortDynArrayAnsiString,      // 15
+    {$else}
+    SortDynArrayRawByteString,
+    {$endif CPUINTEL}
+    SortDynArrayAnsiStringI,     // 16
+    SortDynArrayUnicodeString,   // 17
+    SortDynArrayUnicodeStringI); // 18
+
   // FastVarDataComp() efficient lookup for per-VType comparison function
-  _VARDATACMP: array[0 .. $102 {varUString}, boolean] of TDynArraySortCompare;
+  _VARDATACMP: array[0 .. $102 {varUString}, boolean] of byte; // _CMP2SORT[]
 
 function VariantCompAsUtf8(const A, B: variant; caseInsensitive: boolean): integer;
 // need to serialize both as UTF-8 text/JSON
@@ -3102,8 +3146,7 @@ end;
 
 function FastVarDataComp(A, B: PVarData; caseInsensitive: boolean): integer;
 var
-  at, bt: cardinal;
-  sametypecomp: TDynArraySortCompare;
+  at, bt, sametypecomp: PtrUInt;
 label
   rtl, utf;
 begin
@@ -3130,17 +3173,17 @@ begin
     if at <= high(_VARDATACMP) then
     begin
       sametypecomp := _VARDATACMP[at, caseInsensitive];
-      if Assigned(sametypecomp) then
-        result := sametypecomp(A^.VAny, B^.VAny)
+      if sametypecomp <> 0 then
+        result := _CMP2SORT[sametypecomp](A^.VAny, B^.VAny)
       else
 rtl:    result := VariantCompSimple(PVariant(A)^, PVariant(B)^)
     end
     else if at = varStringByRef then
       // e.g. from TRttiVarData / TRttiCustomProp.CompareValue
-      result := _VARDATACMP[varString, caseInsensitive](
+      result := _CMP2SORT[_VARDATACMP[varString, caseInsensitive]](
         PPointer(A^.VAny)^, PPointer(B^.VAny)^)
     else if at = varSynUnicode or varByRef then
-      result := _VARDATACMP[varSynUnicode, caseInsensitive](
+      result := _CMP2SORT[_VARDATACMP[varSynUnicode, caseInsensitive]](
          PPointer(A^.VAny)^, PPointer(B^.VAny)^)
     else if at < varFirstCustom then
       goto rtl
@@ -5517,6 +5560,8 @@ end;
 
 function TDocVariantData.AddValue(const aName: RawUtf8; const aValue: variant;
   aValueOwned: boolean; aIndex: integer): integer;
+var
+  v: PVariant;
 begin
   if dvoCheckForDuplicatedNames in VOptions then
   begin
@@ -5525,10 +5570,11 @@ begin
       raise EDocVariant.CreateUtf8('AddValue: Duplicated [%] name', [aName]);
   end;
   result := InternalAdd(aName, aIndex);
+  v := @VValue[result];
   if aValueOwned then
-    VValue[result] := aValue
+    v^ := aValue
   else
-    SetVariantByValue(aValue, VValue[result]);
+    SetVariantByValue(aValue, v^);
   if dvoInternValues in VOptions then
     InternalUniqueValue(result);
 end;
@@ -5610,6 +5656,9 @@ begin
     if IsArray then
       // types should match
       exit
+    else if dvoCheckForDuplicatedNames in VOptions then
+      for ndx := 0 to src^.Count - 1 do
+        AddOrUpdateValue(src^.VName[ndx], src^.VValue[ndx])
     else
       for ndx := 0 to src^.Count - 1 do
         AddValue(src^.VName[ndx], src^.VValue[ndx]);
@@ -5623,8 +5672,7 @@ var
 begin
   src := _Safe(aDocVariant, dvObject);
   for ndx := 0 to src^.Count - 1 do
-    AddOrUpdateValue(
-      src^.VName[ndx], src^.VValue[ndx], nil, aOnlyAddMissing);
+    AddOrUpdateValue(src^.VName[ndx], src^.VValue[ndx], nil, aOnlyAddMissing);
 end;
 
 function TDocVariantData.AddItem(const aValue: variant; aIndex: integer): integer;
@@ -6307,7 +6355,7 @@ begin
     inc(result, ord(Delete(aNames[n])));
 end;
 
-function FindNonVoidRawUtf8(n: PPUtf8CharArray; name: PUtf8Char; len: TStrLen;
+function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
   count: PtrInt): PtrInt;
 var
   p: PUtf8Char;
@@ -6325,7 +6373,7 @@ begin
   result := -1;
 end;
 
-function FindNonVoidRawUtf8I(n: PPUtf8CharArray; name: PUtf8Char; len: TStrLen;
+function FindNonVoidRawUtf8I(n: PPointerArray; name: pointer; len: TStrLen;
   count: PtrInt): PtrInt;
 var
   p1, p2, l: PUtf8Char;
@@ -6364,9 +6412,10 @@ no:   p2 := name;
 end;
 
 const
-  DocVariantFind: array[boolean] of function(n: PPUtf8CharArray;
-    name: PUtf8Char; len: TStrLen; count: PtrInt): PtrInt = (
-      FindNonVoidRawUtf8I, FindNonVoidRawUtf8);
+  DocVariantFind: array[{casesensitive:}boolean] of
+    function(p: PPointerArray; n: pointer; l: TStrLen; c: PtrInt): PtrInt = (
+      FindNonVoidRawUtf8I,
+      FindNonVoidRawUtf8);
 
 function TDocVariantData.InternalNextPath(
   var P: PUtf8Char; aName: PShortString): PtrInt;
@@ -7329,9 +7378,7 @@ function TDocVariantData.GetOrAddPVariantByName(const aName: RawUtf8): PVariant;
 var
   ndx: PtrInt;
 begin
-  ndx := GetValueIndex(aName);
-  if ndx < 0 then
-    ndx := InternalAdd(aName);
+  ndx := GetOrAddIndexByName(aName); // in two steps for FPC
   result := @VValue[ndx];
 end;
 
@@ -8641,42 +8688,12 @@ direct:         if Dest <> nil then
   end;
 end;
 
-function SortDynArrayEmptyNull(const A, B): integer;
-begin
-  result := 0; // VType=varEmpty/varNull are always equal
-end;
-
-function SortDynArrayWordBoolean(const A, B): integer;
-begin
-  if WordBool(A) then // normalize
-    if WordBool(B) then
-      result := 0
-    else
-      result := 1
-  else if WordBool(B) then
-    result := -1
-  else
-    result := 0;
-end;
-
 const
-  // comparison of simple types - copied at startup to _VARDATACMP[]
-  _NUM1: array[varEmpty..varDate] of TDynArraySortCompare = (
-    SortDynArrayEmptyNull,
-    SortDynArrayEmptyNull,
-    SortDynArraySmallInt,
-    SortDynArrayInteger,
-    SortDynArraySingle,
-    SortDynArrayDouble,
-    SortDynArrayInt64,
-    SortDynArrayDouble);
-  _NUM2: array[varShortInt..varWord64] of TDynArraySortCompare = (
-    SortDynArrayShortInt,
-    SortDynArrayByte,
-    SortDynArrayWord,
-    SortDynArrayCardinal,
-    SortDynArrayInt64,
-    SortDynArrayQWord);
+  // _CMP2SORT[] comparison of simple types - as copied to _VARDATACMP[]
+  _NUM1: array[varEmpty..varDate] of byte = (
+    1, 1, 2, 3, 4, 5, 6, 7);
+  _NUM2: array[varShortInt..varWord64] of byte = (
+    8, 9, 10, 11, 12, 13);
 
 procedure InitializeUnit;
 var
@@ -8712,21 +8729,17 @@ begin
   // setup FastVarDataComp() efficient lookup comparison functions
   for ins := false to true do
   begin
-    MoveFast(_NUM1, _VARDATACMP[varEmpty, ins], SizeOf(_NUM1));
+    MoveFast(_NUM1, _VARDATACMP[varEmpty, ins],    SizeOf(_NUM1));
     MoveFast(_NUM2, _VARDATACMP[varShortInt, ins], SizeOf(_NUM2));
-    _VARDATACMP[varBoolean, ins] := @SortDynArrayWordBoolean;
+    _VARDATACMP[varBoolean, ins] := 14;
   end;
-  {$ifdef CPUINTEL}
-  _VARDATACMP[varString, false] := @SortDynArrayAnsiString;
-  {$else}
-  _VARDATACMP[varString, false] := @SortDynArrayRawByteString;
-  {$endif CPUINTEL}
-  _VARDATACMP[varString, true]  := @SortDynArrayAnsiStringI;
-  _VARDATACMP[varOleStr, false] := @SortDynArrayUnicodeString;
-  _VARDATACMP[varOleStr, true]  := @SortDynArrayUnicodeStringI;
+  _VARDATACMP[varString, false] := 15;
+  _VARDATACMP[varString, true]  := 16;
+  _VARDATACMP[varOleStr, false] := 17;
+  _VARDATACMP[varOleStr, true]  := 18;
   {$ifdef HASVARUSTRING}
-  _VARDATACMP[varUString, false] := @SortDynArrayUnicodeString;
-  _VARDATACMP[varUString, true]  := @SortDynArrayUnicodeStringI;
+  _VARDATACMP[varUString, false] := 17;
+  _VARDATACMP[varUString, true]  := 18;
   {$endif HASVARUSTRING}
   // patch DispInvoke for performance and to circumvent RTL inconsistencies
   GetVariantManager(vm);
@@ -8735,7 +8748,7 @@ begin
   {$ifdef FPC}
   // circumvent FPC 3.2+ inverted parameters order - may be fixed in later FPC
   test := _ObjFast([]);
-  test.Add('nam', 'val');
+  test.Add('nam', 'val'); // late binding DispInvoke() call
   DispInvokeArgOrderInverted := (_Safe(test)^.Names[0] = 'val');
   {$endif FPC}
 end;

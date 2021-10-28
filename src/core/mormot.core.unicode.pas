@@ -2614,6 +2614,7 @@ begin
     else
       result := TSynAnsiConvert.Create(aCodePage);
     ObjArrayAdd(SynAnsiConvertList, result);
+    ObjArrayAdd(InternalGarbageCollection, result);
     AddWord(SynAnsiConvertListCodePage, SynAnsiConvertListCount, aCodePage);
   finally
     GlobalUnLock;
@@ -6850,16 +6851,9 @@ begin
   {$endif ASMX64AVX}
 end;
 
-procedure FinalizeUnit;
-begin
-  ObjArrayClear(SynAnsiConvertList);
-end;
-
 
 initialization
   InitializeUnit;
 
-finalization
-  FinalizeUnit;
-  
+
 end.

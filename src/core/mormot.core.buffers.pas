@@ -4666,6 +4666,9 @@ begin
     raise EAlgoCompress.CreateUtf8('%.Create: AlgoID=% already registered by %',
       [self, fAlgoID, existing]);
   ObjArrayAdd(SynCompressAlgos, self);
+  GlobalLock;
+  ObjArrayAdd(InternalGarbageCollection, self);
+  GlobalUnLock;
 end;
 
 class function TAlgoCompress.Algo(const Comp: RawByteString): TAlgoCompress;
@@ -10240,16 +10243,9 @@ begin
   AlgoSynLZ := TAlgoSynLZ.Create;
 end;
 
-procedure FinalizeUnit;
-begin
-  ObjArrayClear(SynCompressAlgos);
-end;
-
 
 initialization
   InitializeUnit;
 
-finalization
-  FinalizeUnit;
-  
+
 end.

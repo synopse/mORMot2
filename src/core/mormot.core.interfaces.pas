@@ -3615,8 +3615,11 @@ procedure InitializeInterfaceFactoryCache;
 begin
   GlobalLock;
   try
-    if InterfaceFactoryCache = nil then // paranoid thread-safety
+    if InterfaceFactoryCache = nil then
+    begin // paranoid thread-safety
       InterfaceFactoryCache := TSynObjectListLocked.Create;
+      ObjArrayAdd(InternalGarbageCollection, InterfaceFactoryCache);
+    end;
   finally
     GlobalUnLock;
   end;
@@ -7726,21 +7729,15 @@ begin
   ArmFakeStubAddr := @TInterfacedObjectFake.ArmFakeStub;
   {$endif CPUARM}
   GlobalInterfaceResolver := TInterfaceResolverList.Create;
+  ObjArrayAdd(InternalGarbageCollection, GlobalInterfaceResolver);
   GlobalInterfaceResolver.Add(TypeInfo(IAutoLocker), TAutoLocker);
   GlobalInterfaceResolver.Add(TypeInfo(ILockedDocVariant), TLockedDocVariant);
-end;
-
-procedure FinalizeUnit;
-begin
-  InterfaceFactoryCache.Free;
-  GlobalInterfaceResolver.Free; // also cleanup Instance fields
 end;
 
 
 initialization
   InitializeUnit;
-finalization
-  FinalizeUnit;
-  
+
+
 end.
 

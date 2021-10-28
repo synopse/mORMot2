@@ -4172,8 +4172,11 @@ begin
     GlobalLock;
     try
       if OrmPropInfoRegistration = nil then
+      begin
         OrmPropInfoRegistration := TSynDictionary.Create(
           TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArray));
+        ObjArrayAdd(InternalGarbageCollection, OrmPropInfoRegistration);
+      end;
     finally
       GlobalUnLock;
     end;
@@ -10943,8 +10946,6 @@ initialization
   pointer(@OrmFieldTypeComp[oftVariant])    := @StrComp;
   pointer(@OrmFieldTypeComp[oftNullable])   := @StrComp;
 
-finalization
-  FreeAndNil(OrmPropInfoRegistration);
 
 end.
 

@@ -2678,7 +2678,10 @@ begin
     GlobalLock; // paranoid thread-safety
     try
       if ProcessSystemUse = nil then
+      begin
         ProcessSystemUse := TSystemUse.Create(60);
+        ObjArrayAdd(InternalGarbageCollection, ProcessSystemUse);
+      end;
     finally
       GlobalUnLock;
     end;
@@ -3017,9 +3020,6 @@ begin
   result := 1; // should never be 0 (mark release of TSynFpuException instance)
 end;
 
-var
-  GlobalSynFpuExceptionInstances: TObjectDynArray;
-
 threadvar
   GlobalSynFpuExceptionDelphi,
   GlobalSynFpuExceptionLibrary: TSynFpuException;
@@ -3039,7 +3039,9 @@ begin
   if result <> nil then
     exit;
   obj := TSynFpuException.Create(ffLibrary);
-  ObjArrayAdd(GlobalSynFpuExceptionInstances, obj);
+  GlobalLock;
+  ObjArrayAdd(InternalGarbageCollection, obj);
+  GlobalUnLock;
   GlobalSynFpuExceptionLibrary := obj;
   result := obj;
 end;
@@ -3052,7 +3054,9 @@ begin
   if result <> nil then
     exit;
   obj := TSynFpuException.Create(ffPascal);
-  ObjArrayAdd(GlobalSynFpuExceptionInstances, obj);
+  GlobalLock;
+  ObjArrayAdd(InternalGarbageCollection, obj);
+  GlobalUnLock;
   GlobalSynFpuExceptionDelphi := obj;
   result := obj;
 end;
@@ -3065,20 +3069,14 @@ begin
   CpuFeaturesText := LowerCase(ToText(CpuFeatures, ' '));
   if CpuFeaturesText = '' then
   {$endif CPUINTELARM}
-  {$ifdef OSLINUXANDROID}
-  CpuFeaturesText := LowerCase(CpuInfoFeatures); // fallback to /proc/cpuinfo
-  {$endif OSLINUXANDROID}
+    {$ifdef OSLINUXANDROID}
+    CpuFeaturesText := LowerCase(CpuInfoFeatures); // fallback to /proc/cpuinfo
+    {$endif OSLINUXANDROID}
 end;
 
 initialization
   InitializeUnit;
 
-finalization
-  {$ifdef CPUINTEL}
-  ObjArrayClear(GlobalSynFpuExceptionInstances);
-  {$endif CPUINTEL}
-  ProcessSystemUse.Free;
-  
 end.
 
 

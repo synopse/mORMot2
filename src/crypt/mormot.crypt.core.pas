@@ -6795,7 +6795,10 @@ begin
   GlobalLock;
   try
     if MainAesPrng = nil then
+    begin
       MainAesPrng := TAesPrng.Create;
+      ObjArrayAdd(InternalGarbageCollection, MainAesPrng);
+    end;
   finally
     GlobalUnLock;
   end;
@@ -7043,7 +7046,10 @@ begin
     GlobalLock;
     try
       if MainAesPrngSystem = nil then
+      begin
         MainAesPrngSystem := TSystemPrng.Create;
+        ObjArrayAdd(InternalGarbageCollection, MainAesPrngSystem);
+      end;
     finally
       GlobalUnLock;
     end;
@@ -10493,8 +10499,6 @@ end;
 
 procedure FinalizeUnit;
 begin
-  FreeAndNil(MainAesPrng);
-  FreeAndNil(MainAesPrngSystem);
   {$ifdef USE_PROV_RSA_AES}
   if (CryptoApiAesProvider <> nil) and
      (CryptoApiAesProvider <> HCRYPTPROV_NOTTESTED) then

@@ -19,7 +19,7 @@ unit mormot.core.base;
     - Sorting/Comparison Functions
     - Some Convenient TStream descendants and File access functions
     - Faster Alternative to RTL Standard Functions
-    - Raw Shared Types Definitions
+    - Raw Shared Constants / Types Definitions
 
    Aim of those types and functions is to be cross-platform and cross-compiler,
   without any dependency but the main FPC/Delphi RTL. It also detects the
@@ -3628,6 +3628,11 @@ type
   /// dynamic array of timestamps stored as millisecond-based Unix Time
   TUnixMSTimeDynArray = array of TUnixMSTime;
 
+var
+  /// framework will register here some instances to be released eventually
+  // - better in this main/first/last unit than in each finalization section
+  InternalGarbageCollection: TObjectDynArray;
+
 
 implementation
 
@@ -6748,7 +6753,7 @@ begin
   if n = 0 then
     exit;
   if aContinueOnException then
-    for i := 0 to n - 1 do
+    for i := n - 1 downto 0 do
     try
       a[i].Free;
     except
@@ -10311,7 +10316,7 @@ end;
 
 function SortDynArrayUnicodeString(const A, B): integer;
 begin
-  // works for tkWString and tkUString
+  // works for both tkWString and tkUString
   result := StrCompW(PWideChar(A), PWideChar(B));
 end;
 
@@ -10640,6 +10645,9 @@ end;
 
 initialization
   InitializeUnit;
+
+finalization
+  ObjArrayClear(InternalGarbageCollection, {continueonexcept:}true);
 
 end.
 

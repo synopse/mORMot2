@@ -5550,7 +5550,10 @@ begin
     GlobalLock;
     try
       if SharedSynTimeZone = nil then
+      begin
         SharedSynTimeZone := TSynTimeZone.CreateDefault;
+        ObjArrayAdd(InternalGarbageCollection, SharedSynTimeZone);
+      end;
     finally
       GlobalUnLock;
     end;
@@ -5857,10 +5860,5 @@ begin
   result := TSynTimeZone.Default.LocalToUtc(LocalDateTime, TzId);
 end;
 
-
-initialization
-
-finalization
-  FreeAndNilSafe(SharedSynTimeZone);
 
 end.

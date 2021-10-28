@@ -671,7 +671,10 @@ begin
   GlobalLock;
   try
     if MainAesPrngOsl = nil then
+    begin
       MainAesPrngOsl := TAesPrngOsl.Create;
+      ObjArrayAdd(InternalGarbageCollection, MainAesPrngOsl);
+    end;
   finally
     GlobalUnLock;
   end;
@@ -1612,7 +1615,6 @@ end;
 
 procedure FinalizeUnit;
 begin
-  FreeAndNil(MainAesPrngOsl);
   if (prime256v1grp <> nil) and
      (prime256v1grp <> PEC_GROUP_PRIME256V1_NOTAVAILABLE) then
     EC_GROUP_free(prime256v1grp);
