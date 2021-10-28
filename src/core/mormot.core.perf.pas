@@ -2384,14 +2384,14 @@ function ToText(const aArm32CPUFeatures: TArm32HwCaps;
   const Sep: RawUtf8): RawUtf8;
 begin
   result := FeaturesToText(
-    TypeInfo(TArm32HwCaps), aArm32CPUFeatures, Sep, 6);
+    TypeInfo(TArm32HwCap), aArm32CPUFeatures, Sep, 6);
 end;
 
 function ToText(const aArm64CPUFeatures: TArm64HwCaps;
   const Sep: RawUtf8): RawUtf8;
 begin
   result := FeaturesToText(
-    TypeInfo(TArm64HwCaps), aArm64CPUFeatures, Sep, 6);
+    TypeInfo(TArm64HwCap), aArm64CPUFeatures, Sep, 6);
 end;
 
 
