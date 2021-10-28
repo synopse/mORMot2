@@ -5552,7 +5552,7 @@ begin
       if SharedSynTimeZone = nil then
       begin
         SharedSynTimeZone := TSynTimeZone.CreateDefault;
-        ObjArrayAdd(InternalGarbageCollection, SharedSynTimeZone);
+        RegisterGlobalShutdownRelease(SharedSynTimeZone);
       end;
     finally
       GlobalUnLock;

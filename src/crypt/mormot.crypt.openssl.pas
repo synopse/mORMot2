@@ -673,7 +673,7 @@ begin
     if MainAesPrngOsl = nil then
     begin
       MainAesPrngOsl := TAesPrngOsl.Create;
-      ObjArrayAdd(InternalGarbageCollection, MainAesPrngOsl);
+      RegisterGlobalShutdownRelease(MainAesPrngOsl);
     end;
   finally
     GlobalUnLock;

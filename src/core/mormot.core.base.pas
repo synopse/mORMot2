@@ -3628,10 +3628,10 @@ type
   /// dynamic array of timestamps stored as millisecond-based Unix Time
   TUnixMSTimeDynArray = array of TUnixMSTime;
 
-var
-  /// framework will register here some instances to be released eventually
-  // - better in this main/first/last unit than in each finalization section
-  InternalGarbageCollection: TObjectDynArray;
+/// framework will register here some instances to be released eventually
+// - better in this main/first/last unit than in each finalization section
+// - this call should be done within a nested GlobalLock/GlobalUnlock section
+procedure RegisterGlobalShutdownRelease(Instance: TObject);
 
 
 implementation
@@ -10642,12 +10642,30 @@ begin
   TestCpuFeatures;
 end;
 
+var
+  InternalGarbageCollection: array of TObject;
+  InternalGarbageCollectionCount: integer;
+
+procedure RegisterGlobalShutdownRelease(Instance: TObject);
+begin
+  ObjArrayAddCount(
+    InternalGarbageCollection, Instance, InternalGarbageCollectionCount);
+end;
+
+procedure FinalizeUnit;
+var
+  i: PtrInt;
+begin
+  for i := InternalGarbageCollectionCount - 1 downto 0 do
+    FreeAndNilSafe(InternalGarbageCollection[i]);
+end;
+
 
 initialization
   InitializeUnit;
 
 finalization
-  ObjArrayClear(InternalGarbageCollection, {continueonexcept:}true);
+  FinalizeUnit;
 
 end.
 

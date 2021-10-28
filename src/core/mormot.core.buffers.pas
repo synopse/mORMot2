@@ -4667,7 +4667,7 @@ begin
       [self, fAlgoID, existing]);
   ObjArrayAdd(SynCompressAlgos, self);
   GlobalLock;
-  ObjArrayAdd(InternalGarbageCollection, self);
+  RegisterGlobalShutdownRelease(self);
   GlobalUnLock;
 end;
 

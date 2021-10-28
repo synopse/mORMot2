@@ -2614,7 +2614,7 @@ begin
     else
       result := TSynAnsiConvert.Create(aCodePage);
     ObjArrayAdd(SynAnsiConvertList, result);
-    ObjArrayAdd(InternalGarbageCollection, result);
+    RegisterGlobalShutdownRelease(result);
     AddWord(SynAnsiConvertListCodePage, SynAnsiConvertListCount, aCodePage);
   finally
     GlobalUnLock;

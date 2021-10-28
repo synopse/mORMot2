@@ -6797,7 +6797,7 @@ begin
     if MainAesPrng = nil then
     begin
       MainAesPrng := TAesPrng.Create;
-      ObjArrayAdd(InternalGarbageCollection, MainAesPrng);
+      RegisterGlobalShutdownRelease(MainAesPrng);
     end;
   finally
     GlobalUnLock;
@@ -7048,7 +7048,7 @@ begin
       if MainAesPrngSystem = nil then
       begin
         MainAesPrngSystem := TSystemPrng.Create;
-        ObjArrayAdd(InternalGarbageCollection, MainAesPrngSystem);
+        RegisterGlobalShutdownRelease(MainAesPrngSystem);
       end;
     finally
       GlobalUnLock;

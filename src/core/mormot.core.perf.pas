@@ -2680,7 +2680,7 @@ begin
       if ProcessSystemUse = nil then
       begin
         ProcessSystemUse := TSystemUse.Create(60);
-        ObjArrayAdd(InternalGarbageCollection, ProcessSystemUse);
+        RegisterGlobalShutdownRelease(ProcessSystemUse);
       end;
     finally
       GlobalUnLock;
@@ -3040,7 +3040,7 @@ begin
     exit;
   obj := TSynFpuException.Create(ffLibrary);
   GlobalLock;
-  ObjArrayAdd(InternalGarbageCollection, obj);
+  RegisterGlobalShutdownRelease(obj);
   GlobalUnLock;
   GlobalSynFpuExceptionLibrary := obj;
   result := obj;
@@ -3055,7 +3055,7 @@ begin
     exit;
   obj := TSynFpuException.Create(ffPascal);
   GlobalLock;
-  ObjArrayAdd(InternalGarbageCollection, obj);
+  RegisterGlobalShutdownRelease(obj);
   GlobalUnLock;
   GlobalSynFpuExceptionDelphi := obj;
   result := obj;

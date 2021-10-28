@@ -1242,7 +1242,7 @@ begin
       if SynMustacheCache = nil then
         SynMustacheCache := TSynMustacheCache.CreateEx(
           [fObjectsOwned, fNoDuplicate, fCaseSensitive]);
-      ObjArrayAdd(InternalGarbageCollection, SynMustacheCache);
+      RegisterGlobalShutdownRelease(SynMustacheCache);
     finally
       GlobalUnLock;
     end;

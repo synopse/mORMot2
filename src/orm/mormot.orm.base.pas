@@ -4175,7 +4175,7 @@ begin
       begin
         OrmPropInfoRegistration := TSynDictionary.Create(
           TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArray));
-        ObjArrayAdd(InternalGarbageCollection, OrmPropInfoRegistration);
+        RegisterGlobalShutdownRelease(OrmPropInfoRegistration);
       end;
     finally
       GlobalUnLock;
