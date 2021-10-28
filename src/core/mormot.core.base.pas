@@ -10643,21 +10643,29 @@ begin
 end;
 
 var
-  InternalGarbageCollection: array of TObject;
-  InternalGarbageCollectionCount: integer;
+  InternalGarbageCollection: record
+    Instances:  array of TObject;
+    Count: integer;
+    Shutdown: boolean; // paranoid check to avoid messing with Instances[]
+  end;
 
 procedure RegisterGlobalShutdownRelease(Instance: TObject);
 begin
-  ObjArrayAddCount(
-    InternalGarbageCollection, Instance, InternalGarbageCollectionCount);
+  with InternalGarbageCollection do
+    if not Shutdown then
+      ObjArrayAddCount(Instances, Instance, Count);
 end;
 
 procedure FinalizeUnit;
 var
   i: PtrInt;
 begin
-  for i := InternalGarbageCollectionCount - 1 downto 0 do
-    FreeAndNilSafe(InternalGarbageCollection[i]);
+  with InternalGarbageCollection do
+  begin
+    Shutdown := true;
+    for i := Count - 1 downto 0 do
+      FreeAndNilSafe(Instances[i]);
+  end;
 end;
 
 
