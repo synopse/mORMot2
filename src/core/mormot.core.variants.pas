@@ -882,6 +882,8 @@ type
     function GetAsDocVariantByIndex(aIndex: integer): PDocVariantData;
     function InternalAdd(aName: PUtf8Char; aNameLen: integer): integer; overload;
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure InternalUniqueValue(aIndex: PtrInt);
     function InternalNextPath(var P: PUtf8Char; aName: PShortString): PtrInt;
     procedure ClearFast;
   public
@@ -3673,10 +3675,17 @@ begin
   fInternValues.Free;
 end;
 
+const
+  _GETMETHOD: array[0..3] of PAnsiChar = (
+    'COUNT', // 0
+    'KIND',  // 1
+    'JSON',  // 2
+    nil);
+
 function IntGetPseudoProp(ndx: integer; const source: TDocVariantData;
   var Dest: variant): boolean;
 begin
-  // sub-function to avoid temporary RawUtf8
+  // sub-function to avoid temporary RawUtf8 for source.ToJson
   result := true;
   case ndx of
     0:
@@ -3700,15 +3709,12 @@ begin
     result := false
   else if (NameLen > 4) and
           (Name[0] = '_') and
-          IntGetPseudoProp(IdemPCharArray(@Name[1],
-            ['COUNT',
-             'KIND',
-             'JSON']), dv, variant(Dest)) then
+          IntGetPseudoProp(IdemPPChar(@Name[1], @_GETMETHOD), dv, variant(Dest)) then
     result := true
   else
   begin
-    ndx := dv.GetValueIndex(pointer(Name), NameLen,
-      dvoNameCaseSensitive in dv.VOptions);
+    ndx := dv.GetValueIndex(
+             pointer(Name), NameLen, dvoNameCaseSensitive in dv.VOptions);
     if ndx < 0 then
       if NoException or
          (dvoReturnNullForUnknownProperty in dv.VOptions) then
@@ -3730,7 +3736,6 @@ function TDocVariant.IntSet(const Instance, Value: TVarData;
   Name: PAnsiChar; NameLen: PtrInt): boolean;
 var
   ndx: PtrInt;
-  aName: RawUtf8;
   dv: TDocVariantData absolute Instance;
 begin
   result := true;
@@ -3743,10 +3748,7 @@ begin
   ndx := dv.GetValueIndex(
     pointer(Name), NameLen, dvoNameCaseSensitive in dv.VOptions);
   if ndx < 0 then
-  begin
-    FastSetString(aName, Name, NameLen);
-    ndx := dv.InternalAdd(aName);
-  end;
+    ndx := dv.InternalAdd(Name, NameLen);
   dv.InternalSetValue(ndx, variant(Value));
 end;
 
@@ -4538,7 +4540,12 @@ procedure TDocVariantData.InternalSetValue(aIndex: PtrInt; const aValue: variant
 begin
   SetVariantByValue(aValue, VValue[aIndex]); // caller ensured that aIndex is OK
   if dvoInternValues in VOptions then
-    DocVariantType.InternValues.UniqueVariant(VValue[aIndex]);
+    InternalUniqueValue(aIndex);
+end;
+
+procedure TDocVariantData.InternalUniqueValue(aIndex: PtrInt);
+begin
+  DocVariantType.InternValues.UniqueVariant(VValue[aIndex]);
 end;
 
 procedure TDocVariantData.SetOptions(const opt: TDocVariantOptions);
@@ -4637,7 +4644,7 @@ begin
       SetVariantByValue(tmp, VValue[arg + VCount]);
     end;
     if dvoInternValues in VOptions then
-      DocVariantType.InternValues.UniqueVariant(VValue[arg + VCount]);
+      InternalUniqueValue(arg + VCount);
   end;
   inc(VCount, n);
 end;
@@ -5523,7 +5530,7 @@ begin
   else
     SetVariantByValue(aValue, VValue[result]);
   if dvoInternValues in VOptions then
-    DocVariantType.InternValues.UniqueVariant(VValue[result]);
+    InternalUniqueValue(result);
 end;
 
 function TDocVariantData.AddValue(aName: PUtf8Char; aNameLen: integer;
@@ -5578,7 +5585,7 @@ begin
     added := InternalAdd(aPaths[p]);
     PVarData(@VValue[added])^ := v;
     if dvoInternValues in VOptions then
-      DocVariantType.InternValues.UniqueVariant(VValue[added]);
+      InternalUniqueValue(added);
   end;
 end;
 
@@ -5657,7 +5664,7 @@ begin
     added := InternalAdd('');
     VarRecToVariant(aValue[ndx], VValue[added]);
     if dvoInternValues in VOptions then
-      DocVariantType.InternValues.UniqueVariant(VValue[added]);
+      InternalUniqueValue(added);
   end;
 end;
 
@@ -6300,15 +6307,77 @@ begin
     inc(result, ord(Delete(aNames[n])));
 end;
 
+function FindNonVoidRawUtf8(n: PPUtf8CharArray; name: PUtf8Char; len: TStrLen;
+  count: PtrInt): PtrInt;
+var
+  p: PUtf8Char;
+begin
+  // FPC does proper inlining in this loop
+  result := 0;
+  repeat
+    p := n[result]; // all VName[]<>'' so p=n^<>nil
+    if (PStrLen(p - _STRLEN)^ = len) and
+       CompareMemFixed(p, name, len) then
+      exit;
+    inc(result);
+    dec(count);
+  until count = 0;
+  result := -1;
+end;
+
+function FindNonVoidRawUtf8I(n: PPUtf8CharArray; name: PUtf8Char; len: TStrLen;
+  count: PtrInt): PtrInt;
+var
+  p1, p2, l: PUtf8Char;
+label
+  no;
+begin
+  result := 0;
+  p2 := name;
+  repeat
+    // inlined IdemPropNameUSameLenNotNull(p, name, len)
+    p1 := n[result]; // all VName[]<>'' so p1<>nil
+    if PStrLen(p1 - _STRLEN)^ = len then
+    begin
+      l := @p1[len - SizeOf(cardinal)];
+      dec(p2, PtrUInt(p1));
+      while PtrUInt(l) >= PtrUInt(p1) do
+        // compare 4 Bytes per loop
+        if (PCardinal(p1)^ xor PCardinal(@p2[PtrUInt(p1)])^) and $dfdfdfdf <> 0 then
+          goto no
+        else
+          inc(PCardinal(p1));
+      inc(PCardinal(l));
+      while PtrUInt(p1) < PtrUInt(l) do
+        // remaining bytes
+        if (ord(p1^) xor ord(p2[PtrUInt(p1)])) and $df <> 0 then
+          goto no
+        else
+          inc(PByte(p1));
+      exit; // match found
+no:   p2 := name;
+    end;
+    inc(result);
+    dec(count);
+  until count = 0;
+  result := -1;
+end;
+
+const
+  DocVariantFind: array[boolean] of function(n: PPUtf8CharArray;
+    name: PUtf8Char; len: TStrLen; count: PtrInt): PtrInt = (
+      FindNonVoidRawUtf8I, FindNonVoidRawUtf8);
+
 function TDocVariantData.InternalNextPath(
   var P: PUtf8Char; aName: PShortString): PtrInt;
 begin
   GetNextItemShortString(P, aName, '.');
-  if aName^[0] in [#0, #254] then
+  if (aName^[0] in [#0, #254]) or
+     (VCount = 0) then
     result := -1
   else
-    result := GetValueIndex(@aName^[1], ord(aName^[0]),
-      dvoNameCaseSensitive in VOptions);
+    result := DocVariantFind[dvoNameCaseSensitive in VOptions](
+      pointer(VName), @aName^[1], ord(aName^[0]), VCount);
 end;
 
 function TDocVariantData.DeleteByPath(const aPath: RawUtf8): boolean;
@@ -6393,62 +6462,6 @@ begin
             (VCount = 0);
 end;
 
-function FindNonVoidRawUtf8(n: PPUtf8CharArray; name: PUtf8Char; len: TStrLen;
-  count: PtrInt): PtrInt;
-var
-  p: PUtf8Char;
-begin
-  // FPC does proper inlining in this loop
-  result := 0;
-  repeat
-    p := n[result]; // all VName[]<>'' so p=n^<>nil
-    if (PStrLen(p - _STRLEN)^ = len) and
-       CompareMemFixed(p, name, len) then
-      exit;
-    inc(result);
-    dec(count);
-  until count = 0;
-  result := -1;
-end;
-
-function FindNonVoidRawUtf8I(n: PPUtf8CharArray; name: PUtf8Char; len: TStrLen;
-  count: PtrInt): PtrInt;
-var
-  p1, p2, l: PUtf8Char;
-label
-  no;
-begin
-  result := 0;
-  p2 := name;
-  repeat
-    // inlined IdemPropNameUSameLenNotNull(p, name, len)
-    p1 := n[result]; // all VName[]<>'' so p1<>nil
-    if PStrLen(p1 - _STRLEN)^ = len then
-    begin
-      l := @p1[len - SizeOf(cardinal)];
-      dec(p2, PtrUInt(p1));
-      while PtrUInt(l) >= PtrUInt(p1) do
-        // compare 4 Bytes per loop
-        if (PCardinal(p1)^ xor PCardinal(@p2[PtrUInt(p1)])^) and $dfdfdfdf <> 0 then
-          goto no
-        else
-          inc(PCardinal(p1));
-      inc(PCardinal(l));
-      while PtrUInt(p1) < PtrUInt(l) do
-        // remaining bytes
-        if (ord(p1^) xor ord(p2[PtrUInt(p1)])) and $df <> 0 then
-          goto no
-        else
-          inc(PByte(p1));
-      exit; // match found
-no:   p2 := name;
-    end;
-    inc(result);
-    dec(count);
-  until count = 0;
-  result := -1;
-end;
-
 function TDocVariantData.GetValueIndex(aName: PUtf8Char; aNameLen: PtrInt;
   aCaseSensitive: boolean): integer;
 var
@@ -6465,11 +6478,9 @@ begin
         result := -1;
     end
     else
-    // O(n) lookup for name -> efficient brute force sub-functions
-    if aCaseSensitive then
-      result := FindNonVoidRawUtf8(pointer(VName), aName, aNameLen, VCount)
-    else
-      result := FindNonVoidRawUtf8I(pointer(VName), aName, aNameLen, VCount)
+      // O(n) lookup for name -> efficient brute force sub-functions
+      result := DocVariantFind[dvoNameCaseSensitive in VOptions](
+        pointer(VName), aName, aNameLen, VCount)
   else
     result := -1;
 end;
@@ -6697,11 +6708,8 @@ begin
       else
         ndx := FastFindPUtf8CharSorted(
           pointer(VName), VCount - 1, pointer(aName), aSortedCompare)
-    else if dvoNameCaseSensitive in VOptions then
-      ndx := FindNonVoidRawUtf8(
-        pointer(VName), pointer(aName), length(aName), VCount)
     else
-      ndx := FindNonVoidRawUtf8I(
+      ndx := DocVariantFind[dvoNameCaseSensitive in VOptions](
         pointer(VName), pointer(aName), length(aName), VCount);
     if aFoundIndex <> nil then
       aFoundIndex^ := ndx;
