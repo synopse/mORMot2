@@ -6517,7 +6517,7 @@ begin
   if fOrmFieldType = oftNullable then
     Read.CustomVariants := nil
   else
-    Read.CustomVariants := @DocVariantOptions;
+    Read.CustomVariants := @fDocVariantOptions;
   RTTI_BINARYLOAD[rkVariant](@value, Read, fPropType);
   Read.CustomVariants := bak;
   fPropInfo.SetVariantProp(Instance, value);

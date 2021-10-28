@@ -1359,7 +1359,9 @@ begin
   if Stmt <> nil then
   try
     Stmt.ExecutePreparedAndFetchAllAsJson(
-      ForceAjax or (Owner = nil) or not Owner.Owner.NoAjaxJson, result);
+      ForceAjax or
+      (Owner = nil) or
+      not Owner.Owner.NoAjaxJson, result);
   except
     Stmt := nil;
     HandleClearPoolOnConnectionIssue;

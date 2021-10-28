@@ -436,7 +436,8 @@ type
     // - you can specify a User/Password credential pair to also test the
     // authentication via TSynAuthentication
     constructor Create(aProps: TSqlDBConnectionProperties;
-      const aUserID,aPassword: RawUtf8; aProtocol: TSqlDBProxyConnectionProtocolClass); reintroduce;
+      const aUserID, aPassword: RawUtf8;
+      aProtocol: TSqlDBProxyConnectionProtocolClass); reintroduce;
   end;
 
 

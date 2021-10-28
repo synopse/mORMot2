@@ -6736,7 +6736,6 @@ begin
     end;
     result := result + Fields[F].Name + ',';
   end;
-
   result[length(result)] := ')';
   result := result + ' values (';
   for F := 0 to high(Fields) do
