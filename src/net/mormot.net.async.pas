@@ -1714,7 +1714,12 @@ begin
     raise EAsyncConnections.CreateUtf8('%: %:% connection failure (%)',
       [self, fThreadClients.Address, fThreadClients.Port, ToText(res)^]);
   connection := nil;
-  if not ConnectionCreate(client, {ip=}'', connection) then
+  if ConnectionCreate(client, {ip=}'', connection) then
+  begin
+    if fThreadReadPoll <> nil then
+      fThreadReadPoll.fEvent.SetEvent // awake reading thread(s)
+  end
+  else
     client.ShutdownAndClose({rdwr=}false);
 end;
 
