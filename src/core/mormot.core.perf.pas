@@ -3037,9 +3037,7 @@ begin
   if result <> nil then
     exit;
   obj := TSynFpuException.Create(ffLibrary);
-  GlobalLock;
   RegisterGlobalShutdownRelease(obj);
-  GlobalUnLock;
   GlobalSynFpuExceptionLibrary := obj;
   result := obj;
 end;
@@ -3052,9 +3050,7 @@ begin
   if result <> nil then
     exit;
   obj := TSynFpuException.Create(ffPascal);
-  GlobalLock;
   RegisterGlobalShutdownRelease(obj);
-  GlobalUnLock;
   GlobalSynFpuExceptionDelphi := obj;
   result := obj;
 end;

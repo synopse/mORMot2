@@ -1289,11 +1289,11 @@ procedure CoInit;
 procedure CoUninit;
 
 /// retrieves the current executable module handle, i.e.  its memory load address
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 
 /// post a message to the Windows message queue
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 function PostMessage(hWnd: HWND; Msg:UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
 
 /// retrieves the current stack trace
@@ -1306,20 +1306,20 @@ function RtlCaptureStackBackTrace(FramesToSkip, FramesToCapture: cardinal;
 function IsDebuggerPresent: BOOL; stdcall;
 
 /// retrieves the current thread ID
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetCurrentThreadId: DWORD; stdcall;
 
 /// retrieves the current process ID
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetCurrentProcessId: DWORD; stdcall;
 
-/// redefined in mormot.core.os to avoid dependency to Windows
+/// redefined in mormot.core.os to avoid dependency to the Windows unit
 function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWORD): DWORD; stdcall;
 
-/// redefined in mormot.core.os to avoid dependency to Windows
+/// redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetEnvironmentStringsW: PWideChar; stdcall;
 
-/// redefined in mormot.core.os to avoid dependency to Windows
+/// redefined in mormot.core.os to avoid dependency to the Windows unit
 function FreeEnvironmentStringsW(EnvBlock: PWideChar): BOOL; stdcall;
 
 /// expand any embedded environment variables, i.e %windir%
@@ -1327,39 +1327,39 @@ function ExpandEnvVars(const aStr: string): string;
 
 /// try to enter a Critical Section (Lock)
 // - returns 1 if the lock was acquired, or 0 if the mutex is already locked
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 // - under Delphi/Windows, directly call the homonymous Win32 API
 function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer; stdcall;
 
 /// enter a Critical Section (Lock)
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 // - under Delphi/Windows, directly call the homonymous Win32 API
 procedure EnterCriticalSection(var cs: TRTLCriticalSection); stdcall;
 
 /// leave a Critical Section (UnLock)
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 // - under Delphi/Windows, directly call the homonymous Win32 API
 procedure LeaveCriticalSection(var cs: TRTLCriticalSection); stdcall;
 
 /// initialize IOCP instance
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 function CreateIoCompletionPort(FileHandle, ExistingCompletionPort: THandle;
   CompletionKey: pointer; NumberOfConcurrentThreads: DWORD): THandle; stdcall;
 
 /// retrieve IOCP instance status
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetQueuedCompletionStatus(CompletionPort: THandle;
   var lpNumberOfBytesTransferred: DWORD; var lpCompletionKey: PtrUInt;
   var lpOverlapped: pointer; dwMilliseconds: DWORD): BOOL; stdcall;
 
 /// trigger a IOCP instance
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 function PostQueuedCompletionStatus(CompletionPort: THandle;
   NumberOfBytesTransferred: DWORD; dwCompletionKey: pointer;
   lpOverlapped: POverlapped): BOOL; stdcall;
 
 /// finalize a Windows resource (e.g. IOCP instance)
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 function CloseHandle(hObject: THandle): BOOL; stdcall;
 
 /// redefined here to avoid warning to include "Windows" in uses clause
@@ -1559,7 +1559,7 @@ type
 
 /// returns the current UTC time as TSystemTime
 // - under Delphi/Windows, directly call the homonymous Win32 API
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 // - you should call directly FPC's version otherwise
 // - warning: do not call this function directly, but use TSynSystemTime as
 // defined in mormot.core.datetime which is really cross-platform
@@ -1593,17 +1593,17 @@ function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
 
 
 const
-  /// redefined here to avoid dependency to Windows or SyncObjs
+  /// redefined here to avoid dependency to the Windows or SyncObjs units
   INFINITE = cardinal(-1);
 
 /// initialize a Critical Section (for Lock/UnLock)
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 // - under Delphi/Windows, directly call the homonymous Win32 API
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// finalize a Critical Section (for Lock/UnLock)
-// - redefined in mormot.core.os to avoid dependency to Windows
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 // - under Delphi/Windows, directly call the homonymous Win32 API
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
@@ -1622,7 +1622,7 @@ var EnterCriticalSection: procedure(var cs: TRTLCriticalSection);
 // - defined in mormot.core.os for inlined FpcCurrentThreadManager call
 var LeaveCriticalSection: procedure(var cs: TRTLCriticalSection);
 
-/// leave a Critical Section (UnLock)
+/// try to acquire and lock a Critical Section (Lock)
 // - returns 1 if the lock was acquired, or 0 if the mutex is already locked
 // - defined in mormot.core.os for inlined FpcCurrentThreadManager call
 var TryEnterCriticalSection: function(var cs: TRTLCriticalSection): integer;
@@ -2780,6 +2780,11 @@ procedure GlobalLock;
 // critical section or TSynLocker - these functions are just here to be
 // convenient, for non time-critical process (e.g. singleton initialization)
 procedure GlobalUnLock;
+
+/// framework will register here some instances to be released eventually
+// - better in this root unit than in each finalization section
+// - its use is protected by the GlobalLock
+function RegisterGlobalShutdownRelease(Instance: TObject): pointer;
 
 
 { ****************** Unix Daemon and Windows Service Support }
@@ -4887,6 +4892,28 @@ begin
   mormot.core.os.LeaveCriticalSection(GlobalCriticalSection);
 end;
 
+var
+  InternalGarbageCollection: record
+    Instances:  TObjectDynArray;
+    Count: integer;
+    Shutdown: boolean; // paranoid check to avoid messing with Instances[]
+  end;
+
+function RegisterGlobalShutdownRelease(Instance: TObject): pointer;
+begin
+  if not InternalGarbageCollection.Shutdown then
+  begin
+    GlobalLock;
+    try
+      with InternalGarbageCollection do
+        ObjArrayAddCount(Instances, Instance, Count);
+    finally
+      GlobalUnLock;
+    end;
+  end;
+  result := Instance;
+end;
+
 function SleepDelay(elapsed: PtrInt): PtrInt;
 begin
   if elapsed < 50 then
@@ -5533,7 +5560,15 @@ end;
 
 
 procedure FinalizeUnit;
+var
+  i: PtrInt;
 begin
+  with InternalGarbageCollection do
+  begin
+    Shutdown := true;
+    for i := Count - 1 downto 0 do
+      FreeAndNilSafe(Instances[i]); // before GlobalCriticalSection deletion
+  end;
   ObjArrayClear(CurrentFakeStubBuffers);
   Executable.Version.Free;
   DeleteCriticalSection(AutoSlotsLock);

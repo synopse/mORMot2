@@ -4666,9 +4666,7 @@ begin
     raise EAlgoCompress.CreateUtf8('%.Create: AlgoID=% already registered by %',
       [self, fAlgoID, existing]);
   ObjArrayAdd(SynCompressAlgos, self);
-  GlobalLock;
   RegisterGlobalShutdownRelease(self);
-  GlobalUnLock;
 end;
 
 class function TAlgoCompress.Algo(const Comp: RawByteString): TAlgoCompress;

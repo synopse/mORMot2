@@ -3628,11 +3628,6 @@ type
   /// dynamic array of timestamps stored as millisecond-based Unix Time
   TUnixMSTimeDynArray = array of TUnixMSTime;
 
-/// framework will register here some instances to be released eventually
-// - better in this main/first/last unit than in each finalization section
-// - this call should be done within a nested GlobalLock/GlobalUnlock section
-function RegisterGlobalShutdownRelease(Instance: TObject): pointer;
-
 
 implementation
 
@@ -10642,39 +10637,8 @@ begin
   TestCpuFeatures;
 end;
 
-var
-  InternalGarbageCollection: record
-    Instances:  TObjectDynArray;
-    Count: integer;
-    Shutdown: boolean; // paranoid check to avoid messing with Instances[]
-  end;
-
-function RegisterGlobalShutdownRelease(Instance: TObject): pointer;
-begin
-  with InternalGarbageCollection do
-    if not Shutdown then
-      ObjArrayAddCount(Instances, Instance, Count);
-  result := Instance;
-end;
-
-procedure FinalizeUnit;
-var
-  i: PtrInt;
-begin
-  with InternalGarbageCollection do
-  begin
-    Shutdown := true;
-    for i := Count - 1 downto 0 do
-      FreeAndNilSafe(Instances[i]);
-  end;
-end;
-
-
 initialization
   InitializeUnit;
-
-finalization
-  FinalizeUnit;
 
 end.
 

@@ -644,7 +644,7 @@ begin
 end;
 
 // computes result = Product mod Curve_P_32
-// from http://www.nsa.gov/ia/_files/nist-routines.pdf
+// from NIST https://tinyurl.com/3p5mt8kr
 procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
 var
   carry: PtrInt;
