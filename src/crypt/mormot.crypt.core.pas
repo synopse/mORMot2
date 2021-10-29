@@ -6795,10 +6795,7 @@ begin
   GlobalLock;
   try
     if MainAesPrng = nil then
-    begin
-      MainAesPrng := TAesPrng.Create;
-      RegisterGlobalShutdownRelease(MainAesPrng);
-    end;
+      MainAesPrng := RegisterGlobalShutdownRelease(TAesPrng.Create);
   finally
     GlobalUnLock;
   end;
@@ -7046,10 +7043,7 @@ begin
     GlobalLock;
     try
       if MainAesPrngSystem = nil then
-      begin
-        MainAesPrngSystem := TSystemPrng.Create;
-        RegisterGlobalShutdownRelease(MainAesPrngSystem);
-      end;
+        MainAesPrngSystem := RegisterGlobalShutdownRelease(TSystemPrng.Create);
     finally
       GlobalUnLock;
     end;

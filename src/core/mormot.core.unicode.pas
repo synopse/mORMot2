@@ -2613,8 +2613,8 @@ begin
       result := TSynAnsiFixedWidth.Create(aCodePage)
     else
       result := TSynAnsiConvert.Create(aCodePage);
-    ObjArrayAdd(SynAnsiConvertList, result);
     RegisterGlobalShutdownRelease(result);
+    ObjArrayAdd(SynAnsiConvertList, result);
     AddWord(SynAnsiConvertListCodePage, SynAnsiConvertListCount, aCodePage);
   finally
     GlobalUnLock;

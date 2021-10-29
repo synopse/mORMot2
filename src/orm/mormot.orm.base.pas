@@ -4172,11 +4172,9 @@ begin
     GlobalLock;
     try
       if OrmPropInfoRegistration = nil then
-      begin
-        OrmPropInfoRegistration := TSynDictionary.Create(
-          TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArray));
-        RegisterGlobalShutdownRelease(OrmPropInfoRegistration);
-      end;
+        OrmPropInfoRegistration := RegisterGlobalShutdownRelease(
+          TSynDictionary.Create(
+            TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArray)));
     finally
       GlobalUnLock;
     end;

@@ -5550,10 +5550,8 @@ begin
     GlobalLock;
     try
       if SharedSynTimeZone = nil then
-      begin
-        SharedSynTimeZone := TSynTimeZone.CreateDefault;
-        RegisterGlobalShutdownRelease(SharedSynTimeZone);
-      end;
+        SharedSynTimeZone :=
+          RegisterGlobalShutdownRelease(TSynTimeZone.CreateDefault);
     finally
       GlobalUnLock;
     end;

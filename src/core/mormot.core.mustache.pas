@@ -1240,9 +1240,8 @@ begin
     GlobalLock;
     try
       if SynMustacheCache = nil then
-        SynMustacheCache := TSynMustacheCache.CreateEx(
-          [fObjectsOwned, fNoDuplicate, fCaseSensitive]);
-      RegisterGlobalShutdownRelease(SynMustacheCache);
+        SynMustacheCache := RegisterGlobalShutdownRelease(
+          TSynMustacheCache.CreateEx([fObjectsOwned, fNoDuplicate, fCaseSensitive]));
     finally
       GlobalUnLock;
     end;

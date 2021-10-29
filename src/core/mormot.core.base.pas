@@ -3631,7 +3631,7 @@ type
 /// framework will register here some instances to be released eventually
 // - better in this main/first/last unit than in each finalization section
 // - this call should be done within a nested GlobalLock/GlobalUnlock section
-procedure RegisterGlobalShutdownRelease(Instance: TObject);
+function RegisterGlobalShutdownRelease(Instance: TObject): pointer;
 
 
 implementation
@@ -10644,16 +10644,17 @@ end;
 
 var
   InternalGarbageCollection: record
-    Instances:  array of TObject;
+    Instances:  TObjectDynArray;
     Count: integer;
     Shutdown: boolean; // paranoid check to avoid messing with Instances[]
   end;
 
-procedure RegisterGlobalShutdownRelease(Instance: TObject);
+function RegisterGlobalShutdownRelease(Instance: TObject): pointer;
 begin
   with InternalGarbageCollection do
     if not Shutdown then
       ObjArrayAddCount(Instances, Instance, Count);
+  result := Instance;
 end;
 
 procedure FinalizeUnit;

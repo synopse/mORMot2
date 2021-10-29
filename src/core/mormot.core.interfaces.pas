@@ -3615,11 +3615,9 @@ procedure InitializeInterfaceFactoryCache;
 begin
   GlobalLock;
   try
-    if InterfaceFactoryCache = nil then
-    begin // paranoid thread-safety
-      InterfaceFactoryCache := TSynObjectListLocked.Create;
-      RegisterGlobalShutdownRelease(InterfaceFactoryCache);
-    end;
+    if InterfaceFactoryCache = nil then // paranoid thread-safety
+      InterfaceFactoryCache :=
+        RegisterGlobalShutdownRelease(TSynObjectListLocked.Create);
   finally
     GlobalUnLock;
   end;

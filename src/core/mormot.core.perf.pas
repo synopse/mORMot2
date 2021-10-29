@@ -2678,10 +2678,8 @@ begin
     GlobalLock; // paranoid thread-safety
     try
       if ProcessSystemUse = nil then
-      begin
-        ProcessSystemUse := TSystemUse.Create(60);
-        RegisterGlobalShutdownRelease(ProcessSystemUse);
-      end;
+        ProcessSystemUse := RegisterGlobalShutdownRelease(
+          TSystemUse.Create(60));
     finally
       GlobalUnLock;
     end;

@@ -671,10 +671,7 @@ begin
   GlobalLock;
   try
     if MainAesPrngOsl = nil then
-    begin
-      MainAesPrngOsl := TAesPrngOsl.Create;
-      RegisterGlobalShutdownRelease(MainAesPrngOsl);
-    end;
+      MainAesPrngOsl := RegisterGlobalShutdownRelease(TAesPrngOsl.Create);
   finally
     GlobalUnLock;
   end;
