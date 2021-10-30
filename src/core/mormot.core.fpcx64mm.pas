@@ -49,10 +49,11 @@ unit mormot.core.fpcx64mm;
 // - try to enable it if unexpected SmallGetmemSleepCount/SmallFreememSleepCount
 // and SleepCount/SleepCycles contentions are reported by CurrentHeapStatus;
 // - tiny blocks will be <= 256 bytes (instead of 128 bytes);
-// - will use 2x (FPCMM_BOOST) or 4x (FPCMM_BOOSTER) more tiny blocks arenas;
+// - FPCMM_BOOSTER will use 2x more tiny blocks arenas - likely to be wasteful;
 // - will enable FPCMM_SMALLNOTWITHMEDIUM trying to reduce medium sleeps;
 // - warning: depending on the workload and hardware, it may actually be slower,
-// and will consume more RAM: consider FPCMM_SERVER as a fair alternative.
+// triggering more Meidum arena contention, and consuming more RAM: consider
+// FPCMM_SERVER as a fair alternative.
 {.$define FPCMM_BOOST}
 {.$define FPCMM_BOOSTER}
 
@@ -598,15 +599,15 @@ const
   // (sometimes) the more arenas, the better multi-threadable
   {$ifdef FPCMM_BOOSTER}
   NumTinyBlockTypesPO2  = 4;
-  NumTinyBlockArenasPO2 = 5; // will probably end up with Medium lock contention
+  NumTinyBlockArenasPO2 = 4; // will probably end up with Medium lock contention
   {$else}
     {$ifdef FPCMM_BOOST}
     NumTinyBlockTypesPO2  = 4; // tiny are <= 256 bytes
-    NumTinyBlockArenasPO2 = 4; // 16 + 1 arenas
+    NumTinyBlockArenasPO2 = 3; // 8 arenas
     {$else}
     // default (or FPCMM_SERVER) settings
     NumTinyBlockTypesPO2  = 3; // multiple arenas for tiny blocks <= 128 bytes
-    NumTinyBlockArenasPO2 = 3; // 8 round-robin arenas + 1 main by default
+    NumTinyBlockArenasPO2 = 3; // 8 round-robin arenas (including main) by default
     {$endif FPCMM_BOOST}
   {$endif FPCMM_BOOSTER}
 
@@ -618,7 +619,7 @@ const
     880, 960, 1056, 1152, 1264, 1376, 1504, 1648, 1808, 1984, 2176, 2384,
     MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize);
   NumTinyBlockTypes = 1 shl NumTinyBlockTypesPO2;
-  NumTinyBlockArenas = 1 shl NumTinyBlockArenasPO2;
+  NumTinyBlockArenas = (1 shl NumTinyBlockArenasPO2) - 1; // -1 = main Small[]
   NumSmallInfoBlock = NumSmallBlockTypes + NumTinyBlockArenas * NumTinyBlockTypes;
   SmallBlockGranularity = 16;
   TargetSmallBlocksPerPool = 48;
@@ -1220,31 +1221,33 @@ asm
 @LockTinyBlockTypeLoop:
         // Round-Robin attempt to lock of SmallBlockInfo.Tiny[]
         // -> fair distribution among calls to reduce thread contention
-        mov     edx, NumTinyBlockArenas
+        mov     edx, NumTinyBlockArenas + 1
 @TinyBlockArenaLoop:
         mov     eax, SizeOf(TTinyBlockTypes)
   lock  xadd    dword ptr [r8 + TSmallBlockInfo.TinyCurrentArena], eax
-        and     eax, (NumTinyBlockArenas * SizeOf(TTinyBlockTypes)) - 1
-        add     rax, rcx
-        lea     rbx, [r8 + rax].TSmallBlockInfo.Tiny
+        lea     rbx, [r8 + rcx]
+        and     eax, ((NumTinyBlockArenas + 1) * SizeOf(TTinyBlockTypes)) - 1
+        jz      @TinySmall // Arena 0 = TSmallBlockInfo.Small
+	lea	rbx, [rax + rbx + TSmallBlockInfo.Tiny - SizeOf(TTinyBlockTypes)]
+@TinySmall:
         mov     eax, $100
-        cmp     [rbx].TSmallBlockType.Locked, ah
-        je      @NextTinyBlockArena
+        cmp     byte ptr [rbx].TSmallBlockType.Locked, 0
+        jnz     @NextTinyBlockArena1
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
-@NextTinyBlockArena:
+@NextTinyBlockArena1:
         dec     edx
         jnz     @TinyBlockArenaLoop
-        // Also try the default SmallBlockInfo.Small[] and its next size
-        lea     rbx, [r8 + rcx]
+        // Fallback to SmallBlockInfo.Small[] next 2 small sizes - never occurs
+        lea     rbx, [r8 + rcx + TSmallBlockInfo.Small + SizeOf(TSmallBlockType)]
         mov     eax, $100
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
-        add     rbx, SizeOf(TSmallBlockType)
+        add     rbx, SizeOf(TSmallBlockType) // next two small sizes
         mov     eax, $100
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
-        // Thread Contention (occurs much less than during _Freemem)
+        // Thread Contention (_Freemem is more likely)
         {$ifdef FPCMM_DEBUG} lock {$endif}
         inc     dword ptr [rbx].TSmallBlockType.GetmemSleepCount
         push    r8
@@ -1269,18 +1272,27 @@ asm
 @LockBlockTypeLoop:
         // Grab the default block type
         mov     eax, $100
+        cmp     byte ptr [rbx].TSmallBlockType.Locked, 0
+        jnz     @NextLockBlockType1
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
         // Try up to two next sizes
-        add     rbx, SizeOf(TSmallBlockType)
         mov     eax, $100
+@NextLockBlockType1:
+        add     rbx, SizeOf(TSmallBlockType)
+        cmp     byte ptr [rbx].TSmallBlockType.Locked, al
+        jnz     @NextLockBlockType2
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
+        mov     eax, $100
+@NextLockBlockType2:
+        add     rbx, SizeOf(TSmallBlockType)
         pause
-        add     rbx, SizeOf(TSmallBlockType)
-        mov     eax, $100
+        cmp     byte ptr [rbx].TSmallBlockType.Locked, al
+        jnz     @NextLockBlockType3
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
+@NextLockBlockType3:
         sub     rbx, 2 * SizeOf(TSmallBlockType)
         {$ifdef FPCMM_PAUSE}
         pause
@@ -1289,10 +1301,10 @@ asm
         shl     rdx, 32
         or      rax, rdx
         cmp     rax, r9
-        jb      @LockBlockTypeLoop // no timeout yet
+        jb      @LockBlockTypeLoop // continue spinning until timeout
         {$else}
         dec     r9
-        jnz     @LockBlockTypeLoop // no timeout yet
+        jnz     @LockBlockTypeLoop // continue until spin count reached
         {$endif FPCMM_SLEEPTSC}
         {$endif FPCMM_PAUSE}
         // Block type and two sizes larger are all locked - give up and sleep
