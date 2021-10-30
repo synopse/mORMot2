@@ -973,6 +973,9 @@ type
     /// append some wide chars to the buffer in one line
     // - will write #0..#31 chars as spaces (so content will stay on the same line)
     procedure AddOnSameLineW(P: PWord; Len: PtrInt);
+    /// append some VCL/LCL string to the buffer in one line
+    // - will write #0..#31 chars as spaces (so content will stay on the same line)
+    procedure AddOnSameLineString(const Text: string);
     /// append an UTF-8 String, with no JSON escaping
     procedure AddString(const Text: RawUtf8);
     /// append several UTF-8 strings
@@ -5790,6 +5793,15 @@ begin
       inc(B, Utf16CharToUtf8(B + 1, P));
     end;
   end;
+end;
+
+procedure TBaseWriter.AddOnSameLineString(const Text: string);
+begin
+  {$ifdef UNICODE}
+  AddOnSameLineW(pointer(Text), length(Text));
+  {$else}
+  AddOnSameLine(pointer(Text), length(Text));
+  {$endif UNICODE}
 end;
 
 procedure TBaseWriter.AddTrimLeftLowerCase(Text: PShortString);
