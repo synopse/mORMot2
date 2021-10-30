@@ -296,8 +296,8 @@ type
 /// retrieve the use counts of allocated small blocks
 // - returns maxcount biggest results, sorted by "orderby" field occurence
 function GetSmallBlockStatus(maxcount: integer = 10;
-  orderby: TSmallBlockOrderBy = obTotal; count: PPtrUInt = nil;
-  bytes: PPtrUInt = nil): TSmallBlockStatusDynArray;
+  orderby: TSmallBlockOrderBy = obTotal; count: PPtrUInt = nil; bytes: PPtrUInt = nil;
+  small: PCardinal = nil; tiny: PCardinal = nil): TSmallBlockStatusDynArray;
 
 /// retrieve all small blocks which suffered from blocking during multi-thread
 // - returns maxcount biggest results, sorted by SleepCount occurence
@@ -2532,16 +2532,19 @@ begin
     until L >= R;
 end;
 
-procedure SetSmallBlockStatus(var res: TResArray);
+procedure SetSmallBlockStatus(var res: TResArray; out small, tiny: cardinal);
 var
   i, a: integer;
   p: PSmallBlockType;
   d: ^TSmallBlockStatus;
 begin
+  small := 0;
+  tiny := 0;
   d := @res;
   p := @SmallBlockInfo;
   for i := 1 to NumSmallBlockTypes do
   begin
+    inc(small, ord(p^.GetmemCount <> 0));
     d^.Total := p^.GetmemCount;
     d^.Current := p^.GetmemCount - p^.FreememCount;
     d^.BlockSize := p^.BlockSize;
@@ -2553,6 +2556,7 @@ begin
     d := @res; // aggregate counters
     for i := 1 to NumTinyBlockTypes do
     begin
+      inc(tiny, ord(p^.GetmemCount <> 0));
       inc(d^.Total, p^.GetmemCount);
       inc(d^.Current, p^.GetmemCount - p^.FreememCount);
       inc(d);
@@ -2671,6 +2675,7 @@ var
   res: TResArray; // no heap allocation involved
   i, n, smallcount: PtrInt;
   t, b: PtrUInt;
+  small, tiny: cardinal;
 begin
   if context[0] <> #0 then
     writeln(context);
@@ -2711,9 +2716,11 @@ begin
   end;
   if smallblockstatuscount > 0 then
   begin
-    SetSmallBlockStatus(res);
+    SetSmallBlockStatus(res, small, tiny);
     n := SortSmallBlockStatus(res, smallblockstatuscount, ord(obTotal), @t, @b) - 1;
-    writeln(' Small Blocks since beginning: ', K(t), '/', K(b), 'B');
+    writeln(' Small Blocks since beginning: ', K(t), '/', K(b),
+            'B (as small=', K(small), '/', NumSmallBlockTypes,
+            ' tiny=', K(tiny), '/', NumTinyBlockArenas * NumTinyBlockTypes, ')');
     for i := 0 to n do
       with TSmallBlockStatus(res[i]) do
       begin
@@ -2737,16 +2744,21 @@ end;
 
 {$I+}
 
-function GetSmallBlockStatus(maxcount: integer;
-  orderby: TSmallBlockOrderBy; count, bytes: PPtrUInt): TSmallBlockStatusDynArray;
+function GetSmallBlockStatus(maxcount: integer; orderby: TSmallBlockOrderBy;
+  count, bytes: PPtrUInt; small, tiny: PCardinal): TSmallBlockStatusDynArray;
 var
   res: TResArray;
+  sm, ti: cardinal;
 begin
   assert(SizeOf(TRes) = SizeOf(TSmallBlockStatus));
   result := nil;
   if maxcount <= 0 then
     exit;
-  SetSmallBlockStatus(res);
+  SetSmallBlockStatus(res, sm, ti);
+  if small <> nil then
+    small^ := sm;
+  if tiny <> nil then
+    tiny^ := ti;
   maxcount := SortSmallBlockStatus(res, maxcount, ord(orderby), count, bytes);
   if maxcount = 0 then
     exit;
