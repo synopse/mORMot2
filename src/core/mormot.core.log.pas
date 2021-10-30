@@ -5036,67 +5036,6 @@ begin
     LogFileInit;
 end;
 
-{$ifdef FPC_X64MM}
-// include mormot.core.fpcx64mm information
-
-procedure WriteArena(W: TBaseWriter; const name: shortstring;
-  const a: TMMStatusArena);
-begin
-  {$ifdef FPCMM_DEBUG}
-  W.Add('  %: %=%/%=% peak=% sleep=% ',
-    [name, K(a.CumulativeAlloc - a.CumulativeFree), KBNoSpace(a.CurrentBytes),
-     K(a.CumulativeAlloc), KBNoSpace(a.CumulativeBytes),
-     KBNoSpace(a.PeakBytes), K(a.SleepCount)]);
-  {$else}
-  W.Add(' %: %/% sleep=% ', [name, KBNoSpace(a.CurrentBytes),
-    KBNoSpace(a.CumulativeBytes), K(a.SleepCount)]);
-  {$endif FPCMM_DEBUG}
-end;
-
-procedure WriteX64MM(W: TBaseWriter);
-var
-  s: TMMStatus;
-  cont: TSmallBlockContentionDynArray;
-  small: TSmallBlockStatusDynArray;
-  sc, sb: PtrUInt;
-  i: PtrInt;
-begin
-  W.AddShort(FPCMM_FLAGS);
-  s := CurrentHeapStatus;
-  small := GetSmallBlockStatus(10, obTotal, @sc, @sb);
-  W.Add('  Small: %=%/%=%',
-    [K(s.SmallBlocks), KBNoSpace(s.SmallBlocksSize), K(sc), KBNoSpace(sb)]);
-  for i := 0 to high(small) do
-    with small[i] do
-    W.Add(' %:%=%/%=%', [BlockSize, K(Current),
-      KBNoSpace(Current * BlockSize), K(Total), KBNoSpace(Total * BlockSize)]);
-  WriteArena(W, 'Medium', s.Medium);
-  WriteArena(W, 'Large', s.Large);
-  W.Add('  Sleep: count=% ', [K(s.SleepCount)]);
-  {$ifdef FPCMM_DEBUG}
-  {$ifdef FPCMM_SLEEPTSC}
-  W.Add(' rdtsc=%', [K(s.SleepCycles)]);
-  {$endif FPCMM_SLEEPTSC}
-  {$ifdef FPCMM_LOCKLESSFREE}
-  W.Add(' locklessspin=%', [K(s.SmallFreememLockLessSpin)]);
-  {$endif FPCMM_LOCKLESSFREE}
-  {$endif FPCMM_DEBUG}
-  W.Add(' getmem=% freemem=%',
-    [K(s.SmallGetmemSleepCount), K(s.SmallFreememSleepCount)]);
-  if s.SmallGetmemSleepCount + s.SmallFreememSleepCount > 1000 then
-  begin
-    cont := GetSmallBlockContention(8);
-    for i := 0 to high(cont) do
-      with cont[i] do
-        if GetmemBlockSize > 0 then
-          W.Add(' getmem(%)=%', [GetmemBlockSize, K(SleepCount)])
-        else
-          W.Add(' freemem(%)=%', [FreememBlockSize, K(SleepCount)])
-  end;
-end;
-
-{$endif FPC_X64MM}
-
 procedure TSynLog.AddMemoryStats;
 var
   info: TMemoryInfo; // cross-compiler and cross-platform
@@ -5108,7 +5047,9 @@ begin
        KBNoSpace(info.filetotal), KBNoSpace(info.filefree),
        KBNoSpace(info.allocreserved), KBNoSpace(info.allocused)]);
   {$ifdef FPC_X64MM}
-  WriteX64MM(fWriter);
+  // include mormot.core.fpcx64mm raw information
+  fWriter.AddNoJsonEscapeString(GetHeapStatus(
+    ' - fpcx64mm', 16, 16, {flags=}true, {sameline=}true));
   {$endif FPC_X64MM}
   fWriter.AddShorter('   ');
 end;

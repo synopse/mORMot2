@@ -313,6 +313,13 @@ procedure WriteHeapStatus(const context: shortstring = '';
   smallblockstatuscount: integer = 8; smallblockcontentioncount: integer = 8;
   compilationflags: boolean = false);
 
+/// convenient debugging function into a string
+// - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
+// up to the smallblockcontentioncount biggest occurences
+function GetHeapStatus(const context: shortstring; smallblockstatuscount,
+  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
+
+
 const
   /// human readable information about how our MM was built
   // - similar to WriteHeapStatus(compilationflags=true) output
@@ -2665,49 +2672,64 @@ begin
     result := result + tmp^;
 end;
 
-{$I-}
-
-procedure WriteHeapStatusDetail(const arena: TMMStatusArena;
-  const name: shortstring);
+function S(i: PtrUInt): shortstring;
 begin
-  write(name, K(arena.CurrentBytes):4,
-    'B/', K(arena.CumulativeBytes), 'B ');
-  {$ifdef FPCMM_DEBUG}
-  write('   peak=', K(arena.PeakBytes),
-      'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
-         ' alloc=', K(arena.CumulativeAlloc),
-          ' free=', K(arena.CumulativeFree));
-  {$endif FPCMM_DEBUG}
-  writeln(' sleep=', K(arena.SleepCount));
+  str(i, result);
 end;
 
-procedure WriteHeapStatus(const context: shortstring; smallblockstatuscount,
-  smallblockcontentioncount: integer; compilationflags: boolean);
+function GetHeapStatus(const context: shortstring; smallblockstatuscount,
+  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
 var
   res: TResArray; // no heap allocation involved
   i, n, smallcount: PtrInt;
   t, b: PtrUInt;
   small, tiny: cardinal;
+
+  procedure Wr(const V: array of ShortString; CRLF: boolean = true);
+  var
+    i: PtrInt;
+  begin // we don't have format() nor formatutf8() -> this is good enough
+    for i := 0 to high(V) do
+      result := result + string(V[i]); // fast enough
+    if CRLF and not onsameline then
+      result := result + #13#10;
+  end;
+
+  procedure WriteHeapStatusDetail(const arena: TMMStatusArena;
+    const name: shortstring);
+  begin
+    Wr([name, K(arena.CurrentBytes),
+      'B/', K(arena.CumulativeBytes), 'B '], {crlf=}false);
+    {$ifdef FPCMM_DEBUG}
+    Wr(['   peak=', K(arena.PeakBytes),
+      'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
+         ' alloc=', K(arena.CumulativeAlloc),
+          ' free=', K(arena.CumulativeFree)], false);
+    {$endif FPCMM_DEBUG}
+    Wr([' sleep=', K(arena.SleepCount)]);
+  end;
+
 begin
+  result := '';
   if context[0] <> #0 then
-    writeln(context);
+    Wr([context]);
   if compilationflags then
-    writeln(' Flags:' + FPCMM_FLAGS);
+    Wr([' Flags:' + FPCMM_FLAGS]);
   with CurrentHeapStatus do
   begin
-    writeln(' Small:  blocks=', K(SmallBlocks), ' size=', K(SmallBlocksSize),
-      'B (part of Medium arena)');
+    Wr([' Small:  blocks=', K(SmallBlocks),
+                  ' size=', K(SmallBlocksSize), 'B (part of Medium arena)']);
     WriteHeapStatusDetail(Medium, ' Medium: ');
     WriteHeapStatusDetail(Large,  ' Large:  ');
     if SleepCount <> 0 then
-      writeln(' Total Sleep: count=', K(SleepCount)
-        {$ifdef FPCMM_SLEEPTSC} , ' rdtsc=', K(SleepCycles) {$endif});
+      Wr([' Total Sleep: count=', K(SleepCount)
+        {$ifdef FPCMM_SLEEPTSC} , ' rdtsc=', K(SleepCycles) {$endif}]);
     smallcount := SmallGetmemSleepCount + SmallFreememSleepCount;
     if smallcount <> 0 then
-      writeln(' Small Sleep: getmem=', K(SmallGetmemSleepCount),
-        ' freemem=', K(SmallFreememSleepCount)
+      Wr([' Small Sleep: getmem=', K(SmallGetmemSleepCount),
+                      ' freemem=', K(SmallFreememSleepCount)
         {$ifdef FPCMM_LOCKLESSFREE} {$ifdef FPCMM_DEBUG} ,
-        '  locklessspin=', K(SmallFreememLockLessSpin) {$endif} {$endif} );
+        '  locklessspin=', K(SmallFreememLockLessSpin) {$endif} {$endif}]);
   end;
   if (smallblockcontentioncount > 0) and
      (smallcount <> 0) then
@@ -2717,44 +2739,52 @@ begin
       with TSmallBlockContention(res[i]) do
       begin
         if GetmemBlockSize <> 0 then
-          write('  getmem(', GetmemBlockSize)
+          Wr(['  getmem(', S(GetmemBlockSize)], {crlf=}false)
         else
-          write('  freemem(', FreememBlockSize);
-        write(')=' , K(SleepCount));
+          Wr(['  freemem(', S(FreememBlockSize)], false);
+        Wr([')=' , K(SleepCount)], false);
         if (i and 3 = 3) or
            (i = n - 1) then
-          writeln;
+          Wr([]);
       end;
   end;
   if smallblockstatuscount > 0 then
   begin
     SetSmallBlockStatus(res, small, tiny);
     n := SortSmallBlockStatus(res, smallblockstatuscount, ord(obTotal), @t, @b) - 1;
-    writeln(' Small Blocks since beginning: ', K(t), '/', K(b),
-            'B (as small=', K(small), '/', NumSmallBlockTypes,
-            ' tiny=', K(tiny), '/', NumTinyBlockArenas * NumTinyBlockTypes, ')');
+    Wr([' Small Blocks since beginning: ', K(t), '/', K(b),
+        'B (as small=', K(small), '/', S(NumSmallBlockTypes),
+        ' tiny=', K(tiny), '/', S(NumTinyBlockArenas * NumTinyBlockTypes), ')']);
     for i := 0 to n do
       with TSmallBlockStatus(res[i]) do
       begin
-        write('  ', BlockSize, '=', K(Total));
+        Wr(['  ', S(BlockSize), '=', K(Total)], false);
         if (i and 7 = 7) or
            (i = n) then
-          writeln;
+          Wr([]);
       end;
     n := SortSmallBlockStatus(res, smallblockstatuscount, ord(obCurrent), @t, @b) - 1;
-    writeln(' Small Blocks current: ', K(t), '/', K(b), 'B');
+    Wr([' Small Blocks current: ', K(t), '/', K(b), 'B']);
     for i := 0 to n do
       with TSmallBlockStatus(res[i]) do
       begin
-        write('  ', BlockSize, '=', K(Current));
+        Wr(['  ', S(BlockSize), '=', K(Current)], false);
         if (i and 7 = 7) or
            (i = n) then
-          writeln;
+          Wr([]);
       end;
   end;
 end;
 
-{$I+}
+procedure WriteHeapStatus(const context: shortstring; smallblockstatuscount,
+  smallblockcontentioncount: integer; compilationflags: boolean);
+begin
+  {$I-}
+  writeln(GetHeapStatus(context,
+    smallblockstatuscount, smallblockcontentioncount, compilationflags, false));
+  ioresult;
+  {$I+}
+end;
 
 function GetSmallBlockStatus(maxcount: integer; orderby: TSmallBlockOrderBy;
   count, bytes: PPtrUInt; small, tiny: PCardinal): TSmallBlockStatusDynArray;
