@@ -316,6 +316,7 @@ procedure WriteHeapStatus(const context: shortstring = '';
 /// convenient debugging function into a string
 // - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
 // up to the smallblockcontentioncount biggest occurences
+// - warning: this function is not thread-safe
 function GetHeapStatus(const context: shortstring; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
 
@@ -2677,40 +2678,34 @@ begin
   str(i, result);
 end;
 
-function GetHeapStatus(const context: shortstring; smallblockstatuscount,
-  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
+type
+  // allow to write into a temp string or the console
+  TGetHeapStatusWrite =
+    procedure(const V: array of ShortString; CRLF: boolean = true);
+
+procedure WriteHeapStatusDetail(const arena: TMMStatusArena;
+  const name: shortstring; Wr: TGetHeapStatusWrite);
+begin
+  Wr([name, K(arena.CurrentBytes),
+    'B/', K(arena.CumulativeBytes), 'B '], {crlf=}false);
+  {$ifdef FPCMM_DEBUG}
+  Wr(['   peak=', K(arena.PeakBytes),
+    'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
+       ' alloc=', K(arena.CumulativeAlloc),
+        ' free=', K(arena.CumulativeFree)], false);
+  {$endif FPCMM_DEBUG}
+  Wr([' sleep=', K(arena.SleepCount)]);
+end;
+
+procedure ComputeHeapStatus(const context: shortstring; smallblockstatuscount,
+  smallblockcontentioncount: integer; compilationflags: boolean;
+  Wr: TGetHeapStatusWrite);
 var
   res: TResArray; // no heap allocation involved
   i, n, smallcount: PtrInt;
   t, b: PtrUInt;
   small, tiny: cardinal;
-
-  procedure Wr(const V: array of ShortString; CRLF: boolean = true);
-  var
-    i: PtrInt;
-  begin // we don't have format() nor formatutf8() -> this is good enough
-    for i := 0 to high(V) do
-      result := result + string(V[i]); // fast enough
-    if CRLF and not onsameline then
-      result := result + #13#10;
-  end;
-
-  procedure WriteHeapStatusDetail(const arena: TMMStatusArena;
-    const name: shortstring);
-  begin
-    Wr([name, K(arena.CurrentBytes),
-      'B/', K(arena.CumulativeBytes), 'B '], {crlf=}false);
-    {$ifdef FPCMM_DEBUG}
-    Wr(['   peak=', K(arena.PeakBytes),
-      'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
-         ' alloc=', K(arena.CumulativeAlloc),
-          ' free=', K(arena.CumulativeFree)], false);
-    {$endif FPCMM_DEBUG}
-    Wr([' sleep=', K(arena.SleepCount)]);
-  end;
-
 begin
-  result := '';
   if context[0] <> #0 then
     Wr([context]);
   if compilationflags then
@@ -2719,8 +2714,8 @@ begin
   begin
     Wr([' Small:  blocks=', K(SmallBlocks),
                   ' size=', K(SmallBlocksSize), 'B (part of Medium arena)']);
-    WriteHeapStatusDetail(Medium, ' Medium: ');
-    WriteHeapStatusDetail(Large,  ' Large:  ');
+    WriteHeapStatusDetail(Medium, ' Medium: ', Wr);
+    WriteHeapStatusDetail(Large,  ' Large:  ', Wr);
     if SleepCount <> 0 then
       Wr([' Total Sleep: count=', K(SleepCount)
         {$ifdef FPCMM_SLEEPTSC} , ' rdtsc=', K(SleepCycles) {$endif}]);
@@ -2776,14 +2771,48 @@ begin
   end;
 end;
 
+var
+  WrStrTemp: string; // we don't require thread safety here
+  WrStrOnSameLine: boolean;
+
+procedure WrStr(const V: array of ShortString; CRLF: boolean);
+var
+  i: PtrInt;
+begin // we don't have format() nor formatutf8() -> this is good enough
+  for i := 0 to high(V) do
+    WrStrTemp := WrStrTemp + string(V[i]); // fast enough
+  if CRLF and not WrStrOnSameLine then
+    WrStrTemp := WrStrTemp + #13#10;
+end;
+
+function GetHeapStatus(const context: shortstring; smallblockstatuscount,
+  smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
+begin
+  WrStrOnSameLine := onsameline;
+  ComputeHeapStatus(context, smallblockstatuscount, smallblockcontentioncount,
+    compilationflags, WrStr);
+  result := WrStrTemp;
+  WrStrTemp := '';
+end;
+
+procedure WrConsole(const V: array of ShortString; CRLF: boolean);
+var
+  i: PtrInt;
+begin // direct write to the console with no memory heap allocation
+  {$I-}
+  for i := 0 to high(V) do
+    write(V[i]);
+  if CRLF then
+    writeln;
+  ioresult;
+  {$I+}
+end;
+
 procedure WriteHeapStatus(const context: shortstring; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags: boolean);
 begin
-  {$I-}
-  writeln(GetHeapStatus(context,
-    smallblockstatuscount, smallblockcontentioncount, compilationflags, false));
-  ioresult;
-  {$I+}
+  ComputeHeapStatus(context,  smallblockstatuscount, smallblockcontentioncount,
+    compilationflags, WrConsole);
 end;
 
 function GetSmallBlockStatus(maxcount: integer; orderby: TSmallBlockOrderBy;
