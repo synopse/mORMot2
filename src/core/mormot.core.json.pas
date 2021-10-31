@@ -1968,7 +1968,7 @@ function RecordSaveJson(const Rec; TypeInfo: PRttiInfo;
 // - is just a wrapper around TTextWriter.AddDynArrayJson(), creating
 // a temporary TDynArray wrapper on the stack
 // - to be used e.g. for custom record JSON serialization, within a
-// TDynArrayJsonCustomWriter callback or RegisterCustomJsonSerializerFromText()
+// TDynArrayJsonCustomWriter callback or Rtti.RegisterFromText()
 // (following EnumSetsAsText optional parameter for nested enumerates and sets)
 function DynArraySaveJson(const Value; TypeInfo: PRttiInfo;
   EnumSetsAsText: boolean = false): RawUtf8;
@@ -1978,7 +1978,7 @@ function DynArraySaveJson(const Value; TypeInfo: PRttiInfo;
 // - is just a wrapper around TTextWriter.AddDynArrayJson(), creating
 // a temporary TDynArray wrapper on the stack
 // - to be used e.g. for custom record JSON serialization, within a
-// TDynArrayJsonCustomWriter callback or RegisterCustomJsonSerializerFromText()
+// TDynArrayJsonCustomWriter callback or Rtti.RegisterFromText()
 function DynArrayBlobSaveJson(TypeInfo: PRttiInfo; BlobValue: pointer): RawUtf8;
 
 /// wrapper to serialize a T*ObjArray dynamic array as JSON
