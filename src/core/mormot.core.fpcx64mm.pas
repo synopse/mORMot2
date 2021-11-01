@@ -382,7 +382,7 @@ implementation
   - Large blocks have one giant lock over mmap/virtualalloc system calls;
   - SwitchToThread/FpNanoSleep OS call is done after initial spinning;
   - FPCMM_LOCKLESSFREE reduces Freemem() thread contention;
-  - FPCMM_DEBUG / WriteHeapStatus can identify the lock contention(s).
+  - FPCMM_DEBUG / WriteHeapStatus helps identifying the lock contention(s).
 
 }
 
@@ -2719,7 +2719,9 @@ begin
     if SleepCount <> 0 then
       Wr([' Total Sleep: count=', K(SleepCount)
         {$ifdef FPCMM_SLEEPTSC} , ' rdtsc=', K(SleepCycles) {$endif}]);
-    smallcount := SmallGetmemSleepCount + SmallFreememSleepCount;
+    smallcount := SmallGetmemSleepCount + SmallFreememSleepCount
+      {$ifdef FPCMM_LOCKLESSFREE} {$ifdef FPCMM_DEBUG}
+       + SmallFreememLockLessSpin {$endif} {$endif};
     if smallcount <> 0 then
       Wr([' Small Sleep: getmem=', K(SmallGetmemSleepCount),
                       ' freemem=', K(SmallFreememSleepCount)
