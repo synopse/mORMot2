@@ -5218,7 +5218,6 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         mov     rax, qword ptr [rip + AESNIHASHKEYSCHED]
         pshufhw xmm0, xmm0, 00H
         shl     r10, 4
-        movdqa  xmm1, xmm0
         pxor    xmm0, dqword ptr [rax]
         movups  xmm1, dqword ptr [data + len - 16] // no read after end of page
         lea     r11, [rip + @shifts] // (heap has header so no read before EOP)
@@ -5226,7 +5225,7 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         cmp     len, 16 // 1..16 bytes have no branch
         ja      @17up
         je      @16
-        pshufb  xmm1, dqword ptr [r11 + r10]  // shuffle data bits to lower xmm2
+        pshufb  xmm1, dqword ptr [r11 + r10]  // shuffle data bits to lower xmm1
 @16:    aesenc  xmm1, xmm0
         aesenc  xmm1, xmm1
         aesenc  xmm1, xmm1
