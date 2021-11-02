@@ -102,6 +102,9 @@ unit mormot.core.fpcx64mm;
 // (to not slow down older CPUs), so it is safe to enable this on Server HW
 {.$define FPCMM_ERMS}
 
+// try "cmp" before "lock cmpxchg" for old processors with huge lock penalty
+{.$define FPCMM_CMPBEFORELOCK}
+
 // will export libc-like functions, and not replace the FPC MM
 // - e.g. to use this unit as a stand-alone C memory allocator
 {.$define FPCMM_STANDALONE}
@@ -855,8 +858,10 @@ asm
         {$endif FPCMM_SLEEPTSC}
         mov     rcx, r10
         mov     eax, $100
+        {$ifdef FPCMM_CMPBEFORELOCK}
         cmp     byte ptr [r10].TMediumBlockInfo.Locked, true
         je      @sp
+        {$endif FPCMM_CMPBEFORELOCK}
   lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
         je      @ok
         jmp     @sp
@@ -1059,8 +1064,10 @@ asm
         jz      @rc // timeout
         {$endif FPCMM_SLEEPTSC}
         mov     eax, $100
-        cmp     byte ptr [rcx], ah // don't flush the CPU cache if Locked still true
+        {$ifdef FPCMM_CMPBEFORELOCK}
+        cmp     byte ptr [rcx], true
         je      @sp
+        {$endif FPCMM_CMPBEFORELOCK}
   lock  cmpxchg byte ptr [rcx], ah
         je      @ok
         jmp     @sp
@@ -1229,18 +1236,21 @@ asm
 @LockTinyBlockTypeLoop:
         // Round-Robin attempt to lock of SmallBlockInfo.Tiny[]
         // -> fair distribution among calls to reduce thread contention
-        mov     edx, NumTinyBlockArenas + 1
+        mov     edx, NumTinyBlockArenas + 1 // 8/16 arenas (including Small[])
 @TinyBlockArenaLoop:
         mov     eax, SizeOf(TTinyBlockTypes)
-  lock  xadd    dword ptr [r8 + TSmallBlockInfo.TinyCurrentArena], eax
+        // note: "lock xadd" decreases the loop iterations but is slower
+        xadd    dword ptr [r8 + TSmallBlockInfo.TinyCurrentArena], eax
         lea     rbx, [r8 + rcx]
         and     eax, ((NumTinyBlockArenas + 1) * SizeOf(TTinyBlockTypes)) - 1
-        jz      @TinySmall // Arena 0 = TSmallBlockInfo.Small
+        jz      @TinySmall // Arena 0 = TSmallBlockInfo.Small[]
 	lea	rbx, [rax + rbx + TSmallBlockInfo.Tiny - SizeOf(TTinyBlockTypes)]
 @TinySmall:
         mov     eax, $100
-        cmp     byte ptr [rbx].TSmallBlockType.Locked, 0
+        {$ifdef FPCMM_CMPBEFORELOCK}
+        cmp     byte ptr [rbx].TSmallBlockType.Locked, false
         jnz     @NextTinyBlockArena1
+        {$endif FPCMM_CMPBEFORELOCK}
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
 @NextTinyBlockArena1:
@@ -1280,24 +1290,30 @@ asm
 @LockBlockTypeLoop:
         // Grab the default block type
         mov     eax, $100
-        cmp     byte ptr [rbx].TSmallBlockType.Locked, 0
+        {$ifdef FPCMM_CMPBEFORELOCK}
+        cmp     byte ptr [rbx].TSmallBlockType.Locked, false
         jnz     @NextLockBlockType1
+        {$endif FPCMM_CMPBEFORELOCK}
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
         // Try up to two next sizes
         mov     eax, $100
 @NextLockBlockType1:
         add     rbx, SizeOf(TSmallBlockType)
+        {$ifdef FPCMM_CMPBEFORELOCK}
         cmp     byte ptr [rbx].TSmallBlockType.Locked, al
         jnz     @NextLockBlockType2
+        {$endif FPCMM_CMPBEFORELOCK}
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
         mov     eax, $100
 @NextLockBlockType2:
         add     rbx, SizeOf(TSmallBlockType)
         pause
+        {$ifdef FPCMM_CMPBEFORELOCK}
         cmp     byte ptr [rbx].TSmallBlockType.Locked, al
         jnz     @NextLockBlockType3
+        {$endif FPCMM_CMPBEFORELOCK}
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
 @NextLockBlockType3:
@@ -1888,8 +1904,10 @@ asm
 {$ifdef FPCMM_LOCKLESSFREE}
 @ProcessPendingBin:
         // Try once to acquire BinLocked (spinning may induce race condition)
+        {$ifdef FPCMM_CMPBEFORELOCK}
         cmp     byte ptr [rbx].TSmallBlockType.BinLocked, true
         je      @BinAlreadyLocked
+        {$endif FPCMM_CMPBEFORELOCK}
         mov     eax, $100
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.BinLocked, ah
         jne     @BinAlreadyLocked
@@ -1987,8 +2005,10 @@ asm
         dec     r9
         jz      @SpinTimeout
         {$endif FPCMM_SLEEPTSC}
+        {$ifdef FPCMM_CMPBEFORELOCK}
         cmp     byte ptr [rbx].TSmallBlockType.BinLocked, true
         je      @SpinBinLock
+        {$endif FPCMM_CMPBEFORELOCK}
         mov     eax, $100
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.BinLocked, ah
         jne     @SpinBinLock
@@ -2042,8 +2062,10 @@ asm
         jz      @LockBlockTypeReleaseCore
         {$endif FPCMM_SLEEPTSC}
         mov     eax, $100
+        {$ifdef FPCMM_CMPBEFORELOCK}
         cmp     byte ptr [rbx].TSmallBlockType.Locked, true
         je      @SpinLockBlockType
+        {$endif FPCMM_CMPBEFORELOCK}
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         jne     @SpinLockBlockType
         {$ifdef FPCMM_SLEEPTSC}
