@@ -661,6 +661,7 @@ type
       QuoteChar: AnsiChar = #0);
     /// append a TDateTime value, expanded as Iso-8601 encoded text
     // - use 'YYYY-MM-DDThh:mm:ss' format (with FirstChar='T')
+    // - if twoDateTimeWithZ CustomOption is set, will append an ending 'Z'
     // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
     // - if QuoteChar is not #0, it will be written before and after the date
     procedure AddDateTime(Value: PDateTime; FirstChar: AnsiChar = 'T';
@@ -668,12 +669,14 @@ type
       AlwaysDateAndTime: boolean = false); overload;
     /// append a TDateTime value, expanded as Iso-8601 encoded text
     // - use 'YYYY-MM-DDThh:mm:ss' format
+    // - if twoDateTimeWithZ CustomOption is set, will append an ending 'Z'
     // - append nothing if Value=0
     // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
     procedure AddDateTime(const Value: TDateTime; WithMS: boolean = false); overload;
     /// append a TDateTime value, expanded as Iso-8601 text with milliseconds
     // and Time Zone designator
     // - i.e. 'YYYY-MM-DDThh:mm:ss.sssZ' format
+    // - twoDateTimeWithZ CustomOption is ignored in favor of TZD parameter
     // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
     procedure AddDateTimeMS(const Value: TDateTime; Expanded: boolean = true;
       FirstTimeChar: AnsiChar = 'T'; const TZD: RawUtf8 = 'Z');
@@ -5619,7 +5622,7 @@ begin
   if (Value^ = 0) and
      (QuoteChar = #0) then
     exit;
-  if BEnd - B <= 25 then
+  if BEnd - B <= 26 then
     FlushToStream;
   inc(B);
   if QuoteChar <> #0 then
@@ -5644,6 +5647,11 @@ begin
     end;
     dec(B);
   end;
+  if twoDateTimeWithZ in fCustomOptions then
+  begin
+    inc(B);
+    B^ := 'Z';
+  end;
   if QuoteChar <> #0 then
   begin
     inc(B);
@@ -5655,14 +5663,17 @@ procedure TTextWriter.AddDateTime(const Value: TDateTime; WithMS: boolean);
 begin
   if Value = 0 then
     exit;
-  if BEnd - B <= 23 then
+  if BEnd - B <= 24 then
     FlushToStream;
   inc(B);
   if trunc(Value) <> 0 then
     B := DateToIso8601PChar(Value, B, true);
   if frac(Value) <> 0 then
     B := TimeToIso8601PChar(Value, B, true, 'T', WithMS);
-  dec(B);
+  if twoDateTimeWithZ in fCustomOptions then
+    B^ := 'Z'
+  else
+    dec(B);
 end;
 
 procedure TTextWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean;

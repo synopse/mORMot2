@@ -624,6 +624,7 @@ type
   // - twoIgnoreDefaultInRecord will force custom record serialization to avoid
   // writing the fields with default values, i.e. enable soWriteIgnoreDefault
   // when published properties are serialized
+  // - twoDateTimeWithZ appends an ending 'Z' to TDateTime/TDateTimeMS values
   TTextWriterOption = (
     twoStreamIsOwned,
     twoFlushToStreamNoAutoResize,
@@ -635,7 +636,8 @@ type
     twoForceJsonStandard,
     twoEndOfLineCRLF,
     twoBufferIsExternal,
-    twoIgnoreDefaultInRecord);
+    twoIgnoreDefaultInRecord,
+    twoDateTimeWithZ);
     
   /// options set for a TBaseWriter / TBaseWriter instance
   // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior;
