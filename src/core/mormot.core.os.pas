@@ -1574,11 +1574,11 @@ procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 
 /// convert a Win32 64-bit FILETIME value into an Unix seconds time
 function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif}
 
 /// convert a Win32 64-bit FILETIME value into an Unix milliseconds time
 function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif}
 
 {$else}
 
