@@ -254,7 +254,7 @@ type
       aOptions: TInterfaceMethodOptions = []);
     procedure ClientAlgo(algo: TRestAuthenticationSignedUriAlgo);
     class procedure CustomReader(var Context: TJsonParserContext; Data: pointer);
-    class procedure CustomWriter(W: TTextWriter; Data: pointer;
+    class procedure CustomWriter(W: TJsonWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions);
     procedure SetOptions(aAsJsonObject: boolean; aOptions: TInterfaceMethodOptions);
     procedure IntSubtractJson(Ctxt: TOnInterfaceStubExecuteParamsJson);
@@ -496,7 +496,7 @@ function TServiceCalculator.RepeatJsonArray(
 var
   buf: array[word] of byte;
 begin
-  with TTextWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
+  with TJsonWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
   try
     Add('[');
     while count > 0 do
@@ -519,7 +519,7 @@ function TServiceCalculator.RepeatTextArray(
 var
   buf: array[word] of byte;
 begin
-  with TTextWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
+  with TJsonWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
   try
     while count > 0 do
     begin
@@ -1847,7 +1847,7 @@ begin
   end;
 end;
 
-class procedure TTestServiceOrientedArchitecture.CustomWriter(W: TTextWriter;
+class procedure TTestServiceOrientedArchitecture.CustomWriter(W: TJsonWriter;
   Data: pointer; Options: TTextWriterWriteObjectOptions);
 var
   V: ^TRestCacheEntryValue absolute Data;

@@ -2060,7 +2060,7 @@ type
       var Dest): TSqlDBFieldType;
     /// append the inlined value of a given parameter, mainly for GetSqlWithInlinedParams
     // - optional MaxCharCount will truncate the text to a given number of chars
-    procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
+    procedure AddParamValueAsText(Param: integer; Dest: TJsonWriter;
       MaxCharCount: integer); virtual;
     /// return a Column as a variant
     function GetColumnVariant(const ColName: RawUtf8): Variant;
@@ -2464,7 +2464,7 @@ type
     // should also implement a custom version with no temporary variable
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data (unless ForceBlobAsNull property was set)
-    procedure ColumnsToJson(WR: TJsonWriter); virtual;
+    procedure ColumnsToJson(WR: TResultsWriter); virtual;
     /// compute the SQL INSERT statement corresponding to this columns row
     // - and populate the Fields[] array with columns information (type and name)
     // - if the current column value is NULL, will return ftNull: it is up to the
@@ -2705,7 +2705,7 @@ type
       IO: TSqlDBParamInOutType; ArrayCount: integer): PSqlDBParam; overload;
     /// append the inlined value of a given parameter
     // - faster overridden method
-    procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
+    procedure AddParamValueAsText(Param: integer; Dest: TJsonWriter;
       MaxCharCount: integer); override;
   public
     /// create a statement instance
@@ -4889,7 +4889,7 @@ var
        (rowcount = prevrowcount) then
       exit;
     prevrowcount := rowcount;
-    with TTextWriter.CreateOwnedStream(tmp) do
+    with TJsonWriter.CreateOwnedStream(tmp) do
     try
       case Props.fDbms of
         dFirebird:
@@ -5102,7 +5102,7 @@ procedure TSqlDBConnectionProperties.MultipleValuesInsertFirebird(
   const FieldNames: TRawUtf8DynArray; const FieldTypes: TSqlDBFieldTypeArray;
   RowCount: integer; const FieldValues: TRawUtf8DynArrayDynArray);
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   maxf, sqllenwitoutvalues, sqllen, r, f, i: PtrInt;
   v: RawUtf8;
 begin
@@ -5130,7 +5130,7 @@ begin
     else
       inc(sqllenwitoutvalues, Length(FieldNames[f]));
     end;
-  W := TTextWriter.CreateOwnedStream(49152);
+  W := TJsonWriter.CreateOwnedStream(49152);
   try
     r := 0;
     repeat
@@ -5841,7 +5841,7 @@ begin
   result := ColumnTimestamp(ColumnIndex(ColName));
 end;
 
-procedure TSqlDBStatement.ColumnsToJson(WR: TJsonWriter);
+procedure TSqlDBStatement.ColumnsToJson(WR: TResultsWriter);
 var
   col: integer;
   blob: RawByteString;
@@ -5984,13 +5984,13 @@ end;
 
 function TSqlDBStatement.FetchAllToJson(Json: TStream; Expanded: boolean): PtrInt;
 var
-  W: TJsonWriter;
+  W: TResultsWriter;
   col: integer;
   maxmem: PtrUInt;
   tmp: TTextWriterStackBuffer;
 begin
   result := 0;
-  W := TJsonWriter.Create(Json, Expanded, false, nil, 0, @tmp);
+  W := TResultsWriter.Create(Json, Expanded, false, nil, 0, @tmp);
   try
     Connection.InternalProcess(speActive);
     maxmem := Connection.Properties.StatementMaxMemory;
@@ -6046,7 +6046,7 @@ const
 var
   F, FMax: integer;
   maxmem: PtrUInt;
-  W: TTextWriter;
+  W: TJsonWriter;
   tmp: RawByteString;
   V: TSqlVar;
 begin
@@ -6060,7 +6060,7 @@ begin
     CommaSep := #9;
   FMax := ColumnCount - 1;
   maxmem := Connection.Properties.StatementMaxMemory;
-  W := TTextWriter.Create(Dest, 65536);
+  W := TJsonWriter.Create(Dest, 65536);
   try
     // add optional/deprecated/Windows-centric UTF-8 Byte Order Mark
     if AddBOM then
@@ -6542,7 +6542,7 @@ var
   P, B: PUtf8Char;
   num: integer;
   maxSize, maxAllowed: cardinal;
-  W: TTextWriter;
+  W: TJsonWriter;
   tmp: TTextWriterStackBuffer;
 begin
   fSqlWithInlinedParams := fSql;
@@ -6565,7 +6565,7 @@ begin
         if P^ = #0 then
           exit
         else
-          W := TTextWriter.CreateOwnedStream(tmp);
+          W := TJsonWriter.CreateOwnedStream(tmp);
       W.AddNoJsonEscape(B, P - B);
       if P^ = #0 then
         break;
@@ -6585,7 +6585,7 @@ begin
   end;
 end;
 
-procedure TSqlDBStatement.AddParamValueAsText(Param: integer; Dest: TTextWriter;
+procedure TSqlDBStatement.AddParamValueAsText(Param: integer; Dest: TJsonWriter;
   MaxCharCount: integer);
 
   procedure AppendUnicode(W: PWideChar; WLen: integer);
@@ -7491,7 +7491,7 @@ begin
 end;
 
 procedure TSqlDBStatementWithParams.AddParamValueAsText(Param: integer;
-  Dest: TTextWriter; MaxCharCount: integer);
+  Dest: TJsonWriter; MaxCharCount: integer);
 begin
   dec(Param);
   if cardinal(Param) >= cardinal(fParamCount) then

@@ -1867,7 +1867,7 @@ begin
       C := TPollAsyncConnection(Conn[result]).Handle;
       if C = H then
         exit;
-      RR := result + 1; // compile as 2 branchless cmovc/cmovnc on FPC
+      RR := result + 1; // compile as 2 branchless cmovg/cmovle on x86_64 FPC
       dec(result);
       if C < H then
         L := RR

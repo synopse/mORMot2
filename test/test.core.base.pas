@@ -1151,7 +1151,7 @@ var
   Test, Test2: RawByteString;
   ST: TCustomMemoryStream;
   Index: TIntegerDynArray;
-  W: TTextWriter;
+  W: TJsonWriter;
   {$ifndef ISDELPHI2010}
   JSON_BASE64_MAGIC_UTF8: RawUtf8;
   {$endif ISDELPHI2010}
@@ -1246,7 +1246,7 @@ begin
   Check(not IsRawUtf8DynArray(TypeInfo(TIntegerDynArray)), 'IsRawUtf8DynArray2');
   Check(not IsRawUtf8DynArray(TypeInfo(TPointerDynArray)), 'IsRawUtf8DynArray3');
   Check(not IsRawUtf8DynArray(TypeInfo(TAmountCollection)), 'IsRawUtf8DynArray4');
-  W := TTextWriter.CreateOwnedStream;
+  W := TJsonWriter.CreateOwnedStream;
   // validate TBooleanDynArray
   dyn1.Init(TypeInfo(TBooleanDynArray), AB);
   SetLength(AB, 4);
@@ -3504,7 +3504,7 @@ function TestAddFloatStr(const str: RawUtf8): RawUtf8;
 var
   tmp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream(tmp) do
+  with TJsonWriter.CreateOwnedStream(tmp) do
   try
     AddFloatStr(pointer(str));
     SetText(result);

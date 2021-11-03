@@ -1046,7 +1046,7 @@ begin
        (Sec > 1) then
     begin
       TimeToIso8601PChar(@tmp[10], true, Hour - 1, Min - 1, Sec - 1, 0, 'T');
-      SetString(aIso8601, tmp, 19); // we use 'T' as TTextWriter.AddDateTime
+      SetString(aIso8601, tmp, 19); // we use 'T' as TJsonWriter.AddDateTime
     end
     else
       SetString(aIso8601, tmp, 10); // only date
@@ -1076,7 +1076,7 @@ begin
          (Sec > 1) then
       begin
         TimeToIso8601PChar(Dest + 11, true, Hour - 1, Min - 1, Sec - 1, 0, 'T');
-        result := 21; // we use 'T' as TTextWriter.AddDateTime
+        result := 21; // we use 'T' as TJsonWriter.AddDateTime
       end
       else
         result := 12; // only date

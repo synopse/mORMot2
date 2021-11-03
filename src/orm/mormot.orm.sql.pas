@@ -749,7 +749,7 @@ end;
 function TRestStorageExternal.AdaptSqlForEngineList(var SQL: RawUtf8): boolean;
 var
   Stmt: TSelectStatement;
-  W: TTextWriter;
+  W: TJsonWriter;
   limit: TSqlDBDefinitionLimitClause;
   limitSQL, name: RawUtf8;
   f, n: PtrInt;
@@ -793,7 +793,7 @@ begin
       else
         FormatUtf8(limit.InsertFmt, [Stmt.Limit], limitSQL);
     end;
-    W := TTextWriter.CreateOwnedStream(tmp);
+    W := TJsonWriter.CreateOwnedStream(tmp);
     try
       W.AddShorter('select ');
       if limit.Position = posSelect then
@@ -2135,7 +2135,7 @@ const
 function TRestStorageExternal.ComputeSql(
   var Prepared: TOrmVirtualTablePrepared): RawUtf8;
 var
-  WR: TTextWriter;
+  WR: TJsonWriter;
   i: PtrInt;
   tmp: TTextWriterStackBuffer;
   where: POrmVirtualTablePreparedConstraint;
@@ -2151,7 +2151,7 @@ begin
     exit;
   end;
   result := '';
-  WR := TTextWriter.CreateOwnedStream(tmp);
+  WR := TJsonWriter.CreateOwnedStream(tmp);
   try
     WR.AddString(fSelectAllDirectSQL);
     where := @Prepared.Where;

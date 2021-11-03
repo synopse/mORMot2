@@ -280,7 +280,7 @@ type
     // - will use WR.Expand to guess the expected output format
     // - this overriden implementation will call fReultSet methods to avoid
     // creating most temporary variable
-    procedure ColumnsToJson(WR: TJsonWriter); override;
+    procedure ColumnsToJson(WR: TResultsWriter); override;
     {$endif ZEOS72UP}
     /// gets a number of updates made by latest executed statement
     function UpdateCount: integer; override;
@@ -1314,7 +1314,7 @@ end;
 
 {$ifdef ZEOS72UP}
 
-procedure TSqlDBZeosStatement.ColumnsToJson(WR: TJsonWriter);
+procedure TSqlDBZeosStatement.ColumnsToJson(WR: TResultsWriter);
 
 {$if not (defined(ZEOS73UP) and defined(MORMOT2))}
 var

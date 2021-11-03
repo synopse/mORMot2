@@ -130,7 +130,7 @@ type
   TSynMustacheContext = class
   protected
     fContextCount: integer;
-    fWriter: TTextWriter;
+    fWriter: TJsonWriter;
     fOwner: TSynMustache;
     fEscapeInvert: boolean;
     fHelpers: TSynMustacheHelpers;
@@ -145,7 +145,7 @@ type
       virtual; abstract;
   public
     /// initialize the rendering context for the given text writer
-    constructor Create(Owner: TSynMustache; WR: TTextWriter);
+    constructor Create(Owner: TSynMustache; WR: TJsonWriter);
     /// the registered Expression Helpers, to handle {{helperName value}} tags
     // - use TSynMustache.HelperAdd/HelperDelete class methods to manage the list
     // or retrieve standard helpers via TSynMustache.HelpersGetStandardList
@@ -155,7 +155,7 @@ type
     property OnStringTranslate: TOnStringTranslate
       read fOnStringTranslate write fOnStringTranslate;
     /// read-only access to the associated text writer instance
-    property Writer: TTextWriter
+    property Writer: TJsonWriter
       read fWriter;
     /// invert the HTML characters escaping process
     // - by default, {{value}} will escape value chars, and {{{value}} won't
@@ -197,7 +197,7 @@ type
     // lifetime of this TSynMustacheContextVariant instance
     // - you should not use this constructor directly, but the
     // corresponding TSynMustache.Render*() methods
-    constructor Create(Owner: TSynMustache; WR: TTextWriter;
+    constructor Create(Owner: TSynMustache; WR: TJsonWriter;
       SectionMaxCount: integer; const aDocument: variant);
   end;
 
@@ -353,7 +353,7 @@ type
     // BlobToBase64, JsonQuote, JsonQuoteUri, ToJson, EnumTrim, EnumTrimRight,
     // Lower, Upper, PowerOfTwo, Equals (expecting two parameters), MarkdownToHtml,
     // SimpleToHtml (Markdown with no HTML pass-through) and WikiToHtml
-    // (following TTextWriter.AddHtmlEscapeWiki syntax)
+    // (following TJsonWriter.AddHtmlEscapeWiki syntax)
     // - an additional #if helper is also registered, which would allow runtime
     // view logic, via = < > <= >= <> operators over two values:
     // $ {{#if .,"=",123}}  {{#if Total,">",1000}}  {{#if info,"<>",""}}
@@ -468,7 +468,7 @@ implementation
 
 { TSynMustacheContext }
 
-constructor TSynMustacheContext.Create(Owner: TSynMustache; WR: TTextWriter);
+constructor TSynMustacheContext.Create(Owner: TSynMustache; WR: TJsonWriter);
 begin
   fOwner := Owner;
   fWriter := WR;
@@ -492,7 +492,7 @@ end;
 { TSynMustacheContextVariant }
 
 constructor TSynMustacheContextVariant.Create(Owner: TSynMustache;
-  WR: TTextWriter; SectionMaxCount: integer; const aDocument: variant);
+  WR: TJsonWriter; SectionMaxCount: integer; const aDocument: variant);
 begin
   inherited Create(Owner, WR);
   SetLength(fContext, SectionMaxCount + 1);
@@ -1381,11 +1381,11 @@ function TSynMustache.Render(const Context: variant;
   Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
   const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   Ctxt: TSynMustacheContext;
   tmp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(tmp);
+  W := TJsonWriter.CreateOwnedStream(tmp);
   try
     Ctxt := TSynMustacheContextVariant.Create(self, W, SectionMaxCount, Context);
     try

@@ -263,7 +263,7 @@ type
     // - will use WR.Expand to guess the expected output format
     // - this overriden implementation will call fReultSet methods to avoid
     // creating most temporary variable
-    procedure ColumnsToJson(WR: TJsonWriter); override;
+    procedure ColumnsToJson(WR: TResultsWriter); override;
   end;
 
 
@@ -550,7 +550,7 @@ var
     aPar: TRawUtf8DynArray;
     aParTyp: TRawUtf8DynArray;
     iP, iA, iStart, iEnd, iCnt, iStmCount: integer;
-    W: TTextWriter;
+    W: TJsonWriter;
     newStatement: IStatement;
 
     procedure PrepareBlockStatement;
@@ -635,7 +635,7 @@ var
     iStart := 0;
     iStmCount := Round(fParamsArrayCount /
                        Round( fParamsArrayCount / cMaxStm + 0.5));
-    W := TTextWriter.CreateOwnedStream(49152);
+    W := TJsonWriter.CreateOwnedStream(49152);
     try
       while iStart < fParamsArrayCount do
       begin
@@ -908,7 +908,7 @@ begin
   result := fResults[Col].GetAsString;
 end;
 
-procedure TSqlDBIbxStatement.ColumnsToJson(WR: TJsonWriter);
+procedure TSqlDBIbxStatement.ColumnsToJson(WR: TResultsWriter);
 var
   I, H, C: integer;
   s:   RawUtf8;

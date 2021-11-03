@@ -901,7 +901,7 @@ type
     // a TServicesPublishedInterfaces JSON array, e.g.
     // $ [{"PublicUri":{"Address":"1.2.3.4","Port":"123","Root":"root"},"Names":['Calculator']},...]
     procedure FindServiceAll(const aServiceName: RawUtf8;
-      aWriter: TTextWriter); overload;
+      aWriter: TJsonWriter); overload;
     /// the number of milliseconds after which an entry expires
     // - is 0 by default, meaning no expiration
     // - you can set it to a value so that any service URI registered with
@@ -1533,7 +1533,7 @@ end;
 
 function TServiceContainer.AsJson: RawJson;
 var
-  WR: TTextWriter;
+  WR: TBaseWriter;
   i: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
@@ -1541,7 +1541,7 @@ begin
   if (self = nil) or
      (fInterface = nil) then
     exit;
-  WR := TJsonSerializer.CreateOwnedStream(temp);
+  WR := TBaseWriter.CreateOwnedStream(temp);
   try
     WR.Add('[');
     for i := 0 to high(fInterface) do
@@ -1693,7 +1693,7 @@ begin
 end;
 
 procedure TServicesPublishedInterfacesList.FindServiceAll(
-  const aServiceName: RawUtf8; aWriter: TTextWriter);
+  const aServiceName: RawUtf8; aWriter: TJsonWriter);
 var
   i: PtrInt;
   tix: Int64;

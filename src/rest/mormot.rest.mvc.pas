@@ -151,13 +151,13 @@ type
   /// define TMvcViewsMustache.RegisterExpressionHelpersForTables CSS styling
   TExpressionHtmlTableStyle = class
   public
-    class procedure StartTable(WR: TTextWriter); virtual;
-    class procedure BeforeFieldName(WR: TTextWriter); virtual;
-    class procedure BeforeValue(WR: TTextWriter); virtual;
-    class procedure AddLabel(WR: TTextWriter; const text: string;
+    class procedure StartTable(WR: TBaseWriter); virtual;
+    class procedure BeforeFieldName(WR: TBaseWriter); virtual;
+    class procedure BeforeValue(WR: TBaseWriter); virtual;
+    class procedure AddLabel(WR: TBaseWriter; const text: string;
       kind: THtmlTableStyleLabel); virtual;
-    class procedure AfterValue(WR: TTextWriter); virtual;
-    class procedure EndTable(WR: TTextWriter); virtual;
+    class procedure AfterValue(WR: TBaseWriter); virtual;
+    class procedure EndTable(WR: TBaseWriter); virtual;
   end;
   /// to define TMvcViewsMustache.RegisterExpressionHelpersForTables CSS styling
   TExpressionHtmlTableStyleClass = class of TExpressionHtmlTableStyle;
@@ -165,8 +165,8 @@ type
   /// TMvcViewsMustache.RegisterExpressionHelpersForTables via Bootstrap CSS
   TExpressionHtmlTableStyleBootstrap = class(TExpressionHtmlTableStyle)
   public
-    class procedure StartTable(WR: TTextWriter); override;
-    class procedure AddLabel(WR: TTextWriter; const text: string;
+    class procedure StartTable(WR: TBaseWriter); override;
+    class procedure AddLabel(WR: TBaseWriter; const text: string;
       kind: THtmlTableStyleLabel); override;
   end;
 
@@ -931,7 +931,7 @@ var
   caption: string;
   sets: TStringList;
   u: RawUtf8;
-  W: TTextWriter;
+  W: TBaseWriter;
   tmp: TTextWriterStackBuffer;
 const
   ONOFF: array[boolean] of THtmlTableStyleLabel = (
@@ -942,7 +942,7 @@ const
 begin
   if _SafeObject(Value, Rec) then
   begin
-    W := TTextWriter.CreateOwnedStream(tmp);
+    W := TBaseWriter.CreateOwnedStream(tmp);
     try
       HtmlTableStyle.StartTable(W);
       for f := 0 to TableProps.Fields.Count - 1 do
@@ -1061,7 +1061,7 @@ end;
 
 { TExpressionHtmlTableStyle }
 
-class procedure TExpressionHtmlTableStyle.AddLabel(WR: TTextWriter;
+class procedure TExpressionHtmlTableStyle.AddLabel(WR: TBaseWriter;
   const text: string; kind: THtmlTableStyleLabel);
 const
   SETLABEL: array[THtmlTableStyleLabel] of string[3] = (
@@ -1072,27 +1072,27 @@ begin
   WR.AddShorter('&nbsp;');
 end;
 
-class procedure TExpressionHtmlTableStyle.AfterValue(WR: TTextWriter);
+class procedure TExpressionHtmlTableStyle.AfterValue(WR: TBaseWriter);
 begin
   WR.AddShort('</td></tr>');
 end;
 
-class procedure TExpressionHtmlTableStyle.BeforeFieldName(WR: TTextWriter);
+class procedure TExpressionHtmlTableStyle.BeforeFieldName(WR: TBaseWriter);
 begin
   WR.AddShorter('<tr><td>');
 end;
 
-class procedure TExpressionHtmlTableStyle.BeforeValue(WR: TTextWriter);
+class procedure TExpressionHtmlTableStyle.BeforeValue(WR: TBaseWriter);
 begin
   WR.AddShort('</td><td>');
 end;
 
-class procedure TExpressionHtmlTableStyle.EndTable(WR: TTextWriter);
+class procedure TExpressionHtmlTableStyle.EndTable(WR: TBaseWriter);
 begin
   WR.AddShorter('</table>');
 end;
 
-class procedure TExpressionHtmlTableStyle.StartTable(WR: TTextWriter);
+class procedure TExpressionHtmlTableStyle.StartTable(WR: TBaseWriter);
 begin
   WR.AddShorter('<table>');
 end;
@@ -1100,7 +1100,7 @@ end;
 
 { TExpressionHtmlTableStyleBootstrap }
 
-class procedure TExpressionHtmlTableStyleBootstrap.AddLabel(WR: TTextWriter;
+class procedure TExpressionHtmlTableStyleBootstrap.AddLabel(WR: TBaseWriter;
   const text: string; kind: THtmlTableStyleLabel);
 const
   SETLABEL: array[THtmlTableStyleLabel] of string[7] = (
@@ -1113,7 +1113,7 @@ begin
   WR.AddShorter('</span>');
 end;
 
-class procedure TExpressionHtmlTableStyleBootstrap.StartTable(WR: TTextWriter);
+class procedure TExpressionHtmlTableStyleBootstrap.StartTable(WR: TBaseWriter);
 begin
   WR.AddShort('<table class="table table-striped table-bordered">');
 end;
@@ -1597,7 +1597,7 @@ var
   action: TMvcAction;
   exec: TInterfaceMethodExecute;
   isAction: boolean;
-  WR: TTextWriter;
+  WR: TJsonWriter;
   m: PInterfaceMethod;
   methodOutput: RawUtf8;
   renderContext, info: variant;
@@ -1613,7 +1613,7 @@ begin
         try
           m := @fApplication.fFactory.Methods[fMethodIndex];
           isAction := m^.ArgsResultIsServiceCustomAnswer;
-          WR := TJsonSerializer.CreateOwnedStream(tmp);
+          WR := TJsonWriter.CreateOwnedStream(tmp);
           try
             WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended];
             WR.Add('{');

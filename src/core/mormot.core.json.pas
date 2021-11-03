@@ -8,7 +8,7 @@ unit mormot.core.json;
 
    JSON functions shared by all framework units
     - Low-Level JSON Processing Functions
-    - TTextWriter class with proper JSON escaping and WriteObject() support
+    - TJsonWriter class with proper JSON escaping and WriteObject() support
     - JSON-aware TSynNameValue TSynPersistentStoreJson
     - JSON-aware TSynDictionary Storage
     - JSON Unserialization for any kind of Values
@@ -402,7 +402,7 @@ function JsonObjectsByPath(JsonObject, PropPath: PUtf8Char): RawUtf8;
 // $ {key1:value1,key2,value2...} -> [key1,key2...] + [value1,value2...]
 // - this function won't allocate any memory during its process, nor
 // modify the JSON input buffer
-// - is the reverse of the TTextWriter.AddJsonArraysAsJsonObject() method
+// - is the reverse of the TJsonWriter.AddJsonArraysAsJsonObject() method
 // - used e.g. by TSynDictionary.LoadFromJson
 // - returns the number of items parsed and stored into keys/values, -1 on
 // error parsing the input JSON buffer
@@ -481,25 +481,25 @@ function UrlEncodeJsonObject(const UriName, ParametersJson: RawUtf8;
 
 
 /// formats and indents a JSON array or document to the specified layout
-// - just a wrapper around TTextWriter.AddJsonReformat() method
+// - just a wrapper around TJsonWriter.AddJsonReformat() method
 // - WARNING: the JSON buffer is decoded in-place, so P^ WILL BE modified
 procedure JsonBufferReformat(P: PUtf8Char; out result: RawUtf8;
   Format: TTextWriterJsonFormat = jsonHumanReadable);
 
 /// formats and indents a JSON array or document to the specified layout
-// - just a wrapper around TTextWriter.AddJsonReformat, making a private
+// - just a wrapper around TJsonWriter.AddJsonReformat, making a private
 // of the supplied JSON buffer (so that JSON content  would stay untouched)
 function JsonReformat(const Json: RawUtf8;
   Format: TTextWriterJsonFormat = jsonHumanReadable): RawUtf8;
 
 /// formats and indents a JSON array or document as a file
-// - just a wrapper around TTextWriter.AddJsonReformat() method
+// - just a wrapper around TJsonWriter.AddJsonReformat() method
 // - WARNING: the JSON buffer is decoded in-place, so P^ WILL BE modified
 function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
   Format: TTextWriterJsonFormat = jsonHumanReadable): boolean;
 
 /// formats and indents a JSON array or document as a file
-// - just a wrapper around TTextWriter.AddJsonReformat, making a private
+// - just a wrapper around TJsonWriter.AddJsonReformat, making a private
 // of the supplied JSON buffer (so that JSON content  would stay untouched)
 function JsonReformatToFile(const Json: RawUtf8; const Dest: TFileName;
   Format: TTextWriterJsonFormat = jsonHumanReadable): boolean;
@@ -537,18 +537,18 @@ function FormatUtf8(const Format: RawUtf8;
   JsonFormat: boolean = false): RawUtf8; overload;
 
 
-{ ********** TTextWriter class with proper JSON escaping and WriteObject() support }
+{ ********** TJsonWriter class with proper JSON escaping and WriteObject() support }
 
 type
-  /// JSON-capable TBaseWriter inherited class
-  // - in addition to TBaseWriter, will handle JSON serialization of any
-  // kind of value, including classes
-  TTextWriter = class(TBaseWriter)
+  /// JSON-capable TBaseWriter/TTextWriter inherited class
+  // - in addition to TBaseWriter/TTextWriter, will handle JSON serialization
+  // of any kind of value, including classes
+  TJsonWriter = class(TTextWriter)
   protected
     // used by AddCRAndIndent for enums, sets and T*ObjArray comment of values
     fBlockComment: RawUtf8;
     // used by WriteObjectAsString/AddDynArrayJsonAsString methods
-    fInternalJsonWriter: TTextWriter;
+    fInternalJsonWriter: TJsonWriter;
     procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
       AnsiToWide: PWordArray; Escape: TTextWriterKind);
     // called after TRttiCustomProp.GetValueDirect/GetValueGetter
@@ -557,11 +557,11 @@ type
   public
     /// release all internal structures
     destructor Destroy; override;
-    /// gives access to a temporary TTextWriter
-    // - returned instance is owned by this TTextWriter, and voided
+    /// gives access to a temporary TJsonWriter
+    // - returned instance is owned by this TJsonWriter, and voided
     // - may be used to escape some JSON espaced value (i.e. escape it twice),
-    // in conjunction with AddJsonEscape(Source: TTextWriter)
-    function GetTempJsonWriter: TTextWriter;
+    // in conjunction with AddJsonEscape(Source: TJsonWriter)
+    function GetTempJsonWriter: TJsonWriter;
     /// append '[' or '{' with proper indentation
     procedure BlockBegin(Starter: AnsiChar; Options: TTextWriterWriteObjectOptions);
     /// append ',' with proper indentation
@@ -638,12 +638,8 @@ type
     procedure Add(const Values: array of const); overload;
     /// append some values at once with custom escaping
     procedure Add(const Values: array of const; Escape: TTextWriterKind); overload;
-    /// append an array of integers as CSV
-    procedure AddCsvInteger(const Integers: array of integer); overload;
-    /// append an array of doubles as CSV
-    procedure AddCsvDouble(const Doubles: array of double); overload;
     /// append an array of RawUtf8 as CSV of JSON strings
-    procedure AddCsvUtf8(const Values: array of RawUtf8); overload;
+    procedure AddCsvUtf8(const Values: array of RawUtf8);
     /// append an array of const as CSV of JSON values
     procedure AddCsvConst(const Values: array of const);
     /// append a quoted string as JSON, with in-place decoding
@@ -652,44 +648,6 @@ type
     // - as used e.g. by TJsonObjectDecoder.EncodeAsJson method and
     // JsonEncodeNameSQLValue() function
     procedure AddQuotedStringAsJson(const QuotedString: RawUtf8);
-    /// append a TTimeLog value, expanded as Iso-8601 encoded text
-    procedure AddTimeLog(Value: PInt64; QuoteChar: AnsiChar = #0);
-    /// append a TUnixTime value, expanded as Iso-8601 encoded text
-    procedure AddUnixTime(Value: PInt64; QuoteChar: AnsiChar = #0);
-    /// append a TUnixMSTime value, expanded as Iso-8601 encoded text
-    procedure AddUnixMSTime(Value: PInt64; WithMS: boolean = false;
-      QuoteChar: AnsiChar = #0);
-    /// append a TDateTime value, expanded as Iso-8601 encoded text
-    // - use 'YYYY-MM-DDThh:mm:ss' format (with FirstChar='T')
-    // - if twoDateTimeWithZ CustomOption is set, will append an ending 'Z'
-    // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
-    // - if QuoteChar is not #0, it will be written before and after the date
-    procedure AddDateTime(Value: PDateTime; FirstChar: AnsiChar = 'T';
-      QuoteChar: AnsiChar = #0; WithMS: boolean = false;
-      AlwaysDateAndTime: boolean = false); overload;
-    /// append a TDateTime value, expanded as Iso-8601 encoded text
-    // - use 'YYYY-MM-DDThh:mm:ss' format
-    // - if twoDateTimeWithZ CustomOption is set, will append an ending 'Z'
-    // - append nothing if Value=0
-    // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
-    procedure AddDateTime(const Value: TDateTime; WithMS: boolean = false); overload;
-    /// append a TDateTime value, expanded as Iso-8601 text with milliseconds
-    // and Time Zone designator
-    // - i.e. 'YYYY-MM-DDThh:mm:ss.sssZ' format
-    // - twoDateTimeWithZ CustomOption is ignored in favor of TZD parameter
-    // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
-    procedure AddDateTimeMS(const Value: TDateTime; Expanded: boolean = true;
-      FirstTimeChar: AnsiChar = 'T'; const TZD: RawUtf8 = 'Z');
-    /// append the current UTC date and time, in our log-friendly format
-    // - e.g. append '20110325 19241502' - with no trailing space nor tab
-    // - you may set LocalTime=TRUE to write the local date and time instead
-    // - this method is very fast, and avoid most calculation or API calls
-    procedure AddCurrentLogTime(LocalTime: boolean);
-    /// append the current UTC date and time, in our log-friendly format
-    // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
-    // - you may set LocalTime=TRUE to write the local date and time instead
-    // - this method is very fast, and avoid most calculation or API calls
-    procedure AddCurrentNCSALogTime(LocalTime: boolean);
 
     /// append strings or integers with a specified format
     // - this overriden version will properly handle JSON escape
@@ -716,7 +674,7 @@ type
     procedure WriteObject(Value: TObject;
       WriteOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]); override;
     /// append complex types as JSON content using TRttiCustom
-    // - called e.g. by TTextWriter.AddVariant() for varAny / TRttiVarData
+    // - called e.g. by TJsonWriter.AddVariant() for varAny / TRttiVarData
     procedure AddRttiCustomJson(Value: pointer; RttiCustom: TObject;
       WriteOptions: TTextWriterWriteObjectOptions);
     /// append a JSON value, array or document, in a specified format
@@ -795,14 +753,14 @@ type
     procedure AddJsonEscape(const V: TVarRec); overload;
     /// append a UTF-8 JSON String, between double quotes and with JSON escaping
     procedure AddJsonString(const Text: RawUtf8);
-    /// flush a supplied TTextWriter, and write pending data as JSON escaped text
+    /// flush a supplied TJsonWriter, and write pending data as JSON escaped text
     // - may be used with InternalJsonWriter, as a faster alternative to
     // ! AddJsonEscape(Pointer(fInternalJsonWriter.Text),0);
-    procedure AddJsonEscape(Source: TTextWriter); overload;
-    /// flush a supplied TTextWriter, and write pending data as JSON escaped text
+    procedure AddJsonEscape(Source: TJsonWriter); overload;
+    /// flush a supplied TJsonWriter, and write pending data as JSON escaped text
     // - may be used with InternalJsonWriter, as a faster alternative to
     // ! AddNoJsonEscapeUtf8(Source.Text);
-    procedure AddNoJsonEscape(Source: TTextWriter); overload;
+    procedure AddNoJsonEscape(Source: TJsonWriter); overload;
     /// append a UTF-8 already encoded JSON forcing Unicode escape
     // - don't escapes chars according to the JSON RFC but escape all 8-bit
     // UTF-8 values as their UTF-16 \u#### escaped content
@@ -1117,7 +1075,7 @@ type
   TSynPersistentStoreJson = class(TSynPersistentStore)
   protected
     // append "name" -> inherited should add properties to the JSON object
-    procedure AddJson(W: TTextWriter); virtual;
+    procedure AddJson(W: TJsonWriter); virtual;
   public
     /// serialize this instance as a JSON object
     function SaveToJson(reformat: TTextWriterJsonFormat = jsonCompact): RawUtf8;
@@ -1363,7 +1321,7 @@ type
     procedure CopyValues(out Dest; ObjArrayByRef: boolean = false);
     /// serialize the content as a "key":value JSON object
     procedure SaveToJson(
-      W: TTextWriter; EnumSetsAsText: boolean = false); overload;
+      W: TJsonWriter; EnumSetsAsText: boolean = false); overload;
     /// serialize the content as a "key":value JSON object
     function SaveToJson(
       EnumSetsAsText: boolean = false): RawUtf8; overload;
@@ -1444,7 +1402,7 @@ type
   // - defined here for low-level use of TRttiJsonSave functions
   TJsonSaveContext = object
   protected
-    W: TTextWriter;
+    W: TJsonWriter;
     Options: TTextWriterWriteObjectOptions;
     Info: TRttiCustom;
     Prop: PRttiCustomProp;
@@ -1454,7 +1412,7 @@ type
     procedure AddDateTime(Value: PDateTime; WithMS: boolean);
   public
     /// initialize this low-level context
-    procedure Init(WR: TTextWriter;
+    procedure Init(WR: TJsonWriter;
       WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
       {$ifdef HASINLINE}inline;{$endif}
   end;
@@ -1770,7 +1728,7 @@ const
 type
   /// the callback signature used by TRttiJson for serializing JSON data
   // - Data^ should be written into W, with the supplied Options
-  TOnRttiJsonWrite = procedure(W: TTextWriter; Data: pointer;
+  TOnRttiJsonWrite = procedure(W: TJsonWriter; Data: pointer;
     Options: TTextWriterWriteObjectOptions) of object;
 
   /// the callback signature used by TRttiJson for unserializing JSON data
@@ -1781,7 +1739,7 @@ type
   /// the callback signature used by TRttiJson for serializing JSON classes
   // - Instance should be written into W, with the supplied Options
   // - is in fact a convenient alias to the TOnRttiJsonWrite callback
-  TOnClassJsonWrite = procedure(W: TTextWriter; Instance: TObject;
+  TOnClassJsonWrite = procedure(W: TJsonWriter; Instance: TObject;
     Options: TTextWriterWriteObjectOptions) of object;
 
   /// the callback signature used by TRttiJson for unserializing JSON classes
@@ -1915,7 +1873,7 @@ procedure JsonEncodeArrayOfConst(const Values: array of const;
   WithoutBraces: boolean; var result: RawUtf8); overload;
 
 /// encode as JSON {"name":value} object, from a potential SQL quoted value
-// - will unquote the SQLValue using TTextWriter.AddQuotedStringAsJson()
+// - will unquote the SQLValue using TJsonWriter.AddQuotedStringAsJson()
 procedure JsonEncodeNameSQLValue(const Name, SQLValue: RawUtf8;
   var result: RawUtf8);
 
@@ -1942,7 +1900,7 @@ var
 
 
 /// serialize most kind of content as JSON, using its RTTI
-// - is just a wrapper around TTextWriter.AddTypedJson()
+// - is just a wrapper around TJsonWriter.AddTypedJson()
 // - so would handle tkClass, tkEnumeration, tkSet, tkRecord, tkDynArray,
 // tkVariant kind of content - other kinds would return 'null'
 // - you can override serialization options if needed
@@ -1950,14 +1908,14 @@ procedure SaveJson(const Value; TypeInfo: PRttiInfo;
   Options: TTextWriterOptions; var result: RawUtf8); overload;
 
 /// serialize most kind of content as JSON, using its RTTI
-// - is just a wrapper around TTextWriter.AddTypedJson()
+// - is just a wrapper around TJsonWriter.AddTypedJson()
 // - so would handle tkClass, tkEnumeration, tkSet, tkRecord, tkDynArray,
 // tkVariant kind of content - other kinds would return 'null'
 function SaveJson(const Value; TypeInfo: PRttiInfo;
   EnumSetsAsText: boolean = false): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// save record into its JSON serialization as saved by TTextWriter.AddRecordJson
+/// save record into its JSON serialization as saved by TJsonWriter.AddRecordJson
 // - will use default Base64 encoding over RecordSave() binary - or custom true
 // JSON format (as set by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
 // or via enhanced RTTI), if available (following EnumSetsAsText optional
@@ -1968,7 +1926,7 @@ function RecordSaveJson(const Rec; TypeInfo: PRttiInfo;
 
 /// serialize a dynamic array content as JSON
 // - Value shall be set to the source dynamic array field
-// - is just a wrapper around TTextWriter.AddDynArrayJson(), creating
+// - is just a wrapper around TJsonWriter.AddDynArrayJson(), creating
 // a temporary TDynArray wrapper on the stack
 // - to be used e.g. for custom record JSON serialization, within a
 // TDynArrayJsonCustomWriter callback or Rtti.RegisterFromText()
@@ -1978,7 +1936,7 @@ function DynArraySaveJson(const Value; TypeInfo: PRttiInfo;
 
 /// serialize a dynamic array content, supplied as raw binary buffer, as JSON
 // - Value shall be set to the source dynamic array field
-// - is just a wrapper around TTextWriter.AddDynArrayJson(), creating
+// - is just a wrapper around TJsonWriter.AddDynArrayJson(), creating
 // a temporary TDynArray wrapper on the stack
 // - to be used e.g. for custom record JSON serialization, within a
 // TDynArrayJsonCustomWriter callback or Rtti.RegisterFromText()
@@ -1990,7 +1948,7 @@ function ObjArrayToJson(const aObjArray;
   aOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
 
 /// will serialize set of TObject into its UTF-8 JSON representation
-// - follows ObjectToJson()/TTextWriter.WriterObject() functions output
+// - follows ObjectToJson()/TJsonWriter.WriterObject() functions output
 // - if Names is not supplied, the corresponding class names would be used
 function ObjectsToJson(const Names: array of RawUtf8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
@@ -2012,7 +1970,7 @@ function ObjectToJsonDebug(Value: TObject;
     woHumanReadable, woStoreClassName, woStorePointer]): RawUtf8;
 
 /// unserialize most kind of content as JSON, using its RTTI, as saved by
-// TTextWriter.AddRecordJson / RecordSaveJson
+// TJsonWriter.AddRecordJson / RecordSaveJson
 // - is just a wrapper around GetDataFromJson() global low-level function
 // - returns nil on error, or the end of buffer on success
 // - warning: the JSON buffer will be modified in-place during process - use
@@ -2023,7 +1981,7 @@ function LoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   Tolerant: boolean = true): PUtf8Char;
 
 /// fill a record content from a JSON serialization as saved by
-// TTextWriter.AddRecordJson / RecordSaveJson
+// TJsonWriter.AddRecordJson / RecordSaveJson
 // - will use default Base64 encoding over RecordSave() binary - or custom
 // JSON format (as set by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
 // or via enhanced RTTI), if available
@@ -2036,7 +1994,7 @@ function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
   Tolerant: boolean = true): PUtf8Char; overload;
 
 /// fill a record content from a JSON serialization as saved by
-// TTextWriter.AddRecordJson / RecordSaveJson
+// TJsonWriter.AddRecordJson / RecordSaveJson
 // - this overloaded function will make a private copy before parsing it,
 // so is safe with a read/only or shared string - but slightly slower
 // - will use default Base64 encoding over RecordSave() binary - or custom
@@ -2047,7 +2005,7 @@ function RecordLoadJson(var Rec; const Json: RawUtf8; TypeInfo: PRttiInfo;
   Tolerant: boolean = true): boolean; overload;
 
 /// fill a dynamic array content from a JSON serialization as saved by
-// TTextWriter.AddDynArrayJson
+// TJsonWriter.AddDynArrayJson
 // - Value shall be set to the target dynamic array field
 // - is just a wrapper around TDynArray.LoadFromJson(), creating a temporary
 // TDynArray wrapper on the stack
@@ -2063,7 +2021,7 @@ function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   Tolerant: boolean = true): PUtf8Char; overload;
 
 /// fill a dynamic array content from a JSON serialization as saved by
-// TTextWriter.AddDynArrayJson, which won't be modified
+// TJsonWriter.AddDynArrayJson, which won't be modified
 // - this overloaded function will make a private copy before parsing it,
 // so is safe with a read/only or shared string - but slightly slower
 function DynArrayLoadJson(var Value; const Json: RawUtf8;
@@ -2167,7 +2125,7 @@ const
   XMLUTF8_NAMESPACE = '<contents xmlns="http://www.w3.org/2001/XMLSchema-instance">';
 
 /// convert a JSON array or document into a simple XML content
-// - just a wrapper around TTextWriter.AddJsonToXML, with an optional
+// - just a wrapper around TJsonWriter.AddJsonToXML, with an optional
 // header before the XML converted data (e.g. XMLUTF8_HEADER), and an optional
 // name space content node which will nest the generated XML data (e.g.
 // '<contents xmlns="http://www.w3.org/2001/XMLSchema-instance">') - the
@@ -2177,7 +2135,7 @@ procedure JsonBufferToXML(P: PUtf8Char; const Header, NameSpace: RawUtf8;
   out result: RawUtf8);
 
 /// convert a JSON array or document into a simple XML content
-// - just a wrapper around TTextWriter.AddJsonToXML, making a private copy
+// - just a wrapper around TJsonWriter.AddJsonToXML, making a private copy
 // of the supplied JSON buffer using TSynTempBuffer (so that JSON content
 // would stay untouched)
 // - the optional header is added at the beginning of the resulting string
@@ -2444,7 +2402,7 @@ procedure JsonDoUniEscape(const s: RawUtf8; var result: RawUtf8; esc: boolean);
 var
   tmp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream(tmp) do
+  with TJsonWriter.CreateOwnedStream(tmp) do
     try
       if esc then
         AddNoJsonEscapeForcedUnicode(pointer(s), length(s))
@@ -4200,8 +4158,8 @@ begin
     result := '""'
   else if (pointer(result) = pointer(P)) or
           NeedsJsonEscape(P, PLen) then
-    // use TTextWriter.AddJsonEscape() for proper JSON escape
-    with TTextWriter.CreateOwnedStream(temp) do
+    // use TJsonWriter.AddJsonEscape() for proper JSON escape
+    with TJsonWriter.CreateOwnedStream(temp) do
     try
       AddString(aPrefix);
       Add('"');
@@ -4251,7 +4209,7 @@ var
   temp: array[word] of byte; // 64KB buffer
 begin
   if P <> nil then
-    with TTextWriter.CreateOwnedStream(@temp, SizeOf(temp)) do
+    with TJsonWriter.CreateOwnedStream(@temp, SizeOf(temp)) do
     try
       AddJsonReformat(P, Format, nil);
       SetText(result);
@@ -4281,7 +4239,7 @@ begin
   try
     F := TFileStream.Create(Dest, fmCreate);
     try
-      with TTextWriter.Create(F, @temp, SizeOf(temp)) do
+      with TJsonWriter.Create(F, @temp, SizeOf(temp)) do
       try
         AddJsonReformat(P, Format, nil);
         FlushFinal;
@@ -4335,7 +4293,7 @@ begin
     VarRecToUtf8(Args[0], result)
   else
     // handle any number of parameters with minimal memory allocations
-    with TTextWriter.CreateOwnedStream(temp) do
+    with TJsonWriter.CreateOwnedStream(temp) do
     try
       A := 0;
       P := 0;
@@ -4409,7 +4367,7 @@ end;
 { ********** Low-Level JSON Serialization for all TRttiParserType }
 
 // defined here for proper inlining
-procedure TTextWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
+procedure TJsonWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
 begin
   AddComma;
   if woHumanReadable in Options then
@@ -4419,7 +4377,7 @@ end;
 
 { TJsonSaveContext }
 
-procedure TJsonSaveContext.Init(WR: TTextWriter;
+procedure TJsonSaveContext.Init(WR: TJsonWriter;
   WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
 begin
   W := WR;
@@ -4848,7 +4806,7 @@ type
   TCCHook = class(TObjectWithCustomCreate); // to access its protected methods
   TCCHookClass = class of TCCHook;
 
-procedure AppendExceptionLocation(w: TTextWriter; e: ESynException);
+procedure AppendExceptionLocation(w: TJsonWriter; e: ESynException);
 begin // call TDebugFile.FindLocationShort if mormot.core.log is used
   w.Add('"');
   w.AddShort(GetExecutableLocation(e.RaisedAt));
@@ -4979,7 +4937,7 @@ end;
 
 // most known RTL classes custom serialization
 
-procedure _JS_Objects(W: TTextWriter; Value: PObject; Count: integer;
+procedure _JS_Objects(W: TJsonWriter; Value: PObject; Count: integer;
   Options: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
@@ -5145,11 +5103,11 @@ end;
 
 
 
-{ ********** TTextWriter class with proper JSON escaping and WriteObject() support }
+{ ********** TJsonWriter class with proper JSON escaping and WriteObject() support }
 
-{ TTextWriter }
+{ TJsonWriter }
 
-procedure TTextWriter.WriteObjectPropName(PropName: PUtf8Char;
+procedure TJsonWriter.WriteObjectPropName(PropName: PUtf8Char;
   PropNameLen: PtrInt; Options: TTextWriterWriteObjectOptions);
 begin
   if woHumanReadable in Options then
@@ -5159,16 +5117,16 @@ begin
     Add(' ');
 end;
 
-procedure TTextWriter.WriteObjectPropNameShort(const PropName: shortstring;
+procedure TJsonWriter.WriteObjectPropNameShort(const PropName: shortstring;
   Options: TTextWriterWriteObjectOptions);
 begin
   WriteObjectPropName(@PropName[1], ord(PropName[0]), Options);
 end;
 
-procedure TTextWriter.WriteObjectAsString(Value: TObject;
+procedure TJsonWriter.WriteObjectAsString(Value: TObject;
   Options: TTextWriterWriteObjectOptions);
 var
-  W: TTextWriter;
+  W: TJsonWriter;
 begin
   Add('"');
   W := GetTempJsonWriter;
@@ -5177,11 +5135,11 @@ begin
   Add('"');
 end;
 
-procedure TTextWriter.AddDynArrayJsonAsString(aTypeInfo: PRttiInfo; var aValue;
+procedure TJsonWriter.AddDynArrayJsonAsString(aTypeInfo: PRttiInfo; var aValue;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   temp: TDynArray;
-  W: TTextWriter;
+  W: TJsonWriter;
 begin
   Add('"');
   temp.Init(aTypeInfo, aValue);
@@ -5191,7 +5149,7 @@ begin
   Add('"');
 end;
 
-procedure TTextWriter.BlockBegin(Starter: AnsiChar;
+procedure TJsonWriter.BlockBegin(Starter: AnsiChar;
   Options: TTextWriterWriteObjectOptions);
 begin
   if woHumanReadable in Options then
@@ -5202,7 +5160,7 @@ begin
   Add(Starter);
 end;
 
-procedure TTextWriter.BlockEnd(Stopper: AnsiChar;
+procedure TJsonWriter.BlockEnd(Stopper: AnsiChar;
   Options: TTextWriterWriteObjectOptions);
 begin
   if woHumanReadable in Options then
@@ -5213,7 +5171,7 @@ begin
   Add(Stopper);
 end;
 
-procedure TTextWriter.AddCRAndIndent;
+procedure TJsonWriter.AddCRAndIndent;
 begin
   if fBlockComment <> '' then
   begin
@@ -5224,7 +5182,7 @@ begin
   inherited AddCRAndIndent;
 end;
 
-procedure TTextWriter.AddPropJsonString(const PropName: shortstring;
+procedure TJsonWriter.AddPropJsonString(const PropName: shortstring;
   const Text: RawUtf8);
 begin
   AddProp(@PropName[1], ord(PropName[0]));
@@ -5232,7 +5190,7 @@ begin
   AddComma;
 end;
 
-procedure TTextWriter.AddPropJsonInt64(const PropName: shortstring;
+procedure TJsonWriter.AddPropJsonInt64(const PropName: shortstring;
   Value: Int64);
 begin
   AddProp(@PropName[1], ord(PropName[0]));
@@ -5240,7 +5198,7 @@ begin
   AddComma;
 end;
 
-procedure TTextWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
+procedure TJsonWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
   AnsiToWide: PWordArray; Escape: TTextWriterKind);
 var
   c: cardinal;
@@ -5333,22 +5291,22 @@ begin
   until SourceChars = 0;
 end;
 
-destructor TTextWriter.Destroy;
+destructor TJsonWriter.Destroy;
 begin
   inherited Destroy;
   fInternalJsonWriter.Free;
 end;
 
-function TTextWriter.GetTempJsonWriter: TTextWriter;
+function TJsonWriter.GetTempJsonWriter: TJsonWriter;
 begin
   if fInternalJsonWriter = nil then
-    fInternalJsonWriter := TTextWriter.CreateOwnedStream
+    fInternalJsonWriter := TJsonWriter.CreateOwnedStream
   else
     fInternalJsonWriter.CancelAll;
   result := fInternalJsonWriter;
 end;
 
-procedure TTextWriter.Add(P: PUtf8Char; Escape: TTextWriterKind);
+procedure TJsonWriter.Add(P: PUtf8Char; Escape: TTextWriterKind);
 begin
   if P <> nil then
     case Escape of
@@ -5361,7 +5319,7 @@ begin
     end;
 end;
 
-procedure TTextWriter.Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind);
+procedure TJsonWriter.Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind);
 begin
   if P <> nil then
     case Escape of
@@ -5374,7 +5332,7 @@ begin
     end;
 end;
 
-procedure TTextWriter.AddW(P: PWord; Len: PtrInt; Escape: TTextWriterKind);
+procedure TJsonWriter.AddW(P: PWord; Len: PtrInt; Escape: TTextWriterKind);
 begin
   if P <> nil then
     case Escape of
@@ -5387,12 +5345,12 @@ begin
     end;
 end;
 
-procedure TTextWriter.AddAnsiString(const s: AnsiString; Escape: TTextWriterKind);
+procedure TJsonWriter.AddAnsiString(const s: AnsiString; Escape: TTextWriterKind);
 begin
   AddAnyAnsiBuffer(pointer(s), length(s), Escape, 0);
 end;
 
-procedure TTextWriter.AddAnyAnsiString(const s: RawByteString;
+procedure TJsonWriter.AddAnyAnsiString(const s: RawByteString;
   Escape: TTextWriterKind; CodePage: integer);
 var
   L: integer;
@@ -5415,7 +5373,7 @@ begin
   AddAnyAnsiBuffer(pointer(s), L, Escape, CodePage);
 end;
 
-procedure EngineAppendUtf8(W: TTextWriter; Engine: TSynAnsiConvert;
+procedure EngineAppendUtf8(W: TJsonWriter; Engine: TSynAnsiConvert;
   P: PAnsiChar; Len: PtrInt; Escape: TTextWriterKind);
 var
   tmp: TSynTempBuffer;
@@ -5426,7 +5384,7 @@ begin
   tmp.Done;
 end;
 
-procedure TTextWriter.AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
+procedure TJsonWriter.AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
   Escape: TTextWriterKind; CodePage: integer);
 var
   B: PUtf8Char;
@@ -5488,7 +5446,7 @@ utf8:     Add(PUtf8Char(P), Len, Escape);
   end;
 end;
 
-procedure TTextWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
+procedure TJsonWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
 var
   trailing, main, n: PtrUInt;
 begin
@@ -5543,7 +5501,7 @@ begin
     Add('"');
 end;
 
-procedure TTextWriter.BinarySaveBase64(Data: pointer; Info: PRttiInfo;
+procedure TJsonWriter.BinarySaveBase64(Data: pointer; Info: PRttiInfo;
   Kinds: TRttiKinds; withMagic, withCrc: boolean);
 var
   temp: TSynTempBuffer;
@@ -5553,7 +5511,7 @@ begin
   temp.Done;
 end;
 
-procedure TTextWriter.Add(const Format: RawUtf8; const Values: array of const;
+procedure TJsonWriter.Add(const Format: RawUtf8; const Values: array of const;
   Escape: TTextWriterKind; WriteObjectOptions: TTextWriterWriteObjectOptions);
 var
   ValuesIndex: integer;
@@ -5588,155 +5546,7 @@ begin
   until false;
 end;
 
-procedure TTextWriter.AddTimeLog(Value: PInt64; QuoteChar: AnsiChar);
-begin
-  if BEnd - B <= 31 then
-    FlushToStream;
-  B := PTimeLogBits(Value)^.Text(B + 1, true, 'T', QuoteChar) - 1;
-end;
-
-procedure TTextWriter.AddUnixTime(Value: PInt64; QuoteChar: AnsiChar);
-var
-  DT: TDateTime;
-begin
-  // inlined UnixTimeToDateTime()
-  DT := Value^ / SecsPerDay + UnixDateDelta;
-  AddDateTime(@DT, 'T', QuoteChar, {withms=}false, {dateandtime=}true);
-end;
-
-procedure TTextWriter.AddUnixMSTime(Value: PInt64; WithMS: boolean;
-  QuoteChar: AnsiChar);
-var
-  DT: TDateTime;
-begin
-  // inlined UnixMSTimeToDateTime()
-  DT := Value^ / MSecsPerDay + UnixDateDelta;
-  AddDateTime(@DT, 'T', QuoteChar, WithMS, {dateandtime=}true);
-end;
-
-procedure TTextWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
-  QuoteChar: AnsiChar; WithMS: boolean; AlwaysDateAndTime: boolean);
-var
-  T: TSynSystemTime;
-begin
-  if (Value^ = 0) and
-     (QuoteChar = #0) then
-    exit;
-  if BEnd - B <= 26 then
-    FlushToStream;
-  inc(B);
-  if QuoteChar <> #0 then
-    B^ := QuoteChar
-  else
-    dec(B);
-  if Value^ <> 0 then
-  begin
-    inc(B);
-    if AlwaysDateAndTime or
-       (trunc(Value^) <> 0) then
-    begin
-      T.FromDate(Value^);
-      B := DateToIso8601PChar(B, true, T.Year, T.Month, T.Day);
-    end;
-    if AlwaysDateAndTime or
-       (frac(Value^) <> 0) then
-    begin
-      T.FromTime(Value^);
-      B := TimeToIso8601PChar(B, true, T.Hour, T.Minute, T.Second,
-        T.MilliSecond, FirstChar, WithMS);
-    end;
-    dec(B);
-  end;
-  if twoDateTimeWithZ in fCustomOptions then
-  begin
-    inc(B);
-    B^ := 'Z';
-  end;
-  if QuoteChar <> #0 then
-  begin
-    inc(B);
-    B^ := QuoteChar;
-  end;
-end;
-
-procedure TTextWriter.AddDateTime(const Value: TDateTime; WithMS: boolean);
-begin
-  if Value = 0 then
-    exit;
-  if BEnd - B <= 24 then
-    FlushToStream;
-  inc(B);
-  if trunc(Value) <> 0 then
-    B := DateToIso8601PChar(Value, B, true);
-  if frac(Value) <> 0 then
-    B := TimeToIso8601PChar(Value, B, true, 'T', WithMS);
-  if twoDateTimeWithZ in fCustomOptions then
-    B^ := 'Z'
-  else
-    dec(B);
-end;
-
-procedure TTextWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean;
-  FirstTimeChar: AnsiChar; const TZD: RawUtf8);
-var
-  T: TSynSystemTime;
-begin
-  if Value = 0 then
-    exit;
-  T.FromDateTime(Value);
-  Add(DTMS_FMT[Expanded], [UInt4DigitsToShort(T.Year), UInt2DigitsToShortFast(T.Month),
-    UInt2DigitsToShortFast(T.Day), FirstTimeChar, UInt2DigitsToShortFast(T.Hour),
-    UInt2DigitsToShortFast(T.Minute), UInt2DigitsToShortFast(T.Second),
-    UInt3DigitsToShort(T.MilliSecond), TZD]);
-end;
-
-procedure TTextWriter.AddCurrentLogTime(LocalTime: boolean);
-var
-  time: TSynSystemTime;
-begin
-  time.FromNow(LocalTime);
-  time.AddLogTime(self);
-end;
-
-procedure TTextWriter.AddCurrentNCSALogTime(LocalTime: boolean);
-var
-  time: TSynSystemTime;
-begin
-  time.FromNow(LocalTime);
-  if BEnd - B <= 21 then
-    FlushToStream;
-  inc(B, time.ToNCSAText(B + 1));
-end;
-
-procedure TTextWriter.AddCsvInteger(const Integers: array of integer);
-var
-  i: PtrInt;
-begin
-  if length(Integers) = 0 then
-    exit;
-  for i := 0 to high(Integers) do
-  begin
-    Add(Integers[i]);
-    AddComma;
-  end;
-  CancelLastComma;
-end;
-
-procedure TTextWriter.AddCsvDouble(const Doubles: array of double);
-var
-  i: PtrInt;
-begin
-  if length(Doubles) = 0 then
-    exit;
-  for i := 0 to high(Doubles) do
-  begin
-    AddDouble(Doubles[i]);
-    AddComma;
-  end;
-  CancelLastComma;
-end;
-
-procedure TTextWriter.AddCsvUtf8(const Values: array of RawUtf8);
+procedure TJsonWriter.AddCsvUtf8(const Values: array of RawUtf8);
 var
   i: PtrInt;
 begin
@@ -5751,7 +5561,7 @@ begin
   CancelLastComma;
 end;
 
-procedure TTextWriter.AddCsvConst(const Values: array of const);
+procedure TJsonWriter.AddCsvConst(const Values: array of const);
 var
   i: PtrInt;
 begin
@@ -5765,7 +5575,7 @@ begin
   CancelLastComma;
 end;
 
-procedure TTextWriter.Add(const Values: array of const);
+procedure TJsonWriter.Add(const Values: array of const);
 var
   i: PtrInt;
 begin
@@ -5773,7 +5583,7 @@ begin
     AddJsonEscape(Values[i]);
 end;
 
-procedure TTextWriter.Add(const Values: array of const; Escape: TTextWriterKind);
+procedure TJsonWriter.Add(const Values: array of const; Escape: TTextWriterKind);
 var
   i: PtrInt;
 begin
@@ -5781,7 +5591,7 @@ begin
     Add(Values[i], Escape);
 end;
 
-procedure TTextWriter.AddQuotedStringAsJson(const QuotedString: RawUtf8);
+procedure TJsonWriter.AddQuotedStringAsJson(const QuotedString: RawUtf8);
 var
   L: integer;
   P, B: PUtf8Char;
@@ -5816,7 +5626,7 @@ begin
   end;
 end;
 
-procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
+procedure TJsonWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   cv: TSynInvokeableVariantType;
@@ -5880,7 +5690,7 @@ begin
   end;
 end;
 
-procedure TTextWriter.AddTypedJson(Value, TypeInfo: pointer;
+procedure TJsonWriter.AddTypedJson(Value, TypeInfo: pointer;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
@@ -5899,7 +5709,7 @@ begin
   end;
 end;
 
-procedure TTextWriter.WriteObject(Value: TObject;
+procedure TJsonWriter.WriteObject(Value: TObject;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
@@ -5919,7 +5729,7 @@ begin
   AddNull;
 end;
 
-procedure TTextWriter.AddRttiCustomJson(Value: pointer; RttiCustom: TObject;
+procedure TJsonWriter.AddRttiCustomJson(Value: pointer; RttiCustom: TObject;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
@@ -5933,7 +5743,7 @@ begin
     BinarySaveBase64(Value, ctxt.Info.Info, rkAllTypes, {magic=}true);
 end;
 
-procedure TTextWriter.AddRttiVarData(const Value: TRttiVarData;
+procedure TJsonWriter.AddRttiVarData(const Value: TRttiVarData;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   V64: Int64;
@@ -5957,7 +5767,7 @@ begin
     AddRttiCustomJson(Value.PropValue, Value.Prop.Value, WriteOptions);
 end;
 
-procedure TTextWriter.AddText(const Text: RawByteString; Escape: TTextWriterKind);
+procedure TJsonWriter.AddText(const Text: RawByteString; Escape: TTextWriterKind);
 begin
   if Escape = twJsonEscape then
     Add('"');
@@ -5970,7 +5780,7 @@ begin
     Add('"');
 end;
 
-procedure TTextWriter.AddTextW(P: PWord; Escape: TTextWriterKind);
+procedure TJsonWriter.AddTextW(P: PWord; Escape: TTextWriterKind);
 begin
   if Escape = twJsonEscape then
     Add('"');
@@ -5979,7 +5789,7 @@ begin
     Add('"');
 end;
 
-function TTextWriter.AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
+function TJsonWriter.AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
  EndOfObject: PUtf8Char): PUtf8Char;
 var
   objEnd: AnsiChar;
@@ -6133,7 +5943,7 @@ begin
   result := Json;
 end;
 
-function TTextWriter.AddJsonToXML(Json: PUtf8Char;
+function TJsonWriter.AddJsonToXML(Json: PUtf8Char;
   ArrayName, EndOfObject: PUtf8Char): PUtf8Char;
 var
   objEnd: AnsiChar;
@@ -6244,7 +6054,7 @@ begin
   result := Json;
 end;
 
-procedure TTextWriter.AddJsonEscape(P: Pointer; Len: PtrInt);
+procedure TJsonWriter.AddJsonEscape(P: Pointer; Len: PtrInt);
 var
   i, start: PtrInt;
   {$ifdef CPUX86NOTPIC}
@@ -6318,7 +6128,7 @@ noesc:
         (i >= Len);
 end;
 
-procedure TTextWriter.AddJsonEscapeString(const s: string);
+procedure TJsonWriter.AddJsonEscapeString(const s: string);
 begin
   if s <> '' then
     {$ifdef UNICODE}
@@ -6328,12 +6138,12 @@ begin
     {$endif UNICODE}
 end;
 
-procedure TTextWriter.AddJsonEscapeAnsiString(const s: AnsiString);
+procedure TJsonWriter.AddJsonEscapeAnsiString(const s: AnsiString);
 begin
   AddAnyAnsiString(s, twJsonEscape, 0);
 end;
 
-procedure TTextWriter.AddJsonEscapeW(P: PWord; Len: PtrInt);
+procedure TJsonWriter.AddJsonEscapeW(P: PWord; Len: PtrInt);
 var
   i, c, s: PtrInt;
   esc: byte;
@@ -6377,7 +6187,7 @@ begin
   end;
 end;
 
-procedure TTextWriter.AddJsonEscape(const V: TVarRec);
+procedure TJsonWriter.AddJsonEscape(const V: TVarRec);
 begin
   with V do
     case VType of
@@ -6433,7 +6243,7 @@ begin
     end;
 end;
 
-procedure TTextWriter.AddJsonEscape(Source: TTextWriter);
+procedure TJsonWriter.AddJsonEscape(Source: TJsonWriter);
 begin
   if Source.fTotalFileSize = 0 then
     AddJsonEscape(Source.fTempBuf, Source.B - Source.fTempBuf + 1)
@@ -6441,7 +6251,7 @@ begin
     AddJsonEscape(Pointer(Source.Text));
 end;
 
-procedure TTextWriter.AddNoJsonEscape(Source: TTextWriter);
+procedure TJsonWriter.AddNoJsonEscape(Source: TJsonWriter);
 begin
   if Source.fTotalFileSize = 0 then
     AddNoJsonEscape(Source.fTempBuf, Source.B - Source.fTempBuf + 1)
@@ -6449,7 +6259,7 @@ begin
     AddNoJsonEscapeUtf8(Source.Text);
 end;
 
-procedure TTextWriter.AddNoJsonEscapeForcedUnicode(P: PUtf8Char; Len: PtrInt);
+procedure TJsonWriter.AddNoJsonEscapeForcedUnicode(P: PUtf8Char; Len: PtrInt);
 var
   S, P2: PUtf8Char;
   c: cardinal;
@@ -6505,7 +6315,7 @@ nxt:if Len = 0 then
   until false;
 end;
 
-procedure TTextWriter.AddNoJsonEscapeForcedNoUnicode(P: PUtf8Char; Len: PtrInt);
+procedure TJsonWriter.AddNoJsonEscapeForcedNoUnicode(P: PUtf8Char; Len: PtrInt);
 var
   P2: PUtf8Char;
 begin
@@ -6546,14 +6356,14 @@ begin
   until Len <= 0;
 end;
 
-procedure TTextWriter.AddJsonString(const Text: RawUtf8);
+procedure TJsonWriter.AddJsonString(const Text: RawUtf8);
 begin
   Add('"');
   AddJsonEscape(pointer(Text));
   Add('"');
 end;
 
-procedure TTextWriter.Add(const V: TVarRec; Escape: TTextWriterKind;
+procedure TJsonWriter.Add(const V: TVarRec; Escape: TTextWriterKind;
   WriteObjectOptions: TTextWriterWriteObjectOptions);
 begin
   with V do
@@ -6609,7 +6419,7 @@ begin
     end;
 end;
 
-procedure TTextWriter.AddJson(const Format: RawUtf8; const Args, Params: array of const);
+procedure TJsonWriter.AddJson(const Format: RawUtf8; const Args, Params: array of const);
 var
   temp: variant;
 begin
@@ -6617,7 +6427,7 @@ begin
   AddVariant(temp, twJsonEscape);
 end;
 
-procedure TTextWriter.AddJsonArraysAsJsonObject(keys, values: PUtf8Char);
+procedure TJsonWriter.AddJsonArraysAsJsonObject(keys, values: PUtf8Char);
 var
   k, v: PUtf8Char;
   parser: TJsonGotoEndParser;
@@ -6656,7 +6466,7 @@ begin
   Add('}');
 end;
 
-procedure TTextWriter.AddJsonEscape(const NameValuePairs: array of const);
+procedure TJsonWriter.AddJsonEscape(const NameValuePairs: array of const);
 var
   a: integer;
 
@@ -6713,7 +6523,7 @@ begin
   Add('}');
 end;
 
-function TTextWriter.AddRecordJson(Value: pointer; RecordInfo: PRttiInfo;
+function TJsonWriter.AddRecordJson(Value: pointer; RecordInfo: PRttiInfo;
   WriteOptions: TTextWriterWriteObjectOptions): PtrInt;
 var
   ctxt: TJsonSaveContext;
@@ -6728,7 +6538,7 @@ begin
   result := ctxt.Info.Size;
 end;
 
-procedure TTextWriter.AddVoidRecordJson(RecordInfo: PRttiInfo;
+procedure TJsonWriter.AddVoidRecordJson(RecordInfo: PRttiInfo;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   tmp: TSynTempBuffer;
@@ -6738,7 +6548,7 @@ begin
   tmp.Done;
 end;
 
-procedure TTextWriter.AddDynArrayJson(var DynArray: TDynArray;
+procedure TJsonWriter.AddDynArrayJson(var DynArray: TDynArray;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
@@ -6759,14 +6569,14 @@ begin
   end;
 end;
 
-procedure TTextWriter.AddDynArrayJson(var DynArray: TDynArrayHashed;
+procedure TJsonWriter.AddDynArrayJson(var DynArray: TDynArrayHashed;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
   // needed if UNDIRECTDYNARRAY is defined (Delphi 2009+)
   AddDynArrayJson(PDynArray(@DynArray)^, WriteOptions);
 end;
 
-function TTextWriter.AddDynArrayJson(Value: pointer; Info: TRttiCustom;
+function TJsonWriter.AddDynArrayJson(Value: pointer; Info: TRttiCustom;
   WriteOptions: TTextWriterWriteObjectOptions): PtrInt;
 var
   temp: TDynArray;
@@ -8292,7 +8102,7 @@ var
   i: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream(temp) do
+  with TJsonWriter.CreateOwnedStream(temp) do
   try
     Add('{');
     for i := 0 to Count - 1 do
@@ -8408,16 +8218,16 @@ end;
 
 { TSynPersistentStoreJson }
 
-procedure TSynPersistentStoreJson.AddJson(W: TTextWriter);
+procedure TSynPersistentStoreJson.AddJson(W: TJsonWriter);
 begin
   W.AddPropJsonString('name', fName);
 end;
 
 function TSynPersistentStoreJson.SaveToJson(reformat: TTextWriterJsonFormat): RawUtf8;
 var
-  W: TTextWriter;
+  W: TJsonWriter;
 begin
-  W := TTextWriter.CreateOwnedStream(65536);
+  W := TJsonWriter.CreateOwnedStream(65536);
   try
     W.Add('{');
     AddJson(W);
@@ -9178,7 +8988,7 @@ begin
   result := fSafe.Padding[DIC_KEYCOUNT].VInteger;
 end;
 
-procedure TSynDictionary.SaveToJson(W: TTextWriter; EnumSetsAsText: boolean);
+procedure TSynDictionary.SaveToJson(W: TJsonWriter; EnumSetsAsText: boolean);
 var
   k, v: RawUtf8;
 begin
@@ -9200,10 +9010,10 @@ end;
 
 function TSynDictionary.SaveToJson(EnumSetsAsText: boolean): RawUtf8;
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(temp) as TTextWriter;
+  W := TJsonWriter.CreateOwnedStream(temp) as TJsonWriter;
   try
     SaveToJson(W, EnumSetsAsText);
     W.SetText(result);
@@ -9763,7 +9573,7 @@ begin
     // return void JSON object on error
     result := '{}'
   else
-    with TTextWriter.CreateOwnedStream(temp) do
+    with TJsonWriter.CreateOwnedStream(temp) do
     try
       AddJsonEscape(NameValuePairs);
       SetText(result);
@@ -9777,7 +9587,7 @@ function JsonEncode(const Format: RawUtf8;
 var
   temp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream(temp) do
+  with TJsonWriter.CreateOwnedStream(temp) do
   try
     AddJson(Format, Args, Params);
     SetText(result);
@@ -9788,10 +9598,10 @@ end;
 
 function JsonEncodeArrayDouble(const Values: array of double): RawUtf8;
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('[');
     W.AddCsvDouble(Values);
@@ -9804,10 +9614,10 @@ end;
 
 function JsonEncodeArrayUtf8(const Values: array of RawUtf8): RawUtf8;
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('[');
     W.AddCsvUtf8(Values);
@@ -9820,10 +9630,10 @@ end;
 
 function JsonEncodeArrayInteger(const Values: array of integer): RawUtf8;
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('[');
     W.AddCsvInteger(Values);
@@ -9851,7 +9661,7 @@ begin
     else
       result := '[]'
   else
-    with TTextWriter.CreateOwnedStream(temp) do
+    with TJsonWriter.CreateOwnedStream(temp) do
     try
       if not WithoutBraces then
         Add('[');
@@ -9872,7 +9682,7 @@ begin
   if (SQLValue <> '') and
      (SQLValue[1] in ['''', '"']) then
     // unescape SQL quoted string value into a valid JSON string
-    with TTextWriter.CreateOwnedStream(temp) do
+    with TJsonWriter.CreateOwnedStream(temp) do
     try
       Add('{', '"');
       AddNoJsonEscapeUtf8(Name);
@@ -9893,7 +9703,7 @@ procedure SaveJson(const Value; TypeInfo: PRttiInfo; Options: TTextWriterOptions
 var
   temp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream(temp) do
+  with TJsonWriter.CreateOwnedStream(temp) do
   try
     CustomOptions := CustomOptions + Options;
     AddTypedJson(@Value, TypeInfo);
@@ -9942,7 +9752,7 @@ begin
     if DynArray.LoadFrom(BlobValue) = nil then
       result := ''
     else
-      with TTextWriter.CreateOwnedStream(temp) do
+      with TJsonWriter.CreateOwnedStream(temp) do
       try
         AddDynArrayJson(DynArray);
         SetText(result);
@@ -9959,7 +9769,7 @@ function ObjArrayToJson(const aObjArray;
 var
   temp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream(temp) do
+  with TJsonWriter.CreateOwnedStream(temp) do
   try
     if woEnumSetsAsText in aOptions then
       CustomOptions := CustomOptions + [twoEnumSetsAsTextInRecord];
@@ -9977,7 +9787,7 @@ var
   i, n: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream(temp) do
+  with TJsonWriter.CreateOwnedStream(temp) do
   try
     n := high(Names);
     BlockBegin('{', Options);
@@ -10206,7 +10016,7 @@ begin
   if P = nil then
     result := Header
   else
-    with TTextWriter.CreateOwnedStream(temp) do
+    with TJsonWriter.CreateOwnedStream(temp) do
     try
       AddNoJsonEscape(pointer(Header), length(Header));
       L := length(NameSpace);
@@ -10489,7 +10299,7 @@ end;
 
 initialization
   InitializeUnit;
-  DefaultTextWriterSerializer := TTextWriter;
+  DefaultJsonWriter := TJsonWriter;
   
 end.
 

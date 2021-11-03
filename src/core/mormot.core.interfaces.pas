@@ -48,7 +48,7 @@ type
   /// handled kind of parameters for an interface-based service provider method
   // - we do not handle all kind of variables, but provide some enhanced types
   // handled by JsonToObject/ObjectToJson functions (smvObject) or
-  // TDynArray.LoadFromJson / TTextWriter.AddDynArrayJson methods (smvDynArray)
+  // TDynArray.LoadFromJson / TJsonWriter.AddDynArrayJson methods (smvDynArray)
   // - records will be serialized as Base64 string, with our RecordSave/RecordLoad
   // low-level format by default, or as true JSON objects since Delphi 2010 or
   // after a Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer call
@@ -189,24 +189,24 @@ type
     // - non standard types (e.g. clas, enumerate, dynamic array or record)
     // are identified by their type identifier - so contract does not extend
     // up to the content of such high-level structures
-    procedure SerializeToContract(WR: TTextWriter);
+    procedure SerializeToContract(WR: TJsonWriter);
     /// check if the supplied argument value is the default (e.g. 0, '' or null)
     function IsDefault(V: pointer): boolean;
     /// unserialize a JSON value into this argument
     function FromJson(const MethodName: RawUtf8; var R: PUtf8Char; V: pointer;
       Error: PShortString; DVO: TDocVariantOptions): boolean;
     /// append the JSON value corresponding to this argument
-    procedure AddJson(WR: TTextWriter; V: pointer;
+    procedure AddJson(WR: TJsonWriter; V: pointer;
       ObjectOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
     /// append the value corresponding to this argument as within a JSON string
     // - will escape any JSON string character, and include a pending ','
-    procedure AddJsonEscaped(WR: TTextWriter; V: pointer);
+    procedure AddJsonEscaped(WR: TJsonWriter; V: pointer);
     /// append the JSON value corresponding to this argument, from its text value
     // - includes a pending ','
-    procedure AddValueJson(WR: TTextWriter; const Value: RawUtf8);
+    procedure AddValueJson(WR: TJsonWriter; const Value: RawUtf8);
     /// append the default JSON value corresponding to this argument
     // - includes a pending ','
-    procedure AddDefaultJson(WR: TTextWriter);
+    procedure AddDefaultJson(WR: TJsonWriter);
     /// convert a value into its JSON representation
     procedure AsJson(var DestValue: RawUtf8; V: pointer);
     /// convert a value into its variant representation
@@ -1420,7 +1420,7 @@ type
     // $ Add(10,20)=[30],
     // or, if WasError is TRUE:
     // $ Divide(20,0) error "divide by zero",
-    procedure AddAsText(WR: TTextWriter; aScope: TInterfaceStubLogLayouts;
+    procedure AddAsText(WR: TJsonWriter; aScope: TInterfaceStubLogLayouts;
       SepChar: AnsiChar = ',');
   end;
 
@@ -2217,7 +2217,7 @@ type
     procedure FakeCallSetJsonToStack(var ctxt: TFakeCallContext; R: PUtf8Char);
     procedure FakeCallInternalProcess(var ctxt: TFakeCallContext); override;
     // should be overriden to support interface parameters (i.e. callbacks)
-    procedure InterfaceWrite(W: TTextWriter; const aMethod: TInterfaceMethod;
+    procedure InterfaceWrite(W: TJsonWriter; const aMethod: TInterfaceMethod;
       const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); virtual;
   public
     /// create an instance, using the specified interface and factory
@@ -2419,7 +2419,7 @@ type
   /// execute a method of a TInterfacedObject instance, from/to JSON
   TInterfaceMethodExecute = class(TInterfaceMethodExecuteRaw)
   protected
-    fTempTextWriter: TTextWriter;
+    fTempTextWriter: TJsonWriter;
     fOnCallback: TOnInterfaceMethodExecuteCallback;
     fServiceCustomAnswerHead: RawUtf8;
     fServiceCustomAnswerStatus: cardinal;
@@ -2435,7 +2435,7 @@ type
     // corresponding ExecutedInstancesFailed[] property will be filled with
     // the JSON serialized exception
     function ExecuteJson(const Instances: array of pointer; Par: PUtf8Char;
-      Res: TTextWriter; Error: PShortString = nil; ResAsJsonObject: boolean = false): boolean;
+      Res: TJsonWriter; Error: PShortString = nil; ResAsJsonObject: boolean = false): boolean;
     /// execute the corresponding method of one weak IInvokable reference
     // - exepect no output argument, i.e. no returned data, unless output is set
     // - this version will identify TInterfacedObjectFake implementations,
@@ -2456,8 +2456,8 @@ type
     // redirects to TServiceContainerServer.GetFakeCallback
     property OnCallback: TOnInterfaceMethodExecuteCallback
       read fOnCallback write fOnCallback;
-    /// allow to use an instance-specific temporary TJsonSerializer
-    function TempTextWriter: TTextWriter;
+    /// allow to use an instance-specific temporary TOrmWriter
+    function TempTextWriter: TJsonWriter;
   end;
 
 
@@ -2504,7 +2504,7 @@ implementation
 
 { ************ IInvokable Interface Methods and Parameters RTTI Extraction }
 
-procedure TInterfaceMethodArgument.SerializeToContract(WR: TTextWriter);
+procedure TInterfaceMethodArgument.SerializeToContract(WR: TJsonWriter);
 const
   ARGDIRTOJSON: array[TInterfaceMethodValueDirection] of string[4] = (
   // convert into generic in/out direction (assume result is out)
@@ -2626,7 +2626,7 @@ begin
   end;
 end;
 
-procedure TInterfaceMethodArgument.AddJson(WR: TTextWriter; V: pointer;
+procedure TInterfaceMethodArgument.AddJson(WR: TJsonWriter; V: pointer;
   ObjectOptions: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
@@ -2645,7 +2645,7 @@ end;
 
 procedure TInterfaceMethodArgument.AsJson(var DestValue: RawUtf8; V: pointer);
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
   case ValueType of  // some direct conversion of simple types into RawUtf8
@@ -2677,7 +2677,7 @@ begin
   else
     begin
       // use generic AddJson() method for complex "..." content
-      W := TTextWriter.CreateOwnedStream(temp);
+      W := TJsonWriter.CreateOwnedStream(temp);
       try
         AddJson(W, V);
         W.SetText(DestValue);
@@ -2688,9 +2688,9 @@ begin
   end;
 end;
 
-procedure TInterfaceMethodArgument.AddJsonEscaped(WR: TTextWriter; V: pointer);
+procedure TInterfaceMethodArgument.AddJsonEscaped(WR: TJsonWriter; V: pointer);
 var
-  W: TTextWriter;
+  W: TJsonWriter;
 begin
   if ValueType in [imvBoolean..imvCurrency, imvInterface] then
     // no need to escape those
@@ -2703,7 +2703,7 @@ begin
   end;
 end;
 
-procedure TInterfaceMethodArgument.AddValueJson(WR: TTextWriter; const Value: RawUtf8);
+procedure TInterfaceMethodArgument.AddValueJson(WR: TJsonWriter; const Value: RawUtf8);
 begin
   if vIsString in ValueKindAsm then
   begin
@@ -2718,7 +2718,7 @@ begin
   end;
 end;
 
-procedure TInterfaceMethodArgument.AddDefaultJson(WR: TTextWriter);
+procedure TInterfaceMethodArgument.AddDefaultJson(WR: TJsonWriter);
 begin
   case ValueType of
     imvBoolean:
@@ -2925,11 +2925,11 @@ end;
 function TInterfaceMethod.ArgsArrayToObject(P: PUtf8Char; Input: boolean): RawUtf8;
 var
   i: integer;
-  W: TTextWriter;
+  W: TJsonWriter;
   Value: PUtf8Char;
   temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('{');
     if (P = nil) or
@@ -2970,14 +2970,14 @@ function TInterfaceMethod.ArgsCommandLineToObject(P: PUtf8Char;
   Input, RaiseExceptionOnUnknownParam: boolean): RawUtf8;
 var
   i: integer;
-  W: TTextWriter;
+  W: TJsonWriter;
   B: PUtf8Char;
   arginfo: PInterfaceMethodArgument;
   arg, value: RawUtf8;
   ok: boolean;
   temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('{');
     while (P <> nil) and
@@ -3390,7 +3390,7 @@ end;
 procedure TInterfacedObjectFake.FakeCallGetJsonFromStack(
   var ctxt: TFakeCallContext; var Json: RawUtf8);
 var
-  Params: TTextWriter;
+  Params: TJsonWriter;
   opt: TTextWriterWriteObjectOptions;
   arg: integer;
   V: PPointer;
@@ -3398,7 +3398,7 @@ var
 begin
   FakeCallGetParamsFromStack(ctxt);
   // generate the ParamsJson input from c^.Value[]
-  Params := TTextWriter.CreateOwnedStream(temp);
+  Params := TJsonWriter.CreateOwnedStream(temp);
   try
     if ifoJsonAsExtended in fOptions then
       Params.CustomOptions := Params.CustomOptions + [twoForceJsonExtended]
@@ -3539,7 +3539,7 @@ begin
     FakeCallSetJsonToStack(ctxt, pointer(OutputJson));
 end;
 
-procedure TInterfacedObjectFake.InterfaceWrite(W: TTextWriter;
+procedure TInterfacedObjectFake.InterfaceWrite(W: TJsonWriter;
   const aMethod: TInterfaceMethod; const aParamInfo: TInterfaceMethodArgument;
   aParamValue: Pointer);
 begin
@@ -3804,7 +3804,7 @@ end;
 constructor TInterfaceFactory.Create(aInterface: PRttiInfo);
 var
   m, a, reg: integer;
-  WR: TTextWriter;
+  WR: TJsonWriter;
   ErrorMsg: RawUtf8;
   {$ifdef HAS_FPREG}
   ValueIsInFPR: boolean;
@@ -4195,7 +4195,7 @@ begin
     //assert(offs=0);
     {$endif CPUX86}
   end;
-  WR := TTextWriter.CreateOwnedStream;
+  WR := TJsonWriter.CreateOwnedStream;
   try
     // compute the default results JSON array for all methods
     for m := 0 to MethodsCount - 1 do
@@ -5569,7 +5569,7 @@ begin
     result := CustomResults;
 end;
 
-procedure TInterfaceStubLog.AddAsText(WR: TTextWriter; aScope:
+procedure TInterfaceStubLog.AddAsText(WR: TJsonWriter; aScope:
   TInterfaceStubLogLayouts; SepChar: AnsiChar);
 begin
   if wName in aScope then
@@ -5747,13 +5747,13 @@ end;
 procedure TOnInterfaceStubExecuteParamsVariant.SetResultFromOutput;
 var
   a, ndx: integer;
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
   fResult := '';
   if fOutput = nil then
     exit;
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('[');
     ndx := 0;
@@ -6331,7 +6331,7 @@ function TInterfaceStub.IntGetLogAsText(asmndx: integer; const aParams: RawUtf8;
   aScope: TInterfaceStubLogLayouts; SepChar: AnsiChar): RawUtf8;
 var
   i: integer;
-  WR: TTextWriter;
+  WR: TJsonWriter;
   temp: TTextWriterStackBuffer;
   log: ^TInterfaceStubLog;
 begin
@@ -6339,7 +6339,7 @@ begin
     result := ''
   else
   begin
-    WR := TTextWriter.CreateOwnedStream(temp);
+    WR := TJsonWriter.CreateOwnedStream(temp);
     try
       log := Pointer(fLogs);
       if asmndx < RESERVED_VTABLE_SLOTS then
@@ -7345,11 +7345,11 @@ begin
   inherited Destroy;
 end;
 
-function TInterfaceMethodExecute.TempTextWriter: TTextWriter;
+function TInterfaceMethodExecute.TempTextWriter: TJsonWriter;
 begin
   if fTempTextWriter = nil then
   begin
-    fTempTextWriter := TTextWriter.CreateOwnedStream;
+    fTempTextWriter := TJsonWriter.CreateOwnedStream;
     fTempTextWriter.CustomOptions := fTempTextWriter.CustomOptions +
       [twoForceJsonExtended, twoIgnoreDefaultInRecord]; // shorter
   end;
@@ -7360,7 +7360,7 @@ function TInterfaceMethodExecute.ExecuteJsonCallback(Instance: pointer;
   const params: RawUtf8; output: PRawUtf8): boolean;
 var
   fake: TInterfacedObjectFake;
-  WR: TTextWriter;
+  WR: TJsonWriter;
   n: integer;
   tmp: TSynTempBuffer;
 begin
@@ -7429,7 +7429,7 @@ begin
 end;
 
 function TInterfaceMethodExecute.ExecuteJson(const Instances: array of pointer;
-  Par: PUtf8Char; Res: TTextWriter; Error: PShortString; ResAsJsonObject: boolean): boolean;
+  Par: PUtf8Char; Res: TJsonWriter; Error: PShortString; ResAsJsonObject: boolean): boolean;
 var
   a, a1: integer;
   Val, Name: PUtf8Char;

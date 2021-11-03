@@ -623,7 +623,7 @@ end;
 
 function DataSetToJson(Data: TDataSet): RawJson;
 var
-  W: TJsonWriter;
+  W: TResultsWriter;
   f: PtrInt;
   blob: TRawByteStringStream;
 begin
@@ -633,7 +633,7 @@ begin
   Data.First;
   if Data.Eof then
     exit;
-  W := TJsonWriter.Create(nil, true, false, nil, 16384);
+  W := TResultsWriter.Create(nil, true, false, nil, 16384);
   try
     // get col names and types
     SetLength(W.ColNames, Data.FieldCount);

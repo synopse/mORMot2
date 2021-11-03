@@ -258,14 +258,14 @@ type
     fTimeLog: TTimeLogDynArray;
     fFileVersions: TFVs;
     class procedure FVReader(var Context: TJsonParserContext; Data: pointer);
-    class procedure FVWriter(W: TTextWriter; Data: pointer;
+    class procedure FVWriter(W: TJsonWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions);
     class procedure FVReader2(var Context: TJsonParserContext; Data: pointer);
-    class procedure FVWriter2(W: TTextWriter; Data: pointer;
+    class procedure FVWriter2(W: TJsonWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions);
     class procedure FVClassReader(var Context: TJsonParserContext;
        Value: TObject);
-    class procedure FVClassWriter(W: TTextWriter; Value: TObject;
+    class procedure FVClassWriter(W: TJsonWriter; Value: TObject;
       Options: TTextWriterWriteObjectOptions);
   published
     property Ints: TIntegerDynArray
@@ -827,7 +827,7 @@ begin
     end;
 end;
 
-class procedure TCollTstDynArray.FVWriter(W: TTextWriter; Data: pointer;
+class procedure TCollTstDynArray.FVWriter(W: TJsonWriter; Data: pointer;
   Options: TTextWriterWriteObjectOptions);
 begin
   with PFV(Data)^ do
@@ -854,7 +854,7 @@ begin
     end;
 end;
 
-class procedure TCollTstDynArray.FVWriter2(W: TTextWriter; Data: pointer;
+class procedure TCollTstDynArray.FVWriter2(W: TJsonWriter; Data: pointer;
   Options: TTextWriterWriteObjectOptions);
 begin
   with PFV(Data)^ do
@@ -885,7 +885,7 @@ begin
     end;
 end;
 
-class procedure TCollTstDynArray.FVClassWriter(W: TTextWriter; Value: TObject;
+class procedure TCollTstDynArray.FVClassWriter(W: TJsonWriter; Value: TObject;
   Options: TTextWriterWriteObjectOptions);
 begin
   with TFileVersion(Value) do
@@ -2165,7 +2165,7 @@ begin
     check(CompareMem(pointer(RB), pointer(U), length(U)));
 {    J := TRestServer.JsonEncodeResult([r]);
     Check(SameValue(GetExtended(pointer(JsonDecode(J)),err),r)); }
-    with TTextWriter.CreateOwnedStream do
+    with TJsonWriter.CreateOwnedStream do
     try
       AddVariant(a);
       AddComma;

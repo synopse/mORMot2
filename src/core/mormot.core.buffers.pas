@@ -2230,7 +2230,7 @@ type
     function AsText: RawByteString;
     /// return all content as a single TByteDynArray
     function AsBytes: TByteDynArray;
-    /// save all content into a TTextWriter instance
+    /// save all content into a TJsonWriter instance
     procedure Write(W: TBaseWriter; Escape: TTextWriterKind = twJsonEscape); overload;
     /// save all content into a TBufferWriter instance
     procedure WriteBinary(W: TBufferWriter); overload;

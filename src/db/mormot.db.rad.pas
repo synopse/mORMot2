@@ -251,7 +251,7 @@ type
     // - will use WR.Expand to guess the expected output format
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TJsonWriter); override;
+    procedure ColumnsToJson(WR: TResultsWriter); override;
   end;
 
   ///	implements a statement via the DB.pas TDataSet/TQuery-like connection
@@ -735,7 +735,7 @@ begin
   result := fQuery.Fields[col];
 end;
 
-procedure TSqlDBDatasetStatementAbstract.ColumnsToJson(WR: TJsonWriter);
+procedure TSqlDBDatasetStatementAbstract.ColumnsToJson(WR: TResultsWriter);
 var
   col: PtrInt;
   f: TField;

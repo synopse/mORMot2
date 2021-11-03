@@ -110,7 +110,7 @@ type
       const Fields: TFieldBits; BsonFieldNames: PRawUtf8DynArray;
       const SubFields: TRawUtf8DynArray): integer;
     function GetJsonValues(const Res: TBsonDocument;
-      const extFieldNames: TRawUtf8DynArray; W: TJsonSerializer): integer;
+      const extFieldNames: TRawUtf8DynArray; W: TOrmWriter): integer;
   public
     // overridden methods calling the MongoDB external server
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
@@ -910,7 +910,7 @@ procedure TRestStorageMongoDB.JsonFromDoc(var doc: TDocVariantData;
 var
   i: PtrInt;
   name: RawUtf8;
-  W: TTextWriter;
+  W: TJsonWriter;
   tmp: TTextWriterStackBuffer;
 begin
   if (doc.VarType <> DocVariantType.VarType) or
@@ -920,7 +920,7 @@ begin
     result := '';
     exit;
   end;
-  W := TTextWriter.CreateOwnedStream(tmp);
+  W := TJsonWriter.CreateOwnedStream(tmp);
   try
     W.Add('{');
     for i := 0 to doc.Count - 1 do
@@ -1061,7 +1061,7 @@ begin
 end;
 
 function TRestStorageMongoDB.GetJsonValues(const Res: TBsonDocument;
-  const extFieldNames: TRawUtf8DynArray; W: TJsonSerializer): integer;
+  const extFieldNames: TRawUtf8DynArray; W: TOrmWriter): integer;
 
   function itemFind(item: PBsonElement; itemcount, o1ndx: integer;
     const aName: RawUtf8): PBsonElement;
@@ -1434,7 +1434,7 @@ var
 
 var
   T: TOrmTableJson;
-  W: TJsonSerializer;
+  W: TOrmWriter;
   MS: TRawByteStringStream;
   Res: TBsonDocument;
   limit: PtrInt;

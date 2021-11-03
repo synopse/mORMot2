@@ -4528,7 +4528,7 @@ type
     // - will use WR.Expand to guess the expected output format
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data
-    procedure FieldsToJson(WR: TJsonWriter; DoNotFetchBlobs: boolean = false);
+    procedure FieldsToJson(WR: TResultsWriter; DoNotFetchBlobs: boolean = false);
     /// the column/field count of the current ROW
     // - fields numerotation starts with 0
     property FieldCount: integer
@@ -7876,11 +7876,11 @@ function TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
 // expand=false: { "FieldCount":2,"Values":["col1","col2",val11,"val12",val21,..] }
 var
   i: PtrInt;
-  W: TJsonWriter;
+  W: TResultsWriter;
   tmp: TTextWriterStackBuffer;
 begin
   result := 0;
-  W := TJsonWriter.Create(Json, Expand, false, nil, 0, @tmp);
+  W := TResultsWriter.Create(Json, Expand, false, nil, 0, @tmp);
   try
     W.CustomOptions := W.CustomOptions + Options;
     // prepare the SQL request
@@ -8244,7 +8244,7 @@ begin
   result := sqlite3.stmt_readonly(Request) <> 0;
 end;
 
-procedure TSqlRequest.FieldsToJson(WR: TJsonWriter; DoNotFetchBlobs: boolean);
+procedure TSqlRequest.FieldsToJson(WR: TResultsWriter; DoNotFetchBlobs: boolean);
 var
   i: PtrInt;
   P: PUtf8Char;

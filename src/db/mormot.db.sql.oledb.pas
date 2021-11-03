@@ -465,7 +465,7 @@ type
     // - fast overridden implementation with no temporary variable
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TJsonWriter); override;
+    procedure ColumnsToJson(WR: TResultsWriter); override;
     /// return a Column as a variant
     // - this implementation will retrieve the data with no temporary variable
     // (since TQuery calls this method a lot, we tried to optimize it)
@@ -1093,7 +1093,7 @@ begin
   end;
 end;
 
-procedure TSqlDBOleDBStatement.ColumnsToJson(WR: TJsonWriter);
+procedure TSqlDBOleDBStatement.ColumnsToJson(WR: TResultsWriter);
 var
   col: integer;
   C: PSqlDBColumnProperty;

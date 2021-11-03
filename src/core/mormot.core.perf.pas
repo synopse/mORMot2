@@ -1645,10 +1645,10 @@ end;
 
 function TSynMonitor.ComputeDetailsJson: RawUtf8;
 var
-  W: TBaseWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
-  W := DefaultTextWriterSerializer.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     ComputeDetailsTo(W);
     W.SetText(result);

@@ -145,7 +145,7 @@ type
     fUpdateCount: integer;
     fShouldLogSQL: boolean; // sllSQL in SynDBLog.Level -> set fLogSQLValues[]
     // retrieve the inlined value of a given parameter, e.g. 1 or 'name'
-    procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
+    procedure AddParamValueAsText(Param: integer; Dest: TJsonWriter;
       MaxCharCount: integer); override;
   public
     /// create a SQLite3 statement instance, from an existing SQLite3 connection
@@ -268,7 +268,7 @@ type
     // - fast overridden implementation with no temporary variable
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TJsonWriter); override;
+    procedure ColumnsToJson(WR: TResultsWriter); override;
   end;
 
 
@@ -608,7 +608,7 @@ begin
   result := fStatement.FieldNull(Col);
 end;
 
-procedure TSqlDBSQLite3Statement.ColumnsToJson(WR: TJsonWriter);
+procedure TSqlDBSQLite3Statement.ColumnsToJson(WR: TResultsWriter);
 begin
   fStatement.FieldsToJson(WR, fForceBlobAsNull);
 end;
@@ -691,7 +691,7 @@ begin
 end;
 
 procedure TSqlDBSQLite3Statement.AddParamValueAsText(Param: integer;
-  Dest: TTextWriter; MaxCharCount: integer);
+  Dest: TJsonWriter; MaxCharCount: integer);
 var
   v: PVarData;
 begin

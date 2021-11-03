@@ -11,7 +11,7 @@ unit mormot.db.core;
     - Nullable Values Stored as Variant
     - Date/Time SQL encoding
     - SQL Parameters Inlining and Processing
-    - TJsonWriter Specialized for Database Export
+    - TResultsWriter Specialized for Database Export
     - TSelectStatement SQL SELECT Parser
     - JSON Object Decoder and SQL Generation
     - TID Processing Functions
@@ -768,12 +768,12 @@ function GetTableNamesFromSqlSelect(const SQL: RawUtf8): TRawUtf8DynArray;
 
 
 
-{ ************ TJsonWriter Specialized for Database Export }
+{ ************ TResultsWriter Specialized for Database Export }
 
 type
-  /// simple writer to a Stream, specialized for the JSON format and SQL export
+  /// simple writer to a Stream, specialized for SQL export as JSON
   // - i.e. define some property/method helpers to export SQL resultset as JSON
-  TJsonWriter = class(TTextWriter)
+  TResultsWriter = class(TJsonWriter)
   protected
     /// used to store output format
     fExpand: boolean;
@@ -959,7 +959,7 @@ type
     fWhereHasParenthesis, fHasSelectSubFields, fWhereHasSubFields: boolean;
     fLimit: integer;
     fOffset: integer;
-    fWriter: TJsonWriter;
+    fWriter: TResultsWriter;
     fOrderByFieldDesc: TFieldBits;
   public
     /// parse the given SELECT SQL statement and retrieve the corresponding
@@ -1025,7 +1025,7 @@ type
     property Offset: integer
       read fOffset;
     /// optional associated writer
-    property Writer: TJsonWriter
+    property Writer: TResultsWriter
       read fWriter write fWriter;
   end;
 
@@ -2089,7 +2089,7 @@ var
 begin
   n := length(Values);
   if n > 0 then
-    with TTextWriter.CreateOwnedStream(temp) do
+    with TJsonWriter.CreateOwnedStream(temp) do
     try
       AddString(PropName);
       if n = 1 then
@@ -2393,15 +2393,15 @@ end;
 
 
 
-{ ************ TJsonWriter Specialized for Database Export }
+{ ************ TResultsWriter Specialized for Database Export }
 
-{ TJsonWriter }
+{ TResultsWriter }
 
 const
   VOID_ARRAY: PAnsiChar = '[]'#10;
   VOID_FIELD: PAnsiChar = '{"FieldCount":0}';
 
-procedure TJsonWriter.CancelAllVoid;
+procedure TResultsWriter.CancelAllVoid;
 begin
   CancelAll; // rewind JSON
   if fExpand then
@@ -2411,13 +2411,13 @@ begin
     inc(fTotalFileSize, fStream.Write(VOID_FIELD^, 16));
 end;
 
-constructor TJsonWriter.Create(aStream: TStream; Expand, withID: boolean;
+constructor TResultsWriter.Create(aStream: TStream; Expand, withID: boolean;
   const Fields: TFieldBits; aBufSize: integer);
 begin
   Create(aStream, Expand, withID, FieldBitsToIndex(Fields), aBufSize);
 end;
 
-constructor TJsonWriter.Create(aStream: TStream; Expand, withID: boolean;
+constructor TResultsWriter.Create(aStream: TStream; Expand, withID: boolean;
   const Fields: TFieldIndexDynArray; aBufSize: integer;
   aStackBuffer: PTextWriterStackBuffer);
 begin
@@ -2435,7 +2435,7 @@ begin
   fFields := Fields;
 end;
 
-procedure TJsonWriter.AddColumns(aKnownRowsCount: integer);
+procedure TResultsWriter.AddColumns(aKnownRowsCount: integer);
 var
   i: PtrInt;
 begin
@@ -2471,7 +2471,7 @@ begin
   end;
 end;
 
-procedure TJsonWriter.AddColumn(aColName: PUtf8Char; aColIndex, aColCount: PtrInt);
+procedure TResultsWriter.AddColumn(aColName: PUtf8Char; aColIndex, aColCount: PtrInt);
 const
   FMT: array[boolean] of RawUtf8 = ('"%":', '%:');
 begin
@@ -2502,7 +2502,7 @@ begin
   end;
 end;
 
-procedure TJsonWriter.ChangeExpandedFields(aWithID: boolean;
+procedure TResultsWriter.ChangeExpandedFields(aWithID: boolean;
   const aFields: TFieldIndexDynArray);
 begin
   if not Expand then
@@ -2512,7 +2512,7 @@ begin
   fFields := aFields;
 end;
 
-procedure TJsonWriter.EndJsonObject(aKnownRowsCount, aRowsCount: integer;
+procedure TResultsWriter.EndJsonObject(aKnownRowsCount, aRowsCount: integer;
   aFlushFinal: boolean);
 begin
   CancelLastComma; // cancel last ','
@@ -2531,7 +2531,7 @@ begin
     FlushFinal;
 end;
 
-procedure TJsonWriter.TrimFirstRow;
+procedure TResultsWriter.TrimFirstRow;
 var
   P, PBegin, PEnd: PUtf8Char;
 begin
@@ -3414,7 +3414,7 @@ function TJsonObjectDecoder.EncodeAsSql(
   const Prefix1, Prefix2: RawUtf8; Update: boolean): RawUtf8;
 var
   f: PtrInt;
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 
   procedure AddValue;
@@ -3432,7 +3432,7 @@ begin
   result := '';
   if FieldCount = 0 then
     exit;
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.AddString(Prefix1);
     W.AddString(Prefix2);
@@ -3474,12 +3474,12 @@ end;
 procedure TJsonObjectDecoder.EncodeAsJson(out result: RawUtf8);
 var
   f: PtrInt;
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
   if FieldCount = 0 then
     exit;
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('{');
     for f := 0 to FieldCount - 1 do

@@ -668,7 +668,7 @@ type
     /// corresponding TRttiVarData.VType
     // - rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkArray are
     // identified as varAny with TVarData.VAny pointing to the actual value, and
-    // will be handled as expected by TTextWriter.AddRttiVarData
+    // will be handled as expected by TJsonWriter.AddRttiVarData
     RttiVarDataVType: cardinal;
     /// type-specific information
     case TRttiKind of
@@ -1951,7 +1951,7 @@ type
   // rkObject are stored as varAny/PropValue pointer to the field value (for
   // GetValueDirect) or Instance (for GetValueGetter if PropValueIsInstance=true),
   // and Prop to the corresponding property RTTI
-  // - will be properly handled by TTextWriter.AddVariant/AddRttiVarData
+  // - will be properly handled by TJsonWriter.AddVariant/AddRttiVarData
   // - can be casted as a variant value, but contains RTTI and clear flag:
   // ! if rvd.NeedsClear then VarClearProc(rvd.Data);
   TRttiVarData = packed record
@@ -2059,7 +2059,7 @@ type
     /// very fast retrieval of any field value into a TVarData-like
     // - works if Prop is defined or not, calling any getter method if needed
     // - complex TRttiVarData with varAny pointer will be properly handled by
-    // TTextWriter.AddVariant/AddRttiVarData (e.g. rkEnumeration or rkDynArray)
+    // TJsonWriter.AddVariant/AddRttiVarData (e.g. rkEnumeration or rkDynArray)
     // - rvd can be casted to a variant, but contains RTTI Info and clear flag:
     // ! if rvd.NeedsClear then VarClearProc(rvd.Data);
     procedure GetValue(Data: pointer; out RVD: TRttiVarData);
@@ -2655,14 +2655,14 @@ type
     // and/or rcfHookRead for RttiBeforeReadObject or RttiAfterReadObject methods
     // (disabled by default not to slow down the serialization process)
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); virtual;
-    // called before TTextWriter.WriteObject() serialize this instance as JSON
+    // called before TJsonWriter.WriteObject() serialize this instance as JSON
     // - triggered if RttiCustomSetParser defined the rcfHookWrite flag
     // - you can return true if your method made the serialization
     // - this default implementation just returns false, to continue serializing
     // - TSynMonitor will change the serialization Options for this instance
     function RttiBeforeWriteObject(W: TBaseWriter;
       var Options: TTextWriterWriteObjectOptions): boolean; virtual;
-    // called by TTextWriter.WriteObject() to serialize one published property value
+    // called by TJsonWriter.WriteObject() to serialize one published property value
     // - triggered if RttiCustomSetParser defined the rcfHookWriteProperty flag
     // - is overriden in TOrm/TOrmMany to detect "fake" instances
     // or by TSynPersistentWithPassword to hide the password field value
@@ -2670,7 +2670,7 @@ type
     // default) if the property is to be serialized as usual
     function RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
       Options: TTextWriterWriteObjectOptions): boolean; virtual;
-    /// called after TTextWriter.WriteObject() serialized this instance as JSON
+    /// called after TJsonWriter.WriteObject() serialized this instance as JSON
     // - triggered if RttiCustomSetParser defined the rcfHookWrite flag
     // - execute just before W.BlockEnd('}')
     procedure RttiAfterWriteObject(W: TBaseWriter;
@@ -6446,7 +6446,7 @@ begin
       // rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkObject
       RVD.PropValue := Data; // keeping RVD.PropValueIsInstance=false
       RVD.Prop := @self;
-      // varAny/Value handled by TTextWriter.AddVariant/AddRttiVarData
+      // varAny/Value handled by TJsonWriter.AddVariant/AddRttiVarData
     end;
   varUnknown:
     // rkChar, rkWChar, rkSString converted into temporary RawUtf8
@@ -6494,7 +6494,7 @@ begin
       RVD.PropValueIsInstance := true;
       RVD.PropValue := Instance;
       RVD.Prop := @self;
-      // varAny/Value/Prop handled by TTextWriter.AddVariant/AddRttiVarData
+      // varAny/Value/Prop handled by TJsonWriter.AddVariant/AddRttiVarData
     end;
   varUnknown:
     // rkChar, rkWChar, rkSString converted into temporary RawUtf8
@@ -8448,7 +8448,7 @@ begin
       raise ERttiException.CreateUtf8('Unexpected RTTI_FINALIZE[%]', [ToText(k)^]);
     if Assigned(RTTI_MANAGEDCOPY[k]) <> (k in rkManagedTypes) then
       raise ERttiException.CreateUtf8('Unexpected RTTI_MANAGEDCOPY[%]', [ToText(k)^]);
-    // TTextWriter.AddRttiVarData for TRttiCustomProp.GetValueDirect/GetValueGetter
+    // TJsonWriter.AddRttiVarData for TRttiCustomProp.GetValueDirect/GetValueGetter
     case k of
       rkEnumeration,
       rkSet,

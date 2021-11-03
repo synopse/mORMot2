@@ -604,7 +604,7 @@ type
     // of plain JSON string (as stored in the database)
     // - will idenfity ClientKind=ckAjax, or check for rsoGetAsJsonNotAsString
     // in TRestServer.Options
-    function ClientOrmOptions: TJsonSerializerOrmOptions;
+    function ClientOrmOptions: TOrmWriterOptions;
     /// true if called from TRestServer.AdministrationExecute
     function IsRemoteAdministrationExecute: boolean;
       {$ifdef FPC}inline;{$endif}
@@ -648,7 +648,7 @@ type
     // arrays or objects, or add an "ID_str" string field for JavaScript
     procedure Returns(Value: TObject; Status: integer = HTTP_SUCCESS;
       Handle304NotModified: boolean = false;
-      OrmOptions: TJsonSerializerOrmOptions = [];
+      OrmOptions: TOrmWriterOptions = [];
       const CustomHeader: RawUtf8 = ''); overload;
     /// use this method to send back any variant as JSON to the caller
     // - this method will call VariantSaveJson() to compute the returned content
@@ -751,9 +751,9 @@ type
     // ! end;
     procedure ConfigurationRestMethod(SettingsStorage: TObject);
     /// low-level preparation of the JSON result for a service execution
-    procedure ServiceResultStart(WR: TTextWriter); virtual;
+    procedure ServiceResultStart(WR: TJsonWriter); virtual;
     /// low-level closure of the JSON result for a service execution
-    procedure ServiceResultEnd(WR: TTextWriter; ID: TID); virtual;
+    procedure ServiceResultEnd(WR: TJsonWriter; ID: TID); virtual;
     /// low-level statistics merge during service execution
     procedure StatsFromContext(Stats: TSynMonitorInputOutput;
       var Diff: Int64; DiffIsMicroSecs: boolean);
@@ -1808,8 +1808,8 @@ type
     procedure OnBeginCurrentThread(Sender: TThread); override;
     procedure OnEndCurrentThread(Sender: TThread); override;
     // called by Stat() and Info() method-based services
-    procedure InternalStat(Ctxt: TRestServerUriContext; W: TTextWriter); virtual;
-    procedure AddStat(Flags: TRestServerAddStats; W: TTextWriter);
+    procedure InternalStat(Ctxt: TRestServerUriContext; W: TJsonWriter); virtual;
+    procedure AddStat(Flags: TRestServerAddStats; W: TJsonWriter);
     procedure InternalInfo(var info: TDocVariantData); virtual;
     procedure SetStatUsage(usage: TSynMonitorUsage);
     function GetServiceMethodStat(const aMethod: RawUtf8): TSynMonitorInputOutput;
@@ -3199,7 +3199,7 @@ begin
   LockedInc64(@Server.fStats.fServiceMethod);
 end;
 
-procedure TRestServerUriContext.ServiceResultStart(WR: TTextWriter);
+procedure TRestServerUriContext.ServiceResultStart(WR: TJsonWriter);
 const
   JSONSTART: array[boolean] of RawUtf8 = (
     '{"result":[', '{"result":{');
@@ -3211,7 +3211,7 @@ begin
     WR.AddString(JSONSTART[ForceServiceResultAsJsonObject]);
 end;
 
-procedure TRestServerUriContext.ServiceResultEnd(WR: TTextWriter; ID: TID);
+procedure TRestServerUriContext.ServiceResultEnd(WR: TJsonWriter; ID: TID);
 const
   JSONSEND_WITHID: array[boolean] of RawUtf8 = (
     '],"id":', '},"id":');
@@ -3239,10 +3239,10 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
 
     procedure ServiceResult(const Name, JsonValue: RawUtf8);
     var
-      wr: TTextWriter;
+      wr: TJsonWriter;
       temp: TTextWriterStackBuffer;
     begin
-      wr := TJsonSerializer.CreateOwnedStream(temp);
+      wr := TOrmWriter.CreateOwnedStream(temp);
       try
         ServiceResultStart(wr);
         if ForceServiceResultAsJsonObject then
@@ -3435,10 +3435,10 @@ end;
 procedure TRestServerUriContext.ExecuteOrmGet;
 
   procedure ConvertOutBodyAsPlainJson(const FieldsCsv: RawUtf8;
-    Options: TJsonSerializerOrmOptions);
+    Options: TOrmWriterOptions);
   var
     rec: TOrm;
-    W: TJsonSerializer;
+    W: TOrmWriter;
     bits: TFieldBits;
     withid: boolean;
     tmp: TTextWriterStackBuffer;
@@ -3447,7 +3447,7 @@ procedure TRestServerUriContext.ExecuteOrmGet;
     if (FieldsCsv = '') or
        // handle ID single field only if ID_str is needed
        (IsRowID(pointer(FieldsCsv)) and
-        not (jwoID_str in Options)) or
+        not (owoID_str in Options)) or
        // we won't handle min()/max() functions
        not TableModelProps.Props.FieldBitsFromCsv(FieldsCsv, bits, withid) then
       exit;
@@ -3477,7 +3477,7 @@ var
   resultlist: TOrmTable;
   tableindexes: TIntegerDynArray;
   rec: TOrm;
-  opt: TJsonSerializerOrmOptions;
+  opt: TOrmWriterOptions;
   P: PUtf8Char;
   i, j, L: PtrInt;
   cache: TRestCache;
@@ -4528,18 +4528,18 @@ begin
   result := fClientKind;
 end;
 
-function TRestServerUriContext.ClientOrmOptions: TJsonSerializerOrmOptions;
+function TRestServerUriContext.ClientOrmOptions: TOrmWriterOptions;
 begin
   result := [];
   if (TableModelProps = nil) or
      (ClientKind <> ckAjax) then
     exit;
   if rsoGetID_str in Server.Options then
-    include(result, jwoID_str);
+    include(result, owoID_str);
   if ([oftObject, oftBlobDynArray, oftVariant] *
       TableModelProps.Props.HasTypeFields <> []) and
      (rsoGetAsJsonNotAsString in Server.Options) then
-    include(result, jwoAsJsonNotAsString);
+    include(result, owoAsJsonNotAsString);
 end;
 
 function TRestServerUriContext.GetResourceFileName: TFileName;
@@ -4595,7 +4595,7 @@ begin
 end;
 
 procedure TRestServerUriContext.Returns(Value: TObject; Status: integer;
-  Handle304NotModified: boolean; OrmOptions: TJsonSerializerOrmOptions;
+  Handle304NotModified: boolean; OrmOptions: TOrmWriterOptions;
   const CustomHeader: RawUtf8);
 var
   json: RawUtf8;
@@ -4740,7 +4740,7 @@ begin
   if h < 0 then
     result := '{"result":null}'
   else
-    with TJsonSerializer.CreateOwnedStream(temp) do
+    with TOrmWriter.CreateOwnedStream(temp) do
     try
       AddShort('{"result":');
       if h = 0 then
@@ -4824,7 +4824,7 @@ begin
     StatusCodeToReason(Status, msg)
   else
     msg := ErrorMessage;
-  with TTextWriter.CreateOwnedStream(temp) do
+  with TJsonWriter.CreateOwnedStream(temp) do
   try
     AddShort('{'#13#10'"errorCode":');
     Add(Call.OutStatus);
@@ -4915,11 +4915,11 @@ var
   procedure DecodeUriParametersIntoJson(const input: TRawUtf8DynArray);
   var
     a, i, ilow: PtrInt;
-    WR: TTextWriter;
+    WR: TJsonWriter;
     argdone: boolean;
     temp: TTextWriterStackBuffer;
   begin
-    WR := TJsonSerializer.CreateOwnedStream(temp);
+    WR := TOrmWriter.CreateOwnedStream(temp);
     try // convert URI parameters into the expected ordered json array
       WR.Add('[');
       with PInterfaceMethod(ServiceMethod)^ do
@@ -6606,7 +6606,7 @@ begin
     OnInternalInfo(self, info);
 end;
 
-procedure TRestServer.InternalStat(Ctxt: TRestServerUriContext; W: TTextWriter);
+procedure TRestServer.InternalStat(Ctxt: TRestServerUriContext; W: TJsonWriter);
 var
   flags: TRestServerAddStats;
 begin
@@ -6627,7 +6627,7 @@ begin
   AddStat(flags, W);
 end;
 
-procedure TRestServer.AddStat(Flags: TRestServerAddStats; W: TTextWriter);
+procedure TRestServer.AddStat(Flags: TRestServerAddStats; W: TJsonWriter);
 const
   READWRITE: array[boolean] of string[9] = (
     '{"read":', '{"write":');
@@ -6931,14 +6931,14 @@ end;
 function TRestServer.SessionsAsJson: RawJson;
 var
   i: PtrInt;
-  W: TJsonSerializer;
+  W: TOrmWriter;
   temp: TTextWriterStackBuffer;
 begin
   result := '';
   if (self = nil) or
      (fSessions.Count = 0) then
     exit;
-  W := TJsonSerializer.CreateOwnedStream(temp);
+  W := TOrmWriter.CreateOwnedStream(temp);
   try
     fSessions.Safe.Lock;
     try
@@ -7482,11 +7482,11 @@ end;
 
 procedure TRestServer.Stat(Ctxt: TRestServerUriContext);
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   json, xml, name: RawUtf8;
   temp: TTextWriterStackBuffer;
 begin
-  W := TJsonSerializer.CreateOwnedStream(temp);
+  W := TOrmWriter.CreateOwnedStream(temp);
   try
     name := Ctxt.InputUtf8OrVoid['findservice'];
     if name = '' then

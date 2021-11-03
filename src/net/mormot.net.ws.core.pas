@@ -1532,14 +1532,14 @@ procedure TWebSocketProtocolJson.FrameCompress(const Head: RawUtf8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
 var
-  WR: TTextWriter;
+  WR: TJsonWriter;
   tmp: TTextWriterStackBuffer;
   i: PtrInt;
 begin
   frame.opcode := focText;
   frame.content := [];
   frame.tix := 0;
-  WR := TTextWriter.CreateOwnedStream(tmp);
+  WR := TJsonWriter.CreateOwnedStream(tmp);
   try
     WR.Add('{');
     WR.AddFieldName(Head);

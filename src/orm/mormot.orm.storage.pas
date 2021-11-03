@@ -2364,7 +2364,7 @@ end;
 procedure TRestStorageInMemory.GetJsonValuesEvent(aDest: pointer;
   aRec: TOrm; aIndex: integer);
 var
-  W: TJsonSerializer absolute aDest;
+  W: TOrmWriter absolute aDest;
 begin
   aRec.GetJsonValues(W);
   W.AddComma;
@@ -2795,7 +2795,7 @@ var
   ndx, KnownRowsCount: PtrInt;
   j: PtrInt;
   id: Int64;
-  W: TJsonSerializer;
+  W: TOrmWriter;
   IsNull: boolean;
   Prop: TOrmPropInfo;
   bits: TFieldBits;
@@ -3164,7 +3164,7 @@ end;
 procedure TRestStorageInMemory.SaveToJson(Stream: TStream; Expand: boolean);
 var
   i, j: PtrInt;
-  W: TJsonSerializer;
+  W: TOrmWriter;
   ndx: TIntegerDynArray;
 begin
   if self = nil then

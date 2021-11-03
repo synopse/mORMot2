@@ -227,11 +227,11 @@ type
     function AsyncBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
     /// append some JSON content in a BATCH to be writen in a background thread
     // - could be used to emulate AsyncBatchAdd() with an already pre-computed
-    // JSON object, as stored in a TTextWriter instance
+    // JSON object, as stored in a TJsonWriter instance
     // - is a wrapper around TRestBatch.RawAppend.AddNoJsonEscape(SentData)
     // in the Timer thread
     // - this method is thread-safe
-    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TJsonWriter);
     /// update an ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsyncBatchStart(), or returns -1
     // - is a wrapper around the TRestBatch.Update() sent in the Timer thread
@@ -738,7 +738,7 @@ type
       const aCustomFieldsCsv: RawUtf8 = ''): boolean;
     procedure AppendListAsJsonArray(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const OutputFieldName: RawUtf8; W: TJsonSerializer;
+      const OutputFieldName: RawUtf8; W: TOrmWriter;
       const CustomFieldsCsv: RawUtf8 = '');
     function RTreeMatch(DataTable: TOrmClass;
       const DataTableBlobFieldName: RawUtf8; RTreeTable: TOrmRTreeClass;
@@ -820,7 +820,7 @@ type
       ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     function AsyncBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
-    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TJsonWriter);
     function AsyncBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     function AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
@@ -2254,7 +2254,7 @@ end;
 
 procedure TRest.AppendListAsJsonArray(Table: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-  const OutputFieldName: RawUtf8; W: TJsonSerializer; const CustomFieldsCsv: RawUtf8);
+  const OutputFieldName: RawUtf8; W: TOrmWriter; const CustomFieldsCsv: RawUtf8);
 begin
   fOrm.AppendListAsJsonArray(Table, FormatSqlWhere, BoundsSqlWhere,
     OutputFieldName, W, CustomFieldsCsv);
@@ -2529,7 +2529,7 @@ begin
   result := fOrm.AsyncBatchRawAdd(Table, SentData);
 end;
 
-procedure TRest.AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+procedure TRest.AsyncBatchRawAppend(Table: TOrmClass; SentData: TJsonWriter);
 begin
   fOrm.AsyncBatchRawAppend(Table, SentData);
 end;
@@ -3011,7 +3011,7 @@ begin
 end;
 
 procedure TRestBackgroundTimer.AsyncBatchRawAppend(Table: TOrmClass;
-  SentData: TTextWriter);
+  SentData: TJsonWriter);
 var
   b: TRestBatchLocked;
 begin

@@ -236,7 +236,7 @@ type
     function TryJsonToVariant(var Json: PUtf8Char; var Value: variant;
       EndOfObject: PUtf8Char): boolean; virtual;
     /// customization of variant into JSON serialization
-    procedure ToJson(W: TTextWriter; const Value: variant); virtual;
+    procedure ToJson(W: TJsonWriter; const Value: variant); virtual;
     /// clear the content
     // - this default implementation will set VType := varEmpty
     // - override it if your custom type needs to manage its internal memory
@@ -290,8 +290,8 @@ function SynRegisterCustomVariantType(
   aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
 
 /// try to serialize a custom variant value into JSON
-// - as used e.g. by TTextWriter.AddVariant
-function CustomVariantToJson(W: TTextWriter; const Value: variant;
+// - as used e.g. by TJsonWriter.AddVariant
+function CustomVariantToJson(W: TJsonWriter; const Value: variant;
   Escape: TTextWriterKind): boolean;
 
 
@@ -682,7 +682,7 @@ type
     function InternValues: TRawUtf8Interning;
       {$ifdef HASINLINE}inline;{$endif}
     // this implementation will write the content as JSON object or array
-    procedure ToJson(W: TTextWriter; const Value: variant); override;
+    procedure ToJson(W: TJsonWriter; const Value: variant); override;
     /// will check if the value is an array, and return the number of items
     // - if the document is an array, will return the items count (0 meaning
     // void array) - used e.g. by TSynMustacheContextVariant
@@ -2611,7 +2611,7 @@ function GetNextItemToVariant(var P: PUtf8Char;
   out Value: Variant; Sep: AnsiChar = ','; AllowDouble: boolean = true): boolean;
 
 /// retrieve a variant value from a JSON number or string
-// - follows TTextWriter.AddVariant() format (calls GetJsonToAnyVariant)
+// - follows TJsonWriter.AddVariant() format (calls GetJsonToAnyVariant)
 // - make a temporary copy before parsing - use GetJsonToAnyVariant() on a buffer
 // - return true and set Value on success, or false and empty Value on error
 function VariantLoadJson(var Value: Variant; const Json: RawUtf8;
@@ -3562,7 +3562,7 @@ begin
   result := false;
 end;
 
-procedure TSynInvokeableVariantType.ToJson(W: TTextWriter; const Value: variant);
+procedure TSynInvokeableVariantType.ToJson(W: TJsonWriter; const Value: variant);
 begin
   raise ESynVariant.CreateUtf8('%.ToJson is not implemented', [self]);
 end;
@@ -3646,7 +3646,7 @@ begin
   Dest := v;
 end;
 
-function CustomVariantToJson(W: TTextWriter; const Value: variant;
+function CustomVariantToJson(W: TJsonWriter; const Value: variant;
   Escape: TTextWriterKind): boolean;
 var
   v: TCustomVariantType;
@@ -3900,7 +3900,7 @@ begin
   result := dvoReturnNullForUnknownProperty in Data.VOptions; // to avoid error
 end;
 
-procedure TDocVariant.ToJson(W: TTextWriter; const Value: variant);
+procedure TDocVariant.ToJson(W: TJsonWriter; const Value: variant);
 var
   ndx: PtrInt;
   vt: cardinal;
@@ -6930,7 +6930,7 @@ var
   Up: array[byte] of AnsiChar;
   temp: TTextWriterStackBuffer;
   ndx: PtrInt;
-  W: TTextWriter;
+  W: TJsonWriter;
 begin
   if (not IsObject) or
      (VCount = 0) then
@@ -6939,7 +6939,7 @@ begin
     exit;
   end;
   UpperCopy255(Up, aStartName)^ := #0;
-  W := DefaultTextWriterSerializer.CreateOwnedStream(temp) as TTextWriter;
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('{');
     for ndx := 0 to VCount - 1 do
@@ -7170,7 +7170,7 @@ end;
 function TDocVariantData.ToJson(const Prefix, Suffix: RawUtf8;
   Format: TTextWriterJsonFormat): RawUtf8;
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
   if (cardinal(VType) <> DocVariantVType) and
@@ -7179,7 +7179,7 @@ begin
     result := ''; // null -> 'null'
     exit;
   end;
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.AddString(Prefix);
     DocVariantType.ToJson(W, variant(self));
@@ -7193,13 +7193,13 @@ end;
 procedure TDocVariantData.SaveToJsonFile(const FileName: TFileName);
 var
   F: TFileStream;
-  W: TTextWriter;
+  W: TJsonWriter;
 begin
   if cardinal(VType) <> DocVariantVType then
     exit;
   F := TFileStream.Create(FileName, fmCreate);
   try
-    W := TTextWriter.Create(F, 65536);
+    W := TJsonWriter.Create(F, 65536);
     try
       DocVariantType.ToJson(W, variant(self));
       W.FlushFinal;
@@ -7215,7 +7215,7 @@ function TDocVariantData.ToNonExpandedJson: RawUtf8;
 var
   field: TRawUtf8DynArray;
   fieldCount, r, f: PtrInt;
-  W: TTextWriter;
+  W: TJsonWriter;
   row: PDocVariantData;
   temp: TTextWriterStackBuffer;
 begin
@@ -7238,7 +7238,7 @@ begin
     end;
   if fieldCount = 0 then
     raise EDocVariant.Create('ToNonExpandedJson: Value[0] is not an object');
-  W := DefaultTextWriterSerializer.CreateOwnedStream(temp) as TTextWriter;
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('{"fieldCount":%,"rowCount":%,"values":[', [fieldCount, VCount]);
     for f := 0 to fieldCount - 1 do
@@ -7313,7 +7313,7 @@ begin
     raise EDocVariant.Create('ToTextPairs expects a dvObject');
   if (VCount > 0) and
      IsObject then
-    with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
+    with TJsonWriter.CreateOwnedStream(temp) do
     try
       ndx := 0;
       repeat

@@ -181,7 +181,7 @@ type
     // case, conversion is immediate and accurate
     procedure ToCurr(out result: currency); overload;
     /// converts this Decimal128 value to its string representation
-    procedure AddText(W: TTextWriter);
+    procedure AddText(W: TJsonWriter);
   end;
 
   /// points to a 128-bit decimal value
@@ -413,7 +413,7 @@ type
     function TryJsonToVariant(var Json: PUtf8Char; var Value: variant;
       EndOfObject: PUtf8Char): boolean; override;
     /// variant serialization will use modMongoStrict JSON-compatible mode
-    procedure ToJson(W: TTextWriter; const Value: variant); override;
+    procedure ToJson(W: TJsonWriter; const Value: variant); override;
     /// handle type conversion
     // - only types processed by now are string/OleStr/UnicodeString/date
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
@@ -680,7 +680,7 @@ type
     // - this method will use by default the MongoDB Extended JSON syntax for
     // specific MongoDB objects but you may use modMongoShell if needed
     // - will raise an EBsonException if element is not correct
-    procedure AddMongoJson(W: TTextWriter;
+    procedure AddMongoJson(W: TJsonWriter;
       Mode: TMongoJsonMode = modMongoStrict); overload;
   end;
 
@@ -1225,12 +1225,12 @@ function BsonDocumentToJson(const BSON: TBsonDocument;
 // - this function will use by default the MongoDB Extended JSON syntax for
 // specific MongoDB objects but you may use modMongoShell if needed
 procedure BsonListToJson(BsonList: PByte; Kind: TBsonElementType;
-  W: TTextWriter; Mode: TMongoJsonMode = modMongoStrict);
+  W: TJsonWriter; Mode: TMongoJsonMode = modMongoStrict);
 
 /// convert any kind of BSON/JSON element, encoded as variant, into JSON
 // - this function will use by default the MongoDB Extended JSON syntax for
 // specific MongoDB objects but you may use modMongoShell if needed
-procedure AddMongoJson(const Value: variant; W: TTextWriter;
+procedure AddMongoJson(const Value: variant; W: TJsonWriter;
   Mode: TMongoJsonMode = modMongoStrict); overload;
 
 /// convert any kind of BSON/JSON element, encoded as variant, into JSON
@@ -1584,7 +1584,7 @@ begin
   FastSetString(result, @tmp, ToText(tmp));
 end;
 
-procedure TDecimal128.AddText(W: TTextWriter);
+procedure TDecimal128.AddText(W: TJsonWriter);
 var
   tmp: TDecimal128Str;
 begin
@@ -2068,7 +2068,7 @@ begin
   inherited Create;
 end;
 
-procedure TBsonVariant.ToJson(W: TTextWriter; const Value: variant);
+procedure TBsonVariant.ToJson(W: TJsonWriter; const Value: variant);
 var
   item: TBsonElement;
   temp: RawByteString;
@@ -2807,7 +2807,7 @@ begin
     result := default;
 end;
 
-procedure TBsonElement.AddMongoJson(W: TTextWriter; Mode: TMongoJsonMode);
+procedure TBsonElement.AddMongoJson(W: TJsonWriter; Mode: TMongoJsonMode);
 label
   Bin, regex;
 begin
@@ -2969,7 +2969,7 @@ begin
          Iso8601CheckAndDecode(PUtf8Char(v.VAny) + 3, Length(RawUtf8(v.VAny)) - 3,
            PDateTime(@Data.InternalStorage)^) then
       begin
-        // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
+        // recognized TJsonWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
         Element := @Data.InternalStorage;
         Kind := betDateTime;
         ElementBytes := BSON_ELEMENTSIZE[betDateTime];
@@ -3560,7 +3560,7 @@ begin
         if (VAny <> nil) and
            (PInteger(VAny)^ and $ffffff = JSON_SQLDATE_MAGIC_C) and
            Iso8601CheckAndDecode(PUtf8Char(VAny) + 3, Length(RawUtf8(VAny)) - 3, dt) then
-          // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
+          // recognized TJsonWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
           BsonWriteDateTime(name, dt)
         else
           BsonWrite(name, RawUtf8(VAny)); // expect UTF-8 content
@@ -3821,11 +3821,11 @@ begin
           // recognized '\uFFF0base64encodedbinary' pattern
           BsonWrite(name, pointer(blob), length(blob))
         else if Iso8601CheckAndDecode(Value, ValueLen, ValueDateTime) then
-          // recognized TTextWriter.AddDateTime() pattern
+          // recognized TJsonWriter.AddDateTime() pattern
           BsonWriteDateTime(name, ValueDateTime)
         else if (PInteger(Value)^ and $ffffff = JSON_SQLDATE_MAGIC_C) and
            Iso8601CheckAndDecode(Value + 3, ValueLen - 3, ValueDateTime) then
-          // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) pattern
+          // recognized TJsonWriter.AddDateTime(woDateTimeWithMagic) pattern
           BsonWriteDateTime(name, ValueDateTime)
         else        // will point to the in-place escaped Json text
           BsonWriteString(name, Value, ValueLen);
@@ -3974,7 +3974,7 @@ begin
   BsonToDoc(pointer(BSON), result, length(BSON));
 end;
 
-procedure BsonListToJson(BsonList: PByte; Kind: TBsonElementType; W: TTextWriter;
+procedure BsonListToJson(BsonList: PByte; Kind: TBsonElementType; W: TJsonWriter;
   Mode: TMongoJsonMode);
 var
   item: TBsonElement;
@@ -4025,11 +4025,11 @@ end;
 function BsonToJson(BSON: PByte; Kind: TBsonElementType;
   ExpectedBSONLen: integer; Mode: TMongoJsonMode): RawUtf8;
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   tmp: TTextWriterStackBuffer;
 begin
   BsonParseLength(BSON, ExpectedBSONLen);
-  W := TTextWriter.CreateOwnedStream(tmp);
+  W := TJsonWriter.CreateOwnedStream(tmp);
   try
     BsonListToJson(BSON, Kind, W, Mode);
     W.SetText(result);
@@ -4038,7 +4038,7 @@ begin
   end;
 end;
 
-procedure AddMongoJson(const Value: variant; W: TTextWriter; Mode: TMongoJsonMode);
+procedure AddMongoJson(const Value: variant; W: TJsonWriter; Mode: TMongoJsonMode);
 
   procedure AddCustom;
   var
@@ -4058,10 +4058,10 @@ end;
 
 function VariantSaveMongoJson(const Value: variant; Mode: TMongoJsonMode): RawUtf8;
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   tmp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(tmp);
+  W := TJsonWriter.CreateOwnedStream(tmp);
   try
     AddMongoJson(Value, W, Mode);
     W.SetText(result);

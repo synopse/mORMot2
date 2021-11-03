@@ -131,7 +131,7 @@ type
     /// this method will recognize if the TOrm was allocated by
     // a Create*Joined() constructor: in this case, it will write the ID
     // of the nested property, and not the PtrInt() transtyped value
-    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
+    procedure GetJsonValues(Instance: TObject; W: TJsonWriter); override;
   end;
 
   TOrmPropInfoRttiIDObjArray = array of TOrmPropInfoRttiID;
@@ -616,7 +616,7 @@ type
     // - is just a wrapper around TOrm.AppendFillAsJsonArray()
     procedure AppendListAsJsonArray(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const OutputFieldName: RawUtf8; W: TJsonSerializer;
+      const OutputFieldName: RawUtf8; W: TOrmWriter;
       const CustomFieldsCsv: RawUtf8 = '');
     /// dedicated method used to retrieve matching IDs using a fast R-Tree index
     // - a TOrmRTree is associated to a TOrm with a specified BLOB
@@ -1071,10 +1071,10 @@ type
     function AsyncBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
     /// append some JSON content in a BATCH to be writen in a background thread
     // - could be used to emulate AsyncBatchAdd() with an already pre-computed
-    // JSON object, as stored in a TTextWriter instance
+    // JSON object, as stored in a TJsonWriter instance
     // - is a wrapper around BackgroundTimer.AsyncBatchRawAppend()
     // - this method is thread-safe
-    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TJsonWriter);
     /// update an ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsyncBatchStart(), or returns -1
     // - is a wrapper around BackgroundTimer.AsyncBatchUpdate()
@@ -1610,7 +1610,7 @@ type
     function RttiBeforeReadPropertyValue(Ctxt: pointer;
       Prop: PRttiCustomProp): boolean; override;
     class procedure RttiJsonRead(var Context: TJsonParserContext; Instance: TObject);
-    class procedure RttiJsonWrite(W: TTextWriter; Instance: TObject;
+    class procedure RttiJsonWrite(W: TJsonWriter; Instance: TObject;
       Options: TTextWriterWriteObjectOptions);
   protected
     fInternalState: cardinal;
@@ -2163,17 +2163,17 @@ type
     // for conveniency
     function GetSqlSet: RawUtf8;
     /// return the UTF-8 encoded JSON objects for the values of this TOrm
-    // - layout and fields should have been set at TJsonSerializer construction:
-    // to append some content to an existing TJsonSerializer, call the
+    // - layout and fields should have been set at TOrmWriter construction:
+    // to append some content to an existing TOrmWriter, call the
     // AppendAsJsonObject() method
-    procedure GetJsonValues(W: TJsonSerializer); overload;
+    procedure GetJsonValues(W: TOrmWriter); overload;
     /// return the UTF-8 encoded JSON objects for the values of this TOrm
     // - the JSON buffer will be finalized if needed (e.g. non expanded mode),
-  	// and the supplied TJsonSerializer instance will be freed by this method
-    // - layout and fields should have been set at TJsonSerializer construction:
-    // to append some content to an existing TJsonSerializer, call the
+  	// and the supplied TOrmWriter instance will be freed by this method
+    // - layout and fields should have been set at TOrmWriter construction:
+    // to append some content to an existing TOrmWriter, call the
     // AppendAsJsonObject() method
-    procedure GetJsonValuesAndFree(Json: TJsonSerializer); overload;
+    procedure GetJsonValuesAndFree(Json: TOrmWriter); overload;
     /// return the UTF-8 encoded JSON objects for the values contained
     // in the current published fields of a TOrm child
     // - only simple fields (i.e. not RawBlob/TOrmMany) are retrieved:
@@ -2188,26 +2188,26 @@ type
     // JSON string (which is the default, as expected by the database storage),
     // or if an "ID_str" string field should be added for JavaScript
     procedure GetJsonValues(Json: TStream; Expand, withID: boolean;
-      Occasion: TOrmOccasion; OrmOptions: TJsonSerializerOrmOptions = []); overload;
+      Occasion: TOrmOccasion; OrmOptions: TOrmWriterOptions = []); overload;
     /// same as overloaded GetJsonValues(), but returning result into a RawUtf8
     // - if UsingStream is not set, it will use a temporary TRawByteStringStream
     function GetJsonValues(Expand, withID: boolean;
       Occasion: TOrmOccasion; UsingStream: TRawByteStringStream = nil;
-      OrmOptions: TJsonSerializerOrmOptions = []): RawUtf8; overload;
+      OrmOptions: TOrmWriterOptions = []): RawUtf8; overload;
     /// same as overloaded GetJsonValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUtf8
     function GetJsonValues(Expand, withID: boolean; const Fields: TFieldBits;
-      OrmOptions: TJsonSerializerOrmOptions = []): RawUtf8; overload;
+      OrmOptions: TOrmWriterOptions = []): RawUtf8; overload;
     /// same as overloaded GetJsonValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUtf8
     function GetJsonValues(Expand, withID: boolean; const FieldsCsv: RawUtf8;
-      OrmOptions: TJsonSerializerOrmOptions = []): RawUtf8; overload;
+      OrmOptions: TOrmWriterOptions = []): RawUtf8; overload;
     /// will append the record fields as an expanded JSON object
-    // - GetJsonValues() will expect a dedicated TJsonSerializer, whereas this
-    // method will add the JSON object directly to any TJsonSerializer
+    // - GetJsonValues() will expect a dedicated TOrmWriter, whereas this
+    // method will add the JSON object directly to any TOrmWriter
     // - by default, will append the simple fields, unless the Fields optional
     // parameter is customized to a non void value
-    procedure AppendAsJsonObject(W: TJsonSerializer; Fields: TFieldBits);
+    procedure AppendAsJsonObject(W: TOrmWriter; Fields: TFieldBits);
     /// will append all the FillPrepare() records as an expanded JSON array
     // - generates '[{rec1},{rec2},...]' using a loop similar to:
     // ! while FillOne do .. AppendJsonObject() ..
@@ -2216,7 +2216,7 @@ type
     // - by default, will append the simple fields, unless the Fields optional
     // parameter is customized to a non void value
     // - see also IRestOrm.AppendListAsJsonArray for a high-level wrapper method
-    procedure AppendFillAsJsonArray(const FieldName: RawUtf8; W: TJsonSerializer;
+    procedure AppendFillAsJsonArray(const FieldName: RawUtf8; W: TOrmWriter;
       const Fields: TFieldBits = []);
     /// change TDocVariantData.Options for all variant published fields
     // - may be used to replace e.g. JSON_FAST_EXTENDED by JSON_FAST
@@ -2477,7 +2477,7 @@ type
     /// will iterate over all FillPrepare items, appending them as a JSON array
     // - creates a JSON array of all record rows, using
     // ! while FillOne do GetJsonValues(W)...
-    procedure AppendFillAsJsonValues(W: TJsonSerializer);
+    procedure AppendFillAsJsonValues(W: TOrmWriter);
 
     /// fill all published properties of this object from a TOrmTable result row
     // - call FillPrepare() then FillRow(Row)
@@ -3703,11 +3703,11 @@ type
     // - on error (i.e. if FieldIndex is out of range) will return TRUE
     // - otherwise, will return FALSE and append the external field name to Text
     function AppendFieldName(FieldIndex: integer; var Text: RawUtf8): boolean; overload;
-    /// append a field name to a TTextWriter instance
+    /// append a field name to a TJsonWriter instance
     // - if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN (-1), appends RowIDFieldName
     // - on error (i.e. if FieldIndex is out of range) will return TRUE
     // - otherwise, will return FALSE and append the external field name to Text
-    function AppendFieldName(FieldIndex: integer; WR: TTextWriter): boolean; overload;
+    function AppendFieldName(FieldIndex: integer; WR: TJsonWriter): boolean; overload;
     /// return the field name as RawUtf8 value
     // - if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN (-1), appends RowIDFieldName
     // - otherwise, will return the external field name
@@ -4324,7 +4324,7 @@ type
     fInternalBufferSize: integer;
     fCalledWithinRest: boolean;
     fPreviousTableMatch: boolean;
-    fBatch: TJsonSerializer;
+    fBatch: TOrmWriter;
     fTable: TOrmClass;
     fTableIndex: integer;
     fBatchCount: integer;
@@ -4446,7 +4446,7 @@ type
     /// allow to append some JSON content to the internal raw buffer
     // - could be used to emulate Add/Update/Delete
     // - FullRow=TRUE will increment the global Count
-    function RawAppend(FullRow: boolean = true): TTextWriter;
+    function RawAppend(FullRow: boolean = true): TJsonWriter;
     /// allow to append some JSON content to the internal raw buffer for a POST
     // - could be used to emulate Add() with an already pre-computed JSON object
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -4913,7 +4913,7 @@ begin
   inherited SetValue(Instance, Value, ValueLen, wasString);
 end;
 
-procedure TOrmPropInfoRttiID.GetJsonValues(Instance: TObject; W: TTextWriter);
+procedure TOrmPropInfoRttiID.GetJsonValues(Instance: TObject; W: TJsonWriter);
 var
   ID: PtrUInt;
 begin
@@ -4984,10 +4984,10 @@ procedure EncodeMultiInsertSQLite3(Props: TOrmProperties;
   var result: RawUtf8);
 var
   f: PtrInt;
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     if boInsertOrIgnore in BatchOptions then
       W.AddShort('insert or ignore into ')
@@ -6821,7 +6821,7 @@ begin
     fFill.UnMap;
 end;
 
-procedure TOrm.AppendFillAsJsonValues(W: TJsonSerializer);
+procedure TOrm.AppendFillAsJsonValues(W: TOrmWriter);
 begin
   W.Add('[');
   while FillOne do
@@ -6954,7 +6954,7 @@ begin
       SimpleFields[f].SetBinary(self, Read);
 end;
 
-procedure TOrm.GetJsonValues(W: TJsonSerializer);
+procedure TOrm.GetJsonValues(W: TOrmWriter);
 var
   f, c: PtrInt;
   Props: TOrmPropInfoList;
@@ -6973,7 +6973,7 @@ begin
   begin
     W.Add(fID);
     W.AddComma;
-    if (jwoID_str in W.OrmOptions) and W.Expand then
+    if (owoID_str in W.OrmOptions) and W.Expand then
     begin
       W.AddShort('"ID_str":"');
       W.Add(fID);
@@ -7000,7 +7000,7 @@ begin
     W.Add('}');
 end;
 
-procedure TOrm.AppendAsJsonObject(W: TJsonSerializer; Fields: TFieldBits);
+procedure TOrm.AppendAsJsonObject(W: TOrmWriter; Fields: TFieldBits);
 var // Fields are not "const" since are modified if zero
   i: PtrInt;
   P: TOrmProperties;
@@ -7029,7 +7029,7 @@ begin
 end;
 
 procedure TOrm.AppendFillAsJsonArray(const FieldName: RawUtf8;
-  W: TJsonSerializer; const Fields: TFieldBits);
+  W: TOrmWriter; const Fields: TFieldBits);
 begin
   if FieldName <> '' then
     W.AddFieldName(FieldName);
@@ -7066,7 +7066,7 @@ begin
         end;
 end;
 
-procedure TOrm.GetJsonValuesAndFree(Json: TJsonSerializer);
+procedure TOrm.GetJsonValuesAndFree(Json: TOrmWriter);
 begin
   if Json <> nil then
   try
@@ -7082,9 +7082,9 @@ begin
 end;
 
 procedure TOrm.GetJsonValues(Json: TStream; Expand, withID: boolean;
-  Occasion: TOrmOccasion; OrmOptions: TJsonSerializerOrmOptions);
+  Occasion: TOrmOccasion; OrmOptions: TOrmWriterOptions);
 var
-  serializer: TJsonSerializer;
+  serializer: TOrmWriter;
   tmp: TTextWriterStackBuffer;
 begin
   if self = nil then
@@ -7097,10 +7097,10 @@ begin
 end;
 
 function TOrm.GetJsonValues(Expand, withID: boolean;
-  const Fields: TFieldBits; OrmOptions: TJsonSerializerOrmOptions): RawUtf8;
+  const Fields: TFieldBits; OrmOptions: TOrmWriterOptions): RawUtf8;
 var
   J: TRawByteStringStream;
-  serializer: TJsonSerializer;
+  serializer: TOrmWriter;
   tmp: TTextWriterStackBuffer;
 begin
   J := TRawByteStringStream.Create;
@@ -7116,7 +7116,7 @@ begin
 end;
 
 function TOrm.GetJsonValues(Expand, withID: boolean;
-  const FieldsCsv: RawUtf8; OrmOptions: TJsonSerializerOrmOptions): RawUtf8;
+  const FieldsCsv: RawUtf8; OrmOptions: TOrmWriterOptions): RawUtf8;
 var
   bits: TFieldBits;
 begin
@@ -7128,7 +7128,7 @@ end;
 
 function TOrm.GetJsonValues(Expand, withID: boolean;
   Occasion: TOrmOccasion; UsingStream: TRawByteStringStream;
-  OrmOptions: TJsonSerializerOrmOptions): RawUtf8;
+  OrmOptions: TOrmWriterOptions): RawUtf8;
 var
   J: TRawByteStringStream;
 begin
@@ -7999,9 +7999,9 @@ end;
 
 const
   ID_JSON: array[boolean] of string[7] = (
-    'RowID', 'ID'); // see also TJsonSerializer.SetOrmOptions: Ajax requires ID
+    'RowID', 'ID'); // see also TOrmWriter.SetOrmOptions: Ajax requires ID
 
-class procedure TOrm.RttiJsonWrite(W: TTextWriter; Instance: TObject;
+class procedure TOrm.RttiJsonWrite(W: TJsonWriter; Instance: TObject;
   Options: TTextWriterWriteObjectOptions);
 var
   cur: POrmPropInfo;
@@ -9345,7 +9345,7 @@ var
   aTableName, aFieldName: RawUtf8;
   Props: TOrmModelProperties;
   fields: TOrmPropInfoList;
-  W: TTextWriter;
+  W: TJsonWriter;
 
   procedure RegisterTableForRecordReference(aFieldType: TOrmPropInfo;
     aFieldTable: TClass);
@@ -9423,7 +9423,7 @@ begin
     end;
   if Props.Props.JoinedFieldsTable <> nil then
   begin
-    W := TTextWriter.CreateOwnedStream(1024);
+    W := TJsonWriter.CreateOwnedStream(1024);
     try
       W.AddShorter('SELECT ');
       // JoinedFieldsTable[0] is the class itself
@@ -10426,7 +10426,7 @@ type
   TComputeSqlContent = (
     cTableSimpleFields, cUpdateSimple, cUpdateSetAll, cInsertAll);
 
-  procedure SetSQL(W: TTextWriter; withID, withTableName: boolean;
+  procedure SetSQL(W: TJsonWriter; withID, withTableName: boolean;
     var result: RawUtf8; content: TComputeSqlContent = cTableSimpleFields);
   var
     f: PtrInt;
@@ -10472,10 +10472,10 @@ type
   end;
 
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try // SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
     SetSQL(W, false, false, fSql.TableSimpleFields[false, false]);
     SetSQL(W, false, true, fSql.TableSimpleFields[false, true]);
@@ -10591,7 +10591,7 @@ begin
 end;
 
 function TOrmPropertiesMapping.AppendFieldName(FieldIndex: integer;
-  WR: TTextWriter): boolean;
+  WR: TJsonWriter): boolean;
 begin
   result := false; // success
   if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then
@@ -11040,7 +11040,7 @@ procedure TRestBatch.Reset(aTable: TOrmClass;
   AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions);
 begin
   fBatch.Free; // full reset for SetExpandedJsonWriter
-  fBatch := TJsonSerializer.CreateOwnedStream(fInternalBufferSize);
+  fBatch := TOrmWriter.CreateOwnedStream(fInternalBufferSize);
   fBatch.Expand := true;
   FillZero(fBatchFields);
   fBatchCount := 0;
@@ -11124,7 +11124,7 @@ begin
   Props.SetJsonWriterColumnNames(fBatch, 0);
 end;
 
-function TRestBatch.RawAppend(FullRow: boolean): TTextWriter;
+function TRestBatch.RawAppend(FullRow: boolean): TJsonWriter;
 begin
   if FullRow then
     inc(fBatchCount);

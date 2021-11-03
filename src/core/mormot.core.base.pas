@@ -97,7 +97,7 @@ const
   /// fake code page used to recognize RawBlob
   // - RawBlob internal code page will be CP_RAWBYTESTRING = 65535, but our ORM
   // will identify the RawBlob type and unserialize it using CP_RAWBLOB instead
-  // - TTextWriter.AddAnyAnsiBuffer will recognize it and use Base-64 encoding
+  // - TJsonWriter.AddAnyAnsiBuffer will recognize it and use Base-64 encoding
   CP_RAWBLOB = 65534;
 
   /// US English Windows Code Page, i.e. WinAnsi standard character encoding
@@ -2715,7 +2715,7 @@ procedure bswap64array(a, b: PQWordArray; n: PtrInt);
 // - since this function uses an unsafe typeless EventList parameter, you should
 // not use it in high-level code, but only as wrapper within dedicated methods
 // - will add Event to EventList[] unless Event is already registered
-// - is used e.g. by TTextWriter as such:
+// - is used e.g. by TJsonWriter as such:
 // ! ...
 // !   fEchos: array of TOnTextWriterEcho;
 // ! ...
@@ -2738,13 +2738,13 @@ function MultiEventAdd(var EventList; const Event: TMethod): boolean;
 // callback already registered by MultiEventAdd() to this list of events
 // - since this function uses an unsafe typeless EventList parameter, you should
 // not use it in high-level code, but only as wrapper within dedicated methods
-// - is used e.g. by TTextWriter as such:
+// - is used e.g. by TJsonWriter as such:
 // ! ...
 // !   fEchos: array of TOnTextWriterEcho;
 // ! ...
 // !   procedure EchoRemove(const aEcho: TOnTextWriterEcho);
 // ! ...
-// ! procedure TTextWriter.EchoRemove(const aEcho: TOnTextWriterEcho);
+// ! procedure TJsonWriter.EchoRemove(const aEcho: TOnTextWriterEcho);
 // ! begin
 // !   MultiEventRemove(fEchos,TMethod(aEcho));
 // ! end;
@@ -3449,7 +3449,7 @@ type
   // not compatible with previous versions or FPC, and it makes more sense to
   // work with RawByteString/RawUtf8 in our UTF-8 oriented framework
   // - just like TStringStream, is designed for appending data, not modifying
-  // in-place, as requested e.g. by TTextWriter or TBufferWriter classes
+  // in-place, as requested e.g. by TJsonWriter or TBufferWriter classes
   TRawByteStringStream = class(TStreamWithPosition)
   protected
     fDataString: RawByteString;

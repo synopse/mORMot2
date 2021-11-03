@@ -189,7 +189,7 @@ type
     function ColumnBlob(Col: integer): RawByteString; override;
     /// append all columns values of the current Row to a JSON stream
     // - overriden method to avoid temporary memory allocation or conversion
-    procedure ColumnsToJson(WR: TJsonWriter); override;
+    procedure ColumnsToJson(WR: TResultsWriter); override;
     /// how many parameters founded during prepare stage
     property PreparedParamsCount: integer
       read fPreparedParamsCount;
@@ -739,7 +739,7 @@ begin
   SetString(result, P, BlobInPlaceDecode(P, PQ.GetLength(fRes, fCurrentRow, col)));
 end;
 
-procedure TSqlDBPostgresStatement.ColumnsToJson(WR: TJsonWriter);
+procedure TSqlDBPostgresStatement.ColumnsToJson(WR: TResultsWriter);
 var
   col: integer;
   P: pointer;

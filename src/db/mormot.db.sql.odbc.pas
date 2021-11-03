@@ -253,7 +253,7 @@ type
     // - fast overridden implementation with no temporary variable
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TJsonWriter); override;
+    procedure ColumnsToJson(WR: TResultsWriter); override;
     /// returns the number of rows updated by the execution of this statement
     function UpdateCount: integer; override;
   end;
@@ -796,7 +796,7 @@ begin
   result := GetCol(Col, ftNull) = colNull;
 end;
 
-procedure TSqlDBOdbcStatement.ColumnsToJson(WR: TJsonWriter);
+procedure TSqlDBOdbcStatement.ColumnsToJson(WR: TResultsWriter);
 var
   res: TSqlDBStatementGetCol;
   col: integer;

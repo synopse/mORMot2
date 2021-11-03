@@ -981,7 +981,7 @@ end;
 procedure TServiceFactoryServer.OnLogRestExecuteMethod(
   Sender: TInterfaceMethodExecuteRaw; Step: TInterfaceMethodExecuteEventStep);
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   a: PtrInt;
   len: integer;
 begin
@@ -1076,7 +1076,7 @@ end;
 procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TRestServerUriContext);
 var
   Inst: TServiceFactoryServerInstance;
-  WR: TJsonSerializer;
+  WR: TJsonWriter;
   entry: PInterfaceEntry;
   instancePtr: pointer; // weak IInvokable reference
   dolock, execres: boolean;
@@ -1109,7 +1109,7 @@ var
 
   procedure FinalizeLogRest;
   var
-    W: TTextWriter;
+    W: TJsonWriter;
   begin
     W := exec.TempTextWriter;
     if exec.CurrentStep < smsBefore then
@@ -1247,7 +1247,7 @@ begin
       if fBackgroundThread = nil then
         fBackgroundThread := fRestServer.Run.NewBackgroundThreadMethod(
           '% %', [self, fInterface.InterfaceName]);
-    WR := TJsonSerializer.CreateOwnedStream(temp);
+    WR := TJsonWriter.CreateOwnedStream(temp);
     try
       Ctxt.ThreadServer^.Factory := self;
       if not (optForceStandardJson in opt) and

@@ -859,7 +859,7 @@ begin
      (Minute < 60) and
      (Second < 60) then
   begin
-    // we use 'T' as TTextWriter.AddDateTime
+    // we use 'T' as TJsonWriter.AddDateTime
     TimeToIso8601PChar(Dest, true, Hour, Minute, Second, Fraction div 1000000,
       'T', WithMS);
     if WithMS then

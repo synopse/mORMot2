@@ -2259,11 +2259,11 @@ var
   url, root, interfmethod, interf, id, method, frames: RawUtf8;
   callback: TRestClientCallbackItem;
   methodIndex: integer;
-  WR: TTextWriter;
+  WR: TJsonWriter;
   temp: TTextWriterStackBuffer;
   ok: boolean;
 
-  procedure Call(methodIndex: integer; const par: RawUtf8; res: TTextWriter);
+  procedure Call(methodIndex: integer; const par: RawUtf8; res: TJsonWriter);
   var
     method: PInterfaceMethod;
     exec: TInterfaceMethodExecute;
@@ -2336,7 +2336,7 @@ begin
       callback.Factory.Methods[methodIndex].InterfaceDotMethodName) then
   try
     // execute the method using JSON as data representation
-    WR := TTextWriter.CreateOwnedStream(temp);
+    WR := TJsonWriter.CreateOwnedStream(temp);
     try
       WR.AddShort('{"result":[');
       if frames = '[0]' then

@@ -452,7 +452,7 @@ type
   TInterfacedObjectFakeClient = class(TInterfacedObjectFake)
   protected
     fClient: TServiceFactoryClient;
-    procedure InterfaceWrite(W: TTextWriter; const aMethod: TInterfaceMethod;
+    procedure InterfaceWrite(W: TJsonWriter; const aMethod: TInterfaceMethod;
       const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); override;
   public
     constructor Create(aClient: TServiceFactoryClient;
@@ -477,7 +477,7 @@ begin
   inherited Create(aClient.fInterface, aClient, opt, aInvoke, aNotifyDestroy);
 end;
 
-procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TTextWriter;
+procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TJsonWriter;
   const aMethod: TInterfaceMethod; const aParamInfo: TInterfaceMethodArgument;
   aParamValue: Pointer);
 begin

@@ -322,7 +322,7 @@ type
     // faster when run over high number of data rows)
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TJsonWriter); override;
+    procedure ColumnsToJson(WR: TResultsWriter); override;
     /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but Oracle usually use
     // such structures to get data from strored procedures
@@ -922,7 +922,7 @@ begin
   result := GetCol(Col, C) = nil;
 end;
 
-procedure TSqlDBOracleStatement.ColumnsToJson(WR: TJsonWriter);
+procedure TSqlDBOracleStatement.ColumnsToJson(WR: TResultsWriter);
 var
   V: pointer;
   col, indicator: integer;

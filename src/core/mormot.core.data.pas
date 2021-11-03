@@ -5646,7 +5646,7 @@ var
   tempstr: RawUtf8;
 begin
   // not very fast, but creates valid JSON - see also VariantSaveJson()
-  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
+  with DefaultJsonWriter.CreateOwnedStream(temp) do
   try
     AddVariant(Data^, twJsonEscape);
     if WrittenBytes = 0 then
@@ -6885,7 +6885,7 @@ begin
     result := '[]'
   else
   begin
-    W := DefaultTextWriterSerializer.CreateOwnedStream(temp);
+    W := DefaultJsonWriter.CreateOwnedStream(temp);
     try
       if EnumSetsAsText then
         W.CustomOptions := W.CustomOptions + [twoEnumSetsAsTextInRecord];
@@ -8319,7 +8319,7 @@ begin
       else
       begin
         S := TFakeWriterStream.Create;
-        W := DefaultTextWriterSerializer.Create(S, @tmp, SizeOf(tmp));
+        W := DefaultJsonWriter.Create(S, @tmp, SizeOf(tmp));
         try
           W.AddVariant(value, twJsonEscape);
           len := W.WrittenBytes;
