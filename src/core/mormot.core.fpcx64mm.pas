@@ -851,9 +851,9 @@ asm
         cmp     rax, r9
         ja      @rc // timeout
         {$else}
-@s:     mov     r9d, SpinMediumLockCount
+@s:     mov     edx, SpinMediumLockCount
 @sp:    pause
-        dec     r9
+        dec     edx
         jz      @rc //timeout
         {$endif FPCMM_SLEEPTSC}
         mov     rcx, r10
@@ -1058,9 +1058,9 @@ asm
         cmp     rax, r9
         ja      @rc // timeout
         {$else}
-        mov     r9d, SpinLargeLockCount
+        mov     edx, SpinLargeLockCount
 @sp:    pause
-        dec     r9
+        dec     edx
         jz      @rc // timeout
         {$endif FPCMM_SLEEPTSC}
         mov     eax, $100
@@ -1236,7 +1236,7 @@ asm
 @LockTinyBlockTypeLoop:
         // Round-Robin attempt to lock of SmallBlockInfo.Tiny[]
         // -> fair distribution among calls to reduce thread contention
-        mov     edx, NumTinyBlockArenas + 1 // 8/16 arenas (including Small[])
+        mov     dl, NumTinyBlockArenas + 1 // 8/16 arenas (including Small[])
 @TinyBlockArenaLoop:
         mov     eax, SizeOf(TTinyBlockTypes)
         // note: "lock xadd" decreases the loop iterations but is slower
@@ -1254,7 +1254,7 @@ asm
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
 @NextTinyBlockArena1:
-        dec     edx
+        dec     dl
         jnz     @TinyBlockArenaLoop
         // Fallback to SmallBlockInfo.Small[] next 2 small sizes - never occurs
         lea     rbx, [r8 + rcx + TSmallBlockInfo.Small + SizeOf(TSmallBlockType)]
@@ -1284,7 +1284,7 @@ asm
         shl     rdx, 32
         lea     r9, [rax + rdx + SpinSmallGetmemLockTSC] // r9 = endtsc
         {$else}
-        mov    r9d, SpinSmallGetmemLockCount
+        mov    edx, SpinSmallGetmemLockCount
         {$endif FPCMM_SLEEPTSC}
         {$endif FPCMM_PAUSE}
 @LockBlockTypeLoop:
@@ -1327,7 +1327,7 @@ asm
         cmp     rax, r9
         jb      @LockBlockTypeLoop // continue spinning until timeout
         {$else}
-        dec     r9
+        dec     edx
         jnz     @LockBlockTypeLoop // continue until spin count reached
         {$endif FPCMM_SLEEPTSC}
         {$endif FPCMM_PAUSE}
@@ -2055,10 +2055,10 @@ asm
         cmp     rax, r9
         ja      @LockBlockTypeReleaseCore
         {$else}
-        mov     r9d, SpinSmallFreememLockCount
+        mov     edx, SpinSmallFreememLockCount
 @SpinLockBlockType:
         pause
-        dec     r9
+        dec     edx
         jz      @LockBlockTypeReleaseCore
         {$endif FPCMM_SLEEPTSC}
         mov     eax, $100
