@@ -62,16 +62,15 @@ end;
 const
   UnixDelta = 25569;
   UnixFileTimeDelta = 116444736000000000; // from year 1601 to 1970
-  DateFileTimeDelta =  94353120000000000; // from year 1601 to 1899
 
-procedure UnixTimeToFileTime(I64: Int64; out FT: TFileTime);
+procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 begin
   I64 := I64 * 10000000;
   inc(I64, UnixFileTimeDelta);
   Int64ToFileTime(I64, FT);
 end;
 
-procedure UnixTimeToLocalTime(I64: Int64; out Local: TSystemTime);
+procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
 var
   ft, lt: TFileTime;
 begin
@@ -80,8 +79,7 @@ begin
   FileTimeToSystemTime(lt, Local);
 end;
 
-function FileTimeToUnixTime(const FT: TFileTime): Int64;
-  {$ifdef HASINLINE} inline; {$endif}
+function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
 {$ifdef CPU64}
 var
   nano100: Int64; // TFileTime is in 100 ns unit
@@ -95,7 +93,7 @@ begin
   {$endif CPU64}
 end;
 
-function FileTimeToUnixMSTime(const FT: TFileTime): Int64;
+function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
 {$ifdef CPU64}
 var
   nano100: Int64; // TFileTime is in 100 ns unit
@@ -109,7 +107,7 @@ begin
   {$endif CPU64}
 end;
 
-function UnixTimeUtc: Int64;
+function UnixTimeUtc: TUnixTime;
 var
   ft: TFileTime;
 begin
@@ -122,7 +120,7 @@ var
   // - points to GetSystemTimeAsFileTime() before Windows 8
   GetSystemTimePreciseAsFileTime: procedure(var ft: TFILETIME); stdcall;
 
-function UnixMSTimeUtc: Int64;
+function UnixMSTimeUtc: TUnixMSTime;
 var
   ft: TFileTime;
 begin
@@ -130,7 +128,7 @@ begin
   result := FileTimeToUnixMSTime(ft);
 end;
 
-function UnixMSTimeUtcFast: Int64;
+function UnixMSTimeUtcFast: TUnixMSTime;
 var
   ft: TFileTime;
 begin

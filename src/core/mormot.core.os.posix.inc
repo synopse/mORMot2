@@ -617,7 +617,7 @@ begin
   result := result div MILLION; // ns to ms
 end;
 
-function UnixTimeUtc: Int64;
+function UnixTimeUtc: TUnixTime;
 var
   tz: timeval;
 begin
@@ -625,7 +625,7 @@ begin
   result := tz.tv_sec;
 end;
 
-function UnixMSTimeUtc: Int64;
+function UnixMSTimeUtc: TUnixMSTime;
 var
   tz: timeval;
 begin
@@ -692,7 +692,7 @@ var
   CLOCK_MONOTONIC_PRECISE: integer = CLOCK_MONOTONIC;
 
 
-function UnixMSTimeUtc: Int64;
+function UnixMSTimeUtc: TUnixMSTime;
 var
   r: timespec;
 begin
@@ -701,7 +701,7 @@ begin
   result := PtrUInt(r.tv_nsec) div MILLION + (r.tv_sec * THOUSAND);
 end;
 
-function UnixTimeUtc: Int64;
+function UnixTimeUtc: TUnixTime;
 var
   r: timespec;
 begin
@@ -739,7 +739,7 @@ end;
 
 {$endif OSDARWIN}
 
-function UnixMSTimeUtcFast: Int64;
+function UnixMSTimeUtcFast: TUnixMSTime;
 begin
   result := UnixMSTimeUtc;
 end;

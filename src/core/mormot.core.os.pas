@@ -1567,7 +1567,18 @@ procedure GetLocalTime(out result: TSystemTime); stdcall;
 
 /// a wrapper around FileTimeToLocalFileTime/FileTimeToSystemTime Windows APIs
 // - only used by mormot.lib.static for proper SQlite3 linking on Windows
-procedure UnixTimeToLocalTime(I64: Int64; out Local: TSystemTime);
+procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
+
+/// convert an Unix seconds time to a Win32 64-bit FILETIME value
+procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
+
+/// convert a Win32 64-bit FILETIME value into an Unix seconds time
+function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// convert a Win32 64-bit FILETIME value into an Unix milliseconds time
+function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
+  {$ifdef HASINLINE} inline; {$endif}
 
 {$else}
 
@@ -1775,7 +1786,7 @@ function NowUtc: TDateTime;
 // (will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
 // or GetSystemTimeAsFileTime under Windows)
 // - returns a 64-bit unsigned value, so is "Year2038bug" free
-function UnixTimeUtc: Int64;
+function UnixTimeUtc: TUnixTime;
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time
 // - i.e. current number of milliseconds elapsed since Unix epoch 1/1/1970
@@ -1784,14 +1795,14 @@ function UnixTimeUtc: Int64;
 // or GetSystemTimeAsFileTime/GetSystemTimePreciseAsFileTime under Windows - the
 // later being more accurate, but slightly slower than the former, so you may
 // consider using UnixMSTimeUtcFast on Windows if its 10-16ms accuracy is enough
-function UnixMSTimeUtc: Int64;
+function UnixMSTimeUtc: TUnixMSTime;
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time
 // - under Linux/POSIX, is the very same than UnixMSTimeUtc (inlined call)
 // - under Windows 8+, will call GetSystemTimeAsFileTime instead of
 // GetSystemTimePreciseAsFileTime, which has higher precision, but is slower
 // - prefer it under Windows, if a dozen of ms resolution is enough for your task
-function UnixMSTimeUtcFast: Int64;
+function UnixMSTimeUtcFast: TUnixMSTime;
   {$ifdef OSPOSIX} inline; {$endif}
 
 /// the number of minutes bias in respect to UTC/GMT date/time
@@ -1819,10 +1830,10 @@ type
     EStack: PPtrUInt;
     /// = FPC's RaiseProc() FrameCount if EStack is Frame: PCodePointer
     EStackCount: integer;
-    /// timestamp of this exception, as number of seconds since UNIX Epoch (TUnixTime)
+    /// timestamp of this exception, as number of seconds since UNIX Epoch
     // - UnixTimeUtc is faster than NowUtc or GetSystemTime
     // - use UnixTimeToDateTime() to convert it into a regular TDateTime
-    ETimestamp: Int64;
+    ETimestamp: TUnixTime;
     /// the logging level corresponding to this exception
     // - may be either sllException or sllExceptionOS
     ELevel: TSynLogInfo;
@@ -1877,7 +1888,14 @@ function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): bo
 
 /// convert a Windows File 32-bit TimeStamp into a regular TDateTime
 // - returns 0 if the conversion failed
+// - used e.g. by FileSetDateFromWindowsTime() on POSIX
 function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
+
+/// convert a Windows File 64-bit TimeStamp into a regular TDateTime
+// - i.e. a FILETIME value as returned by GetFileTime() Win32 API
+// - returns 0 if the conversion failed
+// - some binary formats (e.g. ISO 9660) has such FILETIME fields
+function WindowsFileTime64ToDateTime(WinTime: QWord): TDateTime;
 
 /// low-level conversion of a TDateTime into a Windows File 32-bit TimeStamp
 // - returns 0 if the conversion failed
@@ -3856,6 +3874,14 @@ begin
     result := date + time
   else
     result := 0;
+end;
+
+const
+  DateFileTimeDelta =  94353120000000000; // from year 1601 to 1899
+
+function WindowsFileTime64ToDateTime(WinTime: QWord): TDateTime;
+begin
+  result := (WinTime - DateFileTimeDelta) / 10000;
 end;
 
 function ValidHandle(Handle: THandle): boolean;
