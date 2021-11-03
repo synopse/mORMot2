@@ -2040,7 +2040,8 @@ type
     // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
     // appending class name for any class or object, the hexa value for a
     // pointer, or the JSON representation of any supplied TDocVariant
-    constructor CreateLastOSError(const Format: RawUtf8; const Args: array of const);
+    constructor CreateLastOSError(const Format: RawUtf8; const Args: array of const;
+      const Trailer: ShortString = 'OSError');
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged
     // - this default implementation will call the TSynLogExceptionToStrCustom
@@ -9756,13 +9757,15 @@ begin
 end;
 
 constructor ESynException.CreateLastOSError(const Format: RawUtf8;
-  const Args: array of const);
+  const Args: array of const; const Trailer: ShortString);
 var
   error: integer;
+  fmt: RawUtf8;
 begin
   error := GetLastError;
-  CreateUtf8(FormatUtf8('OSError 0x% [%] %', [CardinalToHexShort(error),
-    StringToUtf8(SysErrorMessage(error)), Format]), Args);
+  FormatUtf8('% 0x% [%] %', [Trailer, CardinalToHexShort(error),
+    StringToUtf8(SysErrorMessage(error)), Format], fmt);
+  CreateUtf8(fmt, Args);
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
