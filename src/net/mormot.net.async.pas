@@ -81,6 +81,7 @@ type
     /// the current (reusable) write data buffer of this connection
     fWr: TRawByteStringBuffer;
     /// this method is called when the instance is connected to a poll
+    // - i.e. at the end of TAsyncConnections.ConnectionAdd(), when Handle is set
     // - overriding this method is cheaper than the plain Create destructor
     // - default implementation initializes the locker[] mutexes
     // - you may inherit and set fLockMax := true before if two locks are needed
@@ -105,8 +106,6 @@ type
     /// this method is called when the sockets is closing
     procedure OnClose; virtual;
   public
-    /// initialize the connection instnace
-    constructor Create; override;
     /// finalize the instance
     destructor Destroy; override;
     /// quick check if this instance seems still active, i.e. its Handle <> 0
@@ -733,12 +732,6 @@ end;
 
 
 { TPollAsyncConnection }
-
-constructor TPollAsyncConnection.Create;
-begin
-  inherited Create; // RTTI ininialization
-  AfterCreate;
-end;
 
 destructor TPollAsyncConnection.Destroy;
 var
