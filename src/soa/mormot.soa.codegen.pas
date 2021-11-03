@@ -1128,7 +1128,7 @@ begin
     exit;
   RawUtf8ToVariant(@aUnitName[1], ord(aUnitName[0]), unitName);
   if addAsProperty <> nil then
-    _ObjAddPropU('unitName', unitName, addAsProperty^);
+    _ObjAddProp('unitName', unitName, addAsProperty^);
   if (self = nil) or
      (fUnits.SearchItemByValue(unitName) >= 0) then
     // already registered
