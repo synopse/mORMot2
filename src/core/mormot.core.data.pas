@@ -8056,7 +8056,7 @@ begin
     if p = nil then
       exit;
     dec(p);
-    inc(p^.refCnt); // reuse existing dynamic array instance
+    inc(p^.refCnt); // COW reuse of the existing dynamic array instance
     p^.Length := n; // no memory realloc/copy, just force Capacity=Length=Count
     inc(p);
     dest^ := p;     // assign to Dest variable
