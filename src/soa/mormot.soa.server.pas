@@ -367,6 +367,7 @@ type
     fSessionTimeout: cardinal;
     procedure FakeCallbackAdd(aFakeInstance: TObject);
     procedure FakeCallbackRemove(aFakeInstance: TObject);
+    function GetFakeCallbacksCount: integer;
     procedure RecordVersionCallbackNotify(TableIndex: integer;
       Occasion: TOrmOccasion; const DeletedID: TID;
       const DeletedRevision: TRecordVersion; const AddUpdateJson: RawUtf8);
@@ -470,6 +471,10 @@ type
     /// defines how SOA callbacks will be handled
     property CallbackOptions: TServiceCallbackOptions
       read fCallbackOptions write fCallbackOptions;
+  published
+    /// how many interface callbackas are currently registered
+    property FakeCallbacksCount: integer
+      read GetFakeCallbacksCount;
   end;
 
 
@@ -1706,6 +1711,14 @@ begin
         '', connectionID, callbackID, nil, nil);
 end;
 
+function TServiceContainerServer.GetFakeCallbacksCount: integer;
+begin
+  if fFakeCallbacks <> nil then
+    result := fFakeCallbacks.Count
+  else
+    result := 0;
+end;
+
 function FakeCallbackFind(list: PPointer; n: integer; conn: TRestConnectionID;
   id: TInterfacedObjectFakeID): TInterfacedObjectFakeServer;
 begin
@@ -1732,6 +1745,7 @@ var
 begin
   if (self = nil) or
     (fFakeCallbacks = nil) or
+    (fFakeCallbacks.Count = 0) or
     (Ctxt = nil) then
     exit;
   connectionID := Ctxt.Call^.LowLevelConnectionID;

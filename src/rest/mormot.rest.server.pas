@@ -7589,8 +7589,7 @@ begin
           // POST root/cacheflush/_callback_
           // as called from TSqlHttpClientWebsockets.FakeCallbackUnregister
           (fServices as TServiceContainerServer).FakeCallbackRelease(Ctxt)
-        else if (llfSecured in Ctxt.Call^.LowLevelConnectionFlags) and
-                (Ctxt.UriBlobFieldName = '_replaceconn_') then
+        else if Ctxt.UriBlobFieldName = '_replaceconn_' then
         begin
           // POST root/cacheflush/_replaceconn_ (over a secured connection)
           old := GetInt64(pointer(Ctxt.Call^.InBody));
