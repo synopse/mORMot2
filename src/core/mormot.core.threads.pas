@@ -442,10 +442,11 @@ type
   protected
     fTask: TSynBackgroundTimerTaskDynArray;
     fTasks: TDynArray;
+    fTaskCount: integer;
     fTaskLock: TSynLocker;
     procedure EverySecond(Sender: TSynBackgroundThreadProcess;
       Event: TWaitResult);
-    function Find(const aProcess: TMethod): integer;
+    function Find(const aProcess: TMethod): PtrInt;
     function Add(const aOnProcess: TOnSynBackgroundTimerProcess;
       const aMsg: RawUtf8; aExecuteNow: boolean): boolean;
   public
@@ -930,7 +931,8 @@ procedure TPendingTaskList.AddTasks(const aMilliSecondsDelays: array of integer;
   const aTasks: array of RawByteString);
 var
   item: TPendingTaskListItem;
-  i, ndx: integer;
+  i: PtrInt;
+  ndx: integer;
 begin
   if length(aTasks) <> length(aMilliSecondsDelays) then
     exit;
@@ -1410,7 +1412,7 @@ constructor TSynBackgroundTimer.Create(const aThreadName: RawUtf8;
   const aOnBeforeExecute: TOnNotifyThread;
   const aOnAfterExecute: TOnNotifyThread; aStats: TSynMonitorClass);
 begin
-  fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray), fTask);
+  fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray), fTask, @fTaskCount);
   fTaskLock.Init;
   fTaskLock.LockedBool[0] := false;
   inherited Create(aThreadName, EverySecond, 1000, aOnBeforeExecute, aOnAfterExecute, aStats);
@@ -1432,7 +1434,7 @@ procedure TSynBackgroundTimer.EverySecond(Sender: TSynBackgroundThreadProcess;
   Event: TWaitResult);
 var
   tix: Int64;
-  i, f, n: integer;
+  i, f, n: PtrInt;
   t: ^TSynBackgroundTimerTask;
   todo: TSynBackgroundTimerTaskDynArray; // avoid lock contention
 begin
@@ -1443,19 +1445,19 @@ begin
   n := 0;
   fTaskLock.Lock;
   try
-    variant(fTaskLock.Padding[0]) := true; // = fTaskLock.LockedBool[0]
+    fTaskLock.Padding[0].VBoolean := true; // = fTaskLock.LockedBool[0]
     try
       i := 0;
-      while i < length(fTask) do
+      while i < fTaskCount do
       begin
         t := @fTask[i];
         if tix >= t^.NextTix then
         begin
           if {%H-}todo = nil then
-            SetLength(todo, length(fTask) - n);
-          todo[n] := t^;
+            SetLength(todo, fTaskCount - n);
+          MoveFast(t^, todo[n], SizeOf(t^)); // no COW needed
+          pointer(t^.FIFO) := nil; // now owned by todo[n].FIFO
           inc(n);
-          t^.FIFO := nil; // now owned by todo[n].FIFO
           if integer(t^.Secs) = -1 then
           begin
             // from ExecuteOnce()
@@ -1485,26 +1487,35 @@ begin
         except
         end;
   finally
-    fTaskLock.LockedBool[0] := false;
+    fTaskLock.Padding[0].VBoolean := false; // LockedBool[0] not needed
   end;
 end;
 
-function TSynBackgroundTimer.Find(const aProcess: TMethod): integer;
+function TSynBackgroundTimer.Find(const aProcess: TMethod): PtrInt;
+var
+  m: ^TSynBackgroundTimerTask;
 begin
   // caller should have made fTaskLock.Lock;
-  for result := length(fTask) - 1 downto 0 do
-    with TMethod(fTask[result].OnProcess) do
-      if (Code = aProcess.Code) and
-         (Data = aProcess.Data) then
-        exit;
-  result := -1;
+  result := fTaskCount - 1;
+  if result >= 0 then
+  begin
+    m := @fTask[result];
+    repeat
+      with TMethod(m^.OnProcess) do
+        if (Code = aProcess.Code) and
+           (Data = aProcess.Data) then
+          exit;
+      dec(result);
+      dec(m);
+    until result < 0;
+  end;
 end;
 
 procedure TSynBackgroundTimer.Enable(
   const aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal);
 var
   task: TSynBackgroundTimerTask;
-  found: integer;
+  found: PtrInt;
 begin
   if (self = nil) or
      Terminated or
@@ -1533,7 +1544,7 @@ end;
 
 function TSynBackgroundTimer.Processing: boolean;
 begin
-  result := fTaskLock.LockedBool[0];
+  result := fTaskLock.Padding[0].VBoolean; // = fTaskLock.LockedBool[0]
 end;
 
 procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
@@ -1580,7 +1591,7 @@ function TSynBackgroundTimer.Add(
   const aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUtf8;
   aExecuteNow: boolean): boolean;
 var
-  found: integer;
+  found: PtrInt;
 begin
   result := false;
   if (self = nil) or
@@ -1611,7 +1622,7 @@ end;
 function TSynBackgroundTimer.DeQueue(
   const aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUtf8): boolean;
 var
-  found: integer;
+  found: PtrInt;
 begin
   result := false;
   if (self = nil) or
@@ -1632,7 +1643,7 @@ end;
 function TSynBackgroundTimer.Disable(
   const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 var
-  found: integer;
+  found: PtrInt;
 begin
   result := false;
   if (self = nil) or
@@ -1916,7 +1927,8 @@ end;
 procedure TSynParallelProcess.ParallelRunAndWait(const Method: TOnSynParallelProcess;
   MethodCount: integer; const OnMainThreadIdle: TNotifyEvent);
 var
-  use, t, n, perthread: integer;
+  use, t: PtrInt;
+  n, perthread: integer;
   error: RawUtf8;
 begin
   if (MethodCount <= 0) or
@@ -1938,7 +1950,7 @@ begin
     use := t;
   try
     // start secondary threads
-    perthread := MethodCount div use;
+    perthread := cardinal(MethodCount) div cardinal(use);
     if perthread = 0 then
       use := 1;
     n := 0;
