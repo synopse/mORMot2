@@ -8742,7 +8742,7 @@ procedure TOrmTableAbstract.GetCsvValues(Dest: TStream; Tab: boolean;
 var
   U: PUtf8Char;
   F, R, FMax, o, len: PtrInt;
-  W: TBaseWriter;
+  W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
   if (self = nil) or
@@ -8754,7 +8754,7 @@ begin
     RowLast := fRowCount;
   if RowFirst < 0 then
     RowFirst := 0;
-  W := TBaseWriter.Create(Dest, @temp, SizeOf(temp));
+  W := TTextWriter.Create(Dest, @temp, SizeOf(temp));
   try
     if AddBOM then
       W.AddShorter(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
@@ -8809,12 +8809,12 @@ const
     ' dt:type="number" rs:dbtype="currency"',
     ' dt:type="dateTime"', ' dt:type="string"', ' dt:type="bin.hex"');
 var
-  W: TBaseWriter;
+  W: TTextWriter;
   f, r: PtrInt;
   o: PtrInt;
   U: PUtf8Char;
 begin
-  W := TBaseWriter.Create(Dest, 65536);
+  W := TTextWriter.Create(Dest, 65536);
   try
     W.AddShort('<xml xmlns:s="uuid:BDC6E3F0-6DA3-11d1-A2A3-00AA00C14882" ' +
       'xmlns:dt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882" ' +

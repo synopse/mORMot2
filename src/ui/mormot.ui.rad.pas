@@ -87,7 +87,7 @@ type
     function SearchForField(const aLookupFieldName: RawUtf8;
       const aLookupValue: variant; aOptions: TLocateOptions): integer; virtual;
     // used to serialize TBcdVariant as JSON
-    class procedure BcdWrite(const aWriter: TBaseWriter; const aValue);
+    class procedure BcdWrite(const aWriter: TTextWriter; const aValue);
   public
     /// this overridden constructor will compute an unique Name property
     constructor Create(Owner: TComponent); override;
@@ -613,7 +613,7 @@ type
     fBcd: TBcd;
   end;
 
-class procedure TVirtualDataSet.BcdWrite(const aWriter: TBaseWriter; const aValue);
+class procedure TVirtualDataSet.BcdWrite(const aWriter: TTextWriter; const aValue);
 begin
   AddBcd(aWriter, TFMTBcdData(TVarData(aValue).VPointer).fBcd);
 end;

@@ -11,7 +11,7 @@ unit mormot.core.datetime;
     - TSynDate / TSynDateTime / TSynSystemTime High-Level objects
     - TUnixTime / TUnixMSTime POSIX Epoch Compatible 64-bit date/time
     - TTimeLog efficient 64-bit custom date/time encoding
-    - TTextWriter supporting date/time ISO-8601 serialization
+    - TTextDateWriter supporting date/time ISO-8601 serialization
 
   *****************************************************************************
 }
@@ -424,10 +424,10 @@ type
     /// append the stored date and time, in a log-friendly format
     // - e.g. append '20110325 19241502' - with no trailing space nor tab
     // - as called by TJsonWriter.AddCurrentLogTime()
-    procedure AddLogTime(WR: TBaseWriter);
+    procedure AddLogTime(WR: TTextWriter);
     /// append the stored date and time, in apache-like format, to a TJsonWriter
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
-    procedure AddNCSAText(WR: TBaseWriter);
+    procedure AddNCSAText(WR: TTextWriter);
     /// append the stored date and time, in apache-like format, to a memory buffer
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     // - returns the number of chars added to P, i.e. always 21
@@ -770,12 +770,12 @@ function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
 
 
 
-{ ******************* TTextWriter supporting date/time ISO-8601 serialization }
+{ ******************* TTextDateWriter supporting date/time ISO-8601 serialization }
 
 type
-  /// enhanced TBaseWriter inherited class
-  // - in addition to TBaseWriter, will handle date/time ISO-8601 serialization
-  TTextWriter = class(TBaseWriter)
+  /// enhanced TTextWriter inherited class
+  // - in addition to TTextWriter, will handle date/time ISO-8601 serialization
+  TTextDateWriter = class(TTextWriter)
   public
     /// append a TTimeLog value, expanded as Iso-8601 encoded text
     procedure AddTimeLog(Value: PInt64; QuoteChar: AnsiChar = #0);
@@ -1957,7 +1957,7 @@ begin
     Year, Month, Day, Expanded, FirstTimeChar, TZD);
 end;
 
-procedure TSynSystemTime.AddLogTime(WR: TBaseWriter);
+procedure TSynSystemTime.AddLogTime(WR: TTextWriter);
 var
   d100: TDiv100Rec;
   P: PUtf8Char;
@@ -2063,7 +2063,7 @@ begin
     UInt2DigitsToShortFast(Second)], text);
 end;
 
-procedure TSynSystemTime.AddNCSAText(WR: TBaseWriter);
+procedure TSynSystemTime.AddNCSAText(WR: TTextWriter);
 begin
   if WR.BEnd - WR.B <= 21 then
     WR.FlushToStream;
@@ -2883,18 +2883,18 @@ begin
 end;
 
 
-{ ******************* TTextWriter supporting date/time ISO-8601 serialization }
+{ ******************* TTextDateWriter supporting date/time ISO-8601 serialization }
 
-{ TTextWriter }
+{ TTextDateWriter }
 
-procedure TTextWriter.AddTimeLog(Value: PInt64; QuoteChar: AnsiChar);
+procedure TTextDateWriter.AddTimeLog(Value: PInt64; QuoteChar: AnsiChar);
 begin
   if BEnd - B <= 31 then
     FlushToStream;
   B := PTimeLogBits(Value)^.Text(B + 1, true, 'T', QuoteChar) - 1;
 end;
 
-procedure TTextWriter.AddUnixTime(Value: PInt64; QuoteChar: AnsiChar);
+procedure TTextDateWriter.AddUnixTime(Value: PInt64; QuoteChar: AnsiChar);
 var
   DT: TDateTime;
 begin
@@ -2903,7 +2903,7 @@ begin
   AddDateTime(@DT, 'T', QuoteChar, {withms=}false, {dateandtime=}true);
 end;
 
-procedure TTextWriter.AddUnixMSTime(Value: PInt64; WithMS: boolean;
+procedure TTextDateWriter.AddUnixMSTime(Value: PInt64; WithMS: boolean;
   QuoteChar: AnsiChar);
 var
   DT: TDateTime;
@@ -2913,7 +2913,7 @@ begin
   AddDateTime(@DT, 'T', QuoteChar, WithMS, {dateandtime=}true);
 end;
 
-procedure TTextWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
+procedure TTextDateWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
   QuoteChar: AnsiChar; WithMS: boolean; AlwaysDateAndTime: boolean);
 var
   T: TSynSystemTime;
@@ -2958,7 +2958,7 @@ begin
   end;
 end;
 
-procedure TTextWriter.AddDateTime(const Value: TDateTime; WithMS: boolean);
+procedure TTextDateWriter.AddDateTime(const Value: TDateTime; WithMS: boolean);
 begin
   if Value = 0 then
     exit;
@@ -2975,7 +2975,7 @@ begin
     dec(B);
 end;
 
-procedure TTextWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean;
+procedure TTextDateWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUtf8);
 var
   T: TSynSystemTime;
@@ -2989,7 +2989,7 @@ begin
     UInt3DigitsToShort(T.MilliSecond), TZD]);
 end;
 
-procedure TTextWriter.AddCurrentLogTime(LocalTime: boolean);
+procedure TTextDateWriter.AddCurrentLogTime(LocalTime: boolean);
 var
   time: TSynSystemTime;
 begin
@@ -2997,7 +2997,7 @@ begin
   time.AddLogTime(self);
 end;
 
-procedure TTextWriter.AddCurrentNCSALogTime(LocalTime: boolean);
+procedure TTextDateWriter.AddCurrentNCSALogTime(LocalTime: boolean);
 var
   time: TSynSystemTime;
 begin

@@ -471,9 +471,9 @@ type
     // TSynLocker would increase inherited fields offset -> managed PSynLocker
     fSafe: PSynLocker;
     // will lock/unlock the instance during JSON serialization of its properties
-    function RttiBeforeWriteObject(W: TBaseWriter;
+    function RttiBeforeWriteObject(W: TTextWriter;
       var Options: TTextWriterWriteObjectOptions): boolean; override;
-    procedure RttiAfterWriteObject(W: TBaseWriter;
+    procedure RttiAfterWriteObject(W: TTextWriter;
       Options: TTextWriterWriteObjectOptions); override;
     // set the rcfHookWrite flag to call RttiBeforeWriteObject
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
@@ -1513,9 +1513,9 @@ type
     procedure SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean = false;
       reformat: TTextWriterJsonFormat = jsonCompact); overload;
     /// serialize the dynamic array content as JSON
-    // - is just a wrapper around TTextWriter.AddTypedJson()
+    // - is just a wrapper around TTextDateWTTextWriterriter.AddTypedJson()
     // - this method will therefore recognize T*ObjArray types
-    procedure SaveToJson(W: TBaseWriter); overload;
+    procedure SaveToJson(W: TTextWriter); overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJson method, i.e.
     // handling TbooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
@@ -1905,7 +1905,7 @@ type
       reformat: TTextWriterJsonFormat = jsonCompact): RawUtf8; overload; inline;
     procedure SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean = false;
       reformat: TTextWriterJsonFormat = jsonCompact); overload; inline;
-    procedure SaveToJson(W: TBaseWriter); overload; inline;
+    procedure SaveToJson(W: TTextWriter); overload; inline;
     function LoadFromJson(P: PUtf8Char; aEndOfObject: PUtf8Char = nil;
       CustomVariantOptions: PDocVariantOptions = nil): PUtf8Char; inline;
     function LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar = nil): PAnsiChar; inline;
@@ -3229,7 +3229,7 @@ begin
   Rtti.Flags := Rtti.Flags + [rcfHookWrite];
 end;
 
-function TSynPersistentLock.RttiBeforeWriteObject(W: TBaseWriter;
+function TSynPersistentLock.RttiBeforeWriteObject(W: TTextWriter;
   var Options: TTextWriterWriteObjectOptions): boolean;
 begin
   if woPersistentLock in Options then
@@ -3237,7 +3237,7 @@ begin
   result := false; // continue with default JSON serialization
 end;
 
-procedure TSynPersistentLock.RttiAfterWriteObject(W: TBaseWriter;
+procedure TSynPersistentLock.RttiAfterWriteObject(W: TTextWriter;
   Options: TTextWriterWriteObjectOptions);
 begin
   if woPersistentLock in Options then
@@ -4686,7 +4686,7 @@ end;
 
 procedure TRawUtf8List.SaveToStream(Dest: TStream; const Delimiter: RawUtf8);
 var
-  W: TBaseWriter;
+  W: TTextWriter;
   i: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
@@ -4695,7 +4695,7 @@ begin
     exit;
   fSafe.Lock;
   try
-    W := TBaseWriter.Create(Dest, @temp, SizeOf(temp));
+    W := TTextWriter.Create(Dest, @temp, SizeOf(temp));
     try
       i := 0;
       repeat
@@ -6879,7 +6879,7 @@ end;
 procedure TDynArray.SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean;
   reformat: TTextWriterJsonFormat);
 var
-  W: TBaseWriter;
+  W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
   if GetCount = 0 then
@@ -6898,7 +6898,7 @@ begin
   end;
 end;
 
-procedure TDynArray.SaveToJson(W: TBaseWriter);
+procedure TDynArray.SaveToJson(W: TTextWriter);
 var
   len, backup: PtrInt;
   hacklen: PDALen;
@@ -8279,7 +8279,7 @@ var
   tmp: array[byte] of AnsiChar; // avoid heap allocation
   vt: cardinal;
   S: TStream;
-  W: TBaseWriter;
+  W: TTextWriter;
   P: pointer;
   len: integer;
 begin
@@ -9210,7 +9210,7 @@ begin
   InternalDynArray.SaveToJson(result, EnumSetsAsText, reformat);
 end;
 
-procedure TDynArrayHashed.SaveToJson(W: TBaseWriter);
+procedure TDynArrayHashed.SaveToJson(W: TTextWriter);
 begin
   InternalDynArray.SaveToJson(W);
 end;

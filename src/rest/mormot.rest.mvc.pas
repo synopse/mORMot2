@@ -151,13 +151,13 @@ type
   /// define TMvcViewsMustache.RegisterExpressionHelpersForTables CSS styling
   TExpressionHtmlTableStyle = class
   public
-    class procedure StartTable(WR: TBaseWriter); virtual;
-    class procedure BeforeFieldName(WR: TBaseWriter); virtual;
-    class procedure BeforeValue(WR: TBaseWriter); virtual;
-    class procedure AddLabel(WR: TBaseWriter; const text: string;
+    class procedure StartTable(WR: TTextWriter); virtual;
+    class procedure BeforeFieldName(WR: TTextWriter); virtual;
+    class procedure BeforeValue(WR: TTextWriter); virtual;
+    class procedure AddLabel(WR: TTextWriter; const text: string;
       kind: THtmlTableStyleLabel); virtual;
-    class procedure AfterValue(WR: TBaseWriter); virtual;
-    class procedure EndTable(WR: TBaseWriter); virtual;
+    class procedure AfterValue(WR: TTextWriter); virtual;
+    class procedure EndTable(WR: TTextWriter); virtual;
   end;
   /// to define TMvcViewsMustache.RegisterExpressionHelpersForTables CSS styling
   TExpressionHtmlTableStyleClass = class of TExpressionHtmlTableStyle;
@@ -165,8 +165,8 @@ type
   /// TMvcViewsMustache.RegisterExpressionHelpersForTables via Bootstrap CSS
   TExpressionHtmlTableStyleBootstrap = class(TExpressionHtmlTableStyle)
   public
-    class procedure StartTable(WR: TBaseWriter); override;
-    class procedure AddLabel(WR: TBaseWriter; const text: string;
+    class procedure StartTable(WR: TTextWriter); override;
+    class procedure AddLabel(WR: TTextWriter; const text: string;
       kind: THtmlTableStyleLabel); override;
   end;
 
@@ -931,7 +931,7 @@ var
   caption: string;
   sets: TStringList;
   u: RawUtf8;
-  W: TBaseWriter;
+  W: TTextWriter;
   tmp: TTextWriterStackBuffer;
 const
   ONOFF: array[boolean] of THtmlTableStyleLabel = (
@@ -942,7 +942,7 @@ const
 begin
   if _SafeObject(Value, Rec) then
   begin
-    W := TBaseWriter.CreateOwnedStream(tmp);
+    W := TTextWriter.CreateOwnedStream(tmp);
     try
       HtmlTableStyle.StartTable(W);
       for f := 0 to TableProps.Fields.Count - 1 do
@@ -1061,7 +1061,7 @@ end;
 
 { TExpressionHtmlTableStyle }
 
-class procedure TExpressionHtmlTableStyle.AddLabel(WR: TBaseWriter;
+class procedure TExpressionHtmlTableStyle.AddLabel(WR: TTextWriter;
   const text: string; kind: THtmlTableStyleLabel);
 const
   SETLABEL: array[THtmlTableStyleLabel] of string[3] = (
@@ -1072,27 +1072,27 @@ begin
   WR.AddShorter('&nbsp;');
 end;
 
-class procedure TExpressionHtmlTableStyle.AfterValue(WR: TBaseWriter);
+class procedure TExpressionHtmlTableStyle.AfterValue(WR: TTextWriter);
 begin
   WR.AddShort('</td></tr>');
 end;
 
-class procedure TExpressionHtmlTableStyle.BeforeFieldName(WR: TBaseWriter);
+class procedure TExpressionHtmlTableStyle.BeforeFieldName(WR: TTextWriter);
 begin
   WR.AddShorter('<tr><td>');
 end;
 
-class procedure TExpressionHtmlTableStyle.BeforeValue(WR: TBaseWriter);
+class procedure TExpressionHtmlTableStyle.BeforeValue(WR: TTextWriter);
 begin
   WR.AddShort('</td><td>');
 end;
 
-class procedure TExpressionHtmlTableStyle.EndTable(WR: TBaseWriter);
+class procedure TExpressionHtmlTableStyle.EndTable(WR: TTextWriter);
 begin
   WR.AddShorter('</table>');
 end;
 
-class procedure TExpressionHtmlTableStyle.StartTable(WR: TBaseWriter);
+class procedure TExpressionHtmlTableStyle.StartTable(WR: TTextWriter);
 begin
   WR.AddShorter('<table>');
 end;
@@ -1100,7 +1100,7 @@ end;
 
 { TExpressionHtmlTableStyleBootstrap }
 
-class procedure TExpressionHtmlTableStyleBootstrap.AddLabel(WR: TBaseWriter;
+class procedure TExpressionHtmlTableStyleBootstrap.AddLabel(WR: TTextWriter;
   const text: string; kind: THtmlTableStyleLabel);
 const
   SETLABEL: array[THtmlTableStyleLabel] of string[7] = (
@@ -1113,7 +1113,7 @@ begin
   WR.AddShorter('</span>');
 end;
 
-class procedure TExpressionHtmlTableStyleBootstrap.StartTable(WR: TBaseWriter);
+class procedure TExpressionHtmlTableStyleBootstrap.StartTable(WR: TTextWriter);
 begin
   WR.AddShort('<table class="table table-striped table-bordered">');
 end;

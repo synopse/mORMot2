@@ -1779,7 +1779,7 @@ function AnyTextFileToRawUtf8(const FileName: TFileName;
 // !   // Comment
 // !   ConstName: array[0..2] of byte = (
 // !     $01,$02,$03);
-procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUtf8;
+procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUtf8;
   Data: pointer; Len: integer; PerLine: integer = 16); overload;
 
 /// generate some pascal source code holding some data binary as constant
@@ -2018,7 +2018,7 @@ type
 // <strong>..</strong>, `..` into <code>..</code>, and http://... as
 // <a href=http://...>
 // - escape any HTML special chars, and Emoji tags as specified with esc
-procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUtf8Char;
+procedure AddHtmlEscapeWiki(W: TTextWriter; P: PUtf8Char;
   esc: TTextWriterHtmlEscape = [heHtmlEscape, heEmojiToUtf8]);
 
 /// convert minimal Markdown text into proper HTML
@@ -2033,7 +2033,7 @@ procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUtf8Char;
 // write plain HTML in the supplied text) unless esc is set otherwise
 // - only inline-style links and images are supported yet (not reference-style);
 // tables aren't supported either
-procedure AddHtmlEscapeMarkdown(W: TBaseWriter; P: PUtf8Char;
+procedure AddHtmlEscapeMarkdown(W: TTextWriter; P: PUtf8Char;
   esc: TTextWriterHtmlEscape = [heEmojiToUtf8]);
 
 /// escape some wiki-marked text into HTML
@@ -2162,16 +2162,16 @@ function EmojiFromText(P: PUtf8Char; len: PtrInt): TEmoji;
 // - will append ':' if no Emoji text is recognized, and return eNone
 // - will try both EMOJI_AFTERDOTS[] and EMOJI_RTTI[] reference set
 // - if W is nil, won't append anything, but just return the recognized TEmoji
-function EmojiParseDots(var P: PUtf8Char; W: TBaseWriter = nil): TEmoji;
+function EmojiParseDots(var P: PUtf8Char; W: TTextWriter = nil): TEmoji;
 
 /// low-level conversion of UTF-8 Emoji sequences into github/Markdown :identifiers:
-procedure EmojiToDots(P: PUtf8Char; W: TBaseWriter); overload;
+procedure EmojiToDots(P: PUtf8Char; W: TTextWriter); overload;
 
 /// conversion of UTF-8 Emoji sequences into github/Markdown :identifiers:
 function EmojiToDots(const text: RawUtf8): RawUtf8; overload;
 
 /// low-level conversion of github/Markdown :identifiers: into UTF-8 Emoji sequences
-procedure EmojiFromDots(P: PUtf8Char; W: TBaseWriter); overload;
+procedure EmojiFromDots(P: PUtf8Char; W: TTextWriter); overload;
 
 /// conversion of github/Markdown :identifiers: into UTF-8 Emoji sequences
 function EmojiFromDots(const text: RawUtf8): RawUtf8; overload;
@@ -2231,7 +2231,7 @@ type
     /// return all content as a single TByteDynArray
     function AsBytes: TByteDynArray;
     /// save all content into a TJsonWriter instance
-    procedure Write(W: TBaseWriter; Escape: TTextWriterKind = twJsonEscape); overload;
+    procedure Write(W: TTextWriter; Escape: TTextWriterKind = twJsonEscape); overload;
     /// save all content into a TBufferWriter instance
     procedure WriteBinary(W: TBufferWriter); overload;
     /// save all content as a string into a TBufferWriter instance
@@ -2260,12 +2260,12 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append the text at a given position in Values[], JSON escaped by default
     // - text should be in a single Values[] entry
-    procedure FindWrite(aPosition, aLength: integer; W: TBaseWriter;
+    procedure FindWrite(aPosition, aLength: integer; W: TTextWriter;
       Escape: TTextWriterKind = twJsonEscape; TrailingCharsToIgnore: integer = 0);
       {$ifdef HASINLINE}inline;{$endif}
     /// append the blob at a given position in Values[], Base64 encoded
     // - text should be in a single Values[] entry
-    procedure FindWriteBase64(aPosition, aLength: integer; W: TBaseWriter;
+    procedure FindWriteBase64(aPosition, aLength: integer; W: TTextWriter;
       withMagic: boolean);
       {$ifdef HASINLINE}inline;{$endif}
     /// copy the text at a given position in Values[]
@@ -6979,7 +6979,7 @@ var
   len, filescount, i: integer;
   boundaries: TRawUtf8DynArray;
   bound: RawUtf8;
-  W: TBaseWriter;
+  W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
   result := false;
@@ -6987,7 +6987,7 @@ begin
   if len = 0 then
     exit;
   filescount := 0;
-  W := TBaseWriter.CreateOwnedStream(temp);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     // header - see https://www.w3.org/Protocols/rfc1341/7_2_Multipart.html
     bound := MultiPartFormDataNewBound(boundaries);
@@ -8076,7 +8076,7 @@ end;
 procedure TMemoryMapText.SaveToStream(Dest: TStream; const Header: RawUtf8);
 var
   i: PtrInt;
-  W: TBaseWriter;
+  W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
   i := length(Header);
@@ -8086,7 +8086,7 @@ begin
     Dest.WriteBuffer(fMap.Buffer^, fMap.Size);
   if fAppendedLinesCount = 0 then
     exit;
-  W := TBaseWriter.Create(Dest, @temp, SizeOf(temp));
+  W := TTextWriter.Create(Dest, @temp, SizeOf(temp));
   try
     if (fMap.Size > 0) and
        (fMap.Buffer[fMap.Size - 1] >= ' ') then
@@ -8552,7 +8552,7 @@ end;
 function BinToSource(const ConstName, Comment: RawUtf8;
   Data: pointer; Len, PerLine: integer; const Suffix: RawUtf8): RawUtf8;
 var
-  W: TBaseWriter;
+  W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
   if (Data = nil) or
@@ -8561,7 +8561,7 @@ begin
     result := ''
   else
   begin
-    W := TBaseWriter.CreateOwnedStream(temp,
+    W := TTextWriter.CreateOwnedStream(temp,
       Len * 5 + 50 + length(Comment) + length(Suffix));
     try
       BinToSource(W, ConstName, Comment, Data, Len, PerLine);
@@ -8577,7 +8577,7 @@ begin
   end;
 end;
 
-procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUtf8;
+procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUtf8;
   Data: pointer; Len, PerLine: integer);
 var
   line, i: integer;
@@ -9142,12 +9142,12 @@ type
 
   TTextWriterEscape = object
     P, B, P2, B2: PUtf8Char;
-    W: TBaseWriter;
+    W: TTextWriter;
     st: set of TTextWriterEscapeStyle;
     fmt: TTextWriterHtmlFormat;
     esc: TTextWriterHtmlEscape;
     lst: TTextWriterEscapeLineStyle;
-    procedure Start(dest: TBaseWriter; src: PUtf8Char; escape: TTextWriterHtmlEscape);
+    procedure Start(dest: TTextWriter; src: PUtf8Char; escape: TTextWriterHtmlEscape);
     function ProcessText(const stopchars: TSynByteSet): AnsiChar;
     procedure ProcessHRef;
     function ProcessLink: boolean;
@@ -9157,13 +9157,13 @@ type
     procedure SetLine(style: TTextWriterEscapeLineStyle);
     procedure EndOfParagraph;
     procedure NewMarkdownLine;
-    procedure AddHtmlEscapeWiki(dest: TBaseWriter; src: PUtf8Char;
+    procedure AddHtmlEscapeWiki(dest: TTextWriter; src: PUtf8Char;
       escape: TTextWriterHtmlEscape);
-    procedure AddHtmlEscapeMarkdown(dest: TBaseWriter; src: PUtf8Char;
+    procedure AddHtmlEscapeMarkdown(dest: TTextWriter; src: PUtf8Char;
       escape: TTextWriterHtmlEscape);
   end;
 
-procedure TTextWriterEscape.Start(dest: TBaseWriter; src: PUtf8Char;
+procedure TTextWriterEscape.Start(dest: TTextWriter; src: PUtf8Char;
   escape: TTextWriterHtmlEscape);
 begin
   P := src;
@@ -9396,7 +9396,7 @@ none:     if lst = twlParagraph then
   P := GotoNextNotSpaceSameLine(P + 1);
 end;
 
-procedure TTextWriterEscape.AddHtmlEscapeWiki(dest: TBaseWriter;
+procedure TTextWriterEscape.AddHtmlEscapeWiki(dest: TTextWriter;
   src: PUtf8Char; escape: TTextWriterHtmlEscape);
 begin
   Start(dest, src, escape);
@@ -9443,7 +9443,7 @@ begin
   SetLine(twlNone);
 end;
 
-procedure TTextWriterEscape.AddHtmlEscapeMarkdown(dest: TBaseWriter;
+procedure TTextWriterEscape.AddHtmlEscapeMarkdown(dest: TTextWriter;
   src: PUtf8Char; escape: TTextWriterHtmlEscape);
 begin
   Start(dest, src, escape);
@@ -9551,9 +9551,9 @@ end;
 function HtmlEscapeWiki(const wiki: RawUtf8; esc: TTextWriterHtmlEscape): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
-  W: TBaseWriter;
+  W: TTextWriter;
 begin
-  W := TBaseWriter.CreateOwnedStream(temp);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     AddHtmlEscapeWiki(W, pointer(wiki), esc);
     W.SetText(result);
@@ -9565,9 +9565,9 @@ end;
 function HtmlEscapeMarkdown(const md: RawUtf8; esc: TTextWriterHtmlEscape): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
-  W: TBaseWriter;
+  W: TTextWriter;
 begin
-  W := TBaseWriter.CreateOwnedStream(temp);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     AddHtmlEscapeMarkdown(W, pointer(md), esc);
     W.SetText(result);
@@ -9576,14 +9576,14 @@ begin
   end;
 end;
 
-procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUtf8Char; esc: TTextWriterHtmlEscape);
+procedure AddHtmlEscapeWiki(W: TTextWriter; P: PUtf8Char; esc: TTextWriterHtmlEscape);
 var
   doesc: TTextWriterEscape;
 begin
   doesc.AddHtmlEscapeWiki(W, P, esc);
 end;
 
-procedure AddHtmlEscapeMarkdown(W: TBaseWriter; P: PUtf8Char; esc: TTextWriterHtmlEscape);
+procedure AddHtmlEscapeMarkdown(W: TTextWriter; P: PUtf8Char; esc: TTextWriterHtmlEscape);
 var
   doesc: TTextWriterEscape;
 begin
@@ -9598,7 +9598,7 @@ begin
   // note: we may enhance performance by using FastFindPUtf8CharSorted()
 end;
 
-function EmojiParseDots(var P: PUtf8Char; W: TBaseWriter): TEmoji;
+function EmojiParseDots(var P: PUtf8Char; W: TTextWriter): TEmoji;
 var
   c: PUtf8Char;
 begin
@@ -9630,7 +9630,7 @@ begin
     W.Add(':');
 end;
 
-procedure EmojiToDots(P: PUtf8Char; W: TBaseWriter);
+procedure EmojiToDots(P: PUtf8Char; W: TTextWriter);
 var
   B: PUtf8Char;
   c: cardinal;
@@ -9656,7 +9656,7 @@ end;
 
 function EmojiToDots(const text: RawUtf8): RawUtf8;
 var
-  W: TBaseWriter;
+  W: TTextWriter;
   tmp: TTextWriterStackBuffer;
 begin
   if PosExChar(#$f0, text) = 0 then
@@ -9664,7 +9664,7 @@ begin
     result := text; // no UTF-8 smiley for sure
     exit;
   end;
-  W := TBaseWriter.CreateOwnedStream(tmp);
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     EmojiToDots(pointer(text), W);
     W.SetText(result);
@@ -9673,7 +9673,7 @@ begin
   end;
 end;
 
-procedure EmojiFromDots(P: PUtf8Char; W: TBaseWriter);
+procedure EmojiFromDots(P: PUtf8Char; W: TTextWriter);
 var
   B: PUtf8Char;
 begin
@@ -9692,10 +9692,10 @@ end;
 
 function EmojiFromDots(const text: RawUtf8): RawUtf8;
 var
-  W: TBaseWriter;
+  W: TTextWriter;
   tmp: TTextWriterStackBuffer;
 begin
-  W := TBaseWriter.CreateOwnedStream(tmp);
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     EmojiFromDots(pointer(text), W);
     W.SetText(result);
@@ -9863,7 +9863,7 @@ begin
       MoveFast(pointer(Value)^, PByteArray(result)[Position], length(Value));
 end;
 
-procedure TRawByteStringGroup.Write(W: TBaseWriter; Escape: TTextWriterKind);
+procedure TRawByteStringGroup.Write(W: TTextWriter; Escape: TTextWriterKind);
 var
   i: integer;
 begin
@@ -10005,7 +10005,7 @@ begin
 end;
 
 procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer;
-  W: TBaseWriter; Escape: TTextWriterKind; TrailingCharsToIgnore: integer);
+  W: TTextWriter; Escape: TTextWriterKind; TrailingCharsToIgnore: integer);
 var
   P: pointer;
 begin
@@ -10015,7 +10015,7 @@ begin
 end;
 
 procedure TRawByteStringGroup.FindWriteBase64(aPosition, aLength: integer;
-  W: TBaseWriter; withMagic: boolean);
+  W: TTextWriter; withMagic: boolean);
 var
   P: pointer;
 begin

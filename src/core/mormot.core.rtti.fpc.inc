@@ -973,13 +973,13 @@ end;
 procedure _ansistr_concat_multi_convert(var dest: RawByteString;
   const s: array of RawByteString; cp: cardinal);
 var
-  t: TBaseWriter;
+  t: TTextWriter;
   i: PtrInt;
   p: pointer;
   u: RawUtf8;
   tmp: TTextWriterStackBuffer;
 begin
-  t := TBaseWriter.CreateOwnedStream(tmp);
+  t := TTextWriter.CreateOwnedStream(tmp);
   try
     for i := 0 to high(s) do
     begin

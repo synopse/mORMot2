@@ -1554,7 +1554,7 @@ type
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// used to customize the exception log to contain information about the Query
     // - it will log the database parameters
-    function CustomLog(WR: TBaseWriter;
+    function CustomLog(WR: TTextWriter;
       const Context: TSynLogExceptionContext): boolean; override;
     {$endif NOEXCEPTIONINTERCEPT}
   published
@@ -1586,7 +1586,7 @@ type
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// used to customize the exception log to contain information about the Query
     // - it will log both the failing request and the returned error message
-    function CustomLog(WR: TBaseWriter;
+    function CustomLog(WR: TTextWriter;
       const Context: TSynLogExceptionContext): boolean; override;
     {$endif NOEXCEPTIONINTERCEPT}
     /// the associated error reply document
@@ -2623,7 +2623,7 @@ begin
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
-function EMongoRequestException.CustomLog(WR: TBaseWriter;
+function EMongoRequestException.CustomLog(WR: TTextWriter;
   const Context: TSynLogExceptionContext): boolean;
 begin
   inherited CustomLog(WR, Context);
@@ -2681,7 +2681,7 @@ begin
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
-function EMongoDatabaseException.CustomLog(WR: TBaseWriter;
+function EMongoDatabaseException.CustomLog(WR: TTextWriter;
   const Context: TSynLogExceptionContext): boolean;
 begin
   inherited CustomLog(WR, Context);

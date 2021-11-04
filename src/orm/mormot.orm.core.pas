@@ -1607,7 +1607,7 @@ type
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
     /// fake nested TOrm classes would be serialized as integer
     function IsPropClassInstance(Prop: PRttiCustomProp): boolean; virtual;
-    function RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
+    function RttiWritePropertyValue(W: TTextWriter; Prop: PRttiCustomProp;
       Options: TTextWriterWriteObjectOptions): boolean; override;
     function RttiBeforeReadPropertyValue(Ctxt: pointer;
       Prop: PRttiCustomProp): boolean; override;
@@ -7930,7 +7930,7 @@ begin
   result := fFill.JoinedFields;
 end;
 
-function TOrm.RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
+function TOrm.RttiWritePropertyValue(W: TTextWriter; Prop: PRttiCustomProp;
   Options: TTextWriterWriteObjectOptions): boolean;
 begin
   if (not(rcfClassMayBeID in Prop^.Value.Flags)) or

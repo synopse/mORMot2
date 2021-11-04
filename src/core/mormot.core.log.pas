@@ -120,7 +120,7 @@ type
     procedure SaveToExe(const aExeName: TFileName);
     /// save all debugging information as JSON content
     // - may be useful from debugging purposes
-    procedure SaveToJson(W: TBaseWriter); overload;
+    procedure SaveToJson(W: TTextWriter); overload;
     /// save all debugging information as a JSON file
     // - may be useful from debugging purposes
     procedure SaveToJson(const aJsonFile: TFileName;
@@ -129,7 +129,7 @@ type
     // - create a global TDebugFile instance for the current process, if needed
     // - if no debugging information is available (.map/.dbg/.mab), will write
     // the raw address pointer as hexadecimal
-    class function Log(W: TBaseWriter; aAddressAbsolute: PtrUInt;
+    class function Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
       AllowNotCodeAddr: boolean; SymbolNameNotFilename: boolean = false): boolean;
     /// compute the relative memory address from its absolute (pointer) value
     function AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
@@ -458,7 +458,7 @@ type
   ISynLog = interface(IUnknown)
     ['{527AC81F-BC41-4717-B089-3F74DE56F1AE}']
     /// call this method to add some information to the log at a specified level
-    // - will use TBaseWriter.Add(...,twOnSameLine) to append its content
+    // - will use TTextWriter.Add(...,twOnSameLine) to append its content
     // - % = #37 indicates a string, integer, floating-point, class parameter
     // to be appended as text (e.g. class name), any variant as JSON...
     // - note that cardinal values should be type-casted to Int64() (otherwise
@@ -971,7 +971,7 @@ type
   // per-thread (if Family.PerThreadLog=ptOneFilePerThread) or global private
   // log file instance
   // - was very optimized for speed, if no logging is written, and even during
-  // log write (using an internal TBaseWriter)
+  // log write (using an internal TTextWriter)
   // - can use available debugging information via the TDebugFile class, for
   // stack trace logging for exceptions, sllStackTrace, and Enter/Leave labelling
   TSynLog = class(TObject, ISynLog)
@@ -1040,7 +1040,7 @@ type
     procedure ThreadContextRehash;
     function NewRecursion: PSynLogThreadRecursion;
     function Instance: TSynLog;
-    function ConsoleEcho(Sender: TBaseWriter; Level: TSynLogInfo;
+    function ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
       const Text: RawUtf8): boolean; virtual;
   public
     /// intialize for a TSynLog class instance
@@ -1162,7 +1162,7 @@ type
     class procedure DebuggerNotify(Level: TSynLogInfo; const Format: RawUtf8;
       const Args: array of const);
     /// call this method to add some information to the log at the specified level
-    // - will use TBaseWriter.Add(...,twOnSameLine) to append its content
+    // - will use TTextWriter.Add(...,twOnSameLine) to append its content
     // - % = #37 indicates a string, integer, floating-point, class parameter
     // to be appended as text (e.g. class name), any variant as JSON...
     // - note that cardinal values should be type-casted to Int64() (otherwise
@@ -1329,7 +1329,7 @@ type
   // for any incoming event, using e.g. TSynLogCallbacks.Subscribe
   ISynLogCallback = interface(IInvokable)
     ['{9BC218CD-A7CD-47EC-9893-97B7392C37CF}']
-    /// each line of the TBaseWriter internal instance will trigger this method
+    /// each line of the TTextWriter internal instance will trigger this method
     // - similar to TOnTextWriterEcho, as defined in mormot.core.text
     // - an initial call with Level=sllNone and the whole previous Text may be
     // transmitted, if ReceiveExistingKB is set for TSynLogCallbacks.Subscribe()
@@ -1370,7 +1370,7 @@ type
     procedure Unsubscribe(const Callback: ISynLogCallback); virtual;
     /// notify a given log event
     // - matches the TOnTextWriterEcho signature
-    function OnEcho(Sender: TBaseWriter; Level: TSynLogInfo;
+    function OnEcho(Sender: TTextWriter; Level: TSynLogInfo;
       const Text: RawUtf8): boolean;
   published
     /// how many registrations are currently defined
@@ -3168,7 +3168,7 @@ const
   _TDebugSymbol = 'Name:RawUtf8 Start,Stop:integer';
   _TDebugUnit ='Symbol:TDebugSymbol FileName:RawUtf8 Line,Addr:TIntegerDynArray';
 
-procedure TDebugFile.SaveToJson(W: TBaseWriter);
+procedure TDebugFile.SaveToJson(W: TTextWriter);
 begin
   if Rtti.RegisterType(TypeInfo(TDebugSymbol)).Props.Count = 0 then
     Rtti.RegisterFromText([TypeInfo(TDebugSymbol), _TDebugSymbol,
@@ -3331,7 +3331,7 @@ begin
     result := PtrInt(aAddressAbsolute) - PtrInt(fCodeOffset);
 end;
 
-class function TDebugFile.Log(W: TBaseWriter; aAddressAbsolute: PtrUInt;
+class function TDebugFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
   AllowNotCodeAddr, SymbolNameNotFilename: boolean): boolean;
 var
   u, s, Line, offset: integer;
@@ -4596,7 +4596,7 @@ begin
   result := self;
 end;
 
-function TSynLog.ConsoleEcho(Sender: TBaseWriter; Level: TSynLogInfo;
+function TSynLog.ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
   const Text: RawUtf8): boolean;
 {$ifdef OSLINUX}
 var
@@ -5210,7 +5210,7 @@ begin
     if Text = '' then
     begin
       if Instance <> nil then
-        if PClass(fWriter)^ = TBaseWriter then
+        if PClass(fWriter)^ = TTextWriter then
           // WriteObject() requires TJsonWriter from mormot.core.json.pas
           fWriter.AddInstancePointer(Instance, #0, {unit=}true, {ptr=}true)
         else
@@ -5919,7 +5919,7 @@ begin
   inherited Destroy;
 end;
 
-function TSynLogCallbacks.OnEcho(Sender: TBaseWriter; Level: TSynLogInfo;
+function TSynLogCallbacks.OnEcho(Sender: TTextWriter; Level: TSynLogInfo;
   const Text: RawUtf8): boolean;
 var
   i: PtrInt;
@@ -6111,7 +6111,7 @@ begin
       // not exact YYYYMMDD hhmmsszz layout -> try plain ISO-8601
       Iso8601ToDateTimePUtf8CharVar(P, 17, result)
     else if TryEncodeDate(Y, M, D, result) then
-      // MS shl 4 = 16 ms resolution in TBaseWriter.AddCurrentLogTime()
+      // MS shl 4 = 16 ms resolution in TTextWriter.AddCurrentLogTime()
       result := result + EncodeTime(HH, MM, SS, MS shl 4)
     else
       result := 0;

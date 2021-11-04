@@ -2135,7 +2135,7 @@ var
 begin
   n := length(Values);
   if n > 0 then
-    with TBaseWriter.CreateOwnedStream(temp) do
+    with TTextWriter.CreateOwnedStream(temp) do
     try
       AddString(PropName);
       if n = 1 then

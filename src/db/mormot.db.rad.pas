@@ -82,7 +82,7 @@ type
 
 /// append a TBcd value as text to the output buffer
 // - very optimized for speed
-procedure AddBcd(WR: TBaseWriter; const AValue: TBcd);
+procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
 
 type
   /// a string buffer, used by InternalBcdToBuffer to store its output text
@@ -341,7 +341,7 @@ begin
   result := PEnd - PBeg;
 end;
 
-procedure AddBcd(WR: TBaseWriter; const AValue: TBcd);
+procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
 var
   len: PtrInt;
   PBeg: PAnsiChar;

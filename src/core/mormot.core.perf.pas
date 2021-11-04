@@ -382,7 +382,7 @@ type
     procedure LockedPerSecProperties; virtual;
     procedure LockedFromProcessTimer; virtual;
     procedure LockedSum(another: TSynMonitor); virtual;
-    procedure WriteDetailsTo(W: TBaseWriter); virtual;
+    procedure WriteDetailsTo(W: TTextWriter); virtual;
     procedure Changed; virtual;
   public
     /// low-level high-precision timer instance
@@ -441,7 +441,7 @@ type
     function ComputeDetailsJson: RawUtf8;
     /// appends a JSON content with all published properties information
     // - thread-safe method
-    procedure ComputeDetailsTo(W: TBaseWriter); virtual;
+    procedure ComputeDetailsTo(W: TTextWriter); virtual;
     /// returns a TDocVariant with all published properties information
     // - thread-safe method
     function ComputeDetails: variant;
@@ -462,7 +462,7 @@ type
     // - thread-safe method
     procedure FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
     // customize JSON Serialization to set woEnumSetsAsText
-    function RttiBeforeWriteObject(W: TBaseWriter;
+    function RttiBeforeWriteObject(W: TTextWriter;
       var Options: TTextWriterWriteObjectOptions): boolean; override;
     /// an identifier associated to this monitored resource
     // - is used e.g. for TSynMonitorUsage persistence/tracking
@@ -1437,7 +1437,7 @@ begin
   // do nothing by default - overriden classes may track modified changes
 end;
 
-function TSynMonitor.RttiBeforeWriteObject(W: TBaseWriter;
+function TSynMonitor.RttiBeforeWriteObject(W: TTextWriter;
   var Options: TTextWriterWriteObjectOptions): boolean;
 begin
  if woFullExpand in Options then
@@ -1622,7 +1622,7 @@ begin
   inc(fInternalErrors, another.Errors);
 end;
 
-procedure TSynMonitor.WriteDetailsTo(W: TBaseWriter);
+procedure TSynMonitor.WriteDetailsTo(W: TTextWriter);
 begin
   fSafe^.Lock;
   try
@@ -1632,7 +1632,7 @@ begin
   end;
 end;
 
-procedure TSynMonitor.ComputeDetailsTo(W: TBaseWriter);
+procedure TSynMonitor.ComputeDetailsTo(W: TTextWriter);
 begin
   fSafe^.Lock;
   try

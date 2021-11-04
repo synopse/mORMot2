@@ -256,7 +256,7 @@ type
     class function RandomTextParagraph(WordCount: integer; LastPunctuation: AnsiChar = '.';
       const RandomInclude: RawUtf8 = ''): RawUtf8;
     /// add containing some "bla bli blo blu" fake text, with paragraphs
-    class procedure AddRandomTextParagraph(WR: TBaseWriter; WordCount: integer;
+    class procedure AddRandomTextParagraph(WR: TTextWriter; WordCount: integer;
       LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUtf8 = '';
       NoLineFeed: boolean = false);
     /// this method is triggered internally - e.g. by Check() - when a test failed
@@ -846,9 +846,9 @@ class function TSynTestCase.RandomTextParagraph(WordCount: integer;
   LastPunctuation: AnsiChar; const RandomInclude: RawUtf8): RawUtf8;
 var
   tmp: TTextWriterStackBuffer;
-  WR: TBaseWriter;
+  WR: TTextWriter;
 begin
-  WR := TBaseWriter.CreateOwnedStream(tmp);
+  WR := TTextWriter.CreateOwnedStream(tmp);
   try
     AddRandomTextParagraph(WR, WordCount, LastPunctuation, RandomInclude);
     WR.SetText(result);
@@ -857,7 +857,7 @@ begin
   end;
 end;
 
-class procedure TSynTestCase.AddRandomTextParagraph(WR: TBaseWriter;
+class procedure TSynTestCase.AddRandomTextParagraph(WR: TTextWriter;
   WordCount: integer; LastPunctuation: AnsiChar; const RandomInclude: RawUtf8;
   NoLineFeed: boolean);
 type

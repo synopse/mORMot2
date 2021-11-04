@@ -10,7 +10,7 @@ unit mormot.core.text;
     - UTF-8 String Manipulation Functions
     - TRawUtf8DynArray Processing Functions
     - CSV-like Iterations over Text Buffers
-    - TBaseWriter parent class for Text Generation
+    - TTextWriter parent class for Text Generation
     - Numbers (integers or floats) and Variants to Text Conversion
     - Hexadecimal Text And Binary Conversion
     - Text Formatting functions and ESynException class
@@ -467,7 +467,7 @@ function GetNextItemQWord(var P: PUtf8Char; Sep: AnsiChar = ','): QWord;
 // - if Sep is #0, it won't be searched for
 // - will first fill the 64-bit value with 0, then decode each two hexadecimal
 // characters available in P
-// - could be used to decode TBaseWriter.AddBinToHexDisplayMinChars() output
+// - could be used to decode TTextWriter.AddBinToHexDisplayMinChars() output
 function GetNextItemHexa(var P: PUtf8Char; Sep: AnsiChar = ','): QWord;
 
 /// return next CSV string as unsigned integer from P, 0 if no more
@@ -582,13 +582,13 @@ function Int64DynArrayToCsv(const Values: TInt64DynArray;
   {$ifdef HASINLINE}inline;{$endif}
 
 
-{ ************ TBaseWriter parent class for Text Generation }
+{ ************ TTextWriter parent class for Text Generation }
 
 type
-  /// event signature for TBaseWriter.OnFlushToStream callback
+  /// event signature for TTextWriter.OnFlushToStream callback
   TOnTextWriterFlush = procedure(Text: PUtf8Char; Len: PtrInt) of object;
 
-  /// defines how text is to be added into TBaseWriter / TJsonWriter
+  /// defines how text is to be added into TTextWriter / TJsonWriter
   // - twNone will write the supplied text with no escaping
   // - twJsonEscape will properly escape " and \ as expected by JSON
   // - twOnSameLine will convert any line feeds or control chars into spaces
@@ -597,11 +597,11 @@ type
     twJsonEscape,
     twOnSameLine);
 
-  /// available global options for a TBaseWriter / TBaseWriter instance
-  // - TBaseWriter.WriteObject() method behavior would be set via their own
+  /// available global options for a TTextWriter / TTextWriter instance
+  // - TTextWriter.WriteObject() method behavior would be set via their own
   // TTextWriterWriteObjectOptions, and work in conjunction with those settings
   // - twoStreamIsOwned would be set if the associated TStream is owned by
-  // the TBaseWriter instance
+  // the TTextWriter instance
   // - twoFlushToStreamNoAutoResize would forbid FlushToStream to resize the
   // internal memory buffer when it appears undersized - FlushFinal will set it
   // before calling a last FlushToStream
@@ -617,7 +617,7 @@ type
   // - when enumerates and sets are serialized as text into JSON, you may force
   // the identifiers to be left-trimed for all their lowercase characters
   // (e.g. sllError -> 'Error') by setting twoTrimLeftEnumSets: this option
-  // would default to the global TBaseWriter.SetDefaultEnumTrim setting
+  // would default to the global TTextWriter.SetDefaultEnumTrim setting
   // - twoEndOfLineCRLF would reflect the TEchoWriter.EndOfLineCRLF property
   // - twoBufferIsExternal would be set if the temporary buffer is not handled
   // by the instance, but specified at constructor, maybe from the stack
@@ -639,17 +639,17 @@ type
     twoIgnoreDefaultInRecord,
     twoDateTimeWithZ);
     
-  /// options set for a TBaseWriter / TBaseWriter instance
+  /// options set for a TTextWriter / TTextWriter instance
   // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior;
-  // or set global process customization for a TBaseWriter
+  // or set global process customization for a TTextWriter
   TTextWriterOptions = set of TTextWriterOption;
 
-  /// may be used to allocate on stack a 8KB work buffer for a TBaseWriter
-  // - via the TBaseWriter.CreateOwnedStream overloaded constructor
+  /// may be used to allocate on stack a 8KB work buffer for a TTextWriter
+  // - via the TTextWriter.CreateOwnedStream overloaded constructor
   TTextWriterStackBuffer = array[0..8191] of AnsiChar;
   PTextWriterStackBuffer = ^TTextWriterStackBuffer;
 
-  /// available options for TBaseWriter.WriteObject() method
+  /// available options for TTextWriter.WriteObject() method
   // - woHumanReadable will add some line feeds and indentation to the content,
   // to make it more friendly to the human eye
   // - woDontStoreDefault (which is set by default for WriteObject method) will
@@ -717,7 +717,7 @@ type
     woDontStoreVoid,
     woPersistentLock);
 
-  /// options set for TBaseWriter.WriteObject() method
+  /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
   /// the potential places were TJsonWriter.AddHtmlEscape should process
@@ -734,7 +734,7 @@ type
     hfOutsideAttributes,
     hfWithinAttributes);
 
-  /// the available JSON format, for TBaseWriter.AddJsonReformat() and its
+  /// the available JSON format, for TTextWriter.AddJsonReformat() and its
   // JsonBufferReformat() and JsonReformat() wrappers
   // - jsonCompact is the default machine-friendly single-line layout
   // - jsonHumanReadable will add line feeds and indentation, for a more
@@ -763,11 +763,11 @@ type
     
   /// parent to T*Writer text processing classes, with the minimum set of methods
   // - use an internal buffer, so much faster than naive string+string
-  // - see TTextWriter in mormot.core.datetime for date/time methods
+  // - see TTextDateWriter in mormot.core.datetime for date/time methods
   // - see TJsonWriter in mormot.core.json for proper JSON support
   // - see TResultsWriter in mormot.db.core for SQL resultset export
   // - see TOrmWriter in mormot.orm.core for ORM oriented serialization
-  TBaseWriter = class
+  TTextWriter = class
   protected
     fStream: TStream;
     fInitialStreamPosition: PtrUInt;
@@ -801,19 +801,19 @@ type
     // - will use an external buffer (which may be allocated on stack)
     constructor Create(aStream: TStream; aBuf: pointer; aBufSize: integer); overload;
     /// the data will be written to an internal TRawByteStringStream
-    // - TRawByteStringStream.DataString method will be used by TBaseWriter.Text
+    // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
     // to retrieve directly the content without any data move nor allocation
     // - default internal buffer size if 4096 (enough for most JSON objects)
     // - consider using a stack-allocated buffer and the overloaded method
     constructor CreateOwnedStream(aBufSize: integer = 4096); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use an external buffer (which may be allocated on stack)
-    // - TRawByteStringStream.DataString method will be used by TBaseWriter.Text
+    // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
     // to retrieve directly the content without any data move nor allocation
     constructor CreateOwnedStream(aBuf: pointer; aBufSize: integer); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use the stack-allocated TTextWriterStackBuffer if possible
-    // - TRawByteStringStream.DataString method will be used by TBaseWriter.Text
+    // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
     // to retrieve directly the content without any data move nor allocation
     constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
       aBufSize: integer = SizeOf(TTextWriterStackBuffer)); overload;
@@ -832,7 +832,7 @@ type
     // - this is global to the current process, and should be use mainly for
     // compatibility purposes for the whole process
     // - you may change the default behavior by setting twoTrimLeftEnumSets
-    // in the TBaseWriter.CustomOptions property of a given serializer
+    // in the TTextWriter.CustomOptions property of a given serializer
     // - note that unserialization process would recognize both formats
     class procedure SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
 
@@ -1181,11 +1181,11 @@ type
     // - you should call the FlushFinal (or FlushToStream) methods before using
     // this TStream content, to flush all pending characters
     // - if the TStream instance has not been specified when calling the
-    // TBaseWriter constructor, it can be forced via this property, before
+    // TTextWriter constructor, it can be forced via this property, before
     // any writting
     property Stream: TStream
       read fStream write SetStream;
-    /// global options to customize this TBaseWriter instance process
+    /// global options to customize this TTextWriter instance process
     // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior
     property CustomOptions: TTextWriterOptions
       read fCustomOptions write fCustomOptions;
@@ -1196,14 +1196,14 @@ type
   end;
 
   /// class of our simple TEXT format writer to a Stream
-  TBaseWriterClass = class of TBaseWriter;
+  TBaseWriterClass = class of TTextWriter;
 
 var
   /// contains the default JSON serialization class for the framework
   // - used internally by ObjectToJson/VariantSaveJson to avoid circular references
-  // - will be set to TJsonWriter by mormot.core.json; default TBaseWriter
+  // - will be set to TJsonWriter by mormot.core.json; default TTextWriter
   // would raise an exception on any JSON processing attempt
-  DefaultJsonWriter: TBaseWriterClass = TBaseWriter;
+  DefaultJsonWriter: TBaseWriterClass = TTextWriter;
 
 /// will serialize any TObject into its UTF-8 JSON representation
 /// - serialize as JSON the published integer, Int64, floating point values,
@@ -1216,18 +1216,18 @@ var
 // - any TCollection property will also be serialized as JSON arrays
 // - you can add some custom serializers for ANY class, via mormot.core.json.pas
 // TRttiJson.RegisterCustomSerializer() class method
-// - call internally TBaseWriter.WriteObject() method from DefaultJsonWriter
+// - call internally TTextWriter.WriteObject() method from DefaultJsonWriter
 function ObjectToJson(Value: TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
 
 /// escape some UTF-8 text into HTML
-// - just a wrapper around TBaseWriter.AddHtmlEscape() process,
+// - just a wrapper around TTextWriter.AddHtmlEscape() process,
 // replacing < > & " chars depending on the HTML layer
 function HtmlEscape(const text: RawUtf8;
   fmt: TTextWriterHtmlFormat = hfAnyWhere): RawUtf8;
 
 /// escape some VCL/LCL text into UTF-8 HTML
-// - just a wrapper around TBaseWriter.AddHtmlEscapeString() process,
+// - just a wrapper around TTextWriter.AddHtmlEscapeString() process,
 // replacing < > & " chars depending on the HTML layer
 function HtmlEscapeString(const text: string;
   fmt: TTextWriterHtmlFormat = hfAnyWhere): RawUtf8;
@@ -1246,16 +1246,16 @@ type
   /// callback used to echo each line of TEchoWriter class
   // - should return TRUE on success, FALSE if the log was not echoed: but
   // TSynLog will continue logging, even if this event returned FALSE
-  TOnTextWriterEcho = function(Sender: TBaseWriter; Level: TSynLogInfo;
+  TOnTextWriterEcho = function(Sender: TTextWriter; Level: TSynLogInfo;
     const Text: RawUtf8): boolean of object;
 
-  /// add optional echoing of the lines to TBaseWriter
+  /// add optional echoing of the lines to TTextWriter
   // - as used e.g. by TSynLog writer for log optional redirection
-  // - is defined as a nested class to reduce plain TBaseWriter scope, and
+  // - is defined as a nested class to reduce plain TTextWriter scope, and
   // better follow the SOLID principles
   TEchoWriter = class
   protected
-    fWriter: TBaseWriter;
+    fWriter: TTextWriter;
     fEchoStart: PtrInt;
     fEchoBuf: RawUtf8;
     fEchos: array of TOnTextWriterEcho;
@@ -1265,10 +1265,10 @@ type
     procedure SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
   public
     /// prepare for the echoing process
-    constructor Create(Owner: TBaseWriter); reintroduce;
+    constructor Create(Owner: TTextWriter); reintroduce;
     /// end the echoing process
     destructor Destroy; override;
-    /// should be called from TBaseWriter.FlushToStream
+    /// should be called from TTextWriter.FlushToStream
     // - write pending data to the Stream, with automatic buffer resizal and echoing
     // - this overriden method will handle proper echoing
     procedure FlushToStream(Text: PUtf8Char; Len: PtrInt);
@@ -1286,8 +1286,8 @@ type
     procedure EchoRemove(const aEcho: TOnTextWriterEcho);
     /// reset the internal buffer used for echoing content
     procedure EchoReset;
-    /// the associated TBaseWriter instance
-    property Writer: TBaseWriter
+    /// the associated TTextWriter instance
+    property Writer: TTextWriter
       read fWriter;
     /// define how AddEndOfLine method stores its line feed characters
     // - by default (FALSE), it will append a LF (#10) char to the buffer
@@ -1677,7 +1677,7 @@ procedure DoubleToStr(Value: Double; var result: RawUtf8); overload;
 // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
 // - will end not only on #0 but on any char not matching 1[.2[e[-]3]] pattern
 // - is used when the input comes from a third-party source with no regular
-// output, e.g. a database driver, via TBaseWriter.AddFloatStr
+// output, e.g. a database driver, via TTextWriter.AddFloatStr
 function FloatStrCopy(s, d: PUtf8Char): PUtf8Char;
 
 /// fast conversion of 2 digit characters into a 0..99 value
@@ -1741,7 +1741,7 @@ function VariantToUtf8(const V: Variant; var Text: RawUtf8): boolean; overload;
 /// save a variant value into a JSON content
 // - is properly implemented by mormot.core.json.pas: if this unit is not
 // included in the project, this function will raise an exception
-// - follows the TBaseWriter.AddVariant() and VariantLoadJson() format
+// - follows the TTextWriter.AddVariant() and VariantLoadJson() format
 // - is able to handle simple and custom variant types, for instance:
 // !  VariantSaveJson(1.5)='1.5'
 // !  VariantSaveJson('test')='"test"'
@@ -2007,7 +2007,7 @@ type
   // - should return TRUE if all needed information has been logged by the
   // event handler
   // - should return FALSE if Context.EAddr and Stack trace is to be appended
-  TSynLogExceptionToStr = function(WR: TBaseWriter;
+  TSynLogExceptionToStr = function(WR: TTextWriter;
     const Context: TSynLogExceptionContext): boolean;
 
 var
@@ -2016,7 +2016,7 @@ var
 
 /// the default Exception handler for logging
 // - defined here to be called e.g. by ESynException.CustomLog() as default
-function DefaultSynLogExceptionToStr(WR: TBaseWriter;
+function DefaultSynLogExceptionToStr(WR: TTextWriter;
   const Context: TSynLogExceptionContext): boolean;
 
 {$endif NOEXCEPTIONINTERCEPT}
@@ -2053,7 +2053,7 @@ type
     // - override this method to provide a custom logging content
     // - should return TRUE if Context.EAddr and Stack trace is not to be
     // written (i.e. as for any TSynLogExceptionToStr callback)
-    function CustomLog(WR: TBaseWriter;
+    function CustomLog(WR: TTextWriter;
       const Context: TSynLogExceptionContext): boolean; virtual;
     {$endif NOEXCEPTIONINTERCEPT}
     /// the code location when this exception was triggered
@@ -2309,16 +2309,16 @@ function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt; overload;
 // - \xxx is converted into a single xxx byte from octal, and \\ into \
 function OctToBin(const Oct: RawUtf8): RawByteString; overload;
 
-/// revert the value as encoded by TBaseWriter.AddInt18ToChars3() or Int18ToChars3()
+/// revert the value as encoded by TTextWriter.AddInt18ToChars3() or Int18ToChars3()
 // - no range check is performed: you should ensure that the incoming text
 // follows the expected 3-chars layout
 function Chars3ToInt18(P: pointer): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// compute the value as encoded by TBaseWriter.AddInt18ToChars3() method
+/// compute the value as encoded by TTextWriter.AddInt18ToChars3() method
 function Int18ToChars3(Value: cardinal): RawUtf8; overload;
 
-/// compute the value as encoded by TBaseWriter.AddInt18ToChars3() method
+/// compute the value as encoded by TTextWriter.AddInt18ToChars3() method
 procedure Int18ToChars3(Value: cardinal; var result: RawUtf8); overload;
 
 /// creates a 3 digits string from a 0..999 value as '000'..'999'
@@ -4730,11 +4730,11 @@ begin
 end;
 
 
-{ ************ TBaseWriter parent class for Text Generation }
+{ ************ TTextWriter parent class for Text Generation }
 
-{ TBaseWriter }
+{ TTextWriter }
 
-constructor TBaseWriter.Create(aStream: TStream; aBufSize: integer);
+constructor TTextWriter.Create(aStream: TStream; aBufSize: integer);
 begin
   SetStream(aStream);
   if aBufSize < 256 then
@@ -4742,13 +4742,13 @@ begin
   SetBuffer(nil, aBufSize);
 end;
 
-constructor TBaseWriter.Create(aStream: TStream; aBuf: pointer; aBufSize: integer);
+constructor TTextWriter.Create(aStream: TStream; aBuf: pointer; aBufSize: integer);
 begin
   SetStream(aStream);
   SetBuffer(aBuf, aBufSize);
 end;
 
-constructor TBaseWriter.CreateOwnedFileStream(
+constructor TTextWriter.CreateOwnedFileStream(
   const aFileName: TFileName; aBufSize: integer);
 begin
   DeleteFile(aFileName);
@@ -4756,20 +4756,20 @@ begin
   Include(fCustomOptions, twoStreamIsOwned);
 end;
 
-constructor TBaseWriter.CreateOwnedStream(aBuf: pointer; aBufSize: integer);
+constructor TTextWriter.CreateOwnedStream(aBuf: pointer; aBufSize: integer);
 begin
   SetStream(TRawByteStringStream.Create);
   SetBuffer(aBuf, aBufSize);
   Include(fCustomOptions, twoStreamIsOwned);
 end;
 
-constructor TBaseWriter.CreateOwnedStream(aBufSize: integer);
+constructor TTextWriter.CreateOwnedStream(aBufSize: integer);
 begin
   Create(TRawByteStringStream.Create, aBufSize);
   Include(fCustomOptions, twoStreamIsOwned);
 end;
 
-constructor TBaseWriter.CreateOwnedStream(
+constructor TTextWriter.CreateOwnedStream(
   var aStackBuf: TTextWriterStackBuffer; aBufSize: integer);
 begin
   if aBufSize > SizeOf(aStackBuf) then // too small -> allocate on heap
@@ -4782,7 +4782,7 @@ begin
   end;
 end;
 
-destructor TBaseWriter.Destroy;
+destructor TTextWriter.Destroy;
 begin
   if twoStreamIsOwned in fCustomOptions then
     fStream.Free;
@@ -4791,12 +4791,12 @@ begin
   inherited;
 end;
 
-function TBaseWriter.PendingBytes: PtrUInt;
+function TTextWriter.PendingBytes: PtrUInt;
 begin
   result := B - fTempBuf + 1;
 end;
 
-procedure TBaseWriter.Add(c: AnsiChar);
+procedure TTextWriter.Add(c: AnsiChar);
 begin
   if B >= BEnd then
     FlushToStream; // may rewind B -> not worth any local PUtf8Char variable
@@ -4804,7 +4804,7 @@ begin
   inc(B);
 end;
 
-procedure TBaseWriter.AddComma;
+procedure TTextWriter.AddComma;
 begin
   if B >= BEnd then
     FlushToStream;
@@ -4812,7 +4812,7 @@ begin
   inc(B);
 end;
 
-procedure TBaseWriter.Add(c1, c2: AnsiChar);
+procedure TTextWriter.Add(c1, c2: AnsiChar);
 begin
   if B >= BEnd then
     FlushToStream;
@@ -4821,7 +4821,7 @@ begin
   inc(B, 2);
 end;
 
-procedure TBaseWriter.Add(const Format: RawUtf8; const Values: array of const;
+procedure TTextWriter.Add(const Format: RawUtf8; const Values: array of const;
   Escape: TTextWriterKind; WriteObjectOptions: TTextWriterWriteObjectOptions);
 var
   tmp: RawUtf8;
@@ -4839,46 +4839,46 @@ begin
   end;
 end;
 
-procedure TBaseWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
+procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
   raise ESynException.CreateUtf8(
     '%.AddVariant unimplemented: use TJsonWriter', [self]);
 end;
 
-procedure TBaseWriter.AddTypedJson(Value, TypeInfo: pointer;
+procedure TTextWriter.AddTypedJson(Value, TypeInfo: pointer;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
   raise ESynException.CreateUtf8(
     '%.AddTypedJson unimplemented: use TJsonWriter', [self]);
 end;
 
-function TBaseWriter.{%H-}AddJsonReformat(Json: PUtf8Char;
+function TTextWriter.{%H-}AddJsonReformat(Json: PUtf8Char;
   Format: TTextWriterJsonFormat; EndOfObject: PUtf8Char): PUtf8Char;
 begin
   raise ESynException.CreateUtf8(
     '%.AddJsonReformat unimplemented: use TJsonWriter', [self]);
 end;
 
-procedure TBaseWriter.Add(P: PUtf8Char; Escape: TTextWriterKind);
+procedure TTextWriter.Add(P: PUtf8Char; Escape: TTextWriterKind);
 begin
   raise ESynException.CreateUtf8(
     '%.Add(..,Escape: TTextWriterKind) unimplemented: use TJsonWriter', [self]);
 end;
 
-procedure TBaseWriter.Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind);
+procedure TTextWriter.Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind);
 begin
   raise ESynException.CreateUtf8(
     '%.Add(..,Escape: TTextWriterKind) unimplemented: use TJsonWriter', [self]);
 end;
 
-procedure TBaseWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
+procedure TTextWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
 begin
   raise ESynException.CreateUtf8(
     '%.WrBase64() unimplemented: use TJsonWriter', [self]);
 end;
 
-procedure TBaseWriter.AddShorter(const Text: TShort8);
+procedure TTextWriter.AddShorter(const Text: TShort8);
 var
   L: PtrInt;
 begin
@@ -4893,7 +4893,7 @@ begin
   end;
 end;
 
-procedure TBaseWriter.AddNull;
+procedure TTextWriter.AddNull;
 begin
   if B >= BEnd then
     FlushToStream;
@@ -4901,14 +4901,14 @@ begin
   inc(B, 4);
 end;
 
-procedure TBaseWriter.WriteObject(Value: TObject;
+procedure TTextWriter.WriteObject(Value: TObject;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
   raise ESynException.CreateUtf8(
     '%.WriteObject unimplemented: use TJsonWriter', [self]);
 end;
 
-procedure TBaseWriter.AddObjArrayJson(const aObjArray;
+procedure TTextWriter.AddObjArrayJson(const aObjArray;
   aOptions: TTextWriterWriteObjectOptions);
 var
   i: PtrInt;
@@ -4924,7 +4924,7 @@ begin
   Add(']');
 end;
 
-procedure TBaseWriter.WriteToStream(data: pointer; len: PtrUInt);
+procedure TTextWriter.WriteToStream(data: pointer; len: PtrUInt);
 begin
   if Assigned(fOnFlushToStream) then
     fOnFlushToStream(data, len);
@@ -4932,7 +4932,7 @@ begin
   inc(fTotalFileSize, len);
 end;
 
-function TBaseWriter.GetTextLength: PtrUInt;
+function TTextWriter.GetTextLength: PtrUInt;
 begin
   if self = nil then
     result := 0
@@ -4943,12 +4943,12 @@ end;
 var
   DefaultTextWriterTrimEnum: boolean;
   
-class procedure TBaseWriter.SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
+class procedure TTextWriter.SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
 begin
   DefaultTextWriterTrimEnum := aShouldTrimEnumsAsText;
 end;
 
-procedure TBaseWriter.SetBuffer(aBuf: pointer; aBufSize: integer);
+procedure TTextWriter.SetBuffer(aBuf: pointer; aBufSize: integer);
 begin
   if aBufSize <= 16 then
     raise ESynException.CreateUtf8('%.SetBuffer(size=%)', [self, aBufSize]);
@@ -4966,7 +4966,7 @@ begin
     Include(fCustomOptions, twoTrimLeftEnumSets);
 end;
 
-procedure TBaseWriter.SetStream(aStream: TStream);
+procedure TTextWriter.SetStream(aStream: TStream);
 begin
   if fStream <> nil then
     if twoStreamIsOwned in fCustomOptions then
@@ -4982,7 +4982,7 @@ begin
   end;
 end;
 
-procedure TBaseWriter.FlushFinal;
+procedure TTextWriter.FlushFinal;
 var
   len: PtrInt;
 begin // don't mess with twoFlushToStreamNoAutoResize: it may not be final
@@ -4992,7 +4992,7 @@ begin // don't mess with twoFlushToStreamNoAutoResize: it may not be final
   B := fTempBuf - 1;
 end;
 
-procedure TBaseWriter.FlushToStream;
+procedure TTextWriter.FlushToStream;
 var
   tmp, written: PtrUInt;
 begin
@@ -5023,7 +5023,7 @@ begin
   B := fTempBuf - 1;
 end;
 
-procedure TBaseWriter.ForceContent(const text: RawUtf8);
+procedure TTextWriter.ForceContent(const text: RawUtf8);
 begin
   CancelAll;
   if (fInitialStreamPosition = 0) and
@@ -5034,10 +5034,10 @@ begin
   fTotalFileSize := fInitialStreamPosition + PtrUInt(length(text));
 end;
 
-procedure TBaseWriter.SetText(out result: RawUtf8; reformat: TTextWriterJsonFormat);
+procedure TTextWriter.SetText(out result: RawUtf8; reformat: TTextWriterJsonFormat);
 var
   Len: cardinal;
-  temp: TBaseWriter;
+  temp: TTextWriter;
 begin
   FlushFinal;
   Len := fTotalFileSize - fInitialStreamPosition;
@@ -5067,12 +5067,12 @@ begin
   end;
 end;
 
-function TBaseWriter.Text: RawUtf8;
+function TTextWriter.Text: RawUtf8;
 begin
   SetText(result);
 end;
 
-procedure TBaseWriter.CancelAll;
+procedure TTextWriter.CancelAll;
 begin
   if self = nil then
     exit; // avoid GPF
@@ -5081,7 +5081,7 @@ begin
   B := fTempBuf - 1;
 end;
 
-procedure TBaseWriter.CancelLastChar(aCharToCancel: AnsiChar);
+procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);
 var
   P: PUtf8Char;
 begin
@@ -5091,13 +5091,13 @@ begin
     dec(B);
 end;
 
-procedure TBaseWriter.CancelLastChar;
+procedure TTextWriter.CancelLastChar;
 begin
   if B >= fTempBuf then // Add() methods append at B+1
     dec(B);
 end;
 
-procedure TBaseWriter.CancelLastComma;
+procedure TTextWriter.CancelLastComma;
 var
   P: PUtf8Char;
 begin
@@ -5107,7 +5107,7 @@ begin
     dec(B);
 end;
 
-function TBaseWriter.LastChar: AnsiChar;
+function TTextWriter.LastChar: AnsiChar;
 begin
   if B >= fTempBuf then
     result := B^
@@ -5115,7 +5115,7 @@ begin
     result := #0;
 end;
 
-procedure TBaseWriter.AddOnce(c: AnsiChar);
+procedure TTextWriter.AddOnce(c: AnsiChar);
 begin
   if (B >= fTempBuf) and
      (B^ = c) then
@@ -5126,7 +5126,7 @@ begin
   inc(B);
 end;
 
-procedure TBaseWriter.Add(Value: PtrInt);
+procedure TTextWriter.Add(Value: PtrInt);
 var
   tmp: array[0..23] of AnsiChar;
   P: PAnsiChar;
@@ -5149,7 +5149,7 @@ begin
 end;
 
 {$ifdef CPU32} // Add(Value: PtrInt) already implemented it for CPU64
-procedure TBaseWriter.Add(Value: Int64);
+procedure TTextWriter.Add(Value: Int64);
 var
   tmp: array[0..23] of AnsiChar;
   P: PAnsiChar;
@@ -5178,7 +5178,7 @@ begin
 end;
 {$endif CPU32}
 
-procedure TBaseWriter.AddCurr64(Value: PInt64);
+procedure TTextWriter.AddCurr64(Value: PInt64);
 var
   tmp: array[0..31] of AnsiChar;
   P: PAnsiChar;
@@ -5204,12 +5204,12 @@ begin
   inc(B, Len);
 end;
 
-procedure TBaseWriter.AddCurr(const Value: currency);
+procedure TTextWriter.AddCurr(const Value: currency);
 begin
   AddCurr64(PInt64(@Value));
 end;
 
-procedure TBaseWriter.AddU(Value: cardinal);
+procedure TTextWriter.AddU(Value: cardinal);
 var
   tmp: array[0..23] of AnsiChar;
   P: PAnsiChar;
@@ -5231,7 +5231,7 @@ begin
   inc(B, Len);
 end;
 
-procedure TBaseWriter.AddQ(Value: QWord);
+procedure TTextWriter.AddQ(Value: QWord);
 var
   tmp: array[0..23] of AnsiChar;
   P: PAnsiChar;
@@ -5253,33 +5253,33 @@ begin
   inc(B, Len);
 end;
 
-procedure TBaseWriter.AddQHex(Value: Qword);
+procedure TTextWriter.AddQHex(Value: Qword);
 begin
   AddBinToHexDisplayLower(@Value, SizeOf(Value), '"');
 end;
 
-procedure TBaseWriter.Add(Value: Extended; precision: integer; noexp: boolean);
+procedure TTextWriter.Add(Value: Extended; precision: integer; noexp: boolean);
 var
   tmp: ShortString;
 begin
   AddShort(ExtendedToJson(@tmp, Value, precision, noexp)^);
 end;
 
-procedure TBaseWriter.AddDouble(Value: double; noexp: boolean);
+procedure TTextWriter.AddDouble(Value: double; noexp: boolean);
 var
   tmp: ShortString;
 begin
   AddShort(DoubleToJson(@tmp, Value, noexp)^);
 end;
 
-procedure TBaseWriter.AddSingle(Value: single; noexp: boolean);
+procedure TTextWriter.AddSingle(Value: single; noexp: boolean);
 var
   tmp: ShortString;
 begin
   AddShort(ExtendedToJson(@tmp, Value, SINGLE_PRECISION, noexp)^);
 end;
 
-procedure TBaseWriter.Add(Value: boolean);
+procedure TTextWriter.Add(Value: boolean);
 var
   PS: PShortString;
 begin
@@ -5290,7 +5290,7 @@ begin
   AddShorter(PS^);
 end;
 
-procedure TBaseWriter.AddFloatStr(P: PUtf8Char);
+procedure TTextWriter.AddFloatStr(P: PUtf8Char);
 begin
   if StrLen(P) > 127 then
     exit; // clearly invalid input
@@ -5303,7 +5303,7 @@ begin
     B^ := '0';
 end;
 
-procedure TBaseWriter.Add(Value: PGUID; QuotedChar: AnsiChar);
+procedure TTextWriter.Add(Value: PGUID; QuotedChar: AnsiChar);
 begin
   if BEnd - B <= 38 then
     FlushToStream;
@@ -5321,7 +5321,7 @@ begin
     dec(B);
 end;
 
-procedure TBaseWriter.AddCR;
+procedure TTextWriter.AddCR;
 begin
   if B >= BEnd then
     FlushToStream;
@@ -5329,7 +5329,7 @@ begin
   inc(B, 2);
 end;
 
-procedure TBaseWriter.AddCRAndIndent;
+procedure TTextWriter.AddCRAndIndent;
 var
   ntabs: cardinal;
 begin
@@ -5347,7 +5347,7 @@ begin
   inc(B, ntabs + 2);
 end;
 
-procedure TBaseWriter.AddChars(aChar: AnsiChar; aCount: PtrInt);
+procedure TTextWriter.AddChars(aChar: AnsiChar; aCount: PtrInt);
 var
   n: PtrInt;
 begin
@@ -5366,7 +5366,7 @@ begin
   until aCount <= 0;
 end;
 
-procedure TBaseWriter.Add2(Value: PtrUInt);
+procedure TTextWriter.Add2(Value: PtrUInt);
 begin
   if B >= BEnd then
     FlushToStream;
@@ -5377,7 +5377,7 @@ begin
   inc(B, 3);
 end;
 
-procedure TBaseWriter.Add3(Value: cardinal);
+procedure TTextWriter.Add3(Value: cardinal);
 var
   V: cardinal;
 begin
@@ -5394,7 +5394,7 @@ begin
   B^ := ',';
 end;
 
-procedure TBaseWriter.Add4(Value: PtrUInt);
+procedure TTextWriter.Add4(Value: PtrUInt);
 begin
   if B >= BEnd then
     FlushToStream;
@@ -5416,7 +5416,7 @@ begin
   P^ := AnsiChar(V - result * 10 + 48);
 end;
 
-procedure TBaseWriter.AddMicroSec(MS: cardinal);
+procedure TTextWriter.AddMicroSec(MS: cardinal);
 var
   W: PWordArray;
 begin
@@ -5436,7 +5436,7 @@ begin
   inc(B, 9);
 end;
 
-procedure TBaseWriter.AddCsvInteger(const Integers: array of integer);
+procedure TTextWriter.AddCsvInteger(const Integers: array of integer);
 var
   i: PtrInt;
 begin
@@ -5450,7 +5450,7 @@ begin
   CancelLastComma;
 end;
 
-procedure TBaseWriter.AddCsvDouble(const Doubles: array of double);
+procedure TTextWriter.AddCsvDouble(const Doubles: array of double);
 var
   i: PtrInt;
 begin
@@ -5464,12 +5464,12 @@ begin
   CancelLastComma;
 end;
 
-procedure TBaseWriter.AddNoJsonEscape(P: Pointer);
+procedure TTextWriter.AddNoJsonEscape(P: Pointer);
 begin
   AddNoJsonEscape(P, StrLen(PUtf8Char(P)));
 end;
 
-procedure TBaseWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
+procedure TTextWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
 var
   direct: PtrInt;
   lastcommainmem: boolean;
@@ -5512,7 +5512,7 @@ begin
     end;
 end;
 
-procedure EngineAppendUtf8(W: TBaseWriter; Engine: TSynAnsiConvert;
+procedure EngineAppendUtf8(W: TTextWriter; Engine: TSynAnsiConvert;
   P: PAnsiChar; Len: PtrInt);
 var
   tmp: TSynTempBuffer;
@@ -5523,7 +5523,7 @@ begin
   tmp.Done;
 end;
 
-procedure TBaseWriter.AddNoJsonEscape(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
+procedure TTextWriter.AddNoJsonEscape(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
 var
   B: PAnsiChar;
 begin
@@ -5560,12 +5560,12 @@ begin
     end;
 end;
 
-procedure TBaseWriter.AddNoJsonEscapeUtf8(const text: RawByteString);
+procedure TTextWriter.AddNoJsonEscapeUtf8(const text: RawByteString);
 begin
   AddNoJsonEscape(pointer(text), length(text));
 end;
 
-procedure TBaseWriter.AddRawJson(const json: RawJson);
+procedure TTextWriter.AddRawJson(const json: RawJson);
 begin
   if json = '' then
     AddNull
@@ -5573,7 +5573,7 @@ begin
     AddNoJsonEscape(pointer(json), length(json));
 end;
 
-procedure TBaseWriter.AddNoJsonEscapeString(const s: string);
+procedure TTextWriter.AddNoJsonEscapeString(const s: string);
 begin
   if s <> '' then
     {$ifdef UNICODE}
@@ -5583,7 +5583,7 @@ begin
     {$endif UNICODE}
 end;
 
-procedure TBaseWriter.AddNoJsonEscapeW(WideChar: PWord; WideCharCount: integer);
+procedure TTextWriter.AddNoJsonEscapeW(WideChar: PWord; WideCharCount: integer);
 var
   PEnd: PtrUInt;
 begin
@@ -5631,7 +5631,7 @@ begin
   end;
 end;
 
-procedure TBaseWriter.AddProp(PropName: PUtf8Char; PropNameLen: PtrInt);
+procedure TTextWriter.AddProp(PropName: PUtf8Char; PropNameLen: PtrInt);
 begin
   if PropNameLen <= 0 then
     exit; // paranoid check
@@ -5653,23 +5653,23 @@ begin
   end;
 end;
 
-procedure TBaseWriter.AddPropName(const PropName: ShortString);
+procedure TTextWriter.AddPropName(const PropName: ShortString);
 begin
   AddProp(@PropName[1], ord(PropName[0]));
 end;
 
-procedure TBaseWriter.AddFieldName(const FieldName: RawUtf8);
+procedure TTextWriter.AddFieldName(const FieldName: RawUtf8);
 begin
   AddProp(Pointer(FieldName), length(FieldName));
 end;
 
-procedure TBaseWriter.AddClassName(aClass: TClass);
+procedure TTextWriter.AddClassName(aClass: TClass);
 begin
   if aClass <> nil then
     AddShort(ClassNameShort(aClass)^);
 end;
 
-procedure TBaseWriter.AddInstanceName(Instance: TObject; SepChar: AnsiChar);
+procedure TTextWriter.AddInstanceName(Instance: TObject; SepChar: AnsiChar);
 begin
   Add('"');
   if Instance = nil then
@@ -5683,7 +5683,7 @@ begin
     Add(SepChar);
 end;
 
-procedure TBaseWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
+procedure TTextWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
   IncludeUnitName, IncludePointer: boolean);
 begin
   if IncludeUnitName and
@@ -5703,7 +5703,7 @@ begin
     Add(SepChar);
 end;
 
-procedure TBaseWriter.AddShort(const Text: ShortString);
+procedure TTextWriter.AddShort(const Text: ShortString);
 var
   L: PtrInt;
 begin
@@ -5716,7 +5716,7 @@ begin
   inc(B, L);
 end;
 
-procedure TBaseWriter.AddLine(const Text: shortstring);
+procedure TTextWriter.AddLine(const Text: shortstring);
 var
   L: PtrInt;
 begin
@@ -5733,7 +5733,7 @@ begin
   inc(B);
 end;
 
-procedure TBaseWriter.AddOnSameLine(P: PUtf8Char);
+procedure TTextWriter.AddOnSameLine(P: PUtf8Char);
 var
   D: PUtf8Char;
   c: AnsiChar;
@@ -5763,7 +5763,7 @@ begin
   end;
 end;
 
-procedure TBaseWriter.AddOnSameLine(P: PUtf8Char; Len: PtrInt);
+procedure TTextWriter.AddOnSameLine(P: PUtf8Char; Len: PtrInt);
 var
   D: PUtf8Char;
   c: AnsiChar;
@@ -5791,7 +5791,7 @@ begin
   end;
 end;
 
-procedure TBaseWriter.AddOnSameLineW(P: PWord; Len: PtrInt);
+procedure TTextWriter.AddOnSameLineW(P: PWord; Len: PtrInt);
 var
   PEnd: PtrUInt;
   c: cardinal;
@@ -5830,7 +5830,7 @@ begin
   end;
 end;
 
-procedure TBaseWriter.AddOnSameLineString(const Text: string);
+procedure TTextWriter.AddOnSameLineString(const Text: string);
 begin
   {$ifdef UNICODE}
   AddOnSameLineW(pointer(Text), length(Text));
@@ -5839,7 +5839,7 @@ begin
   {$endif UNICODE}
 end;
 
-procedure TBaseWriter.AddTrimLeftLowerCase(Text: PShortString);
+procedure TTextWriter.AddTrimLeftLowerCase(Text: PShortString);
 var
   P: PAnsiChar;
   L: integer;
@@ -5857,12 +5857,12 @@ begin
     AddNoJsonEscape(P, L);
 end;
 
-procedure TBaseWriter.AddTrimSpaces(const Text: RawUtf8);
+procedure TTextWriter.AddTrimSpaces(const Text: RawUtf8);
 begin
   AddTrimSpaces(pointer(Text));
 end;
 
-procedure TBaseWriter.AddTrimSpaces(P: PUtf8Char);
+procedure TTextWriter.AddTrimSpaces(P: PUtf8Char);
 var
   c: AnsiChar;
 begin
@@ -5875,7 +5875,7 @@ begin
     until c = #0;
 end;
 
-procedure TBaseWriter.AddReplace(Text: PUtf8Char; Orig, Replaced: AnsiChar);
+procedure TTextWriter.AddReplace(Text: PUtf8Char; Orig, Replaced: AnsiChar);
 begin
   if Text <> nil then
     while Text^ <> #0 do
@@ -5888,7 +5888,7 @@ begin
     end;
 end;
 
-procedure TBaseWriter.AddByteToHex(Value: PtrUInt);
+procedure TTextWriter.AddByteToHex(Value: PtrUInt);
 begin
   if B >= BEnd then
     FlushToStream;
@@ -5896,7 +5896,7 @@ begin
   inc(B, 2);
 end;
 
-procedure TBaseWriter.AddInt18ToChars3(Value: cardinal);
+procedure TTextWriter.AddInt18ToChars3(Value: cardinal);
 begin
   if B >= BEnd then
     FlushToStream;
@@ -5906,7 +5906,7 @@ begin
   inc(B, 3);
 end;
 
-procedure TBaseWriter.AddString(const Text: RawUtf8);
+procedure TTextWriter.AddString(const Text: RawUtf8);
 var
   L: PtrInt;
 begin
@@ -5925,7 +5925,7 @@ begin
     AddNoJsonEscape(pointer(Text), L);
 end;
 
-procedure TBaseWriter.AddStringCopy(const Text: RawUtf8; start, len: PtrInt);
+procedure TTextWriter.AddStringCopy(const Text: RawUtf8; start, len: PtrInt);
 var
   L: PtrInt;
 begin
@@ -5947,7 +5947,7 @@ begin
   end;
 end;
 
-procedure TBaseWriter.AddStrings(const Text: array of RawUtf8);
+procedure TTextWriter.AddStrings(const Text: array of RawUtf8);
 var
   i: PtrInt;
 begin
@@ -5955,7 +5955,7 @@ begin
     AddString(Text[i]);
 end;
 
-procedure TBaseWriter.AddStrings(const Text: RawUtf8; count: PtrInt);
+procedure TTextWriter.AddStrings(const Text: RawUtf8; count: PtrInt);
 var
   i, L, siz: PtrInt;
 begin
@@ -5977,7 +5977,7 @@ begin
     end;
 end;
 
-procedure TBaseWriter.AddBinToHexDisplay(Bin: pointer; BinBytes: PtrInt);
+procedure TTextWriter.AddBinToHexDisplay(Bin: pointer; BinBytes: PtrInt);
 begin
   if cardinal(BinBytes * 2 - 1) >= cardinal(fTempBufSize) then
     exit;
@@ -5987,7 +5987,7 @@ begin
   inc(B, BinBytes * 2);
 end;
 
-procedure TBaseWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: PtrInt;
+procedure TTextWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: PtrInt;
   QuotedChar: AnsiChar);
 begin
   if cardinal(BinBytes * 2 + 1) >= cardinal(fTempBufSize) then
@@ -6008,7 +6008,7 @@ begin
     dec(B);
 end;
 
-procedure TBaseWriter.AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: PtrInt);
+procedure TTextWriter.AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: PtrInt);
 begin
   AddBinToHexDisplayLower(Bin, BinBytes, '"');
 end;
@@ -6024,18 +6024,18 @@ begin
   inc(result);
 end;
 
-procedure TBaseWriter.AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt;
+procedure TTextWriter.AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt;
   QuotedChar: AnsiChar);
 begin
   AddBinToHexDisplayLower(Bin, DisplayMinChars(Bin, BinBytes), QuotedChar);
 end;
 
-procedure TBaseWriter.AddPointer(P: PtrUInt; QuotedChar: AnsiChar);
+procedure TTextWriter.AddPointer(P: PtrUInt; QuotedChar: AnsiChar);
 begin
   AddBinToHexDisplayLower(@P, DisplayMinChars(@P, SizeOf(P)), QuotedChar);
 end;
 
-procedure TBaseWriter.AddBinToHex(Bin: Pointer; BinBytes: PtrInt);
+procedure TTextWriter.AddBinToHex(Bin: Pointer; BinBytes: PtrInt);
 var
   chunk: PtrInt;
 begin
@@ -6063,7 +6063,7 @@ begin
   dec(B); // allow CancelLastChar
 end;
 
-procedure TBaseWriter.AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt;
+procedure TTextWriter.AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt;
   Quote: AnsiChar; TextMaxLen: PtrInt);
 var
   Q: PUtf8Char;
@@ -6098,7 +6098,7 @@ end;
 var
   HTML_ESC: array[hfAnyWhere..hfWithinAttributes] of TAnsiCharToByte;
 
-procedure TBaseWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat);
+procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat);
 var
   B: PUtf8Char;
   esc: ^TAnsiCharToByte;
@@ -6135,9 +6135,9 @@ end;
 function HtmlEscape(const text: RawUtf8; fmt: TTextWriterHtmlFormat): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
-  W: TBaseWriter;
+  W: TTextWriter;
 begin
-  W := TBaseWriter.CreateOwnedStream(temp);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     W.AddHtmlEscape(pointer(text), length(text), fmt);
     W.SetText(result);
@@ -6149,9 +6149,9 @@ end;
 function HtmlEscapeString(const text: string; fmt: TTextWriterHtmlFormat): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
-  W: TBaseWriter;
+  W: TTextWriter;
 begin
-  W := TBaseWriter.CreateOwnedStream(temp);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     W.AddHtmlEscapeString(text, fmt);
     W.SetText(result);
@@ -6160,7 +6160,7 @@ begin
   end;
 end;
 
-procedure TBaseWriter.AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
+procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
   Fmt: TTextWriterHtmlFormat);
 var
   B: PUtf8Char;
@@ -6200,7 +6200,7 @@ begin
   until false;
 end;
 
-procedure TBaseWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHtmlFormat);
+procedure TTextWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHtmlFormat);
 var
   tmp: TSynTempBuffer;
   len: integer;
@@ -6210,7 +6210,7 @@ begin
   tmp.Done;
 end;
 
-procedure TBaseWriter.AddHtmlEscapeUtf8(const Text: RawUtf8; Fmt: TTextWriterHtmlFormat);
+procedure TTextWriter.AddHtmlEscapeUtf8(const Text: RawUtf8; Fmt: TTextWriterHtmlFormat);
 begin
   AddHtmlEscape(pointer(Text), length(Text), Fmt);
 end;
@@ -6218,7 +6218,7 @@ end;
 var
   XML_ESC: TAnsiCharToByte;
 
-procedure TBaseWriter.AddXmlEscape(Text: PUtf8Char);
+procedure TTextWriter.AddXmlEscape(Text: PUtf8Char);
 var
   i, beg: PtrInt;
   esc: ^TAnsiCharToByte;
@@ -6270,7 +6270,7 @@ end;
 
 { TEchoWriter }
 
-constructor TEchoWriter.Create(Owner: TBaseWriter);
+constructor TEchoWriter.Create(Owner: TTextWriter);
 begin
   fWriter := Owner;
   if Assigned(fWriter.OnFlushToStream) then
@@ -9802,7 +9802,7 @@ end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
-function DefaultSynLogExceptionToStr(WR: TBaseWriter;
+function DefaultSynLogExceptionToStr(WR: TTextWriter;
   const Context: TSynLogExceptionContext): boolean;
 var
   extcode: cardinal;
@@ -9831,7 +9831,7 @@ begin
       end;
     end;
     WR.Add(' ');
-    if WR.ClassType = TBaseWriter then
+    if WR.ClassType = TTextWriter then
       {$ifdef UNICODE}
       WR.AddOnSameLineW(pointer(Context.EInstance.Message), 0)
       {$else}
@@ -9849,7 +9849,7 @@ begin
   result := false; // caller should append "at EAddr" and the stack trace
 end;
 
-function ESynException.CustomLog(WR: TBaseWriter;
+function ESynException.CustomLog(WR: TTextWriter;
   const Context: TSynLogExceptionContext): boolean;
 begin
   if Assigned(TSynLogExceptionToStrCustom) then

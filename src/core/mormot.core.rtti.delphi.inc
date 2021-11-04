@@ -391,7 +391,7 @@ begin
   result := PRecordInfo(GetTypeData(@self))^.ManagedFldCount;
 end;
 
-{$ifdef ISDELPHI2010} // read enhanced RTTI available since Delphi 2010
+{$ifdef HASEXTRECORDRTTI} // read enhanced RTTI available since Delphi 2010
 
 type
   /// map Delphi tkRecord TypeInfo with enhanced RTTI
@@ -446,7 +446,7 @@ begin
   result := nil; // extended record information not available before Delphi 2010
 end;
 
-{$endif ISDELPHI2010}
+{$endif HASEXTRECORDRTTI}
 
 function TRttiInfo.IsQWord: boolean;
 begin
@@ -488,7 +488,7 @@ begin
     result := pointer(elType);
     if result <> nil then // nil e.g. for TIntegerDynArray or T*ObjArray
       result := PPointer(result)^;
-    {$ifdef ISDELPHI2010}
+    {$ifdef HASEXTRECORDRTTI}
     if result = nil then
     begin
       // try the second slot, which may be set even for unmanaged types
@@ -496,7 +496,7 @@ begin
       if result <> nil then
         result := PPointer(result)^;
     end;
-    {$endif ISDELPHI2010}
+    {$endif HASEXTRECORDRTTI}
   end;
 end;
 function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;

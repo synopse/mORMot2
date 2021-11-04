@@ -542,7 +542,7 @@ type
     function GetSetNameCsv(Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false): RawUtf8; overload;
     /// get the enumeration names corresponding to a set value
-    procedure GetSetNameCsv(W: TBaseWriter; Value: cardinal; SepChar: AnsiChar = ',';
+    procedure GetSetNameCsv(W: TTextWriter; Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false); overload;
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
@@ -2083,7 +2083,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append the field value as JSON with proper getter method call
     // - wrap GetValue() + AddVariant() over a temp TRttiVarData
-    procedure AddValueJson(W: TBaseWriter; Data: pointer;
+    procedure AddValueJson(W: TTextWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions);
   end;
 
@@ -2660,7 +2660,7 @@ type
     // - you can return true if your method made the serialization
     // - this default implementation just returns false, to continue serializing
     // - TSynMonitor will change the serialization Options for this instance
-    function RttiBeforeWriteObject(W: TBaseWriter;
+    function RttiBeforeWriteObject(W: TTextWriter;
       var Options: TTextWriterWriteObjectOptions): boolean; virtual;
     // called by TJsonWriter.WriteObject() to serialize one published property value
     // - triggered if RttiCustomSetParser defined the rcfHookWriteProperty flag
@@ -2668,12 +2668,12 @@ type
     // or by TSynPersistentWithPassword to hide the password field value
     // - should return true if a property has been written, false (which is the
     // default) if the property is to be serialized as usual
-    function RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
+    function RttiWritePropertyValue(W: TTextWriter; Prop: PRttiCustomProp;
       Options: TTextWriterWriteObjectOptions): boolean; virtual;
     /// called after TJsonWriter.WriteObject() serialized this instance as JSON
     // - triggered if RttiCustomSetParser defined the rcfHookWrite flag
     // - execute just before W.BlockEnd('}')
-    procedure RttiAfterWriteObject(W: TBaseWriter;
+    procedure RttiAfterWriteObject(W: TTextWriter;
       Options: TTextWriterWriteObjectOptions); virtual;
     /// called to unserialize this instance from JSON
     // - triggered if RttiCustomSetParser defined the rcfHookRead flag
@@ -3039,7 +3039,7 @@ var
   uncamel: shortstring;
   temp: TTextWriterStackBuffer;
 begin
-  with TBaseWriter.CreateOwnedStream(temp) do
+  with TTextWriter.CreateOwnedStream(temp) do
   try
     AddString(Prefix);
     V := NameList;
@@ -3124,7 +3124,7 @@ begin
   result := TrimLeftLowerCaseShort(GetEnumName(Value));
 end;
 
-procedure TRttiEnumType.GetSetNameCsv(W: TBaseWriter; Value: cardinal;
+procedure TRttiEnumType.GetSetNameCsv(W: TTextWriter; Value: cardinal;
   SepChar: AnsiChar; FullSetsAsStar: boolean);
 var
   j: integer;
@@ -3157,10 +3157,10 @@ end;
 function TRttiEnumType.GetSetNameCsv(Value: cardinal; SepChar: AnsiChar;
   FullSetsAsStar: boolean): RawUtf8;
 var
-  W: TBaseWriter;
+  W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
-  W := TBaseWriter.CreateOwnedStream(temp);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     GetSetNameCsv(W, Value, SepChar, FullSetsAsStar);
     W.SetText(result);
@@ -6338,7 +6338,7 @@ begin
     raise ERttiException.Create('TRttiCustomProp.SetValue: with Prop=nil');
 end;
 
-procedure TRttiCustomProp.AddValueJson(W: TBaseWriter; Data: pointer;
+procedure TRttiCustomProp.AddValueJson(W: TTextWriter; Data: pointer;
   Options: TTextWriterWriteObjectOptions);
 var
   rvd: TRttiVarData;
@@ -6752,7 +6752,7 @@ var
   i: PtrInt;
 begin
   if Count > 0 then
-    with TBaseWriter.CreateOwnedStream(tmp) do
+    with TTextWriter.CreateOwnedStream(tmp) do
     try
       AddString(Prefix);
       for i := 0 to Count - 1 do
@@ -8347,19 +8347,19 @@ begin
   // do nothing by default
 end;
 
-function TObjectWithCustomCreate.RttiBeforeWriteObject(W: TBaseWriter;
+function TObjectWithCustomCreate.RttiBeforeWriteObject(W: TTextWriter;
   var Options: TTextWriterWriteObjectOptions): boolean;
 begin
   result := false; // default JSON serialization
 end;
 
-function TObjectWithCustomCreate.RttiWritePropertyValue(W: TBaseWriter;
+function TObjectWithCustomCreate.RttiWritePropertyValue(W: TTextWriter;
   Prop: PRttiCustomProp; Options: TTextWriterWriteObjectOptions): boolean;
 begin
   result := false; // default JSON serializaiton
 end;
 
-procedure TObjectWithCustomCreate.RttiAfterWriteObject(W: TBaseWriter;
+procedure TObjectWithCustomCreate.RttiAfterWriteObject(W: TTextWriter;
   Options: TTextWriterWriteObjectOptions);
 begin
   // nothing to do

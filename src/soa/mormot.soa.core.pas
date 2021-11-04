@@ -1533,7 +1533,7 @@ end;
 
 function TServiceContainer.AsJson: RawJson;
 var
-  WR: TBaseWriter;
+  WR: TTextWriter;
   i: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
@@ -1541,7 +1541,7 @@ begin
   if (self = nil) or
      (fInterface = nil) then
     exit;
-  WR := TBaseWriter.CreateOwnedStream(temp);
+  WR := TTextWriter.CreateOwnedStream(temp);
   try
     WR.Add('[');
     for i := 0 to high(fInterface) do

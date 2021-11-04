@@ -540,10 +540,10 @@ function FormatUtf8(const Format: RawUtf8;
 { ********** TJsonWriter class with proper JSON escaping and WriteObject() support }
 
 type
-  /// JSON-capable TBaseWriter/TTextWriter inherited class
-  // - in addition to TBaseWriter/TTextWriter, will handle JSON serialization
+  /// JSON-capable TTextWriter/TTextDateWriter inherited class
+  // - in addition to TTextWriter/TTextDateWriter, will handle JSON serialization
   // of any kind of value, including classes
-  TJsonWriter = class(TTextWriter)
+  TJsonWriter = class(TTextDateWriter)
   protected
     // used by AddCRAndIndent for enums, sets and T*ObjArray comment of values
     fBlockComment: RawUtf8;
@@ -3780,7 +3780,7 @@ function JsonObjectsByPath(JsonObject, PropPath: PUtf8Char): RawUtf8;
 var
   itemName, objName, propNameFound, objPath: RawUtf8;
   start, ending, obj: PUtf8Char;
-  WR: TBaseWriter;
+  WR: TTextWriter;
   temp: TTextWriterStackBuffer;
 
   procedure AddFromStart(const name: RawUtf8);
@@ -3791,7 +3791,7 @@ var
       exit;
     if WR = nil then
     begin
-      WR := TBaseWriter.CreateOwnedStream(temp);
+      WR := TTextWriter.CreateOwnedStream(temp);
       WR.Add('{');
     end
     else
@@ -3864,7 +3864,7 @@ end;
 
 function JsonObjectAsJsonArrays(Json: PUtf8Char; out keys, values: RawUtf8): integer;
 var
-  wk, wv: TBaseWriter;
+  wk, wv: TTextWriter;
   kb, ke, vb, ve: PUtf8Char;
   temp1, temp2: TTextWriterStackBuffer;
   parser: TJsonGotoEndParser;
@@ -3876,8 +3876,8 @@ begin
     exit;
   parser.Init({strict=}false, nil);
   n := 0;
-  wk := TBaseWriter.CreateOwnedStream(temp1);
-  wv := TBaseWriter.CreateOwnedStream(temp2);
+  wk := TTextWriter.CreateOwnedStream(temp1);
+  wv := TTextWriter.CreateOwnedStream(temp2);
   try
     wk.Add('[');
     wv.Add('[');
@@ -4099,7 +4099,7 @@ begin
   if ParametersJson = nil then
     result := UriName
   else
-    with TBaseWriter.CreateOwnedStream(temp) do
+    with TTextWriter.CreateOwnedStream(temp) do
     try
       AddString(UriName);
       if (JsonDecode(ParametersJson, Params, true) <> nil) and
@@ -8080,7 +8080,7 @@ var
   i: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
-  with TBaseWriter.CreateOwnedStream(temp) do
+  with TTextWriter.CreateOwnedStream(temp) do
   try
     for i := 0 to Count - 1 do
       if (IgnoreKey = '') or

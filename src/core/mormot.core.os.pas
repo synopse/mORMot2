@@ -234,7 +234,7 @@ const
     'false', 'true');
 
   /// the JavaScript-like values of non-number IEEE constants
-  // - as recognized by FloatToShortNan, and used by TBaseWriter.Add()
+  // - as recognized by FloatToShortNan, and used by TTextWriter.Add()
   // when serializing such single/double/extended floating-point values
   JSON_NAN: array[TFloatNan] of string[11] = (
     '0', '"NaN"', '"Infinity"', '"-Infinity"');
