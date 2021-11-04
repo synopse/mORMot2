@@ -7,7 +7,7 @@ unit mormot.core.threads;
   *****************************************************************************
 
    High-Level Multi-Threading features shared by all framework units
-    - Thread-Safe Pending Tasks List
+    - Thread-Safe TSynQueue and TPendingTaskList
     - Background Thread Processing
     - Parallel Execution in a Thread Pool
     - Server Process Oriented Thread Pool
@@ -25,13 +25,11 @@ uses
   syncobjs,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.rtti,
   mormot.core.text,
+  mormot.core.rtti,
+  mormot.core.buffers,
   mormot.core.data,
   mormot.core.perf;
-
-
-{ ************ Thread-Safe Pending Tasks List }
 
 const
   /// defined here to avoid explicit link to syncobjs in uses clause
@@ -52,6 +50,105 @@ type
   /// exception class raised by this unit
   ESynThread = class(ESynException);
 
+
+{ ************ Thread-Safe TSynQueue and TPendingTaskList }
+
+type
+  /// thread-safe FIFO (First-In-First-Out) in-order queue of records
+  // - uses internally a TDynArray storage, with a sliding algorithm, more
+  // efficient than the FPC or Delphi TQueue, or a naive TDynArray.Add/Delete
+  // - supports efficient binary persistence, if needed
+  // - this structure is also thread-safe by design
+  TSynQueue = class(TSynPersistentStore)
+  protected
+    fValues: TDynArray;
+    fValueVar: pointer;
+    fCount, fFirst, fLast: integer;
+    fWaitPopFlags: set of (wpfDestroying);
+    fWaitPopCounter: integer;
+    procedure InternalGrow;
+    function InternalDestroying(incPopCounter: integer): boolean;
+    function InternalWaitDone(starttix, endtix: Int64; const idle: TThreadMethod): boolean;
+    /// low-level virtual methods implementing the persistence
+    procedure LoadFromReader; override;
+    procedure SaveToWriter(aWriter: TBufferWriter); override;
+  public
+    /// initialize the queue storage
+    // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
+    // would store the values within this TSynQueue instance
+    // - a name can optionally be assigned to this instance
+    constructor Create(aTypeInfo: PRttiInfo;
+      const aName: RawUtf8 = ''); reintroduce; virtual;
+    /// finalize the storage
+    // - would release all internal stored values, and call WaitPopFinalize
+    destructor Destroy; override;
+    /// store one item into the queue
+    // - this method is thread-safe, since it will lock the instance
+    procedure Push(const aValue);
+    /// extract one item from the queue, as FIFO (First-In-First-Out)
+    // - returns true if aValue has been filled with a pending item, which
+    // is removed from the queue (use Peek if you don't want to remove it)
+    // - returns false if the queue is empty
+    // - this method is thread-safe, since it will lock the instance
+    function Pop(out aValue): boolean;
+    /// extract one matching item from the queue, as FIFO (First-In-First-Out)
+    // - the current pending item is compared with aAnother value
+    function PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
+      out aValue): boolean;
+    /// lookup one item from the queue, as FIFO (First-In-First-Out)
+    // - returns true if aValue has been filled with a pending item, without
+    // removing it from the queue (as Pop method does)
+    // - returns false if the queue is empty
+    // - this method is thread-safe, since it will lock the instance
+    function Peek(out aValue): boolean;
+    /// wait and extract one item from the queue, as FIFO (First-In-First-Out)
+    // - returns true if aValue has been filled with a pending item within the
+    // specified aTimeoutMS time
+    // - returns false if nothing was pushed into the queue in time, or if
+    // WaitPopFinalize has been called
+    // - aWhenIdle could be assigned e.g. to VCL/LCL Application.ProcessMessages
+    // - you can optionally compare the pending item before returning it (could
+    // be used e.g. when several threads are putting items into the queue)
+    // - this method is thread-safe, but will lock the instance only if needed
+    function WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
+      out aValue; aCompared: pointer = nil;
+      aCompare: TDynArraySortCompare = nil): boolean;
+    /// waiting lookup of one item from the queue, as FIFO (First-In-First-Out)
+    // - returns a pointer to a pending item within the specified aTimeoutMS
+    // time - the Safe.Lock is still there, so that caller could check its content,
+    // then call Pop() if it is the expected one, and eventually always call Safe.Unlock
+    // - returns nil if nothing was pushed into the queue in time
+    // - this method is thread-safe, but will lock the instance only if needed
+    function WaitPeekLocked(aTimeoutMS: integer; const aWhenIdle: TThreadMethod): pointer;
+    /// ensure any pending or future WaitPop() returns immediately as false
+    // - is always called by Destroy destructor
+    // - could be also called e.g. from an UI OnClose event to avoid any lock
+    // - this method is thread-safe, but will lock the instance only if needed
+    procedure WaitPopFinalize(aTimeoutMS: integer=100);
+    /// delete all items currently stored in this queue, and void its capacity
+    // - this method is thread-safe, since it will lock the instance
+    procedure Clear;
+    /// initialize a dynamic array with the stored queue items
+    // - aDynArrayValues should be a variable defined as aTypeInfo from Create
+    // - you can retrieve an optional TDynArray wrapper, e.g. for binary or JSON
+    // persistence
+    // - this method is thread-safe, and will make a copy of the queue data
+    procedure Save(out aDynArrayValues; aDynArray: PDynArray = nil); overload;
+    /// returns how many items are currently stored in this queue
+    // - this method is thread-safe
+    function Count: integer;
+    /// returns how much slots is currently reserved in memory
+    // - the queue has an optimized auto-sizing algorithm, you can use this
+    // method to return its current capacity
+    // - this method is thread-safe
+    function Capacity: integer;
+    /// returns true if there are some items currently pending in the queue
+    // - slightly faster than checking Count=0, and much faster than Pop or Peek
+    function Pending: boolean;
+  end;
+
+
+type
   /// internal item definition, used by TPendingTaskList storage
   TPendingTaskListItem = packed record
     /// the task should be executed when TPendingTaskList.GetTimestamp reaches
@@ -894,7 +991,389 @@ const
 implementation
 
 
-{ ************ Thread-Safe Pending Tasks List }
+{ ************ Thread-Safe TSynQueue and TPendingTaskList }
+
+{ TSynQueue }
+
+constructor TSynQueue.Create(aTypeInfo: PRttiInfo; const aName: RawUtf8);
+begin
+  inherited Create(aName);
+  fFirst := -1;
+  fLast := -2;
+  fValues.Init(aTypeInfo, fValueVar, @fCount);
+end;
+
+destructor TSynQueue.Destroy;
+begin
+  WaitPopFinalize;
+  fValues.Clear;
+  inherited Destroy;
+end;
+
+procedure TSynQueue.Clear;
+begin
+  fSafe.Lock;
+  try
+    fValues.Clear;
+    fFirst := -1;
+    fLast := -2;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynQueue.Count: integer;
+begin
+  if self = nil then
+    result := 0
+  else
+  begin
+    fSafe.Lock;
+    try
+      if fFirst < 0 then
+        result := 0
+      else if fFirst <= fLast then
+        result := fLast - fFirst + 1
+      else
+        result := fCount - fFirst + fLast + 1;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+end;
+
+function TSynQueue.Capacity: integer;
+begin
+  if self = nil then
+    result := 0
+  else
+  begin
+    fSafe.Lock;
+    try
+      result := fValues.Capacity;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+end;
+
+function TSynQueue.Pending: boolean;
+begin
+  // allow some false positive in heavily multi-threaded context
+  result := (self <> nil) and
+            (fFirst >= 0);
+end;
+
+procedure TSynQueue.Push(const aValue);
+begin
+  fSafe.Lock;
+  try
+    if fFirst < 0 then
+    begin
+      fFirst := 0; // start from the bottom of the void queue
+      fLast := 0;
+      if fCount = 0 then
+        fValues.Count := 64;
+    end
+    else if fFirst <= fLast then
+    begin
+      // stored in-order
+      inc(fLast);
+      if fLast = fCount then
+        InternalGrow;
+    end
+    else
+    begin
+      inc(fLast);
+      if fLast = fFirst then
+      begin
+        // collision -> arrange
+        fValues.AddArray(fValueVar, 0, fLast); // move 0..fLast to the end
+        fLast := fCount;
+        InternalGrow;
+      end;
+    end;
+    fValues.ItemCopyFrom(@aValue, fLast);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TSynQueue.InternalGrow;
+var
+  cap: integer;
+begin
+  cap := fValues.Capacity;
+  if fFirst > cap - fCount then
+    // use leading space if worth it
+    fLast := 0
+  else
+  // append at the end
+  if fCount = cap then
+    // reallocation needed
+    fValues.Count := cap + cap shr 3 + 64
+  else
+    // fill trailing memory as much as possible
+    fCount := cap;
+end;
+
+function TSynQueue.Peek(out aValue): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := fFirst >= 0;
+    if result then
+      fValues.ItemCopyAt(fFirst, @aValue);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynQueue.Pop(out aValue): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := fFirst >= 0;
+    if result then
+    begin
+      fValues.ItemMoveTo(fFirst, @aValue);
+      if fFirst = fLast then
+      begin
+        fFirst := -1; // reset whole store (keeping current capacity)
+        fLast := -2;
+      end
+      else
+      begin
+        inc(fFirst);
+        if fFirst = fCount then
+          // will retrieve from leading items
+          fFirst := 0;
+      end;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynQueue.PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
+  out aValue): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := (fFirst >= 0) and
+              Assigned(aCompare) and
+              Assigned(aAnother) and
+              (aCompare(fValues.ItemPtr(fFirst)^, aAnother^) = 0) and
+              Pop(aValue);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynQueue.InternalDestroying(incPopCounter: integer): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := wpfDestroying in fWaitPopFlags;
+    inc(fWaitPopCounter, incPopCounter);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynQueue.InternalWaitDone(starttix, endtix: Int64;
+  const idle: TThreadMethod): boolean;
+begin
+  if Assigned(idle) then
+  begin
+    SleepHiRes(1); // SleepStep() may wait up to 250 ms which is not responsive
+    idle; // e.g. Application.ProcessMessages
+  end
+  else
+    SleepStep(starttix);
+  result := (wpfDestroying in fWaitPopFlags) or // no need to lock/unlock
+            (GetTickCount64 > endtix);
+end;
+
+function TSynQueue.WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
+  out aValue; aCompared: pointer; aCompare: TDynArraySortCompare): boolean;
+var
+  starttix, endtix: Int64;
+begin
+  result := false;
+  if not InternalDestroying(+1) then
+  try
+    starttix := GetTickCount64;
+    endtix := starttix + aTimeoutMS;
+    repeat
+      if Assigned(aCompared) and
+         Assigned(aCompare) then
+        result := PopEquals(aCompared, aCompare, aValue)
+      else
+        result := Pop(aValue);
+    until result or
+          InternalWaitDone(starttix, endtix, aWhenIdle);
+  finally
+    InternalDestroying(-1);
+  end;
+end;
+
+function TSynQueue.WaitPeekLocked(aTimeoutMS: integer;
+  const aWhenIdle: TThreadMethod): pointer;
+var
+  starttix, endtix: Int64;
+begin
+  result := nil;
+  if not InternalDestroying(+1) then
+  try
+    starttix := GetTickCount64;
+    endtix := starttix + aTimeoutMS;
+    repeat
+      fSafe.Lock;
+      try
+        if fFirst >= 0 then
+          result := fValues.ItemPtr(fFirst);
+      finally
+        if result = nil then
+          fSafe.UnLock; // caller should always Unlock once done
+      end;
+    until (result <> nil) or
+          InternalWaitDone(starttix, endtix, aWhenIdle);
+  finally
+    InternalDestroying(-1);
+  end;
+end;
+
+procedure TSynQueue.WaitPopFinalize(aTimeoutMS: integer);
+var
+  starttix, endtix: Int64; // never wait forever
+begin
+  fSafe.Lock;
+  try
+    include(fWaitPopFlags, wpfDestroying);
+    if fWaitPopCounter = 0 then
+      exit;
+  finally
+    fSafe.UnLock;
+  end;
+  starttix := GetTickCount64;
+  endtix := starttix + aTimeoutMS;
+  repeat
+    SleepStep(starttix); // ensure WaitPos() is actually finished
+  until (fWaitPopCounter = 0) or
+        (GetTickCount64 > endtix);
+end;
+
+procedure TSynQueue.Save(out aDynArrayValues; aDynArray: PDynArray);
+var
+  n: integer;
+  DA: TDynArray;
+begin
+  DA.Init(fValues.Info.Info, aDynArrayValues, @n);
+  fSafe.Lock;
+  try
+    DA.Capacity := Count; // pre-allocate whole array, and set its length
+    if fFirst >= 0 then
+      if fFirst <= fLast then
+        DA.AddArray(fValueVar, fFirst, fLast - fFirst + 1)
+      else
+      begin
+        DA.AddArray(fValueVar, fFirst, fCount - fFirst);
+        DA.AddArray(fValueVar, 0, fLast + 1);
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+  if aDynArray <> nil then
+    aDynArray^.Init(fValues.Info.Info, aDynArrayValues);
+end;
+
+procedure TSynQueue.LoadFromReader;
+var
+  n: integer;
+  info: PRttiInfo;
+  load: TRttiBinaryLoad;
+  p: PAnsiChar;
+label
+  raw;
+begin
+  fSafe.Lock;
+  try
+    Clear;
+    inherited LoadFromReader;
+    n := fReader.VarUInt32;
+    if n = 0 then
+      exit;
+    fFirst := 0;
+    fLast := n - 1;
+    fValues.Count := n;
+    p := fValues.Value^;
+    info := fValues.Info.Cache.ItemInfo;
+    if info <> nil then
+    begin
+      load := RTTI_BINARYLOAD[info^.Kind];
+      if Assigned(load) then
+        repeat
+          inc(p, load(p, fReader, info));
+          dec(n);
+        until n = 0
+      else
+        goto raw;
+    end
+    else
+raw:  fReader.Copy(p, n * fValues.Info.Cache.ItemSize);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TSynQueue.SaveToWriter(aWriter: TBufferWriter);
+var
+  n: integer;
+  info: PRttiInfo;
+  sav: TRttiBinarySave;
+
+  procedure WriteItems(start, count: integer);
+  var
+    p: PAnsiChar;
+  begin
+    if count = 0 then
+      exit;
+    p := fValues.ItemPtr(start);
+    if Assigned(sav) then
+      repeat
+        inc(p, sav(p, aWriter, info));
+        dec(count);
+      until count = 0
+    else
+      aWriter.Write(p, count * fValues.Info.Cache.ItemSize);
+  end;
+
+begin
+  fSafe.Lock;
+  try
+    inherited SaveToWriter(aWriter);
+    n := Count;
+    aWriter.WriteVarUInt32(n);
+    if n = 0 then
+      exit;
+    info := fValues.Info.Cache.ItemInfo;
+    if info <> nil then
+      sav := RTTI_BINARYSAVE[info^.Kind]
+    else
+      sav := nil;
+    if fFirst <= fLast then
+      WriteItems(fFirst, fLast - fFirst + 1)
+    else
+    begin
+      WriteItems(fFirst, fCount - fFirst);
+      WriteItems(0, fLast + 1);
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
 
 { TPendingTaskList }
 

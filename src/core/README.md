@@ -116,7 +116,7 @@ Low-Level Data Processing Functions shared by all framework units
 - `TSynPersistentStore` with proper Binary Serialization
 - INI Files and In-memory Access
 - Efficient RTTI Values Binary Serialization and Comparison
-- `TDynArray`, `TDynArrayHashed` and `TSynQueue` Wrappers
+- `TDynArray` and `TDynArrayHashed` Wrappers
 - `Integer` Arrays Extended Process
 - `RawUtf8` String Values Interning and `TRawUtf8List`
 
@@ -182,7 +182,7 @@ Performance Monitoring functions shared by all framework units
 ### mormot.core.threads
 
 High-Level Multi-Threading features shared by all framework units
-- Thread-Safe Pending Tasks List
+- Thread-Safe `TSynQueue` and `TPendingTaskList`
 - Background Thread Processing
 - Parallel Execution in a Thread Pool
 - Server Process Oriented Thread Pool
