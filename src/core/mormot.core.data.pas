@@ -1413,7 +1413,7 @@ type
     /// insert a sorted element value at the proper place
     // - the index should have been computed by FastLocateSorted(): false
     // - you may consider using FastLocateOrAddSorted() instead
-    procedure FastAddSorted(Index: integer; const Item);
+    procedure FastAddSorted(Index: PtrInt; const Item);
     /// search and add an element value inside a sorted dynamic array
     // - this method will use the Compare property function for the search
     // - will be faster than a manual FindAndAddIfNotExisting+Sort process
@@ -1425,7 +1425,7 @@ type
     /// delete a sorted element value at the proper place
     // - plain Delete(Index) would reset the fSorted flag to FALSE, so use
     // this method with a FastLocateSorted/FastAddSorted array
-    procedure FastDeleteSorted(Index: integer);
+    procedure FastDeleteSorted(Index: PtrInt);
     /// will reverse all array items, in place
     procedure Reverse;
     /// sort the dynamic array items using a lookup array of indexes
@@ -6285,51 +6285,52 @@ const
      SortDynArrayWord,          //  ptWord
      nil,                       //  ptEnumeration
      nil,                       //  ptSet
-     nil,                       //  ptClass
+     SortDynArrayPointer,       //  ptClass
      nil,                       //  ptDynArray
-     nil,                       //  ptInterface
+     SortDynArrayPointer,       //  ptInterface
      nil),                      //  ptCustom
-   // case sensitive comparison/sort functions:
-   (nil,                        //  ptNone
-    nil,                        //  ptArray
-    SortDynArrayBoolean,        //  ptBoolean
-    SortDynArrayByte,           //  ptByte
-    SortDynArrayCardinal,       //  ptCardinal
-    SortDynArrayInt64,          //  ptCurrency
-    SortDynArrayDouble,         //  ptDouble
-    SortDynArrayExtended,       //  ptExtended
-    SortDynArrayInt64,          //  ptInt64
-    SortDynArrayInteger,        //  ptInteger
-    SortDynArrayQWord,          //  ptQWord
-    {$ifdef CPUINTEL}SortDynArrayAnsiString
-    {$else}SortDynArrayRawByteString{$endif}, //  ptRawByteString
-    SortDynArrayAnsiStringI,    //  ptRawJson
-    SortDynArrayAnsiStringI,    //  ptRawUtf8
-    nil,                        //  ptRecord
-    SortDynArraySingle,         //  ptSingle
-    SortDynArrayStringI,        //  ptString
-    SortDynArrayUnicodeStringI, //  ptSynUnicode
-    SortDynArrayDouble,         //  ptDateTime
-    SortDynArrayDouble,         //  ptDateTimeMS
-    SortDynArray128,            //  ptGuid
-    SortDynArray128,            //  ptHash128
-    SortDynArray256,            //  ptHash256
-    SortDynArray512,            //  ptHash512
-    SortDynArrayInt64,          //  ptOrm
-    SortDynArrayInt64,          //  ptTimeLog
-    SortDynArrayUnicodeStringI, //  ptUnicodeString
-    SortDynArrayInt64,          //  ptUnixTime
-    SortDynArrayInt64,          //  ptUnixMSTime
-    SortDynArrayVariantI,       //  ptVariant
-    SortDynArrayUnicodeStringI, //  ptWideString
-    SortDynArrayAnsiStringI,    //  ptWinAnsi
-    SortDynArrayWord,           //  ptWord
-    nil,                        //  ptEnumeration
-    nil,                        //  ptSet
-    nil,                        //  ptClass
-    nil,                        //  ptDynArray
-    nil,                        //  ptInterface
-    nil));                      //  ptCustom
+    // case sensitive comparison/sort functions:
+    (nil,                        //  ptNone
+     nil,                        //  ptArray
+     SortDynArrayBoolean,        //  ptBoolean
+     SortDynArrayByte,           //  ptByte
+     SortDynArrayCardinal,       //  ptCardinal
+     SortDynArrayInt64,          //  ptCurrency
+     SortDynArrayDouble,         //  ptDouble
+     SortDynArrayExtended,       //  ptExtended
+     SortDynArrayInt64,          //  ptInt64
+     SortDynArrayInteger,        //  ptInteger
+     SortDynArrayQWord,          //  ptQWord
+     {$ifdef CPUINTEL}SortDynArrayAnsiString
+     {$else}SortDynArrayRawByteString{$endif}, //  ptRawByteString
+     SortDynArrayAnsiStringI,    //  ptRawJson
+     SortDynArrayAnsiStringI,    //  ptRawUtf8
+     nil,                        //  ptRecord
+     SortDynArraySingle,         //  ptSingle
+     SortDynArrayStringI,        //  ptString
+     SortDynArrayUnicodeStringI, //  ptSynUnicode
+     SortDynArrayDouble,         //  ptDateTime
+     SortDynArrayDouble,         //  ptDateTimeMS
+     SortDynArray128,            //  ptGuid
+     SortDynArray128,            //  ptHash128
+     SortDynArray256,            //  ptHash256
+     SortDynArray512,            //  ptHash512
+     SortDynArrayInt64,          //  ptOrm
+     SortDynArrayInt64,          //  ptTimeLog
+     SortDynArrayUnicodeStringI, //  ptUnicodeString
+     SortDynArrayInt64,          //  ptUnixTime
+     SortDynArrayInt64,          //  ptUnixMSTime
+     SortDynArrayVariantI,       //  ptVariant
+     SortDynArrayUnicodeStringI, //  ptWideString
+     SortDynArrayAnsiStringI,    //  ptWinAnsi
+     SortDynArrayWord,           //  ptWord
+     nil,                        //  ptEnumeration
+     nil,                        //  ptSet
+     SortDynArrayPointer,        //  ptClass
+     nil,                        //  ptDynArray
+     SortDynArrayPointer,        //  ptInterface
+     nil));                      //  ptCustom
+
 
 { TDynArray }
 
@@ -6527,7 +6528,7 @@ end;
 
 function TDynArray.Pop(var Dest): boolean;
 var
-  index: integer;
+  index: PtrInt;
 begin
   index := GetCount - 1;
   result := index >= 0;
@@ -7177,13 +7178,13 @@ begin
     Index := -1;
 end;
 
-procedure TDynArray.FastAddSorted(Index: integer; const Item);
+procedure TDynArray.FastAddSorted(Index: PtrInt; const Item);
 begin
   Insert(Index, Item);
   fSorted := true; // Insert -> SetCount -> fSorted := false
 end;
 
-procedure TDynArray.FastDeleteSorted(Index: integer);
+procedure TDynArray.FastDeleteSorted(Index: PtrInt);
 begin
   Delete(Index);
   fSorted := true; // Delete -> SetCount -> fSorted := false

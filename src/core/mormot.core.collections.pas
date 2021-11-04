@@ -578,7 +578,7 @@ type
   // Collections.NewList<T> and Collections.NewKeyValue<TKey, TValue> methods
   Collections = class
   protected
-    {$ifdef SPECIALIZE_ENABLED}
+  {$ifdef SPECIALIZE_ENABLED}
     {$ifdef FPC}
     const
       tkLString = tkAString; // circumvent FPC RTTI incompatibility
@@ -639,7 +639,7 @@ type
     class function RaiseUseNewPlainList(aItemTypeInfo: PRttiInfo): pointer; static;
     class function RaiseUseNewPlainKeyValue(
       const aContext: TNewSynKeyValueContext): pointer; static;
-    {$endif SPECIALIZE_ENABLED}
+  {$endif SPECIALIZE_ENABLED}
   public
     /// generate a new IList<T> instance for most simple types
     // - use this factory method instead of plain TSynListSpecialized<T>.Create
