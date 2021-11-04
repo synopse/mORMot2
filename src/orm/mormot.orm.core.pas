@@ -2718,15 +2718,18 @@ type
   /// parent class of TRestOrm, to implement IRestOrm methods
   // - since Delphi interface cannot have parametrized methods, we need
   // to define a TRestOrmGenerics abstract class to use generics signature
+  // - only has some low-level methods used directly from mormot.rest.core.pas
   TRestOrmParent = class(TInterfacedObject)
 
   {$endif HASGENERICS}
   public
     /// ensure the current thread will be taken into account during process
     // - this abstract method won't do anything, but overriden versions may
+    // - low-level method used directly from mormot.rest.core.pas
     procedure BeginCurrentThread(Sender: TThread); virtual;
     /// called when thread is finished to ensure
     // - this abstract method won't do anything, but overriden versions may
+    // - low-level method used directly from mormot.rest.core.pas
     procedure EndCurrentThread(Sender: TThread); virtual;
   end;
 

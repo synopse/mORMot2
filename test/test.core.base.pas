@@ -26,6 +26,7 @@ uses
   mormot.core.search,
   mormot.core.log,
   mormot.core.test,
+  mormot.core.threads,
   mormot.net.sock,
   mormot.net.http,
   mormot.net.client,

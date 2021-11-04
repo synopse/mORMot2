@@ -57,7 +57,7 @@ type
   /// thread-safe FIFO (First-In-First-Out) in-order queue of records
   // - uses internally a TDynArray storage, with a sliding algorithm, more
   // efficient than the FPC or Delphi TQueue, or a naive TDynArray.Add/Delete
-  // - supports efficient binary persistence, if needed
+  // - supports TSynPersistentStore binary persistence, if needed
   // - this structure is also thread-safe by design
   TSynQueue = class(TSynPersistentStore)
   protected
@@ -69,7 +69,7 @@ type
     procedure InternalGrow;
     function InternalDestroying(incPopCounter: integer): boolean;
     function InternalWaitDone(starttix, endtix: Int64; const idle: TThreadMethod): boolean;
-    /// low-level virtual methods implementing the persistence
+    /// low-level TSynPersistentStore methods implementing the persistence
     procedure LoadFromReader; override;
     procedure SaveToWriter(aWriter: TBufferWriter); override;
   public
@@ -161,21 +161,18 @@ type
   /// internal list definition, used by TPendingTaskList storage
   TPendingTaskListItemDynArray = array of TPendingTaskListItem;
 
-  /// handle a list of tasks, stored as RawByteString, with a time stamp
-  // - internal time stamps would be GetTickCount64 by default, so have a
-  // resolution of about 16 ms under Windows
+  /// thread-safe list of tasks, stored as RawByteString, with a timestamp
   // - you can add tasks to the internal list, to be executed after a given
   // delay, using a post/peek like algorithm
   // - execution delays are not expected to be accurate, but are best guess,
-  // according to each NextPendingTask call
-  // - this implementation is thread-safe, thanks to the Safe internal locker
+  // according to each NextPendingTask call, and GetTimestamp resolution
   TPendingTaskList = class(TSynLocked)
   protected
     fCount: integer;
     fTask: TPendingTaskListItemDynArray;
     fTasks: TDynArray;
     function GetCount: integer;
-    function GetTimestamp: Int64; virtual;
+    function GetTimestamp: Int64; virtual; // returns GetTickCount64 by default
   public
     /// initialize the list memory and resources
     constructor Create; override;
