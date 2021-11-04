@@ -1352,7 +1352,9 @@ begin
     if consoledisplay then
       params.OnProgress := TStreamRedirect.ProgressToConsole;
     if params.WGet(url, destfile,
-         tunnel, tls, sockettimeout, redirectmax) <> destfile then
+         tunnel, tls, sockettimeout, redirectmax) = destfile then
+      result := ''
+    else
       result := 'WGet: unexpected destfile'; // paranoid
   except
     on E: Exception do
