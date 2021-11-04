@@ -1742,7 +1742,7 @@ type
   // - implemented e.g. by TRestHttpServer.NotifyCallback
   TOnRestServerClientCallback = function(aSender: TRestServer;
     const aInterfaceDotMethodName, aParams: RawUtf8;
-    aConnectionID: Int64; aFakeCallID: integer;
+    aConnectionID: TRestConnectionID; aFakeCallID: integer;
     aResult, aErrorMsg: PRawUtf8): boolean of object;
 
   /// event signature used by TRestServer.OnServiceCreateInstance
@@ -5760,7 +5760,7 @@ begin
   InitializeDomainAuth;
   // initialize this authentication scheme
   inherited Create(aServer);
-  // TDynArray access to fSspiAuthContext[] by THttpServerConnectionID (ptInt64)
+  // TDynArray access to fSspiAuthContext[] by TRestConnectionID (ptInt64)
   fSspiAuthContexts.InitSpecific(TypeInfo(TSecContextDynArray),
     fSspiAuthContext, ptInt64, @fSspiAuthContextCount);
 end;
@@ -5779,7 +5779,8 @@ function TRestServerAuthenticationSspi.Auth(
 var
   i, ndx: PtrInt;
   username, indataenc: RawUtf8;
-  ticks, connectionID: Int64;
+  ticks: Int64;
+  connectionID: TRestConnectionID;
   browserauth: boolean;
   outdata: RawByteString;
   user: TAuthUser;
@@ -7552,6 +7553,7 @@ end;
 procedure TRestServer.CacheFlush(Ctxt: TRestServerUriContext);
 var
   i, count: PtrInt;
+  old: TRestConnectionID;
   cache: TRestCache;
 begin
   case Ctxt.Method of
@@ -7573,6 +7575,17 @@ begin
         // POST root/cacheflush/_callback_
         // as called from TSqlHttpClientWebsockets.FakeCallbackUnregister
         (Services as TServiceContainerServer).FakeCallbackRelease(Ctxt)
+      else if Ctxt.UriBlobFieldName = '_replaceconn_' then
+      begin
+        // POST root/cacheflush/_replaceconn_
+        old := GetInt64(pointer(Ctxt.Call^.InBody));
+        count := (Services as TServiceContainerServer).
+          FakeCallbackReplaceConnectionID(old, Ctxt.Call^.LowLevelConnectionID);
+        InternalLog('%: Connection % replaced by % from % count=%',
+          [Model.Root, old, Ctxt.Call^.LowLevelConnectionID,
+           Ctxt.RemoteIPNotLocal, count], sllHTTP);
+        Ctxt.Returns(['count', count]);
+      end
       else if Ctxt.UriBlobFieldName = '_ping_' then
       begin
         // POST root/cacheflush/_ping_

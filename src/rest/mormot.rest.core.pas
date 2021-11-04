@@ -97,6 +97,11 @@ type
   TRestAcquireExecutions =
     array[TRestServerUriContextCommand] of TRestAcquireExecution;
 
+  /// a genuine identifier for a given client connection on server side
+  // - see also THttpServerConnectionID as defined in mormot.net.http: may map
+  // the http.sys ID, or a genuine 31-bit value from increasing sequence
+  TRestConnectionID = Int64;
+
 
 const
   /// size in bytes, to log up to 2 KB of JSON response, to save space
@@ -1138,7 +1143,7 @@ type
     // - stores mormot.net.http's THttpServerConnectionID, e.g. a http.sys
     // 64-bit ID, or an incremental rolling sequence of 31-bit integers for
     // THttpServer/TWebSocketServer, or maybe a raw PtrInt(self/THandle)
-    LowLevelConnectionID: Int64;
+    LowLevelConnectionID: TRestConnectionID;
     /// low-level properties of the current connection
     LowLevelConnectionFlags: TRestUriParamsLowLevelFlags;
     /// pre-parsed Remote IP of the current connection

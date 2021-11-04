@@ -358,7 +358,7 @@ type
   protected
     fRestServer: TRestServer; // set by Create := fOwner as TRestServer
     fPublishSignature: boolean;
-    fConnectionID: Int64;
+    fConnectionID: TRestConnectionID;
     fFakeCallbacks: TSynObjectListLocked; // TInterfacedObjectFakeServer instances
     fOnCallbackReleasedOnClientSide: TOnCallbackReleased;
     fOnCallbackReleasedOnServerSide: TOnCallbackReleased;
@@ -407,7 +407,7 @@ type
     /// replace the connection ID of callbacks after a reconnection
     // - returns the number of callbacks changed
     function FakeCallbackReplaceConnectionID(
-      aConnectionIDOld, aConnectionIDNew: Int64): integer;
+      aConnectionIDOld, aConnectionIDNew: TRestConnectionID): integer;
     /// register a callback interface which will be called each time a write
     // operation is performed on a given TOrm with a TRecordVersion field
     // - called e.g. by TRestServer.RecordVersionSynchronizeSubscribeMaster
@@ -1436,7 +1436,7 @@ type
   TInterfacedObjectFakeServer = class(TInterfacedObjectFake)
   protected
     fServer: TRestServer;
-    fLowLevelConnectionID: Int64;
+    fLowLevelConnectionID: TRestConnectionID;
     fService: TServiceFactoryServer;
     fReleasedOnClientSide: boolean;
     fFakeInterface: Pointer;
@@ -1674,7 +1674,7 @@ procedure TServiceContainerServer.FakeCallbackRemove(aFakeInstance: TObject);
 var
   i: PtrInt;
   callbackID: TInterfacedObjectFakeID;
-  connectionID: Int64;
+  connectionID: TRestConnectionID;
   fake: TInterfacedObjectFakeServer;
 begin
   if (self = nil) or
@@ -1706,8 +1706,8 @@ begin
         '', connectionID, callbackID, nil, nil);
 end;
 
-function FakeCallbackFind(list: PPointer; n: integer;
-  conn: Int64; id: TInterfacedObjectFakeID): TInterfacedObjectFakeServer;
+function FakeCallbackFind(list: PPointer; n: integer; conn: TRestConnectionID;
+  id: TInterfacedObjectFakeID): TInterfacedObjectFakeServer;
 begin
   if n <> 0 then
     repeat
@@ -1725,7 +1725,7 @@ procedure TServiceContainerServer.FakeCallbackRelease(
   Ctxt: TRestServerUriContext);
 var
   fake: TInterfacedObjectFakeServer;
-  connectionID: Int64;
+  connectionID: TRestConnectionID;
   fakeID: TInterfacedObjectFakeID;
   Values: TNameValuePUtf8CharDynArray;
   withLog: boolean; // avoid stack overflow
@@ -1857,7 +1857,8 @@ begin
   end;
 end;
 
-function FakeCallbackReplaceID(list: PPointer; n: integer; old, new: Int64): integer;
+function FakeCallbackReplaceID(list: PPointer; n: integer;
+  old, new: TRestConnectionID): integer;
 var
   fake: TInterfacedObjectFakeServer;
 begin
@@ -1876,7 +1877,7 @@ begin
 end;
 
 function TServiceContainerServer.FakeCallbackReplaceConnectionID(
-  aConnectionIDOld, aConnectionIDNew: Int64): integer;
+  aConnectionIDOld, aConnectionIDNew: TRestConnectionID): integer;
 begin
   result := 0;
   if (fFakeCallbacks = nil) or
