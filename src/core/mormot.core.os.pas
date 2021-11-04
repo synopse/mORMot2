@@ -3881,7 +3881,7 @@ const
 
 function WindowsFileTime64ToDateTime(WinTime: QWord): TDateTime;
 begin
-  result := (WinTime - DateFileTimeDelta) / 10000;
+  result := (Int64(WinTime) - DateFileTimeDelta) / 10000;
 end;
 
 function ValidHandle(Handle: THandle): boolean;
