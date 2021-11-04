@@ -1526,7 +1526,7 @@ function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray;
 // raiseExceptionOnOverflow is FALSE and the returned array slot is filled
 // with maxInt/minInt
 function TIntegerDynArrayFrom64(const Values: TInt64DynArray;
-  raiseExceptionOnOverflow: boolean=true): TIntegerDynArray;
+  raiseExceptionOnOverflow: boolean = true): TIntegerDynArray;
 
 /// quick helper to initialize a dynamic array of 64-bit integers from 32-bit values
 // - see also FromI64() for 64-bit signed integer values input

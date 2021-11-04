@@ -95,8 +95,8 @@ type
     // !   TSqlDBUniDACConnectionProperties.URI(dMySQL,'192.168.2.60:3306'),
     // !   'world', 'root', 'dev');
     class function URI(aServer: TSqlDBDefinition; const aServerName: RawUtf8;
-      const aLibraryLocation: TFileName='';
-      aLibraryLocationAppendExePath: boolean=true): RawUtf8;
+      const aLibraryLocation: TFileName = '';
+      aLibraryLocationAppendExePath: boolean = true): RawUtf8;
 
     /// retrieve the column/field layout of a specified table
     // - this overridden method will use UniDAC metadata to retrieve the information

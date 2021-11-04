@@ -531,7 +531,7 @@ type
     /// initialize the list instance
     // - the stored TObject instances will be owned by this TSynObjectListLocked,
     // unless AOwnsObjects is set to false
-    constructor Create(aOwnsObjects: boolean=true); reintroduce;
+    constructor Create(aOwnsObjects: boolean = true); reintroduce;
     /// release the list instance (including the locking resource)
     destructor Destroy; override;
     /// add one item to the list using the global critical section
@@ -2314,7 +2314,7 @@ function GetSectionContent(const Content, SectionName: RawUtf8): RawUtf8; overlo
 // - return TRUE if something was changed in Content
 // - return FALSE if [Section] doesn't exist or is already void
 function DeleteSection(var Content: RawUtf8; const SectionName: RawUtf8;
-  EraseSectionHeader: boolean=true): boolean; overload;
+  EraseSectionHeader: boolean = true): boolean; overload;
 
 /// delete a whole [Section]
 // - if EraseSectionHeader is TRUE (default), then the [Section] line is also
@@ -2323,7 +2323,7 @@ function DeleteSection(var Content: RawUtf8; const SectionName: RawUtf8;
 // - return FALSE if [Section] doesn't exist or is already void
 // - SectionFirstLine may have been obtained by FindSectionFirstLine() function above
 function DeleteSection(SectionFirstLine: PUtf8Char; var Content: RawUtf8;
-  EraseSectionHeader: boolean=true): boolean; overload;
+  EraseSectionHeader: boolean = true): boolean; overload;
 
 /// replace a whole [Section] content by a new content
 // - create a new [Section] if none was existing

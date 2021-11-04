@@ -123,7 +123,7 @@ type
       const aSettingsName: TFileName = ''); reintroduce;
     /// main entry point of the daemon, to process the command line switches
     // - aAutoStart is used only under Windows
-    procedure CommandLine(aAutoStart: boolean=true);
+    procedure CommandLine(aAutoStart: boolean = true);
     /// inherited class should override this abstract method with proper process
     procedure Start; virtual; abstract;
     /// inherited class should override this abstract method with proper process

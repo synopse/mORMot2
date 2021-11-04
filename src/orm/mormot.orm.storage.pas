@@ -561,7 +561,7 @@ type
     /// create one index for all specific FieldNames at once
     // - do nothing virtual/abstract method by default: will return FALSE (i.e. error)
     function CreateSqlMultiIndex(Table: TOrmClass; const FieldNames: array of RawUtf8;
-      Unique: boolean; IndexName: RawUtf8=''): boolean; virtual;
+      Unique: boolean; IndexName: RawUtf8 = ''): boolean; virtual;
     /// search for a numerical field value
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array

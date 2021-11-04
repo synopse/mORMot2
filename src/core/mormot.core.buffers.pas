@@ -510,83 +510,39 @@ procedure ResourceSynLZToRawByteString(const ResName: string;
 
 {$ifndef PUREMORMOT2}
 
-/// deprecated function - use AlgoSynLZ.StreamComputeLen
 function StreamSynLZComputeLen(P: PAnsiChar;
   Len, Magic: cardinal): integer; deprecated;
-
-/// deprecated function - use AlgoSynLZ.StreamCompress
 function StreamSynLZ(Source: TCustomMemoryStream; Dest: TStream;
   Magic: cardinal): integer; overload; deprecated;
-
-/// deprecated function - use AlgoSynLZ.StreamCompress
 function StreamSynLZ(Source: TCustomMemoryStream; const DestFile: TFileName;
-  Magic: cardinal): integer; overload;deprecated;
-
-/// deprecated function - use AlgoSynLZ.FileCompress
-function FileSynLZ(const Source, Dest: TFileName;
-  Magic: cardinal): boolean; deprecated;
-
-/// deprecated function - use AlgoSynLZ.FileUnCompress
+  Magic: cardinal): integer; overload; deprecated;
+function FileSynLZ(const Source, Dest: TFileName; Magic: cardinal): boolean; deprecated;
 function FileUnSynLZ(const Source, Dest: TFileName; Magic: cardinal): boolean; deprecated;
-
-/// deprecated function - use AlgoSynLZ.FileIsCompressed
 function FileIsSynLZ(const Name: TFileName; Magic: cardinal): boolean; deprecated;
-
-/// deprecated function - use AlgoSynLZ.StreamUnCompress
-function StreamUnSynLZ(const Source: TFileName;
-  Magic: cardinal): TMemoryStream; overload; deprecated;
-
-/// deprecated function - use AlgoSynLZ.StreamUnCompress
-function StreamUnSynLZ(Source: TStream;
-  Magic: cardinal): TMemoryStream; overload; deprecated;
-
-/// deprecated function - please call AlgoSynLZ.Compress() method
-function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer=100;
-  CheckMagicForCompressed: boolean=false): RawByteString; overload;
-
-/// deprecated function - please call AlgoSynLZ.Compress() method
+function StreamUnSynLZ(const Source: TFileName; Magic: cardinal): TMemoryStream; overload; deprecated;
+function StreamUnSynLZ(Source: TStream; Magic: cardinal): TMemoryStream; overload; deprecated;
+function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer = 100;
+  CheckMagicForCompressed: boolean = false): RawByteString; overload;
 procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
-  CompressionSizeTrigger: integer=100; CheckMagicForCompressed: boolean=false); overload;
-
-/// deprecated function - please call AlgoSynLZ.Compress() method
+  CompressionSizeTrigger: integer = 100; CheckMagicForCompressed: boolean = false); overload;
 function SynLZCompress(P, Dest: PAnsiChar; PLen, DestLen: integer;
-  CompressionSizeTrigger: integer=100; CheckMagicForCompressed: boolean=false): integer; overload;
-
-/// deprecated function - please call AlgoSynLZ.Decompress() method
+  CompressionSizeTrigger: integer = 100; CheckMagicForCompressed: boolean = false): integer; overload;
 function SynLZDecompress(const Data: RawByteString): RawByteString; overload;
-
-/// deprecated function - please call AlgoSynLZ.Decompress() method
 procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
-  SafeDecompression: boolean=false); overload;
-
-/// deprecated function - please call AlgoSynLZ.DecompressToBytes() method
+  SafeDecompression: boolean = false); overload;
 function SynLZCompressToBytes(const Data: RawByteString;
-  CompressionSizeTrigger: integer=100): TByteDynArray; overload;
-
-/// deprecated function - please call AlgoSynLZ.CompressToBytes() method
+  CompressionSizeTrigger: integer = 100): TByteDynArray; overload;
 function SynLZCompressToBytes(P: PAnsiChar; PLen: integer;
-  CompressionSizeTrigger: integer=100): TByteDynArray; overload;
-
-/// deprecated function - please call AlgoSynLZ.Decompress() method
+  CompressionSizeTrigger: integer = 100): TByteDynArray; overload;
 function SynLZDecompress(const Data: TByteDynArray): RawByteString; overload;
-
-/// deprecated function - please call AlgoSynLZ.Decompress() method
 function SynLZDecompress(const Data: RawByteString; out Len: integer;
   var tmp: RawByteString): pointer; overload;
-
-/// deprecated function - please call AlgoSynLZ.Decompress() method
 function SynLZDecompress(P: PAnsiChar; PLen: integer; out Len: integer;
   var tmp: RawByteString): pointer; overload;
-
-/// deprecated function - please call AlgoSynLZ.DecompressHeader() method
 function SynLZDecompressHeader(P: PAnsiChar; PLen: integer): integer;
-
-/// deprecated function - please call AlgoSynLZ.DecompressBody() method
-function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer;
-  SafeDecompression: boolean=false): boolean;
-
-/// deprecated function - please call AlgoSynLZ.DecompressPartial() method
-function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer;
+function SynLZDecompressBody(P,Body: PAnsiChar; PLen, BodyLen: integer;
+  SafeDecompression: boolean = false): boolean;
+function SynLZDecompressPartial(P, Partial: PAnsiChar; PLen, PartialLen: integer): integer;
 
 {$endif PUREMORMOT2}
 
