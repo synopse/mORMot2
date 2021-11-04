@@ -428,7 +428,7 @@ type
   TRest = class(TInterfaceResolver)
   protected
     fOrm: IRestOrm;
-    fOrmInstance: TInterfacedObject; // is a TRestOrm from mormot.orm.rest.pas
+    fOrmInstance: TRestOrmParent; // is a TRestOrm from mormot.orm.rest.pas
     fModel: TOrmModel;
     fServices: TServiceContainer;
     fRun: TRestRunThreads;
@@ -471,7 +471,7 @@ type
     // - e.g. release associated TOrmModel and TServiceContainer
     destructor Destroy; override;
     /// called by TRestOrm.Create overriden constructor to set fOrm from IRestOrm
-    procedure SetOrmInstance(aORM: TInterfacedObject); virtual;
+    procedure SetOrmInstance(aORM: TRestOrmParent); virtual;
     /// save the TRest properties into a persistent storage object
     // - you can then use TRest.CreateFrom() to re-instantiate it
     // - current Definition.Key value will be used for the password encryption
@@ -1482,9 +1482,6 @@ type
 
 implementation
 
-uses
-  mormot.orm.rest; // to avoid circular references
-
 
 { ************ Customize REST Execution }
 
@@ -1829,7 +1826,7 @@ begin
   fRun := TRestRunThreads.Create(self);
 end;
 
-procedure TRest.SetOrmInstance(aORM: TInterfacedObject);
+procedure TRest.SetOrmInstance(aORM: TRestOrmParent);
 begin
   if fOrmInstance <> nil then
     raise ERestException.CreateUtf8('%.SetOrmInstance twice', [self]);
@@ -1885,12 +1882,12 @@ end;
 
 procedure TRest.OnBeginCurrentThread(Sender: TThread);
 begin
-  TRestOrm(fOrmInstance).BeginCurrentThread(Sender);
+  fOrmInstance.BeginCurrentThread(Sender);
 end;
 
 procedure TRest.OnEndCurrentThread(Sender: TThread);
 begin
-  TRestOrm(fOrmInstance).EndCurrentThread(Sender);
+  fOrmInstance.EndCurrentThread(Sender);
   // most will be done e.g. in TRestRunThreadsServer.EndCurrentThread
   if fLogFamily <> nil then
     fLogFamily.OnThreadEnded(Sender);

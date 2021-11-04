@@ -283,12 +283,6 @@ type
     constructor CreateWithoutRest(aModel: TOrmModel); reintroduce; virtual;
     /// release internal used instances
     destructor Destroy; override;
-    /// ensure the current thread will be taken into account during process
-    // - this abstract method won't do anything, but overriden versions may
-    procedure BeginCurrentThread(Sender: TThread); virtual;
-    /// called when thread is finished to ensure
-    // - this abstract method won't do anything, but overriden versions may
-    procedure EndCurrentThread(Sender: TThread); virtual;
     /// low-level access to the current TOrm class holding a transaction
     // - equals nil outside of a TransactionBegin/Commit scope
     property TransactionTable: TOrmClass
@@ -672,16 +666,6 @@ begin
      (fModel.Owner = self) then
     // make sure we are the Owner (TRestStorage has fModel<>nil e.g.)
     FreeAndNilSafe(fModel);
-end;
-
-procedure TRestOrm.BeginCurrentThread(Sender: TThread);
-begin
-  // nothing do to at this level -> see e.g. TRestOrmServer.BeginCurrentThread
-end;
-
-procedure TRestOrm.EndCurrentThread(Sender: TThread);
-begin
-  // nothing do to at this level -> see e.g. TRestOrmServer.EndCurrentThread
 end;
 
 function TRestOrm.SQLComputeForSelect(Table: TOrmClass;

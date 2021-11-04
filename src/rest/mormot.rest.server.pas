@@ -1942,7 +1942,7 @@ type
       aHandleUserAuthentication: boolean = false;
       const aRoot: RawUtf8 = 'root');
     /// called by TRestOrm.Create overriden constructor to set fOrm from IRestOrm
-    procedure SetOrmInstance(aORM: TInterfacedObject); override;
+    procedure SetOrmInstance(aORM: TRestOrmParent); override;
 
     /// implement a generic local, piped or HTTP/1.1 provider
     // - this is the main entry point of the server, from the client side
@@ -6195,7 +6195,7 @@ begin
   model.Owner := self;
 end;
 
-procedure TRestServer.SetOrmInstance(aORM: TInterfacedObject);
+procedure TRestServer.SetOrmInstance(aORM: TRestOrmParent);
 begin
   inherited SetOrmInstance(aORM);
   if not aORM.GetInterface(IRestOrmServer, fServer) then

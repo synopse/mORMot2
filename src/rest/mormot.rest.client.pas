@@ -620,7 +620,7 @@ type
     // - also unlock all still locked records by this client
     destructor Destroy; override;
     /// called by TRestOrm.Create overriden constructor to set fOrm from IRestOrm
-    procedure SetOrmInstance(aORM: TInterfacedObject); override;
+    procedure SetOrmInstance(aORM: TRestOrmParent); override;
     /// save the TSqlRestClientUri properties into a persistent storage object
     // - CreateFrom() will expect Definition.UserName/Password to store the
     // credentials which will be used by SetUser()
@@ -2172,7 +2172,7 @@ begin
   end;
 end;
 
-procedure TRestClientUri.SetOrmInstance(aORM: TInterfacedObject);
+procedure TRestClientUri.SetOrmInstance(aORM: TRestOrmParent);
 begin
   inherited SetOrmInstance(aORM); // set fOrm
   if not fOrmInstance.GetInterface(IRestOrmClient, fClient) then

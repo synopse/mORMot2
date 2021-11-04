@@ -2711,16 +2711,24 @@ type
       const aCustomFieldsCsv: RawUtf8 = ''): IList<T>; overload;
   end;
 
-  TRestOrmParent = class(TRestOrmGenerics);
+  TRestOrmParent = class(TRestOrmGenerics)
 
   {$else}
 
   /// parent class of TRestOrm, to implement IRestOrm methods
   // - since Delphi interface cannot have parametrized methods, we need
   // to define a TRestOrmGenerics abstract class to use generics signature
-  TRestOrmParent = class(TInterfacedObject);
+  TRestOrmParent = class(TInterfacedObject)
 
   {$endif HASGENERICS}
+  public
+    /// ensure the current thread will be taken into account during process
+    // - this abstract method won't do anything, but overriden versions may
+    procedure BeginCurrentThread(Sender: TThread); virtual;
+    /// called when thread is finished to ensure
+    // - this abstract method won't do anything, but overriden versions may
+    procedure EndCurrentThread(Sender: TThread); virtual;
+  end;
 
 
   { -------------------- RecordRef Wrapper Definition }
@@ -8567,6 +8575,18 @@ begin
 end;
 
 {$endif HASGENERICS}
+
+{ TRestOrmParent }
+
+procedure TRestOrmParent.BeginCurrentThread(Sender: TThread);
+begin
+  // nothing do to at this level -> see e.g. TRestOrmServer.BeginCurrentThread
+end;
+
+procedure TRestOrmParent.EndCurrentThread(Sender: TThread);
+begin
+  // nothing do to at this level -> see e.g. TRestOrmServer.EndCurrentThread
+end;
 
 
 { ------------ TOrmMany Definition }
