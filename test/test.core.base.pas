@@ -1152,9 +1152,9 @@ var
   ST: TCustomMemoryStream;
   Index: TIntegerDynArray;
   W: TJsonWriter;
-  {$ifndef ISDELPHI2010}
+  {$ifndef HASEXTRECORDRTTI}
   JSON_BASE64_MAGIC_UTF8: RawUtf8;
-  {$endif ISDELPHI2010}
+  {$endif HASEXTRECORDRTTI}
   tmp: TSynTempBuffer;
 const
   MAGIC: array[0..1] of word = (34, $fff0);
@@ -1603,13 +1603,13 @@ begin
   W.CancelAll;
   W.AddDynArrayJson(ARP);
   U := W.Text;
-  {$ifndef ISDELPHI2010} // enhanced RTTI won't let binary serialization
+  {$ifndef HASEXTRECORDRTTI} // enhanced RTTI won't let binary serialization
   P := pointer(U);
   JSON_BASE64_MAGIC_UTF8 := RawUnicodeToUtf8(@MAGIC, 2);
   U2 := RawUtf8('[') + JSON_BASE64_MAGIC_UTF8 +
         RawUtf8(BinToBase64(ARP.SaveTo)) + RawUtf8('"]');
   Check(U = U2);
-  {$endif ISDELPHI2010}
+  {$endif HASEXTRECORDRTTI}
   ARP.Clear;
   Check(ARP.LoadFromJson(pointer(U)) <> nil);
   if not CheckFailed(ARP.Count = 1001) then
@@ -1701,14 +1701,14 @@ begin
   // note: error? ensure TTestCoreBase run after TTestLowLevelTypes
   // -> otherwise custom serialization is still active with no Build* fields
   U := W.Text;
-  {$ifdef ISDELPHI2010} // thanks to enhanced RTTI
+  {$ifdef HASEXTRECORDRTTI} // thanks to enhanced RTTI
   Check(IdemPChar(pointer(U), '[{"MAJOR":0,"MINOR":1,"RELEASE":2,"BUILD":3,' +
     '"MAIN":"1000","DETAILED":"2000","BUILDDATETIME":"1999-02-24T02:52:48",' +
     '"BUILDYEAR":2011},{"MAJOR":1,"MINOR":2,"RELEASE":3,"BUILD":4,'));
   CheckHash(U, $74523E0F, 'hash32i');
   {$else}
   Check(U = '[' + JSON_BASE64_MAGIC_UTF8 + BinToBase64(Test) + '"]');
-  {$endif ISDELPHI2010}
+  {$endif HASEXTRECORDRTTI}
   AFP.Clear;
   Check(AFP.LoadFrom(pointer(Test)) - pointer(Test) = length(Test));
   for i := 0 to 1000 do

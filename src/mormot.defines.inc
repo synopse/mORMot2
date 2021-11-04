@@ -443,6 +443,7 @@
       {$define HASSAFEINLINE}  // earliest Delphi have troubles inlining :(
       {$define ISDELPHI2010}
       {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
+      {$define HASEXTRECORDRTTI}
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}

@@ -1147,7 +1147,7 @@ type
       read fValue write fValue;
   end;
 
-  {$ifdef ISDELPHI2010}
+  {$ifdef HASEXTRECORDRTTI}
   TStaticArrayOfInt = packed array[1..5] of Integer;
 
   TNewRtti = record
@@ -1167,7 +1167,7 @@ type
       last_name: string;
     end;
   end;
-  {$endif ISDELPHI2010}
+  {$endif HASEXTRECORDRTTI}
 
 const
   // convention may be to use __ or _ before the type name
@@ -1525,11 +1525,11 @@ var
     X: RawUtf8;
     AA, AB: TRawUtf8DynArrayDynArray;
     i, a, v: PtrInt;
-    {$ifdef ISDELPHI2010}
+    {$ifdef HASEXTRECORDRTTI}
     nav, nav2: TConsultaNav;
     nrtti, nrtti2: TNewRtti;
     book: TBookRecord;
-    {$endif ISDELPHI2010}
+    {$endif HASEXTRECORDRTTI}
   begin
     Finalize(JR);
     Finalize(JR2);
@@ -1823,7 +1823,7 @@ var
     Check(Cache.Json = 'test3');
     Check(Cache.Tag = 12);
 
-    {$ifdef ISDELPHI2010}
+    {$ifdef HASEXTRECORDRTTI}
     FillCharFast(nav, SizeOf(nav), 0);
     FillCharFast(nav2, SizeOf(nav2), 1);
     Check(not CompareMem(@nav, @nav2, SizeOf(nav)));
@@ -1876,7 +1876,7 @@ var
     check(book.name = 'Book the First');
     check(book.author.first_name = 'Bob');
     Check(book.author.last_name = 'White');
-    {$endif ISDELPHI2010}
+    {$endif HASEXTRECORDRTTI}
   end;
 
   procedure TestGetJsonField(const s, v: RawUtf8; str, error: boolean;
@@ -2712,10 +2712,10 @@ begin
   end;
   Parser.Free;
 
-  {$ifdef ISDELPHI2010}
+  {$ifdef HASEXTRECORDRTTI}
   // test JSON serialization defined by Enhanced RTTI available since Delphi 2010
   TestJSONSerialization;
-  {$endif ISDELPHI2010}
+  {$endif HASEXTRECORDRTTI}
   // test TJsonRecordTextDefinition JSON serialization
   Rtti.RegisterFromText(TypeInfo(TSubAB), __TSubAB);
   Rtti.RegisterFromText(TypeInfo(TSubCD), __TSubCD);
@@ -2738,10 +2738,10 @@ begin
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArrayVariant), '');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArraySimple), '');
 
-  {$ifdef ISDELPHI2010}
+  {$ifdef HASEXTRECORDRTTI}
   // test JSON serialization defined by Enhanced RTTI
   TestJSONSerialization;
-  {$endif ISDELPHI2010}
+  {$endif HASEXTRECORDRTTI}
   // tests parsing options
   Parser := Rtti.RegisterFromText(
     TypeInfo(TTestCustomJsonRecord), __TTestCustomJsonRecord);

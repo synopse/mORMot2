@@ -488,7 +488,7 @@ begin
     result := pointer(elType);
     if result <> nil then // nil e.g. for TIntegerDynArray or T*ObjArray
       result := PPointer(result)^;
-    {$ifdef HASEXTRECORDRTTI}
+    {$ifdef HASDYNARRAYTYPE}
     if result = nil then
     begin
       // try the second slot, which may be set even for unmanaged types
@@ -496,7 +496,7 @@ begin
       if result <> nil then
         result := PPointer(result)^;
     end;
-    {$endif HASEXTRECORDRTTI}
+    {$endif HASDYNARRAYTYPE}
   end;
 end;
 function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;
