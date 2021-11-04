@@ -289,8 +289,7 @@ type
   public
     /// initialize the threading process
     constructor Create(aOwner: TRest); reintroduce;
-    /// finalize the associated background timer
-    // - called by Destroy, but may be called sooner
+    /// notify that no new registration is allowed
     procedure Shutdown;
     /// finalize the threading process
     destructor Destroy; override;
@@ -2850,7 +2849,7 @@ var
 begin
   try
     // send any pending json
-    for b := 0 to high(fBackgroundBatch) do
+    for b := 0 to length(fBackgroundBatch) - 1 do
     begin
       batch := fBackgroundBatch[b];
       if batch.Count = 0 then
@@ -2876,16 +2875,17 @@ begin
       end;
       // inlined TRest.BatchSend for lower contention
       if json <> '' then
-      try
-        // json layout is '{"Table":["cmd":values,...]}'
-        status := fRest.ORM.BatchSend(table, json, res, count); // may take a while
-        fRest.InternalLog('AsyncBatchExecute % EngineBatchSend=%',
-          [table, status]);
-      except
-        on E: Exception do
-          fRest.InternalLog('% during AsyncBatchExecute %',
-            [E.ClassType, table], sllWarning);
-      end;
+        try
+          // json layout is '{"Table":["cmd":values,...]}'
+          status := fRest.Orm.BatchSend(table, json, res, count);
+          // BatchSend() may take a while
+          fRest.InternalLog(
+            'AsyncBatchExecute % EngineBatchSend=%', [table, status]);
+        except
+          on E: Exception do
+            fRest.InternalLog('% during AsyncBatchExecute %',
+              [E.ClassType, table], sllWarning);
+        end;
     end;
   finally
     if IdemPChar(pointer(Msg), 'FREE@') then
@@ -2928,7 +2928,7 @@ begin
   if fBackgroundBatch = nil then
     SetLength(fBackgroundBatch, fRest.Model.TablesMax + 1);
   fBackgroundBatch[b] := TRestBatchLocked.Create(
-    fRest.ORM, Table, AutomaticTransactionPerRow, Options);
+    fRest.Orm, Table, AutomaticTransactionPerRow, Options);
   fBackgroundBatch[b].Threshold := PendingRowThreshold;
   result := true;
 end;
@@ -3522,16 +3522,15 @@ end;
 
 procedure TRestRunThreads.Shutdown;
 begin
-  if self = nil then
-    exit;
-  fShutdown := true;
-  FreeAndNilSafe(fBackgroundTimer);
+  if self <> nil then
+    fShutdown := true;
 end;
 
 destructor TRestRunThreads.Destroy;
 begin
   inherited Destroy;
-  Shutdown;
+  fShutdown := true;
+  FreeAndNilSafe(fBackgroundTimer);
 end;
 
 function TRestRunThreads.EnsureBackgroundTimerExists: TRestBackgroundTimer;

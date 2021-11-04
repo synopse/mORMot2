@@ -2528,7 +2528,7 @@ function TRestClientUri.CallBackPut(const aMethodName, aSentData: RawUtf8;
   out aResponse: RawUtf8; aTable: TOrmClass; aID: TID;
   aResponseHead: PRawUtf8): integer;
 begin
-  result := callback(mPUT, aMethodName, aSentData, aResponse, aTable, aID, aResponseHead);
+  result := Callback(mPUT, aMethodName, aSentData, aResponse, aTable, aID, aResponseHead);
 end;
 
 function TRestClientUri.CallBack(method: TUriMethod; const aMethodName,
@@ -2545,7 +2545,7 @@ begin
   begin
     u := fModel.GetUriCallBack(aMethodName, aTable, aID);
     log := fLogClass.Enter('Callback %', [u], self);
-    m := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TUriMethod), ord(method)));
+    m := MethodText(method);
     result := Uri(u, m, @aResponse, aResponseHead, @aSentData);
     InternalLog('% result=% resplen=%',
       [m, result, length(aResponse)], sllServiceReturn);

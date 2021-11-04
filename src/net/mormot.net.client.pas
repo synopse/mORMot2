@@ -1358,7 +1358,7 @@ begin
       result := 'WGet: unexpected destfile'; // paranoid
   except
     on E: Exception do
-      result := E.Message;
+      FormatString('[%] %', [E, E.Message], result);
   end;
 end;
 

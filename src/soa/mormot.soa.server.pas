@@ -1881,6 +1881,8 @@ function TServiceContainerServer.FakeCallbackReplaceConnectionID(
 begin
   result := 0;
   if (fFakeCallbacks = nil) or
+     (aConnectionIDOld <= 0) or
+     (aConnectionIDNew <= 0) or
      (aConnectionIDOld = aConnectionIDNew) then
     exit;
   fFakeCallbacks.Safe.Lock;

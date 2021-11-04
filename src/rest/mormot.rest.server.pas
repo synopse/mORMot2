@@ -6829,8 +6829,8 @@ begin
      (cardinal(aSessionIndex) < cardinal(fSessions.Count)) then
   begin
     sess := fSessions.List[aSessionIndex];
-    if Services <> nil then
-      (Services as TServiceContainerServer).OnCloseSession(sess.IDCardinal);
+    if fServices <> nil then
+      (fServices as TServiceContainerServer).OnCloseSession(sess.IDCardinal);
     if Ctxt = nil then
       InternalLog('Deleted session %:%/%',
         [sess.User.LogonName, sess.IDCardinal, fSessions.Count], sllUserAuth)
@@ -7571,22 +7571,7 @@ begin
         Ctxt.Success;
       end;
     mPOST:
-      if Ctxt.UriBlobFieldName = '_callback_' then
-        // POST root/cacheflush/_callback_
-        // as called from TSqlHttpClientWebsockets.FakeCallbackUnregister
-        (Services as TServiceContainerServer).FakeCallbackRelease(Ctxt)
-      else if Ctxt.UriBlobFieldName = '_replaceconn_' then
-      begin
-        // POST root/cacheflush/_replaceconn_
-        old := GetInt64(pointer(Ctxt.Call^.InBody));
-        count := (Services as TServiceContainerServer).
-          FakeCallbackReplaceConnectionID(old, Ctxt.Call^.LowLevelConnectionID);
-        InternalLog('%: Connection % replaced by % from % count=%',
-          [Model.Root, old, Ctxt.Call^.LowLevelConnectionID,
-           Ctxt.RemoteIPNotLocal, count], sllHTTP);
-        Ctxt.Returns(['count', count]);
-      end
-      else if Ctxt.UriBlobFieldName = '_ping_' then
+      if Ctxt.UriBlobFieldName = '_ping_' then
       begin
         // POST root/cacheflush/_ping_
         count := 0;
@@ -7597,7 +7582,26 @@ begin
         InternalLog('Renew % authenticated session % from %: count=%',
           [Model.Root, Ctxt.Session, Ctxt.RemoteIPNotLocal, count], sllUserAuth);
         Ctxt.Returns(['count', count]);
-      end;
+      end
+      else if (fServices <> nil) and
+              (llfWebsockets in Ctxt.Call^.LowLevelConnectionFlags) then
+        if Ctxt.UriBlobFieldName = '_callback_' then
+          // POST root/cacheflush/_callback_
+          // as called from TSqlHttpClientWebsockets.FakeCallbackUnregister
+          (fServices as TServiceContainerServer).FakeCallbackRelease(Ctxt)
+        else if (llfSecured in Ctxt.Call^.LowLevelConnectionFlags) and
+                (Ctxt.UriBlobFieldName = '_replaceconn_') then
+        begin
+          // POST root/cacheflush/_replaceconn_ (over a secured connection)
+          old := GetInt64(pointer(Ctxt.Call^.InBody));
+          count := (fServices as TServiceContainerServer).
+            FakeCallbackReplaceConnectionID(old, Ctxt.Call^.LowLevelConnectionID);
+          InternalLog('%: Connection % replaced by % from % on %',
+            [Model.Root, old, Ctxt.Call^.LowLevelConnectionID,
+             Ctxt.RemoteIPNotLocal, Plural('interface', count)], sllHTTP);
+          Ctxt.Returns(['count', count]);
+        end;
+    mPUT:
   end;
 end;
 

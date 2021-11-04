@@ -22,8 +22,8 @@ unit mormot.core.fpcx64mm;
     - C memory managers (glibc, Intel TBB, jemalloc) have a very high RAM
       consumption (especially Intel TBB) and do panic/SIGKILL on any GPF
     - Pascal alternatives (FastMM4,ScaleMM2,BrainMM) are Windows+Delphi specific
-    - Our lockess round-robin of tiny blocks and freemem-specific bin list are 
-      unique algorithms among Memory Managers AFAIK
+    - Our lockess round-robin of tiny blocks and freemem bin list are unique
+      algorithms in Memory Managers AFAIK
     - It was so fun diving into SSE2 x86_64 assembly and Pierre's insight
     - Resulting code is still easy to understand and maintain
 
@@ -3163,7 +3163,7 @@ begin
     {$ifdef FPCMM_LOCKLESSFREE}
     {$ifdef FPCMM_REPORTMEMORYLEAKS}
     if p^.BinCount <> 0 then
-      writeln('BinCount=',p^.BinCount,' for small=',p^.BlockSize);
+      writeln('BinCount=', p^.BinCount, ' for small=', p^.BlockSize);
     {$endif FPCMM_REPORTMEMORYLEAKS}
     for j := 0 to p^.BinCount - 1 do
       if p^.BinInstance[j] <> nil then

@@ -109,7 +109,7 @@ const
 function ToMethod(const method: RawUtf8): TUriMethod;
 
 /// convert a TUriMethod enumerate to its #0 terminated uppercase text
-function MethodText(m: TUriMethod): PAnsiChar;
+function MethodText(m: TUriMethod): RawUtf8;
 
 
 {$ifdef PUREMORMOT2}
@@ -590,7 +590,7 @@ implementation
 
 const
   // sorted by occurence for in-order O(n) search via IdemPPChar()
-  METHODNAME: array[0..ord(high(TUriMethod))] of PAnsiChar = (
+  METHODNAME: array[0..ord(high(TUriMethod))] of RawUtf8 = (
     'GET',
     'POST',
     'PUT',
@@ -619,20 +619,20 @@ const
     'PATCH',
     'SEARCH',
     'CONNECT',
-    nil);
+    '');
 
 function ToMethod(const method: RawUtf8): TUriMethod;
 begin
   result := TUriMethod(IdemPPChar(pointer(method), @METHODNAME) + 1);
 end;
 
-function MethodText(m: TUriMethod): PAnsiChar;
+function MethodText(m: TUriMethod): RawUtf8;
 begin
   dec(m);
   if cardinal(m) <= high(METHODNAME) then
     result := METHODNAME[ord(m)]
   else
-    result := nil;
+    result := '';
 end;
 
 
