@@ -285,9 +285,13 @@ type
   protected
     fOwner: TRest;
     fBackgroundTimer: TRestBackgroundTimer;
+    fShutdown: boolean;
   public
     /// initialize the threading process
     constructor Create(aOwner: TRest); reintroduce;
+    /// finalize the associated background timer
+    // - called by Destroy, but may be called sooner
+    procedure Shutdown;
     /// finalize the threading process
     destructor Destroy; override;
     /// allows to safely execute a processing method in a background thread
@@ -462,6 +466,7 @@ type
     /// any overriden TRest class should call it in the initialization section
     class procedure RegisterClassNameForDefinition;
     /// ensure the thread will be taken into account during process
+    // - will redirect to fOrmInstance: TRestOrmParent corresponding methods
     procedure OnBeginCurrentThread(Sender: TThread); virtual;
     procedure OnEndCurrentThread(Sender: TThread); virtual;
   public
@@ -1850,6 +1855,7 @@ begin
   if fOrm <> nil then
     // abort any (unlikely) pending TRestBatch
     fOrm.AsyncBatchStop(nil);
+  fRun.Shutdown; // notify ASAP
   for cmd := Low(cmd) to high(cmd) do
     FreeAndNilSafe(fAcquireExecution[cmd]); // calls fOrmInstance.OnEndThread
   FreeAndNilSafe(fServices);
@@ -3514,15 +3520,24 @@ begin
   fOwner := aOwner;
 end;
 
+procedure TRestRunThreads.Shutdown;
+begin
+  if self = nil then
+    exit;
+  fShutdown := true;
+  FreeAndNilSafe(fBackgroundTimer);
+end;
+
 destructor TRestRunThreads.Destroy;
 begin
   inherited Destroy;
-  FreeAndNilSafe(fBackgroundTimer);
+  Shutdown;
 end;
 
 function TRestRunThreads.EnsureBackgroundTimerExists: TRestBackgroundTimer;
 begin
-  if self = nil then
+  if (self = nil) or
+     fShutdown then
   begin
     result := nil; // paranoid check to avoid any GPF
     exit;
@@ -3540,7 +3555,8 @@ end;
 function TRestRunThreads.NewBackgroundThreadMethod(const Format: RawUtf8;
    const Args: array of const): TSynBackgroundThreadMethod;
 begin
-  if self = nil then
+  if (self = nil) or
+     fShutdown then
     result := nil
   else
     result := TSynBackgroundThreadMethod.Create(nil, FormatUtf8(Format, Args),
@@ -3550,7 +3566,8 @@ end;
 function TRestRunThreads.NewParallelProcess(ThreadCount: integer; const Format: RawUtf8;
   const Args: array of const): TSynParallelProcess;
 begin
-  if self = nil then
+  if (self = nil) or
+     fShutdown then
     result := nil
   else
     result := TSynParallelProcess.Create(ThreadCount, FormatUtf8(Format, Args),
@@ -3564,6 +3581,12 @@ function TRestRunThreads.NewBackgroundThreadProcess(
 var
   name: RawUtf8;
 begin
+  if (self = nil) or
+     fShutdown then
+  begin
+    result := nil;
+    exit;
+  end;
   FormatUtf8(Format, Args, name);
   if self = nil then
     result := TSynBackgroundThreadProcess.Create(name, aOnProcess, aOnProcessMS,
@@ -3578,7 +3601,8 @@ function TRestRunThreads.TimerEnable(
   aOnProcessSecs: cardinal): TRestBackgroundTimer;
 begin
   result := nil;
-  if self = nil then
+  if (self = nil) or
+     fShutdown then
     exit;
   if aOnProcessSecs = 0 then
   begin
@@ -3593,6 +3617,7 @@ function TRestRunThreads.TimerDisable(
   const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 begin
   if (self = nil) or
+     fShutdown or
      (fBackgroundTimer = nil) then
     result := false
   else
@@ -3607,7 +3632,8 @@ end;
 function TRestRunThreads.SystemUseTrack(periodSec: integer): TSystemUse;
 begin
   result := nil;
-  if self = nil then
+  if (self = nil) or
+     fShutdown then
     exit;
   result := TSystemUse.Current;
   if (result.Timer = nil) or
@@ -3637,7 +3663,8 @@ procedure TRestRunThreads.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
   const aOnResult: TOnAsyncRedirectResult);
 begin
-  if self <> nil then
+  if (self <> nil) and
+     not fShutdown then
     EnsureBackgroundTimerExists.AsyncRedirect(
       aGuid, aDestinationInterface, aCallbackInterface, aOnResult);
 end;
@@ -3646,7 +3673,8 @@ procedure TRestRunThreads.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
   const aOnResult: TOnAsyncRedirectResult);
 begin
-  if self <> nil then
+  if (self <> nil) and
+     not fShutdown then
     EnsureBackgroundTimerExists.AsyncRedirect(
       aGuid, aDestinationInstance, aCallbackInterface, aOnResult);
 end;
@@ -3654,7 +3682,8 @@ end;
 procedure TRestRunThreads.AsyncInterning(Interning: TRawUtf8Interning;
   InterningMaxRefCount, PeriodMinutes: integer);
 begin
-  if self <> nil then
+  if (self <> nil) and
+     not fShutdown then
     EnsureBackgroundTimerExists.AsyncInterning(
       Interning, InterningMaxRefCount, PeriodMinutes);
 end;
@@ -3663,7 +3692,8 @@ function TRestRunThreads.MultiRedirect(const aGuid: TGUID; out aCallbackInterfac
   aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
 var factory: TInterfaceFactory;
 begin
-  if self = nil then
+  if (self = nil) or
+     fShutdown then
     result := nil
   else
   begin
