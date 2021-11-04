@@ -13,9 +13,6 @@ uses
   classes,
   {$ifndef FPC}
   typinfo, // to avoid Delphi inlining problems
-  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
-  Generics.Collections,
-  {$endif ISDELPHI2010}
   {$endif FPC}
   mormot.core.base,
   mormot.core.os,
@@ -24,6 +21,9 @@ uses
   mormot.core.unicode,
   mormot.core.datetime,
   mormot.core.rtti,
+  {$ifdef HASGENERICS} // not supported on oldest compilers (e.g. < Delphi XE8)
+  mormot.core.collections,
+  {$endif HASGENERICS}
   mormot.crypt.core,
   mormot.core.data,
   mormot.core.variants,
@@ -1958,12 +1958,13 @@ end;
 
 procedure TTestSQLite3Engine._TOrmTableJson;
 var
-  J: TOrmTable;
+  J, T: TOrmTable;
   i1, i2, aR, aF, F1, F2, n: integer;
+  fid, ffn, fln, fyb, fyd: PtrInt;
   Comp, Comp1, Comp2: TUtf8Compare;
-  {$ifdef ISDELPHI2010}
-  Peoples: TObjectList<TOrmPeople>;
-  {$endif ISDELPHI2010}
+  {$ifdef HASGENERICS}
+  Peoples: IList<TOrmPeople>;
+  {$endif HASGENERICS}
   row: variant;
   lContactDataQueueDynArray: TDynArray;
   lContactDataQueueArray: TRawUtf8DynArray;
@@ -2025,70 +2026,72 @@ begin
         Free;
       end;
     Demo.Execute('VACUUM;');
-    with TOrmTableDB.Create(Demo, [], Req, true) do // re-test after VACCUM
+    T := TOrmTableDB.Create(Demo, [], Req, true); // re-test after VACCUM
     try
-      check(RowCount = J.RowCount);
-      check(FieldCount = J.FieldCount);
-      check(FieldIndex('ID') = 0);
-      check(FieldIndex('RowID') = 0);
-      for aF := 0 to FieldCount - 1 do
-        check(FieldIndex(J.Get(0, aF)) = aF);
-      for aR := 0 to RowCount do
-        for aF := 0 to FieldCount - 1 do // aF=3=Blob
-          check((aF = 3) or (StrIComp(Get(aR, aF), J.Get(aR, aF)) = 0));
+      check(T.RowCount = J.RowCount);
+      check(T.FieldCount = J.FieldCount);
+      fid := T.FieldIndex('ID');
+      ffn := T.FieldIndex('FirstName');
+      fln := T.FieldIndex('LastName');
+      fyb := T.FieldIndex('YearOfBirth');
+      fyd := T.FieldIndex('YearOfDeath');
+      check(fid = 0);
+      check(T.FieldIndex('RowID') = fid);
+      for aF := 0 to T.FieldCount - 1 do
+        check(T.FieldIndex(J.Get(0, aF)) = aF);
+      for aR := 0 to T.RowCount do
+        for aF := 0 to T.FieldCount - 1 do // aF=3=Blob
+          check((aF = 3) or (StrIComp(T.Get(aR, aF), J.Get(aR, aF)) = 0));
       n := 0;
-      while Step do
+      while T.Step do
       begin
-        for aF := 0 to FieldCount - 1 do // aF=3=Blob
-          check((aF = 3) or (StrIComp(FieldBuffer(aF), J.Get(StepRow, aF)) = 0));
+        for aF := 0 to T.FieldCount - 1 do // aF=3=Blob
+          check((aF = 3) or (StrIComp(T.FieldBuffer(aF), J.Get(T.StepRow, aF)) = 0));
         inc(n);
       end;
       check(n = J.RowCount);
       n := 0;
-      if not CheckFailed(Step(true, @row)) then
+      if not CheckFailed(T.Step(true, @row)) then
         repeat
-          check(row.ID = J.GetAsInteger(StepRow, FieldIndex('ID')));
-          check(row.FirstName = J.GetU(StepRow, FieldIndex('FirstName')));
-          check(row.LastName = J.GetU(StepRow, FieldIndex('LastName')));
-          check(row.YearOfBirth = J.GetAsInteger(StepRow, FieldIndex('YearOfBirth')));
-          check(row.YearOfDeath = J.GetAsInteger(StepRow, FieldIndex('YearOfDeath')));
+          check(row.ID = J.GetAsInteger(T.StepRow, fid));
+          check(row.FirstName = J.GetU(T.StepRow, ffn));
+          check(row.LastName = J.GetU(T.StepRow, fln));
+          check(row.YearOfBirth = J.GetAsInteger(T.StepRow, fyb));
+          check(row.YearOfDeath = J.GetAsInteger(T.StepRow, fyd));
           inc(n);
-        until not Step(false, @row);
+        until not T.Step(false, @row);
       check(n = J.RowCount);
-      with ToObjectList(TOrmPeople) do
+      with T.ToObjectList(TOrmPeople) do
       try
         check(Count = J.RowCount);
         for aR := 1 to Count do
           with TOrmPeople(Items[aR - 1]) do
           begin
-            check(IDValue = J.GetAsInteger(aR, FieldIndex('ID')));
-            check(FirstName = J.GetU(aR, FieldIndex('FirstName')));
-            check(LastName = J.GetU(aR, FieldIndex('LastName')));
-            check(YearOfBirth = J.GetAsInteger(aR, FieldIndex('YearOfBirth')));
-            check(YearOfDeath = J.GetAsInteger(aR, FieldIndex('YearOfDeath')));
+            check(IDValue = J.GetAsInteger(aR, fid));
+            check(FirstName = J.GetU(aR, ffn));
+            check(LastName = J.GetU(aR, fln));
+            check(YearOfBirth = J.GetAsInteger(aR, fyb));
+            check(YearOfDeath = J.GetAsInteger(aR, fyd));
           end;
       finally
         Free;
       end;
-      {$ifdef ISDELPHI2010}
-      Peoples := ToObjectList<TOrmPeople>;
-      try
-        check(Peoples.Count = J.RowCount);
-        for aR := 1 to Peoples.Count do
-          with Peoples[aR - 1] do
-          begin
-            check(id = J.GetAsInteger(aR, FieldIndex('ID')));
-            check(FirstName = J.GetU(aR, FieldIndex('FirstName')));
-            check(LastName = J.GetU(aR, FieldIndex('LastName')));
-            check(YearOfBirth = J.GetAsInteger(aR, FieldIndex('YearOfBirth')));
-            check(YearOfDeath = J.GetAsInteger(aR, FieldIndex('YearOfDeath')));
-          end;
-      finally
-        Peoples.Free;
-      end;
-      {$endif ISDELPHI2010}
+      {$ifdef HASGENERICS}
+      Peoples := T.ToIList<TOrmPeople>;
+      check(Peoples.Count = J.RowCount);
+      for aR := 1 to Peoples.Count do
+        with Peoples[aR - 1] do
+        begin
+          check(id = J.GetAsInteger(aR, fid));
+          check(FirstName = J.GetU(aR, ffn));
+          check(LastName = J.GetU(aR, fln));
+          check(YearOfBirth = J.GetAsInteger(aR, fyb));
+          check(YearOfDeath = J.GetAsInteger(aR, fyd));
+        end;
+      // Peoples := nil; // not mandatory
+      {$endif HASGENERICS}
     finally
-      Free;
+      T.Free;
     end;
     for aF := 0 to J.FieldCount - 1 do
     begin

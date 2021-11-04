@@ -28,9 +28,9 @@ uses
   classes,
   variants,
   contnrs,
-  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
-  Generics.Collections,
-  {$endif ISDELPHI2010}
+  {$ifdef HASGENERICS} // not supported on oldest compilers (e.g. < Delphi XE8)
+  mormot.core.collections,
+  {$endif HASGENERICS}
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -706,14 +706,13 @@ type
     function RetrieveList(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const aCustomFieldsCsv: RawUtf8 = ''): TObjectList; overload;
-    {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
-    function RetrieveList<T: TOrm>(
-      const aCustomFieldsCsv: RawUtf8 = ''): TObjectList<T>; overload;
-       {$ifdef HASINLINE}inline;{$endif}
-    function RetrieveList<T: TOrm>(const FormatSqlWhere: RawUtf8;
+    {$ifdef HASGENERICS}
+    function RetrieveIList<T: TOrm>(
+      const aCustomFieldsCsv: RawUtf8 = ''): IList<T>; overload;
+    function RetrieveIList<T: TOrm>(const FormatSqlWhere: RawUtf8;
       const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): TObjectList<T>; overload;
-    {$endif ISDELPHI2010}
+      const aCustomFieldsCsv: RawUtf8 = ''): IList<T>; overload;
+    {$endif HASGENERICS}
     function RetrieveListJson(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const aCustomFieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false): RawJson; overload;
@@ -2182,20 +2181,20 @@ begin
   result := fOrm.RetrieveList(Table, FormatSqlWhere, BoundsSqlWhere, aCustomFieldsCsv);
 end;
 
-{$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
+{$ifdef HASGENERICS}
 
-function TRest.RetrieveList<T>(const aCustomFieldsCsv: RawUtf8): TObjectList<T>;
+function TRest.RetrieveIList<T>(const aCustomFieldsCsv: RawUtf8): IList<T>;
 begin
-  result := fOrm.Generics.RetrieveList<T>(aCustomFieldsCsv);
+  result := fOrm.Generics.RetrieveIList<T>(aCustomFieldsCsv);
 end;
 
-function TRest.RetrieveList<T>(const FormatSqlWhere: RawUtf8;
-  const BoundsSqlWhere: array of const; const aCustomFieldsCsv: RawUtf8): TObjectList<T>;
+function TRest.RetrieveIList<T>(const FormatSqlWhere: RawUtf8;
+  const BoundsSqlWhere: array of const; const aCustomFieldsCsv: RawUtf8): IList<T>;
 begin
-  result := fOrm.Generics.RetrieveList<T>(FormatSqlWhere, BoundsSqlWhere, aCustomFieldsCsv);
+  result := fOrm.Generics.RetrieveIList<T>(FormatSqlWhere, BoundsSqlWhere, aCustomFieldsCsv);
 end;
 
-{$endif ISDELPHI2010}
+{$endif HASGENERICS}
 
 function TRest.RetrieveListJson(Table: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;

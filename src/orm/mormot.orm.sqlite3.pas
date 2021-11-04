@@ -73,7 +73,7 @@ type
     // - uses a TOrmTableJson internally: all currency is transformed to its
     // floating point TEXT representation, and allows efficient caching
     // - if the SQL statement is in the DB cache, it's retrieved from its
-    // cached value: our JSON parsing is a lot faster than SQLite3 engine
+    // cached value: our JSON parsing is a lot faster than the SQLite3 engine
     // itself, and uses less memory
     // - will raise an Exception on any error
     constructor Create(aDB: TSqlDatabase; const Tables: array of TOrmClass;

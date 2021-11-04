@@ -336,10 +336,12 @@ type
     function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
       const WhereClause: RawUtf8 = ''): TOrmTable; overload;
     function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
-      const WhereClauseFormat: RawUtf8; const BoundsSqlWhere: array of const): TOrmTable;
-      overload; {$ifdef ISDELPHI2010} override; {$else} virtual; {$endif}
+      const WhereClauseFormat: RawUtf8;
+      const BoundsSqlWhere: array of const): TOrmTable; overload;
+        {$ifdef HASGENERICS} override; {$endif}
     function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
-      const WhereClauseFormat: RawUtf8; const Args, Bounds: array of const): TOrmTable; overload;
+      const WhereClauseFormat: RawUtf8;
+      const Args, Bounds: array of const): TOrmTable; overload;
     function FTSMatch(Table: TOrmFts3Class; const WhereClause: RawUtf8;
       var DocID: TIDDynArray): boolean; overload;
     function FTSMatch(Table: TOrmFts3Class; const MatchClause: RawUtf8;

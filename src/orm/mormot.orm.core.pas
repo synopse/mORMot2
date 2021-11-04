@@ -39,9 +39,6 @@ uses
   contnrs,
   {$ifndef FPC}
   typinfo, // for proper Delphi inlining
-  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
-  Generics.Collections,
-  {$endif ISDELPHI2010}
   {$endif FPC}
   mormot.core.base,
   mormot.core.os,
@@ -56,6 +53,9 @@ uses
   mormot.core.json,
   mormot.core.threads,
   mormot.core.search,
+  {$ifdef HASGENERICS} // not supported on oldest compilers (e.g. < Delphi XE8)
+  mormot.core.collections,
+  {$endif HASGENERICS}
   mormot.crypt.secure, // for TSynUniqueIdentifierGenerator
   mormot.db.core,
   mormot.orm.base;
@@ -186,9 +186,9 @@ type
 
   { -------------------- IRestOrm IRestOrmServer IRestOrmClient Definitions }
 
-  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
+  {$ifdef HASGENERICS}
   TRestOrmGenerics = class;
-  {$endif ISDELPHI2010}
+  {$endif HASGENERICS}
 
   /// Object-Relational-Mapping calls for CRUD access to a database
   // - as implemented in TRest.ORM
@@ -475,12 +475,14 @@ type
     function RetrieveList(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const aCustomFieldsCsv: RawUtf8 = ''): TObjectList; overload;
-    {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
+    {$ifdef HASGENERICS}
     /// access to ORM parametrized/generics methods
-    // - since Delphi interface cannot have parametrized methods, we need
-    // to return a TRestOrmGenerics abstract class to use generics signature
+    // - since interface types can not have parametrized methods, we return
+    // a TRestOrmGenerics abstract class to provide generics signature
+    // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
+    // executables than Generics.Collections, and need no try..finally Free
     function Generics: TRestOrmGenerics;
-    {$endif ISDELPHI2010}
+    {$endif HASGENERICS}
     /// get a list of members from a SQL statement as RawJson
     // - implements REST GET collection
     // - for better server speed, the WHERE clause should use bound parameters
@@ -2651,13 +2653,15 @@ type
   TOrmArray = array[0..MaxInt div SizeOf(TOrm) - 1] of TOrm;
   POrmArray = ^TOrmArray;
 
-  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
+  {$ifdef HASGENERICS}
 
   /// since Delphi interfaces cannot have parametrized methods, we need
   // to use this abstract class to use generics signature
+  // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
+  // executables than Generics.Collections, and need no try..finally Free
   TRestOrmGenerics = class(TInterfacedObject)
   protected
-    // needed to implement RetrieveList<T> actual data retrieval
+    // needed to implement RetrieveIList<T> actual data retrieval
     function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
       const WhereClauseFormat: RawUtf8; const BoundsSqlWhere: array of const): TOrmTable;
       overload; virtual; abstract;
@@ -2671,26 +2675,22 @@ type
     // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
-    // - return a TObjectList<T> on success (possibly with Count=0) - caller is
+    // - return a IList<T> on success (possibly with Count=0) - caller is
     // responsible of freeing the instance
     // - return nil on error
     // - since Delphi interface cannot have parametrized methods, we need to
     // call this overloaded TRestOrmGenerics method to use generics signature
     // - you can write for instance:
-    // !var list: TObjectList<TOrmTest>;
+    // !var list: IList<TOrmTest>;
     // !    R: TOrmTest;
     // !    orm: IRestOrm
     // ! ...
-    // !    list := orm.Generics.RetrieveList<TOrmTest>('ID,Test');
+    // !    list := orm.Generics.RetrieveIList<TOrmTest>('ID,Test');
     // !    if list <> nil then
-    // !    try
     // !      for R in list do
     // !        writeln(R.ID, '=', R.Test);
-    // !    finally
-    // !      list.Free;
-    // !    end;
-    function RetrieveList<T: TOrm>(
-      const aCustomFieldsCsv: RawUtf8 = ''): TObjectList<T>; overload;
+    function RetrieveIList<T: TOrm>(
+      const aCustomFieldsCsv: RawUtf8 = ''): IList<T>; overload;
        {$ifdef HASINLINE}inline;{$endif}
     /// get a list of members from a SQL statement
     // - implements REST GET collection with a WHERE clause
@@ -2702,14 +2702,13 @@ type
     // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
-    // - return a TObjectList<T> on success (possibly with Count=0) - caller is
-    // responsible of freeing the instance
+    // - return a IList<T> on success (possibly with Count=0)
     // - return nil on error
     // - since Delphi interface cannot have parametrized methods, we need to
     // call this overloaded TRestOrmGenerics method to use generics signature
-    function RetrieveList<T: TOrm>(const FormatSqlWhere: RawUtf8;
+    function RetrieveIList<T: TOrm>(const FormatSqlWhere: RawUtf8;
       const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): TObjectList<T>; overload;
+      const aCustomFieldsCsv: RawUtf8 = ''): IList<T>; overload;
   end;
 
   TRestOrmParent = class(TRestOrmGenerics);
@@ -2721,7 +2720,7 @@ type
   // to define a TRestOrmGenerics abstract class to use generics signature
   TRestOrmParent = class(TInterfacedObject);
 
-  {$endif ISDELPHI2010}
+  {$endif HASGENERICS}
 
 
   { -------------------- RecordRef Wrapper Definition }
@@ -2786,6 +2785,10 @@ type
     function InitOneFieldType(field: PtrInt; out size: integer;
       out info: PRttiInfo; out tableindex: integer): TOrmFieldType; override;
     procedure FillOrms(P: POrm; RecordType: TOrmClass);
+    {$ifdef HASGENERICS}
+    /// create and fill a new IList<T>
+    procedure ToNewIList(var result; item: TOrmClass);
+    {$endif HASGENERICS}
     /// guess the property type information from ORM
     function FieldPropFromTables(const PropName: RawUtf8;
       out PropInfo: TOrmPropInfo; out TableIndex: integer): TOrmFieldType;
@@ -2885,14 +2888,14 @@ type
     // of the first associated record class (from internal QueryTables[])
     procedure ToObjectList(DestList: TObjectList;
       RecordType: TOrmClass = nil); overload;
-    {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
-    /// create a TObjectList<TOrm> with TOrm instances corresponding
-    // to this TOrmTable result set
-    // - use the specified TOrm class or create instances
-    // of the first associated record class (from internal QueryTables[])
-    // - always returns an instance, even if the TOrmTable is nil or void
-    function ToObjectList<T: TOrm>: TObjectList<T>; overload;
-    {$endif ISDELPHI2010}
+    {$ifdef HASGENERICS}
+    /// create a IList<TOrm> with TOrm instances corresponding to this resultset
+    // - always returns an IList<> instance, even if the TOrmTable is nil or void
+    // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
+    // executables than Generics.Collections, and need no try..finally Free: a
+    // single TSynListSpecialized<TOrm> class will be reused for all IList<>
+    function ToIList<T: TOrm>: IList<T>; overload;
+    {$endif HASGENERICS}
     /// fill an existing T*ObjArray variable with TOrm instances
     // corresponding to this TOrmTable result set
     // - use the specified TOrm class or create instances
@@ -5302,46 +5305,47 @@ begin
   fOwnedRecords.Add(result);
 end;
 
-{$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
+{$ifdef HASGENERICS}
 
-function TOrmTable.ToObjectList<T>: TObjectList<T>;
+procedure TOrmTable.ToNewIList(var result; item: TOrmClass);
 var
-  cloned, item: TOrm;
+  list: TSynListSpecialized<TOrm>;
+  cloned, one: TOrm;
   r: integer;
-  {$ifdef ISDELPHIXE3}
   rec: POrm;
-  {$endif ISDELPHIXE3}
 begin
-  result := TObjectList<T>.Create; // TObjectList<T> will free each T instance
+  list := TSynListSpecialized<TOrm>.Create(
+    [], ptClass, TypeInfo(TOrmObjArray), item.ClassInfo);
+  // all IList<T> share the same VMT -> assign same TSynListSpecialized<TOrm>
+  IList<TOrm>(result) := list;
+  // IList<T> will own and free each T instance
   if (self = nil) or
      (fRowCount = 0) then
     exit;
-  cloned := TOrmClass(T).Create;
+  cloned := item.Create;
   try
     cloned.FillPrepare(self);
-    {$ifdef ISDELPHIXE3}
-    result.Count := fRowCount; // faster than manual Add()
-    rec := pointer(result.List);
+    list.SetCount(fRowCount); // allocate once
+    rec := list.First;        // fast direct iteration
     for r := 1 to fRowCount do
     begin
-      item := TOrmClass(T).Create;
-      rec^ := item;
+      one := item.Create;
+      rec^ := one;
       inc(rec);
-    {$else}
-    for r := 1 to fRowCount do
-    begin
-      item := TOrmClass(T).Create;
-      result.Add(item);
-    {$endif ISDELPHIXE3}
-      cloned.fFill.Fill(r, item);
-      item.fInternalState := fInternalState;
+      cloned.fFill.Fill(r, one);
+      one.fInternalState := fInternalState;
     end;
   finally
     cloned.Free;
   end;
 end;
 
-{$endif ISDELPHI2010}
+function TOrmTable.ToIList<T>: IList<T>;
+begin
+  ToNewIList(result, TOrmClass(T)); // smaller executable with sub ToNewIList()
+end;
+
+{$endif HASGENERICS}
 
 procedure TOrmTable.FillOrms(P: POrm; RecordType: TOrmClass);
 var
@@ -8531,7 +8535,7 @@ end;
 {$endif PUREMORMOT2}
 
 
-{$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
+{$ifdef HASGENERICS}
 
 { TRestOrmGenerics }
 
@@ -8540,13 +8544,13 @@ begin
   result := self; // circumvent limitation of non parametrized interface definition
 end;
 
-function TRestOrmGenerics.RetrieveList<T>(const aCustomFieldsCsv: RawUtf8): TObjectList<T>;
+function TRestOrmGenerics.RetrieveIList<T>(const aCustomFieldsCsv: RawUtf8): IList<T>;
 begin
-  result := RetrieveList<T>('', [], aCustomFieldsCsv);
+  result := RetrieveIList<T>('', [], aCustomFieldsCsv);
 end;
 
-function TRestOrmGenerics.RetrieveList<T>(const FormatSqlWhere: RawUtf8;
-  const BoundsSqlWhere: array of const; const aCustomFieldsCsv: RawUtf8): TObjectList<T>;
+function TRestOrmGenerics.RetrieveIList<T>(const FormatSqlWhere: RawUtf8;
+  const BoundsSqlWhere: array of const; const aCustomFieldsCsv: RawUtf8): IList<T>;
 var table: TOrmTable;
 begin
   result := nil;
@@ -8555,14 +8559,14 @@ begin
   table := MultiFieldValues(TOrmClass(T), aCustomFieldsCsv,
     FormatSqlWhere, BoundsSqlWhere);
   if table <> nil then
-  try
-    result := table.ToObjectList<T>;
-  finally
-    table.Free;
-  end;
+    try
+      result := table.ToIList<T>;
+    finally
+      table.Free;
+    end;
 end;
 
-{$endif ISDELPHI2010}
+{$endif HASGENERICS}
 
 
 { ------------ TOrmMany Definition }
