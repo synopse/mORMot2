@@ -10784,8 +10784,21 @@ end;
 
 function TOrmPropertiesAbstract.FieldBitsFromRawUtf8(
   const aFields: array of RawUtf8; var Bits: TFieldBits): boolean;
+var
+  f, ndx: PtrInt;
 begin
-  result := FieldBitsFromRawUtf8(aFields, Bits);
+  FillZero(Bits);
+  result := false;
+  if self = nil then
+    exit;
+  for f := 0 to high(aFields) do
+  begin
+    ndx := Fields.IndexByName(pointer(aFields[f]));
+    if ndx < 0 then
+      exit; // invalid field name
+    include(Bits, ndx);
+  end;
+  result := true;
 end;
 {$endif PUREMORMOT2}
 
