@@ -70,7 +70,7 @@ type
   // - you can add tasks to the internal list, to be executed after a given
   // delay, using a post/peek like algorithm
   // - execution delays are not expected to be accurate, but are best guess,
-  // according to NextTask call
+  // according to each NextPendingTask call
   // - this implementation is thread-safe, thanks to the Safe internal locker
   TPendingTaskList = class(TSynLocked)
   protected
@@ -87,7 +87,8 @@ type
       const aTask: RawByteString); virtual;
     /// append several tasks, specifying a delay in milliseconds between tasks
     // - first supplied delay would be computed from the current time, then
-    // it would specify how much time to wait between the next supplied task
+    // it would specify how much time to wait between the next supplied task -
+    // that is, aMilliSecondsDelays is not an absolute delay
     procedure AddTasks(const aMilliSecondsDelays: array of integer;
       const aTasks: array of RawByteString);
     /// retrieve the next pending task
@@ -941,7 +942,7 @@ begin
   try
     for i := 0 to High(aTasks) do
     begin
-      inc(item.Timestamp, aMilliSecondsDelays[i]);
+      inc(item.Timestamp, aMilliSecondsDelays[i]); // delays between tasks
       item.Task := aTasks[i];
       if fTasks.FastLocateSorted(item, ndx) then
         inc(ndx); // always insert just after any existing timestamp
@@ -968,15 +969,18 @@ begin
 end;
 
 function TPendingTaskList.NextPendingTask: RawByteString;
+var
+  tix: Int64;
 begin
   result := '';
   if (self = nil) or
      (fCount = 0) then
     exit;
+  tix := GetTimestamp;
   fSafe.Lock;
   try
     if fCount > 0 then
-      if GetTimestamp >= fTask[0].Timestamp then
+      if tix >= fTask[0].Timestamp then
       begin
         result := fTask[0].Task;
         fTasks.FastDeleteSorted(0);

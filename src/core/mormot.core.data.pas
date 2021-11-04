@@ -2148,7 +2148,7 @@ type
     fWaitPopCounter: integer;
     procedure InternalGrow;
     function InternalDestroying(incPopCounter: integer): boolean;
-    function InternalWaitDone(endtix: Int64; const idle: TThreadMethod): boolean;
+    function InternalWaitDone(starttix, endtix: Int64; const idle: TThreadMethod): boolean;
     /// low-level virtual methods implementing the persistence
     procedure LoadFromReader; override;
     procedure SaveToWriter(aWriter: TBufferWriter); override;
@@ -2181,7 +2181,7 @@ type
     // - returns false if the queue is empty
     // - this method is thread-safe, since it will lock the instance
     function Peek(out aValue): boolean;
-    /// waiting extract of one item from the queue, as FIFO (First-In-First-Out)
+    /// wait and extract one item from the queue, as FIFO (First-In-First-Out)
     // - returns true if aValue has been filled with a pending item within the
     // specified aTimeoutMS time
     // - returns false if nothing was pushed into the queue in time, or if
@@ -2199,8 +2199,7 @@ type
     // then call Pop() if it is the expected one, and eventually always call Safe.Unlock
     // - returns nil if nothing was pushed into the queue in time
     // - this method is thread-safe, but will lock the instance only if needed
-    function WaitPeekLocked(aTimeoutMS: integer;
-      const aWhenIdle: TThreadMethod): pointer;
+    function WaitPeekLocked(aTimeoutMS: integer; const aWhenIdle: TThreadMethod): pointer;
     /// ensure any pending or future WaitPop() returns immediately as false
     // - is always called by Destroy destructor
     // - could be also called e.g. from an UI OnClose event to avoid any lock
@@ -9404,9 +9403,7 @@ begin
 end;
 
 
-
-function DynArray(
-  aTypeInfo: PRttiInfo; var aValue; aCountPointer: PInteger): TDynArray;
+function DynArray(aTypeInfo: PRttiInfo; var aValue; aCountPointer: PInteger): TDynArray;
 begin
   result.Init(aTypeInfo, aValue, aCountPointer);
 end;
@@ -9600,24 +9597,30 @@ begin
   end;
 end;
 
-function TSynQueue.InternalWaitDone(endtix: Int64; const idle: TThreadMethod): boolean;
+function TSynQueue.InternalWaitDone(starttix, endtix: Int64;
+  const idle: TThreadMethod): boolean;
 begin
-  SleepHiRes(1);
   if Assigned(idle) then
+  begin
+    SleepHiRes(1); // SleepStep() may wait up to 250 ms which is not responsive
     idle; // e.g. Application.ProcessMessages
-  result := InternalDestroying(0) or
+  end
+  else
+    SleepStep(starttix);
+  result := (wpfDestroying in fWaitPopFlags) or // no need to lock/unlock
             (GetTickCount64 > endtix);
 end;
 
 function TSynQueue.WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
   out aValue; aCompared: pointer; aCompare: TDynArraySortCompare): boolean;
 var
-  endtix: Int64;
+  starttix, endtix: Int64;
 begin
   result := false;
   if not InternalDestroying(+1) then
   try
-    endtix := GetTickCount64 + aTimeoutMS;
+    starttix := GetTickCount64;
+    endtix := starttix + aTimeoutMS;
     repeat
       if Assigned(aCompared) and
          Assigned(aCompare) then
@@ -9625,7 +9628,7 @@ begin
       else
         result := Pop(aValue);
     until result or
-          InternalWaitDone(endtix, aWhenIdle);
+          InternalWaitDone(starttix, endtix, aWhenIdle);
   finally
     InternalDestroying(-1);
   end;
@@ -9634,12 +9637,13 @@ end;
 function TSynQueue.WaitPeekLocked(aTimeoutMS: integer;
   const aWhenIdle: TThreadMethod): pointer;
 var
-  endtix: Int64;
+  starttix, endtix: Int64;
 begin
   result := nil;
   if not InternalDestroying(+1) then
   try
-    endtix := GetTickCount64 + aTimeoutMS;
+    starttix := GetTickCount64;
+    endtix := starttix + aTimeoutMS;
     repeat
       fSafe.Lock;
       try
@@ -9650,7 +9654,7 @@ begin
           fSafe.UnLock; // caller should always Unlock once done
       end;
     until (result <> nil) or
-          InternalWaitDone(endtix, aWhenIdle);
+          InternalWaitDone(starttix, endtix, aWhenIdle);
   finally
     InternalDestroying(-1);
   end;
@@ -9658,7 +9662,7 @@ end;
 
 procedure TSynQueue.WaitPopFinalize(aTimeoutMS: integer);
 var
-  endtix: Int64; // never wait forever
+  starttix, endtix: Int64; // never wait forever
 begin
   fSafe.Lock;
   try
@@ -9668,9 +9672,10 @@ begin
   finally
     fSafe.UnLock;
   end;
-  endtix := GetTickCount64 + aTimeoutMS;
+  starttix := GetTickCount64;
+  endtix := starttix + aTimeoutMS;
   repeat
-    SleepHiRes(1); // ensure WaitPos() is actually finished
+    SleepStep(starttix); // ensure WaitPos() is actually finished
   until (fWaitPopCounter = 0) or
         (GetTickCount64 > endtix);
 end;
