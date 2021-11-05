@@ -97,7 +97,7 @@ begin
   AddCase([
   //
     TTestCoreBase, TTestCoreProcess,
-    {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi 2010)
+    {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi XE7)
     TTestCoreCollections,
     {$endif HASGENERICS}
     TTestCoreCrypto, TTestCoreEcc,

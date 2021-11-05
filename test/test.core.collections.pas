@@ -7,7 +7,7 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
-{$ifdef HASGENERICS} // do-nothing unit on oldest compilers (e.g. < Delphi 2010)
+{$ifdef HASGENERICS} // do-nothing unit on oldest compilers (e.g. < Delphi XE8)
 
 uses
   sysutils,

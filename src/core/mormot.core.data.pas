@@ -1256,7 +1256,7 @@ type
     // - Add + Pop/Peek will implement a LIFO (Last-In-First-Out) stack
     // - warning: Dest must be of the same exact type than the dynamic array
     // - returns true if the item was successfully copied and removed
-    // - use Peek() if you don't want to remove the item
+    // - use Peek() if you don't want to remove the item, but just get its value
     function Pop(var Dest): boolean;
     /// get the last element stored in the dynamic array
     // - Add + Pop/Peek will implement a LIFO (Last-In-First-Out) stack
@@ -1269,7 +1269,7 @@ type
     // - removing from head will move all items so TSynQueue is faster
     // - warning: Dest must be of the same exact type than the dynamic array
     // - returns true if the item was successfully copied and removed
-    // - use PeekHead() if you don't want to remove the item
+    // - use PeekHead() if you don't want to remove the item, but get its value
     function PopHead(var Dest): boolean;
     /// get the first element stored in the dynamic array
     // - Add + PopHead/PeekHead will implement a FIFO (First-In-First-Out) stack
