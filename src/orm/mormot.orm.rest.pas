@@ -623,7 +623,7 @@ const
 
 function ToMethod(const method: RawUtf8): TUriMethod;
 begin
-  result := TUriMethod(IdemPPChar(pointer(method), @METHODNAME) + 1);
+  result := TUriMethod(IdemPPChar(pointer(method), pointer(@METHODNAME)) + 1);
 end;
 
 function MethodText(m: TUriMethod): RawUtf8;

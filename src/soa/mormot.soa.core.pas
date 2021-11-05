@@ -610,7 +610,7 @@ type
   TServiceContainerInterfaceMethods = array of TServiceContainerInterfaceMethod;
 
   /// used in TServiceContainer to identify fListInterfaceMethod[] entries
-  // - maximum bit of 255 is a limitation of the pascal compiler itself
+  // - maximum bit count of 255 is a limitation of the pascal compiler itself
   TServiceContainerInterfaceMethodBits = set of 0..255;
 
   /// a global services provider class
@@ -643,10 +643,6 @@ type
     constructor Create(aOwner: TInterfaceResolver); virtual;
     /// release all registered services
     destructor Destroy; override;
-    /// release all services of a TRest instance before shutdown
-    // - will allow to properly release any pending callbacks
-    // - TRest.Services.Release will call FreeAndNil(fServices)
-    procedure Release;
     /// return the number of registered service interfaces
     // - you can use InterfaceList[] to access the instances
     function Count: integer;
@@ -913,9 +909,6 @@ type
 
 implementation
 
-uses
-  mormot.rest.core;
-
 
 { ************ TOrmServiceLog TOrmServiceNotifications Classes }
 
@@ -1084,7 +1077,8 @@ var
   i: PtrInt;
 begin
   result := (self <> nil) and
-    fOrm.MainFieldIDs(fOrm.Model.GetTableInherited(TAuthGroup), aGroup, IDs);
+    fOrm.MainFieldIDs(
+      fOrm.Model.GetTableInherited(DefaultTAuthGroupClass), aGroup, IDs);
   if result then
     for i := 0 to high(IDs) do
       // fExecution[].Denied set is able to store IDs up to 256 only
@@ -1166,7 +1160,8 @@ var
 begin
   if self <> nil then
     for m := 0 to high(aMethod) do
-      FillcharFast(fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
+      FillcharFast(
+        fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
         SizeOf(fExecution[0].Denied), 0);
   result := self;
 end;
@@ -1204,7 +1199,8 @@ var
 begin
   if self <> nil then
     for m := 0 to high(aMethod) do
-      FillcharFast(fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
+      FillcharFast(
+        fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
         SizeOf(fExecution[0].Denied), 255);
   result := self;
 end;
@@ -1295,12 +1291,6 @@ begin
   for i := 0 to high(fInterface) do
     fInterface[i].Service.Free;
   inherited;
-end;
-
-procedure TServiceContainer.Release;
-begin
-  if self <> nil then
-    TRest(fOwner).ServicesRelease(self);
 end;
 
 function TServiceContainer.Count: integer;

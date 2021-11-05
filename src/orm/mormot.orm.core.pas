@@ -4761,6 +4761,10 @@ const
     DELETE: ALL_ACCESS_RIGHTS
   );
 
+var
+  /// TAuthGroup will be injected by mormot.rest.core.pas
+  DefaultTAuthGroupClass: TOrmClass;
+
 
 { ************** TOrm High-Level Parents }
 

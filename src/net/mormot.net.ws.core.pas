@@ -144,6 +144,12 @@ type
     logBinaryFrameContent,
     logCallback);
 
+  /// points to parameters to be used for WebSockets process
+  // - using a pointer/reference type will allow in-place modification of
+  // any TWebSocketProcess.Settings, TWebSocketServer.Settings or
+  // THttpClientWebSockets.Settings property
+  PWebSocketProcessSettings = ^TWebSocketProcessSettings;
+
   /// parameters to be used for WebSockets processing
   // - those settings are used by all protocols running on a given
   // TWebSocketServer or a THttpClientWebSockets
@@ -230,14 +236,8 @@ type
     procedure SetDefaults;
     /// will set LogDetails to its highest level of verbosity
     // - used only if WebSocketLog global variable is set
-    procedure SetFullLog;
+    function SetFullLog: PWebSocketProcessSettings;
   end;
-
-  /// points to parameters to be used for WebSockets process
-  // - using a pointer/reference type will allow in-place modification of
-  // any TWebSocketProcess.Settings, TWebSocketServer.Settings or
-  // THttpClientWebSockets.Settings property
-  PWebSocketProcessSettings = ^TWebSocketProcessSettings;
 
   /// callback event triggered by TWebSocketProtocol for any incoming message
   // - called before TWebSocketProtocol.ProcessIncomingFrame for incoming
@@ -2372,10 +2372,11 @@ begin
   EcdheRounds := DEFAULT_ECCROUNDS;
 end;
 
-procedure TWebSocketProcessSettings.SetFullLog;
+function TWebSocketProcessSettings.SetFullLog: PWebSocketProcessSettings;
 begin
   LogDetails := [logHeartbeat, logTextFrameContent, logBinaryFrameContent];
   // logCallback is debug-focused and for TWebSocketAsyncServerRest only
+  result := @self;
 end;
 
 
@@ -2526,13 +2527,10 @@ begin
 end;
 
 procedure TWebSocketProcess.SetLastPingTicks;
-var
-  tix: Int64;
 begin
   if fNoLastSocketTicks then
     raise EWebSockets.CreateUtf8('Unexpected %.LastPingDelay', [self]);
-  tix := GetTickCount64;
-  fLastSocketTicks := tix;
+  fLastSocketTicks := GetTickCount64;
   fInvalidPingSendCount := 0;
 end;
 

@@ -4041,5 +4041,8 @@ end;
 
 
 
+initialization
+  DefaultTAuthGroupClass := TAuthGroup;
+
 end.
 
