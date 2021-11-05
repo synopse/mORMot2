@@ -3558,19 +3558,19 @@ begin
      fShutdown then
     result := nil
   else
-    result := TSynBackgroundThreadMethod.Create(nil, FormatUtf8(Format, Args),
-      BeginCurrentThread, EndCurrentThread);
+    result := TSynBackgroundThreadMethod.Create(
+      nil, FormatUtf8(Format, Args), BeginCurrentThread, EndCurrentThread);
 end;
 
-function TRestRunThreads.NewParallelProcess(ThreadCount: integer; const Format: RawUtf8;
-  const Args: array of const): TSynParallelProcess;
+function TRestRunThreads.NewParallelProcess(ThreadCount: integer;
+  const Format: RawUtf8; const Args: array of const): TSynParallelProcess;
 begin
   if (self = nil) or
      fShutdown then
     result := nil
   else
-    result := TSynParallelProcess.Create(ThreadCount, FormatUtf8(Format, Args),
-      BeginCurrentThread, EndCurrentThread);
+    result := TSynParallelProcess.Create(
+      ThreadCount, FormatUtf8(Format, Args), BeginCurrentThread, EndCurrentThread);
 end;
 
 function TRestRunThreads.NewBackgroundThreadProcess(
@@ -3580,19 +3580,14 @@ function TRestRunThreads.NewBackgroundThreadProcess(
 var
   name: RawUtf8;
 begin
+  FormatUtf8(Format, Args, name);
   if (self = nil) or
      fShutdown then
-  begin
-    result := nil;
-    exit;
-  end;
-  FormatUtf8(Format, Args, name);
-  if self = nil then
-    result := TSynBackgroundThreadProcess.Create(name, aOnProcess, aOnProcessMS,
-      nil, nil, aStats)
+    result := TSynBackgroundThreadProcess.Create(
+      name, aOnProcess, aOnProcessMS, nil, nil, aStats)
   else
-    result := TSynBackgroundThreadProcess.Create(name, aOnProcess, aOnProcessMS,
-      BeginCurrentThread, EndCurrentThread, aStats);
+    result := TSynBackgroundThreadProcess.Create(
+      name, aOnProcess, aOnProcessMS, BeginCurrentThread, EndCurrentThread, aStats);
 end;
 
 function TRestRunThreads.TimerEnable(
@@ -3689,7 +3684,8 @@ end;
 
 function TRestRunThreads.MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
   aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
-var factory: TInterfaceFactory;
+var
+  factory: TInterfaceFactory;
 begin
   if (self = nil) or
      fShutdown then
