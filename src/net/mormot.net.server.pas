@@ -1138,8 +1138,8 @@ type
     // - for aPingTimeout explanation see PingTimeout property documentation
     constructor Create(CreateSuspended: boolean; aSocketThreadsCount: integer = 1;
       aPingTimeout: integer = 0; const QueueName: SynUnicode = '';
-      const aOnWSThreadStart: TOnNotifyThread=nil;
-      const aOnWSThreadTerminate: TOnNotifyThread=nil); reintroduce;
+      const aOnWSThreadStart: TOnNotifyThread = nil;
+      const aOnWSThreadTerminate: TOnNotifyThread = nil); reintroduce;
     /// create a WebSockets processing clone from the main thread
     // - do not use directly - is called during thread pool creation
     constructor CreateClone(From: THttpApiServer); override;

@@ -1264,6 +1264,19 @@ type
     // - returns true if the item was successfully copied into Dest
     // - use Pop() if you also want to remove the item
     function Peek(var Dest): boolean;
+    /// get and remove the first element stored in the dynamic array
+    // - Add + PopHead/PeekHead will implement a FIFO (First-In-First-Out) stack
+    // - removing from head will move all items so TSynQueue is faster
+    // - warning: Dest must be of the same exact type than the dynamic array
+    // - returns true if the item was successfully copied and removed
+    // - use PeekHead() if you don't want to remove the item
+    function PopHead(var Dest): boolean;
+    /// get the first element stored in the dynamic array
+    // - Add + PopHead/PeekHead will implement a FIFO (First-In-First-Out) stack
+    // - warning: Dest must be of the same exact type than the dynamic array
+    // - returns true if the item was successfully copied and removed
+    // - use PopHead() if you also want to remove the item
+    function PeekHead(var Dest): boolean;
     /// delete the whole dynamic array content
     // - this method will recognize T*ObjArray types and free all instances
     procedure Clear;
@@ -6440,6 +6453,23 @@ begin
   begin
     ItemMoveTo(index, @Dest);
     SetCount(index);
+  end;
+end;
+
+function TDynArray.PeekHead(var Dest): boolean;
+begin
+  result := GetCount <> 0;
+  if result then
+    ItemCopy(fValue^, @Dest);
+end;
+
+function TDynArray.PopHead(var Dest): boolean;
+begin
+  result := GetCount <> 0;
+  if result then
+  begin
+    ItemMoveTo(0, @Dest);
+    Delete(0);
   end;
 end;
 

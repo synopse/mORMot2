@@ -1699,7 +1699,7 @@ function ObjArrayNotNilCount(const aObjArray): integer;
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - do nothing if the index is out of range in the dynamic array
 procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
-  aContinueOnException: boolean=false; aCount: PInteger=nil); overload;
+  aContinueOnException: boolean = false; aCount: PInteger = nil); overload;
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()

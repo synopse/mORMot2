@@ -1683,7 +1683,8 @@ var
   fake: TInterfacedObjectFakeServer;
 begin
   if (self = nil) or
-     (fFakeCallbacks = nil) then
+     (fFakeCallbacks = nil) or
+     (fFakeCallbacks.Count = 0) then
     exit;
   connectionID := 0;
   callbackID := 0;

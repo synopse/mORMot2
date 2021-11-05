@@ -124,7 +124,7 @@ type
     // - is always called by Destroy destructor
     // - could be also called e.g. from an UI OnClose event to avoid any lock
     // - this method is thread-safe, but will lock the instance only if needed
-    procedure WaitPopFinalize(aTimeoutMS: integer=100);
+    procedure WaitPopFinalize(aTimeoutMS: integer = 100);
     /// delete all items currently stored in this queue, and void its capacity
     // - this method is thread-safe, since it will lock the instance
     procedure Clear;
