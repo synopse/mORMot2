@@ -364,6 +364,236 @@ begin
 end;
 
 
+{ ******************** Mac and IP Addresses Support }
+
+{$ifndef OSANDROID}
+  // on POSIX, use getifaddrs/freeifaddrs from libc
+  {$define USE_IFADDRS}
+{$endif OSANDROID}
+
+{$ifdef OSANDROIDARM64}
+  {$define USE_IFADDRS}
+  // Android BIONIC seems to implement it since Android N (API level 24)
+  // https://android.googlesource.com/platform/bionic/+/master/docs/status.md
+{$endif OSANDROID}
+
+{$ifdef USE_IFADDRS}
+
+type
+  pifaddrs = ^ifaddrs;
+  ifaddrs = record
+    ifa_next: pifaddrs;
+    ifa_name: PAnsiChar;
+    ifa_flags: cardinal;
+    ifa_addr: Psockaddr;
+    ifa_netmask: Psockaddr;
+    ifa_dstaddr: Psockaddr;
+    ifa_data: Pointer;
+  end;
+
+  {$ifdef OSBSDDARWIN} // from bsd/net/if_dl.h
+  psockaddr_dl = ^sockaddr_dl;
+  sockaddr_dl = record
+    sdl_len: byte;	 // Total length of sockaddr
+    sdl_family: byte;	 // AF_LINK
+    sdl_index: word;	 // if != 0, system given index for interface
+    sdl_type: byte;	 // interface type
+    sdl_nlen: byte;	 // interface name length, no trailing 0 reqd.
+    sdl_alen: byte;	 // link level address length
+    sdl_slen: byte;	 // link layer selector length
+    sdl_data: array[byte] of byte; // interface name + link level address
+  end;
+  {$else}
+  psockaddr_ll = ^sockaddr_ll;
+  sockaddr_ll = record
+    sll_family: word;
+    sll_protocol: word;
+    sll_ifindex: integer;
+    sll_hatype: word;
+    sll_pkttype: byte;
+    sll_halen: byte;
+    sll_addr: array[byte] of byte;
+  end;
+  {$endif OSBSDDARWIN}
+
+const
+  IFF_UP = $1;
+  IFF_LOOPBACK = $8;
+
+function getifaddrs(var ifap: pifaddrs): Integer; cdecl;
+  external clib name 'getifaddrs';
+procedure freeifaddrs(ifap: pifaddrs); cdecl;
+  external clib name 'freeifaddrs';
+
+function GetIPAddresses(Kind: TIPAddress): TRawUtf8DynArray;
+var
+  list, info: pifaddrs;
+  n: PtrInt;
+  s: RawUtf8;
+  ss: shortstring;
+begin
+  result := nil;
+  n := 0;
+  if getifaddrs(list) = NO_ERROR then
+  try
+    info := list;
+    repeat
+      if (info^.ifa_addr <> nil) and
+         (info^.ifa_flags and IFF_LOOPBACK = 0) and
+         (info^.ifa_flags and IFF_UP <> 0) then
+      begin
+        s := '';
+        case info^.ifa_addr^.sa_family of
+          AF_INET:
+            if kind <> tiaIPv6 then
+              with info^.ifa_addr^ do
+                if (integer(sin_addr) <> $0100007f) and
+                   (integer(sin_addr) <> 0) then
+                  case Kind of
+                    tiaIpv4,
+                    tiaAny:
+                      IP4Text(@sin_addr,s);
+                    tiaIPv4Public:
+                      if IsPublicIP(integer(sin_addr)) then
+                        IP4Text(@sin_addr, s);
+                    tiaIPv4Private:
+                      if not IsPublicIP(integer(sin_addr)) then
+                        IP4Text(@sin_addr,s);
+                  end;
+          AF_INET6:
+            if kind in [tiaAny, tiaIPv6] then
+            begin
+              IP6Short(info^.ifa_addr, ss, false);
+              if Pos('%', ss) = 0 then
+                FastSetString(s, @ss[1], ord(ss[0]));
+            end;
+        end;
+        if s <> '' then
+        begin
+          if n = length(result) then
+            SetLength(result, NextGrow(n));
+          result[n] := s;
+          inc(n);
+        end;
+      end;
+      info := info^.ifa_next;
+    until info = nil;
+  finally
+    freeifaddrs(list);
+  end;
+  if n <> length(result) then
+    SetLength(result, n);
+end;
+
+function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
+var
+  list, info: pifaddrs;
+  i, n: PtrInt;
+  mac: RawUtf8;
+begin
+  result := nil;
+  if getifaddrs(list) = NO_ERROR then
+  try
+    n := 0;
+    info := list;
+    repeat
+      if (info^.ifa_addr <> nil) and
+         (info^.ifa_flags and IFF_LOOPBACK = 0) and
+         (UpAndDown or
+          (info^.ifa_flags and IFF_UP <> 0)) and
+      // see https://stackoverflow.com/a/51218583/458259
+      {$ifdef OSBSDDARWIN}
+         (info^.ifa_addr^.sa_family = AF_LINK) then
+      begin
+        mac := '';
+        with psockaddr_dl(info^.ifa_addr)^ do
+          if sdl_alen = 6 then
+            // #define LLADDR(s) ((caddr_t)((s)->sdl_data + (s)->sdl_nlen))
+            mac := MacToText(@sdl_data[sdl_nlen]);
+        if mac <> '' then
+      {$else}
+         (info^.ifa_addr^.sa_family = AF_PACKET) then
+      begin
+        mac := MacToText(@psockaddr_ll(info^.ifa_addr)^.sll_addr);
+      {$endif OSBSDDARWIN}
+        for i := 0 to n - 1 do
+          if result[i].Address = mac then
+          begin
+            mac := ''; // may appear several times
+            break;
+          end;
+        if mac <> '' then
+        begin
+          SetLength(result, n + 1);
+          result[n].Name := info^.ifa_name;
+          result[n].Address := mac;
+          inc(n);
+        end;
+      end;
+      info := info^.ifa_next;
+    until info = nil;
+  finally
+    freeifaddrs(list);
+  end;
+end;
+
+{$else}
+
+function GetIPAddresses(Kind: TIPAddress): TRawUtf8DynArray;
+begin
+  result := nil;
+end;
+
+{$ifdef OSLINUX}
+
+function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
+var
+  n: integer;
+  SR: TSearchRec;
+  fn: TFileName;
+  f: RawUtf8;
+begin
+  result := nil;
+  if FindFirst('/sys/class/net/*', faDirectory, SR) = 0 then
+  begin
+    n := 0;
+    repeat
+      if (SR.Name <> 'lo') and
+         SearchRecValidFolder(SR) then
+      begin
+        fn := '/sys/class/net/' + SR.Name;
+        f := StringFromFile(fn + '/flags', {nosize=}true);
+        if (length(f) > 2) and // e.g. '0x40' or '0x1043'
+           (PosixParseHex32(pointer(f)) and (IFF_UP or IFF_LOOPBACK) = IFF_UP) then
+        begin
+          f := TrimU(StringFromFile(fn + '/address', {nosize=}true));
+          if f <> '' then
+          begin
+            SetLength(result, n + 1);
+            result[n].Name := SR.Name;
+            result[n].Address := f;
+            inc(n);
+          end;
+        end;
+      end;
+    until FindNext(SR) <> 0;
+    FindClose(SR);
+  end;
+end;
+
+{$else}
+
+function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
+begin
+  // on Android, /sys/class/net is not readable from the standard user
+  result := nil;
+end;
+
+{$endif OSLINUX}
+
+{$endif USE_IFADDRS}
+
+
 { ******************** Efficient Multiple Sockets Polling }
 
 {$ifdef USEPOLL}

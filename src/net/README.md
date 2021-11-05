@@ -14,8 +14,10 @@ All `mormot.net.*.pas` units define client/server communication as used by our f
 
 Cross-Platform Raw Sockets API Definition
 - Socket Process High-Level Encapsulation
+- MAC and IP Addresses Support
 - TLS / HTTPS Encryption Abstract Layer
 - Efficient Multiple Sockets Polling
+- `TUri` parsing/generating URL wrapper
 - `TCrtSocket` Buffered Socket Read/Write Class
 
 The Low-Level Sockets API is encapsultated into a single set of functions, and wrapped around a `TNetSocket` abstract helper, and never made public.

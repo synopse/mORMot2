@@ -8,6 +8,7 @@ unit mormot.net.sock;
 
    Cross-Platform Raw Sockets API Definition
    - Socket Process High-Level Encapsulation
+   - MAC and IP Addresses Support
    - TLS / HTTPS Encryption Abstract Layer
    - Efficient Multiple Sockets Polling
    - TUri parsing/generating URL wrapper
@@ -256,6 +257,66 @@ var
 // - e.g. ToText(nrNotFound)='NotFound'
 function ToText(res: TNetResult): PShortString; overload;
 
+
+{ ******************** Mac and IP Addresses Support }
+
+type
+  TIPAddress = (
+    tiaAny,
+    tiaIPv4,
+    tiaIPv4Public,
+    tiaIPv4Private,
+    tiaIPv6);
+
+/// detect IANA private IPv4 address space from its 32-bit raw value
+function IsPublicIP(ip4: cardinal): boolean;
+
+/// convert an IPv4 raw value into a shortstring text
+procedure IP4Short(ip4addr: PByteArray; var s: shortstring);
+
+/// convert an IPv4 raw value into a RawUtf8 text
+procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
+
+/// convert an IPv6 full address into a shortstring text
+procedure IP6Short(psockaddr: pointer; var s: shortstring; withport: boolean);
+
+/// convert a MAC address value into a RawUtf8 text
+function MacToText(mac: PByteArray): RawUtf8;
+
+/// enumerate all IP addresses of the current computer
+// - may be used to enumerate all adapters
+function GetIPAddresses(Kind: TIPAddress = tiaIPv4): TRawUtf8DynArray;
+
+/// returns all IP addresses of the current computer as a single CSV text
+// - may be used to enumerate all adapters
+function GetIPAddressesText(const Sep: RawUtf8 = ' ';
+  Kind: TIPAddress = tiaIPv4): RawUtf8;
+
+
+type
+  /// interface name/address pairs as returned by GetMacAddresses
+  TMacAddress = record
+    /// contains e.g. 'eth0' on Linux
+    Name: RawUtf8;
+    /// contains e.g. '12:50:b6:1e:c6:aa' from /sys/class/net/eth0/adddress
+    Address: RawUtf8;
+  end;
+  TMacAddressDynArray = array of TMacAddress;
+
+/// enumerate all Mac addresses of the current computer
+function GetMacAddresses(UpAndDown: boolean = false): TMacAddressDynArray;
+
+/// enumerate all Mac addresses of the current computer as 'name1=addr1 name2=addr2'
+function GetMacAddressesText(WithoutName: boolean = true;
+  UpAndDown: boolean = false): RawUtf8;
+
+
+{$ifdef OSWINDOWS}
+/// remotly get the MAC address of a computer, from its IP Address
+// - only works under Win2K and later, which features a ARP protocol client
+// - return the MAC address as a 12 hexa chars ('0050C204C80A' e.g.)
+function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
+{$endif OSWINDOWS}
 
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
@@ -1097,37 +1158,6 @@ begin
     result := NetLastError;
 end;
 
-procedure IP4Short(ip4addr: PByteArray; var s: shortstring);
-begin
-  str(ip4addr[0], s);
-  inc(s[0]);
-  s[ord(s[0])] := '.';
-  AppendShortInteger(ip4addr[1], s);
-  inc(s[0]);
-  s[ord(s[0])] := '.';
-  AppendShortInteger(ip4addr[2], s);
-  inc(s[0]);
-  s[ord(s[0])] := '.';
-  AppendShortInteger(ip4addr[3], s);
-end;
-
-procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
-var
-  s: shortstring;
-begin
-  if PCardinal(ip4addr)^ = 0 then
-    // '0.0.0.0' bound to any host -> ''
-    result := ''
-  else if PCardinal(ip4addr)^ = cLocalhost32 then
-    // '127.0.0.1' loopback -> no memory allocation
-    result := IP4local
-  else
-  begin
-    IP4Short(ip4addr, s);
-    FastSetString(result, @s[1], ord(s[0]));
-  end;
-end;
-
 function ToText(res: TNetResult): PShortString;
 begin
   result := @_NR[res]; // no mormot.core.rtti.pas need
@@ -1228,10 +1258,6 @@ begin
 end;
 
 procedure TNetAddr.IPShort(out result: shortstring; withport: boolean);
-var
-  host: array[0..NI_MAXHOST] of AnsiChar;
-  serv: array[0..NI_MAXSERV] of AnsiChar;
-  hostlen, servlen: integer;
 begin
   result[0] := #0;
   case PSockAddr(@Addr)^.sa_family of
@@ -1245,20 +1271,7 @@ begin
         end;
       end;
     AF_INET6:
-      begin
-        hostlen := NI_MAXHOST;
-        servlen := NI_MAXSERV;
-        if getnameinfo(@Addr, SizeOf(sockaddr_in6), host{%H-}, hostlen,
-             serv{%H-}, servlen, NI_NUMERICHOST + NI_NUMERICSERV) = NO_ERROR then
-        begin
-          SetString(result, PAnsiChar(@host), mormot.core.base.StrLen(@host));
-          if withport then
-          begin
-            AppendShortChar(':', result);
-            AppendShortBuffer(PAnsiChar(@serv), -1, result);
-          end;
-        end;
-      end;
+      IP6Short(@Addr, result, withport);
     {$ifdef OSPOSIX}
     AF_UNIX:
       SetString(result, PAnsiChar(@psockaddr_un(@Addr)^.sun_path),
@@ -1742,6 +1755,197 @@ end;
 function TNetSocketWrap.Socket: PtrInt;
 begin
   result := TSocket(@self);
+end;
+
+
+{ ******************** Mac and IP Addresses Support }
+
+function IsPublicIP(ip4: cardinal): boolean;
+begin
+  result := false;
+  case ToByte(ip4) of // ignore IANA private IP4 address spaces
+    10:
+      exit;
+    172:
+      if ((ip4 shr 8) and 255) in [16..31] then
+        exit;
+    192:
+      if (ip4 shr 8) and 255 = 168 then
+        exit;
+  end;
+  result := true;
+end;
+
+procedure IP4Short(ip4addr: PByteArray; var s: shortstring);
+begin
+  str(ip4addr[0], s);
+  AppendShortChar('.', s);
+  AppendShortInteger(ip4addr[1], s);
+  AppendShortChar('.', s);
+  AppendShortInteger(ip4addr[2], s);
+  AppendShortChar('.', s);
+  AppendShortInteger(ip4addr[3], s);
+end;
+
+procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
+var
+  s: shortstring;
+begin
+  if PCardinal(ip4addr)^ = 0 then
+    // '0.0.0.0' bound to any host -> ''
+    result := ''
+  else if PCardinal(ip4addr)^ = cLocalhost32 then
+    // '127.0.0.1' loopback -> no memory allocation
+    result := IP4local
+  else
+  begin
+    IP4Short(ip4addr, s);
+    FastSetString(result, @s[1], ord(s[0]));
+  end;
+end;
+
+procedure IP6Short(psockaddr: pointer; var s: shortstring; withport: boolean);
+var
+  host: array[0..NI_MAXHOST] of AnsiChar;
+  serv: array[0..NI_MAXSERV] of AnsiChar;
+  flags, hostlen, servlen: integer;
+begin
+  s[0] := #0;
+  hostlen := NI_MAXHOST;
+  servlen := NI_MAXSERV;
+  if withport then
+    flags := NI_NUMERICHOST + NI_NUMERICSERV
+  else
+    flags := NI_NUMERICHOST;
+  if getnameinfo(psockaddr, SizeOf(sockaddr_in6), host{%H-}, hostlen,
+       serv{%H-}, servlen, flags) = NO_ERROR then
+  begin
+    SetString(s, PAnsiChar(@host), mormot.core.base.StrLen(@host));
+    if withport then
+    begin
+      AppendShortChar(':', s);
+      AppendShortBuffer(PAnsiChar(@serv), -1, s);
+    end;
+  end;
+end;
+
+const
+  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
+
+function MacToText(mac: PByteArray): RawUtf8;
+var
+  P: PAnsiChar;
+  i: PtrInt;
+begin
+  SetLength(result, 17);
+  P := pointer(result);
+  i := 0;
+  repeat
+    P[0] := HexCharsLower[mac[i] shr 4];
+    P[1] := HexCharsLower[mac[i] and $F];
+    if i = 5 then
+      break;
+    P[2] := ':'; // as in Linux
+    inc(P, 3);
+    inc(i);
+  until false;
+end;
+
+var
+  // GetIPAddressesText(Sep=' ') cache - refreshed every 32 seconds
+  IPAddresses: array[TIPAddress] of record
+    Text: RawUtf8;
+    Tix: integer;
+  end;
+
+  // GetMacAddresses / GetMacAddressesText cache
+  MacAddresses: array[{UpAndDown=}boolean] of record
+    Searched: boolean; // searched once: no change during process lifetime
+    Addresses: TMacAddressDynArray;
+    Text: array[{WithoutName=}boolean] of RawUtf8;
+  end;
+
+function GetIPAddressesText(const Sep: RawUtf8; Kind: TIPAddress): RawUtf8;
+var
+  ip: TRawUtf8DynArray;
+  now: integer;
+  i: PtrInt;
+begin
+  result := '';
+  with IPAddresses[Kind] do
+  begin
+    if Sep = ' ' then
+    begin
+      now := GetTickCount64 shr 15; // refresh every 32768 ms
+      if now <> Tix then
+        Tix := now
+      else
+      begin
+        result := Text;
+        if result <> '' then
+          exit; // return the value from cache
+      end;
+    end;
+    // we need to ask the OS for the current IP addresses
+    ip := GetIPAddresses(Kind);
+    if ip = nil then
+      exit;
+    result := ip[0];
+    for i := 1 to high(ip) do
+      result := result + Sep + ip[i];
+    if Sep = ' ' then
+      Text := result;
+  end;
+end;
+
+function GetMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
+begin
+  with MacAddresses[UpAndDown] do
+  begin
+    if not Searched then
+    begin
+      mormot.core.os.GlobalLock;
+      try
+        if not Searched then
+        begin
+          Addresses := RetrieveMacAddresses(UpAndDown);
+          Searched := true;
+        end;
+      finally
+        mormot.core.os.GlobalUnLock;
+      end;
+    end;
+    result := Addresses;
+  end;
+end;
+
+function GetMacAddressesText(WithoutName, UpAndDown: boolean): RawUtf8;
+var
+  i: PtrInt;
+  addr: TMacAddressDynArray;
+  w, wo: RawUtf8;
+begin
+  with MacAddresses[UpAndDown] do
+  begin
+    result := Text[WithoutName];
+    if (result <> '') or
+       Searched then
+      exit;
+    addr := GetMacAddresses(UpAndDown);
+    if addr = nil then
+      exit;
+    for i := 0 to high(addr) do
+      with addr[i] do
+      begin
+        w := w + Name + '=' + Address + ' ';
+        wo := wo + Address + ' ';
+      end;
+    SetLength(w, length(w) - 1);
+    SetLength(wo, length(wo) - 1);
+    Text[false] := w;
+    Text[true] := wo;
+    result := Text[WithoutName];
+  end;
 end;
 
 
@@ -3518,6 +3722,7 @@ begin
   else
     result := fPeerAddr^.Port;
 end;
+
 
 function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;
   aTLSContext: PNetTlsContext; aTunnel: PUri): TCrtSocket;

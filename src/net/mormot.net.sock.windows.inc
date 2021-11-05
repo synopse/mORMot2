@@ -420,6 +420,8 @@ function sendto(s: TSocket; Buf: Pointer; len, flags: integer;
   external ws2 name 'sendto';
 function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer; stdcall;
   external ws2 name 'getpeername';
+function inet_addr(cp: PAnsiChar): cardinal; stdcall;
+  external ws2 name 'inet_addr';
 
 
 { ******** TNetSocket Cross-Platform Wrapper }
@@ -576,6 +578,200 @@ begin
      (wr.fd_array[0] = sock) then
     include(result, neWrite);
 end;
+
+
+{ ******************** IP Addresses Support }
+
+const
+  IPHLPAPI = 'iphlpapi.dll';
+
+type
+  PMIB_IPADDRTABLE = ^MIB_IPADDRTABLE;
+  MIB_IPADDRTABLE = record
+    dwNumEntries: DWORD;
+    ip: array[0..200] of record
+      dwAddr: DWORD;
+      dwIndex: DWORD;
+      dwMask: DWORD;
+      dwBCastAddr: DWORD;
+      dwReasmSize: DWORD;
+      unused1: Word;
+      wType: Word;
+    end;
+  end;
+
+function GetIpAddrTable(pIpAddrTable: PMIB_IPADDRTABLE;
+  var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall; external IPHLPAPI;
+
+
+function GetIPAddresses(Kind: TIPAddress): TRawUtf8DynArray;
+var
+  Table: MIB_IPADDRTABLE;
+  Size: DWORD;
+  i: PtrInt;
+  n: PtrUInt;
+begin
+  result := nil;
+  if Kind = tiaIPv6 then
+    exit; // GetIpAddrTable() is an IPv4 only API
+  Size := SizeOf(Table);
+  if GetIpAddrTable(@Table, Size, false) <> NO_ERROR then
+    exit;
+  SetLength(result, Table.dwNumEntries);
+  n := 0;
+  for i := 0 to Table.dwNumEntries-1 do
+    with Table.ip[i] do
+    if (dwAddr <> $0100007f) and
+       (dwAddr <> 0) then
+    begin
+      case Kind of
+        tiaIPv4Public:
+          if not IsPublicIP(dwAddr) then
+            continue;
+        tiaIPv4Private:
+          if IsPublicIP(dwAddr) then
+            continue;
+      end;
+      IP4Text(@dwAddr, result[n]);
+      inc(n);
+    end;
+  if n <> Table.dwNumEntries then
+    SetLength(result, n);
+end;
+
+
+
+{ ******************** Mac Addresses Support }
+
+const
+  MAX_ADAPTER_ADDRESS_LENGTH = 8;
+  GAA_FLAG_SKIP_UNICAST = $1;
+  GAA_FLAG_SKIP_ANYCAST = $2;
+  GAA_FLAG_SKIP_MULTICAST = $4;
+  GAA_FLAG_SKIP_DNS_SERVER = $8;
+  GAA_FLAG_SKIP_FRIENDLY_NAME = $20;
+  GAA_FLAG_INCLUDE_ALL_INTERFACES = $100; // Vista+
+  GAA_FLAGS = GAA_FLAG_SKIP_UNICAST or
+              GAA_FLAG_SKIP_ANYCAST or
+              GAA_FLAG_SKIP_MULTICAST or
+              GAA_FLAG_SKIP_DNS_SERVER or
+              GAA_FLAG_SKIP_FRIENDLY_NAME;
+              // or GAA_FLAG_INCLUDE_ALL_INTERFACES;
+  IfOperStatusUp = 1;
+
+type
+  SOCKET_ADDRESS = record
+    lpSockaddr: PSOCKADDR;
+    iSockaddrLength: Integer;
+  end;
+  PIP_ADAPTER_UNICAST_ADDRESS = pointer;
+  PIP_ADAPTER_ANYCAST_ADDRESS = pointer;
+  PIP_ADAPTER_DNS_SERVER_ADDRESS = pointer;
+  PIP_ADAPTER_MULTICAST_ADDRESS = pointer;
+  PIP_ADAPTER_ADDRESSES = ^_IP_ADAPTER_ADDRESSES;
+  _IP_ADAPTER_ADDRESSES = record
+    Union: record
+      case Integer of
+        0: (
+          Alignment: ULONGLONG);
+        1: (
+          Length: ULONG;
+          IfIndex: DWORD);
+    end;
+    Next: PIP_ADAPTER_ADDRESSES;
+    AdapterName: PAnsiChar;
+    FirstUnicastAddress: PIP_ADAPTER_UNICAST_ADDRESS;
+    FirstAnycastAddress: PIP_ADAPTER_ANYCAST_ADDRESS;
+    FirstMulticastAddress: PIP_ADAPTER_MULTICAST_ADDRESS;
+    FirstDnsServerAddress: PIP_ADAPTER_DNS_SERVER_ADDRESS;
+    DnsSuffix: PWCHAR;
+    Description: PWCHAR;
+    FriendlyName: PWCHAR;
+    PhysicalAddress: array [0..MAX_ADAPTER_ADDRESS_LENGTH - 1] of BYTE;
+    PhysicalAddressLength: DWORD;
+    Flags: DWORD;
+    Mtu: DWORD;
+    IfType: ULONG;
+    OperStatus: DWORD;
+    // below fields are only available on Windows XP with SP1 and later
+    Ipv6IfIndex: ULONG;
+    ZoneIndices: array [0..15] of DWORD;
+    FirstPrefix: pointer;
+    // below fields are only available on Windows Vista and later
+    TransmitLinkSpeed: Int64;
+    ReceiveLinkSpeed: Int64;
+    FirstWinsServerAddress: pointer;
+    FirstGatewayAddress: pointer;
+    Ipv4Metric: ULONG;
+    Ipv6Metric: ULONG;
+    Luid: Int64;
+    Dhcpv4Server: SOCKET_ADDRESS;
+    CompartmentId: DWORD;
+    NetworkGuid: TGUID;
+    ConnectionType: DWORD;
+    TunnelType: DWORD;
+    // DHCP v6 Info following (not used by our code)
+  end;
+
+function GetAdaptersAddresses(Family: ULONG; Flags: DWORD; Reserved: pointer;
+  pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWORD; stdcall;
+  external IPHLPAPI;
+
+function SendARP(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
+  PhyAddrLen: Pointer): DWORD; stdcall; external IPHLPAPI;
+
+
+function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
+var
+  n: PtrInt;
+  siz: ULONG;
+  p: PIP_ADAPTER_ADDRESSES;
+  tmp: RawByteString;
+begin
+  result := nil;
+  siz := 0;
+  if GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, nil, @siz) <> ERROR_BUFFER_OVERFLOW then
+    exit;
+  SetLength(tmp, siz); // around 600 bytes per interface
+  p := pointer(tmp);
+  if GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, p, @siz) = ERROR_SUCCESS then
+  begin
+    n := 0;
+    repeat
+      if (p^.Flags <> 0) and
+         (UpAndDown or
+          (p^.OperStatus = IfOperStatusUp)) and
+         (p^.PhysicalAddressLength = 6) then
+      begin
+        SetLength(result, n + 1);
+        Win32PWideCharToUtf8(
+          p^.Description, StrLenW(p^.Description), result[n].Name);
+        result[n].Address := MacToText(@p^.PhysicalAddress);
+        inc(n);
+      end;
+      p := p^.Next;
+    until p = nil;
+  end;
+end;
+
+function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
+// implements http://msdn.microsoft.com/en-us/library/aa366358
+var
+  dwRemoteIP: DWORD;
+  PhyAddrLen: Longword;
+  pMacAddr: array [0..7] of byte;
+begin
+  result := '';
+  dwremoteIP := inet_addr(pointer(IP));
+  if dwremoteIP <> 0 then
+  begin
+    PhyAddrLen := 8;
+    if SendARP(dwremoteIP, 0, @pMacAddr, @PhyAddrLen) = NO_ERROR then
+      if PhyAddrLen = 6 then
+        result := MacToText(@pMacAddr);
+  end;
+end;
+
 
 
 { ******************** Efficient Multiple Sockets Polling }
