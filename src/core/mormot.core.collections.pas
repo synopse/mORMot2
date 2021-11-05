@@ -786,6 +786,9 @@ end;
 
 function TSynListAbstract.DoPop(var dest; opt: TListPop): boolean;
 begin
+  if fHasher <> nil then
+    raise ESynList.CreateUtf8(
+      '%.Pop() is not compatible with loCreateUniqueIndex', [self]);
   if popFromHead in opt then
     if popPeek in opt then
       result := fDynArray.PeekHead(dest)
