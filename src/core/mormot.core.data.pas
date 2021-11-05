@@ -7973,7 +7973,8 @@ begin
   if dest^ <> nil then
     FastDynArrayClear(dest, fInfo.Cache.ItemInfo); // reset Dest variable slot
   n := GetCount;
-  if Offset < 0 then begin
+  if Offset < 0 then
+  begin
     // ! SliceAsDynArray(DA, -10);  // last Count-10..Count-1 items
     inc(Offset, n);
     if Offset < 0 then

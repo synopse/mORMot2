@@ -2271,6 +2271,54 @@ end;
 
 {$endif OSLINUX}
 
+function Hex2Dec(c: AnsiChar): integer; inline;
+begin
+  result := ord(c);
+  case c of
+    '0'..'9':
+      dec(result, ord('0'));
+    'A'..'Z':
+      dec(result, ord('A') - 10);
+    'a'..'z':
+      dec(result, ord('a') - 10);
+  else
+    result := -1;
+  end;
+end;
+
+function PosixParseHex32(p: PAnsiChar): integer;
+var
+  v0, v1: integer;
+begin
+  result := 0;
+  p := StrScan(p, 'x');
+  if p = nil then
+    exit;
+  repeat
+    inc(p); // points to trailing 'x' at start
+    v0 := Hex2Dec(p^);
+    if v0 < 0 then
+      break; // not in '0'..'9','a'..'f'
+    inc(p);
+    v1 := Hex2Dec(p^);
+    if v1 < 0 then
+    begin
+      result := (result shl 4) or v0; // only one char left
+      break;
+    end;
+    result := (result shl 8) or (v0 shl 4) or v1;
+  until false;
+end;
+
+procedure ParseHex32Add(p: PAnsiChar; var result: TIntegerDynArray);
+var
+  v: integer;
+begin
+  v := PosixParseHex32(p);
+  if v <> 0 then
+    AddInteger(result, v, {nodup=}true);
+end;
+
 {$ifdef CPUARM3264} // POSIX libc is faster than the RTL or our pascal code
 
 function libc_strlen(s: PAnsiChar): SizeInt;
@@ -2302,46 +2350,6 @@ begin
   if (@dest <> nil) and
      (count > 0) then
     libc_memset(@dest, value, count);
-end;
-
-function Hex2Dec(c: AnsiChar): integer; inline;
-begin
-  result := ord(c);
-  case c of
-    '0'..'9':
-      dec(result, ord('0'));
-    'A'..'Z':
-      dec(result, ord('A') - 10);
-    'a'..'z':
-      dec(result, ord('a') - 10);
-  else
-    result := -1;
-  end;
-end;
-
-procedure ParseHex32(p: PAnsiChar; var result: TIntegerDynArray);
-var
-  v, v0, v1: integer;
-begin
-  p := StrScan(p, 'x');
-  if p = nil then
-    exit;
-  v := 0;
-  repeat
-    inc(p); // points to trailing 'x' at start
-    v0 := Hex2Dec(p^);
-    if v0 < 0 then
-      break; // not in '0'..'9','a'..'f'
-    inc(p);
-    v1 := Hex2Dec(p^);
-    if v1 < 0 then
-    begin
-      v := (v shl 4) or v0; // only one char left
-      break;
-    end;
-    v := (v shl 8) or (v0 shl 4) or v1;
-  until false;
-  AddInteger(result, v, {nodup=}true);
 end;
 
 {$ifdef OSLINUXANDROID}
@@ -2530,9 +2538,9 @@ begin
       hw := ParseLine(beg)
     {$ifdef CPUARM3264}
     else if IdemPChar(beg, 'CPU IMPLEMENTER') then
-      ParseHex32(beg, aci)
+      ParseHex32Add(beg, aci)
     else if IdemPChar(beg, 'CPU PART') then
-      ParseHex32(beg, act);
+      ParseHex32Add(beg, act);
     {$endif CPUARM3264}
   end;
   {$ifdef CPUARM3264}

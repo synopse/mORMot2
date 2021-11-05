@@ -996,7 +996,7 @@ begin
 end;
 
 // local RTL wrapper function to avoid linking mormot.core.unicode.pas
-procedure RawUnicodeToUtf8(P: PWideChar; Len: integer; out res: RawUtf8);
+procedure Win32PWideCharToUtf8(P: PWideChar; Len: integer; out res: RawUtf8);
 var
   tmp: TSynTempBuffer;
 begin
@@ -1021,7 +1021,7 @@ begin
   while (Len > 0) and
         (ord(Buffer[Len - 1]) in [0..32, ord('.')]) do
     dec(Len);
-  RawUnicodeToUtf8(Buffer, Len, result);
+  Win32PWideCharToUtf8(Buffer, Len, result);
 end;
 
 function EnumProcessName(PID: cardinal): RawUtf8;
@@ -1040,11 +1040,11 @@ begin
       begin
         len := high(name);
         if QueryFullProcessImageNameW(h, 0, name, @len) then
-          RawUnicodeToUtf8(name, len, result);
+          Win32PWideCharToUtf8(name, len, result);
       end
       else
         if GetModuleFileNameExW(h, 0, name, high(name)) <> 0 then
-          RawUnicodeToUtf8(name, StrLenW(name), result);
+          Win32PWideCharToUtf8(name, StrLenW(name), result);
     finally
       CloseHandle(h);
     end;
@@ -1379,7 +1379,7 @@ begin
       if GetDiskInfo(fn, av, fr, tot, @volume) then
       begin
         SetLength(result, n + 1);
-        RawUnicodeToUtf8(pointer(volume), length(volume), result[n].name);
+        Win32PWideCharToUtf8(pointer(volume), length(volume), result[n].name);
         volume := '';
         result[n].mounted := fn;
         result[n].size := tot;
@@ -1537,7 +1537,7 @@ var
     u := Utf8Decode('\StringFileInfo\' + LanguageInfo + '\' + From);
     VerQueryValueW(Pt, pointer(u), StrValPt, sz);
     if sz > 0 then
-      RawUnicodeToUtf8(StrValPt, StrLenW(StrValPt), result)
+      Win32PWideCharToUtf8(StrValPt, StrLenW(StrValPt), result)
     else
       result := '';
   end;
@@ -1608,10 +1608,10 @@ var
 begin
   tmpsize := SizeOf(tmp);
   GetComputerNameW(tmp{%H-}, tmpsize);
-  RawUnicodeToUtf8(@tmp, StrLenW(tmp), Host);
+  Win32PWideCharToUtf8(@tmp, StrLenW(tmp), Host);
   tmpsize := SizeOf(tmp);
   GetUserNameW(tmp, tmpsize);
-  RawUnicodeToUtf8(@tmp, StrLenW(tmp), User);
+  Win32PWideCharToUtf8(@tmp, StrLenW(tmp), User);
 end;
 
 // avoid unneeded reference to ShlObj.pas
@@ -1725,7 +1725,7 @@ begin
   begin
     case rtype of
       REG_SZ, REG_EXPAND_SZ, REG_MULTI_SZ:
-        RawUnicodeToUtf8(tmp.buf, StrLenW(tmp.buf), result);
+        Win32PWideCharToUtf8(tmp.buf, StrLenW(tmp.buf), result);
     end;
     if andtrim then
       result := TrimU(result);
@@ -1780,7 +1780,7 @@ begin
   begin
     len := maxlen;
     if RegEnumKeyExW(key, i, tmp.buf, len, nil, nil, nil, nil) = 0 then
-      RawUnicodeToUtf8(tmp.buf, len, result[i]);
+      Win32PWideCharToUtf8(tmp.buf, len, result[i]);
   end;
   tmp.Done;
 end;
