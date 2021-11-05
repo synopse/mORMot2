@@ -299,6 +299,13 @@ type
     function TableMaxID(Table: TOrmClass): TID; virtual;
     // try from cache, then from DB
     function MemberExists(Table: TOrmClass; ID: TID): boolean; virtual;
+    {$ifdef ORMGENERICS}
+    function RetrieveIList(T: TOrmClass; var IList;
+      const CustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+    function RetrieveIList(T: TOrmClass; var IList;
+      const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+      const CustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+    {$endif ORMGENERICS}
     function OneFieldValue(Table: TOrmClass;
       const FieldName, WhereClause: RawUtf8): RawUtf8; overload;
     function OneFieldValueInt64(Table: TOrmClass;
@@ -332,7 +339,6 @@ type
     function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
       const WhereClauseFormat: RawUtf8;
       const BoundsSqlWhere: array of const): TOrmTable; overload;
-        {$ifdef HASGENERICS} override; {$endif}
     function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
       const WhereClauseFormat: RawUtf8;
       const Args, Bounds: array of const): TOrmTable; overload;
@@ -347,10 +353,10 @@ type
     function MainFieldIDs(Table: TOrmClass; const Values: array of RawUtf8;
       out IDs: TIDDynArray): boolean;
     function Retrieve(const SqlWhere: RawUtf8; Value: TOrm;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload; virtual;
+      const CustomFieldsCsv: RawUtf8 = ''): boolean; overload; virtual;
     function Retrieve(const WhereClauseFmt: RawUtf8;
       const Args, Bounds: array of const; Value: TOrm;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+      const CustomFieldsCsv: RawUtf8 = ''): boolean; overload;
     function Retrieve(aID: TID; Value: TOrm;
       ForUpdate: boolean = false): boolean; overload; virtual;
     function Retrieve(Reference: TRecordReference;
@@ -358,12 +364,12 @@ type
     function Retrieve(aPublishedRecord, aValue: TOrm): boolean; overload;
     function RetrieveList(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): TObjectList; overload;
+      const CustomFieldsCsv: RawUtf8 = ''): TObjectList; overload;
     function RetrieveListJson(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false): RawJson; overload;
+      const CustomFieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false): RawJson; overload;
     function RetrieveListJson(Table: TOrmClass;
-      const SqlWhere: RawUtf8; const aCustomFieldsCsv: RawUtf8 = '';
+      const SqlWhere: RawUtf8; const CustomFieldsCsv: RawUtf8 = '';
       aForceAjax: boolean = false): RawJson; overload;
     function RetrieveDocVariantArray(Table: TOrmClass;
       const ObjectName, CustomFieldsCsv: RawUtf8;
@@ -380,7 +386,7 @@ type
       const CustomFieldsCsv: RawUtf8): variant;
     function RetrieveListObjArray(var ObjArray; Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean;
+      const CustomFieldsCsv: RawUtf8 = ''): boolean;
     procedure AppendListAsJsonArray(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const OutputFieldName: RawUtf8; W: TOrmWriter;
@@ -802,6 +808,37 @@ procedure TRestOrm.WriteUnLock;
 begin
   fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
 end;
+
+{$ifdef ORMGENERICS}
+
+function TRestOrm.RetrieveIList(T: TOrmClass; var IList;
+  const CustomFieldsCsv: RawUtf8): boolean;
+begin
+  result := RetrieveIList(T, IList, '', [], CustomFieldsCsv);
+end;
+
+function TRestOrm.RetrieveIList(T: TOrmClass; var IList;
+  const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+  const CustomFieldsCsv: RawUtf8): boolean;
+var
+  table: TOrmTable;
+begin
+  result := false;
+  IInterface(IList) := nil;
+  if self = nil then
+    exit;
+  table := MultiFieldValues(T, CustomFieldsCsv,
+    FormatSqlWhere, BoundsSqlWhere);
+  if table <> nil then
+    try
+      table.ToNewIList(T, IList);
+      result := true;
+    finally
+      table.Free;
+    end;
+end;
+
+{$endif ORMGENERICS}
 
 function TRestOrm.TableRowCount(Table: TOrmClass): Int64;
 var
@@ -1300,7 +1337,7 @@ begin
 end;
 
 function TRestOrm.Retrieve(const SqlWhere: RawUtf8; Value: TOrm;
-  const aCustomFieldsCsv: RawUtf8): boolean;
+  const CustomFieldsCsv: RawUtf8): boolean;
 var
   T: TOrmTable;
   sql: RawUtf8;
@@ -1312,7 +1349,7 @@ begin
   sql := TrimU(SqlWhere);
   if not EndWith(sql, ' LIMIT 1') then
     sql := sql + ' LIMIT 1'; // we keep a single record below
-  T := MultiFieldValues(POrmClass(Value)^, aCustomFieldsCsv, sql);
+  T := MultiFieldValues(POrmClass(Value)^, CustomFieldsCsv, sql);
   if T <> nil then
   try
     if T.RowCount >= 1 then
@@ -1329,12 +1366,12 @@ end;
 
 function TRestOrm.Retrieve(const WhereClauseFmt: RawUtf8;
   const Args, Bounds: array of const; Value: TOrm;
-  const aCustomFieldsCsv: RawUtf8): boolean;
+  const CustomFieldsCsv: RawUtf8): boolean;
 var
   where: RawUtf8;
 begin
   where := FormatUtf8(WhereClauseFmt, Args, Bounds);
-  result := Retrieve(where, Value, aCustomFieldsCsv);
+  result := Retrieve(where, Value, CustomFieldsCsv);
 end;
 
 function TRestOrm.Retrieve(aID: TID; Value: TOrm; ForUpdate: boolean): boolean;
@@ -1397,7 +1434,7 @@ end;
 
 function TRestOrm.RetrieveList(Table: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8): TObjectList;
+  const CustomFieldsCsv: RawUtf8): TObjectList;
 var
   T: TOrmTable;
 begin
@@ -1405,7 +1442,7 @@ begin
   if (self = nil) or
      (Table = nil) then
     exit;
-  T := MultiFieldValues(Table, aCustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
+  T := MultiFieldValues(Table, CustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
   if T <> nil then
   try
     result := TObjectList.Create;
@@ -1417,21 +1454,21 @@ end;
 
 function TRestOrm.RetrieveListJson(Table: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8; aForceAjax: boolean): RawJson;
+  const CustomFieldsCsv: RawUtf8; aForceAjax: boolean): RawJson;
 var
   where: RawUtf8;
 begin
   where := FormatUtf8(FormatSqlWhere, [], BoundsSqlWhere);
-  result := RetrieveListJson(Table, where, aCustomFieldsCsv, aForceAjax)
+  result := RetrieveListJson(Table, where, CustomFieldsCsv, aForceAjax)
 end;
 
 function TRestOrm.RetrieveListJson(Table: TOrmClass;
-  const SqlWhere: RawUtf8; const aCustomFieldsCsv: RawUtf8;
+  const SqlWhere: RawUtf8; const CustomFieldsCsv: RawUtf8;
   aForceAjax: boolean): RawJson;
 var
   sql: RawUtf8;
 begin
-  sql := SQLComputeForSelect(Table, aCustomFieldsCsv, SqlWhere);
+  sql := SQLComputeForSelect(Table, CustomFieldsCsv, SqlWhere);
   if sql = '' then
     result := ''
   else
@@ -1550,7 +1587,7 @@ end;
 
 function TRestOrm.RetrieveListObjArray(var ObjArray; Table: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8): boolean;
+  const CustomFieldsCsv: RawUtf8): boolean;
 var
   T: TOrmTable;
 begin
@@ -1558,7 +1595,7 @@ begin
   if (self = nil) or
      (Table = nil) then
     exit;
-  T := MultiFieldValues(Table, aCustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
+  T := MultiFieldValues(Table, CustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
   if T <> nil then
   try
     result := T.ToObjArray(ObjArray, Table);

@@ -275,11 +275,11 @@ begin
   TestOne<Double>();
   TestOne<TDateTime>();
   TestOne<RawUtf8>();
-  {$ifdef MSWINDOWS} // OleString on Windows only -> = UnicodeString on POSIX
+  {$ifdef OSWINDOWS} // OleString on Windows only -> = UnicodeString on POSIX
   // disabled since SPECIALIZE_WSTRING is not set
   //TestOne<WideString>();
   // note: WideString (BSTR API) is way slower than UnicodeString or RawUtf8
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   {$ifdef HASVARUSTRING}
   TestOne<UnicodeString>();
   {$endif HASVARUSTRING}

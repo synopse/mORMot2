@@ -253,6 +253,9 @@
           {$ifdef CPUX86}
             {$define FPC_PIC}
           {$endif CPUX86}
+          {$ifdef CPUAARCH64}
+            {$define OSANDROIDARM64}
+          {$endif CPUAARCH64}
         {$else}
         'Unsupported Operating System - yet'
         {$endif ANDROID}
@@ -312,8 +315,9 @@
     {$define FPC_NEWRTTI}
     // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
     {$define HASINTERFACERTTI}
-    // generics support seems excellent in FPC 3.2+
+    // generics support seems good in FPC 3.2+ but triggers linking issues
     {$define HASGENERICS}
+    {$define ORMGENERICS}
     {$define FPCGENERICS}
   {$endif}
 
@@ -456,6 +460,7 @@
       {$define FPC_OR_DELPHIXE} // Delphi 2007/2009/2010 inlining bugs
       {$define ISDELPHIXE}
       {$define HASGENERICS}     // somewhat unusable generics (?)
+      {$define ORMGENERICS}
     {$ifend}
     {$if CompilerVersion >= 23.0} // = Delphi XE2
       // Delphi XE2 has some cross-platform features
@@ -485,6 +490,7 @@
          (CompilerVersion = 28.0)}  // = Delphi XE6 or XE7
       // avoid internal error G2515 or F2084 AV0044FF4E-R00000008-0
       {$undef HASGENERICS}
+      {$undef ORMGENERICS}
     {$ifend}
     {$if CompilerVersion >= 28.0}
       {$define ISDELPHIXE7}

@@ -729,7 +729,7 @@ end;
 procedure TRestHttpClientSocket.InternalClose;
 begin
   if fSocket <> nil then
-  InternalLog('InternalClose: fSocket.Free', sllTrace);
+    InternalLog('InternalClose: fSocket.Free', sllTrace);
   FreeAndNilSafe(fSocket);
 end;
 

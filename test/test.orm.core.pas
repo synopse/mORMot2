@@ -26,9 +26,9 @@ uses
   mormot.core.log,
   mormot.core.mustache,
   mormot.core.test,
-  {$ifdef HASGENERICS} // not supported on oldest compilers (e.g. < Delphi XE8)
+  {$ifdef ORMGENERICS} // not supported on oldest compilers (e.g. < Delphi XE8)
   mormot.core.collections,
-  {$endif HASGENERICS}
+  {$endif ORMGENERICS}
   mormot.db.core,
   mormot.db.nosql.bson,
   mormot.orm.base,
@@ -202,9 +202,9 @@ var
   readonly: boolean;
   docs: variant;
   T: TOrmTable;
-  {$ifdef HASGENERICS}
+  {$ifdef ORMGENERICS}
   List: IList<TOrmTest>;
-  {$endif HASGENERICS}
+  {$endif ORMGENERICS}
 begin
   Model := TOrmModel.Create([TOrmTest]);
   try
@@ -293,8 +293,8 @@ begin
         finally
           R.Free;
         end;
-        {$ifdef HASGENERICS}
-        List := Client.Orm.Generics.RetrieveIList<TOrmTest>('*');
+        {$ifdef ORMGENERICS}
+        Check(Client.Orm.RetrieveIList(TOrmTest, List, '*'));
         if not CheckFailed(List <> nil) then
         begin
           Check(List.Count = 9999);
@@ -307,7 +307,7 @@ begin
           end;
           // List := nil; // not mandatory
         end;
-        {$endif HASGENERICS}
+        {$endif ORMGENERICS}
         for readonly := false to true do
         begin
           T := Client.Orm.MultiFieldValues(TOrmTest, '*');

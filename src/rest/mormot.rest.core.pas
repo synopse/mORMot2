@@ -28,9 +28,6 @@ uses
   classes,
   variants,
   contnrs,
-  {$ifdef HASGENERICS} // not supported on oldest compilers (e.g. < Delphi XE8)
-  mormot.core.collections,
-  {$endif HASGENERICS}
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -715,13 +712,6 @@ type
     function RetrieveList(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const aCustomFieldsCsv: RawUtf8 = ''): TObjectList; overload;
-    {$ifdef HASGENERICS}
-    function RetrieveIList<T: TOrm>(
-      const aCustomFieldsCsv: RawUtf8 = ''): IList<T>; overload;
-    function RetrieveIList<T: TOrm>(const FormatSqlWhere: RawUtf8;
-      const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): IList<T>; overload;
-    {$endif HASGENERICS}
     function RetrieveListJson(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const aCustomFieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false): RawJson; overload;
@@ -2187,21 +2177,6 @@ function TRest.RetrieveList(Table: TOrmClass;
 begin
   result := fOrm.RetrieveList(Table, FormatSqlWhere, BoundsSqlWhere, aCustomFieldsCsv);
 end;
-
-{$ifdef HASGENERICS}
-
-function TRest.RetrieveIList<T>(const aCustomFieldsCsv: RawUtf8): IList<T>;
-begin
-  result := fOrm.Generics.RetrieveIList<T>(aCustomFieldsCsv);
-end;
-
-function TRest.RetrieveIList<T>(const FormatSqlWhere: RawUtf8;
-  const BoundsSqlWhere: array of const; const aCustomFieldsCsv: RawUtf8): IList<T>;
-begin
-  result := fOrm.Generics.RetrieveIList<T>(FormatSqlWhere, BoundsSqlWhere, aCustomFieldsCsv);
-end;
-
-{$endif HASGENERICS}
 
 function TRest.RetrieveListJson(Table: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;

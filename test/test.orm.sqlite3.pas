@@ -21,9 +21,9 @@ uses
   mormot.core.unicode,
   mormot.core.datetime,
   mormot.core.rtti,
-  {$ifdef HASGENERICS} // not supported on oldest compilers (e.g. < Delphi XE8)
+  {$ifdef ORMGENERICS} // not supported on oldest compilers (e.g. < Delphi XE8)
   mormot.core.collections,
-  {$endif HASGENERICS}
+  {$endif ORMGENERICS}
   mormot.crypt.core,
   mormot.core.data,
   mormot.core.variants,
@@ -1962,9 +1962,9 @@ var
   i1, i2, aR, aF, F1, F2, n: integer;
   fid, ffn, fln, fyb, fyd: PtrInt;
   Comp, Comp1, Comp2: TUtf8Compare;
-  {$ifdef HASGENERICS}
+  {$ifdef ORMGENERICS}
   Peoples: IList<TOrmPeople>;
-  {$endif HASGENERICS}
+  {$endif ORMGENERICS}
   row: variant;
   lContactDataQueueDynArray: TDynArray;
   lContactDataQueueArray: TRawUtf8DynArray;
@@ -2076,8 +2076,8 @@ begin
       finally
         Free;
       end;
-      {$ifdef HASGENERICS}
-      Peoples := T.ToIList<TOrmPeople>;
+      {$ifdef ORMGENERICS}
+      T.ToNewIList(TOrmPeople, Peoples);
       check(Peoples.Count = J.RowCount);
       for aR := 1 to Peoples.Count do
         with Peoples[aR - 1] do
@@ -2089,7 +2089,7 @@ begin
           check(YearOfDeath = J.GetAsInteger(aR, fyd));
         end;
       // Peoples := nil; // not mandatory
-      {$endif HASGENERICS}
+      {$endif ORMGENERICS}
     finally
       T.Free;
     end;

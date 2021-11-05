@@ -52,10 +52,10 @@ uses
   mormot.core.log,
   mormot.core.json,
   mormot.core.threads,
-  mormot.core.search,
-  {$ifdef HASGENERICS} // not supported on oldest compilers (e.g. < Delphi XE8)
+  {$ifdef ORMGENERICS}
   mormot.core.collections,
-  {$endif HASGENERICS}
+  {$endif ORMGENERICS}
+  mormot.core.search,
   mormot.crypt.secure, // for TSynUniqueIdentifierGenerator
   mormot.db.core,
   mormot.orm.base;
@@ -185,10 +185,6 @@ type
 
 
   { -------------------- IRestOrm IRestOrmServer IRestOrmClient Definitions }
-
-  {$ifdef HASGENERICS}
-  TRestOrmGenerics = class;
-  {$endif HASGENERICS}
 
   /// Object-Relational-Mapping calls for CRUD access to a database
   // - as implemented in TRest.ORM
@@ -465,24 +461,55 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
-    // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
-    // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
+    // - CustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if CustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if CustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     // - return a TObjectList on success (possibly with Count=0) - caller is
     // responsible of freeing the instance
     // - this TObjectList will contain a list of all matching records
     // - return nil on error
     function RetrieveList(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): TObjectList; overload;
-    {$ifdef HASGENERICS}
-    /// access to ORM parametrized/generics methods
-    // - since interface types can not have parametrized methods, we return
-    // a TRestOrmGenerics abstract class to provide generics signature
-    // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
-    // executables than Generics.Collections, and need no try..finally Free
-    function Generics: TRestOrmGenerics;
-    {$endif HASGENERICS}
+      const CustomFieldsCSV: RawUtf8 = ''): TObjectList; overload;
+    {$ifdef ORMGENERICS}
+    /// get a IList<TOrm> of members from a SQL statement
+    // - implements REST GET collection
+    // - CustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if CustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if CustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - return true and a IList<T> in Result on success (maybe with Count=0)
+    // - return false on error
+    // - untyped "var IList" and not directly IList<T: TOrm> because neither
+    // Delphi nor FPC allow parametrized interface method (and also because
+    // it breaks my FPC compiler sometimes)
+    // - you can write for instance:
+    // !var list: IList<TOrmTest>;
+    // !    R: TOrmTest;
+    // !    orm: IRestOrm
+    // ! ...
+    // !    if orm.RetrieveIList(TOrmTest, list, 'ID,Test') then
+    // !      for R in list do
+    // !        writeln(R.ID, '=', R.Test);
+    function RetrieveIList(T: TOrmClass; var IList;
+      const CustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+    /// get a IList<TOrm> of members from a SQL statement
+    // - implements REST GET collection with a WHERE clause
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSqlWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSqlWhere open array - use
+    // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
+    // double, currency, RawUtf8 values to be bound to the request as parameters
+    // - CustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if CustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if CustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - return true and a IList<T> in Result on success (maybe with Count=0)
+    // - return false on error
+    // - untyped "var IList" and not directly IList<T: TOrm> because neither
+    // Delphi nor FPC allow parametrized interface methods
+    function RetrieveIList(T: TOrmClass; var IList;
+      const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+      const CustomFieldsCSV: RawUtf8 = ''): boolean; overload;
+    {$endif ORMGENERICS}
     /// get a list of members from a SQL statement as RawJson
     // - implements REST GET collection
     // - for better server speed, the WHERE clause should use bound parameters
@@ -2653,75 +2680,9 @@ type
   TOrmArray = array[0..MaxInt div SizeOf(TOrm) - 1] of TOrm;
   POrmArray = ^TOrmArray;
 
-  {$ifdef HASGENERICS}
-
-  /// since Delphi interfaces cannot have parametrized methods, we need
-  // to use this abstract class to use generics signature
-  // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
-  // executables than Generics.Collections, and need no try..finally Free
-  TRestOrmGenerics = class(TInterfacedObject)
-  protected
-    // needed to implement RetrieveIList<T> actual data retrieval
-    function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
-      const WhereClauseFormat: RawUtf8; const BoundsSqlWhere: array of const): TOrmTable;
-      overload; virtual; abstract;
-  public
-    /// access to ORM parametrized/generic methods
-    // - since Delphi interface cannot have parametrized methods, we need
-    // to return this abstract class to use generics signature
-    function Generics: TRestOrmGenerics;
-    /// get a list of members from a SQL statement
-    // - implements REST GET collection
-    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
-    // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
-    // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
-    // - return a IList<T> on success (possibly with Count=0) - caller is
-    // responsible of freeing the instance
-    // - return nil on error
-    // - since Delphi interface cannot have parametrized methods, we need to
-    // call this overloaded TRestOrmGenerics method to use generics signature
-    // - you can write for instance:
-    // !var list: IList<TOrmTest>;
-    // !    R: TOrmTest;
-    // !    orm: IRestOrm
-    // ! ...
-    // !    list := orm.Generics.RetrieveIList<TOrmTest>('ID,Test');
-    // !    if list <> nil then
-    // !      for R in list do
-    // !        writeln(R.ID, '=', R.Test);
-    function RetrieveIList<T: TOrm>(
-      const aCustomFieldsCsv: RawUtf8 = ''): IList<T>; overload;
-       {$ifdef HASINLINE}inline;{$endif}
-    /// get a list of members from a SQL statement
-    // - implements REST GET collection with a WHERE clause
-    // - for better server speed, the WHERE clause should use bound parameters
-    // identified as '?' in the FormatSqlWhere statement, which is expected to
-    // follow the order of values supplied in BoundsSqlWhere open array - use
-    // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
-    // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
-    // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
-    // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
-    // - return a IList<T> on success (possibly with Count=0)
-    // - return nil on error
-    // - since Delphi interface cannot have parametrized methods, we need to
-    // call this overloaded TRestOrmGenerics method to use generics signature
-    function RetrieveIList<T: TOrm>(const FormatSqlWhere: RawUtf8;
-      const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): IList<T>; overload;
-  end;
-
-  TRestOrmParent = class(TRestOrmGenerics)
-
-  {$else}
-
   /// parent class of TRestOrm, to implement IRestOrm methods
-  // - since Delphi interface cannot have parametrized methods, we need
-  // to define a TRestOrmGenerics abstract class to use generics signature
   // - only has some low-level methods used directly from mormot.rest.core.pas
   TRestOrmParent = class(TInterfacedObject)
-
-  {$endif HASGENERICS}
   public
     /// ensure the current thread will be taken into account during process
     // - this abstract method won't do anything, but overriden versions may
@@ -2796,10 +2757,6 @@ type
     function InitOneFieldType(field: PtrInt; out size: integer;
       out info: PRttiInfo; out tableindex: integer): TOrmFieldType; override;
     procedure FillOrms(P: POrm; RecordType: TOrmClass);
-    {$ifdef HASGENERICS}
-    /// create and fill a new IList<T>
-    procedure ToNewIList(var result; item: TOrmClass);
-    {$endif HASGENERICS}
     /// guess the property type information from ORM
     function FieldPropFromTables(const PropName: RawUtf8;
       out PropInfo: TOrmPropInfo; out TableIndex: integer): TOrmFieldType;
@@ -2899,14 +2856,14 @@ type
     // of the first associated record class (from internal QueryTables[])
     procedure ToObjectList(DestList: TObjectList;
       RecordType: TOrmClass = nil); overload;
-    {$ifdef HASGENERICS}
+    {$ifdef ORMGENERICS}
     /// create a IList<TOrm> with TOrm instances corresponding to this resultset
     // - always returns an IList<> instance, even if the TOrmTable is nil or void
     // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
     // executables than Generics.Collections, and need no try..finally Free: a
     // single TSynListSpecialized<TOrm> class will be reused for all IList<>
-    function ToIList<T: TOrm>: IList<T>; overload;
-    {$endif HASGENERICS}
+    procedure ToNewIList(Item: TOrmClass; var Result);
+    {$endif ORMGENERICS}
     /// fill an existing T*ObjArray variable with TOrm instances
     // corresponding to this TOrmTable result set
     // - use the specified TOrm class or create instances
@@ -5320,9 +5277,9 @@ begin
   fOwnedRecords.Add(result);
 end;
 
-{$ifdef HASGENERICS}
+{$ifdef ORMGENERICS}
 
-procedure TOrmTable.ToNewIList(var result; item: TOrmClass);
+procedure TOrmTable.ToNewIList(Item: TOrmClass; var Result);
 var
   list: TSynListSpecialized<TOrm>;
   cloned, one: TOrm;
@@ -5330,21 +5287,21 @@ var
   rec: POrm;
 begin
   list := TSynListSpecialized<TOrm>.Create(
-    [], ptClass, TypeInfo(TOrmObjArray), item.ClassInfo);
+    [], ptClass, TypeInfo(TOrmObjArray), Item.ClassInfo);
   // all IList<T> share the same VMT -> assign same TSynListSpecialized<TOrm>
-  IList<TOrm>(result) := list;
+  IList<TOrm>(Result) := list;
   // IList<T> will own and free each T instance
   if (self = nil) or
      (fRowCount = 0) then
     exit;
-  cloned := item.Create;
+  cloned := Item.Create;
   try
     cloned.FillPrepare(self);
     list.SetCount(fRowCount); // allocate once
     rec := list.First;        // fast direct iteration
     for r := 1 to fRowCount do
     begin
-      one := item.Create;
+      one := Item.Create;
       rec^ := one;
       inc(rec);
       cloned.fFill.Fill(r, one);
@@ -5355,12 +5312,7 @@ begin
   end;
 end;
 
-function TOrmTable.ToIList<T>: IList<T>;
-begin
-  ToNewIList(result, TOrmClass(T)); // smaller executable with sub ToNewIList()
-end;
-
-{$endif HASGENERICS}
+{$endif ORMGENERICS}
 
 procedure TOrmTable.FillOrms(P: POrm; RecordType: TOrmClass);
 var
@@ -8550,38 +8502,6 @@ end;
 {$endif PUREMORMOT2}
 
 
-{$ifdef HASGENERICS}
-
-{ TRestOrmGenerics }
-
-function TRestOrmGenerics.Generics: TRestOrmGenerics;
-begin
-  result := self; // circumvent limitation of non parametrized interface definition
-end;
-
-function TRestOrmGenerics.RetrieveIList<T>(const aCustomFieldsCsv: RawUtf8): IList<T>;
-begin
-  result := RetrieveIList<T>('', [], aCustomFieldsCsv);
-end;
-
-function TRestOrmGenerics.RetrieveIList<T>(const FormatSqlWhere: RawUtf8;
-  const BoundsSqlWhere: array of const; const aCustomFieldsCsv: RawUtf8): IList<T>;
-var table: TOrmTable;
-begin
-  result := nil;
-  if self = nil then
-    exit;
-  table := MultiFieldValues(TOrmClass(T), aCustomFieldsCsv,
-    FormatSqlWhere, BoundsSqlWhere);
-  if table <> nil then
-    try
-      result := table.ToIList<T>;
-    finally
-      table.Free;
-    end;
-end;
-
-{$endif HASGENERICS}
 
 { TRestOrmParent }
 

@@ -35,8 +35,6 @@ uses
   mormot.orm.core,
   mormot.rest.client;
 
-
-
 const
   {$ifdef OSWINDOWS}
   HTTP_DEFAULTPORT = '888';
