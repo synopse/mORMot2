@@ -30,6 +30,7 @@ The source code tree is split into the following sub-folders:
 - [`ui`](ui) for VCL/LCL User Interface oriented components;
 - [`script`](script) for the supported (java)script engines;
 - [`ddd`](ddd) for *Domain-Driven-Design* related code;
+- [`misc`](misc) for miscellaneous reusable units;
 - [`tools`](tools) for some useful tools tied to our framework.
 
 
