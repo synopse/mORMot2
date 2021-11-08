@@ -2476,18 +2476,18 @@ type
     // - Row number is from 1 to Table.RowCount
     // - setter method (write Set*) is called if available
     // - handle UTF-8 SQL to Delphi values conversion (see TPropInfo mapping)
-    // - this method has been made virtual e.g. so that a calculated value can be
-    // used in a custom field
+    // - this method has been made virtual e.g. so that a calculated value can
+    // be used in a custom field
     function FillRow(aRow: integer; aDest: TOrm = nil): boolean; virtual;
     /// fill all published properties of this object from the next available
     // TOrmTable prepared row
     // - FillPrepare() must have been called before
-    // - the Row number is taken from property FillCurrentRow
+    // - the Row number is taken from FillContext.FillCurrentRow property
     // - return true on success, false if no more Row data is available
     // - internally call FillRow() to update published properties values
     function FillOne(aDest: TOrm = nil): boolean;
     /// go to the first prepared row, ready to loop through all rows with FillOne()
-    // - the Row number (property FillCurrentRow) is reset to 1
+    // - the Row number (FillContext.FillCurrentRow property) is reset to 1
     // - return true on success, false if no Row data is available
     // - you can use it e.g. as:
     // ! while Rec.FillOne do

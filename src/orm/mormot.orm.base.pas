@@ -5061,7 +5061,7 @@ end;
 procedure TOrmPropInfoRttiCurrency.SetValue(Instance: TObject; Value: PUtf8Char;
   ValueLen: PtrInt; wasString: boolean);
 begin
-  SetValueCurrency(Instance, StrToCurr64(Value, nil));
+  SetValueCurrency(Instance, StrToCurrency(Value));
 end;
 
 function TOrmPropInfoRttiCurrency.CompareValue(Item1, Item2: TObject;
@@ -5119,7 +5119,7 @@ begin
       exit;
     end;
   end;
-  SetValueCurrency(Instance, PCurrency(@V)^);
+  SetValueCurrency(Instance, V);
   result := true;
 end;
 
