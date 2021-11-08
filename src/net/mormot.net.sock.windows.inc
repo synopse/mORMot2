@@ -673,7 +673,7 @@ type
     Union: record
       case Integer of
         0: (
-          Alignment: ULONGLONG);
+          Alignment: QWord);
         1: (
           Length: ULONG;
           IfIndex: DWORD);
