@@ -44,7 +44,7 @@ uses
   mormot.orm.core,
   mormot.orm.rest,
   mormot.soa.core,
-  mormot.soa.Server,
+  mormot.soa.server,
   mormot.db.core,
   mormot.rest.core,
   mormot.rest.server,

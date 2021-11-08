@@ -1,3 +1,6 @@
+/// ORM + REST Benchmark Over Several DB backends
+// - this program is a part of the Open Source Synopse mORMot framework 2,
+// licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 program PerfTestConsole;
 
 {$I mormot.defines.inc}
