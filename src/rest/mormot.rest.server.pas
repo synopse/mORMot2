@@ -7280,7 +7280,7 @@ begin
           [self, Sender, RunningThread])
       else        // reset the TThread info
         RunningThread := nil;
-  // call TRestOrmServer.EndCurrentThread
+  // call TRestOrmServer.EndCurrentThread (and TSynLogFamily.OnThreadEnded)
   inherited OnEndCurrentThread(Sender);
 end;
 

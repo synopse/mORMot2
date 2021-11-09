@@ -42,7 +42,7 @@ unit mormot.lib.lizard;
   Note: Deflate was system zlib, not our faster libdeflate
   Conclusion: SynLZ has the best compression ratio for its compression speed,
     but Lizard is much faster at decompression, when working with big log filesiles.
-  For small files (<MB), SynLZ is always faster, and uses less memory than Lizard.
+  For small files (<1MB), SynLZ is always faster, and uses less memory than Lizard.
 
   Some numbers, taken from regression tests on an AARCH64 Oracle Cloud VM:
     TAlgoSynLZ 3.8 MB->2 MB: comp 285:150MB/s decomp 215:410MB/s

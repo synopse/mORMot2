@@ -19,15 +19,18 @@ uses
   mormot.core.text,
   mormot.core.rtti,
   mormot.core.log,
+  mormot.rest.core,
+  mormot.rest.server,
   mormot.rest.memserver,
   mormot.rest.http.server,
   mormot.soa.core,
+  mormot.soa.server,
   mormot.net.ws.core,
   restws.longworkshared in 'restws.longworkshared.pas';
 
 type
   /// ILongWorkServer service implementation
-  TLongWorkService = class(TInterfacedObject, ILongWorkService)
+  TLongWorkService = class(TInjectableObjectRest, ILongWorkService)
   protected
     fTotalWorkCount: Integer;
   public
@@ -38,15 +41,15 @@ type
 
   // how the background work is done in a temporary thread
   /// - as initialized and run by TLongWorkService.StartWork
-  TLongWorkServiceThread = class(TThread)
+  TLongWorkServiceThread = class(TRestThread)
   protected
     fCallback: ILongWorkCallback;
     fWorkName: string;
     // this is the main execution: just a sleep() with some random timing
-    procedure Execute; override;
+    procedure InternalExecute; override;
   public
     // when Execute is finished, will trigger callback WorkFinished/WorkFailed
-    constructor Create(const workName: string; const callback: ILongWorkCallback);
+    constructor Create(owner: TRest; const workName: string; const callback: ILongWorkCallback);
   end;
 
 
@@ -56,7 +59,7 @@ procedure TLongWorkService.StartWork(
   const workName: string; const onFinish: ILongWorkCallback);
 begin
   InterlockedIncrement(fTotalWorkCount);
-  TLongWorkServiceThread.Create(workName, onFinish);
+  TLongWorkServiceThread.Create(fServer, workName, onFinish);
 end;
 
 function TLongWorkService.TotalWorkCount: Integer;
@@ -67,16 +70,16 @@ end;
 
 { TLongWorkServiceThread }
 
-constructor TLongWorkServiceThread.Create(
+constructor TLongWorkServiceThread.Create(owner: TRest;
   const workName: string; const callback: ILongWorkCallback);
 begin
-  inherited Create(false);
+  inherited Create(owner, false, false);
   fCallback := callback;
   fWorkName := workName;
   FreeOnTerminate := true;
 end;
 
-procedure TLongWorkServiceThread.Execute;
+procedure TLongWorkServiceThread.InternalExecute;
 var
   tix: Int64;
 begin
@@ -119,7 +122,7 @@ begin
       TextColor(ccLightGreen);
       writeln('WebSockets Long Work Server running on localhost:8888'#13#10);
       TextColor(ccWhite);
-      writeln('Please compile and run Project31LongWorkClient.exe'#13#10);
+      writeln('Please compile and run one or several restws_longworkclient'#13#10);
       TextColor(ccLightGray);
       writeln('Press [Enter] to quit'#13#10);
       TextColor(ccCyan);
