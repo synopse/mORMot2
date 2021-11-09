@@ -78,7 +78,7 @@ The mORMOt 2 repository content is split into the following sub-folders:
 * create new environment variable `mormot2` with full path to the *mORMot 2* sources (Tools - Options - IDE - Evironment Variables); 
 * add the following string to your IDE library paths (for all target platforms):
 
-    `$(mormot2)\src\core;$(mormot2)\src\db;$(mormot2)\src\rest;$(mormot2)\src\crypt;$(mormot2)\src\script;$(mormot2)\src\app;$(mormot2)\src\net;$(mormot2)\src\orm;$(mormot2)\src\soa;$(mormot2)\src\lib`
+   `$(mormot2)\src\core;$(mormot2)\src\db;$(mormot2)\src\rest;$(mormot2)\src\crypt;$(mormot2)\src\script;$(mormot2)\src\app;$(mormot2)\src\net;$(mormot2)\src\orm;$(mormot2)\src\soa;$(mormot2)\src\lib`
 
 4. Open and compile `/test/mormot2tests.dpr` in the IDE, and run the regression tests on your machine.
 
@@ -89,7 +89,7 @@ The mORMOt 2 repository content is split into the following sub-folders:
 
 ## Presentation
 
-Synopse *mORMot* is an Open Source Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 10.4 Sydney and FPC 3.2/trunk, targeting Windows/Linux for servers, and any platform for clients (including mobile or AJAX).
+Synopse *mORMot* is an Open Source Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 11 Sydney and FPC 3.2/trunk, targeting Windows/Linux for servers, and any platform for clients (including mobile or AJAX).
 
 The main features of *mORMot* are therefore:
 
