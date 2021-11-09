@@ -4429,10 +4429,11 @@ begin
   d := unaligned(Value^);
   W.AddDateTime(d, WithMS);
   if woDateTimeWithZSuffix in Options then
-    if frac(d) = 0 then // FireFox can't decode short form "2017-01-01Z"
-      W.AddShort('T00:00:00Z') // the same pattern for date and dateTime
-    else
-      W.Add('Z');
+    if not (twoDateTimeWithZ in W.CustomOptions) then // if not alreayd done
+      if frac(d) = 0 then // FireFox can't decode short form "2017-01-01Z"
+        W.AddShort('T00:00:00Z') // the same pattern for date and dateTime
+      else
+        W.Add('Z');
   W.Add('"');
 end;
 
