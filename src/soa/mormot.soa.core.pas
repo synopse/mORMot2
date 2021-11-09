@@ -484,12 +484,16 @@ type
     // - if no method name is given (i.e. []), option will be set for all methods
     // - include optExecInMainThread will force the method(s) to be called within
     // a RunningThread.Synchronize() call - slower, but thread-safe
-    // - this method returns self in order to allow direct chaining of security
+    // - this method returns self in order to allow direct chaining of settings
     // calls, in a fluent interface
     function SetOptions(const aMethod: array of RawUtf8;
       aOptions: TInterfaceMethodOptions;
-      aAction: TServiceMethodOptionsAction = moaReplace): TServiceFactoryServerAbstract;
-    /// define the the instance life time-out, in seconds
+      aAction: TServiceMethodOptionsAction = moaReplace): TServiceFactoryServerAbstract; overload;
+    /// define execution options for the whole interface
+    // - fluent alternative of setting homonymous boolean properties of this class
+    // - this method returns self in order to allow direct chaining of settings
+    function SetOptions(aOptions: TInterfaceOptions): TServiceFactoryServerAbstract; overload;
+    /// define the instance life time-out, in seconds
     // - for sicClientDriven, sicPerSession, sicPerUser or sicPerGroup modes
     // - raise an exception for other kind of execution
     // - this method returns self in order to allow direct chaining of setting
@@ -1269,6 +1273,20 @@ begin
   result := self;
 end;
 
+function TServiceFactoryServerAbstract.SetOptions(
+  aOptions: TInterfaceOptions): TServiceFactoryServerAbstract;
+begin
+  if self <> nil then
+  begin
+    fByPassAuthentication := (optByPassAuthentication in aOptions);
+    fResultAsJsonObject := (optResultAsJsonObject in aOptions);
+    fResultAsJsonObjectWithoutResult := (optResultAsJsonObjectWithoutResult in aOptions);
+    fResultAsXMLObject := (optResultAsXMLObject in aOptions);
+    fResultAsJsonObjectIfAccept := (optResultAsXMLObjectIfAcceptOnlyXML in aOptions);
+    fExcludeServiceLogCustomAnswer := (optExcludeServiceLogCustomAnswer in aOptions);
+  end;
+  result := self;
+end;
 
 
 { ************ TServiceContainer Abstract Services Holder }

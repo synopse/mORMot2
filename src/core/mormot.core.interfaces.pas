@@ -2271,7 +2271,7 @@ type
     optIgnoreException);
 
   /// set of per-method execution options for an interface-based service provider
-  // - by default, mehthod executions are concurrent, for better server
+  // - by default, method executions are concurrent, for better server
   // responsiveness; if you set optExecLockedPerInterface, all methods of
   // a given interface will be executed with a critical section
   // - optExecInMainThread will force the method to be called within
@@ -2307,6 +2307,20 @@ type
   // optIgnoreException is set and the exception is trapped (not to be used
   // unless you know what you are doing)
   TInterfaceMethodOptions = set of TInterfaceMethodOption;
+
+  /// available execution options for an interface-based service provider
+  // - mimics TServiceFactoryServer homonymous boolean properties
+  TInterfaceOption = (
+    optByPassAuthentication,
+    optResultAsJsonObject,
+    optResultAsJsonObjectWithoutResult,
+    optResultAsXMLObject,
+    optResultAsXMLObjectIfAcceptOnlyXML,
+    optExcludeServiceLogCustomAnswer);
+
+  /// set of execution options for an interface-based service provider
+  // - mimics TServiceFactoryServer homonymous boolean properties
+  TInterfaceOptions = set of TInterfaceOption;
 
   /// callback called by TInterfaceMethodExecute to process an interface
   // callback parameter
