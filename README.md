@@ -89,7 +89,7 @@ The mORMOt 2 repository content is split into the following sub-folders:
 
 ## Presentation
 
-Synopse *mORMot* is an Open Source Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 11 Sydney and FPC 3.2/trunk, targeting Windows/Linux for servers, and any platform for clients (including mobile or AJAX).
+Synopse *mORMot* is an Open Source Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 11 Alexandria and FPC 3.2/trunk, targeting Windows/Linux for servers, and any platform for clients (including mobile or AJAX).
 
 The main features of *mORMot* are therefore:
 
