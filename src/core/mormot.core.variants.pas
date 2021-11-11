@@ -5563,6 +5563,11 @@ function TDocVariantData.AddValue(const aName: RawUtf8; const aValue: variant;
 var
   v: PVariant;
 begin
+  if aName = '' then
+  begin
+    result := -1;
+    exit;
+  end;
   if dvoCheckForDuplicatedNames in VOptions then
   begin
     result := GetValueIndex(aName);
@@ -6517,6 +6522,8 @@ var
   err: integer;
 begin
   if (cardinal(VType) = DocVariantVType) and
+     (aNameLen > 0) and
+     (aName <> nil) and
      (VCount > 0) then
     if IsArray then
     begin
