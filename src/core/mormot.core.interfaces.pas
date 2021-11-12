@@ -2320,6 +2320,7 @@ type
 
   /// set of execution options for an interface-based service provider
   // - mimics TServiceFactoryServer homonymous boolean properties
+  // - as used by TServiceFactoryServerAbstract.SetWholeOptions()
   TInterfaceOptions = set of TInterfaceOption;
 
   /// callback called by TInterfaceMethodExecute to process an interface
@@ -2783,7 +2784,8 @@ begin
           else
             DestValue := PInt64(V)^;
       end;
-    imvDouble, imvDateTime:
+    imvDouble,
+    imvDateTime:
       DestValue := unaligned(PDouble(V)^);
     imvCurrency:
       DestValue := PCurrency(V)^;
@@ -3107,7 +3109,8 @@ procedure TInterfaceMethod.ArgsValuesAsDocVariant(
   const Values: TVariantDynArray; Input: boolean; Options: TDocVariantOptions);
 begin
   case Kind of
-    pdvObject, pdvObjectFixed:
+    pdvObject,
+    pdvObjectFixed:
       begin
         Dest.InitObjectFromVariants(ArgsNames(Input), Values, Options);
         if Kind = pdvObjectFixed then
@@ -3316,7 +3319,8 @@ begin
   {$else}
   {$ifdef CPUINTEL} // x87 ABI expects floats to be in st(0) FPU stack
   case ctxt.ResultType of
-    imvDouble, imvDateTime:
+    imvDouble,
+    imvDateTime:
       asm
         fld     qword ptr [result]
       end;
@@ -3971,7 +3975,9 @@ begin
     if ArgsResultIndex >= 0 then
       with Args[ArgsResultIndex] do
       case ValueType of
-        imvNone, imvObject, imvInterface:
+        imvNone,
+        imvObject,
+        imvInterface:
           raise EInterfaceFactory.CreateUtf8(
             '%.Create: I% unexpected result type %',
             [self, InterfaceDotMethodName, ArgTypeName^]);

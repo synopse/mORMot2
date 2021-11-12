@@ -488,11 +488,11 @@ type
     // calls, in a fluent interface
     function SetOptions(const aMethod: array of RawUtf8;
       aOptions: TInterfaceMethodOptions;
-      aAction: TServiceMethodOptionsAction = moaReplace): TServiceFactoryServerAbstract; overload;
+      aAction: TServiceMethodOptionsAction = moaReplace): TServiceFactoryServerAbstract;
     /// define execution options for the whole interface
     // - fluent alternative of setting homonymous boolean properties of this class
     // - this method returns self in order to allow direct chaining of settings
-    function SetOptions(aOptions: TInterfaceOptions): TServiceFactoryServerAbstract; overload;
+    function SetWholeOptions(aOptions: TInterfaceOptions): TServiceFactoryServerAbstract; 
     /// define the instance life time-out, in seconds
     // - for sicClientDriven, sicPerSession, sicPerUser or sicPerGroup modes
     // - raise an exception for other kind of execution
@@ -1273,7 +1273,7 @@ begin
   result := self;
 end;
 
-function TServiceFactoryServerAbstract.SetOptions(
+function TServiceFactoryServerAbstract.SetWholeOptions(
   aOptions: TInterfaceOptions): TServiceFactoryServerAbstract;
 begin
   if self <> nil then

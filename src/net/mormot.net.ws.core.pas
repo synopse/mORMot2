@@ -2607,7 +2607,8 @@ procedure TWebSocketProcess.SendPing;
 var
   request: TWebSocketFrame;
 begin
-  if fState <> wpsRun then
+  if (self = nil) or
+     (fState <> wpsRun) then
     exit;
   LockedInc32(@fProcessCount); // flag currently processing
   try
