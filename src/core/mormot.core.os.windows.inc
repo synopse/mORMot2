@@ -1614,15 +1614,14 @@ begin
   Win32PWideCharToUtf8(@tmp, StrLenW(tmp), User);
 end;
 
-// avoid unneeded reference to ShlObj.pas
-function SHGetFolderPath(hwnd: hwnd; csidl: integer; hToken: THandle;
-  dwFlags: DWord; pszPath: PChar): HRESULT;
-    stdcall; external 'SHFolder.dll' name 'SHGetFolderPath' + _AW;
-
 var
-  _SystemPath: array[TSystemPath] of TFileName;
+  // avoid unneeded reference to ShlObj.pas
+  // - late binding is mandatory to be used on WinPE which does NOT have this dll
+  SHGetFolderPath: function(hwnd: hwnd; csidl: integer; hToken: THandle;
+    dwFlags: DWord; pszPath: PChar): HRESULT;
+  _SystemPath: array[TSystemPath] of TFileName; // cache
 
-function GetSystemPath(kind: TSystemPath): TFileName;
+function ComputeSystemPath(kind: TSystemPath): TFileName;
 const
   CSIDL_PERSONAL = $0005;
   CSIDL_LOCAL_APPDATA = $001C; // local non roaming user folder
@@ -1638,23 +1637,36 @@ const
 var
   tmp: array[0..MAX_PATH] of char;
 begin
-  result := _SystemPath[kind];
-  if result <> '' then
-    exit;
   if (kind = spLog) and
      IsDirectoryWritable(Executable.ProgramFilePath) then
     result := EnsureDirectoryExists(Executable.ProgramFilePath + 'log')
   else if (csidl[kind] <> 0) and
+          Assigned(SHGetFolderPath) and
           (SHGetFolderPath(0, csidl[kind], 0, 0, @tmp) = S_OK) then
     result := IncludeTrailingPathDelimiter(tmp)
   else
   begin
     result := GetEnvironmentVariable(ENV[kind]);
     if result = '' then
+    begin
       result := GetEnvironmentVariable('APPDATA');
+      if result = '' then
+      begin
+        result := GetEnvironmentVariable('TEMP');
+        if result = '' then
+          result := Executable.ProgramFilePath;
+      end;
+    end;
     result := IncludeTrailingPathDelimiter(result);
   end;
   _SystemPath[kind] := result;
+end;
+
+function GetSystemPath(kind: TSystemPath): TFileName;
+begin
+  result := _SystemPath[kind];
+  if result = '' then
+    result := ComputeSystemPath(kind);
 end;
 
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
@@ -3273,6 +3285,10 @@ begin
     //@EnumProcessModules := GetProcAddress(h, 'EnumProcessModules');
     @GetProcessMemoryInfo := GetProcAddress(h, 'GetProcessMemoryInfo');
   end;
+  h := Windows.LoadLibrary('SHFolder.dll');
+  if h >= 32 then
+    // e.g. WinPE doesn't have it - https://stackoverflow.com/q/8683038/458259
+    @SHGetFolderPath := GetProcAddress(h, 'SHGetFolderPath' + _AW);
   // retrieve system information
   TimeZoneLocalBias := -GetLocalTimeOffset;
   FillcharFast(SystemInfo, SizeOf(SystemInfo), 0);
