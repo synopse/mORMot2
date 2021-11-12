@@ -1515,6 +1515,11 @@ begin
   result := S; // no conversion needed if text is plain ASCII-7 content
 end;
 
+procedure FormatU(const fmt: string; const args: array of const; var result: RawUtf8);
+begin
+  result := RawUtf8(format(fmt, args));
+end;
+
 constructor TFileVersion.Create(const aFileName: TFileName;
   aMajor, aMinor, aRelease, aBuild: integer);
 var
@@ -1578,7 +1583,7 @@ begin
         VerQueryValue(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
         if Size2 >= 4 then
         begin
-          LanguageInfo := RawUtf8(format('%4.4x%4.4x', [Trans^[0], Trans^[1]]));
+          FormatU('%4.4x%4.4x', [Trans^[0], Trans^[1]], LanguageInfo);
           CompanyName := ReadResourceByName('CompanyName');
           FileDescription := ReadResourceByName('FileDescription');
           FileVersion := ReadResourceByName('FileVersion');
@@ -3268,7 +3273,8 @@ begin
   IsWow64Process := GetProcAddress(h, 'IsWow64Process');
   Res := false;
   IsWow64 := Assigned(IsWow64Process) and
-             IsWow64Process(GetCurrentProcess, Res) and Res;
+             IsWow64Process(GetCurrentProcess, Res) and
+             Res;
   if IsWow64 then
     // see http://msdn.microsoft.com/en-us/library/ms724381(v=VS.85).aspx
     GetNativeSystemInfo := GetProcAddress(h, 'GetNativeSystemInfo')
@@ -3368,12 +3374,13 @@ begin
     OpenProcessAccess := PROCESS_QUERY_INFORMATION or PROCESS_VM_READ;
   with OSVersionInfo do
     if wServicePackMajor = 0 then
-      OSVersionText := RawUtf8(Format('Windows %s (%d.%d.%d)',
-        [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber]))
+      FormatU('Windows %s (%d.%d.%d)',
+        [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber],
+        OSVersionText)
     else
-      OSVersionText := RawUtf8(Format(
-        'Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers],
-         wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber]));
+      FormatU('Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers],
+         wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber],
+         OSVersionText);
   OSVersion32.os := osWindows;
   OSVersion32.win := Vers;
   OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
@@ -3425,8 +3432,8 @@ begin
   if {%H-}cpu = '' then
     cpu := RawUtf8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
   cpu := TrimU(cpu);
-  CpuInfoText := RawUtf8(Format('%d x %s (' + CPU_ARCH_TEXT + ')',
-    [SystemInfo.dwNumberOfProcessors, cpu]));
+  FormatU('%d x %s (' + CPU_ARCH_TEXT + ')',
+    [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
   TrimDualSpaces(OSVersionText);
   TrimDualSpaces(OSVersionInfoEx);
   TrimDualSpaces(BiosInfoText);

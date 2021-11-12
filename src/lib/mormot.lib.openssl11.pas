@@ -187,7 +187,8 @@ function OpenSslIsAvailable: boolean;
 // OPENSSLFULLAPI or OPENSSLSTATIC conditionals have been defined
 function OpenSslInitialize(
    const libcryptoname: TFileName = LIB_CRYPTO;
-   const libsslname: TFileName = LIB_SSL): boolean;
+   const libsslname: TFileName = LIB_SSL;
+   const libprefix: RawUtf8 = _PU): boolean;
 
 
 { ******************** OpenSSL Library Constants }
@@ -2230,7 +2231,8 @@ begin
   end;
 end;
 
-function OpenSslInitialize(const libcryptoname, libsslname: TFileName): boolean;
+function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
+  const libprefix: RawUtf8): boolean;
 var
   P: PPointerArray;
   api: PtrInt;
@@ -2260,7 +2262,7 @@ begin
         ], EOpenSsl);
       P := @@libcrypto.CRYPTO_malloc;
       for api := low(LIBCRYPTO_ENTRIES) to high(LIBCRYPTO_ENTRIES) do
-        libcrypto.Resolve(pointer(_PU + LIBCRYPTO_ENTRIES[api]),
+        libcrypto.Resolve(pointer(libprefix + LIBCRYPTO_ENTRIES[api]),
           @P[api], {onfail=}EOpenSsl);
       // attempt to load libssl
       libssl.TryLoadLibrary([
@@ -2276,7 +2278,7 @@ begin
         ], EOpenSsl);
       P := @@libssl.SSL_CTX_new;
       for api := low(LIBSSL_ENTRIES) to high(LIBSSL_ENTRIES) do
-        libssl.Resolve(pointer(_PU + LIBSSL_ENTRIES[api]),
+        libssl.Resolve(pointer(libprefix + LIBSSL_ENTRIES[api]),
           @P[api], {onfail=}EOpenSsl);
       // nothing is to be initialized with OpenSSL 1.1.*
       {$ifdef OPENSSLUSERTLMM}
