@@ -1618,7 +1618,7 @@ var
   // avoid unneeded reference to ShlObj.pas
   // - late binding is mandatory to be used on WinPE which does NOT have this dll
   SHGetFolderPath: function(hwnd: hwnd; csidl: integer; hToken: THandle;
-    dwFlags: DWord; pszPath: PChar): HRESULT;
+    dwFlags: DWord; pszPath: PChar): HRESULT; stdcall;
   _SystemPath: array[TSystemPath] of TFileName; // cache
 
 function ComputeSystemPath(kind: TSystemPath): TFileName;
