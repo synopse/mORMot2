@@ -1850,9 +1850,46 @@ asm
         pop     rbx
 end;
 
-procedure FreeSmallLocked; nostackframe; assembler;
-// rbx=TSmallBlockType rcx=P rdx=TSmallBlockPoolHeader
+{$ifdef FPCMM_REPORTMEMORYLEAKS}
+const
+  /// mark freed blocks with 00000000 BLOODLESS marker to track incorrect usage
+  REPORTMEMORYLEAK_FREEDHEXSPEAK = $B100D1E55;
+{$endif FPCMM_REPORTMEMORYLEAKS}
+
+function _FreeMem(P: pointer): PtrUInt; nostackframe; assembler;
 asm
+        {$ifdef FPCMM_REPORTMEMORYLEAKS}
+        mov     eax, REPORTMEMORYLEAK_FREEDHEXSPEAK // 00000000 BLOODLESS marker
+        {$endif FPCMM_REPORTMEMORYLEAKS}
+        {$ifndef MSWINDOWS}
+        mov     rcx, P
+        {$endif MSWINDOWS}
+        test    P, P
+        jz      @VoidPointer
+        {$ifdef FPCMM_REPORTMEMORYLEAKS}
+        mov     qword ptr [P], rax // over TObject VMT or string/dynarray header
+        {$endif FPCMM_REPORTMEMORYLEAKS}
+        mov     rdx, qword ptr [P - BlockHeaderSize]
+        {$ifdef FPCMM_ASSUMEMULTITHREAD}
+        mov     eax, $100
+        {$else}
+        mov     rax, qword ptr [rip + SmallBlockInfo].TSmallBlockInfo.IsMultiThreadPtr
+        {$endif FPCMM_ASSUMEMULTITHREAD}
+        // Is it a small block in use?
+        test    dl, IsFreeBlockFlag + IsMediumBlockFlag + IsLargeBlockFlag
+        jnz     @NotSmallBlockInUse
+        // Get the small block type in rbx and try to grab it
+        push    rbx
+        mov     rbx, [rdx].TSmallBlockPoolHeader.BlockType
+        {$ifdef FPCMM_ASSUMEMULTITHREAD}
+  lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
+        jne     @CheckTinySmallLock
+        {$else}
+        cmp     byte ptr [rax], false
+        jne     @TinySmallLockLoop // lock if IsMultiThread=true
+        {$endif FPCMM_ASSUMEMULTITHREAD}
+@FreeAndUnlock:
+        // rbx=TSmallBlockType rcx=P rdx=TSmallBlockPoolHeader
         // Adjust number of blocks in use, set rax = old first free block
         add     [rbx].TSmallBlockType.FreememCount, 1
         mov     rax, [rdx].TSmallBlockPoolHeader.FirstFreeBlock
@@ -1879,6 +1916,9 @@ asm
         jne     @ProcessPendingBin
         {$endif FPCMM_LOCKLESSFREE}
         mov     byte ptr [rbx].TSmallBlockType.Locked, false
+        movzx   eax, word ptr [rbx].TSmallBlockType.BlockSize
+        pop     rbx
+@VoidPointer:
         ret
 @PoolIsNowEmpty:
         // FirstFreeBlock=nil means it is the sequential feed pool with a single block
@@ -1901,7 +1941,10 @@ asm
         mov     rcx, rdx
         mov     rdx, qword ptr [rdx - BlockHeaderSize]
         lea     r10, [rip + SmallMediumBlockInfo]
-        jmp     FreeMediumBlock // no call nor BinLocked to avoid race condition
+        call    FreeMediumBlock // no call nor BinLocked to avoid race condition
+        movzx   eax, word ptr [rbx].TSmallBlockType.BlockSize
+        pop     rbx
+        ret
 {$ifdef FPCMM_LOCKLESSFREE}
 @ProcessPendingBin:
         // Try once to acquire BinLocked (spinning may induce race condition)
@@ -1920,53 +1963,13 @@ asm
         dec     byte ptr [rbx].TSmallBlockType.BinCount
         mov     byte ptr [rbx].TSmallBlockType.BinLocked, false
         mov     rdx, [rcx - BlockHeaderSize]
-        jmp     FreeSmallLocked // loop until BinCount=0 or BinLocked
+        jmp     @FreeAndUnlock // loop until BinCount=0 or BinLocked
 @NoBin: mov     byte ptr [rbx].TSmallBlockType.BinLocked, false
 @BinAlreadyLocked:
         mov     byte ptr [rbx].TSmallBlockType.Locked, false
 {$endif FPCMM_LOCKLESSFREE}
-end;
-
-{$ifdef FPCMM_REPORTMEMORYLEAKS}
-const
-  /// mark freed blocks with 00000000 BLOODLESS marker to track incorrect usage
-  REPORTMEMORYLEAK_FREEDHEXSPEAK = $B100D1E55;
-{$endif FPCMM_REPORTMEMORYLEAKS}
-
-function _FreeMem(P: pointer): PtrUInt; nostackframe; assembler;
-asm
-        {$ifndef MSWINDOWS}
-        mov     rcx, P
-        {$endif MSWINDOWS}
-        test    P, P
-        jz      @VoidPointer
-        {$ifdef FPCMM_REPORTMEMORYLEAKS}
-        mov     eax, REPORTMEMORYLEAK_FREEDHEXSPEAK // 00000000 BLOODLESS marker
-        mov     qword ptr [P], rax // over TObject VMT or string/dynarray header
-        {$endif FPCMM_REPORTMEMORYLEAKS}
-        mov     rdx, qword ptr [P - BlockHeaderSize]
-        {$ifndef FPCMM_ASSUMEMULTITHREAD}
-        mov     rax, qword ptr [rip + SmallBlockInfo].TSmallBlockInfo.IsMultiThreadPtr
-        {$endif FPCMM_ASSUMEMULTITHREAD}
-        // Is it a small block in use?
-        test    dl, IsFreeBlockFlag + IsMediumBlockFlag + IsLargeBlockFlag
-        jnz     @NotSmallBlockInUse
-        // Get the small block type in rbx and try to grab it
-        push    rbx
-        mov     rbx, [rdx].TSmallBlockPoolHeader.BlockType
-        {$ifdef FPCMM_ASSUMEMULTITHREAD}
-        mov     eax, $100
-  lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
-        jne     @CheckTinySmallLock
-        {$else}
-        cmp     byte ptr [rax], false
-        jne     @TinySmallLockLoop // lock if IsMultiThread=true
-        {$endif FPCMM_ASSUMEMULTITHREAD}
-@FreeAndUnlock:
-        call    FreeSmallLocked
         movzx   eax, word ptr [rbx].TSmallBlockType.BlockSize
         pop     rbx
-@VoidPointer:
         ret
 @NotSmallBlockInUse:
         lea     r10, [rip + MediumBlockInfo]
