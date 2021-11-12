@@ -1376,7 +1376,7 @@ begin
   if not _PROXYSET then
   begin
     GlobalLock;
-    StringToUtf8(GetEnvironmentVariable('HTTP_PROXY'), _PROXY[false]);
+    StringToUtf8(GetEnvironmentVariable('HTTP_PROXY'),  _PROXY[false]);
     StringToUtf8(GetEnvironmentVariable('HTTPS_PROXY'), _PROXY[true]);
     if _PROXY[true] = '' then
       _PROXY[true] := _PROXY[false];

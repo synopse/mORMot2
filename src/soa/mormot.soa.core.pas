@@ -387,7 +387,7 @@ type
     fResultAsJsonObject: boolean;
     fResultAsJsonObjectWithoutResult: boolean;
     fResultAsXMLObject: boolean;
-    fResultAsJsonObjectIfAccept: boolean;
+    fResultAsXMLObjectIfAcceptOnlyXML: boolean;
     fResultAsXMLObjectNameSpace: RawUtf8;
     fExcludeServiceLogCustomAnswer: boolean;
     function GetAuthGroupIDs(const aGroup: array of RawUtf8;
@@ -561,7 +561,7 @@ type
     // - using this method allows to mix standard JSON requests (from JSON
     // or AJAX clients) and XML requests (from XML-only clients)
     property ResultAsXMLObjectIfAcceptOnlyXML: boolean
-      read fResultAsJsonObjectIfAccept write fResultAsJsonObjectIfAccept;
+      read fResultAsXMLObjectIfAcceptOnlyXML write fResultAsXMLObjectIfAcceptOnlyXML;
     /// specify a custom name space content when returning a XML object
     // - by default, no name space will be appended - but such rough XML will
     // have potential validation problems
@@ -1282,7 +1282,7 @@ begin
     fResultAsJsonObject := (optResultAsJsonObject in aOptions);
     fResultAsJsonObjectWithoutResult := (optResultAsJsonObjectWithoutResult in aOptions);
     fResultAsXMLObject := (optResultAsXMLObject in aOptions);
-    fResultAsJsonObjectIfAccept := (optResultAsXMLObjectIfAcceptOnlyXML in aOptions);
+    fResultAsXMLObjectIfAcceptOnlyXML := (optResultAsXMLObjectIfAcceptOnlyXML in aOptions);
     fExcludeServiceLogCustomAnswer := (optExcludeServiceLogCustomAnswer in aOptions);
   end;
   result := self;
