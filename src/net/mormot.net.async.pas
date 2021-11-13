@@ -557,6 +557,7 @@ type
     fMaxConnections: integer;
     fExecuteState: THttpServerExecuteState;
     fExecuteAcceptOnly: boolean; // writes in another thread (THttpAsyncServer)
+    fExecuteMessage: RawUtf8;
     fSockPort: RawUtf8;
     procedure SetExecuteState(State: THttpServerExecuteState); virtual;
     procedure Execute; override;
@@ -2149,9 +2150,15 @@ begin
       'TAsyncServer.WaitStarted(%) with self=nil', [seconds]);
   tix := mormot.core.os.GetTickCount64 + seconds * 1000; // never wait forever
   repeat
-    if Terminated or
-       (fExecuteState in [esRunning, esFinished]) then
+    if Terminated then
       exit;
+    case fExecuteState of
+      esRunning:
+        exit;
+      esFinished:
+        raise EAsyncConnections.CreateUtf8('%.Execute aborted as %',
+          [self, fExecuteMessage]);
+    end;
     Sleep(1); // warning: waits typically 1-15 ms on Windows
     if mormot.core.os.GetTickCount64 > tix then
       raise EAsyncConnections.CreateUtf8(
@@ -2297,10 +2304,13 @@ begin
     end;
   except
     on E: Exception do
+    begin
       // callback exceptions should all be catched: so we assume that any
       // exception in mORMot code should be considered as fatal
+      FormatUtf8('% [%]', [E, E.Message], fExecuteMessage);
       DoLog(sllWarning, 'Execute raised uncatched % -> terminate %',
         [E.ClassType, fProcessName], self);
+    end;
   end;
   DoLog(sllInfo, 'Execute: done AW %', [fProcessName], self);
   SetExecuteState(esFinished);
@@ -2695,6 +2705,7 @@ end;
 function THttpAsyncServer.GetExecuteState: THttpServerExecuteState;
 begin
   result := fAsync.fExecuteState; // state comes from THttpAsyncConnections
+  fExecuteMessage := fAsync.fExecuteMessage;
 end;
 
 function THttpAsyncServer.GetRegisterCompressGzStatic: boolean;
@@ -2727,22 +2738,21 @@ begin
   // Send() output packets in the background
   SetCurrentThreadName('W %', [fAsync.fProcessName]);
   NotifyThreadStart(self);
-  WaitStarted(10);
-  if fAsync = nil then
-    exit;
-  try
-    fAsync.DoLog(sllTrace, 'Execute: main W loop', [], self);
-    while not Terminated and
-          not fAsync.Terminated do
-      if fAsync.fClients.fWrite.GetOne(1000, 'W', notif) then
-        fAsync.fClients.ProcessWrite(notif);
-  except
-    on E: Exception do
-      // callback exceptions should all be catched: so we assume that any
-      // exception in mORMot code should be considered as fatal
-      fAsync.DoLog(sllWarning, 'Execute raised uncatched % -> terminate %',
-        [E.ClassType, fAsync.fProcessName], self);
-  end;
+  WaitStarted(10); // wait for fAsync.Execute to bind and start
+  if fAsync <> nil then
+    try
+      fAsync.DoLog(sllTrace, 'Execute: main W loop', [], self);
+      while not Terminated and
+            not fAsync.Terminated do
+        if fAsync.fClients.fWrite.GetOne(1000, 'W', notif) then
+          fAsync.fClients.ProcessWrite(notif);
+    except
+      on E: Exception do
+        // callback exceptions should all be catched: so we assume that any
+        // exception in mORMot code should be considered as fatal
+        fAsync.DoLog(sllWarning, 'Execute raised uncatched % -> terminate %',
+          [E.ClassType, fAsync.fProcessName], self);
+    end;
   fAsync.DoLog(sllInfo, 'Execute: done W %', [fAsync.fProcessName], self);
 end;
 

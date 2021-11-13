@@ -472,7 +472,7 @@ type
     fSockPort: RawUtf8;
     fHeaderRetrieveAbortDelay: cardinal;
     fHeadersUnFiltered: boolean;
-    fExecuteMessage: string;
+    fExecuteMessage: RawUtf8;
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
     procedure IncStat(one: THttpServerSocketGetRequestResult);
       {$ifdef HASINLINE} inline; {$endif}
@@ -1560,9 +1560,15 @@ var
 begin
   tix := mormot.core.os.GetTickCount64 + Seconds * 1000; // never wait forever
   repeat
-    if Terminated or
-       (GetExecuteState in [esRunning, esFinished]) then
+    if Terminated then
       exit;
+    case GetExecuteState of
+      esRunning:
+        exit;
+      esFinished:
+        raise EHttpServer.CreateUtf8('%.Execute aborted due to %',
+          [self, fExecuteMessage]);
+    end;
     Sleep(1); // warning: waits typically 1-15 ms on Windows
     if mormot.core.os.GetTickCount64 > tix then
       raise EHttpServer.CreateUtf8('%.WaitStarted timeout after % seconds [%]',
@@ -1764,7 +1770,7 @@ begin
   try
     fSock := TCrtSocket.Bind(fSockPort); // BIND + LISTEN
     fExecuteState := esRunning;
-    if not fSock.SockIsDefined then // paranoid (Bind would have raise an exception)
+    if not fSock.SockIsDefined then // paranoid check
       raise EHttpServer.CreateUtf8('%.Execute: %.Bind failed', [self, fSock]);
     while not Terminated do
     begin
@@ -1821,7 +1827,7 @@ begin
   except
     on E: Exception do
       // any exception would break and release the thread
-      fExecuteMessage := E.ClassName + ' [' + E.Message + ']';
+      FormatUtf8('% [%]', [E, E.Message], fExecuteMessage);
   end;
   EnterCriticalSection(fProcessCS);
   fExecuteState := esFinished;

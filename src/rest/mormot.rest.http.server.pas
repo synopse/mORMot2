@@ -725,7 +725,7 @@ begin
     else
       raise ERestHttpServer.CreateUtf8('%.Create(% ): unsupported %',
         [self, fDBServerNames, ToText(aUse)^]);
-    THttpServerSocketGeneric(fHttpServer).WaitStarted;
+    THttpServerSocketGeneric(fHttpServer).WaitStarted(10);
   end;
   // setup the newly created server instance
   fHttpServer.OnRequest := Request;
