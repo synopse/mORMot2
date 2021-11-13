@@ -94,6 +94,7 @@ type
     /// initialize the proxy HTTP server forwarding specified RTSP server:port
     // - default aThreadPoolCount=1 is the best and fastest for our RTSP/HTTP
     // tunneling process, which is almost non blocking
+    // - warning: should call WaitStarted() to let Execute bind and run
     constructor Create(const aRtspServer, aRtspPort, aHttpPort: RawUtf8;
       aLog: TSynLogClass; const aOnStart, aOnStop: TOnNotifyThread;
       aOptions: TAsyncConnectionsOptions = []; aThreadPoolCount: integer = 1); reintroduce;

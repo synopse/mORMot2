@@ -568,11 +568,17 @@ type
     // threads will do atpReadPending for socket reading and processing the data
     // - there will always be two other threads, one for Accept() and another
     // for asynchronous data writing (i.e. sending to the socket)
+    // - warning: should call WaitStarted() to let Execute bind and run
     constructor Create(const aPort: RawUtf8;
       const OnStart, OnStop: TOnNotifyThread;
       aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
       aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
       aThreadPoolCount: integer); reintroduce; virtual;
+    /// to be called just after Create to wait for Execute to Bind
+    // - will raise an exception on timeout, or if the binding failed
+    // - needed only for raw protocol implementation: THttpServerGeneric will
+    // have its own WaitStarted method
+    procedure WaitStarted(seconds: integer);
     /// shut down the server, releasing all associated threads and sockets
     destructor Destroy; override;
   published
@@ -1683,12 +1689,11 @@ begin
   end;
   // unlock and stop ProcessRead/ProcessWrite polling
   for i := 0 to high(fThreads) do
-  begin
     fThreads[i].Terminate;
+  for i := 0 to high(fThreads) do
     if (fThreads[i].fEvent <> nil) and
        (fThreads[i].fExecuteState = esRunning) then
       fThreads[i].fEvent.SetEvent;
-  end;
   // stop polling and refuse further Write/ConnectionRemove
   endtix := mormot.core.os.GetTickCount64 + 1000;
   repeat
@@ -2135,6 +2140,25 @@ begin
   // binding will be done in Execute
 end;
 
+procedure TAsyncServer.WaitStarted(seconds: integer);
+var
+  tix: Int64;
+begin
+  if self = nil then
+    raise EAsyncConnections.CreateUtf8(
+      'TAsyncServer.WaitStarted(%) with self=nil', [seconds]);
+  tix := mormot.core.os.GetTickCount64 + seconds * 1000; // never wait forever
+  repeat
+    if Terminated or
+       (fExecuteState in [esRunning, esFinished]) then
+      exit;
+    Sleep(1); // warning: waits typically 1-15 ms on Windows
+    if mormot.core.os.GetTickCount64 > tix then
+      raise EAsyncConnections.CreateUtf8(
+        '%.WaitStarted timeout after % seconds', [self, seconds]);
+  until false;
+end;
+
 destructor TAsyncServer.Destroy;
 var
   endtix: Int64;
@@ -2194,10 +2218,10 @@ begin
   SetCurrentThreadName('AW %', [fProcessName]);
   NotifyThreadStart(self);
   try
-    // bind fServer to the expected TCP port
+    // create and bind fServer to the expected TCP port
     SetExecuteState(esBinding);
     fServer := TCrtSocket.Bind(fSockPort);
-    if fServer.Sock = nil then // paranoid check
+    if not fServer.SockIsDefined then // paranoid check
       raise EAsyncConnections.CreateUtf8('%.Execute: bind failed', [self]);
     SetExecuteState(esRunning);
     if not fExecuteAcceptOnly then

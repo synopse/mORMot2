@@ -7528,17 +7528,17 @@ end;
 
 function TrimU(const S: RawUtf8): RawUtf8;
 var
-  I, L: PtrInt;
+  i, L: PtrInt;
 begin
   L := Length(S);
-  I := 1;
-  while (I <= L) and
-        (S[I] <= ' ') do
-    inc(I);
-  if I > L then
+  i := 1;
+  while (i <= L) and
+        (S[i] <= ' ') do
+    inc(i);
+  if i > L then
     // void string
     FastAssignNew(result)
-  else if (I = 1) and
+  else if (i = 1) and
           (S[L] > ' ') then
     // nothing to trim: reference counted copy
     result := S
@@ -7547,7 +7547,7 @@ begin
     // allocate a new trimmed UTF-8 string
     while S[L] <= ' ' do
       dec(L);
-    result := Copy(S, I, L - I + 1);
+    result := Copy(S, i, L - i + 1);
   end;
 end;
 
@@ -7843,7 +7843,7 @@ begin
   e.r[1].c1 := e.r[1].c1 xor lec^.rs2;
   e.r[1].c2 := e.r[1].c2 xor lec^.rs3;
   e.r[1].c3 := e.r[1].c3 xor PtrUInt(lec); // any threadvar is thread-specific
-  // Windows CoCreateGuid, Linux/proc/sys/kernel/random/uuid, FreeBSD syscall,
+  // Windows CoCreateGuid, Linux /proc/sys/kernel/random/uuid, FreeBSD syscall,
   // then fallback to /dev/urandom or RTL mtwist_u32rand - may be slow
   CreateGUID(TGuid(e.r[2].b));
   // no mormot.core.os yet, so we can't use QueryPerformanceMicroSeconds()

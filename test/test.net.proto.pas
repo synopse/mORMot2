@@ -188,6 +188,7 @@ begin
     '127.0.0.1', '3999', '3998', TSynLog, nil, nil, options, {threads=}1);
     // threads=1 is the safest & fastest - but you may set 16 for testing
   try
+    proxy.WaitStarted(1);
     RtspRegressionTests(proxy, self, N, 10);
   finally
     proxy.Free;
