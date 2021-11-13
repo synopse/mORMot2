@@ -423,13 +423,15 @@ const
   PAGE_READWRITE = 4;
 
 function VirtualAlloc(lpAddress: pointer;
-   dwSize: PtrUInt; flAllocationType, flProtect: cardinal): pointer; stdcall;
-     external kernel32 name 'VirtualAlloc';
+   dwSize: PtrUInt; flAllocationType, flProtect: cardinal): pointer;
+     stdcall; external kernel32 name 'VirtualAlloc';
 function VirtualFree(lpAddress: pointer; dwSize: PtrUInt;
-   dwFreeType: cardinal): LongBool; stdcall;
-     external kernel32 name 'VirtualFree';
-procedure SwitchToThread; stdcall;
-     external kernel32 name 'SwitchToThread';
+   dwFreeType: cardinal): LongBool;
+     stdcall; external kernel32 name 'VirtualFree';
+procedure SwitchToThread;
+     stdcall; external kernel32 name 'SwitchToThread';
+function VirtualQuery(lpAddress, lpMemInfo: pointer; dwLength: PtrUInt): PtrUInt;
+     stdcall; external kernel32 name 'VirtualQuery';
 
 function AllocMedium(Size: PtrInt): pointer; inline;
 begin
@@ -449,7 +451,11 @@ begin
   VirtualFree(ptr, 0, MEM_RELEASE);
 end;
 
-{$define FPCMM_NOMREMAP} // our Windows target has no mremap feature yet
+// our Windows target has no mremap feature yet
+{$define FPCMM_NOMREMAP}
+
+// experimental VirtualQuery detection of object class - use at your own risk
+{$define FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 
 {$else}
 
@@ -497,6 +503,10 @@ begin
 end;
 
 {$endif FPCMM_NOMREMAP}
+
+// experimental detection of object class - use at your own risk
+{$define FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
+// (untested on BSD/DARWIN)
 
 {$else}
 
@@ -3016,32 +3026,46 @@ begin
   MemoryLeakReported := true;
 end;
 
-{$ifdef LINUX}
-  // experimental detection of object class - use at your own risk
-  {$define FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
-{$endif LINUX}
+{$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
+function SeemsRealPointer(p: pointer): boolean;
+{$ifdef MSWINDOWS}
+var
+  meminfo: record
+    BaseAddress, AllocationBase: pointer;
+    AllocationProtect: cardinal;
+    PartitionId: word;
+    RegionSize: PtrUInt;
+    State, Protect, MemType: cardinal;
+  end;
+{$endif MSWINDOWS}
+begin
+  result := false;
+  if PtrUInt(p) <= 65535 then
+    exit;
+  {$ifdef MSWINDOWS}
+  // see https://stackoverflow.com/a/37547837/458259
+  FillChar(meminfo, SizeOf(meminfo), 0);
+  result := (VirtualQuery(p, @meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
+            (meminfo.Protect and $00e6 <> 0) and
+            (meminfo.Protect and $0100 = 0);
+  {$else}
+  // let the GPF happen silently in the kernel
+  result := (fpaccess(p, F_OK) <> 0) and
+            (fpgeterrno <> ESysEFAULT);
+  {$endif MSWINDOWS}
+end;
+{$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 
 procedure MediumMemoryLeakReport(
   var Info: TMediumBlockInfo; p: PMediumBlockPoolHeader);
 var
   block: PByte;
   header, size: PtrUInt;
-
   {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
   first, last: PByte;
   vmt: PAnsiChar;
-
-  function SeemsRealPointer(p: pointer): boolean;
-  begin
-    result := (PtrUInt(p) > 65535)
-      {$ifndef MSWINDOWS} and
-      // let the GPF happen silently in the kernel
-      (fpaccess(p, F_OK) <> 0) and
-      (fpgeterrno <> ESysEFAULT)
-      {$endif MSWINDOWS};
-  end;
+  exceptcount: integer;
   {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
-
 begin
   if (Info.SequentialFeedBytesLeft = 0) or
      (PtrUInt(Info.LastSequentiallyFed) < PtrUInt(p)) or
@@ -3052,6 +3076,9 @@ begin
       block := Info.LastSequentiallyFed
     else
       exit;
+  {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
+  exceptcount := 0;
+  {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
   repeat
     header := PPtrUInt(block - BlockHeaderSize)^;
     size := header and DropMediumAndLargeFlagsMask;
@@ -3084,7 +3111,7 @@ begin
                  {$endif FPCMM_REPORTMEMORYLEAKS}
                  SeemsRealPointer(vmt) then
               try
-                // try to access the TObject VMT (seems to work on Linux)
+                // try to access the TObject VMT
                 if (PPtrInt(vmt + vmtInstanceSize)^ >= sizeof(vmt)) and
                    (PPtrInt(vmt + vmtInstanceSize)^ <=
                     PSmallBlockPoolHeader(block).BlockType.BlockSize) and
@@ -3092,10 +3119,14 @@ begin
                 begin
                    StartReport;
                    writeln(' probable ', PShortString(PPointer(vmt + vmtClassName)^)^,
-                     ' leak (', PSmallBlockPoolHeader(block).BlockType.BlockSize, ' bytes)');
+                     ' leak (', PPtrInt(vmt + vmtInstanceSize)^, '/',
+                     PSmallBlockPoolHeader(block).BlockType.BlockSize, ' bytes)');
                 end;
               except
-                // intercept any GPF
+                // intercept and ignore any GPF - SeemsRealPointer()
+                inc(exceptcount);
+                if exceptcount = 64 then
+                  exit; // exceptions should stay exceptional
               end;
             end;
             inc(first, PSmallBlockPoolHeader(block).BlockType.BlockSize);
