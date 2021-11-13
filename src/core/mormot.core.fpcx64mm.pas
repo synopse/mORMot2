@@ -1235,7 +1235,7 @@ asm
         jae     @NotTinyBlockType
         // ---------- TINY (size<=128B) block lock ----------
 @LockTinyBlockTypeLoop:
-        // Round-Robin attempt to lock of SmallBlockInfo.Tiny[]
+        // Round-Robin attempt to lock next SmallBlockInfo.Tiny[]
         // -> fair distribution among calls to reduce thread contention
         mov     dl, NumTinyBlockArenas + 1 // 8/16 arenas (including Small[])
 @TinyBlockArenaLoop:
@@ -1852,14 +1852,14 @@ end;
 
 {$ifdef FPCMM_REPORTMEMORYLEAKS}
 const
-  /// mark freed blocks with 00000000 BLOODLESS marker to track incorrect usage
-  REPORTMEMORYLEAK_FREEDHEXSPEAK = $B100D1E55;
+  /// mark freed blocks with 00000000 BLODLESS marker to track incorrect usage
+  REPORTMEMORYLEAK_FREEDHEXSPEAK = $B10D1E55;
 {$endif FPCMM_REPORTMEMORYLEAKS}
 
 function _FreeMem(P: pointer): PtrUInt; nostackframe; assembler;
 asm
         {$ifdef FPCMM_REPORTMEMORYLEAKS}
-        mov     eax, REPORTMEMORYLEAK_FREEDHEXSPEAK // 00000000 BLOODLESS marker
+        mov     eax, REPORTMEMORYLEAK_FREEDHEXSPEAK // 00000000 BLODLESS marker
         {$endif FPCMM_REPORTMEMORYLEAKS}
         {$ifndef MSWINDOWS}
         mov     rcx, P
@@ -3076,8 +3076,13 @@ begin
           begin
             if ((PPtrUInt(first - BlockHeaderSize)^ and IsFreeBlockFlag) = 0) then
             begin
-              vmt := PPointer(first)^; // _FreeMem() ensured vmt=nil
-              if (vmt <> nil) and SeemsRealPointer(vmt) then
+              vmt := PPointer(first)^; // _FreeMem() ensured vmt=nil/$b10dle55
+              if (vmt <> nil) and
+                 {$ifdef FPCMM_REPORTMEMORYLEAKS}
+                 (PtrUInt(vmt) <> REPORTMEMORYLEAK_FREEDHEXSPEAK) and
+                 // FreeMem marked freed blocks with 00000000 BLOODLESS marker
+                 {$endif FPCMM_REPORTMEMORYLEAKS}
+                 SeemsRealPointer(vmt) then
               try
                 // try to access the TObject VMT (seems to work on Linux)
                 if (PPtrInt(vmt + vmtInstanceSize)^ >= sizeof(vmt)) and
