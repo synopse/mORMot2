@@ -365,8 +365,7 @@ type
     fOwner: TAsyncConnections;
     fProcess: TAsyncConnectionsThreadProcess;
     fWaitForReadPending: boolean;
-    fExecuteStarted: boolean;
-    fExecuteFinished: boolean;
+    fExecuteState: THttpServerExecuteState;
     fIndex: integer;
     fEvent: TEvent;
     procedure Execute; override;
@@ -1518,7 +1517,7 @@ begin
   SetCurrentThreadName(n);
   fOwner.NotifyThreadStart(self);
   try
-    fExecuteStarted := true;
+    fExecuteState := esRunning;
     // implement parallel client connections for TAsyncClient
     while not Terminated and
           (fOwner.fThreadClients.Count > 0) and
@@ -1589,7 +1588,7 @@ begin
         fOwner.DoLog(sllWarning, 'Execute raised a % -> terminate % thread %',
           [E.ClassType, fOwner.fConnectionClass, n], self);
   end;
-  fExecuteFinished := true;
+  fExecuteState := esFinished;
 end;
 
 
@@ -1663,7 +1662,7 @@ var
 begin
   result := false;
   for i := 0 to high(fThreads) do
-    if not fThreads[i].fExecuteStarted then
+    if fThreads[i].fExecuteState = esNotStarted then
       exit;
   result := true;
 end;
@@ -1687,7 +1686,7 @@ begin
   begin
     fThreads[i].Terminate;
     if (fThreads[i].fEvent <> nil) and
-       not fThreads[i].fExecuteFinished then
+       (fThreads[i].fExecuteState = esRunning) then
       fThreads[i].fEvent.SetEvent;
   end;
   // stop polling and refuse further Write/ConnectionRemove
@@ -1695,7 +1694,7 @@ begin
   repeat
     n := 0;
     for i := 0 to high(fThreads) do
-      if not fThreads[i].fExecuteFinished then
+      if fThreads[i].fExecuteState = esRunning then
         inc(n);
     if n = 0 then
       break;
@@ -2129,11 +2128,11 @@ constructor TAsyncServer.Create(const aPort: RawUtf8;
   aOptions: TAsyncConnectionsOptions; aThreadPoolCount: integer);
 begin
   fSockPort := aPort;
-  fServer := TCrtSocket.Bind(aPort);
   fMaxConnections := 7777777; // huge number for sure
   fMaxPending := 1000; // fair enough for pending requests
   inherited Create(OnStart, OnStop, aConnectionClass, ProcessName, aLog,
     aOptions, aThreadPoolCount);
+  // binding will be done in Execute
 end;
 
 destructor TAsyncServer.Destroy;
@@ -2190,12 +2189,16 @@ var
   start: Int64;
   async: boolean;
 begin
-  // Accept() incoming connections [and Send() output packets in the background]
+  // Accept() incoming connections
+  // [and Send() output packets in the background]
   SetCurrentThreadName('AW %', [fProcessName]);
   NotifyThreadStart(self);
-  // constructor did bind fServer to the expected TCP port
-  if fServer.Sock <> nil then
   try
+    // bind fServer to the expected TCP port
+    SetExecuteState(esBinding);
+    fServer := TCrtSocket.Bind(fSockPort);
+    if fServer.Sock = nil then // paranoid check
+      raise EAsyncConnections.CreateUtf8('%.Execute: bind failed', [self]);
     SetExecuteState(esRunning);
     if not fExecuteAcceptOnly then
       // setup the main bound connection to be polling together with the writes
@@ -2209,7 +2212,7 @@ begin
     while not Terminated do
     begin
       if not async then
-        notif.tag := 0 // blocking accept()
+        notif.tag := 0 // blocking initial accept()
       else if not fClients.fWrite.GetOne(1000, 'AW', notif) then
         continue;
       if Terminated then
