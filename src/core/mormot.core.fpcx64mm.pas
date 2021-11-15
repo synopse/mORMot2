@@ -23,7 +23,7 @@ unit mormot.core.fpcx64mm;
       consumption (especially Intel TBB) and do panic/SIGKILL on any GPF
     - Pascal alternatives (FastMM4,ScaleMM2,BrainMM) are Windows+Delphi specific
     - Our lockess round-robin of tiny blocks and freemem bin list are unique
-      algorithms in Memory Managers AFAIK
+      algorithms among Memory Managers, and match modern CPUs and workloads
     - It was so fun diving into SSE2 x86_64 assembly and Pierre's insight
     - Resulting code is still easy to understand and maintain
 
@@ -377,6 +377,7 @@ implementation
   - Tiny and small blocks can fed from their own pool, not the medium pool;
   - Additional bin list to reduce small/tiny Freemem() thread contention;
   - Memory leaks and thread sleep tracked with almost no performance loss;
+  - Large blocks logic has been rewritten, especially realloc;
   - On Linux, mremap is used for efficient realloc of large blocks.
 
   About locking:
@@ -408,9 +409,6 @@ implementation
 
 {$ifdef MSWINDOWS}
 
-var
-  HeapStatus: TMMStatus;
-
 const
   kernel32 = 'kernel32.dll';
 
@@ -421,6 +419,19 @@ const
   MEM_TOP_DOWN = $100000;
 
   PAGE_READWRITE = 4;
+  PAGE_GUARD = $0100;
+  PAGE_VALID = $00e6; // PAGE_READONLY or PAGE_READWRITE or PAGE_EXECUTE or
+      // PAGE_EXECUTE_READ or PAGE_EXECUTE_READWRITE or PAGE_EXECUTE_WRITECOPY
+
+type
+  // VirtualQuery() API result structure
+  TMemInfo = record
+    BaseAddress, AllocationBase: pointer;
+    AllocationProtect: cardinal;
+    PartitionId: word;
+    RegionSize: PtrUInt;
+    State, Protect, MemType: cardinal;
+  end;
 
 function VirtualAlloc(lpAddress: pointer;
    dwSize: PtrUInt; flAllocationType, flProtect: cardinal): pointer;
@@ -442,17 +453,46 @@ end;
 function AllocLarge(Size: PtrInt): pointer; inline;
 begin
   // top-down allocation of large blocks to reduce fragmentation
-  // (this feature is not needed on POSIX, but seems less needed)
+  // (MEM_TOP_DOWN is not available on POSIX, but seems less needed)
   result := VirtualAlloc(nil, Size, MEM_COMMIT or MEM_TOP_DOWN, PAGE_READWRITE);
 end;
 
-procedure Free(ptr: pointer; Size: PtrInt); inline;
+procedure FreeMediumLarge(ptr: pointer; Size: PtrInt); inline;
 begin
   VirtualFree(ptr, 0, MEM_RELEASE);
 end;
 
-// our Windows target has no mremap feature yet
-{$define FPCMM_NOMREMAP}
+function RemapLarge(addr: pointer; old_len, new_len: size_t): pointer;
+var
+  meminfo: TMemInfo;
+  next: pointer;
+  nextsize: PtrUInt;
+begin
+  // old_len and new_len have 64KB granularity, so match Windows page size
+  nextsize := new_len - old_len;
+  if PtrInt(nextsize) > 0 then
+  begin
+    // try to allocate the memory just after the existing one
+    FillChar(meminfo, SizeOf(meminfo), 0);
+    next := addr + old_len;
+    if (VirtualQuery(next, @meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
+       (meminfo.State = MEM_FREE) and
+       (meminfo.RegionSize >= nextsize) and // enough space?
+       // reserve the address space in two steps for thread safety
+       (VirtualAlloc(next, nextsize, MEM_RESERVE, PAGE_READWRITE) <> nil) and
+       (VirtualAlloc(next, nextsize, MEM_COMMIT, PAGE_READWRITE) <> nil) then
+      begin
+        result := addr; // in-place realloc: no need to move memory :)
+        exit;
+      end;
+  end;
+  // we need to use the slower but safe Alloc/Move/Free pattern
+  result := AllocLarge(new_len);
+  if new_len > old_len then
+    new_len := old_len; // handle size up or down
+  Move(addr^, result^, new_len); // RTL non-volatile asm or our AVX MoveFast()
+  FreeMediumLarge(addr, old_len);
+end;
 
 // experimental VirtualQuery detection of object class - use at your own risk
 {$define FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
@@ -464,9 +504,6 @@ uses
   syscall,
   {$endif DARWIN}
   BaseUnix;
-
-var
-  HeapStatus: TMMStatus;
 
 // we directly call the Kernel, so this unit doesn't require any libc
 
@@ -482,10 +519,9 @@ begin
     MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
 end;
 
-procedure Free(ptr: pointer; Size: PtrInt); inline;
+procedure FreeMediumLarge(ptr: pointer; Size: PtrInt); inline;
 begin
-  Size := fpmunmap(ptr, Size);
-  // assert(Size = 0);
+  fpmunmap(ptr, Size);
 end;
 
 {$ifdef LINUX}
@@ -496,10 +532,11 @@ const
   syscall_nr_mremap = 25; // valid on x86_64 Linux and Android
   MREMAP_MAYMOVE = 1;
 
-function fpmremap(addr: pointer; old_len, new_len: size_t; may_move: longint): pointer; inline;
+function RemapLarge(addr: pointer; old_len, new_len: size_t): pointer; inline;
 begin
+  // let the Linux Kernel mremap() the memory using its TLB magic
   result := pointer(do_syscall(syscall_nr_mremap, TSysParam(addr),
-    TSysParam(old_len), TSysParam(new_len), TSysParam(may_move)));
+    TSysParam(old_len), TSysParam(new_len), TSysParam(MREMAP_MAYMOVE)));
 end;
 
 {$endif FPCMM_NOMREMAP}
@@ -525,6 +562,23 @@ begin
 end;
 
 {$endif MSWINDOWS}
+
+{$ifdef FPCMM_NOMREMAP} // fallback to safe and simple Alloc/Move/Free pattern
+function RemapLarge(addr: pointer; old_len, new_len: size_t): pointer;
+begin
+  result := AllocLarge(new_len);
+  if new_len > old_len then
+    new_len := old_len; // resize down
+  Move(addr^, result^, new_len); // RTL non-volatile asm or our AVX MoveFast()
+  FreeMediumLarge(addr, old_len);
+end;
+{$endif FPCMM_NOMREMAP}
+
+
+{ ********* Some Assembly Helpers }
+
+var
+  HeapStatus: TMMStatus;
 
 {$ifdef FPCMM_DEBUG}
 
@@ -560,9 +614,6 @@ end;
 
 {$endif FPCMM_DEBUG}
 
-
-{ ********* Some Assembly Helpers }
-
 procedure NotifyArenaAlloc(var Arena: TMMStatusArena; Size: PtrUInt);
   nostackframe; assembler;
 asm
@@ -591,28 +642,6 @@ asm
         add     qword ptr [Arena].TMMStatusArena.CurrentBytes, Size
         {$endif FPCMM_DEBUG}
 end;
-
-{$ifdef FPCMM_NOMREMAP}
-
-// faster than Move() as called from ReallocateLargeBlock
-procedure MoveLarge(src, dst: pointer; cnt: PtrInt); nostackframe; assembler;
-asm
-        sub     cnt, 8
-        add     src, cnt
-        add     dst, cnt
-        neg     cnt
-        jns     @z
-        align 16
-@s:     movaps  xmm0, oword ptr [src + cnt] // AVX move is not really faster
-        movntdq oword ptr [dst + cnt], xmm0 // non-temporal loop
-        add     cnt, 16
-        js      @s
-        sfence
-@z:     mov     rax, qword ptr [src + cnt]
-        mov     qword ptr [dst + cnt], rax
-end;
-
-{$endif FPCMM_NOMREMAP}
 
 
 { ********* Constants and Data Structures Definitions }
@@ -671,7 +700,6 @@ const
     64 * 1024 - MediumBlockGranularity + MediumBlockSizeOffset;
   MaximumSmallBlockPoolSize =
     OptimalSmallBlockPoolSizeUpperLimit + MinimumMediumBlockSize;
-  LargeBlockGranularity = 65536;
   MediumInPlaceDownsizeLimit = MinimumMediumBlockSize div 4;
 
   IsFreeBlockFlag = 1;
@@ -823,7 +851,7 @@ type
   TLargeBlockHeader = record
     PreviousLargeBlockHeader: PLargeBlockHeader;
     NextLargeBlockHeader: PLargeBlockHeader;
-    Reserved1: PtrUInt;
+    Reserved: PtrUInt;
     BlockSizeAndFlags: PtrUInt;
   end;
 
@@ -832,6 +860,7 @@ const
   SmallBlockPoolHeaderSize = SizeOf(TSmallBlockPoolHeader);
   MediumBlockPoolHeaderSize = SizeOf(TMediumBlockPoolHeader);
   LargeBlockHeaderSize = SizeOf(TLargeBlockHeader);
+  LargeBlockGranularity = 65536;
 
 var
   SmallBlockInfo: TSmallBlockInfo;
@@ -1018,7 +1047,7 @@ end;
 
 procedure FreeMedium(ptr: PMediumBlockPoolHeader);
 begin
-  Free(ptr, MediumBlockPoolSizeMem);
+  FreeMediumLarge(ptr, MediumBlockPoolSizeMem);
   NotifyMediumLargeFree(HeapStatus.Medium, MediumBlockPoolSizeMem);
 end;
 
@@ -1091,7 +1120,7 @@ asm
 end;
 
 function AllocateLargeBlockFrom(size: PtrUInt;
-   existing: pointer; oldsize: PtrUInt): pointer;
+  existing: pointer; oldsize: PtrUInt): pointer;
 var
   blocksize: PtrUInt;
   header, old: PLargeBlockHeader;
@@ -1101,11 +1130,7 @@ begin
   if existing = nil then
     header := AllocLarge(blocksize)
   else
-    {$ifdef FPCMM_NOMREMAP}
-    header := nil; // paranoid
-    {$else}
-    header := fpmremap(existing, oldsize, blocksize, MREMAP_MAYMOVE);
-    {$endif FPCMM_NOMREMAP}
+    header := RemapLarge(existing, oldsize, blocksize);
   if header <> nil then
   begin
     NotifyArenaAlloc(HeapStatus.Large, blocksize);
@@ -1132,7 +1157,7 @@ end;
 procedure FreeLarge(ptr: PLargeBlockHeader; size: PtrUInt);
 begin
   NotifyMediumLargeFree(HeapStatus.Large, size);
-  Free(ptr, size);
+  FreeMediumLarge(ptr, size);
 end;
 
 function FreeLargeBlock(p: pointer): PtrInt;
@@ -1159,11 +1184,11 @@ end;
 function ReallocateLargeBlock(p: pointer; size: PtrUInt): pointer;
 var
   oldavail, minup, new: PtrUInt;
-  {$ifndef FPCMM_NOMREMAP} prev, next, {$endif} header: PLargeBlockHeader;
+  prev, next, header: PLargeBlockHeader;
 begin
   header := pointer(PByte(p) - LargeBlockHeaderSize);
   oldavail := (DropMediumAndLargeFlagsMask and header^.BlockSizeAndFlags) -
-    (LargeBlockHeaderSize + BlockHeaderSize);
+              (LargeBlockHeaderSize + BlockHeaderSize);
   new := size;
   if size > oldavail then
   begin
@@ -1186,24 +1211,29 @@ begin
       // size-down and move just the trailing data
       oldavail := size;
   end;
-  {$ifdef FPCMM_NOMREMAP}
-  // no mremap(): reallocate a new block, copy the existing data, free old
-  result := _GetMem(new);
-  if result <> nil then
-    MoveLarge(p, result, oldavail);
-  _FreeMem(p);
-  {$else}
-  // remove from current chain list
-  LockLargeBlocks;
-  prev := header^.PreviousLargeBlockHeader;
-  next := header^.NextLargeBlockHeader;
-  next.PreviousLargeBlockHeader := prev;
-  prev.NextLargeBlockHeader := next;
-  LargeBlocksLocked := False;
-  // let the Linux Kernel mremap() the memory using its TLB magic
-  size := DropMediumAndLargeFlagsMask and header^.BlockSizeAndFlags;
-  result := AllocateLargeBlockFrom(new, header, size);
-  {$endif FPCMM_NOMREMAP}
+  if new < MaximumMediumBlockSize then
+  begin
+    // size was reduced to a small/medium block: use GetMem/Move/FreeMem
+    result := _GetMem(new);
+    if result <> nil then
+      Move(p^, result^, oldavail); // RTL non-volatile asm or our AVX MoveFast()
+    _FreeMem(p);
+  end
+  else
+  begin
+    // remove large block from current chain list
+    LockLargeBlocks;
+    prev := header^.PreviousLargeBlockHeader;
+    next := header^.NextLargeBlockHeader;
+    next.PreviousLargeBlockHeader := prev;
+    prev.NextLargeBlockHeader := next;
+    LargeBlocksLocked := False;
+    size := DropMediumAndLargeFlagsMask and header^.BlockSizeAndFlags;
+    // on Linux, call Kernel mremap() and its TLB magic
+    // on Windows, try to reserve the memory block just after the existing
+    // otherwise, use Alloc/Move/Free pattern, with asm/AVX move
+    result := AllocateLargeBlockFrom(new, header, size);
+  end;
 end;
 
 
@@ -3030,13 +3060,7 @@ end;
 function SeemsRealPointer(p: pointer): boolean;
 {$ifdef MSWINDOWS}
 var
-  meminfo: record
-    BaseAddress, AllocationBase: pointer;
-    AllocationProtect: cardinal;
-    PartitionId: word;
-    RegionSize: PtrUInt;
-    State, Protect, MemType: cardinal;
-  end;
+  meminfo: TMemInfo;
 {$endif MSWINDOWS}
 begin
   result := false;
