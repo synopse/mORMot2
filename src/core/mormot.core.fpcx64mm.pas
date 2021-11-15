@@ -3043,11 +3043,14 @@ begin
   if PtrUInt(p) <= 65535 then
     exit;
   {$ifdef MSWINDOWS}
+  // VirtualQuery API is slow but better than raising an exception
   // see https://stackoverflow.com/a/37547837/458259
   FillChar(meminfo, SizeOf(meminfo), 0);
   result := (VirtualQuery(p, @meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
-            (meminfo.Protect and $00e6 <> 0) and
-            (meminfo.Protect and $0100 = 0);
+            (meminfo.RegionSize >= SizeOf(pointer)) and
+            (meminfo.State = MEM_COMMIT) and
+            (meminfo.Protect and PAGE_VALID <> 0) and
+            (meminfo.Protect and PAGE_GUARD = 0);
   {$else}
   // let the GPF happen silently in the kernel
   result := (fpaccess(p, F_OK) <> 0) and
@@ -3120,7 +3123,8 @@ begin
                    StartReport;
                    writeln(' probable ', PShortString(PPointer(vmt + vmtClassName)^)^,
                      ' leak (', PPtrInt(vmt + vmtInstanceSize)^, '/',
-                     PSmallBlockPoolHeader(block).BlockType.BlockSize, ' bytes)');
+                     PSmallBlockPoolHeader(block).BlockType.BlockSize,
+                     ' bytes) at $', HexStr(first));
                 end;
               except
                 // intercept and ignore any GPF - SeemsRealPointer()

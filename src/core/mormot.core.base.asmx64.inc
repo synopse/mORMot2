@@ -151,7 +151,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         ja      @favxn                       // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @favxr: vmovups ymm0, yword ptr [src + rax]  // regular loop
-        vmovaps [r10 + rax], ymm0
+        vmovaps [r10 + rax], ymm0            // most CPUs have one store unit
         add     rax, 32
         jl      @favxr
 @favxe: vmovups yword ptr [r10], ymm1        // last 32
