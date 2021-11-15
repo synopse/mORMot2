@@ -1783,6 +1783,11 @@ type
   // - can be set as an alternative to TDynArrayHashOne
   TOnDynArrayHashOne = function(const Item): cardinal of object;
 
+  TDynArrayHasherState = set of (
+    hasHasher,
+    canHash
+    {$ifdef DYNARRAYHASH_16BIT} , hash16bit {$endif} );
+
   /// implements O(1) lookup to any dynamic array content
   // - this won't handle the storage process (like add/update), just efficiently
   // maintain a hash table over an existing dynamic array: several TDynArrayHasher
@@ -1802,8 +1807,7 @@ type
     HashTableSize: integer;
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
     ScanCounter: integer; // Scan()>=0 up to CountTrigger*2
-    State: set of (hasHasher, canHash
-      {$ifdef DYNARRAYHASH_16BIT} , hash16bit {$endif} );
+    State: TDynArrayHasherState;
     function HashTableIndex(aHashCode: PtrUInt): PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     function HashTableIndexToIndex(aHashTableIndex: PtrInt): PtrInt;
@@ -8655,28 +8659,30 @@ end;
 
 procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: PtrInt);
 var
-  n: integer;
+  n, ndx: PtrInt;
 begin
   // on input: HashTable[result] slot is already computed
   n := DynArray^.Count;
+  ndx := result;
+  result := n;
   if HashTableSize < n then
     RaiseFatalCollision('HashAdd HashTableSize', aHashCode);
   if HashTableSize - n < n shr 2 then
   begin
     // grow hash table when 25% void
     ReHash({forced=}true);
-    result := Find(aHashCode, {foradd=}true); // recompute position
-    if result >= 0 then
+    ndx := Find(aHashCode, {foradd=}true); // recompute position
+    if ndx >= 0 then
       RaiseFatalCollision('HashAdd', aHashCode);
   end;
-  result := -result - 1; // store Index+1 (0 means void slot)
+  ndx := -ndx - 1; // store Index+1 (0 means void slot)
+  inc(n);
   {$ifdef DYNARRAYHASH_16BIT}
   if hash16bit in State then
-    PWordArray(HashTableStore)[result] := n + 1
+    PWordArray(HashTableStore)[ndx] := n
   else
   {$endif DYNARRAYHASH_16BIT}
-    HashTableStore[result] := n + 1;
-  result := n;
+    HashTableStore[ndx] := n;
 end; // on output: result holds the position in fValue[]
 
 procedure TDynArrayHasher.HashDelete(aArrayIndex, aHashTableIndex: PtrInt;
@@ -8745,7 +8751,7 @@ end;
 function TDynArrayHasher.FindBeforeAdd(Item: pointer; out wasAdded: boolean;
   aHashCode: cardinal): PtrInt;
 var
-  n: integer;
+  n: PtrInt;
 begin
   wasAdded := false;
   if not (canHash in State) then
@@ -8886,14 +8892,14 @@ type
     collisions: integer;
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
     P: PAnsiChar;
-    procedure Process(Hasher: PDynArrayHasher; count: integer);
+    procedure Process(Hasher: PDynArrayHasher; count: PtrInt);
   end;
 
-procedure TFastReHash.Process(Hasher: PDynArrayHasher; count: integer);
+procedure TFastReHash.Process(Hasher: PDynArrayHasher; count: PtrInt);
 var
   fnd, ndx: PtrInt;
 label
-  nxt, cont;
+  nxt, ok;
 begin
   // should match FindOrNew() logic
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
@@ -8921,12 +8927,7 @@ nxt:if Assigned(Hasher^.EventHash) then // inlined HashOne()
         begin
           // we can use this void entry (most common case)
           PWordArray(Hasher^.HashTableStore)[ndx] := ht;
-cont:     inc(P, siz); // next item
-          inc(ht);
-          dec(count);
-          if count = 0 then
-            exit;
-          goto nxt;
+          goto ok;
         end;
       end
       else
@@ -8937,7 +8938,12 @@ cont:     inc(P, siz); // next item
         begin
           // we can use this void entry (most common case)
           Hasher^.HashTableStore[ndx] := ht;
-          goto cont;
+ok:       inc(P, siz); // next item
+          inc(ht);
+          dec(count);
+          if count <> 0 then
+            goto nxt;
+          exit;
         end;
       end;
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
@@ -9009,8 +9015,8 @@ begin
   {$ifdef DYNARRAYHASH_16BIT}
   if DynArray^.Capacity < $ffff then
   begin
-    include(State, hash16bit);
-    siz := (siz shr 1) {$ifndef DYNARRAYHASH_PO2} + 1 {$endif};
+    include(State, hash16bit); // we can store indexes as 16-bit word values
+    siz := (siz shr 1) {$ifndef DYNARRAYHASH_PO2} + 1 {$endif}; // store twice
   end
   else
     exclude(State, hash16bit);
