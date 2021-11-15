@@ -89,8 +89,9 @@ unit mormot.core.fpcx64mm;
 // - beneficial from our tests on high thread contention (HTTP/REST server)
 {.$define FPCMM_LOCKLESSFREE}
 
-// won't use mremap but a regular getmem/move/freemem pattern
+// won't use mremap but a regular getmem/move/freemem pattern for large blocks
 // - depending on the actual system (e.g. on a VM), mremap may be slower
+// - will disable Linux mremap() or Windows following block VirtualQuery/Alloc
 {.$define FPCMM_NOMREMAP}
 
 // force the tiny/small blocks to be in their own arena, not with medium blocks
@@ -338,9 +339,9 @@ const
     {$ifdef FPCMM_LOCKLESSFREE}      + ' lockless'    {$endif}
     {$ifdef FPCMM_PAUSE}             + ' pause'       {$endif}
     {$ifdef FPCMM_SLEEPTSC}          + ' rdtsc'       {$endif}
-    {$ifdef LINUX}
+    {$ifndef BSD}
       {$ifdef FPCMM_NOMREMAP}        + ' nomremap'    {$endif}
-    {$endif LINUX}
+    {$endif BSD}
     {$ifdef FPCMM_SMALLNOTWITHMEDIUM}+ ' smallpool'   {$endif}
     {$ifdef FPCMM_ERMS}              + ' erms'        {$endif}
     {$ifdef FPCMM_DEBUG}             + ' debug'       {$endif}
@@ -462,6 +463,8 @@ begin
   VirtualFree(ptr, 0, MEM_RELEASE);
 end;
 
+{$ifndef FPCMM_NOMREMAP}
+
 function RemapLarge(addr: pointer; old_len, new_len: size_t): pointer;
 var
   meminfo: TMemInfo;
@@ -494,6 +497,8 @@ begin
   FreeMediumLarge(addr, old_len);
 end;
 
+{$endif FPCMM_NOMREMAP}
+
 // experimental VirtualQuery detection of object class - use at your own risk
 {$define FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 
@@ -515,8 +520,7 @@ end;
 
 function AllocLarge(Size: PtrInt): pointer; inline;
 begin
-  result := fpmmap(nil, Size, PROT_READ or PROT_WRITE,
-    MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
+  result := AllocMedium(size); // same API (no MEM_TOP_DOWN option)
 end;
 
 procedure FreeMediumLarge(ptr: pointer; Size: PtrInt); inline;
@@ -563,7 +567,9 @@ end;
 
 {$endif MSWINDOWS}
 
-{$ifdef FPCMM_NOMREMAP} // fallback to safe and simple Alloc/Move/Free pattern
+// fallback to safe and simple Alloc/Move/Free pattern
+{$ifdef FPCMM_NOMREMAP}
+
 function RemapLarge(addr: pointer; old_len, new_len: size_t): pointer;
 begin
   result := AllocLarge(new_len);
@@ -572,6 +578,7 @@ begin
   Move(addr^, result^, new_len); // RTL non-volatile asm or our AVX MoveFast()
   FreeMediumLarge(addr, old_len);
 end;
+
 {$endif FPCMM_NOMREMAP}
 
 
@@ -3126,7 +3133,8 @@ begin
                 and DropMediumAndLargeFlagsMask) - BlockSize
             else
               last := Pointer(PByte(NextSequentialFeedBlockAddress) - 1);
-          while first <= last do
+          while (first <= last) and
+                (exceptcount < 64) do
           begin
             if ((PPtrUInt(first - BlockHeaderSize)^ and IsFreeBlockFlag) = 0) then
             begin
@@ -3153,8 +3161,6 @@ begin
               except
                 // intercept and ignore any GPF - SeemsRealPointer()
                 inc(exceptcount);
-                if exceptcount = 64 then
-                  exit; // exceptions should stay exceptional
               end;
             end;
             inc(first, PSmallBlockPoolHeader(block).BlockType.BlockSize);
