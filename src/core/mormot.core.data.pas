@@ -8886,11 +8886,11 @@ end;
 type
   TFastReHash = object // dedicated object for better register allocation
     hc: cardinal;
-    values, first, last, siz: PtrInt;
-    duplicates, ht: integer;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     collisions: integer;
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
+    values, first, last, siz: PtrInt;
+    duplicates, ht: integer;
     P: PAnsiChar;
     procedure Process(Hasher: PDynArrayHasher; count: PtrInt);
   end;

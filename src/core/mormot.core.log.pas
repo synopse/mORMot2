@@ -6606,7 +6606,7 @@ end;
 
 procedure TSynLogFile.ProcessOneLine(LineBeg, LineEnd: PUtf8Char);
 var
-  thread, n: cardinal;
+  thread, n, i: PtrUInt;
   MS: integer;
   L: TSynLogInfo;
 begin
@@ -6686,13 +6686,15 @@ begin
   case L of
     sllEnter:
       begin
-        if cardinal(fLogProcStackCount[thread]) >=
-            cardinal(length(fLogProcStack[thread])) then
-          SetLength(fLogProcStack[thread], length(fLogProcStack[thread]) + 256);
-        fLogProcStack[thread][fLogProcStackCount[thread]] := fLogProcNaturalCount;
+        n := length(fLogProcStack[thread]);
+        i := fLogProcStackCount[thread];
+        if i >= n then
+          SetLength(fLogProcStack[thread], i + 256);
+        fLogProcStack[thread][i] := fLogProcNaturalCount;
         inc(fLogProcStackCount[thread]);
-        if cardinal(fLogProcNaturalCount) >= cardinal(length(fLogProcNatural)) then
-          SetLength(fLogProcNatural, length(fLogProcNatural) + 32768);
+        n := length(fLogProcNatural);
+        if PtrUInt(fLogProcNaturalCount) >= n then
+          SetLength(fLogProcNatural, NextGrow(fLogProcNaturalCount));
         // fLogProcNatural[].Index will be set in TSynLogFile.LoadFromMap
         inc(fLogProcNaturalCount);
       end;
