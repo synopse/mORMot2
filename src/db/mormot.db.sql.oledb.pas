@@ -266,7 +266,7 @@ type
     fRowStepHandleRetrieved: PtrUInt;
     fRowStepHandleCurrent: PtrUInt;
     fRowStepHandles: TPtrUIntDynArray;
-    fRowSetData: array of byte;
+    fRowSetData: TBytes;
     fParamBindings: TDBBindingDynArray;
     fColumnBindings: TDBBindingDynArray;
     fHasColumnValueByRef: boolean;

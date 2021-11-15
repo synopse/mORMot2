@@ -716,7 +716,7 @@ type
     fServerSessionID: HTTP_SERVER_SESSION_ID;
     fUrlGroupID: HTTP_URL_GROUP_ID;
     fLogData: pointer;
-    fLogDataStorage: array of byte;
+    fLogDataStorage: TBytes;
     fLoggingServiceName: RawUtf8;
     fAuthenticationSchemes: THttpApiRequestAuthentications;
     fReceiveBufferSize: cardinal;
