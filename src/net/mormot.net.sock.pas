@@ -90,9 +90,9 @@ type
     constructor Create(msg: string; const args: array of const;
       error: TNetResult = nrOK); reintroduce;
     /// raise ENetSock if res is not nrOK or nrRetry
-    class procedure Check(res: TNetResult; const Context: shortstring);
+    class procedure Check(res: TNetResult; const Context: ShortString);
     /// call NetLastError and raise ENetSock if not nrOK nor nrRetry
-    class procedure CheckLastError(const Context: shortstring; ForceRaise: boolean = false;
+    class procedure CheckLastError(const Context: ShortString; ForceRaise: boolean = false;
       AnotherNonFatal: integer = 0);
   published
     property LastError: TNetResult
@@ -141,9 +141,9 @@ type
     function SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;
     function Family: TNetFamily;
     function IP(localasvoid: boolean = false): RawUtf8;
-    function IPShort(withport: boolean = false): shortstring; overload;
+    function IPShort(withport: boolean = false): ShortString; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure IPShort(out result: shortstring; withport: boolean = false); overload;
+    procedure IPShort(out result: ShortString; withport: boolean = false); overload;
     function Port: TNetPort;
     function SetPort(p: TNetPort): TNetResult;
     function Size: integer;
@@ -271,14 +271,14 @@ type
 /// detect IANA private IPv4 address space from its 32-bit raw value
 function IsPublicIP(ip4: cardinal): boolean;
 
-/// convert an IPv4 raw value into a shortstring text
-procedure IP4Short(ip4addr: PByteArray; var s: shortstring);
+/// convert an IPv4 raw value into a ShortString text
+procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
 
 /// convert an IPv4 raw value into a RawUtf8 text
 procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
 
-/// convert an IPv6 full address into a shortstring text
-procedure IP6Short(psockaddr: pointer; var s: shortstring; withport: boolean);
+/// convert an IPv6 full address into a ShortString text
+procedure IP6Short(psockaddr: pointer; var s: ShortString; withport: boolean);
 
 /// convert a MAC address value into a RawUtf8 text
 function MacToText(mac: PByteArray): RawUtf8;
@@ -1139,7 +1139,7 @@ begin
     result := nrRetry;
 end;
 
-function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): shortstring;
+function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): ShortString;
 var
   nr: TNetResult;
   err: integer;
@@ -1175,14 +1175,14 @@ begin
   inherited CreateFmt(msg, args);
 end;
 
-class procedure ENetSock.Check(res: TNetResult; const Context: shortstring);
+class procedure ENetSock.Check(res: TNetResult; const Context: ShortString);
 begin
   if (res <> nrOK) and
      (res <> nrRetry) then
     raise Create('%s failed', [Context], res);
 end;
 
-class procedure ENetSock.CheckLastError(const Context: shortstring;
+class procedure ENetSock.CheckLastError(const Context: ShortString;
   ForceRaise: boolean; AnotherNonFatal: integer);
 var
   res: TNetResult;
@@ -1252,12 +1252,12 @@ begin
     FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
-function TNetAddr.IPShort(withport: boolean): shortstring;
+function TNetAddr.IPShort(withport: boolean): ShortString;
 begin
   IPShort(result, withport);
 end;
 
-procedure TNetAddr.IPShort(out result: shortstring; withport: boolean);
+procedure TNetAddr.IPShort(out result: ShortString; withport: boolean);
 begin
   result[0] := #0;
   case PSockAddr(@Addr)^.sa_family of
@@ -1776,7 +1776,7 @@ begin
   result := true;
 end;
 
-procedure IP4Short(ip4addr: PByteArray; var s: shortstring);
+procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
 begin
   str(ip4addr[0], s);
   AppendShortChar('.', s);
@@ -1789,7 +1789,7 @@ end;
 
 procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
 var
-  s: shortstring;
+  s: ShortString;
 begin
   if PCardinal(ip4addr)^ = 0 then
     // '0.0.0.0' bound to any host -> ''
@@ -1804,7 +1804,7 @@ begin
   end;
 end;
 
-procedure IP6Short(psockaddr: pointer; var s: shortstring; withport: boolean);
+procedure IP6Short(psockaddr: pointer; var s: ShortString; withport: boolean);
 var
   host: array[0..NI_MAXHOST] of AnsiChar;
   serv: array[0..NI_MAXSERV] of AnsiChar;
@@ -3309,7 +3309,7 @@ end;
 procedure TCrtSocket.SockSend(const Values: array of const);
 var
   i: PtrInt;
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   for i := 0 to high(Values) do
     with Values[i] do

@@ -117,7 +117,7 @@ const
 // - e.g. StatusCodeToReason(200)='OK'
 // - as defined in http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 // - see also StatusCodeToErrorMsg() from mormot.core.text if you need
-// the HTTP error as both integer and text, returned as shortstring
+// the HTTP error as both integer and text, returned as ShortString
 function StatusCodeToReason(Code: cardinal): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -229,7 +229,7 @@ const
   NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
 
   /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
-  // - can be used e.g. in logs, or anything accepting a shortstring
+  // - can be used e.g. in logs, or anything accepting a ShortString
   BOOL_STR: array[boolean] of string[7] = (
     'false', 'true');
 
@@ -984,7 +984,7 @@ procedure SetExecutableVersion(const aVersionText: RawUtf8); overload;
 // return filename, symbol name and line number (if any) as plain text, e.g.
 // '4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)' on FPC
 var
-  GetExecutableLocation: function(aAddress: pointer): shortstring;
+  GetExecutableLocation: function(aAddress: pointer): ShortString;
 
 
 type
@@ -1740,10 +1740,10 @@ function Unicode_AnsiToWide(
 function Unicode_WideToAnsi(
   W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
 
-/// conversion of some UTF-16 buffer into a temporary Ansi shortstring
+/// conversion of some UTF-16 buffer into a temporary Ansi ShortString
 // - used when mormot.core.unicode is an overkill, e.g. TCrtSocket.SockSend()
 procedure Unicode_WideToShort(
-  W: PWideChar; LW, CodePage: PtrInt; var res: shortstring);
+  W: PWideChar; LW, CodePage: PtrInt; var res: ShortString);
 
 /// compatibility function, wrapping Win32 API CharUpperBuffW()
 // - on POSIX, use the ICU library, or fallback to 'a'..'z' conversion only
@@ -2784,10 +2784,10 @@ threadvar
 function GetCurrentThreadName: RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// returns the thread id and the thread name as a shortstring
+/// returns the thread id and the thread name as a ShortString
 // - returns e.g. 'Thread 0001abcd [shortthreadname]'
 // - for convenient use when logging or raising an exception
-function GetCurrentThreadInfo: shortstring;
+function GetCurrentThreadInfo: ShortString;
 
 /// enter a process-wide giant lock for thread-safe shared process
 // - shall be protected as such:
@@ -3828,7 +3828,7 @@ begin
 end;
 
 procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt;
-  var res: shortstring);
+  var res: ShortString);
 var
   i: PtrInt;
 begin
@@ -4062,8 +4062,8 @@ begin
   retry := 10;
   repeat
     // thread-safe unique file name generation
-    result := Format('%s%s_%x.tmp', [folder, Executable.ProgramName,
-      InterlockedIncrement(_TmpCounter)]);
+    result := Format('%s%s_%x.tmp',
+      [folder, Executable.ProgramName, InterlockedIncrement(_TmpCounter)]);
     if not FileExists(result) then
       exit;
     dec(retry); // no endless loop
@@ -4896,7 +4896,7 @@ const
   // hexstr() is not available on Delphi -> use our own simple version
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 
-function _GetExecutableLocation(aAddress: pointer): shortstring;
+function _GetExecutableLocation(aAddress: pointer): ShortString;
 var
   i: PtrInt;
   b: PByte;
@@ -5044,7 +5044,7 @@ begin
   ShortStringToAnsi7String(CurrentThreadName, result);
 end;
 
-function GetCurrentThreadInfo: shortstring;
+function GetCurrentThreadInfo: ShortString;
 begin
   result := ShortString(format('Thread %x [%s]',
     [PtrUInt(GetCurrentThreadId), CurrentThreadName]));

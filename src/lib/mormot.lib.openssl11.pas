@@ -1109,7 +1109,7 @@ function BIO_ToString(b: PBIO; andfree: boolean = false): RawUtf8; overload;
 procedure OpenSSL_Free(ptr: pointer);
 function SSL_error(error: integer): RawUtf8; overload;
 procedure SSL_error(error: integer; var result: RawUtf8); overload;
-function SSL_error_short(error: integer): shortstring;
+function SSL_error_short(error: integer): ShortString;
 function SSL_is_fatal_error(error: integer): boolean;
 procedure WritelnSSL_error; // very useful when debugging
 
@@ -2891,7 +2891,7 @@ begin
   FastSetString(result, @tmp, mormot.core.base.StrLen(@tmp));
 end;
 
-function SSL_error_short(error: integer): shortstring;
+function SSL_error_short(error: integer): ShortString;
 begin
   ERR_error_string_n(error, @result[1], 254);
   result[0] := AnsiChar(mormot.core.base.StrLen(@result[1]));

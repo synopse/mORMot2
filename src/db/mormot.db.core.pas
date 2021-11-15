@@ -256,7 +256,7 @@ function IsRowID(FieldName: PUtf8Char; FieldLen: integer): boolean;
   {$ifdef HASINLINE}inline;{$endif} overload;
 
 /// returns TRUE if the specified field name is either 'ID', either 'ROWID'
-function IsRowIDShort(const FieldName: shortstring): boolean;
+function IsRowIDShort(const FieldName: ShortString): boolean;
   {$ifdef HASINLINE}inline;{$endif} overload;
 
 /// returns the stored size of a TSqlVar database value
@@ -702,7 +702,7 @@ type
   end;
 
 /// returns a 64-bit value as inlined ':(1234):' text
-function InlineParameter(ID: Int64): shortstring; overload;
+function InlineParameter(ID: Int64): ShortString; overload;
 
 /// returns a string value as inlined ':("value"):' text
 function InlineParameter(const value: RawUtf8): RawUtf8; overload;
@@ -1522,7 +1522,7 @@ begin
   end;
 end;
 
-function IsRowIDShort(const FieldName: shortstring): boolean;
+function IsRowIDShort(const FieldName: ShortString): boolean;
 begin
   result := ((PIntegerArray(@FieldName)^[0] and $dfdfff =
               2 + ord('I') shl 8 + ord('D') shl 16) or
@@ -1926,7 +1926,7 @@ end;
 
 { ************ SQL Parameters Inlining and Processing }
 
-function InlineParameter(ID: Int64): shortstring;
+function InlineParameter(ID: Int64): ShortString;
 begin
   FormatShort(':(%):', [ID], result);
 end;

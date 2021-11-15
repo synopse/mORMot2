@@ -2122,8 +2122,8 @@ type
     function GetU(Row: PtrInt; const FieldName: RawUtf8): RawUtf8; overload;
     /// read-only access to a particular field value, as Win Ansi text
     function GetA(Row, Field: PtrInt): WinAnsiString;
-    /// read-only access to a particular field value, as Win Ansi text shortstring
-    function GetS(Row, Field: PtrInt): shortstring;
+    /// read-only access to a particular field value, as Win Ansi text ShortString
+    function GetS(Row, Field: PtrInt): ShortString;
     /// read-only access to a particular field value, as a Variant
     // - text will be stored as RawUtf8 (as varString type)
     // - will try to use the most approriate Variant type for conversion (will
@@ -2897,7 +2897,7 @@ type
       var Bits: TFieldBits): boolean;
     /// compute the CSV field names text from a set of bits
     procedure CsvFromFieldBits(const Prefix: array of const;
-      const Bits: TFieldBits; const BitsSuffix: shortstring;
+      const Bits: TFieldBits; const BitsSuffix: ShortString;
       const Suffix: array of const; out Result: RawUtf8);
     /// set all field indexes corresponding to the supplied field names
     // - returns TRUE on success, FALSE if any field name is not existing
@@ -7548,7 +7548,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         result := ClassOrmFieldType(Info);
         exit;
       end;
-    // note: tkString (shortstring) and tkInterface not handled
+    // note: tkString (ShortString) and tkInterface not handled
   else
     begin
       result := oftUnknown;
@@ -8432,7 +8432,7 @@ begin
   result := GetAsDateTime(Row, FieldIndex(FieldName));
 end;
 
-function TOrmTableAbstract.GetS(Row, Field: PtrInt): shortstring;
+function TOrmTableAbstract.GetS(Row, Field: PtrInt): ShortString;
 begin
   Utf8ToShortString(result, Get(Row, Field));
 end;
@@ -10620,7 +10620,7 @@ function TOrmPropertiesAbstract.IsFieldNameOrFunction(const PropName: RawUtf8): 
 var
   L: integer;
   P, P2: PUtf8Char;
-  tmp: shortstring; // no heap allocation
+  tmp: ShortString; // no heap allocation
 begin
   result := false;
   L := length(PropName);
@@ -10803,7 +10803,7 @@ end;
 {$endif PUREMORMOT2}
 
 procedure TOrmPropertiesAbstract.CsvFromFieldBits(const Prefix: array of const;
-  const Bits: TFieldBits; const BitsSuffix: shortstring;
+  const Bits: TFieldBits; const BitsSuffix: ShortString;
   const Suffix: array of const; out Result: RawUtf8);
 var
   f: PtrInt;

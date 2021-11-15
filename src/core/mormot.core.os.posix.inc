@@ -331,7 +331,7 @@ end;
 
 function TIcuLibrary.ucnv(codepage: cardinal): pointer;
 var
-  s: shortstring;
+  s: ShortString;
   err: SizeInt;
   {$ifdef CPUINTEL}
   mask: cardinal;
@@ -1452,13 +1452,13 @@ begin
   fpsysctl(pointer(@mib), 2, @result, @len, nil, 0);
 end;
 
-function fpsysctlhwstr(hwid: cint; var temp: shortstring): pointer;
+function fpsysctlhwstr(hwid: cint; var temp: ShortString): pointer;
 var mib: array[0..1] of cint;
     len: cint;
 begin
   mib[0] := CTL_HW;
   mib[1] := hwid;
-  FillCharFast(temp, SizeOf(temp), 0); // shortstring as 0-terminated buffer
+  FillCharFast(temp, SizeOf(temp), 0); // ShortString as 0-terminated buffer
   len := SizeOf(temp);
   fpsysctl(pointer(@mib), 2, @temp, @len, nil, 0);
   if temp[0] <> #0 then
@@ -1929,7 +1929,7 @@ procedure DoShutDown(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
 var
   level: TSynLogInfo;
   si_code: integer;
-  text: shortstring; // code below has no memory allocation
+  text: ShortString; // code below has no memory allocation
 begin
   if Assigned(SynDaemonInterceptLog) then
   begin
@@ -2421,7 +2421,7 @@ var
   tp: timespec;
   {$endif OSDARWIN}
   {$ifdef OSBSDDARWIN}
-  temp: shortstring;
+  temp: ShortString;
   {$else}
   hw, cpuinfo: PUtf8Char;
   proccpuinfo, release, prod: RawUtf8;

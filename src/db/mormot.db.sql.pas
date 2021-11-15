@@ -6477,7 +6477,7 @@ end;
 function TSqlDBStatement.SqlLogEnd(const Fmt: RawUtf8;
   const Args: array of const): Int64;
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   tmp[0] := #0;
   {$ifndef SYNDB_SILENCE}

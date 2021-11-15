@@ -402,7 +402,7 @@ type
     // - may be used to automatically purge a list of subscribed callbacks,
     // e.g. before trigerring the interface instance, and avoid an exception
     // - can optionally append the callback class instance information to
-    // a local shortstring variable, e.g. for logging/debug purposes
+    // a local ShortString variable, e.g. for logging/debug purposes
     class function CallbackReleasedOnClientSide(const callback: IInterface;
       callbacktext: PShortString = nil): boolean; overload;
     /// replace the connection ID of callbacks after a reconnection
@@ -1090,7 +1090,7 @@ var
   timeStart, timeEnd: Int64;
   stats: TSynMonitorInputOutput;
   m: PtrInt;
-  err: shortstring;
+  err: ShortString;
   temp: TTextWriterStackBuffer;
 
   function GetFullMethodName: RawUtf8;
@@ -1841,7 +1841,7 @@ begin
   FakeCallbackAdd(instance);
 end;
 
-procedure AppendWithSpace(var dest: shortstring; const source: shortstring);
+procedure AppendWithSpace(var dest: ShortString; const source: ShortString);
 var
   d, s: PtrInt;
 begin

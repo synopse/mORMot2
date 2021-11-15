@@ -2640,7 +2640,7 @@ begin
   end;
 end;
 
-procedure InternalFileAppend(const ctxt: shortstring;
+procedure InternalFileAppend(const ctxt: ShortString;
   const main, append, new, zipfolder, mask: TFileName; flag: boolean;
   const onadd: TOnZipWriteAdd; const zipfiles: array of TFileName;
   level: integer; keepdigitalsign: boolean);

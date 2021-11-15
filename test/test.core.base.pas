@@ -3559,7 +3559,7 @@ var
   c: currency;
   ident: TRawUtf8DynArray;
   vj, vs: variant;
-  a, a2: shortstring;
+  a, a2: ShortString;
   u: string;
   varint: array[0..255] of byte;
   st: TFastReader;

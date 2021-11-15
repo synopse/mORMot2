@@ -1601,7 +1601,7 @@ var
   m: PInterfaceMethod;
   methodOutput: RawUtf8;
   renderContext, info: variant;
-  err: shortstring;
+  err: ShortString;
   tmp: TTextWriterStackBuffer;
 begin
   action.ReturnedStatus := HTTP_SUCCESS;

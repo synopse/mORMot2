@@ -157,7 +157,7 @@ type
     // - returns only the hexadecimal value if no match is found in .map/.gdb info
     // - won't allocate any heap memory during the text creation
     // - mormot.core.os.pas' GetExecutableLocation() redirects to this method
-    function FindLocationShort(aAddressAbsolute: PtrUInt): shortstring;
+    function FindLocationShort(aAddressAbsolute: PtrUInt): ShortString;
     /// load .map/.gdb info and return the symbol location according
     // to the supplied ESynException
     // - i.e. unit name, symbol name and line number (if any), as plain text
@@ -1970,7 +1970,7 @@ type
     isdwarf64, debugtoconsole: boolean;
     debug: TDebugFile;
     map: TMemoryMap;
-    function FindSections(const filename: shortstring): boolean;
+    function FindSections(const filename: ShortString): boolean;
     procedure ReadInit(aBase, aLimit: Int64);
     function ReadLeb128: Int64;
     function ReadAddress(addr_size: PtrInt): QWord; inline;
@@ -1999,9 +1999,9 @@ end;
 
 {$I-}
 
-function TDwarfReader.FindSections(const filename: shortstring): boolean;
+function TDwarfReader.FindSections(const filename: ShortString): boolean;
 var
-  dbgfn: shortstring;
+  dbgfn: ShortString;
   e: TExeFile; // use RTL's cross-OS exeinfo.pp unit
 begin
   result := false;
@@ -2287,7 +2287,7 @@ var
   header64: TDwarfLineInfoHeader64;
   header32: TDwarfLineInfoHeader32;
   u: PDebugUnit;
-  s: shortstring;
+  s: ShortString;
   filesdir: array[0..15] of byte;
   numoptable: array[1..255] of byte;
 begin
@@ -2493,7 +2493,7 @@ var
   unit_length, low_pc, high_pc: QWord;
   abbr, level: cardinal;
   i: PtrInt;
-  name, typname: shortstring;
+  name, typname: ShortString;
 begin
   // check if DWARF 32-bit or 64-bit format
   ReadInit(file_offset, file_size);
@@ -3401,7 +3401,7 @@ begin
   ShortStringToAnsi7String(FindLocationShort(aAddressAbsolute), result);
 end;
 
-function TDebugFile.FindLocationShort(aAddressAbsolute: PtrUInt): shortstring;
+function TDebugFile.FindLocationShort(aAddressAbsolute: PtrUInt): ShortString;
 var
   u, s, line, offset: integer;
 begin
@@ -3443,7 +3443,7 @@ begin
     result := GetInstanceDebugFile.FindLocation(PtrUInt(exc.RaisedAt));
 end;
 
-function _GetExecutableLocation(aAddress: pointer): shortstring;
+function _GetExecutableLocation(aAddress: pointer): ShortString;
 begin
   result := GetInstanceDebugFile.FindLocationShort(PtrUInt(aAddress));
 end;

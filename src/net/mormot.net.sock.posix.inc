@@ -430,7 +430,7 @@ var
   list, info: pifaddrs;
   n: PtrInt;
   s: RawUtf8;
-  ss: shortstring;
+  ss: ShortString;
 begin
   result := nil;
   n := 0;

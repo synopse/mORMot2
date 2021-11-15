@@ -45,7 +45,7 @@ const
   JSON_SQLDATE_MAGIC_QUOTE_C = ord('"') + cardinal(JSON_SQLDATE_MAGIC_C) shl 8;
 
   /// '"' +  UTF-8 encoded \uFFF1 special code to mark ISO-8601 SQLDATE in JSON
-  // - defined as a shortstring constant to be used as:
+  // - defined as a ShortString constant to be used as:
   // ! AddShorter(JSON_SQLDATE_MAGIC_QUOTE_STR);
   JSON_SQLDATE_MAGIC_QUOTE_STR: string[4] = '"'#$ef#$bf#$b1;
 

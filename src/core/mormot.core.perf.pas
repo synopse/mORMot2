@@ -188,7 +188,7 @@ type
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
     function ByCount(Count: QWord): TShort16;
     /// returns e.g. '16.9 MB in 102.20ms i.e. 165.5 MB/s'
-    function SizePerSec(Size: QWord): shortstring;
+    function SizePerSec(Size: QWord): ShortString;
     /// textual representation of total time elapsed
     // - with appened time resolution (us,ms,s) - from MicroSecToString()
     // - not to be used in normal code (which could rather call the Stop method),
@@ -1249,7 +1249,7 @@ begin
     result := (Count * 1000000) div fTime;
 end;
 
-function TPrecisionTimer.SizePerSec(Size: QWord): shortstring;
+function TPrecisionTimer.SizePerSec(Size: QWord): ShortString;
 begin
   FormatShort('% in % i.e. %/s', [KB(Size), Stop, KB(PerSec(Size))], result);
 end;
@@ -2740,7 +2740,7 @@ var
   i: PtrInt;
   parts: TDiskPartitions;
 
-  function GetInfo(var p: TDiskPartition): shortstring;
+  function GetInfo(var p: TDiskPartition): ShortString;
   const
     F: array[boolean] of RawUtf8 = ('% % (% / %)', '% % (%/%)');
   var

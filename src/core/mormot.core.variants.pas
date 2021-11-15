@@ -6824,7 +6824,7 @@ function TDocVariantData.GetPVariantByPath(const aPath: RawUtf8): PVariant;
 var
   P: PUtf8Char;
   ndx: PtrInt;
-  n: shortstring;
+  n: ShortString;
 begin
   if (cardinal(VType) <> DocVariantVType) or
      (aPath = '') or

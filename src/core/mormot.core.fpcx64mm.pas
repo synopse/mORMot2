@@ -314,7 +314,7 @@ function GetSmallBlockContention(
 /// convenient debugging function into the console
 // - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
 // up to the smallblockcontentioncount biggest occurences
-procedure WriteHeapStatus(const context: shortstring = '';
+procedure WriteHeapStatus(const context: ShortString = '';
   smallblockstatuscount: integer = 8; smallblockcontentioncount: integer = 8;
   compilationflags: boolean = false);
 
@@ -322,7 +322,7 @@ procedure WriteHeapStatus(const context: shortstring = '';
 // - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
 // up to the smallblockcontentioncount biggest occurences
 // - warning: this function is not thread-safe
-function GetHeapStatus(const context: shortstring; smallblockstatuscount,
+function GetHeapStatus(const context: ShortString; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
 
 
@@ -413,10 +413,10 @@ implementation
 const
   kernel32 = 'kernel32.dll';
 
-  MEM_COMMIT = $1000;
+  MEM_COMMIT   = $1000;
   MEM_RESERVE  = $2000;
-  MEM_RELEASE = $8000;
-  MEM_FREE = $10000;
+  MEM_RELEASE  = $8000;
+  MEM_FREE     = $10000;
   MEM_TOP_DOWN = $100000;
 
   PAGE_READWRITE = 4;
@@ -748,7 +748,7 @@ const
   // pre-ERMS expects at least 256 bytes, IvyBridge+ with ERMS is good from 64
   // see https://stackoverflow.com/a/43837564/458259 for explanations and timing
   // -> "movaps" loop is used up to 256 bytes of data: good on all CPUs
-  // -> "movntdq" is used for large blocks on Windows: always faster than ERMS
+  // -> "movnt" Move/MoveFast is used for large blocks: always faster than ERMS
   ErmsMinSize = 256;
   {$endif FPCMM_ERMS}
 
@@ -2514,7 +2514,7 @@ end;
 
 function _MemSize(P: pointer): PtrUInt;
 begin
-  // AFAIK used only by fpc_AnsiStr_SetLength() in RTL
+  // AFAIK used only by fpc_AnsiStr_SetLength() in FPC RTL
   // also used by our static SQLite3 for its xSize() callback
   P := PPointer(PByte(P) - BlockHeaderSize)^;
   if (PtrUInt(P) and (IsMediumBlockFlag or IsLargeBlockFlag)) = 0 then
@@ -2725,7 +2725,7 @@ const
   K_: array[0..4] of string[1] = (
     'P', 'T', 'G', 'M', 'K');
 
-function K(i: PtrUInt): shortstring;
+function K(i: PtrUInt): ShortString;
 var
   j, n: PtrUInt;
   tmp: PShortString;
@@ -2746,7 +2746,7 @@ begin
     result := result + tmp^;
 end;
 
-function S(i: PtrUInt): shortstring;
+function S(i: PtrUInt): ShortString;
 begin
   str(i, result);
 end;
@@ -2757,7 +2757,7 @@ type
     procedure(const V: array of ShortString; CRLF: boolean = true);
 
 procedure WriteHeapStatusDetail(const arena: TMMStatusArena;
-  const name: shortstring; Wr: TGetHeapStatusWrite);
+  const name: ShortString; Wr: TGetHeapStatusWrite);
 begin
   Wr([name, K(arena.CurrentBytes),
     'B/', K(arena.CumulativeBytes), 'B '], {crlf=}false);
@@ -2770,7 +2770,7 @@ begin
   Wr([' sleep=', K(arena.SleepCount)]);
 end;
 
-procedure ComputeHeapStatus(const context: shortstring; smallblockstatuscount,
+procedure ComputeHeapStatus(const context: ShortString; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags: boolean;
   Wr: TGetHeapStatusWrite);
 var
@@ -2856,11 +2856,12 @@ var
 begin // we don't have format() nor formatutf8() -> this is good enough
   for i := 0 to high(V) do
     WrStrTemp := WrStrTemp + string(V[i]); // fast enough
-  if CRLF and not WrStrOnSameLine then
+  if CRLF and
+     not WrStrOnSameLine then
     WrStrTemp := WrStrTemp + #13#10;
 end;
 
-function GetHeapStatus(const context: shortstring; smallblockstatuscount,
+function GetHeapStatus(const context: ShortString; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
 begin
   WrStrOnSameLine := onsameline;
@@ -2883,7 +2884,7 @@ begin // direct write to the console with no memory heap allocation
   {$I+}
 end;
 
-procedure WriteHeapStatus(const context: shortstring; smallblockstatuscount,
+procedure WriteHeapStatus(const context: ShortString; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags: boolean);
 begin
   ComputeHeapStatus(context,  smallblockstatuscount, smallblockcontentioncount,

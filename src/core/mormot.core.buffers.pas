@@ -637,7 +637,7 @@ type
     /// copy the next VarBlob value from the buffer into a TSynTempBuffer
     procedure VarBlob(out Value: TSynTempBuffer); overload;
     /// read the next ShortString value from the buffer
-    function VarShortString: shortstring;
+    function VarShortString: ShortString;
       {$ifdef HASINLINE}inline;{$endif}
     /// fast ignore the next VarUInt32/VarInt32/VarUInt64/VarInt64 value
     // - don't raise any exception, so caller could check explicitly for any EOF
@@ -945,7 +945,7 @@ const
   JSON_BASE64_MAGIC_QUOTE_C = ord('"') + cardinal(JSON_BASE64_MAGIC_C) shl 8;
 
   /// '"' + UTF-8 encoded \uFFF0 special code to mark Base64 binary in JSON
-  // - defined as a shortstring constant to be used as:
+  // - defined as a ShortString constant to be used as:
   // ! AddShorter(JSON_BASE64_MAGIC_QUOTE_S);
   JSON_BASE64_MAGIC_QUOTE_S: string[4] = '"'#$ef#$bf#$b0;
 
@@ -978,10 +978,10 @@ function BinToBase64(const s: RawByteString): RawUtf8; overload;
 function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUtf8; overload;
 
 /// fast conversion from a small binary data into Base64 encoded UTF-8 text
-function BinToBase64Short(const s: RawByteString): shortstring; overload;
+function BinToBase64Short(const s: RawByteString): ShortString; overload;
 
 /// fast conversion from a small binary data into Base64 encoded UTF-8 text
-function BinToBase64Short(Bin: PAnsiChar; BinBytes: integer): shortstring; overload;
+function BinToBase64Short(Bin: PAnsiChar; BinBytes: integer): ShortString; overload;
 
 /// fast conversion from binary data into prefixed/suffixed Base64 encoded UTF-8 text
 // - with optional JSON_BASE64_MAGIC_C prefix (UTF-8 encoded \uFFF0 special code)
@@ -1088,11 +1088,11 @@ function BinToBase64uri(const s: RawByteString): RawUtf8; overload;
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
 function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUtf8; overload;
 
-/// fast conversion from a binary buffer into Base64-like URI-compatible encoded shortstring
+/// fast conversion from a binary buffer into Base64-like URI-compatible encoded ShortString
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
-// - returns '' if BinBytes void or too big for the resulting shortstring
-function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): shortstring;
+// - returns '' if BinBytes void or too big for the resulting ShortString
+function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): ShortString;
 
 /// conversion from any Base64 encoded value into URI-compatible encoded text
 // - warning: will modify the supplied base64 string in-place
@@ -1662,7 +1662,7 @@ const
 
 /// write count number and append 's' (if needed) to form a plural English noun
 // - for instance, Plural('row',100) returns '100 rows' with no heap allocation
-function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
+function Plural(const itemname: ShortString; itemcount: cardinal): ShortString;
 
 /// low-level fast conversion from binary data to escaped text
 // - non printable characters will be written as $xx hexadecimal codes
@@ -1696,11 +1696,11 @@ function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUtf8; overload
 // - is much slower than LogEscape/EscapeToShort, but has no size limitation
 function LogEscapeFull(const source: RawByteString): RawUtf8; overload;
 
-/// fill a shortstring with the (hexadecimal) chars of the input text/binary
-function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring; overload;
+/// fill a ShortString with the (hexadecimal) chars of the input text/binary
+function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString; overload;
 
-/// fill a shortstring with the (hexadecimal) chars of the input text/binary
-function EscapeToShort(const source: RawByteString): shortstring; overload;
+/// fill a ShortString with the (hexadecimal) chars of the input text/binary
+function EscapeToShort(const source: RawByteString): ShortString; overload;
 
 
 /// get text File contents (even UTF-16 or UTF-8) and convert it into a
@@ -3488,7 +3488,7 @@ begin
   VarUtf8(result);
 end;
 
-function TFastReader.VarShortString: shortstring;
+function TFastReader.VarShortString: ShortString;
 var
   len: cardinal;
   s: PAnsiChar;
@@ -5928,7 +5928,7 @@ begin
   Base64Encode(pointer(result), pointer(s), len);
 end;
 
-function BinToBase64Short(Bin: PAnsiChar; BinBytes: integer): shortstring;
+function BinToBase64Short(Bin: PAnsiChar; BinBytes: integer): ShortString;
 var
   destlen: integer;
 begin
@@ -5942,7 +5942,7 @@ begin
   Base64Encode(@result[1], Bin, BinBytes);
 end;
 
-function BinToBase64Short(const s: RawByteString): shortstring;
+function BinToBase64Short(const s: RawByteString): ShortString;
 begin
   result := BinToBase64Short(pointer(s), length(s));
 end;
@@ -6313,7 +6313,7 @@ begin
   Base64uriEncode(pointer(result), Bin, BinBytes);
 end;
 
-function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): shortstring;
+function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): ShortString;
 var
   len: integer;
 begin
@@ -8308,7 +8308,7 @@ begin
   MoveFast(Buffer, PByteArray(Content)^[ContentLen], BufferLen);
 end;
 
-function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
+function Plural(const itemname: ShortString; itemcount: cardinal): ShortString;
 var
   len, L: PtrInt;
 begin
@@ -8400,13 +8400,13 @@ begin
   PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := sourcelen;
 end;
 
-function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring;
+function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString;
 begin
   result[0] := AnsiChar(
     EscapeBuffer(source, sourcelen, @result[1], 255) - @result[1]);
 end;
 
-function EscapeToShort(const source: RawByteString): shortstring;
+function EscapeToShort(const source: RawByteString): ShortString;
 begin
   result[0] := AnsiChar(
     EscapeBuffer(pointer(source), length(source), @result[1], 255) - @result[1]);
@@ -8590,7 +8590,7 @@ end;
 
 function TStreamRedirect.GetProgress: RawUtf8;
 var
-  ctx, remain: shortstring;
+  ctx, remain: ShortString;
 begin
   if (self = nil) or
      fTerminated then
@@ -8638,7 +8638,7 @@ end;
 {$I-}
 class procedure TStreamRedirect.ProgressToConsole(Sender: TStreamRedirect);
 var
-  eraseline: shortstring;
+  eraseline: ShortString;
   msg: RawUtf8;
 begin
   eraseline[0] := AnsiChar(Sender.fConsoleLen + 2);

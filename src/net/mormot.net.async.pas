@@ -201,7 +201,7 @@ type
       events: TPollSocketEvents): boolean; virtual; abstract;
     procedure OnClosed(connection: TPollAsyncConnection); virtual; abstract;
     procedure UnlockAndCloseConnection(writer: boolean;
-      var connection: TPollAsyncConnection; const caller: shortstring);
+      var connection: TPollAsyncConnection; const caller: ShortString);
     procedure CloseConnection(var connection: TPollAsyncConnection);
   public
     /// initialize the read/write sockets polling
@@ -1210,7 +1210,7 @@ begin
 end;
 
 procedure TPollAsyncSockets.UnlockAndCloseConnection(writer: boolean;
-  var connection: TPollAsyncConnection; const caller: shortstring);
+  var connection: TPollAsyncConnection; const caller: ShortString);
 begin
   if connection = nil then
     exit;
@@ -1470,7 +1470,7 @@ end;
 function TAsyncConnectionsSockets.OnError(connection: TPollAsyncConnection;
   events: TPollSocketEvents): boolean;
 var
-  err: shortstring;
+  err: ShortString;
 begin
   GetSetNameShort(TypeInfo(TPollSocketEvents), events, err);
   fOwner.DoLog(sllDebug, 'OnError% events=[%] -> free socket and instance',

@@ -60,7 +60,7 @@ type
     /// fill the item properties from a FindFirst/FindNext's TSearchRec
     procedure FromSearchRec(const Directory: TFileName; const F: TSearchRec);
     /// returns some ready-to-be-loggued text
-    function ToText: shortstring;
+    function ToText: ShortString;
   end;
   {$A+}
 
@@ -1440,7 +1440,7 @@ begin
   Timestamp := SearchRecToDateTime(F);
 end;
 
-function TFindFiles.ToText: shortstring;
+function TFindFiles.ToText: ShortString;
 begin
   FormatShort('% % %', [Name, KB(Size), DateTimeToFileShort(Timestamp)], result);
 end;

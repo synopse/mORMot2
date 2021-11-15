@@ -275,18 +275,18 @@ function TrimLeftLowerCase(const V: RawUtf8): PUtf8Char;
 function TrimLeftLowerCaseShort(V: PShortString): RawUtf8;
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
-// - return a shortstring: enumeration names are pure 7-bit ANSI with Delphi 7
+// - return a ShortString: enumeration names are pure 7-bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
 function TrimLeftLowerCaseToShort(V: PShortString): ShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
-// - return a shortstring: enumeration names are pure 7-bit ANSI with Delphi 7
+// - return a ShortString: enumeration names are pure 7-bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
 procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString); overload;
 
-/// fast append some UTF-8 text into a shortstring, with an ending ','
-procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: shortstring;
+/// fast append some UTF-8 text into a ShortString, with an ending ','
+procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
   trimlowercase: boolean);   {$ifdef FPC} inline; {$endif}
 
 /// fast search of an exact case-insensitive match of a RTTI's PShortString array
@@ -969,7 +969,7 @@ type
     // - redirect to AddNoJsonEscape() otherwise
     procedure AddRawJson(const json: RawJson);
     /// append a line of text with CR+LF at the end
-    procedure AddLine(const Text: shortstring);
+    procedure AddLine(const Text: ShortString);
     /// append some chars to the buffer in one line
     // - P should be ended with a #0
     // - will write #1..#31 chars as spaces (so content will stay on the same line)
@@ -1585,7 +1585,7 @@ function ExtendedToShortNoExp(S: PShortString; Value: TSynExtended;
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
 // - as returned by ExtendedToShort/DoubleToShort textual conversion
 // - such values do appear as IEEE floating points, but are not defined in JSON
-function FloatToShortNan(const s: shortstring): TFloatNan;
+function FloatToShortNan(const s: ShortString): TFloatNan;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
@@ -1646,7 +1646,7 @@ const
   // trailing has been removed in this cut-down version
   C_NO_MIN_WIDTH = -32767;
 
-/// raw function to convert a 64-bit double into a shortstring, stored in str
+/// raw function to convert a 64-bit double into a ShortString, stored in str
 // - implements Fabian Loitsch's Grisu algorithm dedicated to double values
 // - currently, this unit only set min_width=0 (for DoubleToShortNoExp to avoid
 // any scientific notation ) or min_width=C_NO_MIN_WIDTH (for DoubleToShort to
@@ -1876,15 +1876,15 @@ procedure FormatUtf8(const Format: RawUtf8; const Args: array of const;
 function FormatBuffer(const Format: RawUtf8; const Args: array of const;
   Dest: pointer; DestLen: PtrInt): PtrInt;
 
-/// fast Format() function replacement, for UTF-8 content stored in shortstring
+/// fast Format() function replacement, for UTF-8 content stored in ShortString
 // - use the same single token % (and implementation) than FormatUtf8()
-// - shortstring allows fast stack allocation, so is perfect for small content
+// - ShortString allows fast stack allocation, so is perfect for small content
 // - truncate result if the text size exceeds 255 bytes
 procedure FormatShort(const Format: RawUtf8; const Args: array of const;
-  var result: shortstring);
+  var result: ShortString);
 
-/// fast Format() function replacement, for UTF-8 content stored in shortstring
-function FormatToShort(const Format: RawUtf8; const Args: array of const): shortstring;
+/// fast Format() function replacement, for UTF-8 content stored in ShortString
+function FormatToShort(const Format: RawUtf8; const Args: array of const): ShortString;
 
 /// fast Format() function replacement, tuned for small content
 // - use the same single token % (and implementation) than FormatUtf8()
@@ -1988,14 +1988,14 @@ procedure NanoSecToString(Nano: QWord; out result: TShort16);
 
 /// convert "valueunit" values into x or x.xx text with up to 2 digits
 // - supplied value should be the actual unit value * 100
-procedure By100ToTwoDigitString(value: cardinal; const valueunit: shortstring;
+procedure By100ToTwoDigitString(value: cardinal; const valueunit: ShortString;
   var result: TShort16);
 
 /// convert an integer value into its textual representation with thousands marked
 // - ThousandSep is the character used to separate thousands in numbers with
 // more than three digits to the left of the decimal separator
 function IntToThousandString(Value: integer;
-  const ThousandSep: TShort4 = ','): shortstring;
+  const ThousandSep: TShort4 = ','): ShortString;
 
 
 { ************ ESynException class }
@@ -2077,7 +2077,7 @@ type
 /// convert any HTTP_* constant to an integer error code and its English text
 // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 // - calls StatusCodeToReason() to retrieve the text message
-function StatusCodeToErrorMsg(Code: integer): shortstring;
+function StatusCodeToErrorMsg(Code: integer): ShortString;
 
 
 { **************** Hexadecimal Text And Binary Conversion }
@@ -2201,7 +2201,7 @@ procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt); overload;
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8; overload;
 
 /// fast conversion from up to 127 bytes of binary data into lowercase hexa chars
-function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: PtrInt): shortstring;
+function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: PtrInt): ShortString;
 
 /// fast conversion from up to 64-bit of binary data into lowercase hexa chars
 function BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: PtrInt): TShort16;
@@ -2354,11 +2354,11 @@ function UInt2DigitsToShortFast(Value: byte): TShort4;
 
 /// convert a 32-bit integer (storing a IP4 address) into its full notation
 // - returns e.g. '1.2.3.4' for any valid address, or '' if ip4=0
-function IP4Text(ip4: cardinal): shortstring; overload;
+function IP4Text(ip4: cardinal): ShortString; overload;
 
 /// convert a 128-bit buffer (storing an IP6 address) into its full notation
 // - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
-function IP6Text(ip6: PHash128): shortstring; overload;
+function IP6Text(ip6: PHash128): ShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a 128-bit buffer (storing an IP6 address) into its full notation
@@ -2412,14 +2412,14 @@ type
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
-// - using a shortstring will allow fast allocation on the stack, so is
+// - using a ShortString will allow fast allocation on the stack, so is
 // preferred e.g. when providing a GUID to a ESynException.CreateUtf8()
 function GuidToShort(const guid: TGUID): TGuidShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
-// - using a shortstring will allow fast allocation on the stack, so is
+// - using a ShortString will allow fast allocation on the stack, so is
 // preferred e.g. when providing a GUID to a ESynException.CreateUtf8()
 procedure GuidToShort(const
   guid: TGUID; out dest: TGuidShortString); overload;
@@ -3449,7 +3449,7 @@ begin
     FastSetString(result, P, L);
 end;
 
-procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: shortstring;
+procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
   trimlowercase: boolean);
 begin
   if trimlowercase then
@@ -5716,7 +5716,7 @@ begin
   inc(B, L);
 end;
 
-procedure TTextWriter.AddLine(const Text: shortstring);
+procedure TTextWriter.AddLine(const Text: ShortString);
 var
   L: PtrInt;
 begin
@@ -7588,7 +7588,7 @@ end;
 
 {$endif EXTENDEDTOSHORT_USESTR}
 
-function FloatToShortNan(const s: shortstring): TFloatNan;
+function FloatToShortNan(const s: ShortString): TFloatNan;
 begin
   case PInteger(@s)^ and $ffdfdfdf of
     3 + ord('N') shl 8 + ord('A') shl 16 + ord('N') shl 24:
@@ -8358,7 +8358,7 @@ end;
 
 /// set one of special results with proper sign
 procedure d2a_return_special(str: PAnsiChar; sign: integer;
-  const spec: shortstring);
+  const spec: ShortString);
 begin
   // Compute length
   str[0] := spec[0];
@@ -9427,7 +9427,7 @@ begin
           exit;
         end;
         {$ifdef HASINLINE}
-        MoveSmall(d^.Text, Dest, d^.Len); // shortstring are small in practice
+        MoveSmall(d^.Text, Dest, d^.Len); // ShortString are small in practice
         {$else}
         MoveFast(d^.Text^, Dest^, d^.Len);
         {$endif HASINLINE}
@@ -9466,7 +9466,7 @@ begin
 end;
 
 procedure FormatShort(const Format: RawUtf8; const Args: array of const;
-  var result: shortstring);
+  var result: ShortString);
 var
   process: TFormatUtf8;
 begin
@@ -9496,7 +9496,7 @@ begin
 end;
 
 function FormatToShort(const Format: RawUtf8;
-  const Args: array of const): shortstring;
+  const Args: array of const): ShortString;
 var
   process: TFormatUtf8;
 begin
@@ -9691,7 +9691,7 @@ begin
 end;
 
 function IntToThousandString(Value: integer;
-  const ThousandSep: TShort4): shortstring;
+  const ThousandSep: TShort4): ShortString;
 var
   i, L, Len: cardinal;
 begin
@@ -9712,7 +9712,7 @@ begin
   MicroSecToString(Micro, result);
 end;
 
-procedure By100ToTwoDigitString(value: cardinal; const valueunit: shortstring;
+procedure By100ToTwoDigitString(value: cardinal; const valueunit: ShortString;
   var result: TShort16);
 var
   d100: TDiv100Rec;
@@ -9729,7 +9729,7 @@ begin
   end;
 end;
 
-procedure _TimeToString(value: cardinal; const u: shortstring;
+procedure _TimeToString(value: cardinal; const u: ShortString;
   var result: TShort16);
 var
   d: cardinal;
@@ -9861,7 +9861,7 @@ end;
 {$endif NOEXCEPTIONINTERCEPT}
 
 
-function StatusCodeToErrorMsg(Code: integer): shortstring;
+function StatusCodeToErrorMsg(Code: integer): ShortString;
 var
   msg: RawUtf8;
 begin
@@ -10021,7 +10021,7 @@ begin
   BinToHexDisplayLower(Bin, pointer(result), BinBytes);
 end;
 
-function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: PtrInt): shortstring;
+function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: PtrInt): ShortString;
 begin
   if BinBytes > 127 then
     BinBytes := 127;
@@ -10452,7 +10452,7 @@ begin
   PWord(@result[1])^ := TwoDigitLookupW[Value];
 end;
 
-function IP4Text(ip4: cardinal): shortstring;
+function IP4Text(ip4: cardinal): ShortString;
 var
   b: array[0..3] of byte absolute ip4;
 begin
@@ -10488,7 +10488,7 @@ begin
   end;
 end;
 
-function IP6Text(ip6: PHash128): shortstring;
+function IP6Text(ip6: PHash128): ShortString;
 begin
   IP6Text(ip6, @result);
 end;

@@ -629,7 +629,7 @@ function ToByte(value: cardinal): cardinal; inline;
 {$endif CPUARM}
 
 const
-  /// used to mark the end of ASCIIZ buffer, or return a void shortstring
+  /// used to mark the end of ASCIIZ buffer, or return a void ShortString
   NULCHAR: AnsiChar = #0;
 
   /// a TGUID containing '{00000000-0000-0000-0000-00000000000}'
@@ -720,42 +720,42 @@ procedure GetMemAligned(var holder: RawByteString; fillwith: pointer; len: PtrUI
 function UniqueRawUtf8(var u: RawUtf8): pointer;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// direct conversion of an ANSI-7 shortstring into an AnsiString
+/// direct conversion of an ANSI-7 ShortString into an AnsiString
 // - can be used e.g. for names retrieved from RTTI to convert them into RawUtf8
-function ShortStringToAnsi7String(const source: shortstring): RawByteString; overload;
+function ShortStringToAnsi7String(const source: ShortString): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// direct conversion of an ANSI-7 shortstring into an AnsiString
+/// direct conversion of an ANSI-7 ShortString into an AnsiString
 // - can be used e.g. for names retrieved from RTTI to convert them into RawUtf8
-procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUtf8); overload;
+procedure ShortStringToAnsi7String(const source: ShortString; var result: RawUtf8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// direct conversion of an ANSI-7 AnsiString into an shortstring
+/// direct conversion of an ANSI-7 AnsiString into an ShortString
 // - can be used e.g. for names retrieved from RTTI
-procedure Ansi7StringToShortString(const source: RawUtf8; var result: shortstring);
+procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortString);
   {$ifdef FPC}inline;{$endif}
 
 /// simple concatenation of a 32-bit integer as text into a shorstring
-procedure AppendShortInteger(value: integer; var dest: shortstring);
+procedure AppendShortInteger(value: integer; var dest: ShortString);
 
 /// simple concatenation of a 64-bit integer as text into a shorstring
-procedure AppendShortInt64(value: Int64; var dest: shortstring);
+procedure AppendShortInt64(value: Int64; var dest: ShortString);
 
 /// simple concatenation of a character into a shorstring
-procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
+procedure AppendShortChar(chr: AnsiChar; var dest: ShortString);
   {$ifdef FPC} inline; {$endif}
 
-/// simple concatenation of a shortstring text into a shorstring
-procedure AppendShort(const src: shortstring; var dest: shortstring);
+/// simple concatenation of a ShortString text into a shorstring
+procedure AppendShort(const src: ShortString; var dest: ShortString);
   {$ifdef FPC} inline; {$endif}
 
 /// simple concatenation of a #0 ending text into a shorstring
 // - if Len is < 0, will use StrLen(buf)
-procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: shortstring);
+procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: ShortString);
 
 /// simple concatenation of an ANSI-7 AnsiString into a shorstring
 // - if Len is < 0, will use StrLen(buf)
-procedure AppendShortAnsi7String(const buf: RawByteString; var dest: shortstring);
+procedure AppendShortAnsi7String(const buf: RawByteString; var dest: ShortString);
   {$ifdef FPC}inline;{$endif}
 
 /// just a wrapper around vmtClassName to avoid a string conversion
@@ -2627,7 +2627,7 @@ type
     /// XOR some memory buffer with random bytes
     procedure Fill(dest: pointer; count: integer);
     /// fill some string[size] with 7-bit ASCII random text
-    procedure FillShort(var dest: shortstring; size: PtrUInt);
+    procedure FillShort(var dest: ShortString; size: PtrUInt);
     /// fill some string[31] with 7-bit ASCII random text
     procedure FillShort31(var dest: TShort31);
   end;
@@ -4059,22 +4059,22 @@ begin
   result := @u[1];
 end;
 
-function ShortStringToAnsi7String(const source: shortstring): RawByteString;
+function ShortStringToAnsi7String(const source: ShortString): RawByteString;
 begin
   FastSetString(RawUtf8(result), @source[1], ord(source[0]));
 end;
 
-procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUtf8);
+procedure ShortStringToAnsi7String(const source: ShortString; var result: RawUtf8);
 begin
   FastSetString(result, @source[1], ord(source[0]));
 end;
 
-procedure Ansi7StringToShortString(const source: RawUtf8; var result: shortstring);
+procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortString);
 begin
   SetString(result, PAnsiChar(pointer(source)), length(source));
 end;
 
-procedure AppendShort(const src: shortstring; var dest: shortstring);
+procedure AppendShort(const src: ShortString; var dest: ShortString);
 var
   len: PtrInt;
 begin
@@ -4086,7 +4086,7 @@ begin
   inc(dest[0], len);
 end;
 
-procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
+procedure AppendShortChar(chr: AnsiChar; var dest: ShortString);
 begin
   if dest[0] = #255 then
     exit;
@@ -4094,23 +4094,23 @@ begin
   dest[ord(dest[0])] := chr;
 end;
 
-procedure AppendShortInteger(value: integer; var dest: shortstring);
+procedure AppendShortInteger(value: integer; var dest: ShortString);
 var
-  temp: shortstring;
+  temp: ShortString;
 begin
   str(value, temp); // fast enough for our purpose
   AppendShort(temp, dest);
 end;
 
-procedure AppendShortInt64(value: Int64; var dest: shortstring);
+procedure AppendShortInt64(value: Int64; var dest: ShortString);
 var
-  temp: shortstring;
+  temp: ShortString;
 begin
   str(value, temp);
   AppendShort(temp, dest);
 end;
 
-procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: shortstring);
+procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: ShortString);
 begin
   if len < 0 then
     len := StrLen(buf);
@@ -4121,7 +4121,7 @@ begin
   inc(dest[0], len);
 end;
 
-procedure AppendShortAnsi7String(const buf: RawByteString; var dest: shortstring);
+procedure AppendShortAnsi7String(const buf: RawByteString; var dest: ShortString);
 begin
   if buf <> '' then
     AppendShortBuffer(pointer(buf), PStrLen(PtrUInt(buf) - _STRLEN)^, dest);
@@ -4129,7 +4129,7 @@ end;
 
 function ClassNameShort(C: TClass): PShortString;
 // new TObject.ClassName is UnicodeString (since Delphi 2009) -> inline code
-// with vmtClassName = UTF-8 encoded text stored in a shortstring = -44
+// with vmtClassName = UTF-8 encoded text stored in a ShortString = -44
 begin
   result := PPointer(PtrInt(PtrUInt(C)) + vmtClassName)^;
 end;
@@ -7953,7 +7953,7 @@ begin
   until count = 0;
 end;
 
-procedure TLecuyer.FillShort(var dest: shortstring; size: PtrUInt);
+procedure TLecuyer.FillShort(var dest: ShortString; size: PtrUInt);
 begin
   if size > 255 then
     size := 255;

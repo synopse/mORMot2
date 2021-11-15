@@ -2824,7 +2824,8 @@ begin
         result := fConnections[GetUnlockedSecondaryIndex]
       else
         result := fConnections[0];
-    rpSecondary, rpSecondaryPreferred:
+    rpSecondary,
+    rpSecondaryPreferred:
       result := fConnections[GetUnlockedSecondaryIndex];
     rpNearest:
       begin

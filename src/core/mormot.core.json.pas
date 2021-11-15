@@ -236,15 +236,15 @@ function GetJsonField(P: PUtf8Char; out PDest: PUtf8Char;
 function GetJsonPropName(var Json: PUtf8Char; Len: PInteger = nil;
   NoJsonUnescape: boolean = false): PUtf8Char; overload;
 
-/// decode a JSON field name in an UTF-8 encoded shortstring variable
+/// decode a JSON field name in an UTF-8 encoded ShortString variable
 // - this function would left the P^ buffer memory untouched, so may be safer
 // than the overloaded GetJsonPropName() function in some cases
-// - it will return the property name as a local UTF-8 encoded shortstring,
+// - it will return the property name as a local UTF-8 encoded ShortString,
 // or PropName='' on error
 // - this function won't unescape the property name, as strict JSON (i.e. a "st\"ring")
 // - but it will handle MongoDB syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
-procedure GetJsonPropName(var P: PUtf8Char; out PropName: shortstring); overload;
+procedure GetJsonPropName(var P: PUtf8Char; out PropName: ShortString); overload;
 
 /// decode a JSON content in an UTF-8 encoded buffer
 // - GetJsonField() will only handle JSON "strings" or numbers - if
@@ -576,7 +576,7 @@ type
       Options: TTextWriterWriteObjectOptions);
     /// used internally by WriteObject() when serializing a published property
     // - will call AddCRAndIndent then append "PropName":
-    procedure WriteObjectPropNameShort(const PropName: shortstring;
+    procedure WriteObjectPropNameShort(const PropName: ShortString;
       Options: TTextWriterWriteObjectOptions);
       {$ifdef HASINLINE}inline;{$endif}
     /// same as WriteObject(), but will double all internal " and bound with "
@@ -589,9 +589,9 @@ type
       WriteOptions: TTextWriterWriteObjectOptions = []);
     /// append a JSON field name, followed by an escaped UTF-8 JSON String and
     // a comma (',')
-    procedure AddPropJsonString(const PropName: shortstring; const Text: RawUtf8);
+    procedure AddPropJsonString(const PropName: ShortString; const Text: RawUtf8);
     /// append a JSON field name, followed by a number value and a comma (',')
-    procedure AddPropJsonInt64(const PropName: shortstring; Value: Int64);
+    procedure AddPropJsonInt64(const PropName: ShortString; Value: Int64);
     /// append CR+LF (#13#10) chars and #9 indentation
     // - will also flush any fBlockComment
     procedure AddCRAndIndent; override;
@@ -3306,7 +3306,7 @@ e:Json := P + 1;
   result := Name;
 end;
 
-procedure GetJsonPropName(var P: PUtf8Char; out PropName: shortstring);
+procedure GetJsonPropName(var P: PUtf8Char; out PropName: ShortString);
 var
   Name: PAnsiChar;
   c: AnsiChar;
@@ -3703,7 +3703,7 @@ end;
 function JsonObjectItem(P: PUtf8Char; const PropName: RawUtf8;
   PropNameFound: PRawUtf8): PUtf8Char;
 var
-  name: shortstring; // no memory allocation nor P^ modification
+  name: ShortString; // no memory allocation nor P^ modification
   PropNameLen: integer;
   PropNameUpper: array[byte] of AnsiChar;
 begin
@@ -4596,7 +4596,7 @@ end;
 
 procedure _JS_ID(Data: PInt64; const Ctxt: TJsonSaveContext);
 var
-  _str: shortstring;
+  _str: ShortString;
 begin
   Ctxt.W.Add(Data^);
   if woIDAsIDstr in Ctxt.Options then
@@ -5118,7 +5118,7 @@ begin
     Add(' ');
 end;
 
-procedure TJsonWriter.WriteObjectPropNameShort(const PropName: shortstring;
+procedure TJsonWriter.WriteObjectPropNameShort(const PropName: ShortString;
   Options: TTextWriterWriteObjectOptions);
 begin
   WriteObjectPropName(@PropName[1], ord(PropName[0]), Options);
@@ -5183,7 +5183,7 @@ begin
   inherited AddCRAndIndent;
 end;
 
-procedure TJsonWriter.AddPropJsonString(const PropName: shortstring;
+procedure TJsonWriter.AddPropJsonString(const PropName: ShortString;
   const Text: RawUtf8);
 begin
   AddProp(@PropName[1], ord(PropName[0]));
@@ -5191,7 +5191,7 @@ begin
   AddComma;
 end;
 
-procedure TJsonWriter.AddPropJsonInt64(const PropName: shortstring;
+procedure TJsonWriter.AddPropJsonInt64(const PropName: ShortString;
   Value: Int64);
 begin
   AddProp(@PropName[1], ord(PropName[0]));

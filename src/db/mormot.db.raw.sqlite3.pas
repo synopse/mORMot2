@@ -7154,7 +7154,7 @@ end;
 procedure TSqlDataBase.BackupBackgroundWaitUntilFinished(
   TimeOutSeconds: integer);
 
-  function StepAsText: shortstring;
+  function StepAsText: ShortString;
   begin
     Lock;
     if fBackupBackgroundInProcess = nil then

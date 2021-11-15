@@ -398,7 +398,7 @@ type
     function PropList: PRttiProp;
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a Field property RTTI information from a Property Name
-    function FieldProp(const PropName: shortstring): PRttiProp;
+    function FieldProp(const PropName: ShortString): PRttiProp;
   end;
 
   /// pointer to TClassType, as returned by PRttiInfo.RttiClass()
@@ -468,7 +468,7 @@ type
     function NameList: PShortString;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the corresponding enumeration name
-    // - return a void '' shortstring if Value is invalid (>MaxValue)
+    // - return a void '' ShortString if Value is invalid (>MaxValue)
     function GetEnumNameOrd(Value: cardinal): PShortString;
       {$ifdef FPC} inline; {$endif}
     /// get the corresponding enumeration name
@@ -1211,12 +1211,12 @@ function GetRttiProps(RttiClass: TClass): PRttiProps;
 function GetRttiProp(C: TClass; out PropInfo: PRttiProp): integer;
 
 /// retrieve a Field property RTTI information from a Property Name
-function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PRttiProp;
+function ClassFieldProp(ClassType: TClass; const PropName: ShortString): PRttiProp;
 
 /// retrieve a Field property RTTI information from a Property Name
 // - this special version also searches into parent properties
 // (TRttiProp search scope is only inside the current class level)
-function ClassFieldPropWithParents(aClassType: TClass; const aPropName: shortstring;
+function ClassFieldPropWithParents(aClassType: TClass; const aPropName: ShortString;
   aCaseSensitive: boolean = false): PRttiProp;
 
 /// retrieve an integer/Int64 Field propery value from a Property Name
@@ -1230,7 +1230,7 @@ function ClassFieldInt64(Instance: TObject; const PropName: ShortString;
 // - this special version also searches into parent properties
 // (TRttiProp search scope is only inside the current class level)
 // - returns TRUE and set PropInstance if a matching property was found
-function ClassFieldInstance(Instance: TObject; const PropName: shortstring;
+function ClassFieldInstance(Instance: TObject; const PropName: ShortString;
   PropClassType: TClass; out PropInstance): boolean; overload;
 
 /// retrieve a Field property RTTI information from a Property Name
@@ -1327,7 +1327,7 @@ function GetPublishedMethods(Instance: TObject;
 
 /// copy object properties
 // - copy integer, Int64, enumerates (including boolean), variant, records,
-// dynamic arrays, classes and any string properties (excluding shortstring)
+// dynamic arrays, classes and any string properties (excluding ShortString)
 // - TCollection items can be copied also, if they are of the same exact class
 // - object properties instances are created in aTo if the objects are not
 // TOrm children (in this case, these are not class instances, but
@@ -1462,7 +1462,7 @@ function GetDisplayNameFromClass(C: TClass): RawUtf8;
 function GetCaptionFromClass(C: TClass): string;
 
 /// defined here to avoid circular dependency in mormot.core.os.pas
-function ToText(cmd: TParseCommands): shortstring; overload;
+function ToText(cmd: TParseCommands): ShortString; overload;
 
 
 { ***************** IInvokable Interface RTTI }
@@ -2115,7 +2115,7 @@ type
     // A-Z a-z 0-9 and _ characters, up to 63 in length
     // - if New equals '', this published property will be excluded from
     // the JSON serialized object
-    // - the New shortstring should be a local constant, to avoid random GPF
+    // - the New ShortString should be a local constant, to avoid random GPF
     function NameChange(const Old, New: RawUtf8): PRttiCustomProp;
     /// customize property/field name, specified as old/new pairs
     // - each Old[] field name will be replaced by the corresponding New[] name
@@ -2124,7 +2124,7 @@ type
     // - if any New[] equals '', this published property will be excluded from
     // the JSON serialized object
     // - setting both Old=New=[] will return back to the default names from RTTI
-    // - the New shortstring should be a local constant, to avoid random GPF
+    // - the New ShortString should be a local constant, to avoid random GPF
     // - Rtti.ByClass[TMyClass].Props.NameChanges() replaces deprecated
     // TJsonSerializer.RegisterCustomSerializerFieldNames(TMyClass, ...)
     procedure NameChanges(const Old, New: array of RawUtf8);
@@ -2460,7 +2460,7 @@ type
     function Find(Name: PUtf8Char; NameLen: PtrInt;
       Kinds: TRttiKinds = []): TRttiCustom; overload;
     /// efficient search of TRttiCustom from a given type name
-    function Find(const Name: shortstring; Kinds: TRttiKinds = []): TRttiCustom;
+    function Find(const Name: ShortString; Kinds: TRttiKinds = []): TRttiCustom;
        overload; {$ifdef HASINLINE}inline;{$endif}
     /// manual search of any matching TRttiCustom.ArrayRtti type
     function FindByArrayRtti(ElemInfo: PRttiInfo): TRttiCustom;
@@ -2876,7 +2876,7 @@ end;
 
 { TRttiProps = TPropData in TypInfo }
 
-function TRttiProps.FieldProp(const PropName: shortstring): PRttiProp;
+function TRttiProps.FieldProp(const PropName: ShortString): PRttiProp;
 var
   i: integer;
 begin
@@ -3036,7 +3036,7 @@ procedure TRttiEnumType.GetEnumNameAll(out result: RawUtf8; const Prefix: RawUtf
 var
   i: integer;
   V: PShortString;
-  uncamel: shortstring;
+  uncamel: ShortString;
   temp: TTextWriterStackBuffer;
 begin
   with TTextWriter.CreateOwnedStream(temp) do
@@ -4519,7 +4519,7 @@ begin
     ClassFieldNamesAllProps(ClassType, IncludePropType, Types), ', ');
 end;
 
-function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PRttiProp;
+function ClassFieldProp(ClassType: TClass; const PropName: ShortString): PRttiProp;
 begin
   if ClassType <> nil then
     result := GetRttiProps(ClassType)^.FieldProp(PropName)
@@ -4527,7 +4527,7 @@ begin
     result := nil;
 end;
 
-function ClassFieldPropWithParents(aClassType: TClass; const aPropName: shortstring;
+function ClassFieldPropWithParents(aClassType: TClass; const aPropName: ShortString;
   aCaseSensitive: boolean): PRttiProp;
 var
   n, i: integer;
@@ -4639,7 +4639,7 @@ begin
   result := nil;
 end;
 
-function ClassFieldInstance(Instance: TObject; const PropName: shortstring;
+function ClassFieldInstance(Instance: TObject; const PropName: ShortString;
   PropClassType: TClass; out PropInstance): boolean;
 var
   P: PRttiProp;
@@ -4982,7 +4982,7 @@ begin
   end;
 end;
 
-function ToText(cmd: TParseCommands): shortstring;
+function ToText(cmd: TParseCommands): ShortString;
 begin
   if cmd = [] then
     result[0] := #0
@@ -7743,7 +7743,7 @@ begin
   result := nil;
 end;
 
-function TRttiCustomList.Find(const Name: shortstring; Kinds: TRttiKinds): TRttiCustom;
+function TRttiCustomList.Find(const Name: ShortString; Kinds: TRttiKinds): TRttiCustom;
 begin
   result := Find(@Name[1], ord(Name[0]), Kinds);
 end;

@@ -176,9 +176,9 @@ function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char; sourceBytes: PtrInt 
 function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
   MaxDestChars, sourceBytes: PtrInt; NoTrailingZero: boolean = false): PtrInt; overload;
 
-/// direct conversion of a UTF-8 encoded buffer into a WinAnsi shortstring buffer
+/// direct conversion of a UTF-8 encoded buffer into a WinAnsi ShortString buffer
 // - non WinAnsi chars are replaced by '?' placeholders
-procedure Utf8ToShortString(var dest: shortstring; source: PUtf8Char);
+procedure Utf8ToShortString(var dest: ShortString; source: PUtf8Char);
 
 /// calculate the UTF-16 Unicode characters count, UTF-8 encoded in source^
 // - count may not match the UCS4 CodePoint, in case of UTF-16 surrogates
@@ -620,7 +620,7 @@ function WinAnsiBufferToUtf8(Dest: PUtf8Char;
   Source: PAnsiChar; SourceChars: cardinal): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// direct conversion of a WinAnsi shortstring into a UTF-8 text
+/// direct conversion of a WinAnsi ShortString into a UTF-8 text
 // - call internally WinAnsiConvert fast conversion class
 function ShortStringToUtf8(const source: ShortString): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
@@ -793,7 +793,7 @@ function StringToUtf8(const Text: string; var Temp: TSynTempBuffer): integer; ov
 function AnsiBufferToTempUtf8(var Temp: TSynTempBuffer;
   Buf: PAnsiChar; BufLen, CodePage: cardinal): PUtf8Char;
 
-/// convert any UTF-8 encoded shortstring Text into an UTF-8 encoded String
+/// convert any UTF-8 encoded ShortString Text into an UTF-8 encoded String
 // - expects the supplied content to be already ASCII-7 or UTF-8 encoded, e.g.
 // a RTTI type or property name: it won't work with Ansi-encoded strings
 function ToUtf8(const Ansi7Text: ShortString): RawUtf8; overload;
@@ -1025,13 +1025,13 @@ function PropNamesValid(const Values: array of RawUtf8): boolean;
 /// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - behavior is undefined with UTF-8 encoding (some false positive may occur)
-function IdemPropName(const P1, P2: shortstring): boolean; overload;
+function IdemPropName(const P1, P2: ShortString): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
   /// case insensitive comparison of ASCII 7-bit identifiers
   // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
   // - behavior is undefined with UTF-8 encoding (some false positive may occur)
-function IdemPropName(const P1: shortstring; P2: PUtf8Char; P2Len: PtrInt): boolean; overload;
+function IdemPropName(const P1: ShortString; P2: PUtf8Char; P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// case insensitive comparison of ASCII 7-bit identifiers
@@ -1302,8 +1302,8 @@ function UpperCopy(dest: PAnsiChar; const source: RawUtf8): PAnsiChar;
 
 /// copy source into dest^ with ASCII 7-bit upper case conversion
 // - returns final dest pointer
-// - this special version expect source to be a shortstring
-function UpperCopyShort(dest: PAnsiChar; const source: shortstring): PAnsiChar;
+// - this special version expect source to be a ShortString
+function UpperCopyShort(dest: PAnsiChar; const source: ShortString): PAnsiChar;
 
 /// fast UTF-8 comparison handling WinAnsi CP-1252 case folding
 // - this version expects u1 and u2 to be zero-terminated
@@ -1807,7 +1807,7 @@ begin
     result := '';
 end;
 
-procedure Utf8ToShortString(var dest: shortstring; source: PUtf8Char);
+procedure Utf8ToShortString(var dest: ShortString; source: PUtf8Char);
 var
   c: cardinal;
   len, extra, i: integer;
@@ -4186,7 +4186,7 @@ begin
   result := true;
 end;
 
-function IdemPropName(const P1, P2: shortstring): boolean;
+function IdemPropName(const P1, P2: ShortString): boolean;
 begin
   result := (P1[0] = P2[0]) and
             ((P1[0] = #0) or
@@ -4194,7 +4194,7 @@ begin
               IdemPropNameUSameLenNotNull(@P1[1], @P2[1], ord(P2[0]))));
 end;
 
-function IdemPropName(const P1: shortstring; P2: PUtf8Char; P2Len: PtrInt): boolean;
+function IdemPropName(const P1: ShortString; P2: PUtf8Char; P2Len: PtrInt): boolean;
 begin
   result := (ord(P1[0]) = P2Len) and
             ((P2Len = 0) or
@@ -5808,7 +5808,7 @@ begin
   result := dest;
 end;
 
-function UpperCopyShort(dest: PAnsiChar; const source: shortstring): PAnsiChar;
+function UpperCopyShort(dest: PAnsiChar; const source: ShortString): PAnsiChar;
 var
   s: PByteArray;
   i: PtrInt;

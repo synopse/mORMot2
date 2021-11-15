@@ -1254,7 +1254,7 @@ end;
 procedure TRestOrmServerDB.GetAndPrepareStatementRelease(E: Exception;
   const Format: RawUtf8; const Args: array of const; ForceBindReset: boolean);
 var
-  msg: shortstring;
+  msg: ShortString;
 begin
   FormatShort(Format, Args, msg);
   GetAndPrepareStatementRelease(E, msg, ForceBindReset);
@@ -1616,7 +1616,7 @@ function TRestOrmServerDB.InternalExecute(const aSql: RawUtf8;
   LastChangeCount: PInteger): boolean;
 var
   n, res: integer;
-  msg: shortstring;
+  msg: ShortString;
 begin
   msg := '';
   if (self <> nil) and

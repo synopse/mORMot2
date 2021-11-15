@@ -1341,7 +1341,7 @@ end;
 
 function TDecimal128.FromFloat(const value: TSynExtended; precision: integer): boolean;
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   if (precision <= 0) or
      (precision = DOUBLE_PRECISION) then
