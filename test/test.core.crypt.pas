@@ -21,8 +21,7 @@ uses
   mormot.core.perf,
   mormot.core.test,
   mormot.crypt.jwt,
-  mormot.crypt.ecc,
-  mormot.lib.z;
+  mormot.crypt.ecc;
 
 type
   /// regression tests for mormot.crypt.core and mormot.crypt.jwt features

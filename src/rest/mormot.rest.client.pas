@@ -25,7 +25,6 @@ uses
   classes,
   variants,
   contnrs,
-  mormot.lib.z, // we use zlib crc32 as default URI signature
   {$ifdef DOMAINRESTAUTH}
   mormot.lib.sspi, // do-nothing units on non compliant system
   mormot.lib.gssapi,

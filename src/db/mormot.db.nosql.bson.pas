@@ -190,10 +190,14 @@ type
 const
   /// the textual representation of the TDecimal128 special values
   DECIMAL128_SPECIAL_TEXT: array[TDecimal128SpecialValue] of RawUtf8 = (
-  // dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
-    '', '', 'NaN', '0', 'Infinity', '-Infinity',
-    '-9.999999999999999999999999999999999E+6144',
-    '9.999999999999999999999999999999999E+6144');
+    '',                                           // dsvError
+    '',                                           // dsvValue
+    'NaN',                                        // dsvNan
+    '0',                                          // dsvZero
+    'Infinity',                                   // dsvPosInf
+    '-Infinity',                                  // dsvNegInf
+    '-9.999999999999999999999999999999999E+6144', // dsvMin
+    '9.999999999999999999999999999999999E+6144'); // dsvMax
 
   BSON_DECIMAL128_HI_NAN = $7c00000000000000;
   BSON_DECIMAL128_HI_INT64POS = $3040000000000000; // 0 fixed decimals
@@ -900,17 +904,20 @@ const
   /// special JSON string content which will be used to store a betDeprecatedUndefined item
   // - *[false] is for strict JSON, *[true] for MongoDB Extended JSON
   BSON_JSON_UNDEFINED: array[boolean] of string[23] = (
-    '{"$undefined":true}', 'undefined');
+    '{"$undefined":true}',
+    'undefined');
 
   /// special JSON string content which will be used to store a betMinKey item
   // - *[false] is for strict JSON, *[true] for MongoDB Extended JSON
   BSON_JSON_MINKEY: array[boolean] of string[15] = (
-    '{"$minKey":1}', 'MinKey');
+    '{"$minKey":1}',
+    'MinKey');
 
   /// special JSON string content which will be used to store a betMaxKey item
   // - *[false] is for strict JSON, *[true] for MongoDB Extended JSON
   BSON_JSON_MAXKEY: array[boolean] of string[15] = (
-    '{"$maxKey":1}', 'MaxKey');
+    '{"$maxKey":1}',
+    'MaxKey');
 
   /// special JSON patterns which will be used to format a betObjectID item
   // - *[false,*] is to be written before the hexadecimal ID, *[true,*] after
@@ -921,13 +928,15 @@ const
   /// special JSON patterns which will be used to format a betBinary item
   // - *[false,*] is for strict JSON, *[true,*] for MongoDB Extended JSON
   BSON_JSON_BINARY: array[boolean, boolean] of string[15] = (
-    ('{"$binary":"', '","$type":"'), ('BinData(', ',"'));
+    ('{"$binary":"', '","$type":"'),
+    ('BinData(', ',"'));
 
   /// special JSON string content which will be used to store a betDeprecatedDbptr
   // - *[false,*] is for strict JSON, *[true,*] for MongoDB Extended JSON
   // - (not used by now for this deprecated content)
   BSON_JSON_DBREF: array[boolean, 0..2] of string[15] = (
-    ('{"$ref":"', '","$id":"', '"}'), ('DBRef("', '","', '")'));
+    ('{"$ref":"', '","$id":"', '"}'),
+    ('DBRef("', '","', '")'));
 
   /// special JSON string content which will be used to store a betRegEx
   BSON_JSON_REGEX: array[0..2] of string[15] = (
@@ -936,7 +945,9 @@ const
   /// special JSON patterns which will be used to format a betDateTime item
   // - *[*,false] is to be written before the date value, *[*,true] after
   BSON_JSON_DATE: array[TMongoJsonMode, boolean] of string[15] = (
-    ('"', '"'), ('{"$date":"', '"}'), ('ISODate("', '")'));
+    ('"', '"'),
+    ('{"$date":"', '"}'),
+    ('ISODate("', '")'));
 
   /// special JSON patterns which will be used to format a betDecimal128 item
   // - *[false,*] is to be written before the decimal value, *[true,*] after
@@ -1047,7 +1058,6 @@ function Bson(const Json: RawUtf8; kind: PBsonElementType = nil): TBsonDocument;
 // explicitly via BSON-like extensions: any complex value (e.g. a TDateTime
 // or a BsonVariant binary) won't be handled as expected - use the overloaded
 // Bson() with explicit BsonVariant() name/value pairs instead
-
 function Bson(const Format: RawUtf8; const Args, Params: array of const;
   kind: PBsonElementType = nil): TBsonDocument; overload;
 
@@ -1896,7 +1906,7 @@ const
 var
   GlobalBsonObjectID: record
     Section: TRTLCriticalSection;
-    Default: packed record
+    DefaultValues: packed record
       Counter: cardinal;
       MachineID: TBson24;
       ProcessID: word;
@@ -1908,7 +1918,7 @@ var
 procedure InitBsonObjectIDComputeNew;
 begin
   InitializeCriticalSection(GlobalBsonObjectID.Section);
-  with GlobalBsonObjectID.Default do
+  with GlobalBsonObjectID.DefaultValues do
   begin
     Counter := Random32 and COUNTER_MASK;
     with Executable do
@@ -1940,14 +1950,14 @@ begin
     if now > LastCreateTime then
     begin
       LastCreateTime := now;
-      count := Default.Counter; // reset
+      count := DefaultValues.Counter; // reset
     end
     else
     begin
       count := LastCounter + 1;
-      if count and COUNTER_MASK = Default.Counter then
+      if count and COUNTER_MASK = DefaultValues.Counter then
       begin
-        count := Default.Counter;
+        count := DefaultValues.Counter;
         inc(LastCreateTime); // collision -> cheat on timestamp
       end;
     end;
@@ -1956,8 +1966,8 @@ begin
     Counter.b3 := count;
     LastCounter := count;
     UnixCreateTime := bswap32(LastCreateTime);
-    MachineID := Default.MachineID;
-    ProcessID := Default.ProcessID;
+    MachineID := DefaultValues.MachineID;
+    ProcessID := DefaultValues.ProcessID;
     LeaveCriticalSection(Section);
   end;
 end;
@@ -2796,7 +2806,8 @@ begin
     result := '';
 end;
 
-function TBsonElement.DocItemToInteger(const aName: RawUtf8; const default: Int64): Int64;
+function TBsonElement.DocItemToInteger(
+  const aName: RawUtf8; const default: Int64): Int64;
 var
   item: TBsonElement;
 begin
@@ -3661,7 +3672,7 @@ begin
   case op of
     opEqualTo:
       BsonWriteVariant(name, Value);
-    opNotEqualTo..opIn:
+    opNotEqualTo .. opIn:
       begin
         BsonDocumentBegin(name);
         BsonWriteVariant(QUERY_OPS[op], Value);
@@ -3836,14 +3847,14 @@ begin
       [self, TotalWritten, BSON_MAXDOCUMENTSIZE]);
 end;
 
-function TBsonWriter.BsonWriteDocFromJson(Json: PUtf8Char; aEndOfObject:
-  PUtf8Char; out Kind: TBsonElementType; DoNotTryExtendedMongoSyntax: boolean): PUtf8Char;
+function TBsonWriter.BsonWriteDocFromJson(Json: PUtf8Char; aEndOfObject: PUtf8Char;
+  out Kind: TBsonElementType; DoNotTryExtendedMongoSyntax: boolean): PUtf8Char;
 var
   ndx: cardinal;
   EndOfObject: AnsiChar;
   Name: RawUtf8;
 begin
-  result := nil;
+  result := nil; // parsing error
   if Json = nil then
     exit;
   if Json^ in [#1..' '] then

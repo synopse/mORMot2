@@ -1788,6 +1788,7 @@ end;
 procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA512;
 begin
   ClientAlgo(suaSHA512);
+  // restore to the default hasher
   (fClient.Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
     TRestServerAuthenticationDefault).Algorithm := suaCRC32;
 end;

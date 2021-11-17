@@ -29,11 +29,6 @@ uses
   classes,
   variants,
   contnrs,
-  mormot.lib.z, // zlib's crc32 for private hash
-  {$ifdef DOMAINRESTAUTH}
-  mormot.lib.sspi, // do-nothing units on non compliant system
-  mormot.lib.gssapi,
-  {$endif DOMAINRESTAUTH}
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -43,15 +38,19 @@ uses
   mormot.core.variants,
   mormot.core.data,
   mormot.core.rtti,
-  mormot.crypt.core,
-  mormot.crypt.jwt,
   mormot.core.json,
   mormot.core.threads,
   mormot.core.perf,
   mormot.core.search,
+  mormot.crypt.core,
+  mormot.crypt.jwt,
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
+  {$ifdef DOMAINRESTAUTH}
+  mormot.lib.sspi, // do-nothing units on non compliant system
+  mormot.lib.gssapi,
+  {$endif DOMAINRESTAUTH}
   mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,

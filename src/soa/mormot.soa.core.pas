@@ -25,7 +25,7 @@ uses
   sysutils,
   classes,
   variants,
-  mormot.lib.z, // for contract hashing
+  mormot.lib.z, // use crc32() for contract hashing
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
