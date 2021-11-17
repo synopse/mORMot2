@@ -2811,7 +2811,8 @@ procedure GlobalUnLock;
 /// framework will register here some instances to be released eventually
 // - better in this root unit than in each finalization section
 // - its use is protected by the GlobalLock
-function RegisterGlobalShutdownRelease(Instance: TObject): pointer;
+function RegisterGlobalShutdownRelease(Instance: TObject;
+  SearchExisting: boolean = false): pointer;
 
 
 { ****************** Unix Daemon and Windows Service Support }
@@ -4934,14 +4935,17 @@ var
     Shutdown: boolean; // paranoid check to avoid messing with Instances[]
   end;
 
-function RegisterGlobalShutdownRelease(Instance: TObject): pointer;
+function RegisterGlobalShutdownRelease(Instance: TObject;
+  SearchExisting: boolean): pointer;
 begin
   if not InternalGarbageCollection.Shutdown then
   begin
     GlobalLock;
     try
       with InternalGarbageCollection do
-        ObjArrayAddCount(Instances, Instance, Count);
+        if not SearchExisting or
+           (ObjArrayFind(Instances, Count, Instance) < 0) then
+          ObjArrayAddCount(Instances, Instance, Count);
     finally
       GlobalUnLock;
     end;
