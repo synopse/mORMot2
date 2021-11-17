@@ -2996,6 +2996,14 @@ var
   // for macCrc128c or TAesAbstractAead.MacCheckError
   crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
 
+  /// compute CRC32 checksum on the supplied buffer
+  // - is only available if mormot.lib.z.pas unit is included in the project
+  crc32: THasher;
+
+  /// compute ADLER32 checksum on the supplied buffer
+  // - is only available if mormot.lib.z.pas unit is included in the project
+  adler32: THasher;
+
 /// compute CRC16-CCITT checkum on the supplied buffer
 // - i.e. 16-bit CRC-CCITT, with polynomial x^16 + x^12 + x^5 + 1 ($1021)
 // and $ffff as initial value

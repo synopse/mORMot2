@@ -2779,7 +2779,7 @@ procedure FillZero(var secret: RawByteString);
 begin
   if secret<>'' then
     with PStrRec(Pointer(PtrInt(secret) - _STRRECSIZE))^ do
-      if refCnt=1 then // avoid GPF if const
+      if refCnt = 1 then // avoid GPF if const
         FillCharFast(pointer(secret)^, length, 0);
 end;
 

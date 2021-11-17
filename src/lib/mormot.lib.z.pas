@@ -92,12 +92,14 @@ type
   {$ifdef ZLIBEXT}
   TZLong = PtrUInt;
   TZCRC = PtrUInt;
+  {$define ZLIBC}
   {$endif ZLIBEXT}
 
   {$ifdef ZLIBSTATIC}
   // our statically linked library expects 32-bit long/crc even on FPC Win64
   TZLong = cardinal;
   TZCRC = cardinal;
+  {$define ZLIBC}
   {$endif ZLIBSTATIC}
 
   /// raw structure used by external/static zlib during its stream process
@@ -1169,6 +1171,37 @@ begin
     result := crc32(0, pointer(aString), result);
 end;
 
+
+// we need some wrappers to fix any parameter or ABI issue
+{$ifdef LIBDEFLATESTATIC}
+
+function crc(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+begin
+  result := libdeflate_crc32(crc, buf, len);
+end;
+
+function adler(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+begin
+  result := libdeflate_adler32(crc, buf, len);
+end;
+
+{$else}
+
+function crc(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+begin
+  result := crc32(crc, buf, len);
+end;
+
+function adler(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+begin
+  result := adler32(crc, buf, len);
+end;
+
+{$endif LIBDEFLATESTATIC}
+
+initialization
+  mormot.core.base.crc32 := @crc;
+  mormot.core.base.adler32 := @adler;
 
 end.
 
