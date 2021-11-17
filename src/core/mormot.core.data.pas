@@ -2592,12 +2592,15 @@ type
     // - if fNoDuplicate was set and aText already exists (using the internal hash
     // table), it will return -1 unless aRaiseExceptionIfExisting is forced;
     // optionally freeing the supplied aObject if aFreeAndReturnExistingObject
-    // is true, in which pointer the existing Objects[] is copied (see
-    // AddObjectUnique as a convenient wrapper around this behavior)
+    // is set, in which pointer the existing Objects[] is copied (see
+    // AddObjectUnique as a convenient wrapper around this behavior);
+    // if aFreeAndReturnExistingObject is nil, and aReplaceExistingObject is
+    // true, the existing object is freed and replaced by aObject
     // - thread-safe method
     function AddObject(const aText: RawUtf8; aObject: TObject;
       aRaiseExceptionIfExisting: boolean = false;
-      aFreeAndReturnExistingObject: PPointer = nil): PtrInt;
+      aFreeAndReturnExistingObject: PPointer = nil;
+      aReplaceExistingObject: boolean = false): PtrInt;
     /// try to store a new RawUtf8 item and its associated TObject
     // - fNoDuplicate should have been specified in the list flags
     // - if aText doesn't exist, will add the values
@@ -2609,6 +2612,13 @@ type
     // - in fact, this method is just a wrapper around
     // ! AddObject(aText,aObjectToAddOrFree^,false,@aObjectToAddOrFree);
     procedure AddObjectUnique(const aText: RawUtf8; aObjectToAddOrFree: PPointer);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// force the storage of a RawUtf8 item, and its associated TObject
+    // - without the fNoDuplicate flag, it will always add the supplied value
+    // - if fNoDuplicate was set and aText already exists (using the internal hash
+    // table), it will free any existing Objects[] and put aObject in its place
+    // - thread-safe method, using an internal Hash Table to speedup IndexOf()
+    function AddOrReplaceObject(const aText: RawUtf8; aObject: TObject): PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// append a specified list to the current content
     // - thread-safe method
@@ -4306,7 +4316,8 @@ begin
 end;
 
 function TRawUtf8List.AddObject(const aText: RawUtf8; aObject: TObject;
-  aRaiseExceptionIfExisting: boolean; aFreeAndReturnExistingObject: PPointer): PtrInt;
+  aRaiseExceptionIfExisting: boolean; aFreeAndReturnExistingObject: PPointer;
+  aReplaceExistingObject: boolean): PtrInt;
 var
   added: boolean;
   obj: TObject;
@@ -4332,8 +4343,16 @@ begin
         end;
         if aRaiseExceptionIfExisting then
           raise ESynException.CreateUtf8('%.Add duplicate [%]', [self, aText]);
-        result := -1;
-        exit;
+        if aReplaceExistingObject then
+        begin
+          if obj <> nil then
+            FreeAndNil(fObjects[result]);
+        end
+        else
+        begin
+          result := -1;
+          exit;
+        end;
       end;
     end;
     result := fValues.Add(aText);
@@ -4350,6 +4369,11 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+function TRawUtf8List.AddOrReplaceObject(const aText: RawUtf8; aObject: TObject): PtrInt;
+begin
+  result := AddObject(aText, aObject, {raiseexisting=}false, nil, {replace=}true);
 end;
 
 procedure TRawUtf8List.AddObjectUnique(const aText: RawUtf8;
