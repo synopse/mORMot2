@@ -1608,8 +1608,6 @@ begin
   TEcc256r1Verify := TEcc256r1VerifyOsl;
 end;
 
-
-
 procedure FinalizeUnit;
 begin
   if (prime256v1grp <> nil) and

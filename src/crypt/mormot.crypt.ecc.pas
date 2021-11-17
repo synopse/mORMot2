@@ -3784,7 +3784,7 @@ end;
 
 const
   /// how TEcdheProtocol.SharedSecret initialize the AES engines
-  // - if you link mormot.core.openssl.pas, CTR and GCM will use its version
+  // - if you link mormot.core.openssl.pas, CTR and GCM will use its engines
   ECDHEPROT_EF2AES: array[TEcdheEF] of TAesMode = (
   // efAesCrc  efAesCfb  efAesOfb efAesCtr efAesCbc
     mCfc, mCfb, mOfb, mCtr, mCbc, // 128-bit

@@ -4819,14 +4819,14 @@ function GetEnumNameValueTrimmed(aTypeInfo: PRttiInfo; aValue: PUtf8Char;
   aValueLen: PtrInt): integer;
 begin
   result := aTypeInfo^.EnumBaseType^.
-    GetEnumNameValueTrimmed(aValue, aValueLen, {exact=}false);
+    GetEnumNameValueTrimmed(aValue, aValueLen, {exactcase=}false);
 end;
 
 function GetEnumNameValueTrimmedExact(aTypeInfo: PRttiInfo; aValue: PUtf8Char;
   aValueLen: PtrInt): integer;
 begin
   result := aTypeInfo^.EnumBaseType^.
-    GetEnumNameValueTrimmed(aValue, aValueLen, {exact=}true);
+    GetEnumNameValueTrimmed(aValue, aValueLen, {exactcase=}true);
 end;
 
 function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUtf8;
