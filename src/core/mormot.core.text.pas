@@ -1901,6 +1901,15 @@ function FormatString(const Format: RawUtf8; const Args: array of const): string
 procedure FormatShort16(const Format: RawUtf8; const Args: array of const;
   var result: TShort16);
 
+/// append some path parts into a single file name with proper path delimiters
+// - set EndWithDelim=true if you want to create e.g. full a folder name
+function MakePath(const Part: array of const; EndWithDelim: boolean = false;
+  Delim: AnsiChar = PathDelim): TFileName;
+
+/// create a CSV text from some values
+function MakeCsv(const Value: array of const; EndWithComma: boolean = false;
+  Comma: AnsiChar = ','): RawUtf8;
+
 /// direct conversion of a VCL string into a console OEM-encoded String
 // - under Windows, will use the CP_OEMCP encoding
 // - under Linux, will expect the console to be defined with UTF-8 encoding
@@ -5472,7 +5481,7 @@ end;
 procedure TTextWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
 var
   direct: PtrInt;
-  lastcommainmem: boolean;
+  comma: boolean;
   D: PUtf8Char;
 begin
   if (P <> nil) and
@@ -5503,11 +5512,11 @@ begin
     else
     begin
       FlushFinal; // no auto-resize if content is really huge
-      lastcommainmem := PAnsiChar(P)[Len - 1]= ',';
-      if lastcommainmem then
+      comma := PAnsiChar(P)[Len - 1] = ',';
+      if comma then
         dec(Len);
       WriteToStream(P, Len); // no need to transit huge content into fTempBuf
-      if lastcommainmem then
+      if comma then
         Add(','); // but we need the last comma to be cancelable
     end;
 end;
@@ -9319,11 +9328,15 @@ end;
 type
   // only supported token is %, with any const arguments
   TFormatUtf8 = object
-    b: PTempUtf8;
+    last: PTempUtf8;
     L, argN: PtrInt;
     blocks: array[0..63] of TTempUtf8; // to avoid most heap allocations
     procedure Parse(const Format: RawUtf8; const Args: array of const);
+    procedure DoDelim(const Part: array of const; EndWithDelim: boolean;
+      Delim: AnsiChar);
     procedure Write(Dest: PUtf8Char);
+    procedure WriteUtf8(var result: RawUtf8);
+    procedure WriteString(var result: string);
     function WriteMax(Dest: PUtf8Char; Max: PtrUInt): PUtf8Char;
   end;
 
@@ -9379,7 +9392,40 @@ begin
       break;
     end;
   until false;
-  b := c;
+  last := c;
+end;
+
+procedure TFormatUtf8.DoDelim(const Part: array of const; EndWithDelim: boolean;
+  Delim: AnsiChar);
+var
+  c: PTempUtf8;
+  p: PtrInt;
+begin
+  L := 0;
+  c := @blocks;
+  for p := 0 to high(Part) do
+  begin
+    if c > @blocks[high(blocks)] then
+      raise ESynException.Create('Too many args');
+    inc(L, VarRecToTempUtf8(Part[p], c^));
+    if (EndWithDelim and
+        (p = high(Part))) or
+       ((p <> high(Part)) and
+        (c^.Len <> 0) and
+        (c^.Text[c^.Len - 1] <> Delim)) then
+    begin
+      if c = @blocks[high(blocks)] then
+        raise ESynException.Create('Too many args');
+      inc(c);
+      c^.Len := 1;
+      c^.Text := @c^.Temp;
+      c^.Temp[0] := Delim;
+      c^.TempRawUtf8 := nil;
+      inc(L);
+    end;
+    inc(c);
+  end;
+  last := c;
 end;
 
 procedure TFormatUtf8.Write(Dest: PUtf8Char);
@@ -9397,7 +9443,15 @@ begin
       RawUtf8(d^.TempRawUtf8) := '';
       {$endif FPC}
     inc(d);
-  until d = b;
+  until d = last;
+end;
+
+procedure TFormatUtf8.WriteUtf8(var result: RawUtf8);
+begin
+  if L = 0 then
+    exit; // caller ensured that result=''
+  FastSetString(RawUtf8(result), nil, L);
+  Write(pointer(result));
 end;
 
 function TFormatUtf8.WriteMax(Dest: PUtf8Char; Max: PtrUInt): PUtf8Char;
@@ -9422,7 +9476,7 @@ begin
               RawUtf8(d^.TempRawUtf8) := '';
               {$endif FPC}
             inc(d);
-          until d = b; // avoid memory leak
+          until d = last; // avoid memory leak
           result := PUtf8Char(Max);
           exit;
         end;
@@ -9439,9 +9493,31 @@ begin
           RawUtf8(d^.TempRawUtf8) := '';
           {$endif FPC}
         inc(d);
-      until d = b;
+      until d = last;
   end;
   result := Dest;
+end;
+
+procedure TFormatUtf8.WriteString(var result: string);
+var
+  temp: TSynTempBuffer; // will avoid most memory allocations
+begin
+  if L = 0 then
+  begin
+    result := '';
+    exit;
+  end;
+  {$ifndef UNICODE}
+  if Unicode_CodePage = CP_UTF8 then // e.g. on POSIX or Windows + Lazarus
+  begin
+    WriteUtf8(RawUtf8(result)); // here string=UTF8String=RawUtf8
+    exit;
+  end;
+  {$endif UNICODE}
+  temp.Init(L);
+  Write(temp.buf);
+  Utf8DecodeToString(temp.buf, L, result);
+  temp.Done;
 end;
 
 procedure FormatUtf8(const Format: RawUtf8; const Args: array of const;
@@ -9457,11 +9533,7 @@ begin
   else
   begin
     process.Parse(Format, Args);
-    if process.L <> 0 then
-    begin
-      FastSetString(result, nil, process.L);
-      process.Write(pointer(result));
-    end;
+    process.WriteUtf8(result);
   end;
 end;
 
@@ -9523,20 +9595,16 @@ procedure FormatString(const Format: RawUtf8; const Args: array of const;
   out result: string);
 var
   process: TFormatUtf8;
-  temp: TSynTempBuffer; // will avoid most memory allocations
 begin
   if (Format = '') or
      (high(Args) < 0) then
-  begin
     // no formatting needed
-    Utf8DecodeToString(pointer(Format), length(Format), result);
-    exit;
+    Utf8ToStringVar(Format, result)
+  else
+  begin
+    process.Parse(Format, Args);
+    process.WriteString(result);
   end;
-  process.Parse(Format, Args);
-  temp.Init(process.L);
-  process.Write(temp.buf);
-  Utf8DecodeToString(temp.buf, process.L, result);
-  temp.Done;
 end;
 
 function FormatString(const Format: RawUtf8; const Args: array of const): string;
@@ -9544,6 +9612,24 @@ begin
   FormatString(Format, Args, result);
 end;
 
+function MakePath(const Part: array of const; EndWithDelim: boolean;
+  Delim: AnsiChar): TFileName;
+var
+  process: TFormatUtf8;
+begin
+  process.DoDelim(Part, EndWithDelim, Delim);
+  process.WriteString(result);
+end;
+
+function MakeCsv(const Value: array of const; EndWithComma: boolean;
+  Comma: AnsiChar): RawUtf8;
+var
+  process: TFormatUtf8;
+begin
+  result := '';
+  process.DoDelim(Value, EndWithComma, Comma);
+  process.WriteUtf8(result);
+end;
 
 function StringToConsole(const S: string): RawByteString;
 begin
