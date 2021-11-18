@@ -7785,6 +7785,10 @@ begin
         inc(P);
     inc(P); // jump {
     repeat
+      {$ifdef CPU64}
+      field.Name.Len := 0; // TValuePUtf8Char.Len=PtrInt -> reset high bits
+      field.Value.Len := 0;
+      {$endif CPU64}
       field.Name.Text := GetJsonPropName(P, @field.Name.Len);
       if field.Name.Text = nil then
         exit;  // invalid JSON content
@@ -7793,7 +7797,7 @@ begin
       if not (EndOfObject in [',', '}']) then
         exit; // invalid item separator
       if n = length(Values) then
-        SetLength(Values, n + 32);
+        SetLength(Values, NextGrow(n));
       Values[n] := field;
       inc(n);
     until (P = nil) or
