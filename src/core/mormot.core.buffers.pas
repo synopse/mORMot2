@@ -5021,7 +5021,7 @@ var
   S, D: pointer;
   Head: TAlgoCompressHead;
   Trailer: TAlgoCompressTrailer;
-  tmp: TSynTempBuffer;
+  tmp: RawByteString;
 begin
   if Dest = nil then
   begin
@@ -5038,36 +5038,28 @@ begin
     S := nil;
     DataLen := 0;
   end;
-  tmp.Init(AlgoCompressDestLen(DataLen));
-  try
-    Head.Magic := Magic;
-    Head.UnCompressedSize := DataLen;
-    Head.HashUncompressed := AlgoHash(ForceHash32, S, DataLen);
-    result := AlgoCompress(S, DataLen, tmp.buf);
-    if result > tmp.len then
-      raise EAlgoCompress.Create('StreamCompress: overflow'); // paranoid
-    if result > DataLen then
-    begin
-      // compression is not worth it -> store
-      result := DataLen;
-      D := S;
-      Head.HashCompressed := Head.HashUncompressed;
-    end
-    else
-    begin
-      D := tmp.buf;
-      Head.HashCompressed := AlgoHash(ForceHash32, D, result)
-    end;
-    Head.CompressedSize := result;
-    Dest.WriteBuffer(Head, SizeOf(Head));
-    Dest.WriteBuffer(D^, Head.CompressedSize);
-    Trailer.HeaderRelativeOffset := result + (SizeOf(Head) + SizeOf(Trailer));
-    Trailer.Magic := Magic;
-    Dest.WriteBuffer(Trailer, SizeOf(Trailer));
-    result := Head.CompressedSize + (SizeOf(Head) + SizeOf(Trailer));
-  finally
-    tmp.Done;
-  end;
+  SetLength(tmp, AlgoCompressDestLen(DataLen));
+  D := pointer(tmp);
+  Head.Magic := Magic;
+  Head.UnCompressedSize := DataLen;
+  Head.HashUncompressed := AlgoHash(ForceHash32, S, DataLen);
+  Head.CompressedSize := AlgoCompress(S, DataLen, D);
+  if Head.CompressedSize > length(tmp) then
+    raise EAlgoCompress.Create('StreamCompress: overflow'); // paranoid
+  if Head.CompressedSize > DataLen then
+  begin
+    D := S; // compression is not worth it -> store
+    Head.CompressedSize := DataLen;
+    Head.HashCompressed := Head.HashUncompressed;
+  end
+  else
+    Head.HashCompressed := AlgoHash(ForceHash32, D, Head.CompressedSize);
+  Dest.WriteBuffer(Head, SizeOf(Head));
+  Dest.WriteBuffer(D^, Head.CompressedSize);
+  Trailer.HeaderRelativeOffset := Head.CompressedSize + (SizeOf(Head) + SizeOf(Trailer));
+  Trailer.Magic := Magic;
+  Dest.WriteBuffer(Trailer, SizeOf(Trailer));
+  result := Head.CompressedSize + (SizeOf(Head) + SizeOf(Trailer));
 end;
 
 function TAlgoCompress.StreamCompress(Source: TCustomMemoryStream;
