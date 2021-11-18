@@ -2301,12 +2301,12 @@ function FindIniEntryFile(const FileName: TFileName;
 // - this function scans and update the Content memory buffer, and is
 // therefore very fast (no temporary TMemIniFile is created)
 // - if Section equals '', update the Name= value before any [Section]
-procedure UpdateIniEntry(var Content: RawUtf8; const Section,Name,Value: RawUtf8);
+procedure UpdateIniEntry(var Content: RawUtf8; const Section, Name, Value: RawUtf8);
 
 /// update a Name= Value in a [Section] of a .INI file
 // - if Section equals '', update the Name= value before any [Section]
 // - use internally fast UpdateIniEntry() function above
-procedure UpdateIniEntryFile(const FileName: TFileName; const Section,Name,Value: RawUtf8);
+procedure UpdateIniEntryFile(const FileName: TFileName; const Section, Name, Value: RawUtf8);
 
 /// find the position of the [SEARCH] section in source
 // - return true if [SEARCH] was found, and store pointer to the line after it in source

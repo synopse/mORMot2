@@ -5382,7 +5382,7 @@ end;
 procedure TOrmPropInfoRttiAnsi.GetValuePointer(
   Instance: TObject; out Value: pointer);
 begin
-  if fGetterIsFieldPropOffset <> 0 then
+  if fGetterIsFieldPropOffset <> 0 then // weak assign with no refcnt involved
     Value := PPointer(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
   else
   begin

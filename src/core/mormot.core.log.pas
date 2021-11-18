@@ -3159,8 +3159,8 @@ begin
     W.Flush; // now MS contains the uncompressed binary data
     AlgoSynLZ.StreamCompress(MS, aStream, MAGIC_MAB, {hash32=}true);
   finally
-    MS.Free;
     W.Free;
+    MS.Free;
   end;
 end;
 
@@ -3352,7 +3352,8 @@ begin
      (aAddressAbsolute = 0) then
     exit;
   debug := GetInstanceDebugFile;
-  if debug.HasDebugInfo then
+  if (debug <> nil) and
+     debug.HasDebugInfo then
   begin
     offset := debug.AbsoluteToOffset(aAddressAbsolute);
     s := debug.FindSymbol(offset);
