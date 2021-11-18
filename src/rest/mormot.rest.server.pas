@@ -4057,8 +4057,7 @@ begin
   if n = 0 then
     fInput := nil
   else
-    // don't call SetLength() for a temporary variable, just fake its length
-    PDALen(PAnsiChar(fInput) - _DALEN)^ := n - _DAOFF;
+    DynArrayFakeLength(fInput, n); // SetLength() would make a realloc()
   if (Log <> nil) and
      (LogInputIdent <> '') then
     Log.Add.Log(sllDebug, LogInputIdent, TypeInfo(TRawUtf8DynArray), fInput, self);

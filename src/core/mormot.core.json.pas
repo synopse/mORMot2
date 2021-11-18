@@ -1619,7 +1619,7 @@ type
     ObjectListItem: TRttiCustom;
     /// ParseNext/ParseNextAny unserialized value
     Value: PUtf8Char;
-    /// ParseNext/ParseNextAny unserialized value length
+    /// ParseNext/ParseNextAny unserialized value length (should be an integer)
     ValueLen: integer;
     /// if ParseNext/ParseNextAny unserialized a JSON string
     WasString: boolean;
@@ -4116,7 +4116,7 @@ begin
                 break;
               end;
             if Name.Len = 0 then
-              continue;
+              continue; // was within PropNamesToIgnore[]
             if IncludeQueryDelimiter then
               Add(sep);
             AddNoJsonEscape(Name.Text, Name.Len);
@@ -7378,8 +7378,7 @@ begin
       exit;
     until false;
     if n <> cap then
-      // don't size down the grown memory buffer, just fake its length
-      PDALen(PAnsiChar(arr^) - _DALEN)^ := n - _DAOFF;
+      DynArrayFakeLength(arr^, n); // faster than SetLength()
     Ctxt.Info := arrinfo;
   end;
   Ctxt.ParseEndOfObject; // mimics GetJsonField() / Ctxt.ParseNext
@@ -7803,7 +7802,7 @@ begin
     until (P = nil) or
           (EndOfObject = '}');
   end;
-  SetLength(Values, n);
+  DynArrayFakeLength(Values, n); // SetLength() could have made a realloc()
   if P = nil then // result=nil indicates failure -> points to #0 for end of text
     result := @NULCHAR
   else

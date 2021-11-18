@@ -6450,7 +6450,7 @@ begin
   else
   begin
     result[n] := 0; // always end with a 0
-    PDALen(PAnsiChar(result) - _DALEN)^ := n - _DAOFF; // fake length()
+    DynArrayFakeLength(result, n); // faster than SetLength()
   end;
 end;
 

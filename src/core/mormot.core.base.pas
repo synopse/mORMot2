@@ -618,6 +618,9 @@ const
   // - even if a dynamic array can handle PtrInt length, consider other patterns
   _DAMAXSIZE = $5fffffff;
 
+/// same as SetLength() but without any memory resize - len should be > 0
+procedure DynArrayFakeLength(var arr; len: TDALen);
+  {$ifdef HASINLINE} inline; {$endif}
 
 {$ifndef CPUARM}
 type
@@ -5397,6 +5400,11 @@ begin
   {$else}
   result := IntegerScanIndex(pointer(P), Count, Value);
   {$endif CPU64}
+end;
+
+procedure DynArrayFakeLength(var arr; len: TDALen);
+begin
+  PDALen(PAnsiChar(arr) - _DALEN)^ := len - _DAOFF;
 end;
 
 {$ifdef FPC} // some FPC-specific low-level code due to diverse compiler or RTL
