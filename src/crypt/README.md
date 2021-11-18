@@ -41,6 +41,7 @@ Authentication and Security types shared by all framework units.
 - High-Level `TSynSigner`/`TSynHasher` Multi-Algorithm Wrappers
 - 64-bit `TSynUniqueIdentifier` and its efficient Generator
 - `IProtocol` Safe Communication with Unilateral or Mutual Authentication
+- `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym` High-Level Algorithms Factories
 
 ### mormot.crypt.ecc256r1
 
