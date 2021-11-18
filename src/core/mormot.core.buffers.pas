@@ -987,6 +987,10 @@ function BinToBase64Short(Bin: PAnsiChar; BinBytes: integer): ShortString; overl
 // - with optional JSON_BASE64_MAGIC_C prefix (UTF-8 encoded \uFFF0 special code)
 function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUtf8; overload;
 
+/// fast conversion from binary into prefixed/suffixed Base64 with 64 chars per line
+function BinToBase64Line(sp: PAnsiChar; len: PtrUInt; const Prefix: RawUtf8 = '';
+  const Suffix: RawUtf8 = ''): RawUtf8;
+
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC_C prefix (UTF-8 encoded \uFFF0 special code)
 function BinToBase64WithMagic(const data: RawByteString): RawUtf8; overload;
@@ -1210,28 +1214,28 @@ function Base58ToBin(const base58: RawUtf8): RawByteString; overload;
 
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
-// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+// or Base64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
 function BlobToRawBlob(P: PUtf8Char; Len: integer = 0): RawBlob; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
-// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+// or Base64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
 procedure BlobToRawBlob(P: PUtf8Char; var result: RawBlob; Len: integer = 0); overload;
 
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
-// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+// or Base64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
 function BlobToRawBlob(const Blob: RawByteString): RawBlob; overload;
 
 /// create a TBytes from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
-// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+// or Base64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
 function BlobToBytes(P: PUtf8Char): TBytes;
 
 /// create a memory stream from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
-// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+// or Base64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
 // - the caller must free the stream instance after use
 function BlobToStream(P: PUtf8Char): TStream;
 
@@ -5934,6 +5938,53 @@ begin
   Base64Encode(@result[1], Bin, BinBytes);
 end;
 
+function BinToBase64Line(sp: PAnsiChar; len: PtrUInt; const Prefix, Suffix: RawUtf8): RawUtf8;
+const
+  PERLINE = (64 * 3) div 4;
+var
+  rp: PAnsiChar;
+  outlen, last: PtrUInt;
+begin
+  outlen := BinToBase64Length(len);
+  inc(outlen, 2 * (outlen shr 6)); // one CRLF per line
+  FastSetString(result, nil, PtrInt(outlen) + length(Prefix) + length(Suffix));
+  rp := pointer(result);
+  if Prefix <> '' then
+  begin
+    MoveFast(pointer(Prefix)^, rp^, PStrLen(PtrUInt(Prefix) - _STRLEN)^);
+    inc(rp, PStrLen(PtrUInt(Prefix) - _STRLEN)^);
+  end;
+  while len >= PERLINE do
+  begin
+    Base64EncodeMain(rp, sp, PERLINE);
+    inc(sp, PERLINE);
+    PWord(rp + 64)^ := $0a0d;
+    inc(rp, 66);
+    dec(len, PERLINE);
+  end;
+  if len > 0 then
+  begin
+    last := Base64EncodeMain(rp, sp, len);
+    inc(rp, last * 4);
+    last := last * 3;
+    inc(sp, last);
+    dec(len, last);
+    if len <> 0 then
+    begin
+      Base64EncodeTrailing(rp, sp, len); // 1/2 bytes as 4 chars with trailing =
+      inc(rp, 4);
+    end;
+    PWord(rp)^ := $0a0d;
+    inc(rp, 2);
+  end;
+  if Suffix <> '' then
+  begin
+    MoveFast(pointer(Suffix)^, rp^, PStrLen(PtrUInt(Suffix) - _STRLEN)^);
+    inc(rp, PStrLen(PtrUInt(Suffix) - _STRLEN)^);
+  end;
+  PStrLen(PtrUInt(result) - _STRLEN)^ := rp - pointer(result);
+end;
+
 function BinToBase64Short(const s: RawByteString): ShortString;
 begin
   result := BinToBase64Short(pointer(s), length(s));
@@ -6668,7 +6719,7 @@ begin
     end
     else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC_C) and
        Base64ToBinSafe(@P[3], Len - 3, RawByteString(result)) then
-      exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
+      exit; // safe decode Base64 content ('\uFFF0base64encodedbinary')
   // TEXT format
   SetString(result, PAnsiChar(P), Len);
 end;
@@ -6697,7 +6748,7 @@ begin
     end
     else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC_C) and
         Base64ToBinSafe(@P[3], Len - 3, RawByteString(result)) then
-      exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
+      exit; // safe decode Base64 content ('\uFFF0base64encodedbinary')
   // TEXT format
   result := Blob;
 end;
@@ -6729,7 +6780,7 @@ begin
     else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC_C) and
             IsBase64(@P[3], Len - 3) then
     begin
-      // Base-64 encoded content ('\uFFF0base64encodedbinary')
+      // Base64 encoded content ('\uFFF0base64encodedbinary')
       inc(P, 3);
       dec(Len, 3);
       LenResult := Base64ToBinLength(pointer(P), Len);

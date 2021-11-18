@@ -1818,7 +1818,7 @@ asm // rcx=src, edx=size, r8=dest
         add     r8, 4
         pxor    xmm0, xmm0
         mov     eax, 32768 - 64
-@06:    movaps  dqword ptr [off + rax - 48], xmm0 // stack is aligned to 16 bytes
+@06:    movaps  dqword ptr [off + rax - 48], xmm0 // stack is 16 bytes aligned
         movaps  dqword ptr [off + rax - 32], xmm0
         movaps  dqword ptr [off + rax - 16], xmm0
         movaps  dqword ptr [off + rax], xmm0
