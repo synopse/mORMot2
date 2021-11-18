@@ -9405,7 +9405,7 @@ begin
   c := @blocks;
   for p := 0 to high(Part) do
   begin
-    if c > @blocks[high(blocks)] then
+    if PtrUInt(c) > PtrUInt(@blocks[high(blocks)]) then
       raise ESynException.Create('Too many args');
     inc(L, VarRecToTempUtf8(Part[p], c^));
     if (EndWithDelim and
@@ -9618,7 +9618,7 @@ var
   process: TFormatUtf8;
 begin
   process.DoDelim(Part, EndWithDelim, Delim);
-  process.WriteString(result);
+  process.WriteString(string(result));
 end;
 
 function MakeCsv(const Value: array of const; EndWithComma: boolean;

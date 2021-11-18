@@ -1817,7 +1817,7 @@ asm // rcx=src, edx=size, r8=dest
         mov     dword ptr [r8], 0
         add     r8, 4
         pxor    xmm0, xmm0
-        mov     eax, SizeOf(TOffsets) - 64
+        mov     eax, 32768 - 64
 @06:    movaps  dqword ptr [off + rax - 48], xmm0 // stack is aligned to 16 bytes
         movaps  dqword ptr [off + rax - 32], xmm0
         movaps  dqword ptr [off + rax - 16], xmm0
