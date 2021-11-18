@@ -5408,7 +5408,7 @@ utf8:     Add(PUtf8Char(P), Len, Escape);
         goto utf8;
       CP_UTF16:         // direct write of UTF-16 content
         AddW(PWord(P), 0, Escape);
-      CP_RAWBLOB:       // RawBlob written with Base-64 encoding
+      CP_RAWBLOB:       // RawBlob written with Base64 encoding
         begin
           AddShorter(JSON_BASE64_MAGIC_S); // \uFFF0
           WrBase64(P, Len, {withMagic=}false);
@@ -7257,7 +7257,7 @@ begin
     // detect void (i.e. []) or invalid array
     exit;
   if PCardinal(Ctxt.Json)^ = JSON_BASE64_MAGIC_QUOTE_C then
-    // raw RTTI binary layout with a single Base-64 encoded item
+    // raw RTTI binary layout with a single Base64 encoded item
     Ctxt.Valid := Ctxt.ParseNext and
               (Ctxt.EndOfObject = ']') and
               (Ctxt.Value <> nil) and
@@ -7313,7 +7313,7 @@ begin
     // detect void (i.e. []) or invalid array
     exit;
   if PCardinal(Ctxt.Json)^ = JSON_BASE64_MAGIC_QUOTE_C then
-    // raw RTTI binary layout with a single Base-64 encoded item
+    // raw RTTI binary layout with a single Base64 encoded item
     Ctxt.Valid := Ctxt.ParseNext and
               (Ctxt.EndOfObject = ']') and
               (Ctxt.Value <> nil) and

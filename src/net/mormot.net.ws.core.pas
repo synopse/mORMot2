@@ -1102,7 +1102,7 @@ begin
   if (aKey = '') or
      (aSettings = nil) then
     exit;
-  // 1. try asymetric ES-256 ephemeral secret key and mutual authentication
+  // 1. try asymmetric ES-256 ephemeral secret key and mutual authentication
   // check human-friendly format 'password#*.private' key file name
   with aSettings^ do
     fEncryption := TEcdheProtocol.FromPasswordSecureFile(

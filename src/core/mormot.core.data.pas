@@ -978,7 +978,7 @@ function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: PRttiInfo): PAnsiChar;
 procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: PRttiInfo); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// save a record content into a Base-64 encoded UTF-8 text content
+/// save a record content into a Base64 encoded UTF-8 text content
 // - will use RecordSave() format, with a left-sided binary CRC
 // - is a wrapper around BinarySaveBase64(rkRecordTypes)
 function RecordSaveBase64(const Rec; TypeInfo: PRttiInfo;
@@ -1011,7 +1011,7 @@ function RecordLoad(var Rec; const Source: RawByteString;
   TypeInfo: PRttiInfo; TryCustomVariants: PDocVariantOptions = nil): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// read a record content from a Base-64 encoded content
+/// read a record content from a Base64 encoded content
 // - expects RecordSaveBase64() format, with a left-sided binary CRC32C
 // - is a wrapper around BinaryLoadBase64(rkRecordTypes)
 function RecordLoadBase64(Source: PAnsiChar; Len: PtrInt; var Rec; TypeInfo: PRttiInfo;
@@ -2568,7 +2568,7 @@ type
     constructor CreateEx(aFlags: TRawUtf8ListFlags);
     {$ifndef PUREMORMOT2}
     /// backward compatiliby overloaded constructor
-    // - please rather use the overloaded Create(TRawUtf8ListFlags)
+    // - please rather use the overloaded CreateEx(TRawUtf8ListFlags)
     constructor Create(aOwnObjects: boolean; aNoDuplicate: boolean = false;
       aCaseSensitive: boolean = true); reintroduce; overload;
     {$endif PUREMORMOT2}

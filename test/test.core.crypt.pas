@@ -48,7 +48,7 @@ type
     procedure _RC4;
     /// 32-bit, 64-bit and 128-bit hashing functions including AesNiHash variants
     procedure Hashes;
-    /// Base-64 encoding/decoding functions
+    /// Base64 encoding/decoding functions
     procedure _Base64;
     {$ifndef PUREMORMOT2}
     /// CompressShaAes() using SHA-256 / AES-256-CTR algorithm over SynLZ

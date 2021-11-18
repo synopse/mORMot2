@@ -27,7 +27,7 @@ uses
   mormot.core.os,
   mormot.core.rtti,
   mormot.core.text,
-  mormot.core.buffers, // for base-64 and baudot encoding
+  mormot.core.buffers, // for Base64 and baudot encoding
   mormot.core.datetime,
   mormot.crypt.core;
 
@@ -440,7 +440,7 @@ function EccSelfSigned(const content: TEccCertificateContent): boolean;
 // - just check that the date and authority are set
 function EccCheck(const content: TEccSignatureCertifiedContent): boolean; overload;
 
-/// convert a supplied base-64 text into a TEccSignatureCertifiedContent binary buffer
+/// convert a supplied Base64 text into a TEccSignatureCertifiedContent binary buffer
 function EccSign(const base64: RawUtf8;
   out content: TEccSignatureCertifiedContent): boolean;
 
@@ -448,15 +448,16 @@ function EccSign(const base64: RawUtf8;
 // - returns the number of bytes encoded into der[] buffer
 function EccSignToDer(const sign: TEccSignature; out der: TEccSignatureDer): integer;
 
+
 /// convert a DER compatible content into a raw signature
 function DerToEccSign(const der: TEccSignatureDer; out sign: TEccSignature): boolean;
 
 /// convert a supplied TEccSignatureCertifiedContent binary buffer into proper text
-// - returns base-64 encoded text, or '' if the signature was filled with zeros
+// - returns Base64 encoded text, or '' if the signature was filled with zeros
 function EccText(const sign: TEccSignatureCertifiedContent): RawUtf8; overload;
 
 /// convert a supplied TEccSignature binary buffer into proper text
-// - returns base-64 encoded text, or '' if the signature was filled with zeros
+// - returns Base64 encoded text, or '' if the signature was filled with zeros
 function EccText(const sign: TEccSignature): RawUtf8; overload;
 
 /// low-level verification of a TEccSignatureCertifiedContent binary buffer

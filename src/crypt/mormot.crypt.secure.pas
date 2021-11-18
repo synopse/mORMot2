@@ -613,7 +613,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the resulting hash as lowercase hexadecimal string
     function Final: RawUtf8; overload;
-    /// returns the resulting hash as a binary buffer
+    /// set the resulting hash into a binary buffer, and the size as result
     function Final(out aDigest: THash512Rec): integer; overload;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
     function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
@@ -1228,7 +1228,7 @@ begin
       begin
         PSha3(@ctxt)^.Init(SHA3_ALGO[Algo]);
         PSha3(@ctxt)^.Update(aSecret, aSecretLen);
-      end; // note: the HMAC pattern is included in SHA-3
+      end; // note: the HMAC pattern is included in SHA-3 sponge design
   end;
 end;
 

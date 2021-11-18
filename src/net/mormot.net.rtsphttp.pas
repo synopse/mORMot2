@@ -52,7 +52,7 @@ type
   TPostConnection = class(TAsyncConnection)
   protected
     fRtspTag: TPollSocketTag;
-    // redirect the POST base-64 encoded command to the RTSP socket
+    // redirect the POST Base64 encoded command to the RTSP socket
     function OnRead: TPollAsyncSocketOnReadWrite; override;
     // will release the associated TRtspConnection instance
     procedure BeforeDestroy; override;

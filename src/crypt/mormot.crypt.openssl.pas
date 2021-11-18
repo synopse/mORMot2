@@ -10,7 +10,7 @@ unit mormot.crypt.openssl;
     - OpenSSL Cryptographic Pseudorandom Number Generator (CSPRNG)
     - AES Cypher/Uncypher in various Modes
     - Hashers and Signers OpenSSL Wrappers
-    - OpenSSL Asymetric Cryptography
+    - OpenSSL Asymmetric Cryptography
     - JWT Implementation using any OpenSSL Algorithm
     - Register OpenSSL to our General Cryptography Catalog
 
@@ -312,13 +312,13 @@ type
   end;
 
 
-{ ************** OpenSSL Asymetric Cryptography }
+{ ************** OpenSSL Asymmetric Cryptography }
 
 type
   /// exception class raised by the sign/verify classes of this unit
-  EOpenSslAsymetric = class(EOpenSsl);
+  EOpenSslAsymmetric = class(EOpenSsl);
 
-/// asymetric digital signature of some Message using a given PrivateKey
+/// asymmetric digital signature of some Message using a given PrivateKey
 // - if Algorithm is '', EVP_sha256 will be used as message Digest
 // - if Algorithm is 'null', no Digest is done before signature - which is
 // mandatory e.g. for ed25519 which uses internally SHA-512
@@ -328,7 +328,7 @@ function OpenSslSign(const Algorithm: RawUtf8;
   out Signature: RawByteString; const PrivateKeyPassword: RawUtf8 = '';
   const Engine: RawUtf8 = ''): cardinal;
 
-/// asymetric digital verification of some Message using a given PublicKey
+/// asymmetric digital verification of some Message using a given PublicKey
 // - if Algorithm is '', EVP_sha256 will be used as message Digest
 // - if Algorithm is 'null', no Digest is done before signature - which is
 // mandatory e.g. for ed25519 which uses internally SHA-512
@@ -361,7 +361,7 @@ procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
   out PrivateKey, PublicKey: RawByteString); overload;
 
 
-/// mormot.crypt.ecc256r1 compatible function for asymetric key generation
+/// mormot.crypt.ecc256r1 compatible function for asymmetric key generation
 // - this OpenSSL-powered function will replace our slower mormot.crypt.ecc256r1
 // $ OpenSSL: 300 Ecc256r1MakeKey in 7.75ms i.e. 38,664/s, aver. 25us
 // $ mORMot:  300 Ecc256r1MakeKey in 255ms i.e. 1,176/s, aver. 850us
@@ -369,7 +369,7 @@ procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
 function ecc_make_key_osl(out PublicKey: TEccPublicKey;
   out PrivateKey: TEccPrivateKey): boolean;
 
-/// mormot.crypt.ecc256r1 compatible function for asymetric key signature
+/// mormot.crypt.ecc256r1 compatible function for asymmetric key signature
 // - this OpenSSL-powered function will replace our slower pascal/c code
 // $ OpenSSL: 300 Ecc256r1Sign in 11.66ms i.e. 25,711/s, aver. 38us
 // $ mORMot:  300 Ecc256r1Sign in 262.72ms i.e. 1,141/s, aver. 875us
@@ -377,7 +377,7 @@ function ecc_make_key_osl(out PublicKey: TEccPublicKey;
 function ecdsa_sign_osl(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
   out Signature: TEccSignature): boolean;
 
-/// mormot.crypt.ecc256r1 compatible function for asymetric key verification
+/// mormot.crypt.ecc256r1 compatible function for asymmetric key verification
 // - this OpenSSL-powered function will replace our slower pascal/c code
 // $ OpenSSL: 300 Ecc256r1Verify in 41.32ms i.e. 7,260/s, aver. 137us
 // $ mORMot:  300 Ecc256r1Verify in 319.32ms i.e. 939/s, aver. 1.06ms
@@ -1008,11 +1008,11 @@ begin
 end;
 
 
-{ ************** OpenSSL Asymetric Cryptography }
+{ ************** OpenSSL Asymmetric Cryptography }
 
 function GetMd(const Algorithm: RawUtf8; const Caller: string): PEVP_MD;
 begin
-  EOpenSslAsymetric.CheckAvailable(nil, Caller);
+  EOpenSslAsymmetric.CheckAvailable(nil, Caller);
   if Algorithm = 'null' then
     result := nil // e.g. for ed25519
   else
@@ -1022,7 +1022,7 @@ begin
       else
         result := EVP_get_digestbyname(pointer(Algorithm));
       if result = nil then
-        raise EOpenSslAsymetric.CreateFmt(
+        raise EOpenSslAsymmetric.CreateFmt(
           '%s: unknown [%s] algorithm', [Caller, Algorithm]);
     end;
 end;
@@ -1117,7 +1117,7 @@ var
   ctrl: integer;
 begin
   result := nil;
-  EOpenSslAsymetric.CheckAvailable(nil, 'OpenSslGenerateKeys');
+  EOpenSslAsymmetric.CheckAvailable(nil, 'OpenSslGenerateKeys');
   ctx := EVP_PKEY_CTX_new_id(EvpType, nil);
   if ctx <> nil then
   try
@@ -1350,11 +1350,11 @@ end;
 
 constructor TEcc256r1VerifyOsl.Create(const pub: TEccPublicKey);
 begin
-  EOpenSslAsymetric.CheckAvailable(PClass(self)^, 'Create');
+  EOpenSslAsymmetric.CheckAvailable(PClass(self)^, 'Create');
   if not NewPrime256v1Key(fKey) or
      not PublicKeyToPoint(pub, fPoint) or
      (EC_KEY_set_public_key(fKey, fPoint) <> OPENSSLSUCCESS) then
-    raise EOpenSslAsymetric.CreateFmt('%s.Create failed', [ClassNameShort(self)^]);
+    raise EOpenSslAsymmetric.CreateFmt('%s.Create failed', [ClassNameShort(self)^]);
 end;
 
 destructor TEcc256r1VerifyOsl.Destroy;

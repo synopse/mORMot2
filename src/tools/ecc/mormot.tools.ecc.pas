@@ -67,7 +67,7 @@ function EccCommandSourceFile(const AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const ConstName, Comment, PassWord: RawUtf8): TFileName;
 
-/// end-user command to create a .json base-64 text array from a set of public key files
+/// end-user command to create a .json Base64 text array from a set of public key files
 // - ready to be included e.g. as settings of any server
 // - EccCommandChainCertificates(['*']) will create a 'chain.ca' of all
 // public key files in the current folder

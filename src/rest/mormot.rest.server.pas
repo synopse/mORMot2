@@ -1312,7 +1312,7 @@ type
 
   /// authentication using HTTP Basic scheme
   // - match TRestClientAuthenticationHttpBasic on Client side
-  // - this protocol send both name and password as clear (just base-64 encoded)
+  // - this protocol send both name and password as clear (just Base64 encoded)
   // so should only be used over SSL / HTTPS, or for compatibility reasons
   // - will rely on TRestServerAuthenticationNone for authorization
   // - on client side, this scheme is not called by TRestClientUri.SetUser()
@@ -4964,7 +4964,7 @@ begin
        PInterfaceMethod(ServiceMethod)^.ArgsInputIsOctetStream and
        not Call.InBodyTypeIsJson then
     begin
-      // encode binary as base-64, as expected by InternalExecuteSoaByInterface
+      // encode binary as Base64, as expected by InternalExecuteSoaByInterface
       json := BinToBase64(Call.InBody, '["', '"]', false);
       ServiceParameters := pointer(json);
     end

@@ -1000,7 +1000,7 @@ type
     // - if no setter exists (no write declaration), the getted field address is used
     // - handle UTF-8 SQL to Delphi values conversion
     // - expect BLOB fields encoded as SQlite3 BLOB literals ("x'01234'" e.g.)
-    // or base-64 encoded stream for JSON ("\uFFF0base64encodedbinary") - i.e.
+    // or Base64 encoded stream for JSON ("\uFFF0base64encodedbinary") - i.e.
     // both format supported by BlobToRawBlob() function
     // - handle TPersistent, TCollection, TRawUtf8List or TStrings with JsonToObject
     // - note that the supplied Value buffer won't be modified by this method:
@@ -1016,11 +1016,11 @@ type
     // - if ToSql is true, result is on SQL form (false->'0' e.g.)
     // - if ToSql is false, result is on JSON form (false->'false' e.g.)
     // - BLOB field returns SQlite3 BLOB literals ("x'01234'" e.g.) if ToSql is
-    // true, or base-64 encoded stream for JSON ("\uFFF0base64encodedbinary")
+    // true, or Base64 encoded stream for JSON ("\uFFF0base64encodedbinary")
     // - getter method (read Get*) is called if available
     // - handle Delphi values into UTF-8 SQL conversion
     // - oftBlobDynArray, oftBlobCustom or oftBlobRecord are returned as BLOB
-    // litterals ("X'53514C697465'") if ToSql is true, or base-64 encoded stream
+    // litterals ("X'53514C697465'") if ToSql is true, or Base64 encoded stream
     // for JSON ("\uFFF0base64encodedbinary")
     // - handle TPersistent, TCollection, TRawUtf8List or TStrings with ObjectToJson
     function GetValue(Instance: TObject; ToSql: boolean;
@@ -2199,19 +2199,19 @@ type
     /// read-only access to a particular Blob value
     // - a new RawBlob is created
     // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
-    // or Base-64 encoded content ('\uFFF0base64encodedbinary')
+    // or Base64 encoded content ('\uFFF0base64encodedbinary')
     // - prefered manner is to directly use REST protocol to retrieve a blob field
     function GetBlob(Row, Field: PtrInt): RawBlob;
     /// read-only access to a particular Blob value
     // - a new TBytes is created
     // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
-    //   or Base-64 encoded content ('\uFFF0base64encodedbinary')
+    //   or Base64 encoded content ('\uFFF0base64encodedbinary')
     // - prefered manner is to directly use REST protocol to retrieve a blob field
     function GetBytes(Row, Field: PtrInt): TBytes;
     /// read-only access to a particular Blob value
     // - a new TCustomMemoryStream is created - caller shall free its instance
     // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
-    //   or Base-64 encoded content ('\uFFF0base64encodedbinary')
+    //   or Base64 encoded content ('\uFFF0base64encodedbinary')
     // - prefered manner is to directly use REST protocol to retrieve a blob field
     function GetStream(Row, Field: PtrInt): TStream;
     /// read-only access to a particular DateTime field value

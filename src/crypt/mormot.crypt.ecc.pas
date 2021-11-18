@@ -181,11 +181,11 @@ type
     /// initialize this certificate from a supplied certificate binary
     // - will raise an EECCException if the supplied binary is incorrect
     constructor CreateFrom(const binary: TEccCertificateContent); virtual;
-    /// initialize this certificate from a supplied base-64 encoded binary
+    /// initialize this certificate from a supplied Base64 encoded binary
     // - will raise an EECCException if the supplied base64 is incorrect
     constructor CreateFromBase64(const base64: RawUtf8); virtual;
     /// initialize this certificate from a set of potential inputs
-    // - will first search from a .public file name, base-64 encoded binary,
+    // - will first search from a .public file name, Base64 encoded binary,
     // or a serial number which be used to search for a local .public file
     // (as located by EccKeyFileFind)
     // - will raise an EECCException if no supplied media is correct
@@ -197,10 +197,10 @@ type
     /// SHA-256 + ECDSA secp256r1 signature of the Certificate record
     property Signature: TEccSignature
       read fContent.Signature;
-    /// persist the certificate as some base-64 encoded binary
+    /// persist the certificate as some Base64 encoded binary
     // - will use SaveToStream serialization
     function ToBase64: RawUtf8;
-    /// retrieve the certificate from some base-64 encoded binary
+    /// retrieve the certificate from some Base64 encoded binary
     // - will use LoadFromStream serialization
     // - returns true on success, false otherwise
     function FromBase64(const base64: RawUtf8): boolean;
@@ -209,13 +209,13 @@ type
     // - returns true on success, false otherwise
     function FromFile(const filename: TFileName): boolean;
     /// retrieve the certificate from a set of potential inputs
-    // - will first search from a .public file name, base-64 encoded binary,
+    // - will first search from a .public file name, Base64 encoded binary,
     // or a serial number which be used to search for a local .public file in
     // the current folder or EccKeyFileFolder (as located by EccKeyFileFind)
     // - returns true on success, false otherwise
     function FromAuth(const AuthPubKey: TFileName; const AuthBase64,
       AuthSerial: RawUtf8): boolean;
-    /// persist only the public certificate as some base-64 encoded binary
+    /// persist only the public certificate as some Base64 encoded binary
     // - will follow TEccCertificate.SaveToStream/ToBase64 serialization,
     // even when called from a TEccCertificateSecret instance
     // - could be used to safely publish the public information of a newly
@@ -225,7 +225,7 @@ type
     // - returns true on success (i.e. this class stores a certificate),
     // false otherwise
     function SaveToStream(Stream: TStream): boolean;
-    /// retrieve the certificate from some base-64 encoded binary
+    /// retrieve the certificate from some Base64 encoded binary
     // - returns true on success, false otherwise
     function LoadFromStream(Stream: TStream): boolean;
     /// fast check of the binary buffer storage of this certificate
@@ -243,8 +243,8 @@ type
     // - you can optionally associate an ECDSA secp256r1 digital signature,
     // and a timestamp which may be used when re-creating a decyphered file
     // - use TEccCertificateSecret.Decrypt to uncypher the resulting content
-    function Encrypt(const Plain: RawByteString; Signature:
-      TEccSignatureCertified = nil; FileDateTime: TDateTime = 0;
+    function Encrypt(const Plain: RawByteString;
+      Signature: TEccSignatureCertified = nil; FileDateTime: TDateTime = 0;
       const KDFSalt: RawUtf8 = 'salt'; KDFRounds: integer = DEFAULT_ECCROUNDS;
       const MACSalt: RawUtf8 = 'hmac'; MACRounds: integer = 100;
       Algo: TEciesAlgo = ecaUnknown): RawByteString;
@@ -304,7 +304,7 @@ type
     // fields matching Serial/Issuer, and should be used as "root" certificates
     property IsSelfSigned: boolean
       read GetIsSelfSigned;
-    /// base-64 encoded text of the whole certificate binary information
+    /// Base64 encoded text of the whole certificate binary information
     // - only the public part of the certificate will be shown: any private key
     // of a TEccCertificateSecret instance would be trimmed
     property Base64: RawUtf8
@@ -437,14 +437,14 @@ type
       const PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
       AES: TAesAbstractClass = nil): boolean; overload;
   public
-    /// compute a base-64 encoded signature of some digital content
+    /// compute a Base64 encoded signature of some digital content
     // - memory buffer will be hashed using SHA-256, then will be signed using
     // ECDSA over the private secret key of this certificate instance
     // - you could later on verify this text signature according to the public
     // key of this certificate, calling TEccCertificateChain.IsSigned()
     // - create internally a temporary TEccSignatureCertified instance
     function SignToBase64(Data: pointer; Len: integer): RawUtf8; overload;
-    /// compute a base-64 encoded signature of some digital content hash
+    /// compute a Base64 encoded signature of some digital content hash
     // - signature will be certified by private secret key of this instance
     // - you could later on verify this text signature according to the public
     // key of this certificate, calling TEccCertificateChain.IsSigned()
@@ -602,7 +602,7 @@ type
     // - will raise an EECCException if the supplied binary content is incorrect
     constructor CreateFrom(const binary: TEccSignatureCertifiedContent;
       NoException: boolean = false);
-    /// initialize this signature from a supplied base-64 encoded binary
+    /// initialize this signature from a supplied Base64 encoded binary
     // - will raise an EECCException if the supplied base64 is incorrect
     constructor CreateFromBase64(const base64: RawUtf8;
       NoException: boolean = false);
@@ -631,11 +631,11 @@ type
     // - this method is thread-safe, and not blocking
     function Verify(Authority: TEccCertificate;
       Data: pointer; Len: integer): TEccValidity; overload;
-    /// persist the signature as some base-64 encoded binary
+    /// persist the signature as some Base64 encoded binary
     function ToBase64: RawUtf8;
     /// returns a TDocVariant object of all published properties of this instance
     function ToVariant: variant; virtual;
-    /// retrieve the signature from some base-64 encoded binary
+    /// retrieve the signature from some Base64 encoded binary
     // - returns true on success, false otherwise
     function FromBase64(const base64: RawUtf8): boolean;
     /// retrieve the signature from the "sign": field of a JSON .sign file
@@ -651,6 +651,17 @@ type
     // TEccSignatureCertifiedFile instead
     // - returns TRUE on success, FALSE otherwise
     function SaveToDERFile(const FileName: TFileName): boolean;
+    /// save the ECDSA signature into a X509 PEM text
+    // - PEM is just a base64-encoded DER with some minimal header/footer
+    // - note that PEM/DER content only stores the ECDSA digital signature, so
+    // all certification information is lost
+    function SaveToPEMText: RawUtf8;
+    /// save the ECDSA signature into a X509 PEM file
+    // - note that PEM/DER content only stores the ECDSA digital signature, so
+    // all certification information is lost - consider using
+    // TEccSignatureCertifiedFile instead
+    // - returns TRUE on success, FALSE otherwise
+    function SaveToPEMFile(const FileName: TFileName): boolean;
     /// low-level access to the binary buffer used ECDSA secp256r1 cryptography
     // - you should not use this property, but other methods
     property Content: TEccSignatureCertifiedContent
@@ -727,7 +738,7 @@ type
 
   /// manage PKI certificates using ECC secp256r1 cryptography
   // - will implement a simple and efficient public-key infrastructure (PKI),
-  // based on JSON objects or even plain base-64 encoded JSON strings
+  // based on JSON objects or even plain Base64 encoded JSON strings
   TEccCertificateChain = class(TSynPersistentLock)
   protected
     fItems: TEccCertificateObjArray;
@@ -740,11 +751,11 @@ type
     function IndexBySerial(const Serial: TEccCertificateID): integer;
   public
     /// initialize the certificate store from some JSON array of strings
-    // - the serialization format is just a JSON array of base-64 encoded
+    // - the serialization format is just a JSON array of Base64 encoded
     // certificates (with only public keys) - so diverse from CreateFromFile()
     // - will call LoadFromJson(), and raise EECCException on any error
     constructor CreateFromJson(const json: RawUtf8);
-    /// initialize the certificate store from an array of base-64 encoded strings
+    /// initialize the certificate store from an array of Base64 encoded strings
     // - a TRawUtf8DynArray value is very convenient when storing the
     // certificates chain as part of JSON settings, e.g. TDDDAppSettings
     // - will call LoadFromArray(), and raise EECCException on any error
@@ -848,7 +859,7 @@ type
     // - this method is thread-safe, and not blocking
     function IsSigned(const sign: TEccSignatureCertifiedContent;
       Data: pointer; Len: integer): TEccValidity; overload;
-    /// verify the base-64 encoded digital signature of a given hash
+    /// verify the Base64 encoded digital signature of a given hash
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored ECDSA signature according to the public key of
     // the associated signing authority (which should be stored in Items[])
@@ -856,7 +867,7 @@ type
     // - this method is thread-safe, and not blocking
     function IsSigned(const base64sign: RawUtf8;
       const hash: THash256): TEccValidity; overload;
-    /// verify the base-64 encoded digital signature of a given memory buffer
+    /// verify the Base64 encoded digital signature of a given memory buffer
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored ECDSA signature according to the public key of
     // the associated signing authority (which should be stored in Items[])
@@ -878,12 +889,12 @@ type
     // not self-signed or its serial was already part of the internal list
     // - this method is thread-safe
     function AddSelfSigned(cert: TEccCertificate): integer;
-    /// save the whole certificates chain as an array of base-64 encoded content
+    /// save the whole certificates chain as an array of Base64 encoded content
     // - each certificate would be stored via PublicToBase64() into a RawUtf8
     // - any private key would be trimmed from the output: private secret keys
     // should NOT be kept in the main chain, in which only public keys will appear
     function SaveToArray: TRawUtf8DynArray;
-    /// load a certificates chain from an array of base-64 encoded content
+    /// load a certificates chain from an array of Base64 encoded content
     // - follows SaveToArray format
     // - would create only TEccCertificate instances with their public keys,
     // since no private key, therefore no TEccCertificateSecret is expected
@@ -895,14 +906,14 @@ type
     // should appear
     function SaveToJson: RawUtf8;
     /// load a certificates chain from a JSON array of strings
-    // - follows SaveToJson format, i.e. base-64 encoded strings
+    // - follows SaveToJson format, i.e. Base64 encoded strings
     // - would create only TEccCertificate instances with their public keys,
     // since no private key, therefore no TEccCertificateSecret is expected
     function LoadFromJson(const json: RawUtf8): boolean;
   public
     /// initialize the certificate store from some JSON-serialized .ca file
     // - the file would store plain verbose information of all certificates,
-    // i.e. base-64 full information (containing only public keys) and also
+    // i.e. Base64 full information (containing only public keys) and also
     // high-level published properties of all stored certificates (e.g. Serial)
     // - as such, this file format is more verbose than CreateFromJson/SaveToJson
     // and may be convenient for managing certificates with a text/json editor
@@ -915,7 +926,7 @@ type
     /// save the whole certificates chain as a JSON object, matching .ca format
     // - is in fact the human-friendly JSON serialization of this instance
     // - would store plain verbose information of all certificates,
-    // i.e. base-64 full information (containing only public keys) and also
+    // i.e. Base64 full information (containing only public keys) and also
     // high-level published properties of all stored certificates (e.g. Serial)
     // - as such, .ca file format is more verbose than CreateFromJson/SaveToJson
     // and may be convenient for managing certificates with a text/json editor
@@ -923,7 +934,7 @@ type
     /// save the whole certificates chain as a JSON content, matching .ca format
     // - is in fact the human-friendly JSON serialization of this instance
     // - would store plain verbose information of all certificates,
-    // i.e. base-64 full information (containing only public keys) and also
+    // i.e. Base64 full information (containing only public keys) and also
     // high-level published properties of all stored certificates (e.g. Serial)
     // - as such, .ca file format is more verbose than CreateFromJson/SaveToJson
     // and may be convenient for managing certificates with a text/json editor
@@ -936,7 +947,7 @@ type
     /// save the whole certificates chain as a .ca JSON file
     // - is in fact the human-friendly JSON serialization of this instance
     // - the .ca file would store plain verbose information of all certificates,
-    // i.e. base-64 full information (containing only public keys) and also
+    // i.e. Base64 full information (containing only public keys) and also
     // high-level published properties of all stored certificates (e.g. Serial)
     // - as such, this file format is more verbose than CreateFromJson/SaveToJson
     // and may be convenient for managing certificates with a text/json editor
@@ -1007,6 +1018,8 @@ function EciesKeyFileFind(const encrypted: RawByteString; out keyfile: TFileName
 // - under Linux, returns '$HOME/.synopse/keys/'
 function EccKeyFileFolder: TFileName;
 
+/// convert a raw signature into a PEM compatible text buffer
+function EccSignToPem(const sign: TEccSignature): RawUtf8;
 
 
 { ***************** IProtocol Implemented using Public Key Cryptography }
@@ -1416,7 +1429,7 @@ type
 
 
 const
-  /// the TEcdheProtocol class to create depending on the asymetric side
+  /// the TEcdheProtocol class to create depending on the asymmetric side
   ECDHEPROT_CLASS: array[ {server=} boolean ] of TEcdheProtocolClass = (
     TEcdheProtocolClient,
     TEcdheProtocolServer);
@@ -1671,6 +1684,12 @@ begin
     Utf8ToFileName(EccText(head.recid), keyfile);
     result := EccKeyFileFind(keyfile, privkey);
   end;
+end;
+
+
+function EccSignToPem(const sign: TEccSignature): RawUtf8;
+begin
+  result := DerToPem(@sign, SizeOf(sign));
 end;
 
 
@@ -2780,6 +2799,24 @@ begin
     result := false
   else
     result := FileFromString(SaveToDERBinary, FileName);
+end;
+
+function TEccSignatureCertified.SaveToPEMText: RawUtf8;
+var
+  der: TEccSignatureDer;
+begin
+  if not Check then
+    result := ''
+  else
+    result := DerToPem(@der, EccSignToDer(fContent.Signature, der));
+end;
+
+function TEccSignatureCertified.SaveToPEMFile(const FileName: TFileName): boolean;
+begin
+  if not Check then
+    result := false
+  else
+    result := FileFromString(SaveToPEMText, FileName);
 end;
 
 

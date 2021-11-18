@@ -113,7 +113,7 @@ type
   /// set of low-level processing options at assembly level
   // - vIsString is included for imvRawUtf8, imvString, imvRawByteString and
   // imvWideString kind of parameter (imvRecord has it to false, even if they
-  // are Base-64 encoded within the JSON content, and also imvVariant/imvRawJson)
+  // are Base64 encoded within the JSON content, and also imvVariant/imvRawJson)
   // - vPassedByReference is included if the parameter is passed as reference
   // (i.e. defined as var/out, or is a record or a reference-counted type result)
   // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
