@@ -73,6 +73,14 @@ procedure TrimLeftLines(var S: RawUtf8);
 // - faster alternative to S := copy(S, Left + 1, length(S) - Left - Right)
 procedure TrimChars(var S: RawUtf8; Left, Right: PtrInt);
 
+/// returns the supplied text content, without any specified char
+// - specify a custom char set to be excluded, e.g. as [#0 .. ' ']
+function TrimChar(const text: RawUtf8; const chars: TSynAnsicharSet): RawUtf8;
+
+/// returns the supplied text content, without any control char
+// - here control chars have an ASCII code in [#0 .. ' '], i.e. text[] <= ' '
+function TrimControlChars(const text: RawUtf8): RawUtf8;
+
 /// split a RawUtf8 string into two strings, according to SepStr separator
 // - if SepStr is not found, LeftStr=Str and RightStr=''
 // - if ToUpperCase is TRUE, then LeftStr and RightStr will be made uppercase
@@ -110,12 +118,6 @@ function SplitRights(const Str, SepChar: RawUtf8): RawUtf8;
 /// check all character within text are spaces or control chars
 // - i.e. a faster alternative to  if TrimU(text)='' then
 function IsVoid(const text: RawUtf8): boolean;
-
-/// returns the supplied text content, without any control char
-// - a control char has an ASCII code #0 .. #32, i.e. text[]<=' '
-// - you can specify a custom char set to be excluded, if needed
-function TrimControlChars(const text: RawUtf8;
-  const controls: TSynAnsicharSet = [#0 .. ' ']): RawUtf8;
 
 /// fill all bytes of this memory buffer with zeros, i.e. 'toto' -> #0#0#0#0
 // - will write the memory buffer directly, so if this string instance is shared
@@ -2757,15 +2759,14 @@ begin
   result := true;
 end;
 
-function TrimControlChars(const text: RawUtf8;
-  const controls: TSynAnsicharSet): RawUtf8;
+function TrimControlChars(const text: RawUtf8): RawUtf8;
 var
   len, i, j, n: PtrInt;
   P: PAnsiChar;
 begin
   len := length(text);
   for i := 1 to len do
-    if text[i] in controls then
+    if text[i] <= ' ' then
     begin
       n := i - 1;
       FastSetString(result, nil, len);
@@ -2773,12 +2774,44 @@ begin
       if n > 0 then
         MoveFast(pointer(text)^, P^, n);
       for j := i + 1 to len do
-        if not (text[j] in controls) then
+        if text[j] > ' ' then
         begin
           P[n] := text[j];
           inc(n);
         end;
-      SetLength(result, n); // truncate
+      if n = 0 then
+        result := ''
+      else
+        PStrLen(PtrUInt(result) - _STRLEN)^ := n; // in-place truncation
+      exit;
+    end;
+  result := text; // no control char found
+end;
+
+function TrimChar(const text: RawUtf8; const chars: TSynAnsicharSet): RawUtf8;
+var
+  len, i, j, n: PtrInt;
+  P: PAnsiChar;
+begin
+  len := length(text);
+  for i := 1 to len do
+    if text[i] in chars then
+    begin
+      n := i - 1;
+      FastSetString(result, nil, len);
+      P := pointer(result);
+      if n > 0 then
+        MoveFast(pointer(text)^, P^, n);
+      for j := i + 1 to len do
+        if not (text[j] in chars) then
+        begin
+          P[n] := text[j];
+          inc(n);
+        end;
+      if n = 0 then
+        result := ''
+      else
+        PStrLen(PtrUInt(result) - _STRLEN)^ := n; // in-place truncation
       exit;
     end;
   result := text; // no control char found
