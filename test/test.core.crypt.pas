@@ -1368,7 +1368,14 @@ begin
     if i < 67 then // Base58 is much slower than Base64: not used on big buffers
     begin
       b64 := BinToBase58(tmp);
-      Check(Base58ToBin(b64) = tmp);
+      CheckEqual(Base58ToBin(b64), tmp);
+    end;
+    if tmp <> '' then
+    begin
+      Check(not IsPem(b64));
+      b64 := DerToPem(pointer(tmp), length(tmp));
+      Check(IsPem(b64));
+      CheckUtf8(PemToDer(b64) = tmp, b64)
     end;
     tmp := tmp + AnsiChar(Random32(255));
   end;

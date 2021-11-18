@@ -908,6 +908,23 @@ type
 
 
 
+const
+  PEM_CERTIFICATE_BEGIN = '-----BEGIN CERTIFICATE-----';
+  PEM_CERTIFICATE_END = '-----END CERTIFICATE-----';
+
+/// convert a binary DER content into a PEM text
+function DerToPem(der: pointer; len: PtrInt): RawUtf8;
+
+/// convert a PEM text file into a binary DER
+// - if the supplied buffer doesn't start with '-----BEGIN CERTIFICATE-----'
+// trailer, will expect the input to be plain binary and return it
+function PemToDer(const pem: RawUtf8): RawByteString;
+
+/// quickly check the begin/end of a PEM text
+// - do not validate the internal Base64 encoding, just the trailer/ending
+function IsPem(const pem: RawUtf8): boolean;
+
+
 implementation
 
 
@@ -969,6 +986,7 @@ var
   dig: THash512Rec;
 begin
   BinToHexLower(@dig, Final(dig), result);
+  FillZero(dig.b);
 end;
 
 const
@@ -1350,7 +1368,8 @@ begin
 end;
 
 procedure TSynSigner.Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
-  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8; aDefaultAlgo: TSignAlgo);
+  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8;
+  aDefaultAlgo: TSignAlgo);
 var
   tmp: TSynTempBuffer;
   k: TSynSignerParams;
@@ -1391,7 +1410,8 @@ begin
 end;
 
 procedure TSynSigner.Pbkdf2(const aParamsJson: RawUtf8;
-  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8; aDefaultAlgo: TSignAlgo);
+  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8;
+  aDefaultAlgo: TSignAlgo);
 begin
   Pbkdf2(pointer(aParamsJson), length(aParamsJson),
     aDerivatedKey, aDefaultSalt, aDefaultAlgo);
@@ -2320,11 +2340,11 @@ begin
   Secret := Random32;
   // temporary secret for encryption
   CryptNonce := Random32;
-  TAesPrng.Main.FillRandom(@Crypt, SizeOf(Crypt)); // cryptographic randomness
+  MainAesPrng.FillRandom(@Crypt, SizeOf(Crypt)); // cryptographic randomness
 end;
 
 type
-  // map the binary layout of our base-64 serialized cookies
+  // map the binary layout of our Base64 serialized cookies
   TCookieContent = packed record
     head: packed record
       cryptnonce: cardinal; // ctr to cipher following bytes
@@ -2433,6 +2453,54 @@ begin
 end;
 
 
+
+
+
+function DerToPem(der: pointer; len: PtrInt): RawUtf8;
+begin
+  result := BinToBase64Line(der, len,
+    PEM_CERTIFICATE_BEGIN + #13#10, PEM_CERTIFICATE_END + #13#10);
+end;
+
+function IsPem(const pem: RawUtf8): boolean;
+begin
+  result := (pem <> '') and
+            IdemPChar(pointer(pem), PEM_CERTIFICATE_BEGIN) and
+            EndWith(pem, PEM_CERTIFICATE_END + #13#10);
+end;
+
+function PemToDer(const pem: RawUtf8): RawByteString;
+var
+  s, d: PUtf8Char;
+  c: AnsiChar;
+  l: PtrInt;
+  base64: TSynTempBuffer;
+begin
+  if IsPem(pem) then
+  begin
+    s := PUtf8Char(pointer(pem)) + (length(PEM_CERTIFICATE_BEGIN) + 2);
+    l := length(pem) - length(PEM_CERTIFICATE_BEGIN) - length(PEM_CERTIFICATE_END) - 4;
+    if l > 0 then
+    begin
+      d := base64.Init(l);
+      repeat
+        c := s^;
+        inc(s);
+        if c <= ' ' then
+          continue
+        else if c = '-' then
+          break; // no need to check #0 since -----END CERTIFICATE will appear
+        d^ := c;
+        inc(d); // keep only Base64 chars
+      until false;
+      result := Base64ToBinSafe(base64.buf, d - base64.buf);
+      base64.Done;
+      if result <> '' then
+        exit;
+    end;
+  end;
+  result := pem;
+end;
 
 
 
