@@ -9,6 +9,7 @@ unit mormot.crypt.ecc;
    Certificate-based Public Key Cryptography Classes
     - High-Level Certificate-based Public Key Cryptography
     - IProtocol Implemented using Public Key Cryptography
+    - Registration of our ECC Engine to the TCryptAsym Factory
 
   *****************************************************************************
 
@@ -4241,6 +4242,94 @@ begin
 end;
 
 
+{ ****************** Registration of our ECC Engine to the TCryptAsym Factory }
+
+type
+  TCryptAsymInternal = class(TCryptAsym)
+  public
+    procedure GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8); override;
+    function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
+      const priv: RawByteString; out sig: RawByteString;
+      const privpwd: RawUtf8 = ''): boolean; override;
+    function Verify(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
+      const pub, sig: RawByteString): boolean; override;
+    function SharedSecret(const pub, priv: RawByteString): RawByteString; override;
+  end;
+
+{ TCryptAsymInternal }
+
+procedure TCryptAsymInternal.GenerateDer(out pub, priv: RawByteString;
+  const privpwd: RawUtf8);
+var
+  rawpub: TEccPublicKey;
+  rawpriv: TEccPrivateKey;
+begin
+  if not Ecc256r1MakeKey(rawpub, rawpriv) then
+    exit;
+  pub := EccToDer(rawpub);
+  priv := EccToDer(rawpriv);
+  FillZero(rawpriv);
+end;
+function TCryptAsymInternal.Sign(hasher: TCryptHasher; msg: pointer;
+  msglen: PtrInt; const priv: RawByteString; out sig: RawByteString;
+  const privpwd: RawUtf8): boolean;
+var
+  digest: THash512Rec;
+  key: TEccPrivateKey;
+  sign: TEccSignature;
+begin
+  result := false;
+  if (hasher = nil) or
+     (priv = '') or
+     (privpwd <> '') then
+    exit; // invalid or unsupported
+  if not PemToEcc(priv, key) then
+    exit; // accept key in raw, PEM or DER format
+  FillZero(digest.b); // hasher may not fill all bytes needed by the algorithm
+  hasher.Full(msg, msglen, digest);
+  result := Ecc256r1Sign(key, digest.Lo, sign);
+  if result then
+    sig := EccToDer(sign); // return signature in DER format
+  FillZero(key);
+end;
+
+function TCryptAsymInternal.Verify(hasher: TCryptHasher; msg: pointer;
+  msglen: PtrInt; const pub, sig: RawByteString): boolean;
+var
+  digest: THash512Rec;
+  key: TEccPublicKey;
+  sign: TEccSignature;
+begin
+  result := false;
+  if (hasher = nil) or
+     (pub = '') then
+    exit; // invalid or unsupported
+  if not DerToEcc(pointer(sig), length(sig), sign) or
+     not DerToEcc(pointer(pub), length(pub), key) then
+    exit; // accept signature and public key in raw, PEM or DER format
+  FillZero(digest.b); // hasher may not fill all bytes needed by the algorithm
+  hasher.Full(msg, msglen, digest);
+  result := Ecc256r1Verify(key, digest.Lo, sign);
+end;
+
+function TCryptAsymInternal.SharedSecret(const pub, priv: RawByteString): RawByteString;
+var
+  keypub: TEccPublicKey;
+  keypriv: TEccPrivateKey;
+  sec: TEccSecretKey;
+begin
+  if DerToEcc(pointer(priv), length(priv), keypriv) and
+     DerToEcc(pointer(pub), length(pub), keypub) and
+     Ecc256r1SharedSecret(keypub, keypriv, sec) then
+    // accept signature and public key in raw, PEM or DER format
+    SetString(result, PAnsiChar(@sec), SizeOf(sec))
+  else
+    result := '';
+  FillZero(sec);
+end;
+
+
+
 initialization
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(TypeInfo(TEccCertificateObjArray), TEccCertificate);
@@ -4251,4 +4340,5 @@ initialization
   assert(SizeOf(TEcdheFrameServer) = 306);
 
 end.
+
 

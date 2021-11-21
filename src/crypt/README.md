@@ -42,6 +42,7 @@ Authentication and Security types shared by all framework units.
 - 64-bit `TSynUniqueIdentifier` and its efficient Generator
 - `IProtocol` Safe Communication with Unilateral or Mutual Authentication
 - `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym` High-Level Algorithms Factories
+- Minimal `PEM`/`DER` Encoding/Decoding
 
 ### mormot.crypt.ecc256r1
 
@@ -57,6 +58,7 @@ If `mormot.crypt.openssl.RegisterOpenSsl` is called, faster *OpenSSL* library wi
 Certificate-based Public Key Cryptography Classes
 - High-Level Certificate-based Public Key Cryptography
 - `IProtocol` Implemented using Public Key Cryptography
+- Registration of our ECC Engine to the `TCryptAsym` Factory
 
 ### mormot.crypt.jwt
 
