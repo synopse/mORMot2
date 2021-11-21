@@ -14,6 +14,7 @@ unit mormot.crypt.secure;
     - IProtocol Safe Communication with Unilateral or Mutual Authentication
     - TBinaryCookieGenerator Simple Cookie Generator
     - Rnd/Hash/Sign/Cipher/Asym High-Level Algorithms Factories
+    - Minimal PEM/DER Encoding/Decoding
 
    Uses optimized mormot.crypt.core.pas for its actual process.
 
@@ -1012,7 +1013,10 @@ type
   TCryptHasher = class(TCryptAlgo)
   public
     /// one-step process of a whole memory buffer, into an hexadecimal digest
-    function Full(buf: pointer; buflen: PtrInt): RawUtf8;
+    function Full(buf: pointer; buflen: PtrInt): RawUtf8; overload;
+    /// one-step process of a whole memory buffer, into an binary digest
+    // - returns the number of bytes stored in digest
+    function Full(buf: pointer; buflen: PtrInt; out digest: THash512Rec): PtrInt; overload;
     /// one-step process of a whole file content, into an hexadecimal digest
     function FullFile(const filename: TFileName): RawUtf8;
     /// main factory to create a new hasher instance with this algorithm
@@ -1106,33 +1110,33 @@ type
   TCryptAsym = class(TCryptAlgo)
   public
     /// generate a public/private pair of keys in the PEM text format
-    procedure GeneratePem(out pub, priv: RawByteString; const privpwd: RawUtf8); virtual;
+    procedure GeneratePem(out pub, priv: RawUtf8; const privpwd: RawUtf8); virtual;
     /// generate a public/private pair of keys in the DER binary format
-    procedure GenerateDer(out pub, priv: RawUtf8; const privpwd: RawUtf8); virtual;
+    procedure GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8); virtual;
     /// digital signature of some message using a private key
     // - the message is first hashed with the supplied TCryptHasher
     function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
-      const priv: RawByteString; out Signature: RawByteString;
+      const priv: RawByteString; out sig: RawByteString;
       const privpwd: RawUtf8 = ''): boolean; overload; virtual; abstract;
     /// digital signature of some message using a private key
     // - the message is first hashed with the supplied hashername
     function Sign(const hashername: RawUtf8; const msg, priv: RawByteString;
-      out signat: RawByteString; const privpwd: RawUtf8 = ''): boolean; overload;
+      out sig: RawByteString; const privpwd: RawUtf8 = ''): boolean; overload;
     /// digital signature of some message using a private key
     // - the message is first hashed with the supplied hashername
     function Sign(const hashername: RawUtf8; const msg, priv: TBytes;
-      out signat: TBytes; const privpwd: RawUtf8 = ''): boolean; overload;
+      out sig: TBytes; const privpwd: RawUtf8 = ''): boolean; overload;
     /// digital signature verification of some message using a public key
     // - the message is first hashed with the supplied TCryptHasher
     function Verify(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
-      const pub, signat: RawByteString): boolean; overload; virtual; abstract;
+      const pub, sig: RawByteString): boolean; overload; virtual; abstract;
     /// digital signature verification of some message using a public key
     // - the message is first hashed with the supplied hashername
     function Verify(const hashername: RawUtf8;
-      const msg, pub, signat: RawByteString): boolean; overload;
+      const msg, pub, sig: RawByteString): boolean; overload;
     /// digital signature verification of some message using a public key
     // - the message is first hashed with the supplied hashername
-    function Verify(const hashername: RawUtf8; const msg, pub, signat: TBytes): boolean; overload;
+    function Verify(const hashername: RawUtf8; const msg, pub, sig: TBytes): boolean; overload;
     /// compute a shared secret from local private key and a public key
     // - used for encryption with no key transmission
     // - returns '' if this algorithm doesn't support this feature (e.g. RSA)
@@ -1141,7 +1145,7 @@ type
 
 
 /// main resolver of the randomness generators
-// - the shared TCryptRandom is returned: caller should NOT free it
+// - the shared TCryptRandom of this algorithm is returned: caller should NOT free it
 // - e.g. Rnd.GetBytes(100) to get 100 random bytes from 'rnd-default' engine
 // - call Rnd('rnd-entropy').Get() to gather OS entropy, optionally as
 // 'rnd-entropysys', 'rnd-entropysysblocking', 'rnd-entropyuser'
@@ -1153,7 +1157,7 @@ function Rnd(const name: RawUtf8 = 'rnd-default'): TCryptRandom;
 /// main resolver of the registered hashers
 // - hashers ensure a content as not been tempered: use Signer()
 // to compute a digital signature from a given secret
-// - the shared TCryptHasher is returned: caller should NOT free it
+// - the shared TCryptHasher of this algorithm is returned: caller should NOT free it
 // - if not nil, you could call New or Full/FullFile methods
 // - this unit supports 'MD5','SHA1','SHA256','SHA384','SHA512','SHA3_256','SHA3_512'
 // and 32-bit non-cryptographic 'CRC32','CRC32C','XXHASH32','ADLER32','FNV32'
@@ -1165,7 +1169,7 @@ function Hash(const name: RawUtf8): ICryptHash;
 
 /// main resolver of the registered signers
 // - in respect to Hasher(), will require a secret for safe digital signature
-// - the shared TCryptSigner is returned: caller should NOT free it
+// - the shared TCryptSigner of this algorithm is returned: caller should NOT free it
 // - if not nil, you could call New or Full/FullFile methods
 // - this unit supports 'HMAC-SHA1','HMAC-SHA256','HMAC-SHA384','HMAC-SHA512',
 // and 'SHA3-224','SHA3-256','SHA3-384','SHA3-512','SHA3-S128','SHA3-S256'
@@ -1190,6 +1194,7 @@ function Sign(const paramsjson: RawUtf8;
 // - names are e.g. 'aes-128-cfb' or 'aes-256-gcm' standard combinations
 // - recognize some non-standard algorithms with trailing 'c64', 'cfc', 'ofc' and
 // 'ctc' mode names e.g. as 'aes-256-cfc' - with AED 256-bit support (but c64)
+// - the shared TCryptCipherAlgo of this algorithm is returned: caller should NOT free it
 function CipherAlgo(const name: RawUtf8): TCryptCipherAlgo;
 
 /// main factory for symmetric encryption/decryption process
@@ -1219,25 +1224,54 @@ function Decrypt(const name, hash, secret, salt: RawUtf8; rounds: integer): ICry
 /// main resolver for asymmetric public key algorithms
 // - mormot.crypt.ecc.pas defines 'secp256r1','NISTP-256' and 'prime256v1'
 // which are synonymous of our secp256r1 ECDSA and ECDHE pascal code
+// - the shared TCryptAsym of this algorithm is returned: caller should NOT free it
 function Asym(const name: RawUtf8): TCryptAsym;
 
 
+{ ************************** Minimal PEM/DER Encoding/Decoding }
+
+type
+  /// the DerToPem() supported contents of a PEM text instance
+  TPemKind = (
+    pemCertificate,
+    pemPrivateKey,
+    pemPublicKey);
 
 const
-  PEM_CERTIFICATE_BEGIN = '-----BEGIN CERTIFICATE-----';
-  PEM_CERTIFICATE_END = '-----END CERTIFICATE-----';
+  /// the supported trailer markers of a PEM text instance
+  PEM_BEGIN: array[TPemKind] of RawUtf8 = (
+    '-----BEGIN CERTIFICATE-----'#13#10,
+    '-----BEGIN PRIVATE KEY-----'#13#10,
+    '-----BEGIN PUBLIC KEY-----'#13#10);
+  /// the supported ending markers of a PEM text instance
+  PEM_END: array[TPemKind] of RawUtf8 = (
+    '-----END CERTIFICATE-----'#13#10,
+    '-----END PRIVATE KEY-----'#13#10,
+    '-----END PUBLIC KEY-----'#13#10);
 
-/// convert a binary DER content into a PEM text
-function DerToPem(der: pointer; len: PtrInt): RawUtf8;
+/// convert a binary DER content into a single-instance PEM text
+function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): RawUtf8; overload;
 
-/// convert a PEM text file into a binary DER
-// - if the supplied buffer doesn't start with '-----BEGIN CERTIFICATE-----'
-// trailer, will expect the input to be plain binary and return it
+/// convert a binary DER content into a single-instance PEM text
+function DerToPem(const der: RawByteString; kind: TPemKind): RawUtf8; overload;
+
+/// convert a single-instance PEM text file into a binary DER
+// - if the supplied buffer doesn't start with '-----BEGIN .... -----'
+// trailer, will expect the input to be plain DER binary and return it
 function PemToDer(const pem: RawUtf8): RawByteString;
 
-/// quickly check the begin/end of a PEM text
-// - do not validate the internal Base64 encoding, just the trailer/ending
+/// quickly check the begin/end of a single-instance PEM text
+// - do not validate the internal Base64 encoding, just the trailer/ending lines
+// - expects a single-instance PEM, i.e. with a single key or certificate within
 function IsPem(const pem: RawUtf8): boolean;
+
+/// low-level binary-to-DER encoder
+function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
+
+/// low-level DER sequence to binary decoding
+// - only support a single DER_INTEGER sequence format as generated by DerAppend()
+function DerParse(P: PAnsiChar; sig: PByteArray; siglen: PtrInt): PAnsiChar;
+
 
 
 implementation
@@ -3087,6 +3121,16 @@ begin
   result := h.Final;
 end;
 
+function TCryptHasher.Full(buf: pointer; buflen: PtrInt;
+  out digest: THash512Rec): PtrInt;
+var
+  h: ICryptHash;
+begin
+  h := New;
+  h.Update(buf, buflen);
+  result := h.Final(@digest, SizeOf(digest));
+end;
+
 function TCryptHasher.FullFile(const filename: TFileName): RawUtf8;
 var
   h: ICryptHash;
@@ -3544,19 +3588,19 @@ end;
 
 { TCryptAsym }
 
-procedure TCryptAsym.GeneratePem(out pub, priv: RawByteString;
+procedure TCryptAsym.GeneratePem(out pub, priv: RawUtf8;
   const privpwd: RawUtf8);
 var
-  derpub, derpriv: RawUtf8;
+  derpub, derpriv: RawByteString;
 begin // inherited classes should override at least one of those Generate*()
   GenerateDer(derpub, derpriv, privpwd);
-  pub := DerToPem(pointer(derpub), length(derpub));
-  priv := DerToPem(pointer(derpriv), length(derpriv));
+  pub := DerToPem(pointer(derpub), length(derpub), pemPublicKey);
+  priv := DerToPem(pointer(derpriv), length(derpriv), pemPrivateKey);
 end;
 
-procedure TCryptAsym.GenerateDer(out pub, priv: RawUtf8; const privpwd: RawUtf8);
+procedure TCryptAsym.GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8);
 var
-  pempub, pempriv: RawByteString;
+  pempub, pempriv: RawUtf8;
 begin // inherited classes should override at least one of those Generate*()
   GeneratePem(pempub, pempriv, privpwd);
   pub := PemToDer(pempub);
@@ -3564,7 +3608,7 @@ begin // inherited classes should override at least one of those Generate*()
 end;
 
 function TCryptAsym.Sign(const hashername: RawUtf8; const msg, priv: RawByteString;
-  out signat: RawByteString; const privpwd: RawUtf8): boolean;
+  out sig: RawByteString; const privpwd: RawUtf8): boolean;
 var
   h: TCryptHasher;
 begin
@@ -3572,11 +3616,11 @@ begin
   if h = nil then
     result := false
   else
-    result := Sign(h, pointer(msg), length(msg), priv, signat, privpwd);
+    result := Sign(h, pointer(msg), length(msg), priv, sig, privpwd);
 end;
 
 function TCryptAsym.Sign(const hashername: RawUtf8; const msg, priv: TBytes;
-  out signat: TBytes; const privpwd: RawUtf8): boolean;
+  out sig: TBytes; const privpwd: RawUtf8): boolean;
 var
   h: TCryptHasher;
   p, s: RawByteString;
@@ -3589,12 +3633,12 @@ begin
     BytesToRawByteString(priv, p);
     result := Sign(h, pointer(msg), length(msg), p, s, privpwd);
     if result then
-      RawByteStringToBytes(s, signat);
+      RawByteStringToBytes(s, sig);
   end;
 end;
 
 function TCryptAsym.Verify(const hashername: RawUtf8;
-  const msg, pub, signat: RawByteString): boolean;
+  const msg, pub, sig: RawByteString): boolean;
 var
   h: TCryptHasher;
 begin
@@ -3602,11 +3646,11 @@ begin
   if h = nil then
     result := false
   else
-    result := Verify(h, pointer(msg), length(msg), pub, signat);
+    result := Verify(h, pointer(msg), length(msg), pub, sig);
 end;
 
 function TCryptAsym.Verify(const hashername: RawUtf8;
-  const msg, pub, signat: TBytes): boolean;
+  const msg, pub, sig: TBytes): boolean;
 var
   h: TCryptHasher;
   p, s: RawByteString;
@@ -3617,7 +3661,7 @@ begin
   else
   begin
     BytesToRawByteString(pub, p);
-    BytesToRawByteString(signat, s);
+    BytesToRawByteString(sig, s);
     result := Verify(h, pointer(msg), length(msg), p, s);
   end;
 end;
@@ -3775,42 +3819,50 @@ begin
 end;
 
 
-{ Low-Level DER / PEM conversion }
+{ ************************** Minimal PEM/DER Encoding/Decoding }
 
-function DerToPem(der: pointer; len: PtrInt): RawUtf8;
+function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): RawUtf8;
 begin
-  result := BinToBase64Line(der, len,
-    PEM_CERTIFICATE_BEGIN + #13#10, PEM_CERTIFICATE_END + #13#10);
+  result := BinToBase64Line(der, len, PEM_BEGIN[kind], PEM_END[kind]);
+end;
+
+function DerToPem(const der: RawByteString; kind: TPemKind): RawUtf8;
+begin
+  result := DerToPem(pointer(der), length(der), kind);
 end;
 
 function IsPem(const pem: RawUtf8): boolean;
+var
+  l: PtrUInt;
 begin
-  result := (pem <> '') and
-            IdemPChar(pointer(pem), PEM_CERTIFICATE_BEGIN) and
-            EndWith(pem, PEM_CERTIFICATE_END + #13#10);
+  l := length(pem);
+  while (l > 0) and
+        (pem[l] < ' ') do
+    dec(l); // ignore trailing #13#10
+  result := (l > 10) and
+            (PCardinal(pem)^ = $2d2d2d2d) and // start with ----
+            (PCardinal(PtrUInt(pem) + l - 4)^ = $2d2d2d2d); // end with ----
 end;
 
 function PemToDer(const pem: RawUtf8): RawByteString;
 var
   s, d: PUtf8Char;
   c: AnsiChar;
-  l: PtrInt;
   base64: TSynTempBuffer;
 begin
   if IsPem(pem) then
   begin
-    s := PUtf8Char(pointer(pem)) + (length(PEM_CERTIFICATE_BEGIN) + 2);
-    l := length(pem) - length(PEM_CERTIFICATE_BEGIN) - length(PEM_CERTIFICATE_END) - 4;
-    if l > 0 then
+    s := GotoNextLine(pointer(pem));
+    if s <> nil then
     begin
-      d := base64.Init(l);
+      d := base64.Init(length(pem) - (s - pointer(pem)));
       repeat
         c := s^;
         inc(s);
         if c <= ' ' then
           continue
         else if c = '-' then
-          break; // no need to check #0 since -----END CERTIFICATE will appear
+          break; // no need to check #0 since -----END... will eventually appear
         d^ := c;
         inc(d); // keep only Base64 chars
       until false;
@@ -3823,13 +3875,57 @@ begin
   result := pem;
 end;
 
+const
+  DER_INTEGER  = #$02;
+
+function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
+var
+  pos, prefix: PtrUInt;
+begin
+  pos := 0;
+  while buf[pos] = 0 do
+    // ignore trailing zeros
+    inc(pos);
+  prefix := buf[pos] shr 7; // two's complement?
+  P[0] := DER_INTEGER;
+  P[1] := AnsiChar(buflen - pos + prefix);
+  P[2] := #$00; // prepend 0 for negative number (if prefix=1)
+  inc(P, 2 + prefix);
+  MoveSmall(@buf[pos], P, buflen - pos);
+  result := P + buflen - pos;
+end;
+
+function DerParse(P: PAnsiChar; sig: PByteArray; siglen: PtrInt): PAnsiChar;
+var
+  pos: PtrUInt;
+begin
+  result := nil;
+  FillZero(sig^, siglen);
+  if (P = nil) or
+     (P[0] <> DER_INTEGER) then
+    exit;
+  pos := siglen - ord(P[1]);
+  inc(P, 2);
+  if P^ = #0 then
+  begin
+    inc(P); // negative number appended
+    inc(pos);
+  end;
+  dec(siglen, pos);
+  if siglen < 0 then
+    exit; // avoid buffer overflow
+  MoveSmall(P, @sig[pos], siglen);
+  result := P + siglen;
+end;
+
+
 
 procedure InitializeUnit;
 begin
   Rtti.RegisterType(TypeInfo(TSignAlgo));
   Rtti.RegisterFromText(TypeInfo(TSynSignerParams),
     'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer');
-  // Rnd/Sign/Hash/Cipher/Asym are registered in GlobalCryptAlgoInit
+  // Rnd/Sign/Hash/Cipher/Asym are registered on need in GlobalCryptAlgoInit
 end;
 
 procedure FinalizeUnit;
