@@ -1149,18 +1149,20 @@ const
   FIRSTHEADER_SIGNATURE_INC = $04034b50 + 1;           // PK#3#4
   LASTHEADER_SIGNATURE_INC = $06054b50 + 1;            // PK#5#6
   LASTHEADER64_SIGNATURE_INC = $06064b50 + 1;          // PK#6#6
-  LASTHEADERLOCATOR64_SIGNATURE_INC = $07064b50 + 1;  // PK#6#7
+  LASTHEADERLOCATOR64_SIGNATURE_INC = $07064b50 + 1;   // PK#6#7
   FILEAPPEND_SIGNATURE_INC = $a5ababa5 + 1; // as marked by FileAppendSignature
 
-
-  // identify the OS used to forge the .zip
-  ZIP_OS = (0
+  // identify the OS used to forge the .zip - see PKware appnote 4.4.2
+  ZIP_OS = (
       {$ifdef OSDARWIN}
-        + 19
+        19 // OS X (Darwin)
       {$else}
-      {$ifdef OSPOSIX}
-        + 3
-      {$endif OSPOSIX}
+      {$ifdef OSWINDOWS}
+        3 // UNIX was reported to work with UTF-8 by MPV
+          // 10 = Windows NTFS is not recognized as such, and 0 = MS_DOS
+      {$else}
+        3  // UNIX
+      {$endif OSWINDOWS}
       {$endif OSDARWIN}) shl 8;
 
   // regular .zip format is version 2.0, Zip64 format has version 4.5
@@ -1298,7 +1300,7 @@ end;
 
 constructor TZipAbstract.Create;
 begin
-  SetZipNamePathDelim('/'); // APPNOTE.TXT 4.4.17: MUST be forward slashes
+  SetZipNamePathDelim('/'); // PKware appnote 4.4.17: MUST be forward slashes
 end;
 
 procedure TZipAbstract.SetZipNamePathDelim(Value: AnsiChar);
