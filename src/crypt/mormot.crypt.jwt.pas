@@ -684,7 +684,7 @@ function TJwtAbstract.Compute(const DataNameValue: array of const;
   const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
   ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8;
 var
-  payload, headpayload, signat: RawUtf8;
+  payload, headpayload, sig: RawUtf8;
 begin
   result := '';
   if self = nil then
@@ -692,13 +692,13 @@ begin
   payload := PayloadToJson(DataNameValue, Issuer, Subject, Audience,
     NotBefore, ExpirationMinutes);
   headpayload := fHeaderB64 + BinToBase64Uri(payload);
-  signat := ComputeSignature(headpayload);
-  result := headpayload + '.' + signat;
+  sig := ComputeSignature(headpayload);
+  result := headpayload + '.' + sig;
   if length(result) > JWT_MAXSIZE then
     raise EJwtException.CreateUtf8('%.Compute oversize: len=%',
       [self, length(result)]);
   if Signature <> nil then
-    Signature^ := signat;
+    Signature^ := sig;
 end;
 
 function TJwtAbstract.ComputeAuthorizationHeader(

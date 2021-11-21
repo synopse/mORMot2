@@ -1373,7 +1373,7 @@ begin
     if tmp <> '' then
     begin
       Check(not IsPem(b64));
-      b64 := DerToPem(pointer(tmp), length(tmp));
+      b64 := DerToPem(pointer(tmp), length(tmp), TPemKind(i and 2));
       Check(IsPem(b64));
       CheckUtf8(PemToDer(b64) = tmp, b64)
     end;

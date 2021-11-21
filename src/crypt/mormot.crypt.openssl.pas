@@ -43,6 +43,7 @@ uses
   mormot.core.buffers,
   mormot.crypt.core,
   mormot.crypt.ecc256r1,
+  mormot.crypt.ecc,
   mormot.crypt.secure,
   mormot.crypt.jwt,
   mormot.lib.openssl11;
@@ -1281,7 +1282,7 @@ var
   key: PEC_KEY;
   bn: PBIGNUM;
   derlen: cardinal;
-  der: TEccSignatureDer;
+  der: array[0..(ECC_BYTES * 2) + 7] of byte;
 begin
   result := false;
   if not NewPrime256v1Key(key) then
@@ -1291,7 +1292,7 @@ begin
   if (ECDSA_size(key) <= SizeOf(der)) and
      (EC_KEY_set_private_key(key, bn) = OPENSSLSUCCESS) and
      (ECDSA_Sign(0, @Hash, SizeOf(Hash), @der, @derlen, key) = OPENSSLSUCCESS) then
-    result := DerToEccSign(der, Signature);
+    result := DerToEcc(@der, derlen, Signature);
   BN_free(bn);
   EC_KEY_free(key);
 end;
@@ -1308,8 +1309,7 @@ function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
 var
   key: PEC_KEY;
   pt: PEC_POINT;
-  derlen: integer;
-  der: TEccSignatureDer;
+  der: RawByteString;
 begin
   result := false;
   if not NewPrime256v1Key(key) then
@@ -1317,8 +1317,9 @@ begin
   if PublicKeyToPoint(PublicKey, pt) and
      (EC_KEY_set_public_key(key, pt) = OPENSSLSUCCESS) then
   begin
-    derlen := EccSignToDer(Signature, der);
-    result := ECDSA_verify(0, @Hash, SizeOf(Hash), @der, derlen, key) = OPENSSLSUCCESS;
+    der := EccToDer(Signature);
+    result := ECDSA_verify(
+      0, @Hash, SizeOf(Hash), pointer(der), length(der), key) = OPENSSLSUCCESS;
   end;
   EC_POINT_free(pt);
   EC_KEY_free(key);
@@ -1367,11 +1368,11 @@ end;
 function TEcc256r1VerifyOsl.Verify(const hash: TEccHash;
   const sign: TEccSignature): boolean;
 var
-  derlen: integer;
-  der: TEccSignatureDer;
+  der: RawByteString;
 begin
-  derlen := EccSignToDer(sign, der);
-  result := ECDSA_verify(0, @hash, SizeOf(hash), @der, derlen, fKey) = OPENSSLSUCCESS;
+  der := EccToDer(sign);
+  result := ECDSA_verify(
+    0, @hash, SizeOf(hash), pointer(der), length(der), fKey) = OPENSSLSUCCESS;
 end;
 
 
@@ -1580,6 +1581,8 @@ end;
 { ************** Register OpenSSL to our General Cryptography Catalog }
 
 procedure RegisterOpenSsl;
+var
+  priv, pub: RawbyteString;
 begin
   if (TAesFast[mGcm] = TAesGcmOsl) or
      not OpenSslIsAvailable then
