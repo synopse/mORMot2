@@ -4247,6 +4247,7 @@ end;
 type
   TCryptAsymInternal = class(TCryptAsym)
   public
+    constructor Create(const name: RawUtf8); override;
     procedure GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8); override;
     function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
       const priv: RawByteString; out sig: RawByteString;
@@ -4258,18 +4259,27 @@ type
 
 { TCryptAsymInternal }
 
+constructor TCryptAsymInternal.Create(const name: RawUtf8);
+begin
+  inherited Create(name);
+  fDefaultHasher := Hasher('sha256');
+end;
+
 procedure TCryptAsymInternal.GenerateDer(out pub, priv: RawByteString;
   const privpwd: RawUtf8);
 var
   rawpub: TEccPublicKey;
   rawpriv: TEccPrivateKey;
 begin
+  if privpwd <> '' then
+    raise ECrypt.CreateUtf8('%.GenerateDer: unsupported privpwd', [self]);
   if not Ecc256r1MakeKey(rawpub, rawpriv) then
     exit;
   pub := EccToDer(rawpub);
   priv := EccToDer(rawpriv);
   FillZero(rawpriv);
 end;
+
 function TCryptAsymInternal.Sign(hasher: TCryptHasher; msg: pointer;
   msglen: PtrInt; const priv: RawByteString; out sig: RawByteString;
   const privpwd: RawUtf8): boolean;
@@ -4279,6 +4289,8 @@ var
   sign: TEccSignature;
 begin
   result := false;
+  if hasher = nil then
+    hasher := fDefaultHasher;
   if (hasher = nil) or
      (priv = '') or
      (privpwd <> '') then
@@ -4289,7 +4301,7 @@ begin
   hasher.Full(msg, msglen, digest);
   result := Ecc256r1Sign(key, digest.Lo, sign);
   if result then
-    sig := EccToDer(sign); // return signature in DER format
+    sig := EccToDer(sign); // return signature in PEM format
   FillZero(key);
 end;
 
@@ -4301,11 +4313,13 @@ var
   sign: TEccSignature;
 begin
   result := false;
+  if hasher = nil then
+    hasher := fDefaultHasher;
   if (hasher = nil) or
      (pub = '') then
     exit; // invalid or unsupported
-  if not DerToEcc(pointer(sig), length(sig), sign) or
-     not DerToEcc(pointer(pub), length(pub), key) then
+  if not PemToEcc(sig, sign) or
+     not PemToEcc(pub, key) then
     exit; // accept signature and public key in raw, PEM or DER format
   FillZero(digest.b); // hasher may not fill all bytes needed by the algorithm
   hasher.Full(msg, msglen, digest);
@@ -4318,8 +4332,8 @@ var
   keypriv: TEccPrivateKey;
   sec: TEccSecretKey;
 begin
-  if DerToEcc(pointer(priv), length(priv), keypriv) and
-     DerToEcc(pointer(pub), length(pub), keypub) and
+  if PemToEcc(priv, keypriv) and
+     PemToEcc(pub, keypub) and
      Ecc256r1SharedSecret(keypub, keypriv, sec) then
     // accept signature and public key in raw, PEM or DER format
     SetString(result, PAnsiChar(@sec), SizeOf(sec))
@@ -4338,6 +4352,7 @@ initialization
   assert(SizeOf(TEciesHeader) = 228);
   assert(SizeOf(TEcdheFrameClient) = 290);
   assert(SizeOf(TEcdheFrameServer) = 306);
+  TCryptAsymInternal.Implements('secp256r1,NISTP-256,prime256v1');
 
 end.
 
