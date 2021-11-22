@@ -894,9 +894,6 @@ const
   EVP_F_EVP_PKEY_DECRYPT = 104;
   EVP_F_EVP_PKEY_DECRYPT_INIT = 138;
   EVP_F_EVP_PKEY_DECRYPT_OLD = 151;
-  EVP_F_EVP_PKEY_DERIVE = 153;
-  EVP_F_EVP_PKEY_DERIVE_INIT = 154;
-  EVP_F_EVP_PKEY_DERIVE_SET_PEER = 155;
   EVP_F_EVP_PKEY_ENCRYPT = 105;
   EVP_F_EVP_PKEY_ENCRYPT_INIT = 139;
   EVP_F_EVP_PKEY_ENCRYPT_OLD = 152;
@@ -15315,15 +15312,6 @@ function EVP_PKEY_decrypt_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
 
 function EVP_PKEY_decrypt(ctx: PEVP_PKEY_CTX; _out: PByte; outlen: PPtrUInt; _in: PByte; inlen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_decrypt';
-
-function EVP_PKEY_derive_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_derive_init';
-
-function EVP_PKEY_derive_set_peer(ctx: PEVP_PKEY_CTX; peer: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_derive_set_peer';
-
-function EVP_PKEY_derive(ctx: PEVP_PKEY_CTX; key: PByte; keylen: PPtrUInt): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_derive';
 
 function EVP_PKEY_check(ctx: PEVP_PKEY_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_check';
