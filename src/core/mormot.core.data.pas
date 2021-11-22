@@ -4345,14 +4345,15 @@ begin
           raise ESynException.CreateUtf8('%.Add duplicate [%]', [self, aText]);
         if aReplaceExistingObject then
         begin
-          if obj <> nil then
-            FreeAndNil(fObjects[result]);
+          if obj = nil then
+            raise ESynException.CreateUtf8(
+              '%.AddOrReplaceObject with no object at [%]', [self, aText]);
+          FreeAndNil(fObjects[result]);
+          fObjects[result] := aObject;
         end
         else
-        begin
           result := -1;
-          exit;
-        end;
+        exit;
       end;
     end;
     result := fValues.Add(aText);
