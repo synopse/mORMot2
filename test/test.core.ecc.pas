@@ -629,7 +629,8 @@ procedure TTestCoreEcc._OpenSSL;
   procedure Test(EvpType, BitsOrCurve, Count: integer; const Digest, Name: RawUtf8);
   var
     timer: TPrecisionTimer;
-    priv, pub, msg, sig: RawByteString;
+    priv, pub: RawUtf8;
+    msg, sig: RawByteString;
     i: integer;
   begin
     timer.Start;

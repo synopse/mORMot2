@@ -802,7 +802,7 @@ const
     TJwtES256KOsl,
     TJwtEdDSAOsl);
 var
-  priv, pub: RawByteString;
+  priv, pub: RawUtf8;
 {$endif USE_OPENSSL}
 var
   i: integer;
