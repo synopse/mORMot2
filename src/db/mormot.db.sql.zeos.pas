@@ -409,6 +409,7 @@ end;
 function TSqlDBZeosConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBZeosConnection.Create(self);
+  TSqlDBZeosConnection(result).InternalProcess(speCreated);
 end;
 
 constructor TSqlDBZeosConnectionProperties.CreateWithZURL(const aUrl: TZURL;

@@ -2246,6 +2246,7 @@ end;
 function TSqlDBOleDBConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBOleDBConnection.Create(self);
+  TSqlDBOleDBConnection(result).InternalProcess(speCreated);
 end;
 
 procedure TSqlDBOleDBConnectionProperties.SetInternalProperties;

@@ -149,6 +149,7 @@ end;
 function TSqlDBBDEConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBBDEConnection.Create(self);
+  TSqlDBBDEConnection(result).InternalProcess(speCreated);
 end;
 
 function TSqlDBBDEConnectionProperties.GetDbms: TSqlDBDefinition;

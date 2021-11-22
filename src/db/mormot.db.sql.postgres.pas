@@ -446,6 +446,7 @@ end;
 function TSqlDBPostgresConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBPostgresConnection.Create(self);
+  TSqlDBPostgresConnection(result).InternalProcess(speCreated);
 end;
 
 function TSqlDBPostgresConnectionProperties.Oid2FieldType(
@@ -454,7 +455,7 @@ var
   i: PtrInt;
 begin
   if cOID <= 65535 then
-  begin
+  begin // fast brute force search within L1 CPU cache
     i := WordScanIndex(pointer(fOids), fOidsCount, cOID);
     if i >= 0 then
       result := fOidsFieldTypes[i]

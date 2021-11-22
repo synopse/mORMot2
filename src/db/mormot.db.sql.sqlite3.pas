@@ -376,6 +376,7 @@ end;
 function TSqlDBSQLite3ConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBSQLite3Connection.Create(self);
+  TSqlDBSQLite3Connection(result).InternalProcess(speCreated);
 end;
 
 

@@ -417,6 +417,7 @@ end;
 function TSqlDBFireDACConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBFireDACConnection.Create(self);
+  TSqlDBFireDACConnection(result).InternalProcess(speCreated);
 end;
 
 

@@ -416,6 +416,7 @@ end;
 function TSqlDBOracleConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBOracleConnection.Create(self);
+  TSqlDBOracleConnection(result).InternalProcess(speCreated);
 end;
 
 procedure TSqlDBOracleConnectionProperties.PasswordChanged(

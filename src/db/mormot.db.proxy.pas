@@ -1075,6 +1075,7 @@ end;
 function TSqlDBProxyConnectionPropertiesAbstract.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBProxyConnection.Create(self);
+  TSqlDBProxyConnection(result).InternalProcess(speCreated);
 end;
 
 procedure TSqlDBProxyConnectionPropertiesAbstract.GetFields(

@@ -1368,6 +1368,7 @@ end;
 function TSqlDBIbxConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBIbxConnection.Create(self);
+  TSqlDBIbxConnection(result).InternalProcess(speCreated);
 end;
 
 function TSqlDBIbxConnectionProperties.SqlCreate(const aTableName: RawUtf8;

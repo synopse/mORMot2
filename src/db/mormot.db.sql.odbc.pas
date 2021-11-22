@@ -1297,6 +1297,7 @@ end;
 function TSqlDBOdbcConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBOdbcConnection.Create(self);
+  TSqlDBOdbcConnection(result).InternalProcess(speCreated);
 end;
 
 procedure TSqlDBOdbcConnectionProperties.GetFields(const aTableName: RawUtf8;

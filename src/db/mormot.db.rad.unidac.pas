@@ -445,6 +445,7 @@ end;
 function TSqlDBUniDACConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBUniDACConnection.Create(self);
+  TSqlDBUniDACConnection(result).InternalProcess(speCreated);
 end;
 
 class function TSqlDBUniDACConnectionProperties.URI(aServer: TSqlDBDefinition;

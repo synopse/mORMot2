@@ -280,6 +280,7 @@ end;
 function TSqlDBNexusDBConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBNexusDBConnection.Create(self);
+  TSqlDBNexusDBConnectionProperties(result).InternalProcess(speCreated);
 end;
 
 function TSqlDBNexusDBConnectionProperties.DatabaseExists: boolean;

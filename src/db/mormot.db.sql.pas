@@ -1090,6 +1090,7 @@ type
   /// possible events notified to TOnSqlDBProcess callback method
   // - event handler is specified by TSqlDBConnectionProperties.OnProcess or
   // TSqlDBConnection.OnProcess properties
+  // - speCreated is called from all NewConnection overriden methods
   // - speConnected / speDisconnected will notify TSqlDBConnection.Connect
   // and TSqlDBConnection.Disconnect calls
   // - speNonActive / speActive will be used to notify external DB blocking
@@ -1105,6 +1106,7 @@ type
   // corresponding TSqlDBConnection.StartTransaction, TSqlDBConnection.Commit
   // and TSqlDBConnection.Rollback methods
   TOnSqlDBProcessEvent = (
+    speCreated,
     speConnected,
     speDisconnected,
     speNonActive,
@@ -1118,8 +1120,8 @@ type
   /// event handler called during all external DB process
   // - event handler is specified by TSqlDBConnectionProperties.OnProcess or
   // TSqlDBConnection.OnProperties properties
-  TOnSqlDBProcess = procedure(Sender: TSqlDBConnection; Event:
-    TOnSqlDBProcessEvent) of object;
+  TOnSqlDBProcess = procedure(Sender: TSqlDBConnection;
+    Event: TOnSqlDBProcessEvent) of object;
 
   /// event triggered when an expired password is detected
   // - will allow to provide a new password
@@ -1158,7 +1160,6 @@ type
     const TableName: RawUtf8; const FieldNames: TRawUtf8DynArray;
     const FieldTypes: TSqlDBFieldTypeArray; RowCount: integer;
     const FieldValues: TRawUtf8DynArrayDynArray) of object;
-
 
   /// event handler called to customize TRestStorageExternal table creation
   // - access the DB using Sender.Properties to properly create the index
@@ -1722,6 +1723,7 @@ type
     // PostgreSQL or SQlite3), as defined by MultipleValuesInsert() callback
     property OnBatchInsert: TOnBatchInsert
       read fOnBatchInsert write fOnBatchInsert;
+
     /// allow to customize the creation of a table by our ORM
     // - may be used e.g. to generate a partitioned table on PostgreSQL
     property OnTableCreate: TOnTableCreate
