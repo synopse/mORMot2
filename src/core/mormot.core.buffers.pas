@@ -1836,7 +1836,8 @@ type
     class function GetHashFileExt: RawUtf8; virtual;
     /// apply the internal hash algorithm to the supplied file content
     // - could be used ahead of time to validate a cached file
-    class function HashFile(const FileName: TFileName): RawUtf8;
+    class function HashFile(const FileName: TFileName;
+      const OnProgress: TOnStreamProgress = nil): RawUtf8;
     /// specify a TStream to which any Read()/Write() will be redirected
     // - this TStream instance will be owned by the TStreamRedirect
     property Redirected: TStream
@@ -5951,8 +5952,8 @@ begin
   rp := pointer(result);
   if Prefix <> '' then
   begin
-    MoveFast(pointer(Prefix)^, rp^, PStrLen(PtrUInt(Prefix) - _STRLEN)^);
-    inc(rp, PStrLen(PtrUInt(Prefix) - _STRLEN)^);
+    MoveFast(pointer(Prefix)^, rp^, PStrLen(PAnsiChar(pointer(Prefix)) - _STRLEN)^);
+    inc(rp, PStrLen(PAnsiChar(pointer(Prefix)) - _STRLEN)^);
   end;
   while len >= PERLINE do
   begin
@@ -5979,10 +5980,10 @@ begin
   end;
   if Suffix <> '' then
   begin
-    MoveFast(pointer(Suffix)^, rp^, PStrLen(PtrUInt(Suffix) - _STRLEN)^);
-    inc(rp, PStrLen(PtrUInt(Suffix) - _STRLEN)^);
+    MoveFast(pointer(Suffix)^, rp^, PStrLen(PAnsiChar(pointer(Suffix)) - _STRLEN)^);
+    inc(rp, PStrLen(PAnsiChar(pointer(Suffix)) - _STRLEN)^);
   end;
-  PStrLen(PtrUInt(result) - _STRLEN)^ := rp - pointer(result);
+  PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := rp - pointer(result);
 end;
 
 function BinToBase64Short(const s: RawByteString): ShortString;
@@ -8754,7 +8755,8 @@ begin
   result := ''; // no associated hasher on this parent class
 end;
 
-class function TStreamRedirect.HashFile(const FileName: TFileName): RawUtf8;
+class function TStreamRedirect.HashFile(const FileName: TFileName;
+  const OnProgress: TOnStreamProgress): RawUtf8;
 var
   hasher: TStreamRedirect;
   f: THandle;
@@ -8767,6 +8769,11 @@ begin
     exit;
   hasher := Create(TFileStreamFromHandle.Create(f));
   try
+    if Assigned(OnProgress) then
+    begin
+      hasher.fExpectedSize := FileSize(f);
+      hasher.OnProgress := OnProgress;
+    end;
     hasher.Append;
     result := hasher.GetHash;
   finally
@@ -8776,7 +8783,7 @@ end;
 
 procedure TStreamRedirect.Append;
 var
-  buf: array[word] of cardinal; // 256KB of buffer
+  buf: RawByteString;
   read: PtrInt;
 begin
   if fRedirected = nil then
@@ -8791,14 +8798,22 @@ begin
     fPosition := fCurrentSize;
   end
   else
+  begin
+    SetLength(buf, 1 shl 10); // 1MB temporary buffer
     repeat
-      read := fRedirected.Read(buf, SizeOf(buf));
+      read := fRedirected.Read(pointer(buf)^, length(buf));
       if read <= 0 then
         break;
-      DoHash(@buf, read);
+      DoHash(pointer(buf), read);
       inc(fCurrentSize, read);
       inc(fPosition, read);
+      if Assigned(fOnProgress) or
+         Assigned(fOnLog) then
+        if (fExpectedSize <> 0) and
+           (fCurrentSize <> read) then
+          DoReport(true);
     until false;
+  end;
 end;
 
 procedure TStreamRedirect.Ended;
