@@ -1732,7 +1732,7 @@ begin
     der[0] := DER_SEQUENCE;
     der[1] := AnsiChar(len - 2);
   end;
-  SetString(result, @der, len);
+  SetString(result, PAnsiChar(@der), len);
 end;
 
 function EccToDer(const priv: TEccPrivateKey): RawByteString;
@@ -1748,7 +1748,7 @@ begin
     der[0] := DER_SEQUENCE;
     der[1] := AnsiChar(len - 2);
   end;
-  SetString(result, @der, len);
+  SetString(result, PAnsiChar(@der), len);
 end;
 
 function EccToDer(const pub: TEccPublicKey): RawByteString;
@@ -1764,7 +1764,7 @@ begin
     der[0] := DER_SEQUENCE;
     der[1] := AnsiChar(len - 2);
   end;
-  SetString(result, @der, len);
+  SetString(result, PAnsiChar(@der), len);
 end;
 
 function DerToEcc(der: PByteArray; derlen: PtrInt; out sign: TEccSignature): boolean;
