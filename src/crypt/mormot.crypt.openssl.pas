@@ -185,6 +185,10 @@ type
   // $  openssl aes-256-gcm in 3.43ms i.e. 727590/s or 1.5 GB/s
   // $  mormot aes-128-gcm in 3.45ms i.e. 722752/s or 1.5 GB/s
   // $  mormot aes-256-gcm in 4.11ms i.e. 607385/s or 1.2 GB/s
+  // - WARNING: AEAD associated information is currently unsupported by
+  // TAesGcmOsl, due to some obscure OpenSSL padding issue in our code - GMAC
+  // will be properly handled by TAesGcmOsl, but you should use plain TAesGcm
+  // instead if you really need to authenticate some associated information
   TAesGcmOsl = class(TAesGcmAbstract)
   protected
     fAes: TAesOsl;
@@ -202,10 +206,14 @@ type
     // reverse encryption/decryption process
     // - will return self to avoid creating two instances
     function CloneEncryptDecrypt: TAesAbstract; override;
-    /// AES-GCM pure alternative to MacSetNonce()
+    /// AES-GCM pure alternative to MacSetNonce() - unsupported
     // - set the IV as usual (only the first 12 bytes will be used for GCM),
     // then optionally append any AEAD data with this method; warning: you need
     // to call Encrypt() once before - perhaps as Encrypt(nil, nil, 0)
+    // - WARNING: AEAD associated information is currently unsupported by
+    // TAesGcmOsl, due to some obscure OpenSSL padding issue in our code - GMAC
+    // will be properly handled by TAesGcmOsl, but you should use plain TAesGcm
+    // instead if you really need to authenticate some associated information
     procedure AesGcmAad(Buf: pointer; Len: integer); override;
     /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - after Encrypt, fill tag with the GCM value of the data and return true
@@ -613,6 +621,7 @@ begin
      (Count and AesBlockMod <> 0) then
     raise ESynCrypto.CreateUtf8('%.%: Count=% is not a multiple of 16',
       [Owner, 'UpdEvp', Count]);
+  outl := 0;
   EOpenSslCrypto.Check(Owner, 'UpdEvp',
     EVP_CipherUpdate(Ctx[DoEncrypt], BufOut, @outl, BufIn, Count));
   // no need to call EVP_CipherFinal_ex() since we expect no padding

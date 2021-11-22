@@ -457,6 +457,8 @@ type
   /// class-reference type (metaclass) of an AES cypher/uncypher
   TAesAbstractClass = class of TAesAbstract;
 
+  TAesAbstractClasses = array[TAesMode] of TAesAbstractClass;
+
   {$M+}
   /// handle AES cypher/uncypher with chaining
   // - use any of the inherited implementation, corresponding to the chaining
@@ -608,7 +610,7 @@ type
     // - may be used e.g. for AES-GCM or our custom AES-CTR modes
     // - default implementation, for a non AEAD protocol, returns false
     function MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
-      Associated: pointer = nil; AssociatedLen: integer = 0): boolean; virtual;
+      const Associated: RawByteString = ''): boolean; virtual;
     /// returns AEAD (authenticated-encryption with associated-data) MAC
     // - returns a MAC hash (up to 256-bit), computed during the last Encryption
     // - may be used e.g. for TAesGcm or our custom TAesOfc/TAesCfbCr modes
@@ -935,7 +937,7 @@ type
     // - should be set with a new MAC key value before each message, to avoid
     // replay attacks (as called from TEcdheProtocol.SetKey)
     function MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
-      Associated: pointer = nil; AssociatedLen: integer = 0): boolean; override;
+      const Associated: RawByteString = ''): boolean; override;
     /// returns AEAD (authenticated-encryption with associated-data) MAC
     // - returns a 256-bit MAC hash, computed during the last Encryption
     // - encrypt the internal fMac property value using the current AES cypher
@@ -1045,6 +1047,7 @@ type
   TAesGcmAbstract = class(TAesAbstract)
   protected
     fStarted: (stNone, stEnc, stDec); // used to call AES.Reset()
+    fAssociated: RawByteString;
     procedure AfterCreate; override;
     // abstract methods which should be overriden with the AES-GCM engine
     function AesGcmInit: boolean; virtual; abstract; // from fKey/fKeySize
@@ -1065,7 +1068,7 @@ type
     // - will just include any supplied associated data to the GMAC tag
     // - see AesGcmAad() method as a "pure AES-GCM" alternative
     function MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
-      Associated: pointer = nil; AssociatedLen: integer = 0): boolean; override;
+      const Associated: RawByteString = ''): boolean; override;
     /// returns the AES-GCM GMAC after Encryption
     // - returns the 128-bit GMAC into EncryptMac.Lo
     // - see AesGcmFinal() method as a "pure AES-GCM" alternative
@@ -1236,9 +1239,21 @@ type
 var
   /// the fastest AES implementation classes available on the system, per mode
   // - mormot.crypt.openssl may register its own classes, e.g. TAesGcmOsl
-  TAesFast: array[TAesMode] of TAesAbstractClass = (
+  TAesFast: TAesAbstractClasses = (
     TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr,
     TAesCfc, TAesOfc, TAesCtc, TAesGcm);
+
+const
+  /// the internal AES implementation classes available on the system, per mode
+  // - mormot.crypt.openssl won't override those classes
+  TAesInternal: TAesAbstractClasses = (
+    TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr,
+    TAesCfc, TAesOfc, TAesCtc, TAesGcm);
+
+const
+  /// the AES chaining modes which supports AEAD process
+  AES_AEAD = [mCfc, mOfc, mCtc, mGcm];
+
 
 /// OpenSSL-like Cipher name encoding of mormot.crypt.core AES engines
 // - return e.g. 'aes-128-cfb' or 'aes-256-gcm'
@@ -5061,7 +5076,7 @@ begin
 end;
 
 function TAesAbstract.MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
-  Associated: pointer; AssociatedLen: integer): boolean;
+  const Associated: RawByteString): boolean;
 begin
   result := false;
 end;
@@ -5141,8 +5156,7 @@ begin
   if Encrypt then
   begin
     TAesPrng.Main.FillRandom(nonce);
-    if not MacSetNonce({encrypt=}true, nonce,
-             pointer(Associated), length(Associated)) then
+    if not MacSetNonce({encrypt=}true, nonce, Associated) then
       // leave ASAP if this class doesn't support AEAD process
       exit;
     // inlined EncryptPkcs7() + RecordSave()
@@ -5174,8 +5188,7 @@ begin
       // to avoid buffer overflow
       exit;
     // decrypt and check MAC
-    if MacSetNonce({encrypt=}false, pcd^.nonce,
-         pointer(Associated), length(Associated)) then
+    if MacSetNonce({encrypt=}false, pcd^.nonce, Associated) then
       result := DecryptPkcs7Buffer(P, len, {ivatbeg=}true, {raiseexc=}false);
     if result <> '' then
       if not MacDecryptCheckTag(pcd^.mac) then
@@ -5566,16 +5579,15 @@ begin
 end;
 
 function TAesAbstractAead.MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
-  Associated: pointer; AssociatedLen: integer): boolean;
+  const Associated: RawByteString): boolean;
 begin
   // safe seed for plain text crc, before AES encryption
   // from TEcdheProtocol.SetKey, RandomNonce uniqueness will avoid replay attacks
   fMac.plain := THash256Rec(RandomNonce).Lo;
   XorBlock16(@fMac.plain, @THash256Rec(RandomNonce).Hi);
   // neutral seed for encrypted crc, to check for errors, with no compromission
-  if (Associated <> nil) and
-     (AssociatedLen > 0) then
-    crc128c(Associated, AssociatedLen, fMac.encrypted)
+  if (Associated <> '') then
+    crc128c(pointer(Associated), length(Associated), fMac.encrypted)
   else
     FillcharFast(fMac.encrypted, SizeOf(THash128), 255); // -1 seed
   result := true;
@@ -6020,6 +6032,8 @@ begin
       raise ESynCrypto.CreateUtf8('Unexpected %.Encrypt', [self]);
     fStarted := stEnc;
     AesGcmReset; // caller should have set the IV
+    if fAssociated <> '' then
+      AesGcmAad(pointer(fAssociated), length(fAssociated));
   end;
   if (Count <> 0) and
      not AesGcmProcess(BufIn, BufOut, Count) then
@@ -6035,6 +6049,8 @@ begin
       raise ESynCrypto.CreateUtf8('Unexpected %.Decrypt', [self]);
     fStarted := stDec;
     AesGcmReset; // caller should have set the IV
+    if fAssociated <> '' then
+      AesGcmAad(pointer(fAssociated), length(fAssociated));
   end;
   if (Count <> 0) and
      not AesGcmProcess(BufIn, BufOut, Count) then
@@ -6043,25 +6059,13 @@ begin
 end;
 
 function TAesGcmAbstract.MacSetNonce(DoEncrypt: boolean;
-  const RandomNonce: THash256; Associated: pointer; AssociatedLen: integer): boolean;
+  const RandomNonce: THash256; const Associated: RawByteString): boolean;
 begin
+  result := false; // should be called before Encrypt/Decrypt
   if fStarted <> stNone then
-  begin
-    result := false; // should be called before Encrypt/Decrypt
     exit;
-  end;
   // RandomNonce is ignored since not used during AES-GCM GMAC computation
-  if (Associated <> nil) and
-     (AssociatedLen > 0) then
-  begin
-    // we need to initiate the Encryption/Decryption phase to set the AAD
-    if DoEncrypt then
-      Encrypt(nil, nil, 0)
-    else
-      Decrypt(nil, nil, 0);
-    // now it will call the overriden AES-GCM engine
-    AesGcmAad(Associated, AssociatedLen);
-  end;
+  fAssociated := Associated;
   result := true;
 end;
 
