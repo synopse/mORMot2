@@ -7378,7 +7378,10 @@ begin
       exit;
     until false;
     if n <> cap then
-      DynArrayFakeLength(arr^, n); // faster than SetLength()
+      if n = 0 then
+        FastDynArrayClear(arr^, arrinfo.Cache.ItemInfo)
+      else
+        DynArrayFakeLength(arr^, n); // faster than SetLength()
     Ctxt.Info := arrinfo;
   end;
   Ctxt.ParseEndOfObject; // mimics GetJsonField() / Ctxt.ParseNext
@@ -7802,7 +7805,7 @@ begin
     until (P = nil) or
           (EndOfObject = '}');
   end;
-  DynArrayFakeLength(Values, n); // SetLength() could have made a realloc()
+  DynArrayFakeLength(Values, n); // SetLength() would have made a realloc()
   if P = nil then // result=nil indicates failure -> points to #0 for end of text
     result := @NULCHAR
   else
