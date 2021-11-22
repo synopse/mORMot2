@@ -937,7 +937,7 @@ type
     // - returns the last instance created for name[]
     class function Implements(const name: array of RawUtf8): pointer; overload;
     /// register this class to override one or several identifiers implementation
-    class procedure Implements(csv: PUtf8Char); overload;
+    class procedure Implements(csv: PUtf8Char; const suffix: RawUtf8 = ''); overload;
     /// return all the TCryptAlog instances matching this class type
     // - could be used e.g. as TCryptRandom.Instances
     class function Instances: TCryptAlgos;
@@ -1120,8 +1120,6 @@ type
 
   /// asymmetric public-key cryptography parent class, as returned by Asym()
   TCryptAsym = class(TCryptAlgo)
-  protected
-    fDefaultHasher: TCryptHasher;
   public
     /// generate a public/private pair of keys in the PEM text format
     procedure GeneratePem(out pub, priv: RawUtf8; const privpwd: RawUtf8); virtual;
@@ -2880,7 +2878,7 @@ begin
       result := Create(name[i]);
 end;
 
-class procedure TCryptAlgo.Implements(csv: PUtf8Char);
+class procedure TCryptAlgo.Implements(csv: PUtf8Char; const suffix: RawUtf8);
 var
   name: RawUtf8;
 begin
@@ -2890,7 +2888,7 @@ begin
   begin
     GetNextItem(csv, ',', name);
     if name <> '' then
-      Create(name);
+      Create(name + suffix);
   end;
 end;
 
@@ -3728,7 +3726,7 @@ begin
       exit;
     GlobalCryptAlgo := RegisterGlobalShutdownRelease(
       TRawUtf8List.CreateEx([fObjectsOwned, fNoDuplicate]));
-    // register known factories
+    // register mormot.crypt.core engines into our factories
     TCryptRandomEntropy.Implements(RndAlgosText);
     TCryptRandomAesPrng.Implements('rnd-default,rnd-aes');
     TCryptRandomLecuyerPrng.Implements('rnd-lecuyer');
@@ -3741,8 +3739,8 @@ begin
       begin
         bits := 128 + b * 64;
         n := AesAlgoNameEncode(m, bits);
-        TCryptAesInternal.Create(n, m, bits, TAesFast);
-        TCryptAesInternal.Create(n + '-int', m, bits, TAesInternal);
+        TCryptAesInternal.Create(n, m, bits, TAesFast); // fastest
+        TCryptAesInternal.Create(n + '-int', m, bits, TAesInternal); // internal
       end;
   finally
    GlobalUnlock;

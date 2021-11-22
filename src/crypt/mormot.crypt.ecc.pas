@@ -4246,6 +4246,8 @@ end;
 
 type
   TCryptAsymInternal = class(TCryptAsym)
+  protected
+    fDefaultHasher: TCryptHasher;
   public
     constructor Create(const name: RawUtf8); override;
     procedure GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8); override;
@@ -4352,7 +4354,7 @@ initialization
   assert(SizeOf(TEciesHeader) = 228);
   assert(SizeOf(TEcdheFrameClient) = 290);
   assert(SizeOf(TEcdheFrameServer) = 306);
-  TCryptAsymInternal.Implements('secp256r1,NISTP-256,prime256v1');
+  TCryptAsymInternal.Implements('ES256,secp256r1,NISTP-256,prime256v1');
 
 end.
 
