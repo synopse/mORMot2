@@ -3584,6 +3584,7 @@ begin
                 TAesGcmAbstract(fAes).AesGcmFinal( // validate GMAC from src
                   PAesBlock(@PByteArray(src)[length(src) - GMAC_SIZE])^);
     end;
+    exit;
   end
   else if fAesAead in fFlags then
     // our proprietary mCfc,mOfc,mCtc AEAD algorithms using 256-bit crc32c

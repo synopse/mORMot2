@@ -1992,10 +1992,22 @@ procedure TTestCoreCrypto.Catalog;
 var
   m: TAesMode;
   k, k2: integer;
-  n: RawUtf8;
+  a, i: PtrInt;
+  c32, cprev: cardinal;
+  d, dprev: double;
+  n, h, nprev, aead, pub, priv, pub2, priv2: RawUtf8;
+  r, s: RawByteString;
   c: TAesAbstract;
   key: THash256;
+  rnd: TCryptRandom;
+  hsh: TCryptHasher;
+  sig: TCryptSigner;
+  cip: TCryptCipherAlgo;
+  asy: TCryptAsym;
+  en, de: ICryptCipher;
+  alg: TCryptAlgos;
 begin
+  // validate AesAlgoNameEncode / TAesMode
   FillZero(key);
   for k := 0 to 2 do
     for m := low(m) to high(m) do
@@ -2016,6 +2028,107 @@ begin
       n[10] := ' ';
       CheckUtf8(AesAlgoNameDecode(n, k2) = nil, n);
     end;
+  // validate Rnd/Hash/Sign/Cipher/Asym High-Level Algorithms Factories
+  alg := TCryptRandom.Instances;
+  for a := 0 to high(alg) do
+  begin
+    rnd := alg[a] as TCryptRandom;
+    Check(mormot.crypt.secure.Rnd(rnd.AlgoName) = rnd);
+    cprev := 0;
+    dprev := 0;
+    for i := 1 to 10 do
+    begin
+      c32 := rnd.Get32;
+      CheckUtf8(c32 <> cprev, rnd.AlgoName);
+      cprev := c32;
+      c32 := rnd.Get32(i * 77);
+      Check(c32 < cardinal(i * 77));
+      d := rnd.GetDouble;
+      check(d <> dprev);
+      dprev := d;
+      n := rnd.Get(i);
+      check(length(n) = i);
+    end;
+  end;
+  alg := TCryptHasher.Instances;
+  for a := 0 to high(alg) do
+  begin
+    hsh := alg[a] as TCryptHasher;
+    Check(mormot.crypt.secure.Hasher(hsh.AlgoName) = hsh);
+    h := hsh.Full(n);
+    for i := 1 to length(n) do
+    begin
+      inc(n[i]);
+      CheckUtf8(hsh.Full(n) <> h, hsh.AlgoName);
+      dec(n[i]);
+    end;
+    CheckUtf8(hsh.Full(n) = h, hsh.AlgoName);
+  end;
+  alg := TCryptSigner.Instances;
+  for a := 0 to high(alg) do
+  begin
+    sig := alg[a] as TCryptSigner;
+    Check(mormot.crypt.secure.Signer(sig.AlgoName) = sig);
+    h := sig.Full('key', n);
+    for i := 1 to length(n) do
+    begin
+      inc(n[i]);
+      CheckUtf8(sig.Full('key', n) <> h, sig.AlgoName);
+      dec(n[i]);
+    end;
+    CheckEqual(sig.Full('key', n), h, sig.AlgoName);
+    for i := 1 to 5 do
+    begin
+      h := sig.NewPbkdf2('sec', 'salt', i).Update(n).Final;
+      CheckEqual(h, sig.NewPbkdf2('sec', 'salt', i).Update(n).Final, sig.AlgoName);
+      Check(h <> sig.NewPbkdf2('sec', 'sel', i).Update(n).Final);
+      Check(h <> sig.NewPbkdf2('sec', 'salt', i + 1).Update(n).Final);
+    end;
+  end;
+  alg := TCryptCipherAlgo.Instances;
+  for a := 0 to high(alg) do
+  begin
+    cip := alg[a] as TCryptCipherAlgo;
+    Check(mormot.crypt.secure.CipherAlgo(cip.AlgoName) = cip);
+    if cip.IsAead then
+      aead := cip.AlgoName
+    else
+      aead := '';
+    nprev := '';
+    for i := 1 to 5 do
+    begin
+      en := cip.Encrypt('hmac-sha256', 'sec', 'salt', i);
+      de := cip.Decrypt('hmac-SHA256', 'sec', 'salt', i);
+      CheckUtf8(en.Process(n, r, aead), cip.AlgoName);
+      Check(nprev <> r);
+      Check(de.Process(r, s, aead));
+      CheckEqual(n, s, cip.AlgoName);
+      nprev := r;
+    end;
+  end;
+  alg := TCryptAsym.Instances;
+  for a := 0 to high(alg) do
+  begin
+    asy := alg[a] as TCryptAsym;
+    Check(mormot.crypt.secure.Asym(asy.AlgoName) = asy);
+    asy.GeneratePem(pub, priv, '');
+    Check(pub <> '');
+    Check(priv <> '');
+    CheckUtf8(asy.Sign(n, priv, s), asy.AlgoName);
+    Check(s <> '');
+    Check(asy.Verify(n, pub, s));
+    inc(n[1]);
+    Check(not asy.Verify(n, pub, s));
+    dec(n[1]);
+    asy.GeneratePem(pub2, priv2, '');
+    Check(pub2 <> '');
+    Check(priv2 <> '');
+    Check(pub <> pub2);
+    Check(priv <> priv2);
+    s := asy.SharedSecret(pub, priv2);
+    if s <> '' then
+      CheckEqual(asy.SharedSecret(pub2, priv), s, asy.AlgoName);
+  end;
 end;
 
 procedure TTestCoreCrypto._TBinaryCookieGenerator;
