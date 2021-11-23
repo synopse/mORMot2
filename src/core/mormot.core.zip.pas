@@ -379,6 +379,7 @@ type
   protected
     fZipNamePathDelim, fZipNamePathDelimReversed: AnsiChar;
     fZipNamePathDelimString, fZipNamePathDelimReversedString: string;
+    fFileName: TFileName;
     procedure SetZipNamePathDelim(Value: AnsiChar);
   public
     /// initialize this class
@@ -403,7 +404,6 @@ type
     fCentralDirectoryOffset: Int64;
     fCentralDirectoryFirstFile: PFileHeader;
     fResource: TExecutableResource;
-    fFileName: TFileName;
     function UnZipStream(aIndex: integer; const aInfo: TFileInfoFull;
       aDest: TStream): boolean;
   public
@@ -494,6 +494,21 @@ type
   TOnZipWriteCreateFrom = function(
     const Entry: TZipReadEntry): boolean of object;
 
+  /// the current step of TOnZipWrite
+  // - zwsReadFile is triggerred during CreateFrom(TZipRead)
+  // - zwsWriteMem/zwsWriteFile is set during AddDeflated/AddStored process
+  TOnZipWriteStep = (
+    zwsReadFile,
+    zwsWriteMem,
+    zwsWriteFile);
+
+  TZipWrite = class;
+
+  /// optional callback used during TZipWrite process
+  // - Remaining indicates how many bytes of FileName are still to be processed
+  TOnZipWrite = procedure(Sender: TZipWrite; Step: TOnZipWriteStep;
+    const FileName: TFileName; Remaining: Int64) of object;
+
   /// write-only access for creating a .zip archive
   // - update can be done manualy by using CreateFrom()
   TZipWrite = class(TZipAbstract)
@@ -502,7 +517,6 @@ type
     fAppendOffset: QWord;
     fNeedZip64: boolean;
     fDestOwned: boolean;
-    fFileName: TFileName;
     fOnCreateFromFiles: TFileNameDynArray;
     function OnCreateFrom(const Entry: TZipReadEntry): boolean;
     // returns @Entry[Count], allocating if necessary
@@ -521,6 +535,8 @@ type
     Entry: array of TZipWriteEntry;
     /// mainly used during debugging - default false is safe and more efficient
     ForceZip64: boolean;
+    /// an optional callback triggered during each AddStored/AddDeflate process
+    OnZipWrite: TOnZipWrite;
     /// initialize the .zip archive
     // - a new .zip file content is prepared
     constructor Create(const aDestFileName: TFileName); overload;
@@ -539,14 +555,16 @@ type
     // - Dest stream is positioned next after the existing data (possibly
     // ignoring OnAdd files), ready to call AddDeflated/AddStored
     constructor CreateFrom(const aFileName: TFileName;
-      WorkingMem: QWord = 1 shl 20; const OnAdd: TOnZipWriteCreateFrom = nil); overload;
+      WorkingMem: QWord = 1 shl 20; const OnAdd: TOnZipWriteCreateFrom = nil;
+      const OnWrite: TOnZipWrite = nil); overload;
     /// open an existing .zip archive, ready to add some new files
     // - overloaded constructor converting a file list into a corresponding
     // TOnZipWriteCreateFrom callback for case-insensitive file exclusion
     // - this is a convenient way of updating a .zip in-place: e.g. to replace a
     // file, supply it to the IgnoreZipFiles array, then call AddDeflate
     constructor CreateFrom(const aFileName: TFileName;
-      const IgnoreZipFiles: array of TFileName; WorkingMem: QWord = 1 shl 20); overload;
+      const IgnoreZipFiles: array of TFileName; WorkingMem: QWord = 1 shl 20;
+      const OnWrite: TOnZipWrite = nil); overload;
     /// flush pending content, then release associated memory
     destructor Destroy; override;
     /// compress (using the deflate method) a memory buffer, and add it to the zip file
@@ -1349,7 +1367,7 @@ begin
 end;
 
 constructor TZipWrite.CreateFrom(const aFileName: TFileName; WorkingMem: QWord;
-  const OnAdd: TOnZipWriteCreateFrom);
+  const OnAdd: TOnZipWriteCreateFrom; const OnWrite: TOnZipWrite);
 var
   R: TZipRead;
   h: THandle;
@@ -1361,6 +1379,7 @@ var
   tomove: boolean;
   tmp: RawByteString;
 begin
+  OnZipWrite := OnWrite;
   h := FileOpen(aFileName, fmOpenReadWrite or fmShareDenyNone);
   if ValidHandle(h) then
   begin
@@ -1402,16 +1421,22 @@ begin
             if info.f64.zzipSize > 0 then
               if s^.local <> nil then
               begin
+                // this file is small enough to be in the current work memory
+                if Assigned(OnWrite) then
+                  OnWrite(self, zwsReadFile, s^.zipName, info.f64.zzipSize);
                 FileWrite(h, s^.local^.Data^, info.f64.zzipSize);
                 inc(writepos, info.f64.zzipSize);
               end
               else
               begin
+                // read and move the file by 1MB chunks
                 if tmp = '' then
                   SetString(tmp, nil, 1 shl 20);
                 len := info.f64.zzipSize;
                 readpos := Int64(s^.localoffs) + info.localfileheadersize;
                 repeat
+                  if Assigned(OnWrite) then
+                    OnWrite(self, zwsReadFile, s^.zipName, len);
                   FileSeek64(h, readpos, soFromBeginning);
                   read := length(tmp);
                   if len < read then
@@ -1427,7 +1452,7 @@ begin
           end
           else
           begin
-            // we can keep the file content in-place -> just update d^
+            // we can keep the file content in-place -> just update dir entry
             d^.h32.SetVersion(info.f32.IsZip64);
             d^.h64.offset := writepos;
             if d^.h64.zip64id = 0 then
@@ -1471,14 +1496,15 @@ begin
 end;
 
 constructor TZipWrite.CreateFrom(const aFileName: TFileName;
-  const IgnoreZipFiles: array of TFileName; WorkingMem: QWord);
+  const IgnoreZipFiles: array of TFileName; WorkingMem: QWord;
+  const OnWrite: TOnZipWrite);
 var
   i: PtrInt;
 begin
   SetLength(fOnCreateFromFiles, length(IgnoreZipFiles));
   for i := 0 to high(IgnoreZipFiles) do
     fOnCreateFromFiles[i] := IgnoreZipFiles[i];
-  CreateFrom(aFileName, WorkingMem, OnCreateFrom);
+  CreateFrom(aFileName, WorkingMem, OnCreateFrom, OnWrite);
   fOnCreateFromFiles := nil;
 end;
 
@@ -1596,6 +1622,8 @@ begin
   // may call libdeflate_crc32 / libdeflate_deflate_compress
   e := NewEntry(Z_DEFLATED, mormot.lib.z.crc32(0, Buf, Size), FileAge);
   e^.h64.zfullSize := Size;
+  if Assigned(OnZipWrite) then
+    OnZipWrite(self, zwsWriteMem, aZipName, Size);
   tmp.Init(zlibCompressMax(Size));
   try
     e^.h64.zzipSize := CompressMem(Buf, tmp.buf, Size, tmp.len, CompressLevel);
@@ -1610,16 +1638,19 @@ end;
 procedure TZipWrite.AddStored(const aZipName: TFileName;
   Buf: pointer; Size: PtrInt; FileAge: integer);
 begin
-  if self <> nil then
-    // may call libdeflate_crc32
-    with NewEntry(Z_STORED, mormot.lib.z.crc32(0, Buf, Size), FileAge)^ do
-    begin
-      h64.zfullSize := Size;
-      h64.zzipSize := Size;
-      WriteHeader(aZipName);
-      fDest.WriteBuffer(Buf^, Size); // write stored data
-      inc(Count);
-    end;
+  if self = nil then
+    exit;
+  if Assigned(OnZipWrite) then
+    OnZipWrite(self, zwsWriteMem, aZipName, Size);
+  // may call libdeflate_crc32
+  with NewEntry(Z_STORED, mormot.lib.z.crc32(0, Buf, Size), FileAge)^ do
+  begin
+    h64.zfullSize := Size;
+    h64.zzipSize := Size;
+    WriteHeader(aZipName);
+    fDest.WriteBuffer(Buf^, Size); // write stored data
+    inc(Count);
+  end;
 end;
 
 procedure TZipWrite.AddStored(const aFileName: TFileName;
@@ -1652,6 +1683,8 @@ begin
     try
       todo := FileSeek64(f, 0, soFromEnd);
       FileSeek64(f, 0, soFromBeginning);
+      if Assigned(OnZipWrite) then
+        OnZipWrite(self, zwsWriteFile, ZipName, todo);
       age := FileAgeToWindowsTime(aFileName);
       // prepare and write initial version of the local file header
       met := Z_DEFLATED;
@@ -1708,6 +1741,8 @@ begin
             else
               deflate.WriteBuffer(pointer(tmp)^, len); // crc and compress
             dec(todo, len);
+            if Assigned(OnZipWrite) then
+              OnZipWrite(self, zwsWriteFile, ZipName, todo);
           end;
           if deflate <> nil then
           begin
@@ -1810,6 +1845,8 @@ begin
       else
         h64 := z^.dir64^; // proper Zip64 support
       // append new header and file content
+      if Assigned(OnZipWrite) then
+        OnZipWrite(self, zwsWriteFile, z^.zipName, h64.zzipSize);
       WriteHeader(z^.zipName);
       if z^.local = nil then
       begin
