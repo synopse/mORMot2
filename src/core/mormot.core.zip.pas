@@ -2136,6 +2136,8 @@ begin
     Size := FileSize(aFile);
   if Size < WorkingMem then
     WorkingMem := Size; // up to 1MB by default
+  if WorkingMem < 32 then
+    raise ESynZip.CreateUtf8('%.Create: No ZIP header found %', [self, fFileName]);
   SetString(fSourceBuffer, nil, WorkingMem);
   P := pointer(fSourceBuffer);
   // search for the first zip file local header
