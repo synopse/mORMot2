@@ -591,7 +591,9 @@ type
     /// raise a EFastReader with "Reached End of Input" error message
     procedure ErrorOverflow;
     /// raise a EFastReader with "Incorrect Data: ...." error message
-    procedure ErrorData(const fmt: RawUtf8; const args: array of const);
+    procedure ErrorData(const fmt: RawUtf8; const args: array of const); overload;
+    /// raise a EFastReader with "Incorrect Data: ...." error message
+    procedure ErrorData(const msg: shortstring); overload;
     /// read the next 32-bit signed value from the buffer
     function VarInt32: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3021,6 +3023,11 @@ begin
     OnErrorData(fmt, args)
   else
     raise EFastReader.CreateUtf8('Incorrect Data: ' + fmt, args);
+end;
+
+procedure TFastReader.ErrorData(const msg: shortstring);
+begin
+  ErrorData('%', [msg]);
 end;
 
 function TFastReader.EOF: boolean;
