@@ -4896,7 +4896,8 @@ begin
     t := UrlEncode(s);
     Check(UrlDecode(t) = s);
     d := 'seleCT=' + t + '&where=' + Int32ToUtf8(i);
-    Check(UrlEncode(['seleCT', s, 'where', i]) = '?' + d);
+    CheckEqual(UrlEncode(['seleCT', s, 'where', i]), '?' + d);
+    CheckEqual(UrlEncode(['seleCT', s, 'where', i], {trimlead=}true), d);
   end;
 end;
 
