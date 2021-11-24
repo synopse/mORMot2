@@ -594,6 +594,9 @@ const
   // - to be used inlined e.g. as PRefCnt(p - _STRREFCNT)^
   _STRREFCNT = SizeOf(TRefCnt) + _STRLEN;
 
+  /// used to calc the beginning of memory allocation of a dynamic array
+  _DARECSIZE = SizeOf(TDynArrayRec);
+
   /// cross-compiler negative offset to TDynArrayRec.high/length field
   // - to be used inlined e.g. as
   // ! PDALen(PAnsiChar(Values) - _DALEN)^ + _DAOFF
@@ -3062,22 +3065,47 @@ var
   // - set to crc32csse42() if SSE4.2 or ARMv8 are available on this CPU,
   // or fallback to xxHash32() which is faster than crc32cfast() e.g. on ARM
   // - mormot.crypt.core may assign safer and faster AesNiHash32() if available
+  // - so the hash value may change on another computer or after program restart
   DefaultHasher: THasher = xxHash32;
 
   /// the 32-bit hash function used by TRawUtf8Interning
   // - set to crc32csse42() if SSE4.2 or ARMv8 are available on this CPU,
   // or fallback to xxHash32() which performs better than crc32cfast()
   // - mormot.crypt.core may assign safer and faster AesNiHash32() if available
+  // - so the hash value may change on another computer or after program restart
   InterningHasher: THasher = xxHash32;
 
   /// a 64-bit hasher function
   // - crc32cTwice() by default, but mormot.crypt.core may assign AesNiHash64()
+  // - so the hash value may change on another computer or after program restart
   DefaultHasher64: THasher64 = crc32cTwice;
 
   /// a 128-bit hasher function
   // - crc32c128() by default, but mormot.crypt.core may assign AesNiHash128()
+  // - so the hash value may change on another computer or after program restart
   DefaultHasher128: THasher128 = crc32c128;
 
+/// compute a 32-bit hash of any string using DefaultHasher()
+// - so the hash value may change on another computer or after program restart
+function DefaultHash(const s: RawByteString): cardinal; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compute a 32-bit hash of any array of bytes using DefaultHasher()
+// - so the hash value may change on another computer or after program restart
+function DefaultHash(const b: TBytes): cardinal; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compute a 32-bit hash of any string using the CRC32C checksum
+// - the returned hash value will be stable on all platforms, and use HW opcodes
+// if available on the current CPU
+function crc32cHash(const s: RawByteString): cardinal; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compute a 32-bit hash of any array of bytes using the CRC32C checksum
+// - the returned hash value will be stable on all platforms, and use HW opcodes
+// if available on the current CPU
+function crc32cHash(const b: TBytes): cardinal; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// get maximum possible (worse) SynLZ compressed size
 function SynLZcompressdestlen(in_len: integer): integer;
@@ -9522,6 +9550,26 @@ end;
 function Hash32(const Text: RawByteString): cardinal;
 begin
   result := Hash32(pointer(Text), Length(Text));
+end;
+
+function DefaultHash(const s: RawByteString): cardinal;
+begin
+  result := DefaultHasher(0, pointer(s), length(s));
+end;
+
+function DefaultHash(const b: TBytes): cardinal;
+begin
+  result := DefaultHasher(0, pointer(b), length(b));
+end;
+
+function crc32cHash(const s: RawByteString): cardinal;
+begin
+  result := crc32c(0, pointer(s), length(s));
+end;
+
+function crc32cHash(const b: TBytes): cardinal;
+begin
+  result := crc32c(0, pointer(b), length(b));
 end;
 
 function xxHash32Mixup(crc: cardinal): cardinal;
