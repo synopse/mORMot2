@@ -5550,6 +5550,7 @@ end;
 procedure TTestCoreBase.UrlDecoding;
 var
   i, V: integer;
+  c: cardinal;
   s, t, d: RawUtf8;
   U: PUtf8Char;
 begin
@@ -5566,6 +5567,8 @@ begin
     Check(IdemPChar(U, 'WHERE='), 'Where');
     Check(UrlDecodeInteger(U, 'WHERE=', V));
     Check(V = i);
+    Check(UrlDecodeCardinal(U, 'WHERE=', c));
+    Check(c = cardinal(i));
     Check(not UrlDecodeValue(pointer(d), 'NOTFOUND=', t, @U));
     Check(UrlDecodeInteger(U, 'WHERE=', V, @U));
     Check(U = nil);

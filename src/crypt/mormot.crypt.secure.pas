@@ -2014,7 +2014,8 @@ end;
 
 { TSynConnectionDefinition }
 
-constructor TSynConnectionDefinition.CreateFromJson(const Json: RawUtf8; Key: cardinal);
+constructor TSynConnectionDefinition.CreateFromJson(
+  const Json: RawUtf8; Key: cardinal);
 var
   privateCopy: RawUtf8;
   values: array[0..4] of TValuePUtf8Char;
@@ -2022,7 +2023,12 @@ begin
   fKey := Key;
   privateCopy := Json;
   JsonDecode(privateCopy,
-    ['Kind', 'ServerName', 'DatabaseName', 'User', 'Password'], @values);
+    ['Kind',          // 0
+     'ServerName',    // 1
+     'DatabaseName',  // 2
+     'User',          // 3
+     'Password'],     // 4
+    @values);
   fKind := values[0].ToString;
   values[1].ToUtf8(fServerName);
   values[2].ToUtf8(fDatabaseName);

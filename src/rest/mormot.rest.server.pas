@@ -1652,21 +1652,27 @@ type
   TRestServerUriPagingParameters = record
     /// parameter name used to specify the request sort order
     // - default value is 'SORT='
+    // - note that any custom value should end with a '=' character
     Sort: RawUtf8;
     /// parameter name used to specify the request sort direction
     // - default value is 'DIR='
+    // - note that any custom value should end with a '=' character
     Dir: RawUtf8;
     /// parameter name used to specify the request starting offset
     // - default value is 'STARTINDEX='
+    // - note that any custom value should end with a '=' character
     StartIndex: RawUtf8;
     /// parameter name used to specify the request the page size (LIMIT clause)
     // - default value is 'RESULTS='
+    // - note that any custom value should end with a '=' character
     Results: RawUtf8;
     /// parameter name used to specify the request field names
     // - default value is 'SELECT='
+    // - note that any custom value should end with a '=' character
     Select: RawUtf8;
     /// parameter name used to specify the request WHERE clause
     // - default value is 'WHERE='
+    // - note that any custom value should end with a '=' character
     Where: RawUtf8;
     /// returned JSON field value of optional total row counts
     // - default value is nil, i.e. no total row counts field

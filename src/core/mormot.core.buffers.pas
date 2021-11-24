@@ -1379,6 +1379,7 @@ function UrlDecode(U: PUtf8Char): RawUtf8; overload;
 // textual value
 // - UrlDecodeValue('select=%2A&where=LastName%3D%27M%C3%B4net%27','SELECT=',V,@Next)
 // will return Next^='where=...' and V='*'
+// - Upper should be already uppercased, and end with a '=' character
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
 function UrlDecodeValue(U: PUtf8Char; const Upper: RawUtf8;
@@ -1388,6 +1389,7 @@ function UrlDecodeValue(U: PUtf8Char; const Upper: RawUtf8;
 // integer numerical value
 // - UrlDecodeInteger('offset=20&where=LastName%3D%27M%C3%B4net%27','OFFSET=',O,@Next)
 // will return Next^='where=...' and O=20
+// - Upper should be already uppercased, and end with a '=' character
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
 function UrlDecodeInteger(U: PUtf8Char; const Upper: RawUtf8;
@@ -1397,6 +1399,7 @@ function UrlDecodeInteger(U: PUtf8Char; const Upper: RawUtf8;
 // cardinal numerical value
 // - UrlDecodeCardinal('offset=20&where=LastName%3D%27M%C3%B4net%27','OFFSET=',O,@Next)
 // will return Next^='where=...' and O=20
+// - Upper should be already uppercased, and end with a '=' character
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
 function UrlDecodeCardinal(U: PUtf8Char; const Upper: RawUtf8;
@@ -1406,6 +1409,7 @@ function UrlDecodeCardinal(U: PUtf8Char; const Upper: RawUtf8;
 // Int64 numerical value
 // - UrlDecodeInt64('offset=20&where=LastName%3D%27M%C3%B4net%27','OFFSET=',O,@Next)
 // will return Next^='where=...' and O=20
+// - Upper should be already uppercased, and end with a '=' character
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
 function UrlDecodeInt64(U: PUtf8Char; const Upper: RawUtf8;
@@ -1415,6 +1419,7 @@ function UrlDecodeInt64(U: PUtf8Char; const Upper: RawUtf8;
 // floating-point value
 // - UrlDecodeExtended('price=20.45&where=LastName%3D%27M%C3%B4net%27','PRICE=',P,@Next)
 // will return Next^='where=...' and P=20.45
+// - Upper should be already uppercased, and end with a '=' character
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
 function UrlDecodeExtended(U: PUtf8Char; const Upper: RawUtf8;
@@ -1424,6 +1429,7 @@ function UrlDecodeExtended(U: PUtf8Char; const Upper: RawUtf8;
 // floating-point value
 // - UrlDecodeDouble('price=20.45&where=LastName%3D%27M%C3%B4net%27','PRICE=',P,@Next)
 // will return Next^='where=...' and P=20.45
+// - Upper should be already uppercased, and end with a '=' character
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
 function UrlDecodeDouble(U: PUtf8Char; const Upper: RawUtf8;
