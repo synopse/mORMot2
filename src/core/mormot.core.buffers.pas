@@ -1366,7 +1366,8 @@ function UrlEncode(Text: PUtf8Char): RawUtf8; overload;
 // - parameters values can be either textual, integer or extended, or any TObject
 // - TObject serialization into UTF-8 will be processed by the ObjectToJson()
 // function
-function UrlEncode(const NameValuePairs: array of const): RawUtf8; overload;
+function UrlEncode(const NameValuePairs: array of const;
+  TrimLeadingQuestionMark: boolean = false): RawUtf8; overload;
 
 /// decode a string compatible with URI encoding into its original value
 // - you can specify the decoding range (as in copy(s,i,len) function)
@@ -7300,7 +7301,8 @@ begin
   _UrlEncode_Write(pointer(Text), pointer(result), @TEXT_BYTES);
 end;
 
-function UrlEncode(const NameValuePairs: array of const): RawUtf8;
+function UrlEncode(const NameValuePairs: array of const;
+  TrimLeadingQuestionMark: boolean): RawUtf8;
 // (['select','*','where','ID=12','offset',23,'object',aObject]);
 var
   a, n: PtrInt;
@@ -7324,7 +7326,10 @@ begin
         VarRecToUtf8(p^, value);
       result := result + '&' + name + '=' + UrlEncode(value);
     end;
-    result[1] := '?';
+    if TrimLeadingQuestionMark then
+      delete(result, 1, 1)
+    else
+      result[1] := '?';
   end;
 end;
 

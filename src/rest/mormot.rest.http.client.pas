@@ -637,9 +637,7 @@ begin
     'SendTimeout', fSendTimeout,
     'ReceiveTimeout', fReceiveTimeout,
     'ProxyName', fProxyName,
-    'ProxyByPass', fProxyByPass]);
-  Definition.DatabaseName :=
-    copy(Definition.DatabaseName, 2, MaxInt); // trim leading '?'
+    'ProxyByPass', fProxyByPass], {TrimLeadingQuestionMark=}true);
 end;
 
 constructor TRestHttpClientGeneric.RegisteredClassCreateFrom(aModel: TOrmModel;
