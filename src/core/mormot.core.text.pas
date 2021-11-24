@@ -120,15 +120,15 @@ function SplitRights(const Str, SepChar: RawUtf8): RawUtf8;
 function IsVoid(const text: RawUtf8): boolean;
 
 /// fill all bytes of this memory buffer with zeros, i.e. 'toto' -> #0#0#0#0
-// - will write the memory buffer directly, so if this string instance is shared
-// (i.e. has refcount>1), all other variables will contains zeros
+// - will write the memory buffer directly, if this string instance is not shared
+// (i.e. has refcount = 1), to avoid zeroing still-used values
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(secret); end;
 procedure FillZero(var secret: RawByteString); overload;
 
 /// fill all bytes of this UTF-8 string with zeros, i.e. 'toto' -> #0#0#0#0
-// - will write the memory buffer directly, so if this string instance is shared
-// (i.e. has refcount>1), all other variables will contains zeros
+// - will write the memory buffer directly, if this string instance is not shared
+// (i.e. has refcount = 1), to avoid zeroing still-used values
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(secret); end;
 procedure FillZero(var secret: RawUtf8); overload;
@@ -137,6 +137,11 @@ procedure FillZero(var secret: RawUtf8); overload;
 // - SpiUtf8 type has been defined explicitly to store Sensitive Personal
 // Information
 procedure FillZero(var secret: SpiUtf8); overload;
+
+/// fill all bytes of this dynamic array of bytes with zeros
+// - will write the memory buffer directly, if this array instance is not shared
+// (i.e. has refcount = 1), to avoid zeroing still-used values
+procedure FillZero(var secret: TBytes); overload;
 
 /// actual replacement function called by StringReplaceAll() on first match
 // - not to be called as such, but defined globally for proper inlining
@@ -561,26 +566,26 @@ function CsvToInt64DynArray(Csv: PUtf8Char; Sep: AnsiChar = ','): TInt64DynArray
 // - you can set some custom Prefix and Suffix text
 function IntegerDynArrayToCsv(Values: PIntegerArray; ValuesCount: integer;
   const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
-  InlinedValue: boolean = false): RawUtf8; overload;
+  InlinedValue: boolean = false; SepChar: AnsiChar = ','): RawUtf8; overload;
 
 /// return the corresponding CSV text from a dynamic array of 32-bit integer
 // - you can set some custom Prefix and Suffix text
 function IntegerDynArrayToCsv(const Values: TIntegerDynArray;
   const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
-  InlinedValue: boolean = false): RawUtf8; overload;
+  InlinedValue: boolean = false; SepChar: AnsiChar = ','): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// return the corresponding CSV text from a dynamic array of 64-bit integers
 // - you can set some custom Prefix and Suffix text
 function Int64DynArrayToCsv(Values: PInt64Array; ValuesCount: integer;
   const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
-  InlinedValue: boolean = false): RawUtf8; overload;
+  InlinedValue: boolean = false; SepChar: AnsiChar = ','): RawUtf8; overload;
 
 /// return the corresponding CSV text from a dynamic array of 64-bit integers
 // - you can set some custom Prefix and Suffix text
 function Int64DynArrayToCsv(const Values: TInt64DynArray;
   const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
-  InlinedValue: boolean = false): RawUtf8; overload;
+  InlinedValue: boolean = false; SepChar: AnsiChar = ','): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 
@@ -2819,7 +2824,7 @@ end;
 
 procedure FillZero(var secret: RawByteString);
 begin
-  if secret<>'' then
+  if secret <> '' then
     with PStrRec(Pointer(PtrInt(secret) - _STRRECSIZE))^ do
       if refCnt = 1 then // avoid GPF if const
         FillCharFast(pointer(secret)^, length, 0);
@@ -2833,6 +2838,14 @@ end;
 procedure FillZero(var secret: SpiUtf8);
 begin
   FillZero(RawByteString(secret));
+end;
+
+procedure FillZero(var secret: TBytes);
+begin
+  if secret <> nil then
+    with PDynArrayRec(Pointer(PtrInt(secret) - _DARECSIZE))^ do
+      if refCnt = 1 then // avoid GPF if const
+        FillCharFast(pointer(secret)^, length, 0);
 end;
 
 function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUtf8;
@@ -4619,7 +4632,7 @@ begin
 end;
 
 function IntegerDynArrayToCsv(Values: PIntegerArray; ValuesCount: integer;
-  const Prefix, Suffix: RawUtf8; InlinedValue: boolean): RawUtf8;
+  const Prefix, Suffix: RawUtf8; InlinedValue: boolean; SepChar: AnsiChar): RawUtf8;
 type // shortstrings are faster (no heap allocation)
   TInts16 = packed array[word] of string[15];
 var
@@ -4642,7 +4655,7 @@ begin
      // compute whole result length at once
     dec(ValuesCount);
     inc(Len, length(Prefix) + length(Suffix));
-    tmp[15] := ',';
+    tmp[15] := SepChar;
     for i := 0 to ValuesCount do
     begin
       P := StrInt32(@tmp[15], Values[i]);
@@ -4685,7 +4698,7 @@ begin
 end;
 
 function Int64DynArrayToCsv(Values: PInt64Array; ValuesCount: integer;
-  const Prefix, Suffix: RawUtf8; InlinedValue: boolean): RawUtf8;
+  const Prefix, Suffix: RawUtf8; InlinedValue: boolean; SepChar: AnsiChar): RawUtf8;
 type
   TInt = packed record
     Len: byte;
@@ -4746,7 +4759,7 @@ begin
       if ValuesCount = 0 then
         break;
       inc(int);
-      P^ := ',';
+      P^ := SepChar;
       inc(P);
       dec(ValuesCount);
     until false;
@@ -4758,17 +4771,17 @@ begin
 end;
 
 function IntegerDynArrayToCsv(const Values: TIntegerDynArray;
-  const Prefix, Suffix: RawUtf8; InlinedValue: boolean): RawUtf8;
+  const Prefix, Suffix: RawUtf8; InlinedValue: boolean; SepChar: AnsiChar): RawUtf8;
 begin
   result := IntegerDynArrayToCsv(pointer(Values), length(Values),
-    Prefix, Suffix, InlinedValue);
+    Prefix, Suffix, InlinedValue, SepChar);
 end;
 
 function Int64DynArrayToCsv(const Values: TInt64DynArray;
-  const Prefix, Suffix: RawUtf8; InlinedValue: boolean): RawUtf8;
+  const Prefix, Suffix: RawUtf8; InlinedValue: boolean; SepChar: AnsiChar): RawUtf8;
 begin
   result := Int64DynArrayToCsv(pointer(Values), length(Values),
-    Prefix, Suffix, InlinedValue);
+    Prefix, Suffix, InlinedValue, SepChar);
 end;
 
 
