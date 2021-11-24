@@ -2297,7 +2297,7 @@ end;
 
 procedure TWinCryptoApi.Resolve;
 const
-  NAMES: array[0..7] of PAnsiChar = (
+  NAMES: array[0..9] of PAnsiChar = (
     'CryptAcquireContextA',
     'CryptReleaseContext',
     'CryptImportKey',
@@ -2305,7 +2305,9 @@ const
     'CryptDestroyKey',
     'CryptEncrypt',
     'CryptDecrypt',
-    'CryptGenRandom');
+    'CryptGenRandom',
+    'CryptSignMessage',
+    'CryptVerifyMessageSignature');
 var
   P: PPointer;
   i: integer;

@@ -1187,6 +1187,57 @@ type
   HCRYPTKEY = pointer;
   HCRYPTHASH = pointer;
 
+  PCCERT_CONTEXT = pointer;
+  PPCCERT_CONTEXT = ^PCCERT_CONTEXT;
+  PCCRL_CONTEXT = pointer;
+  PPCCRL_CONTEXT = ^PCCRL_CONTEXT;
+  PCRYPT_ATTRIBUTE = pointer;
+  PCERT_INFO = pointer;
+  HCERTSTORE = pointer;
+
+  CRYPTOAPI_BLOB = record
+    cbData: DWORD;
+    pbData: PByte;
+  end;
+  CRYPT_OBJID_BLOB = CRYPTOAPI_BLOB;
+
+  PCRYPT_ALGORITHM_IDENTIFIER = ^CRYPT_ALGORITHM_IDENTIFIER;
+  CRYPT_ALGORITHM_IDENTIFIER = record
+    pszObjId: PAnsiChar;
+    Parameters: CRYPT_OBJID_BLOB;
+  end;
+
+  CRYPT_SIGN_MESSAGE_PARA = record
+    cbSize: DWORD;
+    dwMsgEncodingType: DWORD;
+    pSigningCert: PCCERT_CONTEXT;
+    HashAlgorithm: CRYPT_ALGORITHM_IDENTIFIER;
+    pvHashAuxInfo: Pointer;
+    cMsgCert: DWORD;
+    rgpMsgCert: PPCCERT_CONTEXT;
+    cMsgCrl: DWORD;
+    rgpMsgCrl: PPCCRL_CONTEXT;
+    cAuthAttr: DWORD;
+    rgAuthAttr: PCRYPT_ATTRIBUTE;
+    cUnauthAttr: DWORD;
+    rgUnauthAttr: PCRYPT_ATTRIBUTE;
+    dwFlags: DWORD;
+    dwInnerContentType: DWORD;
+    HashEncryptionAlgorithm: CRYPT_ALGORITHM_IDENTIFIER;
+    pvHashEncryptionAuxInfo: Pointer;
+  end;
+
+  PFN_CRYPT_GET_SIGNER_CERTIFICATE = function(pvGetArg: Pointer;
+    dwCertEncodingType: DWORD; pSignerId: PCERT_INFO;
+    hMsgCertStore: HCERTSTORE): PCCERT_CONTEXT; stdcall;
+  CRYPT_VERIFY_MESSAGE_PARA = record
+    cbSize: DWORD;
+    dwMsgAndCertEncodingType: DWORD;
+    hCryptProv: HCRYPTPROV;
+    pfnGetSignerCertificate: PFN_CRYPT_GET_SIGNER_CERTIFICATE;
+    pvGetArg: Pointer;
+  end;
+
   /// direct access to the Windows CryptoApi
   TWinCryptoApi = object
   private
@@ -1224,6 +1275,14 @@ type
     // - since Windows Vista with Service Pack 1 (SP1), an AES counter-mode
     // based PRNG specified in NIST Special Publication 800-90 is used
     GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: Pointer): BOOL; stdcall;
+    /// sign a message
+    CryptSignMessage: function(var pSignPara: CRYPT_SIGN_MESSAGE_PARA;
+      fDetachedSignature: BOOL; cToBeSigned: DWORD; rgpbToBeSigned: pointer;
+      var rgcbToBeSigned: DWORD; pbSignedBlob: pointer; var pcbSignedBlob: DWORD): BOOL; stdcall;
+    /// verify a signed message
+    CryptVerifyMessageSignature: function(var pVerifyPara: CRYPT_VERIFY_MESSAGE_PARA;
+      dwSignerIndex: DWORD; pbSignedBlob: PByte; cbSignedBlob: DWORD;
+      pbDecoded: PByte; pcbDecoded: LPDWORD; ppSignerCert: PPCCERT_CONTEXT): BOOL; stdcall;
     /// try to load the CryptoApi on this system
     function Available: boolean;
       {$ifdef HASINLINE}inline;{$endif}
