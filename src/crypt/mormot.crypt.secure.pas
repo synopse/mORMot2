@@ -1253,19 +1253,41 @@ type
   TPemKind = (
     pemCertificate,
     pemPrivateKey,
-    pemPublicKey);
+    pemPublicKey,
+    pemRsaPrivateKey,
+    pemRsaPublicKey,
+    pemEcPrivateKey,
+    pemEncryptedPrivateKey,
+    pemCertificateRequest,
+    pemDhParameters,
+    pemEcParameters);
 
 const
   /// the supported trailer markers of a PEM text instance
   PEM_BEGIN: array[TPemKind] of RawUtf8 = (
     '-----BEGIN CERTIFICATE-----'#13#10,
     '-----BEGIN PRIVATE KEY-----'#13#10,
-    '-----BEGIN PUBLIC KEY-----'#13#10);
+    '-----BEGIN PUBLIC KEY-----'#13#10,
+    '-----BEGIN RSA PRIVATE KEY-----'#13#10,
+    '-----BEGIN RSA PUBLIC KEY-----'#13#10,
+    '-----BEGIN EC PRIVATE KEY-----'#13#10,
+    '-----BEGIN ENCRYPTED PRIVATE KEY-----'#13#10,
+    '-----BEGIN CERTIFICATE REQUEST-----'#13#10,
+    '-----BEGIN DH PARAMETERS-----'#13#10,
+    '-----BEGIN EC PARAMETERS-----'#13#10);
+
   /// the supported ending markers of a PEM text instance
   PEM_END: array[TPemKind] of RawUtf8 = (
     '-----END CERTIFICATE-----'#13#10,
     '-----END PRIVATE KEY-----'#13#10,
-    '-----END PUBLIC KEY-----'#13#10);
+    '-----END PUBLIC KEY-----'#13#10,
+    '-----END RSA PRIVATE KEY-----'#13#10,
+    '-----END RSA PUBLIC KEY-----'#13#10,
+    '-----END EC PRIVATE KEY-----'#13#10,
+    '-----END ENCRYPTED PRIVATE KEY-----'#13#10,
+    '-----END CERTIFICATE REQUEST-----'#13#10,
+    '-----END DH PARAMETERS-----'#13#10,
+    '-----END EC PARAMETERS-----'#13#10);
 
 /// convert a binary DER content into a single-instance PEM text
 function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): RawUtf8; overload;
