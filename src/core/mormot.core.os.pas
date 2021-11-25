@@ -2521,6 +2521,79 @@ procedure RedirectCode(Func, RedirectFunc: Pointer);
   { TODO : introduce light cross-platform read/write lockers ? }
 
 type
+  /// how TRWLock.Lock and TRWLock.UnLock high-level wrapper methods are called
+  TRWLockContext = (
+    cReadOnly,
+    cReadWrite,
+    cWrite);
+
+  /// a lightweight multiple Reads / exclusive Write lock
+  // - calls SwitchToThread after some spinning, but don't use any R/W OS API
+  // - locks are expected to be kept a very small amount of time: use TSynLocker
+  // or TRTLCriticalSection if the lock may block too long
+  // - warning: ReadOnlyLock and WriteLock are reentrant, but ReadWriteLock would
+  // deadlock if called in a row: use TSynLocker or TRTLCriticalSection if the
+  // nested code may call again ReadWriteLock/WriteLock e.g. from sub functions
+  TRWLock = object
+  private
+    Flags: PtrUInt; // bit 0 = WriteLock, 1 = ReadWriteLock, >1 = ReadOnlyLock
+    LastReadWriteLockThread, LastWriteLockThread: TThreadID; // to be reentrant
+    LastReadWriteLockCount, LastWriteLockCount: cardinal;
+  public
+    /// initialize the R/W lock
+    // - not needed if TRWLock is part of a class - i.e. if was filled with 0
+    procedure Init;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// wait for the lock to be accessible for reading
+    // - but not upgradable to writing: nested ReadWriteLock/WriteLock would lock
+    // - several readers could acquire the lock simultaneously
+    procedure ReadOnlyLock;
+    /// release a previous ReadOnlyLock call
+    procedure ReadOnlyUnLock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// wait for the lock to be accessible for reading - later upgradable to write
+    // - will mark the lock with the current thread so that a nested WriteLock
+    // would be possible, but won't block concurrent ReadOnlyLock
+    // - several readers could acquire ReadOnlyLock simultaneously, but only a
+    // single thread could acquire a ReadWriteLock
+    // - reentrant method, and nested WriteLock is allowed
+    procedure ReadWriteLock;
+    /// release a previous ReadWriteLock call
+    procedure ReadWriteUnLock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// wait for the lock to be accessible for writing
+    // - the write lock is exclusive
+    // - calling WriteLock within a ReadWriteLock is allowed and won't block
+    // - but calling WriteLock within a ReadOnlyLock would deaadlock
+    // - this method is rentrant from a single thread
+    procedure WriteLock;
+    /// release a previous WriteLock call
+    procedure WriteUnlock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// a high-level wrapper over ReadOnlyLock/ReadWriteLock/WriteLock methods
+    procedure Lock(context: TRWLockContext);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// a high-level wrapper over ReadOnlyUnLock/ReadWriteUnLock/WriteUnLock methods
+    procedure UnLock(context: TRWLockContext);
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
+const
+  RW_FORCE: array[{write}boolean] of TRWLockContext = (
+    cReadOnly,
+    cWrite);
+
+type
+  /// how TSynLocker handles its thread processing
+  // - by default, uSharedLock will use the main TRTLCriticalSection
+  // - you may set uRWLock and call overloaded RWLock/RWUnLock() to
+  // use a lighter TRWLock - but be aware that only cReadOnly is reentrant
+  // - uNoLock will disable the whole locking mechanism
+  TSynLockerUse = (
+    uSharedLock,
+    uRWLock,
+    uNoLock);
+
   /// allow to add cross-platform locking methods to any class instance
   // - typical use is to define a Safe: TSynLocker property, call Safe.Init
   // and Safe.Done in constructor/destructor methods, and use Safe.Lock/UnLock
@@ -2802,6 +2875,14 @@ function SleepDelay(elapsed: PtrInt): PtrInt;
 /// compute optimal sleep time as SleepStep, in 0/1/5/50/120-250 ms steps
 // - is agressively designed burning some CPU in favor of responsiveness
 function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): PtrInt;
+
+/// similar to Windows SwitchToThread API call, to be truly cross-platform
+// - call fpnanosleep(10) on POSIX systems
+procedure SwitchToThread;
+  {$ifdef OSWINDOWS} stdcall; {$endif}
+
+/// try LockedCAS() in a loop, calling SwitchToThread after some spinning
+procedure SpinCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 
 /// low-level naming of a thread
 // - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
@@ -5086,6 +5167,44 @@ begin
   result := terminated = terminatedvalue;
 end;
 
+{$ifdef CPUINTEL}
+procedure DoPause; {$ifdef FPC} assembler; nostackframe; {$endif}
+asm
+      pause
+end;
+{$endif CPUINTEL}
+
+const
+  {$ifdef CPUINTEL}
+  SPIN_COUNT = 1000;
+  {$else}
+  SPIN_COUNT = 100; // since DoPause does nothing, switch to thread sooner
+  {$endif CPUINTEL}
+
+function DoSpin(spin: PtrUInt): PtrUInt;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  {$ifdef CPUINTEL}
+  DoPause;
+  {$endif CPUINTEL}
+  dec(spin);
+  if spin = 0 then
+  begin
+    SwitchToThread;
+    spin := SPIN_COUNT;
+  end;
+  result := spin;
+end;
+
+procedure SpinCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
+var
+  spin: PtrUInt;
+begin
+  spin := SPIN_COUNT;
+  while not LockedCAS(Target, NewValue, Comperand) do
+    spin := DoSpin(spin);
+end;
+
 procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
   const Args: array of const);
 begin
@@ -5113,11 +5232,129 @@ begin
     [PtrUInt(GetCurrentThreadId), CurrentThreadName]));
 end;
 
-function NewSynLocker: PSynLocker;
+
+{ TRWLock }
+
+procedure TRWLock.Init;
 begin
-  result := AllocMem(SizeOf(TSynLocker));
-  InitializeCriticalSection(result^.fSection);
-  result^.fInitialized := true;
+  Flags := 0;
+end;
+
+procedure TRWLock.ReadOnlyLock;
+var
+  spin, f: PtrUInt;
+begin
+  // if not writing, atomically increase the RD counter in the upper flag bits
+  spin := SPIN_COUNT;
+  repeat
+    f := Flags and not 1; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
+    if LockedCAS(Flags, f + 4, f) then
+      break;
+    spin := DoSpin(spin);
+  until false;
+end;
+
+procedure TRWLock.ReadOnlyUnLock;
+begin
+  LockedDec(Flags, 4);
+end;
+
+procedure TRWLock.ReadWriteLock;
+var
+  spin, f: PtrUInt;
+  tid: TThreadID;
+begin
+  tid := GetCurrentThreadId;
+  if (Flags and 2 = 2) and
+     (LastReadWriteLockThread = tid) then
+  begin
+    inc(LastReadWriteLockCount); // allow ReadWriteLock to be reentrant
+    exit;
+  end;
+  // if not writing, atomically acquire the upgradable RD flag bit
+  spin := SPIN_COUNT;
+  repeat
+    f := Flags and not 3; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
+    if LockedCAS(Flags, f + 2, f) then
+      break;
+    spin := DoSpin(spin);
+  until false;
+  LastReadWriteLockCount := 1;
+  LastReadWriteLockThread := tid;
+end;
+
+procedure TRWLock.ReadWriteUnLock;
+begin
+  dec(LastReadWriteLockCount);
+  if LastReadWriteLockCount <> 0 then
+    exit;
+  LastReadWriteLockThread := 0;
+  LockedDec(Flags, 2);
+end;
+
+procedure TRWLock.WriteLock;
+var
+  spin, f: PtrUInt;
+  tid: TThreadID;
+begin
+  tid := GetCurrentThreadId;
+  if (Flags and 1 = 1) and
+     (LastWriteLockThread = tid) then
+  begin
+    inc(LastWriteLockCount); // allow WriteLock to be reentrant
+    exit;
+  end;
+  spin := SPIN_COUNT;
+  repeat
+    // acquire the WR flag bit
+    repeat
+      f := Flags and not 1; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
+      if LockedCAS(Flags, f + 1, f) then
+        break;
+      spin := DoSpin(spin);
+    until false;
+    if (Flags and 2 = 2) and
+       (LastReadWriteLockThread <> tid) then
+      // there is a pending ReadWriteLock but not on this thread
+      LockedDec(Flags, 1) // try again
+    else
+      // we can acquire the WR lock
+      break;
+  until false;
+  LastWriteLockCount := 1;
+  LastWriteLockThread := tid;
+  // wait for all readers to have finished their job
+  while Flags > 3 do
+    spin := DoSpin(spin);
+end;
+
+procedure TRWLock.WriteUnlock;
+begin
+  dec(LastWriteLockCount);
+  if LastWriteLockCount <> 0 then
+    exit;
+  LastWriteLockThread := 0;
+  LockedDec(Flags, 1);
+end;
+
+procedure TRWLock.Lock(context: TRWLockContext);
+begin
+  if context = cReadOnly then
+    ReadOnlyLock
+  else if context = cReadWrite then
+    ReadWriteLock
+  else
+    WriteLock;
+end;
+
+procedure TRWLock.UnLock(context: TRWLockContext);
+begin
+  if context = cReadOnly then
+    ReadOnlyUnLock
+  else if context = cReadWrite then
+    ReadWriteUnLock
+  else
+    WriteUnLock;
 end;
 
 

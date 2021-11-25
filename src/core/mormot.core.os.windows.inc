@@ -147,6 +147,7 @@ procedure AllocConsole;               external kernel32;
 function  CloseHandle;                external kernel32;
 procedure FileClose;                  external kernel32 name 'CloseHandle';
 function  GetCurrentThreadId;         external kernel32;
+procedure SwitchToThread;             external kernel32;
 function  GetCurrentProcessId;        external kernel32;
 function  WaitForSingleObject;        external kernel32;
 function  GetEnvironmentStringsW;     external kernel32;
@@ -459,16 +460,12 @@ begin
   result := p^.V;
 end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap on XP :(
 
-{$ifdef FPC} // oddly not defined in fpc\rtl\win
-function SwitchToThread: BOOL;
-  stdcall; external kernel32 name 'SwitchToThread';
-{$endif FPC}
-
 procedure SleepHiRes(ms: cardinal);
 begin
-  if (ms <> 0) or
-     not SwitchToThread then
-    Windows.Sleep(ms); // follow the HW timer: typically up to 16ms on Windows
+  if ms <> 0 then
+    Windows.Sleep(ms) // follow the HW timer: typically up to 16ms on Windows
+  else
+     SwitchToThread;
 end;
 
 {$ifdef FPC}

@@ -1076,6 +1076,17 @@ begin
   // no retry loop on ESysEINTR (as with regular RTL's Sleep)
 end;
 
+procedure SwitchToThread;
+var
+  timeout: Ttimespec;
+begin
+  // nanosleep() seems better than FPC RTL ThreadSwitch = sched_yield
+  timeout.tv_sec := 0;
+  timeout.tv_nsec := 10; // empirically identified on a recent Linux Kernel
+  // note: nanosleep() adds a few dozen of microsecs for context switching
+  fpnanosleep(@timeout, nil);
+end;
+
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 begin
   InitCriticalSection(cs);
