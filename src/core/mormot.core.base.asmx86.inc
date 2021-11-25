@@ -2127,7 +2127,27 @@ function RefCntDecFree(var refcnt: TRefCnt): boolean;
 asm
         lock dec dword ptr [refcnt]  // TRefCnt=longint on Delphi and FPC 32-bit
         setbe   al
-        end; // don't check for ismultithread global since lock is cheaper on new CPUs
+end; // don't check for ismultithread global since lock is cheaper on new CPUs
+
+function LockedCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        xchg    eax, ecx
+   lock cmpxchg dword ptr [ecx], edx
+        setz    al
+end;
+
+procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+   lock add     dword ptr [Target], Increment
+end;
+
+procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+   lock sub     dword ptr [Target], Decrement
+end;
 
 function IsXmmYmmOSEnabled: boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}

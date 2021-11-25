@@ -2351,6 +2351,16 @@ procedure LockedInc64(int64: PInt64);
 // - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
 function RefCntDecFree(var refcnt: TRefCnt): boolean;
 
+/// Intel/AMD asm version of FPC InterlockedCompareExchange(pointer)
+// - true if Target was equal to Comparand, and Target set to NewValue
+function LockedCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
+
+/// Intel/AMD asm version of FPC InterlockedExchangeAdd(pointer) with no result
+procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt);
+
+/// Intel/AMD asm version of FPC InterlockedExchangeAdd(pointer) with no result
+procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
+
 // defined here for mormot.test.base only
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
 
@@ -2372,6 +2382,12 @@ procedure LockedInc64(int64: PInt64); inline;
 /// redirect to FPC InterlockedDecrement() on non Intel CPU
 // - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
 function RefCntDecFree(var refcnt: TRefCnt): boolean; inline;
+
+/// redirect to FPC InterlockedCompareExchange(pointer) on non Intel CPU
+function LockedCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean; inline;
+
+/// redirect to FPC InterlockedExchangeAdd(pointer) on non Intel CPU
+procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt); inline;
 
 {$endif CPUINTEL}
 
@@ -8578,6 +8594,22 @@ begin
     if InterlockedIncrement(Lo) = 0 then
       InterlockedIncrement(Hi); // collission is highly unprobable
   {$endif FPC_64}
+end;
+
+function LockedCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
+begin
+  result := InterlockedCompareExchange(
+    pointer(Target), pointer(NewValue), pointer(Comperand)) = pointer(Comperand);
+end;
+
+procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt);
+begin
+  InterlockedExchangeAdd(pointer(Target), pointer(Increment));
+end;
+
+procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
+begin
+  InterlockedExchangeAdd(pointer(Target), pointer(-PtrInt(Decrement)));
 end;
 
 procedure bswap64array(a,b: PQWordArray; n: PtrInt);

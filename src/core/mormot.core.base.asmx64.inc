@@ -2114,6 +2114,23 @@ function RefCntDecFree(var refcnt: TRefCnt): boolean;
         setbe   al
 end; // don't check for ismultithread global since lock is cheaper on new CPUs
 
+function LockedCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rax, Comperand
+   lock cmpxchg qword ptr [Target], NewValue
+        setz    al
+end;
+
+procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+   lock add     qword ptr [Target], Increment
+end;
+
+procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+   lock sub     qword ptr [Target], Decrement
+end;
+
 {$ifndef FPC}
 
 // those functions are intrinsics with FPC :)
