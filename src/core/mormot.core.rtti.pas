@@ -1646,6 +1646,11 @@ var
   // - RTTI_MANAGEDCOPY[...]=nil for unmanaged types (e.g. rkOrdinalTypes)
   RTTI_MANAGEDCOPY: TRttiCopiers;
 
+/// fill all sensitive fields of this class or record with zeros
+// - RawByteString/TBytes with refcount=1 will be zeroed before freed
+procedure FillZero(Info: PRttiInfo; var Value); overload;
+
+
 
 { ************** RTTI Value Types used for JSON Parsing }
 
@@ -5845,6 +5850,83 @@ raw:MoveFast(Source^, Dest^, result)
     else
       goto raw;
   end;
+end;
+
+
+{ RTTI-based FillZero() }
+
+procedure FillZero(Info: PRttiInfo; var Value);
+var
+  nfo: TRttiCustom;
+  fin: TRttiFinalizer;
+  da: PDynArrayRec;
+  i, siz: PtrInt;
+  v: PAnsiChar;
+  p: PRttiCustomProp;
+begin
+  nfo := nil;
+  case Info^.Kind of
+    {$ifdef FPC}
+    rkObject,
+    {$endif FPC}
+    rkRecord:
+      nfo := Rtti.RegisterType(Info);
+    {$ifdef FPC}
+    rkLStringOld,
+    {$endif FPC}
+    {$ifdef HASVARUSTRING}
+    rkUString,
+    {$endif HASVARUSTRING}
+    rkLString:
+      FillZero(RawByteString(Value));
+    rkVariant:
+      if TVarData(Value).VType = varString then
+        FillZero(RawByteString(TVarData(Value).VAny));
+    rkClass:
+      if TObject(Value) <> nil then
+        nfo := Rtti.RegisterClass(TObject(Value));
+    rkDynArray:
+      begin
+        da := PPointer(Value)^;
+        if da <> nil then
+        begin
+          dec(da);
+          if (da^.refCnt >= 0) and
+             RefCntDecFree(da^.refCnt) then
+          begin
+            Info := Info^.DynArrayItemType(siz);
+            v := PPointer(Value)^;
+            if Info <> nil then
+              for i := 1 to da^.length do
+              begin
+                FillZero(Info, v^); // process nested items
+                inc(v, siz);
+              end
+            else
+              FillCharFast(v^, da^.length * siz, 0); // e.g. for TBytes
+            Freemem(da);
+          end;
+          PPointer(Value)^ := nil;
+        end;
+        exit;
+      end;
+  end;
+  if nfo <> nil then
+  begin
+    p := pointer(nfo.Props.List); // for both records and classes
+    v := PPointer(Value)^;
+    for i := 0 to nfo.Props.Count - 1 do
+    begin
+      if (p^.OffsetSet >= 0) and
+         (p^.Value <> nil) and
+         (p^.Value.Info <> nil) then
+        FillZero(p^.Value.Info, v[p^.OffsetSet]); // process nested fields
+      inc(p);
+    end;
+  end;
+  fin := RTTI_FINALIZE[Info^.Kind];
+  if Assigned(fin) then
+    fin(@Value, Info);
 end;
 
 
