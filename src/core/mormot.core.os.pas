@@ -1708,7 +1708,7 @@ function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 // - if the supplied mutex has been initialized, do nothing
 // - if the supplied mutex is void (i.e. all filled with 0), initialize it
 procedure InitializeCriticalSectionIfNeededAndEnter(var cs: TRTLCriticalSection);
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINEWINAPI}inline;{$endif}
 
 /// on need finalization of a mutex
 // - if the supplied mutex has been initialized, delete it
@@ -2606,11 +2606,13 @@ type
   // - for object-level locking, see TSynPersistentLock which owns one such
   // instance, or call low-level fSafe := NewSynLocker in your constructor,
   // then fSafe^.DoneAndFreemem in your destructor
+  // - RWUse property could replace the TRTLCriticalSection by a lighter TRWLock
   TSynLocker = object
   protected
     fSection: TRTLCriticalSection;
-    fSectionPadding: PtrInt; // paranoid to avoid FUTEX_WAKE_PRIVATE=EAGAIN
+    fRW: TRWLock;
     fLocked, fInitialized: boolean;
+    fRWUse: TSynLockerUse;
     function GetVariant(Index: integer): Variant;
     procedure SetVariant(Index: integer; const Value: Variant);
     function GetInt64(Index: integer): Int64;
@@ -2650,10 +2652,18 @@ type
     /// finalize the mutex, and call FreeMem() on the pointer of this instance
     // - should have been initiazed with a NewSynLocker call
     procedure DoneAndFreeMem;
+    /// low-level acquisition of the lock, depending on RWUse property
+    // - warning: if RWUse=uRWLock, this method is reentrant only for cReadOnly
+    procedure RWLock(context: TRWLockContext);
+      {$ifdef HASINLINEWINAPI} inline; {$endif}
+    /// low-level release of the lock, depending on RWUse property
+    procedure RWUnLock(context: TRWLockContext);
+      {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// lock the instance for exclusive access
-    // - this method is re-entrant from the same thread (you can nest Lock/UnLock
-    // calls in the same thread), but would block any other Lock attempt in
-    // another thread
+    // - redirects to RWLock(cWrite)
+    // - with default RWUse=uSharedLock, this method is re-entrant from the same
+    // thread i.e. you can nest Lock/UnLock calls in the same thread
+    // - warning: with RWUse=uRWLock, this method would deadlock on nested calls
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! Safe.Lock;
     // ! try
@@ -2661,9 +2671,10 @@ type
     // ! finally
     // !   Safe.Unlock;
     // ! end;
-    procedure Lock;
+    procedure Lock; overload;
       {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// will try to acquire the mutex
+    // - do nothing and return false if RWUse is not the default uSharedLock
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! if Safe.TryLock then
     // !   try
@@ -2674,6 +2685,7 @@ type
     function TryLock: boolean;
       {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// will try to acquire the mutex for a given time
+    // - just wait and return false if RWUse is not the default uSharedLock
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! if Safe.TryLockMS(100) then
     // !   try
@@ -2683,9 +2695,10 @@ type
     // !   end;
     function TryLockMS(retryms: integer): boolean;
     /// release the instance for exclusive access
+    // - redirects to RWUnLock(cWrite)
     // - each Lock/TryLock should have its exact UnLock opposite, so a
     // try..finally block is mandatory for safe code
-    procedure UnLock;
+    procedure UnLock; overload;
       {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// will enter the mutex until the IUnknown reference is released
     // - could be used as such under Delphi:
@@ -2712,6 +2725,7 @@ type
     // !end;
     function ProtectMethod: IUnknown;
     /// returns true if the mutex is currently locked by another thread
+    // - only accurate with default RWUse = uSharedLock
     property IsLocked: boolean
       read fLocked;
     /// returns true if the Init method has been called for this mutex
@@ -2724,6 +2738,7 @@ type
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // LockedBool, LockedInt64, LockedPointer and LockedUtf8 array properties
     // - returns null if the Index is out of range
+    // - allow concurrent thread reading if RWUse was set to uRWLock
     property Locked[Index: integer]: Variant
       read GetVariant write SetVariant;
     /// safe locked access to a Int64 value
@@ -2731,6 +2746,7 @@ type
     // Locked and LockedUtf8 array properties
     // - Int64s will be stored internally as a varInt64 variant
     // - returns nil if the Index is out of range, or does not store a Int64
+    // - allow concurrent thread reading if RWUse was set to uRWLock
     property LockedInt64[Index: integer]: Int64
       read GetInt64 write SetInt64;
     /// safe locked access to a boolean value
@@ -2738,6 +2754,7 @@ type
     // Locked, LockedInt64, LockedPointer and LockedUtf8 array properties
     // - value will be stored internally as a varboolean variant
     // - returns nil if the Index is out of range, or does not store a boolean
+    // - allow concurrent thread reading if RWUse was set to uRWLock
     property LockedBool[Index: integer]: boolean
       read GetBool write SetBool;
     /// safe locked access to a pointer/TObject value
@@ -2745,6 +2762,7 @@ type
     // Locked, LockedBool, LockedInt64 and LockedUtf8 array properties
     // - pointers will be stored internally as a varUnknown variant
     // - returns nil if the Index is out of range, or does not store a pointer
+    // - allow concurrent thread reading if RWUse was set to uRWLock
     property LockedPointer[Index: integer]: Pointer
       read GetPointer write SetPointer;
     /// safe locked access to an UTF-8 string value
@@ -2752,6 +2770,7 @@ type
     // Locked and LockedPointer array properties
     // - UTF-8 string will be stored internally as a varString variant
     // - returns '' if the Index is out of range, or does not store a string
+    // - allow concurrent thread reading if RWUse was set to uRWLock
     property LockedUtf8[Index: integer]: RawUtf8
       read GetUtf8 write SetUtf8;
     /// safe locked in-place increment to an Int64 value
@@ -2782,6 +2801,9 @@ type
     // with a Lock; try ... finally UnLock block
     property UnlockedInt64[Index: integer]: Int64
       read GetUnlockedInt64 write SetUnlockedInt64;
+    /// how RWLock/RWUnLock would be processed
+    property RWUse: TSynLockerUse
+      read fRWUse write fRWUse;
   end;
 
   /// a pointer to a TSynLocker mutex instance
@@ -5374,12 +5396,19 @@ end;
 
 { TSynLocker }
 
+function NewSynLocker: PSynLocker;
+begin
+  result := AllocMem(SizeOf(TSynLocker));
+  InitializeCriticalSection(result^.fSection);
+  result^.fInitialized := true;
+end;
+
 procedure TSynLocker.Init;
 begin
   InitializeCriticalSection(fSection);
-  fSectionPadding := 0;
   fLocked := false;
   fInitialized := true;
+  fRW.Flags := 0;
   PaddingUsedCount := 0;
 end;
 
@@ -5400,21 +5429,62 @@ begin
   FreeMem(@self);
 end;
 
+procedure TSynLocker.RWLock(context: TRWLockContext);
+begin
+  case fRWUse of
+    uSharedLock:
+      begin
+        mormot.core.os.EnterCriticalSection(fSection);
+        fLocked := true;
+      end;
+    uRWLock:
+      fRW.Lock(context);
+  end; // uNoLock will just do nothing
+end;
+
+procedure TSynLocker.RWUnLock(context: TRWLockContext);
+begin
+  case fRWUse of
+    uSharedLock:
+      begin
+        fLocked := false;
+        mormot.core.os.LeaveCriticalSection(fSection);
+      end;
+    uRWLock:
+      fRW.UnLock(context);
+  end; // uNoLock will just do nothing
+end;
+
 procedure TSynLocker.Lock;
 begin
-  mormot.core.os.EnterCriticalSection(fSection);
-  fLocked := true;
+  case fRWUse of
+    uSharedLock:
+      begin
+        mormot.core.os.EnterCriticalSection(fSection);
+        fLocked := true;
+      end;
+    uRWLock:
+      fRW.WriteLock;
+  end; // uNoLock will just do nothing
 end;
 
 procedure TSynLocker.UnLock;
 begin
-  fLocked := false;
-  mormot.core.os.LeaveCriticalSection(fSection);
+  case fRWUse of
+    uSharedLock:
+      begin
+        fLocked := false;
+        mormot.core.os.LeaveCriticalSection(fSection);
+      end;
+    uRWLock:
+      fRW.WriteUnLock;
+  end; // uNoLock will just do nothing
 end;
 
 function TSynLocker.TryLock: boolean;
 begin
   if fLocked or
+     (fRWUse <> uSharedLock) or
      (mormot.core.os.TryEnterCriticalSection(fSection) = 0) then
     result := false
   else
@@ -5444,13 +5514,17 @@ end;
 function TSynLocker.GetVariant(Index: integer): Variant;
 begin
   if cardinal(Index) < cardinal(PaddingUsedCount) then
+  {$ifdef HASFASTTRYFINALLY}
   try
-    mormot.core.os.EnterCriticalSection(fSection);
-    fLocked := true;
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    RWLock(cReadOnly);
     result := variant(Padding[Index]);
+  {$ifdef HASFASTTRYFINALLY}
   finally
-    fLocked := false;
-    mormot.core.os.LeaveCriticalSection(fSection);
+  {$endif HASFASTTRYFINALLY}
+    RWUnLock(cReadOnly);
   end
   else
     VarClear(result);
@@ -5460,28 +5534,30 @@ procedure TSynLocker.SetVariant(Index: integer; const Value: Variant);
 begin
   if cardinal(Index) <= high(Padding) then
   try
-    mormot.core.os.EnterCriticalSection(fSection);
-    fLocked := true;
+    RWLock(cWrite);
     if Index >= PaddingUsedCount then
       PaddingUsedCount := Index + 1;
     variant(Padding[Index]) := Value;
   finally
-    fLocked := false;
-    mormot.core.os.LeaveCriticalSection(fSection);
+    RWUnLock(cWrite);
   end;
 end;
 
 function TSynLocker.GetInt64(Index: integer): Int64;
 begin
   if cardinal(Index) < cardinal(PaddingUsedCount) then
+  {$ifdef HASFASTTRYFINALLY}
   try
-    mormot.core.os.EnterCriticalSection(fSection);
-    fLocked := true;
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    RWLock(cReadOnly);
     if not VariantToInt64(variant(Padding[Index]), result) then
       result := 0;
+  {$ifdef HASFASTTRYFINALLY}
   finally
-    fLocked := false;
-    mormot.core.os.LeaveCriticalSection(fSection);
+  {$endif HASFASTTRYFINALLY}
+    RWUnLock(cReadOnly);
   end
   else
     result := 0;
@@ -5495,14 +5571,18 @@ end;
 function TSynLocker.GetBool(Index: integer): boolean;
 begin
   if cardinal(Index) < cardinal(PaddingUsedCount) then
+  {$ifdef HASFASTTRYFINALLY}
   try
-    mormot.core.os.EnterCriticalSection(fSection);
-    fLocked := true;
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    RWLock(cReadOnly);
     if not VariantToBoolean(variant(Padding[Index]), result) then
       result := false;
+  {$ifdef HASFASTTRYFINALLY}
   finally
-    fLocked := false;
-    mormot.core.os.LeaveCriticalSection(fSection);
+  {$endif HASFASTTRYFINALLY}
+    RWUnLock(cReadOnly);
   end
   else
     result := false;
@@ -5513,7 +5593,7 @@ begin
   SetVariant(Index, Value);
 end;
 
-function TSynLocker.GetUnLockedInt64(Index: integer): Int64;
+function TSynLocker.GetUnlockedInt64(Index: integer): Int64;
 begin
   if (cardinal(Index) >= cardinal(PaddingUsedCount)) or
      not VariantToInt64(variant(Padding[Index]), result) then
@@ -5533,17 +5613,21 @@ end;
 function TSynLocker.GetPointer(Index: integer): Pointer;
 begin
   if cardinal(Index) < cardinal(PaddingUsedCount) then
+  {$ifdef HASFASTTRYFINALLY}
   try
-    mormot.core.os.EnterCriticalSection(fSection);
-    fLocked := true;
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    RWLock(cReadOnly);
     with Padding[Index] do
       if VType = varUnknown then
         result := VUnknown
       else
         result := nil;
+  {$ifdef HASFASTTRYFINALLY}
   finally
-    fLocked := false;
-    mormot.core.os.LeaveCriticalSection(fSection);
+  {$endif HASFASTTRYFINALLY}
+    RWUnLock(cReadOnly);
   end
   else
     result := nil;
@@ -5553,8 +5637,7 @@ procedure TSynLocker.SetPointer(Index: integer; const Value: Pointer);
 begin
   if cardinal(Index) <= high(Padding) then
   try
-    mormot.core.os.EnterCriticalSection(fSection);
-    fLocked := true;
+    RWLock(cWrite);
     if Index >= PaddingUsedCount then
       PaddingUsedCount := Index + 1;
     with Padding[Index] do
@@ -5563,21 +5646,24 @@ begin
       VUnknown := Value;
     end;
   finally
-    fLocked := false;
-    mormot.core.os.LeaveCriticalSection(fSection);
+    RWUnLock(cWrite);
   end;
 end;
 
 function TSynLocker.GetUtf8(Index: integer): RawUtf8;
 begin
   if cardinal(Index) < cardinal(PaddingUsedCount) then
+  {$ifdef HASFASTTRYFINALLY}
   try
-    mormot.core.os.EnterCriticalSection(fSection);
-    fLocked := true;
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    RWLock(cReadOnly);
     VariantStringToUtf8(variant(Padding[Index]), result);
+  {$ifdef HASFASTTRYFINALLY}
   finally
-    fLocked := false;
-    mormot.core.os.LeaveCriticalSection(fSection);
+  {$endif HASFASTTRYFINALLY}
+    RWUnLock(cReadOnly);
   end
   else
     result := '';
@@ -5587,14 +5673,12 @@ procedure TSynLocker.SetUtf8(Index: integer; const Value: RawUtf8);
 begin
   if cardinal(Index) <= high(Padding) then
   try
-    mormot.core.os.EnterCriticalSection(fSection);
-    fLocked := true;
+    RWLock(cWrite);
     if Index >= PaddingUsedCount then
       PaddingUsedCount := Index + 1;
     RawUtf8ToVariant(Value, variant(Padding[Index]));
   finally
-    fLocked := false;
-    mormot.core.os.LeaveCriticalSection(fSection);
+    RWUnLock(cWrite);
   end;
 end;
 
@@ -5602,8 +5686,7 @@ function TSynLocker.LockedInt64Increment(Index: integer; const Increment: Int64)
 begin
   if cardinal(Index) <= high(Padding) then
   try
-    mormot.core.os.EnterCriticalSection(fSection);
-    fLocked := true;
+    RWLock(cWrite);
     result := 0;
     if Index < PaddingUsedCount then
       VariantToInt64(variant(Padding[Index]), result)
@@ -5611,44 +5694,36 @@ begin
       PaddingUsedCount := Index + 1;
     variant(Padding[Index]) := Int64(result + Increment);
   finally
-    fLocked := false;
-    mormot.core.os.LeaveCriticalSection(fSection);
+    RWUnLock(cWrite);
   end
   else
     result := 0;
 end;
 
-function TSynLocker.LockedExchange(Index: integer; const Value: Variant): Variant;
+function TSynLocker.LockedExchange(Index: integer; const Value: variant): variant;
 begin
+  VarClear(result);
   if cardinal(Index) <= high(Padding) then
   try
-    mormot.core.os.EnterCriticalSection(fSection);
-    fLocked := true;
+    RWLock(cWrite);
     with Padding[Index] do
     begin
       if Index < PaddingUsedCount then
         result := PVariant(@VType)^
       else
-      begin
         PaddingUsedCount := Index + 1;
-        VarClear(result);
-      end;
       PVariant(@VType)^ := Value;
     end;
   finally
-    fLocked := false;
-    mormot.core.os.LeaveCriticalSection(fSection);
-  end
-  else
-    VarClear(result);
+    RWUnLock(cWrite);
+  end;
 end;
 
 function TSynLocker.LockedPointerExchange(Index: integer; Value: pointer): pointer;
 begin
   if cardinal(Index) <= high(Padding) then
   try
-    mormot.core.os.EnterCriticalSection(fSection);
-    fLocked := true;
+    RWLock(cWrite);
     with Padding[Index] do
     begin
       if Index < PaddingUsedCount then
@@ -5668,12 +5743,12 @@ begin
       VUnknown := Value;
     end;
   finally
-    fLocked := false;
-    mormot.core.os.LeaveCriticalSection(fSection);
+    RWUnLock(cWrite);
   end
   else
     result := nil;
 end;
+
 
 
 { TSynLocked }
