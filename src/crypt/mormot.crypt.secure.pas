@@ -1260,7 +1260,9 @@ type
     pemEncryptedPrivateKey,
     pemCertificateRequest,
     pemDhParameters,
-    pemEcParameters);
+    pemEcParameters,
+    pemSsh2EncryptedPrivateKey,
+    pemSsh2PublicKey);
 
 const
   /// the supported trailer markers of a PEM text instance
@@ -1274,7 +1276,9 @@ const
     '-----BEGIN ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----BEGIN CERTIFICATE REQUEST-----'#13#10,
     '-----BEGIN DH PARAMETERS-----'#13#10,
-    '-----BEGIN EC PARAMETERS-----'#13#10);
+    '-----BEGIN EC PARAMETERS-----'#13#10,
+    '-----BEGIN SSH2 ENCRYPTED PRIVATE KEY-----'#13#10,
+    '-----BEGIN SSH2 PUBLIC KEY-----'#13#10);
 
   /// the supported ending markers of a PEM text instance
   PEM_END: array[TPemKind] of RawUtf8 = (
@@ -1287,7 +1291,9 @@ const
     '-----END ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----END CERTIFICATE REQUEST-----'#13#10,
     '-----END DH PARAMETERS-----'#13#10,
-    '-----END EC PARAMETERS-----'#13#10);
+    '-----END EC PARAMETERS-----'#13#10,
+    '-----END SSH2 ENCRYPTED PRIVATE KEY-----'#13#10,
+    '-----END SSH2 PUBLIC KEY-----'#13#10);
 
 /// convert a binary DER content into a single-instance PEM text
 function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): RawUtf8; overload;
