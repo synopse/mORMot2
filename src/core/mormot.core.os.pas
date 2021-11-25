@@ -1275,12 +1275,12 @@ type
     // - since Windows Vista with Service Pack 1 (SP1), an AES counter-mode
     // based PRNG specified in NIST Special Publication 800-90 is used
     GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: Pointer): BOOL; stdcall;
-    /// sign a message
-    CryptSignMessage: function(var pSignPara: CRYPT_SIGN_MESSAGE_PARA;
+    /// sign a message (not resolved yet - in crypt32.dll)
+    SignMessage: function(var pSignPara: CRYPT_SIGN_MESSAGE_PARA;
       fDetachedSignature: BOOL; cToBeSigned: DWORD; rgpbToBeSigned: pointer;
       var rgcbToBeSigned: DWORD; pbSignedBlob: pointer; var pcbSignedBlob: DWORD): BOOL; stdcall;
-    /// verify a signed message
-    CryptVerifyMessageSignature: function(var pVerifyPara: CRYPT_VERIFY_MESSAGE_PARA;
+    /// verify a signed message (not resolved yet - in crypt32.dll)
+    VerifyMessageSignature: function(var pVerifyPara: CRYPT_VERIFY_MESSAGE_PARA;
       dwSignerIndex: DWORD; pbSignedBlob: PByte; cbSignedBlob: DWORD;
       pbDecoded: PByte; pcbDecoded: LPDWORD; ppSignerCert: PPCCERT_CONTEXT): BOOL; stdcall;
     /// try to load the CryptoApi on this system
