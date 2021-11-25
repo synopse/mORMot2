@@ -6173,7 +6173,7 @@ var
     end;
     dic := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
       TypeInfo(TIntegerDynArray), false, 0, nil, Hasher);
-    dic.Options := [doSingleThreaded];
+    dic.ThreadUse := uNoLock; // faster without locking
     if SetCapacity then
       dic.Capacity := Length(a);
     timer.Start;
