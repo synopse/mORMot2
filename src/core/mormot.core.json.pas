@@ -1098,12 +1098,6 @@ type
     iaAdd,
     iaAddForced);
 
-  /// tune TSynDictionary process depending on your use case
-  // - doSingleThreaded will bypass Safe.Lock/UnLock call for better performance
-  // if you are sure that this dictionary will be accessed from a single thread
-  TSynDictionaryOptions = set of (
-    doSingleThreaded);
-
   /// event called by TSynDictionary.ForEach methods to iterate over stored items
   // - if the implementation method returns TRUE, will continue the loop
   // - if the implementation method returns FALSE, will stop values browsing
@@ -1131,7 +1125,6 @@ type
     fTimeOut: TCardinalDynArray;
     fTimeOuts: TDynArray;
     fCompressAlgo: TAlgoCompress;
-    fOptions: TSynDictionaryOptions;
     fOnCanDelete: TOnSynDictionaryCanDelete;
     function InternalAddUpdate(aKey, aValue: pointer; aUpdate: boolean): PtrInt;
     function InArray(const aKey, aArrayValue; aAction: TSynDictionaryInArray;
@@ -1144,6 +1137,8 @@ type
     procedure SetCapacity(const Value: integer);
     function GetTimeOutSeconds: cardinal; {$ifdef FPC} inline; {$endif}
     procedure SetTimeOutSeconds(Value: cardinal);
+    function GetThreadUse: TSynLockerUse;
+    procedure SetThreadUse(const Value: TSynLockerUse);
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -1238,7 +1233,7 @@ type
     // - returns the number of times OnEach has been called
     // - this method is thread-safe, since it will lock the instance
     function ForEach(const OnEach: TOnSynDictionary;
-      Opaque: pointer = nil): integer; overload;
+      Opaque: pointer = nil; MayModify: boolean = true): integer; overload;
     /// apply a specified event over matching items stored in this dictionnary
     // - would browse the list in the adding order, comparing each key and/or
     // value item with the supplied comparison functions and aKey/aValue content
@@ -1247,7 +1242,7 @@ type
     // - this method is thread-safe, since it will lock the instance
     function ForEach(const OnMatch: TOnSynDictionary;
       KeyCompare, ValueCompare: TDynArraySortCompare; const aKey, aValue;
-      Opaque: pointer = nil): integer; overload;
+      Opaque: pointer = nil; MayModify: boolean = true): integer; overload;
     /// touch the entry timeout field so that it won't be deprecated sooner
     // - this method is not thread-safe, and is expected to be execute e.g.
     // from a ForEach() TOnSynDictionary callback
@@ -1352,7 +1347,7 @@ type
     class function OnCanDeleteSynPersistentLocked(
       const aKey, aValue; aIndex: PtrInt): boolean;
     /// returns how many items are currently stored in this dictionary
-    // - this method is thread-safe
+    // - this method is thread-safe, but returns an evolving value
     function Count: integer;
     /// fast returns how many items are currently stored in this dictionary
     // - this method is NOT thread-safe so should be protected by fSafe.Lock/UnLock
@@ -1387,10 +1382,11 @@ type
     // TSynPersistentLock instance, to avoid any potential access violation
     property OnCanDeleteDeprecated: TOnSynDictionaryCanDelete
       read fOnCanDelete write fOnCanDelete;
-    /// can tune TSynDictionary process depending on your use case
+    /// can tune TSynDictionary threading process depending on your use case
+    // - will redirect to the internal Safe TSynLocker instance
     // - warning: any performance impact should always be monitored, not guessed
-    property Options: TSynDictionaryOptions
-      read fOptions write fOptions;
+    property ThreadUse: TSynLockerUse
+      read GetThreadUse write SetThreadUse;
   end;
 
 
@@ -8437,28 +8433,19 @@ end;
 
 function TSynDictionary.GetCapacity: integer;
 begin
-  if doSingleThreaded in fOptions then
-    result := fKeys.Capacity
-  else
-  begin
-    fSafe.Lock;
-    result := fKeys.Capacity;
-    fSafe.UnLock;
-  end;
+  result := fKeys.Capacity; // no need to lock for an evolving value
 end;
 
 procedure TSynDictionary.SetCapacity(const Value: integer);
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.Lock; // = RWLock(cWrite);
   try
     fKeys.Capacity := Value;
     fValues.Capacity := Value;
     if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
       fTimeOuts.Capacity := Value;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -8469,15 +8456,9 @@ end;
 
 procedure TSynDictionary.SetTimeOutSeconds(Value: cardinal);
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
-  try
-    DeleteAll;
-    fSafe.Padding[DIC_TIMESEC].VInteger := Value;
-  finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
-  end;
+  // no fSafe.Lock because RWLock(cWrite) in DeleteAll is enough
+  DeleteAll;
+  fSafe.Padding[DIC_TIMESEC].VInteger := Value;
 end;
 
 procedure TSynDictionary.SetTimeouts;
@@ -8506,8 +8487,7 @@ begin
   now := GetTickCount64 shr 10;
   if fSafe.Padding[DIC_TIMETIX].VInteger = integer(now) then
     exit; // no need to search more often than every second
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.RwLock(cReadWrite); // would upgrade to cWrite only if needed
   try
     fSafe.Padding[DIC_TIMETIX].VInteger := now;
     for i := fSafe.Padding[DIC_TIMECOUNT].VInteger - 1 downto 0 do
@@ -8516,6 +8496,9 @@ begin
          (not Assigned(fOnCanDelete) or
           fOnCanDelete(fKeys.ItemPtr(i)^, fValues.ItemPtr(i)^, i)) then
       begin
+        if (result = 0) and
+           (fSafe.RWUse = uRWLock) then
+          fSafe.RWLock(cWrite);
         fKeys.Delete(i);
         fValues.Delete(i);
         fTimeOuts.Delete(i);
@@ -8524,8 +8507,10 @@ begin
     if result > 0 then
       fKeys.Rehash; // mandatory after fKeys.Delete(i)
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    if (result > 0) and
+       (fSafe.RWUse = uRWLock) then
+      fSafe.RWUnLock(cWrite);
+    fSafe.RwUnLock(cReadWrite);
   end;
 end;
 
@@ -8533,8 +8518,7 @@ procedure TSynDictionary.DeleteAll;
 begin
   if self = nil then
     exit;
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.Lock; // = RWLock(cWrite);
   try
     fKeys.Clear;
     fKeys.Hasher.Clear; // mandatory to avoid GPF
@@ -8542,8 +8526,7 @@ begin
     if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
       fTimeOuts.Clear;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -8554,6 +8537,16 @@ begin
   inherited Destroy;
 end;
 
+function TSynDictionary.GetThreadUse: TSynLockerUse;
+begin
+  result := fSafe^.RWUse;
+end;
+
+procedure TSynDictionary.SetThreadUse(const Value: TSynLockerUse);
+begin
+  fSafe^.RWUse := Value;
+end;
+
 function TSynDictionary.InternalAddUpdate(
   aKey, aValue: pointer; aUpdate: boolean): PtrInt;
 var
@@ -8561,61 +8554,45 @@ var
   tim: cardinal;
 begin
   tim := ComputeNextTimeOut;
-  result := fKeys.FindHashedForAdding(aKey^, added);
-  if added then
-  begin
-    with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
-      // fKey[result] := aKey;
-      ItemCopy(aKey, PAnsiChar(Value^) + (result * Info.Cache.ItemSize));
-    if fValues.Add(aValue^) <> result then
-      raise ESynDictionary.CreateUtf8('%.Add fValues.Add', [self]);
-    if tim <> 0 then
-      fTimeOuts.Add(tim);
-  end
-  else if aUpdate then
-  begin
-    fValues.ItemCopyFrom(@aValue, result, {ClearBeforeCopy=}true);
-    if tim <> 0 then
-      fTimeOut[result] := tim;
-  end
-  else
-    result := -1;
+  fSafe.Lock; // = RWLock(cWrite) - cReadWrite is not possible here
+  try
+    result := fKeys.FindHashedForAdding(aKey^, added);
+    if added then
+    begin
+      with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
+        // fKey[result] := aKey;
+        ItemCopy(aKey, PAnsiChar(Value^) + (result * Info.Cache.ItemSize));
+      if fValues.Add(aValue^) <> result then
+        raise ESynDictionary.CreateUtf8('%.Add fValues.Add', [self]);
+      if tim <> 0 then
+        fTimeOuts.Add(tim);
+    end
+    else if aUpdate then
+    begin
+      fValues.ItemCopyFrom(@aValue, result, {ClearBeforeCopy=}true);
+      if tim <> 0 then
+        fTimeOut[result] := tim;
+    end
+    else
+      result := -1;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TSynDictionary.Add(const aKey, aValue): PtrInt;
 begin
-  if doSingleThreaded in fOptions then
-    result := InternalAddUpdate(@aKey, @aValue, {update=}false)
-  else
-  begin
-    fSafe.Lock;
-    try
-      result := InternalAddUpdate(@aKey, @aValue, {update=}false)
-    finally
-      fSafe.UnLock;
-    end;
-  end;
+  result := InternalAddUpdate(@aKey, @aValue, {update=}false)
 end;
 
 function TSynDictionary.AddOrUpdate(const aKey, aValue): PtrInt;
 begin
-  if doSingleThreaded in fOptions then
-    result := InternalAddUpdate(@aKey, @aValue, {update=}true)
-  else
-  begin
-    fSafe.Lock;
-    try
-      result := InternalAddUpdate(@aKey, @aValue, {update=}true)
-    finally
-      fSafe.UnLock;
-    end;
-  end;
+  result := InternalAddUpdate(@aKey, @aValue, {update=}true)
 end;
 
 function TSynDictionary.Clear(const aKey): PtrInt;
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.Lock;
   try
     result := fKeys.FindHashed(aKey);
     if result >= 0 then
@@ -8625,15 +8602,13 @@ begin
         fTimeOut[result] := 0;
     end;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
 function TSynDictionary.Delete(const aKey): PtrInt;
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.Lock;
   try
     result := fKeys.FindHashedAndDelete(aKey);
     if result >= 0 then
@@ -8643,8 +8618,7 @@ begin
         fTimeOuts.Delete(result);
     end;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -8669,8 +8643,7 @@ begin
      (fValues.Info.ArrayRtti.Kind <> rkDynArray) then
     raise ESynDictionary.CreateUtf8('%.Values: % items are not dynamic arrays',
       [self, fValues.Info.Name]);
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.Lock;
   try
     ndx := fKeys.FindHashed(aKey);
     if ndx < 0 then
@@ -8696,8 +8669,7 @@ begin
         result := nested.Add(aArrayValue) >= 0;
     end;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -8712,8 +8684,7 @@ function TSynDictionary.FindKeyFromValue(const aValue;
 var
   ndx: PtrInt;
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.RwLock(RW_FORCE[aUpdateTimeOut]);
   try
     ndx := fValues.IndexOf(aValue); // use fast RTTI for value search
     result := ndx >= 0;
@@ -8724,8 +8695,7 @@ begin
         SetTimeoutAtIndex(ndx);
     end;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.RwUnLock(RW_FORCE[aUpdateTimeOut]);
   end;
 end;
 
@@ -8821,8 +8791,7 @@ function TSynDictionary.FindAndCopy(const aKey;
 var
   ndx: PtrInt;
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.Lock;
   try
     ndx := Find(aKey, aUpdateTimeOut);
     if ndx >= 0 then
@@ -8833,8 +8802,7 @@ begin
     else
       result := false;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -8842,8 +8810,7 @@ function TSynDictionary.FindAndExtract(const aKey; var aValue): boolean;
 var
   ndx: PtrInt;
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.Lock;
   try
     ndx := fKeys.FindHashedAndDelete(aKey);
     if ndx >= 0 then
@@ -8857,22 +8824,22 @@ begin
     else
       result := false;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
 function TSynDictionary.Exists(const aKey): boolean;
 begin
-  if doSingleThreaded in fOptions then
-  begin
-    result := fKeys.FindHashed(aKey) >= 0;
-    exit;
-  end;
   fSafe.Lock;
+  {$ifdef HASFASTTRYFINALLY}
   try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
     result := fKeys.FindHashed(aKey) >= 0;
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     fSafe.UnLock;
   end;
 end;
@@ -8880,37 +8847,32 @@ end;
 function TSynDictionary.ExistsValue(
   const aValue; aCompare: TDynArraySortCompare): boolean;
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.RWLock(cReadOnly);
   try
     result := fValues.Find(aValue, aCompare) >= 0;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.RWUnLock(cReadOnly);
   end;
 end;
 
 procedure TSynDictionary.CopyValues(out Dest; ObjArrayByRef: boolean);
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.Lock;
   try
     fValues.CopyTo(Dest, ObjArrayByRef);
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
 function TSynDictionary.ForEach(const OnEach: TOnSynDictionary;
-  Opaque: pointer): integer;
+  Opaque: pointer; MayModify: boolean): integer;
 var
   k, v: PAnsiChar;
   i, n, ks, vs: PtrInt;
 begin
   result := 0;
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.RWLock(RW_FORCE[MayModify]);
   try
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
     if (n = 0) or
@@ -8929,20 +8891,18 @@ begin
       inc(v, vs);
     end;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.RWUnLock(RW_FORCE[MayModify]);
   end;
 end;
 
 function TSynDictionary.ForEach(const OnMatch: TOnSynDictionary;
   KeyCompare, ValueCompare: TDynArraySortCompare; const aKey, aValue;
-  Opaque: pointer): integer;
+  Opaque: pointer; MayModify: boolean): integer;
 var
   k, v: PAnsiChar;
   i, n, ks, vs: PtrInt;
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.RWLock(RW_FORCE[MayModify]);
   try
     result := 0;
     if not Assigned(OnMatch) or
@@ -8969,8 +8929,7 @@ begin
       inc(v, vs);
     end;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.RWUnLock(RW_FORCE[MayModify]);
   end;
 end;
 
@@ -8999,8 +8958,7 @@ procedure TSynDictionary.SaveToJson(W: TJsonWriter; EnumSetsAsText: boolean);
 var
   k, v: RawUtf8;
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.RWLock(cReadOnly);
   try
     if fSafe.Padding[DIC_KEYCOUNT].VInteger > 0 then
     begin
@@ -9009,8 +8967,7 @@ begin
       fValues.SaveToJson(v, EnumSetsAsText);
     end;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.RWUnLock(cReadOnly);
   end;
   W.AddJsonArraysAsJsonObject(pointer(k), pointer(v));
 end;
@@ -9031,13 +8988,11 @@ end;
 
 function TSynDictionary.SaveValuesToJson(EnumSetsAsText: boolean): RawUtf8;
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.RWLock(cReadOnly);
   try
     fValues.SaveToJson(result, EnumSetsAsText);
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.RWUnLock(cReadOnly);
   end;
 end;
 
@@ -9058,8 +9013,7 @@ begin
   n := JsonObjectAsJsonArrays(Json, k, v);
   if n <= 0 then
     exit;
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.Lock;
   try
     if (fKeys.LoadFromJson(pointer(k), nil, CustomVariantOptions) <> nil) and
        (fKeys.Count = n) and
@@ -9071,8 +9025,7 @@ begin
         result := true;
       end;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -9087,8 +9040,7 @@ begin
   if plain = '' then
     exit;
   rdr.Init(plain);
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.Lock;
   try
     try
       RTTI_BINARYLOAD[rkDynArray](fKeys.Value, rdr, fKeys.Info.Info);
@@ -9107,8 +9059,7 @@ begin
       result := false;
     end;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -9130,8 +9081,7 @@ var
   tmp: TTextWriterStackBuffer;
   W: TBufferWriter;
 begin
-  if not (doSingleThreaded in fOptions) then
-    fSafe.Lock;
+  fSafe.RWLock(cReadOnly);
   try
     result := '';
     if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
@@ -9147,8 +9097,7 @@ begin
       W.Free;
     end;
   finally
-    if not (doSingleThreaded in fOptions) then
-      fSafe.UnLock;
+    fSafe.RWUnLock(cReadOnly);
   end;
 end;
 

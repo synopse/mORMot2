@@ -1141,8 +1141,8 @@ begin
   // initialize the associated dictionary
   fData := TSynDictionary.Create(k, v, kvoKeyCaseInsensitive in fOptions,
     aContext.Timeout, aContext.Compress, aContext.Hasher);
-  if kvoThreadSafe in fOptions then
-    fData.Options := [doSingleThreaded];
+  if not (kvoThreadSafe in fOptions) then
+    fData.ThreadUse := uNoLock; // no locking unless kvoThreadSafe is set
   if (fData.Keys.Info.ArrayRtti = nil) or
      ((aContext.KeyArrayTypeInfo <> nil) and
       (fData.Keys.Info.ArrayRtti.Info <> fKeyTypeInfo)) then
