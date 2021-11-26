@@ -494,6 +494,18 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
+  /// adding light single Read / exclusive Write locking methods to a
+  // TSynPersistent with virtual constructor
+  TSynPersistentRWLock = class(TSynPersistent)
+  protected
+    fSafe: TRWLock;
+  public
+    /// access to the associated TRWLock
+    // - call Safe methods to protect multi-thread access on this storage
+    property Safe: TRWLock
+      read fSafe;
+  end;
+
   {$ifndef PUREMORMOT2}
 
   /// used for backward compatibility only with existing code
