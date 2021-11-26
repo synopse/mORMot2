@@ -419,7 +419,7 @@ begin
   // retrieve or (re)create the engine associated with this thread
   result := nil;
   tid := GetCurrentThreadId;
-  fEngines.Safe.Lock; // no try..finally for exception-safe GetTickCount64
+  fEngines.Safe.ReadOnlyLock; // no try..finally for exception-safe code
   existing := ThreadEngineIndex(tid);
   if existing >= 0 then
   begin
@@ -434,11 +434,13 @@ begin
       if result.fContentVersion = fContentVersion then
       begin
         // we got the right engine -> quickly return
-        fEngines.Safe.UnLock;
+        fEngines.Safe.ReadOnlyUnLock;
         exit;
       end;
   end;
+  fEngines.Safe.ReadOnlyUnLock;
   tobereleased := result;
+  fEngines.Safe.WriteLock;
   try // some exceptions may occur from now on
     if existing >= 0 then
     begin
@@ -464,7 +466,7 @@ begin
     for i := 0 to fEngines.Count - 1 do
       fEngineID[i] := TThreadSafeEngine(fEngines.List[i]).ThreadID;
     // now we don't need to access fEngines anymore
-    fEngines.Safe.UnLock;
+    fEngines.Safe.WriteUnLock;
     // released outside the lock - garbage collection may take some time
     tobereleased.Free;
   end;
@@ -497,13 +499,13 @@ begin
   result := nil;
   if PtrUInt(aThreadID) = 0 then
     exit;
-  fEngines.Safe.Lock;
+  fEngines.Safe.ReadOnlyLock;
   try
     i := ThreadEngineIndex(aThreadID);
     if i >= 0 then
       result := fEngines.List[i];
   finally
-    fEngines.Safe.UnLock;
+    fEngines.Safe.ReadOnlyUnLock;
   end;
 end;
 

@@ -2300,7 +2300,7 @@ begin
     exit;
   if aTimeOutMs <= 0 then
     aTimeOutMs := 3000; // never wait for ever
-  fPool.Safe.Lock;
+  fPool.Safe.WriteLock;
   try
     p := pointer(fPool.List);
     for i := 1 to fPool.Count do
@@ -2320,7 +2320,7 @@ begin
     inc(fCallCounter); // 1,2,3,...
     result.fCall := fCallCounter;
   finally
-    fPool.Safe.UnLock;
+    fPool.Safe.WriteUnLock;
   end;
 end;
 
@@ -2334,7 +2334,7 @@ begin
   if (fCallCounter = CALL_DESTROYING) or
      (call <= 0) then
     exit;
-  fPool.Safe.Lock;
+  fPool.Safe.ReadOnlyLock;
   try
     p := pointer(fPool.List);
     for i := 1 to fPool.Count do
@@ -2348,7 +2348,7 @@ begin
       else
         inc(p);
   finally
-    fPool.Safe.UnLock;
+    fPool.Safe.ReadOnlyUnLock;
   end;
 end;
 

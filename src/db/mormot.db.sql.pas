@@ -7203,7 +7203,7 @@ procedure TSqlDBConnectionPropertiesThreadSafe.ClearConnectionPool;
 var
   i: PtrInt;
 begin
-  fConnectionPool.Safe.Lock;
+  fConnectionPool.Safe.WriteLock;
   try
     if fMainConnection <> nil then
       fMainConnection.fLastAccessTicks := -1; // force IsOutdated to return true
@@ -7211,7 +7211,7 @@ begin
       TSqlDBConnectionThreadSafe(fConnectionPool.List[i]).fLastAccessTicks := -1;
     fLatestConnectionRetrievedInPool := -1;
   finally
-    fConnectionPool.Safe.UnLock;
+    fConnectionPool.Safe.WriteUnLock;
   end;
 end;
 
@@ -7272,7 +7272,7 @@ procedure TSqlDBConnectionPropertiesThreadSafe.EndCurrentThread;
 var
   i: integer;
 begin
-  fConnectionPool.Safe.Lock;
+  fConnectionPool.Safe.WriteLock;
   try
     i := CurrentThreadConnectionIndex;
     if i >= 0 then
@@ -7283,7 +7283,7 @@ begin
         fLatestConnectionRetrievedInPool := -1;
     end;
   finally
-    fConnectionPool.Safe.UnLock;
+    fConnectionPool.Safe.WriteUnLock;
   end;
 end;
 
@@ -7299,27 +7299,22 @@ begin
   case fThreadingMode of
     tmThreadPool:
       begin
-        fConnectionPool.Safe.Lock;
-        {$ifdef HASFASTTRYFINALLY}
+        fConnectionPool.Safe.ReadOnlyLock;
+        i := CurrentThreadConnectionIndex;
+        if i >= 0 then
+        begin
+          result := fConnectionPool.List[i];
+          fConnectionPool.Safe.ReadOnlyUnLock;
+          exit;
+        end;
+        fConnectionPool.Safe.ReadOnlyUnLock;
+        fConnectionPool.Safe.WriteLock;
         try
-        {$endif HASFASTTRYFINALLY}
-          i := CurrentThreadConnectionIndex;
-          if i >= 0 then
-          begin
-            result := fConnectionPool.List[i];
-            {$ifndef HASFASTTRYFINALLY}
-            fConnectionPool.Safe.UnLock;
-            {$endif HASFASTTRYFINALLY}
-            exit;
-          end;
-        {$ifndef HASFASTTRYFINALLY}
-        try
-        {$endif HASFASTTRYFINALLY}
           result := NewConnection; // no need to release the lock (fast method)
           (result as TSqlDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
           fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
         finally
-          fConnectionPool.Safe.UnLock;
+          fConnectionPool.Safe.WriteUnLock;
         end;
       end;
     tmMainConnection:

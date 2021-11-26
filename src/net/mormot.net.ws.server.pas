@@ -495,12 +495,12 @@ begin
   if Terminated or
      (ConnectionID = 0) then
     exit;
-  fWebSocketConnections.Safe.Lock;
+  fWebSocketConnections.Safe.ReadOnlyLock;
   try
     result := FastFindConnection(pointer(fWebSocketConnections.List),
       fWebSocketConnections.Count, ConnectionID);
   finally
-    fWebSocketConnections.Safe.UnLock;
+    fWebSocketConnections.Safe.ReadOnlyUnLock;
   end;
   if (result <> nil) and
      (result.State <> wpsRun) then
@@ -535,7 +535,7 @@ begin
   temp.content := aFrame.content;
   len := length(aFrame.payload);
   tix := GetTickCount64 shr 10;
-  fWebSocketConnections.Safe.Lock;
+  fWebSocketConnections.Safe.ReadOnlyLock;
   try
     ws := pointer(fWebSocketConnections.List);
     for i := 1 to fWebSocketConnections.Count do
@@ -552,7 +552,7 @@ begin
       inc(ws);
     end;
   finally
-    fWebSocketConnections.Safe.UnLock;
+    fWebSocketConnections.Safe.ReadOnlyUnLock;
     if ids >= 0 then
       sorted.Done;
   end;

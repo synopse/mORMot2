@@ -1688,7 +1688,7 @@ begin
     exit;
   connectionID := 0;
   callbackID := 0;
-  fFakeCallbacks.Safe.Lock;
+  fFakeCallbacks.Safe.WriteLock;
   try
     i := fFakeCallbacks.IndexOf(aFakeInstance);
     if i >= 0 then
@@ -1704,7 +1704,7 @@ begin
       fFakeCallbacks.Delete(i);
     end;
   finally
-    fFakeCallbacks.Safe.UnLock;
+    fFakeCallbacks.Safe.WriteUnLock;
   end;
   if connectionID <> 0 then
     if Assigned(fRestServer.OnNotifyCallback) then
@@ -1763,10 +1763,10 @@ begin
     // avoid stack overflow ;)
     fRestServer.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
       [ClassType, fakeID, Values[0].Name.Text], sllDebug);
-  fFakeCallbacks.Safe.Lock;
+  fFakeCallbacks.Safe.WriteLock;
   try
     fake := FakeCallbackFind(
-      pointer(fFakeCallbacks), fFakeCallbacks.Count, connectionID, fakeID);
+      pointer(fFakeCallbacks.List), fFakeCallbacks.Count, connectionID, fakeID);
     if fake <> nil then
     begin
       fake.fReleasedOnClientSide := true;
@@ -1797,7 +1797,7 @@ begin
         Ctxt.Success;
     end;
   finally
-    fFakeCallbacks.Safe.UnLock;
+    fFakeCallbacks.Safe.WriteUnLock;
   end;
 end;
 
@@ -1900,12 +1900,12 @@ begin
      (aConnectionIDNew <= 0) or
      (aConnectionIDOld = aConnectionIDNew) then
     exit;
-  fFakeCallbacks.Safe.Lock;
+  fFakeCallbacks.Safe.ReadOnlyLock;
   try
     result := FakeCallbackReplaceID(pointer(fFakeCallbacks.List),
       fFakeCallbacks.Count, aConnectionIDOld, aConnectionIDNew);
   finally
-    fFakeCallbacks.Safe.UnLock;
+    fFakeCallbacks.Safe.ReadOnlyLock;
   end;
 end;
 
