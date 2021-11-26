@@ -8496,8 +8496,7 @@ begin
          (not Assigned(fOnCanDelete) or
           fOnCanDelete(fKeys.ItemPtr(i)^, fValues.ItemPtr(i)^, i)) then
       begin
-        if (result = 0) and
-           (fSafe.RWUse = uRWLock) then
+        if result = 0 then
           fSafe.RWLock(cWrite);
         fKeys.Delete(i);
         fValues.Delete(i);
@@ -8507,8 +8506,7 @@ begin
     if result > 0 then
       fKeys.ForceReHash; // mandatory after manual fKeys.Delete(i)
   finally
-    if (result > 0) and
-       (fSafe.RWUse = uRWLock) then
+    if result > 0 then
       fSafe.RWUnLock(cWrite);
     fSafe.RwUnLock(cReadWrite);
   end;
@@ -8592,17 +8590,19 @@ end;
 
 function TSynDictionary.Clear(const aKey): PtrInt;
 begin
-  fSafe.Lock;
+  fSafe.RWLock(cReadWrite);
   try
     result := fKeys.FindHashed(aKey);
     if result >= 0 then
     begin
+      fSafe.RWLock(cWrite);
       fValues.ItemClear(fValues.ItemPtr(result));
       if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
         fTimeOut[result] := 0;
+      fSafe.RWUnLock(cWrite);
     end;
   finally
-    fSafe.UnLock;
+    fSafe.RWUnLock(cReadWrite);
   end;
 end;
 
@@ -8643,7 +8643,7 @@ begin
      (fValues.Info.ArrayRtti.Kind <> rkDynArray) then
     raise ESynDictionary.CreateUtf8('%.Values: % items are not dynamic arrays',
       [self, fValues.Info.Name]);
-  fSafe.Lock;
+  fSafe.RWLock(RW_FORCE[aAction <> iaFind]); // cReadOnly only for iaFind
   try
     ndx := fKeys.FindHashed(aKey);
     if ndx < 0 then
@@ -8665,11 +8665,12 @@ begin
         result := nested.FindAndUpdate(aArrayValue) >= 0;
       iaFindAndAddIfNotExisting:
         result := nested.FindAndAddIfNotExisting(aArrayValue) >= 0;
-      iaAdd, iaAddForced:
+      iaAdd,
+      iaAddForced:
         result := nested.Add(aArrayValue) >= 0;
     end;
   finally
-    fSafe.UnLock;
+    fSafe.RWUnLock(RW_FORCE[aAction <> iaFind]);
   end;
 end;
 
@@ -8684,7 +8685,7 @@ function TSynDictionary.FindKeyFromValue(const aValue;
 var
   ndx: PtrInt;
 begin
-  fSafe.RwLock(RW_FORCE[aUpdateTimeOut]);
+  fSafe.RwLock(RW_UPGRADE[aUpdateTimeOut]);
   try
     ndx := fValues.IndexOf(aValue); // use fast RTTI for value search
     result := ndx >= 0;
@@ -8692,10 +8693,14 @@ begin
     begin
       fKeys.ItemCopyAt(ndx, @aKey);
       if aUpdateTimeOut then
+      begin
+        fSafe.RwLock(cWrite);
         SetTimeoutAtIndex(ndx);
+        fSafe.RwUnLock(cWrite);
+      end;
     end;
   finally
-    fSafe.RwUnLock(RW_FORCE[aUpdateTimeOut]);
+    fSafe.RwUnLock(RW_UPGRADE[aUpdateTimeOut]);
   end;
 end;
 
@@ -8791,7 +8796,7 @@ function TSynDictionary.FindAndCopy(const aKey;
 var
   ndx: PtrInt;
 begin
-  fSafe.Lock;
+  fSafe.RWLock(cReadOnly);
   try
     ndx := Find(aKey, aUpdateTimeOut);
     if ndx >= 0 then
@@ -8802,7 +8807,7 @@ begin
     else
       result := false;
   finally
-    fSafe.UnLock;
+    fSafe.RWUnLock(cReadOnly);
   end;
 end;
 
@@ -8810,27 +8815,29 @@ function TSynDictionary.FindAndExtract(const aKey; var aValue): boolean;
 var
   ndx: PtrInt;
 begin
-  fSafe.Lock;
+  fSafe.RWLock(cReadWrite);
   try
     ndx := fKeys.FindHashedAndDelete(aKey);
     if ndx >= 0 then
     begin
+      fSafe.RWLock(cWrite);
       fValues.ItemMoveTo(ndx, @aValue); // faster than ItemCopyAt()
       fValues.Delete(ndx);
       if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
         fTimeOuts.Delete(ndx);
+      fSafe.RWUnLock(cWrite);
       result := true;
     end
     else
       result := false;
   finally
-    fSafe.UnLock;
+    fSafe.RWUnLock(cReadWrite);
   end;
 end;
 
 function TSynDictionary.Exists(const aKey): boolean;
 begin
-  fSafe.Lock;
+  fSafe.RWLock(cReadOnly);
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -8840,7 +8847,7 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    fSafe.UnLock;
+    fSafe.RWUnLock(cReadOnly);
   end;
 end;
 
@@ -8857,11 +8864,11 @@ end;
 
 procedure TSynDictionary.CopyValues(out Dest; ObjArrayByRef: boolean);
 begin
-  fSafe.Lock;
+  fSafe.RWLock(cReadOnly);
   try
     fValues.CopyTo(Dest, ObjArrayByRef);
   finally
-    fSafe.UnLock;
+    fSafe.RWUnLock(cReadOnly);
   end;
 end;
 
