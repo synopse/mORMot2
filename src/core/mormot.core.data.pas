@@ -517,38 +517,36 @@ type
   end;
 
   /// add locking methods to a TSynObjectList
-  // - this class expands the regular TSynObjectList to include a TSynLocker
-  // - you need to call the Safe.Lock/Unlock methods by hand to protect the
+  // - this class expands the regular TSynObjectList to include a TRWLock
+  // - you need to call the Safe locking methods by hand to protect the
   // execution of index-oriented methods (like Delete/Items/Count...): the
   // list content may change in the background, so using indexes is thread-safe
   // - on the other hand, Add/Clear/ClearFromLast/Remove stateless methods have
-  // been overriden in this class to call Safe.Lock/Unlock, and therefore are
+  // been overriden in this class to call Safe lock methods, and therefore are
   // thread-safe and protected to any background change
   TSynObjectListLocked = class(TSynObjectList)
   protected
-    fSafe: TSynLocker;
+    fSafe: TRWLock;
   public
     /// initialize the list instance
     // - the stored TObject instances will be owned by this TSynObjectListLocked,
     // unless AOwnsObjects is set to false
     constructor Create(aOwnsObjects: boolean = true); reintroduce;
-    /// release the list instance (including the locking resource)
-    destructor Destroy; override;
-    /// add one item to the list using the global critical section
+    /// add one item to the list using Safe.WriteLock
     function Add(item: pointer): integer; override;
-    /// delete all items of the list using the global critical section
+    /// delete all items of the list using Safe.WriteLock
     procedure Clear; override;
-    /// delete all items of the list in reverse order, using the global critical section
+    /// delete all items of the list in reverse order, using Safe.WriteLock
     procedure ClearFromLast; override;
-    /// fast delete one item in the list
+    /// fast delete one item in the list, using Safe.WriteLock
     function Remove(item: pointer): integer; override;
-    /// check an item using the global critical section
+    /// check an item using Safe.ReadOnlyLock
     function Exists(item: pointer): boolean; override;
-    /// the critical section associated to this list instance
+    /// the light single Read / exclusive Write lock associated to this list
     // - could be used to protect shared resources within the internal process,
     // for index-oriented methods like Delete/Items/Count...
-    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
-    property Safe: TSynLocker
+    // - use Safe lock methods with a try ... finally block
+    property Safe: TRWLock
       read fSafe;
   end;
 
@@ -3196,62 +3194,55 @@ end;
 constructor TSynObjectListLocked.Create(AOwnsObjects: boolean);
 begin
   inherited Create(AOwnsObjects);
-  fSafe.Init;
-end;
-
-destructor TSynObjectListLocked.Destroy;
-begin
-  inherited Destroy;
-  fSafe.Done;
 end;
 
 function TSynObjectListLocked.Add(item: pointer): integer;
 begin
-  Safe.Lock;
+  Safe.WriteLock;
   try
     result := inherited Add(item);
   finally
-    Safe.UnLock;
+    Safe.WriteUnLock;
   end;
 end;
 
 function TSynObjectListLocked.Remove(item: pointer): integer;
 begin
-  Safe.Lock;
+  Safe.WriteLock;
   try
     result := inherited Remove(item);
   finally
-    Safe.UnLock;
+    Safe.WriteUnLock;
   end;
 end;
 
 function TSynObjectListLocked.Exists(item: pointer): boolean;
 begin
-  Safe.Lock;
+  Safe.ReadOnlyLock;
   try
     result := inherited Exists(item);
   finally
-    Safe.UnLock;
+    Safe.ReadOnlyUnLock;
   end;
 end;
 
 procedure TSynObjectListLocked.Clear;
 begin
-  Safe.Lock;
+  Safe.WriteLock;
   try
     inherited Clear;
   finally
-    Safe.UnLock;
+    Safe.WriteUnLock;
   end;
 end;
 
 procedure TSynObjectListLocked.ClearFromLast;
 begin
-  Safe.Lock;
+  Safe.WriteLock;
   try
     inherited ClearFromLast;
   finally
-    Safe.UnLock;
+    Safe.WriteUnLock;
   end;
 end;
 
