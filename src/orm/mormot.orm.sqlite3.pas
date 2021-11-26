@@ -1350,14 +1350,17 @@ begin
   else
   begin
     fRest.AcquireExecution[execOrmWrite].Safe.Lock; // protect fJsonDecoder
-    fJsonDecoder.Decode(SentData, nil, pInlined, result, false);
-    if (fOwner <> nil) and
-       (props.RecordVersionField <> nil) then
-      fOwner.RecordVersionHandle(ooInsert, TableModelIndex, fJsonDecoder,
-        props.RecordVersionField);
-    sql := fJsonDecoder.EncodeAsSql('INSERT INTO ', sql, {update=}false);
-    Finalize(fJsonDecoder); // release temp values memory ASAP
-    fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
+    try
+      fJsonDecoder.Decode(SentData, nil, pInlined, result, false);
+      if (fOwner <> nil) and
+         (props.RecordVersionField <> nil) then
+        fOwner.RecordVersionHandle(ooInsert, TableModelIndex, fJsonDecoder,
+          props.RecordVersionField);
+      sql := fJsonDecoder.EncodeAsSql('INSERT INTO ', sql, {update=}false);
+      Finalize(fJsonDecoder); // release temp values memory ASAP
+    finally
+      fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
+    end;
   end;
   if InternalExecute(sql, true, nil, nil, nil, PInt64(@result)) then
     InternalUpdateEvent(oeAdd, TableModelIndex, result, SentData, nil, nil);
@@ -1930,10 +1933,11 @@ var
   props: TOrmProperties;
   sql: RawUtf8;
 begin
+  result := false;
   if (TableModelIndex < 0) or
      (ID <= 0) then
-    result := false
-  else if SentData = '' then
+    exit;
+  if SentData = '' then
     // update with no simple field -> valid no-op
     result := true
   else
@@ -1941,13 +1945,16 @@ begin
     // this sql statement use :(inlined params): for all values
     props := fModel.TableProps[TableModelIndex].Props;
     fRest.AcquireExecution[execOrmWrite].Safe.Lock; // protect fJsonDecoder
-    fJsonDecoder.Decode(SentData, nil, pInlined, ID, false);
-    if props.RecordVersionField <> nil then
-      fOwner.RecordVersionHandle(ooUpdate, TableModelIndex,
-        fJsonDecoder, props.RecordVersionField);
-    sql := fJsonDecoder.EncodeAsSql('', '', {update=}true);
-    Finalize(fJsonDecoder); // release temp values memory ASAP
-    fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
+    try
+      fJsonDecoder.Decode(SentData, nil, pInlined, ID, false);
+      if props.RecordVersionField <> nil then
+        fOwner.RecordVersionHandle(ooUpdate, TableModelIndex,
+          fJsonDecoder, props.RecordVersionField);
+      sql := fJsonDecoder.EncodeAsSql('', '', {update=}true);
+      Finalize(fJsonDecoder); // release temp values memory ASAP
+    finally
+      fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
+    end;
     if sql = '' then
       raise ERestStorage.CreateUtf8('%.MainEngineUpdate: invalid input [%]',
         [self, EscapeToShort(SentData)]);
