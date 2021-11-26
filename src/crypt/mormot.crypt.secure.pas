@@ -275,8 +275,8 @@ type
     function Exists(const aIP: RawUtf8): boolean;
     /// creates a TDynArray wrapper around the stored list of values
     // - could be used e.g. for binary persistence
-    // - warning: caller should make Safe.Unlock when finished
-    function DynArrayLocked: TDynArray;
+    // - warning: caller should make Safe.Unlock(aLock) when finished
+    function DynArrayLocked(aLock: TRWLockContext = cWrite): TDynArray;
     /// low-level access to the internal IPv4 list
     // - 32-bit unsigned values are sorted, for fast O(log(n)) binary search
     property IP4: TIntegerDynArray
@@ -2251,12 +2251,12 @@ begin
   if (self = nil) or
      not IPToCardinal(aIP, ip4) then
     exit;
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     AddSortedInteger(fIP4, fCount, ip4);
     result := true;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -2269,15 +2269,17 @@ begin
   if (self = nil) or
      not IPToCardinal(aIP, ip4) then
     exit;
-  fSafe.Lock;
+  fSafe.ReadWriteLock;
   try
     i := FastFindIntegerSorted(pointer(fIP4), fCount - 1, ip4);
     if i < 0 then
       exit;
+    fSafe.WriteLock;
     DeleteInteger(fIP4, fCount, i);
+    fSafe.WriteUnLock;
     result := true;
   finally
-    fSafe.UnLock;
+    fSafe.ReadWriteUnLock;
   end;
 end;
 
@@ -2290,18 +2292,18 @@ begin
      (fCount = 0) or
      not IPToCardinal(aIP, ip4) then
     exit;
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     if FastFindIntegerSorted(pointer(fIP4), fCount - 1, ip4) >= 0 then
       result := true;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
-function TIPBan.DynArrayLocked: TDynArray;
+function TIPBan.DynArrayLocked(aLock: TRWLockContext): TDynArray;
 begin
-  fSafe.Lock;
+  fSafe.Lock(aLock);
   result.InitSpecific(TypeInfo(TCardinalDynArray), fIP4, ptCardinal, @fCount);
 end;
 
@@ -2946,14 +2948,14 @@ begin
     GlobalCryptAlgoInit;
   result := nil;
   n := 0;
-  GlobalCryptAlgo.Safe.Lock;
+  GlobalCryptAlgo.Safe.ReadOnlyLock;
   try
     o := pointer(GlobalCryptAlgo.ObjectPtr);
     for i := 0 to GlobalCryptAlgo.Count - 1 do
       if o[i].InheritsFrom(self) then
         ObjArrayAddCount(result, o[i], n);
   finally
-    GlobalCryptAlgo.Safe.UnLock;
+    GlobalCryptAlgo.Safe.ReadOnlyUnLock;
   end;
   if n <> 0 then
     DynArrayFakeLength(result, n);
@@ -2969,14 +2971,14 @@ begin
     GlobalCryptAlgoInit;
   result := nil;
   n := 0;
-  GlobalCryptAlgo.Safe.Lock;
+  GlobalCryptAlgo.Safe.ReadOnlyLock;
   try
     o := pointer(GlobalCryptAlgo.ObjectPtr);
     for i := 0 to GlobalCryptAlgo.Count - 1 do
       if o[i].InheritsFrom(self) then
         AddRawUtf8(result, n, TCryptAlgo(o[i]).fName);
   finally
-    GlobalCryptAlgo.Safe.UnLock;
+    GlobalCryptAlgo.Safe.ReadOnlyUnLock;
   end;
   if n <> 0 then
     DynArrayFakeLength(result, n);

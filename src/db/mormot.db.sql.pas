@@ -6982,7 +6982,7 @@ var
         begin
           if fCache = nil then
             fCache := TRawUtf8List.CreateEx(
-              [fObjectsOwned, fNoDuplicate, fCaseSensitive]);
+              [fObjectsOwned, fNoDuplicate, fCaseSensitive, fNoThreadLock]);
           if fCache.AddObject(cachedsql, stmt) >= 0 then
             stmt._AddRef
           else // will be owned by fCache.Objects[]

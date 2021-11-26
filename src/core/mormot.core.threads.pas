@@ -66,6 +66,7 @@ type
     fCount, fFirst, fLast: integer;
     fWaitPopFlags: set of (wpfDestroying);
     fWaitPopCounter: integer;
+    procedure InternalPop(aValue: pointer);
     procedure InternalGrow;
     function InternalDestroying(incPopCounter: integer): boolean;
     function InternalWaitDone(starttix, endtix: Int64; const idle: TThreadMethod): boolean;
@@ -114,12 +115,13 @@ type
       out aValue; aCompared: pointer = nil;
       aCompare: TDynArraySortCompare = nil): boolean;
     /// waiting lookup of one item from the queue, as FIFO (First-In-First-Out)
-    // - returns a pointer to a pending item within the specified aTimeoutMS
-    // time - the Safe.Lock is still there, so that caller could check its content,
-    // then call Pop() if it is the expected one, and eventually always call Safe.Unlock
+    // - returns a pointer to a pending item within aTimeoutMS time
+    // - Safe.ReadWriteLock is kept, so caller could check its content, then
+    // call Pop() if it is the expected one, and eventually Safe.ReadWriteUnlock
     // - returns nil if nothing was pushed into the queue in time
     // - this method is thread-safe, but will lock the instance only if needed
-    function WaitPeekLocked(aTimeoutMS: integer; const aWhenIdle: TThreadMethod): pointer;
+    function WaitPeekLocked(aTimeoutMS: integer;
+      const aWhenIdle: TThreadMethod): pointer;
     /// ensure any pending or future WaitPop() returns immediately as false
     // - is always called by Destroy destructor
     // - could be also called e.g. from an UI OnClose event to avoid any lock
@@ -1009,13 +1011,13 @@ end;
 
 procedure TSynQueue.Clear;
 begin
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     fValues.Clear;
     fFirst := -1;
     fLast := -2;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -1025,16 +1027,22 @@ begin
     result := 0
   else
   begin
-    fSafe.Lock;
+    fSafe.ReadOnlyLock;
+    {$ifdef HASFASTTRYFINALLY}
     try
+    {$else}
+    begin
+    {$endif HASFASTTRYFINALLY}
       if fFirst < 0 then
         result := 0
       else if fFirst <= fLast then
         result := fLast - fFirst + 1
       else
         result := fCount - fFirst + fLast + 1;
+    {$ifdef HASFASTTRYFINALLY}
     finally
-      fSafe.UnLock;
+    {$endif HASFASTTRYFINALLY}
+      fSafe.ReadOnlyUnLock;
     end;
   end;
 end;
@@ -1045,11 +1053,11 @@ begin
     result := 0
   else
   begin
-    fSafe.Lock;
+    fSafe.ReadOnlyLock;
     try
       result := fValues.Capacity;
     finally
-      fSafe.UnLock;
+      fSafe.ReadOnlyUnLock;
     end;
   end;
 end;
@@ -1063,7 +1071,7 @@ end;
 
 procedure TSynQueue.Push(const aValue);
 begin
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     if fFirst < 0 then
     begin
@@ -1092,7 +1100,7 @@ begin
     end;
     fValues.ItemCopyFrom(@aValue, fLast);
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -1116,65 +1124,75 @@ end;
 
 function TSynQueue.Peek(out aValue): boolean;
 begin
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     result := fFirst >= 0;
     if result then
       fValues.ItemCopyAt(fFirst, @aValue);
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
+end;
+
+procedure TSynQueue.InternalPop(aValue: pointer);
+begin
+  fValues.ItemMoveTo(fFirst, aValue); // caller made ReadWriteLock
+  fSafe.WriteLock;
+  if fFirst = fLast then
+  begin
+    fFirst := -1; // reset whole store (keeping current capacity)
+    fLast := -2;
+  end
+  else
+  begin
+    inc(fFirst);
+    if fFirst = fCount then
+      // will retrieve from leading items
+      fFirst := 0;
+  end;
+  fSafe.WriteUnLock;
 end;
 
 function TSynQueue.Pop(out aValue): boolean;
 begin
-  fSafe.Lock;
+  fSafe.ReadWriteLock;
   try
     result := fFirst >= 0;
     if result then
-    begin
-      fValues.ItemMoveTo(fFirst, @aValue);
-      if fFirst = fLast then
-      begin
-        fFirst := -1; // reset whole store (keeping current capacity)
-        fLast := -2;
-      end
-      else
-      begin
-        inc(fFirst);
-        if fFirst = fCount then
-          // will retrieve from leading items
-          fFirst := 0;
-      end;
-    end;
+      InternalPop(@aValue);
   finally
-    fSafe.UnLock;
+    fSafe.ReadWriteUnLock;
   end;
 end;
 
 function TSynQueue.PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
   out aValue): boolean;
 begin
-  fSafe.Lock;
+  result := false;
+  if not Assigned(aCompare) or
+     not Assigned(aAnother) then
+    exit;
+  fSafe.ReadWriteLock;
   try
-    result := (fFirst >= 0) and
-              Assigned(aCompare) and
-              Assigned(aAnother) and
-              (aCompare(fValues.ItemPtr(fFirst)^, aAnother^) = 0) and
-              Pop(aValue);
+    if (fFirst >= 0) and
+       (aCompare(fValues.ItemPtr(fFirst)^, aAnother^) = 0) then
+    begin
+      InternalPop(@aValue);
+      result := true;
+    end;
   finally
-    fSafe.UnLock;
+    fSafe.ReadWriteUnLock;
   end;
 end;
 
 function TSynQueue.InternalDestroying(incPopCounter: integer): boolean;
 begin
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     result := wpfDestroying in fWaitPopFlags;
     inc(fWaitPopCounter, incPopCounter);
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -1226,13 +1244,16 @@ begin
     starttix := GetTickCount64;
     endtix := starttix + aTimeoutMS;
     repeat
-      fSafe.Lock;
-      try
-        if fFirst >= 0 then
-          result := fValues.ItemPtr(fFirst);
-      finally
-        if result = nil then
-          fSafe.UnLock; // caller should always Unlock once done
+      if fFirst >= 0 then
+      begin
+        fSafe.ReadWriteLock;
+        try
+          if fFirst >= 0 then
+            result := fValues.ItemPtr(fFirst);
+        finally
+          if result = nil then
+            fSafe.ReadWriteUnLock; // caller should always Unlock once done
+        end;
       end;
     until (result <> nil) or
           InternalWaitDone(starttix, endtix, aWhenIdle);
@@ -1245,13 +1266,13 @@ procedure TSynQueue.WaitPopFinalize(aTimeoutMS: integer);
 var
   starttix, endtix: Int64; // never wait forever
 begin
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     include(fWaitPopFlags, wpfDestroying);
     if fWaitPopCounter = 0 then
       exit;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
   starttix := GetTickCount64;
   endtix := starttix + aTimeoutMS;
@@ -1267,7 +1288,7 @@ var
   DA: TDynArray;
 begin
   DA.Init(fValues.Info.Info, aDynArrayValues, @n);
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     DA.Capacity := Count; // pre-allocate whole array, and set its length
     if fFirst >= 0 then
@@ -1279,7 +1300,7 @@ begin
         DA.AddArray(fValueVar, 0, fLast + 1);
       end;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
   if aDynArray <> nil then
     aDynArray^.Init(fValues.Info.Info, aDynArrayValues);
@@ -1294,7 +1315,7 @@ var
 label
   raw;
 begin
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     Clear;
     inherited LoadFromReader;
@@ -1320,7 +1341,7 @@ begin
     else
 raw:  fReader.Copy(p, n * fValues.Info.Cache.ItemSize);
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -1347,7 +1368,7 @@ var
   end;
 
 begin
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     inherited SaveToWriter(aWriter);
     n := Count;
@@ -1367,7 +1388,7 @@ begin
       WriteItems(0, fLast + 1);
     end;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 

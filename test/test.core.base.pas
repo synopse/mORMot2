@@ -832,6 +832,8 @@ begin
       Check(GetInteger(Pointer(L[i])) = TComponent(L.Objects[i]).Tag);
     Check(L.IndexOf('5') = 2);
     Check(L.IndexOf('6') < 0);
+    Check(L.Exists('5'));
+    Check(not L.Exists('6'));
   finally
     L.Free;
   end;
@@ -844,7 +846,7 @@ begin
       Check(L.AddObject(Rec.Parameters, Rec) = i - 1);
       Check(L.IndexOf(Rec.Parameters) = i - 1);
     end;
-    Check(L.IndexOf('') < 0);
+    Check(not L.Exists(''));
     Check(L.IndexOf('abcd') < 0);
     Check(L.Count = MAX);
     n := 0;

@@ -281,7 +281,7 @@ begin
         cookie := sock.HeaderGetValue('X-SESSIONCOOKIE');
         if cookie = '' then
           exit;
-        fPendingGet.Safe.Lock;
+        fPendingGet.Safe.WriteLock;
         try
           found := -1;
           now := mormot.core.os.GetTickCount64 shr 10;
@@ -339,7 +339,7 @@ begin
             end;
           end;
         finally
-          fPendingGet.Safe.UnLock;
+          fPendingGet.Safe.WriteUnLock;
         end;
       end
       else if log <> nil then

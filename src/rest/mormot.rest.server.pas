@@ -6878,7 +6878,8 @@ begin
   fSessionsDeprecatedTix := tix;
   result := 0;
   if (self = nil) or
-     (fSessions = nil) then
+     (fSessions = nil) or
+     (fSessions.Count = 0) then
     exit;
   fSessions.Safe.ReadWriteLock;
   try
