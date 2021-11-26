@@ -5587,7 +5587,7 @@ begin
   EnterCriticalSection(fLock);
   try
     fZones.LoadFromBinary(AlgoSynLZ.Decompress(Buffer));
-    fZones.ReHash;
+    fZones.ForceReHash;
     FreeAndNil(fIds);
     FreeAndNil(fDisplays);
   finally
@@ -5666,7 +5666,7 @@ begin
     end;
   end;
   reg.Close;
-  fZones.ReHash;
+  fZones.ForceReHash;
   FreeAndNil(fIds);
   FreeAndNil(fDisplays);
 end;

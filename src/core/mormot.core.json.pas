@@ -7927,7 +7927,7 @@ procedure TSynNameValue.Init(aCaseSensitive: boolean);
 begin
   // release dynamic arrays memory before FillcharFast()
   List := nil;
-  DynArray.Hasher.Clear;
+  Finalize(PDynArrayHasher(@DynArray.Hasher)^);
   // initialize hashed storage
   FillCharFast(self, SizeOf(self), 0);
   DynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray), List,
@@ -7976,7 +7976,7 @@ begin
         break;
     end;
   if result > 0 then
-    DynArray.ReHash;
+    DynArray.ForceReHash;
 end;
 
 function TSynNameValue.Value(const aName: RawUtf8; const aDefaultValue: RawUtf8): RawUtf8;
@@ -8054,13 +8054,13 @@ end;
 procedure TSynNameValue.SetBlobDataPtr(aValue: pointer);
 begin
   DynArray.LoadFrom(aValue);
-  DynArray.ReHash;
+  DynArray.ForceReHash;
 end;
 
 procedure TSynNameValue.SetBlobData(const aValue: RawByteString);
 begin
   DynArray.LoadFromBinary(aValue);
-  DynArray.ReHash;
+  DynArray.ForceReHash;
 end;
 
 function TSynNameValue.GetStr(const aName: RawUtf8): RawUtf8;
@@ -8337,7 +8337,7 @@ begin
     if Count <> 0 then
     begin
       fNameValue.DynArray.Clear;
-      fNameValue.DynArray.ReHash;
+      fNameValue.DynArray.ForceReHash;
       result := true; // mark something was flushed
     end;
     fRamUsed := 0;
@@ -8505,7 +8505,7 @@ begin
         inc(result);
       end;
     if result > 0 then
-      fKeys.Rehash; // mandatory after fKeys.Delete(i)
+      fKeys.ForceReHash; // mandatory after manual fKeys.Delete(i)
   finally
     if (result > 0) and
        (fSafe.RWUse = uRWLock) then
@@ -8521,7 +8521,7 @@ begin
   fSafe.Lock; // = RWLock(cWrite);
   try
     fKeys.Clear;
-    fKeys.Hasher.Clear; // mandatory to avoid GPF
+    fKeys.Hasher.ForceReHash; // mandatory to avoid GPF
     fValues.Clear;
     if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
       fTimeOuts.Clear;
@@ -9021,7 +9021,7 @@ begin
        (fValues.Count = n) then
       begin
         SetTimeouts;
-        fKeys.Rehash; // warning: duplicated keys won't be identified
+        fKeys.ForceRehash; // warning: duplicated keys won't be identified
         result := true;
       end;
   finally
@@ -9052,7 +9052,7 @@ begin
         fSafe.Padding[DIC_KEYCOUNT].VInteger := n;
         fSafe.Padding[DIC_VALUECOUNT].VInteger := n;      
         SetTimeouts;  // set ComputeNextTimeOut for all items
-        fKeys.ReHash; // optimistic: input from safe TSynDictionary.SaveToBinary
+        fKeys.ForceReHash; // optimistic: input from TSynDictionary.SaveToBinary
         result := true;
       end;
     except

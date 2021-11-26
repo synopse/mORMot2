@@ -933,7 +933,7 @@ begin
     A.amount := UInt32ToUtf8(i);
     Check(AmountDA.Add(A) = i - 1);
   end;
-  AmountDA.ReHash;
+  AmountDA.ForceReHash;
   for i := 1 to length(AmountCollection) do
     Check(AmountDA.FindHashed(i) = i - 1);
   // default Init() will hash and compare the WHOLE binary content, i.e. 8 bytes
@@ -947,7 +947,7 @@ begin
     AI.amount := i * 2;
     Check(AmountIDA1.Add(AI) = i - 1);
   end;
-  AmountIDA1.ReHash;
+  AmountIDA1.ForceReHash;
   for i := 1 to length(AmountICollection) do
   begin
     AI.firmID := i;
@@ -967,7 +967,7 @@ begin
     AI.amount := i * 2;
     Check(AmountIDA2.Add(AI) = i - 1);
   end;
-  AmountIDA2.ReHash;
+  AmountIDA2.ForceReHash;
   for i := 1 to length(AmountICollection) do
     Check(AmountIDA2.FindHashed(i) >= 0);
   // valide generic-like features
@@ -989,7 +989,7 @@ begin
   City.Longitude := 0;
   ACities.Add(City);
   Check(ACities.Count = 3);
-  ACities.ReHash; // will use default hash, and search by Name = 1st field
+  ACities.ForceReHash; // will use default hash, and search by Name = 1st field
   City.Name := 'Iasi';
   Check(ACities.FindHashedAndFill(City) = 0);
   Check(City.Name = 'Iasi');
@@ -5097,7 +5097,7 @@ begin
       d.tzi.Bias := i;
       check(tz.Zones.Add(d) = i, 'add some zones');
     end;
-    tz.Zones.ReHash;
+    tz.Zones.ForceReHash;
     dt := nowutc;
     for reload := false to true do
     begin

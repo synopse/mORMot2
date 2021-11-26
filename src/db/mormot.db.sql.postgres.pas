@@ -494,7 +494,7 @@ var
   cName: RawUtf8;
 begin
   fColumn.Clear;
-  fColumn.ReHash;
+  fColumn.ForceReHash;
   nCols := PQ.nfields(fRes);
   fColumn.Capacity := nCols;
   for c := 0 to nCols - 1 do

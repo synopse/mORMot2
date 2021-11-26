@@ -1189,7 +1189,7 @@ begin
     if fStatement <> nil then
       ODBC.CloseCursor(fStatement); // no check needed
     fColumn.Clear;
-    fColumn.ReHash;
+    fColumn.ForceReHash;
   end;
   inherited ReleaseRows;
 end;

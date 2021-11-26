@@ -1584,7 +1584,7 @@ begin
   if fColumnCount > 0 then
   begin
     fColumn.Clear;
-    fColumn.ReHash;
+    fColumn.ForceReHash;
     // faster if full command is re-prepared!
     fCommand := nil;
     Prepare(fSql, fExpectResults);

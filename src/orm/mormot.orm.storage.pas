@@ -720,7 +720,7 @@ type
   // default, if BinaryFile parameter is left to false; a proprietary compressed
   // binary format can be used instead) if a file name is supplied at creating
   // the TRestStorageInMemory instance
-  // - our TRestStorage database engine is very optimized and is a lot
+  // - our TRestStorageInMemory database engine is very optimized and is a lot
   // faster than SQLite3 for such queries - but its values remain in RAM,
   // therefore it is not meant to deal with more than 100,000 rows or if
   // ACID commit on disk is required
@@ -3055,8 +3055,8 @@ begin
     begin
       timer.Start;
       for f := 0 to length(fUnique) - 1 do
-        fUnique[f].Hasher.Clear;
-      fValues.Hasher.Clear;
+        fUnique[f].Hasher.ForceReHash;
+      fValues.Hasher.ForceReHash;
       fValues.Clear;
       if andUpdateFile then
       begin
@@ -3096,13 +3096,13 @@ begin
   loaded.Pause;
   timer.Start;
   fCount := length(fValue);
-  dup := fValues.ReHash;
+  dup := fValues.ForceReHash;
   if dup > 0 then
     dupfield := ID_TXT
   else
     for f := 0 to length(fUnique) - 1 do
     begin
-      dup := fUnique[f].Hasher.ReHash({forced=}true);
+      dup := fUnique[f].Hasher.ForceReHash;
       if dup > 0 then
       begin
         dupfield := fUnique[f].PropInfo.Name;

@@ -897,7 +897,7 @@ begin
                (value < fCount);
   fDynArray.Count := value; // will resize the dynamic array
   if forcehash then
-    fHasher^.ReHash({forced=}true);
+    fHasher^.ForceReHash;
 end;
 
 function TSynListAbstract.GetCapacity: PtrInt;
@@ -913,21 +913,21 @@ begin
                (value < fCount);
   fDynArray.Capacity := value; // don't change Count, just dynamic array length
   if forcehash then
-    fHasher^.ReHash({forced=}true);
+    fHasher^.ForceReHash;
 end;
 
 procedure TSynListAbstract.Clear;
 begin
   fDynArray.Clear;
   if fHasher <> nil then
-    fHasher^.ReHash({forced=}true);
+    fHasher^.ForceReHash;
 end;
 
 procedure TSynListAbstract.Reverse;
 begin
   fDynArray.Reverse;
   if fHasher <> nil then
-    fHasher^.ReHash({forced=}true);
+    fHasher^.ForceReHash;
 end;
 
 function TSynListAbstract.GetComparer: TDynArraySortCompare;
@@ -944,7 +944,7 @@ procedure TSynListAbstract.Sort(customcompare: TDynArraySortCompare);
 begin
   fDynArray.Sort(customcompare);
   if fHasher <> nil then
-    fHasher^.ReHash({forced=}true);
+    fHasher^.ForceReHash;
 end;
 
 procedure TSynListAbstract.Sort(start, stop: integer;
@@ -952,7 +952,7 @@ procedure TSynListAbstract.Sort(start, stop: integer;
 begin
   fDynArray.SortRange(start, stop, customcompare);
   if fHasher <> nil then
-    fHasher^.ReHash({forced=}true);
+    fHasher^.ForceReHash;
 end;
 
 procedure TSynListAbstract.Sort(var indexes: TIntegerDynArray;
@@ -966,7 +966,7 @@ procedure TSynListAbstract.Sort(const customcompare: TOnDynArraySortCompare;
 begin
   fDynArray.Sort(customcompare, descending);
   if fHasher <> nil then
-    fHasher^.ReHash({forced=}true);
+    fHasher^.ForceReHash;
 end;
 
 function TSynListAbstract.Sorted: boolean;

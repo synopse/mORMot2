@@ -1960,6 +1960,7 @@ function TSynMonitorUsage.TrackPropLock(Instance: TObject;
 var
   i, j: PtrInt;
 begin
+  result := nil;
   fSafe.Lock;
   for i := 0 to length(fTracked) - 1 do
     if fTracked[i].Instance = Instance then
@@ -1975,7 +1976,6 @@ begin
         break;
       end;
   fSafe.UnLock;
-  result := nil;
 end;
 
 const
