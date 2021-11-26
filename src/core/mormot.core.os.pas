@@ -2544,9 +2544,17 @@ type
     // - not needed if TRWLock is part of a class - i.e. if was filled with 0
     procedure Init;
       {$ifdef HASINLINE} inline; {$endif}
-    /// wait for the lock to be accessible for reading
-    // - but not upgradable to writing: nested ReadWriteLock/WriteLock would lock
-    // - several readers could acquire the lock simultaneously
+    /// wait for the lock to be available for reading, but not upgradable to write
+    // - warning: calling ReadWriteLock/WriteLock after ReadOnlyLock would deadlock
+    // - several readers could acquire the lock simultaneously, and ReadOnlyLock
+    // is reentrant since there is an internal counter
+    // - typical usage is the following:
+    // ! rwlock.ReadOnlyLock; // won't block concurrent ReadOnlyLock
+    // ! try
+    // !   result := Exists(value);
+    // ! finally
+    // !   rwlock.ReadOnlyUnLock;
+    // ! end;
     procedure ReadOnlyLock;
     /// release a previous ReadOnlyLock call
     procedure ReadOnlyUnLock;
@@ -2557,6 +2565,22 @@ type
     // - several readers could acquire ReadOnlyLock simultaneously, but only a
     // single thread could acquire a ReadWriteLock
     // - reentrant method, and nested WriteLock is allowed
+    // - typical usage is the following:
+    // ! rwlock.ReadWriteLock;      // won't block concurrent ReadOnlyLock
+    // ! try                        // but block other ReadWriteLock/WriteLock
+    // !   result := Exists(value);
+    // !   if not result then
+    // !   begin
+    // !     rwlock.WriteLock; // block any ReadOnlyLock/ReadWriteLock/WriteLock
+    // !     try
+    // !       Add(value);
+    // !     finally
+    // !       rwlock.WriteUnLock;
+    // !     end;
+    // !   end;
+    // ! finally
+    // !   rwlock.ReadWriteUnLock;
+    // ! end;
     procedure ReadWriteLock;
     /// release a previous ReadWriteLock call
     procedure ReadWriteUnLock;
@@ -2566,6 +2590,13 @@ type
     // - calling WriteLock within a ReadWriteLock is allowed and won't block
     // - but calling WriteLock within a ReadOnlyLock would deaadlock
     // - this method is rentrant from a single thread
+    // - typical usage is the following:
+    // ! rwlock.WriteLock; // block any ReadOnlyLock/ReadWriteLock/WriteLock
+    // ! try
+    // !   Add(value);
+    // ! finally
+    // !   rwlock.WriteUnLock;
+    // ! end;
     procedure WriteLock;
     /// release a previous WriteLock call
     procedure WriteUnlock;
@@ -3882,9 +3913,6 @@ end;
 
 
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
-
-var
-  AutoSlotsLock: TRTLCriticalSection;
 
 procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt; LeaveUnprotected: boolean);
 begin
@@ -5260,6 +5288,7 @@ end;
 procedure TRWLock.Init;
 begin
   Flags := 0;
+  // no need to set the other fields because they will be reset if Flags=0
 end;
 
 procedure TRWLock.ReadOnlyLock;
@@ -5301,8 +5330,8 @@ begin
       break;
     spin := DoSpin(spin);
   until false;
-  LastReadWriteLockCount := 1;
   LastReadWriteLockThread := tid;
+  LastReadWriteLockCount := 1;
 end;
 
 procedure TRWLock.ReadWriteUnLock;
@@ -5340,11 +5369,11 @@ begin
       // there is a pending ReadWriteLock but not on this thread
       LockedDec(Flags, 1) // try again
     else
-      // we can acquire the WR lock
+      // we acquired the WR lock
       break;
   until false;
-  LastWriteLockCount := 1;
   LastWriteLockThread := tid;
+  LastWriteLockCount := 1;
   // wait for all readers to have finished their job
   while Flags > 3 do
     spin := DoSpin(spin);
@@ -5408,7 +5437,7 @@ begin
   InitializeCriticalSection(fSection);
   fLocked := false;
   fInitialized := true;
-  fRW.Flags := 0;
+  fRW.Init;
   PaddingUsedCount := 0;
 end;
 
@@ -5981,7 +6010,6 @@ begin
   end;
   ObjArrayClear(CurrentFakeStubBuffers);
   Executable.Version.Free;
-  DeleteCriticalSection(AutoSlotsLock);
   DeleteCriticalSection(GlobalCriticalSection);
   FinalizeSpecificUnit; // in mormot.core.os.posix/windows.inc files
 end;
@@ -5992,7 +6020,6 @@ initialization
   SetMultiByteRTLFileSystemCodePage(CP_UTF8);
   {$endif ISFPC27}
   InitializeCriticalSection(GlobalCriticalSection);
-  InitializeCriticalSection(AutoSlotsLock);
   InitializeUnit; // in mormot.core.os.posix/windows.inc files
   OSVersionShort := ToTextOS(OSVersionInt32);
   SetExecutableVersion(0, 0, 0, 0);
