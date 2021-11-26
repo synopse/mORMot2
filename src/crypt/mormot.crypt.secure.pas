@@ -703,7 +703,10 @@ function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8; overlo
 procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos); overload;
 
 /// one-step hash computation of a buffer as lowercase hexadecimal string
-function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
+function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
+
+/// one-step hash computation of a buffer as lowercase hexadecimal string
+function HashFull(aAlgo: THashAlgo; const aBuffer: RawByteString): RawUtf8; overload;
 
 /// compute the MD5 checksum of a given file
 // - this function maps the THashFile signature as defined in mormot.core.buffers
@@ -1522,6 +1525,13 @@ var
   hasher: TSynHasher;
 begin
   result := hasher.Full(aAlgo, aBuffer, aLen);
+end;
+
+function HashFull(aAlgo: THashAlgo; const aBuffer: RawByteString): RawUtf8;
+var
+  hasher: TSynHasher;
+begin
+  result := hasher.Full(aAlgo, pointer(aBuffer), length(aBuffer));
 end;
 
 function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8;
