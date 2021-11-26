@@ -1931,7 +1931,7 @@ end;
 
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var off: TOffsets;
-asm // rcx=src, edx=size, r8=dest
+asm     // rcx=src, edx=size, r8=dest
         {$ifdef WIN64ABI} // additional registers to preserve
         push    rsi
         push    rdi

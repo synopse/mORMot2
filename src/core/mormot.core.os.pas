@@ -2602,10 +2602,10 @@ type
     procedure WriteUnlock;
       {$ifdef HASINLINE} inline; {$endif}
     /// a high-level wrapper over ReadOnlyLock/ReadWriteLock/WriteLock methods
-    procedure Lock(context: TRWLockContext);
+    procedure Lock(context: TRWLockContext {$ifndef PUREMORMOT2} = cWrite {$endif});
       {$ifdef HASINLINE} inline; {$endif}
     /// a high-level wrapper over ReadOnlyUnLock/ReadWriteUnLock/WriteUnLock methods
-    procedure UnLock(context: TRWLockContext);
+    procedure UnLock(context: TRWLockContext {$ifndef PUREMORMOT2} = cWrite {$endif});
       {$ifdef HASINLINE} inline; {$endif}
   end;
 
@@ -5291,6 +5291,55 @@ begin
   // no need to set the other fields because they will be reset if Flags=0
 end;
 
+// dedicated asm for this most simple (and used) method
+{$ifdef CPUX64}
+
+procedure TRWLock.ReadOnlyLock;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        {$ifndef WIN64ABI}
+        mov     rcx, rdi      // rcx = self
+        {$endif WIN64ABI}
+@retry: mov     r8d, SPIN_COUNT
+@spin:  mov     rax, qword ptr [rcx + TRWLock.Flags]
+        and     rax, not 1
+        lea     rdx, [rax + 4]
+   lock cmpxchg qword ptr [rcx + TRWLock.Flags], rdx
+        jnz     @locked
+        ret
+@locked:pause
+        dec     r8d
+        jnz     @spin
+        push    rcx
+        call    SwitchToThread
+        pop     rcx
+        jmp     @retry
+end;
+
+{$else}
+
+{$ifdef CPUX86}
+
+procedure TRWLock.ReadOnlyLock;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    ebx
+        mov     ebx, eax
+@retry: mov     ecx, SPIN_COUNT
+@spin:  mov     eax, dword ptr [ebx + TRWLock.Flags]
+        and     eax, not 1
+        lea     edx, [eax + 4]
+   lock cmpxchg dword ptr [ebx + TRWLock.Flags], edx
+        jz      @done
+        pause
+        dec     ecx
+        jnz     @spin
+        call    SwitchToThread
+        jmp     @retry
+@done:  pop     ebx
+end;
+
+{$else}
+
 procedure TRWLock.ReadOnlyLock;
 var
   spin, f: PtrUInt;
@@ -5304,6 +5353,9 @@ begin
     spin := DoSpin(spin);
   until false;
 end;
+
+{$endif CPUX86}
+{$endif CPUX64}
 
 procedure TRWLock.ReadOnlyUnLock;
 begin
