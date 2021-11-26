@@ -462,9 +462,16 @@ type
   end;
 
   /// how TSynKeyValueSpecialized<TKey, TValue>.Create() will handle its storage
+  // - kvoKeyCaseInsensitive will let TKey values lookup ignore the case
+  // - kvoThreadSafe will force the instance to be thread-safe via a TRWLock
+  // - kvoThreadCriticalSection + kvoThreadSafe will force to use a regular
+  // TCriticalSection for the thread safety
+  // - kvoDefaultIfNotFound will let IKeyValue<TKey, TValue>.Items[] return the
+  // default TValue (e.g. 0 or '') and don't raise an exception if TKey is not found
   TSynKeyValueOptions = set of (
     kvoKeyCaseInsensitive,
     kvoThreadSafe,
+    kvoThreadCriticalSection,
     kvoDefaultIfNotFound);
 
   /// stack parameters to ease TSynKeyValueSpecialized<TKey, TValue> creation
@@ -1142,7 +1149,9 @@ begin
   fData := TSynDictionary.Create(k, v, kvoKeyCaseInsensitive in fOptions,
     aContext.Timeout, aContext.Compress, aContext.Hasher);
   if not (kvoThreadSafe in fOptions) then
-    fData.ThreadUse := uNoLock; // no locking unless kvoThreadSafe is set
+    fData.ThreadUse := uNoLock // not thread-safe by default
+  else if not (kvoThreadCriticalSection in fOptions) then
+    fData.ThreadUse := uRWLock;
   if (fData.Keys.Info.ArrayRtti = nil) or
      ((aContext.KeyArrayTypeInfo <> nil) and
       (fData.Keys.Info.ArrayRtti.Info <> fKeyTypeInfo)) then
