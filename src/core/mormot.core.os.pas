@@ -2531,9 +2531,8 @@ type
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
   // - locks are expected to be kept a very small amount of time: use TSynLocker
   // or TRTLCriticalSection if the lock may block too long
-  // - warning: ReadOnlyLock and WriteLock are reentrant, but ReadWriteLock would
-  // deadlock if called in a row: use TSynLocker or TRTLCriticalSection if the
-  // nested code may call again ReadWriteLock/WriteLock e.g. from sub functions
+  // - warning: all methods are reentrant, but WriteLock/ReadWriteLock would
+  // deadlock if called after a ReadOnlyLock
   TRWLock = object
   private
     Flags: PtrUInt; // bit 0 = WriteLock, 1 = ReadWriteLock, >1 = ReadOnlyLock
@@ -2545,9 +2544,9 @@ type
     procedure Init;
       {$ifdef HASINLINE} inline; {$endif}
     /// wait for the lock to be available for reading, but not upgradable to write
+    // - several readers could acquire the lock simultaneously
+    // - ReadOnlyLock is reentrant since there is an internal counter
     // - warning: calling ReadWriteLock/WriteLock after ReadOnlyLock would deadlock
-    // - several readers could acquire the lock simultaneously, and ReadOnlyLock
-    // is reentrant since there is an internal counter
     // - typical usage is the following:
     // ! rwlock.ReadOnlyLock; // won't block concurrent ReadOnlyLock
     // ! try
@@ -2602,10 +2601,10 @@ type
     procedure WriteUnlock;
       {$ifdef HASINLINE} inline; {$endif}
     /// a high-level wrapper over ReadOnlyLock/ReadWriteLock/WriteLock methods
-    procedure Lock(context: TRWLockContext {$ifndef PUREMORMOT2} = cWrite {$endif});
+    procedure Lock(context: TRWLockContext (*{$ifndef PUREMORMOT2} = cWrite {$endif}*));
       {$ifdef HASINLINE} inline; {$endif}
     /// a high-level wrapper over ReadOnlyUnLock/ReadWriteUnLock/WriteUnLock methods
-    procedure UnLock(context: TRWLockContext {$ifndef PUREMORMOT2} = cWrite {$endif});
+    procedure UnLock(context: TRWLockContext (*{$ifndef PUREMORMOT2} = cWrite {$endif}*));
       {$ifdef HASINLINE} inline; {$endif}
   end;
 
@@ -2620,8 +2619,9 @@ const
 type
   /// how TSynLocker handles its thread processing
   // - by default, uSharedLock will use the main TRTLCriticalSection
-  // - you may set uRWLock and call overloaded RWLock/RWUnLock() to
-  // use a lighter TRWLock - but be aware that only cReadOnly is reentrant
+  // - you may set uRWLock and call overloaded RWLock/RWUnLock() to use our
+  // lighter TRWLock - but be aware that cReadOnly followed by cReadWrite/cWrite
+  // would deadlock - regular Lock/UnLock will use cWrite exclusive lock
   // - uNoLock will disable the whole locking mechanism
   TSynLockerUse = (
     uSharedLock,
