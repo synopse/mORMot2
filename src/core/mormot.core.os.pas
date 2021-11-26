@@ -2684,7 +2684,7 @@ type
     // - should have been initiazed with a NewSynLocker call
     procedure DoneAndFreeMem;
     /// low-level acquisition of the lock, depending on RWUse property
-    // - warning: if RWUse=uRWLock, this method is reentrant only for cReadOnly
+    // - warning: if RWUse=uRWLock, this method will use the internal TRWLock
     procedure RWLock(context: TRWLockContext);
       {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// low-level release of the lock, depending on RWUse property
@@ -2702,7 +2702,7 @@ type
     // ! finally
     // !   Safe.Unlock;
     // ! end;
-    procedure Lock; overload;
+    procedure Lock;
       {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// will try to acquire the mutex
     // - do nothing and return false if RWUse is not the default uSharedLock

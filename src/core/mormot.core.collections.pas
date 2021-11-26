@@ -106,8 +106,8 @@ type
 
   /// customize IList<T>.Pop() behaviour
   // - popPeek won't remove the item from the list, just copy the value
-  // - Add+Pop implement a LIFO (Last-In-First-Out) stack by default, but
-  // FIFO (First-In-First-Out) if popFromHead is defined
+  // - Add+Pop implement a LIFO (Last-In-First-Out) stack by default, but a
+  // FIFO (First-In-First-Out) if popFromHead is defined in this options set
   TListPop = set of (
     popPeek,
     popFromHead);
