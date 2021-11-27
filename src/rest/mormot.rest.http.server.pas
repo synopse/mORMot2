@@ -173,7 +173,7 @@ type
   // - just create it and it will serve SQL statements as UTF-8 JSON
   // - for a true AJAX server, expanded data is prefered - your code may contain:
   // ! DBServer.NoAjaxJson := false;
-  TRestHttpServer = class(TSynPersistentLock)
+  TRestHttpServer = class(TSynPersistent)
   protected
     fShutdownInProgress: boolean;
     fHttpServer: THttpServerGeneric;
@@ -183,6 +183,7 @@ type
     fDBServers: array of TRestHttpOneServer;
     fDBServerNames: RawUtf8;
     fDBSingleServer: ^TRestHttpOneServer;
+    fSafe: TRWLock;
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUtf8;
     fAccessControlAllowOriginsMatch: TMatchs;
@@ -516,7 +517,7 @@ begin
      (aServer.Model = nil) then
     exit;
   log := fLog.Enter(self, 'AddServer');
-  fSafe.Lock; // protect fDBServers[]
+  fSafe.WriteLock; // protect fDBServers[]
   try
     n := length(fDBServers);
     for i := 0 to n - 1 do
@@ -535,7 +536,7 @@ begin
     fHttpServer.ProcessName := fDBServerNames;
     result := true;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
     if log <> nil then
       log.Log(sllHttp, 'AddServer(%,Root=%,Port=%,Public=%:%)=% servers=%',
         [aServer, aServer.Model.Root, fPort, fPublicAddress, fPublicPort,
@@ -545,14 +546,14 @@ end;
 
 function TRestHttpServer.DBServerFind(aServer: TRestServer): integer;
 begin
-  fSafe.Lock; // protect fDBServers[]
+  fSafe.ReadOnlyLock; // protect fDBServers[]
   try
     for result := 0 to Length(fDBServers) - 1 do
       if fDBServers[result].Server = aServer then
         exit;
     result := -1;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
@@ -567,7 +568,7 @@ begin
      (aServer.Model = nil) then
     exit;
   log := fLog.Enter(self, 'RemoveServer');
-  fSafe.Lock; // protect fDBServers[]
+  fSafe.WriteLock; // protect fDBServers[]
   try
     n := high(fDBServers);
     for i := n downto 0 do // may appear several times, with another Security
@@ -594,7 +595,7 @@ begin
         result := true; // don't break here: may appear with another Security
       end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
     if log <> nil then
       log.Log(sllHttp, '%.RemoveServer(Root=%)=%',
         [self, aServer.Model.Root, BOOL_STR[result]], self);
@@ -787,7 +788,7 @@ begin
     log := fLog.Enter('Shutdown(%)', [BOOL_STR[noRestServerShutdown]], self);
     fShutdownInProgress := true;
     fHttpServer.Shutdown;
-    fSafe.Lock; // protect fDBServers[]
+    fSafe.WriteLock; // protect fDBServers[]
     try
       for i := 0 to high(fDBServers) do
       begin
@@ -798,7 +799,7 @@ begin
           fDBServers[i].Server.OnNotifyCallback := nil;
       end;
     finally
-      fSafe.UnLock;
+      fSafe.WriteUnLock;
     end;
   end;
 end;
@@ -808,12 +809,12 @@ begin
   result := nil;
   if self = nil then
     exit;
-  fSafe.Lock; // protect fDBServers[]
+  fSafe.ReadOnlyLock; // protect fDBServers[]
   try
     if cardinal(Index) < cardinal(length(fDBServers)) then
       result := fDBServers[Index].Server;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
@@ -827,14 +828,14 @@ procedure TRestHttpServer.SetDBServerAccessRight(Index: integer;
 begin
   if self = nil then
     exit;
-  fSafe.Lock; // protect fDBServers[]
+  fSafe.WriteLock; // protect fDBServers[]
   try
     if Value = nil then
       Value := HTTP_DEFAULT_ACCESS_RIGHTS;
     if cardinal(Index) < cardinal(length(fDBServers)) then
       fDBServers[Index].RestAccessRights := Value;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -1017,7 +1018,7 @@ begin
     else
     begin
       // thread-safe use of dynamic fDBServers[] array
-      fSafe.Lock;
+      fSafe.ReadOnlyLock;
       try
         for i := 0 to length(fDBServers) - 1 do
           with fDBServers[i] do
@@ -1032,12 +1033,12 @@ begin
               break;
             end;
       finally
-        fSafe.UnLock;
+        fSafe.ReadOnlyUnLock;
       end;
-      if (match = rmNoMatch) or
-         (serv = nil) then
-        exit;
     end;
+    if (match = rmNoMatch) or
+       (serv = nil) then
+      exit;
     if (rsoRedirectServerRootUriForExactCase in fOptions) and
        (match = rmMatchWithCaseChange) then
     begin
@@ -1107,12 +1108,12 @@ var
 begin
   if self = nil then
     exit;
-  fSafe.Lock; // protect fDBServers[]
+  fSafe.WriteLock; // protect fDBServers[]
   try
     for i := 0 to high(fDBServers) do
       fDBServers[i].Server.Run.EndCurrentThread(Sender);
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -1124,12 +1125,12 @@ begin
     exit;
   if CurrentThreadName = '' then
     SetCurrentThreadName('% %% %', [self, fPort, fDBServerNames, Sender]);
-  fSafe.Lock; // protect fDBServers[]
+  fSafe.WriteLock; // protect fDBServers[]
   try
     for i := 0 to high(fDBServers) do
       fDBServers[i].Server.Run.BeginCurrentThread(Sender);
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 

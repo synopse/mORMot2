@@ -844,7 +844,7 @@ type
   TServicesPublishedInterfacesDynArray = array of TServicesPublishedInterfaces;
 
   /// used e.g. by TRestServer to store a list of TServicesPublishedInterfaces
-  TServicesPublishedInterfacesList = class(TSynPersistentLock)
+  TServicesPublishedInterfacesList = class(TSynPersistentRWLock)
   private
     fDynArray: TDynArray;
     fDynArrayTimeoutTix: TDynArray;
@@ -1637,7 +1637,7 @@ var
   tix: Int64;
 begin
   tix := GetTickCount64;
-  Safe.Lock;
+  Safe.ReadOnlyLock;
   try
     for result := 0 to Count - 1 do
       if List[result].PublicUri.Equals(aPublicUri) then
@@ -1646,7 +1646,7 @@ begin
           exit;
     result := -1;
   finally
-    Safe.UnLock;
+    Safe.ReadOnlyUnLock;
   end;
 end;
 
@@ -1658,7 +1658,7 @@ var
 begin
   tix := GetTickCount64;
   result := nil;
-  Safe.Lock;
+  Safe.ReadOnlyLock;
   try
     n := 0;
     for i := Count - 1 downto 0 do
@@ -1672,7 +1672,7 @@ begin
           inc(n);
         end;
   finally
-    Safe.UnLock;
+    Safe.ReadOnlyUnLock;
   end;
 end;
 
@@ -1686,7 +1686,7 @@ begin
   tix := GetTickCount64;
   result := nil;
   n := 0;
-  Safe.Lock;
+  Safe.ReadOnlyLock;
   try
     for i := Count - 1 downto 0 do
       // downwards to return the latest first
@@ -1695,7 +1695,7 @@ begin
            (fTimeoutTix[i] < tix) then
           AddRawUtf8(TRawUtf8DynArray(result), n, List[i].PublicUri.Uri);
   finally
-    Safe.UnLock;
+    Safe.ReadOnlyUnLock;
   end;
   SetLength(result, n);
 end;
@@ -1707,7 +1707,7 @@ var
   tix: Int64;
 begin
   tix := GetTickCount64;
-  Safe.Lock;
+  Safe.ReadOnlyLock;
   try
     aWriter.Add('[');
     if aServiceName = '*' then
@@ -1735,7 +1735,7 @@ begin
     aWriter.CancelLastComma;
     aWriter.Add(']');
   finally
-    Safe.UnLock;
+    Safe.ReadOnlyUnLock;
   end;
 end;
 
@@ -1757,7 +1757,7 @@ var
   tix: Int64;
   i: PtrInt;
 begin
-  Safe.Lock;
+  Safe.WriteLock;
   try
     fDynArray.LoadFromJson(pointer(PublishedJson));
     fDynArrayTimeoutTix.Count := Count;
@@ -1769,7 +1769,7 @@ begin
     for i := 0 to Count - 1 do
       fTimeoutTix[i] := tix;
   finally
-    Safe.UnLock;
+    Safe.WriteUnLock;
   end;
 end;
 
@@ -1798,7 +1798,7 @@ begin
      (nfo.PublicUri.Address = '') then
     // invalid supplied JSON content
     exit;
-  Safe.Lock;
+  Safe.WriteLock;
   try
     // store so that the latest updated version is always at the end
     for i := 0 to Count - 1 do
@@ -1821,7 +1821,7 @@ begin
     end;
     fLastPublishedJson := crc;
   finally
-    Safe.UnLock;
+    Safe.WriteUnLock;
   end;
 end;
 
