@@ -2541,6 +2541,8 @@ type
     // - not needed if TRWLock is part of a class - i.e. if was filled with 0
     procedure Init;
       {$ifdef HASINLINE} inline; {$endif}
+    /// could be called at shutdown to ensure that the R/W lock is in neutral state
+    procedure AssertDone;
     /// wait for the lock to be available for reading, but not upgradable to write
     // - several readers could acquire the lock simultaneously
     // - ReadOnlyLock is reentrant since there is an internal counter
@@ -2605,6 +2607,8 @@ type
     procedure UnLock(context: TRWLockContext (*{$ifndef PUREMORMOT2} = cWrite {$endif}*));
       {$ifdef HASINLINE} inline; {$endif}
   end;
+  PRWLock = ^TRWLock;
+
 
 const
   RW_FORCE: array[{write}boolean] of TRWLockContext = (
@@ -5290,6 +5294,12 @@ procedure TRWLock.Init;
 begin
   Flags := 0;
   // no need to set the other fields because they will be reset if Flags=0
+end;
+
+procedure TRWLock.AssertDone;
+begin
+  if Flags <> 0 then
+    raise EOSException.CreateFmt('TRWLock Flags=%x', [Flags]);
 end;
 
 // dedicated asm for this most simple (and used) method
