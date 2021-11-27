@@ -4780,7 +4780,7 @@ type
     // - caller must provide the JSON result for the SQL statement previously set
     //  by LockJson()
     // - do proper caching of the JSON response for this SQL statement
-    procedure UnLockJson(const aJsonResult: RawUtf8; aResultCount: PtrInt);
+    procedure UnLockJson(const aSql, aJsonResult: RawUtf8; aResultCount: PtrInt);
     /// (re)open the database from file fFileName
     // - TSqlDatabase.Create already opens the database: this method is to be
     // used only on particular cases, e.g. to close temporary a DB file and
@@ -6795,7 +6795,7 @@ begin
     if aResultCount <> nil then
       aResultCount^ := Count;
   finally
-    UnLockJson(result, Count);
+    UnLockJson(aSql, result, Count);
     fLog.Add.Log(sllSQL, '% % returned % bytes %', [Timer.Stop,
       FileNameWithoutPath, length(result), aSql], self);
   end;
@@ -7027,14 +7027,14 @@ begin
   end;
 end;
 
-procedure TSqlDataBase.UnLockJson(const aJsonResult: RawUtf8;
+procedure TSqlDataBase.UnLockJson(const aSql, aJsonResult: RawUtf8;
   aResultCount: PtrInt);
 begin
   if self <> nil then
   try
     if fLog <> nil then
       fLog.Add.Log(sllResult, aJsonResult, self, fLogResultMaximumSize);
-    fCache.Add(aJsonResult, aResultCount); // no-op if Reset was made just before
+    fCache.AddOrUpdate(aSql, aJsonResult, aResultCount); // no-op if Reset was made just before
   finally
     fSafe.UnLock; // on non-concurent calls, this API is very fast
   end;

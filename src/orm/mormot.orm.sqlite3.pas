@@ -462,7 +462,7 @@ begin
       inherited CreateFromTables(Tables, aSql, jsoncached);
       Assert(n = fRowCount);
     finally
-      aDB.UnLockJson(jsoncached, n);
+      aDB.UnLockJson(aSql, jsoncached, n);
     end
   else
   begin
@@ -1802,7 +1802,7 @@ begin
           GetAndPrepareStatementRelease(E);
       end;
     finally
-      DB.UnLockJson(result, rows);
+      DB.UnLockJson(SQL, result, rows);
     end;
   end;
   if ReturnedRowCount <> nil then
