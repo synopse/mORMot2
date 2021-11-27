@@ -2518,8 +2518,6 @@ procedure RedirectCode(Func, RedirectFunc: Pointer);
 
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }
 
-  { TODO : introduce light cross-platform read/write lockers ? }
-
 type
   /// how TRWLock.Lock and TRWLock.UnLock high-level wrapper methods are called
   TRWLockContext = (
@@ -2537,7 +2535,7 @@ type
   private
     Flags: PtrUInt; // bit 0 = WriteLock, 1 = ReadWriteLock, >1 = ReadOnlyLock
     LastReadWriteLockThread, LastWriteLockThread: TThreadID; // to be reentrant
-    LastReadWriteLockCount, LastWriteLockCount: cardinal;
+    LastReadWriteLockCount,  LastWriteLockCount: cardinal;
   public
     /// initialize the R/W lock
     // - not needed if TRWLock is part of a class - i.e. if was filled with 0
@@ -5411,21 +5409,18 @@ begin
     exit;
   end;
   spin := SPIN_COUNT;
+  // acquire the WR flag bit
   repeat
-    // acquire the WR flag bit
-    repeat
-      f := Flags and not 1; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
-      if LockedCAS(Flags, f + 1, f) then
+    f := Flags and not 1; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
+    if LockedCAS(Flags, f + 1, f) then
+      if (Flags and 2 = 2) and
+         (LastReadWriteLockThread <> tid) then
+        // there is a pending ReadWriteLock but not on this thread
+        LockedDec(Flags, 1) // try again
+      else
+        // we exclusively acquired the WR lock
         break;
-      spin := DoSpin(spin);
-    until false;
-    if (Flags and 2 = 2) and
-       (LastReadWriteLockThread <> tid) then
-      // there is a pending ReadWriteLock but not on this thread
-      LockedDec(Flags, 1) // try again
-    else
-      // we acquired the WR lock
-      break;
+    spin := DoSpin(spin);
   until false;
   LastWriteLockThread := tid;
   LastWriteLockCount := 1;
