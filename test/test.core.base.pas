@@ -5315,6 +5315,7 @@ var
 begin
   C := TSynCache.Create;
   try
+    Check(not C.Reset);
     for i := 0 to 100 do
     begin
       v := Int32ToUtf8(i);
@@ -5322,14 +5323,17 @@ begin
       s := C.Find(v, @Tag);
       Check(s = '');
       Check(Tag = 0);
-      C.Add(v + v, i);
+      C.AddOrUpdate(v, v + v, i);
     end;
+    CheckEqual(c.Count, 101);
     for i := 0 to 100 do
     begin
       v := Int32ToUtf8(i);
       Check(C.Find(v, @Tag) = v + v);
       Check(Tag = i);
     end;
+    Check(C.Reset);
+    CheckEqual(c.Count, 0);
   finally
     C.Free;
   end;

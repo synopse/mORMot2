@@ -1625,7 +1625,7 @@ begin
   fPendingProcessLock.Done;
 end;
 
-function TSynBackgroundThreadMethodAbstract.GetPendingProcess: 
+function TSynBackgroundThreadMethodAbstract.GetPendingProcess:
   TSynBackgroundThreadProcessStep;
 begin
   fPendingProcessLock.Lock;
@@ -2378,14 +2378,6 @@ end;
 
 { TSynParallelProcessThread }
 
-procedure TSynParallelProcessThread.Process;
-begin
-  if not Assigned(fMethod) then
-    exit;
-  fMethod(fIndexStart, fIndexStop);
-  fMethod := nil;
-end;
-
 procedure TSynParallelProcessThread.Start(
   const Method: TOnSynParallelProcess; IndexStart, IndexStop: integer);
 begin
@@ -2393,6 +2385,14 @@ begin
   fIndexStart := IndexStart;
   fIndexStop := IndexStop;
   fProcessEvent.SetEvent; // notify execution
+end;
+
+procedure TSynParallelProcessThread.Process;
+begin
+  if not Assigned(fMethod) then
+    exit;
+  fMethod(fIndexStart, fIndexStop);
+  fMethod := nil;
 end;
 
 
@@ -2471,7 +2471,7 @@ begin
         if Assigned(OnMainThreadIdle) then
           OnMainThreadIdle(self);
       until false;
-      fPool[t].start(Method, n, n + perthread - 1);
+      fPool[t].Start(Method, n, n + perthread - 1);
       inc(n, perthread);
       inc(fParallelRunCount);
     end;
@@ -2480,7 +2480,7 @@ begin
     begin
       if Assigned(OnMainThreadIdle) then
       begin
-        fPool[use - 1].start(Method, n, MethodCount - 1);
+        fPool[use - 1].Start(Method, n, MethodCount - 1);
         inc(use); // also wait for the last thread
       end
       else
