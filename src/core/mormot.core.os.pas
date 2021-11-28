@@ -2531,7 +2531,11 @@ type
   // or TRTLCriticalSection if the lock may block too long
   // - warning: all methods are reentrant, but WriteLock/ReadWriteLock would
   // deadlock if called after a ReadOnlyLock
+  {$ifdef USERECORDWITHMETHODS}
+  TRWLock = record
+  {$else}
   TRWLock = object
+  {$endif USERECORDWITHMETHODS}
   private
     Flags: PtrUInt; // bit 0 = WriteLock, 1 = ReadWriteLock, >1 = ReadOnlyLock
     LastReadWriteLockThread, LastWriteLockThread: TThreadID; // to be reentrant
@@ -2599,7 +2603,7 @@ type
     procedure WriteLock;
     /// release a previous WriteLock call
     procedure WriteUnlock;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef FPC_OR_DELPHIXE} inline; {$endif} // circumvent weird Delphi bug
     /// a high-level wrapper over ReadOnlyLock/ReadWriteLock/WriteLock methods
     procedure Lock(context: TRWLockContext (*{$ifndef PUREMORMOT2} = cWrite {$endif}*));
       {$ifdef HASINLINE} inline; {$endif}
@@ -2643,6 +2647,8 @@ type
   // instance, or call low-level fSafe := NewSynLocker in your constructor,
   // then fSafe^.DoneAndFreemem in your destructor
   // - RWUse property could replace the TRTLCriticalSection by a lighter TRWLock
+  // - see also TRWLock and TSynPersistentRWLock if the multiple read / exclusive
+  // write lock is better (only if the locked process does not take too much time)
   TSynLocker = object
   protected
     fSection: TRTLCriticalSection;
@@ -2865,8 +2871,9 @@ function NewSynLocker: PSynLocker;
 type
   {$M+}
 
-  /// a lighter alternative to TSynPersistentLock
+  /// a persistent-agnostic alternative to TSynPersistentLock
   // - can be used as base class when custom JSON persistence is not needed
+  // - consider a TRWLock field as a lighter multi read / exclusive write option
   TSynLocked = class
   protected
     fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
