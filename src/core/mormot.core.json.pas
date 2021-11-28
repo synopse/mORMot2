@@ -1103,7 +1103,7 @@ type
   // - will maintain a dynamic array of values, associated with a hash table
   // for the keys, so that setting or retrieving values would be O(1)
   // - thread-safe by default, since most methods are protected by a TSynLocker;
-  // set the doSingleThreaded option if you don't need thread-safety
+  // use the ThreadUse option to tune thread-safety (e.g. disable or use a TRWLock)
   // - TDynArray is a wrapper which does not store anything, whereas this class
   // is able to store both keys and values, and provide convenient methods to
   // access the stored data, including JSON serialization and binary storage
@@ -1329,12 +1329,14 @@ type
     /// load the content from SynLZ-compressed raw binary data
     // - as previously saved by SaveToBinary method
     function LoadFromBinary(const binary: RawByteString): boolean;
-    /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLock(aValue).Safe.IsLocked
+    /// can be assigned to OnCanDeleteDeprecated to check
+    // TSynPersistentLock(aValue).Safe.IsLocked before actual deletion
     class function OnCanDeleteSynPersistentLock(
       const aKey, aValue; aIndex: PtrInt): boolean;
-    /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLock(aValue).Safe.IsLocked
+    {$ifndef PUREMORMOT2}
     class function OnCanDeleteSynPersistentLocked(
       const aKey, aValue; aIndex: PtrInt): boolean;
+    {$endif PUREMORMOT2}
     /// returns how many items are currently stored in this dictionary
     // - this method is thread-safe, but returns an evolving value
     function Count: integer;
@@ -1373,7 +1375,8 @@ type
       read fOnCanDelete write fOnCanDelete;
     /// can tune TSynDictionary threading process depending on your use case
     // - will redirect to the internal Safe TSynLocker instance
-    // - warning: any performance impact should always be monitored, not guessed
+    // - warning: to be set only before any process is done
+    // - advice: any performance impact should always be monitored, not guessed
     property ThreadUse: TSynLockerUse
       read GetThreadUse write SetThreadUse;
   end;
@@ -3610,7 +3613,7 @@ end;
 
 function JsonArrayDecode(P: PUtf8Char; out Values: TPUtf8CharDynArray): boolean;
 var
-  n, max: integer;
+  n, max: PtrInt;
   parser: TJsonGotoEndParser;
 begin
   result := false;
@@ -3626,6 +3629,7 @@ begin
         SetLength(Values, max);
       end;
       Values[n] := P;
+      inc(n);
       P := parser.GotoEnd(P);
       if P = nil then
         exit; // invalid content, or #0 reached
@@ -9038,11 +9042,13 @@ begin
   result := not TSynPersistentLock(aValue).Safe^.IsLocked;
 end;
 
+{$ifndef PUREMORMOT2}
 class function TSynDictionary.OnCanDeleteSynPersistentLocked(
   const aKey, aValue; aIndex: PtrInt): boolean;
 begin
-  result := not TSynPersistentLock(aValue).Safe.IsLocked;
+  result := not TSynPersistentLocked(aValue).Safe^.IsLocked;
 end;
+{$endif PUREMORMOT2}
 
 function TSynDictionary.SaveToBinary(
   NoCompression: boolean; Algo: TAlgoCompress): RawByteString;
