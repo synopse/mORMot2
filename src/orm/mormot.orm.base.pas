@@ -1263,9 +1263,9 @@ type
     procedure SetValue(Instance: TObject; Value: PUtf8Char; ValueLen: PtrInt;
       wasString: boolean); override;
     function GetValueInt64(Instance: TObject): Int64;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     procedure SetValueInt64(Instance: TObject; V64: Int64);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
