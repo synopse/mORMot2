@@ -2680,7 +2680,7 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
       if n + fWorkThreadCount > QueueLength then
         exit; // too many connection limit reached (see QueueIsFull)
       if n = length(fPendingContext) then
-        SetLength(fPendingContext, n + n shr 3 + 64);
+        SetLength(fPendingContext, NextGrow(n));
       fPendingContext[n] := aContext;
       inc(fPendingContextCount);
       result := true; // added in pending queue
@@ -2754,7 +2754,8 @@ begin
   result := nil;
   if (self = nil) or
      fTerminated or
-     (fPendingContext = nil) then
+     (fPendingContext = nil) or
+     (fPendingContextCount = 0) then
     exit;
   EnterCriticalsection(fSafe);
   try

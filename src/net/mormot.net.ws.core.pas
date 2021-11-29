@@ -538,10 +538,10 @@ type
   end;
 
   /// used to maintain a list of websocket protocols (for the server side)
-  TWebSocketProtocolList = class(TSynPersistentLock)
+  TWebSocketProtocolList = class(TSynPersistentRWLock)
   protected
     fProtocols: array of TWebSocketProtocol;
-    // caller should make fSafe.Lock/UnLock
+    // caller should make fSafe.ReadOnlyLock/WriteLock
     function FindIndex(const aName, aUri: RawUtf8): integer;
   public
     /// add a protocol to the internal list
@@ -589,9 +589,11 @@ type
     wscNonBlockWithoutAnswer);
 
   /// used to manage a thread-safe list of WebSockets frames
-  TWebSocketFrameList = class(TSynPersistentLock)
+  // - TSynLocked because SendPendingOutgoingFrames() locks it and may take time
+  TWebSocketFrameList = class(TSynLocked)
   protected
     fTimeoutSec: cardinal;
+    fAnswerToIgnore: integer;
     procedure Delete(i: PtrInt);
   public
     /// low-level access to the WebSocket frames list
@@ -613,6 +615,7 @@ type
     function Pop(protocol: TWebSocketProtocol; const head: RawUtf8;
       out frame: TWebSocketFrame; currentSec: cardinal): boolean;
     /// how many 'answer' frames are to be ignored
+    // - incdec should be either 0, -1 or +1
     // - this method is thread-safe
     function AnswerToIgnore(incdec: integer = 0): integer;
   end;
@@ -1284,11 +1287,11 @@ end;
 
 function TWebSocketFrameList.AnswerToIgnore(incdec: integer): integer;
 begin
-  Safe^.Lock;
-  if incdec <> 0 then
-    inc(Safe^.Padding[0].VInteger, incdec);
-  result := Safe^.Padding[0].VInteger;
-  Safe^.UnLock;
+  if incdec < 0 then
+    LockedDec32(@fAnswerToIgnore)
+  else if incdec > 0 then
+    LockedInc32(@fAnswerToIgnore);
+  result := fAnswerToIgnore;
 end;
 
 function TWebSocketFrameList.Pop(protocol: TWebSocketProtocol;
@@ -1332,17 +1335,17 @@ procedure TWebSocketFrameList.Push(
 begin
   if self = nil then
     exit;
+  if fTimeoutSec <= 0 then
+    currentSec := 0
+  else if currentSec = 0 then
+    currentSec := GetTickCount64 shr 10;
   Safe.Lock;
   try
     if Count >= length(List) then
       SetLength(List, NextGrow(Count));
     List[Count] := frame;
-    if fTimeoutSec > 0 then
-    begin
-      if currentSec = 0 then
-        currentSec := GetTickCount64 shr 10;
+    if currentSec > 0 then
       List[Count].tix := currentSec + fTimeoutSec;
-    end;
     inc(Count);
   finally
     Safe.UnLock;
@@ -2129,7 +2132,7 @@ begin
   result := nil;
   if self = nil then
     exit;
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     for i := 0 to length(fProtocols) - 1 do
       with fProtocols[i] do
@@ -2142,7 +2145,7 @@ begin
           exit;
         end;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
@@ -2155,7 +2158,7 @@ begin
   if (self = nil) or
      (aClientUri = '') then
     exit;
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     for i := 0 to length(fProtocols) - 1 do
       if IdemPropNameU(fProtocols[i].fUri, aClientUri) then
@@ -2164,7 +2167,7 @@ begin
         exit;
       end;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
@@ -2201,7 +2204,7 @@ begin
   result := false;
   if aProtocol = nil then
     exit;
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     i := FindIndex(aProtocol.Name, aProtocol.Uri);
     if i < 0 then
@@ -2210,7 +2213,7 @@ begin
       result := true;
     end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -2221,7 +2224,7 @@ begin
   result := false;
   if aProtocol = nil then
     exit;
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     i := FindIndex(aProtocol.Name, aProtocol.Uri);
     if i < 0 then
@@ -2235,7 +2238,7 @@ begin
       fProtocols[i] := aProtocol;
     end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -2243,7 +2246,7 @@ function TWebSocketProtocolList.Remove(const aProtocolName, aUri: RawUtf8): bool
 var
   i: PtrInt;
 begin
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     i := FindIndex(aProtocolName, aUri);
     if i >= 0 then
@@ -2254,7 +2257,7 @@ begin
     else
       result := false;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
