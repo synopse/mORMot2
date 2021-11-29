@@ -526,8 +526,8 @@ type
   // for a disk/database storage or transmission over a network
   // - internally, several (hardware-accelerated) crc32c hash functions will be
   // used, with some random seed values, to simulate several hashing functions
-  // - Insert/MayExist/Reset methods are thread-safe
-  TSynBloomFilter = class(TSynLocked)
+  // - all methods are thread-safe, and MayExist can be concurrent (via a TRWLock)
+  TSynBloomFilter = class(TSynPersistent)
   private
     fSize: cardinal;
     fFalsePositivePercent: double;
@@ -535,7 +535,7 @@ type
     fHashFunctions: cardinal;
     fInserted: cardinal;
     fStore: RawByteString;
-    function GetInserted: cardinal;
+    fSafe: TRWLock;
   public
     /// initialize the internal bits storage for a given number of items
     // - by default, internal bits array size will be guess from a 1 % false
@@ -561,21 +561,24 @@ type
     procedure Reset; virtual;
     /// returns TRUE if the supplied items was probably set via Insert()
     // - some false positive may occur, but not much than FalsePositivePercent
-    // - this method is thread-safe
+    // - this method is thread-safe, and allow concurrent calls (via a TRWLock)
     function MayExist(const aValue: RawByteString): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// returns TRUE if the supplied items was probably set via Insert()
     // - some false positive may occur, but not much than FalsePositivePercent
-    // - this method is thread-safe
+    // - this method is thread-safe, and allow concurrent calls (via a TRWLock)
     function MayExist(aValue: pointer; aValueLen: integer): boolean; overload;
     /// store the internal bits array into a binary buffer
     // - may be used to transmit or store the state of a dataset, avoiding
     // to recompute all Insert() at program startup, or to synchronize
     // networks nodes information and reduce the number of remote requests
+    // - this method is thread-safe, and won't block MayExist (via a TRWLock)
     function SaveTo(aMagic: cardinal = $B1003F11): RawByteString; overload;
     /// store the internal bits array into a binary buffer
     // - may be used to transmit or store the state of a dataset, avoiding
     // to recompute all Insert() at program startup, or to synchronize
     // networks nodes information and reduce the number of remote requests
+    // - this method is thread-safe, and won't block MayExist (via a TRWLock)
     procedure SaveTo(aDest: TBufferWriter;
       aMagic: cardinal = $B1003F11); overload;
     /// read the internal bits array from a binary buffer
@@ -603,7 +606,7 @@ type
       read fHashFunctions;
     /// how many times the Insert() method has been called
     property Inserted: cardinal
-      read GetInserted;
+      read fInserted;
   end;
 
   /// implements a thread-safe differential Bloom Filter storage
@@ -3628,7 +3631,6 @@ constructor TSynBloomFilter.Create(aSize: integer; aFalsePositivePercent: double
 const
   LN2 = 0.69314718056;
 begin
-  inherited Create;
   if aSize < 0 then
     fSize := 1000
   else
@@ -3651,7 +3653,6 @@ end;
 
 constructor TSynBloomFilter.Create(const aSaved: RawByteString; aMagic: cardinal);
 begin
-  inherited Create;
   if not LoadFrom(aSaved, aMagic) then
     raise ESynException.CreateUtf8('%.Create with invalid aSaved content', [self]);
 end;
@@ -3675,7 +3676,7 @@ begin
     h2 := 0
   else
     h2 := crc32c(h1, aValue, aValueLen);
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     for h := 0 to fHashFunctions - 1 do
     begin
@@ -3684,17 +3685,7 @@ begin
     end;
     inc(fInserted);
   finally
-    Safe.UnLock;
-  end;
-end;
-
-function TSynBloomFilter.GetInserted: cardinal;
-begin
-  Safe.Lock;
-  try
-    result := fInserted; // Delphi 5 does not support LockedInt64[]
-  finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -3718,7 +3709,7 @@ begin
     h2 := 0
   else
     h2 := crc32c(h1, aValue, aValueLen);
-  Safe.Lock;
+  fSafe.ReadOnlyLock; // allow concurrent reads
   try
     for h := 0 to fHashFunctions - 1 do
       if GetBitPtr(pointer(fStore), h1 mod fBits) then
@@ -3726,21 +3717,21 @@ begin
       else
         exit;
   finally
-    Safe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
   result := true;
 end;
 
 procedure TSynBloomFilter.Reset;
 begin
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     if fStore = '' then
       SetLength(fStore, (fBits shr 3) + 1);
     FillcharFast(pointer(fStore)^, length(fStore), 0);
     fInserted := 0;
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -3768,7 +3759,7 @@ procedure TSynBloomFilter.SaveTo(aDest: TBufferWriter; aMagic: cardinal);
 begin
   aDest.Write4(aMagic);
   aDest.Write1(BLOOM_VERSION);
-  Safe.Lock;
+  fSafe.ReadOnlyLock;
   try
     aDest.Write8(@fFalsePositivePercent);
     aDest.Write4(fSize);
@@ -3777,7 +3768,7 @@ begin
     aDest.Write4(fInserted);
     ZeroCompress(pointer(fStore), Length(fStore), aDest);
   finally
-    Safe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
@@ -3802,7 +3793,7 @@ begin
   inc(P);
   if version > BLOOM_VERSION then
     exit;
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     fFalsePositivePercent := unaligned(PDouble(P)^);
     inc(P, 8);
@@ -3825,7 +3816,7 @@ begin
     ZeroDecompress(P, PLen - (PAnsiChar(P) - PAnsiChar(start)), fStore);
     result := length(fStore) = integer(fBits shr 3) + 1;
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -3844,19 +3835,19 @@ type
 
 procedure TSynBloomFilterDiff.Insert(aValue: pointer; aValueLen: integer);
 begin
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     inherited Insert(aValue, aValueLen);
     inc(fRevision);
     inc(fSnapshotInsertCount);
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
 procedure TSynBloomFilterDiff.Reset;
 begin
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     inherited Reset;
     fSnapshotAfterInsertCount := fSize shr 5;
@@ -3867,13 +3858,13 @@ begin
     fKnownRevision := 0;
     fKnownStore := '';
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
 procedure TSynBloomFilterDiff.DiffSnapshot;
 begin
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     fKnownRevision := fRevision;
     fSnapshotInsertCount := 0;
@@ -3883,7 +3874,7 @@ begin
     else
       fSnapshotTimestamp := GetTickCount64 + fSnapShotAfterMinutes * 60000;
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -3893,7 +3884,7 @@ var
   W: TBufferWriter;
   temp: array[word] of byte;
 begin
-  Safe.Lock;
+  fSafe.ReadWriteLock; // DiffSnapshot makes a WriteLock
   try
     if aKnownRevision = fRevision then
       head.kind := bdUpToDate
@@ -3938,7 +3929,7 @@ begin
       W.Free;
     end;
   finally
-    Safe.UnLock;
+    fSafe.ReadWriteUnLock;
   end;
 end;
 
@@ -3973,7 +3964,7 @@ begin
     exit;
   inc(P, SizeOf(head^));
   dec(PLen, SizeOf(head^));
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     case head.kind of
       bdFull:
@@ -3990,9 +3981,10 @@ begin
       fInserted := head.inserted;
     end;
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
+
 
 procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TBufferWriter);
 var
