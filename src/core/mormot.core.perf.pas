@@ -364,9 +364,10 @@ type
   // - base class shared e.g. for ORM, SOA or DDD, when a repeatable data
   // process is to be monitored
   // - this class is thread-safe for its methods, but you should call explicitly
-  // Lock/UnLock to access its individual properties
-  TSynMonitor = class(TSynPersistentLock)
+  // non-rentrant Lock/UnLock to access its individual properties
+  TSynMonitor = class(TSynPersistent)
   protected
+    fSafe: PtrUInt; // LightLock/LightUnLock exclusive non-reentrant mutex
     fName: RawUtf8;
     fTaskCount: TSynMonitorCount64;
     fTotalTime: TSynMonitorTime;
@@ -383,7 +384,6 @@ type
     procedure LockedFromProcessTimer; virtual;
     procedure LockedSum(another: TSynMonitor); virtual;
     procedure WriteDetailsTo(W: TTextWriter); virtual;
-    procedure Changed; virtual;
   public
     /// low-level high-precision timer instance
     InternalTimer: TPrecisionTimer;
@@ -395,14 +395,6 @@ type
     constructor Create; overload; override;
     /// finalize the instance
     destructor Destroy; override;
-    /// lock the instance for exclusive access
-    // - needed only if you access directly the instance properties
-    procedure Lock;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// release the instance for exclusive access
-    // - needed only if you access directly the instance properties
-    procedure UnLock;
-      {$ifdef HASINLINE}inline;{$endif}
     /// create Count instances of this actual class in the supplied ObjArr[]
     class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
     /// should be called when the process starts, to resume the internal timer
@@ -450,17 +442,14 @@ type
     // use this method to update the timing from many threads
     // - if you use this method, ProcessStart, ProcessDoTask and ProcessEnd
     // methods are disallowed, and the global fTimer won't be used any more
-    // - will return the processing time, converted into micro seconds, ready
-    // to be logged if needed
-    // - thread-safe method
-    function FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-    /// used to allow thread safe timing
-    // - by default, the internal TPrecisionTimer is not thread safe: you can
-    // use this method to update the timing from many threads
-    // - if you use this method, ProcessStart, ProcessDoTask and ProcessEnd
-    // methods are disallowed, and the global fTimer won't be used any more
     // - thread-safe method
     procedure FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
+    /// non-reentrant exclusive lock acquisition - wrap LightLock(fSafe)
+    procedure Lock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// release the non-reentrant exclusive lock - wrap LightUnLock(fSafe)
+    procedure UnLock;
+      {$ifdef HASINLINE} inline; {$endif}
     // customize JSON Serialization to set woEnumSetsAsText
     function RttiBeforeWriteObject(W: TTextWriter;
       var Options: TTextWriterWriteObjectOptions): boolean; override;
@@ -547,6 +536,8 @@ type
     /// increase the internal size counters
     // - thread-safe method
     procedure AddSize(const Incoming, Outgoing: QWord);
+    /// encapsulate AddSite + ProcessErrorNumber + FromExternalMicroSeconds
+    procedure Notify(const Incoming, Outgoing, MicroSec: QWord; Status: integer);
   published
     /// how many data has been received
     property Input: TSynMonitorSize
@@ -584,9 +575,10 @@ type
     // - thread-safe method
     function GetClientsCurrent: TSynMonitorOneCount;
     /// how many concurrent requests are currently processed
-    // - returns the updated number of requests
+    // - diff is expected to be either 0, -1 or 1
     // - thread-safe method
-    function AddCurrentRequestCount(diff: integer): integer;
+    procedure AddCurrentRequestCount(diff: integer);
+      {$ifdef HASINLINE} inline; {$endif}
   published
     /// current count of connected clients
     property ClientsCurrent: TSynMonitorOneCount
@@ -717,6 +709,7 @@ type
   /// abstract class to track, compute and store TSynMonitor detailed statistics
   // - you should inherit from this class to implement proper data persistence,
   // e.g. using TSynMonitorUsageRest for ORM-based storage
+  // - SaveDB may take some time, so a TSynLocker OS lock is used, not TRWLock
   TSynMonitorUsage = class(TSynPersistentLock)
   protected
     fLog: TSynLogFamily;
@@ -828,7 +821,7 @@ type
   // to gather low-level CPU and RAM information for the given set of processes
   // - is able to keep an history of latest sample values
   // - use Current class function to access a process-wide instance
-  TSystemUse = class(TSynPersistentLock)
+  TSystemUse = class(TSynPersistentRWLock)
   protected
     fProcess: TSystemUseProcessDynArray;
     fProcesses: TDynArray;
@@ -1422,20 +1415,6 @@ begin
   inherited Destroy;
 end;
 
-procedure TSynMonitor.Lock;
-begin
-  fSafe^.Lock;
-end;
-
-procedure TSynMonitor.UnLock;
-begin
-  fSafe^.UnLock;
-end;
-
-procedure TSynMonitor.Changed;
-begin
-  // do nothing by default - overriden classes may track modified changes
-end;
 
 function TSynMonitor.RttiBeforeWriteObject(W: TTextWriter;
   var Options: TTextWriterWriteObjectOptions): boolean;
@@ -1454,25 +1433,24 @@ procedure TSynMonitor.ProcessStart;
 begin
   if fProcessing then
     raise ESynException.CreateUtf8('Unexpected %.ProcessStart', [self]);
-  fSafe^.Lock;
+  InternalTimer.Resume;
+  LightLock(fSafe);
   try
-    InternalTimer.Resume;
     fTaskStatus := taskNotStarted;
     fProcessing := true;
   finally
-    fSafe^.UnLock;
+    LightUnLock(fSafe);
   end;
 end;
 
 procedure TSynMonitor.ProcessDoTask;
 begin
-  fSafe^.Lock;
+  LightLock(fSafe);
   try
     inc(fTaskCount);
     fTaskStatus := taskStarted;
-    Changed;
   finally
-    fSafe^.UnLock;
+    LightUnLock(fSafe);
   end;
 end;
 
@@ -1480,26 +1458,25 @@ procedure TSynMonitor.ProcessStartTask;
 begin
   if fProcessing then
     raise ESynException.CreateUtf8('Reentrant %.ProcessStart', [self]);
-  fSafe^.Lock;
+  InternalTimer.Resume;
+  LightLock(fSafe);
   try
-    InternalTimer.Resume;
     fProcessing := true;
     inc(fTaskCount);
     fTaskStatus := taskStarted;
-    Changed;
   finally
-    fSafe^.UnLock;
+    LightUnLock(fSafe);
   end;
 end;
 
 procedure TSynMonitor.ProcessEnd;
 begin
-  fSafe^.Lock;
+  InternalTimer.Pause;
+  LightLock(fSafe);
   try
-    InternalTimer.Pause;
     LockedFromProcessTimer;
   finally
-    fSafe^.UnLock;
+    LightUnLock(fSafe);
   end;
 end;
 
@@ -1518,38 +1495,41 @@ begin
   end;
   LockedPerSecProperties;
   fProcessing := false;
-  Changed;
-end;
-
-function TSynMonitor.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-begin
-  fSafe^.Lock;
-  try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
-    inc(fTaskCount);
-    fTaskStatus := taskStarted;
-    result := InternalTimer.FromExternalQueryPerformanceCounters(CounterDiff);
-    LockedFromProcessTimer;
-  finally
-    fSafe^.UnLock;
-  end;
 end;
 
 procedure TSynMonitor.FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
 begin
-  fSafe^.Lock;
-  try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
+  LightLock(fSafe);
+  // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
     inc(fTaskCount);
     fTaskStatus := taskStarted;
     InternalTimer.FromExternalMicroSeconds(MicroSecondsElapsed);
     LockedFromProcessTimer;
+  {$ifdef HASFASTTRYFINALLY}
   finally
-    fSafe^.UnLock;
+  {$endif HASFASTTRYFINALLY}
+    LightUnLock(fSafe);
   end;
+end;
+
+procedure TSynMonitor.Lock;
+begin
+  LightLock(fSafe);
+end;
+
+procedure TSynMonitor.UnLock;
+begin
+  LightUnLock(fSafe);
 end;
 
 class procedure TSynMonitor.InitializeObjArray(var ObjArr; Count: integer);
 var
-  i: integer;
+  i: PtrInt;
 begin
   ObjArrayClear(ObjArr);
   SetLength(TPointerDynArray(ObjArr), Count);
@@ -1559,14 +1539,13 @@ end;
 
 procedure TSynMonitor.ProcessError(const info: variant);
 begin
-  fSafe^.Lock;
+  LightLock(fSafe);
   try
     if not VarIsEmptyOrNull(info) then
       inc(fInternalErrors);
     fLastInternalError := info;
-    Changed;
   finally
-    fSafe^.UnLock;
+    LightUnLock(fSafe);
   end;
 end;
 
@@ -1598,13 +1577,13 @@ begin
   if (self = nil) or
      (another = nil) then
     exit;
-  fSafe^.Lock;
-  another.fSafe^.Lock;
+  LightLock(fSafe);
+  LightLock(another.fSafe);
   try
     LockedSum(another);
   finally
-    another.fSafe^.UnLock;
-    fSafe^.UnLock;
+    LightUnLock(another.fSafe);
+    LightUnLock(fSafe);
   end;
 end;
 
@@ -1624,22 +1603,18 @@ end;
 
 procedure TSynMonitor.WriteDetailsTo(W: TTextWriter);
 begin
-  fSafe^.Lock;
-  try
-    W.WriteObject(self);
-  finally
-    fSafe^.UnLock;
-  end;
+  // caller should have made fSafe.ReadOnlyLock or fSafe.WriteLock
+  W.WriteObject(self);
 end;
 
 procedure TSynMonitor.ComputeDetailsTo(W: TTextWriter);
 begin
-  fSafe^.Lock;
+  LightLock(fSafe);
   try
     LockedPerSecProperties; // may not have been calculated after Sum()
     WriteDetailsTo(W);
   finally
-    fSafe^.UnLock;
+    LightUnLock(fSafe);
   end;
 end;
 
@@ -1687,12 +1662,9 @@ end;
 
 procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
 begin
-  fSafe^.Lock;
-  try
-    fSize.Bytes := fSize.Bytes + Bytes;
-  finally
-    fSafe^.UnLock;
-  end;
+  LightLock(fSafe);
+  fSize.Bytes := fSize.Bytes + Bytes;
+  LightUnLock(fSafe);
 end;
 
 procedure TSynMonitorWithSize.LockedSum(another: TSynMonitor);
@@ -1732,13 +1704,34 @@ end;
 
 procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
 begin
-  fSafe^.Lock;
-  try
-    fInput.Bytes := fInput.Bytes + Incoming;
-    fOutput.Bytes := fOutput.Bytes + Outgoing;
-  finally
-    fSafe^.UnLock;
+  LightLock(fSafe);
+  fInput.Bytes := fInput.Bytes + Incoming;
+  fOutput.Bytes := fOutput.Bytes + Outgoing;
+  LightUnLock(fSafe);
+end;
+
+procedure TSynMonitorInputOutput.Notify(
+  const Incoming, Outgoing, MicroSec: QWord; Status: integer);
+var
+  error: boolean;
+begin
+  error := not StatusCodeIsSuccess(Status);
+  LightLock(fSafe);
+  // inlined AddSize
+  fInput.Bytes := fInput.Bytes + Incoming;
+  fOutput.Bytes := fOutput.Bytes + Outgoing;
+  // inlined FromExternalMicroSeconds
+  inc(fTaskCount);
+  fTaskStatus := taskStarted;
+  InternalTimer.FromExternalMicroSeconds(MicroSec);
+  LockedFromProcessTimer;
+  // inlined ProcessErrorNumber(Status)
+  if error then
+  begin
+    inc(fInternalErrors);
+    fLastInternalError := Status;
   end;
+  LightUnLock(fSafe);
 end;
 
 procedure TSynMonitorInputOutput.LockedSum(another: TSynMonitor);
@@ -1758,14 +1751,13 @@ procedure TSynMonitorServer.ClientConnect;
 begin
   if self = nil then
     exit;
-  fSafe^.Lock;
+  LightLock(fSafe);
   try
     inc(fClientsCurrent);
     if fClientsCurrent > fClientsMax then
       fClientsMax := fClientsCurrent;
-    Changed;
   finally
-    fSafe^.UnLock;
+    LightUnLock(fSafe);
   end;
 end;
 
@@ -1773,13 +1765,12 @@ procedure TSynMonitorServer.ClientDisconnect;
 begin
   if self = nil then
     exit;
-  fSafe^.Lock;
+  LightLock(fSafe);
   try
     if fClientsCurrent > 0 then
       dec(fClientsCurrent);
-    Changed;
   finally
-    fSafe^.UnLock;
+    LightUnLock(fSafe);
   end;
 end;
 
@@ -1787,44 +1778,29 @@ procedure TSynMonitorServer.ClientDisconnectAll;
 begin
   if self = nil then
     exit;
-  fSafe^.Lock;
+  LightLock(fSafe);
   try
     fClientsCurrent := 0;
-    Changed;
   finally
-    fSafe^.UnLock;
+    LightUnLock(fSafe);
   end;
 end;
 
 function TSynMonitorServer.GetClientsCurrent: TSynMonitorOneCount;
 begin
   if self = nil then
-  begin
-    result := 0;
-    exit;
-  end;
-  fSafe^.Lock;
-  try
+    result := 0
+  else
     result := fClientsCurrent;
-  finally
-    fSafe^.UnLock;
-  end;
 end;
 
-function TSynMonitorServer.AddCurrentRequestCount(diff: integer): integer;
+procedure TSynMonitorServer.AddCurrentRequestCount(diff: integer);
 begin
-  if self = nil then
-  begin
-    result := 0;
-    exit;
-  end;
-  fSafe^.Lock;
-  try
-    inc(fCurrentRequestCount, diff);
-    result := fCurrentRequestCount;
-  finally
-    fSafe^.UnLock;
-  end;
+  if self <> nil then
+    if diff > 0 then
+      LockedInc32(@fCurrentRequestCount)
+    else if diff < 0 then
+      LockedDec32(@fCurrentRequestCount);
 end;
 
 
@@ -1972,6 +1948,7 @@ begin
             // returns found entry locked
             result := @Props[j];
             exit;
+            // warning: caller should eventually make fSafe.ReadOnlyUnLock
           end;
         break;
       end;
@@ -1982,16 +1959,16 @@ const
   // maps TTimeLogbits mask
   TL_MASK_SECONDS = pred(1 shl 6);
   TL_MASK_MINUTES = pred(1 shl 12);
-  TL_MASK_HOURS = pred(1 shl 17);
-  TL_MASK_DAYS = pred(1 shl 22);
-  TL_MASK_MONTHS = pred(1 shl 26);
+  TL_MASK_HOURS   = pred(1 shl 17);
+  TL_MASK_DAYS    = pred(1 shl 22);
+  TL_MASK_MONTHS  = pred(1 shl 26);
 
   // truncates a TTimeLogbits value to a granularity
-  AS_MINUTES =not TL_MASK_SECONDS;
-  AS_HOURS =not TL_MASK_MINUTES;
-  AS_DAYS =not TL_MASK_HOURS;
-  AS_MONTHS =not TL_MASK_DAYS;
-  AS_YEARS =not TL_MASK_MONTHS;
+  AS_MINUTES = not TL_MASK_SECONDS;
+  AS_HOURS   = not TL_MASK_MINUTES;
+  AS_DAYS    = not TL_MASK_HOURS;
+  AS_MONTHS  = not TL_MASK_DAYS;
+  AS_YEARS   = not TL_MASK_MONTHS;
 
 function TSynMonitorUsage.Modified(Instance: TObject): integer;
 begin
@@ -2054,7 +2031,7 @@ function TSynMonitorUsage.Modified(Instance: TObject;
         if (high(PropNames) < 0) or
            (FindPropName(PropNames, Name) >= 0) then
         begin
-          v := info^.GetInt64Value(Instance);
+          v := Info^.GetInt64Value(Instance);
           diff := v - ValueLast;
           if diff <> 0 then
           begin
@@ -2093,7 +2070,7 @@ begin
     if Instance.InheritsFrom(TSynMonitor) and
        (TSynMonitor(Instance).Name <> '') then
     begin
-      i := track(Instance, TSynMonitor(Instance).Name);
+      i := Track(Instance, TSynMonitor(Instance).Name);
       if i >= 0 then
         save(fTracked[i]);
       exit;
@@ -2280,7 +2257,8 @@ begin
     case gran of
       mugYear:
         inc(result, USAGE_ID_YEAROFFSET);
-      mugDay, mugMonth:
+      mugDay,
+      mugMonth:
         if not monthdaystartat0 then
           inc(result);
       mugHour:
@@ -2319,7 +2297,8 @@ begin
   case gran of
     mugYear:
       dec(aValue, USAGE_ID_YEAROFFSET);
-    mugDay, mugMonth:
+    mugDay,
+    mugMonth:
       dec(aValue);
     mugHour:
       ;
@@ -2448,7 +2427,7 @@ begin
     exit;
   fTimer := Sender;
   now := NowUtc;
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     inc(fDataIndex);
     if fDataIndex >= fHistoryDepth then
@@ -2464,7 +2443,7 @@ begin
           // if GetLastError=ERROR_INVALID_PARAMETER then
           fProcesses.Delete(i);
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -2509,7 +2488,7 @@ begin
   if aProcessID = 0 then
     aProcessID := GetCurrentProcessID;
   {$endif OSWINDOWS}
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     n := length(fProcess);
     for i := 0 to n - 1 do
@@ -2519,7 +2498,7 @@ begin
     fProcess[n].ID := aProcessID;
     SetLength(fProcess[n].Data, fHistoryDepth);
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -2530,7 +2509,7 @@ begin
   result := false;
   if self = nil then
     exit;
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     i := ProcessIndex(aProcessID);
     if i >= 0 then
@@ -2539,13 +2518,13 @@ begin
       result := true;
     end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
 function TSystemUse.ProcessIndex(aProcessID: integer): PtrInt;
 begin
-  // caller should have made fSafe.Enter
+  // caller should have made any fSafe lock
   {$ifdef OSWINDOWS}
   if aProcessID = 0 then
     aProcessID := GetCurrentProcessID;
@@ -2564,7 +2543,7 @@ begin
   result := false;
   if self <> nil then
   begin
-    fSafe.Lock;
+    fSafe.ReadOnlyLock;
     try
       i := ProcessIndex(aProcessID);
       if i >= 0 then
@@ -2576,7 +2555,7 @@ begin
           exit;
       end;
     finally
-      fSafe.UnLock;
+      fSafe.ReadOnlyUnLock;
     end;
   end;
   FillCharFast(aData, SizeOf(aData), 0);
@@ -2621,7 +2600,7 @@ begin
   result := nil;
   if self = nil then
     exit;
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     i := ProcessIndex(aProcessID);
     if i >= 0 then
@@ -2650,7 +2629,7 @@ begin
         end;
       end;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
