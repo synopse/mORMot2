@@ -2213,8 +2213,8 @@ type
     fPrivateSlots: TObjectDynArray;
     fArrayRtti: TRttiCustom;
     fFinalize: TRttiFinalizer;
-    fSetRandom: TRttiCustomRandom;
     fCopy: TRttiCopier;
+    fSetRandom: TRttiCustomRandom;
     fName: RawUtf8;
     fProps: TRttiCustomProps;
     fOwnedRtti: array of TRttiCustom;
@@ -2288,8 +2288,8 @@ type
     // but in TRttiJson, so that it will use mormot.core.variants process
     function ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt; virtual;
     /// fill a value from random - including strings and nested types
-    // - this method is thread-safe using Rtti.DoLock/DoUnLock
     procedure ValueRandom(Data: pointer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -2443,9 +2443,6 @@ type
     Count: integer;
     /// how many TRttiCustom instances have been registered for a given type
     Counts: array[succ(low(TRttiKind)) .. high(TRttiKind)] of integer;
-    /// main Lecuyer Random generator as used by TRttiCustom.ValueRandom
-    // - this is not thread-safe, but it is much faster and documented as such
-    SharedRandom: TLecuyer;
     /// efficient search of TRttiCustom from a given RTTI TypeInfo()
     // - returns nil if Info is not known
     // - call RegisterType() if you want to initialize the type via its RTTI
@@ -5568,16 +5565,18 @@ procedure _NoRandom(V: PPointer; RC: TRttiCustom);
 begin
 end;
 
+// we use SharedRandom since LightLock() may be faster than a threadvar
+
 procedure _FillRandom(V: PByte; RC: TRttiCustom);
 begin
-  Rtti.SharedRandom.Fill(V, RC.Cache.Size);
+  SharedRandom.Fill(V, RC.Cache.Size);
 end;
 
 procedure _StringRandom(V: PPointer; RC: TRttiCustom);
 var
   tmp: TShort31;
 begin
-  Rtti.SharedRandom.FillShort31(tmp);
+  SharedRandom.FillShort31(tmp);
   FastSetStringCP(V^, @tmp[1], ord(tmp[0]), RC.Cache.CodePage);
 end;
 
@@ -5587,7 +5586,7 @@ var
   i: PtrInt;
   W: PWordArray;
 begin
-  Rtti.SharedRandom.FillShort31(tmp);
+  SharedRandom.FillShort31(tmp);
   SetString(V^, PWideChar(nil), ord(tmp[0]));
   W := pointer(V^);
   for i := 1 to ord(tmp[0]) do
@@ -5601,7 +5600,7 @@ var
   i: PtrInt;
   W: PWordArray;
 begin
-  Rtti.SharedRandom.FillShort31(tmp);
+  SharedRandom.FillShort31(tmp);
   SetString(V^, PWideChar(nil), ord(tmp[0]));
   W := pointer(V^);
   for i := 1 to ord(tmp[0]) do
@@ -5612,7 +5611,7 @@ end;
 procedure _VariantRandom(V: PRttiVarData; RC: TRttiCustom);
 begin
   VarClearAndSetType(Variant(V^), varInteger);
-  V^.Data.VInt64 := Rtti.SharedRandom.Next;
+  V^.Data.VInt64 := SharedRandom.Next;
   // generate some 8-bit 32-bit 64-bit integers or a RawUtf8 varString
   case V^.Data.VInteger and 3 of
     0:
@@ -5632,17 +5631,17 @@ end;
 
 procedure _DoubleRandom(V: PDouble; RC: TRttiCustom);
 begin
-  V^ := Rtti.SharedRandom.NextDouble;
+  V^ := SharedRandom.NextDouble;
 end;
 
 procedure _DateTimeRandom(V: PDouble; RC: TRttiCustom);
 begin
-  V^ := 38000 + Int64(Rtti.SharedRandom.Next) / (maxInt shr 12);
+  V^ := 38000 + Int64(SharedRandom.Next) / (maxInt shr 12);
 end;
 
 procedure _SingleRandom(V: PSingle; RC: TRttiCustom);
 begin
-  V^ := Rtti.SharedRandom.NextDouble;
+  V^ := SharedRandom.NextDouble;
 end;
 
 var
@@ -7368,9 +7367,7 @@ end;
 
 procedure TRttiCustom.ValueRandom(Data: pointer);
 begin
-  mormot.core.os.EnterCriticalSection(Rtti.Table^.Lock);
   fSetRandom(Data, self); // handle most simple kind of values from RTTI
-  mormot.core.os.LeaveCriticalSection(Rtti.Table^.Lock);
 end;
 
 function TRttiCustom.ClassNewInstance: pointer;

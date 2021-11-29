@@ -6463,11 +6463,7 @@ begin
     if fInfo.ArrayRtti <> nil then
       fInfo.ArrayRtti.ValueRandom(Item)
     else
-    begin
-      Rtti.DoLock;
-      Rtti.SharedRandom.Fill(Item, fInfo.Cache.ItemSize);
-      Rtti.DoUnLock;
-    end;
+      SharedRandom.Fill(Item, fInfo.Cache.ItemSize);
 end;
 
 function TDynArray.ItemEquals(A, B: pointer; CaseInSensitive: boolean): boolean;
