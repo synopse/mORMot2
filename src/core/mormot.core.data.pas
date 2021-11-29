@@ -500,7 +500,7 @@ type
   protected
     fSafe: TRWLock;
   public
-    /// access to the associated TRWLock
+    /// access to the associated TRWLock instance
     // - call Safe methods to protect multi-thread access on this storage
     property Safe: TRWLock
       read fSafe;
@@ -525,6 +525,16 @@ type
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: PSynLocker
+      read fSafe;
+  end;
+
+  /// adding light locking methods to a TInterfacedObject with virtual constructor
+  TInterfacedObjectRWLocked = class(TInterfacedObjectWithCustomCreate)
+  protected
+    fSafe: TRWLock;
+  public
+    /// access to the multiple Read / exclusive Write locking methods of this instance
+    property Safe: TRWLock
       read fSafe;
   end;
 

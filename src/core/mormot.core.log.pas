@@ -5929,7 +5929,7 @@ begin
   if (Count = 0) or
      fCurrentlyEchoing then
     exit;
-  Safe.Lock;
+  Safe.Lock; // not really concurrent, but faster
   try
     fCurrentlyEchoing := true; // avoid stack overflow if exception below
     for i := Count - 1 downto 0 do
@@ -5993,6 +5993,7 @@ begin
     Safe.UnLock;
   end;
 end;
+
 
 { TSynLogSettings }
 
