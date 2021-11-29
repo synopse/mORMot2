@@ -2619,7 +2619,7 @@ function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean; overload;
 
 
 type
-  /// low-level object implementing a 32-bit Pierre L'Ecuyer software generator
+  /// low-level implementation a 32-bit Pierre L'Ecuyer software random generator
   // - cross-compiler and cross-platform efficient randomness generator, very
   // fast with a much better distribution than Delphi system's Random() function
   // see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
@@ -2689,6 +2689,10 @@ function RandomDouble: double;
 // - consider the cryptographic-level TAesPrng.Main.FillRandom() method
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine
 procedure RandomBytes(Dest: PByte; Count: integer);
+
+/// fill some string[31] with 7-bit ASCII random text
+// - thread-safe and non-blocking function using a per-thread TLecuyer engine
+procedure RandomShort31(var dest: TShort31);
 
 {$ifndef PUREMORMOT2}
 /// fill some 32-bit memory buffer with values from the gsl_rng_taus2 generator
@@ -8070,6 +8074,11 @@ procedure RandomBytes(Dest: PByte; Count: integer);
 begin
   if Count > 0 then
     _Lecuyer.Fill(pointer(Dest), Count);
+end;
+
+procedure RandomShort31(var dest: TShort31);
+begin
+  _Lecuyer.FillShort31(dest);
 end;
 
 {$ifndef PUREMORMOT2}
