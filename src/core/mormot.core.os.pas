@@ -2518,6 +2518,23 @@ procedure RedirectCode(Func, RedirectFunc: Pointer);
 
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }
 
+/// enter an exclusive non-rentrant lock, stored in a PtrUInt value
+// - the lock value should have been initialized with 0 (e.g. as a class field)
+// - warning: non rentrant function, i.e. calling twice in a raw would deadlock:
+// use TRWLock, TSynLocker or TRTLCriticalSection for a safer reentrant lock
+// - light locks are expected to be kept a very small amount of time: use
+// TSynLocker or TRTLCriticalSection if the lock may block too long
+// - calls SwitchToThread after some spinning, but don't use any R/W OS API
+procedure LightLock(var lock: PtrUInt);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// leave an exclusive non-rentrant lock
+procedure LightUnLock(var lock: PtrUInt);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// low-level function called by LightLock() when inlined on ARM/AARCH64
+procedure LightLockSpin(var lock: PtrUInt);
+
 type
   /// how TRWLock.Lock and TRWLock.UnLock high-level wrapper methods are called
   TRWLockContext = (
@@ -5269,6 +5286,7 @@ begin
     spin := DoSpin(spin);
 end;
 
+
 procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
   const Args: array of const);
 begin
@@ -5294,6 +5312,29 @@ function GetCurrentThreadInfo: ShortString;
 begin
   result := ShortString(format('Thread %x [%s]',
     [PtrUInt(GetCurrentThreadId), CurrentThreadName]));
+end;
+
+
+procedure LightLockSpin(var lock: PtrUInt);
+var
+  spin: PtrUInt;
+begin
+  spin := SPIN_COUNT;
+  repeat
+    spin := DoSpin(spin);
+  until LockedCAS(lock, 1, 0);
+end;
+
+// note: we tried to implement it with pure asm but was unstable on Delphi Win64
+procedure LightLock(var lock: PtrUInt);
+begin
+  if not LockedCAS(lock, 1, 0) then
+    LightLockSpin(lock);
+end;
+
+procedure LightUnLock(var lock: PtrUInt);
+begin
+  lock := 0;
 end;
 
 
