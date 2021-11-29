@@ -2632,7 +2632,6 @@ type
   end;
   PRWLock = ^TRWLock;
 
-
 const
   RW_FORCE: array[{write}boolean] of TRWLockContext = (
     cReadOnly,
@@ -2913,18 +2912,35 @@ type
   /// meta-class definition of the TSynLocked hierarchy
   TSynLockedClass = class of TSynLocked;
 
+  /// a thread-safe Pierre L'Ecuyer software random generator
+  // - just wrap TLecuyer with a LighLock()
+  // - should not be used, unless may be slightly faster than a threadvar
+  TLecuyerThreadSafe = object
+    Safe: PtrUInt;
+    Generator: TLecuyer;
+    /// compute the next 32-bit generated value
+    function Next: cardinal; overload;
+    /// compute a 64-bit floating point value
+    function NextDouble: double;
+    /// XOR some memory buffer with random bytes
+    procedure Fill(dest: pointer; count: integer);
+    /// fill some string[31] with 7-bit ASCII random text
+    procedure FillShort31(var dest: TShort31);
+  end;
+
   TThreadIDDynArray = array of TThreadID;
 
-{$ifdef OSPOSIX}
-
 var
+  /// a global thread-safe Pierre L'Ecuyer software random generator
+  SharedRandom: TLecuyerThreadSafe;
+
+{$ifdef OSPOSIX}
   /// could be set to TRUE to force SleepHiRes(0) to call the sched_yield API
   // - in practice, it has been reported as buggy under POSIX systems
   // - even Linus Torvald himself raged against its usage - see e.g.
   // https://www.realworldtech.com/forum/?threadid=189711&curpostid=189752
   // - you may tempt the devil and try it by yourself
   SleepHiRes0Yield: boolean = false;
-
 {$endif OSPOSIX}
 
 /// similar to Windows sleep() API call, to be truly cross-platform
@@ -5857,6 +5873,36 @@ destructor TSynLocked.Destroy;
 begin
   inherited Destroy;
   fSafe^.DoneAndFreeMem;
+end;
+
+{ TLecuyerThreadSafe }
+
+function TLecuyerThreadSafe.Next: cardinal;
+begin
+  LightLock(Safe);
+  result := Generator.Next;
+  LightUnLock(Safe);
+end;
+
+function TLecuyerThreadSafe.NextDouble: double;
+begin
+  LightLock(Safe);
+  result := Generator.NextDouble;
+  LightUnLock(Safe);
+end;
+
+procedure TLecuyerThreadSafe.Fill(dest: pointer; count: integer);
+begin
+  LightLock(Safe);
+  Generator.Fill(dest, count);
+  LightUnLock(Safe);
+end;
+
+procedure TLecuyerThreadSafe.FillShort31(var dest: TShort31);
+begin
+  LightLock(Safe);
+  Generator.FillShort31(dest);
+  LightUnLock(Safe);
 end;
 
 
