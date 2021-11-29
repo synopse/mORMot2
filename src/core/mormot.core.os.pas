@@ -2540,6 +2540,7 @@ type
     Flags: PtrUInt; // bit 0 = WriteLock, 1 = ReadWriteLock, >1 = ReadOnlyLock
     LastReadWriteLockThread, LastWriteLockThread: TThreadID; // to be reentrant
     LastReadWriteLockCount,  LastWriteLockCount: cardinal;
+    procedure ReadOnlyLockSpin;
   public
     /// initialize the R/W lock
     // - not needed if TRWLock is part of a class - i.e. if was filled with 0
@@ -2559,6 +2560,7 @@ type
     // !   rwlock.ReadOnlyUnLock;
     // ! end;
     procedure ReadOnlyLock;
+      {$ifdef HASINLINE} inline; {$endif}
     /// release a previous ReadOnlyLock call
     procedure ReadOnlyUnLock;
       {$ifdef HASINLINE} inline; {$endif}
@@ -2603,7 +2605,7 @@ type
     procedure WriteLock;
     /// release a previous WriteLock call
     procedure WriteUnlock;
-      {$ifdef FPC_OR_DELPHIXE} inline; {$endif} // circumvent weird Delphi bug
+      {$ifdef FPC_OR_DELPHIXE4} inline; {$endif} // circumvent weird Delphi bug
     /// a high-level wrapper over ReadOnlyLock/ReadWriteLock/WriteLock methods
     procedure Lock(context: TRWLockContext (*{$ifndef PUREMORMOT2} = cWrite {$endif}*));
       {$ifdef HASINLINE} inline; {$endif}
@@ -5309,71 +5311,27 @@ begin
     raise EOSException.CreateFmt('TRWLock Flags=%x', [Flags]);
 end;
 
-// dedicated asm for this most simple (and used) method
-{$ifdef CPUX64}
-
+// note: we tried to implement it with pure asm but was unstable on Delphi Win64
 procedure TRWLock.ReadOnlyLock;
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        {$ifndef WIN64ABI}
-        mov     rcx, rdi      // rcx = self
-        {$endif WIN64ABI}
-@retry: mov     r8d, SPIN_COUNT
-@spin:  mov     rax, qword ptr [rcx + TRWLock.Flags]
-        and     rax, not 1
-        lea     rdx, [rax + 4]
-   lock cmpxchg qword ptr [rcx + TRWLock.Flags], rdx
-        jnz     @locked
-        ret
-@locked:pause
-        dec     r8d
-        jnz     @spin
-        push    rcx
-        call    SwitchToThread
-        pop     rcx
-        jmp     @retry
+var
+  f: PtrUInt;
+begin
+  // if not writing, atomically increase the RD counter in the upper flag bits
+  f := Flags and not 1; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
+  if not LockedCAS(Flags, f + 4, f) then
+    ReadOnlyLockSpin;
 end;
 
-{$else}
-
-{$ifdef CPUX86}
-
-procedure TRWLock.ReadOnlyLock;
-{$ifdef FPC}nostackframe; assembler;{$endif}
-asm
-        push    ebx
-        mov     ebx, eax
-@retry: mov     ecx, SPIN_COUNT
-@spin:  mov     eax, dword ptr [ebx + TRWLock.Flags]
-        and     eax, not 1
-        lea     edx, [eax + 4]
-   lock cmpxchg dword ptr [ebx + TRWLock.Flags], edx
-        jz      @done
-        pause
-        dec     ecx
-        jnz     @spin
-        call    SwitchToThread
-        jmp     @retry
-@done:  pop     ebx
-end;
-
-{$else}
-
-procedure TRWLock.ReadOnlyLock;
+procedure TRWLock.ReadOnlyLockSpin;
 var
   spin, f: PtrUInt;
 begin
-  // if not writing, atomically increase the RD counter in the upper flag bits
   spin := SPIN_COUNT;
   repeat
-    f := Flags and not 1; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
-    if LockedCAS(Flags, f + 4, f) then
-      break;
     spin := DoSpin(spin);
-  until false;
+    f := Flags and not 1; // retry ReadOnlyLock
+  until LockedCAS(Flags, f + 4, f);
 end;
-
-{$endif CPUX86}
-{$endif CPUX64}
 
 procedure TRWLock.ReadOnlyUnLock;
 begin
