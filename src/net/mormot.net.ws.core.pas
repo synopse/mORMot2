@@ -293,7 +293,7 @@ type
     procedure AfterGetFrame(var frame: TWebSocketFrame); virtual;
     procedure BeforeSendFrame(var frame: TWebSocketFrame); virtual;
     function FrameData(const frame: TWebSocketFrame; const Head: RawUtf8;
-      HeadFound: PRawUtf8 = nil): pointer; virtual;
+      HeadFound: PRawUtf8 = nil; PMax: PPByte = nil): pointer; virtual;
     function FrameType(const frame: TWebSocketFrame): RawUtf8; virtual;
     function GetRemoteIP: RawUtf8;
     function GetEncrypted: boolean;
@@ -436,7 +436,7 @@ type
       const values: array of PRawByteString;
       var contentType, content: RawByteString): boolean; override;
     function FrameData(const frame: TWebSocketFrame; const Head: RawUtf8;
-      HeadFound: PRawUtf8 = nil): pointer; override;
+      HeadFound: PRawUtf8 = nil; PMax: PPByte = nil): pointer; override;
     function FrameType(const frame: TWebSocketFrame): RawUtf8; override;
   public
     /// initialize the WebSockets JSON protocol
@@ -474,11 +474,12 @@ type
     procedure AfterGetFrame(var frame: TWebSocketFrame); override;
     procedure BeforeSendFrame(var frame: TWebSocketFrame); override;
     function FrameData(const frame: TWebSocketFrame; const Head: RawUtf8;
-      HeadFound: PRawUtf8 = nil): pointer; override;
+      HeadFound: PRawUtf8 = nil; PMax: PPByte = nil): pointer; override;
     function FrameType(const frame: TWebSocketFrame): RawUtf8; override;
     function SendFrames(Owner: TWebSocketProcess;
       var Frames: TWebSocketFrameDynArray;
       var FramesCount: integer): boolean; override;
+    procedure ProcessIncomingFrames(Sender: TWebSocketProcess; P, PMax: PByte);
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUtf8); override;
     function GetFramesInCompression: integer;
@@ -734,7 +735,7 @@ type
        out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
       virtual; abstract;
     function HiResDelay(var start: Int64): Int64;
-    procedure Log(const frame: TWebSocketFrame; const aMethodName: RawUtf8;
+    procedure Log(const frame: TWebSocketFrame; const aMethodName: ShortString;
       aEvent: TSynLogInfo = sllTrace; DisableRemoteLog: boolean = false); virtual;
     function SendPendingOutgoingFrames: integer;
   public
@@ -1164,7 +1165,7 @@ begin
 end;
 
 function TWebSocketProtocol.FrameData(const frame: TWebSocketFrame;
-  const Head: RawUtf8; HeadFound: PRawUtf8): pointer;
+  const Head: RawUtf8; HeadFound: PRawUtf8; PMax: PPByte): pointer;
 begin
   result := nil; // no frame type by default
 end;
@@ -1422,8 +1423,7 @@ begin
           (FrameData(request, 'answer') <> nil) then
   begin
     Sender.fIncoming.AnswerToIgnore(-1);
-    Sender.Log(request,
-      'Ignored answer after NotifyCallback TIMEOUT', sllWarning);
+    Sender.Log(request, 'Ignored answer after NotifyCallback TIMEOUT', sllWarning);
   end
   else
     // e.g. async 'answer' to store in the internal incoming frames list
@@ -1594,7 +1594,7 @@ begin
 end;
 
 function TWebSocketProtocolJson.FrameData(const frame: TWebSocketFrame;
-  const Head: RawUtf8; HeadFound: PRawUtf8): pointer;
+  const Head: RawUtf8; HeadFound: PRawUtf8; PMax: PPByte): pointer;
 var
   P, txt: PUtf8Char;
   len: PtrInt;
@@ -1604,6 +1604,8 @@ begin
      (frame.opcode <> focText) then
     exit;
   P := pointer(frame.payload);
+  if PMax <> nil then
+    PMax^ := pointer(P + length(frame.payload));
   if not NextNotSpaceCharIs(P, '{') then
     exit;
   while P^ <> '"' do
@@ -1805,7 +1807,7 @@ begin
 end;
 
 function TWebSocketProtocolBinary.FrameData(const frame: TWebSocketFrame;
-  const Head: RawUtf8; HeadFound: PRawUtf8): pointer;
+  const Head: RawUtf8; HeadFound: PRawUtf8; PMax: PPByte): pointer;
 var
   len: PtrInt;
   P: PUtf8Char;
@@ -1819,6 +1821,8 @@ begin
     result := PosChar(P + len, FRAME_HEAD_SEP);
     if result <> nil then
     begin
+      if PMax <> nil then
+        PMax := pointer(P + len);
       if HeadFound <> nil then
         FastSetString(HeadFound^, P, PAnsiChar(result) - P);
       inc(PByte(result));
@@ -1972,34 +1976,46 @@ begin
   result := Owner.SendFrame(jumboFrame);
 end;
 
-procedure TWebSocketProtocolBinary.ProcessIncomingFrame(
-  Sender: TWebSocketProcess; var request: TWebSocketFrame; const info: RawUtf8);
+const
+  JUMBO_INFO: array[0..2] of RawUtf8 = (
+    'Sec-WebSocket-Frame: [0]',
+    'Sec-WebSocket-Frame: [1]',
+    '');
+
+procedure TWebSocketProtocolBinary.ProcessIncomingFrames(
+  Sender: TWebSocketProcess; P, PMax: PByte);
 var
-  jumboInfo: RawByteString;
-  n, i: integer;
+  n, i, j: integer;
   frame: TWebSocketFrame;
-  P: PByte;
+  tmp: ShortString;
 begin
-  P := FrameData(request, 'frames');
-  if P <> nil then
-  begin
-    n := FromVarUInt32(P);
+  if FromVarUInt32(P, PMax, cardinal(n)) then
     for i := 0 to n do
     begin
-      if i = 0 then
-        jumboInfo := 'Sec-WebSocket-Frame: [0]'
-      else if i = n then
-        jumboInfo := 'Sec-WebSocket-Frame: [1]'
-      else
-        jumboInfo := '';
       frame.opcode := focBinary;
       frame.content := [];
       frame.tix := 0;
-      frame.payload := FromVarString(P);
-      Sender.Log(frame, FormatUtf8('GetSubFrame(%/%)', [i + 1, n + 1]));
-      inherited ProcessIncomingFrame(Sender, frame, jumboInfo);
+      FromVarString(P, PMax, frame.payload, CP_UTF8);
+      FormatShort('GetSubFrame(%/%)', [i + 1, n + 1], tmp);
+      Sender.Log(frame, tmp);
+      if i = 0 then
+        j := 0
+      else if i = n then
+        j := 1
+      else
+        j := 2;
+      inherited ProcessIncomingFrame(Sender, frame, JUMBO_INFO[j]);
     end;
-  end
+end;
+
+procedure TWebSocketProtocolBinary.ProcessIncomingFrame(
+  Sender: TWebSocketProcess; var request: TWebSocketFrame; const info: RawUtf8);
+var
+  P, PMax: PByte;
+begin
+  P := FrameData(request, 'frames', nil, @PMax);
+  if P <> nil then
+    ProcessIncomingFrames(Sender, P, PMax)
   else
     inherited ProcessIncomingFrame(Sender, request, info);
 end;
@@ -2450,8 +2466,7 @@ begin
   else if not fConnectionCloseWasSent then
   begin
     if log <> nil then
-      log.Log(sllTrace,
-        'Destroy: send focConnectionClose', self);
+      log.Log(sllTrace, 'Destroy: send focConnectionClose', self);
     Shutdown({waitforpong=}true);
   end;
   fState := wpsDestroy;
@@ -2824,7 +2839,7 @@ begin
 end;
 
 procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
-  const aMethodName: RawUtf8; aEvent: TSynLogInfo; DisableRemoteLog: boolean);
+  const aMethodName: ShortString; aEvent: TSynLogInfo; DisableRemoteLog: boolean);
 
   procedure DoLog(log: TSynLog);
   var
