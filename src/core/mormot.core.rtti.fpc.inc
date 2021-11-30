@@ -626,10 +626,9 @@ procedure fpc_dynarray_incr_ref;     external name 'FPC_DYNARRAY_INCR_REF';
 procedure fpc_dynarray_decr_ref;     external name 'FPC_DYNARRAY_DECR_REF';
 procedure fpc_dynarray_clear;        external name 'FPC_DYNARRAY_CLEAR';
 {$ifdef FPC_X64MM}
-procedure fpc_getmem;                external name 'FPC_GETMEM';
+function  fpc_getmem(size: PtrUInt): pointer; external name 'FPC_GETMEM';
 procedure fpc_freemem;               external name 'FPC_FREEMEM';
 {$else}
-procedure _Getmem;                   external name 'FPC_GETMEM';
 procedure _Freemem(p: pointer);      external name 'FPC_FREEMEM';
 {$endif FPC_X64MM}
 
