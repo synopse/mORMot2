@@ -740,7 +740,7 @@ type
   /// manage PKI certificates using ECC secp256r1 cryptography
   // - will implement a simple and efficient public-key infrastructure (PKI),
   // based on JSON objects or even plain Base64 encoded JSON strings
-  TEccCertificateChain = class(TSynPersistentLock)
+  TEccCertificateChain = class(TSynPersistentRWLock)
   protected
     fItems: TEccCertificateObjArray;
     fIsValidCached: boolean;
@@ -3092,12 +3092,12 @@ begin
   if fIsValidCached then
   begin
     crc := crc64c(@content, SizeOf(content));
-    fSafe.Lock;
+    fSafe.ReadOnlyLock;
     try
       if Int64ScanExists(pointer(fIsValidCache), fIsValidCacheCount, crc) then
         exit;
     finally
-      fSafe.Unlock;
+      fSafe.ReadOnlyUnlock;
     end;
   end
   else
@@ -3117,13 +3117,13 @@ begin
   sha.Full(@content.Signed, SizeOf(content.Signed), hash);
   if Ecc256r1Verify(auth.Signed.PublicKey, hash, content.Signature) then
   begin
-    fSafe.Lock;
+    fSafe.ReadOnlyLock;
     try
       if fIsValidCached and
          (crc <> 0) then
         AddInt64(fIsValidCache, fIsValidCacheCount, crc);
     finally
-      fSafe.Unlock;
+      fSafe.ReadOnlyUnlock;
     end;
   end
   else
@@ -3181,7 +3181,7 @@ function TEccCertificateChain.GetBySerial(const Serial: TEccCertificateID; out
 var
   cert: TEccCertificate;
 begin
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     cert := GetBySerial(Serial);
     if cert <> nil then
@@ -3192,7 +3192,7 @@ begin
     else
       result := false;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
@@ -3201,7 +3201,7 @@ function TEccCertificateChain.GetBySerial(const Serial: TEccCertificateID; out
 var
   cert: TEccCertificate;
 begin
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     cert := GetBySerial(Serial);
     if cert <> nil then
@@ -3212,7 +3212,7 @@ begin
     else
       result := false;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
@@ -3220,7 +3220,7 @@ procedure TEccCertificateChain.SetIsValidCached(const Value: boolean);
 begin
   if fIsValidCached = Value then
     exit;
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     fIsValidCached := Value;
     if not Value then
@@ -3229,7 +3229,7 @@ begin
       fIsValidCacheCount := 0;
     end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -3241,12 +3241,12 @@ begin
      (cert = nil) or
      (IsValid(cert.fContent, true) <> expected) then
     exit;
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     if IndexBySerial(cert.Signed.Serial) < 0 then
       result := ObjArrayAdd(fItems, cert);
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -3262,13 +3262,13 @@ end;
 
 procedure TEccCertificateChain.Clear;
 begin
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     ObjArrayClear(fItems);
     fIsValidCacheCount := 0;
     fIsValidCache := nil;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -3407,13 +3407,13 @@ function TEccCertificateChain.SaveToArray: TRawUtf8DynArray;
 var
   i: PtrInt;
 begin
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     SetLength(result{%H-}, length(fItems));
     for i := 0 to high(result) do
       result[i] := fItems[i].PublicToBase64;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
@@ -3439,7 +3439,7 @@ begin
   result := false;
   if self = nil then
     exit;
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     Clear;
     SetLength(fItems, length(values));
@@ -3453,7 +3453,7 @@ begin
       end;
     end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
   result := true;
 end;
@@ -3465,13 +3465,13 @@ begin
   result := nil;
   if self = nil then
     exit;
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     for i := 0 to high(fItems) do
       if not (IsValid(fItems[i]) in ECC_VALIDSIGN) then
         ObjArrayAdd(result, fItems[i]);
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
@@ -3512,7 +3512,7 @@ var
   pub64, items: TDocVariantData;
   i, n: PtrInt;
 begin
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     n := length(fItems);
     pub64.InitFast(n, dvArray);
@@ -3522,12 +3522,12 @@ begin
       pub64.AddItemText(fItems[i].PublicToBase64);
       items.AddItem(fItems[i].ToVariant(false));
     end;
-    result := _ObjFast([
-      'PublicBase64', variant(pub64),
-      'Items', variant(items)]);
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
+  result := _ObjFast([
+    'PublicBase64', variant(pub64),
+    'Items', variant(items)]);
 end;
 
 function TEccCertificateChain.SaveToFileContent: RawUtf8;
