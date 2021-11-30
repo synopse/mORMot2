@@ -410,6 +410,10 @@ implementation
 
 {$ifdef MSWINDOWS}
 
+// Win64: any assembler function with sub-calls should have a stack frame
+// -> nostackframe is defined only on Linux or for functions with no nested call
+{$undef NOSFRAME}
+
 const
   kernel32 = 'kernel32.dll';
 
@@ -510,7 +514,17 @@ uses
   {$endif DARWIN}
   BaseUnix;
 
-// we directly call the Kernel, so this unit doesn't require any libc
+// in practice, SYSV ABI seems to not require a stack frame, as Win64 does, for
+// our use case of nested calls with no local stack storage and direct kernel
+// syscalls - but since it is clearly undocumented, we set it on LINUX only
+// -> appears to work with no problem from our tests: feedback is welcome!
+// -> see FPCMM_NOSFRAME conditional to disable it on LINUX
+{$ifdef LINUX}
+  {$define NOSFRAME}
+{$endif LINUX}
+
+
+// we directly call the OS Kernel, so this unit doesn't require any libc
 
 function AllocMedium(Size: PtrInt): pointer; inline;
 begin
@@ -584,16 +598,18 @@ end;
 
 { ********* Some Assembly Helpers }
 
+// low-level conditional to disable nostackframe code on Linux
+{$ifdef FPCMM_NOSFRAME}
+  {$undef NOSFRAME}
+{$endif FPCMM_NOSFRAME}
+
 var
   HeapStatus: TMMStatus;
-
-// Win64: any assembler function with sub-calls should have a stack frame
-// -> nostackframe is defined only on POSIX or for functions with no nested call
 
 {$ifdef FPCMM_DEBUG}
 
 procedure ReleaseCore;
-  {$ifndef MSWINDOWS} nostackframe; {$endif} assembler;
+  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
 asm
         {$ifdef FPCMM_SLEEPTSC}
         rdtsc // returns the TSC in EDX:EAX
@@ -894,7 +910,7 @@ var
 
 
 procedure LockMediumBlocks;
-  {$ifndef MSWINDOWS} nostackframe; {$endif} assembler;
+  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
 // on input/output: r10=TMediumBlockInfo
 asm
         {$ifdef FPCMM_SLEEPTSC}
@@ -1099,7 +1115,7 @@ begin
 end;
 
 procedure LockLargeBlocks;
-  {$ifndef MSWINDOWS} nostackframe; {$endif} assembler;
+  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
 asm
 @s:     mov     eax, $100
         lea     rcx, [rip + LargeBlocksLocked]
@@ -1258,7 +1274,7 @@ end;
 { ********* Main Memory Manager Functions }
 
 function _GetMem(size: PtrUInt): pointer;
-  {$ifndef MSWINDOWS} nostackframe; {$endif} assembler;
+  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
 asm
         {$ifndef MSWINDOWS}
         mov     rcx, size
@@ -1419,12 +1435,12 @@ asm
         jz      @RemoveSmallPool
         // Unlock the block type and leave
         mov     byte ptr [rbx].TSmallBlockType.Locked, false
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
 @VoidSize:
         inc     size // "we always need to allocate something" (see RTL heap.inc)
         jmp     @VoidSizeToSomething
@@ -1442,12 +1458,12 @@ asm
         // Unlock the block type, set the block header and leave
         mov     byte ptr [rbx].TSmallBlockType.Locked, false
         mov     [rax - BlockHeaderSize], rdx
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
 @RemoveSmallPool:
         // Pool is full - remove it from the partially free list
         mov     rcx, [rdx].TSmallBlockPoolHeader.NextPartiallyFreePool
@@ -1455,12 +1471,12 @@ asm
         mov     [rbx].TSmallBlockType.NextPartiallyFreePool, rcx
         // Unlock the block type and leave
         mov     byte ptr [rbx].TSmallBlockType.Locked, false
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
 @AllocateSmallBlockPool:
         // Access shared information about Medium blocks storage
         lea     rcx, [rip + SmallMediumBlockInfo]
@@ -1564,12 +1580,12 @@ asm
         jnz     @GotMediumBlock // rsi=freeblock rbx=blocktype edi=blocksize
         mov     [r10 + TMediumBlockInfo.Locked], al
         mov     [rbx].TSmallBlockType.Locked, al
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
 @UseWholeBlock:
         // rsi = free block, rbx = block type, edi = block size
         // Mark this block as used in the block following it
@@ -1597,12 +1613,12 @@ asm
         // Unlock the small block type, set header and leave
         mov     byte ptr [rbx].TSmallBlockType.Locked, false
         mov     [rax - BlockHeaderSize], rsi
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
         // ---------- MEDIUM block allocation ----------
 @NotTinySmallBlock:
         // Do we need a Large block?
@@ -1665,12 +1681,12 @@ asm
         or      rbx, IsMediumBlockFlag
         mov     [rax - BlockHeaderSize], rbx
         mov     byte ptr [r10 + TMediumBlockInfo.Locked], false
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
 @AllocateNewSequentialFeedForMedium:
         {$ifdef MSWINDOWS}
         mov     ecx, ebx
@@ -1681,12 +1697,12 @@ asm
         {$endif MSWINDOWS}
         call    AllocNewSequentialFeedMediumPool
         mov     byte ptr [rip + MediumBlockInfo.Locked], false
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
 @GotBinAndGroup:
         // ebx = block size, ecx = bin number, edx = group number
         // Compute rdi = @bin, rsi = free block
@@ -1738,12 +1754,12 @@ asm
         // Unlock medium blocks and leave
         mov     byte ptr [r10 + TMediumBlockInfo.Locked], false
         mov     rax, rsi
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
         // ---------- LARGE block allocation ----------
 @IsALargeBlockRequest:
         xor     rax, rax
@@ -1760,7 +1776,7 @@ asm
 end;
 
 function FreeMediumBlock(arg1: pointer): PtrUInt;
-  {$ifndef MSWINDOWS} nostackframe; {$endif} assembler;
+  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
 // rcx=P rdx=[P-BlockHeaderSize] r10=TMediumBlockInfo
 // (arg1 is used only for proper call of pascal functions below on all ABI)
 asm
@@ -1912,7 +1928,7 @@ const
 {$endif FPCMM_REPORTMEMORYLEAKS}
 
 function _FreeMem(P: pointer): PtrUInt;
-  {$ifndef MSWINDOWS} nostackframe; {$endif} assembler;
+  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
 asm
         {$ifdef FPCMM_REPORTMEMORYLEAKS}
         mov     eax, REPORTMEMORYLEAK_FREEDHEXSPEAK // 00000000 BLODLESS marker
@@ -1973,12 +1989,12 @@ asm
         {$endif FPCMM_LOCKLESSFREE}
         mov     byte ptr [rbx].TSmallBlockType.Locked, false
         movzx   eax, word ptr [rbx].TSmallBlockType.BlockSize
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
 @PoolIsNowEmpty:
         // FirstFreeBlock=nil means it is the sequential feed pool with a single block
         test    rax, rax
@@ -2002,12 +2018,12 @@ asm
         lea     r10, [rip + SmallMediumBlockInfo]
         call    FreeMediumBlock // no call nor BinLocked to avoid race condition
         movzx   eax, word ptr [rbx].TSmallBlockType.BlockSize
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
 {$ifdef FPCMM_LOCKLESSFREE}
 @ProcessPendingBin:
         // Try once to acquire BinLocked (spinning may induce race condition)
@@ -2032,12 +2048,12 @@ asm
         mov     byte ptr [rbx].TSmallBlockType.Locked, false
 {$endif FPCMM_LOCKLESSFREE}
         movzx   eax, word ptr [rbx].TSmallBlockType.BlockSize
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
 @NotSmallBlockInUse:
         lea     r10, [rip + MediumBlockInfo]
         test    dl, IsFreeBlockFlag + IsLargeBlockFlag
@@ -2108,12 +2124,12 @@ asm
         mov     [rbx + TSmallBlockType.BinInstance + rax * 8], rcx
         mov     byte ptr [rbx].TSmallBlockType.BinLocked, false
         movzx   eax, word ptr [rbx].TSmallBlockType.BlockSize
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
 @LockBlockType:
         // Fallback to main block lock if TSmallBlockType.BinInstance[] is full
         mov     byte ptr [rbx].TSmallBlockType.BinLocked, false
@@ -2172,7 +2188,7 @@ end;
 
 // warning: FPC signature is not the same than Delphi: requires "var P"
 function _ReallocMem(var P: pointer; Size: PtrUInt): pointer;
-  {$ifndef MSWINDOWS} nostackframe; {$endif} assembler;
+  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
 asm
         {$ifdef MSWINDOWS}
         push    rdi
@@ -2203,15 +2219,16 @@ asm
         cmp     eax, ecx
         jb      @GetMemMoveFreeMem // r14=P rdx=size
 @NoResize:
+        // branchless execution if current block is good enough for this size
         mov     rax, r14 // keep original pointer
         pop     rcx
-        {$ifdef MSWINDOWS}
-        jmp     @Quit // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     r14
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Quit // on Win64, a stack frame is required
+        {$endif NOSFRAME}
 @VoidSize:
         push    rdx    // to set P=nil
         jmp     @DoFree // ReallocMem(P,0)=FreeMem(P)
@@ -2488,7 +2505,7 @@ asm
 end;
 
 function _AllocMem(Size: PtrUInt): pointer;
-  {$ifndef MSWINDOWS} nostackframe; {$endif} assembler;
+  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
 asm
         push    rbx
         // Compute rbx = size rounded down to the last pointer
@@ -2522,12 +2539,12 @@ asm
 @LastQ: xor     rcx, rcx
         mov     qword ptr [rdx], rcx
         {$ifdef FPCMM_ERMS}
-        {$ifdef MSWINDOWS}
-        jmp     @Done // on Win64, a stack frame is required
-        {$else}
+        {$ifdef NOSFRAME}
         pop     rbx
         ret
-        {$endif MSWINDOWS}
+        {$else}
+        jmp     @Done // on Win64, a stack frame is required
+        {$endif NOSFRAME}
         // ERMS has a startup cost, but "rep stosd" is fast enough on all CPUs
 @erms:  mov     rcx, rbx
         push    rax
