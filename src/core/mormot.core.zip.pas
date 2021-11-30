@@ -275,7 +275,7 @@ type
     /// returns the stored header size
     // - i.e. SizeOf(self) + fileInfo.extraLen + fileInfo.nameLen bytes
     function Size: PtrInt;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifndef FPC}{$ifdef HASINLINE} inline; {$endif}{$endif}
     /// point to the data part of this PLocalFileHeader
     // - jump over fileInfo.extraLen + fileInfo.nameLen bytes
     function Data: PAnsiChar;

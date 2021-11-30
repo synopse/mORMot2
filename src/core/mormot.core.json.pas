@@ -4328,6 +4328,7 @@ begin
                 Add(Params[P]) // numbers or boolean don't need any SQL quoting
             else
               begin
+                FillChar(toquote.Temp,SizeOf(toquote.Temp),0);
                 VarRecToTempUtf8(Params[P], toquote);
                 AddQuotedStr(toquote.Text, toquote.Len, ''''); // double quote
                 if toquote.TempRawUtf8 <> nil then

@@ -8487,13 +8487,13 @@ begin
   fDynArray := aDynArray;
   fHashItem := aHashItem;
   fEventHash := aEventHash;
-  if not Assigned(fHashItem) and
-     not Assigned(fEventHash) then
+  if (not (Assigned(fHashItem) or
+    Assigned(fEventHash))) then
     fHashItem := PT_HASH[aCaseInsensitive, fDynArray^.Info.ArrayFirstField];
   fCompare := aCompare;
   fEventCompare := aEventCompare;
-  if not Assigned(fCompare) and
-     not Assigned(fEventCompare) then
+  if (not (Assigned(fCompare) or
+     Assigned(fEventCompare))) then
     fCompare := PT_SORT[aCaseInsensitive, fDynArray^.Info.ArrayFirstField];
   HashTableInit(aHasher);
 end;

@@ -517,8 +517,10 @@ begin
   check(s <> '', 'current_timestamp');
   s := Demo.ExecuteNoExceptionUtf8('SELECT datetime(current_timestamp);');
   check(s <> '', 'datetime');
+  {$ifndef MSWindows}
   s := Demo.ExecuteNoExceptionUtf8('SELECT datetime(current_timestamp,''localtime'');');
   check(s <> '', 'localtime');
+  {$endif}
 end;
 
 procedure TTestSQLite3Engine.VirtualTableDirectAccess;
