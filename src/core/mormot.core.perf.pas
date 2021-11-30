@@ -383,6 +383,8 @@ type
     procedure LockedPerSecProperties; virtual;
     procedure LockedFromProcessTimer; virtual;
     procedure LockedSum(another: TSynMonitor); virtual;
+    procedure LockedFromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure WriteDetailsTo(W: TTextWriter); virtual;
   public
     /// low-level high-precision timer instance
@@ -507,7 +509,10 @@ type
     destructor Destroy; override;
     /// increase the internal size counter
     // - thread-safe method
-    procedure AddSize(const Bytes: QWord);
+    procedure AddSize(const Bytes: QWord); overload;
+    /// increase the internal size counter and the current timer
+    // - thread-safe method
+    procedure AddSize(const Bytes, MicroSecs: QWord); overload;
   published
     /// how many total data has been hanlded during all working process
     property Size: TSynMonitorSize
@@ -1497,6 +1502,14 @@ begin
   fProcessing := false;
 end;
 
+procedure TSynMonitor.LockedFromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
+begin
+  inc(fTaskCount);
+  fTaskStatus := taskStarted;
+  InternalTimer.FromExternalMicroSeconds(MicroSecondsElapsed);
+  LockedFromProcessTimer;
+end;
+
 procedure TSynMonitor.FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
 begin
   LightLock(fSafe);
@@ -1506,10 +1519,7 @@ begin
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
-    inc(fTaskCount);
-    fTaskStatus := taskStarted;
-    InternalTimer.FromExternalMicroSeconds(MicroSecondsElapsed);
-    LockedFromProcessTimer;
+    LockedFromExternalMicroSeconds(MicroSecondsElapsed);
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
@@ -1667,6 +1677,14 @@ begin
   LightUnLock(fSafe);
 end;
 
+procedure TSynMonitorWithSize.AddSize(const Bytes, MicroSecs: QWord);
+begin
+  LightLock(fSafe);
+  fSize.Bytes := fSize.Bytes + Bytes;
+  LockedFromExternalMicroSeconds(MicroSecs);
+  LightUnLock(fSafe);
+end;
+
 procedure TSynMonitorWithSize.LockedSum(another: TSynMonitor);
 begin
   inherited LockedSum(another);
@@ -1721,10 +1739,7 @@ begin
   fInput.Bytes := fInput.Bytes + Incoming;
   fOutput.Bytes := fOutput.Bytes + Outgoing;
   // inlined FromExternalMicroSeconds
-  inc(fTaskCount);
-  fTaskStatus := taskStarted;
-  InternalTimer.FromExternalMicroSeconds(MicroSec);
-  LockedFromProcessTimer;
+  LockedFromExternalMicroSeconds(MicroSec);
   // inlined ProcessErrorNumber(Status)
   if error then
   begin
@@ -2059,7 +2074,7 @@ begin
   result := 0;
   if Instance = nil then
     exit;
-  fSafe.Lock;
+  fSafe.Lock; // this single lock could make this method inefficient
   try
     for i := 0 to length(fTracked) - 1 do
       if fTracked[i].Instance = Instance then

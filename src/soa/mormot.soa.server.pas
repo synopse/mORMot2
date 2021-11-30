@@ -1329,7 +1329,7 @@ begin
       begin
         QueryPerformanceMicroSeconds(timeEnd);
         dec(timeEnd, timeStart);
-        Ctxt.StatsFromContext(stats, timeEnd, false);
+        Ctxt.StatsFromContext(stats, timeEnd);
         if Ctxt.Server.StatUsage <> nil then
           Ctxt.Server.StatUsage.Modified(stats, []);
         if (mlSessions in fRestServer.StatLevels) and
@@ -1367,7 +1367,7 @@ begin
                   LeaveCriticalSection(fInstanceLock);
                 end;
               end;
-              Ctxt.StatsFromContext(stats, timeEnd, true);
+              Ctxt.StatsFromContext(stats, timeEnd);
               // mlSessions stats are not yet tracked per Client
             end;
         end;

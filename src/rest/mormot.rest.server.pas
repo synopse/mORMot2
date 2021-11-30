@@ -182,6 +182,7 @@ type
     fSessionAccessRights: TOrmAccessRights; // fSession may be deleted meanwhile
     fServiceListInterfaceMethodIndex: integer;
     fTix64: Int64;
+    fStatsInSize, fStatsOutSize: integer;
     function GetInput(const ParamName: RawUtf8): variant;
     function GetInputOrVoid(const ParamName: RawUtf8): variant;
     function GetInputNameIndex(const ParamName: RawUtf8): PtrInt;
@@ -399,7 +400,7 @@ type
     // TRestServer.RecordCanBeUpdated failure
     CustomErrorMsg: RawUtf8;
     /// high-resolution timimg of the execution command, in micro-seconds
-    // - only set when TRestServer.Uri finished
+    // - only set when TRestServer.Uri finished, available e.g. for OnAfterUri
     MicroSecondsElapsed: QWord;
     /// JWT validation information, as filled by AuthenticationCheck()
     JwtContent: TJwtContent;
@@ -757,8 +758,7 @@ type
     /// low-level closure of the JSON result for a service execution
     procedure ServiceResultEnd(WR: TJsonWriter; ID: TID); virtual;
     /// low-level statistics merge during service execution
-    procedure StatsFromContext(Stats: TSynMonitorInputOutput;
-      var Diff: Int64; DiffIsMicroSecs: boolean);
+    procedure StatsFromContext(Stats: TSynMonitorInputOutput; MicroSec: Int64);
     /// low-level HTTP header merge of the OutSetCookie value
     procedure OutHeadFromCookie;
     /// event raised by ExecuteMethod() for interface parameters
@@ -1430,7 +1430,8 @@ type
     destructor Destroy; override;
     /// should be called when a task successfully ended
     // - thread-safe method
-    procedure ProcessSuccess(IsOutcomingFile: boolean); virtual;
+    procedure ProcessSuccess(IsOutcomingFile: boolean);
+      {$ifdef HASINLINE} inline; {$endif}
     /// update and returns the CurrentThreadCount property
     // - this method is thread-safe
     function NotifyThreadCount(delta: integer): integer;
@@ -2366,6 +2367,7 @@ type
       read fStatLevels write fStatLevels;
     /// could be set to track statistic from Stats information
     // - it may be e.g. a TSynMonitorUsageRest instance for REST storage
+    // - warning: current Uri() implementation is inefficient (single lock)
     property StatUsage: TSynMonitorUsage
       read fStatUsage write SetStatUsage;
     /// the class inheriting from TAuthSession to handle in-memory sessions
@@ -3098,27 +3100,21 @@ begin
   ReturnsJson(config, HTTP_SUCCESS, true, twJsonEscape, true);
 end;
 
-procedure StatsAddSizeForCall(Stats: TSynMonitorInputOutput;
-  const Call: TRestUriParams);
-begin
-  Stats.AddSize( // rough estimation
-    length(Call.Url) + length(Call.Method) + length(Call.InHead) +
-      length(Call.InBody) + 12,
-    length(Call.OutHead) + length(Call.OutBody) + 16);
-end;
-
 procedure TRestServerUriContext.StatsFromContext(Stats: TSynMonitorInputOutput;
-  var Diff: Int64; DiffIsMicroSecs: boolean);
+  MicroSec: Int64);
 begin
-  StatsAddSizeForCall(Stats, Call^);
-  if not StatusCodeIsSuccess(Call.OutStatus) then
-    Stats.ProcessErrorNumber(Call.OutStatus);
-  if DiffIsMicroSecs then
-    // avoid a division
-    Stats.FromExternalMicroSeconds(Diff)
-  else
-    // converted to us
-    Diff := Stats.FromExternalQueryPerformanceCounters(Diff);
+  if (self = nil) or
+     (Stats = nil) then
+    exit;
+  if fStatsInSize = 0 then
+  begin
+    // rough estimation - but compute it once
+    fStatsInSize := length(Call.Url) + length(Call.Method) +
+      length(Call.InHead) + length(Call.InBody) + 12;
+    fStatsOutSize := length(Call.OutHead) + length(Call.OutBody) + 16;
+  end;
+  // set all TSynMonitorInputOutput fields in a single LightLock()
+  Stats.Notify(fStatsInSize, fStatsOutSize, MicroSec, Call.OutStatus);
 end;
 
 procedure TRestServerUriContext.OutHeadFromCookie;
@@ -3182,7 +3178,7 @@ begin
     begin
       QueryPerformanceMicroSeconds(timstop);
       dec(timstop, timstart);
-      StatsFromContext(Stats, timstop, false);
+      StatsFromContext(Stats, timstop);
       if Server.fStatUsage <> nil then
         Server.fStatUsage.Modified(Stats, []);
       if (mlSessions in Server.fStatLevels) and
@@ -3213,7 +3209,7 @@ begin
             Server.fStats.UnLock;
           end;
         end;
-        StatsFromContext(sessionstat, timstop, true);
+        StatsFromContext(sessionstat, timstop);
         // mlSessions stats are not yet tracked per Client
       end;
     end;
@@ -3294,13 +3290,7 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
       if ForceServiceResultAsXMLObjectNameSpace = '' then
         ForceServiceResultAsXMLObjectNameSpace := ResultAsXMLObjectNameSpace;
     end;
-    with Server.fStats do
-    begin
-      fSafe^.Lock;
-      inc(fServiceInterface);
-      Changed;
-      fSafe^.UnLock;
-    end;
+    LockedInc64(@Server.fStats.fServiceInterface);
     case ServiceMethodIndex of
       ord(imFree):
         // {"method":"_free_", "params":[], "id":1234}
@@ -5941,36 +5931,35 @@ end;
 
 procedure TRestServerMonitor.ProcessSuccess(IsOutcomingFile: boolean);
 begin
-  fSafe^.Lock;
-  try
-    inc(fSuccess);
-    if IsOutcomingFile then
-      inc(fOutcomingFiles);
-    Changed;
-  finally
-    fSafe^.UnLock;
-  end;
+  if self = nil then
+    exit;
+  LightLock(fSafe);
+  inc(fSuccess);
+  if IsOutcomingFile then
+    inc(fOutcomingFiles);
+  LightUnLock(fSafe);
 end;
 
 procedure TRestServerMonitor.NotifyOrm(aMethod: TUriMethod);
+var
+  counter: PInt64;
 begin
-  fSafe^.Lock;
-  try
-    case aMethod of
-      mGET,
-      mLOCK:
-        inc(fRead);
-      mPOST:
-        inc(fCreated);
-      mPUT:
-        inc(fUpdated);
-      mDELETE:
-        inc(fDeleted);
-    end;
-    Changed;
-  finally
-    fSafe^.UnLock;
+  if self = nil then
+    exit;
+  case aMethod of
+    mGET,
+    mLOCK:
+      counter  := @fRead;
+    mPOST:
+      counter  := @fCreated;
+    mPUT:
+      counter  := @fUpdated;
+    mDELETE:
+      counter  := @fDeleted;
+  else
+    exit;
   end;
+  LockedInc64(counter);
 end;
 
 procedure TRestServerMonitor.NotifyOrmTable(TableIndex, DataSize: integer;
@@ -5981,24 +5970,27 @@ const
 var
   st: TSynMonitorWithSize;
 begin
-  if TableIndex < 0 then
+  if (self = nil) or
+     (TableIndex < 0) then
     exit;
-  fSafe^.Lock;
+  LightLock(fSafe);
   try
     if TableIndex >= length(fPerTable[Write]) then
       // tables may have been added after Create()
       SetLength(fPerTable[Write], TableIndex + 1);
-    if fPerTable[Write, TableIndex] = nil then
-      fPerTable[Write, TableIndex] := TSynMonitorWithSize.Create(
-        fServer.Model.TableProps[TableIndex].Props.SqlTableName + RW[Write]);
     st := fPerTable[Write, TableIndex];
-    st.FromExternalMicroSeconds(MicroSecondsElapsed);
-    st.AddSize(DataSize);
-    if fServer.fStatUsage <> nil then
-      fServer.fStatUsage.Modified(st, []);
+    if st = nil then
+    begin
+      st := TSynMonitorWithSize.Create(
+        fServer.Model.TableProps[TableIndex].Props.SqlTableName + RW[Write]);
+      fPerTable[Write, TableIndex] := st;
+    end;
+    st.AddSize(DataSize, MicroSecondsElapsed);
   finally
-    fSafe^.UnLock;
+    LightUnLock(fSafe);
   end;
+  if fServer.fStatUsage <> nil then
+    fServer.fStatUsage.Modified(st, []);
 end;
 
 function TRestServerMonitor.NotifyThreadCount(delta: integer): integer;
@@ -6007,14 +5999,12 @@ begin
     result := 0
   else
   begin
-    fSafe^.Lock;
+    LightLock(fSafe);
     try
       inc(fCurrentThreadCount, delta);
       result := fCurrentThreadCount;
-      if delta <> 0 then
-        Changed;
     finally
-      fSafe^.UnLock;
+      LightUnLock(fSafe);
     end;
   end;
 end;
@@ -6262,7 +6252,7 @@ begin
     // avoid GPF e.g. in case of missing sqlite3-64.dll
     exit;
   log := fLogClass.Enter('Shutdown(%) % CurrentRequestCount=%',
-    [aStateFileName, fModel.Root, fStats.AddCurrentRequestCount(0)], self);
+    [aStateFileName, fModel.Root, fStats.CurrentRequestCount], self);
   OnNotifyCallback := nil;
   fSessions.Safe.WriteLock;
   try
@@ -6278,7 +6268,7 @@ begin
     timeout := GetTickCount64 + 30000; // never wait forever
     repeat
       SleepHiRes(5);
-    until (fStats.AddCurrentRequestCount(0) = 0) or
+    until (fStats.CurrentRequestCount = 0) or
           (GetTickCount64 > timeout);
   end;
   if aStateFileName <> '' then
@@ -7441,14 +7431,10 @@ begin
       fStats.ProcessSuccess(outcomingfile);
     end
     else
-    begin
       // OutStatus is an error code
-      fStats.ProcessErrorNumber(Call.OutStatus);
       if Call.OutBody = '' then
         // if no custom error message, compute it now as JSON
         ctxt.Error(ctxt.CustomErrorMsg, Call.OutStatus);
-    end;
-    StatsAddSizeForCall(fStats, Call);
     if ((rsoNoInternalState in fOptions) or
         (rsoNoTableURI in fOptions)) and
        (ctxt.Method <> mSTATE) then
@@ -7472,15 +7458,16 @@ begin
         [EscapeToShort(Call.OutHead)], HTTP_SERVERERROR);
   finally
     QueryPerformanceMicroSeconds(msstop);
-    ctxt.MicroSecondsElapsed :=
-      fStats.FromExternalQueryPerformanceCounters(msstop - msstart);
+    dec(msstop, msstart);
+    ctxt.MicroSecondsElapsed := msstop;
+    ctxt.StatsFromContext(fStats, msstop);
     if log <> nil then
     begin
       if sllServer in fLogFamily.Level then
         log.Log(sllServer, '% % % %/% %=% out=% in %', [ctxt.SessionUserName,
           ctxt.RemoteIPNotLocal, Call.Method, Model.Root, ctxt.Uri,
           COMMANDTEXT[ctxt.Command], Call.OutStatus, KB(Call.OutBody),
-          MicroSecToString(ctxt.MicroSecondsElapsed)]);
+          MicroSecToString(msstop)]);
       if (Call.OutBody <> '') and
          (sllServiceReturn in fLogFamily.Level) then
         if not (optNoLogOutput in ctxt.ServiceExecutionOptions) then
@@ -7491,15 +7478,13 @@ begin
     if mlTables in StatLevels then
       case ctxt.Command of
         execOrmGet:
-          fStats.NotifyOrmTable(ctxt.TableIndex, length(Call.OutBody), false,
-            ctxt.MicroSecondsElapsed);
+          fStats.NotifyOrmTable(ctxt.TableIndex, length(Call.OutBody), false, msstop);
         execOrmWrite:
-          fStats.NotifyOrmTable(ctxt.TableIndex, length(Call.InBody), true,
-            ctxt.MicroSecondsElapsed);
+          fStats.NotifyOrmTable(ctxt.TableIndex, length(Call.InBody), true, msstop);
       end;
     fStats.AddCurrentRequestCount(-1);
     if fStatUsage <> nil then
-      fStatUsage.Modified(fStats, []);
+      fStatUsage.Modified(fStats, []); { TODO: fixed inefficient single lock }
     if Assigned(OnAfterUri) then
       try
         OnAfterUri(ctxt);
