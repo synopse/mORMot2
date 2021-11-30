@@ -842,7 +842,7 @@ end;
 procedure TRestHttpServer.SetDBServer(aIndex: integer; aServer: TRestServer;
   aSecurity: TRestHttpServerSecurity; aRestAccessRights: POrmAccessRights);
 begin
-  // note: caller should have made fSafe.Lock
+  // note: caller should have made fSafe.WriteLock
   if self = nil then
     exit;
   if cardinal(aIndex) < cardinal(length(fDBServers)) then

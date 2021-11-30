@@ -2106,10 +2106,10 @@ asm
         cmp     rax, r9
         ja      @LockBlockTypeReleaseCore
         {$else}
-        mov     edx, SpinSmallFreememLockCount
+        mov     r8d, SpinSmallFreememLockCount
 @SpinLockBlockType:
         pause
-        dec     edx
+        dec     r8d
         jz      @LockBlockTypeReleaseCore
         {$endif FPCMM_SLEEPTSC}
         mov     eax, $100
