@@ -7400,12 +7400,12 @@ begin
         else
           // write methods (mPOST, mPUT, mDELETE...)
           ctxt.Command := execOrmWrite;
-        if not Assigned(OnBeforeUri) or
+        if (not Assigned(OnBeforeUri)) or
            OnBeforeUri(ctxt) then
           ctxt.ExecuteCommand;
       except
         on E: Exception do
-          if not Assigned(OnErrorUri) or
+          if (not Assigned(OnErrorUri)) or
              OnErrorUri(ctxt, E) then
             if E.ClassType = EInterfaceFactory then
               ctxt.Error(E, '', [], HTTP_NOTACCEPTABLE)

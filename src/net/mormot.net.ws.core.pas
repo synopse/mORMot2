@@ -1397,7 +1397,7 @@ begin
     Ctxt := Sender.ComputeContext(onRequest);
     try
       if (Ctxt = nil) or
-         not Assigned(onRequest) then
+         (not Assigned(onRequest)) then
         raise EWebSockets.CreateUtf8('%.ProcessOne: onRequest=nil', [self]);
       if (head = '') or
          not FrameToInput(request, noAnswer, Ctxt) then
@@ -2508,8 +2508,8 @@ begin
   frame.opcode := focContinuation;
   frame.content := [];
   frame.tix := 0;
-  if not Assigned(fProtocol.fOnBeforeIncomingFrame) or
-     not fProtocol.fOnBeforeIncomingFrame(self, frame) then
+  if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
+     (not fProtocol.fOnBeforeIncomingFrame(self, frame)) then
     fProtocol.ProcessIncomingFrame(self, frame, ''); // any exception would abort
   WebSocketLog.Add.Log(sllDebug, 'ProcessStart %', [fProtocol], self);
 end;
@@ -2523,8 +2523,8 @@ begin
     frame.opcode := focConnectionClose;
     frame.content := [];
     frame.tix := 0;
-    if not Assigned(fProtocol.fOnBeforeIncomingFrame) or
-       not fProtocol.fOnBeforeIncomingFrame(self, frame) then
+    if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
+       (not fProtocol.fOnBeforeIncomingFrame(self, frame)) then
       fProtocol.ProcessIncomingFrame(self, frame, '');
     if Assigned(fSettings.OnClientDisconnected) then
     begin
@@ -2571,8 +2571,8 @@ begin
     focPong:
       ; // nothing to do
     focText, focBinary:
-      if not Assigned(fProtocol.fOnBeforeIncomingFrame) or
-         not fProtocol.fOnBeforeIncomingFrame(self, request) then
+      if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
+         (not fProtocol.fOnBeforeIncomingFrame(self, request)) then
         fProtocol.ProcessIncomingFrame(self, request, '');
     focConnectionClose:
       begin

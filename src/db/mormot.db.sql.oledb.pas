@@ -867,7 +867,7 @@ function TSqlDBOleDBStatement.GetCol(Col: integer;
   out Column: PSqlDBColumnProperty): pointer;
 begin
   CheckCol(Col); // check Col value
-  if not Assigned(fRowSet) or
+  if (not Assigned(fRowSet)) or
      (fColumnCount = 0) then
     raise EOleDBException.CreateUtf8('%.Column*() with no prior Execute', [self]);
   if CurrentRow <= 0 then
@@ -1490,7 +1490,7 @@ begin
   result := false;
   sav := fCurrentRow;
   fCurrentRow := 0;
-  if not Assigned(fRowSet) or
+  if (not Assigned(fRowSet)) or
      (fColumnCount = 0) then
     exit; // no row available at all (e.g. for SQL UPDATE) -> return false
   if fRowSetAccessor = 0 then
@@ -1849,8 +1849,8 @@ procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement;
       ErrorRecords := ErrorInfo as IErrorRecords;
       ErrorRecords.GetRecordCount(ErrorCount);
       for i := 0 to ErrorCount - 1 do
-        if not Assigned(OleDBProperties.OnCustomError) or
-           not OleDBProperties.OnCustomError(self, ErrorRecords, i) then
+        if (not Assigned(OleDBProperties.OnCustomError)) or
+           (not OleDBProperties.OnCustomError(self, ErrorRecords, i)) then
         begin
           // retrieve generic error info if OnCustomError() didn't handle it
           OleCheck(ErrorRecords.GetErrorInfo(i, GetSystemDefaultLCID, ErrorInfoDetails));

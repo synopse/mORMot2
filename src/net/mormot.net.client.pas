@@ -1638,7 +1638,7 @@ begin
     ctxt.retry := [rMain]
   else
     ctxt.retry := [];
-  if not Assigned(fOnBeforeRequest) or
+  if (not Assigned(fOnBeforeRequest)) or
      fOnBeforeRequest(self, ctxt) then
   begin
     fRedirected := '';

@@ -6608,8 +6608,8 @@ constructor TOrmPropInfoCustom.Create(const aName: RawUtf8;
 begin
   inherited Create(aName, aOrmFieldType, aAttributes, aFieldWidth, aPropIndex);
   fOffset := PtrUInt(aProperty);
-  if (Assigned(aData2Text) and not Assigned(aText2Data)) or
-     (Assigned(aText2Data) and not Assigned(aData2Text)) then
+  if (Assigned(aData2Text) and (not Assigned(aText2Data))) or
+     (Assigned(aText2Data) and (not Assigned(aData2Text))) then
     raise EOrmException.CreateUtf8(
       'Invalid %.Create: expecting both Data2Text/Text2Data', [self]);
   fData2Text := aData2Text;

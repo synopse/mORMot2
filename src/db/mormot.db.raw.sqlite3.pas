@@ -5989,13 +5989,13 @@ begin
       (LibraryResolve(fLoader.Handle, SQLITE3_ENTRIES[171]) <> @snapshot_free)) then
     raise ESqlite3Exception.CreateUtf8( // paranoid check
       '%.Create: please check SQLITE3_ENTRIES[] order for %', [self, LibraryName]);
-  if not Assigned(initialize) or
-     not Assigned(libversion) or
-     not Assigned(open) or
-     not Assigned(close) or
-     not Assigned(create_function) or
-     not Assigned(prepare_v2) or
-     not Assigned(create_module_v2) then
+  if (not Assigned(initialize)) or
+     (not Assigned(libversion)) or
+     (not Assigned(open)) or
+     (not Assigned(close)) or
+     (not Assigned(create_function)) or
+     (not Assigned(prepare_v2)) or
+     (not Assigned(create_module_v2)) then
      // note: some APIs like config() key() or trace() may not be available
      // -> use the "if Assigned(xxx) then xxx(...)" pattern for safety
   begin
@@ -6559,7 +6559,7 @@ begin
   fFileDefaultPageSize := aDefaultPageSize;
   fFileDefaultCacheSize := aDefaultCacheSize;
   if (fOpenV2Flags <> (SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)) and
-     not Assigned(sqlite3.open_v2) then
+     (not Assigned(sqlite3.open_v2)) then
     raise ESqlite3Exception.CreateUtf8(
       'Your % version of SQLite3 does not support custom OpenV2Flags=%',
       [sqlite3.libversion, fOpenV2Flags]);
@@ -6874,8 +6874,8 @@ function TSqlDataBase.TotalChangeCount: integer;
 begin
   if (self = nil) or
      (DB = 0) or
-     not Assigned(sqlite3.total_changes) then
-    result := 0
+     (not Assigned(sqlite3.total_changes)) then
+    result := 0 // no DB or old API
   else
   try
     Lock;
@@ -7094,7 +7094,7 @@ begin
   result := false;
   if (self = nil) or
      (BackupFileName = '') or
-     not Assigned(sqlite3.backup_init) or
+     (not Assigned(sqlite3.backup_init)) or
      (fBackupBackgroundInProcess <> nil) then
     exit;
   fLog.Add.Log(sllDB,'BackupBackground("%") started on %',
@@ -7138,7 +7138,7 @@ begin
   result := false;
   if (self = nil) or
      (BackupDB = nil) or
-     not Assigned(sqlite3.backup_init) or
+     (not Assigned(sqlite3.backup_init)) or
      (fBackupBackgroundInProcess <> nil) then
     exit;
   fLog.Add.Log(sllDB,'BackupBackgroundToDB("%") started on %',
@@ -7234,7 +7234,7 @@ begin
   if log <> nil then
     log.Log(sllDB,'closing [%] %', [FileName, KB(GetFileSize)], self);
   if (sqlite3 = nil) or
-     not Assigned(sqlite3.close) then
+     (not Assigned(sqlite3.close)) then
     raise ESqlite3Exception.CreateUtf8(
       '%.DBClose called with no sqlite3 global', [self]);
   if fBackupBackgroundInProcess <> nil then
@@ -7256,7 +7256,7 @@ begin
   if log <> nil then
     log.Log(sllDB, 'Enable custom tokenizer for [%]', [FileName], self);
   if (sqlite3 = nil) or
-     not Assigned(sqlite3.db_config) then
+     (not Assigned(sqlite3.db_config)) then
     raise ESqlite3Exception.CreateUtf8(
       '%.EnableCustomTokenizer called with no sqlite3 engine', [self]);
   result := sqlite3.db_config(fDB, SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER, 1);
@@ -7273,7 +7273,7 @@ begin
     raise ESqlite3Exception.Create('DBOpen called twice');
   // open the database with the proper API call
   if (sqlite3 = nil) or
-     not Assigned(sqlite3.open) then
+     (not Assigned(sqlite3.open)) then
     raise ESqlite3Exception.Create('DBOpen called with no sqlite3 global');
   StringToUtf8(fFileName, u);
   {$ifdef OSPOSIX}
@@ -7514,7 +7514,7 @@ function TSqlDataBase.GetLimit(Category: TSqlLimitCategory): integer;
 begin
   if (self = nil) or
      (fDB = 0) or
-     not Assigned(sqlite3.limit) then
+     (not Assigned(sqlite3.limit)) then
     result := 0
   else
     result := sqlite3.limit(fDB, ord(Category), -1);

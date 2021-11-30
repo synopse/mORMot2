@@ -6800,7 +6800,7 @@ end;
 procedure TSqlDBConnection.InternalProcess(Event: TOnSqlDBProcessEvent);
 begin
   if (self = nil) or
-     not Assigned(OnProcess) then
+     (not Assigned(OnProcess)) then
     exit;
   case Event of // thread-safe handle of speActive/peNonActive nested calls
     speActive:

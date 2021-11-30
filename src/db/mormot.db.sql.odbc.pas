@@ -675,7 +675,7 @@ var
 begin
   // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
   CheckCol(Col); // check Col<fColumnCount
-  if not Assigned(fStatement) or
+  if (not Assigned(fStatement)) or
      (fColData = nil) then
     raise EOdbcException.CreateUtf8('%.Column*() with no prior Execute', [self]);
   // get all fColData[] (driver may be without SQL_GD_ANY_ORDER)
@@ -802,7 +802,7 @@ var
   col: integer;
   tmp: array[0..31] of AnsiChar;
 begin
-  if not Assigned(fStatement) or
+  if (not Assigned(fStatement)) or
      (CurrentRow <= 0) then
     raise EOdbcException.CreateUtf8('%.ColumnsToJson() with no prior Step', [self]);
   if WR.Expand then
@@ -1254,7 +1254,7 @@ begin
   result := false;
   sav := fCurrentRow;
   fCurrentRow := 0;
-  if not Assigned(fStatement) or
+  if (not Assigned(fStatement)) or
      (fColumnCount = 0) then
     exit; // no row available at all (e.g. for SQL UPDATE) -> return false
   for i := 0 to fColumnCount - 1 do

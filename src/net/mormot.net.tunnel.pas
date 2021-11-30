@@ -386,7 +386,7 @@ var
   key: THash256Rec;
 begin
   if (fPort <> 0) or
-     not Assigned(Transmit) then
+     (not Assigned(Transmit)) then
     raise ETunnel.CreateUtf8('%.BindLocalPort invalid call', [self]);
   // bind to a local ephemeral port
   ClosePort;

@@ -1270,8 +1270,8 @@ begin
   begin
     ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
     Utf8ToFileName(OutContent, fn);
-    if not Assigned(OnSendFile) or
-       not OnSendFile(self, fn) then
+    if (not Assigned(OnSendFile)) or
+       (not OnSendFile(self, fn)) then
       if Context.ContentFromFile(fn, CompressGz) then
         OutContent := Context.Content
       else
@@ -1357,7 +1357,7 @@ begin
   if Sender = nil then
     raise EHttpServer.CreateUtf8('%.NotifyThreadStart(nil)', [self]);
   if Assigned(fOnHttpThreadStart) and
-     not Assigned(Sender.StartNotified) then
+     (not Assigned(Sender.StartNotified)) then
   begin
     fOnHttpThreadStart(Sender);
     Sender.StartNotified := self;
@@ -1400,7 +1400,7 @@ begin
   else
   begin
     if Assigned(Ctxt.ConnectionThread) and
-       not Assigned(Ctxt.ConnectionThread.StartNotified) then
+       (not Assigned(Ctxt.ConnectionThread.StartNotified)) then
       NotifyThreadStart(Ctxt.ConnectionThread);
     if Assigned(OnRequest) then
       result := OnRequest(Ctxt)
@@ -1868,8 +1868,8 @@ var
     result := true;
     ExtractHeader(ctxt.fOutCustomHeaders, 'CONTENT-TYPE:', ctxt.fOutContentType);
     Utf8ToFileName(ctxt.OutContent, fn);
-    if not Assigned(fOnSendFile) or
-       not fOnSendFile(ctxt, fn) then
+    if (not Assigned(fOnSendFile)) or
+       (not fOnSendFile(ctxt, fn)) then
     begin
        ctxt.OutContent := StringFromFile(fn);
        if ctxt.OutContent = '' then
@@ -2587,7 +2587,7 @@ var
   i: PtrInt;
 begin
   if (fReqQueue = 0) or
-     not Assigned(OnRequest) or
+     (not Assigned(OnRequest)) or
      (ChildThreadCount <= 0) or
      (fClones <> nil) then
     exit; // nothing to clone (need a queue and a process event)
@@ -3650,7 +3650,7 @@ constructor THttpApiWebSocketServerProtocol.Create(const aName: RawUtf8;
   const aOnFragment: TOnHttpApiWebSocketServerMessageEvent);
 begin
   if aManualFragmentManagement and
-     not Assigned(aOnFragment) then
+     (not Assigned(aOnFragment)) then
     raise EWebSocketApi.CreateFmt(
       'Error register WebSocket protocol. Protocol %s does not use buffer, ' +
       'but OnFragment handler is not assigned', [aName]);

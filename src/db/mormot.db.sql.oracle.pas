@@ -931,8 +931,8 @@ var
   U: RawUtf8;
 begin
   // dedicated version to avoid as much memory allocation than possible
-  if not Assigned(fStatement) or
-      (CurrentRow <= 0) then
+  if (not Assigned(fStatement)) or
+     (CurrentRow <= 0) then
     raise ESqlDBOracle.CreateUtf8('%.ColumnsToJson() with no prior Step', [self]);
   if WR.Expand then
     WR.Add('{');
@@ -1921,7 +1921,7 @@ function TSqlDBOracleStatement.GetCol(Col: integer; out Column:
   PSqlDBColumnProperty): pointer;
 begin
   CheckCol(Col); // check Col value  against fColumnCount
-  if not Assigned(fStatement) or
+  if (not Assigned(fStatement)) or
      (fColumnCount = 0) or
      (fRowCount = 0) or
      (fRowBuffer = nil) then

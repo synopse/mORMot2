@@ -1169,8 +1169,8 @@ function TSynQueue.PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
   out aValue): boolean;
 begin
   result := false;
-  if not Assigned(aCompare) or
-     not Assigned(aAnother) then
+  if (not Assigned(aCompare)) or
+     (not Assigned(aAnother)) then
     exit;
   fSafe.ReadWriteLock;
   try
@@ -2020,7 +2020,7 @@ var
 begin
   if (self = nil) or
      Terminated or
-     not Assigned(aOnProcess) then
+     (not Assigned(aOnProcess)) then
     exit;
   if aOnProcessSecs = 0 then
   begin
@@ -2097,7 +2097,7 @@ begin
   result := false;
   if (self = nil) or
      Terminated or
-     not Assigned(aOnProcess) then
+     (not Assigned(aOnProcess)) then
     exit;
   fTaskLock.Lock;
   try
@@ -2128,7 +2128,7 @@ begin
   result := false;
   if (self = nil) or
      Terminated or
-     not Assigned(aOnProcess) then
+     (not Assigned(aOnProcess)) then
     exit;
   fTaskLock.Lock;
   try
@@ -2149,7 +2149,7 @@ begin
   result := false;
   if (self = nil) or
      Terminated or
-     not Assigned(aOnProcess) then
+     (not Assigned(aOnProcess)) then
     exit;
   fTaskLock.Lock;
   try
@@ -2433,7 +2433,7 @@ var
   error: RawUtf8;
 begin
   if (MethodCount <= 0) or
-     not Assigned(Method) then
+     (not Assigned(Method)) then
     exit;
   if not Assigned(OnMainThreadIdle) then
     if (self = nil) or
@@ -2871,7 +2871,7 @@ begin
   if Sender = nil then
     raise ESynThread.CreateUtf8('%.NotifyThreadStart(nil)', [self]);
   if Assigned(fOwner.fOnThreadStart) and
-     not Assigned(Sender.fStartNotified) then
+     (not Assigned(Sender.fStartNotified)) then
   begin
     fOwner.fOnThreadStart(Sender);
     Sender.fStartNotified := self;

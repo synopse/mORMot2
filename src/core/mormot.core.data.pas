@@ -7600,7 +7600,7 @@ var
   QuickSort: TDynArrayQuickSort;
   R: PtrInt;
 begin
-  if not Assigned(aCompare) or
+  if (not Assigned(aCompare)) or
      (fValue = nil) or
      (fValue^ = nil) then
     exit; // nothing to sort
@@ -8487,13 +8487,13 @@ begin
   fDynArray := aDynArray;
   fHashItem := aHashItem;
   fEventHash := aEventHash;
-  if not Assigned(fHashItem) and
-     not Assigned(fEventHash) then
+  if not (Assigned(fHashItem) or
+          Assigned(fEventHash)) then
     fHashItem := PT_HASH[aCaseInsensitive, fDynArray^.Info.ArrayFirstField];
   fCompare := aCompare;
   fEventCompare := aEventCompare;
-  if not Assigned(fCompare) and
-     not Assigned(fEventCompare) then
+  if not (Assigned(fCompare) or
+          Assigned(fEventCompare)) then
     fCompare := PT_SORT[aCaseInsensitive, fDynArray^.Info.ArrayFirstField];
   HashTableInit(aHasher);
 end;
@@ -8506,8 +8506,8 @@ begin
   fEventHash := nil;
   fCompare := PT_SORT[aCaseInsensitive, aKind];
   fEventCompare := nil;
-  if not Assigned(fCompare) or
-     not Assigned(fHashItem) then
+  if not (Assigned(fCompare) or
+          Assigned(fHashItem)) then
     raise EDynArray.CreateUtf8(
       'TDynArrayHasher.InitSpecific: % has no hash/compare', [ToText(aKind)^]);
   HashTableInit(aHasher);
@@ -8718,7 +8718,7 @@ begin
     // comparison with item is faster than hash e.g. for huge strings
     with fDynArray^ do
       P := PAnsiChar(Value^) + ndx * fInfo.Cache.ItemSize;
-    if (not Assigned(fEventCompare) and
+    if ((not Assigned(fEventCompare)) and
         (fCompare(P^, Item^) = 0)) or
        (Assigned(fEventCompare) and
         (fEventCompare(P^, Item^) = 0)) then
@@ -9004,7 +9004,7 @@ ok:       inc(P, siz); // next item
       inc(collisions);
       {$endif DYNARRAYHASHCOLLISIONCOUNT}
       fnd := values + (fnd - 1) * siz;
-      if (not Assigned(Hasher^.fEventCompare) and
+      if ((not Assigned(Hasher^.fEventCompare)) and
           (Hasher^.fCompare(pointer(fnd)^, P^) = 0)) or
          (Assigned(Hasher^.fEventCompare) and
           (Hasher^.fEventCompare(pointer(fnd)^, P^) = 0)) then

@@ -6633,7 +6633,7 @@ var
   L, i, cmp: PtrInt;
 begin
   // fast O(log(n)) binary search
-  if not Assigned(Compare) or
+  if (not Assigned(Compare)) or
      (R < 0) then
     result := 0
   else if Compare(P^[R], Value) < 0 then // quick return if already sorted
@@ -9526,11 +9526,7 @@ begin
           result := PUtf8Char(Max);
           exit;
         end;
-        {$ifdef HASINLINE}
-        MoveSmall(d^.Text, Dest, d^.Len); // ShortString are small in practice
-        {$else}
         MoveFast(d^.Text^, Dest^, d^.Len);
-        {$endif HASINLINE}
         inc(Dest, d^.Len);
         if d^.TempRawUtf8 <> nil then
           {$ifdef FPC}

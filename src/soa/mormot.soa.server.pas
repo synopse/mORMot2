@@ -795,7 +795,7 @@ var
 begin
   result := 0;
   if (self = nil) or
-     not Assigned(aEvent) or
+     (not Assigned(aEvent)) or
      (fInstanceCount = 0) then
     exit;
   EnterCriticalSection(fInstanceLock);

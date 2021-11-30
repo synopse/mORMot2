@@ -3038,14 +3038,11 @@ function GetCurrentThreadInfo: ShortString;
 // !  GlobalUnLock;
 // ! end;
 // - you should better not use such a giant-lock, but an instance-dedicated
-// critical section or TSynLocker - these functions are just here to be
+// critical section/TSynLocker or TRWLock - these functions are just here to be
 // convenient, for non time-critical process (e.g. singleton initialization)
 procedure GlobalLock;
 
 /// release the giant lock for thread-safe shared process
-// - you should better not use such a giant-lock, but an instance-dedicated
-// critical section or TSynLocker - these functions are just here to be
-// convenient, for non time-critical process (e.g. singleton initialization)
 procedure GlobalUnLock;
 
 /// framework will register here some instances to be released eventually

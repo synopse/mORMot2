@@ -7162,7 +7162,7 @@ begin
         begin
           M := aModel.VirtualTableModule(self);
           if (M = nil) or
-             not Assigned(GetVirtualTableModuleName) then
+             (not Assigned(GetVirtualTableModuleName)) then
             raise EModelException.CreateUtf8('No registered module for %', [self]);
           mname := GetVirtualTableModuleName(M);
           if Props.Props.Fields.Count = 0 then
@@ -10052,7 +10052,7 @@ begin
   if aClass = nil then
     exit;
   if (aModule = nil) or
-     not Assigned(GetVirtualTableModuleName) or
+     (not Assigned(GetVirtualTableModuleName)) or
      (GetVirtualTableModuleName(aModule) = '') then
     raise EModelException.CreateUtf8('Unexpected %.VirtualTableRegister(%,%)',
       [self, aClass, aModule]);

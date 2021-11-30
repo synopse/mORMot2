@@ -1797,7 +1797,7 @@ procedure TZipWrite.AddFolder(const FolderName: TFileName;
           cl := CompressLevel;
           zf := zipDir;
           zn := f.Name;
-          if not Assigned(OnAdd) or
+          if (not Assigned(OnAdd)) or
              OnAdd(fileDir, f.Name, cl, zf, zn) then
             AddDeflated(fileDir + f.Name, {removepath=}false, cl, zf + zn);
         end;

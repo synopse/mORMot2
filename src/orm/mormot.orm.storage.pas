@@ -2445,7 +2445,7 @@ var
 begin
   result := 0;
   if (self = nil) or
-     not Assigned(OnFind) or
+     (not Assigned(OnFind)) or
      (fCount = 0) then
     exit;
   if IsRowID(pointer(WhereFieldName)) then
@@ -2641,7 +2641,7 @@ begin
   // prepare the search
   result := 0;
   if (self = nil) or
-     not Assigned(OnFind) or
+     (not Assigned(OnFind)) or
      (fCount = 0) then
     exit;
   case WhereOp of
@@ -2778,7 +2778,7 @@ var
 begin
   if (self = nil) or
      (fCount = 0) or
-     not Assigned(OnEachProcess) then
+     (not Assigned(OnEachProcess)) then
     exit;
   StorageLock(WillModifyContent, 'ForEach');
   try

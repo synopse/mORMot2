@@ -4323,8 +4323,12 @@ begin
           begin
             Add(':', '('); // markup for SQL parameter binding
             case Params[P].VType of
-              vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
-              vtCurrency, vtExtended:
+              vtBoolean,
+              vtInteger,
+              vtInt64
+              {$ifdef FPC} , vtQWord {$endif},
+              vtCurrency,
+              vtExtended:
                 Add(Params[P]) // numbers or boolean don't need any SQL quoting
             else
               begin
@@ -7333,7 +7337,7 @@ begin
     // initial guess of the JSON array count - will browse up to 64KB of input
     cap := abs(JsonArrayCount(Ctxt.Json, Ctxt.Json + JSON_PREFETCH));
     if (cap = 0) or
-       not Assigned(load) then
+       (not Assigned(load)) then
     begin
       Ctxt.Valid := false;
       exit;
@@ -8849,7 +8853,7 @@ begin
   try
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
     if (n = 0) or
-       not Assigned(OnEach) then
+       (not Assigned(OnEach)) then
       exit;
     k := fKeys.Value^;
     ks := fKeys.Info.Cache.ItemSize;
@@ -8878,9 +8882,9 @@ begin
   fSafe.RWLock(RW_FORCE[MayModify]);
   try
     result := 0;
-    if not Assigned(OnMatch) or
-       not (Assigned(KeyCompare) or
-            Assigned(ValueCompare)) then
+    if (not Assigned(OnMatch)) or
+       (not (Assigned(KeyCompare) or
+             Assigned(ValueCompare))) then
       exit;
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
     k := fKeys.Value^;
@@ -9299,10 +9303,10 @@ begin
       fJsonSave := PT_JSONSAVE[aParser];
     fJsonLoad := PT_JSONLOAD[aParser];
     // rkRecordTypes serialization with proper fields RTTI
-    if not Assigned(fJsonSave) and
+    if (not Assigned(fJsonSave)) and
        (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
       fJsonSave := @_JS_RttiCustom;
-   if not Assigned(fJsonLoad) and
+   if (not Assigned(fJsonLoad)) and
       (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
     fJsonLoad := @_JL_RttiCustom
   end;

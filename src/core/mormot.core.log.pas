@@ -3861,7 +3861,7 @@ var
 begin
   if (self = nil) or
      (SynLogFile = nil) or
-     not Assigned(aEvent) then
+     (not Assigned(aEvent)) then
     exit;
   EnterCriticalSection(GlobalThreadLock);
   try
@@ -4764,7 +4764,7 @@ end;
 procedure TSynLog.DisableRemoteLog(value: boolean);
 begin
   if (fDisableRemoteLog = value) or
-     not Assigned(fFamily.fEchoRemoteEvent) then
+     (not Assigned(fFamily.fEchoRemoteEvent)) then
     exit;
   if value then
   begin

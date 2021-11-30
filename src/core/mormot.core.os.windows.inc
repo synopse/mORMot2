@@ -1073,8 +1073,8 @@ var
   mem: TProcessMemoryCounters;
 begin
   result := false;
-  if not Assigned(GetProcessTimes) or
-     not Assigned(GetProcessMemoryInfo) then
+  if (not Assigned(GetProcessTimes)) or
+     (not Assigned(GetProcessMemoryInfo)) then
     exit;
   h := OpenProcess(OpenProcessAccess, false, PID);
   if h = 0 then

@@ -6819,7 +6819,7 @@ begin
       inc(n);
     end;
     if (p^.OffsetSet < 0) or
-       not Assigned(p^.Value.fJsonLoad) then
+       (not Assigned(p^.Value.fJsonLoad)) then
       exclude(result, rcfHasOffsetSetJsonLoadProperties);
     inc(p);
   end;
