@@ -1652,7 +1652,7 @@ begin
           until fStatement^.Step <> SQLITE_ROW;
           if LastInsertedID <> nil then
           begin
-            LastInsertedID^ := DB.LastInsertRowID;
+            LastInsertedID^ := sqlite3.last_insert_rowid(DB.DB);
             FormatShort(' lastInsertedID=%', [LastInsertedID^], msg);
           end;
           if LastChangeCount <> nil then
