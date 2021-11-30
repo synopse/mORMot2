@@ -309,7 +309,7 @@ type
     osAndroid);
 
   /// the recognized Windows versions
-  // - defined even outside MSWINDOWS to access e.g. from monitoring tools
+  // - defined even outside OSWINDOWS to access e.g. from monitoring tools
   TWindowsVersion = (
     wUnknown,
     w2000,
@@ -356,7 +356,7 @@ type
 
 const
   /// the recognized Windows versions, as plain text
-  // - defined even outside MSWINDOWS to allow process e.g. from monitoring tools
+  // - defined even outside OSWINDOWS to allow process e.g. from monitoring tools
   WINDOWS_NAME: array[TWindowsVersion] of RawUtf8 = (
     '',
     '2000',

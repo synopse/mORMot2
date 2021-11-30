@@ -141,8 +141,7 @@ end;
 {$ifdef CPUX86} // Delphi is not efficient when inlining code :(
 
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
-  {$ifdef FPC}nostackframe; assembler; {$endif}
-asm // eax=aTypeInfo edx=aIndex
+asm     // eax=aTypeInfo edx=aIndex
         test    eax, eax
         jz      @0
         cmp     byte ptr [eax], tkEnumeration
@@ -710,4 +709,5 @@ begin
   until mn = 0;
   CurrentMethod := nil;
 end;
+
 

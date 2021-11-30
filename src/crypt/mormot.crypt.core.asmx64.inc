@@ -17,8 +17,8 @@
 {$ifdef ASMX64}
 
 procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PWA4);
-{$ifdef FPC}nostackframe; assembler; asm{$else}
-asm // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
+{$ifdef FPC} nostackframe; assembler; asm {$else}
+asm     // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         .noframe
 {$endif}
         // rolled optimized encryption asm version by A. Bouchez
@@ -197,8 +197,8 @@ const
   STACK_SIZE = 32 {$ifndef SYSVABI} + 7 * 16 {$endif};
 
 procedure Sha256Sse4(var input_data; var digest; num_blks: PtrUInt);
-{$ifdef FPC}nostackframe; assembler; asm{$else}
-asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
+{$ifdef FPC} nostackframe; assembler; asm {$else}
+asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         .noframe
 {$endif FPC}
         push    rbx
@@ -1443,9 +1443,9 @@ end;
 
 
 procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
-{$ifdef FPC}nostackframe; assembler; asm{$else}
-asm // W=rcx Buf=rdx
-  .noframe
+{$ifdef FPC} nostackframe; assembler; asm {$else}
+asm     // W=rcx Buf=rdx
+        .noframe
 {$endif}
         {$ifndef WIN64ABI}
         mov     rdx, rsi
@@ -1611,7 +1611,7 @@ procedure bswap160(s, d: PIntegerArray);
 end;
 
 function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Output rdx/rsi=Left r8/rdx=Right
         xor    eax, eax
         mov    r9,  qword ptr [Left]
@@ -1630,7 +1630,7 @@ function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUI
 end;
 
 function _inc256(var Value: THash256Rec; const Added: THash256Rec): PtrUInt;
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Added
         xor    eax, eax
         mov    r8,  qword ptr [Added]
@@ -1645,7 +1645,7 @@ function _inc256(var Value: THash256Rec; const Added: THash256Rec): PtrUInt;
 end;
 
 function _dec256(var Value: THash256Rec; const Subs: THash256Rec): PtrUInt;
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Subs
         xor    eax, eax
         mov    r8,  qword ptr [Subs]
@@ -1660,7 +1660,7 @@ function _dec256(var Value: THash256Rec; const Subs: THash256Rec): PtrUInt;
 end;
 
 function _sub256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Output rdx/rsi=Left r8/rdx=Right
         xor    eax, eax
         mov    r9,  qword ptr [Left]
@@ -1678,7 +1678,7 @@ function _sub256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUI
         adc    eax, eax
 end;
 
-{$ifdef FPC}
+{$ifdef FPC} // constref to force passing by reference (as Delphi does)
 procedure _mult128(constref l, r: THash128Rec; out product: THash256Rec);
   nostackframe; assembler; asm
 {$else}
@@ -1730,7 +1730,7 @@ asm
 end;
 
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
-  {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Output rdx/rsi=Left r8/rdx=Right
         {$ifdef WIN64ABI}
         push    rdi
@@ -1861,7 +1861,7 @@ procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
 end;
 
 procedure _inc64(var Value: THash128Rec; var Added: QWord);
-  {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Added
         mov    rax, qword ptr [Added]
         xor    rdx, rdx
@@ -1870,7 +1870,7 @@ procedure _inc64(var Value: THash128Rec; var Added: QWord);
 end;
 
 procedure _inc128(var Value: THash256Rec; var Added: THash128Rec);
-  {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Added
         mov    rax, qword ptr [Added]
         mov    rdx, qword ptr [Added + 8]
@@ -5184,7 +5184,7 @@ var
 procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt); forward;
 
 function _AesNiHash64(seed: QWord; data: pointer; len: PtrUInt): QWord;
-  {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=seed, rdx/rsi=data, r8/rdx=len
         movq    xmm0, seed
         call    _AesNiHashXmm0
@@ -5192,7 +5192,7 @@ function _AesNiHash64(seed: QWord; data: pointer; len: PtrUInt): QWord;
 end;
 
 procedure _AesNiHash128(hash: PHash128; data: pointer; len: PtrUInt);
-  {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=seed&result, rdx/rsi=data, r8/rdx=len
         movups  xmm0, dqword ptr [hash]
         call    _AesNiHashXmm0
@@ -5540,7 +5540,8 @@ function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal;
   {$ifdef FPC}cdecl;{$endif} external;
 
 function crc32c_sse42_aesni(crc: PtrUInt; buf: PAnsiChar; len: PtrUInt): cardinal;
-{$ifdef FPC}nostackframe; assembler; asm{$else}asm .noframe {$endif}
+{$ifdef FPC} {$ifndef OSWINDOWS} nostackframe; {$endif} assembler; {$endif}
+asm
         mov     rax, crc
         mov     rcx, len
         not     eax
@@ -5575,7 +5576,11 @@ function crc32c_sse42_aesni(crc: PtrUInt; buf: PAnsiChar; len: PtrUInt): cardina
         jz      @0
         crc32   eax, byte ptr [buf]
 @0:     not     eax
+        {$ifdef OSWINDOWS}
+        jmp     @done
+        {$else}
         ret
+        {$endif OSWINDOWS}
 @big:   // our  call: rcx/rdi=crc rdx/rsi=buf r8/rdx=len
         // iscsi_01:  rcx/rdi=buf rdx/rsi=len r8/rdx=crc
         mov     crc, buf
@@ -5583,6 +5588,7 @@ function crc32c_sse42_aesni(crc: PtrUInt; buf: PAnsiChar; len: PtrUInt): cardina
         mov     len, rax
         call    crc32_iscsi_01
         not     eax
+@done:  // on Win64, a stack frame is required when calling sub functions
 end;
 
 {$endif CRC32C_X64}

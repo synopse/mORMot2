@@ -480,8 +480,10 @@ type
     // - return true and a IList<T> in Result on success (maybe with Count=0)
     // - return false on error
     // - untyped "var IList" and not directly IList<T: TOrm> because neither
-    // Delphi nor FPC allow parametrized interface method (and also because
-    // it breaks my FPC compiler sometimes)
+    // Delphi nor FPC allow parametrized interface methods
+    // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
+    // executables than Generics.Collections, and need no try..finally Free: a
+    // single TSynListSpecialized<TOrm> class will be reused for all IList<>
     // - you can write for instance:
     // !var list: IList<TOrmTest>;
     // !    R: TOrmTest;
@@ -6166,7 +6168,7 @@ begin
   begin
     aRow := aRow * Table.fFieldCount;
     map := pointer(fTableMap);
-    for f := 0 to fTableMapCount - 1 do
+    for f := 1 to fTableMapCount do
     begin
       D := aDest;
       if D = nil then

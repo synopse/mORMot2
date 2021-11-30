@@ -659,7 +659,7 @@ asm
         mov     p, rax
         cmp     qword ptr [rax - _STRREFCNT], rdx
         jl      @z
-lock    dec     qword ptr [rax - _STRREFCNT]
+  lock  dec     qword ptr [rax - _STRREFCNT]
         jbe     @free
 @z:     ret
 @free:  sub     p, _STRRECSIZE
@@ -672,7 +672,7 @@ asm
         jz      @z
         cmp     qword ptr [p - _STRREFCNT], 0
         jl      @z
-lock    inc     qword ptr [p - _STRREFCNT]
+   lock inc     qword ptr [p - _STRREFCNT]
 @z:
 end;
 
@@ -685,7 +685,7 @@ asm
         jz      @ns
         cmp     qword ptr [s - _STRREFCNT], 0
         jl      @ns
-lock    inc     qword ptr [s - _STRREFCNT]
+   lock inc     qword ptr [s - _STRREFCNT]
 @ns:    mov     qword ptr [d], s
         test    rax, rax
         jnz     @z
@@ -693,14 +693,14 @@ lock    inc     qword ptr [s - _STRREFCNT]
 @z:     mov     d, rax
         cmp     qword ptr [rax - _STRREFCNT], 0
         jl      @n
- lock   dec     qword ptr [rax - _STRREFCNT]
+   lock dec     qword ptr [rax - _STRREFCNT]
         ja      @n
 @free:  sub     d, _STRRECSIZE
         jmp     _Freemem
 @n:
 end;
 
-{ note: fpc_ansistr_compare/_equal do check the codepage and make a UTF-8
+{ note: fpc_ansistr_compare/_equal RTL do check the codepage and make a UTF-8
   conversion if necessary, whereas Delphi _LStrCmp/_LStrEqual don't;
   involving codepage is safer, but paranoid, and 1. is (much) slower, and
   2. is not Delphi compatible -> we rather follow the Delphi's way }
@@ -789,7 +789,7 @@ asm
         jz      @z
         cmp     qword ptr [p - _DAREFCNT], 0
         jle     @z
-lock    inc     qword ptr [p - _DAREFCNT]
+   lock inc     qword ptr [p - _DAREFCNT]
 @z:
 end;
 
@@ -815,7 +815,7 @@ asm
         sub     p, SizeOf(TDynArrayRec)
         cmp     qword ptr [rax - _DAREFCNT], 0
         jle     @z
-lock    dec     qword ptr [p]
+   lock dec     qword ptr [p]
         jbe     @free
 @z:     ret
 @free:  jmp     _dynarray_decr_ref_free
@@ -846,7 +846,7 @@ begin
 end;
 
 procedure _ansistr_setlength(var s: RawByteString; len: PtrInt; cp: cardinal);
-  nostackframe; assembler;
+  {$ifndef OSWINDOWS} nostackframe; {$endif} assembler;
 asm
         mov     rax, qword ptr [s]
         test    len, len

@@ -754,7 +754,8 @@ begin
     json := '';
   // on success, returns the new RowID value; on error, returns 0
   fRest.AcquireExecution[execOrmWrite].Safe.Lock;
-  try // may be within a batch in another thread
+  try
+    // may be within a batch in another thread -> use execOrmWrite lock
     result := EngineAdd(t, json); // will call static if necessary
   finally
     fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
@@ -827,8 +828,7 @@ begin
   IInterface(IList) := nil;
   if self = nil then
     exit;
-  table := MultiFieldValues(T, CustomFieldsCsv,
-    FormatSqlWhere, BoundsSqlWhere);
+  table := MultiFieldValues(T, CustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
   if table <> nil then
     try
       table.ToNewIList(T, IList);
