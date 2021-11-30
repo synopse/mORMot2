@@ -380,12 +380,16 @@ type
     fProcessing: boolean;
     fTaskStatus: (taskNotStarted,taskStarted);
     fLastInternalError: variant;
+    // warning: lock-free Locked* virtual methods because LightLock is not reentrant
+    procedure LockedProcessDoTask; virtual;
     procedure LockedPerSecProperties; virtual;
     procedure LockedFromProcessTimer; virtual;
     procedure LockedSum(another: TSynMonitor); virtual;
     procedure LockedFromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
       {$ifdef HASINLINE} inline; {$endif}
-    procedure WriteDetailsTo(W: TTextWriter); virtual;
+    procedure LockedProcessError(const info: variant); virtual;
+    procedure LockedProcessErrorInteger(info: integer);
+    procedure LockedWriteDetailsTo(W: TTextWriter); virtual;
   public
     /// low-level high-precision timer instance
     InternalTimer: TPrecisionTimer;
@@ -400,20 +404,23 @@ type
     /// create Count instances of this actual class in the supplied ObjArr[]
     class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
     /// should be called when the process starts, to resume the internal timer
-    // - thread-safe method
+    // - this method is not thread-safe, due to the shared InternalTimer: use
+    // an external TPrecisionTimer then FromExternalMicroSeconds()
     procedure ProcessStart; virtual;
     /// should be called each time a pending task is processed
     // - will increase the TaskCount property
-    // - thread-safe method
-    procedure ProcessDoTask; virtual;
+    // - this method is not thread-safe, due to the shared InternalTimer: use
+    // an external TPrecisionTimer then FromExternalMicroSeconds()
+    procedure ProcessDoTask;
     /// should be called when the process starts, and a task is processed
     // - similar to ProcessStart + ProcessDoTask
-    // - thread-safe method
+    // - this method is not thread-safe, due to the shared InternalTimer: use
+    // an external TPrecisionTimer then FromExternalMicroSeconds()
     procedure ProcessStartTask; virtual;
     /// should be called when an error occurred
     // - typical use is with ObjectToVariant(E,...) kind of information
     // - thread-safe method
-    procedure ProcessError(const info: variant); virtual;
+    procedure ProcessError(const info: variant);
     /// should be called when an error occurred
     // - typical use is with a HTTP status, e.g. as ProcessError(Call.OutStatus)
     // - just a wraper around overloaded ProcessError(), so a thread-safe method
@@ -425,7 +432,8 @@ type
     // - just a wraper around overloaded ProcessError(), so a thread-safe method
     procedure ProcessErrorRaised(E: Exception);
     /// should be called when the process stops, to pause the internal timer
-    // - thread-safe method
+    // - this method is not thread-safe, due to the shared InternalTimer: use
+    // an external TPrecisionTimer then FromExternalMicroSeconds()
     procedure ProcessEnd; virtual;
     /// could be used to manage information average or sums
     // - thread-safe method calling LockedSum protected virtual method
@@ -444,15 +452,16 @@ type
     // use this method to update the timing from many threads
     // - if you use this method, ProcessStart, ProcessDoTask and ProcessEnd
     // methods are disallowed, and the global fTimer won't be used any more
-    // - thread-safe method
+    // - this method is to be used with an external timer for thread-safety
     procedure FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
     /// non-reentrant exclusive lock acquisition - wrap LightLock(fSafe)
+    // - warning: this non-reentrant method would deadlock if called twice
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
     /// release the non-reentrant exclusive lock - wrap LightUnLock(fSafe)
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
-    // customize JSON Serialization to set woEnumSetsAsText
+    /// customize JSON Serialization to set woEnumSetsAsText for readibility
     function RttiBeforeWriteObject(W: TTextWriter;
       var Options: TTextWriterWriteObjectOptions): boolean; override;
     /// an identifier associated to this monitored resource
@@ -1439,24 +1448,19 @@ begin
   if fProcessing then
     raise ESynException.CreateUtf8('Unexpected %.ProcessStart', [self]);
   InternalTimer.Resume;
-  LightLock(fSafe);
-  try
-    fTaskStatus := taskNotStarted;
-    fProcessing := true;
-  finally
-    LightUnLock(fSafe);
-  end;
+  fTaskStatus := taskNotStarted;
+  fProcessing := true;
+end;
+
+procedure TSynMonitor.LockedProcessDoTask;
+begin
+  inc(fTaskCount);
+  fTaskStatus := taskStarted;
 end;
 
 procedure TSynMonitor.ProcessDoTask;
 begin
-  LightLock(fSafe);
-  try
-    inc(fTaskCount);
-    fTaskStatus := taskStarted;
-  finally
-    LightUnLock(fSafe);
-  end;
+  LockedProcessDoTask;
 end;
 
 procedure TSynMonitor.ProcessStartTask;
@@ -1464,25 +1468,14 @@ begin
   if fProcessing then
     raise ESynException.CreateUtf8('Reentrant %.ProcessStart', [self]);
   InternalTimer.Resume;
-  LightLock(fSafe);
-  try
-    fProcessing := true;
-    inc(fTaskCount);
-    fTaskStatus := taskStarted;
-  finally
-    LightUnLock(fSafe);
-  end;
+  fProcessing := true;
+  LockedProcessDoTask;
 end;
 
 procedure TSynMonitor.ProcessEnd;
 begin
   InternalTimer.Pause;
-  LightLock(fSafe);
-  try
-    LockedFromProcessTimer;
-  finally
-    LightUnLock(fSafe);
-  end;
+  LockedFromProcessTimer;
 end;
 
 procedure TSynMonitor.LockedFromProcessTimer;
@@ -1504,8 +1497,7 @@ end;
 
 procedure TSynMonitor.LockedFromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
 begin
-  inc(fTaskCount);
-  fTaskStatus := taskStarted;
+  LockedProcessDoTask;
   InternalTimer.FromExternalMicroSeconds(MicroSecondsElapsed);
   LockedFromProcessTimer;
 end;
@@ -1547,13 +1539,26 @@ begin
     TPointerDynArray(ObjArr)[i] := Create;
 end;
 
+procedure TSynMonitor.LockedProcessError(const info: variant);
+begin
+  if not VarIsEmptyOrNull(info) then
+    inc(fInternalErrors);
+  fLastInternalError := info;
+end;
+
+procedure TSynMonitor.LockedProcessErrorInteger(info: integer);
+begin
+  try
+    LockedProcessError(info);
+  except
+  end;
+end;
+
 procedure TSynMonitor.ProcessError(const info: variant);
 begin
   LightLock(fSafe);
   try
-    if not VarIsEmptyOrNull(info) then
-      inc(fInternalErrors);
-    fLastInternalError := info;
+    LockedProcessError(info);
   finally
     LightUnLock(fSafe);
   end;
@@ -1611,10 +1616,9 @@ begin
   inc(fInternalErrors, another.Errors);
 end;
 
-procedure TSynMonitor.WriteDetailsTo(W: TTextWriter);
+procedure TSynMonitor.LockedWriteDetailsTo(W: TTextWriter);
 begin
-  // caller should have made fSafe.ReadOnlyLock or fSafe.WriteLock
-  W.WriteObject(self);
+  W.WriteObject(self); // simply use RTTI of published fields
 end;
 
 procedure TSynMonitor.ComputeDetailsTo(W: TTextWriter);
@@ -1622,7 +1626,7 @@ begin
   LightLock(fSafe);
   try
     LockedPerSecProperties; // may not have been calculated after Sum()
-    WriteDetailsTo(W);
+    LockedWriteDetailsTo(W);
   finally
     LightUnLock(fSafe);
   end;
@@ -1698,9 +1702,9 @@ end;
 constructor TSynMonitorInputOutput.Create;
 begin
   inherited Create;
-  fInput := TSynMonitorSize.Create({nospace=}false);
+  fInput  := TSynMonitorSize.Create({nospace=}false);
   fOutput := TSynMonitorSize.Create({nospace=}false);
-  fInputThroughput := TSynMonitorThroughput.Create({nospace=}false);
+  fInputThroughput  := TSynMonitorThroughput.Create({nospace=}false);
   fOutputThroughput := TSynMonitorThroughput.Create({nospace=}false);
 end;
 
@@ -1716,14 +1720,14 @@ end;
 procedure TSynMonitorInputOutput.LockedPerSecProperties;
 begin
   inherited LockedPerSecProperties;
-  fInputThroughput.BytesPerSec := fTotalTime.PerSecond(fInput.Bytes);
+  fInputThroughput.BytesPerSec  := fTotalTime.PerSecond(fInput.Bytes);
   fOutputThroughput.BytesPerSec := fTotalTime.PerSecond(fOutput.Bytes);
 end;
 
 procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
 begin
   LightLock(fSafe);
-  fInput.Bytes := fInput.Bytes + Incoming;
+  fInput.Bytes  := fInput.Bytes + Incoming;
   fOutput.Bytes := fOutput.Bytes + Outgoing;
   LightUnLock(fSafe);
 end;
@@ -1736,16 +1740,13 @@ begin
   error := not StatusCodeIsSuccess(Status);
   LightLock(fSafe);
   // inlined AddSize
-  fInput.Bytes := fInput.Bytes + Incoming;
+  fInput.Bytes  := fInput.Bytes + Incoming;
   fOutput.Bytes := fOutput.Bytes + Outgoing;
   // inlined FromExternalMicroSeconds
   LockedFromExternalMicroSeconds(MicroSec);
   // inlined ProcessErrorNumber(Status)
   if error then
-  begin
-    inc(fInternalErrors);
-    fLastInternalError := Status;
-  end;
+    LockedProcessErrorInteger(Status);
   LightUnLock(fSafe);
 end;
 
@@ -1754,7 +1755,7 @@ begin
   inherited LockedSum(another);
   if another.InheritsFrom(TSynMonitorInputOutput) then
   begin
-    fInput.Bytes := fInput.Bytes + TSynMonitorInputOutput(another).Input.Bytes;
+    fInput.Bytes  := fInput.Bytes  + TSynMonitorInputOutput(another).Input.Bytes;
     fOutput.Bytes := fOutput.Bytes + TSynMonitorInputOutput(another).Output.Bytes;
   end;
 end;
