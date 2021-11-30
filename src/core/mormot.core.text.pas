@@ -6121,7 +6121,7 @@ end;
 procedure TTextWriter.AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt;
   Quote: AnsiChar; TextMaxLen: PtrInt);
 var
-  Q: PUtf8Char;
+  q: PtrInt;
 begin
   Add(Quote);
   if (TextMaxLen > 5) and
@@ -6133,16 +6133,16 @@ begin
   if Text <> nil then
   begin
     repeat
-      Q := PosChar(Text, Quote); // fast SSE2 asm on x86_64
-      if Q = nil then
+      q := ByteScanIndex(pointer(Text), PUtf8Char(TextLen) - Text, byte(Quote));
+      if q < 0 then
       begin
         AddNoJsonEscape(Text, PUtf8Char(TextLen) - Text); // no double quote
         break;
       end;
-      inc(Q); // include first Quote
-      AddNoJsonEscape(Text, Q - Text);
+      inc(q); // include first Quote
+      AddNoJsonEscape(Text, q);
       Add(Quote); // double Quote
-      Text := Q;  // continue
+      inc(Text, q); // continue
     until false;
     if TextMaxLen <> 0 then
       AddShorter('...');
