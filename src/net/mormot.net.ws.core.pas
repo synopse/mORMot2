@@ -1822,7 +1822,7 @@ begin
     if result <> nil then
     begin
       if PMax <> nil then
-        PMax := pointer(P + len);
+        PMax^ := pointer(P + length(frame.payload));
       if HeadFound <> nil then
         FastSetString(HeadFound^, P, PAnsiChar(result) - P);
       inc(PByte(result));
@@ -1989,7 +1989,8 @@ var
   frame: TWebSocketFrame;
   tmp: ShortString;
 begin
-  if FromVarUInt32(P, PMax, cardinal(n)) then
+  P := FromVarUInt32Safe(P, PMax, cardinal(n));
+  if P <> nil then
     for i := 0 to n do
     begin
       frame.opcode := focBinary;
