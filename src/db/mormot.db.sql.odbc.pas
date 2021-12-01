@@ -137,6 +137,8 @@ type
     destructor Destroy; override;
     /// connect to the ODBC library, i.e. create the DB instance
     // - should raise an Exception on error
+    // - if TSqlDBOdbcConnectionProperties.Dbms has not been forced, will try to
+    // recognize the DBMS from the connection DriverName/DbmsName text
     procedure Connect; override;
     /// stop connection to the ODBC library, i.e. release the DB instance
     // - should raise an Exception on error
@@ -343,16 +345,21 @@ begin
     GetInfoString(fDbc, SQL_DBMS_NAME, fDbmsName);
     GetInfoString(fDbc, SQL_DBMS_VER, fDbmsVersion);
     // guess DBMS type from driver name or DBMS name
-    fDbms := DRIVER_TYPES[IdemPPChar(pointer(fDriverName), @DRIVER_NAMES)];
-    if fDbms = dDefault then
-      fDbms := DBMS_TYPES[IdemPPChar(pointer(fDbmsName), @DBMS_NAMES)];
-    if fDbms = dDefault then
-      raise EOdbcException.CreateUtf8(
-        '%.Connect: unrecognized provider DbmsName=% DriverName=% DbmsVersion=%',
-        [self, DbmsName, DriverName, DbmsVersion]);
+    if fOdbcProperties.fDbms > dDefault then
+      fDbms := fOdbcProperties.fDbms // has been forced in Properties
+    else
+    begin
+      fDbms := DRIVER_TYPES[IdemPPChar(pointer(fDriverName), @DRIVER_NAMES)];
+      if fDbms = dDefault then
+        fDbms := DBMS_TYPES[IdemPPChar(pointer(fDbmsName), @DBMS_NAMES)];
+      if fDbms = dDefault then
+        raise EOdbcException.CreateUtf8(
+          '%.Connect: unrecognized provider DbmsName=% DriverName=% DbmsVersion=%',
+          [self, DbmsName, DriverName, DbmsVersion]);
+    end;
     if Log <> nil then
-      Log.Log(sllDebug, 'Connected to % using % % recognized as %', [DbmsName,
-        DriverName, DbmsVersion, fProperties.DbmsEngineName]);
+      Log.Log(sllDebug, 'Connected to % using % % recognized as %',
+        [DbmsName, DriverName, DbmsVersion, ToText(fDbms)^]);
     // notify any re-connection
     inherited Connect;
   except
@@ -418,11 +425,11 @@ begin
   with ODBC do
   try
     Check(self, nil,
-      EndTran(SQL_HANDLE_DBC, fDBc, SQL_COMMIT),
-      SQL_HANDLE_DBC, fDBc);
+      EndTran(SQL_HANDLE_DBC, fDbc, SQL_COMMIT),
+      SQL_HANDLE_DBC, fDbc);
     Check(self, nil,
-      SetConnectAttrW(fDBc, SQL_AUTOCOMMIT, SQL_AUTOCOMMIT_ON, 0),
-      SQL_HANDLE_DBC, fDBc); // back to default AUTO COMMIT ON mode
+      SetConnectAttrW(fDbc, SQL_AUTOCOMMIT, SQL_AUTOCOMMIT_ON, 0),
+      SQL_HANDLE_DBC, fDbc); // back to default AUTO COMMIT ON mode
   except
     inc(fTransactionCount); // the transaction is still active
     raise;
@@ -435,11 +442,11 @@ begin
   with ODBC do
   begin
     Check(self, nil,
-      EndTran(SQL_HANDLE_DBC, fDBc, SQL_ROLLBACK),
-      SQL_HANDLE_DBC, fDBc);
+      EndTran(SQL_HANDLE_DBC, fDbc, SQL_ROLLBACK),
+      SQL_HANDLE_DBC, fDbc);
     Check(self, nil,
-      SetConnectAttrW(fDBc, SQL_AUTOCOMMIT, SQL_AUTOCOMMIT_ON, 0),
-      SQL_HANDLE_DBC, fDBc); // back to default AUTO COMMIT ON mode
+      SetConnectAttrW(fDbc, SQL_AUTOCOMMIT, SQL_AUTOCOMMIT_ON, 0),
+      SQL_HANDLE_DBC, fDbc); // back to default AUTO COMMIT ON mode
   end;
 end;
 
@@ -452,8 +459,8 @@ begin
     raise EOdbcException.CreateUtf8('% do not support nested transactions', [self]);
   inherited StartTransaction;
   ODBC.Check(self, nil,
-    ODBC.SetConnectAttrW(fDBc, SQL_AUTOCOMMIT, SQL_AUTOCOMMIT_OFF, 0),
-    SQL_HANDLE_DBC, fDBc);
+    ODBC.SetConnectAttrW(fDbc, SQL_AUTOCOMMIT, SQL_AUTOCOMMIT_OFF, 0),
+    SQL_HANDLE_DBC, fDbc);
 end;
 
 
@@ -510,13 +517,24 @@ begin
               result := ftCurrency;
           end;
       end;
-    SQL_REAL, SQL_DOUBLE:
+    SQL_REAL,
+    SQL_DOUBLE:
       result := ftDouble;
-    SQL_SMALLINT, SQL_INTEGER, SQL_TINYINT, SQL_BIT, SQL_BIGINT:
+    SQL_SMALLINT,
+    SQL_INTEGER,
+    SQL_TINYINT,
+    SQL_BIT,
+    SQL_BIGINT:
       result := ftInt64;
-    SQL_BINARY, SQL_VARBINARY, SQL_LONGVARBINARY:
+    SQL_BINARY,
+    SQL_VARBINARY,
+    SQL_LONGVARBINARY:
       result := ftBlob;
-    SQL_TIME, SQL_DATETIME, SQL_TYPE_DATE, SQL_TYPE_TIME, SQL_TYPE_TIMESTAMP:
+    SQL_TIME,
+    SQL_DATETIME,
+    SQL_TYPE_DATE,
+    SQL_TYPE_TIME,
+    SQL_TYPE_TIMESTAMP:
       result := ftDate;
   else // all other types will be converted to text
     result := ftUtf8;
@@ -1623,7 +1641,7 @@ begin
   begin
     conn := MainConnection as TSqlDBOdbcConnection;
     if not conn.IsConnected then
-      conn.Connect; // retrieve DBMS property
+      conn.Connect; // retrieve Dbms property from DriverName/DbmsName
     fDbms := conn.Dbms;
   end;
   result := fDbms;

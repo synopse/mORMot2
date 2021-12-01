@@ -293,7 +293,7 @@ const
 { ************ Define Database Engine Specific Behavior }
 
 type
-  /// the known database definitions
+  /// the supported SQL database dialects
   // - will be used e.g. for TSqlDBConnectionProperties.SqlFieldCreate(), or
   // for OleDB/ODBC/ZDBC tuning according to the connected database engine
   TSqlDBDefinition = (
@@ -1753,9 +1753,11 @@ type
     property UserID: RawUtf8
       read fUserID;
     /// the remote DBMS type, as stated by the inheriting class itself, or
-    //  retrieved at connecton time (e.g. for ODBC)
+    // retrieved at connecton time (e.g. for ODBC)
+    // - you may force a DB engine to bypass the value returned at runtime
+    // (use with caution, but may be useful with unsupported drivers)
     property Dbms: TSqlDBDefinition
-      read GetDbms;
+      read GetDbms write fDbms;
     /// the remote DBMS type name, retrieved as text from the DBMS property
     property DbmsEngineName: RawUtf8
       read GetDbmsName;
