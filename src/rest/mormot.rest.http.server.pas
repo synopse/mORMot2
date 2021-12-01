@@ -65,6 +65,7 @@ type
   ERestHttpServer = class(ERestException);
 
   /// available running options for TRestHttpServer.Create() constructor
+  // - see HTTP_DEFAULT_MODE / WEBSOCKETS_DEFAULT_MODE for the best mode
   // - useHttpApi to run kernel-mode HTTP.SYS server (THttpApiServer) with an
   // already registered URI (default way, similar to IIS/WCF security policy
   // as specified by Microsoft) - you would need to register the URI by hand,
@@ -80,22 +81,27 @@ type
   // - useHttpApiOnly and useHttpApiRegisteringURIOnly won't fallback to the
   // socket-based HTTP server if http.sys initialization failed
   // - useHttpSocket will run the standard Sockets library (i.e. socket-based
-  // THttpServer with one thread per kept alive connection) - it will trigger
-  // the Windows firewall popup UAC window at first execution
+  // THttpServer with one thread per kept alive connection), using a thread pool
+  // for HTTP/1.0 requests (e.g. behind a reverse proxy) or one thread per
+  // HTTP/1.1 keep alive connection, so won't scale without any reverse proxy
   // - useBidirSocket will use the standard Sockets library but via the
   // TWebSocketServerRest class, allowing HTTP connection upgrade to the
   // WebSockets protocol, to enable immediate event callbacks in addition to
-  // the standard request/answer RESTful mode with one thread per client
+  // the standard request/answer RESTful mode: will use one thread per client
+  // so won't scale
   // - useHttpAsync will use the Sockets library in event-driven mode,
-  // with a thread poll for both single shot and kept alive connections
+  // with a thread poll for both HTTP/1.0 single shot and HTTP/1.1 kept alive
+  // connections, so would scale much better than older useHttpSocket
   // - useBidirAsync will use TWebSocketAsyncServerRest in event-driven mode,
-  // using its thread poll for all its HTTP or WebSockets process
+  // using its thread poll for all its HTTP or WebSockets process, , so would
+  // scale much better than older useBidirSocket
   // - in practice, useHttpSocket is good behind a reverse proxy defined in
   // HTTP/1.0 mode, but useHttpAsync  may scale much better in case of
   // a lot of concurrent connections, especially kept-alive connections
   // - useBidirSocket may be used for legacy reasons, if one thread per client
   // is a good idea - but useBidirAsync may be preferred for proper scaling
-  // - the first item should be the preferred one (see HTTP_DEFAULT_MODE)
+  // - on Windows, all sockets-based server will trigger the firewall popup UAC
+  // window at first execution, unless your setup program did register the app
   TRestHttpServerUse = (
     {$ifdef USEHTTPSYS}
     useHttpApi,
@@ -137,13 +143,17 @@ const
     [useHttpApiRegisteringURI, useHttpApiRegisteringURIOnly];
 
   {$else}
-  // - older useHttpSocket is less efficient than our new async server
+  // - older useHttpSocket focuses on HTTP/1.0 or a small number of short-living
+  // connections - creating one thread per HTTP/1.1 connection - so is a good
+  // idea behind a nginx reverse proxy using HTTP/1.0, whereas our new
+  // useHttpAsync server scales much better with high number of connections
   HTTP_DEFAULT_MODE = useHttpAsync;
   {$endif USEHTTPSYS}
 
   /// the kind of HTTP server to be used by default for WebSockets support
   // - will define the best available server class, depending on the platform
-  // - useBidirSocket is less efficient and uses one thread per connection
+  // - useBidirSocket uses one thread per connection, whereas useBidirAsync
+  // use a thread-pool and has an event-driven approach so scales much better
   WEBSOCKETS_DEFAULT_MODE = useBidirAsync;
 
   /// the TRestHttpServerUse which have bi-directional callback notifications
