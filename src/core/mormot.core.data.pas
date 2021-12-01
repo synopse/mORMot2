@@ -2421,15 +2421,13 @@ type
   TRawUtf8InterningSlot = object
   {$endif USERECORDWITHMETHODS}
   private
-    fSafe: TRTLCriticalSection;
+    fSafe: PtrUInt; // LightLock/LightUnlock thread-safe protection
     fCount: integer;
     fValue: TRawUtf8DynArray;
     fValues: TDynArrayHashed;
   public
     /// initialize the RawUtf8 slot (and its Safe mutex)
     procedure Init;
-    /// finalize the RawUtf8 slot - mainly its associated Safe mutex
-    procedure Done;
     /// returns the interned RawUtf8 value
     procedure Unique(var aResult: RawUtf8; const aText: RawUtf8;
       aTextHash: cardinal);
@@ -2462,8 +2460,6 @@ type
     // - aHashTables is the pool size, and should be a power of two <= 512
     // (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
     constructor Create(aHashTables: integer = 4); reintroduce;
-    /// finalize the storage
-    destructor Destroy; override;
     /// return a RawUtf8 variable stored within this class
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
@@ -3934,14 +3930,8 @@ end;
 
 procedure TRawUtf8InterningSlot.Init;
 begin
-  InitializeCriticalSection(fSafe);
   fValues.InitSpecific(TypeInfo(TRawUtf8DynArray), fValue, ptRawUtf8,
     @fCount, false, InterningHasher);
-end;
-
-procedure TRawUtf8InterningSlot.Done;
-begin
-  DeleteCriticalSection(fSafe);
 end;
 
 procedure TRawUtf8InterningSlot.Unique(var aResult: RawUtf8;
@@ -3950,8 +3940,12 @@ var
   i: PtrInt;
   added: boolean;
 begin
-  EnterCriticalSection(fSafe);
+  LightLock(fSafe);
+  {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
   try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
     i := fValues.FindHashedForAdding(aText, added, aTextHash);
     if added then
     begin
@@ -3960,8 +3954,10 @@ begin
     end
     else
       aResult := fValue[i]; // return unified string instance
+  {$ifdef HASFASTTRYFINALLY}
   finally
-    LeaveCriticalSection(fSafe);
+  {$endif HASFASTTRYFINALLY}
+    LightUnLock(fSafe);
   end;
 end;
 
@@ -3972,9 +3968,11 @@ var
   added: boolean;
   bak: TDynArraySortCompare;
 begin
-  EnterCriticalSection(fSafe);
+  LightLock(fSafe);
   {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
   try
+  {$else}
+  begin
   {$endif HASFASTTRYFINALLY}
     bak := fValues.Hasher.fCompare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
     PDynArrayHasher(@fValues.Hasher)^.fCompare := @SortDynArrayPUtf8Char;
@@ -3986,19 +3984,16 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    LeaveCriticalSection(fSafe);
-  {$ifdef HASFASTTRYFINALLY}
+    LightUnLock(fSafe);
   end;
-  {$endif HASFASTTRYFINALLY}
 end;
 
-procedure TRawUtf8InterningSlot.UniqueText(
-  var aText: RawUtf8; aTextHash: cardinal);
+procedure TRawUtf8InterningSlot.UniqueText(var aText: RawUtf8; aTextHash: cardinal);
 var
   i: PtrInt;
   added: boolean;
 begin
-  EnterCriticalSection(fSafe);
+  LightLock(fSafe);
   try
     i := fValues.FindHashedForAdding(aText, added, aTextHash);
     if added then
@@ -4006,18 +4001,18 @@ begin
     else
       aText := fValue[i];   // return unified string instance
   finally
-    LeaveCriticalSection(fSafe);
+    LightUnLock(fSafe);
   end;
 end;
 
 procedure TRawUtf8InterningSlot.Clear;
 begin
-  EnterCriticalSection(fSafe);
+  LightLock(fSafe);
   try
     fValues.SetCount(0); // Values.Clear
     fValues.Hasher.ForceReHash;
   finally
-    LeaveCriticalSection(fSafe);
+    LightUnLock(fSafe);
   end;
 end;
 
@@ -4027,7 +4022,7 @@ var
   s, d: PPtrUInt; // points to RawUtf8 values
 begin
   result := 0;
-  EnterCriticalSection(fSafe);
+  LightLock(fSafe);
   try
     if fCount = 0 then
       exit;
@@ -4061,7 +4056,7 @@ begin
       fValues.ForceReHash;
     end;
   finally
-    LeaveCriticalSection(fSafe);
+    LightUnLock(fSafe);
   end;
 end;
 
@@ -4084,15 +4079,6 @@ begin
     end;
   raise ESynException.CreateUtf8('%.Create(%) not allowed: ' +
     'should be a power of 2 <= 512', [self, aHashTables]);
-end;
-
-destructor TRawUtf8Interning.Destroy;
-var
-  i: PtrInt;
-begin
-  for i := 0 to fPoolLast do
-    fPool[i].Done;
-  inherited Destroy;
 end;
 
 procedure TRawUtf8Interning.Clear;
