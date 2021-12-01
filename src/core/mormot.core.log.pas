@@ -4079,7 +4079,7 @@ begin
       // TSynLog.Family / TSynLog.Add expect TRttiCustom in the first slot
       raise ESynLogException.CreateUtf8(
         '%.FamilyCreate: vmtAutoTable=% not %', [self, vmt, rtticustom]);
-    Rtti.DoLock;
+    mormot.core.os.EnterCriticalSection(Rtti.RegisterLock);
     try
       result := rtticustom.PrivateSlot;
       if Assigned(result) then
@@ -4093,7 +4093,7 @@ begin
       result := TSynLogFamily.Create(self); // stored in SynLogFamily[]
       rtticustom.PrivateSlot := result; // will be owned by this TRttiCustom
     finally
-      Rtti.DoUnlock;
+      mormot.core.os.LeaveCriticalSection(Rtti.RegisterLock);
     end;
   end
   else

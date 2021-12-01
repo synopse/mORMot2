@@ -2532,7 +2532,7 @@ procedure LightLock(var lock: PtrUInt);
 procedure LightUnLock(var lock: PtrUInt);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// low-level function called by LightLock() when inlined on ARM/AARCH64
+/// low-level function called by LightLock() when inlined
 procedure LightLockSpin(var lock: PtrUInt);
 
 type
@@ -2557,7 +2557,9 @@ type
     Flags: PtrUInt; // bit 0 = WriteLock, 1 = ReadWriteLock, >1 = ReadOnlyLock
     LastReadWriteLockThread, LastWriteLockThread: TThreadID; // to be reentrant
     LastReadWriteLockCount,  LastWriteLockCount: cardinal;
+    {$ifndef ASMINTEL}
     procedure ReadOnlyLockSpin;
+    {$endif ASMINTEL}
   public
     /// initialize the R/W lock
     // - not needed if TRWLock is part of a class - i.e. if was filled with 0
@@ -2577,7 +2579,7 @@ type
     // !   rwlock.ReadOnlyUnLock;
     // ! end;
     procedure ReadOnlyLock;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifndef ASMINTEL} inline; {$endif}
     /// release a previous ReadOnlyLock call
     procedure ReadOnlyUnLock;
       {$ifdef HASINLINE} inline; {$endif}
@@ -5328,6 +5330,13 @@ begin
 end;
 
 
+// we tried a dedicated asm for LightLock() but it was slower
+procedure LightLock(var lock: PtrUInt);
+begin
+  if not LockedCAS(lock, 1, 0) then
+    LightLockSpin(lock);
+end;
+
 procedure LightLockSpin(var lock: PtrUInt);
 var
   spin: PtrUInt;
@@ -5336,13 +5345,6 @@ begin
   repeat
     spin := DoSpin(spin);
   until LockedCAS(lock, 1, 0);
-end;
-
-// note: we tried to implement it with pure asm but was unstable on Delphi Win64
-procedure LightLock(var lock: PtrUInt);
-begin
-  if not LockedCAS(lock, 1, 0) then
-    LightLockSpin(lock);
 end;
 
 procedure LightUnLock(var lock: PtrUInt);
@@ -5355,6 +5357,7 @@ end;
 
 procedure TRWLock.Init;
 begin
+  // bit 0 = WriteLock, 1 = ReadWriteLock, 2.. = ReadOnlyLock counter
   Flags := 0;
   // no need to set the other fields because they will be reset if Flags=0
 end;
@@ -5365,7 +5368,55 @@ begin
     raise EOSException.CreateFmt('TRWLock Flags=%x', [Flags]);
 end;
 
-// note: we tried to implement it with pure asm but was unstable on Delphi Win64
+// dedicated asm for this most simple (and used) method
+{$ifdef ASMX64}
+
+procedure TRWLock.ReadOnlyLock;
+asm     // since we call SwitchToThread we need to have a stackframe
+        {$ifndef WIN64ABI}
+        mov     rcx, rdi      // rcx = self
+        {$endif WIN64ABI}
+@retry: mov     r8d, SPIN_COUNT
+@spin:  mov     rax, qword ptr [rcx + TRWLock.Flags]
+        and     rax, not 1
+        lea     rdx, [rax + 4]
+   lock cmpxchg qword ptr [rcx + TRWLock.Flags], rdx
+        jz      @done
+        pause
+        dec     r8d
+        jnz     @spin
+        push    rcx
+        call    SwitchToThread
+        pop     rcx
+        jmp     @retry
+@done:  // restore the stack frame
+end;
+
+{$else}
+
+{$ifdef ASMX86}
+
+procedure TRWLock.ReadOnlyLock;
+  {$ifdef FPCWINDOWS} nostackframe; assembler; {$endif}
+asm     // since we call SwitchToThread we need to have a stackframe
+        push    ebx
+        mov     ebx, eax
+@retry: mov     ecx, SPIN_COUNT
+@spin:  mov     eax, dword ptr [ebx + TRWLock.Flags]
+        and     eax, not 1
+        lea     edx, [eax + 4]
+   lock cmpxchg dword ptr [ebx + TRWLock.Flags], edx
+        jz      @done
+        pause
+        dec     ecx
+        jnz     @spin
+        call    SwitchToThread
+        jmp     @retry
+@done:  pop     ebx
+end;    // restore the stack frame on systems which expects it
+
+{$else}
+
 procedure TRWLock.ReadOnlyLock;
 var
   f: PtrUInt;
@@ -5386,6 +5437,9 @@ begin
     f := Flags and not 1; // retry ReadOnlyLock
   until LockedCAS(Flags, f + 4, f);
 end;
+
+{$endif ASMX86}
+{$endif ASMX64}
 
 procedure TRWLock.ReadOnlyUnLock;
 begin
@@ -5421,7 +5475,7 @@ begin
   dec(LastReadWriteLockCount);
   if LastReadWriteLockCount <> 0 then
     exit;
-  LastReadWriteLockThread := 0;
+  LastReadWriteLockThread := TThreadID(0);
   LockedDec(Flags, 2);
 end;
 
@@ -5463,7 +5517,7 @@ begin
   dec(LastWriteLockCount);
   if LastWriteLockCount <> 0 then
     exit;
-  LastWriteLockThread := 0;
+  LastWriteLockThread := TThreadID(0);
   LockedDec(Flags, 1);
 end;
 
