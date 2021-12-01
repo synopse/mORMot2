@@ -400,17 +400,17 @@ type
     /// virtual constructor called at instance creation
     constructor Create; virtual;
     /// add one item to the list
-    function Add(item: pointer): integer; virtual;
+    function Add(item: pointer): PtrInt; virtual;
     /// delete all items of the list
     procedure Clear; virtual;
     /// delete one item from the list
     procedure Delete(index: integer; dontfree: boolean = false); virtual;
     /// fast retrieve one item in the list
-    function IndexOf(item: pointer): integer; virtual;
+    function IndexOf(item: pointer): PtrInt; virtual;
     /// fast check if one item exists in the list
     function Exists(item: pointer): boolean; virtual;
     /// fast delete one item in the list
-    function Remove(item: pointer): integer; virtual;
+    function Remove(item: pointer): PtrInt; virtual;
     /// how many items are stored in this TList instance
     property Count: integer
       read fCount;
@@ -555,13 +555,13 @@ type
     // unless AOwnsObjects is set to false
     constructor Create(aOwnsObjects: boolean = true); reintroduce;
     /// add one item to the list using Safe.WriteLock
-    function Add(item: pointer): integer; override;
+    function Add(item: pointer): PtrInt; override;
     /// delete all items of the list using Safe.WriteLock
     procedure Clear; override;
     /// delete all items of the list in reverse order, using Safe.WriteLock
     procedure ClearFromLast; override;
     /// fast delete one item in the list, using Safe.WriteLock
-    function Remove(item: pointer): integer; override;
+    function Remove(item: pointer): PtrInt; override;
     /// check an item using Safe.ReadOnlyLock
     function Exists(item: pointer): boolean; override;
     /// the light single Read / exclusive Write lock associated to this list
@@ -1819,8 +1819,8 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fDynArray: PDynArray;
-    fHashItem: TDynArrayHashOne;     // function
-    fEventHash: TOnDynArrayHashOne;  // function of object
+    fHashItem: TDynArrayHashOne;       // function
+    fEventHash: TOnDynArrayHashOne;    // function of object
     fHashTableStore: TIntegerDynArray; // store 0 for void entry, or Index+1
     fHashTableSize: integer;
     fState: TDynArrayHasherState;
@@ -3059,7 +3059,7 @@ begin
   // nothing to do
 end;
 
-function TSynList.Add(item: pointer): integer;
+function TSynList.Add(item: pointer): PtrInt;
 begin
   // inlined result := ObjArrayAddCount(fList, item, fCount);
   result := fCount;
@@ -3096,12 +3096,12 @@ begin
     result := nil;
 end;
 
-function TSynList.IndexOf(item: pointer): integer;
+function TSynList.IndexOf(item: pointer): PtrInt;
 begin
   result := PtrUIntScanIndex(pointer(fList), fCount, PtrUInt(item));
 end;
 
-function TSynList.Remove(item: Pointer): integer;
+function TSynList.Remove(item: Pointer): PtrInt;
 begin
   result := PtrUIntScanIndex(pointer(fList), fCount, PtrUInt(item));
   if result >= 0 then
@@ -3222,7 +3222,7 @@ begin
   inherited Create(AOwnsObjects);
 end;
 
-function TSynObjectListLocked.Add(item: pointer): integer;
+function TSynObjectListLocked.Add(item: pointer): PtrInt;
 begin
   Safe.WriteLock;
   try
@@ -3232,7 +3232,7 @@ begin
   end;
 end;
 
-function TSynObjectListLocked.Remove(item: pointer): integer;
+function TSynObjectListLocked.Remove(item: pointer): PtrInt;
 begin
   Safe.WriteLock;
   try
