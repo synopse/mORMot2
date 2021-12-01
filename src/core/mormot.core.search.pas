@@ -1309,7 +1309,7 @@ type
   // - note that each instance is thread-safe
   TSynTimeZone = class
   protected
-    fLock: TRTLCriticalSection;
+    fSafe: TRWLock;
     fZone: TTimeZoneDataDynArray;
     fZoneCount: integer;
     fZones: TDynArrayHashed;
@@ -1317,7 +1317,7 @@ type
     fLastIndex: integer;
     fIds: TStringList;
     fDisplays: TStringList;
-    function FindZoneIndex(const TzId: TTimeZoneID): PtrInt;
+    function LockedFindZoneIndex(const TzId: TTimeZoneID): PtrInt;
   public
     /// initialize the internal storage
     // - but no data is available, until Load* methods are called
@@ -5509,7 +5509,6 @@ constructor TSynTimeZone.Create;
 begin
   fZones.InitSpecific(TypeInfo(TTimeZoneDataDynArray),
     fZone, ptRawUtf8, @fZoneCount);
-  InitializeCriticalSection(fLock);
 end;
 
 constructor TSynTimeZone.CreateDefault(dummycpp: integer);
@@ -5529,7 +5528,6 @@ begin
   inherited Destroy;
   fIds.Free;
   fDisplays.Free;
-  DeleteCriticalSection(fLock);
 end;
 
 var
@@ -5553,11 +5551,11 @@ end;
 
 function TSynTimeZone.SaveToBuffer: RawByteString;
 begin
-  EnterCriticalSection(fLock);
+  fSafe.ReadOnlyLock;
   try
     result := AlgoSynLZ.Compress(fZones.SaveTo);
   finally
-    LeaveCriticalSection(fLock);
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
@@ -5576,14 +5574,14 @@ procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
 begin
   if Buffer = '' then
    exit;
-  EnterCriticalSection(fLock);
+  fSafe.WriteLock;
   try
     fZones.LoadFromBinary(AlgoSynLZ.Decompress(Buffer));
     fZones.ForceReHash;
     FreeAndNil(fIds);
     FreeAndNil(fDisplays);
   finally
-    LeaveCriticalSection(fLock);
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -5618,79 +5616,72 @@ var
   i, first, last, year, n: integer;
   item: TTimeZoneData;
 begin
-  fZones.Clear;
-  if reg.ReadOpen(wrLocalMachine, REGKEY) then
-    keys := reg.ReadEnumEntries
-  else
-    keys := nil; // make Delphi 6 happy
-  n := length(keys);
-  fZones.Capacity := n;
-  for i := 0 to n - 1 do
-  begin
-    Finalize(item);
-    FillcharFast(item.tzi, SizeOf(item.tzi), 0);
-    if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i], {reopen=}true) then
+  fSafe.WriteLock;
+  try
+    fZones.Clear;
+    if reg.ReadOpen(wrLocalMachine, REGKEY) then
+      keys := reg.ReadEnumEntries
+    else
+      keys := nil; // make Delphi 6 happy
+    n := length(keys);
+    fZones.Capacity := n;
+    for i := 0 to n - 1 do
     begin
-      item.id := keys[i];
-      item.Display := reg.ReadString('Display');
-      reg.ReadBuffer('TZI', @item.tzi, SizeOf(item.tzi));
-      if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i] + '\Dynamic DST', true) then
+      Finalize(item);
+      FillcharFast(item.tzi, SizeOf(item.tzi), 0);
+      if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i], {reopen=}true) then
       begin
-        // warning: never defined on XP/2003, and not for all entries
-        first := reg.ReadDword('FirstEntry');
-        last := reg.ReadDword('LastEntry');
-        if (first > 0) and
-           (last >= first) then
+        item.id := keys[i];
+        item.Display := reg.ReadString('Display');
+        reg.ReadBuffer('TZI', @item.tzi, SizeOf(item.tzi));
+        if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i] + '\Dynamic DST', true) then
         begin
-          n := 0;
-          SetLength(item.dyn, last - first + 1);
-          for year := first to last do
-            if reg.ReadBuffer(Utf8ToSynUnicode(UInt32ToUtf8(year)),
-              @item.dyn[n].tzi, SizeOf(TTimeZoneInfo)) then
-            begin
-              item.dyn[n].year := year;
-              inc(n);
-            end;
-          SetLength(item.dyn, n);
+          // warning: never defined on XP/2003, and not for all entries
+          first := reg.ReadDword('FirstEntry');
+          last := reg.ReadDword('LastEntry');
+          if (first > 0) and
+             (last >= first) then
+          begin
+            n := 0;
+            SetLength(item.dyn, last - first + 1);
+            for year := first to last do
+              if reg.ReadBuffer(Utf8ToSynUnicode(UInt32ToUtf8(year)),
+                @item.dyn[n].tzi, SizeOf(TTimeZoneInfo)) then
+              begin
+                item.dyn[n].year := year;
+                inc(n);
+              end;
+            SetLength(item.dyn, n);
+          end;
         end;
+        fZones.Add(item);
       end;
-      fZones.Add(item);
     end;
+    reg.Close;
+    fZones.ForceReHash;
+    FreeAndNil(fIds);
+    FreeAndNil(fDisplays);
+  finally
+    fSafe.WriteUnLock;
   end;
-  reg.Close;
-  fZones.ForceReHash;
-  FreeAndNil(fIds);
-  FreeAndNil(fDisplays);
 end;
 
 {$endif OSWINDOWS}
 
-function TSynTimeZone.FindZoneIndex(const TzId: TTimeZoneID): PtrInt;
+function TSynTimeZone.LockedFindZoneIndex(const TzId: TTimeZoneID): PtrInt;
 begin
-  if (self = nil) or
-     (TzId = '') then
+  if TzId = '' then
     result := -1
   else
   begin
-    EnterCriticalSection(fLock);
-    {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
-    try
-    {$endif HASFASTTRYFINALLY}
-      if TzId = fLastZone then
-        result := fLastIndex
-      else
-      begin
-        result := fZones.FindHashed(TzId);
-        fLastZone := TzId;
-        flastIndex := result;
-      end;
-    {$ifdef HASFASTTRYFINALLY}
-    finally
-    {$endif HASFASTTRYFINALLY}
-      LeaveCriticalSection(fLock);
-    {$ifdef HASFASTTRYFINALLY}
+    if TzId = fLastZone then
+      result := fLastIndex
+    else
+    begin
+      result := fZones.FindHashed(TzId);
+      fLastZone := TzId;
+      flastIndex := result;
     end;
-    {$endif HASFASTTRYFINALLY}
   end;
 end;
 
@@ -5698,7 +5689,8 @@ function TSynTimeZone.GetDisplay(const TzId: TTimeZoneID): RawUtf8;
 var
   ndx: PtrInt;
 begin
-  ndx := FindZoneIndex(TzId);
+  fSafe.ReadOnlyLock;
+  ndx := LockedFindZoneIndex(TzId);
   if ndx < 0 then
     if TzId = 'UTC' then // e.g. on XP
       result := TzId
@@ -5706,6 +5698,7 @@ begin
       result := ''
   else
     result := fZone[ndx].display;
+  fSafe.ReadOnlyUnLock;
 end;
 
 function TSynTimeZone.GetBiasForDateTime(const Value: TDateTime;
@@ -5717,46 +5710,51 @@ var
   tzi: PTimeZoneInfo;
   std, dlt: TDateTime;
 begin
-  ndx := FindZoneIndex(TzId);
-  if ndx < 0 then
-  begin
-    Bias := 0;
-    HaveDaylight := false;
-    result := TzId = 'UTC'; // e.g. on XP
-    exit;
-  end;
-  d.FromDate(Value); // faster than DecodeDate
-  tzi := fZone[ndx].GetTziFor(d.Year);
-  if tzi.change_time_std.IsZero then
-  begin
-    HaveDaylight := false;
-    Bias := tzi.Bias + tzi.bias_std;
-  end
-  else
-  begin
-    HaveDaylight := true;
-    std := tzi.change_time_std.EncodeForTimeChange(d.Year);
-    dlt := tzi.change_time_dlt.EncodeForTimeChange(d.Year);
-    if ValueIsUtc then
+  fSafe.ReadOnlyLock;
+  try
+    ndx := LockedFindZoneIndex(TzId);
+    if ndx < 0 then
     begin
-      // Std shifts by the DST bias to convert to UTC
-      std := ((std * MinsPerDay) + tzi.Bias + tzi.bias_dlt) / MinsPerDay;
-      // Dst shifts by the STD bias
-      dlt := ((dlt * MinsPerDay) + tzi.Bias + tzi.bias_std) / MinsPerDay;
+      Bias := 0;
+      HaveDaylight := false;
+      result := TzId = 'UTC'; // e.g. on XP
+      exit;
     end;
-    if std < dlt then
-      if (std <= Value) and
-         (Value < dlt) then
-        Bias := tzi.Bias + tzi.bias_std
-      else
-        Bias := tzi.Bias + tzi.bias_dlt
-    else if (dlt <= Value) and
-            (Value < std) then
-      Bias := tzi.Bias + tzi.bias_dlt
-    else
+    d.FromDate(Value); // faster than DecodeDate
+    tzi := fZone[ndx].GetTziFor(d.Year);
+    if tzi.change_time_std.IsZero then
+    begin
+      HaveDaylight := false;
       Bias := tzi.Bias + tzi.bias_std;
+    end
+    else
+    begin
+      HaveDaylight := true;
+      std := tzi.change_time_std.EncodeForTimeChange(d.Year);
+      dlt := tzi.change_time_dlt.EncodeForTimeChange(d.Year);
+      if ValueIsUtc then
+      begin
+        // STD shifts by the DLT bias to convert to UTC
+        std := ((std * MinsPerDay) + tzi.Bias + tzi.bias_dlt) / MinsPerDay;
+        // DLT shifts by the STD bias
+        dlt := ((dlt * MinsPerDay) + tzi.Bias + tzi.bias_std) / MinsPerDay;
+      end;
+      if std < dlt then
+        if (std <= Value) and
+           (Value < dlt) then
+          Bias := tzi.Bias + tzi.bias_std
+        else
+          Bias := tzi.Bias + tzi.bias_dlt
+      else if (dlt <= Value) and
+              (Value < std) then
+        Bias := tzi.Bias + tzi.bias_dlt
+      else
+        Bias := tzi.Bias + tzi.bias_std;
+    end;
+    result := true;
+  finally
+    fSafe.ReadOnlyUnLock;
   end;
-  result := true;
 end;
 
 function TSynTimeZone.UtcToLocal(const UtcDateTime: TDateTime;
@@ -5803,8 +5801,10 @@ begin
   if fIDs = nil then
   begin
     fIDs := TStringList.Create;
+    fSafe.ReadOnlyLock;
     for i := 0 to length(fZone) - 1 do
       fIDs.Add(Utf8ToString(RawUtf8(fZone[i].id)));
+    fSafe.ReadOnlyUnLock;
   end;
   result := fIDs;
 end;
@@ -5816,8 +5816,10 @@ begin
   if fDisplays = nil then
   begin
     fDisplays := TStringList.Create;
+    fSafe.ReadOnlyLock;
     for i := 0 to length(fZone) - 1 do
       fDisplays.Add(Utf8ToString(fZone[i].Display));
+    fSafe.ReadOnlyUnLock;
   end;
   result := fDisplays;
 end;

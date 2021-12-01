@@ -1446,7 +1446,7 @@ begin
   if self = nil then
     exit;
   InternalLog(SQL, sllSQL);
-  StorageLock(false, 'EngineList');
+  StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'MongoList' {$endif});
   try
     if IdemPropNameU(fBasicSqlCount, SQL) then
       SetCount(TableRowCount(fStoredClass))
@@ -1554,7 +1554,7 @@ begin
   if Encoding in [encPost, encDelete] then
   begin
     // lock is protected by try..finally in TRestServer.RunBatch
-    StorageLock(true, 'InternalBatchStart');
+    StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'MongoBatchStart' {$endif});
     try
       if (fBatchMethod <> mNone) or
          (fBatchWriter <> nil) then
