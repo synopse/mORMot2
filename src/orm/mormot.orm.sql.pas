@@ -753,7 +753,6 @@ var
   limit: TSqlDBDefinitionLimitClause;
   limitSQL, name: RawUtf8;
   f, n: PtrInt;
-  tmp: TTextWriterStackBuffer;
 begin
   result := false;
   if SQL = '' then
@@ -793,7 +792,7 @@ begin
       else
         FormatUtf8(limit.InsertFmt, [Stmt.Limit], limitSQL);
     end;
-    W := TJsonWriter.CreateOwnedStream(tmp);
+    W := TJsonWriter.CreateOwnedStream(GetTempBuffer^);
     try
       W.AddShorter('select ');
       if limit.Position = posSelect then
@@ -2137,7 +2136,6 @@ function TRestStorageExternal.ComputeSql(
 var
   WR: TJsonWriter;
   i: PtrInt;
-  tmp: TTextWriterStackBuffer;
   where: POrmVirtualTablePreparedConstraint;
   order: ^TOrmVirtualTablePreparedOrderBy;
   {$ifdef SQLVIRTUALLOGS}
@@ -2151,7 +2149,7 @@ begin
     exit;
   end;
   result := '';
-  WR := TJsonWriter.CreateOwnedStream(tmp);
+  WR := TJsonWriter.CreateOwnedStream(GetTempBuffer^);
   try
     WR.AddString(fSelectAllDirectSQL);
     where := @Prepared.Where;

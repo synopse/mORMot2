@@ -2154,8 +2154,8 @@ type
     // (which calls our very fast ISO TEXT to Int64 conversion routine)
     // - an individual bit set in UniqueField forces the corresponding field to
     // be marked as UNIQUE (an unique index is automaticaly created on the specified
-    // column); use TOrmModel fIsUnique[] array, which set the bits values
-    // to 1 if a property field was published with "stored AS_UNIQUE"
+    // column); use TOrmProperties.IsUniqueFieldsBits[] array, which set the bits
+    // values to 1 if a property field was published with "stored AS_UNIQUE"
     // (i.e. "stored false")
     // - this method will handle TOrmFts* classes like FTS* virtual tables,
     // TOrmRTree as RTREE virtual table, and TOrmVirtualTable*ID
@@ -3886,8 +3886,6 @@ type
     /// initialize the Database Model
     // - set the Tables to be associated with this Model, as TOrm classes
     // - set the optional Root URI path of this Model
-    // - initialize the fIsUnique[] array from "stored AS_UNIQUE" (i.e. "stored
-    // false") published properties of every TOrmClass
     constructor Create(const Tables: array of TOrmClass;
       const aRoot: RawUtf8 = 'root'); reintroduce; overload;
     /// you should not use this constructor, but one of the overloaded versions,
@@ -3947,7 +3945,7 @@ type
     /// return TRUE if the specified field of this class was marked as unique
     // - an unique field is defined as "stored AS_UNIQUE" (i.e. "stored false")
     // in its property definition
-    // - reflects the internal private fIsUnique propery
+    // - reflects TOrmProperties.IsUniqueFieldsBits[] values
     function GetIsUnique(aTable: TOrmClass; aFieldIndex: integer): boolean;
     /// try to retrieve a table index from a SQL statement
     // - naive search of '... FROM TableName' pattern in the supplied SQL,
@@ -6047,6 +6045,14 @@ end;
 
 // some methods defined ahead of time for proper inlining
 
+// since "var class" are not available in Delphi 6-7, and is inherited by
+// the children classes under latest Delphi versions (i.e. the "var class" is
+// shared by all inherited classes, whereas we want one var per class), we
+// reused one of the magic VMT slots (i.e. the one for automated methods,
+// AutoTable, a relic from Delphi 2 that is generally not used anymore) - see
+// http://hallvards.blogspot.com/2007/05/hack17-virtual-class-variables-part-ii.html
+// [a slower alternative may have been to use a global TSynDictionary]
+
 class function TOrm.OrmProps: TOrmProperties;
 begin
   result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
@@ -6287,14 +6293,6 @@ end;
 
 
 { TOrm }
-
-// since "var class" are not available in Delphi 6-7, and is inherited by
-// the children classes under latest Delphi versions (i.e. the "var class" is
-// shared by all inherited classes, whereas we want one var per class), we
-// reused one of the magic VMT slots (i.e. the one for automated methods,
-// AutoTable, a relic from Delphi 2 that is generally not used anymore) - see
-// http://hallvards.blogspot.com/2007/05/hack17-virtual-class-variables-part-ii.html
-// [a slower alternative may have been to use a global TSynDictionary]
 
 class function TOrm.PropsCreate: TOrmProperties;
 var

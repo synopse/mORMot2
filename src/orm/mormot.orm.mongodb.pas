@@ -101,7 +101,6 @@ type
     fBatchWriter: TBsonWriter;
     fBatchIDs: TIDDynArray;
     fBatchIDsCount: integer;
-    fStorageTemp: PTextWriterStackBuffer;
     function EngineNextID: TID;
     function DocFromJson(const Json: RawUtf8; Occasion: TOrmOccasion;
       var Doc: TDocVariantData): TID;
@@ -316,7 +315,7 @@ var
   name: RawUtf8;
 begin
   sf := length(SubFields);
-  W := TBsonWriter.Create(TRawByteStringStream);
+  W := TBsonWriter.Create(GetTempBuffer^);
   try
     W.BsonDocumentBegin;
     if WithID then
@@ -400,7 +399,6 @@ begin
   inherited;
   FreeAndNilSafe(fBatchWriter);
   fEngineGenerator.Free;
-  Freemem(fStorageTemp);
   InternalLog('Destroy for % using %', [fStoredClass, Collection], sllInfo);
 end;
 
@@ -911,7 +909,6 @@ var
   i: PtrInt;
   name: RawUtf8;
   W: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
 begin
   if (doc.VarType <> DocVariantType.VarType) or
      (doc.Kind <> dvObject) or
@@ -920,7 +917,7 @@ begin
     result := '';
     exit;
   end;
-  W := TJsonWriter.CreateOwnedStream(tmp);
+  W := TJsonWriter.CreateOwnedStream(GetTempBuffer^);
   try
     W.Add('{');
     for i := 0 to doc.Count - 1 do
@@ -1247,7 +1244,7 @@ var
         [ClassType, SQL], sllError);
       exit;
     end;
-    B := TBsonWriter.Create(TRawByteStringStream);
+    B := TBsonWriter.Create(GetTempBuffer^);
     try
       B.BsonDocumentBegin;
       if Stmt.OrderByField <> nil then
@@ -1319,7 +1316,7 @@ var
           distinct := Stmt.Select[i].Field;
           distinctName := fStoredClassMapping^.FieldNameByIndex(distinct - 1);
         end;
-    B := TBsonWriter.Create(TRawByteStringStream);
+    B := TBsonWriter.Create(GetTempBuffer^);
     try
       B.BsonDocumentBegin;
       if Stmt.Where <> nil then
@@ -1508,11 +1505,9 @@ begin
           Res := fCollection.FindBson(Query, Projection, limit, Stmt.Offset);
           MS := TRawByteStringStream.Create;
           try
-            if fStorageTemp = nil then
-              Getmem(fStorageTemp, SizeOf(fStorageTemp^));
             W := fStoredClassRecordProps.CreateJsonWriter(MS,
               ForceAjax or (Owner = nil) or not Owner.Owner.NoAjaxJson,
-              withID, bits, {rowcounts=}0, 0, fStorageTemp);
+              withID, bits, {rowcounts=}0, 0, GetTempBuffer);
             try
               ResCount := GetJsonValues(Res, extFieldNames, W);
               result := MS.DataString;
@@ -1571,6 +1566,7 @@ begin
         mPOST:
           // POST=ADD=INSERT -> EngineAdd() will add to fBatchWriter
           fBatchWriter := TBsonWriter.Create(TRawByteStringStream);
+          // 64KB buffer for fBatchWriter instead of 8KB GetTempBuffer^
       end;
       result := true; // means BATCH mode is supported
     finally

@@ -508,18 +508,18 @@ type
     fStorageLockShouldIncreaseOwnerInternalState: boolean;
     fStorageLockLogTrace: boolean;
     fModified: boolean;
-    fOwner: TRestOrmServer;
-    fStorageCriticalSection: TRTLCriticalSection;
+    fOutInternalStateForcedRefresh: boolean;
     fStorageCriticalSectionCount: integer;
+    fOwner: TRestOrmServer;
+    fStorageVirtual: TOrmVirtualTable;
     fBasicSqlCount: RawUtf8;
     fBasicSqlHasRows: array[boolean] of RawUtf8;
-    fStorageVirtual: TOrmVirtualTable;
-    /// any set bit in this field indicates UNIQUE field value
-    fIsUnique: TFieldBits;
-    fOutInternalStateForcedRefresh: boolean;
+    fStorageCriticalSection: TRTLCriticalSection;
+    fTempBuffer: PTextWriterStackBuffer;
     procedure RecordVersionFieldHandle(Occasion: TOrmOccasion;
       var Decoder: TJsonObjectDecoder);
     function GetStoredClassName: RawUtf8;
+    function GetTempBuffer: PTextWriterStackBuffer;
   public
     /// initialize the abstract storage data
     constructor Create(aClass: TOrmClass; aServer: TRestOrmServer); reintroduce; virtual;
@@ -528,7 +528,7 @@ type
 
     /// should be called before any access to the storage content
     // - and protected with a try ... finally StorageUnLock; end section
-    procedure StorageLock(WillModifyContent: boolean; const msg: RawUtf8); virtual;
+    procedure StorageLock(WillModifyContent: boolean; const msg: shortstring); virtual;
     /// should be called after any StorageLock-protected access to the content
     // - e.g. protected with a try ... finally StorageUnLock; end section
     procedure StorageUnLock; virtual;
@@ -738,7 +738,6 @@ type
     fUnique, fUniquePerField: array of TRestStorageInMemoryUnique;
     fMaxID: TID;
     fValues: TDynArrayHashed; // hashed by ID
-    fTempBuffer: PTextWriterStackBuffer;
     function UniqueFieldsUpdateOK(aRec: TOrm; aUpdateIndex: integer;
       aFields: PFieldBits): boolean;
     function GetItem(Index: integer): TOrm;
@@ -1075,7 +1074,7 @@ type
     // tables could flush the database content without proper notification
     // - this overridden implementation will call Owner.FlushInternalDBCache
     procedure StorageLock(WillModifyContent: boolean;
-      const msg: RawUtf8); override;
+      const msg: shortstring); override;
   end;
 
 
@@ -1737,7 +1736,6 @@ begin
   end;
   fStoredClassProps := fModel.Props[aClass];
   fStoredClassMapping := @fStoredClassProps.ExternalDB;
-  fIsUnique := fStoredClassRecordProps.IsUniqueFieldsBits;
   fBasicSqlCount := 'SELECT COUNT(*) FROM ' +
     fStoredClassRecordProps.SqlTableName;
   fBasicSqlHasRows[false] := 'SELECT RowID FROM ' +
@@ -1759,6 +1757,8 @@ begin
     fStorageVirtual.fStatic := nil;
     fStorageVirtual.fStaticStorage := nil;
   end;
+  if fTempBuffer <> nil then
+    FreeMem(fTempBuffer);
 end;
 
 function TRestStorage.CreateSqlMultiIndex(Table: TOrmClass;
@@ -1793,7 +1793,7 @@ begin
 end;
 
 procedure TRestStorage.StorageLock(WillModifyContent: boolean;
-  const msg: RawUtf8);
+  const msg: shortstring);
 begin
   if fStorageLockLogTrace or
      (fStorageCriticalSectionCount > 1) then
@@ -1864,6 +1864,13 @@ begin
     result := ''
   else
     ClassToText(fStoredClass, result);
+end;
+
+function TRestStorage.GetTempBuffer: PTextWriterStackBuffer;
+begin
+  if fTempBuffer = nil then
+    GetMem(fTempBuffer, SizeOf(fTempBuffer^)); // 8KB pre-allocated buffer
+  result := fTempBuffer;
 end;
 
 
@@ -1973,18 +1980,18 @@ begin
     result := false; // mark error
     exit;
   end;
-  StorageLock(true, 'EngineUpdate');
+  rec := fStoredClass.Create;
   try
-    rec := fStoredClass.Create;
+    rec.FillFrom(SentData, @fields);
+    rec.IDValue := ID;
+    StorageLock(true, 'EngineUpdate');
     try
-      rec.FillFrom(SentData, @fields);
-      rec.IDValue := ID;
       result := UpdateOne(rec, fields, SentData);
     finally
-      rec.Free;
+      StorageUnLock;
     end;
   finally
-    StorageUnLock;
+    rec.Free;
   end;
 end;
 
@@ -1992,6 +1999,7 @@ function TRestStorageTOrm.UpdateOne(ID: TID;
   const Values: TSqlVarDynArray): boolean;
 var
   rec: TOrm;
+  sentdata: RawUtf8;
 begin
   if ID <= 0 then
   begin
@@ -2002,10 +2010,10 @@ begin
   try
     rec.SetFieldSqlVars(Values);
     rec.IDValue := ID;
+    sentdata := rec.GetJsonValues(true, False, ooUpdate);
     StorageLock(true, 'UpdateOne');
     try
-      result := UpdateOne(rec, rec.Orm.CopiableFieldsBits,
-        rec.GetJsonValues(true, False, ooUpdate));
+      result := UpdateOne(rec, rec.Orm.CopiableFieldsBits, sentdata);
     finally
       StorageUnLock;
     end;
@@ -2086,14 +2094,14 @@ begin
         StringReplaceAll(fBasicUpperSqlSelect[false], ' ROWID,', ' ID,');
     end;
   fields := fStoredClassRecordProps.Fields;
-  n := GetBitsCount(fIsUnique, fields.Count);
+  n := GetBitsCount(fStoredClassRecordProps.IsUniqueFieldsBits, fields.Count);
   if n > 0 then
   begin
     SetLength(fUnique, n);
     SetLength(fUniquePerField, fields.Count);
     n := 0;
     for f := 0 to fields.Count - 1 do
-      if byte(f) in fIsUnique then
+      if byte(f) in fStoredClassRecordProps.IsUniqueFieldsBits then
       begin
         fUnique[n] := TRestStorageInMemoryUnique.Create(self, fields.List[f]);
         fUniquePerField[f] := fUnique[n];
@@ -2109,8 +2117,6 @@ begin
   ObjArrayClear(fUnique);
   fValues.Clear; // to free all stored TOrm instances
   fSearchRec.Free;
-  if fTempBuffer <> nil then
-    FreeMem(fTempBuffer);
   inherited Destroy;
 end;
 
@@ -2527,7 +2533,7 @@ begin
     // nothing to search (e.g. oftUnknown or oftMany)
     exit;
   // use fUnique[] hash array for O(1) search if available
-  if WhereField in fIsUnique then
+  if WhereField in fStoredClassRecordProps.IsUniqueFieldsBits then
   begin
     if FoundOffset <= 0 then
     begin
@@ -2810,9 +2816,7 @@ begin
     raise ERestStorage.CreateUtf8('%.GetJsonValues on % with Stmt.Where[]=%:' +
       ' our in-memory engine only supports a single WHERE clause operation',
       [self, fStoredClass, length(Stmt.Where)]);
-  if fTempBuffer = nil then
-    GetMem(fTempBuffer, SizeOf(fTempBuffer^)); // 8KB pre-allocated buffer
-  tmp := fTempBuffer; // aBufSize=65500 is ignored if tmp<>nil
+  tmp := GetTempBuffer; // aBufSize=65500 is ignored if tmp<>nil
   if Stmt.Where = nil then
     // no WHERE statement -> get all rows -> guess rows count
     if (Stmt.Limit > 0) and
@@ -2953,64 +2957,69 @@ var
 begin
   result := '';
   ResCount := 0;
-  StorageLock(false, 'EngineList');
-  try
-    if IdemPropNameU(fBasicSqlCount, SQL) then
-      SetCount(TableRowCount(fStoredClass))
-    else if IdemPropNameU(fBasicSqlHasRows[false], SQL) or
-            IdemPropNameU(fBasicSqlHasRows[true], SQL) then
-      if TableHasRows(fStoredClass) then
-      begin
-        // return one expanded row with fake ID=1 - enough for the ORM usecase
-        result := '[{"RowID":1}]'#$A;
-        ResCount := 1;
-      end
-      else
-      begin
-        // return the not expanded field name if no row, as a regular SQL engine
-        result := '{"fieldCount":1,"values":["RowID"]}'#$A;
-        ResCount := 0;
-      end
+  if IdemPropNameU(fBasicSqlCount, SQL) then
+    SetCount(TableRowCount(fStoredClass))
+  else if IdemPropNameU(fBasicSqlHasRows[false], SQL) or
+          IdemPropNameU(fBasicSqlHasRows[true], SQL) then
+    if TableHasRows(fStoredClass) then
+    begin
+      // return one expanded row with fake ID=1 - enough for the ORM usecase
+      result := '[{"RowID":1}]'#$A;
+      ResCount := 1;
+    end
     else
     begin
-      // parse SQL SELECT with a single where clause
-      Stmt := TSelectStatement.Create(SQL,
-        fStoredClassRecordProps.Fields.IndexByName,
-        fStoredClassRecordProps.SimpleFieldSelect);
-      try
-        if (Stmt.SqlStatement = '') or // parsing failed
-           (length(Stmt.Where) > 1) or // only a SINGLE expression is allowed yet
-           not IdemPropNameU(Stmt.TableName, fStoredClassRecordProps.SqlTableName) then
-          // invalid request -> return ''
-          exit;
-        if Stmt.SelectFunctionCount = 0 then
-        begin
-          // save rows as JSON, with appropriate search according to Where.* arguments
-          MS := TRawByteStringStream.Create;
+      // return the not expanded field name if no row, as a regular SQL engine
+      result := '{"fieldCount":1,"values":["RowID"]}'#$A;
+      ResCount := 0;
+    end
+  else
+  begin
+    // parse SQL SELECT with a single where clause
+    Stmt := TSelectStatement.Create(SQL,
+      fStoredClassRecordProps.Fields.IndexByName,
+      fStoredClassRecordProps.SimpleFieldSelect);
+    try
+      if (Stmt.SqlStatement = '') or // parsing failed
+         (length(Stmt.Where) > 1) or // only a SINGLE expression is allowed yet
+         not IdemPropNameU(Stmt.TableName, fStoredClassRecordProps.SqlTableName) then
+        // invalid request -> return ''
+        exit;
+      if Stmt.SelectFunctionCount = 0 then
+      begin
+        // save rows as JSON, with appropriate search according to Where.* arguments
+        MS := TRawByteStringStream.Create;
+        try
+          ForceAjax := ForceAjax or
+                       not Owner.Owner.NoAjaxJson;
+          StorageLock(false, 'EngineList GetJsonValues');
           try
-            ForceAjax := ForceAjax or
-                         not Owner.Owner.NoAjaxJson;
             ResCount := GetJsonValues(MS, ForceAjax, Stmt);
-            result := MS.DataString;
           finally
-            MS.Free;
+            StorageUnLock;
           end;
-        end
-        else if (length(Stmt.Select) <> 1) or
-                (Stmt.SelectFunctionCount <> 1) or
-                (Stmt.Limit > 1) or
-                (Stmt.Offset <> 0) then
-          // handle a single max() or count() function with no LIMIT nor OFFSET
-          exit
-        else
-          case Stmt.Select[0].FunctionKnown of
-            funcCountStar:
-              if Stmt.Where = nil then
-                // was e.g. "SELECT Count(*) FROM TableName;"
-                SetCount(TableRowCount(fStoredClass))
-              else
-              begin
-                // was e.g. "SELECT Count(*) FROM TableName WHERE ..."
+          result := MS.DataString;
+        finally
+          MS.Free;
+        end;
+      end
+      else if (length(Stmt.Select) <> 1) or
+              (Stmt.SelectFunctionCount <> 1) or
+              (Stmt.Limit > 1) or
+              (Stmt.Offset <> 0) then
+        // handle a single max() or count() function with no LIMIT nor OFFSET
+        exit
+      else
+        case Stmt.Select[0].FunctionKnown of
+          funcCountStar:
+            if Stmt.Where = nil then
+              // was e.g. "SELECT Count(*) FROM TableName;"
+              SetCount(TableRowCount(fStoredClass))
+            else
+            begin
+              // was e.g. "SELECT Count(*) FROM TableName WHERE ..."
+              StorageLock(false, 'EngineList Count');
+              try
                 ResCount := FindWhereEqual(Stmt.Where[0].Field,
                   Stmt.Where[0].Value, DoNothingEvent, nil, 0, 0);
                 case Stmt.Where[0].Operation of
@@ -3019,24 +3028,31 @@ begin
                   opNotEqualTo:
                     SetCount(TableRowCount(fStoredClass) - ResCount);
                 end;
+              finally
+                StorageUnLock;
               end;
-            funcMax:
-              if (Stmt.Where = nil) and
-                 FindMax(Stmt.Select[0].Field, max) then
-              begin
-                FormatUtf8('[{"Max()":%}]'#$A, [max], result);
-                ResCount := 1;
+            end;
+          funcMax:
+            if Stmt.Where = nil then
+            begin
+              StorageLock(false, 'EngineList Max');
+              try
+                if FindMax(Stmt.Select[0].Field, max) then
+                begin
+                  FormatUtf8('[{"Max()":%}]'#$A, [max], result);
+                  ResCount := 1;
+                end;
+              finally
+                StorageUnLock;
               end;
-          else
-            // unhandled Distinct() or other SQL functions
-            exit;
-          end;
-      finally
-        Stmt.Free;
-      end;
+            end;
+        else
+          // unhandled Distinct() or other SQL functions
+          exit;
+        end;
+    finally
+      Stmt.Free;
     end;
-  finally
-    StorageUnLock;
   end;
   if ReturnedRowCount <> nil then
     ReturnedRowCount^ := ResCount;
@@ -3138,9 +3154,9 @@ var
   T: TOrmTableJson;
   timer: TPrecisionTimer;
 begin
+  timer.Start;
   StorageLock(true, 'LoadFromJson');
   try
-    timer.Start;
     if fCount > 0 then
       DropValues({andupdatefile=}false);
     fModified := false;
@@ -3256,11 +3272,11 @@ begin
   MS := AlgoSynLZ.StreamUnCompress(Stream, TRESTSTORAGEINMEMORY_MAGIC);
   if MS = nil then
     exit;
+  R.Init(MS.Memory, MS.Size);
   StorageLock(true, 'LoadFromBinary');
   try
     try
       // check header: expect same exact RTTI
-      R.Init(MS.Memory, MS.Size);
       R.VarUtf8(s);
       if (s <> '') and // 0='' in recent mORMot 1.18 format
          not IdemPropNameU(s, 'TSqlRecordProperties') then // old buggy format
@@ -3360,11 +3376,11 @@ begin
   MS := TMemoryStream.Create;
   W := TBufferWriter.Create(MS, 1 shl 20);
   try
+    // primitive magic and fields signature for file type identification
+    W.Write1(0); // ClassName='TSqlRecordProperties' in old buggy format
+    fStoredClassRecordProps.SaveBinaryHeader(W);
     StorageLock(false, 'SaveToBinary');
     try
-      // primitive magic and fields signature for file type identification
-      W.Write1(0); // ClassName='TSqlRecordProperties' in old buggy format
-      fStoredClassRecordProps.SaveBinaryHeader(W);
       // write IDs - in increasing order
       if fUnSortedID then
         fValues.CreateOrderedIndex(ndx, nil);
@@ -3485,7 +3501,7 @@ begin
   P := fStoredClassProps.Prop[FieldName];
   if P = nil then
     exit;
-  if P.PropertyIndex in fIsUnique then
+  if P.PropertyIndex in fStoredClassRecordProps.IsUniqueFieldsBits then
   begin
     InternalLog('EngineUpdateFieldIncrement(%) on UNIQUE %.%',
       [ID, fStoredClass, P.Name], sllDB);
@@ -3539,7 +3555,7 @@ begin
   P := fStoredClassRecordProps.Fields.ByRawUtf8Name(SetFieldName);
   if P = nil then
     exit; // don't allow setting ID field, which is Read Only
-  if P.PropertyIndex in fIsUnique then
+  if P.PropertyIndex in fStoredClassRecordProps.IsUniqueFieldsBits then
   begin
     InternalLog('EngineUpdateField on UNIQUE %.%', [fStoredClass, P.Name], sllDB);
     exit; { TODO : allow update UNIQUE field? }
@@ -4077,7 +4093,7 @@ begin
 end;
 
 procedure TRestStorageInMemoryExternal.StorageLock(WillModifyContent: boolean;
-  const msg: RawUtf8);
+  const msg: shortstring);
 begin
   inherited StorageLock(WillModifyContent, msg);
   if WillModifyContent and
@@ -4153,7 +4169,7 @@ begin
       fMax := store.fCount - 1;
       if Prepared.IsWhereOneFieldEquals then
         with Prepared.Where[0] do
-          if Column in store.fIsUnique then
+          if Column in store.fStoredClassRecordProps.IsUniqueFieldsBits then
           begin
             store.fStoredClassRecordProps.Fields.List[Column].SetFieldSqlVar(
               store.fSearchRec, Value);
@@ -4249,7 +4265,7 @@ begin
     if Prepared.IsWhereOneFieldEquals then
       with Prepared.Where[0] do
         if (Column >= 0) and
-           (Column in fStaticInMemory.fIsUnique) then
+           (Column in fStaticInMemory.fStoredClassRecordProps.IsUniqueFieldsBits) then
         begin
           Value.VType := ftNull; // mark TOrmVirtualTableCursorJson expects it
           OmitCheck := true;
