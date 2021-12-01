@@ -1836,11 +1836,11 @@ type
     // - returns nil if not found, or fill aContext.User/Group values if matchs
     // - this method will also check for outdated sessions, and delete them
     // - this method is not thread-safe: caller should use Sessions.Safe.ReadOnlyLock
-    function SessionAccess(Ctxt: TRestServerUriContext): TAuthSession;
+    function LockedSessionAccess(Ctxt: TRestServerUriContext): TAuthSession;
     /// delete a session from its index in Sessions[]
     // - will perform any needed clean-up, and log the event
     // - this method is not thread-safe: caller should use Sessions.Safe.WriteLock
-    procedure SessionDelete(aSessionIndex: integer; Ctxt: TRestServerUriContext);
+    procedure LockedSessionDelete(aSessionIndex: integer; Ctxt: TRestServerUriContext);
     /// SessionAccess will detect and delete outdated sessions, but you can call
     // this method to force checking for deprecated session now
     // - may be used e.g. from OnSessionCreate to limit the number of active sessions
@@ -5280,7 +5280,7 @@ begin // fServer.Auth() method-based service made fServer.Sessions.WriteLock
            (fUser.LogonName = uname) then
         begin
           Ctxt.fAuthSession := nil; // avoid GPF
-          fServer.SessionDelete(i, Ctxt);
+          fServer.LockedSessionDelete(i, Ctxt);
           Ctxt.Success;
           break;
         end;
@@ -5396,7 +5396,7 @@ begin
      (Ctxt.UriSessionSignaturePos + (18 + 8) <= length(Ctxt.Call^.Url)) and
      HexDisplayToCardinal(PAnsiChar(pointer(Ctxt.Call^.Url)) +
        Ctxt.UriSessionSignaturePos + 18, Ctxt.Session) then
-    result := fServer.SessionAccess(Ctxt);
+    result := fServer.LockedSessionAccess(Ctxt);
 end;
 
 
@@ -5636,7 +5636,7 @@ begin
   cookie := Ctxt.InCookie[REST_COOKIE_SESSION];
   if (length(cookie) = 8) and
      HexDisplayToCardinal(pointer(cookie), Ctxt.Session) then
-    result := fServer.SessionAccess(Ctxt)
+    result := fServer.LockedSessionAccess(Ctxt)
   else
     result := nil;
 end;
@@ -6835,7 +6835,7 @@ begin
   fStats.ClientConnect;
 end;
 
-procedure TRestServer.SessionDelete(aSessionIndex: integer;
+procedure TRestServer.LockedSessionDelete(aSessionIndex: integer;
   Ctxt: TRestServerUriContext);
 var
   a: TAuthSession;
@@ -6878,7 +6878,7 @@ begin
       begin
         if result = 0 then
           fSessions.Safe.WriteLock; // upgrade the lock
-        SessionDelete(i, nil);
+        LockedSessionDelete(i, nil);
         inc(result);
       end;
   finally
@@ -6901,7 +6901,7 @@ begin
   result := nil;
 end;
 
-function TRestServer.SessionAccess(Ctxt: TRestServerUriContext): TAuthSession;
+function TRestServer.LockedSessionAccess(Ctxt: TRestServerUriContext): TAuthSession;
 begin
   // caller of RetrieveSession/SessionAccess made fSessions.Safe.ReadOnlyLock
   if (self <> nil) and
@@ -6933,24 +6933,20 @@ end;
 
 function TRestServer.SessionGetUser(aSessionID: cardinal): TAuthUser;
 var
-  i: PtrInt;
-begin // seldom called: no need to optimize any further
+  s: TAuthSession;
+begin
   result := nil;
   if self = nil then
     exit;
   fSessions.Safe.ReadOnlyLock;
   try
-    for i := 0 to fSessions.Count - 1 do
-      with TAuthSession(fSessions.List[i]) do
-        if IDCardinal = aSessionID then
-        begin
-          if User <> nil then
-          begin
-            result := User.CreateCopy as fAuthUserClass;
-            result.GroupRights := nil; // it is not a true instance
-          end;
-          Break;
-        end;
+    s := FindSession(pointer(fSessions.List), fSessions.Count, aSessionID);
+    if (s <> nil) and
+       (s.User <> nil) then
+    begin
+      result := s.User.CreateCopy as fAuthUserClass;
+      result.GroupRights := nil; // it is not a true instance
+    end;
   finally
     fSessions.Safe.ReadOnlyUnLock;
   end;
