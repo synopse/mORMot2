@@ -2251,8 +2251,9 @@ end;
 function TMongoConnection.GetBsonAndFree(Query: TMongoRequestQuery): TBsonDocument;
 var
   W: TBsonWriter;
+  tmp: TTextWriterStackBuffer;
 begin
-  W := TBsonWriter.Create(TRawByteStringStream);
+  W := TBsonWriter.Create(tmp);
   try
     W.BSONDocumentBegin;
     GetRepliesAndFree(Query, ReplyBson, W); // W.Tag = item number in array

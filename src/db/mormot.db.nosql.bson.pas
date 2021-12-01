@@ -868,12 +868,12 @@ type
     /// flush the content and return the whole binary encoded stream
     // - call BsonAdjustDocumentsSize() to adjust all internal document sizes
     // - expect the TBsonWriter instance to have been created as such:
-    // ! TBsonWriter.Create(TRawByteStringStream);
+    // ! TBsonWriter.Create(TRawByteStringStream) or Create(tmp)
     procedure ToBsonDocument(var result: TBsonDocument); virtual;
     /// flush the content and return the whole document as a TBsonVariant
     // - call ToBsonDocument() to adjust all internal document sizes
     // - expect the TBsonWriter instance to have been created as such:
-    // ! TBsonWriter.Create(TRawByteStringStream);
+    // ! TBsonWriter.Create(TRawByteStringStream) or Create(tmp)
     procedure ToBsonVariant(var result: variant; Kind: TBsonElementType = betDoc);
   end;
 
@@ -3027,13 +3027,6 @@ str:    Kind := betString;
     end
     else if vt = cardinal(DocVariantVType) then
     begin
-      with TBsonWriter.Create(TRawByteStringStream) do // inlined Bson()
-      try
-        BsonWriteDoc(vdoc^);
-        ToBsonDocument(aTemp);
-      finally
-        Free;
-      end;
       if vdoc.IsObject then
         Kind := betDoc
       else if vdoc.IsArray then
@@ -3041,6 +3034,7 @@ str:    Kind := betString;
       else
         raise EBsonException.CreateUtf8('TBsonElement.FromVariant(doc,%)',
           [ToText(vdoc.Kind)^]);
+      aTemp := Bson(vdoc^);
       FromBson(pointer(aTemp));
       if ElementBytes < 0 then
         raise EBsonException.CreateUtf8('TBsonElement.FromVariant(docbson,%)',
@@ -4168,6 +4162,8 @@ begin
 end;
 
 function Bson(const doc: TDocVariantData): TBsonDocument;
+var
+  tmp: TTextWriterStackBuffer;
 begin
   if doc.VarType = varVariantByRef then
   begin
@@ -4175,8 +4171,9 @@ begin
     exit;
   end;
   if doc.VarType <> DocVariantType.VarType then
-    raise EBsonException.Create('doc is not a TDocVariant');
-  with TBsonWriter.Create(TRawByteStringStream) do
+    raise EBsonException.CreateUtf8(
+      'Bson(doc) is % not a TDocVariant', [doc.VarType]);
+  with TBsonWriter.Create(tmp) do
   try
     BsonWriteDoc(doc);
     ToBsonDocument(result);
@@ -4186,8 +4183,10 @@ begin
 end;
 
 function BsonFromIntegers(const Integers: array of integer): TBsonDocument;
+var
+  tmp: TTextWriterStackBuffer;
 begin
-  with TBsonWriter.Create(TRawByteStringStream) do
+  with TBsonWriter.Create(tmp) do
   try
     BsonWriteArrayOfInteger(Integers);
     ToBsonDocument(result);
@@ -4197,8 +4196,10 @@ begin
 end;
 
 function BsonFromInt64s(const Integers: array of Int64): TBsonDocument;
+var
+  tmp: TTextWriterStackBuffer;
 begin
-  with TBsonWriter.Create(TRawByteStringStream) do
+  with TBsonWriter.Create(tmp) do
   try
     BsonWriteArrayOfInt64(Integers);
     ToBsonDocument(result);
@@ -4212,6 +4213,7 @@ var
   W: TBsonWriter;
   name: RawUtf8;
   a: PtrInt;
+  tmp: TTextWriterStackBuffer;
 
   procedure WriteValue;
   var
@@ -4252,7 +4254,7 @@ var
   end;
 
 begin
-  W := TBsonWriter.Create(TRawByteStringStream);
+  W := TBsonWriter.Create(tmp);
   try
     W.BsonDocumentBegin;
     a := 0;
@@ -4274,8 +4276,9 @@ function BsonFieldSelector(const FieldNames: array of RawUtf8): TBsonDocument;
 var
   i: PtrInt;
   W: TBsonWriter;
+  tmp: TTextWriterStackBuffer;
 begin
-  W := TBsonWriter.Create(TRawByteStringStream, 512);
+  W := TBsonWriter.Create(tmp);
   try
     W.BsonDocumentBegin;
     for i := 0 to high(FieldNames) do
@@ -4299,8 +4302,9 @@ function JsonBufferToBsonDocument(Json: PUtf8Char; var doc: TBsonDocument;
   DoNotTryExtendedMongoSyntax: boolean): TBsonElementType;
 var
   W: TBsonWriter;
+  tmp: TTextWriterStackBuffer;
 begin
-  W := TBsonWriter.Create(TRawByteStringStream);
+  W := TBsonWriter.Create(tmp);
   try
     W.BsonWriteDocFromJson(Json, nil, result, DoNotTryExtendedMongoSyntax);
     W.ToBsonDocument(doc);
@@ -4317,6 +4321,7 @@ var
   EndOfObject: AnsiChar;
   Kind: TBsonElementType;
   n: integer;
+  tmp: TTextWriterStackBuffer;
 begin
   result := false;
   if Json = nil then
@@ -4326,7 +4331,7 @@ begin
     exit;
   Json := GotoNextNotSpace(Json + 1);
   n := 0;
-  W := TBsonWriter.Create(TRawByteStringStream, 16384);
+  W := TBsonWriter.Create(tmp);
   try
     repeat
       Json := W.BsonWriteDocFromJson(Json, @EndOfObject, Kind,
