@@ -253,19 +253,18 @@ begin
 end;
 
 var
-  _QueryPerformanceFrequency: QWord; // is documented as stable after boot
+  // value is documented as stable after boot, so we get it at startup
+  _QueryPerformanceFrequency: QWord;
+  // from HyperV or if HPET disabled e.g. -> direct division
+  _QueryPerformanceFrequencyPer10: boolean;
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
-var
-  cnt, freq: QWord;
 begin
-  QueryPerformanceCounter(PInt64(@cnt)^);
-  freq := _QueryPerformanceFrequency;
-  if freq = 10000000 then
-    // from HyperV or if HPET disabled e.g. -> faster division by a constant
-    Value := cnt div 10
+  QueryPerformanceCounter(PInt64(@Value)^);
+  if _QueryPerformanceFrequencyPer10 then
+    Value := QWord(Value) div 10 // faster division by a constant (especially on FPC_64)
   else
-    Value := (cnt * 1000000) div freq;
+    Value := QWord((QWord(Value) * 1000000) div _QueryPerformanceFrequency);
 end;
 
 const
@@ -3268,6 +3267,7 @@ begin
   QueryPerformanceFrequency(PInt64(@_QueryPerformanceFrequency)^);
   if _QueryPerformanceFrequency = 0 then
     raise Exception.Create('QueryPerformanceFrequency=0'); // paranoid
+  _QueryPerformanceFrequencyPer10 := _QueryPerformanceFrequency = 10000000;
   IsWow64Process := GetProcAddress(h, 'IsWow64Process');
   Res := false;
   IsWow64 := Assigned(IsWow64Process) and
