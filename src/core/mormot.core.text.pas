@@ -4941,7 +4941,7 @@ begin
   if L > 0 then
   begin
     {$ifdef DEBUG} assert(L <= 8); {$endif}
-    if BEnd - B <= L then
+    if B >= BEnd then
       FlushToStream;
     PInt64(B + 1)^ := PInt64(@Text[1])^;
     inc(B, L);
