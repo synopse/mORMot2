@@ -1669,7 +1669,7 @@ type
     function Algo(hasher: TCryptHasher): RawUtf8;
   public
     constructor Create(const name: RawUtf8); overload; override;
-    constructor Create(osa: TOpenSslAsym); overload;
+    constructor Create(osa: TOpenSslAsym); reintroduce; overload; 
     procedure GeneratePem(out pub, priv: RawUtf8; const privpwd: RawUtf8); override;
     function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
       const priv: RawByteString; out sig: RawByteString;
