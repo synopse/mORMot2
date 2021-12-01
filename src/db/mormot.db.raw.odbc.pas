@@ -889,26 +889,77 @@ const
   {$endif OSWINDOWS}
 
   ODBC_ENTRIES: array[0..66] of PAnsiChar = (
-    'SQLAllocEnv', 'SQLAllocHandle', 'SQLAllocStmt',
-    'SQLBindCol', 'SQLBindParameter', 'SQLCancel', 'SQLCloseCursor',
-    'SQLColAttribute', 'SQLColAttributeW', 'SQLColumns',
-    'SQLColumnsW', 'SQLStatistics', 'SQLStatisticsW', 'SQLConnect',
-    'SQLConnectW', 'SQLCopyDesc', 'SQLDataSources', 'SQLDataSourcesW',
-    'SQLDescribeCol', 'SQLDescribeColW', 'SQLDisconnect', 'SQLEndTran',
-    'SQLError', 'SQLErrorW', 'SQLExecDirect', 'SQLExecDirectW', 'SQLExecute',
-    'SQLFetch', 'SQLFetchScroll', 'SQLFreeConnect', 'SQLFreeEnv',
-    'SQLFreeHandle', 'SQLFreeStmt', 'SQLGetConnectAttr', 'SQLGetConnectAttrW',
-    'SQLGetCursorName', 'SQLGetCursorNameW', 'SQLGetData', 'SQLGetDescField',
-    'SQLGetDescFieldW', 'SQLGetDescRec', 'SQLGetDescRecW', 'SQLGetDiagField',
-    'SQLGetDiagFieldW', 'SQLGetDiagRec', 'SQLGetDiagRecW', 'SQLMoreResults',
-    'SQLPrepare', 'SQLPrepareW', 'SQLRowCount', 'SQLNumResultCols', 'SQLGetInfo',
-    'SQLGetInfoW', 'SQLSetStmtAttr', 'SQLSetStmtAttrW', 'SQLSetEnvAttr',
-    'SQLSetConnectAttr', 'SQLSetConnectAttrW', 'SQLTables', 'SQLTablesW',
-    'SQLForeignKeys', 'SQLForeignKeysW', 'SQLDriverConnect', 'SQLDriverConnectW',
-    'SQLProcedureColumnsA', 'SQLProcedureColumnsW', 'SQLProcedures');
+    'SQLAllocEnv',
+    'SQLAllocHandle',
+    'SQLAllocStmt',
+    'SQLBindCol',
+    'SQLBindParameter',
+    'SQLCancel',
+    'SQLCloseCursor',
+    'SQLColAttribute',
+    'SQLColAttributeW',
+    'SQLColumns',
+    'SQLColumnsW',
+    'SQLStatistics',
+    'SQLStatisticsW',
+    'SQLConnect',
+    'SQLConnectW',
+    'SQLCopyDesc',
+    'SQLDataSources',
+    'SQLDataSourcesW',
+    'SQLDescribeCol',
+    'SQLDescribeColW',
+    'SQLDisconnect',
+    'SQLEndTran',
+    'SQLError',
+    'SQLErrorW',
+    'SQLExecDirect',
+    'SQLExecDirectW',
+    'SQLExecute',
+    'SQLFetch',
+    'SQLFetchScroll',
+    'SQLFreeConnect',
+    'SQLFreeEnv',
+    'SQLFreeHandle',
+    'SQLFreeStmt',
+    'SQLGetConnectAttr',
+    'SQLGetConnectAttrW',
+    'SQLGetCursorName',
+    'SQLGetCursorNameW',
+    'SQLGetData',
+    'SQLGetDescField',
+    'SQLGetDescFieldW',
+    'SQLGetDescRec',
+    'SQLGetDescRecW',
+    'SQLGetDiagField',
+    'SQLGetDiagFieldW',
+    'SQLGetDiagRec',
+    'SQLGetDiagRecW',
+    'SQLMoreResults',
+    'SQLPrepare',
+    'SQLPrepareW',
+    'SQLRowCount',
+    'SQLNumResultCols',
+    'SQLGetInfo',
+    'SQLGetInfoW',
+    'SQLSetStmtAttr',
+    'SQLSetStmtAttrW',
+    'SQLSetEnvAttr',
+    'SQLSetConnectAttr',
+    'SQLSetConnectAttrW',
+    'SQLTables',
+    'SQLTablesW',
+    'SQLForeignKeys',
+    'SQLForeignKeysW',
+    'SQLDriverConnect',
+    'SQLDriverConnectW',
+    'SQLProcedureColumnsA',
+    'SQLProcedureColumnsW',
+    'SQLProcedures');
 
 
 {$ifdef OSWINDOWS}
+
 function ODBCInstalledDriversList(const aIncludeVersion: boolean;
   var aDrivers: TStrings): boolean;
 
@@ -923,8 +974,8 @@ function ODBCInstalledDriversList(const aIncludeVersion: boolean;
   end;
 
 var
-  I: PtrInt;
-  lDriver: string;
+  i: PtrInt;
+  s: string;
 begin
   with TRegistry.Create do
   try
@@ -937,15 +988,15 @@ begin
         aDrivers := TStringList.Create;
       GetValueNames(aDrivers);
       if aIncludeVersion then
-        for I := 0 to aDrivers.Count - 1 do
+        for i := 0 to aDrivers.Count - 1 do
         begin
           CloseKey;
-          result := OpenKeyReadOnly('Software\ODBC\ODBCINST.INI\'  +  aDrivers[I]);
+          result := OpenKeyReadOnly('Software\ODBC\ODBCINST.INI\'  +  aDrivers[i]);
           if result then
           begin
             // expand environment variable, i.e %windir%
-            lDriver := ExpandEnvVars(ReadString('Driver'));
-            aDrivers[I] := aDrivers[I]  +  '='  +  GetFullFileVersion(lDriver);
+            s := ExpandEnvVars(ReadString('Driver'));
+            aDrivers[i] := aDrivers[i]  +  '='  +  GetFullFileVersion(s);
           end;
         end;
     end;
@@ -953,8 +1004,11 @@ begin
     Free;
   end;
 end;
+
 {$else}
+
 // TODO: ODBCInstalledDriversList for Linux
+
 {$endif OSWINDOWS}
 
 
