@@ -2389,6 +2389,9 @@ function LockedCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean; 
 /// redirect to FPC InterlockedExchangeAdd(pointer) on non Intel CPU
 procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt); inline;
 
+/// redirect to FPC InterlockedExchangeAdd(pointer) on non Intel CPU
+procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt); inline;
+
 {$endif CPUINTEL}
 
 {$ifndef FPC}
