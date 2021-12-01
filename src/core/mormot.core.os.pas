@@ -5372,7 +5372,7 @@ end;
 {$ifdef ASMX64}
 
 procedure TRWLock.ReadOnlyLock;
-asm     // since we call SwitchToThread we need to have a stackframe
+asm     // since we may call SwitchToThread we need to have a stackframe
         {$ifndef WIN64ABI}
         mov     rcx, rdi      // rcx = self
         {$endif WIN64ABI}
@@ -5398,7 +5398,7 @@ end;
 
 procedure TRWLock.ReadOnlyLock;
   {$ifdef FPCWINDOWS} nostackframe; assembler; {$endif}
-asm     // since we call SwitchToThread we need to have a stackframe
+asm     // since we may call SwitchToThread we need to have a stackframe
         push    ebx
         mov     ebx, eax
 @retry: mov     ecx, SPIN_COUNT

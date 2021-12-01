@@ -873,25 +873,27 @@ type
   // Event-driven approach under Linux/POSIX
   TSynThreadPool = class
   protected
+    {$ifndef USE_WINIOCP}
+    fSafe: PtrUInt; // LightLock/LightUnlock non-rentrant exclusive lock
+    {$endif USE_WINIOCP}
     fWorkThread: TSynThreadPoolWorkThreads;
     fWorkThreadCount: integer;
     fRunningThreads: integer;
     fExceptionsCount: integer;
     fOnThreadTerminate: TOnNotifyThread;
     fOnThreadStart: TOnNotifyThread;
-    fTerminated: boolean;
-    fContentionAbortCount: cardinal;
     fContentionTime: Int64;
+    fContentionAbortCount: cardinal;
     fContentionCount: cardinal;
     fContentionAbortDelay: integer;
     fName: RawUtf8;
+    fTerminated: boolean;
     {$ifdef USE_WINIOCP}
     fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
     fQueuePendingContext: boolean;
     fPendingContext: array of pointer;
     fPendingContextCount: integer;
-    fSafe: TRTLCriticalSection;
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
     function QueueLength: integer; virtual;
@@ -906,10 +908,10 @@ type
     /// initialize a thread pool with the supplied number of threads
     // - abstract Task() virtual method will be called by one of the threads
     // - up to 256 threads can be associated to a Thread Pool
-    // - can optionaly accept aOverlapHandle - a handle previously
-    // opened for overlapped I/O (IOCP) under Windows
-    // - aQueuePendingContext=true will store the pending context into
-    // an internal queue, so that Push() always returns true
+    // - on Windows, can optionaly accept aOverlapHandle - a handle previously
+    // opened using Windows Overlapped I/O (IOCP)
+    // - on POSIX, aQueuePendingContext=true will store the pending context into
+    // an internal queue, so that Push() returns true until the queue is full
     {$ifdef USE_WINIOCP}
     constructor Create(NumberOfThreads: integer = 32;
       aOverlapHandle: THandle = INVALID_HANDLE_VALUE; const aName: RawUtf8 = '');
@@ -932,8 +934,10 @@ type
     /// may be called after Push() returned false to see if queue was actually full
     // - returns false if QueuePendingContext is false
     function QueueIsFull: boolean;
-    /// parameter as supplied to Create constructor
-    property QueuePendingContext: boolean read fQueuePendingContext;
+    /// if the pool should maintain an internal queue when all threads are busy
+    // - supplied as Create constructor parameter
+    property QueuePendingContext: boolean
+      read fQueuePendingContext;
     {$endif USE_WINIOCP}
     /// low-level access to the threads defined in this thread pool
     property WorkThread: TSynThreadPoolWorkThreads
@@ -2595,7 +2599,6 @@ begin
   if fRequestQueue = 0 then
     exit;
   {$else}
-  InitializeCriticalSection(fSafe);
   fQueuePendingContext := aQueuePendingContext;
   {$endif USE_WINIOCP}
   // now create the worker threads
@@ -2634,8 +2637,6 @@ begin
   finally
     {$ifdef USE_WINIOCP}
     CloseHandle(fRequestQueue);
-    {$else}
-    DeleteCriticalSection(fSafe);
     {$endif USE_WINIOCP}
   end;
   inherited Destroy;
@@ -2661,34 +2662,34 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
   begin
     result := false; // queue is full
     found := nil;
-    EnterCriticalsection(fSafe);
-    try
-      thread := pointer(fWorkThread);
-      for i := 1 to fWorkThreadCount do
-        if thread^.fProcessingContext = nil then
-        begin
-          found := thread^;
-          found.fProcessingContext := aContext;
-          result := true; // found one available thread
-          exit;
-        end
-        else
-          inc(thread);
-      if not fQueuePendingContext then
+    LightLock(fSafe);
+    thread := pointer(fWorkThread);
+    for i := 1 to fWorkThreadCount do
+      if thread^.fProcessingContext = nil then
+      begin
+        found := thread^;
+        found.fProcessingContext := aContext;
+        LightUnLock(fSafe);
+        found.fEvent.SetEvent; // notify outside of the fSafe lock
+        result := true; // found one available thread
         exit;
+      end
+      else
+        inc(thread);
+    if fQueuePendingContext then
+    begin
       n := fPendingContextCount;
-      if n + fWorkThreadCount > QueueLength then
-        exit; // too many connection limit reached (see QueueIsFull)
-      if n = length(fPendingContext) then
-        SetLength(fPendingContext, NextGrow(n));
-      fPendingContext[n] := aContext;
-      inc(fPendingContextCount);
-      result := true; // added in pending queue
-    finally
-      LeaveCriticalsection(fSafe);
-      if found <> nil then
-        found.fEvent.SetEvent; // rather notify outside of the fSafe lock
+      if n + fWorkThreadCount <= QueueLength then
+      begin
+        // not too many connection limit reached (see QueueIsFull)
+        if n = length(fPendingContext) then
+          SetLength(fPendingContext, NextGrow(n));
+        fPendingContext[n] := aContext;
+        inc(fPendingContextCount);
+        result := true; // added in pending queue
+      end;
     end;
+    LightUnLock(fSafe);
   end;
 
 {$endif USE_WINIOCP}
@@ -2710,7 +2711,8 @@ begin
     tix := GetTickCount64;
     starttix := tix;
     endtix := tix + fContentionAbortDelay; // default 5 sec
-    repeat // during this delay, no new connection is ACCEPTed
+    repeat
+      // during this delay, no new connection is ACCEPTed
       if tix - starttix < 50 then // wait for an available slot in the queue
         SleepHiRes(1)
       else
@@ -2746,7 +2748,7 @@ end;
 function TSynThreadPool.QueueIsFull: boolean;
 begin
   result := fQueuePendingContext and
-    (GetPendingContextCount + fWorkThreadCount > QueueLength);
+            (GetPendingContextCount + fWorkThreadCount > QueueLength);
 end;
 
 function TSynThreadPool.PopPendingContext: pointer;
@@ -2757,7 +2759,7 @@ begin
      (fPendingContext = nil) or
      (fPendingContextCount = 0) then
     exit;
-  EnterCriticalsection(fSafe);
+  LightLock(fSafe);
   try
     if fPendingContextCount > 0 then
     begin
@@ -2766,10 +2768,10 @@ begin
       MoveFast(fPendingContext[1], fPendingContext[0],
         fPendingContextCount * SizeOf(pointer));
       if fPendingContextCount = 128 then
-        SetLength(fPendingContext, 128); // small queue when congestion is resolved
+        SetLength(fPendingContext, 128); // reduce when congestion is resolved
     end;
   finally
-    LeaveCriticalsection(fSafe);
+    LightUnLock(fSafe);
   end;
 end;
 
@@ -2845,18 +2847,18 @@ begin
       fEvent.WaitFor(INFINITE);
       if fOwner.fTerminated then
         break;
-      EnterCriticalSection(fOwner.fSafe);
+      LightLock(fOwner.fSafe);
       ctxt := fProcessingContext;
-      LeaveCriticalSection(fOwner.fSafe);
+      LightUnLock(fOwner.fSafe);
       if ctxt <> nil then
       begin
         repeat
           DoTask(ctxt);
           ctxt := fOwner.PopPendingContext; // unqueue any pending context
         until ctxt = nil;
-        EnterCriticalSection(fOwner.fSafe);
+        LightLock(fOwner.fSafe);
         fProcessingContext := nil; // indicates this thread is now available
-        LeaveCriticalSection(fOwner.fSafe);
+        LightUnLock(fOwner.fSafe);
       end;
      {$endif USE_WINIOCP}
     until fOwner.fTerminated or
