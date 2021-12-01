@@ -2304,7 +2304,6 @@ type
     /// retrieve an instance of a given class per RTTI
     // - previously registered by SetPrivateSlot
     function GetPrivateSlot(aClass: TClass): pointer;
-      {$ifdef HASINLINE}inline;{$endif}
     /// low-level RTTI kind, taken from Rtti property
     property Kind: TRttiKind
       read fCache.Kind;
@@ -2372,6 +2371,7 @@ type
     // - stores e.g. the TOrmProperties ORM information of a TOrm,
     // or the TSynLogFamily of a TSynLog instance
     // - is owned, as TObject, by this TRttiCustom
+    // - assignment is usually protected by the Rtti.RegisterLock
     property PrivateSlot: pointer
       read fPrivateSlot write fPrivateSlot;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
@@ -2391,13 +2391,13 @@ type
   PRttiCustom = ^TRttiCustom;
 
   /// meta-class of TRttiCustom
-  // - is usually a TRttiCustom or a TRttiJson class type
+  // - is usually a TRttiJson class type once mormot.core.json.pas is linked
   TRttiCustomClass = class of TRttiCustom;
 
   /// store PRttiInfo/TRttiCustom pairs for TRttiCustomList hash table
   TRttiCustomListPair = record
-    RttiInfoRttiCustom: TPointerDynArray;
-    CurrentEnd: pointer;
+    Pairs: TPointerDynArray;
+    PairsEnd: pointer;
   end;
   PRttiCustomListPair = ^TRttiCustomListPair;
 
@@ -2406,7 +2406,7 @@ type
     /// speedup search by name e.g. from a loop
     Last: TRttiCustom;
     /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by Name[0][1]
-    Hash: array[0..RTTICUSTOMTYPEINFOHASH] of TRttiCustomListPair;
+    PerHash: array[0..RTTICUSTOMTYPEINFOHASH] of TRttiCustomListPair;
   end;
   PRttiCustomListPairs = ^TRttiCustomListPairs;
 
@@ -2414,10 +2414,10 @@ type
   // - avoid link to mormot.core.data hash table, with a fast access
   // - consume e.g. around 50KB of memory for all mormot2tests types
   TRttiCustomListHashTable = record
-    /// for DoRegister thread-safety - no need of TSynLocker padding
-    Lock: TRTLCriticalSection;
+    /// efficient PerKind[].PerHash[].Pairs thread-safety during Find/AddToPairs
+    Pairs: TRWLock;
     /// per-Kind and per-Name hash table of PRttiInfo/TRttiCustom pairs
-    Pairs: array[succ(low(TRttiKind)) .. high(TRttiKind)] of TRttiCustomListPairs;
+    PerKind: array[succ(low(TRttiKind)) .. high(TRttiKind)] of TRttiCustomListPairs;
   end;
 
   /// maintain a thread-safe list of PRttiInfo/TRttiCustom/TRttiJson registration
@@ -2434,13 +2434,16 @@ type
     function DoRegister(Info: PRttiInfo): TRttiCustom; overload;
     function DoRegister(ObjectClass: TClass): TRttiCustom; overload;
     function DoRegister(ObjectClass: TClass; ToDo: TRttiCustomFlags): TRttiCustom; overload;
-    procedure Add(Instance: TRttiCustom);
+    procedure AddToPairs(Instance: TRttiCustom);
     procedure SetGlobalClass(RttiClass: TRttiCustomClass); // ensure Count=0
     procedure Init;
     procedure Done;
   public
     /// how many TRttiCustom instances have been registered
     Count: integer;
+    /// a global lock shared for high-level RTTI registration process
+    // - is used e.g. to protect DoRegister() or TRttiCustom.PrivateSlot
+    RegisterLock: TRTLCriticalSection;
     /// how many TRttiCustom instances have been registered for a given type
     Counts: array[succ(low(TRttiKind)) .. high(TRttiKind)] of integer;
     /// efficient search of TRttiCustom from a given RTTI TypeInfo()
@@ -2614,10 +2617,6 @@ type
     // - the RTTI information will here be defined as plain text
     function RegisterFromText(const TypeName: RawUtf8;
       const RttiDefinition: RawUtf8): TRttiCustom; overload;
-    /// low-level access to the global mutex associated with this RTTI list
-    procedure DoLock;
-    /// low-level access to the global mutex associated with this RTTI list
-    procedure DoUnLock;
     /// default property to access a given RTTI TypeInfo() customization
     // - you can access or register one type by using this default property:
     // ! Rtti[TypeInfo(TMyClass)].Props.NameChange('old', 'new')
@@ -7261,7 +7260,7 @@ begin
   // initialize process
   SetParserType(ParserType, pctNone);
   // register to the internal list
-  Rtti.Add(self);
+  Rtti.AddToPairs(self);
 end;
 
 function {%H-}_New_NotImplemented(Rtti: TRttiCustom): pointer;
@@ -7629,35 +7628,43 @@ begin
   fFlags := fFlags + Props.AdjustAfterAdded;
 end;
 
-function TRttiCustom.GetPrivateSlot(aClass: TClass): pointer;
+function FindPrivateSlot(c: TClass; slot: PPointer): pointer;
+  {$ifdef HASINLINE}inline;{$endif}
 var
   n: integer;
-  slot: PPointer;
 begin
-  slot := pointer(fPrivateSlots);
-  if slot <> nil then
-  begin
-    result := slot^;
-    if PClass(result)^ = aClass then
-      exit;
-    n := PDALen(PAnsiChar(slot) - _DALEN)^ + (_DAOFF - 1);
-    if n <> 0 then
-      repeat
-        inc(slot);
-        result := slot^;
-        if PClass(result)^ = aClass then
-          exit;
-        dec(n);
-      until n = 0;
-  end;
+  result := slot^;
+  if PClass(result)^ = c then // if fPrivateSlots[0].ClassType = c then
+    exit;
+  n := PDALen(PAnsiChar(slot) - _DALEN)^ + (_DAOFF - 1);
+  if n <> 0 then
+    repeat
+      inc(slot);
+      result := slot^;
+      if PClass(result)^ = c then
+        exit;
+      dec(n);
+    until n = 0;
   result := nil;
+end;
+
+function TRttiCustom.GetPrivateSlot(aClass: TClass): pointer;
+begin
+  // is used by GetWeakZero() so benefits from our multi-read lock
+  Rtti.Table^.Pairs.ReadOnlyLock;
+  result := pointer(fPrivateSlots);
+  if result <> nil then
+    result := FindPrivateSlot(aClass, result);
+  Rtti.Table^.Pairs.ReadOnlyUnLock;
 end;
 
 function TRttiCustom.SetPrivateSlot(aObject: TObject): pointer;
 begin
-  Rtti.DoLock;
+  Rtti.Table^.Pairs.WriteLock;
   try
-    result := GetPrivateSlot(PClass(aObject)^);
+    result := pointer(fPrivateSlots);
+    if result <> nil then
+      result := FindPrivateSlot(PClass(aObject)^, result); // search again
     if result = nil then
     begin
       ObjArrayAdd(fPrivateSlots, aObject);
@@ -7666,7 +7673,7 @@ begin
     else
       aObject.Free;
   finally
-    Rtti.DoUnLock;
+    Rtti.Table^.Pairs.WriteUnLock;
   end;
 end;
 
@@ -7676,7 +7683,7 @@ end;
 procedure TRttiCustomList.Init;
 begin
   Table := AllocMem(SizeOf(Table^)); // 15KB zeroed hash table allocation
-  InitializeCriticalSection(Table^.Lock);
+  InitializeCriticalSection(RegisterLock);
   fGlobalClass := TRttiCustom;
 end;
 
@@ -7686,24 +7693,17 @@ var
 begin
   for i := Count - 1 downto 0 do
     Instances[i].Free;
-  DeleteCriticalSection(Table^.Lock);
   Dispose(Table);
+  DeleteCriticalSection(RegisterLock);
 end;
 
-function TRttiCustomList.Find(Info: PRttiInfo): TRttiCustom;
-var
-  P: PRttiCustomListPair;
+function LockedFind(Info: PRttiInfo; P: PRttiCustomListPair): TRttiCustom;
+  {$ifdef HASINLINE}inline;{$endif}
 begin
-  if Info^.Kind <> rkClass then
+  result := pointer(P^.Pairs);
+  if result <> nil then
   begin
-    // our optimized "hash table of the poor" (tm) lookup
-    P := @Table^.Pairs[Info^.Kind].Hash[(PtrUInt(Info.RawName[0]) xor
-           PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH];
-    // note: we tried to include RawName[2] and $df, but with no gain
-    result := pointer(P^.RttiInfoRttiCustom);
-    if result = nil then
-      exit;
-    P := P^.CurrentEnd;
+    P := P^.PairsEnd;
     repeat
       // efficient brute force search within L1 cache
       if PPointer(result)^ <> Info then
@@ -7717,6 +7717,22 @@ begin
       result := PPointerArray(result)[1]; // found
       exit;
     until false;
+  end;
+end;
+
+function TRttiCustomList.Find(Info: PRttiInfo): TRttiCustom;
+var
+  P: PRttiCustomListPair;
+begin
+  if Info^.Kind <> rkClass then
+  begin
+    // our optimized "hash table of the poor" (tm) lookup
+    P := @Table^.PerKind[Info^.Kind].PerHash[(PtrUInt(Info.RawName[0]) xor
+           PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH];
+    // note: we tried to include RawName[2] and $df, but with no gain
+    Table^.Pairs.ReadOnlyLock;
+    result := LockedFind(Info, P);
+    Table^.Pairs.ReadOnlyUnLock;
   end
   else
     // direct lookup of the vmtAutoTable slot for classes
@@ -7779,7 +7795,7 @@ begin
      (Name <> nil) and
      (NameLen > 0) then
   begin
-    K := @Table^.Pairs[Kind];
+    K := @Table^.PerKind[Kind];
     // try latest found value e.g. calling from JsonRetrieveObjectRttiCustom()
     result := K^.Last;
     if (result <> nil) and
@@ -7787,14 +7803,15 @@ begin
        IdemPropNameUSameLenNotNull(pointer(result.Name), Name, NameLen) then
       exit;
     // our optimized "hash table of the poor" (tm) lookup
-    P := @K^.Hash[(PtrUInt(NameLen) xor PtrUInt(Name[0])) and RTTICUSTOMTYPEINFOHASH];
-    result := pointer(P^.RttiInfoRttiCustom);
+    P := @K^.PerHash[(PtrUInt(NameLen) xor PtrUInt(Name[0]))
+           and RTTICUSTOMTYPEINFOHASH];
+    Table^.Pairs.ReadOnlyLock;
+    result := pointer(P^.Pairs);
     if result <> nil then
-    begin
-      result := FindNameInPairs(pointer(result), P^.CurrentEnd, Name, NameLen);
-      if result <> nil then
-        K^.Last := result;
-    end;
+      result := FindNameInPairs(pointer(result), P^.PairsEnd, Name, NameLen);
+    Table^.Pairs.ReadOnlyUnLock;
+    if result <> nil then
+      K^.Last := result;
   end
   else
     result := nil;
@@ -7811,7 +7828,7 @@ begin
   begin
     if Kinds = [] then
       Kinds := rkAllTypes;
-    for k := low(Table^.Pairs) to high(Table^.Pairs) do
+    for k := low(Table^.PerKind) to high(Table^.PerKind) do
       if k in Kinds then
       begin
         result := Find(Name, NameLen, k);
@@ -7834,18 +7851,18 @@ var
   p: PRttiCustomListPair;
   pp: PPointerArray;
 begin
-  mormot.core.os.EnterCriticalSection(Table^.Lock);
+  Table^.Pairs.ReadOnlyLock;
   try
     if ElemInfo <> nil then
     begin
-      k := @Table^.Pairs[rkDynArray];
-      for i := 0 to high(k^.Hash) do
+      k := @Table^.PerKind[rkDynArray];
+      for i := 0 to high(k^.PerHash) do
       begin
-        p := @k.Hash[i];
-        pp := pointer(p^.RttiInfoRttiCustom);
+        p := @k.PerHash[i];
+        pp := pointer(p^.Pairs);
         if pp <> nil then
         begin
-          p := p^.CurrentEnd;
+          p := p^.PairsEnd;
           repeat
             result := pp[1]; // PRttiInfo/TRttiCustom pairs
             if (result.ArrayRtti <> nil) and
@@ -7858,7 +7875,7 @@ begin
     end;
     result := nil;
   finally
-    mormot.core.os.LeaveCriticalSection(Table^.Lock);
+    Table^.Pairs.ReadOnlyUnLock;
   end;
 end;
 
@@ -7874,16 +7891,6 @@ begin
     result := nil;
 end;
 
-procedure TRttiCustomList.DoLock;
-begin
-  mormot.core.os.EnterCriticalSection(Table^.Lock);
-end;
-
-procedure TRttiCustomList.DoUnLock;
-begin
-  mormot.core.os.LeaveCriticalSection(Table^.Lock);
-end;
-
 function TRttiCustomList.DoRegister(Info: PRttiInfo): TRttiCustom;
 begin
   if Info = nil then
@@ -7891,15 +7898,15 @@ begin
     result := nil;
     exit;
   end;
-  mormot.core.os.EnterCriticalSection(Table^.Lock);
+  mormot.core.os.EnterCriticalSection(RegisterLock);
   try
-    result := Find(Info); // search again (for thread safety)
+    result := Find(Info);  // search again (within RegisterLock context)
     if result <> nil then
       exit; // already registered in the background
     result := GlobalClass.Create(Info);
-    Add(result);
+    AddToPairs(result);
   finally
-    mormot.core.os.LeaveCriticalSection(Table^.Lock);
+    mormot.core.os.LeaveCriticalSection(RegisterLock);
   end;
   assert(Find(Info) = result); // paranoid check
 end;
@@ -7914,7 +7921,7 @@ begin
   else
   begin
     // generate fake RTTI for classes without {$M+}, e.g. TObject or Exception
-    mormot.core.os.EnterCriticalSection(Table^.Lock);
+    mormot.core.os.EnterCriticalSection(RegisterLock);
     try
       result := Find(ObjectClass); // search again (for thread safety)
       if result <> nil then
@@ -7924,7 +7931,7 @@ begin
       result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
       GetTypeData(result.fCache.Info)^.ClassType := ObjectClass;
     finally
-      mormot.core.os.LeaveCriticalSection(Table^.Lock);
+      mormot.core.os.LeaveCriticalSection(RegisterLock);
     end;
   end;
 end;
@@ -7934,7 +7941,7 @@ var
   i: integer;
   p: PRttiCustomProp;
 begin
-  mormot.core.os.EnterCriticalSection(Table^.Lock);
+  mormot.core.os.EnterCriticalSection(RegisterLock);
   try
     result := DoRegister(ObjectClass);
     if (rcfAutoCreateFields in ToDo) and
@@ -7963,30 +7970,33 @@ begin
       include(result.fFlags, rcfAutoCreateFields); // should be set once defined
     end;
   finally
-    mormot.core.os.LeaveCriticalSection(Table^.Lock);
+    mormot.core.os.LeaveCriticalSection(RegisterLock);
   end;
 end;
 
-procedure TRttiCustomList.Add(Instance: TRttiCustom);
+procedure TRttiCustomList.AddToPairs(Instance: TRttiCustom);
 var
   hash, n: PtrInt;
   P: PRttiCustomListPair;
-begin // call is made within Lock..UnLock
+begin
+  // call is made within RegisterLock but when resizing P^.Pairs,
+  // Table^.PairsSafe.WriteLock should be used
   hash := (PtrUInt(Instance.Info.RawName[0]) xor
            PtrUInt(Instance.Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH;
-  P := @Table^.Pairs[Instance.Kind].Hash[hash];
-  n := length(P^.RttiInfoRttiCustom);
-  if (n = 0) or
-     (@P^.RttiInfoRttiCustom[n] = P^.CurrentEnd) then
-  begin
-    SetLength(P^.RttiInfoRttiCustom, n + 32); // seldom resize for thread safety
-    P^.CurrentEnd := @P^.RttiInfoRttiCustom[n];
+  P := @Table^.PerKind[Instance.Kind].PerHash[hash];
+  Table^.Pairs.WriteLock;
+  try
+    n := length(P^.Pairs);
+    SetLength(P^.Pairs, n + 2);
+    P^.PairsEnd := @P^.Pairs[n];
+    PPointerArray(P^.PairsEnd)[0] := Instance.Info;
+    PPointerArray(P^.PairsEnd)[1] := Instance;
+    P^.PairsEnd := @PPointerArray(P^.PairsEnd)[2];
+    ObjArrayAddCount(Instances, Instance, Count); // to release memory
+    inc(Counts[Instance.Kind]);
+  finally
+    Table^.Pairs.WriteUnLock;
   end;
-  PPointerArray(P^.CurrentEnd)[0] := Instance.Info;
-  PPointerArray(P^.CurrentEnd)[1] := Instance;
-  P^.CurrentEnd := @PPointerArray(P^.CurrentEnd)[2];
-  ObjArrayAddCount(Instances, Instance, Count); // to release memory
-  inc(Counts[Instance.Kind]);
 end;
 
 procedure TRttiCustomList.SetGlobalClass(RttiClass: TRttiCustomClass);
@@ -8163,7 +8173,8 @@ begin
      not (DynArrayOrRecord^.Kind in rkRecordOrDynArrayTypes) then
     raise ERttiException.Create('Rtti.RegisterFromText(DynArrayOrRecord?)');
   result := RegisterType(DynArrayOrRecord);
-  mormot.core.os.EnterCriticalSection(Table^.Lock);
+  // usually done once at startup from main thread, so RegisterLock is safe
+  mormot.core.os.EnterCriticalSection(RegisterLock);
   try
     if result.Kind = rkDynArray then
       if result.ArrayRtti = nil then
@@ -8189,7 +8200,7 @@ begin
       result.Props.SetFromRecordExtendedRtti(result.Info); // only for Delphi 2010+
     result.SetParserType(result.Parser, result.ParserComplex);
   finally
-    mormot.core.os.LeaveCriticalSection(Table^.Lock);
+    mormot.core.os.LeaveCriticalSection(RegisterLock);
   end;
 end;
 
@@ -8199,7 +8210,7 @@ var
   P: PUtf8Char;
   new: boolean;
 begin
-  mormot.core.os.EnterCriticalSection(Table^.Lock);
+  mormot.core.os.EnterCriticalSection(RegisterLock);
   try
     result := Find(pointer(TypeName), length(TypeName));
     new := result = nil;
@@ -8214,7 +8225,7 @@ begin
     if new then
       result.NoRttiSetAndRegister(ptRecord, TypeName);
   finally
-    mormot.core.os.LeaveCriticalSection(Table^.Lock);
+    mormot.core.os.LeaveCriticalSection(RegisterLock);
   end;
 end;
 

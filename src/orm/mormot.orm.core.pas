@@ -6302,7 +6302,7 @@ var
 begin
   // private sub function for proper TOrm.OrmProps method inlining
   rtticustom := Rtti.RegisterClass(self);
-  Rtti.DoLock;
+  mormot.core.os.EnterCriticalSection(Rtti.RegisterLock);
   try
     result := rtticustom.PrivateSlot; // Private is TOrmProperties
     if Assigned(result) then
@@ -6322,7 +6322,7 @@ begin
        rcfClassMayBeID];  // for IsPropClassInstance
     self.InternalDefineModel(result);
   finally
-    Rtti.DoUnLock;
+    mormot.core.os.LeaveCriticalSection(Rtti.RegisterLock);
   end;
 end;
 
