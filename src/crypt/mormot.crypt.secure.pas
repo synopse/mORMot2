@@ -1062,8 +1062,10 @@ type
     function Process(const src: RawByteString; out dst: RawByteString;
       const aeadinfo: RawByteString = ''): boolean; overload;
     /// general encryption/decryption method using TBytes buffers
+    // - use use TByteDynArray for aeadinfo because TBytes raise a Delphi XE
+    // compiler bug - it should be assignment compatible with any TBytes value
     function Process(const src: TBytes; out dst: TBytes;
-      const aeadinfo: TBytes = nil): boolean; overload;
+      const aeadinfo: TByteDynArray = nil): boolean; overload;
     /// low-level encryption/decryption on memory buffers
     // - srclen/dsstlen should match the size block of the algorithm,
     // e.g. 16 bytes for AES or 1 byte for SHAKE (i.e. SHA-3 in XOF cipher mode)
@@ -1116,7 +1118,7 @@ type
     function Process(const src: RawByteString; out dst: RawByteString;
       const aeadinfo: RawByteString): boolean; overload; virtual; abstract;
     function Process(const src: TBytes; out dst: TBytes;
-      const aeadinfo: TBytes = nil): boolean; overload; virtual; abstract;
+      const aeadinfo: TByteDynArray): boolean; overload; virtual; abstract;
     procedure RawProcess(src, dst: pointer; srclen, dstlen: PtrInt); virtual; abstract;
     function RawFinal(var gmac: TAesBlock): boolean; virtual; abstract;
   end;
@@ -2885,7 +2887,8 @@ begin
   GlobalCryptAlgo.AddOrReplaceObject(name, self);
 end;
 
-class function TCryptAlgo.InternalFind(const name: RawUtf8; var Last: TCryptAlgo): pointer;
+class function TCryptAlgo.InternalFind(
+  const name: RawUtf8; var Last: TCryptAlgo): pointer;
 begin
   if name = '' then
   begin
@@ -2904,7 +2907,8 @@ begin
       result := nil;
 end;
 
-class function TCryptAlgo.InternalResolve(const name: RawUtf8; CSV: PUtf8Char): integer;
+class function TCryptAlgo.InternalResolve(
+  const name: RawUtf8; CSV: PUtf8Char): integer;
 begin
   result := FindCsvIndex(CSV, name, ',', {casesens=}false);
   if result < 0 then
@@ -3532,7 +3536,7 @@ type
     function Process(const src: RawByteString; out dst: RawByteString;
       const aeadinfo: RawByteString): boolean; overload; override;
     function Process(const src: TBytes; out dst: TBytes;
-      const aeadinfo: TBytes): boolean; overload; override;
+      const aeadinfo: TByteDynArray): boolean; overload; override;
     procedure RawProcess(src, dst: pointer; srclen, dstlen: PtrInt); override;
     function RawFinal(var gmac: TAesBlock): boolean; override;
   end;
@@ -3642,7 +3646,7 @@ begin
 end;
 
 function TCryptAesCipher.Process(const src: TBytes; out dst: TBytes;
-  const aeadinfo: TBytes): boolean;
+  const aeadinfo: TByteDynArray): boolean;
 begin
   result := false;
   if src = nil then
