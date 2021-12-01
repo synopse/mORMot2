@@ -60,10 +60,6 @@
 {.$define NOXPOWEREDNAME}
 // define this to avoid sending "X-Powered-By: Synopse mORMot" HTTP header
 
-{.$define SQLVIRTUALLOGS}
-// enable low-level logging of SQlite3 virtual table query planner costs
-// -> to be defined only for internal debugging
-
 {.$define NOSYNDBZEOS}
 // make mormot.db.sql.zeos.pas a "void" unit - defined for FPC/Lazarus packages only
 
@@ -87,6 +83,12 @@
 
 {.$define NOTORMTABLELEN}
 // disable TOrmTable internal fLen[] pre-computed table - may save some memory
+
+{.$define DEBUGSTORAGELOCK}
+// could be defined to force verbose log of StorageLock/StorageUnLock
+
+{.$define DEBUGSQLVIRTUALTABLE}
+// could be defined to force verbose log of SQlite3 virtual table query planner costs
 
 {.$define ONLYUSEHTTPSOCKET}
 // is defined on POSIX but may be enabled on Windows if socket+SChannel is enough
@@ -132,8 +134,8 @@
 
   {$define HASINLINE}
   {$define HASINLINEWINAPI} // Delphi has troubles inlining Windows API calls
-  {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
-  {$define NODELPHIASM}   // avoid e.g. low-level System.@LStrFromPCharLen calls
+  {$define HASSAFEINLINE}   // Delphi 2007 has sometimes troubles inlining :(
+  {$define NODELPHIASM}     // avoid e.g. low-level System.@LStrFromPCharLen
   {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
   {$define HASITERATORS}
   {$define HASDBFTWIDE}
@@ -141,9 +143,9 @@
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
   {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii()
-  {$define USERECORDWITHMETHODS}  // use "object" only for Delphi 7
+  {$define USERECORDWITHMETHODS}   // use "object" only for Delphi 7
   {$define FPC_OR_UNICODE}
-  {$define FPC_OR_DELPHIXE} // to circumvent Delphi internal errors
+  {$define FPC_OR_DELPHIXE}        // to circumvent Delphi internal errors
   {$define FPC_OR_DELPHIXE4}
 
 
@@ -215,20 +217,20 @@
     {$define FPCPOSIX}
     {$ifdef BSD}
       // conditionals for Darwin and BSD family like OpenBSD/FreeBSD
-      {$define OSBSDDARWIN} // OSBSDDARWIN = OSBSD + OSDARWIN
+      {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD + OSDARWIN
       {$ifdef DARWIN}
         {$define OSDARWIN}
         {$define FPCDARWIN}
         {$ifdef CPUINTEL}
-          {$define FPC_PIC} // may have not be defined in the compiler options
+          {$define FPC_PIC}     // may have not be defined in compiler options
         {$endif CPUINTEL}
         {$define NOPATCHRTL}    // don't mess with asm stuff
         {$define DISABLE_SSE42} // circumvent clang asm bugs
       {$else}
-        {$define OSBSD}   // OSX has some non-standard API calls
+        {$define OSBSD}         // OSX has some non-standard API calls
         {$define FPCBSD}
         {$ifdef OPENBSD}
-          {$define OSOPENBSD}  // OSBDS = OSOPENBSD + OSFREEBSD
+          {$define OSOPENBSD}   // OSBDS = OSOPENBSD + OSFREEBSD
           {$ifdef CPUX86}
             {$define FPC_PIC}
           {$endif CPUX86}
@@ -240,7 +242,7 @@
     {$else}
       {$ifdef LINUX}
         // conditionals for Linux
-        {$define OSLINUX} // e.g. to disable epoll API
+        {$define OSLINUX}       // e.g. to disable epoll API
         {$define FPCLINUX}
         {$define OSLINUXANDROID}
       {$else}
@@ -249,7 +251,7 @@
           {$define OSANDROID}
           {$define FPCANDROID}
           {$define OSLINUXANDROID}
-          {$define NOPATCHRTL} // don't mess with asm stuff
+          {$define NOPATCHRTL}  // don't mess with asm stuff
           {$ifdef CPUX86}
             {$define FPC_PIC}
           {$endif CPUX86}
@@ -270,17 +272,17 @@
   {$ifdef CPU64}
     {$define FPC_64}
     {$ifdef CPUX64}
-      {$ASMMODE INTEL}       // as Delphi expects
+      {$ASMMODE INTEL}         // as Delphi expects
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$define FPC_CPUX64}
-      {$ifndef OSDARWIN}  // MachOS has troubles with our asm
+      {$ifndef OSDARWIN}       // MachOS has troubles with our asm
         {$define FPC_ASMX64}
-        {$define ASMX64}     // supports asm with globals
-        {$define ASMINTEL}   // either ASMX86 or ASMX64
-        {$define ASMX64AVX}  // supports AVX/AVX2/AVX512
-        {$define CPUX64ASM}  // FPC has no problem (not Delphi prior XE7)
-        {$define HASAESNI}   // mormot.crypt.core rejected by Darwin asm
+        {$define ASMX64}       // supports asm with globals
+        {$define ASMINTEL}     // either ASMX86 or ASMX64
+        {$define ASMX64AVX}    // supports AVX/AVX2/AVX512
+        {$define CPUX64ASM}    // FPC has no problem (not Delphi prior XE7)
+        {$define HASAESNI}     // mormot.crypt.core rejected by Darwin asm
       {$endif OSDARWIN}
     {$endif CPUX64}
     {$ifdef CPUAARCH64}
@@ -289,11 +291,11 @@
   {$else}
     {$define FPC_32}
     {$ifdef CPUX86}
-      {$ASMMODE INTEL}       // as Delphi expects
+      {$ASMMODE INTEL}         // as Delphi expects
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$define FPC_X86}
-      {$ifndef FPC_PIC}   // MachOS/OpenBSD/Android require PIC code on i386
+      {$ifndef FPC_PIC}        // MachOS/OpenBSD/Android require PIC code on i386
         {$define ASMX86}       // supports asm with globals
         {$define ASMINTEL}     // either ASMX86 or ASMX64
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
@@ -381,34 +383,34 @@
   {$endif}
 
   {$define ISDELPHI}
-  {$define CPUINTEL}   // Delphi only for Intel by now
-  {$define ASMINTEL}   // either ASMX86 or ASMX64
+  {$define CPUINTEL}          // Delphi only for Intel by now
+  {$define ASMINTEL}          // either ASMX86 or ASMX64
   {$ifdef CPUX64}
     {$undef CPU32}
-    {$define CPU64}    // Delphi compiler for 64 bit CPU
+    {$define CPU64}           // Delphi compiler for 64 bit CPU
     {$define CPU64DELPHI}
-    {$define ASMX64}   // supports asm with globals
+    {$define ASMX64}          // supports asm with globals
     {$define EXTENDEDTOSHORT_USESTR} // FloatToText() slower in Delphi Win64
     {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii() - not Delphi Win32
   {$else CPUX64}
-    {$define CPU32}    // Delphi compiler for 32 bit CPU
+    {$define CPU32}           // Delphi compiler for 32 bit CPU
     {$undef CPU64}
     {$define CPU32DELPHI}
-    {$define CPUX86}   // for compatibility with older versions of Delphi
-    {$define ASMX86}   // supports asm with globals
-    {$define CPUX86NOTPIC} // use "absolute" instead of local register
-    {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
+    {$define CPUX86}          // for compatibility with older versions of Delphi
+    {$define ASMX86}          // supports asm with globals
+    {$define CPUX86NOTPIC}    // use "absolute" instead of local register
+    {$define TSYNEXTENDED80}  // only 32-bit has a true x87 extended type
   {$endif CPUX64}
 
   {$define DELPHI_OR_FPC_OLDRTTI}
-  {$define HASINTERFACERTTI} // interface RTTI (not oldest FPC)
-  {$define HASFASTTRYFINALLY}
-  {$warn UNSAFE_CODE OFF}    // Delphi for .Net does not exist any more!
+  {$define HASINTERFACERTTI}  // interface RTTI (not oldest FPC)
+  {$define HASFASTTRYFINALLY} // Delphi Win32/Win64 uses efficient SEH
+  {$warn UNSAFE_CODE OFF}     // Delphi for .Net does not exist any more!
   {$warn UNSAFE_TYPE OFF}
   {$warn UNSAFE_CAST OFF}
   {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
   {$warn SYMBOL_PLATFORM OFF}
-  {$warn SYMBOL_DEPRECATED OFF} // for faVolumeID
+  {$warn SYMBOL_DEPRECATED OFF}   // for faVolumeID
   {$warn UNIT_PLATFORM OFF}
 
   {$if CompilerVersion >= 17}     // = Delphi 2005
@@ -424,10 +426,10 @@
       // low-level FastMM4 information
       {.$define WITH_FASTMM4STATS}
     {$ifend}
-    {$ifdef VER180}              // = Delphi 2006
-      {$define ISDELPHI20062007} // to circumvent some specific bugs
+    {$ifdef VER180}               // = Delphi 2006
+      {$define ISDELPHI20062007}  // to circumvent some specific bugs
     {$endif}
-    {$ifdef VER185}              // = Delphi 2007
+    {$ifdef VER185}               // = Delphi 2007
       {$define ISDELPHI20062007}
     {$endif}
     {$if CompilerVersion > 18}
@@ -435,31 +437,31 @@
       {$define HASITERATORS}
       {$define HASDBFTWIDE}
     {$ifend}
-    {$if CompilerVersion = 20}   // = Delphi 2009
-      {$define ISDELPHI2009}     // to circumvent some specific bugs
+    {$if CompilerVersion = 20}    // = Delphi 2009
+      {$define ISDELPHI2009}      // to circumvent some specific bugs
       {$define ISDELPHI20092010}
-      {$define HASNOSTATICRTTI}  // has no TypeInfo(TGUID)
+      {$define HASNOSTATICRTTI}   // has no TypeInfo(TGUID)
     {$ifend}
-    {$if CompilerVersion = 21}   // = Delphi 2010
-      {$define ISDELPHI20092010} // to circumvent some specific bugs
+    {$if CompilerVersion = 21}    // = Delphi 2010
+      {$define ISDELPHI20092010}  // to circumvent some specific bugs
     {$ifend}
     {$if CompilerVersion >= 21.0}
-      {$define HASSAFEINLINE}  // earliest Delphi have troubles inlining :(
+      {$define HASSAFEINLINE}     // earliest Delphi have troubles inlining :(
       {$define ISDELPHI2010}
-      {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
+      {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
       {$define HASEXTRECORDRTTI}
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}
-      {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling some RTTI
+      {$ifdef NEWRTTINOTUSED}     // to reduce EXE size by disabling some RTTI
         {$WEAKLINKRTTI ON}
         {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
       {$endif NEWRTTINOTUSED}
     {$ifend}
     {$if CompilerVersion >= 22.0} // = Delphi XE
-      {$define FPC_OR_DELPHIXE} // Delphi 2007/2009/2010 inlining bugs
+      {$define FPC_OR_DELPHIXE}   // Delphi 2007/2009/2010 inlining bugs
       {$define ISDELPHIXE}
-      {$define HASGENERICS}     // somewhat unusable generics (?)
+      {$define HASGENERICS}       // somewhat unusable generics (?)
       {$define ORMGENERICS}
     {$ifend}
     {$if CompilerVersion >= 23.0} // = Delphi XE2
@@ -474,7 +476,7 @@
     {$ifend}
     {$if CompilerVersion >= 25.0} // = Delphi XE4
       {$define ISDELPHIXE4}
-      {$define FPC_OR_DELPHIXE4} // circumvent Internal Error: C2130 on XE3
+      {$define FPC_OR_DELPHIXE4}  // circumvent Internal Error: C2130 on XE3
       {$define HASAESNI}
     {$ifend}
     {$if CompilerVersion >= 26.0} // = Delphi XE5
@@ -487,7 +489,7 @@
       {$define ISDELPHIXE6}
     {$ifend}
     {$if (CompilerVersion = 27.0) or
-         (CompilerVersion = 28.0)}  // = Delphi XE6 or XE7
+         (CompilerVersion = 28.0)} // = Delphi XE6 or XE7
       // avoid internal error G2515 or F2084 AV0044FF4E-R00000008-0
       {$undef HASGENERICS}
       {$undef ORMGENERICS}
@@ -495,12 +497,12 @@
     {$if CompilerVersion >= 28.0}
       {$define ISDELPHIXE7}
       {$ifdef CPU64}
-        {$define CPUX64ASM} // e.g. XE4 SSE asm is buggy :(
+        {$define CPUX64ASM}       // e.g. XE4 SSE asm is buggy :(
       {$endif CPU64}
     {$ifend}
     {$if CompilerVersion >= 29.0} // = Delphi XE8
       {$define ISDELPHIXE8}
-      {$define HASGETTYPEKIND} // generics and intrinsics are buggy before XE8
+      {$define HASGETTYPEKIND}    // generics intrinsics are buggy before XE8
     {$ifend}
     {$if CompilerVersion >= 30.0} // = Delphi 10
       {$define ISDELPHI10}
@@ -526,7 +528,7 @@
     {$if CompilerVersion >= 35.0} // = Delphi 11 Alexandria
       {$define ISDELPHI11}
       {$ifdef CPU64}
-        {.$define ASMX64AVX}  // initial AVX/AVX2/AVX512 support - but broken
+        {.$define ASMX64AVX}      // initial AVX/AVX2/AVX512 support - but broken
       {$endif CPU64}
     {$ifend}
     {$if CompilerVersion >= 36.0} // = Delphi 11.1
@@ -565,17 +567,17 @@
 {$ifdef CPUINTEL}
   {$ifdef OSWINDOWS}
     {$ifdef CPUX64}
-      {$define WIN64ABI} // for asm on x86_64
+      {$define WIN64ABI}    // for asm on x86_64
     {$endif CPUX64}
   {$endif OSWINDOWS}
   {$ifdef OSPOSIX}
     {$ifdef CPUX64}
-      {$define SYSVABI} // for asm on x86_64
+      {$define SYSVABI}     // for asm on x86_64
     {$endif CPUX64}
   {$endif OSPOSIX}
   {$define CPUINTELARM}
 {$else}
-  {$undef HASAESNI} // AES-NI is an Intel-specific feature
+  {$undef HASAESNI}         // AES-NI is an Intel-specific feature
   {$ifdef CPUARM3264}
     {$define CPUINTELARM}
   {$endif CPUARM3264}
@@ -597,50 +599,50 @@
   {$if defined(OSOPENBSD) and defined(FPC_CROSSCOMPILING)}
     {$define NOSQLITE3STATIC} // OpenBSD problems with fpcupdeluxe libgcc.a
   {$ifend}
-  {$define LIZARD_EXTERNALONLY} // Lizard is disabled but on some targets
+  {$define LIZARD_EXTERNALONLY}     // Lizard is disabled but on some targets
   {$ifdef OSLINUX}
     {$ifdef CPUINTEL}
-      {$define LIBDEFLATESTATIC}  // libdeflate static binding
-      {$define LIBQUICKJSSTATIC}  // quickjs static binding
-      {$undef LIZARD_EXTERNALONLY} // static liblizard.a
+      {$define LIBDEFLATESTATIC}    // libdeflate static binding
+      {$define LIBQUICKJSSTATIC}    // quickjs static binding
+      {$undef LIZARD_EXTERNALONLY}  // static liblizard.a
     {$endif CPUINTEL}
     {$ifdef CPUARM}
       {.$undef LIZARD_EXTERNALONLY} // static liblizard.a is not tested
-      {.$define LIBDEFLATESTATIC} // compiles, but untested
-      {.$define LIBQUICKJSSTATIC} // compiles, but untested
+      {.$define LIBDEFLATESTATIC}   // compiles, but untested
+      {.$define LIBQUICKJSSTATIC}   // compiles, but untested
     {$endif CPUARM}
     {$ifdef CPUAARCH64}
       {$define LIBDEFLATESTATIC}
-      {$undef LIZARD_EXTERNALONLY} // static liblizard.a seems OK
-      {.$define LIBQUICKJSSTATIC} // compiles, but access violations
+      {$undef LIZARD_EXTERNALONLY}  // static liblizard.a seems OK
+      {.$define LIBQUICKJSSTATIC}   // compiles, but access violations
     {$endif CPUAARCH64}
   {$endif OSLINUX}
   {$ifdef OSWINDOWS}
-    {$undef LIZARD_EXTERNALONLY} // static liblizard.a
+    {$undef LIZARD_EXTERNALONLY}    // static liblizard.a
     {$ifdef CPUX86}
       {$define LIBDEFLATESTATIC}
       {$define LIBQUICKJSSTATIC}
     {$endif CPUX86}
     {$ifdef CPUX64}
-      {.$define LIBDEFLATESTATIC} // Win64 + FPC 3.2 = internal error 200603061
+      {.$define LIBDEFLATESTATIC}   // Win64 + FPC 3.2 = internal error 200603061
       {$define LIBQUICKJSSTATIC}
     {$endif CPUX64}
   {$endif OSWINDOWS}
 {$else}
-  {$define LIZARD_EXTERNALONLY} // no static .obj for Delphi Win32/Win64 yet
+  {$define LIZARD_EXTERNALONLY}     // no static .obj for Delphi Win32/Win64 yet
   {$ifdef CPUX86}
-    {$define LIBQUICKJSSTATIC}  // our quickjs.obj seems fine on Win32 :)
+    {$define LIBQUICKJSSTATIC}      // our quickjs.obj seems fine on Win32 :)
   {$endif CPUX86}
   // there is a linking bug with Delphi XE4 on Win64
   {$ifdef CPUX64}
     {$if (CompilerVersion = 25.0) or
          (CompilerVersion = 28.0) or 
-         (CompilerVersion = 29.0)} // exactly XE4, XE7 or XE8 are known to GPF
+         (CompilerVersion = 29.0)}  // exactly XE4, XE7 or XE8 are known to GPF
       // other Win32/Win64 Delphi platforms "should work" (tm) as expected
       {$define NOSQLITE3STATIC}
     {$ifend}
-    {$define LIBQUICKJSSTATIC} // seems fine BUT on Delphi 10.4 Win64
-    {$if CompilerVersion = 34.0} // = Delphi 10.4
+    {$define LIBQUICKJSSTATIC}      // seems fine BUT on Delphi 10.4 Win64
+    {$if CompilerVersion = 34.0}    // = Delphi 10.4
       {$undef LIBQUICKJSSTATIC}
     {$ifend}
   {$endif}
@@ -670,14 +672,14 @@
 {$ifdef OSWINDOWS}
 
   {$ifndef ONLYUSEHTTPSOCKET}
-    {$define USEWININET}   // publish TWinINet/TWinHttp/TWinHttpAPI classes
-    {$define USE_WINIOCP}  // I/O completion ports API is the best option under Windows
+    {$define USEWININET}      // publish TWinINet/TWinHttp/TWinHttpAPI classes
+    {$define USE_WINIOCP}     // I/O completion ports API fine under Windows
     // (under Linux/POSIX, we fallback to a classical event-driven pool)
-    {$define USEHTTPSYS}   // enable http.sys kernel-mode Web server
+    {$define USEHTTPSYS}      // enable http.sys kernel-mode Web server
   {$endif ONLYUSEHTTPSOCKET}
 
-  {$ifndef NOSSPIAUTH} // from mormot.lib.sspi
-    {$define DOMAINRESTAUTH} // enable SSPI in mormot.rest.client/server
+  {$ifndef NOSSPIAUTH}        // from mormot.lib.sspi
+    {$define DOMAINRESTAUTH}  // enable SSPI in mormot.rest.client/server
   {$endif NOSSPIAUTH}
 
 {$endif OSWINDOWS}
@@ -695,10 +697,10 @@
   {$else}
 
     {$ifndef ONLYUSEHTTPSOCKET}
-      {$define USELIBCURL}   // try cross-platform libcurl for https on POSIX
+      {$define USELIBCURL}      // try cross-platform libcurl for https on POSIX
     {$endif ONLYUSEHTTPSOCKET}
 
-    {$ifndef NOGSSAPIAUTH} // mormot.lib.gssapi is not Android compatible
+    {$ifndef NOGSSAPIAUTH}      // mormot.lib.gssapi is not Android compatible
       {$define DOMAINRESTAUTH}  // enable libgss in mormot.rest.client/server
     {$endif NOGSSAPIAUTH}
 

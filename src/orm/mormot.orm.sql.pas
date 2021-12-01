@@ -764,10 +764,10 @@ begin
     if (Stmt.SqlStatement = '') or // parsing failed
       not IdemPropNameU(Stmt.TableName, fStoredClassRecordProps.SqlTableName) then
     begin
-      {$ifdef SQLVIRTUALLOGS}
+      {$ifdef DEBUGSQLVIRTUALTABLE}
       InternalLog('AdaptSqlForEngineList: complex statement -> switch to ' +
         'SQLite3 virtual engine - check efficiency', [], sllDebug);
-      {$endif SQLVIRTUALLOGS}
+      {$endif DEBUGSQLVIRTUALTABLE}
       exit;
     end;
     if Stmt.Offset <> 0 then
@@ -985,7 +985,7 @@ begin
      (Method in [mPOST..mDELETE]) and
      (BATCH[Method] in fProperties.BatchSendingAbilities) then
   begin
-    StorageLock(true, 'InternalBatchStart');
+    StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'ExtBatchStart' {$endif});
     // lock protected by try..finally in TRestServer.RunBatch caller
     try
       if fBatchMethod <> mNone then
@@ -1991,7 +1991,8 @@ var
   stmt: ISqlDBStatement;
 begin
   result := 0;
-  StorageLock(false, 'ExecuteFromJson'); // avoid race condition against max(ID)
+  StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'ExtExecuteFromJson' {$endif});
+  // lock to avoid race condition against max(ID)
   try
     case Occasion of
       ooInsert:
@@ -2115,12 +2116,10 @@ end;
 
 procedure TRestStorageExternal.EngineAddForceSelectMaxID;
 begin
-  StorageLock(true, 'EngineAddForceSelectMaxID');
+  StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'ExtAddForceSelectMaxID' {$endif});
   fEngineLockedMaxID := 0;
   StorageUnLock;
 end;
-
-{.$define SQLVIRTUALLOGS}
 
 const
   SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of string[3] = (
@@ -2138,9 +2137,9 @@ var
   i: PtrInt;
   where: POrmVirtualTablePreparedConstraint;
   order: ^TOrmVirtualTablePreparedOrderBy;
-  {$ifdef SQLVIRTUALLOGS}
+  {$ifdef DEBUGSQLVIRTUALTABLE}
   log: RawUtf8;
-  {$endif SQLVIRTUALLOGS}
+  {$endif DEBUGSQLVIRTUALTABLE}
 begin
   if (Prepared.WhereCount = 0) and
      (Prepared.OrderByCount = 0) then
@@ -2155,15 +2154,15 @@ begin
     where := @Prepared.Where;
     for i := 0 to Prepared.WhereCount - 1 do
     begin
-      {$ifdef SQLVIRTUALLOGS}
+      {$ifdef DEBUGSQLVIRTUALTABLE}
       log := FormatUtf8('% [column=% oper=% omitcheck=%]',
         [log, where^.Column, ToText(where^.Operation)^, where^.OmitCheck]);
-      {$endif SQLVIRTUALLOGS}
+      {$endif DEBUGSQLVIRTUALTABLE}
       if where^.Operation > high(SQL_OPER_WITH_PARAM) then
       begin
-        {$ifdef SQLVIRTUALLOGS}
+        {$ifdef DEBUGSQLVIRTUALTABLE}
         log := log + ':UNSUPPORTED';
-        {$endif SQLVIRTUALLOGS}
+        {$endif DEBUGSQLVIRTUALTABLE}
         fRest.InternalLog('ComputeSql: unsupported % on column %',
           [ToText(where^.Operation)^, where^.Column], sllWarning);
         where^.OmitCheck := false; // unsupported operator -> manual search
@@ -2187,9 +2186,9 @@ begin
     order := @Prepared.OrderBy;
     for i := 0 to Prepared.OrderByCount - 1 do
     begin
-      {$ifdef SQLVIRTUALLOGS}
+      {$ifdef DEBUGSQLVIRTUALTABLE}
       log := FormatUtf8('% [column=% desc=%]', [log, order^.Column, order^.Desc]);
-      {$endif SQLVIRTUALLOGS}
+      {$endif DEBUGSQLVIRTUALTABLE}
       if i = 0 then
         WR.AddShort(' order by ')
       else
@@ -2208,11 +2207,11 @@ begin
     WR.SetText(result);
   finally
     WR.Free;
-    {$ifdef SQLVIRTUALLOGS}
+    {$ifdef DEBUGSQLVIRTUALTABLE}
     fRest.InternalLog('ComputeSql [%] [omitorder=% cost=% rows=%]%',
       [result, Prepared.OmitOrderBy, Prepared.EstimatedCost,
        Prepared.EstimatedRows, log], sllDB);
-    {$endif SQLVIRTUALLOGS}
+    {$endif DEBUGSQLVIRTUALTABLE}
   end;
 end;
 
@@ -2311,9 +2310,9 @@ begin
      (Table.Static <> nil) then
   begin
     storage := Table.Static as TRestStorageExternal;
-    {$ifndef SQLVIRTUALLOGS}
+    {$ifndef DEBUGSQLVIRTUALTABLE}
     if fSql = '' then
-    {$endif SQLVIRTUALLOGS}
+    {$endif DEBUGSQLVIRTUALTABLE}
       fSql := storage.ComputeSql(Prepared);
     try
       fStatement := storage.fProperties.NewThreadSafeStatementPrepared(
@@ -2437,7 +2436,8 @@ begin
      (Static <> nil) then
     with Static as TRestStorageExternal do
     begin
-      StorageLock(false, 'Insert'); // to avoid race condition against max(RowID)
+      StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'ExtInsert' {$endif});
+      // lock to avoid race condition against max(RowID)
       try
         insertedRowID := EngineLockedNextID;
         with fStoredClassMapping^ do
