@@ -896,17 +896,13 @@ type
   protected
     fEntry: TInterfaceResolverListEntries;
     fOnCreateInstance: TOnResolverCreateInstance;
-    fSafe: TSynLocker;
+    fSafe: TRWLock;
     function PrepareAddAndLock(aInterface: PRttiInfo;
       aImplementationClass: TClass): PInterfaceEntry;
-    function Find(aInterface: PRttiInfo): PInterfaceResolverListEntry;
+    function LockedFind(aInterface: PRttiInfo): PInterfaceResolverListEntry;
       {$ifdef HASINLINE} inline; {$endif}
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
   public
-    /// initialize the internal thread-safe list
-    constructor Create; virtual;
-    /// finialize the internal thread-safe list
-    destructor Destroy; override;
     /// check if a given interface can be resolved, from its RTTI
     function Implements(aInterface: PRttiInfo): boolean; override;
     /// register a given implementaiton class for an interface
@@ -5092,17 +5088,6 @@ end;
 
 { TInterfaceResolverList }
 
-constructor TInterfaceResolverList.Create;
-begin
-  fSafe.Init;
-end;
-
-destructor TInterfaceResolverList.Destroy;
-begin
-  inherited Destroy;
-  fSafe.Done;
-end;
-
 function TInterfaceResolverList.PrepareAddAndLock(aInterface: PRttiInfo;
   aImplementationClass: TClass): PInterfaceEntry;
 var
@@ -5118,15 +5103,15 @@ begin
   if result = nil then
     raise EInterfaceResolver.CreateUtf8('%.Add(): % does not implement %',
       [self, aImplementationClass, aInterface^.RawName]);
-  fSafe.Lock;
+  fSafe.WriteLock;
   for i := 0 to length(fEntry) - 1 do
     if fEntry[i].TypeInfo = aInterface then
     begin
-      fSafe.UnLock;
+      fSafe.WriteUnLock;
       raise EInterfaceResolver.CreateUtf8('%.Add(%): % already registered',
         [self, aImplementationClass, aInterface^.RawName]);
     end;
-end; // caller should explicitly call finally LeaveCriticalSection(...) end;
+end; // caller should explicitly call fSafe.WriteUnLock
 
 procedure TInterfaceResolverList.Add(aInterface: PRttiInfo;
   aImplementationClass: TInterfacedObjectClass);
@@ -5136,7 +5121,7 @@ var
 begin
   e := PrepareAddAndLock(aInterface, aImplementationClass);
   try
-    // here we are protected within a EnterCriticalSection() call
+    // here we are protected within a fSafe.WriteLock
     n := length(fEntry);
     SetLength(fEntry, n + 1);
     with fEntry[n] do
@@ -5146,7 +5131,7 @@ begin
       InterfaceEntry := e;
     end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -5158,7 +5143,7 @@ var
 begin
   e := PrepareAddAndLock(aInterface, aImplementation.ClassType);
   try
-    // here we are protected within a EnterCriticalSection() call
+    // here we are protected within a fSafe.WriteLock
     n := length(fEntry);
     SetLength(fEntry, n + 1);
     with fEntry[n] do
@@ -5170,7 +5155,7 @@ begin
       InterfaceEntry := e;
     end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -5181,7 +5166,7 @@ begin
   if (aInterface = nil) or
      (aInterface^.Kind <> rkInterface) then
     raise EInterfaceResolver.CreateUtf8('%.Delete(?)', [self]);
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     last := length(fEntry) - 1;
     for i := 0 to last do
@@ -5199,11 +5184,12 @@ begin
           exit;
         end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
-function TInterfaceResolverList.Find(aInterface: PRttiInfo): PInterfaceResolverListEntry;
+function TInterfaceResolverList.LockedFind(
+  aInterface: PRttiInfo): PInterfaceResolverListEntry;
 var
   n: integer;
 begin
@@ -5229,9 +5215,9 @@ var
 begin
   new := nil;
   result := true;
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
-    e := Find(aInterface);
+    e := LockedFind(aInterface);
     if e <> nil then
     begin
       if e^.Instance <> nil then
@@ -5249,7 +5235,7 @@ begin
       end;
     end;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
   if new <> nil then
   begin
@@ -5263,9 +5249,9 @@ end;
 
 function TInterfaceResolverList.Implements(aInterface: PRttiInfo): boolean;
 begin
-  fSafe.Lock;
-  result := Find(aInterface) <> nil;
-  fSafe.UnLock;
+  fSafe.ReadOnlyLock;
+  result := LockedFind(aInterface) <> nil;
+  fSafe.ReadOnlyUnLock;
 end;
 
 
