@@ -2114,7 +2114,7 @@ function RefCntDecFree(var refcnt: TRefCnt): boolean;
         setbe   al
 end; // don't check for ismultithread global since lock is cheaper on new CPUs
 
-function LockedCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
+function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rax, Comperand
    lock cmpxchg qword ptr [Target], NewValue

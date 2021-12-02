@@ -2983,8 +2983,8 @@ function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): PtrInt;
 procedure SwitchToThread;
   {$ifdef OSWINDOWS} stdcall; {$endif}
 
-/// try LockedCAS() in a loop, calling SwitchToThread after some spinning
-procedure SpinCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
+/// try LockedExc() in a loop, calling SwitchToThread after some spinning
+procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 
 /// low-level naming of a thread
 // - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
@@ -5292,12 +5292,12 @@ begin
   result := spin;
 end;
 
-procedure SpinCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
+procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 var
   spin: PtrUInt;
 begin
   spin := SPIN_COUNT;
-  while not LockedCAS(Target, NewValue, Comperand) do
+  while not LockedExc(Target, NewValue, Comperand) do
     spin := DoSpin(spin);
 end;
 
@@ -5333,7 +5333,7 @@ end;
 // we tried a dedicated asm for LightLock() but it was slower
 procedure LightLock(var lock: PtrUInt);
 begin
-  if not LockedCAS(lock, 1, 0) then
+  if not LockedExc(lock, 1, 0) then
     LightLockSpin(lock);
 end;
 
@@ -5423,7 +5423,7 @@ var
 begin
   // if not writing, atomically increase the RD counter in the upper flag bits
   f := Flags and not 1; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
-  if not LockedCAS(Flags, f + 4, f) then
+  if not LockedExc(Flags, f + 4, f) then
     ReadOnlyLockSpin;
 end;
 
@@ -5435,7 +5435,7 @@ begin
   repeat
     spin := DoSpin(spin);
     f := Flags and not 1; // retry ReadOnlyLock
-  until LockedCAS(Flags, f + 4, f);
+  until LockedExc(Flags, f + 4, f);
 end;
 
 {$endif ASMX86}
@@ -5462,19 +5462,21 @@ begin
   spin := SPIN_COUNT;
   repeat
     f := Flags and not 3; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
-    if LockedCAS(Flags, f + 2, f) then
+    if LockedExc(Flags, f + 2, f) then
       break;
     spin := DoSpin(spin);
   until false;
   LastReadWriteLockThread := tid;
-  LastReadWriteLockCount := 1;
+  LastReadWriteLockCount := 0;
 end;
 
 procedure TRWLock.ReadWriteUnLock;
 begin
-  dec(LastReadWriteLockCount);
   if LastReadWriteLockCount <> 0 then
+  begin
+    dec(LastReadWriteLockCount);
     exit;
+  end;
   LastReadWriteLockThread := TThreadID(0);
   LockedDec(Flags, 2);
 end;
@@ -5495,7 +5497,7 @@ begin
   // acquire the WR flag bit
   repeat
     f := Flags and not 1; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
-    if LockedCAS(Flags, f + 1, f) then
+    if LockedExc(Flags, f + 1, f) then
       if (Flags and 2 = 2) and
          (LastReadWriteLockThread <> tid) then
         // there is a pending ReadWriteLock but not on this thread
@@ -5506,7 +5508,7 @@ begin
     spin := DoSpin(spin);
   until false;
   LastWriteLockThread := tid;
-  LastWriteLockCount := 1;
+  LastWriteLockCount := 0;
   // wait for all readers to have finished their job
   while Flags > 3 do
     spin := DoSpin(spin);
@@ -5514,9 +5516,11 @@ end;
 
 procedure TRWLock.WriteUnlock;
 begin
-  dec(LastWriteLockCount);
   if LastWriteLockCount <> 0 then
+  begin
+    dec(LastWriteLockCount);
     exit;
+  end;
   LastWriteLockThread := TThreadID(0);
   LockedDec(Flags, 1);
 end;

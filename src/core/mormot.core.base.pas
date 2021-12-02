@@ -2351,16 +2351,6 @@ procedure LockedInc64(int64: PInt64);
 // - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
 function RefCntDecFree(var refcnt: TRefCnt): boolean;
 
-/// Intel/AMD asm version of FPC InterlockedCompareExchange(pointer)
-// - true if Target was equal to Comparand, and Target set to NewValue
-function LockedCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
-
-/// Intel/AMD asm version of FPC InterlockedExchangeAdd(pointer) with no result
-procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt);
-
-/// Intel/AMD asm version of FPC InterlockedExchangeAdd(pointer) with no result
-procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
-
 // defined here for mormot.test.base only
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
 
@@ -2383,16 +2373,25 @@ procedure LockedInc64(int64: PInt64); inline;
 // - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
 function RefCntDecFree(var refcnt: TRefCnt): boolean; inline;
 
-/// redirect to FPC InterlockedCompareExchange(pointer) on non Intel CPU
-function LockedCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean; inline;
-
-/// redirect to FPC InterlockedExchangeAdd(pointer) on non Intel CPU
-procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt); inline;
-
-/// redirect to FPC InterlockedExchangeAdd(pointer) on non Intel CPU
-procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt); inline;
-
 {$endif CPUINTEL}
+
+/// fast atomic compare-and-swap operation on a pointer-sized integer value
+// - via Intel/AMD custom asm or FPC RTL InterlockedCompareExchange(pointer)
+// - true if Target was equal to Comparand, and Target set to NewValue
+// - used e.g. as thread-safe atomic operation for TLightLock/TRWLock
+// - Target should be aligned, which is the case when defined as a class field
+function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
+
+/// fast atomic addition operation on a pointer-sized integer value
+// - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(pointer)
+// - Target should be aligned, which is the case when defined as a class field
+procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt);
+
+/// fast atomic substraction operation on a pointer-sized integer value
+// - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(-pointer)
+// - Target should be aligned, which is the case when defined as a class field
+procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
+
 
 {$ifndef FPC}
 
@@ -8608,7 +8607,7 @@ begin
   {$endif FPC_64}
 end;
 
-function LockedCAS(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
+function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
 begin
   result := InterlockedCompareExchange(
     pointer(Target), pointer(NewValue), pointer(Comperand)) = pointer(Comperand);
