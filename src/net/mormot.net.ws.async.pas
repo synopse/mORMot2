@@ -93,8 +93,7 @@ type
     function OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean; override;
     // used e.g. by TWebSocketAsyncServer.WebSocketBroadcast
     function SendDirect(const tmp: TSynTempBuffer;
-      opcode: TWebSocketFrameOpCode): boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+      opcode: TWebSocketFrameOpCode; timeout: integer): boolean;
   end;
 
   /// handle HTTP/WebSockets server connections using non-blocking sockets
@@ -141,11 +140,14 @@ type
     // - expect aFrame.opcode to be either focText or focBinary
     // - WebSocketBroadcast(nil) will broadcast to all running websockets
     // - returns the number of sent frames
+    // - by default, won't wait (and therefore won't send anything) if
+    // TPollAsyncConnection write is locked (unlikely) - unless aTimeOut is set
     // - warning: the raw frame will be directly sent with no encoding (i.e.
     // no encryption nor compression) so is to be used with raw protocols
     // (e.g. to efficiently notify AJAX browsers)
     function WebSocketBroadcast(const aFrame: TWebSocketFrame;
-      const aClientsConnectionID: THttpServerConnectionIDDynArray): integer;
+      const aClientsConnectionID: THttpServerConnectionIDDynArray;
+      aTimeOut: integer = 0): integer;
     /// access to the protocol list handled by this server
     property WebSocketProtocols: TWebSocketProtocolList
       read fProtocols;
@@ -302,14 +304,14 @@ begin
 end;
 
 function TWebSocketAsyncConnection.SendDirect(const tmp: TSynTempBuffer;
-  opcode: TWebSocketFrameOpCode): boolean;
+  opcode: TWebSocketFrameOpCode; timeout: integer): boolean;
 begin
   if self = nil then
     result := false
   else
   begin
     // use timeout=0 since WebSocketBroadcast() has a connection lock
-    result := fOwner.Write(self, tmp.buf, tmp.len, {timeout=}0);
+    result := fOwner.Write(self, tmp.buf, tmp.len, timeout);
     if result and
        (opcode = focConnectionClose) then
       fProcess.fConnectionCloseWasSent := true;
@@ -569,7 +571,8 @@ begin
 end;
 
 function TWebSocketAsyncServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
-  const aClientsConnectionID: THttpServerConnectionIDDynArray): integer;
+  const aClientsConnectionID: THttpServerConnectionIDDynArray;
+  aTimeOut: integer): integer;
 var
   i: PtrInt;
   tmp: TSynTempBuffer;
@@ -580,22 +583,22 @@ begin
      not (aFrame.opcode in [focText, focBinary, focConnectionClose]) then
     exit;
   FrameSendEncode(aFrame, {mask=}0, tmp);
-  fAsync.Lock;
+  fAsync.Lock(cReadOnly);
   try
     // use TWebSocketAsyncConnection.SendDirect for non-blocking socket sending
     if aClientsConnectionID = nil then
       // broadcast to all connected clients
       for i := 0 to fAsync.ConnectionCount - 1 do
         inc(result, ord(TWebSocketAsyncConnection(fAsync.Connection[i]).
-           SendDirect(tmp, aFrame.opcode)))
+           SendDirect(tmp, aFrame.opcode, aTimeOut)))
     else
-      // broadcast to some specified connected clients
+      // broadcast to some specified connected clients, using O(log(n)) search
       for i := 0 to length(aClientsConnectionID) - 1 do
         inc(result, ord(TWebSocketAsyncConnection(
-          fAsync.ConnectionSearch(aClientsConnectionID[i])). // O(log(n)) search
-            SendDirect(tmp, aFrame.opcode)));
+          fAsync.LockedConnectionSearch(aClientsConnectionID[i])).
+            SendDirect(tmp, aFrame.opcode, aTimeOut)));
   finally
-    fAsync.UnLock;
+    fAsync.UnLock(cReadOnly);
     tmp.Done;
   end;
 end;

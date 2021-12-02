@@ -172,14 +172,14 @@ begin
   if decoded = '' then
     exit; // maybe some pending command chars
   fRd.Reset;
-  rtsp := fOwner.ConnectionFindLocked(fRtspTag);
+  rtsp := fOwner.ConnectionFindAndLock(fRtspTag, cReadOnly);
   if rtsp <> nil then
   try
     fOwner.WriteString(rtsp, decoded); // async sending to RTSP server
     fOwner.Log.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
       [Handle, decoded], self);
   finally
-    fOwner.Unlock;
+    fOwner.Unlock(cReadOnly);
   end
   else
   begin

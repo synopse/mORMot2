@@ -734,10 +734,10 @@ type
     function ComputeContext(
        out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
       virtual; abstract;
-    function HiResDelay(var start: Int64): Int64;
     procedure Log(const frame: TWebSocketFrame; const aMethodName: ShortString;
       aEvent: TSynLogInfo = sllTrace; DisableRemoteLog: boolean = false); virtual;
     function SendPendingOutgoingFrames: integer;
+    function HiResDelay(var start: Int64): Int64;
   public
     /// initialize the WebSockets process on a given connection
     // - the supplied TWebSocketProtocol will be owned by this instance
@@ -2804,7 +2804,7 @@ begin
       if fState in [wpsDestroy, wpsClose] then
       begin
         WebSocketLog.Add.Log(sllError,
-          'NotifyCallback answer wait on closed connection', self);
+          'NotifyCallback answer abort on closed connection', self);
         exit;
       end
       else if tix > max then
