@@ -566,9 +566,9 @@ type
   // used internally by TPollSockets.Subscribe/Unsubscribe for thread safety
   TPollSocketsSubscription = record
     Unsubscribe: TNetSocketDynArray;
-    UnsubscribeCount: integer;
     Subscribe: array of TPollSocketsSubscribe;
-    SubscribeCount: PtrInt;
+    UnsubscribeCount: integer;
+    SubscribeCount: integer;
   end;
 
   /// implements efficient polling of multiple sockets
@@ -668,7 +668,7 @@ type
     property PendingCount: PtrInt
       read fPending.Count;
     /// how many connections are pending to be subscribed
-    property SubscribeCount: PtrInt
+    property SubscribeCount: integer
       read fSubscription.SubscribeCount;
     /// how many connections are pending to be unsubscribed
     property UnsubscribeCount: integer
