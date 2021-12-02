@@ -3877,7 +3877,6 @@ type
     procedure SetRoot(const aRoot: RawUtf8);
     procedure SetTableProps(aIndex: integer);
     function GetTableProps(aClass: TOrmClass): TOrmModelProperties;
-    /// get the enumerate type information about the possible actions to be
     function GetLocks(aTable: TOrmClass): POrmLocks;
     function GetTable(const SqlTableName: RawUtf8): TOrmClass;
     function GetTableExactIndex(const TableName: RawUtf8): PtrInt;
@@ -4082,9 +4081,9 @@ type
     /// unlock all previously locked records
     procedure UnLockAll;
     /// return true if a specified record is locked
-    function isLocked(aTable: TOrmClass; aID: TID): boolean; overload;
+    function IsLocked(aTable: TOrmClass; aID: TID): boolean; overload;
     /// return true if a specified record is locked
-    function isLocked(aRec: TOrm): boolean; overload;
+    function IsLocked(aRec: TOrm): boolean; overload;
     /// delete all the locked IDs entries, after a specified time
     // - to be used to release locked records if the client crashed
     // - default value is 30 minutes, which seems correct for common usage
@@ -9916,17 +9915,17 @@ begin
     result := TableProps[aTableIndex].Props.SqlAddField(aFieldIndex);
 end;
 
-function TOrmModel.isLocked(aTable: TOrmClass; aID: TID): boolean;
+function TOrmModel.IsLocked(aTable: TOrmClass; aID: TID): boolean;
 begin
-  result := GetLocks(aTable)^.isLocked(aID);
+  result := GetLocks(aTable)^.IsLocked(aID);
 end;
 
-function TOrmModel.isLocked(aRec: TOrm): boolean;
+function TOrmModel.IsLocked(aRec: TOrm): boolean;
 begin
   if aRec = nil then
     result := false
   else
-    result := isLocked(POrmClass(aRec)^, aRec.fID);
+    result := IsLocked(POrmClass(aRec)^, aRec.fID);
 end;
 
 function TOrmModel.Lock(aTable: TOrmClass; aID: TID): boolean;
