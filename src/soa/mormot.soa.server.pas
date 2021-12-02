@@ -105,9 +105,9 @@ type
     /// the internal Instance ID, as remotely sent in "id":1
     // - is set to 0 when an entry in the array is free
     InstanceID: TID;
-    /// GetTickCount64() timestamp corresponding to the last access of
+    /// GetTickCount64() shr 10 timestamp corresponding to the last access of
     // this instance
-    LastAccess64: Int64;
+    LastAccess: cardinal;
     /// the associated client session
     Session: cardinal;
     /// the implementation instance itself
@@ -117,6 +117,7 @@ type
     // to an interface to any sub-method on the server side -> dec(RefCount)
     procedure SafeFreeInstance(Factory: TServiceFactoryServer);
   end;
+  PServiceFactoryServerInstance = ^TServiceFactoryServerInstance;
 
   /// server-side service provider uses this to store its internal instances
   // - used by TServiceFactoryServer in sicClientDriven, sicPerSession,
@@ -150,13 +151,15 @@ type
   TServiceFactoryServer = class(TServiceFactoryServerAbstract)
   protected
     fRestServer: TRestServer; // just a transtyped fResolver value
+    fInstanceLock: TRWLock;
     fInstance: TServiceFactoryServerInstanceDynArray;
     fInstances: TDynArray;
     fInstanceCapacity: integer; // some void entries may have P^.InstanceID=0
     fInstanceCount: integer;
+    fInstanceCounter: cardinal;
     fInstanceCurrentID: TID;
     fInstanceTimeOut: cardinal;
-    fInstanceLock: TRTLCriticalSection;
+    fInstanceDeprecatedTix32: cardinal;
     fStats: TSynMonitorInputOutputObjArray;
     fImplementationClass: TInterfacedClass;
     fImplementationClassKind: (
@@ -167,6 +170,7 @@ type
     fBackgroundThread: TSynBackgroundThreadMethod;
     fOnMethodExecute: TOnServiceCanExecute;
     fOnExecute: array of TOnInterfaceMethodExecute;
+    fExecuteLock: TRTLCriticalSection;
     procedure SetServiceLogByIndex(const aMethods: TInterfaceFactoryMethodBits;
       const aLogRest: IRestOrm; aLogClass: TOrmServiceLogClass);
     procedure SetTimeoutSecInt(value: cardinal);
@@ -253,6 +257,7 @@ type
     procedure ExecuteMethod(Ctxt: TRestServerUriContext);
     /// call the supplied aEvent callback for all class instances implementing
     // this service
+    // - aEvent should be quick because it is executed with a ReadOnlyLock
     function RunOnAllInstances(const aEvent: TOnServiceFactoryServerOne;
       var aOpaque): integer;
     /// low-level get an implementation Inst.Instance for the given Inst.InstanceID
@@ -294,6 +299,12 @@ type
     // - you can also use the SetTimeOutSec() fluent function instead
     property TimeoutSec: cardinal
       read GetTimeoutSec write SetTimeoutSecInt;
+    /// how many instances are currently hosted by this interface
+    property InstanceCount: integer
+      read fInstanceCount;
+    /// how many instances have been created for this interface since startup
+    property InstanceCounter: cardinal
+      read fInstanceCounter;
   end;
 
 
@@ -570,12 +581,12 @@ constructor TServiceFactoryServer.Create(aRestServer: TRestServer;
   aTimeOutSec: cardinal; aSharedInstance: TInterfacedObject);
 begin
   // extract RTTI from the interface
-  InitializeCriticalSection(fInstanceLock);
+  InitializeCriticalSection(fExecuteLock);
   fRestServer := aRestServer;
   inherited Create(aRestServer, aInterface, aInstanceCreation, aContractExpected);
   if fRestServer.MethodAddress(ShortString(InterfaceUri)) <> nil then
     raise EServiceException.CreateUtf8(
-      '%.Create: I% already exposed as % published method',
+      '%.Create: I% URI already exposed by % published method',
       [self, InterfaceUri, fRestServer]);
   fImplementationClass := aImplementationClass;
   if fImplementationClass.InheritsFrom(TInterfacedObjectFake) then
@@ -645,7 +656,7 @@ begin
         fInstances.InitSpecific(TypeInfo(TServiceFactoryServerInstanceDynArray),
           fInstance, ptQWord, @fInstanceCapacity);
         // fInstance[] are compared/sorted by InstanceID: TID
-        fInstanceTimeOut := aTimeOutSec * 1000;
+        fInstanceTimeOut := aTimeOutSec;
       end;
   end;
   SetLength(fStats, fInterface.MethodsCount);
@@ -655,9 +666,9 @@ procedure TServiceFactoryServer.SetTimeoutSecInt(value: cardinal);
 begin
   if (self = nil) or
      (InstanceCreation in SERVICE_IMPLEMENTATION_NOID) then
-    raise EServiceException.CreateUtf8('%.SetTimeoutSecInt() with %',
-      [self, ToText(InstanceCreation)^]);
-  fInstanceTimeOut := value * 1000;
+    raise EServiceException.CreateUtf8('%.SetTimeoutSecInt(%) with %',
+      [self, value, ToText(InstanceCreation)^]);
+  fInstanceTimeOut := value;
 end;
 
 function TServiceFactoryServer.SetTimeoutSec(
@@ -673,7 +684,7 @@ begin
      (InstanceCreation in SERVICE_IMPLEMENTATION_NOID) then
     result := 0
   else
-    result := fInstanceTimeout div 1000;
+    result := fInstanceTimeout;
 end;
 
 function TServiceFactoryServer.GetStat(
@@ -720,7 +731,7 @@ begin
     fRestServer.InternalLog('%.Destroy for I% %: fInstanceCount=%',
       [ClassType, fInterfaceUri, ToText(InstanceCreation)^, fInstanceCount], sllDebug);
   try
-    EnterCriticalSection(fInstanceLock);
+    fInstanceLock.WriteLock;
     try
       // release any internal instance (should have been done by client)
       try
@@ -734,9 +745,9 @@ begin
       ; // better ignore any error in business logic code
     end;
   finally
-    LeaveCriticalSection(fInstanceLock);
+    fInstanceLock.WriteUnLock;
   end;
-  DeleteCriticalSection(fInstanceLock);
+  DeleteCriticalSection(fExecuteLock);
   ObjArrayClear(fStats, true);
   inherited Destroy;
 end;
@@ -790,9 +801,9 @@ end;
 
 function TServiceFactoryServer.RenewSession(aSession: cardinal): integer;
 var
-  tix: Int64;
+  tix: cardinal;
   i: integer;
-  P: ^TServiceFactoryServerInstance;
+  P: PServiceFactoryServerInstance;
 begin
   result := 0;
   if (self = nil) or
@@ -800,21 +811,21 @@ begin
      (aSession <= CONST_AUTHENTICATION_NOT_USED) or
      not (fInstanceCreation in [sicClientDriven, sicPerSession]) then
     exit;
-  tix := GetTickCount64;
-  EnterCriticalSection(fInstanceLock);
+  tix := GetTickCount64 shr 10;
+  fInstanceLock.ReadOnlyLock;
   try
     P := pointer(fInstance);
     for i := 1 to fInstanceCapacity do
     begin
       if P^.Session = aSession then
       begin
-        P^.LastAccess64 := tix;
+        P^.LastAccess := tix;
         inc(result);
       end;
       inc(P);
     end;
   finally
-    LeaveCriticalSection(fInstanceLock);
+    fInstanceLock.ReadOnlyUnLock;
   end;
 end;
 
@@ -822,14 +833,14 @@ function TServiceFactoryServer.RunOnAllInstances(
   const aEvent: TOnServiceFactoryServerOne; var aOpaque): integer;
 var
   i: integer;
-  P: ^TServiceFactoryServerInstance;
+  P: PServiceFactoryServerInstance;
 begin
   result := 0;
   if (self = nil) or
      (not Assigned(aEvent)) or
      (fInstanceCount = 0) then
     exit;
-  EnterCriticalSection(fInstanceLock);
+  fInstanceLock.ReadOnlyLock;
   try
     P := pointer(fInstance);
     for i := 1 to fInstanceCapacity do
@@ -840,7 +851,7 @@ begin
       inc(P);
     end;
   finally
-    LeaveCriticalSection(fInstanceLock);
+    fInstanceLock.ReadOnlyUnLock;
   end;
 end;
 
@@ -848,14 +859,16 @@ procedure TServiceFactoryServerInstance.SafeFreeInstance(
   Factory: TServiceFactoryServer);
 var
   Obj: TInterfacedObject;
+  start, stop: Int64;
 begin
   if Instance = nil then
     exit; // nothing to release
   dec(Factory.fInstanceCount);
-  InstanceID := 0;
+  InstanceID := 0; // notify that this entry is free
   Session := 0;
   Obj := Instance;
   Instance := nil;
+  QueryPerformanceMicroSeconds(start);
   try
     if (optFreeInMainThread in Factory.fAnyOptions) and
        (GetCurrentThreadID <> MainThreadID) then
@@ -865,116 +878,174 @@ begin
       BackgroundExecuteInstanceRelease(Obj, Factory.fBackgroundThread)
     else
       IInterface(Obj)._Release; // dec(RefCount) + Free if 0
+    QueryPerformanceMicroSeconds(stop);
+    dec(stop, start);
+    if stop > 500 then // caller made a blocking WriteLock
+      Factory.RestServer.Internallog('SafeFreeInstance: I%._Release took %',
+        [Factory.InterfaceUri, MicroSecToString(stop)], sllWarning);
   except
     on E: Exception do
       Factory.RestServer.Internallog('SafeFreeInstance: Ignored % exception ' +
-        'during %._Release', [E.ClassType, Factory.InterfaceUri], sllDebug);
+        'during I%._Release', [E.ClassType, Factory.InterfaceUri], sllDebug);
   end;
+end;
+
+function FindInstance(P: PServiceFactoryServerInstance; n: integer;
+  const id: TID): PServiceFactoryServerInstance;
+begin
+  result := P;
+  repeat
+    if result^.InstanceID = id then
+      exit;
+    inc(result);
+    dec(n)
+  until n = 0;
+  result := nil;
 end;
 
 function TServiceFactoryServer.RetrieveInstance(
   var Inst: TServiceFactoryServerInstance;
   aMethodIndex, aSession: integer): integer;
+var
+  prevcounter: cardinal; // may increase between ReadOnlyLock/WriteLock
 
   procedure AddNew;
   var
-    i: integer;
-    P: ^TServiceFactoryServerInstance;
+    P: PServiceFactoryServerInstance;
   begin
     Inst.Session := aSession;
-    Inst.Instance := CreateInstance(true);
+    Inst.Instance := CreateInstance({andincrefcnt=}true);
     if Inst.Instance = nil then
       exit;
     result := aMethodIndex; // notify caller
-    inc(fInstanceCount);
+    fInstanceLock.WriteLock;
+    try
+      if Inst.InstanceID = 0 then
+      begin
+        // new sicClientDriven instance
+        inc(fInstanceCurrentID);
+        Inst.InstanceID := fInstanceCurrentID;
+      end
+      else if prevcounter <> fInstanceCounter then
+      begin
+        // paranoid search if (very unlikely) created in a background thread
+        P := FindInstance(pointer(fInstance), fInstanceCapacity, Inst.InstanceID);
+        if P <> nil then
+        begin
+          IInterface(Inst.Instance)._Release; // ignore CreateInstance() above
+          P^.LastAccess := Inst.LastAccess;
+          Inst.Instance := P^.Instance;
+          exit;
+        end;
+      end;
+      if fInstanceCount = fInstanceCapacity then
+        P := nil
+      else
+        P := FindInstance(pointer(fInstance), fInstanceCapacity, 0);
+      if P = nil then
+        fInstances.Add(Inst) // append a new entry
+      else
+        P^ := Inst; // found an empty entry -> recycle it
+      inc(fInstanceCount);
+      inc(fInstanceCounter);
+    finally
+      fInstanceLock.WriteUnLock;
+    end;
     fRestServer.InternalLog(
-      '%.RetrieveInstance: Adding %(%) instance (id=%) count=%',
+      '%.RetrieveInstance: Adding I%(%) instance (id=%) count=%',
       [ClassType, fInterfaceUri, pointer(Inst.Instance), Inst.InstanceID,
        fInstanceCount], sllDebug);
-    P := pointer(fInstance);
-    for i := 1 to fInstanceCapacity do
-      if P^.InstanceID = 0 then
-      begin
-        P^ := Inst; // found an empty entry -> re-use it
-        exit;
-      end
-      else
-        inc(P);
-    fInstances.Add(Inst); // append a new entry
   end;
 
 var
   i: integer;
-  P: ^TServiceFactoryServerInstance;
+  tix: cardinal;
+  P: PServiceFactoryServerInstance;
 begin
   result := -1;
-  Inst.LastAccess64 := GetTickCount64;
-  EnterCriticalSection(fInstanceLock);
-  try
-    // first release any deprecated instances
-    if (fInstanceTimeout <> 0) and
-       (fInstanceCount > 0) then
-    begin
-      P := pointer(fInstance);
-      for i := 1 to fInstanceCapacity do
+  Inst.LastAccess := GetTickCount64 shr 10; // 1 second resolution
+  // every second, check and release any deprecated instance(s)
+  if (fInstanceTimeout <> 0) and
+     (fInstanceCount > 0) and
+     (Inst.LastAccess <> fInstanceDeprecatedTix32) then
+  begin
+    fInstanceLock.WriteLock;
+    try
+      if fInstanceDeprecatedTix32 <> Inst.LastAccess then
       begin
-        if (P^.InstanceID <> 0) and
-           (Inst.LastAccess64 > P^.LastAccess64 + fInstanceTimeOut) then
-        begin
-          fRestServer.InternalLog('%.RetrieveInstance: Delete %(%) ' +
-            'instance (id=%) after % minutes timeout (max % minutes)',
-            [ClassType, fInterfaceUri, pointer(Inst.Instance), P^.InstanceID,
-             (Inst.LastAccess64 - P^.LastAccess64) div 60000,
-             fInstanceTimeOut div 60000], sllInfo);
-          P^.SafeFreeInstance(self);
-        end;
-        inc(P);
-      end;
-    end;
-    if Inst.InstanceID = 0 then
-    begin
-      // initialize a new sicClientDriven instance
-      if (InstanceCreation <> sicClientDriven) or
-         ((cardinal(aMethodIndex - Length(SERVICE_PSEUDO_METHOD)) >=
-           fInterface.MethodsCount) and
-          (aMethodIndex <> ord(imInstance))) then
-        exit;
-      inc(fInstanceCurrentID);
-      Inst.InstanceID := fInstanceCurrentID;
-      AddNew;
-    end
-    else
-    begin
-      // search the instance corresponding to Inst.InstanceID
-      if fInstanceCount > 0 then
-      begin
+        fInstanceDeprecatedTix32 := Inst.LastAccess;
+        tix := Inst.LastAccess - fInstanceTimeout;
         P := pointer(fInstance);
         for i := 1 to fInstanceCapacity do
-          if P^.InstanceID = Inst.InstanceID then
+        begin
+          if (P^.InstanceID <> 0) and
+             (tix > P^.LastAccess) then
           begin
-            result := aMethodIndex; // notify caller
-            if aMethodIndex = ord(imFree) then
-            begin
-              // {"method":"_free_", "params":[], "id":1234}
-              P^.SafeFreeInstance(self);
-              exit;
-            end;
-            P^.LastAccess64 := Inst.LastAccess64;
-            Inst.Instance := P^.Instance;
-            exit;
-          end
-          else
-            inc(P);
+            fRestServer.InternalLog('%.RetrieveInstance: Delete I%(%) ' +
+              'instance (id=%) after % minutes timeout (max % minutes)',
+              [ClassType, fInterfaceUri, pointer(Inst.Instance), P^.InstanceID,
+               tix div 60, fInstanceTimeOut div 60], sllInfo);
+            P^.SafeFreeInstance(self);
+          end;
+          inc(P);
+        end;
       end;
-      // add any new session/user/group/thread instance if necessary
-      if (InstanceCreation <> sicClientDriven) and
-         (cardinal(aMethodIndex - Length(SERVICE_PSEUDO_METHOD)) <
-           fInterface.MethodsCount) then
-        AddNew;
+    finally
+      fInstanceLock.WriteUnLock;
     end;
-  finally
-    LeaveCriticalSection(fInstanceLock);
   end;
+  // imFree has a specific behavior
+  if aMethodIndex = ord(imFree) then
+  begin
+    // {"method":"_free_", "params":[], "id":1234}
+    fInstanceLock.WriteLock;
+    try
+      P := FindInstance(pointer(fInstance), fInstanceCapacity, Inst.InstanceID);
+      if P <> nil then
+      begin
+        result := aMethodIndex; // notify caller
+        P^.SafeFreeInstance(self);
+      end;
+    finally
+      fInstanceLock.WriteUnLock;
+    end;
+    exit;
+  end;
+  // now create or retrieve the instance
+  if Inst.InstanceID = 0 then
+  begin
+    // initialize a new sicClientDriven instance
+    if (InstanceCreation = sicClientDriven) and
+       ((cardinal(aMethodIndex - Length(SERVICE_PSEUDO_METHOD))
+          < fInterface.MethodsCount) or
+        (aMethodIndex = ord(imInstance))) then
+      AddNew;
+    exit;
+  end;
+  // search the instance corresponding to Inst.InstanceID
+  prevcounter := fInstanceCounter;
+  if fInstanceCount > 0 then
+  begin
+    // non-blocking regular retrieval of any existing TInterfacedObject
+    fInstanceLock.ReadOnlyLock;
+    try
+      P := FindInstance(pointer(fInstance), fInstanceCapacity, Inst.InstanceID);
+      if P <> nil then
+      begin
+        result := aMethodIndex; // notify caller
+        P^.LastAccess := Inst.LastAccess;
+        Inst.Instance := P^.Instance;
+        exit;
+      end;
+    finally
+      fInstanceLock.ReadOnlyUnLock;
+    end;
+  end;
+  // new TInterfacedObject corresponding to this session/user/group/thread
+  if (InstanceCreation <> sicClientDriven) and
+     (cardinal(aMethodIndex - Length(SERVICE_PSEUDO_METHOD))
+       < fInterface.MethodsCount) then
+    AddNew;
 end;
 
 function TServiceFactoryServer.CreateInstance(
@@ -1268,7 +1339,7 @@ begin
       Ctxt.ServiceResultStart(WR);
       dolock := optExecLockedPerInterface in opt;
       if dolock then
-        EnterCriticalSection(fInstanceLock);
+        EnterCriticalSection(fExecuteLock);
       exec := TInterfaceMethodExecute.Create(Ctxt.ServiceMethod);
       try
         exec.Options := opt;
@@ -1305,7 +1376,7 @@ begin
         Ctxt.Call.OutStatus := exec.ServiceCustomAnswerStatus;
       finally
         if dolock then
-          LeaveCriticalSection(fInstanceLock);
+          LeaveCriticalSection(fExecuteLock);
       end;
       if Ctxt.Call.OutHead = '' then
       begin
@@ -1396,7 +1467,6 @@ end;
 
 
 { ***************** TServiceContainerServer Services Holder }
-
 
 { TInterfacedObjectFakeServer }
 
@@ -1595,7 +1665,7 @@ end;
 procedure TServiceContainerServer.OnCloseSession(aSessionID: cardinal);
 var
   i, j: PtrInt;
-  P: ^TServiceFactoryServerInstance;
+  P: PServiceFactoryServerInstance;
   fact: TServiceFactoryServer;
   inst: TServiceFactoryServerInstance;
 begin
@@ -1612,7 +1682,7 @@ begin
         sicClientDriven:
           begin
             // release ASAP if was not notified by client
-            EnterCriticalSection(fact.fInstanceLock);
+            fact.fInstanceLock.WriteLock;
             try
               P := pointer(fact.fInstance);
               for j := 1 to fact.fInstanceCapacity do
@@ -1622,7 +1692,7 @@ begin
                 inc(P);
               end;
             finally
-              LeaveCriticalSection(fact.fInstanceLock);
+              fact.fInstanceLock.WriteUnLock;
             end;
           end;
       end;
@@ -1634,7 +1704,15 @@ begin
   if self = nil then
     exit;
   if fFakeCallbacks = nil then
-    fFakeCallbacks := TSynObjectListLocked.Create(false);
+  begin
+    fRestServer.AcquireExecution[execSoaByInterface].Safe.Lock;
+    try
+      if fFakeCallbacks = nil then
+        fFakeCallbacks := TSynObjectListLocked.Create(false);
+    finally
+      fRestServer.AcquireExecution[execSoaByInterface].Safe.UnLock;
+    end;
+  end;
   fFakeCallbacks.Add(aFakeInstance);
 end;
 
@@ -1726,7 +1804,7 @@ begin
     // avoid stack overflow ;)
     fRestServer.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
       [ClassType, fakeID, Values[0].Name.Text], sllDebug);
-  fFakeCallbacks.Safe.WriteLock;
+  fFakeCallbacks.Safe.ReadOnlyLock;
   try
     fake := FakeCallbackFind(
       pointer(fFakeCallbacks.List), fFakeCallbacks.Count, connectionID, fakeID);
@@ -1760,7 +1838,7 @@ begin
         Ctxt.Success;
     end;
   finally
-    fFakeCallbacks.Safe.WriteUnLock;
+    fFakeCallbacks.Safe.ReadOnlyUnLock;
   end;
 end;
 
