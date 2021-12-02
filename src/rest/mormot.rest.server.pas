@@ -5933,11 +5933,11 @@ procedure TRestServerMonitor.ProcessSuccess(IsOutcomingFile: boolean);
 begin
   if self = nil then
     exit;
-  LightLock(fSafe);
+  fSafe.Lock;
   inc(fSuccess);
   if IsOutcomingFile then
     inc(fOutcomingFiles);
-  LightUnLock(fSafe);
+  fSafe.UnLock;
 end;
 
 procedure TRestServerMonitor.NotifyOrm(aMethod: TUriMethod);
@@ -5973,7 +5973,7 @@ begin
   if (self = nil) or
      (TableIndex < 0) then
     exit;
-  LightLock(fSafe);
+  fSafe.Lock;
   try
     if TableIndex >= length(fPerTable[Write]) then
       // tables may have been added after Create()
@@ -5987,7 +5987,7 @@ begin
     end;
     st.AddSize(DataSize, MicroSecondsElapsed);
   finally
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
   if fServer.fStatUsage <> nil then
     fServer.fStatUsage.Modified(st, []);
@@ -5999,12 +5999,12 @@ begin
     result := 0
   else
   begin
-    LightLock(fSafe);
+    fSafe.Lock;
     try
       inc(fCurrentThreadCount, delta);
       result := fCurrentThreadCount;
     finally
-      LightUnLock(fSafe);
+      fSafe.UnLock;
     end;
   end;
 end;

@@ -2421,7 +2421,7 @@ type
   TRawUtf8InterningSlot = object
   {$endif USERECORDWITHMETHODS}
   private
-    fSafe: PtrUInt; // LightLock/LightUnlock thread-safe protection
+    fSafe: TLightLock;
     fCount: integer;
     fValue: TRawUtf8DynArray;
     fValues: TDynArrayHashed;
@@ -3940,7 +3940,7 @@ var
   i: PtrInt;
   added: boolean;
 begin
-  LightLock(fSafe);
+  fSafe.Lock;
   {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
   try
   {$else}
@@ -3957,7 +3957,7 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
@@ -3968,7 +3968,7 @@ var
   added: boolean;
   bak: TDynArraySortCompare;
 begin
-  LightLock(fSafe);
+  fSafe.Lock;
   {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
   try
   {$else}
@@ -3984,7 +3984,7 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
@@ -3993,7 +3993,7 @@ var
   i: PtrInt;
   added: boolean;
 begin
-  LightLock(fSafe);
+  fSafe.Lock;
   try
     i := fValues.FindHashedForAdding(aText, added, aTextHash);
     if added then
@@ -4001,18 +4001,18 @@ begin
     else
       aText := fValue[i];   // return unified string instance
   finally
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
 procedure TRawUtf8InterningSlot.Clear;
 begin
-  LightLock(fSafe);
+  fSafe.Lock;
   try
     fValues.SetCount(0); // Values.Clear
     fValues.Hasher.ForceReHash;
   finally
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
@@ -4022,7 +4022,7 @@ var
   s, d: PPtrUInt; // points to RawUtf8 values
 begin
   result := 0;
-  LightLock(fSafe);
+  fSafe.Lock;
   try
     if fCount = 0 then
       exit;
@@ -4056,7 +4056,7 @@ begin
       fValues.ForceReHash;
     end;
   finally
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 

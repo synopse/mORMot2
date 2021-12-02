@@ -1205,7 +1205,7 @@ type
     fUserID: RawUtf8;
     fForcedSchemaName: RawUtf8;
     fMainConnection: TSqlDBConnection;
-    fMainConnectionLock: PtrUInt;
+    fMainConnectionLock: TLightLock;
     fBatchMaxSentAtOnce: integer;
     fLoggedSqlMaxSize: integer;
     fConnectionTimeOutTicks: Int64;
@@ -1215,10 +1215,10 @@ type
     fUseCache, fStoreVoidStringAsNull, fLogSqlStatementOnException,
       fRollbackOnDisconnect, fReconnectAfterConnectionError,
       fFilterTableViewSchemaName: boolean;
-    fDateTimeFirstChar: AnsiChar;
     {$ifndef UNICODE}
     fVariantWideString: boolean;
     {$endif UNICODE}
+    fDateTimeFirstChar: AnsiChar;
     fStatementMaxMemory: Int64;
     fSqlGetServerTimestamp: RawUtf8;
     fEngineName: RawUtf8;
@@ -3446,7 +3446,7 @@ end;
 
 function TSqlDBConnectionProperties.GetMainConnection: TSqlDBConnection;
 begin
-  LightLock(fMainConnectionLock);
+  fMainConnectionLock.Lock;
   if (fMainConnection = nil) or
      ((fConnectionTimeOutTicks <> 0) and
        fMainConnection.IsOutdated(GetTickCount64)) then
@@ -3456,7 +3456,7 @@ begin
     except
       fMainConnection := nil;
     end;
-  LightUnLock(fMainConnectionLock);
+  fMainConnectionLock.UnLock;
   result := fMainConnection;
 end;
 
@@ -3472,9 +3472,9 @@ end;
 
 procedure TSqlDBConnectionProperties.ClearConnectionPool;
 begin
-  LightLock(fMainConnectionLock);
+  fMainConnectionLock.Lock;
   FreeAndNilSafe(fMainConnection); // contains its own try..finally
-  LightUnLock(fMainConnectionLock);
+  fMainConnectionLock.UnLock;
 end;
 
 function TSqlDBConnectionProperties.NewThreadSafeStatement: TSqlDBStatement;
@@ -7368,7 +7368,7 @@ begin
         end;
       end;
     tmMainConnection:
-      result := inherited GetMainConnection; // has its own LightLock()
+      result := inherited GetMainConnection; // has its own TLightLock
   else
     result := nil;
   end;

@@ -874,7 +874,7 @@ type
   TSynThreadPool = class
   protected
     {$ifndef USE_WINIOCP}
-    fSafe: PtrUInt; // LightLock/LightUnlock non-rentrant exclusive lock
+    fSafe: TLightLock;
     {$endif USE_WINIOCP}
     fWorkThread: TSynThreadPoolWorkThreads;
     fWorkThreadCount: integer;
@@ -2662,14 +2662,14 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
   begin
     result := false; // queue is full
     found := nil;
-    LightLock(fSafe);
+    fSafe.Lock;
     thread := pointer(fWorkThread);
     for i := 1 to fWorkThreadCount do
       if thread^.fProcessingContext = nil then
       begin
         found := thread^;
         found.fProcessingContext := aContext;
-        LightUnLock(fSafe);
+        fSafe.UnLock;
         found.fEvent.SetEvent; // notify outside of the fSafe lock
         result := true; // found one available thread
         exit;
@@ -2689,7 +2689,7 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
         result := true; // added in pending queue
       end;
     end;
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 
 {$endif USE_WINIOCP}
@@ -2759,7 +2759,7 @@ begin
      (fPendingContext = nil) or
      (fPendingContextCount = 0) then
     exit;
-  LightLock(fSafe);
+  fSafe.Lock;
   try
     if fPendingContextCount > 0 then
     begin
@@ -2771,7 +2771,7 @@ begin
         SetLength(fPendingContext, 128); // reduce when congestion is resolved
     end;
   finally
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
@@ -2847,18 +2847,18 @@ begin
       fEvent.WaitFor(INFINITE);
       if fOwner.fTerminated then
         break;
-      LightLock(fOwner.fSafe);
+      fOwner.fSafe.Lock;
       ctxt := fProcessingContext;
-      LightUnLock(fOwner.fSafe);
+      fOwner.fSafe.UnLock;
       if ctxt <> nil then
       begin
         repeat
           DoTask(ctxt);
           ctxt := fOwner.PopPendingContext; // unqueue any pending context
         until ctxt = nil;
-        LightLock(fOwner.fSafe);
+        fOwner.fSafe.Lock;
         fProcessingContext := nil; // indicates this thread is now available
-        LightUnLock(fOwner.fSafe);
+        fOwner.fSafe.UnLock;
       end;
      {$endif USE_WINIOCP}
     until fOwner.fTerminated or

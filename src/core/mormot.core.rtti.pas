@@ -5564,7 +5564,7 @@ procedure _NoRandom(V: PPointer; RC: TRttiCustom);
 begin
 end;
 
-// we use SharedRandom since LightLock() may be faster than a threadvar
+// we use SharedRandom since TLightLock may be faster than a threadvar
 
 procedure _FillRandom(V: PByte; RC: TRttiCustom);
 begin

@@ -367,7 +367,7 @@ type
   // non-rentrant Lock/UnLock to access its individual properties
   TSynMonitor = class(TSynPersistent)
   protected
-    fSafe: PtrUInt; // LightLock/LightUnLock exclusive non-reentrant mutex
+    fSafe: TLightLock;
     fName: RawUtf8;
     fTaskCount: TSynMonitorCount64;
     fTotalTime: TSynMonitorTime;
@@ -454,11 +454,11 @@ type
     // methods are disallowed, and the global fTimer won't be used any more
     // - this method is to be used with an external timer for thread-safety
     procedure FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
-    /// non-reentrant exclusive lock acquisition - wrap LightLock(fSafe)
+    /// non-reentrant exclusive lock acquisition - wrap fSafe.Lock
     // - warning: this non-reentrant method would deadlock if called twice
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
-    /// release the non-reentrant exclusive lock - wrap LightUnLock(fSafe)
+    /// release the non-reentrant exclusive lock - wrap fSafe.UnLock
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
     /// customize JSON Serialization to set woEnumSetsAsText for readibility
@@ -1504,7 +1504,7 @@ end;
 
 procedure TSynMonitor.FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
 begin
-  LightLock(fSafe);
+  fSafe.Lock;
   // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
   {$ifdef HASFASTTRYFINALLY}
   try
@@ -1515,18 +1515,18 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
 procedure TSynMonitor.Lock;
 begin
-  LightLock(fSafe);
+  fSafe.Lock;
 end;
 
 procedure TSynMonitor.UnLock;
 begin
-  LightUnLock(fSafe);
+  fSafe.UnLock;
 end;
 
 class procedure TSynMonitor.InitializeObjArray(var ObjArr; Count: integer);
@@ -1556,11 +1556,11 @@ end;
 
 procedure TSynMonitor.ProcessError(const info: variant);
 begin
-  LightLock(fSafe);
+  fSafe.Lock;
   try
     LockedProcessError(info);
   finally
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
@@ -1592,13 +1592,13 @@ begin
   if (self = nil) or
      (another = nil) then
     exit;
-  LightLock(fSafe);
-  LightLock(another.fSafe);
+  fSafe.Lock;
+  another.fSafe.Lock;
   try
     LockedSum(another);
   finally
-    LightUnLock(another.fSafe);
-    LightUnLock(fSafe);
+    another.fSafe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -1623,12 +1623,12 @@ end;
 
 procedure TSynMonitor.ComputeDetailsTo(W: TTextWriter);
 begin
-  LightLock(fSafe);
+  fSafe.Lock;
   try
     LockedPerSecProperties; // may not have been calculated after Sum()
     LockedWriteDetailsTo(W);
   finally
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
@@ -1676,17 +1676,17 @@ end;
 
 procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
 begin
-  LightLock(fSafe);
+  fSafe.Lock;
   fSize.Bytes := fSize.Bytes + Bytes;
-  LightUnLock(fSafe);
+  fSafe.UnLock;
 end;
 
 procedure TSynMonitorWithSize.AddSize(const Bytes, MicroSecs: QWord);
 begin
-  LightLock(fSafe);
+  fSafe.Lock;
   fSize.Bytes := fSize.Bytes + Bytes;
   LockedFromExternalMicroSeconds(MicroSecs);
-  LightUnLock(fSafe);
+  fSafe.UnLock;
 end;
 
 procedure TSynMonitorWithSize.LockedSum(another: TSynMonitor);
@@ -1726,10 +1726,10 @@ end;
 
 procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
 begin
-  LightLock(fSafe);
+  fSafe.Lock;
   fInput.Bytes  := fInput.Bytes + Incoming;
   fOutput.Bytes := fOutput.Bytes + Outgoing;
-  LightUnLock(fSafe);
+  fSafe.UnLock;
 end;
 
 procedure TSynMonitorInputOutput.Notify(
@@ -1738,7 +1738,7 @@ var
   error: boolean;
 begin
   error := not StatusCodeIsSuccess(Status);
-  LightLock(fSafe);
+  fSafe.Lock;
   // inlined AddSize
   fInput.Bytes  := fInput.Bytes + Incoming;
   fOutput.Bytes := fOutput.Bytes + Outgoing;
@@ -1747,7 +1747,7 @@ begin
   // inlined ProcessErrorNumber(Status)
   if error then
     LockedProcessErrorInteger(Status);
-  LightUnLock(fSafe);
+  fSafe.UnLock;
 end;
 
 procedure TSynMonitorInputOutput.LockedSum(another: TSynMonitor);
@@ -1767,13 +1767,13 @@ procedure TSynMonitorServer.ClientConnect;
 begin
   if self = nil then
     exit;
-  LightLock(fSafe);
+  fSafe.Lock;
   try
     inc(fClientsCurrent);
     if fClientsCurrent > fClientsMax then
       fClientsMax := fClientsCurrent;
   finally
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
@@ -1781,12 +1781,12 @@ procedure TSynMonitorServer.ClientDisconnect;
 begin
   if self = nil then
     exit;
-  LightLock(fSafe);
+  fSafe.Lock;
   try
     if fClientsCurrent > 0 then
       dec(fClientsCurrent);
   finally
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
@@ -1794,11 +1794,11 @@ procedure TSynMonitorServer.ClientDisconnectAll;
 begin
   if self = nil then
     exit;
-  LightLock(fSafe);
+  fSafe.Lock;
   try
     fClientsCurrent := 0;
   finally
-    LightUnLock(fSafe);
+    fSafe.UnLock;
   end;
 end;
 

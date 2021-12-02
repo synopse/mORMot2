@@ -2518,22 +2518,41 @@ procedure RedirectCode(Func, RedirectFunc: Pointer);
 
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }
 
-/// enter an exclusive non-rentrant lock, stored in a PtrUInt value
-// - the lock value should have been initialized with 0 (e.g. as a class field)
-// - warning: non rentrant function, i.e. calling twice in a raw would deadlock:
-// use TRWLock, TSynLocker or TRTLCriticalSection for a safer reentrant lock
-// - light locks are expected to be kept a very small amount of time: use
-// TSynLocker or TRTLCriticalSection if the lock may block too long
-// - calls SwitchToThread after some spinning, but don't use any R/W OS API
-procedure LightLock(var lock: PtrUInt);
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// leave an exclusive non-rentrant lock
-procedure LightUnLock(var lock: PtrUInt);
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// low-level function called by LightLock() when inlined
-procedure LightLockSpin(var lock: PtrUInt);
+type
+  /// a lightweight exclusive non-rentrant lock, stored in a PtrUInt value
+  // - calls SwitchToThread after some spinning, but don't use any R/W OS API
+  // - warning: methods are non rentrant, i.e. calling Lock twice in a raw would
+  // deadlock: use TRWLock or TSynLocker/TRTLCriticalSection for reentrant methods
+  // - light locks are expected to be kept a very small amount of time: use
+  // TSynLocker or TRTLCriticalSection if the lock may block too long
+  // - only consume 4 bytes on CPU32, 8 bytes on CPU64
+  {$ifdef USERECORDWITHMETHODS}
+  TLightLock = record
+  {$else}
+  TLightLock = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    Flags: PtrUInt;
+    // low-level function called by the Lock method when inlined
+    procedure LockSpin;
+  public
+    /// to be called if the instance has not been filled with 0
+    // - e.g. not needed if TLightLock is defined as a class field
+    procedure Init;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// enter an exclusive non-rentrant lock
+    procedure Lock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// try to enter an exclusive non-rentrant lock
+    // - if returned true, caller should eventually call LightUnLock()
+    // - several lightlocks, each protecting a few variables (e.g. a list), may be
+    // more efficient than a more global TRTLCriticalSection/TRWLock
+    function TryLock: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// leave an exclusive non-rentrant lock
+    procedure UnLock;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
 
 type
   /// how TRWLock.Lock and TRWLock.UnLock high-level wrapper methods are called
@@ -2918,7 +2937,7 @@ type
   // - just wrap TLecuyer with a LighLock()
   // - should not be used, unless may be slightly faster than a threadvar
   TLecuyerThreadSafe = object
-    Safe: PtrUInt;
+    Safe: TLightLock;
     Generator: TLecuyer;
     /// compute the next 32-bit generated value
     function Next: cardinal; overload;
@@ -5330,27 +5349,40 @@ begin
 end;
 
 
-// we tried a dedicated asm for LightLock() but it was slower
-procedure LightLock(var lock: PtrUInt);
+{ TLightLock }
+
+procedure TLightLock.Init;
 begin
-  if not LockedExc(lock, 1, 0) then
-    LightLockSpin(lock);
+  Flags := 0;
 end;
 
-procedure LightLockSpin(var lock: PtrUInt);
+procedure TLightLock.LockSpin;
 var
   spin: PtrUInt;
 begin
   spin := SPIN_COUNT;
   repeat
     spin := DoSpin(spin);
-  until LockedCAS(lock, 1, 0);
+  until LockedExc(Flags, 1, 0);
 end;
 
-procedure LightUnLock(var lock: PtrUInt);
+procedure TLightLock.Lock;
 begin
-  lock := 0;
+  // we tried a dedicated asm but it was slower: inlining is preferred
+  if not LockedExc(Flags, 1, 0) then
+    LockSpin;
 end;
+
+function TLightLock.TryLock: boolean;
+begin
+  result := LockedExc(Flags, 1, 0);
+end;
+
+procedure TLightLock.UnLock;
+begin
+  Flags := 0;
+end;
+
 
 
 { TRWLock }
@@ -5934,30 +5966,30 @@ end;
 
 function TLecuyerThreadSafe.Next: cardinal;
 begin
-  LightLock(Safe);
+  Safe.Lock;
   result := Generator.Next;
-  LightUnLock(Safe);
+  Safe.UnLock;
 end;
 
 function TLecuyerThreadSafe.NextDouble: double;
 begin
-  LightLock(Safe);
+  Safe.Lock;
   result := Generator.NextDouble;
-  LightUnLock(Safe);
+  Safe.UnLock;
 end;
 
 procedure TLecuyerThreadSafe.Fill(dest: pointer; count: integer);
 begin
-  LightLock(Safe);
+  Safe.Lock;
   Generator.Fill(dest, count);
-  LightUnLock(Safe);
+  Safe.UnLock;
 end;
 
 procedure TLecuyerThreadSafe.FillShort31(var dest: TShort31);
 begin
-  LightLock(Safe);
+  Safe.Lock;
   Generator.FillShort31(dest);
-  LightUnLock(Safe);
+  Safe.UnLock;
 end;
 
 
