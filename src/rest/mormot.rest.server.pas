@@ -326,8 +326,6 @@ type
     // - contain ServiceExecution.Options including optNoLogInput/optNoLogOutput
     // in case of TInterfaceFactory.RegisterUnsafeSpiType
     ServiceExecutionOptions: TInterfaceMethodOptions;
-    /// low-level index of the Service in the internal methods list
-    ServiceListInterfaceMethodIndex: integer;
     /// force the interface-based service methods to return a JSON object
     // - default behavior is to follow Service.ResultAsJsonObject property value
     // (which own default is to return a more convenient JSON array)
@@ -998,8 +996,8 @@ type
     constructor CreateFrom(var Read: TFastReader; Server: TRestServer); virtual;
     /// will release the User and User.GroupRights instances
     destructor Destroy; override;
-    /// initialize the Interfaces: TSynMonitorInputOutputObjArray statistics
-    procedure InterfacesSetLength(MethodCount: integer);
+    /// update the Interfaces[] statistics
+    procedure NotifyInterfaces(aCtxt: TRestServerUriContext; aElapsed: Int64);
   public
     /// the session ID number, as numerical value
     // - never equals to 1 (CONST_AUTHENTICATION_NOT_USED, i.e. authentication
@@ -3113,7 +3111,7 @@ begin
       length(Call.InHead) + length(Call.InBody) + 12;
     fStatsOutSize := length(Call.OutHead) + length(Call.OutBody) + 16;
   end;
-  // set all TSynMonitorInputOutput fields in a single LightLock()
+  // set all TSynMonitorInputOutput fields in a single TLightLock
   Stats.Notify(fStatsInSize, fStatsOutSize, MicroSec, Call.OutStatus);
 end;
 
@@ -5167,10 +5165,31 @@ begin
   inherited;
 end;
 
-procedure TAuthSession.InterfacesSetLength(MethodCount: integer);
+procedure TAuthSession.NotifyInterfaces(
+  aCtxt: TRestServerUriContext; aElapsed: Int64);
+var
+  m: PtrInt;
 begin
   if fInterfaces = nil then
-    SetLength(fInterfaces, MethodCount);
+  begin
+    aCtxt.Server.Stats.Lock;
+    SetLength(fInterfaces, length(aCtxt.Server.Services.InterfaceMethod));
+    aCtxt.Server.Stats.UnLock;
+  end;
+  m := aCtxt.Server.Services.InterfaceMethods.FindHashed(
+    PInterfaceMethod(aCtxt.ServiceMethod)^.InterfaceDotMethodName);
+  if m < 0 then
+    exit;
+  if Interfaces[m] = nil then
+  begin
+    aCtxt.Server.Stats.Lock;
+    if Interfaces[m] = nil then
+      Interfaces[m] := TSynMonitorInputOutput.Create(
+         PInterfaceMethod(aCtxt.ServiceMethod)^.InterfaceDotMethodName);
+    aCtxt.Server.Stats.UnLock;
+  end;
+  aCtxt.StatsFromContext(Interfaces[m], aElapsed);
+  // mlSessions stats are not yet tracked per Client
 end;
 
 function TAuthSession.GetUserName: RawUtf8;

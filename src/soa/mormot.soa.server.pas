@@ -172,6 +172,7 @@ type
     procedure SetTimeoutSecInt(value: cardinal);
     function GetTimeoutSec: cardinal;
     function GetStat(const aMethod: RawUtf8): TSynMonitorInputOutput;
+    function GetStats(Ctxt: TRestServerUriContext): TSynMonitorInputOutput;
     /// called by ExecuteMethod to append input/output params to Sender.TempTextWriter
     procedure OnLogRestExecuteMethod(Sender: TInterfaceMethodExecuteRaw;
       Step: TInterfaceMethodExecuteEventStep);
@@ -681,6 +682,36 @@ begin
   result := fStats[fInterface.CheckMethodIndex(aMethod)];
 end;
 
+function TServiceFactoryServer.GetStats(
+  Ctxt: TRestServerUriContext): TSynMonitorInputOutput;
+var
+  m: PtrInt;
+begin
+  result := nil;
+  if not (mlInterfaces in fRestServer.StatLevels) then
+    exit;
+  m := Ctxt.ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
+  if m < 0 then
+    exit;
+  result := fStats[m];
+  if result = nil then
+  begin
+    fRestServer.Stats.Lock;
+    try
+      result := fStats[m];
+      if result = nil then
+      begin
+        result := TSynMonitorInputOutput.Create(
+          PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName);
+        fStats[m] := result;
+      end;
+    finally
+      fRestServer.Stats.UnLock;
+    end;
+  end;
+  result.Processing := true;
+end;
+
 destructor TServiceFactoryServer.Destroy;
 var
   i: PtrInt;
@@ -1089,27 +1120,18 @@ var
   exec: TInterfaceMethodExecute;
   timeStart, timeEnd: Int64;
   stats: TSynMonitorInputOutput;
-  m: PtrInt;
   err: ShortString;
   temp: TTextWriterStackBuffer;
 
-  function GetFullMethodName: RawUtf8;
+  procedure Error(const Msg: RawUtf8; Status: integer);
+  var
+    met: RawUtf8;
   begin
     if Ctxt.ServiceMethod <> nil then
-      result := PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName
+      met := PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName
     else
-      result := fInterface.InterfaceName;
-  end;
-
-  procedure Error(const Msg: RawUtf8; Status: integer);
-  begin
-    Ctxt.Error('% % for %',
-     [ToText(InstanceCreation)^, Msg, GetFullMethodName], Status);
-  end;
-
-  function StatsCreate: TSynMonitorInputOutput;
-  begin
-    result := TSynMonitorInputOutput.Create(GetFullMethodName);
+      met := fInterface.InterfaceName;
+    Ctxt.Error('% % for %', [ToText(InstanceCreation)^, Msg, met], Status);
   end;
 
   procedure FinalizeLogRest;
@@ -1203,30 +1225,7 @@ begin
     Error('ServiceExecution=nil', HTTP_SERVERERROR);
     exit;
   end;
-  stats := nil;
-  if mlInterfaces in fRestServer.StatLevels then
-  begin
-    m := Ctxt.ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
-    if m >= 0 then
-    begin
-      stats := fStats[m];
-      if stats = nil then
-      begin
-        EnterCriticalSection(fInstanceLock);
-        try
-          stats := fStats[m];
-          if stats = nil then
-          begin
-            stats := StatsCreate;
-            fStats[m] := stats;
-          end;
-        finally
-          LeaveCriticalSection(fInstanceLock);
-        end;
-      end;
-      stats.Processing := true;
-    end;
-  end;
+  stats := GetStats(Ctxt);
   err := '';
   exec := nil;
   try
@@ -1334,43 +1333,7 @@ begin
           Ctxt.Server.StatUsage.Modified(stats, []);
         if (mlSessions in fRestServer.StatLevels) and
            (Ctxt.AuthSession <> nil) then
-        begin
-          if Ctxt.AuthSession.Interfaces = nil then
-          begin
-            EnterCriticalSection(fInstanceLock);
-            try
-              Ctxt.AuthSession.InterfacesSetLength(
-                length(fRestServer.Services.InterfaceMethod));
-            finally
-              LeaveCriticalSection(fInstanceLock);
-            end;
-          end;
-          m := Ctxt.ServiceListInterfaceMethodIndex;
-          if m < 0 then
-            m := fRestServer.Services.InterfaceMethods.FindHashed(
-              PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName);
-          if m >= 0 then
-            with Ctxt.AuthSession do
-            begin
-              stats := Interfaces[m];
-              if stats = nil then
-              begin
-                EnterCriticalSection(fInstanceLock);
-                try
-                  stats := Interfaces[m];
-                  if stats = nil then
-                  begin
-                    stats := StatsCreate;
-                    Interfaces[m] := stats;
-                  end;
-                finally
-                  LeaveCriticalSection(fInstanceLock);
-                end;
-              end;
-              Ctxt.StatsFromContext(stats, timeEnd);
-              // mlSessions stats are not yet tracked per Client
-            end;
-        end;
+          Ctxt.AuthSession.NotifyInterfaces(Ctxt, timeEnd);
       end
       else
         timeEnd := 0;
