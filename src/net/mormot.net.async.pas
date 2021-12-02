@@ -59,12 +59,6 @@ type
     /// the associated sequence number
     // - equals 0 after TPollAsyncSockets.Stop
     fHandle: TPollAsyncConnectionHandle;
-    /// Lock/Unlock R/W thread acquisition
-    // - our first implementation attempted a simple atomic counter, but failed
-    // on AARCH64 CPU so now TRTLCriticalSection is used - and is fast enough
-    fLockRW: array[boolean] of TRTLCriticalSection;
-    /// current number of nested TryLock/WaitLock calls
-    fLockCounter: array[boolean] of integer;
     /// atomically incremented during WaitLock()
     fWaitCounter: integer;
     /// false for a single lock (default), true to separate read/write locks
@@ -80,15 +74,21 @@ type
     fRd: TRawByteStringBuffer;
     /// the current (reusable) write data buffer of this connection
     fWr: TRawByteStringBuffer;
+    /// TryLock/Unlock R/W thread acquisition
+    // - uses its own rentrant implementation, faster than TRTLCriticalSection
+    fRW: array[boolean] of record
+      Flags: PtrUInt;
+      ThreadID: TThreadID;
+      RentrantCount: integer;
+    end;
     /// this method is called when the instance is connected to a poll
     // - i.e. at the end of TAsyncConnections.ConnectionAdd(), when Handle is set
     // - overriding this method is cheaper than the plain Create destructor
-    // - default implementation initializes the locker[] mutexes
-    // - you may inherit and set fLockMax := true before if two locks are needed
+    // - default implementation does nothing
     procedure AfterCreate; virtual;
     /// this method is called when the instance is about to be deleted from a poll
     // - overriding this method is cheaper than the plain Destroy destructor
-    // - default implementation resets its Handle to 0 for IsDangling detection
+    // - default implementation does nothing
     procedure BeforeDestroy; virtual;
     /// this method is called when the some input data is pending on the socket
     // - should extract frames or requests from Connection.rd, and handle them
@@ -118,17 +118,17 @@ type
     // - returns true if connection has been acquired, setting the wasactive flag
     // - returns false if it is used by another thread
     function TryLock(writer: boolean): boolean;
-      {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// try to acquire an exclusive R/W access to this connection
     // - returns true if connection has been acquired
     // - returns false if it is used by another thread, after the timeoutMS period
     function WaitLock(writer: boolean; timeoutMS: cardinal): boolean;
     /// release exclusive R/W access to this connection
     procedure UnLock(writer: boolean);
-      {$ifdef HASINLINEWINAPI} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// release all R/W nested locks
     // - used when the connection is closed and inactive
     procedure UnLockFinal(writer: boolean);
+      {$ifdef HASINLINE} inline; {$endif}
     // called after TAsyncConnections.LastOperationReleaseMemorySeconds
     function ReleaseMemoryOnIdle: PtrInt;
     /// read-only access to the socket number associated with this connection
@@ -741,27 +741,10 @@ end;
 { TPollAsyncConnection }
 
 destructor TPollAsyncConnection.Destroy;
-var
-  b: boolean;
 begin
+  // note: our light locks do not need any specific release
   try
     BeforeDestroy;
-    // ensure all locks are properly released
-    for b := false to fLockMax do
-      if fLockCounter[b] >= 0 then // set to -1 if already deleted
-      begin
-        while fLockCounter[b] <> 0 do
-        begin
-          // paranoid check: should have been properly unlocked
-          {TSynLog.DoLog(sllWarning, 'TPollAsyncConnection(%) Done locked: r=% w=%',
-            [pointer(@self), fLockCounter[false], fLockCounter[true]], nil);}
-          mormot.core.os.LeaveCriticalSection(fLockRW[b]);
-          dec(fLockCounter[b]);
-        end;
-        // on some OS, free the mutex in the same thread which created it
-        DeleteCriticalSection(fLockRW[b]);
-        fLockCounter[b] := -1; // call DeleteCriticalSection() only once
-      end;
     // finalize the instance
     fHandle := 0; // to detect any dangling pointer
   except
@@ -771,11 +754,7 @@ begin
 end;
 
 procedure TPollAsyncConnection.AfterCreate;
-var
-  b: boolean;
 begin
-  for b := false to fLockMax do
-    InitializeCriticalSection(fLockRW[b]);
 end;
 
 procedure TPollAsyncConnection.BeforeDestroy;
@@ -802,41 +781,48 @@ begin
 end;
 
 function TPollAsyncConnection.TryLock(writer: boolean): boolean;
+var
+  tid: TThreadID;
 begin
-  if not fLockMax then
-    writer := false; // there is a single lock
-  if (fSocket <> nil) and
-     (mormot.core.os.TryEnterCriticalSection(fLockRW[writer]) <> 0) then
-  begin
-    fWasActive := true;
-    inc(fLockCounter[writer]);
-    result := true;
-  end
-  else
-    result := false;
+  result := false;
+  if (self = nil) or
+     (fSocket = nil) then
+    exit;
+  tid := GetCurrentThreadId;
+  with fRW[writer and fLockMax] do
+    if Flags <> 0 then
+      if ThreadID = tid then
+      begin
+        inc(RentrantCount);
+        result := true;
+      end
+      else
+        exit
+    else if LockedExc(Flags, 1, 0) then
+    begin
+      fWasActive := true;
+      ThreadID := tid;
+      RentrantCount := 1;
+      result := true;
+    end;
 end;
 
 procedure TPollAsyncConnection.UnLock(writer: boolean);
 begin
-  if not fLockMax then
-    writer := false; // there is a single lock
-  if (@self <> nil) and
-     (fLockCounter[writer] > 0) then
-  begin
-    dec(fLockCounter[writer]);
-    mormot.core.os.LeaveCriticalSection(fLockRW[writer]);
-  end;
+  if self <> nil then
+    with fRW[writer and fLockMax] do
+    begin
+      dec(RentrantCount);
+      if RentrantCount <> 0 then
+        exit;
+      Flags := 0;
+      ThreadID := TThreadID(0);
+    end;
 end;
 
 procedure TPollAsyncConnection.UnLockFinal(writer: boolean);
 begin
-  if not fLockMax then
-    writer := false; // there is a single lock
-  while fLockCounter[writer] > 0 do
-  begin
-    dec(fLockCounter[writer]);
-    mormot.core.os.LeaveCriticalSection(fLockRW[writer]);
-  end;
+  fRW[writer and fLockMax].Flags := 0;
 end;
 
 procedure TPollAsyncConnection.OnClose;
@@ -920,7 +906,7 @@ begin
             (TPollAsyncConnection(tag).fHandle <> 0) and
             // another atpReadPending thread may currently own this connection
             // (occurs if PollForPendingEvents was called in between)
-            (TPollAsyncConnection(tag).fLockCounter[{write=}false] = 0);
+            (TPollAsyncConnection(tag).fRW[{write=}false].RentrantCount = 0);
 end;
 
 function TPollAsyncReadSockets.PollForPendingEvents(timeoutMS: integer): integer;
@@ -1054,8 +1040,8 @@ begin
     sock := connection.fSocket;
     if fDebugLog <> nil then
       DoLog('Stop sock=% handle=% r=% w=%',
-        [pointer(sock), connection.Handle,
-         connection.fLockCounter[false], connection.fLockCounter[true]]);
+        [pointer(sock), connection.Handle, connection.fRW[false].RentrantCount,
+         connection.fRW[true].RentrantCount]);
     if sock <> nil then
     begin
       // notify ProcessRead/ProcessWrite to abort
@@ -2382,13 +2368,13 @@ begin
       fKeepAliveSec := fServer.Async.fLastOperationSec +
                        fServer.ServerKeepAliveTimeOut div 1000;
   end;
-  inherited AfterCreate;
+  // inherited AfterCreate; // void parent method
 end;
 
 procedure THttpAsyncConnection.BeforeDestroy;
 begin
   fHttp.ProcessDone;
-  inherited BeforeDestroy;
+  // inherited BeforeDestroy; // void parent method
 end;
 
 procedure THttpAsyncConnection.HttpInit;

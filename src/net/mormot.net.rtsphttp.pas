@@ -154,7 +154,7 @@ end;
 procedure TRtspConnection.BeforeDestroy;
 begin
   fGetBlocking.Free;
-  inherited BeforeDestroy;
+  // inherited BeforeDestroy; // void parent method
 end;
 
 
@@ -192,7 +192,7 @@ end;
 procedure TPostConnection.BeforeDestroy;
 begin
   fOwner.ConnectionRemove(fRtspTag); // disable associated RTSP and GET sockets
-  inherited BeforeDestroy;
+  // inherited BeforeDestroy; // void parent method
 end;
 
 

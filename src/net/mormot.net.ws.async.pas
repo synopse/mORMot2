@@ -84,7 +84,6 @@ type
   TWebSocketAsyncConnection = class(THttpAsyncConnection)
   protected
     fProcess: TWebSocketAsyncProcess; // set once upgraded
-    procedure AfterCreate; override;
     function OnRead: TPollAsyncSocketOnReadWrite; override;
     function AfterWrite: TPollAsyncSocketOnReadWrite; override;
     procedure OnClose; override;
@@ -209,13 +208,6 @@ implementation
 
 { TWebSocketAsyncConnection }
 
-procedure TWebSocketAsyncConnection.AfterCreate;
-begin
-  fLockMax := true;  // prepare WebSockets to separate read/write once upgraded
-  inherited AfterCreate;
-  fLockMax := false; // but plain HTTP expects request/answer blocking process
-end;
-
 function TWebSocketAsyncConnection.OnRead: TPollAsyncSocketOnReadWrite;
 begin
   if fProcess = nil then
@@ -265,7 +257,7 @@ function TWebSocketAsyncConnection.DecodeHeaders: integer;
     if result = HTTP_SUCCESS then
     begin
       fHttp.State := hrsUpgraded;
-      fLockMax := true; // WebSockets separates receiving and sending
+      fLockMax := true; // WebSockets separate receiving and sending
       if fOwner.WriteString(self, resp, {timeout=}1000) then
       begin
         // if we reached here, we switched/upgraded to WebSockets bidir frames
