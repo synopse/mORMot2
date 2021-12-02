@@ -2692,7 +2692,8 @@ type
   protected
     fSection: TRTLCriticalSection;
     fRW: TRWLock;
-    fLocked, fInitialized: boolean;
+    fLockCount: integer;
+    fInitialized: boolean;
     fRWUse: TSynLockerUse;
     function GetVariant(Index: integer): Variant;
     procedure SetVariant(Index: integer; const Value: Variant);
@@ -2706,6 +2707,8 @@ type
     procedure SetPointer(Index: integer; const Value: Pointer);
     function GetUtf8(Index: integer): RawUtf8;
     procedure SetUtf8(Index: integer; const Value: RawUtf8);
+    function GetIsLocked: boolean
+      {$ifdef HASINLINE} inline; {$endif}
   public
     /// number of values stored in the internal Padding[] array
     // - equals 0 if no value is actually stored, or a 1..7 number otherwise
@@ -2806,9 +2809,9 @@ type
     // !end;
     function ProtectMethod: IUnknown;
     /// returns true if the mutex is currently locked by another thread
-    // - only accurate with default RWUse = uSharedLock
+    // - only accurate with default RWUse=uSharedLock
     property IsLocked: boolean
-      read fLocked;
+      read GetIsLocked;
     /// returns true if the Init method has been called for this mutex
     // - is only relevant if the whole object has been previously filled with 0,
     // i.e. as part of a class or as global variable, but won't be accurate
@@ -5604,7 +5607,7 @@ end;
 procedure TSynLocker.Init;
 begin
   InitializeCriticalSection(fSection);
-  fLocked := false;
+  fLockCount := 0;
   fInitialized := true;
   fRW.Init;
   PaddingUsedCount := 0;
@@ -5627,13 +5630,18 @@ begin
   FreeMem(@self);
 end;
 
+function TSynLocker.GetIsLocked: boolean;
+begin
+  result := fLockCount <> 0;
+end;
+
 procedure TSynLocker.RWLock(context: TRWLockContext);
 begin
   case fRWUse of
     uSharedLock:
       begin
         mormot.core.os.EnterCriticalSection(fSection);
-        fLocked := true;
+        inc(fLockCount);
       end;
     uRWLock:
       fRW.Lock(context);
@@ -5645,7 +5653,7 @@ begin
   case fRWUse of
     uSharedLock:
       begin
-        fLocked := false;
+        dec(fLockCount);
         mormot.core.os.LeaveCriticalSection(fSection);
       end;
     uRWLock:
@@ -5659,7 +5667,7 @@ begin
     uSharedLock:
       begin
         mormot.core.os.EnterCriticalSection(fSection);
-        fLocked := true;
+        inc(fLockCount);
       end;
     uRWLock:
       fRW.WriteLock;
@@ -5671,7 +5679,7 @@ begin
   case fRWUse of
     uSharedLock:
       begin
-        fLocked := false;
+        dec(fLockCount);
         mormot.core.os.LeaveCriticalSection(fSection);
       end;
     uRWLock:
@@ -5681,27 +5689,29 @@ end;
 
 function TSynLocker.TryLock: boolean;
 begin
-  if fLocked or
-     (fRWUse <> uSharedLock) or
-     (mormot.core.os.TryEnterCriticalSection(fSection) = 0) then
-    result := false
-  else
-  begin
-    fLocked := true;
-    result := true;
-  end;
+  result := (fRWUse = uSharedLock) and
+            (mormot.core.os.TryEnterCriticalSection(fSection) <> 0);
+  if result then
+    inc(fLockCount);
 end;
 
 function TSynLocker.TryLockMS(retryms: integer): boolean;
+var
+  ms: integer;
+  endtix: Int64;
 begin
+  result := TryLock;
+  if result or
+     (retryms <= 0) then
+    exit;
+  ms := 0;
+  endtix := GetTickCount64 + retryms;
   repeat
+    SleepHiRes(ms);
+    ms := ms xor 1; // 0,1,0,1...
     result := TryLock;
-    if result or
-       (retryms <= 0) then
-      break;
-    SleepHiRes(1);
-    dec(retryms);
-  until false;
+  until result or
+       (GetTickCount64 > endtix);
 end;
 
 function TSynLocker.ProtectMethod: IUnknown;
