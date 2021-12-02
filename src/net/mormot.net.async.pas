@@ -150,6 +150,7 @@ type
   /// TPollAsyncSockets.Read allows to asynchronously delete connection instances
   TPollAsyncReadSockets = class(TPollSockets)
   protected
+    fGCLock, fGC2Lock: TLightLock;
     fGC, fGC2: TObjectDynArray;
     fGCCount, fGCCount2, fGCPass: integer;
     function IsValidPending(tag: TPollSocketTag): boolean; override;
@@ -907,7 +908,7 @@ destructor TPollAsyncReadSockets.Destroy;
 begin
   inherited Destroy;
   // release any connection which are not been GCed yet
-  ObjArrayClear(fGC,  {continueonexception=}true, @fGCCount);
+  ObjArrayClear(fGC,  {continueonexception=}true, @fGCCount); // usually none
   ObjArrayClear(fGC2, {continueonexception=}true, @fGCCount2);
 end;
 
@@ -939,18 +940,26 @@ begin
     end;
     if Assigned(fOnLog) then
       fOnLog(sllTrace, 'PollForPendingEvents: GC=%', [fGCCount2], self);
+    if not fGC2Lock.TryLock then
+      exit;
     ObjArrayClear(fGC2, {continueonexception=}true, @fGCCount2);
+    fGC2Lock.UnLock;
     // here fGC2=nil and fGCCount2=0
   end;
-  if fGCCount > 0 then
+  if (fGCCount > 0) and
+     fGC2Lock.TryLock then
   begin
     // atomic copy of the shared AddGC() instances list
-    mormot.core.os.EnterCriticalSection(fPendingLock); // keep lock short
-    fGC2 := fGC; // immediate ref-counting assignment
-    fGCCount2 := fGCCount;
-    fGC := nil;
-    fGCCount := 0;
-    mormot.core.os.LeaveCriticalSection(fPendingLock);
+    if fGC2 = nil then
+    begin
+      fGCLock.Lock;
+      fGC2 := fGC; // immediate ref-counting assignment
+      fGCCount2 := fGCCount;
+      fGC := nil;
+      fGCCount := 0;
+      fGCLock.UnLock;
+    end;
+    fGC2Lock.UnLock;
   end;
 end;
 
@@ -958,9 +967,9 @@ procedure TPollAsyncReadSockets.AddGC(tobefree: TObject);
 begin
   if Terminated then
     exit;
-  mormot.core.os.EnterCriticalSection(fPendingLock);
+  fGCLock.Lock;
   ObjArrayAddCount(fGC, tobefree, fGCCount);
-  mormot.core.os.LeaveCriticalSection(fPendingLock);
+  fGCLock.UnLock;
 end;
 
 
