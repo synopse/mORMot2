@@ -2967,19 +2967,23 @@ procedure TRestServerUriContext.ExecuteCommand;
 
   procedure TimeOut;
   begin
-    Server.InternalLog('TimeOut %.Execute(%) after % ms', [self, ToText(Command)^,
-      Server.fAcquireExecution[Command].LockedTimeOut], sllServer);
+    Server.InternalLog('TimeOut %.Execute(%) after % ms',
+      [self, ToText(Command)^,
+       Server.fAcquireExecution[Command].LockedTimeOut], sllServer);
     if Call <> nil then
       Call^.OutStatus := HTTP_TIMEOUT; // 408 Request Time-out
   end;
 
 var
   method: TThreadMethod;
-  tix, start: Int64;
-  current: cardinal;
+  tix, endtix: Int64;
+  ms, current: cardinal;
 begin
   with Server.fAcquireExecution[Command] do
   begin
+    ms := LockedTimeOut;
+    if ms = 0 then
+      ms := 10000; // never wait forever = 10 seconds max
     case Command of
       execSoaByMethod:
         method := ExecuteSoaByMethod;
@@ -2991,33 +2995,41 @@ begin
         begin
           // special behavior to handle transactions at writing
           method := ExecuteOrmWrite;
-          start := 0;
-          repeat
-            if Safe.TryLock then
-            try
-              current := TRestOrm(Server.fOrmInstance).TransactionActiveSession;
-              if (current = 0) or
-                 (current = Session) then
-              begin
-                // avoiding transaction mixups
-                if Mode = amLocked then
+          endtix := 0;
+          while true do
+            if Safe.TryLockMS(ms, @Server.fShutdownRequested) then
+              try
+                current := TRestOrm(Server.fOrmInstance).TransactionActiveSession;
+                if (current = 0) or
+                   (current = Session) then
                 begin
-                  ExecuteOrmWrite; // process within the obtained write mutex
-                  exit;
+                  // avoiding transaction mixups
+                  if Mode = amLocked then
+                  begin
+                    ExecuteOrmWrite; // process within the obtained write mutex
+                    exit;
+                  end;
+                  break;   // will handle Mode<>amLocked below
                 end;
-                break;   // will handle Mode<>amLocked below
+                // if we reached here, there is a transaction on another session
+                tix := GetTickCount64;
+                if endtix = 0 then
+                  endtix := tix + ms
+                else if tix > endtix then
+                begin
+                  TimeOut; // we were not able to acquire the transaction
+                  exit;
+                end
+                else
+                  ms := endtix - tix;
+              finally
+                Safe.UnLock;
+              end
+            else
+              begin
+                TimeOut;
+                exit;
               end;
-            finally
-              Safe.UnLock;
-            end;
-            tix := SleepStep(start);
-            if (LockedTimeOut <> 0) and
-               (tix > start + LockedTimeOut) then
-            begin
-              TimeOut; // wait up to 5 second by default
-              exit;
-            end;
-          until Server.fShutdownRequested;
         end;
     else
       raise EOrmException.CreateUtf8('Unexpected Command=% in %.Execute',
@@ -3026,38 +3038,21 @@ begin
     if Mode = amBackgroundORMSharedThread then
       if (Command = execOrmWrite) and
          (Server.fAcquireExecution[execOrmGet].Mode = amBackgroundORMSharedThread) then
-        Command := execOrmGet; // for share same thread for ORM read/write
+        Command := execOrmGet; // both ORM read+write will share the read thread
   end;
   with Server.fAcquireExecution[Command] do
     case Mode of
       amUnlocked:
         method;
       amLocked:
-        if LockedTimeOut = 0 then
-        begin
-          Safe.Lock;
+        if Safe.TryLockMS(ms, @Server.fShutdownRequested) then
           try
             method;
           finally
             Safe.UnLock;
-          end;
-        end
+          end
         else
-        begin
-          start := 0;
-          repeat
-            if Safe.TryLock then
-            try
-              method;
-              exit;
-            finally
-              Safe.UnLock;
-            end;
-            tix := SleepStep(start);
-          until Server.fShutdownRequested or
-                (tix > start + LockedTimeOut);
           TimeOut;
-        end;
       amMainThread:
         BackgroundExecuteThreadMethod(method, nil);
       amBackgroundThread,

@@ -82,7 +82,7 @@ type
   public
     /// how read or write operations will be executed
     Mode: TRestServerAcquireMode;
-    /// delay before failing to acquire the lock
+    /// ms delay before failing to acquire the lock
     LockedTimeOut: cardinal;
     /// background thread instance (if any)
     Thread: TSynBackgroundThreadMethod;
