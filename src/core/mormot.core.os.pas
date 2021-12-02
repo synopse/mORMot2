@@ -2708,7 +2708,6 @@ type
     function GetUtf8(Index: integer): RawUtf8;
     procedure SetUtf8(Index: integer; const Value: RawUtf8);
     function GetIsLocked: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
   public
     /// number of values stored in the internal Padding[] array
     // - equals 0 if no value is actually stored, or a 1..7 number otherwise
@@ -2809,7 +2808,7 @@ type
     // !end;
     function ProtectMethod: IUnknown;
     /// returns true if the mutex is currently locked by another thread
-    // - only accurate with default RWUse=uSharedLock
+    // - with RWUse=uRWLock, any lock (even ReadOnlyLock) would return true
     property IsLocked: boolean
       read GetIsLocked;
     /// returns true if the Init method has been called for this mutex
@@ -5632,7 +5631,14 @@ end;
 
 function TSynLocker.GetIsLocked: boolean;
 begin
-  result := fLockCount <> 0;
+  case fRWUse of
+    uSharedLock:
+      result := fLockCount <> 0; // only updated by uSharedLock
+    uRWLock:
+      result := fRW.Flags = 0;   // no lock at all
+  else
+    result := false;             // uNoLock will never lock
+  end;
 end;
 
 procedure TSynLocker.RWLock(context: TRWLockContext);
