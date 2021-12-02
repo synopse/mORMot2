@@ -6643,7 +6643,7 @@ var
 begin
   synch.Action := doThreadMethod;
   synch.ThreadMethod := method;
-  BackGroundExecute(synch,backgroundThread);
+  BackGroundExecute(synch, backgroundThread);
 end;
 
 procedure BackgroundExecuteInstanceRelease(instance: TObject;

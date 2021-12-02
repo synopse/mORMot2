@@ -2707,7 +2707,7 @@ type
     procedure SetPointer(Index: integer; const Value: Pointer);
     function GetUtf8(Index: integer): RawUtf8;
     procedure SetUtf8(Index: integer; const Value: RawUtf8);
-    function GetIsLocked: boolean
+    function GetIsLocked: boolean;
       {$ifdef HASINLINE} inline; {$endif}
   public
     /// number of values stored in the internal Padding[] array
@@ -2777,7 +2777,7 @@ type
     // !   finally
     // !     Safe.Unlock;
     // !   end;
-    function TryLockMS(retryms: integer): boolean;
+    function TryLockMS(retryms: integer; terminated: PBoolean = nil): boolean;
     /// release the instance for exclusive access
     // - redirects to RWUnLock(cWrite)
     // - each Lock/TryLock should have its exact UnLock opposite, so a
@@ -5695,23 +5695,27 @@ begin
     inc(fLockCount);
 end;
 
-function TSynLocker.TryLockMS(retryms: integer): boolean;
+function TSynLocker.TryLockMS(retryms: integer; terminated: PBoolean): boolean;
 var
   ms: integer;
   endtix: Int64;
 begin
   result := TryLock;
   if result or
+     (fRWUse <> uSharedLock) or
      (retryms <= 0) then
     exit;
   ms := 0;
   endtix := GetTickCount64 + retryms;
   repeat
     SleepHiRes(ms);
-    ms := ms xor 1; // 0,1,0,1...
     result := TryLock;
-  until result or
-       (GetTickCount64 > endtix);
+    if result or
+       ((terminated <> nil) and
+        terminated^) then
+      exit;
+    ms := ms xor 1; // 0,1,0,1... seems to be good for scaling
+  until GetTickCount64 > endtix;
 end;
 
 function TSynLocker.ProtectMethod: IUnknown;

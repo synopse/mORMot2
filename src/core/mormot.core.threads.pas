@@ -325,6 +325,7 @@ type
   // TSynBackgroundThreadMethod and provide a much more convenient callback
   TSynBackgroundThreadMethodAbstract = class(TSynBackgroundThreadAbstract)
   protected
+    fPendingProcessLock: TLightLock;
     fCallerEvent: TEvent;
     fParam: pointer;
     fCallerThreadID: TThreadID;
@@ -333,7 +334,6 @@ type
     fOnBeforeProcess: TOnNotifyThread;
     fOnAfterProcess: TOnNotifyThread;
     fPendingProcessFlag: TSynBackgroundThreadProcessStep;
-    fPendingProcessLock: TSynLocker;
     procedure ExecuteLoop; override;
     function OnIdleProcessNotify(var start: Int64): Int64; // return elapsed ms
     function GetOnIdleBackgroundThreadActive: boolean;
@@ -1615,7 +1615,6 @@ constructor TSynBackgroundThreadMethodAbstract.Create(
 begin
   fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
   fCallerEvent := TEvent.Create(nil, false, false, '');
-  fPendingProcessLock.Init;
   inherited Create(aThreadName, OnBeforeExecute, OnAfterExecute);
 end;
 
@@ -1626,7 +1625,6 @@ begin
   fCallerEvent.WaitFor(INFINITE); // wait for actual termination
   FreeAndNilSafe(fCallerEvent);
   inherited Destroy;
-  fPendingProcessLock.Done;
 end;
 
 function TSynBackgroundThreadMethodAbstract.GetPendingProcess:
@@ -1690,6 +1688,9 @@ end;
 function TSynBackgroundThreadMethodAbstract.AcquireThread:
   TSynBackgroundThreadProcessStep;
 begin
+  result := fPendingProcessFlag;
+  if result <> flagIdle then
+    exit; // no need to lock if obviously busy or finished
   fPendingProcessLock.Lock;
   try
     result := fPendingProcessFlag;
@@ -1756,6 +1757,7 @@ end;
 function TSynBackgroundThreadMethodAbstract.RunAndWait(OpaqueParam: pointer): boolean;
 var
   start: Int64;
+  ms: integer;
   ThreadID: TThreadID;
 begin
   result := false;
@@ -1767,6 +1769,7 @@ begin
   // 1. wait for any previous request to be finished (should not happen often)
   if Assigned(fOnIdle) then
     fOnIdle(self, 0); // notify started
+  ms := 0;
   start := 0;
   while true do
     case AcquireThread of
@@ -1775,11 +1778,16 @@ begin
       flagIdle:
         break; // we acquired the background thread
     else
-      SleepHiRes(SleepDelay(OnIdleProcessNotify(start)));
+      begin
+        SleepHiRes(ms);
+        ms := ms xor 1; // 0,1,0,1,0,1... SleepDelay() does not scale here
+        if ms = 0 then
+          OnIdleProcessNotify(start);
+      end;
     end;
   // 2. process execution in the background thread
   fParam := OpaqueParam;
-  fProcessEvent.SetEvent; // notify background thread for Call pending process
+  fProcessEvent.SetEvent; // notify background thread for next pending process
   WaitForFinished(start, nil); // wait for flagFinished, then set flagIdle
   result := true;
 end;
