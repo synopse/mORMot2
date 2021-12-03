@@ -1785,6 +1785,72 @@ type
   /// optional callback as used e.g. by THttpClientSocketWGet.OnStreamCreate
   TOnStreamCreate = function(const FileName: string; Mode: cardinal): TStream of object;
 
+  PProgressInfo = ^TProgressInfo;
+
+  /// callback definition to notify some TProgressInfo process
+  // - see e.g. TStreamRedirect.ProgressInfoToConsole
+  TOnInfoProgress = procedure(Sender: TObject; Info: PProgressInfo) of object;
+
+  /// information about the progression of a process, e.g. for TStreamRedirect
+  // - can also compute user-level text information from raw numbers
+  {$ifdef USERECORDWITHMETHODS}
+  TProgressInfo = record
+  {$else}
+  TProgressInfo = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    StartTix, ReportTix: Int64;
+    ExpectedWrittenSize: Int64;
+    ConsoleLen: integer;
+    LastProgress: RawUtf8;
+  public
+    /// optional process context, e.g. a download URI, used for logging/progress
+    Context: RawUtf8;
+    /// number of bytes for the processed size
+    CurrentSize: Int64;
+    /// number of bytes for the final processed size
+    // - may equal 0 if not known
+    ExpectedSize: Int64;
+    /// how many bytes have processed yet
+    ProcessedSize: Int64;
+    /// percentage of CurrentSize versus ExpectedSize
+    // - equals 0 if ExpectedSize is 0
+    Percent: integer;
+    /// number of milliseconds elasped since process beginning
+    Elapsed: Int64;
+    /// number of milliseconds remaining for full process, as estimated
+    // - equals 0 if ExpectedSize is 0
+    // - is just an estimation based on the average PerSecond speed
+    Remaining: Int64;
+    /// number of bytes processed per second
+    PerSecond: PtrInt;
+    /// number of milliseconds between each DoReport notification
+    // - default is 1000, i.e. to notify OnLog/OnProgress every second
+    ReportDelay: Int64;
+    /// can be assigned from TSynLog.DoLog class method for low-level logging
+    // - at least at process startup and finish, and every second (ReportDelay)
+    OnLog: TSynLogProc;
+    /// can be assigned to a TOnInfoProgress callback for high-level logging
+    // - at least at process startup and finish, and every second (ReportDelay)
+    OnProgress: TOnInfoProgress;
+    /// initialize the information, especially start the timing
+    procedure Init;
+    /// called during process to setup ExpectedSize/ExpectedWrittenSize fields
+    procedure SetExpectedSize(SizeExpected, Position: Int64);
+    /// retrieve the current status as simple text
+    function GetProgress: RawUtf8;
+    /// initialize the information for a new process
+    // - once expected size and ident are set, caller should call DoAfter()
+    procedure DoStart(Sender: TObject; SizeExpected: Int64; const Ident: string);
+    /// can be called
+    procedure DoAfter(Sender: TObject; ChunkSize: Int64);
+    /// update the computed fields according to the curent state
+    // - will be updated only every ReportDelay ms (default 1000 = every second)
+    // - return false and compute nothing if ReportDelay has not been reached
+    // - optionally call OnLog and OnProgress callbacks
+    function DoReport(Sender: TObject; ReComputeElapsed: boolean): boolean;
+  end;
+
   /// an abstract pipeline stream able to redirect and hash read/written content
   // - can be used either Read() or Write() calls during its livetime
   // - hashing is performed on the fly during the Read/Write process
@@ -1793,23 +1859,19 @@ type
   TStreamRedirect = class(TStreamWithPosition)
   protected
     fRedirected: TStream;
-    fExpectedSize, fCurrentSize, fExpectedWrittenSize, fProcessedSize: Int64;
-    fStartTix, fReportTix, fLastTix, fTimeOut, fElapsed, fRemaining: Int64;
-    fPerSecond, fLimitPerSecond: PtrInt;
-    fPercent: integer;
-    fOnProgress: TOnStreamProgress;
-    fOnLog: TSynLogProc;
-    fContext: RawUtf8;
+    fInfo: TProgressInfo;
+    fLastTix, fTimeOut: Int64;
+    fLimitPerSecond: PtrInt;
+    fOnStreamProgress: TOnStreamProgress;
     fTerminated: boolean;
-    fConsoleLen: byte;
     fMode: (mUnknown, mRead, mWrite);
     function GetSize: Int64; override;
+    function GetProgress: RawUtf8;
     procedure DoReport(ReComputeElapsed: boolean);
     procedure DoHash(data: pointer; len: integer); virtual; // do nothing
     procedure SetExpectedSize(Value: Int64);
     procedure ReadWriteHash(const Buffer; Count: Longint); virtual;
     procedure ReadWriteReport(const Caller: ShortString); virtual;
-    function GetProgress: RawUtf8;
   public
     /// initialize the internal structure, and start the timing
     // - before calling Read/Write, you should set the Redirected property or
@@ -1818,8 +1880,10 @@ type
     constructor Create(aRedirected: TStream; aRead: boolean = false); reintroduce; virtual;
     /// release the associated Redirected stream
     destructor Destroy; override;
-    /// can be used by for TOnStreamProgress callback writing into the console
-    class procedure ProgressToConsole(Sender: TStreamRedirect);
+    /// can be used as TOnStreamProgress callback writing into the console
+    class procedure ProgressStreamToConsole(Sender: TStreamRedirect);
+    /// can be used as TOnInfoProgress callback writing into the console
+    class procedure ProgressInfoToConsole(Sender: TObject; Info: PProgressInfo);
     /// update the hash and redirect the data to the associated TStream
     // - also trigger OnProgress at least every second
     // - will raise an error if Write() (or Append) have been called before
@@ -1855,27 +1919,27 @@ type
     // - will be used for the callback progress - could be left to 0 for Write()
     // if size is unknown
     property ExpectedSize: Int64
-      read fExpectedSize write SetExpectedSize;
+      read fInfo.ExpectedSize write SetExpectedSize;
     /// how many bytes have passed through Read() or Write()
     // - may not equal Size or Position after an Append - e.g. on resumed
     // download from partial file
     property ProcessedSize: Int64
-      read fProcessedSize;
+      read fInfo.ProcessedSize;
     /// percentage of Size versus ExpectedSize
     // - equals 0 if ExpectedSize is 0
     property Percent: integer
-      read fPercent;
+      read fInfo.Percent;
     /// number of milliseconds elasped since beginning, as set by Read/Write
     property Elapsed: Int64
-      read fElapsed;
+      read fInfo.Elapsed;
     /// number of milliseconds remaining for full process, as set by Read/Write
     // - equals 0 if ExpectedSize is 0
     // - is just an estimation based on the average PerSecond speed
     property Remaining: Int64
-      read fRemaining;
+      read fInfo.Remaining;
     /// number of bytes processed per second, since initialization of this instance
     property PerSecond: PtrInt
-      read fPerSecond;
+      read fInfo.PerSecond;
     /// can limit the Read/Write bandwidth used
     // - sleep so that PerSecond will keep close to this LimitPerSecond value
     property LimitPerSecond: PtrInt
@@ -1885,14 +1949,22 @@ type
       read fTimeOut write fTimeOut;
     /// optional process context, e.g. a download URI, used for logging/progress
     property Context: RawUtf8
-      read fContext write fContext;
+      read fInfo.Context write fInfo.Context;
+    /// number of milliseconds between each notification
+    // - default is 1000, i.e. notify OnLog/OnProgress/OnInfoProgress every second
+    property ReportDelay: Int64
+      read fInfo.ReportDelay write fInfo.ReportDelay;
     /// can be assigned from TSynLog.DoLog class method for low-level logging
     property OnLog: TSynLogProc
-      read fOnLog write fOnLog;
-    /// optional callback triggered during Read/Write
-    // - at least at process startup and finish, and every second
+      read fInfo.OnLog write fInfo.OnLog;
+    /// optional TOnStreamProgress callback triggered during Read/Write
+    // - at least at process startup and finish, and every second / ReportDelay
     property OnProgress: TOnStreamProgress
-      read fOnProgress write fOnProgress;
+      read fOnStreamProgress write fOnStreamProgress;
+    /// optional TOnInfoProgress callback triggered during Read/Write
+    // - at least at process startup and finish, and every second / ReportDelay
+    property OnInfoProgress: TOnInfoProgress
+      read fInfo.OnProgress write fInfo.OnProgress;
   published
     /// the current progression as text, as returned by ProgressToConsole
     property Progress: RawUtf8
@@ -2995,7 +3067,6 @@ begin
   result.Len := FromVarUInt32(Data);
   result.Ptr := pointer(Data);
 end;
-
 
 
 { ****************** TFastReader / TBufferWriter Binary Streams }
@@ -8633,6 +8704,126 @@ end;
 
 { *************************** TStreamRedirect and other Hash process }
 
+{ TProgressInfo }
+
+procedure TProgressInfo.Init;
+begin
+  Finalize(Context);
+  FillCharFast(self, SizeOf(self), 0); // warning: would overlap custom options
+  StartTix := GetTickCount64;
+  ReportDelay := 1000; // DoReport() will notify every second
+end;
+
+procedure TProgressInfo.DoStart(
+  Sender: TObject; SizeExpected: Int64; const Ident: string);
+begin
+  CurrentSize := 0; // no Init because would overlap customized options
+  ProcessedSize := 0;
+  ExpectedSize := SizeExpected;
+  ExpectedWrittenSize := SizeExpected;
+  StringToUtf8(Ident, Context);
+  StartTix := GetTickCount64;
+  ReportTix := 0;
+  Elapsed := 0;
+  DoReport(Sender, {computeelapsed=}false);
+end;
+
+procedure TProgressInfo.DoAfter(Sender: TObject; ChunkSize: Int64);
+begin
+  inc(CurrentSize, ChunkSize);
+  inc(ProcessedSize, ChunkSize);
+  DoReport(Sender, {computeelapsed=}true);
+end;
+
+procedure TProgressInfo.SetExpectedSize(SizeExpected, Position: Int64);
+begin
+  ExpectedSize := SizeExpected;
+  ExpectedWrittenSize := SizeExpected - Position;
+end;
+
+function TProgressInfo.DoReport(Sender: TObject; ReComputeElapsed: boolean): boolean;
+begin
+  if ReComputeElapsed then
+    Elapsed := GetTickCount64 - StartTix; // may have changed in-between
+  if (CurrentSize <> ExpectedSize) and
+     (Elapsed < ReportTix) then
+  begin
+    result := false; // nothing to report yet
+    exit;
+  end;
+  LastProgress := '';
+  ReportTix := Elapsed + ReportDelay; // notify once per second or when finished
+  if ExpectedSize = 0 then
+    Percent := 0
+  else if CurrentSize >= ExpectedSize then
+  begin
+    Percent := 100;
+    Remaining := 0;
+  end
+  else
+  begin
+    if (Elapsed <> 0) and
+       (ProcessedSize <> 0) then
+      Remaining :=
+        (Elapsed * (ExpectedWrittenSize - ProcessedSize)) div ProcessedSize;
+    Percent := (CurrentSize * 100) div ExpectedSize;
+  end;
+  if Elapsed = 0 then
+    PerSecond := 0
+  else
+    PerSecond := (ProcessedSize * 1000) div Elapsed;
+  if Assigned(OnLog) then
+    OnLog(sllTrace, '%', [GetProgress], Sender);
+  if Assigned(OnProgress) then
+    OnProgress(Sender, @self);
+  result := true;
+end;
+
+function TProgressInfo.GetProgress: RawUtf8;
+var
+  ctx, remain, persec: ShortString;
+begin
+  result := LastProgress;
+  if result <> '' then
+    exit;
+  Ansi7StringToShortString(Context, ctx);
+  if ctx[0] > #30 then
+  begin
+    ctx[0] := #33;
+    PCardinal(@ctx[30])^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
+  end;
+  if PerSecond = 0 then
+    persec := ''
+  else
+    FormatShort(' %/s', [KBNoSpace(PerSecond)], persec);
+  if ExpectedSize = 0 then
+    // size may not be known (e.g. server-side chunking)
+    FormatUtf8('% % read% ...', [ctx, KBNoSpace(CurrentSize), persec], result)
+  else if CurrentSize < ExpectedSize then
+  begin
+    // we can state the current progression ratio
+    if Remaining <= 0 then
+      remain := ''
+    else
+      FormatShort(' remaining:%', [MicroSecToString(Remaining * 1000)], remain);
+    FormatUtf8('% %% %/%%%',
+      [ctx, Percent, '%', KBNoSpace(CurrentSize), KBNoSpace(ExpectedSize),
+       persec, remain], result)
+  end
+  else
+    // process is finished
+    if (Elapsed = 0) or
+       (PerSecond = 0) then
+      FormatUtf8('% % done' + CRLF,
+        [Context, KBNoSpace(ExpectedSize)], result)
+    else
+      FormatUtf8('% % done in % (% )' + CRLF,
+        [Context, KBNoSpace(ExpectedSize), MicroSecToString(Elapsed * 1000),
+         persec], result);
+  LastProgress := result;
+end;
+
+
 { TStreamRedirect }
 
 constructor TStreamRedirect.Create(aRedirected: TStream; aRead: boolean);
@@ -8641,7 +8832,7 @@ begin
   if aRead and
      Assigned(aRedirected) then
     SetExpectedSize(aRedirected.Size); // needed e.g. to upload a file
-  fStartTix := GetTickCount64;
+  fInfo.Init;
 end;
 
 destructor TStreamRedirect.Destroy;
@@ -8651,65 +8842,43 @@ begin
 end;
 
 function TStreamRedirect.GetProgress: RawUtf8;
-var
-  ctx, remain: ShortString;
 begin
   if (self = nil) or
      fTerminated then
-  begin
-    result := '';
-    exit;
-  end;
-  Ansi7StringToShortString(Context, ctx);
-  if ctx[0] > #30 then
-  begin
-    ctx[0] := #33;
-    PCardinal(@ctx[30])^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
-  end;
-  if ExpectedSize = 0 then
-    // size may not be known (e.g. server-side chunking)
-    FormatUtf8('% % read %/s ...',
-      [ctx, KBNoSpace(fCurrentSize), KBNoSpace(PerSecond)], result)
-  else if fCurrentSize < ExpectedSize then
-  begin
-    // we can state the current progression ratio
-    if Remaining <= 0 then
-      remain := ''
-    else
-      FormatShort(' remaining:%', [MicroSecToString(Remaining * 1000)], remain);
-    FormatUtf8('% %% %/% %/s%',
-      [ctx, Percent, '%', KBNoSpace(fCurrentSize), KBNoSpace(ExpectedSize),
-       KBNoSpace(PerSecond), remain], result)
-  end
+    result := ''
   else
-    // process is finished
-    FormatUtf8('% % done in % (%/s)' + CRLF,
-      [Context, KBNoSpace(ExpectedSize), MicroSecToString(Elapsed * 1000),
-       KBNoSpace(PerSecond)], result);
+    result := fInfo.GetProgress;
 end;
 
 function TStreamRedirect.GetSize: Int64;
 begin
   if (fMode <> mWrite) and
-     (fExpectedSize <> 0) then
-    result := fExpectedSize
+     (fInfo.ExpectedSize <> 0) then
+    result := fInfo.ExpectedSize
   else
-    result := fCurrentSize;
+    result := fInfo.CurrentSize;
+end;
+
+class procedure TStreamRedirect.ProgressStreamToConsole(Sender: TStreamRedirect);
+begin
+  if Sender <> nil then
+    ProgressInfoToConsole(Sender, @Sender.fInfo);
 end;
 
 {$I-}
-class procedure TStreamRedirect.ProgressToConsole(Sender: TStreamRedirect);
+class procedure TStreamRedirect.ProgressInfoToConsole(
+  Sender: TObject; Info: PProgressInfo);
 var
   eraseline: ShortString;
   msg: RawUtf8;
 begin
-  eraseline[0] := AnsiChar(Sender.fConsoleLen + 2);
+  eraseline[0] := AnsiChar(Info.ConsoleLen + 2);
   eraseline[1] := #13;
   FillCharFast(eraseline[2], ord(eraseline[0]) - 2, 32);
   eraseline[ord(eraseline[0])] := #13;
   system.write(eraseline);
-  msg := Sender.GetProgress;
-  Sender.fConsoleLen := length(msg);
+  msg := Info.GetProgress;
+  Info.ConsoleLen := length(msg); // to properly erase last line
   system.write(msg);
   ioresult;
 end;
@@ -8717,40 +8886,10 @@ end;
 
 procedure TStreamRedirect.DoReport(ReComputeElapsed: boolean);
 begin
-  if ReComputeElapsed then
-    fElapsed := GetTickCount64 - fStartTix; // may have changed in-between
-  if (fCurrentSize <> fExpectedSize) and
-     (fElapsed < fReportTix) then
-    exit;
-  fReportTix := fElapsed + 1000; // notify once per second or when finished
-  if fExpectedSize = 0 then
-    fPercent := 0
-  else if fCurrentSize >= fExpectedSize then
-  begin
-    fPercent := 100;
-    fRemaining := 0;
-  end
-  else
-  begin
-    if (fElapsed <> 0) and
-       (fProcessedSize <> 0) then
-      fRemaining :=
-        (fElapsed * (fExpectedWrittenSize - fProcessedSize)) div fProcessedSize;
-    fPercent := (fCurrentSize * 100) div fExpectedSize;
-  end;
-  if fElapsed = 0 then
-    fPerSecond := 0
-  else
-    fPerSecond := (fProcessedSize * 1000) div fElapsed;
-  if Assigned(fOnLog) then
-    if fExpectedSize = 0 then
-      fOnLog(sllTrace, '%: % - % %/s',
-        [fContext, KB(fCurrentSize), KB(fProcessedSize), KB(fPerSecond)], self)
-    else
-      fOnLog(sllTrace, '%: %% - % / % - % %/s', [fContext, fPercent, '%',
-        KB(fCurrentSize), KB(fExpectedSize), KB(fProcessedSize), KB(PerSecond)], self);
-  if Assigned(fOnProgress) then
-    fOnProgress(self);
+  if fInfo.DoReport(self, ReComputeElapsed) then
+    // DoReport did notify OnLog + OnInfoProgress
+    if Assigned(fOnStreamProgress) then
+      fOnStreamProgress(self);
 end;
 
 procedure TStreamRedirect.DoHash(data: pointer; len: integer);
@@ -8759,8 +8898,7 @@ end;
 
 procedure TStreamRedirect.SetExpectedSize(Value: Int64);
 begin
-  fExpectedSize := Value;
-  fExpectedWrittenSize := Value - fPosition;
+  fInfo.SetExpectedSize(Value, fPosition);
 end;
 
 function TStreamRedirect.GetHash: RawUtf8;
@@ -8789,7 +8927,7 @@ begin
   try
     if Assigned(OnProgress) then
     begin
-      hasher.fExpectedSize := FileSize(f);
+      hasher.fInfo.ExpectedSize := FileSize(f);
       hasher.OnProgress := OnProgress;
     end;
     hasher.Append;
@@ -8806,14 +8944,15 @@ var
 begin
   if fRedirected = nil then
     raise ESynException.CreateUtf8('%.Append(%): Redirected=nil',
-      [self, fContext]);
+      [self, fInfo.Context]);
   if fMode = mRead then
-    raise ESynException.CreateUtf8('%.Append(%) after Read()', [self, fContext]);
+    raise ESynException.CreateUtf8('%.Append(%) after Read()',
+      [self, fInfo.Context]);
   fMode := mWrite;
   if GetHashFileExt = '' then // DoHash() does nothing
   begin
-    fCurrentSize := fRedirected.Seek(0, soEnd);
-    fPosition := fCurrentSize;
+    fInfo.CurrentSize := fRedirected.Seek(0, soEnd);
+    fPosition := fInfo.CurrentSize;
   end
   else
   begin
@@ -8823,12 +8962,13 @@ begin
       if read <= 0 then
         break;
       DoHash(pointer(buf), read);
-      inc(fCurrentSize, read);
+      inc(fInfo.CurrentSize, read);
       inc(fPosition, read);
-      if Assigned(fOnProgress) or
-         Assigned(fOnLog) then
-        if (fExpectedSize <> 0) and
-           (fCurrentSize <> read) then
+      if Assigned(fOnStreamProgress) or
+         Assigned(fInfo.OnProgress) or
+         Assigned(fInfo.OnLog) then
+        if (fInfo.ExpectedSize <> 0) and
+           (fInfo.CurrentSize <> read) then
           DoReport(true);
     until false;
   end;
@@ -8836,11 +8976,12 @@ end;
 
 procedure TStreamRedirect.Ended;
 begin
-  if fCurrentSize = fExpectedSize then
+  if fInfo.CurrentSize = fInfo.ExpectedSize then
     exit; // nothing to report
-  fExpectedSize := fCurrentSize; // reached 100%
-  if Assigned(fOnProgress) or
-     Assigned(fOnLog) then
+  fInfo.ExpectedSize := fInfo.CurrentSize; // reached 100%
+  if Assigned(fOnStreamProgress) or
+     Assigned(fInfo.OnProgress) or
+     Assigned(fInfo.OnLog) then
     DoReport(true); // notify finished
 end;
 
@@ -8852,8 +8993,8 @@ end;
 procedure TStreamRedirect.ReadWriteHash(const Buffer; Count: Longint);
 begin
   DoHash(@Buffer, Count);
-  inc(fCurrentSize, Count);
-  inc(fProcessedSize, Count);
+  inc(fInfo.CurrentSize, Count);
+  inc(fInfo.ProcessedSize, Count);
   inc(fPosition, Count);
 end;
 
@@ -8862,35 +9003,36 @@ var
   tix, tosleep: Int64;
 begin
   tix := GetTickCount64;
-  fElapsed := tix - fStartTix;
+  fInfo.Elapsed := tix - fInfo.StartTix;
   if (fLimitPerSecond <> 0) or
      (fTimeOut <> 0) then
   begin
     if tix shr 7 <> fLastTix shr 7 then // checking every 128 ms is good enough
     begin
       fLastTix := tix;
-      if fElapsed > 0 then
+      if fInfo.Elapsed > 0 then
       begin
         if (fTimeOut <> 0) and
-           (fElapsed > fTimeOut) then
+           (fInfo.Elapsed > fTimeOut) then
           raise ESynException.CreateUtf8('%.%(%) timeout after %',
-            [self, Caller, fContext, MicroSecToString(fElapsed * 1000)]);
+            [self, Caller, fInfo.Context, MicroSecToString(fInfo.Elapsed * 1000)]);
         if fLimitPerSecond > 0 then
         begin
           // adjust bandwith limit every 128 ms by adding some sleep() steps
-          tosleep := ((fProcessedSize * 1000) div fLimitPerSecond) - fElapsed;
+          tosleep := ((fInfo.ProcessedSize * 1000) div fLimitPerSecond) - fInfo.Elapsed;
           if tosleep > 10 then // on Windows, typical resolution is 16ms
           begin
             while tosleep > 300 do
             begin
               SleepHiRes(300); // show progress on very low bandwidth
-              if Assigned(fOnProgress) or
-                 Assigned(fOnLog) then
+              if Assigned(fOnStreamProgress) or
+                 Assigned(fInfo.OnProgress) or
+                 Assigned(fInfo.OnLog) then
                 DoReport(true);
               dec(tosleep, 300);
               if fTerminated then
                 raise ESynException.CreateUtf8('%.%(%) Terminated',
-                  [self, Caller, fContext]);
+                  [self, Caller, fInfo.Context]);
             end;
             SleepHiRes(tosleep);
           end;
@@ -8898,23 +9040,24 @@ begin
       end;
     end;
   end;
-  if Assigned(fOnProgress) or
-     Assigned(fOnLog) then
+  if Assigned(fOnStreamProgress) or
+     Assigned(fInfo.OnProgress) or
+     Assigned(fInfo.OnLog) then
     DoReport(false);
   if fTerminated then
     raise ESynException.CreateUtf8('%.%(%) Terminated',
-      [self, Caller, fContext]);
+      [self, Caller, fInfo.Context]);
 end;
 
 function TStreamRedirect.Read(var Buffer; Count: Longint): Longint;
 begin
   if fMode = mWrite then
     raise ESynException.CreateUtf8('%.Read(%) in Write() mode',
-      [self, fContext]);
+      [self, fInfo.Context]);
   fMode := mRead;
   if fRedirected = nil then
     raise ESynException.CreateUtf8('%.Read(%) with Redirected=nil',
-      [self, fContext]);
+      [self, fInfo.Context]);
   result := fRedirected.Read(Buffer, Count);
   ReadWriteHash(Buffer, result);
   ReadWriteReport('Read');
@@ -8924,7 +9067,7 @@ function TStreamRedirect.Write(const Buffer; Count: Longint): Longint;
 begin
   if fMode = mRead then
     raise ESynException.CreateUtf8('%.Write(%) in Read() mode',
-      [self, fContext]);
+      [self, fInfo.Context]);
   fMode := mWrite;
   ReadWriteHash(Buffer, Count);
   result := Count;
