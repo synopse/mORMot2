@@ -782,7 +782,8 @@ function ToText(C: TClass): RawUtf8; overload;
 var
   /// retrieve the unit name where a given class is implemented
   // - is implemented in mormot.core.rtti.pas; so may be nil otherwise
-  // - is needed since Delphi 7-2007 do not define TObject.UnitName
+  // - is needed since Delphi 7-2009 do not define TObject.UnitName (because
+  // there is no such information available in RTTI)
   ClassUnit: function(C: TClass): PShortString;
 
 /// just a wrapper around vmtParent to avoid a function call

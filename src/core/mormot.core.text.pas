@@ -5740,12 +5740,18 @@ end;
 
 procedure TTextWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
   IncludeUnitName, IncludePointer: boolean);
+var
+  u: PShortString;
 begin
   if IncludeUnitName and
      Assigned(ClassUnit) then
   begin
-    AddShort(ClassUnit(PClass(Instance)^)^);
-    Add('.');
+    u := ClassUnit(PClass(Instance)^);
+    if u^[0] <> #0 then
+    begin
+      AddShort(u^);
+      Add('.');
+    end;
   end;
   AddShort(PPShortString(PPAnsiChar(Instance)^ + vmtClassName)^^);
   if IncludePointer then
