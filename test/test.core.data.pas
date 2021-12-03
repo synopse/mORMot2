@@ -5377,6 +5377,7 @@ var
   FN, FN2: TFileName;
   S: TRawByteStringStream;
   zip64: boolean;
+  onprog: TOnInfoProgress;
 
   procedure test(Z: TZipRead; aCount: integer);
   var
@@ -5386,6 +5387,7 @@ var
     local: TLocalFileHeader;
     info: TFileInfoFull;
   begin
+    Z.OnProgress := onprog;
     Check(Z.TestAll, 'testall');
     with Z do
     try
@@ -5438,6 +5440,7 @@ var
   procedure Prepare(Z: TZipWrite);
   begin
     try
+      Z.OnProgress := onprog;
       Z.ForceZip64 := zip64;
       Z.AddDeflated('rep1\one.exe', pointer(Data), length(Data));
       Check(Z.Count = 1, 'cnt1');
@@ -5458,6 +5461,8 @@ var
   mem: QWord;
   json, deleted: TStringDynArray;
 begin
+  // onprog := TStreamRedirect.ProgressInfoToConsole;
+  onprog := TSynLog.ProgressInfo;
   for m := 1 to 2 do
   for zip64 := false to true do
   begin
@@ -5477,7 +5482,7 @@ begin
     finally
       S.Free;
     end;
-    with TZipWrite.CreateFrom(FN, mem) do
+    with TZipWrite.CreateFrom(FN, mem, nil, onprog) do
     try
       Check(Count = 4, 'two4');
       AddDeflated('rep1\two.exe', pointer(Data), length(Data));
@@ -5486,11 +5491,11 @@ begin
       Free;
     end;
     test(TZipRead.Create(FN, 0, 0, mem), 5);
-    with TZipWrite.CreateFrom(FN, ['rep1\two.exe']) do
+    with TZipWrite.CreateFromIgnore(FN, ['rep1\two.exe'], 1 shl 20, onprog) do
     try
-      Check(Count = 4, 'last4');
+      CheckEqual(Count, 4, 'last4');
       AddDeflated('rep1\two.exe', pointer(Data), length(Data));
-      Check(Count = 5, 'last5');
+      CheckEqual(Count, 5, 'last5');
     finally
       Free;
     end;
@@ -5517,6 +5522,7 @@ begin
     deleted := nil;
     with TZipWrite.Create(FN2) do
     try
+      OnProgress := onprog;
       AddFolder(WorkDir, '*.json', true, 1);
       CheckUtf8(Count > 2, 'json=%', [Count]);
       for i := 0 to Count - 1 do
@@ -5529,7 +5535,8 @@ begin
     finally
       Free;
     end;
-    with TZipWrite.CreateFrom(FN2, TFileNameDynArray(deleted)) do
+    with TZipWrite.CreateFromIgnore(
+      FN2, TFileNameDynArray(deleted), 1 shl 20, onprog) do
     try
       Check(Count = length(json) - length(deleted));
     finally
