@@ -1340,7 +1340,7 @@ end;
 constructor TZipAbstract.Create;
 begin
   SetZipNamePathDelim('/'); // PKware appnote 4.4.17: MUST be forward slashes
-  fInfo.ReportDelay := 0; // report to callbacks every 200 ms by default
+  fInfo.ReportDelay := 200; // report to callbacks every 200 ms by default
 end;
 
 procedure TZipAbstract.InfoStart(
