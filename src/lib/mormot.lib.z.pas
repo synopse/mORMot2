@@ -872,7 +872,7 @@ var
 begin
   if Code = Z_MEM_ERROR then
     OutOfMemoryError;
-  result := code;
+  result := Code;
   for i := Low(ValidCodes) to High(ValidCodes) do
     if ValidCodes[i] = Code then
       exit;

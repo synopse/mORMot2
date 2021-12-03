@@ -910,9 +910,12 @@ begin
   while Z.Stream.avail_in > 0 do
   begin
     // uncompress pending data
-    Z.Check(Z.Uncompress(Z_NO_FLUSH), [Z_OK, Z_STREAM_END], 'TSynZipDecompressor.Write');
+    result := Z.Check(Z.Uncompress(Z_NO_FLUSH), [Z_OK, Z_STREAM_END],
+      'TSynZipDecompressor.Write');
     if Z.Stream.avail_out = 0 then
       Z.DoFlush(Z_OK);
+    if result = Z_STREAM_END then
+      break;
   end;
   Z.Stream.next_in := nil;
   Z.Stream.avail_in := 0;
