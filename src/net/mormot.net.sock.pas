@@ -2114,6 +2114,8 @@ begin
   mormot.core.os.EnterCriticalSection(fPendingLock);
   {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
   try
+  {$else}
+  begin
   {$endif HASFASTTRYFINALLY}
     ndx := fPendingIndex;
     if ndx < fPending.Count then
@@ -2150,11 +2152,9 @@ begin
 ok: end;
   {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     mormot.core.os.LeaveCriticalSection(fPendingLock);
   end;
-  {$else}
-  mormot.core.os.LeaveCriticalSection(fPendingLock);
-  {$endif HASFASTTRYFINALLY}
 end;
 
 function MergePendingEvents(var res: TPollSocketResults; resindex: PtrInt;

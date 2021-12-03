@@ -1350,7 +1350,7 @@ begin
     params.Hasher := hasher;
     params.Hash := hash;
     if consoledisplay then
-      params.OnProgress := TStreamRedirect.ProgressToConsole;
+      params.OnProgress := TStreamRedirect.ProgressStreamToConsole;
     if params.WGet(url, destfile,
          tunnel, tls, sockettimeout, redirectmax) = destfile then
       result := ''
