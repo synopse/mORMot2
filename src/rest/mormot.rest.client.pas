@@ -1556,8 +1556,11 @@ begin
          'data', BinToBase64(OutData)]);
     until Sender.fSession.Data = '';
     if result <> '' then
+    begin
       // TRestServerAuthenticationSspi.Auth encrypted session.fPrivateSalt
-      result := SecDecrypt(SecCtx, Base64ToBin(result));
+      OutData := Base64ToBin(result); // need a local copy on Windows / SSPI
+      result := SecDecrypt(SecCtx, OutData);
+    end;
   finally
     FreeSecContext(SecCtx);
   end;

@@ -316,8 +316,9 @@ function SecEncrypt(var aSecContext: TSecContext;
 // or ClientSspiAuth
 // - aEncrypted contains data that must be decrypted
 // - returns decrypted message
+// - warning: aEncrypted is modified in-place during the process
 function SecDecrypt(var aSecContext: TSecContext;
-  const aEncrypted: RawByteString): RawByteString;
+  var aEncrypted: RawByteString): RawByteString;
 
 
 
@@ -578,7 +579,7 @@ begin
 end;
 
 function SecDecrypt(var aSecContext: TSecContext;
-  const aEncrypted: RawByteString): RawByteString;
+  var aEncrypted: RawByteString): RawByteString;
 var
   EncLen, SigLen: cardinal;
   BufPtr: PByte;
