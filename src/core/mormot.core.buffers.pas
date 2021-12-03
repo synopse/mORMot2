@@ -8781,7 +8781,8 @@ end;
 
 function TProgressInfo.GetProgress: RawUtf8;
 var
-  ctx, remain, persec: ShortString;
+  ctx, remain: ShortString;
+  persec, expect, curr: TShort16;
 begin
   result := LastProgress;
   if result <> '' then
@@ -8789,37 +8790,37 @@ begin
   Ansi7StringToShortString(Context, ctx);
   if ctx[0] > #30 then
   begin
-    ctx[0] := #33;
+    ctx[0] := #33; // truncate to keep information on a single line
     PCardinal(@ctx[30])^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
   end;
-  if PerSecond = 0 then
-    persec := ''
-  else
-    FormatShort(' %/s', [KBNoSpace(PerSecond)], persec);
+  persec := '';
+  if PerSecond <> 0 then
+    FormatShort16(' %/s', [KBNoSpace(PerSecond)], persec);
+  KB(CurrentSize, curr, {nospace=}true);
   if ExpectedSize = 0 then
     // size may not be known (e.g. server-side chunking)
-    FormatUtf8('% % read% ...', [ctx, KBNoSpace(CurrentSize), persec], result)
-  else if CurrentSize < ExpectedSize then
-  begin
-    // we can state the current progression ratio
-    if Remaining <= 0 then
-      remain := ''
-    else
-      FormatShort(' remaining:%', [MicroSecToString(Remaining * 1000)], remain);
-    FormatUtf8('% %% %/%%%',
-      [ctx, Percent, '%', KBNoSpace(CurrentSize), KBNoSpace(ExpectedSize),
-       persec, remain], result)
-  end
+    FormatUtf8('% % read% ...', [ctx, curr, persec], result)
   else
-    // process is finished
-    if (Elapsed = 0) or
-       (PerSecond = 0) then
-      FormatUtf8('% % done' + CRLF,
-        [Context, KBNoSpace(ExpectedSize)], result)
+  begin
+    KB(ExpectedSize, expect, {nospace=}true);
+    if CurrentSize < ExpectedSize then
+    begin
+      // we can state the current progression ratio
+      remain := '';
+      if Remaining > 0 then
+        FormatShort(' remaining:%', [MilliSecToString(Remaining)], remain);
+      FormatUtf8('% %% %/%%%',
+        [ctx, Percent, '%', curr, expect, persec, remain], result)
+    end
     else
-      FormatUtf8('% % done in % (% )' + CRLF,
-        [Context, KBNoSpace(ExpectedSize), MicroSecToString(Elapsed * 1000),
-         persec], result);
+      // process is finished
+      if (Elapsed = 0) or
+         (PerSecond = 0) then
+        FormatUtf8('% % done' + CRLF, [Context, expect], result)
+      else
+        FormatUtf8('% % done in % (% )' + CRLF,
+          [Context, expect, MilliSecToString(Elapsed), persec], result);
+  end;
   LastProgress := result;
 end;
 
@@ -9015,7 +9016,7 @@ begin
         if (fTimeOut <> 0) and
            (fInfo.Elapsed > fTimeOut) then
           raise ESynException.CreateUtf8('%.%(%) timeout after %',
-            [self, Caller, fInfo.Context, MicroSecToString(fInfo.Elapsed * 1000)]);
+            [self, Caller, fInfo.Context, MilliSecToString(fInfo.Elapsed)]);
         if fLimitPerSecond > 0 then
         begin
           // adjust bandwith limit every 128 ms by adding some sleep() steps

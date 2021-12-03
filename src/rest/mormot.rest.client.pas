@@ -2093,8 +2093,8 @@ begin
       end;
       fLogClass.Add.Log(sllTrace, 'IsOpen: % after % -> wait % and ' +
         'retry #% up to % seconds - %',
-        [exc, MicroSecToString(elapsed * 1000),
-         MicroSecToString(wait * 1000), retry, fConnectRetrySeconds, self],
+        [exc, MilliSecToString(elapsed), MilliSecToString(wait), retry,
+         fConnectRetrySeconds, self],
         self);
       SleepHiRes(wait);
     until InternalIsOpen;
