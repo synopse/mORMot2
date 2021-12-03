@@ -1058,6 +1058,7 @@ begin
     if SleepHiRes0Yield then
     begin
       // warning: reported as buggy by Alan on POSIX, and despitable by Linus
+      // - from our testing, it gives worse performance than fpnanosleep()
       ThreadSwitch; // call e.g. pthread's sched_yield API
       exit;
     end

@@ -1537,7 +1537,7 @@ const
 type
   /// low-level systemd parameter to sd.journal_sendv() function
   TIoVec = record
-    iov_base: pointer;
+    iov_base: PAnsiChar;
     iov_len: PtrUInt;
   end;
 
@@ -1561,8 +1561,8 @@ type
     // - priority value can be obtained using integer(LOG_TO_SYSLOG[logLevel])
     journal_print: function(priority: integer; args: array of const): integer; cdecl;
     /// systemd: submit array of iov structures instead of the format string to the system journal.
-    //  - each structure should reference one field of the entry to submit.
-    //  - the second argument specifies the number of structures in the array.
+    // - each structure should reference one field of the entry to submit
+    // - the second argument specifies the number of structures in the array
     journal_sendv: function(var iov: TIoVec; n: integer): integer; cdecl;
     /// sends notification to systemd
     // - see https://www.freedesktop.org/software/systemd/man/notify.html

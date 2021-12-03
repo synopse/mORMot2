@@ -2351,11 +2351,9 @@ end;
 
 function Utf8TruncatedLength(text: PAnsiChar; textlen, maxBytes: PtrUInt): PtrInt;
 begin
+  result := textlen;
   if textlen < maxBytes then
-  begin
-    result := textlen;
     exit;
-  end;
   result := maxBytes;
   while (result > 0) and
         (ord(text[result]) and $c0 = $80) do

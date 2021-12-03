@@ -597,38 +597,38 @@ type
     fArchivePath: TFileName;
     fOnArchive: TSynLogArchiveEvent;
     fOnRotate: TSynLogRotateEvent;
-    fPerThreadLog: TSynLogPerThreadMode;
-    fIncludeComputerNameInFileName: boolean;
     fCustomFileName: TFileName;
     fGlobalLog: TSynLog;
     fSynLogClass: TSynLogClass;
-    fIdent: integer;
     fDestinationPath: TFileName;
     fDefaultExtension: TFileName;
+    fIdent: integer;
     fBufferSize: integer;
-    fHRTimestamp: boolean;
+    fPerThreadLog: TSynLogPerThreadMode;
+    fIncludeComputerNameInFileName: boolean;
+    fHighResolutionTimestamp: boolean;
     fLocalTimestamp: boolean;
     fWithUnitName: boolean;
     fWithInstancePointer: boolean;
     fNoFile: boolean;
     fAutoFlushTimeOut: cardinal;
-    {$ifdef OSWINDOWS}
-    fNoEnvironmentVariable: boolean;
-    {$endif OSWINDOWS}
     {$ifndef NOEXCEPTIONINTERCEPT}
-    fHandleExceptions: boolean;
     fOnBeforeException: TOnBeforeException;
+    fHandleExceptions: boolean;
     {$endif NOEXCEPTIONINTERCEPT}
     fStackTraceLevel: byte;
     fStackTraceUse: TSynLogStackTraceUse;
     fFileExistsAction: TSynLogExistsAction;
+    {$ifdef OSWINDOWS}
+    fNoEnvironmentVariable: boolean;
+    {$endif OSWINDOWS}
     fExceptionIgnore: TList;
     fEchoToConsole: TSynLogInfos;
-    fEchoToConsoleUseJournal: boolean;
     fEchoCustom: TOnTextWriterEcho;
     fEchoRemoteClient: TObject;
-    fEchoRemoteClientOwned: boolean;
     fEchoRemoteEvent: TOnTextWriterEcho;
+    fEchoRemoteClientOwned: boolean;
+    fEchoToConsoleUseJournal: boolean;
     fEndOfLineCRLF: boolean;
     fDestroying: boolean;
     fRotateFileCurrent: cardinal;
@@ -830,7 +830,7 @@ type
     // RotateFileDailyAtHour are set (the high resolution frequency is set
     // in the log file header, so expects a single file)
     property HighResolutionTimestamp: boolean
-      read fHRTimestamp write fHRTimestamp;
+      read fHighResolutionTimestamp write fHighResolutionTimestamp;
     /// by default, time logging will use error-safe UTC values as reference
     // - you may set this property to TRUE to store local time instead
     property LocalTimestamp: boolean
@@ -1035,7 +1035,7 @@ type
     function GetThreadContext: PSynLogThreadContext;
       {$ifdef HASINLINE}inline;{$endif}
     procedure GetThreadContextAndDisableExceptions;
-     // {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     procedure GetThreadContextInternal(id: PtrUInt);
     procedure ThreadContextRehash;
     function NewRecursion: PSynLogThreadRecursion;
@@ -1172,9 +1172,11 @@ type
     /// same as Log(Level,TextFmt,[]) but with one RawUtf8 parameter
     procedure Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArg: RawUtf8; aInstance: TObject = nil); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// same as Log(Level,TextFmt,[]) but with one Int64 parameter
     procedure Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArg: Int64; aInstance: TObject = nil); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// call this method to add some information to the log at the specified level
     // - if Instance is set and Text is not '', it will log the corresponding
     // class name and address (to be used e.g. if you didn't call TSynLog.Enter()
@@ -1186,11 +1188,13 @@ type
     // Log(Level,Instance), i.e. write the Instance as JSON content
     procedure Log(Level: TSynLogInfo; const Text: RawUtf8; aInstance: TObject = nil;
       TextTruncateAtLength: integer = maxInt); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     {$ifdef UNICODE}
     /// call this method to add some VCL string to the log at a specified level
     // - this overloaded version will avoid a call to StringToUtf8()
     procedure Log(Level: TSynLogInfo; const Text: string;
       aInstance: TObject = nil); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     {$endif UNICODE}
     /// call this method to add the content of an object to the log at a
     // specified level
@@ -1202,12 +1206,14 @@ type
     // - if aInstance is an Exception, it will handle its class name and Message:
     // $ 20110330 10010005 debug "EClassName(00C2129A)":"Exception message"
     procedure Log(Level: TSynLogInfo; aInstance: TObject); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// call this method to add the content of most low-level types to the log
     // at a specified level
     // - this overridden implementation will write the value content,
     // written as human readable JSON: handle dynamic arrays and enumerations
     procedure Log(Level: TSynLogInfo; const aName: RawUtf8; aTypeInfo: PRttiInfo;
       const aValue; Instance: TObject); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TDebugFile, will log the
     // unit name, associated symbol and source code line
@@ -1252,6 +1258,9 @@ type
     // if Level is sllExceptionOS, e.g. on SIGABRT/SIGQUIT/SIGINT
     class procedure DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
       const Args: array of const; Instance: TObject = nil);
+    /// low-level class method which can be assigned to a TOnInfoProgress callback
+    // - as used e.g. by TStreamRedirect.OnInfoProgress or TZipAbstract.OnProgress
+    class procedure ProgressInfo(Sender: TObject; Info: PProgressInfo);
     /// Force log rotation; Can be used for example inside SUGHUP signal handler
     procedure ForceRotation;
     /// direct access to the low-level writing content
@@ -4488,6 +4497,8 @@ begin
     EnterCriticalSection(GlobalThreadLock);
     {$ifdef HASFASTTRYFINALLY}
     try
+    {$else}
+    begin
     {$endif HASFASTTRYFINALLY}
       with log.NewRecursion^ do
       begin
@@ -4503,11 +4514,9 @@ begin
       end;
     {$ifdef HASFASTTRYFINALLY}
     finally
+    {$endif HASFASTTRYFINALLY}
       LeaveCriticalSection(GlobalThreadLock);
     end;
-    {$else}
-    LeaveCriticalSection(GlobalThreadLock);
-    {$endif HASFASTTRYFINALLY}
   end;
   // copy to ISynLog interface -> will call TSynLog._AddRef
   result := log;
@@ -4530,6 +4539,8 @@ begin
     EnterCriticalSection(GlobalThreadLock);
     {$ifdef HASFASTTRYFINALLY}
     try
+    {$else}
+    begin
     {$endif HASFASTTRYFINALLY}
       with log.NewRecursion^ do
       begin
@@ -4539,11 +4550,9 @@ begin
       end;
     {$ifdef HASFASTTRYFINALLY}
     finally
+    {$endif HASFASTTRYFINALLY}
       LeaveCriticalSection(GlobalThreadLock);
     end;
-    {$else}
-    LeaveCriticalSection(GlobalThreadLock);
-    {$endif HASFASTTRYFINALLY}
   end;
   // copy to ISynLog interface -> will call TSynLog._AddRef
   result := log;
@@ -4597,13 +4606,43 @@ begin
   result := self;
 end;
 
+{$ifdef OSLINUX}
+procedure SystemdEcho(Level: TSynLogInfo; const Text: RawUtf8);
+var
+  tmp: TShort16;
+  mtmp: RawUtf8;
+  jvec: array[0..1] of TIoVec;
+const
+  _MESSAGE: array[0..7] of AnsiChar = 'MESSAGE=';
+begin
+  if (length(Text) < 18) or
+     not sd.IsAvailable then
+    // should be at last "20200615 08003008  "
+    exit;
+  FormatShort16('PRIORITY=%', [LOG_TO_SYSLOG[Level]], tmp);
+  jvec[0].iov_base := @tmp[1];
+  jvec[0].iov_len := length(tmp);
+  // skip time "20200615 08003008  ." which should not be part of the jvec[]
+  TrimCopy(Text, 18 - 8, Utf8TruncatedLength(Text, 1500) - (18 - 8 - 1), mtmp);
+  // systemd truncates to LINE_MAX = 2048 anyway and expects valid UTF-8
+  with jvec[1] do
+  begin
+    iov_base := pointer(mtmp);
+    iov_len := length(mtmp);
+    while (iov_len > 0) and
+          (iov_base[8] <= ' ') do // trim left spaces
+    begin
+      inc(iov_base);
+      dec(iov_len);
+    end;
+    PInt64(iov_base)^ := PInt64(@_MESSAGE)^;
+  end;
+  sd.journal_sendv(jvec[0], 2);
+end;
+{$endif OSLINUX}
+
 function TSynLog.ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
   const Text: RawUtf8): boolean;
-{$ifdef OSLINUX}
-var
-  tmp, mtmp: RawUtf8;
-  jvec: Array[0..1] of TioVec;
-{$endif OSLINUX}
 begin
   result := true;
   if not (Level in fFamily.fEchoToConsole) then
@@ -4611,18 +4650,7 @@ begin
   {$ifdef OSLINUX}
   if Family.EchoToConsoleUseJournal then
   begin
-    if length(Text) < 18 then
-      // should be at last "20200615 08003008  "
-      exit;
-    FormatUtf8('PRIORITY=%', [LOG_TO_SYSLOG[Level]], tmp);
-    jvec[0].iov_base := pointer(tmp);
-    jvec[0].iov_len := length(tmp);
-    // skip time "20200615 08003008  ."
-    // (journal do it for us, and first space after it)
-    FormatUtf8('MESSAGE=%', [PUtf8Char(pointer(Text)) + 18], mtmp);
-    jvec[1].iov_base := pointer(mtmp);
-    jvec[1].iov_len := length(mtmp);
-    sd.journal_sendv(jvec[0], 2);
+    SystemdEcho(Level, Text);
     exit;
   end;
   {$endif OSLINUX}
@@ -4751,6 +4779,16 @@ begin
   end;
 end;
 
+class procedure TSynLog.ProgressInfo(Sender: TObject; Info: PProgressInfo);
+var
+  log: TSynLog;
+begin
+  log := Add;
+  if (log <> nil) and
+     (sllTrace in log.fFamily.fLevel) then
+    log.Log(sllTrace, Info^.GetProgress, Sender);
+end;
+
 procedure TSynLog.ForceRotation;
 begin
   EnterCriticalSection(GlobalThreadLock);
@@ -4790,11 +4828,9 @@ end;
 procedure TSynLog.Log(Level: TSynLogInfo; aInstance: TObject);
 begin
   if (self <> nil) and
-     (Level in fFamily.fLevel) then
-    if aInstance <> nil then
-      LogInternalText(Level, '', aInstance, maxInt)
-    else
-      LogInternalText(Level, 'Instance=nil', nil, maxInt);
+     (Level in fFamily.fLevel) and
+     (aInstance <> nil) then
+    LogInternalText(Level, '', aInstance, maxInt);
 end;
 
 procedure TSynLog.Log(Level: TSynLogInfo; const aName: RawUtf8;

@@ -1504,8 +1504,8 @@ end;
 
 procedure TSynMonitor.FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
 begin
-  fSafe.Lock;
   // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
+  fSafe.Lock;
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
