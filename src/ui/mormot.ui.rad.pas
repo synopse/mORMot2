@@ -102,14 +102,18 @@ type
     // ftDateTime,ftString,ftWideString kind of fields via GetRowFieldData()
     {$ifdef ISDELPHIXE3}
     {$ifdef ISDELPHIXE4}
+    // Delphi XE4 signature
     function GetFieldData(Field: TField; var Buffer: TValueBuffer): boolean; override;
     {$else}
+    // Delphi XE3 signature
     function GetFieldData(Field: TField; Buffer: TValueBuffer): boolean; override;
     {$endif ISDELPHIXE4}
     {$else}
+    // Delphi 2009..XE2 signature
     function GetFieldData(Field: TField; Buffer: pointer): boolean; override;
     {$endif ISDELPHIXE3}
     {$ifndef UNICODE}
+    // all Delphi versions signature
     function GetFieldData(Field: TField; Buffer: pointer;
       NativeFormat: boolean): boolean; override;
     {$endif UNICODE}

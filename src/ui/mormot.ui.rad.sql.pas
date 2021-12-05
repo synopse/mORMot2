@@ -119,8 +119,8 @@ type
     function PSGetTableName: string; override;
     function PSUpdateRecord(UpdateKind: TUpdateKind;
       Delta: TDataSet): Boolean; override;
-    function PSIsSqlBased: Boolean; override;
-    function PSIsSqlSupported: Boolean; override;
+    function PSIsSQLBased: Boolean; override;
+    function PSIsSQLSupported: Boolean; override;
     {$ifdef ISDELPHIXE3}
     function PSExecuteStatement(const ASQL: string;
       AParams: TParams): integer; overload; override;

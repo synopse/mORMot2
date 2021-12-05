@@ -69,6 +69,10 @@ type
   TRecordBuffer = PChar;
   {$endif UNICODE}
 
+  {$ifndef ISDELPHIXE4}
+  TValueBuffer = Pointer;
+  {$endif ISDELPHIXE4}
+  
   PDateTimeRec = ^TDateTimeRec;
 
   {$ifdef ISDELPHIXE4}
@@ -448,7 +452,7 @@ begin
   else
   begin
     SetLength(result, f.DataSize);
-    f.GetData(pointer(result), {nativeformat=}true);
+    f.GetData(TValueBuffer(result), {nativeformat=}true);
   end;
 end;
 

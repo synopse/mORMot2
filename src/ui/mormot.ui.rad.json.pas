@@ -456,7 +456,7 @@ begin
     FieldName := aTable.GetString(0, aField);
     if FieldName = '' then
     begin
-      DBType := DB.ftUnknown;
+      DBType := ftUnknown;
       SqlType := oftUnknown;
     end
     else
@@ -497,7 +497,7 @@ begin
         oftBlob:
           begin
             DBSize := (aTable.FieldLengthMax(aField, true) * 3) shr 2;
-            DBType := DB.ftBlob;
+            DBType := ftBlob;
           end;
         oftUtf8Text:
           begin
