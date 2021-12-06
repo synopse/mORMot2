@@ -167,6 +167,14 @@ type
     RestAccessRights: POrmAccessRights;
     Security: TRestHttpServerSecurity;
   end;
+  PRestHttpOneServer = ^TRestHttpOneServer;
+
+  /// high-level callback able to customize any TRestHttpServer process
+  // - as used by TRestHttpServer.OnCustomRequest property
+  // - should return TRUE if the Call has been processed, false if the
+  // registered TRestServer instances should handle this request
+  // - please make this method thread-safe and as fast as possible
+  TOnRestHttpServerRequest = function(var Call: TRestUriParams): boolean of object;
 
   /// HTTP/1.1 RESTFUL JSON mORMot Server class
   // - this server is multi-threaded and not blocking
@@ -189,11 +197,10 @@ type
     fHttpServer: THttpServerGeneric;
     fPort, fDomainName: RawUtf8;
     fPublicAddress, fPublicPort: RawUtf8;
-    /// internal servers to compute responses (protected by inherited fSafe)
     fDBServers: array of TRestHttpOneServer;
     fDBServerNames: RawUtf8;
-    fDBSingleServer: ^TRestHttpOneServer;
-    fSafe: TRWLock;
+    fDBSingleServer: PRestHttpOneServer;
+    fSafe: TRWLock; // protect fDBServers[]
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUtf8;
     fAccessControlAllowOriginsMatch: TMatchs;
@@ -202,6 +209,7 @@ type
     fUse: TRestHttpServerUse;
     fLog: TSynLogClass;
     fOptions: TRestHttpServerOptions;
+    fOnCustomRequest: TOnRestHttpServerRequest;
     procedure SetAccessControlAllowOrigin(const Value: RawUtf8);
     procedure ComputeAccessControlHeader(Ctxt: THttpServerRequestAbstract);
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
@@ -426,6 +434,11 @@ type
     /// allow to customize this TRestHttpServer process
     property Options: TRestHttpServerOptions
       read fOptions;
+    /// low-level interception of all incoming requests
+    // - this callback is called BEFORE any registered TRestServer.Uri() methods
+    // so allow any kind of custom routing or process
+    property OnCustomRequest: TOnRestHttpServerRequest
+      read fOnCustomRequest write fOnCustomRequest;
     /// enable cross-origin resource sharing (CORS) for proper AJAX process
     // - see @https://developer.mozilla.org/en-US/docs/HTTP/Access_control_CORS
     // - can be set e.g. to '*' to allow requests from any site/domain; or
@@ -938,7 +951,7 @@ var
   tls: boolean;
   i, hostlen: PtrInt;
   P: PUtf8Char;
-  headers, hostroot, redirect: RawUtf8;
+  headers, hostroot, loc: RawUtf8;
   match: TRestModelMatch;
   serv: TRestServer;
 begin
@@ -994,76 +1007,80 @@ begin
       if hostroot <> '' then
         // e.g. 'Host: project1.com' -> 'root1'
         hostroot := fHosts.Value(hostroot);
+      if hostroot <> '' then
+        if (Ctxt.Url = '') or
+           (PWord(Ctxt.Url)^ = ord('/')) then
+          call.Url := hostroot
+        else if Ctxt.Url[1] = '/' then
+          call.Url := hostroot + Ctxt.Url
+        else
+          call.Url := hostroot + '/' + Ctxt.Url;
     end;
-    if hostroot <> '' then
-      if (Ctxt.Url = '') or
-         (PWord(Ctxt.Url)^ = ord('/')) then
-        call.Url := hostroot
-      else if Ctxt.Url[1] = '/' then
-        call.Url := hostroot + Ctxt.Url
+    if call.Url = '' then
+      if (Ctxt.Url <> '') and
+         (Ctxt.Url[1] = '/') then
+        call.Url := copy(Ctxt.Url, 2, maxInt)
       else
-        call.Url := hostroot + '/' + Ctxt.Url
-    else if (Ctxt.Url <> '') and
-            (Ctxt.Url[1] = '/') then
-      call.Url := copy(Ctxt.Url, 2, maxInt)
-    else
-      call.Url := Ctxt.Url;
-    // search and call any matching TRestServer instance
-    result := HTTP_NOTFOUND; // page not found by default (in case of wrong URL)
+        call.Url := Ctxt.Url;
+    call.Method := Ctxt.Method;
+    call.InHead := Ctxt.InHeaders;
+    call.InBody := Ctxt.InContent;
+    // allow custom URI routing before TRestServer instances
     serv := nil;
-    match := rmNoMatch;
-    if fDBSingleServer <> nil then
-      // optimized for the most common case of a single DB server
-      with fDBSingleServer^ do
-      begin
-        if (Security = secSSL) = tls then
+    if (not Assigned(fOnCustomRequest)) or
+       (not fOnCustomRequest(call)) then
+    begin
+      // search and call any matching TRestServer instance
+      result := HTTP_NOTFOUND; // page not found by default (e.g. wrong URL)
+      match := rmNoMatch;
+      if fDBSingleServer <> nil then
+        // optimized for the most common case of a single DB server
+        with fDBSingleServer^ do
         begin
-          match := Server.Model.UriMatch(call.Url);
-          if match = rmNoMatch then
-            exit;
-          call.RestAccessRights := RestAccessRights;
-          serv := Server;
+          if (Security = secSSL) = tls then
+          begin
+            match := Server.Model.UriMatch(call.Url);
+            if match = rmNoMatch then
+              exit;
+            call.RestAccessRights := RestAccessRights;
+            serv := Server;
+          end;
+        end
+      else
+      begin
+        // thread-safe use of dynamic fDBServers[] array
+        fSafe.ReadOnlyLock;
+        try
+          for i := 0 to length(fDBServers) - 1 do
+            with fDBServers[i] do
+              if (Security = secSSL) = tls then
+              begin
+                // registered for http or https
+                match := Server.Model.UriMatch(call.Url);
+                if match = rmNoMatch then
+                  continue;
+                call.RestAccessRights := RestAccessRights;
+                serv := Server;
+                break;
+              end;
+        finally
+          fSafe.ReadOnlyUnLock;
         end;
-      end
-    else
-    begin
-      // thread-safe use of dynamic fDBServers[] array
-      fSafe.ReadOnlyLock;
-      try
-        for i := 0 to length(fDBServers) - 1 do
-          with fDBServers[i] do
-            if (Security = secSSL) = tls then
-            begin
-              // registered for http or https
-              match := Server.Model.UriMatch(call.Url);
-              if match = rmNoMatch then
-                continue;
-              call.RestAccessRights := RestAccessRights;
-              serv := Server;
-              break;
-            end;
-      finally
-        fSafe.ReadOnlyUnLock;
       end;
-    end;
-    if (match = rmNoMatch) or
-       (serv = nil) then
-      exit;
-    if (rsoRedirectServerRootUriForExactCase in fOptions) and
-       (match = rmMatchWithCaseChange) then
-    begin
-      // force redirection to exact Server.Model.Root case sensitivity
-      call.OutStatus := HTTP_TEMPORARYREDIRECT;
-      call.OutHead := 'Location: /' + serv.Model.Root +
-        copy(call.Url, length(serv.Model.Root)  + 1, maxInt);
-    end
-    else
-    begin
-      // call matching TRestServer.Uri()
-      call.Method := Ctxt.Method;
-      call.InHead := Ctxt.InHeaders;
-      call.InBody := Ctxt.InContent;
-      serv.Uri(call);
+      if (match = rmNoMatch) or
+         (serv = nil) then
+        exit;
+      if (rsoRedirectServerRootUriForExactCase in fOptions) and
+         (match = rmMatchWithCaseChange) then
+      begin
+        // force redirection to exact Server.Model.Root case sensitivity
+        call.OutStatus := HTTP_TEMPORARYREDIRECT;
+        call.OutHead := 'Location: /' + serv.Model.Root +
+          copy(call.Url, length(serv.Model.Root)  + 1, maxInt);
+      end
+      else
+        // call matching TRestServer.Uri()
+        serv.Uri(call);
     end;
     // set output content
     result := call.OutStatus;
@@ -1085,18 +1102,19 @@ begin
       if (result = HTTP_MOVEDPERMANENTLY) or
          (result = HTTP_TEMPORARYREDIRECT) then
       begin
-        redirect := FindIniNameValue(P, 'LOCATION: ');
-        if (redirect <> '') and
-           (redirect[1] = '/') then
-          delete(redirect, 1, 1); // what is needed for real URI doesn't help here
+        loc := FindIniNameValue(P, 'LOCATION: ');
+        if (loc <> '') and
+           (loc[1] = '/') then
+          delete(loc, 1, 1); // what is needed for real URI doesn't help here
         hostlen := length(hostroot);
-        if (length(redirect) > hostlen) and
-           (redirect[hostlen + 1] = '/') and
-           IdemPropNameU(hostroot, pointer(redirect), hostlen) then
+        if (length(loc) > hostlen) and
+           (loc[hostlen + 1] = '/') and
+           IdemPropNameU(hostroot, pointer(loc), hostlen) then
           // hostroot/method -> method on same domain
-          call.OutHead := 'Location: ' + copy(redirect, hostlen + 1, maxInt);
+          call.OutHead := 'Location: ' + copy(loc, hostlen + 1, maxInt);
       end
-      else if ExistsIniName(P, 'SET-COOKIE:') then
+      else if (serv <> nil) and
+              ExistsIniName(P, 'SET-COOKIE:') then
         // cookie Path=/hostroot... -> /...
         call.OutHead := StringReplaceAll(call.OutHead,
           '; Path=/' + serv.Model.Root, '; Path=/')
