@@ -8833,11 +8833,11 @@ end;
 
 constructor TStreamRedirect.Create(aRedirected: TStream; aRead: boolean);
 begin
+  fInfo.Init;
   fRedirected := aRedirected;
   if aRead and
      Assigned(aRedirected) then
     SetExpectedSize(aRedirected.Size); // needed e.g. to upload a file
-  fInfo.Init;
 end;
 
 destructor TStreamRedirect.Destroy;
