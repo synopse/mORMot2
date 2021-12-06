@@ -837,14 +837,18 @@ destructor TSynZipCompressor.Destroy;
 begin
   if fInitialized then
   begin
-    Flush;
+    try
+      Flush;
+      if fFormat = szcfGZ then
+      begin
+        // .gz format expected a trailing header
+        fDestStream.WriteBuffer(fCRC, 4); // CRC of the uncompressed data
+        fDestStream.WriteBuffer(Z.Stream.total_in, 4); // truncated to 32-bit
+      end;
+    except
+      // ignore any exception e.g. when zip was aborted
+    end;
     Z.CompressEnd;
-  end;
-  if fFormat = szcfGZ then
-  begin
-    // .gz format expected a trailing header
-    fDestStream.WriteBuffer(fCRC, 4); // CRC of the uncompressed data
-    fDestStream.WriteBuffer(Z.Stream.total_in, 4); // truncated to 32-bit
   end;
   inherited Destroy;
 end;
@@ -907,7 +911,11 @@ destructor TSynZipDecompressor.Destroy;
 begin
   if fInitialized then
   begin
-    Flush;
+    try
+      Flush;
+    except
+      // ignore any exception e.g. when unzip was aborted
+    end;
     Z.UncompressEnd;
   end;
   inherited Destroy;
