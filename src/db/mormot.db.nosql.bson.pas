@@ -743,6 +743,9 @@ type
     // - this will also reset the internal document offset table
     procedure CancelAll; override;
 
+    /// write an element with no value
+    // - elemType can be either betNull, betMinKey or betMaxKey
+    procedure BsonWrite(const name: RawUtf8; elemtype: TBsonElementType); overload;
     /// write a boolean value
     procedure BsonWrite(const name: RawUtf8; const value: boolean); overload;
     /// write a floating point value
@@ -766,9 +769,6 @@ type
     procedure BsonWriteRegEx(const name: RawUtf8; const RegEx, Options: RawByteString);
     /// write a data/time value
     procedure BsonWriteDateTime(const name: RawUtf8; const value: TDateTime);
-    /// write an element with no value
-    // - elemType can be either betNull, betMinKey or betMaxKey
-    procedure BsonWrite(const name: RawUtf8; elemtype: TBsonElementType); overload;
     /// write an element with no value
     procedure BsonWrite(const name: RawUtf8; const elem: TBsonElement); overload;
     /// write a BsonVariant instance value
@@ -3218,15 +3218,17 @@ end;
 
 procedure TBsonWriter.BsonWrite(const name: RawUtf8; elemtype: TBsonElementType);
 begin
-  Write1(ord(elemtype));
   if name = '' then
-    write1(0)
-  else // write only #0
+    Write2(ord(elemtype)) // write with trailing #0 for void name
+  else
+  begin
+    Write1(ord(elemtype));
     {$ifdef HASINLINE}
     Write(pointer(name), length(name) + 1); // +1 for #0
     {$else}
     Write(pointer(name), PInteger(PtrInt(name) - SizeOf(integer))^ + 1); // +1 for #0
     {$endif HASINLINE}
+  end;
 end;
 
 procedure TBsonWriter.BsonWrite(const name: RawUtf8; const value: integer);
