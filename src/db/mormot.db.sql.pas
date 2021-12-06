@@ -1071,7 +1071,8 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean; out Json: RawUtf8);
+    procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean;
+      out Json: RawUtf8; ReturnedRowCount: PPtrInt = nil);
     /// if set, any BLOB field won't be retrieved, and forced to be null
     // - this may be used to speed up fetching the results for SQL requests
     // with * statements
@@ -2286,7 +2287,7 @@ type
     // format and contains true BLOB data
     // - this virtual implementation calls ExecutePrepared then FetchAllAsJson()
     procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean;
-      out Json: RawUtf8); virtual;
+      out Json: RawUtf8; ReturnedRowCount: PPtrInt = nil); virtual;
     /// gets a number of updates made by latest executed statement
     // - default implementation returns 0
     function UpdateCount: integer; virtual;
@@ -6348,10 +6349,10 @@ begin
 end;
 
 procedure TSqlDBStatement.ExecutePreparedAndFetchAllAsJson(Expanded: boolean;
-  out Json: RawUtf8);
+  out Json: RawUtf8; ReturnedRowCount: PPtrInt);
 begin
   ExecutePrepared;
-  Json := FetchAllAsJson(Expanded);
+  Json := FetchAllAsJson(Expanded, ReturnedRowCount);
 end;
 
 function TSqlDBStatement.ColumnString(Col: integer): string;

@@ -380,7 +380,8 @@ type
     // - this overridden implementation will use JSON for transmission, and
     // binary encoding only for parameters (to avoid unneeded conversions, e.g.
     // when called from mormot.orm.sql.pas)
-    procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean; out Json: RawUtf8); override;
+    procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean;
+      out Json: RawUtf8; ReturnedRowCount: PPtrInt = nil); override;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -1709,10 +1710,13 @@ begin
 end;
 
 procedure TSqlDBProxyStatement.ExecutePreparedAndFetchAllAsJson(
-  Expanded: boolean; out Json: RawUtf8);
+  Expanded: boolean; out Json: RawUtf8; ReturnedRowCount: PPtrInt);
 var
   exec: TSqlDBProxyConnectionCommandExecute;
 begin
+  if ReturnedRowCount <> nil then
+    raise ESqlDBRemote.CreateUtf8('%.ExecutePreparedAndFetchAllAsJson() ' +
+      'does not support ReturnedRowCount', [self]);
   ParamsToCommand(exec);
   TSqlDBProxyConnectionPropertiesAbstract(fConnection.Properties).Process(
     EXECUTE_PREPARED_JSON[Expanded], exec, Json);
