@@ -8328,7 +8328,7 @@ begin
      (Json[1] >= '0') and
      (Json[1] <= '9') then // '012' is not Json, but '0.xx' and '0' are
     exit;
-  remdigit := 19; // max Int64 resolution
+  remdigit := 19;    // max Int64 resolution
   repeat
     if (c >= '0') and
        (c <= '9') then
@@ -8352,7 +8352,7 @@ begin
       end;
       c := Json^;
       if frac >= 0 then
-        inc(frac); // frac>0 to handle #############00000
+        inc(frac);   // frac>0 to handle #############00000
       continue;
     end;
     if c <> '.' then
@@ -8365,7 +8365,7 @@ begin
     dec(frac);
   until false;
   if frac < 0 then
-    inc(frac); // adjust digits after '.'
+    inc(frac);       // adjust digits after '.'
   if (c = 'E') or
      (c = 'e') then
   begin
@@ -8427,9 +8427,7 @@ begin
       until frac = 0;
     Value.VInt64 := v64;
   end
-  else if not AllowVarDouble then
-    exit
-  else
+  else if AllowVarDouble then
   begin
     // converted into a double value
     TRttiVarData(Value).VType := varDouble;
@@ -8439,7 +8437,9 @@ begin
     else
       d := HugePower10(frac);
     Value.VDouble := d * v64;
-  end;
+  end
+  else
+    exit;
   result := Json; // returns the first char after the parsed number
 end;
 
