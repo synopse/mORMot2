@@ -202,6 +202,8 @@ var
   readonly: boolean;
   docs: variant;
   T: TOrmTable;
+  c: PtrInt;
+  json: RawUtf8;
   {$ifdef ORMGENERICS}
   List: IList<TOrmTest>;
   {$endif ORMGENERICS}
@@ -224,6 +226,7 @@ begin
         Client.Client.ForceBlobTransfert := true;
         Check(Client.ServerTimestampSynchronize);
         Check(Client.SetUser('User', 'synopse'));
+        // append some content within a transaction
         Client.Orm.TransactionBegin(TOrmTest);
         R := TOrmTest.Create;
         try
@@ -241,11 +244,29 @@ begin
           end;
           CheckEqual(Client.Client.BatchSend(IDs), HTTP_SUCCESS);
           Check(Length(IDs) = 9900);
+          // validate database to file flush
           Check(not FileExists(WorkDir + 'fullmem.data'));
           Check(Client.CallBackPut('Flush', '', dummy) = HTTP_SUCCESS);
           Check(FileExists(WorkDir + 'fullmem.data'));
+          // check that we can retrieve data from ORM or SQL methods
           Check(Client.Orm.Retrieve(200, R));
           R.CheckWith(self, 200);
+          c := 0;
+          json := Server.Orm.ExecuteJson([TOrmTest], 'select id from test', false, @c);
+          CheckHash(json, $B3C0E823, 'id');
+          Check(c = 9999);
+          c := 0;
+          json := Server.Orm.ExecuteJson([TOrmTest], 'select * from test limit 2', false, @c);
+          CheckHash(json, $D25F059C, '* 2');
+          Check(c = 2);
+          c := 0;
+          json := Server.Orm.ExecuteJson([TOrmTest], 'select rowid from test limit 2', false, @c);
+          CheckHash(json, $CBE157EF, 'rowid 2');
+          Check(c = 2);
+          c := 0;
+          json := Server.Orm.ExecuteJson([TOrmTest], 'select id from test limit 2', false, @c);
+          CheckHash(json, $CBE157EF, 'id 2');
+          Check(c = 2);
         finally
           R.Free;
         end;
@@ -269,6 +290,7 @@ begin
         Client.Client.ForceBlobTransfert := true;
         Check(Client.ServerTimestampSynchronize);
         Check(Client.SetUser('User', 'synopse'));
+        // validate ORM read access
         R := TOrmTest.CreateAndFillPrepare(Client.Orm, '', '*');
         try
           Check((R.FillTable <> nil) and (R.FillTable.RowCount = 9999));
@@ -325,6 +347,7 @@ begin
           Render(Client.Orm.RetrieveDocVariantArray(TOrmTest, 'items', 'Int,Test'));
         check(IdemPChar(pointer(dummy), '1=1'#$D#$A'2=2'#$D#$A'3=3'#$D#$A'4=4'));
         CheckHash(dummy, $BC89CA72);
+        // validate ORM write methods
         Check(Client.Orm.UpdateField(TOrmTest, 100, 'ValWord', [100 + 10]),
           'update one field of a given record');
         R := TOrmTest.Create(Client.Orm, 100);
