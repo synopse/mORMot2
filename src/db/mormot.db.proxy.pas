@@ -1111,17 +1111,17 @@ var
   msgin, msgout, msgRaw: RawByteString;
   header: TRemoteMessageHeader;
   outheader: PRemoteMessageHeader;
-  intext: RawUtf8 absolute Input;
+  intext: RawUtf8                             absolute Input;
   inexec: TSqlDBProxyConnectionCommandExecute absolute Input;
   msg: PAnsiChar;
-  outdef: TSqlDBDefinition absolute Output;
-  outint64: Int64 absolute Output;
-  outboolean: boolean absolute Output;
-  outcolarr: TSqlDBColumnDefineDynArray absolute Output;
-  outindexarr: TSqlDBIndexDefineDynArray absolute Output;
-  outarr: TRawUtf8DynArray absolute Output;
-  oututf8: RawUtf8 absolute Output;
-  outnamevalue: TSynNameValue absolute Output;
+  outdef: TSqlDBDefinition                    absolute Output;
+  outint64: Int64                             absolute Output;
+  outboolean: boolean                         absolute Output;
+  outcolarr: TSqlDBColumnDefineDynArray       absolute Output;
+  outindexarr: TSqlDBIndexDefineDynArray      absolute Output;
+  outarr: TRawUtf8DynArray                    absolute Output;
+  oututf8: RawUtf8                            absolute Output;
+  outnamevalue: TSynNameValue                 absolute Output;
 begin
   // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   header.Magic := REMOTE_MAGIC;
@@ -1168,7 +1168,11 @@ begin
       outint64 := PInt64(msg)^;
     cGetDbms:
       outdef := TSqlDBDefinition(msg^);
-    cConnect, cDisconnect, cCommit, cRollback, cQuit:
+    cConnect,
+    cDisconnect,
+    cCommit,
+    cRollback,
+    cQuit:
       ; // no output parameters here
     cTryStartTransaction:
       outboolean := boolean(msg^);
@@ -1180,7 +1184,10 @@ begin
       DynArrayLoad(outarr, msg, TypeInfo(TRawUtf8DynArray));
     cGetForeignKeys:
       outnamevalue.SetBlobDataPtr(msg);
-    cExecute, cExecuteToBinary, cExecuteToJson, cExecuteToExpandedJson:
+    cExecute,
+    cExecuteToBinary,
+    cExecuteToJson,
+    cExecuteToExpandedJson:
       FastSetString(oututf8, msg, length(msgout) - SizeOf(header));
     cExceptionRaised: // msgout is ExceptionClassName+#0+ExceptionMessage
       raise ESqlDBRemote.CreateUtf8('%.Process(%): server raised % with ''%''',

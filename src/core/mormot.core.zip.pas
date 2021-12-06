@@ -3052,7 +3052,8 @@ begin
     doCompress:
       result := mormot.lib.z.CompressMem(
         src, dst, srcLen, dstLen, fDeflateLevel);
-    doUnCompress, doUncompressPartial:
+    doUnCompress,
+    doUncompressPartial:
       result := mormot.lib.z.UnCompressMem(
         src, dst, srcLen, dstLen);
   else

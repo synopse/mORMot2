@@ -2217,11 +2217,13 @@ begin
       read.Next8;
     DW_FORM_string:
       SkipString;
-    DW_FORM_block, DW_FORM_exprloc:
+    DW_FORM_block,
+    DW_FORM_exprloc:
       read.Next(read.VarUInt64);
     DW_FORM_block1:
       read.Next(read.NextByte);
-    DW_FORM_data1, DW_FORM_flag:
+    DW_FORM_data1,
+    DW_FORM_flag:
       read.NextByte;
     DW_FORM_sdata:
       read.VarNextInt;
@@ -2235,7 +2237,8 @@ begin
         read.Next4
       else
         read.Next(header64.address_size);
-    DW_FORM_strp, DW_FORM_sec_offset:
+    DW_FORM_strp,
+    DW_FORM_sec_offset:
       if isdwarf64 then
         read.Next8
       else

@@ -3721,7 +3721,8 @@ begin
         Copy(pointer(Values), n * 4);
         exit;
       end;
-    wkOffsetU, wkOffsetI:
+    wkOffsetU,
+    wkOffsetI:
       begin
         pi^ := VarUInt32;
         dec(n);
@@ -4522,7 +4523,10 @@ begin
             MoveFast(Values^, P^, n * 4);
             inc(P, n * 4);
           end;
-        wkVarInt32, wkVarUInt32, wkOffsetU, wkOffsetI:
+        wkVarInt32,
+        wkVarUInt32,
+        wkOffsetU,
+        wkOffsetI:
           begin
             // format: Isize + varUInt32s
             PBeg := PAnsiChar(P); // leave space for chunk size
@@ -9310,11 +9314,18 @@ end;
 
 type
   TTextWriterEscapeStyle = (
-    tweBold, tweItalic, tweCode);
+    tweBold,
+    tweItalic,
+    tweCode);
 
   TTextWriterEscapeLineStyle = (
-    twlNone, twlParagraph, twlOrderedList, twlUnorderedList, twlBlockquote,
-    twlCode4, twlCode3);
+    twlNone,
+    twlParagraph,
+    twlOrderedList,
+    twlUnorderedList,
+    twlBlockquote,
+    twlCode4,
+    twlCode3);
 
   TTextWriterEscape = object
     P, B, P2, B2: PUtf8Char;
@@ -9525,7 +9536,9 @@ begin
   end;
   P := GotoNextNotSpaceSameLine(P); // don't implement nested levels yet
   case P^ of
-    '*', '+', '-':
+    '*',
+    '+',
+    '-':
       if P[1] = ' ' then
         SetLine(twlUnorderedList)
       else
@@ -9579,10 +9592,11 @@ begin
   SetLine(twlParagraph);
   repeat
     case ProcessText([0, 10, 13,
-          ord('*'), ord('+'), ord('`'), ord('\'), ord(':')]) of
+                      ord('*'), ord('+'), ord('`'), ord('\'), ord(':')]) of
       #0:
         break;
-      #10, #13:
+      #10,
+      #13:
         begin
           EndOfParagraph;
           SetLine(twlParagraph);
@@ -9640,10 +9654,11 @@ begin
       end
     else
       case ProcessText([0, 10, 13, ord('*'), ord('_'), ord('`'),
-             ord('\'), ord('['), ord('!'), ord(':')]) of
+                        ord('\'), ord('['), ord('!'), ord(':')]) of
         #0:
           break;
-        #10, #13:
+        #10,
+        #13:
           begin
             EndOfParagraph;
             NewMarkdownLine;
@@ -9659,7 +9674,8 @@ begin
           end
           else
             W.Add('\');
-        '*', '_':
+        '*',
+        '_':
           if P[1] = P[0] then
           begin
             // **This text will be bold** or __This text will be bold__
@@ -9770,7 +9786,7 @@ function EmojiFromText(P: PUtf8Char; len: PtrInt): TEmoji;
 begin
   // RTTI has shortstrings in adjacent L1 cache lines -> faster than EMOJI_TEXT[]
   result := TEmoji(FindShortStringListTrimLowerCase(
-    EMOJI_RTTI, ord(high(TEmoji)) - 1, P, len) + 1);
+                     EMOJI_RTTI, ord(high(TEmoji)) - 1, P, len) + 1);
   // note: we may enhance performance by using FastFindPUtf8CharSorted()
 end;
 
