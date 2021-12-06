@@ -35,6 +35,7 @@ uses
   mormot.orm.core,
   mormot.orm.rest,
   mormot.soa.core,
+  mormot.rest.core,
   mormot.rest.client,
   mormot.rest.server,
   mormot.rest.memserver,

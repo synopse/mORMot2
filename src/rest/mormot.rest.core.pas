@@ -13,6 +13,7 @@ unit mormot.rest.core;
     - TRest Abstract Parent Class
     - RESTful Authentication Support
     - TRestUriParams REST URI Definitions
+    - TRestUriContext REST Parent Process on Server Side
     - TRestThread Background Process of a REST instance
     - TOrmHistory/TOrmTableDeleted Modifications Tracked Persistence
 
@@ -39,10 +40,11 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.threads,
-  mormot.crypt.core,
   mormot.core.perf,
   mormot.core.search,
+  mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.jwt,
   mormot.core.log,
   mormot.core.interfaces,
   mormot.orm.base,
@@ -1101,7 +1103,8 @@ type
     /// input parameter containing the caller URI
     Url: RawUtf8;
     /// input parameter containing the caller method
-    // - handle enhanced REST codes: LOCK/UNLOCK/BEGIN/END/ABORT
+    // - handle standard REST codes as GET/POST/PUT/DELETE; but also our own
+    // extensions like LOCK/UNLOCK/BEGIN/END/ABORT
     Method: RawUtf8;
     /// input parameter containing the caller message headers
     // - you can use e.g. to retrieve the remote IP:
@@ -1202,6 +1205,294 @@ type
   PSqlRestUriParams = PRestUriParams;
 
 {$endif PUREMORMOT2}
+
+
+{ ************ TRestUriContext REST Parent Process on Server Side }
+
+type
+  /// the available HTTP methods transmitted between client and server
+  // - some custom verbs are available in addition to standard REST commands
+  // - most of iana verbs are available
+  // see http://www.iana.org/assignments/http-methods/http-methods.xhtml
+  // - for basic CRUD operations, we consider Create=mPOST, Read=mGET,
+  // Update=mPUT and Delete=mDELETE - even if it is not fully RESTful
+  TUriMethod = (
+    mNone,
+    mGET,
+    mPOST,
+    mPUT,
+    mDELETE,
+    mHEAD,
+    mBEGIN,
+    mEND,
+    mABORT,
+    mLOCK,
+    mUNLOCK,
+    mSTATE,
+    mOPTIONS,
+    mPROPFIND,
+    mPROPPATCH,
+    mTRACE,
+    mCOPY,
+    mMKCOL,
+    mMOVE,
+    mPURGE,
+    mREPORT,
+    mMKACTIVITY,
+    mMKCALENDAR,
+    mCHECKOUT,
+    mMERGE,
+    mNOTIFY,
+    mPATCH,
+    mSEARCH,
+    mCONNECT);
+
+  /// set of available HTTP methods transmitted between client and server
+  TUriMethods = set of TUriMethod;
+
+  /// abstract calling context for any Server-Side REST process
+  // - is inherited e.g. by TRestServerUriContext for TRestServer.Uri processing
+  TRestUriContext = class
+  protected
+    fCall: PRestUriParams;
+    fMethod: TUriMethod;
+    fInputCookiesRetrieved: boolean;
+    fRemoteIP: RawUtf8;
+    fUserAgent: RawUtf8;
+    fAuthenticationBearerToken: RawUtf8;
+    fInHeaderLastName: RawUtf8;
+    fInHeaderLastValue: RawUtf8;
+    fInputCookies: array of record
+      Name, Value: RawUtf8; // only computed if InCookie[] is used
+    end;
+    fOutSetCookie: RawUtf8;
+    fJwtContent: PJwtContent;
+    fTix64: Int64;
+    function GetUserAgent: RawUtf8;
+    function GetRemoteIP: RawUtf8;
+    function GetRemoteIPIsLocalHost: boolean;
+    function GetRemoteIPNotLocal: RawUtf8;
+    function GetInHeader(const HeaderName: RawUtf8): RawUtf8;
+    procedure RetrieveCookies;
+    function GetInCookie(CookieName: RawUtf8): RawUtf8;
+    procedure SetInCookie(CookieName, CookieValue: RawUtf8);
+    procedure SetOutSetCookie(const aOutSetCookie: RawUtf8); virtual;
+  public
+    /// initialize the execution context
+    // - this method could have been declared as protected, since it should
+    // never be called outside the TRestServer.Uri() method workflow
+    // - should set Call, and Method members
+    constructor Create(const aCall: TRestUriParams);
+    /// finalize the execution context
+    destructor Destroy; override;
+
+    /// access to all input/output parameters at TRestServer.Uri() level
+    // - process should better call Results() or Success() methods to set the
+    // appropriate answer or Error() method in case of an error
+    // - low-level access to the call parameters can be made via this pointer
+    property Call: PRestUriParams
+      read fCall;
+    /// the used Client-Server method (matching the corresponding HTTP Verb)
+    // - this property will be set from incoming URI, even if RESTful
+    // authentication is not enabled
+    property Method: TUriMethod
+      read fMethod;
+    /// retrieve the "User-Agent" value from the incoming HTTP headers
+    property UserAgent: RawUtf8
+      read GetUserAgent;
+    /// retrieve the "RemoteIP" value from the incoming HTTP headers
+    property RemoteIP: RawUtf8
+      read GetRemoteIP;
+    /// true if the "RemoteIP" value from the incoming HTTP headers is '127.0.0.1'
+    property RemoteIPIsLocalHost: boolean
+      read GetRemoteIPIsLocalHost;
+    /// "RemoteIP" value from the incoming HTTP headers but '' for '127.0.0.1'
+    property RemoteIPNotLocal: RawUtf8
+      read GetRemoteIPNotLocal;
+    /// retrieve an incoming HTTP header
+    // - the supplied header name is case-insensitive
+    // - but rather call RemoteIP or UserAgent properties instead of
+    // InHeader['remoteip'] or InHeader['User-Agent']
+    property InHeader[const HeaderName: RawUtf8]: RawUtf8
+      read GetInHeader;
+    /// retrieve an incoming HTTP cookie value
+    // - cookie name are case-sensitive
+    property InCookie[CookieName: RawUtf8]: RawUtf8
+      read GetInCookie write SetInCookie;
+    /// define a new 'name=value' cookie to be returned to the client
+    // - if not void, TRestServer.Uri() will define a new 'set-cookie: ...'
+    // header in Call^.OutHead
+    // - you can use COOKIE_EXPIRED as value to delete a cookie in the browser
+    // - if no Path=/.. is included, it will append
+    // $ '; Path=/'+Server.Model.Root+'; HttpOnly'
+    property OutSetCookie: RawUtf8
+      read fOutSetCookie write SetOutSetCookie;
+    /// low-level HTTP header merge of the OutSetCookie value
+    procedure OutHeadFromCookie; virtual;
+    /// low-level wrapper method around GetTickCount64 to cache the value
+    // - call avoid an OS API call on server side, during a request process
+    function TickCount64: Int64;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
+    // - typically returns a JWT for statelesss self-contained authentication,
+    // as expected by TJwtAbstract.Verify method
+    // - as an alternative, a non-standard and slightly less safe way of
+    // token transmission may be to encode its value as ?authenticationbearer=....
+    // URI parameter (may be convenient when embedding resources in HTML DOM)
+    function AuthenticationBearerToken: RawUtf8; virtual;
+    /// validate "Authorization: Bearer <JWT>" content from incoming HTTP headers
+    // - returns true on success, storing the payload in JwtContent^ field
+    // - set JwtContent^.result = jwtNoToken if jwt is nil
+    // - on failure (i.e. returns false), will set the error context as
+    // 403 HTTP_FORBIDDEN so that you may directly write:
+    // ! procedure TMyDaemon.Files(Ctxt: TRestServerUriContext);
+    // ! begin
+    // !   if Ctxt.AuthenticationCheck(fJWT) then
+    // !     Ctxt.ReturnFileFromFolder('c:\datafolder');
+    // ! end;
+    function AuthenticationCheck(jwt: TJwtAbstract): boolean; virtual;
+    /// JWT validation information, as filled by AuthenticationCheck()
+    // - equals nil if no JWT authentication was made
+    property JwtContent: PJwtContent
+      read fJwtContent;
+
+    /// use this method to send back directly a result value to the caller
+    // - expects Status to be either HTTP_SUCCESS, HTTP_NOTMODIFIED,
+    // HTTP_CREATED, or HTTP_TEMPORARYREDIRECT, and will return as answer the
+    // supplied result content with no transformation
+    // - if Status is an error code, it will call Error() method
+    // - CustomHeader optional parameter can be set e.g. to
+    // TEXT_CONTENT_TYPE_HEADER if the default JSON_CONTENT_TYPE is not OK,
+    // or calling GetMimeContentTypeHeader() on the returned binary buffer
+    // - if Handle304NotModified is TRUE and Status is HTTP_SUCCESS, the result
+    // content will be hashed (using crc32c) and in case of no modification
+    // will return HTTP_NOTMODIFIED to the browser, without the actual result
+    // content (to save bandwidth)
+    // - set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    procedure Returns(const result: RawUtf8; Status: integer = HTTP_SUCCESS;
+      const CustomHeader: RawUtf8 = ''; Handle304NotModified: boolean = false;
+      HandleErrorAsRegularResult: boolean = false; CacheControlMaxAge: integer = 0;
+      ServerHash: RawUtf8 = ''); overload;
+    /// use this method to send back a JSON object to the caller
+    // - this method will encode the supplied values e.g. as
+    // ! JsonEncode(['name','John','year',1972]) = '{"name":"John","year":1972}'
+    // - implementation is just a wrapper around Returns(JsonEncode([]))
+    // - note that cardinal values should be type-casted to Int64() (otherwise
+    // the integer mapped value will be transmitted, therefore wrongly)
+    // - expects Status to be either HTTP_SUCCESS or HTTP_CREATED
+    // - caller can set Handle304NotModified=TRUE for Status=HTTP_SUCCESS
+    procedure Returns(const NameValuePairs: array of const;
+      Status: integer = HTTP_SUCCESS; Handle304NotModified: boolean = false;
+      HandleErrorAsRegularResult: boolean = false;
+      const CustomHeader: RawUtf8 = ''); overload;
+    /// use this method to send back any object as JSON document to the caller
+    // - this method will call ObjectToJson() to compute the returned content
+    // - you can customize OrmOptions, to force the returned JSON
+    // object to have its TOrm nested fields serialized as true JSON
+    // arrays or objects, or add an "ID_str" string field for JavaScript
+    procedure Returns(Value: TObject; Status: integer = HTTP_SUCCESS;
+      Handle304NotModified: boolean = false;
+      OrmOptions: TOrmWriterOptions = [];
+      const CustomHeader: RawUtf8 = ''); overload;
+    /// use this method to send back any variant as JSON to the caller
+    // - this method will call VariantSaveJson() to compute the returned content
+    procedure ReturnsJson(const Value: variant; Status: integer = HTTP_SUCCESS;
+      Handle304NotModified: boolean = false; Escape: TTextWriterKind = twJsonEscape;
+      MakeHumanReadable: boolean = false; const CustomHeader: RawUtf8 = '';
+      HandleErrorAsRegularResult: boolean = false);
+    /// uses this method to send back directly any binary content to the caller
+    // - the exact MIME type will be retrieved using GetMimeContentTypeHeader(),
+    // from the supplied Blob binary buffer, and optional a file name
+    // - by default, the HTTP_NOTMODIFIED process will take place, to minimize
+    // bandwidth between the server and the client
+    // - set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    procedure ReturnBlob(const Blob: RawByteString; Status: integer = HTTP_SUCCESS;
+      Handle304NotModified: boolean = true; const FileName: TFileName = '';
+      CacheControlMaxAge: integer = 0);
+    /// use this method to send back a file to the caller
+    // - this method will let the HTTP server return the file content
+    // - if Handle304NotModified is TRUE, will check the file age to ensure
+    // that the file content will be sent back to the server only if it changed;
+    // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    // - if ContentType is left to default '', method will guess the expected
+    // mime-type from the file name extension
+    // - if the file name does not exist, a generic 404 error page will be
+    // returned, unless an explicit redirection is defined in Error404Redirect
+    // - you can also specify the resulting file name, as downloaded and written
+    // by the client browser, in the optional AttachmentFileName parameter, if
+    // the URI does not match the expected file name
+    procedure ReturnFile(const FileName: TFileName;
+      Handle304NotModified: boolean = false; const ContentType: RawUtf8 = '';
+      const AttachmentFileName: RawUtf8 = ''; const Error404Redirect: RawUtf8 = '';
+      CacheControlMaxAge: integer = 0);
+    /// use this method to send back a file from a local folder to the caller
+    // - this method will let the HTTP server return the file content
+    // - if Handle304NotModified is TRUE, will check the file age to ensure
+    // that the file content will be sent back to the server only if it changed
+    // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    procedure ReturnFileFromFolder(const FolderName: TFileName;
+      Handle304NotModified: boolean = true;
+      const DefaultFileName: TFileName = 'index.html';
+      const Error404Redirect: RawUtf8 = ''; CacheControlMaxAge: integer = 0); virtual;
+    /// use this method notify the caller that the resource URI has changed
+    // - returns a HTTP_TEMPORARYREDIRECT status with the specified location,
+    // or HTTP_MOVEDPERMANENTLY if PermanentChange is TRUE
+    procedure Redirect(const NewLocation: RawUtf8;
+      PermanentChange: boolean = false);
+    /// use this method to send back a JSON object with a "result" field
+    // - this method will encode the supplied values as a {"result":"...}
+    // JSON object, as such for one value:
+    // $ {"result":"OneValue"}
+    // (with one value, you can just call TRestClientUri.CallBackGetResult
+    // method to call and decode this value)
+    // or as a JSON object containing an array of values:
+    // $ {"result":["One","two"]}
+    // - expects Status to be either HTTP_SUCCESS or HTTP_CREATED
+    // - caller can set Handle304NotModified=TRUE for Status=HTTP_SUCCESS and/or
+    // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    procedure Results(const Values: array of const;
+      Status: integer = HTTP_SUCCESS; Handle304NotModified: boolean = false;
+      CacheControlMaxAge: integer = 0);
+    /// use this method if the caller expect no data, just a status
+    // - just wrap the overloaded Returns() method with no result value
+    // - if Status is an error code, it will call Error() method
+    // - by default, calling this method will mark process as successfull
+    procedure Success(Status: integer = HTTP_SUCCESS); virtual;
+    /// use this method to send back an error to the caller
+    // - expects Status to not be HTTP_SUCCESS neither HTTP_CREATED,
+    // and will send back a JSON error message to the caller, with the
+    // supplied error text
+    // - set CacheControlMaxAge<>0 to include a Cache-Control: max-age = xxx header
+    // - if no ErrorMessage is specified, will return a default text
+    // corresponding to the Status code
+    procedure Error(const ErrorMessage: RawUtf8 = '';
+      Status: integer = HTTP_BADREQUEST;
+      CacheControlMaxAge: integer = 0); overload; virtual;
+    /// use this method to send back an error to the caller
+    // - implementation is just a wrapper over Error(FormatUtf8(Format,Args))
+    procedure Error(const Format: RawUtf8; const Args: array of const;
+      Status: integer = HTTP_BADREQUEST;
+      CacheControlMaxAge: integer = 0); overload;
+    /// use this method to send back an error to the caller
+    // - will serialize the supplied exception, with an optional error message
+    procedure Error(E: Exception; const Format: RawUtf8;
+      const Args: array of const; Status: integer = HTTP_BADREQUEST); overload; virtual;
+  end;
+
+
+/// convert a string HTTP verb into its TUriMethod enumerate
+function ToMethod(const method: RawUtf8): TUriMethod;
+
+/// convert a TUriMethod enumerate to its #0 terminated uppercase text
+function MethodText(m: TUriMethod): RawUtf8;
+
+
+{$ifndef PUREMORMOT2}
+type
+  TSqlUriMethod = TUriMethod;
+  TSqlUriMethods = TUriMethods;
+{$endif PUREMORMOT2}
+
 
 
 
@@ -3377,6 +3668,540 @@ begin
   else
     result := Store;
 end;
+
+
+{ ************ TRestUriContext REST Parent Process on Server Side }
+
+const
+  // sorted by occurence for in-order O(n) search via IdemPPChar()
+  METHODNAME: array[0..ord(high(TUriMethod))] of RawUtf8 = (
+    'GET',
+    'POST',
+    'PUT',
+    'DELETE',
+    'HEAD',
+    'BEGIN',
+    'END',
+    'ABORT',
+    'LOCK',
+    'UNLOCK',
+    'STATE',
+    'OPTIONS',
+    'PROPFIND',
+    'PROPPATCH',
+    'TRACE',
+    'COPY',
+    'MKCOL',
+    'MOVE',
+    'PURGE',
+    'REPORT',
+    'MKACTIVITY',
+    'MKCALENDAR',
+    'CHECKOUT',
+    'MERGE',
+    'NOTIFY',
+    'PATCH',
+    'SEARCH',
+    'CONNECT',
+    '');
+
+function ToMethod(const method: RawUtf8): TUriMethod;
+begin
+  result := TUriMethod(IdemPPChar(pointer(method), pointer(@METHODNAME)) + 1);
+end;
+
+function MethodText(m: TUriMethod): RawUtf8;
+begin
+  dec(m);
+  if cardinal(m) <= high(METHODNAME) then
+    result := METHODNAME[ord(m)]
+  else
+    result := '';
+end;
+
+
+{ TRestUriContext }
+
+constructor TRestUriContext.Create(const aCall: TRestUriParams);
+begin
+  fCall := @aCall;
+  fRemoteIP := aCall.LowLevelRemoteIP;
+  fAuthenticationBearerToken := aCall.LowLevelBearerToken;
+  fUserAgent := aCall.LowLevelUserAgent;
+  fMethod := ToMethod(aCall.Method);
+end;
+
+destructor TRestUriContext.Destroy;
+begin
+  inherited Destroy;
+  if fJwtContent <> nil then
+    Dispose(fJwtContent);
+end;
+
+function TRestUriContext.GetUserAgent: RawUtf8;
+begin
+  result := Call^.HeaderOnce(fUserAgent, 'USER-AGENT: ');
+end;
+
+function TRestUriContext.GetRemoteIP: RawUtf8;
+begin
+  result := Call^.HeaderOnce(fRemoteIP, HEADER_REMOTEIP_UPPER);
+end;
+
+function TRestUriContext.GetRemoteIPNotLocal: RawUtf8;
+begin
+  result := Call^.HeaderOnce(fRemoteIP, HEADER_REMOTEIP_UPPER);
+  if result = '127.0.0.1' then
+    result := '';
+end;
+
+function TRestUriContext.GetRemoteIPIsLocalHost: boolean;
+begin
+  result := (GetRemoteIP = '') or
+            (fRemoteIP = '127.0.0.1');
+end;
+
+function TRestUriContext.AuthenticationBearerToken: RawUtf8;
+begin
+  result := Call^.HeaderOnce(fAuthenticationBearerToken, HEADER_BEARER_UPPER);
+end;
+
+function TRestUriContext.AuthenticationCheck(jwt: TJwtAbstract): boolean;
+begin
+  if fJwtContent = nil then
+    New(fJwtContent);
+  if jwt = nil then
+    fJwtContent^.result := jwtNoToken
+  else
+    jwt.Verify(AuthenticationBearerToken, fJwtContent^);
+  result := JwtContent^.result = jwtValid;
+  if not result then
+    Error('Invalid Bearer [%]', [ToText(JwtContent^.result)^], HTTP_FORBIDDEN);
+end;
+
+function TRestUriContext.GetInHeader(const HeaderName: RawUtf8): RawUtf8;
+var
+  up: array[byte] of AnsiChar;
+begin
+  if self = nil then
+    result := ''
+  else if fInHeaderLastName = HeaderName then
+    result := fInHeaderLastValue
+  else
+  begin
+    PWord(UpperCopy255(up{%H-}, HeaderName))^ := ord(':');
+    FindNameValue(Call.InHead, up, result);
+    if result <> '' then
+    begin
+      fInHeaderLastName := HeaderName;
+      fInHeaderLastValue := result;
+    end;
+  end;
+end;
+
+const
+  // Deny-Of-Service (DOS) Attack detection threshold
+  COOKIE_MAXCOUNT_DOSATTACK = 128;
+
+procedure TRestUriContext.RetrieveCookies;
+var
+  n: PtrInt;
+  P: PUtf8Char;
+  cookie, cn, cv: RawUtf8;
+begin
+  fInputCookiesRetrieved := true;
+  FindNameValue(Call.InHead, 'COOKIE:', cookie);
+  P := pointer(cookie);
+  n := 0;
+  while P <> nil do
+  begin
+    GetNextItemTrimed(P, '=', cn);
+    GetNextItemTrimed(P, ';', cv);
+    if (cn = '') and
+       (cv = '') then
+      break;
+    if n = length(fInputCookies) then
+      SetLength(fInputCookies, NextGrow(n));
+    fInputCookies[n].Name := cn;
+    fInputCookies[n].Value := cv;
+    inc(n);
+    if n > COOKIE_MAXCOUNT_DOSATTACK then
+      raise ERestException.CreateUtf8(
+        '%.RetrieveCookies overflow (%): DOS attempt?', [self, KB(cookie)]);
+  end;
+  if n <> 0 then
+    DynArrayFakeLength(fInputCookies, n);
+end;
+
+procedure TRestUriContext.SetInCookie(CookieName, CookieValue: RawUtf8);
+var
+  i, n: PtrInt;
+begin
+  CookieName := TrimU(CookieName);
+  if (self = nil) or
+     (CookieName = '') then
+    exit;
+  if not fInputCookiesRetrieved then
+    RetrieveCookies;
+  n := length(fInputCookies);
+  for i := 0 to n - 1 do
+    if fInputCookies[i].Name = CookieName then // cookies are case-sensitive
+    begin
+      fInputCookies[i].Value := CookieValue; // in-place update
+      exit;
+    end;
+  SetLength(fInputCookies, n + 1);
+  fInputCookies[n].Name := CookieName;
+  fInputCookies[n].Value := CookieValue;
+end;
+
+function TRestUriContext.GetInCookie(CookieName: RawUtf8): RawUtf8;
+var
+  i: PtrInt;
+begin
+  result := '';
+  CookieName := TrimU(CookieName);
+  if (self = nil) or
+     (CookieName = '') then
+    exit;
+  if not fInputCookiesRetrieved then
+    RetrieveCookies;
+  for i := 0 to length(fInputCookies) - 1 do
+    if fInputCookies[i].Name = CookieName then
+    begin
+      // cookies are case-sensitive
+      result := fInputCookies[i].Value;
+      exit;
+    end;
+end;
+
+procedure TRestUriContext.SetOutSetCookie(const aOutSetCookie: RawUtf8);
+var
+  c: RawUtf8;
+begin
+  if self = nil then
+    exit;
+  c := TrimU(aOutSetCookie);
+  if not IsValidUtf8WithoutControlChars(c) then
+    raise ERestException.CreateUtf8('Unsafe %.SetOutSetCookie', [self]);
+  if PosExChar('=', c) < 2 then
+    raise ERestException.CreateUtf8(
+      '"name=value" expected for %.SetOutSetCookie("%")', [self, c]);
+  fOutSetCookie := c;
+end;
+
+procedure TRestUriContext.OutHeadFromCookie;
+begin
+  Call.OutHead := TrimU(Call.OutHead + #13#10 +
+                        'Set-Cookie: ' + fOutSetCookie);
+end;
+
+function TRestUriContext.TickCount64: Int64;
+begin
+  if (self = nil) or
+     (fTix64 = 0) then
+  begin
+    result := GetTickCount64;
+    if self <> nil then
+      fTix64 := result;
+  end
+  else
+    result := fTix64;
+end;
+
+
+procedure TRestUriContext.Returns(const Result: RawUtf8;
+  Status: integer; const CustomHeader: RawUtf8;
+  Handle304NotModified, HandleErrorAsRegularResult: boolean;
+  CacheControlMaxAge: integer; ServerHash: RawUtf8);
+var
+  clienthash: RawUtf8;
+begin
+  if HandleErrorAsRegularResult or
+     StatusCodeIsSuccess(Status) then
+  begin
+    Call.OutStatus := Status;
+    Call.OutBody := Result;
+    if CustomHeader <> '' then
+      Call.OutHead := CustomHeader
+    else if Call.OutHead = '' then
+      Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
+    if CacheControlMaxAge > 0 then
+      Call.OutHead := Call.OutHead + #13#10 +
+        'Cache-Control: max-age=' + UInt32ToUtf8(CacheControlMaxAge);
+    if Handle304NotModified and
+       (Status = HTTP_SUCCESS) and
+       (Length(Result) > 64) then
+    begin
+      FindNameValue(Call.InHead, 'IF-NONE-MATCH: ', clienthash);
+      if ServerHash = '' then
+        ServerHash := crc32cUtf8ToHex(Result);
+      ServerHash := '"' + ServerHash + '"';
+      if clienthash <> ServerHash then
+        Call.OutHead := Call.OutHead + #13#10 +
+          'ETag: ' + ServerHash
+      else
+      begin
+        // save bandwidth by returning "304 Not Modified"
+        Call.OutBody := '';
+        Call.OutStatus := HTTP_NOTMODIFIED;
+      end;
+    end;
+  end
+  else
+    Error(Result, Status);
+end;
+
+procedure TRestUriContext.Returns(Value: TObject; Status: integer;
+  Handle304NotModified: boolean; OrmOptions: TOrmWriterOptions;
+  const CustomHeader: RawUtf8);
+var
+  json: RawUtf8;
+begin
+  if Value.InheritsFrom(TOrm) then
+    json := TOrm(Value).GetJsonValues(true, true, ooSelect, nil, OrmOptions)
+  else
+    json := ObjectToJson(Value);
+  Returns(json, Status, CustomHeader, Handle304NotModified);
+end;
+
+procedure TRestUriContext.ReturnsJson(const Value: variant;
+  Status: integer; Handle304NotModified: boolean; Escape: TTextWriterKind;
+  MakeHumanReadable: boolean; const CustomHeader: RawUtf8;
+  HandleErrorAsRegularResult: boolean);
+var
+  json: RawUtf8;
+  tmp: TSynTempBuffer;
+begin
+  VariantSaveJson(Value, Escape, json);
+  if MakeHumanReadable and
+     (json <> '') and
+     (json[1] in ['{', '[']) then
+  begin
+    tmp.Init(json);
+    try
+      JsonBufferReformat(tmp.buf, json);
+    finally
+      tmp.Done;
+    end;
+  end;
+  Returns(json, Status, CustomHeader,
+    Handle304NotModified, HandleErrorAsRegularResult);
+end;
+
+procedure TRestUriContext.ReturnBlob(const Blob: RawByteString;
+  Status: integer; Handle304NotModified: boolean; const FileName: TFileName;
+  CacheControlMaxAge: integer);
+begin
+  if not ExistsIniName(pointer(Call.OutHead), HEADER_CONTENT_TYPE_UPPER) then
+    AddToCsv(GetMimeContentTypeHeader(Blob, FileName), Call.OutHead, #13#10);
+  Returns(Blob, Status, Call.OutHead, Handle304NotModified, false, CacheControlMaxAge);
+end;
+
+procedure TRestUriContext.ReturnFile(const FileName: TFileName;
+  Handle304NotModified: boolean; const ContentType: RawUtf8;
+  const AttachmentFileName: RawUtf8; const Error404Redirect: RawUtf8;
+  CacheControlMaxAge: integer);
+var
+  filetime: TDateTime;
+  clienthash, serverhash: RawUtf8;
+begin
+  if FileName = '' then
+    filetime := 0
+  else
+    filetime := FileAgeToDateTime(FileName);
+  if filetime = 0 then
+    if Error404Redirect <> '' then
+      Redirect(Error404Redirect)
+    else
+      Error('', HTTP_NOTFOUND, CacheControlMaxAge)
+  else
+  begin
+    if not ExistsIniName(pointer(Call.OutHead), HEADER_CONTENT_TYPE_UPPER) then
+    begin
+      if Call.OutHead <> '' then
+        Call.OutHead := Call.OutHead + #13#10;
+      if ContentType <> '' then
+        Call.OutHead := Call.OutHead + HEADER_CONTENT_TYPE + ContentType
+      else
+        Call.OutHead := Call.OutHead + GetMimeContentTypeHeader('', FileName);
+    end;
+    if CacheControlMaxAge > 0 then
+      Call.OutHead := Call.OutHead + #13#10'Cache-Control: max-age=' +
+        UInt32ToUtf8(CacheControlMaxAge);
+    Call.OutStatus := HTTP_SUCCESS;
+    if Handle304NotModified then
+    begin
+      FindNameValue(Call.InHead, 'IF-NONE-MATCH:', clienthash);
+      UInt64ToUtf8(DateTimeToUnixTime(filetime), serverhash);
+      Call.OutHead := Call.OutHead + #13#10'ETag: ' + serverhash;
+      if clienthash = serverhash then
+      begin
+        Call.OutStatus := HTTP_NOTMODIFIED;
+        exit;
+      end;
+    end;
+    // Content-Type: appears twice: 1st to notify static file, 2nd for mime type
+    Call.OutHead := STATICFILE_CONTENT_TYPE_HEADER + #13#10 + Call.OutHead;
+    StringToUtf8(FileName, Call.OutBody); // body=filename for STATICFILE_CONTENT
+    if AttachmentFileName <> '' then
+      Call.OutHead := Call.OutHead +
+        #13#10'Content-Disposition: attachment; filename="' + AttachmentFileName + '"';
+  end;
+end;
+
+procedure TRestUriContext.ReturnFileFromFolder(
+  const FolderName: TFileName; Handle304NotModified: boolean;
+  const DefaultFileName: TFileName; const Error404Redirect: RawUtf8;
+  CacheControlMaxAge: integer);
+var
+  fileName: TFileName;
+begin
+  if DefaultFileName <> '' then
+    fileName := IncludeTrailingPathDelimiter(FolderName) + DefaultFileName;
+  ReturnFile(fileName, Handle304NotModified, '', '', Error404Redirect,
+    CacheControlMaxAge);
+end;
+
+procedure TRestUriContext.Redirect(const NewLocation: RawUtf8;
+  PermanentChange: boolean);
+begin
+  if PermanentChange then
+    Call.OutStatus := HTTP_MOVEDPERMANENTLY
+  else
+    Call.OutStatus := HTTP_TEMPORARYREDIRECT;
+  Call.OutHead := 'Location: ' + NewLocation;
+end;
+
+procedure TRestUriContext.Returns(const NameValuePairs: array of const;
+  Status: integer; Handle304NotModified, HandleErrorAsRegularResult: boolean;
+  const CustomHeader: RawUtf8);
+begin
+  Returns(JsonEncode(NameValuePairs), Status, CustomHeader, Handle304NotModified,
+    HandleErrorAsRegularResult);
+end;
+
+procedure TRestUriContext.Results(const Values: array of const;
+  Status: integer; Handle304NotModified: boolean; CacheControlMaxAge: integer);
+var
+  i, h: PtrInt;
+  result: RawUtf8;
+  temp: TTextWriterStackBuffer;
+begin
+  h := high(Values);
+  if h < 0 then
+    result := '{"result":null}'
+  else
+    with TJsonWriter.CreateOwnedStream(temp) do
+    try
+      AddShort('{"result":');
+      if h = 0 then
+        // result is one value
+        AddJsonEscape(Values[0])
+      else
+      begin
+        // result is one array of values
+        Add('[');
+        i := 0;
+        repeat
+          AddJsonEscape(Values[i]);
+          if i = h then
+            break;
+          AddComma;
+          inc(i);
+        until false;
+        Add(']');
+      end;
+      Add('}');
+      SetText(result);
+    finally
+      Free;
+    end;
+  Returns(result, Status, '', Handle304NotModified, false, CacheControlMaxAge);
+end;
+
+procedure TRestUriContext.Success(Status: integer);
+begin
+  if StatusCodeIsSuccess(Status) then
+    Call.OutStatus := Status
+  else
+    Error('', Status);
+end;
+
+procedure TRestUriContext.Error(const Format: RawUtf8;
+  const Args: array of const; Status, CacheControlMaxAge: integer);
+var
+  msg: RawUtf8;
+begin
+  FormatUtf8(Format, Args, msg);
+  Error(msg, Status, CacheControlMaxAge);
+end;
+
+procedure TRestUriContext.Error(E: Exception; const Format: RawUtf8;
+  const Args: array of const; Status: integer);
+var
+  msg, exc: RawUtf8;
+begin
+  FormatUtf8(Format, Args, msg);
+  if E = nil then
+    Error(msg, Status)
+  else
+  begin
+    exc := ObjectToJsonDebug(E);
+    if msg = '' then
+      Error('{"%":%}', [E, exc], Status)
+    else
+      Error(FormatUtf8('{"msg":?,"%":%}', [E, exc], [msg], true), Status);
+  end;
+end;
+
+procedure TRestUriContext.Error(const ErrorMessage: RawUtf8;
+  Status, CacheControlMaxAge: integer);
+var
+  msg: RawUtf8;
+  temp: TTextWriterStackBuffer;
+begin
+  Call.OutStatus := Status;
+  if StatusCodeIsSuccess(Status) then
+  begin
+    // not an error
+    Call.OutBody := ErrorMessage;
+    if CacheControlMaxAge <> 0 then
+      // Cache-Control is ignored for errors
+      Call.OutHead := 'Cache-Control: max-age=' +
+        UInt32ToUtf8(CacheControlMaxAge);
+    exit;
+  end;
+  if ErrorMessage = '' then
+    StatusCodeToReason(Status, msg)
+  else
+    msg := ErrorMessage;
+  with TJsonWriter.CreateOwnedStream(temp) do
+  try
+    AddShort('{'#13#10'"errorCode":');
+    Add(Call.OutStatus);
+    if (msg <> '') and
+       (msg[1] = '{') and
+       (msg[length(msg)] = '}') then
+    begin
+      // detect and append the error message as JSON object
+      AddShort(','#13#10'"error":'#13#10);
+      AddNoJsonEscape(pointer(msg), length(msg));
+      AddShorter(#13#10'}');
+    end
+    else
+    begin
+      // regular error message as JSON text
+      AddShort(','#13#10'"errorText":"');
+      AddJsonEscape(pointer(msg));
+      AddShorter('"'#13#10'}');
+    end;
+    SetText(Call.OutBody);
+  finally
+    Free;
+  end;
+end;
+
 
 
 { ************ TRestThread Background Process of a REST instance }

@@ -1824,7 +1824,8 @@ begin
           @fake.fService.fExecution[Ctxt.ServiceMethodIndex];
         Ctxt.ServiceExecutionOptions := Ctxt.ServiceExecution.Options;
         Ctxt.Service := fake.fService;
-        inc(Ctxt.ServiceMethodIndex, Length(SERVICE_PSEUDO_METHOD));
+        Ctxt.ServiceMethodIndex := Ctxt.ServiceMethodIndex +
+          Length(SERVICE_PSEUDO_METHOD);
         fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
         Ctxt.ServiceParameters := pointer(FormatUtf8('[%,"%"]',
           [PtrInt(PtrUInt(fake.fFakeInterface)), Values[0].Name.Text]));

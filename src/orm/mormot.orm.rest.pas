@@ -43,47 +43,6 @@ uses
 
 { ************ Some definitions Used by TRestOrm Implementation }
 
-type
-  /// the available HTTP methods transmitted between client and server
-  // - some custom verbs are available in addition to standard REST commands
-  // - most of iana verbs are available
-  // see http://www.iana.org/assignments/http-methods/http-methods.xhtml
-  // - for basic CRUD operations, we consider Create=mPOST, Read=mGET,
-  // Update=mPUT and Delete=mDELETE - even if it is not fully RESTful
-  TUriMethod = (
-    mNone,
-    mGET,
-    mPOST,
-    mPUT,
-    mDELETE,
-    mHEAD,
-    mBEGIN,
-    mEND,
-    mABORT,
-    mLOCK,
-    mUNLOCK,
-    mSTATE,
-    mOPTIONS,
-    mPROPFIND,
-    mPROPPATCH,
-    mTRACE,
-    mCOPY,
-    mMKCOL,
-    mMOVE,
-    mPURGE,
-    mREPORT,
-    mMKACTIVITY,
-    mMKCALENDAR,
-    mCHECKOUT,
-    mMERGE,
-    mNOTIFY,
-    mPATCH,
-    mSEARCH,
-    mCONNECT);
-
-  /// set of available HTTP methods transmitted between client and server
-  TUriMethods = set of TUriMethod;
-
 const
   /// convert a TRestBatch encoding scheme into the corresponding ORM TUriMethod
   BATCH_METHOD: array[TRestBatchEncoding] of TUriMethod = (
@@ -104,22 +63,6 @@ const
     oeUpdate,  // encPut
     oeUpdate,  // encPutHex
     oeDelete); // encDelete
-
-/// convert a string HTTP verb into its TUriMethod enumerate
-function ToMethod(const method: RawUtf8): TUriMethod;
-
-/// convert a TUriMethod enumerate to its #0 terminated uppercase text
-function MethodText(m: TUriMethod): RawUtf8;
-
-
-{$ifdef PUREMORMOT2}
-
-type
-  TSqlUriMethod = TUriMethod;
-  TSqlUriMethods = TUriMethods;
-
-{$endif PUREMORMOT2}
-
 
 
 { ************ TRestOrm Parent Class for abstract REST client/server }
@@ -590,56 +533,6 @@ type
 
 
 implementation
-
-
-{ ************ Some definitions Used by TRestOrm Implementation }
-
-const
-  // sorted by occurence for in-order O(n) search via IdemPPChar()
-  METHODNAME: array[0..ord(high(TUriMethod))] of RawUtf8 = (
-    'GET',
-    'POST',
-    'PUT',
-    'DELETE',
-    'HEAD',
-    'BEGIN',
-    'END',
-    'ABORT',
-    'LOCK',
-    'UNLOCK',
-    'STATE',
-    'OPTIONS',
-    'PROPFIND',
-    'PROPPATCH',
-    'TRACE',
-    'COPY',
-    'MKCOL',
-    'MOVE',
-    'PURGE',
-    'REPORT',
-    'MKACTIVITY',
-    'MKCALENDAR',
-    'CHECKOUT',
-    'MERGE',
-    'NOTIFY',
-    'PATCH',
-    'SEARCH',
-    'CONNECT',
-    '');
-
-function ToMethod(const method: RawUtf8): TUriMethod;
-begin
-  result := TUriMethod(IdemPPChar(pointer(method), pointer(@METHODNAME)) + 1);
-end;
-
-function MethodText(m: TUriMethod): RawUtf8;
-begin
-  dec(m);
-  if cardinal(m) <= high(METHODNAME) then
-    result := METHODNAME[ord(m)]
-  else
-    result := '';
-end;
 
 
 { ************ TRestOrm Parent Class for abstract REST client/server }
