@@ -8,7 +8,7 @@ unit mormot.core.buffers;
 
    Low-Level Memory Buffers Processing Functions shared by all framework units
    - Variable Length Integer Encoding / Decoding
-   - TAlgoCompress Compression/Decompression Classes - with AlgoSynLZ
+   - TAlgoCompress Compression/Decompression Classes - with AlgoSynLZ AlgoRleLZ
    - TFastReader / TBufferWriter Binary Streams
    - Base64, Base64Uri, Base58 and Baudot Encoding / Decoding
    - URI-Encoded Text Buffer Process
@@ -234,7 +234,7 @@ type
     /// contains a genuine byte identifier for this algorithm
     // - 0 is reserved for stored, 1 for TAlgoSynLz, 2/3 for TAlgoDeflate/Fast
     // (in mormot.core.zip.pas), 4/5/6 for TAlgoLizard/Fast/Huffman
-    // (in mormot.lib.lizard.pas)
+    // (in mormot.lib.lizard.pas), 7 for TAlgoRleLZ
     property AlgoID: byte
       read fAlgoID;
   public
@@ -451,7 +451,7 @@ type
   TAlgoCompressWithNoDestLen = class(TAlgoCompress)
   protected
     /// inherited classes should implement this single method for the actual process
-    // - dstMax is oinly used for doUncompressPartial
+    // - dstMax is mainly used for doUncompressPartial
     function RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
       process: TAlgoCompressWithNoDestLenProcess): integer; virtual; abstract;
   public
@@ -466,11 +466,34 @@ type
       Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
   end;
 
+  /// implement our SynLZ compression with RLE preprocess as a TAlgoCompress class
+  // - SynLZ is not efficient when its input has a lot of identical characters
+  // (e.g. a database content, or a raw binary buffer)
+  // - this class would make a first pass with RleCompress() before SynLZ
+  // - if RLE has no effect during compression, will fallback to plain SynLZ
+  // with no RLE pass during decompression
+  TAlgoRleLZ = class(TAlgoCompressWithNoDestLen)
+  protected
+    function RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
+      process: TAlgoCompressWithNoDestLenProcess): integer; override;
+  public
+    /// set AlgoID = 7 as genuine byte identifier for RLE + SynLZ
+    constructor Create; override;
+    /// get maximum possible (worse) compressed size for the supplied length
+    function AlgoCompressDestLen(PlainLen: integer): integer; override;
+  end;
+
 var
-  /// acccess to our fast SynLZ compression as a TAlgoCompress class
+  /// our fast SynLZ compression as a TAlgoCompress class
   // - please use this global variable methods instead of the deprecated
   // SynLZCompress/SynLZDecompress wrapper functions
   AlgoSynLZ: TAlgoCompress;
+
+  /// SynLZ compression with RLE preprocess as a TAlgoCompress class
+  // - SynLZ is not efficient when its input has a lot of identical characters
+  // (e.g. a database content, or a raw binary buffer) - try with this class
+  // which is slower than AlgoSynLZ but may have better ratio on such content
+  AlgoRleLZ: TAlgoCompress;
 
 const
   /// CompressionSizeTrigger parameter SYNLZTRIG[true] will disable then
@@ -481,6 +504,9 @@ const
   /// used e.g. as when ALGO_SAFE[SafeDecompression] for TAlgoCompress.Decompress
   ALGO_SAFE: array[boolean] of TAlgoCompressLoad = (
     aclNormal, aclSafeSlow);
+
+  COMPRESS_STORED = #0;
+  COMPRESS_SYNLZ = 1;
 
 
 /// fast concatenation of several AnsiStrings
@@ -4699,10 +4725,6 @@ end;
 
 { TAlgoCompress }
 
-const
-  COMPRESS_STORED = #0;
-  COMPRESS_SYNLZ = 1;
-
 var
   // don't use TObjectList before mormot.core.json registered TRttiJson
   SynCompressAlgos: array of TAlgoCompress;
@@ -5596,6 +5618,70 @@ begin
     PartialLenMax := result;
   result := RawProcess(Comp, Partial, CompLen + (start - Comp),
     PartialLen, PartialLenMax, doUncompressPartial);
+end;
+
+
+{ TAlgoRleLZ }
+
+function TAlgoRleLZ.RawProcess(src, dst: pointer; srcLen, dstLen,
+  dstMax: integer; process: TAlgoCompressWithNoDestLenProcess): integer;
+var
+  tmp: TSynTempBuffer;
+  rle: integer;
+begin
+  case process of
+    doCompress:
+      begin
+        tmp.Init(srcLen - srcLen shr 3); // RLE should reduce at least 1/8 ratio
+        rle := RleCompress(src, tmp.buf, srcLen, tmp.Len);
+        if rle < 0 then
+          // RLE was not worth it -> apply only SynLZ
+          PByte(dst)^ := 0
+        else
+        begin
+          // the RLE first pass did reduce the size
+          PByte(dst)^ := 1;
+          src := tmp.buf;
+          srcLen := rle;
+        end;
+        inc(PByte(dst));
+        result := SynLZcompress1(src, srcLen, dst) + 1;
+        tmp.Done;
+      end;
+    doUnCompress:
+      begin
+        rle := PByte(src)^;
+        inc(PByte(src));
+        dec(srcLen);
+        if rle <> 0 then
+        begin
+          // process SynLZ with final RLE pass
+          tmp.Init(SynLZdecompressdestlen(src));
+          rle := SynLZdecompress1(src, srcLen, tmp.buf);
+          result := RleUnCompress(tmp.buf, dst, rle);
+          tmp.Done;
+        end
+        else
+          // only SynLZ was used
+          result := SynLZdecompress1(src, srcLen, dst);
+      end;
+    doUncompressPartial:
+      raise EAlgoCompress.CreateUtf8(
+        'doUncompressPartial is unsupported for %', [self]);
+  else
+    result := 0;
+  end;
+end;
+
+constructor TAlgoRleLZ.Create;
+begin
+  fAlgoID := 7;
+  inherited Create;
+end;
+
+function TAlgoRleLZ.AlgoCompressDestLen(PlainLen: integer): integer;
+begin
+  result := SynLZcompressdestlen(PlainLen);
 end;
 
 
@@ -8063,7 +8149,8 @@ begin
       $a5a5a5a5, // .mab file = MAGIC_MAB in mormot.core.log.pas
       $a5aba5a5, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server.pas
       LOG_MAGIC, // .log.synlz with SynLZ or Lizard compression
-      $aba5a5ab, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
+      $aba5a5ab ..
+        $aba5a5ab + 7, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
       $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
       $b7010000,
       $ba010000, // mpeg = 00 00 01 Bx
@@ -10429,6 +10516,7 @@ begin
   EMOJI_AFTERDOTS['S'] := eScream;
   // setup internal lists and function wrappers
   AlgoSynLZ := TAlgoSynLZ.Create;
+  AlgoRleLZ := TAlgoRleLZ.Create;
 end;
 
 

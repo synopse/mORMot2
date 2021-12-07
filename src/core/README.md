@@ -99,7 +99,7 @@ At higher level, the new `TRttiCustom` class is the main cached entry of our cus
 
 Low-Level Memory Buffers Processing Functions shared by all framework units
 - *Variable Length Integer* Encoding / Decoding
-- `TAlgoCompress` Compression/Decompression Classes - with `AlgoSynLZ`
+- `TAlgoCompress` Compression/Decompression Classes - with `AlgoSynLZ` `AlgoRleLZ`
 - `TFastReader` / `TBufferWriter` Binary Streams
 - Base64, Base64URI, Base58 and Baudot Encoding / Decoding
 - URI-Encoded Text Buffer Process
