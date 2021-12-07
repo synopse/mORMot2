@@ -4099,7 +4099,7 @@ begin
     // slow, always working implementation
     GetValueVar(Item1, false, tmp1, nil);
     GetValueVar(Item2, false, tmp2, nil);
-    result := StrCompByCase[CaseInsensitive](pointer(tmp1), pointer(tmp2));
+    result := SortDynArrayAnsiStringByCase[CaseInsensitive](tmp1, tmp2);
   end;
 end;
 

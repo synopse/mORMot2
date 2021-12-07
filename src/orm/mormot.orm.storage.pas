@@ -2997,8 +2997,7 @@ begin
         // save rows as JSON, with appropriate search according to Where.* arguments
         MS := TRawByteStringStream.Create;
         try
-          ForceAjax := ForceAjax or
-                       not Owner.Owner.NoAjaxJson;
+          ForceAjax := ForceAjax or not Owner.Owner.NoAjaxJson;
           StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'GetJsonValues' {$endif});
           try
             ResCount := GetJsonValues(MS, ForceAjax, Stmt);

@@ -1019,7 +1019,7 @@ type
     /// initialize a variant instance to store some document-based object content
     // from a supplied JSON array or JSON object content
     // - warning: the incoming JSON buffer will be modified in-place: so you should
-    // make a private copy before running this method, e.g. using TSynTempBuffer
+    // make a private copy before running this method, as InitJson() does
     // - this method is called e.g. by _JsonFmt() _JsonFastFmt() global functions
     // with a temporary JSON buffer content created from a set of parameters
     // - if you call Init*() methods in a row, ensure you call Clear in-between
@@ -3148,7 +3148,7 @@ var
 begin
   VariantToUtf8(A, au, wasString);
   VariantToUtf8(B, bu, wasString);
-  result := StrCompByCase[caseInsensitive](pointer(au), pointer(bu));
+  result := SortDynArrayAnsiStringByCase[caseInsensitive](au, bu);
 end;
 
 function FastVarDataComp(A, B: PVarData; caseInsensitive: boolean): integer;
@@ -5337,7 +5337,7 @@ function TDocVariantData.Compare(const Another: TDocVariantData;
   CaseInsensitive: boolean): integer;
 var
   j, n: PtrInt;
-  nameCmp: TUtf8Compare;
+  nameCmp: TDynArraySortCompare;
 begin
   // first validate the type: as { or [ in JSON
   nameCmp := nil;
@@ -5356,7 +5356,7 @@ begin
       exit;
     end
     else
-      nameCmp := StrCompByCase[not (dvoNameCaseSensitive in VOptions)];
+      nameCmp := SortDynArrayAnsiStringByCase[not (dvoNameCaseSensitive in VOptions)];
   // compare as many in-order content as possible
   n := Another.VCount;
   if VCount < n then
@@ -5365,7 +5365,7 @@ begin
   begin
     if Assigned(nameCmp) then
     begin // each name should match
-      result := nameCmp(pointer(VName[j]), pointer(Another.VName[j]));
+      result := nameCmp(VName[j], Another.VName[j]);
       if result <> 0 then
         exit;
     end;
@@ -5397,8 +5397,8 @@ begin
       begin
         v1 := GetVarData(ObjFields[f], nil, @ndx);
         if (cardinal(ndx) < cardinal(Another.VCount)) and
-           (StrCompByCase[not (dvoNameCaseSensitive in VOptions)](
-              pointer(ObjFields[f]), pointer(Another.VName[ndx])) = 0) then
+           (SortDynArrayAnsiStringByCase[not (dvoNameCaseSensitive in VOptions)](
+              ObjFields[f], Another.VName[ndx]) = 0) then
           v2 := @Another.VValue[ndx] // ObjFields are likely at the same position
         else
           v2 := Another.GetVarData(ObjFields[f]); // full safe field name lookup

@@ -1353,6 +1353,11 @@ function SortDynArrayStringI(const A, B): integer;
 // - implemented here since would call AnsiICompW()
 function SortDynArrayUnicodeStringI(const A, B): integer;
 
+var
+  /// a quick wrapper to SortDynArrayAnsiString or SortDynArrayAnsiStringI
+  // comparison functions
+  SortDynArrayAnsiStringByCase: array[{CaseInsensitive=}boolean] of TDynArraySortCompare;
+
 /// SameText() overloaded function with proper UTF-8 decoding
 // - fast version using NormToUpper[] array for all WinAnsi characters
 // - this version will decode each UTF-8 glyph before using NormToUpper[]
@@ -6839,6 +6844,12 @@ begin
   end;
   StrCompByCase[false] := @StrComp;
   StrCompByCase[true] := @StrIComp;
+  {$ifdef CPUINTEL}
+  SortDynArrayAnsiStringByCase[false] := @SortDynArrayAnsiString;
+  {$else}
+  SortDynArrayAnsiStringByCase[false] := @SortDynArrayRawByteString;
+  {$endif CPUINTEL}
+  SortDynArrayAnsiStringByCase[true] := @SortDynArrayAnsiStringI;
   // setup basic Unicode conversion engines
   SetLength(SynAnsiConvertListCodePage, 16); // no resize -> more thread safe
   CurrentAnsiConvert := TSynAnsiConvert.Engine(Unicode_CodePage);
