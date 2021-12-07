@@ -436,11 +436,13 @@ type
   // - hsrSecured is set if the transmission is encrypted or in-process,
   // using e.g. HTTPS/TLS or our proprietary AES/ECDHE algorithms
   // - hsrWebsockets communication was made using WebSockets
+  // - hsrInProcess is done when run from the same process, i.e. on server side
   // - should exactly match TRestUriParamsLowLevelFlag in mormot.rest.core
   THttpServerRequestFlag = (
     hsrHttps,
     hsrSecured,
-    hsrWebsockets);
+    hsrWebsockets,
+    hsrInProcess);
 
   /// the THttpServerRequest connection attributes
   THttpServerRequestFlags = set of THttpServerRequestFlag;

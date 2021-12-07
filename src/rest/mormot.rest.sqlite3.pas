@@ -131,7 +131,6 @@ type
     fServer: TRestServerDB;
     fOwnedServer: TRestServerDB;
     fOwnedDB: TSqlDataBase;
-    fInternalHeader: RawUtf8;
     function GetDB: TSqlDataBase;
       {$ifdef HASINLINE}inline;{$endif}
     /// method calling the RESTful server fServer
@@ -320,11 +319,10 @@ end;
 
 procedure TRestClientDB.InternalUri(var Call: TRestUriParams);
 begin
-  if fInternalHeader = '' then
-    fInternalHeader := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: ' +
-      PointerToHex(self);
-  AddToCsv(fInternalHeader, call.InHead, #13#10);
   call.RestAccessRights := @FULL_ACCESS_RIGHTS;
+  call.LowLevelRemoteIP := '127.0.0.1';
+  call.LowLevelConnectionID := PtrUInt(self);
+  call.LowLevelConnectionFlags := [llfInProcess, llfSecured];
   fServer.Uri(call);
   if (call.OutInternalState = 0) and
      (fServer.DB.InternalState <> nil) then

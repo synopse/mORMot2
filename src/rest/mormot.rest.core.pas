@@ -1083,11 +1083,13 @@ type
   // - llfSecured is set if the transmission is encrypted or in-process,
   // using e.g. HTTPS/TLS or our proprietary AES/ECDHE WebSockets algorithms
   // - llfWebsockets communication was made using WebSockets
+  // - llfInProcess is done when run from the same process, i.e. on server side
   // - should exactly match THttpServerRequestFlag from mormot.net.http.pas
   TRestUriParamsLowLevelFlag = (
     llfHttps,
     llfSecured,
-    llfWebsockets);
+    llfWebsockets,
+    llfInProcess);
 
   /// some flags set by the caller to notify low-level context
   TRestUriParamsLowLevelFlags = set of TRestUriParamsLowLevelFlag;
@@ -3761,9 +3763,12 @@ var
   agent: RawUtf8;
 begin
   if fClientKind = ckUnknown then
-    if fCall^.InHead = '' then
+    if llfInProcess in fCall^.LowLevelConnectionFlags then
+      // e.g. from TRestClientDB.InternalUri
+      fClientKind := ckFramework
+    else if fCall^.InHead = '' then
       // e.g. for WebSockets remote access
-      fClientKind := ckAjax
+      fClientKind := ckFramework
     else
     begin
       // try to recognize User-Agent header

@@ -2919,14 +2919,16 @@ begin
     Call.OutStatus := HTTP_NOTIMPLEMENTED;
     exit;
   end;
+  call.LowLevelRemoteIP := '127.0.0.1';
+  call.LowLevelConnectionID := PtrUInt(self);
+  call.LowLevelConnectionFlags := [llfInProcess, llfSecured];
   h := pointer(call.InHead);
   hl := length(call.InHead);
   r := nil;
   rl := 0;
-  Call.LowLevelConnectionFlags := [llfSecured]; // in-process execution
   Call.OutStatus := fRequest(
     pointer(Call.Url), pointer(Call.Method), pointer(call.InBody),
-    length(Call.Url), length(Call.Method), length(call.InBody),
+    length(Call.Url),  length(Call.Method),  length(call.InBody),
     f, h, hl, r, rl, Call.OutInternalState);
   FastSetString(Call.OutHead, h, hl);
   FastSetString(Call.OutBody, r, rl);
