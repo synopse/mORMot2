@@ -3175,6 +3175,19 @@ function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): intege
 // data is corrupted during transmission, will instantly return ''
 function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUtf8;
 
+/// simple Run-Length-Encoding compression of a memory buffer
+// - SynLZ is not good with input of a lot of redundant bytes, e.g. chunks of
+// zeros: you could pre-process RleCompress/RleUnCompress such data before SynLZ
+// - see AlgoRleLZ as such a RLE + SynLZ algorithm
+// - returns the number of bytes written to dst, or -1 on dstsize overflow
+function RleCompress(src, dst: PByteArray; srcsize, dstsize: PtrUInt): PtrInt;
+
+/// simple Run-Length-Encoding uncompression of a memory buffer
+// - SynLZ is not good with input of a lot of redundant bytes, e.g. chunks of
+// zeros: you could pre-process RleCompress/RleUnCompress such data before SynLZ
+// - see AlgoRleLZ as such a RLE + SynLZ algorithm
+function RleUnCompress(src, dst: PByteArray; size: PtrUInt): PtrUInt;
+
 /// internal hash table adjustment as called from TDynArrayHasher.HashDelete
 // - decrement any integer greater or equal to a deleted value
 // - brute force O(n) indexes fix after deletion (much faster than full ReHash)
@@ -9185,6 +9198,108 @@ begin
       {%H-}tmp.Done;
     end;
   result := 'synlz';
+end;
+
+const
+  RLE_CW = $33; // any byte would do, but this one is nothing special but for me
+
+function RleEncode(dst: PByteArray; v, n: PtrUInt): PByteArray;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if (n > 3) or
+     (v = RLE_CW) then
+  begin
+    v := v shl 16;
+    inc(v, RLE_CW);
+    while n > 255 do
+    begin
+      PCardinal(dst)^ := v + 255 shl 8;
+      dst := @dst[3];
+      dec(n, 255);
+    end;
+    inc(v, n shl 8);
+    result := @dst[3];
+  end
+  else
+  begin
+    inc(v, (v shl 8) + (v shl 16));
+    result := @dst[n]; // seems faster with branchless move
+  end;
+  PCardinal(dst)^ := v;
+end;
+
+function RleCompress(src, dst: PByteArray; srcsize, dstsize: PtrUInt): PtrInt;
+var
+  dststart: PAnsiChar;
+  c, b, n: PtrUInt;
+begin
+  dststart := PAnsiChar(dst);
+  if srcsize <> 0 then
+  begin
+    dstsize := PtrUInt(@dst[dstsize -3]);
+    b := src[0];
+    n := 0;
+    repeat
+      c := src[0];
+      inc(PByte(src));
+      if c = b then
+      begin
+        inc(n);
+        dec(srcsize);
+        if srcsize = 0 then
+          break;
+      end
+      else
+      begin
+        dst := RleEncode(dst, b, n);
+        n := 1;
+        b := c;
+        dec(srcsize);
+        if (srcsize = 0) or
+           (PtrUInt(dst) >= PtrUInt(dstsize)) then
+          break;
+      end;
+    until false;
+    dst := RleEncode(dst, b, n);
+    if PtrUInt(dst) >= PtrUInt(dstsize) then
+    begin
+      result := -1;
+      exit;
+    end;
+  end;
+  result := PAnsiChar(dst) - dststart;
+end;
+
+function RleUnCompress(src, dst: PByteArray; size: PtrUInt): PtrUInt;
+var
+  dststart: PAnsiChar;
+  v: PtrUInt;
+begin
+  dststart := PAnsiChar(dst);
+  if size > 0 then
+    repeat
+      v := src[0];
+      if v <> RLE_CW then
+      begin
+        dst[0] := v;
+        inc(PByte(dst));
+        inc(PByte(src));
+        dec(size);
+        if size = 0 then
+          break;
+      end
+      else
+      begin
+        v := src[1];
+        FillCharFast(dst^, v, src[2]);
+        inc(PByte(src), 3);
+        inc(PByte(dst), v);
+        dec(size, 3);
+        if PtrInt(size) <= 0 then
+          break;
+      end
+    until false;
+  result := PAnsiChar(dst) - dststart;
 end;
 
 
