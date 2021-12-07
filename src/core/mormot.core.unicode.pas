@@ -5964,8 +5964,11 @@ end;
 // freely inspired by Bero's PUCU library, released under zlib license
 //  https://github.com/BeRo1985/pucu  (C)2016-2020 Benjamin Rosseaux
 
+{$define UU_COMPRESSED}
+// 1KB compressed static table in the exe renders into our 20KB UU[] array :)
+
 type
-  // 20,016 bytes for full Unicode 10.0 case folding branchless conversion :)
+  // 20,016 bytes for full Unicode 10.0 case folding branchless conversion
   TUnicodeUpperTable = object
     Block: array[0..37, 0..127] of integer;
     IndexHi: array[0..271] of byte;
@@ -5986,6 +5989,9 @@ const
   UU_MAX = $10ffff;
 
 var
+  {$ifdef UU_COMPRESSED}
+  UU: TUnicodeUpperTable;
+  {$else}
   UU: TUnicodeUpperTable = (
     Block: (
      (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -6262,6 +6268,7 @@ var
       12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 37, 12, 12,
       12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12));
   );
+  {$endif UU_COMPRESSED}
 
 function TUnicodeUpperTable.Ucs4Upper(c: PtrUInt): PtrUInt;
 var
@@ -6790,13 +6797,9 @@ nxt:u0 := U;
 end;
 
 
-procedure InitializeUnit;
-var
-  i: PtrInt;
-  c: AnsiChar;
 const
-  n2u: array[138..255] of byte =
-    // reference 8-bit upper chars as in WinAnsi / code page 1252
+  // reference 8-bit upper chars as in WinAnsi / code page 1252
+  WinAnsiToUp: array[138..255] of byte =
     (83, 139, 140, 141, 90, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
      153, 83, 155, 140, 157, 90, 89, 160, 161, 162, 163, 164, 165, 166, 167,
      168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181,
@@ -6805,7 +6808,63 @@ const
      79, 215, 79, 85, 85, 85, 85, 89, 222, 223, 65, 65, 65, 65, 65, 65,
      198, 67, 69, 69, 69, 69, 73, 73, 73, 73, 68, 78, 79, 79, 79, 79,
      79, 247, 79, 85, 85, 85, 85, 89, 222, 89);
+
+  {$ifdef UU_COMPRESSED}
+  // 1KB compressed buffer which renders into our 20,016 bytes UU[] array
+  UUSynLZ: array[byte] of cardinal = (
+    $04001A03, $FF336024, $00853300, $FFFFFFE0, $335201F0, $02E700E8, $FFE0AA33,
+    $E004334B, $33790BFF, $04330007, $304331FF, $DB1878BC, $01A82B01, $01433000,
+    $1D343008, $041E3380, $401D3430, $338F1833, $FFFFFED4, $390B33C3, $0C338434,
+    $33143433, $61000834, $34320F33, $82F331A3, $F1EBB33B, $3344DDF7, $32103384,
+    $33843334, $334A33C4, $333833C6, $11343217, $103BC500, $43300200, $4F334401,
+    $0000B133, $30334F04, $33830143, $C6330018, $5EBC3033, $202433C0, $83313432,
+    $23355700, $00002A3F, $06332A3F, $32043433, $1F053340, $A11C02A1, $02A11E02,
+    $3200012E, $43320001, $00023301, $0004CF24, $04000236, $50690200, $00013505,
+    $0E33A54F, $CF233300, $6331A54B, $31000131, $00A52843, $3C624400, $2D00012F,
+    $51440001, $0029F70A, $16B04100, $33A5AC4A, $0D22000A, $91FD4331, $00012B02,
+    $022A8331, $E7001C00, $26A33129, $00080002, $000C0D93, $920A512A, $0001BB0D,
+    $42000527, $B9107064, $14330001, $00022500, $51150028, $C2A5120A, $9C3CF1F3,
+    $AF335400, $33443433, $000C33C4, $84000082, $00BB3320, $5D5AD6E0, $FFFFFFDA,
+    $310009DB, $3201F043, $F00001E1, $01C01201, $0005C100, $01C24331, $0001C700,
+    $01D1C331, $0001CA00, $310001F8, $33BC3043, $B00001AA, $EFBFBD01, $00070001,
+    $FF8C0000, $A03BC2FF, $33830002, $BC328331, $0BFFE0D0, $F01201F0, $04F22E01,
+    $302A04F0, $43303643, $3439240D, $33403344, $4033847E, $02F11133, $11334000,
+    $F10D4330, $40555071, $00C4CC33, $F00001D0, $F3C58202, $3CF43CF1, $01F800C9,
+    $02007000, $E7928331, $8193FFFF, $01819C01, $9D01859E, $81A40181, $0181DB01,
+    $0F1E42C2, $F3C889C9, $8A0400C5, $0EE6E331, $BC32E331, $40CC3340, $0014CC33,
+    $210001C5, $FFBC3043, $0008433A, $00800000, $00233307, $2B330480, $06048000,
+    $B6DBC300, $06331075, $330E0000, $3108002F, $3037B873, $0009050A, $A200014A,
+    $00015604, $0164056A, $80064200, $08020001, $02000170, $00017E07, $80B3317E,
+    $00010700, $04825F08, $26331043, $00020002, $73313316, $DBB31109, $10CC01E3,
+    $33330900, $3B338004, $000F8005, $01373307, $6C3CF1A3, $01FFE400, $B8EC84CC,
+    $F000DC07, $00F00001, $3204332A, $3CF43CF1, $01E6002F, $52019000, $D019F3C2,
+    $02F087FF, $32833112, $D5000CBC, $D8FFFFD5, $433A02A1, $33184335, $7E338434,
+    $28FFB5FC, $33403433, $363340CC, $33443104, $00303204, $E001C1A0, $433182C5,
+    $4321C5E2, $3CF4C5E3, $7734304E, $4134304C, $301E3CF4, $33C41734, $33403344,
+    $84318A9C, $06334033, $32043204, $BC6F021B, $33C03344, $34392C2A, $006E3CF4,
+    $CC01FC60, $68300070, $7C60FFFF, $190970FF, $3CF1F3C2, $57FFE006, $0035F3C2,
+    $700001D8, $F3C28A02, $D0223CF1, $63B97F7F, $F3C20000, $03F20011, $C2B603F0,
+    $FFE035F3, $0601F057, $0009F3C2, $100001DE, $F1337202, $33020100, $33040307,
+    $06050304, $200C3307, $03000001, $03F13308, $04031201, $09086751, $1B330B0A,
+    $11330D0C, $0C0F0E0C, $13121110, $15140C0C, $00000033, $160C0500, $170C0E33,
+    $31331918, $1C1B1A0C, $0C06331D, $26331F1E, $0933200C, $3322210C, $0000000F,
+    $33230C00, $33240C17, $33250C20, $00000C0D);
+  {$endif UU_COMPRESSED}
+
+procedure InitializeUnit;
+var
+  i: PtrInt;
+  c: AnsiChar;
+  {$ifdef UU_COMPRESSED}
+  tmp: array[0..7000] of byte;
+  {$endif UU_COMPRESSED}
 begin
+  {$ifdef UU_COMPRESSED}
+  // Uppercase Unicode table RLE + SynLZ decompression from 1KB to 20KB :)
+  if (RleUnCompress(@tmp, @UU, SynLZdecompress1(@UUSynLZ, 1022, @tmp)) <> SizeOf(UU)) or
+     (crc32c(0, @UU, SizeOf(UU)) <> $7343D053) then
+    raise ESynUnicode.Create('UU Table Decompression Failed'); // paranoid
+  {$endif UU_COMPRESSED}
   // initialize internal lookup tables for various text conversions
   for i := 0 to 255 do
     NormToNormByte[i] := i;
@@ -6813,7 +6872,7 @@ begin
   for i := ord('a') to ord('z') do
     dec(NormToUpperAnsi7Byte[i], 32);
   MoveFast(NormToUpperAnsi7, NormToUpper, 138);
-  MoveFast(n2u, NormToUpperByte[138], SizeOf(n2u));
+  MoveFast(WinAnsiToUp, NormToUpperByte[138], SizeOf(WinAnsiToUp));
   for i := 0 to 255 do
   begin
     c := NormToUpper[AnsiChar(i)];
@@ -6864,6 +6923,30 @@ begin
     IsValidUtf8Buffer := @IsValidUtf8Avx2;
   {$endif ASMX64AVX}
 end;
+
+(*
+procedure doUU;
+var
+  tmp1, tmp2: array[0..3000] of cardinal;
+  rle, lz, i: PtrInt;
+  l: RawUtf8;
+begin
+  writeln(SynLZdecompressdestlen(@UUSynLz));
+  writeln(SynLZdecompress1(@UUSynLZ, 1022, @tmp1));
+  writeln(RleUnCompress(@tmp1, @tmp2, 6659));
+  writeln(CompareMem(@tmp2, @UU, SizeOf(UU)));
+  exit;
+  rle := RleCompress(@UU, @tmp1, SizeOf(UU), SizeOf(tmp1));
+  lz := SynLZCompress1(@tmp1, rle, @tmp2);
+  writeln(SizeOf(UU)); writeln(rle); writeln(lz);
+  writeln('UUSynLZ = array[byte] of cardinal = (');
+  for i := 0 to 255 do begin
+    l := l + '$' + HexStr(tmp2[i], 8) + ',';
+    if length(l) > 70 then begin writeln(l); l := '  '; end;
+  end;
+  writeln(l, ');');
+end;
+*)
 
 
 initialization
