@@ -285,6 +285,19 @@ begin
     result := 0;
 end;
 
+function FileAgeToUnixTimeUtc(const FileName: TFileName; AllowDir: boolean): TUnixTime;
+var
+  FA: WIN32_FILE_ATTRIBUTE_DATA;
+begin
+  // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
+  if GetFileAttributesEx(pointer(FileName), GetFileExInfoStandard, @FA) and
+     (AllowDir or
+      (({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) = 0)) then
+    result := FileTimeToUnixTime(FA.ftLastWriteTime) // no local time conversion
+  else
+    result := 0;
+end;
+
 function FileAgeToWindowsTime(const FileName: TFileName): integer;
 begin
   result := FileAge(FileName);

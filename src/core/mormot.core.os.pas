@@ -1929,8 +1929,18 @@ function SafeFileNameU(const FileName: RawUtf8): boolean;
 
 /// get a file date and time, from its name
 // - returns 0 if file doesn't exist
+// - returns the local file age, encoded as TDateTime
 // - under Windows, will use GetFileAttributesEx fast API
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
+
+/// get a file date and time, from its name, as seconds since Unix Epoch
+// - returns 0 if file (or folder if AllowDir is true) doesn't exist
+// - returns the system API file age (not converted local), encoded as TUnixTime
+// - under Windows, will use GetFileAttributesEx and FileTimeToUnixTime
+// - under POSIX, will call directly the stat API
+// - slightly faster than FileAgeToDateTime() since don't convert to local time
+function FileAgeToUnixTimeUtc(const FileName: TFileName;
+  AllowDir: boolean = false): TUnixTime;
 
 /// get the date and time of one file into a Windows File 32-bit TimeStamp
 // - this cross-system function is used e.g. by mormot.core.zip which expects

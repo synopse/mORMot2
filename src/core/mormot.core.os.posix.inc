@@ -830,6 +830,18 @@ begin
     result := 0;
 end;
 
+function FileAgeToUnixTimeUtc(const FileName: TFileName; AllowDir: boolean): TUnixTime;
+var
+  st: stat;
+begin
+  if (fpStat(pointer(FileName), st) = 0) and
+     (AllowDir or
+      (not FpS_ISDIR(st.st_mode))) then
+    result := st.st_mtime // no local conversion
+  else
+    result := 0
+end;
+
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
 begin
   result := FileSetDate(Dest, FileGetDate(SourceHandle)) = 0;

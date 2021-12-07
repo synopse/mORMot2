@@ -3032,7 +3032,7 @@ constructor TDebugFile.Create(const aExeName: TFileName;
 var
   i: PtrInt;
   ExeFile, MabFile: TFileName;
-  MapAge, MabAge: TDateTime;
+  MapAge, MabAge: TUnixTime;
 begin
   fSymbols.InitSpecific(TypeInfo(TDebugSymbolDynArray), fSymbol, ptRawUtf8,
     @fSymbolsCount, true);
@@ -3062,8 +3062,8 @@ begin
   MabFile := ChangeFileExt(fDebugFile, '.mab');
   EnterCriticalSection(GlobalThreadLock);
   try
-    MapAge := FileAgeToDateTime(fDebugFile);
-    MabAge := FileAgeToDateTime(MabFile);
+    MapAge := FileAgeToUnixTimeUtc(fDebugFile);
+    MabAge := FileAgeToUnixTimeUtc(MabFile);
     if (MapAge > 0) and
        (MabAge < MapAge) then
     begin

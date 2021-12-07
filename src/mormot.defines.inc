@@ -295,7 +295,7 @@
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$define FPC_X86}
-      {$ifndef FPC_PIC}        // MachOS/OpenBSD/Android require PIC code on i386
+      {$ifndef FPC_PIC}        // MachOS/OpenBSD/Android require PIC on i386
         {$define ASMX86}       // supports asm with globals
         {$define ASMINTEL}     // either ASMX86 or ASMX64
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
