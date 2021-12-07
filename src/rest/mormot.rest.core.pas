@@ -1250,6 +1250,13 @@ type
   /// set of available HTTP methods transmitted between client and server
   TUriMethods = set of TUriMethod;
 
+  /// used by TRestUriContext.ClientKind to identify the currently
+  // connected client
+  TRestClientKind = (
+    ckUnknown,
+    ckFramework,
+    ckAJAX);
+
   /// abstract calling context for any Server-Side REST process
   // - is inherited e.g. by TRestServerUriContext for TRestServer.Uri processing
   TRestUriContext = class
@@ -1257,15 +1264,14 @@ type
     fCall: PRestUriParams;
     fMethod: TUriMethod;
     fInputCookiesRetrieved: boolean;
-    fRemoteIP: RawUtf8;
-    fUserAgent: RawUtf8;
-    fAuthenticationBearerToken: RawUtf8;
+    fClientKind: TRestClientKind;
+    fInputPostContentType: RawUtf8;
     fInHeaderLastName: RawUtf8;
     fInHeaderLastValue: RawUtf8;
+    fOutSetCookie: RawUtf8;
     fInputCookies: array of record
       Name, Value: RawUtf8; // only computed if InCookie[] is used
     end;
-    fOutSetCookie: RawUtf8;
     fJwtContent: PJwtContent;
     fTix64: Int64;
     function GetUserAgent: RawUtf8;
@@ -1297,9 +1303,6 @@ type
     // authentication is not enabled
     property Method: TUriMethod
       read fMethod;
-    /// retrieve the "User-Agent" value from the incoming HTTP headers
-    property UserAgent: RawUtf8
-      read GetUserAgent;
     /// retrieve the "RemoteIP" value from the incoming HTTP headers
     property RemoteIP: RawUtf8
       read GetRemoteIP;
@@ -1309,6 +1312,20 @@ type
     /// "RemoteIP" value from the incoming HTTP headers but '' for '127.0.0.1'
     property RemoteIPNotLocal: RawUtf8
       read GetRemoteIPNotLocal;
+    /// retrieve the "User-Agent" value from the incoming HTTP headers
+    property UserAgent: RawUtf8
+      read GetUserAgent;
+    /// identify which kind of client is actually connected
+    // - the "User-Agent" HTTP will be checked for 'mORMot' substring, and
+    // set ckFramework on match
+    // - either ckAjax for a classic (AJAX) browser, or any other kind of
+    // HTTP client
+    // - will be used e.g. by ClientOrmOptions to check if the
+    // current remote client expects standard JSON in all cases
+    function ClientKind: TRestClientKind;
+    /// decode any multipart/form-data POST request input
+    // - returns TRUE and set MultiPart array as expected, on success
+    function InputAsMultiPart(var MultiPart: TMultiPartDynArray): boolean;
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
     // - but rather call RemoteIP or UserAgent properties instead of
@@ -1336,9 +1353,6 @@ type
     /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
     // - typically returns a JWT for statelesss self-contained authentication,
     // as expected by TJwtAbstract.Verify method
-    // - as an alternative, a non-standard and slightly less safe way of
-    // token transmission may be to encode its value as ?authenticationbearer=....
-    // URI parameter (may be convenient when embedding resources in HTML DOM)
     function AuthenticationBearerToken: RawUtf8; virtual;
     /// validate "Authorization: Bearer <JWT>" content from incoming HTTP headers
     // - returns true on success, storing the payload in JwtContent^ field
@@ -3725,10 +3739,9 @@ end;
 constructor TRestUriContext.Create(const aCall: TRestUriParams);
 begin
   fCall := @aCall;
-  fRemoteIP := aCall.LowLevelRemoteIP;
-  fAuthenticationBearerToken := aCall.LowLevelBearerToken;
-  fUserAgent := aCall.LowLevelUserAgent;
   fMethod := ToMethod(aCall.Method);
+  if fMethod = mPost then
+    aCall.InBodyType(fInputPostContentType, {guessjsonifnone=}false);
 end;
 
 destructor TRestUriContext.Destroy;
@@ -3740,17 +3753,39 @@ end;
 
 function TRestUriContext.GetUserAgent: RawUtf8;
 begin
-  result := Call^.HeaderOnce(fUserAgent, 'USER-AGENT: ');
+  result := fCall^.HeaderOnce(fCall^.LowLevelUserAgent, 'USER-AGENT: ');
+end;
+
+function TRestUriContext.ClientKind: TRestClientKind;
+var
+  agent: RawUtf8;
+begin
+  if fClientKind = ckUnknown then
+    if fCall^.InHead = '' then
+      // e.g. for WebSockets remote access
+      fClientKind := ckAjax
+    else
+    begin
+      // try to recognize User-Agent header
+      agent := GetUserAgent;
+      if (agent = '') or
+         (PosEx('mORMot', agent) > 0) then
+        // 'mORMot' set e.g. from DefaultUserAgent() in mormot.net.http
+        fClientKind := ckFramework
+      else
+        fClientKind := ckAjax;
+    end;
+  result := fClientKind;
 end;
 
 function TRestUriContext.GetRemoteIP: RawUtf8;
 begin
-  result := Call^.HeaderOnce(fRemoteIP, HEADER_REMOTEIP_UPPER);
+  result := fCall^.HeaderOnce(fCall^.LowLevelRemoteIP, HEADER_REMOTEIP_UPPER);
 end;
 
 function TRestUriContext.GetRemoteIPNotLocal: RawUtf8;
 begin
-  result := Call^.HeaderOnce(fRemoteIP, HEADER_REMOTEIP_UPPER);
+  result := fCall^.HeaderOnce(fCall^.LowLevelRemoteIP, HEADER_REMOTEIP_UPPER);
   if result = '127.0.0.1' then
     result := '';
 end;
@@ -3758,12 +3793,12 @@ end;
 function TRestUriContext.GetRemoteIPIsLocalHost: boolean;
 begin
   result := (GetRemoteIP = '') or
-            (fRemoteIP = '127.0.0.1');
+            (fCall^.LowLevelRemoteIP = '127.0.0.1');
 end;
 
 function TRestUriContext.AuthenticationBearerToken: RawUtf8;
 begin
-  result := Call^.HeaderOnce(fAuthenticationBearerToken, HEADER_BEARER_UPPER);
+  result := fCall^.HeaderOnce(fCall^.LowLevelBearerToken, HEADER_BEARER_UPPER);
 end;
 
 function TRestUriContext.AuthenticationCheck(jwt: TJwtAbstract): boolean;
@@ -3790,7 +3825,7 @@ begin
   else
   begin
     PWord(UpperCopy255(up{%H-}, HeaderName))^ := ord(':');
-    FindNameValue(Call.InHead, up, result);
+    FindNameValue(fCall.InHead, up, result); // = fCall^.Header(up)
     if result <> '' then
     begin
       fInHeaderLastName := HeaderName;
@@ -3810,7 +3845,7 @@ var
   cookie, cn, cv: RawUtf8;
 begin
   fInputCookiesRetrieved := true;
-  FindNameValue(Call.InHead, 'COOKIE:', cookie);
+  FindNameValue(fCall.InHead, 'COOKIE:', cookie);
   P := pointer(cookie);
   n := 0;
   while P <> nil do
@@ -3892,8 +3927,16 @@ end;
 
 procedure TRestUriContext.OutHeadFromCookie;
 begin
-  Call.OutHead := TrimU(Call.OutHead + #13#10 +
+  fCall.OutHead := TrimU(fCall.OutHead + #13#10 +
                         'Set-Cookie: ' + fOutSetCookie);
+end;
+
+function TRestUriContext.InputAsMultiPart(
+  var MultiPart: TMultiPartDynArray): boolean;
+begin
+  result := (Method = mPOST) and
+     IdemPChar(pointer(fInputPostContentType), 'MULTIPART/FORM-DATA') and
+     MultiPartFormDataDecode(fInputPostContentType, fCall^.InBody, MultiPart);
 end;
 
 function TRestUriContext.TickCount64: Int64;
@@ -3909,7 +3952,6 @@ begin
     result := fTix64;
 end;
 
-
 procedure TRestUriContext.Returns(const Result: RawUtf8;
   Status: integer; const CustomHeader: RawUtf8;
   Handle304NotModified, HandleErrorAsRegularResult: boolean;
@@ -3920,31 +3962,31 @@ begin
   if HandleErrorAsRegularResult or
      StatusCodeIsSuccess(Status) then
   begin
-    Call.OutStatus := Status;
-    Call.OutBody := Result;
+    fCall^.OutStatus := Status;
+    fCall^.OutBody := Result;
     if CustomHeader <> '' then
-      Call.OutHead := CustomHeader
-    else if Call.OutHead = '' then
-      Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
+      fCall^.OutHead := CustomHeader
+    else if fCall^.OutHead = '' then
+      fCall^.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
     if CacheControlMaxAge > 0 then
-      Call.OutHead := Call.OutHead + #13#10 +
+      fCall^.OutHead := fCall^.OutHead + #13#10 +
         'Cache-Control: max-age=' + UInt32ToUtf8(CacheControlMaxAge);
     if Handle304NotModified and
        (Status = HTTP_SUCCESS) and
        (Length(Result) > 64) then
     begin
-      FindNameValue(Call.InHead, 'IF-NONE-MATCH: ', clienthash);
+      FindNameValue(fCall^.InHead, 'IF-NONE-MATCH: ', clienthash);
       if ServerHash = '' then
         ServerHash := crc32cUtf8ToHex(Result);
       ServerHash := '"' + ServerHash + '"';
       if clienthash <> ServerHash then
-        Call.OutHead := Call.OutHead + #13#10 +
+        fCall^.OutHead := fCall^.OutHead + #13#10 +
           'ETag: ' + ServerHash
       else
       begin
         // save bandwidth by returning "304 Not Modified"
-        Call.OutBody := '';
-        Call.OutStatus := HTTP_NOTMODIFIED;
+        fCall^.OutBody := '';
+        fCall^.OutStatus := HTTP_NOTMODIFIED;
       end;
     end;
   end
@@ -3971,20 +4013,12 @@ procedure TRestUriContext.ReturnsJson(const Value: variant;
   HandleErrorAsRegularResult: boolean);
 var
   json: RawUtf8;
-  tmp: TSynTempBuffer;
 begin
   VariantSaveJson(Value, Escape, json);
   if MakeHumanReadable and
      (json <> '') and
      (json[1] in ['{', '[']) then
-  begin
-    tmp.Init(json);
-    try
-      JsonBufferReformat(tmp.buf, json);
-    finally
-      tmp.Done;
-    end;
-  end;
+    json := JsonReformat(json, jsonHumanReadable);
   Returns(json, Status, CustomHeader,
     Handle304NotModified, HandleErrorAsRegularResult);
 end;
@@ -3993,9 +4027,9 @@ procedure TRestUriContext.ReturnBlob(const Blob: RawByteString;
   Status: integer; Handle304NotModified: boolean; const FileName: TFileName;
   CacheControlMaxAge: integer);
 begin
-  if not ExistsIniName(pointer(Call.OutHead), HEADER_CONTENT_TYPE_UPPER) then
-    AddToCsv(GetMimeContentTypeHeader(Blob, FileName), Call.OutHead, #13#10);
-  Returns(Blob, Status, Call.OutHead, Handle304NotModified, false, CacheControlMaxAge);
+  if not ExistsIniName(pointer(fCall^.OutHead), HEADER_CONTENT_TYPE_UPPER) then
+    AddToCsv(GetMimeContentTypeHeader(Blob, FileName), fCall^.OutHead, #13#10);
+  Returns(Blob, Status, fCall^.OutHead, Handle304NotModified, false, CacheControlMaxAge);
 end;
 
 procedure TRestUriContext.ReturnFile(const FileName: TFileName;
@@ -4003,49 +4037,49 @@ procedure TRestUriContext.ReturnFile(const FileName: TFileName;
   const AttachmentFileName: RawUtf8; const Error404Redirect: RawUtf8;
   CacheControlMaxAge: integer);
 var
-  filetime: TDateTime;
+  unixfiletime: TUnixTime;
   clienthash, serverhash: RawUtf8;
 begin
   if FileName = '' then
-    filetime := 0
+    unixfiletime := 0
   else
-    filetime := FileAgeToDateTime(FileName);
-  if filetime = 0 then
+    unixfiletime := FileAgeToUnixTimeUtc(FileName);
+  if unixfiletime = 0 then
     if Error404Redirect <> '' then
       Redirect(Error404Redirect)
     else
       Error('', HTTP_NOTFOUND, CacheControlMaxAge)
   else
   begin
-    if not ExistsIniName(pointer(Call.OutHead), HEADER_CONTENT_TYPE_UPPER) then
+    if not ExistsIniName(pointer(fCall^.OutHead), HEADER_CONTENT_TYPE_UPPER) then
     begin
-      if Call.OutHead <> '' then
-        Call.OutHead := Call.OutHead + #13#10;
+      if fCall^.OutHead <> '' then
+        fCall^.OutHead := fCall^.OutHead + #13#10;
       if ContentType <> '' then
-        Call.OutHead := Call.OutHead + HEADER_CONTENT_TYPE + ContentType
+        fCall^.OutHead := fCall^.OutHead + HEADER_CONTENT_TYPE + ContentType
       else
-        Call.OutHead := Call.OutHead + GetMimeContentTypeHeader('', FileName);
+        fCall^.OutHead := fCall^.OutHead + GetMimeContentTypeHeader('', FileName);
     end;
     if CacheControlMaxAge > 0 then
-      Call.OutHead := Call.OutHead + #13#10'Cache-Control: max-age=' +
-        UInt32ToUtf8(CacheControlMaxAge);
-    Call.OutStatus := HTTP_SUCCESS;
+      fCall^.OutHead := fCall^.OutHead +
+        #13#10'Cache-Control: max-age=' + UInt32ToUtf8(CacheControlMaxAge);
+    fCall^.OutStatus := HTTP_SUCCESS;
     if Handle304NotModified then
     begin
-      FindNameValue(Call.InHead, 'IF-NONE-MATCH:', clienthash);
-      UInt64ToUtf8(DateTimeToUnixTime(filetime), serverhash);
-      Call.OutHead := Call.OutHead + #13#10'ETag: ' + serverhash;
+      FindNameValue(fCall^.InHead, 'IF-NONE-MATCH:', clienthash);
+      UInt64ToUtf8(unixfiletime, serverhash);
+      fCall^.OutHead := fCall^.OutHead + #13#10'ETag: ' + serverhash;
       if clienthash = serverhash then
       begin
-        Call.OutStatus := HTTP_NOTMODIFIED;
+        fCall^.OutStatus := HTTP_NOTMODIFIED;
         exit;
       end;
     end;
     // Content-Type: appears twice: 1st to notify static file, 2nd for mime type
-    Call.OutHead := STATICFILE_CONTENT_TYPE_HEADER + #13#10 + Call.OutHead;
-    StringToUtf8(FileName, Call.OutBody); // body=filename for STATICFILE_CONTENT
+    fCall^.OutHead := STATICFILE_CONTENT_TYPE_HEADER + #13#10 + fCall^.OutHead;
+    StringToUtf8(FileName, fCall^.OutBody); // body=filename for STATICFILE_CONTENT
     if AttachmentFileName <> '' then
-      Call.OutHead := Call.OutHead +
+      fCall^.OutHead := fCall^.OutHead +
         #13#10'Content-Disposition: attachment; filename="' + AttachmentFileName + '"';
   end;
 end;
@@ -4067,10 +4101,10 @@ procedure TRestUriContext.Redirect(const NewLocation: RawUtf8;
   PermanentChange: boolean);
 begin
   if PermanentChange then
-    Call.OutStatus := HTTP_MOVEDPERMANENTLY
+    fCall^.OutStatus := HTTP_MOVEDPERMANENTLY
   else
-    Call.OutStatus := HTTP_TEMPORARYREDIRECT;
-  Call.OutHead := 'Location: ' + NewLocation;
+    fCall^.OutStatus := HTTP_TEMPORARYREDIRECT;
+  fCall^.OutHead := 'Location: ' + NewLocation;
 end;
 
 procedure TRestUriContext.Returns(const NameValuePairs: array of const;
@@ -4123,7 +4157,7 @@ end;
 procedure TRestUriContext.Success(Status: integer);
 begin
   if StatusCodeIsSuccess(Status) then
-    Call.OutStatus := Status
+    fCall^.OutStatus := Status
   else
     Error('', Status);
 end;
@@ -4161,14 +4195,14 @@ var
   msg: RawUtf8;
   temp: TTextWriterStackBuffer;
 begin
-  Call.OutStatus := Status;
+  fCall^.OutStatus := Status;
   if StatusCodeIsSuccess(Status) then
   begin
     // not an error
-    Call.OutBody := ErrorMessage;
+    fCall^.OutBody := ErrorMessage;
     if CacheControlMaxAge <> 0 then
       // Cache-Control is ignored for errors
-      Call.OutHead := 'Cache-Control: max-age=' +
+      fCall^.OutHead := 'Cache-Control: max-age=' +
         UInt32ToUtf8(CacheControlMaxAge);
     exit;
   end;
@@ -4179,7 +4213,7 @@ begin
   with TJsonWriter.CreateOwnedStream(temp) do
   try
     AddShort('{'#13#10'"errorCode":');
-    Add(Call.OutStatus);
+    Add(fCall^.OutStatus);
     if (msg <> '') and
        (msg[1] = '{') and
        (msg[length(msg)] = '}') then
@@ -4196,7 +4230,7 @@ begin
       AddJsonEscape(pointer(msg));
       AddShorter('"'#13#10'}');
     end;
-    SetText(Call.OutBody);
+    SetText(fCall^.OutBody);
   finally
     Free;
   end;

@@ -13,7 +13,7 @@
   {$WARN 7122 off : Check size of XMM memory operand }
 {$endif FPC}
 
-{$ifdef ASMX86}
+{$ifdef ASMX86} // i386 asm with global - disabled on PIC targets
 
 {$define WITH_ERMS} // we enable it as fallback on old CPU without SSE2
 
@@ -677,6 +677,9 @@ asm
         cmp     edx, 8
         jae     @s1
         jmp     dword ptr [edx * 4 + @Table]
+        {$ifdef FPC}
+        align   4
+        {$endif FPC}
 @Table: dd      @z, @1, @2, @3, @4, @5, @6, @7
 @s1:    // fast search by 8 integers (pipelined instructions)
         sub     edx, 8
@@ -1090,7 +1093,7 @@ end;
 function bswap32(a: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-  bswap eax
+        bswap eax
 end;
 
 function bswap64({$ifdef FPC}constref{$else}const{$endif} a: QWord): QWord;

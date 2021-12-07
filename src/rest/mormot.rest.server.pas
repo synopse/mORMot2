@@ -130,13 +130,6 @@ type
     sStaticDataTable,
     sVirtualTable);
 
-  /// used by TRestServerUriContext.ClientKind to identify the currently
-  // connected client
-  TRestServerUriContextClientKind = (
-    ckUnknown,
-    ckFramework,
-    ckAJAX);
-
   /// used to identify the authentication failure reason
   // - as transmitted e.g. by TRestServerUriContext.AuthenticationFailed or
   // TRestServer.OnAuthenticationFailed
@@ -165,11 +158,9 @@ type
   TRestServerUriContext = class(TRestUriContext)
   protected
     fInput: TRawUtf8DynArray; // even items are parameter names, odd are values
-    fInputPostContentType: RawUtf8;
     fInputAllowDouble: boolean;
     fStaticKind: TRestServerKind;
     fCommand: TRestServerUriContextCommand;
-    fClientKind: TRestServerUriContextClientKind;
     fServiceListInterfaceMethodIndex: integer;
     fStatsInSize, fStatsOutSize: integer;
     fServiceMethodIndex: integer;
@@ -396,9 +387,6 @@ type
     // use the InputAsMultiPart() method instead when working with binary
     function GetInputAsTDocVariant(const Options: TDocVariantOptions;
       InterfaceMethod: pointer): variant;
-    /// decode any multipart/form-data POST request input
-    // - returns TRUE and set MultiPart array as expected, on success
-    function InputAsMultiPart(var MultiPart: TMultiPartDynArray): boolean;
     /// low-level access to the input parameters, stored as pairs of UTF-8
     // - even items are parameter names, odd are values
     // - Input*[] properties should have been called previously to fill the
@@ -408,6 +396,12 @@ type
       read fInput;
 
     /// method overriden to support rsoAuthenticationUriDisable option
+    // - i.e. as an alternative, a non-standard and slightly less safe way of
+    // token transmission may be to encode its value as ?authenticationbearer=....
+    // URI parameter (may be convenient when embedding resources in HTML DOM -
+    // but note that the URI is usually part of the web server logs, so it may
+    // be unsafe to use it on production - but may be handy e.g. for debugging
+    // or if you can't tweak the HTTP headers - as with websockets on JavaScript)
     function AuthenticationBearerToken: RawUtf8; override;
     /// validate "Authorization: Bearer <JWT>" content from incoming HTTP headers
     // - overriden to support TRestServer.JwtForUnauthenticatedRequestWhiteIP()
@@ -418,14 +412,6 @@ type
     // - is used internally
     property AuthSession: TAuthSession
       read fAuthSession;
-    /// identify which kind of client is actually connected
-    // - the "User-Agent" HTTP will be checked for 'mORMot' substring, and
-    // set ckFramework on match
-    // - either ckAjax for a classic (AJAX) browser, or any other kind of
-    // HTTP client
-    // - will be used e.g. by ClientOrmOptions to check if the
-    // current remote client expects standard JSON in all cases
-    function ClientKind: TRestServerUriContextClientKind;
     /// the associated routing class on the client side
     class function ClientRouting: TRestClientRoutingClass; virtual; abstract;
     /// identify if the request is about a Table containing nested objects or
@@ -2625,7 +2611,7 @@ begin
   inherited OutHeadFromCookie;
   if rsoCookieIncludeRootPath in Server.fOptions then
     // case-sensitive Path=/ModelRoot
-    Call.OutHead := Call.OutHead + '; Path=/';
+    fCall^.OutHead := fCall^.OutHead + '; Path=/';
 end;
 
 procedure TRestServerUriContext.InternalSetTableFromTableName(
@@ -2683,13 +2669,10 @@ begin
     inc(fParameters);
     fParametersPos := fParameters - P;
   end;
-  if Method = mPost then
-  begin
-    Call^.InBodyType(fInputPostContentType, {guessjsonifnone=}false);
-    if (Parameters = nil) and
-       IdemPChar(pointer(fInputPostContentType), 'APPLICATION/X-WWW-FORM-URLENCODED') then
-      fParameters := pointer(Call^.InBody);
-  end;
+  if (Method = mPost) and
+     (fParameters = nil) and
+     IdemPChar(pointer(fInputPostContentType), 'APPLICATION/X-WWW-FORM-URLENCODED') then
+    fParameters := pointer(Call^.InBody);
   // compute URI without any root nor parameter
   inc(i, j + 2);
   fUriAfterRoot := P + i - 1;
@@ -2780,7 +2763,7 @@ var
 function TRestServerUriContext.IsRemoteAdministrationExecute: boolean;
 begin
   result := (self <> nil) and
-            (Call.RestAccessRights = @BYPASS_ACCESS_RIGHTS);
+            (fCall^.RestAccessRights = @BYPASS_ACCESS_RIGHTS);
 end;
 
 function TRestServerUriContext.Authenticate: boolean;
@@ -2847,7 +2830,7 @@ begin
     Log.Log(sllUserAuth, 'AuthenticationFailed(%) for % (session=%)',
       [txt^, Call^.Url, Session], self);
   // 401 HTTP_UNAUTHORIZED must include a WWW-Authenticate header, so return 403
-  Call.OutStatus := HTTP_FORBIDDEN;
+  fCall^.OutStatus := HTTP_FORBIDDEN;
   FormatUtf8('Authentication Failed: % (%)',
     [UnCamelCase(TrimLeftLowerCaseShort(txt)), ord(Reason)], fCustomErrorMsg);
   // call the notification event
@@ -2994,12 +2977,12 @@ begin
   if fStatsInSize = 0 then
   begin
     // rough estimation - but compute it once
-    fStatsInSize := length(Call.Url) + length(Call.Method) +
-      length(Call.InHead) + length(Call.InBody) + 12;
-    fStatsOutSize := length(Call.OutHead) + length(Call.OutBody) + 16;
+    fStatsInSize := length(fCall^.Url) + length(fCall^.Method) +
+      length(fCall^.InHead) + length(fCall^.InBody) + 12;
+    fStatsOutSize := length(fCall^.OutHead) + length(fCall^.OutBody) + 16;
   end;
   // set all TSynMonitorInputOutput fields in a single TLightLock
-  Stats.Notify(fStatsInSize, fStatsOutSize, MicroSec, Call.OutStatus);
+  Stats.Notify(fStatsInSize, fStatsOutSize, MicroSec, fCall^.OutStatus);
 end;
 
 procedure TRestServerUriContext.ExecuteCallback(var Par: PUtf8Char;
@@ -3279,16 +3262,16 @@ begin
     ServiceParameters := nil;
   end;
   if ForceServiceResultAsXMLObject and
-     (Call.OutBody <> '') and
-     (Call.OutHead <> '') and
-     CompareMemFixed(pointer(Call.OutHead),
+     (fCall^.OutBody <> '') and
+     (fCall^.OutHead <> '') and
+     CompareMemFixed(pointer(fCall^.OutHead),
        pointer(JSON_CONTENT_TYPE_HEADER_VAR), 45) then
   begin
-    delete(Call.OutHead, 15, 31);
-    insert(XML_CONTENT_TYPE, Call.OutHead, 15);
-    JsonBufferToXML(pointer(Call.OutBody), XMLUTF8_HEADER,
+    delete(fCall^.OutHead, 15, 31);
+    insert(XML_CONTENT_TYPE, fCall^.OutHead, 15);
+    JsonBufferToXML(pointer(fCall^.OutBody), XMLUTF8_HEADER,
       ForceServiceResultAsXMLObjectNameSpace, xml);
-    Call.OutBody := xml;
+    fCall^.OutBody := xml;
   end;
 end;
 
@@ -3339,7 +3322,7 @@ procedure TRestServerUriContext.ExecuteOrmGet;
        // we won't handle min()/max() functions
        not TableModelProps.Props.FieldBitsFromCsv(FieldsCsv, bits, withid) then
       exit;
-    rec := Table.CreateAndFillPrepare(Call.OutBody);
+    rec := Table.CreateAndFillPrepare(fCall^.OutBody);
     try
       W := TableModelProps.Props.CreateJsonWriter(TRawByteStringStream.Create,
         true, FieldsCsv, {knownrows=}0, 0, @tmp);
@@ -3347,7 +3330,7 @@ procedure TRestServerUriContext.ExecuteOrmGet;
         W.CustomOptions := W.CustomOptions + [twoForceJsonStandard]; // regular JSON
         W.OrmOptions := Options; // will do the magic
         rec.AppendFillAsJsonValues(W);
-        W.SetText(Call.OutBody);
+        W.SetText(fCall^.OutBody);
       finally
         W.Stream.Free; // associated TRawByteStringStream instance
         W.Free;
@@ -3379,9 +3362,9 @@ begin
         begin
           if Method <> mLOCK then
           begin
-            if (Call.InBody = '') and
+            if (fCall^.InBody = '') and
                (Parameters <> nil) and
-               (reUrlEncodedSql in Call.RestAccessRights^.AllowRemoteExecute) then
+               (reUrlEncodedSql in fCall^.RestAccessRights^.AllowRemoteExecute) then
             begin
               // GET with a sql statement sent in URI, as sql=....
               while not UrlDecodeValue(Parameters, 'sql=', sql, @Parameters) do
@@ -3390,12 +3373,12 @@ begin
             end
             else
               // GET with a sql statement sent as UTF-8 body (not 100% HTTP compatible)
-              sql := Call.InBody;
+              sql := fCall^.InBody;
             if sql <> '' then
             begin
               sqlisselect := IsSelect(pointer(sql), @sqlselect);
               if sqlisselect or
-                 (reSql in Call.RestAccessRights^.AllowRemoteExecute) then
+                 (reSql in fCall^.RestAccessRights^.AllowRemoteExecute) then
               begin
                 fStaticOrm := nil;
                 if sqlisselect then
@@ -3405,9 +3388,9 @@ begin
                   begin
                     // check for SELECT without any known table
                     if not (reSqlSelectWithoutTable in
-                        Call.RestAccessRights^.AllowRemoteExecute) then
+                        fCall^.RestAccessRights^.AllowRemoteExecute) then
                     begin
-                      Call.OutStatus := HTTP_NOTALLOWED;
+                      fCall^.OutStatus := HTTP_NOTALLOWED;
                       exit;
                     end;
                   end
@@ -3415,9 +3398,9 @@ begin
                   begin
                     // check for SELECT with one (or several JOINed) tables
                     for i := 0 to high(tableindexes) do
-                      if not (tableindexes[i] in Call.RestAccessRights^.GET) then
+                      if not (tableindexes[i] in fCall^.RestAccessRights^.GET) then
                       begin
-                        Call.OutStatus := HTTP_NOTALLOWED;
+                        fCall^.OutStatus := HTTP_NOTALLOWED;
                         exit;
                       end;
                     // use the first static table (poorman's JOIN)
@@ -3428,13 +3411,13 @@ begin
                 if StaticOrm <> nil then
                 begin
                   fTableEngine := StaticOrm;
-                  Call.OutBody := TableEngine.EngineList(sql);
+                  fCall^.OutBody := TableEngine.EngineList(sql);
                 end
                 else
-                  Call.OutBody := TRestOrmServer(Server.fOrmInstance).
+                  fCall^.OutBody := TRestOrmServer(Server.fOrmInstance).
                     MainEngineList(sql, false, nil);
                 // security note: only first statement is run by EngineList()
-                if Call.OutBody <> '' then
+                if fCall^.OutBody <> '' then
                 begin
                   // got JSON list '[{...}]' ?
                   if (sqlselect <> '') and
@@ -3445,7 +3428,7 @@ begin
                     if opt <> [] then
                       ConvertOutBodyAsPlainJson(sqlselect, opt);
                   end;
-                  Call.OutStatus := HTTP_SUCCESS;  // 200 OK
+                  fCall^.OutStatus := HTTP_SUCCESS;  // 200 OK
                   if not sqlisselect then
                    // needed for fStats.NotifyOrm(Method) below
                     fMethod := TUriMethod(IdemPCharArray(SqlBegin(pointer(sql)),
@@ -3459,9 +3442,9 @@ begin
         end
         else
         // here, Table<>nil and TableIndex in [0..MAX_TABLES-1]
-        if not (TableIndex in Call.RestAccessRights^.GET) then
+        if not (TableIndex in fCall^.RestAccessRights^.GET) then
           // rejected from User Access
-          Call.OutStatus := HTTP_NOTALLOWED
+          fCall^.OutStatus := HTTP_NOTALLOWED
         else
         begin
           if TableID > 0 then
@@ -3470,8 +3453,8 @@ begin
             // with or w/out locking, or a specified blob field content
             if Method = mLOCK then
               // LOCK is to be followed by PUT -> check user
-              if not (TableIndex in Call.RestAccessRights^.PUT) then
-                Call.OutStatus := HTTP_NOTALLOWED
+              if not (TableIndex in fCall^.RestAccessRights^.PUT) then
+                fCall^.OutStatus := HTTP_NOTALLOWED
               else if Server.fModel.Lock(TableIndex, TableID) then
                 fMethod := mGET; // mark successfully locked
             if fMethod <> mLOCK then
@@ -3482,53 +3465,53 @@ begin
                 if blob <> nil then
                 begin
                   if TableEngine.EngineRetrieveBlob(TableIndex, TableID, blob,
-                    RawBlob(Call.OutBody)) then
+                    RawBlob(fCall^.OutBody)) then
                   begin
-                    Call.OutHead := GetMimeContentTypeHeader(Call.OutBody);
-                    Call.OutStatus := HTTP_SUCCESS; // 200 OK
+                    fCall^.OutHead := GetMimeContentTypeHeader(fCall^.OutBody);
+                    fCall^.OutStatus := HTTP_SUCCESS; // 200 OK
                   end
                   else
-                    Call.OutStatus := HTTP_NOTFOUND;
+                    fCall^.OutStatus := HTTP_NOTFOUND;
                 end;
               end
               else
               begin
                 // GET ModelRoot/TableName/TableID: retrieve a member content, JSON encoded
                 cache := TRestOrm(Server.fOrmInstance).CacheOrNil;
-                Call.OutBody := cache.Retrieve(TableIndex, TableID);
-                if Call.OutBody = '' then
+                fCall^.OutBody := cache.Retrieve(TableIndex, TableID);
+                if fCall^.OutBody = '' then
                 begin
                   // get JSON object '{...}'
                   if StaticOrm <> nil then
-                    Call.OutBody := StaticOrm.EngineRetrieve(TableIndex, TableID)
+                    fCall^.OutBody := StaticOrm.EngineRetrieve(TableIndex, TableID)
                   else
-                    Call.OutBody := TRestOrmServer(Server.fOrmInstance).
+                    fCall^.OutBody := TRestOrmServer(Server.fOrmInstance).
                       MainEngineRetrieve(TableIndex, TableID);
                   // cache if expected
                   if cache <> nil then
-                    if Call.OutBody = '' then
+                    if fCall^.OutBody = '' then
                       cache.NotifyDeletion(TableIndex, TableID)
                     else
-                      cache.Notify(TableIndex, TableID, Call.OutBody, ooSelect);
+                      cache.Notify(TableIndex, TableID, fCall^.OutBody, ooSelect);
                 end;
-                if Call.OutBody <> '' then
+                if fCall^.OutBody <> '' then
                 begin
                   // if something was found
                   opt := ClientOrmOptions;
                   if opt <> [] then
                   begin
                     // cached? -> make private
-                    rec := Table.CreateFrom(Call.OutBody);
+                    rec := Table.CreateFrom(fCall^.OutBody);
                     try
-                      Call.OutBody := rec.GetJsonValues(true, true, ooSelect, nil, opt);
+                      fCall^.OutBody := rec.GetJsonValues(true, true, ooSelect, nil, opt);
                     finally
                       rec.Free;
                     end;
                   end;
-                  Call.OutStatus := HTTP_SUCCESS; // 200 OK
+                  fCall^.OutStatus := HTTP_SUCCESS; // 200 OK
                 end
                 else
-                  Call.OutStatus := HTTP_NOTFOUND;
+                  fCall^.OutStatus := HTTP_NOTFOUND;
               end;
           end
           else
@@ -3606,30 +3589,30 @@ begin
             end;
             sql := Server.fModel.TableProps[TableIndex].SqlFromSelectWhere(
               sqlselect, TrimU(sqlwhere));
-            Call.OutBody := TRestOrmServer(Server.fOrmInstance).
+            fCall^.OutBody := TRestOrmServer(Server.fOrmInstance).
               InternalListRawUtf8(TableIndex, sql);
-            if Call.OutBody <> '' then
+            if fCall^.OutBody <> '' then
             begin
               // got JSON list '[{...}]' ?
               opt := ClientOrmOptions;
               if opt <> [] then
                 ConvertOutBodyAsPlainJson(sqlselect, opt);
-              Call.OutStatus := HTTP_SUCCESS;  // 200 OK
+              fCall^.OutStatus := HTTP_SUCCESS;  // 200 OK
               if Server.UriPagingParameters.SendTotalRowsCountFmt <> '' then
                 // insert "totalRows":% optional value to the JSON output
                 if (rsoNoAjaxJson in Server.Options) or
                    (ClientKind = ckFramework) then
                 begin
                   // optimized non-expanded mORMot-specific layout
-                  P := pointer(Call.OutBody);
-                  L := length(Call.OutBody);
+                  P := pointer(fCall^.OutBody);
+                  L := length(fCall^.OutBody);
                   P := NotExpandedBufferRowCountPos(P, P + L);
                   j := 0;
                   if P <> nil then
-                    j := P - pointer(Call.OutBody) - 11
+                    j := P - pointer(fCall^.OutBody) - 11
                   else
                     for i := 1 to 10 do
-                      if Call.OutBody[L] = '}' then
+                      if fCall^.OutBody[L] = '}' then
                       begin
                         j := L;
                         break;
@@ -3638,43 +3621,43 @@ begin
                         dec(L);
                   if j > 0 then
                     Insert(FormatUtf8(Server.UriPagingParameters.SendTotalRowsCountFmt,
-                      [sqltotalrowcount]), Call.OutBody, j);
+                      [sqltotalrowcount]), fCall^.OutBody, j);
                 end
                 else
                 begin
                   // expanded format -> as {"values":[...],"total":n}
                   if sqltotalrowcount = 0 then // avoid sending fields array
-                    Call.OutBody := '[]'
+                    fCall^.OutBody := '[]'
                   else
-                    Call.OutBody := TrimU(Call.OutBody);
-                  Call.OutBody := '{"values":' + Call.OutBody +
+                    fCall^.OutBody := TrimU(fCall^.OutBody);
+                  fCall^.OutBody := '{"values":' + fCall^.OutBody +
                     FormatUtf8(Server.UriPagingParameters.SendTotalRowsCountFmt,
                      [sqltotalrowcount]) + '}';
                 end;
             end
             else
-              Call.OutStatus := HTTP_NOTFOUND;
+              fCall^.OutStatus := HTTP_NOTFOUND;
           end;
         end;
-        if Call.OutStatus = HTTP_SUCCESS then
+        if fCall^.OutStatus = HTTP_SUCCESS then
           Server.fStats.NotifyOrm(Method);
       end;
     mUNLOCK:
       begin
         // ModelRoot/TableName/TableID to unlock a member
-        if not (TableIndex in Call.RestAccessRights^.PUT) then
-          Call.OutStatus := HTTP_NOTALLOWED
+        if not (TableIndex in fCall^.RestAccessRights^.PUT) then
+          fCall^.OutStatus := HTTP_NOTALLOWED
         else if (Table <> nil) and
                 (TableID > 0) and
            Server.fModel.UnLock(Table, TableID) then
-          Call.OutStatus := HTTP_SUCCESS; // 200 OK
+          fCall^.OutStatus := HTTP_SUCCESS; // 200 OK
       end;
     mSTATE:
       begin
         // STATE method for TRestClientServerInternalState
         // this method is called with Root (-> Table=nil -> Static=nil)
         // we need a specialized method in order to avoid fStats.Invalid increase
-        Call.OutStatus := HTTP_SUCCESS;
+        fCall^.OutStatus := HTTP_SUCCESS;
         TRestOrmServer(Server.fOrmInstance).RefreshInternalStateFromStatic;
       end
   else
@@ -3692,14 +3675,14 @@ procedure TRestServerUriContext.ExecuteOrmWrite;
   begin
     Rec := Table.Create;
     try
-      Rec.FillFrom(pointer(Call.InBody), @bits);
+      Rec.FillFrom(pointer(fCall^.InBody), @bits);
       Rec.ComputeFieldsBeforeWrite(Server.ORM, Occasion);
       with TableModelProps.Props do
         if Occasion = oeAdd then
           bits := bits + ComputeBeforeAddFieldsBits
         else
           bits := bits + ComputeBeforeUpdateFieldsBits;
-      Call.Inbody := Rec.GetJsonValues(true, Rec.IDValue <> 0, bits);
+      fCall^.Inbody := Rec.GetJsonValues(true, Rec.IDValue <> 0, bits);
     finally
       Rec.Free;
     end;
@@ -3720,9 +3703,9 @@ begin
     exit;
   end;
   if not CanExecuteOrmWrite(Method, Table, TableIndex, TableID,
-      Call.RestAccessRights^) then
+      fCall^.RestAccessRights^) then
   begin
-    Call.OutStatus := HTTP_FORBIDDEN;
+    fCall^.OutStatus := HTTP_FORBIDDEN;
     exit;
   end;
   orm := TRestOrmServer(Server.fOrmInstance);
@@ -3733,13 +3716,13 @@ begin
       begin
         // ModelRoot with free SQL statement sent as UTF-8 (only for Admin group)
         // see e.g. TRestClientUri.EngineExecute
-        if reSQL in Call.RestAccessRights^.AllowRemoteExecute then
-          if (Call.InBody <> '') and
-             not (GotoNextNotSpace(Pointer(Call.InBody))^ in [#0, '[', '{']) and
-             orm.EngineExecute(Call.InBody) then
-            Call.OutStatus := HTTP_SUCCESS // 200 ok
+        if reSQL in fCall^.RestAccessRights^.AllowRemoteExecute then
+          if (fCall^.InBody <> '') and
+             not (GotoNextNotSpace(Pointer(fCall^.InBody))^ in [#0, '[', '{']) and
+             orm.EngineExecute(fCall^.InBody) then
+            fCall^.OutStatus := HTTP_SUCCESS // 200 ok
           else
-            Call.OutStatus := HTTP_FORBIDDEN;
+            fCall^.OutStatus := HTTP_FORBIDDEN;
       end
       else
       begin
@@ -3747,21 +3730,21 @@ begin
         // here, Table<>nil, TableID<0 and TableIndex in [0..MAX_TABLES-1]
         if rsoComputeFieldsBeforeWriteOnServerSide in Server.Options then
           ComputeInBodyFields(oeAdd);
-        fTableID := TableEngine.EngineAdd(TableIndex, Call.InBody);
+        fTableID := TableEngine.EngineAdd(TableIndex, fCall^.InBody);
         if fTableID <> 0 then
         begin
           // 201 Created
-          Call.OutStatus := HTTP_CREATED;
-          FormatUtf8('Location: %/%', [Uri, fTableID], Call.OutHead);
+          fCall^.OutStatus := HTTP_CREATED;
+          FormatUtf8('Location: %/%', [Uri, fTableID], fCall^.OutHead);
           cache := orm.CacheOrNil;
           if rsoAddUpdateReturnsContent in Server.Options then
           begin
             cache.NotifyDeletion(TableIndex, fTableID);
-            Call.OutBody := TableEngine.EngineRetrieve(TableIndex, fTableID);
-            cache.Notify(TableIndex, fTableID, Call.OutBody, ooInsert);
+            fCall^.OutBody := TableEngine.EngineRetrieve(TableIndex, fTableID);
+            cache.Notify(TableIndex, fTableID, fCall^.OutBody, ooInsert);
           end
           else
-            cache.Notify(TableIndex, fTableID, Call.InBody, ooInsert);
+            cache.Notify(TableIndex, fTableID, fCall^.InBody, ooInsert);
         end;
       end;
     mPUT:
@@ -3777,27 +3760,28 @@ begin
             // PUT ModelRoot/TableName/TableID/BlobFieldName: update blob field content
             blob := Table.OrmProps.BlobFieldPropFromRawUtf8(UriBlobFieldName);
             if blob <> nil then
-              ok := TableEngine.EngineUpdateBlob(TableIndex, TableID, blob, Call.InBody);
+              ok := TableEngine.EngineUpdateBlob(
+                TableIndex, TableID, blob, fCall^.InBody);
           end
           else
           begin
             // ModelRoot/TableName/TableID with JSON SentData: update a member
             if rsoComputeFieldsBeforeWriteOnServerSide in Server.Options then
               ComputeInBodyFields(oeUpdate);
-            ok := TableEngine.EngineUpdate(TableIndex, TableID, Call.InBody);
+            ok := TableEngine.EngineUpdate(TableIndex, TableID, fCall^.InBody);
             if ok then
             begin
               // flush cache after update (no CreateTime in JSON)
               orm.CacheOrNil.NotifyDeletion(TableIndex, TableID);
               if rsoAddUpdateReturnsContent in Server.Options then
-                Call.OutBody := TableEngine.EngineRetrieve(TableIndex, TableID);
+                fCall^.OutBody := TableEngine.EngineRetrieve(TableIndex, TableID);
             end;
           end;
           if ok then
-            Call.OutStatus := HTTP_SUCCESS; // 200 ok
+            fCall^.OutStatus := HTTP_SUCCESS; // 200 ok
         end
         else
-          Call.OutStatus := HTTP_FORBIDDEN;
+          fCall^.OutStatus := HTTP_FORBIDDEN;
       end
       else if Parameters <> nil then
       begin
@@ -3817,8 +3801,8 @@ begin
             sqlsort, sqlwhere) then
           begin
             if rsoAddUpdateReturnsContent in Server.Options then
-              Call.OutBody := TableEngine.EngineRetrieve(TableIndex, TableID);
-            Call.OutStatus := HTTP_SUCCESS; // 200 ok
+              fCall^.OutBody := TableEngine.EngineRetrieve(TableIndex, TableID);
+            fCall^.OutStatus := HTTP_SUCCESS; // 200 ok
           end;
       end;
     mDELETE:
@@ -3827,13 +3811,13 @@ begin
         // ModelRoot/TableName/TableID to delete a member
         if not orm.RecordCanBeUpdated(Table, TableID, oeDelete,
             @CustomErrorMsg) then
-          Call.OutStatus := HTTP_FORBIDDEN
+          fCall^.OutStatus := HTTP_FORBIDDEN
         else
         begin
           if TableEngine.EngineDelete(TableIndex, TableID) and
              orm.AfterDeleteForceCoherency(TableIndex, TableID) then
           begin
-            Call.OutStatus := HTTP_SUCCESS; // 200 ok
+            fCall^.OutStatus := HTTP_SUCCESS; // 200 ok
             orm.CacheOrNil.NotifyDeletion(TableIndex, TableID);
           end;
         end
@@ -3847,7 +3831,7 @@ begin
             if sqlwhere <> '' then
             begin
               if orm.Delete(Table, sqlwhere) then
-                Call.OutStatus := HTTP_SUCCESS; // 200 ok
+                fCall^.OutStatus := HTTP_SUCCESS; // 200 ok
             end;
             break;
           end;
@@ -3871,7 +3855,7 @@ begin
             if fStaticOrm <> nil then
               fStaticOrm.TransactionBegin(Table, Session);
           end;
-          Call.OutStatus := HTTP_SUCCESS; // 200 ok
+          fCall^.OutStatus := HTTP_SUCCESS; // 200 ok
         end;
       end;
     mEND:
@@ -3890,7 +3874,7 @@ begin
             fStaticOrm.Commit(Session, false);
         end;
         orm.Commit(Session, false);
-        Call.OutStatus := HTTP_SUCCESS; // 200 ok
+        fCall^.OutStatus := HTTP_SUCCESS; // 200 ok
       end;
     mABORT:
       begin
@@ -3908,10 +3892,10 @@ begin
             fStaticOrm.RollBack(Session);
         end;
         orm.RollBack(Session);
-        Call.OutStatus := HTTP_SUCCESS; // 200 ok
+        fCall^.OutStatus := HTTP_SUCCESS; // 200 ok
       end;
   end;
-  if StatusCodeIsSuccess(Call.OutStatus) then
+  if StatusCodeIsSuccess(fCall^.OutStatus) then
     Server.fStats.NotifyOrm(Method);
 end;
 
@@ -4188,38 +4172,14 @@ begin
     end;
   end
   else if InputAsMultiPart(multipart) then
-  begin
-    res.Init(Options, dvObject);
-    for ndx := 0 to high(multipart) do
-      with multipart[ndx] do
-        if ContentType = TEXT_CONTENT_TYPE then
-        begin
-          // append as regular "Name":"TextValue" field
-          RawUtf8ToVariant(Content, v);
-          res.AddValue(name, v);
-        end
-        else
-          // append binary file as an object, with Base64-encoded data
-          res.AddValue(name, _ObjFast([
-            'data', BinToBase64(Content),
-            'filename', FileName,
-            'contenttype', ContentType]));
-  end;
-end;
-
-function TRestServerUriContext.InputAsMultiPart(
-  var MultiPart: TMultiPartDynArray): boolean;
-begin
-  result := (Method = mPOST) and
-     IdemPChar(pointer(fInputPostContentType), 'MULTIPART/FORM-DATA') and
-     MultiPartFormDataDecode(fInputPostContentType, Call^.InBody, MultiPart);
+    MultiPartToDocVariant(multipart, res, @Options);
 end;
 
 function TRestServerUriContext.IsRemoteIPBanned: boolean;
 begin
   if Server.fIPBan.Exists(GetRemoteIP) then
   begin
-    Error('Banned IP %', [fRemoteIP]);
+    Error('Banned IP %', [fCall^.LowLevelRemoteIP]);
     result := true;
   end
   else
@@ -4234,7 +4194,7 @@ begin
   begin
     result := GetInputUtf8OrVoid('authenticationbearer');
     if result <> '' then
-      fAuthenticationBearerToken := result;
+      fCall^.LowLevelBearerToken := result;
   end;
 end;
 
@@ -4245,34 +4205,12 @@ begin
      (Server <> nil) and
      (Server.fIPWhiteJWT <> nil) and
      not Server.fIPWhiteJWT.Exists(GetRemoteIP) and
-     (fRemoteIP <> '') and
-     (fRemoteIP <> '127.0.0.1') then
+     (fCall^.LowLevelRemoteIP <> '') and
+     (fCall^.LowLevelRemoteIP <> '127.0.0.1') then
   begin
-    Error('Invalid IP [%]', [fRemoteIP], HTTP_FORBIDDEN);
+    Error('Invalid IP [%]', [fCall^.LowLevelRemoteIP], HTTP_FORBIDDEN);
     result := false;
   end;
-end;
-
-function TRestServerUriContext.ClientKind: TRestServerUriContextClientKind;
-var
-  agent: RawUtf8;
-begin
-  if fClientKind = ckUnknown then
-    if Call.InHead = '' then
-      // e.g. for WebSockets remote access
-      fClientKind := ckAjax
-    else
-    begin
-      // try to recognize User-Agent header
-      agent := GetUserAgent;
-      if (agent = '') or
-         (PosEx('mORMot', agent) > 0) then
-        // 'mORMot' set e.g. from DefaultUserAgent() in mormot.net.http
-        fClientKind := ckFramework
-      else
-        fClientKind := ckAjax;
-    end;
-  result := fClientKind;
 end;
 
 function TRestServerUriContext.ClientOrmOptions: TOrmWriterOptions;
@@ -4320,7 +4258,7 @@ procedure TRestServerUriContext.Error(const ErrorMessage: RawUtf8;
   Status, CacheControlMaxAge: integer);
 begin
   inherited Error(ErrorMessage, Status, CacheControlMaxAge);
-  Server.InternalLog('%.Error: %', [ClassType, Call.OutBody], sllDebug);
+  Server.InternalLog('%.Error: %', [ClassType, fCall^.OutBody], sllDebug);
 end;
 
 
@@ -4432,18 +4370,18 @@ begin
     raise EServiceException.CreateUtf8(
       '%.ExecuteSoaByInterface invalid call', [self]);
   //  URI as '/Model/Interface.Method[/ClientDrivenID]'
-  if Call.InBody <> '' then
+  if fCall^.InBody <> '' then
     // parameters sent as json array/object (the Delphi/AJAX way) or single blob
     if (ServiceMethod <> nil) and
        PInterfaceMethod(ServiceMethod)^.ArgsInputIsOctetStream and
-       not Call.InBodyTypeIsJson then
+       not fCall^.InBodyTypeIsJson then
     begin
       // encode binary as Base64, as expected by InternalExecuteSoaByInterface
-      json := BinToBase64(Call.InBody, '["', '"]', false);
+      json := BinToBase64(fCall^.InBody, '["', '"]', false);
       ServiceParameters := pointer(json);
     end
     else
-      ServiceParameters := pointer(Call.InBody)
+      ServiceParameters := pointer(fCall^.InBody)
   else
   begin
     // no body -> try URI-encoded parameters (the HTML way)
@@ -4508,7 +4446,7 @@ begin
      (Service = nil) then
     raise EServiceException.CreateUtf8(
       '%.ExecuteSoaByInterface invalid call', [self]);
-  tmp.Init(Call.Inbody);
+  tmp.Init(fCall^.Inbody);
   try
     JsonDecode(tmp.buf, @RPC_NAMES, length(RPC_NAMES), @values, true);
     if values[0].Text = nil then // Method name required
@@ -4594,9 +4532,9 @@ begin
           User.IDValue, 'Data', blob);
         User.Data := blob;
       end;
-      if (aCtxt.Call <> nil) and
-         (aCtxt.Call.InHead <> '') then
-        fSentHeaders := aCtxt.Call.InHead;
+      if (aCtxt.fCall <> nil) and
+         (aCtxt.fCall^.InHead <> '') then
+        fSentHeaders := aCtxt.fCall^.InHead;
       ComputeProtectedValues;
       fRemoteIP := aCtxt.RemoteIP;
       fRemoteOsVersion := aCtxt.SessionOS;
@@ -5232,7 +5170,7 @@ begin
   end
   else
   begin
-    Ctxt.Call.OutHead := 'WWW-Authenticate: Basic realm="mORMot Server"';
+    Ctxt.fCall^.OutHead := 'WWW-Authenticate: Basic realm="mORMot Server"';
     Ctxt.Error('', HTTP_UNAUTHORIZED); // 401 will popup for credentials in browser
   end;
 end;
@@ -6402,8 +6340,8 @@ begin
       Ctxt.fSessionGroup := result.User.GroupRights.IDValue;
       Ctxt.fSessionUserName := result.User.LogonName;
       if (result.RemoteIP <> '') and
-         (Ctxt.fRemoteIP = '') then
-        Ctxt.fRemoteIP := result.RemoteIP;
+         (Ctxt.fCall^.LowLevelRemoteIP = '') then
+        Ctxt.fCall^.LowLevelRemoteIP := result.RemoteIP;
       Ctxt.fSessionAccessRights := result.fAccessRights;
       Ctxt.fSessionOS := result.fRemoteOsVersion;
       Ctxt.Call^.RestAccessRights := @Ctxt.fSessionAccessRights;

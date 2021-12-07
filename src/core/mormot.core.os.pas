@@ -2088,7 +2088,7 @@ function FileStreamSequentialRead(const FileName: string): THandleStream;
 // - content can be binary or text
 // - returns '' if file was not found or any read error occured
 // - wil use GetFileSize() API by default, unless HasNoSize is defined,
-// and read will be done using a buffer (required e.g. for char files under Linux)
+// and read will be done using a buffer (required e.g. for POSIX char files)
 // - uses RawByteString for byte storage, whatever the codepage is
 function StringFromFile(const FileName: TFileName;
   HasNoSize: boolean = false): RawByteString;

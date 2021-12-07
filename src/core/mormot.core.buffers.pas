@@ -6967,11 +6967,9 @@ var
     TrimCopy(line, i + 9, 200, boundary);
     if (boundary <> '') and
        (boundary[1] = '"') then
-      // "boundary" -> boundary
-      boundary := copy(boundary, 2, length(boundary) - 2);
-    boundary := '--' + boundary;
-    endBoundary := boundary + '--' + #13#10;
-    boundary := boundary + #13#10;
+      TrimChars(boundary, 1, 1); // "boundary" -> boundary
+    endBoundary := '--' + boundary + '--' + #13#10;
+    boundary := '--' + boundary + #13#10;
     result := true;
   end;
 
@@ -7038,7 +7036,7 @@ begin
           else
             part.ContentType := TEXT_CONTENT_TYPE;
           {$ifdef HASCODEPAGE}
-          SetCodePage(part.Content, CP_UTF8, false); // ensure raw value is UTF-8
+          SetCodePage(part.Content, CP_UTF8, false); // ensure value is UTF-8
           {$endif HASCODEPAGE}
         end;
         if IdemPropNameU(part.Encoding, 'base64') then

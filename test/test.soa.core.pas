@@ -1339,19 +1339,19 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
     end
     else
       raise Exception.Create('Invalid call');
-    Result := JsonDecode(resp, 'result', nil, true);
-    if IdemPChar(Pointer(Result), '{"RESULT"') then
-      Result := JsonDecode(Result, 'result', nil, false)
+    result := JsonDecode(resp, 'result', nil, true);
+    if IdemPChar(Pointer(result), '{"result"') then
+      result := JsonDecode(result, 'result', nil, false)
     else
-      Result := Copy(Result, 2, length(Result) - 2); // trim '[' + ']'
-    if (Result <> '') and
-       (Result[1] = '"') then
-      Result := UnQuoteSQLString(Result); // '"777"' -> '777'
+      TrimChars(result, 1, 1); // trim '[' + ']'
+    if (result <> '') and
+       (result[1] = '"') then
+      result := UnQuoteSQLString(result); // '"777"' -> '777'
     if (ExpectedResult = 200) and
        (fClient.Server.ServicesRouting = TRestServerRoutingRest) then
     begin
-      resp := XMLUTF8_HEADER + '<result><Result>' + Result + '</Result></result>';
-      check(data = resp);
+      resp := XMLUTF8_HEADER + '<result><Result>' + result + '</Result></result>';
+      CheckEqual(data, resp, 'xml');
     end;
   end;
 
