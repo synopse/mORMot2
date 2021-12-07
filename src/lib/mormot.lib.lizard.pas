@@ -439,7 +439,7 @@ type
   protected
     fCompressionLevel: integer;
     function RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
-      process: TAlgoCompressWithNoDestLenProcess): integer;  override;
+      process: TAlgoCompressWithNoDestLenProcess): integer; override;
   public
     constructor Create; override;
     function AlgoCompressDestLen(PlainLen: integer): integer; override;

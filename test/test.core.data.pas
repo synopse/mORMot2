@@ -5590,10 +5590,10 @@ begin
   end;
 end;
 
-function Spaces(n: integer): RawUtf8;
+function By1(pattern: byte; n: integer): RawUtf8;
 begin
   SetString(result, nil, n);
-  FillCharFast(pointer(result)^, n, 32);
+  FillCharFast(pointer(result)^, n, pattern);
 end;
 
 function By4(pattern, n: integer): RawUtf8;
@@ -5606,8 +5606,21 @@ begin
 end;
 
 procedure TTestCoreCompression._SynLZ;
+
+  procedure TestOne(const v: RawByteString);
+  var
+    s, t: RawByteString;
+  begin
+    s := AlgoSynLZ.Compress(v);
+    t := AlgoSynLZ.Decompress(s);
+    Check(t = v);
+    s := AlgoRleLZ.Compress(v);
+    t := AlgoRleLZ.Decompress(s);
+    Check(t = v);
+  end;
+
 var
-  s, t, rle: RawByteString;
+  s, t: RawByteString;
   i, j, complen2: integer;
   comp2, dec1: array of byte;
   {$ifdef CPUINTEL}
@@ -5615,20 +5628,13 @@ var
   complen1: integer;
   {$endif CPUINTEL}
 begin
-  for i := 1 to 200 do
-  begin
-    s := AlgoSynLZ.Compress(RawUtf8OfChar(AnsiChar(i), i));
-    t := AlgoSynLZ.Decompress(s);
-    Check(t = RawUtf8OfChar(AnsiChar(i), i));
-  end;
-  rle := 'hello' + Spaces(10000) + 'hello' + Spaces(1000) + 'world';
-  s := AlgoSynLZ.Compress(rle);
-  t := AlgoSynLZ.Decompress(s);
-  Check(t = rle);
-  rle := 'hello' + by4($3031333, 10000) + 'hello' + by4($3031333, 1000) + 'world';
-  s := AlgoSynLZ.Compress(rle);
-  t := AlgoSynLZ.Decompress(s);
-  Check(t = rle);
+  for i := 0 to 200 do
+    TestOne(RawUtf8OfChar(AnsiChar(i), i));
+  TestOne('hello' + by1(32, 10000) + 'hello' + by1(32, 1000) + 'world');
+  TestOne('hello' + by1($33, 10000) + 'hello' + by1($33, 1000) + 'world');
+  for i := 1 to 150 do
+    TestOne('hello' + by1(i, Random32(200)) + 'hello' + by1(i + 100, Random32(200)) + 'world');
+  TestOne('hello' + by4($3031333, 10000) + 'hello' + by4($3031333, 1000) + 'world');
   for i := 0 to 1000 do
   begin
     s := RawUtf8OfChar(' ', 20);
@@ -5729,6 +5735,7 @@ procedure TTestCoreCompression._TAlgoCompress;
 
 begin
   TestAlgo(AlgoSynLZ);
+  TestAlgo(AlgoRleLZ); // don't compress better, but validate RleCompress
   Check(AlgoSynLZ.AlgoName = 'synlz');
   {$ifdef OSWINDOWS}
   if (Lizard = nil) and
