@@ -2638,6 +2638,13 @@ function JsonToVariantInPlace(var Value: Variant; Json: PUtf8Char;
   AllowDouble: boolean = false): PUtf8Char;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// decode multipart/form-data POST request content into a TDocVariantData
+// - following RFC 1867
+// - decoded sections are encoded as Doc JSON object with its textual values,
+// or with nested objects, if the data was supplied as binary:
+// ! {"name1":{"data":..,"filename":...,"contenttype":...},"name2":...}
+procedure MultiPartToDocVariant(const MultiPart: TMultiPartDynArray;
+  var Doc: TDocVariantData; Options: PDocVariantOptions = nil);
 
 
 { ************** Variant Binary Serialization }
@@ -8555,6 +8562,32 @@ function JsonToVariant(const Json: RawUtf8; Options: TDocVariantOptions;
   AllowDouble: boolean): variant;
 begin
   VariantLoadJson(result, Json, @Options, AllowDouble);
+end;
+
+procedure MultiPartToDocVariant(const MultiPart: TMultiPartDynArray;
+  var Doc: TDocVariantData; Options: PDocVariantOptions);
+var
+  ndx: PtrInt;
+  v: variant;
+begin
+  if Options = nil then
+    Doc.InitFast(dvObject)
+  else
+    Doc.Init(Options^, dvObject);
+  for ndx := 0 to high(multipart) do
+    with MultiPart[ndx] do
+      if ContentType = TEXT_CONTENT_TYPE then
+      begin
+        // append as regular "Name":"TextValue" field
+        RawUtf8ToVariant(Content, v);
+        Doc.AddValue(name, v);
+      end
+      else
+        // append binary file as an object, with Base64-encoded data
+        Doc.AddValue(name, _ObjFast([
+          'data', BinToBase64(Content),
+          'filename', FileName,
+          'contenttype', ContentType]));
 end;
 
 
