@@ -268,6 +268,22 @@ begin
           json := Server.Orm.ExecuteJson([TOrmTest], 'select id from test limit 2', false, @c);
           CheckHash(json, $CBE157EF, 'id 2');
           Check(c = 2);
+          c := 0;
+          json := Server.Orm.ExecuteJson(
+            [TOrmTest], 'select * from test where id=:(200):', false, @c);
+          CheckHash(json, $17EA83E8, 'id');
+          Check(c = 1);
+          R.ClearProperties;
+          R.FillFrom(pointer(json));
+          R.CheckWith(self, 200, 0, {blob=}false);
+          json := Server.Orm.ExecuteJson(
+            [TOrmTest], 'select * from test where id<=:(200):', false, @c);
+          CheckHash(json, $6BF2723A, 'id');
+          Check(c = 200);
+          json := Client.Orm.RetrieveListJson(TOrmTest, 'Int>?', [200]);
+          CheckHash(json, $0B45C53B, 'id');
+          json := Client.Orm.RetrieveListJson(TOrmTest, 'Test<>?', ['10'], 'ID');
+          CheckHash(json, $53959B0E, 'id');
         finally
           R.Free;
         end;
