@@ -8740,6 +8740,7 @@ var
   vm: TVariantManager; // available since Delphi 7
   vt: cardinal;
   ins: boolean;
+  i: PtrUInt;
   {$ifdef FPC}
   test: variant;
   {$endif FPC}
@@ -8769,9 +8770,11 @@ begin
   // setup FastVarDataComp() efficient lookup comparison functions
   for ins := false to true do
   begin
-    MoveFast(_NUM1, _VARDATACMP[varEmpty, ins],    SizeOf(_NUM1));
-    MoveFast(_NUM2, _VARDATACMP[varShortInt, ins], SizeOf(_NUM2));
+    for i := low(_NUM1) to high(_NUM1) do
+      _VARDATACMP[i, ins] := _NUM1[i];
     _VARDATACMP[varBoolean, ins] := 14;
+    for i := low(_NUM2) to high(_NUM2) do
+      _VARDATACMP[i, ins] := _NUM2[i];
   end;
   _VARDATACMP[varString, false] := 15;
   _VARDATACMP[varString, true]  := 16;

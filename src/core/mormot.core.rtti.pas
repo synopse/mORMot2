@@ -5609,7 +5609,7 @@ end;
 
 procedure _VariantRandom(V: PRttiVarData; RC: TRttiCustom);
 begin
-  VarClearAndSetType(Variant(V^), varInteger);
+  VarClearAndSetType(Variant(V^), varEmpty);
   V^.Data.VInt64 := SharedRandom.Next;
   // generate some 8-bit 32-bit 64-bit integers or a RawUtf8 varString
   case V^.Data.VInteger and 3 of

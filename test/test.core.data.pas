@@ -4284,6 +4284,30 @@ const
     '"1234","RELATION_ID":11,"TIMESTAMP_CALL":"2017-10-26T04:48:14"},' +
     '{"REC_ID":3,"CHANNEL":174,"PHONE":"9149556917","RELATION_ID":12,' +
     '"TIMESTAMP_CALL":"2017-10-26T04:48:14"}]';
+  TEST_DATA_2 = '{"ID":1,"licence_nr":"95c583ef-95f6-4825-9690-6e17b1ddb88a",' +
+    '"password":"random","licenced_to":"test","contact_email":"mail","count":' +
+    '200,"valid_from":"2021-12-07T00:00:0","valid_until":"2021-12-07T23:59:0"' +
+    ',"archived":0,"try_licence":0,"billing":0,"support":0,"support_create_pa' +
+    'quet":0,"note":"","order_id":-1,"raw_licence":"{\"licence_nr\":\"95c583e' +
+    'f-95f6-4825-9690-6e17b1ddb88a\",\"count\":200,\"valid_from\":\"2021-12-0' +
+    '7T00:00:0\",\"valid_until\":\"2021-12-07T23:59:0\",\"product\":\"WAPT En' +
+    'terprise\",\"licenced_to\":\"test\",\"contact_email\":\"mail\",\"domain\' +
+    '":\"\",\"renewal_url\":\"\",\"features\":[\"full\"],\"signature_date\":\' +
+    '"2021-12-07T12:30:41\",\"signer\":\"\",\"signer_certificate\":\"-----BEG' +
+    'IN RSA PRIVATE KEY-----\\r\\nProc-Type: 4,ENCRYPTED\\r\\nDEK-Info: AES-2' +
+    '56-CBC,284BCA8E252D2C16EA2B59EB2BA9B4C1\\r\\n\\r\\npSZEZrApSb/1ToccFnyun' +
+    'B\\r\\nrdAxopYaIYbiG/IgQ019iE4ptqYkbTTeSlvBYMURGJydUaIHdB4x8MqZcya9hWac\' +
+    '\r\\n50X4KB7lGEFOiM1TPwpBuxzSHlCRv1HfDFIn3cL3YdL/QsZVmpG4sR2n4g7Mal/j\\r' +
+    '\\n0U200IXnv8pS7ICntgwtFMOPm8GDp3ZMtDYoc77wAm16M/O8KHMzJMk3RTrLb7w9\\r\\' +
+    'n-----END RSA PRIVATE KEY-----\",\"signed_attributes\":[\"licence_nr\",\' +
+    '"count\",\"valid_from\",\"valid_until\",\"product\",\"licenced_to\",\"co' +
+    'ntact_email\",\"domain\",\"renewal_url\",\"features\",\"signature_date\"' +
+    ',\"signer\",\"signer_certificate\",\"signed_attributes\"],\"signature\":' +
+    '\"UKjRMatlLmig3FsQESZ4iAH0kV2lD1mj3HbHp1dgmvFLz0AE2+VJ/pW+hAywkBrO0n2zOv' +
+    'GeHy7v7AIjMYB3s7/ORaQ4tfGL7BGLpjqWTquXaXIUiosUYelh1LIlEoZlyyOvhBX5QPc55b' +
+    'k+tfEp/Rig1M2l0Day6GOFz9PXpWPV+9aOkVVnNtBmvmzvH94kKPAtgk3L9T3ooor9nS5av/' +
+    'LCYwN8kzuRagxRfDCqVLWZHFFUIb1GMhaKz1jq2oZriTqIByEBSLcbkE+V1fecalJYI6rkaE' +
+    'hQ0BLF3X83x91dqC0kKEyvG1HnKIj/c0oe7CauRIKgbwFo0mT00MRTog==\"}"}]';
 var
   Doc, Doc2: TDocVariantData;
   model, m2: TDocVariantModel;
@@ -4672,6 +4696,17 @@ begin
     lTable.Free;
   end;
   Doc.Clear;
+  Check(Doc.InitJson(TEST_DATA_2));
+  s := Doc.U['raw_licence'];
+  Check(s <> '');
+  Check(IsValidJson(s, {strict=}true));
+  Doc.Clear;
+  Doc.InitJson('{"order_id": -1}');
+  CheckEqual(Doc.I['order_id'], -1);
+  Doc2.Clear;
+  Doc2.InitJson('{"order_id": -1}');
+  Check(Doc.Equals(Doc2));
+  Doc.Clear;
   Doc.InitJson(
    '{' + #13#10 +
    '	"CostCenter": {' + #13#10 +
@@ -4711,6 +4746,9 @@ begin
     '572327,PropertyID:174,DoubleValue:51.5208320617676,ShortStringValue:"51.5208",' +
     'PropertyType:7,PropertyName:"Latitude",PropertyNotation:"Latitude",' +
     'IsRequired:false}]}}');
+  Doc2.Clear;
+  Doc2.InitJson(J, JSON_FAST_FLOAT);
+  Check(Doc2.Equals(Doc));
   J := StringFromFile(WorkDir + 'm1.json');
   if J <> '' then
   begin
