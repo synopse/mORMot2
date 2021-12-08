@@ -5684,8 +5684,22 @@ begin
           result := SynLZdecompress1(src, srcLen, dst);
       end;
     doUncompressPartial:
-      raise EAlgoCompress.CreateUtf8(
-        'doUncompressPartial is unsupported for %', [self]);
+      begin
+        rle := PByte(src)^;
+        inc(PByte(src));
+        dec(srcLen);
+        if rle <> 0 then
+        begin
+          // process full SynLZ with partial RLE pass (not optimal, but works)
+          tmp.Init(SynLZdecompressdestlen(src));
+          rle := SynLZdecompress1(src, srcLen, tmp.buf);
+          result := RleUnCompressPartial(tmp.buf, dst, rle, dstLen);
+          tmp.Done;
+        end
+        else
+          // only SynLZ was used
+          result := SynLZDecompressPartial(src, dst, srcLen, dstLen);
+      end;
   else
     result := 0;
   end;
@@ -5720,8 +5734,7 @@ begin
     doUnCompress:
       result := RleUnCompress(src, dst, srcLen);
     doUncompressPartial:
-      raise EAlgoCompress.CreateUtf8(
-        'doUncompressPartial is unsupported for %', [self]);
+      result := RleUnCompressPartial(src, dst, srcLen, dstLen);
   else
     result := 0;
   end;

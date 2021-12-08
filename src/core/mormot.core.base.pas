@@ -3188,6 +3188,9 @@ function RleCompress(src, dst: PByteArray; srcsize, dstsize: PtrUInt): PtrInt;
 // - see AlgoRleLZ as such a RLE + SynLZ algorithm
 function RleUnCompress(src, dst: PByteArray; size: PtrUInt): PtrUInt;
 
+/// partial Run-Length-Encoding uncompression of a memory buffer
+function RleUnCompressPartial(src, dst: PByteArray; size, max: PtrUInt): PtrUInt;
+
 /// internal hash table adjustment as called from TDynArrayHasher.HashDelete
 // - decrement any integer greater or equal to a deleted value
 // - brute force O(n) indexes fix after deletion (much faster than full ReHash)
@@ -9277,6 +9280,39 @@ begin
           break;
       end
     until false;
+  result := PAnsiChar(dst) - dststart;
+end;
+
+function RleUnCompressPartial(src, dst: PByteArray; size, max: PtrUInt): PtrUInt;
+var
+  dststart: PAnsiChar;
+  v, m: PtrUInt;
+begin
+  dststart := PAnsiChar(dst);
+  inc(max, PtrUInt(dst));
+  while (size > 0) and
+        (PtrUInt(dst) < max) do
+  begin
+    v := src[0];
+    if v = RLE_CW then
+    begin
+      v := src[1];
+      m := max - PtrUInt(dst);
+      if v > m then
+        v := m; // compile as cmov on FPC
+      FillCharFast(dst^, v, src[2]);
+      inc(PByte(dst), v);
+      inc(PByte(src), 3);
+      dec(size, 3);
+    end
+    else
+    begin
+      dst[0] := v;
+      inc(PByte(dst));
+      inc(PByte(src));
+      dec(size);
+    end;
+  end;
   result := PAnsiChar(dst) - dststart;
 end;
 
