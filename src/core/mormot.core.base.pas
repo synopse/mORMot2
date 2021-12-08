@@ -9201,7 +9201,7 @@ begin
 end;
 
 const
-  RLE_CW = $33; // any byte would do, but this one is nothing special but for me
+  RLE_CW = $33; // any byte would do - this one is nothing special but for me
 
 function RleEncode(dst: PByteArray; v, n: PtrUInt): PByteArray;
   {$ifdef HASINLINE} inline; {$endif}
@@ -9270,9 +9270,14 @@ begin
   result := PAnsiChar(dst) - dststart;
 end;
 
+{.$define INLINEDFILL} // actually slower
+
 function RleUnCompress(src, dst: PByteArray; size: PtrUInt): PtrUInt;
 var
   dststart: PAnsiChar;
+  {$ifdef INLINEDFILL}
+  c: PtrInt;
+  {$endif INLINEDFILL}
   v: PtrUInt;
 begin
   dststart := PAnsiChar(dst);
@@ -9290,10 +9295,21 @@ begin
       end
       else
       begin
+        {$ifdef INLINEDFILL}
+        c := src[1];
+        v := src[2];
+        inc(PByte(dst), c);
+        c := -c;
+        repeat
+          dst[c] := v;
+          inc(c);
+        until c = 0;
+        {$else}
         v := src[1];
         FillCharFast(dst^, v, src[2]);
-        inc(PByte(src), 3);
         inc(PByte(dst), v);
+        {$endif INLINEDFILL}
+        inc(PByte(src), 3);
         dec(size, 3);
         if PtrInt(size) <= 0 then
           break;
