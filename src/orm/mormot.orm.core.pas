@@ -3578,7 +3578,7 @@ type
     fTableName: RawUtf8;
     fRowIDFieldName: RawUtf8;
     fExtFieldNames: TRawUtf8DynArray;
-    fExtFieldNamesUnQuotedSQL: TRawUtf8DynArray;
+    fExtFieldNamesUnQuotedSql: TRawUtf8DynArray;
     fSql: TOrmModelPropertiesSql;
     fFieldNamesMatchInternal: TFieldBits;
     fOptions: TOrmPropertiesMappingOptions;
@@ -3727,8 +3727,8 @@ type
     /// the unquoted external field names, following fProps.Props.Field[] order
     // - excluding ID/RowID field, which is stored in RowIDFieldName
     // - in respect to ExtFieldNames[], this array will never quote the field name
-    property ExtFieldNamesUnQuotedSQL: TRawUtf8DynArray
-      read fExtFieldNamesUnQuotedSQL;
+    property ExtFieldNamesUnQuotedSql: TRawUtf8DynArray
+      read fExtFieldNamesUnQuotedSql;
     /// each bit set, following fProps.Props.Field[]+1 order (i.e. 0=ID,
     // 1=Field[0], ...), indicates that this external field name
     // has not been mapped
@@ -10308,7 +10308,7 @@ begin
   // setup default values
   fRowIDFieldName := ID_TXT;
   fProps.Fields.NamesToRawUtf8DynArray(fExtFieldNames);
-  fProps.Fields.NamesToRawUtf8DynArray(fExtFieldNamesUnQuotedSQL);
+  fProps.Fields.NamesToRawUtf8DynArray(fExtFieldNamesUnQuotedSql);
   FillcharFast(fFieldNamesMatchInternal, SizeOf(fFieldNamesMatchInternal), 255);
   fMappingVersion := 1;
   if fAutoComputeSql then
@@ -10341,7 +10341,7 @@ begin
     else
     begin
       fExtFieldNames[f] := InternalExternalPairs[i * 2 + 1];
-      fExtFieldNamesUnQuotedSQL[f] := UnQuotedSQLSymbolName(fExtFieldNames[f]);
+      fExtFieldNamesUnQuotedSql[f] := UnQuotedSQLSymbolName(fExtFieldNames[f]);
       if IdemPropNameU(fExtFieldNames[f], fProps.Fields.List[f].Name) then
         include(fFieldNamesMatchInternal, f + 1)
       else // [0]=ID  [1..n]=fields[i-1]
@@ -10506,8 +10506,8 @@ begin
   else
   begin
     // search for customized field mapping
-    for result := 0 to length(fExtFieldNamesUnQuotedSQL) - 1 do
-      if IdemPropNameU(ExtFieldName, fExtFieldNamesUnQuotedSQL[result]) then
+    for result := 0 to length(fExtFieldNamesUnQuotedSql) - 1 do
+      if IdemPropNameU(ExtFieldName, fExtFieldNamesUnQuotedSql[result]) then
         exit;
     result := -2; // indicates not found
   end;

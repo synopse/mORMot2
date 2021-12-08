@@ -193,7 +193,7 @@ function UnQuoteSqlString(const Value: RawUtf8): RawUtf8;
 
 /// unquote a SQL-compatible symbol name
 // - e.g. '[symbol]' -> 'symbol' or '"symbol"' -> 'symbol'
-function UnQuotedSQLSymbolName(const ExternalDBSymbol: RawUtf8): RawUtf8;
+function UnQuotedSqlSymbolName(const ExternalDBSymbol: RawUtf8): RawUtf8;
 
 
 /// get the next character after a quoted buffer
@@ -3255,7 +3255,7 @@ begin
   UnQuoteSqlStringVar(pointer(Value), result);
 end;
 
-function UnQuotedSQLSymbolName(const ExternalDBSymbol: RawUtf8): RawUtf8;
+function UnQuotedSqlSymbolName(const ExternalDBSymbol: RawUtf8): RawUtf8;
 begin
   if (ExternalDBSymbol <> '') and
      (ExternalDBSymbol[1] in ['[', '"', '''', '(']) then

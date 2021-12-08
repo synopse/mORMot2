@@ -686,7 +686,7 @@ begin
           if Fields.List[f].OrmFieldType in COPIABLE_FIELDS then // ignore oftMany
             /// real database columns exist for Simple + Blob fields (not Many)
             if FieldsExternalIndexOf(
-                fStoredClassMapping^.ExtFieldNamesUnQuotedSQL[f],
+                fStoredClassMapping^.ExtFieldNamesUnQuotedSql[f],
                 rpmMissingFieldNameCaseSensitive in options) < 0 then
             begin
               // add new missing Field
