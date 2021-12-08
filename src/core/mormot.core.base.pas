@@ -9173,7 +9173,7 @@ function RleEncode(dst: PByteArray; v, n: PtrUInt): PByteArray;
 begin
   if (n > 3) or
      (v = RLE_CW) then
-  begin
+  begin // encode as dst[0]=RLE_CW dst[1]=count dst[2]=value
     v := v shl 16;
     inc(v, RLE_CW);
     while n > 255 do
@@ -9187,7 +9187,7 @@ begin
   end
   else
   begin
-    inc(v, (v shl 8) + (v shl 16));
+    inc(v, (v shl 8) + (v shl 16)); // append the value n (=1,2,3) times
     result := @dst[n]; // seems faster with branchless move
   end;
   PCardinal(dst)^ := v;
@@ -9201,7 +9201,7 @@ begin
   dststart := PAnsiChar(dst);
   if srcsize <> 0 then
   begin
-    dstsize := PtrUInt(@dst[dstsize -3]);
+    dstsize := PtrUInt(@dst[dstsize - 3]); // pointer(dstsize) = dstmax
     b := src[0];
     n := 0;
     repeat
@@ -9211,10 +9211,11 @@ begin
       begin
         inc(n);
         dec(srcsize);
-        if srcsize = 0 then
+        if (srcsize = 0) or
+           (PtrUInt(dst) >= PtrUInt(dstsize)) then
           break;
       end
-      else
+      else // dedicated if n = 1 then .. branch was slower
       begin
         dst := RleEncode(dst, b, n);
         n := 1;
@@ -9235,6 +9236,11 @@ begin
   result := PAnsiChar(dst) - dststart;
 end;
 
+{$ifdef CPUINTEL}
+  {$ifndef HASNOSSE2}
+    {$define INLINEDSEARCH} // leverage ByteScanIndex() SSE2 asm
+  {$endif HASNOSSE2}
+{$endif CPUINTEL}
 {.$define INLINEDFILL} // actually slower
 
 function RleUnCompress(src, dst: PByteArray; size: PtrUInt): PtrUInt;
@@ -9248,6 +9254,20 @@ begin
   dststart := PAnsiChar(dst);
   if size > 0 then
     repeat
+      {$ifdef INLINEDSEARCH}
+      if src[0] <> RLE_CW then
+      begin
+        v := ByteScanIndex(src, size, RLE_CW);
+        if PtrInt(v) < 0 then
+          v := size;
+        MoveFast(src^, dst^, v);
+        inc(PByte(src), v);
+        inc(PByte(dst), v);
+        dec(size, v);
+        if size = 0 then
+          break;
+      end;
+      {$else}
       v := src[0];
       if v <> RLE_CW then
       begin
@@ -9259,7 +9279,8 @@ begin
           break;
       end
       else
-      begin
+      {$endif INLINEDSEARCH}
+      begin // here src[0]=RLE_CW src[1]=count src[2]=value
         {$ifdef INLINEDFILL}
         c := src[1];
         v := src[2];
