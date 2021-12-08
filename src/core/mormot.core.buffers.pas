@@ -5698,7 +5698,7 @@ begin
         end
         else
           // only SynLZ was used
-          result := SynLZDecompressPartial(src, dst, srcLen, dstLen);
+          result := SynLZDecompress1Partial(src, srcLen, dst, dstLen);
       end;
   else
     result := 0;
