@@ -234,7 +234,7 @@ type
     /// contains a genuine byte identifier for this algorithm
     // - 0 is reserved for stored, 1 for TAlgoSynLz, 2/3 for TAlgoDeflate/Fast
     // (in mormot.core.zip.pas), 4/5/6 for TAlgoLizard/Fast/Huffman
-    // (in mormot.lib.lizard.pas), 7 for TAlgoRleLZ
+    // (in mormot.lib.lizard.pas), 7/8 for TAlgoRleLZ/TAlgoRle
     property AlgoID: byte
       read fAlgoID;
   public
@@ -467,8 +467,8 @@ type
   end;
 
   /// implement our SynLZ compression with RLE preprocess as a TAlgoCompress class
-  // - SynLZ is not efficient when its input has a lot of identical characters
-  // (e.g. a database content, or a raw binary buffer)
+  // - SynLZ is very good with JSON or text, but not so efficient when its input
+  // has a lot of padding (e.g. a database file, or unoptimized raw binary)
   // - this class would make a first pass with RleCompress() before SynLZ
   // - if RLE has no effect during compression, will fallback to plain SynLZ
   // with no RLE pass during decompression
@@ -478,6 +478,19 @@ type
       process: TAlgoCompressWithNoDestLenProcess): integer; override;
   public
     /// set AlgoID = 7 as genuine byte identifier for RLE + SynLZ
+    constructor Create; override;
+    /// get maximum possible (worse) compressed size for the supplied length
+    function AlgoCompressDestLen(PlainLen: integer): integer; override;
+  end;
+
+  /// implement RLE compression as a TAlgoCompress class
+  // - if RLE has no effect during compression, will fallback to plain store
+  TAlgoRle = class(TAlgoCompressWithNoDestLen)
+  protected
+    function RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
+      process: TAlgoCompressWithNoDestLenProcess): integer; override;
+  public
+    /// set AlgoID = 8 as genuine byte identifier for RLE
     constructor Create; override;
     /// get maximum possible (worse) compressed size for the supplied length
     function AlgoCompressDestLen(PlainLen: integer): integer; override;
@@ -494,6 +507,11 @@ var
   // (e.g. a database content, or a raw binary buffer) - try with this class
   // which is slower than AlgoSynLZ but may have better ratio on such content
   AlgoRleLZ: TAlgoCompress;
+
+  /// Run-Length-Encoding (RLE) compression as a TAlgoCompress class
+  // - if RLE has no effect during compression, will fallback to plain store
+  AlgoRle: TAlgoCompress;
+
 
 const
   /// CompressionSizeTrigger parameter SYNLZTRIG[true] will disable then
@@ -4899,7 +4917,7 @@ begin
     inc(R, BufferOffset);
     PCardinal(R)^ := crc;
     len := AlgoCompress(Plain, PlainLen, R + 9);
-    if len + 64 >= PlainLen then
+    if len >= PlainLen then
     begin
       // store if compression was not worth it
       R[4] := COMPRESS_STORED;
@@ -5623,8 +5641,8 @@ end;
 
 { TAlgoRleLZ }
 
-function TAlgoRleLZ.RawProcess(src, dst: pointer; srcLen, dstLen,
-  dstMax: integer; process: TAlgoCompressWithNoDestLenProcess): integer;
+function TAlgoRleLZ.RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
+  process: TAlgoCompressWithNoDestLenProcess): integer;
 var
   tmp: TSynTempBuffer;
   rle: integer;
@@ -5632,7 +5650,7 @@ begin
   case process of
     doCompress:
       begin
-        tmp.Init(srcLen - srcLen shr 3); // RLE should reduce at least 1/8 ratio
+        tmp.Init(srcLen - srcLen shr 3); // RLE should reduce at least by 1/8
         rle := RleCompress(src, tmp.buf, srcLen, tmp.Len);
         if rle < 0 then
           // RLE was not worth it -> apply only SynLZ
@@ -5682,6 +5700,42 @@ end;
 function TAlgoRleLZ.AlgoCompressDestLen(PlainLen: integer): integer;
 begin
   result := SynLZcompressdestlen(PlainLen);
+end;
+
+
+{ TAlgoRle }
+
+function TAlgoRle.RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
+  process: TAlgoCompressWithNoDestLenProcess): integer;
+begin
+  case process of
+    doCompress:
+      begin
+        // RLE should reduce at least by 1/8
+        result := RleCompress(src, dst, srcLen, srcLen - srcLen shr 3);
+        if result < 0 then
+          // RLE was not worth it -> caller would fallback to plain store
+          result := dstLen; // to indicate no compression
+      end;
+    doUnCompress:
+      result := RleUnCompress(src, dst, srcLen);
+    doUncompressPartial:
+      raise EAlgoCompress.CreateUtf8(
+        'doUncompressPartial is unsupported for %', [self]);
+  else
+    result := 0;
+  end;
+end;
+
+constructor TAlgoRle.Create;
+begin
+  fAlgoID := 8;
+  inherited Create;
+end;
+
+function TAlgoRle.AlgoCompressDestLen(PlainLen: integer): integer;
+begin
+  result := PlainLen + 16;
 end;
 
 
@@ -10517,6 +10571,7 @@ begin
   // setup internal lists and function wrappers
   AlgoSynLZ := TAlgoSynLZ.Create;
   AlgoRleLZ := TAlgoRleLZ.Create;
+  AlgoRle := TAlgoRle.Create;
 end;
 
 
