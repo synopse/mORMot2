@@ -9925,9 +9925,9 @@ begin
   case ElemSize of
     // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
     1:
-      result := ByteScanIndex(P, Count, PByte(Elem)^);
+      result := ByteScanIndex(P, Count, PByte(Elem)^); // SSE2 asm on Intel/AMD
     2:
-      result := WordScanIndex(P, Count, PWord(Elem)^);
+      result := WordScanIndex(P, Count, PWord(Elem)^); // SSE2 asm on Intel/AMD
     4:
       result := IntegerScanIndex(P, Count, PInteger(Elem)^);
     8:
