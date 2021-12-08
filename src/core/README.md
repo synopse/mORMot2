@@ -134,12 +134,15 @@ JSON functions shared by all framework units
 ### mormot.core.collections
 
  Generics Collections as used by all framework units
- - JSON-aware IList<> List Storage
- - JSON-aware IKeyValue<> Dictionary Storage
- - TGenerics Factory for IList<> and IKeyValue<> Instances
+ - JSON-aware `IList<>` List Storage
+ - JSON-aware `IKeyValue<>` Dictionary Storage
+ - Collections Factory for `IList<>` and `IKeyValue<>` Instances
 
-In respect to generics.collections, this unit uses interfaces as variable holders, and leverage them to reduce the generated code as much as possible, as the Spring4D 2.0 framework does, but for both Delphi and FPC.
-It also publishes TDynArray and TSynDictionary high-level features like JSON/binary serialization or thread safety with Generics strong typing.
+In respect to `generics.collections` from the Delphi or FPC RTL, this unit uses `interface` as variable holders, and leverage them to reduce the generated code as much as possible, as the *Spring4D 2.0 framework* does, but for both Delphi and FPC. As a result, compiled units (`.dcu`/`.ppu`) and executable are much smaller, and faster to compile.
+
+It publishes `TDynArray` and `TSynDictionary` high-level features like indexing, sorting, JSON/binary serialization or thread safety as Generics strong typing.
+
+Use `Collections.NewList<T>` and `Collections.NewKeyValue<TKey, TValue>` factories as main entry points of these efficient data structures.
    
 ### mormot.core.variants
 

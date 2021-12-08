@@ -11,11 +11,13 @@ unit mormot.core.collections;
    - JSON-aware IKeyValue<> Dictionary Storage
    - Collections Factory for IList<> and IKeyValue<> Instances
 
-    In respect to generics.collections, this unit uses interfaces as variable
-   holders, and leverage them to reduce the generated code as much as possible,
-   as the Spring4D 2.0 framework does, but for both Delphi and FPC.
-    It also publishes TDynArray and TSynDictionary high-level features like
-   JSON/binary serialization or thread safety with Generics strong typing.
+   In respect to generics.collections, this unit uses interfaces as variable
+  holders, and leverage them to reduce the generated code as much as possible,
+  as the Spring4D 2.0 framework does, but for both Delphi and FPC.
+   It publishes TDynArray and TSynDictionary high-level features like indexing,
+  sorting, JSON/binary serialization or thread safety as Generics strong typing.
+
+  Use Collections.NewList<T> and Collections.NewKeyValue<TKey, TValue> factories
 
   *****************************************************************************
 }
