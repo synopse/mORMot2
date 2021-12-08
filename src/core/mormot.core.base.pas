@@ -1334,17 +1334,17 @@ function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boo
 
 /// fast search of an unsigned byte value position in a byte array
 // - Count is the number of byte entries in P^
-// - return index of P^[index]=Value
-// - return -1 if Value was not found
+// - return index of P^[index]=Value, -1 if Value was not found
+// - is implement with SSE2 asm on i386 and x86_64
 function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifndef CPUINTEL} inline; {$endif}
 
 /// fast search of an unsigned Word value position in a Word array
 // - Count is the number of Word entries in P^
-// - return index of P^[index]=Value
-// - return -1 if Value was not found
+// - return index of P^[index]=Value, -1 if Value was not found
+// - is implement with SSE2 asm on i386 and x86_64
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifndef CPUINTEL} inline; {$endif}
 
 /// sort an integer array, low values first
 procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt); overload;
@@ -2534,7 +2534,7 @@ function PosExString(const SubStr, S: string; Offset: PtrUInt = 1): PtrInt;
 
 /// optimized version of PosEx() with search text as one AnsiChar
 function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
-  {$ifdef FPC}inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast retrieve the position of a given character in a #0 ended buffer
 // - will use fast SSE2 asm on x86_64
@@ -5483,17 +5483,7 @@ begin
   high := len - 1;
 end;
 
-function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
-begin
-  result := IndexByte(P^, Count, Value); // will use fast FPC SSE version
-end;
-
-function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
-begin
-  result := IndexWord(P^, Count, Value); // will use fast FPC SSE version
-end;
-
-procedure Div100(Y: cardinal; var res: TDiv100Rec); // asm on Delphi
+procedure Div100(Y: cardinal; var res: TDiv100Rec); // Delphi=asm, FPC=inlinedS
 var
   Y100: cardinal;
 begin
@@ -5502,38 +5492,7 @@ begin
   res.M := Y {%H-}- Y100 * 100; // avoid div twice
 end;
 
-{$else not FPC}
-
-function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
-begin
-  result := 0;
-  if P <> nil then
-    repeat
-      if result >= Count then
-        break;
-      if P^[result] = Value then
-        exit;
-      inc(result);
-    until false;
-  result := -1;
-end;
-
-function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
-begin
-  result := 0;
-  if P <> nil then
-    repeat
-      if result >= Count then
-        break;
-      if P^[result] = Value then
-        exit;
-      inc(result);
-    until false;
-  result := -1;
-end;
-
 {$endif FPC}
-
 
 function AddInteger(var Values: TIntegerDynArray; Value: integer; NoDuplicates: boolean): boolean;
 var
@@ -7484,16 +7443,9 @@ end;
 function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
 begin
   if Str <> '' then
-  {$ifdef FPC} // will use fast FPC SSE version
-    result := IndexByte(
-      pointer(Str)^, PStrLen(PtrUInt(Str) - _STRLEN)^, byte(Chr)) + 1
+    result := ByteScanIndex(pointer(Str), PStrLen(PtrUInt(Str) - _STRLEN)^, byte(Chr)) + 1
   else
-  {$else} // Delphi "for" loop is faster when not inlined
-    for result := 1 to PInteger(PtrInt(Str) - SizeOf(integer))^ do
-      if Str[result] = Chr then
-        exit;
-  {$endif FPC}
-  result := 0;
+    result := 0;
 end;
 
 {$ifdef UNICODE}
@@ -8653,6 +8605,16 @@ end;
 function bswap64(const a: QWord): QWord;
 begin
   result := SwapEndian(a); // use fast platform-specific function
+end;
+
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
+begin
+  result := IndexByte(P^, Count, Value); // use FPC RTL
+end;
+
+function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
+begin
+  result := IndexWord(P^, Count, Value); // use FPC RTL
 end;
 
 {$endif CPUINTEL}

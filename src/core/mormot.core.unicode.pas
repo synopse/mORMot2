@@ -2591,11 +2591,7 @@ var
   i: PtrInt;
 begin
   SynAnsiConvertListLock.ReadOnlyLock; // concurrent read lock
-  {$ifdef FPC}
-  i := IndexWord(pointer(SynAnsiConvertListCodePage)^,
-  {$else}
   i := WordScanIndex(pointer(SynAnsiConvertListCodePage),
-  {$endif FPC}
     SynAnsiConvertListCount, aCodePage);
   if i >= 0 then
     result := SynAnsiConvertList[i]

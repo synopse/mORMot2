@@ -1052,6 +1052,146 @@ asm
         and     eax, $3f
 end;
 
+{$ifdef HASNOSSE2} // fallback to simple pascal code if no SSE2 available
+
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
+begin
+  result := 0;
+  if P <> nil then
+    repeat
+      if result >= Count then
+        break;
+      if P^[result] = Value then
+        exit;
+      inc(result);
+    until false;
+  result := -1;
+end;
+
+function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
+begin
+  result := 0;
+  if P <> nil then
+    repeat
+      if result >= Count then
+        break;
+      if P^[result] = Value then
+        exit;
+      inc(result);
+    until false;
+  result := -1;
+end;
+
+{$else}
+
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        // eax=P, edx=Count, cl=Value
+        push    ebx
+        mov     ebx, eax
+        movzx   eax, cl
+        mov     ecx, ebx
+        test    edx, edx
+        jbe     @no
+        // eax=Value, ecx=P edx=Count
+        imul    eax, $01010101
+        and     ecx, -16
+        movd    xmm1, eax
+        movaps  xmm0, [ecx]
+        add     ecx, 16
+        pshufd  xmm1, xmm1, 0
+        sub     ecx, ebx
+        pcmpeqb xmm0, xmm1
+        pmovmskb eax, xmm0
+        shl     eax, cl
+        and     eax, $FFFF0000
+        shr     eax, cl
+        jnz     @fnd
+        cmp     edx, ecx
+        jbe     @no
+{$ifdef FPC} align 16 {$endif}
+@by16:  movaps  xmm0, [ebx + ecx]
+        add     ecx, 16
+        pcmpeqb xmm0, xmm1
+        pmovmskb eax, xmm0
+        test    eax, eax
+        jnz     @fnd
+        cmp     edx, ecx
+        ja      @by16
+@no:    mov     eax, -1
+        pop     ebx
+        ret
+@fnd:   bsf     eax, eax
+        lea     eax, dword ptr [ecx + eax - 16]
+        cmp     edx, eax
+        jbe     @no
+        pop     ebx
+end;
+
+function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        // eax=P, edx=Count, cx=Value
+        push    ebx
+        mov     ebx, eax
+        movzx   eax, cx
+        mov     ecx, ebx
+        test    edx, edx
+        jbe     @no
+        test    cl, 1
+        jnz     @unal
+        // eax=Value, ecx=P edx=Count
+        movd    xmm1, eax
+        and     ecx, -16
+        punpcklwd xmm1, xmm1
+        movaps  xmm0, [ecx]
+        add     ecx, 16
+        pshufd  xmm1, xmm1, 0
+        sub     ecx, ebx
+        pcmpeqw xmm0, xmm1
+        pmovmskb eax, xmm0
+        shl     eax, cl
+        and     eax, $FFFF0000
+        shr     eax, cl
+        shr     ecx, 1
+        test    eax, eax
+        jz      @nxt
+@fnd:   bsf     eax, eax
+        shr     eax, 1
+        lea     eax, qword ptr [ecx + eax - 8]
+        cmp     edx, eax
+        jbe     @no
+        pop     ebx
+        ret
+        nop // manual loop alignment
+@by16:  movaps  xmm0, [ebx + ecx * 2]
+        add     ecx, 8
+        pcmpeqw xmm0, xmm1
+        pmovmskb eax, xmm0
+        test    eax, eax
+        jnz     @fnd
+@nxt:   cmp     edx, ecx
+        ja      @by16
+@no:    mov     eax, -1
+        pop     ebx
+        ret
+        // word-unaligned loop (seldom called)
+@unal:  lea     ecx, [ecx + edx * 2]
+        neg     edx
+@unals: cmp     word ptr [ecx + edx * 2], ax
+        jz      @unale
+        add     edx, 1
+        jnz     @unals
+        jmp     @no
+@unale: lea     eax, [ecx + edx * 2]
+        sub     eax, ebx
+        shr     eax, 1
+        pop     ebx
+end;
+
+{$endif HASNOSSE2}
+
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 {$ifdef FPC}nostackframe; assembler; {$endif}
 asm

@@ -2903,12 +2903,10 @@ begin
     result := S
   else
   begin
-    {$ifdef FPC} // will use fast FPC SSE version
     if length(OldPattern) = 1 then
-      found := IndexByte(pointer(S)^, PStrLen(PtrUInt(S) - _STRLEN)^,
+      found := ByteScanIndex(pointer(S), PStrLen(PtrUInt(S) - _STRLEN)^,
         byte(OldPattern[1])) + 1
     else
-    {$endif FPC}
       found := PosEx(OldPattern, S, 1); // our PosEx() is faster than RTL Pos()
     if found = 0 then
       result := S
@@ -2939,15 +2937,15 @@ begin
      (Source <> '') then
   begin
     n := length(Source);
-    for i := 0 to n - 1 do
-      if PAnsiChar(pointer(Source))[i] = OldChar then
-      begin
-        FastSetString(result, PAnsiChar(pointer(Source)), n);
-        for j := i to n - 1 do
-          if PAnsiChar(pointer(result))[j] = OldChar then
-            PAnsiChar(pointer(result))[j] := NewChar;
-        exit;
-      end;
+    i := ByteScanIndex(pointer(Source), n, ord(OldChar));
+    if i >= 0 then
+    begin
+      FastSetString(result, PAnsiChar(pointer(Source)), n);
+      for j := i to n - 1 do
+        if PAnsiChar(pointer(result))[j] = OldChar then
+          PAnsiChar(pointer(result))[j] := NewChar;
+      exit;
+    end;
   end;
   result := Source;
 end;
@@ -3042,22 +3040,11 @@ var
   c: AnsiChar;
 begin
   nquote := 0;
-  {$ifdef FPC}
-  quote1 := IndexByte(P^, PLen, byte(Quote)); // to use fast FPC RTL SSE2 asm
+  quote1 := ByteScanIndex(pointer(P), PLen, byte(Quote)); // asm if available
   if quote1 >= 0 then
     for i := quote1 to PLen - 1 do
       if P[i] = Quote then
         inc(nquote);
-  {$else}
-  quote1 := 0;
-  for i := 0 to PLen - 1 do
-    if P[i] = Quote then
-    begin
-      if nquote = 0 then
-        quote1 := i;
-      inc(nquote);
-    end;
-  {$endif FPC}
   FastSetString(result, nil, PLen + nquote + 2);
   R := pointer(result);
   R^ := Quote;

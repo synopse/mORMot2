@@ -1516,6 +1516,119 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
         {$endif WIN64ABI}
 end;
 
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
+{$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        movzx   eax, r8b
+        mov     r8, rcx
+        test    rdx, rdx
+        {$else}
+        movzx   eax, dl
+        mov     rcx, rdi
+        mov     r8, rdi
+        mov     rdx, rsi
+        test    rsi, rsi
+        {$endif WIN64ABI}
+        jbe     @no
+        // eax=Value, rcx=P rdx=Count
+        imul    eax, $01010101
+        and     rcx, -16
+        movd    xmm1, eax
+        movaps  xmm0, [rcx]
+        add     rcx, 16
+        pshufd  xmm1, xmm1, 0
+        sub     rcx, r8
+        pcmpeqb xmm0, xmm1
+        pmovmskb eax, xmm0
+        shl     eax, cl
+        and     eax, $FFFF0000
+        shr     eax, cl
+        jnz     @fnd
+        cmp     rdx, rcx
+        jbe     @no
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@by16:  movaps  xmm0, [r8 + rcx]
+        add     rcx, 16
+        pcmpeqb xmm0, xmm1
+        pmovmskb eax, xmm0
+        test    eax, eax
+        jnz     @fnd
+        cmp     rdx, rcx
+        ja      @by16
+@no:    mov     rax, -1
+        ret
+@fnd:   bsf     eax, eax
+        lea     rax, qword ptr [rcx + rax - 16]
+        cmp     rdx, rax
+        jbe     @no
+end;
+
+function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
+{$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        movzx   eax, r8w
+        mov     r8, rcx
+        test    rdx, rdx
+        {$else}
+        movzx   eax, dx
+        mov     rcx, rdi
+        mov     r8, rdi
+        mov     rdx, rsi
+        test    rsi, rsi
+        {$endif WIN64ABI}
+        jbe     @no
+        test    rcx, 1
+        jnz     @unal
+        // eax=Value, rcx=P rdx=Count
+        movd    xmm1, eax
+        and     rcx, -16
+        punpcklwd xmm1, xmm1
+        movaps  xmm0, [rcx]
+        add     rcx, 16
+        pshufd  xmm1, xmm1, 0
+        sub     rcx, r8
+        pcmpeqw xmm0, xmm1
+        pmovmskb eax, xmm0
+        shl     eax, cl
+        and     eax, $FFFF0000
+        shr     eax, cl
+        shr     ecx, 1
+        test    eax, eax
+        jnz     @fnd
+        cmp     rdx, rcx
+        jbe     @no
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@by16:  movaps  xmm0, [r8 + rcx * 2]
+        add     rcx, 8
+        pcmpeqw xmm0, xmm1
+        pmovmskb eax, xmm0
+        test    eax, eax
+        jnz     @fnd
+        cmp     rdx, rcx
+        ja      @by16
+@no:    mov     rax, -1
+        ret
+@fnd:   bsf     eax, eax
+        shr     eax, 1
+        lea     rax, qword ptr [rcx + rax - 8]
+        cmp     rdx, rax
+        jbe     @no
+        ret
+        // word-unaligned loop (seldom called)
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@unal:  lea     rcx, [rcx + rdx * 2]
+        neg     rdx
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@unals: cmp     word ptr [rcx + rdx * 2], ax
+        jz      @unale
+        add     rdx, 1
+        jnz     @unals
+        jmp     @no
+@unale: lea     rax, [rcx + rdx * 2]
+        sub     rax, r8
+        shr     rax, 1
+end;
+
 function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
 // from GPL memcmp64.asm by Agner Fog - www.agner.org/optimize

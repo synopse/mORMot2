@@ -3371,12 +3371,33 @@ procedure TTestCoreBase.Integers;
   end;
 
 var
+  i8: TByteDynArray;
+  i16: TWordDynArray;
   i32: TIntegerDynArray;
   i64: TInt64DynArray;
-  i, n: integer;
+  i, n: PtrInt;
   timer: TPrecisionTimer;
 begin
-  check({%H-}i32 = nil);
+  n := 512;
+  SetLength(i8, n);
+  for i := 0 to n - 1 do
+    i8[i] := i;
+  CheckEqual(ByteScanIndex(pointer(i8), 100, 101), -1);
+  for i := 0 to n - 1 do
+    Check(ByteScanIndex(pointer(i8), n, i) = i and 255);
+  SetLength(i16, n);
+  for i := 0 to n - 1 do
+    i16[i] := i;
+  CheckEqual(WordScanIndex(pointer(i16), 100, 101), -1);
+  for i := 0 to n - 1 do
+    Check(WordScanIndex(pointer(i16), n, i) = i);
+  SetLength(i32, n);
+  for i := 0 to n - 1 do
+    i32[i] := i;
+  CheckEqual(IntegerScanIndex(pointer(i32), 100, 101), -1);
+  for i := 0 to n - 1 do
+    Check(IntegerScanIndex(pointer(i32), n, i) = i);
+  i32 := nil;
   DeduplicateInteger(i32);
   check(i32 = nil);
   SetLength(i32, 2);

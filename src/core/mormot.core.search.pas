@@ -2607,7 +2607,7 @@ begin
   else if aCaseInsensitive then
     Search := SearchContainsU
   else
-    Search := SearchContains1; // todo: use IndexByte() on FPC?
+    Search := SearchContains1; // todo: use ByteScanIndex() asm?
   Pattern := pointer(aPattern);
 end;
 
