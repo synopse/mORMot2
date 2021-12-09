@@ -262,10 +262,11 @@ type
     /// this method is triggered internally - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string);
     /// will add to the console a message with a speed estimation
-    // - speed is computed from the method start
+    // - speed is computed from the method start or supplied local Timer
     // - returns the number of microsec of the (may be specified) timer
-    // - OnlyLog will compute and append the info to the log, but not on the console
-    // - warning: this method is not thread-safe if a local Timer is not specified
+    // - any ItemCount<0 would hide the trailing count and use abs(ItemCount)
+    // - OnlyLog will compute and append the info to the log, but not on console
+    // - warning: this method is thread-safe only if a local Timer is specified
     function NotifyTestSpeed(const ItemName: string; ItemCount: integer;
       SizeInBytes: cardinal = 0; Timer: PPrecisionTimer = nil;
       OnlyLog: boolean = false): TSynMonitorOneMicroSec; overload;
@@ -978,11 +979,18 @@ begin
     Temp := Owner.TestTimer
   else
     Temp := Timer^;
-  if ItemCount <= 1 then
+  if ItemCount <= -1 then // -ItemCount to hide the trailing count
+  begin
+    ItemCount := -ItemCount;
+    FormatString('% in % i.e. %/s',
+      [ItemName, Temp.Stop, K(Temp.PerSec(ItemCount))], msg);
+  end
+  else if ItemCount <= 1 then
     FormatString('% in %', [ItemName, Temp.Stop], msg)
   else
-    FormatString('% % in % i.e. %/s, aver. %', [ItemCount, ItemName, Temp.Stop,
-      K(Temp.PerSec(ItemCount)), Temp.ByCount(ItemCount)], msg);
+    FormatString('% % in % i.e. %/s, aver. %',
+      [ItemCount, ItemName, Temp.Stop, K(Temp.PerSec(ItemCount)),
+       Temp.ByCount(ItemCount)], msg);
   if SizeInBytes > 0 then
     msg := FormatString('%, %/s', [msg, KB(Temp.PerSec(SizeInBytes))]);
   AddConsole(msg, OnlyLog);
