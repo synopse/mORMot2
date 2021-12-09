@@ -3163,16 +3163,45 @@ begin
 end;
 
 function GotoEndJsonItemString(P: PUtf8Char): PUtf8Char;
+var
+  tab: PJsonCharSet;
 begin
+  // see TOrmTableJson.ParseAndConvert and TDocVariantData.InitArrayFromResults
+  if P <> nil then
+    repeat
+      if P^ = '"' then
+      begin
+        inc(P);
+        tab := @JSON_CHARS;
+        repeat // inlined GotoEndOfJsonString2()
+          if not (jcJsonStringMarker in tab[P^]) then
+          begin
+            inc(P);   // not [#0, '"', '\']
+            continue; // very fast parsing of most UTF-8 chars
+          end;
+          if P^ = '"' then
+          begin
+            repeat
+              inc(P);
+            until not (P^ in [#1..' ']);
+            result := P;
+            exit;
+          end
+          else if (P^ = #0) or
+                  (P[1] = #0) then
+            // end of string/buffer, or buffer overflow detected as \#0
+            break;
+          inc(P, 2); // P^ was '\' -> ignore \# ou \u0123
+        until false;
+        break;
+      end
+      else if P^ = #0 then
+        break
+      else if P^ <= ' ' then
+        continue;
+      break;
+    until false;
   result := nil;
-  if P = nil then
-    exit;
-  P := GotoNextNotSpace(P);
-  if P^ <> '"' then
-    exit;
-  P := GotoEndOfJsonString2(P + 1, @JSON_CHARS);
-  if P^ = '"' then
-    result := GotoNextNotSpace(P + 1);
 end;
 
 function TryGotoEndOfComment(P: PUtf8Char): PUtf8Char;
