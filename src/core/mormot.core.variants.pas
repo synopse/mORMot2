@@ -1023,6 +1023,7 @@ type
     // - this method is called e.g. by _JsonFmt() _JsonFastFmt() global functions
     // with a temporary JSON buffer content created from a set of parameters
     // - if you call Init*() methods in a row, ensure you call Clear in-between
+    // - consider the faster DocVariantFromResults() from ORM/SQL JSON results
     function InitJsonInPlace(Json: PUtf8Char;
       aOptions: TDocVariantOptions = [];
       aEndOfObject: PUtf8Char = nil): PUtf8Char;
@@ -1034,6 +1035,7 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - handle only currency for floating point values: set JSON_FAST_FLOAT
     // or dvoAllowDoubleValue option to support double, with potential precision loss
+    // - consider the faster DocVariantFromResults() from ORM/SQL JSON results
     function InitJson(const Json: RawUtf8;
       aOptions: TDocVariantOptions = []): boolean; overload;
     /// initialize a variant instance to store some document-based object content
@@ -1042,6 +1044,7 @@ type
     // - a private copy of the incoming JSON buffer will be made
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - handle only currency for floating point values unless you set mFastFloat
+    // - consider the faster DocVariantFromResults() from ORM/SQL JSON results
     function InitJson(const Json: RawUtf8; aModel: TDocVariantModel): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a variant instance to store some document-based object content
@@ -8029,7 +8032,8 @@ var
 label
   parse, parsed, astext, endobj;
 begin
-  VarClearProc(V);
+  if PInteger(@V)^ <> 0 then
+    VarClearProc(V);
   if Json = nil then
     exit;
   if EndOfObject <> nil then

@@ -5810,24 +5810,6 @@ begin
   FastSetString(fPrivateCopy, pointer(aJson), aLen);
 end;
 
-function GetFieldCountExpanded(P: PUtf8Char): integer;
-var
-  EndOfObject: AnsiChar;
-begin
-  result := 0;
-  repeat
-    P := GotoNextJsonItem(P, 2, @EndOfObject); // ignore Name+Value items
-    if P = nil then
-    begin // unexpected end
-      result := 0;
-      exit;
-    end;
-    inc(result);
-    if EndOfObject = '}' then
-      break; // end of object
-  until false;
-end;
-
 function TOrmTableJson.ParseAndConvert(Buffer: PUtf8Char; BufferLen: integer): boolean;
 var
   i, max, resmax, f: PtrInt;
@@ -5849,13 +5831,11 @@ begin
   if IsNotExpandedBuffer(P, Buffer + BufferLen, fFieldCount, fRowCount) then
   begin
     // A. Not Expanded (more optimized) format as array of values
-(* {"fieldCount":9,"values":["ID","Int","Test","Unicode","Ansi","ValFloat","ValWord",
-    "ValDate","Next",0,0,"abcde+?ef+?+?","abcde+?ef+?+?","abcde+?ef+?+?",
-    3.14159265300000E+0000,1203,"2009-03-10T21:19:36",0,..],"rowCount":20} *)
+    // {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
     // 1. check RowCount and DataLen
     if fRowCount < 0 then
     begin
-      // IsNotExpanded() detected invalid input
+      // IsNotExpandedBuffer() detected invalid input
       fRowCount := 0;
       exit;
     end;
@@ -5899,27 +5879,18 @@ begin
   else
   begin
     // B. Expanded format as array of objects (each with field names)
-(* [{"ID":0,"Int":0,"Test":"abcde+?ef+?+?","Unicode":"abcde+?ef+?+?","Ansi":
-    "abcde+?ef+?+?","ValFloat": 3.14159265300000E+0000,"ValWord":1203,
-    "ValDate":"2009-03-10T21:19:36","Next":0},{..}] *)
+    // [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...]
     // 1. get fields count from first row
-    while P^ <> '[' do
-      if P^ = #0 then
-        exit
-      else
-        inc(P); // need an array of objects
-    repeat
-      inc(P);
-      if P^ = #0 then
-        exit;
-    until P^ in ['{', ']']; // go to object beginning
+    P := GotoFieldCountExpanded(P);
+    if P = nil then
+      exit;
     if P^ = ']' then
     begin
       // [] -> valid, but void data
       result := true;
       exit;
     end;
-    inc(P);
+    inc(P); // jmp initial '{'
     fFieldCount := GetFieldCountExpanded(P);
     if fFieldCount = 0 then
       // invalid data for first row
@@ -5992,15 +5963,14 @@ begin
         break;
       inc(fRowCount);
       while (P^ <> '{') and
-            (P^ <> ']') do
-        // go to next object beginning
+            (P^ <> ']') do // go to next object beginning
         if P^ = #0 then
           exit
         else
           inc(P);
       if P^ = ']' then
         break;
-      inc(P); // jmp ']'
+      inc(P); // jmp '}'
     until false;
     if max <> (fRowCount + 1) * fFieldCount then
     begin

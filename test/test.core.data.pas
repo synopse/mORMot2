@@ -3003,8 +3003,9 @@ const
 var
   people, sample, notexpanded, j0, j1, j2, j3: RawUtf8;
   peoples: string;
+  peoplehash: cardinal;
   P: PUtf8Char;
-  count, len, lennexp, i, interned: integer;
+  count, len, lennexp, i, c, interned: integer;
   dv: TDocVariantData;
   table: TOrmTableJson;
   timer: TPrecisionTimer;
@@ -3069,17 +3070,18 @@ begin
   P := @people[2]; // point just after initial '[' for JsonArrayCount
   count := JsonArrayCount(P);
   check(count > 8200); // = 8227 in current People.json ORM tests file
+  c := -(count * ITER); // -c to hide the trailing count number
   i := JsonArrayCount(P, P + 10000);
   check(i < 0);
   check(abs(i) < count);
   timer.Start;
   for i := 1 to ITER do
     Check(JsonArrayCount(P) = count);
-  NotifyTestSpeed('JsonArrayCount(P)', 0, len, @timer, ONLYLOG);
+  NotifyTestSpeed('JsonArrayCount(P)', c, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
     Check(JsonArrayCount(P, P + length(people)) = count);
-  NotifyTestSpeed('JsonArrayCount(P,PMax)', 0, len, @timer, ONLYLOG);
+  NotifyTestSpeed('JsonArrayCount(P,PMax)', c, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER * 5000 do
     Check(JsonObjectPropCount(P + 3) = 6, 'first TOrmPeople object');
@@ -3093,6 +3095,9 @@ begin
   for i := 1 to ITER do
     j0 := JsonReformat(people, jsonHumanReadable);
   NotifyTestSpeed('jsonHumanReadable', 0, length(j0) * ITER, @timer, ONLYLOG);
+  dv.InitJson(people);
+  peoplehash := Hash32(dv.ToJson);
+  dv.Clear; // to reuse dv
   interned := DocVariantType.InternNames.Count;
   timer.Start;
   for i := 1 to ITER do
@@ -3101,7 +3106,7 @@ begin
     Check(dv.count = count);
     dv.Clear; // to reuse dv
   end;
-  NotifyTestSpeed('TDocVariant', 0, len, @timer, ONLYLOG);
+  NotifyTestSpeed('TDocVariant', c, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3109,7 +3114,7 @@ begin
     Check(dv.count = count);
     dv.Clear; // to reuse dv
   end;
-  NotifyTestSpeed('TDocVariant no guess', 0, len, @timer, ONLYLOG);
+  NotifyTestSpeed('TDocVariant no guess', c, len, @timer, ONLYLOG);
   Check(DocVariantType.InternNames.Count = interned, 'no intern');
   DocVariantType.InternNames.Clean;
   timer.Start;
@@ -3119,7 +3124,7 @@ begin
     Check(dv.count = count);
     dv.Clear; // to reuse dv
   end;
-  NotifyTestSpeed('TDocVariant dvoInternNames', 0, len, @timer, ONLYLOG);
+  NotifyTestSpeed('TDocVariant dvoIntern', c, len, @timer, ONLYLOG);
   Check(DocVariantType.InternNames.Count - interned = 6, 'intern');
   Check(DocVariantType.InternNames.Clean = 6, 'clean');
   Check(DocVariantType.InternNames.Count = interned, 'cleaned');
@@ -3133,7 +3138,7 @@ begin
       lennexp := length(notexpanded);
       Check(lennexp < length(people), 'notexpanded');
     end;
-    NotifyTestSpeed('TOrmTableJson GetJsonValues', 0, lennexp * ITER, @timer, ONLYLOG);
+    NotifyTestSpeed('TOrmTableJson save', c, lennexp * ITER, @timer, ONLYLOG);
   finally
     table.Free;
   end;
@@ -3147,7 +3152,7 @@ begin
       table.Free;
     end;
   end;
-  NotifyTestSpeed('TOrmTableJson expanded', 0, len, @timer, ONLYLOG);
+  NotifyTestSpeed('TOrmTableJson exp', c, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3158,7 +3163,29 @@ begin
       table.Free;
     end;
   end;
-  NotifyTestSpeed('TOrmTableJson not expanded', 0, lennexp * ITER, @timer, ONLYLOG);
+  NotifyTestSpeed('TOrmTableJson not exp', c, lennexp * ITER, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    Check(DocVariantFromResults(dv, people));
+    Check(dv.count = count);
+    dv.Clear; // to reuse dv
+  end;
+  NotifyTestSpeed('DocVariantFromResults exp', c, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    Check(DocVariantFromResults(dv, notexpanded));
+    Check(dv.count = count);
+    dv.Clear; // to reuse dv
+  end;
+  NotifyTestSpeed('DocVariantFromResults not exp', c, lennexp * ITER, @timer, ONLYLOG);
+  Check(DocVariantFromResults(dv, people));
+  CheckEqual(peoplehash, Hash32(dv.ToJson));
+  dv.Clear; // to reuse dv
+  Check(DocVariantFromResults(dv, notexpanded));
+  CheckEqual(peoplehash, Hash32(dv.ToJson));
+  dv.Clear; // to reuse dv
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3166,7 +3193,7 @@ begin
     Check(DynArrayLoadJson(rec, people, TypeInfo(TRecordPeopleDynArray)));
     Check(length(rec) = count);
   end;
-  NotifyTestSpeed('DynArrayLoadJson', 0, len, @timer, ONLYLOG);
+  NotifyTestSpeed('DynArrayLoadJson', c, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3175,7 +3202,7 @@ begin
     //FileFromString(DynArraySaveJson(objarr, TypeInfo(TOrmPeopleObjArray)), WorkDir + 'objarray.json');
     ObjArrayClear(objarr);
   end;
-  NotifyTestSpeed('TOrmPeopleObjArray', 0, len, @timer, ONLYLOG);
+  NotifyTestSpeed('TOrmPeopleObjArray', c, len, @timer, ONLYLOG);
   {$ifdef JSONBENCHMARK_FPJSON}
   timer.Start;
   for i := 1 to ITER div 10 do // div 10 since fpjson is slower
@@ -3189,7 +3216,7 @@ begin
         fpjson.Free;
       end;
   end;
-  NotifyTestSpeed('fpjson', 0, len div 10, @timer, ONLYLOG);
+  NotifyTestSpeed('fpjson', c div 10, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_FPJSON}
   {$ifdef JSONBENCHMARK_JSONTOOLS}
   timer.Start;
@@ -3207,7 +3234,7 @@ begin
       jt.Free;
     end;
   end;
-  NotifyTestSpeed('jsontools', 0, len div 10, @timer, ONLYLOG);
+  NotifyTestSpeed('jsontools', c div 10, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_JSONTOOLS}
   {$ifdef JSONBENCHMARK_DELPHIJSON}
   timer.Start;
@@ -3222,7 +3249,7 @@ begin
         djson.Free;
       end;
   end;
-  NotifyTestSpeed('Delphi JSON', 0, len div 10, @timer, ONLYLOG);
+  NotifyTestSpeed('Delphi JSON', c div 10, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_DELPHIJSON}
   {$ifdef JSONBENCHMARK_JDO}
   timer.Start;
@@ -3237,7 +3264,7 @@ begin
         jdo.Free;
       end;
   end;
-  NotifyTestSpeed('JsonDataObjects', 0, len, @timer, ONLYLOG);
+  NotifyTestSpeed('JsonDataObjects', c, len, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_JDO}
   {$ifdef JSONBENCHMARK_SO}
   s := supertypes.SOString(people); // convert to UTF-8 once
@@ -3248,8 +3275,9 @@ begin
     if not CheckFailed(so <> nil) then
       if not CheckFailed(so.IsType(stArray)) then
         Check(so.AsArray.Length = count);
+    so := nil;
   end;
-  NotifyTestSpeed('SuperObject', 0, len div 10, @timer, ONLYLOG);
+  NotifyTestSpeed('SuperObject', c div 10, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_SO}
   {$ifdef JSONBENCHMARK_XSO}
   timer.Start;
@@ -3258,8 +3286,9 @@ begin
     xso := xsuperobject.SA(peoples);
     if not CheckFailed(xso <> nil) then
       Check(xso.Length = count);
+    xso := nil;
   end;
-  NotifyTestSpeed('X-SuperObject', 0, len div ITER, @timer, ONLYLOG);
+  NotifyTestSpeed('X-SuperObject', count, len div ITER, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_SO}
   {$ifdef JSONBENCHMARK_GRIJJY}
   timer.Start;
@@ -3268,7 +3297,7 @@ begin
     g := TgoBsonArray.Parse(peoples);
     Check(g.Count = count);
   end;
-  NotifyTestSpeed('Grijjy', 0, len div 10, @timer, ONLYLOG);
+  NotifyTestSpeed('Grijjy', c div 10, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_GRIJJY}
   {$ifdef JSONBENCHMARK_DWS}
   timer.Start;
@@ -3281,7 +3310,7 @@ begin
       dws.Free;
     end;
   end;
-  NotifyTestSpeed('dwsJSON', 0, len div 10, @timer, ONLYLOG);
+  NotifyTestSpeed('dwsJSON', c div 10, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_DWS}
   {$ifdef JSONBENCHMARK_WSFT}
   WinJson.TJsonParser.Create.Free; // run it once for the trial popup to show
@@ -3301,7 +3330,7 @@ begin
         Free;
       end;
   end;
-  NotifyTestSpeed('WinSoft WinJson', 0, len div 10, @timer, ONLYLOG);
+  NotifyTestSpeed('WinSoft WinJson', c div 10, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_WSFT}
   sample := StringFromFile(WorkDir + 'sample.json');
   if sample <> '' then
@@ -5723,12 +5752,10 @@ procedure TTestCoreCompression._TAlgoCompress;
       if log <> '' then
         break;
     end;
-    AddConsole(format('%s %s->%s: comp %d:%dMB/s decomp %d:%dMB/s',
+    AddConsole(format('%s %s->%s: comp %s/s decomp %s/s',
       [algo.ClassName, KB(plain), KB(comp),
-       ((plain * Int64(1000 * 1000)) div timecomp) shr 20,
-       ((comp * Int64(1000 * 1000)) div timecomp) shr 20,
-       ((comp * Int64(1000 * 1000)) div timedecomp) shr 20,
-       ((plain * Int64(1000 * 1000)) div timedecomp) shr 20]));
+       KBNoSpace((plain * Int64(1000 * 1000)) div timecomp),
+       KBNoSpace((plain * Int64(1000 * 1000)) div timedecomp)]));
     s2 := algo.Decompress(algo.Compress(s), aclNoCrcFast);
     Check(s2 = s, algo.ClassName);
   end;

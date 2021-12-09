@@ -2255,6 +2255,8 @@ type
     // - this method will return a TDocVariant containing a copy of all
     // field values of this row, uncoupled to the TOrmTable instance life time
     // - expand* methods will allow to return human-friendly representations
+    // - if your purpose is to create a TDocVariant array from ORM/SQL JSON,
+    // consider using the faster DocVariantFromResults() wrapper function
     procedure ToDocVariant(Row: PtrInt; out doc: variant;
       options: TDocVariantOptions = JSON_FAST;
       expandTimeLogAsText: boolean = false; expandEnumsAsText: boolean = false;
@@ -2275,6 +2277,8 @@ type
     // will point directly to the TOrmTable, which should remain allocated
     // - if readonly is FALSE, will contain an array of TDocVariant, containing
     // a copy of all field values of this row, uncoupled to the TOrmTable instance
+    // - if your purpose is indeed to create a TDocVariant from ORM/SQL JSON,
+    // consider using the faster DocVariantFromResults() wrapper function
     // - readonly=TRUE is faster to allocate (around 4 times for 10,000 rows), but
     // may be slightly slower to access than readonly=FALSE, if all values are
     // likely be accessed later in the process
