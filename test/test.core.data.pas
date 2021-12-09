@@ -3167,23 +3167,23 @@ begin
   timer.Start;
   for i := 1 to ITER do
   begin
-    Check(DocVariantFromResults(dv, people));
+    Check(dv.InitArrayFromResults(people));
     Check(dv.count = count);
     dv.Clear; // to reuse dv
   end;
-  NotifyTestSpeed('DocVariantFromResults exp', c, len, @timer, ONLYLOG);
+  NotifyTestSpeed('TDocVariant FromResults exp', c, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
   begin
-    Check(DocVariantFromResults(dv, notexpanded));
+    Check(dv.InitArrayFromResults(notexpanded));
     Check(dv.count = count);
     dv.Clear; // to reuse dv
   end;
-  NotifyTestSpeed('DocVariantFromResults not exp', c, lennexp * ITER, @timer, ONLYLOG);
-  Check(DocVariantFromResults(dv, people));
+  NotifyTestSpeed('TDocVariant FromResults not exp', c, lennexp * ITER, @timer, ONLYLOG);
+  Check(dv.InitArrayFromResults(people));
   CheckEqual(peoplehash, Hash32(dv.ToJson));
   dv.Clear; // to reuse dv
-  Check(DocVariantFromResults(dv, notexpanded));
+  Check(dv.InitArrayFromResults(notexpanded));
   CheckEqual(peoplehash, Hash32(dv.ToJson));
   dv.Clear; // to reuse dv
   timer.Start;

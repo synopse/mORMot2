@@ -1001,6 +1001,32 @@ type
     // - will call internally ObjectToVariant() to make the conversion
     procedure InitArrayFromObjArray(const ObjArray; aOptions: TDocVariantOptions;
       aWriterOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
+    /// fill a TDocVariant array from standard or non-expanded JSON ORM/DB result
+    // - accept the ORM/DB results dual formats as recognized by TOrmTableJson
+    // - about 2x (expanded) or 3x (non-expanded) faster than Doc.InitJsonInPlace()
+    // - will also use less memory, because all object field names will be shared
+    // - in expanded mode, the fields order won't be checked, as with TOrmTableJson
+    // - warning: the incoming JSON buffer will be modified in-place: so you should
+    // make a private copy before running this method, as overloaded procedures do
+    function InitArrayFromResults(Json: PUtf8Char; JsonLen: PtrInt;
+      aOptions: TDocVariantOptions = JSON_FAST_FLOAT): boolean; overload;
+    /// fill a TDocVariant array from standard or non-expanded JSON ORM/DB result
+    // - accept the ORM/DB results dual formats as recognized by TOrmTableJson
+    // - about 2x (expanded) or 3x (non-expanded) faster than Doc.InitJson()
+    // - will also use less memory, because all object field names will be shared
+    // - in expanded mode, the fields order won't be checked, as with TOrmTableJson
+    // - a private copy of the incoming JSON buffer will be used before parsing
+    function InitArrayFromResults(const Json: RawUtf8;
+      aOptions: TDocVariantOptions = JSON_FAST_FLOAT): boolean; overload;
+    /// fill a TDocVariant array from standard or non-expanded JSON ORM/DB result
+    // - accept the ORM/DB results dual formats as recognized by TOrmTableJson
+    // - about 2x (expanded) or 3x (non-expanded) faster than Doc.InitJson()
+    // - will also use less memory, because all object field names will be shared
+    // - in expanded mode, the fields order won't be checked, as with TOrmTableJson
+    // - a private copy of the incoming JSON buffer will be used before parsing
+    function InitArrayFromResults(const Json: RawUtf8;
+      aModel: TDocVariantModel): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// initialize a variant instance to store some document-based object content
     // - object will be initialized with names and values supplied as dynamic arrays
     // - if aNames and aValues are [] or do have matching sizes, the variant
@@ -1023,7 +1049,7 @@ type
     // - this method is called e.g. by _JsonFmt() _JsonFastFmt() global functions
     // with a temporary JSON buffer content created from a set of parameters
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    // - consider the faster DocVariantFromResults() from ORM/SQL JSON results
+    // - consider the faster InitArrayFromResults() from ORM/SQL JSON results
     function InitJsonInPlace(Json: PUtf8Char;
       aOptions: TDocVariantOptions = [];
       aEndOfObject: PUtf8Char = nil): PUtf8Char;
@@ -1035,7 +1061,7 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - handle only currency for floating point values: set JSON_FAST_FLOAT
     // or dvoAllowDoubleValue option to support double, with potential precision loss
-    // - consider the faster DocVariantFromResults() from ORM/SQL JSON results
+    // - consider the faster InitArrayFromResults() from ORM/SQL JSON results
     function InitJson(const Json: RawUtf8;
       aOptions: TDocVariantOptions = []): boolean; overload;
     /// initialize a variant instance to store some document-based object content
@@ -1044,7 +1070,7 @@ type
     // - a private copy of the incoming JSON buffer will be made
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - handle only currency for floating point values unless you set mFastFloat
-    // - consider the faster DocVariantFromResults() from ORM/SQL JSON results
+    // - consider the faster InitArrayFromResults() from ORM/SQL JSON results
     function InitJson(const Json: RawUtf8; aModel: TDocVariantModel): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a variant instance to store some document-based object content
@@ -2646,6 +2672,35 @@ function JsonToVariantInPlace(var Value: Variant; Json: PUtf8Char;
   Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty];
   AllowDouble: boolean = false): PUtf8Char;
   {$ifdef HASINLINE} inline; {$endif}
+
+const
+  FIELDCOUNT_PATTERN: PUtf8Char = '{"fieldCount":'; // PatternLen = 14 chars
+  ROWCOUNT_PATTERN: PUtf8Char   = ',"rowCount":';   // PatternLen = 12 chars
+  VALUES_PATTERN: PUtf8Char     = ',"values":[';    // PatternLen = 11 chars
+
+/// quickly check if an UTF-8 buffer start with the supplied Pattern
+// - PatternLen is at least 8 bytes long, typically FIELDCOUNT_PATTERN,
+// ROWCOUNT_PATTERN or VALUES_PATTERN constants
+// - defined here for TDocVariantData.InitArrayFromResults
+function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// parse JSON content in not-expanded format
+// - i.e. stored as '{"fieldCount":3,"values":["ID","FirstName","LastName",...']}
+// - search and extract "fieldCount" and "rowCount" field information
+// - defined here for TDocVariantData.InitArrayFromResults
+function IsNotExpandedBuffer(var P: PUtf8Char; PEnd: PUtf8Char;
+  var FieldCount, RowCount: PtrInt): boolean;
+
+/// efficient retrieval of the number of rows in non-expanded layout
+// - search for "rowCount": at the end of the JSON buffer
+function NotExpandedBufferRowCountPos(P, PEnd: PUtf8Char): PUtf8Char;
+
+/// low-level prepare GetFieldCountExpanded() parsing returning '{' or ']'
+function GotoFieldCountExpanded(P: PUtf8Char): PUtf8Char;
+
+/// low-level parsing of the first expanded JSON object to guess fields count
+function GetFieldCountExpanded(P: PUtf8Char): integer;
 
 /// decode multipart/form-data POST request content into a TDocVariantData
 // - following RFC 1867
@@ -4964,6 +5019,139 @@ begin
       dec(n);
     until n = 0;
   end;
+end;
+
+function TDocVariantData.InitArrayFromResults(Json: PUtf8Char; JsonLen: PtrInt;
+  aOptions: TDocVariantOptions): boolean;
+var
+  fields, rows, capa, r, f: PtrInt;
+  P, V: PUtf8Char;
+  VLen: integer;
+  wasstring: boolean;
+  endofobj: AnsiChar;
+  dv: PDocVariantData;
+  val: PVariant;
+  proto: TDocVariantData;
+begin
+  result := false;
+  Init(aOptions, dvArray);
+  P := GotoNextNotSpace(Json);
+  if IsNotExpandedBuffer(P, Json + JsonLen, fields, rows) then
+  begin
+    // A. Not Expanded (more optimized) format as array of values
+    // {"fields":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rows":20}
+    // 1. check rows and fields
+    if (rows < 0) or // IsNotExpandedBuffer() detected invalid input
+       (fields = 0) then
+      exit;
+    // 2. initialize the object prototype with the trailing field names
+    proto.Init(aOptions, dvObject);
+    proto.Capacity := fields;
+    for f := 1 to fields do
+    begin
+      V := GetJsonField(P, P, @wasstring, nil, @VLen);
+      if not wasstring then
+        exit; // should start with field names
+      proto.AddValue(V, VLen, null);
+    end;
+    // 3. fill all nested objects from incoming values
+    Capacity := rows;
+    SetCount(rows);
+    dv := pointer(Values);
+    for r := 1 to rows do
+    begin
+      val := dv^.InitFrom(proto, {values=}false); // names byref + void values
+      for f := 1 to fields do
+      begin
+        GetJsonToAnyVariant(val^, P, @endofobj, @aOptions, false{double=aOptions});
+        if P = nil then
+          exit;
+        inc(val);
+      end;
+      inc(dv); // next object
+    end;
+  end
+  else
+  begin
+    // B. Expanded format as array of objects (each with field names)
+    // [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...]
+    // 1. get first object (will reuse its field names)
+    P := GotoFieldCountExpanded(P);
+    if (P = nil) or
+       (P^ = ']') then
+      exit; // [] -> valid, but void data
+    P := proto.InitJsonInPlace(P, aOptions, @endofobj);
+    if P = nil then
+      exit;
+    rows := 0;
+    capa := 16;
+    Capacity := capa;
+    dv := pointer(Values);
+    dv^ := proto;
+    // 2. get values (assume fields are always the same as in the first object)
+    repeat
+      while (P^ <> '{') and
+            (P^ <> ']') do // go to next object beginning
+        if P^ = #0 then
+          exit
+        else
+          inc(P);
+      inc(rows);
+      if P^ = ']' then
+        break;
+      inc(P); // jmp '}'
+      if rows = capa then
+      begin
+        capa := NextGrow(capa);
+        Capacity := capa;
+        dv := pointer(Values);
+        inc(dv, rows);
+      end
+      else
+        inc(dv{%H-});
+      val := dv^.InitFrom(proto, {values=}false);
+      for f := 1 to proto.Count do
+      begin
+        P := GotoEndJsonItemString(P); // ignore field names
+        if P = nil then
+          break;
+        inc(P); // ignore jcEndOfJsonFieldOr0
+        GetJsonToAnyVariant({%H-}val^, P, @endofobj, @aOptions, false{double=aOptions});
+        if P = nil then
+          break;
+        inc(val);
+      end;
+      if endofobj <> '}' then
+      begin
+        P := nil;
+        break;
+      end;
+    until false;
+    SetCount(rows);
+  end;
+  if P = nil then
+    Clear
+  else
+    result := true;
+end;
+
+function TDocVariantData.InitArrayFromResults(const Json: RawUtf8;
+  aOptions: TDocVariantOptions): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(Json);
+  try
+    result := InitArrayFromResults(tmp.buf, tmp.len, aOptions);
+  finally
+    tmp.Done;
+  end;
+end;
+
+function TDocVariantData.InitArrayFromResults(const Json: RawUtf8;
+  aModel: TDocVariantModel): boolean;
+begin
+  result := InitArrayFromResults(Json, JSON_[aModel]);
 end;
 
 procedure TDocVariantData.InitObjectFromVariants(const aNames: TRawUtf8DynArray;
@@ -8585,6 +8773,114 @@ function JsonToVariant(const Json: RawUtf8; Options: TDocVariantOptions;
   AllowDouble: boolean): variant;
 begin
   VariantLoadJson(result, Json, @Options, AllowDouble);
+end;
+
+function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
+var
+  i: PtrInt;
+begin // PatternLen is at least 8 bytes long
+  result := false;
+  if P = nil then
+    exit;
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
+  if PPtrInt(P)^ = PPtrInt(Pattern)^ then
+  begin
+    for i := SizeOf(PtrInt) to PatternLen - 1 do
+      if P[i] <> Pattern[i] then
+        exit;
+    inc(P, PatternLen);
+    result := true;
+  end;
+end;
+
+function IsNotExpandedBuffer(var P: PUtf8Char; PEnd: PUtf8Char;
+  var FieldCount, RowCount: PtrInt): boolean;
+var
+  RowCountPos: PUtf8Char;
+begin
+  if not Expect(P, FIELDCOUNT_PATTERN, 14) then
+  begin
+    result := false;
+    exit;
+  end;
+  FieldCount := GetNextItemCardinal(P, #0);
+  if Expect(P, ROWCOUNT_PATTERN, 12) then
+    RowCount := GetNextItemCardinal(P, #0) // initial "rowCount":xxxx
+  else
+  begin
+    RowCountPos := NotExpandedBufferRowCountPos(P, PEnd);
+    if RowCountPos = nil then
+      RowCount := -1                        // no "rowCount":xxxx
+    else
+      RowCount := GetCardinal(RowCountPos); // trailing "rowCount":xxxx
+  end;
+  result := (FieldCount <> 0) and
+            Expect(P, VALUES_PATTERN, 11);
+  if result and
+     (RowCount < 0) then
+  begin
+    RowCount := JsonArrayCount(P, PEnd) div FieldCount; // 900MB/s browse
+    if RowCount <= 0 then
+      RowCount := -1; // bad format -> no data
+  end;
+end;
+
+function NotExpandedBufferRowCountPos(P, PEnd: PUtf8Char): PUtf8Char;
+var
+  i: PtrInt;
+begin
+  // search for "rowCount": at the end of the JSON buffer
+  result := nil;
+  if (PEnd <> nil) and
+     (PEnd - P > 24) then
+    for i := 1 to 24 do
+      case PEnd[-i] of
+        ']',
+        ',':
+          exit;
+        ':':
+          begin
+            if CompareMemFixed(PEnd - i - 11, pointer(ROWCOUNT_PATTERN), 11) then
+              result := PEnd - i + 1;
+            exit;
+          end;
+      end;
+end;
+
+function GotoFieldCountExpanded(P: PUtf8Char): PUtf8Char;
+begin
+  result := nil;
+  while P^ <> '[' do
+    if P^ = #0 then
+      exit
+    else
+      inc(P); // need an array of objects
+  repeat
+    inc(P);
+    if P^ = #0 then
+      exit;
+  until P^ in ['{', ']']; // go to object beginning
+  result := P;
+end;
+
+function GetFieldCountExpanded(P: PUtf8Char): integer;
+var
+  EndOfObject: AnsiChar;
+begin
+  result := 0;
+  repeat
+    P := GotoNextJsonItem(P, 2, @EndOfObject); // ignore Name+Value items
+    if P = nil then
+    begin // unexpected end
+      result := 0;
+      exit;
+    end;
+    inc(result);
+    if EndOfObject = '}' then
+      break; // end of object
+  until false;
 end;
 
 procedure MultiPartToDocVariant(const MultiPart: TMultiPartDynArray;
