@@ -969,11 +969,11 @@ begin
   with TDocVariantData(result) do
     if IDAsHexa then
       InitObject([
-        'ID', Int64ToHex(fID),
+        'ID',       Int64ToHex(fID),
         MethodName, Method], JSON_FAST)
     else
       InitObject([
-        'ID', fID,
+        'ID',       fID,
         MethodName, Method], JSON_FAST);
   m := Service.FindMethodIndex(Method);
   if m >= 0 then

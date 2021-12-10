@@ -2615,16 +2615,16 @@ begin
   sha := Sha256Digest(pointer(content), length(content));
   sign := SignToBase64(sha);
   meta.InitObject([
-    'name', ExtractFileName(FileToSign),
-    'date', DateTimeToIso8601Text(FileAgeToDateTime(FileToSign))],
+    'name',   ExtractFileName(FileToSign),
+    'date',   DateTimeToIso8601Text(FileAgeToDateTime(FileToSign))],
     JSON_FAST);
   meta.AddNameValuesToObject(MetaNameValuePairs);
   doc.InitObject([
-    'meta', variant(meta),
-    'size', length(content),
-    'md5', Md5(content),
+    'meta',   variant(meta),
+    'size',   length(content),
+    'md5',    Md5(content),
     'sha256', Sha256DigestToString(sha),
-    'sign', sign],
+    'sign',   sign],
     JSON_FAST);
   result := FileToSign + ECCCERTIFICATESIGN_FILEEXT;
   FileFromString(doc.ToJson('', '', jsonHumanReadable), result);
@@ -3018,11 +3018,11 @@ begin
   fContent := Signature;
   fLowLevelInfo.Clear;
   fLowLevelInfo.InitObject([
-    'size', fSize,
-    'md5', fMD5,
+    'size',   fSize,
+    'md5',    fMD5,
     'sha256', fSHA256,
-    'sign', ToBase64,
-    'meta', fMetaData]);
+    'sign',   ToBase64,
+    'meta',   fMetaData]);
 end;
 
 constructor TEccSignatureCertifiedFile.CreateFromDecryptedFile(

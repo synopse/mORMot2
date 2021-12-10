@@ -337,7 +337,7 @@ type
     function CreateTimeLog: TTimeLog;
     /// fill this unique identifier structure from its TSynUniqueIdentifier value
     // - is just a wrapper around PInt64(@self)^
-    procedure From(const AID: TSynUniqueIdentifier);
+    procedure From(const aID: TSynUniqueIdentifier);
       {$ifdef HASINLINE}inline;{$endif}
     /// fill this unique identifier back from a 16 chars hexadecimal string
     // - returns TRUE if the supplied hexadecimal is on the expected format
@@ -2338,11 +2338,11 @@ end;
 procedure TSynUniqueIdentifierBits.ToVariant(out Result: variant);
 begin
   TDocVariantData(Result).InitObject([
-    'Created', DateTimeToIso8601Text(CreateDateTime),
+    'Created',    DateTimeToIso8601Text(CreateDateTime),
     'Identifier', ProcessID,
-    'Counter', Counter,
-    'Value', Value,
-    'Hex', Int64ToHex(Value)], JSON_FAST);
+    'Counter',    Counter,
+    'Value',      Value,
+    'Hex',        Int64ToHex(Value)], JSON_FAST);
 end;
 
 function TSynUniqueIdentifierBits.Equal(
@@ -2351,9 +2351,9 @@ begin
   result := Value = Another.Value;
 end;
 
-procedure TSynUniqueIdentifierBits.From(const AID: TSynUniqueIdentifier);
+procedure TSynUniqueIdentifierBits.From(const aID: TSynUniqueIdentifier);
 begin
-  Value := AID;
+  Value := aID;
 end;
 
 function TSynUniqueIdentifierBits.CreateTimeLog: TTimeLog;

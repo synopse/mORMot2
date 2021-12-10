@@ -2209,10 +2209,13 @@ type
     // in the current published fields of a TOrm child
     // - only simple fields (i.e. not RawBlob/TOrmMany) are retrieved:
     //   BLOB fields are ignored (use direct access via dedicated methods instead)
-    // - if Expand is true, JSON data is an object, for direct use with any Ajax or .NET client:
-    // $ {"col1":val11,"col2":"val12"}
-    // - if Expand is false, JSON data is serialized (as used in TOrmTableJson)
-    // $ { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
+    // - if Expand is true, JSON output is a standard array of objects, for
+    // direct use with any Ajax or .NET client:
+    // & [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...]
+    // - if Expand is false, JSON data is serialized in non-expanded format:
+    // & {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
+    // resulting in lower space use and faster process - it could be parsed by
+    // TOrmTableJson or TDocVariantData.InitArrayFromResults
     // - if withID is true, then the first ID field value is included
     // - you can customize OrmOptions, e.g. if oftObject/oftBlobDynArray
     // property instance will be serialized as a JSON object or array, not a
@@ -6578,17 +6581,6 @@ begin
 end;
 
 procedure TOrm.FillFrom(P: PUtf8Char; FieldBits: PFieldBits);
-(*
- NOT EXPANDED - optimized format with a JSON array of JSON values, fields first
- {"fieldCount":9,"values":["ID","Int","Test","Unicode","Ansi","ValFloat","ValWord",
-   "ValDate","Next",0,0,"abcde+?ef+?+?","abcde+?ef+?+?","abcde+?ef+?+?",
-   3.14159265300000E+0000,1203,"2009-03-10T21:19:36",0]}
-
- EXPANDED FORMAT - standard format with a JSON array of JSON objects
- {"ID":0,"Int":0,"Test":"abcde+?ef+?+?","Unicode":"abcde+?ef+?+?","Ansi":
-  "abcde+?ef+?+?","ValFloat": 3.14159265300000E+0000,"ValWord":1203,
-  "ValDate":"2009-03-10T21:19:36","Next":0}
-*)
 var
   F: array[0..MAX_SQLFIELDS - 1] of PUtf8Char; // store field/property names
   wasString: boolean;
@@ -6608,7 +6600,8 @@ begin
   // set each property from values using efficient TOrmPropInfo.SetValue()
   if Expect(P, FIELDCOUNT_PATTERN, 14) then
   begin
-    // not expanded format: read the values directly from the input array
+    // NOT EXPANDED - optimized format with a JSON array of JSON values, fields first
+    //  {"fieldCount":2,"values":["f1","f2","1v1",1v2],"rowCount":1}
     n := GetNextItemCardinal(P, #0) - 1;
     if cardinal(n) > high(F) then
       exit;
@@ -6628,7 +6621,8 @@ begin
   end
   else if P^ = '{' then
   begin
-    // expanded format: check each property name
+    // EXPANDED FORMAT - standard format with a JSON array of JSON objects
+    //  [{"f1":"1v1","f2":1v2}]
     inc(P);
     repeat
       Prop := GetJsonPropName(P);

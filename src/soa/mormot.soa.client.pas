@@ -398,10 +398,11 @@ begin
       else
         count := 1;
       output.InitObject([
-        'errorcount', count,
-        'lasterror', error,
-        'lasttime', NowUtcToString(true, 'T'),
-        'lastelapsed', timer.Stop], JSON_FAST_EXTENDED);
+        'errorcount',  count,
+        'lasterror',   error,
+        'lasttime',    NowUtcToString(true, 'T'),
+        'lastelapsed', timer.Stop],
+        JSON_FAST_EXTENDED);
       pending.Output := variant(output);
       fClient.fSendNotificationsRest.ORM.Update(pending, 'Output', true);
       raise EServiceException.CreateUtf8(

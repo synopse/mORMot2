@@ -3176,10 +3176,10 @@ var
   usr: TDocVariantData;
 begin
   usr.InitObject([
-    'createUser', UserName,
-    'pwd', PasswordDigest(UserName, Password),
+    'createUser',     UserName,
+    'pwd',            PasswordDigest(UserName, Password),
     'digestPassword', false,
-    'roles', roles], JSON_FAST);
+    'roles',          roles], JSON_FAST);
   // note: passwordDigestor:"client" fails
   if client.ServerBuildInfoNumber >= 4000000 then
     usr.AddValue('mechanisms', _ArrFast(['SCRAM-SHA-1']));

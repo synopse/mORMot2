@@ -1002,7 +1002,9 @@ type
     procedure InitArrayFromObjArray(const ObjArray; aOptions: TDocVariantOptions;
       aWriterOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
     /// fill a TDocVariant array from standard or non-expanded JSON ORM/DB result
-    // - accept the ORM/DB results dual formats as recognized by TOrmTableJson
+    // - accept the ORM/DB results dual formats as recognized by TOrmTableJson,
+    // i.e. both [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...] and
+    // {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
     // - about 2x (expanded) or 3x (non-expanded) faster than Doc.InitJsonInPlace()
     // - will also use less memory, because all object field names will be shared
     // - in expanded mode, the fields order won't be checked, as with TOrmTableJson
@@ -1259,12 +1261,13 @@ type
     // - you may then use InitJsonFromFile() to load and parse this file
     procedure SaveToJsonFile(const FileName: TFileName);
     /// save an array of objects as UTF-8 encoded non expanded layout JSON
-    // - returned content would be a JSON object in mORMot's TOrmTable non
+    // - returned content would be a JSON object in mORMot's TOrmTableJson non
     // expanded format, with reduced JSON size, i.e.
-    // $ {"fieldCount":3,"values":["ID","FirstName","LastName",...']}
+    // $ {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
     // - will write '' if Kind is dvUndefined or dvObject
     // - will raise an exception if the array document is not an array of
     // objects with identical field names
+    // - can be unserialized using the InitArrayFromResults() method
     function ToNonExpandedJson: RawUtf8;
     /// save a document as an array of UTF-8 encoded JSON
     // - will expect the document to be a dvArray - otherwise, will raise a

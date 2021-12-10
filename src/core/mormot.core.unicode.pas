@@ -6805,9 +6805,10 @@ const
      198, 67, 69, 69, 69, 69, 73, 73, 73, 73, 68, 78, 79, 79, 79, 79,
      79, 247, 79, 85, 85, 85, 85, 89, 222, 89);
 
-  {$ifdef UU_COMPRESSED}
+{$ifdef UU_COMPRESSED}
+
   // 1KB compressed buffer which renders into our 20,016 bytes UU[] array
-  UUSynLZ: array[byte] of cardinal = (
+  UU_: array[byte] of cardinal = (
     $04001A03, $FF336024, $00853300, $FFFFFFE0, $335201F0, $02E700E8, $FFE0AA33,
     $E004334B, $33790BFF, $04330007, $304331FF, $DB1878BC, $01A82B01, $01433000,
     $1D343008, $041E3380, $401D3430, $338F1833, $FFFFFED4, $390B33C3, $0C338434,
@@ -6845,22 +6846,48 @@ const
     $11330D0C, $0C0F0E0C, $13121110, $15140C0C, $00000033, $160C0500, $170C0E33,
     $31331918, $1C1B1A0C, $0C06331D, $26331F1E, $0933200C, $3322210C, $0000000F,
     $33230C00, $33240C17, $33250C20, $00000C0D);
-  {$endif UU_COMPRESSED}
+
+procedure InitializeUU;
+var
+  tmp: array[0..7000] of byte; // need only 6659 bytes
+begin
+  // Uppercase Unicode table RLE + SynLZ decompression from 1KB to 20KB :)
+  if (RleUnCompress(@tmp, @UU, SynLZdecompress1(@UU_, 1022, @tmp)) <> SizeOf(UU)) or
+     (crc32c(0, @UU, SizeOf(UU)) <> $7343D053) then
+    raise ESynUnicode.Create('UU Table Decompression Failed'); // paranoid
+end;
+
+(*
+procedure doUU;
+var
+  tmp1, tmp2: array[0..5500] of cardinal;
+  rle, lz, i: PtrInt;
+  l: RawUtf8;
+begin
+  writeln(SynLZdecompressdestlen(@UUSynLz));
+  writeln(SynLZdecompress1(@UUSynLZ, 1022, @tmp1));
+  writeln(RleUnCompress(@tmp1, @tmp2, 6659));
+  writeln(CompareMem(@tmp2, @UU, SizeOf(UU)));
+  exit;
+  rle := RleCompress(@UU, @tmp1, SizeOf(UU), SizeOf(tmp1));
+  lz := SynLZCompress1(@tmp1, rle, @tmp2);
+  writeln(SizeOf(UU)); writeln(rle); writeln(lz);
+  writeln('UUSynLZ = array[byte] of cardinal = (');
+  for i := 0 to 255 do begin
+    l := l + '$' + HexStr(tmp2[i], 8) + ',';
+    if length(l) > 70 then begin writeln(l); l := '  '; end;
+  end;
+  writeln(l, ');');
+end;
+*)
+
+{$endif UU_COMPRESSED}
 
 procedure InitializeUnit;
 var
   i: PtrInt;
   c: AnsiChar;
-  {$ifdef UU_COMPRESSED}
-  tmp: array[0..7000] of byte;
-  {$endif UU_COMPRESSED}
 begin
-  {$ifdef UU_COMPRESSED}
-  // Uppercase Unicode table RLE + SynLZ decompression from 1KB to 20KB :)
-  if (RleUnCompress(@tmp, @UU, SynLZdecompress1(@UUSynLZ, 1022, @tmp)) <> SizeOf(UU)) or
-     (crc32c(0, @UU, SizeOf(UU)) <> $7343D053) then
-    raise ESynUnicode.Create('UU Table Decompression Failed'); // paranoid
-  {$endif UU_COMPRESSED}
   // initialize internal lookup tables for various text conversions
   for i := 0 to 255 do
     NormToNormByte[i] := i;
@@ -6920,32 +6947,11 @@ begin
   {$endif ASMX64AVX}
 end;
 
-(*
-procedure doUU;
-var
-  tmp1, tmp2: array[0..3000] of cardinal;
-  rle, lz, i: PtrInt;
-  l: RawUtf8;
-begin
-  writeln(SynLZdecompressdestlen(@UUSynLz));
-  writeln(SynLZdecompress1(@UUSynLZ, 1022, @tmp1));
-  writeln(RleUnCompress(@tmp1, @tmp2, 6659));
-  writeln(CompareMem(@tmp2, @UU, SizeOf(UU)));
-  exit;
-  rle := RleCompress(@UU, @tmp1, SizeOf(UU), SizeOf(tmp1));
-  lz := SynLZCompress1(@tmp1, rle, @tmp2);
-  writeln(SizeOf(UU)); writeln(rle); writeln(lz);
-  writeln('UUSynLZ = array[byte] of cardinal = (');
-  for i := 0 to 255 do begin
-    l := l + '$' + HexStr(tmp2[i], 8) + ',';
-    if length(l) > 70 then begin writeln(l); l := '  '; end;
-  end;
-  writeln(l, ');');
-end;
-*)
-
 
 initialization
+  {$ifdef UU_COMPRESSED}
+  InitializeUU;
+  {$endif UU_COMPRESSED}
   InitializeUnit;
 
 

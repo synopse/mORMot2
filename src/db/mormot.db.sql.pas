@@ -866,11 +866,13 @@ type
     function Instance: TSqlDBStatement;
     // return all rows content as a JSON string
     // - JSON data is retrieved with UTF-8 encoding
-    // - if Expanded is true, JSON data is an array of objects, for direct use
-    // with any Ajax or .NET client:
-    // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
-    // - if Expanded is false, JSON data is serialized (used in TOrmTableJson)
-    // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
+    // - if Expanded is true, JSON output is a standard array of objects, for
+    // direct use with any Ajax or .NET client:
+    // & [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...]
+    // - if Expanded is false, JSON data is serialized in non-expanded format:
+    // & {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
+    // resulting in lower space use and faster process - it could be parsed by
+    // TOrmTableJson or TDocVariantData.InitArrayFromResults
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     // - if ReturnedRowCount points to an integer variable, it will be filled with
@@ -880,11 +882,13 @@ type
     function FetchAllAsJson(Expanded: boolean; ReturnedRowCount: PPtrInt = nil): RawUtf8;
     // append all rows content as a JSON stream
     // - JSON data is added to the supplied TStream, with UTF-8 encoding
-    // - if Expanded is true, JSON data is an array of objects, for direct use
-    // with any Ajax or .NET client:
-    // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
-    // - if Expanded is false, JSON data is serialized (used in TOrmTableJson)
-    // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
+    // - if Expanded is true, JSON output is a standard array of objects, for
+    // direct use with any Ajax or .NET client:
+    // & [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...]
+    // - if Expanded is false, JSON data is serialized in non-expanded format:
+    // & {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
+    // resulting in lower space use and faster process - it could be parsed by
+    // TOrmTableJson or TDocVariantData.InitArrayFromResults
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     // - similar to corresponding TSqlRequest.Execute method in the
@@ -1064,11 +1068,13 @@ type
     procedure ExecutePrepared;
     // execute a prepared SQL statement and return all rows content as a JSON string
     // - JSON data is retrieved with UTF-8 encoding
-    // - if Expanded is true, JSON data is an array of objects, for direct use
-    // with any Ajax or .NET client:
-    // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
-    // - if Expanded is false, JSON data is serialized (used in TOrmTableJson)
-    // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
+    // - if Expanded is true, JSON output is a standard array of objects, for
+    // direct use with any Ajax or .NET client:
+    // & [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...]
+    // - if Expanded is false, JSON data is serialized in non-expanded format:
+    // & {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
+    // resulting in lower space use and faster process - it could be parsed by
+    // TOrmTableJson or TDocVariantData.InitArrayFromResults
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean;
