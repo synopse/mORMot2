@@ -5027,7 +5027,7 @@ end;
 function TDocVariantData.InitArrayFromResults(Json: PUtf8Char; JsonLen: PtrInt;
   aOptions: TDocVariantOptions): boolean;
 var
-  fields, rows, capa, r, f: PtrInt;
+  fieldcount, rowcount, capa, r, f: PtrInt;
   P, V: PUtf8Char;
   VLen: integer;
   wasstring: boolean;
@@ -5039,18 +5039,18 @@ begin
   result := false;
   Init(aOptions, dvArray);
   P := GotoNextNotSpace(Json);
-  if IsNotExpandedBuffer(P, Json + JsonLen, fields, rows) then
+  if IsNotExpandedBuffer(P, Json + JsonLen, fieldcount, rowcount) then
   begin
     // A. Not Expanded (more optimized) format as array of values
-    // {"fields":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rows":20}
-    // 1. check rows and fields
-    if (rows < 0) or // IsNotExpandedBuffer() detected invalid input
-       (fields = 0) then
+    // {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
+    // 1. check rowcount and fieldcount
+    if (rowcount < 0) or // IsNotExpandedBuffer() detected invalid input
+       (fieldcount = 0) then
       exit;
     // 2. initialize the object prototype with the trailing field names
     proto.Init(aOptions, dvObject);
-    proto.Capacity := fields;
-    for f := 1 to fields do
+    proto.Capacity := fieldcount;
+    for f := 1 to fieldcount do
     begin
       V := GetJsonField(P, P, @wasstring, nil, @VLen);
       if not wasstring then
@@ -5058,13 +5058,13 @@ begin
       proto.AddValue(V, VLen, null);
     end;
     // 3. fill all nested objects from incoming values
-    Capacity := rows;
-    SetCount(rows);
+    Capacity := rowcount;
+    SetCount(rowcount);
     dv := pointer(Values);
-    for r := 1 to rows do
+    for r := 1 to rowcount do
     begin
       val := dv^.InitFrom(proto, {values=}false); // names byref + void values
-      for f := 1 to fields do
+      for f := 1 to fieldcount do
       begin
         GetJsonToAnyVariant(val^, P, @endofobj, @aOptions, false{double=aOptions});
         if P = nil then
@@ -5086,12 +5086,12 @@ begin
     P := proto.InitJsonInPlace(P, aOptions, @endofobj);
     if P = nil then
       exit;
-    rows := 0;
+    rowcount := 0;
     capa := 16;
     Capacity := capa;
     dv := pointer(Values);
     dv^ := proto;
-    // 2. get values (assume fields are always the same as in the first object)
+    // 2. get values (assume fieldcount are always the same as in the first object)
     repeat
       while (P^ <> '{') and
             (P^ <> ']') do // go to next object beginning
@@ -5099,19 +5099,19 @@ begin
           exit
         else
           inc(P);
-      inc(rows);
+      inc(rowcount);
       if P^ = ']' then
         break;
       inc(P); // jmp '}'
-      if rows = capa then
+      if rowcount = capa then
       begin
         capa := NextGrow(capa);
         Capacity := capa;
         dv := pointer(Values);
-        inc(dv, rows);
+        inc(dv, rowcount);
       end
       else
-        inc(dv{%H-});
+        inc(dv);
       val := dv^.InitFrom(proto, {values=}false);
       for f := 1 to proto.Count do
       begin
@@ -5119,7 +5119,7 @@ begin
         if P = nil then
           break;
         inc(P); // ignore jcEndOfJsonFieldOr0
-        GetJsonToAnyVariant({%H-}val^, P, @endofobj, @aOptions, false{double=aOptions});
+        GetJsonToAnyVariant(val^, P, @endofobj, @aOptions, false{double=aOptions});
         if P = nil then
           break;
         inc(val);
@@ -5130,7 +5130,7 @@ begin
         break;
       end;
     until false;
-    SetCount(rows);
+    SetCount(rowcount);
   end;
   if P = nil then
     Clear
