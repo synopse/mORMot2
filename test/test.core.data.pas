@@ -3193,7 +3193,15 @@ begin
     Check(DynArrayLoadJson(rec, people, TypeInfo(TRecordPeopleDynArray)));
     Check(length(rec) = count);
   end;
-  NotifyTestSpeed('DynArrayLoadJson', c, len, @timer, ONLYLOG);
+  NotifyTestSpeed('DynArrayLoadJson exp', c, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    // default serialization (with ID=0) TOrmPeopleObjArray in 79.14ms, 247.6 MB/s
+    Check(DynArrayLoadJson(rec, notexpanded, TypeInfo(TRecordPeopleDynArray)));
+    Check(length(rec) = count);
+  end;
+  NotifyTestSpeed('DynArrayLoadJson non exp', c, lennexp * ITER, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -3202,7 +3210,15 @@ begin
     //FileFromString(DynArraySaveJson(objarr, TypeInfo(TOrmPeopleObjArray)), WorkDir + 'objarray.json');
     ObjArrayClear(objarr);
   end;
-  NotifyTestSpeed('TOrmPeopleObjArray', c, len, @timer, ONLYLOG);
+  NotifyTestSpeed('TOrmPeopleObjArray exp', c, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    Check(DynArrayLoadJson(objarr, notexpanded, TypeInfo(TOrmPeopleObjArray)));
+    Check(length(objarr) = count);
+    ObjArrayClear(objarr);
+  end;
+  NotifyTestSpeed('TOrmPeopleObjArray non exp', c, lennexp * ITER, @timer, ONLYLOG);
   {$ifdef JSONBENCHMARK_FPJSON}
   timer.Start;
   for i := 1 to ITER div 10 do // div 10 since fpjson is slower

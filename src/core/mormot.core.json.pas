@@ -521,6 +521,36 @@ procedure QuotedStrJson(P: PUtf8Char; PLen: PtrInt; var result: RawUtf8;
 function QuotedStrJson(const aText: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+const
+  FIELDCOUNT_PATTERN: PUtf8Char = '{"fieldCount":'; // PatternLen = 14 chars
+  ROWCOUNT_PATTERN: PUtf8Char   = ',"rowCount":';   // PatternLen = 12 chars
+  VALUES_PATTERN: PUtf8Char     = ',"values":[';    // PatternLen = 11 chars
+
+/// quickly check if an UTF-8 buffer start with the supplied Pattern
+// - PatternLen is at least 8 bytes long, typically FIELDCOUNT_PATTERN,
+// ROWCOUNT_PATTERN or VALUES_PATTERN constants
+// - defined here for TDocVariantData.InitArrayFromResults
+function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// parse JSON content in not-expanded format
+// - i.e. stored as
+// $ {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
+// - search and extract "fieldCount" and "rowCount" field information
+// - defined here for TDocVariantData.InitArrayFromResults
+function IsNotExpandedBuffer(var P: PUtf8Char; PEnd: PUtf8Char;
+  var FieldCount, RowCount: PtrInt): boolean;
+
+/// efficient retrieval of the number of rows in non-expanded layout
+// - search for "rowCount": at the end of the JSON buffer
+function NotExpandedBufferRowCountPos(P, PEnd: PUtf8Char): PUtf8Char;
+
+/// low-level prepare GetFieldCountExpanded() parsing returning '{' or ']'
+function GotoFieldCountExpanded(P: PUtf8Char): PUtf8Char;
+
+/// low-level parsing of the first expanded JSON object to guess fields count
+function GetFieldCountExpanded(P: PUtf8Char): integer;
+
 /// fast Format() function replacement, handling % and ? parameters
 // - will include Args[] for every % in Format
 // - will inline Params[] for every ? in Format, handling special "inlined"
@@ -4287,6 +4317,115 @@ begin
   end;
 end;
 
+function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
+var
+  i: PtrInt;
+begin // PatternLen is at least 8 bytes long
+  result := false;
+  if P = nil then
+    exit;
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
+  if PPtrInt(P)^ = PPtrInt(Pattern)^ then
+  begin
+    for i := SizeOf(PtrInt) to PatternLen - 1 do
+      if P[i] <> Pattern[i] then
+        exit;
+    inc(P, PatternLen);
+    result := true;
+  end;
+end;
+
+function IsNotExpandedBuffer(var P: PUtf8Char; PEnd: PUtf8Char;
+  var FieldCount, RowCount: PtrInt): boolean;
+var
+  RowCountPos: PUtf8Char;
+begin
+  if not Expect(P, FIELDCOUNT_PATTERN, 14) then
+  begin
+    result := false;
+    exit;
+  end;
+  FieldCount := GetNextItemCardinal(P, #0);
+  if Expect(P, ROWCOUNT_PATTERN, 12) then
+    RowCount := GetNextItemCardinal(P, #0) // initial "rowCount":xxxx
+  else
+  begin
+    if PEnd = nil then
+      PEnd := P + mormot.core.base.StrLen(P);
+    RowCountPos := NotExpandedBufferRowCountPos(P, PEnd);
+    if RowCountPos = nil then
+      RowCount := -1                        // no "rowCount":xxxx
+    else
+      RowCount := GetCardinal(RowCountPos); // trailing "rowCount":xxxx
+  end;
+  result := (FieldCount <> 0) and
+            Expect(P, VALUES_PATTERN, 11);
+  if result and
+     (RowCount < 0) then
+  begin
+    RowCount := JsonArrayCount(P, PEnd) div FieldCount; // 900MB/s browse
+    if RowCount <= 0 then
+      RowCount := -1; // bad format -> no data
+  end;
+end;
+
+function NotExpandedBufferRowCountPos(P, PEnd: PUtf8Char): PUtf8Char;
+var
+  i: PtrInt;
+begin
+  // search for "rowCount": at the end of the JSON buffer
+  result := nil;
+  if (PEnd <> nil) and
+     (PEnd - P > 24) then
+    for i := 1 to 24 do
+      case PEnd[-i] of
+        ']',
+        ',':
+          exit;
+        ':':
+          begin
+            if CompareMemFixed(PEnd - i - 11, pointer(ROWCOUNT_PATTERN), 11) then
+              result := PEnd - i + 1;
+            exit;
+          end;
+      end;
+end;
+
+function GotoFieldCountExpanded(P: PUtf8Char): PUtf8Char;
+begin
+  result := nil;
+  while P^ <> '[' do
+    if P^ = #0 then
+      exit
+    else
+      inc(P); // need an array of objects
+  repeat
+    inc(P);
+    if P^ = #0 then
+      exit;
+  until P^ in ['{', ']']; // go to object beginning
+  result := P;
+end;
+
+function GetFieldCountExpanded(P: PUtf8Char): integer;
+var
+  EndOfObject: AnsiChar;
+begin
+  result := 0;
+  repeat
+    P := GotoNextJsonItem(P, 2, @EndOfObject); // ignore Name+Value items
+    if P = nil then
+    begin // unexpected end
+      result := 0;
+      exit;
+    end;
+    inc(result);
+    if EndOfObject = '}' then
+      break; // end of object
+  until false;
+end;
 
 function FormatUtf8(const Format: RawUtf8; const Args, Params: array of const;
   JsonFormat: boolean): RawUtf8;
@@ -7218,7 +7357,7 @@ begin
       // class instances are accessed by reference, records are stored by value
       Data := PPointer(Data)^;
       if (rcfHookRead in Ctxt.Info.Flags) and
-         (TCCHook(Data).RttiBeforeReadObject(@Ctxt)) then
+         TCCHook(Data).RttiBeforeReadObject(@Ctxt) then
         exit;
     end
     else
@@ -7321,6 +7460,94 @@ begin
   TOnRttiJsonRead(TRttiJson(Ctxt.Info).fJsonReader)(Ctxt, Data);
 end;
 
+function _JL_DynArray_FromResults(Data: PAnsiChar; var Ctxt: TJsonParserContext): boolean;
+var
+  fieldcount, rowcount, r, f: PtrInt;
+  arrinfo, iteminfo: TRttiCustom;
+  item: PAnsiChar;
+  prop: PRttiCustomProp;
+  props: PRttiCustomPropDynArray;
+begin
+  // Not Expanded (more optimized) format as array of values
+  // {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
+  result := IsNotExpandedBuffer(Ctxt.Json, nil, fieldcount, rowcount);
+  if not result then
+    exit; // indicates not the expected format: caller will try Ctxt.ParseArray
+  // 1. check rowcount and fieldcount
+  Ctxt.Valid := false;
+  if (rowcount < 0) or
+     (fieldcount = 0) then
+    exit;
+  // 2. initialize the items lookup from the trailing field names
+  arrinfo := Ctxt.Info;
+  iteminfo := arrinfo.ArrayRtti;
+  if (iteminfo = nil) or
+     (iteminfo.Props.Count = 0) then
+    exit; // expect an array of objects (classes or records)
+  SetLength(props, fieldcount);
+  for f := 0 to fieldcount - 1 do
+  begin
+    if not Ctxt.ParseNext or
+       not Ctxt.WasString then
+      exit; // should start with field names
+    prop := iteminfo.props.Find(Ctxt.Value, Ctxt.ValueLen);
+    if (prop = nil) and
+       (itemInfo.ValueRtlClass = vcObjectWithID) and
+       (PInteger(Ctxt.Value)^ and $dfdfdfdf =
+                 ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
+       (PWord(Ctxt.Value + 4)^ and $ffdf = ord('D')) then
+      prop := @iteminfo.Props.List[0]; // 'RowID' = first TObjectWithID field
+    if (prop = nil) and
+       not (jpoIgnoreUnknownProperty in Ctxt.Options) then
+      exit;
+    props[f] := prop;
+  end;
+  // 3. fill all nested items from incoming values
+  Data := DynArrayNew(PPointer(Data), rowcount, arrinfo.Cache.ItemSize); // alloc
+  for r := 1 to rowcount do
+  begin
+    if iteminfo.Kind = rkClass then
+    begin
+      Ctxt.Info := iteminfo; // as in _JL_RttiCustom()
+      PPointer(Data)^ := TRttiJson(iteminfo).fClassNewInstance(iteminfo);
+      item := PPointer(Data)^; // class are accessed by reference
+      if (rcfHookRead in iteminfo.Flags) and
+         TCCHook(item).RttiBeforeReadObject(@Ctxt) then
+        exit;
+    end
+    else
+      item := Data; // record (or object) are stored by value
+    for f := 0 to fieldcount - 1 do
+      if props[f] = nil then
+        Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject)
+      else if not JsonLoadProp(item, props[f]^, Ctxt) then
+      begin
+        Ctxt.Json := nil;
+        break;
+      end
+      else if Ctxt.EndOfObject = '}' then
+      if Ctxt.EndOfObject = '}' then
+        break;
+    if Ctxt.Json = nil then
+        break;
+    if rcfHookRead in iteminfo.Flags then
+      TCCHook(item).RttiAfterReadObject;
+    inc(Data, arrinfo.Cache.ItemSize);
+  end;
+  Ctxt.Valid := false;
+  if Ctxt.Json <> nil then
+  begin
+    while not (Ctxt.Json^ in [#0, '}']) do
+      inc(Ctxt.Json);
+    if Ctxt.Json^ = '}' then
+    begin
+      inc(Ctxt.Json); // reached final ..],"rowCount":20}
+      Ctxt.Valid := true;
+    end;
+  end;
+  Ctxt.Info := arrinfo; // restore
+end;
+
 procedure _JL_DynArray(Data: PAnsiChar; var Ctxt: TJsonParserContext);
 var
   load: TRttiJsonLoad;
@@ -7331,10 +7558,14 @@ begin
   arr := pointer(Data);
   if arr^ <> nil then
     Ctxt.Info.ValueFinalize(arr); // reset whole array variable
+  Ctxt.Json := GotoNextNotSpace(Ctxt.Json);
+  if (PCardinal(Ctxt.Json)^ <> ord('{') + ord('"') shl 8 + ord('f') shl 16 +
+      ord('i') shl 24) or // FIELDCOUNT_PATTERN = '{"fieldCount":...
+    not _JL_DynArray_FromResults(Data, Ctxt) then
   if not Ctxt.ParseArray then
     // detect void (i.e. []) or invalid array
-    exit;
-  if PCardinal(Ctxt.Json)^ = JSON_BASE64_MAGIC_QUOTE_C then
+    exit
+  else if PCardinal(Ctxt.Json)^ = JSON_BASE64_MAGIC_QUOTE_C then
     // raw RTTI binary layout with a single Base64 encoded item
     Ctxt.Valid := Ctxt.ParseNext and
               (Ctxt.EndOfObject = ']') and
@@ -7404,7 +7635,7 @@ begin
         FastDynArrayClear(arr^, arrinfo.Cache.ItemInfo)
       else
         DynArrayFakeLength(arr^, n); // faster than SetLength()
-    Ctxt.Info := arrinfo;
+    Ctxt.Info := arrinfo; // restore
   end;
   Ctxt.ParseEndOfObject; // mimics GetJsonField() / Ctxt.ParseNext
 end;

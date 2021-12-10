@@ -2196,7 +2196,8 @@ type
     vcObjectList,
     vcList,
     vcESynException,
-    vcException);
+    vcException,
+    vcObjectWithID);
 
 
   /// allow to customize the process of a given TypeInfo/PRttiInfo
@@ -7107,7 +7108,9 @@ begin
   else if aClass.InheritsFrom(ESynException) then
     fValueRtlClass := vcESynException
   else if aClass.InheritsFrom(Exception) then
-    fValueRtlClass := vcException;
+    fValueRtlClass := vcException
+  else if aClass.InheritsFrom(TObjectWithID) then
+    fValueRtlClass := vcObjectWithID;
   // register the published properties of this class
   fProps.AddFromClass(aInfo, {includeparents=}true);
   if fValueRtlClass = vcException then
