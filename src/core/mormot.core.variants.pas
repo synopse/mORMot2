@@ -5024,7 +5024,7 @@ end;
 function TDocVariantData.InitArrayFromResults(Json: PUtf8Char; JsonLen: PtrInt;
   aOptions: TDocVariantOptions): boolean;
 var
-  fields, rows, capa, r, f: PtrInt;
+  ffields, rows, capa, r, f: PtrInt;
   P, V: PUtf8Char;
   VLen: integer;
   wasstring: boolean;
@@ -5036,18 +5036,18 @@ begin
   result := false;
   Init(aOptions, dvArray);
   P := GotoNextNotSpace(Json);
-  if IsNotExpandedBuffer(P, Json + JsonLen, fields, rows) then
+  if IsNotExpandedBuffer(P, Json + JsonLen, ffields, rows) then
   begin
     // A. Not Expanded (more optimized) format as array of values
-    // {"fields":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rows":20}
-    // 1. check rows and fields
+    // {"ffields":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rows":20}
+    // 1. check rows and ffields
     if (rows < 0) or // IsNotExpandedBuffer() detected invalid input
-       (fields = 0) then
+       (ffields = 0) then
       exit;
     // 2. initialize the object prototype with the trailing field names
     proto.Init(aOptions, dvObject);
-    proto.Capacity := fields;
-    for f := 1 to fields do
+    proto.Capacity := ffields;
+    for f := 1 to ffields do
     begin
       V := GetJsonField(P, P, @wasstring, nil, @VLen);
       if not wasstring then
@@ -5061,7 +5061,7 @@ begin
     for r := 1 to rows do
     begin
       val := dv^.InitFrom(proto, {values=}false); // names byref + void values
-      for f := 1 to fields do
+      for f := 1 to ffields do
       begin
         GetJsonToAnyVariant(val^, P, @endofobj, @aOptions, false{double=aOptions});
         if P = nil then
@@ -5088,7 +5088,7 @@ begin
     Capacity := capa;
     dv := pointer(Values);
     dv^ := proto;
-    // 2. get values (assume fields are always the same as in the first object)
+    // 2. get values (assume ffields are always the same as in the first object)
     repeat
       while (P^ <> '{') and
             (P^ <> ']') do // go to next object beginning
