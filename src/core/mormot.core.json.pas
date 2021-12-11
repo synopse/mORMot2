@@ -7513,7 +7513,13 @@ begin
       item := PPointer(Data)^; // class are accessed by reference
       if (rcfHookRead in iteminfo.Flags) and
          TCCHook(item).RttiBeforeReadObject(@Ctxt) then
-        exit;
+      begin
+        inc(PPointer(Data));
+        if Ctxt.Valid then
+          continue
+        else
+          break;
+      end;
     end
     else
       item := Data; // record (or object) are stored by value

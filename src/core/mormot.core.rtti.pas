@@ -2679,18 +2679,18 @@ type
       Options: TTextWriterWriteObjectOptions); virtual;
     /// called to unserialize this instance from JSON
     // - triggered if RttiCustomSetParser defined the rcfHookRead flag
-    // - you can return true if your method made the unserialization
+    // - you can return true if your method made the instance unserialization
     // - this default implementation just returns false, to continue processing
     // - opaque Ctxt is a PJsonParserContext instance
     function RttiBeforeReadObject(Ctxt: pointer): boolean; virtual;
     /// called to unserialize of property of this instance from JSON
     // - triggered if RttiCustomSetParser defined the rcfHookReadProperty flag
-    // - you can return true if your method made the unserialization
+    // - you can return true if your method made the property unserialization
     // - this default implementation just returns false, to continue processing
     // - opaque Ctxt is a PJsonParserContext instance
     function RttiBeforeReadPropertyValue(Ctxt: pointer;
       Prop: PRttiCustomProp): boolean; virtual;
-    /// called after this instance as been unserialized from JSON
+    /// called after this instance has been unserialized from JSON
     // - triggered if RttiCustomSetParser defined the rcfHookRead flag
     procedure RttiAfterReadObject; virtual;
   public
