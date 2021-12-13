@@ -3382,19 +3382,28 @@ begin
   SetLength(i8, n);
   for i := 0 to n - 1 do
     i8[i] := i;
-  CheckEqual(ByteScanIndex(pointer(i8), 100, 101), -1);
+  CheckEqual(ByteScanIndex(pointer(i8), 100, 100), -1);
+  CheckEqual(ByteScanIndex(pointer(i8), 101, 100), 100);
+  CheckEqual(ByteScanIndex(@i8[1], 100, 0), -1, 'aligned read');
+  CheckEqual(ByteScanIndex(@i8[1], 100, 1), 0, 'unaligned read');
   for i := 0 to n - 1 do
     Check(ByteScanIndex(pointer(i8), n, i) = i and 255);
   SetLength(i16, n);
   for i := 0 to n - 1 do
     i16[i] := i;
-  CheckEqual(WordScanIndex(pointer(i16), 100, 101), -1);
+  CheckEqual(WordScanIndex(pointer(i16), 100, 100), -1);
+  CheckEqual(WordScanIndex(pointer(i16), 101, 100), 100);
+  CheckEqual(WordScanIndex(@i16[1], 100, 0), -1, 'aligned read');
+  CheckEqual(WordScanIndex(@i16[1], 100, 1), 0, 'unaligned read');
   for i := 0 to n - 1 do
     Check(WordScanIndex(pointer(i16), n, i) = i);
   SetLength(i32, n);
   for i := 0 to n - 1 do
     i32[i] := i;
-  CheckEqual(IntegerScanIndex(pointer(i32), 100, 101), -1);
+  CheckEqual(IntegerScanIndex(pointer(i32), 100, 100), -1);
+  CheckEqual(IntegerScanIndex(pointer(i32), 101, 100), 100);
+  CheckEqual(IntegerScanIndex(@i32[1], 100, 0), -1, 'aligned read');
+  CheckEqual(IntegerScanIndex(@i32[1], 100, 1), 0, 'unaligned read');
   for i := 0 to n - 1 do
     Check(IntegerScanIndex(pointer(i32), n, i) = i);
   i32 := nil;

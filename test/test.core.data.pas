@@ -4836,7 +4836,8 @@ end;
 type
   TMyEnum = (enFirst, enTwo, enThree, enFour, enFive);
   TMyEnumPart = enTwo .. enFour;
-  TSetMyEnumPart = set of TMyEnumPart;
+  TSetMyEnum = set of TMyEnum;
+  TSetMyEnumPart = set of TMyEnumPart; // validate partial sets
 
 procedure TTestCoreProcess._RTTI;
 var
@@ -4848,12 +4849,25 @@ var
   P: PUtf8Char;
   eoo: AnsiChar;
   e: TEmoji;
+  ep: TSetMyEnumPart;
 begin
+  ep := [enTwo];
+  CheckEqual(byte(ep), 2);
+  tmp := '["enTwo"]';
+  p := UniqueRawUtf8(tmp);
+  i := GetSetNameValue(TypeInfo(TSetMyEnum), p, eoo);
+  checkEqual(i, 2, 'TSetMyEnum');
+  Check(p = nil); // as in mORMot 1
   tmp := '["enTwo"]';
   p := UniqueRawUtf8(tmp);
   i := GetSetNameValue(TypeInfo(TSetMyEnumPart), p, eoo);
-  check(i = 1);
-  Check(p = nil); // as in mORMot 1
+  checkEqual(i, 2, 'TSetMyEnumPart');
+  Check(p = nil);
+  tmp := '["enFirst", "entwo"  ]';
+  p := UniqueRawUtf8(tmp);
+  i := GetSetNameValue(TypeInfo(TSetMyEnumPart), p, eoo);
+  checkEqual(i, 2, 'TSetMyEnumPart');
+  Check(p = nil);
   check(EMOJI_UTF8[eNone] = '');
   checkEqual(BinToHex(EMOJI_UTF8[eGrinning]), 'F09F9880');
   checkEqual(BinToHex(EMOJI_UTF8[ePray]), 'F09F998F');
