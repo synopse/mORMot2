@@ -1879,6 +1879,8 @@ end;
 
 const
   STUB_SIZE = 65536; // 16*4 KB (4 KB = memory granularity)
+  // on most platforms, Compute_FAKEVMT is run once with all JITted stubs
+  // on i386, it needs ArgsSizeInStack adjustement, but only 24 bytes per method
 
 {$ifdef CPUARM}
 
@@ -1887,8 +1889,8 @@ var
 
 function StubCallAllocMem(const Size, flProtect: DWORD): pointer;
 const
-  STUB_RELJMP = {$ifdef CPUARM} $7fffff {$else} $7fffffff {$endif}; // relative jmp
-  STUB_INTERV = STUB_RELJMP+1; // try to reserve in closed stub interval
+  STUB_RELJMP = {$ifdef CPUARM} $7fffff {$else} $7fffffff {$endif}; // rel jmp
+  STUB_INTERV = STUB_RELJMP + 1; // try to reserve in closed stub interval
   STUB_ALIGN = QWord($ffffffffffff0000); // align to STUB_SIZE
 var
   start, stop, stub, dist: PtrUInt;

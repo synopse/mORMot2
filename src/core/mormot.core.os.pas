@@ -4745,17 +4745,18 @@ end;
 type
   // internal memory buffer created with PAGE_EXECUTE_READWRITE flags
   TFakeStubBuffer = class
-  protected
-    fStub: PByteArray;
-    fStubUsed: cardinal;
   public
+    Stub: PByteArray;
+    StubUsed: cardinal;
     constructor Create;
     destructor Destroy; override;
+    function Reserve(size: cardinal): pointer;
   end;
 
 var
   CurrentFakeStubBuffer: TFakeStubBuffer;
   CurrentFakeStubBuffers: array of TFakeStubBuffer;
+  CurrentFakeStubBufferLock: TLightLock;
   {$ifdef UNIX}
   MemoryProtection: boolean = false; // set to true if PROT_EXEC seems to fail
   {$endif UNIX}
@@ -4763,32 +4764,41 @@ var
 constructor TFakeStubBuffer.Create;
 begin
   {$ifdef OSWINDOWS}
-  fStub := VirtualAlloc(nil, STUB_SIZE, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-  if fStub = nil then
+  Stub := VirtualAlloc(nil, STUB_SIZE, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+  if Stub = nil then
   {$else OSWINDOWS}
   if not MemoryProtection then
-    fStub := StubCallAllocMem(STUB_SIZE, PROT_READ or PROT_WRITE or PROT_EXEC);
-  if (fStub = MAP_FAILED) or
+    Stub := StubCallAllocMem(STUB_SIZE, PROT_READ or PROT_WRITE or PROT_EXEC);
+  if (Stub = MAP_FAILED) or
      MemoryProtection then
   begin
     // i.e. on OpenBSD, we can have w^x protection
-    fStub := StubCallAllocMem(STUB_SIZE, PROT_READ OR PROT_WRITE);
-    if fStub <> MAP_FAILED then
+    Stub := StubCallAllocMem(STUB_SIZE, PROT_READ OR PROT_WRITE);
+    if Stub <> MAP_FAILED then
       MemoryProtection := True;
   end;
-  if fStub = MAP_FAILED then
+  if Stub = MAP_FAILED then
   {$endif OSWINDOWS}
     raise EOSException.Create('ReserveExecutableMemory(): OS memory allocation failed');
+  ObjArrayAdd(CurrentFakeStubBuffers, self);
 end;
 
 destructor TFakeStubBuffer.Destroy;
 begin
   {$ifdef OSWINDOWS}
-  VirtualFree(fStub, 0, MEM_RELEASE);
+  VirtualFree(Stub, 0, MEM_RELEASE);
   {$else}
-  fpmunmap(fStub, STUB_SIZE);
+  fpmunmap(Stub, STUB_SIZE);
   {$endif OSWINDOWS}
   inherited;
+end;
+
+function TFakeStubBuffer.Reserve(size: cardinal): pointer;
+begin
+  result := @Stub[StubUsed];
+  while size and 7 <> 0 do
+    inc(size); // ensure the returned buffers are 8 bytes aligned
+  inc(StubUsed, size);
 end;
 
 function ReserveExecutableMemory(size: cardinal): pointer;
@@ -4796,23 +4806,14 @@ begin
   if size > STUB_SIZE then
     raise EOSException.CreateFmt('ReserveExecutableMemory(size=%d>%d)',
       [size, STUB_SIZE]);
-  GlobalLock;
+  CurrentFakeStubBufferLock.Lock;
   try
-    if (CurrentFakeStubBuffer <> nil) and
-       (CurrentFakeStubBuffer.fStubUsed + size > STUB_SIZE) then
-      CurrentFakeStubBuffer := nil;
-    if CurrentFakeStubBuffer = nil then
-    begin
+    if (CurrentFakeStubBuffer = nil) or
+       (CurrentFakeStubBuffer.StubUsed + size > STUB_SIZE) then
       CurrentFakeStubBuffer := TFakeStubBuffer.Create;
-      ObjArrayAdd(CurrentFakeStubBuffers, CurrentFakeStubBuffer);
-    end;
-    with CurrentFakeStubBuffer do
-    begin
-      result := @fStub[fStubUsed];
-      inc(fStubUsed, size);
-    end;
+    result := CurrentFakeStubBuffer.Reserve(size);
   finally
-    GlobalUnLock;
+    CurrentFakeStubBufferLock.UnLock;
   end;
 end;
 
