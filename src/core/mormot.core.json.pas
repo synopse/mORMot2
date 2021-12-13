@@ -4117,6 +4117,8 @@ begin
         exit; // avoid GPF below if already reached the input end
     end;
     P := ParseEndOfObject(P, EndOfObject); // mimics GetJsonField()
+    if EndOfObject = #0 then
+      P := nil; // as in mORMot 1
   end
   else
     SetQWord(GetJsonField(P, P, nil, @EndOfObject), result);
