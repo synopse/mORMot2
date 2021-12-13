@@ -1593,7 +1593,7 @@ function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
         and     eax, $FFFF0000
         shr     eax, cl
         shr     ecx, 1
-        test    eax, eax
+        bsf     eax, eax
         jnz     @fnd
         cmp     rdx, rcx
         jbe     @no
@@ -1602,19 +1602,19 @@ function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
         add     rcx, 8
         pcmpeqw xmm0, xmm1
         pmovmskb eax, xmm0
-        test    eax, eax
+        bsf     eax, eax
         jnz     @fnd
         cmp     rdx, rcx
         ja      @by16
 @no:    mov     rax, -1
         ret
-@fnd:   bsf     eax, eax
-        shr     eax, 1
+        bsf     eax, eax
+@fnd:   shr     eax, 1
         lea     rax, qword ptr [rcx + rax - 8]
         cmp     rdx, rax
         jbe     @no
         ret
-        // word-unaligned loop (seldom called)
+        // 16bit-unaligned loop (seldom called)
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @unal:  lea     rcx, [rcx + rdx * 2]
         neg     rdx
@@ -1627,6 +1627,72 @@ function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
 @unale: lea     rax, [rcx + rdx * 2]
         sub     rax, r8
         shr     rax, 1
+end;
+
+function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
+{$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        mov     eax, r8d
+        movd    xmm1, r8d
+        mov     r8, rcx
+        test    rdx, rdx
+        {$else}
+        mov     eax, edx
+        movd    xmm1, edx
+        mov     rcx, rdi
+        mov     r8, rdi
+        mov     rdx, rsi
+        test    rsi, rsi
+        {$endif WIN64ABI}
+        jbe     @no
+        test    rcx, 3
+        jnz     @unal
+        // eax=Value, rcx=P rdx=Count
+        and     rcx, -16
+        movaps  xmm0, [rcx]
+        add     rcx, 16
+        pshufd  xmm1, xmm1, 0
+        sub     rcx, r8
+        pcmpeqd xmm0, xmm1
+        pmovmskb eax, xmm0
+        shl     eax, cl
+        and     eax, $FFFF0000
+        shr     eax, cl
+        shr     ecx, 2
+        bsf     eax, eax
+        jnz     @fnd
+        cmp     rdx, rcx
+        jbe     @no
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@by16:  movaps  xmm0, [r8 + rcx * 4]
+        add     rcx, 4
+        pcmpeqd xmm0, xmm1
+        pmovmskb eax, xmm0
+        bsf     eax, eax
+        jnz     @fnd
+        cmp     rdx, rcx
+        ja      @by16
+@no:    mov     rax, -1
+        ret
+        bsf     eax, eax
+@fnd:   shr     eax, 2
+        lea     rax, qword ptr [rcx + rax - 4]
+        cmp     rdx, rax
+        jbe     @no
+        ret
+        // 32bit-unaligned loop (seldom called)
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@unal:  lea     rcx, [rcx + rdx * 4]
+        neg     rdx
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@unals: cmp     dword ptr [rcx + rdx * 4], eax
+        jz      @unale
+        add     rdx, 1
+        jnz     @unals
+        jmp     @no
+@unale: lea     rax, [rcx + rdx * 4]
+        sub     rax, r8
+        shr     rax, 2
 end;
 
 function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;

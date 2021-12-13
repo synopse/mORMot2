@@ -1266,23 +1266,28 @@ function ComparePointer(const A, B: pointer): integer;
 function CompareQWord(const A, B: QWord): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast search of an unsigned integer position in an integer array
+/// fast search of an unsigned integer item in a 32-bit integer array
 // - Count is the number of cardinal entries in P^
 // - returns P where P^=Value
 // - returns nil if Value was not found
+// - is implemented via IntegerScanIndex() SSE2 asm on i386 and x86_64
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
+  {$ifdef CPUINTEL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
-/// fast search of an unsigned integer position in an integer array
+/// fast search of an unsigned integer position in a 32-bit integer array
 // - Count is the number of integer entries in P^
 // - return index of P^[index]=Value
 // - return -1 if Value was not found
+// - is implemented with SSE2 asm on i386 and x86_64
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifndef CPUINTEL}inline;{$endif}
 
-/// fast search of an unsigned integer in an integer array
+/// fast search of an unsigned integer in a 32-bit integer array
 // - returns true if P^=Value within Count entries
 // - returns false if Value was not found
+// - is implemented via IntegerScanIndex() SSE2 asm on i386 and x86_64
 function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
+  {$ifdef CPUINTEL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// fast search of an integer position in a 64-bit integer array
 // - Count is the number of Int64 entries in P^
@@ -1335,14 +1340,14 @@ function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boo
 /// fast search of an unsigned byte value position in a byte array
 // - Count is the number of byte entries in P^
 // - return index of P^[index]=Value, -1 if Value was not found
-// - is implement with SSE2 asm on i386 and x86_64
+// - is implemented with SSE2 asm on i386 and x86_64
 function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
   {$ifndef CPUINTEL} inline; {$endif}
 
 /// fast search of an unsigned Word value position in a Word array
 // - Count is the number of Word entries in P^
 // - return index of P^[index]=Value, -1 if Value was not found
-// - is implement with SSE2 asm on i386 and x86_64
+// - is implemented with SSE2 asm on i386 and x86_64
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
   {$ifndef CPUINTEL} inline; {$endif}
 
@@ -5346,18 +5351,6 @@ end;
 
 {$endif FPC_OR_UNICODE}
 
-function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
-begin
-  result := PtrUInt(IntegerScan(P, Count, Value));
-  if result = 0 then
-    dec(result)
-  else
-  begin
-    dec(result, PtrUInt(P));
-    result := result shr 2;
-  end;
-end;
-
 function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
 begin
   if P <> nil then
@@ -8140,6 +8133,20 @@ type
 
 // optimized asm for x86 and x86_64 is located in include files
 
+function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
+begin
+  Count := IntegerScanIndex(P, Count, Value); // SSE2 asm on Intel/AMD
+  if Count >= 0 then
+    result := @P[Count]
+  else
+    result := nil;
+end;
+
+function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
+begin
+  result := IntegerScanIndex(P, Count, Value) >= 0; // SSE2 asm on Intel/AMD
+end;
+
 type
   TIntelRegisters = record
     eax, ebx, ecx, edx: cardinal;
@@ -8618,6 +8625,85 @@ end;
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
 begin
   result := IndexWord(P^, Count, Value); // use FPC RTL
+end;
+
+function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
+begin
+  result := nil;
+  if P = nil then
+    exit;
+  Count := PtrUInt(@P[Count - 4]); // per-four loop is faster than FPC RTL
+  repeat
+    if PtrUInt(P) > PtrUInt(Count) then
+      break;
+    if P^[0] <> Value then
+      if P^[1] <> Value then
+        if P^[2] <> Value then
+          if P^[3] <> Value then
+          begin
+            P := @P[4];
+            continue;
+          end
+          else
+            result := @P[3]
+        else
+          result := @P[2]
+      else
+        result := @P[1]
+    else
+      result := pointer(P);
+    exit;
+  until false;
+  inc(Count, 4 * SizeOf(Value));
+  result := pointer(P);
+  repeat
+    if PtrUInt(result) >= PtrUInt(Count) then
+      break;
+    if result^ = Value then
+      exit;
+    inc(result);
+  until false;
+  result := nil;
+end;
+
+function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
+begin
+  if P <> nil then
+  begin
+    result := true;
+    Count := PtrInt(@P[Count - 4]);
+    repeat
+      if PtrUInt(P) > PtrUInt(Count) then
+        break;
+      if (P^[0] = Value) or
+         (P^[1] = Value) or
+         (P^[2] = Value) or
+         (P^[3] = Value) then
+        exit;
+      P := @P[4];
+    until false;
+    inc(Count, 4 * SizeOf(Value));
+    repeat
+      if PtrUInt(P) >= PtrUInt(Count) then
+        break;
+      if P^[0] = Value then
+        exit;
+      P := @P[1];
+    until false;
+  end;
+  result := false;
+end;
+
+function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
+begin
+  result := PtrUInt(IntegerScan(P, Count, Value));
+  if result = 0 then
+    dec(result)
+  else
+  begin
+    dec(result, PtrUInt(P));
+    result := result shr 2;
+  end;
 end;
 
 {$endif CPUINTEL}
@@ -9871,73 +9957,6 @@ zero:
   result := false;
 end;
 {$endif CPUX64}
-
-function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
-begin
-  result := nil;
-  if P = nil then
-    exit;
-  Count := PtrUInt(@P[Count - 4]);
-  repeat
-    if PtrUInt(P) > PtrUInt(Count) then
-      break;
-    if P^[0] <> Value then
-      if P^[1] <> Value then
-        if P^[2] <> Value then
-          if P^[3] <> Value then
-          begin
-            P := @P[4];
-            continue;
-          end
-          else
-            result := @P[3]
-        else
-          result := @P[2]
-      else
-        result := @P[1]
-    else
-      result := pointer(P);
-    exit;
-  until false;
-  inc(Count, 4 * SizeOf(Value));
-  result := pointer(P);
-  repeat
-    if PtrUInt(result) >= PtrUInt(Count) then
-      break;
-    if result^ = Value then
-      exit;
-    inc(result);
-  until false;
-  result := nil;
-end;
-
-function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
-begin
-  if P <> nil then
-  begin
-    result := true;
-    Count := PtrInt(@P[Count - 4]);
-    repeat
-      if PtrUInt(P) > PtrUInt(Count) then
-        break;
-      if (P^[0] = Value) or
-         (P^[1] = Value) or
-         (P^[2] = Value) or
-         (P^[3] = Value) then
-        exit;
-      P := @P[4];
-    until false;
-    inc(Count, 4 * SizeOf(Value));
-    repeat
-      if PtrUInt(P) >= PtrUInt(Count) then
-        break;
-      if P^[0] = Value then
-        exit;
-      P := @P[1];
-    until false;
-  end;
-  result := false;
-end;
 
 procedure crcblockfast(crc128, data128: PBlock128);
 begin
