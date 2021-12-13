@@ -3099,13 +3099,15 @@ end;
 
 var
   EnvironmentCache: SynUnicode;
+  EnvironmentCacheLock: TLightLock;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
   envaddexisting: boolean; parsed: PParseCommands): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
-  path: TFileName;
+  exe, path: TFileName;
+  // CreateProcess can alter the strings -> use local SynUnicode temp variables
   wcmd, wenv, wpath: SynUnicode;
   e, p: PWideChar;
   exitcode: cardinal;
@@ -3113,36 +3115,40 @@ var
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
   result := -1;
+  // extract path and exe from cmd input
   if cmd = '' then
     exit;
-  // CreateProcess can alter the strings -> use local SynUnicode temp variable
-  wcmd := SynUnicode(cmd);
-  UniqueString(wcmd);
   if cmd[1] = '"' then
   begin
-    path := copy(cmd, 2, maxInt);
-    i := Pos('"', path);
+    exe := copy(cmd, 2, maxInt);
+    i := Pos('"', exe);
     if i = 0 then
       exit;
-    SetLength(path, i - 1); // unquote "path" string
+    SetLength(exe, i - 1); // unquote "exe" string
   end
   else
   begin
     i := Pos(' ', cmd);
-    if i <= 1 then
-      exit;
-    path := copy(cmd, 1, i - 1);
+    if i = 0 then
+      exe := cmd // no parameter
+    else
+      exe := copy(cmd, 1, i - 1); // split exe and parameter(s)
   end;
-  path := ExtractFilePath(path);
-  if path = '' then
-    path := Executable.ProgramFilePath;
+  if exe <> '' then
+    path := ExtractFilePath(exe);
+  if (path = '') and
+     FileExists(Executable.ProgramFilePath + exe) then
+    path := Executable.ProgramFilePath; // prefers the current folder
+  // prepare the CreateProcess arguments
+  wcmd := SynUnicode(cmd);
+  UniqueString(wcmd);
   wpath := SynUnicode(path);
   if env <> '' then
   begin
     wenv := SynUnicode(env);
     if envaddexisting then
     begin
-      GlobalLock;
+      EnvironmentCacheLock.Lock;
       try
         if EnvironmentCache = '' then
         begin
@@ -3155,19 +3161,20 @@ begin
         end;
         wenv := EnvironmentCache + wenv;
       finally
-        GlobalUnLock;
+        EnvironmentCacheLock.UnLock;
       end;
     end
     else
       UniqueString(wenv);
   end;
+  // launch the process
   FillCharFast(startupinfo, SizeOf(startupinfo), 0);
   startupinfo.cb := SizeOf(startupinfo);
   FillCharFast(processinfo, SizeOf(processinfo), 0);
   // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
   if CreateProcessW(nil, pointer(wcmd), nil, nil, false,
     CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE or
-    DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
+      DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
     pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo) then
   begin
     if waitfor then
