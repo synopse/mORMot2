@@ -4833,6 +4833,10 @@ begin
   result := nil;
 end;
 
+type
+  TMyEnum = (enFirst, enTwo, enThree, enFour, enFive);
+  TMyEnumPart = enTwo .. enFour;
+  TSetMyEnumPart = set of TMyEnumPart;
 
 procedure TTestCoreProcess._RTTI;
 var
@@ -4845,6 +4849,11 @@ var
   eoo: AnsiChar;
   e: TEmoji;
 begin
+  tmp := '["enTwo"]';
+  p := UniqueRawUtf8(tmp);
+  i := GetSetNameValue(TypeInfo(TSetMyEnumPart), p, eoo);
+  check(i = 1);
+  Check(p = nil); // as in mORMot 1
   check(EMOJI_UTF8[eNone] = '');
   checkEqual(BinToHex(EMOJI_UTF8[eGrinning]), 'F09F9880');
   checkEqual(BinToHex(EMOJI_UTF8[ePray]), 'F09F998F');

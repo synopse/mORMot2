@@ -5196,7 +5196,7 @@ begin
 end;
 
 var
-  InternalGarbageCollection: record
+  InternalGarbageCollection: record // RegisterGlobalShutdownRelease() list
     Instances:  TObjectDynArray;
     Count: integer;
     Shutdown: boolean; // paranoid check to avoid messing with Instances[]
@@ -6204,7 +6204,8 @@ begin
             include(result, pcHasSubCommand)
           else
             include(result, pcHasShellVariable);
-      '*', '?':
+      '*',
+      '?':
         if posix and
            (state * [sInSQ, sInDQ] = []) then
           include(result, pcHasWildcard);

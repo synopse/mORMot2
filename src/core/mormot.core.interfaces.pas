@@ -898,7 +898,7 @@ type
     fOnCreateInstance: TOnResolverCreateInstance;
     fSafe: TRWLock;
     function PrepareAddAndLock(aInterface: PRttiInfo;
-      aImplementationClass: TClass): PInterfaceEntry;
+      aImplementationClass: TClass): PInterfaceEntry; // fSafe.WriteUnLock after
     function LockedFind(aInterface: PRttiInfo): PInterfaceResolverListEntry;
       {$ifdef HASINLINE} inline; {$endif}
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
@@ -5196,7 +5196,7 @@ begin
   result := pointer(fEntry);
   if result = nil then
     exit;
-  // fast brute-force search in the L1 cache
+  // fast brute-force search in L1 cache (TInterfaceResolverListEntries)
   n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
   repeat
     if result^.TypeInfo = aInterface then
@@ -5215,7 +5215,7 @@ var
 begin
   new := nil;
   result := true;
-  fSafe.ReadOnlyLock;
+  fSafe.ReadOnlyLock; // Multiple Read / Exclusive Write lock
   try
     e := LockedFind(aInterface);
     if e <> nil then
@@ -5240,7 +5240,7 @@ begin
   if new <> nil then
   begin
     if Assigned(fOnCreateInstance) then
-      // this event should be called outside fSafe.Lock
+      // this event should be called outside fSafe lock
       fOnCreateInstance(self, new);
     exit;
   end;
@@ -5249,7 +5249,7 @@ end;
 
 function TInterfaceResolverList.Implements(aInterface: PRttiInfo): boolean;
 begin
-  fSafe.ReadOnlyLock;
+  fSafe.ReadOnlyLock; // Multiple Read / Exclusive Write lock
   result := LockedFind(aInterface) <> nil;
   fSafe.ReadOnlyUnLock;
 end;
