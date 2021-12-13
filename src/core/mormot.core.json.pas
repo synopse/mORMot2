@@ -435,7 +435,7 @@ function RemoveCommentsFromJson(const s: RawUtf8): RawUtf8; overload;
 // - if P^ contains ['*'], would fill all bits
 // - returns P=nil if reached prematurely the end of content, or returns
 // the value separator (e.g. , or }) in EndOfObject (like GetJsonField)
-function GetSetNameValue(Names: PShortString; MaxValue: integer;
+function GetSetNameValue(Names: PShortString; MinValue, MaxValue: integer;
   var P: PUtf8Char; out EndOfObject: AnsiChar): QWord; overload;
 
 /// helper to retrieve the bit mapped integer value of a set from its JSON text
@@ -4062,7 +4062,7 @@ begin
   result := P;
 end;
 
-function GetSetNameValue(Names: PShortString; MaxValue: integer;
+function GetSetNameValue(Names: PShortString; MinValue, MaxValue: integer;
   var P: PUtf8Char; out EndOfObject: AnsiChar): QWord;
 var
   Text: PUtf8Char;
@@ -4072,6 +4072,7 @@ begin
   result := 0;
   if (P = nil) or
      (Names = nil) or
+     (MinValue < 0) or
      (MaxValue < 0) then
     exit;
   while (P^ <= ' ') and
@@ -4109,7 +4110,7 @@ begin
           i := -1;
         if i < 0 then
           i := FindShortStringListTrimLowerCase(names, MaxValue, Text, TextLen);
-        if i >= 0 then
+        if i >= MinValue then
           SetBitPtr(@result, i);
         // unknown enum names (i=-1) would just be ignored
       until EndOfObject = ']';
@@ -4128,12 +4129,12 @@ function GetSetNameValue(Info: PRttiInfo;
   var P: PUtf8Char; out EndOfObject: AnsiChar): QWord;
 var
   Names: PShortString;
-  MaxValue: integer;
+  MinValue, MaxValue: integer;
 begin
   if (Info <> nil) and
      (Info^.Kind = rkSet) and
-     (Info^.SetEnumType(Names, MaxValue) <> nil) then
-    result := GetSetNameValue(Names, MaxValue, P, EndOfObject)
+     (Info^.SetEnumType(Names, MinValue, MaxValue) <> nil) then
+    result := GetSetNameValue(Names, MinValue, MaxValue, P, EndOfObject)
   else
     result := 0;
 end;
@@ -4816,7 +4817,8 @@ begin
     Ctxt.W.BlockBegin('{', Ctxt.Options);
     i := 0;
     repeat
-      Ctxt.AddShortBoolean(PS, GetBitPtr(Data, i));
+      if i >= Ctxt.Info.Cache.EnumMin then
+        Ctxt.AddShortBoolean(PS, GetBitPtr(Data, i));
       if i = Ctxt.Info.Cache.EnumMax then
         break;
       inc(i);
@@ -4839,7 +4841,8 @@ begin
       PS := Ctxt.Info.Cache.EnumList;
       for i := 0 to Ctxt.Info.Cache.EnumMax do
       begin
-        if GetBitPtr(Data, i) then
+        if (i >= Ctxt.Info.Cache.EnumMin) and
+           GetBitPtr(Data, i) then
         begin
           Ctxt.W.Add('"');
           Ctxt.W.AddShort(PS^);
@@ -7193,7 +7196,8 @@ begin
     begin
       v := GetInteger(Ctxt.Value, err);
       if (err <> 0) or
-         (PtrUInt(v) > Ctxt.Info.Cache.EnumMax) then
+         (PtrUInt(v) > Ctxt.Info.Cache.EnumMax) or
+         (PtrUInt(v) < Ctxt.Info.Cache.EnumMin) then
         v := -1;
     end;
     if v < 0 then
@@ -7209,8 +7213,8 @@ procedure _JL_Set(Data: pointer; var Ctxt: TJsonParserContext);
 var
   v: QWord;
 begin
-  v := GetSetNameValue(Ctxt.Info.Cache.EnumList,
-    Ctxt.Info.Cache.EnumMax, Ctxt.Json, Ctxt.EndOfObject);
+  with Ctxt.Info.Cache do
+    v := GetSetNameValue(EnumList, EnumMin, EnumMax, Ctxt.Json, Ctxt.EndOfObject);
   Ctxt.Valid := Ctxt.Json <> nil;
   MoveSmall(@v, Data, Ctxt.Info.Size);
 end;

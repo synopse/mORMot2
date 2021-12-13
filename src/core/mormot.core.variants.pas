@@ -4390,7 +4390,7 @@ begin
     with Info.Cache do
     begin
       PS := @EnumList;
-      for bit := EnumInfo.MinValue to EnumMax do
+      for bit := EnumMin to EnumMax do
       begin
         if GetBitPtr(@Value, bit) then
           arr.AddItem(PS^);

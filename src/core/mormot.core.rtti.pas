@@ -527,7 +527,7 @@ type
     // - if AlsoTrimLowerCase is TRUE, and EnumName does not start with
     // lowercases 'a'..'z', they will be ignored: e.g. GetEnumNameValue('Warning')
     // will find sllWarning item
-    // - return -1 if not found (don't use directly this value to avoid any GPF)
+    // - return -1 if not found, or if RTTI's MinValue is not 0
     function GetEnumNameValue(Value: PUtf8Char; ValueLen: integer;
       AlsoTrimLowerCase: boolean = true): integer; overload;
     /// get the corresponding enumeration ordinal value, from its trimmed name
@@ -546,11 +546,11 @@ type
       FullSetsAsStar: boolean = false); overload;
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
-    // - return -1 if not found (don't use directly this value to avoid any GPF)
+    // - return -1 if not found, or if RTTI's MinValue is not 0
     function GetEnumNameTrimedValue(const EnumName: ShortString): integer; overload;
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
-    // - return -1 if not found (don't use directly this value to avoid any GPF)
+    // - return -1 if not found, or if RTTI's MinValue is not 0
     function GetEnumNameTrimedValue(Value: PUtf8Char; ValueLen: integer = 0): integer; overload;
     /// compute how many bytes this type will use to be stored as a enumerate
     function SizeInStorageAsEnum: integer;
@@ -678,6 +678,7 @@ type
         CodePage: cardinal; // RawBlob=CP_RAWBYTESTRING not CP_RAWBLOB
         Engine: TSynAnsiConvert);
       rkEnumeration, rkSet: (
+        EnumMin,
         EnumMax:  cardinal;
         EnumInfo: PRttiEnumType;
         EnumList: PShortString);
@@ -755,14 +756,14 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// for rkEnumeration: get the enumeration values information
     function EnumBaseType(out NameList: PShortString;
-      out Max: integer): PRttiEnumType; overload;
+      out Min, Max: integer): PRttiEnumType; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// for rkSet: get the type information of its associated enumeration
     function SetEnumType: PRttiEnumType; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// for rkSet: get the associated enumeration values information
     function SetEnumType(out NameList: PShortString;
-      out Max: integer): PRttiEnumType; overload;
+      out Min, Max: integer): PRttiEnumType; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// for rkSet: in how many bytes this type is stored
     // - is very efficient on latest FPC only - i.e. ifdef ISFPC32
@@ -3097,7 +3098,8 @@ function TRttiEnumType.GetEnumNameValue(Value: PUtf8Char; ValueLen: integer;
   AlsoTrimLowerCase: boolean): integer;
 begin
   if (Value <> nil) and
-     (ValueLen > 0) then
+     (ValueLen > 0) and
+     (MinValue = 0) then
   begin
     result := FindShortStringListExact(NameList, MaxValue, Value, ValueLen);
     if (result < 0) and
@@ -3112,7 +3114,8 @@ function TRttiEnumType.GetEnumNameValueTrimmed(Value: PUtf8Char; ValueLen: integ
   ExactCase: boolean): integer;
 begin
   if (Value <> nil) and
-     (ValueLen > 0) then
+     (ValueLen > 0) and
+     (MinValue = 0) then
     if ExactCase then
       result := FindShortStringListTrimLowerCaseExact(NameList, MaxValue, Value, ValueLen)
     else
@@ -3133,7 +3136,8 @@ var
   PS: PShortString;
 begin
   W.Add('[');
-  if FullSetsAsStar and GetAllBits(Value, MaxValue + 1) then
+  if FullSetsAsStar and
+     GetAllBits(Value, MaxValue + 1) then
     W.AddShorter('"*"')
   else
   begin
@@ -3178,7 +3182,8 @@ end;
 
 function TRttiEnumType.GetEnumNameTrimedValue(Value: PUtf8Char; ValueLen: integer): integer;
 begin
-  if Value = nil then
+  if (Value = nil) or
+     (MinValue <> 0) then
     result := -1
   else
   begin
@@ -3337,10 +3342,11 @@ begin
 end;
 
 function TRttiInfo.EnumBaseType(out NameList: PShortString;
-  out Max: integer): PRttiEnumType;
+  out Min, Max: integer): PRttiEnumType;
 begin
   result := EnumBaseType;
   NameList := result^.NameList;
+  Min := result^.MinValue;
   Max := result^.MaxValue;
 end;
 
@@ -3354,12 +3360,13 @@ begin
 end;
 
 function TRttiInfo.SetEnumType(out NameList: PShortString;
-  out Max: integer): PRttiEnumType;
+  out Min, Max: integer): PRttiEnumType;
 begin
   result := SetEnumType;
   if result <> nil then
   begin
-    NameList := result^.NameList;
+    NameList := result^.EnumBaseType.NameList; // EnumBaseType for partial sets
+    Min := result^.MinValue;
     Max := result^.MaxValue;
   end;
 end;
@@ -3411,19 +3418,18 @@ begin
           include(Cache.Flags, rcfIsCurrency);
         end;
       end;
-    rkEnumeration:
-      begin
-        enum := Cache.Info.EnumBaseType;
-        Cache.EnumInfo := enum;
-        Cache.EnumMax := enum.MaxValue;
-        Cache.EnumList := enum.NameList;
-      end;
+    rkEnumeration,
     rkSet:
       begin
-        enum := Cache.Info.SetEnumType;
-        Cache.EnumInfo := enum;
+        if Kind = rkEnumeration then
+          enum := Cache.Info.EnumBaseType
+        else
+          enum := Cache.Info.SetEnumType;
+        Cache.EnumMin := enum.MinValue;
         Cache.EnumMax := enum.MaxValue;
-        Cache.EnumList := enum.NameList;
+        Cache.EnumInfo := enum;
+        // EnumBaseType^ is required for partial sets on Delphi
+        Cache.EnumList := enum.EnumBaseType^.NameList;
       end;
     rkDynArray:
       begin
@@ -4909,12 +4915,12 @@ end;
 
 procedure GetEnumCaptions(aTypeInfo: PRttiInfo; aDest: PString);
 var
-  MaxValue, i: integer;
+  MinValue, MaxValue, i: integer;
   res: PShortString;
 begin
-  aTypeInfo^.EnumBaseType(res, MaxValue);
+  aTypeInfo^.EnumBaseType(res, MinValue, MaxValue);
   if res <> nil then
-    for i := 0 to MaxValue do
+    for i := MinValue to MaxValue do
     begin
       GetCaptionFromTrimmed(res, aDest^);
       inc(PByte(res), PByte(res)^ + 1); // next
