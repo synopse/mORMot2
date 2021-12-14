@@ -1220,7 +1220,7 @@ var
   GDtoObject, G2: TDtoObject;
   owv: TObjectWithVariant;
   Trans: TTestCustomJson2;
-  Disco: TTestCustomDiscogs;
+  Disco, Disco2: TTestCustomDiscogs;
   Cache: TRestCacheEntryValue;
   peop: TOrmPeople;
   K: RawUtf8;
@@ -2841,6 +2841,8 @@ begin
   end;
   U := RecordSaveJson(Trans, TypeInfo(TTestCustomJson2));
   FileFromString(U, WorkDir + 'transactions.json');
+  SaveJson(Trans, TypeInfo(TTestCustomJson2), [twoNonExpandedArrays], U);
+  TestTrans;
   Rtti.RegisterFromText(TypeInfo(TTestCustomJson2Title), '');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJson2), '');
   U := RecordSaveJson(Trans, TypeInfo(TTestCustomJson2));
@@ -2867,7 +2869,17 @@ begin
   TRttiJson(Parser).IncludeWriteOptions := [woHumanReadable];
   U := RecordSaveJson(Disco, TypeInfo(TTestCustomDiscogs));
   Check(IsValidJson(U));
+  Check(IsValidUtf8(U));
   FileFromString(U, WorkDir + 'discoExtract.json');
+  TRttiJson(Parser).IncludeWriteOptions := [];
+  SaveJson(Disco, TypeInfo(TTestCustomDiscogs), [twoNonExpandedArrays], U);
+  Check(IsValidJson(U));
+  Check(IsValidUtf8(U)); 
+  FileFromString(U, WorkDir + 'discoExtractNonExp.json');
+  FillCharFast(Disco2, SizeOf(Disco), 0);
+  RecordLoadJson(Disco2, pointer(U), TypeInfo(TTestCustomDiscogs));
+  Check(RecordEquals(Disco, Disco2, TypeInfo(TTestCustomDiscogs)), 'disco2');
+  Finalize(Disco2);
   Finalize(Disco);
   FillCharFast(Disco, SizeOf(Disco), 0);
   U := '{"pagination":{"per_page":1},"releases":[{"title":"TEST","id":10}]}';

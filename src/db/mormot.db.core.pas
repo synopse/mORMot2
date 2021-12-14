@@ -2432,11 +2432,11 @@ begin
   else
   begin
     AddShort('{"fieldCount":');
-    Add(length(ColNames));
+    AddU(length(ColNames));
     if aKnownRowsCount > 0 then
     begin
       AddShort(',"rowCount":');
-      Add(aKnownRowsCount);
+      AddU(aKnownRowsCount);
     end;
     AddShort(',"values":["');
     // first row is FieldNames

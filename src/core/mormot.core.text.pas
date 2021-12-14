@@ -632,6 +632,9 @@ type
   // writing the fields with default values, i.e. enable soWriteIgnoreDefault
   // when published properties are serialized
   // - twoDateTimeWithZ appends an ending 'Z' to TDateTime/TDateTimeMS values
+  // - twoNonExpandedArrays will force the 'non expanded' optimized JSON layout
+  // for array of records or classes, ignoring other formatting options:
+  // $ {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
   TTextWriterOption = (
     twoStreamIsOwned,
     twoFlushToStreamNoAutoResize,
@@ -644,7 +647,8 @@ type
     twoEndOfLineCRLF,
     twoBufferIsExternal,
     twoIgnoreDefaultInRecord,
-    twoDateTimeWithZ);
+    twoDateTimeWithZ,
+    twoNonExpandedArrays);
     
   /// options set for a TTextWriter / TTextWriter instance
   // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior;

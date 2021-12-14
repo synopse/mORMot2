@@ -2106,11 +2106,15 @@ type
     List: TRttiCustomPropDynArray;
     /// how many properties/fields are in List[]
     Count: integer;
+    /// how many properties/fields with Name <> '' are in List[]
+    CountNonVoid: integer;
     /// total size, in bytes, of all properties/fields
     // - equals the sum of List[].Value.Size
     Size: integer;
     /// List[NotInheritedIndex]..List[Count-1] store the last level of properties
     NotInheritedIndex: integer;
+    /// contains List[].Name as a JSON array including a trailing ,
+    NamesAsJsonArray: RawUtf8;
     /// locate a property/field by name
     function Find(PropName: PUtf8Char; PropNameLen: PtrInt): PRttiCustomProp; overload;
     /// locate a property/field by name
@@ -6724,11 +6728,30 @@ begin
   result := Find(pointer(PropName), length(PropName));
 end;
 
+function FromNames(p: PRttiCustomProp; n: integer; out names: RawUtf8): integer;
+begin
+  result := 0;
+  if n = 0 then
+    exit;
+  repeat
+    if p^.Name <> '' then
+    begin
+      inc(result);
+      names := {%H-}names + '"' + p^.Name + '",';  // include trailing ,
+    end;
+    inc(p);
+    dec(n);
+  until n = 0;
+end;
+
 function TRttiCustomProps.NameChange(const Old, New: RawUtf8): PRttiCustomProp;
 begin
   result := Find(Old);
   if result <> nil then
+  begin
     result^.Name := New;
+    CountNonVoid := FromNames(pointer(List), Count, NamesAsJsonArray);
+  end;
 end;
 
 procedure TRttiCustomProps.NameChanges(const Old, New: array of RawUtf8);
@@ -6755,6 +6778,7 @@ begin
       raise ERttiException.CreateUtf8('NameChanges(%) unknown', [Old[i]]);
     p^.Name := New[i];
   end;
+  CountNonVoid := FromNames(pointer(List), Count, NamesAsJsonArray);
 end;
 
 procedure TRttiCustomProps.Add(Info: PRttiInfo; Offset: PtrInt;
@@ -6775,11 +6799,16 @@ begin
       MoveFast(List[0], List[1], SizeOf(List[0]) * Count);
       pointer(List[0].Name) := nil; // avoid GPF below
     end;
+    NamesAsJsonArray := '"' + PropName + '",' + NamesAsJsonArray;
     n := 0;
   end
   else
+  begin
+    NamesAsJsonArray := NamesAsJsonArray + '"' + PropName + '",';
     n := Count;
+  end;
   inc(Count);
+  inc(CountNonVoid);
   with List[n] do
   begin
     Value := Rtti.RegisterType(Info);
@@ -6809,9 +6838,11 @@ var
   i, n: PtrInt;
   p: PRttiCustomProp;
 begin
+  CountNonVoid := FromNames(pointer(List), Count, NamesAsJsonArray);
   if Count = 0 then
   begin
     result := [];
+    fManaged := nil;
     exit;
   end;
   result := [rcfHasNestedProperties, rcfHasOffsetSetJsonLoadProperties];
@@ -8698,6 +8729,7 @@ end;
 
 initialization
   InitializeUnit;
+
 
 end.
 

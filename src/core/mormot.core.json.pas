@@ -4352,16 +4352,16 @@ begin
   end;
   FieldCount := GetNextItemCardinal(P, #0);
   if Expect(P, ROWCOUNT_PATTERN, 12) then
-    RowCount := GetNextItemCardinal(P, #0) // initial "rowCount":xxxx
+    RowCount := GetNextItemCardinal(P, #0)    // initial "rowCount":xxxx
   else
   begin
     if PEnd = nil then
-      PEnd := P + mormot.core.base.StrLen(P);
+      PEnd := P + mormot.core.base.StrLen(P); // late search of ending
     RowCountPos := NotExpandedBufferRowCountPos(P, PEnd);
     if RowCountPos = nil then
-      RowCount := -1                        // no "rowCount":xxxx
+      RowCount := -1                          // no "rowCount":xxxx
     else
-      RowCount := GetCardinal(RowCountPos); // trailing "rowCount":xxxx
+      RowCount := GetCardinal(RowCountPos);   // trailing "rowCount":xxxx
   end;
   result := (FieldCount <> 0) and
             Expect(P, VALUES_PATTERN, 11);
@@ -4902,6 +4902,70 @@ begin
     Ctxt.W, Data, Ctxt.Options);
 end;
 
+type
+  TCCHook = class(TObjectWithCustomCreate); // to access its protected methods
+  TCCHookClass = class of TCCHook;
+
+procedure _JS_OneProp(var c: TJsonSaveContext; p: PRttiCustomProp; Data: PAnsiChar);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if (woHideSensitivePersonalInformation in c.Options) and
+     (rcfSpi in p^.Value.Flags) then
+    c.W.AddShorter('"***"')
+  else if p^.OffsetGet >= 0 then
+  begin
+    // direct value write (record field or plain class property)
+    c.Info := p^.Value;
+    TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c);
+  end
+  else
+    // need to call a getter method
+    p^.AddValueJson(c.W, Data, c.Options);
+end;
+
+procedure _JS_NonExpanded(var c: TJsonSaveContext; Data: PAnsiChar; n: integer);
+var
+  v: PAnsiChar;
+  item: TRttiCustom;
+  p: PRttiCustomProp;
+  f: integer;
+begin
+  // {"fieldCount":2,"rowCount":20,"values":["f1","f2","1v1",1v2,"2v1",2v2...]}
+  item := c.Info;
+  c.W.BlockBegin('{', c.Options);
+  c.W.AddShort('"fieldCount":');
+  c.W.AddU(item.Props.CountNonVoid);
+  c.W.AddShort(',"rowCount":');
+  c.W.AddU(n);
+  c.W.AddShort(',"values":[');
+  c.W.AddString(item.Props.NamesAsJsonArray); // include trailing ,
+  if n <> 0 then
+    repeat
+      if item.Kind = rkClass then
+        v := PPointer(Data)^
+      else
+        v := Data;
+      p := pointer(item.Props.List);
+      f := item.Props.Count;
+      repeat
+        if p^.Name <> '' then
+        begin
+          if not (rcfHookWriteProperty in item.Flags) or
+             not TCCHook(v).RttiWritePropertyValue(c.W, p, c.Options) then
+            _JS_OneProp(c, p, v);
+          c.W.AddComma; // no c.W.BlockAfterItem() within non-expanded layout
+        end;
+        inc(p);
+        dec(f);
+      until f = 0;
+      inc(Data, item.Cache.Size);
+      dec(n);
+    until n = 0;
+  c.W.CancelLastComma;
+  c.W.Add(']');
+  c.W.BlockEnd('}', c.Options);
+end;
+
 procedure _JS_DynArray(Data: PPointer; const Ctxt: TJsonSaveContext);
 var
   n, s: PtrInt;
@@ -4910,6 +4974,19 @@ var
   c: TJsonSaveContext;
 begin
   {%H-}c.Init(Ctxt.W, Ctxt.Options, Ctxt.Info.ArrayRtti);
+  if (twoNonExpandedArrays in c.W.CustomOptions) and
+     (c.Info <> nil) and
+     (c.Info.Props.CountNonVoid > 0) and
+     (Data^ <> nil) then
+  begin
+    // non-expanded format efficient serialization
+    n := PDALen(PAnsiChar(Data^) - _DALEN)^ + _DAOFF; // length(Data)
+    if n <> 1 then // expanded is fine for a single object array
+    begin
+      _JS_NonExpanded(c, Data^, n);
+      exit;
+    end;
+  end;
   c.W.BlockBegin('[', c.Options);
   if Data^ <> nil then
   begin
@@ -4968,10 +5045,6 @@ const
   // - typecast to TRttiJsonSave for proper function call
   PTC_JSONSAVE: array[TRttiParserComplexType] of pointer = (
     nil, nil, nil, nil, @_JS_ID, @_JS_ID, @_JS_QWord, @_JS_QWord, @_JS_QWord);
-
-type
-  TCCHook = class(TObjectWithCustomCreate); // to access its protected methods
-  TCCHookClass = class of TCCHook;
 
 procedure AppendExceptionLocation(w: TJsonWriter; e: ESynException);
 begin // call TDebugFile.FindLocationShort if mormot.core.log is used
@@ -5076,18 +5149,7 @@ begin
           c.W.WriteObjectPropName(pointer(p^.Name), length(p^.Name), c.Options);
           if not (rcfHookWriteProperty in Ctxt.Info.Flags) or
              not TCCHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
-            if (woHideSensitivePersonalInformation in c.Options) and
-               (rcfSpi in p^.Value.Flags) then
-              c.W.AddShorter('"***"')
-            else if p^.OffsetGet >= 0 then
-            begin
-              // direct value write (record field or plain class property)
-              c.Info := p^.Value;
-              TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c);
-            end
-            else
-              // need to call a getter method
-              p^.AddValueJson(c.W, Data, c.Options);
+            _JS_OneProp(c, p, Data);
         end;
         dec(n);
         if n = 0 then
