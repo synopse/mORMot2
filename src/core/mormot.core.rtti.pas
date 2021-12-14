@@ -3429,9 +3429,10 @@ begin
           enum := Cache.Info.SetEnumType;
         Cache.EnumMin := enum.MinValue;
         Cache.EnumMax := enum.MaxValue;
-        Cache.EnumInfo := enum;
         // EnumBaseType^ is required for partial sets on Delphi
-        Cache.EnumList := enum.EnumBaseType^.NameList;
+        enum := enum.EnumBaseType;
+        Cache.EnumInfo := enum;
+        Cache.EnumList := enum.NameList;
       end;
     rkDynArray:
       begin
