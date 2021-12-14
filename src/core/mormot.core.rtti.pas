@@ -2423,7 +2423,7 @@ type
   end;
 
   /// maintain a thread-safe list of PRttiInfo/TRttiCustom/TRttiJson registration
-  TRttiCustomList = object
+  TRttiCustomList = class
   private
     // store PRttiInfo/TRttiCustom pairs by TRttiKind.Kind+Name[0][1]
     Table: ^TRttiCustomListHashTable;
@@ -2438,8 +2438,6 @@ type
     function DoRegister(ObjectClass: TClass; ToDo: TRttiCustomFlags): TRttiCustom; overload;
     procedure AddToPairs(Instance: TRttiCustom);
     procedure SetGlobalClass(RttiClass: TRttiCustomClass); // ensure Count=0
-    procedure Init;
-    procedure Done;
   public
     /// how many TRttiCustom instances have been registered
     Count: integer;
@@ -2448,6 +2446,10 @@ type
     RegisterLock: TRTLCriticalSection;
     /// how many TRttiCustom instances have been registered for a given type
     Counts: array[succ(low(TRttiKind)) .. high(TRttiKind)] of integer;
+    /// initialize the RTTI list
+    constructor Create;
+    /// finalize the RTTI list
+    destructor Destroy; override;
     /// efficient search of TRttiCustom from a given RTTI TypeInfo()
     // - returns nil if Info is not known
     // - call RegisterType() if you want to initialize the type via its RTTI
@@ -7689,14 +7691,14 @@ end;
 
 { TRttiCustomList }
 
-procedure TRttiCustomList.Init;
+constructor TRttiCustomList.Create;
 begin
   Table := AllocMem(SizeOf(Table^)); // 15KB zeroed hash table allocation
   InitializeCriticalSection(RegisterLock);
   fGlobalClass := TRttiCustom;
 end;
 
-procedure TRttiCustomList.Done;
+destructor TRttiCustomList.Destroy;
 var
   i: PtrInt;
 begin
@@ -7704,6 +7706,7 @@ begin
     Instances[i].Free;
   Dispose(Table);
   DeleteCriticalSection(RegisterLock);
+  inherited Destroy;
 end;
 
 function LockedFind(Info: PRttiInfo; P: PRttiCustomListPair): TRttiCustom;
@@ -8646,7 +8649,7 @@ begin
   PT_DYNARRAY[ptWinAnsi]       := TypeInfo(TWinAnsiDynArray);
   PT_DYNARRAY[ptWord]          := TypeInfo(TWordDynArray);
   // prepare global thread-safe TRttiCustomList
-  Rtti.Init;
+  Rtti := RegisterGlobalShutdownRelease(TRttiCustomList.Create);
   ClassUnit := _ClassUnit;
   // redirect most used FPC RTL functions to optimized x86_64 assembly
   {$ifdef FPC_CPUX64}
@@ -8695,8 +8698,5 @@ end;
 initialization
   InitializeUnit;
 
-finalization
-  Rtti.Done;
-  
 end.
 
