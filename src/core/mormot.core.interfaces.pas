@@ -3874,7 +3874,8 @@ begin
   if MethodsCount > MAX_METHOD_COUNT then
     raise EInterfaceFactory.CreateUtf8(
       '%.Create(%): interface has too many methods (%), so breaks the ' +
-      'Interface Segregation Principle', [self, fInterfaceName, MethodsCount]);
+      'Interface Segregation Principle and our internal buffers provision',
+      [self, fInterfaceName, MethodsCount]);
   fMethodIndexCurrentFrameCallback := -1;
   fMethodIndexCallbackReleased := -1;
   SetLength(fMethods, MethodsCount);
@@ -4087,14 +4088,16 @@ begin
             SizeInStorage := ArgRtti.Cache.EnumInfo.SizeInStorageAsSet;
             if not (SizeInStorage in [1, 2, 4]) then
               raise EInterfaceFactory.CreateUtf8(
-                '%.Create: invalid SizeInStorage=% in %.% method % parameter for % set',
+                '%.Create: unexpected SizeInStorage=% in %.% method % parameter' +
+                ' for % set - we support only byte/integer/Int64 sizes',
                 [self, SizeInStorage, fInterfaceName, URI, ParamName^, ArgTypeName^]);
           end;
         imvRecord:
           if ArgRtti.Size <= POINTERBYTES then
             raise EInterfaceFactory.CreateUtf8(
-              '%.Create: % record too small in %.% method % parameter',
-              [self, ArgTypeName^, fInterfaceName, URI, ParamName^])
+              '%.Create: % record too small in %.% method % parameter: it ' +
+              'should be at least % bytes (i.e. a pointer) to be on stack',
+              [self, ArgTypeName^, fInterfaceName, URI, ParamName^, POINTERBYTES])
           else
             SizeInStorage := POINTERBYTES; // handle only records when passed by ref
         imvBinary:
@@ -4179,7 +4182,7 @@ begin
         begin
           // put in an integer register
           {$ifdef CPUARM}
-          // on 32-bit ARM, ordinals>POINTERBYTES are also placed in normal registers
+          // on 32-bit ARM, ordinals>POINTERBYTES are also placed in registers
           if (SizeInStack>POINTERBYTES) and
              ((reg and 1) = 0) then
             inc(reg); // must be aligned on even boundary
@@ -4189,7 +4192,7 @@ begin
             // no space, put on stack
             InStackOffset := ArgsSizeInStack;
             inc(ArgsSizeInStack, SizeInStack);
-            // all other parameters following the current one, must also be placed on stack
+            // all params following the current one, must also be placed on stack
             reg := PARAMREG_LAST + 1;
             continue;
           end;
@@ -4207,7 +4210,7 @@ begin
     end;
     if ArgsSizeInStack > MAX_EXECSTACK then
       raise EInterfaceFactory.CreateUtf8(
-        '%.Create: Stack size % > % for %.% method',
+        '%.Create: Stack size % > % for %.% method parameters',
         [self, ArgsSizeInStack, MAX_EXECSTACK, fInterfaceName, URI]);
     {$ifdef CPUX86}
     // pascal/register convention are passed left-to-right -> reverse order
@@ -4592,16 +4595,16 @@ begin
   for i := 0 to MAX_METHOD_COUNT - 1 do
   begin
     _FAKEVMT[i + RESERVED_VTABLE_SLOTS] := P;
-    {$ifdef CPUX64} // note: on Posix, (stub-P) > 32-bit -> need absolute jmp
-    P^ := $ba49;        // mov r10, x64FakeStub
+    {$ifdef CPUX64}    // note: on Posix, (stub-P) > 32-bit -> need absolute jmp
+    P^ := $ba49;       // mov r10, x64FakeStub
     inc(PWord(P));
     PPointer(P)^ := @x64FakeStub;
     inc(PPointer(P));
-    PByte(P)^ := $b8;   // mov eax, MethodIndex
+    PByte(P)^ := $b8;  // mov eax, MethodIndex
     inc(PByte(P));
     P^ := i;
     inc(P);
-    P^ := $66e2ff41;    // jmp r10  (faster than push + ret)
+    P^ := $66e2ff41;   // jmp r10  (faster than push + ret)
     inc(P);
     P^ := $00441f0f;   // multi-byte nop
     inc(PByte(P), 5);
