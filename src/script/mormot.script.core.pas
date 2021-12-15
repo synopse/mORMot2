@@ -215,7 +215,7 @@ type
     fOnDebuggerConnected: TEngineEvent;
     fEngineClass: TThreadSafeEngineClass;
     fEngineExpireTimeOutTix: Int64;
-    fEngines: TSynObjectListLocked; // TThreadSafeEngine
+    fEngines: TSynObjectListLightLocked; // of TThreadSafeEngine
     fEngineID: TThreadIDDynArray;
     fMaxEngines: integer;
     fDebugMainThread: boolean;
@@ -269,7 +269,7 @@ type
     property MainEngine: TThreadSafeEngine
       read fMainEngine;
     /// low-level access to the per-thread TThreadSafeEngine internal pool
-    property Engines: TSynObjectListLocked
+    property Engines: TSynObjectListLightLocked
       read fEngines;
     /// specify a maximum lifetime period after which script engines will
     // be recreated, to avoid potential JavaScript memory leak (variables in global,
@@ -366,7 +366,7 @@ constructor TThreadSafeManager.Create(aEngineClass: TThreadSafeEngineClass;
 begin
   inherited Create;
   fEngineClass := aEngineClass;
-  fEngines := TSynObjectListLocked.Create;
+  fEngines := TSynObjectListLightLocked.Create;
   fMaxEngines := aMaxPerThreadEngines;
   fOnLog := aOnLog;
   if Assigned(fOnLog) then
@@ -394,11 +394,17 @@ begin
   fEngines.Free;
 end;
 
+{$ifdef THREADID32}
+function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
+begin // use SSE2 on i386/x86_64
+  result := IntegerScanIndex(pointer(fEngineID), fEngines.Count, aThreadID);
+end;
+{$else}
 function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
 var
   e: ^TThreadID;
 begin
-  // caller made fEngines.Safe.Lock
+  // caller made fEngines.Safe.ReadLock/WriteLock
   e := pointer(fEngineID);
   for result := 0 to fEngines.Count - 1 do
     // brute force search in L1 cache is fast enough since fMaxEngines is small
@@ -408,6 +414,7 @@ begin
       inc(e);
   result := -1;
 end;
+{$endif CPU32}
 
 function TThreadSafeManager.ThreadSafeEngine(ThreadData: pointer;
   TagForNewEngine: PtrInt): TThreadSafeEngine;
@@ -419,13 +426,13 @@ begin
   // retrieve or (re)create the engine associated with this thread
   result := nil;
   tid := GetCurrentThreadId;
-  fEngines.Safe.ReadOnlyLock; // no try..finally for exception-safe code
+  fEngines.Safe.ReadLock; // no try..finally for exception-safe code
   existing := ThreadEngineIndex(tid);
   if existing >= 0 then
   begin
     result := fEngines.List[existing];
     if ThreadData = nil then
-      ThreadData := result.fThreadData // to be used if recreated
+      ThreadData := result.fThreadData  // to be used if recreated
     else
       result.fThreadData := ThreadData; // override with the given parameter
     if result.NeverExpire or
@@ -434,20 +441,24 @@ begin
       if result.fContentVersion = fContentVersion then
       begin
         // we got the right engine -> quickly return
-        fEngines.Safe.ReadOnlyUnLock;
+        fEngines.Safe.ReadUnLock;
         exit;
       end;
   end;
-  fEngines.Safe.ReadOnlyUnLock;
-  tobereleased := result;
+  fEngines.Safe.ReadUnLock;
+  tobereleased := nil;
   fEngines.Safe.WriteLock;
   try // some exceptions may occur from now on
+    if (existing > fEngines.Count) or
+       (fEngines.List[existing] <> result) then
+      existing := ThreadEngineIndex(tid); // paranoid
     if existing >= 0 then
     begin
-      // the engine is expired or its content changed -> recreate
+      // the engine is expired or its content changed -> remove and recreate
+      tobereleased := fEngines.List[existing];
       if Assigned(fOnLog) then
         fOnLog(sllInfo, 'ThreadSafeEngine: expired %', [result], self);
-      fEngines.Delete(existing, {dontfree=}true);
+      fEngines.Delete(existing, {donotfree=}true);
     end;
     // if we reached here, we need a new TThreadSafeEngine instance
     if fEngines.Count >= fMaxEngines then
@@ -499,13 +510,13 @@ begin
   result := nil;
   if PtrUInt(aThreadID) = 0 then
     exit;
-  fEngines.Safe.ReadOnlyLock;
+  fEngines.Safe.ReadLock;
   try
     i := ThreadEngineIndex(aThreadID);
     if i >= 0 then
       result := fEngines.List[i];
   finally
-    fEngines.Safe.ReadOnlyUnLock;
+    fEngines.Safe.ReadUnLock;
   end;
 end;
 

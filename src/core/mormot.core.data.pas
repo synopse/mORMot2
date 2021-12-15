@@ -494,13 +494,25 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
-  /// adding light single Read / exclusive Write locking methods to a
-  // TSynPersistent with virtual constructor
+  /// adding light non-upgradable multiple Read / exclusive Write locking
+  // methods to a TSynPersistent with virtual constructor
+  TSynPersistentRWLighLock = class(TSynPersistent)
+  protected
+    fSafe: TRWLightLock;
+  public
+    /// access to the associated non-upgradable TRWLightLock instance
+    // - call Safe methods to protect multi-thread access on this storage
+    property Safe: TRWLightLock
+      read fSafe;
+  end;
+
+  /// adding light upgradable multiple Read / exclusive Write locking methods
+  // to a TSynPersistent with virtual constructor
   TSynPersistentRWLock = class(TSynPersistent)
   protected
     fSafe: TRWLock;
   public
-    /// access to the associated TRWLock instance
+    /// access to the associated upgradable TRWLock instance
     // - call Safe methods to protect multi-thread access on this storage
     property Safe: TRWLock
       read fSafe;
@@ -538,7 +550,28 @@ type
       read fSafe;
   end;
 
-  /// add locking methods to a TSynObjectList
+  /// add TRWLightLock non-upgradable methods to a TSynObjectList
+  // - this class expands the regular TSynObjectList to include a TRWLightLock
+  // - you need to call the Safe locking methods by hand to protect the
+  // execution of all methods, since even Add/Clear/ClearFromLast/Remove/Exists
+  // have not been overriden because TRWLighLock.WriteLock is not reentrant
+  TSynObjectListLightLocked = class(TSynObjectList)
+  protected
+    fSafe: TRWLightLock;
+  public
+    /// initialize the list instance
+    // - the stored TObject instances will be owned by this TSynObjectListLightLocked,
+    // unless AOwnsObjects is set to false
+    constructor Create(aOwnsObjects: boolean = true); reintroduce;
+    /// the light single Read / exclusive Write LightLock associated to this list
+    // - could be used to protect shared resources within the internal process,
+    // for index-oriented methods like Delete/Items/Count...
+    // - use Safe LightLock methods with a try ... finally bLightLock
+    property Safe: TRWLightLock
+      read fSafe;
+  end;
+
+  /// add TRWLock upgradable methods to a TSynObjectList
   // - this class expands the regular TSynObjectList to include a TRWLock
   // - you need to call the Safe locking methods by hand to protect the
   // execution of index-oriented methods (like Delete/Items/Count...): the
@@ -3195,7 +3228,6 @@ begin
     fSafe.UnLock;
 end;
 
-
 { TInterfacedObjectLocked }
 
 constructor TInterfacedObjectLocked.Create;
@@ -3210,6 +3242,13 @@ begin
   fSafe^.DoneAndFreeMem;
 end;
 
+
+{ TSynObjectListLightLocked }
+
+constructor TSynObjectListLightLocked.Create(AOwnsObjects: boolean);
+begin
+  inherited Create(AOwnsObjects);
+end;
 
 { TSynObjectListLocked }
 
@@ -3267,7 +3306,6 @@ begin
     Safe.WriteUnLock;
   end;
 end;
-
 
 
 { ************ TSynPersistentStore with proper Binary Serialization }

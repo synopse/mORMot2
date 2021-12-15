@@ -535,7 +535,7 @@ type
     fHashFunctions: cardinal;
     fInserted: cardinal;
     fStore: RawByteString;
-    fSafe: TRWLock;
+    fSafe: TRWLock; // need an upgradable lock for TSynBloomFilterDiff
   public
     /// initialize the internal bits storage for a given number of items
     // - by default, internal bits array size will be guess from a 1 % false

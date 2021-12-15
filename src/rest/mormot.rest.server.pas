@@ -1660,7 +1660,7 @@ type
     fSessionClass: TAuthSessionClass;
     fJwtForUnauthenticatedRequest: TJwtAbstract;
     /// in-memory storage of TAuthSession instances
-    fSessions: TSynObjectListLocked;
+    fSessions: TSynObjectListLocked; // need an upgradable lock
     fSessionsDeprecatedTix: cardinal;
     /// used to compute genuine TAuthSession.ID cardinal value
     fSessionCounter: cardinal;
@@ -1720,7 +1720,7 @@ type
     // this method to force checking for deprecated session now
     // - may be used e.g. from OnSessionCreate to limit the number of active sessions
     // - this method is thread-safe via Sessions.Safe.ReadWriteLock/WriteLock
-    // - you can call it often: it will seek for outdated sessions once per second
+    // - it will be called to search for outdated sessions only once per second
     // - returns how many deprecated sessions have been purge
     function SessionDeleteDeprecated(tix: cardinal): integer;
   public
@@ -1796,8 +1796,8 @@ type
     OnInternalInfo: TOnInternalInfo;
     /// event trigerred when Uri() is called, and at least 128 ms is elapsed
     // - could be used to execute some additional process after a period of time
-    // - note that if TRestServer.Uri is not called by any client, this
-    // callback won't be executed either
+    // - note that if TRestServer.Uri is not called by any client, this callback
+    // won't be executed either - consider using TRestServer.Run instead
     OnIdle: TNotifyEvent;
     /// this property can be used to specify the URI parmeters to be used
     // for paged queries
@@ -6284,20 +6284,20 @@ function TRestServer.SessionDeleteDeprecated(tix: cardinal): integer;
 var
   i: PtrInt;
 begin
-  // caller will run this outdated sessions search every second
+  // TRestServer.Uri() runs this method every second
   fSessionsDeprecatedTix := tix;
   result := 0;
   if (self = nil) or
      (fSessions = nil) or
      (fSessions.Count = 0) then
     exit;
-  fSessions.Safe.ReadWriteLock;
+  fSessions.Safe.ReadWriteLock; // won't block the ReadOnlyLock methods
   try
     for i := fSessions.Count - 1 downto 0 do
       if tix > TAuthSession(fSessions.List[i]).TimeOutTix then
       begin
         if result = 0 then
-          fSessions.Safe.WriteLock; // upgrade the lock
+          fSessions.Safe.WriteLock; // upgrade the lock (seldom)
         LockedSessionDelete(i, nil);
         inc(result);
       end;
@@ -6917,8 +6917,8 @@ begin
     tix32 := tix shr 7; // trigger every 128 ms
     if tix32 <> fOnIdleLastTix then
     begin
-      OnIdle(self);
       fOnIdleLastTix := tix32;
+      OnIdle(self);
     end;
   end;
 end;

@@ -569,10 +569,13 @@
     {$ifdef CPUX64}
       {$define WIN64ABI}    // for asm on x86_64
     {$endif CPUX64}
+    {$define THREADID32}    // TThreadID = 32-bit DWORD on Win32 and Win64
   {$endif OSWINDOWS}
   {$ifdef OSPOSIX}
     {$ifdef CPUX64}
       {$define SYSVABI}     // for asm on x86_64
+    {$else}
+      {$define THREADID32}  // TThreadID = PtrUInt/pointer on pthread
     {$endif CPUX64}
   {$endif OSPOSIX}
   {$define CPUINTELARM}
@@ -581,6 +584,9 @@
   {$ifdef CPUARM3264}
     {$define CPUINTELARM}
   {$endif CPUARM3264}
+  {$ifdef CPU32}
+  {$define THREADID32}    // TThreadID = PtrUInt/pointer on pthread
+  {$endif CPU32}
 {$endif CPUINTEL}
 
 {$ifdef CPU32}

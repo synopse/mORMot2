@@ -708,7 +708,7 @@ type
   TBlockingProcessPool = class(TSynPersistent)
   protected
     fClass: TBlockingProcessPoolItemClass;
-    fPool: TSynObjectListLocked;
+    fPool: TSynObjectListLightLocked;
     fCallCounter: TBlockingProcessPoolCall; // set TBlockingProcessPoolItem.Call
   public
     /// initialize the pool, for a given implementation class
@@ -2297,7 +2297,7 @@ begin
     fClass := TBlockingProcessPoolItem
   else
     fClass := aClass;
-  fPool := TSynObjectListLocked.Create;
+  fPool := TSynObjectListLightLocked.Create;
 end;
 
 const
@@ -2310,13 +2310,18 @@ var
 begin
   fCallCounter := CALL_DESTROYING;
   someWaiting := false;
-  for i := 0 to fPool.Count - 1 do
-    with TBlockingProcessPoolItem(fPool.List[i]) do
-      if Event = evWaiting then
-      begin
-        SetEvent; // release WaitFor (with evTimeOut)
-        someWaiting := true;
-      end;
+  fPool.Safe.WriteLock;
+  try
+    for i := 0 to fPool.Count - 1 do
+      with TBlockingProcessPoolItem(fPool.List[i]) do
+        if Event = evWaiting then
+        begin
+          SetEvent; // release WaitFor (with evTimeOut)
+          someWaiting := true;
+        end;
+  finally
+    fPool.Safe.WriteUnLock;
+  end;
   if someWaiting then
     SleepHiRes(10); // propagate the pending evTimeOut to the WaitFor threads
   fPool.Free;
@@ -2367,22 +2372,20 @@ begin
   if (fCallCounter = CALL_DESTROYING) or
      (call <= 0) then
     exit;
-  fPool.Safe.ReadOnlyLock;
-  try
-    p := pointer(fPool.List);
-    for i := 1 to fPool.Count do
-      if p^.call = call then
-      begin
-        result := p^;
-        if locked then
-          result.Lock;
-        exit;
-      end
-      else
-        inc(p);
-  finally
-    fPool.Safe.ReadOnlyUnLock;
-  end;
+  fPool.Safe.ReadLock;
+  p := pointer(fPool.List);
+  for i := 1 to fPool.Count do
+    if p^.Call = call then
+    begin
+      result := p^;
+      fPool.Safe.ReadUnLock; // result.Lock may be blocking
+      if locked then
+        result.Lock;
+      exit;
+    end
+    else
+      inc(p);
+  fPool.Safe.ReadUnLock;
 end;
 
 

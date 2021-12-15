@@ -284,7 +284,7 @@ function TServiceContainerClientAbstract.AddInterface(
   aContractExpected: RawUtf8): boolean;
 var
   i: PtrInt;
-  F: TServiceFactoryClient;
+  f: TServiceFactoryClient;
 begin
   result := false;
   if (self = nil) or
@@ -293,9 +293,9 @@ begin
   CheckInterface(aInterfaces);
   for i := 0 to high(aInterfaces) do
   begin
-    F := fServicesFactoryClients.Create(
+    f := fServicesFactoryClients.Create(
       fOwner as TRest, aInterfaces[i], aInstanceCreation, aContractExpected);
-    AddServiceInternal(F);
+    AddServiceInternal(f);
     aContractExpected := ''; // supplied contract is only for the 1st interface
   end;
   result := true;

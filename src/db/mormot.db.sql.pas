@@ -2615,7 +2615,7 @@ type
   // connection pool
   TSqlDBConnectionPropertiesThreadSafe = class(TSqlDBConnectionProperties)
   protected
-    fConnectionPool: TSynObjectListLocked;
+    fConnectionPool: TSynObjectListLightLocked;
     fLatestConnectionRetrievedInPool: PtrInt;
     fConnectionPoolDeprecatedTix: cardinal;
     fThreadingMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode;
@@ -6927,14 +6927,14 @@ end;
 
 function TSqlDBConnection.IsOutdated(tix: Int64): boolean;
 label
-  ok;
+  old;
 begin
   if (self = nil) or
      (fProperties.fConnectionTimeOutTicks = 0) then
     result := false
   else if fLastAccessTicks < 0 then
     // connection release was forced by ClearConnectionPool
-    goto ok
+    goto old
   else if (fLastAccessTicks = 0) or
           (tix - fLastAccessTicks < fProperties.fConnectionTimeOutTicks) then
   begin
@@ -6944,7 +6944,7 @@ begin
   end
   else
     // notify connection is clearly outdated
-ok: result := true;
+old:result := true;
 end;
 
 function TSqlDBConnection.GetInTransaction: boolean;
@@ -7247,7 +7247,7 @@ end;
 constructor TSqlDBConnectionPropertiesThreadSafe.Create(
   const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
-  fConnectionPool := TSynObjectListLocked.Create;
+  fConnectionPool := TSynObjectListLightLocked.Create;
   fLatestConnectionRetrievedInPool := -1;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
 end;
@@ -7264,8 +7264,7 @@ begin
     id := GetCurrentThreadId;
     // most of the time, we are from the same thread: use simple cache
     result := fLatestConnectionRetrievedInPool;
-    if (result >= 0) and
-       (result < fConnectionPool.Count) and
+    if (PtrUInt(result) < PtrUInt(fConnectionPool.Count)) and
        (TSqlDBConnectionThreadSafe(fConnectionPool.List[result]).
          fThreadID = id) then
         exit;
@@ -7321,11 +7320,11 @@ begin
   case fThreadingMode of
     tmThreadPool:
       begin
-        // first delete any deprecated connection(s)
+        // first delete any deprecated connection(s) - every 16 seconds
         if fConnectionTimeOutTicks <> 0 then
         begin
           tix := GetTickCount64;
-          tix32 := tix shr 14; // it is enough to check every 16 seconds
+          tix32 := tix shr 14; // search every 16.384 seconds
           if (not fDeleteConnectionInOwnThread) and
              (fConnectionPoolDeprecatedTix <> tix32) then
           begin
@@ -7352,19 +7351,20 @@ begin
           tix := 0;
         // search for an existing connection
         result := nil;
-        fConnectionPool.Safe.ReadOnlyLock; // concurrent non blocking search
+        fConnectionPool.Safe.ReadLock; // concurrent non blocking search
         i := LockedPerThreadIndex;
         if i >= 0 then
           result := fConnectionPool.List[i];
-        fConnectionPool.Safe.ReadOnlyUnLock;
+        fConnectionPool.Safe.ReadUnLock;
         if result <> nil then
-          if result.IsOutdated(tix) then
+          if (tix <> 0) and
+             result.IsOutdated(tix) then
             // release this deprecated connection
             EndCurrentThread
           else
             // we found a valid connection for this TThreadID
             exit;
-        // we need to create a new connection
+        // we need to (re)create a new connection
         fConnectionPool.Safe.WriteLock;
         try
           result := NewConnection; // no need to release the lock (fast method)

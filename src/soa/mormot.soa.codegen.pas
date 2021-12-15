@@ -1005,7 +1005,7 @@ end;
 constructor TWrapperContext.CreateFromUsedInterfaces(
   const aDescriptions: TFileName);
 var
-  interfaces: TSynObjectListLocked;
+  interfaces: TSynObjectListLightLocked;
   services: TDocVariantData;
   i: PtrInt;
 begin
@@ -1014,11 +1014,16 @@ begin
   if interfaces = nil then
     exit;
   {%H-}services.InitFast;
-  for i := 0 to interfaces.Count - 1 do
-    services.AddItem(_ObjFast([
-      'interfaceName',
-        TInterfaceFactory(interfaces.List[i]).InterfaceTypeInfo^.RawName,
-      'methods', ContextFromMethods(interfaces.List[i])]));
+  interfaces.Safe.ReadLock;
+  try
+    for i := 0 to interfaces.Count - 1 do
+      services.AddItem(_ObjFast([
+        'interfaceName',
+          TInterfaceFactory(interfaces.List[i]).InterfaceTypeInfo^.RawName,
+        'methods', ContextFromMethods(interfaces.List[i])]));
+  finally
+    interfaces.Safe.ReadUnLock;
+  end;
   fSOA := _ObjFast([
     'enabled',  true,
     'services', variant(services)]);

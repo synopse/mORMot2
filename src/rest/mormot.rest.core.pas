@@ -1349,7 +1349,7 @@ type
     /// low-level HTTP header merge of the OutSetCookie value
     procedure OutHeadFromCookie; virtual;
     /// low-level wrapper method around GetTickCount64 to cache the value
-    // - call avoid an OS API call on server side, during a request process
+    // - may avoid OS API calls on server side, during a request process
     function TickCount64: Int64;
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
