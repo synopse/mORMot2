@@ -200,7 +200,7 @@ type
     fDBServers: array of TRestHttpOneServer;
     fDBServerNames: RawUtf8;
     fDBSingleServer: PRestHttpOneServer;
-    fSafe: TRWLock; // protect fDBServers[]
+    fSafe: TRWLightLock; // protect fDBServers[]
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUtf8;
     fAccessControlAllowOriginsMatch: TMatchs;
@@ -569,14 +569,14 @@ end;
 
 function TRestHttpServer.DBServerFind(aServer: TRestServer): integer;
 begin
-  fSafe.ReadOnlyLock; // protect fDBServers[]
+  fSafe.ReadLock; // protect fDBServers[]
   try
     for result := 0 to Length(fDBServers) - 1 do
       if fDBServers[result].Server = aServer then
         exit;
     result := -1;
   finally
-    fSafe.ReadOnlyUnLock;
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -832,12 +832,12 @@ begin
   result := nil;
   if self = nil then
     exit;
-  fSafe.ReadOnlyLock; // protect fDBServers[]
+  fSafe.ReadLock; // protect fDBServers[]
   try
     if cardinal(Index) < cardinal(length(fDBServers)) then
       result := fDBServers[Index].Server;
   finally
-    fSafe.ReadOnlyUnLock;
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -1049,7 +1049,7 @@ begin
       else
       begin
         // thread-safe use of dynamic fDBServers[] array
-        fSafe.ReadOnlyLock;
+        fSafe.ReadLock;
         try
           for i := 0 to length(fDBServers) - 1 do
             with fDBServers[i] do
@@ -1064,7 +1064,7 @@ begin
                 break;
               end;
         finally
-          fSafe.ReadOnlyUnLock;
+          fSafe.ReadUnLock;
         end;
       end;
       if (match = rmNoMatch) or

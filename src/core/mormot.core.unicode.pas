@@ -2408,7 +2408,7 @@ end;
 var
   // internal list of TSynAnsiConvert instances
   SynAnsiConvertList: array of TSynAnsiConvert;
-  SynAnsiConvertListLock: TRWLock;
+  SynAnsiConvertListLock: TRWLightLock;
   SynAnsiConvertListCount: integer;
   SynAnsiConvertListCodePage: TWordDynArray; // for fast lookup in CPU L1 cache
 
@@ -2590,14 +2590,14 @@ function GetEngine(aCodePage: cardinal): TSynAnsiConvert;
 var
   i: PtrInt;
 begin
-  SynAnsiConvertListLock.ReadOnlyLock; // concurrent read lock
+  SynAnsiConvertListLock.ReadLock; // concurrent read lock
   i := WordScanIndex(pointer(SynAnsiConvertListCodePage),
     SynAnsiConvertListCount, aCodePage);
   if i >= 0 then
     result := SynAnsiConvertList[i]
   else
     result := nil;
-  SynAnsiConvertListLock.ReadOnlyUnLock;
+  SynAnsiConvertListLock.ReadUnLock;
 end;
 
 function NewEngine(aCodePage: cardinal): TSynAnsiConvert;

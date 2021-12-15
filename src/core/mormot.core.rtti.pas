@@ -2217,7 +2217,7 @@ type
     fFlags: TRttiCustomFlags;
     fPrivateSlot: pointer;
     fPrivateSlots: TObjectDynArray;
-    fPrivateSlotLock: TLightLock;
+    fPrivateSlotsSafe: TLightLock;
     fArrayRtti: TRttiCustom;
     fFinalize: TRttiFinalizer;
     fCopy: TRttiCopier;
@@ -2410,10 +2410,10 @@ type
 
   /// efficient PRttiInfo/TRttiCustom pairs for TRttiCustomList hash table
   TRttiCustomListPairs = record
+    /// efficient PerHash[].Pairs thread-safety during Find/AddToPairs
+    Safe: TRWLightLock;
     /// speedup search by name e.g. from a loop
     Last: TRttiCustom;
-    /// efficient PerHash[].Pairs thread-safety during Find/AddToPairs
-    Safe: TRWLock;
     /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by Name[0][1]
     PerHash: array[0..RTTICUSTOMTYPEINFOHASH] of TRttiCustomListPair;
   end;
@@ -7694,16 +7694,16 @@ end;
 function TRttiCustom.GetPrivateSlot(aClass: TClass): pointer;
 begin
   // is used by GetWeakZero() so benefits from a per-class lock
-  fPrivateSlotLock.Lock;
+  fPrivateSlotsSafe.Lock;
   result := pointer(fPrivateSlots);
   if result <> nil then
     result := FindPrivateSlot(aClass, result);
-  fPrivateSlotLock.UnLock;
+  fPrivateSlotsSafe.UnLock;
 end;
 
 function TRttiCustom.SetPrivateSlot(aObject: TObject): pointer;
 begin
-  fPrivateSlotLock.Lock;
+  fPrivateSlotsSafe.Lock;
   try
     result := pointer(fPrivateSlots);
     if result <> nil then
@@ -7716,7 +7716,7 @@ begin
     else
       aObject.Free;
   finally
-    fPrivateSlotLock.UnLock;
+    fPrivateSlotsSafe.UnLock;
   end;
 end;
 
@@ -7773,10 +7773,10 @@ begin
     // our optimized "hash table of the poor" (tm) lookup
     k := @PerKind^[Info^.Kind];
     // note: we tried to include RawName[2] and $df, but with no gain
-    k^.Safe.ReadOnlyLock;
+    k^.Safe.ReadLock;
     result := LockedFind(Info, @k^.PerHash[(PtrUInt(Info.RawName[0]) xor
       PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH]);
-    k^.Safe.ReadOnlyUnLock;
+    k^.Safe.ReadUnLock;
   end
   else
     // direct lookup of the vmtAutoTable slot for classes
@@ -7788,7 +7788,7 @@ begin
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
 end;
 
-function FindNameInPairs(Pairs, PEnd: PPointerArray;
+function LockedFindNameInPairs(Pairs, PEnd: PPointerArray;
   Name: PUtf8Char; NameLen: PtrInt): TRttiCustom;
 var
   nfo: PRttiInfo;
@@ -7849,11 +7849,11 @@ begin
     // our optimized "hash table of the poor" (tm) lookup
     p := @k^.PerHash[(PtrUInt(NameLen) xor PtrUInt(Name[0]))
            and RTTICUSTOMTYPEINFOHASH];
-    k^.Safe.ReadOnlyLock;
+    k^.Safe.ReadLock;
     result := pointer(p^.Pairs);
     if result <> nil then
-      result := FindNameInPairs(pointer(result), p^.PairsEnd, Name, NameLen);
-    k^.Safe.ReadOnlyUnLock;
+      result := LockedFindNameInPairs(pointer(result), p^.PairsEnd, Name, NameLen);
+    k^.Safe.ReadUnLock;
     if result <> nil then
       k^.Last := result;
   end
@@ -7888,39 +7888,46 @@ begin
   result := Find(@Name[1], ord(Name[0]), Kinds);
 end;
 
+function FindNameInArray(Pairs, PEnd: PPointerArray; ElemInfo: PRttiInfo): TRttiCustom;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  repeat
+    result := Pairs[1]; // PRttiInfo/TRttiCustom pairs
+    if (result.ArrayRtti <> nil) and
+       (result.ArrayRtti.Info = ElemInfo) then
+      exit;
+    Pairs := @Pairs[2];
+  until Pairs = PEnd;
+  result := nil;
+end;
+
 function TRttiCustomList.FindByArrayRtti(ElemInfo: PRttiInfo): TRttiCustom;
 var
-  i: PtrInt;
+  n: integer;
   k: PRttiCustomListPairs;
   p: PRttiCustomListPair;
-  pp: PPointerArray;
 begin
-  if ElemInfo <> nil then
+  if ElemInfo = nil then
   begin
-    k := @PerKind^[rkDynArray];
-    k^.Safe.ReadOnlyLock;
-    try
-      for i := 0 to high(k^.PerHash) do
-      begin
-        p := @k.PerHash[i];
-        pp := pointer(p^.Pairs);
-        if pp <> nil then
-        begin
-          p := p^.PairsEnd;
-          repeat
-            result := pp[1]; // PRttiInfo/TRttiCustom pairs
-            if (result.ArrayRtti <> nil) and
-               (result.ArrayRtti.Info = ElemInfo) then
-              exit;
-            pp := @pp[2];
-          until PAnsiChar(pp) = PAnsiChar(p);
-        end;
-      end;
-    finally
-      k^.Safe.ReadOnlyUnLock;
-    end;
+    result := nil;
+    exit;
   end;
-  result := nil;
+  k := @PerKind^[rkDynArray];
+  k^.Safe.ReadLock;
+  p := @k^.PerHash;
+  n := length(k^.PerHash);
+  repeat
+    result := pointer(p^.Pairs);
+    if result <> nil then
+    begin
+      result := FindNameInArray(pointer(p^.Pairs), p^.PairsEnd, ElemInfo);
+      if result <> nil then
+        break;
+    end;
+    inc(p);
+    dec(n);
+  until n = 0;
+  k^.Safe.ReadUnLock;
 end;
 
 function TRttiCustomList.RegisterType(Info: PRttiInfo): TRttiCustom;

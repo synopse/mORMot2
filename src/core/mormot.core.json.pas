@@ -1036,7 +1036,7 @@ type
     fMaxRamUsed: cardinal;
     fTimeoutSeconds: cardinal;
     fTimeoutTix: cardinal;
-    fSafe: TRWLock;
+    fSafe: TRWLightLock;
     procedure ResetIfNeeded;
   public
     /// initialize the internal storage
@@ -1069,7 +1069,7 @@ type
     function Reset: boolean;
     /// access to the internal R/W locker, for thread-safe process
     // - Find/AddOrUpdate methods are protected by this R/W lock
-    property Safe: TRWLock
+    property Safe: TRWLightLock
       read fSafe;
   published
     /// number of entries in the cache
@@ -8614,7 +8614,7 @@ begin
   if (self = nil) or
      (aKey = '') then
     exit;
-  fSafe.ReadOnlyLock;
+  fSafe.ReadLock;
   ndx := fNameValue.Find(aKey);
   if ndx >= 0 then
     with fNameValue.List[ndx] do
@@ -8623,7 +8623,7 @@ begin
       if aResultTag <> nil then
         aResultTag^ := Tag;
     end;
-  fSafe.ReadOnlyUnLock;
+  fSafe.ReadUnLock;
 end;
 
 function TSynCache.AddOrUpdate(const aKey, aValue: RawUtf8; aTag: PtrInt): boolean;

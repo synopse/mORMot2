@@ -889,18 +889,15 @@ type
   TOnResolverCreateInstance = procedure(
     Sender: TInterfaceResolver; Instance: TInterfacedObject) of object;
 
-  /// register a list of classes to implement some interfaces
+  /// register a thread-safe list of classes to implement some interfaces
   // - as used e.g. by TInterfaceResolverInjected.RegisterGlobal()
-  // - this class is thread-safe
   TInterfaceResolverList = class(TInterfaceResolver)
   protected
     fEntry: TInterfaceResolverListEntries;
+    fSafe: TRWLightLock;
     fOnCreateInstance: TOnResolverCreateInstance;
-    fSafe: TRWLock;
-    function PrepareAddAndLock(aInterface: PRttiInfo;
+    function PrepareAddAndWriteLock(aInterface: PRttiInfo;
       aImplementationClass: TClass): PInterfaceEntry; // fSafe.WriteUnLock after
-    function LockedFind(aInterface: PRttiInfo): PInterfaceResolverListEntry;
-      {$ifdef HASINLINE} inline; {$endif}
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
   public
     /// check if a given interface can be resolved, from its RTTI
@@ -921,8 +918,12 @@ type
     property OnCreateInstance: TOnResolverCreateInstance
       read fOnCreateInstance write fOnCreateInstance;
     /// low-level access to the internal registered interface/class list
+    // - should be protected via the Safe locking methods
     property Entry: TInterfaceResolverListEntries
       read fEntry;
+    /// low-level access to the internal lock for thread-safety
+    property Safe: TRWLightLock
+      read fSafe;
   end;
 
   /// abstract factory class targetting any kind of interface
@@ -2590,9 +2591,11 @@ begin
         8:
           result := PInt64(V)^ = 0;
       end;
-    imvRawUtf8..imvWideString, imvObject..imvInterface:
+    imvRawUtf8..imvWideString,
+    imvObject..imvInterface:
       result := PPointer(V)^ = nil;
-    imvBinary, imvRecord:
+    imvBinary,
+    imvRecord:
       result := IsZeroSmall(V, SizeInStorage);
     imvVariant:
       result := PVarData(V)^.vtype <= varNull;
@@ -2851,7 +2854,7 @@ begin
       begin
         obj := ArgRtti.ClassNewInstance;
         try
-          if DocVariantToObject(_Safe(Value)^, obj) then
+          if DocVariantToObject(_Safe(Value)^, obj, ArgRtti) then
             Value := _ObjFast(obj, [woEnumSetsAsText]);
         finally
           obj.Free;
@@ -2865,7 +2868,7 @@ begin
         try
           VariantSaveJson(Value, twJsonEscape, json);
           dyn.LoadFromJson(pointer(json));
-          json := dyn.SaveToJson(true);
+          json := dyn.SaveToJson({EnumSetsAsText=}true);
           _Json(json, Value, JSON_FAST);
         finally
           dyn.Clear;
@@ -5091,7 +5094,7 @@ end;
 
 { TInterfaceResolverList }
 
-function TInterfaceResolverList.PrepareAddAndLock(aInterface: PRttiInfo;
+function TInterfaceResolverList.PrepareAddAndWriteLock(aInterface: PRttiInfo;
   aImplementationClass: TClass): PInterfaceEntry;
 var
   i: PtrInt;
@@ -5122,7 +5125,7 @@ var
   e: PInterfaceEntry;
   n: PtrInt;
 begin
-  e := PrepareAddAndLock(aInterface, aImplementationClass);
+  e := PrepareAddAndWriteLock(aInterface, aImplementationClass);
   try
     // here we are protected within a fSafe.WriteLock
     n := length(fEntry);
@@ -5144,7 +5147,7 @@ var
   e: PInterfaceEntry;
   n: PtrInt;
 begin
-  e := PrepareAddAndLock(aInterface, aImplementation.ClassType);
+  e := PrepareAddAndWriteLock(aInterface, aImplementation.ClassType);
   try
     // here we are protected within a fSafe.WriteLock
     n := length(fEntry);
@@ -5191,12 +5194,13 @@ begin
   end;
 end;
 
-function TInterfaceResolverList.LockedFind(
+function LockedFind(aList: TInterfaceResolverList;
   aInterface: PRttiInfo): PInterfaceResolverListEntry;
+  {$ifdef HASINLINE} inline; {$endif}
 var
   n: integer;
 begin
-  result := pointer(fEntry);
+  result := pointer(aList.fEntry);
   if result = nil then
     exit;
   // fast brute-force search in L1 cache (TInterfaceResolverListEntries)
@@ -5218,9 +5222,9 @@ var
 begin
   new := nil;
   result := true;
-  fSafe.ReadOnlyLock; // Multiple Read / Exclusive Write lock
+  fSafe.ReadLock; // Multiple Read / Exclusive Write lock
   try
-    e := LockedFind(aInterface);
+    e := LockedFind(self, aInterface);
     if e <> nil then
     begin
       if e^.Instance <> nil then
@@ -5238,7 +5242,7 @@ begin
       end;
     end;
   finally
-    fSafe.ReadOnlyUnLock;
+    fSafe.ReadUnLock;
   end;
   if new <> nil then
   begin
@@ -5252,9 +5256,9 @@ end;
 
 function TInterfaceResolverList.Implements(aInterface: PRttiInfo): boolean;
 begin
-  fSafe.ReadOnlyLock; // Multiple Read / Exclusive Write lock
-  result := LockedFind(aInterface) <> nil;
-  fSafe.ReadOnlyUnLock;
+  fSafe.ReadLock; // Multiple Read / Exclusive Write lock
+  result := LockedFind(self, aInterface) <> nil;
+  fSafe.ReadUnLock;
 end;
 
 
