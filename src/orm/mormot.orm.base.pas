@@ -1902,10 +1902,11 @@ type
   TOrmPropInfoList = class
   protected
     fList: TOrmPropInfoObjArray;
-    fCount: integer;
     fTable: TClass; // TOrmClass
+    fCount: integer;
     fOptions: TOrmPropInfoListOptions;
     fOrderedByName: TByteDynArray;
+    fLast: TOrmPropInfo;
     function GetItem(aIndex: PtrInt): TOrmPropInfo;
     procedure QuickSortByName(L, R: PtrInt);
     procedure InternalAddParentsFirst(aClassType: TClass); overload;
@@ -1966,6 +1967,9 @@ type
     // - note that length(List) may not equal Count, since is its capacity
     property List: TOrmPropInfoObjArray
       read fList;
+    /// low-level access to the last TOrmPropInfo in the list
+    property Last: TOrmPropInfo
+      read fLast;
     /// read-only retrieval of a TOrmPropInfo item
     // - will raise an exception if out of range
     property Items[aIndex: PtrInt]: TOrmPropInfo
@@ -7102,6 +7106,10 @@ var
   i: PtrInt;
 begin
   SetLength(fList, fCount);
+  if fCount = 0 then
+    fLast := nil
+  else
+    fLast := fList[fCount - 1];
   // initialize once the ordered lookup indexes, for binary search
   SetLength(fOrderedByName, fCount);
   for i := 0 to fCount - 1 do

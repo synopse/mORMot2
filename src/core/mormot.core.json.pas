@@ -621,7 +621,8 @@ type
     // a comma (',')
     procedure AddPropJsonString(const PropName: ShortString; const Text: RawUtf8);
     /// append a JSON field name, followed by a number value and a comma (',')
-    procedure AddPropJsonInt64(const PropName: ShortString; Value: Int64);
+    procedure AddPropJsonInt64(const PropName: ShortString; Value: Int64;
+      WithQuote: AnsiChar = #0);
     /// append CR+LF (#13#10) chars and #9 indentation
     // - will also flush any fBlockComment
     procedure AddCRAndIndent; override;
@@ -5415,15 +5416,19 @@ procedure TJsonWriter.AddPropJsonString(const PropName: ShortString;
   const Text: RawUtf8);
 begin
   AddProp(@PropName[1], ord(PropName[0]));
-  AddJsonString(Text);
+  AddJsonString(Text); // " + AddJsonEscape(Text) + "
   AddComma;
 end;
 
 procedure TJsonWriter.AddPropJsonInt64(const PropName: ShortString;
-  Value: Int64);
+  Value: Int64; WithQuote: AnsiChar);
 begin
   AddProp(@PropName[1], ord(PropName[0]));
+  if WithQuote <> #0 then
+    Add(WithQuote);
   Add(Value);
+  if WithQuote <> #0 then
+    Add(WithQuote);
   AddComma;
 end;
 

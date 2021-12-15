@@ -1634,7 +1634,7 @@ type
     function GetTable: TOrmTable;
     /// register RttiJsonRead/RttiJsonWrite callbacks for custom serialization
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
-    /// fake nested TOrm classes would be serialized as integer
+    /// 'fake' nested TOrm properties would be serialized as integer
     function IsPropClassInstance(Prop: PRttiCustomProp): boolean; virtual;
     function RttiWritePropertyValue(W: TTextWriter; Prop: PRttiCustomProp;
       Options: TTextWriterWriteObjectOptions): boolean; override;
@@ -6289,7 +6289,7 @@ begin
     rtticustom.Flags := rtticustom.Flags +
       [rcfDisableStored,  // for AS_UNIQUE
        rcfHookWriteProperty, rcfHookReadProperty, // custom RttiWrite/RttiRead
-       rcfClassMayBeID];  // for IsPropClassInstance
+       rcfClassMayBeID];  // avoid most IsPropClassInstance calls
     self.InternalDefineModel(result);
   finally
     mormot.core.os.LeaveCriticalSection(Rtti.RegisterLock);
@@ -7869,7 +7869,8 @@ begin
     result := false // default JSON object serialization
   else
   begin
-    W.Add(PPtrInt(PAnsiChar(self) + Prop^.OffsetGet)^); // serialized as integer
+    // a 'fake' nested TOrm published property should be serialized as integer
+    W.Add(PPtrInt(PAnsiChar(self) + Prop^.OffsetGet)^);
     result := true; // abort default serialization
   end;
 end;
@@ -7883,6 +7884,7 @@ begin
     result := false // default JSON object serialization
   else
   begin
+    // a 'fake' nested TOrm published property should be serialized as integer
     PPtrInt(PAnsiChar(self) + Prop^.OffsetSet)^ :=
       PJsonParserContext(Ctxt)^.ParseInteger;
     result := true; // abort default serialization
@@ -7917,7 +7919,10 @@ begin
           IdemPropNameU(cur^.Name, name, namelen) then
        begin
          f := cur^; // optimistic O(1) property lookup
-         inc(cur);
+         if f <> props.Last then
+           inc(cur)
+         else
+           cur := nil;
        end
        else
        begin
@@ -7930,10 +7935,6 @@ begin
   until Context.EndOfObject = '}';
   Context.ParseEndOfObject;
 end;
-
-const
-  ID_JSON: array[boolean] of string[7] = (
-    'RowID', 'ID'); // see also TOrmWriter.SetOrmOptions: Ajax requires ID
 
 class procedure TOrm.RttiJsonWrite(W: TJsonWriter; Instance: TObject;
   Options: TTextWriterWriteObjectOptions);
@@ -7948,7 +7949,13 @@ begin
     exit;
   end;
   W.BlockBegin('{', Options);
-  W.AddPropJsonInt64(ID_JSON[woIDAsIDstr in Options], TOrm(Instance).fID);
+  if woIDAsIDstr in Options then
+  begin
+    W.AddPropJsonInt64('ID', TOrm(Instance).fID);
+    W.AddPropJsonInt64('ID_str', TOrm(Instance).fID, '"'); // for AJAX
+  end
+  else
+    W.AddPropJsonInt64('RowID', TOrm(Instance).fID);
   props := TOrm(Instance).Orm.Fields;
   cur := pointer(props.List);
   n := props.Count;
