@@ -9252,14 +9252,14 @@ begin
 end;
 
 const
-  RLE_CW = $33; // any byte would do - this one is nothing special but for me
+  RLE_CW = $5a; // any byte would do - this one is nothing special but for me
 
 function RleEncode(dst: PByteArray; v, n: PtrUInt): PByteArray;
   {$ifdef HASINLINE} inline; {$endif}
 begin
   if (n > 3) or
-     (v = RLE_CW) then
-  begin // encode as dst[0]=RLE_CW dst[1]=count dst[2]=value
+     (v = RLE_CW) then // encode as dst[0]=RLE_CW dst[1]=count dst[2]=value
+  begin
     v := v shl 16;
     inc(v, RLE_CW);
     while n > 255 do
