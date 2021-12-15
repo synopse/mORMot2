@@ -2535,6 +2535,8 @@ type
   // deadlock: use TRWLock or TSynLocker/TRTLCriticalSection for reentrant methods
   // - light locks are expected to be kept a very small amount of time: use
   // TSynLocker or TRTLCriticalSection if the lock may block too long
+  // - several lightlocks, each protecting a few variables (e.g. a list), may
+  // be more efficient than a more global TRTLCriticalSection/TRWLock
   // - only consume 4 bytes on CPU32, 8 bytes on CPU64
   {$ifdef USERECORDWITHMETHODS}
   TLightLock = record
@@ -2554,13 +2556,64 @@ type
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
     /// try to enter an exclusive non-rentrant lock
-    // - if returned true, caller should eventually call LightUnLock()
-    // - several lightlocks, each protecting a few variables (e.g. a list), may be
-    // more efficient than a more global TRTLCriticalSection/TRWLock
+    // - if returned true, caller should eventually call UnLock()
     function TryLock: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// leave an exclusive non-rentrant lock
     procedure UnLock;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
+  /// a lightweight multiple Reads / exclusive Write non-upgradable lock
+  // - calls SwitchToThread after some spinning, but don't use any R/W OS API
+  // - warning: ReadLocks are reentrant and allow concurrent acccess, but calling
+  // WriteLock within a ReadLock, or within another WriteLock, would deadlock
+  // - consider TRWLock is you need an upgradable lock
+  // - light locks are expected to be kept a very small amount of time: use
+  // TSynLocker or TRTLCriticalSection if the lock may block too long
+  // - several lightlocks, each protecting a few variables (e.g. a list), may
+  // be more efficient than a more global TRTLCriticalSection/TRWLock
+  // - only consume 4 bytes on CPU32, 8 bytes on CPU64
+  {$ifdef USERECORDWITHMETHODS}
+  TRWLightLock = record
+  {$else}
+  TRWLightLock = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    Flags: PtrUInt; // bit 0 = WriteLock, >0 = ReadLock
+    // low-level function called by the Lock method when inlined
+    procedure ReadLockSpin;
+  public
+    /// to be called if the instance has not been filled with 0
+    // - e.g. not needed if TRWLightLock is defined as a class field
+    procedure Init;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// enter a non-upgradable multiple reads lock
+    // - read locks maintain a thread-safe counter, so are reentrant and non blocking
+    // - warning: nested WriteLock call after a ReadLock would deadlock
+    procedure ReadLock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// try to enter a non-upgradable multiple reads lock
+    // - if returned true, caller should eventually call ReadUnLock()
+    // - read locks maintain a thread-safe counter, so are reentrant and non blocking
+    // - warning: nested WriteLock call after a ReadLock would deadlock
+    function TryReadLock: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// leave a non-upgradable multiple reads lock
+    procedure ReadUnLock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// enter a non-rentrant non-upgradable exclusive write lock
+    // - warning: nested WriteLock call after a ReadLock or another WriteLock
+    // would deadlock
+    procedure WriteLock;
+    /// try to enter a non-rentrant non-upgradable exclusive write lock
+    // - if returned true, caller should eventually call UnLock()
+    // - warning: nested TryWriteLock call after a ReadLock or another WriteLock
+    // would deadlock
+    function TryWriteLock: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// leave a non-rentrant non-upgradable exclusive write lock
+    procedure WriteUnLock;
       {$ifdef HASINLINE} inline; {$endif}
   end;
 
@@ -2571,7 +2624,7 @@ type
     cReadWrite,
     cWrite);
 
-  /// a lightweight multiple Reads / exclusive Write lock
+  /// a lightweight multiple Reads / exclusive Write reentrant lock
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
   // - locks are expected to be kept a very small amount of time: use TSynLocker
   // or TRTLCriticalSection if the lock may block too long
@@ -2598,7 +2651,7 @@ type
     procedure AssertDone;
     /// wait for the lock to be available for reading, but not upgradable to write
     // - several readers could acquire the lock simultaneously
-    // - ReadOnlyLock is reentrant since there is an internal counter
+    // - ReadOnlyLock is reentrant since there is a thread-safe internal counter
     // - warning: calling ReadWriteLock/WriteLock after ReadOnlyLock would deadlock
     // - typical usage is the following:
     // ! rwlock.ReadOnlyLock; // won't block concurrent ReadOnlyLock
@@ -5396,6 +5449,75 @@ begin
   Flags := 0;
 end;
 
+
+{ TRWLightLock }
+
+procedure TRWLightLock.Init;
+begin
+  Flags := 0; // bit 0=WriteLock, >0=ReadLock counter
+end;
+
+procedure TRWLightLock.ReadLockSpin;
+var
+  f, spin: PtrUInt;
+begin
+  spin := SPIN_COUNT;
+  repeat
+    spin := DoSpin(spin);
+    f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock counter
+  until LockedExc(Flags, f + 2, f);
+end;
+
+procedure TRWLightLock.ReadLock;
+var
+  f: PtrUInt;
+begin
+  // if not writing, atomically increase the RD counter in the upper flag bits
+  f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock counter
+  if not LockedExc(Flags, f + 2, f) then
+    ReadLockSpin;
+end;
+
+function TRWLightLock.TryReadLock: boolean;
+var
+  f: PtrUInt;
+begin
+  // if not writing, atomically increase the RD counter in the upper flag bits
+  f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock counter
+  result := LockedExc(Flags, f + 2, f);
+end;
+
+procedure TRWLightLock.ReadUnLock;
+begin
+  LockedDec(Flags, 2);
+end;
+
+procedure TRWLightLock.WriteLock;
+var
+  spin, f: PtrUInt;
+begin
+  spin := SPIN_COUNT;
+  // acquire the WR flag bit
+  repeat
+    f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock counter
+    if LockedExc(Flags, f + 1, f) then
+      exit;
+    spin := DoSpin(spin);
+  until false;
+end;
+
+function TRWLightLock.TryWriteLock: boolean;
+var
+  f: PtrUInt;
+begin
+  f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock
+  result := LockedExc(Flags, f + 1, f);
+end;
+
+procedure TRWLightLock.WriteUnLock;
+begin
+  LockedDec(Flags, 1);
+end;
 
 
 { TRWLock }

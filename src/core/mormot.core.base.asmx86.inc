@@ -2337,7 +2337,7 @@ end;
 function RefCntDecFree(var refcnt: TRefCnt): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-        lock dec dword ptr [refcnt]  // TRefCnt=longint on Delphi and FPC 32-bit
+   lock dec dword ptr [refcnt]  // TRefCnt=longint on Delphi and FPC 32-bit
         setbe   al
 end; // don't check for ismultithread global since lock is cheaper on new CPUs
 
@@ -2364,9 +2364,9 @@ end;
 function IsXmmYmmOSEnabled: boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
-        xor     ecx, ecx  // specify control register XCR0 = XFEATURE_ENABLED_MASK
+        xor     ecx, ecx  // get control register XCR0 = XFEATURE_ENABLED_MASK
         db  $0f, $01, $d0 // XGETBV reads XCR0 into EDX:EAX
-        and     eax, 6    // check OS has enabled both XMM (bit 1) and YMM (bit 2)
+        and     eax, 6    // check OS enabled both XMM (bit 1) and YMM (bit 2)
         cmp     al, 6
         sete    al
 end;
