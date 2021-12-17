@@ -97,11 +97,11 @@ type
 
 { ****************** Low-Level Memory Buffers Helper Functions }
 
-/// apply the XOR operation to the supplied binary buffers of 16 bytes
+/// apply the A = A XOR B operation to the supplied binary buffers of 16 bytes
 procedure XorBlock16(A, B: PPtrIntArray);
   {$ifdef HASINLINE}inline;{$endif} overload;
 
-/// apply the XOR operation to the supplied binary buffers of 16 bytes
+/// apply the B = A XOR C operation to the supplied binary buffers of 16 bytes
 procedure XorBlock16(A, B, C: PPtrIntArray);
  {$ifdef HASINLINE}inline;{$endif} overload;
 
@@ -6723,18 +6723,19 @@ end;
 class function TAesPrngAbstract.AFUnsplit(const Split: RawByteString;
   out Buffer; BufferBytes: integer): boolean;
 var
-  len, i: cardinal;
+  len, unsplit, i: cardinal;
   src: pointer;
   tmp: TByteDynArray;
 begin
   len := length(Split);
+  unsplit := len div cardinal(BufferBytes);
   result := (len <> 0) and
-            (len mod cardinal(BufferBytes) = 0);
+            (unsplit * cardinal(BufferBytes) = len);
   if not result then
     exit;
   src := pointer(Split);
   SetLength(tmp, BufferBytes);
-  for i := 2 to len div cardinal(BufferBytes) do
+  for i := 2 to unsplit do
   begin
     AFDiffusion(pointer(tmp), src, BufferBytes);
     inc(PByte(src), BufferBytes);
@@ -6745,16 +6746,17 @@ end;
 class function TAesPrngAbstract.AFUnsplit(const Split: RawByteString;
   StripesCount: integer): RawByteString;
 var
-  len: cardinal;
+  len, unsplit: cardinal;
 begin
   result := '';
   len := length(Split);
+  inc(StripesCount);
+  unsplit := len div cardinal(StripesCount);
   if (len = 0) or
-     (len mod cardinal(StripesCount + 1) <> 0) then
+     (unsplit * cardinal(StripesCount) <> len) then
     exit;
-  len := len div cardinal(StripesCount + 1);
-  SetLength(result, len);
-  if not AFUnsplit(Split, pointer(result)^, len) then
+  SetLength(result, unsplit);
+  if not AFUnsplit(Split, pointer(result)^, unsplit) then
     result := '';
 end;
 
