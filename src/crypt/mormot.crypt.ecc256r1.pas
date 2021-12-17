@@ -273,24 +273,48 @@ type
   /// points to certification information of a TEccCertificate
   PEccCertificateSigned = ^TEccCertificateSigned;
 
-  /// store a TEccCertificate binary buffer for ECC secp256r1 cryptography
+  /// store the version 1 TEccCertificate binary buffer for ECC cryptography
   // - i.e. a certificate public key, with its ECDSA signature
   // - would be stored in 173 bytes
-  TEccCertificateContent = packed record
+  TEccCertificateContentV1 = packed record
     /// the TEccCertificate format version
+    // - 1 for mORMot 1 legacy layout, 2 for mORMot 2 with Usage + Issuer
     Version: word;
     /// the certification information, digitaly signed in the Signature field
     Signed: TEccCertificateSigned;
     /// SHA-256 + ECDSA secp256r1 signature of the Certificate record
     Signature: TEccSignature;
-    /// FNV-1a checksum of all previous fields
+    /// FNV-1a checksum of all other fields
     // - we use fnv32 and not crc32c here to avoid colision with crc64c hashing
     // - avoiding to compute slow ECDSA verification in case of corruption,
     // due e.g. to unexpected transmission/bug/fuzzing/dosattack
-    // - should be the very last field in the record
+    // - include V2Info content
     CRC: cardinal;
   end;
 
+  /// up to 512 bytes of additional data for TEccCertificate binary version >= 2
+  TEccCertificateContentV2 = packed record
+    /// 16-bit storage for TCryptCertUsage
+    Usage: word;
+    /// 16-bit len of additional V2Data information
+    DataLen: word;
+    /// some additional data, e.g. the Subject, in up to 508 bytes
+    // - such data will be stored with variable length
+    Data: array[0..507] of byte;
+  end;
+
+  /// store a TEccCertificate binary buffer for ECC secp256r1 cryptography
+  // - i.e. a certificate public key, with its ECDSA signature
+  // - would be stored in 173 bytes (version 1) and 177+ bytes (version 2)
+  TEccCertificateContent = TEccCertificateContentV1;
+{
+  TEccCertificateContent = object
+    /// basic content - version 1 compatible
+    Head: TEccCertificateContentV1;
+    /// new version >= 2 with additional information
+    Info: TEccCertificateContentV2;
+  end;
+}
   /// points to a TEccCertificate binary buffer for ECC secp256r1 cryptography
   PEccCertificateContent = ^TEccCertificateContent;
 
@@ -320,6 +344,7 @@ type
   // TEccSignatureCertified.Verify, TEccCertificateChain.IsValid or
   // TEccCertificateChain.IsSigned methods
   // - see also ECC_VALIDSIGN constant
+  // - match TCertificateValidity enumerate in mormot.crypt.secure
   TEccValidity = (
     ecvUnknown,
     ecvValidSigned,
@@ -391,7 +416,6 @@ function IsEqual(const id1, id2: TEccCertificateID): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// ensure a TEccCertificateIssuer binary buffer is not void, i.e. filled with 0
-
 function IsZero(const issuer: TEccCertificateIssuer): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -425,7 +449,8 @@ function EccCheck(const content: TEccCertificateContent): boolean; overload;
 
 /// fast check of the dates stored in a certificate binary buffer
 // - could be validated against EccCheck()
-function EccCheckDate(const content: TEccCertificateContent): boolean;
+function EccCheckDate(const content: TEccCertificateContent;
+  nowdate: PEccDate = nil): boolean;
 
 /// fast check if the binary buffer storage of a certificate was self-signed
 // - a self-signed certificate will have its AuthoritySerial/AuthorityIssuer
@@ -1450,11 +1475,14 @@ begin
                 (fnv32(0, @content, SizeOf(content) - 4) = content.CRC);
 end;
 
-function EccCheckDate(const content: TEccCertificateContent): boolean;
+function EccCheckDate(const content: TEccCertificateContent;
+  nowdate: PEccDate): boolean;
 var
   now: TEccDate;
 begin
   now := NowEccDate;
+  if nowdate <> nil then
+    nowdate^ := now;
   with content.Signed do
     result := (IssueDate <= now) and
               ((ValidityStart = 0) or
@@ -1505,17 +1533,19 @@ end;
 
 function EccVerify(const sign: TEccSignatureCertifiedContent;
   const hash: THash256; const auth: TEccCertificateContent): TEccValidity;
+var
+  now: TEccDate;
 begin
   if IsZero(hash) then
     result := ecvBadParameter
   else if not EccCheck(sign) then
     result := ecvCorrupted
-  else if sign.Date > NowEccDate then
-    result := ecvInvalidDate
   else if not EccCheck(auth) then
     result := ecvUnknownAuthority
-  else if not EccCheckDate(auth) then
+  else if not EccCheckDate(auth, @now) then
     result := ecvDeprecatedAuthority
+  else if sign.Date > now then
+    result := ecvInvalidDate
   else if not Ecc256r1Verify(auth.Signed.PublicKey, hash, sign.Signature) then
     result := ecvInvalidSignature
   else if EccSelfSigned(auth) then
@@ -1527,6 +1557,7 @@ end;
 
 initialization
   assert(ECC_QUAD = 4);
+  writeln(SizeOf(TEccCertificateContent));
   assert(SizeOf(TEccCertificateContent) = 173); // on all platforms/compilers
   // register our branchless pascal code by default
   @Ecc256r1MakeKey := @ecc_make_key_pas;
