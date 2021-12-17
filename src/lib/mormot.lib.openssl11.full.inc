@@ -668,12 +668,6 @@ const
   B_ASN1_GENERALIZEDTIME = $8000;
   B_ASN1_SEQUENCE = $10000;
   
-  MBSTRING_FLAG = $1000;
-  MBSTRING_UTF8 = MBSTRING_FLAG;
-  MBSTRING_ASC = MBSTRING_FLAG or 1;
-  MBSTRING_BMP = MBSTRING_FLAG or 2;
-  MBSTRING_UNIV = MBSTRING_FLAG or 4;
-  
   SMIME_OLDMIME = $400;
   SMIME_CRLFEOL = $800;
   SMIME_STREAM = $1000;
@@ -697,29 +691,6 @@ const
   
   PKCS9STRING_TYPE = DIRSTRING_TYPE or
                      B_ASN1_IA5STRING;
-  
-  ASN1_STRFLGS_ESC_2253 = 1;
-  ASN1_STRFLGS_ESC_CTRL = 2;
-  ASN1_STRFLGS_ESC_MSB = 4;
-  ASN1_STRFLGS_ESC_QUOTE = 8;
-  
-  CHARTYPE_PRINTABLESTRING = $10;
-  CHARTYPE_FIRST_ESC_2253 = $20;
-  CHARTYPE_LAST_ESC_2253 = $40;
-  
-  ASN1_STRFLGS_UTF8_CONVERT = $10;
-  ASN1_STRFLGS_IGNORE_TYPE = $20;
-  ASN1_STRFLGS_SHOW_TYPE = $40;
-  ASN1_STRFLGS_DUMP_ALL = $80;
-  ASN1_STRFLGS_DUMP_UNKNOWN = $100;
-  ASN1_STRFLGS_DUMP_DER = $200;
-  ASN1_STRFLGS_ESC_2254 = $400;
-  ASN1_STRFLGS_RFC2253 = ASN1_STRFLGS_ESC_2253 or
-                         ASN1_STRFLGS_ESC_CTRL or
-                         ASN1_STRFLGS_ESC_MSB or
-                         ASN1_STRFLGS_UTF8_CONVERT or
-                         ASN1_STRFLGS_DUMP_UNKNOWN or
-                         ASN1_STRFLGS_DUMP_DER;
   
   B_ASN1_TIME = B_ASN1_UTCTIME or
                 B_ASN1_GENERALIZEDTIME;
@@ -2239,7 +2210,6 @@ const
   NID_subject_directory_attributes = 769;
   SN_subject_key_identifier = 'subjectKeyIdentifier';
   LN_subject_key_identifier = 'X509v3 Subject Key Identifier';
-  NID_subject_key_identifier = 82;
   SN_key_usage = 'keyUsage';
   LN_key_usage = 'X509v3 Key Usage';
   NID_key_usage = 83;
@@ -4738,17 +4708,6 @@ const
   X509_SIG_INFO_VALID = $1;
   X509_SIG_INFO_TLS = $2;
 
-  X509v3_KU_DIGITAL_SIGNATURE = $0080;
-  X509v3_KU_NON_REPUDIATION = $0040;
-  X509v3_KU_KEY_ENCIPHERMENT = $0020;
-  X509v3_KU_DATA_ENCIPHERMENT = $0010;
-  X509v3_KU_KEY_AGREEMENT = $0008;
-  X509v3_KU_KEY_CERT_SIGN = $0004;
-  X509v3_KU_CRL_SIGN = $0002;
-  X509v3_KU_ENCIPHER_ONLY = $0001;
-  X509v3_KU_DECIPHER_ONLY = $8000;
-  X509v3_KU_UNDEF = $ffff;
-  
   X509_EX_V_NETSCAPE_HACK = $8000;
   X509_EX_V_INIT = $0001;
   
@@ -5300,12 +5259,6 @@ const
   X509_PURPOSE_TIMESTAMP_SIGN = 9;
   X509_PURPOSE_MIN = 1;
   X509_PURPOSE_MAX = 9;
-  
-  X509V3_EXT_UNKNOWN_MASK = $f shl 16;
-  X509V3_EXT_DEFAULT = 0;
-  X509V3_EXT_ERROR_UNKNOWN = 1 shl 16;
-  X509V3_EXT_PARSE_UNKNOWN = 2 shl 16;
-  X509V3_EXT_DUMP_UNKNOWN = 3 shl 16;
   
   X509V3_ADD_OP_MASK = $f;
   X509V3_ADD_DEFAULT = 0;
@@ -9783,11 +9736,6 @@ type
   sk_X509_NAME_freefunc = procedure(a: PX509_NAME); cdecl;
   sk_X509_NAME_copyfunc = function(a: PX509_NAME): PX509_name_st; cdecl;
 
-  PX509_EXTENSION = pointer;
-  PPX509_EXTENSION = ^PX509_EXTENSION;
-  PX509_EXTENSIONS = pointer;
-  PPX509_EXTENSIONS = ^PX509_EXTENSIONS;
-
   sk_X509_EXTENSION_compfunc = function(a: PPX509_EXTENSION; b: PPX509_EXTENSION): integer; cdecl;
   sk_X509_EXTENSION_freefunc = procedure(a: PX509_EXTENSION); cdecl;
   sk_X509_EXTENSION_copyfunc = function(a: PX509_EXTENSION): PX509_extension_st; cdecl;
@@ -11296,7 +11244,6 @@ type
     bitlen: array [0..3] of PtrUInt;
   end;
 
-  Ptm = pointer;
   PPasn1_ps_func = pointer;
   PBIO_sock_info_u = pointer;
   PPEVP_PBE_KEYGEN = pointer;
@@ -12962,9 +12909,6 @@ function ASN1_STRING_set(str: PASN1_STRING; data: pointer; len: integer): intege
 procedure ASN1_STRING_set0(str: PASN1_STRING; data: pointer; len: integer); cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_STRING_set0';
 
-function ASN1_STRING_length(x: PASN1_STRING): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_STRING_length';
-
 procedure ASN1_STRING_length_set(x: PASN1_STRING; n: integer); cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_STRING_length_set';
 
@@ -13006,12 +12950,6 @@ function ASN1_BIT_STRING_num_asc(name: PUtf8Char; tbl: PBIT_STRING_BITNAME): int
 
 function ASN1_BIT_STRING_set_asc(bs: PASN1_BIT_STRING; name: PUtf8Char; value: integer; tbl: PBIT_STRING_BITNAME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_BIT_STRING_set_asc';
-
-function ASN1_INTEGER_new(): PASN1_INTEGER; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_INTEGER_new';
-
-procedure ASN1_INTEGER_free(a: PASN1_INTEGER); cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_INTEGER_free';
 
 function d2i_ASN1_INTEGER(a: PPASN1_INTEGER; _in: PPByte; len: integer): PASN1_INTEGER; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_ASN1_INTEGER';
@@ -13334,9 +13272,6 @@ function ASN1_TIME_it(): PASN1_ITEM; cdecl;
 function ASN1_OCTET_STRING_NDEF_it(): PASN1_ITEM; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_OCTET_STRING_NDEF_it';
 
-function ASN1_TIME_set(s: PASN1_TIME; t: time_t): PASN1_TIME; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_TIME_set';
-
 function ASN1_TIME_adj(s: PASN1_TIME; t: time_t; offset_day: integer; offset_sec: integer): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_TIME_adj';
 
@@ -13348,15 +13283,6 @@ function ASN1_TIME_to_generalizedtime(t: PASN1_TIME; _out: PPASN1_GENERALIZEDTIM
 
 function ASN1_TIME_set_string(s: PASN1_TIME; str: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_TIME_set_string';
-
-function ASN1_TIME_set_string_X509(s: PASN1_TIME; str: PUtf8Char): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_TIME_set_string_X509';
-
-function ASN1_TIME_to_tm(s: PASN1_TIME; tm: Ptm): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_TIME_to_tm';
-
-function ASN1_TIME_normalize(s: PASN1_TIME): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_TIME_normalize';
 
 function ASN1_TIME_cmp_time_t(s: PASN1_TIME; t: time_t): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_TIME_cmp_time_t';
@@ -13411,9 +13337,6 @@ function ASN1_INTEGER_set(a: PASN1_INTEGER; v: integer): integer; cdecl;
 
 function ASN1_INTEGER_get(a: PASN1_INTEGER): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_INTEGER_get';
-
-function BN_to_ASN1_INTEGER(bn: PBIGNUM; ai: PASN1_INTEGER): PASN1_INTEGER; cdecl;
-  external LIB_CRYPTO name _PU + 'BN_to_ASN1_INTEGER';
 
 function ASN1_INTEGER_to_BN(ai: PASN1_INTEGER; bn: PBIGNUM): PBIGNUM; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_INTEGER_to_BN';
@@ -13507,9 +13430,6 @@ function ASN1_TIME_print(fp: PBIO; a: PASN1_TIME): integer; cdecl;
 
 function ASN1_STRING_print(bp: PBIO; v: PASN1_STRING): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_STRING_print';
-
-function ASN1_STRING_print_ex(_out: PBIO; str: PASN1_STRING; flags: cardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_STRING_print_ex';
 
 function ASN1_buf_print(bp: PBIO; buf: PByte; buflen: PtrUInt; off: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_buf_print';
@@ -13915,9 +13835,6 @@ function OBJ_dup(o: PASN1_OBJECT): PASN1_OBJECT; cdecl;
 
 function OBJ_nid2obj(n: integer): PASN1_OBJECT; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_nid2obj';
-
-function OBJ_nid2ln(n: integer): PUtf8Char; cdecl;
-  external LIB_CRYPTO name _PU + 'OBJ_nid2ln';
 
 function OBJ_txt2obj(s: PUtf8Char; no_name: integer): PASN1_OBJECT; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_txt2obj';
@@ -17944,9 +17861,6 @@ function X509_signature_dump(bp: PBIO; sig: PASN1_STRING; indent: integer): inte
 function X509_signature_print(bp: PBIO; alg: PX509_ALGOR; sig: PASN1_STRING): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_signature_print';
 
-function X509_sign(x: PX509; pkey: PEVP_PKEY; md: PEVP_MD): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_sign';
-
 function X509_sign_ctx(x: PX509; ctx: PEVP_MD_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_sign_ctx';
 
@@ -17973,9 +17887,6 @@ function NETSCAPE_SPKI_sign(x: PNETSCAPE_SPKI; pkey: PEVP_PKEY; md: PEVP_MD): in
 
 function X509_pubkey_digest(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_pubkey_digest';
-
-function X509_digest(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_digest';
 
 function X509_CRL_digest(data: PX509_CRL; typ: PEVP_MD; md: PByte; len: PCardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_digest';
@@ -18075,9 +17986,6 @@ function d2i_PUBKEY_fp(fp: PPointer; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
 
 function d2i_X509_bio(bp: PBIO; x509: PPX509): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_bio';
-
-function i2d_X509_bio(bp: PBIO; x509: PX509): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'i2d_X509_bio';
 
 function d2i_X509_CRL_bio(bp: PBIO; crl: PPX509_CRL): PX509_CRL; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_CRL_bio';
@@ -18367,12 +18275,6 @@ function i2d_X509_REQ_INFO(a: PX509_REQ_INFO; _out: PPByte): integer; cdecl;
 function X509_REQ_INFO_it(): PASN1_ITEM; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_INFO_it';
 
-function X509_REQ_new(): PX509_REQ; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REQ_new';
-
-procedure X509_REQ_free(a: PX509_REQ); cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REQ_free';
-
 function d2i_X509_REQ(a: PPX509_REQ; _in: PPByte; len: integer): PX509_REQ; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_REQ';
 
@@ -18402,9 +18304,6 @@ function X509_ATTRIBUTE_create(nid: integer; atrtype: integer; value: pointer): 
 
 function X509_EXTENSION_new(): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509_EXTENSION_new';
-
-procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
-  external LIB_CRYPTO name _PU + 'X509_EXTENSION_free';
 
 function d2i_X509_EXTENSION(a: PPX509_EXTENSION; _in: PPByte; len: integer): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_EXTENSION';
@@ -18471,9 +18370,6 @@ function i2d_X509_CINF(a: PX509_CINF; _out: PPByte): integer; cdecl;
 
 function X509_CINF_it(): PASN1_ITEM; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CINF_it';
-
-function X509_new(): PX509; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_new';
 
 function d2i_X509(a: PPX509; _in: PPByte; len: integer): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509';
@@ -18700,46 +18596,18 @@ function ASN1_item_sign(it: PASN1_ITEM; algor1: PX509_ALGOR; algor2: PX509_ALGOR
 function ASN1_item_sign_ctx(it: PASN1_ITEM; algor1: PX509_ALGOR; algor2: PX509_ALGOR; signature: PASN1_BIT_STRING; asn: pointer; ctx: PEVP_MD_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_item_sign_ctx';
 
-function X509_get_version(x: PX509): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get_version';
-
-function X509_set_version(x: PX509; version: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_set_version';
-
-function X509_set_serialNumber(x: PX509; serial: PASN1_INTEGER): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_set_serialNumber';
-
-function X509_get_serialNumber(x: PX509): PASN1_INTEGER; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get_serialNumber';
-
 function X509_get0_serialNumber(x: PX509): PASN1_INTEGER; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get0_serialNumber';
-
-function X509_set_issuer_name(x: PX509; name: PX509_NAME): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_set_issuer_name';
-
-function X509_set_subject_name(x: PX509; name: PX509_NAME): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_set_subject_name';
-
-function X509_get0_notBefore(x: PX509): PASN1_TIME; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get0_notBefore';
-
-function X509_getm_notBefore(x: PX509): PASN1_TIME; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_getm_notBefore';
 
 function X509_get_notBefore(x: PX509): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'X509_getm_notBefore';
 
 function X509_set1_notBefore(x: PX509; tm: PASN1_TIME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_set1_notBefore';
+
 function X509_set_notBefore(x: PX509; tm: PASN1_TIME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_set1_notBefore';
 
-function X509_get0_notAfter(x: PX509): PASN1_TIME; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get0_notAfter';
-
-function X509_getm_notAfter(x: PX509): PASN1_TIME; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_getm_notAfter';
 function X509_get_notAfter(x: PX509): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'X509_getm_notAfter';
 
@@ -18748,9 +18616,6 @@ function X509_set1_notAfter(x: PX509; tm: PASN1_TIME): integer; cdecl;
 
 function X509_set_notAfter(x: PX509; tm: PASN1_TIME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_set1_notAfter';
-
-function X509_set_pubkey(x: PX509; pkey: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_set_pubkey';
 
 function X509_up_ref(x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_up_ref';
@@ -18785,9 +18650,6 @@ function X509_REQ_get_version(req: PX509_REQ): integer; cdecl;
 function X509_REQ_set_version(x: PX509_REQ; version: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_set_version';
 
-function X509_REQ_get_subject_name(req: PX509_REQ): PX509_NAME; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REQ_get_subject_name';
-
 function X509_REQ_set_subject_name(req: PX509_REQ; name: PX509_NAME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_set_subject_name';
 
@@ -18802,9 +18664,6 @@ function i2d_re_X509_REQ_tbs(req: PX509_REQ; pp: PPByte): integer; cdecl;
 
 function X509_REQ_set_pubkey(x: PX509_REQ; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_set_pubkey';
-
-function X509_REQ_get_pubkey(req: PX509_REQ): PEVP_PKEY; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REQ_get_pubkey';
 
 function X509_REQ_get0_pubkey(req: PX509_REQ): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_get0_pubkey';
@@ -18935,9 +18794,6 @@ function X509_CRL_diff(base: PX509_CRL; newer: PX509_CRL; skey: PEVP_PKEY; md: P
 function X509_REQ_check_private_key(x509: PX509_REQ; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_check_private_key';
 
-function X509_check_private_key(x509: PX509; pkey: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_check_private_key';
-
 function X509_chain_check_suiteb(perror_depth: PInteger; x: PX509; chain: Pstack_st_X509; flags: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_chain_check_suiteb';
 
@@ -19028,9 +18884,6 @@ function X509_REQ_print_ex(bp: PBIO; x: PX509_REQ; nmflag: cardinal; cflag: card
 function X509_REQ_print(bp: PBIO; req: PX509_REQ): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_print';
 
-function X509_NAME_entry_count(name: PX509_NAME): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_entry_count';
-
 function X509_NAME_get_text_by_NID(name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_get_text_by_NID';
 
@@ -19109,26 +18962,11 @@ function X509v3_delete_ext(x: Pstack_st_X509_EXTENSION; loc: integer): PX509_EXT
 function X509v3_add_ext(x: PPstack_st_X509_EXTENSION; ex: PX509_EXTENSION; loc: integer): Pstack_st_X509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509v3_add_ext';
 
-function X509_get_ext_count(x: PX509): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get_ext_count';
-
-function X509_get_ext_by_NID(x: PX509; nid: integer; lastpos: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get_ext_by_NID';
-
 function X509_get_ext_by_OBJ(x: PX509; obj: PASN1_OBJECT; lastpos: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get_ext_by_OBJ';
 
 function X509_get_ext_by_critical(x: PX509; crit: integer; lastpos: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get_ext_by_critical';
-
-function X509_get_ext(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get_ext';
-
-function X509_delete_ext(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_delete_ext';
-
-function X509_add_ext(x: PX509; ex: PX509_EXTENSION; loc: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_add_ext';
 
 function X509_get_ext_d2i(x: PX509; nid: integer; crit: PInteger; idx: PInteger): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get_ext_d2i';
@@ -19204,15 +19042,6 @@ function X509_EXTENSION_set_critical(ex: PX509_EXTENSION; crit: integer): intege
 
 function X509_EXTENSION_set_data(ex: PX509_EXTENSION; data: PASN1_OCTET_STRING): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_EXTENSION_set_data';
-
-function X509_EXTENSION_get_object(ex: PX509_EXTENSION): PASN1_OBJECT; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_EXTENSION_get_object';
-
-function X509_EXTENSION_get_data(ne: PX509_EXTENSION): PASN1_OCTET_STRING; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_EXTENSION_get_data';
-
-function X509_EXTENSION_get_critical(ex: PX509_EXTENSION): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_EXTENSION_get_critical';
 
 function X509at_get_attr_count(x: Pstack_st_X509_ATTRIBUTE): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509at_get_attr_count';
@@ -20084,9 +19913,6 @@ function X509V3_EXT_REQ_add_nconf(conf: PCONF; ctx: PX509V3_CTX; section: PUtf8C
 function X509V3_EXT_CRL_add_nconf(conf: PCONF; ctx: PX509V3_CTX; section: PUtf8Char; crl: PX509_CRL): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509V3_EXT_CRL_add_nconf';
 
-function X509V3_EXT_conf_nid(conf: Plhash_st_CONF_VALUE; ctx: PX509V3_CTX; ext_nid: integer; value: PUtf8Char): PX509_EXTENSION; cdecl;
-  external LIB_CRYPTO name _PU + 'X509V3_EXT_conf_nid';
-
 function X509V3_EXT_conf(conf: Plhash_st_CONF_VALUE; ctx: PX509V3_CTX; name: PUtf8Char; value: PUtf8Char): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509V3_EXT_conf';
 
@@ -20125,9 +19951,6 @@ procedure X509V3_string_free(ctx: PX509V3_CTX; str: PUtf8Char); cdecl;
 
 procedure X509V3_section_free(ctx: PX509V3_CTX; section: Pstack_st_CONF_VALUE); cdecl;
   external LIB_CRYPTO name _PU + 'X509V3_section_free';
-
-procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer: PX509; subject: PX509; req: PX509_REQ; crl: PX509_CRL; flags: integer); cdecl;
-  external LIB_CRYPTO name _PU + 'X509V3_set_ctx';
 
 function X509V3_add_value(name: PUtf8Char; value: PUtf8Char; extlist: PPstack_st_CONF_VALUE): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509V3_add_value';
@@ -20192,9 +20015,6 @@ function X509V3_add1_i2d(x: PPstack_st_X509_EXTENSION; nid: integer; value: poin
 procedure X509V3_EXT_val_prn(_out: PBIO; val: Pstack_st_CONF_VALUE; indent: integer; ml: integer); cdecl;
   external LIB_CRYPTO name _PU + 'X509V3_EXT_val_prn';
 
-function X509V3_EXT_print(_out: PBIO; ext: PX509_EXTENSION; flag: cardinal; indent: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509V3_EXT_print';
-
 function X509V3_EXT_print_fp(_out: PPointer; ext: PX509_EXTENSION; flag: integer; indent: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509V3_EXT_print_fp';
 
@@ -20227,15 +20047,6 @@ procedure X509_set_proxy_pathlen(x: PX509; l: integer); cdecl;
 
 function X509_get_proxy_pathlen(x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get_proxy_pathlen';
-
-function X509_get_extension_flags(x: PX509): cardinal; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get_extension_flags';
-
-function X509_get_key_usage(x: PX509): cardinal; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get_key_usage';
-
-function X509_get_extended_key_usage(x: PX509): cardinal; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get_extended_key_usage';
 
 function X509_get0_subject_key_id(x: PX509): PASN1_OCTET_STRING; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get0_subject_key_id';
