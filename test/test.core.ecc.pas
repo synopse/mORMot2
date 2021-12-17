@@ -375,7 +375,7 @@ end;
 procedure TTestCoreEcc.EccCommandLineTool;
 var
   sw: ICommandLine;
-  ctxt: TCommandLine;
+  cl: TCommandLine;
   i: PtrInt;
   previd, prevpass: RawUtf8;
   plainfn, rawfn: TFileName;
@@ -389,16 +389,16 @@ var
   function Exec(const nv: array of const; cmd: TEccCommand): PDocVariantData;
   var
     sw: ICommandLine;
-    ctxt: TCommandLine;
+    cl: TCommandLine;
   begin
-    ctxt := TCommandLine.Create(nv);
-    sw := ctxt;
+    cl := TCommandLine.Create(nv);
+    sw := cl;
     {%H-}check(EccCommand(cmd, sw) = eccSuccess);
-    if CheckFailed(ctxt.ConsoleLines <> nil) then
+    if CheckFailed(cl.ConsoleLines <> nil) then
       result := @DocVariantDataFake
     else
     begin
-      exectemp := _JsonFast(ctxt.ConsoleLines[0]);
+      exectemp := _JsonFast(cl.ConsoleLines[0]);
       result := _Safe(exectemp);
     end;
   end;
@@ -417,19 +417,19 @@ begin
         formatUtf8('name%', [i], issuer);
         formatUtf8('pass%', [i], pass);
         rounds := 1000 + i;
-        ctxt := TCommandLine.Create([
-          'auth', {%H-}previd,
+        cl := TCommandLine.Create([
+          'auth',     {%H-}previd,
           'authpass', {%H-}prevpass,
-          'authrounds', rounds - 1,
-          'issuer', issuer,
-          'days', 30 + i,
-          'newpass', pass,
-          'newrounds', rounds]);
-        sw := ctxt;
+          'authrounds',    rounds - 1,
+          'issuer',        issuer,
+          'days',          30 + i,
+          'newpass',       pass,
+          'newrounds',     rounds]);
+        sw := cl;
         check(EccCommand(ecNew, sw) = eccSuccess);
-        if CheckFailed(ctxt.ConsoleLines <> nil) then
+        if CheckFailed(cl.ConsoleLines <> nil) then
           exit;
-        id := TrimU(split(ctxt.ConsoleLines[high(ctxt.ConsoleLines)], '.'));
+        id := TrimU(split(cl.ConsoleLines[high(cl.ConsoleLines)], '.'));
         priv := format('%s.private', [id]);
         pub := format('%s.public', [id]);
         previd := id;
@@ -438,9 +438,9 @@ begin
         test := format('test%d.txt', [i]);
         crypt := 'crypt-' + test;
         FileFromString(text, test);
-        Exec(['file', test,
-              'out', crypt,
-              'auth', pub,
+        Exec(['file',       test,
+              'out',        crypt,
+              'auth',       pub,
               'saltrounds', i + 10], ecCrypt);
       end;
     sw := TCommandLine.Create([]);
@@ -449,8 +449,8 @@ begin
       with keys[i] do
       begin
         with Exec([
-          'auth', priv,
-          'pass', pass,
+          'auth',   priv,
+          'pass',   pass,
           'rounds', rounds], ecInfoPriv)^ do
         begin
           check(I['Version'] = 1);
@@ -470,28 +470,28 @@ begin
         end;
         plainfn := 'plain-' + test;
         Exec([
-          'file', crypt,
-          'out', plainfn,
-          'auth', priv,
-          'authpass', pass,
+          'file',       crypt,
+          'out',        plainfn,
+          'auth',       priv,
+          'authpass',   pass,
           'authrounds', rounds,
           'saltrounds', i + 10], ecDecrypt);
         check(StringFromFile(plainfn) = text);
         Exec([
-          'file', test,
-          'out', crypt,
-          'auth', id,
-          'pass', pass,
-          'rounds', rounds], ecSign);
+          'file',       test,
+          'out',        crypt,
+          'auth',       id,
+          'pass',       pass,
+          'rounds',     rounds], ecSign);
         Exec([
-          'file', test,
-          'out', crypt,
-          'auth', pub,
+          'file',       test,
+          'out',        crypt,
+          'auth',       pub,
           'saltrounds', i + 10,
-          'algo', ord(ecaPBKDF2_HMAC_SHA256_AES128_CTR)], ecCrypt);
+          'algo',       ord(ecaPBKDF2_HMAC_SHA256_AES128_CTR)], ecCrypt);
         rawfn := 'raw-' + test;
         with Exec([
-          'file', crypt,
+          'file',    crypt,
           'rawfile', rawfn], ecInfoCrypt)^ do
         begin
           check(I['Size'] = length(text));
@@ -507,9 +507,9 @@ begin
                 SizeOf(TEciesHeader) + 1);
         DeleteFile(plainfn);
         Exec([
-          'file', crypt,
-          'out', plainfn,
-          'authpass', pass,
+          'file',       crypt,
+          'out',        plainfn,
+          'authpass',   pass,
           'authrounds', rounds,
           'saltrounds', i + 10], ecDecrypt);
         check(StringFromFile(plainfn) = text, 'guess .private from header');
