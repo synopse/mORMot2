@@ -7861,6 +7861,9 @@ begin
     exit;
   root := Ctxt.Info;
   Ctxt.Info := Ctxt.ObjectListItem;
+  if (Ctxt.Info = nil) and
+     (Data^.ItemClass <> nil) then
+    Ctxt.Info := Rtti.RegisterClass(Data^.ItemClass);
   repeat
     item := Ctxt.ParseNewObject;
     if item = nil then
