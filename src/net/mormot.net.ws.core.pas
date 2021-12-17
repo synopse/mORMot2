@@ -539,11 +539,11 @@ type
   end;
 
   /// used to maintain a list of websocket protocols (for the server side)
-  TWebSocketProtocolList = class(TSynPersistentRWLock)
+  TWebSocketProtocolList = class(TSynPersistentRWLightLock)
   protected
     fProtocols: array of TWebSocketProtocol;
     // caller should make fSafe.ReadOnlyLock/WriteLock
-    function FindIndex(const aName, aUri: RawUtf8): integer;
+    function LockedFindIndex(const aName, aUri: RawUtf8): PtrInt;
   public
     /// add a protocol to the internal list
     // - returns TRUE on success
@@ -2149,7 +2149,7 @@ begin
   result := nil;
   if self = nil then
     exit;
-  fSafe.ReadOnlyLock;
+  fSafe.ReadLock;
   try
     for i := 0 to length(fProtocols) - 1 do
       with fProtocols[i] do
@@ -2162,7 +2162,7 @@ begin
           exit;
         end;
   finally
-    fSafe.ReadOnlyUnLock;
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -2175,7 +2175,7 @@ begin
   if (self = nil) or
      (aClientUri = '') then
     exit;
-  fSafe.ReadOnlyLock;
+  fSafe.ReadLock;
   try
     for i := 0 to length(fProtocols) - 1 do
       if IdemPropNameU(fProtocols[i].fUri, aClientUri) then
@@ -2184,7 +2184,7 @@ begin
         exit;
       end;
   finally
-    fSafe.ReadOnlyUnLock;
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -2202,10 +2202,10 @@ begin
   inherited;
 end;
 
-function TWebSocketProtocolList.FindIndex(const aName, aUri: RawUtf8): integer;
+function TWebSocketProtocolList.LockedFindIndex(const aName, aUri: RawUtf8): PtrInt;
 begin
   if aName <> '' then
-    for result := 0 to high(fProtocols) do
+    for result := 0 to length(fProtocols) - 1 do
       with fProtocols[result] do
         if IdemPropNameU(fName, aName) and
            ((fUri = '') or
@@ -2223,7 +2223,7 @@ begin
     exit;
   fSafe.WriteLock;
   try
-    i := FindIndex(aProtocol.Name, aProtocol.Uri);
+    i := LockedFindIndex(aProtocol.Name, aProtocol.Uri);
     if i < 0 then
     begin
       ObjArrayAdd(fProtocols, aProtocol);
@@ -2243,7 +2243,7 @@ begin
     exit;
   fSafe.WriteLock;
   try
-    i := FindIndex(aProtocol.Name, aProtocol.Uri);
+    i := LockedFindIndex(aProtocol.Name, aProtocol.Uri);
     if i < 0 then
     begin
       ObjArrayAdd(fProtocols, aProtocol);
@@ -2265,7 +2265,7 @@ var
 begin
   fSafe.WriteLock;
   try
-    i := FindIndex(aProtocolName, aUri);
+    i := LockedFindIndex(aProtocolName, aUri);
     if i >= 0 then
     begin
       ObjArrayDelete(fProtocols, i);

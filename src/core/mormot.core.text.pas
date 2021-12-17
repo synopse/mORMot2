@@ -2497,8 +2497,7 @@ function RawByteStringToStream(const aString: RawByteString): TStream;
 // !  WriteStringToStream(Stream,aUtf8Text);
 // !  Stream.Seek(0,soBeginning);
 // !  str := ReadStringFromStream(Stream);
-function ReadStringFromStream(S: TStream;
-  MaxAllowedSize: integer = 255): RawUtf8;
+function ReadStringFromStream(S: TStream; MaxAllowedSize: integer = 255): RawUtf8;
 
 /// write an UTF-8 text into a TStream with a len prefix - see ReadStringFromStream
 // - format is Length(integer):Text - use RawByteStringToStream for raw data

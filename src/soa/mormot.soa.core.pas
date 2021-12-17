@@ -844,7 +844,7 @@ type
   TServicesPublishedInterfacesDynArray = array of TServicesPublishedInterfaces;
 
   /// used e.g. by TRestServer to store a list of TServicesPublishedInterfaces
-  TServicesPublishedInterfacesList = class(TSynPersistentRWLock)
+  TServicesPublishedInterfacesList = class(TSynPersistentRWLightLock)
   private
     fDynArray: TDynArray;
     fDynArrayTimeoutTix: TDynArray;
@@ -1637,7 +1637,7 @@ var
   tix: Int64;
 begin
   tix := GetTickCount64;
-  Safe.ReadOnlyLock;
+  Safe.ReadLock;
   try
     for result := 0 to Count - 1 do
       if List[result].PublicUri.Equals(aPublicUri) then
@@ -1646,7 +1646,7 @@ begin
           exit;
     result := -1;
   finally
-    Safe.ReadOnlyUnLock;
+    Safe.ReadUnLock;
   end;
 end;
 
@@ -1658,7 +1658,7 @@ var
 begin
   tix := GetTickCount64;
   result := nil;
-  Safe.ReadOnlyLock;
+  Safe.ReadLock;
   try
     n := 0;
     for i := Count - 1 downto 0 do
@@ -1672,7 +1672,7 @@ begin
           inc(n);
         end;
   finally
-    Safe.ReadOnlyUnLock;
+    Safe.ReadUnLock;
   end;
 end;
 
@@ -1686,7 +1686,7 @@ begin
   tix := GetTickCount64;
   result := nil;
   n := 0;
-  Safe.ReadOnlyLock;
+  Safe.ReadLock;
   try
     for i := Count - 1 downto 0 do
       // downwards to return the latest first
@@ -1695,7 +1695,7 @@ begin
            (fTimeoutTix[i] < tix) then
           AddRawUtf8(TRawUtf8DynArray(result), n, List[i].PublicUri.Uri);
   finally
-    Safe.ReadOnlyUnLock;
+    Safe.ReadUnLock;
   end;
   SetLength(result, n);
 end;
@@ -1707,7 +1707,7 @@ var
   tix: Int64;
 begin
   tix := GetTickCount64;
-  Safe.ReadOnlyLock;
+  Safe.ReadLock;
   try
     aWriter.Add('[');
     if aServiceName = '*' then
@@ -1735,7 +1735,7 @@ begin
     aWriter.CancelLastComma;
     aWriter.Add(']');
   finally
-    Safe.ReadOnlyUnLock;
+    Safe.ReadUnLock;
   end;
 end;
 
