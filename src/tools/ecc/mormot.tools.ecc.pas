@@ -687,10 +687,10 @@ begin
             until (saverounds >= 1000) or
                   sw.NoPrompt;
             splitfiles := 1;
-      {repeat
-        splitfiles := sw.AsInt('SplitFiles',1,
-          'Into how many files the private key should be parceled out.');
-      until (splitfiles>0) or sw.NoPrompt;}
+            {repeat
+              splitfiles := sw.AsInt('SplitFiles',1,
+                'Into how many files the private key should be parceled out.');
+            until (splitfiles>0) or sw.NoPrompt;}
             newfile := EccCommandNew(auth, authpass, authrounds, issuer, start,
               days, savepass, saverounds, splitfiles);
             WritePassword(newfile, savepass, saverounds);

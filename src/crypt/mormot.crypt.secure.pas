@@ -13,7 +13,7 @@ unit mormot.crypt.secure;
     - 64-bit TSynUniqueIdentifier and its efficient Generator
     - IProtocol Safe Communication with Unilateral or Mutual Authentication
     - TBinaryCookieGenerator Simple Cookie Generator
-    - Rnd/Hash/Sign/Cipher/Asym High-Level Algorithms Factories
+    - Rnd/Hash/Sign/Cipher/Asym/Cert High-Level Algorithms Factories
     - Minimal PEM/DER Encoding/Decoding
 
    Uses optimized mormot.crypt.core.pas for its actual process.
@@ -914,7 +914,7 @@ type
   PBinaryCookieGenerator = ^TBinaryCookieGenerator;
 
 
-{ ************* Rnd/Hash/Sign/Cipher/Asym High-Level Algorithms Factories }
+{ ************* Rnd/Hash/Sign/Cipher/Asym/Cert High-Level Algorithms Factories }
 
 type
   ECrypt = class(ESynException);
@@ -1080,7 +1080,6 @@ type
 
   /// symmetric encryption class, as resolved by CipherAlgo()
   TCryptCipherAlgo = class(TCryptAlgo)
-  protected
   public
     /// check if this algorithm is of AEAD kind, i.e. can cipher and authenticate
     // - note that currently our OpenSSL AES-GCM wrapper has troubles with
@@ -1111,7 +1110,6 @@ type
 
   /// symmetric encryption parent class, as returned by Cipher() factory
   TCryptCipher = class(TCryptInstance, ICryptCipher)
-  protected
   public
     // ICryptCipher methods
     function Clone: ICryptCipher; virtual; abstract;
@@ -1166,6 +1164,143 @@ type
     function SharedSecret(const pub, priv: RawByteString): RawByteString; virtual;
   end;
 
+  /// exception class raised by our High-Level Certificates Process
+  ECertificate = class(ESynException);
+
+  /// the known Key Usages for a given Certificate
+  // - is an exact match of TX509Usage enumerate in mormot.lib.openssl11.pas
+  // - stored as a 16-bit memory block
+  TCryptCertUsage = (
+    cuCA,
+    cuEncipherOnly,
+    cuCrlSign,
+    cuKeyCertSign,
+    cuKeyAgreement,
+    cuDataEncipherment,
+    cuKeyEncipherment,
+    cuNonRepudiation,
+    cuDigitalSignature,
+    cuDecipherOnly,
+    cuTlsServer,
+    cuTlsClient,
+    cuEmail,
+    cuCodeSign,
+    cuOcspSign,
+    cuTimestamp);
+
+  /// set of Key Usages for a given Certificate
+  TCryptCertUsages = set of TCryptCertUsage;
+
+  /// the Digital Signature results for a given Certificate
+  // - is an exact match of TEccValidity enumerate in mormot.crypt.ecc256r1.pas
+  TCryptCertValidity = (
+    cvUnknown,
+    cvValidSigned,
+    cvValidSelfSigned,
+    cvNotSupported,
+    cvBadParameter,
+    cvCorrupted,
+    cvInvalidDate,
+    cvUnknownAuthority,
+    cvDeprecatedAuthority,
+    cvInvalidSignature);
+
+  TCryptCert = class;
+
+  /// abstract interface to a Certificate, as returned by Cert() factory
+  // - may be X509 or not, OpenSSL implemented or not
+  ICryptCert = interface
+    /// create a new Certificate instance with its genuine private key
+    // - Subjects is given as a CSV text, e.g. 'synopse.info,www.synopse.info'
+    // - if Authority is nil, will generate a self-signed certificate, otherwise
+    // will use this Authority private key to sign the certificate
+    // - ValidDays and ExpireDays are relative to the current time - ValidDays
+    // is -1 by default to avoid most clock synch issues
+    procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
+      const Authority: ICryptCert = nil; ExpireDays: integer = 365;
+      ValidDays: integer = -1);
+    /// load a Certificate from a ToBinary content
+    // - PrivatePassword is needed if the binary contains a private key
+    function FromBinary(const Binary: RawByteString;
+      const PrivatePassword: RawUtf8 = ''): boolean;
+    /// the Certificate Genuine Serial Number
+    // - e.g. '04:f9:25:39:39:f8:ce:79:1a:a4:0e:b3:fa:72:e3:bc:9e:d6'
+    function GetSerial: RawUtf8;
+    /// the Low-Level Certificate Main Subject
+    // - e.g. '/CN=synopse.info' on OpenSSL, or some Baudot-encoded text
+    function GetSubject: RawUtf8;
+    /// an array of all Subject names covered by this Certificate
+    // - e.g. ['synopse.info', 'www.synopse.info']
+    function GetSubjects: TRawUtf8DynArray;
+    /// the High-Level Certificate Issuer
+    // - e.g. '/C=US/O=Let''s Encrypt/CN=R3' or some Baudot-encoded text
+    function GetIssuerName: RawUtf8;
+    /// the Issuer Key Identifier of this Certificate
+    // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
+    function GetIssuerSerial: RawUtf8;
+    /// the minimum Validity timestamp of this Certificate
+    function GetNotBefore: TDateTime;
+    /// the maximum Validity timestamp of this Certificate
+    function GetNotAfter: TDateTime;
+    /// the Key Usages of this Certificate
+    function GetUsage: TCryptCertUsages;
+    /// verbose Certificate information, returned as huge text/JSON blob
+    function GetPeerInfo: RawUtf8;
+    /// serialize the Certificate as raw binary
+    // - after Generate, will contain the public and private key, so
+    // PrivatePassword is needed to secure its content - if PrivatePassword is
+    // left to '' then only the generated public key will be serialized
+    // - FromBinary() could be used to unserialize the Certificate
+    function ToBinary(const PrivatePassword: RawUtf8 = ''): RawByteString;
+    /// returns true if the Certificate contains a private key secret
+    function HasPrivateSecret: boolean;
+    /// access to the low-level implementation class
+    function Instance: TCryptCert;
+  end;
+
+  /// abstract parent class to implement ICryptCert, as returned by Cert() factory
+  TCryptCert = class(TCryptInstance, ICryptCert)
+  protected
+    procedure RaiseVoid(Instance: pointer; const Msg: shortstring);
+    procedure RaiseError(const Msg: shortstring); overload;
+    procedure RaiseError(const Fmt: RawUtf8; const Args: array of const); overload;
+  public
+    // ICryptCert methods
+    procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
+      const Authority: ICryptCert; ExpireDays, ValidDays: integer); virtual; abstract;
+    function FromBinary(const Binary: RawByteString;
+      const PrivatePassword: RawUtf8): boolean; virtual; abstract;
+    function GetSerial: RawUtf8; virtual; abstract;
+    function GetSubject: RawUtf8; virtual; abstract;
+    function GetSubjects: TRawUtf8DynArray; virtual; abstract;
+    function GetIssuerName: RawUtf8; virtual; abstract;
+    function GetIssuerSerial: RawUtf8; virtual; abstract;
+    function GetNotBefore: TDateTime; virtual; abstract;
+    function GetNotAfter: TDateTime; virtual; abstract;
+    function GetUsage: TCryptCertUsages; virtual; abstract;
+    function GetPeerInfo: RawUtf8; virtual; abstract;
+    function ToBinary(const PrivatePassword: RawUtf8): RawByteString; virtual; abstract;
+    function HasPrivateSecret: boolean; virtual; abstract;
+    function Instance: TCryptCert;
+  end;
+
+  /// meta-class of the abstract parent to implement ICryptCert interface
+  TCryptCertClass = class of TCryptCert;
+
+  /// abstract parent class for ICryptCert factories
+  TCryptCertAlgo = class(TCryptAlgo)
+  public
+    /// main factory to create a new Certificate instance with this algorithm
+    function New: ICryptCert; virtual; abstract;
+  end;
+
+
+const
+  /// such a Certificate could be used for anything
+  CERTIFICATE_USAGE_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
+
+
+
 
 /// main resolver of the randomness generators
 // - the shared TCryptRandom of this algorithm is returned: caller should NOT free it
@@ -1217,7 +1352,10 @@ function Sign(const paramsjson: RawUtf8;
 // - names are e.g. 'aes-128-cfb' or 'aes-256-gcm' standard combinations
 // - recognize some non-standard algorithms with trailing 'c64', 'cfc', 'ofc' and
 // 'ctc' mode names e.g. as 'aes-256-cfc' - with AED 256-bit support (but c64)
-// - the shared TCryptCipherAlgo of this algorithm is returned: caller should NOT free it
+// - will return the fastest engine, which may be OpenSSL, unless 'aes-nnn-xxx-int'
+// is used to force using our mormot.crypt.core.pas own implementation
+// - the shared TCryptCipherAlgo of this algorithm is returned: caller should
+// NOT free it
 function CipherAlgo(const name: RawUtf8): TCryptCipherAlgo;
 
 /// main factory for symmetric encryption/decryption process
@@ -1247,8 +1385,22 @@ function Decrypt(const name, hash, secret, salt: RawUtf8; rounds: integer): ICry
 /// main resolver for asymmetric public key algorithms
 // - mormot.crypt.ecc.pas defines 'secp256r1','NISTP-256' and 'prime256v1'
 // which are synonymous of our secp256r1 ECDSA and ECDHE pascal code
+// - mormot.crypt.openssl.pas will define 'es256' .. 'EdDSA' including
+// 'rs256' for the well known 2048-bit RSA + SHA256 digital signature
 // - the shared TCryptAsym of this algorithm is returned: caller should NOT free it
 function Asym(const name: RawUtf8): TCryptAsym;
+
+/// main resolver for Certificates algorithms
+// - mormot.crypt.ecc.pas defines 'syn-es256' for our TEccCertificate
+// proprietary format (safe and efficient)
+// - mormot.crypt.openssl.pas will define 'x509-es256' .. 'x509-EdDSA' including
+// 'x509-rs256' for the well known 2048-bit RSA + SHA256 certificates
+// - the shared TCryptCertAlgo of this algorithm is returned: caller should
+// NOT free it
+function CertAlgo(const name: RawUtf8): TCryptCertAlgo;
+
+/// main factory of the Certificates instances as returned by CertAlgo()
+function Cert(const name: RawUtf8): ICryptCert;
 
 
 { ************************** Minimal PEM/DER Encoding/Decoding }
@@ -1323,6 +1475,8 @@ function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
 // - only support a single DER_INTEGER sequence format as generated by DerAppend()
 function DerParse(P: PAnsiChar; buf: PByteArray; buflen: PtrInt): PAnsiChar;
 
+
+{ ************** High-Level (X509) Certificates Process }
 
 
 implementation
@@ -2869,7 +3023,7 @@ end;
 
 
 
-{ ************* Rnd/Hash/Sign/Cipher/Asym High-Level Algorithms Factories }
+{ ************* Rnd/Hash/Sign/Cipher/Asym/Cert High-Level Algorithms Factories }
 
 var
   GlobalCryptAlgo: TRawUtf8List; // Objects[] are TCryptAlgo instances
@@ -3761,6 +3915,34 @@ begin
 end;
 
 
+{ TCryptCert }
+
+procedure TCryptCert.RaiseVoid(Instance: pointer; const Msg: shortstring);
+begin
+  if Instance = nil then
+    RaiseError('% is not set', [Msg]);
+end;
+
+procedure TCryptCert.RaiseError(const Msg: shortstring);
+begin
+  raise ECertificate.CreateUtf8('%.%', [self, Msg]);
+end;
+
+procedure TCryptCert.RaiseError(const Fmt: RawUtf8;
+  const Args: array of const);
+var
+  msg: shortstring;
+begin
+  FormatShort(Fmt, Args, msg);
+  RaiseError(msg);
+end;
+
+function TCryptCert.Instance: TCryptCert;
+begin
+  result := self;
+end;
+
+
 { Register mormot.crypt.core and mormot.crypt.secure Algorithms }
 
 procedure GlobalCryptAlgoInit;
@@ -3801,7 +3983,7 @@ end;
 { Actual High-Level Factory Functions }
 
 var // cache the last used algorithm for each factory function
-  LastRnd, LastHasher, LastSigner, LastCipher, LastAsym: TCryptAlgo;
+  LastRnd, LastHasher, LastSigner, LastCipher, LastAsym, LastCert: TCryptAlgo;
 
 function Rnd(const name: RawUtf8): TCryptRandom;
 begin
@@ -3913,6 +4095,22 @@ begin
   result := TCryptAsym.InternalFind(name, LastAsym);
 end;
 
+function CertAlgo(const name: RawUtf8): TCryptCertAlgo;
+begin
+  result := TCryptCertAlgo.InternalFind(name, LastCert);
+end;
+
+function Cert(const name: RawUtf8): ICryptCert;
+var
+  c: TCryptCertAlgo;
+begin
+  c := CertAlgo(name);
+  if c = nil then
+    result := nil
+  else
+    result := c.New;
+end;
+
 
 { ************************** Minimal PEM/DER Encoding/Decoding }
 
@@ -4013,7 +4211,6 @@ begin
   MoveFast(P^, buf[pos], buflen);
   result := P + buflen;
 end;
-
 
 
 procedure InitializeUnit;
