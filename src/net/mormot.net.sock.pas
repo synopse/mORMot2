@@ -281,7 +281,9 @@ procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
 procedure IP6Short(psockaddr: pointer; var s: ShortString; withport: boolean);
 
 /// convert a MAC address value into a RawUtf8 text
-function MacToText(mac: PByteArray): RawUtf8;
+// - returns e.g. '12:50:b6:1e:c6:aa'
+// - could be used to convert some binary buffer into human-friendly hexa string
+function MacToText(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
 
 /// enumerate all IP addresses of the current computer
 // - may be used to enumerate all adapters
@@ -747,6 +749,9 @@ const
   /// the default TCP port as integer, as DEFAULT_PORT_INT[Https]
   DEFAULT_PORT_INT: array[boolean] of TNetPort = (
     80, 443);
+
+/// IdemPChar() like function, to avoid linking mormot.core.text
+function NetStartWith(p, up: PUtf8Char): boolean;
 
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
@@ -1832,18 +1837,21 @@ end;
 const
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 
-function MacToText(mac: PByteArray): RawUtf8;
+function MacToText(mac: PByteArray; maclen: PtrInt): RawUtf8;
 var
   P: PAnsiChar;
   i: PtrInt;
+  tab: PAnsichar;
 begin
-  SetLength(result, 17);
+  SetLength(result, (maclen * 3) - 1);
+  dec(maclen);
+  tab := @HexCharsLower;
   P := pointer(result);
   i := 0;
   repeat
-    P[0] := HexCharsLower[mac[i] shr 4];
-    P[1] := HexCharsLower[mac[i] and $F];
-    if i = 5 then
+    P[0] := tab[mac[i] shr 4];
+    P[1] := tab[mac[i] and $F];
+    if i = maclen then
       break;
     P[2] := ':'; // as in Linux
     inc(P, 3);
@@ -1919,7 +1927,7 @@ begin
   end;
 end;
 
-function GetMacAddressesText(WithoutName, UpAndDown: boolean): RawUtf8;
+function GetMacAddressesText(WithoutName: boolean; UpAndDown: boolean): RawUtf8;
 var
   i: PtrInt;
   addr: TMacAddressDynArray;
@@ -2450,7 +2458,7 @@ end;
 
 { *************************** TUri parsing/generating URL wrapper }
 
-function StartWith(p, up: PUtf8Char): boolean;
+function NetStartWith(p, up: PUtf8Char): boolean;
 // to avoid linking mormot.core.text for IdemPChar()
 var
   c, u: AnsiChar;
@@ -2481,46 +2489,45 @@ begin
   result := true;
 end;
 
+procedure DoEncode(rp, sp: PAnsiChar; len: cardinal);
+const
+  b64: array[0..63] of AnsiChar =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+var
+  i, c: cardinal;
+begin
+  for i := 1 to len div 3 do
+  begin
+    c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
+    rp[0] := b64[(c shr 18) and $3f];
+    rp[1] := b64[(c shr 12) and $3f];
+    rp[2] := b64[(c shr 6) and $3f];
+    rp[3] := b64[c and $3f];
+    inc(rp, 4);
+    inc(sp, 3);
+  end;
+  case len mod 3 of
+    1:
+      begin
+        c := ord(sp[0]) shl 16;
+        rp[0] := b64[(c shr 18) and $3f];
+        rp[1] := b64[(c shr 12) and $3f];
+        rp[2] := '=';
+        rp[3] := '=';
+      end;
+    2:
+      begin
+        c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8;
+        rp[0] := b64[(c shr 18) and $3f];
+        rp[1] := b64[(c shr 12) and $3f];
+        rp[2] := b64[(c shr 6) and $3f];
+        rp[3] := '=';
+      end;
+  end;
+end;
+
 function SockBase64Encode(const s: RawUtf8): RawUtf8;
 // to avoid linking mormot.core.buffers for BinToBase64()
-
-  procedure DoEncode(rp, sp: PAnsiChar; len: cardinal);
-  const
-    b64: array[0..63] of AnsiChar =
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  var
-    i, c: cardinal;
-  begin
-    for i := 1 to len div 3 do
-    begin
-      c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
-      rp[0] := b64[(c shr 18) and $3f];
-      rp[1] := b64[(c shr 12) and $3f];
-      rp[2] := b64[(c shr 6) and $3f];
-      rp[3] := b64[c and $3f];
-      inc(rp, 4);
-      inc(sp, 3);
-    end;
-    case len mod 3 of
-      1:
-        begin
-          c := ord(sp[0]) shl 16;
-          rp[0] := b64[(c shr 18) and $3f];
-          rp[1] := b64[(c shr 12) and $3f];
-          rp[2] := '=';
-          rp[3] := '=';
-        end;
-      2:
-        begin
-          c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8;
-          rp[0] := b64[(c shr 18) and $3f];
-          rp[1] := b64[(c shr 12) and $3f];
-          rp[2] := b64[(c shr 6) and $3f];
-          rp[3] := '=';
-        end;
-    end;
-  end;
-
 var
   len: integer;
 begin
@@ -2575,13 +2582,13 @@ begin
   if PInteger(S)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
   begin
     FastSetString(Scheme, P, S - P);
-    if StartWith(pointer(P), 'HTTPS') then
+    if NetStartWith(pointer(P), 'HTTPS') then
       Https := true
-    else if StartWith(pointer(P), 'UDP') then
+    else if NetStartWith(pointer(P), 'UDP') then
       layer := nlUdp; // 'udp://server:port';
     P := S + 3;
   end;
-  if StartWith(pointer(P), 'UNIX:') then
+  if NetStartWith(pointer(P), 'UNIX:') then
   begin
     inc(P, 5); // 'http://unix:/path/to/socket.sock:/url/path'
     layer := nlUnix;
@@ -2727,7 +2734,7 @@ begin
     Tunnel := aTunnel^;
   // OpenBind() raise an exception on error
   {$ifdef OSPOSIX}
-  if StartWith(pointer(aServer), 'UNIX:') then
+  if NetStartWith(pointer(aServer), 'UNIX:') then
   begin
     // aServer='unix:/path/to/myapp.socket'
     OpenBind(copy(aServer, 6, 200), '', {dobind=}false, aTLS, nlUnix);
@@ -2875,7 +2882,7 @@ begin
           SockSendFlush(#13#10);
           repeat
             SockRecvLn(head);
-            if StartWith(pointer(head), 'HTTP/') and
+            if NetStartWith(pointer(head), 'HTTP/') and
                (length(head) > 11) and
                (head[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
               res := nrOK;
