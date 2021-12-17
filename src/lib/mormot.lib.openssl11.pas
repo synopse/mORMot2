@@ -72,14 +72,17 @@ type
     fLastError: integer;
     function GetOpenSsl: string;
     class procedure CheckFailed(caller: TObject; const method: string;
-      res: integer; errormsg: PRawUtf8);
+      errormsg: PRawUtf8);
   public
     /// wrapper around ERR_get_error/ERR_error_string_n if res <> 1
     class procedure Check(caller: TObject; const method: string;
       res: integer; errormsg: PRawUtf8 = nil); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// wrapper around ERR_get_error/ERR_error_string_n if res <> 1
-    class procedure Check(res: integer); overload;
+    class procedure Check(res: integer; const method: string = ''); overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// wrapper around ERR_get_error/ERR_error_string_n if res if false
+    class procedure Check(res: boolean; const method: string = ''); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// raise the exception if OpenSslIsAvailable if false
     class procedure CheckAvailable(caller: TClass; const method: string);
@@ -632,6 +635,9 @@ const
   MBSTRING_BMP = MBSTRING_FLAG or 2;
   MBSTRING_UNIV = MBSTRING_FLAG or 4;
 
+  MBSTRING: array[{utf8=}boolean] of integer = (
+    MBSTRING_ASC,
+    MBSTRING_UTF8);
 
 type
   OSSL_HANDSHAKE_STATE = (
@@ -990,9 +996,11 @@ type
   TX509_Extensions = array of TX509_Extension;
 
   /// X509v3 Key and Extended Key Usage Flags
+  // - kuCA match NID_basic_constraints containing 'CA:TRUE'
   // - kuEncipherOnly .. kuDecipherOnly match NID_key_usage values
   // - kuTlsServer .. kuAnyeku match NID_ext_key_usage values
   TX509Usage = (
+    kuCA,
     kuEncipherOnly,
     kuCrlSign,
     kuKeyCertSign,
@@ -1006,11 +1014,8 @@ type
     kuTlsClient,
     kuSMime,
     kuCodeSign,
-    kuSgc,
     kuOcspSign,
-    kuTimestamp,
-    kuDvcs,
-    kuAnyeku);
+    kuTimestamp);
 
   /// X509v3 Key and Extended Key Usage Flags
   // - is a convenient way to get or set a Certificate extensions
@@ -1025,14 +1030,15 @@ type
     /// the Certificate Genuine Serial Number
     // - e.g. '04:f9:25:39:39:f8:ce:79:1a:a4:0e:b3:fa:72:e3:bc:9e:d6'
     function SerialNumber: RawUtf8;
-    /// the Low-Level Certificate Subject
+    /// the High-Level Certificate Main Subject
     // - e.g. '/CN=synopse.info'
+    // - see SubjectAlternativeNames for a full set of items
     function SubjectName: RawUtf8;
-    /// an array of DNS Subject names covered by this Certificate
-    // - will search and remove the 'DNS:' trailer
+    /// an array of (DNS) Subject names covered by this Certificate
+    // - will search and remove the 'DNS:' trailer by default (dns=true)
     // - e.g. ['synopse.info', 'www.synopse.info']
-    function SubjectAlternativeNames: TRawUtf8DynArray;
-    /// the Low-Level Certificate Issuer
+    function SubjectAlternativeNames(dns: boolean = true): TRawUtf8DynArray;
+    /// the High-Level Certificate Issuer
     // - e.g. '/C=US/O=Let''s Encrypt/CN=R3'
     function IssuerName: RawUtf8;
     /// the minimum Validity timestamp of this Certificate
@@ -1041,15 +1047,16 @@ type
     function NotAfter: TDateTime;
     /// verbose certificate information, returned as huge text blob
     function PeerInfo: RawUtf8;
-    /// low-level Certificate extension attributes
-    function Extensions: TX509_Extensions;
     /// access a Certificate extension by NID
     function Extension(nid: integer): PX509_EXTENSION;
     /// return a Certificate extension value as text by NID
     // - just a wrapper around
-    // ! X509_EXT_ToUtf8(Extension(nid), result);
+    // ! Extension(nid).ToUtf8(result);
     function ExtensionText(nid: integer): RawUtf8;
+    /// low-level Certificate extension attributes
+    function GetExtensions: TX509_Extensions;
     /// if the Certificate X509v3 Basic Constraints contains 'CA:TRUE'
+    // - match kuCA flag in GetUsage/HasUsage
     function IsCA: boolean;
     /// the X509v3 Key and Extended Key Usage Flags of this Certificate
     function GetUsage: TX509Usages;
@@ -1069,17 +1076,21 @@ type
     /// the X509v3 Issuer Key Identifier of this Certificate
     // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
     function IssuerKeyIdentifier: RawUtf8;
-    /// low-level add an extension to a X509 Certificate
+    /// set the Not Before / Not After Vailidy of this Certificate
+    // - ValidDays and ExpireDays are relative to the current time - ValidDays
+    // is usually -1 to avoid most clock synch issues
+    function SetValidity(ValidDays, ExpireDays: integer): boolean;
+    /// low-level set an extension to a X509 Certificate
     // - any previous extension with this NID will be first deleted
     // - typical nid are NID_subject_alt_name (with 'DNS:xxx'), NID_info_access
     // (as 'caIssuers;xxurlxx'), or NID_netscape_comment
     function SetExtension(nid: cardinal; const value: RawUtf8;
       issuer: PX509 = nil; subject: PX509 = nil): boolean;
-    /// add basic extensions
+    /// set basic extensions
     // - any previous value with this NID will be first deleted
     function SetBasic(ca: boolean; const dns: RawUtf8 = '';
       const subjectkey: RawUtf8 = 'hash'): boolean;
-    /// add key_usage/ext_key_usage extensions
+    /// set key_usage/ext_key_usage extensions
     // - any previous usage set will be first deleted
     function SetUsage(usages: TX509Usages): boolean;
     /// serialize the certificate as PER raw binary
@@ -1268,13 +1279,13 @@ procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
 function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
 function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
   flags: cardinal): integer; cdecl;
-function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
+function X509_NAME_entry_count(name: PX509_NAME): integer; cdecl;
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
+function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
 function X509_digest(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer; cdecl;
 function X509_get_serialNumber(x: PX509): PASN1_INTEGER;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_check_private_key(x509: PX509; pkey: PEVP_PKEY): integer; cdecl;
-function X509_NAME_entry_count(name: PX509_NAME): integer; cdecl;
 function X509_get_ext_count(x: PX509): integer; cdecl;
 function X509_get_ext(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
 function X509_get_ext_by_NID(x: PX509; nid: integer; lastpos: integer): integer; cdecl;
@@ -1441,7 +1452,9 @@ procedure DTLSv1_handle_timeout(s: PSSL);
 function TmToDateTime(const t: tm): TDateTime;
 
 /// create a new X509 Certificate Instance
-function NewCertificate(ValidDays, ExpireDays: integer): PX509;
+// - with a random serial number
+// - call PX509.SetValidity/SetBasic/SetUsage methods for additional information
+function NewCertificate: PX509;
 
 
 { ************** TLS / HTTPS Encryption Layer using OpenSSL for TCrtSocket }
@@ -1861,12 +1874,12 @@ type
     X509_EXTENSION_free: procedure(a: PX509_EXTENSION); cdecl;
     X509_NAME_add_entry_by_txt: function(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
     X509_NAME_print_ex_fp: function(fp: PPointer; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
-    X509_STORE_CTX_get_current_cert: function(ctx: PX509_STORE_CTX): PX509; cdecl;
+    X509_NAME_entry_count: function(name: PX509_NAME): integer; cdecl;
     X509_NAME_oneline: function(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
+    X509_STORE_CTX_get_current_cert: function(ctx: PX509_STORE_CTX): PX509; cdecl;
     X509_digest: function(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer; cdecl;
     X509_get_serialNumber: function(x: PX509): PASN1_INTEGER; cdecl;
     X509_check_private_key: function(x509: PX509; pkey: PEVP_PKEY): integer; cdecl;
-    X509_NAME_entry_count: function(name: PX509_NAME): integer; cdecl;
     X509_get_ext_count: function(x: PX509): integer; cdecl;
     X509_get_ext: function(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
     X509_get_ext_by_NID: function(x: PX509; nid: integer; lastpos: integer): integer; cdecl;
@@ -2024,12 +2037,12 @@ const
     'X509_EXTENSION_free',
     'X509_NAME_add_entry_by_txt',
     'X509_NAME_print_ex_fp',
-    'X509_STORE_CTX_get_current_cert',
+    'X509_NAME_entry_count',
     'X509_NAME_oneline',
+    'X509_STORE_CTX_get_current_cert',
     'X509_digest',
     'X509_get_serialNumber',
     'X509_check_private_key',
-    'X509_NAME_entry_count',
     'X509_get_ext_count',
     'X509_get_ext',
     'X509_get_ext_by_NID',
@@ -2409,14 +2422,19 @@ begin
   result := libcrypto.X509_NAME_print_ex_fp(fp, nm, indent, flags);
 end;
 
-function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509;
+function X509_NAME_entry_count(name: PX509_NAME): integer;
 begin
-  result := libcrypto.X509_STORE_CTX_get_current_cert(ctx);
+  result := libcrypto.X509_NAME_entry_count(name);
 end;
 
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char;
 begin
   result := libcrypto.X509_NAME_oneline(a, buf, size);
+end;
+
+function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509;
+begin
+  result := libcrypto.X509_STORE_CTX_get_current_cert(ctx);
 end;
 
 function X509_digest(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer;
@@ -2432,11 +2450,6 @@ end;
 function X509_check_private_key(x509: PX509; pkey: PEVP_PKEY): integer;
 begin
   result := libcrypto.X509_check_private_key(x509, pkey);
-end;
-
-function X509_NAME_entry_count(name: PX509_NAME): integer;
-begin
-  result := libcrypto.X509_NAME_entry_count(name);
 end;
 
 function X509_get_ext_count(x: PX509): integer;
@@ -3231,7 +3244,8 @@ function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
 function CRYPTO_malloc(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_malloc';
 
-function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
+function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn;
+  f: dyn_MEM_free_fn): integer; cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_set_mem_functions';
 
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
@@ -3282,10 +3296,12 @@ function EVP_DigestVerifyInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX;
 function EVP_DigestVerifyFinal(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestVerifyFinal';
 
-function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt;
+  tbs: PByte; tbslen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestSign';
 
-function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt;
+  tbs: PByte; tbslen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestVerify';
 
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer;
@@ -3370,7 +3386,8 @@ function X509_getm_notBefore(x: PX509): PASN1_TIME; cdecl;
 function X509_getm_notAfter(x: PX509): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'X509_getm_notAfter';
 
-function X509V3_EXT_conf_nid(conf: Plhash_st_CONF_VALUE; ctx: PX509V3_CTX; ext_nid: integer; value: PUtf8Char): PX509_EXTENSION; cdecl;
+function X509V3_EXT_conf_nid(conf: Plhash_st_CONF_VALUE; ctx: PX509V3_CTX;
+  ext_nid: integer; value: PUtf8Char): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509V3_EXT_conf_nid';
 
 function X509_add_ext(x: PX509; ex: PX509_EXTENSION; loc: integer): integer; cdecl;
@@ -3379,7 +3396,8 @@ function X509_add_ext(x: PX509; ex: PX509_EXTENSION; loc: integer): integer; cde
 function X509_delete_ext(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509_delete_ext';
 
-procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer: PX509; subject: PX509; req: PX509_REQ; crl: PX509_CRL; flags: integer); cdecl;
+procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer: PX509; subject: PX509;
+  req: PX509_REQ; crl: PX509_CRL; flags: integer); cdecl;
   external LIB_CRYPTO name _PU + 'X509V3_set_ctx';
 
 function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
@@ -3388,18 +3406,22 @@ function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
 procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
   external LIB_CRYPTO name _PU + 'X509_EXTENSION_free';
 
-function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
+function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char;
+  typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_add_entry_by_txt';
 
 function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
   flags: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_print_ex_fp';
 
-function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_get_current_cert';
+function X509_NAME_entry_count(name: PX509_NAME): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_NAME_entry_count';
 
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_oneline';
+
+function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_get_current_cert';
 
 function X509_digest(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_digest';
@@ -3409,9 +3431,6 @@ function X509_get_serialNumber(x: PX509): PASN1_INTEGER; cdecl;
 
 function X509_check_private_key(x509: PX509; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_check_private_key';
-
-function X509_NAME_entry_count(name: PX509_NAME): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_entry_count';
 
 function X509_get_ext_count(x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get_ext_count';
@@ -3449,7 +3468,8 @@ function X509_get_key_usage(x: PX509): cardinal; cdecl;
 function X509_get_extended_key_usage(x: PX509): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get_extended_key_usage';
 
-function X509V3_EXT_print(_out: PBIO; ext: PX509_EXTENSION; flag: cardinal; indent: integer): integer; cdecl;
+function X509V3_EXT_print(_out: PBIO; ext: PX509_EXTENSION; flag: cardinal;
+  indent: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509V3_EXT_print';
 
 function i2d_X509_bio(bp: PBIO; x509: PX509): integer; cdecl;
@@ -3501,13 +3521,16 @@ function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
   u: pointer): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_PrivateKey';
 
-function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
+function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
+  u: pointer): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_PUBKEY';
 
-function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
+function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
+  u: pointer): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPublicKey';
 
-function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
+function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
+  u: pointer): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPrivateKey';
 
 function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
@@ -3579,7 +3602,8 @@ function HMAC_CTX_new(): PHMAC_CTX; cdecl;
 procedure HMAC_CTX_free(ctx: PHMAC_CTX); cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_CTX_free';
 
-function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD; impl: PENGINE): integer; cdecl;
+function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD;
+  impl: PENGINE): integer; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_Init_ex';
 
 function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
@@ -3612,13 +3636,15 @@ function ASN1_INTEGER_new(): PASN1_INTEGER; cdecl;
 procedure ASN1_INTEGER_free(a: PASN1_INTEGER); cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_INTEGER_free';
 
-function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
+function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT;
+  p4: PBN_CTX): PEC_POINT; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_bn2point';
 
 function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_set_public_key';
 
-function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: integer; eckey: PEC_KEY): integer; cdecl;
+function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer;
+  sig: PByte; siglen: integer; eckey: PEC_KEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECDSA_verify';
 
 procedure EC_POINT_free(point: PEC_POINT); cdecl;
@@ -3648,7 +3674,8 @@ function EC_KEY_set_private_key(key: PEC_KEY; prv: PBIGNUM): integer; cdecl;
 function EC_KEY_get0_public_key(key: PEC_KEY): PEC_POINT; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_get0_public_key';
 
-function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
+function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT;
+  form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_point2buf';
 
 function BN_bn2bin(a: PBIGNUM; _to: pointer): integer; cdecl;
@@ -3657,16 +3684,19 @@ function BN_bn2bin(a: PBIGNUM; _to: pointer): integer; cdecl;
 function ECDSA_size(eckey: PEC_KEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECDSA_size';
 
-function ECDSA_sign(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: PCardinal; eckey: PEC_KEY): integer; cdecl;
+function ECDSA_sign(typ: integer; dgst: PByte; dgstlen: integer;
+  sig: PByte; siglen: PCardinal; eckey: PEC_KEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECDSA_sign';
 
 function EC_POINT_new(group: PEC_GROUP): PEC_POINT; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_new';
 
-function EC_POINT_oct2point(group: PEC_GROUP; p: PEC_POINT; buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
+function EC_POINT_oct2point(group: PEC_GROUP; p: PEC_POINT;
+  buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_oct2point';
 
-function ECDH_compute_key(_out: pointer; outlen: PtrUInt; pub_key: PEC_POINT; ecdh: PEC_KEY; KDF: ECDH_compute_key_KDF): integer; cdecl;
+function ECDH_compute_key(_out: pointer; outlen: PtrUInt;
+  pub_key: PEC_POINT; ecdh: PEC_KEY; KDF: ECDH_compute_key_KDF): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECDH_compute_key';
 
 function EVP_PKEY_CTX_new_id(id: integer; e: PENGINE): PEVP_PKEY_CTX; cdecl;
@@ -3684,7 +3714,8 @@ function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
 function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_keygen';
 
-function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer;
+  cmd: integer; p1: integer; p2: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_ctrl';
 
 function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
@@ -3702,7 +3733,8 @@ function EVP_PKEY_derive_set_peer(ctx: PEVP_PKEY_CTX; peer: PEVP_PKEY): integer;
 function EVP_PKEY_derive(ctx: PEVP_PKEY_CTX; key: PByte; keylen: PPtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_derive';
 
-function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
+function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
+  kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_bio_PrivateKey';
 
 function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
@@ -3951,7 +3983,7 @@ end;
 
 procedure X509_NAME.ToUtf8(out result: RawUtf8);
 var
-  temp: array[0..511] of AnsiChar;
+  temp: array[0..1023] of AnsiChar;
 begin
   if @self = nil then
     exit;
@@ -3966,8 +3998,8 @@ begin
   if (@self <> nil) and
      (Name <> '') and
      (Value <> '') then
-    X509_NAME_add_entry_by_txt(@self,
-      pointer(Name), MBSTRING_ASC, pointer(Value), -1, -1, 0);
+    X509_NAME_add_entry_by_txt(@self, pointer(Name),
+      MBSTRING[IsAnsiCompatible(Value)], pointer(Value), -1, -1, 0);
 end;
 
 procedure X509_NAME.AddEntries(const Country, State, Locality, Organization,
@@ -4071,7 +4103,7 @@ begin
   result := bio.ToStringAndFree;
 end;
 
-function X509.Extensions: TX509_Extensions;
+function X509.GetExtensions: TX509_Extensions;
 var
   i, n: integer;
   e: ^TX509_Extension;
@@ -4125,16 +4157,13 @@ const
     X509v3_KU_DIGITAL_SIGNATURE,
     X509v3_KU_DECIPHER_ONLY);
 
-  XU: array[kuTlsServer .. kuAnyeku] of integer = (
+  XU: array[kuTlsServer .. kuTimestamp] of integer = (
     XKU_SSL_SERVER,
     XKU_SSL_CLIENT,
     XKU_SMIME,
     XKU_CODE_SIGN,
-    XKU_SGC,
     XKU_OCSP_SIGN,
-    XKU_TIMESTAMP,
-    XKU_DVCS,
-    XKU_ANYEKU);
+    XKU_TIMESTAMP);
 
 function X509.GetUsage: TX509Usages;
 var
@@ -4142,6 +4171,8 @@ var
   u: TX509Usage;
 begin
   result := [];
+  if IsCA then
+    include(result, kuCA);
   f := X509_get_key_usage(@self);
   if f <> 0 then
     for u := low(KU) to high(KU) do
@@ -4156,7 +4187,9 @@ end;
 
 function X509.HasUsage(u: TX509Usage): boolean;
 begin
-  if (u >= low(KU)) and
+  if u = kuCA then
+    result := IsCA
+  else if (u >= low(KU)) and
      (u <= high(KU)) then
     result := (X509_get_key_usage(@self) and KU[u]) <> 0
   else if (u >= low(XU)) and
@@ -4188,7 +4221,7 @@ begin
     delete(result, 1, 6);
 end;
 
-function X509.SubjectAlternativeNames: TRawUtf8DynArray;
+function X509.SubjectAlternativeNames(dns: boolean): TRawUtf8DynArray;
 var
   alt: RawUtf8;
   p, s: PUtf8Char;
@@ -4205,13 +4238,16 @@ begin
       inc(p);
     if p^ = #0 then
       break;
-    if NetStartWith(p, 'DNS:') then
-    begin
-      inc(p, 4);
-      s := p;
-    end
+    if dns then
+      if NetStartWith(p, 'DNS:') then
+      begin
+        inc(p, 4);
+        s := p;
+      end
+      else
+        s := nil
     else
-      s := nil;
+      s := p; // return raw list of values
     while not (p^ in [#0 .. ' ', ',']) do
       inc(p);
     if s <> nil then
@@ -4231,6 +4267,13 @@ end;
 function X509.NotAfter: TDateTime;
 begin
   result := X509_getm_notAfter(@self).ToDateTime;
+end;
+
+function X509.SetValidity(ValidDays, ExpireDays: integer): boolean;
+begin
+  result := (ExpireDays <= ValidDays) and
+    (X509_gmtime_adj(X509_getm_notBefore(@self), SecsPerDay * ValidDays) <> nil) and
+    (X509_gmtime_adj(X509_getm_notAfter(@self),  SecsPerDay * ExpireDays) <> nil);
 end;
 
 function X509.SetExtension(nid: cardinal; const value: RawUtf8; issuer: PX509;
@@ -4266,12 +4309,13 @@ begin
   x.Free;
 end;
 
-function X509.SetBasic(ca: boolean; const dns: RawUtf8;
-  const subjectkey: RawUtf8): boolean;
 const
   _CA: array[boolean] of RawUtf8 = (
     'critical,CA:FALSE',
     'critical,CA:TRUE');
+
+function X509.SetBasic(ca: boolean; const dns: RawUtf8;
+  const subjectkey: RawUtf8): boolean;
 begin
   result := SetExtension(NID_basic_constraints, _CA[ca]);
   if result and
@@ -4294,16 +4338,13 @@ const
     ',digitalSignature',
     ',decipherOnly');
 
-  XU_: array[kuTlsServer .. kuAnyeku] of RawUtf8 = (
+  XU_: array[kuTlsServer .. kuTimestamp] of RawUtf8 = (
     'serverAuth,',
     'clientAuth,',
     'emailProtection,',
     'codeSigning,',
-    '',
     'OCSPSigning,',
-    'timeStamping,',
-    'DVCS,',
-    '');
+    'timeStamping,');
 
 function X509.SetUsage(usages: TX509Usages): boolean;
 var
@@ -4311,6 +4352,9 @@ var
   u: TX509Usage;
 begin
   result := false;
+  if kuCA in usages then
+    if not SetExtension(NID_basic_constraints, _CA[true]) then
+      exit;
   for u := low(KU_) to high(KU_) do
     if u in usages then
       v := v + KU_[u];
@@ -4348,33 +4392,26 @@ begin
 end;
 
 
-function NewCertificate(ValidDays, ExpireDays: integer): PX509;
+function NewCertificate: PX509;
 var
   rnd: array[0..19] of byte;
   bn: PBIGNUM;
   ai: PASN1_INTEGER;
   x: PX509;
 begin
+  EOpenSsl.CheckAvailable(nil, 'NewCertificate');
   result := nil;
-  if ExpireDays <= ValidDays then
-    exit;
   x := X509_new();
   if X509_set_version(x, 2) = OPENSSLSUCCESS then // X509v3
   begin
-    RAND_bytes(@rnd, 20);
+    RAND_bytes(@rnd, 20);     // random serial
     rnd[0] := rnd[0] and $7f; // ensure > 0
     bn := BN_bin2bn(@rnd, 20, nil);
     ai := BN_to_ASN1_INTEGER(bn, nil);
-    if X509_set_serialNumber(x, ai) = OPENSSLSUCCESS then // random serial
+    if X509_set_serialNumber(x, ai) = OPENSSLSUCCESS then
       result := x;
     ASN1_INTEGER_free(ai);
     BN_free(bn);
-    if result <> nil then
-    begin
-      // ValidDays is usually -1 to avoid most clock synch issues
-      X509_gmtime_adj(X509_getm_notBefore(x), 60 * 60 * 24 * ValidDays);
-      X509_gmtime_adj(X509_getm_notAfter(x), 60 * 60 * 24 * ExpireDays);
-    end;
   end;
   if result = nil then
     x.Free;
@@ -4387,18 +4424,25 @@ class procedure EOpenSsl.Check(caller: TObject; const method: string;
   res: integer; errormsg: PRawUtf8);
 begin
   if res <> OPENSSLSUCCESS then
-    CheckFailed(caller, method, res, errormsg);
+    CheckFailed(caller, method, errormsg);
 end;
 
-class procedure EOpenSsl.Check(res: integer);
+class procedure EOpenSsl.Check(res: integer; const method: string);
 begin
   if res <> OPENSSLSUCCESS then
-    CheckFailed(nil, '', res, nil);
+    CheckFailed(nil, method, nil);
+end;
+
+class procedure EOpenSsl.Check(res: boolean; const method: string);
+begin
+  if not res then
+    CheckFailed(nil, method, nil);
 end;
 
 class procedure EOpenSsl.CheckFailed(caller: TObject; const method: string;
-  res: integer; errormsg: PRawUtf8);
+  errormsg: PRawUtf8);
 var
+  res: integer;
   msg: RawUtf8;
   exc: EOpenSsl;
 begin

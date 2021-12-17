@@ -1162,8 +1162,7 @@ begin
     EVP_MD_CTX_free(ctx);
     if pkey <> nil then
       EVP_PKEY_free(pkey);
-    if priv <> nil then
-      BIO_free(priv);
+    priv.Free;
   end;
 end;
 
@@ -1183,7 +1182,7 @@ begin
      (SignatureLen <= 0)  then
     exit;
   pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
-  if IdemPChar(PublicKey, '-----BEGIN RSA PUBLIC KEY-----') then
+  if IdemPChar(PublicKey, '-----BEGIN RSA PUBLIC KEY') then
     pkey := PEM_read_bio_RSAPublicKey(pub, nil, nil, pointer(PublicKeyPassword))
   else
     pkey := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(PublicKeyPassword));
@@ -1197,7 +1196,7 @@ begin
   finally
     EVP_MD_CTX_free(ctx);
     EVP_PKEY_free(pkey);
-    BIO_free(pub);
+    pub.Free;
   end;
 end;
 
@@ -1273,13 +1272,13 @@ begin
   bio := BIO_new(BIO_s_mem);
   try
     EOpenSsl.Check(PEM_write_bio_PrivateKey(bio, Keys, nil, nil, 0, nil, nil));
-    PrivateKey := BIO_ToString(bio);
-    BIO_free(bio);
+    PrivateKey := bio.ToString;
+    bio.Free;
     bio := BIO_new(BIO_s_mem);
     EOpenSsl.Check(PEM_write_bio_PUBKEY(bio, Keys));
-    PublicKey := BIO_ToString(bio);
+    PublicKey := bio.ToString;
   finally
-    BIO_free(bio);
+    bio.Free;
   end;
 end;
 
@@ -1352,7 +1351,7 @@ function ecc_make_key_osl(out PublicKey: TEccPublicKey;
                           out PrivateKey: TEccPrivateKey): boolean;
 var
   key: PEC_KEY;
-  pub: PPByte;
+  pub: PByte;
   priv: PBIGNUM;
   publen, privlen: integer;
 begin
@@ -1678,6 +1677,7 @@ type
       const pub, sig: RawByteString): boolean; override;
     function SharedSecret(const pub, priv: RawByteString): RawByteString; override;
   end;
+
 
 { TCryptAsymOsl }
 
