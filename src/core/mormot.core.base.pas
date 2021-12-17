@@ -7335,7 +7335,7 @@ begin
   inc(p, lenSub);
   inc(pSub, lenSub);
   pStart := p;
-  inc(p, Offset + 3);
+  p := @p[Offset + 3];
   ch := pSub[0];
   lenSub := -lenSub;
   if p < pStop then

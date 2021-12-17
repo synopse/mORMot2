@@ -6189,7 +6189,7 @@ var
   outlen, last: PtrUInt;
 begin
   outlen := BinToBase64Length(len);
-  inc(outlen, 2 * (outlen shr 6)); // one CRLF per line
+  inc(outlen, 2 * (outlen shr 6) + 2); // one CRLF per line
   FastSetString(result, nil, PtrInt(outlen) + length(Prefix) + length(Suffix));
   rp := pointer(result);
   if Prefix <> '' then
@@ -6225,6 +6225,7 @@ begin
     MoveFast(pointer(Suffix)^, rp^, PStrLen(PAnsiChar(pointer(Suffix)) - _STRLEN)^);
     inc(rp, PStrLen(PAnsiChar(pointer(Suffix)) - _STRLEN)^);
   end;
+  rp^ := #0;
   PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := rp - pointer(result);
 end;
 

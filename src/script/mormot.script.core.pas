@@ -397,7 +397,7 @@ end;
 {$ifdef THREADID32}
 function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
 begin // use SSE2 on i386/x86_64
-  result := IntegerScanIndex(pointer(fEngineID), fEngines.Count, aThreadID);
+  result := IntegerScanIndex(pointer(fEngineID), fEngines.Count, cardinal(aThreadID));
 end;
 {$else}
 function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
