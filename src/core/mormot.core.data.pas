@@ -447,8 +447,10 @@ type
     procedure ClearFromLast; virtual;
     /// finalize the store items
     destructor Destroy; override;
+    /// create a new ItemClass instance, Add() it and return it
+    function NewItem: pointer;
     /// optional class of the stored items
-    // - could be used when unserializing from JSON
+    // - used e.g. by _JL_TSynObjectList() when unserializing from JSON
     property ItemClass: TClass
       read fItemClass write fItemClass;
     /// flag set if this list will Free its items on Delete/Clear/Destroy
@@ -496,7 +498,7 @@ type
 
   /// adding light non-upgradable multiple Read / exclusive Write locking
   // methods to a TSynPersistent with virtual constructor
-  TSynPersistentRWLighLock = class(TSynPersistent)
+  TSynPersistentRWLightLock = class(TSynPersistent)
   protected
     fSafe: TRWLightLock;
   public
@@ -3178,6 +3180,15 @@ destructor TSynObjectList.Destroy;
 begin
   Clear;
   inherited Destroy;
+end;
+
+function TSynObjectList.NewItem: pointer;
+begin
+  result := nil;
+  if fItemClass = nil then
+    exit;
+  result := Rtti.RegisterClass(fItemClass).ClassNewInstance;
+  Add(result);
 end;
 
 
