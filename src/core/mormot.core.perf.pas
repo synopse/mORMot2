@@ -2414,6 +2414,12 @@ begin
       'disk', GetDiskPartitionsText({nocache=}false, {withfree=}true)]);
 end;
 
+{$ifdef NOEXCEPTIONINTERCEPT}
+function GetLastExceptions(Depth: integer): variant;
+begin
+  VarClear(result{%H-});
+end;
+{$else}
 function GetLastExceptions(Depth: integer): variant;
 var
   info: TSynLogExceptionInfoDynArray;
@@ -2427,6 +2433,7 @@ begin
   for i := 0 to high(info) do
     TDocVariantData(result).AddItemText(ToText(info[i]));
 end;
+{$endif NOEXCEPTIONINTERCEPT}
 
 
 { TSystemUse }

@@ -985,19 +985,21 @@ type
     fThreadLastHash: integer;
     fThreadIndex: integer;
     fCurrentLevel: TSynLogInfo;
+    {$ifndef NOEXCEPTIONINTERCEPT}
     fExceptionIgnoreThreadVar: PBoolean;
+    fExceptionIgnoredBackup: boolean;
+    {$endif NOEXCEPTIONINTERCEPT}
     fInternalFlags: set of (logHeaderWritten, logInitDone);
     fDisableRemoteLog: boolean;
-    fExceptionIgnoredBackup: boolean;
     fThreadContexts: array of TSynLogThreadContext;
     fThreadHash: TWordDynArray; // 8 KB buffer
     fStartTimestamp: Int64;
     fCurrentTimestamp: Int64;
     fStartTimestampDateTime: TDateTime;
-    fStreamPositionAfterHeader: cardinal;
     fWriterClass: TBaseWriterClass;
     fWriterStream: TStream;
     fFileName: TFileName;
+    fStreamPositionAfterHeader: cardinal;
     fFileRotationSize: cardinal;
     fFileRotationNextHour: Int64;
     fThreadIndexReleased: TIntegerDynArray;
@@ -4133,12 +4135,14 @@ begin
   if id <> fThreadID then
     // quickly switch fThreadContext/fThreadIndex to the new thread
     GetThreadContextInternal(PtrUInt(id))
+  {$ifndef NOEXCEPTIONINTERCEPT}
   else
     fExceptionIgnoredBackup := fExceptionIgnoreThreadVar^;
   // caller should always perform in its finally ... end block an eventual:
   // fExceptionIgnoreThreadVar^ := fExceptionIgnoredBackup;
   fExceptionIgnoreThreadVar^ := true;
   // any exception within logging process will be ignored from now on
+  {$endif NOEXCEPTIONINTERCEPT}
 end;
 
 function TSynLog.NewRecursion: PSynLogThreadRecursion;
@@ -4192,8 +4196,10 @@ var
 begin
   // method called when the thread context was changed
   fThreadID := TThreadID(id);
+  {$ifndef NOEXCEPTIONINTERCEPT}
   fExceptionIgnoreThreadVar := @ExceptionIgnorePerThread;
   fExceptionIgnoredBackup := fExceptionIgnoreThreadVar^;
+  {$endif NOEXCEPTIONINTERCEPT}
   // hashing algorithm should match TSynLog.ThreadContextRehash
   if fFamily.fPerThreadLog <> ptNoThreadProcess then
   begin
@@ -4885,7 +4891,9 @@ begin
       {$endif FPC}
       LogTrailer(Level);
     finally
+      {$ifndef NOEXCEPTIONINTERCEPT}
       fExceptionIgnoreThreadVar^ := fExceptionIgnoredBackup;
+      {$endif NOEXCEPTIONINTERCEPT}
       LeaveCriticalSection(GlobalThreadLock);
       if lasterror <> 0 then
         SetLastError(lasterror);
@@ -5227,7 +5235,9 @@ begin
       AddErrorMessage(lasterror);
     LogTrailer(Level);
   finally
+    {$ifndef NOEXCEPTIONINTERCEPT}
     fExceptionIgnoreThreadVar^ := fExceptionIgnoredBackup;
+    {$endif NOEXCEPTIONINTERCEPT}
     LeaveCriticalSection(GlobalThreadLock);
     if lasterror <> 0 then
       SetLastError(lasterror);
@@ -5275,7 +5285,9 @@ begin
       AddErrorMessage(lasterror);
     LogTrailer(Level);
   finally
+    {$ifndef NOEXCEPTIONINTERCEPT}
     fExceptionIgnoreThreadVar^ := fExceptionIgnoredBackup;
+    {$endif NOEXCEPTIONINTERCEPT}
     LeaveCriticalSection(GlobalThreadLock);
     if lasterror <> 0 then
       SetLastError(lasterror);
@@ -5297,7 +5309,9 @@ begin
     fWriter.AddTypedJson(@aValue, aTypeInfo);
     LogTrailer(Level);
   finally
+    {$ifndef NOEXCEPTIONINTERCEPT}
     fExceptionIgnoreThreadVar^ := fExceptionIgnoredBackup;
+    {$endif NOEXCEPTIONINTERCEPT}
     LeaveCriticalSection(GlobalThreadLock);
   end;
 end;

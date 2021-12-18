@@ -521,6 +521,13 @@ end;
 
 {$endif NOSETTHREADNAME}
 
+type
+  // avoid linking of ComObj.pas just for EOleSysError
+  EOleSysError = class(Exception)
+  public
+    ErrorCode: cardinal;
+  end;
+
 {$ifndef NOEXCEPTIONINTERCEPT}
 
 const
@@ -716,13 +723,6 @@ const
     $8002000a,
     $80131047,
     $80028ca0);
-
-type
-  // avoid linking of ComObj.pas just for EOleSysError
-  EOleSysError = class(Exception)
-  public
-    ErrorCode: cardinal;
-  end;
 
 function ExceptionInheritsFrom(E: TClass; const Name: ShortString): boolean;
 begin
