@@ -1074,26 +1074,26 @@ begin
     else
       ip := fServerConnected.RemoteIP;
     fStatCache := JsonReformat(JsonEncode([
-      'version', Executable.Version.Detailed,
-      'started', Started,
-      'memory', TSynMonitorMemory.ToVariant,
-      'disk free', GetDiskPartitionsText,
-      'exceptions', GetLastExceptions,
+      'version',     Executable.Version.Detailed,
+      'started',     Started,
+      'memory',      TSynMonitorMemory.ToVariant,
+      'disk free',   GetDiskPartitionsText,
+      'exceptions',  GetLastExceptions,
       'connections', fClients.ServerConnectionCount,
-      'rejected', Rejected,
-      'server', ip,
+      'rejected',    Rejected,
+      'server',      ip,
       'sent', '{',
-        'kb', KB(sent),
-        'frames', Frames, '}',
+        'kb',        KB(sent),
+        'frames',    Frames, '}',
       'received', '{',
-        'kb', KB(Received),
-        'valid', Valid,
-        'invalid', Invalid, '}',
+        'kb',        KB(Received),
+        'valid',     Valid,
+        'invalid',   Invalid, '}',
       'rest', '{',
-        'frames', fRestFrameCount,
-        'pending', fRestPending, '}',
-      'connected', fClients.ServerConnectionActive,
-      'clients', fClients.WebSocketConnections]));
+        'frames',    fRestFrameCount,
+        'pending',   fRestPending, '}',
+      'connected',   fClients.ServerConnectionActive,
+      'clients',     fClients.WebSocketConnections]));
   end;
   result := fStatCache;
 end;

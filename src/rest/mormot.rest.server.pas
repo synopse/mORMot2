@@ -6010,16 +6010,18 @@ begin
   try
     FormatUtf8('%/%', [m.PhysicalMemoryFree.Text, m.PhysicalMemoryTotal.Text], free);
     info.AddNameValuesToObject([
-      'nowutc', now.Text(true, ' '),
+      'nowutc',    now.Text(true, ' '),
       'timestamp', now.Value,
-      'exe', Executable.ProgramName,
-      'version', Executable.Version.DetailedOrVoid,
-      'host', Executable.Host,
-      'cpu', cpu,
-      {$ifdef OSWINDOWS} 'mem', mem, {$endif OSWINDOWS}
-      'memused', KB(m.AllocatedUsed.Bytes),
-      'memfree', free,
-      'diskfree', GetDiskPartitionsText({nocache=}false, {withfree=}true, {nospace=}true),
+      'exe',       Executable.ProgramName,
+      'version',   Executable.Version.DetailedOrVoid,
+      'host',      Executable.Host,
+      'cpu',       cpu,
+      {$ifdef OSWINDOWS}
+      'mem',       mem,
+      {$endif OSWINDOWS}
+      'memused',   KB(m.AllocatedUsed.Bytes),
+      'memfree',   free,
+      'diskfree',  GetDiskPartitionsText({nocache=}false, {withfree=}true, {nospace=}true),
       'exception', GetLastExceptions(10)]);
   finally
     m.Free;
@@ -6027,12 +6029,12 @@ begin
   Stats.Lock;
   try
     info.AddNameValuesToObject([
-      'started', Stats.StartDate,
-      'clients', Stats.ClientsCurrent,
-      'methods', Stats.ServiceMethod,
+      'started',    Stats.StartDate,
+      'clients',    Stats.ClientsCurrent,
+      'methods',    Stats.ServiceMethod,
       'interfaces', Stats.ServiceInterface,
-      'total', Stats.TaskCount,
-      'time', Stats.TotalTime.Text]);
+      'total',      Stats.TaskCount,
+      'time',       Stats.TotalTime.Text]);
   finally
     Stats.Unlock;
   end;

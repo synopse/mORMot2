@@ -4608,8 +4608,8 @@ begin
   if PClass(a)^ <> PClass(self)^ then
     exit;
   // compare all fields at once
-  result := (TCryptCertInternal(a).fEcc <> nil) and
-            (fEcc <> nil) and
+  result := (fEcc <> nil) and
+            (TCryptCertInternal(a).fEcc <> nil) and
             CompareMem(@TCryptCertInternal(a).fEcc.Content,
               @fEcc.Content, SizeOf(fEcc.Content));
 end;
