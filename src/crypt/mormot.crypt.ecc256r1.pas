@@ -1557,7 +1557,6 @@ end;
 
 initialization
   assert(ECC_QUAD = 4);
-  writeln(SizeOf(TEccCertificateContent));
   assert(SizeOf(TEccCertificateContent) = 173); // on all platforms/compilers
   // register our branchless pascal code by default
   @Ecc256r1MakeKey := @ecc_make_key_pas;
