@@ -2146,9 +2146,10 @@ begin
     check(c1.GetNotBefore < NowUtc);
     check(c1.GetNotAfter > NowUtc);
     c2 := crt.New;
+    Check(not c2.IsEqual(c1));
     check(c2.FromBinary(c1.ToBinary));
     Check(not c2.HasPrivateSecret, 'nopwd=pubonly');
-    Check(c1.Equals(c2));
+    Check(c1.IsEqual(c2));
     CheckEqual(c1.GetSerial, c1.GetSerial);
     CheckEqual(c2.GetSubject, c1.GetSubject);
     CheckEqual(c2.GetIssuerName, c1.GetIssuerName);
@@ -2158,9 +2159,12 @@ begin
     CheckEqual(word(c2.GetUsage), word(c1.GetUsage));
     CheckEqual(c2.GetPeerInfo, c1.GetPeerInfo);
     c3 := crt.New;
+    Check(not c3.IsEqual(c1));
+    Check(not c3.IsEqual(c2));
     check(c3.FromBinary(c1.ToBinary('pwd'), 'pwd'));
     Check(c3.HasPrivateSecret, 'pwd=priv');
-    Check(c3.Equals(c2));
+    Check(c3.IsEqual(c1));
+    Check(c3.IsEqual(c2));
     CheckEqual(c1.GetSerial, c1.GetSerial);
     CheckEqual(c3.GetSubject, c1.GetSubject);
     CheckEqual(c3.GetIssuerName, c1.GetIssuerName);

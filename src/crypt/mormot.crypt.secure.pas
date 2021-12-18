@@ -1258,7 +1258,7 @@ type
     // - will compare the internal properties and the public key, not the
     // private key: you could e.g. use it to verify that a ICryptCert with
     // HasPrivateSecret=false matches another with HasPrivateSecret=true
-    function Equals(const another: ICryptCert): boolean;
+    function IsEqual(const another: ICryptCert): boolean;
     /// access to the low-level implementation class
     function Instance: TCryptCert;
   end;
@@ -1286,7 +1286,7 @@ type
     function GetPeerInfo: RawUtf8; virtual; abstract;
     function ToBinary(const PrivatePassword: RawUtf8): RawByteString; virtual; abstract;
     function HasPrivateSecret: boolean; virtual; abstract;
-    function Equals(const another: ICryptCert): boolean; virtual;
+    function IsEqual(const another: ICryptCert): boolean; virtual; abstract;
     function Instance: TCryptCert;
   end;
 
@@ -3941,13 +3941,6 @@ var
 begin
   FormatShort(Fmt, Args, msg);
   RaiseError(msg);
-end;
-
-function TCryptCert.Equals(const another: ICryptCert): boolean;
-begin
-  // check same exact implementation class
-  result := (another <> nil) and
-            (PClass(another.Instance)^ = PClass(self)^);
 end;
 
 function TCryptCert.Instance: TCryptCert;

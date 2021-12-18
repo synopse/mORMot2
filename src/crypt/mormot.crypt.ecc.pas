@@ -4411,7 +4411,7 @@ type
     function GetPeerInfo: RawUtf8; override;
     function ToBinary(const PrivatePassword: RawUtf8): RawByteString; override;
     function HasPrivateSecret: boolean; override;
-    function Equals(const another: ICryptCert): boolean; override;
+    function IsEqual(const another: ICryptCert): boolean; override;
     /// low-level access to internal TEccCertificate or TEccCertificateSecret
     property Ecc: TEccCertificate
       read fEcc;
@@ -4596,18 +4596,22 @@ begin
             TEccCertificateSecret(fEcc).HasSecret;
 end;
 
-function TCryptCertInternal.Equals(const another: ICryptCert): boolean;
+function TCryptCertInternal.IsEqual(const another: ICryptCert): boolean;
 var
-  e: TEccCertificate;
+  a: TCryptCert;
 begin
-  result := inherited Equals(another);
-  if not result then
-    exit; // not the same class
-  e := TCryptCertInternal(another.Instance).fEcc;
-  result := (e <> nil) and
+  result := false;
+  // check same exact implementation class
+  if another = nil then
+    exit;
+  a := another.Instance;
+  if PClass(a)^ <> PClass(self)^ then
+    exit;
+  // compare all fields at once
+  result := (TCryptCertInternal(a).fEcc <> nil) and
             (fEcc <> nil) and
-            // compare all fileds at once
-            CompareMem(@e.Content, @fEcc.Content, SizeOf(e.Content));
+            CompareMem(@TCryptCertInternal(a).fEcc.Content,
+              @fEcc.Content, SizeOf(fEcc.Content));
 end;
 
 
