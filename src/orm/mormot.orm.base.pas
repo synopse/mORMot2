@@ -10382,7 +10382,7 @@ end;
 constructor TOrmPropertiesAbstract.Create;
 begin
   InitializeCriticalSection(fLock);
-  fSqlTableRetrieveAllFields := ID_TXT;
+  fSqlTableRetrieveAllFields := 'RowID'; // to work with virtual tables
   SetLength(fManyFields, MAX_SQLFIELDS);
   SetLength(fSimpleFields, MAX_SQLFIELDS);
   SetLength(fCopiableFields, MAX_SQLFIELDS);
