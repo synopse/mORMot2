@@ -1930,10 +1930,6 @@ function DynArrayTypeInfoToStandardParserType(
   DynArrayInfo, ElemInfo: PRttiInfo; ElemSize: integer; ExactType: boolean;
   out FieldSize: integer; Complex: PRttiParserComplexType = nil): TRttiParserType;
 
-/// trim ending 'DynArray' or 's' chars from a dynamic array type name
-// - used internally to guess the associated item type name
-function DynArrayItemTypeLen(const DynArrayTypeName: RawUtf8): PtrInt;
-
 
 
 { ************** RTTI-based Registration for Custom JSON Parsing }
@@ -6338,18 +6334,6 @@ begin
     FieldSize := PT_SIZE[result];
 end;
 
-function DynArrayItemTypeLen(const DynArrayTypeName: RawUtf8): PtrInt;
-begin
-  result := length(DynArrayTypeName);
-  if (result > 12) and
-     IdemPropName('DynArray', @PByteArray(DynArrayTypeName)[result - 8], 8) then
-    dec(result, 8)
-  else if (result > 3) and
-          (DynArrayTypeName[result] in ['s', 'S']) then
-    dec(result)
-  else
-    result := 0;
-end;
 
 
 { ************** RTTI-based Registration for Custom JSON Parsing }
@@ -7480,6 +7464,7 @@ var
   prop: TIntegerDynArray;
   propcount: integer;
   propname, typname, atypname: RawUtf8;
+  aname: PUtf8Char;
   ee: TRttiCustomFromTextExpectedEnd;
   alen, i: PtrInt;
   pt, apt: TRttiParserType;
@@ -7582,7 +7567,26 @@ begin
         ptNone:
           // unknown type name -> try from T*DynArray/T*s pattern
           begin
-            alen := DynArrayItemTypeLen(typname);
+            aname := pointer(typname);
+            alen := length(typname);
+            if (alen > 12) and
+               (IdemPropName('DynArray', aname + alen - 8, 8) or
+                IdemPropName('ObjArray', aname + alen - 8, 8)) then
+              dec(alen, 8)
+            else if (alen > 3) and
+                    (aname[aLen] in ['s', 'S']) then
+              dec(alen)
+            else
+            begin
+              {$ifdef HASGENERICSSYNTAX}
+              if (alen > 7) and
+                 (aname[alen] = '>') and
+                 IdemPropName('TArray<', aname, 7) then
+                // try TArray<T> -> T
+                ac := Rtti.RegisterTypeFromName(aname + 7, alen - 8);
+              {$endif HASGENERICSSYNTAX}
+              alen := 0;
+            end;
             if alen > 0 then
             begin
               // try TIntegerDynArray/TIntegers -> integer
