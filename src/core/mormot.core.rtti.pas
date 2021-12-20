@@ -2434,7 +2434,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     // called by FindOrRegister() for proper inlining
     function DoRegister(Info: PRttiInfo): TRttiCustom; overload;
-    function DoRegister(ObjectClass: TClass): TRttiCustom; overload;
     function DoRegister(ObjectClass: TClass; ToDo: TRttiCustomFlags): TRttiCustom; overload;
     procedure AddToPairs(Instance: TRttiCustom);
     procedure SetGlobalClass(RttiClass: TRttiCustomClass); // ensure Count=0
@@ -2507,6 +2506,9 @@ type
     // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup
     function RegisterClass(aObject: TObject): TRttiCustom; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// low-level registration function called from RegisterClass()
+    // - is sometimes called after manual vmtAutoTable slot lookup
+    function DoRegister(ObjectClass: TClass): TRttiCustom; overload;
     /// register a given class type, using its RTTI, to auto-create/free its
     // class and dynamic array published fields
     function RegisterAutoCreateFieldsClass(ObjectClass: TClass): TRttiCustom;
@@ -2723,6 +2725,8 @@ type
     /// this constructor initializes the instance
     // - will register the class type to the Rtti global list
     constructor Create; overload; override;
+    /// this constructor initializes the instance with a given ID
+    constructor CreateWithID(aID: TID);
     /// this property gives direct access to the class instance ID
     // - not defined as "published" since RttiCustomSetParser did register it
     property IDValue: TID
@@ -8534,7 +8538,13 @@ end;
 constructor TObjectWithID.Create;
 begin
   if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
-    Rtti.RegisterClass(self); // ensure TRttiCustom is set
+    Rtti.DoRegister(PClass(self)^); // ensure TRttiCustom is set
+end;
+
+constructor TObjectWithID.CreateWithID(aID: TID);
+begin
+  Create; // may have be overriden
+  fID := aID;
 end;
 
 class procedure TObjectWithID.RttiCustomSetParser(Rtti: TRttiCustom);

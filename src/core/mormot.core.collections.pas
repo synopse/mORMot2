@@ -778,7 +778,7 @@ begin
       [self, aItemTypeInfo^.RawName, ToText(aItemTypeInfo^.Kind)^,
        aDynArrayTypeInfo.RawName, ToText(fDynArray.Info.ArrayRtti.Kind)^]);
   if loNoFinalize in fOptions then
-    fDynArray.NoFinalize := true; // be careful!
+    fDynArray.NoFinalize := true; // forced weak references
   if loCreateUniqueIndex in fOptions then
   begin
     fHasher := AllocMem(SizeOf(fHasher^));

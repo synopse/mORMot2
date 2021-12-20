@@ -3045,7 +3045,7 @@ end;
 constructor TSynPersistent.Create;
 begin
   if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
-    Rtti.RegisterClass(self); // ensure TRttiCustom is set
+    Rtti.DoRegister(PClass(self)^); // ensure TRttiCustom is set
 end;
 
 class function TSynPersistent.RttiCustom: TRttiCustom;
@@ -9976,9 +9976,9 @@ begin
     1:
       result := ByteScanIndex(P, Count, PByte(Elem)^); // SSE2 asm on Intel/AMD
     2:
-      result := WordScanIndex(P, Count, PWord(Elem)^); // SSE2 asm on Intel/AMD
+      result := WordScanIndex(P, Count, PWord(Elem)^); // SSE2 asm
     4:
-      result := IntegerScanIndex(P, Count, PInteger(Elem)^);
+      result := IntegerScanIndex(P, Count, PInteger(Elem)^); // SSE2 asm
     8:
       result := Int64ScanIndex(P, Count, PInt64(Elem)^);
     // small ElemSize version (<SizeOf(PtrInt))
