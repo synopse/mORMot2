@@ -6518,6 +6518,13 @@ begin
   result := -1;
 end;
 
+function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integer;
+begin
+  result := high(Names);
+  if result >= 0 then
+    result := FindPropName(@Names[0], Name, result + 1);
+end;
+
 function FindRawUtf8(const Values: TRawUtf8DynArray; const Value: RawUtf8;
   CaseSensitive: boolean): integer;
 begin
@@ -6530,13 +6537,6 @@ begin
   result := high(Values);
   if result >= 0 then
     result := FindRawUtf8(@Values[0], Value, result + 1, CaseSensitive);
-end;
-
-function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integer;
-begin
-  result := high(Names);
-  if result >= 0 then
-    result := FindPropName(@Names[0], Name, result + 1);
 end;
 
 function AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8;

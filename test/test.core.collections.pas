@@ -180,7 +180,7 @@ begin
   li := Collections.NewList<integer>;
   for i in li do
     Check(i < 0);
-  li.Capacity := MAX + 1;
+  li.Capacity := MAX + 1;       // faster Add() thanks to pre-allocation
   Check(li.Count = 0);
   for i in li do
     Check(i < 0);
