@@ -66,7 +66,7 @@ var
   v: PVariantArray;
   {$ifndef USEEQUALOP}
   p0, p1: ^T;
-  {$endif FPC}
+  {$endif USEEQUALOP}
   da: PDynArray;
   name: RawUtf8;
 begin
@@ -170,6 +170,8 @@ var
   i: integer;
   pi: PInteger;
   li: IList<integer>;
+  o: TObjectWithID;
+  lo: IList<TObjectWithID>;
   u: RawUtf8;
   pu: PRawUtf8;
   lu: IList<RawUtf8>;
@@ -214,6 +216,17 @@ begin
     Check(li.IndexOf(i) = i);   // O(n) brute force search
   for i in li do
     Check(li.Find(i) = i);      // O(1) hash table search
+  // manual IList<TObjectWithID> validation
+  lo := Collections.NewList<TObjectWithID>;
+  lo.Capacity := MAX + 1;
+  for i := 0 to MAX do
+    Check(lo.Add(TObjectWithID.CreateWithID(i)) = i);
+  for i := 0 to lo.Count - 1 do
+    Check(lo[i].IDValue = i);
+  for o in lo do
+    Check(o.IDValue <= MAX);
+  for o in lo.Range(-5) do
+    Check(o.IDValue > MAX - 5);
   // manual IList<RawUtf8> validation
   lu := Collections.NewList<RawUtf8>;
   for u in lu do

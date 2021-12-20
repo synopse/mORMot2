@@ -264,7 +264,7 @@ begin
     check(cert.AuthorityIssuer = 'mormot.net');
     check(chain.Add(cert) = 2);
     check(chain.Count = 3);
-    check(chain.GetBySerial(cert.Content.Signed.Serial) = cert);
+    check(chain.GetBySerial(cert.Content.Head.Signed.Serial) = cert);
     json2 := ObjectToJson(cert);
     CheckEqual(json1, json2, 'serialization trim private key');
     secret.Free;
@@ -275,7 +275,7 @@ begin
     secret := TEccCertificateSecret.CreateFromBase64(PUBPRIV64);
     check(secret.HasSecret);
     check(secret.IsSelfSigned);
-    check(chain.IsValid(secret.Content, true) = ecvValidSelfSigned);
+    check(chain.IsValidRaw(secret.Content, true) = ecvValidSelfSigned);
     check(secret.Serial <> cert.Serial);
     check(secret.Serial = '29E3D71DC26C134A093BA1C22CFA2582');
     json1 := ObjectToJson(secret);
@@ -312,7 +312,7 @@ begin
     secret := TEccCertificateSecret.CreateFromSecureBinary(@MYPRIVKEY,
       MYPRIVKEY_LEN, MYPRIVKEY_PASS, MYPRIVKEY_ROUNDS);
     check(secret.Serial = '29E3D71DC26C134A093BA1C22CFA2582');
-    check(chain.IsValid(secret.Content, true) = ecvValidSelfSigned);
+    check(chain.IsValidRaw(secret.Content, true) = ecvValidSelfSigned);
     json2 := ObjectToJson(secret);
     check(json1 = json2);
     secret.Free;
@@ -339,13 +339,13 @@ begin
     check(sign.AuthorityIssuer = 'toto.com');
     check(sign.SaveToDERBinary = bin);
     check(chain.IsSigned(sign, pointer(json), length(json)) = ecvValidSigned);
-    signcontent := sign.Content;
+    signcontent := sign.Certified;
     inc(signcontent.Signature[10]); // corrupt
-    sign.Content := signcontent;
+    sign.Certified := signcontent;
     check(sign.Check, 'seems valid');
     check(chain.IsSigned(sign, pointer(json), length(json)) = ecvInvalidSignature);
     dec(signcontent.Signature[10]);
-    sign.Content := signcontent;
+    sign.Certified := signcontent;
     check(chain.IsSigned(sign, pointer(json), length(json)) = ecvValidSigned);
     check(chain.IsSigned(sav, pointer(json), length(json)) = ecvValidSigned);
     dec(json[10]);
@@ -361,7 +361,7 @@ begin
     check(chain.Count = 3);
     check(chain.IsValid(selfsignedroot) = ecvValidSelfSigned);
     check(selfsignedroot.IssueDate = EccText(NowEccDate));
-    check(selfsignedroot.Content.Signed.IssueDate = NowEccDate);
+    check(selfsignedroot.Content.Head.Signed.IssueDate = NowEccDate);
     check(chain.GetBySerial(serial) <> nil);
     chain.IsValidCached := true;
     check(ObjectToJson(chain) = jsonchain);
