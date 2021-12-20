@@ -440,11 +440,7 @@ asm
         pop     edi
         pop     esi
 @done:  sub     ecx, 8
-        jl      @tail
-        pop     ebp
-        pop     ebx
-        not     eax
-        ret
+        jge     @e
 @tail:  movzx   ebx, byte[edx + ecx]
         xor     bl, al
         shr     eax, 8
@@ -470,6 +466,7 @@ asm
         xor     edx, dword ptr [edi]
         xor     ecx, dword ptr [edi + 4]
         movzx   esi, dl
+        // note: since we have "+ 1024 * n" offsets, crc32ctab is left immediate
         mov     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 3]
         movzx   esi, dh
         shr     edx, 16

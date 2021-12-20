@@ -2956,10 +2956,10 @@ function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 // - by design, such combined hashes cannot be cascaded
 function crc64c(buf: PAnsiChar; len: cardinal): Int64;
 
-/// compute two CRC32C checksum on the supplied buffer for 64-bit hashing
+/// expand a CRC32C checksum on the supplied buffer for 64-bit hashing
 // - will use SSE 4.2 or ARMv8 hardware accelerated instruction, if available
 // - is the default implementation of DefaultHasher64
-function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
+function crc32ctwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
 
 /// compute CRC63C checksum on the supplied buffer, cascading two crc32c
 // - similar to crc64c, but with 63-bit, so no negative value: may be used
@@ -3133,6 +3133,11 @@ function crc32cHash(const s: RawByteString): cardinal; overload;
 // - the returned hash value will be stable on all platforms, and use HW opcodes
 // if available on the current CPU
 function crc32cHash(const b: TBytes): cardinal; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// combine/reduce a 128-bit hash into a 64-bit hash
+// - e.g. from non cryptographic 128-bit hashers with linked lower/higher 64-bit
+function Hash128To64(const b: THash128): QWord;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get maximum possible (worse) SynLZ compressed size
@@ -9734,8 +9739,8 @@ end;
 
 function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
 begin
-  result := QWord(crc32c(cardinal(seed), buf, len)) +
-            QWord(crc32c(seed shr 32, buf, len)) shl 32;
+  PQWordRec(@result)^.L := crc32c(PQWordRec(@seed)^.L, buf, len);
+  PQWordRec(@result)^.H := crc32c(PQWordRec(@seed)^.H, buf, len);
 end;
 
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
@@ -9850,6 +9855,13 @@ end;
 function crc32cHash(const b: TBytes): cardinal;
 begin
   result := crc32c(0, pointer(b), length(b));
+end;
+
+function Hash128To64(const b: THash128): QWord;
+const
+  prime = 2685821657736338717; // use efficient Marsaglia-like PRNG
+begin
+  result := THash128Rec(b).L xor (THash128Rec(b).L * prime);
 end;
 
 function xxHash32Mixup(crc: cardinal): cardinal;
