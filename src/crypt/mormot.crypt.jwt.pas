@@ -1321,7 +1321,7 @@ begin
   inherited Create('ES256', aClaims, aAudience, aExpirationMinutes,
     aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
   fCertificate := aCertificate;
-  fVerify := TEcc256r1Verify.Create(fCertificate.Content.Signed.PublicKey);
+  fVerify := TEcc256r1Verify.Create(fCertificate.Content.Head.Signed.PublicKey);
 end;
 
 destructor TJwtES256.Destroy;
