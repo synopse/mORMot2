@@ -25,8 +25,11 @@ unit mormot.core.collections;
 interface
 
 {$I ..\mormot.defines.inc}
+// current Delphi compiler support: since Delphi XE, but disabled for XE6/XE7
+//   which trigger internal errors; specialization only since Delphi XE8
 
-{$ifdef HASGENERICS} // do-nothing unit on oldest compilers (e.g. < Delphi 2010)
+
+{$ifdef HASGENERICS} // do-nothing unit on oldest compilers (e.g. Delphi 7/2009)
 
 // FPC 3.2+ and Delphi XE8+ allow to gather most common specializations in this
 // unit and not in the end-user units to reduce executable code size
@@ -50,7 +53,7 @@ uses
   mormot.core.json;
 
 
-// note: defined "var value"  instead of "out value" to avoid finalizer calls
+// note: we defined "var value"  instead of "out value" to avoid finalizer calls
 
 
 { ************** JSON-aware IList<> List Storage }
@@ -517,7 +520,7 @@ type
     /// IKeyValue<> method to search and delete all deprecated items
     function DeleteDeprecated: integer;
     /// IKeyValue<> method to delete all stored key/value pairs
-    procedure Clear; overload;
+    procedure Clear;
     /// IKeyValue<> method to get the number of key/value pairs actually stored
     function Count: integer;
     /// IKeyValue<> method to get the internal TSynDictionary capacity
@@ -696,27 +699,26 @@ type
     /// generate a new IKeyValue<TKey, TValue> instance
     // - use this factory method instead of TSynKeyValueSpecialized<>.Create
     // so that the types will be specifialized and compiled once in this unit
-    // - you can provide the dynamic array TypeInfo() of T if the types are too
-    // complex, or not already registered to mormot.core.rtti
+    // - you can set an optional timeout period, in seconds - you should call
+    // DeleteDeprecated periodically to search for deprecated items
+    // - you can provide specific TypeInfo() if TArray<TKey/TValue> is not enough
     // - by default, this instance won't be thread-safe unless the kvoThreadSafe
     // option is forced, so that process is protected with a TSynLocker mutex
     // - by default, string keys would be searched following exact case, unless
     // the kvoKeyCaseInsensitive option is set
-    // - you can set an optional timeout period, in seconds - you should call
-    // DeleteDeprecated periodically to search for deprecated items
     // - raise ESynKeyValue if T type is too complex: use NewPlainList<T>() instead
     // - inlining does (little) sense even if most parameters would be inlined
     class function NewKeyValue<TKey, TValue>(aOptions: TSynKeyValueOptions = [];
-      aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
+      aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
       aHasher: THasher = nil): IKeyValue<TKey, TValue>; static;
     /// generate a new IKeyValue<TKey, TValue> instance with exact
     // TSynKeyValueSpecialized<TKey, TValue>
     // - to be called for complex types (e.g. managed records) when
     // NewKeyValue<TKey, TValue> fails and triggers ESynKeyValue
     class function NewPlainKeyValue<TKey, TValue>(aOptions: TSynKeyValueOptions = [];
-      aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
+      aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
       aHasher: THasher = nil): IKeyValue<TKey, TValue>;
         static; {$ifdef FPC} inline; {$endif}
   end;
@@ -1059,6 +1061,8 @@ end;
 constructor TSynListSpecialized<T>.Create(aOptions: TListOptions;
   aSortAs: TRttiParserType; aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo);
 begin
+  if aDynArrayTypeInfo = nil then
+    aDynArrayTypeInfo := TypeInfo(TArray<T>);
   if aItemTypeInfo = nil then
     aItemTypeInfo := TypeInfo(T);
   Init(aOptions, aDynArrayTypeInfo, aItemTypeInfo, aSortAs);
@@ -1980,16 +1984,20 @@ begin
   result := TSynListSpecialized<T>.Create(aOptions, aSortAs, aDynArrayTypeInfo);
 end;
 
-class function Collections.NewKeyValue<TKey, TValue>(
-  aOptions: TSynKeyValueOptions; aKeyDynArrayTypeInfo: PRttiInfo;
-  aValueDynArrayTypeInfo: PRttiInfo; aTimeoutSeconds: cardinal;
-  aCompressAlgo: TAlgoCompress; aHasher: THasher): IKeyValue<TKey, TValue>;
+class function Collections.NewKeyValue<TKey, TValue>(aOptions: TSynKeyValueOptions;
+  aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress;
+  aKeyDynArrayTypeInfo, aValueDynArrayTypeInfo: PRttiInfo;
+  aHasher: THasher): IKeyValue<TKey, TValue>;
 var
   ctx: TNewSynKeyValueContext;
 begin
   ctx.Options := aOptions;
+  if aKeyDynArrayTypeInfo = nil then
+    aKeyDynArrayTypeInfo := TypeInfo(TArray<TKey>);
   ctx.KeyArrayTypeInfo := aKeyDynArrayTypeInfo;
   ctx.KeyItemTypeInfo := TypeInfo(TKey);
+  if aValueDynArrayTypeInfo = nil then
+    aValueDynArrayTypeInfo := TypeInfo(TArray<TValue>);
   ctx.ValueArrayTypeInfo := aValueDynArrayTypeInfo;
   ctx.ValueItemTypeInfo := TypeInfo(TValue);
   ctx.Timeout := aTimeOutSeconds;
@@ -2055,16 +2063,20 @@ begin
   {$endif SPECIALIZE_ENABLED}
 end;
 
-class function Collections.NewPlainKeyValue<TKey, TValue>(
-  aOptions: TSynKeyValueOptions; aKeyDynArrayTypeInfo: PRttiInfo;
-  aValueDynArrayTypeInfo: PRttiInfo; aTimeoutSeconds: cardinal;
-  aCompressAlgo: TAlgoCompress; aHasher: THasher): IKeyValue<TKey, TValue>;
+class function Collections.NewPlainKeyValue<TKey, TValue>(aOptions: TSynKeyValueOptions;
+  aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress;
+  aKeyDynArrayTypeInfo, aValueDynArrayTypeInfo: PRttiInfo;
+  aHasher: THasher): IKeyValue<TKey, TValue>;
 var
   ctx: TNewSynKeyValueContext;
 begin
   ctx.Options := aOptions;
+  if aKeyDynArrayTypeInfo = nil then
+    aKeyDynArrayTypeInfo := TypeInfo(TArray<TKey>);
   ctx.KeyArrayTypeInfo := aKeyDynArrayTypeInfo;
   ctx.KeyItemTypeInfo := TypeInfo(TKey);
+  if aValueDynArrayTypeInfo = nil then
+    aValueDynArrayTypeInfo := TypeInfo(TArray<TValue>);
   ctx.ValueArrayTypeInfo := aValueDynArrayTypeInfo;
   ctx.ValueItemTypeInfo := TypeInfo(TValue);
   ctx.Timeout := aTimeOutSeconds;
