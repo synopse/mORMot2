@@ -322,6 +322,8 @@
     {$define ORMGENERICS}
     {$define FPCGENERICS}
   {$endif}
+  // FPC generics (aka parameterized types) are available since 2.6
+  {$define HASGENERICSSYNTAX}
 
   {$ifdef FPC_NEWRTTI}
     {$define ISDELPHI2010_OR_FPC_NEWRTTI}
@@ -374,12 +376,13 @@
     {$define HASCODEPAGE}
     {$define FPC_OR_UNICODE}
     {$define USERECORDWITHMETHODS}
+    {$define HASGENERICSSYNTAX}     // Delphi 2009+ compiler has TArray<>
     { due to a bug in Delphi 2009+, we need to fake inheritance of record,
       since TDynArrayHashed = object(TDynArray) fails to initialize
       http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
     {$define UNDIRECTDYNARRAY}
   {$else}
-    {$define HASNOSTATICRTTI} // Delphi 7/2007 has no TypeInfo(TGUID)
+    {$define HASNOSTATICRTTI}        // Delphi 7/2007 has no TypeInfo(TGUID)
   {$endif}
 
   {$define ISDELPHI}
