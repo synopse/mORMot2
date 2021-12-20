@@ -680,8 +680,8 @@ type
     // so that the types will be specifialized and compiled once in this unit
     // - by default, string values would be searched following exact case,
     // unless the loCaseInsensitive option is set
+    // - will associate a TArray<T> storage, unless aDynArrayTypeInfo is set
     // - raise ESynList if T type is too complex: use NewPlainList<T>() instead
-    // - not inlined since it is of little benefit
     class function NewList<T>(aOptions: TListOptions = [];
       aDynArrayTypeInfo: PRttiInfo = nil): IList<T>; static;
     /// generate a new IList<T> instance with exact TSynListSpecialized<T>
@@ -689,8 +689,7 @@ type
     // NewList<T> fails and triggers ESynList
     // - by default, string values would be searched following exact case,
     // unless the loCaseInsensitive option is set
-    // - you can provide the dynamic array TypeInfo() of T if the types are too
-    // complex, or not already registered to mormot.core.rtti
+    // - will associate a TArray<T> storage, unless aDynArrayTypeInfo is set
     // - if aSortAs is ptNone, will guess the comparison/sort function from RTTI
     // but you can force one e.g. to sort/compare/hash using a record first field
     class function NewPlainList<T>(aOptions: TListOptions = [];
@@ -775,8 +774,9 @@ begin
   if (fDynArray.Info.ArrayRtti = nil) or
      ((aDynArrayTypeInfo <> nil) and
       (fDynArray.Info.ArrayRtti.Kind <> aItemTypeInfo^.Kind))  then
-    raise ESynList.CreateUtf8('%.Create: T does not match %',
-      [self, aDynArrayTypeInfo.RawName]);
+    raise ESynList.CreateUtf8('%.Create<%> (%) does not match % (%)',
+      [self, aItemTypeInfo^.RawName, ToText(aItemTypeInfo^.Kind)^,
+       aDynArrayTypeInfo.RawName, ToText(fDynArray.Info.ArrayRtti.Kind)^]);
   if loNoFinalize in fOptions then
     fDynArray.NoFinalize := true; // be careful!
   if loCreateUniqueIndex in fOptions then
@@ -1931,6 +1931,8 @@ end;
 class function Collections.NewList<T>(aOptions: TListOptions;
   aDynArrayTypeInfo: PRttiInfo): IList<T>;
 begin
+  if aDynArrayTypeInfo = nil then
+    aDynArrayTypeInfo := TypeInfo(TArray<T>);
   // IsManagedType() GetTypeKind() SizeOf() intrinsics to compile efficiently
   if IsManagedType(T) then
     case GetTypeKind(T) of
