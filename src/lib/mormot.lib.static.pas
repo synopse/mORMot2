@@ -316,7 +316,7 @@ procedure libc_endthreadex(exitcode: cardinal); cdecl;
 
 function localtime64_s(var t: Int64; var atm: time_t): integer;
 var
- S: TSystemTime;
+  S: TSystemTime;
 begin
   UnixTimeToLocalTime(t, S);
   atm.tm_sec := S.wSecond;

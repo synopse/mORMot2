@@ -40,6 +40,11 @@ const
   // - map 32 bytes of memory
   ECC_BYTES = SizeOf(THash256);
 
+  /// Mon, 01 Aug 2016 encoded as COM/TDateTime value
+  // - used to compute TEccDate 16-bit values to/from a TDateTime
+  ECC_DELTA = 42583;
+
+
 type
   /// store a public key for ECC secp256r1 cryptography
   // - use Ecc256r1MakeKey() to generate such a key
@@ -253,7 +258,8 @@ type
     ecvInvalidDate,
     ecvUnknownAuthority,
     ecvDeprecatedAuthority,
-    ecvInvalidSignature);
+    ecvInvalidSignature,
+    ecvRevoked);
 
   /// the certification information of a TEccCertificate
   // - as stored in TEccCertificateContent.Head.Signed
@@ -369,15 +375,15 @@ type
     /// compute the FNV-32 digest of the whole content
     // - as stored in Head.CRC
     function ComputeCrc32: cardinal;
-    /// compute a 64-bit digest of the whole content
+    /// compute a 128-bit digest of the whole content
     // - as used for TEccCertificateChain cache
-    function ComputeCrc64: Int64;
+    procedure ComputeCrc128(out crc: THash128);
     /// compute the SHA-256 digest of the whole signed content
     procedure ComputeHash(out hash: TSha256Digest);
     /// serialize this certificate content as binary stream
     function SaveToStream(s: TStream): boolean;
     /// unserialize this certificate content from a binary stream
-    function LoadFromStream(s: TStream): boolean;
+    function LoadFromStream(s: TStream; maxversion: byte): boolean;
   end;
 
   /// points to a TEccCertificate binary buffer for ECC secp256r1 cryptography
@@ -429,6 +435,41 @@ type
   /// points to a TEccSignatureCertified buffer for ECDSA secp256r1 signature
   PEccSignatureCertifiedContent = ^TEccSignatureCertifiedContent;
 
+  /// store a TEccCertificateChain Certificate Revocation List item
+  // - would be stored in 24 bytes
+  {$ifdef USERECORDWITHMETHODS}
+  TEccCertificateRevocation = record
+  {$else}
+  TEccCertificateRevocation = object
+  {$endif USERECORDWITHMETHODS}
+    /// contains the 65535 fixed number
+    // - make a clear distinction with TEccCertificateContentV1.Version
+    // - will be Base64-encoded as '/w...' so could be recognized from
+    // a Base64-encoded TEccCertificate
+    Magic: word;
+    /// the Revocation format version
+    // - currently equals 1
+    Version: word;
+    /// when this revocation becomes active
+    Date: TEccDate;
+    /// why this Certificate was revoked - usually TCryptCertRevocationReason
+    Reason: word;
+    /// the 128-bit revocated Certificate Identifier
+    Serial: TEccCertificateID;
+    /// fast check of the binary buffer storage of a CRL item
+    function Check: boolean;
+    /// convert a supplied Base64 text into TEccCertificateRevocation binary buffer
+    function FromBase64(const base64: RawUtf8): boolean;
+    /// convert a TEccCertificateRevocation binary buffer into Base64 text
+    function ToBase64: RawUtf8;
+    /// setup a CRL item
+    function From(const id: TEccCertificateID; dt: TDateTime; why: word): boolean;
+  end;
+  PEccCertificateRevocation = ^TEccCertificateRevocation;
+
+  /// can store a whole Certificate Revocation List (CRL)
+  TEccCertificateRevocationDynArray = array of TEccCertificateRevocation;
+
   {$A+}
 
   /// the error codes returned by TEccCertificateSecret.Decrypt()
@@ -455,6 +496,7 @@ const
 
 function ToText(val: TEccValidity): PShortString; overload;
 function ToText(res: TEccDecrypt): PShortString; overload;
+
 
 /// fill all bytes of this ECC private key buffer with zero
 // - may be used to cleanup stack-allocated content
@@ -1494,18 +1536,15 @@ end;
 var
   Crc64Seed: QWord; // to avoid forged certificates for cache flooding
 
-function TEccCertificateContent.ComputeCrc64: Int64;
-var
-  h: THash128Rec; // default crc128c has less collisions than crc64c
+procedure TEccCertificateContent.ComputeCrc128(out crc: THash128);
 begin
-  FillZero(h.b);
-  DefaultHasher128(@h.b, @Head, SizeOf(Head)); // may be AesNiHash128
+  FillZero(crc);
+  DefaultHasher128(@crc, @Head, SizeOf(Head)); // may be AesNiHash128
   if Head.Version > 1 then
     // include Info content to the CRC
-    DefaultHasher128(@h.b, @Info, Info.DataLen + 4);
-  result := Hash128To64(h.b); // combine (needed if DefaultHasher128 is weak)
-  PByte(@result)^ := PByte(@Head.Signed.Serial)^; // include 8 bits of serial
-  result := result xor Crc64Seed; // caller can't forge cache values
+    DefaultHasher128(@crc, @Info, Info.DataLen + 4);
+  crc[0] := PByte(@Head.Signed.Serial)^; // include 8 bits of serial
+  PInt64(@crc)^ := PInt64(@crc)^ xor Crc64Seed;
 end;
 
 procedure TEccCertificateContent.ComputeHash(out hash: TSha256Digest);
@@ -1530,16 +1569,19 @@ begin
     result := s.Write(Info, Info.DataLen + 4) = Info.DataLen + 4;
 end;
 
-function TEccCertificateContent.LoadFromStream(s: TStream): boolean;
+function TEccCertificateContent.LoadFromStream(s: TStream; maxversion: byte): boolean;
 begin
   result := s.Read(Head, SizeOf(Head)) = SizeOf(Head);
   if not result then
     exit;
   if Head.Version > 1 then
-    // include Info content from the stream
-    result := (s.Read(Info, 4) = 4) and
-              (Info.DataLen <= SizeOf(Info.Data)) and
-              (s.Read(Info.Data, Info.DataLen) = Info.DataLen);
+    if Head.Version > maxversion then
+       result := false
+    else
+      // include Info content from the stream
+      result := (s.Read(Info, 4) = 4) and
+                (Info.DataLen <= SizeOf(Info.Data)) and
+                (s.Read(Info.Data, Info.DataLen) = Info.DataLen);
 end;
 
 
@@ -1603,6 +1645,56 @@ begin
     result := ecvInvalidSignature
   else
     result := valid;
+end;
+
+
+{ TEccCertificateRevocation }
+
+const
+  ECC_REVOC_MAGIC = 65535;
+  ECC_REVOC_NONE = 7; // = crrNotRevoked = unused reason in RFC5280
+  ECC_REVOC_MAX = 10; // see RFC5280
+
+function TEccCertificateRevocation.Check: boolean;
+begin
+  result := (Magic = ECC_REVOC_MAGIC) and
+            (Version in [1]) and
+            (Date <> 0) and
+            (Reason <> ECC_REVOC_NONE) and // crrNotRevoked is unexpected here
+            (Reason <= ECC_REVOC_MAX) and  // RFC5280 defines 11 entries
+            not IsZero(Serial);
+end;
+
+function TEccCertificateRevocation.FromBase64(const base64: RawUtf8): boolean;
+begin
+  result := Base64ToBin(base64, @self, SizeOf(self)) and
+            Check;
+end;
+
+function TEccCertificateRevocation.ToBase64: RawUtf8;
+begin
+  if Check then
+    result := BinToBase64(@self, SizeOf(self))
+  else
+    result := '';
+end;
+
+function TEccCertificateRevocation.From(const id: TEccCertificateID;
+  dt: TDateTime; why: word): boolean;
+begin
+  if (why = ECC_REVOC_NONE) or
+     (why > ECC_REVOC_MAX) or
+     IsZero(id) then
+    result := false
+  else
+  begin
+    Magic := ECC_REVOC_MAGIC;
+    Version := 1;
+    Date := EccDate(dt);
+    Reason := why;
+    Serial := id;
+    result := Date <> 0;
+  end;
 end;
 
 
@@ -1674,10 +1766,6 @@ begin
             (a [3] = 0)
             {$endif CPU32};
 end;
-
-const
-  // Mon, 01 Aug 2016 encoded as COM/TDateTime value
-  ECC_DELTA = 42583;
 
 function NowEccDate: TEccDate;
 begin

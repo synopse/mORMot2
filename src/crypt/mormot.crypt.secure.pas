@@ -1191,6 +1191,22 @@ type
   /// set of Key Usages for a given Certificate - stored as a 16-bit word
   TCryptCertUsages = set of TCryptCertUsage;
 
+  /// the RFC5280-compatible reasons why a Certificate could be revoked
+  // - used for each item in a Certificate Revocation List (CRL)
+  // - crrNotRevoked (item 7) is not used in the RFC, and used internally here
+  TCryptCertRevocationReason = (
+    crrUnspecified,
+    crrCompromised,
+    crrAuthorityCompromised,
+    crrUnAffiliated,
+    crrSuperseded,
+    crrReplaced,
+    crrTempHold,
+    crrNotRevoked,
+    crrRemoved,
+    crrWithdrawn,
+    crrServerCompromised);
+
   /// the Digital Signature results for a given Certificate
   // - is an exact match of TEccValidity enumerate in mormot.crypt.ecc256r1.pas
   TCryptCertValidity = (
@@ -1305,7 +1321,9 @@ const
   /// such a Certificate could be used for anything
   CERTIFICATE_USAGE_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
 
-
+function ToText(r: TCryptCertRevocationReason): PShortString; overload;
+function ToText(u: TCryptCertUsage): PShortString; overload;
+function ToText(u: TCryptCertUsages): ShortString; overload;
 
 
 /// main resolver of the randomness generators
@@ -3947,6 +3965,22 @@ end;
 function TCryptCert.Instance: TCryptCert;
 begin
   result := self;
+end;
+
+
+function ToText(r: TCryptCertRevocationReason): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TCryptCertRevocationReason), ord(r));
+end;
+
+function ToText(u: TCryptCertUsage): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TCryptCertUsage), ord(u));
+end;
+
+function ToText(u: TCryptCertUsages): ShortString;
+begin
+  GetSetNameShort(TypeInfo(TCryptCertUsages), u, result, {trim=}true);
 end;
 
 
