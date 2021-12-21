@@ -238,6 +238,10 @@ begin
     Check(o.IDValue <= MAX);
   for o in lo.Range(-5) do
     Check(o.IDValue > MAX - 5);
+  lo := Collections.NewList<TObjectWithID>([loCreateUniqueIndex]);
+  i := lo.Add(TObjectWithID.CreateWithID(100));
+  Check(i = 0);
+  CheckEqual(lo[i].IDValue, 100);
   // manual IList<RawUtf8> validation
   lu := Collections.NewList<RawUtf8>;
   for u in lu do

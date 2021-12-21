@@ -1263,7 +1263,7 @@ type
       KeyCompare, ValueCompare: TDynArraySortCompare; const aKey, aValue;
       Opaque: pointer = nil; MayModify: boolean = true): integer; overload;
     /// touch the entry timeout field so that it won't be deprecated sooner
-    // - this method is not thread-safe, and is expected to be execute e.g.
+    // - this method is not thread-safe, and is expected to be executed e.g.
     // from a ForEach() TOnSynDictionary callback
     procedure SetTimeoutAtIndex(aIndex: PtrInt);
     /// search aArrayValue item in a dynamic-array value associated via aKey
@@ -8973,7 +8973,7 @@ function TSynDictionary.FindKeyFromValue(const aValue;
 var
   ndx: PtrInt;
 begin
-  fSafe.RwLock(RW_UPGRADE[aUpdateTimeOut]);
+  fSafe.RwLock(cReadOnly); // cReadOnly is good enough for SetTimeoutAtIndex()
   try
     ndx := fValues.IndexOf(aValue); // use fast RTTI for value search
     result := ndx >= 0;
@@ -8988,7 +8988,7 @@ begin
       end;
     end;
   finally
-    fSafe.RwUnLock(RW_UPGRADE[aUpdateTimeOut]);
+    fSafe.RwUnLock(cReadOnly);
   end;
 end;
 
