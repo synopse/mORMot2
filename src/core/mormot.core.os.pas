@@ -2717,10 +2717,10 @@ type
   PRWLock = ^TRWLock;
 
 const
-  RW_FORCE: array[{write}boolean] of TRWLockContext = (
+  RW_FORCE: array[{write:}boolean] of TRWLockContext = (
     cReadOnly,
     cWrite);
-  RW_UPGRADE: array[{write}boolean] of TRWLockContext = (
+  RW_UPGRADE: array[{write:}boolean] of TRWLockContext = (
     cReadOnly,
     cReadWrite);
 

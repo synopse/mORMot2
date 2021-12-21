@@ -227,6 +227,17 @@ begin
     Check(o.IDValue <= MAX);
   for o in lo.Range(-5) do
     Check(o.IDValue > MAX - 5);
+  lo := Collections.NewList<TObjectWithID>([loCreateUniqueIndex]);
+  for i := 0 to MAX do
+    Check(lo.Add(TObjectWithID.CreateWithID(i)) = i);
+  for i := 0 to MAX do
+    Check(lo.Add(lo[i]) = i); // duplicate found by loCreateUniqueIndex
+  for i := 0 to lo.Count - 1 do
+    Check(lo[i].IDValue = i);
+  for o in lo do
+    Check(o.IDValue <= MAX);
+  for o in lo.Range(-5) do
+    Check(o.IDValue > MAX - 5);
   // manual IList<RawUtf8> validation
   lu := Collections.NewList<RawUtf8>;
   for u in lu do

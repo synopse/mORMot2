@@ -2935,6 +2935,7 @@ end;
 function StringReplaceChars(const Source: RawUtf8; OldChar, NewChar: AnsiChar): RawUtf8;
 var
   i, j, n: PtrInt;
+  P: PAnsiChar;
 begin
   if (OldChar <> NewChar) and
      (Source <> '') then
@@ -2944,9 +2945,10 @@ begin
     if i >= 0 then
     begin
       FastSetString(result, PAnsiChar(pointer(Source)), n);
+      P := pointer(result);
       for j := i to n - 1 do
-        if PAnsiChar(pointer(result))[j] = OldChar then
-          PAnsiChar(pointer(result))[j] := NewChar;
+        if P[j] = OldChar then
+          P[j] := NewChar;
       exit;
     end;
   end;
