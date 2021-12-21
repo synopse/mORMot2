@@ -747,6 +747,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
+  /// exception raised during buffer processing
+  EBufferException = class(ESynException);
+
   /// available kind of integer array storage, corresponding to the data layout
   // of TBufferWriter
   // - wkUInt32 will write the content as "plain" 4 bytes binary (this is the
@@ -1894,6 +1897,9 @@ type
     // - optionally call OnLog and OnProgress callbacks
     function DoReport(Sender: TObject; ReComputeElapsed: boolean): boolean;
   end;
+
+  /// exception raised during TStreamRedirect processing
+  EStreamRedirect = class(ESynException);
 
   /// an abstract pipeline stream able to redirect and hash read/written content
   // - can be used either Read() or Write() calls during its livetime
@@ -3986,7 +3992,7 @@ begin
   if BufLen > 1 shl 22 then
     fBufLen := 1 shl 22 // 4 MB sounds right enough
   else if BufLen < 128 then
-    raise ESynException.CreateUtf8('%.Create(BufLen=%)', [self, BufLen]);
+    raise EBufferException.CreateUtf8('%.Create(BufLen=%)', [self, BufLen]);
   fBufLen := BufLen;
   fBufLen16 := fBufLen - 16;
   fStream := aStream;
@@ -4045,7 +4051,7 @@ begin
   if fStream.InheritsFrom(TRawByteStringStream) and
      (fTotalFlushed > _STRMAXSIZE) then
     // Delphi strings have a 32-bit length so you should change your algorithm
-    raise ESynException.CreateUtf8('%.Write: % overflow (%)',
+    raise EBufferException.CreateUtf8('%.Write: % overflow (%)',
       [self, fStream, KBNoSpace(fTotalFlushed)]);
   fStream.WriteBuffer(Data^, DataLen);
 end;
@@ -4604,7 +4610,7 @@ begin
             PBeg := PAnsiChar(P) + 4; // leave space for chunk size
             P := PByte(CleverStoreInteger(pointer(Values), PBeg, PEnd, ValuesCount, n));
             if P = nil then
-              raise ESynException.CreateUtf8(
+              raise EBufferException.CreateUtf8(
                 '%.WriteVarUInt32Array: data not sorted', [self]);
             PInteger(PBeg - 4)^ := PAnsiChar(P) - PBeg;
           end;
@@ -4707,7 +4713,7 @@ begin
   result := nil;
   siz := GetTotalWritten;
   if siz > _DAMAXSIZE then
-    raise ESynException.CreateUtf8('%.FlushToBytes: overflow (%)', [KB(siz)]);
+    raise EBufferException.CreateUtf8('%.FlushToBytes: overflow (%)', [KB(siz)]);
   SetLength(result, siz);
   if fStream.Position = 0 then
     // direct assignment from internal buffer
@@ -8517,7 +8523,7 @@ var
   P: PUtf8Char;
 begin
   if high(Buffers) > high(lens) then
-    raise ESynException.Create('Too many params in AppendBuffersToRawUtf8()');
+    raise EBufferException.Create('Too many params in AppendBuffersToRawUtf8()');
   len := 0;
   for i := 0 to high(Buffers) do
   begin
@@ -9101,10 +9107,10 @@ var
   read: PtrInt;
 begin
   if fRedirected = nil then
-    raise ESynException.CreateUtf8('%.Append(%): Redirected=nil',
+    raise EStreamRedirect.CreateUtf8('%.Append(%): Redirected=nil',
       [self, fInfo.Context]);
   if fMode = mRead then
-    raise ESynException.CreateUtf8('%.Append(%) after Read()',
+    raise EStreamRedirect.CreateUtf8('%.Append(%) after Read()',
       [self, fInfo.Context]);
   fMode := mWrite;
   if GetHashFileExt = '' then // DoHash() does nothing
@@ -9172,7 +9178,7 @@ begin
       begin
         if (fTimeOut <> 0) and
            (fInfo.Elapsed > fTimeOut) then
-          raise ESynException.CreateUtf8('%.%(%) timeout after %',
+          raise EStreamRedirect.CreateUtf8('%.%(%) timeout after %',
             [self, Caller, fInfo.Context, MilliSecToString(fInfo.Elapsed)]);
         if fLimitPerSecond > 0 then
         begin
@@ -9189,7 +9195,7 @@ begin
                 DoReport(true);
               dec(tosleep, 300);
               if fTerminated then
-                raise ESynException.CreateUtf8('%.%(%) Terminated',
+                raise EStreamRedirect.CreateUtf8('%.%(%) Terminated',
                   [self, Caller, fInfo.Context]);
             end;
             SleepHiRes(tosleep);
@@ -9203,18 +9209,18 @@ begin
      Assigned(fInfo.OnLog) then
     DoReport(false);
   if fTerminated then
-    raise ESynException.CreateUtf8('%.%(%) Terminated',
+    raise EStreamRedirect.CreateUtf8('%.%(%) Terminated',
       [self, Caller, fInfo.Context]);
 end;
 
 function TStreamRedirect.Read(var Buffer; Count: Longint): Longint;
 begin
   if fMode = mWrite then
-    raise ESynException.CreateUtf8('%.Read(%) in Write() mode',
+    raise EStreamRedirect.CreateUtf8('%.Read(%) in Write() mode',
       [self, fInfo.Context]);
   fMode := mRead;
   if fRedirected = nil then
-    raise ESynException.CreateUtf8('%.Read(%) with Redirected=nil',
+    raise EStreamRedirect.CreateUtf8('%.Read(%) with Redirected=nil',
       [self, fInfo.Context]);
   result := fRedirected.Read(Buffer, Count);
   ReadWriteHash(Buffer, result);
@@ -9224,7 +9230,7 @@ end;
 function TStreamRedirect.Write(const Buffer; Count: Longint): Longint;
 begin
   if fMode = mRead then
-    raise ESynException.CreateUtf8('%.Write(%) in Read() mode',
+    raise EStreamRedirect.CreateUtf8('%.Write(%) in Read() mode',
       [self, fInfo.Context]);
   fMode := mWrite;
   ReadWriteHash(Buffer, Count);

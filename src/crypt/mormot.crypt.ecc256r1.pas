@@ -1412,7 +1412,7 @@ begin
       Head.Signed.Issuer := iss; // (un)truncated content in V1 Issuer
       exit;
     end;
-  // Decode(Info, v2); // needed when more than the Subject field
+  // Decode(Info, v2); // needed when more than one Subject field is stored
   v2.Subject := baudot;
   Encode(v2, Info);
 end;
@@ -1422,7 +1422,7 @@ var
   v2: TInfov2;
 begin
   if Head.Version = 1 then
-    result := EccText(Head.Signed.Issuer) // Subject is stored in V1 Issuer
+    result := EccText(Head.Signed.Issuer) // Subject was stored in V1 Issuer
   else
   begin
     Decode(Info, v2);

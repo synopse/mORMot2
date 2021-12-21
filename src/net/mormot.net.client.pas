@@ -178,17 +178,19 @@ type
     // confusion in case of process shutdown - you can use this parameter to
     // continue the download from the existing content (useful for huge files)
     Resume: boolean;
+    /// try to download the Hash value from the server, e.g. from url + '.md5'
+    // - the hash URI extension is retrieved from TStreamRedirect.GetHashFileExt
+    HashFromServer: boolean;
     /// allow custom hashing of the content
     // - if not set, a plain TStreamRedirect with no hashing instance will be
     // used for correct streaming to the destination file
+    // - typical classes are TStreamRedirectMd5 or TStreamRedirectSha256 from
+    // mormot.crypt.secure
     Hasher: TStreamRedirectClass;
     /// the expected hash value, to be compared with Hasher.GetHash return
     // - if supplied, the downloaded content will be checked against this value
     // - see also HashFromServer and HashCacheDir parameters
     Hash: RawUtf8;
-    /// try to download the Hash value from the server, e.g. from url + '.md5'
-    // - the hash URI extension is retrieved from TStreamRedirect.GetHashFileExt
-    HashFromServer: boolean;
     /// an optional folder to lookup for existing content
     // - the Hash parameter will be used to validate the content
     HashCacheDir: TFileName;
