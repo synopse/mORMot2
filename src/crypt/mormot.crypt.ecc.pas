@@ -2272,7 +2272,8 @@ begin
     'AuthorityIssuer', AuthorityIssuer,
     'IsSelfSigned',    IsSelfSigned]);
   if withBase64 then
-    TDocVariantData(result).AddValue('Base64', RawUtf8ToVariant(ToBase64));
+    TDocVariantData(result).AddValue(
+      'Base64', RawUtf8ToVariant(ToBase64));
 end;
 
 function TEccCertificate.ToJson(withBase64: boolean): RawUtf8;
@@ -3163,8 +3164,8 @@ function TEccCertificateChain.IsValidRaw(const content: TEccCertificateContent;
   ignoreDate: boolean): TEccValidity;
 var
   auth: TEccPublicKey;
-  hash: TSha256Digest;
-  crc: THash128;
+  hash: THash256Rec;
+  crc: THash128Rec; // storing crc.Lo 128-bit of SHA-256 is enough
 begin
   result := ecvCorrupted;
   if not content.Check then
@@ -3179,9 +3180,11 @@ begin
     result := ecvValidSelfSigned
   else
     result := ecvValidSigned;
+  content.ComputeHash(hash.b); // sha-256 cryptographic hash
+  crc.b := hash.Lo;
   if fIsValidCached then
   begin
-    content.ComputeCrc128(crc);
+    crc.i0 := crc.i0 xor PtrInt(self); // to avoid flooding on forged input
     fSafe.ReadLock;
     try
       if Hash128Index(pointer(fIsValidCache), fIsValidCacheCount, @crc) >= 0 then
@@ -3189,9 +3192,7 @@ begin
     finally
       fSafe.ReadUnlock;
     end;
-  end
-  else
-    FillZero(crc);
+  end;
   if result = ecvValidSelfSigned then
     auth := content.Head.Signed.PublicKey
   else
@@ -3200,8 +3201,7 @@ begin
     if not (result in ECC_VALIDSIGN) then
       exit; // ecvUnknownAuthority/ecvDeprecatedAuthority/ecvRevoked
   end;
-  content.ComputeHash(hash);
-  if Ecc256r1Verify(auth, hash, content.Head.Signature) then
+  if Ecc256r1Verify(auth, hash.b, content.Head.Signature) then
   begin
     if fIsValidCached then
     begin
@@ -3209,7 +3209,7 @@ begin
       try
         if fIsValidCacheCount > 1024 then
           fIsValidCacheCount := 0; // time to flush the cache
-        AddHash128(fIsValidCache, crc, fIsValidCacheCount);
+        AddHash128(fIsValidCache, crc.b, fIsValidCacheCount);
       finally
         fSafe.WriteUnlock;
       end;

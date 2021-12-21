@@ -375,9 +375,6 @@ type
     /// compute the FNV-32 digest of the whole content
     // - as stored in Head.CRC
     function ComputeCrc32: cardinal;
-    /// compute a 128-bit digest of the whole content
-    // - as used for TEccCertificateChain cache
-    procedure ComputeCrc128(out crc: THash128);
     /// compute the SHA-256 digest of the whole signed content
     procedure ComputeHash(out hash: TSha256Digest);
     /// serialize this certificate content as binary stream
@@ -1533,20 +1530,6 @@ begin
     result := fnv32(result, @Info, Info.DataLen + 4);
 end;
 
-var
-  Crc64Seed: QWord; // to avoid forged certificates for cache flooding
-
-procedure TEccCertificateContent.ComputeCrc128(out crc: THash128);
-begin
-  FillZero(crc);
-  DefaultHasher128(@crc, @Head, SizeOf(Head)); // may be AesNiHash128
-  if Head.Version > 1 then
-    // include Info content to the CRC
-    DefaultHasher128(@crc, @Info, Info.DataLen + 4);
-  crc[0] := PByte(@Head.Signed.Serial)^; // include 8 bits of serial
-  PInt64(@crc)^ := PInt64(@crc)^ xor Crc64Seed;
-end;
-
 procedure TEccCertificateContent.ComputeHash(out hash: TSha256Digest);
 var
   sha: TSha256;
@@ -1868,7 +1851,6 @@ initialization
   assert(ECC_QUAD = 4);
   assert(SizeOf(TEccCertificateContentV1) = 173); // on all platforms/compilers
   assert(SizeOf(TEccSignatureCertifiedContent) = 100);
-  Crc64Seed := Random64; // avoid TEccCertificateContent.ComputeCrc64 flooding
   // register our branchless pascal code by default
   @Ecc256r1MakeKey := @ecc_make_key_pas;
   @Ecc256r1SharedSecret := @ecdh_shared_secret_pas;
