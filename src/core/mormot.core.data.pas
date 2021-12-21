@@ -9972,7 +9972,7 @@ end;
 function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
 begin
   case ElemSize of
-    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
+    // optimized versions for arrays of most simple types
     1:
       result := ByteScanIndex(P, Count, PByte(Elem)^); // SSE2 asm on Intel/AMD
     2:
@@ -9981,6 +9981,10 @@ begin
       result := IntegerScanIndex(P, Count, PInteger(Elem)^); // SSE2 asm
     8:
       result := Int64ScanIndex(P, Count, PInt64(Elem)^);
+    SizeOf(THash128):
+      result := Hash128Index(P, Count, Elem);
+    SizeOf(THash256):
+      result := Hash256Index(P, Count, Elem);
     // small ElemSize version (<SizeOf(PtrInt))
     3, 5..7:
       begin
@@ -10007,44 +10011,7 @@ end;
 
 function AnyScanExists(P, Elem: pointer; Count, ElemSize: PtrInt): boolean;
 begin
-  case ElemSize of
-    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
-    1:
-      result := ByteScanIndex(P, Count, PInteger(Elem)^) >= 0;
-    2:
-      result := WordScanIndex(P, Count, PInteger(Elem)^) >= 0;
-    4:
-      result := IntegerScanExists(P, Count, PInteger(Elem)^);
-    8:
-      result := Int64ScanExists(P, Count, PInt64(Elem)^);
-    // small ElemSize version (<SizeOf(PtrInt))
-    3, 5..7:
-      begin
-        result := true;
-        if Count > 0 then
-          repeat
-            if CompareMemSmall(P, Elem, ElemSize) then
-              exit;
-            inc(PByte(P), ElemSize);
-            dec(Count);
-          until Count = 0;
-        result := false;
-      end;
-  else
-    begin
-      // generic binary comparison (fast with leading 64-bit comparison)
-      result := true;
-      if Count > 0 then
-        repeat
-          if (PInt64(P)^ = PInt64(Elem)^) and
-             CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(Elem) + 8, ElemSize - 8) then
-            exit;
-          inc(PByte(P), ElemSize);
-          dec(Count);
-        until Count = 0;
-      result := false;
-    end;
-  end;
+  result := AnyScanIndex(P, Elem, Count, ElemSize) >= 0;
 end;
 
 
