@@ -1188,7 +1188,7 @@ type
     cuOcspSign,
     cuTimestamp);
 
-  /// set of Key Usages for a given Certificate
+  /// set of Key Usages for a given Certificate - stored as a 16-bit word
   TCryptCertUsages = set of TCryptCertUsage;
 
   /// the Digital Signature results for a given Certificate
@@ -1397,8 +1397,9 @@ function Decrypt(const name, hash, secret, salt: RawUtf8; rounds: integer): ICry
 function Asym(const name: RawUtf8): TCryptAsym;
 
 /// main resolver for Certificates algorithms
-// - mormot.crypt.ecc.pas defines 'syn-es256' for our TEccCertificate
-// proprietary format (safe and efficient)
+// - mormot.crypt.ecc.pas defines 'syn-es256' for our TEccCertificate proprietary
+// format (safe and efficient), with 'syn-es256-v1' for the V1 revision with
+// limited Usage and Subjects support
 // - mormot.crypt.openssl.pas will define 'x509-es256' .. 'x509-EdDSA' including
 // 'x509-rs256' for the well known 2048-bit RSA + SHA256 certificates
 // - the shared TCryptCertAlgo of this algorithm is returned: caller should

@@ -165,6 +165,7 @@ type
   protected
     fContent: TEccCertificateContent;
     fStoreOnlyPublicKey: boolean;
+    fMaxVersion: byte;
     function GetAuthorityIssuer: RawUtf8;
     function GetAuthoritySerial: RawUtf8;
     function GetIssueDate: RawUtf8;
@@ -172,6 +173,8 @@ type
     function GetSerial: RawUtf8;
     function GetValidityEnd: RawUtf8;
     function GetValidityStart: RawUtf8;
+    function GetUsage: TCryptCertUsages;
+    function GetSubject: RawUtf8;
     function GetIsSelfSigned: boolean;
     procedure SetBase64(const base64: RawUtf8);
     // do nothing by default but TEccCertificateSecret will include private key
@@ -227,6 +230,9 @@ type
     // - could be used to safely publish the public information of a newly
     // created certificate
     function PublicToBase64: RawUtf8;
+    /// compare all fields of two Certificates
+    // - don't compare the private key for inherited TEccCertificateSecret
+    function IsEqual(another: TEccCertificate): boolean;
     /// persist the certificate as some binary
     // - returns true on success (i.e. this class stores a certificate),
     // false otherwise
@@ -281,6 +287,19 @@ type
     // - i.e. a json containing all published properties of this instance
     // - persist ToVariant() as an human-readable JSON file
     function ToFile(const filename: TFileName): boolean;
+    /// the maximum storage version allowed for this Certificate
+    // - is 1 by default, but could be set e.g. to 2 to enable long Subject and
+    // Usage fields
+    property MaxVersion: byte
+      read fMaxVersion write fMaxVersion;
+    /// the allowed usages of this certificate
+    // - only encoded with V2 format, so not published as JSON property
+    property Usage: TCryptCertUsages
+      read GetUsage;
+    /// the CSV-encoded subjects of this certificate
+    // - stored in Issuer on V1 format, in a separated field on V2 format
+    property Subject: RawUtf8
+      read GetSubject;
     /// low-level access to the ECC secp256r1 cryptography binary buffer
     // - you should not use this property, but other methods
     property Content: TEccCertificateContent
@@ -349,10 +368,12 @@ type
     // - you may specify some validity time range, if needed
     // - default ParanoidVerify=true will validate the certificate digital
     // signature via a call ecdsa_verify() to ensure its usefulness
-    // - would take around 4 ms under a 32-bit compiler, and 1 ms under 64-bit
+    // - warning: signature would take around 1 ms under a 32-bit compiler
     constructor CreateNew(Authority: TEccCertificateSecret;
       const IssuerText: RawUtf8 = ''; ExpirationDays: integer = 0;
-      StartDate: TDateTime = 0; ParanoidVerify: boolean = true);
+      StartDate: TDateTime = 0; ParanoidVerify: boolean = true;
+      Usage: TCryptCertUsages = CERTIFICATE_USAGE_ALL; const
+      Subjects: RawUtf8 = ''; MaxVers: byte = 1);
     /// create a certificate with its private secret key from a password-protected
     // secure binary buffer
     // - perform all reverse steps from SaveToSecureBinary() method
@@ -1860,6 +1881,7 @@ constructor TEccCertificate.Create;
 begin
   inherited Create;
   fContent.Head.Version := 1;
+  fMaxVersion := 1;
 end;
 
 constructor TEccCertificate.CreateFromBase64(const base64: RawUtf8);
@@ -1910,6 +1932,16 @@ end;
 function TEccCertificate.GetValidityStart: RawUtf8;
 begin
   result := EccText(fContent.Head.Signed.ValidityStart);
+end;
+
+function TEccCertificate.GetUsage: TCryptCertUsages;
+begin
+  result := TCryptCertUsages(word(fContent.GetUsage));
+end;
+
+function TEccCertificate.GetSubject: RawUtf8;
+begin
+  result := fContent.GetSubject;
 end;
 
 function TEccCertificate.GetIsSelfSigned: boolean;
@@ -2014,6 +2046,13 @@ begin
   fStoreOnlyPublicKey := true;
   result := ToBase64;
   fStoreOnlyPublicKey := sav;
+end;
+
+function TEccCertificate.IsEqual(another: TEccCertificate): boolean;
+begin
+  result := (self <> nil) and
+            (another <> nil) and
+            self.fContent.FieldsEqual(another.fContent);
 end;
 
 function TEccCertificate.LoadFromStream(Stream: TStream): boolean;
@@ -2232,7 +2271,8 @@ end;
 
 constructor TEccCertificateSecret.CreateNew(Authority: TEccCertificateSecret;
   const IssuerText: RawUtf8; ExpirationDays: integer; StartDate: TDateTime;
-  ParanoidVerify: boolean);
+  ParanoidVerify: boolean; Usage: TCryptCertUsages;
+  const Subjects: RawUtf8; MaxVers: byte);
 var
   priv: PEccPrivateKey;
   pub: PEccPublicKey;
@@ -2242,6 +2282,7 @@ var
   retry: boolean;
 begin
   Create;
+  fMaxVersion := MaxVers;
   now := NowEccDate;
   with fContent.Head.Signed do
   begin
@@ -2255,8 +2296,12 @@ begin
       ValidityEnd := ValidityStart + ExpirationDays;
     end;
     TAesPrng.Fill(TAesBlock(Serial));
+    fContent.SetUsage(word(Usage), MaxVers);
     if IssuerText = '' then
-      TAesPrng.Fill(TAesBlock(Issuer))
+      if Subjects <> '' then
+        fContent.SetSubject(Subjects, MaxVers)
+      else
+        TAesPrng.Fill(TAesBlock(Issuer))
     else
       EccIssuer(IssuerText, Issuer);
     for retry := false to true do
@@ -2514,7 +2559,7 @@ begin
   if (self = nil) or
      (Len <= SizeOf(PRIVKEY_MAGIC) + SizeOf(TAesBlock)) then
     exit;
-  if IsEqual(THash128(PRIVKEY_MAGIC), PHash128(Data)^) then
+  if mormot.core.base.IsEqual(THash128(PRIVKEY_MAGIC), PHash128(Data)^) then
   begin
     dec(Len, 16);
     head := 16;
@@ -2678,7 +2723,7 @@ begin
   data := @PByteArray(Encrypted)[SizeOf(TEciesHeader)];
   if CheckCRC and HasSecret then
   try
-    if not IsEqual(head.recid, fContent.Head.Signed.Serial) then
+    if not mormot.crypt.ecc256r1.IsEqual(head.recid, fContent.Head.Signed.Serial) then
     begin
       result := ecdInvalidSerial;
       exit;
@@ -2708,7 +2753,7 @@ begin
       // validate the HMAC signature of the encrypted content
       Pbkdf2HmacSha256(secret, MACSalt, MACRounds, mackey.b, 'hmac');
       HmacSha256(@mackey, data, SizeOf(mackey), datalen, hmac);
-      if not IsEqual(hmac, head.hmac) then
+      if not mormot.core.base.IsEqual(hmac, head.hmac) then
         exit;
       // decrypt the content
       SetString(enc, data, datalen);
@@ -4383,16 +4428,20 @@ end;
 type
   /// 'syn-es256' ICryptCert algorithm
   TCryptCertAlgoInternal = class(TCryptCertAlgo)
+  protected
+    fMaxVersion: integer;
   public
+    constructor Create(const name: RawUtf8); override;
     function New: ICryptCert; override; // = TCryptCertInternal.Create(self)
   end;
 
   /// class implementing ICertificate using our ECC Public Key Cryptography
-  // - TEccCertificate.Issuer has a size limitation, so Subjects should be small
+  // - TEccCertificate will store Subjects Baudot-encoded, and as issuer in V1
   // - with the current implementation, GetUsages returns CERTIFICATE_USAGE_ALL
   TCryptCertInternal = class(TCryptCert)
   protected
     fEcc: TEccCertificate; // TEccCertificate or TEccCertificateSecret
+    fMaxVersion: integer;
   public
     destructor Destroy; override;
     // ICertificate methods
@@ -4420,9 +4469,22 @@ type
 
 { TCryptCertAlgoInternal }
 
-function TCryptCertAlgoInternal.New: ICryptCert;
+constructor TCryptCertAlgoInternal.Create(const name: RawUtf8);
 begin
-  result := TCryptCertInternal.Create(self);
+  inherited Create(name);
+  if name = 'syn-es256-v1' then
+    fMaxVersion := 1
+  else
+    fMaxVersion := 20;
+end;
+
+function TCryptCertAlgoInternal.New: ICryptCert;
+var
+  cert: TCryptCertInternal;
+begin
+  cert := TCryptCertInternal.Create(self);
+  cert.fMaxVersion := fMaxVersion;
+  result := cert;
 end;
 
 
@@ -4434,13 +4496,13 @@ begin
   inherited Destroy;
 end;
 
-procedure TCryptCertInternal.Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
-  const Authority: ICryptCert; ExpireDays, ValidDays: integer);
+procedure TCryptCertInternal.Generate(Usages: TCryptCertUsages;
+  const Subjects: RawUtf8; const Authority: ICryptCert;
+  ExpireDays, ValidDays: integer);
 var
   start: TDateTime;
   a: TCryptCert;
   auth: TEccCertificateSecret;
-  expected, issuer: RawUtf8;
 begin
   if fEcc <> nil then
     RaiseError('New: called twice');
@@ -4461,14 +4523,8 @@ begin
       RaiseError('New: Authority holds % which has no private key', [a]);
     auth := TCryptCertInternal(a).fEcc as TEccCertificateSecret;
   end;
-  expected := TrimControlChars(Subjects);
-  issuer := StringReplaceChars(StringReplaceChars(
-    expected, ',', #13),  '.', #10); // #13/#10 are Baudot-friendly
-  { TODO: implement Usage in TEccCertificate }
-  fEcc := TEccCertificateSecret.CreateNew(auth, issuer, ExpireDays, start);
-  if StringReplaceChars(StringReplaceChars(
-       fEcc.Issuer, #10, '.'), #13, ',') <> expected then
-    RaiseError('Generate: too long Subjects=%', [Subjects]);
+  fEcc := TEccCertificateSecret.CreateNew(
+    auth, '', ExpireDays, start, true, Usages, Subjects, fMaxVersion);
 end;
 
 function TCryptCertInternal.FromBinary(const Binary: RawByteString;
@@ -4500,27 +4556,19 @@ begin
 end;
 
 function TCryptCertInternal.GetSubject: RawUtf8;
-var
-  s: RawUtf8;
 begin
-  result := '';
-  if (fEcc = nil) or
-     (fEcc.Issuer = '') then
-    exit;
-  s := StringReplaceChars(fEcc.Issuer, #10, '.');
-  result := GetCsvItem(pointer(s), 0, #13); // return the first subject
+  if fEcc = nil then
+    result := ''
+  else
+    result := GetCsvItem(pointer(fEcc.Content.GetSubject), 0);
 end;
 
 function TCryptCertInternal.GetSubjects: TRawUtf8DynArray;
-var
-  s: RawUtf8;
 begin
-  result := nil;
-  if (fEcc = nil) or
-     (fEcc.Issuer = '') then
-    exit;
-  s := StringReplaceChars(fEcc.Issuer, #10, '.');
-  CsvToRawUtf8DynArray(pointer(s), result, #13);
+  if fEcc = nil then
+    result := nil
+  else
+    CsvToRawUtf8DynArray(pointer(fEcc.Content.GetSubject), result);
 end;
 
 function TCryptCertInternal.GetIssuerName: RawUtf8;
@@ -4558,7 +4606,7 @@ end;
 function TCryptCertInternal.GetUsage: TCryptCertUsages;
 begin
   if fEcc <> nil then
-    result := CERTIFICATE_USAGE_ALL { TODO: implement Usage in TEccCertificate }
+    result := fEcc.GetUsage
   else
     result := [];
 end;
@@ -4605,13 +4653,9 @@ begin
   if another = nil then
     exit;
   a := another.Instance;
-  if PClass(a)^ <> PClass(self)^ then
-    exit;
-  // compare all fields at once
-  result := (fEcc <> nil) and
-            (TCryptCertInternal(a).fEcc <> nil) and
-            CompareMem(@TCryptCertInternal(a).fEcc.Content,
-              @fEcc.Content, SizeOf(fEcc.Content));
+  if PClass(a)^ = PClass(self)^ then
+    // compare all fields at once
+    result := fEcc.IsEqual(TCryptCertInternal(a).fEcc);
 end;
 
 
@@ -4625,7 +4669,7 @@ initialization
   assert(SizeOf(TEcdheFrameClient) = 290);
   assert(SizeOf(TEcdheFrameServer) = 306);
   TCryptAsymInternal.Implements('ES256,secp256r1,NISTP-256,prime256v1');
-  TCryptCertAlgoInternal.Implements('syn-es256');
+  TCryptCertAlgoInternal.Implements('syn-es256,syn-es256-v1');
 
 end.
 

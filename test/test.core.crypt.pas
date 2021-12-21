@@ -2030,7 +2030,7 @@ begin
       n[10] := ' ';
       CheckUtf8(AesAlgoNameDecode(n, k2) = nil, n);
     end;
-  // validate Rnd/Hash/Sign/Cipher/Asym/Cert High-Level Algorithms Factories
+  // validate Rnd High-Level Algorithms Factory
   alg := TCryptRandom.Instances;
   for a := 0 to high(alg) do
   begin
@@ -2052,6 +2052,7 @@ begin
       check(length(n) = i);
     end;
   end;
+  // validate Hash High-Level Algorithms Factory
   alg := TCryptHasher.Instances;
   for a := 0 to high(alg) do
   begin
@@ -2066,6 +2067,7 @@ begin
     end;
     CheckUtf8(hsh.Full(n) = h, hsh.AlgoName);
   end;
+  // validate Sign High-Level Algorithms Factory
   alg := TCryptSigner.Instances;
   for a := 0 to high(alg) do
   begin
@@ -2087,6 +2089,7 @@ begin
       Check(h <> sig.NewPbkdf2('sec', 'salt', i + 1).Update(n).Final);
     end;
   end;
+  // validate Cipher High-Level Algorithms Factory
   alg := TCryptCipherAlgo.Instances;
   for a := 0 to high(alg) do
   begin
@@ -2108,6 +2111,7 @@ begin
       nprev := r;
     end;
   end;
+  // validate Asym High-Level Algorithms Factory
   alg := TCryptAsym.Instances;
   for a := 0 to high(alg) do
   begin
@@ -2131,6 +2135,7 @@ begin
     if s <> '' then
       CheckEqual(asy.SharedSecret(pub2, priv), s, asy.AlgoName);
   end;
+  // validate Cert High-Level Algorithms Factory
   alg := TCryptCertAlgo.Instances;
   for a := 0 to high(alg) do
   begin
@@ -2138,11 +2143,26 @@ begin
     c1 := crt.New;
     Check(c1.GetSerial = '');
     Check(not c1.HasPrivateSecret);
-    c1.Generate([cuCA, cuDigitalSignature], ' s1, s2 ', nil);
+    if crt.AlgoName = 'syn-es256-v1' then
+    begin
+      // TEccCertificate V1 has limited Usage and Subjects support
+      c1.Generate([cuCA, cuDigitalSignature], ' s1, s2 ', nil);
+      CheckEqual(RawUtf8ArrayToCsv(c1.GetSubjects), 's1,s2');
+      check(c1.GetUsage = CERTIFICATE_USAGE_ALL);
+      CheckEqual(c1.GetSubject, 's1');
+    end
+    else
+    begin
+      // X509 and TEccCertificate V2 have proper Usage and Subjects support
+      c1.Generate([cuCA, cuDigitalSignature],
+        ' synopse.info, www.synopse.info ', nil);
+      CheckEqual(RawUtf8ArrayToCsv(c1.GetSubjects),
+        'synopse.info,www.synopse.info');
+      check(c1.GetUsage = [cuCA, cuDigitalSignature]);
+      CheckEqual(c1.GetSubject, 'synopse.info');
+    end;
     Check(c1.GetSerial <> '');
     Check(c1.HasPrivateSecret);
-    CheckEqual(c1.GetSubject, 's1');
-    checkEqual(RawUtf8ArrayToCsv(c1.GetSubjects), 's1,s2');
     check(c1.GetNotBefore < NowUtc);
     check(c1.GetNotAfter > NowUtc);
     c2 := crt.New;

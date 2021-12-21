@@ -237,6 +237,24 @@ type
   PEccCertificateIssuer = ^TEccCertificateIssuer;
   PEccDate = ^TEccDate;
 
+  /// indicate the validity state of a ECDSA signature against a certificate
+  // - as returned by low-level EccVerify() function, and
+  // TEccSignatureCertified.Verify, TEccCertificateChain.IsValid or
+  // TEccCertificateChain.IsSigned methods
+  // - see also ECC_VALIDSIGN constant
+  // - match TCertificateValidity enumerate in mormot.crypt.secure
+  TEccValidity = (
+    ecvUnknown,
+    ecvValidSigned,
+    ecvValidSelfSigned,
+    ecvNotSupported,
+    ecvBadParameter,
+    ecvCorrupted,
+    ecvInvalidDate,
+    ecvUnknownAuthority,
+    ecvDeprecatedAuthority,
+    ecvInvalidSignature);
+
   /// the certification information of a TEccCertificate
   // - as stored in TEccCertificateContent.Head.Signed
   // - defined in a separate record, to be digitaly signed in the Signature field
@@ -292,36 +310,18 @@ type
     CRC: cardinal;
   end;
 
+  {$A-}
+
   /// up to 512 bytes of additional data for TEccCertificate binary version >= 2
-  TEccCertificateContentV2 = packed record
+  TEccCertificateContentV2 = record
     /// 16-bit storage for TCryptCertUsage
     Usage: word;
-    /// 16-bit len of additional V2Data information
+    /// 16-bit len of additional Data information
     DataLen: word;
     /// some additional data, e.g. the Subject, in up to 508 bytes
     // - such data will be stored with variable length
     Data: array[0..507] of byte;
   end;
-
-  /// indicate the validity state of a ECDSA signature against a certificate
-  // - as returned by low-level EccVerify() function, and
-  // TEccSignatureCertified.Verify, TEccCertificateChain.IsValid or
-  // TEccCertificateChain.IsSigned methods
-  // - see also ECC_VALIDSIGN constant
-  // - match TCertificateValidity enumerate in mormot.crypt.secure
-  TEccValidity = (
-    ecvUnknown,
-    ecvValidSigned,
-    ecvValidSelfSigned,
-    ecvNotSupported,
-    ecvBadParameter,
-    ecvCorrupted,
-    ecvInvalidDate,
-    ecvUnknownAuthority,
-    ecvDeprecatedAuthority,
-    ecvInvalidSignature);
-
-  {$A-}
 
   /// store a TEccCertificate binary buffer for ECC secp256r1 cryptography
   // - i.e. a certificate public key, with its ECDSA signature
@@ -331,12 +331,25 @@ type
   {$else}
   TEccCertificateContent = object
   {$endif USERECORDWITHMETHODS}
+  public
     /// basic content - version 1 compatible
     Head: TEccCertificateContentV1;
-    {
     /// new version >= 2 with additional information
     Info: TEccCertificateContentV2;
-    }
+    /// set Certificate usage, as 16-bit TCryptCertUsage value
+    // - will also force the version to be 2 if maxversion allow it
+    procedure SetUsage(usage: integer; maxversion: byte);
+    /// get Certificate 16-bit TCryptCertUsage usage
+    // - returns 65535 = all Usage for version 1
+    function GetUsage: integer;
+    /// set Certificate subject
+    // - the input subject text could be CSV separated
+    // - will first try to store it in the V1 Issuer field
+    // - or switch to V2 and store after Baudot encoding into Info.Data - if
+    // maxversion allow the upgrade
+    procedure SetSubject(const sub: RawUtf8; maxversion: byte);
+    /// get Certificate subject, after Baudot decoding from additional Info.Data
+    function GetSubject: RawUtf8;
     /// fast check of the binary buffer storage of a certificate
     // - ensure CRC has the expected value, using FNV-1a checksum
     // - does not validate the certificate against the certificates chain, nor
@@ -349,6 +362,8 @@ type
     // - a self-signed certificate will have its AuthoritySerial/AuthorityIssuer
     // fields matching Serial/Issuer
     function IsSelfSigned: boolean;
+    /// compare all fields of both Certificates
+    function FieldsEqual(const another: TEccCertificateContent): boolean;
     /// copy of the used bytes of TEccCertificateContent buffer
     procedure CopyTo(out dest: TEccCertificateContent);
     /// compute the FNV-32 digest of the whole content
@@ -490,7 +505,8 @@ function EccText(const Issuer: TEccCertificateIssuer): RawUtf8; overload;
 /// convert some Ascii-7 text into a TEccCertificateIssuer binary buffer
 // - using Emile Baudot encoding
 // - returns TRUE on Text truncation to fit into the 16 bytes
-function EccIssuer(const Text: RawUtf8; out Issuer: TEccCertificateIssuer): boolean;
+function EccIssuer(const Text: RawUtf8; out Issuer: TEccCertificateIssuer;
+  fullbaudot: PRawByteString = nil): boolean;
 
 /// convert a supplied TEccCertificateID binary buffer into proper text
 // - returns hexadecimal values, or '' if the ID is filled with zeros
@@ -1327,19 +1343,105 @@ end;
 
 { TEccCertificateContent }
 
+procedure TEccCertificateContent.SetUsage(usage: integer; maxversion: byte);
+begin
+  if Head.Version = 1 then
+    if (usage = 65535) or
+       (maxversion < 2) then
+      exit // V1 will assume all usages
+    else
+      Head.Version := 2; // we need the new format
+  Info.Usage := usage;
+end;
+
+function TEccCertificateContent.GetUsage: integer;
+begin
+  if Head.Version = 1 then
+    result := 65535 // all usages
+  else
+    result := Info.Usage;
+end;
+
+type
+  TInfoV2 = record // structure to encode/decode TEccCertificateContentV2
+    Subject: RawUtf8;
+  end;
+
+procedure Decode(const info: TEccCertificateContentV2; out v2: TInfoV2);
+var
+  s, smax: PByte;
+begin
+  s := @info.Data;
+  smax := @PByteArray(s)[info.DataLen];
+  v2.Subject := FromVarString(s, smax);
+end;
+
+procedure Encode(const v2: TInfoV2; var info: TEccCertificateContentV2);
+var
+  d: PByte;
+  max: integer;
+begin
+  d := @info.Data;
+  max := SizeOf(info.Data);
+  dec(max, ToVarUInt32LengthWithData(length(v2.Subject)));
+  if max < 0 then
+    exit;
+  d := ToVarString(v2.Subject, d);
+  info.DataLen := PAnsiChar(d) - PAnsiChar(@info.Data);
+end;
+
+procedure TEccCertificateContent.SetSubject(const sub: RawUtf8; maxversion: byte);
+var
+  iss: TEccCertificateIssuer;
+  baudot: RawByteString;
+  truncated: boolean;
+  v2: TInfov2;
+begin
+  // #13/#10 are Baudot-friendly
+  truncated := EccIssuer(StringReplaceChars(StringReplaceChars(TrimControlChars(
+    sub), ',', #13),  '.', #10), iss, @baudot);
+  if Head.Version = 1 then
+    if truncated and
+       (maxversion >= 2) then
+    begin
+      FillZero(THash128(Head.Signed.Issuer));
+      Head.Version := 2; // we need the new format and its V2 Subject field
+    end
+    else
+    begin
+      Head.Signed.Issuer := iss; // (un)truncated content in V1 Issuer
+      exit;
+    end;
+  // Decode(Info, v2); // needed when more than the Subject field
+  v2.Subject := baudot;
+  Encode(v2, Info);
+end;
+
+function TEccCertificateContent.GetSubject: RawUtf8;
+var
+  v2: TInfov2;
+begin
+  if Head.Version = 1 then
+    result := EccText(Head.Signed.Issuer) // Subject is stored in V1 Issuer
+  else
+  begin
+    Decode(Info, v2);
+    result := BaudotToAscii(v2.Subject); // new V2 subject field
+  end;
+  result := StringReplaceChars(StringReplaceChars(result, #10, '.'), #13, ',');
+end;
+
 function TEccCertificateContent.Check: boolean;
 begin
   if (Head.Signed.IssueDate = 0) or
      (Head.Signed.IssueDate = 65535) or
      IsZero(Head.Signed.Serial) or
-     IsZero(Head.Signed.Issuer) or
      IsZero(Head.Signed.AuthoritySerial) or
-     IsZero(Head.Signed.AuthorityIssuer) or
      IsZero(@Head.Signed.PublicKey, SizeOf(Head.Signed.PublicKey)) or
      IsZero(@Head.Signature, SizeOf(Head.Signature)) then
     result := false
   else
-    result := (Head.Version in [1]) and
+    result := (Head.Version in [1, 2]) and
               (ComputeCrc32 = Head.CRC);
 end;
 
@@ -1364,24 +1466,29 @@ begin
             IsEqual(Head.Signed.AuthorityIssuer, Head.Signed.Issuer);
 end;
 
+function TEccCertificateContent.FieldsEqual(
+  const another: TEccCertificateContent): boolean;
+begin
+  result := CompareMem(@Head, @another.Head, SizeOf(Head));
+  if Head.Version > 1 then
+    // compare additional Info content
+    result := CompareMem(@Info, @another.Info, Info.DataLen + 4);
+end;
+
 procedure TEccCertificateContent.CopyTo(out dest: TEccCertificateContent);
 begin
   MoveFast(Head, Dest.Head, SizeOf(Head));
   if Head.Version > 1 then
-  begin
-    // copy Info content to the destination
-
-  end;
+    // copy additional Info content to the destination
+    MoveFast(Info, Dest.Info, Info.DataLen + 4);
 end;
 
 function TEccCertificateContent.ComputeCrc32: cardinal;
 begin
   result := fnv32(0, @Head, SizeOf(Head) - 4);
   if Head.Version > 1 then
-  begin
     // include Info content to the CRC
-
-  end;
+    result := fnv32(result, @Info, Info.DataLen + 4);
 end;
 
 var
@@ -1394,10 +1501,8 @@ begin
   FillZero(h.b);
   DefaultHasher128(@h.b, @Head, SizeOf(Head)); // may be AesNiHash128
   if Head.Version > 1 then
-  begin
     // include Info content to the CRC
-
-  end;
+    DefaultHasher128(@h.b, @Info, Info.DataLen + 4);
   result := Hash128To64(h.b); // combine (needed if DefaultHasher128 is weak)
   PByte(@result)^ := PByte(@Head.Signed.Serial)^; // include 8 bits of serial
   result := result xor Crc64Seed; // caller can't forge cache values
@@ -1410,10 +1515,8 @@ begin
   sha.Init;
   sha.Update(@Head.Signed, SizeOf(Head.Signed));
   if Head.Version > 1 then
-  begin
     // include Info content to the SHA-2 digest
-
-  end;
+    sha.Update(@Info, Info.DataLen + 4);
   sha.Final(hash);
 end;
 
@@ -1423,10 +1526,8 @@ begin
   if not result then
     exit;
   if Head.Version > 1 then
-  begin
     // include Info content to the stream
-
-  end;
+    result := s.Write(Info, Info.DataLen + 4) = Info.DataLen + 4;
 end;
 
 function TEccCertificateContent.LoadFromStream(s: TStream): boolean;
@@ -1435,10 +1536,10 @@ begin
   if not result then
     exit;
   if Head.Version > 1 then
-  begin
     // include Info content from the stream
-
-  end;
+    result := (s.Read(Info, 4) = 4) and
+              (Info.DataLen <= SizeOf(Info.Data)) and
+              (s.Read(Info.Data, Info.DataLen) = Info.DataLen);
 end;
 
 
@@ -1631,13 +1732,16 @@ begin
   end;
 end;
 
-function EccIssuer(const Text: RawUtf8; out Issuer: TEccCertificateIssuer): boolean;
+function EccIssuer(const Text: RawUtf8; out Issuer: TEccCertificateIssuer;
+  fullbaudot: PRawByteString): boolean;
 var
   baudot: RawByteString;
   len: integer;
 begin
   FillZero(THash128(Issuer));
   baudot := AsciiToBaudot(Text);
+  if fullbaudot <> nil then
+    fullbaudot^ := baudot;
   len := length(baudot);
   result := len > SizeOf(Issuer);
   if result then // truncated
