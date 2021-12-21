@@ -2008,6 +2008,9 @@ procedure FillZero(out dig: THash128); overload;
 function Hash128Index(P: PHash128Rec; Count: integer;
   h: PHash128Rec): integer;
 
+/// add a 128-bit item in an array of such values
+function AddHash128(var Arr: THash128DynArray; const V: THash128; var Count: integer): PtrInt;
+
 /// returns TRUE if all 20 bytes of this 160-bit buffer equal zero
 // - e.g. a SHA-1 digest
 function IsZero(const dig: THash160): boolean; overload;
@@ -6977,6 +6980,16 @@ begin
 end;
 
 {$endif CPU64}
+
+function AddHash128(var Arr: THash128DynArray; const V: THash128;
+  var Count: integer): PtrInt;
+begin
+  result := Count;
+  if result = length(Arr) then
+    SetLength(Arr, NextGrow(result));
+  Arr[result] := V;
+  inc(Count);
+end;
 
 function IsZero(const dig: THash160): boolean;
 var
