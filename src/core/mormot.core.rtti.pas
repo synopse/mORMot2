@@ -2293,6 +2293,12 @@ type
     /// fill a value from random - including strings and nested types
     procedure ValueRandom(Data: pointer);
       {$ifdef HASINLINE}inline;{$endif}
+    /// TOnDynArrayHashOne callback used as fallback for unsupported items
+    // - here DefaultHasher() is always used over Size bytes
+    function ValueFullHash(const Elem): cardinal;
+    /// TOnDynArraySortCompare callback used as fallback for unsupported items
+    // - simple per-byte comparison over Size bytes
+    function ValueFullCompare(const A, B): integer;
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -7398,6 +7404,16 @@ end;
 procedure TRttiCustom.ValueRandom(Data: pointer);
 begin
   fSetRandom(Data, self); // handle most simple kind of values from RTTI
+end;
+
+function TRttiCustom.ValueFullHash(const Elem): cardinal;
+begin
+  result := DefaultHasher(0, @Elem, fCache.ItemSize);
+end;
+
+function TRttiCustom.ValueFullCompare(const A, B): integer;
+begin
+  result := MemCmp(@A, @B, fCache.ItemSize); // use SSE2 asm on Intel/AMD
 end;
 
 function TRttiCustom.ClassNewInstance: pointer;

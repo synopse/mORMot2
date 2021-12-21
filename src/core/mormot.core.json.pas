@@ -1151,13 +1151,12 @@ type
       aCompare: TDynArraySortCompare): boolean;
     procedure SetTimeouts;
     function ComputeNextTimeOut: cardinal;
-    function KeyFullHash(const Elem): cardinal;
-    function KeyFullCompare(const A, B): integer;
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
     function GetTimeOutSeconds: cardinal; {$ifdef FPC} inline; {$endif}
     procedure SetTimeOutSeconds(Value: cardinal);
     function GetThreadUse: TSynLockerUse;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetThreadUse(const Value: TSynLockerUse);
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
@@ -8680,52 +8679,29 @@ end;
 { TSynDictionary }
 
 const // use fSafe.Padding[DIC_*] slots for Keys/Values place holders
-  DIC_KEYCOUNT = 0;
-  DIC_KEY = 1;
-  DIC_VALUECOUNT = 2;
-  DIC_VALUE = 3;
-  DIC_TIMECOUNT = 4;
-  DIC_TIMESEC = 5;
-  DIC_TIMETIX = 6;
-
-function TSynDictionary.KeyFullHash(const Elem): cardinal;
-begin
-  result := fKeys.Hasher.Hasher(0, @Elem, fKeys.Info.Cache.ItemSize);
-end;
-
-function TSynDictionary.KeyFullCompare(const A, B): integer;
-var
-  i: PtrInt;
-begin
-  for i := 0 to fKeys.Info.Cache.ItemSize - 1 do
-  begin
-    result := TByteArray(A)[i];
-    dec(result, TByteArray(B)[i]); // in two steps for better asm generation
-    if result <> 0 then
-      exit;
-  end;
-  result := 0;
-end;
+  DIC_KEYCOUNT   = 0;   // Keys.Count integer
+  DIC_KEY        = 1;   // Key.Value pointer
+  DIC_VALUECOUNT = 2;   // Values.Count integer
+  DIC_VALUE      = 3;   // Values.Value pointer
+  DIC_TIMECOUNT  = 4;   // Timeouts.Count integer
+  DIC_TIMESEC    = 5;   // Timeouts Seconds integer
+  DIC_TIMETIX    = 6;   // last GetTickCount64 shr 10 integer
 
 constructor TSynDictionary.Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
   aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal;
   aCompressAlgo: TAlgoCompress; aHasher: THasher);
 begin
   inherited Create;
-  fSafe.Padding[DIC_KEYCOUNT].VType := varInteger;    // Keys.Count integer
-  fSafe.Padding[DIC_VALUECOUNT].VType := varInteger;  // Values.Count integer
-  fSafe.Padding[DIC_KEY].VType := varUnknown;         // Key.Value pointer
-  fSafe.Padding[DIC_VALUE].VType := varUnknown;       // Values.Value pointer
-  fSafe.Padding[DIC_TIMECOUNT].VType := varInteger;   // Timeouts.Count integer
-  fSafe.Padding[DIC_TIMESEC].VType := varInteger;     // Timeouts Seconds
-  fSafe.Padding[DIC_TIMETIX].VType := varInteger;  // last GetTickCount64 shr 10
+  fSafe.Padding[DIC_KEYCOUNT].VType   := varInteger;  // Keys.Count
+  fSafe.Padding[DIC_KEY].VType        := varUnknown;  // Key.Value
+  fSafe.Padding[DIC_VALUECOUNT].VType := varInteger;  // Values.Count
+  fSafe.Padding[DIC_VALUE].VType      := varUnknown;  // Values.Value
+  fSafe.Padding[DIC_TIMECOUNT].VType  := varInteger;  // Timeouts.Count
+  fSafe.Padding[DIC_TIMESEC].VType    := varInteger;  // Timeouts Seconds
+  fSafe.Padding[DIC_TIMETIX].VType    := varInteger;  // GetTickCount64 shr 10
   fSafe.PaddingUsedCount := DIC_TIMETIX + 1;
   fKeys.Init(aKeyTypeInfo, fSafe.Padding[DIC_KEY].VAny, nil, nil, aHasher,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger, aKeyCaseInsensitive);
-  if not Assigned(fKeys.HashItem) then
-    fKeys.EventHash := KeyFullHash;
-  if not Assigned(fKeys.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Compare) then
-    fKeys.EventCompare := KeyFullCompare;
   fValues.Init(aValueTypeInfo, fSafe.Padding[DIC_VALUE].VAny,
     @fSafe.Padding[DIC_VALUECOUNT].VInteger);
   fTimeouts.Init(TypeInfo(TIntegerDynArray), fTimeOut,
@@ -9362,13 +9338,13 @@ begin
   fSafe.Lock;
   try
     try
-      RTTI_BINARYLOAD[rkDynArray](fKeys.Value, rdr, fKeys.Info.Info);
+      RTTI_BINARYLOAD[rkDynArray](fKeys.Value,   rdr, fKeys.Info.Info);
       RTTI_BINARYLOAD[rkDynArray](fValues.Value, rdr, fValues.Info.Info);
       n := fKeys.Capacity;
       if n = fValues.Capacity then
       begin
         // RTTI_BINARYLOAD[rkDynArray]() did not set the external count
-        fSafe.Padding[DIC_KEYCOUNT].VInteger := n;
+        fSafe.Padding[DIC_KEYCOUNT].VInteger   := n;
         fSafe.Padding[DIC_VALUECOUNT].VInteger := n;      
         SetTimeouts;  // set ComputeNextTimeOut for all items
         fKeys.ForceReHash; // optimistic: input from TSynDictionary.SaveToBinary

@@ -2197,7 +2197,7 @@ procedure DynArraySortIndexed(Values: pointer; ItemSize, Count: integer;
 function DynArraySortOne(Kind: TRttiParserType; CaseInsensitive: boolean): TDynArraySortCompare;
 
 /// get the hash function corresponding to a given standard array type
-// - as used e.g. internally by TDynArray
+// - as used e.g. internally by TDynArrayHasher.Init
 function DynArrayHashOne(Kind: TRttiParserType;
   CaseInsensitive: boolean = false): TDynArrayHashOne;
 
@@ -2320,6 +2320,7 @@ function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
 /// fast search of a binary value position in a fixed-size array
 // - Count is the number of entries in P^[]
 function AnyScanExists(P, Elem: pointer; Count, ElemSize: PtrInt): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 { ************ INI Files and In-memory Access }
@@ -8459,9 +8460,9 @@ const
     @HashWord,               //  ptWord
     nil,                     //  ptEnumeration
     nil,                     //  ptSet
-    nil,                     //  ptClass
+    {$ifdef CPU32} @HashInteger {$else} @HashInt64 {$endif}, // ptClass
     nil,                     //  ptDynArray
-    nil,                     //  ptInterface
+    {$ifdef CPU32} @HashInteger {$else} @HashInt64 {$endif}, // ptInterface
     nil),                    //  ptCustom
    // case insensitive hash functions:
    (nil,                     //  ptNone
@@ -8499,17 +8500,19 @@ const
     @HashWord,               //  ptWord
     nil,                     //  ptEnumeration
     nil,                     //  ptSet
-    nil,                     //  ptClass
+    {$ifdef CPU32} @HashInteger {$else} @HashInt64 {$endif}, // ptClass
     nil,                     //  ptDynArray
-    nil,                     //  ptInterface
+    {$ifdef CPU32} @HashInteger {$else} @HashInt64 {$endif}, // ptInterface
     nil));                   //  ptCustom
 
-function DynArrayHashOne(Kind: TRttiParserType; CaseInsensitive: boolean): TDynArrayHashOne;
+function DynArrayHashOne(Kind: TRttiParserType;
+  CaseInsensitive: boolean): TDynArrayHashOne;
 begin
   result := PT_HASH[CaseInsensitive, Kind];
 end;
 
-function DynArraySortOne(Kind: TRttiParserType; CaseInsensitive: boolean): TDynArraySortCompare;
+function DynArraySortOne(Kind: TRttiParserType;
+  CaseInsensitive: boolean): TDynArraySortCompare;
 begin
   result := PT_SORT[CaseInsensitive, Kind];
 end;
@@ -8524,12 +8527,20 @@ begin
   fEventHash := aEventHash;
   if not (Assigned(fHashItem) or
           Assigned(fEventHash)) then
+  begin
     fHashItem := PT_HASH[aCaseInsensitive, fDynArray^.Info.ArrayFirstField];
+    if not Assigned(fHashItem) then
+      fEventHash := fDynArray^.Info.ValueFullHash;
+  end;
   fCompare := aCompare;
   fEventCompare := aEventCompare;
   if not (Assigned(fCompare) or
           Assigned(fEventCompare)) then
+  begin
     fCompare := PT_SORT[aCaseInsensitive, fDynArray^.Info.ArrayFirstField];
+    if not Assigned(fCompare) then
+      fEventCompare := fDynArray^.Info.ValueFullCompare;
+  end;
   HashTableInit(aHasher);
 end;
 
@@ -8538,13 +8549,15 @@ procedure TDynArrayHasher.InitSpecific(aDynArray: PDynArray;
 begin
   fDynArray := aDynArray;
   fHashItem := PT_HASH[aCaseInsensitive, aKind];
-  fEventHash := nil;
+  if Assigned(fHashItem) then
+    fEventHash := nil
+  else
+    fEventHash := aDynArray^.Info.ValueFullHash;
   fCompare := PT_SORT[aCaseInsensitive, aKind];
-  fEventCompare := nil;
-  if not (Assigned(fCompare) or
-          Assigned(fHashItem)) then
-    raise EDynArray.CreateUtf8(
-      'TDynArrayHasher.InitSpecific: % has no hash/compare', [ToText(aKind)^]);
+  if Assigned(fCompare) then
+    fEventCompare := nil
+  else
+    fEventCompare := aDynArray^.Info.ValueFullCompare;
   HashTableInit(aHasher);
 end;
 
