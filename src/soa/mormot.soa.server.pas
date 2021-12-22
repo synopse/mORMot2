@@ -1346,7 +1346,7 @@ begin
         exec.BackgroundExecutionThread := fBackgroundThread;
         exec.OnCallback := Ctxt.ExecuteCallback;
         if fOnExecute <> nil then
-          exec.AddInterceptors(exec.OnExecute);
+          exec.AddInterceptors(fOnExecute);
         if Ctxt.ServiceExecution^.LogRest <> nil then
           exec.AddInterceptor(OnLogRestExecuteMethod);
         if (fImplementationClassKind = ickFake) and
