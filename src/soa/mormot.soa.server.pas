@@ -169,7 +169,7 @@ type
     fSharedInterface: IInterface;
     fBackgroundThread: TSynBackgroundThreadMethod;
     fOnMethodExecute: TOnServiceCanExecute;
-    fOnExecute: array of TOnInterfaceMethodExecute;
+    fOnExecute: TInterfaceMethodExecuteEventDynArray;
     fExecuteLock: TRTLCriticalSection;
     procedure SetServiceLogByIndex(const aMethods: TInterfaceFactoryMethodBits;
       const aLogRest: IRestOrm; aLogClass: TOrmServiceLogClass);
