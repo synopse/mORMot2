@@ -9102,10 +9102,10 @@ begin
   fHashTableStore := nil;
   fHashTableSize := siz;
   {$ifdef DYNARRAYHASH_16BIT}
-  if fDynArray^.Capacity < $ffff then
+  if siz <= 1 shl 16 then
   begin
     include(fState, hash16bit); // we can store indexes as 16-bit word values
-    siz := (siz shr 1) {$ifndef DYNARRAYHASH_PO2} + 1 {$endif}; // store twice
+    siz := (siz shr 1) {$ifndef DYNARRAYHASH_PO2} + 1 {$endif}; // 32-bit count
   end
   else
     exclude(fState, hash16bit);
