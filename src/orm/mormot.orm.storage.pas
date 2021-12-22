@@ -3076,10 +3076,10 @@ begin
     if fCount > 0 then
     begin
       timer.Start;
+      fValues.Clear;
       for f := 0 to length(fUnique) - 1 do
         fUnique[f].Hasher.ForceReHash;
       fValues.Hasher.ForceReHash;
-      fValues.Clear;
       if andUpdateFile then
       begin
         fModified := true;
