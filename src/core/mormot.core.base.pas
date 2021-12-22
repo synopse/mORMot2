@@ -9871,10 +9871,8 @@ begin
 end;
 
 function Hash128To64(const b: THash128): QWord;
-const
-  prime = 2685821657736338717; // use efficient Marsaglia-like PRNG
 begin
-  result := THash128Rec(b).L xor (THash128Rec(b).L * prime);
+  result := THash128Rec(b).L xor (THash128Rec(b).H * QWord(2685821657736338717));
 end;
 
 function xxHash32Mixup(crc: cardinal): cardinal;

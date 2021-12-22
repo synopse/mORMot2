@@ -9003,7 +9003,7 @@ procedure TFastReHash.Process(Hasher: PDynArrayHasher; count: PtrInt);
 var
   fnd, ndx: PtrInt;
 label
-  nxt, ok;
+  s, ok;
 begin
   // should match FindOrNew() logic
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
@@ -9014,7 +9014,7 @@ begin
   siz := Hasher^.fDynArray^.Info.Cache.ItemSize;
   ht := 1; // store index + 1
   repeat
-nxt:if Assigned(Hasher^.fEventHash) then // inlined HashOne()
+s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
       hc := Hasher^.fEventHash(P^)
     else
       hc := Hasher^.fHashItem(P^, Hasher^.fHasher);
@@ -9034,18 +9034,16 @@ nxt:if Assigned(Hasher^.fEventHash) then // inlined HashOne()
       end
       else
       {$endif DYNARRAYHASH_16BIT}
+      if Hasher^.fHashTableStore[ndx] = 0 then
       begin
-        if Hasher^.fHashTableStore[ndx] = 0 then
-        begin
-          // we can use this void entry (most common case)
-          Hasher^.fHashTableStore[ndx] := ht;
-ok:       inc(P, siz); // next item
-          inc(ht);
-          dec(count);
-          if count <> 0 then
-            goto nxt;
-          exit;
-        end;
+        // we can use this void entry (most common case)
+        Hasher^.fHashTableStore[ndx] := ht;
+ok:     inc(P, siz); // next item
+        inc(ht);
+        dec(count);
+        if count <> 0 then
+          goto s;
+        exit;
       end;
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
       inc(collisions);

@@ -2271,7 +2271,7 @@ begin
   if n > 0 then
     repeat
       id := p^.IDValue;
-      if id > result then // cmovg on 64-bit FPC
+      if id > result then   // cmovg on 64-bit FPC
         result := id;
       if id <= prev then
         {$ifdef CPUX86}
