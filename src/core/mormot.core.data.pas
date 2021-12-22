@@ -6441,7 +6441,7 @@ begin
     if result = ptVariant then
       raise EDynArray.CreateUtf8('TDynArray.InitSpecific(%): missing mormot.core.json',
         [Info.Name, ToText(result)^])
-    else
+    else if aKind <> ptNone then
       raise EDynArray.CreateUtf8('TDynArray.InitSpecific(%) unsupported %',
         [Info.Name, ToText(result)^]);
 end;

@@ -163,6 +163,15 @@ begin
   Check(li.Count = 0);
 end;
 
+type
+  TClassWithoutRtti = class
+  private
+    fSoup: RawUtf8;
+  public
+    property Soup: RawUtf8
+      read fSoup write fSoup;
+  end;
+
 procedure TTestCoreCollections._IList;
 const
   MAX = 1000; // not too big since here we validate also brute force searches
@@ -172,11 +181,15 @@ var
   li: IList<integer>;
   o: TObjectWithID;
   lo: IList<TObjectWithID>;
+  s: TClassWithoutRtti;
+  ls: IList<TClassWithoutRtti>;
   u: RawUtf8;
   pu: PRawUtf8;
   lu: IList<RawUtf8>;
   lh: IList<THash128>;
   h: THash128;
+  r: TSynTestFailed;
+  lr: IList<TSynTestFailed>;
 begin
   // manual IList<integer> validation
   li := Collections.NewList<integer>;
@@ -242,6 +255,18 @@ begin
   i := lo.Add(TObjectWithID.CreateWithID(100));
   Check(i = 0);
   CheckEqual(lo[i].IDValue, 100);
+  // manual IList<TClassWithoutRtti> validation
+  ls := Collections.NewList<TClassWithoutRtti>;
+  ls.Capacity := MAX + 1;
+  for i := 0 to MAX do
+  begin
+    s := TClassWithoutRtti.Create;
+    s.Soup := UInt32ToUtf8(i);
+    Check(ls.Add(s) = i);
+    check(ls[i] <> nil);
+   end;
+   for i := 0 to ls.Count - 1 do
+     Check(Utf8ToInteger(ls[i].Soup) = i);
   // manual IList<RawUtf8> validation
   lu := Collections.NewList<RawUtf8>;
   for u in lu do
@@ -292,6 +317,20 @@ begin
   lh.Add(h);
   lh.Sort;
   lh := nil;
+  // manual IList<TSynTestFailed> validation
+  lr := Collections.NewPlainList<TSynTestFailed>;
+  lr.Capacity := MAX + 1;
+  r.TestName := 'n';
+  for i := 0 to MAX do
+  begin
+    r.Error := IntToStr(i);
+    Check(lr.Add(r) = i);
+    check(lr[i].Error = r.Error);
+   end;
+  for i := 0 to lr.Count - 1 do
+    Check(lr[i].TestName = 'n');
+   for i := 0 to lr.Count - 1 do
+     Check(StrToInt(lr[i].Error) = i);
   // validate and benchmark all main types using a generic sub method
   TestOne<byte>();
   TestOne<word>();

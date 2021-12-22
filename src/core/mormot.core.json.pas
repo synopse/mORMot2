@@ -9488,6 +9488,7 @@ function TRttiJson.SetParserType(aParser: TRttiParserType;
   aParserComplex: TRttiParserComplexType): TRttiCustom;
 var
   C: TClass;
+  n: integer;
 begin
   // set Name and Flags from Props[]
   inherited SetParserType(aParser, aParserComplex);
@@ -9546,7 +9547,10 @@ begin
         fClassNewInstance := @_New_ObjectWithCustomCreate;
         // allow any kind of customization for TObjectWithCustomCreate children
         // - is used e.g. by TOrm or TObjectWithID
+        n := Props.Count;
         TCCHookClass(fValueClass).RttiCustomSetParser(self);
+        if n > Props.Count then
+          fFlags := fFlags + fProps.AdjustAfterAdded; // added a prop
       end
       else if C = TSynObjectList then
       begin

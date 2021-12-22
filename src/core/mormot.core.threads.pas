@@ -1402,8 +1402,8 @@ end;
 constructor TPendingTaskList.Create;
 begin
   inherited Create;
-  fTasks.InitSpecific(TypeInfo(TPendingTaskListItemDynArray),
-    fTask, ptInt64, @fCount); // sorted by Timestamp
+  fTasks.InitSpecific(TypeInfo(TPendingTaskListItemDynArray), fTask, ptInt64,
+    @fCount); // sorted by Timestamp
 end;
 
 function TPendingTaskList.GetTimestamp: Int64;

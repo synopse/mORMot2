@@ -2275,8 +2275,9 @@ type
     // - if rcfObjArray is defined in Flags, will release all nested TObject
     procedure ValueFinalizeAndClear(Data: pointer);
       {$ifdef HASINLINE}inline;{$endif}
-    /// efficiently copy a stored value of this type
-    function ValueCopy(Dest, Source: pointer): PtrInt;
+    /// efficiently copy of a stored value of this type
+    // - same behavior as Dest := Source for all types
+    procedure ValueCopy(Dest, Source: pointer);
       {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the Value is 0 / nil / '' / null
     function ValueIsVoid(Data: PAnsiChar): boolean;
@@ -5794,6 +5795,42 @@ rtl:  // copy any complex type via the RTL function of the variants unit
   result := SizeOf(Source^);
 end;
 
+function _Per1Copy(Dest, Source: PByte; Info: PRttiInfo): PtrInt;
+begin
+  Dest^ := Source^;
+  result := 0; // called from TRttiCustom.ValueCopy which ignore this
+end;
+
+function _Per2Copy(Dest, Source: PWord; Info: PRttiInfo): PtrInt;
+begin
+  Dest^ := Source^;
+  result := 0; // ignored
+end;
+
+function _Per4Copy(Dest, Source: PInteger; Info: PRttiInfo): PtrInt;
+begin
+  Dest^ := Source^;
+  result := 0; // ignored
+end;
+
+function _Per8Copy(Dest, Source: PInt64; Info: PRttiInfo): PtrInt;
+begin
+  Dest^ := Source^;
+  result := 0; // ignored
+end;
+
+function _Per16Copy(Dest, Source: PHash128; Info: PRttiInfo): PtrInt;
+begin
+  Dest^ := Source^;
+  result := 0; // ignored
+end;
+
+function _Per32Copy(Dest, Source: PHash256; Info: PRttiInfo): PtrInt;
+begin
+  Dest^ := Source^;
+  result := 0; // ignored
+end;
+
 function _InterfaceCopy(Dest, Source: PInterface; Info: PRttiInfo): PtrInt;
 begin
   Dest^ := Source^;
@@ -7027,21 +7064,12 @@ begin
 end;
 
 // TRttiCustom method defined here for proper inlining
-function TRttiCustom.ValueCopy(Dest, Source: pointer): PtrInt;
+procedure TRttiCustom.ValueCopy(Dest, Source: pointer);
 begin
-  if not Assigned(fCopy) then
-  begin
-    if rcfHasNestedProperties in fFlags then
-      if fCache.Kind = rkClass then
-        fProps.CopyProperties(Dest, Source)
-      else
-        fProps.CopyRecord(Dest, Source)
-    else
-      MoveFast(Source^, Dest^, fCache.Size);
-    result := fCache.Size;
-  end
+  if Assigned(fCopy) then
+    fCopy(Dest, Source, fCache.Info)
   else
-    result := fCopy(Dest, Source, fCache.Info);
+    MoveFast(Source^, Dest^, fCache.Size);
 end;
 
 procedure TRttiCustomProps.CopyRecord(Dest, Source: PAnsiChar);
@@ -7063,7 +7091,8 @@ begin
         inc(Source, offset);
         inc(Dest, offset);
       end;
-      offset := pp^.Value.ValueCopy(Dest, Source); // copy managed field
+      pp^.Value.ValueCopy(Dest, Source); // copy managed field
+      offset := pp^.Value.Size;
       inc(Source, offset);
       inc(Dest, offset);
       inc(offset, pp^.OffsetGet);
@@ -7095,6 +7124,9 @@ begin
           GetValue(Source, v);
           SetValue(Dest, v, {andclear=}true);
         end
+        else if Value.Kind = rkClass then
+          // explicit copy of nested instances properties
+          Value.Props.CopyProperties(Dest + OffsetSet, Source + OffsetGet)
         else
           // direct content copy from the fields memory buffers
           Value.ValueCopy(Dest + OffsetSet, Source + OffsetGet);
@@ -7220,6 +7252,21 @@ begin
   // initialize processing callbacks
   fFinalize := RTTI_FINALIZE[fCache.Kind];
   fCopy := RTTI_MANAGEDCOPY[fCache.Kind];
+  if not Assigned(fCopy) then
+    case fCache.Size of // direct copy of most sizes, including class/pointer
+      1:
+        fCopy := @_Per1Copy;
+      2:
+        fCopy := @_Per2Copy;
+      4:
+        fCopy := @_Per4Copy;
+      8:
+        fCopy := @_Per8Copy;
+      16:
+        fCopy := @_Per16Copy;
+      32:
+        fCopy := @_Per32Copy;
+    end; // ItemCopy() will fallback to MoveFast() otherwise
   pt := TypeInfoToStandardParserType(aInfo, {byname=}true, @pct);
   SetParserType(pt, pct);
 end;

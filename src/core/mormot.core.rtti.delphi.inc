@@ -498,6 +498,7 @@ begin
     {$endif HASDYNARRAYTYPE}
   end;
 end;
+
 function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;
 begin
   with GetTypeData(@self)^ do
