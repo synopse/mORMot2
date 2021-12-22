@@ -36,6 +36,11 @@ interface
 // - NOSPECIALIZE disable ahead-of-time compilation and make naive bloated generics
 // - you may try this conditional to circumvent some Delphi internal errors
 // - see also SPECIALIZE_HASH, SPECIALIZE_SMALL SPECIALIZE_WSTRING conditionals
+// - on XE8 Win32 we can observe
+//    mormot.core.collections.dcu:  default=500KB  NOSPECIALIZE=75KB
+//    test.core.collections.dcu:    default=240KB  NOSPECIALIZE=260KB
+// -> so the main size reduction of those collections is that they are based on
+//    TDynArray and TSynDictionary, then specialization helps a little more
 {.$define NOSPECIALIZE}
 
 
@@ -595,6 +600,10 @@ type
     // so are not pre-compiled by default - this conditional generates them
     // - this affects only IKeyValue<> not IList<> which specializes byte/word
     {.$define SPECIALIZE_SMALL}
+
+    // enable cold compilation of THash128/TGuid and THash256/THash612
+    // - those types are seldom used, so not cold compiled by default
+    {.$define SPECIALIZE_HASH}
 
     // WideString are slow - RawUtf8 or UnicodeString are to be used instead -
     // so are not pre-compiled by default - this conditional generates them

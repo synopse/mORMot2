@@ -5798,7 +5798,7 @@ end;
 function _Per1Copy(Dest, Source: PByte; Info: PRttiInfo): PtrInt;
 begin
   Dest^ := Source^;
-  result := 0; // called from TRttiCustom.ValueCopy which ignore this
+  result := 0; // only called from TRttiCustom.ValueCopy which ignore this
 end;
 
 function _Per2Copy(Dest, Source: PWord; Info: PRttiInfo): PtrInt;

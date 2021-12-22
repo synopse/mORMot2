@@ -1158,6 +1158,7 @@ type
     function GetThreadUse: TSynLockerUse;
       {$ifdef HASINLINE} inline; {$endif}
     procedure SetThreadUse(const Value: TSynLockerUse);
+      {$ifdef HASINLINE} inline; {$endif}
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
