@@ -83,6 +83,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - SSoftPro
 - Stefan (itSDS)
 - Svetozar Belic (transmogrifix)
+- Ti Hory (tihorygit)
 - Tino Teuber
 - TTomas (tom)
 - Uian2000

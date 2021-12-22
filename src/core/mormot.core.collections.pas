@@ -925,7 +925,7 @@ begin
                (value < fCount);
   fDynArray.Count := value; // will resize the dynamic array
   if forcehash then
-    fHasher^.ForceReHash;
+    fHasher^.ForceReHash(nil);
 end;
 
 function TSynListAbstract.GetCapacity: PtrInt;

@@ -1908,8 +1908,8 @@ type
     function FindBeforeDelete(Item: pointer): PtrInt;
     /// full computation of the internal hash table
     // - to be called after items have been manually updated - e.g. after Clear
-    // - returns the number of duplicated values found (likely to be 0)
-    function ForceReHash: integer;
+    // - can return the number of duplicated values found (likely to be 0)
+    procedure ForceReHash(duplicates: PInteger = nil);
     {$ifndef PUREMORMOT2}
     function ReHash(forced: boolean = false): integer;
     {$endif PUREMORMOT2}
@@ -2033,7 +2033,7 @@ type
     // or after calling LoadFrom/Clear method) - this is not necessary after
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
     // - returns the number of duplicated items found - which should be 0
-    function ForceReHash: integer;
+    procedure ForceReHash;
       {$ifdef HASINLINE} inline; {$endif}
     {$ifndef PUREMORMOT2}
     function ReHash(forced: boolean = false): integer;
@@ -8808,7 +8808,7 @@ begin
   if fHashTableSize - n < n shr 2 then
   begin
     // grow hash table when 25% void
-    ForceReHash;
+    ForceReHash(nil);
     ndx := Find(aHashCode, {foradd=}true); // recompute position
     if ndx >= 0 then
       RaiseFatalCollision('HashAdd', aHashCode);
@@ -8991,9 +8991,11 @@ type
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     collisions: integer;
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
+    ht: integer;
     values, first, last, siz: PtrInt;
-    duplicates, ht: integer;
+    duplicates: PInteger;
     P: PAnsiChar;
+    // fill fHashTableStore[] from all stored items
     procedure Process(Hasher: PDynArrayHasher; count: PtrInt);
   end;
 
@@ -9007,7 +9009,6 @@ begin
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions := 0;
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
-  duplicates := 0;
   P := Hasher^.fDynArray^.Value^;
   values := PtrUInt(P);
   siz := Hasher^.fDynArray^.Info.Cache.ItemSize;
@@ -9024,8 +9025,7 @@ nxt:if Assigned(Hasher^.fEventHash) then // inlined HashOne()
       {$ifdef DYNARRAYHASH_16BIT} // inlined HashTableIndexToIndex()
       if hash16bit in Hasher^.fState then
       begin
-        fnd := PWordArray(Hasher^.fHashTableStore)[ndx]; // store index + 1
-        if fnd = 0 then
+        if PWordArray(Hasher^.fHashTableStore)[ndx] = 0 then // store index + 1
         begin
           // we can use this void entry (most common case)
           PWordArray(Hasher^.fHashTableStore)[ndx] := ht;
@@ -9035,8 +9035,7 @@ nxt:if Assigned(Hasher^.fEventHash) then // inlined HashOne()
       else
       {$endif DYNARRAYHASH_16BIT}
       begin
-        fnd := Hasher^.fHashTableStore[ndx]; // store index + 1
-        if fnd = 0 then
+        if Hasher^.fHashTableStore[ndx] = 0 then
         begin
           // we can use this void entry (most common case)
           Hasher^.fHashTableStore[ndx] := ht;
@@ -9051,14 +9050,22 @@ ok:       inc(P, siz); // next item
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
       inc(collisions);
       {$endif DYNARRAYHASHCOLLISIONCOUNT}
-      fnd := values + (fnd - 1) * siz;
-      if ((not Assigned(Hasher^.fEventCompare)) and
-          (Hasher^.fCompare(pointer(fnd)^, P^) = 0)) or
-         (Assigned(Hasher^.fEventCompare) and
-          (Hasher^.fEventCompare(pointer(fnd)^, P^) = 0)) then
+      if duplicates <> nil then
       begin
-        inc(duplicates); // report but ignore duplicates
-        break;
+        // check for duplicated values only if necessary (slow down process)
+        if hash16bit in Hasher^.fState then
+          fnd := PWordArray(Hasher^.fHashTableStore)[ndx]
+        else
+          fnd := Hasher^.fHashTableStore[ndx];
+        fnd := values + (fnd - 1) * siz; // stored index + 1
+        if ((not Assigned(Hasher^.fEventCompare)) and
+            (Hasher^.fCompare(pointer(fnd)^, P^) = 0)) or
+           (Assigned(Hasher^.fEventCompare) and
+            (Hasher^.fEventCompare(pointer(fnd)^, P^) = 0)) then
+        begin
+          inc(duplicates^); // report but ignore duplicates
+          break;
+        end;
       end;
       inc(ndx);
       if ndx = last then
@@ -9077,12 +9084,13 @@ ok:       inc(P, siz); // next item
   until count = 0;
 end;
 
-function TDynArrayHasher.ForceReHash: integer;
+procedure TDynArrayHasher.ForceReHash(duplicates: PInteger);
 var
   n, cap, siz: PtrInt;
   fastrehash: TFastReHash;
 begin
-  result := 0;
+  if duplicates <> nil then
+    duplicates^ := 0;
   if not (hasHasher in fState) then
     exit;
   // Capacity better than Count or HashTableSize, * 2 to reserve some void slots
@@ -9118,8 +9126,8 @@ begin
   n := fDynArray^.Count;
   if n <> 0 then
   begin
+    fastrehash.duplicates := duplicates;
     fastrehash.Process(@self, n);
-    result := fastrehash.duplicates;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     inc(CountCollisions, fastrehash.collisions);
     inc(CountCollisionsCurrent, fastrehash.collisions);
@@ -9132,7 +9140,7 @@ end;
 {$ifndef PUREMORMOT2}
 function TDynArrayHasher.ReHash(forced: boolean): integer;
 begin
-  result := ForceRehash; // always forced for true thread-safety
+  ForceRehash(@result); // always forced for true thread-safety
 end;
 {$endif PUREMORMOT2}
 
@@ -9419,15 +9427,15 @@ begin
   result := fHash.GetHashFromIndex(aIndex);
 end;
 
-function TDynArrayHashed.ForceReHash: integer;
+procedure TDynArrayHashed.ForceReHash;
 begin
-  result := fHash.ForceReHash;
+  fHash.ForceReHash(nil);
 end;
 
 {$ifndef PUREMORMOT2}
 function TDynArrayHashed.ReHash(forced: boolean): integer;
 begin
-  result := fHash.ForceReHash; // always forced
+  fHash.ForceReHash(@result); // always forced
 end;
 {$endif PUREMORMOT2}
 

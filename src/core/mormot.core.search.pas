@@ -5631,8 +5631,8 @@ begin
       FillcharFast(item.tzi, SizeOf(item.tzi), 0);
       if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i], {reopen=}true) then
       begin
-        item.id := keys[i];
-        item.Display := reg.ReadString('Display');
+        item.id := keys[i]; // registry keys are genuine by definition
+        item.display := reg.ReadString('Display');
         reg.ReadBuffer('TZI', @item.tzi, SizeOf(item.tzi));
         if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i] + '\Dynamic DST', true) then
         begin
@@ -5818,7 +5818,7 @@ begin
     fDisplays := TStringList.Create;
     fSafe.ReadLock;
     for i := 0 to length(fZone) - 1 do
-      fDisplays.Add(Utf8ToString(fZone[i].Display));
+      fDisplays.Add(Utf8ToString(fZone[i].display));
     fSafe.ReadUnLock;
   end;
   result := fDisplays;

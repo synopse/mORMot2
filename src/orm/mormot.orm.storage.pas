@@ -3118,13 +3118,13 @@ begin
   loaded.Pause;
   timer.Start;
   fCount := length(fValue);
-  dup := fValues.ForceReHash;
+  fValues.Hasher.ForceReHash(@dup);
   if dup > 0 then
     dupfield := ID_TXT
   else
     for f := 0 to length(fUnique) - 1 do
     begin
-      dup := fUnique[f].Hasher.ForceReHash;
+      fUnique[f].Hasher.ForceReHash(@dup);
       if dup > 0 then
       begin
         dupfield := fUnique[f].PropInfo.Name;

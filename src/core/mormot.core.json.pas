@@ -8808,7 +8808,7 @@ begin
   fSafe.Lock; // = RWLock(cWrite);
   try
     fKeys.Clear;
-    fKeys.Hasher.ForceReHash; // mandatory to avoid GPF
+    fKeys.Hasher.ForceReHash(nil); // mandatory to avoid GPF
     fValues.Clear;
     if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
       fTimeOuts.Clear;
