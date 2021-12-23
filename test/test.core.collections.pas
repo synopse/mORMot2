@@ -412,71 +412,97 @@ end;
 
 procedure TTestCoreCollections._IKeyValue;
 const
-  MAX = 200000; // keys are hashed so we can have some
+  MAX = 100000; // keys are hashed so we can have some
 var
   i: integer;
   vi: Int64;
   di: IKeyValue<integer, Int64>;
   u: RawUtf8;
+  pu: PRawUtf8Array;
   vu: double;
   du: IKeyValue<RawUtf8, double>;
+  setcapa: boolean;
+  setcapatxt: PUtf8Char;
+  timer: TPrecisionTimer;
 begin
-  // manual IKeyValue<integer, Int64> validation
-  di := Collections.NewKeyValue<integer, Int64>;
-  //di.Capacity := MAX + 1;
-  for i := 0 to MAX do
-    if i < 1000 then
-      di.Add(i, i)
-    else
-      Check(di.TryAdd(i, i));
-  Check(di.Count = MAX + 1);
-  for i := 0 to MAX do
+  setcapatxt := nil;
+  for setcapa := false to true do
   begin
-    Check(not di.TryAdd(i, i));
-    Check(di.ContainsKey(i)); // key is searched with O(1) hahsing
-    if i < 1000 then          // value is searched as O(n)
-      Check(di.ContainsValue(i));
-    Check(di[i] = i);
-    Check(di.TryGetValue(i, vi));
-    Check(vi = i);
+    // manual IKeyValue<integer, Int64> validation
+    di := Collections.NewKeyValue<integer, Int64>;
+    if setcapa then
+    begin
+      di.Capacity := MAX + 1;
+      setcapatxt := ' capa';
+    end;
+    timer.Start;
+    for i := 0 to MAX do
+      if i < 1000 then
+        di.Add(i, i)
+      else
+        Check(di.TryAdd(i, i));
+    Check(di.Count = MAX + 1);
+    NotifyTestSpeed('integer,Int64 % add', [setcapatxt], MAX, 0, @timer);
+    for i := 0 to MAX do
+    begin
+      Check(not di.TryAdd(i, i));
+      Check(di.ContainsKey(i)); // key is searched with O(1) hashing
+      if i < 1000 then          // value is searched as O(n)
+        Check(di.ContainsValue(i));
+      Check(di[i] = i);
+      Check(di.TryGetValue(i, vi));
+      Check(vi = i);
+    end;
+    timer.Start;
+    for i := 0 to MAX do
+      Check(di[i] = i);
+    NotifyTestSpeed('integer,Int64 % get', [setcapatxt], MAX, 0, @timer);
+    Check(di.Count = MAX + 1);
+    di.Clear;
+    Check(di.Count = 0);
+    // manual IKeyValue<RawUtf8, double> validation
+    du := Collections.NewKeyValue<RawUtf8, double>([kvoDefaultIfNotFound]);
+    if setcapa then
+      du.Capacity := MAX + 1;
+    timer.Start;
+    for i := 0 to MAX do
+    begin
+      UInt32ToUtf8(i, u);
+      vu := i;
+      if i < 1000 then
+        du.Add(u, vu)
+      else
+        Check(du.TryAdd(u, vu));
+    end;
+    Check(du.Count = MAX + 1);
+    NotifyTestSpeed('RawUtf8,double% add', [setcapatxt], MAX, 0, @timer);
+    for i := 0 to MAX do
+    begin
+      UInt32ToUtf8(i, u);
+      vu := i;
+      Check(not du.TryAdd(u, vu));
+      Check(du.ContainsKey(u));
+      Check(du.GetItem(u) = vu);
+      Check(du[u] = vu);
+      Check(du.GetValueOrDefault(u, -1) = vu);
+      if i < 1000 then
+        Check(du.ContainsValue(vu));
+      Check(du.TryGetValue(u, vu));
+      Check(vu = i);
+      UInt32ToUtf8(i + (MAX * 2), u);
+      Check(not du.ContainsKey(u));
+      Check(not du.TryGetValue(u, vu));
+      Check(du[u] = 0); // kvoDefaultIfNotFound was set
+    end;
+    timer.Start;
+    pu := du.Data.Keys.Value^; // fastest way to browse all keys
+    for i := 0 to MAX do
+      Check(du[pu[i]] = i);
+    NotifyTestSpeed('RawUtf8,double% get', [setcapatxt], MAX, 0, @timer);
+    Check(du.Count = MAX + 1);
+    du.Clear;
+    Check(du.Count = 0);
   end;
-  Check(di.Count = MAX + 1);
-  di.Clear;
-  Check(di.Count = 0);
-  // manual IKeyValue<RawUtf8, double> validation
-  du := Collections.NewKeyValue<RawUtf8, double>([kvoDefaultIfNotFound]);
-  //du.Capacity := MAX + 1;
-  for i := 0 to MAX do
-  begin
-    UInt32ToUtf8(i, u);
-    vu := i;
-    if i < 1000 then
-      du.Add(u, vu)
-    else
-      Check(du.TryAdd(u, vu));
-  end;
-  Check(du.Count = MAX + 1);
-  for i := 0 to MAX do
-  begin
-    UInt32ToUtf8(i, u);
-    vu := i;
-    Check(not du.TryAdd(u, vu));
-    Check(du.ContainsKey(u));
-    Check(du.GetItem(u) = vu);
-    Check(du[u] = vu);
-    Check(du.GetValueOrDefault(u, -1) = vu);
-    if i < 1000 then
-      Check(du.ContainsValue(vu));
-    Check(du.TryGetValue(u, vu));
-    Check(vu = i);
-    UInt32ToUtf8(i + (MAX * 2), u);
-    Check(not du.ContainsKey(u));
-    Check(not du.TryGetValue(u, vu));
-    Check(du.GetItem(u) = 0);
-  end;
-  Check(du.Count = MAX + 1);
-  du.Clear;
-  Check(du.Count = 0);
 end;
 
 {$else}

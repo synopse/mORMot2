@@ -473,8 +473,8 @@ type
     /// low-level access to the internal TSynDictionary storage
     // - which handles a lot of other useful methods not included as generics
     // to reduce the executable code size
-    // - you can use e.g. Data.SaveToJson/SaveToBinary and
-    // Data.LoadFromJson/LoadFromBinary
+    // - you can use e.g. Data.Keys/Data.Values or Data.SaveToJson/SaveToBinary
+    // and Data.LoadFromJson/LoadFromBinary
     function Data: TSynDictionary;
   end;
 
@@ -620,6 +620,9 @@ type
   // - you should never call TSynListSpecialized<T>.Create nor
   // TSynKeyValueSpecialized<TKey, TValue>.Create constructors, but the static
   // Collections.NewList<T> and Collections.NewKeyValue<TKey, TValue> methods
+  // - NewList/NewKeyValue will raise an exception if the types are too complex
+  // (e.g. with a record): redirecting to NewPlainList/NewPlainKeyValue would
+  // generate the whole class anyway (even if not used), so would bloat the exe
   Collections = class
   protected
   {$ifdef SPECIALIZE_ENABLED}
@@ -693,12 +696,13 @@ type
     // - by default, string values would be searched following exact case,
     // unless the loCaseInsensitive option is set
     // - will associate a TArray<T> storage, unless aDynArrayTypeInfo is set
-    // - raise ESynList if T type is too complex: use NewPlainList<T>() instead
+    // - raise ESynKeyValue if T type is too complex (e.g. record, array or
+    // hash): use NewPlainList<T>() instead
     class function NewList<T>(aOptions: TListOptions = [];
       aDynArrayTypeInfo: PRttiInfo = nil): IList<T>; static;
     /// generate a new IList<T> instance with exact TSynListSpecialized<T>
-    // - to be called for complex types (e.g. managed records) when
-    // NewList<T> fails and triggers ESynList
+    // - to be called for complex types (e.g. record, array or hash) when
+    // NewList<T> fails with "too complex" error and triggers ESynList
     // - by default, string values would be searched following exact case,
     // unless the loCaseInsensitive option is set
     // - will associate a TArray<T> storage, unless aDynArrayTypeInfo is set
@@ -709,7 +713,7 @@ type
         static; {$ifdef FPC} inline; {$endif}
     /// generate a new IKeyValue<TKey, TValue> instance
     // - use this factory method instead of TSynKeyValueSpecialized<>.Create
-    // so that the types will be specifialized and compiled once in this unit
+    // so that simple types will be specifialized and compiled once in this unit
     // - you can set an optional timeout period, in seconds - you should call
     // DeleteDeprecated periodically to search for deprecated items
     // - you can provide specific TypeInfo() if TArray<TKey/TValue> is not enough
@@ -717,15 +721,15 @@ type
     // option is forced, so that process is protected with a TSynLocker mutex
     // - by default, string keys would be searched following exact case, unless
     // the kvoKeyCaseInsensitive option is set
-    // - raise ESynKeyValue if T type is too complex: use NewPlainList<T>() instead
-    // - inlining does (little) sense even if most parameters would be inlined
+    // - raise ESynKeyValue if T type is too complex (e.g. record, array or
+    // hash): use NewPlainKeyValue<TKey, TValue>() instead
     class function NewKeyValue<TKey, TValue>(aOptions: TSynKeyValueOptions = [];
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
       aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
       aHasher: THasher = nil): IKeyValue<TKey, TValue>; static;
     /// generate a new IKeyValue<TKey, TValue> instance with exact
     // TSynKeyValueSpecialized<TKey, TValue>
-    // - to be called for complex types (e.g. managed records) when
+    // - to be called for complex types (e.g. record, array or hash) when
     // NewKeyValue<TKey, TValue> fails and triggers ESynKeyValue
     class function NewPlainKeyValue<TKey, TValue>(aOptions: TSynKeyValueOptions = [];
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
@@ -1322,7 +1326,7 @@ end;
 class function Collections.RaiseUseNewPlainList(aItemTypeInfo: PRttiInfo): pointer;
 begin
   raise ESynList.CreateUtf8('Collections.NewList<>: Type is too complex - ' +
-    'use Collections.NewPlainList<%> instead', [aItemTypeInfo.RawName]);
+    'use Collections.NewPlainList<%> instead', [aItemTypeInfo.Name^]);
     // we tried Delphi' "at ReturnAddress" but disabled to avoid internal errors
 end;
 
@@ -1331,7 +1335,7 @@ class function Collections.RaiseUseNewPlainKeyValue(
 begin
   raise ESynKeyValue.CreateUtf8('Collections.NewKeyValue<>: Types are too ' +
     'complex - use Collections.NewPlainKeyValue<%, %> instead',
-    [aContext.KeyItemTypeInfo.RawName, aContext.ValueItemTypeInfo.RawName]);
+    [aContext.KeyItemTypeInfo.Name^, aContext.ValueItemTypeInfo.Name^]);
 end;
 {$ifdef ISDELPHI} {$HINTS ON} {$endif}
 
