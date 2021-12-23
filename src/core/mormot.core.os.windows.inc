@@ -38,25 +38,10 @@ function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
   external kernel32 name 'GetProcAddress';
 
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE} inline; {$endif} 
 begin
-  {$ifdef CPU64}
-  PInt64Rec(@I64)^.Lo := FT.dwLowDateTime;
+  PInt64Rec(@I64)^.Lo := FT.dwLowDateTime; // Delphi 2007 bug with PInt64()
   PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
-  {$else}
-  I64 := PInt64(@FT)^;
-  {$endif CPU64}
-end;
-
-procedure Int64ToFileTime(const I64: Int64; out FT: TFileTime);
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  {$ifdef CPU64}
-  FT.dwLowDateTime := PInt64Rec(@I64)^.Lo;
-  FT.dwHighDateTime := PInt64Rec(@I64)^.Hi;
-  {$else}
-  PInt64(@FT)^ := I64;
-  {$endif CPU64}
 end;
 
 const
@@ -67,7 +52,8 @@ procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 begin
   I64 := I64 * 10000000;
   inc(I64, UnixFileTimeDelta);
-  Int64ToFileTime(I64, FT);
+  FT.dwLowDateTime  := PInt64Rec(@I64)^.Lo; // Delphi 2007 bug with PInt64()
+  FT.dwHighDateTime := PInt64Rec(@I64)^.Hi;
 end;
 
 procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
