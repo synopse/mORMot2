@@ -4834,6 +4834,7 @@ function TOrmPropInfoRttiInt64.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
 var
   V1, V2: Int64;
+  o: PtrUInt;
 begin
   if Item1 = Item2 then
     result := 0
@@ -4843,10 +4844,11 @@ begin
     result := 1
   else
   begin
-    if fGetterIsFieldPropOffset <> 0 then // inlined dual GetValueInt64()
+    o := fGetterIsFieldPropOffset;
+    if o <> 0 then // inlined dual GetValueInt64()
     begin
-      V1 := PInt64(PtrUInt(Item1) + fGetterIsFieldPropOffset)^;
-      V2 := PInt64(PtrUInt(Item2) + fGetterIsFieldPropOffset)^;
+      V1 := PInt64(PAnsiChar(Item1) + o)^;
+      V2 := PInt64(PAnsiChar(Item2) + o)^;
     end
     else
     begin
