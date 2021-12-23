@@ -3929,12 +3929,15 @@ type
     /// get the index of a table in Tables[]
     // - expects SqlTableName to be SQL-like formatted (i.e. without TOrm[Record])
     function GetTableIndex(const SqlTableName: RawUtf8): PtrInt; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// get the index of a table in Tables[], optionally raising EModelException
     function GetTableIndexSafe(aTable: TOrmClass;
       RaiseExceptionIfNotExisting: boolean): PtrInt;
     /// get the index of a table in Tables[]
     // - expects SqlTableName to be SQL-like formatted (i.e. without TOrm[Record])
     function GetTableIndexPtr(SqlTableName: PUtf8Char): PtrInt;
+    /// get the index of a table in Tables[]
+    function GetTableIndexPtrLen(SqlTableName: PUtf8Char; SqlTableNameLen: PtrInt): PtrInt;
     /// return the UTF-8 encoded SQL source to create the table
     function GetSqlCreate(aTableIndex: integer): RawUtf8;
     /// return the UTF-8 encoded SQL source to add the corresponding field
@@ -3957,12 +3960,10 @@ type
     function GetTableIndexFromSqlSelect(const SQL: RawUtf8;
       EnsureUniqueTableInFrom: boolean): integer;
     /// try to retrieve one or several TOrmClass from a SQL statement
-    // - naive search of '... FROM Table1,Table2' pattern in the supplied SQL,
-    // using GetTableNamesFromSqlSelect() function
+    // - naive search of '... FROM Table1,Table2' pattern in the supplied SQL
     function GetTablesFromSqlSelect(const SQL: RawUtf8): TOrmClassDynArray;
     /// try to retrieve one or several table index from a SQL statement
-    // - naive search of '... FROM Table1,Table2' pattern in the supplied SQL,
-    // using GetTableNamesFromSqlSelect() function
+    // - naive search of '... FROM Table1,Table2' pattern in the supplied SQL
     function GetTableIndexesFromSqlSelect(const SQL: RawUtf8): TIntegerDynArray;
     /// check if the supplied URI matches the model's Root property
     // - allows sub-domains, e.g. if Root='root/sub1', then '/root/sub1/toto' and
@@ -9558,26 +9559,40 @@ end;
 
 function TOrmModel.GetTableIndexesFromSqlSelect(const SQL: RawUtf8): TIntegerDynArray;
 var
-  TableNames: TRawUtf8DynArray;
-  i, t, n, ndx: PtrInt;
+  i, j, k, n, ndx: PtrInt;
 begin
   result := nil;
-  TableNames := GetTableNamesFromSqlSelect(SQL);
-  t := length(TableNames);
-  if t = 0 then
-    exit;
-  SetLength(result, t);
   n := 0;
-  for i := 0 to t - 1 do
-  begin
-    ndx := GetTableIndex(TableNames[i]);
-    if ndx < 0 then
-      continue;
-    result[n] := ndx;
-    inc(n);
+  i := PosI(' FROM ', SQL);
+  if i > 0 then
+  begin // same parsing logic than GetTableNamesFromSqlSelect()
+    inc(i, 6);
+    repeat
+      while SQL[i] in [#1..' '] do
+        inc(i);
+      j := 0;
+      while tcIdentifier in TEXT_CHARS[SQL[i + j]] do
+        inc(j);
+      if cardinal(j - 1) > 64 then
+      begin
+        result := nil;
+        exit; // seems too big
+      end;
+      k := i + j;
+      while SQL[k] in [#1..' '] do
+        inc(k);
+      ndx := GetTableIndexPtrLen(PUtf8Char(PtrInt(SQL) + i - 1), j);
+      if ndx >= 0 then
+      begin
+        SetLength(result, n + 1);
+        result[n] := ndx;
+        inc(n);
+      end;
+      if SQL[k] <> ',' then
+        break;
+      i := k + 1;
+    until false;
   end;
-  if n <> t then
-    SetLength(result, n);
 end;
 
 function TOrmModel.GetTable(const SqlTableName: RawUtf8): TOrmClass;
@@ -9674,13 +9689,13 @@ begin
   result := -1;
 end;
 
-function TOrmModel.GetTableIndex(const SqlTableName: RawUtf8): PtrInt;
+function TOrmModel.GetTableIndexPtrLen(SqlTableName: PUtf8Char; SqlTableNameLen: PtrInt): PtrInt;
 begin // use length(SqlTableName)
   if (self <> nil) and
-     (SqlTableName <> '') then
+     (SqlTableName <> nil) then
   begin
     result := FastFindUpperPUtf8CharSorted( // branchless O(log(n)) bin search
-      pointer(fSortedTablesNameUpper), fTablesMax, pointer(SqlTableName), length(SqlTableName));
+      pointer(fSortedTablesNameUpper), fTablesMax, SqlTableName, SqlTableNameLen);
     if result >= 0 then
       result := fSortedTablesNameIndex[result];
   end
@@ -9688,18 +9703,14 @@ begin // use length(SqlTableName)
     result := -1;
 end;
 
+function TOrmModel.GetTableIndex(const SqlTableName: RawUtf8): PtrInt;
+begin
+  result := GetTableIndexPtrLen(pointer(SqlTableName), length(SqlTableName));
+end;
+
 function TOrmModel.GetTableIndexPtr(SqlTableName: PUtf8Char): PtrInt;
 begin
-  if (self <> nil) and
-     (SqlTableName <> nil) then
-  begin
-    result := FastFindUpperPUtf8CharSorted( // branchless O(log(n)) bin search
-      pointer(fSortedTablesNameUpper), fTablesMax, SqlTableName, StrLen(SqlTableName));
-    if result >= 0 then
-      result := fSortedTablesNameIndex[result];
-  end
-  else
-    result := -1;
+  result := GetTableIndexPtrLen(pointer(SqlTableName), StrLen(SqlTableName));
 end;
 
 function TOrmModel.GetUri(aTable: TOrmClass): RawUtf8;
