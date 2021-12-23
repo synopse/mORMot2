@@ -2406,7 +2406,7 @@ begin
     fHttp.State := hrsErrorShutdownInProgress
   else
   begin
-    // use the HTTP machine state to parse fRd input
+    // use the HTTP machine state to asynchronously parse fRd input
     result := soContinue;
     st.P := fRd.Buffer;
     st.Len := fRd.Len;
@@ -2508,7 +2508,7 @@ end;
 
 function THttpAsyncConnection.DecodeHeaders: integer;
 begin
-  result := HTTP_SUCCESS;
+  result := HTTP_SUCCESS; // indicates we can continue the request process
   if (fServer.MaximumAllowedContentLength > 0) and
      (fHttp.ContentLength > fServer.MaximumAllowedContentLength) then
   begin
@@ -2545,9 +2545,9 @@ begin
   begin
     // on fatal error direct reject and close the connection
     StatusCodeToReason(status, fHttp.Command);
+    // (use fHttp.Command(Uri) as temp var to avoid local RawUtf8 allocation)
     FormatUtf8('HTTP/1.0 % %'#13#10#13#10'Server Rejected Request as % %',
       [status, fHttp.Command, status, fHttp.Command],
-      // (use fHttp.CommandUri as temp var to avoid local RawUtf8 allocation)
       fHttp.CommandUri);
     fServer.fAsync.fClients.WriteString(self, fHttp.CommandUri); // no polling
     fServer.IncStat(grRejected);

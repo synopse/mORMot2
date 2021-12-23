@@ -8257,7 +8257,7 @@ endobj: while (P^ <= ' ') and
       end
       else
       begin
-        // parse string/numerical values or true/false/null constants
+        // parse string/numerical values (or true/false/null constants)
 parse:  P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
 parsed: if {%H-}wasString or
            not GetVariantFromNotStringJson(P, V, AllowDouble) then

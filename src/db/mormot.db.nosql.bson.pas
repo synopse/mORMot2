@@ -2185,8 +2185,6 @@ end;
 const
   BSON_JSON_NEWDATE: string[8] = 'ew Date('; // circumvent Delphi XE4 Win64 bug
 
-{$ifdef fpc} {$push} {$endif} {$hints off} // avoid hints with CompareMemFixed() inlining
-
 function TBsonVariant.TryJsonToVariant(var Json: PUtf8Char; var Value: variant;
   EndOfObject: PUtf8Char): boolean;
 // warning: code should NOT modify JSON buffer in-place, unless it returns true
@@ -2405,12 +2403,14 @@ var
 
 var
   P: PUtf8Char;
+  up: PNormTableByte;
 begin
   // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
   result := false;
   // here JSON does not start with " or 1..9 (obvious simple types)
   P := Json;
-  case NormToUpperAnsi7[P^] of
+  up := @NormToUpperAnsi7;
+  case PNormTable(up)^[P^] of
     '{':
       begin
         // strict MongoDB objects e.g. {"$undefined":true} or {"$oid":".."}
@@ -2425,60 +2425,83 @@ begin
         if P[0] = '$' then
           case P[1] of
             'u':
-              if CompareMemFixed(P + 2, @BSON_JSON_UNDEFINED[false][5], 10) then
+              {$ifdef CPUINTEL}
+              if (PInt64(P + 2)^ = $64656E696665646E) and
+                 (PCardinal(P + 8)^ = $3A226465) then
+              {$else} // ARM is not eficient at loading constants
+              if (PInt64(P + 2)^ = PInt64(@BSON_JSON_UNDEFINED[false][5])^) and
+                 (PCardinal(P + 8)^ = PCardinal(@BSON_JSON_UNDEFINED[false][11])^) then
+              {$endif CPUINTEL}
                 Return(betDeprecatedUndefined, P + 12, '}');
             'm':
-              if CompareMemFixed(P + 1, @BSON_JSON_MINKEY[false][4], 8) then
+              {$ifdef CPUINTEL}
+              if PInt64(P + 1)^ = $3A2279654B6E696D then
+              {$else}
+              if PInt64(P + 1)^ = PInt64(@BSON_JSON_MINKEY[false][4])^ then
+              {$endif CPUINTEL}
                 ReturnInt(betMinKey, P + 9, '}')
-              else if CompareMemFixed(P + 1, @BSON_JSON_MAXKEY[false][4], 8) then
+              {$ifdef CPUINTEL}
+              else if PInt64(P + 1)^ = $3A2279654B78616D then
+              {$else}
+              else if PInt64(P + 1)^ = PInt64(@BSON_JSON_MAXKEY[false][4])^ then
+              {$endif CPUINTEL}
                 ReturnInt(betMaxKey, P + 9, '}');
             'o':
+              {$ifdef CPUINTEL}
+              if PInteger(P + 2)^ = $3A226469 then
+              {$else}
               if PInteger(P + 2)^ = PInteger(@BSON_JSON_OBJECTID[false, modMongoStrict][5])^ then
+              {$endif CPUINTEL}
                 TryObjectID(P + 6, '}');
             'd':
-              if CompareMemSmall(P + 2, @BSON_JSON_DATE[modMongoStrict, false][5], 5) then
+              {$ifdef CPUINTEL}
+              if PInteger(P + 2)^ = $22657461 then
+              {$else}
+              if PInteger(P + 2)^ = PInteger(@BSON_JSON_DATE[modMongoStrict, false][5])^ then
+              {$endif CPUINTEL}
                 TryDate(P + 7, '}');
             'r':
-              if CompareMemFixed(P, @BSON_JSON_REGEX[0][3], 8) then
+              {$ifdef CPUINTEL}
+              if PInt64(P)^ = $3A22786567657224 then
+              {$else}
+              if PInt64(P)^ = PInt64(@BSON_JSON_REGEX[0][3])^ then
+              {$endif CPUINTEL}
                 TryRegExStrict(P + 8);
             'n':
-              if CompareMemFixed(P, @BSON_JSON_DECIMAL[false, modMongoStrict][3], 16) then
+              {$ifdef CPUINTEL}
+              if (PInt64(P)^ = $447265626D756E24) and
+                 (PInt64(P + 8)^ = $3A226C616D696365) then
+              {$else}
+              if (PInt64(P)^ = PInt64(@BSON_JSON_DECIMAL[false, modMongoStrict][3])^) and
+                 (PInt64(P + 8)^ = PInt64(@BSON_JSON_DECIMAL[false, modMongoStrict][11])^) then
+              {$endif CPUINTEL}
                 TryDecimal(P + 16, '}');
           end;
       end;
     // MongoDB Shell Mode extended syntax
     'U':
-      if StrCompIL(P + 1,
-          @BSON_JSON_UNDEFINED[true][2], 8) = 0 then
+      if StrILNotNil(P + 1,  @BSON_JSON_UNDEFINED[true][2], up, 8) = 8 then
         Return(betDeprecatedUndefined, P + 8, #0);
     'M':
-      if StrCompIL(P + 1,
-          @BSON_JSON_MINKEY[true][2], 5) = 0 then
+      if StrILNotNil(P + 1, @BSON_JSON_MINKEY[true][2], up, 5) = 5 then
         ReturnInt(betMinKey, P + 5, #0)
-      else if StrCompIL(P + 1,
-               @BSON_JSON_MAXKEY[true][2], 7) = 0 then
+      else if StrILNotNil(P + 1, @BSON_JSON_MAXKEY[true][2], up, 7) = 7 then
         ReturnInt(betMaxKey, P + 5, #0);
     'O':
-      if StrCompIL(P + 1,
-          @BSON_JSON_OBJECTID[false, modMongoShell][2], 8) = 0 then
+      if StrILNotNil(P + 1, @BSON_JSON_OBJECTID[false, modMongoShell][2], up, 8) = 8 then
         TryObjectID(P + 9, ')');
     'N':
-      if StrCompIL(P + 1,
-          @BSON_JSON_NEWDATE[1], 8) = 0 then
+      if StrILNotNil(P + 1, @BSON_JSON_NEWDATE[1], up, 8) = 8 then
         TryDate(P + 9, ')')
-      else if StrCompIL(P + 1,
-               @BSON_JSON_DECIMAL[false, modMongoShell][2], 13) = 0 then
+      else if StrILNotNil(P + 1, @BSON_JSON_DECIMAL[false, modMongoShell][2], up, 13) = 13 then
         TryDecimal(P + 14, ')');
     'I':
-      if StrCompIL(P + 1,
-          @BSON_JSON_DATE[modMongoShell, false][2], 7) = 0 then
+      if StrILNotNil(P + 1, @BSON_JSON_DATE[modMongoShell, false][2], up, 7) = 7 then
         TryDate(P + 8, ')');
     '/':
       TryRegExShell(P + 1);
   end;
 end;
-
-{$ifdef fpc} {$pop} {$else} {$hints on} {$endif}
 
 procedure TBsonVariant.Cast(var Dest: TVarData; const Source: TVarData);
 begin

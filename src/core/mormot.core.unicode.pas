@@ -1211,6 +1211,11 @@ function StrICompNotNil(Str1, Str2: pointer; Up: PNormTableByte): PtrInt;
 function StrICompLNotNil(Str1, Str2: pointer; Up: PNormTableByte; L: PtrInt): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// StrIComp function with a length, lookup table and Str1/Str2 expected not nil
+// - returns L for whole match, or < L for a partial match
+function StrILNotNil(Str1, Str2: pointer; Up: PNormTableByte; L: PtrInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
 type
   /// function prototype used internally for UTF-8 buffer comparison
   // - also used e.g. in mormot.core.variants unit
@@ -4827,6 +4832,17 @@ begin
   until false;
   result := 0;
 end;
+
+function StrILNotNil(Str1, Str2: pointer; Up: PNormTableByte; L: PtrInt): PtrInt;
+begin
+  result := 0;
+  repeat
+    if Up[PByteArray(Str1)[result]] <> Up[PByteArray(Str2)[result]] then
+      exit;
+    inc(result);
+  until result = L;
+end;
+
 
 function StrIComp(Str1, Str2: pointer): PtrInt;
 var
