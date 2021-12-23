@@ -395,6 +395,20 @@ type
   // VCL string=AnsiString like string(aField) but use VariantToString(aField)
   TNullableUtf8Text = type variant;
 
+  /// can identify the TNullable* supported variant types
+  // - as used by NullableVariantType()
+  TNullableVariantType = (
+    nvtNone,
+    nvtInteger,
+    nvtBoolean,
+    nvtFloat,
+    nvtCurrency,
+    nvtDateTime,
+    nvtTimeLog,
+    nvtUtf8Text);
+
+/// detect a TypeInfo(TNullable*) RTTI pointer to nullable variant types
+function NullableVariantType(info: PRttiInfo): TNullableVariantType;
 
 var
   /// a nullable integer value containing null
@@ -1664,6 +1678,36 @@ end;
 
 
 { ************ Nullable Values Stored as Variant }
+
+function NullableVariantType(info: PRttiInfo): TNullableVariantType;
+begin
+  if info <> nil then
+    if info <> TypeInfo(TNullableInteger) then
+      if info <> TypeInfo(TNullableUtf8Text) then
+        if info <> TypeInfo(TNullableBoolean) then
+          if info <> TypeInfo(TNullableFloat) then
+            if info <> TypeInfo(TNullableCurrency) then
+              if info <> TypeInfo(TNullableDateTime) then
+                if info <> TypeInfo(TNullableTimeLog) then
+                  result := nvtNone
+                else
+                  result := nvtTimeLog
+              else
+                result := nvtDateTime
+            else
+              result := nvtCurrency
+          else
+            result := nvtFloat
+        else
+          result := nvtBoolean
+      else
+        result := nvtUtf8Text
+    else
+      result := nvtInteger
+  else
+    result := nvtNone;
+end;
+
 
 // TNullableInteger
 

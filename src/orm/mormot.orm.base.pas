@@ -1897,8 +1897,8 @@ type
   POrmPropInfoRttiMany = ^TOrmPropInfoRttiMany;
 
   /// handle a read-only list of fields information for published properties
-  // - is mainly used by our ORM for TOrm RTTI, but may be used for
-  // any TPersistent
+  // - high-level cache generated from RTTI, tuned for TOrm RTTI, but may be
+  // used for any TPersistent/TSynPersistent
   TOrmPropInfoList = class
   protected
     fList: TOrmPropInfoObjArray;
@@ -3891,6 +3891,21 @@ const
     ' INTEGER, ',                    // oftUnixTime
     ' INTEGER, ');                   // oftUnixMSTime
 
+  NULLABLE_TO_ORM: array[TNullableVariantType] of TOrmFieldType = (
+    oftUnknown,    // nvtNone
+    oftInteger,    // nvtInteger
+    oftBoolean,    // nvtBoolean
+    oftFloat,      // nvtFloat
+    oftCurrency,   // nvtCurrency
+    oftDateTime,   // nvtDateTime
+    oftTimeLog,    // nvtTimeLog
+    oftUtf8Text);  // nvtUtf8Text
+
+function NullableTypeToOrmFieldType(aType: PRttiInfo): TOrmFieldType;
+begin
+  result := NULLABLE_TO_ORM[NullableVariantType(aType)];
+end;
+
 
 { TOrmPropInfo }
 
@@ -4314,7 +4329,7 @@ begin
         C := TOrmPropInfoRttiObject;
       oftVariant:
         begin
-          aOrmFieldType := NullableTypeToOrmFieldType(aType);
+          aOrmFieldType := NULLABLE_TO_ORM[NullableVariantType(aType)];
           if aOrmFieldType = oftUnknown then // no oftNullable type
             aOrmFieldType := oftVariant;     // = regular variant stored as JSON
           C := TOrmPropInfoRttiVariant;
@@ -6476,7 +6491,8 @@ begin
   if wasSqlString <> nil then
     if fOrmFieldType = oftNullable then
       // only TNullableUtf8Text and TNullableDateTime will be actual text
-      wasSqlString^ := (fSqlDBFieldType in TEXT_DBFIELDS) and not VarIsEmptyOrNull(value)
+      wasSqlString^ := (fSqlDBFieldType in TEXT_DBFIELDS) and
+                       not VarIsEmptyOrNull(value)
     else
       // from SQL point of view, variant columns are TEXT or NULL
       wasSqlString^ := not VarIsEmptyOrNull(value);
@@ -7575,43 +7591,11 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
   end;
 end;
 
-function NullableTypeToOrmFieldType(aType: PRttiInfo): TOrmFieldType;
-begin
-  if aType <> nil then
-    if aType <> TypeInfo(TNullableInteger) then
-      if aType <> TypeInfo(TNullableUtf8Text) then
-        if aType <> TypeInfo(TNullableBoolean) then
-          if aType <> TypeInfo(TNullableFloat) then
-            if aType <> TypeInfo(TNullableCurrency) then
-              if aType <> TypeInfo(TNullableDateTime) then
-                if aType <> TypeInfo(TNullableTimeLog) then
-                begin
-                  result := oftUnknown;
-                  exit;
-                end
-                else
-                  result := oftTimeLog
-              else
-                result := oftDateTime
-            else
-              result := oftCurrency
-          else
-            result := oftFloat
-        else
-          result := oftBoolean
-      else
-        result := oftUtf8Text
-    else
-      result := oftInteger
-  else
-    result := oftUnknown;
-end;
-
 function OrmFieldTypeToDBField(aOrmFieldType: TOrmFieldType;
   aTypeInfo: PRttiInfo): TSqlDBFieldType;
 begin
   if aOrmFieldType = oftNullable then
-    aOrmFieldType := NullableTypeToOrmFieldType(aTypeInfo);
+    aOrmFieldType := NULLABLE_TO_ORM[NullableVariantType(aTypeInfo)];
   result := SQLFIELDTYPETODBFIELDTYPE[aOrmFieldType];
 end;
 
@@ -7751,7 +7735,7 @@ begin
         InitFieldNames;
       P := pointer(fFieldNames);
       if fFieldCount < ORMTABLE_FIELDNAMEORDERED then
-      begin
+      begin // up to 9 fields do not need binary search
         up := @NormToUpperAnsi7Byte;
         for result := 0 to fFieldCount - 1 do
           if StrICompNotNil(P[result], FieldName, up) = 0 then // good inlining
@@ -8129,7 +8113,7 @@ begin
         oftNullable:
           begin
             ContentTypeInfo := FieldTypeInfo;
-            ContentType := NullableTypeToOrmFieldType(FieldTypeInfo);
+            ContentType := NULLABLE_TO_ORM[NullableVariantType(FieldTypeInfo)];
             if ContentType = oftUnknown then
               ContentType := oftNullable;
           end;
