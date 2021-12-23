@@ -3397,7 +3397,7 @@ begin
                   else
                   begin
                     // check for SELECT with one (or several JOINed) tables
-                    for i := 0 to high(tableindexes) do
+                    for i := 0 to length(tableindexes) - 1 do
                       if not (tableindexes[i] in fCall^.RestAccessRights^.GET) then
                       begin
                         fCall^.OutStatus := HTTP_NOTALLOWED;

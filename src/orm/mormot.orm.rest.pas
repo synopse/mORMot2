@@ -873,10 +873,8 @@ function TRestOrm.MultiFieldValue(Table: TOrmClass;
   const WhereClause: RawUtf8): boolean;
 var
   SQL: RawUtf8;
-  n, i: PtrInt;
+  n, i, o, f: PtrInt;
   T: TOrmTable;
-  P: PUtf8Char;
-  PLen: integer;
 begin
   result := false;
   n := length(FieldName);
@@ -910,8 +908,20 @@ begin
         // get field values from the first (and unique) row
         for i := 0 to T.FieldCount - 1 do
         begin
-          P := T.Get(1, i, PLen);
-          FastSetString(FieldValue[i], P, PLen);
+          f := i; // regular SQL SELECT order by default
+          if (T.FieldCount > 1) and
+             (StrIComp(T.Results[i], pointer(FieldName[i])) <> 0) then
+          begin
+            // not the regular order (e.g. TRestStorageInMemory = TOrm order)
+            f := T.FieldIndex(FieldName[i]);
+            if f < 0 then
+              if IsFieldName(pointer(FieldName[i])) then
+                exit    // something went wrong
+              else
+                f := i; // expects the function results to be in-order
+          end;
+          o := i + T.FieldCount;
+          FastSetString(FieldValue[f], T.Results[o], T.ResultsLen[o]);
         end;
         result := true;
       finally
