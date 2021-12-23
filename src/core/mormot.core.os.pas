@@ -116,6 +116,8 @@ const
 /// retrieve the HTTP reason text from its integer code
 // - e.g. StatusCodeToReason(200)='OK'
 // - as defined in http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+// - returns the generic 'Invalid Request' for unknown Code
+// - use an internal cache for efficiency
 // - see also StatusCodeToErrorMsg() from mormot.core.text if you need
 // the HTTP error as both integer and text, returned as ShortString
 function StatusCodeToReason(Code: cardinal): RawUtf8; overload;
