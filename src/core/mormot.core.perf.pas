@@ -1566,7 +1566,7 @@ end;
 
 procedure TSynMonitor.ProcessErrorFmt(const Fmt: RawUtf8; const Args: array of const);
 begin
-  ProcessError(RawUtf8ToVariant(FormatUtf8(Fmt, Args)));
+  ProcessError(FormatVariant(Fmt, Args));
 end;
 
 procedure TSynMonitor.ProcessErrorRaised(E: Exception);

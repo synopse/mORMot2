@@ -1912,6 +1912,9 @@ function FormatString(const Format: RawUtf8; const Args: array of const): string
 procedure FormatShort16(const Format: RawUtf8; const Args: array of const;
   var result: TShort16);
 
+/// fast Format() function replacement, for UTF-8 content stored in variant
+function FormatVariant(const Format: RawUtf8; const Args: array of const): variant;
+
 /// append some path parts into a single file name with proper path delimiters
 // - set EndWithDelim=true if you want to create e.g. full a folder name
 function MakePath(const Part: array of const; EndWithDelim: boolean = false;
@@ -9373,6 +9376,12 @@ end;
 function FormatUtf8(const Format: RawUtf8; const Args: array of const): RawUtf8;
 begin
   FormatUtf8(Format, Args, result);
+end;
+
+function FormatVariant(const Format: RawUtf8; const Args: array of const): variant;
+begin
+  ClearVariantForString(result);
+  FormatUtf8(Format, Args, RawUtf8(TVarData(result).VString));
 end;
 
 type

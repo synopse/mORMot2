@@ -90,10 +90,6 @@ procedure ZeroFill(Value: PVarData);
 // - may be used to cleanup stack-allocated content
 procedure FillZero(var value: variant); overload;
 
-/// convert a FormatUtf8() UTF-8 encoded string into a variant RawUtf8 varString
-procedure FormatUtf8ToVariant(const Fmt: RawUtf8; const Args: array of const;
-  var Value: variant);
-
 /// convert an UTF-8 encoded text buffer into a variant RawUtf8 varString
 // - this overloaded version expects a destination variant type (e.g. varString
 // varOleStr / varUString) - if the type is not handled, will raise an
@@ -2960,12 +2956,6 @@ hdr:      handler.Clear(V^)
     inc(V);
     dec(n);
   until n = 0;
-end;
-
-procedure FormatUtf8ToVariant(const Fmt: RawUtf8; const Args: array of const;
-  var Value: variant);
-begin
-  RawUtf8ToVariant(FormatUtf8(Fmt, Args), Value);
 end;
 
 procedure RawUtf8ToVariant(const Txt: RawUtf8; var Value: TVarData;
