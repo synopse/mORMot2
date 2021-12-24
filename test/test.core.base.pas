@@ -4400,6 +4400,11 @@ begin
   i := StrLenSafe(@res[1]);
   check(mormot.core.base.StrLen(@res[1]) = i);
   res := 'one,two,three';
+  Check(IdemPCharArrayBy2(nil, 'ONTWTH') < 0);
+  Check(IdemPCharArrayBy2(pointer(res), 'OFTWTH') < 0);
+  Check(IdemPCharArrayBy2(pointer(res), 'ONTWTH') = 0);
+  Check(IdemPCharArrayBy2(pointer(res), 'TWONTW') = 1);
+  Check(IdemPCharArrayBy2(pointer(res), 'TWTHON') = 2);
   Check(EndWith('three', 'THREE'));
   Check(EndWith(res, 'E'));
   Check(EndWith(res, 'THREE'));

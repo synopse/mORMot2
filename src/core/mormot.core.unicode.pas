@@ -1096,7 +1096,8 @@ function IdemPCharWithoutWhiteSpace(p: PUtf8Char; up: PAnsiChar): boolean;
 // - chars are compared as 7-bit Ansi only (no accentuated characters)
 // - warning: this function expects upArray[] items to have AT LEAST TWO
 // CHARS (it will use a fast 16-bit comparison of initial 2 bytes)
-function IdemPCharArray(p: PUtf8Char; const upArray: array of PAnsiChar): integer; overload;
+// - consider IdemPPChar() which is faster but a bit more verbose
+function IdemPCharArray(p: PUtf8Char; const upArray: array of PAnsiChar): integer;
 
 /// returns the index of a matching beginning of p^ in nil-terminated up^ array
 // - returns -1 if no item matched
@@ -1110,7 +1111,7 @@ function IdemPPChar(p: PUtf8Char; up: PPAnsiChar): PtrInt;
 // - returns -1 if no item matched
 // - ignore case - upArray^ must be already Upper
 // - chars are compared as 7-bit Ansi only (no accentuated characters)
-function IdemPCharArray(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): PtrInt; overload;
+function IdemPCharArrayBy2(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns true if the beginning of p^ is the same as up^
@@ -4437,28 +4438,13 @@ begin
   result := -1;
 end;
 
-function IdemPCharArray(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): PtrInt;
-var
-  w: word;
-  u: PWordArray; // better code generation when inlined
-  {$ifdef CPUX86NOTPIC}
-  tab: TNormTableByte absolute NormToUpperAnsi7;
-  {$else}
-  tab: PByteArray; // faster on PIC/ARM and x86_64
-  {$endif CPUX86NOTPIC}
+function IdemPCharArrayBy2(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): PtrInt;
 begin
   if p <> nil then
-  begin
-    {$ifndef CPUX86NOTPIC}
-    tab := @NormToUpperAnsi7;
-    {$endif CPUX86NOTPIC}
-    w := tab[ord(p[0])] + tab[ord(p[1])] shl 8;
-    u := pointer(upArrayBy2Chars);
-    for result := 0 to pred(length(upArrayBy2Chars) shr 1) do
-      if u[result] = w then
-        exit;
-  end;
-  result := -1;
+    result := WordScanIndex(pointer(upArrayBy2Chars), length(upArrayBy2Chars) shr 1,
+      NormToUpperAnsi7Byte[ord(p[0])] + NormToUpperAnsi7Byte[ord(p[1])] shl 8)
+  else
+    result := -1;
 end;
 
 function IdemPCharU(p, up: PUtf8Char): boolean;
