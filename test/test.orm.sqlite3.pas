@@ -1768,7 +1768,7 @@ begin
                 check(ClientDist.Orm.Retrieve(IntArray[i], V));
                 check(V.SameRecord(aStatic.Items[i * 4]));
               end;
-              check(V.FillPrepare(Client.Orm, IntArray));
+              check(V.FillPrepare(Client.Orm, TIDDynArray(IntArray)));
               for i := 0 to High(IntArray) do
               begin
                 check(V.FillOne);

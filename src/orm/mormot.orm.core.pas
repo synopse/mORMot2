@@ -860,8 +860,8 @@ type
     // - warning: this method will call directly EngineExecute(), and will
     // work just fine with SQLite3, but some other DB engines may not allow
     // a huge number of items within the IN(...) clause
-    function UpdateField(Table: TOrmClass; const IDs: array of Int64;
-      const FieldName: RawUtf8; const FieldValue: variant): boolean; overload;
+    function UpdateFieldAt(Table: TOrmClass; const IDs: array of TID;
+      const FieldName: RawUtf8; const FieldValue: variant): boolean;
     /// increments one integer field value
     // - if available, this method will use atomic value modification, e.g.
     // $ UPDATE table SET field=field+?
@@ -2043,7 +2043,7 @@ type
     // missing fields will be left with previous values - but BatchUpdate() can be
     // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     constructor CreateAndFillPrepare(const aClient: IRestOrm;
-      const aIDs: array of Int64; const aCustomFieldsCsv: RawUtf8 = ''); overload;
+      const aIDs: array of TID; const aCustomFieldsCsv: RawUtf8 = ''); overload;
     /// this constructor initializes the object, and prepares itself to loop
     // through a specified JSON table, which will use a private copy
     // - this method creates a TOrmTableJson, fill it with the supplied JSON buffer,
@@ -2427,8 +2427,7 @@ type
     // you want to Update the retrieved record content later, since any
     // missing fields will be left with previous values - but BatchUpdate() can be
     // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
-    function FillPrepare(const aClient: IRestOrm;
-      const aIDs: array of Int64;
+    function FillPrepare(const aClient: IRestOrm; const aIDs: array of TID;
       const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload;
     // / prepare to loop through a JOINed statement including TOrmMany fields
     // - all TOrmMany.Dest published fields will now contain a true TOrm
@@ -6697,7 +6696,7 @@ begin
 end;
 
 function TOrm.FillPrepare(const aClient: IRestOrm;
-  const aIDs: array of Int64; const aCustomFieldsCsv: RawUtf8): boolean;
+  const aIDs: array of TID; const aCustomFieldsCsv: RawUtf8): boolean;
 begin
   if high(aIDs) < 0 then
     result := false
@@ -7475,7 +7474,7 @@ begin
 end;
 
 constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
-  const aIDs: array of Int64; const aCustomFieldsCsv: RawUtf8);
+  const aIDs: array of TID; const aCustomFieldsCsv: RawUtf8);
 begin
   Create;
   FillPrepare(aClient, aIDs, aCustomFieldsCsv);

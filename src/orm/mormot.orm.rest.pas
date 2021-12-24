@@ -376,8 +376,8 @@ type
     function UpdateField(Table: TOrmClass;
       const WhereFieldName: RawUtf8; const WhereFieldValue: variant;
       const FieldName: RawUtf8; const FieldValue: variant): boolean; overload;
-    function UpdateField(Table: TOrmClass; const IDs: array of Int64;
-      const FieldName: RawUtf8; const FieldValue: variant): boolean; overload;
+    function UpdateFieldAt(Table: TOrmClass; const IDs: array of TID;
+      const FieldName: RawUtf8; const FieldValue: variant): boolean;
     function UpdateFieldIncrement(Table: TOrmClass; ID: TID;
       const FieldName: RawUtf8; Increment: Int64 = 1): boolean;
     function RecordCanBeUpdated(Table: TOrmClass; ID: TID;
@@ -690,7 +690,7 @@ end;
 
 function TRestOrm.GetServerTimestamp: TTimeLog;
 begin
-  result := fRest.GetServerTimeStamp;
+  result := fRest.GetServerTimeStamp(0);
 end;
 
 procedure TRestOrm.WriteLock;
@@ -1883,7 +1883,7 @@ begin
   // warning: this may not update the internal cache
 end;
 
-function TRestOrm.UpdateField(Table: TOrmClass; const IDs: array of Int64;
+function TRestOrm.UpdateFieldAt(Table: TOrmClass; const IDs: array of TID;
   const FieldName: RawUtf8; const FieldValue: variant): boolean;
 var
   value, where: RawUtf8;
