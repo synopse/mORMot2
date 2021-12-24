@@ -689,7 +689,7 @@ var
 
   // contains CLOCK_MONOTONIC_RAW since kernel 2.6.28
   // - so that QueryPerformanceMicroSeconds() is not subject to NTP adjustments
-  CLOCK_MONOTONIC_PRECISE: integer = CLOCK_MONOTONIC;
+  CLOCK_MONOTONIC_HIRES: integer = CLOCK_MONOTONIC;
 
 
 function UnixMSTimeUtc: TUnixMSTime;
@@ -713,7 +713,7 @@ procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var
   r : TTimeSpec;
 begin
-  clock_gettime(CLOCK_MONOTONIC_PRECISE, @r);
+  clock_gettime(CLOCK_MONOTONIC_HIRES, @r);
   // convert from nanoseconds into microseconds
   Value := PtrUInt(r.tv_nsec) div THOUSAND + r.tv_sec * MILLION;
 end;
@@ -1659,7 +1659,7 @@ var
   si: TSysInfo;  // Linuxism
   rt: TTimeSpec; // with nanoseconds resolution
 begin
-  clock_gettime(CLOCK_MONOTONIC_PRECISE, @rt);
+  clock_gettime(CLOCK_MONOTONIC_HIRES, @rt);
   DefaultHasher128(@e.h0, @rt, SizeOf(rt));
   SysInfo(@si); // uptime + loadavg + meminfo + numprocess
   DefaultHasher128(@e.h0, @si, SizeOf(si));
@@ -1669,7 +1669,7 @@ begin
   // read-only random UUID text like '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
   DoHash128File(e.h2, '/proc/sys/kernel/random/uuid');
   DoHash128File(e.h3, '/proc/sys/kernel/random/boot_id');
-  clock_gettime(CLOCK_MONOTONIC_PRECISE, @rt); // should have changed in-between
+  clock_gettime(CLOCK_MONOTONIC_HIRES, @rt); // should have changed in-between
   DefaultHasher128(@e.h3, @rt, SizeOf(rt));
 end;
 
@@ -2636,11 +2636,11 @@ begin
     CLOCK_MONOTONIC_FAST := CLOCK_MONOTONIC_COARSE;
   {$ifdef OSLINUX}
   if clock_gettime(CLOCK_MONOTONIC_RAW, @tp) = 0 then
-    CLOCK_MONOTONIC_PRECISE := CLOCK_MONOTONIC_RAW;
+    CLOCK_MONOTONIC_HIRES := CLOCK_MONOTONIC_RAW;
   {$endif OSLINUX}
   if (clock_gettime(CLOCK_REALTIME_FAST, @tp) <> 0) or // paranoid check
      (clock_gettime(CLOCK_MONOTONIC_FAST, @tp) <> 0) or
-     (clock_gettime(CLOCK_MONOTONIC_PRECISE, @tp) <> 0) then
+     (clock_gettime(CLOCK_MONOTONIC_HIRES, @tp) <> 0) then
     raise EOSException.CreateFmt(
       'clock_gettime() not supported by %s kernel - errno=%d',
       [PAnsiChar(@uts.release), fpgeterrno]);

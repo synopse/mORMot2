@@ -2085,7 +2085,7 @@ begin
     else
     begin
       CacheTix := tix;
-      CacheValue.From(NowUtc + offset);
+      CacheValue.From(NowUtc + Offset);
       result := CacheValue.Value;
     end;
 end;
