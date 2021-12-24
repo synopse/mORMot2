@@ -1558,21 +1558,29 @@ end;
 
 class function TOrmVirtualTable.ModuleName: RawUtf8;
 const
+  NAM: array[0..6] of PUtf8Char = (
+    'TSQLVIRTUALTABLE',
+    'TSQLVIRTUAL',
+    'TSQL',
+    'TORMVIRTUALTABLE',
+    'TORMVIRTUAL',
+    'TORM',
+    nil);
   LEN: array[-1..5] of byte = (
-    1, 16, 11, 4, 16, 11, 4);
+    1,  // 'T'
+    16, // 'TSQLVIRTUALTABLE'
+    11, // 'TSQLVIRTUAL'
+    4,  // 'TSQL'
+    16, // 'TORMVIRTUALTABLE'
+    11, // 'TORMVIRTUAL'
+    4); // 'TORM'
 begin
   if self = nil then
     result := ''
   else
   begin
     ClassToText(self, result);
-    system.delete(result, 1, LEN[IdemPCharArray(pointer(result),
-      ['TSQLVIRTUALTABLE',  // 0
-       'TSQLVIRTUAL',       // 1
-       'TSQL',              // 2
-       'TORMVIRTUALTABLE',  // 3
-       'TORMVIRTUAL',       // 4
-       'TORM'])]);          // 5
+    system.delete(result, 1, LEN[IdemPPChar(pointer(result), @NAM)]);
   end;
 end;
 

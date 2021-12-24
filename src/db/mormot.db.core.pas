@@ -2069,12 +2069,8 @@ begin
     Where := Where + ' and ' + Condition;
 end;
 
-function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
-begin
-  if Where = '' then
-    result := false
-  else
-    result := IdemPCharArray(GotoNextNotSpace(pointer(Where)), [
+const
+  _ENDCLAUSE: array[0..9] of PUtf8Char = (
       'ORDER BY ',
       'GROUP BY ',
       'LIMIT ',
@@ -2083,7 +2079,13 @@ begin
       'RIGHT ',
       'INNER ',
       'OUTER ',
-      'JOIN ']) >= 0;
+      'JOIN ',
+      nil);
+
+function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
+begin
+  result := (Where <> '') and
+            (IdemPPChar(GotoNextNotSpace(pointer(Where)), @_ENDCLAUSE) >= 0);
 end;
 
 function SqlFromWhere(const Where: RawUtf8): RawUtf8;

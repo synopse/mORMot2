@@ -776,6 +776,22 @@ begin
   result := algo;
 end;
 
+const
+  _CONTENTCOMP: array[0..3] of PUtf8Char = (
+    'TEXT/',
+    'IMAGE/',
+    'APPLICATION/',
+    nil);
+  _CONTENTIMG: array[0..2] of PUtf8Char = (
+    'SVG',
+    'X-ICO',
+    nil);
+  _CONTENTAPP: array[0..3] of PUtf8Char = (
+    'JSON',
+    'XML',
+    'JAVASCRIPT',
+    nil);
+
 function CompressContent(Accepted: THttpSocketCompressSet;
   const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
   var OutContent: RawByteString): RawUtf8;
@@ -789,21 +805,13 @@ begin
      (Handled <> nil) then
   begin
     OutContentLen := length(OutContent);
-    case IdemPCharArray(OutContentTypeP,
-          ['TEXT/',
-           'IMAGE/',
-           'APPLICATION/']) of
+    case IdemPPChar(OutContentTypeP, @_CONTENTCOMP) of
       0:
         compressible := true;
       1:
-        compressible := IdemPCharArray(OutContentTypeP + 6,
-          ['SVG',
-           'X-ICO']) >= 0;
+        compressible := IdemPPChar(OutContentTypeP + 6, @_CONTENTIMG) >= 0;
       2:
-        compressible := IdemPCharArray(OutContentTypeP + 12,
-          ['JSON',
-           'XML',
-           'JAVASCRIPT']) >= 0;
+        compressible := IdemPPChar(OutContentTypeP + 12, @_CONTENTAPP) >= 0;
     else
       compressible := false;
     end;

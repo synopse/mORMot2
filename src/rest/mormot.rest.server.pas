@@ -3303,6 +3303,13 @@ begin
   end;
 end;
 
+const
+  METHOD_WRITE: array[0..3] of PUtf8Char = (
+   'INSERT', // mPOST
+   'UPDATE', // mPUT
+   'DELETE', // mDELETE
+   nil);
+
 procedure TRestServerUriContext.ExecuteOrmGet;
 
   procedure ConvertOutBodyAsPlainJson(const FieldsCsv: RawUtf8;
@@ -3431,10 +3438,8 @@ begin
                   fCall^.OutStatus := HTTP_SUCCESS;  // 200 OK
                   if not sqlisselect then
                    // needed for fStats.NotifyOrm(Method) below
-                    fMethod := TUriMethod(IdemPCharArray(SqlBegin(pointer(sql)),
-                      ['INSERT',
-                       'UPDATE',
-                       'DELETE']) + 2); // -1+2 -> mGET=1
+                    fMethod := TUriMethod(IdemPPChar(SqlBegin(pointer(sql)),
+                      @METHOD_WRITE) + 2); // -1+2 -> mGET=1
                 end;
               end;
             end;

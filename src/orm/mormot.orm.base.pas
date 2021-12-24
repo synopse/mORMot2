@@ -768,6 +768,9 @@ procedure ValueVarToVariant(Value: PUtf8Char; ValueLen: integer;
   fieldType: TOrmFieldType; var result: TVarData; createValueTempCopy: boolean;
   typeInfo: PRttiInfo; options: TDocVariantOptions = JSON_FAST);
 
+/// check if P^ is a known SQL function name (max/min/avg/sum/jsonget/jsonhas)
+function IsSqlFunction(P: PUtf8Char): boolean;
+
 
 { ****************** ORM Ready UTF-8 Comparison Functions }
 
@@ -10685,6 +10688,18 @@ const
     'JSONGET(',     // 4
     'JSONHAS(',     // 5
     nil);
+
+function IsSqlFunction(P: PUtf8Char): boolean;
+begin
+  case IdemPPChar(P, @FUNCS) of
+    0..3:
+      result := PosChar(P + 4, ')') <> nil;
+    4..5:
+      result := PosChar(P + 8, ')') <> nil;
+  else
+    result := false;
+  end;
+end;
 
 function TOrmPropertiesAbstract.IsFieldNameOrFunction(const PropName: RawUtf8): boolean;
 var
