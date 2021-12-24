@@ -872,56 +872,55 @@ function TRestOrm.MultiFieldValue(Table: TOrmClass;
   const FieldName: array of RawUtf8; var FieldValue: array of RawUtf8;
   const WhereClause: RawUtf8): boolean;
 var
-  SQL: RawUtf8;
-  n, i, o, f: PtrInt;
+  sql, where: RawUtf8;
+  v, f: PtrInt;
   T: TOrmTable;
 begin
   result := false;
-  n := length(FieldName);
   if (self <> nil) and
      (Table <> nil) and
-     (n = length(FieldValue)) then
+     (high(FieldName) = high(FieldValue)) then
     with Table.OrmProps do
     begin
-      if (n = 1) and
+      where := SqlTableName + SqlFromWhere(WhereClause);
+      if (high(FieldName) = 0) and
          IdemPChar(pointer(FieldName[0]), 'COUNT(*)') then
-        SQL := 'SELECT COUNT(*) FROM ' + SqlTableName + SqlFromWhere(WhereClause)
+        sql := 'SELECT COUNT(*) FROM ' + where
       else
       begin
-        for i := 0 to high(FieldName) do
-          if not IsFieldNameOrFunction(FieldName[i]) then
-            // prevent SQL error or security breach
+        for f := 0 to high(FieldName) do
+          if not IsFieldNameOrFunction(FieldName[f]) then
+            // prevent sql error or security breach
             exit
-          else if SQL = '' then
-            SQL := 'SELECT ' + FieldName[i]
+          else if sql = '' then
+            sql := 'SELECT ' + FieldName[f]
           else
-            SQL := SQL + ',' + FieldName[i];
-        SQL := SQL + ' FROM ' + SqlTableName + SqlFromWhere(WhereClause) +
-                     ' LIMIT 1';
+            sql := sql + ',' + FieldName[f];
+        sql := sql + ' FROM ' + where + ' LIMIT 1';
       end;
-      T := ExecuteList([Table], SQL);
+      T := ExecuteList([Table], sql);
       if T <> nil then
       try
         if (T.FieldCount <> length(FieldName)) or
            (T.RowCount <= 0) then
           exit;
         // get field values from the first (and unique) row
-        for i := 0 to T.FieldCount - 1 do
+        for f := 0 to high(FieldName) do
         begin
-          f := i; // regular SQL SELECT order by default
-          if (T.FieldCount > 1) and
-             (StrIComp(T.Results[i], pointer(FieldName[i])) <> 0) then
+          v := f; // regular SQL SELECT order by default
+          if (high(FieldName) <> 0) and
+             not IdemPropNameU(FieldName[f], T.Results[f], T.ResultsLen[f]) then
           begin
-            // not the regular order (e.g. TRestStorageInMemory = TOrm order)
-            f := T.FieldIndex(FieldName[i]);
-            if f < 0 then
-              if IsFieldName(pointer(FieldName[i])) then
-                exit    // something went wrong
+            // RowID/ID or wrong order (e.g. TRestStorageInMemory = TOrm order)
+            v := T.FieldIndex(pointer(FieldName[f]));
+            if v < 0 then
+              if IsSqlFunction(pointer(FieldName[f])) then
+                v := f // function result could be renamed but in-order
               else
-                f := i; // expects the function results to be in-order
+                exit;  // something went wrong
           end;
-          o := i + T.FieldCount;
-          FastSetString(FieldValue[f], T.Results[o], T.ResultsLen[o]);
+          inc(v, T.FieldCount); // value offset
+          FastSetString(FieldValue[f], T.Results[v], T.ResultsLen[v]);
         end;
         result := true;
       finally
@@ -960,8 +959,8 @@ function TRestOrm.OneFieldValues(Table: TOrmClass;
 var
   T: TOrmTable;
   V: Int64;
-  prop: RawUtf8;
   P: PUtf8Char;
+  field: shortstring;
 begin
   Data := nil;
   // handle naive expressions like SELECT ID from Table where ID=10
@@ -969,8 +968,8 @@ begin
      (length(WhereClause) > 2) then
   begin
     P := pointer(WhereClause);
-    GetNextFieldProp(P, prop);
-    if IsRowIDShort(prop) and
+    GetNextFieldPropSameLine(P, field);
+    if IsRowIDShort(field) and
        (StrPosI('AND', P) = nil) and
        (StrPosI('OR', P) = nil) then
       case P^ of

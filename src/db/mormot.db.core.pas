@@ -918,29 +918,29 @@ type
 
   /// one recognized WHERE expression for TSelectStatement
   TSelectStatementWhere = record
-    /// any '(' before the actual expression
-    ParenthesisBefore: RawUtf8;
-    /// any ')' after the actual expression
-    ParenthesisAfter: RawUtf8;
     /// expressions are evaluated as AND unless this field is set to TRUE
     JoinedOR: boolean;
     /// if this expression is preceded by a NOT modifier
     NotClause: boolean;
+    /// the operator of the WHERE expression
+    Operation: TSelectStatementOperator;
     /// the index of the field used for the WHERE expression
-    // - WhereField=0 for ID, 1 for field # 0, 2 for field #1,
+    // - WhereField=0 for ID, 1 for field #0, 2 for field #1,
     // and so on... (i.e. WhereField = RTTI field index +1)
     Field: integer;
     /// MongoDB-like sub field e.g. 'mainfield.subfield1.subfield2'
     // - still identifying 'mainfield' in Field index, and setting
     // SubField='.subfield1.subfield2'
     SubField: RawUtf8;
-    /// the operator of the WHERE expression
-    Operation: TSelectStatementOperator;
     /// the SQL function name associated to a Field and Value
     // - e.g. 'INTEGERDYNARRAYCONTAINS' and Field=0 for
     // IntegerDynArrayContains(RowID,10) and ValueInteger=10
     // - Value does not contain anything
     FunctionName: RawUtf8;
+    /// any '(' before the actual expression
+    ParenthesisBefore: RawUtf8;
+    /// any ')' after the actual expression
+    ParenthesisAfter: RawUtf8;
     /// the value used for the WHERE expression
     Value: RawUtf8;
     /// the raw value SQL buffer used for the WHERE expression
@@ -2589,25 +2589,31 @@ end;
 
 const
   NULL_UPP = ord('N') + ord('U') shl 8 + ord('L') shl 16 + ord('L') shl 24;
+  ENDCLAUSE: array[0..4] of PAnsiChar = (
+    'LIMIT',   // 0
+    'OFFSET',  // 1
+    'ORDER',   // 2
+    'GROUP',   // 3
+    nil);
 
 constructor TSelectStatement.Create(const SQL: RawUtf8;
   const GetFieldIndex: TOnGetFieldIndex; const SimpleFields: TSelectStatementSelectDynArray);
 var
-  Prop, whereBefore: RawUtf8;
+  prop, whereBefore: RawUtf8;
   P, B: PUtf8Char;
   ndx, order, err, len, selectCount, whereCount: integer;
   whereWithOR, whereNotClause: boolean;
 
   function GetPropIndex: integer;
   begin
-    if not GetNextFieldProp(P, Prop) then
+    if not GetNextFieldProp(P, prop) then
       result := -1
-    else if IsRowID(pointer(Prop)) then
+    else if IsRowID(pointer(prop)) then
       result := 0
     else
     begin
       // 0 = ID field
-      result := GetFieldIndex(Prop);
+      result := GetFieldIndex(prop);
       if result >= 0 then // -1 = no valid field name
         inc(result);  // otherwise: PropertyIndex+1
     end;
@@ -2626,9 +2632,9 @@ var
       if P^ <> '(' then // Field not found -> try function(field)
         exit;
       P := GotoNextNotSpace(P + 1);
-      select.FunctionName := Prop;
+      select.FunctionName := prop;
       inc(fSelectFunctionCount);
-      if IdemPropNameU(Prop, 'COUNT') and
+      if IdemPropNameU(prop, 'COUNT') and
          (P^ = '*') then
       begin
         select.Field := 0; // count( * ) -> count(ID)
@@ -2637,9 +2643,9 @@ var
       end
       else
       begin
-        if IdemPropNameU(Prop, 'DISTINCT') then
+        if IdemPropNameU(prop, 'DISTINCT') then
           select.FunctionKnown := funcDistinct
-        else if IdemPropNameU(Prop, 'MAX') then
+        else if IdemPropNameU(prop, 'MAX') then
           select.FunctionKnown := funcMax;
         select.Field := GetPropIndex;
         if select.Field < 0 then
@@ -2917,7 +2923,7 @@ begin
   begin
     // all simple (not RawBlob/TOrmMany) fields
     inc(P);
-    GetNextFieldProp(P, Prop);
+    GetNextFieldProp(P, prop);
     if SimpleFields = nil then
       exit;
     fSelect := copy(SimpleFields); // use precalculated array of simple fields
@@ -2926,24 +2932,24 @@ begin
     // we need at least one field name
     exit
   else if P^ <> ',' then
-    GetNextFieldProp(P, Prop)
+    GetNextFieldProp(P, prop)
   else
     repeat
       while P^ in [',', #1..' '] do
         inc(P); // trim left
     until not GetNextSelectField; // add other CSV field names
   // 2. get FROM clause
-  if not IdemPropNameU(Prop, 'FROM') then
+  if not IdemPropNameU(prop, 'FROM') then
     exit; // incorrect SQL statement
-  GetNextFieldProp(P, Prop);
-  fTableName := Prop;
+  GetNextFieldProp(P, prop);
+  fTableName := prop;
   // 3. get WHERE clause
   whereCount := 0;
   whereWithOR := false;
   whereNotClause := false;
   whereBefore := '';
-  GetNextFieldProp(P, Prop);
-  if IdemPropNameU(Prop, 'WHERE') then
+  GetNextFieldProp(P, prop);
+  if IdemPropNameU(prop, 'WHERE') then
   begin
     repeat
       B := P;
@@ -2961,7 +2967,7 @@ begin
       ndx := GetPropIndex;
       if ndx < 0 then
       begin
-        if IdemPropNameU(Prop, 'NOT') then
+        if IdemPropNameU(prop, 'NOT') then
         begin
           whereNotClause := true;
           continue;
@@ -2976,12 +2982,12 @@ begin
             ParenthesisBefore := whereBefore;
             JoinedOR := whereWithOR;
             NotClause := whereNotClause;
-            FunctionName := UpperCase(Prop);
+            FunctionName := UpperCase(prop);
             // Byte/Word/Integer/cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
-            len := length(Prop);
+            len := length(prop);
             if (len > 16) and
                IdemPropName('DynArrayContains',
-                 PUtf8Char(@PByteArray(Prop)[len - 16]), 16) then
+                 PUtf8Char(@PByteArray(prop)[len - 16]), 16) then
               Operation := opContains
             else
               Operation := opFunction;
@@ -3009,80 +3015,86 @@ begin
       if not GetWhereExpression(ndx, fWhere[whereCount]) then
         exit; // invalid SQL statement
       inc(whereCount);
-      GetNextFieldProp(P, Prop);
-      if IdemPropNameU(Prop, 'OR') then
+      GetNextFieldProp(P, prop);
+      if IdemPropNameU(prop, 'OR') then
         whereWithOR := true
-      else if IdemPropNameU(Prop, 'AND') then
+      else if IdemPropNameU(prop, 'AND') then
         whereWithOR := false
       else
         goto lim2;
       whereNotClause := false;
       whereBefore := '';
     until false;
-    // 4. get optional LIMIT/OFFSET/ORDER clause
+    // 4. get optional LIMIT/OFFSET/ORDER/GROUP end clause
 lim:P := GotoNextNotSpace(P);
     while (P <> nil) and
           not (P^ in [#0, ';']) do
     begin
-      GetNextFieldProp(P, Prop);
-lim2: if IdemPropNameU(Prop, 'LIMIT') then
-        fLimit := GetNextItemCardinal(P, ' ')
-      else if IdemPropNameU(Prop, 'OFFSET') then
-        fOffset := GetNextItemCardinal(P, ' ')
-      else if IdemPropNameU(Prop, 'ORDER') then
-      begin
-        GetNextFieldProp(P, Prop);
-        if IdemPropNameU(Prop, 'BY') or
-           (fOrderByField <> nil) then
-        begin
-          repeat
-            ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
-            if ndx < 0 then
-              exit; // incorrect SQL statement
-            order := AddFieldIndex(fOrderByField, ndx);
-            if P^ <> ',' then
+      GetNextFieldProp(P, prop);
+lim2: case IdemPPChar(pointer(prop), @ENDCLAUSE) of
+        0:
+          // LIMIT
+          fLimit := GetNextItemCardinal(P, ' ');
+        1:
+          // OFFSET
+          fOffset := GetNextItemCardinal(P, ' ');
+        2:
+          begin
+            // ORDER BY
+            GetNextFieldProp(P, prop);
+            if IdemPropNameU(prop, 'BY') or
+               (fOrderByField <> nil) then
             begin
-              // check ORDER BY ... ASC/DESC
-              if GetNextFieldProp(P, Prop) then
-                if IdemPropNameU(Prop, 'DESC') then
-                  include(fOrderByFieldDesc, order)
-                else if not IdemPropNameU(Prop, 'ASC') then
-                  goto lim2; // parse LIMIT OFFSET clauses after ORDER
-              if P^ <> ',' then
-                break; // no more fields in this ORDER BY clause
-            end;
-            P := GotoNextNotSpace(P + 1);
-          until P^ in [#0, ';'];
-        end
-        else
-          exit; // incorrect SQL statement
-      end
-      else if IdemPropNameU(Prop, 'GROUP') then
-      begin
-        GetNextFieldProp(P, Prop);
-        if IdemPropNameU(Prop, 'BY') then
-        begin
-          repeat
-            ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
-            if ndx < 0 then
+              repeat
+                ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
+                if ndx < 0 then
+                  exit; // incorrect SQL statement
+                order := AddFieldIndex(fOrderByField, ndx);
+                if P^ <> ',' then
+                begin
+                  // check ORDER BY ... ASC/DESC
+                  if GetNextFieldProp(P, prop) then
+                    if IdemPropNameU(prop, 'DESC') then
+                      include(fOrderByFieldDesc, order)
+                    else if not IdemPropNameU(prop, 'ASC') then
+                      goto lim2; // parse LIMIT OFFSET clauses after ORDER
+                  if P^ <> ',' then
+                    break; // no more fields in this ORDER BY clause
+                end;
+                P := GotoNextNotSpace(P + 1);
+              until P^ in [#0, ';'];
+            end
+            else
               exit; // incorrect SQL statement
-            AddFieldIndex(fGroupByField, ndx);
-            if P^ <> ',' then
-              break;
-            P := GotoNextNotSpace(P + 1);
-          until P^ in [#0, ';'];
-        end
-        else
-          exit; // incorrect SQL statement
-      end
-      else if (Prop <> '') or
+          end;
+        3:
+          begin
+            // GROUP BY
+            GetNextFieldProp(P, prop);
+            if IdemPropNameU(prop, 'BY') then
+            begin
+              repeat
+                ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
+                if ndx < 0 then
+                  exit; // incorrect SQL statement
+                AddFieldIndex(fGroupByField, ndx);
+                if P^ <> ',' then
+                  break;
+                P := GotoNextNotSpace(P + 1);
+              until P^ in [#0, ';'];
+            end
+            else
+              exit; // incorrect SQL statement
+          end;
+      else if (prop <> '') or
               not (GotoNextNotSpace(P)^ in [#0, ';']) then
         exit // incorrect SQL statement
       else
         break; // reached the end of the statement
     end;
+    end;
   end
-  else if Prop <> '' then
+  else if prop <> '' then
     goto lim2; // handle LIMIT OFFSET ORDER
   fSqlStatement := SQL; // make a private copy e.g. for Where[].ValueSql
 end;
