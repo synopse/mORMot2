@@ -4222,8 +4222,8 @@ type
     /// activate the internal caching for a set of specified TOrm
     // - if these items are already cached, do nothing
     // - return true on success
-    function SetCache(aTable: TOrmClass; const aIDs: array of TID):
-      boolean; overload;
+    function SetCache(aTable: TOrmClass; const aIDs: array of TID): boolean;
+      overload;
     /// activate the internal caching for a given TOrm
     // - will cache the specified aRecord.ID item
     // - if this item is already cached, do nothing
@@ -4280,7 +4280,7 @@ type
     procedure NotifyDeletion(aTableIndex: integer; aID: TID); overload;
     /// TRest instance shall call this method when records are deleted
     // - TOrmClass to be specified as its index in Rest.Model.Tables[]
-    procedure NotifyDeletions(aTableIndex: integer; const aIDs: array of Int64); overload;
+    procedure NotifyDeletions(aTableIndex: integer; const aIDs: array of TID); overload;
   end;
 
 
@@ -10592,34 +10592,19 @@ begin
 end;
 
 destructor TRestCache.Destroy;
-var
-  i: PtrInt;
 begin
-  for i := 0 to length(fCache) - 1 do
-    fCache[i].Done;
   pointer(fRest) := nil; // don't change reference count
   inherited Destroy;
 end;
 
 function TRestCache.CachedEntries: cardinal;
 var
-  i, j: PtrInt;
+  i: PtrInt;
 begin
   result := 0;
   if self <> nil then
     for i := 0 to length(fCache) - 1 do
-      with fCache[i] do
-        if CacheEnable then
-        begin
-          EnterCriticalSection(Mutex);
-          try
-            for j := 0 to Count - 1 do
-              if Values[j].Timestamp512 <> 0 then
-                inc(result);
-          finally
-            LeaveCriticalSection(Mutex);
-          end;
-        end;
+      inc(result, fCache[i].CachedEntries);
 end;
 
 function TRestCache.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
@@ -10645,16 +10630,10 @@ begin
   i := fModel.GetTableIndexExisting(aTable);
   if Rest.CacheWorthItForTable(i) then
     if PtrUInt(i) < PtrUInt(Length(fCache)) then
-      with fCache[i] do
-      begin
-        EnterCriticalSection(Mutex);
-        try
-          TimeOutMS := aTimeoutMS;
-        finally
-          LeaveCriticalSection(Mutex);
-        end;
-        result := true;
-      end;
+    begin
+      fCache[i].TimeOutMS := aTimeoutMS;
+      result := true;
+    end;
 end;
 
 function TRestCache.IsCached(aTable: TOrmClass): boolean;
@@ -10682,19 +10661,11 @@ begin
   i := fModel.GetTableIndexExisting(aTable);
   if Rest.CacheWorthItForTable(i) then
     if PtrUInt(i) < PtrUInt(Length(fCache)) then
-      with fCache[i] do
-      begin
-        // global cache of all records of this table
-        EnterCriticalSection(Mutex);
-        try
-          CacheEnable := true;
-          CacheAll := true;
-          Value.Clear;
-          result := true;
-        finally
-          LeaveCriticalSection(Mutex);
-        end;
-      end;
+    begin
+      // global cache of all records of this table
+      fCache[i].SetCache;
+      result := true;
+    end;
 end;
 
 function TRestCache.SetCache(aTable: TOrmClass; aID: TID): boolean;
@@ -10795,35 +10766,14 @@ end;
 procedure TRestCache.Flush(aTable: TOrmClass; aID: TID);
 begin
   if self <> nil then
-    with fCache[fModel.GetTableIndexExisting(aTable)] do
-      if CacheEnable then
-      begin
-        EnterCriticalSection(Mutex);
-        try
-          FlushCacheEntry(Value.Find(aID));
-        finally
-          LeaveCriticalSection(Mutex);
-        end;
-      end;
+    fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntries([aID]);
 end;
 
 procedure TRestCache.Flush(aTable: TOrmClass; const aIDs: array of TID);
-var
-  i: PtrInt;
 begin
   if (self <> nil) and
      (length(aIDs) > 0) then
-    with fCache[fModel.GetTableIndexExisting(aTable)] do
-      if CacheEnable then
-      begin
-        EnterCriticalSection(Mutex);
-        try
-          for i := 0 to high(aIDs) do
-            FlushCacheEntry(Value.Find(aIDs[i]));
-        finally
-          LeaveCriticalSection(Mutex);
-        end;
-      end;
+    fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntries(aIDs);
 end;
 
 procedure TRestCache.Notify(aTable: TOrmClass; aID: TID;
@@ -10867,37 +10817,16 @@ begin
   if (self <> nil) and
      (aID > 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
-    with fCache[aTableIndex] do
-      if CacheEnable then
-      begin
-        EnterCriticalSection(Mutex);
-        try
-          FlushCacheEntry(Value.Find(aID));
-        finally
-          LeaveCriticalSection(Mutex);
-        end;
-      end;
+    fCache[aTableIndex].FlushCacheEntries([aID]);
 end;
 
 procedure TRestCache.NotifyDeletions(aTableIndex: integer;
-  const aIDs: array of Int64);
-var
-  i: PtrInt;
+  const aIDs: array of TID);
 begin
   if (self <> nil) and
      (high(aIDs) >= 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
-    with fCache[aTableIndex] do
-      if CacheEnable then
-      begin
-        EnterCriticalSection(Mutex);
-        try
-          for i := 0 to high(aIDs) do
-            FlushCacheEntry(Value.Find(aIDs[i]));
-        finally
-          LeaveCriticalSection(Mutex);
-        end;
-      end;
+    fCache[aTableIndex].FlushCacheEntries(aIDs);
 end;
 
 procedure TRestCache.NotifyDeletion(aTable: TOrmClass; aID: TID);

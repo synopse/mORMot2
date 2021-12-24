@@ -1102,7 +1102,7 @@ begin
               FormatUtf8('["text",%]', [RInt.YearOfDeath]));
           end;
         end;
-        Updated := aExternalClient.GetServerTimestamp;
+        Updated := aExternalClient.Orm.GetServerTimestamp;
         Check(Updated >= Start);
         for i := 1 to BatchID[high(BatchID)] do
           if i mod 100 = 0 then

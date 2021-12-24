@@ -1982,7 +1982,7 @@ begin
     for i := 0 to length(IDs) - 1 do
       if not RecordCanBeUpdated(Table, IDs[i], oeDelete) then
         exit;
-    fCache.NotifyDeletions(t, TInt64DynArray(IDs));
+    fCache.NotifyDeletions(t, IDs);
   end;
   result := true;
 end;

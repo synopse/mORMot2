@@ -771,7 +771,7 @@ function SelectInClause(const PropName: RawUtf8; const Values: array of RawUtf8;
 // or 'PropName in (:(Values0):,:(Values1):,...)' if length(Values)<ValuesInlinedMax
 // - PropName can be used as a prefix to the 'in ()' clause, in conjunction
 // with optional Suffix value
-function SelectInClause(const PropName: RawUtf8; const Values: array of Int64;
+function SelectInClause(const PropName: RawUtf8; const Values: array of TID;
   const Suffix: RawUtf8 = ''; ValuesInlinedMax: integer = 0): RawUtf8; overload;
 
 /// naive search of '... FROM TableName ...' pattern in the supplied SQL
@@ -2154,7 +2154,7 @@ begin
     result := '';
 end;
 
-function SelectInClause(const PropName: RawUtf8; const Values: array of Int64;
+function SelectInClause(const PropName: RawUtf8; const Values: array of TID;
   const Suffix: RawUtf8; ValuesInlinedMax: integer): RawUtf8;
 var
   n, i: integer;

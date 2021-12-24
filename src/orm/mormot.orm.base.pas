@@ -2794,21 +2794,24 @@ type
     /// TDynArray wrapper around the Values[] array
     Value: TDynArray;
     /// used to lock the table cache for multi thread safety
-    Mutex: TRTLCriticalSection;
+    Mutex: TLightLock;
     /// initialize this table cache
     // - will set Value wrapper and Mutex handle - other fields should have
     // been cleared by caller (is the case for a TRestCacheEntryDynArray)
     procedure Init;
     /// reset all settings corresponding to this table cache
     procedure Clear;
-    /// finalize this table cache entry
-    procedure Done;
     /// flush cache for a given Value[] index
-    procedure FlushCacheEntry(Index: integer);
+    // - note: caller should have made Mutex.Lock
+    procedure LockedFlushCacheEntry(Index: integer);
+    /// flush cache for a given Value[]
+    procedure FlushCacheEntries(const aID: array of TID);
     /// flush cache for all Value[]
     procedure FlushCacheAllEntries;
+    /// activate the internal caching for a whole Table
+    procedure SetCache; overload;
     /// add the supplied ID to the Value[] array
-    procedure SetCache(aID: TID);
+    procedure SetCache(aID: TID); overload;
     /// update/refresh the cached JSON serialization of a given ID
     procedure SetJson(aID: TID; const aJson: RawUtf8;
       aTag: cardinal = 0); overload;
@@ -2818,6 +2821,8 @@ type
     /// compute how much memory stored entries are using
     // - will also flush outdated entries
     function CachedMemory(FlushedEntriesCount: PInteger = nil): cardinal;
+    /// returns the number of JSON serialization records within this cache
+    function CachedEntries: cardinal;
   end;
 
   /// for TRestCache, stores all table settings and values
@@ -10207,28 +10212,22 @@ procedure TRestCacheEntry.Init;
 begin
   Value.InitSpecific(TypeInfo(TRestCacheEntryValueDynArray),
     Values, ptInt64, @Count); // will search/sort by first ID: TID field
-  InitializeCriticalSection(Mutex);
-end;
-
-procedure TRestCacheEntry.Done;
-begin
-  DeleteCriticalSection(Mutex);
 end;
 
 procedure TRestCacheEntry.Clear;
 begin
-  EnterCriticalSection(Mutex);
+  Mutex.Lock;
   try
     Value.Clear;
     CacheAll := false;
     CacheEnable := false;
     TimeOutMS := 0;
   finally
-    LeaveCriticalSection(Mutex);
+    Mutex.UnLock;
   end;
 end;
 
-procedure TRestCacheEntry.FlushCacheEntry(Index: integer);
+procedure TRestCacheEntry.LockedFlushCacheEntry(Index: integer);
 begin
   if cardinal(Index) < cardinal(Count) then
     if CacheAll then
@@ -10242,13 +10241,28 @@ begin
       end;
 end;
 
+procedure TRestCacheEntry.FlushCacheEntries(const aID: array of TID);
+var
+  i: PtrInt;
+begin
+  if not CacheEnable then
+    exit;
+  Mutex.Lock;
+  try
+    for i := 0 to high(aID) do
+      LockedFlushCacheEntry(Value.Find(aID[i]));
+  finally
+    Mutex.UnLock;
+  end;
+end;
+
 procedure TRestCacheEntry.FlushCacheAllEntries;
 var
   i: PtrInt;
 begin
   if not CacheEnable then
     exit;
-  EnterCriticalSection(Mutex);
+  Mutex.Lock;
   try
     if CacheAll then
       Value.Clear
@@ -10261,16 +10275,29 @@ begin
           Tag := 0;
         end;
   finally
-    LeaveCriticalSection(Mutex);
+    Mutex.UnLock;
+  end;
+end;
+
+procedure TRestCacheEntry.SetCache;
+begin
+  // global cache of all records of this table
+  Mutex.Lock;
+  try
+    CacheEnable := true;
+    CacheAll := true;
+    Value.Clear;
+  finally
+    Mutex.UnLock;
   end;
 end;
 
 procedure TRestCacheEntry.SetCache(aID: TID);
 var
   Rec: TRestCacheEntryValue;
-  i: integer;
+  i: integer; // FastLocateSorted() required integer
 begin
-  EnterCriticalSection(Mutex);
+  Mutex.Lock;
   try
     CacheEnable := true;
     if not CacheAll and
@@ -10283,20 +10310,20 @@ begin
       Value.FastAddSorted(i, Rec);
     end; // do nothing if aID is already in Values[]
   finally
-    LeaveCriticalSection(Mutex);
+    Mutex.UnLock;
   end;
 end;
 
 procedure TRestCacheEntry.SetJson(aID: TID; const aJson: RawUtf8; aTag: cardinal);
 var
   Rec: TRestCacheEntryValue;
-  i: integer;
+  i: integer; // FastLocateSorted() required integer
 begin
   Rec.ID := aID;
   Rec.Json := aJson;
   Rec.Timestamp512 := GetTickCount64 shr 9;
   Rec.Tag := aTag;
-  EnterCriticalSection(Mutex);
+  Mutex.Lock;
   try
     if Value.FastLocateSorted(Rec, i) then
       Values[i] := Rec
@@ -10304,7 +10331,7 @@ begin
             (i >= 0) then
       Value.FastAddSorted(i, Rec);
   finally
-    LeaveCriticalSection(Mutex);
+    Mutex.UnLock;
   end;
 end;
 
@@ -10314,7 +10341,7 @@ var
   i: PtrInt;
 begin
   result := false;
-  EnterCriticalSection(Mutex);
+  Mutex.Lock;
   try
     i := Value.Find(aID); // fast O(log(n)) binary search by first ID field
     if i >= 0 then
@@ -10322,7 +10349,7 @@ begin
         if Timestamp512 <> 0 then // 0 when there is no JSON value cached
           if (TimeOutMS <> 0) and
              ((GetTickCount64 - TimeOutMS) shr 9 > Timestamp512) then
-            FlushCacheEntry(i)
+            LockedFlushCacheEntry(i)
           else
           begin
             if aTag <> nil then
@@ -10331,7 +10358,7 @@ begin
             result := true; // found a non outdated serialized value in cache
           end;
   finally
-    LeaveCriticalSection(Mutex);
+    Mutex.UnLock;
   end;
 end;
 
@@ -10344,8 +10371,11 @@ begin
   if CacheEnable and
      (Count > 0) then
   begin
-    tix512 := (GetTickCount64 - TimeOutMS) shr 9;
-    EnterCriticalSection(Mutex);
+    if TimeOutMS <> 0 then
+      tix512 := (GetTickCount64 - TimeOutMS) shr 9
+    else
+      tix512 := 0; // make compiler happy
+    Mutex.Lock;
     try
       for i := Count - 1 downto 0 do
         with Values[i] do
@@ -10353,14 +10383,33 @@ begin
             if (TimeOutMS <> 0) and
                (tix512 > Timestamp512) then
             begin
-              FlushCacheEntry(i);
+              LockedFlushCacheEntry(i);
               if FlushedEntriesCount <> nil then
                 inc(FlushedEntriesCount^);
             end
             else
               inc(result, length(JSON) + (SizeOf(TRestCacheEntryValue) + 16));
     finally
-      LeaveCriticalSection(Mutex);
+      Mutex.UnLock;
+    end;
+  end;
+end;
+
+function TRestCacheEntry.CachedEntries: cardinal;
+var
+  i: PtrInt;
+begin
+  result := 0;
+  if CacheEnable and
+     (Count > 0) then
+  begin
+    Mutex.Lock;
+    try
+      for i := 0 to Count - 1 do
+        if Values[i].Timestamp512 <> 0 then
+          inc(result);
+    finally
+      Mutex.UnLock;
     end;
   end;
 end;

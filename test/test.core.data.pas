@@ -795,7 +795,7 @@ end;
 procedure TTestCoreProcess.MustacheHelper(const Value: variant; out Result: variant);
 begin
   with _Safe(Value)^ do
-    RawUtf8ToVariant(FormatUtf8('a=%,b=%', [U['a'], i['b']]), Result);
+    Result := FormatVariant('a=%,b=%', [U['a'], i['b']]);
 end;
 
 
