@@ -61,8 +61,10 @@ type
     function GetDB: TSqlDatabase;
     function GetStatementLastException: RawUtf8;
     // include addition SQLite3 specific information to the returned content
-    procedure InternalStat(Ctxt: TRestServerUriContext; W: TJsonWriter); override;
-    procedure InternalInfo(var info: TDocVariantData); override;
+    procedure InternalStat(Ctxt: TRestServerUriContext;
+      W: TJsonWriter); override;
+    procedure InternalInfo(Ctxt: TRestServerUriContext;
+      var info: TDocVariantData); override;
   public
     /// initialize a REST server with a SQLite3 database
     // - any needed TSqlVirtualTable class should have been already registered
@@ -300,11 +302,12 @@ begin
     end;
 end;
 
-procedure TRestServerDB.InternalInfo(var info: TDocVariantData);
+procedure TRestServerDB.InternalInfo(Ctxt: TRestServerUriContext;
+  var info: TDocVariantData);
 begin
-  inherited InternalInfo(info);
+  inherited InternalInfo(Ctxt, info);
   info.AddValue(
-    'db', FormatString('% %', [ExtractFileName(DB.FileName), KB(DB.FileSize)]));
+    'db', FormatUtf8('% %', [ExtractFileName(DB.FileName), KB(DB.FileSize)]));
 end;
 
 

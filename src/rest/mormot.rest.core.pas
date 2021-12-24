@@ -546,7 +546,7 @@ type
     // the value from PC time (i.e. NowUtc+Offset as TTimeLog)
     // - inherited classes may override this method, or set the appropriate
     // value in Offset field
-    function GetServerTimestamp: TTimeLog; virtual;
+    function GetServerTimestamp(tix64: Int64): TTimeLog; virtual;
 
     /// main access to the IRestOrm methods of this instance
     property Orm: IRestOrm
@@ -782,7 +782,7 @@ type
     function UpdateField(Table: TOrmClass;
       const WhereFieldName: RawUtf8; const WhereFieldValue: variant;
       const FieldName: RawUtf8; const FieldValue: variant): boolean; overload;
-    function UpdateField(Table: TOrmClass; const IDs: array of Int64;
+    function UpdateField(Table: TOrmClass; const IDs: array of TID;
       const FieldName: RawUtf8; const FieldValue: variant): boolean; overload;
     function UpdateFieldIncrement(Table: TOrmClass; ID: TID;
       const FieldName: RawUtf8; Increment: Int64 = 1): boolean;
@@ -1350,6 +1350,7 @@ type
     procedure OutHeadFromCookie; virtual;
     /// low-level wrapper method around GetTickCount64 to cache the value
     // - may avoid OS API calls on server side, during a request process
+    // - warning: do not use within loops for timeout, because it won't change
     function TickCount64: Int64;
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
@@ -2071,11 +2072,13 @@ begin
     result := nil;
 end;
 
-function TRest.GetServerTimestamp: TTimeLog;
+function TRest.GetServerTimestamp(tix64: Int64): TTimeLog;
 var
   tix: cardinal;
 begin
-  tix := GetTickCount64 shr 9; // resolution change from 1 ms to 512 ms
+  if tix64 = 0 then
+    tix64 := GetTickCount64;
+  tix := tix64 shr 9; // resolution change from 1 ms to 512 ms
   with fServerTimestamp do
     if CacheTix = tix then
       result := CacheValue.Value
@@ -2676,10 +2679,10 @@ begin
     FieldValue);
 end;
 
-function TRest.UpdateField(Table: TOrmClass; const IDs: array of Int64;
+function TRest.UpdateField(Table: TOrmClass; const IDs: array of TID;
   const FieldName: RawUtf8; const FieldValue: variant): boolean;
 begin
-  result := fOrm.UpdateField(Table, IDs, FieldName, FieldValue);
+  result := fOrm.UpdateFieldAt(Table, IDs, FieldName, FieldValue);
 end;
 
 function TRest.UpdateFieldIncrement(Table: TOrmClass; ID: TID;

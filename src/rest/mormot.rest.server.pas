@@ -1638,7 +1638,7 @@ type
     Sender: TServiceFactory; Instance: TInterfacedObject) of object;
 
   /// callback allowing to customize the information returned by root/timestamp/info
-  TOnInternalInfo = procedure(Sender: TRestServer;
+  TOnInternalInfo = procedure(Sender: TRestServerUriContext;
     var info: TDocVariantData) of object;
 
   /// a generic REpresentational State Transfer (REST) server
@@ -1681,6 +1681,8 @@ type
     fOnIdleLastTix: cardinal;
     fServicesRouting: TRestServerUriContextClass;
     fRecordVersionSlaveCallbacks: array of IServiceRecordVersionCallback;
+    fTimestampInfoCache: RawUtf8;
+    fTimestampInfoCacheTix: cardinal;
     fServer: IRestOrmServer;
     procedure SetNoAjaxJson(const Value: boolean);
     function GetNoAjaxJson: boolean;
@@ -1695,7 +1697,7 @@ type
     // called by Stat() and Info() method-based services
     procedure InternalStat(Ctxt: TRestServerUriContext; W: TJsonWriter); virtual;
     procedure AddStat(Flags: TRestServerAddStats; W: TJsonWriter);
-    procedure InternalInfo(var info: TDocVariantData); virtual;
+    procedure InternalInfo(Ctxt: TRestServerUriContext; var info: TDocVariantData); virtual;
     procedure SetStatUsage(usage: TSynMonitorUsage);
     function GetServiceMethodStat(const aMethod: RawUtf8): TSynMonitorInputOutput;
     procedure SetRoutingClass(aServicesRouting: TRestServerUriContextClass);
@@ -2887,7 +2889,7 @@ begin
                   break;   // will handle Mode<>amLocked below
                 end;
                 // if we reached here, there is a transaction on another session
-                tix := GetTickCount64;
+                tix := GetTickCount64; // not self.TickCount64 which is fixed
                 if endtix = 0 then
                   endtix := tix + ms
                 else if tix > endtix then
@@ -6002,14 +6004,15 @@ begin
   result := true;
 end;
 
-procedure TRestServer.InternalInfo(var info: TDocVariantData);
+procedure TRestServer.InternalInfo(Ctxt: TRestServerUriContext;
+  var info: TDocVariantData);
 var
   cpu, mem, free: RawUtf8;
   now: TTimeLogBits;
   m: TSynMonitorMemory;
 begin
   // called by root/Timestamp/info REST method
-  now.Value := GetServerTimestamp;
+  now.Value := GetServerTimestamp(Ctxt.TickCount64);
   cpu := TSystemUse.Current(false).HistoryText(0, 15, @mem);
   m := TSynMonitorMemory.Create({nospace=}true);
   try
@@ -6044,7 +6047,7 @@ begin
     Stats.Unlock;
   end;
   if Assigned(OnInternalInfo) then
-    OnInternalInfo(self, info);
+    OnInternalInfo(Ctxt, info);
 end;
 
 procedure TRestServer.InternalStat(Ctxt: TRestServerUriContext; W: TJsonWriter);
@@ -6981,21 +6984,26 @@ end;
 
 procedure TRestServer.Timestamp(Ctxt: TRestServerUriContext);
 
-  procedure DoInfo;
+  procedure ComputeInfo;
   var
     info: TDocVariantData;
   begin
+    fTimestampInfoCacheTix := Ctxt.TickCount64 shr 10;
     {%H-}info.InitFast;
-    InternalInfo(info);
-    Ctxt.Returns(info.ToJson('', '', jsonHumanReadable));
+    InternalInfo(Ctxt, info);
+    fTimestampInfoCache := info.ToJson('', '', jsonHumanReadable);
   end;
 
 begin
   if IdemPropNameU(Ctxt.UriBlobFieldName, 'info') and
      not (rsoTimestampInfoUriDisable in fOptions) then
-    DoInfo
+  begin
+    if Ctxt.TickCount64 shr 10 <> fTimestampInfoCacheTix then
+      ComputeInfo;
+    Ctxt.Returns(fTimestampInfoCache);
+  end
   else
-    Ctxt.Returns(Int64ToUtf8(GetServerTimestamp),
+    Ctxt.Returns(Int64ToUtf8(GetServerTimestamp(Ctxt.TickCount64)),
       HTTP_SUCCESS, TEXT_CONTENT_TYPE_HEADER);
 end;
 
