@@ -1,8 +1,8 @@
-# mORMot Framework Static Files
+# mORMot Framework IDE Setup Files
 
 ## Folder Content
 
-This folder contains some packages for Delphi and Lazarus IDE.
+This folder contains some packages and setup tools for the Delphi and Lazarus IDE.
 
 ## Sub-Folders
 

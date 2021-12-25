@@ -31,6 +31,7 @@ uses
   mormot.db.raw.sqlite3,
   mormot.db.raw.sqlite3.static,
   mormot.db.proxy,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.storage,
   mormot.orm.sql,
@@ -92,12 +93,12 @@ type
     /// test external DB implementation via faster REST calls and change tracking
     // - a TOrmHistory table will be used to store record history
     procedure ExternalViaRESTWithChangeTracking;
-    {$ifndef CPU64}
+    {$ifdef CPU32}
     {$ifdef OSWINDOWS}
     /// test external DB using the JET engine
     procedure JETDatabase;
     {$endif OSWINDOWS}
-    {$endif CPU64}
+    {$endif CPU32}
     {$ifdef OSWINDOWS}
     {$ifdef USEZEOS}
     /// test external Firebird embedded engine via Zeos/ZDBC (if available)
@@ -186,7 +187,7 @@ begin
     exit; // should be called once
   fExternalModel := TOrmModel.Create([TOrmPeopleExt, TOrmOnlyBlob, TOrmTestJoin,
     TOrmASource, TOrmADest, TOrmADests, TOrmPeople, TOrmMyHistory]);
-  ReplaceParamsByNames(ToUtf8(StringOfChar('?', 200)), sql);
+  ReplaceParamsByNames(RawUtf8OfChar('?', 200), sql);
   CheckHash(sql, $AD27D1E0, 'excludes :IF :OF');
 end;
 
@@ -197,14 +198,14 @@ var
   Server: TRestServer;
   Ext: TRestStorageExternalHook;
 
-  procedure Test(aDBMS: TSqlDBDefinition; AdaptShouldWork: boolean;
+  procedure Test(aDbms: TSqlDBDefinition; AdaptShouldWork: boolean;
     const SQLExpected: RawUtf8 = '');
   var
     SQL: RawUtf8;
   begin
     SQL := SqlOrigin;
-    TSqlDBConnectionPropertiesHook(Props).fDBMS := aDBMS;
-    Check((Props.DBMS = aDBMS) or (aDBMS = dUnknown));
+    TSqlDBConnectionPropertiesHook(Props).fDbms := aDbms;
+    Check((Props.Dbms = aDbms) or (aDbms = dUnknown));
     Check(Ext.AdaptSQLForEngineList(SQL) = AdaptShouldWork);
     CheckUtf8(SameTextU(SQL, SQLExpected) or
           not AdaptShouldWork, SQLExpected + #13#10 + SQL);
@@ -212,11 +213,11 @@ var
 
   procedure Test2(const Orig, Expected: RawUtf8);
   var
-    DBMS: TSqlDBDefinition;
+    db: TSqlDBDefinition;
   begin
     SqlOrigin := Orig;
-    for DBMS := low(DBMS) to high(DBMS) do
-      Test(DBMS, true, Expected);
+    for db := low(db) to high(db) do
+      Test(db, true, Expected);
   end;
 
 begin
@@ -459,7 +460,7 @@ begin
             R.FillPrepare(fPeopleData);
             if not CheckFailed(R.FillContext <> nil) then
             begin
-              Client.BatchStart(TOrmPeople, 5000);
+              Client.BatchStart(TOrmPeople);
               n := 0;
               while R.FillOne do
               begin
@@ -489,7 +490,7 @@ begin
             end;
             for i := 0 to high(ids) do
             begin
-              Client.BatchStart(TOrmPeople);
+              Client.BatchStart(TOrmPeople, {autotrans=}0);
               Client.BatchDelete(ids[i]);
               Check(Client.BatchSend(res) = HTTP_SUCCESS);
               Check(length(res) = 1);
@@ -534,7 +535,7 @@ end;
 {$endif USEZEOS}
 {$endif OSWINDOWS}
 
-{$ifndef CPU64}
+{$ifdef CPU32}
 {$ifdef OSWINDOWS}
 
 procedure TTestExternalDatabase.JETDatabase;
@@ -558,7 +559,7 @@ begin
         Client := TRestClientDB.Create(
           Model, nil, SQLITE_MEMORY_DATABASE_NAME, TRestServerDB);
         try
-          Client.Server.CreateMissingTables;
+          Client.Server.Server.CreateMissingTables;
           Client.Orm.TransactionBegin(TOrmPeople);
           n := 0;
           while R.FillOne do
@@ -608,7 +609,7 @@ begin
 end;
 
 {$endif OSWINDOWS}
-{$endif CPU64}
+{$endif CPU32}
 
 procedure TTestExternalDatabase._SynDBRemote;
 var
@@ -642,6 +643,7 @@ var
           'select count(*) from People where YearOfDeath=?', [1519]);
         {%H-}Check(res.Step);
         result := res.ColumnInt(0);
+        res.ReleaseRows;
       end;
 
     var
@@ -815,12 +817,12 @@ begin
           Client2.Server.Server.CreateMissingTables;
 
           Check(Client2.Client.TransactionBegin(TOrmPeople));
-          Check(Client2.Client.BatchStart(TOrmPeople));
+          Check(Client2.Client.BatchStart(TOrmPeople, {autotrans=}0));
           Check(Client2.Client.BatchSend(Res) = 200, 'Void batch');
           Check(Res = nil);
           Client2.Client.Commit;
           Check(Client2.Client.TransactionBegin(TOrmPeople));
-          Check(Client2.Client.BatchStart(TOrmPeople));
+          Check(Client2.Client.BatchStart(TOrmPeople, {autotrans=}0));
           while R.FillOne do
           begin
             Check(R.ID <> 0);
@@ -1050,7 +1052,7 @@ begin
           if RInt.IDValue > 100 then
           begin
             if aExternalClient.Client.BatchCount = 0 then
-              aExternalClient.Client.BatchStart(TOrmPeopleExt, 5000);
+              aExternalClient.Client.BatchStart(TOrmPeopleExt);
             aExternalClient.Client.BatchAdd(RExt, true);
           end
           else
@@ -1100,7 +1102,7 @@ begin
               FormatUtf8('["text",%]', [RInt.YearOfDeath]));
           end;
         end;
-        Updated := aExternalClient.GetServerTimestamp;
+        Updated := aExternalClient.Orm.GetServerTimestamp;
         Check(Updated >= Start);
         for i := 1 to BatchID[high(BatchID)] do
           if i mod 100 = 0 then
@@ -1117,7 +1119,7 @@ begin
             if i > 4000 then
             begin
               if aExternalClient.Client.BatchCount = 0 then
-                aExternalClient.Client.BatchStart(TOrmPeopleExt, 10000);
+                aExternalClient.Client.BatchStart(TOrmPeopleExt);
               Check(aExternalClient.Client.BatchUpdate(RExt) >= 0,
                 'BatchUpdate 1/100 rows');
             end
@@ -1178,14 +1180,16 @@ begin
             Check(RExt.CreatedAt <= Updated);
             if i mod 100 = 0 then
             begin
-              Check(RExt.YearOfBirth = RExt.YearOfDeath, 'Update');
-              Check(RExt.LastChange >= Updated);
+              Check(RExt.YearOfBirth = RExt.YearOfDeath, 'Update1');
+              CheckUtf8(RExt.LastChange >= Updated, 'LastChange1 %>=%',
+                [RExt.LastChange, Updated]);
             end
             else
             begin
-              Check(RExt.YearOfBirth <> RExt.YearOfDeath, 'Update');
+              Check(RExt.YearOfBirth <> RExt.YearOfDeath, 'Update2');
               Check(RExt.LastChange >= Start);
-              Check(RExt.LastChange <= Updated);
+              CheckUtf8(RExt.LastChange <= Updated, 'LastChange2 %<=%',
+                [RExt.LastChange, Updated]);
             end;
           end;
         end;
@@ -1210,7 +1214,7 @@ begin
         end;
         for i := 0 to high(ids) do
         begin
-          aExternalClient.Client.BatchStart(TOrmPeopleExt);
+          aExternalClient.Client.BatchStart(TOrmPeopleExt, {autotrans=}0);
           aExternalClient.Client.BatchDelete(ids[i]);
           Check(aExternalClient.Client.BatchSend(BatchID) = HTTP_SUCCESS);
           Check(length(BatchID) = 1);

@@ -52,11 +52,10 @@ type
   TPostConnection = class(TAsyncConnection)
   protected
     fRtspTag: TPollSocketTag;
-    // redirect the POST base-64 encoded command to the RTSP socket
-    function OnRead(
-      Sender: TAsyncConnections): TPollAsyncSocketOnRead; override;
+    // redirect the POST Base64 encoded command to the RTSP socket
+    function OnRead: TPollAsyncSocketOnReadWrite; override;
     // will release the associated TRtspConnection instance
-    procedure BeforeDestroy(Sender: TAsyncConnections); override;
+    procedure BeforeDestroy; override;
   end;
 
   /// holds a RTSP connection for HTTP GET proxy
@@ -65,10 +64,9 @@ type
   protected
     fGetBlocking: TCrtSocket;
     // redirect the RTSP socket input to the GET content
-    function OnRead(
-      Sender: TAsyncConnections): TPollAsyncSocketOnRead; override;
+    function OnRead: TPollAsyncSocketOnReadWrite; override;
     // will release the associated blocking GET socket
-    procedure BeforeDestroy(Sender: TAsyncConnections); override;
+    procedure BeforeDestroy; override;
   end;
 
 
@@ -94,9 +92,12 @@ type
       out aConnection: TAsyncConnection): boolean; override;
   public
     /// initialize the proxy HTTP server forwarding specified RTSP server:port
+    // - default aThreadPoolCount=1 is the best and fastest for our RTSP/HTTP
+    // tunneling process, which is almost non blocking
+    // - warning: should call WaitStarted() to let Execute bind and run
     constructor Create(const aRtspServer, aRtspPort, aHttpPort: RawUtf8;
       aLog: TSynLogClass; const aOnStart, aOnStop: TOnNotifyThread;
-      aOptions: TAsyncConnectionsOptions = []); reintroduce;
+      aOptions: TAsyncConnectionsOptions = []; aThreadPoolCount: integer = 1); reintroduce;
     /// shutdown and finalize the server
     destructor Destroy; override;
     /// convert a rtsp://.... URI into a http://... proxy URI
@@ -130,92 +131,92 @@ implementation
 
 { TRtspConnection }
 
-function TRtspConnection.OnRead(
-  Sender: TAsyncConnections): TPollAsyncSocketOnRead;
+function TRtspConnection.OnRead: TPollAsyncSocketOnReadWrite;
 begin
-  if acoVerboseLog in Sender.Options then
-    Sender.LogVerbose(self, 'Frame forwarded', fSlot.readbuf);
-  if fGetBlocking.TrySndLow(pointer(fSlot.readbuf), length(fSlot.readbuf)) then
+  if acoVerboseLog in fOwner.Options then
+    fOwner.LogVerbose(self, 'Frame forwarded', [], fRd);
+  if fGetBlocking.TrySndLow(fRd.Buffer, fRd.Len) then
   begin
-    Sender.Log.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
-      [Handle, length(fSlot.readbuf)], self);
-    result := sorContinue;
+    fOwner.Log.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
+      [Handle, fRd.Len], self);
+    result := soContinue;
   end
   else
   begin
-    Sender.Log.Add.Log(sllDebug,
+    fOwner.Log.Add.Log(sllDebug,
       'OnRead % RTSP failed send to GET -> close % connection',
       [Handle, RemoteIP], self);
-    result := sorClose;
+    result := soClose;
   end;
-  fSlot.readbuf := '';
+  fRd.Reset;
 end;
 
-procedure TRtspConnection.BeforeDestroy(Sender: TAsyncConnections);
+procedure TRtspConnection.BeforeDestroy;
 begin
   fGetBlocking.Free;
-  inherited BeforeDestroy(Sender);
+  // inherited BeforeDestroy; // void parent method
 end;
 
 
 { TPostConnection }
 
-function TPostConnection.OnRead(
-  Sender: TAsyncConnections): TPollAsyncSocketOnRead;
+function TPostConnection.OnRead: TPollAsyncSocketOnReadWrite;
 var
+  b64: RawUtf8;
   decoded: RawByteString;
   rtsp: TAsyncConnection;
 begin
-  result := sorContinue;
-  decoded := Base64ToBinSafe(TrimControlChars(fSlot.readbuf));
+  result := soContinue;
+  fRd.AsText(b64);
+  decoded := Base64ToBinSafe(TrimControlChars(b64));
   if decoded = '' then
     exit; // maybe some pending command chars
-  fSlot.readbuf := '';
-  rtsp := Sender.ConnectionFindLocked(fRtspTag);
+  fRd.Reset;
+  rtsp := fOwner.ConnectionFindAndLock(fRtspTag, cReadOnly);
   if rtsp <> nil then
   try
-    Sender.Write(rtsp, decoded); // async sending to RTSP server
-    Sender.Log.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
+    fOwner.WriteString(rtsp, decoded); // async sending to RTSP server
+    fOwner.Log.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
       [Handle, decoded], self);
   finally
-    Sender.Unlock;
+    fOwner.Unlock(cReadOnly);
   end
   else
   begin
-    Sender.Log.Add.Log(sllDebug, 'OnRead % POST found no rtsp=%',
+    fOwner.Log.Add.Log(sllDebug, 'OnRead % POST found no rtsp=%',
       [Handle, fRtspTag], self);
-    result := sorClose;
+    result := soClose;
   end;
 end;
 
-procedure TPostConnection.BeforeDestroy(Sender: TAsyncConnections);
+procedure TPostConnection.BeforeDestroy;
 begin
-  Sender.ConnectionRemove(fRtspTag); // disable associated RTSP and GET sockets
-  inherited BeforeDestroy(Sender);
+  fOwner.ConnectionRemove(fRtspTag); // disable associated RTSP and GET sockets
+  // inherited BeforeDestroy; // void parent method
 end;
 
 
 
 { ******************** RTSP over HTTP Tunnelling }
 
-
 { TRtspOverHttpServer }
 
 constructor TRtspOverHttpServer.Create(
   const aRtspServer, aRtspPort, aHttpPort: RawUtf8; aLog: TSynLogClass;
-  const aOnStart, aOnStop: TOnNotifyThread; aOptions: TAsyncConnectionsOptions);
+  const aOnStart, aOnStop: TOnNotifyThread; aOptions: TAsyncConnectionsOptions;
+  aThreadPoolCount: integer);
 begin
   fLog := aLog;
   fRtspServer := aRtspServer;
   fRtspPort := aRtspPort;
-  fPendingGet := TRawUtf8List.Create([fObjectsOwned, fCaseSensitive]);
-  inherited Create(
-    aHttpPort, aOnStart, aOnStop, TPostConnection, 'rtsp/http', aLog, aOptions);
+  fPendingGet := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive]);
+  inherited Create(aHttpPort, aOnStart, aOnStop, TPostConnection, 'rtsp/http',
+    aLog, aOptions, aThreadPoolCount);
 end;
 
 destructor TRtspOverHttpServer.Destroy;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   log := fLog.Enter(self, 'Destroy');
   inherited Destroy;
@@ -238,6 +239,7 @@ var
   log: ISynLog;
   sock, get, old: TProxySocket;
   cookie: RawUtf8;
+  parse: THttpServerSocketGetRequestResult;
   res: TNetResult;
   rtsp: TNetSocket;
   i, found: PtrInt;
@@ -256,23 +258,30 @@ begin
   aConnection := nil;
   get := nil;
   result := false;
-  log := fLog.Enter('ConnectionCreate(%)', [PtrUInt(aSocket)], self);
+  log := fLog.Enter('ConnectionCreate(%)', [pointer(aSocket)], self);
   try
+    {$ifndef OSLINUX}
+    res := aSocket.MakeBlocking; // otherwise sock.GetRequest() fails randomly
+    if (res <> nrOK) and
+       (log <> nil) then
+      log.Log(sllTrace, 'ConnectionCreate MakeBlocking=%', [ToText(res)^], self);
+    {$endif OSLINUX}
     sock := TProxySocket.Create(nil);
     try
       sock.AcceptRequest(aSocket, nil);
       sock.RemoteIP := aRemoteIp;
       sock.CreateSockIn; // faster header process (released below once not needed)
-      if (sock.GetRequest({withBody=}false, {headertix=}0) = grHeaderReceived) and
+      parse := sock.GetRequest({withBody=}false, {headertix=}0);
+      if (parse = grHeaderReceived) and
          (sock.URL <> '') then
       begin
         if log <> nil then
           log.Log(sllTrace, 'ConnectionCreate received % % %',
-            [sock.Method, sock.URL, sock.HeaderGetText], self);
+            [sock.Method, sock.URL, sock.Http.Headers], self);
         cookie := sock.HeaderGetValue('X-SESSIONCOOKIE');
         if cookie = '' then
           exit;
-        fPendingGet.Safe.Lock;
+        fPendingGet.Safe.WriteLock;
         try
           found := -1;
           now := mormot.core.os.GetTickCount64 shr 10;
@@ -295,7 +304,7 @@ begin
               PendingDelete(found, 'duplicated')
             else
             begin
-              sock.Write(FormatUtf8(
+              sock.SndLow(FormatUtf8(
                 'HTTP/1.0 200 OK'#13#10 +
                 'Server: % %'#13#10 +
                 'Connection: close'#13#10 +
@@ -319,8 +328,8 @@ begin
                 log.Log(sllDebug, 'ConnectionCreate rejected on unknown %',
                   [sock], self)
             end
-            else if not IdemPropNameU(sock.ContentType, RTSP_MIME) then
-              PendingDelete(found, sock.ContentType)
+            else if not IdemPropNameU(sock.Http.ContentType, RTSP_MIME) then
+              PendingDelete(found, sock.Http.ContentType)
             else
             begin
               get := fPendingGet.Objects[found];
@@ -330,11 +339,13 @@ begin
             end;
           end;
         finally
-          fPendingGet.Safe.UnLock;
+          fPendingGet.Safe.WriteUnLock;
         end;
       end
       else if log <> nil then
-        log.Log(sllDebug, 'ConnectionCreate: ignored invalid %', [sock], self);
+        log.Log(sllDebug, 'ConnectionCreate rejected % % % % % %',
+          [ToText(parse)^, sock.Http.Command, sock, sock.Method, sock.URL,
+           sock.Http.Headers], self);
     finally
       sock.Free;
     end;
@@ -347,12 +358,13 @@ begin
       exit;
     end;
     res := NewSocket(
-      fRtspServer, fRtspPort, nlTCP, {bind=}false, 1000, 1000, 1000, 0, rtsp);
+      fRtspServer, fRtspPort, nlTcp, {bind=}false, 1000, 1000, 1000, 0, rtsp);
     if res <> nrOK then
       raise ERtspOverHttp.CreateUtf8('No RTSP server on %:% (%)',
         [fRtspServer, fRtspPort, ToText(res)^]);
-    postconn := TPostConnection.Create(aRemoteIp);
-    rtspconn := TRtspConnection.Create(aRemoteIp);
+    // create the main POST connection and its associated RTSP connection
+    postconn := TPostConnection.Create(self, aRemoteIp);
+    rtspconn := TRtspConnection.Create(self, aRemoteIp);
     if not inherited ConnectionAdd(aSocket, postconn) or
        not inherited ConnectionAdd(rtsp, rtspconn) then
       raise ERtspOverHttp.CreateUtf8('inherited %.ConnectionAdd(%) % failed',
@@ -372,11 +384,11 @@ begin
     if log <> nil then
       log.Log(sllTrace,
         'ConnectionCreate added get=% post=%/% and rtsp=%/% for %',
-        [PtrUInt(rtspconn.fGetBlocking.Sock), PtrUInt(aSocket), aConnection.Handle,
-         PtrUInt(rtsp), rtspconn.Handle, cookie], self);
+        [pointer(rtspconn.fGetBlocking.Sock), pointer(aSocket), aConnection.Handle,
+         pointer(rtsp), rtspconn.Handle, cookie], self);
   except
     if log <> nil then
-      log.Log(sllDebug, 'ConnectionCreate(%) failed', [PtrUInt(aSocket)], self);
+      log.Log(sllDebug, 'ConnectionCreate(%) failed', [pointer(aSocket)], self);
     get.Free;
   end;
 end;

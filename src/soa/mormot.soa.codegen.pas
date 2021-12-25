@@ -40,6 +40,7 @@ uses
   mormot.core.json,
   mormot.core.interfaces,
   mormot.core.mustache,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.soa.core,
@@ -295,7 +296,7 @@ const
 // - you shall have registered the aServices interface(s) by a previous call to
 // the overloaded Get(TypeInfo(IMyInterface)) method or RegisterInterfaces()
 // - you may specify an optional description file, as previously generated
-// by mORMotWrappers' FillDescriptionFromSource function - a local
+// by mormot.soa.codegen.pas' FillDescriptionFromSource function - a local
 // 'WrappersDescription' resource will also be checked
 // - to actually call the remote server, aOnCall should be supplied
 procedure ExecuteFromCommandLine(
@@ -338,7 +339,7 @@ const
     'oftVariant');
 
 type
-  /// types recognized and handled by this mORMotWrappers unit
+  /// types recognized and handled by this mormot.soa.codegen.pas unit
   TWrapperType = (
     wUnknown,
     wBoolean,
@@ -383,18 +384,36 @@ type
     lngSwagger);
 
 const
-  CROSSPLATFORM_KIND: array[TOrmFieldType] of TCrossPlatformOrmFieldKind =( // oftUnknown, oftAnsiText, oftUtf8Text, oftEnumerate, oftSet,    oftInteger,
-    cpkDefault, cpkDefault, cpkDefault, cpkDefault, cpkDefault, cpkDefault,
- // oftID,     oftRecord,  oftBoolean, oftFloat,   oftDateTime,
-    cpkDefault, cpkDefault, cpkDefault, cpkDefault, cpkDateTime,
- // oftTimeLog,oftCurrency,
-    cpkTimeLog, cpkDefault,
- // oftObject,  oftVariant, oftNullable, oftBlob, oftBlobDynArray, oftBlobCustom,
-    cpkDefault, cpkVariant, cpkVariant, cpkBlob, cpkDefault, cpkDefault,
- // oftUtf8Custom,oftMany, oftModTime,  oftCreateTime, oftTID,   oftRecordVersion
-    cpkRecord, cpkDefault, cpkModTime, cpkCreateTime, cpkDefault, cpkDefault,
- // oftSessionUserID, oftDateTimeMS, oftUnixTime, oftUnixMStime
-    cpkDefault, cpkDateTime, cpkDefault, cpkDefault);
+  CROSSPLATFORM_KIND: array[TOrmFieldType] of TCrossPlatformOrmFieldKind =(
+    cpkDefault,    // oftUnknown
+    cpkDefault,    // oftAnsiText
+    cpkDefault,    // oftUtf8Text
+    cpkDefault,    // oftEnumerate
+    cpkDefault,    // oftSet
+    cpkDefault,    // oftInteger
+    cpkDefault,    // oftID
+    cpkDefault,    // oftRecord
+    cpkDefault,    // oftBoolean
+    cpkDefault,    // oftFloat
+    cpkDateTime,   // oftDateTime
+    cpkTimeLog,    // oftTimeLog
+    cpkDefault,    // oftCurrency
+    cpkDefault,    // oftObject
+    cpkVariant,    // oftVariant
+    cpkVariant,    // oftNullable
+    cpkBlob,       // oftBlob
+    cpkDefault,    // oftBlobDynArray
+    cpkDefault,    // oftBlobCustom
+    cpkRecord,     // oftUtf8Custom
+    cpkDefault,    // oftMany
+    cpkModTime,    // oftModTime
+    cpkCreateTime, // oftCreateTime
+    cpkDefault,    // oftTID
+    cpkDefault,    // oftRecordVersion
+    cpkDefault,    // oftSessionUserID
+    cpkDateTime,   // oftDateTimeMS
+    cpkDefault,    // oftUnixTime
+    cpkDefault);   // oftUnixMSTime
 
   SIZETODELPHI: array[0..8] of string[7] = (
     'integer', 'byte', 'word', 'integer',
@@ -410,8 +429,8 @@ const
   SWD32 = '{"type":"number","format":"float"}';
   SWD64 = '{"type":"number","format":"double"}';
 
-  { TODO: refactor TID and Int64 for JavaScript (integers truncated to 53-bit) }
-  TYPES_LANG: array[TWrapperLanguage, TWrapperType] of RawUtf8 =(
+  { TODO: refactor TID and Int64 for JavaScript? (integers truncated to 53-bit) }
+  TYPES_LANG: array[TWrapperLanguage, TWrapperType] of RawUtf8 = (
     // lngDelphi
     ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal', 'Int64',
     'UInt64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
@@ -449,7 +468,8 @@ const
     '', '', '', '', //wCustomAnswer, wRecord, wArray, wVariant
     '', SWI64, '', '' //wObject, wORM, wInterface, wRecordVersion
     ));
-  TYPES_ORM: array[TOrmFieldType] of TWrapperType = (wUnknown,        // oftUnknown
+  TYPES_ORM: array[TOrmFieldType] of TWrapperType = (
+    wUnknown,        // oftUnknown
     wString,         // oftAnsiText
     wRawUtf8,        // oftUtf8Text
     wEnum,           // oftEnumerate
@@ -480,69 +500,70 @@ const
     wUnknown);       // oftUnixMSTime
 
   TYPES_SIMPLE: array[TRttiParserType] of TWrapperType = (
-    wUnknown,  // ptNone
-    wArray,
-    wBoolean,
-    wByte,
-    wCardinal,
-    wCurrency,
-    wDouble,
-    wDouble,   // ptExtended
-    wInt64,
-    wInteger,
-    wQWord,
-    wBlob,
-    wRawJson,
-    wRawUtf8,
-    wRecord,
-    wSingle,
-    wString,
-    wRawUtf8,  // ptSynUnicode
-    wDateTime,
-    wDateTime, // ptDateTimeMS
-    wGUID,
-    wBlob,     // ptHash128
-    wBlob,     // ptHash256
-    wBlob,     // ptHash512
-    wID,
-    wTimeLog,
-    wRawUtf8,
-    wInt64,    // ptUnixTime
-    wInt64,    // ptUnixMSTime
-    wVariant,
-    wRawUtf8,  // ptWideString
-    wRawUtf8,  // ptWinAnsi
-    wWord,
-    wEnum,
-    wSet,
-    wUnknown,  // ptClass
-    wUnknown,  // ptDynArray
-    wUnknown,  // ptInterface
-    wUnknown); // ptCustom
+    wUnknown,  //  ptNone
+    wArray,    //  ptArray
+    wBoolean,  //  ptBoolean
+    wByte,     //  ptByte
+    wCardinal, //  ptCardinal
+    wCurrency, //  ptCurrency
+    wDouble,   //  ptDouble
+    wDouble,   //  ptExtended
+    wInt64,    //  ptInt64
+    wInteger,  //  ptInteger
+    wQWord,    //  ptQWord
+    wBlob,     //  ptRawByteString
+    wRawJson,  //  ptRawJson
+    wRawUtf8,  //  ptRawUtf8
+    wRecord,   //  ptRecord
+    wSingle,   //  ptSingle
+    wString,   //  ptString
+    wRawUtf8,  //  ptSynUnicode
+    wDateTime, //  ptDateTime
+    wDateTime, //  ptDateTimeMS
+    wGUID,     //  ptGuid
+    wBlob,     //  ptHash128
+    wBlob,     //  ptHash256
+    wBlob,     //  ptHash512
+    wID,       //  ptOrm
+    wTimeLog,  //  ptTimeLog
+    wRawUtf8,  //  ptUnicodeString
+    wInt64,    //  ptUnixTime
+    wInt64,    //  ptUnixMSTime
+    wVariant,  //  ptVariant
+    wRawUtf8,  //  ptWideString
+    wRawUtf8,  //  ptWinAnsi
+    wWord,     //  ptWord
+    wEnum,     //  ptEnumeration
+    wSet,      //  ptSet
+    wUnknown,  //  ptClass
+    wUnknown,  //  ptDynArray
+    wUnknown,  //  ptInterface
+    wUnknown); //  ptCustom
 
   TYPES_SOA: array[TInterfaceMethodValueType] of TWrapperType = (
-    wUnknown,
-    wUnknown,
-    wBoolean,
-    wEnum,
-    wSet,
-    wUnknown,
-    wUnknown,
-    wUnknown,
-    wDouble,
-    wDateTime,
-    wCurrency,
-    wRawUtf8,
-    wString,
-    wRawUtf8,
-    wRawUtf8,
-    wRawUtf8,
-    wRecord,
-    wVariant,
-    wObject,
-    wRawJson,
-    wArray,
-    wUnknown); // integers are wUnknown to force best type
+    wUnknown,  // imvNone
+    wUnknown,  // imvSelf
+    wBoolean,  // imvBoolean
+    wEnum,     // imvEnum
+    wSet,      // imvSet
+    wUnknown,  // imvInteger
+    wUnknown,  // imvCardinal
+    wUnknown,  // imvInt64
+    wDouble,   // imvDouble
+    wDateTime, // imvDateTime
+    wCurrency, // imvCurrency
+    wRawUtf8,  // imvRawUtf8
+    wString,   // imvString
+    wRawUtf8,  // imvRawByteString
+    wRawUtf8,  // imvWideString
+    wRawUtf8,  // imvBinary
+    wRecord,   // imvRecord
+    wVariant,  // imvVariant
+    wObject,   // imvObject
+    wRawJson,  // imvRawJson
+    wArray,    // imvDynArray
+    wUnknown); // imvInterface
+    // integers are wUnknown to force best type recognition
 
 type
   EWrapperContext = class(ESynException);
@@ -551,8 +572,8 @@ type
   TWrapperContext = class
   protected
     fServer: TRestServer;
-    fORM, fRecords, fEnumerates, fSets, fArrays,
-     fUnits, fDescriptions: TDocVariantData;
+    fORM, fRecords, fEnumerates, fSets, fArrays: TDocVariantData;
+    fUnits, fDescriptions: TDocVariantData;
     fSOA: variant;
     fSourcePath: TFileNameDynArray;
     fHasAnyRecord: boolean;
@@ -582,13 +603,19 @@ var
   desc: RawByteString;
 begin
   TDocVariant.NewFast([
-    @fORM, @fRecords, @fEnumerates, @fSets, @fArrays, @fUnits, @fDescriptions]);
+    @fORM,
+    @fRecords,
+    @fEnumerates,
+    @fSets,
+    @fArrays,
+    @fUnits,
+    @fDescriptions]);
   if aDescriptions <> '' then
     desc := StringFromFile(aDescriptions);
   if {%H-}desc = '' then
     ResourceSynLZToRawByteString(WRAPPER_RESOURCENAME, desc);
   if desc <> '' then
-    fDescriptions.InitJsonInPlace(Pointer(desc), JSON_OPTIONS_FAST);
+    fDescriptions.InitJsonInPlace(Pointer(desc), JSON_FAST);
 end;
 
 function TWrapperContext.ContextNestedProperties(rtti: TRttiCustom;
@@ -640,13 +667,15 @@ var
       raise EWrapperContext.CreateUtf8(
         '%.RegisterType(%): no RTTI', [typAsName^, typName]);
     case typ of
-      wEnum, wSet:
+      wEnum,
+      wSet:
         // include (untrimed) identifier: values[] may be trimmed at mustache level
         info := _JsonFastFmt('{name:?,values:%}',
           [rtti.Cache.EnumInfo^.GetEnumNameAllAsJsonArray(false)], [typName]);
       wRecord:
         if rtti.Props.Count <> 0 then
-          info := _ObjFast(['name', typName,
+          info := _ObjFast([
+            'name',   typName,
             'fields', ContextNestedProperties(rtti, parentName)]);
       wArray:
         begin
@@ -690,7 +719,8 @@ begin
       typ := TYPES_SIMPLE[rtti.Parser];
       if typ = wUnknown then
         case rtti.Kind of
-          rkRecord {$ifdef FPC}, rkObject{$endif}:
+          rkRecord
+          {$ifdef FPC}, rkObject{$endif}:
             typ := wRecord;
           rkInterface:
             typ := wInterface;
@@ -716,12 +746,12 @@ begin
   // generate basic context as TDocVariant fields
   result := _ObjFast([
     'typeWrapper', typAsName^,
-    'typeSource', typName,
-    'typeDelphi', VarName(lngDelphi),
-    'typePascal', VarName(lngPascal),
-    'typeCS', VarName(lngCS),
-    'typeJava', VarName(lngJava),
-    'typeTS', VarName(lngTypeScript),
+    'typeSource',  typName,
+    'typeDelphi',  VarName(lngDelphi),
+    'typePascal',  VarName(lngPascal),
+    'typeCS',      VarName(lngCS),
+    'typeJava',    VarName(lngJava),
+    'typeTS',      VarName(lngTypeScript),
     'typeSwagger', VarName(lngSwagger)]);
   if self = nil then
     // no need to have full info if called e.g. from MVC
@@ -733,13 +763,26 @@ begin
         AddUnit(rtti.Info^.RttiClass^.UnitName^, @result);
     end;
   case typ of
-    wBoolean, wByte, wWord, wInteger, wCardinal, wInt64, wQWord, wID,
-    wReference, wTimeLog, wModTime, wCreateTime, wSingle, wDouble,
-    wRawUtf8, wString:
+    wBoolean,
+    wByte,
+    wWord,
+    wInteger,
+    wCardinal,
+    wInt64,
+    wQWord,
+    wID,
+    wReference,
+    wTimeLog,
+    wModTime,
+    wCreateTime,
+    wSingle,
+    wDouble,
+    wRawUtf8,
+    wString:
       ; // simple types have no special marshalling
     wDateTime:
-      _ObjAddProps(['isDateTime', true,
-                    'toVariant', 'DateTimeToIso8601',
+      _ObjAddProps(['isDateTime',  true,
+                    'toVariant',   'DateTimeToIso8601',
                     'fromVariant', 'Iso8601ToDateTime'], result);
     wRecordVersion:
       _ObjAddProp('isRecordVersion', true, result);
@@ -751,15 +794,15 @@ begin
       _ObjAddProp('isJson', true, result);
     wEnum:
       begin
-        _ObjAddProps(['isEnum', true,
-                      'toVariant', 'ord',
+        _ObjAddProps(['isEnum',      true,
+                      'toVariant',   'ord',
                       'fromVariant', 'Variant2' + typName], result);
         if self <> nil then
           RegisterType(fEnumerates);
       end;
     wSet:
       begin
-        _ObjAddProps(['isSet', true,
+        _ObjAddProps(['isSet',      true,
                       'toVariant',
                         SIZETODELPHI[rtti.Cache.EnumInfo.SizeInStorageAsSet],
                       'fromVariant', typName], result);
@@ -767,17 +810,17 @@ begin
           RegisterType(fSets);
       end;
     wGUID:
-      _ObjAddProps(['toVariant', 'GuidToVariant',
+      _ObjAddProps(['toVariant',   'GuidToVariant',
                     'fromVariant', 'VariantToGuid'], result);
     wCustomAnswer:
-      _ObjAddProps(['toVariant', 'HttpBodyToVariant',
+      _ObjAddProps(['toVariant',   'HttpBodyToVariant',
                     'fromVariant', 'VariantToHttpBody'], result);
     wRecord:
       begin
         _ObjAddProp('isRecord', true, result);
         if rtti <> nil then
         begin
-          _ObjAddProps(['toVariant', typName + '2Variant',
+          _ObjAddProps(['toVariant',   typName + '2Variant',
                         'fromVariant', 'Variant2' + typName], result);
           if self <> nil then
             RegisterType(fRecords);
@@ -790,13 +833,13 @@ begin
         raise EWrapperContext.CreateUtf8(
           '%.ContextFromRtti: % should be part of the model', [self, typName])
       else
-        _ObjAddProps(['isSQLRecord', true,
+        _ObjAddProps(['isSQLRecord',  true,
                       'isOrm', true], result);
     wObject:
       begin
         _ObjAddProp('isObject', true, result);
         if rtti <> nil then
-          _ObjAddProps(['toVariant', 'ObjectToVariant',
+          _ObjAddProps(['toVariant',   'ObjectToVariant',
                         'fromVariant', typName + '.CreateFromVariant'], result);
       end;
     wArray:
@@ -804,15 +847,15 @@ begin
         _ObjAddProp('isArray', true, result);
         if rtti <> nil then
         begin
-          _ObjAddProps(['toVariant', typName + '2Variant',
+          _ObjAddProps(['toVariant',   typName + '2Variant',
                         'fromVariant', 'Variant2' + typName], result);
           if self <> nil then
             RegisterType(fArrays);
         end;
       end;
     wBlob:
-      _ObjAddProps(['isBlob', true,
-                    'toVariant', 'BlobToVariant',
+      _ObjAddProps(['isBlob',      true,
+                    'toVariant',   'BlobToVariant',
                     'fromVariant', 'VariantToBlob'], result);
     wInterface:
       _ObjAddProp('isInterface', true, result);
@@ -855,7 +898,9 @@ begin
     until src = nil;
   end;
   fServer := aServer;
-  TDocVariant.NewFast([@fields, @services]);
+  TDocVariant.NewFast([
+    @fields,
+    @services]);
   // compute ORM information
   for t := 0 to fServer.Model.TablesMax do
   begin
@@ -882,19 +927,19 @@ begin
         raise EWrapperContext.CreateUtf8('Unexpected type % for %.%',
           [nfo, fServer.Model.Tables[t], nfo.Name]);
       kind := CROSSPLATFORM_KIND[nfo.OrmFieldType];
-      _ObjAddProps(['index', f + 1,
-                    'name', nfo.Name,
-                    'sql', ord(nfo.OrmFieldType),
-                    'sqlName', nfo.OrmFieldTypeName^,
-                    'typeKind', ord(kind),
+      _ObjAddProps(['index',        f + 1,
+                    'name',         nfo.Name,
+                    'sql',          ord(nfo.OrmFieldType),
+                    'sqlName',      nfo.OrmFieldTypeName^,
+                    'typeKind',     ord(kind),
                     'typeKindName', CROSSPLATFORMKIND_TEXT[kind],
-                    'attr', byte(nfo.Attributes)], field);
+                    'attr',         byte(nfo.Attributes)], field);
       if aIsUnique in nfo.Attributes then
         _ObjAddProp('unique', true, field);
       if nfo.FieldWidth > 0 then
         _ObjAddProp('width', nfo.FieldWidth, field);
       if f < nfoList.Count - 1 then
-        _ObjAddProp('comma', ',', field)
+        _ObjAddPropU('comma', ',', field)
       else
         // may conflict with rec.comma otherwise
         _ObjAddProp('comma', null, field);
@@ -927,31 +972,32 @@ begin
       with srv do
         rec := _ObjFast([
           'uri', uri,
-          'interfaceUri', InterfaceUri,
-          'interfaceMangledUri', InterfaceMangledUri,
-          'interfaceName', InterfaceFactory.InterfaceTypeInfo^.RawName,
-          'GUID', GuidToRawUtf8(InterfaceFactory.InterfaceIID),
-          'contractExpected', UnQuoteSqlString(ContractExpected),
-          'instanceCreation', ord(InstanceCreation),
+          'interfaceUri',         InterfaceUri,
+          'interfaceMangledUri',  InterfaceMangledUri,
+          'interfaceName',        InterfaceFactory.InterfaceTypeInfo^.RawName,
+          'GUID',                 GuidToRawUtf8(InterfaceFactory.InterfaceIID),
+          'contractExpected',     UnQuoteSqlString(ContractExpected),
+          'instanceCreation',     ord(InstanceCreation),
           'instanceCreationName', GetEnumNameTrimed(
             TypeInfo(TServiceInstanceImplementation), ord(InstanceCreation)),
-          'methods', ContextFromMethods(InterfaceFactory),
+          'methods',              ContextFromMethods(InterfaceFactory),
           'bypassAuthentication', ByPassAuthentication,
-          'resultAsJsonObject', ResultAsJsonObject,
+          'resultAsJsonObject',   ResultAsJsonObject,
           'resultAsJsonObjectWithoutResult',
             ResultAsJsonObjectWithoutResult and
             (InstanceCreation in SERVICE_IMPLEMENTATION_NOID),
-          'resultAsXMLObject', ResultAsXMLObject,
-          'timeoutSec', TimeoutSec,
+          'resultAsXMLObject',    ResultAsXMLObject,
+          'timeoutSec',           TimeoutSec,
           'serviceDescription',
-            fDescriptions.GetValueOrNull(InterfaceFactory.InterfaceName)]);
+            fDescriptions.GetValueOrNull(InterfaceFactory.InterfaceName)
+        ]);
       if srv.InstanceCreation = sicClientDriven then
         rec.isClientDriven := true;
       services.AddItem(rec);
     end;
     fSOA := _ObjFast([
-      'enabled', True,
-      'services', variant(services),
+      'enabled',          True,
+      'services',         variant(services),
       'expectMangledUri', fServer.Services.ExpectMangledUri]);
   end;
 end;
@@ -959,7 +1005,7 @@ end;
 constructor TWrapperContext.CreateFromUsedInterfaces(
   const aDescriptions: TFileName);
 var
-  interfaces: TSynObjectListLocked;
+  interfaces: TSynObjectListLightLocked;
   services: TDocVariantData;
   i: PtrInt;
 begin
@@ -967,14 +1013,19 @@ begin
   interfaces := TInterfaceFactory.GetUsedInterfaces;
   if interfaces = nil then
     exit;
-  services.InitFast;
-  for i := 0 to interfaces.Count - 1 do
-    services.AddItem(_ObjFast([
-      'interfaceName',
-        TInterfaceFactory(interfaces.List[i]).InterfaceTypeInfo^.RawName,
-      'methods', ContextFromMethods(interfaces.List[i])]));
+  {%H-}services.InitFast;
+  interfaces.Safe.ReadLock;
+  try
+    for i := 0 to interfaces.Count - 1 do
+      services.AddItem(_ObjFast([
+        'interfaceName',
+          TInterfaceFactory(interfaces.List[i]).InterfaceTypeInfo^.RawName,
+        'methods', ContextFromMethods(interfaces.List[i])]));
+  finally
+    interfaces.Safe.ReadUnLock;
+  end;
   fSOA := _ObjFast([
-    'enabled', true,
+    'enabled',  true,
     'services', variant(services)]);
 end;
 
@@ -998,10 +1049,10 @@ begin
     begin
       arg := ContextFromRtti(TYPES_SOA[ValueType], ArgRtti);
       _ObjAddProps([
-        'argName', ParamName^,
-        'argType', ArgTypeName^,
-        'arg.dir', ord(ValueDirection),
-        'dirName', DIRTODELPHI[ValueDirection],
+        'argName',  ParamName^,
+        'argType',  ArgTypeName^,
+        'arg.dir',  ord(ValueDirection),
+        'dirName',  DIRTODELPHI[ValueDirection],
         'dirNoOut', DIRTOSMS[ValueDirection]], arg);
       if ValueDirection in [imdConst, imdVar] then
         _ObjAddProp('dirInput', true, arg);
@@ -1011,22 +1062,22 @@ begin
         _ObjAddProp('dirResult', true, arg);
     end;
     if a < meth.ArgsNotResultLast then
-      _ObjAddProp('commaArg', '; ', arg);
+      _ObjAddPropU('commaArg', '; ', arg);
     if a = high(meth.Args) then
       _ObjAddProp('isArgLast', true, arg);
     if (meth.args[a].ValueDirection in [imdConst, imdVar]) and
        (a < meth.ArgsInLast) then
-      _ObjAddProp('commaInSingle', ',', arg);
+      _ObjAddPropU('commaInSingle', ',', arg);
     if (meth.args[a].ValueDirection in [imdVar, imdOut]) and
        (a < meth.ArgsOutNotResultLast)
       then
-      _ObjAddProp('commaOut', '; ', arg);
+      _ObjAddPropU('commaOut', '; ', arg);
     if meth.args[a].ValueDirection <> imdConst then
     begin
       _ObjAddProps(['indexOutResult', UInt32ToUtf8(r) + ']'], arg);
       inc(r);
       if a < meth.ArgsOutLast then
-        _ObjAddProp('commaOutResult', '; ', arg);
+        _ObjAddPropU('commaOutResult', '; ', arg);
     end;
     TDocVariantData(result).AddItem(arg);
   end;
@@ -1043,10 +1094,10 @@ begin
   with meth do
   begin
     result := _ObjFast([
-      'methodName', uri,
-      'methodIndex', ExecutionMethodIndex,
-      'verb', VERB_DELPHI[ArgsResultIndex >= 0],
-      'args', ContextArgsFromMethod(meth),
+      'methodName',      uri,
+      'methodIndex',     ExecutionMethodIndex,
+      'verb',            VERB_DELPHI[ArgsResultIndex >= 0],
+      'args',            ContextArgsFromMethod(meth),
       'argsOutputCount', ArgsOutputValuesCount]);
     if self <> nil then
     begin
@@ -1101,7 +1152,7 @@ var
   methods: TDocVariantData; // circumvent FPC -O2 memory leak
 begin
   AddUnit(int.InterfaceTypeInfo^.InterfaceUnitName^, nil);
-  methods.InitFast;
+  {%H-}methods.InitFast;
   for m := 0 to int.MethodsCount - 1 do
     methods.AddItem(ContextFromMethod(int.Methods[m]));
   result := variant(methods);
@@ -1125,20 +1176,20 @@ begin
   end;
   result := ContextFromRtti(wUnknown, prop.Value, '', fullName);
   _ObjAddProps([
-    'propName', prop.Name,
+    'propName',     prop.Name,
     'fullPropName', fullName], result);
   if level > 0 then
-    _ObjAddProp('nestedIdentation', StringOfChar(' ', level * 2), result);
+    _ObjAddPropU('nestedIdentation', RawUtf8OfChar(' ', level * 2), result);
   case prop.Value.Parser of
     ptRecord:
       _ObjAddProps([
-        'isSimple', null,
+        'isSimple',    null,
         'nestedRecord', _ObjFast([
           'nestedRecord', null,
-          'fields', ContextNestedProperties(prop.Value, fullName)])], result);
+          'fields',  ContextNestedProperties(prop.Value, fullName)])], result);
     ptArray:
       _ObjAddProps([
-        'isSimple', null,
+        'isSimple',          null,
         'nestedRecordArray', _ObjFast([
           'nestedRecordArray', null,
           'fields', ContextNestedProperties(prop.Value, fullName)])], result);
@@ -1173,48 +1224,49 @@ var
 begin
   // compute the Model information as JSON
   result := _ObjFast([
-    'time', NowToString,
-    'year', CurrentYear,
+    'time',          NowToString,
+    'year',          CurrentYear,
     'mORMotVersion', SYNOPSE_FRAMEWORK_VERSION,
     'Executable', VarStringOrNull(StringToUtf8(Executable.Version.DetailedOrVoid)),
-    'exeInfo', Executable.Version.VersionInfo,
-    'exeName', Executable.ProgramName,
-    'hasorm', fORM.Count > 0,
-    'orm', variant(fORM),
-    'soa', fSOA]);
+    'exeInfo',       Executable.Version.VersionInfo,
+    'exeName',       Executable.ProgramName,
+    'hasorm',        fORM.Count > 0,
+    'orm',           variant(fORM),
+    'soa',           fSOA]);
   if fServer <> nil then
-    _ObjAddProps(['root', fServer.Model.Root], result);
+    _ObjAddProps([
+      'root', fServer.Model.Root], result);
   if fHasAnyRecord then
     _ObjAddProp('ORMWithRecords', true, result);
   if fRecords.Count > 0 then
   begin
     AddDescription(fRecords, 'name', 'recordDescription');
-    _ObjAddProps(['records', variant(fRecords),
+    _ObjAddProps(['records',     variant(fRecords),
                   'withRecords', true,
                   'withHelpers', true], result);
   end;
   if fEnumerates.Count > 0 then
   begin
     AddDescription(fEnumerates, 'name', 'enumDescription');
-    _ObjAddProps(['enumerates', variant(fEnumerates),
+    _ObjAddProps(['enumerates',     variant(fEnumerates),
                   'withEnumerates', true,
-                  'withHelpers', true], result);
+                  'withHelpers',    true], result);
   end;
   if fSets.Count > 0 then
   begin
     AddDescription(fSets, 'name', 'setDescription');
-    _ObjAddProps(['sets', variant(fSets),
-                  'withsets', true,
+    _ObjAddProps(['sets',        variant(fSets),
+                  'withsets',    true,
                   'withHelpers', true], result);
   end;
   if fArrays.Count > 0 then
   begin
-    _ObjAddProps(['arrays', variant(fArrays),
-                  'withArrays', true,
+    _ObjAddProps(['arrays',      variant(fArrays),
+                  'withArrays',  true,
                   'withHelpers', true], result);
   end;
   if fUnits.Count > 0 then
-    _ObjAddProp('units', variant(fUnits), result);
+    _ObjAddProp('units', fUnits, result);
   // add the first supported authentication class type as default
   if fServer <> nil then
     for s := 0 to fServer.AuthenticationSchemesCount - 1 do
@@ -1285,12 +1337,12 @@ begin
     context.uri := Ctxt.UriWithoutSignature;
     if llfHttps in Ctxt.Call^.LowLevelConnectionFlags then
       _ObjAddProps(['protocol', 'https',
-                    'https', true], context)
+                    'https',    true], context)
     else
-      _ObjAddProp('protocol', 'http', context);
+      _ObjAddPropU('protocol', 'http', context);
     host := Ctxt.InHeader['host'];
     if host <> '' then
-      _ObjAddProp('host', host, context);
+      _ObjAddPropU('host', host, context);
     port := GetInteger(pointer(split(host, ':', host)));
     if port = 0 then
       port := 80;
@@ -1361,7 +1413,7 @@ begin
   else
   begin
     _ObjAddProps(['templateName', templateName,
-                  'filename', unitName], context);
+                  'filename',     unitName], context);
     result := TSynMustache.Parse(template).Render(
       context, nil, TSynMustache.HelpersGetStandardList, nil, true);
   end;
@@ -1723,18 +1775,18 @@ begin
         [services[i]]);
     context := ContextFromModel(server);
     _ObjAddProps([
-      'filename', FileName,
-      'projectname', ProjectName,
-      'exeName', Executable.ProgramName,
-      'User', Executable.User,
-      'calltype', CallType,
+      'filename',     FileName,
+      'projectname',  ProjectName,
+      'exeName',      Executable.ProgramName,
+      'User',         Executable.User,
+      'calltype',     CallType,
       'callfunction', CallFunction,
-      'exception', ExceptionType,
+      'exception',    ExceptionType,
       'defaultdelay', DefaultDelay], context);
     if high(units) >= 0 then
       _Safe(context)^.O['units']^.AddItems(units);
     if Key <> '' then
-      _ObjAddProps(['asynchkey', Key,
+      _ObjAddProps(['asynchkey',     Key,
                     'asynchkeytype', KeyType], context);
     _ObjAddProps(additionalcontext, context);
     for i := 0 to high(services) do
@@ -2040,7 +2092,7 @@ begin
   if {%H-}desc = '' then
     ResourceSynLZToRawByteString(WRAPPER_RESOURCENAME, desc);
   if desc <> '' then
-    fDescriptions.InitJsonInPlace(pointer(desc), JSON_OPTIONS_FAST);
+    fDescriptions.InitJsonInPlace(pointer(desc), JSON_FAST);
 end;
 
 procedure TServiceClientCommandLine.Execute;

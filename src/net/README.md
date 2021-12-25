@@ -14,8 +14,10 @@ All `mormot.net.*.pas` units define client/server communication as used by our f
 
 Cross-Platform Raw Sockets API Definition
 - Socket Process High-Level Encapsulation
+- MAC and IP Addresses Support
 - TLS / HTTPS Encryption Abstract Layer
 - Efficient Multiple Sockets Polling
+- `TUri` parsing/generating URL wrapper
 - `TCrtSocket` Buffered Socket Read/Write Class
 
 The Low-Level Sockets API is encapsultated into a single set of functions, and wrapped around a `TNetSocket` abstract helper, and never made public.
@@ -30,10 +32,14 @@ HTTP/HTTPS Abstract Process Classes and Definitions
 ### mormot.net.client
 
 HTTP Client Classes
+- `THttpMultiPartStream` for multipart/formdata HTTP POST
 - `THttpClientSocket` Implementing HTTP client over plain sockets
 - `THttpRequest` Abstract HTTP client class
 - `TWinHttp` `TWinINet` `TWinHttpWebSocketClient` `TCurlHTTP`
+- `TSimpleHttpClient` Wrapper Class
 - Cached HTTP Connection to a Remote Server
+- Send Email using the `SMTP` Protocol
+- `DNS` Resolution Cache for `mormot.net.sock` `NewSocket()`
 
 ### mormot.net.server
 
@@ -70,6 +76,12 @@ WebSockets Bidirectional Server
 - `TWebSocketProtocolChat` Simple Protocol
 - `TWebSocketProcessServer` Processing Class
 - `TWebSocketServerSocket` Bidirectional REST Server
+
+### mormot.net.ws.async
+
+Asynchronous WebSockets Bidirectional Server
+- `TWebSocketAsyncServer` Event-Driven HTTP/WebSockets Server
+- `TWebSocketAsyncServerRest` Bidirectional REST Server
 
 ### mormot.net.relay
 

@@ -32,12 +32,14 @@ uses
   mormot.crypt.jwt,
   mormot.net.client,
   mormot.net.server,
+  mormot.net.http,
   mormot.net.relay,
   mormot.net.ws.core,
   mormot.net.ws.client,
   mormot.net.ws.server,
   mormot.db.core,
   mormot.db.nosql.bson,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.orm.storage,
@@ -47,6 +49,7 @@ uses
   mormot.soa.core,
   mormot.soa.client,
   mormot.soa.server,
+  mormot.soa.codegen,
   mormot.rest.core,
   mormot.rest.client,
   mormot.rest.server,
@@ -54,6 +57,7 @@ uses
   mormot.rest.sqlite3,
   mormot.rest.http.client,
   mormot.rest.http.server,
+  mormot.rest.mvc,
   mormot.db.raw.sqlite3,
   mormot.db.raw.sqlite3.static,
   test.core.data,
@@ -113,7 +117,7 @@ type
   // - since it inherits from ICalculator interface, it will also test
   // the proper interface inheritance handling (i.e. it will test that
   // ICalculator methods are also available)
-  IComplexCalculator = interface(ICalculator)
+  IComplexCalculator = interface(ICalculator)           
     ['{8D0F3839-056B-4488-A616-986CF8D4DEB7}']
     /// purpose of this method is to substract two complex numbers
     // - using class instances as parameters
@@ -125,6 +129,8 @@ type
     /// test variant kind of parameters
     function TestVariants(const Text: RawUtf8; V1: Variant;
       var V2: variant): variant;
+    /// test (maybe huge) RawJson content
+    function TestRawJson(len, value: integer): RawJson;
     /// test in/out collections
     procedure Collections(Item: TCollTest; var List: TCollTestsI;
       out Copy: TCollTestsI);
@@ -135,12 +141,18 @@ type
       out CustomerData: TCustomerData): Boolean;
     //// validate TOrm transmission
     procedure FillPeople(var People: TOrmPeople);
-    {$ifdef UNICODE}
+    //// validate array of TOrm transmission
+    procedure FillPeoples(n: integer; out People: TOrmPeopleObjArray);
+    {$ifndef CPUAARCH64} // FPC doesn't follow the AARCH64 ABI -> fixme
+    {$ifndef HASNOSTATICRTTI}
     /// validate simple record transmission
-    // - older Delphi versions (e.g. 6-7) do not allow records without
+    // - older Delphi versions (e.g. 6-7-2009) do not allow records without
     // nested reference-counted types
+    // - CPUAARCH64 has troubles with TConsultNav size and trigger GPF when
+    // returned as function result -> Echo is an "out" parameter here
     function EchoRecord(const Nav: TConsultaNav): TConsultaNav;
-    {$endif UNICODE}
+    {$endif HASNOSTATICRTTI}
+    {$endif CPUAARCH64}
   end;
 
   /// a test interface, used by TTestServiceOrientedArchitecture
@@ -244,7 +256,7 @@ type
       aOptions: TInterfaceMethodOptions = []);
     procedure ClientAlgo(algo: TRestAuthenticationSignedUriAlgo);
     class procedure CustomReader(var Context: TJsonParserContext; Data: pointer);
-    class procedure CustomWriter(W: TTextWriter; Data: pointer;
+    class procedure CustomWriter(W: TJsonWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions);
     procedure SetOptions(aAsJsonObject: boolean; aOptions: TInterfaceMethodOptions);
     procedure IntSubtractJson(Ctxt: TOnInterfaceStubExecuteParamsJson);
@@ -341,6 +353,7 @@ type
     function TestBlob(n: TComplexNumber): TServiceCustomAnswer;
     function TestVariants(const Text: RawUtf8;
       V1: Variant; var V2: variant): variant;
+    function TestRawJson(len, value: integer): RawJson;
     procedure Collections(Item: TCollTest; var List: TCollTestsI;
       out Copy: TCollTestsI);
     destructor Destroy; override;
@@ -349,6 +362,7 @@ type
     function GetCustomer(CustomerId: Integer;
       out CustomerData: TCustomerData): Boolean;
     procedure FillPeople(var People: TOrmPeople);
+    procedure FillPeoples(n: integer; out People: TOrmPeopleObjArray);
   end;
 
   TServiceComplexNumber = class(TInterfacedObject, IComplexNumber)
@@ -484,7 +498,7 @@ function TServiceCalculator.RepeatJsonArray(
 var
   buf: array[word] of byte;
 begin
-  with TTextWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
+  with TJsonWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
   try
     Add('[');
     while count > 0 do
@@ -507,7 +521,7 @@ function TServiceCalculator.RepeatTextArray(
 var
   buf: array[word] of byte;
 begin
-  with TTextWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
+  with TJsonWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
   try
     while count > 0 do
     begin
@@ -534,19 +548,19 @@ var
 
 function TServiceComplexCalculator.IsNull(n: TComplexNumber): boolean;
 begin
-  Result := (n.Real = 0) and (n.Imaginary = 0);
+  result := (n.Real = 0) and (n.Imaginary = 0);
 end;
 
 procedure TServiceComplexCalculator.Substract(n1, n2: TComplexNumber;
   out Result: TComplexNumber);
 begin
-  {%H-}Result.Real := n1.Real - n2.Real;
-  Result.Imaginary := n1.Imaginary - n2.Imaginary;
+  {%H-}result.Real := n1.Real - n2.Real;
+  result.Imaginary := n1.Imaginary - n2.Imaginary;
 end;
 
 function TServiceComplexCalculator.EchoRecord(const Nav: TConsultaNav): TConsultaNav;
 begin
-  Result := Nav;
+  result := Nav;
 end;
 
 function GetThreadID: PtrUInt;
@@ -557,15 +571,19 @@ end;
 procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
-    itmDirect, itmClient, itmMainThread:
-      {$ifndef OSANDROID}
-      if GetThreadID <> PtrUInt(MainThreadID) then
+    itmDirect,
+    itmClient,
+    itmMainThread:
+      {$ifdef OSANDROID}
+      // On Android, processes never run in the mainthread
+      ;
       {$else}
-      // On Android, processes never run in the mainthread.
-      if false then
-      {$endif OSANDROID}
+      if GetThreadID <> PtrUInt(MainThreadID) then
         raise Exception.Create('Shall be in main thread');
-    itmPerInterfaceThread, itmHttp, itmLocked:
+      {$endif OSANDROID}
+    itmPerInterfaceThread,
+    itmHttp,
+    itmLocked:
       if GetThreadID = PtrUInt(MainThreadID) then
         raise Exception.Create('Shall NOT be in main thread')
       else if ServiceRunningContext.RunningThread = nil then
@@ -578,7 +596,7 @@ begin
   EnsureInExpectedThread;
   Result.Header := TEXT_CONTENT_TYPE_HEADER;
   if n.Real = maxInt then
-    Result.Content := StringOfChar(AnsiChar('-'), 600)
+    Result.Content := RawUtf8OfChar('-', 600)
   else
     Result.Content := FormatUtf8('%,%', [n.Real, n.Imaginary]);
 end;
@@ -588,6 +606,16 @@ function TServiceComplexCalculator.TestVariants(const Text: RawUtf8;
 begin
   V2 := V2 + V1;
   VariantLoadJson(Result, Text);
+end;
+
+function TServiceComplexCalculator.TestRawJson(len, value: integer): RawJson;
+begin
+  if len < 0 then
+    len := 0;
+  FastSetString(RawUtf8(result), nil, len + 2);
+  result[1] := '"';
+  FillcharFast(PByteArray(result)[1], len, value);
+  result[len + 2] := '"';
 end;
 
 function TServiceComplexCalculator.GetCurrentThreadID: PtrUInt;
@@ -605,8 +633,27 @@ end;
 
 procedure TServiceComplexCalculator.FillPeople(var People: TOrmPeople);
 begin
-  People.LastName := FormatUtf8('Last %', [People.ID]);
+  People.LastName  := FormatUtf8('Last %', [People.ID]);
   People.FirstName := FormatUtf8('First %', [People.ID]);
+end;
+
+procedure TServiceComplexCalculator.FillPeoples(
+  n: integer; out People: TOrmPeopleObjArray);
+var
+  i: PtrInt;
+  p: TOrmPeople;
+begin
+  SetLength(People, n);
+  for i := 0 to n - 1 do
+  begin
+    p := TOrmPeople.Create;
+    p.IDValue := i;
+    p.FirstName := UInt32ToUtf8(i);
+    p.LastName := 'Last';
+    p.YearOfBirth := 1982 + i;
+    p.YearOfDeath := 1992 + i;
+    People[i] := p;
+  end;
 end;
 
 procedure TServiceComplexCalculator.Collections(Item: TCollTest;
@@ -800,7 +847,7 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
       Str2[0] := 'ABC';
       Str2[1] := 'DEF';
       Str2[2] := 'GHIJK';
-      FillCharFast(Rec1, sizeof(Rec1), 0);
+      FillCharFast(Rec1, SizeOf(Rec1), 0);
       Rec1.Features := [vtTransaction, vtSavePoint];
       Rec1.FileExtension := Executable.ProgramFileName;
       Rec2.ID := i1;
@@ -831,9 +878,9 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
     Check(Str2[2] = 'GHIJK');
     Check(Str2[3] = 'one,two,three');
     Check(Str2[4] = '');
-    s := StringToUtf8(StringOfChar(#1, 100));
+    s := RawUtf8OfChar(#1, 100);
     check(I.DirectCall(s) = 100);
-    s := StringToUtf8(StringOfChar('-', 600));
+    s := RawUtf8OfChar('-', 600);
     t := length(I.RepeatJsonArray(s, 100));
     checkutf8(t = 1 + 100 * 603, 'RawJson %', [KB(t)]);
     t := length(I.RepeatTextArray(s, 100));
@@ -844,18 +891,19 @@ var
   s: RawUtf8;
   data: TCustomerData;
   people: TOrmPeople;
+  peoples: TOrmPeopleObjArray;
   cust: TServiceCustomAnswer;
   c: cardinal;
   n1, n2: double;
   C1, C2, C3: TComplexNumber;
   Item: TCollTest;
   List, Copy: TCollTestsI;
-  j: integer;
+  n, j: integer;
   x, y: PtrUInt; // TThreadID  = ^TThreadRec under BSD
   V1, V2, V3: variant;
-{$ifdef UNICODE}
-  Nav: TConsultaNav;
-{$endif UNICODE}
+  {$ifndef HASNOSTATICRTTI}
+  Nav, Nav2: TConsultaNav;
+  {$endif HASNOSTATICRTTI}
 begin
   Check(Inst.I.Add(1, 2) = 3);
   Check(Inst.I.Multiply($1111333, $222266667) = $24693E8DB170B85);
@@ -874,11 +922,17 @@ begin
   case GlobalInterfaceTestMode of
     itmMainThread:
       Check(Inst.CC.GetCurrentThreadID = PtrUInt(MainThreadID));
-    itmPerInterfaceThread, itmLocked:
+    itmPerInterfaceThread,
+    itmLocked:
       Check(Inst.CC.GetCurrentThreadID <> PtrUInt(MainThreadID));
   end;
   TestCalculator(Inst.I);
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
+  n := 1000;
+  s := Inst.CC.TestRawJson(n, 49);
+  Check(length(s) = n + 2);
+  CheckEqual(Hash32(s), 4223609852); // n = 1000
+  //CheckEqual(Hash32(s), 2508875362); // n = 100000000
   C3 := TComplexNumber.Create(0, 0);
   C1 := TComplexNumber.Create(2, 3);
   C2 := TComplexNumber.Create(20, 30);
@@ -896,7 +950,8 @@ begin
       CheckSame(C3.Imaginary, -27);
       cust := Inst.CC.TestBlob(C3);
       Check(PosEx(TEXT_CONTENT_TYPE_HEADER, cust.Header) > 0);
-      Check(cust.Content = FormatUtf8('%,%', [C3.Real, C3.Imaginary]));
+      FormatUtf8('%,%', [C3.Real, C3.Imaginary], s);
+      CheckEqual(cust.Content, s);
       V1 := C3.Real;
       V2 := c;
       case c mod 3 of
@@ -911,6 +966,18 @@ begin
       CheckSame(V1, C3.Real);
       CheckSame(V2, C3.Real + c);
       Check(VariantSaveJson(V3) = s);
+      s := Inst.CC.TestRawJson(c, c and 31 + 48);
+      Check(length(s) = integer(c + 2));
+      Check(IsValidJson(s));
+      if s <> '' then
+      begin
+        Check(s[1] = '"');
+        if c > 0 then
+          Check(ord(s[2]) = c and 31 + 48);
+        for j := 3 to length(s) - 1 do
+          Check(s[j] = s[2]);
+        Check(s[length(s)] = '"');
+      end;
       Check(Inst.CC.GetCustomer(c, data));
       Check(data.Id = integer(c));
       Check(GetCardinal(pointer(data.AccountNum)) = c);
@@ -924,21 +991,34 @@ begin
       finally
         people.Free;
       end;
-{$ifdef UNICODE}
+      n := c and 7; // not too much data
+      Inst.CC.FillPeoples(n, peoples);
+      Check(length(peoples) = n);
+      for j := 0 to n - 1 do
+        with peoples[j] do
+        begin
+          CheckEqual(IDValue, j);
+          CheckEqual(FirstName, UInt32ToUtf8(j));
+          CheckEqual(LastName, 'Last');
+          CheckEqual(YearOfBirth, 1982 + j);
+          CheckEqual(YearOfDeath, 1992 + j);
+        end;
+      ObjArrayClear(peoples);
+      {$ifndef CPUAARCH64} // FPC doesn't follow the AARCH64 ABI -> fixme
+      {$ifndef HASNOSTATICRTTI}
       Nav.MaxRows := c;
       Nav.Row0 := c * 2;
       Nav.RowCount := c * 3;
       Nav.IsSQLUpdateBack := c and 1 = 0;
       Nav.EOF := c and 1 = 1;
-      with Inst.CC.EchoRecord(Nav) do
-      begin
-        Check(MaxRows = c);
-        Check(Row0 = c * 2);
-        Check(RowCount = c * 3);
-        Check(IsSQLUpdateBack = (c and 1 = 0));
-        Check(EOF = (c and 1 = 1));
-      end;
-{$endif UNICODE}
+      Nav2 := Inst.CC.EchoRecord(Nav);
+      Check(Nav2.MaxRows = c);
+      Check(Nav2.Row0 = c * 2);
+      Check(Nav2.RowCount = c * 3);
+      Check(Nav2.IsSQLUpdateBack = (c and 1 = 0));
+      Check(Nav2.EOF = (c and 1 = 1));
+      {$endif HASNOSTATICRTTI}
+      {$endif CPUAARCH64}
       if c mod 10 = 1 then
       begin
         Item.Color := Item.Color + 1;
@@ -1009,13 +1089,15 @@ begin
         Check(Inst.CT.GetCurrentRunningThreadID = 0);
         Check(Inst.CT.GetContextServiceInstanceID = 0);
       end;
-    itmClient, itmPerInterfaceThread:
+    itmClient,
+    itmPerInterfaceThread:
       begin
         Check(x = y);
         Check(Inst.CT.GetCurrentRunningThreadID = 0);
         Check(Inst.CT.GetContextServiceInstanceID <> 0);
       end;
-    itmLocked, itmMainThread:
+    itmLocked,
+    itmMainThread:
       begin
         Check(x = y);
         Check(Inst.CT.GetCurrentRunningThreadID <> 0);
@@ -1055,7 +1137,7 @@ var
   stat: TSynMonitorInputOutput;
 begin
  // exit;
-  FillCharFast(Inst, sizeof(Inst), 0);
+  FillCharFast(Inst, SizeOf(Inst), 0);
   GlobalInterfaceTestMode := itmClient;
   if aRunInOtherThread then
     if optExecLockedPerInterface in aOptions then
@@ -1133,7 +1215,7 @@ procedure TTestServiceOrientedArchitecture.DirectCall;
 var
   Inst: TTestServiceInstances;
 begin
-  FillCharFast(Inst, sizeof(Inst), 0); // all Expected..ID=0
+  FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
   Inst.I := TServiceCalculator.Create;
   Inst.CC := TServiceComplexCalculator.Create;
   Inst.CN := TServiceComplexNumber.Create;
@@ -1150,7 +1232,7 @@ procedure TTestServiceOrientedArchitecture.ServerSide;
 var
   Inst: TTestServiceInstances;
 begin
-  FillCharFast(Inst, sizeof(Inst), 0); // all Expected..ID=0
+  FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
   if CheckFailed(fModel <> nil) or
      CheckFailed(fClient <> nil) or
      CheckFailed(fClient.Server.Services.Count = 7) or
@@ -1257,19 +1339,19 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
     end
     else
       raise Exception.Create('Invalid call');
-    Result := JsonDecode(resp, 'result', nil, true);
-    if IdemPChar(Pointer(Result), '{"RESULT"') then
-      Result := JsonDecode(Result, 'result', nil, false)
+    result := JsonDecode(resp, 'result', nil, true);
+    if IdemPChar(Pointer(result), '{"result"') then
+      result := JsonDecode(result, 'result', nil, false)
     else
-      Result := Copy(Result, 2, length(Result) - 2); // trim '[' + ']'
-    if (Result <> '') and
-       (Result[1] = '"') then
-      Result := UnQuoteSQLString(Result); // '"777"' -> '777'
+      TrimChars(result, 1, 1); // trim '[' + ']'
+    if (result <> '') and
+       (result[1] = '"') then
+      result := UnQuoteSQLString(result); // '"777"' -> '777'
     if (ExpectedResult = 200) and
        (fClient.Server.ServicesRouting = TRestServerRoutingRest) then
     begin
-      resp := XMLUTF8_HEADER + '<result><Result>' + Result + '</Result></result>';
-      check(data = resp);
+      resp := XMLUTF8_HEADER + '<result><Result>' + result + '</Result></result>';
+      CheckEqual(data, resp, 'xml');
     end;
   end;
 
@@ -1434,7 +1516,7 @@ end;
 
 procedure TTestServiceOrientedArchitecture.Security;
 
-  procedure Test(Expected: TOrmFieldTables; const msg: string);
+  procedure Test(Expected: TOrmTableBits; const msg: string);
 
     function Ask(const Method, Params: RawUtf8): RawUtf8;
     var
@@ -1510,7 +1592,7 @@ begin
   S.DenyAllByName(['Supervisor']);
   Test([1, 2, 3, 4, 5], 'this group name won''t affect the current Admin user');
   S.DenyAllByName(['Supervisor', 'Admin']);
-  Test([], 'Admin group user was explicitely denied access');
+  Test([], 'Admin group user was explicitly denied access');
   S.AllowAllByName(['Admin']);
   Test([1, 2, 3, 4, 5], 'restore allowed for current Admin user');
   S.AllowAll;
@@ -1608,7 +1690,7 @@ begin
   HTTPServer := TRestHttpServer.Create(HTTP_DEFAULTPORT, [fClient.Server], '+',
     HTTP_DEFAULT_MODE, 8, secNone);
   try
-    FillCharFast(Inst, sizeof(Inst), 0); // all Expected..ID=0
+    FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
     HTTPClient := TRestHttpClient.Create('127.0.0.1', HTTP_DEFAULTPORT, fModel);
     try
       HTTPClient.ServicePublishOwnInterfaces :=
@@ -1706,6 +1788,7 @@ end;
 procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA512;
 begin
   ClientAlgo(suaSHA512);
+  // restore to the default hasher
   (fClient.Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
     TRestServerAuthenticationDefault).Algorithm := suaCRC32;
 end;
@@ -1715,7 +1798,7 @@ begin
   fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc; // back to previous
   fClient.Server.AuthenticationUnregister([
     {$ifdef OSWINDOWS}
-    TRestServerAuthenticationSSPI,
+    TRestServerAuthenticationSspi,
     {$endif OSWINDOWS}
     TRestServerAuthenticationDefault]);
   fClient.Server.AuthenticationRegister(TRestServerAuthenticationNone);
@@ -1734,7 +1817,7 @@ begin
   // restore default authentications
   fClient.Server.AuthenticationRegister([
     {$ifdef OSWINDOWS}
-    TRestServerAuthenticationSSPI,
+    TRestServerAuthenticationSspi,
     {$endif OSWINDOWS}
     TRestServerAuthenticationDefault]);
   fClient.SetUser('User', 'synopse');
@@ -1761,13 +1844,13 @@ begin
   // {"ID":1786554763,"Timestamp":323618765,"Json":"D:\\TestSQL3.exe"}
   if Context.ParseObject(['ID', 'Timestamp', 'Json'], @Values) then
   begin
-    V.ID := GetInt64(Values[0].Value);
+    V.ID := Values[0].ToInt64;
     V.Timestamp512 := Values[1].ToCardinal;
     Values[2].ToUtf8(V.Json);
   end;
 end;
 
-class procedure TTestServiceOrientedArchitecture.CustomWriter(W: TTextWriter;
+class procedure TTestServiceOrientedArchitecture.CustomWriter(W: TJsonWriter;
   Data: pointer; Options: TTextWriterWriteObjectOptions);
 var
   V: ^TRestCacheEntryValue absolute Data;
@@ -1791,8 +1874,8 @@ begin
       'withinterfaces', true,
       'withsessions', true], stats);
     FileFromString(JsonReformat(stats), WorkDir + 'stats.Json');
+    FreeAndNil(fClient);
   end;
-  FreeAndNil(fClient);
   FreeAndNil(fModel);
 end;
 
@@ -2237,7 +2320,7 @@ begin
   end;
   try
     I.Add(0, 0);
-    Check(false);
+    Check(false, 'dead code EInterfaceFactory');
   except
     on E: EInterfaceFactory do
       Check(Pos('TInterfaceStub returned error: expected exception',
@@ -2245,7 +2328,7 @@ begin
   end;
   try
     I.Add(1, 2);
-    Check(false);
+    Check(false, 'dead code ESynException');
   except
     on E: ESynException do
       Check(E.Message = 'expected exception', E.Message);

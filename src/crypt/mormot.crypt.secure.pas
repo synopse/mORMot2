@@ -12,6 +12,9 @@ unit mormot.crypt.secure;
     - High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers
     - 64-bit TSynUniqueIdentifier and its efficient Generator
     - IProtocol Safe Communication with Unilateral or Mutual Authentication
+    - TBinaryCookieGenerator Simple Cookie Generator
+    - Rnd/Hash/Sign/Cipher/Asym/Cert High-Level Algorithms Factories
+    - Minimal PEM/DER Encoding/Decoding
 
    Uses optimized mormot.crypt.core.pas for its actual process.
 
@@ -24,6 +27,7 @@ interface
 
 uses
   sysutils,
+  classes,
   mormot.core.base,
   mormot.core.os,
   mormot.core.rtti,
@@ -271,8 +275,8 @@ type
     function Exists(const aIP: RawUtf8): boolean;
     /// creates a TDynArray wrapper around the stored list of values
     // - could be used e.g. for binary persistence
-    // - warning: caller should make Safe.Unlock when finished
-    function DynArrayLocked: TDynArray;
+    // - warning: caller should make Safe.Unlock(aLock) when finished
+    function DynArrayLocked(aLock: TRWLockContext = cWrite): TDynArray;
     /// low-level access to the internal IPv4 list
     // - 32-bit unsigned values are sorted, for fast O(log(n)) binary search
     property IP4: TIntegerDynArray
@@ -333,7 +337,7 @@ type
     function CreateTimeLog: TTimeLog;
     /// fill this unique identifier structure from its TSynUniqueIdentifier value
     // - is just a wrapper around PInt64(@self)^
-    procedure From(const AID: TSynUniqueIdentifier);
+    procedure From(const aID: TSynUniqueIdentifier);
       {$ifdef HASINLINE}inline;{$endif}
     /// fill this unique identifier back from a 16 chars hexadecimal string
     // - returns TRUE if the supplied hexadecimal is on the expected format
@@ -488,6 +492,9 @@ type
 { implemented in this unit and not in mormot.crypt.core, since TSynSignerParams
   expects JSON support, which requires mormot.core.json }
 
+const
+  SIGNER_DEFAULT_SALT = 'I6sWioAidNnhXO9BK';
+
 type
   /// the HMAC/SHA-3 algorithms known by TSynSigner
   TSignAlgo = (
@@ -525,8 +532,7 @@ type
     /// initialize the digital HMAC/SHA-3 signing context with some secret text
     procedure Init(aAlgo: TSignAlgo; const aSecret: RawUtf8); overload;
     /// initialize the digital HMAC/SHA-3 signing context with some secret binary
-    procedure Init(aAlgo: TSignAlgo;
-      aSecret: pointer; aSecretLen: integer); overload;
+    procedure Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: integer); overload;
     /// initialize the digital HMAC/SHA-3 signing context with PBKDF2 safe
     // iterative key derivation of a secret salted text
     procedure Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
@@ -558,13 +564,13 @@ type
     // - accept as input a TSynSignerParams serialized as JSON object
     procedure Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
       out aDerivatedKey: THash512Rec;
-      const aDefaultSalt: RawUtf8 = 'I6sWioAidNnhXO9BK';
+      const aDefaultSalt: RawUtf8 = SIGNER_DEFAULT_SALT;
       aDefaultAlgo: TSignAlgo = saSha3S128); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     // - accept as input a TSynSignerParams serialized as JSON object
     procedure Pbkdf2(const aParamsJson: RawUtf8;
       out aDerivatedKey: THash512Rec;
-      const aDefaultSalt: RawUtf8 = 'I6sWioAidNnhXO9BK';
+      const aDefaultSalt: RawUtf8 = SIGNER_DEFAULT_SALT;
       aDefaultAlgo: TSignAlgo = saSha3S128); overload;
     /// prepare a TAes object with the key derivated via a Pbkdf2() call
     // - aDerivatedKey is defined as "var", since it will be zeroed after use
@@ -611,7 +617,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the resulting hash as lowercase hexadecimal string
     function Final: RawUtf8; overload;
-    /// returns the resulting hash as a binary buffer
+    /// set the resulting hash into a binary buffer, and the size as result
     function Final(out aDigest: THash512Rec): integer; overload;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
     function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
@@ -625,8 +631,67 @@ type
       read fAlgo;
   end;
 
+  /// TStreamRedirect with TSynHasher cryptographic hashing
+  // - do not use this abstract class but inherited with overloaded GetAlgo
+  TStreamRedirectSynHasher = class(TStreamRedirect)
+  protected
+    fHash: TSynHasher;
+    class function GetAlgo: THashAlgo; virtual; abstract;
+    procedure DoHash(data: pointer; len: integer); override;
+  public
+    constructor Create(aDestination: TStream; aRead: boolean = false); override;
+    function GetHash: RawUtf8; override;
+    class function GetHashFileExt: RawUtf8; override;
+  end;
+
+  /// TStreamRedirect with MD5 cryptographic hashing
+  TStreamRedirectMd5 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-1 cryptographic hashing
+  TStreamRedirectSha1 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-256 cryptographic hashing
+  TStreamRedirectSha256 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-384 cryptographic hashing
+  TStreamRedirectSha384 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-512 cryptographic hashing
+  TStreamRedirectSha512 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-3-256 cryptographic hashing
+  TStreamRedirectSha3_256 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-3-512 cryptographic hashing
+  TStreamRedirectSha3_512 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+
+
+
 function ToText(algo: TSignAlgo): PShortString; overload;
 function ToText(algo: THashAlgo): PShortString; overload;
+
 
 /// compute the hexadecimal hash of any (big) file
 // - using a temporary buffer of 1MB for the sequential reading
@@ -638,7 +703,38 @@ function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8; overlo
 procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos); overload;
 
 /// one-step hash computation of a buffer as lowercase hexadecimal string
-function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
+function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
+
+/// one-step hash computation of a buffer as lowercase hexadecimal string
+function HashFull(aAlgo: THashAlgo; const aBuffer: RawByteString): RawUtf8; overload;
+
+/// compute the MD5 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileMd5(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-1 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha1(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-256 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha256(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-384 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha384(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-512 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha512(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-3-256 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha3_256(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-3-512 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
 
 
@@ -755,8 +851,660 @@ function ToText(res: TProtocolResult): PShortString; overload;
 
 
 
-implementation
+{ ******* TBinaryCookieGenerator Simple Cookie Generator }
 
+type
+  /// a 31-bit increasing sequence used for TBinaryCookieGenerator sessions
+  TBinaryCookieGeneratorSessionID = type integer;
+
+  {$A-}
+  /// efficient thread-safe cookie generation
+  // - you can see it as a JWT-Of-The-Poor: faster to parse and validate
+  // its content, and with very efficiently binary-based serialization
+  // - stores a session ID, cookie name, and encryption and signature keys
+  // - can optionally store any associated record as efficient binary
+  // - it is NOT cryptographic secure, because cookies are not, but it is
+  // strong enough to avoid most attacks, and uses less space than a JWT
+  {$ifdef USERECORDWITHMETHODS}
+  TBinaryCookieGenerator = record
+  {$else}
+  TBinaryCookieGenerator = object
+  {$endif USERECORDWITHMETHODS}
+    /// the cookie name, used for storage in the client side HTTP headers
+    // - is not part of the Generate/Validate content, but could be used
+    // when the cookie is actually stored in HTTP headers
+    CookieName: RawUtf8;
+    /// an increasing 31-bit counter, to implement unique session ID
+    SessionSequence: TBinaryCookieGeneratorSessionID;
+    /// the random initial value of the SessionSequence counter
+    SessionSequenceStart: TBinaryCookieGeneratorSessionID;
+    /// secret information, used for digital signature of the cookie content
+    Secret: cardinal;
+    /// random IV used as CTR on Crypt[] secret key
+    CryptNonce: cardinal;
+    /// used when Generate() has TimeOutMinutes=0
+    // - if equals 0, one month delay is used as "never expire"
+    DefaultTimeOutMinutes: cardinal;
+    /// private random secret, used for encryption of the cookie content
+    Crypt: array[byte] of byte;
+    /// initialize ephemeral temporary cookie generation
+    procedure Init(const Name: RawUtf8 = 'mORMot';
+      DefaultSessionTimeOutMinutes: cardinal = 0);
+    /// will initialize a new Base64Uri-encoded session cookie
+    // - with an optional record data
+    // - will return the 32-bit internal session ID and a Base64Uri cookie
+    // - you can supply a time period, after which the session will expire -
+    // default 0 will use DefaultTimeOutMinutes as supplied to Init()
+    function Generate(out Cookie: RawUtf8; TimeOutMinutes: cardinal = 0;
+      PRecordData: pointer = nil;
+      PRecordTypeInfo: PRttiInfo = nil): TBinaryCookieGeneratorSessionID;
+    ///  decode a base64uri cookie and optionally fill an associated record
+    // - return the associated session/sequence number, 0 on error
+    function Validate(const Cookie: RawUtf8;
+      PRecordData: pointer = nil; PRecordTypeInfo: PRttiInfo = nil;
+      PExpires: PUnixTime = nil;
+      PIssued: PUnixTime = nil): TBinaryCookieGeneratorSessionID;
+    /// allow the very same cookie to be recognized after server restart
+    function Save: RawUtf8;
+    /// unserialize the cookie generation context as serialized by Save
+    function Load(const Saved: RawUtf8): boolean;
+  end;
+  {$A+}
+
+  PBinaryCookieGenerator = ^TBinaryCookieGenerator;
+
+
+{ ************* Rnd/Hash/Sign/Cipher/Asym/Cert High-Level Algorithms Factories }
+
+type
+  ECrypt = class(ESynException);
+
+  TCryptAlgo = class;
+  TCryptAlgos = array of TCryptAlgo;
+
+  /// abstract class implemented e.g. by TCryptRandom/TCryptHasher/TCryptAsym
+  // - we define a class and not a meta-class since it allows to resolve and
+  // store some engine-specific context ahead of time, for faster process
+  // - inherited classes would dedicated New() factory methods; this parent
+  // features the internal registration feature of the known algorithms
+  TCryptAlgo = class(TObject)
+  protected
+    fName: RawUtf8;
+    // case-insensitive quick lookup of the algorithms into a TCryptAlgo instance
+    class function InternalFind(const name: RawUtf8; var Last: TCryptAlgo): pointer;
+    class function InternalResolve(const name: RawUtf8; CSV: PUtf8Char): integer;
+  public
+    /// inherited classes should properly initialize this kind of process
+    constructor Create(const name: RawUtf8); virtual;
+    /// register this class to override one or several identifiers implementation
+    // - returns the last instance created for name[]
+    class function Implements(const name: array of RawUtf8): pointer; overload;
+    /// register this class to override one or several identifiers implementation
+    class procedure Implements(csv: PUtf8Char; const suffix: RawUtf8 = ''); overload;
+    /// return all the TCryptAlog instances matching this class type
+    // - could be used e.g. as TCryptRandom.Instances
+    class function Instances: TCryptAlgos;
+    /// return all the TCryptAlog instances matching this class type
+    // - could be used e.g. as TCryptRandom.Names
+    class function Names: TRawUtf8DynArray;
+    /// process-wide case-insensitive identifier for quick lookup of the algorithms
+    // - typical values may follow OpenSSL naming, e.g. 'MD5', 'AES-128-GCM' or
+    // 'prime256v1'
+    property AlgoName: RawUtf8
+      read fName;
+  end;
+
+  /// interface as implemented e.g. by TCryptHash
+  ICryptHash = interface
+    /// iterative process of a memory buffer
+    function Update(buf: pointer; buflen: PtrInt): ICryptHash; overload;
+    /// iterative process of a memory buffer
+    function Update(const buf: RawByteString): ICryptHash; overload;
+    /// iterative process of a file content
+    procedure UpdateFile(const filename: TFileName);
+    /// compute the digest, and return it in a memory buffer
+    function Final(digest: pointer; digestlen: PtrInt): PtrInt; overload;
+    /// compute the digest, and return it as UTF-8 hexadecimal text
+    function Final: RawUtf8; overload;
+  end;
+
+  /// abstract class implemented e.g. by TCryptHash/TCryptCipher/TCryptKey
+  TCryptInstance = class(TInterfacedObject)
+  protected
+    fCryptAlgo: TCryptAlgo;
+  public
+    /// initialize the instance
+    constructor Create(algo: TCryptAlgo); overload; virtual;
+    /// resolve the name via TCryptAlgo.InternalFind() and initialize the instance
+    constructor Create(const name: RawUtf8); overload;
+    /// access to the associated algorithm
+    property CryptAlgo: TCryptAlgo
+      read fCryptAlgo;
+  end;
+
+  /// randomness generator parent class, as resolved by Rnd()
+  TCryptRandom = class(TCryptAlgo)
+  public
+    /// retrieve some random bytes into a buffer
+    procedure Get(dst: pointer; dstlen: PtrInt); overload; virtual; abstract;
+    /// retrieve some random bytes into a RawByteString
+    function Get(len: PtrInt): RawByteString; overload; virtual;
+    /// retrieve some random bytes into a TBytes
+    function GetBytes(len: PtrInt): TBytes;
+    /// retrieve a random 32-bit value
+    function Get32: cardinal; overload; virtual;
+    /// retrieve a random 32-bit value
+    function Get32(max: cardinal): cardinal; overload;
+    /// retrieve a random floating point value in the [0..1) range
+    function GetDouble: double;
+  end;
+
+  /// hashing/signing parent class, as returned by Hash/Sign() factories
+  TCryptHash = class(TCryptInstance, ICryptHash)
+  protected
+    function InternalFinal(out dig: THash512Rec): PtrInt; virtual; abstract;
+  public
+    // ICryptHash methods
+    function Update(buf: pointer; buflen: PtrInt): ICryptHash; overload; virtual; abstract;
+    function Update(const buf: RawByteString): ICryptHash; overload;
+    procedure UpdateFile(const filename: TFileName);
+    function Final(digest: pointer; digestlen: PtrInt): PtrInt; overload;
+    function Final: RawUtf8; overload;
+  end;
+
+  /// hashing parent class, as resolved by Hasher()
+  // - this class is to ensure a content as not been tempered: use Signer()
+  // to compute a digital signature from a given secret
+  TCryptHasher = class(TCryptAlgo)
+  public
+    /// one-step process of a whole memory buffer, into an hexadecimal digest
+    function Full(buf: pointer; buflen: PtrInt): RawUtf8; overload;
+    /// one-step process of a whole memory buffer, into an hexadecimal digest
+    function Full(const buf: RawByteString): RawUtf8; overload;
+    /// one-step process of a whole memory buffer, into an binary digest
+    // - returns the number of bytes stored in digest
+    function Full(buf: pointer; buflen: PtrInt; out digest: THash512Rec): PtrInt; overload;
+    /// one-step process of a whole file content, into an hexadecimal digest
+    function FullFile(const filename: TFileName): RawUtf8;
+    /// main factory to create a new hasher instance with this algorithm
+    function New: ICryptHash; virtual; abstract;
+  end;
+
+  /// signing parent class, as resolved by Signer()
+  // - in respect to TCryptHasher, requires a secret key to be supplied
+  // for safe HMAC content signature
+  TCryptSigner = class(TCryptAlgo)
+  public
+    /// one-step process of a whole memory buffer, into an hexadecimal digest
+    function Full(key, buf: pointer; keylen, buflen: PtrInt): RawUtf8; overload;
+    /// one-step process of a whole memory buffer, into an hexadecimal digest
+    function Full(const key, buf: RawByteString): RawUtf8; overload;
+    /// one-step process of a whole file content, into an hexadecimal digest
+    function FullFile(key: pointer; keylen: PtrInt; const filename: TFileName): RawUtf8;
+    /// strong PBKDF2 derivation of a secret (and salt) using this algorithm
+    // - returns the number of bytes computed in returned key memory
+    function Pbkdf2(const secret, salt: RawUtf8; rounds: integer;
+      out key: THash512Rec): integer; overload; virtual; abstract;
+    /// main factory to create a new signer instance with this algorithm
+    function New(key: pointer; keylen: PtrInt): ICryptHash; virtual; abstract;
+    /// main factory to create a new signer instance from PBKDF2 derivation
+    function NewPbkdf2(const secret, salt: RawUtf8; rounds: integer): ICryptHash;
+  end;
+
+  /// interface as implemented e.g. by TCryptCipher
+  ICryptCipher = interface
+    /// quickly generate a cipher with the same algorithm, direction and key
+    function Clone: ICryptCipher;
+    /// general encryption/decryption method using RawByteString buffers
+    // - an IV is generated at the start of this if none was specified at New()
+    // - will do proper PKCS7 padding on the src input buffer
+    // - return TRUE on success, FALSE if input padding or AEAD MAC is incorrect
+    function Process(const src: RawByteString; out dst: RawByteString;
+      const aeadinfo: RawByteString = ''): boolean; overload;
+    /// general encryption/decryption method using TBytes buffers
+    // - use use TByteDynArray for aeadinfo because TBytes raise a Delphi XE
+    // compiler bug - it should be assignment compatible with any TBytes value
+    function Process(const src: TBytes; out dst: TBytes;
+      const aeadinfo: TByteDynArray = nil): boolean; overload;
+    /// low-level encryption/decryption on memory buffers
+    // - srclen/dsstlen should match the size block of the algorithm,
+    // e.g. 16 bytes for AES or 1 byte for SHAKE (i.e. SHA-3 in XOF cipher mode)
+    // - on AES-GCM algorithm, if dst=nil then AAD is set from src/srclen
+    procedure RawProcess(src, dst: pointer; srclen, dstlen: PtrInt);
+    /// low-level GMAC computation for AES-GCM
+    // - after Encrypt, fill gmac with the tag value of the data and return true
+    // - after Decrypt, return true only if the tag value of the data match gmac
+    // - always return false if not AES-GCM is used as algorithm
+    function RawFinal(var gmac: TAesBlock): boolean;
+  end;
+
+  /// symmetric encryption class, as resolved by CipherAlgo()
+  TCryptCipherAlgo = class(TCryptAlgo)
+  public
+    /// check if this algorithm is of AEAD kind, i.e. can cipher and authenticate
+    // - note that currently our OpenSSL AES-GCM wrapper has troubles with
+    // AEAD associated authentication so returns false: it will compute and check
+    // the GMAC of the content as expected, but only our internal 'AES-###-GCM-INT'
+    // actually supports aeadinfo <> '' in ICryptCipher.Process
+    function IsAead: boolean; virtual; abstract;
+    /// main factory to create a new instance with this algorithm
+    // - the supplied key should match the size expected by the algorithm
+    function New(key: pointer; encrypt: boolean; iv: pointer = nil): ICryptCipher;
+      overload; virtual; abstract;
+    /// main factory to create a new instance from PBKDF2 key derivation
+    function New(const hash, secret, salt: RawUtf8; rounds: integer;
+      encrypt: boolean): ICryptCipher; overload;
+    /// main factory to create a new encryption instance with this algorithm
+    function Encrypt(key: pointer): ICryptCipher; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// main factory to create a new decryption instance with this algorithm
+    function Decrypt(key: pointer): ICryptCipher; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// main factory to create a new encryption instance from PBKDF2 key derivation
+    function Encrypt(const sign, secret, salt: RawUtf8; rounds: integer): ICryptCipher; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// main factory to create a new decryption instance from PBKDF2 key derivation
+    function Decrypt(const sign, secret, salt: RawUtf8; rounds: integer): ICryptCipher; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
+  /// symmetric encryption parent class, as returned by Cipher() factory
+  TCryptCipher = class(TCryptInstance, ICryptCipher)
+  public
+    // ICryptCipher methods
+    function Clone: ICryptCipher; virtual; abstract;
+    function Process(const src: RawByteString; out dst: RawByteString;
+      const aeadinfo: RawByteString): boolean; overload; virtual; abstract;
+    function Process(const src: TBytes; out dst: TBytes;
+      const aeadinfo: TByteDynArray): boolean; overload; virtual; abstract;
+    procedure RawProcess(src, dst: pointer; srclen, dstlen: PtrInt); virtual; abstract;
+    function RawFinal(var gmac: TAesBlock): boolean; virtual; abstract;
+  end;
+
+  /// asymmetric public-key cryptography parent class, as returned by Asym()
+  TCryptAsym = class(TCryptAlgo)
+  public
+    /// generate a public/private pair of keys in the PEM text format
+    procedure GeneratePem(out pub, priv: RawUtf8; const privpwd: RawUtf8); virtual;
+    /// generate a public/private pair of keys in the DER binary format
+    procedure GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8); virtual;
+    /// digital signature of some message using a private key
+    // - the message is first hashed with the supplied TCryptHasher
+    // - the signature is returned in binary DER format
+    function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
+      const priv: RawByteString; out sig: RawByteString;
+      const privpwd: RawUtf8 = ''): boolean; overload; virtual; abstract;
+    /// digital signature of some message using a private key
+    // - the message is first hashed with the default hasher of this
+    // algorithm, or the specific hashername
+    function Sign(const msg, priv: RawByteString; out sig: RawByteString;
+      const hashername: RawUtf8 = ''; const privpwd: RawUtf8 = ''): boolean; overload;
+    /// digital signature of some message using a private key
+    // - the message is first hashed with the default hasher of this
+    // algorithm, or the specific hashername
+    function Sign(const msg, priv: TBytes; out sig: TBytes;
+      const hashername: RawUtf8 = ''; const privpwd: RawUtf8 = ''): boolean; overload;
+    /// digital signature verification of some message using a public key
+    // - the message is first hashed with the supplied TCryptHasher
+    function Verify(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
+      const pub, sig: RawByteString): boolean; overload; virtual; abstract;
+    /// digital signature verification of some message using a public key
+    // - the message is first hashed with the default hasher of this
+    // algorithm, or the specific hashername
+    function Verify(const msg, pub, sig: RawByteString;
+      const hashername: RawUtf8 = ''): boolean; overload;
+    /// digital signature verification of some message using a public key
+    // - the message is first hashed with the default hasher of this
+    // algorithm, or the specific hashername
+    function Verify(const msg, pub, sig: TBytes;
+      const hashername: RawUtf8 = ''): boolean; overload;
+    /// compute a shared secret from local private key and a public key
+    // - used for encryption with no key transmission
+    // - returns '' if this algorithm doesn't support this feature (e.g. RSA)
+    function SharedSecret(const pub, priv: RawByteString): RawByteString; virtual;
+  end;
+
+  /// exception class raised by our High-Level Certificates Process
+  ECertificate = class(ESynException);
+
+  /// the known Key Usages for a given Certificate
+  // - is an exact match of TX509Usage enumerate in mormot.lib.openssl11.pas
+  // - stored as a 16-bit memory block
+  TCryptCertUsage = (
+    cuCA,
+    cuEncipherOnly,
+    cuCrlSign,
+    cuKeyCertSign,
+    cuKeyAgreement,
+    cuDataEncipherment,
+    cuKeyEncipherment,
+    cuNonRepudiation,
+    cuDigitalSignature,
+    cuDecipherOnly,
+    cuTlsServer,
+    cuTlsClient,
+    cuEmail,
+    cuCodeSign,
+    cuOcspSign,
+    cuTimestamp);
+
+  /// set of Key Usages for a given Certificate - stored as a 16-bit word
+  TCryptCertUsages = set of TCryptCertUsage;
+
+  /// the RFC5280-compatible reasons why a Certificate could be revoked
+  // - used for each item in a Certificate Revocation List (CRL)
+  // - crrNotRevoked (item 7) is not used in the RFC, and used internally here
+  TCryptCertRevocationReason = (
+    crrUnspecified,
+    crrCompromised,
+    crrAuthorityCompromised,
+    crrUnAffiliated,
+    crrSuperseded,
+    crrReplaced,
+    crrTempHold,
+    crrNotRevoked,
+    crrRemoved,
+    crrWithdrawn,
+    crrServerCompromised);
+
+  /// the Digital Signature results for a given Certificate
+  // - is an exact match of TEccValidity enumerate in mormot.crypt.ecc256r1.pas
+  TCryptCertValidity = (
+    cvUnknown,
+    cvValidSigned,
+    cvValidSelfSigned,
+    cvNotSupported,
+    cvBadParameter,
+    cvCorrupted,
+    cvInvalidDate,
+    cvUnknownAuthority,
+    cvDeprecatedAuthority,
+    cvInvalidSignature);
+
+  TCryptCert = class;
+
+  /// abstract interface to a Certificate, as returned by Cert() factory
+  // - may be X509 or not, OpenSSL implemented or not
+  ICryptCert = interface
+    /// create a new Certificate instance with its genuine private key
+    // - Subjects is given as a CSV text, e.g. 'synopse.info,www.synopse.info'
+    // - if Authority is nil, will generate a self-signed certificate, otherwise
+    // will use this Authority private key to sign the certificate
+    // - ValidDays and ExpireDays are relative to the current time - ValidDays
+    // is -1 by default to avoid most clock synch issues
+    procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
+      const Authority: ICryptCert = nil; ExpireDays: integer = 365;
+      ValidDays: integer = -1);
+    /// load a Certificate from a ToBinary content
+    // - PrivatePassword is needed if the binary contains a private key
+    function FromBinary(const Binary: RawByteString;
+      const PrivatePassword: RawUtf8 = ''): boolean;
+    /// the Certificate Genuine Serial Number
+    // - e.g. '04:f9:25:39:39:f8:ce:79:1a:a4:0e:b3:fa:72:e3:bc:9e:d6'
+    function GetSerial: RawUtf8;
+    /// the Low-Level Certificate Main Subject
+    // - e.g. '/CN=synopse.info' on OpenSSL, or some Baudot-encoded text
+    function GetSubject: RawUtf8;
+    /// an array of all Subject names covered by this Certificate
+    // - e.g. ['synopse.info', 'www.synopse.info']
+    function GetSubjects: TRawUtf8DynArray;
+    /// the High-Level Certificate Issuer
+    // - e.g. '/C=US/O=Let''s Encrypt/CN=R3' or some Baudot-encoded text
+    function GetIssuerName: RawUtf8;
+    /// the Issuer Key Identifier of this Certificate
+    // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
+    function GetIssuerSerial: RawUtf8;
+    /// the minimum Validity timestamp of this Certificate
+    function GetNotBefore: TDateTime;
+    /// the maximum Validity timestamp of this Certificate
+    function GetNotAfter: TDateTime;
+    /// the Key Usages of this Certificate
+    function GetUsage: TCryptCertUsages;
+    /// verbose Certificate information, returned as huge text/JSON blob
+    function GetPeerInfo: RawUtf8;
+    /// serialize the Certificate as raw binary
+    // - after Generate, will contain the public and private key, so
+    // PrivatePassword is needed to secure its content - if PrivatePassword is
+    // left to '' then only the generated public key will be serialized
+    // - FromBinary() could be used to unserialize the Certificate
+    function ToBinary(const PrivatePassword: RawUtf8 = ''): RawByteString;
+    /// returns true if the Certificate contains a private key secret
+    function HasPrivateSecret: boolean;
+    /// compare two Certificates, which should share the same algorithm
+    // - will compare the internal properties and the public key, not the
+    // private key: you could e.g. use it to verify that a ICryptCert with
+    // HasPrivateSecret=false matches another with HasPrivateSecret=true
+    function IsEqual(const another: ICryptCert): boolean;
+    /// access to the low-level implementation class
+    function Instance: TCryptCert;
+  end;
+
+  /// abstract parent class to implement ICryptCert, as returned by Cert() factory
+  TCryptCert = class(TCryptInstance, ICryptCert)
+  protected
+    procedure RaiseVoid(Instance: pointer; const Msg: shortstring);
+    procedure RaiseError(const Msg: shortstring); overload;
+    procedure RaiseError(const Fmt: RawUtf8; const Args: array of const); overload;
+  public
+    // ICryptCert methods
+    procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
+      const Authority: ICryptCert; ExpireDays, ValidDays: integer); virtual; abstract;
+    function FromBinary(const Binary: RawByteString;
+      const PrivatePassword: RawUtf8): boolean; virtual; abstract;
+    function GetSerial: RawUtf8; virtual; abstract;
+    function GetSubject: RawUtf8; virtual; abstract;
+    function GetSubjects: TRawUtf8DynArray; virtual; abstract;
+    function GetIssuerName: RawUtf8; virtual; abstract;
+    function GetIssuerSerial: RawUtf8; virtual; abstract;
+    function GetNotBefore: TDateTime; virtual; abstract;
+    function GetNotAfter: TDateTime; virtual; abstract;
+    function GetUsage: TCryptCertUsages; virtual; abstract;
+    function GetPeerInfo: RawUtf8; virtual; abstract;
+    function ToBinary(const PrivatePassword: RawUtf8): RawByteString; virtual; abstract;
+    function HasPrivateSecret: boolean; virtual; abstract;
+    function IsEqual(const another: ICryptCert): boolean; virtual; abstract;
+    function Instance: TCryptCert;
+  end;
+
+  /// meta-class of the abstract parent to implement ICryptCert interface
+  TCryptCertClass = class of TCryptCert;
+
+  /// abstract parent class for ICryptCert factories
+  TCryptCertAlgo = class(TCryptAlgo)
+  public
+    /// main factory to create a new Certificate instance with this algorithm
+    function New: ICryptCert; virtual; abstract;
+  end;
+
+
+const
+  /// such a Certificate could be used for anything
+  CERTIFICATE_USAGE_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
+
+function ToText(r: TCryptCertRevocationReason): PShortString; overload;
+function ToText(u: TCryptCertUsage): PShortString; overload;
+function ToText(u: TCryptCertUsages): ShortString; overload;
+
+
+/// main resolver of the randomness generators
+// - the shared TCryptRandom of this algorithm is returned: caller should NOT free it
+// - e.g. Rnd.GetBytes(100) to get 100 random bytes from 'rnd-default' engine
+// - call Rnd('rnd-entropy').Get() to gather OS entropy, optionally as
+// 'rnd-entropysys', 'rnd-entropysysblocking', 'rnd-entropyuser'
+// - alternative generators are 'rnd-aes' (same as 'rnd-default'), 'rnd-lecuyer'
+// (fast on small content) and 'rnd-system'/'rnd-systemblocking' (mapping
+// FillSystemRandom)
+function Rnd(const name: RawUtf8 = 'rnd-default'): TCryptRandom;
+
+/// main resolver of the registered hashers
+// - hashers ensure a content as not been tempered: use Signer()
+// to compute a digital signature from a given secret
+// - the shared TCryptHasher of this algorithm is returned: caller should NOT free it
+// - if not nil, you could call New or Full/FullFile methods
+// - this unit supports 'MD5','SHA1','SHA256','SHA384','SHA512','SHA3_256','SHA3_512'
+// and 32-bit non-cryptographic 'CRC32','CRC32C','XXHASH32','ADLER32','FNV32'
+function Hasher(const name: RawUtf8): TCryptHasher;
+
+/// main factory of the hashers instances as returned by Hasher()
+// - if not nil, caller should call Update then Final
+function Hash(const name: RawUtf8): ICryptHash;
+
+/// main resolver of the registered signers
+// - in respect to Hasher(), will require a secret for safe digital signature
+// - the shared TCryptSigner of this algorithm is returned: caller should NOT free it
+// - if not nil, you could call New or Full/FullFile methods
+// - this unit supports 'HMAC-SHA1','HMAC-SHA256','HMAC-SHA384','HMAC-SHA512',
+// and 'SHA3-224','SHA3-256','SHA3-384','SHA3-512','SHA3-S128','SHA3-S256'
+function Signer(const name: RawUtf8): TCryptSigner;
+
+/// main factory of the signer instances as returned by Signer()
+// - in respect to Hash(), expects a key/salt to be supplied for the HMAC signing
+// - if not nil, caller should call Update then Final
+function Sign(key: pointer; keylen: PtrInt; const name: RawUtf8): ICryptHash; overload;
+
+/// main factory of the signer instances, with PBKDF2 secret derivation
+// - if not nil, caller should call Update then Final
+function Sign(const name, secret, salt: RawUtf8; rounds: integer): ICryptHash; overload;
+
+/// main factory of a signer instance from strong PBKDF2 derivation
+// - paramsjson contains a TSynSignerParams serialized as JSON object
+// - returns the number of bytes computed in returned key memory
+function Sign(const paramsjson: RawUtf8;
+  const defaultsalt: RawUtf8 = SIGNER_DEFAULT_SALT): ICryptHash; overload;
+
+/// main resolver for symmetric encryption/decryption algorithms
+// - names are e.g. 'aes-128-cfb' or 'aes-256-gcm' standard combinations
+// - recognize some non-standard algorithms with trailing 'c64', 'cfc', 'ofc' and
+// 'ctc' mode names e.g. as 'aes-256-cfc' - with AED 256-bit support (but c64)
+// - will return the fastest engine, which may be OpenSSL, unless 'aes-nnn-xxx-int'
+// is used to force using our mormot.crypt.core.pas own implementation
+// - the shared TCryptCipherAlgo of this algorithm is returned: caller should
+// NOT free it
+function CipherAlgo(const name: RawUtf8): TCryptCipherAlgo;
+
+/// main factory for symmetric encryption/decryption process
+// - supplied key is expected to match the algorithm size
+function Cipher(const name: RawUtf8; key: pointer; encrypt: boolean): ICryptCipher; overload;
+
+/// main factory for symmetric encryption/decryption with PBKDF2 key derivation
+function Cipher(const name, hash, secret, salt: RawUtf8; rounds: integer;
+  encrypt: boolean): ICryptCipher; overload;
+
+/// main factory for symmetric encryption process
+function Encrypt(const name: RawUtf8; key: pointer): ICryptCipher; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// main factory for symmetric decryption process
+function Decrypt(const name: RawUtf8; key: pointer): ICryptCipher; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// main factory for symmetric encryption process with PBKDF2 key derivation
+function Encrypt(const name, hash, secret, salt: RawUtf8; rounds: integer): ICryptCipher; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// main factory for symmetric decryption process with PBKDF2 key derivation
+function Decrypt(const name, hash, secret, salt: RawUtf8; rounds: integer): ICryptCipher; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// main resolver for asymmetric public key algorithms
+// - mormot.crypt.ecc.pas defines 'secp256r1','NISTP-256' and 'prime256v1'
+// which are synonymous of our secp256r1 ECDSA and ECDHE pascal code
+// - mormot.crypt.openssl.pas will define 'es256' .. 'EdDSA' including
+// 'rs256' for the well known 2048-bit RSA + SHA256 digital signature
+// - the shared TCryptAsym of this algorithm is returned: caller should NOT free it
+function Asym(const name: RawUtf8): TCryptAsym;
+
+/// main resolver for Certificates algorithms
+// - mormot.crypt.ecc.pas defines 'syn-es256' for our TEccCertificate proprietary
+// format (safe and efficient), with 'syn-es256-v1' for the V1 revision with
+// limited Usage and Subjects support
+// - mormot.crypt.openssl.pas will define 'x509-es256' .. 'x509-EdDSA' including
+// 'x509-rs256' for the well known 2048-bit RSA + SHA256 certificates
+// - the shared TCryptCertAlgo of this algorithm is returned: caller should
+// NOT free it
+function CertAlgo(const name: RawUtf8): TCryptCertAlgo;
+
+/// main factory of the Certificates instances as returned by CertAlgo()
+function Cert(const name: RawUtf8): ICryptCert;
+
+
+{ ************************** Minimal PEM/DER Encoding/Decoding }
+
+type
+  /// the DerToPem() supported contents of a PEM text instance
+  TPemKind = (
+    pemCertificate,
+    pemPrivateKey,
+    pemPublicKey,
+    pemRsaPrivateKey,
+    pemRsaPublicKey,
+    pemEcPrivateKey,
+    pemEncryptedPrivateKey,
+    pemCertificateRequest,
+    pemDhParameters,
+    pemEcParameters,
+    pemSsh2EncryptedPrivateKey,
+    pemSsh2PublicKey);
+
+const
+  /// the supported trailer markers of a PEM text instance
+  PEM_BEGIN: array[TPemKind] of RawUtf8 = (
+    '-----BEGIN CERTIFICATE-----'#13#10,
+    '-----BEGIN PRIVATE KEY-----'#13#10,
+    '-----BEGIN PUBLIC KEY-----'#13#10,
+    '-----BEGIN RSA PRIVATE KEY-----'#13#10,
+    '-----BEGIN RSA PUBLIC KEY-----'#13#10,
+    '-----BEGIN EC PRIVATE KEY-----'#13#10,
+    '-----BEGIN ENCRYPTED PRIVATE KEY-----'#13#10,
+    '-----BEGIN CERTIFICATE REQUEST-----'#13#10,
+    '-----BEGIN DH PARAMETERS-----'#13#10,
+    '-----BEGIN EC PARAMETERS-----'#13#10,
+    '-----BEGIN SSH2 ENCRYPTED PRIVATE KEY-----'#13#10,
+    '-----BEGIN SSH2 PUBLIC KEY-----'#13#10);
+
+  /// the supported ending markers of a PEM text instance
+  PEM_END: array[TPemKind] of RawUtf8 = (
+    '-----END CERTIFICATE-----'#13#10,
+    '-----END PRIVATE KEY-----'#13#10,
+    '-----END PUBLIC KEY-----'#13#10,
+    '-----END RSA PRIVATE KEY-----'#13#10,
+    '-----END RSA PUBLIC KEY-----'#13#10,
+    '-----END EC PRIVATE KEY-----'#13#10,
+    '-----END ENCRYPTED PRIVATE KEY-----'#13#10,
+    '-----END CERTIFICATE REQUEST-----'#13#10,
+    '-----END DH PARAMETERS-----'#13#10,
+    '-----END EC PARAMETERS-----'#13#10,
+    '-----END SSH2 ENCRYPTED PRIVATE KEY-----'#13#10,
+    '-----END SSH2 PUBLIC KEY-----'#13#10);
+
+/// convert a binary DER content into a single-instance PEM text
+function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): RawUtf8; overload;
+
+/// convert a binary DER content into a single-instance PEM text
+function DerToPem(const der: RawByteString; kind: TPemKind): RawUtf8; overload;
+
+/// convert a single-instance PEM text file into a binary DER
+// - if the supplied buffer doesn't start with '-----BEGIN .... -----'
+// trailer, will expect the input to be plain DER binary and return it
+function PemToDer(const pem: RawUtf8): RawByteString;
+
+/// quickly check the begin/end of a single-instance PEM text
+// - do not validate the internal Base64 encoding, just the trailer/ending lines
+// - expects a single-instance PEM, i.e. with a single key or certificate within
+function IsPem(const pem: RawUtf8): boolean;
+
+/// low-level binary-to-DER encoder
+function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
+
+/// low-level DER sequence to binary decoding
+// - only support a single DER_INTEGER sequence format as generated by DerAppend()
+function DerParse(P: PAnsiChar; buf: PByteArray; buflen: PtrInt): PAnsiChar;
+
+
+{ ************** High-Level (X509) Certificates Process }
+
+
+implementation
 
 
 { **************** High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers }
@@ -817,6 +1565,7 @@ var
   dig: THash512Rec;
 begin
   BinToHexLower(@dig, Final(dig), result);
+  FillZero(dig.b);
 end;
 
 const
@@ -866,6 +1615,92 @@ begin
   result := Final(aDigest);
 end;
 
+
+{ TStreamRedirectSynHasher }
+
+constructor TStreamRedirectSynHasher.Create(aDestination: TStream; aRead: boolean);
+begin
+  inherited Create(aDestination, aRead);
+  fHash.Init(GetAlgo);
+end;
+
+procedure TStreamRedirectSynHasher.DoHash(data: pointer; len: integer);
+begin
+  fHash.Update(data, len);
+end;
+
+function TStreamRedirectSynHasher.GetHash: RawUtf8;
+begin
+  result := fHash.Final;
+end;
+
+const
+  HASH_EXT: array[THashAlgo] of RawUtf8 = (
+    '.md5',
+    '.sha1',
+    '.sha256',
+    '.sha384',
+    '.sha512',
+    '.sha3-256',
+    '.sha3-512');
+
+class function TStreamRedirectSynHasher.GetHashFileExt: RawUtf8;
+begin
+  result := HASH_EXT[GetAlgo];
+end;
+
+
+{ TStreamRedirectSha3_512 }
+
+class function TStreamRedirectSha3_512.GetAlgo: THashAlgo;
+begin
+  result := hfSHA3_512;
+end;
+
+{ TStreamRedirectSha3_256 }
+
+class function TStreamRedirectSha3_256.GetAlgo: THashAlgo;
+begin
+  result := hfSHA3_256;
+end;
+
+{ TStreamRedirectSha512 }
+
+class function TStreamRedirectSha512.GetAlgo: THashAlgo;
+begin
+  result := hfSHA512;
+end;
+
+{ TStreamRedirectSha384 }
+
+class function TStreamRedirectSha384.GetAlgo: THashAlgo;
+begin
+  result := hfSHA384;
+end;
+
+{ TStreamRedirectSha256 }
+
+class function TStreamRedirectSha256.GetAlgo: THashAlgo;
+begin
+  result := hfSHA256;
+end;
+
+{ TStreamRedirectSha1 }
+
+class function TStreamRedirectSha1.GetAlgo: THashAlgo;
+begin
+  result := hfSHA1;
+end;
+
+{ TStreamRedirectMd5 }
+
+class function TStreamRedirectMd5.GetAlgo: THashAlgo;
+begin
+  result := hfMD5;
+end;
+
+
+
 function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
 var
   hasher: TSynHasher;
@@ -873,13 +1708,20 @@ begin
   result := hasher.Full(aAlgo, aBuffer, aLen);
 end;
 
+function HashFull(aAlgo: THashAlgo; const aBuffer: RawByteString): RawUtf8;
+var
+  hasher: TSynHasher;
+begin
+  result := hasher.Full(aAlgo, pointer(aBuffer), length(aBuffer));
+end;
+
 function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8;
 var
   hasher: TSynHasher;
   temp: RawByteString;
   F: THandle;
-  size: Int64;
-  read: cardinal;
+  size, tempsize: Int64;
+  read: integer;
 begin
   result := '';
   if (aFileName = '') or
@@ -889,10 +1731,13 @@ begin
   if ValidHandle(F) then
   try
     size := FileSize(F);
-    SetLength(temp, 1 shl 20); // 1MB temporary buffer for reading
+    tempsize := 1 shl 20; // 1MB temporary buffer for reading
+    if tempsize > size then
+      tempsize := size;
+    SetLength(temp, tempsize);
     while size > 0 do
     begin
-      read := FileRead(F, pointer(temp)^, 1 shl 20);
+      read := FileRead(F, pointer(temp)^, tempsize);
       if read <= 0 then
         exit;
       hasher.Update(pointer(temp), read);
@@ -926,6 +1771,42 @@ begin
       end;
 end;
 
+function HashFileMd5(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfMD5);
+end;
+
+function HashFileSha1(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA1);
+end;
+
+function HashFileSha256(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA256);
+end;
+
+function HashFileSha384(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA384);
+end;
+
+function HashFileSha512(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA512);
+end;
+
+function HashFileSha3_256(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA3_256);
+end;
+
+function HashFileSha3_512(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA3_512);
+end;
+
+
 
 { TSynSigner }
 
@@ -940,18 +1821,18 @@ begin
   SignatureSize := SIGN_SIZE[Algo];
   case Algo of
     saSha1:
-      PHMAC_SHA1(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha1(@ctxt)^.Init(aSecret, aSecretLen);
     saSha256:
-      PHMAC_SHA256(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha256(@ctxt)^.Init(aSecret, aSecretLen);
     saSha384:
-      PHMAC_SHA384(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha384(@ctxt)^.Init(aSecret, aSecretLen);
     saSha512:
-      PHMAC_SHA512(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha512(@ctxt)^.Init(aSecret, aSecretLen);
     saSha3224..saSha3S256:
       begin
         PSha3(@ctxt)^.Init(SHA3_ALGO[Algo]);
         PSha3(@ctxt)^.Update(aSecret, aSecretLen);
-      end; // note: the HMAC pattern is included in SHA-3
+      end; // note: the HMAC pattern is included in SHA-3 sponge design
   end;
 end;
 
@@ -986,13 +1867,13 @@ procedure TSynSigner.Update(aBuffer: pointer; aLen: integer);
 begin
   case Algo of
     saSha1:
-      PHMAC_SHA1(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha1(@ctxt)^.Update(aBuffer, aLen);
     saSha256:
-      PHMAC_SHA256(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha256(@ctxt)^.Update(aBuffer, aLen);
     saSha384:
-      PHMAC_SHA384(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha384(@ctxt)^.Update(aBuffer, aLen);
     saSha512:
-      PHMAC_SHA512(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha512(@ctxt)^.Update(aBuffer, aLen);
     saSha3224..saSha3S256:
       PSha3(@ctxt)^.Update(aBuffer, aLen);
   end;
@@ -1002,13 +1883,13 @@ procedure TSynSigner.Final(out aSignature: THash512Rec; aNoInit: boolean);
 begin
   case Algo of
     saSha1:
-      PHMAC_SHA1(@ctxt)^.Done(aSignature.b160, aNoInit);
+      PHmacSha1(@ctxt)^.Done(aSignature.b160, aNoInit);
     saSha256:
-      PHMAC_SHA256(@ctxt)^.Done(aSignature.Lo, aNoInit);
+      PHmacSha256(@ctxt)^.Done(aSignature.Lo, aNoInit);
     saSha384:
-      PHMAC_SHA384(@ctxt)^.Done(aSignature.b384, aNoInit);
+      PHmacSha384(@ctxt)^.Done(aSignature.b384, aNoInit);
     saSha512:
-      PHMAC_SHA512(@ctxt)^.Done(aSignature.b, aNoInit);
+      PHmacSha512(@ctxt)^.Done(aSignature.b, aNoInit);
     saSha3224..saSha3S256:
       PSha3(@ctxt)^.Final(@aSignature, SignatureSize shl 3, aNoInit);
   end;
@@ -1073,7 +1954,8 @@ begin
 end;
 
 procedure TSynSigner.Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
-  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8; aDefaultAlgo: TSignAlgo);
+  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8;
+  aDefaultAlgo: TSignAlgo);
 var
   tmp: TSynTempBuffer;
   k: TSynSignerParams;
@@ -1114,7 +1996,8 @@ begin
 end;
 
 procedure TSynSigner.Pbkdf2(const aParamsJson: RawUtf8;
-  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8; aDefaultAlgo: TSignAlgo);
+  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8;
+  aDefaultAlgo: TSignAlgo);
 begin
   Pbkdf2(pointer(aParamsJson), length(aParamsJson),
     aDerivatedKey, aDefaultSalt, aDefaultAlgo);
@@ -1328,7 +2211,8 @@ end;
 
 { TSynConnectionDefinition }
 
-constructor TSynConnectionDefinition.CreateFromJson(const Json: RawUtf8; Key: cardinal);
+constructor TSynConnectionDefinition.CreateFromJson(
+  const Json: RawUtf8; Key: cardinal);
 var
   privateCopy: RawUtf8;
   values: array[0..4] of TValuePUtf8Char;
@@ -1336,7 +2220,12 @@ begin
   fKey := Key;
   privateCopy := Json;
   JsonDecode(privateCopy,
-    ['Kind', 'ServerName', 'DatabaseName', 'User', 'Password'], @values);
+    ['Kind',          // 0
+     'ServerName',    // 1
+     'DatabaseName',  // 2
+     'User',          // 3
+     'Password'],     // 4
+    @values);
   fKind := values[0].ToString;
   values[1].ToUtf8(fServerName);
   values[2].ToUtf8(fDatabaseName);
@@ -1543,12 +2432,12 @@ begin
   if (self = nil) or
      not IPToCardinal(aIP, ip4) then
     exit;
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     AddSortedInteger(fIP4, fCount, ip4);
     result := true;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -1561,15 +2450,17 @@ begin
   if (self = nil) or
      not IPToCardinal(aIP, ip4) then
     exit;
-  fSafe.Lock;
+  fSafe.ReadWriteLock;
   try
     i := FastFindIntegerSorted(pointer(fIP4), fCount - 1, ip4);
     if i < 0 then
       exit;
+    fSafe.WriteLock;
     DeleteInteger(fIP4, fCount, i);
+    fSafe.WriteUnLock;
     result := true;
   finally
-    fSafe.UnLock;
+    fSafe.ReadWriteUnLock;
   end;
 end;
 
@@ -1582,18 +2473,18 @@ begin
      (fCount = 0) or
      not IPToCardinal(aIP, ip4) then
     exit;
-  fSafe.Lock;
+  fSafe.ReadOnlyLock;
   try
     if FastFindIntegerSorted(pointer(fIP4), fCount - 1, ip4) >= 0 then
       result := true;
   finally
-    fSafe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
-function TIPBan.DynArrayLocked: TDynArray;
+function TIPBan.DynArrayLocked(aLock: TRWLockContext): TDynArray;
 begin
-  fSafe.Lock;
+  fSafe.Lock(aLock);
   result.InitSpecific(TypeInfo(TCardinalDynArray), fIP4, ptCardinal, @fCount);
 end;
 
@@ -1626,11 +2517,11 @@ end;
 procedure TSynUniqueIdentifierBits.ToVariant(out Result: variant);
 begin
   TDocVariantData(Result).InitObject([
-    'Created', DateTimeToIso8601Text(CreateDateTime),
+    'Created',    DateTimeToIso8601Text(CreateDateTime),
     'Identifier', ProcessID,
-    'Counter', Counter,
-    'Value', Value,
-    'Hex', Int64ToHex(Value)], JSON_OPTIONS_FAST);
+    'Counter',    Counter,
+    'Value',      Value,
+    'Hex',        Int64ToHex(Value)], JSON_FAST);
 end;
 
 function TSynUniqueIdentifierBits.Equal(
@@ -1639,9 +2530,9 @@ begin
   result := Value = Another.Value;
 end;
 
-procedure TSynUniqueIdentifierBits.From(const AID: TSynUniqueIdentifier);
+procedure TSynUniqueIdentifierBits.From(const aID: TSynUniqueIdentifier);
 begin
-  Value := AID;
+  Value := aID;
 end;
 
 function TSynUniqueIdentifierBits.CreateTimeLog: TTimeLog;
@@ -1690,14 +2581,14 @@ begin
   currentTime := UnixTimeUtc; // under Windows faster than GetTickCount64
   fSafe.Lock;
   try
-    if currentTime > fUnixCreateTime then
+    if currentTime > fUnixCreateTime then // time may have been tweaked: compare
     begin
       fUnixCreateTime := currentTime;
       fLastCounter := 0; // reset
     end;
     if fLastCounter = $7fff then
     begin
-      // collision (unlikely) -> cheat on timestamp
+      // collide if more than 32768 per second (unlikely) -> tweak the timestamp
       inc(fUnixCreateTime);
       fLastCounter := 0;
     end
@@ -1718,12 +2609,12 @@ end;
 
 function TSynUniqueIdentifierGenerator.GetComputedCount: Int64;
 begin
-  result := fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT];
+  result := fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VInt64;
 end;
 
 function TSynUniqueIdentifierGenerator.GetCollisions: Int64;
 begin
-  result := fSafe.LockedInt64[SYNUNIQUEGEN_COLLISIONCOUNT];
+  result := fSafe.Padding[SYNUNIQUEGEN_COLLISIONCOUNT].VInt64;
 end;
 
 procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(
@@ -1760,7 +2651,7 @@ begin
   if aSharedObfuscationKeyNewKdf > 0 then
   begin
     // efficient and safe obfuscation based on proven algoriths (AES + SHA3)
-    PBKDF2_SHA3(SHA3_256, aSharedObfuscationKey,
+    Pbkdf2Sha3(SHA3_256, aSharedObfuscationKey,
        ToText(ClassType), aSharedObfuscationKeyNewKdf, @key);
     fCryptoAesE.EncryptInit(key, 128);
     fCryptoAesD.DecryptInitFrom(fCryptoAesE, key, 128);
@@ -1809,8 +2700,8 @@ type // compute a 24 hexadecimal chars (96 bits) obfuscated pseudo file name
 function TSynUniqueIdentifierGenerator.ToObfuscated(
   const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
 var
-  block: THash128Rec;
-  bits: TSynUniqueIdentifierObfuscatedBits absolute block;
+  block: THash128Rec; // 128-bit
+  bits: TSynUniqueIdentifierObfuscatedBits absolute block; // 64+32 = 96-bit
   key: cardinal;
 begin
   result := '';
@@ -1825,7 +2716,7 @@ begin
   if self <> nil then
     if fCryptoAesE.Initialized then
     begin
-      block.c3 := fCryptoCRC; // used as IV during AES permutation
+      block.c3 := fCryptoCRC; // last 32-bit used as IV during AES permutation
       fCryptoAesE.Encrypt(block.b);
       result := BinToHexLower(@block, SizeOf(block)); // 32 hexa chars
       exit;
@@ -2006,11 +2897,1369 @@ end;
 
 
 
+{ ******* TBinaryCookieGenerator Simple Cookie Generator }
+
+procedure XorMemoryCtr(data: PCardinal; size: PtrUInt; ctr: cardinal;
+  key256bytes: PCardinalArray);
+begin
+  while size >= SizeOf(cardinal) do
+  begin
+    dec(size, SizeOf(cardinal));
+    data^ := data^ xor key256bytes[ctr and $3f] xor ctr;
+    inc(data);
+    ctr := ((ctr xor (ctr shr 15)) * 2246822519); // prime-number ctr diffusion
+    ctr := ((ctr xor (ctr shr 13)) * 3266489917);
+    ctr := ctr xor (ctr shr 16);
+  end;
+  while size <> 0 do
+  begin
+    dec(size);
+    PByteArray(data)[size] := PByteArray(data)[size] xor ctr;
+    ctr := ctr shr 8; // 1..3 pending iterations
+  end;
+end;
+
+
+{ TBinaryCookieGenerator }
+
+procedure TBinaryCookieGenerator.Init(const Name: RawUtf8;
+  DefaultSessionTimeOutMinutes: cardinal);
+begin
+  DefaultTimeOutMinutes := DefaultSessionTimeOutMinutes;
+  CookieName := Name;
+  // initial random session ID, small enough to remain 31-bit > 0
+  SessionSequence := Random32 and $07ffffff;
+  SessionSequenceStart := SessionSequence;
+  // temporary secret for checksum
+  Secret := Random32;
+  // temporary secret for encryption
+  CryptNonce := Random32;
+  MainAesPrng.FillRandom(@Crypt, SizeOf(Crypt)); // cryptographic randomness
+end;
+
+type
+  // map the binary layout of our Base64 serialized cookies
+  TCookieContent = packed record
+    head: packed record
+      cryptnonce: cardinal; // ctr to cipher following bytes
+      crc: cardinal;        // = 32-bit digital signature (DefaultHasher)
+      session: integer;     // = jti claim
+      issued: cardinal;     // = iat claim (from UnixTimeUtc-UNIXTIME_MINIMAL)
+      expires: cardinal;    // = exp claim
+    end;
+    data: array[0..2047] of byte; // optional record binary serialization
+  end;
+
+function TBinaryCookieGenerator.Generate(out Cookie: RawUtf8;
+  TimeOutMinutes: cardinal; PRecordData: pointer;
+  PRecordTypeInfo: PRttiInfo): TBinaryCookieGeneratorSessionID;
+var
+  cc: TCookieContent; // local working buffer
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(0);
+  try
+    result := InterlockedIncrement(integer(SessionSequence));
+    if (PRecordData <> nil) and
+       (PRecordTypeInfo <> nil) then
+    begin
+      BinarySave(PRecordData, tmp, PRecordTypeInfo, rkRecordTypes);
+      if tmp.len > SizeOf(cc.data) then
+        // all cookies storage should be < 4K
+        raise ESynException.Create('TBinaryCookieGenerator: Too Big Too Fat');
+    end;
+    cc.head.cryptnonce := Random32;
+    cc.head.session := result;
+    cc.head.issued := UnixTimeUtc - UNIXTIME_MINIMAL;
+    if TimeOutMinutes = 0 then
+      TimeOutMinutes := DefaultTimeOutMinutes;
+    if TimeOutMinutes = 0 then
+      // 1 month expiration is a reasonable high value for "never expires"
+      TimeOutMinutes := 31 * 24 * 60;
+    cc.head.expires := cc.head.issued + TimeOutMinutes * 60;
+    if tmp.len > 0 then
+      MoveFast(tmp.buf^, cc.data, tmp.len);
+    inc(tmp.len, SizeOf(cc.head));
+    cc.head.crc := DefaultHasher(Secret, @cc.head.session, tmp.len - 8);
+    XorMemoryCtr(@cc.head.crc, tmp.len - 4,
+      {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
+    Cookie := BinToBase64Uri(@cc, tmp.len);
+  finally
+    tmp.Done;
+  end;
+end;
+
+function TBinaryCookieGenerator.Validate(const Cookie: RawUtf8;
+  PRecordData: pointer; PRecordTypeInfo: PRttiInfo;
+  PExpires, PIssued: PUnixTime): TBinaryCookieGeneratorSessionID;
+var
+  clen, len: integer;
+  now: cardinal;
+  ccend: PAnsiChar;
+  cc: TCookieContent;
+begin
+  result := 0; // parsing/crc/timeout error
+  if Cookie = '' then
+    exit;
+  clen := length(Cookie);
+  len := Base64uriToBinLength(clen);
+  if (len >= SizeOf(cc.head)) and
+     (len <= SizeOf(cc)) and
+     Base64uriDecode(pointer(Cookie), @cc, clen) then
+  begin
+    XorMemoryCtr(@cc.head.crc, len - SizeOf(cc.head.cryptnonce),
+      {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
+    if (cardinal(cc.head.session) >= cardinal(SessionSequenceStart)) and
+       (cardinal(cc.head.session) <= cardinal(SessionSequence)) and
+       (DefaultHasher(Secret, @cc.head.session, len - 8) = cc.head.crc) then
+    begin
+      if PExpires <> nil then
+        PExpires^ := cc.head.expires + UNIXTIME_MINIMAL;
+      if PIssued <> nil then
+        PIssued^ := cc.head.issued + UNIXTIME_MINIMAL;
+      now := UnixTimeUtc - UNIXTIME_MINIMAL;
+      if (cc.head.issued <= now) and
+         (cc.head.expires >= now) then
+        if (PRecordData = nil) or
+           (PRecordTypeInfo = nil) then
+          result := cc.head.session
+        else if len > SizeOf(cc.head) then
+        begin
+          ccend := PAnsiChar(@cc) + len;
+          if BinaryLoad(PRecordData, @cc.data, PRecordTypeInfo,
+              nil, ccend, rkRecordTypes) = ccend then
+            result := cc.head.session;
+        end;
+    end;
+  end;
+end;
+
+function TBinaryCookieGenerator.Save: RawUtf8;
+begin
+  result := BinarySaveBase64(
+    @self, TypeInfo(TBinaryCookieGenerator), {uri=}true, rkRecordTypes);
+end;
+
+function TBinaryCookieGenerator.Load(const Saved: RawUtf8): boolean;
+begin
+  result := RecordLoadBase64(pointer(Saved), length(Saved),
+    self, TypeInfo(TBinaryCookieGenerator), {uri=}true);
+end;
+
+
+
+{ ************* Rnd/Hash/Sign/Cipher/Asym/Cert High-Level Algorithms Factories }
+
+var
+  GlobalCryptAlgo: TRawUtf8List; // Objects[] are TCryptAlgo instances
+
+procedure GlobalCryptAlgoInit; forward;
+
+
+{ TCryptAlgo }
+
+constructor TCryptAlgo.Create(const name: RawUtf8);
+begin
+  if name = '' then
+    raise ECrypt.CreateUtf8('Unexpected %.Create('''')', [self]);
+  fName := name;
+  GlobalCryptAlgo.AddOrReplaceObject(name, self);
+end;
+
+class function TCryptAlgo.InternalFind(
+  const name: RawUtf8; var Last: TCryptAlgo): pointer;
+begin
+  if name = '' then
+  begin
+    result := nil;
+    exit;
+  end;
+  result := Last; // simple but efficient cache
+  if (result <> nil) and
+     IdemPropNameU(TCryptAlgo(result).fName, name) then
+    exit;
+  result := GlobalCryptAlgo.GetObjectFrom(name); // thread-safe lookup
+  if result <> nil then
+    if TCryptAlgo(result).InheritsFrom(self) then
+      Last := result
+    else
+      result := nil;
+end;
+
+class function TCryptAlgo.InternalResolve(
+  const name: RawUtf8; CSV: PUtf8Char): integer;
+begin
+  result := FindCsvIndex(CSV, name, ',', {casesens=}false);
+  if result < 0 then
+    raise ECrypt.CreateUtf8('%.Create(''%''): unknown algorithm - try %',
+      [self, name, CSV]);
+end;
+
+class function TCryptAlgo.Implements(const name: array of RawUtf8): pointer;
+var
+  i: PtrInt;
+begin
+  if GlobalCryptAlgo = nil then
+    GlobalCryptAlgoInit;
+  result := nil;
+  for i := 0 to high(name) do
+    if name[i] <> '' then
+      result := Create(name[i]);
+end;
+
+class procedure TCryptAlgo.Implements(csv: PUtf8Char; const suffix: RawUtf8);
+var
+  name: RawUtf8;
+begin
+  if GlobalCryptAlgo = nil then
+    GlobalCryptAlgoInit;
+  while csv <> nil do
+  begin
+    GetNextItem(csv, ',', name);
+    if name <> '' then
+      Create(name + suffix);
+  end;
+end;
+
+class function TCryptAlgo.Instances: TCryptAlgos;
+var
+  i: PtrInt;
+  n: integer;
+  o: PObjectArray;
+begin
+  if GlobalCryptAlgo = nil then
+    GlobalCryptAlgoInit;
+  result := nil;
+  n := 0;
+  GlobalCryptAlgo.Safe.ReadOnlyLock;
+  try
+    o := pointer(GlobalCryptAlgo.ObjectPtr);
+    for i := 0 to GlobalCryptAlgo.Count - 1 do
+      if o[i].InheritsFrom(self) then
+        ObjArrayAddCount(result, o[i], n);
+  finally
+    GlobalCryptAlgo.Safe.ReadOnlyUnLock;
+  end;
+  if n <> 0 then
+    DynArrayFakeLength(result, n);
+end;
+
+class function TCryptAlgo.Names: TRawUtf8DynArray;
+var
+  i: PtrInt;
+  n: integer;
+  o: PObjectArray;
+begin
+  if GlobalCryptAlgo = nil then
+    GlobalCryptAlgoInit;
+  result := nil;
+  n := 0;
+  GlobalCryptAlgo.Safe.ReadOnlyLock;
+  try
+    o := pointer(GlobalCryptAlgo.ObjectPtr);
+    for i := 0 to GlobalCryptAlgo.Count - 1 do
+      if o[i].InheritsFrom(self) then
+        AddRawUtf8(result, n, TCryptAlgo(o[i]).fName);
+  finally
+    GlobalCryptAlgo.Safe.ReadOnlyUnLock;
+  end;
+  if n <> 0 then
+    DynArrayFakeLength(result, n);
+end;
+
+
+{ TCryptInstance }
+
+constructor TCryptInstance.Create(algo: TCryptAlgo);
+begin
+  if algo = nil then
+    raise ECrypt.CreateUtf8('Unexpected %.Create(nil)', [self]);
+  fCryptAlgo := algo;
+end;
+
+var
+  LastAlgoInstance: TCryptAlgo;
+
+constructor TCryptInstance.Create(const name: RawUtf8);
+var
+  algo: TCryptAlgo;
+begin
+  algo := TCryptAlgo.InternalFind(name, LastAlgoInstance);
+  if algo = nil then
+    raise ECrypt.CreateUtf8('Unexpected %.Create(''%'')', [self, name]);
+  Create(algo);
+end;
+
+
+{ TCryptRandom }
+
+function TCryptRandom.Get(len: PtrInt): RawByteString;
+begin
+  SetString(result, nil, len);
+  Get(pointer(result), len);
+end;
+
+function TCryptRandom.GetBytes(len: PtrInt): TBytes;
+begin
+  result := nil;
+  SetLength(result, len);
+  Get(pointer(result), len);
+end;
+
+function TCryptRandom.Get32: cardinal;
+begin
+  Get(@result, 4);
+end;
+
+function TCryptRandom.Get32(max: cardinal): cardinal;
+begin
+  result := (QWord(Get32) * max) shr 32;
+end;
+
+function TCryptRandom.GetDouble: double;
+const
+  COEFF32: double = 1.0 / (Int64(1) shl 32);
+begin
+  result := Get32 * COEFF32; // 32-bit resolution is enough for our purpose
+end;
+
+
+{ TCryptRandomEntropy }
+
+type
+  TCryptRandomEntropy = class(TCryptRandom)
+  protected
+    fSource: TAesPrngGetEntropySource;
+  public
+    constructor Create(const name: RawUtf8); override;
+    function Get(len: PtrInt): RawByteString; override;
+    procedure Get(dst: pointer; dstlen: PtrInt); override;
+  end;
+
+const
+  /// CSV text of TAesPrngGetEntropySource items
+  RndAlgosText: PUTF8Char =
+    'rnd-entropy,rnd-entropysys,rnd-entropysysblocking,rnd-entropyuser';
+
+constructor TCryptRandomEntropy.Create(const name: RawUtf8);
+begin
+  fSource := TAesPrngGetEntropySource(InternalResolve(name, RndAlgosText));
+  inherited Create(name); // should be done after InternalResolve()
+end;
+
+function TCryptRandomEntropy.Get(len: PtrInt): RawByteString;
+begin
+  result := TAesPrng.GetEntropy(len, fSource);
+end;
+
+procedure TCryptRandomEntropy.Get(dst: pointer; dstlen: PtrInt);
+var
+  tmp: RawByteString;
+begin
+  tmp := TAesPrng.GetEntropy(dstlen, fSource);
+  MoveFast(pointer(tmp)^, dst^, dstlen);
+  FillZero(tmp);
+end;
+
+
+{ TCryptRandomAesPrng }
+
+type
+  TCryptRandomAesPrng = class(TCryptRandom)
+  public
+    procedure Get(dst: pointer; dstlen: PtrInt); override;
+  end;
+
+procedure TCryptRandomAesPrng.Get(dst: pointer; dstlen: PtrInt);
+begin
+  MainAesPrng.FillRandom(dst, dstlen);
+end;
+
+
+{ TCryptRandomSysPrng }
+
+type
+  TCryptRandomSysPrng = class(TCryptRandom)
+  public
+    procedure Get(dst: pointer; dstlen: PtrInt); override;
+  end;
+
+procedure TCryptRandomSysPrng.Get(dst: pointer; dstlen: PtrInt);
+begin // 'rnd-system,rnd-systemblocking'
+  FillSystemRandom(dst, dstlen, length(fName) > 10);
+end;
+
+
+{ TCryptRandomLecuyerPrng }
+
+type
+  TCryptRandomLecuyerPrng = class(TCryptRandom)
+  public
+    procedure Get(dst: pointer; dstlen: PtrInt); override;
+    function Get32: cardinal; override;
+  end;
+
+procedure TCryptRandomLecuyerPrng.Get(dst: pointer; dstlen: PtrInt);
+begin
+  RandomBytes(dst, dstlen); // use Lecuyer's gsl_rng_taus2 generator
+end;
+
+function TCryptRandomLecuyerPrng.Get32: cardinal;
+begin
+  result := Random32;
+end;
+
+
+{ TCryptHash }
+
+function TCryptHash.Final(digest: pointer; digestlen: PtrInt): PtrInt;
+var
+  dig: THash512Rec;
+begin
+  result := InternalFinal(dig);
+  if result <= digestlen then
+    MoveFast(dig, digest^, result)
+  else
+    result := 0;
+  FillZero(dig.b);
+end;
+
+function TCryptHash.Final: RawUtf8;
+var
+  dig: THash512Rec;
+begin
+  BinToHexLower(@dig, InternalFinal(dig), result);
+  FillZero(dig.b);
+end;
+
+function TCryptHash.Update(const buf: RawByteString): ICryptHash;
+begin
+  result := Update(pointer(buf), length(buf));
+end;
+
+procedure TCryptHash.UpdateFile(const filename: TFileName);
+var
+  temp: RawByteString;
+  F: THandle;
+  size, tempsize: Int64;
+  read: integer;
+begin
+  if filename = '' then
+    exit;
+  F := FileOpenSequentialRead(filename);
+  if ValidHandle(F) then
+  try
+    size := FileSize(F);
+    tempsize := 1 shl 20; // 1MB temporary buffer for reading
+    if tempsize > size then
+      tempsize := size;
+    SetLength(temp, tempsize);
+    while size > 0 do
+    begin
+      read := FileRead(F, pointer(temp)^, tempsize);
+      if read <= 0 then
+        exit;
+      Update(pointer(temp), read);
+      dec(size, read);
+    end;
+  finally
+    FileClose(F);
+  end;
+end;
+
+
+{ TCryptHasher }
+
+function TCryptHasher.Full(buf: pointer; buflen: PtrInt): RawUtf8;
+var
+  h: ICryptHash;
+begin
+  h := New;
+  h.Update(buf, buflen);
+  result := h.Final;
+end;
+
+function TCryptHasher.Full(const buf: RawByteString): RawUtf8;
+begin
+  result := Full(pointer(buf), length(buf));
+end;
+
+function TCryptHasher.Full(buf: pointer; buflen: PtrInt;
+  out digest: THash512Rec): PtrInt;
+var
+  h: ICryptHash;
+begin
+  h := New;
+  h.Update(buf, buflen);
+  result := h.Final(@digest, SizeOf(digest));
+end;
+
+function TCryptHasher.FullFile(const filename: TFileName): RawUtf8;
+var
+  h: ICryptHash;
+begin
+  h := New;
+  h.UpdateFile(filename);
+  result := h.Final;
+end;
+
+
+
+{ TCryptCrcerInternal }
+
+type
+  TCryptCrc32Algo = (aCrc32, aCrc32c, axxHash32, aAdler32, aFnv32);
+
+  TCryptCrc32Internal = class(TCryptHasher)
+  protected
+    fAlgo: TCryptCrc32Algo;
+  public
+    constructor Create(const name: RawUtf8); override;
+    function New: ICryptHash; override;
+  end;
+
+  TCryptCrcInternal = class(TCryptHash)
+  protected
+    fCrc: cardinal;
+    fFunc: THasher;
+    function InternalFinal(out dig: THash512Rec): PtrInt; override;
+  public
+    constructor Create(algo: TCryptCrc32Internal); reintroduce;
+    function Update(buf: pointer; buflen: PtrInt): ICryptHash; override;
+  end;
+
+const
+  /// CSV text of TCryptCrc32Algo items
+  CrcAlgosText: PUtf8Char = 'CRC32,CRC32C,XXHASH32,ADLER32,FNV32';
+
+constructor TCryptCrc32Internal.Create(const name: RawUtf8);
+begin
+  fAlgo := TCryptCrc32Algo(InternalResolve(name, CrcAlgosText));
+  inherited Create(name); // should be done after InternalResolve()
+end;
+
+function TCryptCrc32Internal.New: ICryptHash;
+begin
+  result := TCryptCrcInternal.Create(self);
+end;
+
+
+{ TCryptCrcInternal }
+
+constructor TCryptCrcInternal.Create(algo: TCryptCrc32Internal);
+begin
+  // resolve fFunc in New/Create, since crc32/adler functions may be set later
+  case algo.fAlgo of
+    aCrc32:
+      fFunc := crc32; // maybe from mormot.lib.z
+    aCrc32c:
+      fFunc := crc32c;
+    axxHash32:
+      fFunc := @xxHash32;
+    aAdler32:
+      fFunc := adler32; // maybe from mormot.lib.z
+    aFnv32:
+      fFunc := @fnv32;
+  end;
+  if not Assigned(fFunc) then
+    raise ECrypt.CreateUtf8('%.New: unavailable ''%'' function', [self, algo.fName]);
+  inherited Create(algo);
+end;
+
+function TCryptCrcInternal.Update(buf: pointer; buflen: PtrInt): ICryptHash;
+begin
+  fCrc := fFunc(fCrc, buf, buflen);
+  result := self;
+end;
+
+function TCryptCrcInternal.InternalFinal(out dig: THash512Rec): PtrInt;
+begin
+  dig.c[0] := fCrc;
+  result := SizeOf(fCrc);
+end;
+
+
+{ TCryptHasherInternal }
+
+type
+  TCryptHasherInternal = class(TCryptHasher)
+  protected
+    fAlgo: THashAlgo;
+  public
+    constructor Create(const name: RawUtf8); override;
+    function New: ICryptHash; override;
+  end;
+
+  TCryptHashInternal = class(TCryptHash)
+  protected
+    fAlgo: TSynHasher;
+    function InternalFinal(out dig: THash512Rec): PtrInt; override;
+  public
+    destructor Destroy; override;
+    function Update(buf: pointer; buflen: PtrInt): ICryptHash; override;
+  end;
+
+const
+  /// CSV text of THashAlgo items, as recognized by Hasher/Hash factories
+  HashAlgosText: PUtf8Char = 'MD5,SHA1,SHA256,SHA384,SHA512,SHA3_256,SHA3_512';
+
+constructor TCryptHasherInternal.Create(const name: RawUtf8);
+begin
+  fAlgo := THashAlgo(InternalResolve(name, HashAlgosText));
+  inherited Create(name); // should be done after InternalResolve()
+end;
+
+function TCryptHasherInternal.New: ICryptHash;
+var
+  h: TCryptHashInternal;
+begin
+  h := TCryptHashInternal.Create(self);
+  h.fAlgo.Init(fAlgo);
+  result := h;
+end;
+
+
+{ TCryptHashInternal }
+
+destructor TCryptHashInternal.Destroy;
+begin
+  inherited Destroy;
+  FillCharFast(fAlgo, SizeOf(fAlgo), 0); // override memory
+end;
+
+function TCryptHashInternal.Update(buf: pointer; buflen: PtrInt): ICryptHash;
+begin
+  fAlgo.Update(buf, buflen);
+  result := self;
+end;
+
+function TCryptHashInternal.InternalFinal(out dig: THash512Rec): PtrInt;
+begin
+  fAlgo.Final(dig);
+  result := fAlgo.HashSize;
+end;
+
+
+{ TCryptSigner }
+
+function TCryptSigner.Full(key, buf: pointer; keylen, buflen: PtrInt): RawUtf8;
+var
+  h: ICryptHash;
+begin
+  h := New(key, keylen);
+  h.Update(buf, buflen);
+  result := h.Final;
+end;
+
+function TCryptSigner.Full(const key, buf: RawByteString): RawUtf8;
+begin
+  result := Full(pointer(key), pointer(buf), length(key), length(buf));
+end;
+
+function TCryptSigner.FullFile(key: pointer; keylen: PtrInt;
+  const filename: TFileName): RawUtf8;
+var
+  h: ICryptHash;
+begin
+  h := New(key, keylen);
+  h.UpdateFile(filename);
+  result := h.Final;
+end;
+
+function TCryptSigner.NewPbkdf2(const secret, salt: RawUtf8; rounds: integer): ICryptHash;
+var
+  key: THash512Rec;
+begin
+  result := New(@key, Pbkdf2(secret, salt, rounds, key));
+end;
+
+
+{ TCryptSignerInternal }
+
+type
+  TCryptSignerInternal = class(TCryptSigner)
+  protected
+    fAlgo: TSignAlgo;
+  public
+    constructor Create(const name: RawUtf8); override;
+    function New(key: pointer; keylen: PtrInt): ICryptHash; override;
+    function Pbkdf2(const secret, salt: RawUtf8; rounds: integer;
+      out key: THash512Rec): integer; override;
+  end;
+
+  TCryptSignInternal = class(TCryptHash)
+  protected
+    fAlgo: TSynSigner;
+    function InternalFinal(out dig: THash512Rec): PtrInt; override;
+  public
+    constructor Create(const signer: TSynSigner; const key: THash512Rec); overload;
+    function Update(buf: pointer; buflen: PtrInt): ICryptHash; override;
+  end;
+
+const
+  /// CSV text of TSignAlgo items, as recognized by Signer/Sign factories
+  SignAlgosText: PUtf8Char = 'HMAC-SHA1,HMAC-SHA256,HMAC-SHA384,HMAC-SHA512,' +
+    'SHA3-224,SHA3-256,SHA3-384,SHA3-512,SHA3-S128,SHA3-S256';
+
+constructor TCryptSignerInternal.Create(const name: RawUtf8);
+begin
+  fAlgo := TSignAlgo(InternalResolve(name, SignAlgosText));
+  inherited Create(name); // should be done after InternalResolve()
+end;
+
+function TCryptSignerInternal.New(key: pointer; keylen: PtrInt): ICryptHash;
+var
+  s: TCryptSignInternal;
+begin
+  s := TCryptSignInternal.Create(self);
+  s.fAlgo.Init(fAlgo, key, keylen);
+  result := s;
+end;
+
+function TCryptSignerInternal.Pbkdf2(const secret, salt: RawUtf8;
+  rounds: integer; out key: THash512Rec): integer;
+var
+  s: TSynSigner;
+begin
+  s.Pbkdf2(fAlgo, secret, salt, rounds, key);
+  result := s.SignatureSize;
+end;
+
+
+{ TCryptSignInternal }
+
+constructor TCryptSignInternal.Create(const signer: TSynSigner;
+  const key: THash512Rec);
+begin
+  // directly called by Sign(paramsjson) factory - fCryptAlgo is ignored here
+  fAlgo.Init(signer.Algo, @key, signer.SignatureSize);
+end;
+
+function TCryptSignInternal.Update(buf: pointer; buflen: PtrInt): ICryptHash;
+begin
+  fAlgo.Update(buf, buflen);
+  result := self;
+end;
+
+function TCryptSignInternal.InternalFinal(out dig: THash512Rec): PtrInt;
+begin
+  fAlgo.Final(dig, {noinit=}false);
+  result := fAlgo.SignatureSize;
+end;
+
+
+{ TCryptCipherAlgo }
+
+function TCryptCipherAlgo.Encrypt(key: pointer): ICryptCipher;
+begin
+  result := New(key, {encrypt=}true);
+end;
+
+function TCryptCipherAlgo.Decrypt(key: pointer): ICryptCipher;
+begin
+  result := New(key, {encrypt=}false);
+end;
+
+function TCryptCipherAlgo.New(const hash, secret, salt: RawUtf8;
+  rounds: integer; encrypt: boolean): ICryptCipher;
+var
+  s: TCryptSigner;
+  key: THash512Rec;
+begin
+  s := Signer(hash);
+  if s = nil then
+    raise ECrypt.CreateUtf8('%.New: unknown ''%'' hash', [self, hash]);
+  FillZero(key.b); // s.Pbkdf2 may generate less bits than the cipher consumes
+  s.Pbkdf2(secret, salt, rounds, key);
+  result := New(@key, encrypt);
+end;
+
+function TCryptCipherAlgo.Encrypt(const sign, secret, salt: RawUtf8;
+  rounds: integer): ICryptCipher;
+begin
+  result := New(sign, secret, salt, rounds, {encrypt=}true);
+end;
+
+function TCryptCipherAlgo.Decrypt(const sign, secret, salt: RawUtf8;
+  rounds: integer): ICryptCipher;
+begin
+  result := New(sign, secret, salt, rounds, {encrypt=}false);
+end;
+
+
+
+{ TCryptAesInternal }
+
+type
+  TCryptAesInternal = class(TCryptCipherAlgo)
+  protected
+    fMode: TAesMode;
+    fBits: integer;
+    fEngines: TAesAbstractClasses;
+  public
+    constructor Create(const name: RawUtf8; mode: TAesMode; bits: integer;
+      const engines: TAesAbstractClasses); reintroduce;
+    function New(key: pointer; encrypt: boolean; iv: pointer): ICryptCipher; override;
+    function IsAead: boolean; override;
+  end;
+
+  TCryptAesCipher = class(TCryptCipher)
+  protected
+    fAes: TAesAbstract;
+    fFlags: set of (fEncrypt, fIVAtBeg, fAesGcm, fAesAead);
+  public
+    constructor Create(algo: TCryptAesInternal; key, iv: pointer;
+      encrypt: boolean; const engines: TAesAbstractClasses); overload;
+    destructor Destroy; override;
+    function Clone: ICryptCipher; override;
+    function Process(const src: RawByteString; out dst: RawByteString;
+      const aeadinfo: RawByteString): boolean; overload; override;
+    function Process(const src: TBytes; out dst: TBytes;
+      const aeadinfo: TByteDynArray): boolean; overload; override;
+    procedure RawProcess(src, dst: pointer; srclen, dstlen: PtrInt); override;
+    function RawFinal(var gmac: TAesBlock): boolean; override;
+  end;
+
+constructor TCryptAesInternal.Create(const name: RawUtf8; mode: TAesMode;
+  bits: integer; const engines: TAesAbstractClasses);
+begin
+  inherited Create(name);
+  fMode := mode;
+  fBits := bits;
+  fEngines := engines;
+end;
+
+function TCryptAesInternal.New(key: pointer; encrypt: boolean; iv: pointer): ICryptCipher;
+begin
+  result := TCryptAesCipher.Create(self, key, iv, encrypt, fEngines);
+end;
+
+function TCryptAesInternal.IsAead: boolean;
+begin
+  result := fMode in AES_AEAD; // mCfc, mOfc, mCtc, mGcm
+  if (fMode = mGcm) and
+     (fEngines[mGcm] <> TAesInternal[mGcm]) then
+    result := false; //
+end;
+
+
+{ TCryptAesCipher }
+
+constructor TCryptAesCipher.Create(algo: TCryptAesInternal; key, iv: pointer;
+  encrypt: boolean; const engines: TAesAbstractClasses);
+begin
+  inherited Create(algo);
+  fAes := engines[algo.fMode].Create(key^, algo.fBits);
+  if iv <> nil then
+    fAes.IV := PAesBlock(iv)^
+  else
+    include(fFlags, fIVAtBeg);
+  if encrypt then
+    include(fFlags, fEncrypt);
+  if algo.fMode = mGcm then
+    include(fFlags, fAesGcm)
+  else if algo.fMode in AES_AEAD then
+    include(fFlags, fAesAead);
+end;
+
+destructor TCryptAesCipher.Destroy;
+begin
+  inherited Destroy;
+  fAes.Free;
+end;
+
+function TCryptAesCipher.Clone: ICryptCipher;
+var
+  c: TCryptAesCipher;
+begin
+  c := TCryptAesCipher.Create(fCryptAlgo);
+  c.fAes := fAes.Clone;
+  c.fFlags := fFlags;
+  if not (fIVAtBeg in fFlags) then
+    c.fAes.IV := fAes.IV;
+  result := c;
+end;
+
+function TCryptAesCipher.Process(const src: RawByteString; out dst: RawByteString;
+  const aeadinfo: RawByteString): boolean;
+begin
+  result := false;
+  if src = '' then
+    exit;
+  if fAesGcm in fFlags then
+  begin
+    // standard GCM algorithm with trailing 128-bit GMAC
+    if (aeadinfo <> '') and
+       not fAes.InheritsFrom(TAesGcm) then
+      raise ECrypt.CreateUtf8('% does not properly support AEAD information: ' +
+        'use AES-%-GCM-INT instead', [fAes, TCryptAesInternal(fCryptAlgo).fBits]);
+    if fEncrypt in fFlags then
+    begin
+      dst := fAes.EncryptPkcs7(src, fIVAtBeg in fFlags, GMAC_SIZE);
+      if aeadinfo <> '' then
+        TAesGcmAbstract(fAes).AesGcmAad(pointer(aeadinfo), length(aeadinfo));
+      result := (dst <> '') and
+                TAesGcmAbstract(fAes).AesGcmFinal( // append GMAC to dst
+                   PAesBlock(@PByteArray(dst)[length(dst) - GMAC_SIZE])^)
+    end
+    else
+    begin
+      dst := fAes.DecryptPkcs7(src, fIVAtBeg in fFlags, false, GMAC_SIZE);
+      if aeadinfo <> '' then
+        TAesGcmAbstract(fAes).AesGcmAad(pointer(aeadinfo), length(aeadinfo));
+      result := (dst <> '') and
+                TAesGcmAbstract(fAes).AesGcmFinal( // validate GMAC from src
+                  PAesBlock(@PByteArray(src)[length(src) - GMAC_SIZE])^);
+    end;
+    exit;
+  end
+  else if fAesAead in fFlags then
+    // our proprietary mCfc,mOfc,mCtc AEAD algorithms using 256-bit crc32c
+    dst := fAes.MacAndCrypt(src, fEncrypt in fFlags, aeadinfo)
+  // standard encryption with no AEAD/checksum
+  else if fEncrypt in fFlags then
+    dst := fAes.EncryptPkcs7(src, fIVAtBeg in fFlags)
+  else
+    dst := fAes.DecryptPkcs7(src, fIVAtBeg in fFlags);
+  result := dst <> '';
+end;
+
+function TCryptAesCipher.Process(const src: TBytes; out dst: TBytes;
+  const aeadinfo: TByteDynArray): boolean;
+begin
+  result := false;
+  if src = nil then
+    exit;
+  if fAesAead in fFlags then
+    raise ECrypt.CreateUtf8('%.Process(TBytes) is unsupported for %',
+      [self, fCryptAlgo.AlgoName]); // MacAndCrypt() requires RawByteString
+  if fAesGcm in fFlags then
+  begin
+    // standard GCM algorithm with trailing 128-bit GMAC
+    if aeadinfo <> nil then
+      TAesGcmAbstract(fAes).AesGcmAad(pointer(aeadinfo), length(aeadinfo));
+    if fEncrypt in fFlags then
+    begin
+      dst := fAes.EncryptPkcs7(src, fIVAtBeg in fFlags, GMAC_SIZE);
+      if dst <> nil then
+        result := TAesGcmAbstract(fAes).AesGcmFinal( // append GMAC to dst
+          PAesBlock(@PByteArray(dst)[length(dst) - GMAC_SIZE])^);
+    end
+    else
+    begin
+      dst := fAes.DecryptPkcs7(src, fIVAtBeg in fFlags, false, GMAC_SIZE);
+      if dst <> nil then
+        result := TAesGcmAbstract(fAes).AesGcmFinal( // validate GMAC from src
+          PAesBlock(@PByteArray(src)[length(src) - GMAC_SIZE])^);
+    end;
+    exit;
+  end
+  // standard encryption with no AEAD/checksum
+  else if fEncrypt in fFlags then
+    dst := fAes.EncryptPkcs7(src, fIVAtBeg in fFlags)
+  else
+    dst := fAes.DecryptPkcs7(src, fIVAtBeg in fFlags);
+  result := dst <> nil;
+end;
+
+procedure TCryptAesCipher.RawProcess(src, dst: pointer; srclen, dstlen: PtrInt);
+begin
+  if (dst = nil) and
+     (fAesGcm in fFlags) then
+    TAesGcmAbstract(fAes).AesGcmAad(src, srclen)
+  else if fEncrypt in fFlags then
+    fAes.Encrypt(src, dst, srclen)
+  else
+    fAes.Decrypt(src, dst, srclen)
+end;
+
+function TCryptAesCipher.RawFinal(var gmac: TAesBlock): boolean;
+begin
+  result := (fAesGcm in fFlags) and
+            TAesGcmAbstract(fAes).AesGcmFinal(gmac);
+end;
+
+
+{ TCryptAsym }
+
+procedure TCryptAsym.GeneratePem(out pub, priv: RawUtf8;
+  const privpwd: RawUtf8);
+var
+  derpub, derpriv: RawByteString;
+begin // inherited classes should override at least one of those Generate*()
+  GenerateDer(derpub, derpriv, privpwd);
+  pub := DerToPem(pointer(derpub), length(derpub), pemPublicKey);
+  priv := DerToPem(pointer(derpriv), length(derpriv), pemPrivateKey);
+end;
+
+procedure TCryptAsym.GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8);
+var
+  pempub, pempriv: RawUtf8;
+begin // inherited classes should override at least one of those Generate*()
+  GeneratePem(pempub, pempriv, privpwd);
+  pub := PemToDer(pempub);
+  priv := PemToDer(pempriv);
+end;
+
+function TCryptAsym.Sign(const msg, priv: RawByteString; out sig: RawByteString;
+  const hashername, privpwd: RawUtf8): boolean;
+begin
+  result := Sign(Hasher(hashername), pointer(msg), length(msg), priv, sig, privpwd);
+end;
+
+function TCryptAsym.Sign(const msg, priv: TBytes; out sig: TBytes;
+  const hashername, privpwd: RawUtf8): boolean;
+var
+  p, s: RawByteString;
+begin
+  BytesToRawByteString(priv, p);
+  result := Sign(Hasher(hashername), pointer(msg), length(msg), p, s, privpwd);
+  if result then
+    RawByteStringToBytes(s, sig);
+end;
+
+function TCryptAsym.Verify(const msg, pub, sig: RawByteString;
+  const hashername: RawUtf8): boolean;
+begin
+  result := Verify(Hasher(hashername), pointer(msg), length(msg), pub, sig);
+end;
+
+function TCryptAsym.Verify(const msg, pub, sig: TBytes;
+  const hashername: RawUtf8): boolean;
+var
+  p, s: RawByteString;
+begin
+  BytesToRawByteString(pub, p);
+  BytesToRawByteString(sig, s);
+  result := Verify(Hasher(hashername), pointer(msg), length(msg), p, s);
+end;
+
+function TCryptAsym.SharedSecret(const pub, priv: RawByteString): RawByteString;
+begin
+  result := ''; // unsupported
+end;
+
+
+{ TCryptCert }
+
+procedure TCryptCert.RaiseVoid(Instance: pointer; const Msg: shortstring);
+begin
+  if Instance = nil then
+    RaiseError('% is not set', [Msg]);
+end;
+
+procedure TCryptCert.RaiseError(const Msg: shortstring);
+begin
+  raise ECertificate.CreateUtf8('%.%', [self, Msg]);
+end;
+
+procedure TCryptCert.RaiseError(const Fmt: RawUtf8;
+  const Args: array of const);
+var
+  msg: shortstring;
+begin
+  FormatShort(Fmt, Args, msg);
+  RaiseError(msg);
+end;
+
+function TCryptCert.Instance: TCryptCert;
+begin
+  result := self;
+end;
+
+
+function ToText(r: TCryptCertRevocationReason): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TCryptCertRevocationReason), ord(r));
+end;
+
+function ToText(u: TCryptCertUsage): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TCryptCertUsage), ord(u));
+end;
+
+function ToText(u: TCryptCertUsages): ShortString;
+begin
+  GetSetNameShort(TypeInfo(TCryptCertUsages), u, result, {trim=}true);
+end;
+
+
+{ Register mormot.crypt.core and mormot.crypt.secure Algorithms }
+
+procedure GlobalCryptAlgoInit;
+var
+  m: TAesMode;
+  b, bits: integer;
+  n: RawUtf8;
+begin
+  TAesPrng.Main; // initialize MainAesPrng
+  GlobalLock;
+  try
+    if GlobalCryptAlgo <> nil then
+      exit;
+    GlobalCryptAlgo := RegisterGlobalShutdownRelease(
+      TRawUtf8List.CreateEx([fObjectsOwned, fNoDuplicate]));
+    // register mormot.crypt.core engines into our factories
+    TCryptRandomEntropy.Implements(RndAlgosText);
+    TCryptRandomAesPrng.Implements('rnd-default,rnd-aes');
+    TCryptRandomLecuyerPrng.Implements('rnd-lecuyer');
+    TCryptRandomSysPrng.Implements('rnd-system,rnd-systemblocking');
+    TCryptHasherInternal.Implements(HashAlgosText);
+    TCryptCrc32Internal.Implements(CrcAlgosText);
+    TCryptSignerInternal.Implements(SignAlgosText);
+    for m := low(m) to high(m) do // register all known modes and sizes
+      for b := 0 to 2 do
+      begin
+        bits := 128 + b * 64;
+        n := AesAlgoNameEncode(m, bits);
+        TCryptAesInternal.Create(n, m, bits, TAesFast); // fastest
+        TCryptAesInternal.Create(n + '-int', m, bits, TAesInternal); // internal
+      end;
+  finally
+   GlobalUnlock;
+ end;
+end;
+
+
+{ Actual High-Level Factory Functions }
+
+var // cache the last used algorithm for each factory function
+  LastRnd, LastHasher, LastSigner, LastCipher, LastAsym, LastCert: TCryptAlgo;
+
+function Rnd(const name: RawUtf8): TCryptRandom;
+begin
+  result := TCryptRandom.InternalFind(name, LastRnd);
+end;
+
+function Hasher(const name: RawUtf8): TCryptHasher;
+begin
+  result := TCryptHasher.InternalFind(name, LastHasher);
+end;
+
+function Hash(const name: RawUtf8): ICryptHash;
+var
+  h: TCryptHasher;
+begin
+  h := Hasher(name);
+  if h = nil then
+    result := nil
+  else
+    result := h.New;
+end;
+
+function Signer(const name: RawUtf8): TCryptSigner;
+begin
+  result := TCryptSigner.InternalFind(name, LastSigner);
+end;
+
+function Sign(key: pointer; keylen: PtrInt; const name: RawUtf8): ICryptHash;
+var
+  s: TCryptSigner;
+begin
+  s := Signer(name);
+  if s = nil then
+    result := nil
+  else
+    result := s.New(key, keylen);
+end;
+
+function Sign(const name, secret, salt: RawUtf8; rounds: integer): ICryptHash;
+var
+  s: TCryptSigner;
+begin
+  s := Signer(name);
+  if s = nil then
+    result := nil
+  else
+    result := s.NewPbkdf2(secret, salt, rounds);
+end;
+
+function Sign(const paramsjson, defaultsalt: RawUtf8): ICryptHash;
+var
+  s: TSynSigner;
+  key: THash512Rec;
+begin
+  s.Pbkdf2(paramsjson, key, defaultsalt, saSha256);
+  result := TCryptSignInternal.Create(s, key);
+end;
+
+function CipherAlgo(const name: RawUtf8): TCryptCipherAlgo;
+begin
+  result := TCryptCipherAlgo.InternalFind(name, LastCipher);
+end;
+
+function Cipher(const name: RawUtf8; key: pointer; encrypt: boolean): ICryptCipher;
+var
+  c: TCryptCipherAlgo;
+begin
+  c := CipherAlgo(name);
+  if c = nil then
+    result := nil
+  else
+    result := c.New(key, encrypt);
+end;
+
+function Encrypt(const name: RawUtf8; key: pointer): ICryptCipher;
+begin
+  result := Cipher(name, key, {encrypt=}true);
+end;
+
+function Decrypt(const name: RawUtf8; key: pointer): ICryptCipher;
+begin
+  result := Cipher(name, key, {encrypt=}false);
+end;
+
+function Cipher(const name, hash, secret, salt: RawUtf8; rounds: integer;
+  encrypt: boolean): ICryptCipher;
+var
+  c: TCryptCipherAlgo;
+begin
+  c := CipherAlgo(name);
+  if c = nil then
+    result := nil
+  else
+    result := c.New(hash, secret, salt, rounds, encrypt);
+end;
+
+function Encrypt(const name, hash, secret, salt: RawUtf8; rounds: integer): ICryptCipher;
+begin
+  result := Cipher(name, hash, secret, salt, rounds, {encrypt=}true);
+end;
+
+function Decrypt(const name, hash, secret, salt: RawUtf8; rounds: integer): ICryptCipher;
+begin
+  result := Cipher(name, hash, secret, salt, rounds, {encrypt=}false);
+end;
+
+function Asym(const name: RawUtf8): TCryptAsym;
+begin
+  result := TCryptAsym.InternalFind(name, LastAsym);
+end;
+
+function CertAlgo(const name: RawUtf8): TCryptCertAlgo;
+begin
+  result := TCryptCertAlgo.InternalFind(name, LastCert);
+end;
+
+function Cert(const name: RawUtf8): ICryptCert;
+var
+  c: TCryptCertAlgo;
+begin
+  c := CertAlgo(name);
+  if c = nil then
+    result := nil
+  else
+    result := c.New;
+end;
+
+
+{ ************************** Minimal PEM/DER Encoding/Decoding }
+
+function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): RawUtf8;
+begin
+  result := BinToBase64Line(der, len, PEM_BEGIN[kind], PEM_END[kind]);
+end;
+
+function DerToPem(const der: RawByteString; kind: TPemKind): RawUtf8;
+begin
+  result := DerToPem(pointer(der), length(der), kind);
+end;
+
+function IsPem(const pem: RawUtf8): boolean;
+var
+  l: PtrUInt;
+begin
+  l := length(pem);
+  while (l > 0) and
+        (pem[l] < ' ') do
+    dec(l); // ignore trailing #13#10
+  result := (l > 10) and
+            (PCardinal(pem)^ = $2d2d2d2d) and // start and end with ----
+            (PCardinal(PAnsiChar(pointer(pem)) + l - 4)^ = $2d2d2d2d);
+end;
+
+function PemToDer(const pem: RawUtf8): RawByteString;
+var
+  s, d: PUtf8Char;
+  c: AnsiChar;
+  base64: TSynTempBuffer;
+begin
+  if IsPem(pem) then
+  begin
+    s := GotoNextLine(pointer(pem));
+    if s <> nil then
+    begin
+      d := base64.Init(length(pem) - (s - pointer(pem)));
+      repeat
+        c := s^;
+        inc(s);
+        if c <= ' ' then
+          continue
+        else if c = '-' then
+          break; // no need to check #0 since -----END... will eventually appear
+        d^ := c;
+        inc(d); // keep only Base64 chars
+      until false;
+      result := Base64ToBinSafe(base64.buf, d - base64.buf);
+      base64.Done;
+      if result <> '' then
+        exit;
+    end;
+  end;
+  result := pem;
+end;
+
+const
+  DER_INTEGER  = #$02;
+
+function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
+var
+  pos, prefix: PtrUInt;
+begin
+  pos := 0;
+  while buf[pos] = 0 do
+    // ignore trailing zeros
+    inc(pos);
+  dec(buflen, pos);
+  prefix := buf[pos] shr 7; // two's complement?
+  P[0] := DER_INTEGER;
+  P[1] := AnsiChar(buflen + prefix);
+  P[2] := #$00; // prepend 0 for negative number (if prefix=1)
+  inc(P, 2 + prefix);
+  MoveFast(buf[pos], P^, buflen);
+  result := P + buflen;
+end;
+
+function DerParse(P: PAnsiChar; buf: PByteArray; buflen: PtrInt): PAnsiChar;
+var
+  pos: PtrUInt;
+begin
+  result := nil;
+  FillZero(buf^, buflen);
+  if (P = nil) or
+     (P[0] <> DER_INTEGER) then
+    exit;
+  pos := buflen - ord(P[1]);
+  inc(P, 2);
+  if P^ = #0 then
+  begin
+    inc(P); // negative number appended
+    inc(pos);
+  end;
+  dec(buflen, pos);
+  if buflen < 0 then
+    exit; // avoid buffer overflow
+  MoveFast(P^, buf[pos], buflen);
+  result := P + buflen;
+end;
+
+
 procedure InitializeUnit;
 begin
   Rtti.RegisterType(TypeInfo(TSignAlgo));
   Rtti.RegisterFromText(TypeInfo(TSynSignerParams),
     'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer');
+  // Rnd/Sign/Hash/Cipher/Asym are registered on need in GlobalCryptAlgoInit
 end;
 
 procedure FinalizeUnit;
@@ -2020,7 +4269,9 @@ end;
 
 initialization
   InitializeUnit;
+
 finalization
   FinalizeUnit;
   
 end.
+

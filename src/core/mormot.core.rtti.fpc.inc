@@ -25,7 +25,7 @@ end;
 
 function AlignToPtr(p: pointer): pointer; // not exported by typinfo.pp
 begin
-  result := align(p, sizeof(p));
+  result := align(p, SizeOf(p));
 end;
 
 // use complex AlignTypeData() inlined function from typinfo.pp
@@ -58,6 +58,11 @@ begin
     result := pointer(GetTypeData(@self))
   else
     result := nil;
+end;
+
+function TRttiInfo.RttiNonVoidClass: PRttiClass;
+begin
+  result := pointer(GetTypeData(@self))
 end;
 
 function TRttiClass.ParentInfo: PRttiInfo;
@@ -172,7 +177,7 @@ begin
 end;
 
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
-begin
+begin // is very efficiently inlined by FPC
   result := aTypeInfo^.EnumBaseType.GetEnumNameOrd(aIndex);
 end;
 
@@ -236,8 +241,8 @@ begin
         exit(PBoolean(PtrUInt(Instance) + PtrUInt(StoredProc))^);
       ptVirtual:
         call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(StoredProc))^;
-      else
-        call.Code := pointer(StoredProc);
+    else
+      call.Code := pointer(StoredProc);
     end;
     call.Data := Instance;
     if integer(PropProcs) and (1 shl 6) <> 0 then
@@ -370,26 +375,31 @@ end;
 
 procedure TRttiInfo.RecordManagedFields(out Fields: TRttiRecordManagedFields);
 var
-  info: PTypeData;
-  d: PRecInitData absolute info; // = PRecordInfoInit in rtti.inc
+  info, init: pointer;
 begin
   info := GetTypeData(@self);
-  Fields.Size := info^.RecSize;
-  if Assigned(info^.RecInitInfo) then // see RTTIRecordOp() in rtti.inc
-    d := pointer(GetTypeData(info^.RecInitInfo));
-  Fields.Count := d^.ManagedFieldCount;
-  Fields.Fields := AlignToPtr(Pointer(@d^.ManagedFieldCount) + SizeOf(d^.ManagedFieldCount));
+  Fields.Size := PTypeData(info)^.RecSize;
+  init := PTypeData(info)^.RecInitInfo;
+  if Assigned(init) then // see RTTIRecordOp() in rtti.inc
+    info := GetTypeData(init);
+  Fields.Count := PRecInitData(info)^.ManagedFieldCount;
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  Fields.Fields := AlignToPtr(Pointer(@PRecInitData(info)^.ManagedFieldCount) +
+    SizeOf(PRecInitData(info)^.ManagedFieldCount));
+  {$else}
+  Fields.Fields := pointer(PAnsiChar(info) + SizeOf(PRecInitData(info)^));
+  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 end;
 
 function TRttiInfo.RecordManagedFieldsCount: integer;
 var
-  info: PTypeData;
-  d: PRecInitData absolute info; // = PRecordInfoInit in rtti.inc
+  info, init: pointer;
 begin
   info := GetTypeData(@self);
-  if Assigned(info^.RecInitInfo) then
-    d := pointer(GetTypeData(info^.RecInitInfo));
-  result := d^.ManagedFieldCount;
+  init := PTypeData(info)^.RecInitInfo;
+  if Assigned(init) then
+    info := GetTypeData(init);
+  result := PRecInitData(info)^.ManagedFieldCount; // PRecordInfoInit in rtti.inc
 end;
 
 {$else}
@@ -452,7 +462,7 @@ begin
   result := DeRef(GetTypeData(@self)^.elTypeRef);
 end;
 
-function TRttiInfo.DynArrayItemTypeAny: PRttiInfo;
+function TRttiInfo.DynArrayItemTypeExtended: PRttiInfo;
 begin
   with GetTypeData(@self)^ do
   begin
@@ -495,7 +505,7 @@ function GetPublishedMethods(Instance: TObject;
       Addr: Pointer;
     end;
   var
-    Table: PCardinalArray;
+    Table: PIntegerArray;
     M: ^TMethodInfo;
     i: integer;
   begin
@@ -616,10 +626,9 @@ procedure fpc_dynarray_incr_ref;     external name 'FPC_DYNARRAY_INCR_REF';
 procedure fpc_dynarray_decr_ref;     external name 'FPC_DYNARRAY_DECR_REF';
 procedure fpc_dynarray_clear;        external name 'FPC_DYNARRAY_CLEAR';
 {$ifdef FPC_X64MM}
-procedure fpc_getmem;                external name 'FPC_GETMEM';
+function  fpc_getmem(size: PtrUInt): pointer; external name 'FPC_GETMEM';
 procedure fpc_freemem;               external name 'FPC_FREEMEM';
 {$else}
-procedure _Getmem;                   external name 'FPC_GETMEM';
 procedure _Freemem(p: pointer);      external name 'FPC_FREEMEM';
 {$endif FPC_X64MM}
 
@@ -650,7 +659,7 @@ asm
         mov     p, rax
         cmp     qword ptr [rax - _STRREFCNT], rdx
         jl      @z
-lock    dec     qword ptr [rax - _STRREFCNT]
+  lock  dec     qword ptr [rax - _STRREFCNT]
         jbe     @free
 @z:     ret
 @free:  sub     p, _STRRECSIZE
@@ -663,7 +672,7 @@ asm
         jz      @z
         cmp     qword ptr [p - _STRREFCNT], 0
         jl      @z
-lock    inc     qword ptr [p - _STRREFCNT]
+   lock inc     qword ptr [p - _STRREFCNT]
 @z:
 end;
 
@@ -676,7 +685,7 @@ asm
         jz      @ns
         cmp     qword ptr [s - _STRREFCNT], 0
         jl      @ns
-lock    inc     qword ptr [s - _STRREFCNT]
+   lock inc     qword ptr [s - _STRREFCNT]
 @ns:    mov     qword ptr [d], s
         test    rax, rax
         jnz     @z
@@ -684,14 +693,14 @@ lock    inc     qword ptr [s - _STRREFCNT]
 @z:     mov     d, rax
         cmp     qword ptr [rax - _STRREFCNT], 0
         jl      @n
- lock   dec     qword ptr [rax - _STRREFCNT]
+   lock dec     qword ptr [rax - _STRREFCNT]
         ja      @n
 @free:  sub     d, _STRRECSIZE
         jmp     _Freemem
 @n:
 end;
 
-{ note: fpc_ansistr_compare/_equal do check the codepage and make a UTF-8
+{ note: fpc_ansistr_compare/_equal RTL do check the codepage and make a UTF-8
   conversion if necessary, whereas Delphi _LStrCmp/_LStrEqual don't;
   involving codepage is safer, but paranoid, and 1. is (much) slower, and
   2. is not Delphi compatible -> we rather follow the Delphi's way }
@@ -705,8 +714,16 @@ asm
         jz      @maybe0
 @first: mov     al, byte ptr [s1] // we can check the first char (for quicksort)
         sub     al, byte ptr [s2]
-        jne     @ne
-        mov     r8, qword ptr [s1 - _STRLEN]
+        je      @s
+        movsx   rax, al           // branchless execution on Quicksort
+        ret
+@maybe0:test    s2, s2
+        jz      @1
+        test    s1, s1
+        jnz     @first
+        dec     rax
+        ret
+@s:     mov     r8, qword ptr [s1 - _STRLEN]
         mov     r11, r8
         sub     r8, qword ptr [s2 - _STRLEN] // r8 = length(s1)-length(s2)
         adc     rax, -1
@@ -715,15 +732,13 @@ asm
         sub     s1, rax
         sub     s2, rax
         align   16
-@s:     mov     r10, qword ptr [s1 + rax] // compare by 8 bytes (may include len)
+@by8:   mov     r10, qword ptr [s1 + rax] // compare by 8 bytes
         xor     r10, qword ptr [s2 + rax]
         jnz     @d
         add     rax, 8
-        js      @s
+        js      @by8
 @e:     mov     rax, r8 // all equal -> return difflen
 @0:     ret
-@ne:    movsx   rax, al
-        ret
 @d:     bsf     r10, r10 // compute s1^-s2^
         shr     r10, 3
         add     rax, r10
@@ -731,12 +746,6 @@ asm
         movzx   edx, byte ptr [s2 + rax]
         movzx   eax, byte ptr [s1 + rax]
         sub     rax, rdx
-        ret
-@maybe0:test    s2, s2
-        jz      @1
-        test    s1, s1
-        jnz     @first
-        dec     rax
         ret
 @1:     inc     eax
 end;
@@ -754,7 +763,7 @@ asm
         lea     s1, qword ptr [s1 + rax - 8]
         lea     s2, qword ptr [s2 + rax - 8]
         neg     rax
-        mov     r8, qword ptr [s1] // compare last 8 bytes (may include len)
+        mov     r8, qword ptr [s1] // compare last 8 bytes
         cmp     r8, qword ptr [s2]
         jne     @q
         align 16
@@ -780,13 +789,13 @@ asm
         jz      @z
         cmp     qword ptr [p - _DAREFCNT], 0
         jle     @z
-lock    inc     qword ptr [p - _DAREFCNT]
+   lock inc     qword ptr [p - _DAREFCNT]
 @z:
 end;
 
 procedure _dynarray_decr_ref_free(p: PDynArrayRec; Info: pointer);
 begin
-  Info := GetTypeData(Info)^.elTypeRef;
+  Info := GetTypeData(Info)^.elTypeRef; // on x86_64 we know it is by reference
   if Info <> nil then
   begin
     Info := PPointer(Info)^;
@@ -806,7 +815,7 @@ asm
         sub     p, SizeOf(TDynArrayRec)
         cmp     qword ptr [rax - _DAREFCNT], 0
         jle     @z
-lock    dec     qword ptr [p]
+   lock dec     qword ptr [p]
         jbe     @free
 @z:     ret
 @free:  jmp     _dynarray_decr_ref_free
@@ -816,6 +825,7 @@ end;
 {$ifdef FPC_HAS_CPSTRING} // optimized for systemcodepage=CP_UTF8
 
 {$ifdef FPC_X64MM}
+
 procedure _ansistr_setlength_new(var s: RawByteString; len: PtrInt; cp: cardinal);
 var
   p, new: PAnsiChar;
@@ -836,7 +846,7 @@ begin
 end;
 
 procedure _ansistr_setlength(var s: RawByteString; len: PtrInt; cp: cardinal);
-  nostackframe; assembler;
+  {$ifndef OSWINDOWS} nostackframe; {$endif} assembler;
 asm
         mov     rax, qword ptr [s]
         test    len, len
@@ -856,6 +866,7 @@ asm
         mov     qword ptr [rax].TStrRec.length, len
         mov     byte ptr [rax + len + _STRRECSIZE], 0
 end;
+
 {$endif FPC_X64MM}
 
 procedure _ansistr_concat_convert(var dest: RawByteString;
@@ -945,7 +956,7 @@ begin
       {$else}
       SetLength(dest, l1 + _lstrlen(s2));
       {$endif FPC_X64MM}
-      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
+      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codePage := cp;
       MoveFast(pointer(s2)^, PByteArray(dest)[l1], _lstrlen(s2));
     end
     else
@@ -961,13 +972,13 @@ end;
 procedure _ansistr_concat_multi_convert(var dest: RawByteString;
   const s: array of RawByteString; cp: cardinal);
 var
-  t: TBaseWriter;
+  t: TTextWriter;
   i: PtrInt;
   p: pointer;
   u: RawUtf8;
   tmp: TTextWriterStackBuffer;
 begin
-  t := TBaseWriter.CreateOwnedStream(tmp);
+  t := TTextWriter.CreateOwnedStream(tmp);
   try
     for i := 0 to high(s) do
     begin
@@ -1045,7 +1056,7 @@ begin
       // dest := dest+s... -> self-resize
       SetLength(dest, len);
       new := pointer(dest);
-      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
+      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codePage := cp;
       cp := 0; // no FastAssignNew() below
     end
     else

@@ -1,6 +1,6 @@
 # Synopse *mORMot* Framework
 
-An Open Source Client-Server ORM/SOA framework, version 2
+An Open Source Client-Server ORM/SOA framework in modern Object Pascal, version 2
 
 (c) 2008-2021 Synopse Informatique - Arnaud Bouchez
 
@@ -23,16 +23,73 @@ The main refactoring points tried to better follow SOLID principles:
  - Rewrite some code to avoid internal errors on Delphi (e.g. untyped const/var changed into pointers);
  - Tools to leverage MicroServices coding and administration;
  - Add MVC support for SOA rich clients on Delphi VCL and Lazarus LCL;
+ - New features like *OpenSSL*, *libdeflate* or *QuickJS* support;
  - Introduce high-level non-visual `TComponent` version of our classes for a more RAD approach.
 
 We therefore created a whole new project and repository, since switching to version 2 induced some backward uncompatible changes. New unit names were used, to avoid unexpected collision issues during migration, or if 1.18 is to remain installed for a compatibility project.
 
 (See below if you are upgrading from 1.18 branch)
 
+## Compiler targets
+
+The framework source code:
+- Tries to stay compatible with FPC stable and Delphi 7 and up;
+- Is currently validated against FPC 3.2.0-r45643 (Lazarus 2.1.0-r64940), Delphi 7, 2007, 2010, XE4, XE7 and 10.4;
+
+Please submit pull requests for non-validated versions.
+
+## MPL/GPL/LGPL Three-License
+
+Licensed under a disjunctive three-license giving you the choice of one of the three following sets of free software/open source licensing terms:
+- Mozilla Public License, version 1.1 or later;
+- GNU General Public License, version 2.0 or later;
+- GNU Lesser General Public License, version 2.1 or later.
+
+This allows the use of our code in as wide a variety of software projects as possible, while still maintaining copy-left on code we wrote.
+
+See [the full licensing terms](LICENCE.md).
+
+## Sub-Folders
+
+The mORMOt 2 repository content is split into the following sub-folders:
+
+- [`src`](src) is the main source code folder, where you should find the actual framework;
+- [`packages`](packages) contains IDE packages and tools to setup your dev environment;
+- [`static`](static) contains raw library `.o`/`.obj` files needed for FPC and Delphi static linking;
+- [`test`](test) defines the regression tests of all framework features;
+- [`res`](res) to compile some resources used within `src` - e.g. the `static` third-party binaries;
+- [`doc`](doc) holds the documentation of the framework;
+- [`ex`](ex) contains various samples.
+
+
+## Quick Start
+
+*(preliminary instructions)*
+
+1. Clone the https://github.com/synopse/mORMot2 repository, or download a release from https://github.com/synopse/mORMot2/releases
+
+2. Download latest https://synopse.info/files/mormot2static.7z and extract its content to this `/static` sub-folder of the mORMot 2 repository. As an alternative, the file is part of the github releases.
+
+3. Setup your favorite IDE: 
+
+3.1. On Lazarus, just install the `/packages/lazarus/mormot2.lpk` package.
+
+3.2. On Delphi: 
+* create new environment variable `mormot2` with full path to the *mORMot 2* sources (Tools - Options - IDE - Evironment Variables); 
+* add the following string to your IDE library paths (for all target platforms):
+
+   `$(mormot2)\src\core;$(mormot2)\src\db;$(mormot2)\src\rest;$(mormot2)\src\crypt;$(mormot2)\src\script;$(mormot2)\src\app;$(mormot2)\src\net;$(mormot2)\src\orm;$(mormot2)\src\soa;$(mormot2)\src\lib`
+
+4. Open and compile `/test/mormot2tests.dpr` in the IDE, and run the regression tests on your machine.
+
+5. Browse the [examples folder](/ex) (still a work in progress).
+
+5. Discover and Enjoy!
+
 
 ## Presentation
 
-Synopse *mORMot* is an Open Source Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 10.4 Sydney and FPC 3.2/trunk, targeting Windows/Linux for servers, and any platform for clients (including mobile or AJAX).
+Synopse *mORMot* is an Open Source Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 11 Alexandria and FPC 3.2/trunk, targeting Windows/Linux for servers, and any platform for clients (including mobile or AJAX).
 
 The main features of *mORMot* are therefore:
 
@@ -85,35 +142,6 @@ Even if *mORMot* will be more easily used in a project designed from scratch, it
 Some units (e.g. `...`) are used by *mORMot*, but do not require the whole framework to be linked.
 
 That is, you can use e.g. only  PDF generation, SynDB fast database access, a static-linked SQLite3 engine, direct MongoDB access, Mustache templates, SpiderMonkey JavaSCript engine, code-generated reports, or the TDocVariant, TDynArray, TSynLog classes of SynCommons, without using the main *mORMot* units and features (ORM, Client-Server, services, UI).
-
-## Compiler targets
-
-The framework source code:
-- Tries to stay compatible with FPC trunk and Delphi 7 and up; 
-- Is validated against FPC 3.2.0-r45643, Delphi 7, XE4, XE7 and 10.3;
-- Please submit pull requests for non-validated versions.
-
-## MPL/GPL/LGPL Three-License
-
-Licensed under a disjunctive three-license giving you the choice of one of the three following sets of free software/open source licensing terms:
-- Mozilla Public License, version 1.1 or later;
-- GNU General Public License, version 2.0 or later;
-- GNU Lesser General Public License, version 2.1 or later.
-
-This allows the use of our code in as wide a variety of software projects as possible, while still maintaining copy-left on code we wrote.
-
-See [the full licensing terms](LICENCE.md).
-
-## Sub-Folders
-
-The mORMOt 2 repository content is split into the following sub-folders:
-
-- [`src`](src) is the main source code folder, where you should find the actual framework;
-- [`res`](res) to compile some resources used within `src`;
-- [`static`](static) contains raw library `.o`/`.obj` files needed for FPC and Delphi static linking;
-- [`test`](test) defines the regression tests of all framework features;
-- [`doc`](doc) holds the documentation of the framework;
-- [`ex`](ex) contains various samples.
 
 ## Links
 

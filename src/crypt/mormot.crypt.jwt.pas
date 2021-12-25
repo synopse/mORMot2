@@ -330,12 +330,29 @@ const
   // - see TJwtClaim enumeration and TJwtClaims set
   // - RFC standard expects those to be case-sensitive
   JWT_CLAIMS_TEXT: array[TJwtClaim] of RawUtf8 = (
-    'iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti', 'data');
+    'iss',    // jrcIssuer
+    'sub',    // jrcSubject
+    'aud',    // jrcAudience
+    'exp',    // jrcExpirationTime
+    'nbf',    // jrcNotBefore
+    'iat',    // jrcIssuedAt
+    'jti',    // jrcJwtID
+    'data');  // jrcData
+
 
 function ToText(res: TJwtResult): PShortString; overload;
 function ToCaption(res: TJwtResult): string; overload;
 function ToText(claim: TJwtClaim): PShortString; overload;
 function ToText(claims: TJwtClaims): ShortString; overload;
+
+/// try to recognize a JWT from a supplied text, which may be an URI
+// - will ignore any trailing spaces, then extract any ending Base64-URI encoded
+// text which matches the JWT 'algo.payload.sign' layout
+// - returns '' if no JWT-like pattern was found
+// - it won't validate the exact JWT format, nor any signature, only guess if
+// there is a chance the supplied text contains a JWT, and extract it
+function ParseTrailingJwt(const aText: RawUtf8; noDotCheck: boolean = false): RawUtf8;
+
 
 
 { **************** JWT Implementation of HS and S3 Algorithms }
@@ -374,15 +391,17 @@ type
       aPBKDF2Secret: PHash512Rec = nil); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
+    /// low-level read access to the internal signature structure
+    property SignPrepared: TSynSigner
+      read fSignPrepared;
+    {$ifndef ISDELPHI2009} // avoid Delphi 2009 F2084 Internal Error: DT5830
     /// the digital signature size, in byte
     property SignatureSize: integer
       read fSignPrepared.SignatureSize;
     /// the TSynSigner raw algorithm used for digital signature
     property SignatureAlgo: TSignAlgo
       read fSignPrepared.Algo;
-    /// low-level read access to the internal signature structure
-    property SignPrepared: TSynSigner
-      read fSignPrepared;
+    {$endif ISDELPHI2009}
   end;
 
   /// meta-class for TJwtSynSignerAbstract creations
@@ -480,8 +499,16 @@ const
   // - SHA-1 will fallback to HS256 (since there will never be SHA-1 support)
   // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
   JWT_TEXT: array[TSignAlgo] of RawUtf8 = (
-    'HS256', 'HS256', 'HS384', 'HS512',
-    'S3224', 'S3256', 'S3384', 'S3512', 'S3S128', 'S3S256');
+    'HS256',
+    'HS256',
+    'HS384',
+    'HS512',
+    'S3224',
+    'S3256',
+    'S3384',
+    'S3512',
+    'S3S128',
+    'S3S256');
 
   /// able to instantiate any of the TJwtSynSignerAbstract instance expected
   // - SHA-1 will fallback to TJwtHS256 (since SHA-1 will never be supported)
@@ -489,8 +516,16 @@ const
   // - typical use is the following:
   // ! result := JWT_CLASS[algo].Create(master, round, claims, [], expirationMinutes);
   JWT_CLASS: array[TSignAlgo] of TJwtSynSignerAbstractClass = (
-    TJwtHS256, TJwtHS256, TJwtHS384, TJwtHS512,
-    TJwtS3224, TJwtS3256, TJwtS3384, TJwtS3512, TJwtS3S128, TJwtS3S256);
+    TJwtHS256,
+    TJwtHS256,
+    TJwtHS384,
+    TJwtHS512,
+    TJwtS3224,
+    TJwtS3256,
+    TJwtS3384,
+    TJwtS3512,
+    TJwtS3S128,
+    TJwtS3S256);
 
 
 { **************  JWT Implementation of ES256 Algorithm }
@@ -499,12 +534,18 @@ type
   /// implements JSON Web Tokens using 'ES256' algorithm
   // - i.e. ECDSA using the P-256 curve and the SHA-256 hash algorithm
   // - as defined in http://tools.ietf.org/html/rfc7518 paragraph 3.4
-  // - since ECDSA signature and verification is CPU consumming (under x86, it
-  // takes 2.5 ms, but only 0.3 ms on x64) you may enable CacheTimeoutSeconds
-  // - will use the OpenSSL library if available (much faster than our unit)
+  // - since ECDSA signature and verification is CPU consumming (especially
+  // under x86) you may enable CacheTimeoutSeconds
+  // - will use the OpenSSL library if available - about 5 times faster than
+  // our pascal/asm code - here are some numbers on x86_64:
+  //  TJwtES256 pascal:   100 ES256 in 33.57ms i.e. 2.9K/s, aver. 335us
+  //  TJwtES256 OpenSSL:  100 ES256 in 6.90ms i.e. 14.1K/s, aver. 69us
+  // - pre-compute the public key so is even faster than TJwtES256Osl:
+  //    TJwtES256Osl:     100 ES256 in 9.56ms i.e. 10.2K/s, aver. 95us
   TJwtES256 = class(TJwtAbstract)
   protected
     fCertificate: TEccCertificate;
+    fVerify: TEcc256r1VerifyAbstract; // faster pre-computed public key
     fOwnCertificate: boolean;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
     procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
@@ -567,6 +608,34 @@ begin
   GetSetNameShort(TypeInfo(TJwtClaims), claims, result);
 end;
 
+function ParseTrailingJwt(const aText: RawUtf8; noDotCheck: boolean): RawUtf8;
+var
+  txtlen, beg, dotcount: PtrInt;
+  tc: PTextCharSet;
+begin
+  result := ''; // no JWT found
+  txtlen := length(aText);
+  while (txtlen > 10) and
+        (aText[txtlen] <= ' ') do // trim right
+    dec(txtlen);
+  beg := txtlen + 1;
+  dotcount := 0;
+  tc := @TEXT_CHARS;
+  while (beg > 1) and
+        (tcURIUnreserved in tc[aText[beg - 1]]) do // search backward end of JWT
+  begin
+    dec(beg);
+    if aText[beg] = '.' then
+      inc(dotcount);
+  end;
+  dec(txtlen, beg - 1);
+  if not noDotCheck then
+    if (dotcount <> 2) or
+       (txtlen <= 10) then
+      exit;
+  result := copy(aText, beg, txtlen); // trim base64 encoded part
+end;
+
 
 { TJwtAbstract }
 
@@ -615,7 +684,7 @@ function TJwtAbstract.Compute(const DataNameValue: array of const;
   const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
   ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8;
 var
-  payload, headpayload, signat: RawUtf8;
+  payload, headpayload, sig: RawUtf8;
 begin
   result := '';
   if self = nil then
@@ -623,13 +692,13 @@ begin
   payload := PayloadToJson(DataNameValue, Issuer, Subject, Audience,
     NotBefore, ExpirationMinutes);
   headpayload := fHeaderB64 + BinToBase64Uri(payload);
-  signat := ComputeSignature(headpayload);
-  result := headpayload + '.' + signat;
+  sig := ComputeSignature(headpayload);
+  result := headpayload + '.' + sig;
   if length(result) > JWT_MAXSIZE then
     raise EJwtException.CreateUtf8('%.Compute oversize: len=%',
       [self, length(result)]);
   if Signature <> nil then
-    Signature^ := signat;
+    Signature^ := sig;
 end;
 
 function TJwtAbstract.ComputeAuthorizationHeader(
@@ -657,7 +726,7 @@ var
   payload: TDocVariantData;
 begin
   result := '';
-  payload.InitObject(DataNameValue, JSON_OPTIONS_FAST);
+  payload.InitObject(DataNameValue, JSON_FAST);
   if jrcIssuer in fClaims then
     if Issuer = '' then
       RaiseMissing(jrcIssuer)
@@ -698,8 +767,8 @@ begin
         exit; // not generated, but should be supplied
     end
     else
-      payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcJwtID],
-        fIDGen.ToObfuscated(fIDGen.ComputeNew));
+      payload.AddValue(JWT_CLAIMS_TEXT[jrcJwtID],
+        RawUtf8ToVariant(fIDGen.ToObfuscated(fIDGen.ComputeNew)));
   result := payload.ToJson;
 end;
 
@@ -788,6 +857,11 @@ begin
   JWT.result := jwtValid;
 end;
 
+const
+  JWT_HEAD: array[0..1] of PUtf8Char = (
+    'alg',  // 0
+    'typ'); // 1
+
 procedure TJwtAbstract.Parse(const Token: RawUtf8; var JWT: TJwtContent;
   out headpayload: RawUtf8; out signature: RawByteString; excluded: TJwtClaims);
 var
@@ -799,7 +873,7 @@ var
   claim: TJwtClaim;
   requiredclaims: TJwtClaims;
   value: variant;
-  head: array[0..1] of TValuePUtf8Char;
+  head: array[0..high(JWT_HEAD)] of TValuePUtf8Char;
   aud: TDocVariantData;
   tok: PAnsiChar absolute Token;
   temp: TSynTempBuffer;
@@ -825,9 +899,9 @@ begin
        (headerlen > 512) then
       exit;
     if not Base64UriToBin(tok, headerlen - 1, temp) or
-       (JsonDecode(temp.buf, ['alg', 'typ'], @head) = nil) or
+       (JsonDecode(temp.buf, @JWT_HEAD, length(JWT_HEAD), @head) = nil) or
        not {%H-}head[0].Idem(fAlgorithm) or
-       ((head[1].Value <> nil) and
+       ((head[1].Text <> nil) and
         not head[1].Idem('JWT')) then
       headerlen := 0;
     temp.Done;
@@ -863,9 +937,14 @@ begin
     if P^ <> '{' then
       exit;
     P := GotoNextNotSpace(P + 1);
-    cap := JsonObjectPropCount(P);
-    if cap < 0 then
-      exit;
+    if P^ = '}' then
+      cap := 0
+    else
+    begin
+      cap := JsonObjectPropCount(P); // fast pre-parsing
+      if cap = 0 then
+        exit; // invalid input
+    end;
     requiredclaims := fClaims - excluded;
     if cap > 0 then
       repeat
@@ -905,7 +984,7 @@ begin
                   jrcAudience:
                     if JWT.reg[jrcAudience][1] = '[' then
                     begin
-                      aud.InitJson(JWT.reg[jrcAudience], JSON_OPTIONS_FAST);
+                      aud.InitJson(JWT.reg[jrcAudience], JSON_FAST);
                       if aud.Count = 0 then
                         exit;
                       for j := 0 to aud.Count - 1 do
@@ -945,7 +1024,7 @@ begin
         if jrcData in excluded then
           continue; // caller didn't want to fill JWT.data
         include(JWT.claims, jrcData);
-        GetVariantFromJson(V, wasString, value, @JSON_OPTIONS[true],
+        GetVariantFromJsonField(V, wasString, value, @JSON_[mFast],
           joDoubleInData in fOptions, VLen);
         if JWT.data.Count = 0 then
           JWT.data.Capacity := cap;
@@ -974,13 +1053,21 @@ begin
   result := JWT.result = jwtValid;
 end;
 
+const
+  JWT_PLD: array[0..4] of PUtf8Char = (
+    'iss',  // 0
+    'aud',  // 1
+    'exp',  // 2
+    'nbf',  // 3
+    'sub'); // 4
+
 class function TJwtAbstract.VerifyPayload(const Token,
   ExpectedAlgo, ExpectedSubject, ExpectedIssuer, ExpectedAudience: RawUtf8;
   Expiration: PUnixTime; Signature: PRawUtf8; Payload: PVariant;
   IgnoreTime: boolean; NotBeforeDelta: TUnixTime): TJwtResult;
 var
   P, B: PUtf8Char;
-  V: array[0..4] of TValuePUtf8Char;
+  V: array[0..high(JWT_PLD)] of TValuePUtf8Char;
   now, time: PtrUInt;
   temp, temp2: TSynTempBuffer;
 begin
@@ -992,9 +1079,9 @@ begin
   begin
     B := pointer(Token);
     if not Base64UriToBin(PAnsiChar(B), P - B, temp) or
-       (JsonDecode(temp.buf, ['alg'], @V, false) = nil) or
+       (JsonDecode(temp.buf, @JWT_HEAD, 1, @V, false) = nil) or
        ((ExpectedAlgo <> '') and
-        not IdemPropNameU(ExpectedAlgo, {%H-}V[0].Value, {%H-}V[0].ValueLen)) then
+        not {%H-}V[0].Idem(ExpectedAlgo)) then
       B := nil;
     temp.Done;
     if B = nil then
@@ -1015,11 +1102,11 @@ begin
   begin
     VarClear(PayLoad^);
     temp2.Init(temp.buf, temp.len); // its own copy for in-place parsing
-    PDocVariantData(PayLoad)^.InitJsonInPlace(temp2.buf, JSON_OPTIONS_FAST);
+    PDocVariantData(PayLoad)^.InitJsonInPlace(temp2.buf, JSON_FAST);
     temp2.Done;
   end;
   repeat // avoid try..finally for temp.Done
-    if JsonDecode(temp.buf, ['iss', 'aud', 'exp', 'nbf', 'sub'], @V, true) = nil then
+    if JsonDecode(temp.buf, @JWT_PLD, length(JWT_PLD), @V, true) = nil then
       break;
     result := jwtUnexpectedClaim;
     if ((ExpectedSubject <> '') and
@@ -1033,11 +1120,11 @@ begin
       break;
     if Expiration <> nil then
       Expiration^ := 0;
-    if (V[2].value <> nil) or
-       (V[3].value <> nil) then
+    if (V[2].Text <> nil) or
+       (V[3].Text <> nil) then
     begin
       now := UnixTimeUtc;
-      if V[2].value <> nil then
+      if V[2].Text <> nil then
       begin
         time := V[2].ToCardinal;
         result := jwtExpired;
@@ -1048,7 +1135,7 @@ begin
           Expiration^ := time;
       end;
       if not IgnoreTime and
-         (V[3].value <> nil) then
+         (V[3].Text <> nil) then
       begin
         time := V[3].ToCardinal;
         result := jwtNotBeforeFailed;
@@ -1124,7 +1211,7 @@ var
   temp: THash512Rec;
 begin
   JWT.result := jwtInvalidSignature;
-  if length(signature) <> SignatureSize then
+  if length(signature) <> fSignPrepared.SignatureSize then
     exit;
   signer := fSignPrepared; // thread-safe re-use of prepared TSynSigner
   signer.Update(pointer(headpayload), length(headpayload));
@@ -1132,7 +1219,7 @@ begin
 {  writeln('payload=',headpayload);
    writeln('sign=',bintohex(@temp,SignatureSize));
    writeln('expected=',bintohex(pointer(signature),SignatureSize)); }
-  if CompareMem(@temp, pointer(signature), SignatureSize) then
+  if CompareMem(@temp, pointer(signature), fSignPrepared.SignatureSize) then
     JWT.result := jwtValid;
 end;
 
@@ -1145,7 +1232,7 @@ begin
   signer := fSignPrepared;
   signer.Update(pointer(headpayload), length(headpayload));
   signer.Final(temp);
-  result := BinToBase64Uri(@temp, SignatureSize);
+  result := BinToBase64Uri(@temp, fSignPrepared.SignatureSize);
 end;
 
 destructor TJwtSynSignerAbstract.Destroy;
@@ -1234,12 +1321,14 @@ begin
   inherited Create('ES256', aClaims, aAudience, aExpirationMinutes,
     aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
   fCertificate := aCertificate;
+  fVerify := TEcc256r1Verify.Create(fCertificate.Content.Head.Signed.PublicKey);
 end;
 
 destructor TJwtES256.Destroy;
 begin
   if fOwnCertificate then
     fCertificate.Free;
+  fVerify.Free;
   inherited;
 end;
 
@@ -1250,10 +1339,10 @@ var
   hash: TSha256Digest;
 begin
   JWT.result := jwtInvalidSignature;
-  if length(signature) <> sizeof(TEccSignature) then
+  if length(signature) <> SizeOf(TEccSignature) then
     exit;
   sha.Full(pointer(headpayload), length(headpayload), hash);
-  if Ecc256r1Verify(fCertificate.Content.Signed.PublicKey, hash, PEccSignature(signature)^) then
+  if fVerify.Verify(hash, PEccSignature(signature)^) then
     JWT.result := jwtValid;
 end;
 
@@ -1270,7 +1359,7 @@ begin
   sha.Full(pointer(headpayload), length(headpayload), hash);
   if not Ecc256r1Sign(TEccCertificateSecret(fCertificate).PrivateKey, hash, sign) then
     raise EECCException.CreateUtf8('%.ComputeSignature: ecdsa_sign?', [self]);
-  result := BinToBase64Uri(@sign, sizeof(sign));
+  result := BinToBase64Uri(@sign, SizeOf(sign));
 end;
 
 

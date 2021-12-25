@@ -32,6 +32,7 @@ uses
   mormot.net.client,
   mormot.net.server,
   mormot.net.relay,
+  mormot.net.http,
   mormot.net.ws.core,
   mormot.net.ws.client,
   mormot.net.ws.server,
@@ -453,10 +454,10 @@ begin
     if fTestClass.InheritsFrom(TRestHttpClientGeneric) then
     begin
       WebSocketLog := TSynLog;
-      fHttpServer := TRestHttpServer.Create(aPort, [fDataBase], '+', aHttp);
-      if aHttp = useBidirSocket then
-        fHttpServer.WebSocketsEnable(fDatabase, WS_KEY, WS_JSON, WS_BIN).
-          Settings.SetFullLog;
+      fHttpServer := TRestHttpServer.Create(aPort, [fDataBase], '+', aHttp, 32,
+        secNone, '', '', HTTPSERVER_DEFAULT_OPTIONS {+ [rsoLogVerbose]} );
+      if aHttp in HTTP_BIDIR then
+        fHttpServer.WebSocketsEnable(fDatabase, WS_KEY, WS_JSON, WS_BIN)^.SetFullLog;
     end;
   end;
   // 2. Perform the tests
@@ -524,11 +525,11 @@ begin
         break
       else
       {$endif HAS_NAMEDPIPES}
-      {$ifdef CPUARM3264}
+      {$ifdef CPUARM32}
       if fTestClass = TRestHttpClientWebsockets then
         break
       else
-      {$endif CPUARM3264}
+      {$endif CPUARM32}
         fRunningThreadCount := 10
     else
     {$ifdef HAS_MESSAGES}
@@ -574,26 +575,27 @@ end;
 
 procedure TTestMultiThreadProcess.TCPSockets;
 begin
-  Test(TRestHttpClientSocket, useHttpSocket);
+  Test(TRestHttpClientSocket, useHttpAsync);
 end;
 
 {$ifdef OSPOSIX}
 procedure TTestMultiThreadProcess.UnixDomainSockets;
 begin
-  Test(TRestHttpClientSocket, useHttpSocket, amLocked,
+  Test(TRestHttpClientSocket, useHttpAsync, amLocked,
     'unix:' + RawUtf8(ChangeFileExt(Executable.ProgramFileName, '.sock')));
 end;
 {$endif OSPOSIX}
 
 procedure TTestMultiThreadProcess.Websockets;
 begin
-  Test(TRestHttpClientWebsockets, useBidirSocket);
+  // use a specific port, especially on Windows where http.sys may locked it
+  Test(TRestHttpClientWebsockets, WEBSOCKETS_DEFAULT_MODE, amLocked, '8888');
 end;
 
 {$ifdef USELIBCURL}
 procedure TTestMultiThreadProcess._libcurl;
 begin
-  Test(TRestHttpClientCurl, useHttpSocket);
+  Test(TRestHttpClientCurl, useHttpAsync);
 end;
 {$endif USELIBCURL}
 

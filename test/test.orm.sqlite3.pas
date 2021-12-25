@@ -13,9 +13,6 @@ uses
   classes,
   {$ifndef FPC}
   typinfo, // to avoid Delphi inlining problems
-  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
-  Generics.Collections,
-  {$endif ISDELPHI2010}
   {$endif FPC}
   mormot.core.base,
   mormot.core.os,
@@ -24,6 +21,9 @@ uses
   mormot.core.unicode,
   mormot.core.datetime,
   mormot.core.rtti,
+  {$ifdef ORMGENERICS} // not supported on oldest compilers (e.g. < Delphi XE8)
+  mormot.core.collections,
+  {$endif ORMGENERICS}
   mormot.crypt.core,
   mormot.core.data,
   mormot.core.variants,
@@ -43,6 +43,7 @@ uses
   mormot.net.ws.server,
   mormot.db.core,
   mormot.db.nosql.bson,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.orm.storage,
@@ -102,8 +103,10 @@ type
     // arrays published properties handling
     // - test dynamic tables
     procedure _TRestClientDB;
+    {$ifndef NOSQLITE3STATIC}
     /// check SQlite3 internal regex.c function
     procedure RegexpFunction;
+    {$endif NOSQLITE3STATIC}
     /// test Master/Slave replication using TRecordVersion field
     procedure _TRecordVersion;
   end;
@@ -510,6 +513,12 @@ begin
   check(Names[i1] = '');
   for i := 0 to i1 - 1 do
     check(PosEx('eona', Names[i]) > 0);
+  s := Demo.ExecuteNoExceptionUtf8('SELECT current_timestamp;');
+  check(s <> '', 'current_timestamp');
+  s := Demo.ExecuteNoExceptionUtf8('SELECT datetime(current_timestamp);');
+  check(s <> '', 'datetime');
+  s := Demo.ExecuteNoExceptionUtf8('SELECT datetime(current_timestamp,''localtime'');');
+  check(s <> '', 'localtime');
 end;
 
 procedure TTestSQLite3Engine.VirtualTableDirectAccess;
@@ -557,6 +566,7 @@ begin
   CheckEqual(n, 0);
 end;
 
+{$ifndef NOSQLITE3STATIC}
 procedure TTestSQLite3Engine.RegexpFunction;
 const
   EXPRESSIONS: array[0..2] of RawUtf8 = (
@@ -595,6 +605,7 @@ begin
     Model.Free;
   end;
 end;
+{$endif NOSQLITE3STATIC}
 
 type
   TOrmPeopleVersioned = class(TOrmPeople)
@@ -668,7 +679,7 @@ var
     begin
       serv := TTestBidirectionalRemoteConnection(Test).HttpServer;
       Test.check(serv.AddServer(Master));
-      serv.WebSocketsEnable(Master, 'key2').Settings.SetFullLog;
+      serv.WebSocketsEnable(Master, 'key2')^.SetFullLog;
       ws := TRestHttpClientWebsockets.Create(
         '127.0.0.1', HTTP_DEFAULTPORT, TOrmModel.Create(Model));
       ws.Model.Owner := ws;
@@ -711,7 +722,7 @@ begin
       Master.Free; // test TRestServer.InternalRecordVersionMaxFromExisting
       MasterAccess.Free;
       CreateMaster(false);
-      MasterAccess.Client.BatchStart(TOrmPeopleVersioned, 10000);
+      MasterAccess.Client.BatchStart(TOrmPeopleVersioned);
       while Rec.FillOne do
         // fast add via Batch
         Test.check(MasterAccess.Client.BatchAdd(Rec, true, true) >= 0);
@@ -731,8 +742,8 @@ begin
       begin
         // asynchronous synchronization via websockets
         Test.check(Master.RecordVersionSynchronizeMasterStart(true));
-        Test.check(Slave2.RecordVersionSynchronizeSlaveStart(TOrmPeopleVersioned,
-          MasterAccess, nil));
+        Test.check(Slave2.RecordVersionSynchronizeSlaveStart(
+          TOrmPeopleVersioned, MasterAccess, nil));
       end
       else
       begin
@@ -1448,7 +1459,7 @@ var
       end;
       for i := 0 to high(ids) do
       begin
-        ClientDist.Client.BatchStart(TOrmPeople);
+        ClientDist.Client.BatchStart(TOrmPeople, {autotrans=}0);
         ClientDist.Client.BatchDelete(ids[i]);
         check(ClientDist.Client.BatchSend(res) = HTTP_SUCCESS);
         check(length(res) = 1);
@@ -1757,7 +1768,7 @@ begin
                 check(ClientDist.Orm.Retrieve(IntArray[i], V));
                 check(V.SameRecord(aStatic.Items[i * 4]));
               end;
-              check(V.FillPrepare(Client.Orm, IntArray));
+              check(V.FillPrepare(Client.Orm, TIDDynArray(IntArray)));
               for i := 0 to High(IntArray) do
               begin
                 check(V.FillOne);
@@ -1788,7 +1799,7 @@ begin
               // test BATCH sequence usage
               if ClientDist.Orm.TransactionBegin(TOrmPeople) then
               try
-                check(ClientDist.Client.BatchStart(TOrmPeople, 5000));
+                check(ClientDist.Client.BatchStart(TOrmPeople));
                 n := 0;
                 for i := 0 to aStatic.Count - 1 do
                   if i and 7 = 0 then
@@ -1947,12 +1958,13 @@ end;
 
 procedure TTestSQLite3Engine._TOrmTableJson;
 var
-  J: TOrmTable;
+  J, T: TOrmTable;
   i1, i2, aR, aF, F1, F2, n: integer;
+  fid, ffn, fln, fyb, fyd: PtrInt;
   Comp, Comp1, Comp2: TUtf8Compare;
-  {$ifdef ISDELPHI2010}
-  Peoples: TObjectList<TOrmPeople>;
-  {$endif ISDELPHI2010}
+  {$ifdef ORMGENERICS}
+  Peoples: IList<TOrmPeople>;
+  {$endif ORMGENERICS}
   row: variant;
   lContactDataQueueDynArray: TDynArray;
   lContactDataQueueArray: TRawUtf8DynArray;
@@ -2014,70 +2026,72 @@ begin
         Free;
       end;
     Demo.Execute('VACUUM;');
-    with TOrmTableDB.Create(Demo, [], Req, true) do // re-test after VACCUM
+    T := TOrmTableDB.Create(Demo, [], Req, true); // re-test after VACCUM
     try
-      check(RowCount = J.RowCount);
-      check(FieldCount = J.FieldCount);
-      check(FieldIndex('ID') = 0);
-      check(FieldIndex('RowID') = 0);
-      for aF := 0 to FieldCount - 1 do
-        check(FieldIndex(J.Get(0, aF)) = aF);
-      for aR := 0 to RowCount do
-        for aF := 0 to FieldCount - 1 do // aF=3=Blob
-          check((aF = 3) or (StrIComp(Get(aR, aF), J.Get(aR, aF)) = 0));
+      check(T.RowCount = J.RowCount);
+      check(T.FieldCount = J.FieldCount);
+      fid := T.FieldIndex('ID');
+      ffn := T.FieldIndex('FirstName');
+      fln := T.FieldIndex('LastName');
+      fyb := T.FieldIndex('YearOfBirth');
+      fyd := T.FieldIndex('YearOfDeath');
+      check(fid = 0);
+      check(T.FieldIndex('RowID') = fid);
+      for aF := 0 to T.FieldCount - 1 do
+        check(T.FieldIndex(J.Get(0, aF)) = aF);
+      for aR := 0 to T.RowCount do
+        for aF := 0 to T.FieldCount - 1 do // aF=3=Blob
+          check((aF = 3) or (StrIComp(T.Get(aR, aF), J.Get(aR, aF)) = 0));
       n := 0;
-      while Step do
+      while T.Step do
       begin
-        for aF := 0 to FieldCount - 1 do // aF=3=Blob
-          check((aF = 3) or (StrIComp(FieldBuffer(aF), J.Get(StepRow, aF)) = 0));
+        for aF := 0 to T.FieldCount - 1 do // aF=3=Blob
+          check((aF = 3) or (StrIComp(T.FieldBuffer(aF), J.Get(T.StepRow, aF)) = 0));
         inc(n);
       end;
       check(n = J.RowCount);
       n := 0;
-      if not CheckFailed(Step(true, @row)) then
+      if not CheckFailed(T.Step(true, @row)) then
         repeat
-          check(row.ID = J.GetAsInteger(StepRow, FieldIndex('ID')));
-          check(row.FirstName = J.GetU(StepRow, FieldIndex('FirstName')));
-          check(row.LastName = J.GetU(StepRow, FieldIndex('LastName')));
-          check(row.YearOfBirth = J.GetAsInteger(StepRow, FieldIndex('YearOfBirth')));
-          check(row.YearOfDeath = J.GetAsInteger(StepRow, FieldIndex('YearOfDeath')));
+          check(row.ID = J.GetAsInteger(T.StepRow, fid));
+          check(row.FirstName = J.GetU(T.StepRow, ffn));
+          check(row.LastName = J.GetU(T.StepRow, fln));
+          check(row.YearOfBirth = J.GetAsInteger(T.StepRow, fyb));
+          check(row.YearOfDeath = J.GetAsInteger(T.StepRow, fyd));
           inc(n);
-        until not Step(false, @row);
+        until not T.Step(false, @row);
       check(n = J.RowCount);
-      with ToObjectList(TOrmPeople) do
+      with T.ToObjectList(TOrmPeople) do
       try
         check(Count = J.RowCount);
         for aR := 1 to Count do
           with TOrmPeople(Items[aR - 1]) do
           begin
-            check(IDValue = J.GetAsInteger(aR, FieldIndex('ID')));
-            check(FirstName = J.GetU(aR, FieldIndex('FirstName')));
-            check(LastName = J.GetU(aR, FieldIndex('LastName')));
-            check(YearOfBirth = J.GetAsInteger(aR, FieldIndex('YearOfBirth')));
-            check(YearOfDeath = J.GetAsInteger(aR, FieldIndex('YearOfDeath')));
+            check(IDValue = J.GetAsInteger(aR, fid));
+            check(FirstName = J.GetU(aR, ffn));
+            check(LastName = J.GetU(aR, fln));
+            check(YearOfBirth = J.GetAsInteger(aR, fyb));
+            check(YearOfDeath = J.GetAsInteger(aR, fyd));
           end;
       finally
         Free;
       end;
-      {$ifdef ISDELPHI2010}
-      Peoples := ToObjectList<TOrmPeople>;
-      try
-        check(Peoples.Count = J.RowCount);
-        for aR := 1 to Peoples.Count do
-          with Peoples[aR - 1] do
-          begin
-            check(id = J.GetAsInteger(aR, FieldIndex('ID')));
-            check(FirstName = J.GetU(aR, FieldIndex('FirstName')));
-            check(LastName = J.GetU(aR, FieldIndex('LastName')));
-            check(YearOfBirth = J.GetAsInteger(aR, FieldIndex('YearOfBirth')));
-            check(YearOfDeath = J.GetAsInteger(aR, FieldIndex('YearOfDeath')));
-          end;
-      finally
-        Peoples.Free;
-      end;
-      {$endif ISDELPHI2010}
+      {$ifdef ORMGENERICS}
+      T.ToNewIList(TOrmPeople, Peoples);
+      check(Peoples.Count = J.RowCount);
+      for aR := 1 to Peoples.Count do
+        with Peoples[aR - 1] do
+        begin
+          check(id = J.GetAsInteger(aR, fid));
+          check(FirstName = J.GetU(aR, ffn));
+          check(LastName = J.GetU(aR, fln));
+          check(YearOfBirth = J.GetAsInteger(aR, fyb));
+          check(YearOfDeath = J.GetAsInteger(aR, fyd));
+        end;
+      // Peoples := nil; // not mandatory
+      {$endif ORMGENERICS}
     finally
-      Free;
+      T.Free;
     end;
     for aF := 0 to J.FieldCount - 1 do
     begin
@@ -2191,13 +2205,15 @@ procedure TTestSqliteMemory._TOrmTableWritable;
   var
     s1, s2: TOrmTableJson;
     w: TOrmTableWritable;
-    f, r: integer;
+    json: RawJson;
+    ts: TTimeLogBits;
+    f, r, n: integer;
   begin
     s1 := TOrmTableJson.CreateFromTables([TOrmPeople], '', JS);
     s2 := TOrmTableJson.CreateFromTables([TOrmPeople], '', JS);
     w := TOrmTableWritable.CreateFromTables([TOrmPeople], '', JS);
     try // merge the same data twice, and validate duplicated columns
-      w.NewValuesInterning := intern;
+      w.UpdatedValuesInterning := intern;
       CheckEqual(w.RowCount, s1.RowCount);
       CheckEqual(w.FieldCount, s1.FieldCount);
       w.Join(s2, 'rowid', 'ID'); // s2 will be sorted -> keep s1 untouched
@@ -2229,6 +2245,41 @@ procedure TTestSqliteMemory._TOrmTableWritable;
     finally
       s1.Free;
       s2.Free;
+      w.Free;
+    end;
+    w := TOrmTableWritable.CreateFromTables([TOrmPeopleTimed], '', JS);
+    try
+      w.UpdatedValuesInterning := intern;
+      f := w.FieldIndex('YearOfBirth');
+      Check(f >= 0);
+      n := 0;
+      for r := w.RowCount downto 1 do // downto = validate in-order rows update
+        if r and 3 = 0 then
+        begin
+          w.Update(r, f, UInt32ToUtf8(1700 + r shr 3));
+          inc(n);
+        end;
+      CheckEqual(w.UpdatedRowsCount, n, 'UpdatedRows');
+      ts.From('20211030T18:00:00');
+      Check(ts.Value <> 0);
+      json := w.UpdatesToJson([boOnlyObjects], ts.Value);
+      Check(IsValidJson(json, {strict=}true));
+      CheckHash(json, $91DBF8CA, 'boOnlyObjects');
+      json := w.UpdatesToJson([], ts.Value);
+      Check(IsValidJson(json, {strict=}true));
+      CheckHash(json, $6B9E0BE3, '');
+      json := w.UpdatesToJson([boExtendedJson], ts.Value);
+      Check(IsValidJson(json, {strict=}true));
+      Check(IsValidJson(json, {strict=}false));
+      CheckHash(json, $6B9E0BE3, 'boExtendedJson');
+      json := w.UpdatesToJson([boNoModelEncoding], ts.Value);
+      Check(IsValidJson(json, {strict=}true));
+      CheckHash(json, $49679790, '');
+      json := w.UpdatesToJson([boExtendedJson, boNoModelEncoding], ts.Value);
+      Check(not IsValidJson(json, {strict=}true));
+      Check(IsValidJson(json, {strict=}false));
+      CheckHash(json, $82B63D9D, 'boExtendedJson2');
+    finally
       w.Free;
       intern.Free;
     end;

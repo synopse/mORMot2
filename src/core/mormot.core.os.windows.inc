@@ -38,21 +38,34 @@ function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
   external kernel32 name 'GetProcAddress';
 
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
+  {$ifdef HASINLINE} inline; {$endif} 
 begin
-  {$ifdef CPU64}
-  PInt64Rec(@I64)^.Lo := FT.dwLowDateTime;
+  PInt64Rec(@I64)^.Lo := FT.dwLowDateTime; // Delphi 2007 bug with PInt64()
   PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
-  {$else}
-  I64 := PInt64(@FT)^;
-  {$endif CPU64}
 end;
 
 const
   UnixDelta = 25569;
   UnixFileTimeDelta = 116444736000000000; // from year 1601 to 1970
-  DateFileTimeDelta =  94353120000000000; // from year 1601 to 1899
 
-function FileTimeToUnixTime(const FT: TFileTime): Int64;
+procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
+begin
+  I64 := I64 * 10000000;
+  inc(I64, UnixFileTimeDelta);
+  FT.dwLowDateTime  := PInt64Rec(@I64)^.Lo; // Delphi 2007 bug with PInt64()
+  FT.dwHighDateTime := PInt64Rec(@I64)^.Hi;
+end;
+
+procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
+var
+  ft, lt: TFileTime;
+begin
+  UnixTimeToFileTime(I64, ft);
+  FileTimeToLocalFileTime(ft, lt);
+  FileTimeToSystemTime(lt, Local);
+end;
+
+function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
 {$ifdef CPU64}
 var
   nano100: Int64; // TFileTime is in 100 ns unit
@@ -66,7 +79,7 @@ begin
   {$endif CPU64}
 end;
 
-function FileTimeToUnixMSTime(const FT: TFileTime): Int64;
+function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
 {$ifdef CPU64}
 var
   nano100: Int64; // TFileTime is in 100 ns unit
@@ -80,11 +93,11 @@ begin
   {$endif CPU64}
 end;
 
-function UnixTimeUtc: Int64;
+function UnixTimeUtc: TUnixTime;
 var
   ft: TFileTime;
 begin
-  GetSystemTimeAsFileTime(ft); // fast but with HW low resolution
+  GetSystemTimeAsFileTime(ft); // fast (HW resolution is < TUnixTime second)
   result := FileTimeToUnixTime(ft);
 end;
 
@@ -93,7 +106,7 @@ var
   // - points to GetSystemTimeAsFileTime() before Windows 8
   GetSystemTimePreciseAsFileTime: procedure(var ft: TFILETIME); stdcall;
 
-function UnixMSTimeUtc: Int64;
+function UnixMSTimeUtc: TUnixMSTime;
 var
   ft: TFileTime;
 begin
@@ -101,7 +114,7 @@ begin
   result := FileTimeToUnixMSTime(ft);
 end;
 
-function UnixMSTimeUtcFast: Int64;
+function UnixMSTimeUtcFast: TUnixMSTime;
 var
   ft: TFileTime;
 begin
@@ -120,6 +133,7 @@ procedure AllocConsole;               external kernel32;
 function  CloseHandle;                external kernel32;
 procedure FileClose;                  external kernel32 name 'CloseHandle';
 function  GetCurrentThreadId;         external kernel32;
+procedure SwitchToThread;             external kernel32;
 function  GetCurrentProcessId;        external kernel32;
 function  WaitForSingleObject;        external kernel32;
 function  GetEnvironmentStringsW;     external kernel32;
@@ -137,15 +151,64 @@ function  GetDesktopWindow;           external user32;
 function  Unicode_InPlaceUpper;       external user32 name 'CharUpperBuffW';
 function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 
+{$I-}
 procedure DisplayFatalError(const title, msg: RawUtf8);
 begin
   // better than a MessageBox() especially for services
-  raise Exception.CreateFmt('%s in %s - %s', [title, Executable.ProgramName, msg]);
+  AllocConsole; // will create one black window console if none
+  if title <> '' then
+  begin
+    TextColor(ccWhite);
+    writeln(#13#10, title);
+    writeln(StringOfChar('-', length(title) + 1), #13#10);
+    TextColor(ccLightRed);
+    writeln(msg);
+    TextColor(ccLightGray);
+  end
+  else
+    writeln(msg);
+  ioresult;
 end;
+{$I+}
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin
   result := Windows.GetModuleHandle(lpModuleName); // call either A or W API
+end;
+
+const
+  // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383770
+  ERROR_WINHTTP_TIMEOUT = 12002;
+  ERROR_WINHTTP_CANNOT_CONNECT = 12029;
+  ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
+
+function SysErrorMessage(Code: cardinal; ModuleName: PChar): string;
+var
+  flags, len: PtrUInt;
+  src: pointer;
+  tmp: array[0..1023] of Char;
+begin
+  if ModuleName = nil then
+  begin
+    flags := FORMAT_MESSAGE_FROM_SYSTEM;
+    src := nil;
+  end
+  else
+  begin
+    flags := FORMAT_MESSAGE_FROM_HMODULE;
+    src := pointer(GetModuleHandle(ModuleName));
+  end;
+  len := FormatMessage(flags, src, Code, ENGLISH_LANGID, @tmp, 256, nil);
+  if (len = 0) and
+     (GetLastError = ERROR_RESOURCE_LANG_NOT_FOUND) then
+    len := FormatMessage(flags, src, Code, 0, @tmp, SizeOf(tmp), nil);
+  if len > 0 then
+  begin
+    while (len > 0) and
+          (ord(tmp[len - 1]) in [0..32, ord('.')]) do
+      dec(len);
+    SetString(result, PChar(@tmp), len);
+  end;
 end;
 
 function PostMessage(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
@@ -176,19 +239,18 @@ begin
 end;
 
 var
-  _QueryPerformanceFrequency: QWord; // is documented as stable after boot
+  // value is documented as stable after boot, so we get it at startup
+  _QueryPerformanceFrequency: QWord;
+  // from HyperV or if HPET disabled e.g. -> direct division
+  _QueryPerformanceFrequencyPer10: boolean;
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
-var
-  cnt, freq: QWord;
 begin
-  QueryPerformanceCounter(PInt64(@cnt)^);
-  freq := _QueryPerformanceFrequency;
-  if freq = 10000000 then
-    // from HyperV or if HPET disabled e.g. -> faster division by a constant
-    Value := cnt div 10
+  QueryPerformanceCounter(PInt64(@Value)^);
+  if _QueryPerformanceFrequencyPer10 then
+    Value := QWord(Value) div 10 // faster division by a constant (especially on FPC_64)
   else
-    Value := (cnt * 1000000) div freq;
+    Value := QWord((QWord(Value) * 1000000) div _QueryPerformanceFrequency);
 end;
 
 const
@@ -205,6 +267,19 @@ begin
      FileTimeToSystemTime({%H-}FA.ftLastWriteTime, ST) and
      SystemTimeToTzSpecificLocalTime(nil, ST, LT) then
     result := SystemTimeToDateTime(LT)
+  else
+    result := 0;
+end;
+
+function FileAgeToUnixTimeUtc(const FileName: TFileName; AllowDir: boolean): TUnixTime;
+var
+  FA: WIN32_FILE_ATTRIBUTE_DATA;
+begin
+  // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
+  if GetFileAttributesEx(pointer(FileName), GetFileExInfoStandard, @FA) and
+     (AllowDir or
+      (({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) = 0)) then
+    result := FileTimeToUnixTime(FA.ftLastWriteTime) // no local time conversion
   else
     result := 0;
 end;
@@ -296,7 +371,10 @@ end;
 
 function DeleteFile(const aFileName: TFileName): boolean;
 begin
-  result := SysUtils.DeleteFile(aFileName);
+  if aFileName = '' then
+    result := false
+  else
+    result := SysUtils.DeleteFile(aFileName);
 end;
 
 function FileCreate(const aFileName: TFileName): THandle;
@@ -309,42 +387,56 @@ var
   FileTime: TFileTime;
   D: THandle;
 begin
-  D := FileOpen(Dest, fmOpenWrite);
-  if ValidHandle(D) then
-  begin
-    result := GetFileTime(SourceHandle, nil, nil, @FileTime) and
-              SetFileTime(D, nil, nil, @FileTime);
-    FileClose(D);
-  end
+  if Dest = '' then
+    result := false
   else
-    result := false;
+  begin
+    D := FileOpen(Dest, fmOpenWrite);
+    if ValidHandle(D) then
+    begin
+      result := GetFileTime(SourceHandle, nil, nil, @FileTime) and
+                SetFileTime(D, nil, nil, @FileTime);
+      FileClose(D);
+    end
+    else
+      result := false;
+  end;
 end;
 
 procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
 begin
-  if Secret then
-    SetFileAttributes(pointer(FileName),
-      FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY)
-  else
-    SetFileAttributes(pointer(FileName), FILE_ATTRIBUTE_NORMAL);
+  if FileName <> '' then
+    if Secret then
+      SetFileAttributes(pointer(FileName),
+        FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY)
+    else
+      SetFileAttributes(pointer(FileName), FILE_ATTRIBUTE_NORMAL);
 end;
 
 function RenameFile(const OldName, NewName: TFileName): boolean;
 begin
-  result := SysUtils.RenameFile(OldName,NewName);
+  if (OldName = '') or
+     (NewName = '') then
+    result := false
+  else
+    result := SysUtils.RenameFile(OldName,NewName);
 end;
 
 function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
 begin
-  result := Windows.CopyFile(pointer(Source), pointer(Target), FailIfExists);
+  if (Source = '') or
+     (Target = '') then
+    result := false
+  else
+    result := Windows.CopyFile(pointer(Source), pointer(Target), FailIfExists);
 end;
 
 function FileOpenSequentialRead(const FileName: string): integer;
 begin
-  if OSVersion >= wVista then // don't use the flag on XP
+  if OSVersion >= wVista then // XP has troubles with the "sequential" flag
     result := CreateFile(pointer(FileName), GENERIC_READ,
       FILE_SHARE_READ or FILE_SHARE_WRITE, nil, // same as fmShareDenyNone
-      OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN, 0)
+      OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, 0)
   else
     result := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
 end;
@@ -366,16 +458,12 @@ begin
   result := p^.V;
 end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap on XP :(
 
-{$ifdef FPC} // oddly not defined in fpc\rtl\win
-function SwitchToThread: BOOL;
-  stdcall; external kernel32 name 'SwitchToThread';
-{$endif FPC}
-
 procedure SleepHiRes(ms: cardinal);
 begin
-  if (ms <> 0) or
-     not SwitchToThread then
-    Windows.Sleep(ms); // follow the HW timer: typically up to 16ms on Windows
+  if ms <> 0 then
+    Windows.Sleep(ms) // follow the HW timer: typically up to 16ms on Windows
+  else
+     SwitchToThread;
 end;
 
 {$ifdef FPC}
@@ -419,6 +507,13 @@ end;
 
 {$endif NOSETTHREADNAME}
 
+type
+  // avoid linking of ComObj.pas just for EOleSysError
+  EOleSysError = class(Exception)
+  public
+    ErrorCode: cardinal;
+  end;
+
 {$ifndef NOEXCEPTIONINTERCEPT}
 
 const
@@ -426,50 +521,194 @@ const
   cSetThreadNameException = $406D1388;
 
   // https://docs.microsoft.com/en-us/archive/blogs/yizhang/interpreting-hresults-returned-from-netclr-0x8013xxxx
-  DOTNET_EXCEPTIONNAME: array[0..83] of PUtf8Char = (
-    'Access', 'AmbiguousMatch', 'appdomainUnloaded', 'Application', 'Argument',
-    'ArgumentNull', 'ArgumentOutOfRange', 'Arithmetic', 'ArrayTypeMismatch',
-    'BadImageFormat', 'CannotUnloadappdomain', 'ContextMarshal', 'Cryptographic',
-    'CryptographicUnexpectedOperation', 'CustomAttributeFormat',
-    'DirectoryNotFound', 'DirectoryNotFound', 'DivideByZero', 'DllNotFound',
-    'DuplicateWaitObject', 'EndOfStream', 'EntryPointNotFound', '',
-    'ExecutionEngine', 'External', 'FieldAccess', 'FileLoad', 'FileLoad',
-    'FileNotFound', 'Format', 'IndexOutOfRange', 'InvalidCast',
-    'InvalidComObject', 'InvalidFilterCriteria', 'InvalidOleVariantType',
-    'InvalidOperation', 'InvalidProgram', 'IO', 'IsolatedStorage',
-    'MarshalDirective', 'MethodAccess', 'MissingField',
-    'MissingManifestResource', 'MissingMember', 'MissingMethod',
-    'MulticastNotSupported', 'NotFiniteNumber', 'NotImplemented',
-    'NotSupported', 'NullReference', 'OutOfMemory', 'Overflow',
-    'PlatformNotSupported', 'Policy', 'Rank', 'ReflectionTypeLoad', 'Remoting',
-    'RemotingTimeout', 'SafeArrayTypeMismatch', 'SafeArrayRankMismatch',
-    'Security', 'SEH', 'Serialization', 'Server', 'StackOverflow',
-    'SUDSGenerator', 'SUDSParser', 'SynchronizationLock', 'System', 'Target',
-    'TargetInvocation', 'TargetParameterCount', 'ThreadAbort',
-    'ThreadInterrupted', 'ThreadState', 'ThreadStop', 'TypeInitialization',
-    'TypeLoad', 'TypeUnloaded', 'UnauthorizedAccess', 'InClassConstructor',
-    'KeyNotFound', 'InsufficientStack', 'InsufficientMemory');
+  // see also https://referencesource.microsoft.com/#mscorlib/system/__hresults.cs
+  DOTNET_EXCEPTIONNAME: array[0..91] of PUtf8Char = (
+    'Access',                            // $8013151A
+    'AmbiguousMatch',                    // $8000211D
+    'appdomainUnloaded',                 // $80131015
+    'Application',                       // $80131600
+    'Argument',                          // $80070057
+    'ArgumentNull',                      // $80004003
+    'ArgumentOutOfRange',                // $80131502
+    'Arithmetic',                        // $80070216
+    'ArrayTypeMismatch',                 // $80131503
+    'BadImageFormat',                    // $8007000B
+    'CannotUnloadappdomain',             // $80131015
+    'ContextMarshal',                    // $80090020
+    'Cryptographic',                     // $80004001
+    'CryptographicUnexpectedOperation',  // $80131431
+    'CustomAttributeFormat',             // $80131537
+    'DirectoryNotFound',                 // $80070003
+    'DirectoryNotFound',                 // $80030003
+    'DivideByZero',                      // $80020012
+    'DllNotFound',                       // $80131524
+    'DuplicateWaitObject',               // $80131529
+    'EndOfStream',                       // $00801338
+    'EntryPointNotFound',                // $80131522
+    '',                                  // $80131500 - name is plain Exception
+    'ExecutionEngine',                   // $80131506
+    'External',                          // $80004005
+    'FieldAccess',                       // $80131507
+    'FileLoad',                          // $80131621
+    'FileLoad',                          // $80131018
+    'FileNotFound',                      // $80070002
+    'Format',                            // $80131537
+    'IndexOutOfRange',                   // $80131508
+    'InvalidCast',                       // $80004002
+    'InvalidComObject',                  // $80131527
+    'InvalidFilterCriteria',             // $80131601
+    'InvalidOleVariantType',             // $80131531
+    'InvalidOperation',                  // $80131509
+    'InvalidProgram',                    // $8013153A
+    'IO',                                // $80131620
+    'IsolatedStorage',                   // $80131450
+    'MarshalDirective',                  // $80131535
+    'MethodAccess',                      // $80131510
+    'MissingField',                      // $80131511
+    'MissingManifestResource',           // $80131532
+    'MissingMember',                     // $80131512
+    'MissingMethod',                     // $80131513
+    'MulticastNotSupported',             // $80131514
+    'NotFiniteNumber',                   // $80131528
+    'NotImplemented',                    // $80004001
+    'NotSupported',                      // $80131515
+    'NullReference',                     // $80004003
+    'OutOfMemory',                       // $8007000E
+    'Overflow',                          // $80131516
+    'PlatformNotSupported',              // $80131539
+    'Policy',                            // $80131416
+    'Rank',                              // $80131517
+    'ReflectionTypeLoad',                // $80131602
+    'Remoting',                          // $8013150B
+    'RemotingTimeout',                   // $8013150B
+    'SafeArrayTypeMismatch',             // $80131533
+    'SafeArrayRankMismatch',             // $80131538
+    'Security',                          // $8013150A
+    'SEH',                               // $80004005
+    'Serialization',                     // $8013150C
+    'Server',                            // $8013150E
+    'StackOverflow',                     // $800703E9
+    'SUDSGenerator',                     // $80131500
+    'SUDSParser',                        // $80131500
+    'SynchronizationLock',               // $80131518
+    'System',                            // $80131501
+    'Target',                            // $80131603
+    'TargetInvocation',                  // $80131604
+    'TargetParameterCount',              // $80138002
+    'ThreadAbort',                       // $80131530
+    'ThreadInterrupted',                 // $80131519
+    'ThreadState',                       // $80131520
+    'ThreadStop',                        // $80131521
+    'TypeInitialization',                // $80131534
+    'TypeLoad',                          // $80131522
+    'TypeUnloaded',                      // $80131013
+    'UnauthorizedAccess',                // $80070005
+    'InClassConstructor',                // $80131543
+    'KeyNotFound',                       // $80131577
+    'InsufficientStack',                 // $80131578
+    'InsufficientMemory',                // $8013153D
+    'Verification',                      // $8013150D
+    'HostProtection',                    // $80131640
+    'MinGrantFailed',                    // $80131417
+    'Crypto',                            // $80131430
+    'CryptoUnexOper',                    // $80131431
+    'Overflow',                          // $8002000a
+    'InvalidName',                       // $80131047
+    'TypeMismatch');                     // $80028ca0
 
-  DOTNET_EXCEPTIONHRESULT: array[0..83] of cardinal = (
-    $8013151A, $8000211D, $80131015, $80131600, $80070057, $80004003, $80131502,
-    $80070216, $80131503, $8007000B, $80131015, $80090020, $80004001, $80131431,
-    $80131537, $80070003, $80030003, $80020012, $80131524, $80131529, $00801338,
-    $80131522, $80131500, $80131506, $80004005, $80131507, $80131621, $80131018,
-    $80070002, $80131537, $80131508, $80004002, $80131527, $80131601, $80131531,
-    $80131509, $8013153A, $80131620, $80131450, $80131535, $80131510, $80131511,
-    $80131532, $80131512, $80131513, $80131514, $80131528, $80004001, $80131515,
-    $80004003, $8007000E, $80131516, $80131539, $80131416, $80131517, $80131602,
-    $8013150B, $8013150B, $80131533, $80131538, $8013150A, $80004005, $8013150C,
-    $8013150E, $800703E9, $80131500, $80131500, $80131518, $80131501, $80131603,
-    $80131604, $80138002, $80131530, $80131519, $80131520, $80131521, $80131534,
-    $80131522, $80131013, $80070005, $80131543, $80131577, $80131578, $8013153D);
-
-type
-  // avoid linking of ComObj.pas just for EOleSysError
-  EOleSysError = class(Exception)
-  public
-    ErrorCode: cardinal;
-  end;
+  DOTNET_EXCEPTIONHRESULT: array[0..91] of cardinal = (
+    $8013151A,
+    $8000211D,
+    $80131015,
+    $80131600,
+    $80070057,
+    $80004003,
+    $80131502,
+    $80070216,
+    $80131503,
+    $8007000B,
+    $80131015,
+    $80090020,
+    $80004001,
+    $80131431,
+    $80131537,
+    $80070003,
+    $80030003,
+    $80020012,
+    $80131524,
+    $80131529,
+    $00801338,
+    $80131522,
+    $80131500,
+    $80131506,
+    $80004005,
+    $80131507,
+    $80131621,
+    $80131018,
+    $80070002,
+    $80131537,
+    $80131508,
+    $80004002,
+    $80131527,
+    $80131601,
+    $80131531,
+    $80131509,
+    $8013153A,
+    $80131620,
+    $80131450,
+    $80131535,
+    $80131510,
+    $80131511,
+    $80131532,
+    $80131512,
+    $80131513,
+    $80131514,
+    $80131528,
+    $80004001,
+    $80131515,
+    $80004003,
+    $8007000E,
+    $80131516,
+    $80131539,
+    $80131416,
+    $80131517,
+    $80131602,
+    $8013150B,
+    $8013150B,
+    $80131533,
+    $80131538,
+    $8013150A,
+    $80004005,
+    $8013150C,
+    $8013150E,
+    $800703E9,
+    $80131500,
+    $80131500,
+    $80131518,
+    $80131501,
+    $80131603,
+    $80131604,
+    $80138002,
+    $80131530,
+    $80131519,
+    $80131520,
+    $80131521,
+    $80131534,
+    $80131522,
+    $80131013,
+    $80070005,
+    $80131543,
+    $80131577,
+    $80131578,
+    $8013153D,
+    $8013150D,
+    $80131640,
+    $80131417,
+    $80131430,
+    $80131431,
+    $8002000a,
+    $80131047,
+    $80028ca0);
 
 function ExceptionInheritsFrom(E: TClass; const Name: ShortString): boolean;
 begin
@@ -493,6 +732,7 @@ begin
     result := EOleSysError(EInstance).ErrorCode;
     if result > $80000000 then
       for i := 0 to high(DOTNET_EXCEPTIONHRESULT) do
+        // manual loop: the same error code can appear several times
         if DOTNET_EXCEPTIONHRESULT[i] = result then
           PtrArrayAdd(ExceptionNames, DOTNET_EXCEPTIONNAME[i]);
   end
@@ -507,8 +747,12 @@ var
   {$ifdef WIN64}
     {$define WITH_VECTOREXCEPT} // use AddVectoredExceptionHandler Win64 API
   {$else}
-    // Win32, Linux: intercept via the RaiseProc global variable
-    {$define WITH_RAISEPROC} // RaiseProc is set in main mormot.core.os.pas
+    {$ifdef FPC_USE_WIN32_SEH}
+      {$define WITH_VECTOREXCEPT} // new since FPC 3.2
+    {$else}
+      // Win32, Linux: intercept via the RaiseProc global variable
+      {$define WITH_RAISEPROC} // RaiseProc is set in main mormot.core.os.pas
+    {$endif FPC_USE_WIN32_SEH}
   {$endif WIN64}
 {$else}
   {$ifdef CPU64}
@@ -697,8 +941,8 @@ var
     var lpCreationTime, lpExitTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
   GetProcessMemoryInfo: function(Process: THandle;
     var ppsmemCounters: TProcessMemoryCounters; cb: DWORD): BOOL; stdcall;
-  EnumProcessModules: function (hProcess: THandle; var lphModule: HMODULE; cb: DWORD;
-    var lpcbNeeded: DWORD): BOOL; stdcall;
+  // EnumProcessModules: function (hProcess: THandle; var lphModule: HMODULE; cb: DWORD;
+  //  var lpcbNeeded: DWORD): BOOL; stdcall;
   EnumProcesses: function(lpidProcess: PDWORD; cb: DWORD; var cbNeeded: DWORD): BOOL; stdcall;
   GetModuleFileNameExW: function(hProcess: THandle; hModule: HMODULE;
     lpBaseName: PWideChar; nSize: DWORD): DWORD; stdcall;
@@ -747,7 +991,7 @@ begin
 end;
 
 // local RTL wrapper function to avoid linking mormot.core.unicode.pas
-procedure RawUnicodeToUtf8(P: PWideChar; Len: integer; out res: RawUtf8);
+procedure Win32PWideCharToUtf8(P: PWideChar; Len: integer; out res: RawUtf8);
 var
   tmp: TSynTempBuffer;
 begin
@@ -772,7 +1016,7 @@ begin
   while (Len > 0) and
         (ord(Buffer[Len - 1]) in [0..32, ord('.')]) do
     dec(Len);
-  RawUnicodeToUtf8(Buffer, Len, result);
+  Win32PWideCharToUtf8(Buffer, Len, result);
 end;
 
 function EnumProcessName(PID: cardinal): RawUtf8;
@@ -791,11 +1035,11 @@ begin
       begin
         len := high(name);
         if QueryFullProcessImageNameW(h, 0, name, @len) then
-          RawUnicodeToUtf8(name, len, result);
+          Win32PWideCharToUtf8(name, len, result);
       end
       else
         if GetModuleFileNameExW(h, 0, name, high(name)) <> 0 then
-          RawUnicodeToUtf8(name, StrLenW(name), result);
+          Win32PWideCharToUtf8(name, StrLenW(name), result);
     finally
       CloseHandle(h);
     end;
@@ -814,6 +1058,11 @@ begin
   FileTimeToInt64(ftusr, UserTime);
 end;
 
+function RetrieveLoadAvg: RawUtf8;
+begin
+  result := ''; // call RetrieveSystemTimes() instead
+end;
+
 function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
   out WorkKB, VirtualKB: cardinal): boolean;
 var
@@ -822,8 +1071,8 @@ var
   mem: TProcessMemoryCounters;
 begin
   result := false;
-  if not Assigned(GetProcessTimes) or
-     not Assigned(GetProcessMemoryInfo) then
+  if (not Assigned(GetProcessTimes)) or
+     (not Assigned(GetProcessMemoryInfo)) then
     exit;
   h := OpenProcess(OpenProcessAccess, false, PID);
   if h = 0 then
@@ -833,9 +1082,9 @@ begin
     begin
       FileTimeToInt64(ftkrn, KernelTime);
       FileTimeToInt64(ftusr, UserTime);
-      FillCharFast(mem,SizeOf(mem),0);
+      FillCharFast(mem, SizeOf(mem), 0);
       mem.cb := SizeOf(mem);
-      if GetProcessMemoryInfo(h,mem,SizeOf(mem)) then
+      if GetProcessMemoryInfo(h, mem, SizeOf(mem)) then
       begin
         WorkKB := mem.WorkingSetSize shr 10;
         VirtualKB := mem.PagefileUsage shr 10;
@@ -845,6 +1094,61 @@ begin
   finally
     CloseHandle(h);
   end;
+end;
+
+function CoCreateGuid(out guid: THash128Rec): HRESULT; stdcall; external 'ole32.dll';
+
+procedure XorOSEntropy(var e: THash512Rec);
+var
+  h: THash128Rec;
+  ft: packed record
+    krn, usr, p, e: TFileTime;
+  end;
+  mem: TProcessMemoryCounters;
+begin
+  QueryPerformanceCounter(h.Lo); // e.h3 xored with raw timestamps
+  e.i[6] := e.i[6] xor h.Lo;
+  GetProcessTimes(GetCurrentProcess, ft.p, ft.e, ft.krn, ft.usr);
+  DefaultHasher128(@e.h0, @ft, SizeOf(ft));
+  mem.cb := SizeOf(mem);
+  GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
+  DefaultHasher128(@e.h1, @mem, SizeOf(mem));
+  if Assigned(GetSystemTimes) then
+    GetSystemTimes(ft.usr, ft.p, ft.e);
+  DefaultHasher128(@e.h2, @ft, SizeOf(ft));
+  CoCreateGuid(h); // very fast on Windows - used to obfuscate system info
+  e.i[0] := e.i[0] xor h.Lo;
+  e.i[1] := e.i[1] xor h.Hi;
+  CoCreateGuid(h);
+  e.i[2] := e.i[2] xor h.Lo;
+  e.i[3] := e.i[3] xor h.Hi;
+  CoCreateGuid(h);
+  e.i[4] := e.i[4] xor h.Lo;
+  e.i[5] := e.i[5] xor h.Hi;
+  CoCreateGuid(h);
+  e.i[6] := e.i[6] xor h.Lo;
+  e.i[7] := e.i[7] xor h.Hi;
+  QueryPerformanceCounter(h.Lo); // is likely to have changed in-between
+  e.i[7] := e.i[7] xor h.Lo;     // e.h3 xored with raw timestamps
+end;
+
+function FillSystemRandom(Buffer: PByteArray; Len: integer;
+  AllowBlocking: boolean): boolean;
+var
+  prov: HCRYPTPROV;
+begin
+  result := false;
+  // warning: on some Windows versions, this could take up to 30 ms!
+  if CryptoApi.Available then
+    if CryptoApi.AcquireContextA(prov, nil, nil,
+      PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) then
+    begin
+      result := CryptoApi.GenRandom(prov, Len, Buffer);
+      CryptoApi.ReleaseContext(prov, 0);
+    end;
+  if not result then
+    // OS API call failed -> fallback to our Lecuyer's gsl_rng_taus2 generator
+    RandomBytes(pointer(Buffer), Len);
 end;
 
 function TProcessInfo.Init: boolean;
@@ -930,8 +1234,8 @@ begin
   end
   else
   begin
-    Kernel := SimpleRoundTo2Digits((fDiffKernel * 100) / fDiffTotal);
-    User := SimpleRoundTo2Digits((fDiffUser * 100) / fDiffTotal);
+    Kernel := {%H-}SimpleRoundTo2Digits((fDiffKernel * 100) / fDiffTotal);
+    User := {%H-}SimpleRoundTo2Digits((fDiffUser * 100) / fDiffTotal);
     Idle := 100 - Kernel - User; // ensure sum is always 100%
     result := true;
   end;
@@ -998,7 +1302,8 @@ begin
       end;
   end;
   {$else}
-  if withalloc and Assigned(GetProcessMemoryInfo) then
+  if withalloc and
+     Assigned(GetProcessMemoryInfo) then
   begin
     FillcharFast(mem, SizeOf(mem), 0);
     mem.cb := SizeOf(mem);
@@ -1069,7 +1374,7 @@ begin
       if GetDiskInfo(fn, av, fr, tot, @volume) then
       begin
         SetLength(result, n + 1);
-        RawUnicodeToUtf8(pointer(volume), length(volume), result[n].name);
+        Win32PWideCharToUtf8(pointer(volume), length(volume), result[n].name);
         volume := '';
         result[n].mounted := fn;
         result[n].size := tot;
@@ -1080,24 +1385,26 @@ begin
   end;
 end;
 
-{$I-}
+function HasConsole: boolean;
+begin
+  if StdOut = 0 then
+  begin
+    StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
+    if StdOut = INVALID_HANDLE_VALUE then
+      StdOut := 0;
+  end;
+  result := StdOut <> 0;
+end;
 
 var
   TextAttr: integer = ord(ccDarkGray);
-
-procedure InitConsole;
-begin
-  StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
-  if StdOut = INVALID_HANDLE_VALUE then
-    StdOut := 0;
-end;
 
 procedure TextColor(Color: TConsoleColor);
 var
   oldAttr: integer;
 begin
-  if StdOut = 0 then
-    InitConsole;
+  if not HasConsole then
+    exit;
   oldAttr := TextAttr;
   TextAttr := (TextAttr and $F0) or ord(Color);
   if TextAttr <> oldAttr then
@@ -1108,8 +1415,8 @@ procedure TextBackground(Color: TConsoleColor);
 var
   oldAttr: integer;
 begin
-  if StdOut = 0 then
-    InitConsole;
+  if not HasConsole then
+    exit;
   oldAttr := TextAttr;
   TextAttr := (TextAttr and $0F) or (ord(Color) shl 4);
   if TextAttr <> oldAttr then
@@ -1143,26 +1450,30 @@ begin
   end;
 end;
 
+{$I-}
 procedure ConsoleWaitForEnterKey;
 var
   msg: TMsg;
 begin
-  while not ConsoleKeyPressed(VK_RETURN) do
-  begin
-    if GetCurrentThreadID = MainThreadID then
-      CheckSynchronize{$ifdef WITHUXTHEME}(1000){$endif}
-    else
-      WaitMessage;
-    while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
-      if msg.Message = WM_QUIT then
-        exit
-      else
-      begin
-        TranslateMessage(msg);
-        DispatchMessage(msg);
-      end;
-  end;
+  if IsMultiThread and
+     (GetCurrentThreadID = MainThreadID) then
+    while not ConsoleKeyPressed(VK_RETURN) do
+    begin
+      CheckSynchronize{$ifndef DELPHI6OROLDER}(100){$endif};
+      while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
+        if msg.Message = WM_QUIT then
+          exit
+        else
+        begin
+          TranslateMessage(msg);
+          DispatchMessage(msg);
+        end;
+    end
+  else
+    ReadLn;
+  ioresult;
 end;
+{$I+}
 
 {$ifndef FPC}
 var
@@ -1182,23 +1493,27 @@ end;
 
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
 var
-  tmp: SynUnicode;
+  utf16: SynUnicode;
+  tmp: TSynTempBuffer;
   i: integer;
 begin
   for i := 1 to length(S) do
     if S[i] > #127 then
     begin
-      tmp := Utf8Decode(S);
-      SetLength(result, length(tmp) * 4);
-      CharToOemW(pointer(tmp), pointer(result));
-      SetLength(result, StrLen(pointer(result)));
+      utf16 := Utf8Decode(S);
+      tmp.Init(length(utf16) * 3);
+      CharToOemBuffW(pointer(utf16), tmp.buf, tmp.len);
+      SetString(result, PAnsiChar(tmp.buf), StrLen(tmp.buf));
+      tmp.Done;
       exit;
-    end
-  else
-    result := S;
+    end;
+  result := S; // no conversion needed if text is plain ASCII-7 content
 end;
 
-{$I+}
+procedure FormatU(const fmt: string; const args: array of const; var result: RawUtf8);
+begin
+  result := RawUtf8(format(fmt, args));
+end;
 
 constructor TFileVersion.Create(const aFileName: TFileName;
   aMajor, aMinor, aRelease, aBuild: integer);
@@ -1222,7 +1537,7 @@ var
     u := Utf8Decode('\StringFileInfo\' + LanguageInfo + '\' + From);
     VerQueryValueW(Pt, pointer(u), StrValPt, sz);
     if sz > 0 then
-      RawUnicodeToUtf8(StrValPt, StrLenW(StrValPt), result)
+      Win32PWideCharToUtf8(StrValPt, StrLenW(StrValPt), result)
     else
       result := '';
   end;
@@ -1263,7 +1578,7 @@ begin
         VerQueryValue(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
         if Size2 >= 4 then
         begin
-          LanguageInfo := RawUtf8(format('%4.4x%4.4x', [Trans^[0], Trans^[1]]));
+          FormatU('%4.4x%4.4x', [Trans^[0], Trans^[1]], LanguageInfo);
           CompanyName := ReadResourceByName('CompanyName');
           FileDescription := ReadResourceByName('FileDescription');
           FileVersion := ReadResourceByName('FileVersion');
@@ -1293,21 +1608,20 @@ var
 begin
   tmpsize := SizeOf(tmp);
   GetComputerNameW(tmp{%H-}, tmpsize);
-  RawUnicodeToUtf8(@tmp, StrLenW(tmp), Host);
+  Win32PWideCharToUtf8(@tmp, StrLenW(tmp), Host);
   tmpsize := SizeOf(tmp);
   GetUserNameW(tmp, tmpsize);
-  RawUnicodeToUtf8(@tmp, StrLenW(tmp), User);
+  Win32PWideCharToUtf8(@tmp, StrLenW(tmp), User);
 end;
 
-// avoid unneeded reference to ShlObj.pas
-function SHGetFolderPath(hwnd: hwnd; csidl: integer; hToken: THandle;
-  dwFlags: DWord; pszPath: PChar): HRESULT;
-    stdcall; external 'SHFolder.dll' name 'SHGetFolderPath' + _AW;
-
 var
-  _SystemPath: array[TSystemPath] of TFileName;
+  // avoid unneeded reference to ShlObj.pas
+  // - late binding is mandatory to be used on WinPE which does NOT have this dll
+  SHGetFolderPath: function(hwnd: hwnd; csidl: integer; hToken: THandle;
+    dwFlags: DWord; pszPath: PChar): HRESULT; stdcall;
+  _SystemPath: array[TSystemPath] of TFileName; // cache
 
-function GetSystemPath(kind: TSystemPath): TFileName;
+function ComputeSystemPath(kind: TSystemPath): TFileName;
 const
   CSIDL_PERSONAL = $0005;
   CSIDL_LOCAL_APPDATA = $001C; // local non roaming user folder
@@ -1323,23 +1637,36 @@ const
 var
   tmp: array[0..MAX_PATH] of char;
 begin
-  result := _SystemPath[kind];
-  if result <> '' then
-    exit;
   if (kind = spLog) and
      IsDirectoryWritable(Executable.ProgramFilePath) then
     result := EnsureDirectoryExists(Executable.ProgramFilePath + 'log')
   else if (csidl[kind] <> 0) and
+          Assigned(SHGetFolderPath) and
           (SHGetFolderPath(0, csidl[kind], 0, 0, @tmp) = S_OK) then
     result := IncludeTrailingPathDelimiter(tmp)
   else
   begin
     result := GetEnvironmentVariable(ENV[kind]);
     if result = '' then
+    begin
       result := GetEnvironmentVariable('APPDATA');
+      if result = '' then
+      begin
+        result := GetEnvironmentVariable('TEMP');
+        if result = '' then
+          result := Executable.ProgramFilePath;
+      end;
+    end;
     result := IncludeTrailingPathDelimiter(result);
   end;
   _SystemPath[kind] := result;
+end;
+
+function GetSystemPath(kind: TSystemPath): TFileName;
+begin
+  result := _SystemPath[kind];
+  if result = '' then
+    result := ComputeSystemPath(kind);
 end;
 
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
@@ -1410,7 +1737,7 @@ begin
   begin
     case rtype of
       REG_SZ, REG_EXPAND_SZ, REG_MULTI_SZ:
-        RawUnicodeToUtf8(tmp.buf, StrLenW(tmp.buf), result);
+        Win32PWideCharToUtf8(tmp.buf, StrLenW(tmp.buf), result);
     end;
     if andtrim then
       result := TrimU(result);
@@ -1465,7 +1792,7 @@ begin
   begin
     len := maxlen;
     if RegEnumKeyExW(key, i, tmp.buf, len, nil, nil, nil, nil) = 0 then
-      RawUnicodeToUtf8(tmp.buf, len, result[i]);
+      Win32PWideCharToUtf8(tmp.buf, len, result[i]);
   end;
   tmp.Done;
 end;
@@ -1994,6 +2321,7 @@ begin
       inc(P);
     end;
   end;
+  // note: CryptSignMessage and CryptVerifyMessageSignature are in crypt32.dll
 end;
 
 type
@@ -2284,16 +2612,12 @@ var
   param: string;
   i: integer;
 
-  procedure ShowError(const Msg: RawUtf8);
+  procedure ShowError(Msg: string);
   begin
+    Msg := ServiceName + ': "' + Msg + '" failed for ' + param;
     if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllLastError, 'During % for %', [Msg, param]);
-    if not IsConsole then
-      exit;
-    {$I-} // ignore if no console has been allocated
-    writeln(ServiceName, ': Error "', Msg, '" for ', param);
-    ioresult;
-    {$I+}
+      WindowsServiceLog(sllLastError, '%', [Msg]);
+    ConsoleWrite(RawUtf8(Msg), ccLightRed);
   end;
 
 begin
@@ -2761,13 +3085,15 @@ end;
 
 var
   EnvironmentCache: SynUnicode;
+  EnvironmentCacheLock: TLightLock;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
   envaddexisting: boolean; parsed: PParseCommands): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
-  path: TFileName;
+  exe, path: TFileName;
+  // CreateProcess can alter the strings -> use local SynUnicode temp variables
   wcmd, wenv, wpath: SynUnicode;
   e, p: PWideChar;
   exitcode: cardinal;
@@ -2775,36 +3101,40 @@ var
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
   result := -1;
+  // extract path and exe from cmd input
   if cmd = '' then
     exit;
-  // CreateProcess can alter the strings -> use local SynUnicode temp variable
-  wcmd := SynUnicode(cmd);
-  UniqueString(wcmd);
   if cmd[1] = '"' then
   begin
-    path := copy(cmd, 2, maxInt);
-    i := Pos('"', path);
+    exe := copy(cmd, 2, maxInt);
+    i := Pos('"', exe);
     if i = 0 then
       exit;
-    SetLength(path, i - 1); // unquote "path" string
+    SetLength(exe, i - 1); // unquote "exe" string
   end
   else
   begin
     i := Pos(' ', cmd);
-    if i <= 1 then
-      exit;
-    path := copy(cmd, 1, i - 1);
+    if i = 0 then
+      exe := cmd // no parameter
+    else
+      exe := copy(cmd, 1, i - 1); // split exe and parameter(s)
   end;
-  path := ExtractFilePath(path);
-  if path = '' then
-    path := Executable.ProgramFilePath;
+  if exe <> '' then
+    path := ExtractFilePath(exe);
+  if (path = '') and
+     FileExists(Executable.ProgramFilePath + exe) then
+    path := Executable.ProgramFilePath; // prefers the current folder
+  // prepare the CreateProcess arguments
+  wcmd := SynUnicode(cmd);
+  UniqueString(wcmd);
   wpath := SynUnicode(path);
   if env <> '' then
   begin
     wenv := SynUnicode(env);
     if envaddexisting then
     begin
-      GlobalLock;
+      EnvironmentCacheLock.Lock;
       try
         if EnvironmentCache = '' then
         begin
@@ -2817,19 +3147,20 @@ begin
         end;
         wenv := EnvironmentCache + wenv;
       finally
-        GlobalUnLock;
+        EnvironmentCacheLock.UnLock;
       end;
     end
     else
       UniqueString(wenv);
   end;
+  // launch the process
   FillCharFast(startupinfo, SizeOf(startupinfo), 0);
   startupinfo.cb := SizeOf(startupinfo);
   FillCharFast(processinfo, SizeOf(processinfo), 0);
   // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
   if CreateProcessW(nil, pointer(wcmd), nil, nil, false,
     CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE or
-    DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
+      DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
     pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo) then
   begin
     if waitfor then
@@ -2883,6 +3214,22 @@ begin
   s := TrimU(s);
 end;
 
+function GetLocalTimeOffset: Integer; // not defined in oldest Delphi
+var
+  tzi: TTimeZoneInformation;
+begin
+   case GetTimeZoneInformation(tzi) of
+     TIME_ZONE_ID_UNKNOWN:
+       result := tzi.Bias;
+     TIME_ZONE_ID_STANDARD:
+       result := tzi.Bias + tzi.StandardBias;
+     TIME_ZONE_ID_DAYLIGHT:
+       result := tzi.Bias + tzi.DaylightBias;
+   else
+     result := 0;
+   end;
+end;
+
 procedure InitializeUnit;
 var
   h: THandle;
@@ -2895,6 +3242,22 @@ var
   cpu, manuf, prod, prodver: RawUtf8;
   reg: TWinRegistry;
 begin
+  {$ifndef FPC} // FPC_X86 already redirect to FastCode RTL Move()
+  {$ifdef ASMX86}
+  {$ifndef HASNOSSE2}
+  if not (cfSSE2 in CpuFeatures) then
+  begin
+    // avoid illegal opcode in MoveFast() and SynLZ functions
+    RedirectCode(@MoveFast, @System.Move);
+    RedirectCode(@SynLZcompress1, @SynLZcompress1Pas);
+    RedirectCode(@SynLZdecompress1, @SynLZdecompress1Pas);
+    ConsoleWrite('WARNING: Old not SSE2 CPU detected -> ' +
+      'please recompile with HASNOSSE2', ccLightRed);
+    // note: FillCharFast is handled by mormot.core.base via ERMSB
+  end;
+  {$endif HASNOSSE2}
+  {$endif ASMX86}
+  {$endif FPC}
   // late-binding of newest Windows APIs
   h := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(h, 'GetTickCount64');
@@ -2910,10 +3273,12 @@ begin
   QueryPerformanceFrequency(PInt64(@_QueryPerformanceFrequency)^);
   if _QueryPerformanceFrequency = 0 then
     raise Exception.Create('QueryPerformanceFrequency=0'); // paranoid
+  _QueryPerformanceFrequencyPer10 := _QueryPerformanceFrequency = 10000000;
   IsWow64Process := GetProcAddress(h, 'IsWow64Process');
   Res := false;
   IsWow64 := Assigned(IsWow64Process) and
-             IsWow64Process(GetCurrentProcess, Res) and Res;
+             IsWow64Process(GetCurrentProcess, Res) and
+             Res;
   if IsWow64 then
     // see http://msdn.microsoft.com/en-us/library/ms724381(v=VS.85).aspx
     GetNativeSystemInfo := GetProcAddress(h, 'GetNativeSystemInfo')
@@ -2927,10 +3292,15 @@ begin
   begin
     @EnumProcesses := GetProcAddress(h, 'EnumProcesses');
     @GetModuleFileNameExW := GetProcAddress(h, 'GetModuleFileNameExW');
-    @EnumProcessModules := GetProcAddress(h, 'EnumProcessModules');
+    //@EnumProcessModules := GetProcAddress(h, 'EnumProcessModules');
     @GetProcessMemoryInfo := GetProcAddress(h, 'GetProcessMemoryInfo');
   end;
+  h := Windows.LoadLibrary('SHFolder.dll');
+  if h >= 32 then
+    // e.g. WinPE doesn't have it - https://stackoverflow.com/q/8683038/458259
+    @SHGetFolderPath := GetProcAddress(h, 'SHGetFolderPath' + _AW);
   // retrieve system information
+  TimeZoneLocalBias := -GetLocalTimeOffset;
   FillcharFast(SystemInfo, SizeOf(SystemInfo), 0);
   if Assigned(GetNativeSystemInfo) then
     GetNativeSystemInfo(SystemInfo)
@@ -2992,7 +3362,11 @@ begin
           else
             // https://stackoverflow.com/q/53393150
             Vers := wServer2019_64;
-    end;
+    end
+    else if (Vers = wTen) and
+            (OSVersionInfo.dwBuildNumber >= 22000) then
+      // waiting for an official mean of Windows 11 identification
+      Vers := wEleven;
     if (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64) and
        (Vers < wServer2019_64) then
       inc(Vers);   // e.g. wEight -> wEight64
@@ -3004,13 +3378,16 @@ begin
     OpenProcessAccess := PROCESS_QUERY_INFORMATION or PROCESS_VM_READ;
   with OSVersionInfo do
     if wServicePackMajor = 0 then
-      OSVersionText := RawUtf8(Format('Windows %s (%d.%d.%d)',
-        [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber]))
+      FormatU('Windows %s (%d.%d.%d)',
+        [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber],
+        OSVersionText)
     else
-      OSVersionText := RawUtf8(Format(
-        'Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers],
-         wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber]));
-  OSVersionInt32 := (integer(Vers) shl 8) + ord(osWindows);
+      FormatU('Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers],
+         wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber],
+         OSVersionText);
+  OSVersion32.os := osWindows;
+  OSVersion32.win := Vers;
+  OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
   h := Windows.LoadLibrary(ntdll);
   if h > 0 then
   begin
@@ -3059,25 +3436,21 @@ begin
   if {%H-}cpu = '' then
     cpu := RawUtf8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
   cpu := TrimU(cpu);
-  CpuInfoText := RawUtf8(Format('%d x %s (' + CPU_ARCH_TEXT + ')',
-    [SystemInfo.dwNumberOfProcessors, cpu]));
+  FormatU('%d x %s (' + CPU_ARCH_TEXT + ')',
+    [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
   TrimDualSpaces(OSVersionText);
   TrimDualSpaces(OSVersionInfoEx);
   TrimDualSpaces(BiosInfoText);
   TrimDualSpaces(CpuInfoText);
 end;
 
-{$I-}
 procedure FinalizeSpecificUnit;
 begin
   if CryptoApi.Handle <> 0 then
     Windows.FreeLibrary(CryptoApi.Handle);
   if OleDBCoinitialized <> 0 then
-  begin
-    writeln('Missing ', OleDBCoInitialized, ' TOleDBConnection.Destroy call');
-    ioresult;
-  end;
+    ConsoleWrite('Missing CoUninitialize TOleDBConnection.Destroy call');
 end;
-{$I+}
+
 
 

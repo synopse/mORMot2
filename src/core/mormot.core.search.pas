@@ -1,4 +1,4 @@
-/// Framework Core Text Search Engines
+/// Framework Core Text, Binary and Time Search Engines
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.core.search;
@@ -60,7 +60,7 @@ type
     /// fill the item properties from a FindFirst/FindNext's TSearchRec
     procedure FromSearchRec(const Directory: TFileName; const F: TSearchRec);
     /// returns some ready-to-be-loggued text
-    function ToText: shortstring;
+    function ToText: ShortString;
   end;
   {$A+}
 
@@ -118,6 +118,7 @@ type
   // - implemented as a fast brute-force state-machine without any heap allocation
   // - some common patterns ('exactmatch', 'startwith*', '*endwith', '*contained*')
   // are handled with dedicated code, optionally with case-insensitive search
+  // - PrepareContains() is the most efficient method for '*contained*' search
   // - consider using TMatchs (or SetMatchs/TMatchDynArray) if you expect to
   // search for several patterns, or even TExprParserMatch for expression search
   TMatch = object
@@ -358,7 +359,6 @@ const
   SOUNDEX_BITS = 4;
 
 
-
 { ****************** Versatile Expression Search Engine }
 
 type
@@ -526,8 +526,8 @@ type
   // for a disk/database storage or transmission over a network
   // - internally, several (hardware-accelerated) crc32c hash functions will be
   // used, with some random seed values, to simulate several hashing functions
-  // - Insert/MayExist/Reset methods are thread-safe
-  TSynBloomFilter = class(TSynLocked)
+  // - all methods are thread-safe, and MayExist can be concurrent (via a TRWLock)
+  TSynBloomFilter = class(TSynPersistent)
   private
     fSize: cardinal;
     fFalsePositivePercent: double;
@@ -535,7 +535,7 @@ type
     fHashFunctions: cardinal;
     fInserted: cardinal;
     fStore: RawByteString;
-    function GetInserted: cardinal;
+    fSafe: TRWLock; // need an upgradable lock for TSynBloomFilterDiff
   public
     /// initialize the internal bits storage for a given number of items
     // - by default, internal bits array size will be guess from a 1 % false
@@ -561,21 +561,24 @@ type
     procedure Reset; virtual;
     /// returns TRUE if the supplied items was probably set via Insert()
     // - some false positive may occur, but not much than FalsePositivePercent
-    // - this method is thread-safe
+    // - this method is thread-safe, and allow concurrent calls (via a TRWLock)
     function MayExist(const aValue: RawByteString): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// returns TRUE if the supplied items was probably set via Insert()
     // - some false positive may occur, but not much than FalsePositivePercent
-    // - this method is thread-safe
+    // - this method is thread-safe, and allow concurrent calls (via a TRWLock)
     function MayExist(aValue: pointer; aValueLen: integer): boolean; overload;
     /// store the internal bits array into a binary buffer
     // - may be used to transmit or store the state of a dataset, avoiding
     // to recompute all Insert() at program startup, or to synchronize
     // networks nodes information and reduce the number of remote requests
+    // - this method is thread-safe, and won't block MayExist (via a TRWLock)
     function SaveTo(aMagic: cardinal = $B1003F11): RawByteString; overload;
     /// store the internal bits array into a binary buffer
     // - may be used to transmit or store the state of a dataset, avoiding
     // to recompute all Insert() at program startup, or to synchronize
     // networks nodes information and reduce the number of remote requests
+    // - this method is thread-safe, and won't block MayExist (via a TRWLock)
     procedure SaveTo(aDest: TBufferWriter;
       aMagic: cardinal = $B1003F11); overload;
     /// read the internal bits array from a binary buffer
@@ -603,7 +606,7 @@ type
       read fHashFunctions;
     /// how many times the Insert() method has been called
     property Inserted: cardinal
-      read GetInserted;
+      read fInserted;
   end;
 
   /// implements a thread-safe differential Bloom Filter storage
@@ -1299,22 +1302,23 @@ type
   // - is able to retrieve accurate information from the Windows registry,
   // or from a binary compressed file on other platforms (which should have been
   // saved from a Windows system first)
+  // - for Linux/POSIX our mORMot 2 repository supplies a ready-to-use
+  // ! {$R mormot.tz.res}
   // - each time zone will be idendified by its TzId string, as defined by
   // Microsoft for its Windows Operating system
+  // - note that each instance is thread-safe
   TSynTimeZone = class
   protected
+    fSafe: TRWLightLock;
     fZone: TTimeZoneDataDynArray;
+    fZoneCount: integer;
     fZones: TDynArrayHashed;
     fLastZone: TTimeZoneID;
     fLastIndex: integer;
     fIds: TStringList;
     fDisplays: TStringList;
+    function LockedFindZoneIndex(const TzId: TTimeZoneID): PtrInt;
   public
-    /// will retrieve the default shared TSynTimeZone instance
-    // - locally created via the CreateDefault constructor
-    // - this is the usual entry point for time zone process, calling e.g.
-    // $ aLocalTime := TSynTimeZone.Default.NowToLocal(aTimeZoneID);
-    class function Default: TSynTimeZone;
     /// initialize the internal storage
     // - but no data is available, until Load* methods are called
     constructor Create;
@@ -1322,10 +1326,14 @@ type
     // - under Linux, the file should be located with the executable, renamed
     // with a .tz extension - may have been created via SaveToFile(''), or
     // from a 'TSynTimeZone' bound resource
-    // "dummy" parameter exists only to disambiguate constructors for C++
-    constructor CreateDefault(dummy: integer = 0);
+    // - "dummycpp" parameter exists only to disambiguate constructors for C++
+    constructor CreateDefault(dummycpp: integer = 0);
     /// finalize the instance
     destructor Destroy; override;
+    /// will retrieve the default shared TSynTimeZone instance
+    // - locally created via the CreateDefault constructor
+    // - see also the NowToLocal/LocalToUtc/UtcToLocal global functions
+    class function Default: TSynTimeZone;
     {$ifdef OSWINDOWS}
     /// read time zone information from the Windows registry
     procedure LoadFromRegistry;
@@ -1344,6 +1352,8 @@ type
     // then compile the resource as expected, with a brcc32 .rc entry:
     // ! TSynTimeZone 10 "TSynTimeZone.data"
     // - you can specify a library (dll) resource instance handle, if needed
+    // - for Linux/POSIX our mORMot 2 repository supplies a ready-to-use
+    // ! {$R mormot.tz.res}
     procedure LoadFromResource(Instance: THandle = 0);
     /// write then time zone information into a compressed file
     // - if no file name is supplied, a ExecutableName.tz file would be created
@@ -1352,7 +1362,7 @@ type
     function SaveToBuffer: RawByteString;
     /// retrieve the time bias (in minutes) for a given date/time on a TzId
     function GetBiasForDateTime(const Value: TDateTime; const TzId: TTimeZoneID;
-      out Bias: integer; out HaveDaylight: boolean): boolean;
+      out Bias: integer; out HaveDaylight: boolean; ValueIsUtc: boolean = false): boolean;
     /// retrieve the display text corresponding to a TzId
     // - returns '' if the supplied TzId is not recognized
     function GetDisplay(const TzId: TTimeZoneID): RawUtf8;
@@ -1381,6 +1391,33 @@ type
     function Displays: TStrings;
   end;
 
+/// retrieve the time bias (in minutes) for a given date/time on a TzId
+// - will use a global shared thread-safe TSynTimeZone instance for the request
+function GetBiasForDateTime(const Value: TDateTime; const TzId: TTimeZoneID;
+  out Bias: integer; out HaveDaylight: boolean; ValueIsUtc: boolean = false): boolean;
+
+/// retrieve the display text corresponding to a TzId
+// - returns '' if the supplied TzId is not recognized
+// - will use a global shared thread-safe TSynTimeZone instance for the request
+function GetDisplay(const TzId: TTimeZoneID): RawUtf8;
+
+/// compute the UTC date/time corrected for a given TzId
+// - will use a global shared thread-safe TSynTimeZone instance for the request
+function UtcToLocal(const UtcDateTime: TDateTime; const TzId: TTimeZoneID): TDateTime;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// compute the current date/time corrected for a given TzId
+// - will use a global shared thread-safe TSynTimeZone instance for the request
+function NowToLocal(const TzId: TTimeZoneID): TDateTime;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// compute the UTC date/time for a given local TzId value
+// - by definition, a local time may correspond to two UTC times, during the
+// time biais period, so the returned value is informative only, and any
+// stored value should be following UTC
+// - will use a global shared thread-safe TSynTimeZone instance for the request
+function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 implementation
@@ -1406,7 +1443,7 @@ begin
   Timestamp := SearchRecToDateTime(F);
 end;
 
-function TFindFiles.ToText: shortstring;
+function TFindFiles.ToText: ShortString;
 begin
   FormatShort('% % %', [Name, KB(Size), DateTimeToFileShort(Timestamp)], result);
 end;
@@ -2444,7 +2481,7 @@ begin
   for i := 0 to length(Pattern) - 1 do
   begin
     c := @m^[u[p[i]]]; // for FPC code generation
-    c^ := c^ or (1 shl i);
+    c^ := c^ or cardinal(1 shl i);
   end;
 end;
 
@@ -2570,7 +2607,7 @@ begin
   else if aCaseInsensitive then
     Search := SearchContainsU
   else
-    Search := SearchContains1; // todo: use IndexByte() on FPC?
+    Search := SearchContains1; // todo: use ByteScanIndex() asm?
   Pattern := pointer(aPattern);
 end;
 
@@ -2722,7 +2759,7 @@ end;
 
 function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := true;
   for i := 0 to high(Several) do
@@ -2733,7 +2770,7 @@ end;
 
 function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
 var
-  n: integer;
+  n: PtrInt;
 begin
   result := not MatchExists(One, Several);
   if result then
@@ -3172,7 +3209,6 @@ begin
 end;
 
 
-
 { ****************** Versatile Expression Search Engine }
 
 
@@ -3486,8 +3522,6 @@ type
     function ParseWord: TExprParserResult; override;
   end;
 
-  PExprParserMatchNode = ^TExprParserMatchNode;
-
 function TExprParserMatchNode.ParseWord: TExprParserResult;
 begin
   fMatch.Prepare(fWord, (fOwner as TExprParserMatch).fCaseSensitive, {reuse=}true);
@@ -3537,6 +3571,7 @@ begin
     result := false;
     exit;
   end;
+  // reset any previous resultset
   if fMatchedLastSet > 0 then
   begin
     n := fWordCount;
@@ -3550,6 +3585,7 @@ begin
   while (P < PEnd) and
         (fMatchedLastSet < fWordCount) do
   begin
+    // recognize next word boudaries
     tab := @ROUGH_UTF8;
     while tab[P^] = 0 do
     begin
@@ -3564,6 +3600,7 @@ begin
       inc(P);
     until (P = PEnd) or
           (tab[P^] = 0);
+    // apply the expression nodes to this word
     aTextLen := P - aText; // now aText/aTextLen point to a word
     n := fWordCount;
     repeat
@@ -3594,7 +3631,6 @@ constructor TSynBloomFilter.Create(aSize: integer; aFalsePositivePercent: double
 const
   LN2 = 0.69314718056;
 begin
-  inherited Create;
   if aSize < 0 then
     fSize := 1000
   else
@@ -3617,7 +3653,6 @@ end;
 
 constructor TSynBloomFilter.Create(const aSaved: RawByteString; aMagic: cardinal);
 begin
-  inherited Create;
   if not LoadFrom(aSaved, aMagic) then
     raise ESynException.CreateUtf8('%.Create with invalid aSaved content', [self]);
 end;
@@ -3641,7 +3676,7 @@ begin
     h2 := 0
   else
     h2 := crc32c(h1, aValue, aValueLen);
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     for h := 0 to fHashFunctions - 1 do
     begin
@@ -3650,17 +3685,7 @@ begin
     end;
     inc(fInserted);
   finally
-    Safe.UnLock;
-  end;
-end;
-
-function TSynBloomFilter.GetInserted: cardinal;
-begin
-  Safe.Lock;
-  try
-    result := fInserted; // Delphi 5 does not support LockedInt64[]
-  finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -3684,7 +3709,7 @@ begin
     h2 := 0
   else
     h2 := crc32c(h1, aValue, aValueLen);
-  Safe.Lock;
+  fSafe.ReadOnlyLock; // allow concurrent reads
   try
     for h := 0 to fHashFunctions - 1 do
       if GetBitPtr(pointer(fStore), h1 mod fBits) then
@@ -3692,21 +3717,21 @@ begin
       else
         exit;
   finally
-    Safe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
   result := true;
 end;
 
 procedure TSynBloomFilter.Reset;
 begin
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     if fStore = '' then
       SetLength(fStore, (fBits shr 3) + 1);
     FillcharFast(pointer(fStore)^, length(fStore), 0);
     fInserted := 0;
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -3734,7 +3759,7 @@ procedure TSynBloomFilter.SaveTo(aDest: TBufferWriter; aMagic: cardinal);
 begin
   aDest.Write4(aMagic);
   aDest.Write1(BLOOM_VERSION);
-  Safe.Lock;
+  fSafe.ReadOnlyLock;
   try
     aDest.Write8(@fFalsePositivePercent);
     aDest.Write4(fSize);
@@ -3743,7 +3768,7 @@ begin
     aDest.Write4(fInserted);
     ZeroCompress(pointer(fStore), Length(fStore), aDest);
   finally
-    Safe.UnLock;
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
@@ -3768,7 +3793,7 @@ begin
   inc(P);
   if version > BLOOM_VERSION then
     exit;
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     fFalsePositivePercent := unaligned(PDouble(P)^);
     inc(P, 8);
@@ -3791,7 +3816,7 @@ begin
     ZeroDecompress(P, PLen - (PAnsiChar(P) - PAnsiChar(start)), fStore);
     result := length(fStore) = integer(fBits shr 3) + 1;
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -3810,19 +3835,19 @@ type
 
 procedure TSynBloomFilterDiff.Insert(aValue: pointer; aValueLen: integer);
 begin
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     inherited Insert(aValue, aValueLen);
     inc(fRevision);
     inc(fSnapshotInsertCount);
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
 procedure TSynBloomFilterDiff.Reset;
 begin
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     inherited Reset;
     fSnapshotAfterInsertCount := fSize shr 5;
@@ -3833,13 +3858,13 @@ begin
     fKnownRevision := 0;
     fKnownStore := '';
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
 procedure TSynBloomFilterDiff.DiffSnapshot;
 begin
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     fKnownRevision := fRevision;
     fSnapshotInsertCount := 0;
@@ -3849,7 +3874,7 @@ begin
     else
       fSnapshotTimestamp := GetTickCount64 + fSnapShotAfterMinutes * 60000;
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -3859,7 +3884,7 @@ var
   W: TBufferWriter;
   temp: array[word] of byte;
 begin
-  Safe.Lock;
+  fSafe.ReadWriteLock; // DiffSnapshot makes a WriteLock
   try
     if aKnownRevision = fRevision then
       head.kind := bdUpToDate
@@ -3904,7 +3929,7 @@ begin
       W.Free;
     end;
   finally
-    Safe.UnLock;
+    fSafe.ReadWriteUnLock;
   end;
 end;
 
@@ -3939,7 +3964,7 @@ begin
     exit;
   inc(P, SizeOf(head^));
   dec(PLen, SizeOf(head^));
-  Safe.Lock;
+  fSafe.WriteLock;
   try
     case head.kind of
       bdFull:
@@ -3956,9 +3981,10 @@ begin
       fInserted := head.inserted;
     end;
   finally
-    Safe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
+
 
 procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TBufferWriter);
 var
@@ -4201,11 +4227,11 @@ function crc32c32sse42(buf: pointer): cardinal;
 asm
         mov     edx, eax
         xor     eax, eax
-        {$ifdef ISDELPHI2010}
+        {$ifdef FPC}
         crc32   eax, dword ptr [edx]
         {$else}
         db $F2, $0F, $38, $F1, $02
-        {$endif ISDELPHI2010}
+        {$endif FPC}
 end;
 {$else}
 function crc32c32sse42(buf: pointer): cardinal;
@@ -4914,12 +4940,22 @@ const
   atom_chars: TSynAnsicharSet = [#33..#255] -
     ['(', ')', '<', '>', '@', ',', ';', ':', '\', '/', '"', '.', '[', ']', #127];
   // Valid characters in a "quoted-string"
-  quoted_string_chars: TSynAnsicharSet = [#0..#255] - ['"', #13, '\'];
+  quoted_string_chars: TSynAnsicharSet =
+    [#0..#255] - ['"', #13, '\'];
   // Valid characters in a subdomain
-  letters_digits: TSynAnsicharSet = ['0'..'9', 'A'..'Z', 'a'..'z'];
+  letters_digits: TSynAnsicharSet =
+    ['0'..'9', 'A'..'Z', 'a'..'z'];
 type
-  States = (STATE_BEGIN, STATE_ATOM, STATE_QTEXT, STATE_QCHAR, STATE_QUOTE,
-    STATE_LOCAL_PERIOD, STATE_EXPECTING_SUBDOMAIN, STATE_SUBDOMAIN, STATE_HYPHEN);
+  States = (
+    STATE_BEGIN,
+    STATE_ATOM,
+    STATE_QTEXT,
+    STATE_QCHAR,
+    STATE_QUOTE,
+    STATE_LOCAL_PERIOD,
+    STATE_EXPECTING_SUBDOMAIN,
+    STATE_SUBDOMAIN,
+    STATE_HYPHEN);
 var
   State: States;
   subdomains: integer;
@@ -5101,9 +5137,12 @@ var
   tmp: TSynTempBuffer;
 begin
   tmp.Init(value);
-  JsonDecode(tmp.buf, ['MaxLength', 'Utf8Length'], @V);
-  fMaxLength := GetCardinalDef(V[0].value, 0);
-  fUtf8Length := V[1].Idem('1') or V[1].Idem('true');
+  JsonDecode(tmp.buf, [
+    'MaxLength', // 0
+    'Utf8Length' // 1
+    ], @V);
+  fMaxLength := V[0].ToCardinal(0);
+  fUtf8Length := V[1].ToBoolean;
   tmp.Done;
 end;
 
@@ -5179,11 +5218,16 @@ var
 begin
   inherited;
   tmp.Init(value);
-  JsonDecode(tmp.buf, ['AllowedTLD', 'ForbiddenTLD', 'ForbiddenDomains', 'AnyTLD'], @V);
-  LowerCaseCopy(V[0].value, V[0].ValueLen, fAllowedTLD);
-  LowerCaseCopy(V[1].value, V[1].ValueLen, fForbiddenTLD);
-  LowerCaseCopy(V[2].value, V[2].ValueLen, fForbiddenDomains);
-  AnyTLD := V[3].Idem('1') or V[3].Idem('true');
+  JsonDecode(tmp.buf, [
+    'AllowedTLD',        // 0
+    'ForbiddenTLD',      // 1
+    'ForbiddenDomains',  // 2
+    'AnyTLD'             // 3
+    ], @V);
+  LowerCaseCopy(V[0].Text, V[0].Len, fAllowedTLD);
+  LowerCaseCopy(V[1].Text, V[1].Len, fForbiddenTLD);
+  LowerCaseCopy(V[2].Text, V[2].Len, fForbiddenDomains);
+  AnyTLD := V[3].ToBoolean;
   tmp.Done;
 end;
 
@@ -5339,13 +5383,27 @@ end;
 
 procedure TSynValidateText.SetParameters(const value: RawUtf8);
 var
-  V: array[0..high(TSynValidateTextProps) + 1] of TValuePUtf8Char;
-  i: integer;
+  V: array[0..high(TSynValidateTextProps) + {Utf8Length} 1] of TValuePUtf8Char;
+  i: PtrInt;
   tmp: TSynTempBuffer;
 const
   DEFAULT: TSynValidateTextProps = (
-    1, maxInt, 0, 0, 0, 0, 0, 0, maxInt, maxInt, maxInt, maxInt, maxInt,
-    maxInt, maxInt, maxInt);
+    1,       //  MinLength
+    maxInt,  //  MaxLength
+    0,       //  MinAlphaCount
+    0,       //  MinDigitCount
+    0,       //  MinPunctCount
+    0,       //  MinLowerCount
+    0,       //  MinUpperCount
+    0,       //  MinSpaceCount
+    maxInt,  //  MaxLeftTrimCount
+    maxInt,  //  MaxRightTrimCount
+    maxInt,  //  MaxAlphaCount
+    maxInt,  //  MaxDigitCount
+    maxInt,  //  MaxPunctCount
+    maxInt,  //  MaxLowerCount
+    maxInt,  //  MaxUpperCount
+    maxInt); //  MaxSpaceCount
 begin
   if (MinLength = 0) and
      (MaxLength = 0) then  // if not previously set
@@ -5355,15 +5413,28 @@ begin
     exit;
   tmp.Init(value);
   try
-    JsonDecode(tmp.buf, ['MinLength', 'MaxLength', 'MinAlphaCount',
-      'MinDigitCount', 'MinPunctCount', 'MinLowerCount', 'MinUpperCount',
-      'MinSpaceCount', 'MaxLeftTrimCount', 'MaxRightTrimCount', 'MaxAlphaCount',
-      'MaxDigitCount', 'MaxPunctCount', 'MaxLowerCount', 'MaxUpperCount',
-      'MaxSpaceCount', 'Utf8Length'], @V);
+    JsonDecode(tmp.buf, [
+      'MinLength',
+      'MaxLength',
+      'MinAlphaCount',
+      'MinDigitCount',
+      'MinPunctCount',
+      'MinLowerCount',
+      'MinUpperCount',
+      'MinSpaceCount',
+      'MaxLeftTrimCount',
+      'MaxRightTrimCount',
+      'MaxAlphaCount',
+      'MaxDigitCount',
+      'MaxPunctCount',
+      'MaxLowerCount',
+      'MaxUpperCount',
+      'MaxSpaceCount',
+      'Utf8Length'], @V);
     for i := 0 to high(fProps) do
-      fProps[i] := GetCardinalDef(V[i].value, fProps[i]);
+      fProps[i] := V[i].ToCardinal(fProps[i]);
     with V[high(V)] do
-      fUtf8Length := Idem('1') or Idem('true');
+      fUtf8Length := ToBoolean;
   finally
     tmp.Done;
   end;
@@ -5375,11 +5446,26 @@ end;
 procedure TSynValidatePassWord.SetParameters(const value: RawUtf8);
 const
   DEFAULT: TSynValidateTextProps = (
-    5, 20, 1, 1, 1, 1, 1, 0, maxInt, maxInt, maxInt, maxInt,
-    maxInt, maxInt, maxInt, 0);
+    5,        //  MinLength
+    20,       //  MaxLength
+    1,        //  MinAlphaCount
+    1,        //  MinDigitCount
+    1,        //  MinPunctCount
+    1,        //  MinLowerCount
+    1,        //  MinUpperCount
+    0,        //  MinSpaceCount
+    maxInt,   //  MaxLeftTrimCount
+    maxInt,   //  MaxRightTrimCount
+    maxInt,   //  MaxAlphaCount
+    maxInt,   //  MaxDigitCount
+    maxInt,   //  MaxPunctCount
+    maxInt,   //  MaxLowerCount
+    maxInt,   //  MaxUpperCount
+    0);       //  MaxSpaceCount
 begin
   // set default values for validating a strong password
   fProps := DEFAULT;
+  fUtf8Length := false;
   // read custom parameters
   inherited;
 end;
@@ -5421,17 +5507,18 @@ end;
 
 constructor TSynTimeZone.Create;
 begin
-  fZones.InitSpecific(TypeInfo(TTimeZoneDataDynArray), fZone, ptRawUtf8);
+  fZones.InitSpecific(TypeInfo(TTimeZoneDataDynArray),
+    fZone, ptRawUtf8, @fZoneCount);
 end;
 
-constructor TSynTimeZone.CreateDefault;
+constructor TSynTimeZone.CreateDefault(dummycpp: integer);
 begin
   Create;
   {$ifdef OSWINDOWS}
   LoadFromRegistry;
   {$else}
   LoadFromFile;
-  if fZones.Count = 0 then
+  if fZoneCount = 0 then
     LoadFromResource; // if no .tz file is available, try if bound to executable
   {$endif OSWINDOWS}
 end;
@@ -5453,7 +5540,8 @@ begin
     GlobalLock;
     try
       if SharedSynTimeZone = nil then
-        SharedSynTimeZone := TSynTimeZone.CreateDefault;
+        SharedSynTimeZone :=
+          RegisterGlobalShutdownRelease(TSynTimeZone.CreateDefault);
     finally
       GlobalUnLock;
     end;
@@ -5463,7 +5551,12 @@ end;
 
 function TSynTimeZone.SaveToBuffer: RawByteString;
 begin
-  result := AlgoSynLZ.Compress(fZones.SaveTo);
+  fSafe.ReadLock;
+  try
+    result := AlgoSynLZ.Compress(fZones.SaveTo);
+  finally
+    fSafe.ReadUnLock;
+  end;
 end;
 
 procedure TSynTimeZone.SaveToFile(const FileName: TFileName);
@@ -5479,10 +5572,17 @@ end;
 
 procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
 begin
-  fZones.LoadFromBinary(AlgoSynLZ.Decompress(Buffer));
-  fZones.ReHash;
-  FreeAndNil(fIds);
-  FreeAndNil(fDisplays);
+  if Buffer = '' then
+   exit;
+  fSafe.WriteLock;
+  try
+    fZones.LoadFromBinary(AlgoSynLZ.Decompress(Buffer));
+    fZones.ForceReHash;
+    FreeAndNil(fIds);
+    FreeAndNil(fDisplays);
+  finally
+    fSafe.WriteUnLock;
+  end;
 end;
 
 procedure TSynTimeZone.LoadFromFile(const FileName: TFileName);
@@ -5516,61 +5616,81 @@ var
   i, first, last, year, n: integer;
   item: TTimeZoneData;
 begin
-  fZones.Clear;
-  if reg.ReadOpen(wrLocalMachine, REGKEY) then
-    keys := reg.ReadEnumEntries
-  else
-    keys := nil; // make Delphi 6 happy
-  n := length(keys);
-  fZones.Capacity := n;
-  for i := 0 to n - 1 do
-  begin
-    Finalize(item);
-    FillcharFast(item.tzi, SizeOf(item.tzi), 0);
-    if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i], {reopen=}true) then
+  fSafe.WriteLock;
+  try
+    fZones.Clear;
+    if reg.ReadOpen(wrLocalMachine, REGKEY) then
+      keys := reg.ReadEnumEntries
+    else
+      keys := nil; // make Delphi 6 happy
+    n := length(keys);
+    fZones.Capacity := n;
+    for i := 0 to n - 1 do
     begin
-      item.id := keys[i];
-      item.Display := reg.ReadString('Display');
-      reg.ReadBuffer('TZI', @item.tzi, SizeOf(item.tzi));
-      if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i] + '\Dynamic DST', true) then
+      Finalize(item);
+      FillcharFast(item.tzi, SizeOf(item.tzi), 0);
+      if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i], {reopen=}true) then
       begin
-        // warning: never defined on XP/2003, and not for all entries
-        first := reg.ReadDword('FirstEntry');
-        last := reg.ReadDword('LastEntry');
-        if (first > 0) and
-           (last >= first) then
+        item.id := keys[i]; // registry keys are genuine by definition
+        item.display := reg.ReadString('Display');
+        reg.ReadBuffer('TZI', @item.tzi, SizeOf(item.tzi));
+        if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i] + '\Dynamic DST', true) then
         begin
-          n := 0;
-          SetLength(item.dyn, last - first + 1);
-          for year := first to last do
-            if reg.ReadBuffer(Utf8ToSynUnicode(UInt32ToUtf8(year)),
-              @item.dyn[n].tzi, SizeOf(TTimeZoneInfo)) then
-            begin
-              item.dyn[n].year := year;
-              inc(n);
-            end;
-          SetLength(item.dyn, n);
+          // warning: never defined on XP/2003, and not for all entries
+          first := reg.ReadDword('FirstEntry');
+          last := reg.ReadDword('LastEntry');
+          if (first > 0) and
+             (last >= first) then
+          begin
+            n := 0;
+            SetLength(item.dyn, last - first + 1);
+            for year := first to last do
+              if reg.ReadBuffer(Utf8ToSynUnicode(UInt32ToUtf8(year)),
+                @item.dyn[n].tzi, SizeOf(TTimeZoneInfo)) then
+              begin
+                item.dyn[n].year := year;
+                inc(n);
+              end;
+            SetLength(item.dyn, n);
+          end;
         end;
+        fZones.Add(item);
       end;
-      fZones.Add(item);
     end;
+    reg.Close;
+    fZones.ForceReHash;
+    FreeAndNil(fIds);
+    FreeAndNil(fDisplays);
+  finally
+    fSafe.WriteUnLock;
   end;
-  reg.Close;
-  fZones.ReHash;
-  FreeAndNil(fIds);
-  FreeAndNil(fDisplays);
 end;
 
 {$endif OSWINDOWS}
 
+function TSynTimeZone.LockedFindZoneIndex(const TzId: TTimeZoneID): PtrInt;
+begin
+  if TzId = '' then
+    result := -1
+  else
+  begin
+    if TzId = fLastZone then
+      result := fLastIndex
+    else
+    begin
+      result := fZones.FindHashed(TzId);
+      fLastZone := TzId;
+      flastIndex := result;
+    end;
+  end;
+end;
+
 function TSynTimeZone.GetDisplay(const TzId: TTimeZoneID): RawUtf8;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
-  if self = nil then
-    ndx := -1
-  else
-    ndx := fZones.FindHashed(TzId);
+  fSafe.ReadLock;
+  ndx := LockedFindZoneIndex(TzId);
   if ndx < 0 then
     if TzId = 'UTC' then // e.g. on XP
       result := TzId
@@ -5578,59 +5698,63 @@ begin
       result := ''
   else
     result := fZone[ndx].display;
+  fSafe.ReadUnLock;
 end;
 
 function TSynTimeZone.GetBiasForDateTime(const Value: TDateTime;
-  const TzId: TTimeZoneID; out Bias: integer; out HaveDaylight: boolean): boolean;
+  const TzId: TTimeZoneID; out Bias: integer; out HaveDaylight: boolean;
+  ValueIsUtc: boolean): boolean;
 var
-  ndx: integer;
+  ndx: PtrInt;
   d: TSynSystemTime;
   tzi: PTimeZoneInfo;
   std, dlt: TDateTime;
 begin
-  if (self = nil) or
-     (TzId = '') then
-    ndx := -1
-  else if TzId = fLastZone then
-    ndx := fLastIndex
-  else
-  begin
-    ndx := fZones.FindHashed(TzId);
-    fLastZone := TzId;
-    flastIndex := ndx;
-  end;
-  if ndx < 0 then
-  begin
-    Bias := 0;
-    HaveDaylight := false;
-    result := TzId = 'UTC'; // e.g. on XP
-    exit;
-  end;
-  d.FromDate(Value); // faster than DecodeDate
-  tzi := fZone[ndx].GetTziFor(d.Year);
-  if tzi.change_time_std.IsZero then
-  begin
-    HaveDaylight := false;
-    Bias := tzi.Bias + tzi.bias_std;
-  end
-  else
-  begin
-    HaveDaylight := true;
-    std := tzi.change_time_std.EncodeForTimeChange(d.Year);
-    dlt := tzi.change_time_dlt.EncodeForTimeChange(d.Year);
-    if std < dlt then
-      if (std <= Value) and
-         (Value < dlt) then
-        Bias := tzi.Bias + tzi.bias_std
-      else
-        Bias := tzi.Bias + tzi.bias_dlt
-    else if (dlt <= Value) and
-            (Value < std) then
-      Bias := tzi.Bias + tzi.bias_dlt
-    else
+  fSafe.ReadLock;
+  try
+    ndx := LockedFindZoneIndex(TzId);
+    if ndx < 0 then
+    begin
+      Bias := 0;
+      HaveDaylight := false;
+      result := TzId = 'UTC'; // e.g. on XP
+      exit;
+    end;
+    d.FromDate(Value); // faster than DecodeDate
+    tzi := fZone[ndx].GetTziFor(d.Year);
+    if tzi.change_time_std.IsZero then
+    begin
+      HaveDaylight := false;
       Bias := tzi.Bias + tzi.bias_std;
+    end
+    else
+    begin
+      HaveDaylight := true;
+      std := tzi.change_time_std.EncodeForTimeChange(d.Year);
+      dlt := tzi.change_time_dlt.EncodeForTimeChange(d.Year);
+      if ValueIsUtc then
+      begin
+        // STD shifts by the DLT bias to convert to UTC
+        std := ((std * MinsPerDay) + tzi.Bias + tzi.bias_dlt) / MinsPerDay;
+        // DLT shifts by the STD bias
+        dlt := ((dlt * MinsPerDay) + tzi.Bias + tzi.bias_std) / MinsPerDay;
+      end;
+      if std < dlt then
+        if (std <= Value) and
+           (Value < dlt) then
+          Bias := tzi.Bias + tzi.bias_std
+        else
+          Bias := tzi.Bias + tzi.bias_dlt
+      else if (dlt <= Value) and
+              (Value < std) then
+        Bias := tzi.Bias + tzi.bias_dlt
+      else
+        Bias := tzi.Bias + tzi.bias_std;
+    end;
+    result := true;
+  finally
+    fSafe.ReadUnLock;
   end;
-  result := true;
 end;
 
 function TSynTimeZone.UtcToLocal(const UtcDateTime: TDateTime;
@@ -5644,7 +5768,7 @@ begin
     result := UtcDateTime
   else
   begin
-    GetBiasForDateTime(UtcDateTime, TzId, Bias, HaveDaylight);
+    GetBiasForDateTime(UtcDateTime, TzId, Bias, HaveDaylight, {fromutc=}true);
     result := ((UtcDateTime * MinsPerDay) - Bias) / MinsPerDay;
   end;
 end;
@@ -5677,8 +5801,10 @@ begin
   if fIDs = nil then
   begin
     fIDs := TStringList.Create;
+    fSafe.ReadLock;
     for i := 0 to length(fZone) - 1 do
-      fIDs.Add(Utf8ToString(fZone[i].id));
+      fIDs.Add(Utf8ToString(RawUtf8(fZone[i].id)));
+    fSafe.ReadUnLock;
   end;
   result := fIDs;
 end;
@@ -5690,10 +5816,40 @@ begin
   if fDisplays = nil then
   begin
     fDisplays := TStringList.Create;
+    fSafe.ReadLock;
     for i := 0 to length(fZone) - 1 do
-      fDisplays.Add(Utf8ToString(fZone[i].Display));
+      fDisplays.Add(Utf8ToString(fZone[i].display));
+    fSafe.ReadUnLock;
   end;
   result := fDisplays;
+end;
+
+
+function GetBiasForDateTime(const Value: TDateTime; const TzId: TTimeZoneID;
+  out Bias: integer; out HaveDaylight: boolean; ValueIsUtc: boolean): boolean;
+begin
+  result := TSynTimeZone.Default.
+    GetBiasForDateTime(Value, TzId, Bias, HaveDaylight, ValueIsUtc);
+end;
+
+function GetDisplay(const TzId: TTimeZoneID): RawUtf8;
+begin
+  result := TSynTimeZone.Default.GetDisplay(TzId);
+end;
+
+function UtcToLocal(const UtcDateTime: TDateTime; const TzId: TTimeZoneID): TDateTime;
+begin
+  result := TSynTimeZone.Default.UtcToLocal(UtcDateTime, TzId);
+end;
+
+function NowToLocal(const TzId: TTimeZoneID): TDateTime;
+begin
+  result := TSynTimeZone.Default.NowToLocal(TzId);
+end;
+
+function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
+begin
+  result := TSynTimeZone.Default.LocalToUtc(LocalDateTime, TzId);
 end;
 
 

@@ -95,8 +95,8 @@ type
     // !   TSqlDBUniDACConnectionProperties.URI(dMySQL,'192.168.2.60:3306'),
     // !   'world', 'root', 'dev');
     class function URI(aServer: TSqlDBDefinition; const aServerName: RawUtf8;
-      const aLibraryLocation: TFileName='';
-      aLibraryLocationAppendExePath: boolean=true): RawUtf8;
+      const aLibraryLocation: TFileName = '';
+      aLibraryLocationAppendExePath: boolean = true): RawUtf8;
 
     /// retrieve the column/field layout of a specified table
     // - this overridden method will use UniDAC metadata to retrieve the information
@@ -192,7 +192,7 @@ begin
   for p := Low(UNIDAC_PROVIDER) to high(UNIDAC_PROVIDER) do
     if SameTextU(UNIDAC_PROVIDER[p], provider) then
     begin
-      fDBMS := p;
+      fDbms := p;
       break;
     end;
   inherited Create(provider, aDatabaseName, aUserID, aPassWord);
@@ -204,26 +204,28 @@ begin
     if namevalue <> '' then
       fSpecificOptions.Add(Utf8ToString(namevalue));
   end;
-  case fDBMS of
+  case fDbms of
     dSQLite:
       begin
         // UniDAC support of SQLite3 is just buggy
-        {$ifndef FPC}
+        {$ifdef FPC}
+        fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings do like UTF8
+        {$else}
         {$ifndef UNICODE}
         fForceUseWideString := true; // for non-unicode Delphi
         {$endif UNICODE}
-        fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings have UTF8 encoding alays
         {$endif FPC}
         fSpecificOptions.Values['ForceCreateDatabase'] := 'true';
         fSQLCreateField[ftInt64] := ' BIGINT'; // SQLite3 INTEGER = 32bit for UniDAC
       end;
     dFirebird:
       begin
-        {$ifndef FPC}
+        {$ifdef FPC}
+        fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings do like UTF8
+        {$else}
         {$ifndef UNICODE}
         fForceUseWideString := true;
         {$endif UNICODE}
-        fSpecificOptions.Values['UseUnicode'] := 'true';
         {$endif FPC}
         fSpecificOptions.Values['CharSet'] := 'UTF8';
         fSpecificOptions.Values['CharLength'] := '2';
@@ -232,22 +234,24 @@ begin
       end;
     dOracle:
       begin
-        {$ifndef FPC}
+        {$ifdef FPC}
+        fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings do like UTF8
+        {$else}
         {$ifndef UNICODE}
         fForceUseWideString := true; // for non-unicode Delphi
         {$endif UNICODE}
-        fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings have UTF8 encoding alays
         {$endif FPC}
         fSpecificOptions.Values['Direct'] := 'true';
         fSpecificOptions.Values['HOMENAME'] := '';
       end;
     dMySQL:
       begin
-        {$ifndef FPC}
+        {$ifdef FPC}
+        fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings do like UTF8
+        {$else}
         {$ifndef UNICODE}
         fForceUseWideString := true;
         {$endif UNICODE}
-        fSpecificOptions.Values['UseUnicode'] := 'true';
         {$endif FPC}
         // s.d. 30.11.19 Damit der Connect schneller geht ! CRVioTCP.pas WaitForConnect
         fSpecificOptions.Values['MySQL.ConnectionTimeout'] := '0';
@@ -268,11 +272,12 @@ begin
       end;
     dPostgreSQL:
       begin  // thanks delphinium for the trick!
-        {$ifndef FPC}
+        {$ifdef FPC}
+        fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings do like UTF8
+        {$else}
         {$ifndef UNICODE}
         fForceUseWideString := true;
         {$endif UNICODE}
-        fSpecificOptions.Values['UseUnicode'] := 'true';
         {$endif FPC}
         fSpecificOptions.Values['CharSet'] := 'UTF8';
       end;
@@ -299,7 +304,7 @@ begin
   try
     FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
     FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
-    FillCharFast(F, sizeof(F), 0);
+    FillCharFast(F, SizeOf(F), 0);
     meta.MetaDataKind := 'Columns';
     Split(aTableName, '.', Owner, Table);
     if Table = '' then
@@ -307,7 +312,8 @@ begin
       Table := Owner;
       Owner := '';
     end;
-    if Owner = '' then
+    if (Owner = '') and
+       (fDbms <> dOracle) then
       Owner := MainConnection.Properties.DatabaseName; // itSDS
     if Owner <> '' then
       meta.Restrictions.Values['TABLE_SCHEMA'] := Utf8ToString(UpperCase(Owner))
@@ -356,7 +362,7 @@ var
 begin
   Indexes := nil;
   FA.Init(TypeInfo(TSqlDBIndexDefineDynArray), Indexes, @n);
-  FillCharFast(F, sizeof(F), 0);
+  FillCharFast(F, SizeOf(F), 0);
   meta := (MainConnection as TSqlDBUniDACConnection).fDatabase.CreateMetaData;
   indexs := (MainConnection as TSqlDBUniDACConnection).fDatabase.CreateMetaData;
   try
@@ -369,7 +375,7 @@ begin
       Owner := '';
     end;
     if (Owner = '') and 
-       (fDBMS <> dOracle) then
+       (fDbms <> dOracle) then
       Owner := MainConnection.Properties.DatabaseName; // itSDS
     if Owner <> '' then
       meta.Restrictions.Values['TABLE_SCHEMA'] := UTF8ToString(UpperCase(Owner))
@@ -439,6 +445,7 @@ end;
 function TSqlDBUniDACConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBUniDACConnection.Create(self);
+  TSqlDBUniDACConnection(result).InternalProcess(speCreated);
 end;
 
 class function TSqlDBUniDACConnectionProperties.URI(aServer: TSqlDBDefinition;
@@ -493,13 +500,13 @@ var
   PortNumber, i: integer;
 begin
   inherited Create(aProperties);
-  if (aProperties.DBMS = dMSSQL) and
+  if (aProperties.Dbms = dMSSQL) and
      not SameText(cMSSQLProvider, 'prDirect') then
     CoInit;
   fDatabase := TUniConnection.Create(nil);
   fDatabase.LoginPrompt := false;
   fDatabase.ProviderName := Utf8ToString(fProperties.ServerName);
-  case aProperties.DBMS of
+  case aProperties.Dbms of
     dSQLite, dFirebird, dPostgreSQL, dMySQL, dDB2, dMSSQL:
       fDatabase.Database := Utf8ToString(fProperties.DatabaseName);
   else
@@ -507,10 +514,10 @@ begin
   end;
   fDatabase.Username := Utf8ToString(fProperties.UserID);
   fDatabase.Password := Utf8ToString(fProperties.PassWord);
-  if aProperties.DBMS = dMySQL then
+  if aProperties.Dbms = dMySQL then
     // s.d. 30.11.19 Damit der Connect schneller geht
     fDatabase.SpecificOptions.Add('MySQL.ConnectionTimeout=0');
-  if aProperties.DBMS = dMSSQL then
+  if aProperties.Dbms = dMSSQL then
   begin
     fDatabase.SpecificOptions.Add('SQL Server.Provider=' + cMSSQLProvider);
     // s.d. 30.11.19 Damit der Connect im Direct Mode so Schnell ist wie mit prAuto/OleDB
@@ -540,7 +547,7 @@ begin
   Log := SynDBLog.Enter('Connect to ProviderName=% Database=% on Server=%',
     [fDatabase.ProviderName, fDatabase.Database, fDatabase.Server], self);
   try
-    case fProperties.DBMS of
+    case fProperties.Dbms of
       dFirebird:
         if (fDatabase.Server = '') and
            not FileExists(fDatabase.Database) then
@@ -582,7 +589,7 @@ destructor TSqlDBUniDACConnection.Destroy;
 begin
   try
     Disconnect;
-    if (fProperties.DBMS = dMSSQL) and
+    if (fProperties.Dbms = dMSSQL) and
        not SameText(cMSSQLProvider, 'prDirect') then
       CoUnInit;
   except
@@ -738,8 +745,8 @@ begin
                   P.Values[i].AsString := UTF8ToString(tmp);
                 {$endif UNICODE}
               end
-          end else
-          if aArrayIndex >= 0 then
+          end
+          else if aArrayIndex >= 0 then
             if (VArray[aArrayIndex] = 'null') or
                (fConnection.Properties.StoreVoidStringAsNull and
                 (VArray[aArrayIndex] = #39#39)) then
@@ -794,10 +801,11 @@ begin
               P.AsBlobRef.Write(0, Length(VArray[aArrayIndex]),
                 Pointer(VArray[aArrayIndex]));
             end
-          else begin
-              P.AsBlobRef.Clear;
-              P.AsBlobRef.Write(0, Length(VData), Pointer(VData));
-            end;
+          else
+          begin
+            P.AsBlobRef.Clear;
+            P.AsBlobRef.Write(0, Length(VData), Pointer(VData));
+          end;
           {$else}
             P.AsString := VArray[aArrayIndex]
           else

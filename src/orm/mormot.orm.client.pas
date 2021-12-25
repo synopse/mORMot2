@@ -38,6 +38,7 @@ uses
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
+  mormot.orm.base,
   mormot.orm.core, // for TOrm and IRestOrm
   mormot.orm.rest,
   mormot.soa.core,
@@ -111,11 +112,10 @@ type
     /// overridden method which will call ClientRetrieve()
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
     /// implements IRestOrmClient methods with an internal TRestBatch instance
-    function BatchStart(aTable: TOrmClass;
-      AutomaticTransactionPerRow: cardinal = 0;
-      Options: TRestBatchOptions = []): boolean; virtual;
+    function BatchStart(aTable: TOrmClass; AutomaticTransactionPerRow: cardinal;
+      Options: TRestBatchOptions): boolean; virtual;
     function BatchStartAny(AutomaticTransactionPerRow: cardinal;
-      Options: TRestBatchOptions = []): boolean;
+      Options: TRestBatchOptions): boolean;
     function BatchAdd(Value: TOrm; SendData: boolean; ForceID: boolean = false;
       const CustomFields: TFieldBits = []): integer;
     function BatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
@@ -403,7 +403,7 @@ end;
 
 destructor TRestOrmClient.Destroy;
 begin
-  FreeAndNil(fBatchCurrent);
+  FreeAndNilSafe(fBatchCurrent);
   inherited Destroy; // fCache.Free
 end;
 
@@ -451,16 +451,18 @@ end;
 
 function TRestOrmClient.BatchUpdate(Value: TOrm; const CustomFieldsCsv: RawUtf8;
   DoNotAutoComputeFields: boolean): integer;
+var
+  bits: TFieldBits;
 begin
   if (self = nil) or
      (Value = nil) or
      (fBatchCurrent = nil) or
      (Value.IDValue <= 0) or
-     not BeforeUpdateEvent(Value) then
+     not BeforeUpdateEvent(Value) or
+     not Value.Orm.FieldBitsFromCsv(CustomFieldsCsv, bits) then
     result := -1
   else
-    result := fBatchCurrent.Update(Value,
-      Value.Orm.FieldBitsFromCsv(CustomFieldsCsv), DoNotAutoComputeFields);
+    result := fBatchCurrent.Update(Value, bits, DoNotAutoComputeFields);
 end;
 
 function TRestOrmClient.BatchDelete(ID: TID): integer;
@@ -493,7 +495,7 @@ begin
   try
     result := BatchSend(fBatchCurrent, Results);
   finally
-    FreeAndNil(fBatchCurrent);
+    FreeAndNilSafe(fBatchCurrent);
   end
   else
     result := HTTP_BADREQUEST;
@@ -502,7 +504,7 @@ end;
 procedure TRestOrmClient.BatchAbort;
 begin
   if self <> nil then
-    FreeAndNil(fBatchCurrent);
+    FreeAndNilSafe(fBatchCurrent);
 end;
 
 function TRestOrmClient.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8;
@@ -574,7 +576,8 @@ begin
        IsZero(CustomFields) and
        fForceBlobTransfert[fModel.GetTableIndexExisting(POrmClass(Value)^)] then
       result := UpdateBlobFields(Value);
-    if result and assigned(OnRecordUpdate) then
+    if result and
+       assigned(OnRecordUpdate) then
       OnRecordUpdate(Value);
   end;
 end;
@@ -605,7 +608,7 @@ begin
       resp := TrimU(resp);
       if (resp <> '') and
          (resp[1] = '[') then // '[{....}]' -> '{...}'
-        resp := copy(resp, 2, length(resp) - 2);
+        TrimChars(resp, 1, 1);
       if original <> resp then
       begin
         // did the content really change?
@@ -719,10 +722,12 @@ end;
 function TRestOrmClientUri.EngineList(const SQL: RawUtf8; ForceAjax: boolean;
   ReturnedRowCount: PPtrInt): RawUtf8;
 begin
+  if ReturnedRowCount <> nil then
+    raise EOrmException.CreateUtf8(
+      '%.EngineList does not support ReturnedRowCount (yet)', [self]);
   if (self = nil) or
      (SQL = '') or
-     (ReturnedRowCount <> nil) or
-     // GET on 'root' URI with SQL as body (not fully standard HTTP)
+     // GET on 'root' URI with SQL as body (not standard HTTP)
      (Uri(fModel.Root, 'GET', @result, nil, @SQL) <> HTTP_SUCCESS) then
     result := '';
 end;
@@ -903,7 +908,7 @@ begin
         while (R^ <= ' ') and
               (R^ <> #0) do
           inc(R);
-        res := byte(R^) - 48;
+        res := Int64(ord(R^)) - 48;
         if res <= 9 then
         begin
           inc(R);

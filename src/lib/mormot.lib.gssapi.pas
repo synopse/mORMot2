@@ -239,14 +239,15 @@ type
   end;
 
   /// Exception raised during gssapi library process
-  EGssApi = class(Exception)
+  EGssApi = class(ExceptionWithProps)
   private
     fMajorStatus: cardinal;
     fMinorStatus: cardinal;
   public
-    /// initialize an gssapi library exception
+    /// initialize an gssapi library exception with the proper error message
     constructor Create(aMajorStatus, aMinorStatus: cardinal;
       const aPrefix: string);
+  published
     /// associated GSS_C_GSS_CODE state value
     property MajorStatus: cardinal
       read fMajorStatus;
@@ -292,7 +293,7 @@ function gss_compare_oid(oid1, oid2: gss_OID): boolean;
 
 type
   /// GSSAPI Auth context
-  // - first field should be an Int64 ID
+  // - first field should be an Int64 ID - typically a THttpServerConnectionID
   TSecContext = record
     ID: Int64;
     CredHandle: pointer;
@@ -346,18 +347,18 @@ procedure GssEnlistMechsSupported(MechList: TStringList);
 /// Client-side authentication procedure
 // - aSecContext holds information between function calls
 // - aInData contains data received from server
-// - aSecKerberosSPN is the Service Principal Name,
+// - aSecKerberosSpn is the Service Principal Name,
 // registered in domain, e.g.
 // 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
 // and call function again with data, returned from server
 function ClientSspiAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
+  const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 
 /// Client-side authentication procedure with clear text password.
-//  This function must be used when application need to use different
+// - This function must be used when application need to use different
 //  user credentials (not credentials of logged in user)
 // - aSecContext holds information between function calls
 // - aInData contains data received from server
@@ -367,7 +368,7 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
 // and call function again with data, returned from server
-// - you must use ClientForceSPN to specify server SPN before call
+// - you must use ClientForceSpn to specify server SPN before call
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
@@ -391,10 +392,10 @@ procedure ServerSspiAuthUser(var aSecContext: TSecContext; out aUserName: RawUtf
 // or ClientSspiAuth
 function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 
-/// Force using aSecKerberosSPN for server identification
-// - aSecKerberosSPN is the Service Principal Name, registered in domain, e.g.
-// 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
-procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
+/// force using a Kerberos SPN for server identification
+// - aSecKerberosSpn is the Service Principal Name, as registered in domain,
+// e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
+procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 
 /// Force loading server credentials from specified keytab file
 // - by default, clients may authenticate to any service principal
@@ -403,11 +404,19 @@ procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
 procedure ServerForceKeytab(const aKeytab: RawUtf8);
 
 const
+  /// HTTP Challenge name
+  // - GSS API only supports Negotiate/Kerberos - NTLM is unsafe and deprecated
+  SECPKGNAMEHTTP: RawUtf8 = 'Negotiate';
+
+  /// HTTP Challenge name, converted into uppercase for IdemPChar() pattern
+  SECPKGNAMEHTTP_UPPER: RawUtf8 = 'NEGOTIATE';
+
   /// HTTP header to be set for authentication
-  SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: Negotiate';
+  // - GSS API only supports Negotiate/Kerberos - NTLM is unsafe and deprecated
+  SECPKGNAMEHTTPWWWAUTHENTICATE: RawUtf8 = 'WWW-Authenticate: Negotiate';
 
   /// HTTP header pattern received for authentication
-  SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
+  SECPKGNAMEHTTPAUTHORIZATION: RawUtf8 = 'AUTHORIZATION: NEGOTIATE ';
 
   /// character used as marker in user name to indicates the associated domain
   SSPI_USER_CHAR = '@';
@@ -435,8 +444,7 @@ procedure ServerDomainMapUnRegisterAll;
 /// high-level cross-platform initialization function
 // - as called e.g. by mormot.rest.client/server.pas
 // - in this unit, will just call LoadGssApi('')
-procedure InitializeDomainAuth;
-  {$ifdef HASINLINE} inline; {$endif}
+function InitializeDomainAuth: boolean;
 
 
 implementation
@@ -497,15 +505,24 @@ const
     'gss_release_oid_set', 'gss_display_status',
     'krb5_gss_register_acceptor_identity');
 
+var
+  GssApiTried: TFileName;
+
 procedure LoadGssApi(const LibraryName: TFileName);
 var
   i: PtrInt;
   P: PPointerArray;
-  api: TGssApi;
+  api: TGssApi; // local instance for thread-safe load attempt
+  tried: RawUtf8;
 begin
   if GssApi <> nil then
     // already loaded
     exit;
+  tried := LibraryName + GssLib_MIT + GssLib_Heimdal;
+  if GssApiTried = tried then
+    // try LoadLibrary() only if any of the .so names changed
+    exit;
+  GssApiTried := tried;
   api := TGssApi.Create;
   if api.TryLoadLibrary([LibraryName, GssLib_MIT, GssLib_Heimdal], nil) then
   begin
@@ -572,7 +589,7 @@ begin
     SetString(Str, MsgBuf.value, MsgBuf.length);
     GssApi.gss_release_buffer(MinSt, MsgBuf);
     if Msg <> '' then
-      Msg := Msg + ': ' + Str
+      Msg := Msg + ' - ' + Str
     else
       Msg := Str;
   until (GSS_ERROR(MajSt) <> 0) or
@@ -650,7 +667,7 @@ end;
 procedure GssEnlistMechsSupported(MechList: TStringList);
 var
   i: PtrInt;
-  MajSt, MinSt: cardinal;
+  MinSt: cardinal;
   Mechs: gss_OID_set;
   Buf_sasl, Buf_name, Buf_desc: gss_buffer_desc;
   Sasl, Name, Desc: string;
@@ -658,10 +675,10 @@ begin
   if MechList <> nil then
   begin
     RequireGssApi;
-    MajSt := GssApi.gss_indicate_mechs(MinSt, Mechs);
+    GssApi.gss_indicate_mechs(MinSt, Mechs);
     for i := 0 to Pred(Mechs^.count) do
     begin
-      MajSt := GssApi.gss_inquire_saslname_for_mech(
+      GssApi.gss_inquire_saslname_for_mech(
         MinSt, @Mechs^.elements[i], @Buf_sasl, @Buf_name, @Buf_desc);
       SetString(Sasl, Buf_sasl.value, Buf_sasl.length);
       SetString(Name, Buf_name.value, Buf_name.length);
@@ -671,7 +688,7 @@ begin
       GssApi.gss_release_buffer(MinSt, Buf_name);
       GssApi.gss_release_buffer(MinSt, Buf_desc);
     end;
-    MajSt := GssApi.gss_release_oid_set(MinSt, Mechs);
+    GssApi.gss_release_oid_set(MinSt, Mechs);
   end;
 end;
 
@@ -679,10 +696,10 @@ end;
 { ****************** High-Level Client and Server Authentication using GSSAPI }
 
 var
-  ForceSecKerberosSPN: RawUtf8;
+  ForceSecKerberosSpn: RawUtf8;
 
 function ClientSspiAuthWorker(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
+  const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
   TargetName: gss_name_t;
@@ -693,13 +710,14 @@ var
   CtxAttr: cardinal;
 begin
   TargetName := nil;
-  if aSecKerberosSPN <> '' then
+  if aSecKerberosSpn <> '' then
   begin
-    InBuf.length := Length(aSecKerberosSPN);
-    InBuf.value := pointer(aSecKerberosSPN);
+    InBuf.length := Length(aSecKerberosSpn);
+    InBuf.value := pointer(aSecKerberosSpn);
     MajStatus := GssApi.gss_import_name(
       MinStatus, @InBuf, GSS_KRB5_NT_PRINCIPAL_NAME, TargetName);
-    GccCheck(MajStatus, MinStatus, 'Failed to import server SPN');
+    GccCheck(MajStatus, MinStatus,
+      'ClientSspiAuthWorker: Failed to import server SPN');
   end;
   try
     CtxReqAttr := GSS_C_INTEG_FLAG or GSS_C_CONF_FLAG;
@@ -712,7 +730,8 @@ begin
     MajStatus := GssApi.gss_init_sec_context(MinStatus, aSecContext.CredHandle,
       aSecContext.CtxHandle, TargetName, GSS_C_MECH_SPNEGO,
       CtxReqAttr, GSS_C_INDEFINITE, nil, @InBuf, nil, @OutBuf, @CtxAttr, nil);
-    GccCheck(MajStatus, MinStatus, 'Failed to initialize security context');
+    GccCheck(MajStatus, MinStatus,
+      'ClientSspiAuthWorker: Failed to initialize security context');
     result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
     SetString(aOutData, PAnsiChar(OutBuf.value), OutBuf.length);
     GssApi.gss_release_buffer(MinStatus, OutBuf);
@@ -723,11 +742,11 @@ begin
 end;
 
 function ClientSspiAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
+  const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
   MajStatus, MinStatus: cardinal;
-  SecKerberosSPN: RawUtf8;
+  SecKerberosSpn: RawUtf8;
 begin
   RequireGssApi;
   if aSecContext.CredHandle = nil then
@@ -736,14 +755,14 @@ begin
     MajStatus := GssApi.gss_acquire_cred(MinStatus, nil, GSS_C_INDEFINITE, nil,
       GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
     GccCheck(MajStatus, MinStatus,
-      'Failed to acquire credentials for current user');
+      'ClientSspiAuth: Failed to acquire credentials for current user');
   end;
-  if aSecKerberosSPN <> '' then
-    SecKerberosSPN := aSecKerberosSPN
+  if aSecKerberosSpn <> '' then
+    SecKerberosSpn := aSecKerberosSpn
   else
-    SecKerberosSPN := ForceSecKerberosSPN;
+    SecKerberosSpn := ForceSecKerberosSpn;
   result := ClientSspiAuthWorker(
-    aSecContext, aInData, SecKerberosSPN, aOutData);
+    aSecContext, aInData, SecKerberosSpn, aOutData);
 end;
 
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
@@ -772,7 +791,7 @@ begin
       'Failed to acquire credentials for specified user');
   end;
   result := ClientSspiAuthWorker(
-    aSecContext, aInData, ForceSecKerberosSPN, aOutData);
+    aSecContext, aInData, ForceSecKerberosSpn, aOutData);
 end;
 
 function ServerSspiAuth(var aSecContext: TSecContext;
@@ -816,8 +835,7 @@ function ServerDomainFind(const aOld: RawUtf8): PtrInt;
 begin
   for result := 0 to length(ServerDomainMap) - 1 do
     with ServerDomainMap[result] do
-      if (length(Old) = length(aOld)) and
-         IdemPChar(pointer(aOld), pointer(Old)) then
+      if IdemPropNameU(Old, aOld) then
         exit;
   result := -1;
 end;
@@ -868,8 +886,7 @@ begin
     DomainLen := StrLen(DomainStart);
     for i := 0 to high(ServerDomainMap) do
       with ServerDomainMap[i] do
-        if (length(Old) = DomainLen) and
-           IdemPChar(DomainStart, pointer(Old)) then
+        if IdemPropNameU(Old, DomainStart, DomainLen) then
         begin
           Domain := New;
           break;
@@ -937,9 +954,9 @@ begin
   GssApi.gss_release_buffer(MinStatus, OutBuf);
 end;
 
-procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
+procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 begin
-  ForceSecKerberosSPN := aSecKerberosSPN;
+  ForceSecKerberosSpn := aSecKerberosSpn;
 end;
 
 procedure ServerForceKeytab(const aKeytab: RawUtf8);
@@ -948,10 +965,11 @@ begin
     GssApi.krb5_gss_register_acceptor_identity(pointer(aKeytab));
 end;
 
-procedure InitializeDomainAuth;
+function InitializeDomainAuth: boolean;
 begin
   if GssApi = nil then
     LoadGssApi('');
+  result := GssApi <> nil;
 end;
 
 initialization

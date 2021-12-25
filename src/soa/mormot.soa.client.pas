@@ -91,7 +91,7 @@ type
 
 { ***************** TServiceFactoryClient Service Provider }
 
-    /// a service provider implemented on the client side
+  /// a service provider implemented on the client side
   // - each registered interface has its own TServiceFactoryClient instance,
   // available as one TSqlServiceContainerClient item from TRest.Services property
   // - will emulate "fake" implementation class instance of a given interface
@@ -110,14 +110,14 @@ type
     function CreateFakeInstance: TInterfacedObject;
     function InternalInvoke(const aMethod: RawUtf8; const aParams: RawUtf8 = '';
       aResult: PRawUtf8 = nil; aErrorMsg: PRawUtf8 = nil;
-      aClientDrivenID: PCardinal = nil;
+      aFakeID: PInterfacedObjectFakeID = nil;
       aServiceCustomAnswer: PServiceCustomAnswer = nil;
       aClient: TRest = nil): boolean; virtual;
     // match TOnFakeInstanceInvoke callback signature
     function Invoke(const aMethod: TInterfaceMethod; const aParams: RawUtf8;
-      aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
+      aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean;
-    procedure NotifyInstanceDestroyed(aClientDrivenID: cardinal); virtual;
+    procedure NotifyInstanceDestroyed(aFakeID: TInterfacedObjectFakeID); virtual;
   public
     /// initialize the service provider parameters
     // - it will check and retrieve all methods of the supplied interface,
@@ -225,7 +225,7 @@ type
       read fResultAsJsonObject write fResultAsJsonObject;
     /// delay the sicClientDriven server-side instance to the first method call
     // - by default, CreateFakeInstance will call _instance_ server pseudo-method
-    // to ensure a fClientDrivenID is safely and properly initialized
+    // to ensure its FakeID is safely and properly initialized
     // - if you are sure that your client's interface variables will be thread-safe,
     // you may define this property to TRUE so that the "id" field as returned
     // at first method call will be used - makes sense only if a lot of short-live
@@ -284,7 +284,7 @@ function TServiceContainerClientAbstract.AddInterface(
   aContractExpected: RawUtf8): boolean;
 var
   i: PtrInt;
-  F: TServiceFactoryClient;
+  f: TServiceFactoryClient;
 begin
   result := false;
   if (self = nil) or
@@ -293,9 +293,9 @@ begin
   CheckInterface(aInterfaces);
   for i := 0 to high(aInterfaces) do
   begin
-    F := fServicesFactoryClients.Create(
+    f := fServicesFactoryClients.Create(
       fOwner as TRest, aInterfaces[i], aInstanceCreation, aContractExpected);
-    AddServiceInternal(F);
+    AddServiceInternal(f);
     aContractExpected := ''; // supplied contract is only for the 1st interface
   end;
   result := true;
@@ -388,7 +388,7 @@ begin
     if (params <> '') and
        (params[1] = '[') then
       // trim [..] for URI call
-      params := copy(params, 2, length(params) - 2);
+      TrimChars(params, 1, 1);
     client := pending.Session;
     if not fClient.InternalInvoke(
       pending.Method, params, nil, @error, @client, nil, fRemote) then
@@ -398,10 +398,11 @@ begin
       else
         count := 1;
       output.InitObject([
-        'errorcount', count,
-        'lasterror', error,
-        'lasttime', NowUtcToString(true, 'T'),
-        'lastelapsed', timer.Stop], JSON_OPTIONS_FAST_EXTENDED);
+        'errorcount',  count,
+        'lasterror',   error,
+        'lasttime',    NowUtcToString(true, 'T'),
+        'lastelapsed', timer.Stop],
+        JSON_FAST_EXTENDED);
       pending.Output := variant(output);
       fClient.fSendNotificationsRest.ORM.Update(pending, 'Output', true);
       raise EServiceException.CreateUtf8(
@@ -452,7 +453,7 @@ type
   TInterfacedObjectFakeClient = class(TInterfacedObjectFake)
   protected
     fClient: TServiceFactoryClient;
-    procedure InterfaceWrite(W: TTextWriter; const aMethod: TInterfaceMethod;
+    procedure InterfaceWrite(W: TJsonWriter; const aMethod: TInterfaceMethod;
       const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); override;
   public
     constructor Create(aClient: TServiceFactoryClient;
@@ -477,7 +478,7 @@ begin
   inherited Create(aClient.fInterface, aClient, opt, aInvoke, aNotifyDestroy);
 end;
 
-procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TTextWriter;
+procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TJsonWriter;
   const aMethod: TInterfaceMethod; const aParamInfo: TInterfaceMethodArgument;
   aParamValue: Pointer);
 begin
@@ -509,13 +510,14 @@ begin
   if not fDelayedInstance and
      (fInstanceCreation = sicClientDriven) and
     InternalInvoke(SERVICE_PSEUDO_METHOD[imInstance], '', @id) then
-    // thread-safe initialization of the fClientDrivenID
-    TInterfacedObjectFakeClient(result).fClientDrivenID := GetCardinal(pointer(id));
+    // thread-safe initialization of the TInterfacedObjectFakeID
+    TInterfacedObjectFakeClient(result).fFakeID := GetCardinal(pointer(id));
 end;
 
 function TServiceFactoryClient.Invoke(const aMethod: TInterfaceMethod;
   const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
-  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+  aFakeID: PInterfacedObjectFakeID;
+  aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 
   procedure SendNotificationsLog;
   var
@@ -527,12 +529,12 @@ function TServiceFactoryClient.Invoke(const aMethod: TInterfaceMethod;
     try
       pending.Method := aMethod.Uri;
       json := '[' + aParams + ']';
-      input.InitJsonInPlace(pointer(json), JSON_OPTIONS_FAST_EXTENDED);
+      input.InitJsonInPlace(pointer(json), JSON_FAST_EXTENDED);
       pending.Input := variant(input);
-      if (aClientDrivenID <> nil) and
-         (aClientDrivenID^ <> 0) then
+      if (aFakeID <> nil) and
+         (aFakeID^ <> 0) then
       begin
-        pending.Session := aClientDrivenID^;
+        pending.Session := aFakeID^;
         fSendNotificationsRest.ORM.Add(pending, 'Method,Input,Session');
       end
       else
@@ -554,7 +556,7 @@ begin
   end
   else
     result := InternalInvoke(aMethod.Uri, aParams, aResult, aErrorMsg,
-      aClientDrivenID, aServiceCustomAnswer);
+      aFakeID, aServiceCustomAnswer);
 end;
 
 class function TServiceFactoryClient.GetErrorMessage(status: integer): RawUtf8;
@@ -581,7 +583,7 @@ end;
 
 function TServiceFactoryClient.InternalInvoke(const aMethod: RawUtf8;
   const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
-  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer;
+  aFakeID: PInterfacedObjectFakeID; aServiceCustomAnswer: PServiceCustomAnswer;
   aClient: TRest): boolean;
 var
   baseuri, uri, sent, resp, clientDrivenID, head, error, ct: RawUtf8;
@@ -621,16 +623,16 @@ begin
     fClient := fResolver as TRest;
   if aClient = nil then
     aClient := fClient;
-  if (aClientDrivenID <> nil) and
-     (aClientDrivenID^ > 0) then
-    UInt32ToUtf8(aClientDrivenID^, clientDrivenID);
+  if (aFakeID <> nil) and
+     (aFakeID^ > 0) then
+    UInt32ToUtf8(aFakeID^, clientDrivenID);
   m := fInterface.FindMethodIndex(aMethod);
   if m < 0 then
     service := nil
   else
     service := @fInterface.Methods[m];
   withinput := ((service = nil) or
-                ([imdConst, imdVar] * service^.HasSPIParams = [])) and
+                ([imdConst, imdVar] * service^.HasSpiParams = [])) and
                not (optNoLogInput in fExecution[m].Options);
   if withinput then
     // include non-sensitive input in log
@@ -654,12 +656,12 @@ begin
   if (status = HTTP_UNAUTHORIZED) and
      (clientDrivenID <> '') and
      (fInstanceCreation = sicClientDriven) and
-     (aClientDrivenID <> nil) then
+     (aFakeID <> nil) then
   begin
     if log <> nil then
       log.Log(sllClient, '% -> try to recreate ClientDrivenID', [{%H-}resp], self);
     clientDrivenID := '';
-    aClientDrivenID^ := 0;
+    aFakeID^ := 0;
     DoClientCall;
   end;
   // decode result
@@ -691,7 +693,7 @@ begin
        (resp <> '') and
        not (optNoLogOutput in fExecution[m].Options) and
        ((service = nil) or
-        ([imdConst, imdVar] * service^.HasSPIParams = [])) then
+        ([imdConst, imdVar] * service^.HasSpiParams = [])) then
       with fClient.LogFamily do
         if sllServiceReturn in Level then
           log.Log(sllServiceReturn, resp, self, MAX_SIZE_RESPONSE_LOG);
@@ -699,11 +701,11 @@ begin
     begin
       if aResult <> nil then
         aResult^ := resp;
-      if aClientDrivenID <> nil then
-        aClientDrivenID^ := 0;
+      if aFakeID <> nil then
+        aFakeID^ := 0;
     end
     else if (resp <> '') and
-            (aClientDrivenID = nil) and
+            (aFakeID = nil) and
             not IdemPChar(GotoNextNotSpace (pointer(resp)), '{"RESULT":') then
     begin
       if aResult <> nil then
@@ -711,8 +713,10 @@ begin
     end
     else
     begin
-      if (JsonDecode(pointer(resp), ['result', 'id'], @Values, true) = nil) or
-         ({%H-}Values[0].Value = nil) then
+      if (JsonDecode(pointer(resp), ['result', // 0
+                                     'id'      // 1
+                                    ], @Values, true) = nil) or
+         ({%H-}Values[0].Text = nil) then
       begin
         // no "result":... layout
         if aErrorMsg <> nil then
@@ -725,10 +729,10 @@ begin
       end;
       if aResult <> nil then
         Values[0].ToUtf8(aResult^);
-      if (aClientDrivenID <> nil) and
-         (Values[1].Value <> nil) then
+      if (aFakeID <> nil) and
+         (Values[1].Text <> nil) then
         // keep ID if no "id":...
-        aClientDrivenID^ := Values[1].ToCardinal;
+        aFakeID^ := Values[1].ToCardinal;
     end;
   end
   else
@@ -750,15 +754,16 @@ begin
     aServiceCustomAnswer^.status := status;
     aServiceCustomAnswer^.Header := head;
     aServiceCustomAnswer^.Content := resp;
-    // no "id" field returned, but aClientDrivenID^ should not change
+    // no "id" field returned, but aFakeID^ should not change
   end;
   result := true;
 end;
 
-procedure TServiceFactoryClient.NotifyInstanceDestroyed(aClientDrivenID: cardinal);
+procedure TServiceFactoryClient.NotifyInstanceDestroyed(
+  aFakeID: TInterfacedObjectFakeID);
 begin
-  if aClientDrivenID <> 0 then
-    InternalInvoke(SERVICE_PSEUDO_METHOD[imFree], '', nil, nil, @aClientDrivenID);
+  if aFakeID <> 0 then
+    InternalInvoke(SERVICE_PSEUDO_METHOD[imFree], '', nil, nil, @aFakeID);
 end;
 
 constructor TServiceFactoryClient.Create(aRest: TRest; aInterface: PRttiInfo;
@@ -803,7 +808,7 @@ end;
 
 destructor TServiceFactoryClient.Destroy;
 begin
-  FreeAndNil(fSendNotificationsThread);
+  FreeAndNilSafe(fSendNotificationsThread);
   if fSharedInstance <> nil then
     if fSharedInstance.RefCount <> 1 then
       raise EServiceException.CreateUtf8(
@@ -821,9 +826,9 @@ begin
   if InternalInvoke(SERVICE_PSEUDO_METHOD[imSignature], '', @result) and
      (result <> '') then
     if result[1] = '[' then
-      result := copy(result, 2, length(result) - 2)
+      TrimChars(result, 1, 1)
     else if IdemPChar(pointer(result), '{"SIGNATURE":') then
-      result := copy(result, 14, length(result) - 14);
+      TrimChars(result, 13, 1);
 end;
 
 function TServiceFactoryClient.Get(out Obj): boolean;
@@ -901,17 +906,17 @@ end;
 procedure TServiceFactoryClient.SendNotificationsWait(aTimeOutSeconds: integer);
 var
   timeOut: Int64;
-  log: ISynLog;
 begin
-  if SendNotificationsPending = 0 then
-    exit;
-  log := fClient.LogClass.Enter;
-  timeOut := GetTickCount64 + aTimeOutSeconds * 1000;
-  repeat
-    SleepHiRes(5);
-    if SendNotificationsPending = 0 then
-      exit;
-  until GetTickCount64 > timeOut;
+  if SendNotificationsPending <> 0 then
+    with fClient.LogClass.Enter do
+    begin
+      timeOut := GetTickCount64 + aTimeOutSeconds * 1000;
+      repeat
+        SleepHiRes(5);
+        if SendNotificationsPending = 0 then
+          exit;
+      until GetTickCount64 > timeOut;
+    end;
 end;
 
 procedure TServiceFactoryClient.SetOptions(const aMethod: array of RawUtf8;

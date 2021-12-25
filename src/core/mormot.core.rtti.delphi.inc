@@ -40,6 +40,11 @@ begin
     result := nil;
 end;
 
+function TRttiInfo.RttiNonVoidClass: PRttiClass;
+begin
+  result := pointer(GetTypeData(@self))
+end;
+
 function TRttiClass.PropCount: integer;
 begin
   result := PTypeData(@self)^.PropCount;
@@ -136,8 +141,7 @@ end;
 {$ifdef CPUX86} // Delphi is not efficient when inlining code :(
 
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
-  {$ifdef FPC}nostackframe; assembler; {$endif}
-asm // eax=aTypeInfo edx=aIndex
+asm     // eax=aTypeInfo edx=aIndex
         test    eax, eax
         jz      @0
         cmp     byte ptr [eax], tkEnumeration
@@ -360,7 +364,10 @@ end;
 
 function TRttiInfo.Name: PShortString;
 begin
-  result := @RawName;
+  if @self <> nil then
+    result := @RawName
+  else
+    result := @NULCHAR;
 end;
 
 function TRttiInfo.RecordSize: PtrInt;
@@ -383,7 +390,7 @@ begin
   result := PRecordInfo(GetTypeData(@self))^.ManagedFldCount;
 end;
 
-{$ifdef ISDELPHI2010} // read enhanced RTTI available since Delphi 2010
+{$ifdef HASEXTRECORDRTTI} // read enhanced RTTI available since Delphi 2010
 
 type
   /// map Delphi tkRecord TypeInfo with enhanced RTTI
@@ -403,11 +410,11 @@ var
   p: PRecordTypeField;
   f: PtrInt;
 begin
+  result := nil; // don't reallocate previous answer
   info := pointer(GetTypeData(@self));
   RecSize := info^.RecSize;
   inc(PByte(info), info^.ManagedCount * SizeOf(TManagedField));
   inc(PByte(info), info^.NumOps * SizeOf(pointer));
-  result := nil; // don't reallocate previous answer
   SetLength(result, info^.AllCount);
   p := @info^.AllFields[0];
   for f := 0 to info^.AllCount - 1 do
@@ -435,19 +442,19 @@ end;
 function TRttiInfo.RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
 begin
   RecSize := self.RecordSize;
-  result := nil; // not available before Delphi 2010
+  result := nil; // extended record information not available before Delphi 2010
 end;
 
-{$endif ISDELPHI2010}
+{$endif HASEXTRECORDRTTI}
 
 function TRttiInfo.IsQWord: boolean;
 begin
   if @self = TypeInfo(QWord) then
     result := true
   else
-    {$ifdef UINICODE}
-    if Kind = tkInt64 then
-      with PHash128Rec(PAnsiChar(@Name[1]) + ord(Name[0]))^ do
+    {$ifdef UNICODE}
+    if Kind = rkInt64 then
+      with PHash128Rec(PAnsiChar(@RawName[1]) + ord(RawName[0]))^ do
         result := Lo > Hi // check MinInt64Value>MaxInt64Value
     else
     {$endif UNICODE}
@@ -468,19 +475,19 @@ end;
 
 function TRttiInfo.DynArrayItemType: PRttiInfo;
 begin
- result := pointer(GetTypeData(@self)^.elType);
- if result <> nil then // nil e.g. for TIntegerDynArray or T*ObjArray
-   result := PPointer(result)^;
+  result := pointer(GetTypeData(@self)^.elType);
+  if result <> nil then // nil e.g. for TIntegerDynArray or T*ObjArray
+    result := PPointer(result)^;
 end;
 
-function TRttiInfo.DynArrayItemTypeAny: PRttiInfo;
+function TRttiInfo.DynArrayItemTypeExtended: PRttiInfo;
 begin
   with GetTypeData(@self)^ do
   begin
     result := pointer(elType);
     if result <> nil then // nil e.g. for TIntegerDynArray or T*ObjArray
       result := PPointer(result)^;
-    {$ifdef ISDELPHI2010}
+    {$ifdef HASDYNARRAYTYPE}
     if result = nil then
     begin
       // try the second slot, which may be set even for unmanaged types
@@ -488,9 +495,10 @@ begin
       if result <> nil then
         result := PPointer(result)^;
     end;
-    {$endif ISDELPHI2010}
+    {$endif HASDYNARRAYTYPE}
   end;
 end;
+
 function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;
 begin
   with GetTypeData(@self)^ do
@@ -520,8 +528,8 @@ begin
   result := PArrayInfo(GetTypeData(@self))^.ArraySize;
 end;
 
-function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
-  aClass: TClass): integer;
+function GetPublishedMethods(Instance: TObject;
+  out Methods: TPublishedMethodInfoDynArray; aClass: TClass): integer;
 
   procedure AddParentsFirst(C: TClass);
   type
@@ -562,16 +570,14 @@ begin
     AddParentsFirst(PPointer(Instance)^); // use recursion for adding
 end;
 
-{$ifndef UNICODE} // not defined on Delphi 7/2007
-
+{$ifndef ISDELPHI2010} // not defined on Delphi 7/2007/2009
 type
   TCallConv = (ccReg, ccCdecl, ccPascal, ccStdCall, ccSafeCall);
-
-{$endif UNICODE}
+{$endif ISDELPHI2010}
 
 /// fake TTypeInfo RTTI used for TGUID/THash128... on Delphi 7/2007
 {$ifdef HASNOSTATICRTTI}
-
+                       
 type
   // enough Delphi RTTI for TRttiInfo.RecordManagedFields
   TFakeTypeInfo = packed record
@@ -659,7 +665,7 @@ begin
   ancestor := pi^.IntfParent^;
   if ancestor <> nil then
   begin
-    AddMethodsFromTypeInfo(ancestor);
+    AddMethodsFromTypeInfo(ancestor); // recursive call of parents
     inc(Level);
   end;
   p := @pi^.IntfUnit[ord(pi^.IntfUnit[0]) + 1];
@@ -704,4 +710,5 @@ begin
   until mn = 0;
   CurrentMethod := nil;
 end;
+
 

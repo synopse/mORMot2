@@ -61,8 +61,10 @@ type
     function GetDB: TSqlDatabase;
     function GetStatementLastException: RawUtf8;
     // include addition SQLite3 specific information to the returned content
-    procedure InternalStat(Ctxt: TRestServerUriContext; W: TTextWriter); override;
-    procedure InternalInfo(var info: TDocVariantData); override;
+    procedure InternalStat(Ctxt: TRestServerUriContext;
+      W: TJsonWriter); override;
+    procedure InternalInfo(Ctxt: TRestServerUriContext;
+      var info: TDocVariantData); override;
   public
     /// initialize a REST server with a SQLite3 database
     // - any needed TSqlVirtualTable class should have been already registered
@@ -131,7 +133,6 @@ type
     fServer: TRestServerDB;
     fOwnedServer: TRestServerDB;
     fOwnedDB: TSqlDataBase;
-    fInternalHeader: RawUtf8;
     function GetDB: TSqlDataBase;
       {$ifdef HASINLINE}inline;{$endif}
     /// method calling the RESTful server fServer
@@ -173,8 +174,8 @@ type
   end;
 
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   TSqlRestClientDB = TRestClientDB;
@@ -271,7 +272,7 @@ begin
   result := (fOrmInstance as TRestOrmServerDB).StatementLastException;
 end;
 
-procedure TRestServerDB.InternalStat(Ctxt: TRestServerUriContext; W: TTextWriter);
+procedure TRestServerDB.InternalStat(Ctxt: TRestServerUriContext; W: TJsonWriter);
 var
   i: PtrInt;
   ndx: TIntegerDynArray;
@@ -301,11 +302,12 @@ begin
     end;
 end;
 
-procedure TRestServerDB.InternalInfo(var info: TDocVariantData);
+procedure TRestServerDB.InternalInfo(Ctxt: TRestServerUriContext;
+  var info: TDocVariantData);
 begin
-  inherited InternalInfo(info);
+  inherited InternalInfo(Ctxt, info);
   info.AddValue(
-    'db', FormatString('% %', [ExtractFileName(DB.FileName), KB(DB.FileSize)]));
+    'db', FormatUtf8('% %', [ExtractFileName(DB.FileName), KB(DB.FileSize)]));
 end;
 
 
@@ -320,11 +322,10 @@ end;
 
 procedure TRestClientDB.InternalUri(var Call: TRestUriParams);
 begin
-  if fInternalHeader = '' then
-    fInternalHeader := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: ' +
-      PointerToHex(self);
-  AddToCsv(fInternalHeader, call.InHead, #13#10);
   call.RestAccessRights := @FULL_ACCESS_RIGHTS;
+  call.LowLevelRemoteIP := '127.0.0.1';
+  call.LowLevelConnectionID := PtrUInt(self);
+  call.LowLevelConnectionFlags := [llfInProcess, llfSecured];
   fServer.Uri(call);
   if (call.OutInternalState = 0) and
      (fServer.DB.InternalState <> nil) then
@@ -401,7 +402,7 @@ begin
         // free associated model only if it's owned by nobody
         m := nil;
       try
-        FreeAndNil(fOwnedServer);
+        FreeAndNilSafe(fOwnedServer);
         fServer := nil;
       finally
         m.Free;

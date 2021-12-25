@@ -39,6 +39,7 @@ type
   TTestCoreEcc = class(TSynTestCase)
   protected
     pub: array of TEccPublicKey;
+    pubunc: array of TEccPublicKeyUncompressed;
     priv: array of TEccPrivateKey;
     sign: array of TEccSignature;
     hash: TEccHash;
@@ -80,46 +81,47 @@ var
   s1, s2, s3: TEccSecretKey;
 begin
   SetLength(pub, ECC_COUNT);
+  SetLength(pubunc, ECC_COUNT);
   SetLength(priv, ECC_COUNT);
   SetLength(sign, ECC_COUNT);
-  TAesPrng.Main.FillRandom(@hash, sizeof(hash));
+  TAesPrng.Main.FillRandom(@hash, SizeOf(hash));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     'DC5B79BD481E536DD8075D06C18D42B25B557B4671017BA2A26102B69FD9B70A'),
-    @pr1, sizeof(pr1)));
+    @pr1, SizeOf(pr1)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '024698753E25650A3129320A7DDBA43D56051F4BEE3653897960A61FBC92AB24A5'),
-    @pu1, sizeof(pu1)));
+    @pu1, SizeOf(pu1)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     'CFA96FAC873F522897000815BE96338DE8D355D5F495DD5C5A4FEF0AEDB66D5B'),
-    @pr2, sizeof(pr2)));
+    @pr2, SizeOf(pr2)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '0298D0D01FCE73146C10CD05E08BEA573BEE4EFC56D5EBAAC64B32672C8FAC1502'),
-    @pu2, sizeof(pu2)));
+    @pu2, SizeOf(pu2)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '9509D00BBBA2308445BC73311C3887E935183F65D361D4C39E2FA432B7168599'),
-    @h1, sizeof(h1)));
+    @h1, SizeOf(h1)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     'F04CD0AA3D40433C51F35D07DBF4E11C91C922791A8BA7B930B5C30716D8B26E4B65EFBF' +
-    'BDC0526A94ABDAA31130248F0413AC33D5BFA903E09847AAF42FD043'), @si1, sizeof(si1)));
+    'BDC0526A94ABDAA31130248F0413AC33D5BFA903E09847AAF42FD043'), @si1, SizeOf(si1)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '3366C112F95B2F52836171CAD3F3441C4B3C75348859092B200DE5024CB0C91B'),
-    @h2, sizeof(h2)));
+    @h2, SizeOf(h2)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     'EEEF6F1D0A590BFC72B9D7DC0DB4BF36A8928DA2B8078FEE567808BB082525438CF68546' +
-    '26E17FBB28528450E50E43AB2598ED2CD3ACC7B43865BEB843452713'), @si2, sizeof(si2)));
+    '26E17FBB28528450E50E43AB2598ED2CD3ACC7B43865BEB843452713'), @si2, SizeOf(si2)));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '51A0C8018EC725F9B9F821D826FEEC4CAE8843066685522F1961D25935EAA39E'),
-    @s1, sizeof(s1)));
+    @s1, SizeOf(s1)));
   Check(Ecc256r1Verify(pu1, h1, si1));
   Check(Ecc256r1Verify(pu2, h2, si2));
   FillZero(s2);
   Check(Ecc256r1SharedSecret(pu1, pr2, s2));
   Check(IsEqual(s1, s2));
-  Check(CompareMem(@s1, @s2, sizeof(s1)));
+  Check(CompareMem(@s1, @s2, SizeOf(s1)));
   FillZero(s3);
   Check(Ecc256r1SharedSecret(pu2, pr1, s3));
   Check(IsEqual(s1, s3));
-  Check(CompareMem(@s1, @s3, sizeof(s1)));
+  Check(CompareMem(@s1, @s3, SizeOf(s1)));
   Check(ecdsa_verify_pas(pu1, h1, si1));
   Check(ecdsa_verify_pas(pu2, h2, si2));
   FillZero(s2);
@@ -139,19 +141,30 @@ begin
   Check(ecc_make_key_pas(pub[0], priv[0])); // also validate our pascal code
   timer.Start;
   for i := 1 to ECC_COUNT - 1 do
-    Check(Ecc256r1MakeKey(pub[i], priv[i]));
+    Check(Ecc256r1MakeKey(pub[i], priv[i])); // may be OpenSSL
   NotifyTestSpeed('Ecc256r1MakeKey', ECC_COUNT - 1, 0, @timer);
+  ecc_uncompress_key_pas(pub[0], pubunc[0]); // also validate our pascal code
+  timer.Start;
+  for i := 1 to ECC_COUNT - 1 do
+    Ecc256r1Uncompress(pub[i], pubunc[i]); // may be OpenSSL
+  NotifyTestSpeed('Ecc256r1Uncompress', ECC_COUNT - 1, 0, @timer);
   timer.Start;
   for i := 0 to ECC_COUNT - 2 do
     Check(Ecc256r1Sign(priv[i], hash, sign[i]));
   NotifyTestSpeed('Ecc256r1Sign', ECC_COUNT - 1, 0, @timer);
-  Check(ecdsa_sign_pas(priv[ECC_COUNT - 1], hash, sign[ECC_COUNT - 1]));
+  Check(ecdsa_sign_pas(priv[ECC_COUNT - 1], hash, sign[ECC_COUNT - 1]), 's');
   Check(ecdsa_verify_pas(pub[7], hash, sign[7]));
   timer.Start;
   for i := 0 to ECC_COUNT - 1 do
     if i <> 7 then
       check(Ecc256r1Verify(pub[i], hash, sign[i]));
   NotifyTestSpeed('Ecc256r1Verify', ECC_COUNT - 1, 0, @timer);
+  Check(ecdsa_verify_uncompressed_pas(pubunc[7], hash, sign[7]), 'vu');
+  timer.Start;
+  for i := 0 to ECC_COUNT - 1 do
+    if i <> 7 then
+      check(Ecc256r1VerifyUncomp(pubunc[i], hash, sign[i]));
+  NotifyTestSpeed('Ecc256r1VerifyUncomp', ECC_COUNT - 1, 0, @timer);
   timer.Start;
   for i := 0 to ECC_COUNT - 2 do
   begin
@@ -251,7 +264,7 @@ begin
     check(cert.AuthorityIssuer = 'mormot.net');
     check(chain.Add(cert) = 2);
     check(chain.Count = 3);
-    check(chain.GetBySerial(cert.Content.Signed.Serial) = cert);
+    check(chain.GetBySerial(cert.Content.Head.Signed.Serial) = cert);
     json2 := ObjectToJson(cert);
     CheckEqual(json1, json2, 'serialization trim private key');
     secret.Free;
@@ -262,14 +275,14 @@ begin
     secret := TEccCertificateSecret.CreateFromBase64(PUBPRIV64);
     check(secret.HasSecret);
     check(secret.IsSelfSigned);
-    check(chain.IsValid(secret.Content, true) = ecvValidSelfSigned);
+    check(chain.IsValidRaw(secret.Content, true) = ecvValidSelfSigned);
     check(secret.Serial <> cert.Serial);
     check(secret.Serial = '29E3D71DC26C134A093BA1C22CFA2582');
     json1 := ObjectToJson(secret);
     check(json1 <> json2);
     json2 := PUBPRIVJSON + copy(PUBPRIV64, 1,
       posEx('y1uzNJeQTIk', PUBPRIV64) + 10) + 'AAAAA"}';
-    check(json1 = json2, 'no private key');
+    checkEqual(json1, json2, 'no private key');
     jsonchain := ObjectToJson(chain);
     check(length(jsonchain) = 1545);
     sav := secret.SaveToSource('MyPrivKey', 'Generated by tests', '123456');
@@ -299,7 +312,7 @@ begin
     secret := TEccCertificateSecret.CreateFromSecureBinary(@MYPRIVKEY,
       MYPRIVKEY_LEN, MYPRIVKEY_PASS, MYPRIVKEY_ROUNDS);
     check(secret.Serial = '29E3D71DC26C134A093BA1C22CFA2582');
-    check(chain.IsValid(secret.Content, true) = ecvValidSelfSigned);
+    check(chain.IsValidRaw(secret.Content, true) = ecvValidSelfSigned);
     json2 := ObjectToJson(secret);
     check(json1 = json2);
     secret.Free;
@@ -326,13 +339,13 @@ begin
     check(sign.AuthorityIssuer = 'toto.com');
     check(sign.SaveToDERBinary = bin);
     check(chain.IsSigned(sign, pointer(json), length(json)) = ecvValidSigned);
-    signcontent := sign.Content;
+    signcontent := sign.Certified;
     inc(signcontent.Signature[10]); // corrupt
-    sign.Content := signcontent;
+    sign.Certified := signcontent;
     check(sign.Check, 'seems valid');
     check(chain.IsSigned(sign, pointer(json), length(json)) = ecvInvalidSignature);
     dec(signcontent.Signature[10]);
-    sign.Content := signcontent;
+    sign.Certified := signcontent;
     check(chain.IsSigned(sign, pointer(json), length(json)) = ecvValidSigned);
     check(chain.IsSigned(sav, pointer(json), length(json)) = ecvValidSigned);
     dec(json[10]);
@@ -348,7 +361,7 @@ begin
     check(chain.Count = 3);
     check(chain.IsValid(selfsignedroot) = ecvValidSelfSigned);
     check(selfsignedroot.IssueDate = EccText(NowEccDate));
-    check(selfsignedroot.Content.Signed.IssueDate = NowEccDate);
+    check(selfsignedroot.Content.Head.Signed.IssueDate = NowEccDate);
     check(chain.GetBySerial(serial) <> nil);
     chain.IsValidCached := true;
     check(ObjectToJson(chain) = jsonchain);
@@ -362,7 +375,7 @@ end;
 procedure TTestCoreEcc.EccCommandLineTool;
 var
   sw: ICommandLine;
-  ctxt: TCommandLine;
+  cl: TCommandLine;
   i: PtrInt;
   previd, prevpass: RawUtf8;
   plainfn, rawfn: TFileName;
@@ -376,16 +389,16 @@ var
   function Exec(const nv: array of const; cmd: TEccCommand): PDocVariantData;
   var
     sw: ICommandLine;
-    ctxt: TCommandLine;
+    cl: TCommandLine;
   begin
-    ctxt := TCommandLine.Create(nv);
-    sw := ctxt;
+    cl := TCommandLine.Create(nv);
+    sw := cl;
     {%H-}check(EccCommand(cmd, sw) = eccSuccess);
-    if CheckFailed(ctxt.ConsoleLines <> nil) then
+    if CheckFailed(cl.ConsoleLines <> nil) then
       result := @DocVariantDataFake
     else
     begin
-      exectemp := _JsonFast(ctxt.ConsoleLines[0]);
+      exectemp := _JsonFast(cl.ConsoleLines[0]);
       result := _Safe(exectemp);
     end;
   end;
@@ -404,19 +417,19 @@ begin
         formatUtf8('name%', [i], issuer);
         formatUtf8('pass%', [i], pass);
         rounds := 1000 + i;
-        ctxt := TCommandLine.Create([
-          'auth', {%H-}previd,
+        cl := TCommandLine.Create([
+          'auth',     {%H-}previd,
           'authpass', {%H-}prevpass,
-          'authrounds', rounds - 1,
-          'issuer', issuer,
-          'days', 30 + i,
-          'newpass', pass,
-          'newrounds', rounds]);
-        sw := ctxt;
+          'authrounds',    rounds - 1,
+          'issuer',        issuer,
+          'days',          30 + i,
+          'newpass',       pass,
+          'newrounds',     rounds]);
+        sw := cl;
         check(EccCommand(ecNew, sw) = eccSuccess);
-        if CheckFailed(ctxt.ConsoleLines <> nil) then
+        if CheckFailed(cl.ConsoleLines <> nil) then
           exit;
-        id := TrimU(split(ctxt.ConsoleLines[high(ctxt.ConsoleLines)], '.'));
+        id := TrimU(split(cl.ConsoleLines[high(cl.ConsoleLines)], '.'));
         priv := format('%s.private', [id]);
         pub := format('%s.public', [id]);
         previd := id;
@@ -425,9 +438,9 @@ begin
         test := format('test%d.txt', [i]);
         crypt := 'crypt-' + test;
         FileFromString(text, test);
-        Exec(['file', test,
-              'out', crypt,
-              'auth', pub,
+        Exec(['file',       test,
+              'out',        crypt,
+              'auth',       pub,
               'saltrounds', i + 10], ecCrypt);
       end;
     sw := TCommandLine.Create([]);
@@ -436,8 +449,8 @@ begin
       with keys[i] do
       begin
         with Exec([
-          'auth', priv,
-          'pass', pass,
+          'auth',   priv,
+          'pass',   pass,
           'rounds', rounds], ecInfoPriv)^ do
         begin
           check(I['Version'] = 1);
@@ -449,7 +462,7 @@ begin
           check(I['Size'] = length(text));
           check(U['recipient'] = issuer);
           check(U['Recipientserial'] = id);
-          check(length(U['RandomPublicKey']) = sizeof(TEccPublicKey) * 2);
+          check(length(U['RandomPublicKey']) = SizeOf(TEccPublicKey) * 2);
           check(U['Algorithm'] = ShortStringToAnsi7String(
             ToText(ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ)^));
           check(O['Signature']^.VarType = varNull, 'not signed');
@@ -457,46 +470,46 @@ begin
         end;
         plainfn := 'plain-' + test;
         Exec([
-          'file', crypt,
-          'out', plainfn,
-          'auth', priv,
-          'authpass', pass,
+          'file',       crypt,
+          'out',        plainfn,
+          'auth',       priv,
+          'authpass',   pass,
           'authrounds', rounds,
           'saltrounds', i + 10], ecDecrypt);
         check(StringFromFile(plainfn) = text);
         Exec([
-          'file', test,
-          'out', crypt,
-          'auth', id,
-          'pass', pass,
-          'rounds', rounds], ecSign);
+          'file',       test,
+          'out',        crypt,
+          'auth',       id,
+          'pass',       pass,
+          'rounds',     rounds], ecSign);
         Exec([
-          'file', test,
-          'out', crypt,
-          'auth', pub,
+          'file',       test,
+          'out',        crypt,
+          'auth',       pub,
           'saltrounds', i + 10,
-          'algo', ord(ecaPBKDF2_HMAC_SHA256_AES128_CTR)], ecCrypt);
+          'algo',       ord(ecaPBKDF2_HMAC_SHA256_AES128_CTR)], ecCrypt);
         rawfn := 'raw-' + test;
         with Exec([
-          'file', crypt,
+          'file',    crypt,
           'rawfile', rawfn], ecInfoCrypt)^ do
         begin
           check(I['Size'] = length(text));
           check(U['recipient'] = issuer);
           check(U['Recipientserial'] = id);
-          check(length(U['RandomPublicKey']) = sizeof(TEccPublicKey) * 2);
+          check(length(U['RandomPublicKey']) = SizeOf(TEccPublicKey) * 2);
           check(U['Algorithm'] = 'ecaPBKDF2_HMAC_SHA256_AES128_CTR');
           check(O['Signature']^.I['Version'] = 1, 'signed');
           check(O['Signature']^.U['AuthoritySerial'] = id, 'serial');
           check(B['Meta']);
         end;
         check(PosEx(StringFromFile(rawfn), StringFromFile(crypt)) =
-                sizeof(TEciesHeader) + 1);
+                SizeOf(TEciesHeader) + 1);
         DeleteFile(plainfn);
         Exec([
-          'file', crypt,
-          'out', plainfn,
-          'authpass', pass,
+          'file',       crypt,
+          'out',        plainfn,
+          'authpass',   pass,
           'authrounds', rounds,
           'saltrounds', i + 10], ecDecrypt);
         check(StringFromFile(plainfn) = text, 'guess .private from header');
@@ -616,7 +629,8 @@ procedure TTestCoreEcc._OpenSSL;
   procedure Test(EvpType, BitsOrCurve, Count: integer; const Digest, Name: RawUtf8);
   var
     timer: TPrecisionTimer;
-    priv, pub, msg, sig: RawByteString;
+    priv, pub: RawUtf8;
+    msg, sig: RawByteString;
     i: integer;
   begin
     timer.Start;

@@ -10,7 +10,7 @@ unit mormot.crypt.openssl;
     - OpenSSL Cryptographic Pseudorandom Number Generator (CSPRNG)
     - AES Cypher/Uncypher in various Modes
     - Hashers and Signers OpenSSL Wrappers
-    - OpenSSL Asymetric Cryptography
+    - OpenSSL Asymmetric Cryptography
     - JWT Implementation using any OpenSSL Algorithm
     - Register OpenSSL to our General Cryptography Catalog
 
@@ -43,6 +43,7 @@ uses
   mormot.core.buffers,
   mormot.crypt.core,
   mormot.crypt.ecc256r1,
+  mormot.crypt.ecc,
   mormot.crypt.secure,
   mormot.crypt.jwt,
   mormot.lib.openssl11;
@@ -184,6 +185,10 @@ type
   // $  openssl aes-256-gcm in 3.43ms i.e. 727590/s or 1.5 GB/s
   // $  mormot aes-128-gcm in 3.45ms i.e. 722752/s or 1.5 GB/s
   // $  mormot aes-256-gcm in 4.11ms i.e. 607385/s or 1.2 GB/s
+  // - WARNING: AEAD associated information is currently unsupported by
+  // TAesGcmOsl, due to some obscure OpenSSL padding issue in our code - GMAC
+  // will be properly handled by TAesGcmOsl, but you should use plain TAesGcm
+  // instead if you really need to authenticate some associated information
   TAesGcmOsl = class(TAesGcmAbstract)
   protected
     fAes: TAesOsl;
@@ -201,10 +206,14 @@ type
     // reverse encryption/decryption process
     // - will return self to avoid creating two instances
     function CloneEncryptDecrypt: TAesAbstract; override;
-    /// AES-GCM pure alternative to MacSetNonce()
+    /// AES-GCM pure alternative to MacSetNonce() - unsupported
     // - set the IV as usual (only the first 12 bytes will be used for GCM),
     // then optionally append any AEAD data with this method; warning: you need
     // to call Encrypt() once before - perhaps as Encrypt(nil, nil, 0)
+    // - WARNING: AEAD associated information is currently unsupported by
+    // TAesGcmOsl, due to some obscure OpenSSL padding issue in our code - GMAC
+    // will be properly handled by TAesGcmOsl, but you should use plain TAesGcm
+    // instead if you really need to authenticate some associated information
     procedure AesGcmAad(Buf: pointer; Len: integer); override;
     /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - after Encrypt, fill tag with the GCM value of the data and return true
@@ -312,13 +321,13 @@ type
   end;
 
 
-{ ************** OpenSSL Asymetric Cryptography }
+{ ************** OpenSSL Asymmetric Cryptography }
 
 type
   /// exception class raised by the sign/verify classes of this unit
-  EOpenSslAsymetric = class(EOpenSsl);
+  EOpenSslAsymmetric = class(EOpenSsl);
 
-/// asymetric digital signature of some Message using a given PrivateKey
+/// asymmetric digital signature of some Message using a given PrivateKey
 // - if Algorithm is '', EVP_sha256 will be used as message Digest
 // - if Algorithm is 'null', no Digest is done before signature - which is
 // mandatory e.g. for ed25519 which uses internally SHA-512
@@ -328,7 +337,7 @@ function OpenSslSign(const Algorithm: RawUtf8;
   out Signature: RawByteString; const PrivateKeyPassword: RawUtf8 = '';
   const Engine: RawUtf8 = ''): cardinal;
 
-/// asymetric digital verification of some Message using a given PublicKey
+/// asymmetric digital verification of some Message using a given PublicKey
 // - if Algorithm is '', EVP_sha256 will be used as message Digest
 // - if Algorithm is 'null', no Digest is done before signature - which is
 // mandatory e.g. for ed25519 which uses internally SHA-512
@@ -338,7 +347,7 @@ function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
   MessageLen, PublicKeyLen, SignatureLen: integer;
   const Engine: RawUtf8 = ''): boolean;
 
-/// generate a public/private pair of keys
+/// generate a public/private pair of keys in raw OpenSSL format
 // - if EvpType is EVP_PKEY_DSA, EVP_PKEY_DH or EVP_PKEY_RSA or EVP_PKEY_RSA_PSS,
 // BitsOrCurve is the number of bits of the key
 // - if EvpType is EVP_PKEY_EC, BitsOrCurve is the curve NID (e.g.
@@ -347,9 +356,9 @@ function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
 // - caller should EVP_PKEY_free() the result
 function OpenSslGenerateKeys(EvpType, BitsOrCurve: integer): PEVP_PKEY; overload;
 
-/// persist a public/private pair of keys
+/// persist a public/private pair of keys in PEM text format
 procedure OpenSslSaveKeys(Keys: PEVP_PKEY;
-  out PrivateKey, PublicKey: RawByteString);
+  out PrivateKey, PublicKey: RawUtf8);
 
 /// generate a public/private pair of keys in PEM text format
 // - if EvpType is EVP_PKEY_DSA, EVP_PKEY_DH or EVP_PKEY_RSA or EVP_PKEY_RSA_PSS,
@@ -358,10 +367,15 @@ procedure OpenSslSaveKeys(Keys: PEVP_PKEY;
 // NID_X9_62_prime256v1)
 // - if EvpType is EVP_PKEY_ED25519, BitsOrCurve is ignored
 procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
-  out PrivateKey, PublicKey: RawByteString); overload;
+  out PrivateKey, PublicKey: RawUtf8); overload;
 
+{
+/// compute the (e.g. ECDH) shared secret from a public/private keys inverted pair
+function OpenSslSharedSecret(EvpType, BitsOrCurve: integer;
+  const PublicKey, PrivateKey: RawUtf8; const PrivateKeyPassword: RawUtf8 = ''): RawByteString;
+}
 
-/// mormot.crypt.ecc256r1 compatible function for asymetric key generation
+/// mormot.crypt.ecc256r1 compatible function for asymmetric key generation
 // - this OpenSSL-powered function will replace our slower mormot.crypt.ecc256r1
 // $ OpenSSL: 300 Ecc256r1MakeKey in 7.75ms i.e. 38,664/s, aver. 25us
 // $ mORMot:  300 Ecc256r1MakeKey in 255ms i.e. 1,176/s, aver. 850us
@@ -369,7 +383,7 @@ procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
 function ecc_make_key_osl(out PublicKey: TEccPublicKey;
   out PrivateKey: TEccPrivateKey): boolean;
 
-/// mormot.crypt.ecc256r1 compatible function for asymetric key signature
+/// mormot.crypt.ecc256r1 compatible function for asymmetric key signature
 // - this OpenSSL-powered function will replace our slower pascal/c code
 // $ OpenSSL: 300 Ecc256r1Sign in 11.66ms i.e. 25,711/s, aver. 38us
 // $ mORMot:  300 Ecc256r1Sign in 262.72ms i.e. 1,141/s, aver. 875us
@@ -377,7 +391,7 @@ function ecc_make_key_osl(out PublicKey: TEccPublicKey;
 function ecdsa_sign_osl(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
   out Signature: TEccSignature): boolean;
 
-/// mormot.crypt.ecc256r1 compatible function for asymetric key verification
+/// mormot.crypt.ecc256r1 compatible function for asymmetric key verification
 // - this OpenSSL-powered function will replace our slower pascal/c code
 // $ OpenSSL: 300 Ecc256r1Verify in 41.32ms i.e. 7,260/s, aver. 137us
 // $ mORMot:  300 Ecc256r1Verify in 319.32ms i.e. 939/s, aver. 1.06ms
@@ -392,6 +406,90 @@ function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
 function ecdh_shared_secret_osl(const PublicKey: TEccPublicKey;
   const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 
+type
+  /// OpenSSL verification of a ECDSA signature using ECC secp256r1 cryptography
+  // - assigned to TEcc256r1Verify global meta-class at startup
+  TEcc256r1VerifyOsl = class(TEcc256r1VerifyAbstract)
+  protected
+    fKey: PEC_KEY;
+    fPoint: PEC_POINT;
+  public
+    /// initialize the verifier with a given ECC compressed public key
+    constructor Create(const pub: TEccPublicKey); override;
+    /// finalize this instance
+    destructor Destroy; override;
+    /// validate a signature against a hash using ECC
+    function Verify(const hash: TEccHash; const sign: TEccSignature): boolean;
+      override;
+  end;
+
+  /// most used asymmetric algorithms published by OpenSSL
+  // - as implemented e.g. by TJwtAbstractOsl inherited classes
+  TOpenSslAsym = (
+    osaES256,
+    osaES384,
+    osaES512,
+    osaES256K,
+    osaRS256,
+    osaRS384,
+    osaRS512,
+    osaPS256,
+    osaPS384,
+    osaPS512,
+    osaEdDSA);
+
+const
+  OSA_JWT: array[TOpenSslAsym] of RawUtf8 = (
+    'ES256',              // osaES256
+    'ES384',              // osaES384
+    'ES512',              // osaES512
+    'ES256K',             // osaES256K
+    'RS256',              // osaRS256
+    'RS384',              // osaRS384
+    'RS512',              // osaRS512
+    'PS256',              // osaPS256
+    'PS384',              // osaPS384
+    'PS512',              // osaPS512
+    'EdDSA');             // osaEdDSA
+
+  OSA_HASH: array[TOpenSslAsym] of RawUtf8 = (
+    '',                   // osaES256 will recognize '' as SHA-256 hash
+    'SHA384',             // osaES384
+    'SHA512',             // osaES512
+    '',                   // osaES256K
+    '',                   // osaRS256
+    'SHA384',             // osaRS384
+    'SHA512',             // osaRS512
+    '',                   // osaPS256
+    'SHA384',             // osaPS384
+    'SHA512',             // osaPS512
+    'null');              // osaEdDSA Ed25519 includes its own SHA-512
+
+  OSA_EVPTYPE: array[TOpenSslAsym] of integer = (
+    EVP_PKEY_EC,          // osaES256
+    EVP_PKEY_EC,          // osaES384
+    EVP_PKEY_EC,          // osaES512
+    EVP_PKEY_EC,          // osaES256K
+    EVP_PKEY_RSA,         // osaRS256
+    EVP_PKEY_RSA,         // osaRS384
+    EVP_PKEY_RSA,         // osaRS512
+    EVP_PKEY_RSA_PSS,     // osaPS256
+    EVP_PKEY_RSA_PSS,     // osaPS384
+    EVP_PKEY_RSA_PSS,     // osaPS512
+    EVP_PKEY_ED25519);    // osaEdDSA
+
+  OSA_BITSORCURVE: array[TOpenSslAsym] of integer = (
+    NID_X9_62_prime256v1, // osaES256
+    NID_secp384r1,        // osaES384
+    NID_secp521r1,        // osaES512
+    NID_secp256k1,        // osaES256K
+    2048,                 // osaRS256
+    2048,                 // osaRS384
+    2048,                 // osaRS512
+    2048,                 // osaPS256
+    2048,                 // osaPS384
+    2048,                 // osaPS512
+    0);                   // osaEdDSA
 
 
 { ************** JWT Implementation using any OpenSSL Algorithm }
@@ -444,7 +542,9 @@ type
   // $ 100 EdDSA in 18.08ms i.e. 5,529/s, aver. 180us
   TJwtAbstractOsl = class(TJwtOpenSsl)
   protected
-    procedure SetAlgorithms; virtual; abstract; // set fHashAlgo+fHashAlgorithm
+    fAsym: TOpenSslAsym;
+    procedure SetAlgorithms; virtual; // set fHashAlgo+fHashAlgorithm
+    procedure SetAlgorithm; virtual; abstract; // set fAsym
   public
     /// initialize the JWT processing instance calling SetAlgorithms abstract method
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -460,76 +560,79 @@ type
       aIDObfuscationKey: RawUtf8 = ''; aIDObfuscationKeyNewKdf: integer = 0);
       reintroduce;
     /// generate a private/public keys pair for this algorithm in PEM text format
-    class procedure GenerateKeys(out PrivateKey, PublicKey: RawByteString);
+    class procedure GenerateKeys(out PrivateKey, PublicKey: RawUtf8);
   end;
 
   /// meta-class of all OpenSSL JWT algorithms
   TJwtAbstractOslClass = class of TJwtAbstractOsl;
 
   /// implements 'ES256' secp256r1 ECC algorithm over SHA-256 using OpenSSL
+  // - note that our TJwtES256 class pre-computes the public key so is faster:
+  //  TJwtES256:    100 ES256 in 6.90ms i.e. 14.1K/s, aver. 69us
+  //  TJwtES256Osl: 100 ES256 in 9.56ms i.e. 10.2K/s, aver. 95us
   TJwtES256Osl = class(TJwtAbstractOsl)
   protected
-    procedure SetAlgorithms; override;
+    procedure SetAlgorithm; override;
   end;
 
   /// implements 'ES384' secp384r1 ECC algorithm over SHA-384 using OpenSSL
   TJwtES384Osl = class(TJwtAbstractOsl)
   protected
-    procedure SetAlgorithms; override;
+    procedure SetAlgorithm; override;
   end;
 
   /// implements 'ES512' ecp521r1 ECC algorithm over SHA-512 using OpenSSL
   TJwtES512Osl = class(TJwtAbstractOsl)
   protected
-    procedure SetAlgorithms; override;
+    procedure SetAlgorithm; override;
   end;
 
   /// implements 'ES256K' secp256k1 ECC algorithm using OpenSSL
   TJwtES256KOsl = class(TJwtAbstractOsl)
   protected
-    procedure SetAlgorithms; override;
+    procedure SetAlgorithm; override;
   end;
 
   /// implements 'RS256' RSA 2048-bit algorithm over SHA-256 using OpenSSL
   TJwtRS256Osl = class(TJwtAbstractOsl)
   protected
-    procedure SetAlgorithms; override;
+    procedure SetAlgorithm; override;
   end;
 
   /// implements 'RS384' RSA 2048-bit algorithm over SHA-384 using OpenSSL
   TJwtRS384Osl = class(TJwtAbstractOsl)
   protected
-    procedure SetAlgorithms; override;
+    procedure SetAlgorithm; override;
   end;
 
   /// implements 'RS512' RSA 2048-bit algorithm over SHA-512 using OpenSSL
   TJwtRS512Osl = class(TJwtAbstractOsl)
   protected
-    procedure SetAlgorithms; override;
+    procedure SetAlgorithm; override;
   end;
 
   /// implements 'PS256' RSA-PSS 2048-bit algorithm over SHA-256 using OpenSSL
   TJwtPS256Osl = class(TJwtAbstractOsl)
   protected
-    procedure SetAlgorithms; override;
+    procedure SetAlgorithm; override;
   end;
 
   /// implements 'PS384' RSA-PSS 2048-bit algorithm over SHA-384 using OpenSSL
   TJwtPS384Osl = class(TJwtAbstractOsl)
   protected
-    procedure SetAlgorithms; override;
+    procedure SetAlgorithm; override;
   end;
 
   /// implements 'PS512' RSA-PSS 2048-bit algorithm over SHA-512 using OpenSSL
   TJwtPS512Osl = class(TJwtAbstractOsl)
   protected
-    procedure SetAlgorithms; override;
+    procedure SetAlgorithm; override;
   end;
 
   /// implements 'EdDSA' Ed25519 algorithm using OpenSSL
   TJwtEdDSAOsl = class(TJwtAbstractOsl)
   protected
-    procedure SetAlgorithms; override;
+    procedure SetAlgorithm; override;
   end;
 
 
@@ -539,6 +642,8 @@ type
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
 // - redirects raw mormot.crypt.ecc256r1 functions to use OpenSSL which is much
 // faster than our stand-alone C/pascal version
+// - register OpenSSL for our Asym() high-level factory (via an hidden
+// TCryptAsymOsl class)
 procedure RegisterOpenSsl;
 
 
@@ -594,6 +699,7 @@ begin
      (Count and AesBlockMod <> 0) then
     raise ESynCrypto.CreateUtf8('%.%: Count=% is not a multiple of 16',
       [Owner, 'UpdEvp', Count]);
+  outl := 0;
   EOpenSslCrypto.Check(Owner, 'UpdEvp',
     EVP_CipherUpdate(Ctx[DoEncrypt], BufOut, @outl, BufIn, Count));
   // no need to call EVP_CipherFinal_ex() since we expect no padding
@@ -602,11 +708,14 @@ end;
 procedure TAesOsl.Clone(ToOwner: TAesAbstract; out ToAesOsl: TAesOsl);
 var
   enc: boolean;
+  s, d: TAesAbstractOsl;
 begin
-  TAesAbstractOsl(ToOwner).fKeySize := TAesAbstractOsl(Owner).fKeySize;
-  TAesAbstractOsl(ToOwner).fKeySizeBytes := TAesAbstractOsl(Owner).fKeySizeBytes;
-  TAesAbstractOsl(ToOwner).fKey := TAesAbstractOsl(Owner).fKey;
-  TAesAbstractOsl(ToOwner).fAlgoMode := TAesAbstractOsl(Owner).fAlgoMode;
+  s := TAesAbstractOsl(Owner);
+  d := TAesAbstractOsl(ToOwner);
+  d.fKeySize := s.fKeySize;
+  d.fKeySizeBytes := s.fKeySizeBytes;
+  d.fAlgoMode := s.fAlgoMode;
+  d.fKey := s.fKey;
   ToAesOsl.Owner := ToOwner;
   ToAesOsl.Cipher := Cipher;
   for enc := false to true do
@@ -653,7 +762,7 @@ begin
   GlobalLock;
   try
     if MainAesPrngOsl = nil then
-      MainAesPrngOsl := TAesPrngOsl.Create;
+      MainAesPrngOsl := RegisterGlobalShutdownRelease(TAesPrngOsl.Create);
   finally
     GlobalUnLock;
   end;
@@ -866,8 +975,8 @@ begin
       // custom size in XOF mode
       fDigestSize := hashSize
     else
-      raise EOpenSslHash.CreateFmt('TOpenSslHash.Create: Incorrect hashSize ' +
-        'option passed to a non-XOF hash function "%s"', [Algorithm]);
+      raise EOpenSslHash.CreateFmt('TOpenSslHash.Create: Incorrect HashSize=' +
+        '%d to a non-XOF hash function "%s"', [HashSize, Algorithm]);
 end;
 
 procedure TOpenSslHash.Update(Data: pointer; DataLength: integer);
@@ -990,11 +1099,11 @@ begin
 end;
 
 
-{ ************** OpenSSL Asymetric Cryptography }
+{ ************** OpenSSL Asymmetric Cryptography }
 
-function GetMd(const Algorithm, Caller: RawUtf8): PEVP_MD;
+function GetMd(const Algorithm: RawUtf8; const Caller: string): PEVP_MD;
 begin
-  EOpenSslAsymetric.CheckAvailable(nil, Caller);
+  EOpenSslAsymmetric.CheckAvailable(nil, Caller);
   if Algorithm = 'null' then
     result := nil // e.g. for ed25519
   else
@@ -1004,8 +1113,8 @@ begin
       else
         result := EVP_get_digestbyname(pointer(Algorithm));
       if result = nil then
-        raise EOpenSslAsymetric.CreateFmt(
-          '%: unknown [%] algorithm', [Caller, Algorithm]);
+        raise EOpenSslAsymmetric.CreateFmt(
+          '%s: unknown [%s] algorithm', [Caller, Algorithm]);
     end;
 end;
 
@@ -1042,7 +1151,7 @@ begin
       if EVP_DigestSign(ctx, pointer(Signature), size,
            Message, MessageLen) = OPENSSLSUCCESS then
       begin
-        if size <> length(Signature) then
+        if size <> PtrUInt(length(Signature)) then
           SetLength(Signature, size); // leading zeros may trim the size
         result := size;
       end
@@ -1053,8 +1162,7 @@ begin
     EVP_MD_CTX_free(ctx);
     if pkey <> nil then
       EVP_PKEY_free(pkey);
-    if priv <> nil then
-      BIO_free(priv);
+    priv.Free;
   end;
 end;
 
@@ -1068,13 +1176,13 @@ var
   ctx: PEVP_MD_CTX;
 begin
   result := false;
-  md := GetMd(Algorithm, 'OpenSslSign');
+  md := GetMd(Algorithm, 'OpenSslVerify');
   if (PublicKey = nil) or
      (PublicKeyLen <= 0) or
      (SignatureLen <= 0)  then
     exit;
   pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
-  if IdemPChar(PublicKey, '-----BEGIN RSA PUBLIC KEY-----') then
+  if IdemPChar(PublicKey, '-----BEGIN RSA PUBLIC KEY') then
     pkey := PEM_read_bio_RSAPublicKey(pub, nil, nil, pointer(PublicKeyPassword))
   else
     pkey := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(PublicKeyPassword));
@@ -1088,7 +1196,7 @@ begin
   finally
     EVP_MD_CTX_free(ctx);
     EVP_PKEY_free(pkey);
-    BIO_free(pub);
+    pub.Free;
   end;
 end;
 
@@ -1099,20 +1207,25 @@ var
   ctrl: integer;
 begin
   result := nil;
-  EOpenSslAsymetric.CheckAvailable(nil, 'OpenSslGenerateKeys');
+  EOpenSslAsymmetric.CheckAvailable(nil, 'OpenSslGenerateKeys');
   ctx := EVP_PKEY_CTX_new_id(EvpType, nil);
   if ctx <> nil then
   try
     // see https://wiki.openssl.org/index.php/EVP_Key_and_Parameter_Generation
     case EvpType of
-      EVP_PKEY_EC, EVP_PKEY_DSA, EVP_PKEY_DH:
+      EVP_PKEY_EC,
+      EVP_PKEY_DSA,
+      EVP_PKEY_DH:
         begin
           EOpenSsl.Check(EVP_PKEY_paramgen_init(ctx));
           case EvpType of
             EVP_PKEY_EC:
               ctrl := EVP_PKEY_CTRL_EC_PARAMGEN_CURVE_NID;
-            EVP_PKEY_DSA, EVP_PKEY_DH:
+            EVP_PKEY_DSA,
+            EVP_PKEY_DH:
               ctrl := EVP_PKEY_CTRL_DSA_PARAMGEN_BITS;
+          else
+            exit; // paranoid
           end;
           EOpenSsl.Check(EVP_PKEY_CTX_ctrl(
             ctx, EvpType, EVP_PKEY_OP_PARAMGEN, ctrl, BitsOrCurve, nil));
@@ -1128,11 +1241,14 @@ begin
             EVP_PKEY_CTX_free(kctx);
           end;
         end;
-      EVP_PKEY_RSA, EVP_PKEY_RSA_PSS, EVP_PKEY_ED25519:
+      EVP_PKEY_RSA,
+      EVP_PKEY_RSA_PSS,
+      EVP_PKEY_ED25519:
         begin
           EOpenSsl.Check(EVP_PKEY_keygen_init(ctx));
           case EvpType of
-            EVP_PKEY_RSA, EVP_PKEY_RSA_PSS:
+            EVP_PKEY_RSA,
+            EVP_PKEY_RSA_PSS:
               EOpenSsl.Check(EVP_PKEY_CTX_ctrl(ctx, EvpType, EVP_PKEY_OP_KEYGEN,
                 EVP_PKEY_CTRL_RSA_KEYGEN_BITS, BitsOrCurve, nil));
           end;
@@ -1146,11 +1262,9 @@ begin
   end;
 end;
 
-procedure OpenSslSaveKeys(Keys: PEVP_PKEY;
-  out PrivateKey, PublicKey: RawByteString);
+procedure OpenSslSaveKeys(Keys: PEVP_PKEY; out PrivateKey, PublicKey: RawUtf8);
 var
   bio: PBIO;
-  mem: BUF_MEM;
 begin
   if (Keys = nil) or
      not OpenSslIsAvailable then
@@ -1158,18 +1272,18 @@ begin
   bio := BIO_new(BIO_s_mem);
   try
     EOpenSsl.Check(PEM_write_bio_PrivateKey(bio, Keys, nil, nil, 0, nil, nil));
-    BIO_ToString(bio, PrivateKey);
-    BIO_free(bio);
+    PrivateKey := bio.ToString;
+    bio.Free;
     bio := BIO_new(BIO_s_mem);
     EOpenSsl.Check(PEM_write_bio_PUBKEY(bio, Keys));
-    BIO_ToString(bio, PublicKey);
+    PublicKey := bio.ToString;
   finally
-    BIO_free(bio);
+    bio.Free;
   end;
 end;
 
 procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
-  out PrivateKey, PublicKey: RawByteString);
+  out PrivateKey, PublicKey: RawUtf8);
 var
   keys: PEVP_PKEY;
 begin
@@ -1184,9 +1298,20 @@ begin
   end;
 end;
 
+function OpenSslSharedSecret(EvpType, BitsOrCurve: integer;
+  const PublicKey, PrivateKey, PrivateKeyPassword: RawUtf8): RawByteString;
+begin
+  result := '';
+  EOpenSslAsymmetric.CheckAvailable(nil, 'OpenSslSharedSecret');
+  { TODO: implement as https://wiki.openssl.org/index.php/Elliptic_Curve_Diffie_Hellman }
+end;
+
 
 var
   prime256v1grp: PEC_GROUP;
+
+const
+  PEC_GROUP_PRIME256V1_NOTAVAILABLE = pointer(1);
 
 function NewPrime256v1Key(out key: PEC_KEY): boolean;
 begin
@@ -1200,15 +1325,15 @@ begin
         begin
           prime256v1grp := EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
           if prime256v1grp = nil then
-            prime256v1grp := pointer(1);
+            prime256v1grp := PEC_GROUP_PRIME256V1_NOTAVAILABLE;
         end;
       finally
         GlobalUnLock;
       end;
     end
     else
-      prime256v1grp := pointer(1);
-  if prime256v1grp <> pointer(1) then
+      prime256v1grp := PEC_GROUP_PRIME256V1_NOTAVAILABLE;
+  if prime256v1grp <> PEC_GROUP_PRIME256V1_NOTAVAILABLE then
   begin
     key := EC_KEY_new;
     if EC_KEY_set_group(key, prime256v1grp) = OPENSSLSUCCESS then
@@ -1216,17 +1341,17 @@ begin
     else
     begin
       EC_GROUP_free(prime256v1grp);
-      prime256v1grp := pointer(1);
+      prime256v1grp := PEC_GROUP_PRIME256V1_NOTAVAILABLE;
       EC_KEY_free(key);
     end;
   end;
 end;
 
 function ecc_make_key_osl(out PublicKey: TEccPublicKey;
-  out PrivateKey: TEccPrivateKey): boolean;
+                          out PrivateKey: TEccPrivateKey): boolean;
 var
   key: PEC_KEY;
-  pub: PPByte;
+  pub: PByte;
   priv: PBIGNUM;
   publen, privlen: integer;
 begin
@@ -1259,7 +1384,7 @@ var
   key: PEC_KEY;
   bn: PBIGNUM;
   derlen: cardinal;
-  der: TEccSignatureDer;
+  der: array[0..(ECC_BYTES * 2) + 7] of byte;
 begin
   result := false;
   if not NewPrime256v1Key(key) then
@@ -1269,7 +1394,7 @@ begin
   if (ECDSA_size(key) <= SizeOf(der)) and
      (EC_KEY_set_private_key(key, bn) = OPENSSLSUCCESS) and
      (ECDSA_Sign(0, @Hash, SizeOf(Hash), @der, @derlen, key) = OPENSSLSUCCESS) then
-    result := DerToEccSign(der, Signature);
+    result := DerToEcc(@der, derlen, Signature);
   BN_free(bn);
   EC_KEY_free(key);
 end;
@@ -1286,8 +1411,7 @@ function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
 var
   key: PEC_KEY;
   pt: PEC_POINT;
-  derlen: integer;
-  der: TEccSignatureDer;
+  der: RawByteString;
 begin
   result := false;
   if not NewPrime256v1Key(key) then
@@ -1295,8 +1419,9 @@ begin
   if PublicKeyToPoint(PublicKey, pt) and
      (EC_KEY_set_public_key(key, pt) = OPENSSLSUCCESS) then
   begin
-    derlen := EccSignToDer(Signature, der);
-    result := ECDSA_verify(0, @Hash, SizeOf(Hash), @der, derlen, key) = OPENSSLSUCCESS;
+    der := EccToDer(Signature);
+    result := ECDSA_verify(
+      0, @Hash, SizeOf(Hash), pointer(der), length(der), key) = OPENSSLSUCCESS;
   end;
   EC_POINT_free(pt);
   EC_KEY_free(key);
@@ -1321,6 +1446,35 @@ begin
   BN_free(priv);
   EC_POINT_free(pub);
   EC_KEY_free(key);
+end;
+
+
+{ TEcc256r1VerifyOsl }
+
+constructor TEcc256r1VerifyOsl.Create(const pub: TEccPublicKey);
+begin
+  EOpenSslAsymmetric.CheckAvailable(PClass(self)^, 'Create');
+  if not NewPrime256v1Key(fKey) or
+     not PublicKeyToPoint(pub, fPoint) or
+     (EC_KEY_set_public_key(fKey, fPoint) <> OPENSSLSUCCESS) then
+    raise EOpenSslAsymmetric.CreateFmt('%s.Create failed', [ClassNameShort(self)^]);
+end;
+
+destructor TEcc256r1VerifyOsl.Destroy;
+begin
+  EC_POINT_free(fPoint);
+  EC_KEY_free(fKey);
+  inherited Destroy;
+end;
+
+function TEcc256r1VerifyOsl.Verify(const hash: TEccHash;
+  const sign: TEccSignature): boolean;
+var
+  der: RawByteString;
+begin
+  der := EccToDer(sign);
+  result := ECDSA_verify(
+    0, @hash, SizeOf(hash), pointer(der), length(der), fKey) = OPENSSLSUCCESS;
 end;
 
 
@@ -1390,6 +1544,15 @@ end;
 
 { TJwtAbstractOsl }
 
+procedure TJwtAbstractOsl.SetAlgorithms;
+begin
+  SetAlgorithm;
+  fAlgorithm := OSA_JWT[fAsym];
+  fHashAlgorithm := OSA_HASH[fAsym];
+  fGenEvpType := OSA_EVPTYPE[fAsym];
+  fGenBitsOrCurve := OSA_BITSORCURVE[fAsym];
+end;
+
 constructor TJwtAbstractOsl.Create(const aPrivateKey, aPublicKey: RawByteString;
   const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8; aClaims: TJwtClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
@@ -1403,8 +1566,7 @@ begin
     aIDObfuscationKey, aIDObfuscationKeyNewKdf);
 end;
 
-class procedure TJwtAbstractOsl.GenerateKeys(
-  out PrivateKey, PublicKey: RawByteString);
+class procedure TJwtAbstractOsl.GenerateKeys(out PrivateKey, PublicKey: RawUtf8);
 begin
   with TJwtAbstractOsl(NewInstance) do // no need to call Create
     try
@@ -1418,117 +1580,160 @@ end;
 
 { TJwtES256Osl }
 
-procedure TJwtES256Osl.SetAlgorithms;
+procedure TJwtES256Osl.SetAlgorithm;
 begin
-  fAlgorithm := 'ES256';
-  fHashAlgorithm := ''; // sha256
-  fGenEvpType := EVP_PKEY_EC;
-  fGenBitsOrCurve := NID_X9_62_prime256v1; // = secp256r1
+  fAsym := osaES256;
 end;
 
 { TJwtES384Osl }
 
-procedure TJwtES384Osl.SetAlgorithms;
+procedure TJwtES384Osl.SetAlgorithm;
 begin
-  fAlgorithm := 'ES384';
-  fHashAlgorithm := 'SHA384';
-  fGenEvpType := EVP_PKEY_EC;
-  fGenBitsOrCurve := NID_secp384r1;
+  fAsym := osaES384;
 end;
 
 { TJwtES512Osl }
 
-procedure TJwtES512Osl.SetAlgorithms;
+procedure TJwtES512Osl.SetAlgorithm;
 begin
-  fAlgorithm := 'ES512';
-  fHashAlgorithm := 'SHA512';
-  fGenEvpType := EVP_PKEY_EC;
-  fGenBitsOrCurve := NID_secp521r1;
+  fAsym := osaES512;
 end;
 
 { TJwtES256KOsl }
 
-procedure TJwtES256KOsl.SetAlgorithms;
+procedure TJwtES256KOsl.SetAlgorithm;
 begin
-  fAlgorithm := 'ES256K';
-  fHashAlgorithm := ''; // sha256
-  fGenEvpType := EVP_PKEY_EC;
-  fGenBitsOrCurve := NID_secp256k1;
+  fAsym := osaES256K;
 end;
 
 { TJwtRS256Osl }
 
-procedure TJwtRS256Osl.SetAlgorithms;
+procedure TJwtRS256Osl.SetAlgorithm;
 begin
-  fAlgorithm := 'RS256';
-  fHashAlgorithm := ''; // sha256
-  fGenEvpType := EVP_PKEY_RSA;
-  fGenBitsOrCurve := 2048;
+  fAsym := osaRS256;
 end;
 
 { TJwtRS384Osl }
 
-procedure TJwtRS384Osl.SetAlgorithms;
+procedure TJwtRS384Osl.SetAlgorithm;
 begin
-  fAlgorithm := 'RS384';
-  fHashAlgorithm := 'SHA384';
-  fGenEvpType := EVP_PKEY_RSA;
-  fGenBitsOrCurve := 2048;
+  fAsym := osaRS384;
 end;
 
 { TJwtRS512Osl }
 
-procedure TJwtRS512Osl.SetAlgorithms;
+procedure TJwtRS512Osl.SetAlgorithm;
 begin
-  fAlgorithm := 'RS512';
-  fHashAlgorithm := 'SHA512';
-  fGenEvpType := EVP_PKEY_RSA;
-  fGenBitsOrCurve := 2048;
+  fAsym := osaRS512;
 end;
 
 { TJwtPS256Osl }
 
-procedure TJwtPS256Osl.SetAlgorithms;
+procedure TJwtPS256Osl.SetAlgorithm;
 begin
-  fAlgorithm := 'PS256';
-  fHashAlgorithm := ''; // sha256
-  fGenEvpType := EVP_PKEY_RSA_PSS;
-  fGenBitsOrCurve := 2048;
+  fAsym := osaPS256;
 end;
 
 { TJwtPS384Osl }
 
-procedure TJwtPS384Osl.SetAlgorithms;
+procedure TJwtPS384Osl.SetAlgorithm;
 begin
-  fAlgorithm := 'PS384';
-  fHashAlgorithm := 'SHA384';
-  fGenEvpType := EVP_PKEY_RSA_PSS;
-  fGenBitsOrCurve := 2048;
+  fAsym := osaPS384;
 end;
 
 { TJwtPS512Osl }
 
-procedure TJwtPS512Osl.SetAlgorithms;
+procedure TJwtPS512Osl.SetAlgorithm;
 begin
-  fAlgorithm := 'PS512';
-  fHashAlgorithm := 'SHA512';
-  fGenEvpType := EVP_PKEY_RSA_PSS;
-  fGenBitsOrCurve := 2048;
+  fAsym := osaPS512;
 end;
 
 { TJwtEdDSAOsl }
 
-procedure TJwtEdDSAOsl.SetAlgorithms;
+procedure TJwtEdDSAOsl.SetAlgorithm;
 begin
-  fAlgorithm := 'EdDSA';
-  fHashAlgorithm := 'null'; // Ed25519 includes its own SHA-512
-  fGenEvpType := EVP_PKEY_ED25519;
+  fAsym := osaEdDSA;
 end;
 
 
 { ************** Register OpenSSL to our General Cryptography Catalog }
 
+type
+  TCryptAsymOsl = class(TCryptAsym)
+  protected
+    fOsa: TOpenSslAsym;
+    fDefaultHashAlgorithm: RawUtf8;
+    fEvpType: integer;
+    fBitsOrCurve: integer;
+    function Algo(hasher: TCryptHasher): RawUtf8;
+  public
+    constructor Create(const name: RawUtf8); overload; override;
+    constructor Create(osa: TOpenSslAsym); reintroduce; overload; 
+    procedure GeneratePem(out pub, priv: RawUtf8; const privpwd: RawUtf8); override;
+    function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
+      const priv: RawByteString; out sig: RawByteString;
+      const privpwd: RawUtf8 = ''): boolean; override;
+    function Verify(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
+      const pub, sig: RawByteString): boolean; override;
+    function SharedSecret(const pub, priv: RawByteString): RawByteString; override;
+  end;
+
+
+{ TCryptAsymOsl }
+
+function TCryptAsymOsl.Algo(hasher: TCryptHasher): RawUtf8;
+begin
+  if hasher = nil then
+    result := fDefaultHashAlgorithm
+  else
+    result := hasher.AlgoName; // let OpenSSL resolve the algorithm by name
+end;
+
+constructor TCryptAsymOsl.Create(const name: RawUtf8);
+begin
+  fDefaultHashAlgorithm := OSA_HASH[fOsa];
+  fEvpType := OSA_EVPTYPE[fOsa];
+  fBitsOrCurve := OSA_BITSORCURVE[fOsa];
+  inherited Create(name);
+end;
+
+constructor TCryptAsymOsl.Create(osa: TOpenSslAsym);
+begin
+  fOsa := osa;
+  Create(OSA_JWT[osa]);
+end;
+
+procedure TCryptAsymOsl.GeneratePem(out pub, priv: RawUtf8;
+  const privpwd: RawUtf8);
+begin
+  if privpwd <> '' then
+    raise ECrypt.CreateUtf8('%.GeneratePem(%): unsupported privpwd', [self, fName]);
+  OpenSslGenerateKeys(fEvpType, fBitsOrCurve, priv, pub);
+end;
+
+function TCryptAsymOsl.Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
+  const priv: RawByteString; out sig: RawByteString; const privpwd: RawUtf8): boolean;
+begin
+  result := OpenSslSign(Algo(hasher),
+    msg, pointer(priv), msglen, length(priv), sig, privpwd) <> 0;
+end;
+
+function TCryptAsymOsl.Verify(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
+  const pub, sig: RawByteString): boolean;
+begin
+  result := OpenSslVerify(Algo(hasher),
+    '', msg, pointer(pub), pointer(sig), msglen, length(pub), length(sig));
+end;
+
+function TCryptAsymOsl.SharedSecret(const pub, priv: RawByteString): RawByteString;
+begin
+  result := OpenSslSharedSecret(fEvpType, fBitsOrCurve, pub, priv, '');
+end;
+
+
 procedure RegisterOpenSsl;
+var
+  osa: TOpenSslAsym;
 begin
   if (TAesFast[mGcm] = TAesGcmOsl) or
      not OpenSslIsAvailable then
@@ -1554,17 +1759,19 @@ begin
   @Ecc256r1Sign := @ecdsa_sign_osl;
   @Ecc256r1Verify := @ecdsa_verify_osl;
   @Ecc256r1SharedSecret := @ecdh_shared_secret_osl;
+  TEcc256r1Verify := TEcc256r1VerifyOsl;
+  TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with osaES256
+  for osa := low(osa) to high(osa) do
+    TCryptAsymOsl.Create(osa);
 end;
-
-
 
 procedure FinalizeUnit;
 begin
-  FreeAndNil(MainAesPrngOsl);
   if (prime256v1grp <> nil) and
-     (prime256v1grp <> pointer(1)) then
+     (prime256v1grp <> PEC_GROUP_PRIME256V1_NOTAVAILABLE) then
     EC_GROUP_free(prime256v1grp);
 end;
+
 
 
 initialization

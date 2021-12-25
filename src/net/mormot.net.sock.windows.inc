@@ -33,7 +33,7 @@ type
   PFDSet = ^TFDSet;
   TFDSet = record
     fd_count: integer;
-    fd_array: array[0..FD_SETSIZE-1] of TSocket;
+    fd_array: array[0 .. FD_SETSIZE - 1] of TSocket;
   end;
 
 const
@@ -100,9 +100,9 @@ const
   INADDR_LOOPBACK  = $7F000001;
   INADDR_BROADCAST = $FFFFFFFF;
   INADDR_NONE      = $FFFFFFFF;
-  ADDR_ANY		 = INADDR_ANY;
-  INVALID_SOCKET		= TSocket(NOT(0));
-  SOCKET_ERROR			= -1;
+  ADDR_ANY	   = INADDR_ANY;
+  INVALID_SOCKET   = TSocket(NOT(0));
+  SOCKET_ERROR	   = -1;
 
 const
   IP_OPTIONS          = 1;
@@ -132,7 +132,7 @@ const
   SO_USELOOPBACK  = $0040;          { bypass hardware when possible }
   SO_LINGER       = $0080;          { linger on close if data present }
   SO_OOBINLINE    = $0100;          { leave received OOB data in line }
-  SO_DONTLINGER  =   $ff7f;
+  SO_DONTLINGER   = $ff7f;
   { Additional options }
   SO_SNDBUF       = $1001;          { send buffer size }
   SO_RCVBUF       = $1002;          { receive buffer size }
@@ -151,14 +151,14 @@ const
   SO_PROTOCOL_INFO  = SO_PROTOCOL_INFOA;
   PVD_CONFIG        = $3001;        { configuration info for service provider }
   { Option for opening sockets for synchronous access }
-  SO_OPENTYPE     = $7008;
   SO_SYNCHRONOUS_ALERT    = $10;
   SO_SYNCHRONOUS_NONALERT = $20;
   { Other NT-specific options }
-  SO_MAXDG        = $7009;
-  SO_MAXPATHDG    = $700A;
-  SO_UPDATE_ACCEPT_CONTEXT     = $700B;
-  SO_CONNECT_TIME = $700C;
+  SO_OPENTYPE              = $7008;
+  SO_MAXDG                 = $7009;
+  SO_MAXPATHDG             = $700A;
+  SO_UPDATE_ACCEPT_CONTEXT = $700B;
+  SO_CONNECT_TIME          = $700C;
 
   SOMAXCONN       = $7fffffff;
 
@@ -175,10 +175,10 @@ const
   NI_MAXHOST	   = 1025;
   NI_MAXSERV	   = 32;
   NI_NOFQDN 	   = $1;
-  NI_NUMERICHOST = $2;
+  NI_NUMERICHOST   = $2;
   NI_NAMEREQD	   = $4;
-  NI_NUMERICSERV = $8;
-  NI_DGRAM       = $10;
+  NI_NUMERICSERV   = $8;
+  NI_DGRAM         = $10;
 
 const
   SOCK_STREAM     = 1;               { stream socket }
@@ -360,6 +360,11 @@ const
     IPPROTO_UDP,
     0);
 
+function htons(port: cardinal): cardinal; {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := swap(word(port)); // port should be 16-bit word
+end;
+
 
 { ******** WinSock2 API calls }
 
@@ -380,6 +385,9 @@ function socket(af, struct, protocol: integer): TSocket; stdcall;
 function setsockopt(s: TSocket; level, optname: integer;
    optval: pointer; optlen: integer): integer; stdcall;
   external ws2 name 'setsockopt';
+function getsockopt(s: TSocket; level, optname: integer;
+   optval: pointer; optlen: PInteger): integer; stdcall;
+  external ws2 name 'getsockopt';
 function ioctlsocket(s: TSocket; cmd: cardinal; arg: PCardinal): integer; stdcall;
   external ws2 name 'ioctlsocket';
 function shutdown(s: TSocket; how: integer): integer; stdcall;
@@ -412,6 +420,8 @@ function sendto(s: TSocket; Buf: Pointer; len, flags: integer;
   external ws2 name 'sendto';
 function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer; stdcall;
   external ws2 name 'getpeername';
+function inet_addr(cp: PAnsiChar): cardinal; stdcall;
+  external ws2 name 'inet_addr';
 
 
 { ******** TNetSocket Cross-Platform Wrapper }
@@ -457,7 +467,7 @@ function TNetAddr.SetFrom(const address, addrport: RawUtf8;
 var
   h4, h6: TAddrInfo;
 begin
-  if layer = nlUNIX then
+  if layer = nlUnix then
     result := nrNotImplemented
   else
   begin
@@ -531,18 +541,18 @@ begin
   rdp := nil;
   wrp := nil;
   sock := TSocket(@self);
-  if neRead in scope then
-  begin
-    rd.fd_array[0] := sock;
-    rd.fd_count := 1;
-    rdp := @rd;
-  end;
-  if (neWrite in scope) or
-     not (neRead in scope) then // a least one is needed
+  if neWrite in scope then
   begin
     wr.fd_array[0] := sock;
     wr.fd_count := 1;
     wrp := @wr;
+  end;
+  if (neRead in scope) or
+     not (neWrite in scope) then // a least one is needed
+  begin
+    rd.fd_array[0] := sock;
+    rd.fd_count := 1;
+    rdp := @rd;
   end;
   SetTimeVal(ms, tv);
   res := select(sock + 1, rdp, wrp, nil, @tv);
@@ -556,19 +566,212 @@ begin
      ({%H-}rd.fd_count = 1) and
      (rd.fd_array[0] = sock) then
   begin
-    // Windows expects to check FIONREAD for graceful disconnection
     if ioctlsocket(sock, FIONREAD, @pending) <> NO_ERROR then
       include(result, neError)
-    else if pending > 0 then
-      include(result, neRead)
-    else
-      include(result, neClosed);
+    else 
+      include(result, neRead);
+    // FIONREAD is not enough on Windows for graceful disconnection
+    // -> return neRead and not neClosed if pending=0
   end;
   if (wrp <> nil) and
      ({%H-}wr.fd_count = 1) and
      (wr.fd_array[0] = sock) then
     include(result, neWrite);
 end;
+
+
+{ ******************** IP Addresses Support }
+
+const
+  IPHLPAPI = 'iphlpapi.dll';
+
+type
+  PMIB_IPADDRTABLE = ^MIB_IPADDRTABLE;
+  MIB_IPADDRTABLE = record
+    dwNumEntries: DWORD;
+    ip: array[0..200] of record
+      dwAddr: DWORD;
+      dwIndex: DWORD;
+      dwMask: DWORD;
+      dwBCastAddr: DWORD;
+      dwReasmSize: DWORD;
+      unused1: Word;
+      wType: Word;
+    end;
+  end;
+
+function GetIpAddrTable(pIpAddrTable: PMIB_IPADDRTABLE;
+  var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall; external IPHLPAPI;
+
+
+function GetIPAddresses(Kind: TIPAddress): TRawUtf8DynArray;
+var
+  Table: MIB_IPADDRTABLE;
+  Size: DWORD;
+  i: PtrInt;
+  n: PtrUInt;
+begin
+  result := nil;
+  if Kind = tiaIPv6 then
+    exit; // GetIpAddrTable() is an IPv4 only API
+  Size := SizeOf(Table);
+  if GetIpAddrTable(@Table, Size, false) <> NO_ERROR then
+    exit;
+  SetLength(result, Table.dwNumEntries);
+  n := 0;
+  for i := 0 to Table.dwNumEntries-1 do
+    with Table.ip[i] do
+    if (dwAddr <> $0100007f) and
+       (dwAddr <> 0) then
+    begin
+      case Kind of
+        tiaIPv4Public:
+          if not IsPublicIP(dwAddr) then
+            continue;
+        tiaIPv4Private:
+          if IsPublicIP(dwAddr) then
+            continue;
+      end;
+      IP4Text(@dwAddr, result[n]);
+      inc(n);
+    end;
+  if n <> Table.dwNumEntries then
+    SetLength(result, n);
+end;
+
+
+
+{ ******************** Mac Addresses Support }
+
+const
+  MAX_ADAPTER_ADDRESS_LENGTH = 8;
+  GAA_FLAG_SKIP_UNICAST = $1;
+  GAA_FLAG_SKIP_ANYCAST = $2;
+  GAA_FLAG_SKIP_MULTICAST = $4;
+  GAA_FLAG_SKIP_DNS_SERVER = $8;
+  GAA_FLAG_SKIP_FRIENDLY_NAME = $20;
+  GAA_FLAG_INCLUDE_ALL_INTERFACES = $100; // Vista+
+  GAA_FLAGS = GAA_FLAG_SKIP_UNICAST or
+              GAA_FLAG_SKIP_ANYCAST or
+              GAA_FLAG_SKIP_MULTICAST or
+              GAA_FLAG_SKIP_DNS_SERVER or
+              GAA_FLAG_SKIP_FRIENDLY_NAME;
+              // or GAA_FLAG_INCLUDE_ALL_INTERFACES;
+  IfOperStatusUp = 1;
+
+type
+  SOCKET_ADDRESS = record
+    lpSockaddr: PSOCKADDR;
+    iSockaddrLength: Integer;
+  end;
+  PIP_ADAPTER_UNICAST_ADDRESS = pointer;
+  PIP_ADAPTER_ANYCAST_ADDRESS = pointer;
+  PIP_ADAPTER_DNS_SERVER_ADDRESS = pointer;
+  PIP_ADAPTER_MULTICAST_ADDRESS = pointer;
+  PIP_ADAPTER_ADDRESSES = ^_IP_ADAPTER_ADDRESSES;
+  _IP_ADAPTER_ADDRESSES = record
+    Union: record
+      case Integer of
+        0: (
+          Alignment: QWord);
+        1: (
+          Length: ULONG;
+          IfIndex: DWORD);
+    end;
+    Next: PIP_ADAPTER_ADDRESSES;
+    AdapterName: PAnsiChar;
+    FirstUnicastAddress: PIP_ADAPTER_UNICAST_ADDRESS;
+    FirstAnycastAddress: PIP_ADAPTER_ANYCAST_ADDRESS;
+    FirstMulticastAddress: PIP_ADAPTER_MULTICAST_ADDRESS;
+    FirstDnsServerAddress: PIP_ADAPTER_DNS_SERVER_ADDRESS;
+    DnsSuffix: PWCHAR;
+    Description: PWCHAR;
+    FriendlyName: PWCHAR;
+    PhysicalAddress: array [0..MAX_ADAPTER_ADDRESS_LENGTH - 1] of BYTE;
+    PhysicalAddressLength: DWORD;
+    Flags: DWORD;
+    Mtu: DWORD;
+    IfType: ULONG;
+    OperStatus: DWORD;
+    // below fields are only available on Windows XP with SP1 and later
+    Ipv6IfIndex: ULONG;
+    ZoneIndices: array [0..15] of DWORD;
+    FirstPrefix: pointer;
+    // below fields are only available on Windows Vista and later
+    TransmitLinkSpeed: Int64;
+    ReceiveLinkSpeed: Int64;
+    FirstWinsServerAddress: pointer;
+    FirstGatewayAddress: pointer;
+    Ipv4Metric: ULONG;
+    Ipv6Metric: ULONG;
+    Luid: Int64;
+    Dhcpv4Server: SOCKET_ADDRESS;
+    CompartmentId: DWORD;
+    NetworkGuid: TGUID;
+    ConnectionType: DWORD;
+    TunnelType: DWORD;
+    // DHCP v6 Info following (not used by our code)
+  end;
+
+function GetAdaptersAddresses(Family: ULONG; Flags: DWORD; Reserved: pointer;
+  pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWORD; stdcall;
+  external IPHLPAPI;
+
+function SendARP(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
+  PhyAddrLen: Pointer): DWORD; stdcall; external IPHLPAPI;
+
+
+function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
+var
+  n: PtrInt;
+  siz: ULONG;
+  p: PIP_ADAPTER_ADDRESSES;
+  tmp: RawByteString;
+begin
+  result := nil;
+  siz := 0;
+  if GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, nil, @siz) <> ERROR_BUFFER_OVERFLOW then
+    exit;
+  SetLength(tmp, siz); // around 600 bytes per interface
+  p := pointer(tmp);
+  if GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, p, @siz) = ERROR_SUCCESS then
+  begin
+    n := 0;
+    repeat
+      if (p^.Flags <> 0) and
+         (UpAndDown or
+          (p^.OperStatus = IfOperStatusUp)) and
+         (p^.PhysicalAddressLength = 6) then
+      begin
+        SetLength(result, n + 1);
+        Win32PWideCharToUtf8(
+          p^.Description, StrLenW(p^.Description), result[n].Name);
+        result[n].Address := MacToText(@p^.PhysicalAddress);
+        inc(n);
+      end;
+      p := p^.Next;
+    until p = nil;
+  end;
+end;
+
+function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
+// implements http://msdn.microsoft.com/en-us/library/aa366358
+var
+  dwRemoteIP: DWORD;
+  PhyAddrLen: Longword;
+  pMacAddr: array [0..7] of byte;
+begin
+  result := '';
+  dwremoteIP := inet_addr(pointer(IP));
+  if dwremoteIP <> 0 then
+  begin
+    PhyAddrLen := 8;
+    if SendARP(dwremoteIP, 0, @pMacAddr, @PhyAddrLen) = NO_ERROR then
+      if PhyAddrLen = 6 then
+        result := MacToText(@pMacAddr);
+  end;
+end;
+
 
 
 { ******************** Efficient Multiple Sockets Polling }
@@ -588,7 +791,7 @@ begin
     exit;
   dec(FDSet.fd_count);
   if i < FDSet.fd_count then
-    MoveFast(FDSet.fd_array[i + 1], FDSet.fd_array[i], (FDSet.fd_count - i) * sizeof(TSocket));
+    MoveFast(FDSet.fd_array[i + 1], FDSet.fd_array[i], (FDSet.fd_count - i) * SizeOf(TSocket));
 end;
 
 procedure FD_SET(Socket: TNetSocket; var FDSet: TFDSet);
@@ -605,6 +808,7 @@ type
   // grow FD_SETSIZE up to 512 for the purpose of this class
   // - under POSIX, select() is very limited, so poll/epoll APIs are to be used
   // - in practice, TPollSocketSelect is FASTER than TPollSocketPoll + WSAPoll()
+  // because the new WSAPoll API is just an emulator usinig select() internally
   TPollSocketSelect = class(TPollSocketAbstract)
   protected
     fHighestSocket: TNetSocket;
@@ -617,8 +821,8 @@ type
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
       tag: TPollSocketTag): boolean; override;
     function Unsubscribe(socket: TNetSocket): boolean; override;
-    function WaitForModified(out results: TPollSocketResults;
-      timeoutMS: integer): integer; override;
+    function WaitForModified(var results: TPollSocketResults;
+      timeoutMS: integer): boolean; override;
   end;
 
 constructor TPollSocketSelect.Create;
@@ -653,7 +857,7 @@ end;
 
 function TPollSocketSelect.Unsubscribe(socket: TNetSocket): boolean;
 var
-  i: PtrInt;
+  i, n: PtrInt;
 begin
   result := false;
   if (self <> nil) and
@@ -665,10 +869,11 @@ begin
     FD_CLR(socket, fRead);
     FD_CLR(socket, fWrite);
     dec(fCount);
-    if i < fCount then
+    n := fCount - i;
+    if n > 0 then
     begin
-      MoveFast(fTagSocket[i + 1], fTagSocket[i], (fCount - i) * sizeof(fTagSocket[i]));
-      MoveFast(fTagTag[i + 1], fTagTag[i], (fCount - i) * sizeof(fTagTag[i]));
+      MoveFast(fTagSocket[i + 1], fTagSocket[i], n * SizeOf(fTagSocket[i]));
+      MoveFast(fTagTag[i + 1], fTagTag[i], n * SizeOf(fTagTag[i]));
     end;
     if fCount = 0 then
       fHighestSocket := nil;
@@ -676,19 +881,18 @@ begin
   end;
 end;
 
-function TPollSocketSelect.WaitForModified(out results: TPollSocketResults;
-  timeoutMS: integer): integer;
+function TPollSocketSelect.WaitForModified(var results: TPollSocketResults;
+  timeoutMS: integer): boolean;
 var
   tv: TTimeVal;
   rdp, wrp: PFDSet;
   ev: TPollSocketEvents;
   i: PtrInt;
-  pending: cardinal;
   sock: TNetSocket;
-  rd, wr: TFDSet;
-  tmp: array[0..FD_SETSIZE - 1] of TPollSocketResult;
+  rd, wr: TFDSet; // modified by select() -> local copy on stack
 begin
-  result := -1; // error
+  result := false; // error
+  results.Count := 0;
   if (self = nil) or
      (fCount = 0) then
     exit;
@@ -707,37 +911,41 @@ begin
   else
     wrp := nil;
   SetTimeVal(timeoutMS, tv);
-  result := select(PtrUInt(fHighestSocket) + 1, rdp, wrp, nil, @tv);
-  if result <= 0 then
+  if select(PtrUInt(fHighestSocket) + 1, rdp, wrp, nil, @tv) <= 0 then
     exit;
-  result := 0;
+  if length(results.Events) < fCount then
+    SetLength(results.Events, FD_SETSIZE);
   for i := 0 to fCount - 1 do
   begin
     byte(ev) := 0;
     sock := fTagSocket[i];
     if (rdp <> nil) and
        FD_ISSET(sock, rd{%H-}) then
-    begin
-      if (IoctlSocket(TSocket(sock), FIONREAD, @pending) = NO_ERROR) and
-         ({%H-}pending = 0) then
-        // socket closed gracefully - see TCrtSocket.SockReceivePending
-        include(ev, pseClosed)
-      else
-        include(ev, pseRead);
-    end;
+    // on heavily multi-threaded process, select() may be triggerred but
+    // currently reading in another thread, so here IoctlSocket() would return
+    // pending=0 whereas the socket is actually NOT closed (seen on Windows 7)
+    // -> return pseRead now and let a single thread check for pending bytes and
+    // detect gracefully closed sockets e.g. in TPollAsyncSockets.ProcessRead
+    (*
+    if (IoctlSocket(TSocket(sock), FIONREAD, @pending) = NO_ERROR) and
+       ({%H-}pending = 0) then
+      // socket closed gracefully - see TCrtSocket.SockReceivePending
+      include(ev, pseClosed)
+    else
+    *)
+      include(ev, pseRead);
     if (wrp <> nil) and
        FD_ISSET(sock, wr{%H-}) then
       include(ev, pseWrite);
     if byte(ev) <> 0 then
-      with {%H-}tmp[result] do
+      with results.Events[results.Count] do
       begin
+        result := true;
         events := ev;
         tag := fTagTag[i];
-        inc(result);
+        inc(results.Count);
       end;
   end;
-  SetLength(results, result);
-  MoveFast(tmp, results[0], result * sizeof(tmp[0]));
 end;
 
 
@@ -822,10 +1030,10 @@ type
 
   ESChannel = class(Exception);
 
-  TSChannelClient = class(TInterfacedObject, INetTLS)
+  TSChannelClient = class(TInterfacedObject, INetTls)
   private
     fSocket: TNetSocket;
-    fContext: PNetTLSContext;
+    fContext: PNetTlsContext;
     fServerAddress: RawUtf8;
     fCred: TCredHandle;
     fCtxt: TCtxtHandle;
@@ -833,12 +1041,13 @@ type
     fSizes: TSecPkgContextStreamSizes;
     fData, fInput: AnsiString;
     fInputSize, fDataPos, fDataCount, fInputCount: integer;
+    fSessionClosed: boolean;
     procedure ESChannelRaiseLastError(res: cardinal);
     function CheckSEC_E_OK(res: integer): cardinal;
     procedure HandshakeLoop;
   public
     destructor Destroy; override;
-    procedure AfterConnection(Socket: TNetSocket;  var Context: TNetTLSContext;
+    procedure AfterConnection(Socket: TNetSocket;  var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
@@ -1069,7 +1278,7 @@ begin
 end;
 
 procedure TSChannelClient.AfterConnection(Socket: TNetSocket;
-  var Context: TNetTLSContext; const ServerAddress: RawUtf8);
+  var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
   buf: THandshakeBuf;
   res, f: cardinal;
@@ -1232,7 +1441,12 @@ var
   end;
 
 begin
-  result := nrFatalError;
+  if fSessionClosed and
+     (fDataCount = 0) then
+  begin
+    result := nrClosed;
+    exit;
+  end;
   while fDataCount = 0 do
   try
     fDataPos := 0;
@@ -1244,9 +1458,14 @@ begin
         fInputSize - fInputCount, MSG_NOSIGNAL);
       if read <= 0 then
       begin
-        result := NetLastError; // may be nrRetry for WSATRY_AGAIN
-        if result = nrOK then
-          result := nrUnknownError;
+        if read = 0 then
+          result := nrClosed
+        else
+        begin
+          result := NetLastError; // may be nrRetry for WSATRY_AGAIN
+          if result = nrOK then
+            result := nrUnknownError;
+        end;
         exit;
       end;
       inc(fInputCount, read);
@@ -1258,7 +1477,7 @@ begin
         SEC_I_RENEGOTIATE:
           needsRenegotiate := true;
         SEC_I_CONTEXT_EXPIRED:
-          exit;
+          fSessionClosed := true;
         SEC_E_INCOMPLETE_MESSAGE:
           break;
         else
@@ -1288,6 +1507,7 @@ begin
     if needsRenegotiate then
       HandshakeLoop;
   except
+    result := nrFatalError;
     exit; // shutdown the connection on ESChannel fatal error
   end;
   read := fDataCount;
@@ -1363,7 +1583,7 @@ end;
 
 
 
-function SChannelNewNetTLS: INetTLS;
+function SChannelNewNetTls: INetTls;
 begin
   result := TSChannelClient.Create;
 end;
@@ -1403,7 +1623,7 @@ begin
        Assigned(QueryContextAttributes) and
        Assigned(EncryptMessage) and
        Assigned(DecryptMessage) then
-     NewNetTLS := SChannelNewNetTLS;
+     NewNetTls := SChannelNewNetTls;
   end;
 end;
 

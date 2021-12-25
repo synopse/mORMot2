@@ -123,7 +123,7 @@ type
       const aSettingsName: TFileName = ''); reintroduce;
     /// main entry point of the daemon, to process the command line switches
     // - aAutoStart is used only under Windows
-    procedure CommandLine(aAutoStart: boolean=true);
+    procedure CommandLine(aAutoStart: boolean = true);
     /// inherited class should override this abstract method with proper process
     procedure Start; virtual; abstract;
     /// inherited class should override this abstract method with proper process
@@ -155,7 +155,7 @@ begin
   inherited Create;
   fLog := LOG_STACKTRACE + [sllNewRun];
   fLogRotateFileCount := 2;
-  fServiceName := Utf8ToString(Executable.ProgramName);
+  Utf8ToStringVar(Executable.ProgramName, fServiceName);
   fServiceDisplayName := fServiceName;
 end;
 
@@ -278,10 +278,17 @@ type
      cConsole,
      cKill);
 
-procedure TSynDaemon.CommandLine(aAutoStart: boolean);
 const
   CMD_CHR: array[cHelp .. cKill] of AnsiChar = (
-    'H', 'I', 'R', 'F', 'U', 'C', 'K');
+    'H',  // cHelp
+    'I',  // cInstall
+    'R',  // cRun
+    'F',  // cFork
+    'U',  // cUninstall
+    'C',  // cConsole
+    'K'); // cKill
+
+procedure TSynDaemon.CommandLine(aAutoStart: boolean);
 var
   cmd, c: TExecuteCommandLineCmd;
   p: PUtf8Char;
@@ -393,7 +400,12 @@ begin
       end;
     if cmd = cNone then
       byte(cmd) := ord(cVersion) +
-        IdemPCharArray(p, ['VERS', 'VERB', 'START', 'STOP', 'STAT', 'SILENTK']);
+        IdemPCharArray(p, ['VERS',      // cVersion
+                           'VERB',      // cVerbose
+                           'START',     // cStart
+                           'STOP',      // cStop
+                           'STAT',      // cState
+                           'SILENTK']); // cSilentKill
     end;
   try
     case cmd of
@@ -411,7 +423,8 @@ begin
         if Executable.Version.Version32 <> 0 then
           writeln(' Version: ', Executable.Version.Detailed);
       end;
-    cConsole, cVerbose:
+    cConsole,
+    cVerbose:
       begin
         WriteCopyright;
         writeln('Launched in ', cmdText, ' mode'#10);
@@ -477,7 +490,10 @@ begin
         with fSettings do
           Show(TServiceController.Install(ServiceName, ServiceDisplayName,
             ServiceDescription, aAutoStart, '', ServiceDependencies) <> ssNotInstalled);
-      cStart, cStop, cUninstall, cState:
+      cStart,
+      cStop,
+      cUninstall,
+      cState:
         begin
           ctrl := TServiceController.CreateOpenService(
                     '', '', fSettings.ServiceName);
@@ -505,10 +521,12 @@ begin
     end;
     {$else}
     // POSIX Run/Fork background execution of the executable
-    cRun, cFork:
+    cRun,
+    cFork:
       RunUntilSigTerminated(self, {dofork=}(cmd = cFork), Start, Stop,
         fSettings.fLogClass.DoLog, fSettings.ServiceName);
-    cKill, cSilentKill:
+    cKill,
+    cSilentKill:
       if RunUntilSigTerminatedForKill then
       begin
         if cmd <> cSilentKill then

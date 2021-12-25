@@ -316,8 +316,9 @@ function SecEncrypt(var aSecContext: TSecContext;
 // or ClientSspiAuth
 // - aEncrypted contains data that must be decrypted
 // - returns decrypted message
+// - warning: aEncrypted is modified in-place during the process
 function SecDecrypt(var aSecContext: TSecContext;
-  const aEncrypted: RawByteString): RawByteString;
+  var aEncrypted: RawByteString): RawByteString;
 
 
 
@@ -326,13 +327,13 @@ function SecDecrypt(var aSecContext: TSecContext;
 /// client-side authentication procedure
 // - aSecContext holds information between function calls
 // - aInData contains data received from server
-// - aSecKerberosSPN is the optional SPN domain name, e.g.
+// - aSecKerberosSpn is the optional SPN domain name, e.g.
 // 'mymormotservice/myserver.mydomain.tld'
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
 // and call function again width data, returned from servsr
 function ClientSspiAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
+  const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 
 /// client-side authentication procedure with clear text password
@@ -372,20 +373,15 @@ procedure ServerSspiAuthUser(var aSecContext: TSecContext;
 // ServerSspiAuth() or ClientSspiAuth()
 function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 
-/// force using aSecKerberosSPN for server identification
-// - aSecKerberosSPN is the Service Principal Name, as registered in domain,
+/// force using a Kerberos SPN for server identification
+// - aSecKerberosSpn is the Service Principal Name, as registered in domain,
 // e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
-procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
-
-/// force/unforce NTLM authentication instead of Negotiate for browser authenticaton
-// - use case: SPNs not configured properly in domain
-// - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
-procedure ServerForceNTLM(ForceNTLM: boolean);
+procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 
 /// high-level cross-platform initialization function
 // - as called e.g. by mormot.rest.client/server.pas
 // - in this unit, will just call ServerForceNTLM(false)
-procedure InitializeDomainAuth;
+function InitializeDomainAuth: boolean;
 
 
 const
@@ -398,6 +394,13 @@ const
   SECPKGNAMENEGOTIATE = 'Negotiate';
 
 var
+  /// HTTP Challenge name for SSPI authentication
+  // - call ServerForceNTLM() to specialize this value to 'NTLM' or 'Negotiate'
+  SECPKGNAMEHTTP: RawUtf8;
+
+  /// HTTP Challenge name, converted into uppercase for IdemPChar() pattern
+  SECPKGNAMEHTTP_UPPER: RawUtf8;
+
   /// HTTP header to be set for SSPI authentication
   // - call ServerForceNTLM() to specialize this value to either
   // 'WWW-Authenticate: NTLM' or 'WWW-Authenticate: Negotiate';
@@ -406,7 +409,13 @@ var
   /// HTTP header pattern received for SSPI authentication
   // - call ServerForceNTLM() to specialize this value to either
   // 'AUTHORIZATION: NTLM ' or 'AUTHORIZATION: NEGOTIATE '
-  SECPKGNAMEHTTPAUTHORIZATION: PAnsiChar;
+  SECPKGNAMEHTTPAUTHORIZATION: RawUtf8;
+
+  /// by default, this unit will use Negotiate/Kerberos for client authentication
+  // - can be set to TRUE to use the deprecated and unsafe NTLM protocol instead
+  // - use case: SPNs not configured properly in domain
+  // - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
+  SspiForceNtlmClient: boolean = false;
 
 
 
@@ -570,7 +579,7 @@ begin
 end;
 
 function SecDecrypt(var aSecContext: TSecContext;
-  const aEncrypted: RawByteString): RawByteString;
+  var aEncrypted: RawByteString): RawByteString;
 var
   EncLen, SigLen: cardinal;
   BufPtr: PByte;
@@ -612,7 +621,7 @@ end;
 { ****************** High-Level Client and Server Authentication using SSPI }
 
 var
-  ForceSecKerberosSPN: SynUnicode;
+  ForceSecKerberosSpn: SynUnicode;
 
 function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; pszTargetName: PWideChar;
@@ -670,7 +679,7 @@ begin
   Status := InitializeSecurityContextW(@aSecContext.CredHandle, LInCtxPtr,
     pszTargetName, CtxReqAttr, 0, SECURITY_NATIVE_DREP, InDescPtr, 0,
     @aSecContext.CtxHandle, @OutDesc, CtxAttr, Expiry);
-  Result := (Status = SEC_I_CONTINUE_NEEDED) or
+  result := (Status = SEC_I_CONTINUE_NEEDED) or
             (Status = SEC_I_COMPLETE_AND_CONTINUE);
   if (Status = SEC_I_COMPLETE_NEEDED) or
      (Status = SEC_I_COMPLETE_AND_CONTINUE) then
@@ -682,21 +691,18 @@ begin
 end;
 
 function ClientSspiAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
+  const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
   TargetName: PWideChar;
 begin
-  if aSecKerberosSPN <> '' then
-    TargetName := pointer(Utf8ToSynUnicode(aSecKerberosSPN))
+  if aSecKerberosSpn <> '' then
+    TargetName := pointer(Utf8ToSynUnicode(aSecKerberosSpn))
+  else if ForceSecKerberosSpn <> '' then
+    TargetName := pointer(ForceSecKerberosSpn)
   else
-  begin
-    if ForceSecKerberosSPN <> '' then
-      TargetName := pointer(ForceSecKerberosSPN)
-    else
-      TargetName := nil;
-  end;
-  Result := ClientSspiAuthWorker(
+    TargetName := nil;
+  result :=  ClientSspiAuthWorker(
     aSecContext, aInData, TargetName, nil, aOutData);
 end;
 
@@ -728,11 +734,11 @@ begin
   AuthIdentity.Password := pointer(Password);
   AuthIdentity.PasswordLength := Length(Password);
   AuthIdentity.Flags := SEC_WINNT_AUTH_IDENTITY_UNICODE;
-  if ForceSecKerberosSPN <> '' then
-    TargetName := pointer(ForceSecKerberosSPN)
+  if ForceSecKerberosSpn <> '' then
+    TargetName := pointer(ForceSecKerberosSpn)
   else
     TargetName := nil;
-  Result := ClientSspiAuthWorker(
+  result :=  ClientSspiAuthWorker(
     aSecContext, aInData, TargetName, @AuthIdentity, aOutData);
 end;
 
@@ -787,7 +793,7 @@ begin
   Status := AcceptSecurityContext(@aSecContext.CredHandle, LInCtxPtr, @InDesc,
       ASC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY,
       SECURITY_NATIVE_DREP, @aSecContext.CtxHandle, @OutDesc, CtxAttr, Expiry);
-  Result := (Status = SEC_I_CONTINUE_NEEDED) or
+  result := (Status = SEC_I_CONTINUE_NEEDED) or
             (Status = SEC_I_COMPLETE_AND_CONTINUE);
   if (Status = SEC_I_COMPLETE_NEEDED) or
      (Status = SEC_I_COMPLETE_AND_CONTINUE) then
@@ -817,33 +823,42 @@ begin
   if QueryContextAttributesW(@aSecContext.CtxHandle,
        SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
     raise ESynSspi.CreateLastOSError(aSecContext);
-  Result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name,
+  result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name,
               StrLenW(NegotiationInfo.PackageInfo^.Name));
   FreeContextBuffer(NegotiationInfo.PackageInfo);
 end;
 
-procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
+procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 begin
-  Utf8ToSynUnicode(aSecKerberosSPN, ForceSecKerberosSPN);
+  Utf8ToSynUnicode(aSecKerberosSpn, ForceSecKerberosSpn);
 end;
 
-procedure ServerForceNTLM(ForceNTLM: boolean);
+var
+  DomainAuthMode: (damUndefined, damNtlm, damNegotiate);
+
+procedure SetDomainAuthMode;
 begin
-  if ForceNTLM then
+  if SspiForceNtlmClient then
   begin
-    SECPKGNAMEHTTPWWWAUTHENTICATE := 'WWW-Authenticate: NTLM';
-    SECPKGNAMEHTTPAUTHORIZATION := 'AUTHORIZATION: NTLM ';
+    SECPKGNAMEHTTP := 'NTLM';
+    DomainAuthMode := damNtlm;
   end
   else
   begin
-    SECPKGNAMEHTTPWWWAUTHENTICATE := 'WWW-Authenticate: Negotiate';
-    SECPKGNAMEHTTPAUTHORIZATION := 'AUTHORIZATION: NEGOTIATE ';
+    SECPKGNAMEHTTP := 'Negotiate';
+    DomainAuthMode := damNegotiate;
   end;
+  SECPKGNAMEHTTP_UPPER := UpperCase(SECPKGNAMEHTTP);
+  SECPKGNAMEHTTPWWWAUTHENTICATE := 'WWW-Authenticate: ' + SECPKGNAMEHTTP;
+  SECPKGNAMEHTTPAUTHORIZATION := 'AUTHORIZATION: ' + SECPKGNAMEHTTP_UPPER + ' ';
 end;
 
-procedure InitializeDomainAuth;
+function InitializeDomainAuth: boolean;
 begin
-  ServerForceNTLM(false);
+  if (DomainAuthMode = damUndefined) or
+     (SspiForceNtlmClient <> (DomainAuthMode = damNtlm)) then
+    SetDomainAuthMode;
+  result := true;
 end;
 
 {$endif OSPOSIX}

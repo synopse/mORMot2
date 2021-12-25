@@ -67,7 +67,7 @@ function EccCommandSourceFile(const AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const ConstName, Comment, PassWord: RawUtf8): TFileName;
 
-/// end-user command to create a .json base-64 text array from a set of public key files
+/// end-user command to create a .json Base64 text array from a set of public key files
 // - ready to be included e.g. as settings of any server
 // - EccCommandChainCertificates(['*']) will create a 'chain.ca' of all
 // public key files in the current folder
@@ -123,13 +123,13 @@ function EccCommandCheat(const PrivateFile: TFileName;
   out authpass: RawUtf8; out authround: integer): RawUtf8;
 
 /// end-user command to encrypt a file with the symetric .synaead format
-// - will use symetric encryption via AES-256-CFB/PKCS7 over PBKDF2_HMAC_SHA256
+// - will use symetric encryption via AES-256-CFB/PKCS7 over Pbkdf2HmacSha256
 // - as used in the ecc.dpr command-line tool
 procedure AeadCommandCryptFile(const FileToCrypt, DestFile: TFileName;
   const Password, PasswordSalt: RawUtf8; PasswordRounds: integer);
 
 /// end-user command to decrypt a symetric .synaead file
-// - will use symetric encryption via AES-256-CFB/PKCS7 over PBKDF2_HMAC_SHA256
+// - will use symetric encryption via AES-256-CFB/PKCS7 over Pbkdf2HmacSha256
 // - as used in the ecc.dpr command-line tool
 procedure AeadCommandDecryptFile(const FileToDecrypt, DestFile: TFileName;
   const Password, PasswordSalt: RawUtf8; PasswordRounds: integer);
@@ -202,7 +202,8 @@ begin
       if SavePasswordRounds = DEFAULT_ECCROUNDS then
         json := SavePassword
       else
-        json := JsonEncode(['pass', SavePassword, 'rounds', SavePasswordRounds]);
+        json := JsonEncode(['pass', SavePassword,
+                            'rounds', SavePasswordRounds]);
       bin := TAesPrng.Main.AFSplit(pointer(json)^, length(json), CHEAT_SPLIT);
       fn := Utf8ToString(secret.Serial) + CHEAT_FILEEXT;
       FileFromString(master.Encrypt(bin), fn);
@@ -396,7 +397,7 @@ begin
     begin
       if not EciesHeaderFile(FileToDecrypt, head) then
         exit;
-      priv := Utf8ToString(EccText(head.recid));
+      Utf8ToFileName(EccText(head.recid), priv);
       if not EccKeyFileFind(priv, true) then
         exit; // not found local .private from header
     end;
@@ -430,7 +431,7 @@ begin
     SetLength(files, n);
     for i := 0 to n - 1 do
     begin
-      files[i] := Utf8ToString(CertFiles[i]);
+      Utf8ToFileName(CertFiles[i], files[i]);
       if not EccKeyFileFind(files[i], false) then
         exit;
     end;
@@ -511,9 +512,9 @@ begin
     if json = '' then
       raise EECCException.CreateUtf8('Incorrect file %', [fn]);
     if not doc.InitJson(json) then
-      doc.InitObject(['pass', json,
-                      'rounds', DEFAULT_ECCROUNDS], JSON_OPTIONS_FAST);
-    authpass := doc.U['pass'];
+      doc.InitObject(['pass',   json,
+                      'rounds', DEFAULT_ECCROUNDS], JSON_FAST);
+    authpass  := doc.U['pass'];
     authround := doc.I['rounds'];
     result := doc.ToJson('', '', jsonHumanReadable);
   finally
@@ -530,7 +531,7 @@ var
   dst: RawByteString;
 begin
   try
-    PBKDF2_HMAC_SHA256(
+    Pbkdf2HmacSha256(
       Password, PasswordSalt, PasswordRounds, aeskey, 'salt');
     try
       dst := TAesCfc.MacEncrypt(Source, aeskey, Encrypt);
@@ -686,10 +687,10 @@ begin
             until (saverounds >= 1000) or
                   sw.NoPrompt;
             splitfiles := 1;
-      {repeat
-        splitfiles := sw.AsInt('SplitFiles',1,
-          'Into how many files the private key should be parceled out.');
-      until (splitfiles>0) or sw.NoPrompt;}
+            {repeat
+              splitfiles := sw.AsInt('SplitFiles',1,
+                'Into how many files the private key should be parceled out.');
+            until (splitfiles>0) or sw.NoPrompt;}
             newfile := EccCommandNew(auth, authpass, authrounds, issuer, start,
               days, savepass, saverounds, splitfiles);
             WritePassword(newfile, savepass, saverounds);

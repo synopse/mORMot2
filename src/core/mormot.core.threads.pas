@@ -7,7 +7,7 @@ unit mormot.core.threads;
   *****************************************************************************
 
    High-Level Multi-Threading features shared by all framework units
-    - Thread-Safe Pending Tasks List
+    - Thread-Safe TSynQueue and TPendingTaskList
     - Background Thread Processing
     - Parallel Execution in a Thread Pool
     - Server Process Oriented Thread Pool
@@ -25,17 +25,17 @@ uses
   syncobjs,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.rtti,
   mormot.core.text,
+  mormot.core.rtti,
+  mormot.core.buffers,
   mormot.core.data,
   mormot.core.perf;
-
-
-{ ************ Thread-Safe Pending Tasks List }
 
 const
   /// defined here to avoid explicit link to syncobjs in uses clause
   wrSignaled = syncobjs.wrSignaled;
+  /// defined here to avoid explicit link to syncobjs in uses clause
+  wrTimeout = syncobjs.wrTimeout;
 
 type
   /// defined here to avoid explicit link to syncobjs in uses clause
@@ -44,9 +44,113 @@ type
   /// defined here to avoid explicit link to syncobjs in uses clause
   TEvent = syncobjs.TEvent;
 
+  /// a dynamic array of TThread
+  TThreadDynArray = array of TThread;
+
   /// exception class raised by this unit
   ESynThread = class(ESynException);
 
+
+{ ************ Thread-Safe TSynQueue and TPendingTaskList }
+
+type
+  /// thread-safe FIFO (First-In-First-Out) in-order queue of records
+  // - uses internally a TDynArray storage, with a sliding algorithm, more
+  // efficient than the FPC or Delphi TQueue, or a naive TDynArray.Add/Delete
+  // - supports TSynPersistentStore binary persistence, if needed
+  // - this structure is also thread-safe by design
+  TSynQueue = class(TSynPersistentStore)
+  protected
+    fValues: TDynArray;
+    fValueVar: pointer;
+    fCount, fFirst, fLast: integer;
+    fWaitPopFlags: set of (wpfDestroying);
+    fWaitPopCounter: integer;
+    procedure InternalPop(aValue: pointer);
+    procedure InternalGrow;
+    function InternalDestroying(incPopCounter: integer): boolean;
+    function InternalWaitDone(starttix, endtix: Int64; const idle: TThreadMethod): boolean;
+    /// low-level TSynPersistentStore methods implementing the persistence
+    procedure LoadFromReader; override;
+    procedure SaveToWriter(aWriter: TBufferWriter); override;
+  public
+    /// initialize the queue storage
+    // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
+    // would store the values within this TSynQueue instance
+    // - a name can optionally be assigned to this instance
+    constructor Create(aTypeInfo: PRttiInfo;
+      const aName: RawUtf8 = ''); reintroduce; virtual;
+    /// finalize the storage
+    // - would release all internal stored values, and call WaitPopFinalize
+    destructor Destroy; override;
+    /// store one item into the queue
+    // - this method is thread-safe, since it will lock the instance
+    procedure Push(const aValue);
+    /// extract one item from the queue, as FIFO (First-In-First-Out)
+    // - returns true if aValue has been filled with a pending item, which
+    // is removed from the queue (use Peek if you don't want to remove it)
+    // - returns false if the queue is empty
+    // - this method is thread-safe, since it will lock the instance
+    function Pop(out aValue): boolean;
+    /// extract one matching item from the queue, as FIFO (First-In-First-Out)
+    // - the current pending item is compared with aAnother value
+    function PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
+      out aValue): boolean;
+    /// lookup one item from the queue, as FIFO (First-In-First-Out)
+    // - returns true if aValue has been filled with a pending item, without
+    // removing it from the queue (as Pop method does)
+    // - returns false if the queue is empty
+    // - this method is thread-safe, since it will lock the instance
+    function Peek(out aValue): boolean;
+    /// wait and extract one item from the queue, as FIFO (First-In-First-Out)
+    // - returns true if aValue has been filled with a pending item within the
+    // specified aTimeoutMS time
+    // - returns false if nothing was pushed into the queue in time, or if
+    // WaitPopFinalize has been called
+    // - aWhenIdle could be assigned e.g. to VCL/LCL Application.ProcessMessages
+    // - you can optionally compare the pending item before returning it (could
+    // be used e.g. when several threads are putting items into the queue)
+    // - this method is thread-safe, but will lock the instance only if needed
+    function WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
+      out aValue; aCompared: pointer = nil;
+      aCompare: TDynArraySortCompare = nil): boolean;
+    /// waiting lookup of one item from the queue, as FIFO (First-In-First-Out)
+    // - returns a pointer to a pending item within aTimeoutMS time
+    // - Safe.ReadWriteLock is kept, so caller could check its content, then
+    // call Pop() if it is the expected one, and eventually Safe.ReadWriteUnlock
+    // - returns nil if nothing was pushed into the queue in time
+    // - this method is thread-safe, but will lock the instance only if needed
+    function WaitPeekLocked(aTimeoutMS: integer;
+      const aWhenIdle: TThreadMethod): pointer;
+    /// ensure any pending or future WaitPop() returns immediately as false
+    // - is always called by Destroy destructor
+    // - could be also called e.g. from an UI OnClose event to avoid any lock
+    // - this method is thread-safe, but will lock the instance only if needed
+    procedure WaitPopFinalize(aTimeoutMS: integer = 100);
+    /// delete all items currently stored in this queue, and void its capacity
+    // - this method is thread-safe, since it will lock the instance
+    procedure Clear;
+    /// initialize a dynamic array with the stored queue items
+    // - aDynArrayValues should be a variable defined as aTypeInfo from Create
+    // - you can retrieve an optional TDynArray wrapper, e.g. for binary or JSON
+    // persistence
+    // - this method is thread-safe, and will make a copy of the queue data
+    procedure Save(out aDynArrayValues; aDynArray: PDynArray = nil); overload;
+    /// returns how many items are currently stored in this queue
+    // - this method is thread-safe
+    function Count: integer;
+    /// returns how much slots is currently reserved in memory
+    // - the queue has an optimized auto-sizing algorithm, you can use this
+    // method to return its current capacity
+    // - this method is thread-safe
+    function Capacity: integer;
+    /// returns true if there are some items currently pending in the queue
+    // - slightly faster than checking Count=0, and much faster than Pop or Peek
+    function Pending: boolean;
+  end;
+
+
+type
   /// internal item definition, used by TPendingTaskList storage
   TPendingTaskListItem = packed record
     /// the task should be executed when TPendingTaskList.GetTimestamp reaches
@@ -59,21 +163,18 @@ type
   /// internal list definition, used by TPendingTaskList storage
   TPendingTaskListItemDynArray = array of TPendingTaskListItem;
 
-  /// handle a list of tasks, stored as RawByteString, with a time stamp
-  // - internal time stamps would be GetTickCount64 by default, so have a
-  // resolution of about 16 ms under Windows
+  /// thread-safe list of tasks, stored as RawByteString, with a timestamp
   // - you can add tasks to the internal list, to be executed after a given
   // delay, using a post/peek like algorithm
   // - execution delays are not expected to be accurate, but are best guess,
-  // according to NextTask call
-  // - this implementation is thread-safe, thanks to the Safe internal locker
+  // according to each NextPendingTask call, and GetTimestamp resolution
   TPendingTaskList = class(TSynLocked)
   protected
     fCount: integer;
     fTask: TPendingTaskListItemDynArray;
     fTasks: TDynArray;
     function GetCount: integer;
-    function GetTimestamp: Int64; virtual;
+    function GetTimestamp: Int64; virtual; // returns GetTickCount64 by default
   public
     /// initialize the list memory and resources
     constructor Create; override;
@@ -82,7 +183,8 @@ type
       const aTask: RawByteString); virtual;
     /// append several tasks, specifying a delay in milliseconds between tasks
     // - first supplied delay would be computed from the current time, then
-    // it would specify how much time to wait between the next supplied task
+    // it would specify how much time to wait between the next supplied task -
+    // that is, aMilliSecondsDelays is not an absolute delay
     procedure AddTasks(const aMilliSecondsDelays: array of integer;
       const aTasks: array of RawByteString);
     /// retrieve the next pending task
@@ -223,6 +325,7 @@ type
   // TSynBackgroundThreadMethod and provide a much more convenient callback
   TSynBackgroundThreadMethodAbstract = class(TSynBackgroundThreadAbstract)
   protected
+    fPendingProcessLock: TLightLock;
     fCallerEvent: TEvent;
     fParam: pointer;
     fCallerThreadID: TThreadID;
@@ -231,9 +334,8 @@ type
     fOnBeforeProcess: TOnNotifyThread;
     fOnAfterProcess: TOnNotifyThread;
     fPendingProcessFlag: TSynBackgroundThreadProcessStep;
-    fPendingProcessLock: TSynLocker;
     procedure ExecuteLoop; override;
-    function OnIdleProcessNotify(start: Int64): integer;
+    function OnIdleProcessNotify(var start: Int64): Int64; // return elapsed ms
     function GetOnIdleBackgroundThreadActive: boolean;
     function GetPendingProcess: TSynBackgroundThreadProcessStep;
     procedure SetPendingProcess(State: TSynBackgroundThreadProcessStep);
@@ -437,10 +539,11 @@ type
   protected
     fTask: TSynBackgroundTimerTaskDynArray;
     fTasks: TDynArray;
+    fTaskCount: integer;
     fTaskLock: TSynLocker;
     procedure EverySecond(Sender: TSynBackgroundThreadProcess;
       Event: TWaitResult);
-    function Find(const aProcess: TMethod): integer;
+    function Find(const aProcess: TMethod): PtrInt;
     function Add(const aOnProcess: TOnSynBackgroundTimerProcess;
       const aMsg: RawUtf8; aExecuteNow: boolean): boolean;
   public
@@ -605,7 +708,7 @@ type
   TBlockingProcessPool = class(TSynPersistent)
   protected
     fClass: TBlockingProcessPoolItemClass;
-    fPool: TSynObjectListLocked;
+    fPool: TSynObjectListLightLocked;
     fCallCounter: TBlockingProcessPoolCall; // set TBlockingProcessPoolItem.Call
   public
     /// initialize the pool, for a given implementation class
@@ -758,6 +861,9 @@ type
     destructor Destroy; override;
     /// will loop for any pending task, and execute fOwner.Task()
     procedure Execute; override;
+    /// the associated thread pool
+    property Owner: TSynThreadPool
+      read fOwner;
   end;
 
   TSynThreadPoolWorkThreads = array of TSynThreadPoolWorkThread;
@@ -767,25 +873,27 @@ type
   // Event-driven approach under Linux/POSIX
   TSynThreadPool = class
   protected
+    {$ifndef USE_WINIOCP}
+    fSafe: TLightLock;
+    {$endif USE_WINIOCP}
     fWorkThread: TSynThreadPoolWorkThreads;
     fWorkThreadCount: integer;
     fRunningThreads: integer;
     fExceptionsCount: integer;
     fOnThreadTerminate: TOnNotifyThread;
     fOnThreadStart: TOnNotifyThread;
-    fTerminated: boolean;
-    fContentionAbortCount: cardinal;
     fContentionTime: Int64;
+    fContentionAbortCount: cardinal;
     fContentionCount: cardinal;
     fContentionAbortDelay: integer;
     fName: RawUtf8;
+    fTerminated: boolean;
     {$ifdef USE_WINIOCP}
     fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
     fQueuePendingContext: boolean;
     fPendingContext: array of pointer;
     fPendingContextCount: integer;
-    fSafe: TRTLCriticalSection;
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
     function QueueLength: integer; virtual;
@@ -793,16 +901,17 @@ type
     /// end thread on IO error
     function NeedStopOnIOError: boolean; virtual;
     /// process to be executed after notification
-    procedure Task(aCaller: TSynThread; aContext: Pointer); virtual; abstract;
+    procedure Task(aCaller: TSynThreadPoolWorkThread;
+      aContext: Pointer); virtual; abstract;
     procedure TaskAbort(aContext: Pointer); virtual;
   public
     /// initialize a thread pool with the supplied number of threads
     // - abstract Task() virtual method will be called by one of the threads
     // - up to 256 threads can be associated to a Thread Pool
-    // - can optionaly accept aOverlapHandle - a handle previously
-    // opened for overlapped I/O (IOCP) under Windows
-    // - aQueuePendingContext=true will store the pending context into
-    // an internal queue, so that Push() always returns true
+    // - on Windows, can optionaly accept aOverlapHandle - a handle previously
+    // opened using Windows Overlapped I/O (IOCP)
+    // - on POSIX, aQueuePendingContext=true will store the pending context into
+    // an internal queue, so that Push() returns true until the queue is full
     {$ifdef USE_WINIOCP}
     constructor Create(NumberOfThreads: integer = 32;
       aOverlapHandle: THandle = INVALID_HANDLE_VALUE; const aName: RawUtf8 = '');
@@ -825,8 +934,10 @@ type
     /// may be called after Push() returned false to see if queue was actually full
     // - returns false if QueuePendingContext is false
     function QueueIsFull: boolean;
-    /// parameter as supplied to Create constructor
-    property QueuePendingContext: boolean read fQueuePendingContext;
+    /// if the pool should maintain an internal queue when all threads are busy
+    // - supplied as Create constructor parameter
+    property QueuePendingContext: boolean
+      read fQueuePendingContext;
     {$endif USE_WINIOCP}
     /// low-level access to the threads defined in this thread pool
     property WorkThread: TSynThreadPoolWorkThreads
@@ -883,15 +994,416 @@ const
 implementation
 
 
-{ ************ Thread-Safe Pending Tasks List }
+{ ************ Thread-Safe TSynQueue and TPendingTaskList }
+
+{ TSynQueue }
+
+constructor TSynQueue.Create(aTypeInfo: PRttiInfo; const aName: RawUtf8);
+begin
+  inherited Create(aName);
+  fFirst := -1;
+  fLast := -2;
+  fValues.Init(aTypeInfo, fValueVar, @fCount);
+end;
+
+destructor TSynQueue.Destroy;
+begin
+  WaitPopFinalize;
+  fValues.Clear;
+  inherited Destroy;
+end;
+
+procedure TSynQueue.Clear;
+begin
+  fSafe.WriteLock;
+  try
+    fValues.Clear;
+    fFirst := -1;
+    fLast := -2;
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+function TSynQueue.Count: integer;
+begin
+  if self = nil then
+    result := 0
+  else
+  begin
+    fSafe.ReadOnlyLock;
+    {$ifdef HASFASTTRYFINALLY}
+    try
+    {$else}
+    begin
+    {$endif HASFASTTRYFINALLY}
+      if fFirst < 0 then
+        result := 0
+      else if fFirst <= fLast then
+        result := fLast - fFirst + 1
+      else
+        result := fCount - fFirst + fLast + 1;
+    {$ifdef HASFASTTRYFINALLY}
+    finally
+    {$endif HASFASTTRYFINALLY}
+      fSafe.ReadOnlyUnLock;
+    end;
+  end;
+end;
+
+function TSynQueue.Capacity: integer;
+begin
+  if self = nil then
+    result := 0
+  else
+  begin
+    fSafe.ReadOnlyLock;
+    try
+      result := fValues.Capacity;
+    finally
+      fSafe.ReadOnlyUnLock;
+    end;
+  end;
+end;
+
+function TSynQueue.Pending: boolean;
+begin
+  // allow some false positive in heavily multi-threaded context
+  result := (self <> nil) and
+            (fFirst >= 0);
+end;
+
+procedure TSynQueue.Push(const aValue);
+begin
+  fSafe.WriteLock;
+  try
+    if fFirst < 0 then
+    begin
+      fFirst := 0; // start from the bottom of the void queue
+      fLast := 0;
+      if fCount = 0 then
+        fValues.Count := 64;
+    end
+    else if fFirst <= fLast then
+    begin
+      // stored in-order
+      inc(fLast);
+      if fLast = fCount then
+        InternalGrow;
+    end
+    else
+    begin
+      inc(fLast);
+      if fLast = fFirst then
+      begin
+        // collision -> arrange
+        fValues.AddArray(fValueVar, 0, fLast); // move 0..fLast to the end
+        fLast := fCount;
+        InternalGrow;
+      end;
+    end;
+    fValues.ItemCopyFrom(@aValue, fLast);
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+procedure TSynQueue.InternalGrow;
+var
+  cap: integer;
+begin
+  cap := fValues.Capacity;
+  if fFirst > cap - fCount then
+    // use leading space if worth it
+    fLast := 0
+  else
+  // append at the end
+  if fCount = cap then
+    // reallocation needed
+    fValues.Count := cap + cap shr 3 + 64
+  else
+    // fill trailing memory as much as possible
+    fCount := cap;
+end;
+
+function TSynQueue.Peek(out aValue): boolean;
+begin
+  fSafe.ReadOnlyLock;
+  try
+    result := fFirst >= 0;
+    if result then
+      fValues.ItemCopyAt(fFirst, @aValue);
+  finally
+    fSafe.ReadOnlyUnLock;
+  end;
+end;
+
+procedure TSynQueue.InternalPop(aValue: pointer);
+begin
+  fValues.ItemMoveTo(fFirst, aValue); // caller made ReadWriteLock
+  fSafe.WriteLock;
+  if fFirst = fLast then
+  begin
+    fFirst := -1; // reset whole store (keeping current capacity)
+    fLast := -2;
+  end
+  else
+  begin
+    inc(fFirst);
+    if fFirst = fCount then
+      // will retrieve from leading items
+      fFirst := 0;
+  end;
+  fSafe.WriteUnLock;
+end;
+
+function TSynQueue.Pop(out aValue): boolean;
+begin
+  fSafe.ReadWriteLock;
+  try
+    result := fFirst >= 0;
+    if result then
+      InternalPop(@aValue);
+  finally
+    fSafe.ReadWriteUnLock;
+  end;
+end;
+
+function TSynQueue.PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
+  out aValue): boolean;
+begin
+  result := false;
+  if (not Assigned(aCompare)) or
+     (not Assigned(aAnother)) then
+    exit;
+  fSafe.ReadWriteLock;
+  try
+    if (fFirst >= 0) and
+       (aCompare(fValues.ItemPtr(fFirst)^, aAnother^) = 0) then
+    begin
+      InternalPop(@aValue);
+      result := true;
+    end;
+  finally
+    fSafe.ReadWriteUnLock;
+  end;
+end;
+
+function TSynQueue.InternalDestroying(incPopCounter: integer): boolean;
+begin
+  fSafe.WriteLock;
+  try
+    result := wpfDestroying in fWaitPopFlags;
+    inc(fWaitPopCounter, incPopCounter);
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+function TSynQueue.InternalWaitDone(starttix, endtix: Int64;
+  const idle: TThreadMethod): boolean;
+begin
+  if Assigned(idle) then
+  begin
+    SleepHiRes(1); // SleepStep() may wait up to 250 ms which is not responsive
+    idle; // e.g. Application.ProcessMessages
+  end
+  else
+    SleepStep(starttix);
+  result := (wpfDestroying in fWaitPopFlags) or // no need to lock/unlock
+            (GetTickCount64 > endtix);
+end;
+
+function TSynQueue.WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
+  out aValue; aCompared: pointer; aCompare: TDynArraySortCompare): boolean;
+var
+  starttix, endtix: Int64;
+begin
+  result := false;
+  if not InternalDestroying(+1) then
+  try
+    starttix := GetTickCount64;
+    endtix := starttix + aTimeoutMS;
+    repeat
+      if Assigned(aCompared) and
+         Assigned(aCompare) then
+        result := PopEquals(aCompared, aCompare, aValue)
+      else
+        result := Pop(aValue);
+    until result or
+          InternalWaitDone(starttix, endtix, aWhenIdle);
+  finally
+    InternalDestroying(-1);
+  end;
+end;
+
+function TSynQueue.WaitPeekLocked(aTimeoutMS: integer;
+  const aWhenIdle: TThreadMethod): pointer;
+var
+  starttix, endtix: Int64;
+begin
+  result := nil;
+  if not InternalDestroying(+1) then
+  try
+    starttix := GetTickCount64;
+    endtix := starttix + aTimeoutMS;
+    repeat
+      if fFirst >= 0 then
+      begin
+        fSafe.ReadWriteLock;
+        try
+          if fFirst >= 0 then
+            result := fValues.ItemPtr(fFirst);
+        finally
+          if result = nil then
+            fSafe.ReadWriteUnLock; // caller should always Unlock once done
+        end;
+      end;
+    until (result <> nil) or
+          InternalWaitDone(starttix, endtix, aWhenIdle);
+  finally
+    InternalDestroying(-1);
+  end;
+end;
+
+procedure TSynQueue.WaitPopFinalize(aTimeoutMS: integer);
+var
+  starttix, endtix: Int64; // never wait forever
+begin
+  fSafe.WriteLock;
+  try
+    include(fWaitPopFlags, wpfDestroying);
+    if fWaitPopCounter = 0 then
+      exit;
+  finally
+    fSafe.WriteUnLock;
+  end;
+  starttix := GetTickCount64;
+  endtix := starttix + aTimeoutMS;
+  repeat
+    SleepStep(starttix); // ensure WaitPos() is actually finished
+  until (fWaitPopCounter = 0) or
+        (GetTickCount64 > endtix);
+end;
+
+procedure TSynQueue.Save(out aDynArrayValues; aDynArray: PDynArray);
+var
+  n: integer;
+  DA: TDynArray;
+begin
+  DA.Init(fValues.Info.Info, aDynArrayValues, @n);
+  fSafe.ReadOnlyLock;
+  try
+    DA.Capacity := Count; // pre-allocate whole array, and set its length
+    if fFirst >= 0 then
+      if fFirst <= fLast then
+        DA.AddArray(fValueVar, fFirst, fLast - fFirst + 1)
+      else
+      begin
+        DA.AddArray(fValueVar, fFirst, fCount - fFirst);
+        DA.AddArray(fValueVar, 0, fLast + 1);
+      end;
+  finally
+    fSafe.ReadOnlyUnLock;
+  end;
+  if aDynArray <> nil then
+    aDynArray^.Init(fValues.Info.Info, aDynArrayValues);
+end;
+
+procedure TSynQueue.LoadFromReader;
+var
+  n: integer;
+  info: PRttiInfo;
+  load: TRttiBinaryLoad;
+  p: PAnsiChar;
+label
+  raw;
+begin
+  fSafe.WriteLock;
+  try
+    Clear;
+    inherited LoadFromReader;
+    n := fReader.VarUInt32;
+    if n = 0 then
+      exit;
+    fFirst := 0;
+    fLast := n - 1;
+    fValues.Count := n;
+    p := fValues.Value^;
+    info := fValues.Info.Cache.ItemInfo;
+    if info <> nil then
+    begin
+      load := RTTI_BINARYLOAD[info^.Kind];
+      if Assigned(load) then
+        repeat
+          inc(p, load(p, fReader, info));
+          dec(n);
+        until n = 0
+      else
+        goto raw;
+    end
+    else
+raw:  fReader.Copy(p, n * fValues.Info.Cache.ItemSize);
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+procedure TSynQueue.SaveToWriter(aWriter: TBufferWriter);
+var
+  n: integer;
+  info: PRttiInfo;
+  sav: TRttiBinarySave;
+
+  procedure WriteItems(start, count: integer);
+  var
+    p: PAnsiChar;
+  begin
+    if count = 0 then
+      exit;
+    p := fValues.ItemPtr(start);
+    if Assigned(sav) then
+      repeat
+        inc(p, sav(p, aWriter, info));
+        dec(count);
+      until count = 0
+    else
+      aWriter.Write(p, count * fValues.Info.Cache.ItemSize);
+  end;
+
+begin
+  fSafe.ReadOnlyLock;
+  try
+    inherited SaveToWriter(aWriter);
+    n := Count;
+    aWriter.WriteVarUInt32(n);
+    if n = 0 then
+      exit;
+    info := fValues.Info.Cache.ItemInfo;
+    if info <> nil then
+      sav := RTTI_BINARYSAVE[info^.Kind]
+    else
+      sav := nil;
+    if fFirst <= fLast then
+      WriteItems(fFirst, fLast - fFirst + 1)
+    else
+    begin
+      WriteItems(fFirst, fCount - fFirst);
+      WriteItems(0, fLast + 1);
+    end;
+  finally
+    fSafe.ReadOnlyUnLock;
+  end;
+end;
+
 
 { TPendingTaskList }
 
 constructor TPendingTaskList.Create;
 begin
   inherited Create;
-  fTasks.InitSpecific(TypeInfo(TPendingTaskListItemDynArray),
-    fTask, ptInt64, @fCount); // sorted by Timestamp
+  fTasks.InitSpecific(TypeInfo(TPendingTaskListItemDynArray), fTask, ptInt64,
+    @fCount); // sorted by Timestamp
 end;
 
 function TPendingTaskList.GetTimestamp: Int64;
@@ -921,7 +1433,8 @@ procedure TPendingTaskList.AddTasks(const aMilliSecondsDelays: array of integer;
   const aTasks: array of RawByteString);
 var
   item: TPendingTaskListItem;
-  i, ndx: integer;
+  i: PtrInt;
+  ndx: integer;
 begin
   if length(aTasks) <> length(aMilliSecondsDelays) then
     exit;
@@ -930,7 +1443,7 @@ begin
   try
     for i := 0 to High(aTasks) do
     begin
-      inc(item.Timestamp, aMilliSecondsDelays[i]);
+      inc(item.Timestamp, aMilliSecondsDelays[i]); // delays between tasks
       item.Task := aTasks[i];
       if fTasks.FastLocateSorted(item, ndx) then
         inc(ndx); // always insert just after any existing timestamp
@@ -957,15 +1470,18 @@ begin
 end;
 
 function TPendingTaskList.NextPendingTask: RawByteString;
+var
+  tix: Int64;
 begin
   result := '';
   if (self = nil) or
      (fCount = 0) then
     exit;
+  tix := GetTimestamp;
   fSafe.Lock;
   try
     if fCount > 0 then
-      if GetTimestamp >= fTask[0].Timestamp then
+      if tix >= fTask[0].Timestamp then
       begin
         result := fTask[0].Task;
         fTasks.FastDeleteSorted(0);
@@ -1001,7 +1517,8 @@ begin
   fThreadName := aThreadName;
   fOnBeforeExecute := OnBeforeExecute;
   fOnAfterExecute := OnAfterExecute;
-  inherited Create(CreateSuspended{$ifdef FPC}, 512 * 1024{$endif}); // DefaultStackSize=512KB
+  inherited Create(CreateSuspended
+    {$ifdef FPC}, 512 * 1024{$endif}); // StackSize=512KB (instead of FPC 4MB)
 end;
 
 {$ifndef HASTTHREADSTART}
@@ -1039,25 +1556,8 @@ begin
 end;
 
 function TSynBackgroundThreadAbstract.SleepOrTerminated(MS: cardinal): boolean;
-var
-  endtix: Int64;
 begin
-  result := true; // notify Terminated
-  if Terminated then
-    exit;
-  if MS < 32 then
-    // smaller than GetTickCount resolution (under Windows)
-    SleepHiRes(MS)
-  else
-  begin
-    endtix := mormot.core.os.GetTickCount64 + MS;
-    repeat
-      SleepHiRes(10);
-      if Terminated then
-        exit;
-    until mormot.core.os.GetTickCount64 > endtix;
-  end;
-  result := Terminated; // abnormal delay expiration
+  result := SleepHiRes(MS, PBoolean(@Terminated)^);
 end;
 
 destructor TSynBackgroundThreadAbstract.Destroy;
@@ -1068,7 +1568,7 @@ begin
     WaitForNotExecuting(100);
   end;
   inherited Destroy;
-  FreeAndNil(fProcessEvent);
+  FreeAndNilSafe(fProcessEvent);
 end;
 
 procedure TSynBackgroundThreadAbstract.SetExecuteLoopPause(dopause: boolean);
@@ -1115,7 +1615,6 @@ constructor TSynBackgroundThreadMethodAbstract.Create(
 begin
   fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
   fCallerEvent := TEvent.Create(nil, false, false, '');
-  fPendingProcessLock.Init;
   inherited Create(aThreadName, OnBeforeExecute, OnAfterExecute);
 end;
 
@@ -1124,12 +1623,12 @@ begin
   SetPendingProcess(flagDestroying);
   fProcessEvent.SetEvent;  // notify terminated
   fCallerEvent.WaitFor(INFINITE); // wait for actual termination
-  FreeAndNil(fCallerEvent);
+  FreeAndNilSafe(fCallerEvent);
   inherited Destroy;
-  fPendingProcessLock.Done;
 end;
 
-function TSynBackgroundThreadMethodAbstract.GetPendingProcess: TSynBackgroundThreadProcessStep;
+function TSynBackgroundThreadMethodAbstract.GetPendingProcess:
+  TSynBackgroundThreadProcessStep;
 begin
   fPendingProcessLock.Lock;
   result := fPendingProcessFlag;
@@ -1186,8 +1685,12 @@ begin
   end;
 end;
 
-function TSynBackgroundThreadMethodAbstract.AcquireThread: TSynBackgroundThreadProcessStep;
+function TSynBackgroundThreadMethodAbstract.AcquireThread:
+  TSynBackgroundThreadProcessStep;
 begin
+  result := fPendingProcessFlag;
+  if result <> flagIdle then
+    exit; // no need to lock if obviously busy or finished
   fPendingProcessLock.Lock;
   try
     result := fPendingProcessFlag;
@@ -1202,11 +1705,13 @@ begin
   end;
 end;
 
-function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(start: Int64): integer;
+function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(
+  var start: Int64): Int64;
 begin
-  result := mormot.core.os.GetTickCount64 - start;
-  if result < 0 then
-    result := MaxInt; // should happen only under XP -> ignore
+  result := mormot.core.os.GetTickCount64;
+  if start = 0 then
+    result := start;
+  dec(result, start);
   if Assigned(fOnIdle) then
     fOnIdle(self, result);
 end;
@@ -1221,17 +1726,13 @@ begin
     exit; // nothing to wait for
   try
     if Assigned(onmainthreadidle) then
-    begin
       while fCallerEvent.WaitFor(100) = wrTimeout do
-        onmainthreadidle(self);
-    end
+        onmainthreadidle(self)
     else
     {$ifdef OSWINDOWS} // do process the OnIdle only if UI
     if Assigned(fOnIdle) then
-    begin
       while fCallerEvent.WaitFor(100) = wrTimeout do
-        OnIdleProcessNotify(start);
-    end
+        OnIdleProcessNotify(start)
     else
     {$endif OSWINDOWS}
       fCallerEvent.WaitFor(INFINITE);
@@ -1246,7 +1747,7 @@ begin
   finally
     fParam := nil;
     fCallerThreadID := TThreadID(0);
-    FreeAndNil(fBackgroundException);
+    FreeAndNilSafe(fBackgroundException);
     SetPendingProcess(flagIdle);
     if Assigned(fOnIdle) then
       fOnIdle(self, -1); // notify finished
@@ -1256,6 +1757,7 @@ end;
 function TSynBackgroundThreadMethodAbstract.RunAndWait(OpaqueParam: pointer): boolean;
 var
   start: Int64;
+  ms: integer;
   ThreadID: TThreadID;
 begin
   result := false;
@@ -1267,28 +1769,25 @@ begin
   // 1. wait for any previous request to be finished (should not happen often)
   if Assigned(fOnIdle) then
     fOnIdle(self, 0); // notify started
-  start := mormot.core.os.GetTickCount64;
-  repeat
+  ms := 0;
+  start := 0;
+  while true do
     case AcquireThread of
       flagDestroying:
         exit;
       flagIdle:
         break; // we acquired the background thread
-    end;
-    case OnIdleProcessNotify(start) of // Windows.GetTickCount64 res is 10-16 ms
-      0..20:
-        SleepHiRes(0); // 10 microsec delay on POSIX
-      21..100:
-        SleepHiRes(1);
-      101..900:
-        SleepHiRes(5);
     else
-      SleepHiRes(50);
+      begin
+        SleepHiRes(ms);
+        ms := ms xor 1; // 0,1,0,1,0,1... SleepDelay() does not scale here
+        if ms = 0 then
+          OnIdleProcessNotify(start);
+      end;
     end;
-  until false;
   // 2. process execution in the background thread
   fParam := OpaqueParam;
-  fProcessEvent.SetEvent; // notify background thread for Call pending process
+  fProcessEvent.SetEvent; // notify background thread for next pending process
   WaitForFinished(start, nil); // wait for flagFinished, then set flagIdle
   result := true;
 end;
@@ -1426,7 +1925,7 @@ constructor TSynBackgroundTimer.Create(const aThreadName: RawUtf8;
   const aOnBeforeExecute: TOnNotifyThread;
   const aOnAfterExecute: TOnNotifyThread; aStats: TSynMonitorClass);
 begin
-  fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray), fTask);
+  fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray), fTask, @fTaskCount);
   fTaskLock.Init;
   fTaskLock.LockedBool[0] := false;
   inherited Create(aThreadName, EverySecond, 1000, aOnBeforeExecute, aOnAfterExecute, aStats);
@@ -1448,7 +1947,7 @@ procedure TSynBackgroundTimer.EverySecond(Sender: TSynBackgroundThreadProcess;
   Event: TWaitResult);
 var
   tix: Int64;
-  i, f, n: integer;
+  i, f, n: PtrInt;
   t: ^TSynBackgroundTimerTask;
   todo: TSynBackgroundTimerTaskDynArray; // avoid lock contention
 begin
@@ -1459,19 +1958,19 @@ begin
   n := 0;
   fTaskLock.Lock;
   try
-    variant(fTaskLock.Padding[0]) := true; // = fTaskLock.LockedBool[0]
+    fTaskLock.Padding[0].VBoolean := true; // = fTaskLock.LockedBool[0]
     try
       i := 0;
-      while i < length(fTask) do
+      while i < fTaskCount do
       begin
         t := @fTask[i];
         if tix >= t^.NextTix then
         begin
           if {%H-}todo = nil then
-            SetLength(todo, length(fTask) - n);
-          todo[n] := t^;
+            SetLength(todo, fTaskCount - n);
+          MoveFast(t^, todo[n], SizeOf(t^)); // no COW needed
+          pointer(t^.FIFO) := nil; // now owned by todo[n].FIFO
           inc(n);
-          t^.FIFO := nil; // now owned by todo[n].FIFO
           if integer(t^.Secs) = -1 then
           begin
             // from ExecuteOnce()
@@ -1501,30 +2000,39 @@ begin
         except
         end;
   finally
-    fTaskLock.LockedBool[0] := false;
+    fTaskLock.Padding[0].VBoolean := false; // LockedBool[0] not needed
   end;
 end;
 
-function TSynBackgroundTimer.Find(const aProcess: TMethod): integer;
+function TSynBackgroundTimer.Find(const aProcess: TMethod): PtrInt;
+var
+  m: ^TSynBackgroundTimerTask;
 begin
   // caller should have made fTaskLock.Lock;
-  for result := length(fTask) - 1 downto 0 do
-    with TMethod(fTask[result].OnProcess) do
-      if (Code = aProcess.Code) and
-         (Data = aProcess.Data) then
-        exit;
-  result := -1;
+  result := fTaskCount - 1;
+  if result >= 0 then
+  begin
+    m := @fTask[result];
+    repeat
+      with TMethod(m^.OnProcess) do
+        if (Code = aProcess.Code) and
+           (Data = aProcess.Data) then
+          exit;
+      dec(result);
+      dec(m);
+    until result < 0;
+  end;
 end;
 
 procedure TSynBackgroundTimer.Enable(
   const aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal);
 var
   task: TSynBackgroundTimerTask;
-  found: integer;
+  found: PtrInt;
 begin
   if (self = nil) or
      Terminated or
-     not Assigned(aOnProcess) then
+     (not Assigned(aOnProcess)) then
     exit;
   if aOnProcessSecs = 0 then
   begin
@@ -1549,20 +2057,13 @@ end;
 
 function TSynBackgroundTimer.Processing: boolean;
 begin
-  result := fTaskLock.LockedBool[0];
+  result := fTaskLock.Padding[0].VBoolean; // = fTaskLock.LockedBool[0]
 end;
 
 procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
-var
-  timeout: Int64;
 begin
-  if not Processing then
-    exit;
-  timeout := mormot.core.os.GetTickCount64 + timeoutsecs * 1000;
-  repeat
-    SleepHiRes(1);
-  until not Processing or
-        (mormot.core.os.GetTickcount64 > timeout);
+  SleepHiRes(timeoutsecs, PBoolean(@fTaskLock.Padding[0].VBoolean)^,
+    {terminatedvalue=}false);
 end;
 
 function TSynBackgroundTimer.ExecuteNow(
@@ -1574,7 +2075,8 @@ end;
 function TSynBackgroundTimer.ExecuteOnce(
   const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 begin
-  result := Assigned(aOnProcess) and Assigned(self);
+  result := Assigned(aOnProcess) and
+            Assigned(self);
   if not result then
     exit;
   Enable(aOnProcess, cardinal(-1));
@@ -1602,12 +2104,12 @@ function TSynBackgroundTimer.Add(
   const aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUtf8;
   aExecuteNow: boolean): boolean;
 var
-  found: integer;
+  found: PtrInt;
 begin
   result := false;
   if (self = nil) or
      Terminated or
-     not Assigned(aOnProcess) then
+     (not Assigned(aOnProcess)) then
     exit;
   fTaskLock.Lock;
   try
@@ -1633,12 +2135,12 @@ end;
 function TSynBackgroundTimer.DeQueue(
   const aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUtf8): boolean;
 var
-  found: integer;
+  found: PtrInt;
 begin
   result := false;
   if (self = nil) or
      Terminated or
-     not Assigned(aOnProcess) then
+     (not Assigned(aOnProcess)) then
     exit;
   fTaskLock.Lock;
   try
@@ -1654,12 +2156,12 @@ end;
 function TSynBackgroundTimer.Disable(
   const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 var
-  found: integer;
+  found: PtrInt;
 begin
   result := false;
   if (self = nil) or
      Terminated or
-     not Assigned(aOnProcess) then
+     (not Assigned(aOnProcess)) then
     exit;
   fTaskLock.Lock;
   try
@@ -1795,7 +2297,7 @@ begin
     fClass := TBlockingProcessPoolItem
   else
     fClass := aClass;
-  fPool := TSynObjectListLocked.Create;
+  fPool := TSynObjectListLightLocked.Create;
 end;
 
 const
@@ -1808,13 +2310,18 @@ var
 begin
   fCallCounter := CALL_DESTROYING;
   someWaiting := false;
-  for i := 0 to fPool.Count - 1 do
-    with TBlockingProcessPoolItem(fPool.List[i]) do
-      if Event = evWaiting then
-      begin
-        SetEvent; // release WaitFor (with evTimeOut)
-        someWaiting := true;
-      end;
+  fPool.Safe.WriteLock;
+  try
+    for i := 0 to fPool.Count - 1 do
+      with TBlockingProcessPoolItem(fPool.List[i]) do
+        if Event = evWaiting then
+        begin
+          SetEvent; // release WaitFor (with evTimeOut)
+          someWaiting := true;
+        end;
+  finally
+    fPool.Safe.WriteUnLock;
+  end;
   if someWaiting then
     SleepHiRes(10); // propagate the pending evTimeOut to the WaitFor threads
   fPool.Free;
@@ -1831,7 +2338,7 @@ begin
     exit;
   if aTimeOutMs <= 0 then
     aTimeOutMs := 3000; // never wait for ever
-  fPool.Safe.Lock;
+  fPool.Safe.WriteLock;
   try
     p := pointer(fPool.List);
     for i := 1 to fPool.Count do
@@ -1851,7 +2358,7 @@ begin
     inc(fCallCounter); // 1,2,3,...
     result.fCall := fCallCounter;
   finally
-    fPool.Safe.UnLock;
+    fPool.Safe.WriteUnLock;
   end;
 end;
 
@@ -1865,36 +2372,26 @@ begin
   if (fCallCounter = CALL_DESTROYING) or
      (call <= 0) then
     exit;
-  fPool.Safe.Lock;
-  try
-    p := pointer(fPool.List);
-    for i := 1 to fPool.Count do
-      if p^.call = call then
-      begin
-        result := p^;
-        if locked then
-          result.Lock;
-        exit;
-      end
-      else
-        inc(p);
-  finally
-    fPool.Safe.UnLock;
-  end;
+  fPool.Safe.ReadLock;
+  p := pointer(fPool.List);
+  for i := 1 to fPool.Count do
+    if p^.Call = call then
+    begin
+      result := p^;
+      fPool.Safe.ReadUnLock; // result.Lock may be blocking
+      if locked then
+        result.Lock;
+      exit;
+    end
+    else
+      inc(p);
+  fPool.Safe.ReadUnLock;
 end;
 
 
 { ************ Parallel Execution in a Thread Pool }
 
 { TSynParallelProcessThread }
-
-procedure TSynParallelProcessThread.Process;
-begin
-  if not Assigned(fMethod) then
-    exit;
-  fMethod(fIndexStart, fIndexStop);
-  fMethod := nil;
-end;
 
 procedure TSynParallelProcessThread.Start(
   const Method: TOnSynParallelProcess; IndexStart, IndexStop: integer);
@@ -1903,6 +2400,14 @@ begin
   fIndexStart := IndexStart;
   fIndexStop := IndexStop;
   fProcessEvent.SetEvent; // notify execution
+end;
+
+procedure TSynParallelProcessThread.Process;
+begin
+  if not Assigned(fMethod) then
+    exit;
+  fMethod(fIndexStart, fIndexStop);
+  fMethod := nil;
 end;
 
 
@@ -1938,11 +2443,12 @@ end;
 procedure TSynParallelProcess.ParallelRunAndWait(const Method: TOnSynParallelProcess;
   MethodCount: integer; const OnMainThreadIdle: TNotifyEvent);
 var
-  use, t, n, perthread: integer;
+  use, t: PtrInt;
+  n, perthread: integer;
   error: RawUtf8;
 begin
   if (MethodCount <= 0) or
-     not Assigned(Method) then
+     (not Assigned(Method)) then
     exit;
   if not Assigned(OnMainThreadIdle) then
     if (self = nil) or
@@ -1960,7 +2466,7 @@ begin
     use := t;
   try
     // start secondary threads
-    perthread := MethodCount div use;
+    perthread := cardinal(MethodCount) div cardinal(use);
     if perthread = 0 then
       use := 1;
     n := 0;
@@ -1980,7 +2486,7 @@ begin
         if Assigned(OnMainThreadIdle) then
           OnMainThreadIdle(self);
       until false;
-      fPool[t].start(Method, n, n + perthread - 1);
+      fPool[t].Start(Method, n, n + perthread - 1);
       inc(n, perthread);
       inc(fParallelRunCount);
     end;
@@ -1989,7 +2495,7 @@ begin
     begin
       if Assigned(OnMainThreadIdle) then
       begin
-        fPool[use - 1].start(Method, n, MethodCount - 1);
+        fPool[use - 1].Start(Method, n, MethodCount - 1);
         inc(use); // also wait for the last thread
       end
       else
@@ -2055,13 +2561,17 @@ end;
 
 procedure TSynThread.DoTerminate;
 begin
-  if Assigned(fStartNotified) and
-     Assigned(fOnThreadTerminate) then
-  begin
-    fOnThreadTerminate(self);
-    fStartNotified := nil;
+  try
+    if Assigned(fStartNotified) and
+       Assigned(fOnThreadTerminate) then
+    begin
+      fStartNotified := nil;
+      fOnThreadTerminate(self);
+    end;
+    inherited DoTerminate; // call OnTerminate via Synchronize() in main thread
+  except
+    // hardened: a closing thread should not jeopardize the whole executable! 
   end;
-  inherited DoTerminate;
 end;
 
 {$ifndef HASTTHREADSTART}
@@ -2100,7 +2610,6 @@ begin
   if fRequestQueue = 0 then
     exit;
   {$else}
-  InitializeCriticalSection(fSafe);
   fQueuePendingContext := aQueuePendingContext;
   {$endif USE_WINIOCP}
   // now create the worker threads
@@ -2139,8 +2648,6 @@ begin
   finally
     {$ifdef USE_WINIOCP}
     CloseHandle(fRequestQueue);
-    {$else}
-    DeleteCriticalSection(fSafe);
     {$endif USE_WINIOCP}
   end;
   inherited Destroy;
@@ -2166,34 +2673,34 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
   begin
     result := false; // queue is full
     found := nil;
-    EnterCriticalsection(fSafe);
-    try
-      thread := pointer(fWorkThread);
-      for i := 1 to fWorkThreadCount do
-        if thread^.fProcessingContext = nil then
-        begin
-          found := thread^;
-          found.fProcessingContext := aContext;
-          result := true; // found one available thread
-          exit;
-        end
-        else
-          inc(thread);
-      if not fQueuePendingContext then
+    fSafe.Lock;
+    thread := pointer(fWorkThread);
+    for i := 1 to fWorkThreadCount do
+      if thread^.fProcessingContext = nil then
+      begin
+        found := thread^;
+        found.fProcessingContext := aContext;
+        fSafe.UnLock;
+        found.fEvent.SetEvent; // notify outside of the fSafe lock
+        result := true; // found one available thread
         exit;
+      end
+      else
+        inc(thread);
+    if fQueuePendingContext then
+    begin
       n := fPendingContextCount;
-      if n + fWorkThreadCount > QueueLength then
-        exit; // too many connection limit reached (see QueueIsFull)
-      if n = length(fPendingContext) then
-        SetLength(fPendingContext, n + n shr 3 + 64);
-      fPendingContext[n] := aContext;
-      inc(fPendingContextCount);
-      result := true; // added in pending queue
-    finally
-      LeaveCriticalsection(fSafe);
-      if found <> nil then
-        found.fEvent.SetEvent; // rather notify outside of the fSafe lock
+      if n + fWorkThreadCount <= QueueLength then
+      begin
+        // not too many connection limit reached (see QueueIsFull)
+        if n = length(fPendingContext) then
+          SetLength(fPendingContext, NextGrow(n));
+        fPendingContext[n] := aContext;
+        inc(fPendingContextCount);
+        result := true; // added in pending queue
+      end;
     end;
+    fSafe.UnLock;
   end;
 
 {$endif USE_WINIOCP}
@@ -2215,7 +2722,8 @@ begin
     tix := GetTickCount64;
     starttix := tix;
     endtix := tix + fContentionAbortDelay; // default 5 sec
-    repeat // during this delay, no new connection is ACCEPTed
+    repeat
+      // during this delay, no new connection is ACCEPTed
       if tix - starttix < 50 then // wait for an available slot in the queue
         SleepHiRes(1)
       else
@@ -2240,23 +2748,18 @@ end;
 
 function TSynThreadPool.GetPendingContextCount: integer;
 begin
-  result := 0;
   if (self = nil) or
      fTerminated or
      (fPendingContext = nil) then
-    exit;
-  EnterCriticalsection(fSafe);
-  try
+    result := 0
+  else
     result := fPendingContextCount;
-  finally
-    LeaveCriticalsection(fSafe);
-  end;
 end;
 
 function TSynThreadPool.QueueIsFull: boolean;
 begin
   result := fQueuePendingContext and
-    (GetPendingContextCount + fWorkThreadCount > QueueLength);
+            (GetPendingContextCount + fWorkThreadCount > QueueLength);
 end;
 
 function TSynThreadPool.PopPendingContext: pointer;
@@ -2264,21 +2767,22 @@ begin
   result := nil;
   if (self = nil) or
      fTerminated or
-     (fPendingContext = nil) then
+     (fPendingContext = nil) or
+     (fPendingContextCount = 0) then
     exit;
-  EnterCriticalsection(fSafe);
+  fSafe.Lock;
   try
     if fPendingContextCount > 0 then
     begin
       result := fPendingContext[0];
       dec(fPendingContextCount);
-      MoveFast(fPendingContext[1], fPendingContext[0], fPendingContextCount *
-        SizeOf(pointer));
+      MoveFast(fPendingContext[1], fPendingContext[0],
+        fPendingContextCount * SizeOf(pointer));
       if fPendingContextCount = 128 then
-        SetLength(fPendingContext, 128); // small queue when congestion is resolved
+        SetLength(fPendingContext, 128); // reduce when congestion is resolved
     end;
   finally
-    LeaveCriticalsection(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
@@ -2354,18 +2858,18 @@ begin
       fEvent.WaitFor(INFINITE);
       if fOwner.fTerminated then
         break;
-      EnterCriticalSection(fOwner.fSafe);
+      fOwner.fSafe.Lock;
       ctxt := fProcessingContext;
-      LeaveCriticalSection(fOwner.fSafe);
+      fOwner.fSafe.UnLock;
       if ctxt <> nil then
       begin
         repeat
           DoTask(ctxt);
           ctxt := fOwner.PopPendingContext; // unqueue any pending context
         until ctxt = nil;
-        EnterCriticalSection(fOwner.fSafe);
+        fOwner.fSafe.Lock;
         fProcessingContext := nil; // indicates this thread is now available
-        LeaveCriticalSection(fOwner.fSafe);
+        fOwner.fSafe.UnLock;
       end;
      {$endif USE_WINIOCP}
     until fOwner.fTerminated or
@@ -2380,7 +2884,7 @@ begin
   if Sender = nil then
     raise ESynThread.CreateUtf8('%.NotifyThreadStart(nil)', [self]);
   if Assigned(fOwner.fOnThreadStart) and
-     not Assigned(Sender.fStartNotified) then
+     (not Assigned(Sender.fStartNotified)) then
   begin
     fOwner.fOnThreadStart(Sender);
     Sender.fStartNotified := self;

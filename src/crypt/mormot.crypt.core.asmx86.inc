@@ -868,6 +868,190 @@ asm     // eax=x edx=y ecx=m
         pop     esi
 end;
 
+function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        push   ebp
+        mov    ebx, dword ptr [Left]
+        mov    esi, dword ptr [Left + 4]
+        mov    edi, dword ptr [Left + 8]
+        mov    ebp, dword ptr [Left + 12]
+        add    ebx, dword ptr [Right]
+        adc    esi, dword ptr [Right + 4]
+        adc    edi, dword ptr [Right + 8]
+        adc    ebp, dword ptr [Right + 12]
+        mov    dword ptr [Output], ebx
+        mov    dword ptr [Output + 4], esi
+        mov    dword ptr [Output + 8], edi
+        mov    dword ptr [Output + 12], ebp
+        mov    ebx, dword ptr [Left + 16]
+        mov    esi, dword ptr [Left + 20]
+        mov    edi, dword ptr [Left + 24]
+        mov    ebp, dword ptr [Left + 28]
+        adc    ebx, dword ptr [Right + 16]
+        adc    esi, dword ptr [Right + 20]
+        adc    edi, dword ptr [Right + 24]
+        adc    ebp, dword ptr [Right + 28]
+        mov    dword ptr [Output + 16], ebx
+        mov    dword ptr [Output + 20], esi
+        mov    dword ptr [Output + 24], edi
+        mov    dword ptr [Output + 28], ebp
+        mov    eax, 0  // xor eax,eax is shorter but would change the carry
+        adc    eax, eax
+        pop    ebp
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
+function _inc256(var Value: THash256Rec; const Added: THash256Rec): PtrUInt;
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        push   ebp
+        mov    ebx, dword ptr [Added]
+        mov    esi, dword ptr [Added + 4]
+        mov    edi, dword ptr [Added + 8]
+        mov    ebp, dword ptr [Added + 12]
+        add    dword ptr [Value], ebx
+        adc    dword ptr [Value + 4], esi
+        adc    dword ptr [Value + 8], edi
+        adc    dword ptr [Value + 12], ebp
+        mov    ebx, dword ptr [Added + 16]
+        mov    esi, dword ptr [Added + 20]
+        mov    edi, dword ptr [Added + 24]
+        mov    ebp, dword ptr [Added + 28]
+        adc    dword ptr [Value + 16], ebx
+        adc    dword ptr [Value + 20], esi
+        adc    dword ptr [Value + 24], edi
+        adc    dword ptr [Value + 28], ebp
+        mov    eax, 0  // xor eax,eax is shorter but would change the carry
+        adc    eax, eax
+        pop    ebp
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
+function _sub256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        push   ebp
+        mov    ebx, dword ptr [Left]
+        mov    esi, dword ptr [Left + 4]
+        mov    edi, dword ptr [Left + 8]
+        mov    ebp, dword ptr [Left + 12]
+        sub    ebx, dword ptr [Right]
+        sbb    esi, dword ptr [Right + 4]
+        sbb    edi, dword ptr [Right + 8]
+        sbb    ebp, dword ptr [Right + 12]
+        mov    dword ptr [Output], ebx
+        mov    dword ptr [Output + 4], esi
+        mov    dword ptr [Output + 8], edi
+        mov    dword ptr [Output + 12], ebp
+        mov    ebx, dword ptr [Left + 16]
+        mov    esi, dword ptr [Left + 20]
+        mov    edi, dword ptr [Left + 24]
+        mov    ebp, dword ptr [Left + 28]
+        sbb    ebx, dword ptr [Right + 16]
+        sbb    esi, dword ptr [Right + 20]
+        sbb    edi, dword ptr [Right + 24]
+        sbb    ebp, dword ptr [Right + 28]
+        mov    dword ptr [Output + 16], ebx
+        mov    dword ptr [Output + 20], esi
+        mov    dword ptr [Output + 24], edi
+        mov    dword ptr [Output + 28], ebp
+        mov    eax, 0  // xor eax,eax is shorter but would change the carry
+        adc    eax, eax
+        pop    ebp
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
+function _dec256(var Value: THash256Rec; const Subs: THash256Rec): PtrUInt;
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+          push   ebx
+          push   esi
+          push   edi
+          push   ebp
+          mov    ebx, dword ptr [Subs]
+          mov    esi, dword ptr [Subs + 4]
+          mov    edi, dword ptr [Subs + 8]
+          mov    ebp, dword ptr [Subs + 12]
+          sub    dword ptr [Value], ebx
+          sbb    dword ptr [Value + 4], esi
+          sbb    dword ptr [Value + 8], edi
+          sbb    dword ptr [Value + 12], ebp
+          mov    ebx, dword ptr [Subs + 16]
+          mov    esi, dword ptr [Subs + 20]
+          mov    edi, dword ptr [Subs + 24]
+          mov    ebp, dword ptr [Subs + 28]
+          sbb    dword ptr [Value + 16], ebx
+          sbb    dword ptr [Value + 20], esi
+          sbb    dword ptr [Value + 24], edi
+          sbb    dword ptr [Value + 28], ebp
+          mov    eax, 0  // xor eax,eax is shorter but would change the carry
+          adc    eax, eax
+          pop    ebp
+          pop    edi
+          pop    esi
+          pop    ebx
+end;
+
+procedure _inc64(var Value: THash128Rec; var Added: QWord);
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        mov    ebx, dword ptr [Added]
+        mov    esi, dword ptr [Added + 4]
+        xor    edi, edi
+        add    dword ptr [Value], ebx
+        adc    dword ptr [Value + 4], esi
+        adc    dword ptr [Value + 8], edi
+        adc    dword ptr [Value + 12], edi
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
+procedure _inc128(var Value: THash256Rec; var Added: THash128Rec);
+  {$ifdef FPC}nostackframe; assembler; {$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        push   ebp
+        mov    ebx, dword ptr [Added]
+        mov    esi, dword ptr [Added + 4]
+        mov    edi, dword ptr [Added + 8]
+        mov    ebp, dword ptr [Added + 12]
+        xor    Added, Added
+        add    dword ptr [Value], ebx
+        adc    dword ptr [Value + 4], esi
+        adc    dword ptr [Value + 8], edi
+        adc    dword ptr [Value + 12], ebp
+        adc    dword ptr [Value + 16], Added
+        adc    dword ptr [Value + 20], Added
+        adc    dword ptr [Value + 24], Added
+        adc    dword ptr [Value + 28], Added
+        pop    ebp
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
 procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // W=eax Buf=edx
@@ -1737,7 +1921,7 @@ procedure gf_mul_pclmulqdq(a, b: pointer);
 asm
         movups  xmm0, dqword ptr [a]
         movups  xmm1, dqword ptr [b]
-        movdqu  xmm2, dqword ptr [@swap]
+        movups  xmm2, dqword ptr [@swap]
         pshufb  xmm0, xmm2
         pshufb  xmm1, xmm2
         movdqa  xmm5, xmm0
@@ -1800,7 +1984,7 @@ asm
         psllq   xmm3, 57
         por     xmm4, xmm7
         psrlq   xmm0, 7
-        movdqu  xmm7, dqword ptr [@swap]
+        movups  xmm7, dqword ptr [@swap]
         por     xmm0, xmm3
         psllq   xmm5, 62
         pxor    xmm1, xmm0
@@ -2625,11 +2809,11 @@ procedure _AesNiHash128(hash: PHash128; data: pointer; len: PtrUInt);
   {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
         // eax=@seed&result, edx=data, ecx=len
-        movdqu  xmm0, dqword ptr [eax]
+        movups  xmm0, dqword ptr [eax]
         push    eax
         call    _AesNiHashXmm0
         pop     eax
-        movdqu  dqword ptr [eax], xmm0
+        movups  dqword ptr [eax], xmm0
 end;
 
 function _AesNiHash32(seed: cardinal; data: pointer; len: PtrUInt): cardinal;
@@ -2655,10 +2839,10 @@ asm
         aesenc  xmm0, xmm0
         cmp     ecx, 16 // 1..16 bytes have no branch
         ja      @17up
-        movdqu  xmm1, dqword ptr [edx + ecx - 16] // no read after end of page
+        movups  xmm1, dqword ptr [edx + ecx - 16] // no read after end of page
         je      @16
         shl     ecx, 4          // (and heap has header so no read before EOP)
-        movdqu  xmm2, dqword ptr [@shifts + ecx] // Delphi bug about .align 16
+        movups  xmm2, dqword ptr [@shifts + ecx] // Delphi bug about .align 16
         pshufb  xmm1, xmm2
 @16:    aesenc  xmm1, xmm0
         aesenc  xmm1, xmm1
@@ -2670,8 +2854,8 @@ asm
         ja      @33up
         pxor    xmm1, dqword ptr [eax + 16] // 17..32 bytes
         aesenc  xmm1, xmm1
-        movdqu  xmm2, dqword ptr [edx]
-        movdqu  xmm3, dqword ptr [edx + ecx - 10H] // may overlap
+        movups  xmm2, dqword ptr [edx]
+        movups  xmm3, dqword ptr [edx + ecx - 10H] // may overlap
         aesenc  xmm2, xmm0
         aesenc  xmm3, xmm1
         aesenc  xmm2, xmm2
@@ -2692,10 +2876,10 @@ asm
         aesenc  xmm1, xmm1
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
-        movdqu  xmm4, dqword ptr [edx]
-        movdqu  xmm5, dqword ptr [edx + 10H]
-        movdqu  xmm6, dqword ptr [edx + ecx - 20H] // may overlap
-        movdqu  xmm7, dqword ptr [edx + ecx - 10H]
+        movups  xmm4, dqword ptr [edx]
+        movups  xmm5, dqword ptr [edx + 10H]
+        movups  xmm6, dqword ptr [edx + ecx - 20H] // may overlap
+        movups  xmm7, dqword ptr [edx + ecx - 10H]
         aesenc  xmm4, xmm0
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2
@@ -2741,10 +2925,10 @@ asm
         aesenc  xmm1, xmm1
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
-        movdqu  xmm4, dqword ptr [edx + ecx - 40H] // may overlap
-        movdqu  xmm5, dqword ptr [edx + ecx - 30H]
-        movdqu  xmm6, dqword ptr [edx + ecx - 20H]
-        movdqu  xmm7, dqword ptr [edx + ecx - 10H]
+        movups  xmm4, dqword ptr [edx + ecx - 40H] // may overlap
+        movups  xmm5, dqword ptr [edx + ecx - 30H]
+        movups  xmm6, dqword ptr [edx + ecx - 20H]
+        movups  xmm7, dqword ptr [edx + ecx - 10H]
         aesenc  xmm4, xmm0
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2
@@ -2753,10 +2937,10 @@ asm
         shr     ecx, 6
         // process 64 bytes per iteration
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@loop:  movdqu  xmm0, dqword ptr [edx]
-        movdqu  xmm1, dqword ptr [edx + 10H]
-        movdqu  xmm2, dqword ptr [edx + 20H]
-        movdqu  xmm3, dqword ptr [edx + 30H]
+@loop:  movups  xmm0, dqword ptr [edx]
+        movups  xmm1, dqword ptr [edx + 10H]
+        movups  xmm2, dqword ptr [edx + 20H]
+        movups  xmm3, dqword ptr [edx + 30H]
         aesenc  xmm4, xmm0
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2

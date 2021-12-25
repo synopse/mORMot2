@@ -332,7 +332,7 @@ type
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;
     /// return all columns values into JSON content
-    procedure ColumnsToJson(WR: TJsonWriter); override;
+    procedure ColumnsToJson(WR: TResultsWriter); override;
     /// direct access to the data buffer of the current row
     // - points to Double/Currency value, or variable-length Int64/UTF-8/Blob
     // - points to nil if the column value is NULL
@@ -370,17 +370,20 @@ type
     procedure ExecutePrepared; override;
     /// execute a prepared SQL statement and return all rows content as a JSON string
     // - JSON data is retrieved with UTF-8 encoding
-    // - if Expanded is true, JSON data is an array of objects, for direct use
-    // with any Ajax or .NET client:
-    // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
-    // - if Expanded is false, JSON data is serialized (used in TOrmTableJson)
-    // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
+    // - if Expanded is true, JSON output is a standard array of objects, for
+    // direct use with any Ajax or .NET client:
+    // & [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...]
+    // - if Expanded is false, JSON data is serialized in non-expanded format:
+    // & {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
+    // resulting in lower space use and faster process - it could be parsed by
+    // TOrmTableJson or TDocVariantData.InitArrayFromResults
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     // - this overridden implementation will use JSON for transmission, and
     // binary encoding only for parameters (to avoid unneeded conversions, e.g.
     // when called from mormot.orm.sql.pas)
-    procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean; out Json: RawUtf8); override;
+    procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean;
+      out Json: RawUtf8; ReturnedRowCount: PPtrInt = nil); override;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -436,7 +439,8 @@ type
     // - you can specify a User/Password credential pair to also test the
     // authentication via TSynAuthentication
     constructor Create(aProps: TSqlDBConnectionProperties;
-      const aUserID,aPassword: RawUtf8; aProtocol: TSqlDBProxyConnectionProtocolClass); reintroduce;
+      const aUserID, aPassword: RawUtf8;
+      aProtocol: TSqlDBProxyConnectionProtocolClass); reintroduce;
   end;
 
 
@@ -598,7 +602,7 @@ type
   /// implements a generic HTTP client, able to access remotely any mormot.db.sql
   // - do not instantiate this class, but rather use TSqlDBSocketConnectionProperties
   //  TSqlDBWinHttpConnectionProperties TSqlDBWinINetConnectionProperties
-  TSqlDBHTTPConnectionPropertiesAbstract = class(TSqlDBRemoteConnectionPropertiesAbstract)
+  TSqlDBHttpConnectionPropertiesAbstract = class(TSqlDBRemoteConnectionPropertiesAbstract)
   protected
     fKeepAliveMS: cardinal;
     fUri: TUri;
@@ -627,7 +631,7 @@ type
   end;
 
   /// implements a HTTP client via sockets, able to access remotely any mormot.db.sql
-  TSqlDBSocketConnectionProperties = class(TSqlDBHTTPConnectionPropertiesAbstract)
+  TSqlDBSocketConnectionProperties = class(TSqlDBHttpConnectionPropertiesAbstract)
   protected
     fSocket: THttpClientSocket;
     function InternalRequest(var Data, DataType: RawByteString): integer; override;
@@ -649,7 +653,7 @@ type
   // able to access remotely any mormot.db.sql
   // - never instantiate this class, but rather TSqlDBWinHttpConnectionProperties
   // or TSqlDBWinINetConnectionProperties
-  TSqlDBHttpRequestConnectionProperties = class(TSqlDBHTTPConnectionPropertiesAbstract)
+  TSqlDBHttpRequestConnectionProperties = class(TSqlDBHttpConnectionPropertiesAbstract)
   protected
     fClient: THttpRequest;
     function InternalRequest(var Data, DataType: RawByteString): integer; override;
@@ -728,8 +732,8 @@ type
   end;
   PRemoteMessageHeader = ^TRemoteMessageHeader;
 
-constructor TSqlDBProxyConnectionProtocol.Create(aAuthenticate:
-  TSynAuthenticationAbstract);
+constructor TSqlDBProxyConnectionProtocol.Create(
+  aAuthenticate: TSynAuthenticationAbstract);
 begin
   fAuthenticate := aAuthenticate;
   fTransactionRetryTimeout := 100;
@@ -760,16 +764,21 @@ end;
 function TSqlDBProxyConnectionProtocol.TransactionStarted(
   connection: TSqlDBConnection; sessionID: integer): boolean;
 var
-  endTrial, tix: Int64;
+  tixend, tix: Int64;
 begin
   if sessionID = 0 then
-    raise ESqlDBRemote.CreateUtf8('%: Remote transaction expects authentication/session', [self]);
+    raise ESqlDBRemote.CreateUtf8(
+      '%.TransactionStarted: Remote transaction expects authentication/session',
+      [self]);
   if connection.Properties.InheritsFrom(TSqlDBConnectionPropertiesThreadSafe) and
-     (TSqlDBConnectionPropertiesThreadSafe(connection.Properties).ThreadingMode = tmThreadPool) then
-    raise ESqlDBRemote.CreateUtf8('%: Remote transaction expects %.ThreadingMode<>tmThreadPool: ' +
-      'commit/execute/rollback should be in the same thread/connection', [self, connection.Properties]);
+     (TSqlDBConnectionPropertiesThreadSafe(connection.Properties).
+       ThreadingMode = tmThreadPool) then
+    raise ESqlDBRemote.CreateUtf8(
+      '%.TransactionStarted: Remote transaction expects %.ThreadingMode<>tmThreadPool: ' +
+      'commit/execute/rollback should be in the same thread/connection',
+      [self, connection.Properties]);
   tix := GetTickCount64;
-  endTrial := tix + fTransactionRetryTimeout;
+  tixend := tix + fTransactionRetryTimeout;
   repeat
     EnterCriticalSection(fLock);
     try
@@ -792,11 +801,11 @@ begin
       LeaveCriticalSection(fLock);
     end;
     if result or
-       (tix > endTrial) then
+       (tix > tixend) then
       break;
     SleepHiRes(1);
     tix := GetTickCount64;
-  until tix > endTrial;
+  until tix > tixend;
 end;
 
 procedure TSqlDBProxyConnectionProtocol.TransactionEnd(sessionID: integer);
@@ -823,66 +832,69 @@ begin
   inherited Destroy;
 end;
 
-function TSqlDBRemoteConnectionProtocol.HandleInput(const input: RawByteString):
-  RawByteString;
+function TSqlDBRemoteConnectionProtocol.HandleInput(
+  const input: RawByteString): RawByteString;
 begin
   result := input;
   SymmetricEncrypt(REMOTE_MAGIC, result);
   result := AlgoSynLZ.Decompress(result); // also check crc32c
 end;
 
-function TSqlDBRemoteConnectionProtocol.HandleOutput(const output: RawByteString):
-  RawByteString;
+function TSqlDBRemoteConnectionProtocol.HandleOutput(
+  const output: RawByteString): RawByteString;
 begin
   result := AlgoSynLZ.Compress(output); // includes cr32c hashing
   SymmetricEncrypt(REMOTE_MAGIC, result);
 end;
 
 procedure TSqlDBProxyConnectionProtocol.RemoteProcessMessage(
-  const Input: RawByteString; out Output: RawByteString; Connection: TSqlDBConnection);
+  const Input: RawByteString; out Output: RawByteString;
+  Connection: TSqlDBConnection);
 var
-  Stmt: ISqlDBStatement;
-  Data: TRawByteStringStream;
-  msgInput, msgOutput: RawByteString;
+  stmt: ISqlDBStatement;
+  data: TRawByteStringStream;
+  msgin, msgout: RawUtf8;
   header: PRemoteMessageHeader;
-  O: PAnsiChar;
+  P: PAnsiChar;
   i, session: integer;
   user: RawUtf8;
-  InputExecute: TSqlDBProxyConnectionCommandExecute;
-  ExecuteWithResults: boolean;
-  OutputSqlDBColumnDefineDynArray: TSqlDBColumnDefineDynArray;
-  OutputSqlDBIndexDefineDynArray: TSqlDBIndexDefineDynArray;
-  OutputRawUtf8DynArray: TRawUtf8DynArray;
+  exec: TSqlDBProxyConnectionCommandExecute;
+  execwithres: boolean;
+  colarr: TSqlDBColumnDefineDynArray;
+  defarr: TSqlDBIndexDefineDynArray;
+  outarr: TRawUtf8DynArray;
 
   procedure AppendOutput(value: Int64);
   var
-    len: integer;
+    len: PtrInt;
   begin
-    len := Length(msgOutput);
-    SetLength(msgOutput, len + sizeof(Int64));
-    PInt64(@PByteArray(msgOutput)[len])^ := value;
+    len := Length(msgout);
+    SetLength(msgout, len + SizeOf(Int64));
+    PInt64(@PByteArray(msgout)[len])^ := value;
   end;
 
 begin
   // follow TSqlDBRemoteConnectionPropertiesAbstract.Process binary layout
   if self = nil then
-    raise ESqlDBRemote.Create('RemoteProcessMessage(protocol=nil)');
+    raise ESqlDBRemote.Create('RemoteProcessMessage: unexpected self=nil');
   if Connection = nil then
-    raise ESqlDBRemote.CreateUtf8('%.RemoteProcessMessage(connection=nil)', [self]);
-  msgInput := HandleInput(Input);
-  header := pointer(msgInput);
+    raise ESqlDBRemote.CreateUtf8(
+      '%.RemoteProcessMessage(connection=nil)', [self]);
+  msgin := HandleInput(Input);
+  header := pointer(msgin);
   if (header = nil) or
      (header.Magic <> REMOTE_MAGIC) then
-    raise ESqlDBRemote.CreateUtf8('Wrong %.RemoteProcessMessage() input', [self]);
+    raise ESqlDBRemote.CreateUtf8(
+      'Incorrect %.RemoteProcessMessage() input magic/version', [self]);
   if (Authenticate <> nil) and
      (Authenticate.UsersCount > 0) and
      not (header.Command in [cGetToken, cGetDbms]) then
     if not Authenticate.SessionExists(header.SessionID) then
       raise ESqlDBRemote.Create('You do not have the right to be here');
-  O := pointer(msgInput);
-  inc(O, sizeof(header^));
+  P := pointer(msgin);
+  inc(P, SizeOf(header^));
   try
-    msgOutput := copy(msgInput, 1, SizeOf(header^));
+    msgout := copy(msgin, 1, SizeOf(header^));
     case header.Command of
       cGetToken:
         AppendOutput(Authenticate.CurrentToken);
@@ -892,21 +904,23 @@ begin
           if (Authenticate <> nil) and
              (Authenticate.UsersCount > 0) then
           begin
-            GetNextItem(PUtf8Char(O), #1, user);
-            session := Authenticate.CreateSession(user, PCardinal(O)^);
+            GetNextItem(PUtf8Char(P), #1, user);
+            session := Authenticate.CreateSession(user, PCardinal(P)^);
             if session = 0 then
-              raise ESqlDBRemote.Create('Impossible to Open a Session - ' +
-                'check connection and User/Password');
+              raise ESqlDBRemote.CreateUtf8('%.RemoteProcessMessage: ' +
+                'CreateSession failed - check connection and User/Password',
+                [self]);
           end;
-          PRemoteMessageHeader(msgOutput)^.sessionID := session;
-          msgOutput := msgOutput + AnsiChar(Connection.Properties.DBMS);
+          PRemoteMessageHeader(msgout)^.sessionID := session;
+          AppendCharToRawUtf8(msgout, AnsiChar(Connection.Properties.Dbms));
         end;
       cConnect:
         Connection.Connect;
       cDisconnect:
         Connection.Disconnect;
       cTryStartTransaction:
-        msgOutput := msgOutput + AnsiChar(TransactionStarted(Connection, header.SessionID));
+        AppendCharToRawUtf8(msgout,
+          AnsiChar(TransactionStarted(Connection, header.SessionID)));
       cCommit:
         begin
           TransactionEnd(header.SessionID);
@@ -921,82 +935,86 @@ begin
         AppendOutput(Connection.ServerTimestamp);
       cGetFields:
         begin
-          Connection.Properties.GetFields(O, OutputSqlDBColumnDefineDynArray);
-          msgOutput := msgOutput + DynArraySave(
-            OutputSqlDBColumnDefineDynArray, TypeInfo(TSqlDBColumnDefineDynArray));
+          Connection.Properties.GetFields(P, colarr);
+          msgout := msgout + DynArraySave(
+            colarr, TypeInfo(TSqlDBColumnDefineDynArray));
         end;
       cGetIndexes:
         begin
-          Connection.Properties.GetIndexes(O, OutputSqlDBIndexDefineDynArray);
-          msgOutput := msgOutput + DynArraySave(
-            OutputSqlDBIndexDefineDynArray, TypeInfo(TSqlDBIndexDefineDynArray));
+          Connection.Properties.GetIndexes(P, defarr);
+          msgout := msgout + DynArraySave(
+            defarr, TypeInfo(TSqlDBIndexDefineDynArray));
         end;
       cGetTableNames:
         begin
-          Connection.Properties.GetTableNames(OutputRawUtf8DynArray);
-          msgOutput := msgOutput + DynArraySave(
-            OutputRawUtf8DynArray, TypeInfo(TRawUtf8DynArray));
+          Connection.Properties.GetTableNames(outarr);
+          msgout := msgout + DynArraySave(
+            outarr, TypeInfo(TRawUtf8DynArray));
         end;
       cGetForeignKeys:
         begin
           Connection.Properties.GetForeignKey('', ''); // ensure Dest.fForeignKeys exists
-          msgOutput := msgOutput + Connection.Properties.ForeignKeysData;
+          msgout := msgout + Connection.Properties.ForeignKeysData;
         end;
-      cExecute, cExecuteToBinary, cExecuteToJson, cExecuteToExpandedJson:
+      cExecute,
+      cExecuteToBinary,
+      cExecuteToJson,
+      cExecuteToExpandedJson:
         begin
-          RecordLoad(InputExecute, O, TypeInfo(TSqlDBProxyConnectionCommandExecute));
-          ExecuteWithResults := header.Command <> cExecute;
-          Stmt := Connection.NewStatementPrepared(InputExecute.SQL,
-            ExecuteWithResults, true);
-          if fBlobAsNull in InputExecute.Force then
-            Stmt.ForceBlobAsNull := true;
-          if fDateWithMS in InputExecute.Force then
-            Stmt.ForceDateWithMS := true;
-          for i := 1 to Length(InputExecute.Params) do
-            with InputExecute.Params[i - 1] do
-              if InputExecute.ArrayCount = 0 then
+          RecordLoad(exec, P, TypeInfo(TSqlDBProxyConnectionCommandExecute));
+          execwithres := header.Command <> cExecute;
+          stmt := Connection.NewStatementPrepared(exec.SQL,
+            execwithres, true);
+          if fBlobAsNull in exec.Force then
+            stmt.ForceBlobAsNull := true;
+          if fDateWithMS in exec.Force then
+            stmt.ForceDateWithMS := true;
+          for i := 1 to Length(exec.Params) do
+            with exec.Params[i - 1] do
+              if exec.ArrayCount = 0 then
                 case VType of
                   ftNull:
-                    Stmt.BindNull(i, VInOut);
+                    stmt.BindNull(i, VInOut);
                   ftInt64:
-                    Stmt.Bind(i, VInt64, VInOut);
+                    stmt.Bind(i, VInt64, VInOut);
                   ftDouble:
-                    Stmt.Bind(i, unaligned(PDouble(@VInt64)^), VInOut);
+                    stmt.Bind(i, unaligned(PDouble(@VInt64)^), VInOut);
                   ftCurrency:
-                    Stmt.Bind(i, PCurrency(@VInt64)^, VInOut);
+                    stmt.Bind(i, PCurrency(@VInt64)^, VInOut);
                   ftDate:
-                    Stmt.BindDateTime(i, PDateTime(@VInt64)^, VInOut);
+                    stmt.BindDateTime(i, PDateTime(@VInt64)^, VInOut);
                   ftUtf8:
-                    Stmt.BindTextU(i, VData, VInOut);
+                    stmt.BindTextU(i, VData, VInOut);
                   ftBlob:
-                    Stmt.BindBlob(i, VData, VInOut);
+                    stmt.BindBlob(i, VData, VInOut);
                 else
-                  raise ESqlDBRemote.CreateUtf8('Invalid VType=% parameter #% in %.ProcessExec(%)',
+                  raise ESqlDBRemote.CreateUtf8(
+                    'Invalid VType=% parameter #% in %.ProcessExec(%)',
                     [ord(VType), i, self, ToText(header.Command)^]);
                 end
               else
-                Stmt.BindArray(i, VType, VArray, InputExecute.ArrayCount);
-          Stmt.ExecutePrepared;
-          if ExecuteWithResults then
+                stmt.BindArray(i, VType, VArray, exec.ArrayCount);
+          stmt.ExecutePrepared;
+          if execwithres then
           begin
-            Data := TRawByteStringStream.Create(msgOutput);
+            data := TRawByteStringStream.Create(msgout);
             try
-              Data.Seek(0, soFromEnd); // include header
+              data.Seek(0, soEnd); // include header
               case header.Command of
                 cExecuteToBinary:
-                  Stmt.FetchAllToBinary(Data);
+                  stmt.FetchAllToBinary(data);
                 cExecuteToJson:
-                  Stmt.FetchAllToJson(Data, false);
+                  stmt.FetchAllToJson(data, false);
                 cExecuteToExpandedJson:
-                  Stmt.FetchAllToJson(Data, true);
+                  stmt.FetchAllToJson(data, true);
               end;
-              msgOutput := Data.DataString;
+              msgout := data.DataString;
             finally
-              Data.Free;
+              data.Free;
             end;
           end
-          else if not (fNoUpdateCount in InputExecute.Force) then
-            msgOutput := msgOutput + ToUtf8(Stmt.UpdateCount);
+          else if not (fNoUpdateCount in exec.Force) then
+            msgout := msgout + ToUtf8(stmt.UpdateCount);
         end;
       cQuit:
         begin
@@ -1005,17 +1023,18 @@ begin
           Authenticate.RemoveSession(header.SessionID);
         end;
     else
-      raise ESqlDBRemote.CreateUtf8('Unknown %.RemoteProcessMessage() command %',
+      raise ESqlDBRemote.CreateUtf8(
+        'Unknown %.RemoteProcessMessage() command %',
         [self, ord(header.Command)]);
     end;
   except
     on E: Exception do
     begin
-      PRemoteMessageHeader(msgOutput)^.Command := cExceptionRaised;
-      msgOutput := msgOutput + StringToUtf8(E.ClassName + #0 + E.Message);
+      PRemoteMessageHeader(msgout)^.Command := cExceptionRaised;
+      msgout := msgout + StringToUtf8(E.ClassName + #0 + E.Message);
     end;
   end;
-  Output := HandleOutput(msgOutput);
+  Output := HandleOutput(msgout);
 end;
 
 
@@ -1025,7 +1044,7 @@ end;
 
 procedure TSqlDBProxyConnectionPropertiesAbstract.SetInternalProperties;
 var
-  InputCredential: RawUtf8;
+  credential: RawUtf8;
   token: Int64;
 begin
   if fStartTransactionTimeOut = 0 then
@@ -1034,11 +1053,11 @@ begin
     // override this method and set fProtocol before calling inherited
     fProtocol := TSqlDBProxyConnectionProtocol.Create(nil);
   Process(cGetToken, self, token);
-  SetLength(InputCredential, 4);
-  PCardinal(InputCredential)^ := fProtocol.Authenticate.ComputeHash(
+  SetLength(credential, 4);
+  PCardinal(credential)^ := fProtocol.Authenticate.ComputeHash(
     token, UserID, PassWord);
-  InputCredential := UserID + #1 + InputCredential;
-  fCurrentSession := Process(cGetDbms, InputCredential, fDbms);
+  credential := UserID + #1 + credential;
+  fCurrentSession := Process(cGetDbms, credential, fDbms);
 end;
 
 destructor TSqlDBProxyConnectionPropertiesAbstract.Destroy;
@@ -1059,6 +1078,7 @@ end;
 function TSqlDBProxyConnectionPropertiesAbstract.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBProxyConnection.Create(self);
+  TSqlDBProxyConnection(result).InternalProcess(speCreated);
 end;
 
 procedure TSqlDBProxyConnectionPropertiesAbstract.GetFields(
@@ -1090,72 +1110,93 @@ end;
 function TSqlDBRemoteConnectionPropertiesAbstract.Process(
   Command: TSqlDBProxyConnectionCommand; const Input; var Output): integer;
 var
-  msgInput, msgOutput, msgRaw: RawByteString;
+  msgin, msgout, msgRaw: RawByteString;
   header: TRemoteMessageHeader;
   outheader: PRemoteMessageHeader;
-  InputText: RawUtf8 absolute Input;
-  InputExecute: TSqlDBProxyConnectionCommandExecute absolute Input;
-  O: PAnsiChar;
-  OutputSqlDBDefinition: TSqlDBDefinition absolute Output;
-  OutputInt64: Int64 absolute Output;
-  Outputboolean: boolean absolute Output;
-  OutputSqlDBColumnDefineDynArray: TSqlDBColumnDefineDynArray absolute Output;
-  OutputSqlDBIndexDefineDynArray: TSqlDBIndexDefineDynArray absolute Output;
-  OutputRawUtf8DynArray: TRawUtf8DynArray absolute Output;
-  OutputRawUtf8: RawUtf8 absolute Output;
-  OutputSynNameValue: TSynNameValue absolute Output;
+  intext: RawUtf8                             absolute Input;
+  inexec: TSqlDBProxyConnectionCommandExecute absolute Input;
+  msg: PAnsiChar;
+  outdef: TSqlDBDefinition                    absolute Output;
+  outint64: Int64                             absolute Output;
+  outboolean: boolean                         absolute Output;
+  outcolarr: TSqlDBColumnDefineDynArray       absolute Output;
+  outindexarr: TSqlDBIndexDefineDynArray      absolute Output;
+  outarr: TRawUtf8DynArray                    absolute Output;
+  oututf8: RawUtf8                            absolute Output;
+  outnamevalue: TSynNameValue                 absolute Output;
 begin
   // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   header.Magic := REMOTE_MAGIC;
   header.SessionID := fCurrentSession;
   header.Command := Command;
-  SetString(msgInput, PAnsiChar(@header), sizeof(header));
+  SetString(msgin, PAnsiChar(@header), SizeOf(header));
   case Command of
-    cGetToken, cConnect, cDisconnect, cTryStartTransaction, cCommit, cRollback,
-      cServerTimestamp, cGetTableNames, cGetForeignKeys, cQuit:
+    cGetToken,
+    cConnect,
+    cDisconnect,
+    cTryStartTransaction,
+    cCommit,
+    cRollback,
+    cServerTimestamp,
+    cGetTableNames,
+    cGetForeignKeys,
+    cQuit:
       ; // no input parameters here, just the command
-    cGetDbms, cGetFields, cGetIndexes:
-      msgInput := msgInput + InputText;
-    cExecute, cExecuteToBinary, cExecuteToJson, cExecuteToExpandedJson:
-      msgInput := msgInput +
-        RecordSave(InputExecute, TypeInfo(TSqlDBProxyConnectionCommandExecute));
+    cGetDbms,
+    cGetFields,
+    cGetIndexes:
+      msgin := msgin + intext;
+    cExecute,
+    cExecuteToBinary,
+    cExecuteToJson,
+    cExecuteToExpandedJson:
+      msgin := msgin +
+        RecordSave(inexec, TypeInfo(TSqlDBProxyConnectionCommandExecute));
   else
-    raise ESqlDBRemote.CreateUtf8('Unknown %.Process() input command % (%)', [self,
-      ToText(Command)^, ord(Command)]);
+    raise ESqlDBRemote.CreateUtf8('Unknown %.Process() input command % (%)',
+      [self, ToText(Command)^, ord(Command)]);
   end;
-  ProcessMessage(fProtocol.HandleOutput(msgInput), msgRaw);
-  msgOutput := fProtocol.HandleInput(msgRaw);
-  outheader := pointer(msgOutput);
+  ProcessMessage(fProtocol.HandleOutput(msgin), msgRaw);
+  msgout := fProtocol.HandleInput(msgRaw);
+  outheader := pointer(msgout);
   if (outheader = nil) or
      (outheader.Magic <> REMOTE_MAGIC) then
-    raise ESqlDBRemote.CreateUtf8('Wrong %.Process() returned content', [self]);
-  O := pointer(msgOutput);
-  inc(O, sizeof(header));
+    raise ESqlDBRemote.CreateUtf8('Incorrect %.Process() magic/version', [self]);
+  msg := pointer(msgout);
+  inc(msg, SizeOf(header));
   case outheader.Command of
-    cGetToken, cServerTimestamp:
-      OutputInt64 := PInt64(O)^;
+    cGetToken,
+    cServerTimestamp:
+      outint64 := PInt64(msg)^;
     cGetDbms:
-      OutputSqlDBDefinition := TSqlDBDefinition(O^);
-    cConnect, cDisconnect, cCommit, cRollback, cQuit:
+      outdef := TSqlDBDefinition(msg^);
+    cConnect,
+    cDisconnect,
+    cCommit,
+    cRollback,
+    cQuit:
       ; // no output parameters here
     cTryStartTransaction:
-      Outputboolean := boolean(O^);
+      outboolean := boolean(msg^);
     cGetFields:
-      DynArrayLoad(OutputSqlDBColumnDefineDynArray, O, TypeInfo(TSqlDBColumnDefineDynArray));
+      DynArrayLoad(outcolarr, msg, TypeInfo(TSqlDBColumnDefineDynArray));
     cGetIndexes:
-      DynArrayLoad(OutputSqlDBIndexDefineDynArray, O, TypeInfo(TSqlDBIndexDefineDynArray));
+      DynArrayLoad(outindexarr, msg, TypeInfo(TSqlDBIndexDefineDynArray));
     cGetTableNames:
-      DynArrayLoad(OutputRawUtf8DynArray, O, TypeInfo(TRawUtf8DynArray));
+      DynArrayLoad(outarr, msg, TypeInfo(TRawUtf8DynArray));
     cGetForeignKeys:
-      OutputSynNameValue.SetBlobDataPtr(O);
-    cExecute, cExecuteToBinary, cExecuteToJson, cExecuteToExpandedJson:
-      FastSetString(OutputRawUtf8, O, length(msgOutput) - sizeof(header));
-    cExceptionRaised: // msgOutput is ExceptionClassName+#0+ExceptionMessage
+      outnamevalue.SetBlobDataPtr(msg);
+    cExecute,
+    cExecuteToBinary,
+    cExecuteToJson,
+    cExecuteToExpandedJson:
+      FastSetString(oututf8, msg, length(msgout) - SizeOf(header));
+    cExceptionRaised: // msgout is ExceptionClassName+#0+ExceptionMessage
       raise ESqlDBRemote.CreateUtf8('%.Process(%): server raised % with ''%''',
-        [self, ToText(Command)^, O, O + StrLen(O) + 1]);
+        [self, ToText(Command)^, msg, msg + StrLen(msg) + 1]);
   else
-    raise ESqlDBRemote.CreateUtf8('Unknown %.Process() output command % (%)', [self,
-      ToText(outheader.Command)^, ord(outheader.Command)]);
+    raise ESqlDBRemote.CreateUtf8('Unknown %.Process() output command % (%)',
+      [self, ToText(outheader.Command)^, ord(outheader.Command)]);
   end;
   result := outheader.SessionID;
 end;
@@ -1163,17 +1204,17 @@ end;
 
 { TSqlDBRemoteConnectionPropertiesTest }
 
-constructor TSqlDBRemoteConnectionPropertiesTest.Create(aProps:
-  TSqlDBConnectionProperties; const aUserID, aPassword: RawUtf8; aProtocol:
-  TSqlDBProxyConnectionProtocolClass);
+constructor TSqlDBRemoteConnectionPropertiesTest.Create(
+  aProps: TSqlDBConnectionProperties; const aUserID, aPassword: RawUtf8;
+  aProtocol: TSqlDBProxyConnectionProtocolClass);
 begin
   fProps := aProps;
   fProtocol := aProtocol.Create(TSynAuthentication.Create(aUserID, aPassword));
   inherited Create('', '', aUserID, aPassword);
 end;
 
-procedure TSqlDBRemoteConnectionPropertiesTest.ProcessMessage(const Input:
-  RawByteString; out Output: RawByteString);
+procedure TSqlDBRemoteConnectionPropertiesTest.ProcessMessage(
+  const Input: RawByteString; out Output: RawByteString);
 begin
   fProtocol.RemoteProcessMessage(Input, Output, fProps.ThreadSafeConnection);
 end;
@@ -1242,15 +1283,15 @@ end;
 procedure TSqlDBProxyConnection.StartTransaction;
 var
   started: boolean;
-  endTrial: Int64;
+  endtix: Int64;
 begin
   inherited StartTransaction;
   started := false;
-  endTrial := GetTickCount64 + fProxy.StartTransactionTimeOut;
+  endtix := GetTickCount64 + fProxy.StartTransactionTimeOut;
   repeat
     fProxy.Process(cTryStartTransaction, self, started);
     if started or
-       (GetTickCount64 > endTrial) then
+       (GetTickCount64 > endtix) then
       break;
     SleepHiRes(10); // retry every 10 ms
   until false;
@@ -1267,8 +1308,8 @@ end;
 
 procedure TSqlDBProxyStatementAbstract.IntHeaderProcess(Data: PByte; DataLen: PtrInt);
 var
-  Magic, F, colCount: integer;
-  p: PSqlDBColumnProperty;
+  magic, F, colcount: integer;
+  prop: PSqlDBColumnProperty;
 begin
   fDataCurrentRowValuesStart := nil;
   fDataCurrentRowValuesSize := 0;
@@ -1278,21 +1319,21 @@ begin
   repeat
     if DataLen <= 5 then
       break; // to raise ESqlDBRemote
-    fDataRowCount := PInteger(PAnsiChar(Data) + (DataLen - sizeof(integer)))^;
-    Magic := FromVarUInt32(Data);
-    if Magic <> FETCHALLTOBINARY_MAGIC then
+    fDataRowCount := PInteger(PAnsiChar(Data) + (DataLen - SizeOf(integer)))^;
+    magic := FromVarUInt32(Data);
+    if magic <> FETCHALLTOBINARY_MAGIC then
       break; // corrupted
-    colCount := FromVarUInt32(Data);
-    SetLength(fDataCurrentRowColTypes, colCount);
-    SetLength(fDataCurrentRowValues, colCount);
-    fColumn.Capacity := colCount;
-    for F := 0 to colCount - 1 do
+    colcount := FromVarUInt32(Data);
+    SetLength(fDataCurrentRowColTypes, colcount);
+    SetLength(fDataCurrentRowValues, colcount);
+    fColumn.Capacity := colcount;
+    for F := 0 to colcount - 1 do
     begin
-      p := fColumn.AddAndMakeUniqueName(FromVarString(Data));
-      p^.ColumnType := TSqlDBFieldType(Data^);
+      prop := fColumn.AddAndMakeUniqueName(FromVarString(Data));
+      prop^.ColumnType := TSqlDBFieldType(Data^);
       inc(Data);
-      p^.ColumnValueDBSize := FromVarUInt32(Data);
-      fDataCurrentRowColTypes[F] := p^.ColumnType;
+      prop^.ColumnValueDBSize := FromVarUInt32(Data);
+      fDataCurrentRowColTypes[F] := prop^.ColumnType;
     end;
     if fColumnCount = 0 then
       exit; // no data returned
@@ -1302,8 +1343,9 @@ begin
     fDataRowReader := Data;
     fDataRowNullSize := ((fColumnCount - 1) shr 3) + 1;
     SetLength(fDataCurrentRowNull, fDataRowNullSize);
-    exit;
+    exit; // success
   until false;
+  // raise ESqlDBRemote on invalid input
   fDataRowCount := 0;
   fColumnCount := 0;
   raise ESqlDBRemote.CreateUtf8('Invalid %.IntHeaderProcess', [self]);
@@ -1312,16 +1354,16 @@ end;
 procedure TSqlDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte;
   IgnoreColumnDataSize: boolean);
 var
-  F, Len: integer;
+  F, len: PtrInt;
   ft: TSqlDBFieldType;
 begin
-  // format match TSqlDBStatement.FetchAllToBinary()
+  // match TSqlDBStatement.FetchAllToBinary() format
   if fDataCurrentRowNullLen > 0 then
     FillCharFast(fDataCurrentRowNull[0], fDataCurrentRowNullLen, 0);
   fDataCurrentRowNullLen := FromVarUInt32(Reader);
   if fDataCurrentRowNullLen > fDataRowNullSize then
-    raise ESqlDBRemote.CreateUtf8('Invalid %.IntFillDataCurrent %>%', [self,
-      fDataCurrentRowNullLen, fDataRowNullSize]);
+    raise ESqlDBRemote.CreateUtf8('%.IntFillDataCurrent: Invalid rownull %>%',
+      [self, fDataCurrentRowNullLen, fDataRowNullSize]);
   if fDataCurrentRowNullLen > 0 then
   begin
     MoveFast(Reader^, fDataCurrentRowNull[0], fDataCurrentRowNullLen);
@@ -1345,28 +1387,33 @@ begin
       case ft of
         ftInt64:
           Reader := GotoNextVarInt(Reader);
-        ftDouble, ftCurrency, ftDate:
+        ftDouble,
+        ftCurrency,
+        ftDate:
           inc(Reader, SizeOf(Int64));
-        ftUtf8, ftBlob:
+        ftUtf8,
+        ftBlob:
           begin
-            Len := FromVarUInt32(Reader);
+            len := FromVarUInt32(Reader);
             if not IgnoreColumnDataSize then
-              if Len > fColumns[F].ColumnDataSize then
-                fColumns[F].ColumnDataSize := Len;
-            inc(Reader, Len); // jump string/blob content
+              if len > fColumns[F].ColumnDataSize then
+                fColumns[F].ColumnDataSize := len;
+            inc(Reader, len); // jump string/blob content
           end;
       else
-        raise ESqlDBRemote.CreateUtf8('%.IntStep: Invalid ColumnType(%)=%', [self,
-          fColumns[F].ColumnName, ord(ft)]);
+        raise ESqlDBRemote.CreateUtf8(
+          '%.IntFillDataCurrent: Invalid ColumnType(%)=%',
+          [self, fColumns[F].ColumnName, ord(ft)]);
       end;
     end;
-  fDataCurrentRowValuesSize := PtrUInt(Reader) - PtrUInt(fDataCurrentRowValuesStart);
+  fDataCurrentRowValuesSize :=
+    PtrUInt(Reader) - PtrUInt(fDataCurrentRowValuesStart);
 end;
 
-procedure TSqlDBProxyStatementAbstract.ColumnsToJson(WR: TJsonWriter);
+procedure TSqlDBProxyStatementAbstract.ColumnsToJson(WR: TResultsWriter);
 var
-  col, DataLen: integer;
-  Data: PByte;
+  col, len: PtrInt;
+  data: PByte;
 begin
   if WR.Expand then
     WR.Add('{');
@@ -1374,28 +1421,28 @@ begin
   begin
     if WR.Expand then
       WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
-    Data := fDataCurrentRowValues[col];
-    if Data = nil then
+    data := fDataCurrentRowValues[col];
+    if data = nil then
       WR.AddNull
     else
       case fDataCurrentRowColTypes[col] of
         ftInt64:
-          WR.Add(FromVarInt64Value(Data));
+          WR.Add(FromVarInt64Value(data));
         ftDouble:
-          WR.AddDouble(unaligned(PDouble(Data)^));
+          WR.AddDouble(unaligned(PDouble(data)^));
         ftCurrency:
-          WR.AddCurr64(PInt64(Data));
+          WR.AddCurr64(PInt64(data));
         ftDate:
           begin
             WR.Add('"');
-            WR.AddDateTime(PDateTime(Data)^);
+            WR.AddDateTime(PDateTime(data)^);
             WR.Add('"');
           end;
         ftUtf8:
           begin
             WR.Add('"');
-            DataLen := FromVarUInt32(Data);
-            WR.AddJsonEscape(Data, DataLen);
+            len := FromVarUInt32(data);
+            WR.AddJsonEscape(data, len);
             WR.Add('"');
           end;
         ftBlob:
@@ -1403,13 +1450,13 @@ begin
             WR.AddNull
           else
           begin
-            DataLen := FromVarUInt32(Data);
-            WR.WrBase64(PAnsiChar(Data), DataLen, {withMagic=}true);
+            len := FromVarUInt32(data);
+            WR.WrBase64(PAnsiChar(data), len, {withMagic=}true);
           end;
       end;
     WR.AddComma;
   end;
-  WR.CancelLastComma; // cancel last ','
+  WR.CancelLastComma;
   if WR.Expand then
     WR.Add('}');
 end;
@@ -1417,6 +1464,7 @@ end;
 procedure TSqlDBProxyStatementAbstract.ColumnsToBinary(W: TBufferWriter;
   Null: pointer; const ColTypes: TSqlDBFieldTypeDynArray);
 begin
+  // just transmit the existing raw binary, which is in the expected format
   W.Write(fDataCurrentRowValuesStart, fDataCurrentRowValuesSize);
 end;
 
@@ -1465,17 +1513,18 @@ end;
 
 function TSqlDBProxyStatementAbstract.ColumnCurrency(Col: integer): currency;
 var
-  Data: PByte;
+  data: PByte;
 begin
-  case IntColumnType(Col, Data) of
+  case IntColumnType(Col, data) of
     ftNull:
       result := 0;
     ftInt64:
-      result := FromVarInt64Value(Data{%H-});
-    ftDouble, ftDate:
-      result := unaligned(PDouble(Data)^);
+      result := FromVarInt64Value(data{%H-});
+    ftDouble,
+    ftDate:
+      result := unaligned(PDouble(data)^);
     ftCurrency:
-      result := PCurrency(Data)^;
+      result := PCurrency(data)^;
   else
     raise ESqlDBRemote.CreateUtf8('%.ColumnCurrency()', [self]);
   end;
@@ -1483,17 +1532,18 @@ end;
 
 function TSqlDBProxyStatementAbstract.ColumnDateTime(Col: integer): TDateTime;
 var
-  Data: PByte;
+  data: PByte;
 begin
-  case IntColumnType(Col, Data) of
+  case IntColumnType(Col, data) of
     ftNull:
       result := 0;
     ftInt64:
-      result := FromVarInt64Value(Data{%H-});
-    ftDouble, ftDate:
-      result := unaligned(PDouble(Data)^);
+      result := FromVarInt64Value(data{%H-});
+    ftDouble,
+    ftDate:
+      result := unaligned(PDouble(data)^);
     ftUtf8:
-      with FromVarBlob(Data) do
+      with FromVarBlob(data) do
         result := Iso8601ToDateTimePUtf8Char(PUtf8Char(Ptr), len);
   else
     raise ESqlDBRemote.CreateUtf8('%.ColumnDateTime()', [self]);
@@ -1502,17 +1552,18 @@ end;
 
 function TSqlDBProxyStatementAbstract.ColumnDouble(Col: integer): double;
 var
-  Data: PByte;
+  data: PByte;
 begin
-  case IntColumnType(Col, Data) of
+  case IntColumnType(Col, data) of
     ftNull:
       result := 0;
     ftInt64:
-      result := FromVarInt64Value(Data{%H-});
-    ftDouble, ftDate:
-      result := unaligned(PDouble(Data)^);
+      result := FromVarInt64Value(data{%H-});
+    ftDouble,
+    ftDate:
+      result := unaligned(PDouble(data)^);
     ftCurrency:
-      result := PCurrency(Data)^;
+      result := PCurrency(data)^;
   else
     raise ESqlDBRemote.CreateUtf8('%.ColumnDouble()', [self]);
   end;
@@ -1520,17 +1571,18 @@ end;
 
 function TSqlDBProxyStatementAbstract.ColumnInt(Col: integer): Int64;
 var
-  Data: PByte;
+  data: PByte;
 begin
-  case IntColumnType(Col, Data) of
+  case IntColumnType(Col, data) of
     ftNull:
       result := 0;
     ftInt64:
-      result := FromVarInt64Value(Data{%H-});
-    ftDouble, ftDate:
-      result := Trunc(unaligned(PDouble(Data)^));
+      result := FromVarInt64Value(data{%H-});
+    ftDouble,
+    ftDate:
+      result := Trunc(unaligned(PDouble(data)^));
     ftCurrency:
-      result := PInt64(Data)^ div 10000;
+      result := PInt64(data)^ div 10000;
   else
     raise ESqlDBRemote.CreateUtf8('%.ColumnInt()', [self]);
   end;
@@ -1544,15 +1596,18 @@ end;
 
 function TSqlDBProxyStatementAbstract.ColumnBlob(Col: integer): RawByteString;
 var
-  Data: PByte;
+  data: PByte;
 begin
-  case IntColumnType(Col, Data) of
+  case IntColumnType(Col, data) of
     ftNull:
       result := '';
-    ftDouble, ftCurrency, ftDate:
-      SetString(result, PAnsiChar({%H-}Data), sizeof(Int64));
-    ftBlob, ftUtf8:
-      with FromVarBlob(Data) do
+    ftDouble,
+    ftCurrency,
+    ftDate:
+      SetString(result, PAnsiChar({%H-}data), SizeOf(Int64));
+    ftBlob,
+    ftUtf8:
+      with FromVarBlob(data) do
         SetString(result, Ptr, len);
   else
     raise ESqlDBRemote.CreateUtf8('%.ColumnBlob()', [self]);
@@ -1561,21 +1616,22 @@ end;
 
 function TSqlDBProxyStatementAbstract.ColumnUtf8(Col: integer): RawUtf8;
 var
-  Data: PByte;
+  data: PByte;
 begin
-  case IntColumnType(Col, Data) of
+  case IntColumnType(Col, data) of
     ftNull:
       result := '';
     ftInt64:
-      result := Int64ToUtf8(FromVarInt64Value(Data{%H-}));
+      result := Int64ToUtf8(FromVarInt64Value(data{%H-}));
     ftDouble:
-      result := DoubleToStr(unaligned(PDouble(Data)^));
+      result := DoubleToStr(unaligned(PDouble(data)^));
     ftCurrency:
-      result := Curr64ToStr(PInt64(Data)^);
+      result := Curr64ToStr(PInt64(data)^);
     ftDate:
-      DateTimeToIso8601TextVar(PDateTime(Data)^, 'T', result);
-    ftBlob, ftUtf8:
-      with FromVarBlob(Data) do
+      DateTimeToIso8601TextVar(PDateTime(data)^, 'T', result);
+    ftBlob,
+    ftUtf8:
+      with FromVarBlob(data) do
         FastSetString(result, Ptr, len);
   else
     raise ESqlDBRemote.CreateUtf8('%.ColumnUtf8()', [self]);
@@ -1584,24 +1640,24 @@ end;
 
 function TSqlDBProxyStatementAbstract.ColumnString(Col: integer): string;
 var
-  Data: PByte;
+  data: PByte;
 begin
-  case IntColumnType(Col, Data) of
+  case IntColumnType(Col, data) of
     ftNull:
       result := '';
     ftInt64:
-      result := IntToString(FromVarInt64Value(Data{%H-}));
+      result := IntToString(FromVarInt64Value(data{%H-}));
     ftDouble:
-      result := DoubleToString(unaligned(PDouble(Data)^));
+      result := DoubleToString(unaligned(PDouble(data)^));
     ftCurrency:
-      result := Curr64ToString(PInt64(Data)^);
+      result := Curr64ToString(PInt64(data)^);
     ftDate:
-      DateTimeToIso8601StringVar(PDateTime(Data)^, 'T', result);
+      DateTimeToIso8601StringVar(PDateTime(data)^, 'T', result);
     ftUtf8:
-      with FromVarBlob(Data) do
+      with FromVarBlob(data) do
         Utf8DecodeToString(PUtf8Char(Ptr), len, result);
     ftBlob:
-      with FromVarBlob(Data) do
+      with FromVarBlob(data) do
         SetString(result, Ptr, len shr 1);
   else
     raise ESqlDBRemote.CreateUtf8('%.ColumnString()', [self]);
@@ -1632,18 +1688,23 @@ begin
     include(Input.Force, fNoUpdateCount);
 end;
 
+const
+  EXECUTE_PREPARED_BIN: array[boolean] of TSqlDBProxyConnectionCommand = (
+    cExecute,
+    cExecuteToBinary);
+  EXECUTE_PREPARED_JSON: array[boolean] of TSqlDBProxyConnectionCommand = (
+    cExecuteToJson,
+    cExecuteToExpandedJson);
+
 procedure TSqlDBProxyStatement.ExecutePrepared;
 var
-  Input: TSqlDBProxyConnectionCommandExecute;
-const
-  cmd: array[boolean] of TSqlDBProxyConnectionCommand = (
-    cExecute, cExecuteToBinary);
+  exec: TSqlDBProxyConnectionCommandExecute;
 begin
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   // execute the statement
-  ParamsToCommand(Input);
+  ParamsToCommand(exec);
   TSqlDBProxyConnectionPropertiesAbstract(fConnection.Properties).Process(
-    cmd[fExpectResults], Input, fDataInternalCopy);
+    EXECUTE_PREPARED_BIN[fExpectResults], exec, fDataInternalCopy);
   if fExpectResults then
     // retrieve columns information from TSqlDBStatement.FetchAllToBinary() format
     IntHeaderProcess(pointer(fDataInternalCopy), Length(fDataInternalCopy))
@@ -1658,16 +1719,16 @@ begin
 end;
 
 procedure TSqlDBProxyStatement.ExecutePreparedAndFetchAllAsJson(
-  Expanded: boolean; out Json: RawUtf8);
+  Expanded: boolean; out Json: RawUtf8; ReturnedRowCount: PPtrInt);
 var
-  Input: TSqlDBProxyConnectionCommandExecute;
-const
-  cmd: array[boolean] of TSqlDBProxyConnectionCommand = (
-    cExecuteToJson, cExecuteToExpandedJson);
+  exec: TSqlDBProxyConnectionCommandExecute;
 begin
-  ParamsToCommand(Input);
+  if ReturnedRowCount <> nil then
+    raise ESqlDBRemote.CreateUtf8('%.ExecutePreparedAndFetchAllAsJson() ' +
+      'does not support ReturnedRowCount', [self]);
+  ParamsToCommand(exec);
   TSqlDBProxyConnectionPropertiesAbstract(fConnection.Properties).Process(
-    cmd[Expanded], Input, Json);
+    EXECUTE_PREPARED_JSON[Expanded], exec, Json);
 end;
 
 function TSqlDBProxyStatement.FetchAllToBinary(Dest: TStream;
@@ -1713,11 +1774,11 @@ constructor TSqlDBProxyStatementRandomAccess.Create(Data: PByte; DataLen: intege
   DataRowPosition: PCardinalDynArray; IgnoreColumnDataSize: boolean);
 var
   i, f: PtrInt;
-  Reader: PByte;
+  reader: PByte;
 begin
   inherited Create(nil);
   IntHeaderProcess(Data, DataLen);
-  Reader := fDataRowReaderOrigin;
+  reader := fDataRowReaderOrigin;
   if (DataRowPosition <> nil) and
      (DataRowPosition^ <> nil) then
   begin
@@ -1728,9 +1789,9 @@ begin
           if ColumnType in [ftUtf8, ftBlob] then
             if ColumnValueDBSize = 0 then
             begin
-              // unknown size -> compute
+              // unknown size -> compute ColumnDataSize
               for i := 0 to DataRowCount - 1 do
-                IntFillDataCurrent(Reader, false); // will compute ColumnDataSize
+                IntFillDataCurrent(reader, false); // parse and set ColumnDataSize
               break;
             end
             else
@@ -1741,8 +1802,8 @@ begin
     SetLength(fRowData, DataRowCount);
     for i := 0 to DataRowCount - 1 do
     begin
-      fRowData[i] := PtrUInt(Reader) - PtrUInt(fDataRowReaderOrigin);
-      IntFillDataCurrent(Reader, IgnoreColumnDataSize); // will also compute ColumnDataSize
+      fRowData[i] := PtrUInt(reader) - PtrUInt(fDataRowReaderOrigin);
+      IntFillDataCurrent(reader, IgnoreColumnDataSize); // compute ColumnDataSize
     end;
   end;
 end;
@@ -1750,7 +1811,7 @@ end;
 function TSqlDBProxyStatementRandomAccess.GotoRow(Index: integer;
   RaiseExceptionOnWrongIndex: boolean): boolean;
 var
-  Reader: PByte;
+  reader: PByte;
 begin
   result := (cardinal(Index) < cardinal(fDataRowCount)) and
             (fColumnCount > 0);
@@ -1762,8 +1823,8 @@ begin
   if fDataCurrentRowIndex <> Index then
   begin
     // compute only if changed :)
-    Reader := @PAnsiChar(fDataRowReaderOrigin)[fRowData[Index]];
-    IntFillDataCurrent(Reader, false);
+    reader := @PAnsiChar(fDataRowReaderOrigin)[fRowData[Index]];
+    IntFillDataCurrent(reader, false);
     fDataCurrentRowIndex := Index;
   end;
 end;
@@ -1792,7 +1853,8 @@ begin
   fProperties := aProperties;
   if fProperties.InheritsFrom(TSqlDBConnectionPropertiesThreadSafe) then
   begin
-    TSqlDBConnectionPropertiesThreadSafe(fProperties).ThreadingMode := aThreadMode;
+    TSqlDBConnectionPropertiesThreadSafe(fProperties).
+      ThreadingMode := aThreadMode;
     if aThreadMode = tmMainConnection then
       fProcessLocked := true;
   end;
@@ -1855,7 +1917,8 @@ var
 begin
   inherited;
   fServer := THttpApiServer.Create(false, '');
-  status := THttpApiServer(fServer).AddUrl(fDatabaseName, fPort, fHttps, '+', true);
+  status := THttpApiServer(fServer).AddUrl(
+    fDatabaseName, fPort, fHttps, '+', true);
   if status <> NO_ERROR then
     if status = ERROR_ACCESS_DENIED then
       raise ESqlDBRemote.CreateUtf8(
@@ -1894,48 +1957,50 @@ end;
 
 { ************ HTTP Client Classes for Remote Access }
 
-{ TSqlDBHTTPConnectionPropertiesAbstract }
+{ TSqlDBHttpConnectionPropertiesAbstract }
 
-function TSqlDBHTTPConnectionPropertiesAbstract.GetServer: RawByteString;
+function TSqlDBHttpConnectionPropertiesAbstract.GetServer: RawByteString;
 begin
   result := fUri.Server;
 end;
 
-function TSqlDBHTTPConnectionPropertiesAbstract.GetPort: RawByteString;
+function TSqlDBHttpConnectionPropertiesAbstract.GetPort: RawByteString;
 begin
   result := fUri.Port;
 end;
 
-procedure TSqlDBHTTPConnectionPropertiesAbstract.SetServerName(
+procedure TSqlDBHttpConnectionPropertiesAbstract.SetServerName(
   const aServerName: RawUtf8);
 begin
   fKeepAliveMS := 60000;
   if not fUri.From(aServerName) then
-    raise ESqlDBRemote.CreateUtf8('%.Create: expect a valid URI in aServerName="%"',
+    raise ESqlDBRemote.CreateUtf8(
+      '%.Create: expect a valid URI in aServerName=[%]',
       [self, aServerName]);
   if fUri.Port = '' then
     fUri.Port := SYNDB_DEFAULT_HTTP_PORT;
 end;
 
-procedure TSqlDBHTTPConnectionPropertiesAbstract.ProcessMessage(const Input:
+procedure TSqlDBHttpConnectionPropertiesAbstract.ProcessMessage(const Input:
   RawByteString; out Output: RawByteString);
 var
-  Content, ContentType: RawByteString;
+  content, contenttype: RawByteString;
   status: integer;
 begin
-  Content := Input;
-  ContentType := BINARY_CONTENT_TYPE;
-  status := InternalRequest(Content, ContentType);
+  content := Input;
+  contenttype := BINARY_CONTENT_TYPE;
+  status := InternalRequest(content, contenttype);
   if status <> HTTP_SUCCESS then
     raise ESqlDBRemote.CreateUtf8('%.ProcessMessage: Error % from %',
       [self, status, fUri.Uri]);
-  if ContentType <> BINARY_CONTENT_TYPE then
-    raise ESqlDBRemote.CreateUtf8('%.ProcessMessage: Invalid content type [%] from %',
-      [self, ContentType, fUri.Uri]);
-  Output := Content;
+  if contenttype <> BINARY_CONTENT_TYPE then
+    raise ESqlDBRemote.CreateUtf8(
+      '%.ProcessMessage: Unsupported content type [%] from %',
+      [self, contenttype, fUri.Uri]);
+  Output := content;
 end;
 
-procedure TSqlDBHTTPConnectionPropertiesAbstract.SetInternalProperties;
+procedure TSqlDBHttpConnectionPropertiesAbstract.SetInternalProperties;
 begin
   if fProtocol = nil then
     fProtocol := TSqlDBRemoteConnectionProtocol.Create(
@@ -1968,8 +2033,8 @@ function TSqlDBSocketConnectionProperties.InternalRequest(
 begin
   result := fSocket.Request(fDatabaseName, 'POST', fKeepAliveMS, '', Data,
     DataType, false);
-  Data := fSocket.Content;
-  DataType := fSocket.ContentType;
+  Data := fSocket.Http.Content;
+  DataType := fSocket.Http.ContentType;
 end;
 
 
@@ -1987,13 +2052,13 @@ end;
 function TSqlDBHttpRequestConnectionProperties.InternalRequest(
   var Data, DataType: RawByteString): integer;
 var
-  inData: RawByteString;
-  inDataType, head: RawUtf8;
+  input: RawByteString;
+  inputtype, head: RawUtf8;
 begin
-  inData := Data;
-  inDataType := DataType;
-  result := fClient.Request(fDatabaseName, 'POST', fKeepAliveMS, '', inData,
-    inDataType, head, Data);
+  input := Data; // Data/DataType are used as output parameters
+  inputtype := DataType;
+  result := fClient.Request(
+    fDatabaseName, 'POST', fKeepAliveMS, '', input, inputtype, head, Data);
   FindNameValue(head, HEADER_CONTENT_TYPE_UPPER, RawUtf8(DataType));
 end;
 
@@ -2002,8 +2067,8 @@ end;
 
 { TSqlDBWinHttpConnectionProperties }
 
-constructor TSqlDBWinHttpConnectionProperties.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUtf8);
+constructor TSqlDBWinHttpConnectionProperties.Create(
+  const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   SetServerName(aServerName);
   fClient := TWinHttp.Create(Server, Port, fUri.Https);
@@ -2012,8 +2077,8 @@ end;
 
 { TSqlDBWinINetConnectionProperties }
 
-constructor TSqlDBWinINetConnectionProperties.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUtf8);
+constructor TSqlDBWinINetConnectionProperties.Create(
+  const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   SetServerName(aServerName);
   fClient := TWinINet.Create(Server, Port, fUri.Https);
@@ -2026,8 +2091,8 @@ end;
 
 { TSqlDBCurlConnectionProperties }
 
-constructor TSqlDBCurlConnectionProperties.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUtf8);
+constructor TSqlDBCurlConnectionProperties.Create(
+  const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   SetServerName(aServerName);
   fClient := TCurlHttp.Create(Server, Port, fUri.Https);
@@ -2035,6 +2100,7 @@ begin
 end;
 
 {$endif USELIBCURL}
+
 
 initialization
   TSqlDBSocketConnectionProperties.RegisterClassNameForDefinition;

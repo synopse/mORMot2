@@ -37,7 +37,7 @@ uses
   mormot.net.sock,
   mormot.net.http,
   mormot.net.client,
-  mormot.net.server,
+  mormot.net.server,  // THttpServerRequest for callbacks
   mormot.net.ws.core;
 
 
@@ -55,14 +55,21 @@ type
   TWebSocketProcessClient = class(TWebCrtSocketProcess)
   protected
     fClientThread: TWebSocketProcessClientThread;
+    fConnectionID: THttpServerConnectionID;
     function ComputeContext(
       out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract; override;
   public
     /// initialize the client process for a given THttpClientWebSockets
     constructor Create(aSender: THttpClientWebSockets;
+      aConnectionID: THttpServerConnectionID;
       aProtocol: TWebSocketProtocol; const aProcessName: RawUtf8); reintroduce; virtual;
     /// finalize the process
     destructor Destroy; override;
+  published
+    /// the server-side connection ID, as returned during 101 connection
+    // upgrade in 'Sec-WebSocket-Connection-ID' response header
+    property ConnectionID: THttpServerConnectionID
+      read fConnectionID;
   end;
 
   /// the current state of the client side processing thread
@@ -113,7 +120,7 @@ type
     // - after WebSocketsUpgrade() call, will use WebSockets for the communication
     function Request(const url, method: RawUtf8; KeepAlive: cardinal;
       const header: RawUtf8; const Data: RawByteString; const DataType: RawUtf8;
-      retry: boolean): integer; override;
+      retry: boolean; InStream: TStream = nil; OutStream: TStream = nil): integer; override;
     /// upgrade the HTTP client connection to a specified WebSockets protocol
     // - i.e. 'synopsebin' and optionally 'synopsejson' modes
     // - you may specify an URI to as expected by the server for upgrade
@@ -179,13 +186,17 @@ end;
 { TWebSocketProcessClient }
 
 constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
-  aProtocol: TWebSocketProtocol; const aProcessName: RawUtf8);
+  aConnectionID: THttpServerConnectionID; aProtocol: TWebSocketProtocol;
+  const aProcessName: RawUtf8);
 var
   endtix: Int64;
 begin
-  fMaskSentFrames := FRAME_LEN_MASK; // https://tools.ietf.org/html/rfc6455#section-10.3
+  // https://tools.ietf.org/html/rfc6455#section-10.3
+  // client-to-server masking is mandatory (but not from server to client)
+  fMaskSentFrames := FRAME_LEN_MASK;
   inherited Create(aSender, aProtocol, 0, nil, @aSender.fSettings, aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
+  fConnectionID := aConnectionID;
   fClientThread := TWebSocketProcessClientThread.Create(self);
   endtix := GetTickCount64 + 5000;
   repeat // wait for TWebSocketProcess.ProcessLoop to initiate
@@ -198,7 +209,7 @@ end;
 destructor TWebSocketProcessClient.Destroy;
 var
   tix: Int64;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   log := WebSocketLog.Enter('Destroy: ThreadState=%',
     [ToText(fClientThread.fThreadState)^], self);
@@ -319,11 +330,11 @@ end;
 
 function THttpClientWebSockets.Request(const url, method: RawUtf8;
   KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
-  const DataType: RawUtf8; retry: boolean): integer;
+  const DataType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
 var
   Ctxt: THttpServerRequest;
   block: TWebSocketProcessNotifyCallback;
-  resthead: RawUtf8;
+  body, resthead: RawUtf8;
 begin
   if fProcess <> nil then
   begin
@@ -335,10 +346,13 @@ begin
     else
     begin
       // send the REST request over WebSockets - both ends use NotifyCallback()
-      Ctxt := THttpServerRequest.Create(nil, fProcess.fOwnerConnection,
+      Ctxt := THttpServerRequest.Create(nil, fProcess.fOwnerConnectionID,
         fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags);
       try
-        Ctxt.Prepare(url, method, header, Data, DataType, '');
+        body := Data;
+        if InStream <> nil then
+          body := body + StreamToRawByteString(InStream);
+        Ctxt.Prepare(url, method, header, body, DataType, '', '', '');
         FindNameValue(header, 'SEC-WEBSOCKET-REST:', resthead);
         if resthead = 'NonBlocking' then
           block := wscNonBlockWithoutAnswer
@@ -349,9 +363,12 @@ begin
           HeaderSetText(Ctxt.OutCustomHeaders)
         else
           HeaderSetText(Ctxt.OutCustomHeaders, Ctxt.OutContentType);
-        Content := Ctxt.OutContent;
-        ContentType := Ctxt.OutContentType;
-        ContentLength := length(Ctxt.OutContent);
+        Http.ContentLength := length(Ctxt.OutContent);
+        if OutStream <> nil then
+          OutStream.WriteBuffer(pointer(Ctxt.OutContent)^, Http.ContentLength)
+        else
+          Http.Content := Ctxt.OutContent;
+        Http.ContentType := Ctxt.OutContentType;
       finally
         Ctxt.Free;
       end;
@@ -359,7 +376,8 @@ begin
   end
   else
     // standard HTTP/1.1 REST request (before WebSocketsUpgrade call)
-    result := inherited request(url, method, KeepAlive, header, Data, DataType, retry);
+    result := inherited Request(url, method, KeepAlive, header, Data, DataType,
+      retry, InStream, OutStream);
 end;
 
 procedure THttpClientWebSockets.SetReceiveTimeout(aReceiveTimeout: integer);
@@ -411,7 +429,7 @@ begin
       aProtocol.OnBeforeIncomingFrame := fOnBeforeIncomingFrame;
       RequestSendHeader(aWebSocketsURI, 'GET');
       TAesPrng.Main.FillRandom(key);
-      bin1 := BinToBase64(@key, sizeof(key));
+      bin1 := BinToBase64(@key, SizeOf(key));
       SockSend(['Content-Length: 0'#13#10 +
                 'Connection: Upgrade'#13#10 +
                 'Upgrade: websocket'#13#10 +
@@ -430,16 +448,16 @@ begin
       prot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       result := 'Invalid HTTP Upgrade Header';
       if not IdemPChar(pointer(cmd), 'HTTP/1.1 101') or
-         not (hfConnectionUpgrade in HeaderFlags) or
-         (ContentLength > 0) or
-         not IdemPropNameU(Upgrade, 'websocket') or
+         not (hfConnectionUpgrade in Http.HeaderFlags) or
+         (Http.ContentLength > 0) or
+         not IdemPropNameU(Http.Upgrade, 'websocket') or
          not aProtocol.SetSubprotocol(prot) then
         exit;
       aProtocol.Name := prot;
       result := 'Invalid HTTP Upgrade Accept Challenge';
       ComputeChallenge(bin1, digest1);
       bin2 := HeaderGetValue('SEC-WEBSOCKET-ACCEPT');
-      if not Base64ToBin(pointer(bin2), @digest2, length(bin2), sizeof(digest2)) or
+      if not Base64ToBin(pointer(bin2), @digest2, length(bin2), SizeOf(digest2)) or
          not IsEqual(digest1, digest2) then
         exit;
       if extout <> '' then
@@ -461,7 +479,9 @@ begin
       else
         aProtocol.RemoteIP := Server;
       result := ''; // no error message = success
-      fProcess := TWebSocketProcessClient.Create(self, aProtocol, fProcessName);
+      fProcess := TWebSocketProcessClient.Create(self,
+        GetInt64(pointer(HeaderGetValue('SEC-WEBSOCKET-CONNECTION-ID'))),
+        aProtocol, fProcessName);
       aProtocol := nil; // protocol instance is owned by fProcess now
     except
       on E: Exception do

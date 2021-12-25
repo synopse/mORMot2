@@ -32,6 +32,7 @@ uses
   mormot.net.client,
   mormot.net.server,
   mormot.net.relay,
+  mormot.net.http,
   mormot.net.ws.core,
   mormot.net.ws.client,
   mormot.net.ws.server,
@@ -275,7 +276,7 @@ procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
     try
       for i := 1 to 100 do
       begin
-        C1.Prepare('url', 'POST', 'headers', content, contentType, '');
+        C1.Prepare('url', 'POST', 'headers', content, contentType, '', '', '');
         noAnswer1 := opcode = focBinary;
         noAnswer2 := not noAnswer1;
         TWebSocketProtocolRestHook(protocol).InputToFrame(C1, noAnswer1, frame, head);
@@ -326,15 +327,17 @@ procedure TTestBidirectionalRemoteConnection.RunHttpServer;
 var
   port: integer;
 begin
+  WebSocketLog := TSynLog; // for very detailed log
   TInterfaceFactory.RegisterInterfaces([TypeInfo(IBidirService), TypeInfo(IBidirCallback)]);
   // sicClientDriven services expect authentication for sessions
   fServer := TRestServerFullMemory.CreateWithOwnModel([], true);
   fServer.Server.CreateMissingTables;
   fBidirServer := TBidirServer.Create;
   check(fServer.ServiceDefine(fBidirServer, [IBidirService]) <> nil);
-  fHttpServer := TRestHttpServer.Create(HTTP_DEFAULTPORT, [], '+', useBidirSocket);
+  fHttpServer := TRestHttpServer.Create(
+    HTTP_DEFAULTPORT, [], '+', WEBSOCKETS_DEFAULT_MODE);
   check(fHttpServer.AddServer(fServer));
-  fHttpServer.WebSocketsEnable(fServer, WEBSOCKETS_KEY, true).Settings.SetFullLog;
+  fHttpServer.WebSocketsEnable(fServer, WEBSOCKETS_KEY, true)^.SetFullLog;
   //(fHttpServer.HttpServer as TWebSocketServer).HeartbeatDelay := 5000;
   port := Utf8ToInteger(HTTP_DEFAULTPORT);
   fPublicRelayClientsPort := ToUtf8(port + 1);
@@ -356,7 +359,7 @@ begin
     for b := -10 to 10 do
     begin
       v := I.TestRest(a, b, c);
-      check(GetInteger(pointer(c)) = a + b);
+      CheckEqual(GetInteger(pointer(c)), a + b);
       if CheckFailed(DocVariantType.IsOfType(v)) then
         continue;
       check(v.a = a);

@@ -57,7 +57,7 @@ type
     // - do nothing by now (BDE metadata may be used in the future)
     procedure GetForeignKeys; override;
     /// this overridden method will retrieve the kind of DBMS from the main connection
-    function GetDBMS: TSqlDBDefinition; override;
+    function GetDbms: TSqlDBDefinition; override;
   public
     /// initialize the properties to connect to the BDE engine
     // - aServerName shall contain the BDE Alias name
@@ -75,8 +75,8 @@ type
   protected
     fDatabase: TDatabase;
     fSession: TSession;
-    fDBMS: TSqlDBDefinition;
-    fDBMSName: RawUtf8;
+    fDbms: TSqlDBDefinition;
+    fDbmsName: RawUtf8;
   public
     /// prepare a connection to a specified BDE database server
     constructor Create(aProperties: TSqlDBConnectionProperties); override;
@@ -105,11 +105,11 @@ type
      read fDatabase;
   published
     /// the remote DBMS name, as retrieved at BDE connection creation
-    property DBMSName: RawUtf8
-      read fDBMSName;
+    property DbmsName: RawUtf8
+      read fDbmsName;
     /// the remote DBMS type, as retrieved at BDE connection creation
-    property DBMS: TSqlDBDefinition
-      read fDBMS;
+    property Dbms: TSqlDBDefinition
+      read fDbms;
   end;
 
   /// implements a statement via a BDE connection
@@ -149,14 +149,15 @@ end;
 function TSqlDBBDEConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBBDEConnection.Create(self);
+  TSqlDBBDEConnection(result).InternalProcess(speCreated);
 end;
 
-function TSqlDBBDEConnectionProperties.GetDBMS: TSqlDBDefinition;
+function TSqlDBBDEConnectionProperties.GetDbms: TSqlDBDefinition;
 begin
-  if fDBMS = dUnknown then
+  if fDbms = dUnknown then
     // retrieve DBMS type from alias driver name
-    fDBMS := (MainConnection as TSqlDBBDEConnection).DBMS;
-  result := fDBMS;
+    fDbms := (MainConnection as TSqlDBBDEConnection).Dbms;
+  result := fDbms;
 end;
 
 
@@ -178,10 +179,10 @@ var
 
 constructor TSqlDBBDEConnection.Create(aProperties: TSqlDBConnectionProperties);
 const
-  PCHARS: array[0 .. 2] of PAnsiChar = (
-    'ORACLE','MSSQL','MSACCESS');
-  TYPES: array[-1 .. high(PCHARS)] of TSqlDBDefinition = (
-    dDefault,dOracle,dMSSQL,dJet);
+  PCHARS: array[0 .. 3] of PAnsiChar = (
+    'ORACLE', 'MSSQL', 'MSACCESS', nil);
+  TYPES: array[-1 .. high(PCHARS) - 1] of TSqlDBDefinition = (
+    dDefault, dOracle, dMSSQL, dJet);
 var alias: string;
 begin
   inherited Create(aProperties);
@@ -196,8 +197,8 @@ begin
   fDatabase.AliasName := alias;
   fDatabase.Params.Text := Format('USER NAME=%s'#13#10'PASSWORD=%s',
     [Utf8ToString(fProperties.UserID), Utf8ToString(fProperties.PassWord)]);
-  fDBMSName := StringToUtf8(fSession.GetAliasDriverName(alias));
-  fDBMS := TYPES[IdemPCharArray(pointer(fDBMSName), PCHARS)];
+  fDbmsName := StringToUtf8(fSession.GetAliasDriverName(alias));
+  fDbms := TYPES[IdemPPChar(pointer(fDbmsName), @PCHARS)];
 end;
 
 procedure TSqlDBBDEConnection.Connect;

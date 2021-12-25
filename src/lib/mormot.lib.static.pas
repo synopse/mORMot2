@@ -12,8 +12,12 @@ unit mormot.lib.static;
    - Link Dependencies
    - GCC Math Functions
    - Minimal libc Replacement for Windows
+   - Cross-Platform FPU Exceptions Masking
 
   *****************************************************************************
+
+  Please download latest https://synopse.info/files/mormot2static.7z and
+  extract its content to the /static sub-folder of the mORMot 2 repository.
 
 }
 
@@ -45,12 +49,14 @@ const
 {$endif OSWINDOWS}
 
 
+
 { ********************** Minimal libc Replacement for Windows }
 
 {$ifdef OSWINDOWS}
 
-// made public for Delphi mormot.db.raw.sqlite3.static.pas linking
-// (static linking is somewhat local to each unit with Delphi)
+// some public symbols for Delphi proper linking
+// e.g. for mormot.db.raw.sqlite3.static.pas and mormot.lib.quickjs.pas
+// (static linking is sadly local to each unit with Delphi)
 
 const
   _CLIB = 'msvcrt.dll'; // redirect to the built-in Microsoft "libc"
@@ -60,7 +66,6 @@ type
 
 procedure libc_qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_func); cdecl;
 function libc_rename(oldname, newname: PUtf8Char): integer; cdecl;
-procedure libc_exit(status: integer); cdecl;
 function libc_printf(format: PAnsiChar): Integer; cdecl; varargs;
 function libc_sprintf(buf: Pointer; format: PAnsiChar): Integer; cdecl; varargs;
 function libc_fprintf(fHandle: pointer; format: PAnsiChar): Integer; cdecl; varargs;
@@ -75,6 +80,7 @@ function libc_memcmp(p1, p2: PByte; Size: integer): integer; cdecl;
 function libc_strchr(s: Pointer; c: Integer): Pointer; cdecl;
 function libc_strtod(value: PAnsiChar; endPtr: PPAnsiChar): Double; cdecl;
 function libc_write(handle: Integer; buf: Pointer; len: LongWord): Integer; cdecl;
+function libc_log(d: double): double; cdecl;
 
 type
   timeval = record
@@ -82,32 +88,94 @@ type
     usec: integer;
   end;
 
+  time_t = packed record
+    tm_sec: integer;            { Seconds.      [0-60] (1 leap second) }
+    tm_min: integer;            { Minutes.      [0-59]  }
+    tm_hour: integer;           { Hours.        [0-23]  }
+    tm_mday: integer;           { Day.          [1-31]  }
+    tm_mon: integer;            { Month.        [0-11]  }
+    tm_year: integer;           { Year          - 1900. }
+    tm_wday: integer;           { Day of week.  [0-6]   }
+    tm_yday: integer;           { Days in year. [0-365] }
+    tm_isdst: integer;          { DST.          [-1/0/1]}
+    __tm_gmtoff: integer;       { Seconds east of UTC  }
+    __tm_zone: PChar;           { Timezone abbreviation}
+  end;
+
+function localtime64_s(var t: Int64; var atm: time_t): integer; cdecl;
+function localtime32_s(var t: cardinal; var atm: time_t): integer; cdecl;
 function putchar(c: integer): integer; cdecl;
 function gettimeofday(var tv: timeval; zone: pointer): integer; cdecl;
 function fputc(c: integer; f: pointer): integer; cdecl;
+function fwrite(buf: pointer; size, count: PtrInt; f: pointer): integer; cdecl;
 function strrchr(s: PUtf8Char; c: AnsiChar): PUtf8Char; cdecl;
 function moddi3(num, den: int64): int64; cdecl;
 function umoddi3(num, den: uint64): uint64; cdecl;
 function divdi3(num, den: int64): int64; cdecl;
 function udivdi3(num, den: uint64): uint64; cdecl;
 function udivmoddi4(a, b: UInt64; var c: UInt64): UInt64; cdecl;
-procedure __chkstk_ms; 
+procedure __chkstk_ms;
+
+{$ifdef CPUX64}
+
+procedure __udivti3;
+procedure __udivmodti4;
+procedure __divti3;
+procedure __umodti3;
+
+{$endif CPUX64}
 
 {$endif OSWINDOWS}
 
+/// calls setlocale(LC_NUMERIC, 'C') to force to use the C default locale
+// - is mandatory e.g. for mormot.lib.quickjs to properly parse float values
+// - on Windows, redirects to msvcrt.dll's setlocale() API
+procedure SetLibcNumericLocale;
 
-{ ****************** GCC Math Functions }
 
-/// to be called before executing C code, disabling FPU exceptions
-// - this version uses the cross-platform math unit
-// - any call to this function should reset the previous "pascal" state by
-// calling AfterLibraryCall() with the returned value
-function BeforeLibraryCall: TFPUExceptionMask;
-  {$ifdef HASINLINE} inline; {$endif}
+{ ********************** Cross-Platform FPU Exceptions Masking }
 
-/// to be called after executing C code, re-enbling FPU exceptions
-procedure AfterLibraryCall(saved: TFPUExceptionMask);
-  {$ifdef HASINLINE} inline; {$endif}
+type
+  TFpuFlags = (
+    ffLibrary,
+    ffPascal);
+
+{$ifdef CPUINTEL}
+
+var
+  /// direct efficient x87 / SSE2 FPU flags for rounding and exceptions
+  _FPUFLAGS: array[TFpuFlags] of cardinal = (
+    {$ifdef CPU64}
+      $1FA0, $1920);
+    {$else}
+      $137F, $1372);
+    {$endif CPU64}
+
+{$else}
+
+var
+  /// on non Intel/AMD, use slower but cross-platform RTL Math unit
+  // - defined as var for runtime customization
+  _FPUFLAGS: array[TFpuFlags] of TFPUExceptionMask = (
+    // ffLibrary
+    [exInvalidOp, exDenormalized, exZeroDivide, exOverflow, exUnderflow, exPrecision],
+    // ffPascal
+    [exDenormalized, exUnderflow, exPrecision]);
+
+{$endif CPUINTEL}
+
+/// mask/unmask all FPU exceptions, according to the running CPU
+// - returns the previous execption flags, for ResetFpuFlags() call
+// - x87 flags are $1372 for pascal, or $137F for library
+// - sse flags are $1920 for pascal, or $1FA0 for library
+// - on non Intel/AMD CPUs, will use TFPUExceptionMask from the RTL Math unit
+// - do nothing and return -1 if the supplied flags are the one already set
+function SetFpuFlags(flags: TFpuFlags): cardinal;
+
+/// restore the FPU exceptions flags as overriden by SetFpuFlags()
+// - do nothing if the saved flags are the one already set, i.e. -1
+procedure ResetFpuFlags(saved: cardinal);
+
 
 
 implementation
@@ -126,19 +194,22 @@ implementation
 
 {$ifdef OSANDROID}
   {$ifdef CPUAARCH64}
-    {$L ..\..\static\aarch64-android\libgcc.a}
+    {$linklib ..\..\static\aarch64-android\libgcc.a}
   {$endif CPUAARCH64}
   {$ifdef CPUARM}
-    {$L ..\..\static\arm-android\libgcc.a}
+    {$linklib ..\..\static\arm-android\libgcc.a}
   {$endif CPUARM}
+  {$ifdef CPUX64}
+    {$linklib ..\..\static\x86_64-android\libgcc.a}
+  {$endif CPUX64}
 {$endif OSANDROID}
 
 {$ifdef OSLINUX}
   {$ifdef CPUAARCH64}
-    {$L ..\..\static\aarch64-linux\libgcc.a}
+    {$linklib ..\..\static\aarch64-linux\libgcc.a}
   {$endif CPUAARCH64}
   {$ifdef CPUARM}
-    {$L ..\..\static\arm-linux\libgcc.a}
+    {$linklib ..\..\static\arm-linux\libgcc.a}
   {$endif CPUARM}
 {$endif OSLINUX}
 
@@ -187,10 +258,13 @@ end;
 
 // see e.g. #define assert(x) in QuickJS cutils.h
 
+type
+  ELibStatic = class(Exception);
+
 procedure pas_assertfailed(cond, fn: PAnsiChar; line: integer); cdecl;
  {$ifdef FPC} public name _PREFIX + 'pas_assertfailed'; {$endif}
 begin
-  raise EExternal.CreateFmt('Panic in %s:%d: %s', [fn, line, cond]);
+  raise ELibStatic.CreateFmt('Panic in %s:%d: assert(%s)', [fn, line, cond]);
 end;
 
 
@@ -203,8 +277,6 @@ end;
 
 function libc_rename(oldname, newname: PUtf8Char): integer; cdecl;
   external _CLIB name 'rename';
-procedure libc_exit(status: integer); cdecl;
-  external _CLIB name 'exit';
 function libc_printf(format: PAnsiChar): Integer; cdecl; varargs;
   external _CLIB name 'printf';
 function libc_sprintf(buf: Pointer; format: PAnsiChar): Integer; cdecl; varargs;
@@ -216,7 +288,7 @@ function libc_vsnprintf(buf: pointer; nzize: PtrInt; format: PAnsiChar;
   external _CLIB name '_vsnprintf';
 function libc_strcspn(str, reject: PUtf8Char): integer; cdecl;
   external _CLIB name 'strcspn';
-function libc_strcat(dest: PAnsiChar; src: PAnsiChar): PAnsiChar; cdecl;
+function libc_strcat(dest, src: PAnsiChar): PAnsiChar; cdecl;
   external _CLIB name 'strcat';
 function libc_strcpy(dest, src: PAnsiChar): PAnsiChar; cdecl;
   external _CLIB name 'strcpy';
@@ -227,14 +299,62 @@ function libc_memchr(s: Pointer; c: Integer; n: PtrInt): Pointer; cdecl;
 function libc_memcmp(p1, p2: PByte; Size: integer): integer; cdecl;
   external _CLIB name 'memcmp';
 function libc_strchr(s: Pointer; c: Integer): Pointer; cdecl;
-  external _CLIB name 'memchr';
+  external _CLIB name 'strchr';
 function libc_strtod(value: PAnsiChar; endPtr: PPAnsiChar): Double; cdecl;
   external _CLIB name 'strtod';
 function libc_write(handle: Integer; buf: Pointer; len: LongWord): Integer; cdecl;
   external _CLIB name '_write';
 procedure libc_qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_func); cdecl;
   external _CLIB name 'qsort';
+function libc_log(d: double): double; cdecl;
+  external _CLIB name 'log';
+function libc_beginthreadex(security: pointer; stksize: cardinal;
+  start, arg: pointer; flags: cardinal; var threadid: cardinal): THandle; cdecl;
+  external _CLIB name '_beginthreadex';
+procedure libc_endthreadex(exitcode: cardinal); cdecl;
+  external _CLIB name '_endthreadex';
 
+function localtime64_s(var t: Int64; var atm: time_t): integer;
+var
+  S: TSystemTime;
+begin
+  UnixTimeToLocalTime(t, S);
+  atm.tm_sec := S.wSecond;
+  atm.tm_min := S.wMinute;
+  atm.tm_hour := S.wHour;
+  atm.tm_mday := S.wDay;
+  atm.tm_mon := S.wMonth - 1;
+  atm.tm_year := S.wYear - 1900;
+  atm.tm_wday := S.wDay;
+  result := 0; // on Windows, should return 0; on POSIX, nil or @atm :(
+end;
+
+function localtime32_s(var t: cardinal; var atm: time_t): integer;
+var
+  t64: Int64;
+begin
+  t64 := t;
+  result := localtime64_s(t64, atm);
+end;
+
+var
+ { as standard C library documentation states:
+   Statically allocated buffer, shared by the functions gmtime() and localtime().
+   Each call of these functions overwrites the content of this structure.
+   -> this buffer is shared, but SQlite3 will protect it with a mutex :) }
+   atm: time_t;
+
+function localtime32(t: PCardinal): pointer; cdecl;
+begin
+  localtime32_s(t^, atm);
+  result := @atm;
+end;
+
+function localtime64(t: PInt64): pointer; cdecl;
+begin
+  localtime64_s(t^, atm);
+  result := @atm;
+end;
 
 function putchar(c: integer): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'putchar'; {$endif}
@@ -249,11 +369,12 @@ end;
 function gettimeofday(var tv: timeval; zone: pointer): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'gettimeofday'; {$else} export; {$endif}
 var
-  now: Int64;
+  now, sec: QWord;
 begin
   now := UnixMSTimeUtcFast;
-  tv.usec := (now mod 1000) * 1000;
-  tv.sec := now div 1000;
+  sec := now div 1000;
+  tv.sec := sec;
+  tv.usec := (now - sec * 1000) * 1000;
   result := 0;
 end;
 
@@ -272,12 +393,18 @@ begin
   // simple full pascal version of the standard C library function
   result := nil;
   if s <> nil then
-    while s^<>#0 do
+    while s^ <> #0 do
     begin
       if s^ = c then
         result := s;
       inc(s);
     end;
+end;
+
+function fwrite(buf: pointer; size, count: PtrInt; f: pointer): integer; cdecl;
+  {$ifdef FPC} public name _PREFIX + 'fwrite'; {$endif}
+begin
+  result := libc_write(PtrInt(f), buf, size * count) div size;
 end;
 
 {$ifdef CPUX86}
@@ -304,6 +431,32 @@ asm
 end;
 
 {$endif CPUX86}
+
+{$ifdef CPUX64}
+
+procedure __chkstk_ms; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '___chkstk_ms'; {$endif}
+asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
+        push    rcx
+        push    rax
+        cmp     rax, 4096
+        lea     rcx, qword ptr [rsp+18H]
+        jc      @@002
+@@001:  sub     rcx, 4096
+        or      qword ptr [rcx], 00H
+        sub     rax, 4096
+        cmp     rax, 4096
+        ja      @@001
+@@002:  sub     rcx, rax
+        or      qword ptr [rcx], 00H
+        pop     rax
+        pop     rcx
+end;
+
+{$endif CPUX64}
 
 {$ifdef FPC}
 
@@ -368,7 +521,7 @@ end;
 function strlen(p: PAnsiChar): integer; cdecl;
  {$ifdef FPC} public name _PREFIX + 'strlen'; {$endif}
 begin
-  result := mormot.core.base.strlen(pointer(P));
+  result := mormot.core.base.StrLen(P);
 end;
 
 function strcmp(p1, p2: PAnsiChar): integer; cdecl;
@@ -384,34 +537,50 @@ begin
   result := libc_rename(oldname, newname);
 end;
 
-procedure __exit; cdecl;
+{$ifdef FPC}
+var
+  // redirect mingw import pointer to libc_beginthreadex
+  beginthreadex: pointer public name
+    {$ifdef CPU32} '__imp___beginthreadex' {$else} '__imp__beginthreadex' {$endif};
+  // redirect mingw import pointer to libc_endthreadex
+  endthreadex: pointer public name
+    {$ifdef CPU32} '__imp___endthreadex' {$else} '__imp__endthreadex' {$endif};
+  // redirect mingw import pointer to our internal functions
+  {$ifdef CPU32}
+  imp_localtime32: pointer public name '__imp___localtime32';
+  {$else}
+  imp_localtime64: pointer public name '__imp__localtime64';
+  {$endif CPU32}
+{$endif FPC}
+
+procedure __exit;
  {$ifdef FPC} public name _PREFIX + 'exit'; {$else} export; {$endif}
 begin
-  raise EExternal.Create('exit is not implemented');
+  raise ELibStatic.Create('Unexpected exit() call');
 end;
 
-procedure printf; // varargs function requires a JIT jmp -> no cdecl
- {$ifdef FPC} public name _PREFIX + 'printf'; {$else} export; {$endif}
-begin
-  raise EExternal.Create('printf is not implemented');
+procedure printf; assembler; 
+ {$ifdef FPC} nostackframe; public name _PREFIX + 'printf'; {$else} export; {$endif}
+asm
+  jmp libc_printf
 end;
 
-procedure sprintf;
- {$ifdef FPC} public name _PREFIX + 'sprintf'; {$else} export; {$endif}
-begin
-  raise EExternal.Create('sprintf is not implemented');
+procedure sprintf; assembler;
+ {$ifdef FPC} nostackframe; public name _PREFIX + 'sprintf'; {$else} export; {$endif}
+asm
+  jmp libc_sprintf
 end;
 
-procedure fprintf;
- {$ifdef FPC} public name _PREFIX + 'fprintf'; {$else} export; {$endif}
-begin
-  raise EExternal.Create('fprintf is not implemented');
+procedure fprintf; assembler;
+ {$ifdef FPC} nostackframe; public name _PREFIX + 'fprintf'; {$else} export; {$endif}
+asm
+  jmp libc_fprintf
 end;
 
-procedure _vsnprintf;
- {$ifdef FPC} public name _PREFIX + '__ms_vsnprintf'; {$else} export; {$endif}
-begin
-  raise EExternal.Create('_vsnprintf is not implemented');
+procedure _vsnprintf; assembler;
+ {$ifdef FPC} nostackframe; public name _PREFIX + '__ms_vsnprintf'; {$else} export; {$endif}
+asm
+  jmp libc_vsnprintf
 end;
 
 function strcspn(str, reject: PUtf8Char): integer; cdecl;
@@ -462,16 +631,10 @@ begin
  result := libc_memcmp(p1, p2, Size);
 end;
 
-function strchr(s: Pointer; c: Integer): Pointer; cdecl;
+function strchr(s: PAnsiChar; c: Integer): Pointer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'strchr'; {$else} export; {$endif}
 begin
   result := libc_strchr(s, c);
-end;
-
-function fwrite(buf: pointer; size, count: PtrInt; f: pointer): integer; cdecl;
-  {$ifdef FPC} public name _PREFIX + 'fwrite'; {$endif}
-begin
-  result := libc_write(PtrInt(f), buf, size * count) div size;
 end;
 
 procedure qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_func); cdecl;
@@ -480,23 +643,13 @@ begin
   libc_qsort(baseP, NElem, Width, comparF);
 end;
 
-procedure RedirectToMsvcrt;
-begin
-  // JIT redirect varags functions from our internal stubs to msvcrt.dll
-  RedirectCode(@__exit, @libc_exit);
-  RedirectCode(@printf, @libc_printf);
-  RedirectCode(@sprintf, @libc_sprintf);
-  RedirectCode(@fprintf, @libc_fprintf);
-  RedirectCode(@_vsnprintf, @libc_vsnprintf);
-end;
-
 {$ifdef CPUX86} // not a compiler intrinsic on x86
 
 function _InterlockedCompareExchange(
   var Dest: integer; New, Comp: integer): longint; stdcall;
   public alias: '_InterlockedCompareExchange@12';
 begin
-  result := InterlockedCompareExchange(Dest,New,Comp);
+  result := InterlockedCompareExchange(Dest, New, Comp);
 end;
 
 {$endif CPUX86}
@@ -505,26 +658,32 @@ end;
 
 {$endif OSWINDOWS}
 
+// see clocale.pp unit for those values
+
+function setlocale(category: integer; locale: PAnsiChar): PAnsiChar; cdecl;
+{$ifdef OSWINDOWS}
+  external _CLIB name 'setlocale'; // redirect to msvcrt.dll
+{$else}
+  {$ifdef NETBSD}
+  // NetBSD has a new setlocale function defined in /usr/include/locale.h
+  external 'c' name '__setlocale_mb_len_max_32';
+  {$else}
+  external 'c' name 'setlocale'; // regular libc POSIX call
+  {$endif NETBSD}
+{$endif OSWINDOWS}
+
+const
+  LC_CTYPE = 0;
+  LC_NUMERIC = 1;
+  LC_ALL = 6;
+
+procedure SetLibcNumericLocale;
+begin
+  setlocale(LC_NUMERIC, 'C');
+end;
+
 
 { ****************** GCC Math Functions }
-
-function BeforeLibraryCall: TFPUExceptionMask;
-const
-  FLAGS = [exInvalidOp,
-           exDenormalized,
-           exZeroDivide,
-           exOverflow,
-           exUnderflow,
-           exPrecision];
-begin
-  result := GetExceptionMask;
-  SetExceptionMask(FLAGS);
-end;
-
-procedure AfterLibraryCall(saved: TFPUExceptionMask);
-begin
-  SetExceptionMask(saved);
-end;
 
 function fabs(x: double): double; cdecl;
   {$ifdef FPC} public name _PREFIX + 'fabs'; {$endif}
@@ -535,7 +694,7 @@ end;
 function sqrt(x: double): double; cdecl;
   {$ifdef FPC} public name _PREFIX + 'sqrt'; {$endif}
 begin
-  result := sqr(x);
+  result := system.sqrt(x);
 end;
 
 function cbrt(x: double): double; cdecl;
@@ -800,13 +959,29 @@ end;
 
 {$ifdef OSANDROID}
 
+function mmap64(addr: pointer; len: PtrInt; prot, flags, fd: integer;
+  offset: Int64): pointer; cdecl;
+  {$ifdef FPC} public name 'mmap64'; {$endif}
+begin
+  result := nil; // fails until really needed
+  //  result := fpcmmap(addr, len, prot, flags, fd, offset shr 12);
+  // mmap2 uses 4096 bytes as offset
+end;
+
+{$endif OSANDROID}
+
+{$ifdef OSANDROID2}
+
 {$ifdef CPUARM}
-function bswapsi2(num:uint32):uint32; cdecl; public alias: '__bswapsi2';
+function bswapsi2(num: uint32): uint32; cdecl;
+  public alias: '__bswapsi2';
 asm
   rev r0, r0	// reverse bytes in parameter and put into result register
   bx  lr
 end;
-function bswapdi2(num:uint64):uint64; cdecl; public alias: '__bswapdi2';
+
+function bswapdi2(num: uint64):uint64; cdecl;
+  public alias: '__bswapdi2';
 asm
   rev r2, r0  // r2 = rev(r0)
   rev r0, r1  // r0 = rev(r1)
@@ -817,6 +992,8 @@ end;
 
 {$endif OSANDROID}
 
+{$endif FPC}
+
 {$ifdef CPUINTEL}
 
 {$ifdef CPU64}
@@ -826,9 +1003,12 @@ end;
 // asm stubs to circumvent libgcc.a (cross)linking issues on FPC/Win64
 
 // unsigned long long __udivti3 (unsigned long long a, unsigned long long b)
-procedure __udivti3; assembler; nostackframe;
-  public name _PREFIX + '__udivti3';
+procedure __udivti3; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__udivti3'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         push    rdi
         push    rsi
         push    rbx
@@ -853,7 +1033,7 @@ asm
         xor     eax, eax
 @@002:  mov     qword ptr [rsp], rax
         mov     qword ptr [rsp+8H], r8
-        movdqu  xmm0, xmmword ptr [rsp]
+        movdqu  xmm0, oword ptr [rsp]
         add     rsp, 16
         pop     rbx
         pop     rsi
@@ -928,9 +1108,12 @@ asm
 end;
 
 // unsigned long long __udivmodti4 (unsigned long long a, unsigned long long b, unsigned long long *c)
-procedure __udivmodti4; assembler; nostackframe;
- public name _PREFIX + '__udivmodti4';
+procedure __udivmodti4; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__udivmodti4'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         push    r13
         push    r12
         push    rbp
@@ -958,7 +1141,7 @@ asm
         mov     qword ptr [r8+8H], 0
 @@002:  mov     qword ptr [rsp], rsi
         mov     qword ptr [rsp+8H], r9
-        movdqu  xmm0, xmmword ptr [rsp]
+        movdqu  xmm0, oword ptr [rsp]
         nop
         add     rsp, 24
         pop     rbx
@@ -1074,9 +1257,12 @@ asm
 end;
 
 // long long __divti3 (long long a, long long b)
-procedure __divti3; assembler; nostackframe;
- public name _PREFIX + '__divti3';
+procedure __divti3; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__divti3'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         push    rdi
         push    rsi
         push    rbx
@@ -1124,7 +1310,7 @@ asm
         neg     qword ptr [rsp]
         adc     qword ptr [rsp+8H], 0
         neg     qword ptr [rsp+8H]
-@@005:  movdqu  xmm0, xmmword ptr [rsp]
+@@005:  movdqu  xmm0, oword ptr [rsp]
         add     rsp, 16
         pop     rbx
         pop     rsi
@@ -1199,9 +1385,12 @@ asm
 end;
 
 // unsigned long long __umodti3 (unsigned long long a, unsigned long long b)
-procedure __umodti3; assembler; nostackframe;
- public name _PREFIX + '__umodti3';
+procedure __umodti3; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__umodti3'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         push    rdi
         push    rsi
         push    rbx
@@ -1222,7 +1411,7 @@ asm
 @@001:  xor     r8d, r8d
 @@002:  mov     qword ptr [rsp], r9
         mov     qword ptr [rsp+8H], r8
-        movdqu  xmm0, xmmword ptr [rsp]
+        movdqu  xmm0, oword ptr [rsp]
         nop
         add     rsp, 16
         pop     rbx
@@ -1310,33 +1499,17 @@ asm
         jmp     @@004
 end;
 
-procedure __chkstk_ms; assembler; nostackframe;
-  {$ifdef FPC} public name _PREFIX + '___chkstk_ms'; {$endif}
-asm
-        push    rcx
-        push    rax
-        cmp     rax, 4096
-        lea     rcx, qword ptr [rsp+18H]
-        jc      @@002
-@@001:  sub     rcx, 4096
-        or      qword ptr [rcx], 00H
-        sub     rax, 4096
-        cmp     rax, 4096
-        ja      @@001
-@@002:  sub     rcx, rax
-        or      qword ptr [rcx], 00H
-        pop     rax
-        pop     rcx
-end;
-
 {$endif OSWINDOWS}
 
 {$ifdef OSLINUX}
 
 // unsigned long long __udivti3 (unsigned long long a, unsigned long long b)
-procedure __udivti3; assembler; nostackframe;
-  public name _PREFIX + '__udivti3';
+procedure __udivti3; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__udivti3'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         mov     r8, rcx
         mov     r9, rdx
         mov     r10, rdx
@@ -1424,9 +1597,12 @@ asm
 end;
 
 // unsigned long long __udivmodti4 (unsigned long long a, unsigned long long b, unsigned long long *c)
-procedure __udivmodti4; assembler; nostackframe;
- public name _PREFIX + '__udivmodti4';
+procedure __udivmodti4; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__udivmodti4'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         test    rcx, rcx
         push    r13
         mov     r9, rdx
@@ -1581,9 +1757,12 @@ asm
 end;
 
 // unsigned long long __umodti3 (unsigned long long a, unsigned long long b)
-procedure __umodti3; assembler; nostackframe;
- public name _PREFIX + '__umodti3';
+procedure __umodti3; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__umodti3'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         test    rcx, rcx
         push    r12
         mov     r9, rdx
@@ -1701,13 +1880,65 @@ end;
 {$endif CPUINTEL}
 
 
-{$ifdef OSWINDOWS}
+
+{ ********************** Cross-Platform FPU Exceptions Masking }
+
+const
+  _FPUFLAGSIDEM = cardinal(-1); // fake value used for faster nested calls
+
+procedure _SetFlags(flags: cardinal);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+{$ifdef CPUINTEL}
+  {$ifdef CPU64}
+  SetMXCSR(flags);
+  {$else}
+  Set8087CW(flags);
+  {$endif CPU64}
+{$else}
+  SetExceptionMask(TFPUExceptionMask(flags));
+{$endif CPUINTEL}
+end;
+
+function SetFpuFlags(flags: TFpuFlags): cardinal;
+var
+  new: cardinal;
+begin
+{$ifdef CPUINTEL}
+  {$ifdef CPU64}
+  result := GetMXCSR;
+  {$else}
+  result := Get8087CW;
+  {$endif CPU64}
+{$else}
+  result := cardinal(GetExceptionMask);
+{$endif CPUINTEL}
+  new := cardinal(_FPUFLAGS[flags]);
+  if new <> result then
+    _SetFlags(new)
+  else
+    result := _FPUFLAGSIDEM;
+end;
+
+procedure ResetFpuFlags(saved: cardinal);
+begin
+  if saved <> _FPUFLAGSIDEM then
+    _SetFlags(saved);
+end;
+
 
 initialization
-  RedirectToMsvcrt; // stub some msvcrt.dll varargs functions
-
+{$ifdef FPC}
+{$ifdef OSWINDOWS}
+  // manual fill of our raw mingw import table
+  beginthreadex := @libc_beginthreadex;
+  endthreadex := @libc_endthreadex;
+  {$ifdef CPU32}
+  imp_localtime32 := @localtime32;
+  {$else}
+  imp_localtime64 := @localtime64;
+  {$endif CPU32}
 {$endif OSWINDOWS}
-
 {$endif FPC}
 
 end.

@@ -48,10 +48,10 @@ type
   /// handled kind of parameters for an interface-based service provider method
   // - we do not handle all kind of variables, but provide some enhanced types
   // handled by JsonToObject/ObjectToJson functions (smvObject) or
-  // TDynArray.LoadFromJson / TTextWriter.AddDynArrayJson methods (smvDynArray)
+  // TDynArray.LoadFromJson / TJsonWriter.AddDynArrayJson methods (smvDynArray)
   // - records will be serialized as Base64 string, with our RecordSave/RecordLoad
   // low-level format by default, or as true JSON objects since Delphi 2010 or
-  // after registration via a TTextWriter.RegisterCustomJsonSerializer call
+  // after a Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer call
   // - imvRawJson will transmit the raw JSON content, without serialization
   TInterfaceMethodValueType = (
     imvNone,
@@ -113,7 +113,7 @@ type
   /// set of low-level processing options at assembly level
   // - vIsString is included for imvRawUtf8, imvString, imvRawByteString and
   // imvWideString kind of parameter (imvRecord has it to false, even if they
-  // are Base-64 encoded within the JSON content, and also imvVariant/imvRawJson)
+  // are Base64 encoded within the JSON content, and also imvVariant/imvRawJson)
   // - vPassedByReference is included if the parameter is passed as reference
   // (i.e. defined as var/out, or is a record or a reference-counted type result)
   // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
@@ -129,7 +129,7 @@ type
     vIsString,
     vPassedByReference,
     vIsObjArray,
-    vIsSPI,
+    vIsSpi,
     vIsQword,
     vIsDynArrayString,
     vIsDateTimeMS);
@@ -189,25 +189,24 @@ type
     // - non standard types (e.g. clas, enumerate, dynamic array or record)
     // are identified by their type identifier - so contract does not extend
     // up to the content of such high-level structures
-    procedure SerializeToContract(WR: TTextWriter);
+    procedure SerializeToContract(WR: TJsonWriter);
     /// check if the supplied argument value is the default (e.g. 0, '' or null)
     function IsDefault(V: pointer): boolean;
     /// unserialize a JSON value into this argument
     function FromJson(const MethodName: RawUtf8; var R: PUtf8Char; V: pointer;
       Error: PShortString; DVO: TDocVariantOptions): boolean;
     /// append the JSON value corresponding to this argument
-    // - includes a pending ','
-    procedure AddJson(WR: TTextWriter; V: pointer;
+    procedure AddJson(WR: TJsonWriter; V: pointer;
       ObjectOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
     /// append the value corresponding to this argument as within a JSON string
     // - will escape any JSON string character, and include a pending ','
-    procedure AddJsonEscaped(WR: TTextWriter; V: pointer);
+    procedure AddJsonEscaped(WR: TJsonWriter; V: pointer);
     /// append the JSON value corresponding to this argument, from its text value
     // - includes a pending ','
-    procedure AddValueJson(WR: TTextWriter; const Value: RawUtf8);
+    procedure AddValueJson(WR: TJsonWriter; const Value: RawUtf8);
     /// append the default JSON value corresponding to this argument
     // - includes a pending ','
-    procedure AddDefaultJson(WR: TTextWriter);
+    procedure AddDefaultJson(WR: TJsonWriter);
     /// convert a value into its JSON representation
     procedure AsJson(var DestValue: RawUtf8; V: pointer);
     /// convert a value into its variant representation
@@ -283,8 +282,8 @@ type
     ExecutionMethodIndex: byte;
     /// TRUE if the method is inherited from another parent interface
     IsInherited: boolean;
-    /// the directions of arguments with vIsSPI defined in Args[].ValueKindAsm
-    HasSPIParams: TInterfaceMethodValueDirections;
+    /// the directions of arguments with vIsSpi defined in Args[].ValueKindAsm
+    HasSpiParams: TInterfaceMethodValueDirections;
     /// is 0 for the root interface, 1..n for all inherited interfaces
     HierarchyLevel: byte;
     /// describe expected method arguments
@@ -344,11 +343,11 @@ type
     /// find the next input (const / var) argument index in Args[]
     // - returns true if arg is the new value, false otherwise
     function ArgNextInput(var arg: integer): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// find the next output (var / out / result) argument index in Args[]
     // - returns true if arg is the new value, false otherwise
     function ArgNextOutput(var arg: integer): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// convert parameters encoded as a JSON array into a JSON object
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
@@ -400,8 +399,8 @@ type
   PInterfaceMethod = ^TInterfaceMethod;
 
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   TServiceMethodValueType = TInterfaceMethodValueType;
@@ -478,7 +477,7 @@ const
   // ease method calls
   MAX_METHOD_ARGS = 32;
 
-  // QueryInterface, _AddRef and _Release methods are hard-coded
+  /// IInterface QueryInterface, _AddRef and _Release methods are hard-coded
   RESERVED_VTABLE_SLOTS = 3;
 
 type
@@ -498,10 +497,6 @@ const
     '_contract_',
     '_signature_',
     '_instance_');
-
-  /// how many pseudo methods are assigned to TInterfaceFactory
-  // - equals currently 4
-  SERVICE_PSEUDO_METHOD_COUNT = Length(SERVICE_PSEUDO_METHOD);
 
 type
   {$M+}
@@ -542,8 +537,9 @@ type
     fInterfaceName: RawUtf8;
     fInterfaceUri: RawUtf8;
     fDocVariantOptions: TDocVariantOptions;
+    {$ifdef CPUX86}  // i386 stub requires "ret ArgsSizeInStack"
     fFakeVTable: array of pointer;
-    fFakeStub: PByteArray;
+    {$endif CPUX86}
     fMethodIndexCallbackReleased: integer;
     fMethodIndexCurrentFrameCallback: integer;
     procedure AddMethodsFromTypeInfo(aInterface: PRttiInfo); virtual; abstract;
@@ -579,7 +575,7 @@ type
     class function Guid2TypeInfo(const aGuid: TGUID): PRttiInfo; overload;
     /// returns the list of all declared TInterfaceFactory
     // - as used by SOA and mocking/stubing features of this unit
-    class function GetUsedInterfaces: TSynObjectListLocked;
+    class function GetUsedInterfaces: TSynObjectListLightLocked;
     /// add some TInterfaceFactory instances from their GUID
     class procedure AddToObjArray(var Obj: TInterfaceFactoryObjArray;
       const aGuids: array of TGUID);
@@ -588,7 +584,7 @@ type
     // a bank card number or a plain password
     // - such values will force associated values to be ignored during loging,
     // as a more tuned alternative to optNoLogInput or optNoLogOutput
-    class procedure RegisterUnsafeSPIType(const Types: array of PRttiInfo);
+    class procedure RegisterUnsafeSpiType(const Types: array of PRttiInfo);
 
     /// initialize the internal properties from the supplied interface RTTI
     // - it will check and retrieve all methods of the supplied interface,
@@ -679,7 +675,7 @@ type
     property Contract: RawUtf8
       read fContract;
     /// how this interface will work with variants (including TDocVariant)
-    // - by default, contains JSON_OPTIONS_FAST for best performance - i.e.
+    // - by default, contains JSON_FAST for best performance - i.e.
     // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
     property DocVariantOptions: TDocVariantOptions
       read fDocVariantOptions write fDocVariantOptions;
@@ -689,6 +685,7 @@ type
     property InterfaceName: RawUtf8
       read fInterfaceName;
   end;
+  PInterfaceFactory = ^TInterfaceFactory;
 
   {$ifdef HASINTERFACERTTI}
 
@@ -705,8 +702,8 @@ type
   /// class handling interface implementation generated from source
   // - this class targets oldest FPC, which did not generate the expected RTTI -
   // see http://bugs.freepascal.org/view.php?id=26774
-  // - mORMotWrapper.pas will generate a new inherited class, overriding abstract
-  // AddMethodsFromTypeInfo() to define the interface methods
+  // - mormot.soa.codegen.pas will generate a new inherited class, overriding
+  // abstract AddMethodsFromTypeInfo() to define the interface methods
   TInterfaceFactoryGenerated = class(TInterfaceFactory)
   protected
     fTempStrings: TRawUtf8DynArray;
@@ -719,7 +716,7 @@ type
     procedure AddMethod(const aName: RawUtf8; const aParams: array of const); virtual;
   public
     /// register one interface type definition from the current class
-    // - will be called by mORMotWrapper.pas generated code, in initialization
+    // - will be called by mormot.soa.codegen generated code, in initialization
     // section, so that the needed type information will be available
     class procedure RegisterInterface(aInterface: PRttiInfo); virtual;
   end;
@@ -754,7 +751,7 @@ type
 
 /// returns the interface name of a registered GUID, or its hexadecimal value
 function ToText({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
-  aGuid: TGUID): shortstring; overload;
+  aGuid: TGUID): ShortString; overload;
 
 /// low-level function to retrieve the class instance implementing a given interface
 // - this will work with interfaces stubs generated by the compiler, but also
@@ -794,11 +791,46 @@ type
     // - this default implementation will call TryResolve() on a local IInterface
     // which is somewhat slow, and should better be overriden
     function Implements(aInterface: PRttiInfo): boolean; virtual;
+    /// can be used to perform an DI/IoC for a given interface
+    // - will search for the supplied interface to its internal list of resolvers
+    // - returns TRUE and set the Obj variable with a matching instance
+    // - can be used as such to resolve an ICalculator interface:
+    // ! var calc: ICalculator;
+    // ! begin
+    // !   if Catalog.Resolve(TypeInfo(ICalculator),calc) then
+    // !   ... use calc methods
+    function Resolve(aInterface: PRttiInfo; out Obj): boolean; overload;
+    /// can be used to perform an DI/IoC for a given interface
+    // - you shall have registered the interface TGUID by a previous call to
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
+    // - returns TRUE and set the Obj variable with a matching instance
+    // - returns FALSE (or raise aRaiseIfNotFound) if aGuid is not available
+    // - can be used as such to resolve an ICalculator interface:
+    // ! var calc: ICalculator;
+    // ! begin
+    // !   if ServiceContainer.Resolve(ICalculator,cal) then
+    // !   ... use calc methods
+    function Resolve(const aGuid: TGUID; out Obj;
+      aRaiseIfNotFound: EInterfaceResolver = nil): boolean; overload;
+    /// can be used to perform several DI/IoC for a given set of interfaces
+    // - here interfaces and instances are provided as TypeInfo,@Instance pairs
+    // - raise an EServiceException if any interface can't be resolved, unless
+    // aRaiseExceptionIfNotFound is set to FALSE
+    procedure ResolveByPair(const aInterfaceObjPairs: array of pointer;
+      aRaiseExceptionIfNotFound: boolean = true);
+    /// can be used to perform several DI/IoC for a given set of interfaces
+    // - here interfaces and instances are provided as TGUID and @Instance
+    // - you shall have registered the interface TGUID by a previous call to
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
+    // - raise an EServiceException if any interface can't be resolved, unless
+    // aRaiseExceptionIfNotFound is set to FALSE
+    procedure Resolve(const aInterfaces: array of TGUID;
+                      const aObjs: array of pointer;
+      aRaiseExceptionIfNotFound: boolean = true); overload;
   end;
   {$M-}
 
   /// used to store a list of TInterfacedObject instances
-
   TInterfacedObjectObjArray = array of TInterfacedObject;
 
   /// used to store a list of TInterfaceResolver instances
@@ -835,6 +867,65 @@ type
       read GetImplementationName;
   end;
 
+type
+  /// how TInterfaceResolverList store one interface/class
+  TInterfaceResolverListEntry = record
+    /// contains TypeInfo(ISomeInterface)
+    TypeInfo: PRttiInfo;
+    /// the associated RTTI - mainly used to call its ClassNewInstance method
+    ImplementationClass: TRttiCustom;
+    /// low-level interface VMT information for fast creation
+    InterfaceEntry: PInterfaceEntry;
+    /// shared instance
+    // - will be released with the TInterfaceResolverListEntries array
+    Instance: IInterface;
+  end;
+  PInterfaceResolverListEntry = ^TInterfaceResolverListEntry;
+
+  /// how TInterfaceResolverList store one interface/class
+  TInterfaceResolverListEntries = array of TInterfaceResolverListEntry;
+
+  /// event signature used by TInterfaceResolverList.OnCreateInstance
+  TOnResolverCreateInstance = procedure(
+    Sender: TInterfaceResolver; Instance: TInterfacedObject) of object;
+
+  /// register a thread-safe list of classes to implement some interfaces
+  // - as used e.g. by TInterfaceResolverInjected.RegisterGlobal()
+  TInterfaceResolverList = class(TInterfaceResolver)
+  protected
+    fEntry: TInterfaceResolverListEntries;
+    fSafe: TRWLightLock;
+    fOnCreateInstance: TOnResolverCreateInstance;
+    function PrepareAddAndWriteLock(aInterface: PRttiInfo;
+      aImplementationClass: TClass): PInterfaceEntry; // fSafe.WriteUnLock after
+    function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
+  public
+    /// check if a given interface can be resolved, from its RTTI
+    function Implements(aInterface: PRttiInfo): boolean; override;
+    /// register a given implementaiton class for an interface
+    // - a new aImplementationClass instance will be created for each resolution
+    procedure Add(aInterface: PRttiInfo;
+      aImplementationClass: TInterfacedObjectClass); overload;
+    /// register a given implementation class instance for an interface
+    // - the shared aImplementation instance will be returned for each resolution
+    // - aImplementation will be owned by the internal registration list
+    procedure Add(aInterface: PRttiInfo;
+      aImplementation: TInterfacedObject); overload;
+    /// unregister a given implementation class for an interface
+    // - raise EInterfaceResolver if an TInterfacedObject instance was registered
+    procedure Delete(aInterface: PRttiInfo);
+    /// is called when a new aImplementationClass instance has been created
+    property OnCreateInstance: TOnResolverCreateInstance
+      read fOnCreateInstance write fOnCreateInstance;
+    /// low-level access to the internal registered interface/class list
+    // - should be protected via the Safe locking methods
+    property Entry: TInterfaceResolverListEntries
+      read fEntry;
+    /// low-level access to the internal lock for thread-safety
+    property Safe: TRWLightLock
+      read fSafe;
+  end;
+
   /// abstract factory class targetting any kind of interface
   // - you can inherit from this class to customize dependency injection (DI/IoC),
   // defining the resolution via InjectStub/InjectResolver/InjectInstance methods,
@@ -848,9 +939,6 @@ type
     fResolversToBeReleased: TInterfaceResolverObjArray;
     fDependencies: TInterfacedObjectObjArray;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
-    function TryResolveInternal(aInterface: PRttiInfo; out Obj): boolean;
-    class function RegisterGlobalCheckLocked(aInterface: PRttiInfo;
-      aImplementationClass: TClass): PInterfaceEntry;
   public
     /// define a global class type for interface resolution
     // - most of the time, you will need a local DI/IoC resolution list; but
@@ -895,42 +983,6 @@ type
       overload; virtual;
     /// check if a given interface can be resolved, from its RTTI
     function Implements(aInterface: PRttiInfo): boolean; override;
-    /// can be used to perform an DI/IoC for a given interface
-    // - will search for the supplied interface to its internal list of resolvers
-    // - returns TRUE and set the Obj variable with a matching instance
-    // - can be used as such to resolve an ICalculator interface:
-    // ! var calc: ICalculator;
-    // ! begin
-    // !   if Catalog.Resolve(TypeInfo(ICalculator),calc) then
-    // !   ... use calc methods
-    function Resolve(aInterface: PRttiInfo; out Obj): boolean; overload;
-    /// can be used to perform an DI/IoC for a given interface
-    // - you shall have registered the interface TGUID by a previous call to
-    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
-    // - returns TRUE and set the Obj variable with a matching instance
-    // - returns FALSE (or raise aRaiseIfNotFound) if aGuid is not available
-    // - can be used as such to resolve an ICalculator interface:
-    // ! var calc: ICalculator;
-    // ! begin
-    // !   if ServiceContainer.Resolve(ICalculator,cal) then
-    // !   ... use calc methods
-    function Resolve(const aGuid: TGUID; out Obj;
-      aRaiseIfNotFound: EInterfaceResolver = nil): boolean; overload;
-    /// can be used to perform several DI/IoC for a given set of interfaces
-    // - here interfaces and instances are provided as TypeInfo,@Instance pairs
-    // - raise an EServiceException if any interface can't be resolved, unless
-    // aRaiseExceptionIfNotFound is set to FALSE
-    procedure ResolveByPair(const aInterfaceObjPairs: array of pointer;
-      aRaiseExceptionIfNotFound: boolean = true);
-    /// can be used to perform several DI/IoC for a given set of interfaces
-    // - here interfaces and instances are provided as TGUID and @Instance
-    // - you shall have registered the interface TGUID by a previous call to
-    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
-    // - raise an EServiceException if any interface can't be resolved, unless
-    // aRaiseExceptionIfNotFound is set to FALSE
-    procedure Resolve(const aInterfaces: array of TGUID;
-      const aObjs: array of pointer;
-      aRaiseExceptionIfNotFound: boolean = true); overload;
     /// release all used instances
     // - including all TInterfaceStub instances as specified to Inject(aStubsByGUID)
     // - will call _Release on all TInterfacedObject dependencies
@@ -1008,6 +1060,14 @@ type
   /// class-reference type (metaclass) of a TInjectableObject type
   TInjectableObjectClass = class of TInjectableObject;
 
+var
+  /// global thread-safe list for process-wide interfaces resolution
+  // - TInterfaceResolverInjected.RegisterGlobal/RegisterGlobalDelete
+  // class methods redirect to GlobalInterfaceResolver.Add/Delete
+  // - initialization section of this unit will make at startup:
+  // ! GlobalInterfaceResolver.Add(TypeInfo(IAutoLocker), TAutoLocker);
+  // ! GlobalInterfaceResolver.Add(TypeInfo(ILockedDocVariant), TLockedDocVariant);
+  GlobalInterfaceResolver: TInterfaceResolverList;
 
 
 { ************ TInterfaceStub TInterfaceMock for Dependency Mocking }
@@ -1358,12 +1418,18 @@ type
     // $ Add(10,20)=[30],
     // or, if WasError is TRUE:
     // $ Divide(20,0) error "divide by zero",
-    procedure AddAsText(WR: TTextWriter; aScope: TInterfaceStubLogLayouts;
+    procedure AddAsText(WR: TJsonWriter; aScope: TInterfaceStubLogLayouts;
       SepChar: AnsiChar = ',');
   end;
 
   /// used to keep track of all stubbed methods calls
   TInterfaceStubLogDynArray = array of TInterfaceStubLog;
+
+  /// how TInterfacedObjectFake identify each instance
+  // - match the ID used in sicClientDriven mode of a service
+  // - match the TInterfacedObjectFakeServer 32-bit identifier of a callback
+  TInterfacedObjectFakeID = type cardinal;
+  PInterfacedObjectFakeID = ^TInterfacedObjectFakeID;
 
   /// used to stub an interface implementation
   // - define the expected workflow in a fluent interface using Executes /
@@ -1393,12 +1459,12 @@ type
       const aErrorMsgFmt: RawUtf8; const aErrorMsgArgs: array of const): boolean; virtual;
     // match TOnFakeInstanceInvoke callback signature
     function Invoke(const aMethod: TInterfaceMethod; const aParams: RawUtf8;
-      aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
+      aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean;
     // will launch InternalCheck() process if some expectations defined by
     // ExpectsCount() are not met, i.e. raise an exception for TInterfaceStub
     // or notify the associated test case for TInterfaceMock
-    procedure InstanceDestroyed(aClientDrivenID: cardinal);
+    procedure InstanceDestroyed(aFakeID: TInterfacedObjectFakeID);
     procedure IntSetOptions(Options: TInterfaceStubOptions); virtual;
     procedure IntCheckCount(aMethodIndex, aComputed: cardinal;
       aOperator: TInterfaceStubRuleOperator; aCount: cardinal);
@@ -1849,6 +1915,7 @@ const
   PARAMREG_FIRST = REGEAX;
   PARAMREG_LAST = REGECX;
   // floating-point params are passed by reference
+  VMTSTUBSIZE = 24;
 {$endif CPUX86}
 
 {$ifdef CPUX64}
@@ -1888,6 +1955,7 @@ const
   FPREG_LAST = REGXMM3;
   {$endif SYSVABI}
   {$define HAS_FPREG}
+  VMTSTUBSIZE = 24;
 {$endif CPUX64}
 
 {$ifdef CPUARM}
@@ -1913,6 +1981,7 @@ const
   FPREG_LAST = REGD7;
   {$define HAS_FPREG}
   {$endif CPUARMHF}
+  VMTSTUBSIZE = 16;
 {$endif CPUARM}
 
 {$ifdef CPUAARCH64}
@@ -1940,28 +2009,72 @@ const
   FPREG_FIRST = REGD0;
   FPREG_LAST = REGD7;
   {$define HAS_FPREG}
+  VMTSTUBSIZE = 28;
 {$endif CPUAARCH64}
 
   STACKOFFSET_NONE = -1;
 
   // ordinal values are stored within 64-bit buffer, and records in a RawUtf8
   ARGS_TO_VAR: array[TInterfaceMethodValueType] of TInterfaceMethodValueVar = (
-    imvvNone, imvvSelf, imvv64, imvv64, imvv64, imvv64, imvv64, imvv64, imvv64,
-    imvv64, imvv64, imvvRawUtf8, imvvString, imvvRawUtf8, imvvWideString, imvv64,
-    imvvRecord, imvvRecord, imvvObject, imvvRawUtf8, imvvDynArray, imvvInterface);
+    imvvNone,         // imvNone
+    imvvSelf,         // imvSelf
+    imvv64,           // imvBoolean
+    imvv64,           // imvEnum
+    imvv64,           // imvSet
+    imvv64,           // imvInteger
+    imvv64,           // imvCardinal
+    imvv64,           // imvInt64
+    imvv64,           // imvDouble
+    imvv64,           // imvDateTime
+    imvv64,           // imvCurrency
+    imvvRawUtf8,      // imvRawUtf8
+    imvvString,       // imvString
+    imvvRawUtf8,      // imvRawByteString
+    imvvWideString,   // imvWideString
+    imvv64,           // imvBinary
+    imvvRecord,       // imvRecord
+    imvvRecord,       // imvVariant
+    imvvObject,       // imvObject
+    imvvRawUtf8,      // imvRawJson
+    imvvDynArray,     // imvDynArray
+    imvvInterface);   // imvInterface
 
   {$ifdef CPU32}
   // parameters are always aligned to 8 bytes boundaries on 64-bit ABI
   ARGS_IN_STACK_SIZE: array[TInterfaceMethodValueType] of cardinal = (
-    0, POINTERBYTES, POINTERBYTES, POINTERBYTES, POINTERBYTES, POINTERBYTES,
-    POINTERBYTES, 8, 8, 8, 8, POINTERBYTES, POINTERBYTES, POINTERBYTES,
-    POINTERBYTES, 0, POINTERBYTES, POINTERBYTES, POINTERBYTES, POINTERBYTES,
-    POINTERBYTES, POINTERBYTES);
+    0,             // imvNone
+    POINTERBYTES,  // imvSelf
+    POINTERBYTES,  // imvBoolean
+    POINTERBYTES,  // imvEnum
+    POINTERBYTES,  // imvSet
+    POINTERBYTES,  // imvInteger
+    POINTERBYTES,  // imvCardinal
+    8,             // imvInt64
+    8,             // imvDouble
+    8,             // imvDateTime
+    8,             // imvCurrency
+    POINTERBYTES,  // imvRawUtf8
+    POINTERBYTES,  // imvString
+    POINTERBYTES,  // imvRawByteString
+    POINTERBYTES,  // imvWideString
+    0,             // imvBinary
+    POINTERBYTES,  // imvRecord
+    POINTERBYTES,  // imvVariant
+    POINTERBYTES,  // imvObject
+    POINTERBYTES,  // imvRawJson
+    POINTERBYTES,  // imvDynArray
+    POINTERBYTES); // imvInterface
   {$endif CPU32}
 
   ARGS_RESULT_BY_REF: TInterfaceMethodValueTypes =
-    [imvRawUtf8, imvRawJson, imvString, imvRawByteString, imvWideString,
-     imvRecord, imvVariant, imvDynArray];
+    [imvRawUtf8,
+     imvRawJson,
+     imvString,
+     imvRawByteString,
+     imvWideString,
+     imvRecord,
+     imvVariant,
+     imvDynArray];
 
 type
   /// map the stack memory layout at TInterfacedObjectFake.FakeCall()
@@ -2017,14 +2130,14 @@ type
     fFactory: TInterfaceFactory;
     fVTable: PPointerArray;
     // the JITed asm stubs will redirect to this low-level function(s)
-    function FakeCall(var aCall): Int64;
+    function FakeCall(stack: PFakeCallStack): Int64;
     procedure FakeCallRaiseError(var ctxt: TFakeCallContext;
       const Format: RawUtf8; const Args: array of const);
     procedure FakeCallGetParamsFromStack(var ctxt: TFakeCallContext);
     procedure FakeCallInternalProcess(var ctxt: TFakeCallContext); virtual; abstract;
     // used internally to compute the actual instance from the FakeCall()
     function SelfFromInterface: TInterfacedObjectFakeRaw;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     {$ifdef CPUARM}
     // on ARM, the FakeStub needs to be here, for FakeCall redirection
     procedure ArmFakeStub;
@@ -2042,10 +2155,10 @@ type
     constructor Create(aFactory: TInterfaceFactory); reintroduce;
     /// retrieve one instance of this interface, increasing its RefCount
     procedure Get(out Obj);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// retrieve one instance of this interface, without increasing its RefCount
     procedure GetNoAddRef(out Obj);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
   published
     /// the associated interface factory class
     property Factory: TInterfaceFactory
@@ -2066,13 +2179,14 @@ type
   // - aClientDrivenID can be set optionally to specify e.g. an URI-level session
   TOnFakeInstanceInvoke = function(const aMethod: TInterfaceMethod;
     const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
-    aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean of object;
+    aFakeID: PInterfacedObjectFakeID;
+    aServiceCustomAnswer: PServiceCustomAnswer): boolean of object;
 
   /// event called when destroying a TInterfaceFactory's fake instance
   /// - this method will be run when the fake class instance is destroyed
   // (e.g. if aInstanceCreation is sicClientDriven, to notify the server
   // than the client life time just finished)
-  TOnFakeInstanceDestroy = procedure(aClientDrivenID: cardinal) of object;
+  TOnFakeInstanceDestroy = procedure(aFakeID: TInterfacedObjectFakeID) of object;
 
   /// how TInterfacedObjectFake will perform its execution
   // - by default, fInvoke() will receive standard JSON content, unless
@@ -2093,7 +2207,7 @@ type
     fOptions: TInterfacedObjectFakeOptions;
     fInvoke: TOnFakeInstanceInvoke;
     fNotifyDestroy: TOnFakeInstanceDestroy;
-    fClientDrivenID: cardinal;
+    fFakeID: TInterfacedObjectFakeID;
     fServiceFactory: TObject; // holds a TServiceFactory instance
     // the JITed asm stubs will redirect to these JSON-oriented process
     procedure FakeCallGetJsonFromStack(
@@ -2101,7 +2215,7 @@ type
     procedure FakeCallSetJsonToStack(var ctxt: TFakeCallContext; R: PUtf8Char);
     procedure FakeCallInternalProcess(var ctxt: TFakeCallContext); override;
     // should be overriden to support interface parameters (i.e. callbacks)
-    procedure InterfaceWrite(W: TTextWriter; const aMethod: TInterfaceMethod;
+    procedure InterfaceWrite(W: TJsonWriter; const aMethod: TInterfaceMethod;
       const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); virtual;
   public
     /// create an instance, using the specified interface and factory
@@ -2112,9 +2226,11 @@ type
     /// release the remote server instance (in sicClientDriven mode);
     destructor Destroy; override;
   published
-    /// the ID used in sicClientDriven mode
-    property ClientDrivenID: cardinal
-      read fClientDrivenID;
+    /// how TInterfacedObjectFake identify this instance
+    // - match the ID used in sicClientDriven mode of a service
+    // - match the TInterfacedObjectFakeServer 32-bit identifier of a callback
+    property FakeID: TInterfacedObjectFakeID
+      read fFakeID;
   end;
 
   /// abstract class defining a FakeInvoke() virtual method via a
@@ -2125,7 +2241,7 @@ type
     fName: RawUtf8;
     // default abstract method will do nothing but log the call
     function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUtf8;
-      aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
+      aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
   end;
 
@@ -2153,7 +2269,7 @@ type
     optIgnoreException);
 
   /// set of per-method execution options for an interface-based service provider
-  // - by default, mehthod executions are concurrent, for better server
+  // - by default, method executions are concurrent, for better server
   // responsiveness; if you set optExecLockedPerInterface, all methods of
   // a given interface will be executed with a critical section
   // - optExecInMainThread will force the method to be called within
@@ -2175,7 +2291,7 @@ type
   // won't log any parameter values at input/output - this may be useful for
   // regulatory/safety purposes, e.g. to ensure that no sensitive information
   // (like a credit card number or a password), is logged during process -
-  // consider using TInterfaceFactory.RegisterUnsafeSPIType() instead if you
+  // consider using TInterfaceFactory.RegisterUnsafeSpiType() instead if you
   // prefer a more tuned filtering, for specific high-level types
   // - when parameters are transmitted as JSON object, any missing parameter
   // will be replaced by their default value, unless optErrorOnMissingParam
@@ -2189,6 +2305,21 @@ type
   // optIgnoreException is set and the exception is trapped (not to be used
   // unless you know what you are doing)
   TInterfaceMethodOptions = set of TInterfaceMethodOption;
+
+  /// available execution options for an interface-based service provider
+  // - mimics TServiceFactoryServer homonymous boolean properties
+  TInterfaceOption = (
+    optByPassAuthentication,
+    optResultAsJsonObject,
+    optResultAsJsonObjectWithoutResult,
+    optResultAsXMLObject,
+    optResultAsXMLObjectIfAcceptOnlyXML,
+    optExcludeServiceLogCustomAnswer);
+
+  /// set of execution options for an interface-based service provider
+  // - mimics TServiceFactoryServer homonymous boolean properties
+  // - as used by TServiceFactoryServerAbstract.SetWholeOptions()
+  TInterfaceOptions = set of TInterfaceOption;
 
   /// callback called by TInterfaceMethodExecute to process an interface
   // callback parameter
@@ -2301,7 +2432,7 @@ type
   /// execute a method of a TInterfacedObject instance, from/to JSON
   TInterfaceMethodExecute = class(TInterfaceMethodExecuteRaw)
   protected
-    fTempTextWriter: TTextWriter;
+    fTempTextWriter: TJsonWriter;
     fOnCallback: TOnInterfaceMethodExecuteCallback;
     fServiceCustomAnswerHead: RawUtf8;
     fServiceCustomAnswerStatus: cardinal;
@@ -2317,7 +2448,7 @@ type
     // corresponding ExecutedInstancesFailed[] property will be filled with
     // the JSON serialized exception
     function ExecuteJson(const Instances: array of pointer; Par: PUtf8Char;
-      Res: TTextWriter; Error: PShortString = nil; ResAsJsonObject: boolean = false): boolean;
+      Res: TJsonWriter; Error: PShortString = nil; ResAsJsonObject: boolean = false): boolean;
     /// execute the corresponding method of one weak IInvokable reference
     // - exepect no output argument, i.e. no returned data, unless output is set
     // - this version will identify TInterfacedObjectFake implementations,
@@ -2334,11 +2465,12 @@ type
     /// set from output TServiceCustomAnswer.Status result parameter
     property ServiceCustomAnswerStatus: cardinal
       read fServiceCustomAnswerStatus write fServiceCustomAnswerStatus;
-    /// points e.g. to TRestServerUriContext.ExecuteCallback
+    /// points e.g. to TRestServerUriContext.ExecuteCallback which
+    // redirects to TServiceContainerServer.GetFakeCallback
     property OnCallback: TOnInterfaceMethodExecuteCallback
       read fOnCallback write fOnCallback;
-    /// allow to use an instance-specific temporary TJsonSerializer
-    function TempTextWriter: TTextWriter;
+    /// allow to use an instance-specific temporary TOrmWriter
+    function TempTextWriter: TJsonWriter;
   end;
 
 
@@ -2385,16 +2517,35 @@ implementation
 
 { ************ IInvokable Interface Methods and Parameters RTTI Extraction }
 
-procedure TInterfaceMethodArgument.SerializeToContract(WR: TTextWriter);
+procedure TInterfaceMethodArgument.SerializeToContract(WR: TJsonWriter);
 const
   ARGDIRTOJSON: array[TInterfaceMethodValueDirection] of string[4] = (
   // convert into generic in/out direction (assume result is out)
     'in', 'both', 'out', 'out');
   // AnsiString (Delphi <2009) may loose data depending on the client
   ARGTYPETOJSON: array[TInterfaceMethodValueType] of string[8] = (
-    '??', 'self', 'boolean', '', '', 'integer', 'cardinal', 'int64',
-    'double', 'datetime', 'currency', 'utf8', 'utf8', 'utf8', 'utf8', 'utf8',
-    '', 'variant', '', 'json', '', '');
+    '??',       // imvNone
+    'self',     // imvSelf
+    'boolean',  // imvBoolean
+    '',         // imvEnum
+    '',         // imvSet
+    'integer',  // imvInteger
+    'cardinal', // imvCardinal
+    'int64',    // imvInt64
+    'double',   // imvDouble
+    'datetime', // imvDateTime
+    'currency', // imvCurrency
+    'utf8',     // imvRawUtf8
+    'utf8',     // imvString
+    'utf8',     // imvRawByteString
+    'utf8',     // imvWideString
+    'utf8',     // imvBinary
+    '',         // imvRecord
+    'variant',  // imvVariant
+    '',         // imvObject
+    'json',     // imvRawJson
+    '',         // imvDynArray
+    '');        // imvInterface
 begin
   WR.AddShort('{"argument":"');
   WR.AddShort(ParamName^);
@@ -2407,16 +2558,16 @@ begin
     WR.AddShort(ARGTYPETOJSON[ValueType]);
 {$ifdef SOA_DEBUG}
   WR.Add('"', ',');
-  WR.AddPropJSONInt64('index', IndexVar);
+  WR.AddPropJsonInt64('index', IndexVar);
   WR.AddPropJsonString('var',
     GetEnumNameTrimed(TypeInfo(TInterfaceMethodValueVar), ValueVar));
-  WR.AddPropJSONInt64('stackoffset', InStackOffset);
-  WR.AddPropJSONInt64('reg', RegisterIdent);
-  WR.AddPropJSONInt64('fpreg', FPRegisterIdent);
-  WR.AddPropJSONInt64('stacksize', SizeInStack);
-  WR.AddPropJSONInt64('storsize', SizeInStorage);
+  WR.AddPropJsonInt64('stackoffset', InStackOffset);
+  WR.AddPropJsonInt64('reg', RegisterIdent);
+  WR.AddPropJsonInt64('fpreg', FPRegisterIdent);
+  WR.AddPropJsonInt64('stacksize', SizeInStack);
+  WR.AddPropJsonInt64('storsize', SizeInStorage);
   if ValueType = imvBinary then
-    WR.AddPropJSONInt64('binsize', SizeInBinary);
+    WR.AddPropJsonInt64('binsize', SizeInBinary);
   WR.AddPropName('asm');
   WR.AddString(GetSetNameCsv(TypeInfo(TInterfaceMethodValueAsm), ValueKindAsm));
   WR.AddShort('}', ',');
@@ -2440,9 +2591,11 @@ begin
         8:
           result := PInt64(V)^ = 0;
       end;
-    imvRawUtf8..imvWideString, imvObject..imvInterface:
+    imvRawUtf8..imvWideString,
+    imvObject..imvInterface:
       result := PPointer(V)^ = nil;
-    imvBinary, imvRecord:
+    imvBinary,
+    imvRecord:
       result := IsZeroSmall(V, SizeInStorage);
     imvVariant:
       result := PVarData(V)^.vtype <= varNull;
@@ -2458,7 +2611,7 @@ function TInterfaceMethodArgument.FromJson(const MethodName: RawUtf8;
   var R: PUtf8Char; V: pointer; Error: PShortString;
   DVO: TDocVariantOptions): boolean;
 var
-  tmp: shortstring;
+  tmp: ShortString;
   ctxt: TJsonParserContext;
 begin
   ctxt.Init(R, ArgRtti, JSONPARSER_SERVICE, @DVO, nil);
@@ -2488,7 +2641,7 @@ begin
   end;
 end;
 
-procedure TInterfaceMethodArgument.AddJson(WR: TTextWriter; V: pointer;
+procedure TInterfaceMethodArgument.AddJson(WR: TJsonWriter; V: pointer;
   ObjectOptions: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
@@ -2507,7 +2660,7 @@ end;
 
 procedure TInterfaceMethodArgument.AsJson(var DestValue: RawUtf8; V: pointer);
 var
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
   case ValueType of  // some direct conversion of simple types into RawUtf8
@@ -2539,7 +2692,7 @@ begin
   else
     begin
       // use generic AddJson() method for complex "..." content
-      W := TTextWriter.CreateOwnedStream(temp);
+      W := TJsonWriter.CreateOwnedStream(temp);
       try
         AddJson(W, V);
         W.SetText(DestValue);
@@ -2550,22 +2703,22 @@ begin
   end;
 end;
 
-procedure TInterfaceMethodArgument.AddJsonEscaped(WR: TTextWriter; V: pointer);
+procedure TInterfaceMethodArgument.AddJsonEscaped(WR: TJsonWriter; V: pointer);
 var
-  W: TTextWriter;
+  W: TJsonWriter;
 begin
   if ValueType in [imvBoolean..imvCurrency, imvInterface] then
     // no need to escape those
     AddJson(WR, V)
   else
   begin
-    W := WR.InternalJsonWriter;
+    W := WR.GetTempJsonWriter;
     AddJson(W, V);
     WR.AddJsonEscape(W);
   end;
 end;
 
-procedure TInterfaceMethodArgument.AddValueJson(WR: TTextWriter; const Value: RawUtf8);
+procedure TInterfaceMethodArgument.AddValueJson(WR: TJsonWriter; const Value: RawUtf8);
 begin
   if vIsString in ValueKindAsm then
   begin
@@ -2580,7 +2733,7 @@ begin
   end;
 end;
 
-procedure TInterfaceMethodArgument.AddDefaultJson(WR: TTextWriter);
+procedure TInterfaceMethodArgument.AddDefaultJson(WR: TJsonWriter);
 begin
   case ValueType of
     imvBoolean:
@@ -2631,7 +2784,8 @@ begin
           else
             DestValue := PInt64(V)^;
       end;
-    imvDouble, imvDateTime:
+    imvDouble,
+    imvDateTime:
       DestValue := unaligned(PDouble(V)^);
     imvCurrency:
       DestValue := PCurrency(V)^;
@@ -2651,9 +2805,9 @@ begin
       DestValue := PVariant(V)^;
   else
     begin
-      // use generic AddJson() method
+      // use generic AddJson() method for complex "..." content
       AsJson(tmp, V);
-      VariantLoadJson(DestValue, pointer(tmp), nil, @Options);
+      JsonToVariantInPlace(DestValue, pointer(tmp), Options);
     end;
   end;
 end;
@@ -2664,7 +2818,7 @@ var
   tmp: variant;
 begin
   AsVariant(tmp, V, Dest.Options);
-  if dvoIsArray in Dest.Options then
+  if Dest.IsArray then
     Dest.AddItem(tmp)
   else
     Dest.AddValue(ShortStringToAnsi7String(ParamName^), tmp);
@@ -2700,35 +2854,35 @@ begin
       begin
         obj := ArgRtti.ClassNewInstance;
         try
-          if DocVariantToObject(_Safe(Value)^, obj) then
+          if DocVariantToObject(_Safe(Value)^, obj, ArgRtti) then
             Value := _ObjFast(obj, [woEnumSetsAsText]);
         finally
           obj.Free;
         end;
       end;
     imvDynArray:
-      if _Safe(Value)^.Kind = dvArray then
+      if _Safe(Value)^.IsArray then
       begin
         arr := nil; // recreate using a proper dynamic array
         dyn.InitRtti(ArgRtti, arr);
         try
           VariantSaveJson(Value, twJsonEscape, json);
           dyn.LoadFromJson(pointer(json));
-          json := dyn.SaveToJson(true);
-          _Json(json, Value, JSON_OPTIONS_FAST);
+          json := dyn.SaveToJson({EnumSetsAsText=}true);
+          _Json(json, Value, JSON_FAST);
         finally
           dyn.Clear;
         end;
       end;
     imvRecord:
-      if _Safe(Value)^.Kind = dvObject then
+      if _Safe(Value)^.IsObject then
       begin
         SetLength(rec, ArgRtti.Size);
         try
           VariantSaveJson(Value, twJsonEscape, json);
           RecordLoadJson(rec[0], pointer(json), ArgRtti.Info);
           json := SaveJson(rec[0], ArgRtti.Info, {EnumSetsAsText=}true);
-          _Json(json, Value, JSON_OPTIONS_FAST);
+          _Json(json, Value, JSON_FAST);
         finally
           ArgRtti.ValueFinalize(pointer(rec));
         end;
@@ -2787,11 +2941,11 @@ end;
 function TInterfaceMethod.ArgsArrayToObject(P: PUtf8Char; Input: boolean): RawUtf8;
 var
   i: integer;
-  W: TTextWriter;
+  W: TJsonWriter;
   Value: PUtf8Char;
   temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('{');
     if (P = nil) or
@@ -2832,14 +2986,14 @@ function TInterfaceMethod.ArgsCommandLineToObject(P: PUtf8Char;
   Input, RaiseExceptionOnUnknownParam: boolean): RawUtf8;
 var
   i: integer;
-  W: TTextWriter;
+  W: TJsonWriter;
   B: PUtf8Char;
   arginfo: PInterfaceMethodArgument;
   arg, value: RawUtf8;
   ok: boolean;
   temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('{');
     while (P <> nil) and
@@ -2955,7 +3109,8 @@ procedure TInterfaceMethod.ArgsValuesAsDocVariant(
   const Values: TVariantDynArray; Input: boolean; Options: TDocVariantOptions);
 begin
   case Kind of
-    pdvObject, pdvObjectFixed:
+    pdvObject,
+    pdvObjectFixed:
       begin
         Dest.InitObjectFromVariants(ArgsNames(Input), Values, Options);
         if Kind = pdvObjectFixed then
@@ -2968,8 +3123,9 @@ begin
   end;
 end;
 
-procedure TInterfaceMethod.ArgsAsDocVariantObject(const ArgsParams: TDocVariantData;
-  var ArgsObject: TDocVariantData; Input: boolean);
+procedure TInterfaceMethod.ArgsAsDocVariantObject(
+  const ArgsParams: TDocVariantData; var ArgsObject: TDocVariantData;
+  Input: boolean);
 var
   a, n: PtrInt;
 begin
@@ -3080,17 +3236,7 @@ begin
       if ValueType > imvSelf then
       begin
         V := nil;
-        {$ifndef CPUX86}
-        {$ifdef HAS_FPREG} // x64, armhf, aarch64
-        if FPRegisterIdent > 0 then
-          V := @ctxt.Stack.FPRegs[FPREG_FIRST + FPRegisterIdent - 1]
-        else
-        {$endif HAS_FPREG}
-        if RegisterIdent > 0 then
-          V := @ctxt.Stack.ParamRegs[PARAMREG_FIRST + RegisterIdent - 1];
-        if RegisterIdent = PARAMREG_FIRST then
-          FakeCallRaiseError(ctxt, 'unexpected self', []);
-        {$else}
+        {$ifdef CPUX86}
         case RegisterIdent of
           REGEAX:
             FakeCallRaiseError(ctxt, 'unexpected self', []);
@@ -3099,6 +3245,16 @@ begin
           REGECX:
             V := @ctxt.Stack.ECX;
         else
+        {$else}
+        {$ifdef HAS_FPREG} // x64, armhf, aarch64
+        if FPRegisterIdent > 0 then
+          V := @ctxt.Stack.FPRegs[FPRegisterIdent + (FPREG_FIRST - 1)]
+        else
+        {$endif HAS_FPREG}
+          if RegisterIdent > 0 then
+            V := @ctxt.Stack.ParamRegs[RegisterIdent + (PARAMREG_FIRST - 1)];
+        if RegisterIdent = PARAMREG_FIRST then
+          FakeCallRaiseError(ctxt, 'unexpected self', []);
         {$endif CPUX86}
           if V = nil then
             if (SizeInStack > 0) and
@@ -3107,7 +3263,7 @@ begin
             else
               V := @ctxt.I64s[IndexVar]; // for results in CPU
         {$ifdef CPUX86}
-        end;
+        end; // case RegisterIdent of
         {$endif CPUX86}
         if vPassedByReference in ValueKindAsm then
           V := PPointer(V)^;
@@ -3119,47 +3275,6 @@ begin
     ctxt.ServiceCustomAnswerPoint := ctxt.Value[ctxt.Method^.ArgsResultIndex]
   else
     ctxt.ServiceCustomAnswerPoint := nil;
-end;
-
-function TInterfacedObjectFakeRaw.FakeCall(var aCall): Int64;
-var
-  ctxt: TFakeCallContext;
-begin
-  (*
-     WELCOME ABOARD: you just landed in TInterfacedObjectFake.FakeCall() !
-     if your debugger reached here, you are executing a "fake" interface
-     forged to call a remote SOA server or mock/stub an interface
-  *)
-  self := SelfFromInterface;
-  // setup context
-  ctxt.Stack := @aCall;
-  if ctxt.Stack.MethodIndex >= fFactory.MethodsCount then
-    raise EInterfaceFactory.CreateUtf8('%.FakeCall(%) failed: out of range %',
-      [self, fFactory.fInterfaceName, ctxt.Stack.MethodIndex]);
-  ctxt.Method := @fFactory.fMethods[ctxt.Stack.MethodIndex];
-  ctxt.ResultType := imvNone;
-  ctxt.Result := @result;
-  // call execution virtual method
-  result := 0;
-  self.FakeCallInternalProcess(ctxt);
-  // handle float result if needed (ordinals are already stored in result)
-  {$ifdef HAS_FPREG} // result float is returned in FP first register
-  if ctxt.ResultType in [imvDouble, imvDateTime] then
-    PInt64(@ctxt.Stack.FPRegs[FPREG_FIRST])^ := result;
-  {$else}
-  {$ifdef CPUINTEL} // x87 ABI expects floats to be in st(0) FPU stack
-  case ctxt.ResultType of
-    imvDouble, imvDateTime:
-      asm
-        fld     qword ptr [result]
-      end;
-    imvCurrency:
-      asm
-        fild    qword ptr [result]
-      end;
-  end;
-  {$endif CPUINTEL}
-  {$endif HAS_FPREG}
 end;
 
 {$ifdef HASINLINE}
@@ -3175,6 +3290,48 @@ asm
         sub     eax, TInterfacedObjectFake.fVTable
 end;
 {$endif HASINLINE}
+
+function TInterfacedObjectFakeRaw.FakeCall(stack: PFakeCallStack): Int64;
+var
+  ctxt: TFakeCallContext;
+begin
+  (*
+     WELCOME ABOARD: you just landed in TInterfacedObjectFake.FakeCall() !
+     if your debugger reached here, you are executing a "fake" interface
+     forged to call a remote SOA server or mock/stub an interface
+  *)
+  self := SelfFromInterface;
+  // setup context
+  ctxt.Stack := stack;
+  if stack.MethodIndex >= fFactory.MethodsCount then
+    raise EInterfaceFactory.CreateUtf8('%.FakeCall(%) failed: out of range %',
+      [self, fFactory.fInterfaceName, stack.MethodIndex]);
+  ctxt.Method := @fFactory.fMethods[stack.MethodIndex];
+  ctxt.ResultType := imvNone;
+  ctxt.Result := @result;
+  // call execution virtual method
+  result := 0;
+  self.FakeCallInternalProcess(ctxt);
+  // handle float result if needed (ordinals are already stored in result)
+  {$ifdef HAS_FPREG} // result float is returned in FP first register
+  if ctxt.ResultType in [imvDouble, imvDateTime] then
+    PInt64(@stack.FPRegs[FPREG_FIRST])^ := result;
+  {$else}
+  {$ifdef CPUINTEL} // x87 ABI expects floats to be in st(0) FPU stack
+  case ctxt.ResultType of
+    imvDouble,
+    imvDateTime:
+      asm
+        fld     qword ptr [result]
+      end;
+    imvCurrency:
+      asm
+        fild    qword ptr [result]
+      end;
+  end;
+  {$endif CPUINTEL}
+  {$endif HAS_FPREG}
+end;
 
 function TInterfacedObjectFakeRaw.Fake_AddRef: TIntCnt;
 begin
@@ -3234,7 +3391,7 @@ var
 begin
   if Assigned(fNotifyDestroy) then
   try // release server instance
-    fNotifyDestroy(fClientDrivenID);
+    fNotifyDestroy(fFakeID);
   except
     on E: Exception do
     begin
@@ -3251,7 +3408,7 @@ end;
 procedure TInterfacedObjectFake.FakeCallGetJsonFromStack(
   var ctxt: TFakeCallContext; var Json: RawUtf8);
 var
-  Params: TTextWriter;
+  Params: TJsonWriter;
   opt: TTextWriterWriteObjectOptions;
   arg: integer;
   V: PPointer;
@@ -3259,7 +3416,7 @@ var
 begin
   FakeCallGetParamsFromStack(ctxt);
   // generate the ParamsJson input from c^.Value[]
-  Params := TTextWriter.CreateOwnedStream(temp);
+  Params := TJsonWriter.CreateOwnedStream(temp);
   try
     if ifoJsonAsExtended in fOptions then
       Params.CustomOptions := Params.CustomOptions + [twoForceJsonExtended]
@@ -3393,14 +3550,14 @@ begin
   FakeCallGetJsonFromStack(ctxt, InputJson);
   // call remote server or stub implementation using JSON input/output
   if not fInvoke(ctxt.Method^, InputJson,
-      @OutputJson, @Error, @fClientDrivenID, ctxt.ServiceCustomAnswerPoint) then
+      @OutputJson, @Error, @fFakeID, ctxt.ServiceCustomAnswerPoint) then
     FakeCallRaiseError(ctxt, '''%''', [Error]);
   // unserialize var/out/result parameters from OutputJson array/object
   if ctxt.ServiceCustomAnswerPoint = nil then
     FakeCallSetJsonToStack(ctxt, pointer(OutputJson));
 end;
 
-procedure TInterfacedObjectFake.InterfaceWrite(W: TTextWriter;
+procedure TInterfacedObjectFake.InterfaceWrite(W: TJsonWriter;
   const aMethod: TInterfaceMethod; const aParamInfo: TInterfaceMethodArgument;
   aParamValue: Pointer);
 begin
@@ -3429,58 +3586,102 @@ const
     [imvRawUtf8..imvBinary, imvDateTime];
 
   _FROM_RTTI: array[TRttiParserType] of TInterfaceMethodValueType = (
-  // ptNone, ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
-    imvNone, imvNone, imvBoolean, imvNone, imvCardinal, imvCurrency, imvDouble, imvNone,
-  // ptInt64, ptInteger, ptQWord, ptRawByteString, ptRawJson, ptRawUtf8,
-    imvInt64, imvInteger, imvInt64, imvRawByteString, imvRawJson, imvRawUtf8,
-  // ptRecord, ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS,
-    imvRecord, imvDouble, imvString, imvSynUnicode, imvDateTime, imvDateTime,
-  // ptGuid, ptHash128, ptHash256, ptHash512, ptORM, ptTimeLog, ptUnicodeString,
-    imvBinary, imvBinary, imvBinary, imvBinary, imvInt64, imvInt64, imvUnicodeString,
-  // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi, ptWord,
-    imvInt64, imvInt64, imvVariant, imvWideString, imvRawUtf8, imvNone,
-  // ptEnumeration, ptSet, ptClass, ptDynArray, ptInterface, ptCustom);
-    imvEnum, imvSet, imvObject, imvDynArray, imvInterface, imvNone);
+    imvNone,           //  ptNone
+    imvNone,           //  ptArray
+    imvBoolean,        //  ptBoolean
+    imvNone,           //  ptByte
+    imvCardinal,       //  ptCardinal
+    imvCurrency,       //  ptCurrency
+    imvDouble,         //  ptDouble
+    imvNone,           //  ptExtended
+    imvInt64,          //  ptInt64
+    imvInteger,        //  ptInteger
+    imvInt64,          //  ptQWord
+    imvRawByteString,  //  ptRawByteString
+    imvRawJson,        //  ptRawJson
+    imvRawUtf8,        //  ptRawUtf8
+    imvRecord,         //  ptRecord
+    imvDouble,         //  ptSingle
+    imvString,         //  ptString
+    imvSynUnicode,     //  ptSynUnicode
+    imvDateTime,       //  ptDateTime
+    imvDateTime,       //  ptDateTimeMS
+    imvBinary,         //  ptGuid
+    imvBinary,         //  ptHash128
+    imvBinary,         //  ptHash256
+    imvBinary,         //  ptHash512
+    imvInt64,          //  ptOrm
+    imvInt64,          //  ptTimeLog
+    imvUnicodeString,  //  ptUnicodeString
+    imvInt64,          //  ptUnixTime
+    imvInt64,          //  ptUnixMSTime
+    imvVariant,        //  ptVariant
+    imvWideString,     //  ptWideString
+    imvRawUtf8,        //  ptWinAnsi
+    imvNone,           //  ptWord
+    imvEnum,           //  ptEnumeration
+    imvSet,            //  ptSet
+    imvObject,         //  ptClass
+    imvDynArray,       //  ptDynArray
+    imvInterface,      //  ptInterface
+    imvNone);          //  ptCustom
 
 var
-  InterfaceFactoryCache: TSynObjectListLocked;
+  InterfaceFactoryCache: TSynObjectListLightLocked;
 
-procedure InitializeInterfaceFactoryCache;
+function InitializeInterfaceFactoryCache: TSynObjectListLightLocked;
 begin
   GlobalLock;
   try
     if InterfaceFactoryCache = nil then // paranoid thread-safety
-      InterfaceFactoryCache := TSynObjectListLocked.Create;
+      InterfaceFactoryCache :=
+        RegisterGlobalShutdownRelease(TSynObjectListLightLocked.Create);
   finally
     GlobalUnLock;
   end;
+  result := InterfaceFactoryCache;
+end;
+
+function FactorySearch(F: PInterfaceFactory; n: integer; nfo: PRttiInfo): TInterfaceFactory;
+begin
+  if n <> 0 then
+    repeat
+      result := F^;
+      if result.fInterfaceTypeInfo = nfo then
+        exit;
+      inc(F);
+      dec(n);
+    until n = 0;
+  result := nil;
 end;
 
 class function TInterfaceFactory.Get(aInterface: PRttiInfo): TInterfaceFactory;
 var
-  i: integer;
-  F: ^TInterfaceFactory;
+  cache: TSynObjectListLightLocked;
 begin
   if (aInterface = nil) or
      (aInterface^.Kind <> rkInterface) then
     raise EInterfaceFactory.CreateUtf8('%.Get(invalid)', [self]);
-  if InterfaceFactoryCache = nil then
-    InitializeInterfaceFactoryCache;
-  InterfaceFactoryCache.Safe.Lock;
+  cache := InterfaceFactoryCache;
+  if cache = nil then
+    cache := InitializeInterfaceFactoryCache
+  else
+  begin
+    cache.Safe.ReadLock; // multiple reads lock
+    result := FactorySearch(pointer(cache.List), cache.Count, aInterface);
+    cache.Safe.ReadUnLock;
+    if result <> nil then
+      exit; // retrieved from cache
+  end;
+  cache.Safe.WriteLock; // exclusive write lock
   try
-    F := pointer(InterfaceFactoryCache.List);
-    for i := 1 to InterfaceFactoryCache.Count do
-      if F^.fInterfaceTypeInfo = aInterface then
-      begin
-        result := F^;
-        exit; // retrieved from cache
-      end
-      else
-        inc(F);
+    result := FactorySearch(pointer(cache.List), cache.Count, aInterface);
+    if result <> nil then
+      exit; // paranoid
     // not existing -> create new instance from RTTI
     {$ifdef HASINTERFACERTTI}
     result := TInterfaceFactoryRtti.Create(aInterface);
-    InterfaceFactoryCache.Add(result);
+    cache.Add(result);
     {$else}
     result := nil; // make compiler happy
     raise EInterfaceFactory.CreateUtf8('No RTTI available for I%: please ' +
@@ -3488,7 +3689,7 @@ begin
       [aInterface^.RawName]);
     {$endif HASINTERFACERTTI}
   finally
-    InterfaceFactoryCache.Safe.UnLock;
+    cache.Safe.WriteUnLock;
   end;
 end;
 
@@ -3508,11 +3709,34 @@ end;
 class procedure TInterfaceFactory.RegisterInterfaces(
   const aInterfaces: array of PRttiInfo);
 begin
-  // no-op if not RTTI is available -> will be checked later when resolved
+  // no-op if no RTTI is available -> will be checked later when resolved
   // in fact, TInterfaceFactoryGenerated.RegisterInterface() should be done
 end;
 
 {$endif HASINTERFACERTTI}
+
+function FindGuid(f: PInterfaceFactory; n: integer;
+  {$ifdef CPU64} gL, gH : QWord {$else} guid: PHash128Rec {$endif}): TInterfaceFactory;
+begin
+  if n > 0 then
+    repeat
+      result := f^;
+      with PHash128Rec(@result.fInterfaceIID)^ do
+        {$ifdef CPU64}
+        if (L = gL) and
+           (H = gH) then
+        {$else}
+        if (c0 = guid^.c0) and
+           (c1 = guid^.c1) and
+           (c2 = guid^.c2) and
+           (c3 = guid^.c3) then
+        {$endif CPU64}
+          exit;
+      inc(f);
+      dec(n);
+    until n = 0;
+  result := nil;
+end;
 
 {$ifdef FPC_HAS_CONSTREF}
 class function TInterfaceFactory.Get(constref aGuid: TGUID): TInterfaceFactory;
@@ -3520,45 +3744,19 @@ class function TInterfaceFactory.Get(constref aGuid: TGUID): TInterfaceFactory;
 class function TInterfaceFactory.Get(const aGuid: TGUID): TInterfaceFactory;
 {$endif FPC_HAS_CONSTREF}
 var
-  n: integer;
-  F: ^TInterfaceFactory;
-  {$ifdef CPUX86NOTPIC}
-  cache: TSynObjectListLocked absolute InterfaceFactoryCache;
-  {$else}
-  GL: QWord;
-  cache: TSynObjectListLocked;
-  {$endif CPUX86NOTPIC}
+  cache: TSynObjectListLightLocked;
 begin
-  {$ifndef CPUX86NOTPIC}
   cache := InterfaceFactoryCache;
-  {$endif CPUX86NOTPIC}
   if cache <> nil then
   begin
-    cache.Safe.Lock; // no GPF is expected within the loop -> no try...finally
-    {$ifndef CPUX86NOTPIC}
-    GL := PHash128Rec(@aGuid)^.L;
-    {$endif CPUX86NOTPIC}
-    F := pointer(cache.List);
-    n := cache.Count;
-    if n > 0 then
-      repeat
-        {$ifdef CPUX86NOTPIC}
-        if (PHash128Rec(@F^.fInterfaceIID)^.L = PHash128Rec(@aGuid)^.L) and
-        {$else}
-        if (PHash128Rec(@F^.fInterfaceIID)^.L = GL) and
-        {$endif CPUX86NOTPIC}
-           (PHash128Rec(@F^.fInterfaceIID)^.H = PHash128Rec(@aGuid)^.H) then
-        begin
-          result := F^;
-          cache.Safe.UnLock;
-          exit;
-        end;
-        inc(F);
-        dec(n);
-      until n = 0;
-    cache.Safe.UnLock;
-  end;
-  result := nil;
+    cache.Safe.ReadLock; // no GPF expected within loop -> no try...finally
+    result := FindGuid(pointer(cache.List), cache.Count,
+      {$ifdef CPU64} PHash128Rec(@aGuid)^.L, PHash128Rec(@aGuid)^.H
+      {$else} @aGuid {$endif});
+    cache.Safe.ReadUnLock;
+  end
+  else
+    result := nil;
 end;
 
 class procedure TInterfaceFactory.AddToObjArray(var Obj: TInterfaceFactoryObjArray;
@@ -3600,44 +3798,46 @@ end;
 class function TInterfaceFactory.Get(const aInterfaceName: RawUtf8): TInterfaceFactory;
 var
   L, i: integer;
-  F: ^TInterfaceFactory;
+  f: ^TInterfaceFactory;
+  cache: TSynObjectListLightLocked;
 begin
   result := nil;
   L := length(aInterfaceName);
-  if (InterfaceFactoryCache <> nil) and
+  cache := InterfaceFactoryCache;
+  if (cache <> nil) and
      (L <> 0) then
   begin
-    InterfaceFactoryCache.Safe.Lock;
+    cache.Safe.ReadLock;
     try
-      F := pointer(InterfaceFactoryCache.List);
-      for i := 1 to InterfaceFactoryCache.Count do
-        if IdemPropNameU(F^.fInterfaceName, pointer(aInterfaceName), L) then
+      f := pointer(cache.List);
+      for i := 1 to cache.Count do
+        if IdemPropNameU(f^.fInterfaceName, pointer(aInterfaceName), L) then
         begin
-          result := F^;
+          result := f^;
           exit; // retrieved from cache
         end
         else
-          inc(F);
+          inc(f);
     finally
-      InterfaceFactoryCache.Safe.UnLock;
+      cache.Safe.ReadUnLock;
     end;
   end;
 end;
 
-class function TInterfaceFactory.GetUsedInterfaces: TSynObjectListLocked;
+class function TInterfaceFactory.GetUsedInterfaces: TSynObjectListLightLocked;
 begin
   result := InterfaceFactoryCache;
 end;
 
-class procedure TInterfaceFactory.RegisterUnsafeSPIType(const Types: array of PRttiInfo);
+class procedure TInterfaceFactory.RegisterUnsafeSpiType(const Types: array of PRttiInfo);
 begin
-  Rtti.RegisterUnsafeSPIType(Types);
+  Rtti.RegisterUnsafeSpiType(Types);
 end;
 
 constructor TInterfaceFactory.Create(aInterface: PRttiInfo);
 var
   m, a, reg: integer;
-  WR: TTextWriter;
+  WR: TJsonWriter;
   ErrorMsg: RawUtf8;
   {$ifdef HAS_FPREG}
   ValueIsInFPR: boolean;
@@ -3646,7 +3846,9 @@ var
   offs: integer;
   {$else}
   {$ifdef OSPOSIX} // not used for Win64
+  {$ifdef HAS_FPREG}
   fpreg: integer;
+  {$endif HAS_FPREG}
   {$endif OSPOSIX}
   {$endif CPUX86}
 begin
@@ -3656,7 +3858,7 @@ begin
   if aInterface^.Kind <> rkInterface then
     raise EInterfaceFactory.CreateUtf8('%.Create: % is not an interface',
       [self, aInterface^.RawName]);
-  fDocVariantOptions := JSON_OPTIONS_FAST;
+  fDocVariantOptions := JSON_FAST;
   fInterfaceTypeInfo := aInterface;
   fInterfaceIID := aInterface^.InterfaceGuid^;
   if IsNullGuid(fInterfaceIID) then
@@ -3671,16 +3873,16 @@ begin
   // retrieve all interface methods (recursively including ancestors)
   fMethod.InitSpecific(TypeInfo(TInterfaceMethodDynArray), fMethods, ptRawUtf8,
     @fMethodsCount, {caseinsens=}true);
-  fMethod.HashCountTrigger := 3;
   AddMethodsFromTypeInfo(aInterface); // from RTTI or generated code
   if fMethodsCount = 0 then
     raise EInterfaceFactory.CreateUtf8('%.Create(%): interface has ' +
-      'no RTTI - should inherit from IInvokable or add some methods',
+      'no RTTI - it should inherit from IInvokable or add some methods',
       [self, fInterfaceName]);
   if MethodsCount > MAX_METHOD_COUNT then
     raise EInterfaceFactory.CreateUtf8(
       '%.Create(%): interface has too many methods (%), so breaks the ' +
-      'Interface Segregation Principle', [self, fInterfaceName, MethodsCount]);
+      'Interface Segregation Principle and our internal buffers provision',
+      [self, fInterfaceName, MethodsCount]);
   fMethodIndexCurrentFrameCallback := -1;
   fMethodIndexCallbackReleased := -1;
   SetLength(fMethods, MethodsCount);
@@ -3764,11 +3966,11 @@ begin
           ArgsManagedFirst := a;
         ArgsManagedLast := a;
       end;
-      if rcfSPI in ArgRtti.Flags then
+      if rcfSpi in ArgRtti.Flags then
       begin
-        // as defined by Rtti.RegisterUnsafeSPIType()
-        include(ValueKindAsm, vIsSPI);
-        include(HasSPIParams, ValueDirection);
+        // as defined by Rtti.RegisterUnsafeSpiType()
+        include(ValueKindAsm, vIsSpi);
+        include(HasSpiParams, ValueDirection);
       end;
     end;
     if ArgsOutputValuesCount = 0 then
@@ -3788,7 +3990,9 @@ begin
     if ArgsResultIndex >= 0 then
       with Args[ArgsResultIndex] do
       case ValueType of
-        imvNone, imvObject, imvInterface:
+        imvNone,
+        imvObject,
+        imvInterface:
           raise EInterfaceFactory.CreateUtf8(
             '%.Create: I% unexpected result type %',
             [self, InterfaceDotMethodName, ArgTypeName^]);
@@ -3801,7 +4005,17 @@ begin
                   'parameter [%] not allowed with TServiceCustomAnswer result',
                   [self, InterfaceDotMethodName, Args[a].ParamName^]);
             ArgsResultIsServiceCustomAnswer := true;
-          end;
+          end
+        {$ifdef CPUAARCH64}
+        // FPC uses registers for managed records, but follows the ABI otherwise
+        // which requires the result to be in X8 which is not handled yet
+        // - see aarch64/cpupara.pas: tcpuparamanager.create_paraloc_info_intern
+        else if not (rcfIsManaged in ArgRtti.Flags) then
+          raise EInterfaceFactory.CreateUtf8(
+            '%.Create: I% record result type % is unsupported on aarch64:' +
+            'use an OUT parameter instead, or include a managed field',
+            [self, InterfaceDotMethodName, ArgTypeName^]);
+        {$endif CPUAARCH64}
       end;
     if (ArgsInputValuesCount = 1) and
        (Args[1].ValueType = imvRawByteString) then
@@ -3838,10 +4052,13 @@ begin
       if ValueType in _SMV_STRING then
         Include(ValueKindAsm, vIsString);
       case ValueType of
-        imvInteger, imvCardinal, imvInt64:
+        imvInteger,
+        imvCardinal,
+        imvInt64:
           if rcfQWord in ArgRtti.Cache.Flags then
             Include(ValueKindAsm,vIsQword);
-        imvDouble,imvDateTime:
+        imvDouble,
+        imvDateTime:
           begin
             {$ifdef HAS_FPREG}
             ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
@@ -3863,9 +4080,13 @@ begin
       case ValueType of
         imvBoolean:
           SizeInStorage := 1;
-        imvInteger, imvCardinal:
+        imvInteger,
+        imvCardinal:
           SizeInStorage := 4;
-        imvInt64, imvDouble, imvDateTime, imvCurrency:
+        imvInt64,
+        imvDouble,
+        imvDateTime,
+        imvCurrency:
           SizeInStorage := 8;
         imvEnum:
           SizeInStorage := ArgRtti.Cache.EnumInfo.SizeInStorageAsEnum;
@@ -3874,14 +4095,16 @@ begin
             SizeInStorage := ArgRtti.Cache.EnumInfo.SizeInStorageAsSet;
             if not (SizeInStorage in [1, 2, 4]) then
               raise EInterfaceFactory.CreateUtf8(
-                '%.Create: invalid SizeInStorage=% in %.% method % parameter for % set',
+                '%.Create: unexpected SizeInStorage=% in %.% method % parameter' +
+                ' for % set - we support only byte/integer/Int64 sizes',
                 [self, SizeInStorage, fInterfaceName, URI, ParamName^, ArgTypeName^]);
           end;
         imvRecord:
           if ArgRtti.Size <= POINTERBYTES then
             raise EInterfaceFactory.CreateUtf8(
-              '%.Create: % record too small in %.% method % parameter',
-              [self, ArgTypeName^, fInterfaceName, URI, ParamName^])
+              '%.Create: % record too small in %.% method % parameter: it ' +
+              'should be at least % bytes (i.e. a pointer) to be on stack',
+              [self, ArgTypeName^, fInterfaceName, URI, ParamName^, POINTERBYTES])
           else
             SizeInStorage := POINTERBYTES; // handle only records when passed by ref
         imvBinary:
@@ -3934,7 +4157,7 @@ begin
         {$ifdef CPUARM}
         // parameter must be aligned on a SizeInStack boundary
         if SizeInStack > POINTERBYTES then
-          Inc(ArgsSizeInStack, ArgsSizeInStack mod SizeInStack);
+          Inc(ArgsSizeInStack, ArgsSizeInStack mod cardinal(SizeInStack));
         {$endif CPUARM}
         InStackOffset := ArgsSizeInStack;
         inc(ArgsSizeInStack, SizeInStack);
@@ -3966,7 +4189,7 @@ begin
         begin
           // put in an integer register
           {$ifdef CPUARM}
-          // on 32-bit ARM, ordinals>POINTERBYTES are also placed in normal registers
+          // on 32-bit ARM, ordinals>POINTERBYTES are also placed in registers
           if (SizeInStack>POINTERBYTES) and
              ((reg and 1) = 0) then
             inc(reg); // must be aligned on even boundary
@@ -3976,7 +4199,7 @@ begin
             // no space, put on stack
             InStackOffset := ArgsSizeInStack;
             inc(ArgsSizeInStack, SizeInStack);
-            // all other parameters following the current one, must also be placed on stack
+            // all params following the current one, must also be placed on stack
             reg := PARAMREG_LAST + 1;
             continue;
           end;
@@ -3994,7 +4217,7 @@ begin
     end;
     if ArgsSizeInStack > MAX_EXECSTACK then
       raise EInterfaceFactory.CreateUtf8(
-        '%.Create: Stack size % > % for %.% method',
+        '%.Create: Stack size % > % for %.% method parameters',
         [self, ArgsSizeInStack, MAX_EXECSTACK, fInterfaceName, URI]);
     {$ifdef CPUX86}
     // pascal/register convention are passed left-to-right -> reverse order
@@ -4009,7 +4232,7 @@ begin
     //assert(offs=0);
     {$endif CPUX86}
   end;
-  WR := TTextWriter.CreateOwnedStream;
+  WR := TJsonWriter.CreateOwnedStream;
   try
     // compute the default results JSON array for all methods
     for m := 0 to MethodsCount - 1 do
@@ -4132,11 +4355,11 @@ begin
   if (MethodIndex < 0) or
      (self = nil) then
     result := ''
-  else if MethodIndex < SERVICE_PSEUDO_METHOD_COUNT then
+  else if MethodIndex < Length(SERVICE_PSEUDO_METHOD) then
     result := SERVICE_PSEUDO_METHOD[TServiceInternalMethod(MethodIndex)]
   else
   begin
-    dec(MethodIndex, SERVICE_PSEUDO_METHOD_COUNT);
+    dec(MethodIndex, Length(SERVICE_PSEUDO_METHOD));
     if cardinal(MethodIndex) < MethodsCount then
       result := fMethods[MethodIndex].Uri
     else
@@ -4159,7 +4382,7 @@ begin
 end;
 
 { low-level ASM for TInterfaceFactory.GetMethodsVirtualTable
-  - all ARM, AARCH64 and Linux64 code below was provided by ALF! Thanks! :)  }
+  - initial ARM, AARCH64 and Linux64 code below was provided by ALF! Thanks! :}
 
 {$ifdef FPC}
 
@@ -4251,7 +4474,7 @@ var
   // warning: exact local variables order should match TFakeCallStack
   sx0, sx1, sx2, sx3, sx4, sx5, sx6, sx7: pointer;
   sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
-  smetndx:pointer;
+  smetndx: pointer;
 asm
     // get method index from IP0 [x16/r16]
     str x16,smetndx
@@ -4304,14 +4527,13 @@ var // warning: exact local variables order should match TFakeCallStack
   {$ifdef OSPOSIX}
   sr9, sr8, srcx, srdx, srsi, srdi: pointer;
   {$endif OSPOSIX}
-asm // caller = mov ax,{MethodIndex}; jmp x64FakeStub
+asm     // caller = mov eax,{MethodIndex}; jmp x64FakeStub
         {$ifndef FPC}
         // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
         // So, make space for two variables (+shadow space)
         // adds $50 to stack, so rcx .. at rpb+$10+$50 = rpb+$60
        .params 2
         {$endif FPC}
-        and     rax, $ffff
         mov     smetndx, rax
         movlpd  sxmm0, xmm0 // movlpd to ignore upper 64-bit of 128-bit xmm reg
         movlpd  sxmm1, xmm1
@@ -4351,140 +4573,170 @@ end;
 
 {$endif CPUX64}
 
+var
+  VmtSafe: TLightLock;
+
+{$ifdef CPUX86}  // i386 stub requires "ret ArgsSizeInStack"
+
 function TInterfaceFactory.GetMethodsVirtualTable: pointer;
 var
-  i, tmp: cardinal;
   P: PCardinal;
-  {$ifdef UNIX}
-  PageAlignedFakeStub: pointer;
-  {$endif UNIX}
-  {$ifdef CPUAARCH64}
-  stub: PtrUInt;
-  {$endif CPUAARCH64}
+  i: PtrInt;
 begin
-  if fFakeVTable = nil then
-  begin
-    InterfaceFactoryCache.Safe.Lock;
-    try
-      if fFakeVTable = nil then // avoid race condition error
+  result := fFakeVTable;
+  if result <> nil then
+    exit;
+  // it is the first time we use this interface -> create JITed VMT
+  VmtSafe.Lock;
+  try
+    // we need to JIT with an explicit ArgsSizeInStack adjustement
+    if fFakeVTable = nil then // avoid race condition
+    begin
+      SetLength(fFakeVTable, MethodsCount + RESERVED_VTABLE_SLOTS);
+      // set IInterface required methods
+      fFakeVTable[0] := @TInterfacedObjectFake.FakeQueryInterface;
+      fFakeVTable[1] := @TInterfacedObjectFake.Fake_AddRef;
+      fFakeVTable[2] := @TInterfacedObjectFake.Fake_Release;
+      // set JITted VMT stubs for each method of this interface
+      if MethodsCount <> 0 then
       begin
-        SetLength(fFakeVTable, MethodsCount + RESERVED_VTABLE_SLOTS);
-        // set IInterface required methods
-        fFakeVTable[0] := @TInterfacedObjectFake.FakeQueryInterface;
-        fFakeVTable[1] := @TInterfacedObjectFake.Fake_AddRef;
-        fFakeVTable[2] := @TInterfacedObjectFake.Fake_Release;
-        if MethodsCount = 0 then
-        begin
-          result := pointer(fFakeVTable);
-          exit;
-        end;
-        // reserve executable memory for JIT of all defined methods
-        {$ifdef CPUX86}
-        tmp := MethodsCount * 24;
-        {$endif CPUX86}
-        {$ifdef CPUX64}
-        tmp := MethodsCount * 16;
-        {$endif CPUX64}
-        {$ifdef CPUARM}
-        tmp := MethodsCount * 12;
-        {$endif CPUARM}
-        {$ifdef CPUAARCH64}
-        tmp := ($120 shr 2) + MethodsCount * 28;
-        {$endif CPUAARCH64}
-        fFakeStub := ReserveExecutableMemory(tmp);
-        P := pointer(fFakeStub);
-        {$ifdef CPUAARCH64}
-        PtrUInt(P) := PtrUInt(P) + $120;
-        {$endif CPUAARCH64}
-        // disable execution permission of memory to be able to write into memory
-        ReserveExecutableMemoryPageAccess(P, {exec=}false);
-        // create VMT entry for each method
+        P := ReserveExecutableMemory(MethodsCount * VMTSTUBSIZE);
         for i := 0 to MethodsCount - 1 do
         begin
-          fFakeVTable[i + RESERVED_VTABLE_SLOTS] := P;
-          {$ifdef CPUX64}
-          PWord(P)^ := $b848;
-          inc(PWord(P));           // mov rax,offset x64FakeStub
-          PPtrUInt(P)^ := PtrUInt(@x64FakeStub);
-          inc(PPtrUInt(P));
-          PByte(P)^ := $50;
-          inc(PByte(P));           // push rax
-          P^ := $b866 + (i shl 16);
-          inc(P);                  // mov (r)ax,{MethodIndex}
-          PByte(P)^ := $c3;
-          inc(PByte(P));           // ret
-          {$endif CPUX64}
-          {$ifdef CPUARM}
-          {$ifdef ASMORIG}
-          P^ := ($e3a040 shl 8) + i;
-          inc(P); // mov r4 (v1),{MethodIndex} : store method index in register
-          {$else}
-          P^ := ($e3a0c0 shl 8) + i;
-          inc(P); // mov r12 (ip),{MethodIndex} : store method index in register
-          {$endif ASMORIG}
-          tmp := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub) - PtrUInt(P)) shr 2) - 2;
-          // branch ArmFakeStub (24bit relative, word aligned)
-          P^ := ($ea shl 24) + (tmp and $00ffffff);
-          inc(P);
-          P^ := $e320f000;
-          inc(P);
-          {$endif CPUARM}
-          {$ifdef CPUAARCH64}
-          // store method index in register r16 [IP0]
-          // $10 = r16 ... loop to $1F -> number shifted * $20
-          P^ := ($d280 shl 16) + (i shl 5) + $10;
-          inc(P);  // mov r16 ,{MethodIndex}
-          // we are using a register branch here
-          // fill register x10 with address
-          stub := PtrUInt(@TInterfacedObjectFake.AArch64FakeStub);
-          tmp := (stub shr 0) and $ffff;
-          P^ := ($d280 shl 16) + (tmp shl 5) + $0a;
-          inc(P);
-          tmp := (stub shr 16) and $ffff;
-          P^ := ($f2a0 shl 16) + (tmp shl 5) + $0a;
-          inc(P);
-          tmp := (stub shr 32) and $ffff;
-          P^ := ($f2c0 shl 16) + (tmp shl 5) + $0a;
-          inc(P);
-          tmp := (stub shr 48) and $ffff;
-          P^ := ($f2e0 shl 16) + (tmp shl 5) + $0a;
-          inc(P);
-          // branch to address in x10 register
-          P^ := $d61f0140;
-          inc(P);
-          P^ := $d503201f;
-          inc(P);
-          {$endif CPUAARCH64}
-          {$ifdef CPUX86}
+          fFakeVTable[RESERVED_VTABLE_SLOTS + i] := P;
           P^ := $68ec8b55;
-          inc(P);                 // push ebp; mov ebp,esp
+          inc(P);                 // push ebp; mov ebp, esp
           P^ := i;
           inc(P);                 // push {MethodIndex}
           P^ := $e2895251;
-          inc(P);                 // push ecx; push edx; mov edx,esp
+          inc(P);                 // push ecx; push edx; mov edx, esp
           PByte(P)^ := $e8;
           inc(PByte(P));          // call FakeCall
           P^ := PtrUInt(@TInterfacedObjectFake.FakeCall) - PtrUInt(P) - 4;
           inc(P);
-          P^ := $c25dec89;
-          inc(P);                 // mov esp,ebp; pop ebp
-          {$ifdef OSDARWIN}
-          P^ := $900000;         // ret; nop
-          {$else}
-          P^ := fMethods[i].ArgsSizeInStack or $900000;  // ret {StackSize}; nop
-          {$endif OSDARWIN}
-          inc(PByte(P), 3);
-          {$endif CPUX86}
+          P^ := $c25dec89;        // mov esp, ebp; pop ebp; ret {StackSize}
+          inc(PByte(P), 3);       // overlap c2=ret to avoid GPF
+          P^ := (fMethods[i].ArgsSizeInStack shl 8) or $900000c2;
+          inc(P);
         end;
-        // reenable execution permission of memory as expected by the VMT
-        ReserveExecutableMemoryPageAccess(P, {exec=}true);
+        ReserveExecutableMemoryPageAccess(
+          fFakeVTable[RESERVED_VTABLE_SLOTS], {exec=}true);
       end;
-    finally
-      InterfaceFactoryCache.Safe.UnLock;
     end;
+    result := pointer(fFakeVTable);
+  finally
+    VmtSafe.UnLock;
   end;
-  result := pointer(fFakeVTable);
 end;
+
+{$else}
+
+var
+  // reuse the very same JITted stubs for all interfaces
+  _FAKEVMT: array of pointer;
+
+// JIT MAX_METHOD_COUNT VMT stubs for every method of any interface
+// - internal function protected by VmtSafe.Lock
+procedure Compute_FAKEVMT;
+var
+  P: PCardinal;
+  i: PtrInt;
+  {$ifdef CPUARM3264}
+  stub {$ifdef CPUAARCH64} , tmp {$endif}: PtrUInt;
+  {$endif CPUARM3264}
+begin
+  // reserve executable memory for JIT (aligned to 8 bytes)
+  P := ReserveExecutableMemory(MAX_METHOD_COUNT * VMTSTUBSIZE
+    {$ifdef CPUAARCH64} + ($120 shr 2) {$endif CPUAARCH64});
+  // populate _FAKEVMT[] with JITted stubs
+  SetLength(_FAKEVMT, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
+  // set IInterface RESERVED_VTABLE_SLOTS required methods
+  _FAKEVMT[0] := @TInterfacedObjectFake.FakeQueryInterface;
+  _FAKEVMT[1] := @TInterfacedObjectFake.Fake_AddRef;
+  _FAKEVMT[2] := @TInterfacedObjectFake.Fake_Release;
+  // JIT all potential custom method stubs
+  for i := 0 to MAX_METHOD_COUNT - 1 do
+  begin
+    _FAKEVMT[i + RESERVED_VTABLE_SLOTS] := P;
+    {$ifdef CPUX64}    // note: on Posix, (stub-P) > 32-bit -> need absolute jmp
+    P^ := $ba49;       // mov r10, x64FakeStub
+    inc(PWord(P));
+    PPointer(P)^ := @x64FakeStub;
+    inc(PPointer(P));
+    PByte(P)^ := $b8;  // mov eax, MethodIndex
+    inc(PByte(P));
+    P^ := i;
+    inc(P);
+    P^ := $66e2ff41;   // jmp r10  (faster than push + ret)
+    inc(P);
+    P^ := $00441f0f;   // multi-byte nop
+    inc(PByte(P), 5);
+    {$endif CPUX64}
+    {$ifdef CPUARM}
+    {$ifdef ASMORIG}
+    P^ := ($e3a040 shl 8) + i;
+    inc(P); // mov r4 (v1),{MethodIndex} : store method index in register
+    {$else}
+    P^ := ($e3a0c0 shl 8) + cardinal(i);
+    inc(P); // mov r12 (ip),{MethodIndex} : store method index in register
+    {$endif ASMORIG}
+    stub := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub) -
+             PtrUInt(P)) shr 2) - 2;
+    // branch ArmFakeStub (24bit relative, word aligned)
+    P^ := ($ea shl 24) + (stub and $00ffffff);
+    inc(P);
+    P^ := $e320f000;
+    inc(P);
+    {$endif CPUARM}
+    {$ifdef CPUAARCH64}
+    // store method index in register r16 [IP0]
+    // $10 = r16 ... loop to $1F -> number shifted * $20
+    P^ := ($d280 shl 16) + (i shl 5) + $10;
+    inc(P);  // mov r16 ,{MethodIndex}
+    // we are using a register branch here
+    // fill register x10 with address
+    stub := PtrUInt(@TInterfacedObjectFake.AArch64FakeStub);
+    tmp := (stub shr 0) and $ffff;
+    P^ := ($d280 shl 16) + (tmp shl 5) + $0a;
+    inc(P);
+    tmp := (stub shr 16) and $ffff;
+    P^ := ($f2a0 shl 16) + (tmp shl 5) + $0a;
+    inc(P);
+    tmp := (stub shr 32) and $ffff;
+    P^ := ($f2c0 shl 16) + (tmp shl 5) + $0a;
+    inc(P);
+    tmp := (stub shr 48) and $ffff;
+    P^ := ($f2e0 shl 16) + (tmp shl 5) + $0a;
+    inc(P);
+    // branch to address in x10 register
+    P^ := $d61f0140;
+    inc(P);
+    P^ := $d503201f;
+    inc(P);
+    {$endif CPUAARCH64}
+  end;
+  // reenable execution permission of JITed memory as expected by the VMT
+  ReserveExecutableMemoryPageAccess(
+    _FAKEVMT[RESERVED_VTABLE_SLOTS], {exec=}true);
+end;
+
+function TInterfaceFactory.GetMethodsVirtualTable: pointer;
+begin
+  result := pointer(_FAKEVMT);
+  if result <> nil then
+    exit;
+  // it is the first time we use this interface -> create JITed VMT
+  VmtSafe.Lock;
+  try
+    if _FAKEVMT = nil then
+      Compute_FAKEVMT;
+  finally
+    VmtSafe.UnLock;
+  end;
+  result := pointer(_FAKEVMT);  // we can reuse pre-JITted stubs
+end;
+
+{$endif CPUX86}
 
 
 {$ifdef HASINTERFACERTTI}
@@ -4585,29 +4837,28 @@ end;
 
 class procedure TInterfaceFactoryGenerated.RegisterInterface(aInterface: PRttiInfo);
 var
-  i: PtrInt;
+  cache: TSynObjectListLightLocked;
 begin
   if (aInterface = nil) or
      (self = TInterfaceFactoryGenerated) then
     raise EInterfaceFactory.CreateUtf8('%.RegisterInterface(nil)', [self]);
-  if InterfaceFactoryCache = nil then
-    InitializeInterfaceFactoryCache;
-  InterfaceFactoryCache.Safe.Lock;
+  cache := InterfaceFactoryCache;
+  if cache = nil then
+    cache := InitializeInterfaceFactoryCache;
+  cache.Safe.WriteLock;
   try
-    for i := 0 to InterfaceFactoryCache.Count - 1 do
-      if TInterfaceFactory(InterfaceFactoryCache.List[i]).fInterfaceTypeInfo =
-        aInterface then
-        raise EInterfaceFactory.CreateUtf8('Duplicated %.RegisterInterface(%)',
-          [self, aInterface^.RawName]);
-    InterfaceFactoryCache.Add(Create(aInterface));
+    if FactorySearch(pointer(cache.List), cache.Count, aInterface) <> nil then
+      raise EInterfaceFactory.CreateUtf8('Duplicated %.RegisterInterface(%)',
+        [self, aInterface^.RawName]);
+    cache.Add(Create(aInterface));
   finally
-    InterfaceFactoryCache.Safe.UnLock;
+    cache.Safe.WriteUnLock;
   end;
 end;
 
 
 function ToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  aGuid: TGUID): shortstring;
+  aGuid: TGUID): ShortString;
 var
   fact: TInterfaceFactory;
 begin
@@ -4697,6 +4948,73 @@ begin
   result := TryResolve(aInterface, dummy);
 end;
 
+function TInterfaceResolver.Resolve(aInterface: PRttiInfo; out Obj): boolean;
+begin
+  if self = nil then
+    result := false
+  else
+    result := TryResolve(aInterface, Obj);
+end;
+
+function TInterfaceResolver.Resolve(const aGuid: TGUID; out Obj;
+  aRaiseIfNotFound: EInterfaceResolver): boolean;
+var
+  known: TInterfaceFactory;
+begin
+  if self = nil then
+    result := false
+  else
+  begin
+    known := TInterfaceFactory.Get(aGuid);
+    if known <> nil then
+      result := TryResolve(known.fInterfaceTypeInfo, Obj)
+    else
+      result := false;
+  end;
+  if (aRaiseIfNotFound <> nil) and
+     not result then
+    raise aRaiseIfNotFound.CreateUtf8('%.Resolve(%) unsatisfied',
+      [self, GuidToShort(aGUID)]);
+end;
+
+procedure TInterfaceResolver.ResolveByPair(
+  const aInterfaceObjPairs: array of pointer; aRaiseExceptionIfNotFound: boolean);
+var
+  n, i: PtrInt;
+begin
+  n := length(aInterfaceObjPairs);
+  if (self = nil) or
+     (n = 0) or
+     (n and 1 = 1) then
+    raise EInterfaceResolver.CreateUtf8('%.Resolve([odd])', [self]);
+  for i := 0 to (n shr 1) - 1 do
+    if not TryResolve(aInterfaceObjPairs[i * 2], aInterfaceObjPairs[i * 2 + 1]^) then
+      if aRaiseExceptionIfNotFound then
+        raise EInterfaceResolver.CreateUtf8('%.ResolveByPair(%) unsatisfied',
+          [self, PRttiInfo(aInterfaceObjPairs[i * 2])^.RawName]);
+end;
+
+procedure TInterfaceResolver.Resolve(const aInterfaces: array of TGUID;
+  const aObjs: array of pointer; aRaiseExceptionIfNotFound: boolean);
+var
+  n, i: PtrInt;
+  info: PRttiInfo;
+begin
+  n := length(aInterfaces);
+  if (self = nil) or
+     (n = 0) or
+     (n <> length(aObjs)) then
+    raise EInterfaceResolver.CreateUtf8('%.Resolve([?,?])', [self]);
+  for i := 0 to n - 1 do
+    if PPointer(aObjs[i])^ = nil then
+    begin
+      info := TInterfaceFactory.Guid2TypeInfo(aInterfaces[i]);
+      if not TryResolve(info, aObjs[i]^) then
+        if aRaiseExceptionIfNotFound then
+          raise EInterfaceResolver.CreateUtf8('%.Resolve(%) unsatisfied',
+            [self, info^.RawName]);
+    end;
+end;
 
 { TInterfaceResolverForSingleInterface }
 
@@ -4788,182 +5106,217 @@ begin
 end;
 
 
-{ TInterfaceResolverInjected }
 
-var
-  GlobalInterfaceResolutionLock: TRTLCriticalSection;
-  GlobalInterfaceResolution: array of record
-    TypeInfo: PRttiInfo;
-    ImplementationClass: TRttiCustom;
-    InterfaceEntry: PInterfaceEntry;
-    Instance: IInterface; // shared instance - will be released with the array
-  end;
+{ TInterfaceResolverList }
 
-class function TInterfaceResolverInjected.RegisterGlobalCheckLocked(
-  aInterface: PRttiInfo; aImplementationClass: TClass): PInterfaceEntry;
+function TInterfaceResolverList.PrepareAddAndWriteLock(aInterface: PRttiInfo;
+  aImplementationClass: TClass): PInterfaceEntry;
 var
   i: PtrInt;
 begin
   if (aInterface = nil) or
      (aImplementationClass = nil) then
-    raise EInterfaceResolver.CreateUtf8(
-      '%.RegisterGlobal(nil)', [self]);
+    raise EInterfaceResolver.CreateUtf8('%.Add(nil)', [self]);
   if aInterface^.Kind <> rkInterface then
-    raise EInterfaceResolver.CreateUtf8(
-      '%.RegisterGlobal(%): % is not an interface',
+    raise EInterfaceResolver.CreateUtf8('%.Add(%): % is not an interface',
       [self, aInterface^.RawName]);
   result := aImplementationClass.GetInterfaceEntry(aInterface^.InterfaceGuid^);
   if result = nil then
-    raise EInterfaceResolver.CreateUtf8(
-      '%.RegisterGlobal(): % does not implement %',
+    raise EInterfaceResolver.CreateUtf8('%.Add(): % does not implement %',
       [self, aImplementationClass, aInterface^.RawName]);
-  EnterCriticalSection(GlobalInterfaceResolutionLock);
-  for i := 0 to length(GlobalInterfaceResolution) - 1 do
-    if GlobalInterfaceResolution[i].TypeInfo = aInterface then
+  fSafe.WriteLock;
+  for i := 0 to length(fEntry) - 1 do
+    if fEntry[i].TypeInfo = aInterface then
     begin
-      LeaveCriticalSection(GlobalInterfaceResolutionLock); // always UnLock
-      raise EInterfaceResolver.CreateUtf8(
-        '%.RegisterGlobal(%): % already registered',
+      fSafe.WriteUnLock;
+      raise EInterfaceResolver.CreateUtf8('%.Add(%): % already registered',
         [self, aImplementationClass, aInterface^.RawName]);
     end;
-end; // caller should explicitly call finally LeaveCriticalSection(...) end;
+end; // caller should explicitly call fSafe.WriteUnLock
 
-class procedure TInterfaceResolverInjected.RegisterGlobal(aInterface: PRttiInfo;
+procedure TInterfaceResolverList.Add(aInterface: PRttiInfo;
   aImplementationClass: TInterfacedObjectClass);
 var
-  aInterfaceEntry: PInterfaceEntry;
+  e: PInterfaceEntry;
   n: PtrInt;
 begin
-  aInterfaceEntry := RegisterGlobalCheckLocked(aInterface, aImplementationClass);
+  e := PrepareAddAndWriteLock(aInterface, aImplementationClass);
   try
-    // here we are protected within a EnterCriticalSection() call
-    n := length(GlobalInterfaceResolution);
-    SetLength(GlobalInterfaceResolution, n + 1);
-    with GlobalInterfaceResolution[n] do
+    // here we are protected within a fSafe.WriteLock
+    n := length(fEntry);
+    SetLength(fEntry, n + 1);
+    with fEntry[n] do
     begin
       TypeInfo := aInterface;
       ImplementationClass := Rtti.RegisterClass(aImplementationClass);
-      InterfaceEntry := aInterfaceEntry;
+      InterfaceEntry := e;
     end;
   finally
-    LeaveCriticalSection(GlobalInterfaceResolutionLock);
+    fSafe.WriteUnLock;
   end;
 end;
 
-class procedure TInterfaceResolverInjected.RegisterGlobal(aInterface: PRttiInfo;
+procedure TInterfaceResolverList.Add(aInterface: PRttiInfo;
   aImplementation: TInterfacedObject);
 var
-  aInterfaceEntry: PInterfaceEntry;
+  e: PInterfaceEntry;
   n: PtrInt;
 begin
-  aInterfaceEntry := RegisterGlobalCheckLocked(aInterface, aImplementation.ClassType);
+  e := PrepareAddAndWriteLock(aInterface, aImplementation.ClassType);
   try
-    // here we are protected within a EnterCriticalSection() call
-    n := length(GlobalInterfaceResolution);
-    SetLength(GlobalInterfaceResolution, n + 1);
-    with GlobalInterfaceResolution[n] do
+    // here we are protected within a fSafe.WriteLock
+    n := length(fEntry);
+    SetLength(fEntry, n + 1);
+    with fEntry[n] do
     begin
-      if not GetInterfaceFromEntry(aImplementation, aInterfaceEntry, Instance) then
-        raise EInterfaceResolver.CreateUtf8('Unexcepted %.RegisterGlobal(%,%)',
-          [self, aInterface^.RawName, aImplementation]);
       TypeInfo := aInterface;
-      InterfaceEntry := aInterfaceEntry;
+      if not GetInterfaceFromEntry(aImplementation, e, Instance) then
+        raise EInterfaceResolver.CreateUtf8('Unexcepted %.Add(%,%)',
+          [self, aInterface^.RawName, aImplementation]);
+      InterfaceEntry := e;
     end;
   finally
-    LeaveCriticalSection(GlobalInterfaceResolutionLock);
+    fSafe.WriteUnLock;
   end;
 end;
 
-class procedure TInterfaceResolverInjected.RegisterGlobalDelete(aInterface: PRttiInfo);
+procedure TInterfaceResolverList.Delete(aInterface: PRttiInfo);
 var
-  i, n: PtrInt;
+  i, last: PtrInt;
 begin
   if (aInterface = nil) or
      (aInterface^.Kind <> rkInterface) then
-    raise EInterfaceResolver.CreateUtf8('%.RegisterGlobalDelete(?)', [self]);
-  EnterCriticalSection(GlobalInterfaceResolutionLock);
+    raise EInterfaceResolver.CreateUtf8('%.Delete(?)', [self]);
+  fSafe.WriteLock;
   try
-    n := length(GlobalInterfaceResolution) - 1;
-    for i := 0 to n do
-      with GlobalInterfaceResolution[i] do
+    last := length(fEntry) - 1;
+    for i := 0 to last do
+      with fEntry[i] do
         if TypeInfo = aInterface then
         begin
           if Instance = nil then
             raise EInterfaceResolver.CreateUtf8(
-              '%.RegisterGlobalDelete(%) does not match an instance, but a class',
+              '%.Delete(%) does not match an instance, but a class',
               [self, aInterface^.RawName]);
           Instance := nil; // avoid GPF
-          if n > i then
-            MoveFast(GlobalInterfaceResolution[i + 1], GlobalInterfaceResolution[i],
-              (n - i) * SizeOf(GlobalInterfaceResolution[i]));
-          SetLength(GlobalInterfaceResolution, n);
+          if last > i then
+            MoveFast(fEntry[i + 1], fEntry[i], (last - i) * SizeOf(fEntry[i]));
+          SetLength(fEntry, last);
           exit;
         end;
   finally
-    LeaveCriticalSection(GlobalInterfaceResolutionLock);
+    fSafe.WriteUnLock;
   end;
+end;
+
+function LockedFind(aList: TInterfaceResolverList;
+  aInterface: PRttiInfo): PInterfaceResolverListEntry;
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  n: integer;
+begin
+  result := pointer(aList.fEntry);
+  if result = nil then
+    exit;
+  // fast brute-force search in L1 cache (TInterfaceResolverListEntries)
+  n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
+  repeat
+    if result^.TypeInfo = aInterface then
+      exit;
+    inc(result);
+    dec(n);
+  until n = 0;
+  result := nil;
+end;
+
+function TInterfaceResolverList.TryResolve(aInterface: PRttiInfo;
+  out Obj): boolean;
+var
+  e: PInterfaceResolverListEntry;
+  new: TInterfacedObject;
+begin
+  new := nil;
+  result := true;
+  fSafe.ReadLock; // Multiple Read / Exclusive Write lock
+  try
+    e := LockedFind(self, aInterface);
+    if e <> nil then
+    begin
+      if e^.Instance <> nil then
+      begin
+        // will increase the reference count of the shared instance
+        IInterface(Obj) := e^.Instance;
+        exit;
+      end
+      else
+      begin
+        // create a new instance of this registered implementation class
+        new := e^.ImplementationClass.ClassNewInstance;
+        if not GetInterfaceFromEntry(new , e^.InterfaceEntry, Obj) then
+          FreeAndNilSafe(new); // avoid memory leak (paranoid)
+      end;
+    end;
+  finally
+    fSafe.ReadUnLock;
+  end;
+  if new <> nil then
+  begin
+    if Assigned(fOnCreateInstance) then
+      // this event should be called outside fSafe lock
+      fOnCreateInstance(self, new);
+    exit;
+  end;
+  result := false;
+end;
+
+function TInterfaceResolverList.Implements(aInterface: PRttiInfo): boolean;
+begin
+  fSafe.ReadLock; // Multiple Read / Exclusive Write lock
+  result := LockedFind(self, aInterface) <> nil;
+  fSafe.ReadUnLock;
+end;
+
+
+{ TInterfaceResolverInjected }
+
+class procedure TInterfaceResolverInjected.RegisterGlobal(aInterface: PRttiInfo;
+  aImplementationClass: TInterfacedObjectClass);
+begin
+  GlobalInterfaceResolver.Add(aInterface, aImplementationClass);
+end;
+
+class procedure TInterfaceResolverInjected.RegisterGlobal(aInterface: PRttiInfo;
+  aImplementation: TInterfacedObject);
+begin
+  GlobalInterfaceResolver.Add(aInterface, aImplementation);
+end;
+
+class procedure TInterfaceResolverInjected.RegisterGlobalDelete(aInterface: PRttiInfo);
+begin
+  GlobalInterfaceResolver.Delete(aInterface);
 end;
 
 function TInterfaceResolverInjected.TryResolve(aInterface: PRttiInfo;
   out Obj): boolean;
 var
   i: PtrInt;
-  new: TInterfacedObject;
 begin
   if aInterface <> nil then
   begin
     result := true;
-    if self <> nil then
-    begin
-      // first check local DI/IoC
-      if fResolvers <> nil then
-        for i := 0 to length(fResolvers) - 1 do
-          if fResolvers[i].TryResolve(aInterface, Obj) then
-            exit;
-      if fDependencies <> nil then
-        for i := 0 to Length(fDependencies) - 1 do
-          if fDependencies[i].GetInterface(aInterface^.InterfaceGuid^, Obj) then
-            exit;
-    end;
-    EnterCriticalSection(GlobalInterfaceResolutionLock);
-    try
-      // global shared DI/IoC
-      for i := 0 to length(GlobalInterfaceResolution) - 1 do
-        with GlobalInterfaceResolution[i] do
-          if TypeInfo = aInterface then
-            if Instance <> nil then
-            begin
-              // will increase the reference count of the shared instance
-              IInterface(Obj) := Instance;
-              exit;
-            end
-            else
-            begin
-              // create a new instance of this registered implementation class
-              new := ImplementationClass.ClassNewInstance;
-              if GetInterfaceFromEntry(new , InterfaceEntry, Obj) then
-                exit;
-              new.Free; // avoid memory leak (paranoid)
-            end;
-    finally
-      LeaveCriticalSection(GlobalInterfaceResolutionLock);
-    end;
+    // first check local DI/IoC
+    if fResolvers <> nil then
+      for i := 0 to length(fResolvers) - 1 do
+        if fResolvers[i].TryResolve(aInterface, Obj) then
+          exit;
+    if fDependencies <> nil then
+      for i := 0 to Length(fDependencies) - 1 do
+        if fDependencies[i].GetInterface(aInterface^.InterfaceGuid^, Obj) then
+          exit;
+    // then try global shared DI/IoC
+    if GlobalInterfaceResolver.TryResolve(aInterface, Obj) then
+      exit;
   end;
-  result := false;
-end;
-
-function TInterfaceResolverInjected.TryResolveInternal(aInterface: PRttiInfo;
-  out Obj): boolean;
-var
-  i: PtrInt;
-begin
-  result := true;
-  if (self <> nil) and
-     (aInterface <> nil) and
-     (fResolvers <> nil) then
-    for i := 0 to length(fResolvers) - 1 do
-      if fResolvers[i].TryResolve(aInterface, Obj) then
-        exit;
   result := false;
 end;
 
@@ -5035,72 +5388,6 @@ begin
   end;
 end;
 
-function TInterfaceResolverInjected.Resolve(aInterface: PRttiInfo; out Obj): boolean;
-begin
-  if self = nil then
-    result := false
-  else
-    result := TryResolve(aInterface, Obj);
-end;
-
-function TInterfaceResolverInjected.Resolve(const aGuid: TGUID; out Obj;
-  aRaiseIfNotFound: EInterfaceResolver): boolean;
-var
-  known: TInterfaceFactory;
-begin
-  if self = nil then
-    result := false
-  else
-  begin
-    known := TInterfaceFactory.Get(aGuid);
-    if known <> nil then
-      result := Resolve(known.fInterfaceTypeInfo, Obj)
-    else
-      result := false;
-  end;
-  if (aRaiseIfNotFound <> nil) and
-     not result then
-    raise aRaiseIfNotFound.CreateUtf8('%.Resolve(%) unsatisfied',
-      [self, GuidToShort(aGUID)]);
-end;
-
-procedure TInterfaceResolverInjected.ResolveByPair(
-  const aInterfaceObjPairs: array of pointer; aRaiseExceptionIfNotFound: boolean);
-var
-  n, i: PtrInt;
-begin
-  n := length(aInterfaceObjPairs);
-  if (n = 0) or
-     (n and 1 = 1) then
-    raise EInterfaceResolver.CreateUtf8('%.Resolve([odd])', [self]);
-  for i := 0 to (n shr 1) - 1 do
-    if not Resolve(aInterfaceObjPairs[i * 2], aInterfaceObjPairs[i * 2 + 1]^) then
-      if aRaiseExceptionIfNotFound then
-        raise EInterfaceResolver.CreateUtf8('%.ResolveByPair(%) unsatisfied',
-          [self, PRttiInfo(aInterfaceObjPairs[i * 2])^.RawName]);
-end;
-
-procedure TInterfaceResolverInjected.Resolve(const aInterfaces: array of TGUID;
-  const aObjs: array of pointer; aRaiseExceptionIfNotFound: boolean);
-var
-  n, i: PtrInt;
-  info: PRttiInfo;
-begin
-  n := length(aInterfaces);
-  if (n = 0) or
-     (n <> length(aObjs)) then
-    raise EInterfaceResolver.CreateUtf8('%.Resolve([?,?])', [self]);
-  for i := 0 to n - 1 do
-    if PPointer(aObjs[i])^ = nil then
-    begin
-      info := TInterfaceFactory.Guid2TypeInfo(aInterfaces[i]);
-      if not Resolve(info, aObjs[i]^) then
-        if aRaiseExceptionIfNotFound then
-          raise EInterfaceResolver.CreateUtf8('%.Resolve(%) unsatisfied',
-            [self, info^.RawName]);
-    end;
-end;
-
 
 { TInjectableObject }
 
@@ -5127,7 +5414,7 @@ var
 begin
   info := TInterfaceFactory.Guid2TypeInfo(aGuid);
   if not TryResolve(info, Obj) then
-    raise EInterfaceResolver.CreateUtf8('%.Resolve(%): Interface not registered',
+    raise EInterfaceResolver.CreateUtf8('%.Resolve(%): unsatisfied',
       [self, info^.RawName]);
 end;
 
@@ -5153,40 +5440,40 @@ begin
     raise EInterfaceResolver.CreateUtf8('%.Resolve(?,?)', [self]);
 end;
 
+type // to access fAutoCreateInterfaces protected field
+  TRttiCustomWrapper = class(TRttiJson);
+
 procedure TInjectableObject.AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
 var
-  i: integer;
+  rtti: TRttiJson;
+  n: integer;
+  p: ^PRttiCustomProp;
   addr: pointer;
-  CT: TClass;
-  P: PRttiProp;
 begin
   if (self = nil) or
      (fResolver = nil) then
     raise EInterfaceResolver.CreateUtf8(
       '%.AutoResolve with no prior registration', [self]);
-  CT := ClassType;
-  while CT <> TInjectableObject do
-  begin
-    for i := 1 to GetRttiProp(CT, P) do
-    begin
-      if P^.TypeInfo^.Kind = rkInterface then
-        if P^.GetterIsField then
-        begin
-          addr := P^.GetterAddr(self);
-          if not TryResolve(P^.TypeInfo, addr^) then
-            if aRaiseEServiceExceptionIfNotFound then
-              raise EInterfaceResolver.CreateUtf8(
-                '%.AutoResolve: impossible to resolve published property %: %',
-                [self, P^.Name^, P^.TypeInfo^.RawName]);
-        end
-        else
-          raise EInterfaceResolver.CreateUtf8('%.AutoResolve: published ' +
-            'property %: % should directly read the field',
-            [self, P^.Name^, P^.TypeInfo^.RawName]);
-      P := P^.Next;
-    end;
-    CT := GetClassParent(CT);
-  end;
+  // inlined Rtti.RegisterClass()
+  rtti := PPointer(PPAnsiChar(self)^ + vmtAutoTable)^;
+  if (rtti = nil) or
+     not (rcfAutoCreateFields in rtti.Flags) then
+    rtti := DoRegisterAutoCreateFields(self);
+  // resolve all published interface fields
+  p := pointer(TRttiCustomWrapper(rtti).fAutoCreateInterfaces);
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // length(AutoCreateClasses)
+  repeat
+    addr := PAnsiChar(self) + p^^.OffsetGet;
+    if not TryResolve(p^^.Value.Info, addr^) then
+      if aRaiseEServiceExceptionIfNotFound then
+        raise EInterfaceResolver.CreateUtf8(
+          '%.AutoResolve: impossible to resolve published property %: %',
+          [self, p^^.Name, p^^.Value.Name]);
+    inc(p);
+    dec(n);
+  until n = 0;
 end;
 
 constructor TInjectableObject.CreateInjected(const aStubsByGUID: array of TGUID;
@@ -5220,7 +5507,7 @@ begin
   inherited Destroy;
   CleanupInstance; // ensure creatures are released before their creator
   if fResolverOwned then
-    FreeAndNil(fResolver); // let the creator move away
+    FreeAndNilSafe(fResolver); // let the creator move away
 end;
 
 
@@ -5318,7 +5605,7 @@ begin
     result := CustomResults;
 end;
 
-procedure TInterfaceStubLog.AddAsText(WR: TTextWriter; aScope:
+procedure TInterfaceStubLog.AddAsText(WR: TJsonWriter; aScope:
   TInterfaceStubLogLayouts; SepChar: AnsiChar);
 begin
   if wName in aScope then
@@ -5405,7 +5692,8 @@ begin
   try
     P := tmp.buf;
     for i := 0 to fMethod^.ArgsInputValuesCount - 1 do
-      P := VariantLoadJson(fInput[i], P, nil, @aSender.fInterface.DocVariantOptions);
+      GetJsonToAnyVariant(
+        fInput[i], P, nil, @aSender.fInterface.DocVariantOptions, false);
   finally
     tmp.Done;
   end;
@@ -5495,13 +5783,13 @@ end;
 procedure TOnInterfaceStubExecuteParamsVariant.SetResultFromOutput;
 var
   a, ndx: integer;
-  W: TTextWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
   fResult := '';
   if fOutput = nil then
     exit;
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('[');
     ndx := 0;
@@ -5531,14 +5819,14 @@ end;
 function TOnInterfaceStubExecuteParamsVariant.InputAsDocVariant(
   Kind: TInterfaceMethodParamsDocVariantKind; Options: TDocVariantOptions): variant;
 begin
-  VarClear(result);
+  VarClear(result{%H-});
   fMethod^.ArgsValuesAsDocVariant(Kind, TDocVariantData(result), fInput, true, Options);
 end;
 
 function TOnInterfaceStubExecuteParamsVariant.OutputAsDocVariant(
   Kind: TInterfaceMethodParamsDocVariantKind; Options: TDocVariantOptions): variant;
 begin
-  VarClear(result);
+  VarClear(result{%H-});
   fMethod^.ArgsValuesAsDocVariant(Kind, TDocVariantData(result), fOutput, false, Options);
 end;
 
@@ -5556,9 +5844,8 @@ begin
         val := OutputAsDocVariant(pdvObjectFixed)
       else
         val := InputAsDocVariant(pdvObjectFixed);
-      SynLog.Log(aLevel, '%(%)',
-        [fMethod^.InterfaceDotMethodName, _Safe(val)^.ToTextPairs(
-          '=', ',', twJsonEscape)], self);
+      SynLog.Log(aLevel, '%(%)', [fMethod^.InterfaceDotMethodName,
+         _Safe(val)^.ToTextPairs('=', ',', twJsonEscape)], self);
     end;
 end;
 
@@ -5663,7 +5950,7 @@ begin
     [fInterface.Methods[aMethodIndex].Uri, ToText(aOperator)^, aCount, aComputed]);
 end;
 
-procedure TInterfaceStub.InstanceDestroyed(aClientDrivenID: cardinal);
+procedure TInterfaceStub.InstanceDestroyed(aFakeID: TInterfacedObjectFakeID);
 var
   m, r, asmndx: integer;
   num: cardinal;
@@ -5781,7 +6068,7 @@ begin
   if length(Ctxt.EventParams) = SizeOf(TInterfaceStubExecutesToLog) then
     with PInterfaceStubExecutesToLog(Ctxt.EventParams)^ do
       Log.Add.Log(LogLevel, '% %', [Ctxt.Method^.InterfaceDotMethodName,
-       Ctxt.InputAsDocVariant(Kind, JSON_OPTIONS_FAST_EXTENDED)]);
+       Ctxt.InputAsDocVariant(Kind, JSON_FAST_EXTENDED)]);
 end;
 
 function TInterfaceStub.Executes(aLog: TSynLogClass; aLogLevel: TSynLogInfo;
@@ -5951,7 +6238,8 @@ end;
 
 function TInterfaceStub.Invoke(const aMethod: TInterfaceMethod;
   const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
-  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+  aFakeID: PInterfacedObjectFakeID;
+  aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
   ndx: cardinal;
   rule: integer;
@@ -6079,7 +6367,7 @@ function TInterfaceStub.IntGetLogAsText(asmndx: integer; const aParams: RawUtf8;
   aScope: TInterfaceStubLogLayouts; SepChar: AnsiChar): RawUtf8;
 var
   i: integer;
-  WR: TTextWriter;
+  WR: TJsonWriter;
   temp: TTextWriterStackBuffer;
   log: ^TInterfaceStubLog;
 begin
@@ -6087,7 +6375,7 @@ begin
     result := ''
   else
   begin
-    WR := TTextWriter.CreateOwnedStream(temp);
+    WR := TJsonWriter.CreateOwnedStream(temp);
     try
       log := Pointer(fLogs);
       if asmndx < RESERVED_VTABLE_SLOTS then
@@ -6319,7 +6607,9 @@ type
   end;
 
   TBackgroundLauncherAction = (
-    doCallMethod, doInstanceRelease, doThreadMethod);
+    doCallMethod,
+    doInstanceRelease,
+    doThreadMethod);
 
   PBackgroundLauncher = ^TBackgroundLauncher;
   TBackgroundLauncher = record
@@ -6336,7 +6626,7 @@ type
 procedure TInterfacedObjectHooked.InternalRelease;
 begin
   if self <> nil then
-    IInterface(self)._Release; // call the release interface
+    IInterface(self)._Release; // call the release interface to dec(RefCount)
 end;
 
 procedure BackgroundExecuteProc(Call: pointer); forward;
@@ -6375,7 +6665,7 @@ var
 begin
   synch.Action := doThreadMethod;
   synch.ThreadMethod := method;
-  BackGroundExecute(synch,backgroundThread);
+  BackGroundExecute(synch, backgroundThread);
 end;
 
 procedure BackgroundExecuteInstanceRelease(instance: TObject;
@@ -6947,7 +7237,7 @@ begin
              begin
             call.ParamRegs[RegisterIdent] := PPtrInt(Value)^;
             {$ifdef CPUARM}
-            // for e.g. INT64 on 32-bit ARM systems; these are also passed in the normal registers
+            // for e.g. INT64 on 32-bit ARM systems; these are also passed in registers
             if SizeInStack > POINTERBYTES then
               call.ParamRegs[RegisterIdent + 1] := PPtrInt(Value + POINTERBYTES)^;
             {$endif CPUARM}
@@ -7091,11 +7381,11 @@ begin
   inherited Destroy;
 end;
 
-function TInterfaceMethodExecute.TempTextWriter: TTextWriter;
+function TInterfaceMethodExecute.TempTextWriter: TJsonWriter;
 begin
   if fTempTextWriter = nil then
   begin
-    fTempTextWriter := TTextWriter.CreateOwnedStream;
+    fTempTextWriter := TJsonWriter.CreateOwnedStream;
     fTempTextWriter.CustomOptions := fTempTextWriter.CustomOptions +
       [twoForceJsonExtended, twoIgnoreDefaultInRecord]; // shorter
   end;
@@ -7106,7 +7396,7 @@ function TInterfaceMethodExecute.ExecuteJsonCallback(Instance: pointer;
   const params: RawUtf8; output: PRawUtf8): boolean;
 var
   fake: TInterfacedObjectFake;
-  WR: TTextWriter;
+  WR: TJsonWriter;
   n: integer;
   tmp: TSynTempBuffer;
 begin
@@ -7175,7 +7465,7 @@ begin
 end;
 
 function TInterfaceMethodExecute.ExecuteJson(const Instances: array of pointer;
-  Par: PUtf8Char; Res: TTextWriter; Error: PShortString; ResAsJsonObject: boolean): boolean;
+  Par: PUtf8Char; Res: TJsonWriter; Error: PShortString; ResAsJsonObject: boolean): boolean;
 var
   a, a1: integer;
   Val, Name: PUtf8Char;
@@ -7270,6 +7560,8 @@ begin
         case ValueType of
           imvInterface:
             if Assigned(OnCallback) then
+              // retrieve TRestServerUriContext.ExecuteCallback fake interface
+              // via TServiceContainerServer.GetFakeCallback
               OnCallback(Par, ArgRtti, fInterfaces[IndexVar])
             else
               raise EInterfaceFactory.CreateUtf8('OnCallback=nil for %(%: %)',
@@ -7345,7 +7637,7 @@ end;
 
 function TInterfacedObjectFakeCallback.FakeInvoke(
   const aMethod: TInterfaceMethod; const aParams: RawUtf8;
-  aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
+  aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
   aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 begin
   if fLogClass <> nil then
@@ -7371,10 +7663,10 @@ begin
 end;
 
 
-{ TSetWeakZero maintains a per-instance reference list }
+{ TSetWeakZero maintains a thread-safe per-instance reference list }
 
 type
-  TSetWeakZero = class(TSynDictionary)
+  TSetWeakZero = class(TSynDictionary) // TClass / TPointerDynArray map
   protected
     fHookedFreeInstance: PtrUInt;
   public
@@ -7470,25 +7762,16 @@ begin
   {$ifdef CPUARM}
   ArmFakeStubAddr := @TInterfacedObjectFake.ArmFakeStub;
   {$endif CPUARM}
-  InitializeCriticalSection(GlobalInterfaceResolutionLock);
-  TInterfaceResolverInjected.RegisterGlobal(
-    TypeInfo(IAutoLocker), TAutoLocker);
-  TInterfaceResolverInjected.RegisterGlobal(
-    TypeInfo(ILockedDocVariant), TLockedDocVariant);
-end;
-
-procedure FinalizeUnit;
-begin
-  InterfaceFactoryCache.Free;
-  GlobalInterfaceResolution := nil; // also cleanup Instance fields
-  DeleteCriticalSection(GlobalInterfaceResolutionLock);
+  GlobalInterfaceResolver := TInterfaceResolverList.Create;
+  RegisterGlobalShutdownRelease(GlobalInterfaceResolver);
+  GlobalInterfaceResolver.Add(TypeInfo(IAutoLocker), TAutoLocker);
+  GlobalInterfaceResolver.Add(TypeInfo(ILockedDocVariant), TLockedDocVariant);
 end;
 
 
 initialization
   InitializeUnit;
-finalization
-  FinalizeUnit;
-  
+
+
 end.
 

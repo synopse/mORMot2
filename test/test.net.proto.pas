@@ -24,14 +24,19 @@ uses
   mormot.core.test,
   mormot.net.sock,
   mormot.net.http,
+  mormot.net.async,
   mormot.net.rtsphttp;
 
 type
   /// this test case will validate several low-level protocols
   TNetworkProtocols = class(TSynTestCase)
+  protected
+    procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
   published
     /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
     procedure RtspOverHttp;
+    /// RTSP over HTTP, with always temporary buffering
+    procedure RtspOverHttpBufferedWrite;
   end;
 
   
@@ -55,7 +60,8 @@ var
 begin
   // here we follow the steps and content stated by https://goo.gl/CX6VA3
   log := proxy.Log.Enter(proxy, 'Tests');
-  if (proxy = nil) or (proxy.RtspServer <> '127.0.0.1') then
+  if (proxy = nil) or
+     (proxy.RtspServer <> '127.0.0.1') then
     test.Check(false, 'expect a running proxy on 127.0.0.1')
   else
   try
@@ -69,8 +75,8 @@ begin
         with req[r] do
         begin
           session := TSynTestCase.RandomIdentifier(20 + r and 15);
-          get := THttpSocket.Open('localhost', proxy.Server.Port);
-          get.Write('GET /sw.mov HTTP/1.0'#13#10 +
+          get := THttpSocket.Open('localhost', proxy.Server.Port, nlTcp, 1000);
+          get.SndLow('GET /sw.mov HTTP/1.0'#13#10 +
             'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +
             'x-sessioncookie: ' + session + #13#10 +
             'Accept: ' + RTSP_MIME + #13#10 +
@@ -79,9 +85,9 @@ begin
           get.SockRecvLn(text);
           test.Check(text = 'HTTP/1.0 200 OK');
           get.GetHeader(false);
-          test.Check(hfConnectionClose in get.HeaderFlags);
+          test.Check(hfConnectionClose in get.Http.HeaderFlags);
           test.Check(get.SockConnected);
-          test.Check(get.ContentType = RTSP_MIME);
+          test.Check(get.Http.ContentType = RTSP_MIME);
         end;
       if log <> nil then
         log.Log(sllCustom1, 'RegressionTests % POST', [clientcount], proxy);
@@ -89,7 +95,7 @@ begin
         with req[r] do
         begin
           post := TCrtSocket.Open('localhost', proxy.Server.Port);
-          post.Write('POST /sw.mov HTTP/1.0'#13#10 +
+          post.SndLow('POST /sw.mov HTTP/1.0'#13#10 +
             'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +
             'x-sessioncookie: ' + session + #13#10 +
             'Content-Type: ' + RTSP_MIME + #13#10 +
@@ -114,7 +120,7 @@ begin
         if i and 7 = 0 then
         begin
           for r := 0 to rmax do
-            req[r].post.Write(
+            req[r].post.SndLow(
               'REVTQ1JJQkUgcnRzcDovL3R1Y2tydS5hcHBsZS5jb20vc3cubW92IFJUU1AvMS4w'#13#10 +
               'DQpDU2VxOiAxDQpBY2NlcHQ6IGFwcGxpY2F0aW9uL3NkcA0KQmFuZHdpZHRoOiAx'#13#10 +
               'NTAwMDAwDQpBY2NlcHQtTGFuZ3VhZ2U6IGVuLVVTDQpVc2VyLUFnZW50OiBRVFMg'#13#10 +
@@ -130,10 +136,19 @@ begin
         end;
         // stream output should be redirected to the GET request
         for r := 0 to rmax do
-          req[r].stream.Write(req[r].session);
+          req[r].stream.SndLow(req[r].session); // session text as video stream
+        if log <> nil then
+          log.Log(sllCustom1, 'RegressionTests % RUN #% SndLow',
+            [clientcount, i], proxy);
         for r := 0 to rmax do
           with req[r] do
-            test.check(get.SockReceiveString = session);
+          begin
+            text := get.SockReceiveString;
+            //if log <> nil then
+            //  log.Log(sllCustom1, 'RegressionTests % #%/% received %',
+            //    [clientcount, r, rmax, text], proxy);
+            test.check(text = session);
+          end;
       end;
       if log <> nil then
         log.Log(sllCustom1, 'RegressionTests % SHUTDOWN', [clientcount], proxy);
@@ -159,7 +174,7 @@ begin
   end;
 end;
 
-procedure TNetworkProtocols.RtspOverHttp;
+procedure TNetworkProtocols.DoRtspOverHttp(options: TAsyncConnectionsOptions);
 const
   {$ifdef OSDARWIN}
   N = 10;
@@ -170,12 +185,28 @@ var
   proxy: TRtspOverHttpServer;
 begin
   proxy := TRtspOverHttpServer.Create(
-    '127.0.0.1', '3999', '3998', TSynLog, nil, nil);
+    '127.0.0.1', '3999', '3998', TSynLog, nil, nil, options, {threads=}1);
+    // threads=1 is the safest & fastest - but you may set 16 for testing
   try
+    proxy.WaitStarted(1);
     RtspRegressionTests(proxy, self, N, 10);
   finally
     proxy.Free;
   end;
+end;
+
+const
+  //ASYNC_OPTION = ASYNC_OPTION_DEBUG;
+  ASYNC_OPTION = ASYNC_OPTION_VERBOSE;
+
+procedure TNetworkProtocols.RtspOverHttp;
+begin
+  DoRtspOverHttp(ASYNC_OPTION);
+end;
+
+procedure TNetworkProtocols.RtspOverHttpBufferedWrite;
+begin
+  DoRtspOverHttp(ASYNC_OPTION + [acoWritePollOnly]);
 end;
 
 end.

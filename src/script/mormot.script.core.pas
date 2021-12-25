@@ -102,9 +102,9 @@ type
     fPrivateDataForDebugger: pointer;
     fNeverExpire: boolean;
     fNameForDebug, fWebAppRootDir: RawUtf8;
-    fRequestFpuBackup: TFPUExceptionMask;
     fAtomCache: TRawUtf8List; // hashed list of objects=TScriptAtom
     fDoInteruptInOwnThread: TThreadMethod;
+    fRequestFpuBackup: array[0..3] of cardinal;
     function AtomCacheFind(const Name: RawUtf8): TScriptAtom; // nil = not found
       {$ifdef HASINLINE} inline; {$endif}
     procedure AtomCacheAdd(const Name: RawUtf8; Atom: TScriptAtom);
@@ -215,14 +215,16 @@ type
     fOnDebuggerConnected: TEngineEvent;
     fEngineClass: TThreadSafeEngineClass;
     fEngineExpireTimeOutTix: Int64;
-    fEngines: TSynObjectListLocked; // TThreadSafeEngine
+    fEngines: TSynObjectListLightLocked; // of TThreadSafeEngine
+    fEngineID: TThreadIDDynArray;
     fMaxEngines: integer;
     fDebugMainThread: boolean;
     fMainEngine: TThreadSafeEngine;
     fRemoteDebugger: IRemoteDebugger;
     fWorkerManager: IWorkerManager;
     fOnLog: TSynLogProc;
-    function ThreadEngineIndex(aThreadID: TThreadID): integer;
+    function ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetPauseDebuggerOnFirstStep: boolean;
     procedure SetPauseDebuggerOnFirstStep(aPauseDebuggerOnFirstStep: boolean);
     function GetEngineExpireTimeOutMinutes: cardinal;
@@ -239,16 +241,24 @@ type
     /// get or create one Engine associated with current running thread
     // - aThreadData is a pointer to any structure relative to this thread
     // accessible via TThreadSafeEngine.ThreadData
-    function ThreadSafeEngine(ThreadData: pointer;
-      TagForNewEngine: PtrInt): TThreadSafeEngine;
+    function ThreadSafeEngine(ThreadData: pointer = nil;
+      TagForNewEngine: PtrInt = 0): TThreadSafeEngine;
     /// retrieve the Engine associated with this Thread ID
     // - may be MainEngine or one of the previously created ThreadSafeEngine()
     // - return nil if this thread is unknown
+    // - warning: call Engines.Safe.Lock/Unlock if the instance can expire
     function Engine(aThreadID: TThreadID): TThreadSafeEngine; overload;
     /// should be able to retrieve the Engine from a given context
     // - redirect to fEngineClass.From()
     function Engine(aContext: TScriptContext): TThreadSafeEngine; overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// initialize a new engine to be used outside of our engine pool
+    // - the returned engine won't be owned by this class, so is to be released
+    // explicitly by the caller
+    // - this engine won't be registered to the debugger
+    function NewEngine: TThreadSafeEngine;
+    /// returns how many times the NewEngine method has been called
+    function NewEngineCount: integer;
     /// setup and create the main engine associated with the pools
     // - should be called once at startup from the main thread
     // - this engine won't be part of the internal ThreadSafeEngine() pool
@@ -258,10 +268,14 @@ type
     // - is nil if there is no such main engine but only ThreadSafeEngine()
     property MainEngine: TThreadSafeEngine
       read fMainEngine;
+    /// low-level access to the per-thread TThreadSafeEngine internal pool
+    property Engines: TSynObjectListLightLocked
+      read fEngines;
     /// specify a maximum lifetime period after which script engines will
     // be recreated, to avoid potential JavaScript memory leak (variables in global,
     // closures circle, etc.)
-    // - 0 by default - mean no expire timeout
+    // - 0 by default - mean no expiration timeout
+    // - a typical value for a production server is 4*60, i.e. 4 hours
     // - in case a specific engine must never expire, set its NeverExpire property
     property EngineExpireTimeOutMinutes: cardinal
       read GetEngineExpireTimeOutMinutes write SetEngineExpireTimeOutMinutes default 0;
@@ -344,6 +358,7 @@ type
 
 implementation
 
+
 { TThreadSafeManager }
 
 constructor TThreadSafeManager.Create(aEngineClass: TThreadSafeEngineClass;
@@ -351,7 +366,7 @@ constructor TThreadSafeManager.Create(aEngineClass: TThreadSafeEngineClass;
 begin
   inherited Create;
   fEngineClass := aEngineClass;
-  fEngines := TSynObjectListLocked.Create;
+  fEngines := TSynObjectListLightLocked.Create;
   fMaxEngines := aMaxPerThreadEngines;
   fOnLog := aOnLog;
   if Assigned(fOnLog) then
@@ -379,39 +394,73 @@ begin
   fEngines.Free;
 end;
 
+{$ifdef THREADID32}
+function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
+begin // use SSE2 on i386/x86_64
+  result := IntegerScanIndex(pointer(fEngineID), fEngines.Count, cardinal(aThreadID));
+end;
+{$else}
+function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
+var
+  e: ^TThreadID;
+begin
+  // caller made fEngines.Safe.ReadLock/WriteLock
+  e := pointer(fEngineID);
+  for result := 0 to fEngines.Count - 1 do
+    // brute force search in L1 cache is fast enough since fMaxEngines is small
+    if e^ = aThreadID then
+      exit
+    else
+      inc(e);
+  result := -1;
+end;
+{$endif CPU32}
+
 function TThreadSafeManager.ThreadSafeEngine(ThreadData: pointer;
   TagForNewEngine: PtrInt): TThreadSafeEngine;
 var
   tid: TThreadID;
-  i: integer;
+  existing, i: PtrInt;
   tobereleased: TThreadSafeEngine;
 begin
   // retrieve or (re)create the engine associated with this thread
-  tid := GetCurrentThreadId;
-  tobereleased := nil;
   result := nil;
-  fEngines.Safe.Lock;
-  try
-    i := ThreadEngineIndex(tid);
-    if i >= 0 then
+  tid := GetCurrentThreadId;
+  fEngines.Safe.ReadLock; // no try..finally for exception-safe code
+  existing := ThreadEngineIndex(tid);
+  if existing >= 0 then
+  begin
+    result := fEngines.List[existing];
+    if ThreadData = nil then
+      ThreadData := result.fThreadData  // to be used if recreated
+    else
+      result.fThreadData := ThreadData; // override with the given parameter
+    if result.NeverExpire or
+       (fEngineExpireTimeOutTix = 0) or
+       (GetTickCount64 - result.fCreateTix < fEngineExpireTimeOutTix) then
+      if result.fContentVersion = fContentVersion then
+      begin
+        // we got the right engine -> quickly return
+        fEngines.Safe.ReadUnLock;
+        exit;
+      end;
+  end;
+  fEngines.Safe.ReadUnLock;
+  tobereleased := nil;
+  fEngines.Safe.WriteLock;
+  try // some exceptions may occur from now on
+    if (existing > fEngines.Count) or
+       (fEngines.List[existing] <> result) then
+      existing := ThreadEngineIndex(tid); // paranoid
+    if existing >= 0 then
     begin
-      result := fEngines.List[i];
-      if ThreadData = nil then
-        ThreadData := result.fThreadData // to be used if recreated
-      else
-        result.fThreadData := ThreadData; // override with the given parameter
-      if result.NeverExpire or
-         (fEngineExpireTimeOutTix = 0) or
-         (GetTickCount64 - result.fCreateTix < fEngineExpireTimeOutTix) then
-        if result.fContentVersion = fContentVersion then
-          // we got the right engine -> quickly return
-          exit;
-      // the engine is expired or its content changed -> recreate
+      // the engine is expired or its content changed -> remove and recreate
+      tobereleased := fEngines.List[existing];
       if Assigned(fOnLog) then
         fOnLog(sllInfo, 'ThreadSafeEngine: expired %', [result], self);
-      tobereleased := result;
-      fEngines.Delete(i, {dontfree=}true);
+      fEngines.Delete(existing, {donotfree=}true);
     end;
+    // if we reached here, we need a new TThreadSafeEngine instance
     if fEngines.Count >= fMaxEngines then
       raise EScriptException.CreateUtf8(
         '%.ThreadSafeEngine reached its limit of % engines on %',
@@ -422,10 +471,15 @@ begin
     result := fEngineClass.Create(self, ThreadData, TagForNewEngine, tid);
     fEngines.Add(result);
   finally
-    fEngines.Safe.UnLock;
-    if tobereleased <> nil then
-      // done outside the lock - garbage collection may take some time
-      tobereleased.Free;
+    // always populate the L1-cache-friendly array of all ThreadID
+    if length(fEngineID) < fEngines.Count then
+      SetLength(fEngineID, fMaxEngines);
+    for i := 0 to fEngines.Count - 1 do
+      fEngineID[i] := TThreadSafeEngine(fEngines.List[i]).ThreadID;
+    // now we don't need to access fEngines anymore
+    fEngines.Safe.WriteUnLock;
+    // released outside the lock - garbage collection may take some time
+    tobereleased.Free;
   end;
   // initialize the newly (re)created engine outside the lock
   result.AfterCreate;
@@ -447,22 +501,22 @@ end;
 
 function TThreadSafeManager.Engine(aThreadID: TThreadID): TThreadSafeEngine;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := fMainEngine;
   if (result <> nil) and
      (result.ThreadID = aThreadID) then
     exit;
   result := nil;
-  if pointer(aThreadID) = nil then
+  if PtrUInt(aThreadID) = 0 then
     exit;
-  fEngines.Safe.Lock;
+  fEngines.Safe.ReadLock;
   try
     i := ThreadEngineIndex(aThreadID);
     if i >= 0 then
       result := fEngines.List[i];
   finally
-    fEngines.Safe.UnLock;
+    fEngines.Safe.ReadUnLock;
   end;
 end;
 
@@ -486,6 +540,7 @@ begin
     fMainEngine := result;
     result.fNameForDebug := 'Main';
     result.fNeverExpire := true; // not in the pool, anyway
+    result.AfterCreate;
     if Assigned(fRemoteDebugger) and
        fDebugMainThread then
       fRemoteDebugger.StartDebugCurrentThread(result);
@@ -496,6 +551,25 @@ begin
   end
   else if result.ThreadID <> tid then
     raise EScriptException.CreateUtf8('Invalid %.InitializeMainEngine', [self]);
+end;
+
+var
+  NewEngineSequence: integer;
+
+function TThreadSafeManager.NewEngine: TThreadSafeEngine;
+begin
+  result := fEngineClass.Create(nil, nil, 0, TThreadID(0));
+  FormatUtf8('NewEngine%', [InterlockedIncrement(NewEngineSequence)],
+    result.fNameForDebug);
+  result.fNeverExpire := true; // not in the pool, anyway
+  result.AfterCreate;
+  if Assigned(fOnNewEngine) then
+    result.ThreadSafeCall(fOnNewEngine);
+end;
+
+function TThreadSafeManager.NewEngineCount: integer;
+begin
+  result := NewEngineSequence;
 end;
 
 function TThreadSafeManager.GetEngineExpireTimeOutMinutes: cardinal;
@@ -516,20 +590,6 @@ end;
 function TThreadSafeManager.NewWorkerManager: IWorkerManager;
 begin
   result := nil;
-end;
-
-function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): integer;
-var
-  e: ^TThreadSafeEngine;
-begin
-  // caller made fEngines.Safe.Lock
-  e := pointer(fEngines.List);
-  for result := 0 to fEngines.Count - 1 do
-    if e^.fThreadID = aThreadID then
-      exit
-    else
-      inc(e); // brute force search is fast enough since fMaxEngines is small
-  result := -1;
 end;
 
 function TThreadSafeManager.GetPauseDebuggerOnFirstStep: boolean;
@@ -593,19 +653,22 @@ begin
   inherited Create;
   fManager := aManager;
   fCreateTix := GetTickCount64;
-  fContentVersion := fManager.ContentVersion;
   fThreadID := aThreadId;
   fThreadData := aThreadData;
   fTag := aTag;
-  if Assigned(fManager.fOnGetName) then
-    fNameForDebug := fManager.fOnGetName(self);
-  if fNameForDebug = '' then
-    FormatUtf8('% %', [PointerToHexShort(pointer(fThreadId)),
-      CurrentThreadName], fNameForDebug);
-  if Assigned(fManager.fOnGetWebAppRootPath) then
-    fWebAppRootDir := fManager.fOnGetWebAppRootPath(self)
-  else
-    StringToUtf8(Executable.ProgramFilePath, fWebAppRootDir);
+  if Assigned(fManager) then
+  begin
+    fContentVersion := fManager.ContentVersion;
+    if Assigned(fManager.fOnGetName) then
+      fNameForDebug := fManager.fOnGetName(self);
+    if fNameForDebug = '' then
+      FormatUtf8('% %', [PointerToHexShort(pointer(PtrUInt(fThreadId))),
+        CurrentThreadName], fNameForDebug);
+    if Assigned(fManager.fOnGetWebAppRootPath) then
+      fWebAppRootDir := fManager.fOnGetWebAppRootPath(self)
+    else
+      StringToUtf8(Executable.ProgramFilePath, fWebAppRootDir);
+  end;
   // TThreadSafeManager will now call AfterCreate outside of its main lock
 end;
 
@@ -642,23 +705,26 @@ end;
 procedure TThreadSafeEngine.AtomCacheAdd(const Name: RawUtf8; Atom: TScriptAtom);
 begin
   if fAtomCache = nil then
-    fAtomCache := TRawUtf8List.Create([fCaseSensitive, fNoDuplicate]);
+    fAtomCache := TRawUtf8List.CreateEx([fCaseSensitive, fNoDuplicate]);
   fAtomCache.AddObject(Name, Atom);
 end;
 
 procedure TThreadSafeEngine.DoBeginRequest;
 begin
-  if fRequestFpuBackup <> [] then
-    // typical pascal FPU mask is [exDenormalized,exUnderflow,exPrecision]
-    raise EScriptException.CreateUtf8('Nested %.DoBeginRequest', [self]);
-  fRequestFpuBackup := BeforeLibraryCall;
-  assert(fRequestFpuBackup <> []);
+  // paranoid todo: check if we need a Lock here to avoid GPF at expiration?
+  if fRequestFpuBackup[0] = high(fRequestFpuBackup) then
+    raise EScriptException.CreateUtf8(
+      'Too Many Nested %.DoBeginRequest', [self]);
+  inc(fRequestFpuBackup[0]);
+  fRequestFpuBackup[fRequestFpuBackup[0]] := SetFpuFlags(ffLibrary);
 end;
 
 procedure TThreadSafeEngine.DoEndRequest;
 begin
-  AfterLibraryCall(fRequestFpuBackup);
-  fRequestFpuBackup := [];
+  if fRequestFpuBackup[0] = 0 then
+    exit;
+  dec(fRequestFpuBackup[0]);
+  ResetFpuFlags(fRequestFpuBackup[fRequestFpuBackup[0]]);
 end;
 
 

@@ -35,6 +35,7 @@ uses
   mormot.core.rtti,
   mormot.core.log,
   mormot.core.json,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.rest.core,
   mormot.db.core;
@@ -42,61 +43,26 @@ uses
 
 { ************ Some definitions Used by TRestOrm Implementation }
 
-type
-  /// the available HTTP methods transmitted between client and server
-  // - some custom verbs are available in addition to standard REST commands
-  // - most of iana verbs are available
-  // see http://www.iana.org/assignments/http-methods/http-methods.xhtml
-  // - for basic CRUD operations, we consider Create=mPOST, Read=mGET,
-  // Update=mPUT and Delete=mDELETE - even if it is not fully RESTful
-  TUriMethod = (
-    mNone,
-    mGET,
-    mPOST,
-    mPUT,
-    mDELETE,
-    mHEAD,
-    mBEGIN,
-    mEND,
-    mABORT,
-    mLOCK,
-    mUNLOCK,
-    mSTATE,
-    mOPTIONS,
-    mPROPFIND,
-    mPROPPATCH,
-    mTRACE,
-    mCOPY,
-    mMKCOL,
-    mMOVE,
-    mPURGE,
-    mREPORT,
-    mMKACTIVITY,
-    mMKCALENDAR,
-    mCHECKOUT,
-    mMERGE,
-    mNOTIFY,
-    mPATCH,
-    mSEARCH,
-    mCONNECT);
+const
+  /// convert a TRestBatch encoding scheme into the corresponding ORM TUriMethod
+  BATCH_METHOD: array[TRestBatchEncoding] of TUriMethod = (
+    mPOST,     // encPost
+    mPOST,     // encSimple
+    mPOST,     // encPostHex
+    mPOST,     // encPostHexID
+    mPUT,      // encPut
+    mPUT,      // encPutHex
+    mDELETE);  // encDelete
 
-  /// set of available HTTP methods transmitted between client and server
-  TUriMethods = set of TUriMethod;
-
-/// convert a string HTTP verb into its TUriMethod enumerate
-function ToMethod(const method: RawUtf8): TUriMethod;
-
-function ToText(m: TUriMethod): PShortString; overload;
-
-
-{$ifdef PUREMORMOT2}
-
-type
-  TSqlUriMethod = TUriMethod;
-  TSqlUriMethods = TUriMethods;
-
-{$endif PUREMORMOT2}
-
+  /// convert a TRestBatch encoding scheme into the corresponding ORM TUriMethod
+  BATCH_EVENT: array[TRestBatchEncoding] of TOrmEvent = (
+    oeAdd,     // encPost
+    oeAdd,     // encSimple
+    oeAdd,     // encPostHex
+    oeAdd,     // encPostHexID
+    oeUpdate,  // encPut
+    oeUpdate,  // encPutHex
+    oeDelete); // encDelete
 
 
 { ************ TRestOrm Parent Class for abstract REST client/server }
@@ -233,7 +199,7 @@ type
     // - an overridden method returning TRUE shall ensure that calls to
     // EngineAdd / EngineUpdate / EngineDelete (depending of supplied Method)
     // will properly handle operations until InternalBatchStop() is called
-    function InternalBatchStart(Method: TUriMethod;
+    function InternalBatchStart(Encoding: TRestBatchEncoding;
       BatchOptions: TRestBatchOptions): boolean; virtual;
     /// internal method called by TRestServer.Batch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
@@ -242,6 +208,16 @@ type
     // - InternalBatchStart/Stop may safely use a lock for multithreading:
     // implementation in TRestServer.Batch use a try..finally block
     procedure InternalBatchStop; virtual;
+    /// internal method called by TRestServer.Batch() to process SIMPLE input
+    // - an optimized storage engine could override it to process the Sent
+    // JSON array values directly from the memory buffer
+    // - called first with Sent=nil to return either false (unsupported - which
+    // is what this default method does) or true (supported in overriden method)
+    // - called a second time with the proper Sent JSON array of values,
+    // returning the inserted ID or 200 after proper update
+    function InternalBatchDirect(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer; const Fields: TFieldBits;
+      Sent: PUtf8Char): TID; virtual;
   public
     // ------- TRestOrm main methods
     /// initialize the class, and associated to a TRest and its TOrmModel
@@ -250,12 +226,6 @@ type
     constructor CreateWithoutRest(aModel: TOrmModel); reintroduce; virtual;
     /// release internal used instances
     destructor Destroy; override;
-    /// ensure the current thread will be taken into account during process
-    // - this abstract method won't do anything, but overriden versions may
-    procedure BeginCurrentThread(Sender: TThread); virtual;
-    /// called when thread is finished to ensure
-    // - this abstract method won't do anything, but overriden versions may
-    procedure EndCurrentThread(Sender: TThread); virtual;
     /// low-level access to the current TOrm class holding a transaction
     // - equals nil outside of a TransactionBegin/Commit scope
     property TransactionTable: TOrmClass
@@ -272,6 +242,13 @@ type
     function TableMaxID(Table: TOrmClass): TID; virtual;
     // try from cache, then from DB
     function MemberExists(Table: TOrmClass; ID: TID): boolean; virtual;
+    {$ifdef ORMGENERICS}
+    function RetrieveIList(T: TOrmClass; var IList;
+      const CustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+    function RetrieveIList(T: TOrmClass; var IList;
+      const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+      const CustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+    {$endif ORMGENERICS}
     function OneFieldValue(Table: TOrmClass;
       const FieldName, WhereClause: RawUtf8): RawUtf8; overload;
     function OneFieldValueInt64(Table: TOrmClass;
@@ -303,10 +280,11 @@ type
     function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
       const WhereClause: RawUtf8 = ''): TOrmTable; overload;
     function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
-      const WhereClauseFormat: RawUtf8; const BoundsSqlWhere: array of const): TOrmTable;
-      overload; {$ifdef ISDELPHI2010} override; {$else} virtual; {$endif}
+      const WhereClauseFormat: RawUtf8;
+      const BoundsSqlWhere: array of const): TOrmTable; overload;
     function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
-      const WhereClauseFormat: RawUtf8; const Args, Bounds: array of const): TOrmTable; overload;
+      const WhereClauseFormat: RawUtf8;
+      const Args, Bounds: array of const): TOrmTable; overload;
     function FTSMatch(Table: TOrmFts3Class; const WhereClause: RawUtf8;
       var DocID: TIDDynArray): boolean; overload;
     function FTSMatch(Table: TOrmFts3Class; const MatchClause: RawUtf8;
@@ -318,10 +296,10 @@ type
     function MainFieldIDs(Table: TOrmClass; const Values: array of RawUtf8;
       out IDs: TIDDynArray): boolean;
     function Retrieve(const SqlWhere: RawUtf8; Value: TOrm;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload; virtual;
+      const CustomFieldsCsv: RawUtf8 = ''): boolean; overload; virtual;
     function Retrieve(const WhereClauseFmt: RawUtf8;
       const Args, Bounds: array of const; Value: TOrm;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+      const CustomFieldsCsv: RawUtf8 = ''): boolean; overload;
     function Retrieve(aID: TID; Value: TOrm;
       ForUpdate: boolean = false): boolean; overload; virtual;
     function Retrieve(Reference: TRecordReference;
@@ -329,12 +307,12 @@ type
     function Retrieve(aPublishedRecord, aValue: TOrm): boolean; overload;
     function RetrieveList(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): TObjectList; overload;
+      const CustomFieldsCsv: RawUtf8 = ''): TObjectList; overload;
     function RetrieveListJson(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false): RawJson; overload;
+      const CustomFieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false): RawJson; overload;
     function RetrieveListJson(Table: TOrmClass;
-      const SqlWhere: RawUtf8; const aCustomFieldsCsv: RawUtf8 = '';
+      const SqlWhere: RawUtf8; const CustomFieldsCsv: RawUtf8 = '';
       aForceAjax: boolean = false): RawJson; overload;
     function RetrieveDocVariantArray(Table: TOrmClass;
       const ObjectName, CustomFieldsCsv: RawUtf8;
@@ -351,10 +329,10 @@ type
       const CustomFieldsCsv: RawUtf8): variant;
     function RetrieveListObjArray(var ObjArray; Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean;
+      const CustomFieldsCsv: RawUtf8 = ''): boolean;
     procedure AppendListAsJsonArray(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const OutputFieldName: RawUtf8; W: TJsonSerializer;
+      const OutputFieldName: RawUtf8; W: TOrmWriter;
       const CustomFieldsCsv: RawUtf8 = '');
     function RTreeMatch(DataTable: TOrmClass;
       const DataTableBlobFieldName: RawUtf8; RTreeTable: TOrmRTreeClass;
@@ -398,8 +376,8 @@ type
     function UpdateField(Table: TOrmClass;
       const WhereFieldName: RawUtf8; const WhereFieldValue: variant;
       const FieldName: RawUtf8; const FieldValue: variant): boolean; overload;
-    function UpdateField(Table: TOrmClass; const IDs: array of Int64;
-      const FieldName: RawUtf8; const FieldValue: variant): boolean; overload;
+    function UpdateFieldAt(Table: TOrmClass; const IDs: array of TID;
+      const FieldName: RawUtf8; const FieldValue: variant): boolean;
     function UpdateFieldIncrement(Table: TOrmClass; ID: TID;
       const FieldName: RawUtf8; Increment: Int64 = 1): boolean;
     function RecordCanBeUpdated(Table: TOrmClass; ID: TID;
@@ -440,7 +418,7 @@ type
       ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     function AsyncBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
-    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TJsonWriter);
     function AsyncBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     function AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
@@ -480,9 +458,12 @@ type
   // and add some new fields on the fly, even joined from another TOrmTable
   TOrmTableWritable = class(TOrmTableJson)
   protected
-    fNewValues: TRawUtf8DynArray;
-    fNewValuesCount: integer;
-    fNewValuesInterning: TRawUtf8Interning;
+    fUpdatedValues: TRawUtf8DynArray;
+    fUpdatedValuesCount: integer;
+    fUpdatedRowsCount: integer;
+    fUpdatedValuesInterning: TRawUtf8Interning;
+    fUpdatedRows, fUpdatedRowsFields: TIntegerDynArray;
+    fNoUpdateTracking: boolean;
   public
     /// modify a field value in-place, using a RawUtf8 text value
     procedure Update(Row, Field: PtrInt; const Value: RawUtf8); overload;
@@ -500,7 +481,7 @@ type
     // - returns the internal index of the newly created field
     function AddField(const FieldName: RawUtf8; FieldType: TOrmFieldType;
       FieldTypeInfo: pointer = nil; FieldSize: integer = -1): integer; overload;
-    /// define a new field to be stored in this table
+    /// define a TOrm property to be stored as new table field
     // - returns the internal index of the newly created field
     function AddField(const FieldName: RawUtf8; FieldTable: TOrmClass;
       const FieldTableName: RawUtf8 = ''): integer; overload;
@@ -510,52 +491,48 @@ type
     // should remain available as long as you use this TOrmTableWritable
     // - warning: will call From.SortFields(FromKeyField) for faster process
     procedure Join(From: TOrmTable; const FromKeyField, KeyField: RawUtf8);
+    /// append tracked Update() values to a BATCH process
+    // - will only work if this table has a single associated TOrmClass
+    function UpdatesToBatch(Batch: TRestBatch;
+      aServerTimeStamp: TTimeLog = 0): integer;
+    /// generate a JSON of tracked Update() values
+    // - will only work if this table has a single associated TOrmClass
+    // - BATCH-compatible JSON is possible if boOnlyObjects is not part
+    // of the supplied options, e.g. as [boExtendedJson] - in this context any
+    // TModTime field will be processed; set aServerTimeStamp e.g. from
+    // TRestClientUri.GetServerTimestamp, if TimeLogNowUtc is not enough
+    function UpdatesToJson(aOptions: TRestBatchOptions = [boOnlyObjects];
+      aServerTimeStamp: TTimeLog = 0): RawJson;
     /// optionaly de-duplicate Update() values
-    property NewValuesInterning: TRawUtf8Interning
-      read fNewValuesInterning write fNewValuesInterning;
+    property UpdatedValuesInterning: TRawUtf8Interning
+      read fUpdatedValuesInterning write fUpdatedValuesInterning;
     /// how many values have been written via Update() overloaded methods
-    // - is not used if NewValuesInterning was defined
-    property NewValuesCount: integer
-      read fNewValuesCount;
+    // - is not updated if UpdatedValuesInterning was defined
+    property UpdatedValuesCount: integer
+      read fUpdatedValuesCount;
+    /// the rows numbers (1..RowCount) which have been modified by Update()
+    // - Join() and AddField() are not tracked by this list - just Update()
+    // - the numbers are stored in increasing order
+    // - track the modified rows using UpdatedRows[0..UpdatedRowsCount - 1] and
+    // UpdatedRowsFields[0..UpdatedRowsCount - 1] - unless NoUpdateTracking was set
+    property UpdatedRows: TIntegerDynArray
+      read fUpdatedRows;
+    /// how many rows (0..RowCount) have been modified by Update()
+    property UpdatedRowsCount: integer
+      read fUpdatedRowsCount;
+    /// 32-bit field bits which have been modified by Update()
+    // - Join() and AddField() are not tracked by this list - just Update()
+    // - follow UpdatedRows[0..UpdatedRowsCount - 1] row numbers
+    // - if more than 32 field indexes were updated, contains 0
+    property UpdatedRowsFields: TIntegerDynArray
+      read fUpdatedRowsFields;
+    /// if UpdatedRows/UpdatedRowsFields should not be tracked during Update()
+    property NoUpdateTracking: boolean
+      read fNoUpdateTracking write fNoUpdateTracking;
   end;
 
 
 implementation
-
-
-{ ************ Some definitions Used by TRestOrm Implementation }
-
-function ToMethod(const method: RawUtf8): TUriMethod;
-const
-  NAME: array[mGET..high(TUriMethod)] of string[10] = (
-    // sorted by occurence for in-order O(n) search
-    'GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'BEGIN', 'END', 'ABORT',
-    'LOCK', 'UNLOCK', 'STATE',  'OPTIONS', 'PROPFIND', 'PROPPATCH', 'TRACE',
-    'COPY', 'MKCOL', 'MOVE', 'PURGE', 'REPORT',  'MKACTIVITY', 'MKCALENDAR',
-    'CHECKOUT', 'MERGE', 'NOTIFY', 'PATCH', 'SEARCH', 'CONNECT');
-var
-  L: byte;
-  N: PByteArray;
-begin
-  L := Length(method);
-  if (L > 0) and
-     (L < 11) then
-  begin
-    N := @NAME;
-    for result := low(NAME) to high(NAME) do
-      if (N^[0] = L) and
-         IdemPropNameUSameLenNotNull(pointer(@N^[1]), pointer(method), L) then
-        exit
-      else
-        inc(PByte(N), 11);
-  end;
-  result := mNone;
-end;
-
-function ToText(m: TUriMethod): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TUriMethod), ord(m));
-end;
 
 
 { ************ TRestOrm Parent Class for abstract REST client/server }
@@ -582,22 +559,12 @@ end;
 
 destructor TRestOrm.Destroy;
 begin
-  FreeAndNil(fCache);
+  FreeAndNilSafe(fCache);
   inherited Destroy;
   if (fModel <> nil) and
      (fModel.Owner = self) then
     // make sure we are the Owner (TRestStorage has fModel<>nil e.g.)
-    FreeAndNil(fModel);
-end;
-
-procedure TRestOrm.BeginCurrentThread(Sender: TThread);
-begin
-  // nothing do to at this level -> see e.g. TRestOrmServer.BeginCurrentThread
-end;
-
-procedure TRestOrm.EndCurrentThread(Sender: TThread);
-begin
-  // nothing do to at this level -> see e.g. TRestOrmServer.EndCurrentThread
+    FreeAndNilSafe(fModel);
 end;
 
 function TRestOrm.SQLComputeForSelect(Table: TOrmClass;
@@ -615,7 +582,7 @@ begin
         result := SqlFromSelect(SqlTableName, SqlTableRetrieveAllFields, WhereClause, '')
       else if (PosExChar(',', FieldNames) = 0) and
               (PosExChar('(', FieldNames) = 0) and
-              not IsFieldName(FieldNames) then
+              not IsFieldName(pointer(FieldNames)) then
         // prevent SQL error
         result := ''
       else
@@ -680,7 +647,8 @@ begin
     json := '';
   // on success, returns the new RowID value; on error, returns 0
   fRest.AcquireExecution[execOrmWrite].Safe.Lock;
-  try // may be within a batch in another thread
+  try
+    // may be within a batch in another thread -> use execOrmWrite lock
     result := EngineAdd(t, json); // will call static if necessary
   finally
     fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
@@ -722,7 +690,7 @@ end;
 
 function TRestOrm.GetServerTimestamp: TTimeLog;
 begin
-  result := fRest.GetServerTimeStamp;
+  result := fRest.GetServerTimeStamp(0);
 end;
 
 procedure TRestOrm.WriteLock;
@@ -734,6 +702,36 @@ procedure TRestOrm.WriteUnLock;
 begin
   fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
 end;
+
+{$ifdef ORMGENERICS}
+
+function TRestOrm.RetrieveIList(T: TOrmClass; var IList;
+  const CustomFieldsCsv: RawUtf8): boolean;
+begin
+  result := RetrieveIList(T, IList, '', [], CustomFieldsCsv);
+end;
+
+function TRestOrm.RetrieveIList(T: TOrmClass; var IList;
+  const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+  const CustomFieldsCsv: RawUtf8): boolean;
+var
+  table: TOrmTable;
+begin
+  result := false;
+  IInterface(IList) := nil;
+  if self = nil then
+    exit;
+  table := MultiFieldValues(T, CustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
+  if table <> nil then
+    try
+      table.ToNewIList(T, IList);
+      result := true;
+    finally
+      table.Free;
+    end;
+end;
+
+{$endif ORMGENERICS}
 
 function TRestOrm.TableRowCount(Table: TOrmClass): Int64;
 var
@@ -874,44 +872,55 @@ function TRestOrm.MultiFieldValue(Table: TOrmClass;
   const FieldName: array of RawUtf8; var FieldValue: array of RawUtf8;
   const WhereClause: RawUtf8): boolean;
 var
-  SQL: RawUtf8;
-  n, i: PtrInt;
+  sql, where: RawUtf8;
+  v, f: PtrInt;
   T: TOrmTable;
-  P: PUtf8Char;
 begin
   result := false;
-  n := length(FieldName);
   if (self <> nil) and
      (Table <> nil) and
-     (n = length(FieldValue)) then
+     (high(FieldName) = high(FieldValue)) then
     with Table.OrmProps do
     begin
-      if (n = 1) and
+      where := SqlTableName + SqlFromWhere(WhereClause);
+      if (high(FieldName) = 0) and
          IdemPChar(pointer(FieldName[0]), 'COUNT(*)') then
-        SQL := 'SELECT COUNT(*) FROM ' + SqlTableName + SqlFromWhere(WhereClause)
+        sql := 'SELECT COUNT(*) FROM ' + where
       else
       begin
-        for i := 0 to high(FieldName) do
-          if not IsFieldNameOrFunction(FieldName[i]) then
-            // prevent SQL error or security breach
+        for f := 0 to high(FieldName) do
+          if not IsFieldNameOrFunction(FieldName[f]) then
+            // prevent sql error or security breach
             exit
-          else if SQL = '' then
-            SQL := 'SELECT ' + FieldName[i]
+          else if sql = '' then
+            sql := 'SELECT ' + FieldName[f]
           else
-            SQL := SQL + ',' + FieldName[i];
-        SQL := SQL + ' FROM ' + SqlTableName + SqlFromWhere(WhereClause) + ' LIMIT 1';
+            sql := sql + ',' + FieldName[f];
+        sql := sql + ' FROM ' + where + ' LIMIT 1';
       end;
-      T := ExecuteList([Table], SQL);
+      T := ExecuteList([Table], sql);
       if T <> nil then
       try
         if (T.FieldCount <> length(FieldName)) or
            (T.RowCount <= 0) then
           exit;
         // get field values from the first (and unique) row
-        for i := 0 to T.FieldCount - 1 do
+        for f := 0 to high(FieldName) do
         begin
-          P := T.Get(1, i);
-          FastSetString(FieldValue[i], P, StrLen(P));
+          v := f; // regular SQL SELECT order by default
+          if (high(FieldName) <> 0) and
+             not IdemPropNameU(FieldName[f], T.Results[f], T.ResultsLen[f]) then
+          begin
+            // RowID/ID or wrong order (e.g. TRestStorageInMemory = TOrm order)
+            v := T.FieldIndex(pointer(FieldName[f]));
+            if v < 0 then
+              if IsSqlFunction(pointer(FieldName[f])) then
+                v := f // function result could be renamed but in-order
+              else
+                exit;  // something went wrong
+          end;
+          inc(v, T.FieldCount); // value offset
+          FastSetString(FieldValue[f], T.Results[v], T.ResultsLen[v]);
         end;
         result := true;
       finally
@@ -924,8 +933,8 @@ function TRestOrm.MultiFieldValue(Table: TOrmClass;
   const FieldName: array of RawUtf8; var FieldValue: array of RawUtf8;
   WhereID: TID): boolean;
 begin
-  result := MultiFieldValue(Table, FieldName, FieldValue, 'RowID=:(' +
-    Int64ToUtf8(WhereID) + '):');
+  result := MultiFieldValue(Table, FieldName, FieldValue,
+    'RowID=:(' + Int64ToUtf8(WhereID) + '):');
 end;
 
 function TRestOrm.OneFieldValues(Table: TOrmClass;
@@ -950,8 +959,8 @@ function TRestOrm.OneFieldValues(Table: TOrmClass;
 var
   T: TOrmTable;
   V: Int64;
-  prop: RawUtf8;
   P: PUtf8Char;
+  field: shortstring;
 begin
   Data := nil;
   // handle naive expressions like SELECT ID from Table where ID=10
@@ -959,8 +968,8 @@ begin
      (length(WhereClause) > 2) then
   begin
     P := pointer(WhereClause);
-    GetNextFieldProp(P, prop);
-    if IsRowIDShort(prop) and
+    GetNextFieldPropSameLine(P, field);
+    if IsRowIDShort(field) and
        (StrPosI('AND', P) = nil) and
        (StrPosI('OR', P) = nil) then
       case P^ of
@@ -979,7 +988,8 @@ begin
               exit;
             end;
           end;
-        'i', 'I':
+        'i',
+        'I':
           if P[1] in ['n', 'N'] then
           begin
             // SELECT RowID from Table where RowID in [1,2,3]
@@ -1018,7 +1028,6 @@ function TRestOrm.OneFieldValues(Table: TOrmClass;
   const FieldName, WhereClause, Separator: RawUtf8): RawUtf8;
 var
   i, Len, SepLen, L: PtrInt;
-  Lens: TIntegerDynArray;
   T: TOrmTable;
   P: PUtf8Char;
 begin
@@ -1030,21 +1039,16 @@ begin
        (T.RowCount <= 0) then
       exit;
     // calculate row values CSV needed memory
-    SetLength(Lens, T.RowCount);
     SepLen := length(Separator);
     Len := SepLen * (T.RowCount - 1);
     for i := 1 to T.RowCount do
-    begin
-      L := StrLen(T.Results[i]); // ignore fResults[0] i.e. field name
-      inc(Len, L);
-      Lens[i - 1] := L;
-    end;
+      inc(Len, T.ResultsLen[i]); // ignore Results[0] i.e. field name
     SetLength(result, Len);
     // add row values as CSV
     P := pointer(result);
     i := 1;
     repeat
-      L := Lens[i - 1];
+      L := T.ResultsLen[i];
       if L <> 0 then
       begin
         MoveFast(T.Results[i]^, P^, L);
@@ -1052,8 +1056,11 @@ begin
       end;
       if i = T.RowCount then
         break;
-      MoveFast(pointer(Separator)^, P^, SepLen);
-      inc(P, SepLen);
+      if SepLen <> 0 then
+      begin
+        MoveSmall(pointer(Separator), P, SepLen);
+        inc(P, SepLen);
+      end;
       inc(i);
     until false;
     //assert(P-pointer(result)=Len);
@@ -1092,7 +1099,7 @@ begin
           if (IDToIndex <> nil) and
              (aID = IDToIndex^) then
           begin
-            IDToIndex^ := Row - 1;
+            IDToIndex^ := TID(Row) - 1;
             IDToIndex := nil; // set once
           end;
         end;
@@ -1232,7 +1239,7 @@ begin
 end;
 
 function TRestOrm.Retrieve(const SqlWhere: RawUtf8; Value: TOrm;
-  const aCustomFieldsCsv: RawUtf8): boolean;
+  const CustomFieldsCsv: RawUtf8): boolean;
 var
   T: TOrmTable;
   sql: RawUtf8;
@@ -1244,7 +1251,7 @@ begin
   sql := TrimU(SqlWhere);
   if not EndWith(sql, ' LIMIT 1') then
     sql := sql + ' LIMIT 1'; // we keep a single record below
-  T := MultiFieldValues(POrmClass(Value)^, aCustomFieldsCsv, sql);
+  T := MultiFieldValues(POrmClass(Value)^, CustomFieldsCsv, sql);
   if T <> nil then
   try
     if T.RowCount >= 1 then
@@ -1261,12 +1268,12 @@ end;
 
 function TRestOrm.Retrieve(const WhereClauseFmt: RawUtf8;
   const Args, Bounds: array of const; Value: TOrm;
-  const aCustomFieldsCsv: RawUtf8): boolean;
+  const CustomFieldsCsv: RawUtf8): boolean;
 var
   where: RawUtf8;
 begin
   where := FormatUtf8(WhereClauseFmt, Args, Bounds);
-  result := Retrieve(where, Value, aCustomFieldsCsv);
+  result := Retrieve(where, Value, CustomFieldsCsv);
 end;
 
 function TRestOrm.Retrieve(aID: TID; Value: TOrm; ForUpdate: boolean): boolean;
@@ -1329,7 +1336,7 @@ end;
 
 function TRestOrm.RetrieveList(Table: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8): TObjectList;
+  const CustomFieldsCsv: RawUtf8): TObjectList;
 var
   T: TOrmTable;
 begin
@@ -1337,7 +1344,7 @@ begin
   if (self = nil) or
      (Table = nil) then
     exit;
-  T := MultiFieldValues(Table, aCustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
+  T := MultiFieldValues(Table, CustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
   if T <> nil then
   try
     result := TObjectList.Create;
@@ -1349,21 +1356,21 @@ end;
 
 function TRestOrm.RetrieveListJson(Table: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8; aForceAjax: boolean): RawJson;
+  const CustomFieldsCsv: RawUtf8; aForceAjax: boolean): RawJson;
 var
   where: RawUtf8;
 begin
   where := FormatUtf8(FormatSqlWhere, [], BoundsSqlWhere);
-  result := RetrieveListJson(Table, where, aCustomFieldsCsv, aForceAjax)
+  result := RetrieveListJson(Table, where, CustomFieldsCsv, aForceAjax)
 end;
 
 function TRestOrm.RetrieveListJson(Table: TOrmClass;
-  const SqlWhere: RawUtf8; const aCustomFieldsCsv: RawUtf8;
+  const SqlWhere: RawUtf8; const CustomFieldsCsv: RawUtf8;
   aForceAjax: boolean): RawJson;
 var
   sql: RawUtf8;
 begin
-  sql := SQLComputeForSelect(Table, aCustomFieldsCsv, SqlWhere);
+  sql := SQLComputeForSelect(Table, CustomFieldsCsv, SqlWhere);
   if sql = '' then
     result := ''
   else
@@ -1371,8 +1378,8 @@ begin
 end;
 
 function TRestOrm.RetrieveDocVariantArray(Table: TOrmClass;
-  const ObjectName, CustomFieldsCsv: RawUtf8; FirstRecordID: PID;
-  LastRecordID: PID): variant;
+  const ObjectName, CustomFieldsCsv: RawUtf8;
+  FirstRecordID, LastRecordID: PID): variant;
 begin
   result := RetrieveDocVariantArray(Table, ObjectName, '', [], CustomFieldsCsv,
     FirstRecordID, LastRecordID);
@@ -1381,7 +1388,7 @@ end;
 function TRestOrm.RetrieveDocVariantArray(Table: TOrmClass;
   const ObjectName: RawUtf8; const FormatSqlWhere: RawUtf8;
   const BoundsSqlWhere: array of const; const CustomFieldsCsv: RawUtf8;
-  FirstRecordID: PID; LastRecordID: PID): variant;
+  FirstRecordID, LastRecordID: PID): variant;
 var
   T: TOrmTable;
   v: variant;
@@ -1427,7 +1434,7 @@ begin
       doc.SetCount(T.RowCount);
       for row := 1 to T.RowCount do
         T.GetAsVariant(row, 0, doc.Values[row - 1], false, false, false,
-          JSON_OPTIONS_FAST);
+          JSON_FAST);
     finally
       T.Free;
     end;
@@ -1482,7 +1489,7 @@ end;
 
 function TRestOrm.RetrieveListObjArray(var ObjArray; Table: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8): boolean;
+  const CustomFieldsCsv: RawUtf8): boolean;
 var
   T: TOrmTable;
 begin
@@ -1490,7 +1497,7 @@ begin
   if (self = nil) or
      (Table = nil) then
     exit;
-  T := MultiFieldValues(Table, aCustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
+  T := MultiFieldValues(Table, CustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
   if T <> nil then
   try
     result := T.ToObjArray(ObjArray, Table);
@@ -1501,7 +1508,7 @@ end;
 
 procedure TRestOrm.AppendListAsJsonArray(Table: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-  const OutputFieldName: RawUtf8; W: TJsonSerializer; const CustomFieldsCsv: RawUtf8);
+  const OutputFieldName: RawUtf8; W: TOrmWriter; const CustomFieldsCsv: RawUtf8);
 var
   Rec: TOrm;
 begin
@@ -1651,8 +1658,11 @@ begin
     if CustomCsvFields = '*' then
       // FieldBitsFromCsv('*') will use [ooSelect]
       f := SimpleFieldsBits[ooInsert]
-    else
-      f := FieldBitsFromCsv(CustomCsvFields);
+    else if not FieldBitsFromCsv(CustomCsvFields, f) then
+    begin
+      result := 0; // one of the csv field name is invalid
+      exit;
+    end;
   result := InternalAdd(Value, true, @f, ForceID, DoNotAutoComputeFields);
 end;
 
@@ -1728,7 +1738,7 @@ begin
   end;
   t := fModel.GetTableIndexExisting(POrmClass(Value)^);
   if not DoNotAutoComputeFields then
-    Value.ComputeFieldsBeforeWrite(self, oeUpdate); // update oftModTime fields
+    Value.ComputeFieldsBeforeWrite(self, oeUpdate); // update TModTime fields
   if IsZero(CustomFields) then
     if (Value.FillContext <> nil) and
        (Value.FillContext.Table <> nil) and
@@ -1763,13 +1773,15 @@ end;
 
 function TRestOrm.Update(Value: TOrm; const CustomCsvFields: RawUtf8;
   DoNotAutoComputeFields: boolean): boolean;
+var
+  bits: TFieldBits;
 begin
   if (self = nil) or
-     (Value = nil) then
+     (Value = nil) or
+     not Value.Orm.FieldBitsFromCsv(CustomCsvFields, bits) then
     result := false
   else
-    result := Update(Value, Value.Orm.FieldBitsFromCsv(CustomCsvFields),
-      DoNotAutoComputeFields);
+    result := Update(Value, bits, DoNotAutoComputeFields);
 end;
 
 function TRestOrm.Update(aTable: TOrmClass; aID: TID;
@@ -1871,7 +1883,7 @@ begin
   // warning: this may not update the internal cache
 end;
 
-function TRestOrm.UpdateField(Table: TOrmClass; const IDs: array of Int64;
+function TRestOrm.UpdateFieldAt(Table: TOrmClass; const IDs: array of TID;
   const FieldName: RawUtf8; const FieldValue: variant): boolean;
 var
   value, where: RawUtf8;
@@ -1970,12 +1982,12 @@ begin
     for i := 0 to length(IDs) - 1 do
       if not RecordCanBeUpdated(Table, IDs[i], oeDelete) then
         exit;
-    fCache.NotifyDeletions(t, TInt64DynArray(IDs));
+    fCache.NotifyDeletions(t, IDs);
   end;
   result := true;
 end;
 
-function TRestOrm.InternalBatchStart(Method: TUriMethod;
+function TRestOrm.InternalBatchStart(Encoding: TRestBatchEncoding;
   BatchOptions: TRestBatchOptions): boolean;
 begin
   result := false;
@@ -1984,6 +1996,12 @@ end;
 procedure TRestOrm.InternalBatchStop;
 begin
   raise EOrmException.CreateUtf8('Unexpected %.InternalBatchStop',[self]);
+end;
+
+function TRestOrm.InternalBatchDirect(Encoding: TRestBatchEncoding;
+  RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
+begin
+  result := 0; // this engine does NOT support optimized SIMPLE multi-insert
 end;
 
 function TRestOrm.Delete(Table: TOrmClass; const SqlWhere: RawUtf8): boolean;
@@ -2040,7 +2058,7 @@ begin
     exit;
   if BlobStream.Write(pointer(data)^, length(data)) <> length(data) then
     result := false;
-  BlobStream.Seek(0, soFromBeginning); // rewind
+  BlobStream.Seek(0, soBeginning); // rewind
 end;
 
 function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
@@ -2064,15 +2082,17 @@ function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
   const BlobFieldName: RawUtf8; BlobData: TStream): boolean;
 var
   data: RawBlob;
-  L: integer;
+  L: Int64;
 begin
   result := false;
   if (self = nil) or
      (BlobData = nil) then
     exit;
-  L := BlobData.Seek(0, soFromEnd);
+  L := BlobData.Seek(0, soEnd);
+  if L > maxInt then
+    raise EOrmException.CreateUtf8('%.UpdateBlob: %.Size=%', [self, BlobData, L]);
   SetLength(data, L);
-  BlobData.Seek(0, soFromBeginning);
+  BlobData.Seek(0, soBeginning);
   if BlobData.Read(pointer(data)^, L) <> L then
     exit;
   result := UpdateBlob(Table, aID, BlobFieldName, data);
@@ -2293,7 +2313,7 @@ begin
 end;
 
 procedure TRestOrm.AsyncBatchRawAppend(Table: TOrmClass;
-  SentData: TTextWriter);
+  SentData: TJsonWriter);
 begin
   if (self <> nil) and
      (fRest.Run.BackgroundTimer <> nil) and
@@ -2354,37 +2374,56 @@ end;
 function TOrmTableWritable.AddField(const FieldName: RawUtf8): integer;
 var
   prev: TOrmTableJsonDataArray;
-  rowlen, i: integer;
+  {$ifndef NOTORMTABLELEN}
+  prevlen: TIntegerDynArray;
+  {$endif NOTORMTABLELEN}
+  rowlen, i, n: PtrInt;
   S, D: PByte;
 begin
   if (FieldName = '') or
      (FieldIndex(FieldName) >= 0) then
     raise EOrmTable.CreateUtf8('%.AddField(%) invalid fieldname', [self, FieldName]);
+  // register the new field
   result := fFieldCount;
   inc(fFieldCount);
   SetLength(fFieldNames, fFieldCount);
   fFieldNames[result] := FieldName;
+  QuickSortIndexedPUtf8Char(pointer(fFieldNames), fFieldCount, fFieldNameOrder);
+  // prepare internal storage
   prev := fJsonData;
   fJsonData := nil;
-  SetLength(fJsonData, (fRowCount + 1) * fFieldCount);
+  {$ifndef NOTORMTABLELEN}
+  prevlen := fLen;
+  fLen := nil; // SetResultsSafe() won't try to set fLen[]
+  {$endif NOTORMTABLELEN}
+  n := (fRowCount + 1) * fFieldCount;
+  // adjust data rows
+  SetLength(fJsonData, n);
   fData := pointer(fJsonData);
+  SetResultsSafe(result, pointer(FieldName)); // set new field name in row=0
   S := pointer(prev);
   D := pointer(fJsonData);
   rowlen := result * SizeOf(fJsonData[0]);
-  // copy first row (fields names) + add new field name
-  MoveFast(S^, D^, rowlen);
-  inc(S, rowlen);
-  inc(D, rowlen);
-  SetResultsSafe(result, pointer(fFieldNames[result]));
-  inc(D, SizeOf(fJsonData[0]));
-  QuickSortIndexedPUtf8Char(pointer(fFieldNames), fFieldCount, fFieldNameOrder);
-  // copy data rows
-  for i := 1 to fRowCount do
+  for i := 0 to fRowCount do
   begin
     MoveFast(S^, D^, rowlen);
     inc(S, rowlen);
     inc(D, rowlen + SizeOf(fJsonData[0])); // leave new field value as D^=nil
   end;
+  {$ifndef NOTORMTABLELEN}
+  // also adjust the internal fLen[] array
+  SetLength(fLen, n);
+  fLen[result] := length(fFieldNames[result]); // we know the new field length
+  S := pointer(prevlen);
+  D := pointer(fLen);
+  rowlen := result shl 2;
+  for i := 0 to fRowCount do
+  begin
+    MoveFast(S^, D^, rowlen);
+    inc(S, rowlen);
+    inc(D, rowlen + 4); // leave new field value as fLen[]=0
+  end;
+  {$endif NOTORMTABLELEN}
 end;
 
 procedure TOrmTableWritable.Update(Row: PtrInt; const FieldName, Value: RawUtf8);
@@ -2395,23 +2434,42 @@ end;
 procedure TOrmTableWritable.Update(Row, Field: PtrInt; const Value: RawUtf8);
 var
   U: PUtf8Char;
+  n: PtrInt;
+  f: integer;
 begin
+  // update the content
   if (self = nil) or
      (fData = nil) or
      (Row <= 0) or
      (Row > fRowCount) or
      (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
     exit;
-  Row := Row * fFieldCount + Field;
-  U := GetResults(Row);
-  if StrComp(U, pointer(Value)) <> 0 then
-    if fNewValuesInterning <> nil then
-      SetResultsSafe(Row, pointer(fNewValuesInterning.Unique(Value)))
-    else
-    begin
-      AddRawUtf8(fNewValues, fNewValuesCount, Value);
-      SetResultsSafe(Row, pointer(Value));
-    end;
+  f := 1 shl integer(Field); // =0 -> too many fields -> notify all fields
+  inc(Field, Row * fFieldCount);
+  U := GetResults(Field);
+  if StrComp(U, pointer(Value)) = 0 then
+    exit; // nothing was changed
+  if fUpdatedValuesInterning <> nil then
+    U := pointer(fUpdatedValuesInterning.Unique(Value))
+  else
+  begin
+    AddRawUtf8(fUpdatedValues, fUpdatedValuesCount, Value);
+    U := pointer(Value);
+  end;
+  SetResultsSafe(Field, U);
+  // track Update() modifications via UpdatedRows[]/UpdatedRowsFields[]
+  if fNoUpdateTracking then
+    exit;
+  n := AddSortedInteger(fUpdatedRows, fUpdatedRowsCount, Row,
+    @fUpdatedRowsFields); // O(log(N)) lookup
+  if n < 0 then
+  begin
+    // update the CoValues/fUpdatedRowsFields modified field bits
+    n := -(n + 1);  // returned -(foundindex+1)
+    if f <> 0 then
+      f := f or fUpdatedRowsFields[n];
+  end;
+  fUpdatedRowsFields[n] := f
 end;
 
 function TOrmTableWritable.AddField(const FieldName: RawUtf8;
@@ -2509,6 +2567,93 @@ begin
           SetResultsSafe(ndx + new[f], From.Results[k + f]);
     end;
     inc(ndx, FieldCount);
+  end;
+end;
+
+function TOrmTableWritable.UpdatesToBatch(
+  Batch: TRestBatch; aServerTimeStamp: TTimeLog): integer;
+var
+  c: TOrmClass;
+  rec: TOrm;
+  r: PtrInt;
+  def, def32, bits: TFieldBits;
+  props: TIntegerDynArray;
+  upd, updlast, b, f, p: integer;
+begin
+  result := 0;
+  c := QueryRecordType;
+  if (Batch = nil) or
+     (fUpdatedRowsCount = 0) or
+     (c = nil) then
+    exit;
+  rec := c.Create;
+  try
+    rec.FillPrepare(self);
+    rec.FillContext.ComputeSetUpdatedFieldIndexes(props);
+    with rec.Orm do
+      if (oftModTime in HasTypeFields) and
+         not (boOnlyObjects in Batch.Options) then
+      begin
+        // pre-compute once any TModTime field
+        if aServerTimeStamp = 0 then
+          if Assigned(Batch.Rest) then
+            aServerTimeStamp := Batch.Rest.GetServerTimestamp
+          else
+            aServerTimeStamp := TimeLogNowUtc; // e.g. from UpdatesToJson()
+        def := FieldBits[oftModTime];
+        rec.ComputeFieldsBeforeWrite(nil, oeUpdate, aServerTimeStamp);
+      end
+      else
+        FillZero(def);
+    def32 := rec.FillContext.TableMapFields;
+    updlast := 0; // recompute bits only if changed from previous rec
+    for r := 0 to fUpdatedRowsCount - 1 do
+    begin
+      rec.FillContext.Fill(fUpdatedRows[r]);
+      if rec.IDValue = 0 then
+        raise EOrmTable.CreateUtf8('%.UpdatesToBatch: no %.ID map', [self, c]);
+      upd := fUpdatedRowsFields[r];
+      if upd = 0 then // more than 32 fields -> send all mapped
+        bits := def32
+      else if upd <> updlast then
+      begin
+        updlast := upd;
+        bits := def;
+        b := 1;
+        for f := 0 to fFieldCount - 1 do
+        begin
+          if upd and b <> 0 then
+          begin
+            p := props[f];
+            if p < 0 then
+              raise EOrmTable.CreateUtf8(
+                '%.UpdatesToBatch: Unexpected %.%', [self, c, Results[f]]);
+            include(bits, p);
+          end;
+          b := b shl 1;
+        end;
+      end;
+      if Batch.Update(rec, bits, {donotautocompute:}true) < 0 then
+        raise EOrmTable.CreateUtf8(
+          '%.UpdatesToBatch: Batch.Update % failed', [self, rec]);
+      inc(result);
+    end;
+  finally
+    rec.Free;
+  end;
+end;
+
+function TOrmTableWritable.UpdatesToJson(
+  aOptions: TRestBatchOptions; aServerTimeStamp: TTimeLog): RawJson;
+var
+  b: TRestBatch;
+begin
+  b := TRestBatch.CreateNoRest(nil, QueryRecordType, 10000, aOptions);
+  try
+    UpdatesToBatch(b, aServerTimeStamp);
+    b.PrepareForSending(RawUtf8(result));
+  finally
+    b.Free;
   end;
 end;
 

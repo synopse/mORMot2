@@ -213,8 +213,6 @@ implementation
 
 { ************ NexusDB Database Engine Connection }
 
-implementation
-
 uses
   {$ifdef SYNDB_FULLNEXUSDB}
   nxreRemoteServerEngine,
@@ -250,7 +248,7 @@ constructor TSqlDBNexusDBConnectionProperties.Create(const aServerName,
 var
   lServerURL, lAlias: RawUtf8;
 begin
-  fDBMS := dNexusDB;
+  fDbms := dNexusDB;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
   fProtocol := GetNXProtocol(aServerName, lServerURL, lAlias);
   if fProtocol = nxpFOLDER then
@@ -282,6 +280,7 @@ end;
 function TSqlDBNexusDBConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBNexusDBConnection.Create(self);
+  TSqlDBNexusDBConnectionProperties(result).InternalProcess(speCreated);
 end;
 
 function TSqlDBNexusDBConnectionProperties.DatabaseExists: boolean;

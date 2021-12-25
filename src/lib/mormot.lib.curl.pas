@@ -21,7 +21,7 @@ interface
 
 {.$define LIBCURLMULTI}
 // to include the more advanced "multi session" API functions of libcurl
-// see https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
+// see https://curl.se/libcurl/c/libcurl-multi.html interface
 
 {.$define LIBCURLSTATIC}
 // to use the static libcurl.a version of the library - mainly for Android
@@ -103,8 +103,9 @@ type
     coFTPSSLAuth           = 129,
     coIgnoreContentLength  = 136,
     coFTPSkipPasvIp        = 137,
+    coTimeoutMs            = 155, // since libcurl 7.16.2 - April 11 2007
+    coConnectTimeoutMs     = 156,
     coFile                 = 10001,
-    coWriteData            = coFile,
     coURL                  = 10002,
     coProxy                = 10004,
     coUserPwd              = 10005,
@@ -129,7 +130,6 @@ type
     coPostQuote            = 10039,
     coWriteInfo            = 10040,
     coProgressData         = 10057,
-    coXferInfoData         = coProgressData,
     coInterface            = 10062,
     coKRB4Level            = 10063,
     coCAInfo               = 10065,
@@ -147,7 +147,6 @@ type
     coCAPath               = 10097,
     coShare                = 10100,
     coEncoding             = 10102,
-    coAcceptEncoding       = coEncoding,
     coPrivate              = 10103,
     coHttp200Aliases       = 10104,
     coSSLCtxData           = 10109,
@@ -379,6 +378,44 @@ type
     cmNone,
     cmDone);
 
+  /// libcurl multipart/formdata HTTP POST result codes
+  TCurlFormCode = (
+    CURL_FORMADD_OK,
+    CURL_FORMADD_MEMORY,
+    CURL_FORMADD_OPTION_TWICE,
+    CURL_FORMADD_NULL,
+    CURL_FORMADD_UNKNOWN_OPTION,
+    CURL_FORMADD_INCOMPLETE,
+    CURL_FORMADD_ILLEGAL_ARRAY,
+    CURL_FORMADD_DISABLED,
+    CURL_FORMADD_LAST);
+
+  /// libcurl multipart/formdata HTTP POST options
+  TCurlFormOption = (
+    CURLFORM_NOTHING,
+    CURLFORM_COPYNAME, // followed by a string which will be copied by libcurl
+    CURLFORM_PTRNAME,  // followed by a string which pointer will stay available
+    CURLFORM_NAMELENGTH, // if CURLFORM_COPYNAME/PTRNAME is not #0 terminated
+    CURLFORM_COPYCONTENTS, // followed by a pointer to the contents to be copied
+    CURLFORM_PTRCONTENTS,  // followed by a persistent pointer to the contents
+    CURLFORM_CONTENTSLENGTH, // deprecated - use CURLFORM_CONTENTLEN
+    CURLFORM_FILECONTENT, // followed by a filename - may not be a file upload
+    CURLFORM_ARRAY,
+    CURLFORM_OBSOLETE,
+    CURLFORM_FILE, // followed by a filename - will be a file upload part
+    CURLFORM_BUFFER, // followed by a filename - file upload without CURLFORM_FILE
+    CURLFORM_BUFFERPTR,     // CURLFORM_BUFFER persistent pointer
+    CURLFORM_BUFFERLENGTH,  // CURLFORM_BUFFER persistent size
+    CURLFORM_CONTENTTYPE, // followed by a pointer to a string, for CURLFORM_FILE
+    CURLFORM_CONTENTHEADER, // followed by a curl_slist_append() list of headers
+    CURLFORM_FILENAME, // followed by a pointer to a string, for CURLFORM_FILE
+    CURLFORM_END,
+    CURLFORM_OBSOLETE2,
+    CURLFORM_STREAM,
+    CURLFORM_CONTENTLEN, // added in 7.46.0, provide a curl_off_t 64-bit size
+    CURLFORM_LASTENTRY
+    );
+
   /// low-level version information for libcurl library
   TCurlVersionInfo = record
     age: TCurlVersion;
@@ -421,6 +458,43 @@ type
     certinfo: PPCurlSListArray;
   end;
   PCurlCertInfo = ^TCurlCertInfo;
+
+  PCurlHttpPost = ^TCurlHttpPost;
+
+  /// defines a multipart/formdata HTTP POST section
+  TCurlHttpPost = record
+    /// next entry in the list
+    next: PCurlHttpPost;
+    /// pointer to allocated name
+    name: PAnsiChar;
+    /// length of name length
+    namelength: integer;
+    /// pointer to allocated data contents
+    contents: PAnsiChar;
+    /// length of contents field
+    // - see also CURL_HTTPPOST_LARGE / 64-bit contentlen
+    contentslength: integer;
+    /// pointer to allocated buffer contents
+    buffer: PAnsiChar;
+    /// length of buffer field
+    bufferlength: integer;
+    /// Content-Type text
+    contenttype: PAnsiChar;
+    /// list of extra headers for this form
+    contentheader: PPCurlSListArray;
+    /// if one field name has more than one file, this link should link to following files
+    more: PCurlHttpPost;
+    /// as defined below
+    flags: integer;
+    /// file name to show. If not set, the actual file name will be used (if this is a file part)
+    showfilename: PAnsiChar;
+    /// custom pointer used for HTTPPOST_CALLBACK posts
+    userp: pointer;
+    /// alternative length of contents field - used if CURL_HTTPPOST_LARGE is set
+    // - added in 7.46.0 - is defined as POSIX off_t
+    contentlen: Int64;
+  end;
+
 
   /// low-level message information for libcurl library API
   TCurlMsgRec = packed record
@@ -476,6 +550,12 @@ type
 
 {$Z1}
 
+const
+  // some aliases
+  coWriteData = coFile;
+  coXferInfoData = coProgressData;
+  coAcceptEncoding = coEncoding;
+
 
 { ************ CURL Functions API }
 
@@ -499,20 +579,23 @@ type
   /// low-level late binding functions access to the libcurl library API
   // - ensure you called LibCurlInitialize or CurlIsAvailable functions to
   // setup this global instance before using any of its internal functions
-  // - see also https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
+  // - see also https://curl.se/libcurl/c/libcurl-multi.html interface
   {$ifdef LIBCURLSTATIC}
   TLibCurl = record
   {$else}
   TLibCurl = class(TSynLibrary)
   {$endif LIBCURLSTATIC}
   public
-    // in case CurlEnableShare is called this array holds a
-    // critical section per curl_lock_data
-    share_cs: array[0..Ord(CURL_LOCK_DATA_PSL)] of TRTLCriticalSection;
     /// global TCurlShare object, created by CurlEnableGlobalShare
     globalShare: TCurlShare;
+    /// hold CurlEnableGlobalShare mutexes
+    share_cs: array[curl_lock_data] of TRTLCriticalSection;
     /// initialize the library
     global_init: function(flags: TCurlGlobalInit): TCurlResult; cdecl;
+    /// initialize the library and specify a memory manager
+    // - set malloc, free, realloc, strdup and calloc functions
+    global_init_mem: function(flags: TCurlGlobalInit;
+      m, f, r, s, c: pointer): TCurlResult; cdecl;
     /// finalize the library
     global_cleanup: procedure; cdecl;
     /// returns run-time libcurl version info
@@ -537,6 +620,11 @@ type
     slist_append: function(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl;
     /// free an entire slist
     slist_free_all: procedure(list: TCurlSList); cdecl;
+    /// add a section to a multipart/formdata HTTP POST request
+    formadd: function(var first, last: PCurlHttpPost): TCurlFormCode; cdecl varargs;
+    /// finalize the sections of a multipart/formdata HTTP POST request
+    formfree: procedure(first: PCurlHttpPost); cdecl;
+
     /// create a shared object
     share_init: function: pointer; cdecl;
     /// clean up a shared object
@@ -642,16 +730,19 @@ implementation
   // compiled static library from https://github.com/gcesarmza/curl-android-ios
   {$ifdef OSANDROID}
     {$ifdef CPUAARCH64}
-      {$L ..\..\static\aarch64-android\libcurl.a}
+      {$linklib ..\..\static\aarch64-android\libcurl.a}
     {$endif CPUAARCH64}
     {$ifdef CPUARM}
-      {$L ..\..\static\arm-android\libcurl.a}
+      {$linklib ..\..\static\arm-android\libcurl.a}
     {$endif CPUARM}
     {$linklib libz.so}
   {$endif OSANDROID}
 
   /// initialize the library
   function curl_global_init(flags: TCurlGlobalInit): TCurlResult; cdecl; external;
+  /// initialize the library with a custom memory manager
+  function curl_global_init_mem(flags: TCurlGlobalInit;
+    m, f, r, s, c: pointer): TCurlResult; cdecl; external;
   /// finalize the library
   procedure curl_global_cleanup cdecl; external;
   /// returns run-time libcurl version info
@@ -676,8 +767,13 @@ implementation
   function curl_slist_append(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl; external;
   /// free an entire slist
   procedure curl_slist_free_all(list: TCurlSList); cdecl; external;
+  /// add a section to a multipart/formdata HTTP POST
+  function curl_formadd(var first, last: PCurlHttpPost): TCurlFormCode; cdecl varargs; external;
+  /// finalize all sections of a multipart/formdata HTTP POST
+  procedure curl_formfree(first: PCurlHttpPost); cdecl; external;
+
   /// create a shared object
-  function curl_share_init: pointer; cdecl; external
+  function curl_share_init: pointer; cdecl; external;
   /// clean up a shared object
   function curl_share_cleanup(share_handle: TCurlShare): CURLSHcode; cdecl; external;
   /// set options for a shared object
@@ -748,21 +844,56 @@ begin
   result := {$ifdef LIBCURLSTATIC} true {$else} curl <> nil {$endif};
 end;
 
+// ensure libcurl will call our RTL MM, not the libc heap
+
+function curl_malloc_callback(size: PtrInt) : pointer; cdecl;
+begin
+  GetMem(result, size);
+end;
+
+procedure curl_free_callback(ptr: pointer); cdecl;
+begin
+  FreeMem(ptr);
+end;
+
+function curl_realloc_callback(ptr: pointer; size: PtrInt) : pointer; cdecl;
+begin
+  ReallocMem(ptr, size);
+  result := ptr;
+end;
+
+function curl_strdup_callback(str: PAnsiChar): PAnsiChar; cdecl;
+var
+  len: PtrInt;
+begin
+  len := StrLen(str);
+  GetMem(result, len + 1);
+  result[len] := #0;
+  MoveFast(str^, result^, len);
+end;
+
+function curl_calloc_callback(nmemb, size: PtrInt): pointer; cdecl;
+begin
+  result := AllocMem(size * nmemb);
+end;
+
+
 procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
 
-{$ifndef LIBCURLSTATIC}
-
 var
+  res: TCurlResult;
+{$ifndef LIBCURLSTATIC}
   P: PPointerArray;
   api: PtrInt;
 
 const
-  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 30 {$else} 16 {$endif}] of PAnsiChar = (
-    'curl_global_init', 'curl_global_cleanup', 'curl_version_info',
+  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 33 {$else} 19 {$endif}] of PAnsiChar = (
+    'curl_global_init', 'curl_global_init_mem', 'curl_global_cleanup', 'curl_version_info',
     'curl_easy_init', 'curl_easy_setopt', 'curl_easy_perform', 'curl_easy_cleanup',
     'curl_easy_getinfo', 'curl_easy_duphandle', 'curl_easy_reset',
     'curl_easy_strerror', 'curl_slist_append', 'curl_slist_free_all',
-    'curl_share_init', 'curl_share_cleanup','curl_share_setopt', 'curl_share_strerror'
+    'curl_formadd', 'curl_formfree', 'curl_share_init',
+    'curl_share_cleanup','curl_share_setopt', 'curl_share_strerror'
     {$ifdef LIBCURLMULTI},
     'curl_multi_add_handle', 'curl_multi_assign', 'curl_multi_cleanup',
     'curl_multi_fdset', 'curl_multi_info_read', 'curl_multi_init',
@@ -788,6 +919,7 @@ begin
     {$ifdef LIBCURLSTATIC}
 
     curl.global_init := @curl_global_init;
+    curl.global_init_mem := @curl_global_init_mem;
     curl.global_cleanup := @curl_global_cleanup;
     curl.version_info := @curl_version_info;
     curl.easy_init := @curl_easy_init;
@@ -800,10 +932,12 @@ begin
     curl.easy_strerror := @curl_easy_strerror;
     curl.slist_append := @curl_slist_append;
     curl.slist_free_all := @curl_slist_free_all;
+    curl.formadd := @curl_formadd;
+    curl.formfree := @curl_formfree;
     curl.share_init := @curl_share_init;
     curl.share_cleanup := @curl_share_cleanup;
     curl.share_setopt := @curl_share_setopt;
-    curl.strerror := @curl_share_strerror;
+    curl.share_strerror := @curl_share_strerror;
     {$ifdef LIBCURLMULTI}
     curl.multi_add_handle := @curl_multi_add_handle;
     curl.multi_assign := @curl_multi_assign;
@@ -855,7 +989,10 @@ begin
     {$endif LIBCURLSTATIC}
 
     // if we reached here, the library has been successfully loaded
-    curl.global_init(engines);
+    res := curl.global_init_mem(engines, @curl_malloc_callback, @curl_free_callback,
+      @curl_realloc_callback, @curl_strdup_callback, @curl_calloc_callback);
+    if res <> crOK then
+        raise ECurl.CreateFmt('curl_global_init_mem() failed as %d', [ord(res)]);
     curl.info := curl.version_info(cvFour)^;
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info.version]);
     if curl.info.ssl_version <> nil then
@@ -874,18 +1011,18 @@ end;
 procedure curlShareLock(handle: TCurl; data: curl_lock_data;
   locktype: curl_lock_access; userptr: pointer); cdecl;
 begin
-  EnterCriticalSection(curl.share_cs[Ord(data)]);
+  EnterCriticalSection(curl.share_cs[data]);
 end;
 
 procedure curlShareUnLock(handle: TCurl; data: curl_lock_data;
   userptr: pointer); cdecl;
 begin
-  LeaveCriticalSection(curl.share_cs[Ord(data)]);
+  LeaveCriticalSection(curl.share_cs[data]);
 end;
 
 function CurlEnableGlobalShare: boolean;
 var
-  i: PtrInt;
+  d: curl_lock_data;
 begin
   result := false;
   if not CurlIsAvailable or 
@@ -896,20 +1033,23 @@ begin
     // something went wrong (out of memory, etc.) and therefore
     // the share object was not created
     exit;
-  for i := 0 to ord(CURL_LOCK_DATA_PSL) do
-    InitializeCriticalSection(curl.share_cs[i]);
+  for d := low(d) to high(d) do
+    InitializeCriticalSection(curl.share_cs[d]);
   curl.share_setopt(curl.globalShare, CURLSHOPT_LOCKFUNC, @curlShareLock);
   curl.share_setopt(curl.globalShare, CURLSHOPT_UNLOCKFUNC, @curlShareUnLock);
-  // share and cache DNS + TLS sessions + Connections
+  // share and cache DNS + TLS sessions (but not Connections)
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
-  curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+  // CURL_LOCK_DATA_CONNECT triggers GPF e.g. on Debian Burster 10
+  if curl.info.version_num >= $00074400 then // seems to be fixed in 7.68
+    // see https://github.com/curl/curl/issues/4544
+    curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
   result := true;
 end;
 
 function CurlDisableGlobalShare: CURLSHcode;
 var
-  i: PtrInt;
+  d: curl_lock_data;
 begin
   result := CURLSHE_OK;
   if curl.globalShare = nil then
@@ -917,8 +1057,8 @@ begin
   result := curl.share_cleanup(curl.globalShare);
   if result = CURLSHE_OK then
     curl.globalShare := nil;
-  for i := 0 to ord(CURL_LOCK_DATA_PSL) do
-    DeleteCriticalSection(curl.share_cs[i]);
+  for d := low(d) to high(d) do
+    DeleteCriticalSection(curl.share_cs[d]);
 end;
 
 {$ifndef LIBCURLSTATIC}
@@ -934,8 +1074,7 @@ initialization
 
 finalization
   {$ifdef LIBCURLSTATIC}
-  if curl_initialized and
-     (curl <> nil) then
+  if curl_initialized then
   begin
     CurlDisableGlobalShare;
     curl.global_cleanup;

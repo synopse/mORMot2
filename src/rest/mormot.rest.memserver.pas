@@ -39,6 +39,7 @@ uses
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.orm.server,
@@ -123,7 +124,7 @@ type
     destructor Destroy; override;
     /// Missing tables are created if they don't exist yet for every TOrm
     // class of the Database Model
-    // - you must call explicitely this before having called StaticDataCreate()
+    // - you must call explicitly this before having called StaticDataCreate()
     // - all table description (even Unique feature) is retrieved from the Model
     // - this method also create additional fields, if the TOrm definition
     // has been modified; only field adding is available, field renaming or
@@ -236,8 +237,8 @@ function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
   aHandleUserAuthentication: boolean): TRestServer;
 
 
-{$ifndef PUREMORMOT2}
 // backward compatibility types redirections
+{$ifndef PUREMORMOT2}
 
 type
   // should be a proper type for RegisterClassNameForDefinition
@@ -360,8 +361,11 @@ begin
       t := Model.GetTableIndexPtr(TableName);
       if t < 0 then
         exit;
+      if (P^ <> '[') and
+         (P^ <> '{') then
+        break;
       Data := P;
-      P := GotoNextJsonObjectOrArray(P);
+      P := GotoEndJsonItem(P);
       if P = nil then
         break;
       TRestStorageInMemory(fStaticData[t]).LoadFromJson(Data, P - Data);
@@ -435,7 +439,7 @@ begin
           S.WriteBuffer(CHARS[2], 2);
           SaveToJson(S, true);
           S.WriteBuffer(CHARS[5], 1);
-          if t < integer(fStaticDataCount - 1) then
+          if t < PtrInt(fStaticDataCount - 1) then
             S.WriteBuffer(CHARS[4], 1);
         end;
       S.WriteBuffer(CHARS[6], 1);

@@ -109,10 +109,12 @@ const
   SQL_ATTR_METADATA_ID = 10014;
 
   // statement attributes
+  SQL_QUERY_TIMEOUT = 0;
   SQL_ATTR_APP_ROW_DESC = 10010;
   SQL_ATTR_APP_PARAM_DESC = 10011;
   SQL_ATTR_IMP_ROW_DESC = 10012;
   SQL_ATTR_IMP_PARAM_DESC = 10013;
+  SQL_ATTR_QUERY_TIMEOUT = SQL_QUERY_TIMEOUT; // ODBC 3.0
   SQL_ATTR_CURSOR_SCROLLABLE = -1;
   SQL_ATTR_CURSOR_SENSITIVITY = -2;
 
@@ -857,7 +859,7 @@ begin
      (Minute < 60) and
      (Second < 60) then
   begin
-    // we use 'T' as TTextWriter.AddDateTime
+    // we use 'T' as TJsonWriter.AddDateTime
     TimeToIso8601PChar(Dest, true, Hour, Minute, Second, Fraction div 1000000,
       'T', WithMS);
     if WithMS then
@@ -887,26 +889,77 @@ const
   {$endif OSWINDOWS}
 
   ODBC_ENTRIES: array[0..66] of PAnsiChar = (
-    'SQLAllocEnv', 'SQLAllocHandle', 'SQLAllocStmt',
-    'SQLBindCol', 'SQLBindParameter', 'SQLCancel', 'SQLCloseCursor',
-    'SQLColAttribute', 'SQLColAttributeW', 'SQLColumns',
-    'SQLColumnsW', 'SQLStatistics', 'SQLStatisticsW', 'SQLConnect',
-    'SQLConnectW', 'SQLCopyDesc', 'SQLDataSources', 'SQLDataSourcesW',
-    'SQLDescribeCol', 'SQLDescribeColW', 'SQLDisconnect', 'SQLEndTran',
-    'SQLError', 'SQLErrorW', 'SQLExecDirect', 'SQLExecDirectW', 'SQLExecute',
-    'SQLFetch', 'SQLFetchScroll', 'SQLFreeConnect', 'SQLFreeEnv',
-    'SQLFreeHandle', 'SQLFreeStmt', 'SQLGetConnectAttr', 'SQLGetConnectAttrW',
-    'SQLGetCursorName', 'SQLGetCursorNameW', 'SQLGetData', 'SQLGetDescField',
-    'SQLGetDescFieldW', 'SQLGetDescRec', 'SQLGetDescRecW', 'SQLGetDiagField',
-    'SQLGetDiagFieldW', 'SQLGetDiagRec', 'SQLGetDiagRecW', 'SQLMoreResults',
-    'SQLPrepare', 'SQLPrepareW', 'SQLRowCount', 'SQLNumResultCols', 'SQLGetInfo',
-    'SQLGetInfoW', 'SQLSetStmtAttr', 'SQLSetStmtAttrW', 'SQLSetEnvAttr',
-    'SQLSetConnectAttr', 'SQLSetConnectAttrW', 'SQLTables', 'SQLTablesW',
-    'SQLForeignKeys', 'SQLForeignKeysW', 'SQLDriverConnect', 'SQLDriverConnectW',
-    'SQLProcedureColumnsA', 'SQLProcedureColumnsW', 'SQLProcedures');
+    'SQLAllocEnv',
+    'SQLAllocHandle',
+    'SQLAllocStmt',
+    'SQLBindCol',
+    'SQLBindParameter',
+    'SQLCancel',
+    'SQLCloseCursor',
+    'SQLColAttribute',
+    'SQLColAttributeW',
+    'SQLColumns',
+    'SQLColumnsW',
+    'SQLStatistics',
+    'SQLStatisticsW',
+    'SQLConnect',
+    'SQLConnectW',
+    'SQLCopyDesc',
+    'SQLDataSources',
+    'SQLDataSourcesW',
+    'SQLDescribeCol',
+    'SQLDescribeColW',
+    'SQLDisconnect',
+    'SQLEndTran',
+    'SQLError',
+    'SQLErrorW',
+    'SQLExecDirect',
+    'SQLExecDirectW',
+    'SQLExecute',
+    'SQLFetch',
+    'SQLFetchScroll',
+    'SQLFreeConnect',
+    'SQLFreeEnv',
+    'SQLFreeHandle',
+    'SQLFreeStmt',
+    'SQLGetConnectAttr',
+    'SQLGetConnectAttrW',
+    'SQLGetCursorName',
+    'SQLGetCursorNameW',
+    'SQLGetData',
+    'SQLGetDescField',
+    'SQLGetDescFieldW',
+    'SQLGetDescRec',
+    'SQLGetDescRecW',
+    'SQLGetDiagField',
+    'SQLGetDiagFieldW',
+    'SQLGetDiagRec',
+    'SQLGetDiagRecW',
+    'SQLMoreResults',
+    'SQLPrepare',
+    'SQLPrepareW',
+    'SQLRowCount',
+    'SQLNumResultCols',
+    'SQLGetInfo',
+    'SQLGetInfoW',
+    'SQLSetStmtAttr',
+    'SQLSetStmtAttrW',
+    'SQLSetEnvAttr',
+    'SQLSetConnectAttr',
+    'SQLSetConnectAttrW',
+    'SQLTables',
+    'SQLTablesW',
+    'SQLForeignKeys',
+    'SQLForeignKeysW',
+    'SQLDriverConnect',
+    'SQLDriverConnectW',
+    'SQLProcedureColumnsA',
+    'SQLProcedureColumnsW',
+    'SQLProcedures');
 
 
 {$ifdef OSWINDOWS}
+
 function ODBCInstalledDriversList(const aIncludeVersion: boolean;
   var aDrivers: TStrings): boolean;
 
@@ -921,8 +974,8 @@ function ODBCInstalledDriversList(const aIncludeVersion: boolean;
   end;
 
 var
-  I: PtrInt;
-  lDriver: string;
+  i: PtrInt;
+  s: string;
 begin
   with TRegistry.Create do
   try
@@ -935,15 +988,15 @@ begin
         aDrivers := TStringList.Create;
       GetValueNames(aDrivers);
       if aIncludeVersion then
-        for I := 0 to aDrivers.Count - 1 do
+        for i := 0 to aDrivers.Count - 1 do
         begin
           CloseKey;
-          result := OpenKeyReadOnly('Software\ODBC\ODBCINST.INI\'  +  aDrivers[I]);
+          result := OpenKeyReadOnly('Software\ODBC\ODBCINST.INI\'  +  aDrivers[i]);
           if result then
           begin
             // expand environment variable, i.e %windir%
-            lDriver := ExpandEnvVars(ReadString('Driver'));
-            aDrivers[I] := aDrivers[I]  +  '='  +  GetFullFileVersion(lDriver);
+            s := ExpandEnvVars(ReadString('Driver'));
+            aDrivers[i] := aDrivers[i]  +  '='  +  GetFullFileVersion(s);
           end;
         end;
     end;
@@ -951,8 +1004,11 @@ begin
     Free;
   end;
 end;
+
 {$else}
+
 // TODO: ODBCInstalledDriversList for Linux
+
 {$endif OSWINDOWS}
 
 

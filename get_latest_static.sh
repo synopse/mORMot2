@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# -------------------------------------------------------------------------------
+# DEPRECATED: simply download latest https://synopse.info/files/mormot2static.7z
+# -------------------------------------------------------------------------------
+
 # Update a static folder content from the latest [pre]release of mORMot2
 # Required tools: jq curl wget 7zip. On Ubuntu can be installed by
 # sudo apt install curl wget jq p7zip-full

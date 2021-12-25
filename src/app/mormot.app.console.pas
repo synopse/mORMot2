@@ -213,7 +213,7 @@ constructor TCommandLine.Create(const switches: variant;
   aNoConsole: boolean);
 begin
   inherited Create;
-  fValues.InitCopy(switches, JSON_OPTIONS_FAST);
+  fValues.InitCopy(switches, JSON_FAST);
   fNoPrompt := true;
   fNoConsole := aNoConsole;
 end;
@@ -222,7 +222,7 @@ constructor TCommandLine.Create(const NameValuePairs: array of const;
   aNoConsole: boolean);
 begin
   inherited Create;
-  fValues.InitObject(NameValuePairs, JSON_OPTIONS_FAST);
+  fValues.InitObject(NameValuePairs, JSON_FAST);
   fNoPrompt := true;
   fNoConsole := aNoConsole;
 end;
@@ -369,7 +369,7 @@ end;
 function TCommandLine.AsString(const Switch: RawUtf8;
   const Default, Prompt: string): string;
 begin
-  result := Utf8ToString(AsUtf8(Switch, StringToUtf8(Default), Prompt));
+  Utf8ToStringVar(AsUtf8(Switch, StringToUtf8(Default), Prompt), result);
 end;
 
 

@@ -775,7 +775,7 @@ type
   POracleDate = ^TOracleDate;
 
   /// wrapper to an array of TOracleDate items
-  TOracleDateArray = array[0..(maxInt div sizeof(TOracleDate)) - 1] of TOracleDate;
+  TOracleDateArray = array[0..(maxInt div SizeOf(TOracleDate)) - 1] of TOracleDate;
   POracleDateArray = ^TOracleDateArray;
 
 
@@ -1046,7 +1046,7 @@ begin
        (Sec > 1) then
     begin
       TimeToIso8601PChar(@tmp[10], true, Hour - 1, Min - 1, Sec - 1, 0, 'T');
-      SetString(aIso8601, tmp, 19); // we use 'T' as TTextWriter.AddDateTime
+      SetString(aIso8601, tmp, 19); // we use 'T' as TJsonWriter.AddDateTime
     end
     else
       SetString(aIso8601, tmp, 10); // only date
@@ -1076,7 +1076,7 @@ begin
          (Sec > 1) then
       begin
         TimeToIso8601PChar(Dest + 11, true, Hour - 1, Min - 1, Sec - 1, 0, 'T');
-        result := 21; // we use 'T' as TTextWriter.AddDateTime
+        result := 21; // we use 'T' as TJsonWriter.AddDateTime
       end
       else
         result := 12; // only date
@@ -1476,10 +1476,11 @@ var
   L, ErrNum: integer;
 begin
   case Status of
-    OCI_ERROR, OCI_SUCCESS_WITH_INFO:
+    OCI_ERROR,
+    OCI_SUCCESS_WITH_INFO:
       begin
         tmp[0] := #0;
-        ErrorGet(ErrorHandle, 1, nil, ErrNum, tmp, sizeof(tmp), OCI_HTYPE_ERROR);
+        ErrorGet(ErrorHandle, 1, nil, ErrNum, tmp, SizeOf(tmp), OCI_HTYPE_ERROR);
         L := mormot.core.base.StrLen(@tmp);
         while (L > 0) and
               (tmp[L - 1] < ' ') do
@@ -1542,7 +1543,7 @@ begin
   else
   begin
     tmp[0] := #0;
-    ErrorGet(ErrorHandle, 1, nil, ErrNum, tmp, sizeof(tmp), OCI_HTYPE_ERROR);
+    ErrorGet(ErrorHandle, 1, nil, ErrNum, tmp, SizeOf(tmp), OCI_HTYPE_ERROR);
     L := mormot.core.base.StrLen(@tmp);
     while (L > 0) and
           (tmp[L - 1] < ' ') do
@@ -1573,18 +1574,28 @@ begin
       [fLibraryPath, major_version, minor_version, update_num, patch_num]);
 end;
 
+var
+  _NLSLANG: AnsiString = '';
+
+procedure SetNlsLang;
+begin
+  _NLSLANG := AnsiString(GetEnvironmentVariable('NLS_LANG'));
+  if _NLSLANG = '' then
+    _NLSLANG := '-';
+end;
+
 function TSqlDBOracleLib.CodePageToCharSetID(env: pointer; aCodePage: cardinal): cardinal;
 var
   ocp: PUtf8Char;
   i: integer;
-  nlslang: AnsiString;
 begin
   case aCodePage of
     0:
       begin
-        nlslang := AnsiString(GetEnvironmentVariable('NLS_LANG'));
-        if nlslang <> '' then
-          result := NlsCharSetNameToID(env, pointer(nlslang))
+        if _NLSLANG = '' then
+          SetNlsLang;
+        if _NLSLANG <> '-' then
+          result := NlsCharSetNameToID(env, pointer(_NLSLANG))
         else
           result := CodePageToCharSetID(env, Unicode_CodePage);
       end;
@@ -1605,7 +1616,7 @@ begin
     end;
   end;
   if result = 0 then
-    result := OCI_WE8MSWIN1252;
+    result := OCI_WE8MSWIN1252; // unknown code page -> fallback to Win1252
 end;
 
 const
@@ -1661,11 +1672,12 @@ end;
 procedure Int64ToSqlT_VNU(Value: Int64; OutData: PSqlT_VNU);
 var
   V, Exp: byte;
+  d100: Qword;
   minus: boolean; // True, if the sign is positive
   Size, i: PtrInt;
   Mant: array[0..19] of byte;
 begin
-  FillcharFast(Mant, sizeof(Mant), 0);
+  FillcharFast(Mant, SizeOf(Mant), 0);
   Exp := 0;
   Size := 1;
   minus := Value >= 0;
@@ -1675,8 +1687,9 @@ begin
   begin
     if Value >= 100 then
     begin
-      V := Value mod 100;
-      Value := Value div 100;
+      d100 := Qword(Value) div 100;
+      V := Qword(Value) - (d100 * 100); // V := Value mod 100
+      Value := d100;
       inc(Exp);
     end
     else
@@ -1712,7 +1725,7 @@ end;
 
 function SimilarCharSet(aCharset1, aCharset2: cardinal): boolean;
 var
-  i1, i2: integer;
+  i1, i2: PtrInt;
 begin
   result := true;
   if aCharset1 = aCharset2 then
@@ -1728,7 +1741,7 @@ end;
 
 function OracleCharSetName(aCharsetID: cardinal): PUtf8Char;
 var
-  i: integer;
+  i: PtrInt;
 begin
   for i := 0 to high(CODEPAGES) do
     with CODEPAGES[i] do
@@ -1742,7 +1755,7 @@ end;
 
 function CharSetIDToCodePage(aCharSetID: cardinal): cardinal;
 var
-  i: integer;
+  i: PtrInt;
 begin
   for i := 0 to high(CODEPAGES) do
     with CODEPAGES[i] do

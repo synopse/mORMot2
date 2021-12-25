@@ -275,8 +275,8 @@ type
     fServerConnectedToLocalHost: boolean;
     fStatCache: RawJson;
     fStatTix: integer;
-    function OnServerBeforeBody(var aURL, aMethod, aInHeaders, aInContentType,
-      aRemoteIP, aBearerToken: RawUtf8; aContentLength: integer;
+    function OnServerBeforeBody(var aUrl, aMethod, aInHeaders, aInContentType,
+      aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
       aFlags: THttpServerRequestFlags): cardinal;
     function OnServerRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnClientsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -394,7 +394,7 @@ begin
   rest.status := status;
   rest.url := url;
   rest.method := method;
-  rest.headers := PurgeHeaders(pointer(headers));
+  rest.headers := PurgeHeaders(headers);
   if (contenttype <> '') and
      not IdemPropNameU(contenttype, JSON_CONTENT_TYPE_VAR) then
     rest.contenttype := contenttype;
@@ -482,7 +482,7 @@ begin
                   else
                     p^.OutContentType := rest.contenttype;
                   p^.OutCustomHeaders := rest.headers;
-                  p^.status := rest.status; // should be the latest set
+                  p^.RespStatus := rest.status; // should be the latest set
                   exit; // will be intercepted by TPublicRelay.OnClientsRequest
                 end
                 else
@@ -577,11 +577,11 @@ begin
     if Frame.opcode = focContinuation then
       Frame.payload := ip + #13 + Name + #13 + UpgradeUri; // propagate to Private Relay
     if not fOwner.EncapsulateAndSend(
-        fOwner.fServerConnected, ip, Frame, Sender.OwnerConnection) and
+        fOwner.fServerConnected, ip, Frame, Sender.OwnerConnectionID) and
        (Frame.opcode <> focConnectionClose) then
       raise ERelayProtocol.CreateUtf8(
         '%.ProcessIncomingFrame: Error relaying % from #% % to server',
-        [ToText(Frame.opcode)^, Sender.OwnerConnection, ip]);
+        [ToText(Frame.opcode)^, Sender.OwnerConnectionID, ip]);
   finally
     fOwner.Safe.UnLock;
   end;
@@ -657,10 +657,10 @@ begin
           rest.contenttype := JSON_CONTENT_TYPE_VAR;
         rest.status := http.Request(rest.url, rest.method, {keepalive=}0,
           rest.headers, rest.content, rest.contenttype, {retry=}false);
-        SetRestFrame(Frame, rest.status, '', '', http.HeaderGetText,
-          http.Content, http.ContentType);
+        SetRestFrame(Frame, rest.status, '', '', http.Http.Headers,
+          http.Http.Content, http.Http.ContentType);
         log.Log(sllTrace, 'ProcessIncomingFrame: answered [%] %',
-          [rest.status, KB(http.content)], self);
+          [rest.status, KB(http.Http.Content)], self);
       finally
         http.Free;
       end;
@@ -696,6 +696,7 @@ begin
               Frame.opcode := focConnectionClose;
               Frame.content := [];
               Frame.payload := '';
+              Frame.tix := 0;
               fOwner.EncapsulateAndSend(Sender, 'noserver', Frame, connection);
               exit;
             end;
@@ -842,6 +843,7 @@ begin
   encapsulated.payload := AlgoSynLZ.Compress(encapsulated.payload, trigger);
   dest.opcode := focBinary;
   dest.content := [];
+  dest.tix := 0;
   if (Process.Protocol <> nil) and
      Process.Protocol.Encrypted then
     Process.Protocol.Encryption.Encrypt(encapsulated.payload, dest.payload)
@@ -854,7 +856,8 @@ begin
     inc(fFrames);
   end;
   fLog.Add.Log(LOG_TRACEWARNING[not result], 'EncapsulateAndSend % #% % %',
-    [ToText(Frame.opcode)^, Connection, IP, KBNoSpace(length(dest.payload))], self);
+    [ToText(Frame.opcode)^, Connection, IP,
+     KBNoSpace(length(dest.payload))], self);
 end;
 
 function TAbstractRelay.Decapsulate(Protocol: TWebSocketProtocol;
@@ -921,6 +924,7 @@ begin
   fClients.WaitStarted;
   fClients.WebSocketProtocols.Add(TSynopseServerProtocol.Create(self));
   fClients.OnRequest := OnClientsRequest;
+  // fServer.Settings^.SetFullLog; fClients.Settings^.SetFullLog;
   if log <> nil then
     log.Log(sllDebug, 'Create: Server=% Clients=%', [fServer, fClients], self);
 end;
@@ -940,12 +944,12 @@ begin
 end;
 
 function TPublicRelay.OnServerBeforeBody(
-  var aURL, aMethod, aInHeaders, aInContentType, aRemoteIP, aBearerToken: RawUtf8;
-  aContentLength: integer; aFlags: THttpServerRequestFlags): cardinal;
+  var aUrl, aMethod, aInHeaders, aInContentType, aRemoteIP, aBearerToken: RawUtf8;
+  aContentLength: Int64; aFlags: THttpServerRequestFlags): cardinal;
 var
   res: TJwtResult;
 begin
-  if IdemPChar(pointer(aURL), '/STAT') then
+  if IdemPChar(pointer(aUrl), '/STAT') then
   begin
     result := HTTP_SUCCESS;
     exit;
@@ -1019,12 +1023,12 @@ begin
   try
     start := GetTickCount64;
     repeat
-      if Ctxt.Status <> 0 then
+      if Ctxt.RespStatus <> 0 then
       begin
         if log <> nil then
           log.Log(sllTrace, 'OnClientsRequest: answer [%] % %',
-            [Ctxt.Status, KB(Ctxt.OutContent), Ctxt.OutContentType], self);
-        result := Ctxt.Status;
+            [Ctxt.RespStatus, KB(Ctxt.OutContent), Ctxt.OutContentType], self);
+        result := Ctxt.RespStatus;
         break;
       end;
       diff := GetTickCount64 - start;
@@ -1070,26 +1074,26 @@ begin
     else
       ip := fServerConnected.RemoteIP;
     fStatCache := JsonReformat(JsonEncode([
-      'version', Executable.Version.Detailed,
-      'started', Started,
-      'memory', TSynMonitorMemory.ToVariant,
-      'disk free', GetDiskPartitionsText,
-      'exceptions', GetLastExceptions,
+      'version',     Executable.Version.Detailed,
+      'started',     Started,
+      'memory',      TSynMonitorMemory.ToVariant,
+      'disk free',   GetDiskPartitionsText,
+      'exceptions',  GetLastExceptions,
       'connections', fClients.ServerConnectionCount,
-      'rejected', Rejected,
-      'server', ip,
+      'rejected',    Rejected,
+      'server',      ip,
       'sent', '{',
-        'kb', KB(sent),
-        'frames', Frames, '}',
+        'kb',        KB(sent),
+        'frames',    Frames, '}',
       'received', '{',
-        'kb', KB(Received),
-        'valid', Valid,
-        'invalid', Invalid, '}',
+        'kb',        KB(Received),
+        'valid',     Valid,
+        'invalid',   Invalid, '}',
       'rest', '{',
-        'frames', fRestFrameCount,
-        'pending', fRestPending, '}',
-      'connected', fClients.ServerConnectionActive,
-      'clients', fClients.WebSocketConnections]));
+        'frames',    fRestFrameCount,
+        'pending',   fRestPending, '}',
+      'connected',   fClients.ServerConnectionActive,
+      'clients',     fClients.WebSocketConnections]));
   end;
   result := fStatCache;
 end;

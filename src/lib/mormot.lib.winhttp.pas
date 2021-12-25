@@ -27,12 +27,12 @@ interface
 uses
   sysutils,
   classes,
+  Windows,
+  WinINet,
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,
-  mormot.net.sock,
-  Windows,
-  WinINet;
+  mormot.net.sock;
 
 
 { ******************** WinINet API Additional Wrappers }
@@ -187,7 +187,7 @@ type
     reqTe,
     reqTranslate,
     reqUserAgent,
-    respAcceptRanges = 20,
+    respAcceptRanges = 20{%H-},
     respAge,
     respEtag,
     respLocation,
@@ -940,15 +940,47 @@ const
   HTTP_URL_FLAG_REMOVE_ALL = 1;
 
   HTTP_KNOWNHEADERS: array[low(THttpHeader)..reqUserAgent] of string[19] = (
-    'Cache-Control', 'Connection', 'Date', 'Keep-Alive', 'Pragma',
-    'Trailer', 'Transfer-Encoding', 'Upgrade', 'Via', 'Warning',
-    'Allow', 'Content-Length', 'Content-Type', 'Content-Encoding',
-    'Content-Language', 'Content-Location', 'Content-MD5', 'Content-Range',
-    'Expires', 'Last-Modified', 'Accept', 'Accept-Charset', 'Accept-Encoding',
-    'Accept-Language', 'Authorization', 'Cookie', 'Expect', 'From', 'Host',
-    'If-Match', 'If-Modified-Since', 'If-None-Match', 'If-Range',
-    'If-Unmodified-Since', 'Max-Forwards', 'Proxy-Authorization', 'Referer',
-    'Range', 'TE', 'Translate', 'User-Agent');
+    'Cache-Control',
+    'Connection',
+    'Date',
+    'Keep-Alive',
+    'Pragma',
+    'Trailer',
+    'Transfer-Encoding',
+    'Upgrade',
+    'Via',
+    'Warning',
+    'Allow',
+    'Content-Length',
+    'Content-Type',
+    'Content-Encoding',
+    'Content-Language',
+    'Content-Location',
+    'Content-MD5',
+    'Content-Range',
+    'Expires',
+    'Last-Modified',
+    'Accept',
+    'Accept-Charset',
+    'Accept-Encoding',
+    'Accept-Language',
+    'Authorization',
+    'Cookie',
+    'Expect',
+    'From',
+    'Host',
+    'If-Match',
+    'If-Modified-Since',
+    'If-None-Match',
+    'If-Range',
+    'If-Unmodified-Since',
+    'Max-Forwards',
+    'Proxy-Authorization',
+    'Referer',
+    'Range',
+    'TE',
+    'Translate',
+    'User-Agent');
 
 type
   HTTP_SERVER_PROPERTY = (
@@ -1114,37 +1146,69 @@ var
 
 type
   THttpApis = (
-    hInitialize, hTerminate, hCreateHttpHandle, hAddUrl, hRemoveUrl,
-    hReceiveHttpRequest, hSendHttpResponse, hReceiveRequestEntityBody,
-    hResponseEntityBody, hSetServiceConfiguration, hDeleteServiceConfiguration,
-    hFlushResponseCache, hCancelHttpRequest, hCreateServerSession,
-    hCloseServerSession, hCreateRequestQueue, hSetServerSessionProperty,
-    hQueryServerSessionProperty, hCreateUrlGroup, hCloseUrlGroup,
-    hAddUrlToUrlGroup, hRemoveUrlFromUrlGroup, hSetUrlGroupProperty,
-    hQueryUrlGroupProperty, hSetRequestQueueProperty, hQueryRequestQueueProperty);
+    hInitialize,
+    hTerminate,
+    hCreateHttpHandle,
+    hAddUrl,
+    hRemoveUrl,
+    hReceiveHttpRequest,
+    hSendHttpResponse,
+    hReceiveRequestEntityBody,
+    hResponseEntityBody,
+    hSetServiceConfiguration,
+    hDeleteServiceConfiguration,
+    hFlushResponseCache,
+    hCancelHttpRequest,
+    hCreateServerSession,
+    hCloseServerSession,
+    hCreateRequestQueue,
+    hSetServerSessionProperty,
+    hQueryServerSessionProperty,
+    hCreateUrlGroup,
+    hCloseUrlGroup,
+    hAddUrlToUrlGroup,
+    hRemoveUrlFromUrlGroup,
+    hSetUrlGroupProperty,
+    hQueryUrlGroupProperty,
+    hSetRequestQueueProperty,
+    hQueryRequestQueueProperty);
 
 const
   hHttpApi2First = hCancelHttpRequest;
   HttpNames: array[THttpApis] of PChar = (
-    'HttpInitialize', 'HttpTerminate',
-    'HttpCreateHttpHandle', 'HttpAddUrl', 'HttpRemoveUrl',
-    'HttpReceiveHttpRequest', 'HttpSendHttpResponse',
-    'HttpReceiveRequestEntityBody', 'HttpSendResponseEntityBody',
-    'HttpSetServiceConfiguration', 'HttpDeleteServiceConfiguration',
-    'HttpFlushResponseCache', 'HttpCancelHttpRequest', 'HttpCreateServerSession',
-    'HttpCloseServerSession', 'HttpCreateRequestQueue',
-    'HttpSetServerSessionProperty', 'HttpQueryServerSessionProperty',
-    'HttpCreateUrlGroup', 'HttpCloseUrlGroup', 'HttpAddUrlToUrlGroup',
-    'HttpRemoveUrlFromUrlGroup', 'HttpSetUrlGroupProperty',
-    'HttpQueryUrlGroupProperty', 'HttpSetRequestQueueProperty',
+    'HttpInitialize',
+    'HttpTerminate',
+    'HttpCreateHttpHandle',
+    'HttpAddUrl',
+    'HttpRemoveUrl',
+    'HttpReceiveHttpRequest',
+    'HttpSendHttpResponse',
+    'HttpReceiveRequestEntityBody',
+    'HttpSendResponseEntityBody',
+    'HttpSetServiceConfiguration',
+    'HttpDeleteServiceConfiguration',
+    'HttpFlushResponseCache',
+    'HttpCancelHttpRequest',
+    'HttpCreateServerSession',
+    'HttpCloseServerSession',
+    'HttpCreateRequestQueue',
+    'HttpSetServerSessionProperty',
+    'HttpQueryServerSessionProperty',
+    'HttpCreateUrlGroup',
+    'HttpCloseUrlGroup',
+    'HttpAddUrlToUrlGroup',
+    'HttpRemoveUrlFromUrlGroup',
+    'HttpSetUrlGroupProperty',
+    'HttpQueryUrlGroupProperty',
+    'HttpSetRequestQueueProperty',
     'HttpQueryRequestQueueProperty');
 
 
 type
   /// exception raised during http.sys HTTP/1.1 process
-  EHttpApiServer = class(ENetSock)
+  EHttpApiServer = class(ExceptionWithProps)
   protected
-    fLastError: integer;
+    fLastApiError: integer;
     fLastApi: THttpApis;
   public
     /// raise an EHttpApiServer if the http.sys API result code is an error
@@ -1153,8 +1217,8 @@ type
     constructor Create(api: THttpApis; Error: integer); reintroduce;
   published
     /// the error code of this exception
-    property LastError: integer
-      read fLastError;
+    property LastApiError: integer
+      read fLastApiError;
     /// the execution context of this exception
     property LastApi: THttpApis
       read fLastApi;
@@ -1174,8 +1238,9 @@ function RegURL(aRoot, aPort: RawUtf8; Https: boolean;
   aDomainName: RawUtf8): SynUnicode;
 
 /// low-level adjustement of the HTTP_REQUEST headers
-function RetrieveHeaders(const Request: HTTP_REQUEST;
-  const RemoteIPHeadUp: RawUtf8; out RemoteIP: RawUtf8): RawUtf8;
+function RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
+  const RemoteIPHeadUp, ConnectionIDHeadUp: RawUtf8; out RemoteIP: RawUtf8;
+  var ConnectionID: QWord): RawUtf8;
 
 
 { ******************** winhttp.dll Windows API Definitions }
@@ -1478,30 +1543,61 @@ var
   WinHttpApi: TWinHttpBinding;
 
 type
-  EWinHttp = class(ENetSock);
+  EWinHttp = class(ExceptionWithProps);
   
   TWinHttpApis = (
-    hOpen, hSetStatusCallback, hConnect, hOpenRequest, hCloseHandle,
-    hAddRequestHeaders, hSendRequest, hReceiveResponse, hQueryHeaders,
-    hQueryDataAvailable, hQueryOption, hGetProxyForUrl,
-    hGetIEProxyConfigForCurrentUser, hReadData,
-    hSetTimeouts, hSetOption, hSetCredentials,
-    hWebSocketCompleteUpgrade, hWebSocketClose, hWebSocketQueryCloseStatus,
-    hWebSocketSend, hWebSocketReceive, hWriteData);
+    hOpen,
+    hSetStatusCallback,
+    hConnect,
+    hOpenRequest,
+    hCloseHandle,
+    hAddRequestHeaders,
+    hSendRequest,
+    hReceiveResponse,
+    hQueryHeaders,
+    hQueryDataAvailable,
+    hQueryOption,
+    hGetProxyForUrl,
+    hGetIEProxyConfigForCurrentUser,
+    hReadData,
+    hSetTimeouts,
+    hSetOption,
+    hSetCredentials,
+    hWebSocketCompleteUpgrade,
+    hWebSocketClose,
+    hWebSocketQueryCloseStatus,
+    hWebSocketSend,
+    hWebSocketReceive,
+    hWriteData);
 
 const
   hWebSocketApiFirst = hWebSocketCompleteUpgrade;
 
 const
   WinHttpNames: array[TWinHttpApis] of PChar = (
-    'WinHttpOpen', 'WinHttpSetStatusCallback', 'WinHttpConnect',
-    'WinHttpOpenRequest', 'WinHttpCloseHandle', 'WinHttpAddRequestHeaders',
-    'WinHttpSendRequest', 'WinHttpReceiveResponse', 'WinHttpQueryHeaders',
-    'WinHttpQueryDataAvailable', 'WinHttpQueryOption', 'WinHttpGetProxyForUrl',
-    'WinHttpGetIEProxyConfigForCurrentUser', 'WinHttpReadData', 'WinHttpSetTimeouts',
-    'WinHttpSetOption', 'WinHttpSetCredentials', 'WinHttpWebSocketCompleteUpgrade',
-    'WinHttpWebSocketClose', 'WinHttpWebSocketQueryCloseStatus',
-    'WinHttpWebSocketSend', 'WinHttpWebSocketReceive', 'WinHttpWriteData');
+    'WinHttpOpen',
+    'WinHttpSetStatusCallback',
+    'WinHttpConnect',
+    'WinHttpOpenRequest',
+    'WinHttpCloseHandle',
+    'WinHttpAddRequestHeaders',
+    'WinHttpSendRequest',
+    'WinHttpReceiveResponse',
+    'WinHttpQueryHeaders',
+    'WinHttpQueryDataAvailable',
+    'WinHttpQueryOption',
+    'WinHttpGetProxyForUrl',
+    'WinHttpGetIEProxyConfigForCurrentUser',
+    'WinHttpReadData',
+    'WinHttpSetTimeouts',
+    'WinHttpSetOption',
+    'WinHttpSetCredentials',
+    'WinHttpWebSocketCompleteUpgrade',
+    'WinHttpWebSocketClose',
+    'WinHttpWebSocketQueryCloseStatus',
+    'WinHttpWebSocketSend',
+    'WinHttpWebSocketReceive',
+    'WinHttpWriteData');
 
 
 /// low-level thread-safe initialization of the WinHtpp API
@@ -1535,6 +1631,7 @@ type
 // - note that this call may require a network access, and can be slow: if you
 // can, try to store the proxy information in the settings, and only call it
 // in case of connection failure
+// - as called by cross-platform GetProxyForUri() function from mormot.net.client
 function WinHttpGetProxyInfo(const URL: SynUnicode;
   out ProxyInfo: TProxyInfo): DWORD;
 
@@ -1655,13 +1752,22 @@ type
 
   /// identify each TWebSocketApi late-binding API function
   TWebSocketApis = (
-    hAbortHandle, hBeginClientHandshake, hBeginServerHandshake,
-    hCompleteAction, hCreateClientHandle, hCreateServerHandle, hDeleteHandle,
-    hEndClientHandshake, hEndServerHandshake, hGetAction, hGetGlobalProperty,
-    hReceive, hSend);
+    hAbortHandle,
+    hBeginClientHandshake,
+    hBeginServerHandshake,
+    hCompleteAction,
+    hCreateClientHandle,
+    hCreateServerHandle,
+    hDeleteHandle,
+    hEndClientHandshake,
+    hEndServerHandshake,
+    hGetAction,
+    hGetGlobalProperty,
+    hReceive,
+    hSend);
 
   /// exception raised during http.sys WebSockets process
-  EWebSocketApi = class(ENetSock)
+  EWebSocketApi = class(ExceptionWithProps)
   protected
     fLastError: integer;
     fLastApi: TWebSocketApis;
@@ -1682,12 +1788,20 @@ type
 const
   WEBSOCKET_DLL = 'websocket.dll';
   WebSocketNames: array[TWebSocketApis] of PChar = (
-    'WebSocketAbortHandle', 'WebSocketBeginClientHandshake',
-    'WebSocketBeginServerHandshake', 'WebSocketCompleteAction',
-    'WebSocketCreateClientHandle', 'WebSocketCreateServerHandle',
-    'WebSocketDeleteHandle', 'WebSocketEndClientHandshake',
-    'WebSocketEndServerHandshake', 'WebSocketGetAction',
-    'WebSocketGetGlobalProperty', 'WebSocketReceive', 'WebSocketSend');
+    'WebSocketAbortHandle',
+    'WebSocketBeginClientHandshake',
+    'WebSocketBeginServerHandshake',
+    'WebSocketCompleteAction',
+    'WebSocketCreateClientHandle',
+    'WebSocketCreateServerHandle',
+    'WebSocketDeleteHandle',
+    'WebSocketEndClientHandshake',
+    'WebSocketEndServerHandshake',
+    'WebSocketGetAction',
+    'WebSocketGetGlobalProperty',
+    'WebSocketReceive',
+    'WebSocketSend');
+
   WEB_SOCKET_SEND_ACTION_QUEUE = $1;
   WEB_SOCKET_RECEIVE_ACTION_QUEUE = $2;
   WEB_SOCKET_ALL_ACTION_QUEUE = WEB_SOCKET_SEND_ACTION_QUEUE or
@@ -1754,7 +1868,8 @@ const
   sProtocolHeader: RawUtf8 = 'SEC-WEBSOCKET-PROTOCOL';
 
 /// retrieve an array of headers from WebSockets low-level information
-function HttpSys2ToWebSocketHeaders(const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
+function HttpSys2ToWebSocketHeaders(
+  const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
 
 /// retrieve the linefeed separated text from WebSockets array of headers
 function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
@@ -1803,13 +1918,15 @@ const
   REMOTEIP_HEADERLEN = 10;
   REMOTEIP_HEADER: string[REMOTEIP_HEADERLEN] = 'RemoteIP: ';
 
-function RetrieveHeaders(const Request: HTTP_REQUEST;
-  const RemoteIPHeadUp: RawUtf8; out RemoteIP: RawUtf8): RawUtf8;
+function RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
+  const RemoteIPHeadUp, ConnectionIDHeadUp: RawUtf8; out RemoteIP: RawUtf8;
+  var ConnectionID: QWord): RawUtf8;
 var
   i, L, Lip: integer;
   H: THttpHeader;
   P: PHTTP_UNKNOWN_HEADER;
   D: PAnsiChar;
+  V: PUtf8Char;
 begin
   assert(low(HTTP_KNOWNHEADERS) = low(Request.Headers.KnownHeaders));
   assert(high(HTTP_KNOWNHEADERS) = high(Request.Headers.KnownHeaders));
@@ -1821,7 +1938,7 @@ begin
     if P <> nil then
       for i := 1 to Request.Headers.UnknownHeaderCount do
         if (P^.NameLength = L) and
-           IdemPChar(P^.pName, Pointer(RemoteIPHeadUp)) then
+           IdemPChar(P^.pName, pointer(RemoteIPHeadUp)) then
         begin
           FastSetString(RemoteIP, P^.pRawValue, P^.RawValueLength);
           break;
@@ -1832,6 +1949,23 @@ begin
   if (RemoteIP = '') and
      (Request.Address.pRemoteAddress <> nil) then
     RemoteIP := Request.Address.pRemoteAddress.IP(RemoteIPLocalHostAsVoidInServers);
+  // extract connection ID
+  L := length(ConnectionIDHeadUp);
+  if L <> 0 then
+  begin
+    P := Request.Headers.pUnknownHeaders;
+    if P <> nil then
+      for i := 1 to Request.Headers.UnknownHeaderCount do
+        if (P^.NameLength = L) and
+           IdemPChar(P^.pName, pointer(ConnectionIDHeadUp)) then
+        begin
+          V := pointer(P^.pRawValue);
+          SetQWord(V, V + P^.RawValueLength, ConnectionID);
+          break;
+        end
+        else
+          inc(P);
+  end;
   // compute headers length
   Lip := length(RemoteIP);
   if Lip <> 0 then
@@ -1944,10 +2078,10 @@ end;
 
 constructor EHttpApiServer.Create(api: THttpApis; Error: integer);
 begin
-  fLastError := Error;
+  fLastApiError := Error;
   fLastApi := api;
-  inherited CreateFmt('%s failed: %s (%d)', [HttpNames[api],
-    SysErrorMessagePerModule(Error, HTTPAPI_DLL), Error])
+  inherited CreateFmt('%s failed: %s (%d=0x%x)', [HttpNames[api],
+    SysErrorMessagePerModule(Error, HTTPAPI_DLL), Error, Error])
 end;
 
 
@@ -1965,7 +2099,7 @@ end;
 procedure HTTP_RESPONSE.SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY;
   const Content: RawByteString; const ContentType: RawUtf8);
 begin
-  FillcharFast(DataChunk, sizeof(DataChunk), 0);
+  FillcharFast(DataChunk, SizeOf(DataChunk), 0);
   if ContentType <> '' then
   begin
     Headers.KnownHeaders[reqContentType].RawValueLength := length(ContentType);
@@ -2016,14 +2150,38 @@ function HTTP_RESPONSE.AddCustomHeader(P: PUtf8Char;
   var UnknownHeaders: HTTP_UNKNOWN_HEADERS;
   ForceCustomHeader: boolean): PUtf8Char;
 const
-  KNOWNHEADERS: array[reqCacheControl..respWwwAuthenticate] of PAnsiChar = (
-    'CACHE-CONTROL:', 'CONNECTION:', 'DATE:', 'KEEP-ALIVE:', 'PRAGMA:',
-    'TRAILER:', 'TRANSFER-ENCODING:', 'UPGRADE:', 'VIA:', 'WARNING:', 'ALLOW:',
-    'CONTENT-LENGTH:', 'CONTENT-TYPE:', 'CONTENT-ENCODING:', 'CONTENT-LANGUAGE:',
-    'CONTENT-LOCATION:', 'CONTENT-MD5:', 'CONTENT-RANGE:', 'EXPIRES:',
-    'LAST-MODIFIED:', 'ACCEPT-RANGES:', 'AGE:', 'ETAG:', 'LOCATION:',
-    'PROXY-AUTHENTICATE:', 'RETRY-AFTER:', 'SERVER:', 'SET-COOKIE:', 'VARY:',
-    'WWW-AUTHENTICATE:');
+  KNOWNHEADERS: array[reqCacheControl..succ(respWwwAuthenticate)] of PAnsiChar = (
+    'CACHE-CONTROL:',
+    'CONNECTION:',
+    'DATE:',
+    'KEEP-ALIVE:',
+    'PRAGMA:',
+    'TRAILER:',
+    'TRANSFER-ENCODING:',
+    'UPGRADE:',
+    'VIA:',
+    'WARNING:',
+    'ALLOW:',
+    'CONTENT-LENGTH:',
+    'CONTENT-TYPE:',
+    'CONTENT-ENCODING:',
+    'CONTENT-LANGUAGE:',
+    'CONTENT-LOCATION:',
+    'CONTENT-MD5:',
+    'CONTENT-RANGE:',
+    'EXPIRES:',
+    'LAST-MODIFIED:',
+    'ACCEPT-RANGES:',
+    'AGE:',
+    'ETAG:',
+    'LOCATION:',
+    'PROXY-AUTHENTICATE:',
+    'RETRY-AFTER:',
+    'SERVER:',
+    'SET-COOKIE:',
+    'VARY:',
+    'WWW-AUTHENTICATE:',
+    nil);
 var
   UnknownName: PUtf8Char;
   i: integer;
@@ -2031,7 +2189,7 @@ begin
   if ForceCustomHeader then
     i := -1
   else
-    i := IdemPCharArray(P, KNOWNHEADERS);
+    i := IdemPPChar(P, @KNOWNHEADERS);
   // WebSockets need CONNECTION as unknown header
   if (i >= 0) and
      (THttpHeader(i) <> reqConnection) then
@@ -2109,8 +2267,8 @@ var
   tmp: SynUnicode;
   P: PWideChar;
 begin
-  if not GetTokenInformation(UserToken, TokenUser, @Buffer, SizeOf(Buffer),
-    BufferSize) then
+  if not GetTokenInformation(UserToken, TokenUser,
+           @Buffer, SizeOf(Buffer), BufferSize) then
     exit;
   UserInfo := @Buffer;
   UserSize := 0;
@@ -2135,11 +2293,32 @@ end;
 procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
   dwInternetStatus: cardinal; lpvStatusInformation: pointer;
   dwStatusInformationLength: cardinal); stdcall;
+var
+  err: string;
+  code: DWORD;
 begin
+  code := PDWORD(lpvStatusInformation)^;
+  if code and $00000001 <> 0 then
+    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_REV_FAILED';
+  if code and $00000002 <> 0 then
+    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CERT';
+  if code and $00000004 <> 0 then
+    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_REVOKED';
+  if code and $00000008 <> 0 then
+    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CA';
+  if code and $00000010 <> 0 then
+    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_CN_INVALID';
+  if code and $00000020 <> 0 then
+    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_DATE_INVALID';
+  if code and $00000040 <> 0 then
+    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_WRONG_USAGE';
+  if code and $80000000 <> 0 then
+    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_SECURITY_CHANNEL_ERROR';
   // in case lpvStatusInformation^=-2147483648 this is attempt to connect to
   // non-https socket wrong port - perhaps must be 443?
-  raise EWinHttp.CreateFmt('WinHttp security error. Status %d, statusInfo: %d',
-    [dwInternetStatus, PDWORD(lpvStatusInformation)^]);
+  raise EWinHttp.CreateFmt(
+    'WinHttp security error. Status %d, StatusInfo: %d ($%x%s)',
+    [dwInternetStatus, code, code, err]);
 end;
 
 function WinHttpGetProxyInfo(const URL: SynUnicode;
@@ -2203,7 +2382,6 @@ begin
       WINHTTP_AUTO_DETECT_TYPE_DHCP or WINHTTP_AUTO_DETECT_TYPE_DNS_A;
     AutoDetectProxy := true;
   end;
-
   // if the IE proxy settings are not available or IE has
   // configured auto-config script or auto-detect proxy settings
   if AutoDetectProxy then
@@ -2363,8 +2541,8 @@ begin
     end;
 end;
 
-function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER; const
-  aHeadersCount: integer): RawUtf8;
+function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
+  const aHeadersCount: integer): RawUtf8;
 var
   i: integer;
   h: PWEB_SOCKET_HTTP_HEADER;
@@ -2424,27 +2602,27 @@ const
 initialization
   Assert(
     {$ifdef CPU64}
-    (sizeof(HTTP_REQUEST) = 864) and
-    (sizeof(HTTP_SSL_INFO) = 48) and
-    (sizeof(HTTP_DATA_CHUNK_INMEMORY) = 32) and
-    (sizeof(HTTP_DATA_CHUNK_FILEHANDLE) = 32) and
-    (sizeof(HTTP_REQUEST_HEADERS) = 688) and
-    (sizeof(HTTP_RESPONSE_HEADERS) = 512) and
-    (sizeof(HTTP_COOKED_URL) = 40) and
-    (sizeof(HTTP_RESPONSE) = 568) and
+    (SizeOf(HTTP_REQUEST) = 864) and
+    (SizeOf(HTTP_SSL_INFO) = 48) and
+    (SizeOf(HTTP_DATA_CHUNK_INMEMORY) = 32) and
+    (SizeOf(HTTP_DATA_CHUNK_FILEHANDLE) = 32) and
+    (SizeOf(HTTP_REQUEST_HEADERS) = 688) and
+    (SizeOf(HTTP_RESPONSE_HEADERS) = 512) and
+    (SizeOf(HTTP_COOKED_URL) = 40) and
+    (SizeOf(HTTP_RESPONSE) = 568) and
     {$else}
-    (sizeof(HTTP_REQUEST) = 472) and
-    (sizeof(HTTP_SSL_INFO) = 28) and
-    (sizeof(HTTP_DATA_CHUNK_INMEMORY) = 24) and
-    (sizeof(HTTP_DATA_CHUNK_FILEHANDLE) = 32) and
-    (sizeof(HTTP_RESPONSE) = 288) and
-    (sizeof(HTTP_REQUEST_HEADERS) = 344) and
-    (sizeof(HTTP_RESPONSE_HEADERS) = 256) and
-    (sizeof(HTTP_COOKED_URL) = 24) and
+    (SizeOf(HTTP_REQUEST) = 472) and
+    (SizeOf(HTTP_SSL_INFO) = 28) and
+    (SizeOf(HTTP_DATA_CHUNK_INMEMORY) = 24) and
+    (SizeOf(HTTP_DATA_CHUNK_FILEHANDLE) = 32) and
+    (SizeOf(HTTP_RESPONSE) = 288) and
+    (SizeOf(HTTP_REQUEST_HEADERS) = 344) and
+    (SizeOf(HTTP_RESPONSE_HEADERS) = 256) and
+    (SizeOf(HTTP_COOKED_URL) = 24) and
     {$endif CPU64}
     (ord(reqUserAgent) = 40) and
     (ord(respLocation) = 23) and
-    (sizeof(THttpHeader) = 4) and
+    (SizeOf(THttpHeader) = 4) and
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS) = HTTP_LOG_FIELD_SUB_STATUS)
   );
   WinHttpApiInitialize({RaiseOnError=}false);
