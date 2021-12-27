@@ -1325,6 +1325,7 @@ type
     // - warning: Dest must be of the same exact type than the dynamic array
     // - returns true if the item was successfully copied and removed
     // - use PeekHead() if you don't want to remove the item, but get its value
+    // - first slot will be deleted and all content moved, so may take some time
     function PopHead(var Dest): boolean;
     /// get the first element stored in the dynamic array
     // - Add + PopHead/PeekHead will implement a FIFO (First-In-First-Out) stack
@@ -6486,9 +6487,13 @@ begin
 end;
 
 procedure TDynArray.ItemCopy(Source, Dest: pointer);
+var
+  nfo: TRttiCustom;
 begin
-  if fInfo.ArrayRtti <> nil then
-    fInfo.ArrayRtti.ValueCopy(Dest, Source) // also for T*ObjArray
+  nfo := fInfo.ArrayRtti;
+  if (nfo <> nil) and // inlined nfo.ValueCopy() to avoid MoveFast() twice
+     Assigned(nfo.Copy) then
+    nfo.Copy(Dest, Source, nfo.Info) // also for T*ObjArray
   else
     MoveFast(Source^, Dest^, fInfo.Cache.ItemSize);
 end;
@@ -6561,9 +6566,7 @@ var
 begin
   index := GetCount; // in two explicit steps to ensure no problem at inlining
   SetCount(index + 1);
-  result := fValue^;
-  if result <> nil then
-    inc(PByte(result), index * fInfo.Cache.ItemSize)
+  result := PAnsiChar(fValue^) + index * fInfo.Cache.ItemSize;
 end;
 
 function TDynArray.Peek(var Dest): boolean;

@@ -2220,7 +2220,7 @@ type
     fSetRandom: TRttiCustomRandom;
     fName: RawUtf8;
     fProps: TRttiCustomProps;
-    fOwnedRtti: array of TRttiCustom;
+    fOwnedRtti: array of TRttiCustom; // for SetPropsFromText(NoRegister=true)
     fValueRtlClass: TRttiValueClass;
     fArrayFirstField: TRttiParserType;
     // used by mormot.core.json.pas
@@ -2384,6 +2384,9 @@ type
     // - assignment is usually protected by the Rtti.RegisterLock
     property PrivateSlot: pointer
       read fPrivateSlot write fPrivateSlot;
+    /// redirect to the low-level value copy - use rather ValueCopy()
+    property Copy: TRttiCopier
+      read fCopy;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
     property JsonLoad: pointer
       read fJsonLoad write fJsonLoad;
@@ -6885,6 +6888,8 @@ begin
     if (rcfIsManaged in p^.Value.Flags) and
        (p^.OffsetGet >= 0) then
     begin
+      if not Assigned(p^.Value.fCopy) then
+        raise ERttiException.Create('Paranoid managed Value.Copy');
       include(result, rcfHasNestedManagedProperties);
       fManaged[n] := p;
       inc(n);
@@ -7091,7 +7096,7 @@ begin
         inc(Source, offset);
         inc(Dest, offset);
       end;
-      pp^.Value.ValueCopy(Dest, Source); // copy managed field
+      pp^.Value.fCopy(Dest, Source, pp^.Value.Info); // copy managed field
       offset := pp^.Value.Size;
       inc(Source, offset);
       inc(Dest, offset);
