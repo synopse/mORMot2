@@ -29,7 +29,7 @@ type
   /// regression tests for mormot.core.collections features
   TTestCoreCollections = class(TSynTestCase)
   protected
-    procedure TestOne<T>(li: IList<T> = nil);
+    procedure TestOne<T>(const li: IList<T>);
   published
     procedure _IList;
     procedure _IKeyValue;
@@ -53,7 +53,7 @@ implementation
   {$undef USEEQUALOP}
 {$endif FPC}
 
-procedure TTestCoreCollections.TestOne<T>(li: IList<T>);
+procedure TTestCoreCollections.TestOne<T>(const li: IList<T>);
 const
   MAX = 100000;
   ONLYLOG = true; // set to FALSE for verbose benchmarking console output
@@ -71,16 +71,6 @@ var
   timer, all: TPrecisionTimer;
 begin
   SetLength(cop, MAX);
-  all.Start;
-  // circumvent FPC x86_64/aarch64 internal error 2010021502 :(
-  // - root cause seems to be that T is coming through TestOne<T> generic method
-  // - direct specialization like Collections.NewList<integer> works fine
-  if li = nil then
-  {$ifdef FPC_64}
-    li := TIList<T>.Create(TypeInfo(TArray<T>), TypeInfo(T));
-  {$else}
-    li := Collections.NewList<T>;
-  {$endif FPC_64}
   da := li.Data;
   name := da^.Info.ArrayRtti.Name;
   Check(name <> '');
@@ -93,6 +83,7 @@ begin
   for n := 0 to MAX - 1 do
     da^.ItemRandom(@cop[n]);
   NotifyTestSpeed('random % ', [name], MAX, 0, @timer, ONLYLOG);
+  all.Start;
   li.Capacity := MAX;
   timer.Start;
   for n := 0 to MAX - 1 do
@@ -142,7 +133,7 @@ begin
   end;
   NotifyTestSpeed('in %     ', [name], MAX, 0, @timer, ONLYLOG);
   Check(n = MAX);
-  NotifyTestSpeed(' IList<%>', [name], MAX * 4, 0, @all, {onlylog=}false);
+  NotifyTestSpeed(' IList<%>', [name], MAX * 5, 0, @all, {onlylog=}false);
   timer.Start; // Sort is excluded of main "all" timer since is misleading
   li.Sort;
   NotifyTestSpeed('sort %   ', [name], MAX, 0, @timer, ONLYLOG);
@@ -397,30 +388,38 @@ begin
   for i := 0 to lr.Count - 1 do
     Check(StrToInt(lr[i].Error) = i);
   // validate and benchmark all main types using a generic sub method
-  TestOne<byte>();
-  TestOne<word>();
-  TestOne<integer>();
-  TestOne<cardinal>();
-  TestOne<Int64>();
-  TestOne<QWord>();
-  TestOne<Single>();
-  TestOne<Double>();
-  TestOne<TDateTime>();
-  TestOne<RawUtf8>();
+  // call NewList<> here to circumvent FPC_64 internal error 2010021502 :(
+  // - error appears only if T is coming through TestOne<T> generic method
+  // - direct call of factory methods from here works fine (as in normal code),
+  // and ensures early specifialization is triggered even on FPC x86_64/aarch64
+  TestOne<byte>(Collections.NewList<byte>);
+  TestOne<word>(Collections.NewList<word>);
+  TestOne<integer>(Collections.NewList<integer>);
+  TestOne<cardinal>(Collections.NewList<cardinal>);
+  TestOne<Int64>(Collections.NewList<Int64>);
+  TestOne<QWord>(Collections.NewList<QWord>);
+  TestOne<Single>(Collections.NewList<single>);
+  TestOne<Double>(Collections.NewList<double>);
+  TestOne<TDateTime>(Collections.NewList<TDateTime>);
+  TestOne<RawUtf8>(Collections.NewList<RawUtf8>);
   {$ifdef OSWINDOWS} // OleString on Windows only -> = UnicodeString on POSIX
   // disabled since SPECIALIZE_WSTRING is not set
-  //TestOne<WideString>();
+  //TestOne<WideString>(Collections.NewList<WideString>);
   // note: WideString (BSTR API) is way slower than UnicodeString or RawUtf8
   {$endif OSWINDOWS}
   {$ifdef HASVARUSTRING}
-  TestOne<UnicodeString>();
+  TestOne<UnicodeString>(Collections.NewList<UnicodeString>);
   {$endif HASVARUSTRING}
-  TestOne<Variant>();
+  TestOne<Variant>(Collections.NewList<Variant>);
   {$ifdef TESTHASH128}
-  TestOne<THash128>({$ifndef SPECIALIZE_HASH}
+  TestOne<THash128>({$ifdef SPECIALIZE_HASH}
+                    Collections.NewList<THash128>
+                    {$else}
                     Collections.NewPlainList<THash128>
                     {$endif SPECIALIZE_HASH});
-  TestOne<TGuid>({$ifndef SPECIALIZE_HASH}
+  TestOne<TGuid>({$ifdef SPECIALIZE_HASH}
+                 Collections.NewList<TGuid>
+                 {$else}
                  Collections.NewPlainList<TGuid>
                  {$endif SPECIALIZE_HASH});
   {$endif TESTHASH128}

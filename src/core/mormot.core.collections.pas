@@ -726,7 +726,8 @@ type
     class function NewKeyValue<TKey, TValue>(aOptions: TKeyValueOptions = [];
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
       aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
-      aHasher: THasher = nil): IKeyValue<TKey, TValue>; static;
+      aHasher: THasher = nil): IKeyValue<TKey, TValue>;
+        static; {$ifdef FPC} inline; {$endif}
     /// generate a new IKeyValue<TKey, TValue> instance with exact
     // TIKeyValue<TKey, TValue>
     // - to be called for complex types (e.g. record, array or hash) when
