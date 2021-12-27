@@ -7028,6 +7028,18 @@ begin
   result := true;
 end;
 
+function BruteFind(P, V: PAnsiChar; cmp: TDynArraySortCompare; n, s: PtrInt): PtrInt;
+begin // array is very small, or not sorted -> O(n) iterative search
+  result := 0;
+  repeat
+    if cmp(P^, V^) = 0 then
+      exit;
+    inc(result);
+    inc(P, s);
+  until result = n;
+  result := -1;
+end;
+
 function TDynArray.Find(const Item; const aIndex: TIntegerDynArray;
   aCompare: TDynArraySortCompare): PtrInt;
 var
@@ -7044,7 +7056,7 @@ begin
     if (n > 10) and
        (length(aIndex) >= n) then
     begin
-      // array should be sorted via aIndex[] -> use fast O(log(n)) binary search
+      // fast O(log(n)) binary search over aIndex[]
       L := 0;
       repeat
         result := (L + n) shr 1;
@@ -7062,23 +7074,39 @@ begin
     end
     else
     begin
-      // array is not sorted, or aIndex=nil -> use O(n) iterating search
-      L := fInfo.Cache.ItemSize;
-      for result := 0 to n do
-        if aCompare(P^, Item) = 0 then
-          exit
-        else
-          inc(P, L);
+      result := BruteFind(P, @Item, aCompare, n, fInfo.Cache.ItemSize);
+      exit;
     end;
   end;
   result := -1;
 end;
 
+function SortFind(P, V: PAnsiChar; cmp: TDynArraySortCompare; R, s: PtrInt): PtrInt;
+var
+  m, L: PtrInt;
+  res: integer;
+begin // array is sorted -> use fast O(log(n)) binary search
+  L := 0;
+  dec(R);
+  repeat
+    result := (L + R) shr 1;
+    res := cmp(P[result * s], V^);
+    if res = 0 then
+      exit;
+    m := result - 1;
+    inc(result);
+    if res > 0 then // compile as cmovnle/cmovle opcodes on FPC x86_64
+      R := m
+    else
+      L := result;
+  until L > R;
+  result := -1;
+end;
+
 function TDynArray.Find(const Item; aCompare: TDynArraySortCompare): PtrInt;
 var
-  n, L: PtrInt;
-  cmp: integer;
-  P: PAnsiChar;
+  n: PtrInt;
+  fnd: function(P, V: PAnsiChar; cmp: TDynArraySortCompare; n, s: PtrInt): PtrInt;
 begin
   n := GetCount;
   if not Assigned(aCompare) then
@@ -7086,45 +7114,24 @@ begin
   if n > 0 then
     if Assigned(aCompare) then
     begin
-      P := fValue^;
-      if fSorted and
-         (@aCompare = @fCompare) and
-         (n >= 10) then
-      begin
-        // array is sorted -> use fast O(log(n)) binary search
-        dec(n);
-        L := 0;
-        repeat
-          result := (L + n) shr 1;
-          cmp := aCompare(P[result * fInfo.Cache.ItemSize], Item);
-          if cmp < 0 then
-            L := result + 1
-          else if cmp = 0 then
-            exit
-          else
-            n := result - 1;
-        until L > n;
-      end
-      else
-      begin
-        // array is very small, or not sorted -> O(n) iterative search
-        L := fInfo.Cache.ItemSize;
-        result := 0;
-        repeat
-          if aCompare(P^, Item) = 0 then
-            exit;
-          inc(P, L);
-          inc(result);
-        until result = n; // efficient loop on FPC/x86_64
-      end;
+      fnd := @BruteFind;
+      if n > 10 then
+        if fSorted and
+           (@aCompare = @fCompare) then
+          fnd := @SortFind
+        else if not(rcfArrayItemManaged in fInfo.Flags) and
+                (fInfo.ArrayRtti <> nil) and
+                (@aCompare = @PT_SORT[false, fInfo.ArrayRtti.Parser]) then
+        begin // optimized brute force search with potential SSE2 asm
+          result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize);
+          exit;
+        end;
+      result := fnd(fValue^, @Item, aCompare, n, fInfo.Cache.ItemSize);
     end
     else
-    begin
-      // aCompare/fCompare not set -> fallback to case-sensitive IndexOf()
-      result := IndexOf(Item, {caseinsens=}false);
-      exit;
-    end;
-  result := -1;
+      result := IndexOf(Item, {caseinsens=}false)
+  else
+    result := -1;
 end;
 
 function TDynArray.FindIndex(const Item; aIndex: PIntegerDynArray;
@@ -7210,7 +7217,7 @@ begin
       cmp := fCompare(Item, P[n * fInfo.Cache.ItemSize]);
       if cmp >= 0 then
       begin
-        // greater than last sorted item
+        // greater than last sorted item (may be a common case)
         Index := n;
         if cmp = 0 then
           // returns true + index of existing Elem
