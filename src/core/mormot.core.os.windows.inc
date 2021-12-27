@@ -245,12 +245,14 @@ var
   _QueryPerformanceFrequencyPer10: boolean;
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
+var
+  v: Int64; // for proper alignment on some old Delphi revisions + Win32
 begin
-  QueryPerformanceCounter(PInt64(@Value)^);
+  QueryPerformanceCounter(v);
   if _QueryPerformanceFrequencyPer10 then
-    Value := QWord(Value) div 10 // faster division by a constant (especially on FPC_64)
+    Value := QWord(v) div 10 // faster div by a constant (especially on FPC_64)
   else
-    Value := QWord((QWord(Value) * 1000000) div _QueryPerformanceFrequency);
+    Value := QWord((QWord(v) * 1000000) div _QueryPerformanceFrequency);
 end;
 
 const
