@@ -9031,13 +9031,17 @@ begin
   if self = nil then
     result := -1
   else
-    result := fKeys.FindHashed(aKey);
-  if aUpdateTimeOut and
-     (result >= 0) then
   begin
-    tim := fSafe.Padding[DIC_TIMESEC].VInteger;
-    if tim > 0 then // inlined fTimeout[result] := GetTimeout
-      fTimeout[result] := cardinal(GetTickCount64 shr 10) + tim;
+    //result := fKeys.FindHashed(aKey);
+    result := fKeys.Hasher.FindOrNew(fKeys.Hasher.HashOne(@aKey), @aKey, nil);
+    if result < 0 then
+      result := -1
+    else if aUpdateTimeOut then
+    begin
+      tim := fSafe.Padding[DIC_TIMESEC].VInteger;
+      if tim > 0 then // inlined fTimeout[result] := GetTimeout
+        fTimeout[result] := cardinal(GetTickCount64 shr 10) + tim;
+    end;
   end;
 end;
 
@@ -9077,7 +9081,7 @@ begin
     fTimeOut[ndx] := tim;
   if aIndex <> nil then
     aIndex^ := ndx;
-  result := fValues.ItemPtr(ndx);
+  result := PAnsiChar(fValues.Value^) + ndx * fValues.Info.Cache.ItemSize;
 end;
 
 function TSynDictionary.FindAndCopy(const aKey;
@@ -9086,16 +9090,23 @@ var
   ndx: PtrInt;
 begin
   fSafe.RWLock(cReadOnly);
+  {$ifdef HASFASTTRYFINALLY}
   try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
     ndx := Find(aKey, aUpdateTimeOut);
     if ndx >= 0 then
     begin
-      fValues.ItemCopyAt(ndx, @aValue);
+      fValues.ItemCopy( // inlined ItemCopyAt(ndx, @aValue)
+        PAnsiChar(fValues.Value^) + ndx * fValues.Info.Cache.ItemSize, @aValue);
       result := true;
     end
     else
       result := false;
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     fSafe.RWUnLock(cReadOnly);
   end;
 end;
@@ -9110,7 +9121,7 @@ begin
     if ndx >= 0 then
     begin
       fSafe.RWLock(cWrite);
-      fValues.ItemMoveTo(ndx, @aValue); // faster than ItemCopyAt()
+      fValues.ItemMoveTo(ndx, @aValue); // faster than ItemCopy()
       fValues.Delete(ndx);
       if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
         fTimeOuts.Delete(ndx);
