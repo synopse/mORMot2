@@ -37,8 +37,8 @@ interface
 // - you may try this conditional to circumvent some Delphi internal errors
 // - see also SPECIALIZE_HASH, SPECIALIZE_SMALL SPECIALIZE_WSTRING conditionals
 // - on XE8 Win32 we can observe
-//    mormot.core.collections.dcu:  default=500KB  NOSPECIALIZE=75KB
-//    test.core.collections.dcu:    default=240KB  NOSPECIALIZE=260KB
+//    mormot.core.collections.dcu:  default=496KB  NOSPECIALIZE=75KB
+//    test.core.collections.dcu:    default=181KB  NOSPECIALIZE=263KB
 // -> so the main size reduction of those collections is that they are based on
 //    TDynArray and TSynDictionary, then specialization helps a little more
 {.$define NOSPECIALIZE}
@@ -142,6 +142,8 @@ type
     // - returns the index of the newly added item
     // - always append the new item at the end, unless loCreateUniqueIndex was
     // defined and then any duplicate is ignored and existing index is returned
+    // - you may pre-allocate the array with a previous set of Capacity property
+    // - a faster alternative is to set the Count then assign values with Items[]
     function Add(const value: T): PtrInt;
     /// insert a new value to the collection
     // - raise ESynList if loCreateUniqueIndex is set: use Remove() then Add()
@@ -241,6 +243,8 @@ type
     // !     writeln(pi^);
     // !     inc(pi);
     // !   end;
+    // - could be used to set all items of the array, with a previous Count set
+    // (faster than Add or even Count+SetItems)
     function First: pointer;
     /// returns a dynamic array containing data of this collection
     // - is a convenient way to consume such a list as regular SOA parameters
@@ -263,7 +267,8 @@ type
     property Items[ndx: PtrInt]: T
       read GetItem write SetItem; default;
     /// returns the number of items actually stored
-    // - you can also set the Count value then fill it with Items[]
+    // - you can also set the Count value then fill it with Items[] or even
+    // Data.First with pointers for best performance
     property Count: PtrInt
       read GetCount write SetCount;
     /// returns the internal array capacity
@@ -299,7 +304,7 @@ type
     procedure DoInsert(ndx: PtrInt; const value);
     function DoFind(const value; customcompare: TDynArraySortCompare): PtrInt;
     procedure RaiseGetItem(ndx: PtrInt);
-    procedure CanSetItem(ndx: PtrInt);
+    procedure RaiseSetItem(ndx: PtrInt);
     procedure NewEnumerator(var state: TSynEnumeratorState); overload;
     procedure NewEnumerator(var state: TSynEnumeratorState;
       Offset, Limit: PtrInt); overload;
@@ -311,16 +316,23 @@ type
     function GetComparer: TDynArraySortCompare;
     procedure SetComparer(customcompare: TDynArraySortCompare);
   public
-    /// initialize the array storage, specifying dynamic array type
-    // - here aItemTypeInfo is required to be specified, since may not match T
-    // - you can provide the dynamic array TypeInfo() of T if the types are too
-    // complex, or not already registered to mormot.core.rtti
+    /// internal constructor to create an IList<T> instance from RTTI
+    // - main factories are Collections.NewList<T> or NewPlainList<T> class
+    // functions, which returns a IList<> interface for reusing most class
+    // specializations: you should NOT call any TSynListAbstract<>.Create
+    // - constructor is at TSynListAbstract level to reduce the executable size
     // - if aSortAs is ptNone, will guess the comparison/sort function from RTTI
-    // - we defined a plain method and not a constructor since it is never
-    // called as constuctor, but via Collections.NewList<T> class factory or -
-    // on if needed, from TSynListSpecialized<T>.Create
-    procedure Init(aOptions: TListOptions;
-      aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; aSortAs: TRttiParserType);
+    // - used only to circumvent FPC internal error 2010021502 on x86_64/aarch64
+    // (root cause seems comes from T through another generic method), i.e.
+    // direct specialization like Collections.NewList<integer> works fine,
+    // but cascaded generics like TTestCoreCollections.TestOne<T> need this:
+    // ! {$ifdef FPC_64}
+    // ! li := TSynListSpecialized<T>.Create(TypeInfo(TArray<T>), TypeInfo(T));
+    // ! {$else}
+    // ! li := Collections.NewList<T>;
+    // ! {$endif FPC_64}
+    constructor Create(aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo;
+      aOptions: TListOptions = []; aSortAs: TRttiParserType = ptNone); overload;
     /// finalize the array storage, mainly the internal TDynArray
     destructor Destroy; override;
     /// IList<> method to delete one item inside the collection from its index
@@ -342,7 +354,7 @@ type
     /// IList<> method returning true if Sort() or AddSorted() have been used
     function Sorted: boolean;
     /// low-level IList<> method to access the first item of the collection
-    function First: pointer;
+    function First: pointer;  inline;
     /// IList<> method to return the number of items actually stored
     property Count: PtrInt
       read fCount write SetCount;
@@ -350,9 +362,9 @@ type
     property Capacity: PtrInt
       read GetCapacity write SetCapacity;
     /// IList<> method to access an associated lightweight read/write lock
-    function Safe: PRWLock;
+    function Safe: PRWLock;   inline;
     /// low-level IList<> method to access to the internal TDynArray wrapper
-    function Data: PDynArray;
+    function Data: PDynArray; inline;
   end;
 
   /// generics-based collection storage
@@ -366,20 +378,6 @@ type
     function GetItem(ndx: PtrInt): T;
     procedure SetItem(ndx: PtrInt; const value: T);
   public
-    /// internal constructor to create an IList<T> instance from RTTI
-    // - you should rather use Collections.NewList or Collections.NewPlainList
-    // - used only to circumvent FPC internal error 2010021502 on x86_64/aarch64
-    // - root cause seems comes from T through another generic method
-    // - direct specialization like Collections.NewList<integer> works fine,
-    // but cascaded generics like TTestCoreCollections.TestOne<T> need this:
-    // ! {$ifdef FPC_64}
-    // ! li := TSynListSpecialized<T>.Create;
-    // ! {$else}
-    // ! li := Collections.NewList<T>;
-    // ! {$endif FPC_64}
-    constructor Create(aOptions: TListOptions = [];
-      aSortAs: TRttiParserType = ptNone; aDynArrayTypeInfo: PRttiInfo = nil;
-      aItemTypeInfo: PRttiInfo = nil); overload;
     /// IList<T> method to append a new value to the collection
     function Add(const value: T): PtrInt;
     /// IList<T> method to insert a new value to the collection
@@ -515,7 +513,7 @@ type
     function GetTimeOutSeconds: cardinal;
     procedure SetTimeOutSeconds(value: cardinal);
   public
-    /// initialize the dictionary storage, specifyng dynamic array keys/values
+    /// initialize the dictionary storage, specifying dynamic array keys/values
     // - main factory is Collections.NewKeyValue<TKey, TValue> class function,
     // which returns a IKeyValue<> interface for reusing most class specializations:
     // you should NOT call any TSynKeyValueSpecialized<> constructor anywhere
@@ -610,6 +608,7 @@ type
 
 {$else}
 
+  // disable ahead-of-time specialized factories on unsupported compilers
   {$undef SPECIALIZE_ENABLED}
 
 {$endif HASGETTYPEKIND}
@@ -772,8 +771,8 @@ end;
 
 { TSynListAbstract }
 
-procedure TSynListAbstract.Init(aOptions: TListOptions;
-  aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; aSortAs: TRttiParserType);
+constructor TSynListAbstract.Create(aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo;
+  aOptions: TListOptions; aSortAs: TRttiParserType);
 var
   r: PRttiInfo;
 begin
@@ -792,7 +791,7 @@ begin
       [self, aItemTypeInfo^.RawName, ToText(aItemTypeInfo^.Kind)^,
        aDynArrayTypeInfo.RawName, ToText(fDynArray.Info.ArrayRtti.Kind)^]);
   if loNoFinalize in fOptions then
-    fDynArray.NoFinalize := true; // forced weak references
+    fDynArray.NoFinalize := true; // force weak references
   if loCreateUniqueIndex in fOptions then
   begin
     fHasher := AllocMem(SizeOf(fHasher^));
@@ -906,7 +905,7 @@ begin
     [self, ndx, fCount]);
 end;
 
-procedure TSynListAbstract.CanSetItem(ndx: PtrInt);
+procedure TSynListAbstract.RaiseSetItem(ndx: PtrInt);
 begin
   if fHasher <> nil then
     raise ESynList.CreateUtf8('%.SetItem(%) is not allowed with ' +
@@ -1072,16 +1071,6 @@ end;
 
 { TSynListSpecialized }
 
-constructor TSynListSpecialized<T>.Create(aOptions: TListOptions;
-  aSortAs: TRttiParserType; aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo);
-begin
-  if aDynArrayTypeInfo = nil then
-    aDynArrayTypeInfo := TypeInfo(TArray<T>);
-  if aItemTypeInfo = nil then
-    aItemTypeInfo := TypeInfo(T);
-  Init(aOptions, aDynArrayTypeInfo, aItemTypeInfo, aSortAs);
-end;
-
 function TSynListSpecialized<T>.GetItem(ndx: PtrInt): T;
 begin
   if PtrUInt(ndx) >= PtrUInt(fCount) then
@@ -1091,7 +1080,9 @@ end;
 
 procedure TSynListSpecialized<T>.SetItem(ndx: PtrInt; const value: T);
 begin
-  CanSetItem(ndx);// also check loCreateUniqueIndex
+  if (fHasher <> nil) or // loCreateUniqueIndex is not compatible with SetItem
+     (PtrUInt(ndx) >= PtrUInt(fCount)) then
+    RaiseSetItem(ndx);
   TArray<T>(fValue)[ndx] := value;
 end;
 
@@ -1153,7 +1144,7 @@ end;
 
 { TSynKeyValueAbstract }
 
-// shared methods leveraged against all TSynKeyValueSpecialized<> to reduce exe code size
+// methods shared among all TSynKeyValueSpecialized<> to reduce exe size
 
 constructor TSynKeyValueAbstract.Create(const aContext: TNewSynKeyValueContext);
 begin
@@ -1352,26 +1343,26 @@ begin
   case aSize of
     1:
       obj := TSynListSpecialized<Byte>.Create(
-        aOptions, ptNone, aDynArrayTypeInfo, aItemTypeInfo);
+        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
     2:
       obj := TSynListSpecialized<Word>.Create(
-        aOptions, ptNone, aDynArrayTypeInfo, aItemTypeInfo);
+        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
     4:
       obj := TSynListSpecialized<Integer>.Create(
-        aOptions, ptNone, aDynArrayTypeInfo, aItemTypeInfo);
+        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
     8:
       obj := TSynListSpecialized<Int64>.Create(
-        aOptions, ptNone, aDynArrayTypeInfo, aItemTypeInfo);
+        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
     {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynListSpecialized<THash128>.Create(
-        aOptions, ptNone, aDynArrayTypeInfo, aItemTypeInfo);
+        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
     32:
       obj := TSynListSpecialized<THash256>.Create(
-        aOptions, ptNone, aDynArrayTypeInfo, aItemTypeInfo);
+        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
     64:
       obj := TSynListSpecialized<THash512>.Create(
-        aOptions, ptNone, aDynArrayTypeInfo, aItemTypeInfo);
+        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
     {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainList(aItemTypeInfo);
@@ -1388,13 +1379,13 @@ begin
   case aItemTypeInfo^.RttiFloat of
     rfSingle:
       obj := TSynListSpecialized<Single>.Create(
-        aOptions, ptSingle, aDynArrayTypeInfo, aItemTypeInfo);
+        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptSingle);
     rfDouble:
       obj := TSynListSpecialized<Double>.Create(
-        aOptions, ptDouble, aDynArrayTypeInfo, aItemTypeInfo);
+        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptDouble);
     rfCurr:
       obj := TSynListSpecialized<Currency>.Create(
-        aOptions, ptCurrency, aDynArrayTypeInfo, aItemTypeInfo);
+        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptCurrency);
   else
     obj := RaiseUseNewPlainList(aItemTypeInfo);
   end;
@@ -1405,7 +1396,7 @@ class procedure Collections.NewLString(aOptions: TListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
 begin
   IList<RawByteString>(result) := TSynListSpecialized<RawByteString>.Create(
-    aOptions, ptNone, aDynArrayTypeInfo, aItemTypeInfo); // may be RawUtf8/RawJson
+    aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone); // may be RawUtf8/RawJson
 end;
 
 {$ifdef SPECIALIZE_WSTRING}
@@ -1413,7 +1404,7 @@ class procedure Collections.NewWString(aOptions: TListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
 begin
   IList<WideString>(result) := TSynListSpecialized<WideString>.Create(
-    aOptions, ptWideString, aDynArrayTypeInfo, aItemTypeInfo);
+    aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptWideString);
 end;
 {$endif SPECIALIZE_WSTRING}
 
@@ -1421,21 +1412,21 @@ class procedure Collections.NewUString(aOptions: TListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
 begin
   IList<UnicodeString>(result) := TSynListSpecialized<UnicodeString>.Create(
-    aOptions, ptUnicodeString, aDynArrayTypeInfo, aItemTypeInfo);
+    aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptUnicodeString);
 end;
 
 class procedure Collections.NewInterface(aOptions: TListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
 begin
   IList<IInterface>(result) := TSynListSpecialized<IInterface>.Create(
-    aOptions, ptInterface, aDynArrayTypeInfo, aItemTypeInfo);
+    aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptInterface);
 end;
 
 class procedure Collections.NewVariant(aOptions: TListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
 begin
   IList<Variant>(result) := TSynListSpecialized<Variant>.Create(
-    aOptions, ptVariant, aDynArrayTypeInfo, aItemTypeInfo);
+    aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptVariant);
 end;
 
 
@@ -2107,7 +2098,10 @@ class function Collections.NewList<T>(aOptions: TListOptions;
   aDynArrayTypeInfo: PRttiInfo): IList<T>;
 begin
   // oldest Delphi will generate bloated code for each specific type
-  result := TSynListSpecialized<T>.Create(aOptions, ptNone, aDynArrayTypeInfo);
+  if aDynArrayTypeInfo = nil then
+    aDynArrayTypeInfo := TypeInfo(TArray<T>);
+  result := TSynListSpecialized<T>.Create(
+    aDynArrayTypeInfo, TypeInfo(T), aOptions, ptNone);
 end;
 
 {$endif SPECIALIZE_ENABLED}
@@ -2115,7 +2109,10 @@ end;
 class function Collections.NewPlainList<T>(aOptions: TListOptions;
   aDynArrayTypeInfo: PRttiInfo; aSortAs: TRttiParserType): IList<T>;
 begin
-  result := TSynListSpecialized<T>.Create(aOptions, aSortAs, aDynArrayTypeInfo);
+  if aDynArrayTypeInfo = nil then
+    aDynArrayTypeInfo := TypeInfo(TArray<T>);
+  result := TSynListSpecialized<T>.Create(
+    aDynArrayTypeInfo, TypeInfo(T), aOptions, aSortAs);
 end;
 
 class function Collections.NewKeyValue<TKey, TValue>(aOptions: TSynKeyValueOptions;
