@@ -77,7 +77,7 @@ begin
   // - direct specialization like Collections.NewList<integer> works fine
   if li = nil then
   {$ifdef FPC_64}
-    li := TSynListSpecialized<T>.Create(TypeInfo(TArray<T>), TypeInfo(T));
+    li := TIList<T>.Create(TypeInfo(TArray<T>), TypeInfo(T));
   {$else}
     li := Collections.NewList<T>;
   {$endif FPC_64}

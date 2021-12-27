@@ -483,7 +483,7 @@ type
     // Delphi nor FPC allow parametrized interface methods
     // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
     // executables than Generics.Collections, and need no try..finally Free: a
-    // single TSynListSpecialized<TOrm> class will be reused for all IList<>
+    // single TIList<TOrm> class will be reused for all IList<>
     // - you can write for instance:
     // !var list: IList<TOrmTest>;
     // !    R: TOrmTest;
@@ -1708,11 +1708,11 @@ type
     class procedure AddFilterNotVoidAllTextFields;
     {$ifdef ORMGENERICS}
     /// generate a new IList<TOrm> instance for the specific TOrm class
-    // - a single TSynListSpecialized<TOrm> instance will be shared for all TOrm
-    // classes, even on oldest compilers which do not support specialization
+    // - a single TIList<TOrm> instance will be shared for all TOrm classes,
+    // even on oldest compilers which do not support specialization
     // - the returned IList<T: TOrm> will own and free each T instance
     // - as used e.g. by TOrmTable.ToNewIList()
-    class function NewIList(var IListOrm): TSynListAbstract;
+    class function NewIList(var IListOrm): TIListParent;
     {$endif ORMGENERICS}
 
     /// protect several TOrm local variable instances
@@ -2873,7 +2873,7 @@ type
     // - always returns an IList<> instance, even if the TOrmTable is nil or void
     // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
     // executables than Generics.Collections, and need no try..finally Free: a
-    // single TSynListSpecialized<TOrm> class will be reused for all IList<>
+    // single TIList<TOrm> class will be reused for all IList<>
     procedure ToNewIList(Item: TOrmClass; var Result);
     {$endif ORMGENERICS}
     /// fill an existing T*ObjArray variable with TOrm instances
@@ -5290,7 +5290,7 @@ end;
 {$ifdef ORMGENERICS}
 procedure TOrmTable.ToNewIList(Item: TOrmClass; var Result);
 var
-  list: TSynListAbstract;
+  list: TIListParent;
   cloned, one: TOrm;
   r: integer;
   rec: POrm;
@@ -8300,12 +8300,12 @@ begin
 end;
 
 {$ifdef ORMGENERICS}
-class function TOrm.NewIList(var IListOrm): TSynListAbstract;
+class function TOrm.NewIList(var IListOrm): TIListParent;
 begin
-  result := TSynListSpecialized<TOrm>.Create(
+  result := TIList<TOrm>.Create(
     TypeInfo(TOrmObjArray), self.ClassInfo, [], ptClass);
-  // all IList<T> share the same VMT -> assign shared TSynListSpecialized<TOrm>
-  IList<TOrm>(IListOrm) := TSynListSpecialized<TOrm>(result);
+  // all IList<T> share the same VMT -> assign shared TIList<TOrm>
+  IList<TOrm>(IListOrm) := TIList<TOrm>(result);
 end;
 {$endif ORMGENERICS}
 

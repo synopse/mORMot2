@@ -2082,11 +2082,11 @@ begin
       for aR := 1 to Peoples.Count do
         with Peoples[aR - 1] do
         begin
-          check(id = J.GetAsInteger(aR, fid));
-          check(FirstName = J.GetU(aR, ffn));
-          check(LastName = J.GetU(aR, fln));
-          check(YearOfBirth = J.GetAsInteger(aR, fyb));
-          check(YearOfDeath = J.GetAsInteger(aR, fyd));
+          checkEqual(id, J.GetAsInteger(aR, fid), 'id');
+          checkEqual(FirstName, J.GetU(aR, ffn), 'fn');
+          checkEqual(LastName, J.GetU(aR, fln), 'ln');
+          checkEqual(YearOfBirth, J.GetAsInteger(aR, fyb), 'yb');
+          checkEqual(YearOfDeath, J.GetAsInteger(aR, fyd), 'yd');
         end;
       // Peoples := nil; // not mandatory
       {$endif ORMGENERICS}
