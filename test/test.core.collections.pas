@@ -7,8 +7,6 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
-{$ifdef HASGENERICS} // do-nothing unit on oldest compilers (e.g. < Delphi XE8)
-
 uses
   sysutils,
   classes,
@@ -25,6 +23,7 @@ uses
   mormot.core.perf,
   mormot.core.test;
 
+{$ifdef HASGENERICS} // do-nothing unit on oldest compilers (e.g. < Delphi XE8)
 
 type
   /// regression tests for mormot.core.collections features
@@ -507,7 +506,17 @@ end;
 
 {$else}
 
+type
+  TTestCoreCollections = class(TSynTestCase)
+  published
+    procedure UnsupportedCompiler;
+  end;
+
 implementation
+
+procedure TTestCoreCollections.UnsupportedCompiler;
+begin
+end;
 
 {$endif HASGENERICS} // do-nothing unit on oldest compilers
 
