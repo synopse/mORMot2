@@ -174,14 +174,14 @@ type
   end;
 
 /// compute the crc32 checksum of the supplied memory buffer
-// - can use the much faster libdeflate (10GB/s) instead of plain zlib (800MB/s)
+// - can use the much faster libdeflate (16GB/s) instead of plain zlib (800MB/s)
 function crc32(crc: TZCRC; buf: pointer; len: cardinal): TZCRC;
   {$ifdef LIBDEFLATESTATIC} inline; {$else}
   {$ifdef ZLIBEXT} cdecl; {$else} {$ifdef ZLIBSTATIC} cdecl; {$else}
     {$ifdef FPC} inline; {$endif} {$endif} {$endif} {$endif}
 
 /// compute the adler32 checksum of the supplied memory buffer
-// - can use the much faster libdeflate (14GB/s) instead of plain zlib (1.8GB/s)
+// - can use the much faster libdeflate (22GB/s) instead of plain zlib (1.8GB/s)
 function adler32(adler: TZCRC; buf: pointer; len: cardinal): TZCRC;
   {$ifdef LIBDEFLATESTATIC} inline; {$else}
   {$ifdef ZLIBEXT} cdecl; {$else} {$ifdef ZLIBSTATIC} cdecl; {$else}
@@ -458,7 +458,7 @@ procedure libdeflate_free_decompressor(
 // updated checksum
 // - When starting a new checksum, the required initial value for 'adler' is 1
 // - This value is also returned when 'buffer' is specified as nil.
-// - on x86_64 with AVX, performance is more than 14GB/s whereas zlib is 1.8GB/s
+// - on x86_64 with AVX, performance is more than 22GB/s whereas zlib is 1.8GB/s
 function libdeflate_adler32(adler: cardinal;
   buffer: pointer; len: PtrInt): cardinal; cdecl;
 
@@ -466,7 +466,7 @@ function libdeflate_adler32(adler: cardinal;
 // updated checksum
 // - When starting a new checksum, the required initial value for 'crc' is 1
 // - This value is also returned when 'buffer' is specified as nil.
-// - on x86_64 with AVX, performance is more than 10GB/s whereas zlib is 800MB/s
+// - on x86_64 with AVX, performance is more than 16GB/s whereas zlib is 800MB/s
 function libdeflate_crc32(crc: cardinal;
   buffer: pointer; len: PtrInt): cardinal; cdecl;
 

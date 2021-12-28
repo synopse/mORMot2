@@ -2074,7 +2074,8 @@ begin
   if (fCentralDirectoryOffset <= Offset) or
      (fCentralDirectoryOffset +
        Int64(lh64.totalFiles * SizeOf(TFileHeader)) >= Offset + Size) then
-    raise ESynZip.CreateUtf8('%.Create: corrupted Central Dir Offset=% %',
+    raise ESynZip.CreateUtf8(
+      '%.Create: corrupted Central Directory or too small WorkMem at Offset=% %',
       [self, fCentralDirectoryOffset, fFileName]);
   fCentralDirectoryFirstFile := @BufZip[fCentralDirectoryOffset - Offset];
   SetLength(fEntry, lh64.totalFiles); // Entry[] will contain the Zip headers
@@ -2364,7 +2365,7 @@ begin
   descmin := 0;
   if e^.local <> nil then
     descmin := PtrUInt(e^.local^.Data);
-  if Index < Count - 2 then
+  if Index < Count - 1 then
   begin
     // search backward from next file to current file
     nxt := @Entry[Index + 1];
@@ -2432,7 +2433,7 @@ begin
     result := '';
     exit;
   end;
-  // may call libdeflate_crc32 / libdeflate_deflate_decompress
+  // call libdeflate_crc32 / libdeflate_deflate_decompress if available
   SetString(result, nil, info.f64.zfullSize);
   e := @Entry[aIndex];
   if e^.local = nil then
