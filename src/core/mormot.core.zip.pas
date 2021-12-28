@@ -235,7 +235,7 @@ type
     // - those zzipSize/zfullSize fields are to be taken into consideration
     f64: TFileInfoExtra64;
     /// actual size of the stored local file header
-    localfileheadersize: PtrInt;
+    localsize: PtrInt;
   end;
 
   //// directory file information structure, as used in .zip file format
@@ -279,6 +279,8 @@ type
     /// point to the data part of this PLocalFileHeader
     // - jump over fileInfo.extraLen + fileInfo.nameLen bytes
     function Data: PAnsiChar;
+    /// fill the local file header from Source input stream
+    procedure Load(Source: TStream; LocalOffset: Int64);
     /// move Source position to the data part of this file content
     // - jump over fileInfo.extraLen + fileInfo.nameLen bytes
     procedure LoadAndDataSeek(Source: TStream; LocalOffset: Int64);
@@ -363,7 +365,7 @@ type
     // - may be nil if the file size is bigger than WorkingMem
     local: PLocalFileHeader;
     /// offset to the local file header in the .zip archive
-    // - use TLocalFileHeader.LoadAndDataSeek to load and seek the stream
+    // - use TLocalFileHeader.Load/LoadAndDataSeek to load and seek the stream
     localoffs: QWord;
     /// name of the file inside the .zip archive
     // - not ASCIIZ: length = dir^.fileInfo.nameLen
@@ -1247,7 +1249,7 @@ begin
   inc(result, Size);
 end;
 
-procedure TLocalFileHeader.LoadAndDataSeek(Source: TStream; LocalOffset: Int64);
+procedure TLocalFileHeader.Load(Source: TStream; LocalOffset: Int64);
 begin
   if Source = nil then
     raise ESynZip.Create('Zip: LoadAndDataSeek with Source=nil');
@@ -1255,6 +1257,11 @@ begin
   Source.Seek(LocalOffset, soBeginning);
   if Source.Read(self, SizeOf(self)) <> SizeOf(self) then
     raise ESynZip.Create('Zip: LoadAndDataSeek reading error');
+end;
+
+procedure TLocalFileHeader.LoadAndDataSeek(Source: TStream; LocalOffset: Int64);
+begin
+  Load(Source, LocalOffset);
   // now we can compute and ignore the local header size -> seek on data
   Source.Seek(LocalOffset + Size, soBeginning);
 end;
@@ -1481,7 +1488,7 @@ begin
                 InfoStart(len, 'Read ', s^.zipName);
                 if tmp = '' then
                   SetString(tmp, nil, 1 shl 20);
-                readpos := Int64(s^.localoffs) + info.localfileheadersize;
+                readpos := Int64(s^.localoffs) + info.localsize;
                 repeat
                   FileSeek64(h, readpos, soFromBeginning);
                   read := length(tmp);
@@ -1513,7 +1520,7 @@ begin
               dec(d^.h64.size, SizeOf(d^.h64.offset));
             end;
             SetString(d^.intName, s^.storedName, d^.h32.fileInfo.nameLen);
-            inc(writepos, info.localfileheadersize + Int64(info.f64.zzipSize));
+            inc(writepos, info.localsize + Int64(info.f64.zzipSize));
           end;
           inc(fCount);
           inc(d);
@@ -2310,7 +2317,7 @@ begin
   // try to get information from central directory
   e := @Entry[Index];
   if e^.local = nil then
-    Header.LoadAndDataSeek(fSource, e^.localoffs + fSourceOffset)
+    Header.Load(fSource, e^.localoffs + fSourceOffset)
   else
     Header := e^.local^;
   result := true;
@@ -2336,8 +2343,8 @@ begin
   if e^.local <> nil then
     local := e^.local^
   else
-    local.LoadAndDataSeek(fSource, e^.localoffs + fSourceOffset);
-  Info.localfileheadersize := local.Size;
+    local.Load(fSource, e^.localoffs + fSourceOffset);
+  Info.localsize := local.Size;
   if local.fileInfo.flags and FLAG_DATADESCRIPTOR = 0 then
   begin
     // it seems we can use the central directory information
@@ -2417,7 +2424,6 @@ var
   data: pointer;
   tmp: RawByteString;
   info: TFileInfoFull;
-  local: TLocalFileHeader;
 begin
   if not RetrieveFileInfo(aIndex, info) or
      (info.f64.zzipSize > 128 shl 20) or
@@ -2431,7 +2437,7 @@ begin
   e := @Entry[aIndex];
   if e^.local = nil then
   begin
-    local.LoadAndDataSeek(fSource, e^.localoffs + fSourceOffset);
+    fSource.Seek(e^.localoffs + fSourceOffset + info.localsize, soBeginning);
     case info.f32.zZipMethod of
       Z_STORED:
         begin
