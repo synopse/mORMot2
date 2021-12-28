@@ -1449,6 +1449,8 @@ begin
     U := Int32ToUtf8(i + 1000);
     Check(AUP.IndexOf(U) = i);
   end;
+  U := '3000';
+  Check(AUP.IndexOf(U) < 0);
   Test := AUP.SaveTo;
   CheckEqual(Hash32(@Test[2], length(Test) - 1), $1EC51463, 'hash32e');
   // trimed Test[1]=ElemSize

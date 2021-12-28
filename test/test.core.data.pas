@@ -5595,6 +5595,8 @@ begin
     S := TRawByteStringStream.Create;
     try
       Prepare(TZipWrite.Create(S));
+      Check(IsContentCompressed(pointer(S.DataString), length(S.DataString)));
+      Check(GetMimeContentTypeFromMemory(pointer(S.DataString), length(S.DataString)) = mtZip);
       //FileFromString(S.DataString, FN + 'mem');
       test(TZipRead.Create(pointer(S.DataString), length(S.DataString)), 4);
     finally

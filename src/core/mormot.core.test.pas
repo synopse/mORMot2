@@ -931,8 +931,8 @@ begin
         WR.AddShorter('.'#13#10);
     end;
   end;
-  if not (last in endKind) and
-     (LastPunctuation <> ' ') then
+  if (LastPunctuation <> ' ') and
+     not (last in endKind) then
   begin
     WR.AddShorter('bla');
     WR.Add(LastPunctuation);
