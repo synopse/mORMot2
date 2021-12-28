@@ -284,6 +284,7 @@ type
     procedure DataSeek(Source: TStream; LocalOffset: Int64);
   end;
   PLocalFileHeader = ^TLocalFileHeader;
+  TLocalFileHeaderDynArray = array of TLocalFileHeader;
 
   //// last header structure, as used in .zip file format
   // - this header ends the file and is used to find the TFileHeader entries
@@ -409,6 +410,16 @@ type
       read fInfo.ReportDelay write fInfo.ReportDelay;
   end;
 
+  // some tools store 0 within local header, and append a "data descriptor"
+  TDataDescriptor = packed record
+    signature: cardinal;
+    crc32: cardinal;
+    zipSize: cardinal;
+    fullSize: cardinal;
+  end;
+  PDataDescriptor = ^TDataDescriptor;
+  TDataDescriptorDynArray = array of TDataDescriptor;
+
   /// read-only access to a .zip archive file
   // - can open directly a specified .zip file - only trailing WorkingMem bytes
   // are read in the memory, and should contain at least the Central Directory
@@ -416,6 +427,8 @@ type
   // - can open a .zip archive file content from memory
   TZipRead = class(TZipAbstract)
   private
+    fLocal: TLocalFileHeaderDynArray;
+    fDescriptor: TDataDescriptorDynArray;
     fEntry: TZipReadEntryDynArray;
     fSource: TStream; // if .zip is a file bigger than 1MB
     fSourceOffset: QWord; // where the .zip start in fSource (if appended)
@@ -2065,9 +2078,12 @@ begin
   if (fCentralDirectoryOffset <= Offset) or
      (fCentralDirectoryOffset +
        Int64(lh64.totalFiles * SizeOf(TFileHeader)) >= Offset + Size) then
-    raise ESynZip.CreateUtf8('%.Create: corrupted Central Dir Offset=% %',
+    raise ESynZip.CreateUtf8('%.Create: corrupted Central Dir Offset=% %, ' +
+      ' or insufficient WorkMem.',
       [self, fCentralDirectoryOffset, fFileName]);
   fCentralDirectoryFirstFile := @BufZip[fCentralDirectoryOffset - Offset];
+  SetLength(fLocal, lh64.totalFiles); // fLocal[] will contain the local file headers
+  SetLength(fDescriptor, lh64.totalFiles); // fDescriptors[] will contain the data descriptors
   SetLength(fEntry, lh64.totalFiles); // Entry[] will contain the Zip headers
   e := pointer(fEntry);
   h := fCentralDirectoryFirstFile;
@@ -2287,15 +2303,6 @@ begin
   result := -1;
 end;
 
-type
-  // some tools store 0 within local header, and append a "data descriptor"
-  TDataDescriptor = packed record
-    signature: cardinal;
-    crc32: cardinal;
-    zipSize: cardinal;
-    fullSize: cardinal;
-  end;
-
 function TZipRead.RetrieveLocalFileHeader(Index: integer;
   out Header: TLocalFileHeader): boolean;
 var
@@ -2317,9 +2324,11 @@ end;
 function TZipRead.RetrieveFileInfo(Index: integer;
   out Info: TFileInfoFull): boolean;
 var
-  desc: ^TDataDescriptor;
+  desc: PDataDescriptor;
   e: PZipReadEntry;
   PDataStart: PtrUInt;
+  tmp: RawByteString;
+  tmplen: integer;
   local: TLocalFileHeader;
 begin
   result := false;
@@ -2330,52 +2339,88 @@ begin
   e := @Entry[Index];
   Info.f32 := e^.dir^.fileInfo;
   FillCharFast(Info.f64, SizeOf(Info.f64), 0);
-  if e^.local = nil then
+
+  if nil = e^.local then
+  // this local isn't in our WorkMem, load from our buffer or disk
   begin
-    local.DataSeek(fSource, e^.localoffs + fSourceOffset);
-    if local.fileInfo.flags and FLAG_DATADESCRIPTOR <> 0 then
-      raise ESynZip.CreateUtf8('%: increase WorkingMem for data descriptor ' +
-        '(MacOS) support on % %', [self, e^.zipName, fFileName]);
-    Info.localfileheadersize := local.Size;
-  end
-  else
-  begin
-    Info.localfileheadersize := e^.local^.Size;
-    if e^.local^.fileInfo.flags and FLAG_DATADESCRIPTOR <> 0 then
+    if 0 = fLocal[Index].signature then
+    // local isn't in our buffer, load disk to buffer then use this buffer
     begin
-      // search manually the "data descriptor" from the binary local data
+      fLocal[Index].DataSeek(fSource, e^.localoffs + fSourceOffset);
+      local := fLocal[Index];
+    end;
+  end else
+    local := e^.local^;
+  Info.localfileheadersize := local.Size;
+
+  if 0 <> local.fileInfo.flags and FLAG_DATADESCRIPTOR then
+  // we need to extract actual size from data descriptor
+  begin
+    if 0 <> fDescriptor[Index].signature then
+    // data has been loaded to our buffer
+    begin
+      desc := @fDescriptor[Index];
+      Info.f32.zcrc32 := desc^.crc32;
+      Info.f32.zzipSize := desc^.zipSize;
+      Info.f32.zfullSize := desc^.fullSize;
+      Info.f64.zzipSize := desc^.zipSize;
+      Info.f64.zfullSize := desc^.fullSize;
+      result := true;
+      exit;
+    end;
+
+    if nil <> e^.local then
+    // find data descriptor and extract size from WorkMem
+    begin
       if Index < Count - 2 then
         desc := pointer(Entry[Index + 1].local) // search backward from next file
       else
         desc := pointer(fCentralDirectoryFirstFile); // search from central dir
-      if desc = nil then
-        exit;
-      dec(desc);
       PDataStart := PtrUInt(e^.local^.Data);
-      while PtrUInt(desc) > PDataStart do
-        // same pattern than ReadLocalItemDescriptor() in 7-Zip's ZipIn.cpp
-        // but here, search is done backwards (much faster than 7-Zip algorithm)
-        if (desc^.signature = SIGNATURE_DATADESCRIPTOR) and
-           (desc^.zipSize = PtrUInt(desc) - PDataStart) then
-        begin
-          if (desc^.fullSize = 0) or
-             (desc^.zipSize = ZIP32_MAXSIZE) or
-             (desc^.fullSize = ZIP32_MAXSIZE) then
-            // we expect 32-bit sizes to be available
-            exit;
-          Info.f32.zcrc32 := desc^.crc32;
-          Info.f32.zzipSize := desc^.zipSize;
-          Info.f32.zfullSize := desc^.fullSize;
-          Info.f64.zzipSize := desc^.zipSize;
-          Info.f64.zfullSize := desc^.fullSize;
-          result := true;
-          exit;
-        end
-        else
-          dec(PByte(desc));
-      exit;
+    end else
+    // find data descriptor and extract zipped & unzipped  size from disk
+    begin
+      if Index < Count - 2 then
+      // read from current file data to next local file header
+      // maybe we should reduce this tmplen to lower disk-io & mem-usage
+        tmplen := Entry[Index + 1].localoffs - e^.localoffs - local.Size + 1
+      else
+        tmplen := fCentralDirectoryOffset - e^.localoffs - local.Size + 1;
+      SetString(tmp, nil, tmplen);
+      fSource.Seek(e^.localoffs + local.Size + fSourceOffset, soBeginning);
+      if tmplen <> fSource.Read(tmp[1], tmplen) then
+        raise ESynZip.CreateUtf8('Error on read data descriptor buffer', []);
+      desc := Pointer(@tmp[tmplen]);
+      PDataStart := PtrUInt(@tmp[1]);
     end;
+    // now we have prepared pointer and buffer
+    Dec(desc);
+    while PtrUInt(desc) > PDataStart do
+    // same pattern than ReadLocalItemDescriptor() in 7-Zip's ZipIn.cpp
+    // but here, search is done backwards (much faster than 7-Zip algorithm)
+    if (desc^.signature = SIGNATURE_DATADESCRIPTOR) and
+       (desc^.zipSize = PtrUInt(desc) - PDataStart) then
+    begin
+      if (desc^.fullSize = 0) or
+         (desc^.zipSize = ZIP32_MAXSIZE) or
+         (desc^.fullSize = ZIP32_MAXSIZE) then
+        // we expect 32-bit sizes to be available
+        exit;
+      Info.f32.zcrc32 := desc^.crc32;
+      Info.f32.zzipSize := desc^.zipSize;
+      Info.f32.zfullSize := desc^.fullSize;
+      Info.f64.zzipSize := desc^.zipSize;
+      Info.f64.zfullSize := desc^.fullSize;
+      result := true;
+
+      fDescriptor[Index] := desc^;
+      exit;
+    end
+    else
+      dec(PByte(desc));
+    exit;
   end;
+
   // it seems we can use the central directory information
   if e^.dir64 = nil then
   begin
