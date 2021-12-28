@@ -7835,13 +7835,26 @@ begin
   DestDynArray.Copy(@self, ObjArrayByRef);
 end;
 
+function IndexFind(P, V: PAnsiChar; cmp: TRttiCompare; rtti: PRttiInfo; n: integer): PtrInt;
+var
+  comp: integer;
+begin
+  result := 0;
+  repeat
+    inc(P, cmp(P, V, rtti, comp));
+    if comp = 0 then
+      exit;
+    inc(result);
+    dec(n);
+  until n = 0;
+  result := -1;
+end;
+
 function TDynArray.IndexOf(const Item; CaseInSensitive: boolean): PtrInt;
 var
   rtti: PRttiInfo;
   cmp: TRttiCompare;
   n: PtrInt;
-  comp: integer;
-  P: PAnsiChar;
 label
   bin;
 begin
@@ -7857,20 +7870,9 @@ bin:  result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize)
         goto bin;
       cmp := RTTI_COMPARE[CaseInSensitive, rtti.Kind];
       if Assigned(cmp) then
-      begin
-        P := fValue^;
-        result := 0;
-        repeat
-          inc(P, cmp(P, @Item, rtti, comp));
-          if comp = 0 then
-            exit;
-          inc(result);
-          dec(n);
-        until n = 0;
-      end
+        result := IndexFind(fValue^, @Item, cmp, rtti, n)
       else
         goto bin;
-      result := -1;
     end
   else
     result := -1;

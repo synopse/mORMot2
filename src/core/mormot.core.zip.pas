@@ -1223,8 +1223,8 @@ const
   SIGNATURE_DATADESCRIPTOR = $08074b50;
 
   ZIP64_EXTRA_ID = $0001; // Zip64 extended information
-  NTFS_EXTRA_ID = $000a; // NTFS
-  UNIX_EXTRA_ID = $000d; // UNIX
+  NTFS_EXTRA_ID = $000a;  // NTFS
+  UNIX_EXTRA_ID = $000d;  // UNIX
   EXT_TIME_EXTRA_ID = $5455; // Extended timestamp
   INFOZIP_UNIX_EXTRAID = $5855; // Info-ZIP Unix extension
 
