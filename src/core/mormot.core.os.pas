@@ -1444,6 +1444,11 @@ function CloseHandle(hObject: THandle): BOOL; stdcall;
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 function FileCreate(const aFileName: TFileName): THandle;
 
+{$ifndef UNICODE}
+/// redefined here to call CreateFileW() on non-Unicode RTL
+function FileOpen(const aFileName: TFileName; aMode: integer): THandle;
+{$endif UNICODE}
+
 /// redefined here to avoid warning to include "Windows" in uses clause
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 procedure FileClose(F: THandle); stdcall;
@@ -3604,7 +3609,6 @@ type
     /// will release the global service controller
     destructor Destroy; override;
   end;
-
 
 var
   /// the main TService instance running in the current executable

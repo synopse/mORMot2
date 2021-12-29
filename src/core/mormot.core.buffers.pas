@@ -8243,7 +8243,7 @@ begin
     end;
   end;
   if FileExt <> nil then
-    FileExt^ := ext;
+    FileExt^ := {%H-}ext;
 end;
 
 function GetMimeContentType(Content: Pointer; Len: PtrInt; const FileName: TFileName;

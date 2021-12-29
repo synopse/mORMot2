@@ -8,6 +8,62 @@
 
 { ****************** Unicode, Time, File process }
 
+// W32() get a PWideChar buffer from a TFileName using a temp static buffer
+{$ifdef UNICODE}
+
+type
+  TW32Temp = byte; // not used
+
+function W32(const FileName: TFileName; var Temp: TW32Temp): PWideChar; inline;
+begin
+  Temp := 0; // make compiler happy
+  result := pointer(FileName); // no conversion needed
+end;
+
+{$else}
+
+type
+  TW32Temp = array[0..MAX_PATH] of WideChar; // no temp alloc for ASCII names
+
+procedure W32Convert(const FileName: TFileName; var Temp: TW32Temp);
+var
+  U: SynUnicode;
+  len: PtrInt;
+begin
+  // identical to FPC RTL, which converts to UnicodeString before Wide API call 
+  U := SynUnicode(FileName); // let the RTL + WinAPI do the conversion
+  len := length(U) * 2 + 2;  // include trailing #0
+  if len > SizeOf(Temp) then
+    Temp[0] := #0 // avoid buffer overflow (will be rejected by Windows anyway)
+  else
+    MoveFast(pointer(U)^, Temp, len);
+end;
+
+function W32(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
+var
+  i, len: PtrInt;
+begin
+  len := length(FileName);
+  if len = 0 then
+    result := nil
+  else
+  begin
+    if IsAnsiCompatible(pointer(FileName), len) then
+    begin
+      // most common case doesn't need any Unicode conversion
+      if len > MAX_PATH then
+        len := 0;
+      for i := 0 to len do // include trailing #0
+        PWordArray(@Temp)[i] := PByteArray(FileName)[i];
+    end
+    else
+      W32Convert(FileName, Temp);
+    result := @Temp;
+  end;
+end;
+
+{$endif UNICODE}
+
 const
   DefaultCharVar: AnsiChar = '?';
 
@@ -23,8 +79,10 @@ end;
 
 
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
+var
+  tmp: TW32Temp;
 begin
-  result := Windows.LoadLibrary(pointer(LibraryName));
+  result := Windows.LoadLibraryW(W32(LibraryName, tmp));
 end;
 
 procedure LibraryClose(Lib: TLibHandle);
@@ -263,9 +321,10 @@ function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
   ST, LT: TSystemTime;
+  tmp: TW32Temp;
 begin
   // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
-  if GetFileAttributesEx(pointer(FileName), GetFileExInfoStandard, @FA) and
+  if GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA) and
      FileTimeToSystemTime({%H-}FA.ftLastWriteTime, ST) and
      SystemTimeToTzSpecificLocalTime(nil, ST, LT) then
     result := SystemTimeToDateTime(LT)
@@ -276,9 +335,10 @@ end;
 function FileAgeToUnixTimeUtc(const FileName: TFileName; AllowDir: boolean): TUnixTime;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
+  tmp: TW32Temp;
 begin
   // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
-  if GetFileAttributesEx(pointer(FileName), GetFileExInfoStandard, @FA) and
+  if GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA) and
      (AllowDir or
       (({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) = 0)) then
     result := FileTimeToUnixTime(FA.ftLastWriteTime) // no local time conversion
@@ -288,7 +348,7 @@ end;
 
 function FileAgeToWindowsTime(const FileName: TFileName): integer;
 begin
-  result := FileAge(FileName);
+  result := FileAge(FileName); // only called by mormot.core.zip
 end;
 
 function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
@@ -338,9 +398,10 @@ end;
 function FileSize(const FileName: TFileName): Int64;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
+  tmp: TW32Temp;
 begin
   // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
-  if GetFileAttributesEx(pointer(FileName), GetFileExInfoStandard, @FA) then
+  if GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA) then
   begin
     PInt64Rec(@result)^.Lo := FA.nFileSizeLow;
     PInt64Rec(@result)^.Hi := FA.nFileSizeHigh;
@@ -372,17 +433,49 @@ begin
 end;
 
 function DeleteFile(const aFileName: TFileName): boolean;
+var
+  tmp: TW32Temp;
 begin
   if aFileName = '' then
     result := false
   else
-    result := SysUtils.DeleteFile(aFileName);
+    result := DeleteFileW(W32(aFileName, tmp));
 end;
 
 function FileCreate(const aFileName: TFileName): THandle;
+var
+  tmp: TW32Temp;
 begin
-  result := SysUtils.FileCreate(aFileName);
+  result := CreateFileW(W32(aFileName, tmp), GENERIC_READ or GENERIC_WRITE,
+    0, nil, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 end;
+
+{$ifndef UNICODE} // W32() is not worth it if aFileName is UnicodeString
+function FileOpen(const aFileName: TFileName; aMode: integer): THandle;
+const
+  FILE_WRITE_ATTRIBUTES = $0100; // not defined on oldest Delphi
+  ACCESS: array[0..2] of DWord = (
+    GENERIC_READ,
+    GENERIC_WRITE,
+    GENERIC_READ or GENERIC_WRITE or FILE_WRITE_ATTRIBUTES);
+  SHARE: array[0..4] of DWord = (
+    0,
+    0,
+    FILE_SHARE_READ,
+    FILE_SHARE_WRITE,
+    FILE_SHARE_READ or FILE_SHARE_WRITE);
+var
+  tmp: TW32Temp;
+  s: PtrInt;
+begin
+  s := (aMode and $f0) shr 4;
+  if s <= high(SHARE) then
+   result := CreateFileW(W32(aFileName, tmp), ACCESS[aMode and 3], SHARE[s],
+     nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0)
+  else
+    result := THandle(-1);
+end;
+{$endif UNICODE}
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
 var
@@ -406,41 +499,51 @@ begin
 end;
 
 procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
+const
+  FLAGS: array[boolean] of integer = (
+    FILE_ATTRIBUTE_NORMAL,
+    FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY);
+var
+  tmp: TW32Temp;
 begin
   if FileName <> '' then
-    if Secret then
-      SetFileAttributes(pointer(FileName),
-        FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY)
-    else
-      SetFileAttributes(pointer(FileName), FILE_ATTRIBUTE_NORMAL);
+    SetFileAttributesW(W32(FileName, tmp), FLAGS[Secret]);
 end;
 
 function RenameFile(const OldName, NewName: TFileName): boolean;
+var
+  o, n: TW32Temp;
 begin
   if (OldName = '') or
      (NewName = '') then
     result := false
   else
-    result := SysUtils.RenameFile(OldName,NewName);
+    result := MoveFileW(W32(OldName, o), W32(NewName, n));
 end;
 
 function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
+var
+  s, t: TW32Temp;
 begin
   if (Source = '') or
      (Target = '') then
     result := false
   else
-    result := Windows.CopyFile(pointer(Source), pointer(Target), FailIfExists);
+    result := Windows.CopyFileW(W32(Source, s), W32(Target, t), FailIfExists);
 end;
 
-function FileOpenSequentialRead(const FileName: string): integer;
+function FileOpenSequentialRead(const FileName: TFileName): integer;
+var
+  tmp: TW32Temp;
+  flags: integer;
 begin
   if OSVersion >= wVista then // XP has troubles with the "sequential" flag
-    result := CreateFile(pointer(FileName), GENERIC_READ,
-      FILE_SHARE_READ or FILE_SHARE_WRITE, nil, // same as fmShareDenyNone
-      OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, 0)
+    flags := FILE_FLAG_SEQUENTIAL_SCAN
   else
-    result := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
+    flags := FILE_ATTRIBUTE_NORMAL;
+  result := CreateFileW(W32(FileName, tmp), GENERIC_READ,
+    FILE_SHARE_READ or FILE_SHARE_WRITE, nil, // same as fmShareDenyNone
+    OPEN_EXISTING, flags, 0)
 end;
 
 threadvar // mandatory: GetTickCount seems per-thread on XP :(
@@ -1528,7 +1631,7 @@ var
   Info: ^TVSFixedFileInfo;
   FileTime: TFILETIME;
   SystemTime: TSYSTEMTIME;
-  tmp: TFileName;
+  tmp: SynUnicode;
 
   function ReadResourceByName(const From: RawUtf8): RawUtf8;
   var
@@ -1550,14 +1653,21 @@ begin
   begin
     // GetFileVersionInfo modifies the filename parameter data while parsing
     // Copy the string const into a local variable to create a writeable copy
-    SetString(tmp, PChar(pointer(aFileName)), length(aFileName));
-    Size := GetFileVersionInfoSize(pointer(tmp), Size2);
+    tmp := SynUnicode(aFileName);
+    {$ifdef UNICODE}
+    UniqueString(tmp);
+    {$endif UNICODE}
+    Size := GetFileVersionInfoSizeW(pointer(tmp), Size2);
     if Size > 0 then
     begin
       GetMem(Pt, Size);
       try
-        GetFileVersionInfo(pointer(aFileName), 0, Size, Pt);
-        VerQueryValue(Pt, '\', pointer(Info), Size2);
+        tmp := SynUnicode(aFileName);
+        {$ifdef UNICODE}
+        UniqueString(tmp);
+        {$endif UNICODE}
+        GetFileVersionInfoW(pointer(tmp), 0, Size, Pt);
+        VerQueryValueW(Pt, '\', pointer(Info), Size2);
         with Info^ do
         begin
           if Version32 = 0 then
@@ -2967,15 +3077,15 @@ end;
     
 procedure ServiceProc(ArgCount: cardinal; Args: PPChar); stdcall;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if not Assigned(ServiceSingle) then
     exit;
-  for i := 1 to ArgCount - 1 do
+  SetLength(ServiceSingle.fArgsList, ArgCount - 1);
+  for i := 0 to ArgCount - 2 do
   begin
     Inc(Args);
-    SetLength(ServiceSingle.fArgsList, length(ServiceSingle.fArgsList) + 1);
-    ServiceSingle.fArgsList[high(ServiceSingle.fArgsList)] := Args^;
+    ServiceSingle.fArgsList[i] := Args^;
   end;
   ServiceSingle.fStatusHandle := RegisterServiceCtrlHandler(
     pointer(ServiceSingle.fSName), @ServiceSingle.ControlHandler);
