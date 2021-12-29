@@ -975,19 +975,22 @@ begin
       begin
         fInstanceDeprecatedTix32 := Inst.LastAccess;
         tix := Inst.LastAccess - fInstanceTimeout;
-        P := pointer(fInstance);
-        for i := 1 to fInstanceCapacity do
+        if integer(tix) > 0 then // tix<0 when booted sooner than the timeout
         begin
-          if (P^.InstanceID <> 0) and
-             (tix > P^.LastAccess) then
+          P := pointer(fInstance);
+          for i := 1 to fInstanceCapacity do
           begin
-            fRestServer.InternalLog('%.RetrieveInstance: Delete I%(%) ' +
-              'instance (id=%) after % minutes timeout (max % minutes)',
-              [ClassType, fInterfaceUri, pointer(Inst.Instance), P^.InstanceID,
-               tix div 60, fInstanceTimeOut div 60], sllInfo);
-            P^.SafeFreeInstance(self);
+            if (P^.InstanceID <> 0) and
+               (tix > P^.LastAccess) then
+            begin
+              fRestServer.InternalLog('%.RetrieveInstance: Delete I%(%) ' +
+                'instance (id=%) after % minutes timeout (max % minutes)',
+                [ClassType, fInterfaceUri, pointer(Inst.Instance), P^.InstanceID,
+                 tix div 60, fInstanceTimeOut div 60], sllInfo);
+              P^.SafeFreeInstance(self);
+            end;
+            inc(P);
           end;
-          inc(P);
         end;
       end;
     finally
