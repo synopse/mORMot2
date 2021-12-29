@@ -2407,7 +2407,7 @@ begin
       raise ESynZip.CreateUtf8('%: data descriptor read error on % %',
         [self, e^.zipName, fFileName]);
     descmin := PtrUInt(@tmp);
-    desc := @tmp[tmpLen];
+    desc := pointer(descmin + tmpLen);
     e := nil; // indicates below that descmin does not match zipSize
   end;
   dec(desc);
