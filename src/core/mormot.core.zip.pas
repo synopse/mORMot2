@@ -2455,7 +2455,7 @@ begin
   e := @Entry[aIndex];
   if e^.local = nil then
   begin
-    fSource.Seek(e^.localoffs + fSourceOffset + info.localsize, soBeginning);
+    fSource.Seek(e^.localoffs + fSourceOffset + PtrUInt(info.localsize), soBeginning);
     case info.f32.zZipMethod of
       Z_STORED:
         begin
