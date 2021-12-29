@@ -697,9 +697,12 @@ function ToText(algo: THashAlgo): PShortString; overload;
 // - using a temporary buffer of 1MB for the sequential reading
 function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8; overload;
 
+/// compute one or several hexadecimal hash(es) of any (big) file
+// - using a temporary buffer of 1MB for the sequential reading
+function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos): TRawUtf8DynArray;
+
 /// compute the hexadecimal hashe(s) of one file, as external .md5/.sha256/.. files
-// - reading the file once in memory, then apply all algorithms on it and
-// generate the text hash files in the very same folder
+// - generate the text hash files in the very same folder
 procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos); overload;
 
 /// one-step hash computation of a buffer as lowercase hexadecimal string
@@ -1715,60 +1718,98 @@ begin
   result := hasher.Full(aAlgo, pointer(aBuffer), length(aBuffer));
 end;
 
-function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8;
+function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos): TRawUtf8DynArray;
 var
-  hasher: TSynHasher;
+  hasher: array of TSynHasher;
   temp: RawByteString;
   F: THandle;
   size, tempsize: Int64;
-  read: integer;
+  n, read: integer;
+  a: THashAlgo;
+  h: PtrInt;
 begin
-  result := '';
-  if (aFileName = '') or
-     not hasher.Init(aAlgo) then
+  result := nil;
+  if aFileName = '' then
+    exit;
+  n := 0;
+  for a := low(a) to high(a) do
+    inc(n, ord(a in aAlgos));
+  if n = 0 then
     exit;
   F := FileOpenSequentialRead(aFileName);
   if ValidHandle(F) then
   try
+    SetLength(hasher, n);
+    h := 0;
+    for a := low(a) to high(a) do
+      if a in aAlgos then
+        if hasher[h].Init(a) then
+          inc(h)
+        else
+          exit;
     size := FileSize(F);
     tempsize := 1 shl 20; // 1MB temporary buffer for reading
     if tempsize > size then
       tempsize := size;
     SetLength(temp, tempsize);
+    dec(n);
     while size > 0 do
     begin
       read := FileRead(F, pointer(temp)^, tempsize);
       if read <= 0 then
         exit;
-      hasher.Update(pointer(temp), read);
+      for h := 0 to n do
+        hasher[h].Update(pointer(temp), read);
       dec(size, read);
     end;
-    result := hasher.Final;
+    SetLength(result, n + 1);
+    for h := 0 to n do
+      result[h] := hasher[h].Final;
   finally
     FileClose(F);
   end;
 end;
 
+function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8;
+var
+  h: TRawUtf8DynArray;
+begin
+  h := HashFileRaw(aFileName, [aAlgo]);
+  if h = nil then
+    result := ''
+  else
+    result := h[0];
+end;
+
+const
+  ALGO_EXT: array[THashAlgo] of string[8] = (
+    'md5',
+    'sha1',
+    'sha256',
+    'sha384',
+    'sha512',
+    'sha3_256',
+    'sha3_512');
+
 procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos);
 var
-  data, hash: RawUtf8;
+  h: TRawUtf8DynArray;
   efn, fn: string;
   a: THashAlgo;
+  n: PtrInt;
 begin
-  if aAlgos = [] then
+  h := HashFileRaw(aFileName, aAlgos);
+  if h = nil then
     exit;
   efn := ExtractFileName(aFileName);
-  data := StringFromFile(aFileName);
-  if data <> '' then
-    for a := low(a) to high(a) do
-      if a in aAlgos then
-      begin
-        FormatUtf8('% *%',
-          [HashFull(a, pointer(data), length(data)), efn], hash);
-        FormatString('%.%',
-          [efn, LowerCase(TrimLeftLowerCaseShort(ToText(a)))], fn);
-        FileFromString(hash, fn);
-      end;
+  n := 0;
+  for a := low(a) to high(a) do
+    if a in aAlgos then
+    begin
+      FormatString('%.%', [efn, ALGO_EXT[a]], fn);
+      FileFromString(FormatUtf8('% *%', [h[n], efn]), fn);
+      inc(n);
+    end;
 end;
 
 function HashFileMd5(const FileName: TFileName): RawUtf8;
