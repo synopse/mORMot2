@@ -3054,6 +3054,23 @@ var
   EnvironmentCache: SynUnicode;
   EnvironmentCacheLock: TLightLock;
 
+procedure GetEnvironmentCache;
+var
+  e, p: PWideChar;
+begin
+  EnvironmentCacheLock.Lock;
+  if EnvironmentCache = '' then
+  begin
+    e := GetEnvironmentStringsW;
+    p := e;
+    while p^ <> #0 do
+      inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
+    SetString(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
+    FreeEnvironmentStringsW(e);
+  end;
+  EnvironmentCacheLock.UnLock;
+end;
+
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
   envaddexisting: boolean; parsed: PParseCommands): integer;
 var
@@ -3062,7 +3079,6 @@ var
   exe, path: TFileName;
   // CreateProcess can alter the strings -> use local SynUnicode temp variables
   wcmd, wenv, wpath: SynUnicode;
-  e, p: PWideChar;
   exitcode: cardinal;
   i: integer;
 begin
@@ -3101,21 +3117,9 @@ begin
     wenv := SynUnicode(env);
     if envaddexisting then
     begin
-      EnvironmentCacheLock.Lock;
-      try
-        if EnvironmentCache = '' then
-        begin
-          e := GetEnvironmentStringsW;
-          p := e;
-          while p^ <> #0 do
-            inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
-          SetString(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
-          FreeEnvironmentStringsW(e);
-        end;
-        wenv := EnvironmentCache + wenv;
-      finally
-        EnvironmentCacheLock.UnLock;
-      end;
+      if EnvironmentCache = '' then
+        GetEnvironmentCache;
+      wenv := EnvironmentCache + wenv;
     end
     else
       UniqueString(wenv);
