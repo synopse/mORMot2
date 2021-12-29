@@ -1801,98 +1801,63 @@ end;
 
 
 const
-  SE_CREATE_TOKEN_NAME           = 'SeCreateTokenPrivilege';
-  SE_ASSIGNPRIMARYTOKEN_NAME     = 'SeAssignPrimaryTokenPrivilege';
-  SE_LOCK_MEMORY_NAME            = 'SeLockMemoryPrivilege';
-  SE_INCREASE_QUOTA_NAME         = 'SeIncreaseQuotaPrivilege';
-  SE_UNSOLICITED_INPUT_NAME      = 'SeUnsolicitedInputPrivilege';
-  SE_MACHINE_ACCOUNT_NAME        = 'SeMachineAccountPrivilege';
-  SE_TCB_NAME                    = 'SeTcbPrivilege';
-  SE_SECURITY_NAME               = 'SeSecurityPrivilege';
-  SE_TAKE_OWNERSHIP_NAME         = 'SeTakeOwnershipPrivilege';
-  SE_LOAD_DRIVER_NAME            = 'SeLoadDriverPrivilege';
-  SE_SYSTEM_PROFILE_NAME         = 'SeSystemProfilePrivilege';
-  SE_SYSTEMTIME_NAME             = 'SeSystemtimePrivilege';
-  SE_PROF_SINGLE_PROCESS_NAME    = 'SeProfileSingleProcessPrivilege';
-  SE_INC_BASE_PRIORITY_NAME      = 'SeIncreaseBasePriorityPrivilege';
-  SE_CREATE_PAGEFILE_NAME        = 'SeCreatePagefilePrivilege';
-  SE_CREATE_PERMANENT_NAME       = 'SeCreatePermanentPrivilege';
-  SE_BACKUP_NAME                 = 'SeBackupPrivilege';
-  SE_RESTORE_NAME                = 'SeRestorePrivilege';
-  SE_SHUTDOWN_NAME               = 'SeShutdownPrivilege';
-  SE_DEBUG_NAME                  = 'SeDebugPrivilege';
-  SE_AUDIT_NAME                  = 'SeAuditPrivilege';
-  SE_SYSTEM_ENVIRONMENT_NAME     = 'SeSystemEnvironmentPrivilege';
-  SE_CHANGE_NOTIFY_NAME          = 'SeChangeNotifyPrivilege';
-  SE_REMOTE_SHUTDOWN_NAME        = 'SeRemoteShutdownPrivilege';
-  SE_UNDOCK_NAME                 = 'SeUndockPrivilege';
-  SE_SYNC_AGENT_NAME             = 'SeSyncAgentPrivilege';
-  SE_ENABLE_DELEGATION_NAME      = 'SeEnableDelegationPrivilege';
-  SE_MANAGE_VOLUME_NAME          = 'SeManageVolumePrivilege';
-  SE_IMPERSONATE_NAME            = 'SeImpersonatePrivilege';
-  SE_CREATE_GLOBAL_NAME          = 'SeCreateGlobalPrivilege';
-  SE_TRUSTED_CREDMAN_ACCESS_NAME = 'SeTrustedCredManAccessPrivilege';
-  SE_RELABEL_NAME                = 'SeRelabelPrivilege';
-  SE_INC_WORKING_SET_NAME        = 'SeIncreaseWorkingSetPrivilege';
-  SE_TIME_ZONE_NAME              = 'SeTimeZonePrivilege';
-  SE_CREATE_SYMBOLIC_LINK_NAME   = 'SeCreateSymbolicLinkPrivilege';
-
   MAX_SE_NAME_LENGTH = 31;
-
-  WinSystemPrivilegeToSE_NAME: array[TWinSystemPrivilege] of string = (
-    SE_CREATE_TOKEN_NAME,
-    SE_ASSIGNPRIMARYTOKEN_NAME,
-    SE_LOCK_MEMORY_NAME,
-    SE_INCREASE_QUOTA_NAME,
-    SE_UNSOLICITED_INPUT_NAME,
-    SE_MACHINE_ACCOUNT_NAME,
-    SE_TCB_NAME,
-    SE_SECURITY_NAME,
-    SE_TAKE_OWNERSHIP_NAME,
-    SE_LOAD_DRIVER_NAME,
-    SE_SYSTEM_PROFILE_NAME,
-    SE_SYSTEMTIME_NAME,
-    SE_PROF_SINGLE_PROCESS_NAME,
-    SE_INC_BASE_PRIORITY_NAME,
-    SE_CREATE_PAGEFILE_NAME,
-    SE_CREATE_PERMANENT_NAME,
-    SE_BACKUP_NAME,
-    SE_RESTORE_NAME,
-    SE_SHUTDOWN_NAME,
-    SE_DEBUG_NAME,
-    SE_AUDIT_NAME,
-    SE_SYSTEM_ENVIRONMENT_NAME,
-    SE_CHANGE_NOTIFY_NAME,
-    SE_REMOTE_SHUTDOWN_NAME,
-    SE_UNDOCK_NAME,
-    SE_SYNC_AGENT_NAME,
-    SE_ENABLE_DELEGATION_NAME,
-    SE_MANAGE_VOLUME_NAME,
-    SE_IMPERSONATE_NAME,
-    SE_CREATE_GLOBAL_NAME,
-    SE_TRUSTED_CREDMAN_ACCESS_NAME,
-    SE_RELABEL_NAME,
-    SE_INC_WORKING_SET_NAME,
-    SE_TIME_ZONE_NAME,
-    SE_CREATE_SYMBOLIC_LINK_NAME
-  );
+  WINSYSTEMPRIVILEGENAME: array[TWinSystemPrivilege] of string = (
+    'SeCreateTokenPrivilege',          // wspCreateToken
+    'SeAssignPrimaryTokenPrivilege',   // wspAssignPrimaryToken
+    'SeLockMemoryPrivilege',           // wspLockMemory
+    'SeIncreaseQuotaPrivilege',        // wspIncreaseQuota
+    'SeUnsolicitedInputPrivilege',     // wspUnsolicitedInput
+    'SeMachineAccountPrivilege',       // wspMachineAccount
+    'SeTcbPrivilege',                  // wspTCP
+    'SeSecurityPrivilege',             // wspSecurity
+    'SeTakeOwnershipPrivilege',        // wspTakeOwnership
+    'SeLoadDriverPrivilege',           // wspLoadDriver
+    'SeSystemProfilePrivilege',        // wspSystemProfile
+    'SeSystemtimePrivilege',           // wspSystemTime
+    'SeProfileSingleProcessPrivilege', // wspProfSingleProcess
+    'SeIncreaseBasePriorityPrivilege', // wspIncBasePriority
+    'SeCreatePagefilePrivilege',       // wspCreatePageFile
+    'SeCreatePermanentPrivilege',      // wspCreatePermanent
+    'SeBackupPrivilege',               // wspBackup
+    'SeRestorePrivilege',              // wspRestore
+    'SeShutdownPrivilege',             // wspShutdown
+    'SeDebugPrivilege',                // wspDebug
+    'SeAuditPrivilege',                // wspAudit
+    'SeSystemEnvironmentPrivilege',    // wspSystemEnvironment
+    'SeChangeNotifyPrivilege',         // wspChangeNotify
+    'SeRemoteShutdownPrivilege',       // wspRemoteShutdown
+    'SeUndockPrivilege',               // wspUndock
+    'SeSyncAgentPrivilege',            // wspSyncAgent
+    'SeEnableDelegationPrivilege',     // wspEnableDelegation
+    'SeManageVolumePrivilege',         // wspManageVolume
+    'SeImpersonatePrivilege',          // wspImpersonate
+    'SeCreateGlobalPrivilege',         // wspCreateGlobal
+    'SeTrustedCredManAccessPrivilege', // wspTrustedCredmanAccess
+    'SeRelabelPrivilege',              // wspRelabel
+    'SeIncreaseWorkingSetPrivilege',   // wspIncWorkingSet
+    'SeTimeZonePrivilege',             // wspTimeZone
+    'SeCreateSymbolicLinkPrivilege');  // wspCreateSymbolicLink
 
 type
-  PTOKEN_PRIVILEGES = ^TOKEN_PRIVILEGES;
   TOKEN_PRIVILEGES = packed record
     PrivilegeCount : DWORD;
     Privileges : array[0..0] of LUID_AND_ATTRIBUTES;
   end;
+  PTOKEN_PRIVILEGES = ^TOKEN_PRIVILEGES;
 
 function OpenProcessToken(ProcessHandle: THandle; DesiredAccess: DWORD;
   var TokenHandle: THandle): BOOL;
     stdcall; external advapi32 name 'OpenProcessToken';
+
 function LookupPrivilegeValue(lpSystemName, lpName: PChar;
   var lpLuid: TLargeInteger): BOOL;
     stdcall; external advapi32 name 'LookupPrivilegeValue' + _AW;
+
 function LookupPrivilegeName(lpSystemName: LPCSTR; var lpLuid: TLargeInteger;
   lpName: PChar; var cbName: DWORD): BOOL;
     stdcall; external advapi32 name 'LookupPrivilegeName' + _AW;
+
 function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
   const NewState: TOKEN_PRIVILEGES; BufferLength: DWORD;
   PreviousState: PTokenPrivileges; ReturnLength: PDWORD): BOOL;
@@ -2020,7 +1985,7 @@ begin
               [GetLastError, PInt64(@tp.Privileges[i].Luid)^])
         end;
       for p := low(p) to high(p) do
-        if CompareText(name, WinSystemPrivilegeToSE_NAME[p]) = 0 then
+        if CompareText(name, WINSYSTEMPRIVILEGENAME[p]) = 0 then
         begin
           Include(fAvailable, p);
           if tp.Privileges[i].Attributes and SE_PRIVILEGE_ENABLED <> 0 then
@@ -2044,7 +2009,7 @@ begin
   result := false;
   cbprev := SizeOf(TOKEN_PRIVILEGES);
   if not LookupPrivilegeValue(
-           nil, Pointer(WinSystemPrivilegeToSE_NAME[aPrivilege]), id) then
+           nil, Pointer(WINSYSTEMPRIVILEGENAME[aPrivilege]), id) then
     exit;
   tp.PrivilegeCount := 1;
   tp.Privileges[0].Luid := PInt64(@id)^;
@@ -2712,7 +2677,8 @@ end;
 procedure TService.DoCtrlHandle(Code: cardinal);
 begin
   if Assigned(WindowsServiceLog) then
-    WindowsServiceLog(sllInfo, '%: command % received from OS', [ServiceName, Code], self);
+    WindowsServiceLog(sllInfo, '%: command % received from OS',
+      [ServiceName, Code], self);
   try
     case Code of
       SERVICE_CONTROL_STOP:
@@ -2895,12 +2861,12 @@ begin
     SetServiceStatus(fStatusHandle, fStatusRec);
 end;
 
-procedure TService.start;
+procedure TService.Start;
 begin
   with TServiceController.CreateOpenService(
     '', '', fSName, SERVICE_ALL_ACCESS) do
   try
-    start([]);
+    Start([]);
   finally
     Free;
   end;
