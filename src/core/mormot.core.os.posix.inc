@@ -1002,7 +1002,7 @@ begin
 end;
 {$I+}
 
-function FileOpenSequentialRead(const FileName: string): integer;
+function FileOpenSequentialRead(const FileName: TFileName): integer;
 begin
   // SysUtils.FileOpen = fpOpen + fpFlock
   result := fpOpen(pointer(FileName), O_RDONLY); // no fpFlock() call

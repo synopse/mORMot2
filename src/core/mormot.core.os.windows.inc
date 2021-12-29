@@ -2160,8 +2160,7 @@ function ReadProcessMemory(hProcess: THandle; const lpBaseAddress: Pointer;
   lpBuffer: Pointer; nSize: PtrUInt; var lpNumberOfBytesRead: PtrUInt): BOOL;
     stdcall; external kernel32 name 'ReadProcessMemory';
 
-function InternalGetProcessInfo(aPID: DWORD;
-  out aInfo: TWinProcessInfo): boolean;
+function InternalGetProcessInfo(aPID: DWORD; out aInfo: TWinProcessInfo): boolean;
 var
   bytesread: PtrUInt;
   sizeneeded: DWORD;

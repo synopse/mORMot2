@@ -1149,6 +1149,10 @@ type
   end;
 
   /// which information was returned by GetProcessInfo() overloaded functions
+  // - wpaiPID is set when PID was retrieved
+  // - wpaiBasic with ParentPID/BasePriority/ExitStatus/PEBBaseAddress/AffinityMask
+  // - wpaiPEB with SessionID/BeingDebugged
+  // - wpaiCommandLine and wpaiImagePath when CommandLine and ImagePath are set
   TWinProcessAvailableInfos = set of (
     wpaiPID,
     wpaiBasic,
@@ -1158,17 +1162,30 @@ type
 
   /// information returned by GetProcessInfo() overloaded functions
   TWinProcessInfo = record
+    /// which information was returned within this structure
     AvailableInfo: TWinProcessAvailableInfos;
+    /// the Process ID
     PID: cardinal;
+    /// the Parent Process ID
     ParentPID: cardinal;
+    /// Terminal Services session identifier associated with this process
     SessionID: cardinal;
-    PEBBaseAddress: Pointer;
+    /// points to the low-level internal PEB structure
+    // - you can not directly access this memory, unless ReadProcessMemory()
+    // with proper wspDebug priviledge API is called
+    PEBBaseAddress: pointer;
+    /// GetProcessAffinityMask-like value
     AffinityMask: cardinal;
+    /// process priority
     BasePriority: integer;
+    /// GetExitCodeProcess-like value
     ExitStatus: integer;
+    /// indicates whether the specified process is currently being debugged
     BeingDebugged: byte;
-    ImagePath: SynUnicode;
+    /// command-line string passed to the process
     CommandLine: SynUnicode;
+    /// path of the image file for the process
+    ImagePath: SynUnicode;
   end;
 
   PWinProcessInfo = ^TWinProcessInfo;
@@ -2078,13 +2095,13 @@ type
 // so it would use regular FileOpen() on this deprecated OS
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by StringFromFile() or HashFile() functions
-function FileOpenSequentialRead(const FileName: string): integer;
+function FileOpenSequentialRead(const FileName: TFileName): integer;
 
 /// returns a TFileStream optimized for one pass file reading
 // - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN on Windows
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by TRestOrmServerFullMemory and TAlgoCompress
-function FileStreamSequentialRead(const FileName: string): THandleStream;
+function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 
 /// read a File content into a string
 // - content can be binary or text
@@ -3579,7 +3596,7 @@ type
   end;
 
   /// inherit from this class if your application has a single Windows Service
-  // - note that the TService jumper does not work well - so use this instead
+  // - note that only this single-service implementation is available by now
   TServiceSingle = class(TService)
   public
     /// will set a global function as service controller
@@ -4276,7 +4293,7 @@ begin
     FileClose(Handle); // otherwise file is stil opened
 end;
 
-function FileStreamSequentialRead(const FileName: string): THandleStream;
+function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 begin
   result := TFileStreamFromHandle.Create(FileOpenSequentialRead(FileName));
 end;
