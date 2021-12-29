@@ -8725,7 +8725,7 @@ var
   F: THandle;
   Header: THash256Rec;
 begin
-  F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
+  F := FileOpenSequentialRead(FileName);
   if not ValidHandle(F) then
     result := false
   else
@@ -8751,7 +8751,7 @@ var
 begin
   // see CodecEncrypt/CodecDecrypt in mormot.db.raw.sqlite3.static
   result := false;
-  F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
+  F := FileOpenSequentialRead(FileName);
   if not ValidHandle(F) then
     exit;
   if (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and

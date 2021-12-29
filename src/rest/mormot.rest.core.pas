@@ -4051,7 +4051,7 @@ begin
   if FileName = '' then
     unixfiletime := 0
   else
-    unixfiletime := FileAgeToUnixTimeUtc(FileName);
+    unixfiletime := FileAgeToUnixTimeUtc(FileName); // fast API call
   if unixfiletime = 0 then
     if Error404Redirect <> '' then
       Redirect(Error404Redirect)

@@ -1646,7 +1646,7 @@ begin
   result := false;
   if encryptedfile = '' then
     exit;
-  F := FileOpen(encryptedfile, fmOpenRead or fmShareDenyNone);
+  F := FileOpenSequentialRead(encryptedfile);
   if not ValidHandle(F) then
     exit;
   if FileRead(F, head, SizeOf(head)) = SizeOf(head) then

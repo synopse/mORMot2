@@ -990,7 +990,7 @@ var
   F: THandle;
   Header: array[0..31] of AnsiChar;
 begin
-  F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
+  F := FileOpenSequentialRead(FileName);
   if not ValidHandle(F) then
     result := false
   else
