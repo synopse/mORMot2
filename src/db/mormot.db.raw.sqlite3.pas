@@ -6793,18 +6793,18 @@ begin
     exit; // avoid GPF in case of call from a static-only server
   end;
   Timer.Start;
-  result := LockJson(aSql, aResultCount); // lock and try getting the request from the cache
+  result := LockJson(aSql, aResultCount); // lock and try getting from cache
   if result = '' then
-  // only Execute the DB request if not got from cache
-  try
-    result := R.ExecuteJson(DB, aSql, Expand, @Count, StatementMaxMemory);
-    if aResultCount <> nil then
-      aResultCount^ := Count;
-  finally
-    UnLockJson(aSql, result, Count);
-    fLog.Add.Log(sllSQL, '% % returned % bytes %', [Timer.Stop,
-      FileNameWithoutPath, length(result), aSql], self);
-  end;
+    // only Execute the DB request if not got from cache
+    try
+      result := R.ExecuteJson(DB, aSql, Expand, @Count, StatementMaxMemory);
+      if aResultCount <> nil then
+        aResultCount^ := Count;
+    finally
+      UnLockJson(aSql, result, Count);
+      fLog.Add.Log(sllSQL, '% % returned % bytes %', [Timer.Stop,
+        FileNameWithoutPath, length(result), aSql], self);
+    end;
 end;
 
 function DirectExplainQueryPlan(DB: TSqlite3DB; const aSql: RawUtf8): RawUtf8;

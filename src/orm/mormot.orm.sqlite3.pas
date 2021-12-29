@@ -457,7 +457,7 @@ begin
     // not retrieved from cache -> call SQLite3 engine
     try
       n := 0;
-      jsoncached := r.ExecuteJson(aDB.DB, aSql, Expand, @n);
+      jsoncached := r.ExecuteJson(aDB.DB, aSql, Expand, @n, aDB.StatementMaxMemory);
       // big JSON is faster than sqlite3_get_table(): less heap allocations
       inherited CreateFromTables(Tables, aSql, jsoncached);
       Assert(n = fRowCount);
