@@ -401,6 +401,8 @@ type
     constructor Create; virtual;
     /// add one item to the list
     function Add(item: pointer): PtrInt; virtual;
+    /// insert one item to the list at a given position
+    function Insert(item: pointer; index: PtrInt): PtrInt;
     /// delete all items of the list
     procedure Clear; virtual;
     /// delete one item from the list
@@ -561,10 +563,6 @@ type
   protected
     fSafe: TRWLightLock;
   public
-    /// initialize the list instance
-    // - the stored TObject instances will be owned by this TSynObjectListLightLocked,
-    // unless AOwnsObjects is set to false
-    constructor Create(aOwnsObjects: boolean = true); reintroduce;
     /// the light single Read / exclusive Write LightLock associated to this list
     // - could be used to protect shared resources within the internal process,
     // for index-oriented methods like Delete/Items/Count...
@@ -585,10 +583,6 @@ type
   protected
     fSafe: TRWLock;
   public
-    /// initialize the list instance
-    // - the stored TObject instances will be owned by this TSynObjectListLocked,
-    // unless AOwnsObjects is set to false
-    constructor Create(aOwnsObjects: boolean = true); reintroduce;
     /// add one item to the list using Safe.WriteLock
     function Add(item: pointer): PtrInt; override;
     /// delete all items of the list using Safe.WriteLock
@@ -607,6 +601,36 @@ type
       read fSafe;
   end;
 
+  /// event used by TSynObjectListSorted to compare its instances
+  TOnObjectCompare = function(A, B: TObject): integer;
+
+  /// an ordered thread-safe TSynObjectList
+  // - items will be stored in order, for O(log(n)) fast search
+  TSynObjectListSorted = class(TSynObjectListLocked)
+  protected
+    fCompare: TOnObjectCompare;
+    // returns TRUE and the index of existing Item, or FALSE and the index
+    // where the Item is to be inserted so that the array remains sorted
+    function Locate(item: pointer; out index: PtrInt): boolean;
+  public
+    /// initialize the object list to be sorted with the supplied function
+    constructor Create(const aCompare: TOnObjectCompare;
+      aOwnsObjects: boolean = true); reintroduce;
+    /// add in-order one item to the list using Safe.WriteLock
+    // - returns the sorted index when item was inserted
+    // - returns < 0 if item was found, as -(existingindex + 1)
+    function Add(item: pointer): PtrInt; override;
+    /// fast retrieve one item in the list using O(log(n)) binary search
+    // - this overriden version won't search for the item pointer itself,
+    // but will use the Compare() function until it is 0
+    function IndexOf(item: pointer): PtrInt; override;
+    /// fast retrieve one item in the list using O(log(n)) binary search
+    // - supplied item should have enough information for fCompare to work
+    function Find(item: TObject): TObject;
+    /// how two stored objects are stored
+    property Compare: TOnObjectCompare
+      read fCompare write fCompare;
+  end;
 
 
 { ************ TSynPersistentStore with proper Binary Serialization }
@@ -1792,7 +1816,6 @@ type
     property CountExternal: PInteger
       read fCountP;
   end;
-
 
 
 {.$define DYNARRAYHASHCOLLISIONCOUNT} // to be defined also in test.core.base
@@ -3102,6 +3125,22 @@ begin
   inc(fCount);
 end;
 
+function TSynList.Insert(item: pointer; index: PtrInt): PtrInt;
+var
+  n: PtrInt;
+begin
+  n := fCount;
+  if length(fList) = n then
+    SetLength(fList, NextGrow(n));
+  if PtrUInt(index) < PtrUInt(n) then
+    MoveFast(fList[index], fList[index + 1], (n - index) * SizeOf(pointer))
+  else
+    index := n;
+  fList[index] := item;
+  inc(fCount);
+  result := index;
+end;
+
 procedure TSynList.Clear;
 begin
   fList := nil;
@@ -3118,7 +3157,7 @@ end;
 
 function TSynList.Exists(item: pointer): boolean;
 begin
-  result := PtrUIntScanExists(pointer(fList), fCount, PtrUInt(item));
+  result := IndexOf(item) >= 0;
 end;
 
 function TSynList.Get(index: integer): pointer;
@@ -3134,9 +3173,9 @@ begin
   result := PtrUIntScanIndex(pointer(fList), fCount, PtrUInt(item));
 end;
 
-function TSynList.Remove(item: Pointer): PtrInt;
+function TSynList.Remove(item: pointer): PtrInt;
 begin
-  result := PtrUIntScanIndex(pointer(fList), fCount, PtrUInt(item));
+  result := IndexOf(item);
   if result >= 0 then
     Delete(result);
 end;
@@ -3256,19 +3295,7 @@ begin
 end;
 
 
-{ TSynObjectListLightLocked }
-
-constructor TSynObjectListLightLocked.Create(AOwnsObjects: boolean);
-begin
-  inherited Create(AOwnsObjects);
-end;
-
 { TSynObjectListLocked }
-
-constructor TSynObjectListLocked.Create(AOwnsObjects: boolean);
-begin
-  inherited Create(AOwnsObjects);
-end;
 
 function TSynObjectListLocked.Add(item: pointer): PtrInt;
 begin
@@ -3318,6 +3345,92 @@ begin
   finally
     Safe.WriteUnLock;
   end;
+end;
+
+
+{ TSynObjectListSorted }
+
+constructor TSynObjectListSorted.Create(const aCompare: TOnObjectCompare;
+  aOwnsObjects: boolean);
+begin
+  inherited Create(aOwnsObjects);
+  fCompare := aCompare;
+end;
+
+function TSynObjectListSorted.Locate(item: pointer; out index: PtrInt): boolean;
+var
+  n, l, i: PtrInt;
+  cmp: integer;
+begin // see TDynArray.FastLocateSorted below
+  result := false;
+  n := fCount;
+  if n = 0 then // a void array is always sorted
+    index := 0
+  else
+  begin
+    dec(n);
+    cmp := fCompare(fList[n], item);
+    if cmp < 0 then
+    begin
+      // greater than last sorted item (may be a common case)
+      if cmp = 0 then
+        // returns true + index of existing Elem
+        result := true
+      else
+        // returns false + insert after last position
+        inc(n);
+      index := n;
+      exit;
+    end;
+    l := 0;
+    repeat
+      // O(log(n)) binary search of the sorted position
+      i := (l + n) shr 1;
+      cmp := fCompare(fList[i], item);
+      if cmp = 0 then
+      begin
+        // returns true + index of existing Elem
+        index := i;
+        result := true;
+        exit;
+      end
+      else if cmp < 0 then
+        l := i + 1
+      else
+        n := i - 1;
+    until l > n;
+    // Elem not found: returns false + the index where to insert
+    index := l;
+  end;
+end;
+
+function TSynObjectListSorted.Add(item: pointer): PtrInt;
+begin
+  Safe.WriteLock;
+  try
+    if Locate(item, result) then // O(log(n)) binary search
+      result := -(result + 1)
+    else
+      Insert(item, result);
+  finally
+    Safe.WriteUnLock;
+  end;
+end;
+
+function TSynObjectListSorted.IndexOf(item: pointer): PtrInt;
+begin
+  if not Locate(item, result) then // O(log(n)) binary search
+    result := -1;
+end;
+
+function TSynObjectListSorted.Find(item: TObject): TObject;
+var
+  i: PtrInt;
+begin
+  if Locate(item, i) then
+    result := fList[i]
+  else
+    result := nil;
 end;
 
 
@@ -7228,8 +7341,7 @@ begin
         exit;
       end;
       Index := 0;
-      while Index <= n do
-      begin
+      repeat
         // O(log(n)) binary search of the sorted position
         i := (Index + n) shr 1;
         cmp := fCompare(P[i * fInfo.Cache.ItemSize], Item);
@@ -7244,7 +7356,7 @@ begin
           Index := i + 1
         else
           n := i - 1;
-      end;
+      until Index > n;
       // Elem not found: returns false + the index where to insert
     end
     else
