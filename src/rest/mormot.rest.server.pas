@@ -6988,7 +6988,7 @@ procedure TRestServer.Timestamp(Ctxt: TRestServerUriContext);
   var
     info: TDocVariantData;
   begin
-    fTimestampInfoCacheTix := Ctxt.TickCount64 shr 10;
+    fTimestampInfoCacheTix := Ctxt.TickCount64 shr 12;
     {%H-}info.InitFast;
     InternalInfo(Ctxt, info);
     fTimestampInfoCache := info.ToJson('', '', jsonHumanReadable);
@@ -6998,8 +6998,8 @@ begin
   if IdemPropNameU(Ctxt.UriBlobFieldName, 'info') and
      not (rsoTimestampInfoUriDisable in fOptions) then
   begin
-    if Ctxt.TickCount64 shr 10 <> fTimestampInfoCacheTix then
-      ComputeInfo;
+    if Ctxt.TickCount64 shr 12 <> fTimestampInfoCacheTix then
+      ComputeInfo; // cache refreshed every 4 seconds
     Ctxt.Returns(fTimestampInfoCache);
   end
   else

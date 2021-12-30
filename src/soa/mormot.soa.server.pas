@@ -967,7 +967,7 @@ begin
   // every second, check and release any deprecated instance(s)
   if (fInstanceTimeout <> 0) and
      (fInstanceCount > 0) and
-     (Inst.LastAccess <> fInstanceDeprecatedTix32) then
+     (fInstanceDeprecatedTix32 <> Inst.LastAccess) then
   begin
     fInstanceLock.WriteLock;
     try

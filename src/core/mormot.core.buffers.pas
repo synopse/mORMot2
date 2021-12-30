@@ -8217,8 +8217,8 @@ const
     mtCss,  mtJson,  mtXIcon,  mtFont,  mtText,  mtSvg,  mtXml,  mtXml,  mtXml,
     mtWebp,  mtManifest,  mtManifest,  mtXml,  mtJS,  mtFont,  mtOgg,
     mtOgg,  mtMp4,  mtMp2,  mtMp2,  mtMpeg,  mtH264,  mtText,  mtText,  mtGzip,
-    mtWebm,  mtWebm,  mtRar,  mt7z,  mtBz2, mtWma, mtWmv, mtAvi, mtPpt,
-    mtXls, mtPdf, mtSQlite3, mtSQlite3);
+    mtWebm,  mtWebm,  mtRar,  mt7z,  mtBz2, mtWma, mtWmv, mtAvi,
+    mtPpt,  mtXls, mtPdf, mtSQlite3, mtSQlite3);
 
 function GetMimeContentTypeFromExt(const FileName: TFileName; FileExt: PRawUtf8): TMimeType;
 var
