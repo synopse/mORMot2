@@ -549,8 +549,8 @@ type
     property ServiceParameters: PUtf8Char
       read fServiceParameters write fServiceParameters;
     /// the instance ID for interface-based services instance
-    // - can be e.g. the client session ID for sicPerSession or the thread ID for
-    // sicPerThread
+    // - can be e.g. the sicPerSession session ID, the sicPerThread thread ID,
+    // or the sicClientDriven field as decoded by UriDecodeSoaByInterface
     property ServiceInstanceID: TID
       read fServiceInstanceID write fServiceInstanceID;
     /// the current execution context of an interface-based service
@@ -831,17 +831,22 @@ type
 
 { ************ TAuthSession for In-Memory User Sessions }
 
+  /// used for efficient TAuthSession.IDCardinal comparison
+  TAuthSessionParent = class(TSynPersistent)
+  protected
+    fIDCardinal: cardinal;
+  end;
+
   /// class used to maintain in-memory sessions
   // - this is not a TOrm table so won't be remotely accessible, for
   // performance and security reasons
   // - the User field is a true instance, copy of the corresponding database
   // content (for better speed)
   // - you can inherit from this class, to add custom session process
-  TAuthSession = class(TSynPersistent)
+  TAuthSession = class(TAuthSessionParent)
   protected
     fUser: TAuthUser;
     fID: RawUtf8;
-    fIDCardinal: cardinal;
     fTimeOutTix: cardinal;
     fTimeOutShr10: cardinal;
     fPrivateKey: RawUtf8;
@@ -1660,10 +1665,11 @@ type
     fSessionClass: TAuthSessionClass;
     fJwtForUnauthenticatedRequest: TJwtAbstract;
     /// in-memory storage of TAuthSession instances
-    fSessions: TSynObjectListLocked; // need an upgradable lock
+    fSessions: TSynObjectListSorted; // sorted by ID, with upgradable lock
     fSessionsDeprecatedTix: cardinal;
     /// used to compute genuine TAuthSession.ID cardinal value
-    fSessionCounter: cardinal;
+    fSessionCounter: integer;
+    fSessionCounterMin: cardinal;
     fSessionAuthentication: TRestServerAuthenticationDynArray;
     fPublishedMethod: TRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
@@ -1709,6 +1715,8 @@ type
     // with afSessionAlreadyStartedForThisUser or afSessionCreationAborted reason
     procedure SessionCreate(var User: TAuthUser; Ctxt: TRestServerUriContext;
       out Session: TAuthSession); virtual;
+    /// search for Ctxt.Session ID
+    function LockedSessionFind(aSessionID: cardinal; aIndex: PPtrInt): TAuthSession;
     /// search for Ctxt.Session ID and fill Ctxt.Session* members if found
     // - returns nil if not found, or fill aContext.User/Group values if matchs
     // - this method will also check for outdated sessions, and delete them
@@ -1903,7 +1911,7 @@ type
     procedure AuthenticationUnregisterAll;
     /// read-only access to the internal list of sessions
     // - ensure you protect its access using Sessions.Safe TRWLock
-    property Sessions: TSynObjectListLocked
+    property Sessions: TSynObjectListSorted
       read fSessions;
     /// read-only access to the list of registered server-side authentication
     // methods, used for session creation
@@ -4492,6 +4500,12 @@ end;
 
 { TAuthSession }
 
+/// TSynObjectListSorted-TOnObjectCompare compatible callback method
+function AuthSessionCompare(A, B: TObject): integer;
+begin
+  result := CompareCardinal(TAuthSession(A).fIDCardinal, TAuthSession(B).fIDCardinal);
+end;
+
 procedure TAuthSession.ComputeProtectedValues;
 begin
   // here User.GroupRights and fPrivateKey should have been set
@@ -4520,16 +4534,8 @@ begin
     if User.GroupRights.IDValue <> 0 then
     begin
       // compute the next Session ID
-      with aCtxt.Server do
-      begin
-        if fSessionCounter >= cardinal(maxInt) then
-          // avoid CONST_AUTHENTICATION_* i.e. IDCardinal=0 (77) or 1 (76)
-          fSessionCounter := 100
-        else
-          inc(fSessionCounter);
-        fIDCardinal := fSessionCounter xor 77; // simple obfuscation
-        UInt32ToUtf8(fIDCardinal, fID);
-      end;
+      fIDCardinal := InterlockedIncrement(aCtxt.Server.fSessionCounter);
+      UInt32ToUtf8(fIDCardinal, fID);
       // set session parameters
       TAesPrng.Main.Fill(@rnd, SizeOf(rnd));
       fPrivateKey := BinToHex(@rnd, SizeOf(rnd));
@@ -4685,6 +4691,7 @@ function TRestServerAuthentication.AuthSessionRelease(
 var
   uname: RawUtf8;
   sessid: cardinal;
+  s: TAuthSession;
   i: PtrInt;
 begin // fServer.Auth() method-based service made fServer.Sessions.WriteLock
   result := false;
@@ -4701,16 +4708,16 @@ begin // fServer.Auth() method-based service made fServer.Sessions.WriteLock
   result := true; // recognized GET ModelRoot/auth?UserName=...&Session=...
   // allow only to delete its own session - ticket [7723fa7ebd]
   if sessid = Ctxt.Session then
-    for i := 0 to fServer.fSessions.Count - 1 do
-      with TAuthSession(fServer.fSessions.List[i]) do
-        if (fIDCardinal = sessid) and
-           (fUser.LogonName = uname) then
-        begin
-          Ctxt.fAuthSession := nil; // avoid GPF
-          fServer.LockedSessionDelete(i, Ctxt);
-          Ctxt.Success;
-          break;
-        end;
+  begin
+    s := fServer.LockedSessionFind(sessid, @i);
+    if (s <> nil) and
+       (s.User.LogonName = uname) then
+      begin
+        Ctxt.fAuthSession := nil; // avoid GPF
+        fServer.LockedSessionDelete(i, Ctxt);
+        Ctxt.Success;
+      end;
+  end;
 end;
 
 function TRestServerAuthentication.GetUser(Ctxt: TRestServerUriContext;
@@ -5568,7 +5575,8 @@ begin
   if aModel = nil then
     raise EOrmException.CreateUtf8('%.Create(Model=nil)', [self]);
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
-  fSessions := TSynObjectListLocked.Create; // needed by AuthenticationRegister() below
+  // fSessions is needed by AuthenticationRegister() below
+  fSessions := TSynObjectListSorted.Create(AuthSessionCompare);
   fAuthUserClass := TAuthUser;
   fAuthGroupClass := TAuthGroup;
   fModel := aModel; // we need this property ASAP
@@ -5588,8 +5596,9 @@ begin
   fAfterCreation := true;
   fStats := TRestServerMonitor.Create(self);
   UriPagingParameters := PAGINGPARAMETERS_YAHOO;
-  // + 100 to avoid CONST_AUTHENTICATION_* i.e. IDCardinal=0 (77) or 1 (76)
-  fSessionCounter := Random32(maxInt - 200) + 100; // positive 31-bit integer
+  // + 10 to avoid CONST_AUTHENTICATION_* i.e. IDCardinal=0 or 1
+  fSessionCounterMin := Random32(1 shl 20) + 10; // positive 31-bit integer
+  fSessionCounter := fSessionCounterMin;
   // retrieve published methods
   fPublishedMethods.InitSpecific(
     TypeInfo(TRestServerMethods), fPublishedMethod, ptRawUtf8, nil, true);
@@ -6265,6 +6274,38 @@ begin
   fStats.ClientConnect;
 end;
 
+function TRestServer.LockedSessionFind(aSessionID: cardinal; aIndex: PPtrInt): TAuthSession;
+var
+  tmp: TAuthSessionParent;
+  i: PtrInt;
+begin
+  if (aSessionID < fSessionCounterMin) or
+     (aSessionID > cardinal(fSessionCounter)) then
+    result := nil
+  else
+  begin
+    tmp := TAuthSessionParent.Create;
+    {$ifdef HASFASTTRYFINALLY}
+    try
+    {$else}
+    begin
+    {$endif HASFASTTRYFINALLY}
+      tmp.fIDCardinal := aSessionID;
+      i := fSessions.IndexOf(tmp); // use fast O(log(n)) binary search
+      if aIndex <> nil then
+        aIndex^ := i;
+      if i < 0 then
+        result := nil
+      else
+        result := fSessions.List[i];
+    {$ifdef HASFASTTRYFINALLY}
+    finally
+    {$endif HASFASTTRYFINALLY}
+      tmp.Free;
+    end;
+  end;
+end;
+
 procedure TRestServer.LockedSessionDelete(aSessionIndex: integer;
   Ctxt: TRestServerUriContext);
 var
@@ -6318,19 +6359,6 @@ begin
   end;
 end;
 
-function FindSession(s: PAuthSession; n: integer; id: cardinal): TAuthSession;
-begin
-  if n <> 0 then
-    repeat
-      result := s^;
-      if result.IDCardinal = id then
-        exit;
-      inc(s);
-      dec(n);
-    until n = 0;
-  result := nil;
-end;
-
 function TRestServer.LockedSessionAccess(Ctxt: TRestServerUriContext): TAuthSession;
 begin
   // caller of RetrieveSession/SessionAccess made fSessions.Safe.ReadOnlyLock
@@ -6339,7 +6367,7 @@ begin
      (Ctxt.Session > CONST_AUTHENTICATION_NOT_USED) then
   begin
     // retrieve session from its ID
-    result := FindSession(pointer(fSessions.List), fSessions.Count, Ctxt.Session);
+    result := LockedSessionFind(Ctxt.Session, nil);
     if result <> nil then
     begin
       // found the session
@@ -6370,7 +6398,7 @@ begin
     exit;
   fSessions.Safe.ReadOnlyLock;
   try
-    s := FindSession(pointer(fSessions.List), fSessions.Count, aSessionID);
+    s := LockedSessionFind(aSessionID, nil);
     if (s <> nil) and
        (s.User <> nil) then
     begin
