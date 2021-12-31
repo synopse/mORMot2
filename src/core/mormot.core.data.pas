@@ -1817,6 +1817,16 @@ type
       read fCountP;
   end;
 
+  /// just a wrapper record to join a TDynArray, its Count and a TRWLightLock
+  TDynArrayLocked = record
+    /// lightweight multiple Reads / exclusive Write non-upgradable lock
+    Safe: TRWLightLock;
+    /// the wrapper to a dynamic array
+    DynArray: TDynArray;
+    /// will store the length of the TDynArray
+    Count: integer;
+  end;
+
 
 {.$define DYNARRAYHASHCOLLISIONCOUNT} // to be defined also in test.core.base
 
