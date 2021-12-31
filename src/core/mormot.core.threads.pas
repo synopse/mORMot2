@@ -168,16 +168,15 @@ type
   // delay, using a post/peek like algorithm
   // - execution delays are not expected to be accurate, but are best guess,
   // according to each NextPendingTask call, and GetTimestamp resolution
-  TPendingTaskList = class(TSynLocked)
+  TPendingTaskList = class
   protected
-    fCount: integer;
     fTask: TPendingTaskListItemDynArray;
-    fTasks: TDynArray;
+    fTasks: TDynArrayLocked;
     function GetCount: integer;
     function GetTimestamp: Int64; virtual; // returns GetTickCount64 by default
   public
     /// initialize the list memory and resources
-    constructor Create; override;
+    constructor Create; reintroduce;
     /// append a task, specifying a delay in milliseconds from current time
     procedure AddTask(aMilliSecondsDelayFromNow: integer;
       const aTask: RawByteString); virtual;
@@ -521,7 +520,8 @@ type
     OnProcess: TOnSynBackgroundTimerProcess;
     Secs: cardinal;
     NextTix: Int64;
-    FIFO: TRawUtf8DynArray;
+    Msg: TRawUtf8DynArray;
+    MsgSafe: TLightLock;
   end;
 
   /// stores TSynBackgroundTimer internal registration list
@@ -538,9 +538,9 @@ type
   TSynBackgroundTimer = class(TSynBackgroundThreadProcess)
   protected
     fTask: TSynBackgroundTimerTaskDynArray;
-    fTasks: TDynArray;
-    fTaskCount: integer;
-    fTaskLock: TSynLocker;
+    fTasks: TDynArrayLocked;
+    fProcessing: boolean;
+    fProcessingCounter: integer;
     procedure EverySecond(Sender: TSynBackgroundThreadProcess;
       Event: TWaitResult);
     function Find(const aProcess: TMethod): PtrInt;
@@ -599,16 +599,17 @@ type
     /// execute a task without waiting for the next aOnProcessSecs occurence
     // - aOnProcess should not have been registered by a previous call to Enable() method
     function ExecuteOnce(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
-    /// returns true if there is currenly one task processed
-    function Processing: boolean;
     /// wait until no background task is processed
     procedure WaitUntilNotProcessing(timeoutsecs: integer = 10);
     /// low-level access to the internal task list
     property Task: TSynBackgroundTimerTaskDynArray
       read fTask;
-    /// low-level access to the internal task mutex
-    property TaskLock: TSynLocker
-      read fTaskLock;
+    /// low-level access to the internal task list wrapper and safe
+    property Tasks: TDynArrayLocked
+      read fTasks;
+    /// returns TRUE if there is currenly some tasks processed
+    property Processing: boolean
+      read fProcessing;
   end;
 
 
@@ -1402,8 +1403,8 @@ end;
 constructor TPendingTaskList.Create;
 begin
   inherited Create;
-  fTasks.InitSpecific(TypeInfo(TPendingTaskListItemDynArray), fTask, ptInt64,
-    @fCount); // sorted by Timestamp
+  fTasks.DynArray.InitSpecific(TypeInfo(TPendingTaskListItemDynArray), fTask,
+    ptInt64, @fTasks.Count); // sorted by Timestamp
 end;
 
 function TPendingTaskList.GetTimestamp: Int64;
@@ -1419,13 +1420,13 @@ var
 begin
   item.Timestamp := GetTimestamp + aMilliSecondsDelayFromNow;
   item.Task := aTask;
-  fSafe.Lock;
+  fTasks.Safe.WriteLock;
   try
-    if fTasks.FastLocateSorted(item, ndx) then
+    if fTasks.DynArray.FastLocateSorted(item, ndx) then
       inc(ndx); // always insert just after any existing timestamp
-    fTasks.FastAddSorted(ndx, item);
+    fTasks.DynArray.FastAddSorted(ndx, item);
   finally
-    fSafe.UnLock;
+    fTasks.Safe.WriteUnLock;
   end;
 end;
 
@@ -1439,18 +1440,18 @@ begin
   if length(aTasks) <> length(aMilliSecondsDelays) then
     exit;
   item.Timestamp := GetTimestamp;
-  fSafe.Lock;
+  fTasks.Safe.WriteLock;
   try
-    for i := 0 to High(aTasks) do
+    for i := 0 to high(aTasks) do
     begin
       inc(item.Timestamp, aMilliSecondsDelays[i]); // delays between tasks
       item.Task := aTasks[i];
-      if fTasks.FastLocateSorted(item, ndx) then
+      if fTasks.DynArray.FastLocateSorted(item, ndx) then
         inc(ndx); // always insert just after any existing timestamp
-      fTasks.FastAddSorted(ndx, item);
+      fTasks.DynArray.FastAddSorted(ndx, item);
     end;
   finally
-    fSafe.UnLock;
+    fTasks.Safe.WriteUnLock;
   end;
 end;
 
@@ -1459,14 +1460,7 @@ begin
   if self = nil then
     result := 0
   else
-  begin
-    fSafe.Lock;
-    try
-      result := fCount;
-    finally
-      fSafe.UnLock;
-    end;
-  end;
+    result := fTasks.Count;
 end;
 
 function TPendingTaskList.NextPendingTask: RawByteString;
@@ -1475,32 +1469,32 @@ var
 begin
   result := '';
   if (self = nil) or
-     (fCount = 0) then
+     (fTasks.Count = 0) then
     exit;
   tix := GetTimestamp;
-  fSafe.Lock;
+  fTasks.Safe.WriteLock;
   try
-    if fCount > 0 then
+    if fTasks.Count > 0 then
       if tix >= fTask[0].Timestamp then
       begin
         result := fTask[0].Task;
-        fTasks.FastDeleteSorted(0);
+        fTasks.DynArray.FastDeleteSorted(0);
       end;
   finally
-    fSafe.UnLock;
+    fTasks.Safe.WriteUnLock;
   end;
 end;
 
 procedure TPendingTaskList.Clear;
 begin
   if (self = nil) or
-     (fCount = 0) then
+     (fTasks.Count = 0) then
     exit;
-  fSafe.Lock;
+  fTasks.Safe.WriteLock;
   try
-    fTasks.Clear;
+    fTasks.DynArray.Clear;
   finally
-    fSafe.UnLock;
+    fTasks.Safe.WriteUnLock;
   end;
 end;
 
@@ -1685,8 +1679,8 @@ begin
   end;
 end;
 
-function TSynBackgroundThreadMethodAbstract.AcquireThread:
-  TSynBackgroundThreadProcessStep;
+function TSynBackgroundThreadMethodAbstract.
+  AcquireThread: TSynBackgroundThreadProcessStep;
 begin
   result := fPendingProcessFlag;
   if result <> flagIdle then
@@ -1925,9 +1919,8 @@ constructor TSynBackgroundTimer.Create(const aThreadName: RawUtf8;
   const aOnBeforeExecute: TOnNotifyThread;
   const aOnAfterExecute: TOnNotifyThread; aStats: TSynMonitorClass);
 begin
-  fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray), fTask, @fTaskCount);
-  fTaskLock.Init;
-  fTaskLock.LockedBool[0] := false;
+  fTasks.DynArray.Init(TypeInfo(TSynBackgroundTimerTaskDynArray),
+    fTask, @fTasks.Count);
   inherited Create(aThreadName, EverySecond, 1000, aOnBeforeExecute, aOnAfterExecute, aStats);
 end;
 
@@ -1937,7 +1930,6 @@ begin
      (ProcessSystemUse.Timer = self) then
     ProcessSystemUse.Timer := nil; // allows processing by another background timer
   inherited Destroy;
-  fTaskLock.Done;
 end;
 
 const
@@ -1956,25 +1948,25 @@ begin
     exit;
   tix := mormot.core.os.GetTickCount64;
   n := 0;
-  fTaskLock.Lock;
+  LockedInc32(@fProcessingCounter);
   try
-    fTaskLock.Padding[0].VBoolean := true; // = fTaskLock.LockedBool[0]
+    fTasks.Safe.WriteLock;
     try
       i := 0;
-      while i < fTaskCount do
+      while i < fTasks.Count do
       begin
         t := @fTask[i];
         if tix >= t^.NextTix then
         begin
-          if {%H-}todo = nil then
-            SetLength(todo, fTaskCount - n);
+          if n = 0 then
+            SetLength(todo, fTasks.Count - n);
           MoveFast(t^, todo[n], SizeOf(t^)); // no COW needed
-          pointer(t^.FIFO) := nil; // now owned by todo[n].FIFO
+          pointer(t^.Msg) := nil; // now owned by todo[n].Msg
           inc(n);
           if integer(t^.Secs) = -1 then
           begin
             // from ExecuteOnce()
-            fTasks.Delete(i);
+            fTasks.DynArray.Delete(i);
             continue; // don't inc(i)
           end
           else
@@ -1984,14 +1976,14 @@ begin
         inc(i);
       end;
     finally
-      fTaskLock.UnLock;
+      fTasks.Safe.WriteUnLock;
     end;
     for i := 0 to n - 1 do
       with todo[i] do
-        if FIFO <> nil then
-          for f := 0 to length(FIFO) - 1 do
+        if Msg <> nil then
+          for f := 0 to length(Msg) - 1 do
           try
-            OnProcess(self, Event, FIFO[f]);
+            OnProcess(self, Event, Msg[f]);
           except
           end
         else
@@ -2000,7 +1992,7 @@ begin
         except
         end;
   finally
-    fTaskLock.Padding[0].VBoolean := false; // LockedBool[0] not needed
+    fProcessing := InterlockedDecrement(fProcessingCounter) <> 0;
   end;
 end;
 
@@ -2009,7 +2001,7 @@ var
   m: ^TSynBackgroundTimerTask;
 begin
   // caller should have made fTaskLock.Lock;
-  result := fTaskCount - 1;
+  result := fTasks.Count - 1;
   if result >= 0 then
   begin
     m := @fTask[result];
@@ -2043,27 +2035,22 @@ begin
   task.Secs := aOnProcessSecs;
   task.NextTix :=
     mormot.core.os.GetTickCount64 + (aOnProcessSecs * 1000 - TIXPRECISION);
-  fTaskLock.Lock;
+  task.MsgSafe.Init; // required since task is on stack
+  fTasks.Safe.WriteLock;
   try
     found := Find(TMethod(aOnProcess));
     if found >= 0 then
       fTask[found] := task
     else
-      fTasks.Add(task);
+      fTasks.DynArray.Add(task);
   finally
-    fTaskLock.UnLock;
+    fTasks.Safe.WriteUnLock;
   end;
-end;
-
-function TSynBackgroundTimer.Processing: boolean;
-begin
-  result := fTaskLock.Padding[0].VBoolean; // = fTaskLock.LockedBool[0]
 end;
 
 procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
 begin
-  SleepHiRes(timeoutsecs, PBoolean(@fTaskLock.Padding[0].VBoolean)^,
-    {terminatedvalue=}false);
+  SleepHiRes(timeoutsecs, fProcessing, {terminatedvalue=}false);
 end;
 
 function TSynBackgroundTimer.ExecuteNow(
@@ -2111,7 +2098,7 @@ begin
      Terminated or
      (not Assigned(aOnProcess)) then
     exit;
-  fTaskLock.Lock;
+  fTasks.Safe.ReadLock;
   try
     found := Find(TMethod(aOnProcess));
     if found >= 0 then
@@ -2121,14 +2108,18 @@ begin
         if aExecuteNow then
           NextTix := 0;
         if aMsg <> #0 then
-          AddRawUtf8(FIFO, aMsg);
+        begin
+          MsgSafe.Lock;
+          AddRawUtf8(Msg, aMsg);
+          MsgSafe.UnLock;
+        end;
       end;
       if aExecuteNow then
         ProcessEvent.SetEvent;
       result := true;
     end;
   finally
-    fTaskLock.UnLock;
+    fTasks.Safe.ReadUnLock;
   end;
 end;
 
@@ -2142,14 +2133,18 @@ begin
      Terminated or
      (not Assigned(aOnProcess)) then
     exit;
-  fTaskLock.Lock;
+  fTasks.Safe.ReadLock;
   try
     found := Find(TMethod(aOnProcess));
     if found >= 0 then
       with fTask[found] do
-        result := DeleteRawUtf8(FIFO, FindRawUtf8(FIFO, aMsg));
+      begin
+        MsgSafe.Lock;
+        result := DeleteRawUtf8(Msg, FindRawUtf8(Msg, aMsg));
+        MsgSafe.UnLock;
+      end;
   finally
-    fTaskLock.UnLock;
+    fTasks.Safe.ReadUnLock;
   end;
 end;
 
@@ -2163,16 +2158,16 @@ begin
      Terminated or
      (not Assigned(aOnProcess)) then
     exit;
-  fTaskLock.Lock;
+  fTasks.Safe.WriteLock;
   try
     found := Find(TMethod(aOnProcess));
     if found >= 0 then
     begin
-      fTasks.Delete(found);
+      fTasks.DynArray.Delete(found);
       result := true;
     end;
   finally
-    fTaskLock.UnLock;
+    fTasks.Safe.WriteUnLock;
   end;
 end;
 

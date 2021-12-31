@@ -831,11 +831,11 @@ type
     function Init(ArrayTypeInfo: PRttiInfo;
       const Source: RawByteString): boolean; overload;
     /// iterate over the current stored item
-    // - Elem should point to a variable of the exact item type stored in this
+    // - Item should point to a variable of the exact item type stored in this
     // dynamic array
-    // - returns true if Elem was filled with one value, or false if all
+    // - returns true if Item was filled with one value, or false if all
     // items were read, and Position contains the end of the binary buffer
-    function Step(Elem: pointer): boolean;
+    function Step(Item: pointer): boolean;
     /// extract the first field value of the current stored item
     // - this function won't increase the internal Current pointer
     // - returns true if Field was filled with one value, or false if all
@@ -4850,15 +4850,15 @@ begin
   result := Init(ArrayTypeInfo, pointer(Source), length(Source));
 end;
 
-function TDynArrayLoadFrom.Step(Elem: pointer): boolean;
+function TDynArrayLoadFrom.Step(Item: pointer): boolean;
 begin
   if (Current < Count) and
      not Reader.EOF then
   begin
     if Assigned(ArrayLoad) then
-      ArrayLoad(Elem, Reader, ArrayRtti.Cache.ItemInfo)
+      ArrayLoad(Item, Reader, ArrayRtti.Cache.ItemInfo)
     else
-      Reader.Copy(Elem, ArrayRtti.Cache.ItemSize);
+      Reader.Copy(Item, ArrayRtti.Cache.ItemSize);
     inc(Current);
     result := true;
   end
