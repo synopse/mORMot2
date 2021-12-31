@@ -1813,18 +1813,18 @@ type
   TInterfacedObjectMulti = class;
 
   /// thread-safe implementation of IMultiCallbackRedirect
-  TInterfacedObjectMultiList = class(TInterfacedObjectLocked, IMultiCallbackRedirect)
+  TInterfacedObjectMultiList = class(
+    TInterfacedObjectWithCustomCreate, IMultiCallbackRedirect)
   protected
     fDest: TInterfacedObjectMultiDestDynArray;
-    fDestCount: integer;
-    fDests: TDynArray;
+    fDests: TDynArrayLocked;
     fFakeCallback: TInterfacedObjectMulti;
     procedure Redirect(const aCallback: IInvokable;
       const aMethodsNames: array of RawUtf8; aSubscribe: boolean); overload;
     procedure Redirect(const aCallback: TInterfacedObject;
       const aMethodsNames: array of RawUtf8; aSubscribe: boolean); overload;
     procedure CallBackUnRegister;
-    function GetInstances(aMethod: integer; var aInstances: TPointerDynArray): integer;
+    function GetInstances(aMethod: integer; var aInstances: TPointerDynArray): PtrInt;
   public
     constructor Create; override;
     destructor Destroy; override;
@@ -1851,8 +1851,8 @@ type
 constructor TInterfacedObjectMultiList.Create;
 begin
   inherited Create;
-  fDests.InitSpecific(TypeInfo(TInterfacedObjectMultiDestDynArray), fDest,
-    ptInterface, @fDestCount);
+  fDests.DynArray.InitSpecific(TypeInfo(TInterfacedObjectMultiDestDynArray),
+    fDest, ptInterface, @fDests.Count);
 end;
 
 procedure TInterfacedObjectMultiList.Redirect(const aCallback: IInvokable;
@@ -1871,18 +1871,18 @@ begin
      ObjectFromInterface(aCallback)], self);
   fFakeCallback.Factory.CheckMethodIndexes(aMethodsNames, true, new.methods);
   new.instance := aCallback;
-  fSafe.Lock;
+  fDests.Safe.WriteLock;
   try
-    ndx := fDests.Find(aCallback);
+    ndx := fDests.DynArray.Find(aCallback);
     if aSubscribe then
       if ndx < 0 then
-        fDests.Add(new)
+        fDests.DynArray.Add(new)
       else
         fDest[ndx] := new
     else
-      fDests.Delete(ndx);
+      fDests.DynArray.Delete(ndx);
   finally
-    fSafe.UnLock;
+    fDests.Safe.WriteUnLock;
   end;
 end;
 
@@ -1904,11 +1904,11 @@ end;
 
 procedure TInterfacedObjectMultiList.CallBackUnRegister;
 begin
-  fSafe.Lock;
+  fDests.Safe.WriteLock;
   try
-    fDests.ClearSafe;
+    fDests.DynArray.ClearSafe;
   finally
-    fSafe.UnLock;
+    fDests.Safe.WriteUnLock;
   end;
   if fFakeCallback <> nil then
   begin
@@ -1924,18 +1924,18 @@ begin
 end;
 
 function TInterfacedObjectMultiList.GetInstances(aMethod: integer;
-  var aInstances: TPointerDynArray): integer;
+  var aInstances: TPointerDynArray): PtrInt;
 var
   i: integer;
   dest: ^TInterfacedObjectMultiDest;
-begin
+begin // caller made fDests.Safe lock
   result := 0;
   dec(aMethod, RESERVED_VTABLE_SLOTS);
   if aMethod < 0 then
     exit;
-  SetLength(aInstances, fDestCount);
+  SetLength(aInstances, fDests.Count);
   dest := pointer(fDest);
-  for i := 1 to fDestCount do
+  for i := 1 to fDests.Count do
   begin
     if aMethod in dest^.methods then
     begin
@@ -1944,7 +1944,7 @@ begin
     end;
     inc(dest);
   end;
-  if result <> fDestCount then
+  if result <> fDests.Count then
     SetLength(aInstances, result);
 end;
 
@@ -1988,16 +1988,16 @@ function TInterfacedObjectMulti.FakeInvoke(const aMethod: TInterfaceMethod;
   const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
   aFakeID: PInterfacedObjectFakeID; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
-  i: Ptrint;
+  i: PtrInt;
   exec: TInterfaceMethodExecute;
-  instances: TPointerDynArray;
+  instances, tobedeleted: TPointerDynArray;
 begin
   result := inherited FakeInvoke(
     aMethod, aParams, aResult, aErrorMsg, aFakeID, aServiceCustomAnswer);
   if not result or
-     (fList.fDestCount = 0) then
+     (fList.fDests.Count = 0) then
     exit;
-  fList.fSafe.Lock;
+  fList.fDests.Safe.ReadLock; // we need to protect instances[]
   try
     if fList.GetInstances(aMethod.ExecutionMethodIndex, instances) = 0 then
       exit;
@@ -2006,20 +2006,33 @@ begin
       exec.Options := [optIgnoreException]; // use exec.ExecutedInstancesFailed
       result := exec.ExecuteJson(instances, pointer('[' + aParams + ']'), nil);
       if exec.ExecutedInstancesFailed <> nil then
-        for i := high(exec.ExecutedInstancesFailed) downto 0 do
+        for i := length(exec.ExecutedInstancesFailed) - 1 downto 0 do
           if exec.ExecutedInstancesFailed[i] <> '' then
-          try
-            fRest.InternalLog('%.FakeInvoke % failed due to % -> unsubscribe',
+          begin
+            fRest.InternalLog('%.FakeInvoke I% failed due to % -> unsubscribe %',
               [ClassType, aMethod.InterfaceDotMethodName,
-               exec.ExecutedInstancesFailed[i]], sllDebug);
-            fList.fDests.FindAndDelete(instances[i]);
-          except // ignore any exception when releasing the (unstable?) callback
+               exec.ExecutedInstancesFailed[i], instances[i]], sllDebug);
+            PtrArrayAdd(tobedeleted, instances[i]);
           end;
     finally
       exec.Free;
     end;
   finally
-    fList.fSafe.UnLock;
+    fList.fDests.Safe.ReadUnLock;
+  end;
+  if tobedeleted = nil then
+    exit;
+  fList.fDests.Safe.WriteLock;
+  try
+    for i := 0 to length(tobedeleted) - 1 do
+      try
+        fRest.InternalLog('%.FakeInvoke: I% delete unsafe %',
+          [ClassType, aMethod.InterfaceDotMethodName, tobedeleted[i]], sllDebug);
+        fList.fDests.DynArray.FindAndDelete(tobedeleted[i]);
+      except // ignore any exception when releasing the (unstable) callback
+      end;
+  finally
+    fList.fDests.Safe.WriteUnLock;
   end;
 end;
 
@@ -2202,6 +2215,11 @@ begin
   // most will be done e.g. in TRestRunThreadsServer.EndCurrentThread
   if fLogFamily <> nil then
     fLogFamily.OnThreadEnded(Sender);
+end;
+
+procedure TRest.OnRestBackgroundTimerCreate;
+begin
+  // nothing to do by default
 end;
 
 procedure TRest.DefinitionTo(Definition: TSynConnectionDefinition);
@@ -3370,7 +3388,7 @@ var
 begin
   if not RecordLoad(call, Msg, TypeInfo(TInterfacedObjectAsyncCall)) then
     exit; // invalid message (e.g. periodic execution)
-  log := fRest.fLogClass.Enter('AsyncBackgroundExecute % %',
+  log := fRest.fLogClass.Enter('AsyncBackgroundExecute I% %',
     [call.Method^.InterfaceDotMethodName, call.Params], self);
   exec := TInterfaceMethodExecute.Create(call.Method);
   try
@@ -3379,7 +3397,7 @@ begin
     else
       o := nil;
     if not exec.ExecuteJsonCallback(call.Instance, call.Params, o) then
-      fRest.InternalLog('%.AsyncBackgroundExecute %: ExecuteJsonCallback failed',
+      fRest.InternalLog('%.AsyncBackgroundExecute I%: ExecuteJsonCallback failed',
         [ClassType, call.Method^.InterfaceDotMethodName], sllWarning)
     else if o <> nil then
       call.OnOutput(call.Method^,
