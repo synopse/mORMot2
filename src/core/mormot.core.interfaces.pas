@@ -2257,6 +2257,7 @@ type
     optExecLockedPerInterface,
     optExecInPerInterfaceThread,
     optFreeInPerInterfaceThread,
+    optFreeDelayed,
     optExecInMainThread,
     optFreeInMainThread,
     optVariantCopiedByReference,
@@ -2285,6 +2286,8 @@ type
   // whole service class - is not set by default, for performance reasons
   // - optExecInPerInterfaceThread and optFreeInPerInterfaceThread will allow
   // creation of a per-interface dedicated thread
+  // - by default _Release is done within the service lock, unless optFreeDelayed
+  // is set and instances are released later (e.g. if may take some time)
   // - if optInterceptInputOutput is set, TServiceFactoryServer.AddInterceptor()
   // events will have their Sender.Input/Output values defined
   // - if optNoLogInput/optNoLogOutput is set, TSynLog and SetServiceLog database
@@ -6601,11 +6604,6 @@ begin
 end;
 
 type
-  TInterfacedObjectHooked = class(TInterfacedObject)
-  public
-    procedure InternalRelease;
-  end;
-
   TBackgroundLauncherAction = (
     doCallMethod,
     doInstanceRelease,
@@ -6618,16 +6616,10 @@ type
       doCallMethod: (
         CallMethodArgs: pointer); // forward PCallMethodArgs
       doInstanceRelease: (
-        Instance: TInterfacedObjectHooked);
+        Instance: TInterfacedObject);
       doThreadMethod: (
         ThreadMethod: TThreadMethod)
   end;
-
-procedure TInterfacedObjectHooked.InternalRelease;
-begin
-  if self <> nil then
-    IInterface(self)._Release; // call the release interface to dec(RefCount)
-end;
 
 procedure BackgroundExecuteProc(Call: pointer); forward;
 
@@ -6674,9 +6666,7 @@ var
   synch: TBackgroundLauncher;
 begin
   synch.Action := doInstanceRelease;
-  if not instance.InheritsFrom(TInterfacedObject) then
-    raise EInterfaceFactory.CreateUtf8('BackgroundExecuteInstanceRelease(%)', [instance]);
-  synch.Instance := TInterfacedObjectHooked(instance);
+  synch.Instance := instance as TInterfacedObject;
   BackGroundExecute(synch, backgroundThread);
 end;
 
@@ -7039,7 +7029,7 @@ begin
       doCallMethod:
         CallMethod(PCallMethodArgs(synch^.CallMethodArgs)^);
       doInstanceRelease:
-        synch^.Instance.InternalRelease;
+        IInterface(synch^.Instance)._Release; // dec(RefCount) + Free if 0
       doThreadMethod:
         synch^.ThreadMethod;
     end;
