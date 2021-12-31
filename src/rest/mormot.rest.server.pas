@@ -2880,7 +2880,7 @@ begin
         begin
           // special behavior to handle transactions at writing
           method := ExecuteOrmWrite;
-          endtix := 0;
+          endtix := TickCount64 + ms;
           while true do
             if Safe.TryLockMS(ms, @Server.fShutdownRequested) then
               try
@@ -2898,15 +2898,12 @@ begin
                 end;
                 // if we reached here, there is a transaction on another session
                 tix := GetTickCount64; // not self.TickCount64 which is fixed
-                if endtix = 0 then
-                  endtix := tix + ms
-                else if tix > endtix then
+                if tix > endtix then
                 begin
                   TimeOut; // we were not able to acquire the transaction
                   exit;
-                end
-                else
-                  ms := endtix - tix;
+                end;
+                ms := endtix - tix;
               finally
                 Safe.UnLock;
               end
@@ -6748,9 +6745,9 @@ begin
   begin
     inst.InstanceID := PtrUInt(id);
     for i := 0 to Services.Count - 1 do
-      with TServiceFactoryServer(Services.InterfaceList[i].service) do
+      with TServiceFactoryServer(Services.InterfaceList[i].Service) do
         if InstanceCreation = sicPerThread then
-          RetrieveInstance(inst, ord(imFree), 0);
+          RetrieveInstance(nil, inst, ord(imFree), 0);
   end;
   with PServiceRunningContext(PerThreadRunningContextAddress)^ do
     if RunningThread <> nil then
@@ -7062,8 +7059,8 @@ begin
         count := 0;
         if Ctxt.Session > CONST_AUTHENTICATION_NOT_USED then
           for i := 0 to Services.Count - 1 do
-            inc(count, TServiceFactoryServer(Services.InterfaceList[i].service).
-              RenewSession(Ctxt.Session));
+            inc(count, TServiceFactoryServer(Services.InterfaceList[i].Service).
+              RenewSession(Ctxt));
         InternalLog('Renew % authenticated session % from %: count=%',
           [Model.Root, Ctxt.Session, Ctxt.RemoteIPNotLocal, count], sllUserAuth);
         Ctxt.Returns(['count', count]);
