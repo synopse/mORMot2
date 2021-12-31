@@ -93,7 +93,7 @@ type
     size: cardinal;
     /// when this encryption was performed
     date: TEccDate;
-    /// optional timestamp, in Unix seconds since 1970, of the source file
+    /// optional (local) timestamp, in Unix seconds since 1970, of the source file
     unixts: cardinal;
     /// actual encryption algorithm used
     algo: TEciesAlgo;

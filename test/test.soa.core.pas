@@ -264,7 +264,6 @@ type
     procedure IntSubtractVariantVoid(Ctxt: TOnInterfaceStubExecuteParamsVariant);
     /// release used instances (e.g. http server) and memory
     procedure CleanUp; override;
-  public
   published
     /// test the SetWeak/SetWeakZero weak interface functions
     procedure WeakInterfaces;
@@ -1927,8 +1926,8 @@ end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideRESTBackgroundThread;
 begin
-  ClientTest(TRestServerRoutingRest, false, true, [optExecInPerInterfaceThread,
-    optFreeInPerInterfaceThread]);
+  ClientTest(TRestServerRoutingRest, false, true,
+    [optExecInPerInterfaceThread, optFreeInPerInterfaceThread]);
   fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc; // back to previous
 end;
 

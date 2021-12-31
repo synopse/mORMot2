@@ -2347,13 +2347,13 @@ function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
 
 /// fast search of a binary value position in a fixed-size array
 // - Count is the number of entries in P^[]
-// - return index of P^[index]=Elem^, comparing ElemSize bytes
+// - return index of P^[index]=V^, comparing VSize bytes
 // - return -1 if Value was not found
-function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
+function AnyScanIndex(P, V: pointer; Count, VSize: PtrInt): PtrInt;
 
 /// fast search of a binary value position in a fixed-size array
 // - Count is the number of entries in P^[]
-function AnyScanExists(P, Elem: pointer; Count, ElemSize: PtrInt): boolean;
+function AnyScanExists(P, V: pointer; Count, VSize: PtrInt): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 
@@ -3384,7 +3384,7 @@ begin // see TDynArray.FastLocateSorted below
     begin
       // greater than last sorted item (may be a common case)
       if cmp = 0 then
-        // returns true + index of existing Elem
+        // returns true + index of existing item
         result := true
       else
         // returns false + insert after last position
@@ -3399,7 +3399,7 @@ begin // see TDynArray.FastLocateSorted below
       cmp := fCompare(fList[i], item);
       if cmp = 0 then
       begin
-        // returns true + index of existing Elem
+        // returns true + index of existing item
         index := i;
         result := true;
         exit;
@@ -3409,7 +3409,7 @@ begin // see TDynArray.FastLocateSorted below
       else
         n := i - 1;
     until l > n;
-    // Elem not found: returns false + the index where to insert
+    // item not found: returns false + the index where to insert
     index := l;
   end;
 end;
@@ -7289,7 +7289,7 @@ function TDynArray.FindAndUpdate(const Item; aIndex: PIntegerDynArray;
 begin
   result := FindIndex(Item, aIndex, aCompare);
   if result >= 0 then
-    // if found, fill Elem with the matching item
+    // if found, fill Item with the matching item
     ItemCopy(@Item, PAnsiChar(fValue^) + (result * fInfo.Cache.ItemSize));
 end;
 
@@ -7336,17 +7336,17 @@ begin
     else if fSorted then
     begin
       P := fValue^;
+      // first compare with the last sorted item (handle some common cases)
       dec(n);
       cmp := fCompare(Item, P[n * fInfo.Cache.ItemSize]);
       if cmp >= 0 then
       begin
-        // greater than last sorted item (may be a common case)
         Index := n;
         if cmp = 0 then
-          // returns true + index of existing Elem
+          // was just added: returns true + index of last item
           result := true
         else
-          // returns false + insert after last position
+          // bigger than existing: returns false + insert after last position
           inc(Index);
         exit;
       end;
@@ -7357,7 +7357,7 @@ begin
         cmp := fCompare(P[i * fInfo.Cache.ItemSize], Item);
         if cmp = 0 then
         begin
-          // returns true + index of existing Elem
+          // returns true + index of existing Item
           Index := i;
           result := True;
           exit;
@@ -7367,7 +7367,7 @@ begin
         else
           n := i - 1;
       until Index > n;
-      // Elem not found: returns false + the index where to insert
+      // Item not found: returns false + the index where to insert
     end
     else
       // not Sorted
@@ -7391,17 +7391,17 @@ end;
 
 function TDynArray.FastLocateOrAddSorted(const Item; wasAdded: PBoolean): integer;
 var
-  toInsert: boolean;
+  added: boolean;
 begin
-  toInsert := not FastLocateSorted(Item, result) and
-              (result >= 0);
-  if toInsert then
+  added := not FastLocateSorted(Item, result) and
+           (result >= 0);
+  if added then
   begin
     Insert(result, Item);
     fSorted := true; // Insert -> SetCount -> fSorted := false
   end;
   if wasAdded <> nil then
-    wasAdded^ := toInsert;
+    wasAdded^ := added;
 end;
 
 type
@@ -9481,7 +9481,7 @@ begin
     until added;
   end;
   result := PAnsiChar(Value^) + ndx * Info.Cache.ItemSize;
-  PRawUtf8(result)^ := aName; // store unique name at 1st elem position
+  PRawUtf8(result)^ := aName; // store unique name at 1st position
 end;
 
 function TDynArrayHashed.AddUniqueName(const aName: RawUtf8;
@@ -9502,7 +9502,7 @@ begin
     if aNewIndex <> nil then
       aNewIndex^ := ndx;
     result := PAnsiChar(Value^) + ndx * Info.Cache.ItemSize;
-    PRawUtf8(result)^ := aName; // store unique name at 1st elem position
+    PRawUtf8(result)^ := aName; // store unique name at 1st position
   end
   else if ExceptionMsg = '' then
     raise EDynArray.CreateUtf8('TDynArrayHashed: Duplicated [%] name', [aName])
@@ -10122,49 +10122,49 @@ begin
     Values32[i] := Values64[i];
 end;
 
-function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
+function AnyScanIndex(P, V: pointer; Count, VSize: PtrInt): PtrInt;
 begin
-  case ElemSize of
+  case VSize of
     // optimized versions for arrays of most simple types
     1:
-      result := ByteScanIndex(P, Count, PByte(Elem)^); // SSE2 asm on Intel/AMD
+      result := ByteScanIndex(P, Count, PByte(V)^); // SSE2 asm on Intel/AMD
     2:
-      result := WordScanIndex(P, Count, PWord(Elem)^); // SSE2 asm
+      result := WordScanIndex(P, Count, PWord(V)^); // SSE2 asm
     4:
-      result := IntegerScanIndex(P, Count, PInteger(Elem)^); // SSE2 asm
+      result := IntegerScanIndex(P, Count, PInteger(V)^); // SSE2 asm
     8:
-      result := Int64ScanIndex(P, Count, PInt64(Elem)^);
+      result := Int64ScanIndex(P, Count, PInt64(V)^);
     SizeOf(THash128):
-      result := Hash128Index(P, Count, Elem);
+      result := Hash128Index(P, Count, V);
     SizeOf(THash256):
-      result := Hash256Index(P, Count, Elem);
-    // small ElemSize version (<SizeOf(PtrInt))
+      result := Hash256Index(P, Count, V);
+    // small VSize version (<SizeOf(PtrInt))
     3, 5..7:
       begin
         for result := 0 to Count - 1 do
-          if CompareMemSmall(P, Elem, ElemSize) then
+          if CompareMemSmall(P, V, VSize) then
             exit
           else
-            inc(PByte(P), ElemSize);
+            inc(PByte(P), VSize);
         result := -1;
       end;
   else
     begin
       // generic binary comparison (fast with inlined CompareMemSmall)
       for result := 0 to Count - 1 do
-        if (PInt64(P)^ = PInt64(Elem)^) and // not better using a local Int64 var
-           CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(Elem) + 8, ElemSize - 8) then
+        if (PInt64(P)^ = PInt64(V)^) and // not better using a local Int64 var
+           CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(V) + 8, VSize - 8) then
           exit
         else
-          inc(PByte(P), ElemSize);
+          inc(PByte(P), VSize);
       result := -1;
     end;
   end;
 end;
 
-function AnyScanExists(P, Elem: pointer; Count, ElemSize: PtrInt): boolean;
+function AnyScanExists(P, V: pointer; Count, VSize: PtrInt): boolean;
 begin
-  result := AnyScanIndex(P, Elem, Count, ElemSize) >= 0;
+  result := AnyScanIndex(P, V, Count, VSize) >= 0;
 end;
 
 
