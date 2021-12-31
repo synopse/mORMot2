@@ -137,6 +137,7 @@ type
     fBackgroundBatch: TRestBatchLockedDynArray;
     fBackgroundInterning: array of TRawUtf8Interning;
     fBackgroundInterningMaxRefCount: integer;
+    fBackgroundInterningSafe: TLightLock;
     procedure SystemUseBackgroundExecute(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUtf8);
     // used by AsyncRedirect/AsyncBatch/AsyncInterning
@@ -467,6 +468,7 @@ type
     // - will redirect to fOrmInstance: TRestOrmParent corresponding methods
     procedure OnBeginCurrentThread(Sender: TThread); virtual;
     procedure OnEndCurrentThread(Sender: TThread); virtual;
+    procedure OnRestBackgroundTimerCreate; virtual;
   public
     /// initialize the class, and associate it to a specified database Model
     constructor Create(aModel: TOrmModel); virtual;
@@ -1352,7 +1354,6 @@ type
     // - may avoid OS API calls on server side, during a request process
     // - warning: do not use within loops for timeout, because it won't change
     function TickCount64: Int64;
-      {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
     // - typically returns a JWT for statelesss self-contained authentication,
     // as expected by TJwtAbstract.Verify method
@@ -3430,13 +3431,18 @@ var
 begin
   timer.Start;
   claimed := 0;
-  for i := 0 to high(fBackgroundInterning) do
-    inc(claimed, fBackgroundInterning[i].Clean(fBackgroundInterningMaxRefCount));
-  if claimed = 0 then
-    exit; // nothing to collect
-  total := claimed;
-  for i := 0 to high(fBackgroundInterning) do
-    inc(total, fBackgroundInterning[i].Count);
+  fBackgroundInterningSafe.Lock;
+  try
+    for i := 0 to high(fBackgroundInterning) do
+      inc(claimed, fBackgroundInterning[i].Clean(fBackgroundInterningMaxRefCount));
+    if claimed = 0 then
+      exit; // nothing to collect
+    total := claimed;
+    for i := 0 to high(fBackgroundInterning) do
+      inc(total, fBackgroundInterning[i].Count);
+  finally
+    fBackgroundInterningSafe.UnLock;
+  end;
   fRest.InternalLog(
     '%.AsyncInterning: Clean(%) claimed %/% strings from % pools in %',
     [ClassType, fBackgroundInterningMaxRefCount, claimed, total,
@@ -3449,20 +3455,20 @@ begin
   if (self = nil) or
      (Interning = nil) then
     exit;
-  fTaskLock.Lock;
+  fBackgroundInterningSafe.Lock; // AsyncBackgroundInterning running (unlikely)
   try
     if (InterningMaxRefCount <= 0) or
        (PeriodMinutes <= 0) then
-      ObjArrayDelete(fBackgroundInterning, Interning)
-    else
     begin
-      fBackgroundInterningMaxRefCount := InterningMaxRefCount;
-      ObjArrayAddOnce(fBackgroundInterning, Interning);
-      Enable(AsyncBackgroundInterning, PeriodMinutes * 60);
+      ObjArrayDelete(fBackgroundInterning, Interning);
+      exit;
     end;
+    fBackgroundInterningMaxRefCount := InterningMaxRefCount;
+    ObjArrayAddOnce(fBackgroundInterning, Interning);
   finally
-    fTaskLock.UnLock;
+    fBackgroundInterningSafe.UnLock;
   end;
+  Enable(AsyncBackgroundInterning, PeriodMinutes * 60);
 end;
 
 
@@ -4386,7 +4392,10 @@ begin
   fSafe.Lock;
   try
     if fBackgroundTimer = nil then
+    begin
       fBackgroundTimer := TRestBackgroundTimer.Create(fOwner);
+      fOwner.OnRestBackgroundTimerCreate;
+    end;
     result := fBackgroundTimer;
   finally
     fSafe.UnLock;
