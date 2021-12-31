@@ -186,7 +186,7 @@ type
       FileExt: TFileName;
       ContentType: RawUtf8;
       Locker: IAutoLocker;
-      FileAgeLast: PtrUInt;
+      FileAgeLast: TUnixTime;
       FileAgeCheckTick: Int64;
       Flags: TMvcViewFlags;
     end;
@@ -196,7 +196,7 @@ type
     /// return the template file contents
     function GetTemplate(const aFileName: TFileName): RawUtf8; virtual;
     /// return the template file date and time
-    function GetTemplateAge(const aFileName: TFileName): PtrUInt; virtual;
+    function GetTemplateAge(const aFileName: TFileName): TUnixTime; virtual;
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: Integer; const Context: variant;
       var View: TMvcView); override;
@@ -1303,7 +1303,7 @@ end;
 function TMvcViewsMustache.GetRenderer(methodIndex: integer;
   var view: TMvcView): TSynMustache;
 var
-  age: PtrUInt;
+  age: TUnixTime;
 begin
   if cardinal(methodIndex) >= fFactory.MethodsCount then
     raise EMvcException.CreateUtf8(
@@ -1368,12 +1368,11 @@ begin
   result := AnyTextFileToRawUtf8(ViewTemplateFolder + aFileName, true);
 end;
 
-{$WARN SYMBOL_DEPRECATED OFF} // we don't need TDateTime, just values to compare
-function TMvcViewsMustache.GetTemplateAge(const aFileName: TFileName): PtrUInt;
+function TMvcViewsMustache.GetTemplateAge(const aFileName: TFileName): TUnixTime;
 begin
-  result := FileAge(ViewTemplateFolder + aFileName);
+  // we don't need TDateTime, just values to compare
+  result := FileAgeToUnixTimeUtc(ViewTemplateFolder + aFileName);
 end;
-{$WARN SYMBOL_DEPRECATED ON}
 
 procedure TMvcViewsMustache.Render(methodIndex: Integer; const Context: variant;
   var View: TMvcView);
