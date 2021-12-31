@@ -7499,7 +7499,7 @@ begin
             repeat
               inc(Par);
             until not (Par^ in [#1..' ']);
-            if Par <> '}' then
+            if Par^ <> '}' then
             begin
               ParObjValuesUsed := true;
               FillCharFast(ParObjValues, (ArgsInLast + 1) * SizeOf(pointer), 0);
@@ -7513,7 +7513,7 @@ begin
                 for a := a1 to ArgsInLast do
                 with Args[a] do
                   if ValueDirection <> imdOut then
-                    if IdemPropName(ParamName^,Name,NameLen) then
+                    if IdemPropName(ParamName^, Name, NameLen) then
                     begin
                       ParObjValues[a] := Val; // fast redirection, without allocation
                       if a = a1 then
