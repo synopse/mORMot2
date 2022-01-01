@@ -294,7 +294,7 @@ type
     procedure BeforeSendFrame(var frame: TWebSocketFrame); virtual;
     function FrameData(const frame: TWebSocketFrame; const Head: RawUtf8;
       HeadFound: PRawUtf8 = nil; PMax: PPByte = nil): pointer; virtual;
-    function FrameType(const frame: TWebSocketFrame): RawUtf8; virtual;
+    function FrameType(const frame: TWebSocketFrame): TShort31; virtual;
     function GetRemoteIP: RawUtf8;
     function GetEncrypted: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -437,7 +437,7 @@ type
       var contentType, content: RawByteString): boolean; override;
     function FrameData(const frame: TWebSocketFrame; const Head: RawUtf8;
       HeadFound: PRawUtf8 = nil; PMax: PPByte = nil): pointer; override;
-    function FrameType(const frame: TWebSocketFrame): RawUtf8; override;
+    function FrameType(const frame: TWebSocketFrame): TShort31; override;
   public
     /// initialize the WebSockets JSON protocol
     // - if aUri is '', any URI would potentially upgrade to this protocol; you can
@@ -475,7 +475,7 @@ type
     procedure BeforeSendFrame(var frame: TWebSocketFrame); override;
     function FrameData(const frame: TWebSocketFrame; const Head: RawUtf8;
       HeadFound: PRawUtf8 = nil; PMax: PPByte = nil): pointer; override;
-    function FrameType(const frame: TWebSocketFrame): RawUtf8; override;
+    function FrameType(const frame: TWebSocketFrame): TShort31; override;
     function SendFrames(Owner: TWebSocketProcess;
       var Frames: TWebSocketFrameDynArray;
       var FramesCount: integer): boolean; override;
@@ -1170,7 +1170,7 @@ begin
   result := nil; // no frame type by default
 end;
 
-function TWebSocketProtocol.FrameType(const frame: TWebSocketFrame): RawUtf8;
+function TWebSocketProtocol.FrameType(const frame: TWebSocketFrame): TShort31;
 begin
   result := '*'; // no frame URI by default
 end;
@@ -1672,7 +1672,7 @@ begin
   result := true;
 end;
 
-function TWebSocketProtocolJson.FrameType(const frame: TWebSocketFrame): RawUtf8;
+function TWebSocketProtocolJson.FrameType(const frame: TWebSocketFrame): TShort31;
 var
   P, txt: PUtf8Char;
 begin
@@ -1686,7 +1686,7 @@ begin
     exit;
   txt := P;
   P := GotoEndOfJsonString(P);
-  FastSetString(result, txt, P - txt);
+  SetString(result, PAnsiChar(txt), P - txt);
 end;
 
 function TWebSocketProtocolJson.SendFrames(Owner: TWebSocketProcess;
@@ -1832,7 +1832,7 @@ begin
     result := nil;
 end;
 
-function TWebSocketProtocolBinary.FrameType(const frame: TWebSocketFrame): RawUtf8;
+function TWebSocketProtocolBinary.FrameType(const frame: TWebSocketFrame): TShort31;
 var
   i: PtrInt;
 begin
@@ -1844,7 +1844,7 @@ begin
   if i = 0 then
     result := '*'
   else
-    FastSetString(result, pointer(frame.payload), i - 1);
+    SetString(result, PAnsiChar(pointer(frame.payload)), i - 1);
 end;
 
 procedure TWebSocketProtocolBinary.BeforeSendFrame(var frame: TWebSocketFrame);
