@@ -95,15 +95,17 @@ type
     function SendDirect(const tmp: TSynTempBuffer;
       opcode: TWebSocketFrameOpCode; timeout: integer): boolean;
   end;
+  TWebSocketAsyncConnectionDynArray = array of TWebSocketAsyncConnection;
 
   /// handle HTTP/WebSockets server connections using non-blocking sockets
   TWebSocketAsyncConnections = class(THttpAsyncConnections)
   protected
     // maintain a thread-safe list to minimize ProcessIdleTix time
-    fOutgoingLock: TRTLCriticalSection;
+    fOutgoingSafe: TLightLock;
     fOutgoingCount: integer;
-    fOutgoing: array of TWebSocketAsyncConnection;
+    fOutgoing: TWebSocketAsyncConnectionDynArray;
     procedure NotifyOutgoing(Connection: TWebSocketAsyncConnection);
+    procedure ProcessIdleTixSendFrames;
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); override;
   public
     /// create an event-driven HTTP/WebSockets Server
@@ -112,8 +114,6 @@ type
       aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
       aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
       aThreadPoolCount: integer); override;
-    /// finalize the HTTP/WebSockets Connections
-    destructor Destroy; override;
   end;
 
   /// HTTP/WebSockets server using non-blocking sockets
@@ -327,31 +327,58 @@ constructor TWebSocketAsyncConnections.Create(const aPort: RawUtf8;
   aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
   aThreadPoolCount: integer);
 begin
-  InitializeCriticalSection(fOutgoingLock);
   inherited Create(aPort, OnStart, OnStop, aConnectionClass, ProcessName,
     aLog, aOptions, aThreadPoolCount);
   fLastOperationIdleSeconds := 10; // 10 secs is good enough for ping/pong
 end;
 
-destructor TWebSocketAsyncConnections.Destroy;
-begin
-  inherited Destroy;
-  DeleteCriticalSection(fOutgoingLock);
-end;
-
 procedure TWebSocketAsyncConnections.NotifyOutgoing(
   Connection: TWebSocketAsyncConnection);
 begin
-  EnterCriticalSection(fOutgoingLock);
+  fOutgoingSafe.Lock;
   ObjArrayAddOnce(fOutgoing, Connection, fOutgoingCount);
-  LeaveCriticalSection(fOutgoingLock);
+  fOutgoingSafe.UnLock;
+end;
+
+procedure TWebSocketAsyncConnections.ProcessIdleTixSendFrames;
+var
+  i, conn, valid, sent, invalid: PtrInt;
+  pending: TWebSocketAsyncConnectionDynArray; // keep fOutgoingSafe lock short
+  timer: TPrecisionTimer;
+begin
+  if Assigned(fLog) and
+     (sllTrace in fLog.Family.Level) then
+    timer.Start // we monitor this loop, which should not be blocking
+  else
+    timer.Init; // no need to call high-precision timing API
+  fOutgoingSafe.Lock;
+  try
+    conn := fOutgoingCount;
+    fOutgoingCount := 0;
+    pending := fOutgoing; // fast per-reference copy
+    fOutgoing := nil;
+  finally
+    fOutgoingSafe.UnLock;
+  end;
+  valid := 0;
+  invalid := 0;
+  for i := 0 to conn - 1 do
+  begin
+    sent := pending[i].fProcess.SendPendingOutgoingFrames;
+    if sent < 0 then
+      inc(invalid)
+    else
+      inc(valid, sent);
+  end;
+  timer.Pause; // BeforeSendFrame encrypt/compress may have taken some time
+  if (invalid <> 0) or
+     (timer.TimeInMicroSec > 500) then // 0.5 ms seems responsive enough
+    DoLog(sllTrace, 'ProcessIdleTix conn=% valid=% invalid=% in %',
+      [conn, valid, invalid, timer.Time], self);
 end;
 
 procedure TWebSocketAsyncConnections.ProcessIdleTix(Sender: TObject;
   NowTix: Int64);
-var
-  i, conn, valid, sent, invalid: PtrInt;
-  timer: TPrecisionTimer;
 begin
   if Terminated then
     exit;
@@ -362,35 +389,8 @@ begin
     fIdleTix := NowTix + 1000;
   end;
   // send pending outgoing frames, with optional JumboFrame gathering
-  if fOutgoingCount = 0 then
-    exit;
-  if Assigned(fLog) and
-     (sllTrace in fLog.Family.Level) then
-    timer.Start // we monitor this loop, which should not be blocking
-  else
-    timer.Init; // no need to call high-precision timing API
-  valid := 0;
-  invalid := 0;
-  EnterCriticalSection(fOutgoingLock);
-  try
-    conn := fOutgoingCount;
-    for i := 0 to conn - 1 do
-    begin
-      sent := fOutgoing[i].fProcess.SendPendingOutgoingFrames;
-      if sent < 0 then
-        inc(invalid)
-      else
-        inc(valid, sent);
-    end;
-    fOutgoingCount := 0;
-  finally
-    LeaveCriticalSection(fOutgoingLock);
-  end;
-  timer.Pause; // BeforeSendFrame encrypt/compress may have taken some time
-  if (invalid <> 0) or
-     (timer.TimeInMicroSec > 500) then // 0.5 ms seems responsive enough
-    DoLog(sllTrace, 'ProcessIdleTix conn=% valid=% invalid=% in %',
-      [conn, valid, invalid, timer.Time], self);
+  if fOutgoingCount <> 0 then
+    ProcessIdleTixSendFrames;
 end;
 
 
