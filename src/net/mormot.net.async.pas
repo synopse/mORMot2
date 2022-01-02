@@ -45,6 +45,9 @@ type
   // - will start from 1, and increase during the TAsyncConnections live-time
   TPollAsyncConnectionHandle = type integer;
 
+  /// a dynamic array of TPollAsyncConnectionHandle identifiers
+  TPollAsyncConnectionHandleDynArray = array of TPollAsyncConnectionHandle;
+
   /// let TPollAsyncSockets.OnRead/AfterWrite shutdown the socket if needed
   TPollAsyncSocketOnReadWrite = (
     soContinue,

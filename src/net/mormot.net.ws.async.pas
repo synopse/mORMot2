@@ -95,7 +95,6 @@ type
     function SendDirect(const tmp: TSynTempBuffer;
       opcode: TWebSocketFrameOpCode; timeout: integer): boolean;
   end;
-  TWebSocketAsyncConnectionDynArray = array of TWebSocketAsyncConnection;
 
   /// handle HTTP/WebSockets server connections using non-blocking sockets
   TWebSocketAsyncConnections = class(THttpAsyncConnections)
@@ -103,7 +102,7 @@ type
     // maintain a thread-safe list to minimize ProcessIdleTix time
     fOutgoingSafe: TLightLock;
     fOutgoingCount: integer;
-    fOutgoing: TWebSocketAsyncConnectionDynArray;
+    fOutgoingHandle: TIntegerDynArray; // = TPollAsyncConnectionHandle
     procedure NotifyOutgoing(Connection: TWebSocketAsyncConnection);
     procedure ProcessIdleTixSendFrames;
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); override;
@@ -336,14 +335,15 @@ procedure TWebSocketAsyncConnections.NotifyOutgoing(
   Connection: TWebSocketAsyncConnection);
 begin
   fOutgoingSafe.Lock;
-  ObjArrayAddOnce(fOutgoing, Connection, fOutgoingCount);
+  AddInteger(fOutgoingHandle, fOutgoingCount, Connection.Handle, {nodup=}true);
   fOutgoingSafe.UnLock;
 end;
 
 procedure TWebSocketAsyncConnections.ProcessIdleTixSendFrames;
 var
   i, conn, valid, sent, invalid: PtrInt;
-  pending: TWebSocketAsyncConnectionDynArray; // keep fOutgoingSafe lock short
+  pending: TIntegerDynArray; // keep fOutgoingSafe lock short
+  c: TAsyncConnection;
   timer: TPrecisionTimer;
 begin
   if Assigned(fLog) and
@@ -355,8 +355,8 @@ begin
   try
     conn := fOutgoingCount;
     fOutgoingCount := 0;
-    pending := fOutgoing; // fast per-reference copy
-    fOutgoing := nil;
+    pending := fOutgoingHandle; // fast per-reference copy
+    fOutgoingHandle := nil;
   finally
     fOutgoingSafe.UnLock;
   end;
@@ -364,11 +364,15 @@ begin
   invalid := 0;
   for i := 0 to conn - 1 do
   begin
-    sent := pending[i].fProcess.SendPendingOutgoingFrames;
-    if sent < 0 then
-      inc(invalid)
-    else
-      inc(valid, sent);
+    c := ConnectionFind(pending[i]);
+    if c <> nil then
+    begin
+      sent := (c as TWebSocketAsyncConnection).fProcess.SendPendingOutgoingFrames;
+      if sent < 0 then
+        inc(invalid)
+      else
+        inc(valid, sent);
+    end;
   end;
   timer.Pause; // BeforeSendFrame encrypt/compress may have taken some time
   if (invalid <> 0) or
