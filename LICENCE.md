@@ -1,6 +1,6 @@
 # mORMot Framework Licencing Terms
 
-**The mORMot framework. Copyright (C) 2021 Arnaud Bouchez**
+**The mORMot framework. Copyright (C) 2022 Arnaud Bouchez**
 
 **Synopse Informatique - https://synopse.info**
 

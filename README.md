@@ -2,7 +2,7 @@
 
 An Open Source Client-Server ORM/SOA framework in modern Object Pascal, version 2
 
-(c) 2008-2021 Synopse Informatique - Arnaud Bouchez
+(c) 2008-2022 Synopse Informatique - Arnaud Bouchez
 
 https://synopse.info  - http://mORMot.net
 
