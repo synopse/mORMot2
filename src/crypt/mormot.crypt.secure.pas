@@ -13,7 +13,7 @@ unit mormot.crypt.secure;
     - 64-bit TSynUniqueIdentifier and its efficient Generator
     - IProtocol Safe Communication with Unilateral or Mutual Authentication
     - TBinaryCookieGenerator Simple Cookie Generator
-    - Rnd/Hash/Sign/Cipher/Asym/Cert High-Level Algorithms Factories
+    - Rnd/Hash/Sign/Cipher/Asym/Cert/Store High-Level Algorithms Factories
     - Minimal PEM/DER Encoding/Decoding
 
    Uses optimized mormot.crypt.core.pas for its actual process.
@@ -917,7 +917,7 @@ type
   PBinaryCookieGenerator = ^TBinaryCookieGenerator;
 
 
-{ ************* Rnd/Hash/Sign/Cipher/Asym/Cert High-Level Algorithms Factories }
+{ ************* Rnd/Hash/Sign/Cipher/Asym/Cert/Store High-Level Algorithms Factories }
 
 type
   ECrypt = class(ESynException);
@@ -1222,7 +1222,8 @@ type
     cvInvalidDate,
     cvUnknownAuthority,
     cvDeprecatedAuthority,
-    cvInvalidSignature);
+    cvInvalidSignature,
+    cvRevoked);
 
   TCryptCert = class;
 
@@ -1319,6 +1320,57 @@ type
     function New: ICryptCert; virtual; abstract;
   end;
 
+  /// abstract interface to a Certificates Store, as returned by Store() factory
+  // - may be X509 or not, OpenSSL implemented or not
+  ICryptStore = interface
+    /// load a Certificates Store from a ToBinary content
+    function FromBinary(const Binary: RawByteString): boolean;
+    /// serialize the Certificates Store as raw binary
+    function ToBinary: RawByteString;
+    /// search for a certificate from its (hexadecimal) identifier
+    function GetBySerial(const Serial: RawUtf8): ICryptCert;
+    /// quickly check if a given certificate ID is part of the CRL
+    // - returns crrNotRevoked is the serial is not known as part of the CRL
+    // - returns the reason why this certificate has been revoked otherwise
+    function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason;
+    /// register a certificate in the internal certificate chain
+    // - returns false e.g. if the certificate was not valid, or its
+    // serial was already part of the internal list
+    // - self-signed certificate could be included - but add them with caution
+    function Add(const cert: ICryptCert): boolean;
+    /// add a new Serial number to the internal Certificate Revocation List
+    function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
+      Reason: TCryptCertRevocationReason): boolean;
+    /// check if the certificate is valid, against known certificates chain
+    // - will check internal properties of the certificate (e.g. validity dates),
+    // and validate the stored digital signature according to the public key of
+    // the associated signing authority, as found within the store
+    function IsValid(const cert: ICryptCert): TCryptCertValidity;
+  end;
+
+  /// abstract parent class to implement ICryptCert, as returned by Cert() factory
+  TCryptStore = class(TCryptInstance, ICryptStore)
+  public
+    // ICryptStore methods
+    function FromBinary(const Binary: RawByteString): boolean; virtual; abstract;
+    function ToBinary: RawByteString; virtual; abstract;
+    function GetBySerial(const Serial: RawUtf8): ICryptCert; virtual; abstract;
+    function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; virtual; abstract;
+    function Add(const cert: ICryptCert): boolean; virtual; abstract;
+    function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
+      Reason: TCryptCertRevocationReason): boolean; virtual; abstract;
+    function IsValid(const cert: ICryptCert): TCryptCertValidity; virtual; abstract;
+  end;
+
+  /// meta-class of the abstract parent to implement ICryptStore interface
+  TCryptStoreClass = class of TCryptStore;
+
+  /// abstract parent class for ICryptStore factories
+  TCryptStoreAlgo = class(TCryptAlgo)
+  public
+    /// main factory to create a new Store instance with this engine
+    function New: ICryptStore; virtual; abstract;
+  end;
 
 const
   /// such a Certificate could be used for anything
@@ -1327,7 +1379,7 @@ const
 function ToText(r: TCryptCertRevocationReason): PShortString; overload;
 function ToText(u: TCryptCertUsage): PShortString; overload;
 function ToText(u: TCryptCertUsages): ShortString; overload;
-
+function ToText(v: TCryptCertValidity): PShortString; overload;
 
 /// main resolver of the randomness generators
 // - the shared TCryptRandom of this algorithm is returned: caller should NOT free it
@@ -1429,6 +1481,17 @@ function CertAlgo(const name: RawUtf8): TCryptCertAlgo;
 
 /// main factory of the Certificates instances as returned by CertAlgo()
 function Cert(const name: RawUtf8): ICryptCert;
+
+/// main resolver for Certificates Store engines
+// - mormot.crypt.ecc.pas defines 'syn-store' for our TEccCertificateChain
+//  proprietary format (safe and efficient)
+// - mormot.crypt.openssl.pas will define 'x509-store'
+// - the shared TCryptStoreAlgo of this algorithm is returned: caller should
+// NOT free it
+function StoreAlgo(const name: RawUtf8): TCryptStoreAlgo;
+
+/// main factory of Certificates Store engines as returned by StoreAlgo()
+function Store(const name: RawUtf8): ICryptStore;
 
 
 { ************************** Minimal PEM/DER Encoding/Decoding }
@@ -4024,6 +4087,12 @@ begin
   GetSetNameShort(TypeInfo(TCryptCertUsages), u, result, {trim=}true);
 end;
 
+function ToText(v: TCryptCertValidity): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TCryptCertValidity), ord(v));
+end;
+
+
 
 { Register mormot.crypt.core and mormot.crypt.secure Algorithms }
 
@@ -4065,7 +4134,8 @@ end;
 { Actual High-Level Factory Functions }
 
 var // cache the last used algorithm for each factory function
-  LastRnd, LastHasher, LastSigner, LastCipher, LastAsym, LastCert: TCryptAlgo;
+  LastRnd, LastHasher, LastSigner, LastCipher,
+  LastAsym, LastCert, LastStore: TCryptAlgo;
 
 function Rnd(const name: RawUtf8): TCryptRandom;
 begin
@@ -4187,6 +4257,22 @@ var
   c: TCryptCertAlgo;
 begin
   c := CertAlgo(name);
+  if c = nil then
+    result := nil
+  else
+    result := c.New;
+end;
+
+function StoreAlgo(const name: RawUtf8): TCryptStoreAlgo;
+begin
+  result := TCryptStoreAlgo.InternalFind(name, LastStore);
+end;
+
+function Store(const name: RawUtf8): ICryptStore;
+var
+  c: TCryptStoreAlgo;
+begin
+  c := StoreAlgo(name);
   if c = nil then
     result := nil
   else
