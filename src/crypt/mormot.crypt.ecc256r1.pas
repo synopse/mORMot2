@@ -433,7 +433,7 @@ type
   PEccSignatureCertifiedContent = ^TEccSignatureCertifiedContent;
 
   /// store a TEccCertificateChain Certificate Revocation List item
-  // - would be stored in 24 bytes
+  // - would be stored as 24 bytes
   {$ifdef USERECORDWITHMETHODS}
   TEccCertificateRevocation = record
   {$else}
@@ -461,6 +461,10 @@ type
     function ToBase64: RawUtf8;
     /// setup a CRL item
     function From(const id: TEccCertificateID; dt: TDateTime; why: word): boolean;
+    /// read TEccCertificateRevocation binary buffer from the given TStream
+    function LoadFromStream(st: TStream): boolean;
+    /// write the TEccCertificateRevocation binary buffer into the given TStream
+    procedure SaveToStream(st: TStream);
   end;
   PEccCertificateRevocation = ^TEccCertificateRevocation;
 
@@ -1652,6 +1656,17 @@ function TEccCertificateRevocation.FromBase64(const base64: RawUtf8): boolean;
 begin
   result := Base64ToBin(base64, @self, SizeOf(self)) and
             Check;
+end;
+
+function TEccCertificateRevocation.LoadFromStream(st: TStream): boolean;
+begin
+  result := (st.Read(self, SizeOf(self)) = SizeOf(self)) and
+            Check;
+end;
+
+procedure TEccCertificateRevocation.SaveToStream(st: TStream);
+begin
+  st.WriteBuffer(self, SizeOf(self));
 end;
 
 function TEccCertificateRevocation.ToBase64: RawUtf8;

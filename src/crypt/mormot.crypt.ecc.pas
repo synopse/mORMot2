@@ -819,9 +819,13 @@ type
       out PublicKey: TEccPublicKey; valid: TEccValidity = ecvUnknown): TEccValidity;
     /// quickly check if a given certificate ID is part of the CRL
     // - will check the internal Certificate Revocation List and the current date
+    // - returns crrNotRevoked is the serial is not known as part of the CRL
+    // - returns the reason why this certificate has been revoked otherwise
     function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; overload;
     /// quickly check if a given certificate ID is part of the CRL
     // - will check the internal Certificate Revocation List and the current date
+    // - returns crrNotRevoked is the serial is not known as part of the CRL
+    // - returns the reason why this certificate has been revoked otherwise
     function IsRevoked(const Serial: TEccCertificateID): TCryptCertRevocationReason; overload;
     /// add a new Serial number to the internal Certificate Revocation List
     function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
@@ -958,6 +962,14 @@ type
     // - would create only TEccCertificate instances with their public keys,
     // since no private key, therefore no TEccCertificateSecret is expected
     function LoadFromJson(const json: RawUtf8): boolean;
+    /// save the whole certificates chain as a binary content
+    // - each certificate and CRL would be stored via its SaveToStream() binary layout
+    // - by design, any private key would be trimmed from the output content
+    function SaveToBinary: RawByteString;
+    /// load a certificates chain from binary content
+    // - each certificate and CRL is read via its LoadFromStream() binary layout
+    // - would create only TEccCertificate instances with their public keys
+    function LoadFromBinary(const binary: RawByteString): boolean;
   public
     /// initialize the certificate store from some JSON-serialized .ca file
     // - the file would store plain verbose information of all certificates,
@@ -3620,6 +3632,87 @@ begin
   end;
 end;
 
+const
+  CHAIN_MAGIC = $513c2a13;
+
+function TEccCertificateChain.SaveToBinary: RawByteString;
+var
+  i, n: PtrInt;
+  st: TRawByteStringStream;
+begin
+  st := TRawByteStringStream.Create;
+  try
+    fSafe.ReadLock;
+    try
+      // genuine magic header
+      n := CHAIN_MAGIC;
+      st.WriteBuffer(n, 4);
+      // store first the certificates
+      n := length(fItems);
+      if n > 65535 then
+        raise ECertificate.Create('Too many items in Chain');
+      st.WriteBuffer(n, 2);
+      for i := 0 to n - 1 do
+      begin
+        fItems[i].fStoreOnlyPublicKey := true; // for safety
+        fItems[i].SaveToStream(st);
+        fItems[i].fStoreOnlyPublicKey := false;
+      end;
+      // then the revocation serials
+      n := length(fCrl);
+      if n > 65535 then
+        raise ECertificate.Create('Too many crls in Chain');
+      st.WriteBuffer(n, 2);
+      for i := 0 to n - 1 do
+        fCrl[i].SaveToStream(st);
+    finally
+      fSafe.ReadUnLock;
+    end;
+    result := st.DataString;
+  finally
+    st.Free;
+  end;
+end;
+
+function TEccCertificateChain.LoadFromBinary(const binary: RawByteString): boolean;
+var
+  i, n: PtrInt;
+  st: TRawByteStringStream;
+begin
+  result := false;
+  if (self = nil) or
+     (length(binary) < 8) or
+     (PCardinal(binary)^ <> CHAIN_MAGIC) then
+    exit;
+  st := TRawByteStringStream.Create(binary);
+  fSafe.WriteLock;
+  try
+    LockedClear;
+    // follow SaveToBinary() layout
+    if st.Read(n, 4) <> 4 then
+      exit; // CHAIN_MAGIC
+    n := 0;
+    if st.Read(n, 2) <> 2 then
+      exit;
+    SetLength(fItems, n);
+    for i := 0 to n - 1 do
+      if not fItems[i].LoadFromStream(st) then
+        exit;
+    if st.Read(n, 2) <> 2 then
+      exit;
+    SetLength(fCrl, n);
+    for i := 0 to n - 1 do
+      if not fCrl[i].LoadFromStream(st) then
+        exit;
+    result := true;
+  finally
+    if not result then
+      LockedClear;
+    fSafe.WriteUnLock;
+    st.Free;
+  end;
+end;
+
 function TEccCertificateChain.LoadFromArray(const values: TRawUtf8DynArray): boolean;
 var
   i, n, crl: PtrInt;
@@ -4586,8 +4679,10 @@ type
   TCryptCertInternal = class(TCryptCert)
   protected
     fEcc: TEccCertificate; // TEccCertificate or TEccCertificateSecret
+    fEccByRef: boolean;
     fMaxVersion: integer;
   public
+    constructor CreateFrom(aEcc: TEccCertificate);
     destructor Destroy; override;
     // ICryptCert methods
     procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
@@ -4635,9 +4730,22 @@ end;
 
 { TCryptCertInternal }
 
+var
+  CryptCertInternal: TCryptCertAlgo;
+
+constructor TCryptCertInternal.CreateFrom(aEcc: TEccCertificate);
+begin
+  fEcc := aEcc;
+  fEccByRef := true;
+  if CryptCertInternal = nil then
+    CryptCertInternal := CertAlgo('syn-es256');
+  Create(CryptCertInternal);
+end;
+
 destructor TCryptCertInternal.Destroy;
 begin
-  fEcc.Free;
+  if not fEccByRef then
+    fEcc.Free;
   inherited Destroy;
 end;
 
@@ -4804,6 +4912,113 @@ begin
 end;
 
 
+type
+  /// 'syn-store' ICryptStore algorithm
+  TCryptStoreAlgoInternal = class(TCryptStoreAlgo)
+  public
+    function New: ICryptStore; override; // = TCryptStoreInternal.Create(self)
+  end;
+
+  /// class implementing ICryptStore using our ECC Public Key Cryptography
+  TCryptStoreInternal = class(TCryptStore)
+  protected
+    fEcc: TEccCertificateChain;
+  public
+    constructor Create(algo: TCryptAlgo); override;
+    destructor Destroy; override;
+    // ICryptStore methods
+    function FromBinary(const Binary: RawByteString): boolean; override;
+    function ToBinary: RawByteString; override;
+    function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
+    function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; override;
+    function Add(const cert: ICryptCert): boolean; override;
+    function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
+      Reason: TCryptCertRevocationReason): boolean; override;
+    function IsValid(const cert: ICryptCert): TCryptCertValidity; override;
+  end;
+
+
+{ TCryptStoreInternal }
+
+constructor TCryptStoreInternal.Create(algo: TCryptAlgo);
+begin
+  inherited Create(algo);
+  fEcc := TEccCertificateChain.Create;
+end;
+
+destructor TCryptStoreInternal.Destroy;
+begin
+  inherited Destroy;
+  fEcc.Free;
+end;
+
+function TCryptStoreInternal.FromBinary(const Binary: RawByteString): boolean;
+begin
+  result := fEcc.LoadFromBinary(Binary);
+end;
+
+function TCryptStoreInternal.ToBinary: RawByteString;
+begin
+  result := fEcc.SaveToBinary;
+end;
+
+function TCryptStoreInternal.GetBySerial(const Serial: RawUtf8): ICryptCert;
+var
+  c: TEccCertificate;
+begin
+  c := fEcc.GetBySerial(Serial);
+  if c = nil then
+    result := nil
+  else
+    result := TCryptCertInternal.CreateFrom(c);
+end;
+
+function TCryptStoreInternal.IsRevoked(
+  const Serial: RawUtf8): TCryptCertRevocationReason;
+begin
+  result := fEcc.IsRevoked(Serial);
+end;
+
+function TCryptStoreInternal.Add(const cert: ICryptCert): boolean;
+var
+  a: TCryptCertInternal;
+begin
+  result := false;
+  if cert <> nil then
+  begin
+    a := cert.Instance as TCryptCertInternal;
+    if a.fEcc.IsSelfSigned then
+      result := fEcc.AddSelfSigned(a.fEcc) >= 0 // specific method
+    else
+      result := fEcc.Add(a.fEcc) >= 0;
+    a.fEccByRef := result; // will be owned by fEcc chain
+  end;
+end;
+
+function TCryptStoreInternal.Revoke(const Serial: RawUtf8;
+  RevocationDate: TDateTime; Reason: TCryptCertRevocationReason): boolean;
+begin
+  result := fEcc.Revoke(Serial, RevocationDate, Reason);
+end;
+
+function TCryptStoreInternal.IsValid(const cert: ICryptCert): TCryptCertValidity;
+begin
+  if cert = nil then
+    result := cvBadParameter
+  else
+    result := TCryptCertValidity(fEcc.IsValid(
+      (cert.Instance as TCryptCertInternal).fEcc));
+end;
+
+
+{ TCryptStoreAlgoInternal }
+
+function TCryptStoreAlgoInternal.New: ICryptStore;
+begin
+  result := TCryptStoreInternal.Create(self);
+end;
+
+
 initialization
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(TypeInfo(TEccCertificateObjArray), TEccCertificate);
@@ -4812,8 +5027,11 @@ initialization
   assert(SizeOf(TEciesHeader) = 228);
   assert(SizeOf(TEcdheFrameClient) = 290);
   assert(SizeOf(TEcdheFrameServer) = 306);
+  assert(ord(High(TCryptCertValidity)) = ord(High(TEccValidity)));
+  assert(ord(cvRevoked) = ord(ecvRevoked));
   TCryptAsymInternal.Implements('ES256,secp256r1,NISTP-256,prime256v1');
   TCryptCertAlgoInternal.Implements('syn-es256,syn-es256-v1');
+  TCryptStoreAlgoInternal.Implements('syn-store');
 
 end.
 
