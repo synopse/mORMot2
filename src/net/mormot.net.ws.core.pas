@@ -2215,16 +2215,13 @@ begin
 end;
 
 function TWebSocketProtocolList.Add(aProtocol: TWebSocketProtocol): boolean;
-var
-  i: PtrInt;
 begin
   result := false;
   if aProtocol = nil then
     exit;
   fSafe.WriteLock;
   try
-    i := LockedFindIndex(aProtocol.Name, aProtocol.Uri);
-    if i < 0 then
+    if LockedFindIndex(aProtocol.Name, aProtocol.Uri) < 0 then
     begin
       ObjArrayAdd(fProtocols, aProtocol);
       result := true;

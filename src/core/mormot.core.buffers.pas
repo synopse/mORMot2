@@ -8212,7 +8212,7 @@ const
     'OGV',  'MP4',  'M2V',  'M2P',  'MP3',  'H264',  'TEXT',  'LOG',  'GZ',
     'WEBM',  'MKV',  'RAR',  '7Z',  'BZ2', 'WMA', 'WMV', 'AVI',
     'PPT', 'XLS', 'PDF', 'SQLITE', 'DB3', nil);
-  MIME_EXT_TYPE: array[0..high(MIME_EXT) - 1] of TMimeType = (
+  MIME_EXT_TYPE: array[0 .. high(MIME_EXT) - 1] of TMimeType = (
     mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml,
     mtCss,  mtJson,  mtXIcon,  mtFont,  mtText,  mtSvg,  mtXml,  mtXml,  mtXml,
     mtWebp,  mtManifest,  mtManifest,  mtXml,  mtJS,  mtFont,  mtOgg,
@@ -8223,7 +8223,7 @@ const
 function GetMimeContentTypeFromExt(const FileName: TFileName; FileExt: PRawUtf8): TMimeType;
 var
   ext: RawUtf8;
-  i: PtrInt;
+  i: integer;
 begin
   result := mtUnknown;
   if FileName <> '' then

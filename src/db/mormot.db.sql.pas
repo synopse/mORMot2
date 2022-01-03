@@ -4532,7 +4532,7 @@ function TSqlDBConnectionProperties.ColumnTypeNativeToDB(
       ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob,
       ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftNull);
   var
-    ndx: PtrInt;
+    ndx: integer;
   begin
     //assert(StrComp(PCHARS[DECIMAL],'DECIMAL')=0);
     ndx := IdemPPChar(pointer(aNativeType), @PCHARS);
@@ -4676,7 +4676,7 @@ end;
 function TSqlDBConnectionProperties.SqlCreate(const aTableName: RawUtf8;
   const aFields: TSqlDBColumnCreateDynArray; aAddID: boolean): RawUtf8;
 var
-  i: integer;
+  i: PtrInt;
   f: RawUtf8;
   col: TSqlDBColumnCreate;
   addprimarykey: RawUtf8;
