@@ -482,6 +482,9 @@ type
   // call _DV() and a local TDocVariantData instead of a PDocVariantData
   PDocVariantData = ^TDocVariantData;
 
+  /// pointer to a dynamic array of TDocVariant storage
+  PDocVariantDataDynArray = array of PDocVariantData;
+
   /// define the TDocVariant storage layout
   // - if it has one or more named properties, it is a dvObject
   // - if it has no name property, it is a dvArray
