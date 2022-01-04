@@ -1611,8 +1611,12 @@ function gcd(a, b: cardinal): cardinal;
 { ************ ObjArray PtrArray InterfaceArray Wrapper Functions }
 
 /// wrapper to add an item to a array of pointer dynamic array storage
-function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
+function PtrArrayAdd(var aPtrArray; aItem: pointer): integer; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// wrapper to add an item to a array of pointer dynamic array storage
+function PtrArrayAdd(var aPtrArray; aItem: pointer;
+  var aPtrArrayCount: integer): PtrInt; overload;
 
 /// wrapper to add once an item to a array of pointer dynamic array storage
 function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
@@ -6504,6 +6508,17 @@ begin
   result := length(a);
   SetLength(a, result + 1);
   a[result] := aItem;
+end;
+
+function PtrArrayAdd(var aPtrArray; aItem: pointer; var aPtrArrayCount: integer): PtrInt;
+var
+  a: TPointerDynArray absolute aPtrArray;
+begin
+  result := aPtrArrayCount;
+  if result = length(a) then
+    SetLength(a, NextGrow(result));
+  a[result] := aItem;
+  inc(aPtrArrayCount);
 end;
 
 function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
