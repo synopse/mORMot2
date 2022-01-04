@@ -347,7 +347,7 @@ type
     // - will also force the version to be 2 if maxversion allow it
     procedure SetUsage(usage: integer; maxversion: byte);
     /// get Certificate 16-bit TCryptCertUsage usage
-    // - returns 65535 = all Usage for version 1
+    // - returns CERTIFICATE_USAGE_ALL = all Usage for version 1
     function GetUsage: integer;
     /// set Certificate subject
     // - the input subject text could be CSV separated
@@ -440,7 +440,7 @@ type
   {$else}
   TEccCertificateRevocation = object
   {$endif USERECORDWITHMETHODS}
-    /// contains the 65535 fixed number
+    /// contains the 65535 fixed number (ECC_REVOC_MAGIC)
     // - make a clear distinction with TEccCertificateContentV1.Version
     // - will be Base64-encoded as '/w...' so could be recognized from
     // a Base64-encoded TEccCertificate
@@ -496,6 +496,11 @@ const
   /// TEccDecrypt results indicating a valid decryption process
   ECC_VALIDDECRYPT =
     [ecdDecrypted, ecdDecryptedWithSignature];
+
+  /// map all TCryptCertUsages flags for ECC Version 1 default value
+  // - should match word(CERTIFICATE_USAGE_ALL) from mormot.crypt.secure.pas
+  ECCV1_USAGE_ALL = 65535;
+
 
 function ToText(val: TEccValidity): PShortString; overload;
 function ToText(res: TEccDecrypt): PShortString; overload;
@@ -1391,7 +1396,7 @@ end;
 procedure TEccCertificateContent.SetUsage(usage: integer; maxversion: byte);
 begin
   if Head.Version = 1 then
-    if (usage = 65535) or
+    if (usage = ECCV1_USAGE_ALL) or
        (maxversion < 2) then
       exit // V1 will assume all usages
     else
@@ -1402,7 +1407,7 @@ end;
 function TEccCertificateContent.GetUsage: integer;
 begin
   if Head.Version = 1 then
-    result := 65535 // all usages
+    result := ECCV1_USAGE_ALL // all usages
   else
     result := Info.Usage;
 end;

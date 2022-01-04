@@ -370,6 +370,18 @@ begin
     chain.IsValidCached := true;
     check(ObjectToJson(chain) = jsonchain);
     check(DeleteFile(selfsignedroot.SaveToSecureFileName));
+    CheckEqual(chain.CrlCount, 0);
+    check(chain.Revoke(serial, 0, crrCompromised));
+    CheckEqual(chain.CrlCount, 1);
+    check(chain.IsValid(selfsignedroot) = ecvRevoked);
+    chain.SaveToFile('test');
+    chain.Clear;
+    CheckEqual(chain.Count, 0);
+    CheckEqual(chain.CrlCount, 0);
+    check(chain.LoadFromFile('test'));
+    CheckEqual(chain.Count, 4);
+    check(chain.IsValid(selfsignedroot) = ecvRevoked);
+    CheckEqual(chain.CrlCount, 1);
     selfsignedroot.Free;
   finally
     chain.Free;

@@ -294,10 +294,6 @@ type
     // Usage fields
     property MaxVersion: byte
       read fMaxVersion write fMaxVersion;
-    /// the allowed usages of this certificate
-    // - only encoded with V2 format, so not published as JSON property
-    property Usage: TCryptCertUsages
-      read GetUsage;
     /// the CSV-encoded subjects of this certificate
     // - stored in Issuer on V1 format, in a separated field on V2 format
     property Subject: RawUtf8
@@ -332,6 +328,11 @@ type
     /// identify the authoritify issuer used for signing, as text
     property AuthorityIssuer: RawUtf8
       read GetAuthorityIssuer;
+    /// the allowed usages of this certificate
+    // - only encoded with V2 format, so not published as JSON property
+    // - V1 would set CERTIFICATE_USAGE_ALL = 65335 which won't be serialized
+    property Usage: TCryptCertUsages
+      read GetUsage default CERTIFICATE_USAGE_ALL;
     /// if this certificate has been signed by itself
     // - a self-signed certificate will have its AuthoritySerial/AuthorityIssuer
     // fields matching Serial/Issuer, and should be used as "root" certificates
@@ -787,6 +788,8 @@ type
     fIsValidCache: THash128DynArray; // valid TEccCertificateContent.ComputeCrc128
     function GetCount: integer;
       {$ifdef HASINLINE} inline; {$endif}
+    function GetCrlCount: integer;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure LockedClear;
     function InternalAdd(cert: TEccCertificate; expected: TEccValidity): PtrInt;
     procedure SetIsValidCached(const Value: boolean);
@@ -1036,6 +1039,9 @@ type
     /// how many certificates are currently stored in the certificates chain
     property Count: integer
       read GetCount;
+    /// how many certificates are currently revoked in the certificates CRL
+    property CrlCount: integer
+      read GetCrlCount default 0;
     /// the maximum storage version allowed for this Certificate
     // - is 2 by default, but could be set e.g. to 1 for backward compatibility
     property MaxVersion: byte
@@ -2290,6 +2296,8 @@ begin
 end;
 
 function TEccCertificate.ToVariant(withBase64: boolean): variant;
+var
+  u: TCryptCertUsages;
 begin
   result := _ObjFast([
     'Version',         Version,
@@ -2301,9 +2309,13 @@ begin
     'AuthoritySerial', AuthoritySerial,
     'AuthorityIssuer', AuthorityIssuer,
     'IsSelfSigned',    IsSelfSigned]);
+  u := GetUsage;
+  if u <> CERTIFICATE_USAGE_ALL then
+    TDocVariantData(result).AddValue(
+      'Usage',         SetNameToVariant(word(u), TypeInfo(TCryptCertUsages)));
   if withBase64 then
     TDocVariantData(result).AddValue(
-      'Base64', RawUtf8ToVariant(ToBase64));
+      'Base64',        RawUtf8ToVariant(ToBase64));
 end;
 
 function TEccCertificate.ToJson(withBase64: boolean): RawUtf8;
@@ -3339,6 +3351,7 @@ begin
     exit;
   fSafe.WriteLock;
   try
+    fIsValidCacheCount := 0; // revocation disable some certs
     n := length(fCrl);
     if Reason = crrNotRevoked then
     begin
@@ -3515,6 +3528,14 @@ begin
     result := 0
   else
     result := length(fItems);
+end;
+
+function TEccCertificateChain.GetCrlCount: integer;
+begin
+  if self = nil then
+    result := 0
+  else
+    result := length(fCrl);
 end;
 
 function TEccCertificateChain.IsAuthorized(sign: TEccSignatureCertified): boolean;
@@ -3784,13 +3805,14 @@ begin
     crl := 0;
     for i := 0 to high(values) do
       if values[i] <> '' then
-        if PWord(values[i])^ = ord('/') + ord('w') shl 8 then
+        if PWord(values[i])^ = ord('/') + ord('/') shl 8 then
         begin
           // this is a base64-encoded TEccCertificateRevocation entry
           if crl = length(fCrl) then
             SetLength(fCrl, NextGrow(crl));
           if not fCrl[crl].FromBase64(values[i]) then
             exit;
+          inc(crl);
         end
         else
         begin
@@ -5122,6 +5144,7 @@ initialization
   assert(SizeOf(TEciesHeader) = 228);
   assert(SizeOf(TEcdheFrameClient) = 290);
   assert(SizeOf(TEcdheFrameServer) = 306);
+  assert(ECCV1_USAGE_ALL = word(CERTIFICATE_USAGE_ALL));
   assert(ord(High(TCryptCertValidity)) = ord(High(TEccValidity)));
   assert(ord(cvRevoked) = ord(ecvRevoked));
   TCryptAsymInternal.Implements('ES256,secp256r1,NISTP-256,prime256v1');
