@@ -259,7 +259,8 @@ type
     ecvUnknownAuthority,
     ecvDeprecatedAuthority,
     ecvInvalidSignature,
-    ecvRevoked);
+    ecvRevoked,
+    ecvWrongUsage);
 
   /// the certification information of a TEccCertificate
   // - as stored in TEccCertificateContent.Head.Signed
@@ -484,7 +485,8 @@ type
     ecdNoPrivateKey,
     ecdInvalidMAC,
     ecdDecryptError,
-    ecdWriteFileError);
+    ecdWriteFileError,
+    ecdUnsupported);
 
 const
   /// TEccValidity results indicating a valid digital signature

@@ -781,14 +781,18 @@ type
   protected
     fItems: TEccCertificateObjArray;
     fCrl: TEccCertificateRevocationDynArray;
+    fMaxVersion: byte;
     fIsValidCached: boolean;
     fIsValidCacheCount: integer;
     fIsValidCache: THash128DynArray; // valid TEccCertificateContent.ComputeCrc128
     function GetCount: integer;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure LockedClear;
     function InternalAdd(cert: TEccCertificate; expected: TEccValidity): PtrInt;
     procedure SetIsValidCached(const Value: boolean);
   public
+    /// initialize a blank certificate store
+    constructor Create; override;
     /// initialize the certificate store from some JSON array of strings
     // - the serialization format is just a JSON array of Base64 encoded
     // certificates (with only public keys) - so diverse from CreateFromFile()
@@ -812,11 +816,12 @@ type
     function GetBySerial(const Serial: TEccCertificateID): TEccCertificate; overload;
     /// search for a certificate public key from its binary identifier
     // - returns ecvValidSigned/ecvValidSelfSigned if the Serial identifier
-    // was found and not deprecated/revoked
-    // - returns ecvUnknownAuthority/ecvDeprecatedAuthority/ecvRevoked otherwise
+    // was found and not deprecated/revoked, for the proper Usage
+    // - returns ecvUnknownAuthority/ecvDeprecatedAuthority/ecvRevoked/ecvWrongUsage
+    // otherwise
     // - this method is thread-safe, since it makes a private copy of the key
-    function GetKeyBySerial(const Serial: TEccCertificateID;
-      out PublicKey: TEccPublicKey; valid: TEccValidity = ecvUnknown): TEccValidity;
+    function GetKeyBySerial(const Serial: TEccCertificateID; Usage: TCryptCertUsages;
+      out PublicKey: TEccPublicKey; Valid: TEccValidity = ecvUnknown): TEccValidity;
     /// quickly check if a given certificate ID is part of the CRL
     // - will check the internal Certificate Revocation List and the current date
     // - returns crrNotRevoked is the serial is not known as part of the CRL
@@ -828,9 +833,11 @@ type
     // - returns the reason why this certificate has been revoked otherwise
     function IsRevoked(const Serial: TEccCertificateID): TCryptCertRevocationReason; overload;
     /// add a new Serial number to the internal Certificate Revocation List
+    // - you can set Reason as crrNotRevoked to remove a previous revocation
     function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; overload;
     /// add a new Serial number to the internal Certificate Revocation List
+    // - you can set Reason as crrNotRevoked to remove a previous revocation
     function Revoke(const Serial: TEccCertificateID; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; overload;
     /// check if the certificate is valid, against known certificates chain
@@ -848,7 +855,7 @@ type
     // - consider setting IsValidCached property to TRUE to reduce resource use
     // - this method is thread-safe, and not blocking
     function IsValidRaw(const content: TEccCertificateContent;
-      ignoreDate: boolean = false): TEccValidity;
+      ignoreDate: boolean = false; allowSelfSigned: boolean = false): TEccValidity;
     /// check all stored certificates and their authorization chain
     // - returns nil if all items were valid
     // - returns the list of any invalid instances
@@ -929,16 +936,18 @@ type
       Data: pointer; Len: integer): TEccValidity; overload;
     /// register a certificate in the internal certificate chain
     // - returns the index of the newly inserted certificate
-    // - returns -1 on error, e.g. if the certificate was not valid, or its
-    // serial was already part of the internal list
+    // - returns -1 on error, e.g. if the certificate was not valid, if it has
+    // no cuCA/cuDigitalSignature in its Usage, or its serial was already part
+    // of the internal list
     // - any self-signed certificate will be rejected: use AddSelfSigned() instead
     // - this method is thread-safe
     function Add(cert: TEccCertificate): PtrInt;
     /// register a self-signed certificate in the internal certificate chain
     // - a self-signed certificate will have its AuthoritySerial/AuthorityIssuer
     // fields matching Serial/Issuer, and should be used as "root" certificates
-    // - returns -1 on error, e.g. if the certificate was not valid,
-    // not self-signed or its serial was already part of the internal list
+    // - returns -1 on error, e.g. if the certificate was not valid, if it has
+    // no cuCA/cuDigitalSignature in its Usage, or its serial was already part
+    // of the internal list
     // - this method is thread-safe
     function AddSelfSigned(cert: TEccCertificate): PtrInt;
     /// save the whole certificates chain as an array of Base64 encoded content
@@ -1027,6 +1036,10 @@ type
     /// how many certificates are currently stored in the certificates chain
     property Count: integer
       read GetCount;
+    /// the maximum storage version allowed for this Certificate
+    // - is 2 by default, but could be set e.g. to 1 for backward compatibility
+    property MaxVersion: byte
+      read fMaxVersion write fMaxVersion;
     /// if the IsValid() calls should maintain a cache of all valid certificates
     // - will use a naive but very efficient crc64c hashing of previous contents
     // - since ecdsa_verify() is very demanding, such a cache may have a huge
@@ -2117,6 +2130,8 @@ function TEccCertificate.Verify(const hash: THash256;
 begin
   if self = nil then
     result := ecvUnknownAuthority
+  else if not (cuDigitalSignature in GetUsage) then
+    result := ecvNotSupported
   else
     result := Signature.Verify(hash, fContent);
 end;
@@ -2141,6 +2156,9 @@ begin
     exit;
   if not CheckCRC then
     raise EECCException.CreateUtf8('%.Encrypt: no public key', [self]);
+  if not (cuEncipherOnly in GetUsage) then
+    raise EECCException.CreateUtf8(
+      '%.Encrypt: missing cuEncipherOnly Usage', [self]);
   if Algo = ecaUnknown then // use safest algorithm by default
     if IsContentCompressed(pointer(Plain), length(Plain)) then
       Algo := ecaPBKDF2_HMAC_SHA256_AES256_CFB
@@ -2695,7 +2713,8 @@ var
 begin
   result := '';
   if (self = nil) or
-     IsZero(Hash) then
+     IsZero(Hash) or
+     not (cuDigitalSignature in GetUsage) then
     exit;
   sign := TEccSignatureCertified.CreateNew(self, Hash);
   try
@@ -2749,6 +2768,9 @@ var
   hmac: THash256;
   c: TAesAbstractClass;
 begin
+  result := ecdUnsupported;
+  if not (cuDigitalSignature in GetUsage) then
+    exit;
   result := ecdCorrupted;
   datalen := length(Encrypted) - SizeOf(TEciesHeader);
   if (datalen <= 0) or
@@ -3143,6 +3165,12 @@ end;
 
 { TEccCertificateChain }
 
+constructor TEccCertificateChain.Create;
+begin
+  inherited Create;
+  fMaxVersion := 2;
+end;
+
 constructor TEccCertificateChain.CreateFromJson(const json: RawUtf8);
 begin
   Create;
@@ -3200,16 +3228,18 @@ begin
     fSafe.ReadLock;
     try
       if Hash128Index(pointer(fIsValidCache), fIsValidCacheCount, @crc) >= 0 then
-        exit;
+        exit; // 128-bit lower part of sha-256 is very unlikely to collide
     finally
       fSafe.ReadUnlock;
     end;
   end;
-  if result = ecvValidSelfSigned then
+  if allowSelfSigned and
+     (result = ecvValidSelfSigned) then
     auth := content.Head.Signed.PublicKey
   else
   begin
-    result := GetKeyBySerial(content.Head.Signed.AuthoritySerial, auth, result);
+    result := GetKeyBySerial(content.Head.Signed.AuthoritySerial,
+                [cuCA, cuDigitalSignature], auth, result);
     if not (result in ECC_VALIDSIGN) then
       exit; // ecvUnknownAuthority/ecvDeprecatedAuthority/ecvRevoked
   end;
@@ -3220,7 +3250,7 @@ begin
       fSafe.WriteLock;
       try
         if fIsValidCacheCount > 1024 then
-          fIsValidCacheCount := 0; // time to flush the cache
+          fIsValidCacheCount := 0; // time to flush the cache once reached 16KB
         AddHash128(fIsValidCache, crc.b, fIsValidCacheCount);
       finally
         fSafe.WriteUnlock;
@@ -3256,7 +3286,7 @@ begin
          (ser.i2 = i2) and
          (ser.i3 = i3) and
       {$endif CPU64}
-        (p^.Date < now) then
+        (p^.Date <= now) then
       begin
         result := TCryptCertRevocationReason(p^.Reason);
         exit;
@@ -3290,26 +3320,50 @@ var
   id: TEccCertificateID;
 begin
   result := EccID(Serial, id) and
-            Revoke(Serial, RevocationDate, Reason);
+            Revoke(id, RevocationDate, Reason);
 end;
 
 function TEccCertificateChain.Revoke(const Serial: TEccCertificateID;
   RevocationDate: TDateTime; Reason: TCryptCertRevocationReason): boolean;
 var
-  i: PtrInt;
+  n, i: PtrInt;
+  c: PEccCertificateRevocation;
 begin
   result := false;
+  if (RevocationDate = 0) and
+     (Reason <> crrNotRevoked) then
+    RevocationDate := NowUtc;
   if (self = nil) or
-     (RevocationDate = 0) or
-     (Reason = crrNotRevoked) or
+     (RevocationDate < 0) or
      IsZero(Serial) then
     exit;
   fSafe.WriteLock;
   try
-    i := length(fCrl);
-    SetLength(fCrl, i + 1);
-    if not fCrl[i].From(Serial, RevocationDate, ord(Reason)) then
-      SetLength(fCrl, i);
+    n := length(fCrl);
+    if Reason = crrNotRevoked then
+    begin
+      c := pointer(fCrl);
+      dec(n);
+      for i := 0 to n do
+        if IsEqual(c^.Serial, Serial) then
+        begin
+          if n > i then
+            MoveFast(fCrl[i + 1], fCrl[i], (n - i) * SizeOf(fCrl[i]));
+          SetLength(fCrl, n);
+          result := true;
+          break;
+        end
+        else
+          inc(c);
+    end
+    else
+    begin
+      SetLength(fCrl, n + 1);
+      if fCrl[n].From(Serial, RevocationDate, ord(Reason)) then
+        result := true
+      else
+        SetLength(fCrl, n);
+    end;
   finally
     fSafe.WriteUnLock;
   end;
@@ -3359,7 +3413,7 @@ begin
 end;
 
 function TEccCertificateChain.GetKeyBySerial(const Serial: TEccCertificateID;
-  out PublicKey: TEccPublicKey; valid: TEccValidity): TEccValidity;
+  Usage: TCryptCertUsages; out PublicKey: TEccPublicKey; Valid: TEccValidity): TEccValidity;
 var
   cert: TEccCertificate;
   now: TEccDate;
@@ -3369,6 +3423,8 @@ begin
     cert := FindBySerial(pointer(fItems), length(fItems), @Serial);
     if cert = nil then
       result := ecvUnknownAuthority
+    else if Usage * cert.GetUsage = [] then
+      result := ecvWrongUsage
     else if not cert.fContent.CheckDate(@now) then
       result := ecvDeprecatedAuthority
     else if (fCrl <> nil) and
@@ -3412,7 +3468,9 @@ begin
   result := -1;
   if (self = nil) or
      (cert = nil) or
-     (IsValidRaw(cert.fContent, true) <> expected) then
+     (cert.GetUsage * [cuCA, cuDigitalSignature] = []) or
+     (IsValidRaw(cert.fContent, {igndate=}true,
+                 {allowself=}expected = ecvValidSelfSigned) <> expected) then
     exit;
   fSafe.WriteLock;
   try
@@ -3582,12 +3640,7 @@ begin
     result := ecvBadParameter
   else
   begin
-    fSafe.ReadLock; // non blocking lock
-    try
-      result := GetKeyBySerial(sign.AuthoritySerial, authkey);
-    finally
-      fSafe.ReadUnLock;
-    end;
+    result := GetKeyBySerial(sign.AuthoritySerial, [cuDigitalSignature], authkey);
     if result in ECC_VALIDSIGN then
       result := sign.Verify(hash, authkey, result);
   end;
@@ -3696,8 +3749,11 @@ begin
       exit;
     SetLength(fItems, n);
     for i := 0 to n - 1 do
+    begin
+      fItems[i] := TEccCertificate.CreateVersion(fMaxVersion);
       if not fItems[i].LoadFromStream(st) then
         exit;
+    end;
     if st.Read(n, 2) <> 2 then
       exit;
     SetLength(fCrl, n);
@@ -3739,7 +3795,7 @@ begin
         else
         begin
           // regular TEccCertificate entry
-          fItems[i] := TEccCertificate.Create;
+          fItems[i] := TEccCertificate.CreateVersion(fMaxVersion);
           if not fItems[i].FromBase64(values[i]) then
             exit;
           inc(n);
@@ -3789,7 +3845,7 @@ begin
   Create;
   for i := 0 to high(files) do
   begin
-    auth := TEccCertificate.Create;
+    auth := TEccCertificate.CreateVersion(fMaxVersion);
     try
       if auth.FromFile(files[i]) then
       begin

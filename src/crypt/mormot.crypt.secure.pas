@@ -1515,8 +1515,8 @@ function CertAlgo(const name: RawUtf8): TCryptCertAlgo;
 function Cert(const name: RawUtf8): ICryptCert;
 
 /// main resolver for Certificates Store engines
-// - mormot.crypt.ecc.pas defines 'syn-store' for our TEccCertificateChain
-//  proprietary format (safe and efficient)
+// - mormot.crypt.ecc.pas defines 'syn-store' or 'syn-store-nocache" for our
+// TEccCertificateChain proprietary format (safe and efficient)
 // - mormot.crypt.openssl.pas will define 'x509-store'
 // - the shared TCryptStoreAlgo of this algorithm is returned: caller should
 // NOT free it
