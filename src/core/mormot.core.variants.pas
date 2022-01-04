@@ -2390,7 +2390,11 @@ function ObjectToVariantDebug(Value: TObject;
 
 /// get the enumeration names corresponding to a set value, as a JSON array
 function SetNameToVariant(Value: cardinal; Info: TRttiCustom;
-  FullSetsAsStar: boolean = false): variant;
+  FullSetsAsStar: boolean = false): variant; overload;
+
+/// get the enumeration names corresponding to a set value, as a JSON array
+function SetNameToVariant(Value: cardinal; Info: PRttiInfo;
+  FullSetsAsStar: boolean = false): variant; overload;
 
 /// fill a class instance from a TDocVariant object document properties
 // - returns FALSE if the variant is not a dvObject, TRUE otherwise
@@ -4382,7 +4386,7 @@ begin
   else
     with Info.Cache do
     begin
-      PS := @EnumList;
+      PS := EnumList;
       for bit := EnumMin to EnumMax do
       begin
         if GetBitPtr(@Value, bit) then
@@ -4391,6 +4395,12 @@ begin
       end;
     end;
   result := variant(arr);
+end;
+
+function SetNameToVariant(Value: cardinal; Info: PRttiInfo;
+  FullSetsAsStar: boolean): variant;
+begin
+  result := SetNameToVariant(Value, Rtti.RegisterType(Info), FullSetsAsStar);
 end;
 
 function DocVariantToObject(var doc: TDocVariantData; obj: TObject;

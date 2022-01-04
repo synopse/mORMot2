@@ -31,8 +31,8 @@ var
   len: PtrInt;
 begin
   // identical to FPC RTL, which converts to UnicodeString before Wide API call 
-  U := SynUnicode(FileName); // let the RTL + WinAPI do the conversion
-  len := length(U) * 2 + 2;  // include trailing #0
+  U := SynUnicode(FileName); // let the RTL + OS do the conversion
+  len := length(U) * 2 + 2;  // +2 to include trailing #0
   if len > SizeOf(Temp) then
     Temp[0] := #0 // avoid buffer overflow (will be rejected by Windows anyway)
   else
