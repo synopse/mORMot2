@@ -1223,7 +1223,8 @@ type
     cvUnknownAuthority,
     cvDeprecatedAuthority,
     cvInvalidSignature,
-    cvRevoked);
+    cvRevoked,
+    cvWrongUsage);
 
   TCryptCert = class;
 
@@ -1272,6 +1273,13 @@ type
     // left to '' then only the generated public key will be serialized
     // - FromBinary() could be used to unserialize the Certificate
     function ToBinary(const PrivatePassword: RawUtf8 = ''): RawByteString;
+    /// compute a digital signature of some digital content
+    // - memory buffer will be hashed then signed using the private secret key
+    // of this certificate instance
+    // - you could later on verify this text signature according to the public
+    // key of this certificate, using ICertStore.Verify()
+    // - returns '' on failure, e.g. if this Certificate has no private key
+    function Sign(Data: pointer; Len: integer): RawUtf8;
     /// returns true if the Certificate contains a private key secret
     function HasPrivateSecret: boolean;
     /// compare two Certificates, which should share the same algorithm
@@ -1307,6 +1315,7 @@ type
     function ToBinary(const PrivatePassword: RawUtf8): RawByteString; virtual; abstract;
     function HasPrivateSecret: boolean; virtual; abstract;
     function IsEqual(const another: ICryptCert): boolean; virtual; abstract;
+    function Sign(Data: pointer; Len: integer): RawUtf8; virtual; abstract;
     function Instance: TCryptCert;
   end;
 
@@ -1318,6 +1327,11 @@ type
   public
     /// main factory to create a new Certificate instance with this algorithm
     function New: ICryptCert; virtual; abstract;
+    /// factory to generate a new Certificate instance
+    // - just a wrapper around New and ICryptCert.Generate()
+    function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
+      const Authority: ICryptCert = nil; ExpireDays: integer = 365;
+      ValidDays: integer = -1): ICryptCert;
   end;
 
   /// abstract interface to a Certificates Store, as returned by Store() factory
@@ -1337,6 +1351,7 @@ type
     // - returns false e.g. if the certificate was not valid, or its
     // serial was already part of the internal list
     // - self-signed certificate could be included - but add them with caution
+    // - the Certificate should have one of cuCA, cuDigitalSignature usages
     function Add(const cert: ICryptCert): boolean;
     /// add a new Serial number to the internal Certificate Revocation List
     function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
@@ -1346,6 +1361,17 @@ type
     // and validate the stored digital signature according to the public key of
     // the associated signing authority, as found within the store
     function IsValid(const cert: ICryptCert): TCryptCertValidity;
+    /// verify the digital signature of a given memory buffer
+    // - this signature should have come from a previous ICryptCert.Sign() call
+    // - will check internal properties of the certificate (e.g. validity dates),
+    // and validate the stored signature according to the public key of
+    // the associated signing authority (which should be in this Store)
+    function Verify(const Signature: RawUtf8;
+      Data: pointer; Len: integer): TCryptCertValidity;
+    /// how many certificates are currently stored
+    function Count: integer;
+    /// call e.g. CertAlgo.New to prepare a new ICryptCert to add to this store
+    function CertAlgo: TCryptCertAlgo;
   end;
 
   /// abstract parent class to implement ICryptCert, as returned by Cert() factory
@@ -1360,6 +1386,10 @@ type
     function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; virtual; abstract;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; virtual; abstract;
+    function Verify(const Signature: RawUtf8;
+      Data: pointer; Len: integer): TCryptCertValidity; virtual; abstract;
+    function Count: integer; virtual; abstract;
+    function CertAlgo: TCryptCertAlgo; virtual; abstract;
   end;
 
   /// meta-class of the abstract parent to implement ICryptStore interface
@@ -1370,6 +1400,8 @@ type
   public
     /// main factory to create a new Store instance with this engine
     function New: ICryptStore; virtual; abstract;
+    /// main factory to create a new Store instance from saved Binary
+    function NewFrom(const Binary: RawByteString): ICryptStore;
   end;
 
 const
@@ -4044,6 +4076,17 @@ begin
 end;
 
 
+{ TCryptCertAlgo }
+
+function TCryptCertAlgo.Generate(Usages: TCryptCertUsages;
+  const Subjects: RawUtf8; const Authority: ICryptCert;
+  ExpireDays, ValidDays: integer): ICryptCert;
+begin
+  result := New;
+  result.Generate(Usages, Subjects, Authority, ExpireDays, ValidDays);
+end;
+
+
 { TCryptCert }
 
 procedure TCryptCert.RaiseVoid(Instance: pointer; const Msg: shortstring);
@@ -4070,6 +4113,17 @@ function TCryptCert.Instance: TCryptCert;
 begin
   result := self;
 end;
+
+
+{ TCryptStoreAlgo }
+
+function TCryptStoreAlgo.NewFrom(const Binary: RawByteString): ICryptStore;
+begin
+  result := New;
+  if not result.FromBinary(Binary) then
+    result := nil;
+end;
+
 
 
 function ToText(r: TCryptCertRevocationReason): PShortString;

@@ -2005,8 +2005,7 @@ function IsEqual(const A, B: THash128): boolean; overload;
 procedure FillZero(out dig: THash128); overload;
 
 /// fast O(n) search of a 128-bit item in an array of such values
-function Hash128Index(P: PHash128Rec; Count: integer;
-  h: PHash128Rec): integer;
+function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
 
 /// add a 128-bit item in an array of such values
 function AddHash128(var Arr: THash128DynArray; const V: THash128; var Count: integer): PtrInt;
