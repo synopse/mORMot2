@@ -3201,7 +3201,7 @@ begin
 end;
 
 function TEccCertificateChain.IsValidRaw(const content: TEccCertificateContent;
-  ignoreDate: boolean): TEccValidity;
+  ignoreDate, allowSelfSigned: boolean): TEccValidity;
 var
   auth: TEccPublicKey;
   hash: THash256Rec;
@@ -4757,6 +4757,7 @@ type
     function ToBinary(const PrivatePassword: RawUtf8): RawByteString; override;
     function HasPrivateSecret: boolean; override;
     function IsEqual(const another: ICryptCert): boolean; override;
+    function Sign(Data: pointer; Len: integer): RawUtf8; override;
     /// low-level access to internal TEccCertificate or TEccCertificateSecret
     property Ecc: TEccCertificate
       read fEcc;
@@ -4787,14 +4788,15 @@ end;
 { TCryptCertInternal }
 
 var
-  CryptCertInternal: TCryptCertAlgo;
+  CryptCertInternal: TCryptCertAlgoInternal;
 
 constructor TCryptCertInternal.CreateFrom(aEcc: TEccCertificate);
 begin
   fEcc := aEcc;
   fEccByRef := true;
+  fMaxVersion := CryptCertInternal.fMaxVersion;
   if CryptCertInternal = nil then
-    CryptCertInternal := CertAlgo('syn-es256');
+    CryptCertInternal := CertAlgo('syn-es256') as TCryptCertAlgoInternal;
   Create(CryptCertInternal);
 end;
 
@@ -4967,6 +4969,14 @@ begin
     result := fEcc.IsEqual(TCryptCertInternal(a).fEcc);
 end;
 
+function TCryptCertInternal.Sign(Data: pointer; Len: integer): RawUtf8;
+begin
+  if HasPrivateSecret then
+    result := TEccCertificateSecret(fEcc).SignToBase64(Data, Len)
+  else
+    result := '';
+end;
+
 
 type
   /// 'syn-store' ICryptStore algorithm
@@ -4991,6 +5001,10 @@ type
     function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; override;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; override;
+    function Verify(const Signature: RawUtf8;
+      Data: pointer; Len: integer): TCryptCertValidity; override;
+    function Count: integer; override;
+    function CertAlgo: TCryptCertAlgo; override;
   end;
 
 
@@ -5040,7 +5054,7 @@ var
   a: TCryptCertInternal;
 begin
   result := false;
-  if cert <> nil then
+  if cert <> nil  then
   begin
     a := cert.Instance as TCryptCertInternal;
     if a.fEcc.IsSelfSigned then
@@ -5063,15 +5077,40 @@ begin
     result := cvBadParameter
   else
     result := TCryptCertValidity(fEcc.IsValid(
-      (cert.Instance as TCryptCertInternal).fEcc));
+                (cert.Instance as TCryptCertInternal).fEcc));
+end;
+
+function TCryptStoreInternal.Verify(const Signature: RawUtf8; Data: pointer;
+  Len: integer): TCryptCertValidity;
+begin
+  result := TCryptCertValidity(fEcc.IsSigned(Signature, Data, Len));
+end;
+
+function TCryptStoreInternal.Count: integer;
+begin
+  result := length(fEcc.fItems);
+end;
+
+var
+  CryptCertAlgoInternal: TCryptCertAlgo;
+
+function TCryptStoreInternal.CertAlgo: TCryptCertAlgo;
+begin
+  if CryptCertAlgoInternal = nil then
+    CryptCertAlgoInternal := mormot.crypt.secure.CertAlgo('syn-es256');
+  result := CryptCertAlgoInternal;
 end;
 
 
 { TCryptStoreAlgoInternal }
 
 function TCryptStoreAlgoInternal.New: ICryptStore;
+var
+  a: TCryptStoreInternal;
 begin
-  result := TCryptStoreInternal.Create(self);
+  a := TCryptStoreInternal.Create(self);
+  a.fEcc.IsValidCached := AlgoName <> 'syn-store-nocache';
+  result := a;
 end;
 
 
@@ -5087,7 +5126,7 @@ initialization
   assert(ord(cvRevoked) = ord(ecvRevoked));
   TCryptAsymInternal.Implements('ES256,secp256r1,NISTP-256,prime256v1');
   TCryptCertAlgoInternal.Implements('syn-es256,syn-es256-v1');
-  TCryptStoreAlgoInternal.Implements('syn-store');
+  TCryptStoreAlgoInternal.Implements('syn-store,syn-store-nocache');
 
 end.
 
