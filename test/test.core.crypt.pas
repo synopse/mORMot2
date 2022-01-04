@@ -2007,6 +2007,8 @@ var
   en, de: ICryptCipher;
   crt: TCryptCertAlgo;
   c1, c2, c3: ICryptCert;
+  str: TCryptStoreAlgo;
+  st1, st2, st3: ICryptStore;
   alg: TCryptAlgos;
 begin
   // validate AesAlgoNameEncode / TAesMode
@@ -2193,6 +2195,78 @@ begin
     CheckSame(c3.GetNotBefore, c1.GetNotBefore);
     CheckEqual(word(c3.GetUsage), word(c1.GetUsage));
     CheckEqual(c3.GetPeerInfo, c1.GetPeerInfo);
+  end;
+  // validate Store High-Level Algorithms Factory
+  r := RandomAnsi7(100);
+  alg := TCryptStoreAlgo.Instances;
+  for a := 0 to high(alg) do
+  begin
+    str := alg[a] as TCryptStoreAlgo;
+    st1 := str.New;
+    CheckEqual(st1.Count, 0);
+    // set c1 as self-signed root certificate (in v1 format)
+    c1 := st1.CertAlgo.Generate([cuCA]);
+    Check(st1.IsValid(c1) = cvUnknownAuthority);
+    Check(st1.Add(c1));
+    CheckEqual(st1.Count, 1);
+    Check(st1.IsValid(c1) = cvValidSelfSigned);
+    Check(c1.HasPrivateSecret, 'priv1');
+    CheckEqual(c1.Sign(pointer(r), length(r)), '');
+    // set c2 as itermediate CA, signed by c1 root CA
+    c2 := nil;
+    Check(not st1.Add(c2), 'no priv');
+    CheckEqual(st1.Count, 1);
+    c2 := st1.CertAlgo.New;
+    Check(c3.Instance.ClassType = c1.Instance.ClassType);
+    c2.Generate([cuCA], '', c1);
+    Check(c2.GetUsage = [cuCA]);
+    Check(cuCA in c2.GetUsage);
+    Check(not (cuDigitalSignature in c2.GetUsage));
+    Check(c2.HasPrivateSecret, 'priv2');
+    Check(st1.IsValid(c2) = cvValidSigned, 'c2');
+    Check(st1.Add(c2));
+    CheckEqual(st1.Count, 2);
+    Check(st1.IsValid(c2) = cvValidSigned, 'c2');
+    CheckEqual(c2.Sign(pointer(r), length(r)), '', 'no cuDigitalSignature');
+    // set c3 as signing authority
+    c3 := st1.CertAlgo.New;
+    c3.Generate([cuDigitalSignature], '', c2);
+    Check(c3.Instance.ClassType = c1.Instance.ClassType);
+    CheckEqual(c3.Instance.CryptAlgo.AlgoName, c2.Instance.CryptAlgo.AlgoName);
+    Check(c3.HasPrivateSecret, 'priv3');
+    Check(st1.IsValid(c3) = cvValidSigned, 'c3');
+    Check(st1.Add(c3));
+    // sign
+    s := c3.Sign(pointer(r), length(r));
+    Check(s <> '', 'sign');
+    Check(st1.Verify(s, pointer(r), length(r)) = cvValidSigned, 's1');
+    // persist the Store
+    st2 := str.NewFrom(st1.ToBinary);
+    CheckEqual(st2.Count, 3);
+    Check(st2 <> nil);
+    Check(st2.IsValid(c1) = cvValidSelfSigned, '2c1');
+    Check(st2.IsValid(c2) = cvValidSigned, '2c2');
+    Check(st2.IsValid(c3) = cvValidSigned, '2c3');
+    Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2a');
+    dec(r[1]);
+    Check(st2.Verify(s, pointer(r), length(r)) = cvInvalidSignature, 's2b');
+    inc(r[1]);
+    Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2c');
+    // validate CRL
+    Check(st2.Revoke(c3.GetSerial, 0, crrWithdrawn));
+    Check(st2.Verify(s, pointer(r), length(r)) = cvRevoked, 's2d');
+    Check(st2.Revoke(c3.GetSerial, 0, crrNotRevoked));
+    Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2e');
+    // ensure new certs are not recognized by previous stores
+    if st3 <> nil then
+    begin
+      CheckEqual(st3.Count, 3);
+      Check(st3.IsValid(c1) = cvUnknownAuthority, '3c1');
+      Check(st3.IsValid(c2) = cvUnknownAuthority, '3c2');
+      Check(st3.IsValid(c3) = cvUnknownAuthority, '3c3');
+      Check(st3.Verify(s, pointer(r), length(r)) = cvUnknownAuthority, 's3');
+    end;
+    st3 := st2;
   end;
 end;
 
