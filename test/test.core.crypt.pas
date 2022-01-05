@@ -2172,7 +2172,7 @@ begin
     check(c2.FromBinary(c1.ToBinary));
     Check(not c2.HasPrivateSecret, 'nopwd=pubonly');
     Check(c1.IsEqual(c2));
-    CheckEqual(c1.GetSerial, c1.GetSerial);
+    CheckEqual(c2.GetSerial, c1.GetSerial);
     CheckEqual(c2.GetSubject, c1.GetSubject);
     CheckEqual(c2.GetIssuerName, c1.GetIssuerName);
     CheckEqual(c2.GetIssuerSerial, c1.GetIssuerSerial);
@@ -2187,7 +2187,7 @@ begin
     Check(c3.HasPrivateSecret, 'pwd=priv');
     Check(c3.IsEqual(c1));
     Check(c3.IsEqual(c2));
-    CheckEqual(c1.GetSerial, c1.GetSerial);
+    CheckEqual(c3.GetSerial, c1.GetSerial);
     CheckEqual(c3.GetSubject, c1.GetSubject);
     CheckEqual(c3.GetIssuerName, c1.GetIssuerName);
     CheckEqual(c3.GetIssuerSerial, c1.GetIssuerSerial);
@@ -2217,7 +2217,7 @@ begin
     Check(not st1.Add(c2), 'no priv');
     CheckEqual(st1.Count, 1);
     c2 := st1.CertAlgo.New;
-    Check(c3.Instance.ClassType = c1.Instance.ClassType);
+    Check(c2.Instance.ClassType = c1.Instance.ClassType);
     c2.Generate([cuCA], '', c1);
     Check(c2.GetUsage = [cuCA]);
     Check(cuCA in c2.GetUsage);
@@ -2293,8 +2293,8 @@ begin
   for i := 0 to high(cook) do
     CheckEqual(gen.Validate(cook[i]), cookid[i], 'gen1');
   for i := 0 to high(cook) shr 4 do
-    CheckEqual(gen.Validate(ParseTrailingJwt('/uri/' + cook[i] + '  ',
-      {nodot=}true)), cookid[i], 'gen2');
+    CheckEqual(gen.Validate(ParseTrailingJwt(
+      '/uri/' + cook[i] + '  ', {nodot=}true)), cookid[i], 'gen2');
   bak := gen.Save;
   gen.Init;
   for i := 0 to high(cook) do

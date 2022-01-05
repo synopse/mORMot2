@@ -304,8 +304,8 @@ var
 begin
   List := TStringList.Create;
   try
-    (MainConnection as TSqlDBFireDACConnection).fDatabase.GetTableNames('', '',
-      '', List, [osMy], [tkTable]);
+    (MainConnection as TSqlDBFireDACConnection).fDatabase.GetTableNames(
+      '', '', '', List, [osMy], [tkTable]);
     StringListToRawUtf8DynArray(List, Tables);
     exit;
   finally
