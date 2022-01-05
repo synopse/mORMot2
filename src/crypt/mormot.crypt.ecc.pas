@@ -2034,18 +2034,20 @@ end;
 
 function TEccCertificate.FromFile(const filename: TFileName): boolean;
 var
-  json: RawUtf8;
+  content: RawUtf8;
   fn: TFileName;
 begin
   if ExtractFileExt(filename) = '' then
     fn := filename + ECCCERTIFICATEPUBLIC_FILEEXT
   else
     fn := filename;
-  json := StringFromFile(fn);
-  if json = '' then
+  content := StringFromFile(fn);
+  if content = '' then
     result := false
+  else if GotoNextNotSpace(pointer(content))^ = '{' then
+    result := FromBase64(JsonDecode(content, 'Base64', nil, true))
   else
-    result := FromBase64(JsonDecode(json, 'Base64', nil, true));
+    result := LoadFromBinary(content);
 end;
 
 function TEccCertificate.FromAuth(const AuthPubKey: TFileName;
@@ -3712,6 +3714,7 @@ const
 function TEccCertificateChain.SaveToBinary: RawByteString;
 var
   i, n: PtrInt;
+  c: TEccCertificate;
   st: TRawByteStringStream;
 begin
   st := TRawByteStringStream.Create;
@@ -3728,9 +3731,10 @@ begin
       st.WriteBuffer(n, 2);
       for i := 0 to n - 1 do
       begin
-        fItems[i].fStoreOnlyPublicKey := true; // for safety
-        fItems[i].SaveToStream(st);
-        fItems[i].fStoreOnlyPublicKey := false;
+        c := fItems[i];
+        c.fStoreOnlyPublicKey := true; // for safety
+        c.SaveToStream(st);
+        c.fStoreOnlyPublicKey := false;
       end;
       // then the revocation serials
       n := length(fCrl);
