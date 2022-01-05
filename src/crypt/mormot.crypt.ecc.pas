@@ -5136,7 +5136,10 @@ begin
 end;
 
 
-initialization
+procedure InitializeUnit;
+var
+  a: TCryptCertUsages;
+begin
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(TypeInfo(TEccCertificateObjArray), TEccCertificate);
   {$endif HASDYNARRAYTYPE}
@@ -5144,12 +5147,18 @@ initialization
   assert(SizeOf(TEciesHeader) = 228);
   assert(SizeOf(TEcdheFrameClient) = 290);
   assert(SizeOf(TEcdheFrameServer) = 306);
-  assert(ECCV1_USAGE_ALL = word(CERTIFICATE_USAGE_ALL));
+  a := CERTIFICATE_USAGE_ALL;
+  assert(word(a) = ECCV1_USAGE_ALL);
   assert(ord(High(TCryptCertValidity)) = ord(High(TEccValidity)));
   assert(ord(cvRevoked) = ord(ecvRevoked));
   TCryptAsymInternal.Implements('ES256,secp256r1,NISTP-256,prime256v1');
   TCryptCertAlgoInternal.Implements('syn-es256,syn-es256-v1');
   TCryptStoreAlgoInternal.Implements('syn-store,syn-store-nocache');
+end;
+
+
+initialization
+  InitializeUnit;
 
 end.
 
