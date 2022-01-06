@@ -216,7 +216,7 @@ begin
   aName := Sha256DigestToString(dig);
   result := Hash256Index(pointer(fPrepared), fPreparedCount, @dig);
   if result >= 0 then
-    exit; // already prepared
+    exit; // already prepared -> we will just give the statement name to PQ
   PQ.Check(fPGConn,
     PQ.Prepare(fPGConn, pointer(aName), pointer(aSql), aParamCount, nil));
   result := fPreparedCount;
@@ -272,6 +272,7 @@ begin
       HexToBinFast(P + 2, PByte(P), result); // in-place conversion
   end
   else
+    // oldest PostgreSQL versions may stil use octal encoding (unlikely)
     result := OctToBin(P, pointer(P)); // in-place conversion
 end;
 
@@ -328,6 +329,10 @@ begin
   try
     inherited Disconnect;
   finally
+    // any prepared statements will be released with this connection
+    fPrepared := nil;
+    fPreparedCount := 0;
+    // let PG driver finish the connection
     if fPGConn <> nil then
     begin
       PQ.Finish(fPGConn);
@@ -425,7 +430,8 @@ begin
   MapOid(REGPROCOID, ftInt64);
   MapOid(OIDOID, ftInt64);
   MapOid(FLOAT4OID, ftDouble);
-end; // any unregistered OID will be handled as ftUtf8
+  // note: any other unregistered OID will be handled as ftUtf8 to keep the data
+end;
 
 constructor TSqlDBPostgresConnectionProperties.Create(
   const aServerName, aDatabaseName, aUserID, aPassword: RawUtf8);
@@ -550,7 +556,7 @@ begin
   if (fPreparedParamsCount > 0) and
      (IdemPPChar(pointer(fSqlPrepared), @PREP_SQL) >= 0) then
   begin
-    // preparable statement
+    // preparable statement will be cached by Sha256(SQL) name on server side
     fCacheIndex := TSqlDBPostgresConnection(fConnection).PrepareCached(
       fSqlPrepared, fPreparedParamsCount, fPreparedStmtName);
     SqlLogEnd(' name=% cache=%', [fPreparedStmtName, fCacheIndex]);
