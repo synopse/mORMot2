@@ -7243,11 +7243,24 @@ var
 begin
   fConnectionPool.Safe.WriteLock;
   try
-    // mark all connections as deprecated - Delete() will be done later on
-    if fMainConnection <> nil then
-      fMainConnection.fLastAccessTicks := -1; // force IsOutdated to return true
-    for i := 0 to fConnectionPool.Count - 1 do
-      TSqlDBConnectionThreadSafe(fConnectionPool.List[i]).fLastAccessTicks := -1;
+    if fDeleteConnectionInOwnThread then
+    begin
+      // mark all connections as deprecated - Delete() will be done later on, in
+      // the proper thread (some providers may require to keep the same thread)
+      if fMainConnection <> nil then
+        fMainConnection.fLastAccessTicks := -1; // force IsOutdated()=true
+      for i := 0 to fConnectionPool.Count - 1 do
+        TSqlDBConnectionThreadSafe(fConnectionPool.List[i]).
+          fLastAccessTicks := -1;
+    end
+    else
+    begin
+      // we can delete all existing connections now
+      fMainConnectionLock.Lock;
+      FreeAndNilSafe(fMainConnection);
+      fMainConnectionLock.UnLock;
+      fConnectionPool.ClearFromLast; // to use FreeAndNilSafe
+    end;
     fLatestConnectionRetrievedInPool := -1;
     fConnectionPoolDeprecatedTix := 0; // trigger ThreadSafeConnection() release
   finally
@@ -7336,26 +7349,27 @@ begin
         if tix <> 0 then
         begin
           tix := GetTickCount64;
-          tix32 := tix shr 14; // search every 16.384 seconds
-          if (not fDeleteConnectionInOwnThread) and
-             (fConnectionPoolDeprecatedTix <> tix32) then
+          if not fDeleteConnectionInOwnThread then
           begin
-            fConnectionPoolDeprecatedTix := tix32;
-            fConnectionPool.Safe.WriteLock;
-            try
-              i := 0;
-              while i < fConnectionPool.Count do
-                if TSqlDBConnectionThreadSafe(fConnectionPool.List[i]).
-                      IsOutdated(tix) then
-                begin
-                  fConnectionPool.Delete(i);
-                  if i = fLatestConnectionRetrievedInPool then
+            tix32 := tix shr 14; // search every 16.384 seconds
+            if fConnectionPoolDeprecatedTix <> tix32 then
+            begin
+              fConnectionPoolDeprecatedTix := tix32;
+              fConnectionPool.Safe.WriteLock;
+              try
+                i := 0;
+                while i < fConnectionPool.Count do
+                  if TSqlDBConnectionThreadSafe(fConnectionPool.List[i]).
+                        IsOutdated(tix) then
+                  begin
+                    fConnectionPool.Delete(i);
                     fLatestConnectionRetrievedInPool := -1;
-                end
-                else
-                  inc(i);
-            finally
-              fConnectionPool.Safe.WriteUnLock;
+                  end
+                  else
+                    inc(i);
+              finally
+                fConnectionPool.Safe.WriteUnLock;
+              end;
             end;
           end;
         end;
@@ -7366,19 +7380,21 @@ begin
         if i >= 0 then
           result := fConnectionPool.List[i];
         fConnectionPool.Safe.ReadUnLock;
+        // is this connection not deprecated?
         if result <> nil then
-          if (tix <> 0) and
-             result.IsOutdated(tix) then
-            // release this deprecated connection
+          if (result.fLastAccessTicks < 0) or // from ClearConnectionPool
+             ((tix <> 0) and
+              result.IsOutdated(tix)) then
+            // make fConnectionPool.Delete to release this old instance
             EndCurrentThread
           else
             // we found a valid connection for this TThreadID
             exit;
         // we need to (re)create a new connection for this thread
         result := NewConnection; // run outside of the lock (even if fast)
+        (result as TSqlDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
         fConnectionPool.Safe.WriteLock;
         try
-          (result as TSqlDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
           fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
         finally
           fConnectionPool.Safe.WriteUnLock;
