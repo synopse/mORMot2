@@ -66,14 +66,14 @@ uses
   {$ifdef OSWINDOWS}
   mormot.db.sql.oledb,
   mormot.db.rad,
-  {$endif}
+  {$endif OSWINDOWS}
   mormot.db.sql.odbc,
   {$ifdef USENEXUSDB}
   mormot.db.rad.nexusdb,
-  {$endif}
+  {$endif USENEXUSDB}
   {$ifdef USEBDE}
   mormot.db.rad.bde,
-  {$endif}
+  {$endif USEBDE}
   {$ifdef USEUNIDAC}
   mormot.db.rad.unidac,
   SQLiteUniProvider,
@@ -83,13 +83,13 @@ uses
   SQLServerUniProvider,
   PostgreSQLUniProvider,
   MySqlUniProvider,
-  {$endif}
+  {$endif USEUNIDAC}
   {$ifdef USEZEOS}
   mormot.db.sql.zeos,
-  {$endif}
+  {$endif USEZEOS}
   {$ifdef USEIBX}
   mormot.db.sql.ibx,
-  {$endif}
+  {$endif USEIBX}
   {$ifdef USEFIREDAC}
   mormot.db.rad.firedac,
   {$ifdef ISDELPHIXE5}
@@ -110,11 +110,14 @@ uses
   uADPhysPG,
   uADPhysDB2,
   uADPhysMySQL,
-  {$endif}
-  {$endif}
+  {$endif ISDELPHIXE5}
+  {$endif USEFIREDAC}
+  {$ifdef USELOCALPOSTGRESQL}
+  mormot.db.sql.postgres,
+  {$endif USELOCALPOSTGRESQL}
   {$ifdef USEMONGODB}
   mormot.db.nosql.mongodb,
-  {$endif}
+  {$endif USEMONGODB}
   mormot.db.core;
 
 type
