@@ -446,6 +446,7 @@ type
     /// delete all objects of the list in reverse order
     // - for some kind of processes, owned objects should be removed from the
     // last added to the first
+    // - will use slower but safer FreeAndNilSafe() instead of plain Free
     procedure ClearFromLast; virtual;
     /// finalize the store items
     destructor Destroy; override;
@@ -3223,7 +3224,7 @@ var
 begin
   if fOwnObjects then
     for i := fCount - 1 downto 0 do // call Free in reverse order
-      TObject(fList[i]).Free;
+      FreeAndNilSafe(fList[i]);     // safer
   inherited Clear;
 end;
 
