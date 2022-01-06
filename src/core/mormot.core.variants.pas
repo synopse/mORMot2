@@ -5089,7 +5089,7 @@ begin
       val := dv^.InitFrom(proto, {values=}false);
       for f := 1 to proto.Count do
       begin
-        P := GotoEndJsonItemString(P); // ignore field names
+        P := GotoEndJsonItemString(P); // ignore field names (assume same order)
         if P = nil then
           break;
         inc(P); // ignore jcEndOfJsonFieldOr0

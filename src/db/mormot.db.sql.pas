@@ -3469,7 +3469,7 @@ begin
   begin
     try
       FreeAndNilSafe(fMainConnection);
-      result := NewConnection; // fast method
+      result := NewConnection; // fast enough method
     except
       result := nil;
     end;

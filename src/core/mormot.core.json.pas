@@ -3226,10 +3226,13 @@ begin
         until false;
         break;
       end
-      else if P^ = #0 then
-        break
       else if P^ <= ' ' then
+      begin
+        if P^ = #0 then
+          break;
+        inc(P);
         continue;
+      end;
       break;
     until false;
   result := nil;
