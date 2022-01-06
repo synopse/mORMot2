@@ -3122,6 +3122,7 @@ label
   _dq;
 begin
   result := '';
+  // fist compute the resulting length
   n := length(Values);
   if n = 0 then
     exit;
@@ -3157,6 +3158,7 @@ begin
     inc(v);
     dec(n);
   until n = 0;
+  // generate the output JSON
   FastSetString(result, nil, L);
   d := pointer(result);
   d^ := '{';
@@ -3168,8 +3170,9 @@ begin
     if vl <> 0 then
     begin
       s := pointer(v^);
-      if s^ = '''' then // quoted ftUtf8
+      if s^ = '''' then
       begin
+        // quoted ftUtf8
         d^ := '"';
         inc(d);
         dec(vl, 2);
@@ -3196,12 +3199,11 @@ _dq:        dec(vl);
         inc(d);
       end
       else
-        repeat // regular content
-          d^ := s^;
-          inc(d);
-          inc(s);
-          dec(vl);
-        until vl = 0;
+      begin
+        // regular content (e.g. numbers)
+        MoveFast(s^, d^, vl);
+        inc(d, vl);
+      end;
     end;
     d^ := ',';
     inc(d);
