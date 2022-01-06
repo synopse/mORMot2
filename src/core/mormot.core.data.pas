@@ -457,7 +457,7 @@ type
       read fItemClass write fItemClass;
     /// flag set if this list will Free its items on Delete/Clear/Destroy
     property OwnObjects: boolean
-      read fOwnObjects;
+      read fOwnObjects write fOwnObjects;
   end;
   PSynObjectList = ^TSynObjectList;
 
