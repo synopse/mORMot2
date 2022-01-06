@@ -455,7 +455,8 @@ var
   i: PtrInt;
 begin
   if cOID <= 65535 then
-  begin // fast brute force search within L1 CPU cache
+  begin
+    // fast brute force search within L1 CPU cache (use SSE2 asm on Intel/AMD)
     i := WordScanIndex(pointer(fOids), fOidsCount, cOID);
     if i >= 0 then
       result := fOidsFieldTypes[i]

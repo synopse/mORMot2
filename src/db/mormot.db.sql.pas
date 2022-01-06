@@ -1982,6 +1982,7 @@ type
       read GetServerDateTime;
     /// this event handler will be called during all process
     // - can be used e.g. to change the desktop cursor
+    // - please let this callback return as quickly as possible
     // - by default, will follow TSqlDBConnectionProperties.OnProcess property
     property OnProcess: TOnSqlDBProcess
       read fOnProcess write fOnProcess;
@@ -3452,19 +3453,27 @@ begin
 end;
 
 function TSqlDBConnectionProperties.GetMainConnection: TSqlDBConnection;
+var
+  tix: Int64;
 begin
+  tix := fConnectionTimeOutTicks;
+  if tix <> 0 then
+    tix := GetTickCount64;
   fMainConnectionLock.Lock;
-  if (fMainConnection = nil) or
-     ((fConnectionTimeOutTicks <> 0) and
-       fMainConnection.IsOutdated(GetTickCount64)) then
+  result := fMainConnection;
+  if (result = nil) or
+     ((tix <> 0) and
+      result.IsOutdated(tix)) then
+  begin
     try
       FreeAndNilSafe(fMainConnection);
-      fMainConnection := NewConnection;
+      result := NewConnection; // fast method
     except
-      fMainConnection := nil;
+      result := nil;
     end;
+    fMainConnection := result;
+  end;
   fMainConnectionLock.UnLock;
-  result := fMainConnection;
 end;
 
 function TSqlDBConnectionProperties.{%H-}NewConnection: TSqlDBConnection;
@@ -7321,7 +7330,8 @@ begin
     tmThreadPool:
       begin
         // first delete any deprecated connection(s) - every 16 seconds
-        if fConnectionTimeOutTicks <> 0 then
+        tix := fConnectionTimeOutTicks;
+        if tix <> 0 then
         begin
           tix := GetTickCount64;
           tix32 := tix shr 14; // search every 16.384 seconds
@@ -7346,9 +7356,7 @@ begin
               fConnectionPool.Safe.WriteUnLock;
             end;
           end;
-        end
-        else
-          tix := 0;
+        end;
         // search for an existing connection
         result := nil;
         fConnectionPool.Safe.ReadLock; // concurrent non blocking search
@@ -7364,10 +7372,10 @@ begin
           else
             // we found a valid connection for this TThreadID
             exit;
-        // we need to (re)create a new connection
+        // we need to (re)create a new connection for this thread
+        result := NewConnection; // run outside of the lock (even if fast)
         fConnectionPool.Safe.WriteLock;
         try
-          result := NewConnection; // no need to release the lock (fast method)
           (result as TSqlDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
           fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
         finally
