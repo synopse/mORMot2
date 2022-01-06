@@ -1224,7 +1224,7 @@ begin
       'Linked version is % whereas the current/expected is ' + EXPECTED_SQLITE3_VERSION +
       '.' + CRLF + CRLF + 'Please download latest SQLite3 ' + EXPECTED_SQLITE3_VERSION +
       ' revision from'+ CRLF + EXPECTED_STATIC_DOWNLOAD,
-      [Executable.ProgramName, fVersionText], error);
+      [Executable.ProgramFileName, fVersionText], error);
     // SQLite3Log.Add.Log() would do nothing: we are in .exe initialization
     DisplayFatalError(' WARNING: deprecated SQLite3 engine', error);
   end;
