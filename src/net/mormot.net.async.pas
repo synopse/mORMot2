@@ -1542,7 +1542,8 @@ begin
       case fProcess of
         atpReadSingle:
           // a single thread to rule them all: polling, reading and processing
-          if fOwner.fClients.fRead.GetOne(1000, n, notif) then
+          if fOwner.fClients.fRead.GetOne(3000000, n, notif) then
+            // 3000000 timeout so that GetOne() would stay in 120-250 ms steps
             if not Terminated then
               fOwner.fClients.ProcessRead(notif);
         atpReadPoll:

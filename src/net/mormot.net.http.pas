@@ -1125,7 +1125,7 @@ begin
     exit;
   if not (hfConnectionClose in HeaderFlags) then
     if not (hfConnectionKeepAlive in HeaderFlags) and
-       (P[7] <> '1')then
+       (P[7] <> '1') then
       include(HeaderFlags, hfConnectionClose);
   ParseHeaderFinalize;
   result := true;
