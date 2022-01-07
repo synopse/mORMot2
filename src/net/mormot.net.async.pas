@@ -1550,8 +1550,6 @@ begin
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
           begin
-            if fOwner.fClients.fRead.Count = 0 then
-              fEvent.WaitFor(INFINITE); // blocking until next accept()
             start := 0; // back to SleepHiRes(0)
             while not Terminated do
             begin
@@ -1559,8 +1557,15 @@ begin
               if Terminated then
                 break
               else if pending = 0 then
-                // 0/1/10/50/150 ms steps, checking fThreadReadPoll from accept
-                SleepStep(start, @Terminated, fEvent)
+                if fOwner.fClients.fRead.Count = 0 then
+                begin
+                  // avoid void PollForPendingEvents/SleepStep loop
+                  fEvent.WaitFor(INFINITE); // blocking until next accept()
+                  start := 0;
+                end
+                else
+                  // 0/1/10/50/150 ms steps, checking fThreadReadPoll from accept
+                  SleepStep(start, @Terminated, fEvent)
               else
               begin
                 // process fOwner.fClients.fPending in atpReadPending threads
@@ -1693,20 +1698,20 @@ begin
          WriteCount, KB(WriteBytes), fConnectionCount]);
     fClients.Terminate(5000);
   end;
-  // unlock and stop ProcessRead/ProcessWrite polling
+  // terminate and unlock background ProcessRead/ProcessWrite polling threads
   for i := 0 to high(fThreads) do
     fThreads[i].Terminate;
-  for i := 0 to high(fThreads) do
-    if (fThreads[i].fEvent <> nil) and
-       (fThreads[i].fExecuteState = esRunning) then
-      fThreads[i].fEvent.SetEvent;
-  // stop polling and refuse further Write/ConnectionRemove
-  endtix := mormot.core.os.GetTickCount64 + 1000;
+  endtix := mormot.core.os.GetTickCount64 + 10000;
   repeat
     n := 0;
     for i := 0 to high(fThreads) do
-      if fThreads[i].fExecuteState = esRunning then
-        inc(n);
+      with fThreads[i] do
+        if fExecuteState = esRunning then
+        begin
+          if fEvent <> nil then
+            fEvent.SetEvent; // release any (e.g. atpReadPoll) lock
+          inc(n);
+        end;
     if n = 0 then
       break;
     DoLog(sllTrace, 'Destroy unfinished=%', [n], self);
@@ -1717,7 +1722,7 @@ begin
   inherited Destroy;
   if not (acoNoConnectionTrack in fOptions) then
     for i := 0 to fConnectionCount - 1 do
-      fConnection[i].Free;
+      fConnection[i].Free; // they are normally no pending connection yet
 end;
 
 function TAsyncConnections.ThreadClientsConnect: TAsyncConnection;
