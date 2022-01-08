@@ -1569,7 +1569,7 @@ type
   // - about systemd: see https://www.freedesktop.org/wiki/Software/systemd
   // and http://0pointer.de/blog/projects/socket-activation.html - to get headers
   // on debian: `sudo apt install libsystemd-dev && cd /usr/include/systemd`
-  TSystemD = packed object
+  TSystemD = record
   private
     systemd: pointer;
     tested: boolean;

@@ -1531,6 +1531,7 @@ function Store(const name: RawUtf8): ICryptStore;
 type
   /// the DerToPem() supported contents of a PEM text instance
   TPemKind = (
+    pemUnspecified,
     pemCertificate,
     pemPrivateKey,
     pemPublicKey,
@@ -1543,10 +1544,12 @@ type
     pemEcParameters,
     pemSsh2EncryptedPrivateKey,
     pemSsh2PublicKey);
+  PPemKind = ^TPemKind;
 
 const
   /// the supported trailer markers of a PEM text instance
   PEM_BEGIN: array[TPemKind] of RawUtf8 = (
+    '-----BEGIN PRIVACY-ENHANCED MESSAGE-----'#13#10,
     '-----BEGIN CERTIFICATE-----'#13#10,
     '-----BEGIN PRIVATE KEY-----'#13#10,
     '-----BEGIN PUBLIC KEY-----'#13#10,
@@ -1562,6 +1565,7 @@ const
 
   /// the supported ending markers of a PEM text instance
   PEM_END: array[TPemKind] of RawUtf8 = (
+    '-----END PRIVACY-ENHANCED MESSAGE-----'#13#10,
     '-----END CERTIFICATE-----'#13#10,
     '-----END PRIVATE KEY-----'#13#10,
     '-----END PUBLIC KEY-----'#13#10,
@@ -1585,6 +1589,12 @@ function DerToPem(const der: RawByteString; kind: TPemKind): RawUtf8; overload;
 // - if the supplied buffer doesn't start with '-----BEGIN .... -----'
 // trailer, will expect the input to be plain DER binary and return it
 function PemToDer(const pem: RawUtf8): RawByteString;
+
+/// parse a multi-PEM text input and return the next PEM content
+// - search and identify any PEM_BEGIN/PEM_END markers
+// - ready to be decoded via PemToDer()
+// - optionally returning the recognized TPemKind (maybe pemUnspecified)
+function NextPem(var P: PUtf8Char; Kind: PPemKind = nil): RawUtf8;
 
 /// quickly check the begin/end of a single-instance PEM text
 // - do not validate the internal Base64 encoding, just the trailer/ending lines
@@ -3184,7 +3194,7 @@ end;
 
 
 
-{ ************* Rnd/Hash/Sign/Cipher/Asym/Cert High-Level Algorithms Factories }
+{ ************* Rnd/Hash/Sign/Cipher/Asym/Cert/Store High-Level Algorithms Factories }
 
 var
   GlobalCryptAlgo: TRawUtf8List; // Objects[] are TCryptAlgo instances
@@ -4390,6 +4400,36 @@ begin
   result := pem;
 end;
 
+function PemHeader(lab: PUtf8Char): TPemKind;
+begin
+  for result := succ(low(result)) to high(result) do
+    if IdemPropNameUSameLenNotNull(@PEM_BEGIN[result][12], lab, 10) then
+      exit;
+  result := low(result);
+end;
+
+function NextPem(var P: PUtf8Char; Kind: PPemKind): RawUtf8;
+var
+  start: PUtf8Char;
+begin
+  result := '';
+  if P = nil then
+    exit;
+  start := GotoNextNotSpace(P);
+  if PCardinal(start)^ <> $2d2d2d2d then
+    exit;
+  if Kind <> nil then
+    Kind^ := PemHeader(start + 11); // label just after '-----BEGIN '
+  P := start;
+  repeat
+    P := GotoNextLine(P);
+    if P = nil then
+      exit;
+  until PCardinal(P)^ = $2d2d2d2d;
+  P := GotoNextLine(P);
+  FastSetString(result, start, P - start);
+end;
+
 const
   DER_INTEGER  = #$02;
 
@@ -4440,7 +4480,7 @@ begin
   Rtti.RegisterType(TypeInfo(TSignAlgo));
   Rtti.RegisterFromText(TypeInfo(TSynSignerParams),
     'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer');
-  // Rnd/Sign/Hash/Cipher/Asym are registered on need in GlobalCryptAlgoInit
+  // Rnd/Sign/Hash/Cipher/Asym/Cert/Store are registered in GlobalCryptAlgoInit
 end;
 
 procedure FinalizeUnit;

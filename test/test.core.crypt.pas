@@ -1322,6 +1322,8 @@ var
   tmp: RawByteString;
   b64: RawUtf8;
   Value: WinAnsiString;
+  P: PUtf8Char;
+  k: TPemKind;
   i, L: Integer;
   i64: Qword;
 begin
@@ -1373,9 +1375,14 @@ begin
     if tmp <> '' then
     begin
       Check(not IsPem(b64));
-      b64 := DerToPem(pointer(tmp), length(tmp), TPemKind(i and 2));
+      b64 := DerToPem(pointer(tmp), length(tmp), TPemKind(i and 7));
       Check(IsPem(b64));
-      CheckUtf8(PemToDer(b64) = tmp, b64)
+      CheckUtf8(PemToDer(b64) = tmp, b64);
+      P := pointer(b64);
+      CheckEqual(NextPem(P, @k), b64);
+      Check(P <> nil);
+      Check(k = TPemKind(i and 7));
+      CheckEqual(NextPem(P, @k), '');
     end;
     tmp := tmp + AnsiChar(Random32(255));
   end;

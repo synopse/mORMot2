@@ -7757,7 +7757,7 @@ _0: if source[0] = #13 then
     end
     else if source[0] = #0 then
     begin
-      result := nil;
+      result := nil; // premature ending
       exit;
     end
     else if source[0] <> #10 then
