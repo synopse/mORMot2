@@ -1736,7 +1736,8 @@ begin
     fRun.fViews.Render(fMethodIndex, outContext, view);
   fOutput.Content := view.Content;
   fOutput.Header := HEADER_CONTENT_TYPE + view.ContentType;
-  if _Safe(outContext)^.GetAsRawUtf8('CustomOutHttpHeader', head) then
+  if _Safe(outContext)^.GetAsRawUtf8('CustomOutHttpHeader', head) and
+     (head <> '') then
     fOutput.Header := fOutput.Header + #13#10 + head;
   fOutput.Status := status;
   fOutputFlags := view.Flags;
