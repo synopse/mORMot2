@@ -2240,6 +2240,22 @@ begin
         (sub.UnsubscribeCount <> 0))then
       fOnLog(sllTrace, 'PollForPendingEvents sub=% unsub=%',
         [sub.SubscribeCount, sub.UnsubscribeCount], self);
+    // ensure subscribe + unsubscribe pairs are ignored
+    if not fUnsubscribeShouldShutdownSocket then
+      for u := 0 to sub.UnsubscribeCount - 1 do
+      begin
+        sock := sub.Unsubscribe[u];
+        for s := 0 to sub.SubscribeCount - 1 do
+          if sub.Subscribe[s].socket = sock then
+          begin
+            if Assigned(fOnLog) then
+              fOnLog(sllTrace, 'PollForPendingEvents sub+unsub sock=%',
+                [pointer(sock)], self);
+            sub.Unsubscribe[u] := nil; // mark both no op
+            sub.Subscribe[s].socket := nil;
+            break;
+          end;
+      end;
     // use fPoll[] to retrieve any pending notifications
     mormot.core.os.EnterCriticalSection(fPollLock);
     try
@@ -2247,17 +2263,6 @@ begin
       for u := 0 to sub.UnsubscribeCount - 1 do
       begin
         sock := sub.Unsubscribe[u];
-        if not fUnsubscribeShouldShutdownSocket then
-          for s := 0 to sub.SubscribeCount - 1 do
-            if sub.Subscribe[s].socket = sock then
-            begin
-              if Assigned(fOnLog) then
-                fOnLog(sllTrace, 'PollForPendingEvents sub+unsub sock=%',
-                  [pointer(sock)], self);
-              sock := nil; // Unsubscribe after/before Subscribe -> no op
-              sub.Subscribe[s].socket := nil;
-              break;
-            end;
         if sock <> nil then
           for p := 0 to length(fPoll) - 1 do
             if fPoll[p].Unsubscribe(sock) then
