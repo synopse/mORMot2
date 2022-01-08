@@ -1168,11 +1168,11 @@ type
   end;
 
   /// exception class raised by our High-Level Certificates Process
-  ECertificate = class(ESynException);
+  ECryptCert = class(ESynException);
 
   /// the known Key Usages for a given Certificate
   // - is an exact match of TX509Usage enumerate in mormot.lib.openssl11.pas
-  // - stored as a 16-bit memory block
+  // - stored as a 16-bit memory block, with CERTIFICATE_USAGE_ALL = 65535
   TCryptCertUsage = (
     cuCA,
     cuEncipherOnly,
@@ -4107,7 +4107,7 @@ end;
 
 procedure TCryptCert.RaiseError(const Msg: shortstring);
 begin
-  raise ECertificate.CreateUtf8('%.%', [self, Msg]);
+  raise ECryptCert.CreateUtf8('%.%', [self, Msg]);
 end;
 
 procedure TCryptCert.RaiseError(const Fmt: RawUtf8;

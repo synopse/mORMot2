@@ -152,7 +152,7 @@ const
 
 type
   /// exception class associated with this mormot.crypt.ecc unit
-  EECCException = class(ESynException);
+  EEccException = class(ESynException);
 
   TEccSignatureCertified = class;
 
@@ -186,13 +186,13 @@ type
     /// initialize this certificate with an explicit maximum version support
     constructor CreateVersion(MaxVers: integer);
     /// initialize this certificate from a supplied Base64 encoded binary
-    // - will raise an EECCException if the supplied base64 is incorrect
+    // - will raise an EEccException if the supplied base64 is incorrect
     constructor CreateFromBase64(const base64: RawUtf8); virtual;
     /// initialize this certificate from a set of potential inputs
     // - will first search from a .public file name, Base64 encoded binary,
     // or a serial number which be used to search for a local .public file
     // (as located by EccKeyFileFind)
-    // - will raise an EECCException if no supplied media is correct
+    // - will raise an EEccException if no supplied media is correct
     constructor CreateFromAuth(const AuthPubKey: TFileName; const AuthBase64,
       AuthSerial: RawUtf8); virtual;
     /// the certification information, digitaly signed in the Signature field
@@ -371,7 +371,7 @@ type
     // TAesPrng.Fill() will be used
     // - you may specify some validity time range, if needed
     // - default ParanoidVerify=true will validate the certificate digital
-    // signature via a call ecdsa_verify() to ensure its usefulness
+    // signature via a call Ecc256r1Verify() to ensure its usefulness
     // - warning: signature would take around 1 ms under a 32-bit compiler
     constructor CreateNew(Authority: TEccCertificateSecret;
       const IssuerText: RawUtf8 = ''; ExpirationDays: integer = 0;
@@ -381,7 +381,7 @@ type
     /// create a certificate with its private secret key from a password-protected
     // secure binary buffer
     // - perform all reverse steps from SaveToSecureBinary() method
-    // - will raise an EECCException if the supplied Binary is incorrect
+    // - will raise an EEccException if the supplied Binary is incorrect
     constructor CreateFromSecureBinary(const Binary: RawByteString;
       const PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
       AES: TAesAbstractClass = nil); overload;
@@ -389,14 +389,14 @@ type
     // secure binary buffer
     // - may be used on a constant array in executable, created via SaveToSource()
     // - perform all reverse steps from SaveToSecureBinary() method
-    // - will raise an EECCException if the supplied Binary is incorrect
+    // - will raise an EEccException if the supplied Binary is incorrect
     constructor CreateFromSecureBinary(Data: pointer; Len: integer;
       const PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
       AES: TAesAbstractClass = nil); overload;
     /// create a certificate with its private secret key from an encrypted
     // secure .private binary file and its associated password
     // - perform all reverse steps from SaveToSecureFile() method
-    // - will raise an EECCException if the supplied file is incorrect
+    // - will raise an EEccException if the supplied file is incorrect
     constructor CreateFromSecureFile(const FileName: TFileName;
       const PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
       AES: TAesAbstractClass = nil); overload;
@@ -404,7 +404,7 @@ type
     // secure .private binary file stored in a given folder
     // - overloaded constructor retrieving the file directly from its folder
     // - perform all reverse steps from SaveToSecureFile() method
-    // - will raise an EECCException if the supplied file is incorrect
+    // - will raise an EEccException if the supplied file is incorrect
     constructor CreateFromSecureFile(const FolderName: TFileName;
       const Serial, PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
       AES: TAesAbstractClass = nil); overload;
@@ -492,7 +492,7 @@ type
     /// compute a .sign digital signature of any file
     // - SHA-256/ECDSA digital signature is included in a JSON document
     // - you can set some additional metadata information for the "meta": field
-    // - will raise an EECCException if FileToSign does not exist
+    // - will raise an EEccException if FileToSign does not exist
     // - returns the .sign file name, which is in fact FileToSign+'.sign'
     // - use TEccSignatureCertifiedFile class to load and validate such files
     function SignFile(const FileToSign: TFileName;
@@ -637,15 +637,15 @@ type
     // the supplied Authority certificate
     constructor CreateNew(Authority: TEccCertificateSecret; const Hash: THash256); overload;
     /// initialize this signature from a supplied binary
-    // - will raise an EECCException if the supplied binary content is incorrect
+    // - will raise an EEccException if the supplied binary content is incorrect
     constructor CreateFrom(const binary: TEccSignatureCertifiedContent;
       NoException: boolean = false);
     /// initialize this signature from a supplied Base64 encoded binary
-    // - will raise an EECCException if the supplied base64 is incorrect
+    // - will raise an EEccException if the supplied base64 is incorrect
     constructor CreateFromBase64(const base64: RawUtf8;
       NoException: boolean = false);
     /// initialize this signature from the "sign": field of a JSON .sign file
-    // - will raise an EECCException if the supplied file is incorrect
+    // - will raise an EEccException if the supplied file is incorrect
     constructor CreateFromFile(const signfilename: TFileName;
       NoException: boolean = false);
     /// fast check of the binary buffer storage of this signature
@@ -734,7 +734,7 @@ type
   public
     /// create and set .sign fields after TEccCertificateSecret.Decrypt() process
     // - will compute Size, and MD5/SHA-256 hashes from aDecryptedContent
-    // - will raise an EECCException if the supplied parameters are incorrect
+    // - will raise an EEccException if the supplied parameters are incorrect
     constructor CreateFromDecryptedFile(const aDecryptedContent: RawByteString;
       const Signature: TEccSignatureCertifiedContent; const MetaData: RawJson);
     /// read a .sign digital signature file
@@ -799,12 +799,12 @@ type
     /// initialize the certificate store from some JSON array of strings
     // - the serialization format is just a JSON array of Base64 encoded
     // certificates (with only public keys) - so diverse from CreateFromFile()
-    // - will call LoadFromJson(), and raise EECCException on any error
+    // - will call LoadFromJson(), and raise EEccException on any error
     constructor CreateFromJson(const json: RawUtf8);
     /// initialize the certificate store from an array of Base64 encoded strings
     // - a TRawUtf8DynArray value is very convenient when storing the
     // certificates chain as part of JSON settings, e.g. TDDDAppSettings
-    // - will call LoadFromArray(), and raise EECCException on any error
+    // - will call LoadFromArray(), and raise EEccException on any error
     constructor CreateFromArray(const values: TRawUtf8DynArray);
     /// finalize the certificate store
     destructor Destroy; override;
@@ -990,10 +990,10 @@ type
     // - as such, this file format is more verbose than CreateFromJson/SaveToJson
     // and may be convenient for managing certificates with a text/json editor
     // - you may use SaveToFile() method to create such JSON file
-    // - will call LoadFromFile(), and raise EECCException on any error
+    // - will call LoadFromFile(), and raise EEccException on any error
     constructor CreateFromFile(const jsonfile: TFileName);
     /// initialize the certificate store from an array of .public file names
-    // - raise EECCException on any error when reading a .public file
+    // - raise EEccException on any error when reading a .public file
     constructor CreateFromFiles(const files: array of TFileName);
     /// save the whole certificates chain as a JSON object, matching .ca format
     // - is in fact the human-friendly JSON serialization of this instance
@@ -1048,7 +1048,7 @@ type
       read fMaxVersion write fMaxVersion;
     /// if the IsValid() calls should maintain a cache of all valid certificates
     // - will use a naive but very efficient crc64c hashing of previous contents
-    // - since ecdsa_verify() is very demanding, such a cache may have a huge
+    // - since Ecc256r1Verify() is very demanding, such a cache may have a huge
     // speed benefit if the certificates are about to be supplied several times
     // - is disabled by default, for paranoid safety
     property IsValidCached: boolean
@@ -1941,7 +1941,7 @@ constructor TEccCertificate.CreateFromBase64(const base64: RawUtf8);
 begin
   Create;
   if not FromBase64(base64) then
-    raise EECCException.CreateUtf8('Invalid %.CreateFromBase64', [self]);
+    raise EEccException.CreateUtf8('Invalid %.CreateFromBase64', [self]);
 end;
 
 constructor TEccCertificate.CreateFromAuth(const AuthPubKey: TFileName;
@@ -1949,7 +1949,7 @@ constructor TEccCertificate.CreateFromAuth(const AuthPubKey: TFileName;
 begin
   Create;
   if not FromAuth(AuthPubKey, AuthBase64, AuthSerial) then
-    raise EECCException.CreateUtf8('Invalid %.CreateFromAuth', [self]);
+    raise EEccException.CreateUtf8('Invalid %.CreateFromAuth', [self]);
 end;
 
 function TEccCertificate.GetAuthorityIssuer: RawUtf8;
@@ -2163,9 +2163,9 @@ begin
   if Plain = '' then
     exit;
   if not CheckCRC then
-    raise EECCException.CreateUtf8('%.Encrypt: no public key', [self]);
+    raise EEccException.CreateUtf8('%.Encrypt: no public key', [self]);
   if not (cuEncipherOnly in GetUsage) then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       '%.Encrypt: missing cuEncipherOnly Usage', [self]);
   if Algo = ecaUnknown then // use safest algorithm by default
     if IsContentCompressed(pointer(Plain), length(Plain)) then
@@ -2173,7 +2173,7 @@ begin
     else
       Algo := ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ;
   if not (Algo in [ecaFIRST .. ecaLAST]) then
-    raise EECCException.CreateUtf8('%.Encrypt: unsupported %', [self, ToText(Algo)^]);
+    raise EEccException.CreateUtf8('%.Encrypt: unsupported %', [self, ToText(Algo)^]);
   try
     head.magic := THash128(ECIES_MAGIC[0]);
     head.rec := fContent.Head.Signed.Issuer;
@@ -2197,11 +2197,11 @@ begin
     else
       FillcharFast(head.sign, SizeOf(head.sign), 255); // Version=255=not signed
     if not Ecc256r1MakeKey(head.rndpub, rndpriv) then
-      raise EECCException.CreateUtf8('%.Encrypt: MakeKey?', [self]);
+      raise EEccException.CreateUtf8('%.Encrypt: MakeKey?', [self]);
     SetLength(secret, SizeOf(TEccSecretKey));
     if not Ecc256r1SharedSecret(
         fContent.Head.Signed.PublicKey, rndpriv, PEccSecretKey(secret)^) then
-      raise EECCException.CreateUtf8('%.Encrypt: SharedSecret?', [self]);
+      raise EEccException.CreateUtf8('%.Encrypt: SharedSecret?', [self]);
     Pbkdf2HmacSha256(secret, KDFSalt, KDFRounds, aeskey.b, 'salt');
     if Algo in ECIES_SYNLZ then
     begin
@@ -2272,7 +2272,7 @@ var
 begin
   plain := StringFromFile(FileToCrypt);
   if plain = '' then
-    raise EECCException.CreateUtf8('File not found: [%]', [FileToCrypt]);
+    raise EEccException.CreateUtf8('File not found: [%]', [FileToCrypt]);
   if DestFile = '' then
     dest := FileToCrypt + ENCRYPTED_FILEEXT
   else
@@ -2373,7 +2373,7 @@ begin
     for retry := false to true do
     begin
       if not Ecc256r1MakeKey(PublicKey, fPrivateKey) then
-        raise EECCException.CreateUtf8('%.CreateNew: MakeKey?', [self]);
+        raise EEccException.CreateUtf8('%.CreateNew: MakeKey?', [self]);
       if Authority = nil then
       begin
         AuthoritySerial := Serial;
@@ -2391,18 +2391,18 @@ begin
           if not Ecc256r1Sign(fPrivateKey, hash{%H-}, temp) or
              not Ecc256r1Verify(PublicKey, hash, temp) then
             if retry then
-              raise EECCException.CreateUtf8('%.CreateNew: ParanoidVerify1?', [self])
+              raise EEccException.CreateUtf8('%.CreateNew: ParanoidVerify1?', [self])
             else
               continue;
       end;
       fContent.ComputeHash(hash);
       if not Ecc256r1Sign(priv^, hash, fContent.Head.Signature) then
-        raise EECCException.CreateUtf8('%.CreateNew: ecdsa_sign?', [self]);
+        raise EEccException.CreateUtf8('%.CreateNew: Ecc256r1Sign?', [self]);
       if not ParanoidVerify or
          Ecc256r1Verify(pub^, hash, fContent.Head.Signature) then
         break
       else if retry then
-        raise EECCException.CreateUtf8('%.CreateNew: ParanoidVerify2?', [self]);
+        raise EEccException.CreateUtf8('%.CreateNew: ParanoidVerify2?', [self]);
     end;
   end;
   fContent.Head.CRC := fContent.ComputeCrc32;
@@ -2420,7 +2420,7 @@ constructor TEccCertificateSecret.CreateFromSecureBinary(Data: pointer;
 begin
   Create;
   if not LoadFromSecureBinary(Data, Len, PassWord, Pbkdf2Round, AES) then
-    raise EECCException.CreateUtf8('Invalid %.CreateFromSecureBinary', [self]);
+    raise EEccException.CreateUtf8('Invalid %.CreateFromSecureBinary', [self]);
 end;
 
 constructor TEccCertificateSecret.CreateFromSecureFile(const FileName: TFileName;
@@ -2428,7 +2428,7 @@ constructor TEccCertificateSecret.CreateFromSecureFile(const FileName: TFileName
 begin
   Create;
   if not LoadFromSecureFile(FileName, PassWord, Pbkdf2Round, AES) then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       'Invalid %.CreateFromSecureFile("%")', [self, FileName]);
 end;
 
@@ -2748,7 +2748,7 @@ var
 begin
   content := StringFromFile(FileToSign);
   if content = '' then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       '%.SignFile: file [%] not found', [self, FileToSign]);
   sha := Sha256Digest(pointer(content), length(content));
   sign := SignToBase64(sha);
@@ -2955,7 +2955,7 @@ begin
   if binary.Check then
     fCertified := binary
   else if not NoException then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       'Invalid %.CreateFrom', [self]);
 end;
 
@@ -2965,7 +2965,7 @@ begin
   Create;
   if not FromBase64(base64) then
     if not NoException then
-      raise EECCException.CreateUtf8(
+      raise EEccException.CreateUtf8(
         'Invalid %.CreateFromBase64', [self]);
 end;
 
@@ -2975,7 +2975,7 @@ begin
   Create;
   if not FromFile(signfilename) then
     if not NoException then
-      raise EECCException.CreateUtf8(
+      raise EEccException.CreateUtf8(
         'Invalid %.CreateFromFile("%")', [self, signfilename]);
 end;
 
@@ -2990,16 +2990,16 @@ constructor TEccSignatureCertified.CreateNew(Authority: TEccCertificateSecret;
 begin
   Create;
   if not Authority.HasSecret then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       '%.CreateNew: secret=0 %', [self, Authority]);
   if IsZero(Hash) then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       '%.CreateNew(Hash=0)', [self]);
   fCertified.Date := NowEccDate;
   fCertified.AuthoritySerial := Authority.Content.Head.Signed.Serial;
   fCertified.AuthorityIssuer := Authority.Content.Head.Signed.Issuer;
   if not Ecc256r1Sign(Authority.fPrivateKey, Hash, fCertified.Signature) then
-    raise EECCException.CreateUtf8('%.CreateNew: ecdsa_sign?', [self]);
+    raise EEccException.CreateUtf8('%.CreateNew: Ecc256r1Sign?', [self]);
 end;
 
 function TEccSignatureCertified.GetAuthorityIssuer: RawUtf8;
@@ -3172,7 +3172,7 @@ constructor TEccSignatureCertifiedFile.CreateFromDecryptedFile(
 begin
   inherited Create;
   if not FromDecryptedFile(aDecryptedContent, Signature, MetaData) then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       'Invalid Signature for %.CreateFromDecryptedFile', [self]);
 end;
 
@@ -3189,14 +3189,14 @@ constructor TEccCertificateChain.CreateFromJson(const json: RawUtf8);
 begin
   Create;
   if not LoadFromJson(json) then
-    raise EECCException.CreateUtf8('Invalid %.CreateFromJson', [self]);
+    raise EEccException.CreateUtf8('Invalid %.CreateFromJson', [self]);
 end;
 
 constructor TEccCertificateChain.CreateFromArray(const values: TRawUtf8DynArray);
 begin
   Create;
   if not LoadFromArray(values) then
-    raise EECCException.CreateUtf8('Invalid %.CreateFromArray', [self]);
+    raise EEccException.CreateUtf8('Invalid %.CreateFromArray', [self]);
 end;
 
 destructor TEccCertificateChain.Destroy;
@@ -3727,7 +3727,7 @@ begin
       // store first the certificates
       n := length(fItems);
       if n > 65535 then
-        raise ECertificate.Create('Too many items in Chain');
+        raise EEccException.Create('Too many items in Chain');
       st.WriteBuffer(n, 2);
       for i := 0 to n - 1 do
       begin
@@ -3739,7 +3739,7 @@ begin
       // then the revocation serials
       n := length(fCrl);
       if n > 65535 then
-        raise ECertificate.Create('Too many crls in Chain');
+        raise EEccException.Create('Too many CRLs in Chain');
       st.WriteBuffer(n, 2);
       for i := 0 to n - 1 do
         fCrl[i].SaveToStream(st);
@@ -3858,7 +3858,7 @@ constructor TEccCertificateChain.CreateFromFile(const jsonfile: TFileName);
 begin
   Create;
   if not LoadFromFile(jsonfile) then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       'Invalid %.CreateFromFile("%")', [self, jsonfile]);
 end;
 
@@ -3879,7 +3879,7 @@ begin
         auth := nil;
       end
       else
-        raise EECCException.CreateUtf8(
+        raise EEccException.CreateUtf8(
           '%.CreateFromFiles: invalid file [%]', [self, files[i]]);
     finally
       auth.Free;
@@ -4021,7 +4021,7 @@ begin
   begin
     res := aPKI.IsValid(aPrivate);
     if not (res in ECC_VALIDSIGN) then
-      raise EECCException.CreateUtf8('%.Create failed: aPKI.IsValid(%)=%',
+      raise EEccException.CreateUtf8('%.Create failed: aPKI.IsValid(%)=%',
         [self, aPrivate.Serial, ToText(res)^]);
   end;
   inherited Create;
@@ -4073,7 +4073,7 @@ class procedure TEcdheProtocol.FromKeySetCA(aPKI: TEccCertificateChain);
 begin
   if _FromKeySetCA <> nil then
     if _FromKeySetCARefCount > 0 then
-      raise EECCException.CreateUtf8(
+      raise EEccException.CreateUtf8(
         '%.FromKeySetCA: % is still used by %',
         [self, _FromKeySetCA, Plural('instance', _FromKeySetCARefCount)])
     else
@@ -4217,12 +4217,12 @@ const
 procedure TEcdheProtocol.SetIVAndMacNonce(aEncrypt: boolean);
 begin
   if fAes[aEncrypt] = nil then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       '%.% with no handshake', [self, ED[aEncrypt]]);
   fAes[aEncrypt].IV := fkM[aEncrypt].Lo; // kM is a CTR -> IV unicity
   if fAlgo.mac = macDuringEF then
     if not fAes[aEncrypt].MacSetNonce(aEncrypt, fkM[aEncrypt].b) then
-      raise EECCException.CreateUtf8(
+      raise EEccException.CreateUtf8(
         '%.%: macDuringEF not available in %/%',
         [self, ED[aEncrypt], ToText(fAlgo.ef)^, fAes[aEncrypt]]);
 end;
@@ -4255,7 +4255,7 @@ begin
       if aEncrypt and
          not fAes[aEncrypt].MacEncryptGetTag(aMAC.b) then
         // should have been computed during Encryption process
-        raise EECCException.CreateUtf8('%.%: macDuringEF not available in %/%',
+        raise EEccException.CreateUtf8('%.%: macDuringEF not available in %/%',
           [self, ED[aEncrypt], ToText(fAlgo.ef)^, fAes[aEncrypt]]);
     macHmacCrc256c:
       HmacCrc256c(@fkM[aEncrypt], aEncrypted, SizeOf(THash256), aLen, aMAC.b);
@@ -4276,7 +4276,7 @@ begin
     macNone:
       crc256c(@fkM[aEncrypt], SizeOf(THash256), aMAC.b); // replay attack only
   else
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       '%.%: ComputeMAC %?', [self, ED[aEncrypt], ToText(fAlgo.mac)^]);
   end;
   // always increase sequence number against replay attacks
@@ -4389,9 +4389,9 @@ var
 
 begin
   if fAes[false] <> nil then
-    raise EECCException.CreateUtf8('%.SharedSecret already called', [self]);
+    raise EEccException.CreateUtf8('%.SharedSecret already called', [self]);
   if fAlgo.kdf <> kdfHmacSha256 then
-    raise EECCException.CreateUtf8('%.SharedSecret %?', [self, ToText(fAlgo.kdf)^]);
+    raise EEccException.CreateUtf8('%.SharedSecret %?', [self, ToText(fAlgo.kdf)^]);
   try
     ComputeSecret(fEFSalt);
     fAes[false] := TAesFast[ECDHEPROT_EF2AES[fAlgo.ef]].Create(
@@ -4441,11 +4441,11 @@ var
 begin
   QC := fPrivate.fContent.Head;
   if QC.Version <> 1 then
-    raise EECCException.CreateUtf8('%.Sign: require V1 %', [self, fPrivate]);
+    raise EEccException.CreateUtf8('%.Sign: require V1 %', [self, fPrivate]);
   dec(len, SizeOf(TEccSignature)); // Sign at the latest position
   sha.Full(frame, len, hash);
   if not Ecc256r1Sign(fPrivate.fPrivateKey, hash, PEccSignature(@frame[len])^) then
-    raise EECCException.CreateUtf8('%.Sign: ecdsa_sign?', [self]);
+    raise EEccException.CreateUtf8('%.Sign: Ecc256r1Sign?', [self]);
 end;
 
 function TEcdheProtocol.Clone: IProtocol;
@@ -4462,7 +4462,7 @@ constructor TEcdheProtocolClient.Create(aAuth: TEcdheAuth;
 begin
   if (aAuth <> authServer) and
      not aPrivate.CheckCRC then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       '%.Create: need valid Private Key for %', [self, ToText(aAuth)^])
   else
     inherited;
@@ -4472,7 +4472,7 @@ procedure TEcdheProtocolClient.ComputeHandshake(out aClient: TEcdheFrameClient);
 begin
   // setup the algorithms
   if fAes[false] <> nil then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       '%.ComputeHandshake already called', [self]);
   FillCharFast(aClient, SizeOf(aClient), 0);
   aClient.algo := fAlgo;
@@ -4482,7 +4482,7 @@ begin
   // generate the client ephemeral key
   if fAlgo.auth <> authClient then
     if not Ecc256r1MakeKey(aClient.QE, fdE) then
-      raise EECCException.CreateUtf8('%.ComputeHandshake: MakeKey?', [self]);
+      raise EEccException.CreateUtf8('%.ComputeHandshake: MakeKey?', [self]);
   // compute the client ephemeral signature
   if fAlgo.auth <> authServer then
     Sign(@aClient, SizeOf(aClient), aClient.QCA);
@@ -4555,7 +4555,7 @@ constructor TEcdheProtocolServer.Create(aAuth: TEcdheAuth;
 begin
   if (aAuth <> authClient) and
      not aPrivate.CheckCRC then
-    raise EECCException.CreateUtf8(
+    raise EEccException.CreateUtf8(
       '%.Create: need valid Private Key for %', [self, ToText(aAuth)^]);
   inherited;
   include(fAuthorized, aAuth); // conservative default
@@ -4603,7 +4603,7 @@ begin
   aServer.RndB := fRndB;
   if fAlgo.auth <> authServer then
     if not Ecc256r1MakeKey(aServer.QF, dF) then
-      raise EECCException.CreateUtf8('%.ComputeHandshake: MakeKey?', [self]);
+      raise EEccException.CreateUtf8('%.ComputeHandshake: MakeKey?', [self]);
   try
     result := sprInvalidPublicKey;
     if fAlgo.auth <> authServer then

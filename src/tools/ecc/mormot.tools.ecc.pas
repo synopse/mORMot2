@@ -307,7 +307,7 @@ var
 begin
   content := StringFromFile(FileToVerify);
   if content = '' then
-    raise EECCException.CreateUtf8('File not found: %', [FileToVerify]);
+    raise EEccException.CreateUtf8('File not found: %', [FileToVerify]);
   cert := TEccSignatureCertified.CreateFromFile(FileToVerify);
   try
     if not cert.Check then
@@ -338,7 +338,7 @@ var
 begin
   content := StringFromFile(FileToVerify);
   if content = '' then
-    raise EECCException.CreateUtf8('File not found: %', [FileToVerify]);
+    raise EEccException.CreateUtf8('File not found: %', [FileToVerify]);
   cert := TEccSignatureCertified.CreateFrom(Signature);
   try
     auth := TEccCertificate.Create;
@@ -364,14 +364,14 @@ var
 begin
   content := StringFromFile(FileToCrypt);
   if content = '' then
-    raise EECCException.CreateUtf8('File not found: %', [FileToCrypt]);
+    raise EEccException.CreateUtf8('File not found: %', [FileToCrypt]);
   auth := TEccCertificate.Create;
   try
     if not auth.FromAuth(AuthPubKey, AuthBase64, AuthSerial) then
-      raise EECCException.Create('No public key');
+      raise EEccException.Create('No public key');
     if not auth.EncryptFile(
        FileToCrypt, DestFile, Password, PasswordRounds, Algo, true) then
-      raise EECCException.CreateUtf8('EncryptFile failed for %', [FileToCrypt]);
+      raise EEccException.CreateUtf8('EncryptFile failed for %', [FileToCrypt]);
   finally
     auth.Free;
     FillZero(content);
@@ -442,7 +442,7 @@ begin
     if ValidateItems <> nil then
     begin
       result := '';
-      raise EECCException.Create('Some of the certificates are invalid');
+      raise EEccException.Create('Some of the certificates are invalid');
     end;
     SaveToFile(result);
   finally
@@ -472,7 +472,7 @@ var
 begin
   if FileExists(CHEAT_FILEMASTER + ECCCERTIFICATEPUBLIC_FILEEXT) or
      FileExists(CHEAT_FILEMASTER + ECCCERTIFICATESECRET_FILEEXT) then
-    raise EECCException.Create(CHEAT_FILEMASTER + ' file already exist');
+    raise EEccException.Create(CHEAT_FILEMASTER + ' file already exist');
   // generate pair
   new := TEccCertificateSecret.CreateNew(nil, Issuer);
   try
@@ -501,16 +501,16 @@ begin
   fn := ChangeFileExt(PrivateFile, CHEAT_FILEEXT);
   bin := StringFromFile(fn);
   if bin = '' then
-    raise EECCException.CreateUtf8('Unknown file %', [fn]);
+    raise EEccException.CreateUtf8('Unknown file %', [fn]);
   master := TEccCertificateSecret.CreateFromSecureFile(
     CHEAT_FILEMASTER, CheatPassword, CheatRounds);
   try
     res := master.Decrypt(bin, split);
     if res <> ecdDecrypted then
-      raise EECCException.CreateUtf8('% on %', [ToText(res)^, fn]);
+      raise EEccException.CreateUtf8('% on %', [ToText(res)^, fn]);
     json := TAesPrng.AFUnsplit(split, CHEAT_SPLIT);
     if json = '' then
-      raise EECCException.CreateUtf8('Incorrect file %', [fn]);
+      raise EEccException.CreateUtf8('Incorrect file %', [fn]);
     if not doc.InitJson(json) then
       doc.InitObject(['pass',   json,
                       'rounds', DEFAULT_ECCROUNDS], JSON_FAST);
@@ -537,10 +537,10 @@ begin
       dst := TAesCfc.MacEncrypt(Source, aeskey, Encrypt);
       try
         if dst = '' then
-          raise EECCException.CreateUtf8(
+          raise EEccException.CreateUtf8(
             'MacEncrypt failed for %', [DestFileName]);
         if not FileFromString(dst, DestFileName) then
-          raise EECCException.CreateUtf8(
+          raise EEccException.CreateUtf8(
             'FileFromString failed for %', [DestFileName]);
       finally
         FillZero(dst);
@@ -561,7 +561,7 @@ var
 begin
   plain := StringFromFile(FileToCrypt);
   if plain = '' then
-    raise EECCException.CreateUtf8('File not found: %', [FileToCrypt]);
+    raise EEccException.CreateUtf8('File not found: %', [FileToCrypt]);
   if DestFile = '' then
     dest := FileToCrypt + AEAD_FILEEXT
   else
@@ -578,7 +578,7 @@ var
 begin
   encrypted := StringFromFile(FileToDecrypt);
   if encrypted = '' then
-    raise EECCException.CreateUtf8('File not found: %', [FileToDecrypt]);
+    raise EEccException.CreateUtf8('File not found: %', [FileToDecrypt]);
   if DestFile = '' then
     dest := GetFileNameWithoutExt(FileToDecrypt)
   else
@@ -642,7 +642,7 @@ var
 begin
   result := eccSuccess;
   if sw = nil then
-    raise EECCException.Create('EccCommand(nil)');
+    raise EEccException.Create('EccCommand(nil)');
   try
     try
       case cmd of
