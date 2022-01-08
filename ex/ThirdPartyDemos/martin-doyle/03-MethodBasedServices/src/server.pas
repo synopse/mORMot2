@@ -6,6 +6,7 @@ interface
 uses
   mormot.core.base,
   mormot.core.data,
+  mormot.core.os,
   mormot.core.unicode,
   mormot.orm.core,
   mormot.orm.rest,

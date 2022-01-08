@@ -5,6 +5,7 @@ interface
 {$I mormot.defines.inc}
 uses
   mormot.core.base,
+  mormot.orm.base,
   mormot.orm.core;
 
 type
