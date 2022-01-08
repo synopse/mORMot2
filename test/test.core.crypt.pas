@@ -2172,11 +2172,11 @@ begin
     end;
     Check(c1.GetSerial <> '');
     Check(c1.HasPrivateSecret);
-    check(c1.GetNotBefore < NowUtc);
+    check(c1.GetNotBefore <= NowUtc);
     check(c1.GetNotAfter > NowUtc);
     c2 := crt.New;
     Check(not c2.IsEqual(c1));
-    check(c2.FromBinary(c1.ToBinary));
+    check(c2.Load(c1.Save));
     Check(not c2.HasPrivateSecret, 'nopwd=pubonly');
     Check(c1.IsEqual(c2));
     CheckEqual(c2.GetSerial, c1.GetSerial);
@@ -2190,7 +2190,7 @@ begin
     c3 := crt.New;
     Check(not c3.IsEqual(c1));
     Check(not c3.IsEqual(c2));
-    check(c3.FromBinary(c1.ToBinary('pwd'), 'pwd'));
+    check(c3.Load(c1.Save('pwd'), 'pwd'));
     Check(c3.HasPrivateSecret, 'pwd=priv');
     Check(c3.IsEqual(c1));
     Check(c3.IsEqual(c2));

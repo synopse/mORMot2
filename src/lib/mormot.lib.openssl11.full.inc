@@ -14570,9 +14570,6 @@ function EVP_aes_192_ocb(): PEVP_CIPHER; cdecl;
 function EVP_aes_256_ecb(): PEVP_CIPHER; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_aes_256_ecb';
 
-function EVP_aes_256_cbc(): PEVP_CIPHER; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_aes_256_cbc';
-
 function EVP_aes_256_cfb1(): PEVP_CIPHER; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_aes_256_cfb1';
 
@@ -17867,9 +17864,6 @@ function X509_sign_ctx(x: PX509; ctx: PEVP_MD_CTX): integer; cdecl;
 function X509_http_nbio(rctx: POCSP_REQ_CTX; pcert: PPX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_http_nbio';
 
-function X509_REQ_sign(x: PX509_REQ; pkey: PEVP_PKEY; md: PEVP_MD): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REQ_sign';
-
 function X509_REQ_sign_ctx(x: PX509_REQ; ctx: PEVP_MD_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_sign_ctx';
 
@@ -17984,9 +17978,6 @@ function i2d_PUBKEY_fp(fp: PPointer; pkey: PEVP_PKEY): integer; cdecl;
 function d2i_PUBKEY_fp(fp: PPointer; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_PUBKEY_fp';
 
-function d2i_X509_bio(bp: PBIO; x509: PPX509): PX509; cdecl;
-  external LIB_CRYPTO name _PU + 'd2i_X509_bio';
-
 function d2i_X509_CRL_bio(bp: PBIO; crl: PPX509_CRL): PX509_CRL; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_CRL_bio';
 
@@ -18055,18 +18046,6 @@ function i2d_PKCS8_PRIV_KEY_INFO_bio(bp: PBIO; p8inf: PPKCS8_PRIV_KEY_INFO): int
 
 function i2d_PKCS8PrivateKeyInfo_bio(bp: PBIO; key: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'i2d_PKCS8PrivateKeyInfo_bio';
-
-function i2d_PrivateKey_bio(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'i2d_PrivateKey_bio';
-
-function d2i_PrivateKey_bio(bp: PBIO; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
-  external LIB_CRYPTO name _PU + 'd2i_PrivateKey_bio';
-
-function i2d_PUBKEY_bio(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'i2d_PUBKEY_bio';
-
-function d2i_PUBKEY_bio(bp: PBIO; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
-  external LIB_CRYPTO name _PU + 'd2i_PUBKEY_bio';
 
 function X509_dup(x509: PX509): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'X509_dup';
@@ -21498,9 +21477,6 @@ function PEM_write_bio_PrivateKey_traditional(bp: PBIO; x: PEVP_PKEY; enc: PEVP_
 
 function PEM_write_bio_PKCS8PrivateKey_nid(bp: PBIO; x: PEVP_PKEY; nid: integer; kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_bio_PKCS8PrivateKey_nid';
-
-function PEM_write_bio_PKCS8PrivateKey(p1: PBIO; p2: PEVP_PKEY; p3: PEVP_CIPHER; p4: PUtf8Char; p5: integer; p6: Ppem_password_cb; p7: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_write_bio_PKCS8PrivateKey';
 
 function i2d_PKCS8PrivateKey_bio(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'i2d_PKCS8PrivateKey_bio';

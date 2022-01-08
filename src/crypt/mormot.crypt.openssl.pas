@@ -2006,7 +2006,10 @@ begin
   TEcc256r1Verify := TEcc256r1VerifyOsl;
   TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with osaES256
   for osa := low(osa) to high(osa) do
+  begin
     TCryptAsymOsl.Create(osa);
+    TCryptCertAlgoOpenSsl.Create(osa);
+  end;
 end;
 
 procedure FinalizeUnit;
