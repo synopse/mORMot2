@@ -4768,9 +4768,8 @@ type
     destructor Destroy; override;
     // ICryptCert methods
     procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
-      const Authority: ICryptCert; ExpireDays, ValidDays: integer); override;
-    function FromBinary(const Binary: RawByteString;
-      const PrivatePassword: RawUtf8): boolean; override;
+      const Authority: ICryptCert; ExpireDays, ValidDays: integer;
+      Fields: PCryptCertFields); override;
     function GetSerial: RawUtf8; override;
     function GetSubject: RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
@@ -4780,8 +4779,11 @@ type
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
-    function ToBinary(const PrivatePassword: RawUtf8): RawByteString; override;
+    function Load(const Saved: RawByteString;
+      const PrivatePassword: RawUtf8): boolean; override;
+    function Save(const PrivatePassword: RawUtf8): RawByteString; override;
     function HasPrivateSecret: boolean; override;
+    function GetPrivateKey: RawByteString; override;
     function IsEqual(const another: ICryptCert): boolean; override;
     function Sign(Data: pointer; Len: integer): RawUtf8; override;
     /// low-level access to internal TEccCertificate or TEccCertificateSecret
@@ -4835,12 +4837,13 @@ end;
 
 procedure TCryptCertInternal.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
-  ExpireDays, ValidDays: integer);
+  ExpireDays, ValidDays: integer; Fields: PCryptCertFields);
 var
   start: TDateTime;
   a: TCryptCert;
   auth: TEccCertificateSecret;
 begin
+  // note: Fields is unsupported (yet)
   if fEcc <> nil then
     RaiseError('New: called twice');
   if ValidDays = 0 then
@@ -4864,7 +4867,7 @@ begin
     auth, '', ExpireDays, start, true, Usages, Subjects, fMaxVersion);
 end;
 
-function TCryptCertInternal.FromBinary(const Binary: RawByteString;
+function TCryptCertInternal.Load(const Saved: RawByteString;
   const PrivatePassword: RawUtf8): boolean;
 begin
   if fEcc <> nil then
@@ -4872,13 +4875,13 @@ begin
   if PrivatePassword = '' then
   begin
     fEcc := TEccCertificate.CreateVersion(fMaxVersion);
-    result := fEcc.LoadFromBinary(Binary); // plain public key only
+    result := fEcc.LoadFromBinary(Saved); // plain public key only
   end
   else
   begin
     fEcc := TEccCertificateSecret.CreateVersion(fMaxVersion);
     result := TEccCertificateSecret(fEcc). // encrypted and with private key
-      LoadFromSecureBinary(Binary, PrivatePassword);
+      LoadFromSecureBinary(Saved, PrivatePassword);
   end;
   if not result then
     FreeAndNil(fEcc);
@@ -4956,7 +4959,7 @@ begin
     result := '';
 end;
 
-function TCryptCertInternal.ToBinary(const PrivatePassword: RawUtf8): RawByteString;
+function TCryptCertInternal.Save(const PrivatePassword: RawUtf8): RawByteString;
 begin
   if fEcc <> nil then
     if fEcc.InheritsFrom(TEccCertificateSecret) then
@@ -4979,6 +4982,15 @@ begin
   result := (fEcc <> nil) and
             fEcc.InheritsFrom(TEccCertificateSecret) and
             TEccCertificateSecret(fEcc).HasSecret;
+end;
+
+function TCryptCertInternal.GetPrivateKey: RawByteString;
+begin
+  if HasPrivateSecret then
+    SetString(result, PAnsiChar(@TEccCertificateSecret(fEcc).PrivateKey),
+      SizeOf(TEccPrivateKey))
+  else
+    result := '';
 end;
 
 function TCryptCertInternal.IsEqual(const another: ICryptCert): boolean;

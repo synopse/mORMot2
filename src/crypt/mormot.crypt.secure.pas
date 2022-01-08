@@ -1228,8 +1228,22 @@ type
 
   TCryptCert = class;
 
+  /// convenient wrapper of X509 Certificate subject name fields
+  // - not always implemented - mainly our 'syn-es256' certificate won't
+  TCryptCertFields = record
+    Country,
+    State,
+    Locality,
+    Organization,
+    OrgUnit,
+    CommonName: RawUtf8;
+  end;
+  PCryptCertFields = ^TCryptCertFields;
+
   /// abstract interface to a Certificate, as returned by Cert() factory
   // - may be X509 or not, OpenSSL implemented or not
+  // - note: features and serialization are not fully compatible between engines,
+  // but those high-level methods work as expected within each TCryptCertAlgo
   ICryptCert = interface
     /// create a new Certificate instance with its genuine private key
     // - Subjects is given as a CSV text, e.g. 'synopse.info,www.synopse.info'
@@ -1239,11 +1253,7 @@ type
     // is -1 by default to avoid most clock synch issues
     procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
       const Authority: ICryptCert = nil; ExpireDays: integer = 365;
-      ValidDays: integer = -1);
-    /// load a Certificate from a ToBinary content
-    // - PrivatePassword is needed if the binary contains a private key
-    function FromBinary(const Binary: RawByteString;
-      const PrivatePassword: RawUtf8 = ''): boolean;
+      ValidDays: integer = -1; Fields: PCryptCertFields = nil);
     /// the Certificate Genuine Serial Number
     // - e.g. '04:f9:25:39:39:f8:ce:79:1a:a4:0e:b3:fa:72:e3:bc:9e:d6'
     function GetSerial: RawUtf8;
@@ -1267,12 +1277,19 @@ type
     function GetUsage: TCryptCertUsages;
     /// verbose Certificate information, returned as huge text/JSON blob
     function GetPeerInfo: RawUtf8;
-    /// serialize the Certificate as raw binary
+    /// load a Certificate from a Save() content
+    // - PrivatePassword is needed if the input contains a private key
+    function Load(const Saved: RawByteString;
+      const PrivatePassword: RawUtf8 = ''): boolean;
+    /// serialize the Certificate as reusable content
     // - after Generate, will contain the public and private key, so
     // PrivatePassword is needed to secure its content - if PrivatePassword is
     // left to '' then only the generated public key will be serialized
-    // - FromBinary() could be used to unserialize the Certificate
-    function ToBinary(const PrivatePassword: RawUtf8 = ''): RawByteString;
+    // - mormot.crypt.ecc will use the SaveToBinary/SaveToSecureBinary format
+    // - mormot.crypt.openssl will use X509.ToBinary DER format if PrivatePassword
+    // is not set, or the PEM format with concatanated certificate and private
+    // key text (in that order) if PrivatePassword is set
+    function Save(const PrivatePassword: RawUtf8 = ''): RawByteString;
     /// compute a digital signature of some digital content
     // - memory buffer will be hashed then signed using the private secret key
     // of this certificate instance
@@ -1282,6 +1299,8 @@ type
     function Sign(Data: pointer; Len: integer): RawUtf8;
     /// returns true if the Certificate contains a private key secret
     function HasPrivateSecret: boolean;
+    /// retrieve the private key as raw binary, or '' if none
+    function GetPrivateKey: RawByteString;
     /// compare two Certificates, which should share the same algorithm
     // - will compare the internal properties and the public key, not the
     // private key: you could e.g. use it to verify that a ICryptCert with
@@ -1300,8 +1319,9 @@ type
   public
     // ICryptCert methods
     procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
-      const Authority: ICryptCert; ExpireDays, ValidDays: integer); virtual; abstract;
-    function FromBinary(const Binary: RawByteString;
+      const Authority: ICryptCert; ExpireDays, ValidDays: integer;
+      Fields: PCryptCertFields); virtual; abstract;
+    function Load(const Saved: RawByteString;
       const PrivatePassword: RawUtf8): boolean; virtual; abstract;
     function GetSerial: RawUtf8; virtual; abstract;
     function GetSubject: RawUtf8; virtual; abstract;
@@ -1312,9 +1332,10 @@ type
     function GetNotAfter: TDateTime; virtual; abstract;
     function GetUsage: TCryptCertUsages; virtual; abstract;
     function GetPeerInfo: RawUtf8; virtual; abstract;
-    function ToBinary(const PrivatePassword: RawUtf8): RawByteString; virtual; abstract;
+    function Save(const PrivatePassword: RawUtf8): RawByteString; virtual; abstract;
     function HasPrivateSecret: boolean; virtual; abstract;
-    function IsEqual(const another: ICryptCert): boolean; virtual; abstract;
+    function GetPrivateKey: RawByteString; virtual; abstract;
+    function IsEqual(const another: ICryptCert): boolean; virtual;
     function Sign(Data: pointer; Len: integer): RawUtf8; virtual; abstract;
     function Instance: TCryptCert;
   end;
@@ -1331,7 +1352,7 @@ type
     // - just a wrapper around New and ICryptCert.Generate()
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
       const Authority: ICryptCert = nil; ExpireDays: integer = 365;
-      ValidDays: integer = -1): ICryptCert;
+      ValidDays: integer = -1; Fields: PCryptCertFields = nil): ICryptCert;
   end;
 
   /// abstract interface to a Certificates Store, as returned by Store() factory
@@ -1505,8 +1526,8 @@ function Asym(const name: RawUtf8): TCryptAsym;
 // - mormot.crypt.ecc.pas defines 'syn-es256' for our TEccCertificate proprietary
 // format (safe and efficient), with 'syn-es256-v1' for the V1 revision with
 // limited Usage and Subjects support
-// - mormot.crypt.openssl.pas will define 'x509-es256' .. 'x509-EdDSA' including
-// 'x509-rs256' for the well known 2048-bit RSA + SHA256 certificates
+// - mormot.crypt.openssl.pas will define 'x509-es256' .. 'x509-eddsa' including
+// 'x509-rs256' for the well established 2048-bit RSA + SHA256 certificates
 // - the shared TCryptCertAlgo of this algorithm is returned: caller should
 // NOT free it
 function CertAlgo(const name: RawUtf8): TCryptCertAlgo;
@@ -4090,10 +4111,10 @@ end;
 
 function TCryptCertAlgo.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
-  ExpireDays, ValidDays: integer): ICryptCert;
+  ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
 begin
   result := New;
-  result.Generate(Usages, Subjects, Authority, ExpireDays, ValidDays);
+  result.Generate(Usages, Subjects, Authority, ExpireDays, ValidDays, Fields);
 end;
 
 
@@ -4117,6 +4138,14 @@ var
 begin
   FormatShort(Fmt, Args, msg);
   RaiseError(msg);
+end;
+
+function TCryptCert.IsEqual(const another: ICryptCert): boolean;
+begin
+  // HasPrivateKey is not part of the comparison
+  result := (@self <> nil) and
+            Assigned(another) and
+            (GetPeerInfo = another.GetPeerInfo); // should be good enough
 end;
 
 function TCryptCert.Instance: TCryptCert;
