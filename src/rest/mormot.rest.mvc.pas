@@ -1653,7 +1653,7 @@ begin
             _Safe(renderContext)^.AddValue('main', info);
             if fMethodIndex = fApplication.fFactoryErrorIndex then
               _ObjAddProps([
-                'errorCode', action.ReturnedStatus,
+                'errorCode',            action.ReturnedStatus,
                 'originalErrorContext', JsonReformat(ToUtf8(renderContext))],
                 renderContext);
             Renders(renderContext, action.ReturnedStatus, false);
@@ -1710,6 +1710,7 @@ procedure TMvcRendererFromViews.Renders(var outContext: variant;
   status: cardinal; forcesError: boolean);
 var
   view: TMvcView;
+  head: RawUtf8;
 begin
   view.Flags := fRun.fViews.fViewFlags;
   if forcesError or
@@ -1722,9 +1723,9 @@ begin
     on E: Exception do
     begin
       _ObjAddProps([
-        'exceptionName', E.ClassName,
+        'exceptionName',    ClassNameShort(E)^,
         'exceptionMessage', E.Message,
-        'className', ClassName], outContext);
+        'className',        ClassNameShort(self)^], outContext);
       view.Content := TSynMustache.Parse(MUSTACHE_DEFAULTERROR).
         Render(outContext);
       view.ContentType := HTML_CONTENT_TYPE;
@@ -1735,6 +1736,8 @@ begin
     fRun.fViews.Render(fMethodIndex, outContext, view);
   fOutput.Content := view.Content;
   fOutput.Header := HEADER_CONTENT_TYPE + view.ContentType;
+  if _Safe(outContext)^.GetAsRawUtf8('CustomOutHttpHeader', head) then
+    fOutput.Header := fOutput.Header + #13#10 + head;
   fOutput.Status := status;
   fOutputFlags := view.Flags;
 end;
