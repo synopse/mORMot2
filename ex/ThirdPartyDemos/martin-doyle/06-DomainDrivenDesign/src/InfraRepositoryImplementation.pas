@@ -7,6 +7,7 @@ uses
   SysUtils,
   mormot.core.base,
   mormot.core.os,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.db.raw.sqlite3,
 

@@ -8,6 +8,7 @@ uses
   mormot.core.data,
   mormot.core.json,
   mormot.core.interfaces,
+  mormot.orm.base,
   mormot.orm.core;
 
 const
