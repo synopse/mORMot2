@@ -1607,7 +1607,7 @@ begin
     begin
       utf16 := Utf8Decode(S);
       tmp.Init(length(utf16) * 3);
-      CharToOemBuffW(pointer(utf16), tmp.buf, tmp.len);
+      CharToOemBuffW(pointer(utf16), tmp.buf, length(utf16));
       SetString(result, PAnsiChar(tmp.buf), StrLen(tmp.buf));
       tmp.Done;
       exit;
