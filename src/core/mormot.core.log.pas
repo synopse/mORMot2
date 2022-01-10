@@ -5472,8 +5472,8 @@ begin
     if aLevel <> sllLeave then
     begin
       // sllEnter or sllNone
-      if Instance <> nil then
-        fWriter.AddInstancePointer(Instance, '.', fFamily.WithUnitName,
+      if r^.Instance <> nil then
+        fWriter.AddInstancePointer(r^.Instance, '.', fFamily.WithUnitName,
           fFamily.WithInstancePointer);
       if r^.MethodName <> nil then
       begin
