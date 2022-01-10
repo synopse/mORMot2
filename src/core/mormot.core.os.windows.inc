@@ -1596,23 +1596,24 @@ begin
     result := 0;
 end;
 
-function Utf8ToConsole(const S: RawUtf8): RawByteString;
+procedure Utf8ToConsoleDoConv(const Utf8: RawUtf8; var Console: RawByteString);
 var
   utf16: SynUnicode;
   tmp: TSynTempBuffer;
-  i: integer;
 begin
-  for i := 1 to length(S) do
-    if S[i] > #127 then
-    begin
-      utf16 := Utf8Decode(S);
-      tmp.Init(length(utf16) * 3);
-      CharToOemBuffW(pointer(utf16), tmp.buf, length(utf16));
-      SetString(result, PAnsiChar(tmp.buf), StrLen(tmp.buf));
-      tmp.Done;
-      exit;
-    end;
-  result := S; // no conversion needed if text is plain ASCII-7 content
+  utf16 := Utf8Decode(Utf8);
+  tmp.Init(length(utf16) * 3);
+  CharToOemBuffW(pointer(utf16), tmp.buf, length(utf16) + 1); // +1 = ending #0
+  SetString(Console, PAnsiChar(tmp.buf), StrLen(tmp.buf));
+  tmp.Done;
+end;
+
+function Utf8ToConsole(const S: RawUtf8): RawByteString;
+begin
+  if IsAnsiCompatible(S) then
+    result := S // no conversion needed
+  else
+    Utf8ToConsoleDoConv(S, result);
 end;
 
 procedure FormatU(const fmt: string; const args: array of const; var result: RawUtf8);
