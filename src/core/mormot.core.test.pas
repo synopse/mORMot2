@@ -38,8 +38,13 @@ type
 
   /// allows to tune TSynTest process
   // - tcoLogEachCheck will log as sllCustom4 each non void Check() message
+  // - tcoLogInSubFolder will log within a '[executable]\logs\' sub-folder
+  // - tcoLogVerboseRotate will force the log files to rotate - could be set if
+  // you expect test logs to be huge, bigger than what LogView supports
   TSynTestOption = (
-    tcoLogEachCheck);
+    tcoLogEachCheck,
+    tcoLogInSubFolder,
+    tcoLogVerboseRotate);
 
   /// set of options to tune TSynTest process
   TSynTestOptions = set of TSynTestOption;
@@ -1344,12 +1349,14 @@ begin
     Level := withLogs;
     PerThreadLog := ptIdentifiedInOnFile;
     HighResolutionTimestamp := true;
-    if Level = LOG_VERBOSE then
+    if (tcoLogVerboseRotate in options) and
+       (Level = LOG_VERBOSE) then
     begin
       RotateFileCount := 10;
       RotateFileSizeKB := 100*1024; // rotate verbose logs by 100MB files
     end;
-    //DestinationPath := Executable.ProgramFilePath + 'logs'; // should exist
+    if tcoLogInSubFolder in options then
+      DestinationPath := EnsureDirectoryExists(Executable.ProgramFilePath + 'logs');
   end;
   // testing is performed by some dedicated classes defined in the caller units
   tests := Create(CustomIdent);
