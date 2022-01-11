@@ -94,7 +94,7 @@ type
   public
     /// create the test case instance
     constructor Create(Owner: TSynTests; const Ident: string = ''); override;
-    /// release used instances (e.g. server) and memory
+    /// release used instances (e.g. server) and memory after all methods exec
     procedure CleanUp; override;
     /// if not '', forces the test not to initiate any server and connnect to
     // the specified server IP address
@@ -234,6 +234,7 @@ var
   Rest: array of TRest;
   Rec: TOrmPeople;
   i, n, r: PtrInt;
+  log: ISynLog;
 begin
   SetCurrentThreadName('% #%', [self, fID]);
   Rec := TOrmPeople.Create;
@@ -251,6 +252,8 @@ begin
               SetLength(Rest, fTest.ClientPerThread);
               for i := 0 to high(Rest) do
                 Rest[i] := fTest.CreateClient;
+              log := TSynLog.Enter('Execute %=% iterations=%',
+                [Rest[0].ClassType, length(Rest), fIterationCount], self);
               if not fTest.CheckFailed(Rest <> nil) then
               begin
                 n := 0;
@@ -290,6 +293,7 @@ begin
               fProcessFinished := true;
               if InterlockedDecrement(fTest.fPendingThreadCount) = 0 then
                 fTest.fPendingThreadFinished.SetEvent; // notify all finished
+              log := nil;
             end;
           except
             on E: Exception do
@@ -458,6 +462,7 @@ begin
         secNone, '', '', HTTPSERVER_DEFAULT_OPTIONS {+ [rsoLogVerbose]} );
       if aHttp in HTTP_BIDIR then
         fHttpServer.WebSocketsEnable(fDatabase, WS_KEY, WS_JSON, WS_BIN)^.SetFullLog;
+      //writeln('server running on ',fDatabase.Model.Root,':',fHttpserver.Port); readln;
     end;
   end;
   // 2. Perform the tests
@@ -470,9 +475,11 @@ begin
     // 2.2. Launch the background client threads
     fPendingThreadFinished.ResetEvent;
     fPendingThreadCount := fRunningThreadCount;
+    //Write(fRunningThreadCount, ' ');
     fTimer.Start;
     for n := 0 to fRunningThreadCount - 1 do
       TTestMultiThreadProcessThread(fThreads[n]).LaunchProcess;
+    //write('.');
     // 2.3. Wait for the background client threads process to be finished
     repeat
       {$ifdef HAS_MESSAGES}
@@ -498,6 +505,7 @@ begin
         end;
     until allFinished;
     fTimer.Stop;
+    //WriteLn(' ',fTimer.PerSec(fOperationCount * 2));
     fRunConsole := Format('%s%d=%d/s  ',
       [fRunConsole, fRunningThreadCount, fTimer.PerSec(fOperationCount * 2)]);
     // 2.4. Check INSERTed IDs consistency

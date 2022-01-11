@@ -655,9 +655,9 @@ procedure TTestCoreEcc._OpenSSL;
     Check({%H-}priv <> '');
     Check({%H-}pub <> '');
     NotifyTestSpeed('% Generation', [Name], Count, 0, @timer);
-writeln(Name, ':'#10);
-writeln(priv);
-writeln(pub);
+//writeln(Name, ':'#10);
+//writeln(priv);
+//writeln(pub);
     msg := RandomString(100);
     if IdemPChar(pointer(Name), 'RSA') then
       Count := Count * 10;
