@@ -462,6 +462,8 @@ type
       aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
       aThreadPoolCount: integer); reintroduce; virtual;
     /// shut down the instance, releasing all associated threads and sockets
+    procedure Shutdown;
+    /// shut down and finalize the instance, calling Shutdown
     destructor Destroy; override;
     /// high-level access to a connection instance, from its handle
     // - use efficient O(log(n)) binary search, since handles are increasing
@@ -1520,7 +1522,7 @@ end;
 procedure TAsyncConnectionsThread.Execute;
 var
   n: RawUtf8;
-  pending: integer;
+  new, ms: integer;
   start: Int64;
   notif: TPollSocketResult;
 begin
@@ -1542,8 +1544,7 @@ begin
       case fProcess of
         atpReadSingle:
           // a single thread to rule them all: polling, reading and processing
-          if fOwner.fClients.fRead.GetOne(3000000, n, notif) then
-            // 3000000 timeout so that GetOne() would stay in 120-250 ms steps
+          if fOwner.fClients.fRead.GetOne(1100, n, notif) then
             if not Terminated then
               fOwner.fClients.ProcessRead(notif);
         atpReadPoll:
@@ -1551,29 +1552,42 @@ begin
           // (no process because a faulty service would delay all reading)
           begin
             start := 0; // back to SleepHiRes(0)
+            if fOwner.fClients.fRead.PollClass.FollowEpoll then
+              ms := 1100 // efficient epoll_wait(ms) API call
+            else
+              ms := 0;
             while not Terminated do
             begin
-              pending := fOwner.fClients.fRead.PollForPendingEvents(0);
+              new := fOwner.fClients.fRead.PollForPendingEvents(ms);
               if Terminated then
-                break
-              else if pending = 0 then
+                break;
+              if new = 0 then
+              begin
                 if fOwner.fClients.fRead.Count = 0 then
                 begin
                   // avoid void PollForPendingEvents/SleepStep loop
                   fEvent.WaitFor(INFINITE); // blocking until next accept()
                   start := 0;
+                  continue;
                 end
-                else
-                  // 0/1/10/50/150 ms steps, checking fThreadReadPoll from accept
-                  SleepStep(start, @Terminated, fEvent)
-              else
+                else if ms = 0 then
+                begin
+                  // 0/1/10/50/150 ms steps, checking fThreadReadPoll.fEvent
+                  SleepStep(start, @Terminated, fEvent);
+                  continue;
+                end;
+              end;
+              new := fOwner.fClients.fRead.fPending.Count;
+              if new > 0 then
               begin
                 // process fOwner.fClients.fPending in atpReadPending threads
-                fOwner.ThreadPollingWakeup(pending);
+                fEvent.ResetEvent;
+                fOwner.ThreadPollingWakeup(new);
                 // atpReadPending notifies fThreadReadPoll.fEvent when done
                 if Terminated or
                    (fEvent.WaitFor(10) = wrSignaled) then
                   break;
+                start := 0;
               end;
             end;
           end;
@@ -1629,7 +1643,7 @@ begin
   if aThreadPoolCount <= 0 then
     aThreadPoolCount := 1;
   fLastOperationReleaseMemorySeconds := 60;
-  fLastOperationSec := Qword(GetTickCount64) div 1000; // need something ASAP
+  fLastOperationSec := Qword(mormot.core.os.GetTickCount64) div 1000; // ASAP
   fLog := aLog;
   fConnectionClass := aConnectionClass;
   if not (acoNoConnectionTrack in aOptions) then
@@ -1684,7 +1698,7 @@ begin
   result := true;
 end;
 
-destructor TAsyncConnections.Destroy;
+procedure TAsyncConnections.Shutdown;
 var
   i, n: PtrInt;
   endtix: Int64;
@@ -1693,36 +1707,44 @@ begin
   if fClients <> nil then
   begin
     with fClients do
-      DoLog('Destroy threads=% total=% reads=%/% writes=%/% count=%',
+      DoLog('Shutdown threads=% total=% reads=%/% writes=%/% count=%',
         [length(fThreads), Total, ReadCount, KB(ReadBytes),
          WriteCount, KB(WriteBytes), fConnectionCount]);
     fClients.Terminate(5000);
   end;
   // terminate and unlock background ProcessRead/ProcessWrite polling threads
-  for i := 0 to high(fThreads) do
-    fThreads[i].Terminate;
-  endtix := mormot.core.os.GetTickCount64 + 10000;
-  repeat
-    n := 0;
+  if fThreads <> nil then
+  begin
     for i := 0 to high(fThreads) do
-      with fThreads[i] do
-        if fExecuteState = esRunning then
-        begin
-          if fEvent <> nil then
-            fEvent.SetEvent; // release any (e.g. atpReadPoll) lock
-          inc(n);
-        end;
-    if n = 0 then
-      break;
-    DoLog(sllTrace, 'Destroy unfinished=%', [n], self);
-    SleepHiRes(1);
-  until mormot.core.os.GetTickCount64 > endtix;
-  FreeAndNilSafe(fClients); // FreeAndNil() sets nil before which is incorrect
-  ObjArrayClear(fThreads);
+      fThreads[i].Terminate;
+    endtix := mormot.core.os.GetTickCount64 + 10000;
+    repeat
+      n := 0;
+      for i := 0 to high(fThreads) do
+        with fThreads[i] do
+          if fExecuteState = esRunning then
+          begin
+            if fEvent <> nil then
+              fEvent.SetEvent; // release any (e.g. atpReadPoll) lock
+            inc(n);
+          end;
+      if n = 0 then
+        break;
+      DoLog(sllTrace, 'Destroy unfinished=%', [n], self);
+      SleepHiRes(1);
+    until mormot.core.os.GetTickCount64 > endtix;
+    FreeAndNilSafe(fClients); // FreeAndNil() sets nil before which is incorrect
+    ObjArrayClear(fThreads);
+  end;
+end;
+
+destructor TAsyncConnections.Destroy;
+begin
+  Shutdown;
   inherited Destroy;
   if not (acoNoConnectionTrack in fOptions) then
-    for i := 0 to fConnectionCount - 1 do
-      fConnection[i].Free; // they are normally no pending connection yet
+    // they are normally no pending connection anymore
+    ObjArrayClear(fConnection, fConnectionCount);
 end;
 
 function TAsyncConnections.ThreadClientsConnect: TAsyncConnection;
@@ -2253,7 +2275,7 @@ begin
     begin
       if not async then
         notif.tag := 0 // blocking initial accept()
-      else if not fClients.fWrite.GetOne(1000, 'AW', notif) then
+      else if not fClients.fWrite.GetOne(900, 'AW', notif) then
         continue;
       if Terminated then
         break;
@@ -2279,7 +2301,7 @@ begin
               [fServer.Port, ToText(res)^], self);
             if res <> nrTooManyConnections then
               // progressive wait (if not load-balancing, but socket error)
-              SleepStep(start, @Terminated);
+              SleepStep(start);
             break;
           end;
           if Terminated then
@@ -2743,6 +2765,9 @@ end;
 procedure THttpAsyncServer.Execute;
 var
   notif: TPollSocketResult;
+  tix64: Int64;
+  tix, lasttix: cardinal;
+  ms: integer;
 begin
   // Send() output packets in the background
   SetCurrentThreadName('W %', [fAsync.fProcessName]);
@@ -2751,10 +2776,40 @@ begin
   if fAsync <> nil then
     try
       fAsync.DoLog(sllTrace, 'Execute: main W loop', [], self);
+      tix := mormot.core.os.GetTickCount64 shr 16; // delay=500 after 1 min idle
+      lasttix := tix;
+      ms := 1000; // fine if OnGetOneIdle is called in-between
+      if fAsync.fClients.fWrite.PollClass.FollowEpoll then
+        if fCallbackSendDelay <> nil then
+          ms := fCallbackSendDelay^; // for WebSockets frame gathering
       while not Terminated and
             not fAsync.Terminated do
-        if fAsync.fClients.fWrite.GetOne(1000, 'W', notif) then
-          fAsync.fClients.ProcessWrite(notif);
+        if fAsync.fClients.fWrite.Count = 0 then
+        begin
+          // no socket/poll/epoll API nedeed (most common case)
+          if (fCallbackSendDelay <> nil) and
+             (tix = lasttix) then
+            SleepHiRes(fCallbackSendDelay^) // delayed SendFrames gathering
+          else
+            SleepHiRes(500); // idle server
+          tix64 := mormot.core.os.GetTickCount64;
+          tix := tix64 shr 16;
+          fAsync.ProcessIdleTix(self, tix64);
+          if (fCallbackSendDelay <> nil) and
+             (fAsync.fClients.fRead.Count <> 0) then
+            lasttix := tix;
+        end
+        else
+        begin
+          // some packets queued for async sending (unlikely)
+          if fAsync.fClients.fWrite.GetOne(ms, 'W', notif) then
+            fAsync.fClients.ProcessWrite(notif);
+          if fCallbackSendDelay <> nil then
+          begin
+            tix := mormot.core.os.GetTickCount64 shr 16;
+            lasttix := tix;
+          end;
+        end;
     except
       on E: Exception do
         // callback exceptions should all be catched: so we assume that any

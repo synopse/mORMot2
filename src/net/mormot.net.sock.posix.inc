@@ -18,6 +18,8 @@ uses
   {$define USEPOLL} // epoll API is Linux-specific -> force use poll() on BSD
 {$endif OSBSDDARWIN}
 
+{.$define USEPOLL} // to validate poll API on Linux
+
 
 { ******** Sockets Type Definitions }
 
@@ -628,6 +630,7 @@ function TPollSocketPoll.Subscribe(socket: TNetSocket; events: TPollSocketEvents
 var
   i, new: PtrInt;
   n, e, fd, s: integer;
+  p: PPollFD;
 begin
   result := false;
   if (self = nil) or
@@ -643,22 +646,25 @@ begin
     e := e or POLLOUT;
   s := PtrUInt(socket);
   new := -1;
+  p := pointer(fFD);
   if fFDCount = fCount then
   begin
     // no void entry
-    for i := 0 to fFDCount - 1 do
-      if fFD[i].fd = s then
+    for i := 1 to fFDCount do
+      if p^.fd = s then
         // already subscribed
-        exit;
+        exit
+      else
+        inc(p);
   end
   else
     for i := 0 to fFDCount - 1 do
     begin
-      fd := fFD[i].fd;
+      fd := p^.fd;
       if fd = s then
         // already subscribed
-        exit;
-      if fd < 0 then
+        exit
+      else if fd < 0 then
         // found a void entry
         new := i;
     end;
@@ -709,73 +715,84 @@ function TPollSocketPoll.Unsubscribe(socket: TNetSocket): boolean;
 var
   i: PtrInt;
   s: integer;
+  p: PPollFD;
 begin
   s := PtrUInt(socket);
-  for i := 0 to fFDCount - 1 do
-    if fFD[i].fd = s then
+  p := pointer(fFD);
+  for i := 1 to fFDCount do
+    if p^.fd = s then
     begin
-      with fFD[i] do
-      begin
-        revents := 0; // quickly ignored in WaitForModified()
-        fd := -1; // mark entry as void and reusable
-      end;
+      p^.fd := -1;     // mark entry as void and reusable
+      p^.revents := 0; // quickly ignored in WaitForModified()
       dec(fCount);
       if fCount <= fFDCount shr 1 then
         FDVacuum; // avoid too many void entries
       result := true;
       exit;
-    end;
+    end
+    else
+      inc(p);
   result := false;
+end;
+
+procedure PollConvert(p: PPollFD; d: PPollSocketResult; n: integer; t: PPollSocketTag);
+var
+  e: TPollSocketEvents;
+  r: integer;
+begin
+  repeat
+    r := p^.revents;
+    if (r <> 0) and
+       (p^.fd > 0) then
+    begin
+      if r = POLLIN then
+        byte(d^.events) := byte([pseRead]) // optimized for the most common case
+      else
+      begin
+        byte(e) := 0;
+        if r and (POLLIN or POLLPRI) <> 0 then
+          include(e, pseRead);
+        if r and POLLOUT <> 0 then
+          include(e, pseWrite);
+        if r and POLLERR <> 0 then
+          include(e, pseError);
+        if r and POLLHUP <> 0 then
+          include(e, pseClosed);
+        d^.events := e;
+      end;
+      d^.tag := t^;
+      inc(d);
+      p^.revents := 0; // reset result flags for reuse
+    end;
+    inc(p);
+    inc(t);
+    dec(n);
+  until n = 0;
 end;
 
 function TPollSocketPoll.WaitForModified(var results: TPollSocketResults;
   timeoutMS: integer): boolean;
 var
-  e: TPollSocketEvents;
-  i, d: PtrInt;
-  ev: integer;
+  n: PtrInt;
 begin
   result := false; // error
   if (self = nil) or
      (fCount = 0) then
     exit;
-  results.Count := poll(pointer(fFD), fFDCount, timeoutMS);
-  if results.Count <= 0 then
+  // here fCount=0 would not permit next async subscription
+  n := poll(pointer(fFD), fFDCount, timeoutMS);
+  results.Count := n;
+  if n <= 0 then
     exit;
-  if length(results.Events) < results.Count then
-    SetLength(results.Events, fCount);
-  d := 0;
-  for i := 0 to fFDCount - 1 do
+  if results.Events = nil then
+    SetLength(results.Events, n + 4)
+  else if n > length(results.Events) then
+  if length(results.Events) < n then
   begin
-    ev := fFD[i].revents;
-    if (ev <> 0) and
-       (fFD[i].fd > 0) then
-    begin
-      if ev = POLLIN then
-        byte(e) := byte([pseRead]) // optimized for the most common case
-      else
-      begin
-        byte(e) := 0;
-        if ev and (POLLIN or POLLPRI) <> 0 then
-          include(e, pseRead);
-        if ev and POLLOUT <> 0 then
-          include(e, pseWrite);
-        if ev and POLLERR <> 0 then
-          include(e, pseError);
-        if ev and POLLHUP <> 0 then
-          include(e, pseClosed);
-      end;
-      with results.Events[d] do
-      begin
-        events := e;
-        tag := fTags[i];
-      end;
-      inc(d);
-      fFD[i].revents := 0; // reset result flags for reuse
-    end;
+    results.Events := nil;
+    SetLength(results.Events, fMaxSockets);
   end;
-  if d <> results.Count then // paranoid
-    raise ENetSock.CreateFmt('TPollSocketPoll: %d<>%d', [results.Count, d]);
+  PollConvert(pointer(fFD), pointer(results.Events), fFDCount, pointer(fTags));
   result := true;
 end;
 
@@ -805,24 +822,42 @@ type
     // directly calls epool_wait() function
     function WaitForModified(var results: TPollSocketResults;
       timeoutMS: integer): boolean; override;
-    /// read-only access to the low-level epoll_create file descriptor
+    // stop epolling
+    procedure Terminate; override;
+    // read-only access to the low-level epoll_create file descriptor
     property EPFD: integer
       read fEPFD;
   end;
 
+{$define POLLSOCKETEPOLL}
+// is defined for TPollSocketEpoll.FollowEpoll = true
+
 constructor TPollSocketEpoll.Create;
 begin
   inherited Create;
-  fMaxSockets := 20000;
-  fEPFD := epoll_create(fMaxSockets);
+  fMaxSockets := 100; // initial value: no limitation in practice and can grow
+  fEPFD := epoll_create(fMaxSockets); // since 2.6.8 size is ignored
   SetLength(fResults, fMaxSockets);
 end;
 
 destructor TPollSocketEpoll.Destroy;
 begin
-  fpClose(fEPFD);
+  Terminate;
   inherited;
 end;
+
+procedure TPollSocketEpoll.Terminate;
+begin
+  if fEPFD <= 0 then
+    exit;
+  fpClose(fEPFD);
+  fEPFD := -1;
+end;
+
+// "EPOLLET" edge triggered detection is not consistent with select or poll
+// -> PollForPendingEvents() will use fast O(n*m) MergePendingEvents()
+const
+  EPOLLMODE = 0; // EPOLLET
 
 function TPollSocketEpoll.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
   tag: TPollSocketTag): boolean;
@@ -832,25 +867,27 @@ begin
   result := false;
   if (self = nil) or
      (socket = nil) or
+     (fEPFD <= 0) or
      (PtrUInt(socket) = PtrUInt(fEPFD)) or
-     (byte(events) = 0) or
-     (fCount = fMaxSockets) then
+     (byte(events) = 0) then
     exit;
-  // "EPOLLET" edge triggered detection is not consistent with select or poll
   e.data.ptr := pointer(tag); // don't use data.u64
   if pseRead in events then
     if pseWrite in events then
-      e.events := EPOLLIN or EPOLLPRI or EPOLLOUT
+      e.events := EPOLLIN or EPOLLPRI or EPOLLOUT or EPOLLMODE
     else
-      e.events := EPOLLIN or EPOLLPRI
+      e.events := EPOLLIN or EPOLLPRI or EPOLLMODE
   else if pseWrite in events then
-    e.events := EPOLLOUT
+    e.events := EPOLLOUT or EPOLLMODE
   else
     e.events := 0;
   // EPOLLERR and EPOLLHUP are always implicitly tracked
   result := epoll_ctl(fEPFD, EPOLL_CTL_ADD, TSocket(socket), @e) >= NO_ERROR;
-  if result then
-    inc(fCount);
+  if not result then
+    exit;
+  inc(fCount);
+  if fCount = fMaxSockets then
+    fMaxSockets := NextGrow(fMaxSockets); // epoll has no theoritical limit
 end;
 
 function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
@@ -859,13 +896,19 @@ var
 begin
   if (self = nil) or
      (socket = nil) or
+     (fEPFD <= 0) or
      (PtrUInt(socket) = PtrUInt(fEPFD)) then
     result := false
   else
   begin
     result := epoll_ctl(fEPFD, EPOLL_CTL_DEL, TSocket(socket), @e) >= NO_ERROR;
     if result then
+    begin
       dec(fCount);
+      if (fMaxSockets > 100) and
+         (fCount < fMaxSockets shr 1) then
+        fMaxSockets := fMaxSockets shr 1; // size down fMaxSockets
+    end;
   end;
 end;
 
@@ -879,14 +922,27 @@ var
 begin
   result := false; // error or nothing new
   if (self = nil) or
-     (fCount = 0) then
+     (fEPFD <= 0) then
     exit;
+  // we allow fCount=0 which enable background epoll_ctl subscription
+  if fMaxSockets > length(fResults) then
+  begin
+    fResults := nil;
+    SetLength(fResults, fMaxSockets);
+  end;
   n := epoll_wait(fEPFD, pointer(fResults), fMaxSockets, timeoutMS);
   results.Count := n;
   if n <= 0 then
     exit;
-  if n > length(results.Events) then
-    SetLength(results.Events, fMaxSockets); // n<=fMaxSockets for sure
+  if results.Events = nil then
+    // temporary results.Events = new in PollForPendingEvents()
+    SetLength(results.Events, n + 4)
+  else if n > length(results.Events) then
+  begin
+    // results.Events can be reused between PollForPendingEvents() calls
+    results.Events := nil;
+    SetLength(results.Events, fMaxSockets)
+  end;
   for i := 0 to n - 1 do
   begin
     with fResults[i] do

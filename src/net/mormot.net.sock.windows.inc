@@ -920,7 +920,7 @@ begin
     byte(ev) := 0;
     sock := fTagSocket[i];
     if (rdp <> nil) and
-       FD_ISSET(sock, rd{%H-}) then
+      FD_ISSET(sock, rd{%H-}) then
     // on heavily multi-threaded process, select() may be triggerred but
     // currently reading in another thread, so here IoctlSocket() would return
     // pending=0 whereas the socket is actually NOT closed (seen on Windows 7)

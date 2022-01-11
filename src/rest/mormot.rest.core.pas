@@ -2164,7 +2164,7 @@ destructor TRest.Destroy;
 var
   cmd: TRestServerUriContextCommand;
 begin
-  InternalLog('TRest.Destroy %',[fModel.SafeRoot],sllInfo); // self->GPF
+  InternalLog('TRest.Destroy %', [fModel.SafeRoot], sllInfo); // self->GPF
   if fOrm <> nil then
     // abort any (unlikely) pending TRestBatch
     fOrm.AsyncBatchStop(nil);

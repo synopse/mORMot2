@@ -341,14 +341,14 @@ end;
 
 procedure TWebSocketAsyncConnections.ProcessIdleTixSendFrames;
 var
-  i, conn, valid, sent, invalid: PtrInt;
+  i, conn, valid, sent, invalid, unknown: PtrInt;
   pending: TIntegerDynArray; // keep fOutgoingSafe lock short
   c: TAsyncConnection;
   timer: TPrecisionTimer;
 begin
   if Assigned(fLog) and
      (sllTrace in fLog.Family.Level) then
-    timer.Start // we monitor this loop, which should not be blocking
+    timer.Start // we monitor frame sending timing
   else
     timer.Init; // no need to call high-precision timing API
   fOutgoingSafe.Lock;
@@ -362,6 +362,7 @@ begin
   end;
   valid := 0;
   invalid := 0;
+  unknown := 0;
   for i := 0 to conn - 1 do
   begin
     c := ConnectionFind(pending[i]);
@@ -372,13 +373,17 @@ begin
         inc(invalid)
       else
         inc(valid, sent);
-    end;
+    end
+    else
+      inc(unknown);
   end;
   timer.Pause; // BeforeSendFrame encrypt/compress may have taken some time
   if (invalid <> 0) or
+     (unknown <> 0) or
      (timer.TimeInMicroSec > 500) then // 0.5 ms seems responsive enough
-    DoLog(sllTrace, 'ProcessIdleTix conn=% valid=% invalid=% in %',
-      [conn, valid, invalid, timer.Time], self);
+    DoLog(sllTrace,
+      'ProcessIdleTixSendFrames conn=% valid=% invalid=% unknown=% in %',
+      [conn, valid, invalid, unknown, timer.Time], self);
 end;
 
 procedure TWebSocketAsyncConnections.ProcessIdleTix(Sender: TObject;
@@ -537,7 +542,7 @@ begin
   // initialize protocols and connections
   fConnectionClass := TWebSocketAsyncConnection;
   fConnectionsClass := TWebSocketAsyncConnections;
-  fCanNotifyCallback := true;
+  fCallbackSendDelay := @fSettings.SendDelay;
   fProtocols := TWebSocketProtocolList.Create;
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;

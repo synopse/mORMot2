@@ -117,7 +117,7 @@ type
     fServerName: RawUtf8;
     fCurrentConnectionID: integer; // 31-bit NextConnectionID sequence
     fCurrentRequestID: integer;
-    fCanNotifyCallback: boolean;
+    fCallbackSendDelay: PCardinal;
     fRemoteIPHeader, fRemoteIPHeaderUpper: RawUtf8;
     fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: RawUtf8;
     function GetApiVersion: RawUtf8; virtual; abstract;
@@ -267,8 +267,8 @@ type
       read GetHttpQueueLength write SetHttpQueueLength;
     /// TRUE if the inherited class is able to handle callbacks
     // - only TWebSocketServer/TWebSocketAsyncServer have this ability by now
-    property CanNotifyCallback: boolean
-      read fCanNotifyCallback;
+    function CanNotifyCallback: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// the value of a custom HTTP header containing the real client IP
     // - by default, the RemoteIP information will be retrieved from the socket
     // layer - but if the server runs behind some proxy service, you should
@@ -1437,6 +1437,12 @@ begin
   if RemoteConnID = 0 then
     // fallback to 31-bit sequence
     RemoteConnID := NextConnectionID;
+end;
+
+function THttpServerGeneric.CanNotifyCallback: boolean;
+begin
+  result := (self <> nil) and
+            (fCallbackSendDelay <> nil);
 end;
 
 procedure THttpServerGeneric.SetServerName(const aName: RawUtf8);
@@ -2648,7 +2654,7 @@ begin
   fOnBeforeBody := From.fOnBeforeBody;
   fOnBeforeRequest := From.fOnBeforeRequest;
   fOnAfterRequest := From.fOnAfterRequest;
-  fCanNotifyCallback := From.fCanNotifyCallback;
+  fCallbackSendDelay := From.fCallbackSendDelay;
   fCompress := From.fCompress;
   fCompressAcceptEncoding := From.fCompressAcceptEncoding;
   fReceiveBufferSize := From.fReceiveBufferSize;

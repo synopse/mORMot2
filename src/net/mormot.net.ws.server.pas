@@ -364,7 +364,7 @@ begin
   fSocketClass := TWebSocketServerSocket;
   fProcessClass := TWebSocketProcessServer;
   // initialize protocols and connections
-  fCanNotifyCallback := true;
+  fCallbackSendDelay := @fSettings.SendDelay;
   fWebSocketConnections := TSynObjectListLocked.Create({owned=}false);
   fProtocols := TWebSocketProtocolList.Create;
   fSettings.SetDefaults;

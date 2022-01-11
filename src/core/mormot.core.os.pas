@@ -5469,7 +5469,7 @@ end;
 
 procedure TLightLock.UnLock;
 begin
-  Flags := 0;
+  Flags := 0; // non reentrant locks need no additional thread safety
 end;
 
 
