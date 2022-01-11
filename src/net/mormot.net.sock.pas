@@ -182,7 +182,8 @@ type
     procedure SetKeepAlive(keepalive: boolean);
     procedure SetLinger(linger: integer);
     procedure SetNoDelay(nodelay: boolean);
-    function Accept(out clientsocket: TNetSocket; out addr: TNetAddr): TNetResult;
+    function Accept(out clientsocket: TNetSocket; out addr: TNetAddr;
+      async: boolean): TNetResult;
     function GetPeer(out addr: TNetAddr): TNetResult;
     function MakeAsync: TNetResult;
     function MakeBlocking: TNetResult;
@@ -1009,7 +1010,8 @@ type
     // - returns nil on error or a ResultClass instance on success
     // - if ResultClass is nil, will return a plain TCrtSocket, but you may
     // specify e.g. THttpServerSocket if you expect incoming HTTP requests
-    function AcceptIncoming(ResultClass: TCrtSocketClass = nil): TCrtSocket;
+    function AcceptIncoming(ResultClass: TCrtSocketClass = nil;
+      Async: boolean = false): TCrtSocket;
     /// remote IP address after AcceptRequest() call over TCP
     // - is either the raw connection IP to the current server socket, or
     // a custom header value set by a local proxy as retrieved by inherited
@@ -1547,7 +1549,7 @@ type
 {$endif OSWINDOWS}
 
 function TNetSocketWrap.Accept(out clientsocket: TNetSocket;
-  out addr: TNetAddr): TNetResult;
+  out addr: TNetAddr; async: boolean): TNetResult;
 var
   len: tsocklen;
   sock: TSocket;
@@ -1557,7 +1559,12 @@ begin
   else
   begin
     len := SizeOf(addr);
-    sock := mormot.net.sock.accept(TSocket(@self), @addr, len);
+    {$ifdef OSLINUX}
+    if async then
+      sock := mormot.net.sock.accept4(TSocket(@self), @addr, len, O_NONBLOCK)
+    else
+    {$endif OSLINUX}
+      sock := mormot.net.sock.accept(TSocket(@self), @addr, len);
     if sock = -1 then
     begin
       result := NetLastError;
@@ -1572,7 +1579,14 @@ begin
       clientsocket.SetRecvBufferSize(65536);
       clientsocket.SetSendBufferSize(65536);
       {$endif OSWINDOWS}
-      result := nrOK;
+      {$ifdef OSLINUX}
+      //if async then write(' nb=',(fpfcntl(sock,F_GETFL,0) and O_NONBLOCK));
+      {$else}
+      if async then
+        result := clientsocket.MakeAsync
+      else
+      {$endif OSLINUX}
+        result := nrOK;
     end;
   end;
 end;
@@ -3840,7 +3854,8 @@ begin
   result := sockerrno;
 end;
 
-function TCrtSocket.AcceptIncoming(ResultClass: TCrtSocketClass): TCrtSocket;
+function TCrtSocket.AcceptIncoming(
+  ResultClass: TCrtSocketClass; Async: boolean): TCrtSocket;
 var
   client: TNetSocket;
   addr: TNetAddr;
@@ -3848,7 +3863,7 @@ begin
   result := nil;
   if not SockIsDefined then
     exit;
-  if fSock.Accept(client, addr) <> nrOK then
+  if fSock.Accept(client, addr, Async) <> nrOK then
     exit;
   if ResultClass = nil then
     ResultClass := TCrtSocket;

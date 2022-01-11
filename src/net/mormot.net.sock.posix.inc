@@ -63,6 +63,7 @@ const
     MSG_NOSIGNAL  = $400;
     {$endif OSOPENBSD}
   {$else}
+
     {$ifdef SUNOS}
     MSG_NOSIGNAL = $20000;  // Do not generate SIGPIPE.
     {$else}
@@ -171,6 +172,10 @@ function listen(s: TSocket; backlog: integer): integer; cdecl;
   external clib name 'listen';
 function accept(s: TSocket; addr: PSockAddr; var addrlen: tsocklen): integer; cdecl;
   external clib name 'accept';
+{$ifdef OSLINUX}
+function accept4(s: TSocket; addr: PSockAddr; var addrlen: tsocklen; flags: integer): integer; cdecl;
+  external clib name 'accept4';
+{$endif OSLINUX}
 function connect(s: TSocket; name: PSockAddr; namelen: tsocklen): integer; cdecl;
   external clib name 'connect';
 function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;

@@ -292,7 +292,7 @@ var
 begin
   try
     fState := stAccepting;
-    ENetSock.Check(fServerSock.Accept(fClientSock, fClientAddr),
+    ENetSock.Check(fServerSock.Accept(fClientSock, fClientAddr, {async=}false),
       'TTunnelLocalThread.Execute');
     fState := stProcessing;
     while not Terminated do
