@@ -1780,7 +1780,7 @@ begin
       raise EHttpServer.CreateUtf8('%.Execute: %.Bind failed', [self, fSock]);
     while not Terminated do
     begin
-      res := Sock.Sock.Accept(cltsock, cltaddr);
+      res := Sock.Sock.Accept(cltsock, cltaddr, {async=}false);
       if not (res in [nrOK, nrRetry]) then
         if Terminated then
           break

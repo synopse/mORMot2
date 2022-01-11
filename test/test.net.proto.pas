@@ -22,6 +22,7 @@ uses
   mormot.core.json,
   mormot.core.log,
   mormot.core.test,
+  mormot.core.perf,
   mormot.net.sock,
   mormot.net.http,
   mormot.net.async,
@@ -54,6 +55,62 @@ type
 var
   streamer: TCrtSocket;
   req: array of TReq;
+
+  procedure Shutdown;
+  var
+    r, rmax: PtrInt;
+    log: ISynLog;
+    timer, one: TPrecisionTimer;
+  begin
+    log := proxy.Log.Enter(proxy, 'Shutdown');
+    // first half deletes POST first, second half deletes GET first
+    timer.Start;
+    rmax := clientcount - 1;
+    for r := 0 to rmax shr 1 do
+      req[r].post.Free;
+    if log <> nil then
+      log.Log(sllCustom1, 'RegressionTests SHUTDOWN 1 %', [timer.Stop], proxy);
+    timer.Start;
+    req[0].stream.Free; // validates remove POST when RTSP already down
+    if log <> nil then
+      log.Log(sllCustom1, 'RegressionTests SHUTDOWN 2 %', [timer.Stop], proxy);
+    timer.Start;
+    for r := (rmax shr 1) + 1 to rmax do
+      req[r].get.Free;
+    if log <> nil then
+      log.Log(sllCustom1, 'RegressionTests SHUTDOWN 3 %', [timer.Stop], proxy);
+    timer.Start;
+    for r := 0 to rmax shr 1 do
+      req[r].get.Free;
+    if log <> nil then
+      log.Log(sllCustom1, 'RegressionTests SHUTDOWN 4 %', [timer.Stop], proxy);
+    timer.Start;
+    for r := (rmax shr 1) + 1 to rmax do
+      req[r].post.Free;
+    if log <> nil then
+      log.Log(sllCustom1, 'RegressionTests SHUTDOWN 5 %', [timer.Stop], proxy);
+    timer.Start;
+    sleep(10);
+    //proxy.Shutdown; // don't make any difference
+    if log <> nil then
+      log.Log(sllCustom1, 'RegressionTests SHUTDOWN 6 %', [timer.Stop], proxy);
+    for r := 1 to rmax do
+    begin
+      one.Start;
+      //req[r].stream.OnLog := TSynLog.DoLog;
+      req[r].stream.Free;
+      if log <> nil then
+        log.Log(sllCustom1, 'RegressionTests SHUTDOWN 6-% %', [r, one.Stop], proxy);
+    end;
+    if log <> nil then
+      log.Log(sllCustom1, 'RegressionTests % SHUTDOWN 7 %', [timer.Stop], proxy);
+    timer.Start;
+    streamer.Free;
+    if log <> nil then
+      log.Log(sllCustom1, 'RegressionTests ENDED %', [timer.Stop], proxy);
+  end;
+
+var
   rmax, r, i: PtrInt;
   text: RawUtf8;
   log: ISynLog;
@@ -103,7 +160,7 @@ begin
             'Cache-Control: no-cache'#13#10 +
             'Content-Length: 32767'#13#10 +
             'Expires: Sun, 9 Jan 1972 00:00:00 GMT'#13#10#13#10);
-          stream := streamer.AcceptIncoming;
+          stream := streamer.AcceptIncoming(nil, {async=}true);
           if stream = nil then
           begin
             test.Check(false);
@@ -153,20 +210,7 @@ begin
       if log <> nil then
         log.Log(sllCustom1, 'RegressionTests % SHUTDOWN', [clientcount], proxy);
     finally
-      // first half deletes POST first, second half deletes GET first
-      for r := 0 to rmax shr 1 do
-        req[r].post.Free;
-      req[0].stream.Free; // validates remove POST when RTSP already down
-      for r := (rmax shr 1) + 1 to rmax do
-        req[r].get.Free;
-      for r := 0 to rmax shr 1 do
-        req[r].get.Free;
-      for r := (rmax shr 1) + 1 to rmax do
-        req[r].post.Free;
-      Sleep(10); // warning: waits typically 10-15 ms on Windows
-      for r := 1 to rmax do
-        req[r].stream.Free;
-      streamer.Free;
+      Shutdown;
     end;
   except
     on E: Exception do
@@ -175,15 +219,19 @@ begin
 end;
 
 procedure TNetworkProtocols.DoRtspOverHttp(options: TAsyncConnectionsOptions);
-const
-  {$ifdef OSDARWIN}
-  N = 10;
-  {$else}
-  N = 100;
-  {$endif OSDARWIN}
 var
+  N: integer;
   proxy: TRtspOverHttpServer;
 begin
+  {$ifdef OSDARWIN}
+  N := 10;
+  {$else}
+  if PollSocketClass.FollowEpoll then
+    // with epoll, each stream shutdown takes 40ms for no known reason :(
+    N := 10
+  else
+    N := 100;
+  {$endif OSDARWIN}
   proxy := TRtspOverHttpServer.Create(
     '127.0.0.1', '3999', '3998', TSynLog, nil, nil, options, {threads=}1);
     // threads=1 is the safest & fastest - but you may set 16 for testing

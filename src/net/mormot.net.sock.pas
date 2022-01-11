@@ -2291,12 +2291,8 @@ end;
 function TPollSockets.PollForPendingEvents(timeoutMS: integer): integer;
 var
   last, lastcount, n: PtrInt;
-  {$ifdef POLLSOCKETEPOLL}
-  {.$define EPOLLFULDEB}
-  {$ifdef EPOLLFULDEB}
   start, stop: Int64;
-  {$endif EPOLLFULDEB}
-  {$else}
+  {$ifndef POLLSOCKETEPOLL}
   u, s, p: PtrInt;
   poll: TPollSocketAbstract;
   sock: TNetSocket;
@@ -2308,6 +2304,8 @@ begin
   result := 0;
   if fTerminated then
     exit;
+  if Assigned(OnLog) then
+    QueryPerformanceMicroSeconds(start);
   LockedInc32(@fGettingOne);
   try
     // thread-safe get the pending (un)subscriptions
@@ -2326,14 +2324,9 @@ begin
     end;
     {$ifdef POLLSOCKETEPOLL}
     // epoll_wait() is thread-safe and let epoll_ctl() work in the background
-    {$ifdef EPOLLFULDEB}
-    if Assigned(OnLog) then
-    begin
+    {if Assigned(OnLog) then
       OnLog(sllTrace, 'PollForPendingEvents: before WaitForModified(%) count=% pending=%',
-        [timeoutMS, fCount, fPending.Count], self);
-      QueryPerformanceMicroSeconds(start);
-    end;
-    {$endif EPOLLFULDEB}
+        [timeoutMS, fCount, fPending.Count], self);}
     if fEpollGettingOne then
       // epoll_wait() is not expected to be used from several threads
       raise ENetSock.Create('%s.PollForPendingEvents should be called from a ' +
@@ -2341,15 +2334,6 @@ begin
     fEpollGettingOne := true;
     // if fCount=0 epoll_wait() still wait and allow background subscription
     fPoll[0].WaitForModified(new, timeoutMS);
-    {$ifdef EPOLLFULDEB}
-    if Assigned(OnLog) then
-    begin
-      QueryPerformanceMicroSeconds(stop);
-      OnLog(sllTrace,
-        'PollForPendingEvents: after WaitForModified(%) count=% pending=% new=% %us',
-        [timeoutMS, fCount, fPending.Count, new.Count, stop - start], self);
-    end;
-    {$endif EPOLLFULDEB}
     last := 0;
     lastcount := fPoll[0].Count;
     {$else}
@@ -2501,9 +2485,12 @@ begin
     //if result = 0 then {$i-} write('!'); {$i+}
     if {(result > 0) and}
        Assigned(fOnLog) then
+    begin
+      QueryPerformanceMicroSeconds(stop);
       fOnLog(sllTrace,
-        'PollForPendingEvents=% in fPoll[%] (subscribed=%) pending=%',
-          [result, last, lastcount, fPending.Count], self);
+        'PollForPendingEvents=% in fPoll[%] (subscribed=%) pending=% %us',
+          [result, last, lastcount, fPending.Count, stop - start], self);
+    end;
   finally
     LockedDec32(@fGettingOne);
     {$ifdef POLLSOCKETEPOLL}

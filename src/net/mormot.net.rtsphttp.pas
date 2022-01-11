@@ -260,12 +260,10 @@ begin
   result := false;
   log := fLog.Enter('ConnectionCreate(%)', [pointer(aSocket)], self);
   try
-    {$ifndef OSLINUX}
-    res := aSocket.MakeBlocking; // otherwise sock.GetRequest() fails randomly
+    res := aSocket.MakeBlocking; // otherwise sock.GetRequest() fails
     if (res <> nrOK) and
        (log <> nil) then
       log.Log(sllTrace, 'ConnectionCreate MakeBlocking=%', [ToText(res)^], self);
-    {$endif OSLINUX}
     sock := TProxySocket.Create(nil);
     try
       sock.AcceptRequest(aSocket, nil);
@@ -348,6 +346,10 @@ begin
            sock.Http.Headers], self);
     finally
       sock.Free;
+      res := aSocket.MakeAsync; // as expected by TPollAsyncSockets
+      if (res <> nrOK) and
+         (log <> nil) then
+        log.Log(sllTrace, 'ConnectionCreate MakeAsync=%', [ToText(res)^], self);
     end;
     if get = nil then
       exit;
@@ -372,6 +374,10 @@ begin
     aConnection := postconn;
     postconn.fRtspTag := rtspconn.Handle;
     rtspconn.fGetBlocking := get;
+    res := rtspconn.Socket.MakeAsync; // as expected by fClients.Start
+    if (res <> nrOK) and
+       (log <> nil) then
+      log.Log(sllTrace, 'ConnectionCreate rtspconn.MakeAsync=%', [ToText(res)^], self);
     if not fClients.Start(rtspconn) then
     begin
     if log <> nil then

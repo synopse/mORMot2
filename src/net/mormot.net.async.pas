@@ -69,10 +69,11 @@ type
     /// flag set by TAsyncConnections.IdleEverySecond to purge rd/wr unused buffers
     // - avoid to call the GetTickCount64 system API for every activity
     fWasActive: boolean;
-    /// flag set when Subscribe() has been called
-    fWriteSubscribed: boolean;
     /// flag set by UnlockAndCloseConnection
     fClosing: boolean;
+    /// pseRead/pseWrite flags set when Subscribe() has been called
+    // - pseClosed indicates that the connection was Added to the list
+    fSubscribed: TPollSocketEvents;
     /// the current (reusable) read data buffer of this connection
     fRd: TRawByteStringBuffer;
     /// the current (reusable) write data buffer of this connection
@@ -167,8 +168,12 @@ type
     function PollForPendingEvents(timeoutMS: integer): integer; override;
   end;
 
-  /// callback prototype for TPollAsyncSockets.OnStart/OnStop events
-  TOnPollAsyncEvent = procedure(Sender: TPollAsyncConnection) of object;
+  /// callback prototype for TPollAsyncSockets.OnStart events
+  // - should return true if Start() should not subscribe for this connection
+  TOnPollAsyncStart = function(Sender: TPollAsyncConnection): boolean of object;
+
+  /// callback prototype for TPollAsyncSockets.OnStop events
+  TOnPollAsyncStop = procedure(Sender: TPollAsyncConnection) of object;
 
   {$M+}
   /// read/write buffer-oriented process of multiple non-blocking connections
@@ -193,11 +198,11 @@ type
     fWriteCount: integer;
     fReadBytes: Int64;
     fWriteBytes: Int64;
-    fOptions: TPollAsyncSocketsOptions;
     fDebugLog: TSynLogClass;
+    fOptions: TPollAsyncSocketsOptions;
     fProcessReadCheckPending: boolean;
-    fOnStart: TOnPollAsyncEvent;
-    fOnStop: TOnPollAsyncEvent;
+    fOnStart: TOnPollAsyncStart;
+    fOnStop: TOnPollAsyncStop;
     function GetCount: integer;
     procedure DoLog(const TextFmt: RawUtf8; const TextArgs: array of const);
     // pseError: return false to close socket and connection
@@ -206,6 +211,9 @@ type
     procedure OnClosed(connection: TPollAsyncConnection); virtual; abstract;
     procedure UnlockAndCloseConnection(writer: boolean;
       var connection: TPollAsyncConnection; const caller: ShortString);
+    procedure RegisterConnection(connection: TPollAsyncConnection); virtual; abstract;
+    function SubscribeConnection(
+      connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
     procedure CloseConnection(var connection: TPollAsyncConnection);
   public
     /// initialize the read/write sockets polling
@@ -222,6 +230,7 @@ type
     // or Unsubscribe and delete the socket when pseClosed is notified
     // - fWrite will poll for outgoing packets as specified by Write(), then
     // send any pending data once the socket is ready
+    // - any manual call of Start() should ensure the connection is non-blocking
     function Start(connection: TPollAsyncConnection): boolean; virtual;
     /// remove a connection from the internal poll, and shutdown its socket
     // - most of the time, the connection is released by OnClosed when the other
@@ -257,11 +266,11 @@ type
       read fOptions write fOptions;
     /// event called on Start() method success
     // - warning: this callback should be very quick because it is blocking
-    property OnStart: TOnPollAsyncEvent
+    property OnStart: TOnPollAsyncStart
       read fOnStart write fOnStart;
     /// event called on Stop() method success
     // - warning: this callback should be very quick because it is blocking
-    property OnStop: TOnPollAsyncEvent
+    property OnStop: TOnPollAsyncStop
       read fOnStop write fOnStop;
   published
     /// how many connections are currently managed by this instance
@@ -340,6 +349,7 @@ type
     fOwner: TAsyncConnections;
     function GetTotal: integer;
       {$ifdef HASINLINE} inline; {$endif}
+    procedure RegisterConnection(connection: TPollAsyncConnection); override;
     // just log the error, and close connection if acoOnErrorContinue is not set
     function OnError(connection: TPollAsyncConnection;
       events: TPollSocketEvents): boolean; override;
@@ -374,6 +384,7 @@ type
     fExecuteState: THttpServerExecuteState;
     fIndex: integer;
     fEvent: TEvent;
+    fName: RawUtf8;
     procedure Execute; override;
   public
     /// initialize the thread
@@ -388,6 +399,9 @@ type
     /// when used as a thread pool, the number of this thread
     property Index: integer
       read fIndex;
+    /// the low-level thread name
+    property Name: RawUtf8
+      read fName;
   end;
 
   /// low-level options for TAsyncConnections processing
@@ -445,14 +459,14 @@ type
     function ConnectionAdd(
       aSocket: TNetSocket; aConnection: TAsyncConnection): boolean; virtual;
     function ConnectionDelete(
-      aHandle: TPollAsyncConnectionHandle): boolean; overload; virtual;
+      aConnection: TPollAsyncConnection): boolean; overload; virtual;
     function LockedConnectionDelete(
       aConnection: TAsyncConnection; aIndex: integer): boolean;
     procedure ThreadPollingWakeup(Events: integer);
     procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject);
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); virtual;
-    procedure ProcessClientStart(Sender: TPollAsyncConnection);
+    function ProcessClientStart(Sender: TPollAsyncConnection): boolean;
     procedure IdleEverySecond(tix: Int64);
   public
     /// initialize the multiple connections
@@ -692,7 +706,7 @@ type
   THttpAsyncConnections = class(TAsyncServer)
   protected
     fAsyncServer: THttpAsyncServer;
-    procedure SetExecuteState(State: THttpServerExecuteState); override;
+    procedure Execute; override;
   end;
 
   /// meta-class of THttpAsyncConnections type
@@ -991,8 +1005,6 @@ begin
 end;
 
 function TPollAsyncSockets.Start(connection: TPollAsyncConnection): boolean;
-var
-  res: TNetResult;
 begin
   result := false;
   if fRead.Terminated or
@@ -1000,41 +1012,29 @@ begin
     exit;
   LockedInc32(@fProcessingRead);
   try
-    // we expect non-blocking mode on a real working socket
-    res := connection.fSocket.MakeAsync;
-    if res <> nrOK then
-    begin
-      if fDebugLog <> nil then
-        DoLog('Start: MakeAsync(%) failed as % %',
-          [pointer(connection.fSocket), ToText(res)^, connection]);
-    end
-    else
-    begin
-      // get sending buffer size from OS (if not already retrieved)
-      if fSendBufferSize = 0 then
-        {$ifdef OSWINDOWS}
-        // on Windows, default buffer is 8KB and we upgrade it to 64KB
-        // but for normal process, this could be a bit low -> force 256KB
-        fSendBufferSize := 256 shl 10;
-        // if direct Write() doesn't succeed, it will subscribe to ProcessWrite
-        {$else}
-        // on Linux/POSIX, typical values are 2MB for TCP, 200KB on Unix Sockets
-        fSendBufferSize := connection.fSocket.SendBufferSize;
-        {$endif OSWINDOWS}
-      // subscribe for any incoming packets
-      result := fRead.Subscribe(
-        connection.fSocket, [pseRead], TPollSocketTag(connection));
-      // now, ProcessRead will handle pseRead+pseError/pseClosed on this socket
-      if fDebugLog <> nil then
-        DoLog('Start sock=% handle=%',
-          [pointer(connection.fSocket), connection.Handle]);
-    end;
+    // get sending buffer size from OS (if not already retrieved)
+    if fSendBufferSize = 0 then
+      {$ifdef OSWINDOWS}
+      // on Windows, default buffer is 8KB and we upgrade it to 64KB
+      // but for normal process, this could be a bit low -> force 256KB
+      fSendBufferSize := 256 shl 10;
+      // if direct Write() doesn't succeed, it will subscribe to ProcessWrite
+      {$else}
+      // on Linux/POSIX, typical values are 2MB for TCP, 200KB on Unix Sockets
+      fSendBufferSize := connection.fSocket.SendBufferSize;
+      {$endif OSWINDOWS}
+    // subscribe for incoming data (async for select/poll, immediate for epoll)
+    if Assigned(fOnStart) then
+      result := fOnStart(connection); // e.g. TAsyncConnections.ProcessClientStart
+    if not result then // if fRead.Subscribe() is not delayed in atpReadPending
+      result := SubscribeConnection(connection, pseRead);
+    // now, ProcessRead will handle pseRead+pseError/pseClosed on this socket
+    if fDebugLog <> nil then
+      DoLog('Start sock=% handle=%',
+        [pointer(connection.fSocket), connection.Handle]);
   finally
     LockedDec32(@fProcessingRead);
   end;
-  if result and
-     Assigned(fOnStart) then
-    fOnStart(connection);
 end;
 
 function TPollAsyncSockets.Stop(connection: TPollAsyncConnection): boolean;
@@ -1058,8 +1058,9 @@ begin
       // notify ProcessRead/ProcessWrite to abort
       connection.fSocket := nil;
       // register to unsubscribe for the next PollForPendingEvents() call
-      fRead.Unsubscribe(sock, TPollSocketTag(connection));
-      if connection.fWriteSubscribed then
+      if pseRead in connection.fSubscribed then
+        fRead.Unsubscribe(sock, TPollSocketTag(connection));
+      if pseWrite in connection.fSubscribed then
         fWrite.Unsubscribe(sock, TPollSocketTag(connection));
       result := true;
     end;
@@ -1187,10 +1188,7 @@ begin
       if previous = 0 then
       begin
         // register for ProcessWrite() if not already
-        result := fWrite.Subscribe(
-          connection.fSocket, [pseWrite], TPollSocketTag(connection));
-        if result then
-          connection.fWriteSubscribed := true;
+        result := SubscribeConnection(connection, pseWrite);
         if fDebugLog <> nil then
           DoLog('Write Subscribe(sock=%,handle=%)=% %',
             [pointer(connection.Socket), connection.Handle, result, fWrite]);
@@ -1232,6 +1230,28 @@ begin
   // Stop() will try to acquire this lock -> notify no need to wait
   connection.fClosing := true;
   CloseConnection(connection);
+end;
+
+function TPollAsyncSockets.SubscribeConnection(
+  connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
+var
+  poll: TPollSockets;
+begin
+  RegisterConnection(connection);
+  if sub in connection.fSubscribed then
+  begin
+    result := false;
+    exit;
+  end;
+  if sub = pseRead then
+    poll := fRead
+  else
+    poll := fWrite;
+  result := poll.Subscribe(connection.fSocket, [sub], TPollSocketTag(connection));
+  if result then
+    include(connection.fSubscribed, sub);
+  if fDebugLog <> nil then
+    DoLog('SubscribeConnection=% handle=% %', [result, connection.Handle, ToText(sub)^]);
 end;
 
 procedure TPollAsyncSockets.CloseConnection(var connection: TPollAsyncConnection);
@@ -1329,8 +1349,16 @@ begin
           end;
         end;
         connection.UnLock(false); // UnlockSlotAndCloseConnection set slot=nil
+        if (connection.fSocket <> nil) and
+           not connection.fClosing and
+           not (pseRead in connection.fSubscribed) then
+          // it is time to subscribe for any future read on this connection
+          if not SubscribeConnection(connection, pseRead) then
+            if fDebugLog <> nil then
+              DoLog('ProcessRead: Subscribe failed % %', [connection, fRead]);
       end
       else if fDebugLog <> nil then
+        // happens on thread contention
         DoLog('ProcessRead: TryLock failed % %', [connection, fRead]);
     end;
   finally
@@ -1385,7 +1413,7 @@ begin
         else if res <> nrOk then
         begin
           fWrite.Unsubscribe(connection.fSocket, notif.tag);
-          connection.fWriteSubscribed := false;
+          exclude(connection.fSubscribed, pseWrite);
           if fDebugLog <> nil then
             DoLog('Write failed as % -> Unsubscribe(%,%) %', [ToText(res)^,
               pointer(connection.fSocket), connection.Handle, fWrite]);
@@ -1417,7 +1445,7 @@ begin
         begin
           // no further ProcessWrite unless slot.fWr contains pending data
           fWrite.Unsubscribe(connection.fSocket, notif.tag);
-          connection.fWriteSubscribed := false;
+          exclude(connection.fSubscribed, pseWrite);
           if fDebugLog <> nil then
             DoLog('Write Unsubscribe(sock=%,handle=%)=% %',
              [pointer(connection.fSocket), connection.Handle, fWrite]);
@@ -1485,7 +1513,7 @@ begin
 end;
 
 function TAsyncConnectionsSockets.Write(connection: TPollAsyncConnection;
-  data: pointer; datalen, timeout: integer): boolean;
+  data: pointer; datalen: integer; timeout: integer): boolean;
 begin
   if (fOwner.fLog <> nil) and
      (acoVerboseLog in fOwner.Options) and
@@ -1497,6 +1525,20 @@ end;
 function TAsyncConnectionsSockets.GetTotal: integer;
 begin
   result := fOwner.fLastHandle; // handles are a plain integer sequence
+end;
+
+procedure TAsyncConnectionsSockets.RegisterConnection(connection: TPollAsyncConnection);
+begin
+  if not (pseClosed in connection.fSubscribed) then
+  begin
+    include(connection.fSubscribed, pseClosed);
+    fOwner.fConnectionLock.WriteLock;
+    try
+      ObjArrayAddCount(fOwner.fConnection, connection, fOwner.fConnectionCount);
+    finally
+      fOwner.fConnectionLock.WriteUnLock;
+    end;
+  end;
 end;
 
 
@@ -1521,13 +1563,12 @@ end;
 
 procedure TAsyncConnectionsThread.Execute;
 var
-  n: RawUtf8;
   new, ms: integer;
   start: Int64;
   notif: TPollSocketResult;
 begin
-  FormatUtf8('R% %', [fIndex, fOwner.fProcessName], n);
-  SetCurrentThreadName(n);
+  FormatUtf8('R% %', [fIndex, fOwner.fProcessName], fName);
+  SetCurrentThreadName(fName);
   fOwner.NotifyThreadStart(self);
   try
     fExecuteState := esRunning;
@@ -1536,6 +1577,17 @@ begin
           (fOwner.fThreadClients.Count > 0) and
           (InterlockedDecrement(fOwner.fThreadClients.Count) >= 0) do
       fOwner.ThreadClientsConnect;
+    ms := 0;
+    case fProcess of
+      atpReadSingle:
+        if fOwner.fClients.fRead.PollClass.FollowEpoll then
+          ms := 100 // for quick shutdown
+        else
+          ms := 1000;
+      atpReadPoll:
+          if fOwner.fClients.fRead.PollClass.FollowEpoll then
+            ms := 1100; // efficient epoll_wait(ms) API call
+    end;
     // main TAsyncConnections read/write process
     while not Terminated and
           (fOwner.fClients <> nil) and
@@ -1543,19 +1595,15 @@ begin
     begin
       case fProcess of
         atpReadSingle:
-          // a single thread to rule them all: polling, reading and processing
-          if fOwner.fClients.fRead.GetOne(1100, n, notif) then
-            if not Terminated then
-              fOwner.fClients.ProcessRead(notif);
+            // a single thread to rule them all: polling, reading and processing
+            if fOwner.fClients.fRead.GetOne(ms, fName, notif) then
+              if not Terminated then
+                fOwner.fClients.ProcessRead(notif);
         atpReadPoll:
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
           begin
             start := 0; // back to SleepHiRes(0)
-            if fOwner.fClients.fRead.PollClass.FollowEpoll then
-              ms := 1100 // efficient epoll_wait(ms) API call
-            else
-              ms := 0;
             while not Terminated do
             begin
               new := fOwner.fClients.fRead.PollForPendingEvents(ms);
@@ -1600,7 +1648,7 @@ begin
               if Terminated then
                 break;
               fWaitForReadPending := false;
-              while fOwner.fClients.fRead.GetOnePending(notif, n) and
+              while fOwner.fClients.fRead.GetOnePending(notif, fName) and
                     not Terminated do
                 fOwner.fClients.ProcessRead(notif);
               // release atpReadPoll lock above
@@ -1612,12 +1660,12 @@ begin
           [self, ord(fProcess)]);
       end;
     end;
-    fOwner.DoLog(sllInfo, 'Execute: done %', [n], self);
+    fOwner.DoLog(sllInfo, 'Execute: done %', [fName], self);
   except
     on E: Exception do
       if fOwner <> nil then
         fOwner.DoLog(sllWarning, 'Execute raised a % -> terminate % thread %',
-          [E.ClassType, fOwner.fConnectionClass, n], self);
+          [E.ClassType, fOwner.fConnectionClass, fName], self);
   end;
   fExecuteState := esFinished;
 end;
@@ -1726,12 +1774,12 @@ begin
           begin
             if fEvent <> nil then
               fEvent.SetEvent; // release any (e.g. atpReadPoll) lock
+            DoLog(sllTrace, 'Destroy unfinished=%', [fThreads[i]], self);
             inc(n);
           end;
       if n = 0 then
         break;
-      DoLog(sllTrace, 'Destroy unfinished=%', [n], self);
-      SleepHiRes(1);
+      SleepHiRes(10);
     until mormot.core.os.GetTickCount64 > endtix;
     FreeAndNilSafe(fClients); // FreeAndNil() sets nil before which is incorrect
     ObjArrayClear(fThreads);
@@ -1813,23 +1861,15 @@ begin
     raise EAsyncConnections.CreateUtf8(
       '%.ConnectionAdd: %.Handle overflow', [self, aConnection]);
   aConnection.fSocket := aSocket;
+  aConnection.fHandle := InterlockedIncrement(fLastHandle);
   if acoNoConnectionTrack in fOptions then
   begin
-    aConnection.fHandle := InterlockedIncrement(fLastHandle);
+    include(aConnection.fSubscribed, pseClosed);
     InterlockedIncrement(fConnectionCount);
-  end
-  else
-  begin
-    fConnectionLock.WriteLock;
-    try
-      inc(fLastHandle);
-      aConnection.fHandle := fLastHandle;
-      ObjArrayAddCount(fConnection, aConnection, fConnectionCount);
-    finally
-      fConnectionLock.WriteUnLock;
-    end;
-  end;
-  aConnection.AfterCreate;
+  end else if fThreadReadPoll = nil then
+    // ProcessClientStart() won't delay SuscribeConnection + RegisterConnection
+    fClients.RegisterConnection(aConnection);
+  aConnection.AfterCreate; // Handle has been computed
   if acoVerboseLog in fOptions then
     DoLog(sllTrace, 'ConnectionAdd% socket=% count=%',
       [aConnection, pointer(aSocket), fConnectionCount], self);
@@ -1854,7 +1894,7 @@ begin
 end;
 
 function TAsyncConnections.ConnectionDelete(
-  aHandle: TPollAsyncConnectionHandle): boolean;
+  aConnection: TPollAsyncConnection): boolean;
 var
   i: integer;
   conn: TAsyncConnection;
@@ -1862,9 +1902,16 @@ begin
   // don't call fClients.Stop() here - see ConnectionRemove()
   result := false;
   if Terminated or
-     (aHandle <= 0) then
+     (aConnection = nil) or
+     (aConnection.Handle <= 0) then
     exit;
-  conn := ConnectionFindAndLock(aHandle, cWrite, @i);
+  if not (pseClosed in aConnection.fSubscribed) then
+  begin
+    fClients.fRead.AddGC(aConnection); // will be released after processed
+    exit;
+  end;
+  exclude(aConnection.fSubscribed, pseClosed);
+  conn := ConnectionFindAndLock(aConnection.Handle, cWrite, @i);
   if conn <> nil then
     try
       result := LockedConnectionDelete(conn, i);
@@ -1873,7 +1920,7 @@ begin
     end;
   if not result then
     DoLog(sllTrace, 'ConnectionDelete(%)=false count=%',
-      [aHandle, fConnectionCount], self);
+      [aConnection.Handle, fConnectionCount], self);
 end;
 
 function FastFindConnection(Conn: PPointerArray; R: PtrInt; H: integer): PtrInt;
@@ -1928,7 +1975,7 @@ begin
     if i >= 0 then
     begin
       if fConnection[i].Handle <> aHandle then // very short-living connection
-        i := FastFindConnection(pointer(fConnection), i, aHandle);
+        i := FastFindConnection(pointer(fConnection), i, aHandle); // O(log(n))
       if i >= 0 then
       begin
         result := fConnection[i];
@@ -1959,7 +2006,7 @@ begin
   n := fConnectionCount;
   if (i >= n) or
      (fConnection[i].Handle <> aHandle) then
-    i := FastFindConnection(pointer(fConnection), n - 1, aHandle);
+    i := FastFindConnection(pointer(fConnection), n - 1, aHandle); // O(log(n))
   if i >= 0 then
   begin
     fLastConnectionFind := i;
@@ -2025,7 +2072,7 @@ begin
     InterlockedDecrement(fConnectionCount);
   end
   else
-    ConnectionDelete(connection.Handle);
+    ConnectionDelete(connection);
 end;
 
 procedure TAsyncConnections.Lock(aLock: TRWLockContext);
@@ -2149,11 +2196,18 @@ begin
   // note: this method should be non-blocking and return quickly
  end;
 
-procedure TAsyncConnections.ProcessClientStart(Sender: TPollAsyncConnection);
+function TAsyncConnections.ProcessClientStart(Sender: TPollAsyncConnection): boolean;
 begin
   if fThreadReadPoll <> nil then
-    // release atpReadPoll lock to handle new subscription ASAP
-    fThreadReadPoll.fEvent.SetEvent;
+  begin
+    // initial accept() will be directly redirected to atpReadPending threads
+    // with no initial fRead.SubScribe() to speed up e.g. HTTP/1.0
+    fClients.fRead.AddOnePending(TPollSocketTag(Sender), [pseRead]);
+    ThreadPollingWakeup(1);
+    result := true; // no Subscribe() -> delayed in atpReadPending if needed
+  end
+  else
+    result := false; // Subscribe() is done by TPollAsyncSockets.Start caller
 end;
 
 
@@ -2250,10 +2304,12 @@ var
   ip: RawUtf8;
   start: Int64;
   async: boolean;
+const
+  AW: array[boolean] of string[1] = ('W', '');
 begin
   // Accept() incoming connections
-  // [and Send() output packets in the background]
-  SetCurrentThreadName('AW %', [fProcessName]);
+  // and Send() output packets in the background if fExecuteAcceptOnly=false
+  SetCurrentThreadName('A% %', [AW[fExecuteAcceptOnly], fProcessName]);
   NotifyThreadStart(self);
   try
     // create and bind fServer to the expected TCP port
@@ -2264,7 +2320,7 @@ begin
     SetExecuteState(esRunning);
     if not fExecuteAcceptOnly then
       // setup the main bound connection to be polling together with the writes
-      if fClients.fWrite.Subscribe(fServer.Sock, [pseRead], {notif.tag=} 0) then
+      if fClients.fWrite.Subscribe(fServer.Sock, [pseRead], {tag=}0) then
         fClients.fWrite.PollForPendingEvents(0) // actually subscribe
       else
         raise EAsyncConnections.CreateUtf8('%.Execute: subscribe accept?', [self]);
@@ -2283,7 +2339,8 @@ begin
       begin
         repeat
           // could we Accept one or several incoming connection(s)?
-          res := fServer.Sock.Accept(client, sin);
+          // we expect non-blocking mode from now on
+          res := fServer.Sock.Accept(client, sin, {async=}true);
           if Terminated or
              (res = nrRetry) then
             break;
@@ -2324,7 +2381,7 @@ begin
             end;
           end
           else if connection <> nil then // connection=nil for custom list
-            ConnectionDelete(connection.Handle);
+            ConnectionDelete(connection);
         until Terminated;
       end
       else
@@ -2679,12 +2736,10 @@ end;
 
 { THttpAsyncConnections }
 
-procedure THttpAsyncConnections.SetExecuteState(State: THttpServerExecuteState);
+procedure THttpAsyncConnections.Execute;
 begin
-  if State = esRunning then
-    // SetExecuteState(esRunning) is done by TAsyncServer.Execute once started
-    fExecuteAcceptOnly := true; // THttpAsyncServer.Execute will do the writes
-  inherited SetExecuteState(state);
+  fExecuteAcceptOnly := true; // THttpAsyncServer.Execute will do the writes
+  inherited Execute;
 end;
 
 
