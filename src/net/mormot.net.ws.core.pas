@@ -2458,11 +2458,12 @@ var
   timeout: Int64;
   log: ISynLog;
 begin
-  log := WebSocketLog.Enter('Destroy %', [ToText(fState)^], self);
   if fState = wpsCreate then
     fProcessEnded := true
   else if not fConnectionCloseWasSent then
   begin
+    if log = nil then
+      log := WebSocketLog.Enter('Destroy %', [ToText(fState)^], self);
     if log <> nil then
       log.Log(sllTrace, 'Destroy: send focConnectionClose', self);
     Shutdown({waitforpong=}true);
@@ -2471,12 +2472,14 @@ begin
   if (fProcessCount > 0) or
      not fProcessEnded then
   begin
+    if log = nil then
+      log := WebSocketLog.Enter('Destroy %', [ToText(fState)^], self);
     if log <> nil then
       log.Log(sllDebug, 'Destroy: wait for fProcessCount=% fProcessEnded=%',
-          [fProcessCount, fProcessEnded], self);
+        [fProcessCount, fProcessEnded], self);
     timeout := GetTickCount64 + 5000;
     repeat
-      SleepHiRes(2);
+      SleepHiRes(1);
     until ((fProcessCount = 0) and fProcessEnded) or
           (GetTickCount64 > timeout);
     if log <> nil then
