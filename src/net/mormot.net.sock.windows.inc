@@ -28,6 +28,8 @@ const
   FD_SETSIZE = 512;
 
 type
+  /// a socket is always pointer-sized on Windows
+  // - and we also use PtrInt for our TNetSocketWrap cast
   TSocket = PtrInt;
 
   tsocklen = integer;

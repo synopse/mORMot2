@@ -93,7 +93,8 @@ const
 {$packrecords C}
 
 type
-  // sockets.pp forced longint for Kylix compatibility
+  /// a socket is always cint = 32-bit integer sized on POSIX
+  // - we extend it to PtrInt for our TNetSocketWrap cast
   TSocket = PtrInt;
 
   THostEnt = record
