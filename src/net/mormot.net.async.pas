@@ -2218,7 +2218,7 @@ begin
   begin
     // initial accept() will be directly redirected to atpReadPending threads
     // with no initial fRead.SubScribe() to speed up e.g. HTTP/1.0
-    fClients.fRead.AddOnePending(TPollSocketTag(Sender), [pseRead]);
+    fClients.fRead.AddOnePending(TPollSocketTag(Sender), [pseRead], {nosrch=}true);
     ThreadPollingWakeup(1);
     result := true; // no Subscribe() -> delayed in atpReadPending if needed
   end

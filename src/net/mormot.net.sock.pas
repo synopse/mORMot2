@@ -661,7 +661,8 @@ type
     function PollForPendingEvents(timeoutMS: integer): integer; virtual;
     /// manually append one event to the pending nodifications
     // - ready to be retrieved by GetOnePending
-    procedure AddOnePending(aTag: TPollSocketTag; aEvents: TPollSocketEvents);
+    procedure AddOnePending(aTag: TPollSocketTag; aEvents: TPollSocketEvents;
+      aNoSearch: boolean);
     /// notify any GetOne waiting method to stop its polling loop
     procedure Terminate; override;
     /// indicates that Unsubscribe() should also call ShutdownAndClose(socket)
@@ -2485,14 +2486,15 @@ begin
 end;
 
 procedure TPollSockets.AddOnePending(
-  aTag: TPollSocketTag; aEvents: TPollSocketEvents);
+  aTag: TPollSocketTag; aEvents: TPollSocketEvents; aNoSearch: boolean);
 var
   n: PtrInt;
 begin
   fPendingSafe.Lock;
   try
     n := fPending.Count;
-    if (n = 0) or
+    if aNoSearch or
+       (n = 0) or
        (FindPendingFromTag(@fPending.Events[fPendingIndex],
           n - fPendingIndex, aTag) = nil) then
     begin
