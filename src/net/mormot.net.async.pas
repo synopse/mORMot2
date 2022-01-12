@@ -1319,10 +1319,14 @@ begin
           if fRead.Terminated or
              (connection.fSocket = nil) then
             exit;
-          recved := SizeOf(temp);
           if fDebugLog <> nil then
             timer.Start;
+          recved := SizeOf(temp);
           res := connection.fSocket.Recv(@temp, recved); // no need of RecvPending()
+          if res = nrRetry then
+            // should happen only after accept() -> leverage this thread
+            if connection.fSocket.WaitFor(1, [neRead]) = [neRead] then
+              res := connection.fSocket.Recv(@temp, recved);
           if fDebugLog <> nil then
             DoLog('ProcessRead recv(%)=% len=% in % %',
               [pointer(connection.Socket), ToText(res)^, recved, timer.Stop, fRead]);
