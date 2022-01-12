@@ -1826,15 +1826,21 @@ end;
 procedure TAsyncConnections.ThreadPollingWakeup(Events: integer);
 var
   i: PtrInt;
+  t: ^TAsyncConnectionsThread;
 begin
-  for i := 0 to length(fThreads) - 1 do
-    if fThreads[i].fWaitForReadPending then
+  t := pointer(fThreads);
+  for i := 1 to length(fThreads) do
+  begin
+    if t^.fWaitForReadPending then
     begin
-      fThreads[i].fEvent.SetEvent;
+      t^.fWaitForReadPending := false; // acquire this thread
+      t^.fEvent.SetEvent;
       dec(Events);
       if Events = 0 then
         exit;
     end;
+    inc(t);
+  end;
 end;
 
 procedure TAsyncConnections.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
