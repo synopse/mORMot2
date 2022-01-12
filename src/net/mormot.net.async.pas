@@ -1817,6 +1817,8 @@ begin
   with fThreadClients do
     res := NewSocket(Address, Port, nlTcp, {bind=}false, timeout, timeout,
       timeout, {retry=}0, client);
+  if res = nrOk then
+    res := client.MakeAsync;
   if res <> nrOK then
     raise EAsyncConnections.CreateUtf8('%: %:% connection failure (%)',
       [self, fThreadClients.Address, fThreadClients.Port, ToText(res)^]);
