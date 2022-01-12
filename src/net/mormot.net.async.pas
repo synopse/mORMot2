@@ -1831,22 +1831,48 @@ end;
 
 procedure TAsyncConnections.ThreadPollingWakeup(Events: integer);
 var
-  i: PtrInt;
-  t: ^TAsyncConnectionsThread;
-begin
-  t := pointer(fThreads);
-  for i := 1 to length(fThreads) do
+  i, n: PtrInt;
+  t: PAsyncConnectionsThread;
+  ndx: array[byte] of byte; // wake up to 256 threads at once
+
+  procedure AddOne;
+    {$ifdef HASINLINE} inline; {$endif}
   begin
     if t^.fWaitForReadPending then
     begin
       t^.fWaitForReadPending := false; // acquire this thread
-      t^.fEvent.SetEvent;
-      dec(Events);
-      if Events = 0 then
-        exit;
+      ndx[n] := i;
+      inc(n);
     end;
     inc(t);
   end;
+
+begin
+  // simple thread-safe fair round-robin over fThreads[]
+  if Events > high(ndx) then
+    Events := high(ndx);
+  n := 0;
+  fThreadPollingWakeupSafe.Lock;
+  try
+    t := @fThreads[fThreadPollingWakeup + 1];
+    for i := fThreadPollingWakeup + 1 to high(fThreads) do
+      if n = Events then
+        break
+      else
+        AddOne;
+    t := pointer(fThreads);
+    for i := 0 to fThreadPollingWakeup do
+      if n = Events then
+        break
+      else
+        AddOne;
+    if n <> 0 then
+      fThreadPollingWakeup := ndx[n - 1];
+  finally
+    fThreadPollingWakeupSafe.UnLock;
+  end;
+  for i := 0 to n - 1 do
+    fThreads[ndx[i]].fEvent.SetEvent; // notify outside fThreadPollingWakeupSafe
 end;
 
 procedure TAsyncConnections.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
