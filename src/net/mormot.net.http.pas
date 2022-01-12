@@ -301,6 +301,7 @@ type
     /// should be done when the HTTP Server state machine is done
     // - will check and process hfContentStreamNeedFree flag
     procedure ProcessDone;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
 
 const

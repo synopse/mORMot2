@@ -608,6 +608,8 @@ type
     procedure WaitStarted(seconds: integer);
     /// shut down the server, releasing all associated threads and sockets
     destructor Destroy; override;
+    /// prepare the server finalization
+    procedure Shutdown;
   published
     /// access to the TCP server socket
     property Server: TCrtSocket
@@ -1097,7 +1099,9 @@ begin
   fRead.Terminate;
   fWrite.Terminate;
   // wait for actual termination
-  if waitforMS <= 0 then
+  if (waitforMS <= 0) or
+     ((fProcessingRead = 0) and
+      (fProcessingWrite = 0)) then
     exit;
   start := GetTickCount64;
   repeat
@@ -1748,7 +1752,7 @@ end;
 
 procedure TAsyncConnections.Shutdown;
 var
-  i, n: PtrInt;
+  i, n, p: PtrInt;
   endtix: Int64;
 begin
   Terminate;
@@ -1765,6 +1769,7 @@ begin
   begin
     for i := 0 to high(fThreads) do
       fThreads[i].Terminate;
+    p := 0;
     endtix := mormot.core.os.GetTickCount64 + 10000;
     repeat
       n := 0;
@@ -1774,12 +1779,14 @@ begin
           begin
             if fEvent <> nil then
               fEvent.SetEvent; // release any (e.g. atpReadPoll) lock
-            DoLog(sllTrace, 'Destroy unfinished=%', [fThreads[i]], self);
+            if p and 15 = 0 then
+              DoLog(sllTrace, 'Destroy unfinished=%', [fThreads[i]], self);
             inc(n);
           end;
       if n = 0 then
         break;
-      SleepHiRes(10);
+      SleepHiRes(1);
+      inc(p);
     until mormot.core.os.GetTickCount64 > endtix;
     FreeAndNilSafe(fClients); // FreeAndNil() sets nil before which is incorrect
     ObjArrayClear(fThreads);
@@ -1907,7 +1914,10 @@ begin
     exit;
   if not (pseClosed in aConnection.fSubscribed) then
   begin
-    fClients.fRead.AddGC(aConnection); // will be released after processed
+    // this connection was not part of fConnection[] list nor subscribed
+    // e.g. HTTP/1.0 short request
+    aConnection.Free; // no need to call fClients.fRead.AddGC
+    result := true;
     exit;
   end;
   exclude(aConnection.fSubscribed, pseClosed);
@@ -2244,22 +2254,31 @@ begin
         raise EAsyncConnections.CreateUtf8('%.Execute aborted as %',
           [self, fExecuteMessage]);
     end;
-    Sleep(1); // warning: waits typically 1-15 ms on Windows
+    SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
     if mormot.core.os.GetTickCount64 > tix then
       raise EAsyncConnections.CreateUtf8(
         '%.WaitStarted timeout after % seconds', [self, seconds]);
   until false;
 end;
 
-destructor TAsyncServer.Destroy;
+procedure TAsyncServer.Shutdown;
 var
-  endtix: Int64;
+  i: PtrInt;
+  len: integer;
   touchandgo: TNetSocket; // paranoid ensure Accept() is released
+  ev: TNetEvents;
   host, port: RawUtf8;
 begin
   Terminate;
-  endtix := mormot.core.os.GetTickCount64 + 10000;
-  if fServer <> nil then
+  for i := 0 to high(fThreads) do
+    with fThreads[i] do
+      if not Terminated then
+      begin
+        Terminate;
+        if fEvent <> nil then
+          fEvent.SetEvent;
+      end;
+  if fServer.SockIsDefined then
   begin
     host := fServer.Server; // will also work for nlUnix
     if fServer.SocketLayer <> nlUnix then
@@ -2268,11 +2287,30 @@ begin
         host := '127.0.0.1';
       port := fSockPort;
     end;
+    DoLog(sllTrace, 'Shutdown %:% release request', [host, port], self);
     if NewSocket(host, port{%H-}, fServer.SocketLayer, false,
          10, 0, 0, 0, touchandgo) = nrOk then
-      touchandgo.ShutdownAndClose(false);
+    begin
+      if fClients.fRead.PollClass.FollowEpoll then
+      begin
+        len := 1;
+        touchandgo.Send(@len, len);    // release epoll_wait() in R0 thread
+        ev := touchandgo.WaitFor(100, [neRead]);
+        DoLog(sllTrace, 'Shutdown epoll WaitFor=%', [byte(ev)], self);
+        SleepHiRes(1);
+      end;
+      touchandgo.ShutdownAndClose(false);  // release the AW thread
+    end;
     fServer.Close; // shutdown the socket to unlock Accept() in Execute
   end;
+end;
+
+destructor TAsyncServer.Destroy;
+var
+  endtix: Int64;
+begin
+  endtix := mormot.core.os.GetTickCount64 + 10000;
+  Shutdown;
   //DoLog(sllTrace, 'Destroy before inherited', [], self);
   inherited Destroy;
   if fExecuteState = esRunning then
@@ -2303,6 +2341,7 @@ var
   sin: TNetAddr;
   ip: RawUtf8;
   start: Int64;
+  len: integer;
   async: boolean;
 const
   AW: array[boolean] of string[1] = ('W', '');
@@ -2339,11 +2378,24 @@ begin
       begin
         repeat
           // could we Accept one or several incoming connection(s)?
-          // we expect non-blocking mode from now on
+          // async=true to expect client in non-blocking mode from now on
           res := fServer.Sock.Accept(client, sin, {async=}true);
-          if Terminated or
-             (res = nrRetry) then
+          if Terminated then
+          begin
+            // specific behavior from Shutdown method
+            if fClients.fRead.PollClass.FollowEpoll and
+               (res = nrOK) then
+            begin
+              DoLog(sllTrace, 'Execute: Accept(%) release', [fServer.Port], self);
+              // background subscribe to release epoll_wait() in R0 thread
+              fClients.fRead.Subscribe(client, [pseRead], {tag=}0);
+              len := 1;
+              client.Send(@len, len); // release touchandgo.WaitFor
+            end;
             break;
+          end;
+          if res = nrRetry then
+            break; // timeout
           if (fClients.fRead.Count > fMaxConnections) or
              (fClients.fRead.PendingCount > fMaxPending) then
           begin
