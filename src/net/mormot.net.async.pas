@@ -403,6 +403,7 @@ type
     property Name: RawUtf8
       read fName;
   end;
+  PAsyncConnectionsThread = ^TAsyncConnectionsThread;
 
   /// low-level options for TAsyncConnections processing
   // - TAsyncConnectionsSockets.OnError will shutdown the connection on any error,
@@ -453,6 +454,8 @@ type
       Address, Port: RawUtf8;
     end;
     fIdleTix: Int64;
+    fThreadPollingWakeupSafe: TLightLock;
+    fThreadPollingWakeup: integer;
     function AllThreadsStarted: boolean; virtual;
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
       out aConnection: TAsyncConnection): boolean; virtual;
@@ -921,6 +924,11 @@ destructor TPollAsyncReadSockets.Destroy;
 begin
   inherited Destroy;
   // release any connection which are not been GCed yet
+  if (fGCCount = 0) and
+     (fGCCount2 = 0) then
+    exit;
+  if Assigned(fOnLog) then
+    fOnLog(sllTrace, 'Destroy: GC=% GC2=%', [fGCCount, fGCCount2], self);
   ObjArrayClear(fGC,  {continueonexception=}true, @fGCCount); // usually none
   ObjArrayClear(fGC2, {continueonexception=}true, @fGCCount2);
 end;
@@ -1593,8 +1601,8 @@ begin
         else
           ms := 1000;
       atpReadPoll:
-          if fOwner.fClients.fRead.PollClass.FollowEpoll then
-            ms := 1100; // efficient epoll_wait(ms) API call
+        if fOwner.fClients.fRead.PollClass.FollowEpoll then
+          ms := 1100; // efficient epoll_wait(ms) API call
     end;
     // main TAsyncConnections read/write process
     while not Terminated and
@@ -1641,9 +1649,8 @@ begin
                 fOwner.ThreadPollingWakeup(new);
                 // atpReadPending notifies fThreadReadPoll.fEvent when done
                 if Terminated or
-                   (fEvent.WaitFor(10) = wrSignaled) then
+                   (fEvent.WaitFor(20) = wrSignaled) then
                   break;
-                start := 0;
               end;
             end;
           end;
@@ -1793,7 +1800,7 @@ begin
       inc(p);
     until mormot.core.os.GetTickCount64 > endtix;
     FreeAndNilSafe(fClients); // FreeAndNil() sets nil before which is incorrect
-    ObjArrayClear(fThreads);
+    ObjArrayClear(fThreads, {continueonexception=}true);
   end;
 end;
 
@@ -1802,8 +1809,14 @@ begin
   Shutdown;
   inherited Destroy;
   if not (acoNoConnectionTrack in fOptions) then
+  begin
     // they are normally no pending connection anymore
-    ObjArrayClear(fConnection, fConnectionCount);
+    if fConnectionCount = 0 then
+      exit;
+    if Assigned(fLog) then
+      fLog.Add.Log(sllTrace, 'Destroy: GC connections=%', [fConnectionCount], self);
+    ObjArrayClear(fConnection, {continueonexception=}true, @fConnectionCount);
+  end;
 end;
 
 function TAsyncConnections.ThreadClientsConnect: TAsyncConnection;
@@ -1835,8 +1848,7 @@ var
   t: PAsyncConnectionsThread;
   ndx: array[byte] of byte; // wake up to 256 threads at once
 
-  procedure AddOne;
-    {$ifdef HASINLINE} inline; {$endif}
+  procedure AddOne; {$ifdef FPC} inline; {$endif}
   begin
     if t^.fWaitForReadPending then
     begin
