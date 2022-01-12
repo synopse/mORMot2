@@ -86,7 +86,7 @@ type
       RentrantCount: integer;
     end;
     /// this method is called when the instance is connected to a poll
-    // - i.e. at the end of TAsyncConnections.ConnectionAdd(), when Handle is set
+    // - i.e. at the end of TAsyncConnections.ConnectionNew(), when Handle is set
     // - overriding this method is cheaper than the plain Create destructor
     // - default implementation does nothing
     procedure AfterCreate; virtual;
@@ -456,8 +456,8 @@ type
     function AllThreadsStarted: boolean; virtual;
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
       out aConnection: TAsyncConnection): boolean; virtual;
-    function ConnectionAdd(
-      aSocket: TNetSocket; aConnection: TAsyncConnection): boolean; virtual;
+    function ConnectionNew(aSocket: TNetSocket; aConnection: TAsyncConnection;
+      aAddAndSubscribe: boolean = true): boolean; virtual;
     function ConnectionDelete(
       aConnection: TPollAsyncConnection): boolean; overload; virtual;
     function LockedConnectionDelete(
@@ -1860,18 +1860,18 @@ end;
 function TAsyncConnections.ConnectionCreate(aSocket: TNetSocket;
   const aRemoteIp: RawUtf8; out aConnection: TAsyncConnection): boolean;
 begin
-  // you can override this class then call ConnectionAdd
+  // you can override this class then call ConnectionNew
   if Terminated then
     result := false
   else
   begin
     aConnection := fConnectionClass.Create(self, aRemoteIp);
-    result := ConnectionAdd(aSocket, aConnection);
+    result := ConnectionNew(aSocket, aConnection, {add=}false);
   end;
 end;
 
-function TAsyncConnections.ConnectionAdd(aSocket: TNetSocket;
-  aConnection: TAsyncConnection): boolean;
+function TAsyncConnections.ConnectionNew(aSocket: TNetSocket;
+  aConnection: TAsyncConnection; aAddAndSubscribe: boolean): boolean;
 begin
   result := false; // caller should release aSocket
   if Terminated then
@@ -1885,12 +1885,13 @@ begin
   begin
     include(aConnection.fSubscribed, pseClosed);
     InterlockedIncrement(fConnectionCount);
-  end else if fThreadReadPoll = nil then
+  end else if (fThreadReadPoll = nil) or
+              aAddAndSubscribe then
     // ProcessClientStart() won't delay SuscribeConnection + RegisterConnection
     fClients.RegisterConnection(aConnection);
   aConnection.AfterCreate; // Handle has been computed
   if acoVerboseLog in fOptions then
-    DoLog(sllTrace, 'ConnectionAdd% socket=% count=%',
+    DoLog(sllTrace, 'ConnectionNew % socket=% count=%',
       [aConnection, pointer(aSocket), fConnectionCount], self);
   result := true; // indicates aSocket owned by the pool
 end;

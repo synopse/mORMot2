@@ -367,9 +367,9 @@ begin
     // create the main POST connection and its associated RTSP connection
     postconn := TPostConnection.Create(self, aRemoteIp);
     rtspconn := TRtspConnection.Create(self, aRemoteIp);
-    if not inherited ConnectionAdd(aSocket, postconn) or
-       not inherited ConnectionAdd(rtsp, rtspconn) then
-      raise ERtspOverHttp.CreateUtf8('inherited %.ConnectionAdd(%) % failed',
+    if not inherited ConnectionNew(aSocket, postconn) or
+       not inherited ConnectionNew(rtsp, rtspconn) then
+      raise ERtspOverHttp.CreateUtf8('inherited %.ConnectionNew(%) % failed',
         [self, aSocket, cookie]);
     aConnection := postconn;
     postconn.fRtspTag := rtspconn.Handle;
