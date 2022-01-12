@@ -1034,6 +1034,7 @@ end;
 // "EPOLLET" edge triggered detection is not consistent with select or poll
 // -> PollForPendingEvents() will use fast O(n*m) MergePendingEvents()
 const
+  EPOLLRDHUP = $2000; // since 2.6.17 (not defined in FPC Linux.pp) = close
   EPOLLMODE = 0; // EPOLLET
 
 function TPollSocketEpoll.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
@@ -1051,9 +1052,9 @@ begin
   e.data.ptr := pointer(tag); // don't use data.u64
   if pseRead in events then
     if pseWrite in events then
-      e.events := EPOLLIN or EPOLLPRI or EPOLLOUT or EPOLLMODE
+      e.events := EPOLLIN or EPOLLPRI or EPOLLOUT or EPOLLRDHUP or EPOLLMODE
     else
-      e.events := EPOLLIN or EPOLLPRI or EPOLLMODE
+      e.events := EPOLLIN or EPOLLPRI or EPOLLRDHUP or EPOLLMODE
   else if pseWrite in events then
     e.events := EPOLLOUT or EPOLLMODE
   else
@@ -1093,9 +1094,10 @@ function TPollSocketEpoll.WaitForModified(var results: TPollSocketResults;
   timeoutMS: integer): boolean;
 var
   e: TPollSocketEvents;
-  i, n: PtrInt;
+  n: PtrInt;
   ev: integer;
-  t: TPollSocketTag;
+  ee: ^EPoll_Event;
+  er: PPollSocketResult;
 begin
   result := false; // error or nothing new
   if (self = nil) or
@@ -1120,33 +1122,28 @@ begin
     results.Events := nil;
     SetLength(results.Events, fMaxSockets)
   end;
-  for i := 0 to n - 1 do
-  begin
-    with fResults[i] do
+  ee := pointer(fResults);
+  er := pointer(results.Events);
+  repeat
+    er^.tag := TPollSocketTag(ee^.data.ptr);
+    ev := ee^.events;
+    byte(e) := byte([pseRead]); // optimized for the most common case
+    if ev <> EPOLLIN then
     begin
-      ev := events;
-      t := TPollSocketTag(data.ptr);
-    end;
-    if ev = EPOLLIN then
-      byte(e) := byte([pseRead]) // optimized for the most common case
-    else
-    begin
-      byte(e) := 0;
-      if ev and (EPOLLIN or EPOLLPRI) <> 0 then
-        include(e, pseRead);
+      if ev and (EPOLLIN or EPOLLPRI) = 0 then
+        byte(e) := 0;
       if ev and EPOLLOUT <> 0 then
         include(e, pseWrite);
       if ev and EPOLLERR <> 0 then
         include(e, pseError);
-      if ev and EPOLLHUP <> 0 then
+      if ev and (EPOLLHUP or EPOLLRDHUP) <> 0 then
         include(e, pseClosed);
     end;
-    with results.Events[i] do
-    begin
-      events := e;
-      tag := t;
-    end;
-  end;
+    er^.events := e;
+    inc(ee);
+    inc(er);
+    dec(n)
+  until n = 0;
   result := true;
 end;
 
