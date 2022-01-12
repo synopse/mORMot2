@@ -696,6 +696,7 @@
 {$ifdef OSPOSIX}
 
   {$define ONLYUSEHTTPSOCKET} // efficient cross-platform Socket + OpenSSL API
+  {.$define OLDLIBC} // use only oldest API, e.g. accept() instead of accept4()
 
   {$ifdef OSANDROID}
 

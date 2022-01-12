@@ -1543,28 +1543,16 @@ begin
   end;
 end;
 
-{$ifdef OSWINDOWS}
-type
-  tsocklen = integer;
-{$endif OSWINDOWS}
-
 function TNetSocketWrap.Accept(out clientsocket: TNetSocket;
   out addr: TNetAddr; async: boolean): TNetResult;
 var
-  len: tsocklen;
   sock: TSocket;
 begin
   if @self = nil then
     result := nrNoSocket
   else
   begin
-    len := SizeOf(addr);
-    {$ifdef OSLINUX}
-    if async then
-      sock := mormot.net.sock.accept4(TSocket(@self), @addr, len, O_NONBLOCK)
-    else
-    {$endif OSLINUX}
-      sock := mormot.net.sock.accept(TSocket(@self), @addr, len);
+    sock := doaccept(TSocket(@self), @addr, async);
     if sock = -1 then
     begin
       result := NetLastError;
@@ -1579,13 +1567,9 @@ begin
       clientsocket.SetRecvBufferSize(65536);
       clientsocket.SetSendBufferSize(65536);
       {$endif OSWINDOWS}
-      {$ifdef OSLINUX}
-      //if async then write(' nb=',(fpfcntl(sock,F_GETFL,0) and O_NONBLOCK));
-      {$else}
       if async then
         result := clientsocket.MakeAsync
       else
-      {$endif OSLINUX}
         result := nrOK;
     end;
   end;
@@ -1645,6 +1629,7 @@ begin
     result := nrNoSocket
   else
   begin
+//    len := fprecv(TSocket(@self), Buf, len, 0);
     len := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
     // man recv: Upon successful completion, recv() shall return the length of
     // the message in bytes. If no messages are available to be received and the

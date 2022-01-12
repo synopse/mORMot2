@@ -30,6 +30,8 @@ const
 type
   TSocket = PtrInt;
 
+  tsocklen = integer;
+
   PFDSet = ^TFDSet;
   TFDSet = record
     fd_count: integer;
@@ -422,6 +424,15 @@ function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer
   external ws2 name 'getpeername';
 function inet_addr(cp: PAnsiChar): cardinal; stdcall;
   external ws2 name 'inet_addr';
+
+function doaccept(s: TSocket; addr: PSockAddr; var async: boolean): TSocket;
+var
+  len: integer;
+begin
+  len := SOCKADDR_SIZE;
+  result  := accept(s, addr, len);
+  // no accept4() on Windows -> async will be done later
+end;
 
 
 { ******** TNetSocket Cross-Platform Wrapper }

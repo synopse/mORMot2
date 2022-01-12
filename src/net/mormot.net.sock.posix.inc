@@ -14,6 +14,10 @@ uses
   {$endif OSLINUXANDROID}
   initc; // link clib='c' for our socket purpose
 
+{$ifdef OSLINUX}
+  {$define HASACCEPT4}
+{$endif OSLINUX}
+
 {$ifdef OSBSDDARWIN}
   {$define USEPOLL} // epoll API is Linux-specific -> force use poll() on BSD
 {$endif OSBSDDARWIN}
@@ -34,6 +38,10 @@ const
   WSAETIMEDOUT = ESysETIMEDOUT;
   WSAEMFILE = ESysEMFILE;
   WSAECONNREFUSED = ESysECONNREFUSED;
+
+  {$ifdef OSLINUX}
+  SOCK_NONBLOCK = O_NONBLOCK; // see net.h
+  {$endif OSLINUX}
 
   {$ifdef OSFREEBSD}
   NI_NUMERICHOST = 2;
@@ -144,55 +152,186 @@ type
 
 { ******** Sockets API calls via the libc }
 
+// note: POSIX sockets are fd = C int = 32-bit integer, not our TSocket = PtrInt
+//       so we use plain integer in the Sockets API calls below
+
+{$ifdef OLDLIBC}
+  {$undef HASACCEPT4}
+{$endif OLDLIBC}
+
+{.$define DIRECTSYSCALL} // no noticeable performance or stability change
+
+{$ifdef SOCKDIRECTSYSCALL}
+
+function gethostbyname(name: PAnsiChar): PHostEnt; cdecl;
+  external clib name 'gethostbyname'; // no syscall available from FPC
+
+function socket(af, struct, protocol: integer): integer; inline;
+begin
+  result := fpsocket(af, struct, protocol);
+end;
+
+function setsockopt(s: integer; level, optname: integer;
+   optval: pointer; optlen: integer): integer; inline;
+begin
+  result := fpsetsockopt(s, level, optname, optval, optlen);
+end;
+
+function getsockopt(s: integer; level, optname: integer;
+   optval: pointer; optlen: pSocklen): integer; inline;
+begin
+  result := fpgetsockopt(s, level, optname, optval, optlen);
+end;
+
+function ioctlsocket(s: integer; cmd: cardinal; arg: PCardinal): integer; inline;
+begin
+  result := fpioctl(s, cmd, arg);
+end;
+
+function shutdown(s: integer; how: integer): integer; inline;
+begin
+  result := fpshutdown(s, how);
+end;
+
+function closesocket(s: integer): integer; inline;
+begin
+  result := fpclose(s);
+end;
+
+function getnameinfo(addr: PSockAddr; namelen: tsocklen; host: PAnsiChar;
+   hostlen: tsocklen; serv: PAnsiChar; servlen: tsocklen; flags: integer): integer; cdecl;
+  external clib name 'getnameinfo'; // no syscall available from FPC
+
+function bind(s: integer; addr: PSockAddr; namelen: tsocklen): integer; inline;
+begin
+  result := fpbind(s, addr, namelen);
+end;
+
+function listen(s: integer; backlog: integer): integer; inline;
+begin
+  result := fplisten(s, backlog);
+end;
+
+function accept(s: integer; addr: PSockAddr; var addrlen: tsocklen): integer; inline;
+begin
+  result := fpaccept(s, addr, @addrlen);
+end;
+
+{$ifdef HASACCEPT4}
+function accept4(s: integer; addr: PSockAddr; var addrlen: tsocklen; flags: integer): integer; cdecl;
+  external clib name 'accept4'; // no syscall available from FPC
+{$endif HASACCEPT4}
+
+function connect(s: integer; name: PSockAddr; namelen: tsocklen): integer; inline;
+  begin
+    result := fpconnect(s, name, namelen);
+  end;
+
+function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
+   timeout: PTimeVal): integer; inline;
+begin
+  result := fpselect(nfds, readfds, writefds, exceptfds, timeout);
+end;
+
+function recv(s: integer; Buf: Pointer; len: size_t; flags: integer): ssize_t; inline;
+begin
+  result := fprecv(s, Buf, len, flags);
+end;
+
+function recvfrom(s: integer; Buf: Pointer; len: size_t; flags: integer;
+   from: PSockAddr; fromlen: pSocklen): ssize_t; inline;
+begin
+ result := fprecvfrom(s, Buf, len, flags, from, fromlen);
+end;
+
+function send(s: integer; Buf: Pointer; len: size_t; flags: integer): ssize_t; inline;
+begin
+  result := fpsend(s, Buf, len, flags);
+end;
+
+function sendto(s: integer; Buf: Pointer; len: size_t; flags: integer;
+   addrto: PSockAddr; tolen: integer): ssize_t; inline;
+begin
+ result := fpsendto(s, Buf, len, flags, addrto, tolen);
+end;
+
+function getpeername(s: integer; name: PSockAddr; var namelen: tsocklen): integer; inline;
+begin
+  result := fpgetpeername(s, name, @namelen);
+end;
+
+{$else}
+
 // we use the libc rather than fp*() low-level functions because the libc
-// may be implemented via vDSO and avoid a syscall
+// may be implemented via vDSO and avoid a syscall, and some high-level API
+// like gethostbyname() or accept4() are not available as fp* syscalls
 
 function gethostbyname(name: PAnsiChar): PHostEnt; cdecl;
   external clib name 'gethostbyname';
-function socket(af, struct, protocol: integer): TSocket; cdecl;
+
+function socket(af, struct, protocol: integer): integer; cdecl;
   external clib name 'socket';
-function setsockopt(s: TSocket; level, optname: integer;
+
+function setsockopt(s: integer; level, optname: integer;
    optval: pointer; optlen: integer): integer; cdecl;
   external clib name 'setsockopt';
-function getsockopt(s: TSocket; level, optname: integer;
+
+function getsockopt(s: integer; level, optname: integer;
    optval: pointer; optlen: PInteger): integer; cdecl;
   external clib name 'getsockopt';
-function ioctlsocket(s: TSocket; cmd: cardinal; arg: PCardinal): integer; cdecl;
+
+function ioctlsocket(s: integer; cmd: cardinal; arg: PCardinal): integer; cdecl;
   external clib name 'ioctl';
-function shutdown(s: TSocket; how: integer): integer; cdecl;
+
+function shutdown(s: integer; how: integer): integer; cdecl;
   external clib name 'shutdown';
-function closesocket(s: TSocket): integer; cdecl;
+
+function closesocket(s: integer): integer; cdecl;
   external clib name 'close';
+
 function getnameinfo(addr: PSockAddr; namelen: tsocklen; host: PAnsiChar;
    hostlen: tsocklen; serv: PAnsiChar; servlen: tsocklen; flags: integer): integer; cdecl;
   external clib name 'getnameinfo';
-function bind(s: TSocket; addr: PSockAddr; namelen: tsocklen): integer; cdecl;
+
+function bind(s: integer; addr: PSockAddr; namelen: tsocklen): integer; cdecl;
   external clib name 'bind';
-function listen(s: TSocket; backlog: integer): integer; cdecl;
+
+function listen(s: integer; backlog: integer): integer; cdecl;
   external clib name 'listen';
-function accept(s: TSocket; addr: PSockAddr; var addrlen: tsocklen): integer; cdecl;
+
+function accept(s: integer; addr: PSockAddr; var addrlen: tsocklen): integer; cdecl;
   external clib name 'accept';
-{$ifdef OSLINUX}
-function accept4(s: TSocket; addr: PSockAddr; var addrlen: tsocklen; flags: integer): integer; cdecl;
+
+{$ifdef HASACCEPT4}
+function accept4(s: integer; addr: PSockAddr; var addrlen: tsocklen; flags: integer): integer; cdecl;
   external clib name 'accept4';
-{$endif OSLINUX}
-function connect(s: TSocket; name: PSockAddr; namelen: tsocklen): integer; cdecl;
+{$endif HASACCEPT4}
+
+function connect(s: integer; name: PSockAddr; namelen: tsocklen): integer; cdecl;
   external clib name 'connect';
+
 function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
    timeout: PTimeVal): integer; cdecl;
   external clib name 'select';
-function recv(s: TSocket; Buf: Pointer; len: size_t; flags: integer): ssize_t; cdecl;
+
+function recv(s: integer; Buf: Pointer; len: size_t; flags: integer): ssize_t; cdecl;
   external clib name 'recv';
-function recvfrom(s: TSocket; Buf: Pointer; len: size_t; flags: integer;
+
+function recvfrom(s: integer; Buf: Pointer; len: size_t; flags: integer;
    from: PSockAddr; fromlen: Pinteger): ssize_t; cdecl;
   external clib name 'recvfrom';
-function send(s: TSocket; Buf: Pointer; len: size_t; flags: integer): ssize_t; cdecl;
+
+function send(s: integer; Buf: Pointer; len: size_t; flags: integer): ssize_t; cdecl;
   external clib name 'send';
-function sendto(s: TSocket; Buf: Pointer; len: size_t; flags: integer;
+
+function sendto(s: integer; Buf: Pointer; len: size_t; flags: integer;
    addrto: PSockAddr; tolen: integer): ssize_t; cdecl;
   external clib name 'sendto';
-function getpeername(s: TSocket; name: PSockAddr; var namelen: tsocklen): integer; cdecl;
+
+function getpeername(s: integer; name: PSockAddr; var namelen: tsocklen): integer; cdecl;
   external clib name 'getpeername';
+
+{$endif SOCKDIRECTSYSCALL}
 
 {$ifdef OSDARWIN}
 // circumvent linking issue on Mac OSX
@@ -208,6 +347,38 @@ function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
 function sockerrno: integer; inline;
 begin
   result := cerrno; // from libc
+end;
+
+{$ifdef HASACCEPT4}
+var
+  Accept4Unsupported: boolean;
+{$endif HASACCEPT4}
+
+function doaccept(s: TSocket; addr: PSockAddr; var async: boolean): integer;
+var
+  len: tsocklen;
+begin
+  len := SOCKADDR_SIZE;
+  {$ifdef HASACCEPT4}
+  if async and
+     not Accept4Unsupported then
+  begin
+    // see https://github.com/eudev-project/eudev/issues/7#issuecomment-10502344
+    result := accept4(s, addr, len, SOCK_NONBLOCK);
+    if (result < 0) and
+       ((cerrno = ESysENOSYS) or
+        (cerrno = ESysEOPNOTSUPP)) then
+    begin
+      Accept4Unsupported := true; // will fallback from now on on old systems
+      len := SOCKADDR_SIZE;
+      result := accept(s, addr, len);
+    end
+    else
+      async := false; // no need to call MakeAsync
+  end
+  else
+  {$endif HASACCEPT4}
+    result := accept(s, addr, len);
 end;
 
 
