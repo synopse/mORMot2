@@ -1482,7 +1482,10 @@ begin
         else
           SockSend('Connection: Close');
         dat := ctxt.Data; // local var copy for Data to be compressed in-place
-        CompressDataAndWriteHeaders(ctxt.DataType, dat, ctxt.InStream);
+        if (dat <> '') or
+           ((ctxt.method <> 'GET') and // no message body len/type for GET/HEAD
+            (ctxt.method <> 'HEAD')) then
+          CompressDataAndWriteHeaders(ctxt.DataType, dat, ctxt.InStream);
         if ctxt.header <> '' then
           SockSend(ctxt.header);
         if Http.CompressAcceptEncoding <> '' then
@@ -2452,7 +2455,8 @@ procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
     Bytes, Current, Max, BytesWritten: cardinal;
   begin
     if Assigned(fOnUpload) and
-       (IdemPropNameU(aMethod, 'POST') or IdemPropNameU(aMethod, 'PUT')) then
+       (IdemPropNameU(aMethod, 'POST') or
+        IdemPropNameU(aMethod, 'PUT')) then
     begin
       result := WinHttpApi.SendRequest(
         fRequest, nil, 0, nil, 0, L, 0);
