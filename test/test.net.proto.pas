@@ -160,12 +160,13 @@ begin
             'Cache-Control: no-cache'#13#10 +
             'Content-Length: 32767'#13#10 +
             'Expires: Sun, 9 Jan 1972 00:00:00 GMT'#13#10#13#10);
-          stream := streamer.AcceptIncoming(nil, {async=}true);
+          stream := streamer.AcceptIncoming(nil, {async=}false);
           if stream = nil then
           begin
             test.Check(false);
             exit;
           end;
+          stream.Sock.SetLinger(0); // otherwise shutdown takes 40ms with epoll
           test.Check(get.SockConnected);
           test.Check(post.SockConnected);
         end;
@@ -226,11 +227,7 @@ begin
   {$ifdef OSDARWIN}
   N := 10;
   {$else}
-  if PollSocketClass.FollowEpoll then
-    // with epoll, each stream shutdown takes 40ms for no known reason :(
-    N := 10
-  else
-    N := 100;
+  N := 100;
   {$endif OSDARWIN}
   proxy := TRtspOverHttpServer.Create(
     '127.0.0.1', '3999', '3998', TSynLog, nil, nil, options, {threads=}1);
