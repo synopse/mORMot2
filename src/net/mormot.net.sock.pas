@@ -2242,28 +2242,35 @@ ok: end;
 end;
 
 function MergePendingEvents(var res: TPollSocketResults; resindex: PtrInt;
-  new: PPollSocketResult; newcount: integer): integer;
+  new: PPollSocketResult; newcount: PtrInt): integer;
 var
-  n: PtrInt;
+  n, cap: PtrInt;
   exist: PPollSocketResult;
 begin
   result := 0; // returns number of new events to process
-  n := res.Count - resindex;
-  // here we know that newcount > 0 and n > 0 so we can vacuum the results list
+  n := res.Count;
+  // vacuum the results list (to let caller set fPendingIndex := 0)
   if resindex <> 0 then
+  begin
+    dec(n, resindex);
     MoveFast(res.Events[resindex], res.Events[0], n * SizeOf(res.Events[0]));
+    res.Count := n;
+  end;
   // remove any duplicate: PollForPendingEvents() called before GetOnePending()
-  res.Count := n;
+  cap := length(res.Events);
   repeat
     // O(n*m) is faster than UnSubscribe/Subscribe because n and m are small
-    exist := FindPendingFromTag(pointer(res.Events), n, new^.tag);
+    exist := FindPendingFromTag(pointer(res.Events), res.Count, new^.tag);
     if exist = nil then
     begin
       // new event to process
-      if res.Count >= length(res.Events) then
-        SetLength(res.Events, n + newCount + 16); // seldom needed in practice
-      res.Events[res.Count] := new^;
-      inc(res.Count);
+      if n >= cap then
+      begin
+        cap := n + newCount + 16;
+        SetLength(res.Events, cap); // seldom needed
+      end;
+      res.Events[n] := new^;
+      inc(n);
       inc(result);
     end
     else
@@ -2272,6 +2279,7 @@ begin
     inc(new);
     dec(newCount);
   until newCount = 0;
+  res.Count := n;
 end;
 
 function TPollSockets.PollForPendingEvents(timeoutMS: integer): integer;
