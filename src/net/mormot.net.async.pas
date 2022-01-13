@@ -465,6 +465,7 @@ type
       aConnection: TPollAsyncConnection): boolean; overload; virtual;
     function LockedConnectionDelete(
       aConnection: TAsyncConnection; aIndex: integer): boolean;
+    procedure ConnectionAdd(conn: TAsyncConnection);
     procedure ThreadPollingWakeup(Events: integer);
     procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject);
@@ -1250,7 +1251,8 @@ function TPollAsyncSockets.SubscribeConnection(
 var
   poll: TPollSockets;
 begin
-  RegisterConnection(connection);
+  if not (pseClosed in connection.fSubscribed) then // not already registered
+    RegisterConnection(connection);
   if sub in connection.fSubscribed then
   begin
     result := false;
@@ -1293,6 +1295,7 @@ var
   recved, added: integer;
   res: TNetResult;
   timer: TPrecisionTimer;
+  wf: string[3];
   temp: array[0..$7fff] of byte; // up to 32KB moved to small reusable fRd.Buffer
 begin
   result := false;
@@ -1334,12 +1337,17 @@ begin
           recved := SizeOf(temp);
           res := connection.fSocket.Recv(@temp, recved); // no need of RecvPending()
           if res = nrRetry then
+          begin
+            wf := 'wf ';
             // should happen only after accept() -> leverage this thread
             if connection.fSocket.WaitFor(1, [neRead]) = [neRead] then
               res := connection.fSocket.Recv(@temp, recved);
+          end
+          else
+            wf[0] := #0;
           if fDebugLog <> nil then
-            DoLog('ProcessRead recv(%)=% len=% in % %',
-              [pointer(connection.Socket), ToText(res)^, recved, timer.Stop, fRead]);
+            DoLog('ProcessRead recv(%)=% len=% %in % %', [pointer(connection.Socket),
+              ToText(res)^, recved, wf, timer.Stop, fRead]);
           if connection.fSocket = nil then
             exit; // Stop() called
           if res = nrRetry then
@@ -1547,16 +1555,7 @@ end;
 
 procedure TAsyncConnectionsSockets.RegisterConnection(connection: TPollAsyncConnection);
 begin
-  if not (pseClosed in connection.fSubscribed) then
-  begin
-    include(connection.fSubscribed, pseClosed);
-    fOwner.fConnectionLock.WriteLock;
-    try
-      ObjArrayAddCount(fOwner.fConnection, connection, fOwner.fConnectionCount);
-    finally
-      fOwner.fConnectionLock.WriteUnLock;
-    end;
-  end;
+  fOwner.ConnectionAdd(TAsyncConnection(connection));
 end;
 
 
@@ -1918,7 +1917,7 @@ begin
     exit;
   if fLastHandle < 0 then // paranoid check
     raise EAsyncConnections.CreateUtf8(
-      '%.ConnectionAdd: %.Handle overflow', [self, aConnection]);
+      '%.ConnectionNew: %.Handle overflow', [self, aConnection]);
   aConnection.fSocket := aSocket;
   aConnection.fHandle := InterlockedIncrement(fLastHandle);
   if acoNoConnectionTrack in fOptions then
@@ -1928,7 +1927,7 @@ begin
   end else if (fThreadReadPoll = nil) or
               aAddAndSubscribe then
     // ProcessClientStart() won't delay SuscribeConnection + RegisterConnection
-    fClients.RegisterConnection(aConnection);
+    ConnectionAdd(aConnection);
   aConnection.AfterCreate; // Handle has been computed
   if acoVerboseLog in fOptions then
     DoLog(sllTrace, 'ConnectionNew % socket=% count=%',
@@ -1938,18 +1937,52 @@ end;
 
 function TAsyncConnections.LockedConnectionDelete(aConnection: TAsyncConnection;
   aIndex: integer): boolean;
+var
+  n: PtrInt;
 begin
   // caller should have done fConnectionLock.Lock(cWrite)
   try
     PtrArrayDelete(fConnection, aIndex, @fConnectionCount);
+    n := fConnectionCount;
+    if (n > 256) and
+       (length(fConnection) > n shl 1) then
+      SetLength(fConnection, n + n shr 3); // reduce 50% free into 12.5%
     if acoVerboseLog in fOptions then
-      DoLog(sllTrace, 'ConnectionDelete % count=%',
-        [aConnection, fConnectionCount], self);
+      DoLog(sllTrace, 'ConnectionDelete % count=%', [aConnection, n], self);
     aConnection.fSocket := nil;   // ensure is known as disabled
     fClients.fRead.AddGC(aConnection); // will be released after processed
     result := true;
   except
     result := false;
+  end;
+end;
+
+procedure TAsyncConnections.ConnectionAdd(conn: TAsyncConnection);
+var
+  c: ^TPollAsyncConnection;
+  i: PtrInt;
+begin
+  include(conn.fSubscribed, pseClosed); // mark as registered
+  fConnectionLock.WriteLock;
+  try
+    if fConnectionCount = length(fConnection) then
+      SetLength(fConnection, NextGrow(fConnectionCount));
+    i := fConnectionCount - 1;
+    c := @fConnection[i];
+    while (i >= 0) and
+          (c^.Handle >= conn.Handle) do
+    begin
+      dec(i); // not sorted Handle (on rare thread contention)
+      dec(c); // the order problem is always at the end (no binary search need)
+    end;
+    inc(i);   // the index where to insert
+    inc(c);
+    if i < fConnectionCount then
+      MoveFast(c^, PAnsiChar(c)[SizeOf(conn)], (fConnectionCount - i) * SizeOf(conn));
+    c^ := conn;
+    inc(fConnectionCount);
+  finally
+    fConnectionLock.WriteUnLock;
   end;
 end;
 
@@ -1982,8 +2015,8 @@ begin
       fConnectionLock.WriteUnLock;
     end;
   if not result then
-    DoLog(sllTrace, 'ConnectionDelete(%)=false count=%',
-      [aConnection.Handle, fConnectionCount], self);
+    DoLog(sllWarning, 'ConnectionDelete(%)=false count=%',
+      [aConnection.Handle, fConnectionCount], self); // should never happen
 end;
 
 function FastFindConnection(Conn: PPointerArray; R: PtrInt; H: integer): PtrInt;
@@ -1993,7 +2026,7 @@ var
 begin
   // fast O(log(n)) binary search
   L := 0;
-  if 0 <= R then
+  if R >= 0 then
     repeat
       {$ifdef CPUX64}
       result := L + R;
@@ -2013,6 +2046,22 @@ begin
     until L > R;
   result := -1
 end;
+(*
+begin // brute force variant to debug ConnectionDelete()=false
+  if R >= 0 then
+  begin
+    inc(R);
+    result := 0;
+    repeat
+      if TPollAsyncConnection(Conn[result]).Handle = H then
+        exit;
+      inc(result);
+      dec(R);
+    until R = 0;
+  end;
+  result := -1;
+end;
+*)
 
 function TAsyncConnections.ConnectionFindAndLock(
   aHandle: TPollAsyncConnectionHandle; aLock: TRWLockContext;

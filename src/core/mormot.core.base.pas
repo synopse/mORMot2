@@ -6256,7 +6256,7 @@ begin
     while (result >= 0) and
           (P^[result] >= Value) do
       dec(result);
-    result := result + 1; // return the index where to insert
+    inc(result); // return the index where to insert
   end;
 end;
 
@@ -6285,7 +6285,7 @@ begin
     while (result >= 0) and
           (P^[result] >= Value) do
       dec(result);
-    result := result + 1; // return the index where to insert
+    inc(result); // return the index where to insert
   end;
 end;
 
