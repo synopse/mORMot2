@@ -274,12 +274,12 @@ begin
                   inc(n);
                 end;
                 for i := 0 to n - 1 do
-                  if fTest.CheckFailed(Rest[r].Orm.Retrieve(fIDs[i], Rec)) then
+                  if fTest.CheckFailed(Rest[r].Orm.Retrieve(fIDs[i], Rec), 'get') then
                     break
                   else
                   begin
-                    fTest.Check(Rec.YearOfBirth = 1000 + i);
-                    fTest.Check(Rec.YearOfDeath = 1040 + i);
+                    fTest.Check(Rec.YearOfBirth = 1000 + i, 'yob');
+                    fTest.Check(Rec.YearOfDeath = (1040 + i) and $ffff, 'yod');
                     //if (Rec.YearOfBirth<>1000+i) or (Rec.YearOfDeath<>1040+i) then writeln(i,'  ',ObjectToJSON(Rec));
                     if r = high(Rest) then
                       r := 0
