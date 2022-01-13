@@ -282,7 +282,10 @@ type
       OnlyLog: boolean = false): TSynMonitorOneMicroSec; overload;
     /// append some text to the current console
     // - OnlyLog will compute and append the info to the log, but not on the console
-    procedure AddConsole(const msg: string; OnlyLog: boolean = false);
+    procedure AddConsole(const msg: string; OnlyLog: boolean = false); overload;
+    /// append some text to the current console
+    procedure AddConsole(const Fmt: RawUtf8; const Args: array of const;
+      OnlyLog: boolean = false); overload;
     /// the test suit which owns this test case
     property Owner: TSynTests
       read fOwner;
@@ -973,6 +976,15 @@ begin
   end;
 end;
 
+procedure TSynTestCase.AddConsole(
+  const Fmt: RawUtf8; const Args: array of const; OnlyLog: boolean);
+var
+  msg: string;
+begin
+  FormatString(Fmt, Args, msg);
+  AddConsole(msg, OnlyLog);
+end;
+
 function TSynTestCase.NotifyTestSpeed(const ItemName: string; ItemCount: integer;
   SizeInBytes: cardinal; Timer: PPrecisionTimer;
   OnlyLog: boolean): TSynMonitorOneMicroSec;
@@ -1206,6 +1218,11 @@ begin
             Color(ccLightGreen)
           else
             Color(ccLightRed);
+          if C.fRunConsole <> '' then
+          begin
+            TextLn(['   ', C.fRunConsole]);
+            C.fRunConsole := '';
+          end;
           Text(['  Total failed: ', IntToThousandString(C.AssertionsFailed),
             ' / ', IntToThousandString(C.Assertions), '  - ', C.Ident]);
           if C.AssertionsFailed = 0 then

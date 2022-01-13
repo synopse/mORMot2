@@ -565,10 +565,10 @@ type
     // ! Lock; try ... finally UnLock; end;
     property ConnectionCount: integer
       read fConnectionCount;
+  published
     /// how many read threads there are in this thread pool
     property ThreadPoolCount: integer
       read fThreadPoolCount;
-  published
     /// access to the TCP client sockets poll
     // - TAsyncConnection.OnRead should rather use Write() and LogVerbose()
     // methods of this TAsyncConnections class instead of using Clients
@@ -741,6 +741,7 @@ type
       CreateSuspended: boolean = false; aLogVerbose: boolean = false); override;
     /// finalize the HTTP Server
     destructor Destroy; override;
+  published
     /// if we should search for local .gz cached file when serving static files
     property RegisterCompressGzStatic: boolean
       read GetRegisterCompressGzStatic write SetRegisterCompressGzStatic;
@@ -1310,7 +1311,8 @@ begin
       end;
     if pseClosed in notif.events then
     begin
-      // never notified on Windows: select() doesn't return any "close" flag
+      // - properly triggered from EPOLLRDHUP on Linux in ET mode
+      // - never notified on Windows: select() doesn't return any "close" flag
       // and checking for pending bytes for closed connection is not correct
       // on multi-thread -> Recv() below will properly detect disconnection
       CloseConnection(connection);
