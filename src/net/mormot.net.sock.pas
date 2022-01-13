@@ -1688,7 +1688,7 @@ var
   events: TNetEvents;
   pending: integer;
 begin
-  events := WaitFor(100, [neRead]);
+  events := WaitFor(ms, [neRead]);
   if (neError in events) or
      (Assigned(terminated) and
       terminated^) then
