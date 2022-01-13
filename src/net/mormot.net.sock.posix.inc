@@ -1013,7 +1013,7 @@ constructor TPollSocketEpoll.Create;
 begin
   inherited Create;
   fMaxSockets := 100; // initial value: no limitation in practice and can grow
-  fEPFD := epoll_create(fMaxSockets); // since 2.6.8 size is ignored
+  fEPFD := epoll_create(10000); // since 2.6.8 size is ignored
   SetLength(fResults, fMaxSockets);
 end;
 
@@ -1031,11 +1031,17 @@ begin
   fEPFD := -1;
 end;
 
-// "EPOLLET" edge triggered detection is not consistent with select or poll
-// -> PollForPendingEvents() will use fast O(n*m) MergePendingEvents()
 const
   EPOLLRDHUP = $2000; // since 2.6.17 (not defined in FPC Linux.pp) = close
-  EPOLLMODE = 0; // EPOLLET
+  // note: EPOLLRDHUP in LT mode needs recv() len=0 so is not worth it
+  //                  in ET mode properly reflects connection close
+  EPOLLMODE_LT = 0;                     // Level Triggered mode
+  EPOLLMODE_ET = EPOLLET or EPOLLRDHUP; // Event Triggered mode + RDHUP
+  // "EPOLLET" edge triggered detection is not consistent with select or poll
+  // -> PollForPendingEvents() will use fast O(n*m) MergePendingEvents()
+  EPOLLMODE = EPOLLMODE_LT;
+  // EPOLLRDHUP is relevant only in ET mode
+  EPOLLCLOSE = EPOLLHUP or (EPOLLMODE and EPOLLRDHUP);
 
 function TPollSocketEpoll.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
   tag: TPollSocketTag): boolean;
@@ -1052,9 +1058,9 @@ begin
   e.data.ptr := pointer(tag); // don't use data.u64
   if pseRead in events then
     if pseWrite in events then
-      e.events := EPOLLIN or EPOLLPRI or EPOLLOUT or EPOLLRDHUP or EPOLLMODE
+      e.events := EPOLLIN or EPOLLPRI or EPOLLOUT or EPOLLMODE
     else
-      e.events := EPOLLIN or EPOLLPRI or EPOLLRDHUP or EPOLLMODE
+      e.events := EPOLLIN or EPOLLPRI or EPOLLMODE
   else if pseWrite in events then
     e.events := EPOLLOUT or EPOLLMODE
   else
@@ -1136,7 +1142,7 @@ begin
         include(e, pseWrite);
       if ev and EPOLLERR <> 0 then
         include(e, pseError);
-      if ev and (EPOLLHUP or EPOLLRDHUP) <> 0 then
+      if ev and EPOLLCLOSE <> 0 then
         include(e, pseClosed);
     end;
     er^.events := e;
