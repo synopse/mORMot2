@@ -82,6 +82,7 @@ type
     fMinThreads: integer;
     fMaxThreads: integer;
     fOperationCount: integer;
+    fIterationTotalCount, fClientsTotalCount: integer;
     fClientPerThread: integer;
     fClientOnlyServerIP, fClientOnlyPort: RawUtf8;
     fTimer: TPrecisionTimer;
@@ -310,6 +311,8 @@ procedure TTestMultiThreadProcessThread.LaunchProcess;
 begin
   fProcessFinished := false;
   fIterationCount := fTest.fOperationCount div fTest.fRunningThreadCount;
+  inc(fTest.fIterationTotalCount, fIterationCount);
+  inc(fTest.fClientsTotalCount, fTest.fClientPerThread);
   fEvent.SetEvent; // launch work in Execute loop
 end;
 
@@ -319,6 +322,10 @@ end;
 procedure TTestMultiThreadProcess.CleanUp;
 begin
   DatabaseClose;
+  if fThreads <> nil then
+    AddConsole('MaxThreads=% MaxClients=% TotalOps=% TotalClients=%',
+      [fMaxThreads, fClientPerThread * fMaxThreads,
+       fIterationTotalCount, fClientsTotalCount]);
   FreeAndNil(fModel);
   FreeAndNil(fThreads);
   FreeAndNil(fPendingThreadFinished);
@@ -329,9 +336,11 @@ constructor TTestMultiThreadProcess.Create(
 begin
   inherited;
   fMinThreads := 1;
-  fMaxThreads := 50;
-  fOperationCount := 300;
+  fMaxThreads := 50;      // 1, 2, 5, 10, 30, 50
+  fOperationCount := 300; // will be divided among threads
   fClientPerThread := 1;
+  // note: IterationCount := OperationCount div RunningThreadCount
+  //       and make some round robin around fClientPerThread
   fPendingThreadFinished := TEvent.Create(nil, false, false, '');
 end;
 
