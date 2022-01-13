@@ -2570,7 +2570,8 @@ begin
       end;
     focPong:
       ; // nothing to do
-    focText, focBinary:
+    focText,
+    focBinary:
       if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
          (not fProtocol.fOnBeforeIncomingFrame(self, request)) then
         fProtocol.ProcessIncomingFrame(self, request, '');

@@ -1939,16 +1939,23 @@ function TAsyncConnections.LockedConnectionDelete(aConnection: TAsyncConnection;
   aIndex: integer): boolean;
 var
   n: PtrInt;
+  start, stop: Int64;
 begin
   // caller should have done fConnectionLock.Lock(cWrite)
   try
+    if acoVerboseLog in fOptions then
+      QueryPerformanceMicroSeconds(start);
     PtrArrayDelete(fConnection, aIndex, @fConnectionCount);
     n := fConnectionCount;
     if (n > 256) and
        (length(fConnection) > n shl 1) then
       SetLength(fConnection, n + n shr 3); // reduce 50% free into 12.5%
     if acoVerboseLog in fOptions then
-      DoLog(sllTrace, 'ConnectionDelete % count=%', [aConnection, n], self);
+    begin
+      QueryPerformanceMicroSeconds(stop);
+      DoLog(sllTrace, 'ConnectionDelete % count=% %us',
+        [aConnection, n, stop - start], self); // a few us at most
+    end;
     aConnection.fSocket := nil;   // ensure is known as disabled
     fClients.fRead.AddGC(aConnection); // will be released after processed
     result := true;
@@ -2648,7 +2655,7 @@ begin
     fHttp.State := hrsErrorShutdownInProgress
   else
   begin
-    // use the HTTP machine state to asynchronously parse fRd input
+    // use the HTTP state machine to asynchronously parse fRd input
     result := soContinue;
     st.P := fRd.Buffer;
     st.Len := fRd.Len;
@@ -2710,7 +2717,7 @@ begin
   // compute next step
   if fHttp.State = hrsSendBody then
   begin
-    // use the HTTP machine state to fill fWr with outgoing body chunk
+    // use the HTTP state machine to fill fWr with outgoing body chunk
     fHttp.ProcessBody(fWr, fOwner.fClients.fSendBufferSize);
     fOwner.DoLog(sllTrace, 'AfterWrite SendBody ContentLength=% Wr=%',
       [fHttp.ContentLength, fWr.Len], self);
