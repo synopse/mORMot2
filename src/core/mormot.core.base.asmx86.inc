@@ -2346,7 +2346,13 @@ asm
         setz    al
 end;
 
-procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt);
+procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+   lock add     dword ptr [Target], Increment
+end;
+
+procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
    lock add     dword ptr [Target], Increment

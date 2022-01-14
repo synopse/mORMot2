@@ -2387,6 +2387,11 @@ function RefCntDecFree(var refcnt: TRefCnt): boolean; inline;
 
 {$endif CPUINTEL}
 
+/// low-level string/dynarray reference counter process
+// - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
+procedure RefCntAdd(var refcnt: TRefCnt; increment: TRefCnt);
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// fast atomic compare-and-swap operation on a pointer-sized integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedCompareExchange(pointer)
 // - true if Target was equal to Comparand, and Target set to NewValue
@@ -2397,13 +2402,17 @@ function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
 /// fast atomic addition operation on a pointer-sized integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(pointer)
 // - Target should be aligned, which is the case when defined as a class field
-procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt);
+procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
 
 /// fast atomic substraction operation on a pointer-sized integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(-pointer)
 // - Target should be aligned, which is the case when defined as a class field
 procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
 
+/// fast atomic addition operation on a 32-bit integer value
+// - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(pointer)
+// - Target should be aligned, which is the case when defined as a class field
+procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
 
 {$ifndef FPC}
 
@@ -7841,6 +7850,16 @@ begin
   result := true;
 end;
 
+procedure RefCntAdd(var refcnt: TRefCnt; increment: TRefCnt);
+begin
+  // FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
+  {$ifdef FPC}
+  LockedAdd(PtrUInt(refcnt), increment);
+  {$else}
+  LockedAdd32(cardinal(refcnt), increment);
+  {$endif FPC}
+end;
+
 procedure FillZero(var dest; count: PtrInt);
 begin
   FillCharFast(dest, count, 0);
@@ -8621,9 +8640,14 @@ begin
     pointer(Target), pointer(NewValue), pointer(Comperand)) = pointer(Comperand);
 end;
 
-procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt);
+procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
 begin
   InterlockedExchangeAdd(pointer(Target), pointer(Increment));
+end;
+
+procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
+begin
+  InterlockedExchangeAdd(Target, Increment);
 end;
 
 procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
