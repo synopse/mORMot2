@@ -2925,6 +2925,9 @@ constructor THttpAsyncServer.Create(const aPort: RawUtf8; const OnStart,
 var
   aco: TAsyncConnectionsOptions;
 begin
+  fProcessName := ProcessName;
+  if fProcessName = '' then
+    fProcessName := aPort;
   // initialize HTTP parsing
   fCompressGz := -1;
   fHeadersDefaultBufferSize := 2048; // one fpcx64mm small block
@@ -2941,10 +2944,10 @@ begin
     fConnectionsClass := THttpAsyncConnections;
   // bind and start the actual thread-pooled connections async server
   fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
-    fConnectionClass, ProcessName, TSynLog, aco, ServerThreadPoolCount);
+    fConnectionClass, fProcessName, TSynLog, aco, ServerThreadPoolCount);
   fAsync.fAsyncServer := self;
   // launch this TThread instance, but as suspended since Execute is void
-  inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
+  inherited Create(aPort, OnStart, OnStop, fProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended);
 end;
 
