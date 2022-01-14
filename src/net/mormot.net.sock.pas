@@ -2298,7 +2298,7 @@ begin
   result := 0;
   if fTerminated then
     exit;
-  if Assigned(OnLog) then
+  if Assigned(fOnLog) then
     QueryPerformanceMicroSeconds(start);
   LockedInc32(@fGettingOne);
   try

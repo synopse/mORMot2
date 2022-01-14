@@ -468,6 +468,7 @@ type
   TOnHttpServerSendFile = function(Context: THttpServerRequestAbstract;
     const LocalFileName: TFileName): boolean of object;
 
+  {$M+}
   /// abstract generic input/output structure used for HTTP server requests
   // - URL/Method/InHeaders/InContent properties are input parameters
   // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -499,10 +500,20 @@ type
     // - will reset output parameters
     procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
       const aInContent: RawByteString;
-      const aInContentType, aRemoteIP, aAuthBearer, aUserAgent: RawUtf8);
+      const aInContentType, aRemoteIP, aAuthBearer, aUserAgent: RawUtf8); overload;
       {$ifdef HASINLINE} inline; {$endif}
+    procedure Prepare(const aHttp: THttpRequestContext;
+      const aRemoteIP: RawUtf8); overload;
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(AppendedHeader: RawUtf8);
+    /// input parameter containing the caller message body
+    // - e.g. some GET/POST/PUT JSON data can be specified here
+    property InContent: RawByteString
+      read fInContent;
+    /// output parameter to be set to the response message body
+    property OutContent: RawByteString
+      read fOutContent write fOutContent;
+  published
     /// input parameter containing the caller URI
     property Url: RawUtf8
       read fUrl;
@@ -512,19 +523,12 @@ type
     /// input parameter containing the caller message headers
     property InHeaders: RawUtf8
       read fInHeaders;
-    /// input parameter containing the caller message body
-    // - e.g. some GET/POST/PUT JSON data can be specified here
-    property InContent: RawByteString
-      read fInContent;
     // input parameter defining the caller message body content type
     property InContentType: RawUtf8
       read fInContentType;
     /// output HTTP response status
     property RespStatus: integer
       read fRespStatus write fRespStatus;
-    /// output parameter to be set to the response message body
-    property OutContent: RawByteString
-      read fOutContent write fOutContent;
     /// output parameter to define the reponse message body content type
     // - if OutContentType is STATICFILE_CONTENT_TYPE (i.e. '!STATICFILE'),
     // then OutContent is the UTF-8 file name of a file to be sent to the
@@ -577,7 +581,7 @@ type
     property AuthenticatedUser: RawUtf8
       read fAuthenticatedUser;
   end;
-
+  {$M-}
 
 
 implementation
@@ -1765,6 +1769,22 @@ begin
   fUserAgent := aUserAgent;
   fInContent := aInContent;
   fInContentType := aInContentType;
+  fOutContent := '';
+  fOutContentType := '';
+  fOutCustomHeaders := '';
+end;
+
+procedure THttpServerRequestAbstract.Prepare(const aHttp: THttpRequestContext;
+  const aRemoteIP: RawUtf8);
+begin
+  fUrl := aHttp.CommandUri;
+  fMethod := aHttp.CommandMethod;
+  fRemoteIP := aRemoteIP;
+  fInHeaders := aHttp.Headers;
+  fAuthBearer := aHttp.BearerToken;
+  fUserAgent := aHttp.UserAgent;
+  fInContent := aHttp.Content;
+  fInContentType := aHttp.ContentType;
   fOutContent := '';
   fOutContentType := '';
   fOutCustomHeaders := '';

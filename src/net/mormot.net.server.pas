@@ -55,6 +55,7 @@ type
   THttpServerRequest = class(THttpServerRequestAbstract)
   protected
     fServer: THttpServerGeneric;
+    fErrorMessage: string;
     {$ifdef USEWININET}
     fHttpApiRequest: PHTTP_REQUEST;
     function GetFullURL: SynUnicode;
@@ -66,13 +67,16 @@ type
       aConnectionFlags: THttpServerRequestFlags); virtual;
     /// prepare one reusable HTTP State Machine for sending the response
     procedure SetupResponse(var Context: THttpRequestContext;
-      const ServerName: RawUtf8; const ErrorMessage: string;
-      const OnSendFile: TOnHttpServerSendFile;
       CompressGz, MaxSizeAtOnce: integer);
+    /// just a wrapper around fErrorMessage := FormatString()
+    procedure SetErrorMessage(const Fmt: RawUtf8; const Args: array of const);
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric
       read fServer;
+    /// optional error message which will be used by SetupResponse
+    property ErrorMessage: string
+      read fErrorMessage write fErrorMessage;
     {$ifdef USEWININET}
     /// for THttpApiServer, input parameter containing the caller full URL
     property FullURL: SynUnicode
@@ -120,6 +124,7 @@ type
     fCallbackSendDelay: PCardinal;
     fRemoteIPHeader, fRemoteIPHeaderUpper: RawUtf8;
     fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: RawUtf8;
+    fOnSendFile: TOnHttpServerSendFile;
     function GetApiVersion: RawUtf8; virtual; abstract;
     procedure SetServerName(const aName: RawUtf8); virtual;
     procedure SetOnRequest(const aRequest: TOnHttpServerRequest); virtual;
@@ -239,6 +244,10 @@ type
     // header overflow the supplied number of bytes
     property MaximumAllowedContentLength: cardinal
       read fMaximumAllowedContentLength write SetMaximumAllowedContentLength;
+    /// custom event handler used to send a local file for STATICFILE_CONTENT_TYPE
+    // - see also NginxSendFileFrom() method
+    property OnSendFile: TOnHttpServerSendFile
+      read fOnSendFile write fOnSendFile;
     /// defines request/response internal queue length
     // - default value if 1000, which sounds fine for most use cases
     // - for THttpApiServer, will return 0 if the system does not support HTTP
@@ -467,7 +476,6 @@ type
   protected
     fServerKeepAliveTimeOut: cardinal;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
-    fOnSendFile: TOnHttpServerSendFile;
     fNginxSendFileFrom: array of TFileName;
     fSockPort: RawUtf8;
     fHeaderRetrieveAbortDelay: cardinal;
@@ -545,10 +553,6 @@ type
     // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
     property HeaderRetrieveAbortDelay: cardinal
       read fHeaderRetrieveAbortDelay write fHeaderRetrieveAbortDelay;
-    /// custom event handler used to send a local file for STATICFILE_CONTENT_TYPE
-    // - see also NginxSendFileFrom() method
-    property OnSendFile: TOnHttpServerSendFile
-      read fOnSendFile write fOnSendFile;
     /// the low-level thread execution thread
     property ExecuteState: THttpServerExecuteState
       read GetExecuteState;
@@ -1250,17 +1254,14 @@ begin
 end;
 
 procedure THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
-  const ServerName: RawUtf8; const ErrorMessage: string;
-  const OnSendFile: TOnHttpServerSendFile; CompressGz, MaxSizeAtOnce: integer);
+  CompressGz, MaxSizeAtOnce: integer);
 var
   P, PEnd: PUtf8Char;
   len: PtrInt;
   reason: RawUtf8;
   fn: TFileName;
-  err: string;
 begin
   // note: caller should have set hfConnectionClose in Context.HeaderFlags
-  err := ErrorMessage;
   // process content
   Context.ContentLength := 0;
   if OutContentType = NORESPONSE_CONTENT_TYPE then
@@ -1270,24 +1271,25 @@ begin
   begin
     ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
     Utf8ToFileName(OutContent, fn);
-    if (not Assigned(OnSendFile)) or
-       (not OnSendFile(self, fn)) then
+    if (not Assigned(fServer.OnSendFile)) or
+       (not fServer.OnSendFile(self, fn)) then
       if Context.ContentFromFile(fn, CompressGz) then
         OutContent := Context.Content
       else
       begin
-        FormatString('Impossible to find %', [fn], err);
+        FormatString('Impossible to find %', [fn], fErrorMessage);
         fRespStatus := HTTP_NOTFOUND;
       end;
   end;
   StatusCodeToReason(fRespStatus, reason);
-  if err <> '' then
+  if fErrorMessage <> '' then
   begin
     OutCustomHeaders := '';
     OutContentType := 'text/html; charset=utf-8'; // create message to display
     OutContent := FormatUtf8('<body style="font-family:verdana">'#10 +
       '<h1>% Server Error %</h1><hr><p>HTTP % %<p>%<p><small>' + XPOWEREDVALUE,
-      [ServerName, fRespStatus, fRespStatus, reason, HtmlEscapeString(err)]);
+      [fServer.ServerName, fRespStatus, fRespStatus, reason,
+       HtmlEscapeString(fErrorMessage)]);
   end;
   // append Command
   Context.Head.Reset;
@@ -1317,7 +1319,7 @@ begin
   end;
   // generic headers
   Context.Head.Append('Server: ');
-  Context.Head.Append(ServerName, {crlf=}true);
+  Context.Head.Append(fServer.ServerName, {crlf=}true);
   {$ifndef NOXPOWEREDNAME}
   Context.Head.Append(XPOWEREDNAME + ': ' + XPOWEREDVALUE, true);
   {$endif NOXPOWEREDNAME}
@@ -1325,6 +1327,12 @@ begin
   Context.ContentType := OutContentType;
   Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // also set State
   // now TAsyncConnectionsSockets.Write(Head) should be called
+end;
+
+procedure THttpServerRequest.SetErrorMessage(const Fmt: RawUtf8;
+  const Args: array of const);
+begin
+  FormatString(Fmt, Args, fErrorMessage);
 end;
 
 {$ifdef USEWININET}
@@ -1977,9 +1985,7 @@ begin
     HTTPREMOTEFLAGS[ClientSock.TLS.Enabled]);
   try
     respsent := false;
-    with ClientSock do
-      ctxt.Prepare(URL, Method, Http.Headers, Http.Content, Http.ContentType,
-        fRemoteIP, Http.BearerToken, Http.UserAgent);
+    ctxt.Prepare(ClientSock.Http, ClientSock.fRemoteIP);
     try
       cod := DoBeforeRequest(ctxt);
       if cod > 0 then

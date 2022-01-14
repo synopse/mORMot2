@@ -2824,7 +2824,6 @@ var
   req: THttpServerRequest;
   cod: integer;
   output: PRawByteStringBuffer;
-  err: string;
 begin
   // check the status
   if nfHeadersParsed in fHttp.HeaderFlags then
@@ -2843,12 +2842,14 @@ begin
   result := soClose;
   req := THttpServerRequest.Create(fServer, fRemoteConnID, {thread=}nil, []);
   try
-    req.Prepare(fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers,
-      fHttp.Content, fHttp.ContentType, fRemoteIP, fHttp.BearerToken, fHttp.UserAgent);
+    req.Prepare(fHttp, fRemoteIP);
     try
       req.RespStatus := fServer.DoBeforeRequest(req);
       if req.RespStatus > 0 then
-        FormatString('Rejected % Request', [fHttp.CommandUri], err)
+      begin
+        req.SetErrorMessage('Rejected % Request', [fHttp.CommandUri]);
+        fServer.IncStat(grRejected);
+      end
       else
       begin
         // execute the main processing callback
@@ -2863,7 +2864,7 @@ begin
         begin
           // intercept and return Internal Server Error 500
           req.RespStatus := HTTP_SERVERERROR;
-          FormatString('%: %', [E, E.Message], err);
+          req.SetErrorMessage('%: %', [E, E.Message]);
           fServer.IncStat(grException);
           // will keep soClose as result to shutdown the connection
         end;
@@ -2877,8 +2878,7 @@ begin
         [fServer.Async.fLastOperationSec, fKeepAliveSec], self);
       include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
     end;
-    req.SetupResponse(fHttp, fServer.ServerName, err,
-      fServer.OnSendFile, fServer.fCompressGz,
+    req.SetupResponse(fHttp, fServer.fCompressGz,
       fServer.fAsync.fClients.fSendBufferSize);
     fRespStatus := req.RespStatus;
   finally
