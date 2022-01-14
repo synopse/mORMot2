@@ -1308,12 +1308,6 @@ begin
     exit;
   LockedInc32(@fProcessingRead);
   try
-    if pseError in notif.events then
-      if not OnError(connection, notif.events) then
-      begin
-        CloseConnection(connection);
-        exit;
-      end;
     if pseClosed in notif.events then
     begin
       // - properly triggered from EPOLLRDHUP on Linux in ET mode
@@ -1322,8 +1316,15 @@ begin
       // on multi-thread -> Recv() below will properly detect disconnection
       CloseConnection(connection);
       exit;
-    end
-    else if pseRead in notif.events then
+    end;
+    if pseError in notif.events then
+      // check for pseError after pseClosed, because closing is no fatal error
+      if not OnError(connection, notif.events) then
+      begin
+        CloseConnection(connection);
+        exit;
+      end;
+    if pseRead in notif.events then
     begin
       // we were notified that there may be some pending input data
       added := 0;
