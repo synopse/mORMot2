@@ -455,7 +455,7 @@ type
     end;
     fIdleTix: Int64;
     fThreadPollingWakeupSafe: TLightLock;
-    fThreadPollingWakeup: integer;
+    fThreadPollingWakeupIndex: PtrInt;
     function AllThreadsStarted: boolean; virtual;
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
       out aConnection: TAsyncConnection): boolean; virtual;
@@ -1623,6 +1623,7 @@ begin
             start := 0; // back to SleepHiRes(0)
             while not Terminated do
             begin
+              fWaitForReadPending := false;
               new := fOwner.fClients.fRead.PollForPendingEvents(ms);
               if Terminated then
                 break;
@@ -1631,6 +1632,7 @@ begin
                 if fOwner.fClients.fRead.Count = 0 then
                 begin
                   // avoid void PollForPendingEvents/SleepStep loop
+                  fWaitForReadPending := true;
                   fEvent.WaitFor(INFINITE); // blocking until next accept()
                   start := 0;
                   continue;
@@ -1649,6 +1651,7 @@ begin
                 fEvent.ResetEvent;
                 fOwner.ThreadPollingWakeup(new);
                 // atpReadPending notifies fThreadReadPoll.fEvent when done
+                fWaitForReadPending := true;
                 if Terminated or
                    (fEvent.WaitFor(20) = wrSignaled) then
                   break;
@@ -1668,7 +1671,8 @@ begin
                     not Terminated do
                 fOwner.fClients.ProcessRead(notif);
               // release atpReadPoll lock above
-              fOwner.fThreadReadPoll.fEvent.SetEvent;
+              if fOwner.fThreadReadPoll.fWaitForReadPending then
+                fOwner.fThreadReadPoll.fEvent.SetEvent;
             end;
           end;
       else
@@ -1863,24 +1867,24 @@ var
 begin
   // simple thread-safe fair round-robin over fThreads[]
   if Events > high(ndx) then
-    Events := high(ndx);
+    Events := high(ndx); // avoid ndx[] buffer overflow
   n := 0;
   fThreadPollingWakeupSafe.Lock;
   try
-    t := @fThreads[fThreadPollingWakeup + 1];
-    for i := fThreadPollingWakeup + 1 to high(fThreads) do
+    t := @fThreads[fThreadPollingWakeupIndex + 1];
+    for i := fThreadPollingWakeupIndex + 1 to high(fThreads) do
       if n = Events then
         break
       else
         AddOne;
     t := pointer(fThreads);
-    for i := 0 to fThreadPollingWakeup do
+    for i := 0 to fThreadPollingWakeupIndex do
       if n = Events then
         break
       else
         AddOne;
     if n <> 0 then
-      fThreadPollingWakeup := ndx[n - 1];
+      fThreadPollingWakeupIndex := ndx[n - 1];
   finally
     fThreadPollingWakeupSafe.UnLock;
   end;
