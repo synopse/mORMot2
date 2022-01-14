@@ -447,6 +447,7 @@ type
     fLog: TSynLogClass;
     fConnectionLock: TRWLock; // would block only on connection add/remove
     fOptions: TAsyncConnectionsOptions;
+    fClientsEpoll: boolean; // = PollSocketClass.FollowEpoll
     fLastOperationSec: TAsyncConnectionSec;
     fLastOperationReleaseMemorySeconds: cardinal;
     fLastOperationIdleSeconds: cardinal;
@@ -1350,14 +1351,16 @@ begin
             timer.Start;
           recved := SizeOf(temp);
           res := connection.fSocket.Recv(@temp, recved); // no need of RecvPending()
+          {$ifdef OSLINUX} // WaitFor=select() should not be called with FIONBIO
           if res = nrRetry then
           begin
-            wf := 'wf ';
             // should happen only after accept() -> leverage this thread
             if connection.fSocket.WaitFor(1, [neRead]) = [neRead] then
               res := connection.fSocket.Recv(@temp, recved);
+            wf := 'wf ';
           end
           else
+          {$endif OSLINUX}
             wf[0] := #0;
           if fDebugLog <> nil then
             DoLog('ProcessRead recv(%)=% len=% %in % %', [pointer(connection.Socket),
@@ -1611,12 +1614,12 @@ begin
     ms := 0;
     case fProcess of
       atpReadSingle:
-        if fOwner.fClients.fRead.PollClass.FollowEpoll then
+        if fOwner.fClientsEpoll then
           ms := 100 // for quick shutdown
         else
           ms := 1000;
       atpReadPoll:
-        if fOwner.fClients.fRead.PollClass.FollowEpoll then
+        if fOwner.fClientsEpoll then
           ms := 1100; // efficient epoll_wait(ms) API call
     end;
     // main TAsyncConnections read/write process
@@ -1626,10 +1629,10 @@ begin
     begin
       case fProcess of
         atpReadSingle:
-            // a single thread to rule them all: polling, reading and processing
-            if fOwner.fClients.fRead.GetOne(ms, fName, notif) then
-              if not Terminated then
-                fOwner.fClients.ProcessRead(notif);
+          // a single thread to rule them all: polling, reading and processing
+          if fOwner.fClients.fRead.GetOne(ms, fName, notif) then
+            if not Terminated then
+              fOwner.fClients.ProcessRead(notif);
         atpReadPoll:
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
@@ -1643,9 +1646,14 @@ begin
                 break;
               pending := fOwner.fClients.fRead.fPending.Count;
               if new = 0 then
-              begin
-                if (pending = 0) and
-                   (fOwner.fClients.fRead.Count = 0) then
+                if not fOwner.fClientsEpoll then
+                begin
+                  // 0/1/10/50/150 ms steps, checking fThreadReadPoll.fEvent
+                  SleepStep(start, @Terminated, fEvent);
+                  continue;
+                end
+                else if (pending = 0) and
+                        (fOwner.fClients.fRead.Count = 0) then
                 begin
                   // avoid void PollForPendingEvents/SleepStep loop
                   fEvent.ResetEvent;
@@ -1655,14 +1663,7 @@ begin
                   //fOwner.DoLog(sllInfo, 'Execute: % wakeup', [fName], self);
                   start := 0;
                   continue;
-                end
-                else if ms = 0 then
-                begin
-                  // 0/1/10/50/150 ms steps, checking fThreadReadPoll.fEvent
-                  SleepStep(start, @Terminated, fEvent);
-                  continue;
                 end;
-              end;
               if pending > 0 then
               begin
                 // process fOwner.fClients.fPending in atpReadPending threads
@@ -1739,6 +1740,7 @@ begin
     include(opt, paoWritePollOnly);
   fClients := TAsyncConnectionsSockets.Create(opt);
   fClients.fOwner := self;
+  fClientsEpoll := fClients.fRead.PollClass.FollowEpoll;
   fClients.OnStart := ProcessClientStart;
   fClients.fWrite.OnGetOneIdle := ProcessIdleTix;
   if Assigned(fLog) and
@@ -2429,7 +2431,7 @@ begin
     if NewSocket(host, port{%H-}, fServer.SocketLayer, false,
          10, 0, 0, 0, touchandgo) = nrOk then
     begin
-      if fClients.fRead.PollClass.FollowEpoll then
+      if fClientsEpoll then
       begin
         len := 1;
         touchandgo.Send(@len, len);    // release epoll_wait() in R0 thread
@@ -2520,7 +2522,7 @@ begin
           if Terminated then
           begin
             // specific behavior from Shutdown method
-            if fClients.fRead.PollClass.FollowEpoll and
+            if fClientsEpoll and
                (res = nrOK) then
             begin
               DoLog(sllTrace, 'Execute: Accept(%) release', [fServer.Port], self);
@@ -3032,7 +3034,7 @@ begin
       tix := mormot.core.os.GetTickCount64 shr 16; // delay=500 after 1 min idle
       lasttix := tix;
       ms := 1000; // fine if OnGetOneIdle is called in-between
-      if fAsync.fClients.fWrite.PollClass.FollowEpoll then
+      if fAsync.fClientsEpoll then
         if fCallbackSendDelay <> nil then
           ms := fCallbackSendDelay^; // for WebSockets frame gathering
       while not Terminated and
