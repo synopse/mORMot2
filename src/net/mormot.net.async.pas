@@ -1881,8 +1881,8 @@ begin
         break
       else
         AddOne;
-    t := pointer(fThreads);
-    for i := 0 to fThreadPollingWakeupIndex do
+    t := @fThreads[1]; // fThread[0]=fThreadReadPoll and should not be used
+    for i := 1 to fThreadPollingWakeupIndex do
       if n = Events then
         break
       else

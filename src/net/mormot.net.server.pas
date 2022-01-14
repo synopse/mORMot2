@@ -475,12 +475,14 @@ type
   THttpServerSocketGeneric = class(THttpServerGeneric)
   protected
     fServerKeepAliveTimeOut: cardinal;
+    fServerKeepAliveTimeOutSec: cardinal;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
     fNginxSendFileFrom: array of TFileName;
     fSockPort: RawUtf8;
     fHeaderRetrieveAbortDelay: cardinal;
     fHeadersUnFiltered: boolean;
     fExecuteMessage: RawUtf8;
+    procedure SetServerKeepAliveTimeOut(Value: cardinal);
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
     procedure IncStat(one: THttpServerSocketGetRequestResult);
       {$ifdef HASINLINE} inline; {$endif}
@@ -1551,7 +1553,7 @@ constructor THttpServerSocketGeneric.Create(const aPort: RawUtf8;
   aHeadersUnFiltered: boolean; CreateSuspended: boolean; aLogVerbose: boolean);
 begin
   fSockPort := aPort;
-  fServerKeepAliveTimeOut := KeepAliveTimeOut; // 30 seconds by default
+  SetServerKeepAliveTimeOut(KeepAliveTimeOut); // 30 seconds by default
   // event handlers set before inherited Create to be visible in childs
   fOnHttpThreadStart := OnStart;
   SetOnTerminate(OnStop);
@@ -1588,6 +1590,12 @@ begin
       raise EHttpServer.CreateUtf8('%.WaitStarted timeout after % seconds [%]',
         [self, Seconds, fExecuteMessage]);
   until false;
+end;
+
+procedure THttpServerSocketGeneric.SetServerKeepAliveTimeOut(Value: cardinal);
+begin
+  fServerKeepAliveTimeOut := Value;
+  fServerKeepAliveTimeOutSec := Value div 1000;
 end;
 
 function THttpServerSocketGeneric.GetStat(
