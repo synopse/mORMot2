@@ -2719,8 +2719,9 @@ begin
   begin
     // use the HTTP state machine to fill fWr with outgoing body chunk
     fHttp.ProcessBody(fWr, fOwner.fClients.fSendBufferSize);
-    fOwner.DoLog(sllTrace, 'AfterWrite SendBody ContentLength=% Wr=%',
-      [fHttp.ContentLength, fWr.Len], self);
+    if acoVerboseLog in fOwner.fOptions then
+      fOwner.DoLog(sllTrace, 'AfterWrite SendBody ContentLength=% Wr=%',
+        [fHttp.ContentLength, fWr.Len], self);
     if fWr.Len <> 0 then
       // need to continue background sending
       exit;
@@ -2733,8 +2734,9 @@ begin
     exit;
   end;
   // whole headers + body outgoing content was sent
-  fOwner.DoLog(sllTrace, 'AfterWrite Done ContentLength=% Wr=% Flags=%',
-    [fHttp.ContentLength, fWr.Len, ToText(fHttp.HeaderFlags)], self);
+  if acoVerboseLog in fOwner.fOptions then
+    fOwner.DoLog(sllTrace, 'AfterWrite Done ContentLength=% Wr=% Flags=%',
+      [fHttp.ContentLength, fWr.Len, ToText(fHttp.HeaderFlags)], self);
   if Assigned(fServer.fOnAfterResponse) then
     try
       fServer.fOnAfterResponse(
