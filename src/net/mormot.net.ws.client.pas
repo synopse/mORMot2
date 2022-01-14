@@ -352,7 +352,7 @@ begin
         body := Data;
         if InStream <> nil then
           body := body + StreamToRawByteString(InStream);
-        Ctxt.Prepare(url, method, header, body, DataType, '', '', '');
+        Ctxt.Prepare(url, method, header, body, DataType, '');
         FindNameValue(header, 'SEC-WEBSOCKET-REST:', resthead);
         if resthead = 'NonBlocking' then
           block := wscNonBlockWithoutAnswer

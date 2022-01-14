@@ -1000,7 +1000,7 @@ begin
     call.LowLevelUserAgent := Ctxt.UserAgent;
     if fHosts.Count > 0 then
     begin
-      FindNameValue(Ctxt.InHeaders, 'HOST: ', hostroot);
+      hostroot := Ctxt.Host;
       i := PosExChar(':', hostroot);
       if i > 0 then
         SetLength(hostroot, i - 1); // trim any port
@@ -1246,7 +1246,7 @@ begin
       try
         FormatUtf8('%/%/%',
           [aSender.Model.Root, aInterfaceDotMethodName, aFakeCallID], url);
-        ctxt.Prepare(url, 'POST', '', '[' + aParams + ']', '', '', '', '');
+        ctxt.Prepare(url, 'POST', '', '[' + aParams + ']', '', '');
         // fHttpServer.Callback() raises EHttpServer but for bidir servers
         status := fHttpServer.Callback(ctxt, aResult = nil);
         if status = HTTP_SUCCESS then

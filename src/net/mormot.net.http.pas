@@ -221,6 +221,8 @@ type
     ContentType: RawUtf8;
     /// same as HeaderGetValue('ACCEPT-ENCODING'), but retrieved during ParseHeader
     AcceptEncoding: RawUtf8;
+    /// same as HeaderGetValue('HOST'), but retrieved during ParseHeader
+    Host: RawUtf8;
     /// same as HeaderGetValue('USER-AGENT'), but retrieved during ParseHeader
     UserAgent: RawUtf8;
     /// same as HeaderGetValue('UPGRADE'), but retrieved during ParseHeader
@@ -482,6 +484,7 @@ type
     fInHeaders,
     fInContentType,
     fAuthenticatedUser,
+    fHost,
     fAuthBearer,
     fUserAgent,
     fOutContentType,
@@ -499,8 +502,7 @@ type
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
     procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
-      const aInContent: RawByteString;
-      const aInContentType, aRemoteIP, aAuthBearer, aUserAgent: RawUtf8); overload;
+      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8); overload;
       {$ifdef HASINLINE} inline; {$endif}
     procedure Prepare(const aHttp: THttpRequestContext;
       const aRemoteIP: RawUtf8); overload;
@@ -546,6 +548,9 @@ type
     /// the client remote IP, as specified to Prepare()
     property RemoteIP: RawUtf8
       read fRemoteIP write fRemoteIP;
+    /// the "Host" HTTP header token, as specified to Prepare()
+    property Host: RawUtf8
+      read fHost write fHost;
     /// the "Bearer" HTTP header token, as specified to Prepare()
     property AuthBearer: RawUtf8
       read fAuthBearer write fAuthBearer;
@@ -938,7 +943,7 @@ begin
 end;
 
 const
-  PARSEDHEADERS: array[0..10] of PAnsiChar = (
+  PARSEDHEADERS: array[0..11] of PAnsiChar = (
     'CONTENT-',                    // 0
     'TRANSFER-ENCODING: CHUNKED',  // 1
     'CONNECTION: ',                // 2
@@ -949,6 +954,7 @@ const
     'EXPECT: 100',                 // 7
     HEADER_BEARER_UPPER,           // 8
     'USER-AGENT:',                 // 9
+    'HOST:',                       // 10
     nil);
   PARSEDHEADERS2: array[0..3] of PAnsiChar = (
     'LENGTH:',    // 0
@@ -1086,6 +1092,12 @@ begin
         // 'USER-AGENT:'
         inc(P, 11);
         GetTrimmed(P, UserAgent);
+      end;
+    10:
+      begin
+        // 'HOST:'
+        inc(P, 5);
+        GetTrimmed(P, Host);
       end
   else
     // unrecognized name should be stored in Headers
@@ -1759,19 +1771,14 @@ end;
 
 procedure THttpServerRequestAbstract.Prepare(
   const aUrl, aMethod, aInHeaders: RawUtf8; const aInContent: RawByteString;
-  const aInContentType, aRemoteIP, aAuthBearer, aUserAgent: RawUtf8);
+  const aInContentType, aRemoteIP: RawUtf8);
 begin
   fUrl := aUrl;
   fMethod := aMethod;
-  fRemoteIP := aRemoteIP;
   fInHeaders := aInHeaders;
-  fAuthBearer := aAuthBearer;
-  fUserAgent := aUserAgent;
   fInContent := aInContent;
   fInContentType := aInContentType;
-  fOutContent := '';
-  fOutContentType := '';
-  fOutCustomHeaders := '';
+  fRemoteIP := aRemoteIP;
 end;
 
 procedure THttpServerRequestAbstract.Prepare(const aHttp: THttpRequestContext;
@@ -1781,6 +1788,7 @@ begin
   fMethod := aHttp.CommandMethod;
   fRemoteIP := aRemoteIP;
   fInHeaders := aHttp.Headers;
+  fHost := aHttp.Host;
   fAuthBearer := aHttp.BearerToken;
   fUserAgent := aHttp.UserAgent;
   fInContent := aHttp.Content;

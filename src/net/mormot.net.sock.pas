@@ -1266,7 +1266,7 @@ begin
       AF_UNIX:
         begin
           if not localasvoid then
-            result := IP4local;
+            result := IP4local; // by definition, unix sockets are local
           exit;
         end;
       {$endif OSPOSIX}
@@ -3896,6 +3896,6 @@ initialization
 
 finalization
   FinalizeUnit;
-  
+
 end.
 
