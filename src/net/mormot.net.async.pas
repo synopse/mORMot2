@@ -362,7 +362,7 @@ type
     function Write(connection: TPollAsyncConnection;
       data: pointer; datalen: integer; timeout: integer = 5000): boolean; override;
   published
-    /// how many clients have been handled by the poll, from the beginning
+    /// how many connections have been handled by the poll, from the beginning
     property Total: integer
       read GetTotal;
   end;
@@ -1024,6 +1024,9 @@ begin
     exit;
   LockedInc32(@fProcessingRead);
   try
+    {if fDebugLog <> nil then
+      DoLog('Start sock=% handle=%',
+        [pointer(connection.fSocket), connection.Handle]);}
     // get sending buffer size from OS (if not already retrieved)
     if fSendBufferSize = 0 then
       {$ifdef OSWINDOWS}
@@ -1038,12 +1041,11 @@ begin
     // subscribe for incoming data (async for select/poll, immediate for epoll)
     if Assigned(fOnStart) then
       result := fOnStart(connection); // e.g. TAsyncConnections.ProcessClientStart
-    if not result then // if fRead.Subscribe() is not delayed in atpReadPending
+    // result=true here means that fRead.Subscribe() is delayed in atpReadPending
+    // warning: result=true may actually make connection.Free before it returns
+    if not result then
+      // let ProcessRead handle pseRead+pseError/pseClosed on this socket
       result := SubscribeConnection(connection, pseRead);
-    // now, ProcessRead will handle pseRead+pseError/pseClosed on this socket
-    if fDebugLog <> nil then
-      DoLog('Start sock=% handle=%',
-        [pointer(connection.fSocket), connection.Handle]);
   finally
     LockedDec32(@fProcessingRead);
   end;
@@ -1632,6 +1634,7 @@ begin
                 if fOwner.fClients.fRead.Count = 0 then
                 begin
                   // avoid void PollForPendingEvents/SleepStep loop
+                  fEvent.ResetEvent;
                   fWaitForReadPending := true;
                   fEvent.WaitFor(INFINITE); // blocking until next accept()
                   start := 0;
@@ -1671,7 +1674,7 @@ begin
                     not Terminated do
                 fOwner.fClients.ProcessRead(notif);
               // release atpReadPoll lock above
-              if fOwner.fThreadReadPoll.fWaitForReadPending then
+              //if fOwner.fThreadReadPoll.fWaitForReadPending then wrk 30% slower
                 fOwner.fThreadReadPoll.fEvent.SetEvent;
             end;
           end;
@@ -1775,7 +1778,7 @@ begin
   if fClients <> nil then
   begin
     with fClients do
-      DoLog('Shutdown threads=% total=% reads=%/% writes=%/% count=%',
+      DoLog('Shutdown threads=% accept=% reads=%/% writes=%/% count=%',
         [length(fThreads), Total, ReadCount, KB(ReadBytes),
          WriteCount, KB(WriteBytes), fConnectionCount]);
     fClients.Terminate(5000);
@@ -2451,11 +2454,10 @@ var
   client: TNetSocket;
   connection: TAsyncConnection;
   res: TNetResult;
-  sin: TNetAddr;
-  ip: RawUtf8;
+  async: boolean;
   start: Int64;
   len: integer;
-  async: boolean;
+  sin: TNetAddr;
 const
   AW: array[boolean] of string[1] = ('W', '');
 begin
@@ -2513,6 +2515,8 @@ begin
              (fClients.fRead.PendingCount > fMaxPending) then
           begin
             // map THttpAsyncServer.HttpQueueLength property value
+            DoLog(sllTrace, 'Execute: Accept connections=% pending=% overflow',
+              [fClients.fRead.Count, fClients.fRead.PendingCount], self);
             client.ShutdownAndClose({rdwr=}false); // e.g. for load balancing
             res := nrTooManyConnections;
           end;
@@ -2530,23 +2534,24 @@ begin
             break;
           // if we reached here, we have accepted a connection -> process
           start := 0;
-          ip := sin.IP;
-          if not ConnectionCreate(client, ip, connection) then
-            client.ShutdownAndClose({rdwr=}false)
-          else if fClients.Start(connection) then
+          if ConnectionCreate(client, sin.IP, connection) then
           begin
-            if acoVerboseLog in fOptions then
-              DoLog(sllTrace, 'Execute: Accept(%)=%',
-                [fServer.Port, connection], self);
-            if (not async) and
-               not fExecuteAcceptOnly then
+            // no log here, because already done in ConnectionNew and Start()
+            // may do connection.Free in atpReadPending background -> log before
+            if fClients.Start(connection) then
             begin
-              fServer.Sock.MakeAsync; // share thread with Writes
-              async := true;
-            end;
+              if (not async) and
+                 not fExecuteAcceptOnly then
+              begin
+                fServer.Sock.MakeAsync; // share thread with Writes
+                async := true;
+              end;
+            end
+            else if connection <> nil then // connection=nil for custom list
+              ConnectionDelete(connection);
           end
-          else if connection <> nil then // connection=nil for custom list
-            ConnectionDelete(connection);
+          else
+            client.ShutdownAndClose({rdwr=}false)
         until Terminated;
       end
       else
