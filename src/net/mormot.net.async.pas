@@ -440,6 +440,7 @@ type
     fThreads: array of TAsyncConnectionsThread;
     fThreadReadPoll: TAsyncConnectionsThread;
     fConnectionCount: integer; // only subscribed - not just after accept()
+    fConnectionHigh: integer;
     fThreadPoolCount: integer;
     fLastConnectionFind: integer;
     fLastHandle: integer;
@@ -562,15 +563,18 @@ type
     // ! Lock; try ... finally UnLock; end;
     property Connection: TAsyncConnectionDynArray
       read fConnection;
-    /// current connections count
-    // - this is the number of long-living connections - may not appear just
-    // after accept, so never for a HTTP/1.0 short-living request
-    property ConnectionCount: integer
-      read fConnectionCount;
   published
     /// how many read threads there are in this thread pool
     property ThreadPoolCount: integer
       read fThreadPoolCount;
+    /// current HTTP/1.1 / WebSockets connections count
+    // - this is the number of long-living connections - may not appear just
+    // after accept, so never for a HTTP/1.0 short-living request
+    property ConnectionCount: integer
+      read fConnectionCount;
+    /// maximum number of concurrent long-living connections
+    property ConnectionHigh: integer
+      read fConnectionHigh;
     /// access to the TCP client sockets poll
     // - TAsyncConnection.OnRead should rather use Write() and LogVerbose()
     // methods of this TAsyncConnections class instead of using Clients
@@ -586,6 +590,7 @@ type
     fServer: TCrtSocket; // for proper complex binding
     fMaxPending: integer;
     fMaxConnections: integer;
+    fAccepted: Int64;
     fExecuteState: THttpServerExecuteState;
     fExecuteAcceptOnly: boolean; // writes in another thread (THttpAsyncServer)
     fExecuteMessage: RawUtf8;
@@ -619,6 +624,11 @@ type
     /// access to the TCP server socket
     property Server: TCrtSocket
       read fServer;
+    /// how many connections have been accepted since server startup
+    // - ConnectionCount is the number of long-living connections, this
+    // counter is the absolute number, including short-living connections
+    property Accepted: Int64
+      read fAccepted;
     /// above how many active connections accept() would reject
     // - MaxPending applies to the actual thread-pool processing activity,
     // whereas MaxConnections tracks the number of connections even in idle state
@@ -1979,14 +1989,15 @@ end;
 procedure TAsyncConnections.ConnectionAdd(conn: TAsyncConnection);
 var
   c: ^TPollAsyncConnection;
-  i: PtrInt;
+  i, n: PtrInt;
 begin
   include(conn.fSubscribed, pseClosed); // mark as registered
   fConnectionLock.WriteLock;
   try
-    if fConnectionCount = length(fConnection) then
-      SetLength(fConnection, NextGrow(fConnectionCount));
-    i := fConnectionCount - 1;
+    n := fConnectionCount;
+    if n = length(fConnection) then
+      SetLength(fConnection, NextGrow(n));
+    i := n - 1;
     c := @fConnection[i];
     while (i >= 0) and
           (c^.Handle >= conn.Handle) do
@@ -1996,10 +2007,13 @@ begin
     end;
     inc(i);   // the index where to insert
     inc(c);
-    if i < fConnectionCount then
-      MoveFast(c^, PAnsiChar(c)[SizeOf(conn)], (fConnectionCount - i) * SizeOf(conn));
+    if i < n then
+      MoveFast(c^, PAnsiChar(c)[SizeOf(conn)], (n - i) * SizeOf(conn));
     c^ := conn;
-    inc(fConnectionCount);
+    inc(n);
+    if n > fConnectionHigh then
+      fConnectionHigh := n;
+    fConnectionCount := n;
   finally
     fConnectionLock.WriteUnLock;
   end;
@@ -2519,6 +2533,7 @@ begin
           end;
           if res = nrRetry then
             break; // timeout
+          inc(fAccepted);
           if (fClients.fRead.Count > fMaxConnections) or
              (fClients.fRead.PendingCount > fMaxPending) then
           begin
