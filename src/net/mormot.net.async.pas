@@ -625,7 +625,7 @@ type
       read fMaxConnections write fMaxConnections;
     /// above how many fClients.fRead.PendingCount accept() would reject
     // - is mapped by the high-level THttpAsyncServer.HttpQueueLength property
-    // - default is 1000, but could be a lower value e.g. for a load-balancer
+    // - default is 2000, but could be a lower value e.g. for a load-balancer
     // - MaxConnections regulates the absolute number of (idle) connections,
     // whereas this property tracks the actual REST/HTTP requests pending for
     // the internal thread pool
@@ -2346,7 +2346,7 @@ constructor TAsyncServer.Create(const aPort: RawUtf8;
 begin
   fSockPort := aPort;
   fMaxConnections := 7777777; // huge number for sure
-  fMaxPending := 1000; // fair enough for pending requests
+  fMaxPending := 2000;        // fair enough for pending requests
   inherited Create(OnStart, OnStop, aConnectionClass, ProcessName, aLog,
     aOptions, aThreadPoolCount);
   // binding will be done in Execute
