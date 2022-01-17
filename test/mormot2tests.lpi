@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
   <ProjectOptions>
-    <Version Value="12"/>
+    <Version Value="11"/>
     <PathDelim Value="\"/>
     <General>
       <Flags>
         <MainUnitHasCreateFormStatements Value="False"/>
         <MainUnitHasTitleStatement Value="False"/>
-        <MainUnitHasScaledStatement Value="False"/>
-        <CompatibilityMode Value="True"/>
       </Flags>
       <SessionStorage Value="InProjectDir"/>
+      <MainUnit Value="0"/>
       <Title Value="mormot2tests"/>
       <UseAppBundle Value="False"/>
       <ResourceType Value="res"/>
@@ -18,7 +17,7 @@
     <i18n>
       <EnableI18N LFM="False"/>
     </i18n>
-    <BuildModes Count="17">
+    <BuildModes Count="15">
       <Item1 Name="default" Default="True"/>
       <Item2 Name="win32">
         <CompilerOptions>
@@ -31,8 +30,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -76,8 +75,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -133,8 +132,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -177,8 +176,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -240,8 +239,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -294,8 +293,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -340,8 +339,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -386,8 +385,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="//if TargetOS=&apos;darwin&apos; then
-//   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="//if TargetOS='darwin' then
+//   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -443,8 +442,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -499,8 +498,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -545,8 +544,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -601,8 +600,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -656,8 +655,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -711,8 +710,8 @@
             <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
@@ -755,88 +754,6 @@
           </Other>
         </CompilerOptions>
       </Item15>
-      <Item16 Name="Debug">
-        <CompilerOptions>
-          <Version Value="11"/>
-          <PathDelim Value="\"/>
-          <Target>
-            <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
-          </Target>
-          <SearchPaths>
-            <IncludeFiles Value="$(ProjOutDir)"/>
-            <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
-          </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
-          <Parsing>
-            <SyntaxOptions>
-              <SyntaxMode Value="Delphi"/>
-              <IncludeAssertionCode Value="True"/>
-            </SyntaxOptions>
-          </Parsing>
-          <CodeGeneration>
-            <Checks>
-              <IOChecks Value="True"/>
-              <RangeChecks Value="True"/>
-              <OverflowChecks Value="True"/>
-              <StackChecks Value="True"/>
-            </Checks>
-            <VerifyObjMethodCallValidity Value="True"/>
-          </CodeGeneration>
-          <Linking>
-            <Debugging>
-              <DebugInfoType Value="dsDwarf3"/>
-              <UseHeaptrc Value="True"/>
-              <TrashVariables Value="True"/>
-              <UseExternalDbgSyms Value="True"/>
-            </Debugging>
-          </Linking>
-          <Other>
-            <Verbosity>
-              <ShowNotes Value="False"/>
-              <ShowHints Value="False"/>
-            </Verbosity>
-          </Other>
-        </CompilerOptions>
-      </Item16>
-      <Item17 Name="Release">
-        <CompilerOptions>
-          <Version Value="11"/>
-          <PathDelim Value="\"/>
-          <Target>
-            <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
-          </Target>
-          <SearchPaths>
-            <IncludeFiles Value="$(ProjOutDir)"/>
-            <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
-          </SearchPaths>
-          <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
-          <Parsing>
-            <SyntaxOptions>
-              <SyntaxMode Value="Delphi"/>
-            </SyntaxOptions>
-          </Parsing>
-          <CodeGeneration>
-            <SmartLinkUnit Value="True"/>
-            <Optimizations>
-              <OptimizationLevel Value="3"/>
-            </Optimizations>
-          </CodeGeneration>
-          <Linking>
-            <Debugging>
-              <GenerateDebugInfo Value="False"/>
-            </Debugging>
-            <LinkSmart Value="True"/>
-          </Linking>
-          <Other>
-            <Verbosity>
-              <ShowNotes Value="False"/>
-              <ShowHints Value="False"/>
-            </Verbosity>
-          </Other>
-        </CompilerOptions>
-      </Item17>
     </BuildModes>
     <PublishOptions>
       <Version Value="2"/>
@@ -852,7 +769,7 @@
         <PackageName Value="mormot2"/>
       </Item1>
     </RequiredPackages>
-    <Units Count="100">
+    <Units Count="99">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -1249,10 +1166,6 @@
         <Filename Value="..\src\script\mormot.script.quickjs.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit98>
-      <Unit99>
-        <Filename Value="test.core.collections.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit99>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -1265,8 +1178,8 @@
       <IncludeFiles Value="$(ProjOutDir)"/>
       <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
-    <Conditionals Value="if TargetOS=&apos;darwin&apos; then
-   CustomOptions := &apos; -Cg-&apos;;"/>
+    <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
     <Parsing>
       <SyntaxOptions>
         <SyntaxMode Value="Delphi"/>
