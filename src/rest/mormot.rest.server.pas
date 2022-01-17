@@ -6527,7 +6527,7 @@ var
 begin
   aMethodName := TrimU(aMethodName);
   if aMethodName = '' then
-    raise EServiceException.CreateUTF8('%.ServiceMethodRegister('''')',[self]);
+    raise EServiceException.CreateUTF8('%.ServiceMethodRegister('''')', [self]);
   ix := fPublishedMethods.FindHashed(aMethodName);
   if ix >= 0 then begin
     fPublishedMethod[ix].Stats.Free;

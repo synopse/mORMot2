@@ -603,9 +603,6 @@ type
   /// run TMvcApplication directly within a TRestServer method-based service
   // - this is the easiest way to host and publish a MVC Application, optionally
   // in conjunction with REST/AJAX client access
-
-  { TMvcRunOnRestServer }
-
   TMvcRunOnRestServer = class(TMvcRunWithViews)
   protected
     fRestServer: TRestServer;
@@ -635,6 +632,7 @@ type
       aViews: TMvcViewsAbstract = nil;
       aPublishOptions: TMvcPublishOptions=
         [low(TMvcPublishOption) .. high(TMvcPublishOption)]); reintroduce;
+    /// finalize this MVC server logic instance
     destructor Destroy; override;
     /// define some content for a static file
     // - only used if cacheStatic has been defined
@@ -2069,7 +2067,8 @@ procedure TMvcRunOnRestServer.UnregisterMethods;
 var m: integer;
     method: RawUTF8;
 begin
-  for m := 0 to fApplication.fFactory.MethodsCount-1 do begin
+  for m := 0 to fApplication.fFactory.MethodsCount-1 do
+  begin
     method := fApplication.fFactory.Methods[m].URI;
     if method[1]='_' then
       delete(method,1,1); // e.g. IService._Start() -> /service/start
