@@ -1876,9 +1876,14 @@ begin
     FreeAndNil(result);
 end;
 
+{.$define WAKEUPROUNDROBIN}
+
 function TAsyncConnections.ThreadPollingWakeup(Events: PtrInt): PtrInt;
 var
-  i, last, pass: PtrInt;
+  i: PtrInt;
+  {$ifdef WAKEUPROUNDROBIN}
+  last, pass: PtrInt;
+  {$endif WAKEUPROUNDROBIN}
   t: PAsyncConnectionsThread;
   ndx: array[byte] of byte; // wake up to 256 threads at once
 begin
@@ -1886,10 +1891,12 @@ begin
   if Events > high(ndx) then
     Events := high(ndx); // avoid ndx[] buffer overflow
   result := 0;
-  pass := 0;
-  last := high(fThreads);
   fThreadPollingWakeupSafe.Lock;
   try
+    {$ifdef WAKEUPROUNDROBIN}
+    // round-robin version is less efficient in practice
+    pass := 0;
+    last := length(fThreads) - 1;
     i := fThreadPollingWakeupIndex + 1;
     while result < Events do
     begin
@@ -1912,6 +1919,21 @@ begin
       end;
       inc(i);
     end;
+    {$else}
+    t := @fThreads[1]; // [0]=fThreadReadPoll and should not be set from here
+    for i := 1 to length(fThreads) - 1 do
+    begin
+      if t^.fWaitForReadPending then
+      begin
+        t^.fWaitForReadPending := false; // acquire this thread
+        ndx[result] := i;
+        inc(result);
+        if result = Events then
+          break;
+      end;
+      inc(t);
+    end;
+    {$endif WAKEUPROUNDROBIN}
   finally
     fThreadPollingWakeupSafe.UnLock;
   end;
