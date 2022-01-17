@@ -2246,6 +2246,7 @@ function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 function PointerToHex(aPointer: Pointer): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
@@ -10209,8 +10210,7 @@ end;
 
 function PointerToHex(aPointer: Pointer): RawUtf8;
 begin
-  FastSetString(result, nil, SizeOf(aPointer) * 2);
-  BinToHexDisplay(@aPointer, pointer(result), SizeOf(aPointer));
+  PointerToHex(aPointer, result);
 end;
 
 function CardinalToHex(aCardinal: cardinal): RawUtf8;

@@ -1479,7 +1479,7 @@ begin
       Method := 'POST';
     // return the decoded WebSockets frame as a regular HTTP request
     Ctxt.Prepare(
-      URL, Method, InHeaders, InContent, InContentType, fRemoteIP, '', '');
+      URL, Method, InHeaders, InContent, InContentType, fRemoteIP);
     aNoAnswer := NoAnswer = '1';
   end;
 end;

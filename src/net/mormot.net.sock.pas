@@ -254,8 +254,8 @@ var
   RemoteIPLocalHostAsVoidInServers: boolean = true;
 
 
-/// returns the trimmed text of a network result
-// - e.g. ToText(nrNotFound)='NotFound'
+/// returns the plain English text of a network result
+// - e.g. ToText(nrNotFound)='Not Found'
 function ToText(res: TNetResult): PShortString; overload;
 
 
@@ -1266,7 +1266,7 @@ begin
       AF_UNIX:
         begin
           if not localasvoid then
-            result := IP4local;
+            result := IP4local; // by definition, unix sockets are local
           exit;
         end;
       {$endif OSPOSIX}
@@ -2298,7 +2298,7 @@ begin
   result := 0;
   if fTerminated then
     exit;
-  if Assigned(OnLog) then
+  if Assigned(fOnLog) then
     QueryPerformanceMicroSeconds(start);
   LockedInc32(@fGettingOne);
   try
@@ -3714,12 +3714,12 @@ procedure TCrtSocket.SockRecvLn(out Line: RawUtf8; CROnly: boolean);
           end;
           exit;
         end
-        else if P = @tmp[1023] then
+        else if P = @tmp[high(tmp)] then
         begin
           // tmp[] buffer full? -> append to already read chars
           L := Length(Line);
-          Setlength(Line, L + 1024);
-          MoveFast(tmp, PByteArray(Line)[L], 1024);
+          Setlength(Line, L + SizeOf(tmp));
+          MoveFast(tmp, PByteArray(Line)[L], SizeOf(tmp));
           P := tmp;
         end
         else
@@ -3759,7 +3759,8 @@ begin
 end;
 
 procedure TCrtSocket.SockRecvLn;
-var c: AnsiChar;
+var
+  c: AnsiChar;
   Error: integer;
 begin
   if SockIn <> nil then
@@ -3896,6 +3897,6 @@ initialization
 
 finalization
   FinalizeUnit;
-  
+
 end.
 

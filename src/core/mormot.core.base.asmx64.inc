@@ -2300,9 +2300,14 @@ function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
         setz    al
 end;
 
-procedure LockedInc(var Target: PtrUInt; Increment: PtrUInt);
+procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
    lock add     qword ptr [Target], Increment
+end;
+
+procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+   lock add     dword ptr [Target], Increment
 end;
 
 procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);

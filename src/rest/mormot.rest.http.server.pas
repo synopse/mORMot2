@@ -393,11 +393,6 @@ type
       const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean = false;
       aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
         [pboSynLzCompress]): PWebSocketProcessSettings; overload;
-    /// the associated running HTTP server instance
-    // - either THttpApiServer (available only under Windows), THttpServer,
-    // TWebSocketServerRest or TWebSocketAsyncServerRest (on any system)
-    property HttpServer: THttpServerGeneric
-      read fHttpServer;
     /// the TCP/IP (address and) port on which this server is listening to
     // - may contain the public server address to bind to: e.g. '1.2.3.4:1234'
     // - see PublicAddress and PublicPort properties if you want to get the
@@ -414,12 +409,6 @@ type
     // - equals e.g. '1234' if Port = '1.2.3.4:1234'
     property PublicPort: RawUtf8
       read fPublicPort;
-    /// the Urlprefix used for internal HttpAddUrl API call
-    property DomainName: RawUtf8
-      read fDomainName;
-    /// read-only access to the number of registered internal servers
-    property DBServerCount: integer
-      read GetDBServerCount;
     /// read-only access to all internal servers
     property DBServer[Index: integer]: TRestServer
       read GetDBServer;
@@ -431,14 +420,26 @@ type
     // - note that the same REST server may appear several times in this HTTP
     // server instance, e.g. with diverse security options
     function DBServerFind(aServer: TRestServer): integer;
-    /// allow to customize this TRestHttpServer process
-    property Options: TRestHttpServerOptions
-      read fOptions;
     /// low-level interception of all incoming requests
     // - this callback is called BEFORE any registered TRestServer.Uri() methods
     // so allow any kind of custom routing or process
     property OnCustomRequest: TOnRestHttpServerRequest
       read fOnCustomRequest write fOnCustomRequest;
+  published
+    /// the associated running HTTP server instance
+    // - either THttpApiServer (available only under Windows), THttpServer,
+    // TWebSocketServerRest or TWebSocketAsyncServerRest (on any system)
+    property HttpServer: THttpServerGeneric
+      read fHttpServer;
+    /// the Urlprefix used for internal HttpAddUrl API call
+    property DomainName: RawUtf8
+      read fDomainName;
+    /// read-only access to the number of registered internal servers
+    property DBServerCount: integer
+      read GetDBServerCount;
+    /// allow to customize this TRestHttpServer process
+    property Options: TRestHttpServerOptions
+      read fOptions;
     /// enable cross-origin resource sharing (CORS) for proper AJAX process
     // - see @https://developer.mozilla.org/en-US/docs/HTTP/Access_control_CORS
     // - can be set e.g. to '*' to allow requests from any site/domain; or
@@ -1000,7 +1001,7 @@ begin
     call.LowLevelUserAgent := Ctxt.UserAgent;
     if fHosts.Count > 0 then
     begin
-      FindNameValue(Ctxt.InHeaders, 'HOST: ', hostroot);
+      hostroot := Ctxt.Host;
       i := PosExChar(':', hostroot);
       if i > 0 then
         SetLength(hostroot, i - 1); // trim any port
@@ -1246,7 +1247,7 @@ begin
       try
         FormatUtf8('%/%/%',
           [aSender.Model.Root, aInterfaceDotMethodName, aFakeCallID], url);
-        ctxt.Prepare(url, 'POST', '', '[' + aParams + ']', '', '', '', '');
+        ctxt.Prepare(url, 'POST', '', '[' + aParams + ']', '', '');
         // fHttpServer.Callback() raises EHttpServer but for bidir servers
         status := fHttpServer.Callback(ctxt, aResult = nil);
         if status = HTTP_SUCCESS then
