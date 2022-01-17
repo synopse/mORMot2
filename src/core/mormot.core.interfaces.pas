@@ -983,6 +983,7 @@ type
       overload; virtual;
     /// check if a given interface can be resolved, from its RTTI
     function Implements(aInterface: PRttiInfo): boolean; override;
+    procedure DeleteResolver(aResolver: TInterfaceResolver);
     /// release all used instances
     // - including all TInterfaceStub instances as specified to Inject(aStubsByGUID)
     // - will call _Release on all TInterfacedObject dependencies
@@ -5391,6 +5392,14 @@ begin
   end;
 end;
 
+procedure TInterfaceResolverInjected.DeleteResolver(aResolver: TInterfaceResolver);
+var
+  ix: integer;
+begin
+  ix := ObjArrayFind(fResolvers,aResolver);
+  if ix >= 0 then
+    ObjArrayDelete(fResolvers,ix);
+end;
 
 { TInjectableObject }
 
