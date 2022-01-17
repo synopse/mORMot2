@@ -212,7 +212,7 @@ type
     procedure UnlockAndCloseConnection(writer: boolean;
       var connection: TPollAsyncConnection; const caller: ShortString);
     procedure RegisterConnection(connection: TPollAsyncConnection); virtual; abstract;
-    function SubscribeConnection(
+    function SubscribeConnection(const caller: shortstring;
       connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
     procedure CloseConnection(var connection: TPollAsyncConnection);
   public
@@ -1063,7 +1063,7 @@ begin
     // warning: result=true may actually make connection.Free before it returns
     if not result then
       // let ProcessRead handle pseRead+pseError/pseClosed on this socket
-      result := SubscribeConnection(connection, pseRead);
+      result := SubscribeConnection('start', connection, pseRead);
   finally
     LockedDec32(@fProcessingRead);
   end;
@@ -1222,7 +1222,7 @@ begin
       if previous = 0 then
       begin
         // register for ProcessWrite() if not already
-        result := SubscribeConnection(connection, pseWrite);
+        result := SubscribeConnection('write', connection, pseWrite);
         if fDebugLog <> nil then
           DoLog('Write Subscribe(sock=%,handle=%)=% %',
             [pointer(connection.Socket), connection.Handle, result, fWrite]);
@@ -1262,9 +1262,11 @@ begin
   connection.OnClose; // called before slot/socket closing
   // Stop() will try to acquire this lock -> notify no need to wait
   CloseConnection(connection);
+  // connection.Free may have been done if not pseClosed (e.g. HTTP/1.0)
+  connection := nil;
 end;
 
-function TPollAsyncSockets.SubscribeConnection(
+function TPollAsyncSockets.SubscribeConnection(const caller: shortstring;
   connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
 var
   poll: TPollSockets;
@@ -1284,7 +1286,8 @@ begin
   if result then
     include(connection.fSubscribed, sub);
   if fDebugLog <> nil then
-    DoLog('SubscribeConnection=% handle=% %', [result, connection.Handle, ToText(sub)^]);
+    DoLog('SubscribeConnection(%)=% handle=% %',
+      [caller, result, connection.Handle, ToText(sub)^]);
 end;
 
 procedure TPollAsyncSockets.CloseConnection(var connection: TPollAsyncConnection);
@@ -1389,17 +1392,20 @@ begin
               UnlockAndCloseConnection(false, connection, 'ProcessRead OnRead');
             result := true;
           except
-            UnlockAndCloseConnection(false, connection, 'ProcessRead OnRead/E');
+            UnlockAndCloseConnection(false, connection, 'ProcessRead Exception');
           end;
         end;
-        connection.UnLock(false); // UnlockSlotAndCloseConnection set slot=nil
-        if (connection.fSocket <> nil) and
-           not connection.fClosed and
-           not (pseRead in connection.fSubscribed) then
-          // it is time to subscribe for any future read on this connection
-          if not SubscribeConnection(connection, pseRead) then
-            if fDebugLog <> nil then
-              DoLog('ProcessRead: Subscribe failed % %', [connection, fRead]);
+        if connection <> nil then // UnlockAndCloseConnection() may set Free+nil
+        begin
+          connection.UnLock(false); // UnlockSlotAndCloseConnection set slot=nil
+          if (connection.fSocket <> nil) and
+             not connection.fClosed and
+             not (pseRead in connection.fSubscribed) then
+            // it is time to subscribe for any future read on this connection
+            if not SubscribeConnection('read', connection, pseRead) then
+              if fDebugLog <> nil then
+                DoLog('ProcessRead: Subscribe failed % %', [connection, fRead]);
+        end;
       end
       else if fDebugLog <> nil then
         // happens on thread contention
