@@ -1249,21 +1249,24 @@ end;
 
 procedure TPollAsyncSockets.UnlockAndCloseConnection(writer: boolean;
   var connection: TPollAsyncConnection; const caller: ShortString);
+var
+  c: TPollAsyncConnection;
 begin
-  if (connection = nil) or
-     connection.fClosed then
+  c := connection;
+  if (c = nil) or
+     c.fClosed then
     exit;
   {if fDebugLog <> nil then
     DoLog('UnlockSlotAndCloseConnection: % on handle=%',
       [caller, connection.Handle]);}
   // first unlock (if needed)
-  connection.UnLockFinal(writer);
+  c.UnLockFinal(writer);
   // optional process - e.g. TWebSocketAsyncConnection = focConnectionClose
-  connection.OnClose; // called before slot/socket closing
-  // Stop() will try to acquire this lock -> notify no need to wait
-  CloseConnection(connection);
-  // connection.Free may have been done if not pseClosed (e.g. HTTP/1.0)
+  c.OnClose; // called before slot/socket closing
+  // CloseConnection() may do c.Free if not pseClosed (e.g. HTTP/1.0)
   connection := nil;
+  // Stop() will try to acquire this lock -> notify no need to wait
+  CloseConnection(c);
 end;
 
 function TPollAsyncSockets.SubscribeConnection(const caller: shortstring;
