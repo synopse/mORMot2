@@ -2085,8 +2085,10 @@ begin
     until L > R;
   result := -1
 end;
-(*
-begin // brute force variant to debug ConnectionDelete()=false
+
+function SlowFindConnection(Conn: PPointerArray; R, H: integer): PtrInt;
+begin
+  // brute force variant to debug ConnectionDelete()=false
   if R >= 0 then
   begin
     inc(R);
@@ -2100,7 +2102,6 @@ begin // brute force variant to debug ConnectionDelete()=false
   end;
   result := -1;
 end;
-*)
 
 function TAsyncConnections.ConnectionFindAndLock(
   aHandle: TPollAsyncConnectionHandle; aLock: TRWLockContext;
@@ -2126,7 +2127,16 @@ begin
     if i >= 0 then
     begin
       if fConnection[i].Handle <> aHandle then // very short-living connection
+      begin
         i := FastFindConnection(pointer(fConnection), i, aHandle); // O(log(n))
+        {if i < 0 then
+        begin
+          i := SlowFindConnection(pointer(fConnection), i, aHandle); // O(n)
+          if i >= 0 then
+            DoLog(sllError, 'ConnectionFindAndLock(%) Slow<>Fast count=%',
+              [aHandle, fConnectionCount], self); // should never happen
+        end;}
+      end;
       if i >= 0 then
       begin
         result := fConnection[i];
