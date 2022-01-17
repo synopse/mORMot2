@@ -1355,16 +1355,15 @@ begin
             timer.Start;
           recved := SizeOf(temp);
           res := connection.fSocket.Recv(@temp, recved); // no need of RecvPending()
-          {$ifdef OSLINUX} // WaitFor=select() should not be called with FIONBIO
           if res = nrRetry then
           begin
-            // should happen only after accept() -> leverage this thread
+            // should happen only after accept() -> leverage this thread for 1ms
+            recved := SizeOf(temp);
             if connection.fSocket.WaitFor(1, [neRead]) = [neRead] then
               res := connection.fSocket.Recv(@temp, recved);
             wf := 'wf ';
           end
           else
-          {$endif OSLINUX}
             wf[0] := #0;
           if fDebugLog <> nil then
             DoLog('ProcessRead recv(%)=% len=% %in % %', [pointer(connection.Socket),
