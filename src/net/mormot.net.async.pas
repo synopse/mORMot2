@@ -194,8 +194,8 @@ type
     fWrite: TPollSockets; // separated fWrite (short-term subscriptions)
     fProcessingRead, fProcessingWrite: integer;
     fSendBufferSize: integer; // retrieved at first connection Start()
-    fReadCount: integer;
-    fWriteCount: integer;
+    fReadCount: Int64;
+    fWriteCount: Int64;
     fReadBytes: Int64;
     fWriteBytes: Int64;
     fDebugLog: TSynLogClass;
@@ -277,10 +277,10 @@ type
     property Count: integer
       read GetCount;
     /// how many times data has been received by this instance
-    property ReadCount: integer
+    property ReadCount: Int64
       read fReadCount;
     /// how many times data has been sent by this instance
-    property WriteCount: integer
+    property WriteCount: Int64
       read fWriteCount;
     /// how many data bytes have been received by this instance
     property ReadBytes: Int64
@@ -457,7 +457,7 @@ type
     end;
     fIdleTix: Int64;
     fThreadPollingWakeupSafe: TLightLock;
-    fThreadPollingWakeupIndex: PtrInt;
+    fThreadPollingWakeupIndex: integer;
     function AllThreadsStarted: boolean; virtual;
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
       out aConnection: TAsyncConnection): boolean; virtual;
@@ -468,7 +468,7 @@ type
     function LockedConnectionDelete(
       aConnection: TAsyncConnection; aIndex: integer): boolean;
     procedure ConnectionAdd(conn: TAsyncConnection);
-    function ThreadPollingWakeup(Events: integer): PtrInt;
+    function ThreadPollingWakeup(Events: PtrInt): PtrInt;
     procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject);
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); virtual;
@@ -627,7 +627,8 @@ type
       read fServer;
     /// how many connections have been accepted since server startup
     // - ConnectionCount is the number of long-living connections, this
-    // counter is the absolute number, including short-living connections
+    // counter is the absolute number of successfull accept() calls,
+    // including short-living (e.g. HTTP/1.0) connections
     property Accepted: Int64
       read fAccepted;
     /// above how many active connections accept() would reject
@@ -1795,9 +1796,9 @@ begin
   if fClients <> nil then
   begin
     with fClients do
-      DoLog('Shutdown threads=% accept=% reads=%/% writes=%/% count=%',
+      DoLog('Shutdown threads=% total=% reads=%/% writes=%/% now=% hi=%',
         [length(fThreads), Total, ReadCount, KB(ReadBytes),
-         WriteCount, KB(WriteBytes), fConnectionCount]);
+         WriteCount, KB(WriteBytes), fConnectionCount, fConnectionHigh]);
     fClients.Terminate(5000);
   end;
   // terminate and unlock background ProcessRead/ProcessWrite polling threads
@@ -1867,44 +1868,42 @@ begin
     FreeAndNil(result);
 end;
 
-function TAsyncConnections.ThreadPollingWakeup(Events: integer): PtrInt;
+function TAsyncConnections.ThreadPollingWakeup(Events: PtrInt): PtrInt;
 var
-  i: PtrInt;
+  i, last, pass: PtrInt;
   t: PAsyncConnectionsThread;
   ndx: array[byte] of byte; // wake up to 256 threads at once
-
-  procedure AddOne; {$ifdef FPC} inline; {$endif}
-  begin
-    if t^.fWaitForReadPending then
-    begin
-      t^.fWaitForReadPending := false; // acquire this thread
-      ndx[result] := i;
-      inc(result);
-    end;
-    inc(t);
-  end;
-
 begin
   // simple thread-safe fair round-robin over fThreads[]
   if Events > high(ndx) then
     Events := high(ndx); // avoid ndx[] buffer overflow
   result := 0;
+  pass := 0;
+  last := high(fThreads);
   fThreadPollingWakeupSafe.Lock;
   try
-    t := @fThreads[fThreadPollingWakeupIndex + 1];
-    for i := fThreadPollingWakeupIndex + 1 to high(fThreads) do
-      if result = Events then
-        break
-      else
-        AddOne;
-    t := @fThreads[1]; // fThread[0]=fThreadReadPoll and should not be used
-    for i := 1 to fThreadPollingWakeupIndex do
-      if result = Events then
-        break
-      else
-        AddOne;
-    if result <> 0 then
-      fThreadPollingWakeupIndex := ndx[result - 1];
+    i := fThreadPollingWakeupIndex + 1;
+    while result < Events do
+    begin
+      if i > last then
+      begin
+        i := 1; // fThread[0]=fThreadReadPoll and should not be set from here
+        last := fThreadPollingWakeupIndex;
+        if (pass = 1) or
+           (i > last) then
+          break;
+        inc(pass);
+      end;
+      t := @fThreads[i];
+      if t^.fWaitForReadPending then
+      begin
+        t^.fWaitForReadPending := false; // acquire this thread
+        ndx[result] := i;
+        inc(result);
+        fThreadPollingWakeupIndex := i;
+      end;
+      inc(i);
+    end;
   finally
     fThreadPollingWakeupSafe.UnLock;
   end;
