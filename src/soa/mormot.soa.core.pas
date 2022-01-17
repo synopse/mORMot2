@@ -689,9 +689,8 @@ type
     /// retrieve all registered Services contracts as a JSON array
     // - i.e. a JSON array of TServiceFactory.Contract JSON objects
     function AsJson: RawJson;
-    // delete previously registered Interfaces
+    /// delete previously registered Interfaces
     procedure DeleteInterface(const aInterfaces: PRttiInfoDynArray);
-
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
     // or 'Calculator', depending on the ExpectMangledUri property
@@ -1613,9 +1612,11 @@ begin
       fInterfaces.Delete(idx);
       fInterfaces.ReHash();
     end;
-    for iMethods := High(fInterfaceMethod) downto Low(fInterfaceMethod) do begin
+    for iMethods := High(fInterfaceMethod) downto Low(fInterfaceMethod) do
+    begin
       Split(fInterfaceMethod[iMethods].InterfaceDotMethodName, '.', InterfaceName, MethodName);
-      if InterfaceName = tmpInterfaceName then begin
+      if InterfaceName = tmpInterfaceName then
+      begin
         fInterfaceMethods.Delete(iMethods);
         fInterfaceMethods.ReHash();
       end;

@@ -1978,7 +1978,6 @@ type
     /// the HTTP server should call this method so that ServicesPublishedInterfaces
     // registration will be able to work
     procedure SetPublicUri(const Address, Port: RawUtf8);
-
     /// add all published methods of a given object instance to the method-based
     // list of services
     // - all those published method signature should match TOnRestServerCallBack
@@ -6527,10 +6526,10 @@ var
   ix: Integer;
 begin
   aMethodName := TrimU(aMethodName);
-  if aMethodName='' then
+  if aMethodName = '' then
     raise EServiceException.CreateUTF8('%.ServiceMethodRegister('''')',[self]);
-  ix:=fPublishedMethods.FindHashed(aMethodName);
-  if ix<>-1 then begin
+  ix := fPublishedMethods.FindHashed(aMethodName);
+  if ix >= 0 then begin
     fPublishedMethod[ix].Stats.Free;
     fPublishedMethods.Delete(ix);
     fPublishedMethods.ReHash();
