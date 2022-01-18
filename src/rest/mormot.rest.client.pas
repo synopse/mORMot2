@@ -748,6 +748,8 @@ type
     function ServiceDefineSharedApi(const aInterface: TGUID;
       const aContractExpected: RawUtf8 = SERVICE_CONTRACT_NONE_EXPECTED;
       aIgnoreAnyException: boolean = false): TServiceFactoryClient;
+    /// undefine previously defined Interfaces
+    procedure ServiceUndefine(const aInterfaces: array of TGUID);
     /// allow to notify a server the services this client may be actually capable
     // - when this client will connect to a remote server to access its services,
     // it will register its own services, supplying its TRestServer instance,
@@ -2660,6 +2662,11 @@ begin
     else
       raise;
   end;
+end;
+
+procedure TRestClientURI.ServiceUndefine(const aInterfaces: array of TGUID);
+begin
+  (ServiceContainer as TServiceContainerClient).DeleteInterface(TInterfaceFactory.GUID2TypeInfo(aInterfaces));
 end;
 
 function TRestClientUri.ServiceRetrieveAssociated(const aServiceName: RawUtf8;

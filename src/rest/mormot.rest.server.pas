@@ -1978,7 +1978,6 @@ type
     /// the HTTP server should call this method so that ServicesPublishedInterfaces
     // registration will be able to work
     procedure SetPublicUri(const Address, Port: RawUtf8);
-
     /// add all published methods of a given object instance to the method-based
     // list of services
     // - all those published method signature should match TOnRestServerCallBack
@@ -1988,6 +1987,8 @@ type
     procedure ServiceMethodRegister(aMethodName: RawUtf8;
       const aEvent: TOnRestServerCallBack;
       aByPassAuthentication: boolean = false);
+    /// direct unregistration of a method for a given low-level event handler
+    procedure ServiceMethodUnregister(aMethodName: RawUTF8);
     /// call this method to disable Authentication method check for a given
     // published method-based service name
     // - by default, only Auth and Timestamp methods do not require the RESTful
@@ -2086,6 +2087,8 @@ type
     function ServiceDefine(aClient: TRest; const aInterfaces: array of TGUID;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload;
+    /// undefine services.
+    procedure ServiceUndefine(const aInterfaces: array of TGUID);
     /// the routing classs of the service remote request
     // - by default, will use TRestRoutingRest, i.e. an URI-based
     // layout which is secure (since will use our RESTful authentication scheme),
@@ -3019,65 +3022,74 @@ procedure TRestServerUriContext.ExecuteSoaByMethod;
 var
   timstart, timstop: Int64;
   sessionstat: TSynMonitorInputOutput;
+  method: PRestServerMethod;
 begin
-  with Server.fPublishedMethod[MethodIndex] do
+  method := @Server.fPublishedMethod[MethodIndex];
+  if mlMethods in Server.fStatLevels then
   begin
-    if mlMethods in Server.fStatLevels then
+    QueryPerformanceMicroSeconds(timstart);
+    if method^.Stats = nil then
     begin
-      QueryPerformanceMicroSeconds(timstart);
-      if Stats = nil then
+      Server.fStats.Lock; // global lock for thread-safe initialization
+      try
+        if (method^.Stats = nil) then
+          method^.Stats := TSynMonitorInputOutput.Create(method^.Name);
+      finally
+        Server.fStats.UnLock;
+      end;
+    end;
+    method^.Stats.Processing := true;
+  end;
+  if Parameters <> nil then
+    Server.InternalLog('% %', [method^.Name, Parameters], sllServiceCall);
+  method^.CallBack(self);
+  // CallBack(self) might have changed the fPublishedMethod array if there was any
+  // code involved unregistering interfaces. Might lead to AV with Stats enabled.
+  // Recalculate MethodIndex and reassing method pointer.
+  if mlMethods in Server.fStatLevels then
+  begin
+    UriDecodeSoaByMethod;
+    if (MethodIndex <> -1) then
+      method := @Server.fPublishedMethod[MethodIndex] else
+      method := nil;
+  end;
+  if (method <> nil) and (method^.Stats <> nil) then
+  begin
+    QueryPerformanceMicroSeconds(timstop);
+    dec(timstop, timstart);
+    StatsFromContext(method^.Stats, timstop);
+    if Server.fStatUsage <> nil then
+      Server.fStatUsage.Modified(method^.Stats, []);
+    if (mlSessions in Server.fStatLevels) and
+       (fAuthSession <> nil) then
+    begin
+      if fAuthSession.fMethods = nil then
       begin
-        Server.fStats.Lock; // global lock for thread-safe initialization
+        Server.fStats.Lock;
         try
-          if Stats = nil then
-            Stats := TSynMonitorInputOutput.Create(Name);
+          if fAuthSession.fMethods = nil then
+            SetLength(fAuthSession.fMethods, length(Server.fPublishedMethod));
         finally
           Server.fStats.UnLock;
         end;
       end;
-      Stats.Processing := true;
-    end;
-    if Parameters <> nil then
-      Server.InternalLog('% %', [Name, Parameters], sllServiceCall);
-    CallBack(self);
-    if Stats <> nil then
-    begin
-      QueryPerformanceMicroSeconds(timstop);
-      dec(timstop, timstart);
-      StatsFromContext(Stats, timstop);
-      if Server.fStatUsage <> nil then
-        Server.fStatUsage.Modified(Stats, []);
-      if (mlSessions in Server.fStatLevels) and
-         (fAuthSession <> nil) then
+      sessionstat := fAuthSession.fMethods[MethodIndex];
+      if sessionstat = nil then
       begin
-        if fAuthSession.fMethods = nil then
-        begin
-          Server.fStats.Lock;
-          try
-            if fAuthSession.fMethods = nil then
-              SetLength(fAuthSession.fMethods, length(Server.fPublishedMethod));
-          finally
-            Server.fStats.UnLock;
+        Server.fStats.Lock;
+        try
+          sessionstat := fAuthSession.fMethods[MethodIndex];
+          if sessionstat = nil then
+          begin
+            sessionstat := TSynMonitorInputOutput.Create(method^.Name);
+            fAuthSession.fMethods[MethodIndex] := sessionstat;
           end;
+        finally
+          Server.fStats.UnLock;
         end;
-        sessionstat := fAuthSession.fMethods[MethodIndex];
-        if sessionstat = nil then
-        begin
-          Server.fStats.Lock;
-          try
-            sessionstat := fAuthSession.fMethods[MethodIndex];
-            if sessionstat = nil then
-            begin
-              sessionstat := TSynMonitorInputOutput.Create(Name);
-              fAuthSession.fMethods[MethodIndex] := sessionstat;
-            end;
-          finally
-            Server.fStats.UnLock;
-          end;
-        end;
-        StatsFromContext(sessionstat, timstop);
-        // mlSessions stats are not yet tracked per Client
       end;
+      StatsFromContext(sessionstat, timstop);
+      // mlSessions stats are not yet tracked per Client
     end;
   end;
   LockedInc64(@Server.fStats.fServiceMethod);
@@ -6509,6 +6521,21 @@ begin
   end;
 end;
 
+procedure TRestServer.ServiceMethodUnregister(aMethodName: RawUTF8);
+var
+  ix: Integer;
+begin
+  aMethodName := TrimU(aMethodName);
+  if aMethodName = '' then
+    raise EServiceException.CreateUTF8('%.ServiceMethodRegister('''')', [self]);
+  ix := fPublishedMethods.FindHashed(aMethodName);
+  if ix >= 0 then begin
+    fPublishedMethod[ix].Stats.Free;
+    fPublishedMethods.Delete(ix);
+    fPublishedMethods.ReHash();
+  end;
+end;
+
 function TRestServer.ServiceMethodByPassAuthentication(
   const aMethodName: RawUtf8): integer;
 var
@@ -6607,6 +6634,11 @@ var
 begin
   ti := TInterfaceFactory.Guid2TypeInfo(aInterfaces);
   result := ServiceRegister(aClient, ti, aInstanceCreation, aContractExpected);
+end;
+
+procedure TRestServer.ServiceUndefine(const aInterfaces: array of TGUID);
+begin
+  (ServiceContainer as TServiceContainerServer).DeleteInterface(TInterfaceFactory.GUID2TypeInfo(aInterfaces));
 end;
 
 const
