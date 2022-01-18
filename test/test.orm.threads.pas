@@ -60,6 +60,13 @@ uses
   test.orm.core,
   test.orm.sqlite3;
 
+{.$define FORCE_HTTP10}
+
+const
+  MIN_THREADS = 1;
+  MAX_THREADS = 50; // 1, 2, 5, 10, 30, 50
+  MAX_CLIENTS = 50;
+
 // may be implemented in the future
 {.$define HAS_NAMEDPIPES}
 {.$define HAS_MESSAGES}
@@ -120,6 +127,7 @@ type
   published
     /// initialize fDatabase and create MaxThreads threads for clients
     procedure CreateThreadPool;
+//public
     /// direct test of its RESTful methods
     procedure _TRestServerDB;
     /// test via TRestClientDB instances
@@ -132,9 +140,11 @@ type
     /// test via TRestClientURIMessage instances
     procedure _TRestClientURIMessage;
     {$endif HAS_MESSAGES}
+//published
     /// test via TRestHttpClientSocket instances over OS's socket API server
     // - note: Delphi IDE debugger may have trouble following the thread pool
     procedure TCPSockets;
+//public
     {$ifdef USEWININET}
     {$ifndef ONLYUSEHTTPSOCKET}
     /// test via TRestHttpClientWinHTTP instances over http.sys (HTTP API) server
@@ -166,28 +176,27 @@ type
 implementation
 
 {
-  Some Numbers taken on a Core i3 CPU with 2 Cores / 4 Threads:
-  - Create thread pool: 1 assertion passed  1.40ms
-  - TRestServerDB: 36,099 assertions passed  609.10ms
-     1=44533/s  2=30999/s  5=30040/s  10=30020/s  30=28552/s  50=29021/s
-  - TRestClientDB: 36,096 assertions passed  577.87ms
-     1=37165/s  2=34651/s  5=33116/s  10=31843/s  30=31150/s  50=30860/s
-  - TCP sockets: 36,096 assertions passed  1.20s
-     1=11723/s  2=14664/s  5=16084/s  10=16829/s  30=18424/s  50=18773/s
-  - Unix domain sockets: 36,096 assertions passed  1.12s
-     1=13010/s  2=14695/s  5=18749/s  10=19516/s  30=19672/s  50=20016/s
-  - Websockets: 36,066 assertions passed  1.93s
-     1=7167/s  2=9307/s  5=11994/s  10=12631/s  30=10480/s  50=8136/s
-  - libcurl: 36,085 assertions passed  2.73s
-     1=7436/s  2=9375/s  5=12693/s  10=6428/s  30=6072/s  50=5616/s
-  - Locked: 36,099 assertions passed  630.72ms
-     1=23917/s  2=33646/s  5=34147/s  10=32964/s  30=30246/s  50=28532/s
-  - Unlocked: 36,098 assertions passed  603.85ms
-     1=37165/s  2=31870/s  5=30653/s  10=30333/s  30=29932/s  50=29802/s
-  - Main thread: 36,091 assertions passed  617.19ms
-     1=27418/s  2=31227/s  5=32229/s  10=31799/s  30=30926/s  50=31010/s
-  - Background thread: 36,095 assertions passed  934.39ms
-     1=27845/s  2=27359/s  5=24503/s  10=21665/s  30=15350/s  50=13504/s
+  Some Numbers taken on a Core i5 CPU with 2 Cores / 4 Threads:
+  - Create thread pool: 1 assertion passed  3.49ms
+  - TRestServerDB: 84,016 assertions passed  744.20ms
+     1=74184/s  2=57643/s  5=59855/s  10=57237/s  30=57584/s  50=57811/s
+  - TRestClientDB: 84,022 assertions passed  754.43ms
+     1=69211/s  2=61700/s  5=60689/s  10=58181/s  30=55311/s  50=52662/s
+  - TCP sockets: 83,970 assertions passed  2.04s
+     1=17978/s  2=21060/s  5=22636/s  10=26235/s  30=28397/s  50=27965/s
+  - Unix domain sockets: 83,998 assertions passed  2.05s
+     1=15017/s  2=24857/s  5=29631/s  10=33961/s  30=35360/s  50=33696/s
+  - Websockets: 83,927 assertions passed  6.83s
+     1=8043/s  2=16269/s  5=18262/s  10=16404/s  30=6006/s  50=2060/s
+  - Locked: 84,018 assertions passed  812.22ms
+     1=40923/s  2=69135/s  5=59971/s  10=59818/s  30=55788/s  50=51902/s
+  - Unlocked: 84,020 assertions passed  786.65ms
+     1=68147/s  2=60392/s  5=55510/s  10=53308/s  30=53418/s  50=51896/s
+  - Main thread: 83,996 assertions passed  785.41ms
+     1=48828/s  2=60954/s  5=57680/s  10=60557/s  30=58928/s  50=55293/s
+  - Background thread: 84,022 assertions passed  989.21ms
+     1=50817/s  2=47593/s  5=46471/s  10=45656/s  30=36338/s  50=43257/s
+   MaxThreads=50 MaxClients=500 TotalOps=188820 TotalClients=8820
 }
 
 { TTestMultiThreadProcessThread }
@@ -323,7 +332,8 @@ procedure TTestMultiThreadProcess.CleanUp;
 begin
   DatabaseClose;
   if fThreads <> nil then
-    AddConsole('MaxThreads=% MaxClients=% TotalOps=% TotalClients=%',
+    AddConsole('MaxThreads=% MaxClients=% TotalOps=% TotalClients=%'
+      {$ifdef FORCE_HTTP10} + ' HTTP1.0' {$endif},
       [fMaxThreads, fClientPerThread * fMaxThreads,
        fIterationTotalCount, fClientsTotalCount]);
   FreeAndNil(fModel);
@@ -335,10 +345,11 @@ constructor TTestMultiThreadProcess.Create(
   Owner: TSynTests; const Ident: string);
 begin
   inherited;
-  fMinThreads := 1;
-  fMaxThreads := 50;      // 1, 2, 5, 10, 30, 50
-  fOperationCount := 300; // will be divided among threads
-  fClientPerThread := 1;
+  fMinThreads := MIN_THREADS;
+  fMaxThreads := MAX_THREADS;      // 1, 2, 5, 10, 30, 50
+  fOperationCount := MAX_CLIENTS
+    {$ifndef FORCE_HTTP10} * 7 {$endif}; // divided among threads
+  fClientPerThread := MAX_CLIENTS div MAX_THREADS;
   // note: IterationCount := OperationCount div RunningThreadCount
   //       and make some round robin around fClientPerThread
   fPendingThreadFinished := TEvent.Create(nil, false, false, '');
@@ -386,6 +397,9 @@ begin
     //writeln('New Client: ',ClientIP,':',ClientPort);
     result := TRestHttpClientGenericClass(fTestClass).Create(
       ClientIP, ClientPort{%H-}, fModel);
+    {$ifdef FORCE_HTTP10}
+    TRestHttpClientGeneric(result).KeepAliveMS := 0; // force HTTP/1.0
+    {$endif FORCE_HTTP10}
     TRestHttpClientGeneric(result).ServerTimestampSynchronize;
     if fTestClass = TRestHttpClientWebsockets then
       with (result as TRestHttpClientWebsockets) do
@@ -467,8 +481,8 @@ begin
     if fTestClass.InheritsFrom(TRestHttpClientGeneric) then
     begin
       WebSocketLog := TSynLog;
-      fHttpServer := TRestHttpServer.Create(aPort, [fDataBase], '+', aHttp, 32,
-        secNone, '', '', HTTPSERVER_DEFAULT_OPTIONS {+ [rsoLogVerbose]} );
+      fHttpServer := TRestHttpServer.Create(aPort, [fDataBase], '+', aHttp,
+        {threads=}8, secNone, '', '', HTTPSERVER_DEFAULT_OPTIONS + [rsoLogVerbose] );
       if aHttp in HTTP_BIDIR then
         fHttpServer.WebSocketsEnable(fDatabase, WS_KEY, WS_JSON, WS_BIN)^.SetFullLog;
       //writeln('server running on ',fDatabase.Model.Root,':',fHttpserver.Port); readln;
@@ -606,7 +620,7 @@ end;
 procedure TTestMultiThreadProcess.Websockets;
 begin
   // use a specific port, especially on Windows where http.sys may locked it
-  Test(TRestHttpClientWebsockets, WEBSOCKETS_DEFAULT_MODE, amLocked, '8888');
+  Test(TRestHttpClientWebsockets, useBidirAsync, amLocked, '8888');
 end;
 
 {$ifdef USELIBCURL}
