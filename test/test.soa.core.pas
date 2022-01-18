@@ -1395,17 +1395,6 @@ begin
   Check(fClient.Server.Services <> nil);
   if CheckFailed(fClient.Server.Services.Count = 1) then
     exit;
-  // Undefine service
-  fClient.Server.ServiceUndefine([ICalculator]);
-  if CheckFailed(fClient.Server.Services.Count = 0) then
-    exit;
-  Check(fClient.Server.Services['Calculator'] = nil );
-  // Re-register service
-  Check(fClient.Server.ServiceRegister(TServiceCalculator,
-    [TypeInfo(ICalculator)], sicShared) <> nil,
-    're-register TServiceCalculator as the ICalculator implementation on the server');
-  if CheckFailed(fClient.Server.Services.Count = 1) then
-    exit;
   S := fClient.Server.Services.Index(0);
   if CheckFailed(S <> nil) then
     exit;
