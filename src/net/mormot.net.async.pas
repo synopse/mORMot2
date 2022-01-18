@@ -144,12 +144,12 @@ type
       read fHandle;
   end;
 
-  /// possible options for TPollAsyncSockets process
-  // - by default, TPollAsyncSockets.Write will first try to send the data
-  // using Send() in non-blocking mode, unless paoWritePollOnly is defined,
-  // and fWrite will be used to poll output state and send it asynchronously
+  /// possible options for low-level TPollAsyncSockets process
+  // - as translated from homonymous high-level acoWritePollOnly/acoAcceptWait
+  // TAsyncConnectionsOptions items
   TPollAsyncSocketsOptions = set of (
-    paoWritePollOnly);
+    paoWritePollOnly,
+    paoAcceptWait);
 
   /// TPollAsyncSockets.Read allows to asynchronously delete connection instances
   TPollAsyncReadSockets = class(TPollSockets)
@@ -410,10 +410,13 @@ type
   // unless acoOnErrorContinue is defined
   // - acoNoLogRead and acoNoLogWrite could reduce the log verbosity
   // - acoVerboseLog will log transmitted frames content, for debugging purposes
-  // - acoWritePollOnly will be translated into paoWritePollOnly on server
+  // - acoWritePollOnly/acoAcceptWait will be translated into
+  // paoWritePollOnly/paoAcceptWait on server
   // - acoDebugReadWriteLog would make low-level send/receive logging
   // - acoNoConnectionTrack would force to by-pass the internal Connections list
   // if it is not needed - not used by now
+  // - acoAcceptWait enable WaitFor(1ms) during recv() which may enhance
+  // responsiveness if all connections are HTTP/1.0
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -421,7 +424,8 @@ type
     acoVerboseLog,
     acoWritePollOnly,
     acoDebugReadWriteLog,
-    acoNoConnectionTrack);
+    acoNoConnectionTrack,
+    acoAcceptWait);
 
   /// implements an abstract thread-pooled high-performance TCP clients or server
   // - internal TAsyncConnectionsSockets will handle high-performance process
@@ -1358,7 +1362,8 @@ begin
             timer.Start;
           recved := SizeOf(temp);
           res := connection.fSocket.Recv(@temp, recved); // no need of RecvPending()
-          if res = nrRetry then
+          if (res = nrRetry) and
+             (paoAcceptWait in fOptions) then
           begin
             // should happen only after accept() -> leverage this thread for 1ms
             recved := SizeOf(temp);
@@ -1747,6 +1752,8 @@ begin
   opt := [];
   if acoWritePollOnly in aOptions then
     include(opt, paoWritePollOnly);
+  if acoAcceptWait in aOptions then
+    include(opt, paoAcceptWait);
   fClients := TAsyncConnectionsSockets.Create(opt);
   fClients.fOwner := self;
   fClientsEpoll := fClients.fRead.PollClass.FollowEpoll;
