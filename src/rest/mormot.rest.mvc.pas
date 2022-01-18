@@ -615,7 +615,6 @@ type
     procedure RunOnRestServerSub(Ctxt: TRestServerUriContext);
     procedure InternalRunOnRestServer(Ctxt: TRestServerUriContext;
       const MethodName: RawUtf8);
-    procedure UnregisterMethods;
   public
     /// this constructor will publish some views to a TRestServer instance
     // - the associated RestModel can match the supplied TRestServer, or be
@@ -632,8 +631,6 @@ type
       aViews: TMvcViewsAbstract = nil;
       aPublishOptions: TMvcPublishOptions=
         [low(TMvcPublishOption) .. high(TMvcPublishOption)]); reintroduce;
-    /// finalize this MVC server logic instance
-    destructor Destroy; override;
     /// define some content for a static file
     // - only used if cacheStatic has been defined
     function AddStaticCache(const aFileName: TFileName;
@@ -1903,12 +1900,6 @@ begin
   fRestServer.Options := fRestServer.Options + [rsoNoTableURI, rsoNoInternalState];
 end;
 
-destructor TMvcRunOnRestServer.Destroy;
-begin
-  UnregisterMethods;
-  inherited Destroy;
-end;
-
 function TMvcRunOnRestServer.AddStaticCache(const aFileName: TFileName;
   const aFileContent: RawByteString): RawByteString;
 begin
@@ -2061,20 +2052,6 @@ begin
     Ctxt.Redirect(Ctxt.UriWithoutSignature + '/default')
   else
     InternalRunOnRestServer(Ctxt, Ctxt.UriBlobFieldName);
-end;
-
-procedure TMvcRunOnRestServer.UnregisterMethods;
-var
-  m: PtInt;
-  method: RawUTF8;
-begin
-  for m := 0 to fApplication.fFactory.MethodsCount-1 do
-  begin
-    method := fApplication.fFactory.Methods[m].URI;
-    if method[1] = '_' then
-      delete(method, 1, 1); // e.g. IService._Start() -> /service/start
-    fRestServer.ServiceMethodUnregister(method);
-  end;
 end;
 
 
