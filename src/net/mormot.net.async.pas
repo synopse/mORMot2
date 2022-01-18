@@ -1126,9 +1126,9 @@ begin
     // retrieve the raw information of this abstract connection
     sock := connection.fSocket;
     if fDebugLog <> nil then
-      DoLog('Stop sock=% handle=% r=% w=%',
+      DoLog('Stop sock=% handle=% r=% w=% sub=%',
         [pointer(sock), connection.Handle, connection.fRW[false].RentrantCount,
-         connection.fRW[true].RentrantCount]);
+         connection.fRW[true].RentrantCount, ToText(connection.fSubscribed)]);
     if sock <> nil then
     begin
       // notify ProcessRead/ProcessWrite to abort
@@ -1297,6 +1297,7 @@ var
   c: TPollAsyncConnection;
 begin
   c := connection;
+  connection := nil;
   if (c = nil) or
      c.fClosed then
     exit;
@@ -1307,8 +1308,6 @@ begin
   c.UnLockFinal(writer);
   // optional process - e.g. TWebSocketAsyncConnection = focConnectionClose
   c.OnClose; // called before slot/socket closing
-  // CloseConnection() may do c.Free if not pseClosed (e.g. HTTP/1.0)
-  connection := nil;
   // Stop() will try to acquire this lock -> notify no need to wait
   CloseConnection(c);
 end;
@@ -2120,8 +2119,8 @@ begin
   if not (pseClosed in aConnection.fSubscribed) then
   begin
     // this connection was not part of fConnection[] list nor subscribed
-    // e.g. HTTP/1.0 short request
-    aConnection.Free; // no need to call fClients.fRead.AddGC
+    // e.g. HTTP/1.0 short request -> explicit GC - Free is unstable here
+    fClients.fRead.AddGC(aConnection, {directGC2=}false);
     result := true;
     exit;
   end;
