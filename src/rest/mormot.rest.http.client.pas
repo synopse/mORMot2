@@ -23,6 +23,9 @@ interface
 { if defined, TRestHttpClientWebSockets won't be declared
   - will avoid to link mormot.net.ws.* units }
 
+{.$define VERBOSECLIENTLOG}
+// if defined, TRestHttpClientSocket will log low-level THttpClientSocket info
+
 {$I ..\mormot.defines.inc}
 
 uses
@@ -710,6 +713,10 @@ begin
     fSocketClass := THttpClientSocket;
   fSocket := fSocketClass.Open(
     fServer, fPort, nlTcp, fConnectTimeout, fHttps);
+  {$ifdef VERBOSECLIENTLOG}
+  if LogClass <> nil then
+    fSocket.OnLog := LogClass.DoLog; // verbose log
+  {$endif VERBOSECLIENTLOG}
   // note that first registered algo will be the prefered one
   {$ifndef PUREMORMOT2}
   if hcSynShaAes in Compression then
