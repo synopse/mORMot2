@@ -249,51 +249,51 @@ const
   WSABASEERR              = 10000;
 
   { Windows Sockets definitions of regular Microsoft C error constants }
-  WSAEINTR                = (WSABASEERR+4);  // legacy flag
-  WSAEBADF                = (WSABASEERR+9);
-  WSAEACCES               = (WSABASEERR+13);
-  WSAEFAULT               = (WSABASEERR+14);
-  WSAEINVAL               = (WSABASEERR+22);
-  WSAEMFILE               = (WSABASEERR+24);
+  WSAEINTR                = (WSABASEERR + 4);  // legacy flag
+  WSAEBADF                = (WSABASEERR + 9);
+  WSAEACCES               = (WSABASEERR + 13);
+  WSAEFAULT               = (WSABASEERR + 14);
+  WSAEINVAL               = (WSABASEERR + 22);
+  WSAEMFILE               = (WSABASEERR + 24);
 
   { Windows Sockets definitions of regular Berkeley error constants }
-  WSAEWOULDBLOCK          = (WSABASEERR+35);
-  WSAEINPROGRESS          = (WSABASEERR+36);
-  WSAEALREADY             = (WSABASEERR+37);
-  WSAENOTSOCK             = (WSABASEERR+38);
-  WSAEDESTADDRREQ         = (WSABASEERR+39);
-  WSAEMSGSIZE             = (WSABASEERR+40);
-  WSAEPROTOTYPE           = (WSABASEERR+41);
-  WSAENOPROTOOPT          = (WSABASEERR+42);
-  WSAEPROTONOSUPPORT      = (WSABASEERR+43);
-  WSAESOCKTNOSUPPORT      = (WSABASEERR+44);
-  WSAEOPNOTSUPP           = (WSABASEERR+45);
-  WSAEPFNOSUPPORT         = (WSABASEERR+46);
-  WSAEAFNOSUPPORT         = (WSABASEERR+47);
-  WSAEADDRINUSE           = (WSABASEERR+48);
-  WSAEADDRNOTAVAIL        = (WSABASEERR+49);
-  WSAENETDOWN             = (WSABASEERR+50);
-  WSAENETUNREACH          = (WSABASEERR+51);
-  WSAENETRESET            = (WSABASEERR+52);
-  WSAECONNABORTED         = (WSABASEERR+53);
-  WSAECONNRESET           = (WSABASEERR+54);
-  WSAENOBUFS              = (WSABASEERR+55);
-  WSAEISCONN              = (WSABASEERR+56);
-  WSAENOTCONN             = (WSABASEERR+57);
-  WSAESHUTDOWN            = (WSABASEERR+58);
-  WSAETOOMANYREFS         = (WSABASEERR+59);
-  WSAETIMEDOUT            = (WSABASEERR+60);
-  WSAECONNREFUSED         = (WSABASEERR+61);
-  WSAELOOP                = (WSABASEERR+62);
-  WSAENAMETOOLONG         = (WSABASEERR+63);
-  WSAEHOSTDOWN            = (WSABASEERR+64);
-  WSAEHOSTUNREACH         = (WSABASEERR+65);
-  WSAENOTEMPTY            = (WSABASEERR+66);
-  WSAEPROCLIM             = (WSABASEERR+67);
-  WSAEUSERS               = (WSABASEERR+68);
-  WSAEDQUOT               = (WSABASEERR+69);
-  WSAESTALE               = (WSABASEERR+70);
-  WSAEREMOTE              = (WSABASEERR+71);
+  WSAEWOULDBLOCK          = (WSABASEERR + 35);
+  WSAEINPROGRESS          = (WSABASEERR + 36);
+  WSAEALREADY             = (WSABASEERR + 37);
+  WSAENOTSOCK             = (WSABASEERR + 38);
+  WSAEDESTADDRREQ         = (WSABASEERR + 39);
+  WSAEMSGSIZE             = (WSABASEERR + 40);
+  WSAEPROTOTYPE           = (WSABASEERR + 41);
+  WSAENOPROTOOPT          = (WSABASEERR + 42);
+  WSAEPROTONOSUPPORT      = (WSABASEERR + 43);
+  WSAESOCKTNOSUPPORT      = (WSABASEERR + 44);
+  WSAEOPNOTSUPP           = (WSABASEERR + 45);
+  WSAEPFNOSUPPORT         = (WSABASEERR + 46);
+  WSAEAFNOSUPPORT         = (WSABASEERR + 47);
+  WSAEADDRINUSE           = (WSABASEERR + 48);
+  WSAEADDRNOTAVAIL        = (WSABASEERR + 49);
+  WSAENETDOWN             = (WSABASEERR + 50);
+  WSAENETUNREACH          = (WSABASEERR + 51);
+  WSAENETRESET            = (WSABASEERR + 52);
+  WSAECONNABORTED         = (WSABASEERR + 53);
+  WSAECONNRESET           = (WSABASEERR + 54);
+  WSAENOBUFS              = (WSABASEERR + 55);
+  WSAEISCONN              = (WSABASEERR + 56);
+  WSAENOTCONN             = (WSABASEERR + 57);
+  WSAESHUTDOWN            = (WSABASEERR + 58);
+  WSAETOOMANYREFS         = (WSABASEERR + 59);
+  WSAETIMEDOUT            = (WSABASEERR + 60);
+  WSAECONNREFUSED         = (WSABASEERR + 61);
+  WSAELOOP                = (WSABASEERR + 62);
+  WSAENAMETOOLONG         = (WSABASEERR + 63);
+  WSAEHOSTDOWN            = (WSABASEERR + 64);
+  WSAEHOSTUNREACH         = (WSABASEERR + 65);
+  WSAENOTEMPTY            = (WSABASEERR + 66);
+  WSAEPROCLIM             = (WSABASEERR + 67);
+  WSAEUSERS               = (WSABASEERR + 68);
+  WSAEDQUOT               = (WSABASEERR + 69);
+  WSAESTALE               = (WSABASEERR + 70);
+  WSAEREMOTE              = (WSABASEERR + 71);
 
   { Extended Windows Sockets error constant definitions }
   WSASYSNOTREADY          = (WSABASEERR+91);
@@ -536,7 +536,8 @@ begin
   end;
 end;
 
-function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents): TNetEvents;
+function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
+  loerr: system.PInteger): TNetEvents;
 var
   sock: TSocket;
   rd, wr: record
@@ -548,6 +549,8 @@ var
   res: integer;
   pending: cardinal;
 begin
+  if loerr <> nil then
+    loerr^ := 0;
   result := [neError];
   if @self = nil then
     exit;
@@ -570,7 +573,11 @@ begin
   SetTimeVal(ms, tv);
   res := select(sock + 1, rdp, wrp, nil, @tv);
   if res < 0 then
+  begin
+    if loerr <> nil then
+      loerr^ := sockerrno;
     exit;
+  end;
   result := [];
   if res = 0 then
     // nothing new detected
@@ -830,7 +837,7 @@ type
     fRead: TFDSet;
     fWrite: TFDSet;
   public
-    constructor Create; override;
+    constructor Create(aOwner: TPollSockets); override;
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
       tag: TPollSocketTag): boolean; override;
     function Unsubscribe(socket: TNetSocket): boolean; override;
@@ -838,9 +845,9 @@ type
       timeoutMS: integer): boolean; override;
   end;
 
-constructor TPollSocketSelect.Create;
+constructor TPollSocketSelect.Create(aOwner: TPollSockets);
 begin
-  inherited Create;
+  inherited Create(aOwner);
   fMaxSockets := FD_SETSIZE; // 512 in our unit!
   SetLength(fTagSocket, FD_SETSIZE);
   SetLength(fTagTag, FD_SETSIZE);

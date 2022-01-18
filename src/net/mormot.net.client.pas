@@ -1440,6 +1440,8 @@ procedure THttpClientSocket.RequestInternal(
     begin
       // recreate the connection and try again
       Close;
+      //if Assigned(OnLog) then
+      //   OnLog(sllTrace, 'DoRetry after close', [], self);
       try
         OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
         HttpStateReset;
@@ -1455,6 +1457,7 @@ procedure THttpClientSocket.RequestInternal(
 var
   P: PUtf8Char;
   pending: TCrtSocketPending;
+  loerr: integer;
   dat: RawByteString;
   timer: TPrecisionTimer;
 begin
@@ -1468,8 +1471,10 @@ begin
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Http.Content := '';
   if (hfConnectionClose in Http.HeaderFlags) or
-     (SockReceivePending(0) = cspSocketError) then
-    DoRetry(HTTP_NOTFOUND, 'connection closed/broken (keepalive or maxrequest)', [])
+     not SockIsDefined then
+    DoRetry(HTTP_NOTFOUND, 'connection closed (keepalive or maxrequest)', [])
+  else if SockReceivePending(0, @loerr) = cspSocketError then
+    DoRetry(HTTP_NOTFOUND, 'connection broken (socketerror=%)', [loerr])
   else
     try
       try

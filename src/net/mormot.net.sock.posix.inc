@@ -508,7 +508,8 @@ begin
   end;
 end;
 
-function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents): TNetEvents;
+function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
+  loerr: system.PInteger): TNetEvents;
 var
   res: integer;
   p: TPollFD; // select() limits process to 1024 sockets in POSIX -> use poll()
@@ -528,6 +529,8 @@ begin
   if res < 0 then
   begin
     res := sockerrno;
+    if loerr <> nil then
+      loerr^ := res;
     if res = WSATRY_AGAIN then
       // timeout, not a true error
       result := [];
@@ -788,7 +791,7 @@ type
     fFDCount: integer;
     procedure FDVacuum;
   public
-    constructor Create; override;
+    constructor Create(aOwner: TPollSockets); override;
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
       tag: TPollSocketTag): boolean; override;
     function Unsubscribe(socket: TNetSocket): boolean; override;
@@ -796,9 +799,9 @@ type
       timeoutMS: integer): boolean; override;
   end;
 
-constructor TPollSocketPoll.Create;
+constructor TPollSocketPoll.Create(aOwner: TPollSockets);
 begin
-  inherited Create;
+  inherited Create(aOwner);
   fMaxSockets := 20000;
 end;
 
@@ -989,7 +992,7 @@ type
     fEPFD: integer;
     fResults: array of EPoll_Event;
   public
-    constructor Create; override;
+    constructor Create(aOwner: TPollSockets); override;
     destructor Destroy; override;
     // directly calls epoll's EPOLL_CTL_ADD control interface
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
@@ -1009,9 +1012,9 @@ type
 {$define POLLSOCKETEPOLL}
 // is defined for TPollSocketEpoll.FollowEpoll = true
 
-constructor TPollSocketEpoll.Create;
+constructor TPollSocketEpoll.Create(aOwner: TPollSockets);
 begin
-  inherited Create;
+  inherited Create(fOwner);
   fMaxSockets := 100; // initial value: no limitation in practice and can grow
   fEPFD := epoll_create(10000); // since 2.6.8 size is ignored
   SetLength(fResults, fMaxSockets);
@@ -1093,6 +1096,9 @@ begin
          (fCount < fMaxSockets shr 1) then
         fMaxSockets := fMaxSockets shr 1; // size down fMaxSockets
     end;
+    if (fOwner <> nil) and
+       fOwner.fUnsubscribeShouldShutdownSocket then
+      socket.ShutdownAndClose({rdwr=}false);
   end;
 end;
 
