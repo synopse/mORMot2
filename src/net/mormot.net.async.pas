@@ -645,7 +645,7 @@ type
       read fMaxConnections write fMaxConnections;
     /// above how many fClients.fRead.PendingCount accept() would reject
     // - is mapped by the high-level THttpAsyncServer.HttpQueueLength property
-    // - default is 2000, but could be a lower value e.g. for a load-balancer
+    // - default is 10000, but could be a lower value e.g. for a load-balancer
     // - MaxConnections regulates the absolute number of (idle) connections,
     // whereas this property tracks the actual REST/HTTP requests pending for
     // the internal thread pool
@@ -1333,8 +1333,8 @@ begin
   if result then
     include(connection.fSubscribed, sub);
   if fDebugLog <> nil then
-    DoLog('SubscribeConnection(%)=% handle=% %',
-      [caller, result, connection.Handle, ToText(sub)^]);
+    DoLog('Subscribe(%)=% % handle=% %', [pointer(connection.fSocket), result,
+      caller, connection.Handle, ToText(sub)^]);
 end;
 
 procedure TPollAsyncSockets.CloseConnection(var connection: TPollAsyncConnection);
@@ -1722,13 +1722,19 @@ begin
               if pending > 0 then
               begin
                 // process fOwner.fClients.fPending in atpReadPending threads
+                //fOwner.fClients.fRead.PendingLogDebug('Wakeup');
                 fEvent.ResetEvent;
                 fOwner.ThreadPollingWakeup(pending);
                 // atpReadPending notifies fThreadReadPoll.fEvent when done
                 fWaitForReadPending := true;
+                //fOwner.DoLog(sllCustom1, 'Execute: WaitForReadPending', [], self);
                 if Terminated or
                    (fEvent.WaitFor(20) = wrSignaled) then
+                begin
+                  //fOwner.DoLog(sllCustom1, 'Execute: WaitForReadPending signaled', [], self);
                   break;
+                end;
+                //fOwner.DoLog(sllCustom1, 'Execute: WaitForReadPending timeout', [], self);
               end;
             end;
           end;
@@ -2032,7 +2038,7 @@ begin
     ConnectionAdd(aConnection);
   aConnection.AfterCreate; // Handle has been computed
   if acoVerboseLog in fOptions then
-    DoLog(sllTrace, 'ConnectionNew % socket=% count=%',
+    DoLog(sllTrace, 'ConnectionNew % sock=% count=%',
       [aConnection, pointer(aSocket), fConnectionCount], self);
   result := true; // indicates aSocket owned by the pool
 end;
@@ -2054,9 +2060,9 @@ begin
       SetLength(fConnection, n + n shr 3); // reduce 50% free into 12.5%
     if acoVerboseLog in fOptions then
     begin
-      QueryPerformanceMicroSeconds(stop);
+      QueryPerformanceMicroSeconds(stop); // a few us at most
       DoLog(sllTrace, 'ConnectionDelete % count=% %us',
-        [aConnection, n, stop - start], self); // a few us at most
+        [aConnection, n, stop - start], self);
     end;
     aConnection.fSocket := nil;   // ensure is known as disabled
     fClients.fRead.AddGC(aConnection, false); // will be released once processed
@@ -2458,7 +2464,7 @@ constructor TAsyncServer.Create(const aPort: RawUtf8;
 begin
   fSockPort := aPort;
   fMaxConnections := 7777777; // huge number for sure
-  fMaxPending := 2000;        // fair enough for pending requests
+  fMaxPending := 10000;        // fair enough for pending requests
   inherited Create(OnStart, OnStop, aConnectionClass, ProcessName, aLog,
     aOptions, aThreadPoolCount);
   // binding will be done in Execute
@@ -2606,7 +2612,11 @@ begin
         repeat
           // could we Accept one or several incoming connection(s)?
           // async=true to expect client in non-blocking mode from now on
+          // will use accept4() single syscall on Linux
+          {DoLog(sllCustom1, 'Execute: before accepted=%', [fAccepted], self);}
           res := fServer.Sock.Accept(client, sin, {async=}true);
+          {DoLog(sllTrace, 'Execute: Accept(%)=% sock=% #% hi=%', [fServer.Port,
+            ToText(res)^, pointer(client), fAccepted, fConnectionHigh], self);}
           if Terminated then
           begin
             // specific behavior from Shutdown method
@@ -2621,15 +2631,19 @@ begin
             end;
             break;
           end;
+          {if res = nrRetry then
+            DoLog(sllCustom1, 'Execute: Accept(%) retry', [fServer.Port], self);}
           if res = nrRetry then
-            break; // timeout
+            break; // 10 seconds timeout
           inc(fAccepted);
           if (fClients.fRead.Count > fMaxConnections) or
              (fClients.fRead.PendingCount > fMaxPending) then
           begin
             // map THttpAsyncServer.HttpQueueLength property value
-            DoLog(sllTrace, 'Execute: Accept connections=% pending=% overflow',
-              [fClients.fRead.Count, fClients.fRead.PendingCount], self);
+            DoLog(sllWarning,
+              'Execute: Accept connections=%>% pending=%>% overflow',
+              [fClients.fRead.Count, fMaxConnections,
+               fClients.fRead.PendingCount, fMaxPending], self);
             client.ShutdownAndClose({rdwr=}false); // e.g. for load balancing
             res := nrTooManyConnections;
           end;
