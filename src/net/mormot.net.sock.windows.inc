@@ -837,7 +837,7 @@ type
     fRead: TFDSet;
     fWrite: TFDSet;
   public
-    constructor Create; override;
+    constructor Create(aOwner: TPollSockets); override;
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
       tag: TPollSocketTag): boolean; override;
     function Unsubscribe(socket: TNetSocket): boolean; override;
@@ -845,9 +845,9 @@ type
       timeoutMS: integer): boolean; override;
   end;
 
-constructor TPollSocketSelect.Create;
+constructor TPollSocketSelect.Create(aOwner: TPollSockets);
 begin
-  inherited Create;
+  inherited Create(aOwner);
   fMaxSockets := FD_SETSIZE; // 512 in our unit!
   SetLength(fTagSocket, FD_SETSIZE);
   SetLength(fTagTag, FD_SETSIZE);

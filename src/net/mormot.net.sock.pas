@@ -494,6 +494,8 @@ type
   end;
 
   {$M+}
+  TPollSockets = class;
+
   /// abstract parent for TPollSocket* and TPollSockets polling
   TPollAbstract = class
   protected
@@ -529,15 +531,10 @@ type
   TPollSocketAbstract = class(TPollAbstract)
   protected
     fMaxSockets: integer;
+    fOwner: TPollSockets;
   public
-    /// class function factory, returning a socket polling instance matching
-    // at best the current operating system
-    // - return a hidden TPollSocketSelect instance under Windows,
-    // TPollSocketEpoll instance under Linux, or TPollSocketPoll on BSD
-    // - just a wrapper around PollSocketClass.Create
-    class function New: TPollSocketAbstract;
     /// initialize the polling
-    constructor Create; virtual;
+    constructor Create(aOwner: TPollSockets); virtual;
     /// stop status modifications tracking on one specified TSocket
     // - the socket should have been monitored by a previous call to Subscribe()
     // - on success, returns true and fill tag with the associated opaque value
@@ -602,8 +599,8 @@ type
     fGettingOne: integer;
     fLastUnsubscribeTagCount: integer;
     fTerminated: boolean;
-    fUnsubscribeShouldShutdownSocket: boolean;
     fEpollGettingOne: boolean;
+    fUnsubscribeShouldShutdownSocket: boolean;
     fPollClass: TPollSocketClass;
     fOnLog: TSynLogProc;
     fOnGetOneIdle: TOnPollSocketsIdle;
@@ -2017,11 +2014,6 @@ end;
 
 { TPollSocketAbstract }
 
-class function TPollSocketAbstract.New: TPollSocketAbstract;
-begin
-  result := PollSocketClass.Create;
-end;
-
 class function TPollSocketAbstract.FollowEpoll: boolean;
 begin
   {$ifdef POLLSOCKETEPOLL}
@@ -2031,8 +2023,9 @@ begin
   {$endif POLLSOCKETEPOLL}
 end;
 
-constructor TPollSocketAbstract.Create;
+constructor TPollSocketAbstract.Create(aOwner: TPollSockets);
 begin
+  fOwner := aOwner;
 end;
 
 
@@ -2049,7 +2042,7 @@ begin
   // epoll has no size limit (so a single fPoll[0] can be assumed), and
   // epoll_ctl() is thread-safe and let epoll_wait() work in the background
   SetLength(fPoll, 1);
-  fPoll[0] := fPollClass.Create;
+  fPoll[0] := fPollClass.Create(self);
   {$else}
   InitializeCriticalSection(fPollLock);
   {$endif POLLSOCKETEPOLL}
@@ -2181,7 +2174,11 @@ begin
   {$ifdef POLLSOCKETEPOLL}
   // epoll_ctl() is thread-safe and let epoll_wait() work in the background
   if fPoll[0].Unsubscribe(socket) then
+  begin
     LockedDec32(@fCount);
+    if Assigned(fOnLog) then // log outside fPendingSafe
+      fOnLog(sllTrace, 'Unsubscribe(%) count=%', [pointer(socket), fCount], self);
+  end;
   {$else}
   // fPoll[0].UnSubscribe() is not allowed when WaitForModified() is running
   // -> append to the unsubscription asynch list
@@ -2431,7 +2428,7 @@ begin
             end;
           if poll = nil then
           begin
-            poll := fPollClass.Create; // need a new poll instance
+            poll := fPollClass.Create(self); // need a new poll instance
             SetLength(fPoll, n + 1);
             fPoll[n] := poll;
           end;

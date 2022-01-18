@@ -1134,10 +1134,14 @@ begin
       // notify ProcessRead/ProcessWrite to abort
       connection.fSocket := nil;
       // register to unsubscribe for the next PollForPendingEvents() call
-      if pseRead in connection.fSubscribed then
-        fRead.Unsubscribe(sock, TPollSocketTag(connection));
       if pseWrite in connection.fSubscribed then
+        // write first because of UnsubscribeShouldShutdownSocket
         fWrite.Unsubscribe(sock, TPollSocketTag(connection));
+      if pseRead in connection.fSubscribed then
+        fRead.Unsubscribe(sock, TPollSocketTag(connection))
+      else
+        // close the socket even if not subscribed (e.g. HTTP/1.0)
+        sock.ShutdownAndClose({rdwr=}false);
       result := true;
     end;
   finally
