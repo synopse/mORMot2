@@ -536,7 +536,8 @@ begin
   end;
 end;
 
-function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents): TNetEvents;
+function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
+  loerr: system.PInteger): TNetEvents;
 var
   sock: TSocket;
   rd, wr: record
@@ -548,6 +549,8 @@ var
   res: integer;
   pending: cardinal;
 begin
+  if loerr <> nil then
+    loerr^ := 0;
   result := [neError];
   if @self = nil then
     exit;
@@ -570,7 +573,11 @@ begin
   SetTimeVal(ms, tv);
   res := select(sock + 1, rdp, wrp, nil, @tv);
   if res < 0 then
+  begin
+    if loerr <> nil then
+      loerr^ := sockerrno;
     exit;
+  end;
   result := [];
   if res = 0 then
     // nothing new detected

@@ -191,7 +191,7 @@ type
     function Recv(Buf: pointer; var len: integer): TNetResult;
     function SendTo(Buf: pointer; len: integer; out addr: TNetAddr): TNetResult;
     function RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer;
-    function WaitFor(ms: integer; scope: TNetEvents): TNetEvents;
+    function WaitFor(ms: integer; scope: TNetEvents; loerr: system.PInteger = nil): TNetEvents;
     function RecvPending(out pending: integer): TNetResult;
     function RecvWait(ms: integer; out data: RawByteString;
       terminated: PTerminated = nil): TNetResult;
@@ -699,9 +699,12 @@ type
   end;
 
 
-/// the TPollSocketAbstract class best fitting with the current Operating System
-// - as used by TPollSocketAbstract.New method
-// - returns e.g. TPOLLSOCKETEDGE on Linux, or TPollSocketSelect on Windows
+function ToText(ev: TPollSocketEvents): TShort8; overload;
+
+/// class function factory, returning a socket polling class matching
+// at best the current operating system
+// - return a hidden TPollSocketSelect class under Windows, TPollSocketEpoll
+// under Linux, or TPollSocketPoll on BSD
 function PollSocketClass: TPollSocketClass;
 
 
@@ -964,7 +967,8 @@ type
     /// check if there are some pending bytes in the input sockets API buffer
     // - returns cspSocketError if the connection is broken or closed
     // - warning: on Windows, may wait a little less than TimeOutMS (select bug)
-    function SockReceivePending(TimeOutMS: integer): TCrtSocketPending;
+    function SockReceivePending(TimeOutMS: integer;
+      loerr: system.PInteger = nil): TCrtSocketPending;
     /// returns the socket input stream as a string
     function SockReceiveString: RawByteString;
     /// fill the Buffer with Length bytes
@@ -1977,6 +1981,32 @@ end;
 
 
 { ******************** Efficient Multiple Sockets Polling }
+
+function ToText(ev: TPollSocketEvents): TShort8;
+begin
+  result[0] := #0;
+  if pseRead in ev then
+  begin
+    inc(result[0]);
+    result[ord(result[0])] := 'r';
+  end;
+  if pseWrite in ev then
+  begin
+    inc(result[0]);
+    result[ord(result[0])] := 'w';
+  end;
+  if pseError in ev then
+  begin
+    inc(result[0]);
+    result[ord(result[0])] := 'e';
+  end;
+  if pseClosed in ev then
+  begin
+    inc(result[0]);
+    result[ord(result[0])] := 'c';
+  end;
+end;
+
 
 { TPollAbstract }
 
@@ -3042,8 +3072,12 @@ begin
     else
       // direct client connection
       retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
+    //if Assigned(OnLog) then
+    //  OnLog(sllTrace, 'Before NewSocket', [], self);
     res := NewSocket(fServer, fPort, aLayer, doBind,
       fTimeout, fTimeout, fTimeout, retry, fSock);
+    //if Assigned(OnLog) then
+    //  OnLog(sllTrace, 'After NewSocket=%', [ToText(res)^], self);
     if res <> nrOK then
       raise ENetSock.Create('%s %s.OpenBind(%s:%s)',
         [BINDMSG[doBind], ClassNameShort(self)^, fServer, fPort], res);
@@ -3066,7 +3100,7 @@ begin
     DoTlsHandshake;
   if Assigned(OnLog) then
     OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
-      fSock.Socket, TLS.CipherName], self);
+      pointer(fSock.Socket), TLS.CipherName], self);
 end;
 
 procedure TCrtSocket.AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
@@ -3567,12 +3601,15 @@ begin
       [ClassNameShort(self)^, Length, read], NetLastError);
 end;
 
-function TCrtSocket.SockReceivePending(TimeOutMS: integer): TCrtSocketPending;
+function TCrtSocket.SockReceivePending(TimeOutMS: integer;
+  loerr: system.PInteger): TCrtSocketPending;
 var
   events: TNetEvents;
 begin
+  if loerr <> nil then
+    loerr^ := 0;
   if SockIsDefined then
-    events := fSock.WaitFor(TimeOutMS, [neRead])
+    events := fSock.WaitFor(TimeOutMS, [neRead], loerr)
   else
     events := [neError];
   if neError in events then

@@ -508,7 +508,8 @@ begin
   end;
 end;
 
-function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents): TNetEvents;
+function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
+  loerr: system.PInteger): TNetEvents;
 var
   res: integer;
   p: TPollFD; // select() limits process to 1024 sockets in POSIX -> use poll()
@@ -528,6 +529,8 @@ begin
   if res < 0 then
   begin
     res := sockerrno;
+    if loerr <> nil then
+      loerr^ := res;
     if res = WSATRY_AGAIN then
       // timeout, not a true error
       result := [];
