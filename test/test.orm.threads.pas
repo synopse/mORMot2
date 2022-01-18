@@ -61,6 +61,7 @@ uses
   test.orm.sqlite3;
 
 {.$define FORCE_HTTP10}
+{.$define FORCE_TCPONLY}
 
 const
   MIN_THREADS = 1;
@@ -127,7 +128,9 @@ type
   published
     /// initialize fDatabase and create MaxThreads threads for clients
     procedure CreateThreadPool;
-//public
+{$ifdef FORCE_TCPONLY}
+  public
+{$endif FORCE_TCPONLY}
     /// direct test of its RESTful methods
     procedure _TRestServerDB;
     /// test via TRestClientDB instances
@@ -140,11 +143,15 @@ type
     /// test via TRestClientURIMessage instances
     procedure _TRestClientURIMessage;
     {$endif HAS_MESSAGES}
-//published
+{$ifdef FORCE_TCPONLY}
+  published
+{$endif FORCE_TCPONLY}
     /// test via TRestHttpClientSocket instances over OS's socket API server
     // - note: Delphi IDE debugger may have trouble following the thread pool
     procedure TCPSockets;
-//public
+{$ifdef FORCE_TCPONLY}
+  public
+{$endif FORCE_TCPONLY}
     {$ifdef USEWININET}
     {$ifndef ONLYUSEHTTPSOCKET}
     /// test via TRestHttpClientWinHTTP instances over http.sys (HTTP API) server

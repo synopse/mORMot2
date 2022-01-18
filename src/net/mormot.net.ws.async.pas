@@ -105,6 +105,7 @@ type
     fOutgoingHandle: TIntegerDynArray; // = TPollAsyncConnectionHandle
     procedure NotifyOutgoing(Connection: TWebSocketAsyncConnection);
     procedure ProcessIdleTixSendFrames;
+    // overriden to send pending frames
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); override;
   public
     /// create an event-driven HTTP/WebSockets Server
@@ -328,7 +329,8 @@ constructor TWebSocketAsyncConnections.Create(const aPort: RawUtf8;
 begin
   inherited Create(aPort, OnStart, OnStop, aConnectionClass, ProcessName,
     aLog, aOptions, aThreadPoolCount);
-  fLastOperationIdleSeconds := 10; // 10 secs is good enough for ping/pong
+  fLastOperationIdleSeconds := 5; // 5 secs is good enough for ping/pong
+  fKeepConnectionInstanceMS := 500; // more conservative for blocking callbacks
 end;
 
 procedure TWebSocketAsyncConnections.NotifyOutgoing(
@@ -391,12 +393,7 @@ procedure TWebSocketAsyncConnections.ProcessIdleTix(Sender: TObject;
 begin
   if Terminated then
     exit;
-  // inlined TAsyncConnections.ProcessIdleTix logic
-  if NowTix >= fIdleTix then
-  begin
-    IdleEverySecond(NowTix);
-    fIdleTix := NowTix + 1000;
-  end;
+  inherited ProcessIdleTix(Sender, NowTix);
   // send pending outgoing frames, with optional JumboFrame gathering
   if fOutgoingCount <> 0 then
     ProcessIdleTixSendFrames;
@@ -660,6 +657,7 @@ begin
       WebSocketLog.Add.Log(LOG_TRACEERROR[connection = nil],
         'Callback(%) % on ConnectionID=% -> %',
         [Ctxt.Url, ToText(mode)^, Ctxt.ConnectionID, connection], self);
+    // note: returned instance is guaranteed to stay alive for at least 500ms
   end;
   if (connection <> nil) and
      (TWebSocketAsyncConnection(connection).fProcess <> nil) then

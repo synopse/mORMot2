@@ -15,7 +15,8 @@ uses
   initc; // link clib='c' for our socket purpose
 
 {$ifdef OSLINUX}
-  {$define HASACCEPT4}
+  {$define HASACCEPT4} // use Linux-specific accept4() enhanced API call
+  // define OLDLIBC conditional to disable this feature and fallback to accept()
 {$endif OSLINUX}
 
 {$ifdef OSBSDDARWIN}
