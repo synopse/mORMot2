@@ -1797,7 +1797,8 @@ begin
     for i := 0 to fGCCount - 1 do
     begin
       c := fGC[i];
-      if c.fLastOperation <= oldenough then
+      if (c.fLastOperation <= oldenough) or         // timeout
+         (c.fLastOperation > fLastOperationMS) then // or 42 days overflow
       begin
         gc[ngc] := c;
         inc(ngc);
@@ -3126,8 +3127,11 @@ begin
           if (fCallbackSendDelay <> nil) and
              (tix = lasttix) then
             msidle := fCallbackSendDelay^ // delayed SendFrames gathering
+          else if (fAsync.fGCCount = 0) or
+                  (fAsync.fKeepConnectionInstanceMS > 500) then
+            msidle := 500 // idle server
           else
-            msidle := 500; // idle server
+            msidle := fAsync.fKeepConnectionInstanceMS; // for accurate GC pace
           SleepHiRes(msidle);
           // periodic trigger of IdleEverySecond and ProcessIdleTixSendFrames
           tix64 := mormot.core.os.GetTickCount64;
