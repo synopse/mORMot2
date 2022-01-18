@@ -276,7 +276,7 @@ procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
     try
       for i := 1 to 100 do
       begin
-        C1.Prepare('url', 'POST', 'headers', content, contentType, '', '', '');
+        C1.Prepare('url', 'POST', 'headers', content, contentType, '');
         noAnswer1 := opcode = focBinary;
         noAnswer2 := not noAnswer1;
         TWebSocketProtocolRestHook(protocol).InputToFrame(C1, noAnswer1, frame, head);
