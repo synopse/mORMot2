@@ -79,6 +79,7 @@ type
     Demo: TSqlDataBase;
     Req: RawUtf8;
     JS: RawUtf8;
+    DV: variant;
     BackupTimer: TPrecisionTimer;
     function OnBackupProgress(Sender: TSqlDatabaseBackupThread): boolean;
   published
@@ -457,7 +458,12 @@ begin
   check(WinAnsiToUtf8(Utf8ToWinAnsi(Req)) = Req, 'WinAnsiToUtf8/Utf8ToWinAnsi');
   JS := Demo.ExecuteJson(Req); // get result in JSON format
   FileFromString(JS, WorkDir + 'Test1.json');
-  CheckHash(JS, $40C1649A, 'Expected ExecuteJson result not retrieved');
+  CheckHash(JS, $40C1649A, 'ExecuteJson');
+  DV := Demo.ExecuteDocVariant(Req);
+  CheckEqual(_Safe(DV).Count, 1001);
+  JS := _Safe(DV).ToNonExpandedJson;
+  FileFromString(JS, WorkDir + 'Test2.json');
+  CheckHash(JS, $93E54870, 'ExecuteDocVariant');
   {$ifndef NOSQLITE3STATIC}
   if password <> '' then
   begin

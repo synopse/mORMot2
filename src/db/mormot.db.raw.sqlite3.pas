@@ -4383,14 +4383,24 @@ type
       Expand: boolean = false; MaxMemory: PtrUInt = 512 shl 20;
       Options: TTextWriterOptions = []): PtrInt; overload;
     /// Execute one SQL statement which return the results in JSON format
-    // - use internally Execute() above with a TRawByteStringStream, and return a string
+    // - use internally Execute() above with a TRawByteStringStream, and return
+    // UTF-8 encoded JSON according to Expand format
+    // - if aSql is '', the statement should have been prepared, reset and bound
+    // if necessary - if aSql <> '' then the statement would be closed internally
     // - returns the number of data rows added to JSON (excluding the headers)
     // in the integer variable mapped by aResultCount (if any)
     // - by default, won't write more than 512MB of JSON, to avoid EOutOfMemory
-    // - if any error occurs, the ESqlite3Exception is handled and '' is returned
+    // - if any error occurs, ESqlite3Exception is catched and '' is returned
     function ExecuteJson(aDB: TSqlite3DB; const aSql: RawUtf8;
       Expand: boolean = false; aResultCount: PPtrInt = nil;
       MaxMemory: PtrUInt = 512 shl 20; Options: TTextWriterOptions = []): RawUtf8;
+    /// Execute one SQL statement which return the results as a TDocVariant array
+    // - if aSql is '', the statement should have been prepared, reset and bound
+    // if necessary - if aSql <> '' then the statement would be closed internally
+    // - if any error occurs, ESqlite3Exception is catched and null is returned
+    procedure ExecuteDocVariant(aDB: TSqlite3DB; const aSql: RawUtf8;
+      out aResult: variant; aResultModel: TDocVariantModel = mFastFloat;
+      aMaxRows: PtrInt = 1 shl 20);
     /// Execute all SQL statements in the aSql UTF-8 encoded string, results will
     // be written as ANSI text in OutFile
     procedure ExecuteDebug(aDB: TSqlite3DB; const aSql: RawUtf8;
@@ -4485,7 +4495,7 @@ type
 
   // 3. Field attributes after a sucessfull Step() (returned SQLITE_ROW)
   public
-    /// the field name of the current ROW
+    /// the field name of the current ROW, first Col is 0
     function FieldName(Col: integer): RawUtf8;
     /// the field index matching this name
     // - return -1 if not found
@@ -4513,6 +4523,10 @@ type
     function FieldBlobToStream(Col: integer): TStream;
     /// return TRUE if the column value is NULL, first Col is 0
     function FieldNull(Col: integer): boolean;
+    /// return the field value as a variant, first Col is 0
+    // - SQLITE_NULL/SQLITE_INTEGER/SQLITE_FLOAT/SQLITE_TEXT values are returned as
+    // varNull/varInt64/varDouble/varString, SQLITE_BLOB as BinToBase64WithMagic
+    procedure FieldVariant(Col: integer; var Value: variant);
     /// return the field type of this column
     // - retrieve the "SQLite3" column type as returned by sqlite3.column_type -
     //  i.e. SQLITE_NULL, SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, or SQLITE_BLOB
@@ -4887,6 +4901,10 @@ type
     // - the BLOB data is encoded as '"\uFFF0base64encodedbinary"'
     function ExecuteJson(const aSql: RawUtf8; Expand: boolean = false;
       aResultCount: PPtrInt = nil): RawUtf8;
+    /// Execute one SQL statement returning its results as a TDocVariantData array
+    // - just a wrapper around TSqlRequest.ExecuteDocVariant()
+    function ExecuteDocVariant(const aSql: RawUtf8;
+      aModel: TDocVariantModel = mFastFloat; aMaxRows: PtrInt = 1 shl 20): variant;
     /// returns the EXPLAIN QUERY PLAN raw text of a given SQL statement
     // - the result layout is not fixed, and subject to change from one release
     // of SQLite to the next: so we expand it as extended JSON
@@ -6337,8 +6355,8 @@ begin
   if Blob <> nil then
   begin
     Value := sqlite3.value_text(argv[1]);
-    if RawUtf8DynArrayLoadFromContains(Blob, Value, StrLen(Value), sqlite3.user_data
-      (Context) = nil) < 0 then
+    if RawUtf8DynArrayLoadFromContains(Blob, Value, StrLen(Value),
+        sqlite3.user_data(Context) = nil) < 0 then
       Blob := nil;
   end;
   sqlite3.result_int64(Context, Int64(Blob <> nil));
@@ -6504,7 +6522,7 @@ begin
   end;
 end;
 
-procedure TSqlDataBase.Rollback;
+procedure TSqlDataBase.RollBack;
 begin
   if (self = nil) or
      not fTransactionActive then
@@ -6805,6 +6823,14 @@ begin
       fLog.Add.Log(sllSQL, '% % returned % bytes %', [Timer.Stop,
         FileNameWithoutPath, length(result), aSql], self);
     end;
+end;
+
+function TSqlDataBase.ExecuteDocVariant(const aSql: RawUtf8;
+  aModel: TDocVariantModel; aMaxRows: PtrInt): variant;
+var
+  R: TSqlRequest;
+begin
+  R.ExecuteDocVariant(DB, aSql, result, aModel, aMaxRows);
 end;
 
 function DirectExplainQueryPlan(DB: TSqlite3DB; const aSql: RawUtf8): RawUtf8;
@@ -7953,7 +7979,8 @@ var
 begin
   writeln;
   try
-    Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
+    if aSql <> '' then
+      Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     repeat
       repeat
         Res := Step;
@@ -7973,7 +8000,8 @@ begin
     until PrepareNext = SQLITE_DONE;
   finally
     ioresult;
-    Close; // always release statement
+    if aSql <> '' then
+      Close; // release just prepared statement
   end;
 end;
 {$I+}
@@ -8003,6 +8031,60 @@ begin
   end;
 end;
 
+procedure TSqlRequest.ExecuteDocVariant(aDB: TSqlite3DB; const aSql: RawUtf8;
+  out aResult: variant; aResultModel: TDocVariantModel; aMaxRows: PtrInt);
+var
+  dv: TDocVariantData absolute aResult;
+  opt: PDocVariantOptions;
+  f, cap, n: PtrInt;
+  v: PDocVariantData;
+  names: TRawUtf8DynArray;
+  values: TVariantDynArray;
+begin
+  opt := @JSON_[aResultModel];
+  dv.Init(opt^, dvArray);
+  try
+    try
+      if aSql <> '' then
+        Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
+      SetLength(names, FieldCount);
+      for f := 0 to FieldCount - 1 do
+        names[f] := FieldName(f); // reuse the same names for all sub-objects
+      v := nil;
+      cap := 0;
+      n := 0;
+      while n < aMaxRows do
+        case Step of
+          SQLITE_ROW:
+            begin
+              SetLength(values, FieldCount);
+              for f := 0 to FieldCount - 1 do
+                FieldVariant(f, values[f]);
+              if cap = n then
+              begin
+                cap := NextGrow(cap);
+                dv.Capacity := cap;
+                v := @dv.Values[n];
+              end;
+              v^.InitObjectFromVariants(names, values, opt^);
+              inc(v);
+              VariantDynArrayClear(values); // will be owned by dv.Value[n]
+              inc(n);
+            end;
+          SQLITE_DONE:
+            break;
+        end;
+      dv.SetCount(n);
+    except
+      on ESqlite3Exception do
+        dv.Clear;
+    end;
+  finally
+    if aSql <> '' then
+      Close; // release just prepared statement
+  end;
+end;
+
 function TSqlRequest.FieldA(Col: integer): WinAnsiString;
 var
   P: PUtf8Char;
@@ -8024,11 +8106,11 @@ end;
 
 function TSqlRequest.FieldBlob(Col: integer): RawByteString;
 var
-  P: PUtf8Char;
+  P: PAnsiChar;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
     raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldBlob');
-  P := sqlite3.column_blob(Request, Col);
+  P := pointer(sqlite3.column_blob(Request, Col));
   SetString(result, P, sqlite3.column_bytes(Request, Col));
 end;
 
@@ -8077,6 +8159,46 @@ begin
   if cardinal(Col) >= cardinal(FieldCount) then
     raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldNull');
   result := sqlite3.column_type(Request, Col) = SQLITE_NULL;
+end;
+
+procedure TSqlRequest.FieldVariant(Col: integer; var Value: variant);
+var
+  v: TSqlite3Value;
+  p: PUtf8Char;
+  d: TRttiVarData absolute Value;
+begin
+  if cardinal(Col) >= cardinal(FieldCount) then
+    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldVariant');
+  if d.VType <> 0 then
+    VarClearProc(d.Data);
+  v := sqlite3.column_value(Request, Col);
+  case sqlite3.value_type(v) of
+    SQLITE_INTEGER:
+      begin
+        d.VType := varInt64;
+        d.Data.VInt64 := sqlite3.value_int64(v);
+      end;
+    SQLITE_FLOAT:
+      begin
+        d.VType := varDouble;
+        d.Data.VDouble := sqlite3.value_double(v);
+      end;
+    SQLITE_TEXT:
+      begin
+        d.VType := varString;
+        d.Data.VString := nil; // avoid GPF below
+        p := sqlite3.value_text(v);
+        FastSetString(RawUtf8(d.Data.VString), p, StrLen(p));
+      end;
+    SQLITE_BLOB:
+      begin
+        d.VType := varString;
+        d.Data.VString := nil; // avoid GPF below
+        BinToBase64WithMagic(sqlite3.value_blob(v), sqlite3.value_bytes(v),
+          RawUtf8(d.Data.VString));
+      end;
+    // SQLITE_NULL will left Value as null value
+  end;
 end;
 
 function TSqlRequest.FieldType(Col: integer): integer;
@@ -8275,6 +8397,7 @@ begin
     begin
       if twoIgnoreDefaultInRecord in WR.CustomOptions then
       begin
+        // used e.g. by DirectExplainQueryPlan() to reduce output verbosity
         case typ of
           SQLITE_BLOB:
             if DoNotFetchBlobs or
@@ -8453,11 +8576,11 @@ begin
     ErrorWrongNumberOfArgs(Context);
     exit;
   end;
-  P := sqlite3.value_blob(argv[0]);
-  PLen := sqlite3.value_bytes(argv[0]);
-  item := sqlite3.value_blob(argv[1]);
+  P       := sqlite3.value_blob(argv[0]);
+  PLen    := sqlite3.value_bytes(argv[0]);
+  item    := sqlite3.value_blob(argv[1]);
   itemLen := sqlite3.value_bytes(argv[1]);
-  caller := sqlite3.user_data(Context);
+  caller  := sqlite3.user_data(Context);
   if (P <> nil) and
      (PLen > 0) and
      (item <> nil) and
@@ -8562,17 +8685,10 @@ begin
 end;
 
 function StatementCacheTotalTimeCompare(const A, B): integer;
-var
-  i64: Int64;
 begin
-  i64 := TSqlStatementCache(A).Timer.InternalTimer.TimeInMicroSec -
-         TSqlStatementCache(B).Timer.InternalTimer.TimeInMicroSec;
-  if i64 < 0 then
-    result := -1
-  else if i64 > 0 then
-    result := 1
-  else
-    result := 0;
+  result := CompareQWord(
+    TSqlStatementCache(A).Timer.InternalTimer.TimeInMicroSec,
+    TSqlStatementCache(B).Timer.InternalTimer.TimeInMicroSec);
 end;
 
 procedure TSqlStatementCached.SortCacheByTotalTime(var aIndex: TIntegerDynArray);

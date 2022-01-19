@@ -6630,7 +6630,8 @@ begin
         if (VString <> nil) and
            (VString^[0] <> #0) then
           Add(@VString^[1], ord(VString^[0]), Escape);
-      vtInterface, vtPointer:
+      vtInterface,
+      vtPointer:
         AddPointer(PtrUInt(VPointer));
       vtPChar:
         Add(PUtf8Char(VPChar), Escape);

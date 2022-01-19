@@ -5134,14 +5134,17 @@ end;
 procedure TDocVariantData.InitObjectFromVariants(const aNames: TRawUtf8DynArray;
   const aValues: TVariantDynArray; aOptions: TDocVariantOptions);
 begin
+  VCount := length(aNames);
   if (aNames = nil) or
-     (length(aNames) <> length(aValues)) then
+     (length(aValues) <> VCount) then
     VType := varNull
   else
   begin
-    Init(aOptions, dvObject);
-    VCount := length(aNames);
+    VType := DocVariantVType;
+    VOptions := aOptions + [dvoIsObject];
+    pointer(VName) := nil;
     VName := aNames; // fast by-reference copy of VName[] and VValue[]
+    pointer(VValue) := nil;
     VValue := aValues;
   end;
 end;
