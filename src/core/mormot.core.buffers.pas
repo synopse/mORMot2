@@ -6237,28 +6237,29 @@ procedure Base64EncodeAvx2(var b: PAnsiChar; var blen: PtrUInt;
         mov     rcx, qword ptr [r8]
         cmp     rcx, 31
         jbe     @done
-        lea     rdx, qword ptr [rcx - 4] // rounds = (blen - 4) / 24
-        vmovdqa ymm0,  ymmword ptr [rip + @c9]
+        lea     rdx, qword ptr [rcx - 4]
+        vmovdqa ymm0,  yword ptr [rip + @c9]
         mov     r10, 0AAAAAAAAAAAAAAABH
-        vmovdqa ymm7,  ymmword ptr [rip + @c10]
+        vmovdqa ymm7,  yword ptr [rip + @c10]
         mov     rax, rdx
-        vmovdqa ymm5,  ymmword ptr [rip + @c11]
-        vmovdqa ymm8,  ymmword ptr [rip + @c12]
+        vmovdqa ymm5,  yword ptr [rip + @c11]
+        vmovdqa ymm8,  yword ptr [rip + @c12]
         mul     r10
-        vmovdqa ymm9,  ymmword ptr [rip + @c13]
-        vmovdqa ymm10, ymmword ptr [rip + @c14]
-        vmovdqa ymm6,  ymmword ptr [rip + @c16]
-        vmovdqa ymm4,  ymmword ptr [rip + @c15]
-        vmovdqa ymm11, ymmword ptr [rip + @c17]
-        shr     rdx, 4
+        vmovdqa ymm9,  yword ptr [rip + @c13]
+        vmovdqa ymm10, yword ptr [rip + @c14]
+        vmovdqa ymm6,  yword ptr [rip + @c16]
+        vmovdqa ymm4,  yword ptr [rip + @c15]
+        vmovdqa ymm11, yword ptr [rip + @c17]
+        shr     rdx, 4                  // rdx = rounds = (blen - 4) / 24
         lea     rax, qword ptr [rdx + rdx * 2]
         shl     rax, 3
         sub     rcx, rax
-        mov     qword ptr [r8], rcx
-        mov     rcx, qword ptr [rdi]
-        vmovdqu xmm3, xmmword ptr [rcx]
-        vinserti128 ymm1, ymm3, xmmword ptr [rcx + 16], 1
-        mov     rax, qword ptr [rsi]
+        mov     qword ptr [r8], rcx     // blen = rounds * 24
+        mov     rcx, qword ptr [rdi]    // rcx = [rdi] = b
+        mov     rax, qword ptr [rsi]    // rax = [rsi] = b64
+        // initial 20 bytes output process
+        vmovdqu xmm3, oword ptr [rcx]
+        vinserti128 ymm1, ymm3, oword ptr [rcx + 16], 1
         vpermd  ymm1, ymm0, ymm1
         vpshufb ymm1, ymm1, ymm7
         vpand   ymm0, ymm5, ymm1
@@ -6271,8 +6272,8 @@ procedure Base64EncodeAvx2(var b: PAnsiChar; var blen: PtrUInt;
         vpsubb  ymm1, ymm1, ymm2
         vpshufb ymm1, ymm11, ymm1
         vpaddb  ymm0, ymm1, ymm0
-        vmovdqu xmmword ptr [rax], xmm0
-        vextracti128 xmmword ptr [rax + 16], ymm0, 1
+        vmovdqu oword ptr [rax], xmm0
+        vextracti128 oword ptr [rax + 16], ymm0, 1
         add     rax, 32
         add     rcx, 20
         sub     rdx, 1
@@ -6281,10 +6282,11 @@ procedure Base64EncodeAvx2(var b: PAnsiChar; var blen: PtrUInt;
         // process 48 input bytes per loop iteration into 64 encoded bytes
 @9:     cmp     rdx, 1
         je      @12
-        vmovdqu xmm3, xmmword ptr [rcx]
-        vinserti128 ymm1, ymm3, xmmword ptr [rcx + 16], 1
-        vmovdqu xmm3, xmmword ptr [rcx + 24]
-        vinserti128 ymm3, ymm3, xmmword ptr [rcx + 24 + 16], 1
+        // whole loop logic is fully interlaced to unleash future CPU potential
+        vmovdqu xmm1, oword ptr [rcx]
+        vmovdqu xmm3, oword ptr [rcx + 24]
+        vinserti128 ymm1, ymm1, oword ptr [rcx + 16], 1
+        vinserti128 ymm3, ymm3, oword ptr [rcx + 24 + 16], 1
         vpshufb ymm1, ymm1, ymm7
         vpshufb ymm3, ymm3, ymm7
         vpand   ymm0, ymm5, ymm1
@@ -6307,10 +6309,10 @@ procedure Base64EncodeAvx2(var b: PAnsiChar; var blen: PtrUInt;
         vpshufb ymm14, ymm11, ymm14
         vpaddb  ymm0, ymm1, ymm0
         vpaddb  ymm12, ymm14, ymm12
-        vmovdqu xmmword ptr [rax], xmm0
-        vextracti128 xmmword ptr [rax + 16], ymm0, 1
-        vmovdqu xmmword ptr [rax + 32], xmm12
-        vextracti128 xmmword ptr [rax + 48], ymm12, 1
+        vmovdqu oword ptr [rax], xmm0
+        vextracti128 oword ptr [rax + 16], ymm0, 1
+        vmovdqu oword ptr [rax + 32], xmm12
+        vextracti128 oword ptr [rax + 48], ymm12, 1
         add     rcx, 48
         add     rax, 64
         sub     rdx, 2
@@ -6325,8 +6327,8 @@ procedure Base64EncodeAvx2(var b: PAnsiChar; var blen: PtrUInt;
         {$endif WIN64ABI}
         ret
         // trailing 24 bytes
-@12:    vmovdqu xmm3, xmmword ptr [rcx]
-        vinserti128 ymm1, ymm3, xmmword ptr [rcx + 16], 1
+@12:    vmovdqu xmm3, oword ptr [rcx]
+        vinserti128 ymm1, ymm3, oword ptr [rcx + 16], 1
         vpshufb ymm1, ymm1, ymm7
         vpand   ymm0, ymm5, ymm1
         vpmulhuw ymm8, ymm0, ymm8
@@ -6338,8 +6340,8 @@ procedure Base64EncodeAvx2(var b: PAnsiChar; var blen: PtrUInt;
         vpsubb  ymm4, ymm4, ymm6
         vpshufb ymm11, ymm11, ymm4
         vpaddb  ymm0, ymm11, ymm0
-        vmovdqu xmmword ptr [rax], xmm0
-        vextracti128 xmmword ptr [rax + 16], ymm0, 1
+        vmovdqu oword ptr [rax], xmm0
+        vextracti128 oword ptr [rax + 16], ymm0, 1
         add     rcx, 24
         add     rax, 32
         jmp     @10
@@ -6398,26 +6400,26 @@ procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt;
         cmp     r8, 44
         jbe     @5
         lea     r9, qword ptr [r8 - 0DH]
-        vmovdqa ymm1, ymmword ptr [rip + @c0]
-        vmovdqa ymm5, ymmword ptr [rip + @c1]
+        vmovdqa ymm1, yword ptr [rip + @c0]
+        vmovdqa ymm5, yword ptr [rip + @c1]
         mov     rax, r9
         and     r9, 0FFFFFFFFFFFFFFE0H
-        vmovdqa ymm4, ymmword ptr [rip + @c2]
-        vmovdqa ymm9, ymmword ptr [rip + @c3]
+        vmovdqa ymm4, yword ptr [rip + @c2]
+        vmovdqa ymm9, yword ptr [rip + @c3]
         sub     r8, r9
-        shr     rax, 5
-        vmovdqa ymm8, ymmword ptr [rip + @c4]
-        vmovdqa ymm3, ymmword ptr [rip + @c5]
-        mov     qword ptr [rsi], r8
-        vmovdqa ymm2, ymmword ptr [rip + @c6]
-        vmovdqa ymm7, ymmword ptr [rip + @c7]
-        vmovdqa ymm6, ymmword ptr [rip + @c8]
-        mov     r8, qword ptr [rdi]  // r8=[rdi]=b64   r9=[rdx]=b
-        mov     r9, qword ptr [rdx]
+        shr     rax, 5                         // rax = rounds
+        vmovdqa ymm8, yword ptr [rip + @c4]
+        vmovdqa ymm3, yword ptr [rip + @c5]
+        mov     qword ptr [rsi], r8            // set final b64len
+        vmovdqa ymm2, yword ptr [rip + @c6]
+        vmovdqa ymm7, yword ptr [rip + @c7]
+        vmovdqa ymm6, yword ptr [rip + @c8]
+        mov     r8, qword ptr [rdi]            // r8 = [rdi] = b64
+        mov     r9, qword ptr [rdx]            // r9 = [rdx] = b
         align   16
         // decode 32 bytes on input into 24 binary bytes per loop iteration
-@1:     vmovdqu xmm0, xmmword ptr [r8]
-        vinserti128 ymm10, ymm0, xmmword ptr [r8 + 16], 1
+@1:     vmovdqu xmm0, oword ptr [r8]
+        vinserti128 ymm10, ymm0, oword ptr [r8 + 16], 1
         vpsrld  ymm0, ymm10, 4
         vpand   ymm11, ymm1, ymm0
         vpand   ymm0, ymm1, ymm10
@@ -6434,19 +6436,14 @@ procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt;
         vpmaddwd ymm0, ymm0, ymm2
         vpshufb ymm0, ymm0, ymm7
         vpermd  ymm0, ymm6, ymm0
-        vmovdqu xmmword ptr [r9], xmm0
-        vextracti128 xmmword ptr [r9 + 16], ymm0, 1
+        vmovdqu oword ptr [r9], xmm0
+        vextracti128 oword ptr [r9 + 16], ymm0, 1
         add     r9, 24
         sub     rax, 1
         jne     @1
         jmp     @8
-@err:   cmp     rax, 1
-        je      @7
-        jmp     @3
-@7:     mov     eax, 32
-        jmp     @4
-@3:     shl     rax, 5
-@4:     add     qword ptr [rsi], rax // update b64len
+@err:   shl     rax, 5
+        add     qword ptr [rsi], rax // restore proper b64len on error
 @8:     mov     qword ptr [rdi], r8
         mov     qword ptr [rdx], r9
         vzeroupper
