@@ -273,12 +273,12 @@ type
     // - OnlyLog will compute and append the info to the log, but not on console
     // - warning: this method is thread-safe only if a local Timer is specified
     function NotifyTestSpeed(const ItemName: string; ItemCount: integer;
-      SizeInBytes: cardinal = 0; Timer: PPrecisionTimer = nil;
+      SizeInBytes: QWord = 0; Timer: PPrecisionTimer = nil;
       OnlyLog: boolean = false): TSynMonitorOneMicroSec; overload;
     /// will add to the console a formatted message with a speed estimation
     function NotifyTestSpeed(
       const ItemNameFmt: RawUtf8; const ItemNameArgs: array of const;
-      ItemCount: integer; SizeInBytes: cardinal = 0; Timer: PPrecisionTimer = nil;
+      ItemCount: integer; SizeInBytes: QWord = 0; Timer: PPrecisionTimer = nil;
       OnlyLog: boolean = false): TSynMonitorOneMicroSec; overload;
     /// append some text to the current console
     // - OnlyLog will compute and append the info to the log, but not on the console
@@ -986,7 +986,7 @@ begin
 end;
 
 function TSynTestCase.NotifyTestSpeed(const ItemName: string; ItemCount: integer;
-  SizeInBytes: cardinal; Timer: PPrecisionTimer;
+  SizeInBytes: QWord; Timer: PPrecisionTimer;
   OnlyLog: boolean): TSynMonitorOneMicroSec;
 var
   Temp: TPrecisionTimer;
@@ -1015,7 +1015,7 @@ begin
 end;
 
 function TSynTestCase.NotifyTestSpeed(const ItemNameFmt: RawUtf8;
-  const ItemNameArgs: array of const; ItemCount: integer; SizeInBytes: cardinal;
+  const ItemNameArgs: array of const; ItemCount: integer; SizeInBytes: QWord;
   Timer: PPrecisionTimer; OnlyLog: boolean): TSynMonitorOneMicroSec;
 var
   str: string;
