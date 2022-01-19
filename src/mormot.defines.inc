@@ -84,6 +84,12 @@
 {.$define NOTORMTABLELEN}
 // disable TOrmTable internal fLen[] pre-computed table - may save some memory
 
+{.$define NOSQLITE3STATIC}
+// disable static SQlite3 linking - to force use external dll/so library
+
+{.$define NOSQLITE3FPUSAVE}
+// disable SetFpuFlags() calls during SQlite3 engine - may enhance performance
+
 {.$define DEBUGSTORAGELOCK}
 // could be defined to force verbose log of StorageLock/StorageUnLock
 

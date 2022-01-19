@@ -7760,14 +7760,20 @@ begin
 end;
 
 procedure TSqlRequest.Close;
+{$ifndef NOSQLITE3FPUSAVE}
 var
   saved: cardinal;
+{$endif NOSQLITE3FPUSAVE}
 begin
   if Request = 0 then
     exit;
+  {$ifdef NOSQLITE3FPUSAVE}
+  sqlite3.finalize(Request);
+  {$else}
   saved := SetFpuFlags(ffLibrary);
   sqlite3.finalize(Request);
   ResetFpuFlags(saved);
+  {$endif NOSQLITE3FPUSAVE}
   fRequest := 0;
   fFieldCount := 0;
 end;
@@ -8280,16 +8286,20 @@ end;
 
 function TSqlRequest.Prepare(DB: TSqlite3DB; const SQL: RawUtf8;
   NoExcept: boolean): integer;
+{$ifndef NOSQLITE3FPUSAVE}
 var
   saved: cardinal;
+{$endif NOSQLITE3FPUSAVE}
 begin
   fDB := DB;
   fRequest := 0;
   fResetDone := false;
   if DB = 0 then
     raise ESqlite3Exception.Create(DB, SQLITE_CANTOPEN, SQL);
+  {$ifndef NOSQLITE3FPUSAVE}
   saved := SetFpuFlags(ffLibrary);
   try
+  {$endif NOSQLITE3FPUSAVE}
     result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL) + 1,
       fRequest, fNextSQL);
     while (result = SQLITE_OK) and
@@ -8305,9 +8315,11 @@ begin
     fFieldCount := sqlite3.column_count(fRequest);
     if not NoExcept then
       sqlite3_check(RequestDB, result, SQL);
+  {$ifndef NOSQLITE3FPUSAVE}
   finally
     ResetFpuFlags(saved);
   end;
+  {$endif NOSQLITE3FPUSAVE}
 end;
 
 function TSqlRequest.PrepareAnsi(DB: TSqlite3DB;
@@ -8338,8 +8350,10 @@ begin
 end;
 
 function TSqlRequest.Reset: integer;
+{$ifndef NOSQLITE3FPUSAVE}
 var
   saved: cardinal;
+{$endif NOSQLITE3FPUSAVE}
 begin
   if Request = 0 then
     raise ESqlite3Exception.Create(
@@ -8349,27 +8363,35 @@ begin
     result := SQLITE_OK;
     exit;
   end;
+  {$ifdef NOSQLITE3FPUSAVE}
+  result := sqlite3.reset(Request);
+  {$else}
   saved := SetFpuFlags(ffLibrary);
   // no check here since it is in PREVIOUS execution error state
   result := sqlite3.reset(Request);
   ResetFpuFlags(saved);
+  {$endif NOSQLITE3FPUSAVE}
   fResetDone := true;
 end;
 
 function TSqlRequest.Step: integer;
+{$ifndef NOSQLITE3FPUSAVE}
 var
   saved: cardinal;
+{$endif NOSQLITE3FPUSAVE}
 begin
   if Request = 0 then
     raise ESqlite3Exception.Create(RequestDB, SQLITE_MISUSE, 'Step');
   fResetDone := false;
+  {$ifdef NOSQLITE3FPUSAVE}
+  result := sqlite3.step(Request);
+  {$else}
   saved := SetFpuFlags(ffLibrary);
-  try
-    result := sqlite3_check(RequestDB,
-      sqlite3.step(Request), 'Step');
-  finally
-    ResetFpuFlags(saved);
-  end;
+  result := sqlite3.step(Request);
+  ResetFpuFlags(saved);
+  {$endif NOSQLITE3FPUSAVE}
+  if result in SQLITE_ERRORS then // put sqlite3_check() after nested FpuFlags
+     raise ESqlite3Exception.Create(RequestDB, result, 'Step');
 end;
 
 function TSqlRequest.GetReadOnly: boolean;
