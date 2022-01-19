@@ -3128,10 +3128,10 @@ begin
              (tix = lasttix) then
             msidle := fCallbackSendDelay^ // delayed SendFrames gathering
           else if (fAsync.fGCCount = 0) or
-                  (fAsync.fKeepConnectionInstanceMS > 500) then
+                  (fAsync.fKeepConnectionInstanceMS > 500 * 2) then
             msidle := 500 // idle server
           else
-            msidle := fAsync.fKeepConnectionInstanceMS; // for accurate GC pace
+            msidle := fAsync.fKeepConnectionInstanceMS shr 1; // proper GC pace
           SleepHiRes(msidle);
           // periodic trigger of IdleEverySecond and ProcessIdleTixSendFrames
           tix64 := mormot.core.os.GetTickCount64;
