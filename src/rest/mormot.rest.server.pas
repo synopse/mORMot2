@@ -1567,6 +1567,7 @@ type
     // expected by the produced JSON content, and % will be set with the value)
     SendTotalRowsCountFmt: RawUtf8;
   end;
+  PRestServerUriPagingParameters = ^TRestServerUriPagingParameters;
 
   ///  used to define how to trigger Events on record update
   // - see TRestServer.OnUpdateEvent property and InternalUpdateEvent() method
@@ -2863,89 +2864,87 @@ var
   method: TThreadMethod;
   tix, endtix: Int64;
   ms, current: cardinal;
+  exec: PRestAcquireExecution;
 begin
-  with Server.fAcquireExecution[Command] do
-  begin
-    ms := LockedTimeOut;
-    if ms = 0 then
-      ms := 10000; // never wait forever = 10 seconds max
-    case Command of
-      execSoaByMethod:
-        method := ExecuteSoaByMethod;
-      execSoaByInterface:
-        method := ExecuteSoaByInterface;
-      execOrmGet:
-        method := ExecuteOrmGet;
-      execOrmWrite:
-        begin
-          // special behavior to handle transactions at writing
-          method := ExecuteOrmWrite;
-          endtix := TickCount64 + ms;
-          while true do
-            if Safe.TryLockMS(ms, @Server.fShutdownRequested) then
-              try
-                current := TRestOrm(Server.fOrmInstance).TransactionActiveSession;
-                if (current = 0) or
-                   (current = Session) then
+  exec := @Server.fAcquireExecution[Command];
+  ms := exec^.LockedTimeOut;
+  if ms = 0 then
+    ms := 10000; // never wait forever = 10 seconds max
+  case Command of
+    execSoaByMethod:
+      method := ExecuteSoaByMethod;
+    execSoaByInterface:
+      method := ExecuteSoaByInterface;
+    execOrmGet:
+      method := ExecuteOrmGet;
+    execOrmWrite:
+      begin
+        // special behavior to handle transactions at writing
+        method := ExecuteOrmWrite;
+        endtix := TickCount64 + ms;
+        while true do
+          if exec^.Safe.TryLockMS(ms, @Server.fShutdownRequested) then
+            try
+              current := TRestOrm(Server.fOrmInstance).TransactionActiveSession;
+              if (current = 0) or
+                 (current = Session) then
+              begin
+                // avoiding transaction mixups
+                if exec^.Mode = amLocked then
                 begin
-                  // avoiding transaction mixups
-                  if Mode = amLocked then
-                  begin
-                    ExecuteOrmWrite; // process within the obtained write mutex
-                    exit;
-                  end;
-                  break;   // will handle Mode<>amLocked below
-                end;
-                // if we reached here, there is a transaction on another session
-                tix := GetTickCount64; // not self.TickCount64 which is fixed
-                if tix > endtix then
-                begin
-                  TimeOut; // we were not able to acquire the transaction
+                  ExecuteOrmWrite; // process within the obtained write mutex
                   exit;
                 end;
-                ms := endtix - tix;
-              finally
-                Safe.UnLock;
-              end
-            else
+                break;   // will handle Mode<>amLocked below
+              end;
+              // if we reached here, there is a transaction on another session
+              tix := GetTickCount64; // not self.TickCount64 which is fixed
+              if tix > endtix then
               begin
-                TimeOut;
+                TimeOut; // we were not able to acquire the transaction
                 exit;
               end;
-        end;
-    else
-      raise EOrmException.CreateUtf8('Unexpected Command=% in %.Execute',
-        [ord(Command), self]);
-    end;
-    if Mode = amBackgroundORMSharedThread then
-      if (Command = execOrmWrite) and
-         (Server.fAcquireExecution[execOrmGet].Mode = amBackgroundORMSharedThread) then
-        fCommand := execOrmGet; // both ORM read+write will share the read thread
+              ms := endtix - tix;
+            finally
+              exec^.Safe.UnLock;
+            end
+          else
+            begin
+              TimeOut;
+              exit;
+            end;
+      end;
+  else
+    raise EOrmException.CreateUtf8('Unexpected Command=% in %.Execute',
+      [ord(Command), self]);
   end;
-  with Server.fAcquireExecution[Command] do
-    case Mode of
-      amUnlocked:
-        method;
-      amLocked:
-        if Safe.TryLockMS(ms, @Server.fShutdownRequested) then
-          try
-            method;
-          finally
-            Safe.UnLock;
-          end
-        else
-          TimeOut;
-      amMainThread:
-        BackgroundExecuteThreadMethod(method, nil);
-      amBackgroundThread,
-      amBackgroundORMSharedThread:
-        begin
-          if Thread = nil then
-            Thread := Server.Run.NewBackgroundThreadMethod('% % %',
-              [self, Server.fModel.Root, ToText(Command)^]);
-          BackgroundExecuteThreadMethod(method, Thread);
-        end;
-    end;
+  if exec^.Mode = amBackgroundOrmSharedThread then
+    if (Command = execOrmWrite) and
+       (Server.fAcquireExecution[execOrmGet].Mode = amBackgroundOrmSharedThread) then
+      fCommand := execOrmGet; // both ORM read+write will share the read thread
+  case exec^.Mode of
+    amUnlocked:
+      method;
+    amLocked:
+      if exec^.Safe.TryLockMS(ms, @Server.fShutdownRequested) then
+        try
+          method;
+        finally
+          exec^.Safe.UnLock;
+        end
+      else
+        TimeOut;
+    amMainThread:
+      BackgroundExecuteThreadMethod(method, nil);
+    amBackgroundThread,
+    amBackgroundOrmSharedThread:
+      begin
+        if exec^.Thread = nil then
+          exec^.Thread := Server.Run.NewBackgroundThreadMethod('% % %',
+            [self, Server.fModel.Root, ToText(Command)^]);
+        BackgroundExecuteThreadMethod(method, exec^.Thread);
+      end;
+  end;
 end;
 
 procedure TRestServerUriContext.ConfigurationRestMethod(SettingsStorage: TObject);
@@ -3017,67 +3016,66 @@ end;
 
 procedure TRestServerUriContext.ExecuteSoaByMethod;
 var
+  m: PRestServerMethod;
   timstart, timstop: Int64;
   sessionstat: TSynMonitorInputOutput;
 begin
-  with Server.fPublishedMethod[MethodIndex] do
+  m := @Server.fPublishedMethod[MethodIndex];
+  if mlMethods in Server.fStatLevels then
   begin
-    if mlMethods in Server.fStatLevels then
+    QueryPerformanceMicroSeconds(timstart);
+    if m^.Stats = nil then
     begin
-      QueryPerformanceMicroSeconds(timstart);
-      if Stats = nil then
+      Server.fStats.Lock; // global lock for thread-safe initialization
+      try
+        if m^.Stats = nil then
+          m^.Stats := TSynMonitorInputOutput.Create(m^.Name);
+      finally
+        Server.fStats.UnLock;
+      end;
+    end;
+    m^.Stats.Processing := true;
+  end;
+  if Parameters <> nil then
+    Server.InternalLog('% %', [m^.Name, Parameters], sllServiceCall);
+  m^.CallBack(self);
+  if m^.Stats <> nil then
+  begin
+    QueryPerformanceMicroSeconds(timstop);
+    dec(timstop, timstart);
+    StatsFromContext(m^.Stats, timstop);
+    if Server.fStatUsage <> nil then
+      Server.fStatUsage.Modified(m^.Stats, []);
+    if (mlSessions in Server.fStatLevels) and
+       (fAuthSession <> nil) then
+    begin
+      if fAuthSession.fMethods = nil then
       begin
-        Server.fStats.Lock; // global lock for thread-safe initialization
+        Server.fStats.Lock;
         try
-          if Stats = nil then
-            Stats := TSynMonitorInputOutput.Create(Name);
+          if fAuthSession.fMethods = nil then
+            SetLength(fAuthSession.fMethods, length(Server.fPublishedMethod));
         finally
           Server.fStats.UnLock;
         end;
       end;
-      Stats.Processing := true;
-    end;
-    if Parameters <> nil then
-      Server.InternalLog('% %', [Name, Parameters], sllServiceCall);
-    CallBack(self);
-    if Stats <> nil then
-    begin
-      QueryPerformanceMicroSeconds(timstop);
-      dec(timstop, timstart);
-      StatsFromContext(Stats, timstop);
-      if Server.fStatUsage <> nil then
-        Server.fStatUsage.Modified(Stats, []);
-      if (mlSessions in Server.fStatLevels) and
-         (fAuthSession <> nil) then
+      sessionstat := fAuthSession.fMethods[MethodIndex];
+      if sessionstat = nil then
       begin
-        if fAuthSession.fMethods = nil then
-        begin
-          Server.fStats.Lock;
-          try
-            if fAuthSession.fMethods = nil then
-              SetLength(fAuthSession.fMethods, length(Server.fPublishedMethod));
-          finally
-            Server.fStats.UnLock;
+        Server.fStats.Lock;
+        try
+          sessionstat := fAuthSession.fMethods[MethodIndex];
+          if sessionstat = nil then
+          begin
+            sessionstat := TSynMonitorInputOutput.Create(m^.Name);
+            fAuthSession.fMethods[MethodIndex] := sessionstat;
           end;
+        finally
+          Server.fStats.UnLock;
         end;
-        sessionstat := fAuthSession.fMethods[MethodIndex];
-        if sessionstat = nil then
-        begin
-          Server.fStats.Lock;
-          try
-            sessionstat := fAuthSession.fMethods[MethodIndex];
-            if sessionstat = nil then
-            begin
-              sessionstat := TSynMonitorInputOutput.Create(Name);
-              fAuthSession.fMethods[MethodIndex] := sessionstat;
-            end;
-          finally
-            Server.fStats.UnLock;
-          end;
-        end;
-        StatsFromContext(sessionstat, timstop);
-        // mlSessions stats are not yet tracked per Client
       end;
+      StatsFromContext(sessionstat, timstop);
+      // mlSessions stats are not yet tracked per Client
     end;
   end;
   LockedInc64(@Server.fStats.fServiceMethod);
@@ -3139,31 +3137,31 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
       end;
     end;
 
+  var
+    s: TServiceFactoryServer;
   begin
-    with TServiceFactoryServer(Service) do
-    begin
-      // XML needs a full JSON object as input
-      fForceServiceResultAsXMLObject := fForceServiceResultAsXMLObject or
-                                         ResultAsXMLObject;
-      fForceServiceResultAsJsonObject := fForceServiceResultAsJsonObject or
-                                          ResultAsJsonObject or
-                                          ResultAsJsonObjectWithoutResult or
-                                          ForceServiceResultAsXMLObject;
-      fForceServiceResultAsJsonObjectWithoutResult :=
-        ForceServiceResultAsJsonObject and
-        (InstanceCreation in SERVICE_IMPLEMENTATION_NOID) and
-        ResultAsJsonObjectWithoutResult;
-      if fForceServiceResultAsXMLObjectNameSpace = '' then
-        fForceServiceResultAsXMLObjectNameSpace := ResultAsXMLObjectNameSpace;
-    end;
+    s := TServiceFactoryServer(Service);
+    // XML needs a full JSON object as input
+    fForceServiceResultAsXMLObject := fForceServiceResultAsXMLObject or
+                                      s.ResultAsXMLObject;
+    fForceServiceResultAsJsonObject := fForceServiceResultAsJsonObject or
+                                       s.ResultAsJsonObject or
+                                       s.ResultAsJsonObjectWithoutResult or
+                                       ForceServiceResultAsXMLObject;
+    fForceServiceResultAsJsonObjectWithoutResult :=
+      ForceServiceResultAsJsonObject and
+      (s.InstanceCreation in SERVICE_IMPLEMENTATION_NOID) and
+      s.ResultAsJsonObjectWithoutResult;
+    if fForceServiceResultAsXMLObjectNameSpace = '' then
+      fForceServiceResultAsXMLObjectNameSpace := s.ResultAsXMLObjectNameSpace;
     LockedInc64(@Server.fStats.fServiceInterface);
     case ServiceMethodIndex of
       ord(imFree):
         // {"method":"_free_", "params":[], "id":1234}
-        if not (Service.InstanceCreation in [sicClientDriven..sicPerThread]) then
+        if not (s.InstanceCreation in [sicClientDriven..sicPerThread]) then
         begin
           Error('_free_ is not compatible with %',
-            [ToText(Service.InstanceCreation)^]);
+            [ToText(s.InstanceCreation)^]);
           exit;
         end;
       ord(imContract):
@@ -3172,14 +3170,14 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
           if (Call^.InBody <> '') and
              (Call^.InBody <> '[]') then
             Server.AssociatedServices.RegisterFromClientJson(Call^.InBody);
-          ServiceResult('contract', Service.ContractExpected);
+          ServiceResult('contract', s.ContractExpected);
           exit; // "id":0 for this method -> no instance was created
         end;
       ord(imSignature):
         begin
           // "method":"_signature_" to retrieve the implementation signature
           if TServiceContainerServer(Server.Services).PublishSignature then
-            ServiceResult('signature', Service.Contract)
+            ServiceResult('signature', s.Contract)
           else
             // "id":0 for this method -> no instance was created
             Error('Not allowed to publish signature');
@@ -3187,10 +3185,10 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
         end;
       ord(imInstance):
         // "method":"_instance_" from TServiceFactoryClient.CreateFakeInstance
-        if not (Service.InstanceCreation in [sicClientDriven]) then
+        if not (s.InstanceCreation in [sicClientDriven]) then
         begin
           Error('_instance_ is not compatible with %',
-            [ToText(Service.InstanceCreation)^]);
+            [ToText(s.InstanceCreation)^]);
           exit;
         end
         else if ServiceInstanceID <> 0 then
@@ -3214,7 +3212,7 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
       exit;
     end;
     // if we reached here, we have to run the service method
-    TServiceFactoryServer(Service).ExecuteMethod(self);
+    s.ExecuteMethod(self);
   end;
 
 var
@@ -3229,14 +3227,13 @@ begin
       ServiceMethod := @Service.InterfaceFactory.Methods[m];
     ServiceExecution := @Service.Execution[m];
     ServiceExecutionOptions := ServiceExecution.Options;
-    with PInterfaceMethod(ServiceMethod)^ do
-    begin
-      // log from Ctxt.ServiceExecutionOptions
-      if [imdConst, imdVar] * HasSpiParams <> [] then
-        include(fServiceExecutionOptions, optNoLogInput);
-      if [imdVar, imdOut, imdResult] * HasSpiParams <> [] then
-        include(fServiceExecutionOptions, optNoLogOutput);
-    end;
+    // log from Ctxt.ServiceExecutionOptions
+    if [imdConst, imdVar] *
+         PInterfaceMethod(ServiceMethod)^.HasSpiParams <> [] then
+      include(fServiceExecutionOptions, optNoLogInput);
+    if [imdVar, imdOut, imdResult] *
+         PInterfaceMethod(ServiceMethod)^.HasSpiParams <> [] then
+      include(fServiceExecutionOptions, optNoLogOutput);
     // log method call and parameter values (if worth it)
     if (Log <> nil) and
        (sllServiceCall in Log.GenericFamily.Level) and
@@ -3358,6 +3355,7 @@ var
   sqlselect, sqlwhere, sqlwherecount, sqlsort, sqldir, sql: RawUtf8;
   sqlstartindex, sqlresults, sqltotalrowcount: integer;
   nonstandardsqlparameter, nonstandardsqlwhereparameter: boolean;
+  paging: PRestServerUriPagingParameters;
   sqlisselect: boolean;
   resultlist: TOrmTable;
   tableindexes: TIntegerDynArray;
@@ -3540,28 +3538,27 @@ begin
               sqlstartindex := 0;
               sqlresults := 0;
               if Parameters^ <> #0 then
-                with Server.UriPagingParameters do
-                begin
-                  nonstandardsqlparameter :=
-                    Select <> PAGINGPARAMETERS_YAHOO.Select;
-                  nonstandardsqlwhereparameter :=
-                    Where <> PAGINGPARAMETERS_YAHOO.Where;
-                  repeat
-                    UrlDecodeValue(Parameters, Sort, sqlsort);
-                    UrlDecodeValue(Parameters, Dir, sqldir);
-                    UrlDecodeInteger(Parameters, StartIndex, sqlstartindex);
-                    UrlDecodeInteger(Parameters, Results, sqlresults);
-                    UrlDecodeValue(Parameters, Select, sqlselect);
-                    if nonstandardsqlparameter and
-                       (sqlselect = '') then
-                      UrlDecodeValue(Parameters, PAGINGPARAMETERS_YAHOO.Select, sqlselect);
-                    if nonstandardsqlwhereparameter and
-                       ({%H-}sqlwhere = '') then
-                      UrlDecodeValue(Parameters, PAGINGPARAMETERS_YAHOO.Where, sqlwhere);
-                    UrlDecodeValue(Parameters, Server.UriPagingParameters.Where,
-                      sqlwhere, @Parameters);
-                  until Parameters = nil;
-                end;
+              begin
+                paging := @Server.UriPagingParameters;
+                nonstandardsqlparameter :=
+                  paging^.Select <> PAGINGPARAMETERS_YAHOO.Select;
+                nonstandardsqlwhereparameter :=
+                  paging^.Where <> PAGINGPARAMETERS_YAHOO.Where;
+                repeat
+                  UrlDecodeValue(Parameters, paging^.Sort, sqlsort);
+                  UrlDecodeValue(Parameters, paging^.Dir, sqldir);
+                  UrlDecodeInteger(Parameters, paging^.StartIndex, sqlstartindex);
+                  UrlDecodeInteger(Parameters, paging^.Results, sqlresults);
+                  UrlDecodeValue(Parameters, paging^.Select, sqlselect);
+                  if nonstandardsqlparameter and
+                     (sqlselect = '') then
+                    UrlDecodeValue(Parameters, PAGINGPARAMETERS_YAHOO.Select, sqlselect);
+                  if nonstandardsqlwhereparameter and
+                     ({%H-}sqlwhere = '') then
+                    UrlDecodeValue(Parameters, PAGINGPARAMETERS_YAHOO.Where, sqlwhere);
+                  UrlDecodeValue(Parameters, paging^.Where, sqlwhere, @Parameters);
+                until Parameters = nil;
+              end;
               // let SQLite3 do the sort and the paging (will be ignored by Static)
               sqlwherecount := sqlwhere; // "select count(*)" won't expect any ORDER
               if (sqlsort <> '') and
@@ -4287,6 +4284,7 @@ end;
 procedure TRestServerRoutingRest.UriDecodeSoaByInterface;
 var
   i: PtrInt;
+  m: PServiceContainerInterfaceMethod;
   method, clientdrivenid: RawUtf8;
 begin
   if (Table = nil) and
@@ -4297,16 +4295,16 @@ begin
     // check URI as '/Model/Interface.Method[/ClientDrivenID]'
     i := Server.Services.InterfaceMethods.FindHashed(Uri);
     if i >= 0 then // no specific message: it may be a valid request
-      with Server.Services.InterfaceMethod[i] do
-      begin
-        Service := TServiceFactoryServer(InterfaceService);
-        ServiceMethodIndex := InterfaceMethodIndex;
-        fServiceListInterfaceMethodIndex := i;
-        i := ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
-        if i >= 0 then
-          ServiceMethod := @Service.InterfaceFactory.Methods[i];
-        ServiceInstanceID := GetInteger(pointer(UriBlobFieldName));
-      end
+    begin
+      m := @Server.Services.InterfaceMethod[i];
+      Service := TServiceFactoryServer(m^.InterfaceService);
+      ServiceMethodIndex := m^.InterfaceMethodIndex;
+      fServiceListInterfaceMethodIndex := i;
+      i := ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
+      if i >= 0 then
+        ServiceMethod := @Service.InterfaceFactory.Methods[i];
+      ServiceInstanceID := GetInteger(pointer(UriBlobFieldName));
+    end
     else if UriBlobFieldName <> '' then
     begin
       // check URI as '/Model/Interface/Method[/ClientDrivenID]''
@@ -4336,34 +4334,37 @@ var
 
   procedure DecodeUriParametersIntoJson(const input: TRawUtf8DynArray);
   var
-    a, i, ilow: PtrInt;
+    arg, i, ilow: PtrInt;
     WR: TJsonWriter;
     argdone: boolean;
+    m: PInterfaceMethod;
+    a: PInterfaceMethodArgument;
     temp: TTextWriterStackBuffer;
   begin
     WR := TJsonWriter.CreateOwnedStream(temp);
     try // convert URI parameters into the expected ordered json array
       WR.Add('[');
-      with PInterfaceMethod(ServiceMethod)^ do
+      m := ServiceMethod;
+      ilow := 0;
+      a := @m^.Args[m^.ArgsInFirst];
+      for arg := m^.ArgsInFirst to m^.ArgsInLast do
       begin
-        ilow := 0;
-        for a := ArgsInFirst to ArgsInLast do
-          with Args[a] do
-            if ValueDirection <> imdOut then
+        if a^.ValueDirection <> imdOut then
+        begin
+          argdone := false;
+          for i := ilow to high(input) shr 1 do // search argument in URI
+            if IdemPropNameU(input[i * 2], @a^.ParamName^[1], ord(a^.ParamName^[0])) then
             begin
-              argdone := false;
-              for i := ilow to high(input) shr 1 do // search argument in URI
-                if IdemPropNameU(input[i * 2], @ParamName^[1], ord(ParamName^[0])) then
-                begin
-                  AddValueJson(WR, input[i * 2 + 1]); // will add "" if needed
-                  if i = ilow then
-                    inc(ilow); // optimistic in-order search, but allow any order
-                  argdone := true;
-                  break;
-                end;
-              if not argdone then
-                AddDefaultJson(WR); // allow missing argument (and add ',')
+              a^.AddValueJson(WR, input[i * 2 + 1]); // will add "" if needed
+              if i = ilow then
+                inc(ilow); // optimistic in-order search, but allow any order
+              argdone := true;
+              break;
             end;
+          if not argdone then
+            a^.AddDefaultJson(WR); // allow missing argument (and add ',')
+        end;
+        inc(a);
       end;
       WR.CancelLastComma;
       WR.Add(']');
@@ -4802,13 +4803,13 @@ begin
     body.AddValue('algo', RawUtf8ToVariant(fAlgoName));
   with Session.User do
     body.AddNameValuesToObject([
-      'logonid', IDValue,
-      'logonname', LogonName,
+      'logonid',      IDValue,
+      'logonname',    LogonName,
       'logondisplay', DisplayName,
-      'logongroup', GroupRights.IDValue,
-      'timeout', GroupRights.SessionTimeout,
-      'server', Executable.ProgramName,
-      'version', Executable.Version.DetailedOrVoid]);
+      'logongroup',   GroupRights.IDValue,
+      'timeout',      GroupRights.SessionTimeout,
+      'server',       Executable.ProgramName,
+      'version',      Executable.Version.DetailedOrVoid]);
   Ctxt.ReturnsJson(variant(body), HTTP_SUCCESS, false, twJsonEscape, false, header);
 end;
 

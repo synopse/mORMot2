@@ -1043,10 +1043,17 @@ function BinToBase64Line(sp: PAnsiChar; len: PtrUInt; const Prefix: RawUtf8 = ''
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC_C prefix (UTF-8 encoded \uFFF0 special code)
 function BinToBase64WithMagic(const data: RawByteString): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC_C prefix (UTF-8 encoded \uFFF0 special code)
 function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from binary data into Base64 encoded UTF-8 text
+// with JSON_BASE64_MAGIC_C prefix (UTF-8 encoded \uFFF0 special code)
+procedure BinToBase64WithMagic(Data: pointer; DataLen: integer;
+  var Result: RawUtf8); overload;
 
 /// raw function for efficient binary to Base64 encoding of the main block
 // - don't use this function, but rather the BinToBase64() overloaded functions
@@ -6111,7 +6118,7 @@ begin
 end;
 
 function Base64Decode(sp, rp: PAnsiChar; len: PtrInt): boolean;
-{$ifdef FPC} inline;{$endif}
+  {$ifdef FPC} inline;{$endif}
 var
   tab: PBase64Dec; // use local register
 begin
@@ -6366,26 +6373,24 @@ begin
 end;
 
 function BinToBase64WithMagic(const data: RawByteString): RawUtf8;
-var
-  len: integer;
 begin
-  result := '';
-  len := length(data);
-  if len = 0 then
-    exit;
-  FastSetString(result, nil, ((len + 2) div 3) * 4 + 3);
-  PInteger(pointer(result))^ := JSON_BASE64_MAGIC_C;
-  Base64Encode(PAnsiChar(pointer(result)) + 3, pointer(data), len);
+  BinToBase64WithMagic(pointer(data), length(data), result);
 end;
 
 function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUtf8;
 begin
-  result := '';
+  BinToBase64WithMagic(Data, DataLen, result);
+end;
+
+procedure BinToBase64WithMagic(Data: pointer; DataLen: integer;
+  var Result: RawUtf8);
+begin
+  Result := '';
   if DataLen <= 0 then
     exit;
-  FastSetString(result, nil, ((DataLen + 2) div 3) * 4 + 3);
-  PInteger(pointer(result))^ := JSON_BASE64_MAGIC_C;
-  Base64Encode(PAnsiChar(pointer(result)) + 3, Data, DataLen);
+  FastSetString(Result, nil, ((DataLen + 2) div 3) * 4 + 3);
+  PInteger(pointer(Result))^ := JSON_BASE64_MAGIC_C;
+  Base64Encode(PAnsiChar(pointer(Result)) + 3, Data, DataLen);
 end;
 
 function IsBase64Internal(sp: PAnsiChar; len: PtrInt; dec: PBase64Dec): boolean;

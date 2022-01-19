@@ -76,7 +76,7 @@ type
     amUnlocked,
     amLocked,
     amBackgroundThread,
-    amBackgroundORMSharedThread,
+    amBackgroundOrmSharedThread,
     amMainThread);
 
   /// used to store the execution parameters for a TRest instance
@@ -91,6 +91,7 @@ type
     /// finalize the memory structure, and the associated background thread
     destructor Destroy; override;
   end;
+  PRestAcquireExecution = ^TRestAcquireExecution;
 
   /// define how a TRest class may execute its ORM and SOA operations
   TRestAcquireExecutions =
@@ -598,7 +599,7 @@ type
     // ! aServer.AcquireExecutionMode[execOrmGet] := am***;
     // ! aServer.AcquireExecutionMode[execOrmWrite] := am***;
     // here, safe blocking am*** modes are any mode but amUnlocked, i.e. either
-    // amLocked, amBackgroundThread, amBackgroundORMSharedThread or amMainThread
+    // amLocked, amBackgroundThread, amBackgroundOrmSharedThread or amMainThread
     property AcquireExecutionMode[Cmd: TRestServerUriContextCommand]: TRestServerAcquireMode
       read GetAcquireExecutionMode write SetAcquireExecutionMode;
     /// the time (in mili seconds) to try locking internal commands of this class
@@ -615,7 +616,7 @@ type
     // - amBackgroundThread will execute the write methods in a queue, in a
     // dedicated unique thread (which can be convenient, especially for
     // external database transaction process)
-    // - amBackgroundORMSharedThread will execute all ORM methods in a queue, in
+    // - amBackgroundOrmSharedThread will execute all ORM methods in a queue, in
     // a dedicated unique thread, shared for both execOrmWrite and execOrmGet,
     // but still dedicated for execSoaByMethod and execSoaByInterface
     // - a slower alternative to amBackgroundThread may be amMainThread
