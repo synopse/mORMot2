@@ -399,6 +399,9 @@ begin
       check(R.FieldInt(0) = i1 mod i2);
       R.Reset;
     end;
+  R.Bind([12037, 239]);
+  check(R.Step = SQLITE_ROW);
+  check(R.FieldInt(0) = 12037 mod 239);
   R.Close;
   SoundexValues[0] := 'bonjour';
   SoundexValues[1] := 'bonchour';
@@ -459,7 +462,10 @@ begin
   JS := Demo.ExecuteJson(Req); // get result in JSON format
   FileFromString(JS, WorkDir + 'Test1.json');
   CheckHash(JS, $40C1649A, 'ExecuteJson');
-  DV := Demo.ExecuteDocVariant(Req);
+  R.Prepare(Demo.DB, 'SELECT * FROM People WHERE LastName=? ORDER BY FirstName');
+  R.Bind([RawUtf8('M' + _uF4 + 'net')]);
+  R.ExecuteDocVariant(Demo.DB, '', DV);
+  R.Close;
   CheckEqual(_Safe(DV).Count, 1001);
   JS := _Safe(DV).ToNonExpandedJson;
   FileFromString(JS, WorkDir + 'Test2.json');

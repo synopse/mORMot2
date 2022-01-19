@@ -4451,6 +4451,13 @@ type
     // - this function will use copy-on-write assignment of Value, with no memory
     // allocation, then let sqlite3InternalFreeRawByteString release the variable
     procedure Bind(Param: integer; const Value: RawUtf8); overload;
+    /// bind the parameters in-order, from an open argument array
+    // - parameters marked as ? should be specified as method parameter in Params[]
+    // - BLOB parameters can be bound with this method, when set after encoding
+    // via BinToBase64WithMagic() call
+    // - TDateTime parameters can be bound with this method, either directly
+    // as ISO-8601 text, or encoded via DateToSql() or DateTimeToSql()
+    procedure Bind(const Params: array of const); overload;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESqlite3Exception on any error
@@ -7652,6 +7659,60 @@ begin
       sqlite3InternalFreeRawByteString);
   end;
   sqlite3_check(RequestDB, res, 'bind_text');
+end;
+
+procedure TSqlRequest.Bind(const Params: array of const);
+var
+  i: PtrInt;
+  c: integer;
+  tmp: RawUtf8;
+begin
+  // same logic than TSqlDBStatement.Bind(array of const)
+  for i := 1 to high(Params) + 1 do
+    with Params[i - 1] do
+      case VType of
+        vtString:
+          BindU(i, @VString^[1], ord(VString^[0]));
+        vtAnsiString:
+          if VAnsiString = nil then
+            Bind(i, '')
+          else
+          begin
+            c := PInteger(VAnsiString)^ and $00ffffff;
+            if c = JSON_BASE64_MAGIC_C then
+            begin
+              Base64ToBin(PAnsiChar(VAnsiString) + 3,
+                length(RawUtf8(VAnsiString)) - 3, RawByteString(tmp));
+              BindBlob(i, tmp);
+            end
+            else if c = JSON_SQLDATE_MAGIC_C then // store as ISO-8601 text
+              BindU(i, PUtf8Char(VAnsiString) + 3, length(RawUtf8(VAnsiString)) - 3)
+            else
+              Bind(i, RawUtf8(VAnsiString));
+          end;
+        vtBoolean:
+          if VBoolean then // normalize
+            Bind(i, 1)
+          else
+            Bind(i, 0);
+        vtInteger:
+          Bind(i, VInteger);
+        vtInt64:
+          Bind(i, VInt64^);
+        {$ifdef FPC}
+        vtQWord:
+          Bind(i, VQWord^);
+        {$endif FPC}
+        vtCurrency:
+          Bind(i, CurrencyToDouble(VCurrency));
+        vtExtended:
+          Bind(i, VExtended^);
+      else
+        begin
+          VarRecToUtf8(Params[i], tmp);
+          Bind(i, tmp); // bind e.g. vtPChar/vtUnicodeString as UTF-8
+        end;
+      end;
 end;
 
 const
