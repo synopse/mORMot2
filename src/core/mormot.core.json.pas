@@ -5703,7 +5703,7 @@ begin
     if BEnd - B > integer(n + 1) shl 2 then
     begin
       // will fit in available space in Buf -> fast in-buffer Base64 encoding
-      n := Base64EncodeMain(@B[1], P, Len);
+      n := Base64EncodeMain(@B[1], P, Len); // may use AVX2 on FPC x86_64
       inc(B, n * 4);
       inc(P, n * 3);
     end
