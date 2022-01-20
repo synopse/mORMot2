@@ -139,7 +139,6 @@ function NeedsJsonEscape(const Text: RawUtf8): boolean; overload;
 /// returns TRUE if the given text buffers would be escaped when written as JSON
 // - e.g. if contains " or \ characters, as defined by
 // http://www.ietf.org/rfc/rfc4627.txt
-
 function NeedsJsonEscape(P: PUtf8Char): boolean; overload;
 
 /// returns TRUE if the given text buffers would be escaped when written as JSON
@@ -5713,7 +5712,6 @@ begin
       FlushToStream;
       while Len > 0 do
       begin
-        // length(buf) const -> so is ((length(buf)-4)shr2 )*3
         n := ((fTempBufSize - 4) shr 2) * 3;
         if Len < n then
           n := Len;
@@ -7537,7 +7535,7 @@ begin
   TOnRttiJsonRead(TRttiJson(Ctxt.Info).fJsonReader)(Ctxt, Data);
 end;
 
-function _JL_DynArray_FromResults(Data: PAnsiChar; var Ctxt: TJsonParserContext): boolean;
+function _JL_DynArray_FromResults(Data: PPointer; var Ctxt: TJsonParserContext): boolean;
 var
   fieldcount, rowcount, r, f: PtrInt;
   arrinfo, iteminfo: TRttiCustom;
@@ -7571,7 +7569,7 @@ begin
     if (prop = nil) and
        (itemInfo.ValueRtlClass = vcObjectWithID) and
        (PInteger(Ctxt.Value)^ and $dfdfdfdf =
-                 ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
+         ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
        (PWord(Ctxt.Value + 4)^ and $ffdf = ord('D')) then
       prop := @iteminfo.Props.List[0]; // 'RowID' = first TObjectWithID field
     if (prop = nil) and
@@ -7580,18 +7578,18 @@ begin
     props[f] := prop;
   end;
   // 3. fill all nested items from incoming values
-  Data := DynArrayNew(PPointer(Data), rowcount, arrinfo.Cache.ItemSize); // alloc
+  Data := DynArrayNew(Data, rowcount, arrinfo.Cache.ItemSize); // alloc
   for r := 1 to rowcount do
   begin
     if iteminfo.Kind = rkClass then
     begin
       Ctxt.Info := iteminfo; // as in _JL_RttiCustom()
-      PPointer(Data)^ := TRttiJson(iteminfo).fClassNewInstance(iteminfo);
-      item := PPointer(Data)^; // class are accessed by reference
+      Data^ := TRttiJson(iteminfo).fClassNewInstance(iteminfo);
+      item := Data^; // class are accessed by reference
       if (rcfHookRead in iteminfo.Flags) and
          TCCHook(item).RttiBeforeReadObject(@Ctxt) then
       begin
-        inc(PPointer(Data));
+        inc(Data);
         if Ctxt.Valid then
           continue
         else
@@ -7599,9 +7597,9 @@ begin
       end;
     end
     else
-      item := Data; // record (or object) are stored by value
+      item := pointer(Data); // record (or object) are stored by value
     for f := 0 to fieldcount - 1 do
-      if props[f] = nil then
+      if props[f] = nil then // skip jpoIgnoreUnknownProperty
         Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject)
       else if not JsonLoadProp(item, props[f]^, Ctxt) then
       begin
@@ -7609,13 +7607,12 @@ begin
         break;
       end
       else if Ctxt.EndOfObject = '}' then
-      if Ctxt.EndOfObject = '}' then
         break;
     if Ctxt.Json = nil then
         break;
     if rcfHookRead in iteminfo.Flags then
       TCCHook(item).RttiAfterReadObject;
-    inc(Data, arrinfo.Cache.ItemSize);
+    inc(PAnsiChar(Data), arrinfo.Cache.ItemSize);
   end;
   Ctxt.Valid := false;
   if Ctxt.Json <> nil then
@@ -7644,7 +7641,7 @@ begin
   Ctxt.Json := GotoNextNotSpace(Ctxt.Json);
   if (PCardinal(Ctxt.Json)^ <> ord('{') + ord('"') shl 8 + ord('f') shl 16 +
       ord('i') shl 24) or // FIELDCOUNT_PATTERN = '{"fieldCount":...
-    not _JL_DynArray_FromResults(Data, Ctxt) then
+    not _JL_DynArray_FromResults(arr, Ctxt) then
   if not Ctxt.ParseArray then
     // detect void (i.e. []) or invalid array
     exit
