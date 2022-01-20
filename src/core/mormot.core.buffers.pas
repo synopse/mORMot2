@@ -1116,6 +1116,10 @@ function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt): RawByteString; overload;
 // - will check supplied text is a valid Base64 encoded stream
 function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var data: RawByteString): boolean; overload;
 
+/// fast conversion from Base64 encoded text into binary data
+// - will check supplied text is a valid Base64 encoded stream
+function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; out data: TBytes): boolean; overload;
+
 /// raw function for efficient binary to Base64 encoding of the main block
 // - don't use this function, but rather the BinToBase64() overloaded functions
 // - on FPC x86_64, detect and use AVX2 asm for very high throughput (11GB/s)
@@ -6501,11 +6505,34 @@ begin
   end;
 end;
 
+function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; out data: TBytes): boolean;
+var
+  resultLen: PtrInt;
+begin
+  resultLen := Base64ToBinLength(sp, len);
+  if resultLen <> 0 then
+  begin
+    SetLength(data, resultLen);
+    if ConvertBase64ToBin[sp[len - 2]] >= 0 then
+      if ConvertBase64ToBin[sp[len - 1]] >= 0 then
+        // keep len as it is
+      else
+        dec(len)
+    else
+      dec(len, 2); // adjust for Base64AnyDecode() algorithm
+    result := Base64DecodeMain(sp, pointer(data), len); // may use AVX2
+    if not result then
+      data := nil;
+  end
+  else
+    result := false;
+end;
+
 function Base64ToBin(sp: PAnsiChar; len: PtrInt; var blob: TSynTempBuffer): boolean;
 begin
   blob.Init(Base64ToBinLength(sp, len));
   result := (blob.len > 0) and
-            Base64Decode(sp, blob.buf, len shr 2);
+            Base64Decode(sp, blob.buf, len shr 2); // may use AVX2
 end;
 
 function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt
@@ -6514,7 +6541,7 @@ begin
   // nofullcheck is just ignored and deprecated
   result := (bin <> nil) and
             (Base64ToBinLength(base64, base64len) = binlen) and
-            Base64Decode(base64, bin, base64len shr 2);
+            Base64Decode(base64, bin, base64len shr 2); // may use AVX2
 end;
 
 function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt
@@ -6522,6 +6549,7 @@ function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt
 begin
   result := Base64ToBin(pointer(base64), bin, length(base64), binlen);
 end;
+
 
 { --------- Base64 URI encoding/decoding }
 
@@ -7017,17 +7045,8 @@ begin
         exit; // valid hexa data
     end
     else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC_C) and
-            IsBase64(@P[3], Len - 3) then
-    begin
-      // Base64 encoded content ('\uFFF0base64encodedbinary')
-      inc(P, 3);
-      dec(Len, 3);
-      LenResult := Base64ToBinLength(pointer(P), Len);
-      SetLength(result, LenResult);
-      if LenResult > 0 then
-        Base64Decode(pointer(P), pointer(result), Len shr 2);
-      exit;
-    end;
+            Base64ToBinSafe(@P[3], Len - 3, result) then
+       exit; // safe decode Base64 content ('\uFFF0base64encodedbinary')
   // TEXT format
   SetLength(result, Len);
   MoveFast(P^, pointer(result)^, Len);
