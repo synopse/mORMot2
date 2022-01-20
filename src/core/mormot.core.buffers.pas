@@ -4102,7 +4102,7 @@ end;
 procedure TBufferWriter.Setup(aStream: TStream; aBuf: pointer; aLen: integer);
 begin
   fBufLen := aLen;
-  fBufLen16 := fBufLen - 16;
+  fBufLen16 := aLen - 16;
   fBuffer := aBuf;
   fStream := aStream;
 end;
@@ -4110,10 +4110,10 @@ end;
 constructor TBufferWriter.Create(aStream: TStream; BufLen: integer);
 begin
   if BufLen > 1 shl 22 then
-    fBufLen := 1 shl 22 // 4 MB sounds right enough
+    BufLen := 1 shl 22 // 4 MB sounds right enough
   else if BufLen < 128 then
     raise EBufferException.CreateUtf8('%.Create(BufLen=%)', [self, BufLen]);
-  GetMem(fBufferInternal, fBufLen);
+  GetMem(fBufferInternal, BufLen);
   Setup(aStream, fBufferInternal, BufLen);
 end;
 
