@@ -3285,13 +3285,15 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL;
 
 procedure TrimDualSpaces(var s: RawUtf8);
 var
-  i: integer;
+  f, i: integer;
 begin
+  f := 1;
   repeat
-    i := PosEx('  ', s);
+    i := PosEx('  ', s, f);
     if i = 0 then
       break;
     delete(s, i, 1); // dual space -> single space
+    f := i;
   until false;
   s := TrimU(s);
 end;
@@ -3434,20 +3436,19 @@ begin
   begin
     if OSVersionInfo.wProductType <> VER_NT_WORKSTATION then
     begin
-      // Server edition
+      // Server edition - see https://shorturl.at/aryAY for build numbers
       inc(Vers, 2); // e.g. wEight -> wServer2012
       if Vers = wServer2016 then
+        // we identify only LTSC server versions
         if OSVersionInfo.dwBuildNumber >= 17763 then
-          if OSVersionInfo.dwBuildNumber >= 20285 then
-            // https://shorturl.at/asCQ2
+          if OSVersionInfo.dwBuildNumber >= 20285 then // released as 20348
             Vers := wServer2022_64
           else
-            // https://stackoverflow.com/q/53393150
             Vers := wServer2019_64;
     end
     else if (Vers = wTen) and
             (OSVersionInfo.dwBuildNumber >= 22000) then
-      // waiting for an official mean of Windows 11 identification
+      // Windows 11 has always 22000.### build https://shorturl.at/fntPS
       Vers := wEleven;
     if (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64) and
        (Vers < wServer2019_64) then

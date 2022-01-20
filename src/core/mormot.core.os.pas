@@ -4256,7 +4256,7 @@ begin
   result := (FileName <> '') and
             (FileName[1] <> '/') and
             (PosEx('..', FileName) = 0) and
-            (PosEx(':', FileName) = 0) and
+            (PosExChar(':', FileName) = 0) and
             (PosEx('\\', FileName) = 0);
 end;
 
