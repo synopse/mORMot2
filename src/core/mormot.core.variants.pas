@@ -8776,8 +8776,8 @@ begin
       else
         // append binary file as an object, with Base64-encoded data
         Doc.AddValue(name, _ObjFast([
-          'data', BinToBase64(Content),
-          'filename', FileName,
+          'data',        BinToBase64(Content),
+          'filename',    FileName,
           'contenttype', ContentType]));
 end;
 

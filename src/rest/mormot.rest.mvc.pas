@@ -2323,9 +2323,9 @@ end;
 
 procedure TMvcApplication.GetMvcInfo(out info: variant);
 begin
-  info := _ObjFast(['name', fFactory.InterfaceTypeInfo^.RawName,
-                    'mORMot', SYNOPSE_FRAMEWORK_VERSION,
-                    'root', RestModel.Model.Root,
+  info := _ObjFast(['name',    fFactory.InterfaceTypeInfo^.RawName,
+                    'mORMot',  SYNOPSE_FRAMEWORK_VERSION,
+                    'root',    RestModel.Model.Root,
                     'methods', ContextFromMethods(fFactory)]);
 end;
 
