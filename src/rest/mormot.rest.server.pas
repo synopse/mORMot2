@@ -4251,14 +4251,17 @@ procedure TRestServerUriContext.ReturnFileFromFolder(
   const DefaultFileName: TFileName; const Error404Redirect: RawUtf8;
   CacheControlMaxAge: integer);
 var
+  fn: RawUtf8;
   fileName: TFileName;
 begin
   if UriBlobFieldName = '' then
     fileName := DefaultFileName
-  else if not SafeFileNameU(UriBlobFieldName) then
-    fileName := ''
   else
-    Utf8ToFileName(StringReplaceChars(UriBlobFieldName, '/', PathDelim), filename);
+  begin
+    fn := StringReplaceChars(UriBlobFieldName, '/', PathDelim);
+    if SafeFileNameU(fn) then
+      Utf8ToFileName(fn, filename);
+  end;
   inherited ReturnFileFromFolder(FolderName, Handle304NotModified,
     fileName, Error404Redirect, CacheControlMaxAge);
 end;
