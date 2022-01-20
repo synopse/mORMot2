@@ -793,6 +793,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalWrite(Data: pointer; DataLen: PtrInt);
     procedure FlushAndWrite(Data: pointer; DataLen: PtrInt);
+    procedure Setup(aStream: TStream; aBuf: pointer; aLen: integer);
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize the buffer, and specify a file handle to use for writing
     // - define an internal buffer of the specified size
@@ -4093,26 +4095,28 @@ begin
   fInternalStream := true;
 end;
 
+procedure TBufferWriter.Setup(aStream: TStream; aBuf: pointer; aLen: integer);
+begin
+  fBufLen := aLen;
+  fBufLen16 := fBufLen - 16;
+  fBuffer := aBuf;
+  fStream := aStream;
+end;
+
 constructor TBufferWriter.Create(aStream: TStream; BufLen: integer);
 begin
   if BufLen > 1 shl 22 then
     fBufLen := 1 shl 22 // 4 MB sounds right enough
   else if BufLen < 128 then
     raise EBufferException.CreateUtf8('%.Create(BufLen=%)', [self, BufLen]);
-  fBufLen := BufLen;
-  fBufLen16 := fBufLen - 16;
-  fStream := aStream;
   GetMem(fBufferInternal, fBufLen);
-  fBuffer := fBufferInternal;
+  Setup(aStream, fBufferInternal, BufLen);
 end;
 
 constructor TBufferWriter.Create(aStream: TStream;
   aTempBuf: pointer; aTempLen: integer);
 begin
-  fBufLen := aTempLen;
-  fBufLen16 := fBufLen - 16;
-  fBuffer := aTempBuf;
-  fStream := aStream;
+  Setup(aStream, aTempBuf, aTempLen);
 end;
 
 constructor TBufferWriter.Create(aClass: TStreamClass; BufLen: integer);
@@ -4124,13 +4128,14 @@ end;
 constructor TBufferWriter.Create(aClass: TStreamClass;
   aTempBuf: pointer; aTempLen: integer);
 begin
-  Create(aClass.Create, aTempBuf, aTempLen);
+  Setup(aClass.Create, aTempBuf, aTempLen);
   fInternalStream := true;
 end;
 
 constructor TBufferWriter.Create(const aStackBuffer: TTextWriterStackBuffer);
 begin
-  Create(TRawByteStringStream, @aStackBuffer, SizeOf(aStackBuffer));
+  Setup(TRawByteStringStream.Create, @aStackBuffer, SizeOf(aStackBuffer));
+  fInternalStream := true;
 end;
 
 destructor TBufferWriter.Destroy;
@@ -6064,7 +6069,7 @@ const
 var
   /// a conversion table from Base64 text into binary data
   // - used by Base64ToBin/IsBase64 functions
-  // - contains -1 for invalid char, -2 for '=', 0..63 for b64enc[] chars
+  // - has -1 (255) for invalid char, -2 (254) for '=', 0..63 for valid char
   ConvertBase64ToBin, ConvertBase64UriToBin: TBase64Dec;
 
 
@@ -6073,7 +6078,7 @@ var
 function Base64AnyDecode(const decode: TBase64Dec; sp, rp: PAnsiChar; len: PtrInt): boolean;
 var
   c, ch: PtrInt;
-begin
+begin // FPC emits suboptimal asm but Base64DecodeMainAvx2() will run on server
   result := false;
   while len >= 4 do
   begin
@@ -6148,362 +6153,17 @@ begin
   else
     dec(len, 2); // Base64AnyDecode() algorithm ignores the trailing '='
   {$ifdef ASMX64AVX}
-  result := Base64DecodeMain(sp, rp, len);
+  result := Base64DecodeMain(sp, rp, len); // may be Base64DecodeMainAvx2
   {$else}
   result := Base64AnyDecode(tab^, sp, rp, len);
   {$endif ASMX64AVX}
 end;
 
-{$ifdef ASMX86}
-
-function Base64EncodeMainPas(rp, sp: PAnsiChar; len: cardinal): integer;
-  {$ifdef FPC}nostackframe; assembler; {$endif}
-asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
-        push    ebx
-        push    esi
-        push    edi
-        push    ebp
-        mov     ebx, edx
-        mov     esi, eax
-        mov     eax, ecx
-        mov     edx, 1431655766 // faster eax=len div 3 using reciprocal
-        sar     ecx, 31
-        imul    edx
-        mov     eax, edx
-        sub     eax, ecx
-        mov     edi, offset b64enc
-        mov     ebp, eax
-        push    eax
-        jz      @z
-        // edi=b64enc[] ebx=sp esi=rp ebp=len div 3
-        xor     eax, eax
-        @1:     // read 3 bytes from sp
-        movzx   edx, byte ptr [ebx]
-        shl     edx, 16
-        mov     al, [ebx + 2]
-        mov     ah, [ebx + 1]
-        add     ebx, 3
-        or      eax, edx
-        // encode as Base64
-        mov     ecx, eax
-        mov     edx, eax
-        shr     ecx, 6
-        and     edx, $3f
-        and     ecx, $3f
-        mov     dh, [edi + edx]
-        mov     dl, [edi + ecx]
-        mov     ecx, eax
-        shr     eax, 12
-        shr     ecx, 18
-        shl     edx, 16
-        and     ecx, $3f
-        and     eax, $3f
-        mov     cl, [edi + ecx]
-        mov     ch, [edi + eax]
-        or      ecx, edx
-        // write the 4 encoded bytes into rp
-        mov     [esi], ecx
-        add     esi, 4
-        dec     ebp
-        jnz     @1
-@z:     pop     eax // result := len div 3
-        pop     ebp
-        pop     edi
-        pop     esi
-        pop     ebx
-end;
-
-{$else}
-
-{$ifdef ASMX64AVX} // AVX2 ASM not available on Delphi < 11
-// adapted from https://github.com/aklomp/base64 - BSD-2-Clause License
-
-{$WARN 7122 off : Check size of 128-bit memory operand }
-
-procedure Base64EncodeAvx2(var b: PAnsiChar; var blen: PtrUInt;
-  var b64: PAnsiChar);
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        // rcx/rdi=b rdx/rsi=blen r8/rdx=b64
-        {$ifdef WIN64ABI}
-        push    rsi         // Win64 ABI doesn't consider rsi/rdi as volatile
-        push    rdi
-        mov     rsi, r8     // rsi = b64
-        mov     r8, rdx     // r8 = blen
-        mov     rdi, rcx    // rdi = b
-        {$else}
-        mov     r8, rsi     // r8 = blen
-        mov     rsi, rdx    // rsi = b64   rdi = b
-        {$endif WIN64ABI}
-        mov     rcx, qword ptr [r8]
-        cmp     rcx, 31
-        jbe     @done
-        lea     rdx, qword ptr [rcx - 4]
-        vmovdqa ymm0,  yword ptr [rip + @c9]
-        mov     r10, 0AAAAAAAAAAAAAAABH
-        vmovdqa ymm7,  yword ptr [rip + @c10]
-        mov     rax, rdx
-        vmovdqa ymm5,  yword ptr [rip + @c11]
-        vmovdqa ymm8,  yword ptr [rip + @c12]
-        mul     r10
-        vmovdqa ymm9,  yword ptr [rip + @c13]
-        vmovdqa ymm10, yword ptr [rip + @c14]
-        vmovdqa ymm6,  yword ptr [rip + @c16]
-        vmovdqa ymm4,  yword ptr [rip + @c15]
-        vmovdqa ymm11, yword ptr [rip + @c17]
-        shr     rdx, 4                  // rdx = rounds = (blen - 4) / 24
-        lea     rax, qword ptr [rdx + rdx * 2]
-        shl     rax, 3
-        sub     rcx, rax
-        mov     qword ptr [r8], rcx     // blen = rounds * 24
-        mov     rcx, qword ptr [rdi]    // rcx = [rdi] = b
-        mov     rax, qword ptr [rsi]    // rax = [rsi] = b64
-        // initial 20 bytes output process
-        vmovdqu xmm3, oword ptr [rcx]
-        vinserti128 ymm1, ymm3, oword ptr [rcx + 16], 1
-        vpermd  ymm1, ymm0, ymm1
-        vpshufb ymm1, ymm1, ymm7
-        vpand   ymm0, ymm5, ymm1
-        vpmulhuw ymm2, ymm0, ymm8
-        vpand   ymm0, ymm9, ymm1
-        vpmullw ymm0, ymm10, ymm0
-        vpor    ymm0, ymm0, ymm2
-        vpcmpgtb ymm2, ymm0, ymm6
-        vpsubusb ymm1, ymm0, ymm4
-        vpsubb  ymm1, ymm1, ymm2
-        vpshufb ymm1, ymm11, ymm1
-        vpaddb  ymm0, ymm1, ymm0
-        vmovdqu oword ptr [rax], xmm0
-        vextracti128 oword ptr [rax + 16], ymm0, 1
-        add     rax, 32
-        add     rcx, 20
-        sub     rdx, 1
-        je      @10
-        align   16
-        // process 48 input bytes per loop iteration into 64 encoded bytes
-@9:     cmp     rdx, 1
-        je      @12
-        // whole loop logic is fully interlaced to unleash future CPU potential
-        vmovdqu xmm1, oword ptr [rcx]
-        vmovdqu xmm3, oword ptr [rcx + 24]
-        vinserti128 ymm1, ymm1, oword ptr [rcx + 16], 1
-        vinserti128 ymm3, ymm3, oword ptr [rcx + 24 + 16], 1
-        vpshufb ymm1, ymm1, ymm7
-        vpshufb ymm3, ymm3, ymm7
-        vpand   ymm0, ymm5, ymm1
-        vpand   ymm12, ymm5, ymm3
-        vpmulhuw ymm2, ymm0, ymm8
-        vpmulhuw ymm14, ymm12, ymm8
-        vpand   ymm0, ymm9, ymm1
-        vpand   ymm12, ymm9, ymm3
-        vpmullw ymm0, ymm10, ymm0
-        vpmullw ymm12, ymm10, ymm12
-        vpor    ymm0, ymm0, ymm2
-        vpor    ymm12, ymm12, ymm14
-        vpcmpgtb ymm2, ymm0, ymm6
-        vpcmpgtb ymm15, ymm12, ymm6
-        vpsubusb ymm1, ymm0, ymm4
-        vpsubusb ymm14, ymm12, ymm4
-        vpsubb  ymm1, ymm1, ymm2
-        vpsubb  ymm14, ymm14, ymm15
-        vpshufb ymm1, ymm11, ymm1
-        vpshufb ymm14, ymm11, ymm14
-        vpaddb  ymm0, ymm1, ymm0
-        vpaddb  ymm12, ymm14, ymm12
-        vmovdqu oword ptr [rax], xmm0
-        vextracti128 oword ptr [rax + 16], ymm0, 1
-        vmovdqu oword ptr [rax + 32], xmm12
-        vextracti128 oword ptr [rax + 48], ymm12, 1
-        add     rcx, 48
-        add     rax, 64
-        sub     rdx, 2
-        jne     @9
-@10:    add     rcx, 4
-        mov     qword ptr [rsi], rax
-        mov     qword ptr [rdi], rcx
-        vzeroupper
-@done:  {$ifdef WIN64ABI}
-        pop     rdi
-        pop     rsi
-        {$endif WIN64ABI}
-        ret
-        // trailing 24 bytes
-@12:    vmovdqu xmm3, oword ptr [rcx]
-        vinserti128 ymm1, ymm3, oword ptr [rcx + 16], 1
-        vpshufb ymm1, ymm1, ymm7
-        vpand   ymm0, ymm5, ymm1
-        vpmulhuw ymm8, ymm0, ymm8
-        vpand   ymm0, ymm9, ymm1
-        vpmullw ymm0, ymm10, ymm0
-        vpor    ymm0, ymm0, ymm8
-        vpcmpgtb ymm6, ymm0, ymm6
-        vpsubusb ymm4, ymm0, ymm4
-        vpsubb  ymm4, ymm4, ymm6
-        vpshufb ymm11, ymm11, ymm4
-        vpaddb  ymm0, ymm11, ymm0
-        vmovdqu oword ptr [rax], xmm0
-        vextracti128 oword ptr [rax + 16], ymm0, 1
-        add     rcx, 24
-        add     rax, 32
-        jmp     @10
-        align   32
-@c9:    dq 0000000000000000H
-        dq 0000000200000001H
-        dq 0000000400000003H
-        dq 0000000600000005H
-@c10:   dq 0809070805060405H
-        dq 0E0F0D0E0B0C0A0BH
-        dq 0405030401020001H
-        dq 0A0B090A07080607H
-@c11:   dq 0FC0FC000FC0FC00H
-        dq 0FC0FC000FC0FC00H
-        dq 0FC0FC000FC0FC00H
-        dq 0FC0FC000FC0FC00H
-@c12:   dq 0400004004000040H
-        dq 0400004004000040H
-        dq 0400004004000040H
-        dq 0400004004000040H
-@c13:   dq 003F03F0003F03F0H
-        dq 003F03F0003F03F0H
-        dq 003F03F0003F03F0H
-        dq 003F03F0003F03F0H
-@c14:   dq 0100001001000010H
-        dq 0100001001000010H
-        dq 0100001001000010H
-        dq 0100001001000010H
-@c15:   dq 3333333333333333H
-        dq 3333333333333333H
-        dq 3333333333333333H
-        dq 3333333333333333H
-@c16:   dq 1919191919191919H
-        dq 1919191919191919H
-        dq 1919191919191919H
-        dq 1919191919191919H
-@c17:   dq 0FCFCFCFCFCFC4741H
-        dq 0000F0EDFCFCFCFCH
-        dq 0FCFCFCFCFCFC4741H
-        dq 0000F0EDFCFCFCFCH
-end;
-
-procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt;
-  var b: PAnsiChar);
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        // rcx/rdi=b64 rdx/rsi=b64len r8/rdx=b
-        // on decoding error, b64 will point to the faulty input
-        {$ifdef WIN64ABI}
-        push    rsi         // Win64 ABI doesn't consider rsi/rdi as volatile
-        push    rdi
-        mov     rsi, rdx
-        mov     rdx, r8
-        mov     rdi, rcx
-        {$endif WIN64ABI}
-        mov     r8, qword ptr [rsi]
-        cmp     r8, 44
-        jbe     @5
-        lea     r9, qword ptr [r8 - 0DH]
-        vmovdqa ymm1, yword ptr [rip + @c0]
-        vmovdqa ymm5, yword ptr [rip + @c1]
-        mov     rax, r9
-        and     r9, 0FFFFFFFFFFFFFFE0H
-        vmovdqa ymm4, yword ptr [rip + @c2]
-        vmovdqa ymm9, yword ptr [rip + @c3]
-        sub     r8, r9
-        shr     rax, 5                         // rax = rounds
-        vmovdqa ymm8, yword ptr [rip + @c4]
-        vmovdqa ymm3, yword ptr [rip + @c5]
-        mov     qword ptr [rsi], r8            // set final b64len
-        vmovdqa ymm2, yword ptr [rip + @c6]
-        vmovdqa ymm7, yword ptr [rip + @c7]
-        vmovdqa ymm6, yword ptr [rip + @c8]
-        mov     r8, qword ptr [rdi]            // r8 = [rdi] = b64
-        mov     r9, qword ptr [rdx]            // r9 = [rdx] = b
-        align   16
-        // decode 32 bytes on input into 24 binary bytes per loop iteration
-@1:     vmovdqu xmm0, oword ptr [r8]
-        vinserti128 ymm10, ymm0, oword ptr [r8 + 16], 1
-        vpsrld  ymm0, ymm10, 4
-        vpand   ymm11, ymm1, ymm0
-        vpand   ymm0, ymm1, ymm10
-        vpshufb ymm12, ymm5, ymm11
-        vpshufb ymm0, ymm4, ymm0
-        vptest  ymm0, ymm12
-        jnz     @err
-        add     r8, 32
-        vpcmpeqb ymm0, ymm10, ymm9
-        vpaddb  ymm0, ymm0, ymm11
-        vpshufb ymm0, ymm8, ymm0
-        vpaddb  ymm0, ymm0, ymm10
-        vpmaddubsw ymm0, ymm0, ymm3
-        vpmaddwd ymm0, ymm0, ymm2
-        vpshufb ymm0, ymm0, ymm7
-        vpermd  ymm0, ymm6, ymm0
-        vmovdqu oword ptr [r9], xmm0
-        vextracti128 oword ptr [r9 + 16], ymm0, 1
-        add     r9, 24
-        sub     rax, 1
-        jne     @1
-        jmp     @8
-@err:   shl     rax, 5
-        add     qword ptr [rsi], rax // restore proper b64len on error
-@8:     mov     qword ptr [rdi], r8
-        mov     qword ptr [rdx], r9
-        vzeroupper
-@5:     {$ifdef WIN64ABI}
-        pop     rdi
-        pop     rsi
-        {$endif WIN64ABI}
-        ret
-        align   32
-@c0:    dq 2F2F2F2F2F2F2F2FH
-        dq 2F2F2F2F2F2F2F2FH
-        dq 2F2F2F2F2F2F2F2FH
-        dq 2F2F2F2F2F2F2F2FH
-@c1:    dq 0804080402011010H
-        dq 1010101010101010H
-        dq 0804080402011010H
-        dq 1010101010101010H
-@c2:    dq 1111111111111115H
-        dq 1A1B1B1B1A131111H
-        dq 1111111111111115H
-        dq 1A1B1B1B1A131111H
-@c3:    dq 2F2F2F2F2F2F2F2FH
-        dq 2F2F2F2F2F2F2F2FH
-        dq 2F2F2F2F2F2F2F2FH
-        dq 2F2F2F2F2F2F2F2FH
-@c4:    dq 0B9B9BFBF04131000H
-        dq 0000000000000000H
-        dq 0B9B9BFBF04131000H
-        dq 0000000000000000H
-@c5:    dq 0140014001400140H
-        dq 0140014001400140H
-        dq 0140014001400140H
-        dq 0140014001400140H
-@c6:    dq 0001100000011000H
-        dq 0001100000011000H
-        dq 0001100000011000H
-        dq 0001100000011000H
-@c7:    dq 090A040506000102H
-        dq 0FFFFFFFF0C0D0E08H
-        dq 090A040506000102H
-        dq 0FFFFFFFF0C0D0E08H
-@c8:    dq 0000000100000000H
-        dq 0000000400000002H
-        dq 0000000600000005H
-        dq 0FFFFFFFFFFFFFFFFH
-end;
-
-function Base64EncodeMainAvx2(rp, sp: PAnsiChar; len: cardinal): integer;
+procedure Base64EncodeLoop(rp, sp: PAnsiChar; len: cardinal; enc: PBase64Enc);
+  {$ifdef HASINLINE} inline; {$endif}
 var
-  blen: PtrUInt;
   c: cardinal;
-  enc: PBase64Enc; // use local register
-begin
-  result := len div 3;
-  if result = 0 then
-    exit;
-  blen := result * 3;
-  Base64EncodeAvx2(sp, blen, rp); // handle >32 bytes of data using AVX2
-  enc := @b64enc;
-  len := blen;
+begin // this loop is faster than mORMot 1 manual x86 asm, even on Delphi 7
   repeat
     c := (ord(sp[0]) shl 16) or (ord(sp[1]) shl 8) or ord(sp[2]);
     rp[0] := enc[(c shr 18) and $3f];
@@ -6516,37 +6176,36 @@ begin
   until len = 0;
 end;
 
+{$ifdef ASMX64AVX} // AVX2 ASM not available on Delphi < 11
+function Base64EncodeMainAvx2(rp, sp: PAnsiChar; len: cardinal): integer;
+var
+  blen: PtrUInt;
+begin
+  result := len div 3;
+  if result = 0 then
+    exit;
+  blen := result * 3;
+  Base64EncodeAvx2(sp, blen, rp); // handle >32 bytes of data using AVX2
+  Base64EncodeLoop(rp, sp, blen, @b64enc); // good inlining code generation
+end;
+
 function Base64DecodeMainAvx2(sp, rp: PAnsiChar; len: PtrInt): boolean;
 begin
   Base64DecodeAvx2(sp, len, rp);
   // on error, AVX2 code let sp point to the faulty input so result=false
   result := Base64AnyDecode(ConvertBase64ToBin, sp, rp, len);
 end;
-
 {$endif ASMX64AVX}
 
 function Base64EncodeMainPas(rp, sp: PAnsiChar; len: cardinal): integer;
 var
-  c: cardinal;
   enc: PBase64Enc; // use local register
 begin
   enc := @b64enc;
-  len := len div 3;
-  result := len;
-  if len <> 0 then
-    repeat
-      c := (ord(sp[0]) shl 16) or (ord(sp[1]) shl 8) or ord(sp[2]);
-      rp[0] := enc[(c shr 18) and $3f];
-      rp[1] := enc[(c shr 12) and $3f];
-      rp[2] := enc[(c shr 6) and $3f];
-      rp[3] := enc[c and $3f];
-      inc(rp, 4);
-      inc(sp, 3);
-      dec(len)
-    until len = 0;
+  result := len div 3;
+  if result <> 0 then
+    Base64EncodeLoop(rp, sp, result * 3, enc);
 end;
-
-{$endif ASMX86}
 
 procedure Base64EncodeTrailing(rp, sp: PAnsiChar; len: cardinal);
 var
@@ -6577,7 +6236,7 @@ procedure Base64Encode(rp, sp: PAnsiChar; len: cardinal);
 var
   main: cardinal;
 begin
-  main := Base64EncodeMain(rp, sp, len);
+  main := Base64EncodeMain(rp, sp, len); // may use AVX2 on FPC x86_64
   Base64EncodeTrailing(rp + main * 4, sp + main * 3, len - main * 3);
 end;
 
@@ -6616,48 +6275,48 @@ function BinToBase64Line(sp: PAnsiChar; len: PtrUInt; const Prefix, Suffix: RawU
 const
   PERLINE = (64 * 3) div 4;
 var
-  rp: PAnsiChar;
+  p: PAnsiChar;
   outlen, last: PtrUInt;
 begin
   outlen := BinToBase64Length(len);
   inc(outlen, 2 * (outlen shr 6) + 2); // one CRLF per line
   FastSetString(result, nil, PtrInt(outlen) + length(Prefix) + length(Suffix));
-  rp := pointer(result);
+  p := pointer(result);
   if Prefix <> '' then
   begin
-    MoveFast(pointer(Prefix)^, rp^, PStrLen(PAnsiChar(pointer(Prefix)) - _STRLEN)^);
-    inc(rp, PStrLen(PAnsiChar(pointer(Prefix)) - _STRLEN)^);
+    MoveFast(pointer(Prefix)^, p^, PStrLen(PAnsiChar(pointer(Prefix)) - _STRLEN)^);
+    inc(p, PStrLen(PAnsiChar(pointer(Prefix)) - _STRLEN)^);
   end;
   while len >= PERLINE do
   begin
-    Base64EncodeMain(rp, sp, PERLINE);
+    Base64EncodeMain(p, sp, PERLINE); // may use AVX2 on FPC x86_64
     inc(sp, PERLINE);
-    PWord(rp + 64)^ := $0a0d;
-    inc(rp, 66);
+    PWord(p + 64)^ := $0a0d;
+    inc(p, 66);
     dec(len, PERLINE);
   end;
   if len > 0 then
   begin
-    last := Base64EncodeMain(rp, sp, len);
-    inc(rp, last * 4);
+    last := Base64EncodeMain(p, sp, len);
+    inc(p, last * 4);
     last := last * 3;
     inc(sp, last);
     dec(len, last);
     if len <> 0 then
     begin
-      Base64EncodeTrailing(rp, sp, len); // 1/2 bytes as 4 chars with trailing =
-      inc(rp, 4);
+      Base64EncodeTrailing(p, sp, len); // 1/2 bytes as 4 chars with trailing =
+      inc(p, 4);
     end;
-    PWord(rp)^ := $0a0d;
-    inc(rp, 2);
+    PWord(p)^ := $0a0d;
+    inc(p, 2);
   end;
   if Suffix <> '' then
   begin
-    MoveFast(pointer(Suffix)^, rp^, PStrLen(PAnsiChar(pointer(Suffix)) - _STRLEN)^);
-    inc(rp, PStrLen(PAnsiChar(pointer(Suffix)) - _STRLEN)^);
+    MoveFast(pointer(Suffix)^, p^, PStrLen(PAnsiChar(pointer(Suffix)) - _STRLEN)^);
+    inc(p, PStrLen(PAnsiChar(pointer(Suffix)) - _STRLEN)^);
   end;
-  rp^ := #0;
-  PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := rp - pointer(result);
+  p^ := #0;
+  PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := p - pointer(result); // trim
 end;
 
 function BinToBase64Short(const s: RawByteString): ShortString;
@@ -6831,7 +6490,7 @@ begin
         dec(len)
     else
       dec(len, 2); // adjust for Base64AnyDecode() algorithm
-    result := Base64DecodeMain(sp, pointer(data), len);
+    result := Base64DecodeMain(sp, pointer(data), len); // may use AVX2
     if not result then
       data := '';
   end
@@ -6866,97 +6525,6 @@ end;
 
 { --------- Base64 URI encoding/decoding }
 
-{$ifdef ASMX86}
-
-function Base64uriEncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
-  {$ifdef FPC}nostackframe; assembler; {$endif}
-asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
-        push    ebx
-        push    esi
-        push    edi
-        push    ebp
-        mov     ebx, edx
-        mov     esi, eax
-        mov     eax, ecx
-        mov     edx, 1431655766 // faster eax=len div 3 using reciprocal
-        sar     ecx, 31
-        imul    edx
-        mov     eax, edx
-        sub     eax, ecx
-        mov     edi, offset b64urienc
-        mov     ebp, eax
-        push    eax
-        jz      @z
-        // edi=b64urienc[] ebx=sp esi=rp ebp=len div 3
-        xor     eax, eax
-@1:    // read 3 bytes from sp
-        movzx   edx, byte ptr [ebx]
-        shl     edx, 16
-        mov     al, [ebx + 2]
-        mov     ah, [ebx + 1]
-        add     ebx, 3
-        or      eax, edx
-        // encode as Base64uri
-        mov     ecx, eax
-        mov     edx, eax
-        shr     ecx, 6
-        and     edx, $3f
-        and     ecx, $3f
-        mov     dh, [edi + edx]
-        mov     dl, [edi + ecx]
-        mov     ecx, eax
-        shr     eax, 12
-        shr     ecx, 18
-        shl     edx, 16
-        and     ecx, $3f
-        and     eax, $3f
-        mov     cl, [edi + ecx]
-        mov     ch, [edi + eax]
-        or      ecx, edx
-        // write the 4 encoded bytes into rp
-        mov     [esi], ecx
-        add     esi, 4
-        dec     ebp
-        jnz     @1
-@z:     pop     eax // result := len div 3
-        pop     ebp
-        pop     edi
-        pop     esi
-        pop     ebx
-end;
-
-procedure Base64uriEncodeTrailing(rp, sp: PAnsiChar; len: cardinal);
-  {$ifdef HASINLINE}inline;{$endif}
-var
-  c: cardinal;
-begin
-  case len of
-    1:
-      begin
-        c := ord(sp[0]) shl 4;
-        rp[0] := b64urienc[(c shr 6) and $3f];
-        rp[1] := b64urienc[c and $3f];
-      end;
-    2:
-      begin
-        c := ord(sp[0]) shl 10 + ord(sp[1]) shl 2;
-        rp[0] := b64urienc[(c shr 12) and $3f];
-        rp[1] := b64urienc[(c shr 6) and $3f];
-        rp[2] := b64urienc[c and $3f];
-      end;
-  end;
-end;
-
-procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
-var
-  main: cardinal;
-begin
-  main := Base64uriEncodeMain(rp, sp, len);
-  Base64uriEncodeTrailing(rp + main * 4, sp + main * 3, len - main * 3);
-end;
-
-{$else}
-
 procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
 var
   main, c: cardinal;
@@ -6967,7 +6535,7 @@ begin
   if main <> 0 then
   begin
     dec(len, main * 3); // fast modulo
-    repeat
+    repeat // inlined Base64EncodeLoop()
       c := (ord(sp[0]) shl 16) or (ord(sp[1]) shl 8) or ord(sp[2]);
       rp[0] := enc[(c shr 18) and $3f];
       rp[1] := enc[(c shr 12) and $3f];
@@ -6994,8 +6562,6 @@ begin
       end;
   end;
 end;
-
-{$endif ASMX86}
 
 function BinToBase64uriLength(len: PtrUInt): PtrUInt;
 begin
@@ -11003,7 +10569,7 @@ begin
   begin
     LowerCaseSelf(EMOJI_TEXT[e]);
     EMOJI_TAG[e] := ':' + EMOJI_TEXT[e] + ':';
-    SetLength(EMOJI_UTF8[e], 4);
+    SetLength(EMOJI_UTF8[e], 4); // order matches U+1F600 to U+1F64F codepoints
     Ucs4ToUtf8(ord(e) + $1f5ff, pointer(EMOJI_UTF8[e]));
   end;
   EMOJI_AFTERDOTS[')'] := eSmiley;
@@ -11023,7 +10589,7 @@ begin
   AlgoRle := TAlgoRle.Create;
   Base64EncodeMain := @Base64EncodeMainPas;
   Base64DecodeMain := @Base64DecodeMainPas;
-  {$ifdef ASMX64AVX}
+  {$ifdef ASMX64AVX} // focus on FPC x86_64 server performance
   if cfAVX2 in CpuFeatures then
   begin // our AVX2 asm code is almost 10x faster than the pascal version
     Base64EncodeMain := @Base64EncodeMainAvx2; // 11.5 GB/s vs 1.3 GB/s
