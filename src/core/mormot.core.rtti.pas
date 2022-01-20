@@ -677,12 +677,14 @@ type
       rkLString: ( // from TypeInfo() on older Delphi with no CP RTTI
         CodePage: cardinal; // RawBlob=CP_RAWBYTESTRING not CP_RAWBLOB
         Engine: TSynAnsiConvert);
-      rkEnumeration, rkSet: (
+      rkEnumeration,
+      rkSet: (
         EnumMin,
         EnumMax:  cardinal;
         EnumInfo: PRttiEnumType;
         EnumList: PShortString);
-      rkDynArray, rkArray: (
+      rkDynArray,
+      rkArray: (
         ItemInfo: PRttiInfo;
         ItemSize: integer;
         ItemCount: integer; // rkArray only
@@ -2115,6 +2117,8 @@ type
     /// locate a property/field by name
     function Find(const PropName: RawUtf8): PRttiCustomProp; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// locate a property/field index by name
+    function FindIndex(PropName: PUtf8Char; PropNameLen: PtrInt): PtrInt;
     /// customize a property/field name
     // - New is expected to be only plain pascal identifier, i.e.
     // A-Z a-z 0-9 and _ characters, up to 63 in length
@@ -6756,6 +6760,22 @@ begin
     end;
   end;
   result := nil;
+end;
+
+function TRttiCustomProps.FindIndex(PropName: PUtf8Char; PropNameLen: PtrInt): PtrInt;
+var
+  p: PRttiCustomProp;
+begin
+  if PropNameLen <> 0 then
+  begin
+    p := pointer(List);
+    for result := 0 to Count - 1 do
+      if p^.NameMatch(PropName, PropNameLen) then
+        exit
+      else
+        inc(p);
+  end;
+  result := -1;
 end;
 
 function TRttiCustomProps.Find(const PropName: RawUtf8): PRttiCustomProp;
