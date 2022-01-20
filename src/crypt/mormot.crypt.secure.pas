@@ -4402,7 +4402,7 @@ function PemToDer(const pem: RawUtf8): RawByteString;
 var
   s, d: PUtf8Char;
   c: AnsiChar;
-  base64: TSynTempBuffer;
+  base64: TSynTempBuffer; // pem is small, so a 4KB temp buffer is fine enough
 begin
   if IsPem(pem) then
   begin

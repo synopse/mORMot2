@@ -1320,11 +1320,12 @@ const
   Value64: RawUtf8 = 'SGVsbG8gL2Mn6XRhaXQg5+Ar';
 var
   tmp, tmp2: RawByteString;
-  b64, msg: RawUtf8;
+  b64: RawUtf8;
+  msg: string;
   Value: WinAnsiString;
   P: PUtf8Char;
   k: TPemKind;
-  i, L, n: Integer;
+  i, j, L, n: Integer;
   i64: Qword;
   enc, dec: TPrecisionTimer;
 begin
@@ -1405,11 +1406,11 @@ begin
   for i := 0 to 20 do
   begin
     enc.Resume;
-    for n := 1 to n do
+    for j := 1 to n do
       Base64Encode(pointer(b64), pointer(tmp), 1 shl i);
     enc.Pause;
     dec.Resume;
-    for n := 1 to n do
+    for j := 1 to n do
       Base64Decode(pointer(b64), pointer(tmp2), BinToBase64Length(1 shl i) shr 2);
     dec.Pause;
     Check(CompareMem(pointer(tmp), pointer(tmp2), 1 shl i));

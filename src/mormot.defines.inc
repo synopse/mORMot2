@@ -543,6 +543,8 @@
     {$if CompilerVersion >= 36.0} // = Delphi 11.1
       {$define ISDELPHI111}
     {$ifend}
+  {$else}
+     {$define ISDELPHI7}
   {$ifend CompilerVersion >= 17}
 
 {$endif FPC}
