@@ -137,16 +137,20 @@ type
     // - this method is thread-safe, and will make a copy of the queue data
     procedure Save(out aDynArrayValues; aDynArray: PDynArray = nil); overload;
     /// returns how many items are currently stored in this queue
-    // - this method is thread-safe
+    // - this method is not thread-safe, so the returned value should be
+    // either indicative, or you should use explicit Safe lock/unlock
+    // - if you want to check that the queue is not void, call Pending
     function Count: integer;
     /// returns how much slots is currently reserved in memory
     // - the queue has an optimized auto-sizing algorithm, you can use this
     // method to return its current capacity
-    // - this method is thread-safe
+    // - this method is not thread-safe, so returned value is indicative only
     function Capacity: integer;
     /// returns true if there are some items currently pending in the queue
-    // - slightly faster than checking Count=0, and much faster than Pop or Peek
+    // - faster than checking Count=0, and much faster than Pop or Peek
+    // - this method is not thread-safe, so returned value is indicative only
     function Pending: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
 
@@ -1030,26 +1034,12 @@ function TSynQueue.Count: integer;
 begin
   if self = nil then
     result := 0
+  else if fFirst < 0 then
+    result := 0
+  else if fFirst <= fLast then
+    result := fLast - fFirst + 1
   else
-  begin
-    fSafe.ReadOnlyLock;
-    {$ifdef HASFASTTRYFINALLY}
-    try
-    {$else}
-    begin
-    {$endif HASFASTTRYFINALLY}
-      if fFirst < 0 then
-        result := 0
-      else if fFirst <= fLast then
-        result := fLast - fFirst + 1
-      else
-        result := fCount - fFirst + fLast + 1;
-    {$ifdef HASFASTTRYFINALLY}
-    finally
-    {$endif HASFASTTRYFINALLY}
-      fSafe.ReadOnlyUnLock;
-    end;
-  end;
+    result := fCount - fFirst + fLast + 1;
 end;
 
 function TSynQueue.Capacity: integer;
@@ -1057,14 +1047,7 @@ begin
   if self = nil then
     result := 0
   else
-  begin
-    fSafe.ReadOnlyLock;
-    try
-      result := fValues.Capacity;
-    finally
-      fSafe.ReadOnlyUnLock;
-    end;
-  end;
+    result := fValues.Capacity;
 end;
 
 function TSynQueue.Pending: boolean;
@@ -1129,14 +1112,20 @@ end;
 
 function TSynQueue.Peek(out aValue): boolean;
 begin
-  fSafe.ReadOnlyLock;
-  try
-    result := fFirst >= 0;
-    if result then
-      fValues.ItemCopyAt(fFirst, @aValue);
-  finally
-    fSafe.ReadOnlyUnLock;
-  end;
+  if (self <> nil) and
+     (fFirst >= 0) then
+  begin
+    fSafe.ReadOnlyLock;
+    try
+      result := fFirst >= 0;
+      if result then
+        fValues.ItemCopyAt(fFirst, @aValue);
+    finally
+      fSafe.ReadOnlyUnLock;
+    end;
+  end
+  else
+    result := false;
 end;
 
 procedure TSynQueue.InternalPop(aValue: pointer);
@@ -1160,22 +1149,30 @@ end;
 
 function TSynQueue.Pop(out aValue): boolean;
 begin
-  fSafe.ReadWriteLock;
-  try
-    result := fFirst >= 0;
-    if result then
-      InternalPop(@aValue);
-  finally
-    fSafe.ReadWriteUnLock;
-  end;
+  if (self <> nil) and
+     (fFirst >= 0) then
+  begin
+    fSafe.ReadWriteLock;
+    try
+      result := fFirst >= 0;
+      if result then
+        InternalPop(@aValue);
+    finally
+      fSafe.ReadWriteUnLock;
+    end;
+  end
+  else
+    result := false;
 end;
 
 function TSynQueue.PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
   out aValue): boolean;
 begin
   result := false;
-  if (not Assigned(aCompare)) or
-     (not Assigned(aAnother)) then
+  if (self = nil) or
+     (not Assigned(aCompare)) or
+     (not Assigned(aAnother)) or
+     (fFirst < 0) then
     exit;
   fSafe.ReadWriteLock;
   try
