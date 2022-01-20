@@ -499,17 +499,17 @@ function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
         imul    rdx, -200
         lea     rdx, [rdx + r8]
         movzx   rdx, word ptr [rdx + r9]
-        mov     [rcx], dx
+        mov     word ptr [rcx], dx
         cmp     rax, 10
         jae     @s
 @1:     or      al, '0'
         mov     byte ptr [rcx - 2], '-'
-        mov     [rcx - 1], al
+        mov     byte ptr [rcx - 1], al
         lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
         ret
 @2:     movzx   eax, word ptr [r8 + rax * 2]
         mov     byte ptr [rcx - 1], '-'
-        mov     [rcx], ax
+        mov     word ptr [rcx], ax
         lea     rax, [rcx + r10]           // includes '-' if val<0
 end;
 
@@ -537,16 +537,16 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         imul    rdx, -200
         add     rdx, r8
         movzx   rdx, word ptr [rdx + r9]
-        mov     [rcx], dx
+        mov     word ptr [rcx], dx
         cmp     rax, 10
         jae     @s
 @1:     sub     rcx, 1
         or      al, '0'
-        mov     [rcx], al
+        mov     byte ptr [rcx], al
 @0:     mov     rax, rcx
         ret
 @2:     movzx   eax, word ptr [r8 + rax * 2]
-        mov     [rcx], ax
+        mov     word ptr [rcx], ax
         mov     rax, rcx
 end;
 
