@@ -4398,10 +4398,26 @@ begin
             (PCardinal(PAnsiChar(pointer(pem)) + l - 4)^ = $2d2d2d2d);
 end;
 
+function PemToDerBuf(s, d: PUtf8Char): PUtf8Char;
+var
+  c: AnsiChar;
+begin
+  repeat
+    c := s^;
+    inc(s);
+    if c <= ' ' then
+      continue
+    else if c = '-' then
+      break; // no need to check #0 since -----END... will eventually appear
+    d^ := c;
+    inc(d); // keep only Base64 chars
+  until false;
+  result := d;
+end;
+
 function PemToDer(const pem: RawUtf8): RawByteString;
 var
   s, d: PUtf8Char;
-  c: AnsiChar;
   base64: TSynTempBuffer; // pem is small, so a 4KB temp buffer is fine enough
 begin
   if IsPem(pem) then
@@ -4409,17 +4425,7 @@ begin
     s := GotoNextLine(pointer(pem));
     if s <> nil then
     begin
-      d := base64.Init(length(pem) - (s - pointer(pem)));
-      repeat
-        c := s^;
-        inc(s);
-        if c <= ' ' then
-          continue
-        else if c = '-' then
-          break; // no need to check #0 since -----END... will eventually appear
-        d^ := c;
-        inc(d); // keep only Base64 chars
-      until false;
+      d := PemToDerBuf(s, base64.Init(length(pem) - (s - pointer(pem))));
       result := Base64ToBinSafe(base64.buf, d - base64.buf);
       base64.Done;
       if result <> '' then
