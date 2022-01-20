@@ -1919,8 +1919,7 @@ function TypeInfoToStandardParserType(Info: PRttiInfo;
 /// recognize most simple types and return their known dynamic array RTTI
 // - returns nil if we don't know any dynamic array for this type
 // - ExpectExactElemInfo=true ensure that result's ArrayRtti.Info = ElemInfo
-// - mainly used by IList<T> and IKeyValue<T> to guess the dynamic array
-// associated with the T item type
+// - currently not called: IList<T> and IKeyValue<T> just use TypeInfo(T)
 function TypeInfoToDynArrayTypeInfo(ElemInfo: PRttiInfo;
   ExpectExactElemInfo: boolean; ParserType: PRttiParserType = nil): PRttiInfo;
 
@@ -2415,6 +2414,7 @@ type
   PRttiCustomListPair = ^TRttiCustomListPair;
 
   /// efficient PRttiInfo/TRttiCustom pairs for TRttiCustomList hash table
+  // - as stored in TRttiCustomListHashTable[TRttiKind] = one per TRttiKind
   TRttiCustomListPairs = record
     /// efficient PerHash[].Pairs thread-safety during Find/AddToPairs
     Safe: TRWLightLock;
@@ -2429,8 +2429,8 @@ type
   // - a per-Kind and per-Name hash table of PRttiInfo/TRttiCustom pairs
   // - avoid link to mormot.core.data hash table, with a fast access
   // - consume e.g. around 50KB of memory for all mormot2tests types
-  TRttiCustomListHashTable = array[succ(low(TRttiKind)) .. high(TRttiKind)] of
-    TRttiCustomListPairs;
+  TRttiCustomListHashTable =
+    array[succ(low(TRttiKind)) .. high(TRttiKind)] of TRttiCustomListPairs;
 
   /// maintain a thread-safe list of PRttiInfo/TRttiCustom/TRttiJson registration
   TRttiCustomList = class
@@ -2481,6 +2481,7 @@ type
     function Find(const Name: ShortString; Kinds: TRttiKinds = []): TRttiCustom;
        overload; {$ifdef HASINLINE}inline;{$endif}
     /// manual search of any matching TRttiCustom.ArrayRtti type
+    // - currently not called: IList<T> and IKeyValue<T> just use TypeInfo(T)
     function FindByArrayRtti(ElemInfo: PRttiInfo): TRttiCustom;
     /// register a given RTTI TypeInfo()
     // - returns a new (or existing if it was already registered) TRttiCustom
