@@ -63,7 +63,7 @@ uses
   classes,
   variants,
   // main IBX/FB Pascal API units
-  //IB,
+  IB,
   // mORMot 2 units
   mormot.core.base,
   mormot.core.os,
@@ -454,17 +454,6 @@ begin
   SQLLogEnd;
 end;
 
-function DynRawUtf8ArrayToConst(const aValue: TRawUtf8DynArray): TTVarRecDynArray;
-var ndx: PtrInt;
-begin
-  SetLength(Result, Length(aValue));
-  for ndx := 0 to Length(aValue) - 1 do
-  begin
-    result[ndx].VType := vtAnsiString;
-    result[ndx].VAnsiString := pointer(aValue[ndx]);
-  end;
-end;
-
 function Param2Type(const aParam: ISQLParam): RawUtf8;
 begin
   case aParam.GetSQLType of
@@ -630,11 +619,11 @@ var
     oldSQL := StringReplaceAll(fSql, '?', '%');
     SetLength(aParTyp, fParamCount);
     SetLength(aPar, fParamCount);
-    for iP:=0 to fParamCount-1 do
+    for iP := 0 to fParamCount-1 do
       aParTyp[iP] := Param2Type(iParams.Params[iP]);
     iStart := 0;
     iStmCount := Round(fParamsArrayCount /
-                       Round( fParamsArrayCount / cMaxStm + 0.5));
+                 Round(fParamsArrayCount / cMaxStm + 0.5));
     W := TJsonWriter.CreateOwnedStream(49152);
     try
       while iStart < fParamsArrayCount do
@@ -668,7 +657,7 @@ var
               FormatUtf8(':p%', [iCnt], aPar[iP]);
               Inc(iCnt);
             end;
-            W.Add(oldSQL, DynRawUtf8ArrayToConst(aPar));
+            W.Add(oldSQL, RawUtf8DynArrayToArrayOfConst(aPar));
             W.Add(';', #10);
           end;
           W.AddShort('end');
@@ -893,7 +882,7 @@ var
   data: PByte;
 begin
   CheckColAndRowset(Col);
-  if fColumnsMeta[Col].CodePage=CP_UTF8 then
+  if fColumnsMeta[Col].CodePage = CP_UTF8 then
   begin
     fResults.GetData(Col, nul, len, data);
     FastSetString(result, data, len);
