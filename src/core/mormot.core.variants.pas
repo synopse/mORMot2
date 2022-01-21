@@ -111,9 +111,22 @@ function VarRecToVariant(const V: TVarRec): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a variant to an open array (const Args: array of const) argument
-// - will always map to a vtVariant kind of argument
+// - variant is accessed by reference as vtVariant so should remain available
 procedure VariantToVarRec(const V: variant; var result: TVarRec);
   {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a variant array to open array (const Args: array of const) arguments
+// - variants are accessed by reference as vtVariant so should remain available
+procedure VariantsToArrayOfConst(const V: array of variant; VCount: PtrInt;
+  out result: TTVarRecDynArray); overload;
+
+/// convert a variant array to open array (const Args: array of const) arguments
+// - variants are accessed by reference as vtVariant so should remain available
+function VariantsToArrayOfConst(const V: array of variant): TTVarRecDynArray; overload;
+
+/// convert an array of RawUtf8 to open array (const Args: array of const) arguments
+// - RawUtf8 are accessed by reference as vtAnsiString so should remain available
+function RawUtf8DynArrayToArrayOfConst(const V: array of RawUtf8): TTVarRecDynArray;
 
 /// convert any Variant into a VCL string type
 // - expects any varString value to be stored as a RawUtf8
@@ -3026,6 +3039,34 @@ begin
     result.VVariant := TVarData(V).VPointer
   else
     result.VVariant := @V;
+end;
+
+procedure VariantsToArrayOfConst(const V: array of variant; VCount: PtrInt;
+  out result: TTVarRecDynArray);
+var
+  i: PtrInt;
+begin
+  SetLength(result, VCount);
+  for i := 0 to VCount - 1 do
+    VariantToVarRec(V[i], result[i]);
+end;
+
+function VariantsToArrayOfConst(const V: array of variant): TTVarRecDynArray;
+begin
+  VariantsToArrayOfConst(V, length(V), result);
+end;
+
+function RawUtf8DynArrayToArrayOfConst(const V: array of RawUtf8): TTVarRecDynArray;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  SetLength(result, Length(V));
+  for i := 0 to Length(V) - 1 do
+  begin
+    result[i].VType := vtAnsiString;
+    result[i].VAnsiString := pointer(V[i]);
+  end;
 end;
 
 function VarRecToVariant(const V: TVarRec): variant;
@@ -7542,20 +7583,11 @@ begin
 end;
 
 procedure TDocVariantData.ToArrayOfConst(out Result: TTVarRecDynArray);
-var
-  ndx: PtrInt;
 begin
   if IsObject then
     raise EDocVariant.Create('ToArrayOfConst expects a dvArray');
   if IsArray then
-  begin
-    SetLength(Result, VCount);
-    for ndx := 0 to VCount - 1 do
-    begin
-      Result[ndx].VType := vtVariant;
-      Result[ndx].VVariant := @VValue[ndx];
-    end;
-  end;
+    VariantsToArrayOfConst(VValue, VCount, Result);
 end;
 
 function TDocVariantData.ToArrayOfConst: TTVarRecDynArray;

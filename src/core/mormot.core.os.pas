@@ -2618,7 +2618,7 @@ type
     procedure ReadLock;
       {$ifdef HASINLINE} inline; {$endif}
     /// try to enter a non-upgradable multiple reads lock
-    // - if returned true, caller should eventually call ReadUnLock()
+    // - if returned true, caller should eventually call ReadUnLock
     // - read locks maintain a thread-safe counter, so are reentrant and non blocking
     // - warning: nested WriteLock call after a ReadLock would deadlock
     function TryReadLock: boolean;
@@ -2631,7 +2631,7 @@ type
     // would deadlock
     procedure WriteLock;
     /// try to enter a non-rentrant non-upgradable exclusive write lock
-    // - if returned true, caller should eventually call UnLock()
+    // - if returned true, caller should eventually call WriteUnLock
     // - warning: nested TryWriteLock call after a ReadLock or another WriteLock
     // would deadlock
     function TryWriteLock: boolean;
@@ -2732,10 +2732,10 @@ type
     procedure WriteUnlock;
       {$ifdef FPC_OR_DELPHIXE4} inline; {$endif} // circumvent weird Delphi bug
     /// a high-level wrapper over ReadOnlyLock/ReadWriteLock/WriteLock methods
-    procedure Lock(context: TRWLockContext (*{$ifndef PUREMORMOT2} = cWrite {$endif}*));
+    procedure Lock(context: TRWLockContext {$ifndef PUREMORMOT2} = cWrite {$endif});
       {$ifdef HASINLINE} inline; {$endif}
     /// a high-level wrapper over ReadOnlyUnLock/ReadWriteUnLock/WriteUnLock methods
-    procedure UnLock(context: TRWLockContext (*{$ifndef PUREMORMOT2} = cWrite {$endif}*));
+    procedure UnLock(context: TRWLockContext {$ifndef PUREMORMOT2} = cWrite {$endif});
       {$ifdef HASINLINE} inline; {$endif}
   end;
   PRWLock = ^TRWLock;
@@ -5774,7 +5774,7 @@ var
 begin
   for i := 0 to PaddingUsedCount - 1 do
     if not (integer(Padding[i].VType) in VTYPE_SIMPLE) then
-      VarClear(variant(Padding[i]));
+      VarClearProc(Padding[i]);
   DeleteCriticalSection(fSection);
   fInitialized := false;
 end;
