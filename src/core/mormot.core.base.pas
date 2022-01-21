@@ -4697,7 +4697,47 @@ begin
   result := GetInteger(P, err);
 end;
 
+function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
+begin
+  result := StrUInt32(P, val); // StrUInt32 converts PtrUInt=QWord on 64-bit CPU
+end;
+
+function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
+begin
+  result := StrInt32(P, val); // StrInt32 converts PtrInt=Int64 on 64-bit CPU
+end;
+
+function GetQWord(P: PUtf8Char; var err: integer): QWord;
+var
+  c: PtrUInt;
+begin
+  err := 1; // error
+  result := 0;
+  if P = nil then
+    exit;
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
+  c := byte(P^) - 48;
+  if c > 9 then
+    exit;
+  result := c;
+  inc(P);
+  repeat
+    c := byte(P^);
+    if c = 0 then
+      break;
+    dec(c, 48);
+    if c > 9 then
+      exit;
+    result := result * 10 + c;
+    inc(P);
+  until false;
+  err := 0; // success
+end;
+
 {$else}
+// 32-bit dedicated code - use integer/cardinal as much as possible
 
 procedure SetInt64(P: PUtf8Char; var result: Int64);
 var
@@ -4930,8 +4970,6 @@ begin
     result := -result;
 end;
 
-{$endif CPU64}
-
 function GetQWord(P: PUtf8Char; var err: integer): QWord;
 var
   c: PtrUInt;
@@ -4946,21 +4984,6 @@ begin
   c := byte(P^) - 48;
   if c > 9 then
     exit;
-  {$ifdef CPU64}
-  result := c;
-  inc(P);
-  repeat
-    c := byte(P^);
-    if c = 0 then
-      break;
-    dec(c, 48);
-    if c > 9 then
-      exit;
-    result := result * 10 + c;
-    inc(P);
-  until false;
-  err := 0; // success
-  {$else}
   PByte(@result)^ := c;
   inc(P);
   repeat // fast 32-bit loop
@@ -5004,8 +5027,79 @@ begin
       break;
     end;
   until false;
-  {$endif CPU64}
 end;
+
+function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
+var
+  c, c100: QWord;
+  {$ifdef CPUX86NOTPIC}
+  tab: TWordArray absolute TwoDigitLookupW;
+  {$else}
+  tab: PWordArray;
+  {$endif CPUX86NOTPIC}
+begin
+  if PCardinalArray(@val)^[1] = 0 then
+    P := StrUInt32(P, PCardinal(@val)^)
+  else
+  begin
+    {$ifndef CPUX86NOTPIC}
+    tab := @TwoDigitLookupW;
+    {$endif CPUX86NOTPIC}
+    c := val;
+    repeat
+      {$ifdef CPUX86}
+      asm // by-passing the RTL is a good idea here
+        push    ebx
+        mov     edx, dword ptr [c + 4]
+        mov     eax, dword ptr [c]
+        mov     ebx, 100
+        mov     ecx, eax
+        mov     eax, edx
+        xor     edx, edx
+        div     ebx
+        mov     dword ptr [c100 + 4], eax
+        xchg    eax, ecx
+        div     ebx
+        mov     dword ptr [c100], eax
+        imul    ebx, ecx
+        mov     ecx, 100
+        mul     ecx
+        add     edx, ebx
+        pop     ebx
+        sub     dword ptr [c + 4], edx
+        sbb     dword ptr [c], eax
+      end;
+      {$else}
+      c100 := c div 100;   // one div by two digits
+      dec(c, c100 * 100);  // fast c := c mod 100
+      {$endif CPUX86}
+      dec(P, 2);
+      PWord(P)^ := tab[c];
+      c := c100;
+      if (PCardinalArray(@c)^[1] = 0) then
+      begin
+        if PCardinal(@c)^ <> 0 then
+          P := StrUInt32(P, PCardinal(@c)^);
+        break;
+      end;
+    until false;
+  end;
+  result := P;
+end;
+
+function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
+begin
+  if val < 0 then
+  begin
+    P := StrUInt64(P, -val) - 1;
+    P^ := '-';
+  end
+  else
+    P := StrUInt64(P, val);
+  result := P;
+end;
+
+{$endif CPU64}
 
 function GetExtended(P: PUtf8Char): TSynExtended;
 var
@@ -5215,88 +5309,6 @@ begin
 end;
 
 
-{$ifdef CPU64}
-function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
-begin
-  result := StrUInt32(P, val); // StrUInt32 converts PtrUInt=QWord on 64-bit CPU
-end;
-{$else}
-function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
-var
-  c, c100: QWord;
-  {$ifdef CPUX86NOTPIC}
-  tab: TWordArray absolute TwoDigitLookupW;
-  {$else}
-  tab: PWordArray;
-  {$endif CPUX86NOTPIC}
-begin
-  if PCardinalArray(@val)^[1] = 0 then
-    P := StrUInt32(P, PCardinal(@val)^)
-  else
-  begin
-    {$ifndef CPUX86NOTPIC}
-    tab := @TwoDigitLookupW;
-    {$endif CPUX86NOTPIC}
-    c := val;
-    repeat
-      {$ifdef CPUX86}
-      asm // by-passing the RTL is a good idea here
-        push    ebx
-        mov     edx, dword ptr [c + 4]
-        mov     eax, dword ptr [c]
-        mov     ebx, 100
-        mov     ecx, eax
-        mov     eax, edx
-        xor     edx, edx
-        div     ebx
-        mov     dword ptr [c100 + 4], eax
-        xchg    eax, ecx
-        div     ebx
-        mov     dword ptr [c100], eax
-        imul    ebx, ecx
-        mov     ecx, 100
-        mul     ecx
-        add     edx, ebx
-        pop     ebx
-        sub     dword ptr [c + 4], edx
-        sbb     dword ptr [c], eax
-      end;
-      {$else}
-      c100 := c div 100;   // one div by two digits
-      dec(c, c100 * 100);  // fast c := c mod 100
-      {$endif CPUX86}
-      dec(P, 2);
-      PWord(P)^ := tab[c];
-      c := c100;
-      if (PCardinalArray(@c)^[1] = 0) then
-      begin
-        if PCardinal(@c)^ <> 0 then
-          P := StrUInt32(P, PCardinal(@c)^);
-        break;
-      end;
-    until false;
-  end;
-  result := P;
-end;
-{$endif CPU64}
-
-function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
-begin
-  {$ifdef CPU64}
-  result := StrInt32(P, val); // StrInt32 converts PtrInt=Int64 on 64-bit CPU
-  {$else}
-  if val < 0 then
-  begin
-    P := StrUInt64(P, -val) - 1;
-    P^ := '-';
-  end
-  else
-    P := StrUInt64(P, val);
-  result := P;
-  {$endif CPU64}
-end;
-
-
 { ************ integer arrays manipulation }
 
 function IsZero(const Values: TIntegerDynArray): boolean;
@@ -5463,32 +5475,83 @@ begin
   result := Int64ScanIndex(pointer(P), Count, Value); // this is the very same code
 end;
 
+{$ifdef CPU64}
+// PtrInt = Int64 and PtrUInt = QWord
+
 function PtrUIntScan(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): pointer;
 begin
-  {$ifdef CPU64}
   result := Int64Scan(pointer(P), Count, Value);
-  {$else}
-  result := IntegerScan(pointer(P), Count, Value);
-  {$endif CPU64}
 end;
 
 function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
 begin
-  {$ifdef CPU64}
   result := Int64ScanExists(pointer(P), Count, Value);
-  {$else}
-  result := IntegerScanExists(pointer(P), Count, Value);
-  {$endif CPU64}
 end;
 
 function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
 begin
-  {$ifdef CPU64}
   result := Int64ScanIndex(pointer(P), Count, Value);
-  {$else}
-  result := IntegerScanIndex(pointer(P), Count, Value);
-  {$endif CPU64}
 end;
+
+procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
+begin
+  QuickSortInt64(PInt64Array(P), L, R);
+end;
+
+procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
+begin
+  QuickSortInt64(PInt64Array(P), L, R);
+end;
+
+function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt;
+begin
+  result := FastFindInt64Sorted(PInt64Array(P), R, Value);
+end;
+
+function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt;
+begin
+  result := FastFindInt64Sorted(PInt64Array(P), R, Int64(Value));
+end;
+
+{$else}
+// PtrInt = integer and PtrUInt = cardinal
+
+function PtrUIntScan(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): pointer;
+begin
+  result := IntegerScan(pointer(P), Count, Value);
+end;
+
+function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
+begin
+  result := IntegerScanExists(pointer(P), Count, Value);
+end;
+
+function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
+begin
+  result := IntegerScanIndex(pointer(P), Count, Value);
+end;
+
+procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
+begin
+  QuickSortInteger(PIntegerArray(P), L, R);
+end;
+
+procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
+begin
+  QuickSortInteger(PIntegerArray(P), L, R);
+end;
+
+function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt;
+begin
+  result := FastFindIntegerSorted(PIntegerArray(P), R, Value);
+end;
+
+function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt;
+begin
+  result := FastFindIntegerSorted(PIntegerArray(P), R, integer(Value));
+end;
+
+{$endif CPU64}
 
 procedure DynArrayFakeLength(var arr; len: TDALen);
 begin
@@ -6112,42 +6175,6 @@ begin
         R := J;
       end;
     until L >= R;
-end;
-
-procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
-begin
-  {$ifdef CPU64}
-  QuickSortInt64(PInt64Array(P), L, R);
-  {$else}
-  QuickSortInteger(PIntegerArray(P), L, R);
-  {$endif CPU64}
-end;
-
-procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
-begin
-  {$ifdef CPU64}
-  QuickSortInt64(PInt64Array(P), L, R);
-  {$else}
-  QuickSortInteger(PIntegerArray(P), L, R);
-  {$endif CPU64}
-end;
-
-function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt;
-begin
-  {$ifdef CPU64}
-  result := FastFindInt64Sorted(PInt64Array(P), R, Value);
-  {$else}
-  result := FastFindIntegerSorted(PIntegerArray(P), R, Value);
-  {$endif CPU64}
-end;
-
-function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt;
-begin
-  {$ifdef CPU64}
-  result := FastFindInt64Sorted(PInt64Array(P), R, Int64(Value));
-  {$else}
-  result := FastFindIntegerSorted(PIntegerArray(P), R, integer(Value));
-  {$endif CPU64}
 end;
 
 function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt;
@@ -10991,7 +11018,7 @@ begin
     end;
   end;
   // setup minimalistic global functions - overriden by other core units
-  VariantClearSeveral := @_VariantClearSeveral;
+  VariantClearSeveral     := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
   // initialize CPU-specific asm
   TestCpuFeatures;
