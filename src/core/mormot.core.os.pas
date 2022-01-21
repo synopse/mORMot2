@@ -6373,6 +6373,44 @@ begin
   until false;
 end;
 
+procedure TrimDualSpaces(var s: RawUtf8);
+var
+  f, i: integer;
+begin
+  f := 1;
+  repeat
+    i := PosEx('  ', s, f);
+    if i = 0 then
+      break;
+    delete(s, i, 1); // dual space -> single space
+    f := i;
+  until false;
+  s := TrimU(s);
+end;
+
+procedure InitializeUnit;
+begin
+  {$ifdef ISFPC27}
+  SetMultiByteConversionCodePage(CP_UTF8);
+  SetMultiByteRTLFileSystemCodePage(CP_UTF8);
+  {$endif ISFPC27}
+  InitializeCriticalSection(GlobalCriticalSection);
+  InitializeSpecificUnit; // in mormot.core.os.posix/windows.inc files
+  TrimDualSpaces(OSVersionText);
+  TrimDualSpaces(OSVersionInfoEx);
+  TrimDualSpaces(BiosInfoText);
+  TrimDualSpaces(CpuInfoText);
+  OSVersionShort := ToTextOS(OSVersionInt32);
+  SetExecutableVersion(0, 0, 0, 0);
+  JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
+  JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
+  NULL_STR_VAR := 'null';
+  BOOL_UTF8[false] := 'false';
+  BOOL_UTF8[true] := 'true';
+  // minimal stubs which will be properly implemented in mormot.core.log.pas
+  GetExecutableLocation := _GetExecutableLocation;
+  SetThreadName := _SetThreadName;
+end;
 
 procedure FinalizeUnit;
 var
@@ -6391,22 +6429,7 @@ begin
 end;
 
 initialization
-  {$ifdef ISFPC27}
-  SetMultiByteConversionCodePage(CP_UTF8);
-  SetMultiByteRTLFileSystemCodePage(CP_UTF8);
-  {$endif ISFPC27}
-  InitializeCriticalSection(GlobalCriticalSection);
-  InitializeUnit; // in mormot.core.os.posix/windows.inc files
-  OSVersionShort := ToTextOS(OSVersionInt32);
-  SetExecutableVersion(0, 0, 0, 0);
-  JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
-  JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
-  NULL_STR_VAR := 'null';
-  BOOL_UTF8[false] := 'false';
-  BOOL_UTF8[true] := 'true';
-  // minimal stubs which will be properly implemented in mormot.core.log.pas
-  GetExecutableLocation := _GetExecutableLocation;
-  SetThreadName := _SetThreadName;
+  InitializeUnit;
 
 finalization
   FinalizeUnit;

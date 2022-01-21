@@ -1665,6 +1665,7 @@ begin
   DefaultHasher128(@e.h0, @si, SizeOf(si));
   // detailed CPU execution context and timing from Linux kernel
   DoHash128File(e.h0, '/proc/self/statm');
+  DoHash128File(e.h0, '/proc/self/stat');
   DoHash128File(e.h1, '/proc/stat');
   // read-only random UUID text like '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
   DoHash128File(e.h2, '/proc/sys/kernel/random/uuid');
@@ -2345,7 +2346,7 @@ begin
     AddInteger(result, v, {nodup=}true);
 end;
 
-{$ifdef CPUARM3264} // POSIX libc is faster than the RTL or our pascal code
+{$ifdef CPUARM3264} // POSIX libc is faster than FPC RTL or our pascal code
 
 function libc_strlen(s: PAnsiChar): SizeInt;
   cdecl external clib name 'strlen';
@@ -2434,7 +2435,7 @@ procedure crc32blocksarm64(crc128, data128: PBlock128; count: integer); external
 
 {$endif CPUAARCH64}
 
-procedure InitializeUnit;
+procedure InitializeSpecificUnit;
 var
   P: PAnsiChar;
   modname, beg: PUtf8Char;
@@ -2479,9 +2480,9 @@ begin
   {$else}
   {$ifdef OSANDROID}
   release := GetSystemProperty('ro.build.version.release');
-  prod := Trim(RawUtf8(GetSystemProperty('ro.product.brand') + ' ' +
-    GetSystemProperty('ro.product.name') + ' ' +
-    GetSystemProperty('ro.product.device')));
+  prod := TrimU(RawUtf8(GetSystemProperty('ro.product.brand') + ' ' +
+                        GetSystemProperty('ro.product.name') + ' ' +
+                        GetSystemProperty('ro.product.device')));
   {$else}
   prod := TrimU(TrimU(StringFromFile('/sys/class/dmi/id/sys_vendor', true)) +
     ' ' + StringFromFile('/sys/class/dmi/id/product_name', true));

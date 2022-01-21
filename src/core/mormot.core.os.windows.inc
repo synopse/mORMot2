@@ -3283,21 +3283,6 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL;
   stdcall; external kernel32 name 'GetVersionExA';
 {$endif UNICODE}
 
-procedure TrimDualSpaces(var s: RawUtf8);
-var
-  f, i: integer;
-begin
-  f := 1;
-  repeat
-    i := PosEx('  ', s, f);
-    if i = 0 then
-      break;
-    delete(s, i, 1); // dual space -> single space
-    f := i;
-  until false;
-  s := TrimU(s);
-end;
-
 function GetLocalTimeOffset: Integer; // not defined in oldest Delphi
 var
   tzi: TTimeZoneInformation;
@@ -3314,7 +3299,7 @@ begin
    end;
 end;
 
-procedure InitializeUnit;
+procedure InitializeSpecificUnit;
 var
   h: THandle;
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
@@ -3521,10 +3506,6 @@ begin
   cpu := TrimU(cpu);
   FormatU('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
-  TrimDualSpaces(OSVersionText);
-  TrimDualSpaces(OSVersionInfoEx);
-  TrimDualSpaces(BiosInfoText);
-  TrimDualSpaces(CpuInfoText);
 end;
 
 procedure FinalizeSpecificUnit;

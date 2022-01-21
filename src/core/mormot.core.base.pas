@@ -10991,7 +10991,6 @@ begin
 end;
 
 
-
 procedure InitializeUnit;
 var
   i, n: integer;
@@ -11023,6 +11022,7 @@ begin
   // initialize CPU-specific asm
   TestCpuFeatures;
 end;
+
 
 initialization
   InitializeUnit;
