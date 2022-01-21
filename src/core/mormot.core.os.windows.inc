@@ -1076,6 +1076,8 @@ function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
 var n: cardinal;
 begin
   result := nil;
+  if not Assigned(EnumProcesses) then
+    exit;
   n := 2048;
   repeat
     SetLength(result, n);
@@ -1142,9 +1144,9 @@ begin
         if QueryFullProcessImageNameW(h, 0, name, @len) then
           Win32PWideCharToUtf8(name, len, result);
       end
-      else
-        if GetModuleFileNameExW(h, 0, name, high(name)) <> 0 then
-          Win32PWideCharToUtf8(name, StrLenW(name), result);
+      else if Assigned(GetModuleFileNameExW) and
+              (GetModuleFileNameExW(h, 0, name, high(name)) <> 0) then
+        Win32PWideCharToUtf8(name, StrLenW(name), result);
     finally
       CloseHandle(h);
     end;
@@ -1213,10 +1215,12 @@ var
 begin
   QueryPerformanceCounter(h.Lo); // e.h3 xored with raw timestamps
   e.i[6] := e.i[6] xor h.Lo;
-  GetProcessTimes(GetCurrentProcess, ft.p, ft.e, ft.krn, ft.usr);
+  if Assigned(GetProcessTimes) then
+    GetProcessTimes(GetCurrentProcess, ft.p, ft.e, ft.krn, ft.usr);
   DefaultHasher128(@e.h0, @ft, SizeOf(ft));
   mem.cb := SizeOf(mem);
-  GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
+  if Assigned(GetProcessMemoryInfo) then
+    GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
   DefaultHasher128(@e.h1, @mem, SizeOf(mem));
   if Assigned(GetSystemTimes) then
     GetSystemTimes(ft.usr, ft.p, ft.e);
