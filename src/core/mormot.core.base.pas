@@ -2106,6 +2106,11 @@ procedure RcuPtr(var src, dst);
 /// thread-safe move of a memory buffer using a simple Read-Copy-Update pattern
 procedure Rcu(var src, dst; len: integer);
 
+{$ifdef ISDELPHI}
+/// this function is an intrinsic in FPC
+procedure ReadBarrier;
+{$endif ISDELPHI}
+
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
 {$ifdef CPUINTEL}
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
