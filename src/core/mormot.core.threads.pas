@@ -66,6 +66,7 @@ type
     fCount, fFirst, fLast: integer;
     fWaitPopFlags: set of (wpfDestroying);
     fWaitPopCounter: integer;
+    function GetCount: integer;
     procedure InternalPop(aValue: pointer);
     procedure InternalGrow;
     function InternalDestroying(incPopCounter: integer): boolean;
@@ -1030,16 +1031,29 @@ begin
   end;
 end;
 
+function TSynQueue.GetCount: integer;
+var
+  f, l: integer;
+begin
+  f := fFirst;
+  l := fLast;
+  if f < 0 then
+    result := 0
+  else if f <= l then
+    result := l - f + 1
+  else
+    result := fCount - f + l + 1;
+end;
+
 function TSynQueue.Count: integer;
 begin
   if self = nil then
     result := 0
-  else if fFirst < 0 then
-    result := 0
-  else if fFirst <= fLast then
-    result := fLast - fFirst + 1
   else
-    result := fCount - fFirst + fLast + 1;
+    repeat
+      result := GetCount;
+      ReadBarrier;
+    until GetCount = result; // RCU algorithm to avoid aberations
 end;
 
 function TSynQueue.Capacity: integer;
