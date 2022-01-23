@@ -5469,7 +5469,11 @@ end;
 
 procedure TLightLock.UnLock;
 begin
+  {$ifdef CPUINTEL}
   Flags := 0; // non reentrant locks need no additional thread safety
+  {$else}
+  LockedDec(Flags, 1); // ARM can be weak-ordered - see shorturl.at/kuJ12
+  {$endif CPUINTEL}
 end;
 
 

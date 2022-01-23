@@ -7326,7 +7326,8 @@ end;
 
 function TDynArray.FastLocateSorted(const Item; out Index: integer): boolean;
 var
-  n, i, cmp: integer;
+  n, i: PtrInt;
+  cmp: integer;
   P: PAnsiChar;
 begin
   result := False;
@@ -7351,9 +7352,9 @@ begin
           inc(Index);
         exit;
       end;
-      Index := 0;
+      // O(log(n)) binary search of the sorted position
+      Index := 0; // more efficient code if we use Index and not a local var
       repeat
-        // O(log(n)) binary search of the sorted position
         i := (Index + n) shr 1;
         cmp := fCompare(P[i * fInfo.Cache.ItemSize], Item);
         if cmp = 0 then
