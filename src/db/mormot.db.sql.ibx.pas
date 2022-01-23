@@ -430,7 +430,7 @@ begin
   fStatement.SetStaleReferenceChecks(false);
   fStatement.SetRetainInterfaces(true);
   fColumnCount := 0;
-  fColumn.ReHash;
+  fColumn.ForceReHash;
   if ExpectResults then
   begin
     fMeta := fStatement.GetMetaData;

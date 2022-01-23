@@ -1137,7 +1137,7 @@ begin
     if fExpectResults then
     begin
       fColumnCount := 0;
-      fColumn.ReHash;
+      fColumn.ForceReHash;
       fCurrentRow := -1;
       fResultSet := fStatement.ExecuteQueryPrepared;
       if fResultSet = nil then
