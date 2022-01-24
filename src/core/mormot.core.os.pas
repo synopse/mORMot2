@@ -3087,7 +3087,7 @@ function SleepDelay(elapsed: PtrInt): PtrInt;
 function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): PtrInt;
 
 /// similar to Windows SwitchToThread API call, to be truly cross-platform
-// - call fpnanosleep(10) on POSIX systems
+// - call fpnanosleep(10) on POSIX systems, or the homonymous API on Windows
 procedure SwitchToThread;
   {$ifdef OSWINDOWS} stdcall; {$endif}
 
@@ -5371,6 +5371,8 @@ begin
   result := terminated = terminatedvalue;
 end;
 
+// as reference, take a look at Linus insight
+// from https://www.realworldtech.com/forum/?threadid=189711&curpostid=189755
 {$ifdef CPUINTEL}
 procedure DoPause; {$ifdef FPC} assembler; nostackframe; {$endif}
 asm
@@ -5386,9 +5388,9 @@ const
   {$endif CPUINTEL}
 
 function DoSpin(spin: PtrUInt): PtrUInt;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef CPUINTEL} {$ifdef HASINLINE} inline; {$endif} {$endif}
 begin
-  {$ifdef CPUINTEL}
+  {$ifdef CPUINTEL} // on ARM/AARCH64, the not-inlined function call makes delay
   DoPause;
   {$endif CPUINTEL}
   dec(spin);
@@ -5405,7 +5407,8 @@ var
   spin: PtrUInt;
 begin
   spin := SPIN_COUNT;
-  while not LockedExc(Target, NewValue, Comperand) do
+  while (Target <> Comperand) or
+        not LockedExc(Target, NewValue, Comperand) do
     spin := DoSpin(spin);
 end;
 
@@ -5452,7 +5455,8 @@ begin
   spin := SPIN_COUNT;
   repeat
     spin := DoSpin(spin);
-  until LockedExc(Flags, 1, 0);
+  until (Flags = 0) and // when spinning, first check without atomicity
+        LockedExc(Flags, 1, 0);
 end;
 
 procedure TLightLock.Lock;
@@ -5492,7 +5496,8 @@ begin
   repeat
     spin := DoSpin(spin);
     f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock counter
-  until LockedExc(Flags, f + 2, f);
+  until (Flags = f) and
+        LockedExc(Flags, f + 2, f);
 end;
 
 procedure TRWLightLock.ReadLock;
@@ -5527,7 +5532,8 @@ begin
   // acquire the WR flag bit
   repeat
     f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock counter
-    if LockedExc(Flags, f + 1, f) then
+    if (Flags = f) and
+       LockedExc(Flags, f + 1, f) then
       exit;
     spin := DoSpin(spin);
   until false;
@@ -5629,7 +5635,8 @@ begin
   repeat
     spin := DoSpin(spin);
     f := Flags and not 1; // retry ReadOnlyLock
-  until LockedExc(Flags, f + 4, f);
+  until (Flags = f) and
+        LockedExc(Flags, f + 4, f);
 end;
 
 {$endif ASMX86}
@@ -5656,7 +5663,8 @@ begin
   spin := SPIN_COUNT;
   repeat
     f := Flags and not 3; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
-    if LockedExc(Flags, f + 2, f) then
+    if (Flags = f) and
+       LockedExc(Flags, f + 2, f) then
       break;
     spin := DoSpin(spin);
   until false;
@@ -5691,7 +5699,8 @@ begin
   // acquire the WR flag bit
   repeat
     f := Flags and not 1; // bit 0=WriteLock, 1=ReadWriteLock, >1=ReadOnlyLock
-    if LockedExc(Flags, f + 1, f) then
+    if (Flags = f) and
+       LockedExc(Flags, f + 1, f) then
       if (Flags and 2 = 2) and
          (LastReadWriteLockThread <> tid) then
         // there is a pending ReadWriteLock but not on this thread
