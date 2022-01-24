@@ -2277,6 +2277,7 @@ end;
 
 function clock_gettime_c(clk_id: clockid_t; tp: ptimespec): cint;
 begin
+  // FPC only knows the regular clocks: convert to the *_FAST version
   case clk_id of
     // 1 ms resolution is good enough for milliseconds-based RTL functions
     CLOCK_REALTIME:
@@ -2649,7 +2650,7 @@ begin
   {$ifdef OSPTHREADS}
   // mutex_lock() is blocking when dlopen run from a .so: cthreads uses both
   // both static and dynamic linking, which is really confusing to our code
-  // -> we don't open libpthread but we
+  // -> we don't open libpthread but we get its symbol
   pthread := dlopen('libpthread.so.0', RTLD_LAZY);
   if pthread <> nil then
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');

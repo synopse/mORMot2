@@ -94,6 +94,11 @@ unit mormot.core.fpcx64mm;
 // - will disable Linux mremap() or Windows following block VirtualQuery/Alloc
 {.$define FPCMM_NOMREMAP}
 
+// Linux only: customize mmap() allocation strategy
+{.$define FPCMM_MEDIUMMAPPOPULATE} // let Linux AllocMedium() use MAP_POPULATE
+{.$define FPCMM_LARGEMAPPOPULATE}  // let Linux AllocLarge() use MAP_POPULATE
+{.$define FPCMM_MEDIUM32BIT}       // enable MAP_32BIT for AllocMedium()
+
 // force the tiny/small blocks to be in their own arena, not with medium blocks
 // - would use a little more memory, but medium pool is less likely to sleep
 // - not defined for FPCMM_SERVER because no performance difference was found
@@ -130,6 +135,10 @@ interface
     {$define FPCX64MM} // this unit is for FPC + x86_64 only
     {$asmmode Intel}
   {$endif CPUX64}
+  {$ifdef OLDLINUXKERNEL}
+    {$define FPCMM_NOMREMAP}
+  {$endif OLDLINUXKERNEL}
+
   {$ifdef FPCMM_BOOSTER}
     {$define FPCMM_BOOST}
   {$endif FPCMM_BOOSTER}
@@ -142,6 +151,8 @@ interface
     {$define FPCMM_ASSUMEMULTITHREAD}
     {$define FPCMM_LOCKLESSFREE}
     {$define FPCMM_ERMS}
+  {$else}
+    {$define FPCMM_MEDIUMMAPPOPULATE} // actually faster on single threaded app
   {$endif FPCMM_SERVER}
   {$ifdef FPCMM_BOOSTER}
     {$undef FPCMM_DEBUG} // when performance matters more than stats
@@ -377,7 +388,8 @@ implementation
   - New round-robin thread-friendly arenas of tiny blocks;
   - Tiny and small blocks can fed from their own pool, not the medium pool;
   - Additional bin list to reduce small/tiny Freemem() thread contention;
-  - Memory leaks and thread sleep tracked with almost no performance loss;
+  - Memory leaks and thread sleep tracked with almost no performance impact;
+  - Detailed per-block statistics with almost no performance penalty;
   - Large blocks logic has been rewritten, especially realloc;
   - On Linux, mremap is used for efficient realloc of large blocks.
 
@@ -521,20 +533,45 @@ uses
 // -> see FPCMM_NOSFRAME conditional to disable it on LINUX
 {$ifdef LINUX}
   {$define NOSFRAME}
+{$else}
+  {$define OLDLINUXKERNEL} // no Linuxism on BSD
 {$endif LINUX}
 
 
 // we directly call the OS Kernel, so this unit doesn't require any libc
 
+const
+  {$ifdef OLDLINUXKERNEL}
+  MAP_POPULATE = 0; // require Linux 2.5.46
+  MAP_32BIT = 0;    // require Linux 2.4.20 / 2.6
+  {$else}
+  // put the mapping in first 2 GB of memory (31-bit addresses)
+  MAP_32BIT = $40;
+  // populate (prefault) pagetables to avoid page faults later
+  MAP_POPULATE = $08000;
+  {$endif OLDLINUXKERNEL}
+
+  // tiny/small/medium blocks may be allocated as 31-bit pointers
+  // - warning: FPCMM_MEDIUM32BIT may be incompatible with TOrmTable for data
+  // >256KB so may require NOPOINTEROFFSET conditional, so is not set by default
+  // - MAP_POPULATE seems to enhance performance on single threaded process,
+  // but is not included on multi-thread, since it generates locking sleeps
+  MAP_MEDIUM = MAP_PRIVATE or MAP_ANONYMOUS
+     {$ifdef FPCMM_MEDIUM32BIT} or MAP_32BIT {$endif}
+     {$ifdef FPCMM_MEDIUMMAPPOPULATE} or MAP_POPULATE {$endif};
+  // large blocks could use the whole 64-bit address space
+  // - MAP_POPULATE may be included to avoid page faults
+  MAP_LARGE = MAP_PRIVATE or MAP_ANONYMOUS
+     {$ifdef FPCMM_LARGEMAPPOPULATE} or MAP_POPULATE {$endif};
+
 function AllocMedium(Size: PtrInt): pointer; inline;
 begin
-  result := fpmmap(nil, Size, PROT_READ or PROT_WRITE,
-    MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
+  result := fpmmap(nil, Size, PROT_READ or PROT_WRITE, MAP_MEDIUM, -1, 0);
 end;
 
 function AllocLarge(Size: PtrInt): pointer; inline;
 begin
-  result := AllocMedium(size); // same API (no MEM_TOP_DOWN option)
+  result := fpmmap(nil, Size, PROT_READ or PROT_WRITE, MAP_LARGE, -1, 0);
 end;
 
 procedure FreeMediumLarge(ptr: pointer; Size: PtrInt); inline;

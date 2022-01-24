@@ -80,9 +80,10 @@
 
 {.$define NOPOINTEROFFSET}
 // disable TOrmTable offsets on 64-bit if your memory is huge or fragmented
+// note: FPCMM_MEDIUM32BIT may need this for data >256KB
 
 {.$define NOTORMTABLELEN}
-// disable TOrmTable internal fLen[] pre-computed table - may save some memory
+// disable TOrmTable internal fLen[] pre-computed table - slower but less memory
 
 {.$define NOSQLITE3STATIC}
 // disable static SQlite3 linking - to force use external dll/so library
@@ -98,6 +99,12 @@
 
 {.$define ONLYUSEHTTPSOCKET}
 // is defined on POSIX but may be enabled on Windows if socket+SChannel is enough
+
+{.$define OLDLIBC}
+// use only oldest libc API, e.g. accept() instead of accept4()
+
+{.$define OLDLINUXKERNEL}
+// use only oldest Linux syscalls - as in FPC RTL
 
 {.$define USE_OPENSSL}
 // is defined on POSIX (with late binding) but may be enabled on Windows too
@@ -704,7 +711,6 @@
 {$ifdef OSPOSIX}
 
   {$define ONLYUSEHTTPSOCKET} // efficient cross-platform Socket + OpenSSL API
-  {.$define OLDLIBC} // use only oldest API, e.g. accept() instead of accept4()
 
   {$ifdef OSANDROID}
 
