@@ -95,9 +95,10 @@ unit mormot.core.fpcx64mm;
 {.$define FPCMM_NOMREMAP}
 
 // Linux only: customize mmap() allocation strategy
-{.$define FPCMM_MEDIUMMAPPOPULATE} // let Linux AllocMedium() use MAP_POPULATE
-{.$define FPCMM_LARGEMAPPOPULATE}  // let Linux AllocLarge() use MAP_POPULATE
 {.$define FPCMM_MEDIUM32BIT}       // enable MAP_32BIT for AllocMedium()
+{.$define FPCMM_LARGEBIGALIGN}     // align large chunks to 21-bit=2MB=PMD_SIZE
+{.$define FPCMM_MEDIUMMAPPOPULATE} // let Linux AllocMedium() use MAP_POPULATE
+{$define FPCMM_LARGEMAPPOPULATE}   // let Linux AllocLarge() use MAP_POPULATE
 
 // force the tiny/small blocks to be in their own arena, not with medium blocks
 // - would use a little more memory, but medium pool is less likely to sleep
@@ -145,6 +146,7 @@ interface
   {$ifdef FPCMM_BOOST}
     {$define FPCMM_SERVER}
     {$define FPCMM_SMALLNOTWITHMEDIUM}
+    {$define FPCMM_LARGEBIGALIGN} // bigger blocks implies less reallocation
   {$endif FPCMM_BOOST}
   {$ifdef FPCMM_SERVER}
     {$define FPCMM_DEBUG}
@@ -390,8 +392,9 @@ implementation
   - Additional bin list to reduce small/tiny Freemem() thread contention;
   - Memory leaks and thread sleep tracked with almost no performance impact;
   - Detailed per-block statistics with almost no performance penalty;
+  - On Linux, mremap is used for efficient realloc of large blocks;
   - Large blocks logic has been rewritten, especially realloc;
-  - On Linux, mremap is used for efficient realloc of large blocks.
+  - Largest blocks can grow by 2MB=PMD_SIZE chunks for even faster mremap.
 
   About locking:
   - Tiny and Small blocks have their own per-size lock;
@@ -534,7 +537,13 @@ uses
 {$ifdef LINUX}
   {$define NOSFRAME}
 {$else}
-  {$define OLDLINUXKERNEL} // no Linuxism on BSD
+  {$define OLDLINUXKERNEL}      // no Linuxism on BSD
+{$endif LINUX}
+
+// on Linux, mremap() on PMD_SIZE=2MB aligned data can make a huge speedup
+// see https://lwn.net/Articles/833208
+{$ifdef LINUX}
+  {$define FPCMM_LARGEBIGALIGN} // align large chunks to 21-bit = 2MB = PMD_SIZE
 {$endif LINUX}
 
 
@@ -542,12 +551,13 @@ uses
 
 const
   {$ifdef OLDLINUXKERNEL}
-  MAP_POPULATE = 0; // require Linux 2.5.46
-  MAP_32BIT = 0;    // require Linux 2.4.20 / 2.6
+    {$undef FPCMM_MEDIUM32BIT}
+    {$undef FPCMM_MEDIUMMAPPOPULATE}
+    {$undef FPCMM_LARGEMAPPOPULATE}
   {$else}
-  // put the mapping in first 2 GB of memory (31-bit addresses)
+  /// put the mapping in first 2 GB of memory (31-bit addresses) - 2.4.20, 2.6
   MAP_32BIT = $40;
-  // populate (prefault) pagetables to avoid page faults later
+  /// populate (prefault) pagetables to avoid page faults later - 2.5.46
   MAP_POPULATE = $08000;
   {$endif OLDLINUXKERNEL}
 
@@ -559,14 +569,30 @@ const
   MAP_MEDIUM = MAP_PRIVATE or MAP_ANONYMOUS
      {$ifdef FPCMM_MEDIUM32BIT} or MAP_32BIT {$endif}
      {$ifdef FPCMM_MEDIUMMAPPOPULATE} or MAP_POPULATE {$endif};
+
   // large blocks could use the whole 64-bit address space
-  // - MAP_POPULATE may be included to avoid page faults
+  // - MAP_POPULATE may be included by FPCMM_BOOST to avoid page faults, with
+  // no penalty since mmap/mremap are called outside the large blocks lock
   MAP_LARGE = MAP_PRIVATE or MAP_ANONYMOUS
      {$ifdef FPCMM_LARGEMAPPOPULATE} or MAP_POPULATE {$endif};
 
+{$ifdef FPCMM_MEDIUM32BIT}
+var
+  AllocMediumflags: integer = MAP_MEDIUM;
+{$else}
+  AllocMediumflags = MAP_MEDIUM;
+{$endif FPCMM_MEDIUM32BIT}
+
 function AllocMedium(Size: PtrInt): pointer; inline;
 begin
-  result := fpmmap(nil, Size, PROT_READ or PROT_WRITE, MAP_MEDIUM, -1, 0);
+  result := fpmmap(nil, Size, PROT_READ or PROT_WRITE, AllocMediumflags, -1, 0);
+  {$ifdef FPCMM_MEDIUM32BIT}
+  if (result <> nil) or
+     (AllocMediumflags and MAP_32BIT = 0) then
+    exit;
+  AllocMediumflags := AllocMediumflags and not MAP_32BIT;
+  result := AllocMedium(Size); // try with no 2GB limit from now on
+  {$endif FPCMM_MEDIUM32BIT}
 end;
 
 function AllocLarge(Size: PtrInt): pointer; inline;
@@ -629,6 +655,8 @@ begin
   Move(addr^, result^, new_len); // RTL non-volatile asm or our AVX MoveFast()
   FreeMediumLarge(addr, old_len);
 end;
+
+{$undef FPCMM_LARGEBIGALIGN}  // keep 64KB granularity if no mremap()
 
 {$endif FPCMM_NOMREMAP}
 
@@ -803,6 +831,7 @@ const
 
   {$ifdef FPCMM_ERMS}
   // pre-ERMS expects at least 256 bytes, IvyBridge+ with ERMS is good from 64
+  // (copy_user_enhanced_fast_string() in recent Linux kernel uses 64)
   // see https://stackoverflow.com/a/43837564/458259 for explanations and timing
   // -> "movaps" loop is used up to 256 bytes of data: good on all CPUs
   // -> "movnt" Move/MoveFast is used for large blocks: always faster than ERMS
@@ -924,7 +953,12 @@ const
   SmallBlockPoolHeaderSize = SizeOf(TSmallBlockPoolHeader);
   MediumBlockPoolHeaderSize = SizeOf(TMediumBlockPoolHeader);
   LargeBlockHeaderSize = SizeOf(TLargeBlockHeader);
-  LargeBlockGranularity = 65536;
+  LargeBlockGranularity = 1 shl 16; // 64KB for (smallest) large blocks
+  {$ifdef FPCMM_LARGEBIGALIGN}
+  LargeBlockGranularity2 = 1 shl 21;      // PMD_SIZE=2MB granularity
+  LargeBlockGranularity2Size = 2 shl 21;  // for size >= 4MB
+  // on Linux, mremap() on PMD_SIZE=2MB aligned data can make a huge speedup
+  {$endif FPCMM_LARGEBIGALIGN}
 
 var
   SmallBlockInfo: TSmallBlockInfo;
@@ -1190,39 +1224,49 @@ asm
 @ok:    // reset the stack frame before ret
 end;
 
-function AllocateLargeBlockFrom(size: PtrUInt;
-  existing: pointer; oldsize: PtrUInt): pointer;
-var
-  blocksize: PtrUInt;
-  header, old: PLargeBlockHeader;
+function ComputeLargeBlockSize(size: PtrUInt): PtrUInt; inline;
 begin
-  blocksize := (size + LargeBlockHeaderSize +
-    LargeBlockGranularity - 1 + BlockHeaderSize) and -LargeBlockGranularity;
-  if existing = nil then
-    header := AllocLarge(blocksize)
+  inc(size, LargeBlockHeaderSize - 1 + BlockHeaderSize);
+  {$ifdef FPCMM_LARGEBIGALIGN}
+  // on Linux, mremap() on PMD_SIZE=2MB aligned data make a huge speedup
+  if size >= LargeBlockGranularity2Size then // trigger if size>=4MB
+    result := (size + LargeBlockGranularity2) and -LargeBlockGranularity2
   else
-    header := RemapLarge(existing, oldsize, blocksize);
-  if header <> nil then
+  {$endif FPCMM_LARGEBIGALIGN}
+    // use default 64KB granularity
+    result := (size + LargeBlockGranularity) and -LargeBlockGranularity;
+end;
+
+function AllocateLargeBlockFrom(existing: pointer;
+  oldblocksize, newblocksize: PtrUInt): pointer;
+var
+  new, old: PLargeBlockHeader;
+begin
+  if existing = nil then
+    new := AllocLarge(newblocksize)
+  else
+    new := RemapLarge(existing, oldblocksize, newblocksize);
+  if new <> nil then
   begin
-    NotifyArenaAlloc(HeapStatus.Large, blocksize);
+    NotifyArenaAlloc(HeapStatus.Large, newblocksize);
     if existing <> nil then
-      NotifyMediumLargeFree(HeapStatus.Large, oldsize);
-    header.BlockSizeAndFlags := blocksize or IsLargeBlockFlag;
+      NotifyMediumLargeFree(HeapStatus.Large, oldblocksize);
+    new.BlockSizeAndFlags := newblocksize or IsLargeBlockFlag;
     LockLargeBlocks;
     old := LargeBlocksCircularList.NextLargeBlockHeader;
-    header.PreviousLargeBlockHeader := @LargeBlocksCircularList;
-    LargeBlocksCircularList.NextLargeBlockHeader := header;
-    header.NextLargeBlockHeader := old;
-    old.PreviousLargeBlockHeader := header;
+    new.PreviousLargeBlockHeader := @LargeBlocksCircularList;
+    LargeBlocksCircularList.NextLargeBlockHeader := new;
+    new.NextLargeBlockHeader := old;
+    old.PreviousLargeBlockHeader := new;
     LargeBlocksLocked := False;
-    inc(header);
+    inc(new);
   end;
-  result := header;
+  result := new;
 end;
 
 function AllocateLargeBlock(size: PtrUInt): pointer;
 begin
-  result := AllocateLargeBlockFrom(size, nil, 0);
+  result := AllocateLargeBlockFrom(nil, 0, ComputeLargeBlockSize(size));
 end;
 
 procedure FreeLarge(ptr: PLargeBlockHeader; size: PtrUInt);
@@ -1254,7 +1298,7 @@ end;
 
 function ReallocateLargeBlock(p: pointer; size: PtrUInt): pointer;
 var
-  oldavail, minup, new: PtrUInt;
+  oldavail, minup, new, old: PtrUInt;
   prev, next, header: PLargeBlockHeader;
 begin
   header := pointer(PByte(p) - LargeBlockHeaderSize);
@@ -1292,18 +1336,25 @@ begin
   end
   else
   begin
-    // remove large block from current chain list
-    LockLargeBlocks;
-    prev := header^.PreviousLargeBlockHeader;
-    next := header^.NextLargeBlockHeader;
-    next.PreviousLargeBlockHeader := prev;
-    prev.NextLargeBlockHeader := next;
-    LargeBlocksLocked := False;
-    size := DropMediumAndLargeFlagsMask and header^.BlockSizeAndFlags;
-    // on Linux, call Kernel mremap() and its TLB magic
-    // on Windows, try to reserve the memory block just after the existing
-    // otherwise, use Alloc/Move/Free pattern, with asm/AVX move
-    result := AllocateLargeBlockFrom(new, header, size);
+    old := DropMediumAndLargeFlagsMask and header^.BlockSizeAndFlags;
+    size := ComputeLargeBlockSize(new);
+    if size = old then
+      // no need to realloc anything (paranoid check: should be handled above)
+      result := p
+    else
+    begin
+      // remove previous large block from current chain list
+      LockLargeBlocks;
+      prev := header^.PreviousLargeBlockHeader;
+      next := header^.NextLargeBlockHeader;
+      next.PreviousLargeBlockHeader := prev;
+      prev.NextLargeBlockHeader := next;
+      LargeBlocksLocked := False;
+      // on Linux, call Kernel mremap() and its TLB magic
+      // on Windows, try to reserve the memory block just after the existing
+      // otherwise, use Alloc/Move/Free pattern, with asm/AVX move
+      result := AllocateLargeBlockFrom(header, old, size);
+    end;
   end;
 end;
 
