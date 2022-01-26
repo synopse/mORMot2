@@ -578,11 +578,28 @@ var
   OSVersionShort: RawUtf8;
 
   /// some textual information about the current CPU
-  // - contains e.g. '4 x Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz (x64)'
+  // - contains e.g. '4 x Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz 3MB cache'
   CpuInfoText: RawUtf8;
+  /// the on-chip cache size as returned by the OS
+  // - retrieved from /proc/cpuinfo "cache size" entry (L3 cache) on Linux or
+  // CpuCache[3/4].Size (from GetLogicalProcessorInformation) on Windows
+  CpuCacheSize: cardinal;
+  /// the available cache information as returned by the OS
+  // - e.g. 'L1=2*32KB  L2=256KB  L3=3MB' on Windows or '3072 KB' on Linux
+  CpuCacheText: RawUtf8;
   /// some textual information about the current computer hardware, from BIOS
   // - contains e.g. 'LENOVO 20HES23B0U ThinkPad T470'
   BiosInfoText: RawUtf8;
+
+  {$ifdef OSWINDOWS}
+  /// Level 1 to 4 CPU caches as returned by GetLogicalProcessorInformation
+  // - yes, Intel introduced a Level 4 cache (eDRAM) with some Haswell/Iris CPUs
+  // - we don't retrieve this information from Linux / POSIX yet
+  // - only Unified or Data caches are include (not Instruction or Trace)
+  CpuCache: array[1..4] of record
+    Count, Size, LineSize: cardinal;
+  end;
+  {$endif OSWINDOWS}
 
   {$ifdef OSLINUXANDROID}
   /// contains the Flags: or Features: value of Linux /proc/cpuinfo
@@ -4872,8 +4889,8 @@ end;
 function TFakeStubBuffer.Reserve(size: cardinal): pointer;
 begin
   result := @Stub[StubUsed];
-  while size and 7 <> 0 do
-    inc(size); // ensure the returned buffers are 8 bytes aligned
+  while size and 15 <> 0 do
+    inc(size); // ensure the returned buffers are 16 bytes aligned
   inc(StubUsed, size);
 end;
 
@@ -4920,12 +4937,10 @@ end;
 {$endif UNIX}
 
 {$ifndef PUREMORMOT2}
-
 function GetDelphiCompilerVersion: RawUtf8;
 begin
   result := COMPILER_VERSION;
 end;
-
 {$endif PUREMORMOT2}
 
 function ConsoleReadBody: RawByteString;

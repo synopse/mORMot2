@@ -2413,7 +2413,6 @@ type
     cbData: DWORD;
     pbData: PAnsiChar;
   end;
-
   PDATA_BLOB = ^DATA_BLOB;
   {$ifdef FPC}
   {$packrecords DEFAULT}
@@ -3282,6 +3281,43 @@ const
   SM_SERVERR2 = 89;
   PROCESSOR_ARCHITECTURE_AMD64 = 9;
 
+type
+  TSystemLogicalProcessorRelation = (
+    RelationProcessorCore,
+    RelationNumaNode,
+    RelationCache,
+    RelationProcessorPackage,
+    RelationGroup);
+  TSystemLogicalProcessorCache = (
+    CacheUnified,
+    CacheInstruction,
+    CacheData,
+    CacheTrace);
+
+  {$ifdef CPU64}
+  {$A8}
+  {$else}
+  {$A4}
+  {$endif CPU64}
+  TSystemLogicalProcessorInformation = record
+    ProcessorMask: PtrUInt;
+    case Relationship: TSystemLogicalProcessorRelation of
+      RelationProcessorCore: (
+        ProcessorCoreFlags: BYTE);
+      RelationNumaNode: (
+        NumaNodeNumber: DWORD);
+      RelationCache: (
+        Cache: record
+          Level: BYTE;
+          Associativity: BYTE;
+          LineSize: WORD;
+          Size: DWORD;
+          CacheType: TSystemLogicalProcessorCache;
+        end);
+      RelationGroup: (Reserved: array [0..1] of QWord);
+  end;
+  {$A+}
+
 {$ifndef UNICODE}
 function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL;
   stdcall; external kernel32 name 'GetVersionExA';
@@ -3303,17 +3339,41 @@ begin
    end;
 end;
 
+function KB(Size: cardinal): shortstring;
+begin
+  if Size >= 1 shl 30 then
+  begin
+    str(Size shr 30, result);
+    result := result + 'GB';
+  end
+  else if Size >= 1 shl 20 then
+  begin
+    str(Size shr 20, result);
+    result := result + 'MB';
+  end
+  else
+  begin
+    str(Size shr 10, result);
+    result := result + 'KB';
+  end
+end;
+
 procedure InitializeSpecificUnit;
 var
   h: THandle;
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
   GetNativeSystemInfo: procedure(var SystemInfo: TSystemInfo); stdcall;
+  GetLogicalProcessorInformation: function(
+   var Info: TSystemLogicalProcessorInformation; Len: PDWORD): BOOL; stdcall;
   wine_get_version: function: PAnsiChar; stdcall;
   Res: BOOL;
   P: pointer;
   Vers: TWindowsVersion;
   cpu, manuf, prod, prodver: RawUtf8;
   reg: TWinRegistry;
+  proc: array of TSystemLogicalProcessorInformation;
+  i: integer;
+  siz: DWORD;
 begin
   {$ifndef FPC} // FPC_X86 already redirect to FastCode RTL Move()
   {$ifdef ASMX86}
@@ -3327,6 +3387,7 @@ begin
     ConsoleWrite('WARNING: Old not SSE2 CPU detected -> ' +
       'please recompile with HASNOSSE2', ccLightRed);
     // note: FillCharFast is handled by mormot.core.base via ERMSB
+    // and Byte/Word/IntegerScanIndex() are likely to GPF at runtime
   end;
   {$endif HASNOSSE2}
   {$endif ASMX86}
@@ -3360,6 +3421,7 @@ begin
   @GetSystemTimes := GetProcAddress(h, 'GetSystemTimes');
   @GetProcessTimes := GetProcAddress(h, 'GetProcessTimes');
   @QueryFullProcessImageNameW := GetProcAddress(h, 'QueryFullProcessImageNameW');
+  @GetLogicalProcessorInformation := GetProcAddress(h, 'GetLogicalProcessorInformation');
   h := Windows.LoadLibrary('Psapi.dll');
   if h >= 32 then
   begin
@@ -3507,9 +3569,50 @@ begin
     BiosInfoText := BiosInfoText + ' ' + prodver;
   if {%H-}cpu = '' then
     cpu := RawUtf8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
-  cpu := TrimU(cpu);
+  if Assigned(GetLogicalProcessorInformation) then
+  begin
+    SetLength(proc, 512);
+    siz := SizeOf(proc[0]) * 512;
+    if GetLogicalProcessorInformation(Proc[0], @siz) then
+      for i := 0 to (siz div SizeOf(proc[0])) - 1 do
+        with Proc[i] do
+          case Relationship of
+            RelationCache:
+              if Cache.CacheType in [CacheUnified, CacheData] then
+                if (Cache.Level >= low(CpuCache)) and
+                   (Cache.Level <= high(CpuCache)) then
+                  with CpuCache[Cache.Level] do
+                    if (Count = 0) or
+                       (Cache.CacheType <> CacheUnified) then
+                    begin
+                      inc(Count);
+                      Size := Cache.Size;
+                      LineSize := Cache.LineSize;
+                    end;
+          end;
+    for i := high(CpuCache) downto low(CpuCache) do
+    begin
+      CpuCacheSize := CpuCache[i].Size;
+      if CpuCacheSize <> 0 then
+      begin
+        cpu := RawUtf8(format('%s %s cache', [cpu, KB(CpuCacheSize)]));
+        break;
+      end;
+    end;
+    for i := low(CpuCache) to high(CpuCache) do
+      with CpuCache[i] do
+        if Count <> 0 then       
+          if Count = 1 then
+            CpuCacheText := RawUtf8(
+              format('%s L%d=%s ', [CpuCacheText, i, KB(Size)]))
+          else
+            CpuCacheText := RawUtf8(
+              format('%s L%d=%d*%s ', [CpuCacheText, i, Count, KB(Size)]));
+    CpuCacheText := TrimU(CpuCacheText);
+  end;
   FormatU('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
+  // writeln(CpuInfoText); writeln(CpuCacheText);
 end;
 
 procedure FinalizeSpecificUnit;

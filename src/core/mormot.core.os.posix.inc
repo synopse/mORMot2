@@ -1934,7 +1934,7 @@ end;
 
 {$else}
 
-// other platforms (Intel+Arm64) use plain Kernel call
+// other platforms (Intel+Arm64) use plain Kernel call and PtrInt jump
 function StubCallAllocMem(const Size, flProtect: DWORD): pointer;
 begin
   result := fpmmap(nil, STUB_SIZE,
@@ -2451,7 +2451,7 @@ var
   {$ifdef OSBSDDARWIN}
   temp: ShortString;
   {$else}
-  hw, cpuinfo: PUtf8Char;
+  hw, cache, cpuinfo: PUtf8Char;
   proccpuinfo, release, prod: RawUtf8;
   {$ifdef OSLINUX}
   prodver, dist: RawUtf8;
@@ -2544,6 +2544,7 @@ begin
   {$endif OSANDROID}
   BiosInfoText := prod;
   hw := nil;
+  cache := nil;
   SystemInfo.dwNumberOfProcessors := 0;
   proccpuinfo := StringFromFile('/proc/cpuinfo', true);
   cpuinfo := pointer(proccpuinfo);
@@ -2564,6 +2565,8 @@ begin
       CpuInfoFeatures := ParseLine(beg)
     else if IdemPChar(beg, 'HARDWARE') then
       hw := ParseLine(beg)
+    else if IdemPChar(beg, 'CACHE SIZE') then
+      cache := ParseLine(beg)
     {$ifdef CPUARM3264}
     else if IdemPChar(beg, 'CPU IMPLEMENTER') then
       ParseHex32Add(beg, aci)
@@ -2593,6 +2596,22 @@ begin
     else
       BiosInfoText := BiosInfoText + ' (' + prod + ')';
   end;
+  if cache <> nil then
+  begin
+    CpuCacheText := TrimU(cache);
+    CpuInfoText := ' ' + CpuCacheText + ' cache';
+    CpuCacheSize := GetNextCardinal(cache);
+    while cache^ = ' ' do
+      inc(cache);
+    case cache^ of
+      'k', 'K':
+        CpuCacheSize := CpuCacheSize shl 10;
+      'm', 'M':
+        CpuCacheSize := CpuCacheSize shl 20;
+      'g', 'G':
+        CpuCacheSize := CpuCacheSize shl 30;
+    end;
+  end;
   SystemInfo.release := release;
   {$endif OSBSDDARWIN}
   SystemInfo.uts.release := uts.Release;
@@ -2613,8 +2632,8 @@ begin
   {$endif OSANDROID}
   if (SystemInfo.dwNumberOfProcessors > 0) and
      (modname <> nil) then
-    CpuInfoText := Format('%d x %s (' + CPU_ARCH_TEXT + ')',
-      [SystemInfo.dwNumberOfProcessors, modname]);
+    CpuInfoText := Format('%d x %s (' + CPU_ARCH_TEXT + ')%s',
+      [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
   if CpuInfoText = '' then
     CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
