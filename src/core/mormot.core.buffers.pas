@@ -6998,7 +6998,7 @@ begin
        Base64ToBinSafe(@P[3], Len - 3, RawByteString(result)) then
       exit; // safe decode Base64 content ('\uFFF0base64encodedbinary')
   // TEXT format
-  FastSetRawByteString(result, P, Len);
+  FastSetStringCP(result, P, Len, CP_RAWBYTESTRING);
 end;
 
 function BlobToRawBlob(const Blob: RawByteString): RawBlob;
