@@ -3381,7 +3381,7 @@ begin // see TDynArray.FastLocateSorted below
   begin
     dec(n);
     cmp := fCompare(fList[n], item);
-    if cmp < 0 then
+    if cmp <= 0 then
     begin
       // greater than last sorted item (may be a common case)
       if cmp = 0 then
