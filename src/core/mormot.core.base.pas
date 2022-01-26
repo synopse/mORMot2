@@ -10240,6 +10240,11 @@ begin
     RawByteString(TVarData(Value).VAny) := Data;
 end;
 
+procedure VariantToUtf8(const Value: variant; var Dest: RawByteString);
+begin // sub-proc to avoid hidden temp variable in VariantToRawByteString
+  Dest := {$ifdef UNICODE}RawByteString{$else}string{$endif}(Value);
+end;
+
 procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 begin
   case integer(TVarData(Value).VType) of
@@ -10248,8 +10253,12 @@ begin
       Dest := '';
     varString:
       Dest := RawByteString(TVarData(Value).VAny);
+    varStringByRef:
+      Dest := PRawByteString(TVarData(Value).VAny)^;
+    varVariantByRef:
+      VariantToRawByteString(PVariant(TVarData(Value).VPointer)^, Dest);
     else // not from RawByteStringToVariant() -> conversion to string
-      Dest := {$ifdef UNICODE}RawByteString{$else}string{$endif}(Value);
+      VariantToUtf8(Value, Dest);
   end;
 end;
 
