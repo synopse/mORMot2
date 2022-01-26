@@ -2718,7 +2718,7 @@ var
       repeat
         inc(P);
       until P^ in [#0..' ', ';', ')', ','];
-      SetString(Where.Value, B, P - B);
+      FastSetString(Where.Value, B, P - B);
       VariantLoadJson(Where.ValueVariant, Where.Value);
       Where.ValueInteger := GetInteger(pointer(Where.Value), err);
     end;
@@ -2735,7 +2735,7 @@ var
       until not (P^ in [#1..' ', ')']);
       while P[-1] = ' ' do
         dec(P); // trim right space
-      SetString(Where.ParenthesisAfter, B, P - B);
+      FastSetString(Where.ParenthesisAfter, B, P - B);
       P := GotoNextNotSpace(P);
     end;
     result := true;
@@ -2750,7 +2750,7 @@ var
     result := false;
     if Where.ValueSqlLen <= 2 then
       exit;
-    SetString(tmp, PAnsiChar(Where.ValueSql) + 1, Where.ValueSqlLen - 2);
+    FastSetString(tmp, Where.ValueSql + 1, Where.ValueSqlLen - 2);
     P := pointer(tmp); // parse again the IN (...,...,... ) expression
     n := 0;
     try
@@ -2879,7 +2879,7 @@ var
                 else
                   inc(P);
               inc(P);
-              SetString(Where.Value, PAnsiChar(B), P - B);
+              FastSetString(Where.Value, B, P - B);
               Where.ValueSql := B;
               Where.ValueSqlLen := P - B;
               result := GetWhereValues(Where);
@@ -2963,7 +2963,7 @@ begin
         until not (P^ in [#1..' ', '(']);
         while P[-1] = ' ' do
           dec(P); // trim right space
-        SetString(whereBefore, B, P - B);
+        FastSetString(whereBefore, B, P - B);
         B := P;
       end;
       ndx := GetPropIndex;

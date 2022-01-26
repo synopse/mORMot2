@@ -2584,8 +2584,11 @@ begin
   i := 1;
   while (i <= l) and
         (S[i] <= ' ') do
-    Inc(i);
-  result := Copy(S, i, Maxint);
+    inc(i);
+  if i = 1 then
+    result := S
+  else
+    FastSetString(result, @PByteArray(S)[i - 1], l - i);
 end;
 
 function TrimRight(const S: RawUtf8): RawUtf8;
@@ -2595,7 +2598,7 @@ begin
   i := Length(S);
   while (i > 0) and
         (S[i] <= ' ') do
-    Dec(i);
+    dec(i);
   FastSetString(result, pointer(S), i);
 end;
 
@@ -2662,14 +2665,14 @@ begin
   for i := length(Str) downto 1 do
     if Str[i] = SepChar then
     begin
-      result := copy(Str, i + 1, maxInt);
+      FastSetString(result, @PByteArray(Str)[i], length(Str) - i);
       if LeftStr <> nil then
-        LeftStr^ := copy(Str, 1, i - 1);
+        FastSetString(LeftStr^, pointer(Str), i - 1);
       exit;
     end;
   result := Str;
   if LeftStr <> nil then
-    LeftStr^ := '';
+    FastAssignNew(LeftStr^);
 end;
 
 function SplitRights(const Str, SepChar: RawUtf8): RawUtf8;
@@ -2689,7 +2692,7 @@ begin
         for j := 1 to sep do
           if c = SepChar[j] then
           begin
-            result := copy(Str, i + 1, maxInt);
+            FastSetString(result, @PByteArray(Str)[i], length(Str) - i);
             exit;
           end;
       end;
@@ -2700,14 +2703,12 @@ end;
 function Split(const Str, SepStr: RawUtf8; var LeftStr, RightStr: RawUtf8;
   ToUpperCase: boolean): boolean;
 var
-  i: integer;
-  tmp: RawUtf8; // may be called as Split(Str,SepStr,Str,RightStr)
+  i: PtrInt;
+  tmp: pointer; // may be called as Split(Str,SepStr,Str,RightStr)
 begin
-  {$ifdef FPC} // to use fast FPC SSE version
   if length(SepStr) = 1 then
-    i := PosExChar(SepStr[1], Str)
+    i := PosExChar(SepStr[1], Str) // may use SSE2 on i386/x86_64
   else
-  {$endif FPC}
     i := PosEx(SepStr, Str);
   if i = 0 then
   begin
@@ -2717,9 +2718,12 @@ begin
   end
   else
   begin
-    tmp := copy(Str, 1, i - 1);
-    RightStr := copy(Str, i + length(SepStr), maxInt);
-    LeftStr := tmp;
+    dec(i);
+    tmp := nil;
+    FastSetString(RawUtf8(tmp), pointer(Str), i);
+    inc(i, length(SepStr));
+    FastSetString(RightStr, @PByteArray(Str)[i], length(Str) - i);
+    FastAssignNew(LeftStr, tmp);
     result := true;
   end;
   if ToUpperCase then
@@ -2739,6 +2743,7 @@ function Split(const Str: RawUtf8; const SepStr: array of RawUtf8;
   const DestPtr: array of PRawUtf8): PtrInt;
 var
   s, i, j: PtrInt;
+  P: pointer;
 begin
   j := 1;
   result := 0;
@@ -2746,16 +2751,17 @@ begin
   if high(SepStr) >= 0 then
     while result <= high(DestPtr) do
     begin
+      P := @PByteArray(Str)[j - 1];
       i := PosEx(SepStr[s], Str, j);
       if i = 0 then
       begin
         if DestPtr[result] <> nil then
-          DestPtr[result]^ := copy(Str, j, MaxInt);
+          FastSetString(DestPtr[result]^, P, length(Str) - j);
         inc(result);
         break;
       end;
       if DestPtr[result] <> nil then
-        DestPtr[result]^ := copy(Str, j, i - j);
+        FastSetString(DestPtr[result]^, P, i - j);
       inc(result);
       if s < high(SepStr) then
         inc(s);
@@ -2763,7 +2769,7 @@ begin
     end;
   for i := result to high(DestPtr) do
     if DestPtr[i] <> nil then
-      DestPtr[i]^ := '';
+      FastAssignNew(DestPtr[i]^);
 end;
 
 function IsVoid(const text: RawUtf8): boolean;
@@ -2948,7 +2954,7 @@ begin
     i := ByteScanIndex(pointer(Source), n, ord(OldChar));
     if i >= 0 then
     begin
-      FastSetString(result, PAnsiChar(pointer(Source)), n);
+      FastSetString(result, pointer(Source), n);
       P := pointer(result);
       for j := i to n - 1 do
         if P[j] = OldChar then
@@ -3240,9 +3246,9 @@ begin
   else
   begin
     // unescape internal quotes
-    SetLength(Value, P - PBeg - internalquote);
+    pointer(Value) := FastNewString(P - PBeg - internalquote, CP_UTF8);
     P := PBeg;
-    PS := Pointer(Value);
+    PS := pointer(Value);
     repeat
       if P[0] = quote then
         if P[1] = quote then
@@ -3798,9 +3804,15 @@ begin
   else
   begin
     S := P;
+    {$ifdef CPUINTEL}
+    S := PosChar(S, Sep);
+    if S = nil then
+      S := P + StrLen(P);
+    {$else}
     while (S^ <> #0) and
           (S^ <> Sep) do
       inc(S);
+    {$endif CPUINTEL}
     FastSetString(result, P, S - P);
     if S^ <> #0 then
       P := S + 1
@@ -4400,16 +4412,8 @@ begin
 end;
 
 function GetLastCsvItem(const Csv: RawUtf8; Sep: AnsiChar): RawUtf8;
-var
-  i: integer;
 begin
-  for i := length(Csv) downto 1 do
-    if Csv[i] = Sep then
-    begin
-      result := copy(Csv, i + 1, maxInt);
-      exit;
-    end;
-  result := Csv;
+  result := SplitRight(Csv, Sep, nil);
 end;
 
 function GetCsvItemString(P: PChar; Index: PtrUInt; Sep: Char): string;
@@ -4471,6 +4475,7 @@ procedure CsvToRawUtf8DynArray(const Csv, Sep, SepEnd: RawUtf8;
   var List: TRawUtf8DynArray);
 var
   offs, i, n: integer;
+  s: RawUtf8;
 begin
   n := length(List);
   offs := 1;
@@ -4481,13 +4486,13 @@ begin
     begin
       i := PosEx(SepEnd, Csv, offs);
       if i = 0 then
-        i := MaxInt
-      else
-        dec(i, offs);
-      AddRawUtf8(List, n, Copy(Csv, offs, i));
+        i := length(csv) + 1;
+      FastSetString(s, @PByteArray(Csv)[offs - 1], i - offs);
+      AddRawUtf8(List, n, s);
       break;
     end;
-    AddRawUtf8(List, n, Copy(Csv, offs, i - offs));
+    FastSetString(s, @PByteArray(Csv)[offs - 1], i - offs);
+    AddRawUtf8(List, n, s);
     offs := i + length(Sep);
   end;
   SetLength(List, n);
@@ -6402,8 +6407,11 @@ begin
   result := fWriter.B - P + 1;
   L := result - fEchoStart;
   inc(P, fEchoStart);
-  while (L > 0) and (P[L - 1] in [#10, #13]) do // trim right CR/LF chars
+  while (L > 0) and
+        (P[L - 1] in [#10, #13]) do // trim right CR/LF chars
     dec(L);
+  if L = 0 then
+    exit;
   LI := length(fEchoBuf); // fast append to fEchoBuf
   SetLength(fEchoBuf, LI + L);
   MoveFast(P^, PByteArray(fEchoBuf)[LI], L);
@@ -8741,7 +8749,7 @@ begin
     inc(d);
     c := s^;
   end;
-  if c='.' then
+  if c = '.' then
   begin
     PCardinal(d)^ := ord('0')+ord('.')shl 8; // '.5' -> '0.5'
     inc(d,2);
@@ -10064,7 +10072,7 @@ begin
     L := 0
   else // hexadecimal should be in char pairs
     L := L shr 1;
-  SetLength(result, L);
+  pointer(result) := FastNewString(L, CP_RAWBYTESTRING);
   if not mormot.core.text.HexToBin(pointer(Hex), pointer(result), L) then
     result := '';
 end;
@@ -10523,7 +10531,7 @@ begin
   tmp.Init(length(Oct));
   try
     L := OctToBin(pointer(Oct), tmp.buf);
-    SetString(result, PAnsiChar(tmp.buf), L);
+    FastSetRawByteString(result, tmp.buf, L);
   finally
     tmp.Done;
   end;
@@ -10863,7 +10871,7 @@ begin
   if (size = 0) or
      (size > maxInt) then
     exit;
-  SetLength(result, size);
+  pointer(result) := FastNewString(size, CP_RAWBYTESTRING);
   aStream.Read(pointer(result)^, size);
   aStream.Position := current;
 end;
@@ -10878,7 +10886,7 @@ begin
   size := aStream.Size - aPosition;
   if size <= 0 then
     exit; // nothing new
-  SetLength(result, size);
+  pointer(result) := FastNewString(size, CP_RAWBYTESTRING);
   current := aStream.Position;
   aStream.Position := aPosition;
   aStream.Read(pointer(result)^, size);

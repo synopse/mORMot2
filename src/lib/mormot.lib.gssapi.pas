@@ -903,7 +903,7 @@ begin
   end
   else
     // Unknown user name format, leave as is
-    SetString(aUserName, P, Len);
+    FastSetString(aUserName, P, Len);
 end;
 
 procedure ServerSspiAuthUser(var aSecContext: TSecContext;
@@ -950,7 +950,7 @@ begin
   MajStatus := GssApi.gss_inquire_saslname_for_mech(
     MinStatus, MechType, nil, @OutBuf, nil);
   GccCheck(MajStatus, MinStatus, 'Failed to obtain name for mech');
-  SetString(result, PAnsiChar(OutBuf.value), OutBuf.length);
+  FastSetString(result, OutBuf.value, OutBuf.length);
   GssApi.gss_release_buffer(MinStatus, OutBuf);
 end;
 

@@ -2561,6 +2561,7 @@ function PosExString(const SubStr, S: string; Offset: PtrUInt = 1): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// optimized version of PosEx() with search text as one AnsiChar
+// - will use fast SSE2 asm on i386 and x86_64
 function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2595,7 +2596,7 @@ procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
 /// returns the left part of a RawUtf8 string, according to SepStr separator
 // - if SepStr is found, returns Str first chars until (and excluding) SepStr
 // - if SepStr is not found, returns Str
-function Split(const Str, SepStr: RawUtf8; StartPos: integer = 1): RawUtf8; overload;
+function Split(const Str, SepStr: RawUtf8; StartPos: PtrInt = 1): RawUtf8; overload;
 
 /// buffer-safe version of StrComp(), to be used with PUtf8Char/PAnsiChar
 function StrComp(Str1, Str2: pointer): PtrInt;
@@ -7670,7 +7671,8 @@ begin
     // allocate a new trimmed UTF-8 string
     while S[L] <= ' ' do
       dec(L);
-    result := Copy(S, i, L - i + 1);
+    dec(i);
+    FastSetString(result, @PByteArray(S)[i], L - i);
   end;
 end;
 
@@ -7715,23 +7717,26 @@ begin
   result := '';
 end;
 
-function Split(const Str, SepStr: RawUtf8; StartPos: integer): RawUtf8;
+function Split(const Str, SepStr: RawUtf8; StartPos: PtrInt): RawUtf8;
 var
-  i: integer;
+  len, i: PtrInt;
 begin
-  {$ifdef FPC} // to use fast FPC SSE version
+  len := length(Str);
+  if StartPos > len then
+    StartPos := len
+  else if StartPos <= 0 then
+    StartPos := 1;
   if (length(SepStr) = 1) and
      (StartPos <= 1) then
-    i := PosExChar(SepStr[1], Str)
+    i := PosExChar(SepStr[1], Str) // may use SSE2 on i386/x86_64
   else
-  {$endif FPC}
     i := PosEx(SepStr, Str, StartPos);
   if i > 0 then
-    result := Copy(Str, StartPos, i - StartPos)
+    FastSetString(result, @PByteArray(Str)[StartPos - 1], i - StartPos)
   else if StartPos = 1 then
     result := Str
   else
-    result := Copy(Str, StartPos, maxInt);
+    FastSetString(result, @PByteArray(Str)[StartPos - 1], len - StartPos + 1);
 end;
 
 function StrLenW(S: PWideChar): PtrInt;
@@ -10972,7 +10977,7 @@ begin
     Text := fDataString;
   end
   else
-    Text := copy(fDataString, StartPos + 1, Len);
+    FastSetString(Text, @PByteArray(fDataString)[StartPos], Len);
 end;
 
 

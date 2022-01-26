@@ -80,7 +80,8 @@ type
   EOrmException = class(ESynException);
 
   /// used to store bit set for all available Tables in a Database Model
-  TOrmTableBits = set of 0..MAX_TABLES - 1;
+  // - with default MAX_TABLES=256, consumes 32 bytes
+  TOrmTableBits = set of 0 .. MAX_TABLES - 1;
 
   /// a reference to another record in any table in the database Model
   // - stored as a 64-bit signed integer (just like the TID type)
@@ -5666,13 +5667,13 @@ end;
 function TOrmPropInfoRttiRawUtf8.SetFieldSqlVar(Instance: TObject;
   const aValue: TSqlVar): boolean;
 var
-  tmp: RawByteString;
+  tmp: RawUtf8;
 begin
   case aValue.VType of
     ftNull:
       ; // leave tmp=''
     ftUtf8:
-      SetString(tmp, PAnsiChar(aValue.VText), StrLen(aValue.VText));
+      FastSetString(tmp, aValue.VText, StrLen(aValue.VText));
   else
     begin
       result := inherited SetFieldSqlVar(Instance, aValue);

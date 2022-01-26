@@ -3718,7 +3718,7 @@ end;
 
 const
   // sorted by occurence for in-order O(n) search via IdemPPChar()
-  METHODNAME: array[0..ord(high(TUriMethod))] of RawUtf8 = (
+  METHODNAME: array[TUriMethod] of RawUtf8 = (
     'GET',
     'POST',
     'PUT',
@@ -3757,8 +3757,8 @@ end;
 function MethodText(m: TUriMethod): RawUtf8;
 begin
   dec(m);
-  if cardinal(m) <= high(METHODNAME) then
-    result := METHODNAME[ord(m)]
+  if cardinal(m) < cardinal(ord(high(METHODNAME))) then
+    result := METHODNAME[m]
   else
     result := '';
 end;

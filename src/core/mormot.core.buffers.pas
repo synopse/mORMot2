@@ -8527,7 +8527,7 @@ begin
     exit;
   L := length(Text);
   SetLength(Text, L + BufferLen);
-  MoveFast(Buffer^, pointer(PtrInt(Text) + L)^, BufferLen);
+  MoveFast(Buffer^, PByteArray(Text)[L], BufferLen);
 end;
 
 procedure AppendBuffersToRawUtf8(var Text: RawUtf8; const Buffers: array of PUtf8Char);
