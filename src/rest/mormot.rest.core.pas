@@ -3606,13 +3606,11 @@ end;
 
 class function TAuthUser.ComputeHashedPassword(const aPasswordPlain,
   aHashSalt: RawUtf8; aHashRound: integer): RawUtf8;
-const
-  DEPRECATED_SALT = 'salt';
 var
   dig: TSha256Digest;
 begin
-  if aHashSalt = '' then
-    result := Sha256(DEPRECATED_SALT + aPasswordPlain)
+  if aHashSalt = '' then // use FormatUtf8() to circumvent FPC string issue
+    result := Sha256(FormatUtf8('salt%', [aPasswordPlain]))
   else
   begin
     Pbkdf2HmacSha256(aPasswordPlain, aHashSalt, aHashRound, dig);
