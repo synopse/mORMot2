@@ -2008,7 +2008,6 @@ var
     elapsed: Int64;
   begin
     // first validate FillCharFast
-    filled := 0;
     b1 := 0;
     len := 1;
     repeat
@@ -2018,7 +2017,6 @@ var
         FillChar(pointer(buf)^, len, b2)
       else
         FillCharFast(pointer(buf)^, len, b2);
-      inc(filled, len);
       Check(BufEquals(PtrInt(buf), len, b2));
       Check(ord(buf[len + 1]) = b1);
       b1 := b2;
@@ -2027,23 +2025,7 @@ var
       else
         inc(len, 777 + len shr 4);
     until len >= length(buf);
-     // small len makes timer.Resume/Pause unreliable -> single shot measure
-    b1 := 0;
-    len := 1;
-    timer.Start;
-    repeat
-      b2 := (b1 + 1) and 255;
-      if rtl then
-        FillChar(pointer(buf)^, len, b2)
-      else
-        FillCharFast(pointer(buf)^, len, b2);
-      b1 := b2;
-      if len < 16384 then
-        inc(len)
-      else
-        inc(len, 777 + len shr 4);
-    until len >= length(buf);
-    timer.Stop;
+    // benchmark FillChar/FillCharFast
     {$ifdef ASMX64}
     cputxt := GetSetName(TypeInfo(TX64CpuFeatures), CPUIDX64);
     {$endif ASMX64}
@@ -2055,6 +2037,25 @@ var
       {$else}
       msg := 'FillCharFast';
       {$endif ASMX64}
+    // now make the same test with no Check() but with timing
+    // small len makes timer.Resume/Pause unreliable -> single shot measure
+    b1 := 0;
+    len := 1;
+    filled := 0;
+    timer.Start;
+    repeat
+      b2 := (b1 + 1) and 255;
+      if rtl then
+        FillChar(pointer(buf)^, len, b2)
+      else
+        FillCharFast(pointer(buf)^, len, b2);
+      inc(filled, len);
+      b1 := b2;
+      if len < 16384 then
+        inc(len)
+      else
+        inc(len, 777 + len shr 4);
+    until len >= length(buf);
     NotifyTestSpeed(msg, 1, filled, @timer);
      // validates overlapping forward Move/MoveFast
     if rtl then
@@ -2069,21 +2070,23 @@ var
     for i := 0 to length(buf) - 1 do
       P[i] := i; // fills with 0,1,2,...
     Check(IsBufIncreasing(P, length(buf), 0));
-    len := 1;
-    moved := 0;
     timer.Start;
-    repeat
-      if rtl then
-        Move(P[moved + 1], P[moved], len)
-      else
-        MoveFast(P[moved + 1], P[moved], len);
-      inc(moved, len);
-      Check(P[moved] = P[moved - 1]);
-      inc(len);
-    until moved + len >= length(buf);
-    NotifyTestSpeed(msg, 1, moved, @timer);
-    Check(IsBufIncreasing(P, moved, 1));
-    CheckHash(buf, 2284147540);
+    for i := 1 to 20 do     
+    begin
+      len := 1;
+      moved := 0;
+      repeat
+        if rtl then
+          Move(P[moved + 1], P[moved], len)
+        else
+          MoveFast(P[moved + 1], P[moved], len);
+        inc(moved, len);
+        Check(P[moved] = P[moved - 1]);
+        inc(len);
+      until moved + len >= length(buf);
+    end;
+    NotifyTestSpeed(msg, 1, moved * 20, @timer);
+    CheckHash(buf, $813F6468);
     // forward and backward overlapped moves on small buffers
     elapsed := 0;
     moved := 0;
@@ -2091,24 +2094,24 @@ var
     begin
       timer.Start;
       if rtl then
-        for i := 1 to 10000 do
+        for i := 1 to 50000 do
         begin
           Move(P[100], P[i], len);
           Move(P[i], P[100], len);
         end
       else
-        for i := 1 to 10000 do
+        for i := 1 to 50000 do
         begin
           MoveFast(P[100], P[i], len);
           MoveFast(P[i], P[100], len);
         end;
-      inc(moved, 20000 * len);
-      inc(elapsed, NotifyTestSpeed('%b %', [len, msg], 1, 20000 * len, @timer,
+      inc(moved, 100000 * len);
+      inc(elapsed, NotifyTestSpeed('%b %', [len, msg], 1, 100000 * len, @timer,
         {onlylog=}true));
     end;
     timer.FromExternalMicroSeconds(elapsed);
     NotifyTestSpeed('small %', [msg], 1, moved, @timer);
-    CheckHash(buf, 1635609040);
+    CheckHash(buf, $DBB1A444);
     // forward and backward non-overlapped moves on big buffers
     len := (length(buf) - 3200) shr 1;
     timer.Start;
@@ -2124,7 +2127,7 @@ var
         MoveFast(P[i], P[len], len - i * 10);
       end;
     NotifyTestSpeed('big %', [msg], 1, 50 * len, @timer);
-    CheckHash(buf, 818419281);
+    CheckHash(buf, $88D61C65);
     // forward and backward overlapped moves on big buffers
     len := length(buf) - 3200;
     for i := 1 to 3 do
@@ -2138,7 +2141,7 @@ var
         MoveFast(P[3100], P[i], len - i);
         MoveFast(P[i], P[3200], len - i);
       end;
-    CheckHash(buf, 1646145792);
+    CheckHash(buf, $B49DB8A5);
   end;
 
 {$ifdef ASMX64}
@@ -2165,7 +2168,7 @@ begin
     Validate(false);
   // no Validate(true): RedirectCode(@System.FillChar,@FillcharFast)
   {$else}
-  Validate({rtl=}true);
+  Validate(true);
   Validate(false);
   {$endif ASMX64}
 end;
