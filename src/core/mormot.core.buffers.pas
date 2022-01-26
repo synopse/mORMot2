@@ -1794,6 +1794,16 @@ procedure AppendBufferToRawUtf8(var Text: RawUtf8;
 // ! Text := Text + ch;
 procedure AppendCharToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
 
+/// fast add one Ansi String to a RawUtf8 string
+// - append "After" directly, with no code page conversion (needed on FPC)
+// ! Text := Text + After;
+procedure AppendToRawUtf8(var Text: RawUtf8; const After: RawByteString); overload;
+
+/// fast add two Ansi Strings to a RawUtf8 string
+// - append After1 and After2 directly, with no code page conversion (needed on FPC)
+// ! Text := Text + After1 + After2;
+procedure AppendToRawUtf8(var Text: RawUtf8; const After1, After2: RawByteString); overload;
+
 /// fast add one character to a RawUtf8 string, if not already present
 // - avoid a temporary memory allocation of a string, so faster alternative to
 // ! if (Text<>'') and (Text[length(Text)]<>Ch) then Text := Text + ch;
@@ -8505,6 +8515,28 @@ begin
   L := length(Text);
   SetLength(Text, L + 1); // reallocate - most MM keep in-place with no move
   PByteArray(Text)[L] := ord(Ch);
+end;
+
+procedure AppendToRawUtf8(var Text: RawUtf8; const After: RawByteString);
+var
+  L, A: PtrInt;
+begin
+  L := length(Text);
+  A := length(After);
+  SetLength(Text, L + A);
+  MoveFast(pointer(After)^, PByteArray(Text)[L], A);
+end;
+
+procedure AppendToRawUtf8(var Text: RawUtf8; const After1, After2: RawByteString);
+var
+  L, A1, A2: PtrInt;
+begin
+  L := length(Text);
+  A1 := length(After1);
+  A2 := length(After2);
+  SetLength(Text, L + A1 + A2);
+  MoveFast(pointer(After1)^, PByteArray(Text)[L], A1);
+  MoveFast(pointer(After2)^, PByteArray(Text)[L + A1], A2);
 end;
 
 procedure AppendCharOnceToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
