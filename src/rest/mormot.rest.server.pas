@@ -6277,7 +6277,7 @@ end;
 
 function TRestServer.LockedSessionFind(aSessionID: cardinal; aIndex: PPtrInt): TAuthSession;
 var
-  tmp: TAuthSessionParent;
+  tmp: array[0..3] of PtrInt; // store a fake TAuthSessionParent instance
   i: PtrInt;
 begin
   if (aSessionID < fSessionCounterMin) or
@@ -6285,25 +6285,14 @@ begin
     result := nil
   else
   begin
-    tmp := TAuthSessionParent.Create;
-    {$ifdef HASFASTTRYFINALLY}
-    try
-    {$else}
-    begin
-    {$endif HASFASTTRYFINALLY}
-      tmp.fIDCardinal := aSessionID;
-      i := fSessions.IndexOf(tmp); // use fast O(log(n)) binary search
-      if aIndex <> nil then
-        aIndex^ := i;
-      if i < 0 then
-        result := nil
-      else
-        result := fSessions.List[i];
-    {$ifdef HASFASTTRYFINALLY}
-    finally
-    {$endif HASFASTTRYFINALLY}
-      tmp.Free;
-    end;
+    TAuthSessionParent(@tmp).fIDCardinal := aSessionID;
+    i := fSessions.IndexOf(@tmp); // use fast O(log(n)) binary search
+    if aIndex <> nil then
+      aIndex^ := i;
+    if i < 0 then
+      result := nil
+    else
+      result := fSessions.List[i];
   end;
 end;
 
