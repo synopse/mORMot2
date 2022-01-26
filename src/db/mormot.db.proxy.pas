@@ -179,8 +179,8 @@ type
     // - any transmission protocol could call this method to execute the
     // corresponding TSqlDBProxyConnectionCommand on the current connection
     // - replaces TSqlDBConnection.RemoteProcessMessage from mORMot 1.18
-    procedure RemoteProcessMessage(const Input: RawByteString;
-      out Output: RawByteString; Connection: TSqlDBConnection); virtual;
+    procedure RemoteProcessMessage(const Input: RawUtf8;
+      out Output: RawUtf8; Connection: TSqlDBConnection); virtual;
     /// the associated authentication information
     // - you can manage users via AuthenticateUser/DisauthenticateUser methods
     property Authenticate: TSynAuthenticationAbstract
@@ -423,7 +423,7 @@ type
       const Input; var Output): integer; override;
     /// abstract method to override for the expected transmission protocol
     // - could raise an exception on transmission error
-    procedure ProcessMessage(const Input: RawByteString; out Output: RawByteString);
+    procedure ProcessMessage(const Input: RawUtf8; out Output: RawUtf8);
       virtual; abstract;
   end;
 
@@ -433,7 +433,7 @@ type
   protected
     fProps: TSqlDBConnectionProperties;
     // this overriden method will just call fProtocol.RemoteProcessMessage()
-    procedure ProcessMessage(const Input: RawByteString; out Output: RawByteString); override;
+    procedure ProcessMessage(const Input: RawUtf8; out Output: RawUtf8); override;
   public
     /// create a test redirection to an existing local connection property
     // - you can specify a User/Password credential pair to also test the
@@ -614,7 +614,7 @@ type
     procedure SetInternalProperties; override;
     procedure SetServerName(const aServerName: RawUtf8);
     // this overriden method will just call InternalRequest
-    procedure ProcessMessage(const Input: RawByteString; out Output: RawByteString); override;
+    procedure ProcessMessage(const Input: RawUtf8; out Output: RawUtf8); override;
     /// to be overriden to process low-level HTTP/1.1 request
     function InternalRequest(var Data, DataType: RawByteString): integer; virtual; abstract;
   published
@@ -749,8 +749,8 @@ begin
     result := fAuthenticate;
 end;
 
-function TSqlDBProxyConnectionProtocol.HandleInput(const input: RawByteString):
-  RawByteString;
+function TSqlDBProxyConnectionProtocol.HandleInput(
+  const input: RawByteString): RawByteString;
 begin
   result := input;
 end;
@@ -848,8 +848,7 @@ begin
 end;
 
 procedure TSqlDBProxyConnectionProtocol.RemoteProcessMessage(
-  const Input: RawByteString; out Output: RawByteString;
-  Connection: TSqlDBConnection);
+  const Input: RawUtf8; out Output: RawUtf8; Connection: TSqlDBConnection);
 var
   stmt: ISqlDBStatement;
   data: TRawByteStringStream;
@@ -894,7 +893,7 @@ begin
   P := pointer(msgin);
   inc(P, SizeOf(header^));
   try
-    msgout := copy(msgin, 1, SizeOf(header^));
+    FastSetString(msgout, pointer(msgin), SizeOf(header^));
     case header.Command of
       cGetToken:
         AppendOutput(Authenticate.CurrentToken);
@@ -936,25 +935,25 @@ begin
       cGetFields:
         begin
           Connection.Properties.GetFields(P, colarr);
-          msgout := msgout + DynArraySave(
-            colarr, TypeInfo(TSqlDBColumnDefineDynArray));
+          AppendToRawUtf8(msgout, DynArraySave(
+            colarr, TypeInfo(TSqlDBColumnDefineDynArray)));
         end;
       cGetIndexes:
         begin
           Connection.Properties.GetIndexes(P, defarr);
-          msgout := msgout + DynArraySave(
-            defarr, TypeInfo(TSqlDBIndexDefineDynArray));
+          AppendToRawUtf8(msgout, DynArraySave(
+            defarr, TypeInfo(TSqlDBIndexDefineDynArray)));
         end;
       cGetTableNames:
         begin
           Connection.Properties.GetTableNames(outarr);
-          msgout := msgout + DynArraySave(
-            outarr, TypeInfo(TRawUtf8DynArray));
+          AppendToRawUtf8(msgout, DynArraySave(
+            outarr, TypeInfo(TRawUtf8DynArray)));
         end;
       cGetForeignKeys:
         begin
           Connection.Properties.GetForeignKey('', ''); // ensure Dest.fForeignKeys exists
-          msgout := msgout + Connection.Properties.ForeignKeysData;
+          AppendToRawUtf8(msgout, Connection.Properties.ForeignKeysData);
         end;
       cExecute,
       cExecuteToBinary,
@@ -1014,7 +1013,7 @@ begin
             end;
           end
           else if not (fNoUpdateCount in exec.Force) then
-            msgout := msgout + ToUtf8(stmt.UpdateCount);
+            AppendToRawUtf8(msgout, UInt32ToUtf8(stmt.UpdateCount));
         end;
       cQuit:
         begin
@@ -1031,7 +1030,7 @@ begin
     on E: Exception do
     begin
       PRemoteMessageHeader(msgout)^.Command := cExceptionRaised;
-      msgout := msgout + StringToUtf8(E.ClassName + #0 + E.Message);
+      AppendToRawUtf8(msgout, StringToUtf8(E.ClassName + #0 + E.Message));
     end;
   end;
   Output := HandleOutput(msgout);
@@ -1110,7 +1109,7 @@ end;
 function TSqlDBRemoteConnectionPropertiesAbstract.Process(
   Command: TSqlDBProxyConnectionCommand; const Input; var Output): integer;
 var
-  msgin, msgout, msgRaw: RawByteString;
+  msgin, msgout, msgRaw: RawUtf8;
   header: TRemoteMessageHeader;
   outheader: PRemoteMessageHeader;
   intext: RawUtf8                             absolute Input;
@@ -1129,7 +1128,7 @@ begin
   header.Magic := REMOTE_MAGIC;
   header.SessionID := fCurrentSession;
   header.Command := Command;
-  SetString(msgin, PAnsiChar(@header), SizeOf(header));
+  FastSetString(msgin, @header, SizeOf(header));
   case Command of
     cGetToken,
     cConnect,
@@ -1145,13 +1144,13 @@ begin
     cGetDbms,
     cGetFields,
     cGetIndexes:
-      msgin := msgin + intext;
+      AppendToRawUtf8(msgin, intext);
     cExecute,
     cExecuteToBinary,
     cExecuteToJson,
     cExecuteToExpandedJson:
-      msgin := msgin +
-        RecordSave(inexec, TypeInfo(TSqlDBProxyConnectionCommandExecute));
+      AppendToRawUtf8(msgin,
+        RecordSave(inexec, TypeInfo(TSqlDBProxyConnectionCommandExecute)));
   else
     raise ESqlDBRemote.CreateUtf8('Unknown %.Process() input command % (%)',
       [self, ToText(Command)^, ord(Command)]);
@@ -1214,7 +1213,7 @@ begin
 end;
 
 procedure TSqlDBRemoteConnectionPropertiesTest.ProcessMessage(
-  const Input: RawByteString; out Output: RawByteString);
+  const Input: RawUtf8; out Output: RawUtf8);
 begin
   fProtocol.RemoteProcessMessage(Input, Output, fProps.ThreadSafeConnection);
 end;
@@ -1880,7 +1879,7 @@ end;
 
 function TSqlDBServerAbstract.Process(Ctxt: THttpServerRequestAbstract): cardinal;
 var
-  o: RawByteString;
+  o: RawUtf8;
 begin
   if (Ctxt.Method <> 'POST') or
      (Ctxt.InContent = '') or
@@ -1981,8 +1980,8 @@ begin
     fUri.Port := SYNDB_DEFAULT_HTTP_PORT;
 end;
 
-procedure TSqlDBHttpConnectionPropertiesAbstract.ProcessMessage(const Input:
-  RawByteString; out Output: RawByteString);
+procedure TSqlDBHttpConnectionPropertiesAbstract.ProcessMessage(
+  const Input: RawUtf8; out Output: RawUtf8);
 var
   content, contenttype: RawByteString;
   status: integer;
