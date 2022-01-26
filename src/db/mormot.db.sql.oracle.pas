@@ -986,7 +986,7 @@ begin
             if fForceBlobAsNull then
               WR.AddNull
             else if ColumnValueInlined then
-              SetString(U, PAnsiChar(V), ColumnValueDBSize)
+              WR.WrBase64(V, ColumnValueDBSize, true)
             else
             begin
               with TSqlDBOracleConnection(Connection) do

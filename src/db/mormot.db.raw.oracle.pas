@@ -763,7 +763,7 @@ type
     function ToIso8601(Dest: PUtf8Char): integer; overload;
     /// convert an Oracle date and time into its textual expanded ISO-8601
     // - return the ISO-8601 text, without double quotes
-    procedure ToIso8601(var aIso8601: RawByteString); overload;
+    procedure ToIso8601(var aIso8601: RawUtf8); overload;
     /// convert Delphi TDateTime into native Oracle date and time format
     procedure From(const aValue: TDateTime); overload;
     /// convert textual ISO-8601 into native Oracle date and time format
@@ -1030,7 +1030,7 @@ begin
   end;
 end;
 
-procedure TOracleDate.ToIso8601(var aIso8601: RawByteString);
+procedure TOracleDate.ToIso8601(var aIso8601: RawUtf8);
 var
   tmp: array[0..23] of AnsiChar;
 begin
@@ -1046,10 +1046,10 @@ begin
        (Sec > 1) then
     begin
       TimeToIso8601PChar(@tmp[10], true, Hour - 1, Min - 1, Sec - 1, 0, 'T');
-      SetString(aIso8601, tmp, 19); // we use 'T' as TJsonWriter.AddDateTime
+      FastSetString(aIso8601, @tmp, 19); // 'T' as TJsonWriter.AddDateTime
     end
     else
-      SetString(aIso8601, tmp, 10); // only date
+      FastSetString(aIso8601, @tmp, 10); // only date
   end;
 end;
 
@@ -1348,7 +1348,7 @@ begin
   if UseLobChunks then
   begin
     Check(nil, Stmt, LobGetChunkSize(svchp, errhp, locp, ChunkSize), errhp);
-    SetLength(tmp, ChunkSize * SynDBOracleBlobChunksCount);
+    pointer(tmp) := FastNewString(ChunkSize * SynDBOracleBlobChunksCount, CP_RAWBYTESTRING);
     result := 0;
     repeat
       Read := BlobLen;
@@ -1361,7 +1361,7 @@ begin
   end
   else
   begin
-    SetLength(tmp, BlobLen);
+    pointer(tmp) := FastNewString(BlobLen, CP_RAWBYTESTRING);
     Check(nil, Stmt, LobRead(svchp, errhp, locp, result, 1, pointer(tmp), result,
       nil, nil, csid, csfrm), errhp);
     stream.WriteBuffer(pointer(tmp)^, result);
@@ -1376,7 +1376,7 @@ var
 begin
   Len := BlobOpen(Stmt, svchp, errhp, locp);
   try
-    SetLength(result, Len);
+    pointer(result) := FastNewString(Len, CP_RAWBYTESTRING);
     Read := BlobRead(Stmt, svchp, errhp, locp, pointer(result), Len);
     if Read <> Len then
       SetLength(result, Read);
@@ -1428,7 +1428,7 @@ var
   tmp: RawByteString;
 begin
   Check(nil, Stmt, LobGetChunkSize(svchp, errhp, locp, ChunkSize), errhp);
-  SetLength(tmp, ChunkSize * SynDBOracleBlobChunksCount);
+  pointer(tmp) := FastNewString(ChunkSize * SynDBOracleBlobChunksCount, CP_RAWBYTESTRING);
   l_Offset := 1;
   while stream.Position < stream.Size do
   begin
