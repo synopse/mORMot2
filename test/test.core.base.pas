@@ -2307,18 +2307,18 @@ begin
   P := UrlDecodeNextNameValue('name%2Ccom+plex=value', name, value);
   Check(P <> nil);
   Check(P^ = #0);
-  Check(name = 'name,com plex');
-  Check(value = 'value');
+  CheckEqual(name, 'name,com plex');
+  CheckEqual(value, 'value');
   P := UrlDecodeNextNameValue('name%2Ccomplex%3Dvalue', name, value);
   Check(P <> nil);
   Check(P^ = #0);
-  Check(name = 'name,complex');
-  Check(value = 'value');
+  CheckEqual(name, 'name,complex');
+  CheckEqual(value, 'value');
   for i := 0 to 100 do
   begin
     j := i * 5; // circumvent weird FPC code generation bug in -O2 mode
-    s := RandomString(j);
-    Check(UrlDecode(UrlEncode(s)) = s, string(s));
+    s := RandomUtf8(j);
+    CheckEqual(UrlDecode(UrlEncode(s)), s, s);
   end;
   utf := BinToBase64Uri(@GUID, SizeOf(GUID));
   Check(utf = '00amyWGct0y_ze4lIsj2Mw');
@@ -3953,7 +3953,7 @@ begin
   for i := 0 to 10000 do
   begin
     j := i shr 6; // circumvent weird FPC code generation bug in -O2 mode
-    s := RandomString(j);
+    s := RandomAnsi7(j);
     CheckHash(s, Hash32Reference(pointer(s), length(s)));
     Check(kr32(0, pointer(s), length(s)) = kr32reference(pointer(s), length(s)));
     Check(fnv32(0, pointer(s), length(s)) = fnv32reference(0, pointer(s), length(s)));
@@ -4256,6 +4256,9 @@ begin
   check(u = 'abc');
   b := AsciiToBaudot('mORMot.net');
   check(BaudotToAscii(b) = 'mormot.net');
+  {$ifdef FPC}
+  SetCodePage(b, CP_UTF8);
+  {$endif FPC}
   b := b + #0#0#0;
   u := BaudotToAscii(b);
   check(u = 'mormot.net');

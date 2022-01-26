@@ -193,7 +193,6 @@ type
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(const a, b: RawUtf8; const msg: RawUtf8 = ''): boolean; overload;
-      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against pointers/classes
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(a, b: pointer; const msg: RawUtf8 = ''): boolean; overload;
@@ -205,7 +204,6 @@ type
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a=b, will fail and include '#=#' text before the supplied msg
     function CheckNotEqual(const a, b: RawUtf8; const msg: RawUtf8 = ''): boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against pointers/classes
     // - if a=b, will fail and include '#=#' text before the supplied msg
     function CheckNotEqual(a, b: pointer; const msg: RawUtf8 = ''): boolean; overload;
@@ -244,7 +242,7 @@ type
     procedure CheckHash(const data: RawByteString; expectedhash32: cardinal;
       const msg: RawUtf8 = '');
     /// create a temporary string random content, WinAnsi (code page 1252) content
-    class function RandomString(CharCount: integer): RawByteString;
+    class function RandomString(CharCount: integer): WinAnsiString;
     /// create a temporary UTF-8 string random content, using WinAnsi
     // (code page 1252) content
     class function RandomUtf8(CharCount: integer): RawUtf8;
@@ -690,7 +688,8 @@ end;
 
 function TSynTestCase.CheckEqual(const a, b: RawUtf8; const msg: RawUtf8): boolean;
 begin
-  result := a = b;
+  result := (length(a) = length(b)) and
+            CompareMem(pointer(a), pointer(b), length(a));
   CheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
@@ -708,7 +707,8 @@ end;
 
 function TSynTestCase.CheckNotEqual(const a, b: RawUtf8; const msg: RawUtf8): boolean;
 begin
-  result := a <> b;
+  result := (length(a) <> length(b)) or
+            not CompareMem(pointer(a), pointer(b), length(a));
   CheckUtf8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
@@ -786,14 +786,14 @@ begin
     [CardinalToHexShort(crc), CardinalToHexShort(expectedhash32), msg]);
 end;
 
-class function TSynTestCase.RandomString(CharCount: integer): RawByteString;
+class function TSynTestCase.RandomString(CharCount: integer): WinAnsiString;
 var
   i: PtrInt;
   R: PByteArray;
   tmp: TSynTempBuffer;
 begin
   R := tmp.InitRandom(CharCount);
-  SetString(result, nil, CharCount);
+  FastSetStringCP(result, nil, CharCount, CODEPAGE_US);
   for i := 0 to CharCount - 1 do
     PByteArray(result)[i] := 32 + R[i] and 127;
   tmp.Done;
@@ -806,7 +806,7 @@ var
   tmp: TSynTempBuffer;
 begin
   R := tmp.InitRandom(CharCount);
-  SetString(result, nil, CharCount);
+  FastSetString(RawUtf8(result), nil, CharCount);
   for i := 0 to CharCount - 1 do
     PByteArray(result)[i] := 32 + R[i] mod 94;
   tmp.Done;
@@ -819,7 +819,7 @@ var
   tmp: TSynTempBuffer;
 begin
   R := tmp.InitRandom(count);
-  SetString(result, nil, count);
+  FastSetString(RawUtf8(result), nil, count);
   for i := 0 to count - 1 do
     PByteArray(result)[i] := ord(chars64[PtrInt(R[i]) and 63]);
   tmp.Done;
@@ -843,7 +843,7 @@ end;
 
 class function TSynTestCase.RandomUtf8(CharCount: integer): RawUtf8;
 begin
-  result := WinAnsiToUtf8(WinAnsiString(RandomString(CharCount)));
+  result := WinAnsiToUtf8(RandomString(CharCount));
 end;
 
 class function TSynTestCase.RandomUnicode(CharCount: integer): SynUnicode;

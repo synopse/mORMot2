@@ -492,6 +492,9 @@ begin
     for i := 1 to 1000 do
     begin
       data := RandomString(i);
+      {$ifdef FPC}
+      SetCodePage(data, CP_RAWBYTESTRING, {convert=}false);
+      {$endif FPC}
       encrypted := instance.Cypher(secret, data);
       Check((i < 16) or
             (encrypted <> data));
@@ -1724,7 +1727,7 @@ begin
               one.iv := iv.b;
               if aead then
                 TAesAbstractAead(one).Mac := mac;
-              Check(one.DecryptPkcs7(s3) = s2, IntToStr(len));
+              CheckEqual(one.DecryptPkcs7(s3), s2, UInt32ToUtf8(len));
               if aead then
                 Check(one.MacDecryptCheckTag(Tags[k, m, i]))
               else if gcm then
@@ -1989,10 +1992,10 @@ var
 begin
   for keysize := 0 to 10 do
   begin
-    CompressShaAesSetKey(RandomString(keysize));
+    CompressShaAesSetKey(RandomUtf8(keysize));
     for i := 0 to 50 do
     begin
-      s1 := RandomString(i * 3);
+      s1 := RandomUtf8(i * 3);
       s2 := s1;
       Check(CompressShaAes(s1, true) = 'synshaaes');
       Check(CompressShaAes(s1, false) = 'synshaaes');

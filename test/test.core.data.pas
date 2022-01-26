@@ -5674,7 +5674,7 @@ end;
 
 function By1(pattern: byte; n: integer): RawUtf8;
 begin
-  SetString(result, nil, n);
+  FastSetString(result, nil, n);
   FillCharFast(pointer(result)^, n, pattern);
 end;
 
@@ -5682,7 +5682,7 @@ function By4(pattern, n: integer): RawUtf8;
 var
   i: PtrInt;
 begin
-  SetString(result, nil, n * 4);
+  FastSetString(result, nil, n * 4);
   for i := 0 to n - 1 do
     PIntegerArray(result)[i] := pattern;
 end;
@@ -5721,7 +5721,7 @@ begin
   begin
     s := RawUtf8OfChar(' ', 20);
     t := RandomTextParagraph(i, '.', s);
-    SetString(s, PAnsiChar(pointer(t)), length(t)); // =UniqueString
+    FastSetRawByteString(s, pointer(t), length(t)); // =UniqueString
     Check(CompressSynLZ(s, true) = 'synlz');
     Check(CompressSynLZ(s, false) = 'synlz');
     Check(s = t);

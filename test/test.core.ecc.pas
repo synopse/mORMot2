@@ -589,7 +589,7 @@ var
 begin
   SetLength(str, MAX + 1);
   for i := 0 to MAX do
-    str[i] := RandomString(i * 191 + 1);
+    str[i] := RandomUtf8(i * 191 + 1);
   Test(TProtocolNone.Create, 'none');
   TAesPrng.Main.FillRandom(key);
   Test(TProtocolAes.Create(TAesCfb, key, 128), 'aes');
@@ -658,7 +658,7 @@ procedure TTestCoreEcc._OpenSSL;
 //writeln(Name, ':'#10);
 //writeln(priv);
 //writeln(pub);
-    msg := RandomString(100);
+    msg := RandomUtf8(100);
     if IdemPChar(pointer(Name), 'RSA') then
       Count := Count * 10;
     timer.Start;

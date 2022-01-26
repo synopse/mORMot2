@@ -183,8 +183,9 @@ var
   i, j, n: integer;
   dummy, s: RawUtf8;
 
-  procedure CheckVariantWith(const V: Variant; const i: Integer; const offset:
-    integer = 0);
+  procedure CheckVariantWith(const V: Variant; i, offset: Integer);
+  var
+    b1, b2: RawByteString;
   begin
     Check(V.ID = i);
     Check(V.Int = i);
@@ -194,7 +195,9 @@ var
     Check(V.ValFloat = i * 2.5);
     Check(V.ValWord = i + offset);
     Check(V.ValDate = i + 30000);
-    Check(V.Data = V.Test);
+    VariantToRawByteString(V.Data, b1);
+    VariantToRawByteString(V.Test, b2);
+    Check(b1 = b2);
     Check(DocVariantType.IsOfType(V.ValVariant));
     Check(VariantSaveJson(V.ValVariant) = '{"id":' + V.Test + '}');
   end;
@@ -356,7 +359,7 @@ begin
           T.ToDocVariant(docs, readonly);
           with DocVariantData(docs)^ do
             for j := 0 to Count - 1 do
-              CheckVariantWith(Values[j], j + 1);
+              CheckVariantWith(Values[j], j + 1, 0);
           T.Free;
         end;
         dummy := TSynMustache.Parse(
@@ -773,7 +776,7 @@ begin
   try
     for i := 1 to 50 do
     begin
-      Content := RandomString(5 * Random32(1000));
+      Content := RandomAnsi7(5 * Random32(1000));
       Check(R.SetAndSignContent('User', Content));
       Check(R.SignedBy = 'User');
       Check(R.CheckSignature(Content));
