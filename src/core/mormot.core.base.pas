@@ -6713,8 +6713,7 @@ begin
       d[result] := s[i];
       inc(result);
     end;
-  if result <> length(d) then
-    SetLength(d, result);
+  DynArrayFakeLength(d, result);
 end;
 
 procedure ObjArraySetLength(var aObjArray; aLength: integer);
@@ -6766,7 +6765,10 @@ begin
   if n > aItemIndex then
     MoveFast(a[aItemIndex + 1], a[aItemIndex], (n - aItemIndex) * SizeOf(TObject));
   if aCount = nil then
-    SetLength(a, n)
+    if n = 0 then
+      Finalize(a)
+    else
+      DynArrayFakeLength(a, n)
   else
     aCount^ := n;
 end;
@@ -6930,7 +6932,10 @@ begin
   if n > aItemIndex then
     MoveFast(a[aItemIndex + 1], a[aItemIndex], (n - aItemIndex) * SizeOf(IInterface));
   TPointerDynArray(aInterfaceArray)[n] := nil; // avoid GPF in SetLength()
-  SetLength(a, n);
+  if n = 0 then
+    Finalize(a)
+  else
+    DynArrayFakeLength(a, n);
 end;
 
 function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): PtrInt;
