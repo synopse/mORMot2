@@ -8813,12 +8813,13 @@ begin
     PtrUInt(@_dynarray_decr_ref_free));
   RedirectCode(@fpc_dynarray_decr_ref, @fpc_dynarray_clear);
   {$ifdef FPC_HAS_CPSTRING}
+  RedirectRtlCall(@_fpc_setstring_ansistr, @_setstring_ansistr_pansichar, $2d);
   // Delphi/Windows is never natively UTF-8, but FPC+Lazarus may be :)
   if DefaultSystemCodePage = CP_UTF8 then
   begin
     // dedicated UTF-8 concatenation RTL function replacements
-    RedirectRtl(@_fpc_ansistr_concat, @_ansistr_concat_utf8);
-    RedirectRtl(@_fpc_ansistr_concat_multi, @_ansistr_concat_multi_utf8);
+    RedirectRtlUtf8(@_fpc_ansistr_concat, @_ansistr_concat_utf8);
+    RedirectRtlUtf8(@_fpc_ansistr_concat_multi, @_ansistr_concat_multi_utf8);
   end;
   {$ifdef FPC_X64MM}
   RedirectCode(@fpc_ansistr_setlength, @_ansistr_setlength);

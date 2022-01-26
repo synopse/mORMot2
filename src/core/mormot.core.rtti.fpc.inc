@@ -824,9 +824,19 @@ end;
 
 {$ifdef FPC_HAS_CPSTRING} // optimized for systemcodepage=CP_UTF8
 
+procedure _setstring_ansistr_pansichar(out s: pointer; buf: PAnsiChar;
+  len: SizeInt; cp: cardinal);
+begin // the caller ensured s := ''
+  if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
+    cp := DefaultSystemCodePage;
+  s := FastNewString(len, cp);
+  if buf <> nil then
+    MoveFast(buf^, s^, len);
+end;
+
 {$ifdef FPC_X64MM}
 
-procedure _ansistr_setlength_new(var s: RawByteString; len: PtrInt; cp: cardinal);
+procedure _ansistr_setlength_new(var s: pointer; len: PtrInt; cp: cardinal);
 var
   p, new: PAnsiChar;
   l: PtrInt;
@@ -834,7 +844,7 @@ begin
   if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
     cp := DefaultSystemCodePage;
   new := FastNewString(len, cp);
-  p := pointer(s);
+  p := s;
   if p <> nil then
   begin
     l := PStrLen(p - _STRLEN)^ + 1;
@@ -1088,7 +1098,27 @@ begin
   a := a + a + a; // to generate "call fpc_ansistr_concat_multi" opcode
 end;
 
-procedure RedirectRtl(dummy, dest: PByteArray);
+procedure _fpc_setstring_ansistr(var s: RawByteString; buf: PAnsiChar;
+  len: SizeInt; cp: cardinal);
+begin // = call fpc_ansistr_decr_ref + call fpc_setstring_ansistr_pansichar
+  SetString(s, buf, len, cp);
+end;
+
+procedure RedirectRtlCall(dummy, dest: PByteArray; offset: PtrInt);
+begin
+  dummy := @dummy[offset]; // offset to ignore e.g. call fpc_ansistr_decr_ref
+  repeat
+    if dummy[0] = $e8 then
+    begin
+      // found "call fpc_setstring_ansistr_pansichar" opcode
+      RedirectCode(@dummy[PInteger(@dummy[1])^ + 5], dest);
+      exit;
+    end;
+    inc(PByte(dummy));
+  until PInt64(dummy)^ = 0;
+end;
+
+procedure RedirectRtlUtf8(dummy, dest: PByteArray);
 begin
   // POSIX only ABI: Windows is never natively UTF-8
   repeat
