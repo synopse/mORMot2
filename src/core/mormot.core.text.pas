@@ -514,6 +514,7 @@ function GetCsvItemString(P: PChar; Index: PtrUInt; Sep: Char = ','): string;
 
 /// return last CSV string in the supplied UTF-8 content
 function GetLastCsvItem(const Csv: RawUtf8; Sep: AnsiChar = ','): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// return the index of a Value in a CSV string
 // - start at Index=0 for first one
@@ -4467,8 +4468,8 @@ begin
        AddVoidItems then
       AddRawUtf8(List, n, s);
   end;
-  if n <> length(List) then
-    SetLength(List, n);
+  if List <> nil then
+    DynArrayFakeLength(List, n);
 end;
 
 procedure CsvToRawUtf8DynArray(const Csv, Sep, SepEnd: RawUtf8;
@@ -4495,7 +4496,8 @@ begin
     AddRawUtf8(List, n, s);
     offs := i + length(Sep);
   end;
-  SetLength(List, n);
+  if List <> nil then
+    DynArrayFakeLength(List, n);
 end;
 
 function AddPrefixToCsv(Csv: PUtf8Char; const Prefix: RawUtf8; Sep: AnsiChar): RawUtf8;
@@ -4614,7 +4616,8 @@ begin
   n := length(List);
   while Csv <> nil do
     AddInteger(List, n, GetNextItemInteger(Csv, Sep));
-  SetLength(List, n);
+  if List <> nil then
+    DynArrayFakeLength(List, n);
 end;
 
 procedure CsvToInt64DynArray(Csv: PUtf8Char; var List: TInt64DynArray;
@@ -4625,7 +4628,8 @@ begin
   n := length(List);
   while Csv <> nil do
     AddInt64(List, n, GetNextItemInt64(Csv, Sep));
-  SetLength(List, n);
+  if List <> nil then
+    DynArrayFakeLength(List, n);
 end;
 
 function CsvToInt64DynArray(Csv: PUtf8Char; Sep: AnsiChar): TInt64DynArray;
@@ -4635,7 +4639,8 @@ begin
   n := 0;
   while Csv <> nil do
     AddInt64(result, n, GetNextItemInt64(Csv, Sep));
-  SetLength(result, n);
+  if result <> nil then
+    DynArrayFakeLength(result, n);
 end;
 
 function IntegerDynArrayToCsv(Values: PIntegerArray; ValuesCount: integer;
