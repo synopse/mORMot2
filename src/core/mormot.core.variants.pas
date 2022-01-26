@@ -5039,6 +5039,14 @@ begin
   end;
 end;
 
+{ Some numbers on Linux x86_64:
+    TDocVariant exp in 135.36ms i.e. 1.1M/s, 144.8 MB/s
+    TDocVariant exp no guess in 139.10ms i.e. 1.1M/s, 140.9 MB/s
+    TDocVariant exp dvoIntern in 139.19ms i.e. 1.1M/s, 140.8 MB/s
+    TDocVariant FromResults exp in 60.86ms i.e. 2.5M/s, 322 MB/s
+    TDocVariant FromResults not exp in 47ms i.e. 3.3M/s, 183.4 MB/s
+}
+
 function TDocVariantData.InitArrayFromResults(Json: PUtf8Char; JsonLen: PtrInt;
   aOptions: TDocVariantOptions): boolean;
 var

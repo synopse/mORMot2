@@ -8708,20 +8708,23 @@ procedure Pbkdf2HmacSha256(const password, salt: RawByteString; count: integer;
 var
   i: integer;
   tmp: TSha256Digest;
-  mac: THmacSha256;
-  first: THmacSha256;
+  mac, first: THmacSha256; // re-use SHA context for best performance
 begin
+  first.Init(pointer(password), length(password));
+  mac := first;
   if salt = '' then
-    HmacSha256(password, saltdefault + #0#0#0#1, result)
+    mac.Update(saltdefault)
   else
-    HmacSha256(password, salt + #0#0#0#1, result);
+    mac.Update(salt); 
+  PInteger(@tmp)^ := $01000000;
+  mac.Update(@tmp, 4);
+  mac.Done(result);
   if count < 2 then
     exit;
   tmp := result;
-  first.Init(pointer(password), length(password));
   for i := 2 to count do
   begin
-    mac := first; // re-use the very same SHA context for best performance
+    mac := first;
     mac.sha.Update(@tmp, SizeOf(tmp));
     mac.Done(tmp, true);
     XorMemoryPtrInt(@result, @tmp, SizeOf(result) shr POINTERSHR);
@@ -8735,24 +8738,25 @@ procedure Pbkdf2HmacSha256(const password, salt: RawByteString; count: integer;
   var result: THash256DynArray; const saltdefault: RawByteString);
 var
   n, i: integer;
-  iter: RawByteString;
   tmp: TSha256Digest;
-  mac: THmacSha256;
-  first: THmacSha256;
+  mac, first: THmacSha256; // re-use SHA context for best performance
 begin
   first.Init(pointer(password), length(password));
-  SetLength(iter, SizeOf(integer));
   for n := 0 to high(result) do
   begin
-    PInteger(iter)^ := bswap32(n + 1); // U1 = PRF(Password, Salt || INT_32_BE(i))
+    // U1 = PRF(Password, Salt || INT_32_BE(i))
+    mac := first;
     if salt = '' then
-      HmacSha256(password, saltdefault + iter, result[n])
+      mac.Update(saltdefault)
     else
-      HmacSha256(password, salt + iter, result[n]);
-    tmp := result[n];
+      mac.Update(salt);
+    PInteger(@tmp)^ := bswap32(n + 1);
+    mac.Update(@tmp, 4);
+    mac.Done(tmp);
+    result[n] := tmp;
     for i := 2 to count do
     begin
-      mac := first; // re-use the very same SHA context for best performance
+      mac := first;
       mac.sha.Update(@tmp, SizeOf(tmp));
       mac.Done(tmp, true);
       XorMemoryPtrInt(@result[n], @tmp, SizeOf(result[n]) shr POINTERSHR);
@@ -8768,14 +8772,17 @@ procedure Pbkdf2HmacSha384(const password, salt: RawByteString; count: integer;
 var
   i: integer;
   tmp: TSha384Digest;
-  mac: THmacSha384;
-  first: THmacSha384;
+  mac, first: THmacSha384; // re-use SHA context for best performance
 begin
-  HmacSha384(password, salt + #0#0#0#1, result);
+  first.Init(pointer(password), length(password));
+  mac := first;
+  mac.Update(pointer(salt), length(salt));
+  PInteger(@tmp)^ := $01000000;
+  mac.Update(@tmp, 4);
+  mac.Done(result); // HmacSha384(password, salt + #0#0#0#1, result);
   if count < 2 then
     exit;
   tmp := result;
-  first.Init(pointer(password), length(password));
   for i := 2 to count do
   begin
     mac := first; // re-use the very same SHA context for best performance
@@ -8793,14 +8800,17 @@ procedure Pbkdf2HmacSha512(const password, salt: RawByteString; count: integer;
 var
   i: integer;
   tmp: TSha512Digest;
-  mac: THmacSha512;
-  first: THmacSha512;
+  mac, first: THmacSha512; // re-use SHA context for best performance
 begin
-  HmacSha512(password, salt + #0#0#0#1, result);
+  first.Init(pointer(password), length(password));
+  mac := first;
+  mac.Update(pointer(salt), length(salt));
+  PInteger(@tmp)^ := $01000000;
+  mac.Update(@tmp, 4);
+  mac.Done(result); // HmacSha512(password, salt + #0#0#0#1, result);
   if count < 2 then
     exit;
   tmp := result;
-  first.Init(pointer(password), length(password));
   for i := 2 to count do
   begin
     mac := first; // re-use the very same SHA context for best performance
@@ -8818,8 +8828,7 @@ procedure Pbkdf2Sha3(algo: TSha3Algo; const password, salt: RawByteString;
 var
   i: integer;
   tmp: RawByteString;
-  mac: TSha3;
-  first: TSha3;
+  mac, first: TSha3; // re-use SHA context for best performance
 begin
   if resultbytes <= 0 then
     resultbytes := SHA3_DEF_LEN[algo] shr 3;
