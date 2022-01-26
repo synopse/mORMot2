@@ -621,7 +621,7 @@ begin
   if (fInterface.MethodIndexCallbackReleased >= 0) and
      (InstanceCreation <> sicShared) then
     raise EServiceException.CreateUtf8(
-      '%.Create: I%() should be run as sicShared', [self,
+      '%.Create: I%() should be run as sicShared for CallbackReleased method', [self,
       fInterface.Methods[fInterface.MethodIndexCallbackReleased].InterfaceDotMethodName]);
   // initialize the shared instance or client driven parameters
   case InstanceCreation of

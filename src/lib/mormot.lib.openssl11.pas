@@ -718,10 +718,12 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function get_ssl(s: PSSL): integer;
     function pending: integer;
-    procedure ToString(var data: RawByteString); overload;
-    function ToString: RawUtf8; overload;
+    procedure ToString(var data: RawByteString;
+      cp: integer = CP_RAWBYTESTRING); overload;
+    function ToUtf8: RawUtf8; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    function ToStringAndFree: RawUtf8;
+    function ToUtf8AndFree: RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -4064,7 +4066,7 @@ begin
     res := PEM_write_bio_PKCS8PrivateKey(bio, @self, EVP_aes_256_cbc,
       pointer(PassWord), Length(PassWord), nil, nil);
   if res = OPENSSLSUCCESS then
-    result := bio.ToString;
+    result := bio.ToUtf8;
   bio.Free;
 end;
 
@@ -4077,7 +4079,7 @@ begin
     exit;
   bio := BIO_new(BIO_s_mem);
   if PEM_write_bio_PUBKEY(bio, @self) = OPENSSLSUCCESS then
-    result := bio.ToString;
+    result := bio.ToUtf8;
   bio.Free;
 end;
 
@@ -4219,7 +4221,7 @@ begin
   result := BIO_ctrl(@self, _BIO_CTRL_PENDING, 0, nil);
 end;
 
-procedure BIO.ToString(var data: RawByteString);
+procedure BIO.ToString(var data: RawByteString; cp: integer);
 var
   mem: PBUF_MEM;
 begin
@@ -4227,17 +4229,17 @@ begin
      (BIO_ctrl(@self, BIO_C_GET_BUF_MEM_PTR, 0, @mem) <> OPENSSLSUCCESS) then
     data := ''
   else
-    FastSetRawByteString(data, mem.data, mem.length);
+    FastSetStringCP(data, mem.data, mem.length, cp);
 end;
 
-function BIO.ToString: RawUtf8;
+function BIO.ToUtf8: RawUtf8;
 begin
-  ToString(RawByteString(result));
+  ToString(RawByteString(result), CP_UTF8);
 end;
 
-function BIO.ToStringAndFree: RawUtf8;
+function BIO.ToUtf8AndFree: RawUtf8;
 begin
-  ToString(RawByteString(result));
+  ToString(RawByteString(result), CP_UTF8);
   Free;
 end;
 
@@ -4320,7 +4322,7 @@ begin
     exit;
   bio := BIO_new(BIO_s_mem);
   ASN1_STRING_print_ex(bio, @self, flags);
-  result := bio.ToStringAndFree;
+  result := bio.ToUtf8AndFree;
 end;
 
 procedure asn1_string_st.ToHex(out result: RawUtf8);
@@ -4340,7 +4342,7 @@ begin
     exit;
   bio := BIO_new(BIO_s_mem);
   X509V3_EXT_print(bio, @self, flags, 0);
-  result := bio.ToStringAndFree;
+  result := bio.ToUtf8AndFree;
 end;
 
 procedure X509_EXTENSION.Free;
@@ -4400,7 +4402,7 @@ begin
   begin
     bio := BIO_new(BIO_s_mem);
     X509_print(bio, @self);
-    result := bio.ToStringAndFree;
+    result := bio.ToUtf8AndFree;
   end;
 end;
 
