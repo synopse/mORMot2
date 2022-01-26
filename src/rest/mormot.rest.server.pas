@@ -164,15 +164,15 @@ type
     fServiceListInterfaceMethodIndex: integer;
     fStatsInSize, fStatsOutSize: integer;
     fServiceMethodIndex: integer;
+    fUriSessionSignaturePos: integer;
+    fMethodIndex: integer;
+    fTableIndex: integer;
     fAuthSession: TAuthSession;
     fServer: TRestServer;
     fUri, fUriWithoutSignature, fUriUnderscoreAsSlash, fUriBlobFieldName: RawUtf8;
     fUriAfterRoot: PUtf8Char;
-    fUriSessionSignaturePos: integer;
-    fMethodIndex: integer;
     fThreadServer: PServiceRunningContext;
     fTable: TOrmClass;
-    fTableIndex: integer;
     fTableModelProps: TOrmModelProperties;
     fTableEngine: TRestOrm;
     fTableID: TID;
@@ -268,7 +268,8 @@ type
     // - this method could have been declared as protected, since it should
     // never be called outside the TRestServer.Uri() method workflow
     // - should set Call, and Method members
-    constructor Create(aServer: TRestServer; const aCall: TRestUriParams); reintroduce; virtual;
+    constructor Create(
+      aServer: TRestServer; const aCall: TRestUriParams); reintroduce; virtual;
     /// finalize the execution context
     destructor Destroy; override;
 
@@ -1656,12 +1657,14 @@ type
   TRestServer = class(TRest)
   protected
     fHandleAuthentication: boolean;
+    fAfterCreation: boolean;
+    fShutdownRequested: boolean;
+    fStatLevels: TRestServerMonitorLevels;
+    fOptions: TRestServerOptions;
     fBypassOrmAuthentication: TUriMethods;
     /// the TAuthUser and TAuthGroup classes, as defined in model
     fAuthUserClass: TAuthUserClass;
     fAuthGroupClass: TAuthGroupClass;
-    fAfterCreation: boolean;
-    fOptions: TRestServerOptions;
     /// how in-memory sessions are handled
     fSessionClass: TAuthSessionClass;
     fJwtForUnauthenticatedRequest: TJwtAbstract;
@@ -1671,25 +1674,23 @@ type
     /// used to compute genuine TAuthSession.ID cardinal value
     fSessionCounter: integer;
     fSessionCounterMin: cardinal;
-    fSessionAuthentication: TRestServerAuthenticationDynArray;
-    fPublishedMethod: TRestServerMethods;
-    fPublishedMethods: TDynArrayHashed;
+    fTimestampInfoCacheTix: cardinal;
+    fOnIdleLastTix: cardinal;
     fPublishedMethodTimestampIndex: integer;
     fPublishedMethodAuthIndex: integer;
     fPublishedMethodBatchIndex: integer;
+    fSessionAuthentication: TRestServerAuthenticationDynArray;
+    fPublishedMethod: TRestServerMethods;
+    fPublishedMethods: TDynArrayHashed;
+    fTimestampInfoCache: RawUtf8;
     fStats: TRestServerMonitor;
-    fStatLevels: TRestServerMonitorLevels;
     fStatUsage: TSynMonitorUsage;
-    fShutdownRequested: boolean;
     fAssociatedServices: TServicesPublishedInterfacesList;
     fRootRedirectGet: RawUtf8;
     fPublicUri: TRestServerUri;
     fIPBan, fIPWhiteJWT: TIPBan;
-    fOnIdleLastTix: cardinal;
     fServicesRouting: TRestServerUriContextClass;
     fRecordVersionSlaveCallbacks: array of IServiceRecordVersionCallback;
-    fTimestampInfoCache: RawUtf8;
-    fTimestampInfoCacheTix: cardinal;
     fServer: IRestOrmServer;
     procedure SetNoAjaxJson(const Value: boolean);
     function GetNoAjaxJson: boolean;
@@ -2596,13 +2597,13 @@ begin
   inherited Create(aCall);
   fServer := aServer;
   fThreadServer := PerThreadRunningContextAddress;
-  ThreadServer^.Request := self;
+  fThreadServer^.Request := self;
 end;
 
 destructor TRestServerUriContext.Destroy;
 begin
-  if ThreadServer <> nil then
-    ThreadServer^.Request := nil;
+  if fThreadServer <> nil then
+    fThreadServer^.Request := nil;
   inherited Destroy;
 end;
 
@@ -6784,7 +6785,7 @@ begin
   QueryPerformanceMicroSeconds(msstart);
   fStats.AddCurrentRequestCount(1);
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
-  ctxt := ServicesRouting.Create(self, Call);
+  ctxt := fServicesRouting.Create(self, Call);
   try
     if log <> nil then
       ctxt.fLog := log.Instance;
