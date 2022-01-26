@@ -1041,7 +1041,7 @@ var
 begin
   if ODBC.GetDiagFieldA(SQL_HANDLE_STMT, StatementHandle, 1, SQL_DIAG_SQLSTATE,
      @Status, SizeOf(Status), StringLength) = 0 then
-    SetString(result, PAnsiChar(@Status), StringLength)
+    FastSetString(result, @Status, StringLength)
   else
     result := '';
 end;

@@ -4227,7 +4227,7 @@ begin
      (BIO_ctrl(@self, BIO_C_GET_BUF_MEM_PTR, 0, @mem) <> OPENSSLSUCCESS) then
     data := ''
   else
-    SetString(data, PAnsiChar(pointer(mem.data)), mem.length);
+    FastSetRawByteString(data, mem.data, mem.length);
 end;
 
 function BIO.ToString: RawUtf8;

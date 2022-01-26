@@ -739,12 +739,13 @@ end;
 
 function TSqlDBPostgresStatement.ColumnBlob(Col: integer): RawByteString;
 var
-  P: PAnsiChar;
+  P: pointer;
 begin
   // PGFMT_TEXT was used -> need to convert into binary
   CheckColAndRowset(Col);
-  P := pointer(PQ.GetValue(fRes, fCurrentRow, Col));
-  SetString(result, P, BlobInPlaceDecode(P, PQ.GetLength(fRes, fCurrentRow, col)));
+  P := PQ.GetValue(fRes, fCurrentRow, Col);
+  FastSetRawByteString(result, P,
+    BlobInPlaceDecode(P, PQ.GetLength(fRes, fCurrentRow, col)));
 end;
 
 procedure TSqlDBPostgresStatement.ColumnsToJson(WR: TResultsWriter);

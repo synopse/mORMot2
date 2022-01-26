@@ -1608,7 +1608,7 @@ begin
   utf16 := Utf8Decode(Utf8);
   tmp.Init(length(utf16) * 3);
   CharToOemBuffW(pointer(utf16), tmp.buf, length(utf16) + 1); // +1 = ending #0
-  SetString(Console, PAnsiChar(tmp.buf), StrLen(tmp.buf));
+  FastSetRawByteString(Console, tmp.buf, StrLen(tmp.buf));
   tmp.Done;
 end;
 
@@ -2457,7 +2457,7 @@ begin
       src, nil, e, nil, nil, CRYPTPROTECT_UI_FORBIDDEN, dst);
   if ok then
   begin
-    SetString(result, dst.pbData, dst.cbData);
+    FastSetRawByteString(result, dst.pbData, dst.cbData);
     LocalFree(HLOCAL(dst.pbData));
   end
   else

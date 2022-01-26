@@ -330,7 +330,7 @@ begin
           'Need ServerName=DataSourceName or DataBaseName=FullConnectString')
       else
       begin
-        SetString(fSqlDriverFullString, nil, 1024);
+        FastSetString(fSqlDriverFullString, nil, 1024);
         fSqlDriverFullString[1] := #0;
         Len := 0;
         Check(self, nil,
@@ -1047,7 +1047,7 @@ begin
               ftDate:
                 begin
                   CValueType := timestamp.From(unaligned(PDateTime(@VInt64)^), BufferSize);
-                  SetString(VData, PAnsiChar(@timestamp), BufferSize);
+                  FastSetRawByteString(VData, @timestamp, BufferSize);
                   // A workaround for "[ODBC Driver 13 for SQL Server]Datetime field overflow.
                   // Fractional second precision exceeds the scale specified in the parameter binding"
                   // Implemented according to http://rightondevelopment.blogspot.com/2009/10/sql-server-native-client-100-datetime.html

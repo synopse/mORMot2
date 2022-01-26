@@ -4929,7 +4929,7 @@ var
 begin
   inlen := length(Input);
   outlen := EncryptPkcs7Length(inlen, IVAtBeginning);
-  SetString(result, nil, outlen + TrailerLen);
+  FastSetRawByteString(result, nil, outlen + TrailerLen);
   EncryptPkcs7Buffer(pointer(Input), pointer(result), inlen, outlen, IVAtBeginning);
 end;
 
@@ -5023,7 +5023,7 @@ begin
   if not DecryptPkcs7Len(InputLen, ivsize, Input,
       IVAtBeginning, RaiseESynCryptoOnError) then
     exit;
-  SetString(result, nil, InputLen);
+  FastSetRawByteString(result, nil, InputLen);
   P := pointer(result);
   Decrypt(@PByteArray(Input)^[ivsize], P, InputLen);
   padding := ord(P[InputLen - 1]); // result[1..len]
@@ -6590,7 +6590,7 @@ end;
 
 function TAesPrngAbstract.FillRandom(Len: integer): RawByteString;
 begin
-  SetString(result, nil, Len);
+  FastSetRawByteString(result, nil, Len);
   FillRandom(pointer(result), Len);
 end;
 
@@ -7142,13 +7142,13 @@ begin
   // CryptProtectDataEntropy used as salt
   __hmac.Init(@CryptProtectDataEntropy, 32);
   // CryptProtectDataEntropy derivated for current user -> fn + k256 
-  SetString(appsec, PAnsiChar(@CryptProtectDataEntropy), 32);
+  FastSetRawByteString(appsec, @CryptProtectDataEntropy, 32);
   Pbkdf2HmacSha256(appsec, Executable.User, 100, k256);
   FillZero(appsec);
   appsec := Base64Uri(@k256, 15); // =BinToBase64Uri()
   fn := FormatString({$ifdef OSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
     [GetSystemPath(spUserData), appsec]);  // .* files are hidden under Linux
-  SetString(appsec, PAnsiChar(@k256[15]), 17); // use remaining bytes as key
+  FastSetRawByteString(appsec, @k256[15], 17); // use remaining bytes as key
   Sha256Weak(appsec, k256); // just a way to reduce to 256-bit
   try
     // extract private user key from local hidden file 
@@ -8192,7 +8192,7 @@ var
   len: integer;
 begin
   len := length(Source);
-  SetString(result, nil, len);
+  FastSetRawByteString(result, nil, len);
   Cypher(pointer(Key), pointer(Source), pointer(result), length(Key), len);
 end;
 
@@ -8219,7 +8219,7 @@ var
   len: integer;
 begin
   len := length(Source);
-  SetString(result, nil, len);
+  FastSetRawByteString(result, nil, len);
   Cypher(pointer(Source), pointer(result), len);
 end;
 
@@ -9924,7 +9924,7 @@ type
 function AES(const Key; KeySize: cardinal; const s: RawByteString;
   Encrypt: boolean): RawByteString;
 begin
-  SetString(result, nil, length(s));
+  FastSetRawByteString(result, nil, length(s));
   if s <> '' then
     AES(Key, KeySize, pointer(s), pointer(result), length(s), Encrypt);
 end;
@@ -10356,7 +10356,7 @@ end;
 function AESSHA256(const s, Password: RawByteString;
   Encrypt: boolean): RawByteString;
 begin
-  SetString(result, nil, length(s));
+  FastSetRawByteString(result, nil, length(s));
   AESSHA256(pointer(s), pointer(result), length(s), Password, Encrypt);
 end;
 

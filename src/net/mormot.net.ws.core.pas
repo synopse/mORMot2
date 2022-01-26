@@ -1792,7 +1792,7 @@ begin
     inc(len, ToVarUInt32LengthWithData(it^.Len));
     inc(it);
   end;
-  SetString(frame.payload, nil, len);
+  FastSetRawByteString(frame.payload, nil, len);
   P := AppendRawUtf8ToBuffer(pointer(frame.payload), Head);
   P^ := FRAME_HEAD_SEP;
   inc(P);
@@ -1923,7 +1923,7 @@ begin
   i := length(frame.payload) - (PAnsiChar(P) - pointer(frame.payload));
   if i < 0 then
     exit;
-  SetString(content, PAnsiChar(P), i);
+  FastSetRawByteString(content, P, i);
   result := true;
 end;
 
@@ -1958,7 +1958,7 @@ begin
     else
       raise EWebSockets.CreateUtf8('%.SendFrames[%]: Unexpected opcode=%',
         [self, i, ord(Frames[i].opcode)]);
-  SetString(jumboFrame.payload, nil, len);
+  FastSetRawByteString(jumboFrame.payload, nil, len);
   P := pointer(jumboFrame.payload);
   MoveFast(JUMBO_HEADER, P^, SizeOf(JUMBO_HEADER));
   inc(P, SizeOf(JUMBO_HEADER));
@@ -3052,7 +3052,7 @@ end;
 function TWebProcessInFrame.GetData: boolean;
 begin
   if length(data) <> integer(hdr.len32) then
-    SetString(data, nil, hdr.len32);
+    FastSetRawByteString(data, nil, hdr.len32);
   result := HasBytes(pointer(data), hdr.len32);
   if result then
   begin

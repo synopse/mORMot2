@@ -3714,7 +3714,7 @@ end;
 function TFastReader.VarString: RawByteString;
 begin
   with VarBlob do
-    SetString(result, Ptr, Len);
+    FastSetRawByteString(result, Ptr, Len);
 end;
 
 function TFastReader.VarString(CodePage: integer): RawByteString;
@@ -4355,7 +4355,7 @@ begin
   if fPos + len > fBufLen then
   begin
     if len > length(tmp) then
-      SetString(tmp, nil, len); // don't reallocate buffer, but reuse big enough
+      FastSetRawByteString(tmp, nil, len); // don't reallocate buffer (reuse)
     result := pointer(tmp);
   end
   else
@@ -5027,7 +5027,7 @@ begin
      (CheckMagicForCompressed and
       IsContentCompressed(Plain, PlainLen)) then
   begin
-    SetString(result, nil, PlainLen + BufferOffset + 9);
+    FastSetRawByteString(result, nil, PlainLen + BufferOffset + 9);
     R := pointer(result);
     inc(R, BufferOffset);
     PCardinal(R)^ := crc;
@@ -5040,7 +5040,7 @@ begin
     len := CompressDestLen(PlainLen) + BufferOffset;
     if len > SizeOf(tmp) then
     begin
-      SetString(result, nil, len);
+      FastSetRawByteString(result, nil, len);
       R := pointer(result);
     end
     else
@@ -5063,7 +5063,7 @@ begin
     end;
     inc(len, BufferOffset + 9);
     if R = @tmp[BufferOffset] then
-      SetString(result, PAnsiChar(@tmp), len)
+      FastSetRawByteString(result, @tmp, len)
     else
       if result {%H-}<> '' then
         // don't call the MM which may move the data: just adjust length()
@@ -5177,7 +5177,7 @@ begin
   len := DecompressHeader(Comp, CompLen, Load);
   if len = 0 then
     exit;
-  SetString(result, nil, len + BufferOffset);
+  FastSetRawByteString(result, nil, len + BufferOffset);
   dec := pointer(result);
   if not DecompressBody(Comp, dec + BufferOffset, CompLen, len, Load) then
     result := '';
@@ -5200,7 +5200,7 @@ begin
   len := DecompressHeader(pointer(Comp), length(Comp), Load);
   if len = 0 then
     exit; // invalid crc32c
-  SetString(Dest, nil, len);
+  FastSetRawByteString(Dest, nil, len);
   if DecompressBody(pointer(Comp), pointer(Dest), length(Comp), len, Load) then
     result := true
   else
@@ -5226,7 +5226,7 @@ begin
   else
   begin
     if PlainLen > length(tmp) then
-      SetString(tmp, nil, PlainLen);
+      FastSetRawByteString(tmp, nil, PlainLen);
     if DecompressBody(Comp, pointer(tmp), CompLen, PlainLen, Load) then
       result := pointer(tmp);
   end;
@@ -5406,7 +5406,7 @@ begin
     else
     begin
       if Head.CompressedSize > length({%H-}buf) then
-        SetString(buf, nil, Head.CompressedSize);
+        FastSetRawByteString(buf, nil, Head.CompressedSize);
       S := pointer(buf);
       Source.Read(S^, Head.CompressedSize);
     end;
@@ -5538,9 +5538,9 @@ begin
           else
             Head.UnCompressedSize := Count;
           if {%H-}src = '' then
-            SetString(src, nil, Head.UnCompressedSize);
+            FastSetRawByteString(src, nil, Head.UnCompressedSize);
           if {%H-}dst = '' then
-            SetString(dst, nil, AlgoCompressDestLen(Head.UnCompressedSize));
+            FastSetRawByteString(dst, nil, AlgoCompressDestLen(Head.UnCompressedSize));
           Head.UnCompressedSize := S.Read(pointer(src)^, Head.UnCompressedSize);
           if Head.UnCompressedSize <= 0 then
             exit; // read error
@@ -5595,7 +5595,7 @@ begin
              (Head.CompressedSize > Count) then
             exit;
           if Head.CompressedSize > length({%H-}src) then
-            SetString(src, nil, Head.CompressedSize);
+            FastSetRawByteString(src, nil, Head.CompressedSize);
           if S.Read(pointer(src)^, Head.CompressedSize) <> Head.CompressedSize then
             exit;
           dec(Count, Head.CompressedSize);
@@ -5603,7 +5603,7 @@ begin
              (AlgoDecompressDestLen(pointer(src)) <> Head.UnCompressedSize) then
             exit;
           if Head.UnCompressedSize > length({%H-}dst) then
-            SetString(dst, nil, Head.UnCompressedSize);
+            FastSetRawByteString(dst, nil, Head.UnCompressedSize);
           if AlgoDecompress(pointer(src), Head.CompressedSize, pointer(dst)) <>
               Head.UnCompressedSize then
              exit;
@@ -5891,7 +5891,7 @@ begin
   L := 0;
   for i := 0 to high(Values) do
     inc(L, length(Values[i]));
-  SetString(result, nil, L);
+  FastSetRawByteString(result, nil, L);
   P := pointer(result);
   for i := 0 to high(Values) do
   begin
@@ -5915,7 +5915,7 @@ end;
 
 procedure BytesToRawByteString(const bytes: TBytes; out buf: RawByteString);
 begin
-  SetString(buf, PAnsiChar(pointer(bytes)), Length(bytes));
+  FastSetRawByteString(buf, pointer(bytes), Length(bytes));
 end;
 
 procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
@@ -5925,7 +5925,7 @@ var
 begin
   if res.Open(ResName, ResType, Instance) then
   begin
-    SetString(buf, PAnsiChar(res.Buffer), res.Size);
+    FastSetRawByteString(buf, res.Buffer, res.Size);
     res.Close;
   end;
 end;
@@ -6496,7 +6496,7 @@ begin
   resultLen := Base64ToBinLength(sp, len);
   if resultLen <> 0 then
   begin
-    SetString(data, nil, resultLen);
+    FastSetRawByteString(data, nil, resultLen);
     if ConvertBase64ToBin[sp[len - 2]] >= 0 then
       if ConvertBase64ToBin[sp[len - 1]] >= 0 then
         // keep len as it is
@@ -6687,7 +6687,7 @@ begin
   resultLen := Base64uriToBinLength(len);
   if resultLen <> 0 then
   begin
-    SetString(result, nil, resultLen);
+    FastSetRawByteString(result, nil, resultLen);
     if Base64AnyDecode(ConvertBase64UriToBin, sp, pointer(result), len) then
       exit;
   end;
@@ -6959,7 +6959,7 @@ var
   len: integer;
 begin
   len := Base58ToBin(B58, B58Len, temp);
-  SetString(result, PAnsiChar(temp.buf), len);
+  FastSetRawByteString(result, temp.buf, len);
   temp.Done;
 end;
 
@@ -6998,7 +6998,7 @@ begin
        Base64ToBinSafe(@P[3], Len - 3, RawByteString(result)) then
       exit; // safe decode Base64 content ('\uFFF0base64encodedbinary')
   // TEXT format
-  SetString(result, PAnsiChar(P), Len);
+  FastSetRawByteString(result, P, Len);
 end;
 
 function BlobToRawBlob(const Blob: RawByteString): RawBlob;
@@ -7417,7 +7417,7 @@ begin
     dest^ := d shl (8 - bits);
     inc(dest);
   end;
-  SetString(result, PAnsiChar(tmp.buf), PAnsiChar(dest) - PAnsiChar(tmp.buf));
+  FastSetRawByteString(result, tmp.buf, PAnsiChar(dest) - PAnsiChar(tmp.buf));
   tmp.Done;
 end;
 
@@ -10126,7 +10126,7 @@ procedure TRawByteStringGroup.Add(aItem: pointer; aItemLen: integer);
 var
   tmp: RawByteString;
 begin
-  SetString(tmp, PAnsiChar(aItem), aItemLen);
+  FastSetRawByteString(tmp, aItem, aItemLen);
   Add(tmp);
 end;
 
@@ -10227,7 +10227,7 @@ begin
   if (Values <> nil) and
      (Count > 1) then
   begin
-    SetString(tmp, nil, Position);
+    FastSetRawByteString(tmp, nil, Position);
     v := pointer(Values);
     for i := 1 to Count do
     begin
@@ -10383,7 +10383,7 @@ begin
   else
   // direct return if not yet compacted
   if aLength - aPosition <= length(P^.Value) then
-    SetString(aText, PAnsiChar(@PByteArray(P^.Value)[aPosition]), aLength);
+    FastSetRawByteString(aText, @PByteArray(P^.Value)[aPosition], aLength);
 end;
 
 function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
@@ -10514,7 +10514,7 @@ function TRawByteStringBuffer.Reserve(MaxSize: PtrInt): pointer;
 begin
   fLen := 0;
   if MaxSize > length(fBuffer) then
-    SetString(fBuffer, nil, MaxSize); // no realloc -> not SetLength()
+    FastSetRawByteString(fBuffer, nil, MaxSize); // no realloc -> not SetLength()
   result := pointer(fBuffer);
 end;
 

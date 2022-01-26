@@ -1650,7 +1650,7 @@ procedure TOrmVirtualTableCursor.SetColumnBlob(var aResult: TSqlVar;
 begin
   aResult.Options := [];
   aResult.VType := ftBlob;
-  SetString(fColumnTemp, PAnsiChar(aValue), aValueLength); // temporary copy
+  FastSetRawByteString(fColumnTemp, aValue, aValueLength); // temporary copy
   aResult.VBlob := pointer(fColumnTemp);
   aResult.VBlobLen := aValueLength;
 end;

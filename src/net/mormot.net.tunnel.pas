@@ -51,6 +51,7 @@ type
   // - toEcdhe will compute an ephemeral secret to encrypt the link
   TTunnelOption = (
     toEcdhe);
+
   /// options for TTunnelLocal process
   TTunnelOptions = set of TTunnelOption;
   PTunnelOptions = ^TTunnelOptions;
@@ -188,6 +189,7 @@ type
 
 type
   TTunnelRelayIDs = array of TBinaryCookieGeneratorSessionID;
+
   TTunnelRelayLink = record
     // order doesn't matter -> just a link between two clients
     ProcessA, ProcessB: TWebSocketProcess;
@@ -399,7 +401,7 @@ begin
     // initial handshake: TTunnelOptions+TTunnelSession
     header.options := fOptions;
     header.session := Session;
-    SetString(frame, PAnsiChar(@header), SizeOf(header));
+    FastSetRawByteString(frame, @header, SizeOf(header));
     Transmit.Send(frame);
     // server will wait until both sides are connected
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
@@ -436,7 +438,7 @@ begin
   result := false;
   // EDCHE handshake with perfect forward security - server side
   ecdhe := fContext; // pre-computed by overriden Create
-  SetString(frame, PAnsiChar(@ecdhe), SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub));
+  FastSetRawByteString(frame, @ecdhe, SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub));
   Transmit.Send(frame); // frame = rnd+pub
   if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
      (length({%H-}remote) <> SizeOf(TEccPublicKey)) then
@@ -455,7 +457,7 @@ var
 begin
   result := false;
   // EDCHE handshake with perfect forward security - client side
-  SetString(frame, nil, SizeOf(TEccPublicKey));
+  FastSetRawByteString(frame, nil, SizeOf(TEccPublicKey));
   if not fHandshake.WaitPop(TimeOutMS, nil, remote) or // remote = rnd+pub
      (length({%H-}remote) <> SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub)) then
     exit;

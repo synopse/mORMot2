@@ -8309,10 +8309,10 @@ function TDynArray.ItemLoadMem(Source, SourceMax: PAnsiChar): RawByteString;
 begin
   if (Source <> nil) and
      (fInfo.Cache.ItemInfo = nil) then
-    SetString(result, Source, fInfo.Cache.ItemSize)
+    FastSetRawByteString(result, Source, fInfo.Cache.ItemSize)
   else
   begin
-    SetString(result, nil, fInfo.Cache.ItemSize);
+    FastSetRawByteString(result, nil, fInfo.Cache.ItemSize);
     FillCharFast(pointer(result)^, fInfo.Cache.ItemSize, 0);
     ItemLoad(Source, pointer(result), SourceMax);
   end;
@@ -8340,7 +8340,7 @@ end;
 function TDynArray.ItemSave(Item: pointer): RawByteString;
 begin
   if fInfo.Cache.ItemInfo = nil then
-    SetString(result, PAnsiChar(Item), fInfo.Cache.ItemSize)
+    FastSetRawByteString(result, Item, fInfo.Cache.ItemSize)
   else
     result := BinarySave(Item, fInfo.Cache.ItemInfo, rkAllTypes);
 end;

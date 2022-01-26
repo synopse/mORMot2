@@ -2010,7 +2010,7 @@ var
 begin
   if Next(b) then
   begin
-    SetString(BSON, PAnsiChar(b) + 4, PInteger(b)^);
+    FastSetRawByteString(BSON, PAnsiChar(b) + 4, PInteger(b)^);
     result := true;
   end
   else

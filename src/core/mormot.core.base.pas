@@ -690,13 +690,19 @@ function RandomGuid: TGUID; overload;
 // 265, 331, 413, 516, 645, 806, 1007, 1258, 1572, ...
 function NextGrow(capacity: integer): integer;
 
-/// equivalence to SetString(s,nil,len) function but from a raw pointer
+/// equivalence to SetString(s,pansichar,len) function but from a raw pointer
 // - so works with both PAnsiChar and PUtf8Char input buffer (or even PByteArray)
 // - faster especially under FPC
 procedure FastSetString(var s: RawUtf8; p: pointer; len: PtrInt);
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
-/// equivalence to SetString(s,nil,len) function with a specific code page
+/// equivalence to SetString(s,pansichar,len) function but from a raw pointer
+// - so works with both PAnsiChar and PUtf8Char input buffer (or even PByteArray)
+// - faster especially under FPC
+procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
+  {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
+
+/// equivalence to SetString(s,pansichar,len) function with a specific code page
 // - faster especially under FPC
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
@@ -4111,11 +4117,21 @@ begin
   FastAssignNew(s, r);
 end;
 
+procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
+var
+  r: pointer;
+begin
+  r := FastNewString(len, CP_RAWBYTESTRING); // FPC does constant propagation
+  if p <> nil then
+    MoveFast(p^, r^, len);
+  FastAssignNew(s, r);
+end;
+
 procedure GetMemAligned(var holder: RawByteString; fillwith: pointer; len: PtrUInt;
   out aligned: pointer; alignment: PtrUInt);
 begin
   dec(alignment); // expected to be a power of two
-  FastSetStringCP(holder, nil, len + alignment, CP_RAWBYTESTRING);
+  FastSetRawByteString(holder, nil, len + alignment);
   aligned := pointer(holder);
   while PtrUInt(aligned) and alignment <> 0 do
     inc(PByte(aligned));
@@ -9350,7 +9366,7 @@ begin
       PCardinal(P)^ := Hash32(pointer(Data), DataLen);
       len := SynLZcompress1(pointer(Data), DataLen, P + 8);
       PCardinal(P + 4)^ := Hash32(pointer(P + 8), len);
-      SetString(Data, P, len + 8);
+      FastSetRawByteString(Data, P, len + 8);
       {%H-}tmp.Done;
     end
     else
@@ -9365,7 +9381,7 @@ begin
       if (len = 0) or
          ((SynLZDecompress1(P + 8, DataLen - 8, tmp.buf) = len) and
           (Hash32(tmp.buf, len) = PCardinal(P)^)) then
-        SetString(Data, PAnsiChar(tmp.buf), len);
+        FastSetRawByteString(Data, tmp.buf, len);
       {%H-}tmp.Done;
     end;
   result := 'synlz';
@@ -10228,7 +10244,7 @@ begin
      (DataLen <= 0) then
     PCardinal(@Value)^ := varNull
   else
-    SetString(RawByteString(TVarData(Value).VAny), PAnsiChar(Data), DataLen);
+    FastSetRawByteString(RawByteString(TVarData(Value).VAny), Data, DataLen);
 end;
 
 procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant);

@@ -4071,7 +4071,7 @@ begin
               fState := wsClosedByClient
             else
               fState := wsClosedByServer;
-            SetString(fBuffer, PAnsiChar(buf[0].pbBuffer), buf[0].ulBufferLength);
+            FastSetRawByteString(fBuffer, buf[0].pbBuffer, buf[0].ulBufferLength);
             fCloseStatus := buf[0].Reserved1;
             CloseConnection;
             result := False;

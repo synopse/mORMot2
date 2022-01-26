@@ -1613,7 +1613,7 @@ begin
     VType := BsonVariantType.VarType;
     VKind := betDecimal128;
     VBlob := nil;
-    SetString(RawByteString(VBlob), PAnsiChar(@Bits), SizeOf(TDecimal128));
+    FastSetRawByteString(RawByteString(VBlob), @Bits, SizeOf(TDecimal128));
   end;
 end;
 
@@ -2120,7 +2120,7 @@ begin
          (PInteger(VBlob)^ <> Length(RawByteString(VBlob)) - (SizeOf(integer) + 1)) then
         Blob := ''
       else
-        SetString(Blob, PAnsiChar(VBlob) + (SizeOf(integer) + 1), PInteger(VBlob)^);
+        FastSetRawByteString(Blob, PAnsiChar(VBlob) + (SizeOf(integer) + 1), PInteger(VBlob)^);
   end;
 end;
 
@@ -2307,8 +2307,7 @@ var
     if dec.FromText(P, L) = dsvError then
       exit;
     bsonvalue.VBlob := nil; // avoid GPF
-    SetString(RawByteString(bsonvalue.VBlob),
-      PAnsiChar(@dec), SizeOf(TDecimal128));
+    FastSetRawByteString(RawByteString(bsonvalue.VBlob), @dec, SizeOf(TDecimal128));
     Return(betDecimal128, P + L + 1, GotoEndOfObject);
   end;
 
@@ -2321,7 +2320,7 @@ var
     buf: PAnsiChar;
   begin
     bsonvalue.VBlob := nil; // avoid GPF
-    SetString(RawByteString(bsonvalue.VBlob), nil, RegLen + OptLen + 2);
+    FastSetRawByteString(RawByteString(bsonvalue.VBlob), nil, RegLen + OptLen + 2);
     buf := bsonvalue.VBlob;
     MoveFast(Reg^, buf^, RegLen);
     inc(buf, RegLen);
@@ -2726,7 +2725,7 @@ begin
     betDoc,
     betArray:
       if DocArrayConversion = asBsonVariant then
-        SetString(TBsonDocument(resBSON.VBlob), PAnsiChar(Element), ElementBytes)
+        FastSetRawByteString(TBsonDocument(resBSON.VBlob), Element, ElementBytes)
       else
       begin
         BsonItemsToDocVariant(Kind, Data.DocList, TDocVariantData(result), DocArrayConversion);
@@ -2738,7 +2737,7 @@ begin
     betJSScope,
     betTimestamp,
     betDecimal128:
-      SetString(RawByteString(resBSON.VBlob), PAnsiChar(Element), ElementBytes);
+      FastSetRawByteString(RawByteString(resBSON.VBlob), Element, ElementBytes);
     betObjectID:
       resBSON.VObjectID := PBsonObjectID(Element)^;
     betBoolean:

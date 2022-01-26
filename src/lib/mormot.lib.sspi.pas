@@ -560,7 +560,7 @@ begin
   {%H-}InBuf[0].Init(SECBUFFER_TOKEN, @Token[0], Sizes.cbSecurityTrailer);
   // Encoding done in-place, so we copy the data
   SrcLen := Length(aPlain);
-  SetString(EncBuffer, PAnsiChar(pointer(aPlain)), SrcLen);
+  FastSetRawByteString(EncBuffer, pointer(aPlain), SrcLen);
   InBuf[1].Init(SECBUFFER_DATA, pointer(EncBuffer), SrcLen);
   Assert(Sizes.cbBlockSize <= High(Padding)+1);
   InBuf[2].Init(SECBUFFER_PADDING, @Padding[0], Sizes.cbBlockSize);
@@ -612,7 +612,7 @@ begin
   Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
   if Status < 0 then
     raise ESynSspi.CreateLastOSError(aSecContext);
-  SetString(result, PAnsiChar(InBuf[1].pvBuffer), InBuf[1].cbBuffer);
+  FastSetRawByteString(result, InBuf[1].pvBuffer, InBuf[1].cbBuffer);
   FreeContextBuffer(InBuf[1].pvBuffer);
 end;
 
@@ -686,7 +686,7 @@ begin
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
     raise ESynSspi.CreateLastOSError(aSecContext);
-  SetString(aOutData, PAnsiChar(OutBuf.pvBuffer), OutBuf.cbBuffer);
+  FastSetRawByteString(aOutData, OutBuf.pvBuffer, OutBuf.cbBuffer);
   FreeContextBuffer(OutBuf.pvBuffer);
 end;
 
@@ -800,7 +800,7 @@ begin
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
       raise ESynSspi.CreateLastOSError(aSecContext);
-  SetString(aOutData, PAnsiChar(OutBuf.pvBuffer), OutBuf.cbBuffer);
+  FastSetRawByteString(aOutData, OutBuf.pvBuffer, OutBuf.cbBuffer);
   FreeContextBuffer(OutBuf.pvBuffer);
 end;
 

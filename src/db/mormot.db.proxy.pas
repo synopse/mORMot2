@@ -1604,11 +1604,11 @@ begin
     ftDouble,
     ftCurrency,
     ftDate:
-      SetString(result, PAnsiChar({%H-}data), SizeOf(Int64));
+      FastSetRawByteString(result, {%H-}data, SizeOf(Int64));
     ftBlob,
     ftUtf8:
       with FromVarBlob(data) do
-        SetString(result, Ptr, len);
+        FastSetRawByteString(result, Ptr, len);
   else
     raise ESqlDBRemote.CreateUtf8('%.ColumnBlob()', [self]);
   end;

@@ -8173,12 +8173,12 @@ end;
 
 function TSqlRequest.FieldBlob(Col: integer): RawByteString;
 var
-  P: PAnsiChar;
+  P: pointer;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
     raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldBlob');
-  P := pointer(sqlite3.column_blob(Request, Col));
-  SetString(result, P, sqlite3.column_bytes(Request, Col));
+  P := sqlite3.column_blob(Request, Col);
+  FastSetRawByteString(result, P, sqlite3.column_bytes(Request, Col));
 end;
 
 function TSqlRequest.FieldBlobToStream(Col: integer): TStream;

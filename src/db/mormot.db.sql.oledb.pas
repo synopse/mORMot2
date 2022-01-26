@@ -738,7 +738,7 @@ end;
 procedure TSqlDBOleDBStatement.BindBlob(Param: integer; Data: pointer;
   Size: integer; IO: TSqlDBParamInOutType);
 begin
-  SetString(CheckParam(Param, ftBlob, IO)^.VBlob, PAnsiChar(Data), Size);
+  FastSetRawByteString(CheckParam(Param, ftBlob, IO)^.VBlob, Data, Size);
 end;
 
 procedure TSqlDBOleDBStatement.Bind(Param: integer; Value: double;
@@ -925,15 +925,15 @@ begin
   else
     case C^.ColumnType of
       ftBlob:
-        SetString(result, PAnsiChar(ColPtr(C, V)), V^.Length);
+        FastSetRawByteString(result, ColPtr(C, V), V^.Length);
       ftUtf8:
         if V^.Length = 0 then
           result := ''
         else
           // +1 below for trailing WideChar(#0) in the resulting RawUnicode
-          SetString(result, PAnsiChar(ColPtr(C, V)), V^.Length + 1);
+          FastSetRawByteString(result, ColPtr(C, V), V^.Length + 1);
     else
-      SetString(result, PAnsiChar(@V^.Int64), SizeOf(Int64)); // as binary
+      FastSetRawByteString(result, @V^.Int64, SizeOf(Int64)); // as binary
     end;
 end;
 
@@ -1087,7 +1087,7 @@ begin
         else
         begin
           VAny := nil;
-          SetString(RawByteString(VAny), PAnsiChar(ColPtr(C, V)), V^.Length);
+          FastSetRawByteString(RawByteString(VAny), ColPtr(C, V), V^.Length);
         end;
     end;
   end;

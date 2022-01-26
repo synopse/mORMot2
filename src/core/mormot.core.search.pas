@@ -2476,7 +2476,7 @@ var
   m: PSBNDMQ2Mask absolute result;
   c: PCardinal;
 begin
-  SetString(result, nil, SizeOf(m^));
+  FastSetRawByteString(result, nil, SizeOf(m^));
   FillCharFast(m^, SizeOf(m^), 0);
   for i := 0 to length(Pattern) - 1 do
   begin
@@ -3868,7 +3868,7 @@ begin
   try
     fKnownRevision := fRevision;
     fSnapshotInsertCount := 0;
-    SetString(fKnownStore, PAnsiChar(pointer(fStore)), length(fStore));
+    FastSetRawByteString(fKnownStore, pointer(fStore), length(fStore));
     if fSnapShotAfterMinutes = 0 then
       fSnapshotTimestamp := 0
     else
@@ -3908,7 +3908,7 @@ begin
     head.crc := crc32c(0, @head, SizeOf(head) - SizeOf(head.crc));
     if head.kind = bdUpToDate then
     begin
-      SetString(result, PAnsiChar(@head), SizeOf(head));
+      FastSetRawByteString(result, @head, SizeOf(head));
       exit;
     end;
     if head.size + 100 <= SizeOf(temp) then
@@ -4069,7 +4069,7 @@ var
 begin
   PEnd := PAnsiChar(P) + Len - 4;
   DestLen := FromVarUInt32(P);
-  SetString(Dest, nil, DestLen); // FPC uses var
+  FastSetRawByteString(Dest, nil, DestLen); // FPC uses var
   D := pointer(Dest);
   DEnd := D + DestLen;
   crc := 0;
@@ -4628,7 +4628,7 @@ var
   DeltaLen: integer;
 begin
   DeltaLen := DeltaCompress(New, Old, NewSize, OldSize, Delta, Level, BufSize);
-  SetString(result, Delta, DeltaLen);
+  FastSetRawByteString(result, Delta, DeltaLen);
   Freemem(Delta);
 end;
 

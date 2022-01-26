@@ -2370,7 +2370,7 @@ begin
     fPassWord := '';
     exit;
   end;
-  SetString(tmp, PAnsiChar(pointer(value)), Length(value)); // private copy
+  FastSetRawByteString(tmp, pointer(value), Length(value)); // private copy
   SymmetricEncrypt(GetKey, tmp);
   fPassWord := BinToBase64(tmp);
 end;
@@ -3362,7 +3362,7 @@ end;
 
 function TCryptRandom.Get(len: PtrInt): RawByteString;
 begin
-  SetString(result, nil, len);
+  FastSetRawByteString(result, nil, len);
   Get(pointer(result), len);
 end;
 

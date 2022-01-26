@@ -2101,7 +2101,7 @@ end;
 function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
   const BlobFieldName: RawUtf8; BlobData: pointer; BlobSize: integer): boolean;
 var
-  data: RawBlob;
+  tmp: RawByteString;
 begin
   if (self = nil) or
      (BlobData = nil) or
@@ -2109,8 +2109,8 @@ begin
     result := false
   else
   begin
-    SetString(data, PAnsiChar(BlobData), BlobSize);
-    result := UpdateBlob(Table, aID, BlobFieldName, data);
+    FastSetRawByteString(tmp, BlobData, BlobSize);
+    result := UpdateBlob(Table, aID, BlobFieldName, tmp);
   end;
 end;
 

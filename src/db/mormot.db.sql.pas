@@ -5824,7 +5824,7 @@ begin
             if V.VBlob = pointer(tmp) then
               RawByteString(VAny) := tmp
             else
-              SetString(RawByteString(VAny), PAnsiChar(V.VBlob), V.VBlobLen);
+              FastSetRawByteString(RawByteString(VAny), V.VBlob, V.VBlobLen);
         end;
       ftUtf8:
         begin
@@ -7466,7 +7466,7 @@ end;
 procedure TSqlDBStatementWithParams.BindBlob(Param: integer; Data: pointer;
   Size: integer; IO: TSqlDBParamInOutType);
 begin
-  SetString(CheckParam(Param, ftBlob, IO)^.VData, PAnsiChar(Data), Size);
+  FastSetRawByteString(CheckParam(Param, ftBlob, IO)^.VData, Data, Size);
 end;
 
 procedure TSqlDBStatementWithParams.BindCurrency(Param: integer;

@@ -1811,7 +1811,7 @@ begin
     der[0] := DER_SEQUENCE;
     der[1] := AnsiChar(len - 2);
   end;
-  SetString(result, PAnsiChar(@der), len);
+  FastSetRawByteString(result, @der, len);
 end;
 
 function EccToDer(const priv: TEccPrivateKey): RawByteString;
@@ -1827,7 +1827,7 @@ begin
     der[0] := DER_SEQUENCE;
     der[1] := AnsiChar(len - 2);
   end;
-  SetString(result, PAnsiChar(@der), len);
+  FastSetRawByteString(result, @der, len);
 end;
 
 function EccToDer(const pub: TEccPublicKey): RawByteString;
@@ -1843,7 +1843,7 @@ begin
     der[0] := DER_SEQUENCE;
     der[1] := AnsiChar(len - 2);
   end;
-  SetString(result, PAnsiChar(@der), len);
+  FastSetRawByteString(result, @der, len);
 end;
 
 function DerToEcc(der: PByteArray; derlen: PtrInt; out sign: TEccSignature): boolean;
@@ -2635,7 +2635,7 @@ begin
     head := 0;
   if Len and AesBlockMod <> 0 then
     exit;
-  SetString(salt, PAnsiChar(Data) + head, PRIVKEY_SALTSIZE);
+  FastSetRawByteString(salt, PAnsiChar(Data) + head, PRIVKEY_SALTSIZE);
   try
     XorBlock16(pointer(salt), @PRIVKEY_MAGIC);
     Pbkdf2HmacSha256(PassWord, salt, Pbkdf2Round, aeskey);
@@ -2826,7 +2826,7 @@ begin
       if not mormot.core.base.IsEqual(hmac, head.hmac) then
         exit;
       // decrypt the content
-      SetString(enc, data, datalen);
+      FastSetRawByteString(enc, data, datalen);
       dec := c.SimpleEncrypt(
         enc, aeskey, ECIES_AESSIZE[head.Algo], false, true);
     end;
@@ -4292,7 +4292,7 @@ begin
   try
     SetIVAndMacNonce({encrypt=}true);
     len := fAes[true].EncryptPkcs7Length(length(aPlain), false);
-    SetString(aEncrypted, nil, len + SizeOf(THash256)); // append a trailing MAC
+    FastSetRawByteString(aEncrypted, nil, len + SizeOf(THash256)); // trailing MAC
     // encrypt the input
     fAes[true].EncryptPkcs7Buffer(
       Pointer(aPlain), pointer(aEncrypted), length(aPlain), len, false);
@@ -4738,7 +4738,7 @@ begin
      PemToEcc(pub, keypub) and
      Ecc256r1SharedSecret(keypub, keypriv, sec) then
     // accept signature and public key in raw, PEM or DER format
-    SetString(result, PAnsiChar(@sec), SizeOf(sec))
+    FastSetRawByteString(result, @sec, SizeOf(sec))
   else
     result := '';
   FillZero(sec);
@@ -4987,7 +4987,7 @@ end;
 function TCryptCertInternal.GetPrivateKey: RawByteString;
 begin
   if HasPrivateSecret then
-    SetString(result, PAnsiChar(@TEccCertificateSecret(fEcc).PrivateKey),
+    FastSetRawByteString(result, @TEccCertificateSecret(fEcc).PrivateKey,
       SizeOf(TEccPrivateKey))
   else
     result := '';

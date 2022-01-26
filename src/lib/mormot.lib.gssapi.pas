@@ -644,7 +644,7 @@ begin
   MajStatus := GssApi.gss_wrap(
     MinStatus, aSecContext.CtxHandle, 1, 0, @InBuf, nil, @OutBuf);
   GccCheck(MajStatus, MinStatus, 'Failed to encrypt message');
-  SetString(result, PAnsiChar(OutBuf.value), OutBuf.length);
+  FastSetRawByteString(result, OutBuf.value, OutBuf.length);
   GssApi.gss_release_buffer(MinStatus, OutBuf);
 end;
 
@@ -660,7 +660,7 @@ begin
   MajStatus := GssApi.gss_unwrap(
     MinStatus, aSecContext.CtxHandle, @InBuf, @OutBuf, nil, nil);
   GccCheck(MajStatus, MinStatus, 'Failed to decrypt message');
-  SetString(result, PAnsiChar(OutBuf.value), OutBuf.length);
+  FastSetRawByteString(result, OutBuf.value, OutBuf.length);
   GssApi.gss_release_buffer(MinStatus, OutBuf);
 end;
 
@@ -733,7 +733,7 @@ begin
     GccCheck(MajStatus, MinStatus,
       'ClientSspiAuthWorker: Failed to initialize security context');
     result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
-    SetString(aOutData, PAnsiChar(OutBuf.value), OutBuf.length);
+    FastSetRawByteString(aOutData, OutBuf.value, OutBuf.length);
     GssApi.gss_release_buffer(MinStatus, OutBuf);
   finally
     if TargetName <> nil then
@@ -822,7 +822,7 @@ begin
     aSecContext.CredHandle, @InBuf, nil, nil, nil, @OutBuf, @CtxAttr, nil, nil);
   GccCheck(MajStatus, MinStatus, 'Failed to accept client credentials');
   result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
-  SetString(aOutData, PAnsiChar(OutBuf.value), OutBuf.length);
+  FastSetRawByteString(aOutData, OutBuf.value, OutBuf.length);
   GssApi.gss_release_buffer(MinStatus, OutBuf);
 end;
 

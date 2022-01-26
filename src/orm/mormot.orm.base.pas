@@ -5915,7 +5915,7 @@ begin
   case aValue.VType of
     ftBlob:
       begin
-        SetString(tmp, PAnsiChar(aValue.VBlob), aValue.VBlobLen);
+        FastSetRawByteString(tmp, aValue.VBlob, aValue.VBlobLen);
         fPropInfo.SetLongStrProp(Instance, tmp);
         result := true;
       end;
@@ -6848,11 +6848,8 @@ begin
 end;
 
 procedure TOrmPropInfoRecordFixedSize.GetVariant(Instance: TObject; var Dest: Variant);
-var
-  tmp: RawByteString;
 begin
-  SetString(tmp, PAnsiChar(GetFieldAddr(Instance)), fRecordSize);
-  Dest := tmp;
+  RawByteStringToVariant(GetFieldAddr(Instance), fRecordSize, Dest);
 end;
 
 procedure TOrmPropInfoRecordFixedSize.SetVariant(Instance: TObject;
@@ -6917,7 +6914,7 @@ end;
 procedure TOrmPropInfoRecordFixedSize.GetFieldSqlVar(Instance: TObject;
   var aValue: TSqlVar; var temp: RawByteString);
 begin
-  SetString(temp, PAnsiChar(GetFieldAddr(Instance)), fRecordSize);
+  FastSetRawByteString(temp, GetFieldAddr(Instance), fRecordSize);
   aValue.Options := [];
   aValue.VType := ftBlob;
   aValue.VBlob := pointer(temp);

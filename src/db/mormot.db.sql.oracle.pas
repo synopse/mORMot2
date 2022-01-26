@@ -768,7 +768,7 @@ begin
     result := ''
   else if C^.ColumnType = ftBlob then
     if C^.ColumnValueInlined then
-      SetString(result, PAnsiChar(V), C^.ColumnValueDBSize)
+      FastSetRawByteString(result, V, C^.ColumnValueDBSize)
     else        // conversion from POCILobLocator
       with TSqlDBOracleConnection(Connection) do
         OCI.BlobFromDescriptor(self, fContext, fError, V^, result)
@@ -1060,7 +1060,7 @@ begin
       else
       begin
         if C^.ColumnValueInlined then
-          SetString(Temp, PAnsiChar(V), C^.ColumnValueDBSize)
+          FastSetRawByteString(Temp, V, C^.ColumnValueDBSize)
         else
           with TSqlDBOracleConnection(Connection) do
             OCI.BlobFromDescriptor(self, fContext, fError,
@@ -1150,7 +1150,7 @@ begin
         begin
           VAny := nil;
           if C^.ColumnValueInlined then
-            SetString(RawByteString(VAny), PAnsiChar(V), C^.ColumnValueDBSize)
+            FastSetRawByteString(RawByteString(VAny), V, C^.ColumnValueDBSize)
           else
             with TSqlDBOracleConnection(Connection) do
               OCI.BlobFromDescriptor(self, fContext, fError,
@@ -1396,7 +1396,8 @@ begin
                 ftDate:
                   begin
                     VDBType := SQLT_DAT;
-                    SetString(VData, nil, fParamsArrayCount * SizeOf(TOracleDate));
+                    FastSetRawByteString(
+                      VData, nil, fParamsArrayCount * SizeOf(TOracleDate));
                     oData := pointer(VData);
                     oLength := SizeOf(TOracleDate);
                   end;
@@ -1405,7 +1406,8 @@ begin
                   begin
                     // starting with 11.2, OCI supports NUMBER conversion to/from Int64
                     VDBType := SQLT_INT;
-                    SetString(VData, nil, fParamsArrayCount * SizeOf(Int64));
+                    FastSetRawByteString(
+                      VData, nil, fParamsArrayCount * SizeOf(Int64));
                     oData := pointer(VData);
                     oLength := SizeOf(Int64);
                   end;
@@ -1460,7 +1462,7 @@ begin
                 SQLT_STR:
                   begin
                     inc(oLength); // space for trailing #0
-                    SetString(VData, nil, oLength * fParamsArrayCount);
+                    FastSetRawByteString(VData, nil, oLength * fParamsArrayCount);
                     oData := Pointer(VData); // in-place quote removal in text
                     oDataSTR := oData;
                     for j := 0 to fParamsArrayCount - 1 do
@@ -1471,7 +1473,7 @@ begin
                   end;
                 SQLT_LVB:
                   begin
-                    SetString(VData, nil, oLength * fParamsArrayCount);
+                    FastSetRawByteString(VData, nil, oLength * fParamsArrayCount);
                     oData := Pointer(VData);
                     oDataSTR := oData;
                     for j := 0 to fParamsArrayCount - 1 do
@@ -1526,7 +1528,8 @@ begin
                   ociArrays[ociArraysCount]),
                 fError);
               inc(ociArraysCount);
-              SetString(param.VData, nil, Length(param.VArray) * SizeOf(Int64));
+              FastSetRawByteString(
+                param.VData, nil, Length(param.VArray) * SizeOf(Int64));
               oData := pointer(param.VData);
               for j := 0 to Length(param.VArray) - 1 do
                 case param.VType of
@@ -1636,7 +1639,7 @@ begin
                       begin
                         VDBType := SQLT_TIMESTAMP; // SQLT_DAT is wrong within WHERE clause
                         oOCIDateTime := DateTimeToDescriptor(PDateTime(@VInt64)^);
-                        SetString(VData, PAnsiChar(@oOCIDateTime), SizeOf(oOCIDateTime));
+                        FastSetRawByteString(VData, @oOCIDateTime, SizeOf(oOCIDateTime));
                         oData := pointer(VData);
                         oLength := SizeOf(oOCIDateTime);
                       end
@@ -2000,7 +2003,7 @@ begin
       if oNameLen = 0 then
         aName := 'col_' + Int32ToUtf8(i)
       else
-        SetString(aName, oName, oNameLen);
+        FastSetString(aName, oName, oNameLen);
       AttrGet(oHandle, OCI_DTYPE_PARAM, @oType, nil, OCI_ATTR_DATA_TYPE, fError);
       AttrGet(oHandle, OCI_DTYPE_PARAM, @oSize, nil, OCI_ATTR_DATA_SIZE, fError);
       with PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(aName))^ do

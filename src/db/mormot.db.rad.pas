@@ -944,7 +944,7 @@ begin
       begin
         {$ifdef UNICODE}
         tmp := par.AsBlob;
-        SetString(aParam.VData, PAnsiChar(pointer(tmp)), Length(tmp));
+        FastSetRawByteString(aParam.VData, pointer(tmp), Length(tmp));
         {$else}
         aParam.VData := par.AsString;
         {$endif UNICODE}
