@@ -389,15 +389,16 @@ implementation
   - New round-robin thread-friendly arenas of tiny blocks;
   - Tiny and small blocks can fed from their own pool, not the medium pool;
   - Additional bin list to reduce small/tiny Freemem() thread contention;
+  - Large blocks logic has been rewritten, especially realloc;
   - AllocMedium() and AllocLarge() use MAP_POPULATE to reduce page faults;
   - On Linux, mremap is used for efficient realloc of large blocks;
-  - Large blocks logic has been rewritten, especially realloc;
   - Largest blocks can grow by 2MB=PMD_SIZE chunks for even faster mremap.
 
   About locking:
   - Tiny and Small blocks have their own per-size lock;
   - Tiny and Small blocks have one giant lock when fedding from their pool;
   - Medium and Large blocks have one giant lock over their own pool;
+  - Medium blocks have a unlocked prefetched memory chunk to reduce contention;
   - Large blocks don't lock during mmap/virtualalloc system calls;
   - SwitchToThread/FpNanoSleep OS call is done after initial spinning;
   - FPCMM_LOCKLESSFREE reduces Freemem() thread contention;
@@ -738,6 +739,16 @@ end;
 
 { ********* Constants and Data Structures Definitions }
 
+// during spinning, there is clearly thread contention: in this case, plain
+// "cmp" before "lock cmpxchg" is mandatory to leverage the CPU cores
+{$define FPCMM_CMPBEFORELOCK_SPIN}
+
+// prepare a Medium arena chunk in TMediumInfo.Prefetch outside of the lock
+{$define FPCMM_MEDIUMPREFETCH}
+
+// medium locks occurs at getmem: freemem bin list got MaxCount=0 :(
+{.$define FPCMM_LOCKLESSFREEMEDIUM}
+
 const
   // (sometimes) the more arenas, the better multi-threadable
   {$ifdef FPCMM_BOOSTER}
@@ -907,9 +918,6 @@ type
     NextFreeBlock: PMediumFreeBlock;
   end;
 
-  // medium locks occurs at getmem: freemem bin list got MaxCount=0 :(
-  {.$define FPCMM_LOCKLESSFREEMEDIUM}
-
 {$ifdef FPCMM_LOCKLESSFREEMEDIUM}
 const
   MediumBlockLocklessBinCount = 255;
@@ -926,10 +934,16 @@ type
 
   TMediumBlockInfo = record
     Locked: boolean;
+    {$ifdef FPCMM_MEDIUMPREFETCH}
+    PrefetchLocked: boolean;
+    {$endif FPCMM_MEDIUMPREFETCH}
     PoolsCircularList: TMediumBlockPoolHeader;
     LastSequentiallyFed: pointer;
     SequentialFeedBytesLeft: cardinal;
     BinGroupBitmap: cardinal;
+    {$ifdef FPCMM_MEDIUMPREFETCH}
+    Prefetch: pointer;
+    {$endif FPCMM_MEDIUMPREFETCH}
     {$ifndef FPCMM_ASSUMEMULTITHREAD}
     IsMultiThreadPtr: PBoolean; // safe access to IsMultiThread global variable
     {$endif FPCMM_ASSUMEMULTITHREAD}
@@ -973,15 +987,39 @@ var
 
 { ********* Shared Routines }
 
-{$define FPCMM_CMPBEFORELOCK_SPIN}
-// during spinning, there is clearly thread contention: in this case, plain
-// "cmp" before "lock cmpxchg" is mandatory to leverage the CPU cores
-
-
-procedure LockMediumBlocks;
+procedure LockMediumBlocks(dummy: cardinal);
   {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
 // on input/output: r10=TMediumBlockInfo
 asm
+        {$ifdef FPCMM_MEDIUMPREFETCH}
+        // since we are waiting for the lock, prefetch one medium memory chunk
+        mov     rcx, r10
+        xor     edx, edx
+        cmp     qword ptr [rcx].TMediumBlockInfo.Prefetch, rdx
+        jnz     @s
+        {$ifdef FPCMM_CMPBEFORELOCK_SPIN}
+        cmp     byte ptr [rcx].TMediumBlockInfo.PrefetchLocked, dl
+        jnz     @s
+        {$endif FPCMM_CMPBEFORELOCK_SPIN}
+        mov     eax, $100
+  lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.PrefetchLocked, ah
+        jne     @s
+        cmp     qword ptr [rcx].TMediumBlockInfo.Prefetch, rdx
+        jnz     @s2
+        push    rsi
+        push    rdi
+        push    r10
+        push    r11
+        mov     dummy, MediumBlockPoolSizeMem
+        call    AllocMedium
+        pop     r11
+        pop     r10
+        pop     rdi
+        pop     rsi
+        mov     qword ptr [r10].TMediumBlockInfo.Prefetch, rax
+@s2:    mov     byte ptr [r10].TMediumBlockInfo.PrefetchLocked, false
+        {$endif FPCMM_MEDIUMPREFETCH}
+        // spin and acquire the medium arena lock
         {$ifdef FPCMM_SLEEPTSC}
 @s:     rdtsc   // tsc in edx:eax
         shl     rdx, 32
@@ -1192,6 +1230,26 @@ begin
   NotifyMediumLargeFree(HeapStatus.Medium, MediumBlockPoolSizeMem);
 end;
 
+{$ifdef FPCMM_MEDIUMPREFETCH}
+function TryAllocMediumPrefetch(var Info: TMediumBlockInfo): pointer;
+  nostackframe; assembler;
+asm
+        xor     eax, eax
+        mov     rcx, Info
+        cmp     qword ptr [rcx].TMediumBlockInfo.Prefetch, rax
+        jz      @s        // is there a prefetched memory chunk available?
+        xor     edx, edx
+        mov     eax, $100
+  lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.PrefetchLocked, ah
+        jne     @s
+        // just get the memory chunk - no need to call mmap/VirtualAlloc
+        mov     rax, qword ptr [rcx].TMediumBlockInfo.Prefetch
+        mov     qword ptr [rcx].TMediumBlockInfo.Prefetch, rdx
+        mov     byte ptr [rcx].TMediumBlockInfo.PrefetchLocked, dl
+@s:
+end;
+{$endif FPCMM_MEDIUMPREFETCH}
+
 function AllocNewSequentialFeedMediumPool(BlockSize: cardinal;
   var Info: TMediumBlockInfo): pointer;
 var
@@ -1199,7 +1257,11 @@ var
   new: pointer;
 begin
   BinMediumSequentialFeedRemainder(Info);
-  new := AllocMedium(MediumBlockPoolSizeMem);
+  {$ifdef FPCMM_MEDIUMPREFETCH}
+  new := TryAllocMediumPrefetch(Info);
+  if new = nil then
+  {$endif FPCMM_MEDIUMPREFETCH}
+    new := AllocMedium(MediumBlockPoolSizeMem);
   if new <> nil then
   begin
     old := Info.PoolsCircularList.NextMediumBlockPoolHeader;
@@ -3119,6 +3181,9 @@ begin
     medium.PreviousFreeBlock := medium;
     medium.NextFreeBlock := medium;
   end;
+  {$ifdef FPCMM_MEDIUMPREFETCH}
+  Info.Prefetch := AllocMedium(MediumBlockPoolSizeMem);
+  {$endif FPCMM_MEDIUMPREFETCH}
 end;
 
 procedure InitializeMemoryManager;
@@ -3357,6 +3422,10 @@ begin
       if Instance[i] <> nil then
         _FreeMem(Instance[i]); // release (unlikely) pending instances
   {$endif FPCMM_LOCKLESSFREEMEDIUM}
+  {$ifdef FPCMM_MEDIUMPREFETCH}
+  if Info.Prefetch <> nil then
+    FreeMediumLarge(Info.Prefetch, MediumBlockPoolSizeMem);
+  {$endif FPCMM_MEDIUMPREFETCH}
 end;
 
 procedure FreeAllMemory;
