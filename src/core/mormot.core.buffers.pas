@@ -5303,7 +5303,7 @@ begin
     S := nil;
     DataLen := 0;
   end;
-  SetLength(tmp, AlgoCompressDestLen(DataLen));
+  pointer(tmp) := FastNewString(AlgoCompressDestLen(DataLen), 0);
   D := pointer(tmp);
   Head.Magic := Magic;
   Head.UnCompressedSize := DataLen;
@@ -5376,7 +5376,7 @@ begin
         buflen := 65536;
         if sourcesize < buflen then
           buflen := sourcesize;
-        SetLength(buf, buflen);
+        pointer(buf) := FastNewString(buflen, 0);
         Source.Position := sourceSize - buflen;
         if Source.Read(pointer(buf)^, buflen) <> buflen then
           exit;
@@ -6990,7 +6990,7 @@ begin
       // BLOB literals are string literals containing hexadecimal data and
       // preceded by a single "x" or "X" character. For example: X'53514C697465'
       LenHex := (Len - 3) shr 1;
-      SetLength(result, LenHex);
+      pointer(result) := FastNewString(LenHex, CP_RAWBYTESTRING);
       if mormot.core.text.HexToBin(@P[2], pointer(result), LenHex) then
         exit; // valid hexa data
     end
@@ -7019,7 +7019,7 @@ begin
       // BLOB literals are string literals containing hexadecimal data and
       // preceded by a single "x" or "X" character. For example: X'53514C697465'
       LenHex := (Len - 3) shr 1;
-      SetLength(result, LenHex);
+      pointer(result) := FastNewString(LenHex, CP_RAWBYTESTRING);
       if mormot.core.text.HexToBin(@P[2], pointer(result), LenHex) then
         exit; // valid hexa data
     end
@@ -7078,7 +7078,7 @@ begin
   result := '';
   if RawBlobLength <> 0 then
   begin
-    SetLength(result, RawBlobLength * 2 + 3);
+    pointer(result) := FastNewString(RawBlobLength * 2 + 3, CP_UTF8);
     P := pointer(result);
     P[0] := 'X';
     P[1] := '''';
