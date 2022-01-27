@@ -5588,9 +5588,9 @@ end;
 
 procedure TRWLock.ReadOnlyLock;
 asm     // since we may call SwitchToThread we need to have a stackframe
-        {$ifndef WIN64ABI}
+        {$ifdef SYSVABI}
         mov     rcx, rdi      // rcx = self
-        {$endif WIN64ABI}
+        {$endif SYSVABI}
 @retry: mov     r8d, SPIN_COUNT
 @spin:  mov     rax, qword ptr [rcx + TRWLock.Flags]
         and     rax, not 1

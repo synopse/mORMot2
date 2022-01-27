@@ -271,6 +271,7 @@ function _numbits256(const V: THash256Rec): integer;
 const
   /// hide all AES Context complex code
   AES_CONTEXT_SIZE = 276 + SizeOf(pointer)
+    {$ifdef WIN64ABI}  + SizeOf(THash128) {$endif}
     {$ifdef USEAESNI32} + SizeOf(pointer) {$endif};
 
   /// power of two for a standard AES block size during cypher/uncypher
@@ -2713,6 +2714,9 @@ type
     buf: TAesBlock;
     // main AES function to process one 16-bytes block
     DoBlock: TAesContextDoBlock;
+    {$ifdef WIN64ABI}
+    xmm7bak: THash128; // used to preserve the xmm7 register in Win64 asm
+    {$endif WIN64ABI}
     {$ifdef USEAESNI32}
     AesNi32: pointer; // xmm7 AES-NI encoding
     {$endif USEAESNI32}
