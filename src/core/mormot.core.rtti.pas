@@ -5223,7 +5223,7 @@ begin
       v^ := nil;
       dec(p);
       if (p^.refCnt >= 0) and
-         RefCntDecFree(p^.refCnt) then
+         StrCntDecFree(p^.refCnt) then
         {$ifdef FPC_X64MM}
         _Freemem(p); // works for both rkLString + rkUString
         {$else}
@@ -5285,7 +5285,7 @@ begin
     begin
       dec(p);
       if (p^.refCnt >= 0) and
-         RefCntDecFree(p^.refCnt) then
+         DACntDecFree(p^.refCnt) then
       begin
         if ElemInfo <> nil then
           FastFinalizeArray(Value^, ElemInfo, p^.length);
@@ -5467,7 +5467,7 @@ begin
   dec(p);
   if (p^.refCnt < 0) or
      ((p^.refCnt > 1) and
-      not RefCntDecFree(p^.refCnt)) then
+      not DACntDecFree(p^.refCnt)) then
   begin
     n := p^.length;
     Info := Info^.DynArrayItemType(elemsize);
@@ -5492,7 +5492,7 @@ begin
     V^ := nil;
     dec(p);
     if (p^.refCnt >= 0) and
-       RefCntDecFree(p^.refCnt) then
+       StrCntDecFree(p^.refCnt) then
       Freemem(p);
   end;
   result := SizeOf(V^);
@@ -5535,7 +5535,7 @@ begin
   begin
     dec(p);
     if (p^.refCnt >= 0) and
-       RefCntDecFree(p^.refCnt) then
+       DACntDecFree(p^.refCnt) then
     begin
       Info := Info^.DynArrayItemType;
       if Info <> nil then
@@ -5955,7 +5955,7 @@ begin
         begin
           dec(da);
           if (da^.refCnt >= 0) and
-             RefCntDecFree(da^.refCnt) then
+             DACntDecFree(da^.refCnt) then
           begin
             Info := Info^.DynArrayItemType(siz);
             v := PPointer(Value)^;

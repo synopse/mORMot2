@@ -1431,7 +1431,7 @@ function FastFindIndexedPUtf8Char(P: PPUtf8CharArray; R: PtrInt;
 
 /// add a RawUtf8 value in an alphaticaly sorted dynamic array of RawUtf8
 // - returns the index where the Value was added successfully in Values[]
-// - returns -1 if the specified Value was alredy present in Values[]
+// - returns -1 if the specified Value was already present in Values[]
 //  (we must avoid any duplicate for O(log(n)) binary search)
 // - if CoValues is set, its content will be moved to allow inserting a new
 // value at CoValues[result] position - a typical usage of CoValues is to store
@@ -2646,7 +2646,7 @@ begin
     exit; // nothing to trim
   Right := PStrLen(P - _STRLEN)^ - Right; // compute new length
   if Right > 0 then
-    if PRefCnt(P - _STRREFCNT)^ = 1 then
+    if PStrCnt(P - _STRCNT)^ = 1 then
     begin
       PStrLen(P - _STRLEN)^ := Right; // we can modify it in-place
       if Left <> 0 then
@@ -7016,7 +7016,7 @@ begin
   else
   begin
     dec(n);
-    if PRefCnt(PAnsiChar(pointer(Values)) - _DAREFCNT)^ > 1 then
+    if PDACnt(PAnsiChar(pointer(Values)) - _DACNT)^ > 1 then
       Values := copy(Values); // make unique
     Values[Index] := ''; // avoid GPF
     if n > Index then
@@ -7042,7 +7042,7 @@ begin
   begin
     dec(n);
     ValuesCount := n;
-    if PRefCnt(PAnsiChar(pointer(Values)) - _DAREFCNT)^ > 1 then
+    if PDACnt(PAnsiChar(pointer(Values)) - _DACNT)^ > 1 then
       Values := copy(Values); // make unique
     Values[Index] := ''; // avoid GPF
     dec(n, Index);

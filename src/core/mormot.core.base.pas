@@ -486,12 +486,6 @@ type
   TShort8 = string[8];
   PShort8 = ^TShort8;
 
-  /// cross-compiler type used for string/dynarray reference counter
-  // - FPC uses PtrInt/SizeInt, Delphi uses longint even on CPU64
-  TRefCnt = {$ifdef FPC} SizeInt {$else} longint {$endif};
-  /// pointer to cross-compiler type used for string/dynarray reference counter
-  PRefCnt = ^TRefCnt;
-
   /// cross-compiler type used for string length
   // - FPC uses PtrInt/SizeInt, Delphi uses longint even on CPU64
   TStrLen = {$ifdef FPC} SizeInt {$else} longint {$endif};
@@ -503,6 +497,18 @@ type
   TDALen = PtrInt;
   /// pointer to cross-compiler type used for dynamic array length
   PDALen = ^TDALen;
+
+  /// cross-compiler type used for string reference counter
+  // - FPC and Delphi don't always use the same type
+  TStrCnt = {$ifdef STRCNT32} longint {$else} SizeInt {$endif};
+  /// pointer to cross-compiler type used for string reference counter
+  PStrCnt = ^TStrCnt;
+
+  /// cross-compiler type used for dynarray reference counter
+  // - FPC uses PtrInt/SizeInt, Delphi uses longint even on CPU64
+  TDACnt = {$ifdef DACNT32} longint {$else} SizeInt {$endif};
+  /// pointer to cross-compiler type used for dynarray reference counter
+  PDACnt = ^TDACnt;
 
   /// cross-compiler return type of IUnknown._AddRef/_Release methods
   // - used to reduce the $ifdef when implementing interfaces in Delphi and FPC
@@ -520,11 +526,13 @@ type
           {$ifdef HASCODEPAGE}
           codePage: TSystemCodePage; // =Word
           elemSize: Word;
+          {$ifndef STRCNT32}
           {$ifdef CPU64}
           _PaddingToQWord: DWord;
           {$endif CPU64}
+          {$endif STRCNT32}
           {$endif HASCODEPAGE}
-          refCnt: TRefCnt; // =SizeInt
+          refCnt: TStrCnt; // =SizeInt on older FPC, =longint since FPC 3.4
           length: TStrLen;
         );
       {$ifdef HASCODEPAGE}
@@ -535,8 +543,8 @@ type
     end;
 
     TDynArrayRec = packed record
-      refCnt: TRefCnt; // =SizeInt
-      high: TDALen;    // =SizeInt (differs from Delphi: equals length-1)
+      refCnt: TDACnt; // =SizeInt
+      high: TDALen;   // =SizeInt (differs from Delphi: equals length-1)
       function GetLength: TDALen; inline;
       procedure SetLength(len: TDALen); inline;
       property length: TDALen // Delphi compatibility wrapper
@@ -558,9 +566,9 @@ type
       elemSize: Word;
     {$endif HASCODEPAGE}
       /// string reference count (basic garbage memory mechanism)
-      refCnt: TRefCnt;
+      refCnt: TStrCnt; // 32-bit longint with Delphi
       /// equals length(s) - i.e. size in AnsiChar/WideChar, not bytes
-      length: TStrLen;
+      length: TStrLen; // 32-bit longint with Delphi
     end;
 
     /// map the Delphi/FPC dynamic array header (stored before each instance)
@@ -570,10 +578,10 @@ type
       _Padding: cardinal;
       {$endif}
       /// dynamic array reference count (basic garbage memory mechanism)
-      refCnt: TRefCnt; // 32-bit longint with Delphi
+      refCnt: TDACnt; // 32-bit longint with Delphi
       /// length in element count
       // - size in bytes = length*ElemSize
-      length: TDALen;
+      length: TDALen; // PtrInt/NativeInt
     end;
 
     {$endif FPC}
@@ -591,8 +599,8 @@ const
   _STRLEN = SizeOf(TStrLen);
 
   /// cross-compiler negative offset to TStrRec.refCnt field
-  // - to be used inlined e.g. as PRefCnt(p - _STRREFCNT)^
-  _STRREFCNT = SizeOf(TRefCnt) + _STRLEN;
+  // - to be used inlined e.g. as PStrCnt(p - _STRCNT)^
+  _STRCNT = SizeOf(TStrCnt) + _STRLEN;
 
   /// used to calc the beginning of memory allocation of a dynamic array
   _DARECSIZE = SizeOf(TDynArrayRec);
@@ -607,8 +615,8 @@ const
   _DAOFF = {$ifdef FPC} 1 {$else} 0 {$endif};
   
   /// cross-compiler negative offset to TDynArrayRec.refCnt field
-  // - to be used inlined e.g. as PRefCnt(PAnsiChar(Values) - _DAREFCNT)^
-  _DAREFCNT = SizeOf(TRefCnt) + _DALEN;
+  // - to be used inlined e.g. as PDACnt(PAnsiChar(Values) - _DACNT)^
+  _DACNT = SizeOf(TDACnt) + _DALEN;
 
   /// in-memory string process will allow up to 800 MB
   // - used as high limit e.g. for TBufferWriter over a TRawByteStringStream
@@ -2368,11 +2376,16 @@ procedure LockedDec32(int32: PInteger);
 /// slightly faster than InterlockedIncrement64()
 procedure LockedInc64(int64: PInt64);
 
-/// low-level string/dynarray reference counter unprocess
+/// low-level string reference counter unprocess
 // - caller should have tested that refcnt>=0
 // - returns true if the managed variable should be released (i.e. refcnt was 1)
-// - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
-function RefCntDecFree(var refcnt: TRefCnt): boolean;
+function StrCntDecFree(var refcnt: TStrCnt): boolean;
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// low-level dynarray reference counter unprocess
+// - caller should have tested that refcnt>=0
+function DACntDecFree(var refcnt: TDACnt): boolean;
+  {$ifndef CPUINTEL} inline; {$endif}
 
 // defined here for mormot.test.base only
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
@@ -2392,15 +2405,14 @@ procedure LockedDec32(int32: PInteger); inline;
 /// redirect to FPC InterlockedIncrement64() on non Intel CPU
 procedure LockedInc64(int64: PInt64); inline;
 
-/// redirect to FPC InterlockedDecrement() on non Intel CPU
-// - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
-function RefCntDecFree(var refcnt: TRefCnt): boolean; inline;
-
 {$endif CPUINTEL}
 
-/// low-level string/dynarray reference counter process
-// - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
-procedure RefCntAdd(var refcnt: TRefCnt; increment: TRefCnt);
+/// low-level string reference counter process
+procedure StrCntAdd(var refcnt: TStrCnt; increment: TStrCnt);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// low-level dynarray reference counter process
+procedure DACntAdd(var refcnt: TDACnt; increment: TDACnt);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// fast atomic compare-and-swap operation on a pointer-sized integer value
@@ -4063,7 +4075,7 @@ begin
     exit;
   dec(sr);
   if (sr^.refcnt >= 0) and
-     RefCntDecFree(sr^.refcnt) then
+     StrCntDecFree(sr^.refcnt) then
     FreeMem(sr);
 end;
 
@@ -5737,7 +5749,7 @@ begin
   dec(n);
   if n > Index then
   begin
-    if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
+    if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
       Values := copy(Values); // make unique
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(Word));
   end;
@@ -5754,7 +5766,7 @@ begin
   dec(n);
   if n > Index then
   begin
-    if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
+    if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
       Values := copy(Values); // make unique
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(integer));
   end;
@@ -5771,7 +5783,7 @@ begin
   dec(n, Index + 1);
   if n > 0 then
   begin
-    if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
+    if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
       Values := copy(Values); // make unique
     MoveFast(Values[Index + 1], Values[Index], n * SizeOf(integer));
   end;
@@ -5788,7 +5800,7 @@ begin
   dec(n);
   if n > Index then
   begin
-    if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
+    if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
       Values := copy(Values); // make unique
     MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(Int64));
   end;
@@ -5805,7 +5817,7 @@ begin
   dec(n, Index + 1);
   if n > 0 then
   begin
-    if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
+    if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
       Values := copy(Values); // make unique
     MoveFast(Values[Index + 1], Values[Index], n * SizeOf(Int64));
   end;
@@ -7930,14 +7942,22 @@ begin
   result := true;
 end;
 
-procedure RefCntAdd(var refcnt: TRefCnt; increment: TRefCnt);
+procedure StrCntAdd(var refcnt: TStrCnt; increment: TStrCnt);
 begin
-  // FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
-  {$ifdef FPC}
-  LockedAdd(PtrUInt(refcnt), increment);
-  {$else}
+  {$ifdef STRCNT32}
   LockedAdd32(cardinal(refcnt), increment);
-  {$endif FPC}
+  {$else}
+  LockedAdd(PtrUInt(refcnt), increment);
+  {$endif STRCNT32}
+end;
+
+procedure DACntAdd(var refcnt: TDACnt; increment: TDACnt);
+begin
+  {$ifdef DACNT32}
+  LockedAdd32(cardinal(refcnt), increment);
+  {$else}
+  LockedAdd(PtrUInt(refcnt), increment);
+  {$endif DACNT32}
 end;
 
 procedure FillZero(var dest; count: PtrInt);
@@ -8683,14 +8703,24 @@ begin
   result := SynLZdecompress1pas(src, size, dst);
 end;
 
-function RefCntDecFree(var refcnt: TRefCnt): boolean;
+function StrCntDecFree(var refcnt: TStrCnt): boolean;
 begin
   // fallback to RTL asm e.g. for ARM
-  {$ifdef FPC_64}
-  result := InterLockedDecrement64(refcnt) <= 0;
-  {$else}
+  {$ifdef STRCNT32}
   result := InterLockedDecrement(refcnt) <= 0;
-  {$endif FPC_64}
+  {$else}
+  result := InterLockedDecrement64(refcnt) <= 0;
+  {$endif STRCNT32}
+end; // we don't check for ismultithread global
+
+function DACntDecFree(var refcnt: TDACnt): boolean;
+begin
+  // fallback to RTL asm e.g. for ARM
+  {$ifdef DACNT32}
+  result := InterLockedDecrement(refcnt) <= 0;
+  {$else}
+  result := InterLockedDecrement64(refcnt) <= 0;
+  {$endif DACNT32}
 end; // we don't check for ismultithread global
 
 procedure LockedInc32(int32: PInteger);

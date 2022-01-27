@@ -568,9 +568,15 @@ asm
         test    rax, rax
         jz      @z
         lea     d, qword ptr [rax - _STRRECSIZE]
-        cmp     qword ptr [rax - _STRREFCNT], 0 // refcnt=-1 for const
+        {$ifdef STRCNT32}
+        cmp     dword ptr [rax - _STRCNT], 0 // refcnt=-1 for const
         jl      @z
-lock    dec     qword ptr [rax - _STRREFCNT]
+lock    dec     dword ptr [rax - _STRCNT]
+        {$else}
+        cmp     qword ptr [rax - _STRCNT], 0 // refcnt=-1 for const
+        jl      @z
+lock    dec     qword ptr [rax - _STRCNT]
+        {$endif STRCNT32}
         jbe     @free
 @z:     ret
 @free:  jmp     _Freemem
@@ -2658,14 +2664,25 @@ function InterlockedDecrement(var I: integer): integer;
         dec     eax
 end;
 
-function RefCntDecFree(var refcnt: TRefCnt): boolean;
-{$ifdef FPC}nostackframe; assembler; asm
-        lock dec qword ptr [refcnt]  // TRefCnt=SizeInt=Int64 for FPC_64
-{$else} asm .noframe
-        lock dec dword ptr [refcnt]  // TRefCnt=longint on Delphi Win64
-{$endif FPC}
+function StrCntDecFree(var refcnt: TStrCnt): boolean;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        {$ifdef STRCNT32}
+   lock dec dword ptr [refcnt]  // TStrCnt=longint on Delphi Win64 and FPC>=3.4
+        {$else}
+   lock dec qword ptr [refcnt]  // on FPC<3.4
+        {$endif STRCNT32}
         setbe   al
 end; // don't check for ismultithread global since lock is cheaper on new CPUs
+
+function DACntDecFree(var refcnt: TDACnt): boolean;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        {$ifdef DACNT32}
+   lock dec dword ptr [refcnt]  // TDACnt=longint on Delphi
+        {$else}
+   lock dec qword ptr [refcnt]
+        {$endif DACNT32}
+        setbe   al
+end;
 
 function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}

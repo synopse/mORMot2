@@ -1599,7 +1599,7 @@ begin
   json := EngineList(SQL, false);
   if json <> '' then
     result := TOrmTableJson.CreateFromTables(Tables, SQL, json,
-      {ownjson=}PRefCnt(PAnsiChar(pointer(json)) - _STRREFCNT)^ = 1)
+      {ownjson=}PStrCnt(PAnsiChar(pointer(json)) - _STRCNT)^ = 1)
   else
     result := nil;
 end;

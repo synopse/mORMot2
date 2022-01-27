@@ -657,9 +657,15 @@ asm
         jz      @z
         mov     qword ptr [p], rdx
         mov     p, rax
-        cmp     qword ptr [rax - _STRREFCNT], rdx
+        {$ifdef STRCNT32}
+        cmp     dword ptr [rax - _STRCNT], rdx
         jl      @z
-  lock  dec     qword ptr [rax - _STRREFCNT]
+  lock  dec     dword ptr [rax - _STRCNT]
+        {$else}
+        cmp     qword ptr [rax - _STRCNT], rdx
+        jl      @z
+  lock  dec     qword ptr [rax - _STRCNT]
+        {$endif STRCNT32}
         jbe     @free
 @z:     ret
 @free:  sub     p, _STRRECSIZE
@@ -670,9 +676,15 @@ procedure _ansistr_incr_ref(p: pointer); nostackframe; assembler;
 asm
         test    p, p
         jz      @z
-        cmp     qword ptr [p - _STRREFCNT], 0
+        {$ifdef STRCNT32}
+        cmp     dword ptr [p - _STRCNT], 0
         jl      @z
-   lock inc     qword ptr [p - _STRREFCNT]
+   lock inc     dword ptr [p - _STRCNT]
+        {$else}
+        cmp     qword ptr [p - _STRCNT], 0
+        jl      @z
+   lock inc     qword ptr [p - _STRCNT]
+        {$endif STRCNT32}
 @z:
 end;
 
@@ -683,17 +695,31 @@ asm
         jz      @eq
         test    s, s
         jz      @ns
-        cmp     qword ptr [s - _STRREFCNT], 0
+        {$ifdef STRCNT32}
+        cmp     dword ptr [s - _STRCNT], 0
         jl      @ns
-   lock inc     qword ptr [s - _STRREFCNT]
+   lock inc     dword ptr [s - _STRCNT]
 @ns:    mov     qword ptr [d], s
         test    rax, rax
         jnz     @z
 @eq:    ret
 @z:     mov     d, rax
-        cmp     qword ptr [rax - _STRREFCNT], 0
+        cmp     dword ptr [rax - _STRCNT], 0
         jl      @n
-   lock dec     qword ptr [rax - _STRREFCNT]
+   lock dec     dword ptr [rax - _STRCNT]
+        {$else}
+        cmp     qword ptr [s - _STRCNT], 0
+        jl      @ns
+   lock inc     qword ptr [s - _STRCNT]
+@ns:    mov     qword ptr [d], s
+        test    rax, rax
+        jnz     @z
+@eq:    ret
+@z:     mov     d, rax
+        cmp     qword ptr [rax - _STRCNT], 0
+        jl      @n
+   lock dec     qword ptr [rax - _STRCNT]
+        {$endif STRCNT32}
         ja      @n
 @free:  sub     d, _STRRECSIZE
         jmp     _Freemem
@@ -787,9 +813,9 @@ procedure _dynarray_incr_ref(p: pointer); nostackframe; assembler;
 asm
         test    p, p
         jz      @z
-        cmp     qword ptr [p - _DAREFCNT], 0
+        cmp     qword ptr [p - _DACNT], 0
         jle     @z
-   lock inc     qword ptr [p - _DAREFCNT]
+   lock inc     qword ptr [p - _DACNT]
 @z:
 end;
 
@@ -813,7 +839,7 @@ asm
         mov     qword ptr [p], 0
         mov     p, rax
         sub     p, SizeOf(TDynArrayRec)
-        cmp     qword ptr [rax - _DAREFCNT], 0
+        cmp     qword ptr [rax - _DACNT], 0
         jle     @z
    lock dec     qword ptr [p]
         jbe     @free
@@ -863,7 +889,11 @@ asm
         jle     _ansistr_decr_ref
         test    rax, rax
         jz      _ansistr_setlength_new
-        cmp     qword ptr [rax - _STRREFCNT], 1
+        {$ifdef STRCNT32}
+        cmp     dword ptr [rax - _STRCNT], 1
+        {$else}
+        cmp     qword ptr [rax - _STRCNT], 1
+        {$endif STRCNT32}
         jne     _ansistr_setlength_new
         push    len
         push    s

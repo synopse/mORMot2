@@ -6570,11 +6570,11 @@ begin
     dec(VCount);
     if VName <> nil then
     begin
-      if PRefCnt(PAnsiChar(pointer(VName)) - _DAREFCNT)^ > 1 then
+      if PDACnt(PAnsiChar(pointer(VName)) - _DACNT)^ > 1 then
         VName := copy(VName); // make unique
       VName[Index] := '';
     end;
-    if PRefCnt(PAnsiChar(pointer(VValue)) - _DAREFCNT)^ > 1 then
+    if PDACnt(PAnsiChar(pointer(VValue)) - _DACNT)^ > 1 then
       VValue := copy(VValue); // make unique
     VarClear(VValue[Index]);
     n := VCount - Index;

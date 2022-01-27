@@ -2335,10 +2335,17 @@ asm
         rdtsc
 end;
 
-function RefCntDecFree(var refcnt: TRefCnt): boolean;
+function StrCntDecFree(var refcnt: TStrCnt): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-   lock dec dword ptr [refcnt]  // TRefCnt=longint on Delphi and FPC 32-bit
+   lock dec dword ptr [refcnt]  // =longint on Delphi and FPC 32-bit
+        setbe   al
+end; // don't check for ismultithread global since lock is cheaper on new CPUs
+
+function DACntDecFree(var refcnt: TDACnt): boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+   lock dec dword ptr [refcnt]  // =longint on Delphi and FPC 32-bit
         setbe   al
 end; // don't check for ismultithread global since lock is cheaper on new CPUs
 

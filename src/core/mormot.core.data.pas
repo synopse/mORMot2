@@ -2512,7 +2512,7 @@ type
     procedure Clear;
     /// reclaim any unique RawUtf8 values
     // - any string with an usage count <= aMaxRefCount will be removed
-    function Clean(aMaxRefCount: TRefCnt): integer;
+    function Clean(aMaxRefCount: TStrCnt): integer;
     /// how many items are currently stored in Value[]
     property Count: integer
       read fCount;
@@ -2583,7 +2583,7 @@ type
     // - returns the number of unique RawUtf8 cleaned from the internal pool
     // - to be executed on a regular basis - but not too often, since the
     // process can be time consumming, and void the benefit of interning
-    function Clean(aMaxRefCount: TRefCnt = 1): integer;
+    function Clean(aMaxRefCount: TStrCnt = 1): integer;
     /// how many items are currently stored in this instance
     function Count: integer;
   end;
@@ -4191,7 +4191,7 @@ begin
   end;
 end;
 
-function TRawUtf8InterningSlot.Clean(aMaxRefCount: TRefCnt): integer;
+function TRawUtf8InterningSlot.Clean(aMaxRefCount: TStrCnt): integer;
 var
   i: integer;
   s, d: PPtrUInt; // points to RawUtf8 values
@@ -4205,7 +4205,7 @@ begin
     d := s;
     for i := 1 to fCount do
     begin
-      if PRefCnt(PAnsiChar(s^) - _STRREFCNT)^ <= aMaxRefCount then
+      if PStrCnt(PAnsiChar(s^) - _STRCNT)^ <= aMaxRefCount then
       begin
         {$ifdef FPC}
         FastAssignNew(PRawUtf8(s)^);
@@ -4265,7 +4265,7 @@ begin
       fPool[i].Clear;
 end;
 
-function TRawUtf8Interning.Clean(aMaxRefCount: TRefCnt): integer;
+function TRawUtf8Interning.Clean(aMaxRefCount: TStrCnt): integer;
 var
   i: PtrInt;
 begin
@@ -6786,7 +6786,7 @@ begin
   n := GetCount;
   if PtrUInt(aIndex) >= PtrUInt(n) then
     exit; // out of range
-  if PRefCnt(PAnsiChar(fValue^) - _DAREFCNT)^ > 1 then
+  if PDACnt(PAnsiChar(fValue^) - _DACNT)^ > 1 then
     InternalSetLength(n, n); // unique
   dec(n);
   s := fInfo.Cache.ItemSize;
@@ -8032,7 +8032,7 @@ begin
       // FastDynArrayClear() with ObjArray support
       dec(p);
       if (p^.refCnt >= 0) and
-         RefCntDecFree(p^.refCnt) then
+         DACntDecFree(p^.refCnt) then
       begin
         if (OldLength <> 0) and
            not fNoFinalize then
@@ -9799,9 +9799,9 @@ begin
   if (Values = nil) or
      (Excluded = nil) then
     exit; // nothing to exclude
-  if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
+  if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
     Values := copy(Values); // make unique
-  if PRefCnt(PAnsiChar(Excluded) - _DAREFCNT)^ > 1 then
+  if PDACnt(PAnsiChar(Excluded) - _DACNT)^ > 1 then
     Excluded := copy(Excluded);
   v := Length(Values);
   n := 0;
@@ -9842,9 +9842,9 @@ begin
     Values := nil;
     exit;
   end;
-  if PRefCnt(PAnsiChar(Values) - _DAREFCNT)^ > 1 then
+  if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
     Values := copy(Values); // make unique
-  if PRefCnt(PAnsiChar(Included) - _DAREFCNT)^ > 1 then
+  if PDACnt(PAnsiChar(Included) - _DACNT)^ > 1 then
     Included := copy(Included);
   v := Length(Values);
   n := 0;
