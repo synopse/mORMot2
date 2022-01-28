@@ -2376,17 +2376,6 @@ procedure LockedDec32(int32: PInteger);
 /// slightly faster than InterlockedIncrement64()
 procedure LockedInc64(int64: PInt64);
 
-/// low-level string reference counter unprocess
-// - caller should have tested that refcnt>=0
-// - returns true if the managed variable should be released (i.e. refcnt was 1)
-function StrCntDecFree(var refcnt: TStrCnt): boolean;
-  {$ifndef CPUINTEL} inline; {$endif}
-
-/// low-level dynarray reference counter unprocess
-// - caller should have tested that refcnt>=0
-function DACntDecFree(var refcnt: TDACnt): boolean;
-  {$ifndef CPUINTEL} inline; {$endif}
-
 // defined here for mormot.test.base only
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
 
@@ -2406,6 +2395,17 @@ procedure LockedDec32(int32: PInteger); inline;
 procedure LockedInc64(int64: PInt64); inline;
 
 {$endif CPUINTEL}
+
+/// low-level string reference counter unprocess
+// - caller should have tested that refcnt>=0
+// - returns true if the managed variable should be released (i.e. refcnt was 1)
+function StrCntDecFree(var refcnt: TStrCnt): boolean;
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// low-level dynarray reference counter unprocess
+// - caller should have tested that refcnt>=0
+function DACntDecFree(var refcnt: TDACnt): boolean;
+  {$ifndef CPUINTEL} inline; {$endif}
 
 /// low-level string reference counter process
 procedure StrCntAdd(var refcnt: TStrCnt; increment: TStrCnt);
@@ -2606,6 +2606,9 @@ function Trim(const S: RawUtf8): RawUtf8;
 // with the main String/UnicodeString type of Delphi 2009+
 // - in mORMot 1.18, there was a Trim() function but it was confusing
 function TrimU(const S: RawUtf8): RawUtf8;
+
+/// fast dedicated RawUtf8 version of s := Trim(s)
+procedure TrimSelf(var S: RawUtf8);
 
 /// single-allocation (therefore faster) alternative to Trim(copy())
 procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
@@ -7748,7 +7751,7 @@ end;
 {$endif PUREMORMOT2}
 
 procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
-  var result: RawUtf8); // faster alternative to Trim(copy())
+  var result: RawUtf8); // faster alternative to TrimU(copy())
 var
   L: PtrInt;
 begin
