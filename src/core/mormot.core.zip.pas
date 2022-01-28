@@ -2100,7 +2100,7 @@ begin
       raise ESynZip.CreateUtf8('%: corrupted header %', [self, fFileName]);
     e^.dir := h;
     e^.storedName := PAnsiChar(h) + SizeOf(h^);
-    FastSetRawByteString(tmp, e^.storedName, h^.fileInfo.nameLen);
+    SetString(tmp, e^.storedName, h^.fileInfo.nameLen); // better for FPC
     isascii7 := true;
     P := pointer(tmp);
     repeat

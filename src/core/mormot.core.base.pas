@@ -3421,7 +3421,7 @@ procedure VariantStringToUtf8(const V: Variant; var result: RawUtf8); overload;
 function VariantStringToUtf8(const V: Variant): RawUtf8; overload;
 
 var
-  /// efficient initialization of successive variant items from a (dynamic) array
+  /// efficient finalization of successive variant items from a (dynamic) array
   // - this unit will include a basic version calling VarClear()
   // - mormot.core.variants will assign a more efficient implementation
   VariantClearSeveral: procedure(V: PVarData; n: integer);
@@ -11069,6 +11069,7 @@ begin
     SetCodePage(fDataString, CP_UTF8, false);
     {$endif HASCODEPAGE}
     Text := fDataString;
+    fDataString := ''; // caller will own the string from now on
   end
   else
     FastSetString(Text, @PByteArray(fDataString)[StartPos], Len);

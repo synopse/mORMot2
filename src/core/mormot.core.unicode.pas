@@ -3874,8 +3874,8 @@ end;
 function Ansi7ToString(const Text: RawByteString): string;
 begin
   result := Text; // if we are SURE this text is 7-bit Ansi -> direct assign
-  {$ifdef FPC}
-  SetCodePage(RawByteString(result), DefaultSystemCodePage);
+  {$ifdef FPC} // if Text is CP_RAWBYTESTRING then FPC won't handle it properly
+  SetCodePage(RawByteString(result), DefaultSystemCodePage, false);
   {$endif FPC}
 end;
 

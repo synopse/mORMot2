@@ -7348,7 +7348,7 @@ begin
           // was just added: returns true + index of last item
           result := true
         else
-          // bigger than existing: returns false + insert after last position
+          // bigger than last item: returns false + insert after last position
           inc(Index);
         exit;
       end;
