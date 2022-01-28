@@ -1594,9 +1594,15 @@ begin
     exit;
   fSafe.Lock;
   another.fSafe.Lock;
+  {$ifdef HASFASTTRYFINALLY}
   try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
     LockedSum(another);
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     another.fSafe.UnLock;
     fSafe.UnLock;
   end;
