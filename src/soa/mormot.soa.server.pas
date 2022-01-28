@@ -1256,6 +1256,42 @@ begin
     end;
 end;
 
+procedure ExecuteError(Factory: TServiceFactoryServer; Ctxt: TRestServerUriContext;
+  const Msg: RawUtf8; Status: integer);
+var
+  met: RawUtf8;
+begin
+  if Ctxt.ServiceMethod <> nil then
+    met := PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName
+  else
+    met := Factory.fInterface.InterfaceName;
+  Ctxt.Error('% % for %', [ToText(Factory.InstanceCreation)^, Msg, met], Status);
+end;
+
+procedure FinalizeLogRest(ctxt: TRestServerUriContext;
+  exec: TInterfaceMethodExecute; timeEnd: Int64);
+var
+  W: TJsonWriter;
+begin
+  W := exec.TempTextWriter;
+  if exec.CurrentStep < smsBefore then
+  begin
+    W.CancelAll;
+    W.Add('"POST",{Method:"%",Input:{',
+      [exec.Method^.InterfaceDotMethodName]);
+  end;
+  if exec.CurrentStep < smsAfter then
+    W.AddShort('},Output:{Failed:"Probably due to wrong input"');
+  W.Add('},Session:%,User:%,Time:%,MicroSec:%',
+    [integer(Ctxt.Session), Ctxt.SessionUser, TimeLogNowUtc, timeEnd]);
+  if Ctxt.RemoteIPIsLocalHost then
+    W.Add('}', ',')
+  else
+    W.Add(',IP:"%"},', [Ctxt.RemoteIP]);
+  with Ctxt.ServiceExecution^ do
+    IRestOrm(LogRest).AsyncBatchRawAppend(LogClass, W);
+end;
+
 procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TRestServerUriContext);
 var
   Inst: TServiceFactoryServerInstance;
@@ -1269,41 +1305,6 @@ var
   stats: TSynMonitorInputOutput;
   err: ShortString;
   temp: TTextWriterStackBuffer;
-
-  procedure Error(const Msg: RawUtf8; Status: integer);
-  var
-    met: RawUtf8;
-  begin
-    if Ctxt.ServiceMethod <> nil then
-      met := PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName
-    else
-      met := fInterface.InterfaceName;
-    Ctxt.Error('% % for %', [ToText(InstanceCreation)^, Msg, met], Status);
-  end;
-
-  procedure FinalizeLogRest;
-  var
-    W: TJsonWriter;
-  begin
-    W := exec.TempTextWriter;
-    if exec.CurrentStep < smsBefore then
-    begin
-      W.CancelAll;
-      W.Add('"POST",{Method:"%",Input:{',
-        [exec.Method^.InterfaceDotMethodName]);
-    end;
-    if exec.CurrentStep < smsAfter then
-      W.AddShort('},Output:{Failed:"Probably due to wrong input"');
-    W.Add('},Session:%,User:%,Time:%,MicroSec:%',
-      [integer(Ctxt.Session), Ctxt.SessionUser, TimeLogNowUtc, timeEnd]);
-    if Ctxt.RemoteIPIsLocalHost then
-      W.Add('}', ',')
-    else
-      W.Add(',IP:"%"},', [Ctxt.RemoteIP]);
-    with Ctxt.ServiceExecution^ do
-      IRestOrm(LogRest).AsyncBatchRawAppend(LogClass, W);
-  end;
-
 begin
   if mlInterfaces in fRestServer.StatLevels then
     QueryPerformanceMicroSeconds(timeStart);
@@ -1339,7 +1340,8 @@ begin
             end
           else
           begin
-            Error('mode expects an authenticated session', HTTP_FORBIDDEN);
+            ExecuteError(self, Ctxt,
+              'mode expects an authenticated session', HTTP_FORBIDDEN);
             exit;
           end;
         end;
@@ -1361,7 +1363,8 @@ begin
   end;
   if Inst.Instance = nil then
   begin
-    Error('instance not found or deprecated', HTTP_FORBIDDEN);
+    ExecuteError(self, Ctxt,
+      'instance not found or deprecated', HTTP_FORBIDDEN);
     exit;
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;
@@ -1369,7 +1372,7 @@ begin
   if (Ctxt.ServiceExecution = nil) or
      (Ctxt.ServiceMethod = nil) then
   begin
-    Error('ServiceExecution=nil', HTTP_SERVERERROR);
+    ExecuteError(self, Ctxt, 'ServiceExecution=nil', HTTP_SERVERERROR);
     exit;
   end;
   stats := GetStats(Ctxt);
@@ -1440,11 +1443,11 @@ begin
         if not execres then
         begin
           // wrong request returns HTTP error 406
-          if err <> '' then
+          if err[0] <> #0 then
             Ctxt.Error('%', [err], HTTP_NOTACCEPTABLE)
           else
-            Error('execution failed (probably due to bad input parameters: ' +
-               'e.g. did you initialize your input record(s)?)',
+            ExecuteError(self, Ctxt, 'execution failed (probably due to bad ' +
+              'input parameters: e.g. did you initialize your input record(s)?)',
                HTTP_NOTACCEPTABLE);
           exit;
         end;
@@ -1488,7 +1491,7 @@ begin
       if exec <> nil then
       begin
         if Ctxt.ServiceExecution^.LogRest <> nil then
-          FinalizeLogRest;
+          FinalizeLogRest(Ctxt, exec, timeEnd);
         exec.Free;
       end;
     end;

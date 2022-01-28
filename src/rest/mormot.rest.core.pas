@@ -1391,7 +1391,7 @@ type
     procedure Returns(const result: RawUtf8; Status: integer = HTTP_SUCCESS;
       const CustomHeader: RawUtf8 = ''; Handle304NotModified: boolean = false;
       HandleErrorAsRegularResult: boolean = false; CacheControlMaxAge: integer = 0;
-      ServerHash: RawUtf8 = ''); overload;
+      const ServerHash: RawUtf8 = ''); overload;
     /// use this method to send back a JSON object to the caller
     // - this method will encode the supplied values e.g. as
     // ! JsonEncode(['name','John','year',1972]) = '{"name":"John","year":1972}'
@@ -3983,12 +3983,35 @@ begin
     result := fTix64;
 end;
 
+procedure SetCacheControl(var Head: RawUtf8; CacheControlMaxAge: integer);
+begin
+  Head := Head + #13#10 + 'Cache-Control: max-age=' +
+    UInt32ToUtf8(CacheControlMaxAge);
+end;
+
+procedure Process304NotModified(Call: PRestUriParams; const ServerHash: RawUtf8);
+var
+  server, client: RawUtf8;
+begin
+  FindNameValue(Call^.InHead, 'IF-NONE-MATCH: ', client);
+  server := ServerHash;
+  if server = '' then
+    server := crc32cUtf8ToHex(Call^.OutBody);
+  server := '"' + server + '"';
+  if client <> server then
+    Call^.OutHead := Call^.OutHead + #13#10 + 'ETag: ' + server
+  else
+  begin
+    // save bandwidth by returning "304 Not Modified"
+    Call^.OutBody := '';
+    Call^.OutStatus := HTTP_NOTMODIFIED;
+  end;
+end;
+
 procedure TRestUriContext.Returns(const Result: RawUtf8;
   Status: integer; const CustomHeader: RawUtf8;
   Handle304NotModified, HandleErrorAsRegularResult: boolean;
-  CacheControlMaxAge: integer; ServerHash: RawUtf8);
-var
-  clienthash: RawUtf8;
+  CacheControlMaxAge: integer; const ServerHash: RawUtf8);
 begin
   if HandleErrorAsRegularResult or
      StatusCodeIsSuccess(Status) then
@@ -4000,26 +4023,11 @@ begin
     else if fCall^.OutHead = '' then
       fCall^.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
     if CacheControlMaxAge > 0 then
-      fCall^.OutHead := fCall^.OutHead + #13#10 +
-        'Cache-Control: max-age=' + UInt32ToUtf8(CacheControlMaxAge);
+      SetCacheControl(fCall^.OutHead, CacheControlMaxAge);
     if Handle304NotModified and
        (Status = HTTP_SUCCESS) and
        (Length(Result) > 64) then
-    begin
-      FindNameValue(fCall^.InHead, 'IF-NONE-MATCH: ', clienthash);
-      if ServerHash = '' then
-        ServerHash := crc32cUtf8ToHex(Result);
-      ServerHash := '"' + ServerHash + '"';
-      if clienthash <> ServerHash then
-        fCall^.OutHead := fCall^.OutHead + #13#10 +
-          'ETag: ' + ServerHash
-      else
-      begin
-        // save bandwidth by returning "304 Not Modified"
-        fCall^.OutBody := '';
-        fCall^.OutStatus := HTTP_NOTMODIFIED;
-      end;
-    end;
+      Process304NotModified(fCall, ServerHash);
   end
   else
     Error(Result, Status);

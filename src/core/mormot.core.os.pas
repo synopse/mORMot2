@@ -3904,13 +3904,17 @@ end;
 function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrInt): boolean;
 var
   i: PtrInt;
+  c: cardinal;
 begin
   result := true;
   for i := 0 to headlen - 3 do
-    if (PInteger(head + i)^ = $0a0d0a0d) or
-       (PWord(head + i)^ = $0d0d) or
-       (PWord(head + i)^ = $0a0a) then
+  begin
+    c := PCardinal(head + i)^;
+    if (c = $0a0d0a0d) or
+       (Word(c) = $0d0d) or
+       (Word(c) = $0a0a) then
       exit;
+  end;
   result := false;
 end;
 
