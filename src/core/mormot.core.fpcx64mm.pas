@@ -283,11 +283,11 @@ type
   // - a single GetmemBlockSize or FreememBlockSize non 0 field is set
   TSmallBlockContention = packed record
     /// how many times a small block getmem/freemem has been waiting for unlock
-    SleepCount: cardinal;
+    SleepCount: PtrUInt;
     /// the small block size on which Getmem() has been blocked - or 0
-    GetmemBlockSize: cardinal;
+    GetmemBlockSize: PtrUInt;
     /// the small block size on which Freemem() has been blocked - or 0
-    FreememBlockSize: cardinal;
+    FreememBlockSize: PtrUInt;
   end;
 
   /// small blocks detailed information as returned GetSmallBlockContention
@@ -296,18 +296,21 @@ type
   /// one GetSmallBlockStatus information
   TSmallBlockStatus = packed record
     /// how many times a memory block of this size has been allocated
-    Total: cardinal;
+    Total: PtrUInt;
     /// how many memory blocks of this size are currently allocated
-    Current: cardinal;
+    Current: PtrUInt;
     /// the standard size of the small memory block
-    BlockSize: cardinal;
+    BlockSize: PtrUInt;
   end;
 
   /// small blocks detailed information as returned GetSmallBlockStatus
   TSmallBlockStatusDynArray = array of TSmallBlockStatus;
 
   /// sort order of detailed information as returned GetSmallBlockStatus
-  TSmallBlockOrderBy = (obTotal, obCurrent, obBlockSize);
+  TSmallBlockOrderBy = (
+    obTotal,
+    obCurrent,
+    obBlockSize);
 
 /// retrieve the use counts of allocated small blocks
 // - returns maxcount biggest results, sorted by "orderby" field occurence
@@ -879,7 +882,7 @@ type
   PSmallBlockType = ^TSmallBlockType;
 
   TSmallBlockTypes = array[0..NumSmallBlockTypes - 1] of TSmallBlockType;
-  TTinyBlockTypes = array[0..NumTinyBlockTypes - 1] of TSmallBlockType;
+  TTinyBlockTypes  = array[0..NumTinyBlockTypes - 1]  of TSmallBlockType;
 
   TSmallBlockInfo = record
     Small: TSmallBlockTypes;
@@ -895,7 +898,7 @@ type
   TSmallBlockPoolHeader = record
     BlockType: PSmallBlockType;
     {$ifdef CPU32}
-    Padding32Bits: cardinal;
+    Padding32Bits: cardinal; // for 8*4=32 bytes alignment
     {$endif CPU32}
     NextPartiallyFreePool: PSmallBlockPoolHeader;
     PreviousPartiallyFreePool: PSmallBlockPoolHeader;
@@ -2781,14 +2784,14 @@ end;
 
 type
   // match both TSmallBlockStatus and TSmallBlockContention
-  TRes = array[0..2] of cardinal;
+  TRes = array[0..2] of PtrUInt;
   // details are allocated on the stack, not the heap
   TResArray = array[0..(NumSmallInfoBlock * 2) - 1] of TRes;
 
 procedure QuickSortRes(var Res: TResArray; L, R, Level: PtrInt);
 var
   I, J, P: PtrInt;
-  pivot: cardinal;
+  pivot: PtrUInt;
   tmp: TRes;
 begin
   if L < R then
