@@ -134,6 +134,11 @@ type
     vIsDynArrayString,
     vIsDateTimeMS);
 
+  /// a pointer to an interface-based service provider method description
+  // - since TInterfaceFactory instances are shared in a global list, we
+  // can safely use such pointers in our code to refer to a particular method
+  PInterfaceMethod = ^TInterfaceMethod;
+
   /// describe a service provider method argument
   {$ifdef USERECORDWITHMETHODS}
   TInterfaceMethodArgument = record
@@ -193,8 +198,8 @@ type
     /// check if the supplied argument value is the default (e.g. 0, '' or null)
     function IsDefault(V: pointer): boolean;
     /// unserialize a JSON value into this argument
-    function FromJson(const MethodName: RawUtf8; var R: PUtf8Char; V: pointer;
-      Error: PShortString; DVO: TDocVariantOptions): boolean;
+    function SetFromJson(var Ctxt: TJsonParserContext; Method: PInterfaceMethod;
+      V: pointer; Error: PShortString): boolean;
     /// append the JSON value corresponding to this argument
     procedure AddJson(WR: TJsonWriter; V: pointer;
       ObjectOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
@@ -392,11 +397,6 @@ type
 
   /// describe all mtehods of an interface-based service provider
   TInterfaceMethodDynArray = array of TInterfaceMethod;
-
-  /// a pointer to an interface-based service provider method description
-  // - since TInterfaceFactory instances are shared in a global list, we
-  // can safely use such pointers in our code to refer to a particular method
-  PInterfaceMethod = ^TInterfaceMethod;
 
 
 // backward compatibility types redirections
@@ -2448,14 +2448,14 @@ type
     /// finalize the execution instance
     destructor Destroy; override;
     /// execute the corresponding method of weak IInvokable references
-    // - will retrieve a JSON array of parameters from Par (as [1,"par2",3])
+    // - will retrieve a JSON array of parameters from P buffer (as [1,"par2",3])
     // - will append a JSON array of results in Res, or set an Error message, or
     // a JSON object (with parameter names) in Res if ResultAsJsonObject is set
     // - if one Instances[] is supplied, any exception will be propagated (unless
     // optIgnoreException is set); if more than one Instances[] is supplied,
     // corresponding ExecutedInstancesFailed[] property will be filled with
     // the JSON serialized exception
-    function ExecuteJson(const Instances: array of pointer; Par: PUtf8Char;
+    function ExecuteJson(const Instances: array of pointer; P: PUtf8Char;
       Res: TJsonWriter; Error: PShortString = nil; ResAsJsonObject: boolean = false): boolean;
     /// execute the corresponding method of one weak IInvokable reference
     // - exepect no output argument, i.e. no returned data, unless output is set
@@ -2615,14 +2615,12 @@ const
    [jpoHandleCustomVariants, jpoIgnoreUnknownEnum, jpoIgnoreUnknownProperty,
     jpoIgnoreStringType, jpoAllowInt64Hex, jpoNullDontReleaseObjectInstance];
 
-function TInterfaceMethodArgument.FromJson(const MethodName: RawUtf8;
-  var R: PUtf8Char; V: pointer; Error: PShortString;
-  DVO: TDocVariantOptions): boolean;
+function TInterfaceMethodArgument.SetFromJson(var Ctxt: TJsonParserContext;
+  Method: PInterfaceMethod; V: pointer; Error: PShortString): boolean;
 var
   tmp: ShortString;
-  ctxt: TJsonParserContext;
 begin
-  ctxt.Init(R, ArgRtti, JSONPARSER_SERVICE, @DVO, nil);
+  ctxt.Info := ArgRtti;
   if ArgRtti.JsonLoad = nil then
     // fallback to raw record RTTI binary unserialization with Base64 encoding
     ctxt.Valid := ctxt.ParseNext and
@@ -2636,17 +2634,14 @@ begin
   if not ctxt.Valid then
   begin
     FormatShort('I% failed parsing %: % from input JSON',
-      [MethodName, ParamName^, ArgTypeName^], tmp);
+      [Method^.InterfaceDotMethodName, ParamName^, ArgTypeName^], tmp);
     if Error = nil then
       raise EInterfaceFactory.CreateUtf8('%', [tmp]);
     Error^ := tmp;
     result := false;
   end
   else
-  begin
-    R := ctxt.Json;
     result := true;
-  end;
 end;
 
 procedure TInterfaceMethodArgument.AddJson(WR: TJsonWriter; V: pointer;
@@ -3241,47 +3236,45 @@ var
   arg: integer;
 begin
   FillCharFast(ctxt.I64s, ctxt.Method^.ArgsUsedCount[imvv64] * SizeOf(Int64), 0);
-  for arg := 1 to high(ctxt.Method^.Args) do
+  a := @ctxt.Method^.Args[1];
+  for arg := 1 to length(ctxt.Method^.Args) - 1 do
   begin
-    a := @ctxt.Method^.Args[arg];
-    if a^.ValueType > imvSelf then
-    begin
-      V := nil;
-      {$ifdef CPUX86}
-      case a^.RegisterIdent of
-        REGEAX:
-          FakeCallRaiseError(ctxt, 'unexpected self', []);
-        REGEDX:
-          V := @ctxt.Stack.EDX;
-        REGECX:
-          V := @ctxt.Stack.ECX;
-      else
-      {$else}
-      {$ifdef HAS_FPREG} // x64, armhf, aarch64
-      if a^.FPRegisterIdent > 0 then
-        V := @ctxt.Stack.FPRegs[a^.FPRegisterIdent + (FPREG_FIRST - 1)]
-      else
-      {$endif HAS_FPREG}
-        if a^.RegisterIdent > 0 then
-          V := @ctxt.Stack.ParamRegs[a^.RegisterIdent + (PARAMREG_FIRST - 1)];
-      if a^.RegisterIdent = PARAMREG_FIRST then
+    V := nil;
+    {$ifdef CPUX86}
+    case a^.RegisterIdent of
+      REGEAX:
         FakeCallRaiseError(ctxt, 'unexpected self', []);
-      {$endif CPUX86}
-        if V = nil then
-          if (a^.SizeInStack > 0) and
-             (a^.InStackOffset <> STACKOFFSET_NONE) then
-            V := @ctxt.Stack.Stack[a^.InStackOffset]
-          else
-            V := @ctxt.I64s[a^.IndexVar]; // for results in CPU
-      {$ifdef CPUX86}
-      end; // case RegisterIdent of
-      {$endif CPUX86}
-      if vPassedByReference in a^.ValueKindAsm then
-        V := PPointer(V)^;
-      if a^.ValueType = imvDynArray then
-        {%H-}ctxt.DynArrays[a^.IndexVar].InitRtti(a^.ArgRtti, V^);
-      ctxt.Value[arg] := V;
-    end;
+      REGEDX:
+        V := @ctxt.Stack.EDX;
+      REGECX:
+        V := @ctxt.Stack.ECX;
+    else
+    {$else}
+    {$ifdef HAS_FPREG} // x64, armhf, aarch64
+    if a^.FPRegisterIdent > 0 then
+      V := @ctxt.Stack.FPRegs[a^.FPRegisterIdent + (FPREG_FIRST - 1)]
+    else
+    {$endif HAS_FPREG}
+      if a^.RegisterIdent > 0 then
+        V := @ctxt.Stack.ParamRegs[a^.RegisterIdent + (PARAMREG_FIRST - 1)];
+    if a^.RegisterIdent = PARAMREG_FIRST then
+      FakeCallRaiseError(ctxt, 'unexpected self', []);
+    {$endif CPUX86}
+      if V = nil then
+        if (a^.SizeInStack > 0) and
+           (a^.InStackOffset <> STACKOFFSET_NONE) then
+          V := @ctxt.Stack.Stack[a^.InStackOffset]
+        else
+          V := @ctxt.I64s[a^.IndexVar]; // for results in CPU
+    {$ifdef CPUX86}
+    end; // case RegisterIdent of
+    {$endif CPUX86}
+    if vPassedByReference in a^.ValueKindAsm then
+      V := PPointer(V)^;
+    if a^.ValueType = imvDynArray then
+      {%H-}ctxt.DynArrays[a^.IndexVar].InitRtti(a^.ArgRtti, V^);
+    ctxt.Value[arg] := V;
+    inc(a);
   end;
   if ctxt.Method^.ArgsResultIsServiceCustomAnswer then
     ctxt.ServiceCustomAnswerPoint := ctxt.Value[ctxt.Method^.ArgsResultIndex]
@@ -3442,11 +3435,10 @@ begin
     end
     else
       opt := DEFAULT_WRITEOPTIONS[false];
-    for arg := 1 to high(ctxt.Method^.Args) do
+    a := @ctxt.Method^.Args[1];
+    for arg := 1 to length(ctxt.Method^.Args) - 1 do
     begin
-      a := @ctxt.Method^.Args[arg];
-      if (a^.ValueType > imvSelf) and
-         (a^.ValueDirection in [imdConst, imdVar]) then
+      if a^.ValueDirection in [imdConst, imdVar] then
       begin
         V := ctxt.Value[arg];
         case a^.ValueType of
@@ -3467,6 +3459,7 @@ begin
           end;
         end;
       end;
+      inc(a);
     end;
     Params.CancelLastComma;
     Params.SetText(Json); // without [ ]
@@ -3483,6 +3476,7 @@ var
   Val: PUtf8Char;
   a: PInterfaceMethodArgument;
   resultAsJsonObject: boolean;
+  c: TJsonParserContext;
 begin
   if R <> nil then
   begin
@@ -3496,13 +3490,13 @@ begin
       resultAsJsonObject := true
     else if R^ <> '[' then
       FakeCallRaiseError(ctxt, 'JSON array/object result expected', []);
-    inc(R);
+    c.Init(R + 1, nil, JSONPARSER_SERVICE, @fFactory.DocVariantOptions, nil);
     arg := ctxt.Method^.ArgsOutFirst;
     if arg > 0 then
       repeat
         if resultAsJsonObject then
         begin
-          Val := GetJsonPropName(R, @ValLen);
+          Val := GetJsonPropName(c.Json, @ValLen);
           if Val = nil then
             // end of JSON object
             break;
@@ -3519,8 +3513,7 @@ begin
         a := @ctxt.Method^.Args[arg];
         //assert(ValueDirection in [imdVar,imdOut,imdResult]);
         V := ctxt.Value[arg];
-        a^.FromJson(ctxt.Method^.InterfaceDotMethodName, R, V, nil,
-          fFactory.DocVariantOptions);
+        a^.SetFromJson(c, ctxt.Method, V, nil);
         if a^.ValueDirection = imdResult then
         begin
           ctxt.ResultType := a^.ValueType;
@@ -3528,16 +3521,13 @@ begin
             // ordinal/real result values to CPU/FPU registers
             MoveFast(V^, ctxt.Result^, a^.SizeInStorage);
         end;
-        if R = nil then
+        if c.Json = nil then
           break;
-        if R^ in [#1..' '] then
-          repeat
-            inc(R)
-          until not (R^ in [#1..' ']);
+        c.Json := GotoNextNotSpace(c.Json);
         if resultAsJsonObject then
         begin
-          if (R^ = #0) or
-             (R^ = '}') then
+          if (c.Json^ = #0) or
+             (c.Json^ = '}') then
             break
           else
           // end of JSON object
@@ -3917,7 +3907,7 @@ begin
     ArgsManagedFirst := -1;
     ArgsManagedLast := -2;
     Args[0].ValueType := imvSelf;
-    for a := 1 to high(Args) do
+    for a := 1 to length(Args) - 1 do
     with Args[a] do
     begin
       ValueType := _FROM_RTTI[ArgRtti.Parser];
@@ -7144,9 +7134,9 @@ begin
         fMethod^.ArgsUsedCount[imvvInterface] * SizeOf(pointer), 0);
   end;
   V := @fValues[1];
-  for a := 1 to high(fMethod^.Args) do
+  arg := @fMethod^.Args[1];
+  for a := 1 to length(fMethod^.Args) - 1 do
   begin
-    arg := @fMethod^.Args[a];
     case arg^.ValueVar of
       imvv64:
         V^ := @fInt64s[arg^.IndexVar];
@@ -7177,6 +7167,7 @@ begin
          ord(arg^.ValueType)]);
     end;
     inc(V);
+    inc(arg);
   end;
   if optInterceptInputOutput in fOptions then
   begin
@@ -7489,7 +7480,7 @@ begin
 end;
 
 function TInterfaceMethodExecute.ExecuteJson(const Instances: array of pointer;
-  Par: PUtf8Char; Res: TJsonWriter; Error: PShortString; ResAsJsonObject: boolean): boolean;
+  P: PUtf8Char; Res: TJsonWriter; Error: PShortString; ResAsJsonObject: boolean): boolean;
 var
   a, a1: integer;
   Val, Name: PUtf8Char;
@@ -7498,6 +7489,7 @@ var
   opt: array[{smdVar=}boolean] of TTextWriterWriteObjectOptions;
   ParObjValuesUsed: boolean;
   c: PServiceCustomAnswer;
+  ctxt: TJsonParserContext;
   arg: PInterfaceMethodArgument;
   ParObjValues: array[0 .. MAX_METHOD_ARGS - 1] of PUtf8Char;
 begin
@@ -7508,34 +7500,31 @@ begin
     // locate input arguments from JSON array or object
     ParObjValuesUsed := false;
     if (fMethod^.ArgsInputValuesCount <> 0) and
-       (Par <> nil) then
+       (P <> nil) then
     begin
-      if Par^ in [#1..' '] then
-        repeat
-          inc(Par);
-        until not (Par^ in [#1..' ']);
-      case Par^ of
+      P := GotoNextNotSpace(P);
+      case P^ of
         '[':
           // input arguments as a JSON array , e.g. '[1,2,"three"]' (default)
-          inc(Par);
+          inc(P);
         '{':
           begin
             // retrieve arguments values from JSON object -> field name lookup
             repeat
-              inc(Par);
-            until not (Par^ in [#1..' ']);
-            if Par^ <> '}' then
+              inc(P);
+            until not (P^ in [#1..' ']);
+            if P^ <> '}' then
             begin
               ParObjValuesUsed := true;
               FillCharFast(ParObjValues,
                 (fMethod^.ArgsInLast + 1) * SizeOf(pointer), 0);
               a1 := fMethod^.ArgsInFirst;
               repeat
-                Name := GetJsonPropName(Par, @NameLen);
+                Name := GetJsonPropName(P, @NameLen);
                 if Name = nil then
                   exit; // invalid JSON object in input
-                Val := Par;
-                Par := GotoNextJsonItem(Par, 1, @EndOfObject);
+                Val := P;
+                P := GotoNextJsonItem(P, 1, @EndOfObject);
                 for a := a1 to fMethod^.ArgsInLast do
                 begin
                   arg := @fMethod^.Args[a];
@@ -7548,20 +7537,20 @@ begin
                       break;
                     end;
                 end;
-              until (Par = nil) or
+              until (P = nil) or
                     (EndOfObject = '}');
             end;
-            Par := nil;
+            P := nil;
           end;
       else
-        if PInteger(Par)^ = NULL_LOW then
-          Par := nil
+        if PInteger(P)^ = NULL_LOW then
+          P := nil
         else
           exit; // only support JSON array or JSON object as input
       end;
     end;
     // parse and decode JSON input const/var arguments (if any) into fValues[]
-    if (Par = nil) and
+    if (P = nil) and
        not ParObjValuesUsed then
     begin
       if (fMethod^.ArgsInputValuesCount > 0) and
@@ -7569,6 +7558,9 @@ begin
         exit; // paranoid setting
     end
     else
+    begin
+      ctxt.Init(P, nil, JSONPARSER_SERVICE,
+        @JSON_OPTIONS[optVariantCopiedByReference in Options], nil);
       for a := fMethod^.ArgsInFirst to fMethod^.ArgsInLast do
       begin
         arg := @fMethod^.Args[a];
@@ -7584,34 +7576,33 @@ begin
                 continue
             else
               // value to be retrieved from JSON object
-              Par := ParObjValues[a]
-          else if Par = nil then
+              ctxt.Json := ParObjValues[a]
+          else if ctxt.Json = nil then
             break; // premature end of ..] (ParObjValuesUsed=false)
           case arg^.ValueType of
             imvInterface:
               if Assigned(OnCallback) then
                 // retrieve TRestServerUriContext.ExecuteCallback fake interface
                 // via TServiceContainerServer.GetFakeCallback
-                OnCallback(Par, arg^.ArgRtti, fInterfaces[arg^.IndexVar])
+                OnCallback(ctxt.Json, arg^.ArgRtti, fInterfaces[arg^.IndexVar])
               else
                 raise EInterfaceFactory.CreateUtf8('OnCallback=nil for %(%: %)',
                   [fMethod^.InterfaceDotMethodName, arg^.ParamName^,
                    arg^.ArgTypeName^]);
             imvDynArray:
               begin
-                Par := fDynArrays[arg^.IndexVar].Wrapper.LoadFromJson(Par);
-                if Par = nil then
+                ctxt.Json := fDynArrays[arg^.IndexVar].Wrapper.LoadFromJson(ctxt.Json);
+                if ctxt.Json= nil then
                   exit;
-                IgnoreComma(Par);
+                IgnoreComma(ctxt.Json);
               end;
           else
-            if not arg^.FromJson(
-               fMethod^.InterfaceDotMethodName, Par, fValues[a], Error,
-               JSON_OPTIONS[optVariantCopiedByReference in Options]) then
+            if not arg^.SetFromJson(ctxt, fMethod, fValues[a], Error) then
               exit;
           end;
         end;
       end;
+    end;
     // execute the method, using prepared input/output fValues[]
     RawExecute(@Instances[0], high(Instances));
     // send back any var/out output arguments as JSON
