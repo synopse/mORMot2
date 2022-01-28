@@ -1687,8 +1687,8 @@ asm
         .noframe
 {$endif FPC}
         // rcx/rdi=l rdx/rsi=r r8/rdx=product
-        // -> preserve rdx, which is used as result by mul opcode
         {$ifdef WIN64ABI}
+        // -> preserve rdx=r, which is used as result by mul opcode
         push   rsi
         mov    rsi, r
         {$else}
@@ -5723,7 +5723,7 @@ function _AesNiHash64(seed: QWord; data: pointer; len: PtrUInt): QWord;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=seed, rdx/rsi=data, r8/rdx=len
         movq    xmm0, seed
-        call    _AesNiHashXmm0
+        call    _AesNiHashXmm0 // preserve rcx/rdi=seed flag
         movq    rax, xmm0 // made 3 AES permutations -> 32/64-bit trunc is good
 end;
 
@@ -5775,13 +5775,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movd    eax, xmm0 // when jumped from _AesNiHash32
         {$ifdef WIN64ABI}
         jmp     @exit
-        {$else}
-        ret
-        {$endif WIN64ABI}
 @0:     mov     eax, seedfromhash32 // _AesNiHash32 left seed in first param reg
-        {$ifdef WIN64ABI}
         jmp     @exit
         {$else}
+        ret
+@0:     mov     eax, seedfromhash32 // _AesNiHash32 left seed in first param reg
         ret
         {$endif WIN64ABI}
 @17up:  cmp     len, 32
@@ -6121,7 +6119,7 @@ procedure sha512_sse4(data, hash: pointer; blocks: Int64);
 
 // defined in mormot.crypt.core.pas, not in mormot.core.base, to avoid
 // .o/.obj dependencies for most basic executables (for which mormot.core.base
-// crc32c x86_64 asm is alredy fast enough)
+// crc32c x86_64 asm is already fast enough)
 function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal;
   {$ifdef FPC}cdecl;{$endif} external;
 
