@@ -1574,6 +1574,12 @@ procedure FastFinalizeArray(Value: PPointer; ElemTypeInfo: PRttiInfo;
 // - same as RTTI_FINALIZE[rkRecord]()
 function FastRecordClear(Value: pointer; Info: PRttiInfo): PtrInt;
 
+/// efficient finalization of successive record items from a (dynamic) array
+procedure RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: integer);
+
+/// efficient finalization of successive RawUtf8 items from a (dynamic) array
+procedure StringClearSeveral(v: PPointer; n: PtrInt);
+
 /// low-level finalization of a dynamic array of RawUtf8
 // - faster than RTL Finalize() or setting nil
 procedure RawUtf8DynArrayClear(var Value: TRawUtf8DynArray);
@@ -5182,7 +5188,7 @@ begin
             (r.Cache.CodePage = CP_UTF8);
 end;
 
-procedure _RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: integer);
+procedure RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: integer);
 var
   fields: TRttiRecordManagedFields;
   f: PRttiRecordField;
@@ -5212,7 +5218,7 @@ begin
   end;
 end;
 
-procedure _StringClearSeveral(v: PPointer; n: PtrInt);
+procedure StringClearSeveral(v: PPointer; n: PtrInt);
 var
   p: PStrRec;
 begin
@@ -5240,14 +5246,14 @@ procedure FastFinalizeArray(Value: PPointer; ElemTypeInfo: PRttiInfo;
 var
   fin: TRttiFinalizer;
 begin
-  //  caller ensured ElemTypeInfo<>nil and Count>0
+  // caller ensured ElemTypeInfo<>nil and Count>0
   case ElemTypeInfo^.Kind of
     {$ifdef FPC}
     rkObject,
     {$endif FPC}
     rkRecord:
       // retrieve ElemTypeInfo.RecordManagedFields once
-      _RecordClearSeveral(pointer(Value), ElemTypeInfo, Count);
+      RecordClearSeveral(pointer(Value), ElemTypeInfo, Count);
     {$ifdef FPC}
     rkLStringOld,
     {$endif FPC}
@@ -5256,7 +5262,7 @@ begin
     {$endif HASVARUSTRING}
     rkLString:
       // optimized loop for AnsiString / UnicodeString (PStrRec header)
-      _StringClearSeveral(pointer(Value), Count);
+      StringClearSeveral(pointer(Value), Count);
     rkVariant:
       // from mormot.core.variants - supporting custom variants
       // or at least from mormot.core.base calling inlined VarClear()
