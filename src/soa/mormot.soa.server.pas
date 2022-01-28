@@ -93,6 +93,17 @@ type
 
 { ***************** TServiceFactoryServer Service Provider }
 
+  /// execute method from/to JSON for TServiceFactoryServer.ExecuteJson
+  TInterfaceMethodExecuteServer = class(TInterfaceMethodExecute)
+  protected
+    // used internally by TServiceFactoryServer.fExecuteCached
+    fCached: TLightLock;
+    fCachedWR: TJsonWriter;
+  public
+    /// finalize this execution context
+    destructor Destroy; override;
+  end;
+
   /// server-side service provider uses this to store one internal instance
   // - used by TServiceFactoryServer in sicClientDriven, sicPerSession,
   // sicPerUser or sicPerGroup mode
@@ -159,12 +170,14 @@ type
     fOnMethodExecute: TOnServiceCanExecute;
     fOnExecute: TInterfaceMethodExecuteEventDynArray;
     fExecuteLock: TRTLCriticalSection;
+    fExecuteCached: array of TInterfaceMethodExecuteServer;
     procedure SetServiceLogByIndex(const aMethods: TInterfaceFactoryMethodBits;
       const aLogRest: IRestOrm; aLogClass: TOrmServiceLogClass);
     procedure SetTimeoutSecInt(value: cardinal);
     function GetTimeoutSec: cardinal;
     function GetStat(const aMethod: RawUtf8): TSynMonitorInputOutput;
-    function GetStats(Ctxt: TRestServerUriContext): TSynMonitorInputOutput;
+    function GetStats(
+      Ctxt: TRestServerUriContext; MethodIndex: PtrInt): TSynMonitorInputOutput;
     function GetInstanceGCCount: integer;
     procedure InstanceFree(Obj: TInterfacedObject);
     procedure InstanceFreeGC(Obj: TInterfacedObject);
@@ -573,12 +586,23 @@ end;
 
 { ***************** TServiceFactoryServer Service Provider }
 
+{ TInterfaceMethodExecuteServer }
+
+destructor TInterfaceMethodExecuteServer.Destroy;
+begin
+  inherited Destroy;
+  fCachedWR.Free;
+end;
+
+
 { TServiceFactoryServer }
 
 constructor TServiceFactoryServer.Create(aRestServer: TRestServer;
   aInterface: PRttiInfo; aInstanceCreation: TServiceInstanceImplementation;
   aImplementationClass: TInterfacedClass; const aContractExpected: RawUtf8;
   aTimeOutSec: cardinal; aSharedInstance: TInterfacedObject);
+var
+  i: PtrInt;
 begin
   // extract RTTI from the interface
   InitializeCriticalSection(fExecuteLock);
@@ -662,6 +686,14 @@ begin
       end;
   end;
   SetLength(fStats, fInterface.MethodsCount);
+  SetLength(fExecuteCached, fInterface.MethodsCount);
+  for i := 0 to fInterface.MethodsCount - 1 do
+  begin
+    // prepare some reusable execution context (avoid most memory allocations)
+    fExecuteCached[i] := TInterfaceMethodExecuteServer.Create(
+      fInterface, @fInterface.Methods[i], []);
+    fExecuteCached[i].fCachedWR := TJsonWriter.CreateOwnedStream(16384);
+  end;
 end;
 
 procedure TServiceFactoryServer.SetTimeoutSecInt(value: cardinal);
@@ -696,27 +728,23 @@ begin
 end;
 
 function TServiceFactoryServer.GetStats(
-  Ctxt: TRestServerUriContext): TSynMonitorInputOutput;
-var
-  m: PtrInt;
+  Ctxt: TRestServerUriContext; MethodIndex: PtrInt): TSynMonitorInputOutput;
 begin
   result := nil;
-  if not (mlInterfaces in fRestServer.StatLevels) then
+  if (MethodIndex < 0) or
+     not (mlInterfaces in fRestServer.StatLevels) then
     exit;
-  m := Ctxt.ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
-  if m < 0 then
-    exit;
-  result := fStats[m];
+  result := fStats[MethodIndex];
   if result = nil then
   begin
     fRestServer.Stats.Lock;
     try
-      result := fStats[m];
+      result := fStats[MethodIndex];
       if result = nil then
       begin
         result := TSynMonitorInputOutput.Create(
           PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName);
-        fStats[m] := result;
+        fStats[MethodIndex] := result;
       end;
     finally
       fRestServer.Stats.UnLock;
@@ -763,6 +791,7 @@ begin
   FreeAndNil(fBackgroundThread);
   DeleteCriticalSection(fExecuteLock);
   ObjArrayClear(fStats, true);
+  ObjArrayClear(fExecuteCached);
   inherited Destroy;
 end;
 
@@ -1298,10 +1327,11 @@ var
   WR: TJsonWriter;
   entry: PInterfaceEntry;
   instancePtr: pointer; // weak IInvokable reference
-  dolock, execres: boolean;
+  execres: boolean;
   opt: TInterfaceMethodOptions;
   exec: TInterfaceMethodExecute;
   timeStart, timeEnd: Int64;
+  m: PtrInt;
   stats: TSynMonitorInputOutput;
   err: ShortString;
   temp: TTextWriterStackBuffer;
@@ -1369,14 +1399,16 @@ begin
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;
   // 2. call method implementation
-  if (Ctxt.ServiceExecution = nil) or
+  m := Ctxt.ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
+  if (m < 0) or
+     (Ctxt.ServiceExecution = nil) or
      (Ctxt.ServiceMethod = nil) then
   begin
     ExecuteError(self, Ctxt, 'ServiceExecution=nil', HTTP_SERVERERROR);
     exit;
   end;
-  stats := GetStats(Ctxt);
   err := '';
+  stats := nil;
   exec := nil;
   try
     if fImplementationClassKind = ickFake then
@@ -1401,7 +1433,19 @@ begin
       if fBackgroundThread = nil then
         fBackgroundThread := fRestServer.Run.NewBackgroundThreadMethod(
           '% %', [self, fInterface.InterfaceName]);
-    WR := TJsonWriter.CreateOwnedStream(temp);
+    exec := fExecuteCached[m];
+    if TInterfaceMethodExecuteServer(exec).fCached.TryLock then
+    begin
+      // use the cached instance, set current options and reuse its TJsonWriter
+      exec.Options := opt;
+      WR := TInterfaceMethodExecuteServer(exec).fCachedWR;
+    end
+    else
+    begin
+      // another thread is already using this instance -> create transient
+      exec := TInterfaceMethodExecute.Create(fInterface, Ctxt.ServiceMethod, opt);
+      WR := TJsonWriter.CreateOwnedStream(temp);
+    end;
     try
       Ctxt.ThreadServer^.Factory := self;
       if not (optForceStandardJson in opt) and
@@ -1416,12 +1460,11 @@ begin
         WR.CustomOptions := WR.CustomOptions + [twoIgnoreDefaultInRecord];
       // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
       Ctxt.ServiceResultStart(WR);
-      dolock := optExecLockedPerInterface in opt;
-      if dolock then
+      if mlInterfaces in fRestServer.StatLevels then
+        stats := GetStats(Ctxt, m);
+      if optExecLockedPerInterface in opt then
         EnterCriticalSection(fExecuteLock);
-      exec := TInterfaceMethodExecute.Create(Ctxt.ServiceMethod);
       try
-        exec.Options := opt;
         exec.BackgroundExecutionThread := fBackgroundThread;
         exec.OnCallback := Ctxt.ExecuteCallback;
         if fOnExecute <> nil then
@@ -1454,7 +1497,7 @@ begin
         Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
         Ctxt.Call.OutStatus := exec.ServiceCustomAnswerStatus;
       finally
-        if dolock then
+        if optExecLockedPerInterface in opt then
           LeaveCriticalSection(fExecuteLock);
       end;
       if Ctxt.Call.OutHead = '' then
@@ -1467,7 +1510,10 @@ begin
       WR.SetText(Ctxt.Call.OutBody);
     finally
       Ctxt.ThreadServer^.Factory := nil;
-      WR.Free;
+      if exec = fExecuteCached[m] then
+        WR.CancelAll // will reuse this instance and its buffer
+      else
+        WR.Free;
     end;
   finally
     try
@@ -1492,7 +1538,10 @@ begin
       begin
         if Ctxt.ServiceExecution^.LogRest <> nil then
           FinalizeLogRest(Ctxt, exec, timeEnd);
-        exec.Free;
+        if exec = fExecuteCached[m] then
+          TInterfaceMethodExecuteServer(exec).fCached.UnLock
+        else
+          exec.Free;
       end;
     end;
   end;

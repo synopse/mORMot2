@@ -1004,7 +1004,7 @@ begin
         end;
       ObjArrayClear(peoples);
       {$ifndef CPUAARCH64} // FPC doesn't follow the AARCH64 ABI -> fixme
-      {$ifndef HASNOSTATICRTTI}
+      {$ifndef HASNOSTATICRTTI} // need RTTI for static records
       Nav.MaxRows := c;
       Nav.Row0 := c * 2;
       Nav.RowCount := c * 3;

@@ -161,9 +161,9 @@ type
     ValueVar: TInterfaceMethodValueVar;
     /// how the variable is to be passed at asm level
     ValueKindAsm: TInterfaceMethodValueAsm;
-    /// byte offset in the CPU stack of this argument
+    /// byte offset in the CPU stack of this argument (16-bit)
     // - may be -1 if pure register parameter with no backup on stack (x86)
-    InStackOffset: integer;
+    InStackOffset: smallint;
     /// used to specify if the argument is passed as register
     // - contains 0 if parameter is not a register
     // - contains 1 for EAX, 2 for EDX and 3 for ECX registers for x86
@@ -171,25 +171,25 @@ type
     // 4 for R9, with a backing store on the stack for x64
     // - contains 1 for R0, 2 R1 ... 4 for R3, with a backing store on the stack for arm
     // - contains 1 for X0, 2 X1 ... 8 for X7, with a backing store on the stack for aarch64
-    RegisterIdent: integer;
+    RegisterIdent: byte;
     /// used to specify if a floating-point argument is passed as register
     // - contains always 0 for x86/x87
     // - contains 1 for XMM0, 2 for XMM1, ..., 4 for XMM3 for x64
     // - contains 1 for D0, 2 for D1, ..., 8 for D7 for armhf
     // - contains 1 for V0, 2 for V1, ..., 8 for V7 for aarch64
-    FPRegisterIdent: integer;
+    FPRegisterIdent: byte;
+    /// index of the associated variable in the local array[ArgsUsedCount[]]
+    IndexVar: byte;
     /// size (in bytes) of this argument on the stack
-    SizeInStack: integer;
+    SizeInStack: byte;
+    /// 64-bit aligned position in TInterfaceMethod.ArgsSizeAsValue memory
+    OffsetAsValue: word;
     /// size (in bytes) of this imvv64 ordinal value
     // - e.g. depending of the associated kind of enumeration
     SizeInStorage: integer;
     /// hexadecimal binary size (in bytes) of this imvv64 ordinal value
     // - set only if ValueType=imvBinary
     SizeInBinary: integer;
-    /// index of the associated variable in the local array[ArgsUsedCount[]]
-    // - for imdConst argument, contains -1 (no need to a local var: the value
-    // will be on the stack only)
-    IndexVar: integer;
     /// serialize the argument into the TServiceContainer.Contract JSON format
     // - non standard types (e.g. clas, enumerate, dynamic array or record)
     // are identified by their type identifier - so contract does not extend
@@ -295,20 +295,20 @@ type
     // - Args[0] always is imvSelf
     // - if method is a function, an additional imdResult argument is appended
     Args: TInterfaceMethodArgumentDynArray;
-    /// the index of the result pseudo-argument in Args[]
+    /// the index of the result pseudo-argument in Args[] (signed 8-bit)
     // - is -1 if the method is defined as a (not a function)
     ArgsResultIndex: shortint;
-    /// the index of the first const / var argument in Args[]
+    /// the index of the first const / var argument in Args[] (signed 8-bit)
     ArgsInFirst: shortint;
-    /// the index of the last const / var argument in Args[]
+    /// the index of the last const / var argument in Args[] (signed 8-bit)
     ArgsInLast: shortint;
-    /// the index of the first var / out / result argument in Args[]
+    /// the index of the first var / out / result argument in Args[] (signed 8-bit)
     ArgsOutFirst: shortint;
-    /// the index of the last var / out / result argument in Args[]
+    /// the index of the last var / out / result argument in Args[] (signed 8-bit)
     ArgsOutLast: shortint;
-    /// the index of the last argument in Args[], excepting result
+    /// the index of the last argument in Args[], excepting result (signed 8-bit)
     ArgsNotResultLast: shortint;
-    /// the index of the last var / out argument in Args[]
+    /// the index of the last var / out argument in Args[] (signed 8-bit)
     ArgsOutNotResultLast: shortint;
     /// the number of const / var parameters in Args[]
     // - i.e. the number of elements in the input JSON array
@@ -324,20 +324,21 @@ type
     // with mime-type 'application/octet-stream' as expected
     ArgsInputIsOctetStream: boolean;
     /// the index of the first argument expecting manual stack initialization
-    // - set if there is any imvObject,imvDynArray,imvRecord,imvInterface or
-    // imvVariant
+    // - set for Args[].ValueVar >= imvvRawUtf8
     ArgsManagedFirst: shortint;
-    /// the index of the last argument expecting manual stack initialization
-    // - set if there is any imvObject, imvDynArray, imvRecord, imvInterface or
-    // imvVariant
-    ArgsManagedLast: shortint;
+    /// how manual stack initialization arguments are defined
+    // - set for Args[].ValueVar >= imvvRawUtf8
+    ArgsManagedCount: byte;
     /// contains all used kind of arguments
     ArgsUsed: TInterfaceMethodValueTypes;
-    /// contains the count of variables for all used kind of arguments
-    ArgsUsedCount: array[TInterfaceMethodValueVar] of byte;
     /// needed CPU stack size (in bytes) for all arguments
     // - under x64, does not include the backup space for the four registers
-    ArgsSizeInStack: cardinal;
+    ArgsSizeInStack: word;
+    /// 64-bit aligned cumulative size for all arguments values
+    // - follow Args[].OffsetAsValue distribution
+    ArgsSizeAsValue: word;
+    /// contains the count of variables for all used kind of arguments
+    ArgsUsedCount: array[TInterfaceMethodValueVar] of byte;
     /// retrieve an argument index in Args[] from its name
     // - search is case insensitive
     // - if Input is TRUE, will search within const / var arguments
@@ -391,7 +392,7 @@ type
     /// computes a TDocVariant containing the input or output arguments values
     // - Values[] should point to the input/output raw binary values, as stored
     // in TInterfaceMethodExecute.Values during execution
-    procedure ArgsStackAsDocVariant(const Values: TPPointerDynArray;
+    procedure ArgsStackAsDocVariant(const Values: TPointerDynArray;
       out Dest: TDocVariantData; Input: boolean);
   end;
 
@@ -498,6 +499,14 @@ const
     '_signature_',
     '_instance_');
 
+  JSONPARSER_SERVICE: TJsonParserOptions =
+    [jpoHandleCustomVariants,
+     jpoIgnoreUnknownEnum,
+     jpoIgnoreUnknownProperty,
+     jpoIgnoreStringType,
+     jpoAllowInt64Hex,
+     jpoNullDontReleaseObjectInstance];
+
 type
   {$M+}
   TInterfaceFactory = class;
@@ -537,6 +546,7 @@ type
     fInterfaceName: RawUtf8;
     fInterfaceUri: RawUtf8;
     fDocVariantOptions: TDocVariantOptions;
+    fJsonParserOptions: TJsonParserOptions;
     {$ifdef CPUX86}  // i386 stub requires "ret ArgsSizeInStack"
     fFakeVTable: array of pointer;
     {$endif CPUX86}
@@ -675,10 +685,14 @@ type
     property Contract: RawUtf8
       read fContract;
     /// how this interface will work with variants (including TDocVariant)
-    // - by default, contains JSON_FAST for best performance - i.e.
-    // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
+    // - by default, contains JSON_FAST_FLOAT for best performance - i.e.
+    // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference, dvoAllowDoubleValue]
     property DocVariantOptions: TDocVariantOptions
       read fDocVariantOptions write fDocVariantOptions;
+    /// how this interface will process its JSON parsing
+    // - by default, contains JSONPARSER_SERVICE very relaxed parsing options
+    property JsonParserOptions: TJsonParserOptions
+      read fJsonParserOptions write fJsonParserOptions;
   published
     /// will return the interface name, e.g. 'ICalculator'
     // - published property to be serializable as JSON e.g. for debbuging info
@@ -2017,8 +2031,6 @@ const
   VMTSTUBSIZE = 28;
 {$endif CPUAARCH64}
 
-  STACKOFFSET_NONE = -1;
-
   // ordinal values are stored within 64-bit buffer, and records in a RawUtf8
   ARGS_TO_VAR: array[TInterfaceMethodValueType] of TInterfaceMethodValueVar = (
     imvvNone,         // imvNone
@@ -2266,6 +2278,7 @@ type
     optExecInMainThread,
     optFreeInMainThread,
     optVariantCopiedByReference,
+    optVariantFloatAllowed,
     optInterceptInputOutput,
     optNoLogInput,
     optNoLogOutput,
@@ -2293,6 +2306,8 @@ type
   // creation of a per-interface dedicated thread
   // - by default _Release is done within the service lock, unless optFreeDelayed
   // is set and instances are released later (e.g. if may take some time)
+  // - optVariantCopiedByReference and optVariantFloatAllowed are used to
+  // generate the proper TDocVariantData options
   // - if optInterceptInputOutput is set, TServiceFactoryServer.AddInterceptor()
   // events will have their Sender.Input/Output values defined
   // - if optNoLogInput/optNoLogOutput is set, TSynLog and SetServiceLog database
@@ -2356,34 +2371,29 @@ type
   /// abtract execution of a TInterfacedObject method
   TInterfaceMethodExecuteRaw = class
   protected
+    fFactory: TInterfaceFactory;
     fMethod: PInterfaceMethod;
-    fRawUtf8s: TRawUtf8DynArray;
-    fStrings: TStringDynArray;
-    fWideStrings: TWideStringDynArray;
-    fRecords: array of TBytes; // imvRecord or imvVariant
-    fInt64s: TInt64DynArray;
-    fObjects: TObjectDynArray;
-    fInterfaces: TPointerDynArray;
-    fDynArrays: array of record
-      Value: Pointer;
-      Wrapper: TDynArray;
-    end;
-    fValues: TPPointerDynArray;
+    fStorage: TByteDynArray;
+    fDynArray: array of TDynArray;
+    fValues: TPointerDynArray;
     fAlreadyExecuted: boolean;
+    fOptions: TInterfaceMethodOptions;
+    fDocVariantOptions: TDocVariantOptions;
     fOnExecute: TInterfaceMethodExecuteEventDynArray;
     fCurrentStep: TInterfaceMethodExecuteEventStep;
     fBackgroundExecutionThread: TSynBackgroundThreadMethod;
     fLastException: Exception;
     fExecutedInstancesFailed: TRawUtf8DynArray;
-    fOptions: TInterfaceMethodOptions;
     fInput: TDocVariantData;
     fOutput: TDocVariantData;
+    procedure SetOptions(const Value: TInterfaceMethodOptions);
     procedure BeforeExecute;
     procedure RawExecute(const Instances: PPointerArray; InstancesLast: integer);
     procedure AfterExecute;
   public
     /// initialize the execution instance
-    constructor Create(aMethod: PInterfaceMethod);
+    constructor Create(aFactory: TInterfaceFactory; aMethod: PInterfaceMethod;
+      const aOptions: TInterfaceMethodOptions);
     /// allow to hook method execution
     // - if optInterceptInputOutput is defined in Options, then Sender.Input/Output
     // fields will contain the execution data context when Hook is called
@@ -2393,13 +2403,16 @@ type
     // fields will contain the execution data context when Hook[] are called
     procedure AddInterceptors(const Hook: TInterfaceMethodExecuteEventDynArray);
 
+    /// low-level direct access to the associated interface factory information
+    property Factory: TInterfaceFactory
+      read fFactory;
     /// low-level direct access to the associated method information
     property Method: PInterfaceMethod
       read fMethod;
     /// low-level direct access to the current input/output parameter values
     // - you should not need to access this, but rather set
     // optInterceptInputOutput in Options, and read Input/Output content
-    property Values: TPPointerDynArray
+    property Values: TPointerDynArray
       read fValues;
     /// reference to the actual execution method callbacks
     property OnExecute: TInterfaceMethodExecuteEventDynArray
@@ -2415,7 +2428,7 @@ type
       read fBackgroundExecutionThread write fBackgroundExecutionThread;
     /// associated settings, as copied from TServiceFactoryServer.Options
     property Options: TInterfaceMethodOptions
-      read fOptions write fOptions;
+      read fOptions write SetOptions;
     /// set if optInterceptInputOutput is defined in TServiceFactoryServer.Options
     // - contains a dvObject with input parameters as "argname":value pairs
     // - this is a read-only property: you cannot change the input content
@@ -2588,7 +2601,7 @@ function TInterfaceMethodArgument.IsDefault(V: pointer): boolean;
 begin
   result := false;
   case ValueType of
-    imvBoolean..imvCurrency:
+    imvBoolean .. imvCurrency:
       case SizeInStorage of
         1:
           result := PByte(V)^ = 0;
@@ -2599,8 +2612,8 @@ begin
         8:
           result := PInt64(V)^ = 0;
       end;
-    imvRawUtf8..imvWideString,
-    imvObject..imvInterface:
+    imvRawUtf8 .. imvWideString,
+    imvObject .. imvInterface:
       result := PPointer(V)^ = nil;
     imvBinary,
     imvRecord:
@@ -2609,11 +2622,6 @@ begin
       result := PVarData(V)^.vtype <= varNull;
   end;
 end;
-
-const
-  JSONPARSER_SERVICE: TJsonParserOptions =
-   [jpoHandleCustomVariants, jpoIgnoreUnknownEnum, jpoIgnoreUnknownProperty,
-    jpoIgnoreStringType, jpoAllowInt64Hex, jpoNullDontReleaseObjectInstance];
 
 function TInterfaceMethodArgument.SetFromJson(var Ctxt: TJsonParserContext;
   Method: PInterfaceMethod; V: pointer; Error: PShortString): boolean;
@@ -2986,8 +2994,8 @@ begin
   end;
 end;
 
-function TInterfaceMethod.ArgsCommandLineToObject(P: PUtf8Char;
-  Input, RaiseExceptionOnUnknownParam: boolean): RawUtf8;
+function TInterfaceMethod.ArgsCommandLineToObject(P: PUtf8Char; Input: boolean;
+  RaiseExceptionOnUnknownParam: boolean): RawUtf8;
 var
   i: integer;
   W: TJsonWriter;
@@ -3087,7 +3095,7 @@ begin
   end;
 end;
 
-procedure TInterfaceMethod.ArgsStackAsDocVariant(const Values: TPPointerDynArray;
+procedure TInterfaceMethod.ArgsStackAsDocVariant(const Values: TPointerDynArray;
   out Dest: TDocVariantData; Input: boolean);
 var
   a: PtrInt;
@@ -3262,8 +3270,8 @@ begin
     {$endif CPUX86}
       if V = nil then
         if (a^.SizeInStack > 0) and
-           (a^.InStackOffset <> STACKOFFSET_NONE) then
-          V := @ctxt.Stack.Stack[a^.InStackOffset]
+           (a^.InStackOffset >= 0) then
+          V := @ctxt.Stack.Stack[a^.InStackOffset] // value is on stack
         else
           V := @ctxt.I64s[a^.IndexVar]; // for results in CPU
     {$ifdef CPUX86}
@@ -3490,7 +3498,7 @@ begin
       resultAsJsonObject := true
     else if R^ <> '[' then
       FakeCallRaiseError(ctxt, 'JSON array/object result expected', []);
-    c.Init(R + 1, nil, JSONPARSER_SERVICE, @fFactory.DocVariantOptions, nil);
+    c.Init(R + 1, nil, fFactory.JsonParserOptions, @fFactory.DocVariantOptions, nil);
     arg := ctxt.Method^.ArgsOutFirst;
     if arg > 0 then
       repeat
@@ -3862,7 +3870,8 @@ begin
   if aInterface^.Kind <> rkInterface then
     raise EInterfaceFactory.CreateUtf8('%.Create: % is not an interface',
       [self, aInterface^.RawName]);
-  fDocVariantOptions := JSON_FAST;
+  fDocVariantOptions := JSON_FAST_FLOAT;
+  fJsonParserOptions := JSONPARSER_SERVICE;
   fInterfaceTypeInfo := aInterface;
   fInterfaceIID := aInterface^.InterfaceGuid^;
   if IsNullGuid(fInterfaceIID) then
@@ -3905,12 +3914,12 @@ begin
     ArgsOutNotResultLast := -2;
     ArgsResultIndex := -1;
     ArgsManagedFirst := -1;
-    ArgsManagedLast := -2;
     Args[0].ValueType := imvSelf;
     for a := 1 to length(Args) - 1 do
     with Args[a] do
     begin
       ValueType := _FROM_RTTI[ArgRtti.Parser];
+      ValueVar := ARGS_TO_VAR[ValueType];
       ErrorMsg := ''; // seems supported
       case ValueType of
       imvNone:
@@ -3963,12 +3972,11 @@ begin
         ArgsOutLast := a;
         inc(ArgsOutputValuesCount);
       end;
-      if ValueType in [imvObject, imvDynArray, imvRecord,
-           imvInterface, imvVariant] then
+      if ValueVar >= imvvRawUtf8 then
       begin
         if ArgsManagedFirst < 0 then
           ArgsManagedFirst := a;
-        ArgsManagedLast := a;
+        inc(ArgsManagedCount);
       end;
       if rcfSpi in ArgRtti.Flags then
       begin
@@ -4044,7 +4052,6 @@ begin
       FPRegisterIdent := 0;
       ValueIsInFPR := false;
       {$endif HAS_FPREG}
-      ValueVar := ARGS_TO_VAR[ValueType];
       IndexVar := ArgsUsedCount[ValueVar];
       inc(ArgsUsedCount[ValueVar]);
       include(ArgsUsed, ValueType);
@@ -4112,16 +4119,20 @@ begin
           else
             SizeInStorage := POINTERBYTES; // handle only records when passed by ref
         imvBinary:
-          ; // already set SizeInStorage
+          SizeInStorage := ArgRtti.Size;
       else
         SizeInStorage := POINTERBYTES;
       end;
+      OffsetAsValue := ArgsSizeAsValue;
+      inc(ArgsSizeAsValue, ArgRtti.Size);
+      while ArgsSizeAsValue and 7 <> 0 do
+        inc(ArgsSizeAsValue); // align to 64-bit
       if ValueDirection = imdResult then
       begin
         if not (ValueType in ARGS_RESULT_BY_REF) then
           continue; // ordinal/real/class results are returned in CPU/FPU registers
         {$ifndef CPUX86}
-        InStackOffset := STACKOFFSET_NONE;
+        InStackOffset := -1;
         RegisterIdent := PARAMREG_RESULT;
         continue;
         {$endif CPUX86}
@@ -4135,7 +4146,7 @@ begin
           SizeInStack := ARGS_IN_STACK_SIZE[ValueType]
       else
       {$endif CPU32}
-        SizeInStack := POINTERBYTES; // always aligned to 8 bytes boundaries for 64-bit
+        SizeInStack := POINTERBYTES; // always 8 bytes alignes on 64-bit
       if
         {$ifndef CPUARM}
         // on ARM, ordinals>POINTERBYTES can also be placed in the normal registers !!
@@ -4169,7 +4180,7 @@ begin
       else
       begin
         // this parameter will go in a register
-        InStackOffset := STACKOFFSET_NONE;
+        InStackOffset := -1;
         {$ifndef CPUX86}
         if (ArgsResultIndex >= 0) and
            (reg = PARAMREG_RESULT) and
@@ -5982,7 +5993,7 @@ begin
     if eCount in fHasExpects then
       for m := 0 to fInterface.MethodsCount - 1 do
         with fRules[m] do
-          for r := 0 to high(Rules) do
+          for r := 0 to length(Rules) - 1 do
             with Rules[r] do
               if ExpectedPassCountOperator <> ioUndefined then
               begin
@@ -6000,7 +6011,7 @@ begin
         with fRules[m] do
         begin
           asmndx := m + RESERVED_VTABLE_SLOTS;
-          for r := 0 to high(Rules) do
+          for r := 0 to length(Rules) - 1 do
             with Rules[r] do
               if ExpectedTraceHash <> 0 then
                 InternalCheck(
@@ -7062,36 +7073,43 @@ end;
 
 { TInterfaceMethodExecuteRaw }
 
-constructor TInterfaceMethodExecuteRaw.Create(aMethod: PInterfaceMethod);
+constructor TInterfaceMethodExecuteRaw.Create(aFactory: TInterfaceFactory;
+  aMethod: PInterfaceMethod; const aOptions: TInterfaceMethodOptions);
 var
   a: PtrInt;
   arg: PInterfaceMethodArgument;
+  V: PPointer;
 begin
-  if aMethod^.ArgsUsedCount[imvv64] > 0 then
-    SetLength(fInt64s, aMethod^.ArgsUsedCount[imvv64]);
-  if aMethod^.ArgsUsedCount[imvvObject] > 0 then
-    SetLength(fObjects, aMethod^.ArgsUsedCount[imvvObject]);
-  if aMethod^.ArgsUsedCount[imvvInterface] > 0 then
-    SetLength(fInterfaces, aMethod^.ArgsUsedCount[imvvInterface]);
-  if aMethod^.ArgsUsedCount[imvvRecord] > 0 then
-    SetLength(fRecords, aMethod^.ArgsUsedCount[imvvRecord]);
-  if aMethod^.ArgsUsedCount[imvvDynArray] > 0 then
-    SetLength(fDynArrays, aMethod^.ArgsUsedCount[imvvDynArray]);
-  SetLength(fValues, length(aMethod^.Args));
-  for a := aMethod^.ArgsManagedFirst to aMethod^.ArgsManagedLast do
-  begin
-    arg := @aMethod^.Args[a];
-    case arg^.ValueType of
-      imvDynArray:
-        with fDynArrays[arg^.IndexVar] do
-          Wrapper.InitRtti(arg^.ArgRtti, Value);
-      imvRecord:
-        SetLength(fRecords[arg^.IndexVar], arg^.ArgRtti.Size);
-      imvVariant:
-        SetLength(fRecords[arg^.IndexVar], SizeOf(Variant));
-    end;
-  end;
+  // set parameters
+  fFactory := aFactory;
   fMethod := aMethod;
+  SetOptions(aOptions);
+  // initialize temporary storage for call arguments
+  SetLength(fStorage, fMethod^.ArgsSizeAsValue);
+  SetLength(fDynArray, aMethod^.ArgsUsedCount[imvvDynArray]);
+  // assign the parameters storage to the fValues[] pointers
+  SetLength(fValues, length(aMethod^.Args));
+  V := @fValues[1];
+  arg := @fMethod^.Args[1];
+  for a := 1 to length(fMethod^.Args) - 1 do
+  begin
+    V^ := @fStorage[arg^.OffsetAsValue];
+    if arg^.ValueVar = imvvDynArray then
+      fDynArray[arg^.IndexVar].InitRtti(arg^.ArgRtti, V^^);
+    inc(V);
+    inc(arg);
+  end;
+end;
+
+procedure TInterfaceMethodExecuteRaw.SetOptions(
+  const Value: TInterfaceMethodOptions);
+begin
+  fOptions := Value;
+  fDocVariantOptions := fFactory.DocVariantOptions;
+  if optVariantCopiedByReference in Value then
+    include(fDocVariantOptions, dvoValueCopiedByReference);
+  if optVariantFloatAllowed in Value then
+    include(fDocVariantOptions, dvoAllowDoubleValue);
 end;
 
 procedure TInterfaceMethodExecuteRaw.AddInterceptor(
@@ -7108,79 +7126,45 @@ end;
 
 procedure TInterfaceMethodExecuteRaw.BeforeExecute;
 var
-  a: PtrInt;
+  a: PInterfaceMethodArgument;
   V: PPointer;
-  arg: PInterfaceMethodArgument;
+  n: integer;
 begin
   fExecutedInstancesFailed := nil;
-  // recreate managed arrays for each call
-  if fMethod^.ArgsUsedCount[imvvRawUtf8] > 0 then
-    SetLength(fRawUtf8s, fMethod^.ArgsUsedCount[imvvRawUtf8]);
-  if fMethod^.ArgsUsedCount[imvvString] > 0 then
-    SetLength(fStrings, fMethod^.ArgsUsedCount[imvvString]);
-  if fMethod^.ArgsUsedCount[imvvWideString] > 0 then
-    SetLength(fWideStrings, fMethod^.ArgsUsedCount[imvvWideString]);
   if fAlreadyExecuted then
-  begin
-    // reset unmanaged values for each call
-    if fMethod^.ArgsUsedCount[imvvObject] > 0 then
-      FillCharFast(fObjects,
-        fMethod^.ArgsUsedCount[imvvObject] * SizeOf(TObject), 0);
-    if fMethod^.ArgsUsedCount[imvv64] > 0 then
-      FillCharFast(fInt64s,
-        fMethod^.ArgsUsedCount[imvv64] * SizeOf(Int64), 0);
-    if fMethod^.ArgsUsedCount[imvvInterface] > 0 then
-      FillCharFast(fInterfaces,
-        fMethod^.ArgsUsedCount[imvvInterface] * SizeOf(pointer), 0);
-  end;
-  V := @fValues[1];
-  arg := @fMethod^.Args[1];
-  for a := 1 to length(fMethod^.Args) - 1 do
-  begin
-    case arg^.ValueVar of
-      imvv64:
-        V^ := @fInt64s[arg^.IndexVar];
-      imvvRawUtf8:
-        V^ := @fRawUtf8s[arg^.IndexVar];
-      imvvString:
-        V^ := @fStrings[arg^.IndexVar];
-      imvvWideString:
-        V^ := @fWideStrings[arg^.IndexVar];
-      imvvObject:
+    FillCharFast(pointer(fStorage)^, fMethod^.ArgsSizeAsValue, 0)
+  else
+    fAlreadyExecuted := true;
+  with fMethod^ do
+    if imvObject in ArgsUsed then
+    begin
+      // set new input and output TObject instances as expected by the call
+      a := @Args[ArgsManagedFirst];
+      V := @fValues[ArgsManagedFirst];
+      n := ArgsUsedCount[imvvObject];
+      repeat
+        if a^.ValueType = imvObject then
         begin
-          V^ := @fObjects[arg^.IndexVar];
-          PPointer(V^)^ := arg^.ArgRtti.ClassNewInstance;
+          PObject(V^)^ := a^.ArgRtti.ClassNewInstance;
+          dec(n);
+          if n = 0 then
+            break;
         end;
-      imvvInterface:
-        V^ := @fInterfaces[arg^.IndexVar];
-      imvvRecord:
-        begin
-          V^ := pointer(fRecords[arg^.IndexVar]);
-          if fAlreadyExecuted then
-            FillCharFast(V^^, arg^.ArgRtti.Size, 0);
-        end;
-      imvvDynArray:
-        V^ := @fDynArrays[arg^.IndexVar].Value;
-    else
-      raise EInterfaceFactory.CreateUtf8('I%.%:% ValueType=%',
-        [fMethod^.InterfaceDotMethodName, arg^.ParamName^, arg^.ArgTypeName^,
-         ord(arg^.ValueType)]);
+        inc(V);
+        inc(a);
+      until false;
     end;
-    inc(V);
-    inc(arg);
-  end;
   if optInterceptInputOutput in fOptions then
   begin
     Input.InitFast(fMethod^.ArgsInputValuesCount, dvObject);
     Output.InitFast(fMethod^.ArgsOutputValuesCount, dvObject);
   end;
-  fAlreadyExecuted := true;
 end;
 
-procedure TInterfaceMethodExecuteRaw.RawExecute(const Instances: PPointerArray;
-  InstancesLast: integer);
+procedure TInterfaceMethodExecuteRaw.RawExecute(
+  const Instances: PPointerArray; InstancesLast: integer);
 var
-  Value: pointer;
+  pv: PPointer;
   a, e, i: PtrInt;
   call: TCallMethodArgs;
   arg: PInterfaceMethodArgument;
@@ -7198,7 +7182,7 @@ begin
   {$else}
   {$ifdef CPUINTEL}
   call.StackSize := fMethod^.ArgsSizeInStack shr 3;
-  // ensure stack aligned on 16 bytes (paranoid)
+  // ensure stack aligned on 16 bytes (mandatory on some architectures)
   if call.StackSize and 1 <> 0 then
     inc(call.StackSize);
   // stack is filled reversed (RTL)
@@ -7216,10 +7200,10 @@ begin
   {$endif CPUAARCH64}
   {$endif CPUINTEL}
   {$endif CPUX86}
+  arg := @fMethod^.Args[1];
+  pv := @fValues[1];
   for a := 1 to length(fMethod^.Args) - 1 do
   begin
-    arg := @fMethod^.Args[a];
-    Value := fValues[a];
     if (arg^.ValueDirection <> imdConst) or
        (arg^.ValueType in [imvRecord, imvVariant]) then
      begin
@@ -7227,11 +7211,11 @@ begin
       if (arg^.RegisterIdent = 0) and
          (arg^.FPRegisterIdent = 0) and
          (arg^.SizeInStack > 0) then
-        MoveFast(Value, Stack[arg^.InStackOffset], arg^.SizeInStack)
+        MoveFast(pv^, Stack[arg^.InStackOffset], arg^.SizeInStack)
       else
       begin
         if arg^.RegisterIdent > 0 then
-          call.ParamRegs[arg^.RegisterIdent] := PtrInt(Value);
+          call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv)^;
         if arg^.FPRegisterIdent > 0 then
           raise EInterfaceFactory.CreateUtf8('Unexpected % FPReg=%',
             [arg^.ParamName^, arg^.FPRegisterIdent]); // should never happen
@@ -7243,21 +7227,21 @@ begin
       if (arg^.RegisterIdent = 0) and
          (arg^.FPRegisterIdent = 0) and
          (arg^.SizeInStack > 0) then
-        MoveFast(Value^, Stack[arg^.InStackOffset], arg^.SizeInStack)
+        MoveFast(pv^^, Stack[arg^.InStackOffset], arg^.SizeInStack)
       else
       begin
         if arg^.RegisterIdent > 0 then
         begin
-          call.ParamRegs[arg^.RegisterIdent] := PPtrInt(Value)^;
+          call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv^)^;
           {$ifdef CPUARM}
           // for e.g. INT64 on 32-bit ARM systems; these are also passed in registers
           if arg^.SizeInStack > POINTERBYTES then
-            call.ParamRegs[arg^.RegisterIdent + 1] := PPtrInt(Value + POINTERBYTES)^;
+            call.ParamRegs[arg^.RegisterIdent + 1] := PPtrInt(pv^ + POINTERBYTES)^;
           {$endif CPUARM}
         end;
         {$ifdef HAS_FPREG}
         if arg^.FPRegisterIdent > 0 then
-          call.FPRegs[arg^.FPRegisterIdent] := unaligned(PDouble(Value)^);
+          call.FPRegs[arg^.FPRegisterIdent] := unaligned(PDouble(pv^)^);
         if (arg^.RegisterIdent > 0) and
            (arg^.FPRegisterIdent > 0) then
           raise EInterfaceFactory.CreateUtf8('Unexpected % reg=% FP=%',
@@ -7265,6 +7249,8 @@ begin
         {$endif HAS_FPREG}
       end;
     end;
+    inc(arg);
+    inc(pv);
   end;
   // execute the method
   for i := 0 to InstancesLast do
@@ -7348,42 +7334,49 @@ end;
 
 procedure TInterfaceMethodExecuteRaw.AfterExecute;
 var
-  i, a: PtrInt;
+  V: PPointer;
+  f: PtrInt;
   arg: PInterfaceMethodArgument;
 begin
-  // finalize managed arrays for each call
-  Finalize(fRawUtf8s);
-  Finalize(fStrings);
-  Finalize(fWideStrings);
-  if fMethod^.ArgsManagedFirst >= 0 then
+  // finalize managed parameters after each call
+  f := fMethod^.ArgsManagedFirst;
+  if f >= 0 then
   begin
-    for i := 0 to fMethod^.ArgsUsedCount[imvvObject] - 1 do
-      fObjects[i].Free;
-    for i := 0 to fMethod^.ArgsUsedCount[imvvInterface] - 1 do
-      IUnknown(fInterfaces[i]) := nil;
-    for i := 0 to fMethod^.ArgsUsedCount[imvvDynArray] - 1 do
-      // will handle T*ObjArray, and set Value^=nil
-      fDynArrays[i].Wrapper.Clear;
-    if fRecords <> nil then
-    begin
-      i := 0;
-      for a := fMethod^.ArgsManagedFirst to fMethod^.ArgsManagedLast do
-      begin
-        arg := @fMethod^.Args[a];
-        case arg^.ValueType of
-          imvRecord:
-            begin
-              FastRecordClear(pointer(fRecords[i]), arg^.ArgRtti.Info);
-              inc(i);
-            end;
-          imvVariant:
-            begin
-              VarClear(PVariant(fRecords[i])^); // fast, even for simple types
-              inc(i);
-            end;
-        end;
+    arg := @fMethod^.Args[f];
+    V := @fValues[f];
+    f := fMethod^.ArgsManagedCount;
+    repeat
+      case arg^.ValueVar of
+        imvvString:
+          PString(V^)^ := '';
+        imvvWideString:
+          PWideString(V^)^ := '';
+        imvvRawUtf8:
+          PRawUtf8(V^)^ := '';
+        imvvDynArray:
+          fDynArray[arg^.IndexVar].Clear;
+        imvvObject:
+          PObject(V^)^.Free;
+        imvvInterface:
+          PInterface(V^)^ := nil;
+        imvvRecord:
+          if arg^.ValueType = imvVariant then
+            VarClearProc(PVarData(V^)^)
+          else
+            FastRecordClear(V^, arg^.ArgRtti.Info);
+        else
+          begin
+            inc(arg);
+            inc(V);
+            continue;
+          end;
       end;
-    end;
+      dec(f);
+      if f = 0 then
+        break;
+      inc(arg);
+      inc(V);
+    until false;
   end;
 end;
 
@@ -7486,8 +7479,8 @@ var
   Val, Name: PUtf8Char;
   NameLen: integer;
   EndOfObject: AnsiChar;
-  opt: array[{smdVar=}boolean] of TTextWriterWriteObjectOptions;
   ParObjValuesUsed: boolean;
+  opt: array[{smdVar=}boolean] of TTextWriterWriteObjectOptions;
   c: PServiceCustomAnswer;
   ctxt: TJsonParserContext;
   arg: PInterfaceMethodArgument;
@@ -7531,9 +7524,9 @@ begin
                   if arg^.ValueDirection <> imdOut then
                     if IdemPropName(arg^.ParamName^, Name, NameLen) then
                     begin
-                      ParObjValues[a] := Val; // fast redirection, without allocation
+                      ParObjValues[a] := Val; // fast redirection, without alloc
                       if a = a1 then
-                        inc(a1); // enable optimistic O(1) search for in-order input
+                        inc(a1); // optimistic O(1) search for in-order input
                       break;
                     end;
                 end;
@@ -7559,13 +7552,12 @@ begin
     end
     else
     begin
-      ctxt.Init(P, nil, JSONPARSER_SERVICE,
-        @JSON_OPTIONS[optVariantCopiedByReference in Options], nil);
+      ctxt.Init(P, nil, fFactory.JsonParserOptions, @fDocVariantOptions, nil);
       for a := fMethod^.ArgsInFirst to fMethod^.ArgsInLast do
       begin
         arg := @fMethod^.Args[a];
         if arg^.ValueDirection <> imdOut then
-        // (imdResult is excluded from ArgsInLast from can't appear here)
+        // (imdResult is excluded with a <= ArgsInLast: can't appear here)
         begin
           if ParObjValuesUsed then
             if ParObjValues[a] = nil then // missing parameter in input JSON
@@ -7584,15 +7576,15 @@ begin
               if Assigned(OnCallback) then
                 // retrieve TRestServerUriContext.ExecuteCallback fake interface
                 // via TServiceContainerServer.GetFakeCallback
-                OnCallback(ctxt.Json, arg^.ArgRtti, fInterfaces[arg^.IndexVar])
+                OnCallback(ctxt.Json, arg^.ArgRtti, PInterface(fValues[a])^)
               else
                 raise EInterfaceFactory.CreateUtf8('OnCallback=nil for %(%: %)',
                   [fMethod^.InterfaceDotMethodName, arg^.ParamName^,
                    arg^.ArgTypeName^]);
             imvDynArray:
               begin
-                ctxt.Json := fDynArrays[arg^.IndexVar].Wrapper.LoadFromJson(ctxt.Json);
-                if ctxt.Json= nil then
+                ctxt.Json := fDynArray[arg^.IndexVar].LoadFromJson(ctxt.Json);
+                if ctxt.Json = nil then
                   exit;
                 IgnoreComma(ctxt.Json);
               end;
@@ -7639,10 +7631,10 @@ begin
             Res.AddPropName(arg^.ParamName^);
           case arg^.ValueType of
             imvDynArray:
-                if vIsObjArray in arg^.ValueKindAsm then
-                  Res.AddObjArrayJson(fValues[a]^, opt[arg^.ValueDirection = imdVar])
-                else
-                  Res.AddDynArrayJson(fDynArrays[arg^.IndexVar].Wrapper);
+              if vIsObjArray in arg^.ValueKindAsm then
+                Res.AddObjArrayJson(fValues[a]^, opt[arg^.ValueDirection = imdVar])
+              else
+                Res.AddDynArrayJson(fDynArray[arg^.IndexVar]);
           else
             arg^.AddJson(Res, fValues[a], opt[arg^.ValueDirection = imdVar]);
           end;

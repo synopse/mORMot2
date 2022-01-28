@@ -4898,7 +4898,8 @@ end;
 procedure TRestServerAuthenticationSignedUri.SetAlgorithm(
   value: TRestAuthenticationSignedUriAlgo);
 begin
-  fComputeSignature := TRestClientAuthenticationSignedUri.GetComputeSignature(value);
+  fComputeSignature :=
+    TRestClientAuthenticationSignedUri.GetComputeSignature(value);
   if value = suaCRC32 then
     fAlgoName := ''
   else
@@ -4944,10 +4945,8 @@ begin
          CardinalToHexShort(sign)], self);
   end
   else
-  begin
     Ctxt.Log.Log(sllUserAuth, 'Invalid Timestamp: expected >=%, got %',
       [minticks, Int64(ts)], self);
-  end;
   result := nil; // indicates invalid signature
 end;
 

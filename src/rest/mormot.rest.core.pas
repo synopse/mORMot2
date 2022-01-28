@@ -2002,9 +2002,9 @@ begin
   try
     if fList.GetInstances(aMethod.ExecutionMethodIndex, instances) = 0 then
       exit;
-    exec := TInterfaceMethodExecute.Create(@aMethod);
+    exec := TInterfaceMethodExecute.Create(fFactory, @aMethod,
+      [optIgnoreException]); // to use exec.ExecutedInstancesFailed
     try
-      exec.Options := [optIgnoreException]; // use exec.ExecutedInstancesFailed
       result := exec.ExecuteJson(instances, pointer('[' + aParams + ']'), nil);
       if exec.ExecutedInstancesFailed <> nil then
         for i := length(exec.ExecutedInstancesFailed) - 1 downto 0 do
@@ -3015,12 +3015,13 @@ type
       aResult, aErrorMsg: PRawUtf8; aFakeID: PInterfacedObjectFakeID;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
   public
-    constructor Create(aTimer: TRestBackgroundTimer; aFactory:
-      TInterfaceFactory; const aDestinationInterface: IInvokable; out
-      aCallbackInterface; const aOnResult: TOnAsyncRedirectResult);
+    constructor Create(aTimer: TRestBackgroundTimer;
+      aFactory: TInterfaceFactory; const aDestinationInterface: IInvokable;
+      out aCallbackInterface; const aOnResult: TOnAsyncRedirectResult);
   end;
 
   TInterfacedObjectAsyncCall = packed record
+    Factory: TInterfaceFactory;
     Method: PInterfaceMethod;
     Instance: pointer; // weak IInvokable reference
     Params: RawUtf8;
@@ -3054,6 +3055,7 @@ begin
     aMethod, aParams, aResult, aErrorMsg, aFakeID, aServiceCustomAnswer);
   if not result then
     exit;
+  call.Factory := fFactory;
   call.Method := @aMethod;
   call.Instance := pointer(fDest);
   call.Params := aParams;
@@ -3391,7 +3393,7 @@ begin
     exit; // invalid message (e.g. periodic execution)
   log := fRest.fLogClass.Enter('AsyncBackgroundExecute I% %',
     [call.Method^.InterfaceDotMethodName, call.Params], self);
-  exec := TInterfaceMethodExecute.Create(call.Method);
+  exec := TInterfaceMethodExecute.Create(call.Factory, call.Method, []);
   try
     if Assigned(call.OnOutput) then
       o := @output

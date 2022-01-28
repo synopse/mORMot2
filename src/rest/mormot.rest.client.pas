@@ -2280,7 +2280,8 @@ var
     begin
       // expects no result -> asynchronous non blocking notification in UI thread
       Ctxt.OutStatus := 0;
-      execmsg := TRestClientUriServiceNotification.Create(method);
+      execmsg := TRestClientUriServiceNotification.Create(
+        callback.Factory, method, []);
       execmsg.fOwner := self;
       execmsg.fInstance := callback.Instance;
       execmsg.fPar := par;
@@ -2292,7 +2293,7 @@ var
     else
     // if PostMessage() failed, or expecting result -> blocking execution
     {$endif OSWINDOWS}
-      exec := TInterfaceMethodExecute.Create(method);
+      exec := TInterfaceMethodExecute.Create(callback.Factory, method, []);
     try
       ok := exec.ExecuteJson([callback.Instance], pointer(par), res);
       Ctxt.OutHead := exec.ServiceCustomAnswerHead;

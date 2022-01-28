@@ -1616,9 +1616,8 @@ begin
           try
             WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended];
             WR.Add('{');
-            exec := TInterfaceMethodExecute.Create(m);
+            exec := TInterfaceMethodExecute.Create(fApplication.fFactory, m, []);
             try
-              exec.Options := [optVariantCopiedByReference];
               exec.ServiceCustomAnswerStatus := action.ReturnedStatus;
               err := '';
               if not exec.ExecuteJson([fApplication.fFactoryEntry],
