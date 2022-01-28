@@ -285,6 +285,7 @@
   // -- identify CPU Architectures
 
   {$ifdef CPU64}
+    // 64-bit Architecture
     {$define FPC_64}
     {$ifdef CPUX64}
       {$ASMMODE INTEL}         // as Delphi expects
@@ -304,6 +305,7 @@
       {$define CPUARM3264}
     {$endif CPUAARCH64}
   {$else}
+    // 32-bit Architecture
     {$define FPC_32}
     {$ifdef CPUX86}
       {$ASMMODE INTEL}         // as Delphi expects
@@ -321,6 +323,8 @@
     {$ifdef CPUARM}
       {$define CPUARM3264}
     {$endif CPUARM}
+    {$define STRCNT32}         // 32-bit TAnsiRec.Ref
+    {$define DACNT32}          // 32-bit TDynArrayRec.refCnt
   {$endif CPU64}
 
 
