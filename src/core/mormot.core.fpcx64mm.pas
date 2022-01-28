@@ -553,7 +553,7 @@ uses
 const
   {$ifdef OLDLINUXKERNEL}
     {$undef FPCMM_MEDIUM32BIT}
-    {$undef FPCMM_MEDIUMMAPPOPULATE}
+    MAP_POPULATE = 0;
   {$else}
     /// put the mapping in first 2 GB of memory (31-bit addresses) - 2.4.20,2.6
     MAP_32BIT = $40;
@@ -746,7 +746,8 @@ end;
 // prepare a Medium arena chunk in TMediumInfo.Prefetch outside of the lock
 {$define FPCMM_MEDIUMPREFETCH}
 
-// medium locks occurs at getmem: freemem bin list got MaxCount=0 :(
+// on contention, use a bin list to implement medium blocks freeing
+// - disabled, since medium locks occur at getmem: freemem bin got MaxCount=0
 {.$define FPCMM_LOCKLESSFREEMEDIUM}
 
 const
