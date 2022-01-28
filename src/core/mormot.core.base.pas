@@ -7693,19 +7693,50 @@ begin
         (S[i] <= ' ') do
     inc(i);
   if i > L then
-    // void string
-    FastAssignNew(result)
+    FastAssignNew(result) // void string
   else if (i = 1) and
           (S[L] > ' ') then
-    // nothing to trim: reference counted copy
-    result := S
+    result := S // nothing to trim: reference counted copy
   else
   begin
-    // allocate a new trimmed UTF-8 string
     while S[L] <= ' ' do
       dec(L);
     dec(i);
-    FastSetString(result, @PByteArray(S)[i], L - i);
+    FastSetString(result, @PByteArray(S)[i], L - i); // trim and allocate
+  end;
+end;
+
+procedure TrimSelf(var S: RawUtf8);
+var
+  i, L: PtrInt;
+begin
+  if S = '' then
+    exit;
+  L := PStrLen(PAnsiChar(pointer(S)) - _STRLEN)^;
+  i := 1;
+  while (i <= L) and
+        (S[i] <= ' ') do
+    inc(i);
+  if i > L then
+    FastAssignNew(S) // void string
+  else if (i = 1) and
+          (S[L] > ' ') then
+    exit // nothing to trim
+  else
+  begin
+    // trim the UTF-8 string
+    while S[L] <= ' ' do
+      dec(L);
+    dec(i);
+    dec(L, i);
+    if (L <> 0) and
+       (PStrCnt(PAnsiChar(pointer(S)) - _STRCNT)^ = 1) then
+    begin
+      PStrLen(PAnsiChar(pointer(S)) - _STRLEN)^ := L; // just fake length
+      MoveFast(PByteArray(S)[i], pointer(S)^, L + 1); // move in place (with #0)
+    end
+    else
+      FastSetString(S, @PByteArray(S)[i], L); // allocate
   end;
 end;
 
@@ -8721,7 +8752,7 @@ begin
   {$else}
   result := InterLockedDecrement64(refcnt) <= 0;
   {$endif DACNT32}
-end; // we don't check for ismultithread global
+end;
 
 procedure LockedInc32(int32: PInteger);
 begin

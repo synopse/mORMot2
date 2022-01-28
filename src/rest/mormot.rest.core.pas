@@ -3903,7 +3903,7 @@ procedure TRestUriContext.SetInCookie(CookieName, CookieValue: RawUtf8);
 var
   i, n: PtrInt;
 begin
-  CookieName := TrimU(CookieName);
+  TrimSelf(CookieName);
   if (self = nil) or
      (CookieName = '') then
     exit;
@@ -3926,7 +3926,7 @@ var
   i: PtrInt;
 begin
   result := '';
-  CookieName := TrimU(CookieName);
+  TrimSelf(CookieName);
   if (self = nil) or
      (CookieName = '') then
     exit;

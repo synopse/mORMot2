@@ -5125,7 +5125,7 @@ end;
 
 procedure TSynFilterTrim.Process(aFieldIndex: integer; var value: RawUtf8);
 begin
-  value := TrimU(value);
+  TrimSelf(value);
 end;
 
 

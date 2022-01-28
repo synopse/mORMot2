@@ -6413,7 +6413,7 @@ begin
     delete(s, i, 1); // dual space -> single space
     f := i;
   until false;
-  s := TrimU(s);
+  TrimSelf(s);
 end;
 
 procedure InitializeUnit;

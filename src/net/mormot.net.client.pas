@@ -1810,7 +1810,7 @@ begin
     urlfile := 'index';
   if result = '' then
     result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile);
-  params.Hash := TrimU(params.Hash);
+  TrimSelf(params.Hash);
   if params.HashFromServer and
      Assigned(params.Hasher) and
      (params.Hash = '') then
@@ -3429,7 +3429,7 @@ begin
     Expect('250');
     repeat
       GetNextItem(P, ',', rec);
-      rec := TrimU(rec);
+      TrimSelf(rec);
       if rec = '' then
         continue;
       if PosExChar('<', rec) = 0 then

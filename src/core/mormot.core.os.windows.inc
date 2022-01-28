@@ -1857,7 +1857,7 @@ begin
         Win32PWideCharToUtf8(tmp.buf, StrLenW(tmp.buf), result);
     end;
     if andtrim then
-      result := TrimU(result);
+      TrimSelf(result);
   end;
   tmp.Done;
 end;
@@ -3608,7 +3608,7 @@ begin
           else
             CpuCacheText := RawUtf8(
               format('%s L%d=%d*%s ', [CpuCacheText, i, Count, KB(Size)]));
-    CpuCacheText := TrimU(CpuCacheText);
+    TrimSelf(CpuCacheText);
   end;
   FormatU('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);

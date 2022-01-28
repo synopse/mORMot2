@@ -2736,7 +2736,7 @@ var
 begin
   Clear;
   result := false;
-  aUri := TrimU(aUri);
+  TrimSelf(aUri);
   if aUri = '' then
     exit;
   P := pointer(aUri);

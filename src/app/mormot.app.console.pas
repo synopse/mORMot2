@@ -316,7 +316,7 @@ begin
   ioresult;
   {$I+}
   TextColor(ccLightGray);
-  result := TrimU(result);
+  TrimSelf(result);
   if result = '' then
     result := Default;
 end;

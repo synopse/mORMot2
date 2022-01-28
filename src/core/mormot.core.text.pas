@@ -4438,7 +4438,7 @@ begin
   begin
     GetNextItem(Csv, Sep, s);
     if TrimValue then
-      s := TrimU(s);
+      TrimSelf(s);
     if CaseSensitive then
     begin
       if s = Value then

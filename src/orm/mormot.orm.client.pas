@@ -605,7 +605,7 @@ begin
       Value.InternalState := state;
       original := Value.GetJsonValues(
         IsNotAjaxJson(pointer(resp)), true, ooSelect);
-      resp := TrimU(resp);
+      TrimSelf(resp);
       if (resp <> '') and
          (resp[1] = '[') then // '[{....}]' -> '{...}'
         TrimChars(resp, 1, 1);

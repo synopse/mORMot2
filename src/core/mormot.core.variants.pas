@@ -5417,7 +5417,7 @@ begin
     else
       GetNextItem(aCsv, ItemSep, v);
     if DoTrim then
-      v := TrimU(v);
+      TrimSelf(v);
     if n = '' then
       break;
     RawUtf8ToVariant(v, val);

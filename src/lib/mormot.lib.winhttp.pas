@@ -1894,8 +1894,8 @@ const
 begin
   if aPort = '' then
     aPort := DEFAULT_PORT[Https];
-  aRoot := TrimU(aRoot);
-  aDomainName := TrimU(aDomainName);
+  TrimSelf(aRoot);
+  TrimSelf(aDomainName);
   if aDomainName = '' then
   begin
     result := '';

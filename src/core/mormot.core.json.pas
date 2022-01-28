@@ -8367,7 +8367,8 @@ begin
   if rtti = nil then
     exit;
   ToRttiOrd(rtti.RttiOrd, @aEnum, aEnumDefault); // always set the default value
-  v := TrimU(Value(aName, ''));
+  v := Value(aName, '');
+  TrimSelf(v);
   if v = '' then
     exit;
   i := GetInteger(pointer(v), err);

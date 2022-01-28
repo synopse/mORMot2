@@ -705,7 +705,7 @@ begin
         end;
     if ErrMsg <> '' then
       raise ERestHttpServer.CreateUtf8('%.Create(% ): %', [self, fDBServerNames, ErrMsg]);
-    fDBServerNames := TrimU(fDBServerNames);
+    TrimSelf(fDBServerNames);
     // associate before HTTP server is started, for TRestServer.BeginCurrentThread
     SetLength(fDBServers, length(aServers));
     for i := 0 to high(aServers) do
@@ -1115,12 +1115,13 @@ begin
           call.OutHead := 'Location: ' + copy(loc, hostlen + 1, maxInt);
       end
       else if (serv <> nil) and
-              ExistsIniName(P, 'SET-COOKIE:') then
+              ExistsIniName(pointer(call.OutHead), 'SET-COOKIE:') then
         // cookie Path=/hostroot... -> /...
         call.OutHead := StringReplaceAll(call.OutHead,
           '; Path=/' + serv.Model.Root, '; Path=/')
     end;
-    Ctxt.OutCustomHeaders := TrimU(call.OutHead);
+    TrimSelf(call.OutHead);
+    Ctxt.OutCustomHeaders := call.OutHead;
     if call.OutInternalState <> 0 then
       Ctxt.OutCustomHeaders := FormatUtf8('%'#13#10'Server-InternalState: %',
         [Ctxt.OutCustomHeaders, call.OutInternalState]);

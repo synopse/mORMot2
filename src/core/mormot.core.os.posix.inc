@@ -2500,7 +2500,7 @@ begin
   if (release <> '') and
      (release[1] = '"') then
     release := copy(release, 2, length(release) - 2);
-  release := TrimU(release);
+  TrimSelf(release);
   if release = '' then
   begin
     FindNameValue(StringFromFile('/etc/lsb-release'), 'DISTRIB_DESCRIPTION=', release);

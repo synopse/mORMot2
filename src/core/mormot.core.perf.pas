@@ -2711,7 +2711,7 @@ begin
         if aDestMemoryMB <> nil then
           mem := FormatUtf8('%% ', [mem, TwoDigits(WorkKB / 1024)]);
       end;
-  result := TrimU(result);
+  TrimSelf(result);
   if aDestMemoryMB <> nil then
     aDestMemoryMB^ := TrimU(mem);
 end;

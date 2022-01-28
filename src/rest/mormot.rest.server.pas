@@ -3570,7 +3570,7 @@ begin
                   sqlsort := sqlsort + ' DESC';
                 sqlwhere := sqlwhere + ' ORDER BY ' + sqlsort;
               end;
-              sqlwhere := TrimU(sqlwhere);
+              TrimSelf(sqlwhere);
               if (sqlresults <> 0) and
                  (StrPosI('LIMIT ', pointer(sqlwhere)) = nil) then
               begin
@@ -3639,7 +3639,7 @@ begin
                   if sqltotalrowcount = 0 then // avoid sending fields array
                     fCall^.OutBody := '[]'
                   else
-                    fCall^.OutBody := TrimU(fCall^.OutBody);
+                    TrimSelf(fCall^.OutBody);
                   fCall^.OutBody := '{"values":' + fCall^.OutBody +
                     FormatUtf8(Server.UriPagingParameters.SendTotalRowsCountFmt,
                      [sqltotalrowcount]) + '}';
@@ -3837,7 +3837,7 @@ begin
         repeat
           if UrlDecodeValue(Parameters, 'WHERE=', sqlwhere, @Parameters) then
           begin
-            sqlwhere := TrimU(sqlwhere);
+            TrimSelf(sqlwhere);
             if sqlwhere <> '' then
             begin
               if orm.Delete(Table, sqlwhere) then
@@ -6488,7 +6488,7 @@ end;
 procedure TRestServer.ServiceMethodRegister(aMethodName: RawUtf8;
   const aEvent: TOnRestServerCallBack; aByPassAuthentication: boolean);
 begin
-  aMethodName := TrimU(aMethodName);
+  TrimSelf(aMethodName);
   if aMethodName = '' then
     raise EServiceException.CreateUtf8('%.ServiceMethodRegister('''')', [self]);
   if not (rsoNoTableURI in fOptions) and

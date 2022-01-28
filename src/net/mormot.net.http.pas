@@ -1800,7 +1800,7 @@ end;
 
 procedure THttpServerRequestAbstract.AddInHeader(AppendedHeader: RawUtf8);
 begin
-  AppendedHeader := TrimU(AppendedHeader);
+  TrimSelf(AppendedHeader);
   if AppendedHeader <> '' then
     if fInHeaders = '' then
       fInHeaders := AppendedHeader
