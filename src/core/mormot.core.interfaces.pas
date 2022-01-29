@@ -69,7 +69,6 @@ type
     imvString,
     imvRawByteString,
     imvWideString,
-    imvBinary,
     imvRecord,
     imvVariant,
     imvObject,
@@ -111,28 +110,14 @@ type
   TInterfaceMethodValueDirections = set of TInterfaceMethodValueDirection;
 
   /// set of low-level processing options at assembly level
-  // - vIsString is included for imvRawUtf8, imvString, imvRawByteString and
-  // imvWideString kind of parameter (imvRecord has it to false, even if they
-  // are Base64 encoded within the JSON content, and also imvVariant/imvRawJson)
   // - vPassedByReference is included if the parameter is passed as reference
   // (i.e. defined as var/out, or is a record or a reference-counted type result)
-  // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
-  // cleared with ObjArrClear() and not TDynArray.Clear
-  // - vIsSPI indicates that the value contains some Sensitive Personal
-  // Information (e.g. a bank card number or a plain password), which type has
-  // been previously registered via TInterfaceFactory.RegisterUnsafeSPIType
-  // so that low-level logging won't include such values
   // - vIsQword is set for ValueType=imvInt64 over a QWord unsigned 64-bit value
   // - vIsDynArrayString is set for ValueType=imvDynArray of string values
-  // - vIsDateTimeMS is set for ValueType=imvDateTime and TDateTimeMS value
   TInterfaceMethodValueAsm = set of (
-    vIsString,
     vPassedByReference,
-    vIsObjArray,
-    vIsSpi,
     vIsQword,
-    vIsDynArrayString,
-    vIsDateTimeMS);
+    vIsDynArrayString);
 
   /// a pointer to an interface-based service provider method description
   // - since TInterfaceFactory instances are shared in a global list, we
@@ -152,6 +137,7 @@ type
     ArgTypeName: PShortString;
     /// the low-level RTTI information of this argument
     // - use ArgRtti.Info to retrieve the TypeInfo() of this argument
+    // - ArgRtti.Size
     ArgRtti: TRttiJson;
     /// we do not handle all kind of object pascal variables
     ValueType: TInterfaceMethodValueType;
@@ -161,9 +147,6 @@ type
     ValueVar: TInterfaceMethodValueVar;
     /// how the variable is to be passed at asm level
     ValueKindAsm: TInterfaceMethodValueAsm;
-    /// byte offset in the CPU stack of this argument (16-bit)
-    // - may be -1 if pure register parameter with no backup on stack (x86)
-    InStackOffset: smallint;
     /// used to specify if the argument is passed as register
     // - contains 0 if parameter is not a register
     // - contains 1 for EAX, 2 for EDX and 3 for ECX registers for x86
@@ -182,21 +165,16 @@ type
     IndexVar: byte;
     /// size (in bytes) of this argument on the stack
     SizeInStack: byte;
+    /// byte offset in the CPU stack of this argument (16-bit)
+    // - may be -1 if pure register parameter with no backup on stack (x86)
+    InStackOffset: smallint;
     /// 64-bit aligned position in TInterfaceMethod.ArgsSizeAsValue memory
-    OffsetAsValue: word;
-    /// size (in bytes) of this imvv64 ordinal value
-    // - e.g. depending of the associated kind of enumeration
-    SizeInStorage: integer;
-    /// hexadecimal binary size (in bytes) of this imvv64 ordinal value
-    // - set only if ValueType=imvBinary
-    SizeInBinary: integer;
+    OffsetAsValue: cardinal;
     /// serialize the argument into the TServiceContainer.Contract JSON format
     // - non standard types (e.g. clas, enumerate, dynamic array or record)
     // are identified by their type identifier - so contract does not extend
     // up to the content of such high-level structures
     procedure SerializeToContract(WR: TJsonWriter);
-    /// check if the supplied argument value is the default (e.g. 0, '' or null)
-    function IsDefault(V: pointer): boolean;
     /// unserialize a JSON value into this argument
     function SetFromJson(var Ctxt: TJsonParserContext; Method: PInterfaceMethod;
       V: pointer; Error: PShortString): boolean;
@@ -212,14 +190,6 @@ type
     /// append the default JSON value corresponding to this argument
     // - includes a pending ','
     procedure AddDefaultJson(WR: TJsonWriter);
-    /// convert a value into its JSON representation
-    procedure AsJson(var DestValue: RawUtf8; V: pointer);
-    /// convert a value into its variant representation
-    // - complex objects will be converted into a TDocVariant, after JSON
-    // serialization: variant conversion options may e.g. be retrieve from
-    // TInterfaceFactory.DocVariantOptions
-    procedure AsVariant(var DestValue: variant; V: pointer;
-      Options: TDocVariantOptions);
     /// add a value into a TDocVariant object or array
     // - Dest should already have set its Kind to either dvObject or dvArray
     procedure AddAsVariant(var Dest: TDocVariantData; V: pointer);
@@ -287,7 +257,7 @@ type
     ExecutionMethodIndex: byte;
     /// TRUE if the method is inherited from another parent interface
     IsInherited: boolean;
-    /// the directions of arguments with vIsSpi defined in Args[].ValueKindAsm
+    /// the directions of arguments with SPI parameters defined
     HasSpiParams: TInterfaceMethodValueDirections;
     /// is 0 for the root interface, 1..n for all inherited interfaces
     HierarchyLevel: byte;
@@ -296,7 +266,7 @@ type
     // - if method is a function, an additional imdResult argument is appended
     Args: TInterfaceMethodArgumentDynArray;
     /// the index of the result pseudo-argument in Args[] (signed 8-bit)
-    // - is -1 if the method is defined as a (not a function)
+    // - is -1 if the method is defined as a procedure (not a function)
     ArgsResultIndex: shortint;
     /// the index of the first const / var argument in Args[] (signed 8-bit)
     ArgsInFirst: shortint;
@@ -336,7 +306,7 @@ type
     ArgsSizeInStack: word;
     /// 64-bit aligned cumulative size for all arguments values
     // - follow Args[].OffsetAsValue distribution
-    ArgsSizeAsValue: word;
+    ArgsSizeAsValue: cardinal;
     /// contains the count of variables for all used kind of arguments
     ArgsUsedCount: array[TInterfaceMethodValueVar] of byte;
     /// retrieve an argument index in Args[] from its name
@@ -434,7 +404,7 @@ const
   smvString        = imvString;
   smvRawByteString = imvRawByteString;
   smvWideString    = imvWideString;
-  smvBinary        = imvBinary;
+  // smvBinary = imvBinary; not defined any more (handle by RTTI itself)
   smvRecord        = imvRecord;
   smvVariant       = imvVariant;
   smvObject        = imvObject;
@@ -2048,7 +2018,6 @@ const
     imvvString,       // imvString
     imvvRawUtf8,      // imvRawByteString
     imvvWideString,   // imvWideString
-    imvv64,           // imvBinary
     imvvRecord,       // imvRecord
     imvvRecord,       // imvVariant
     imvvObject,       // imvObject
@@ -2058,6 +2027,7 @@ const
 
   {$ifdef CPU32}
   // parameters are always aligned to 8 bytes boundaries on 64-bit ABI
+  // but may be on 32-bit or 64-bit on 32-bit CPU
   ARGS_IN_STACK_SIZE: array[TInterfaceMethodValueType] of cardinal = (
     0,             // imvNone
     POINTERBYTES,  // imvSelf
@@ -2074,7 +2044,6 @@ const
     POINTERBYTES,  // imvString
     POINTERBYTES,  // imvRawByteString
     POINTERBYTES,  // imvWideString
-    0,             // imvBinary
     POINTERBYTES,  // imvRecord
     POINTERBYTES,  // imvVariant
     POINTERBYTES,  // imvObject
@@ -2374,7 +2343,6 @@ type
     fFactory: TInterfaceFactory;
     fMethod: PInterfaceMethod;
     fStorage: TByteDynArray;
-    fDynArray: array of TDynArray;
     fValues: TPointerDynArray;
     fAlreadyExecuted: boolean;
     fOptions: TInterfaceMethodOptions;
@@ -2560,7 +2528,6 @@ const
     'utf8',     // imvString
     'utf8',     // imvRawByteString
     'utf8',     // imvWideString
-    'utf8',     // imvBinary
     '',         // imvRecord
     'variant',  // imvVariant
     '',         // imvObject
@@ -2586,41 +2553,12 @@ begin
   WR.AddPropJsonInt64('reg', RegisterIdent);
   WR.AddPropJsonInt64('fpreg', FPRegisterIdent);
   WR.AddPropJsonInt64('stacksize', SizeInStack);
-  WR.AddPropJsonInt64('storsize', SizeInStorage);
-  if ValueType = imvBinary then
-    WR.AddPropJsonInt64('binsize', SizeInBinary);
   WR.AddPropName('asm');
   WR.AddString(GetSetNameCsv(TypeInfo(TInterfaceMethodValueAsm), ValueKindAsm));
   WR.AddShort('}', ',');
 {$else}
   WR.AddShorter('"},');
 {$endif SOA_DEBUG}
-end;
-
-function TInterfaceMethodArgument.IsDefault(V: pointer): boolean;
-begin
-  result := false;
-  case ValueType of
-    imvBoolean .. imvCurrency:
-      case SizeInStorage of
-        1:
-          result := PByte(V)^ = 0;
-        2:
-          result := PWord(V)^ = 0;
-        4:
-          result := PInteger(V)^ = 0;
-        8:
-          result := PInt64(V)^ = 0;
-      end;
-    imvRawUtf8 .. imvWideString,
-    imvObject .. imvInterface:
-      result := PPointer(V)^ = nil;
-    imvBinary,
-    imvRecord:
-      result := IsZeroSmall(V, SizeInStorage);
-    imvVariant:
-      result := PVarData(V)^.vtype <= varNull;
-  end;
 end;
 
 function TInterfaceMethodArgument.SetFromJson(var Ctxt: TJsonParserContext;
@@ -2669,51 +2607,6 @@ begin
       {magic=}true, {withcrc=}false);
 end;
 
-procedure TInterfaceMethodArgument.AsJson(var DestValue: RawUtf8; V: pointer);
-var
-  W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
-begin
-  case ValueType of  // some direct conversion of simple types into RawUtf8
-    imvBoolean:
-      DestValue := BOOL_UTF8[PBoolean(V)^];
-    imvEnum..imvInt64:
-      case SizeInStorage of
-        1:
-          UInt32ToUtf8(PByte(V)^, DestValue);
-        2:
-          UInt32ToUtf8(PWord(V)^, DestValue);
-        4:
-          if ValueType = imvInteger then
-            Int32ToUtf8(PInteger(V)^, DestValue)
-          else
-            UInt32ToUtf8(PCardinal(V)^, DestValue);
-        8:
-          if vIsQword in ValueKindAsm then
-            UInt64ToUtf8(PQword(V)^, DestValue)
-          else
-            Int64ToUtf8(PInt64(V)^, DestValue);
-      end;
-    imvDouble:
-      DoubleToStr(unaligned(PDouble(V)^), DestValue);
-    imvCurrency:
-      Curr64ToStr(PInt64(V)^, DestValue);
-    imvRawJson:
-      DestValue := PRawUtf8(V)^;
-  else
-    begin
-      // use generic AddJson() method for complex "..." content
-      W := TJsonWriter.CreateOwnedStream(temp);
-      try
-        AddJson(W, V);
-        W.SetText(DestValue);
-      finally
-        W.Free;
-      end;
-    end;
-  end;
-end;
-
 procedure TInterfaceMethodArgument.AddJsonEscaped(WR: TJsonWriter; V: pointer);
 var
   W: TJsonWriter;
@@ -2731,7 +2624,7 @@ end;
 
 procedure TInterfaceMethodArgument.AddValueJson(WR: TJsonWriter; const Value: RawUtf8);
 begin
-  if vIsString in ValueKindAsm then
+  if rcfJsonString in ArgRtti.Flags then
   begin
     WR.Add('"');
     WR.AddJsonEscape(pointer(Value));
@@ -2763,63 +2656,10 @@ begin
     imvVariant:
       WR.AddShorter('null,');
   else
-    if vIsString in ValueKindAsm then
+    if rcfJsonString in ArgRtti.Flags then
       WR.AddShorter('"",')
     else
       WR.AddShorter('0,');
-  end;
-end;
-
-procedure TInterfaceMethodArgument.AsVariant(var DestValue: variant; V: pointer;
-  Options: TDocVariantOptions);
-var
-  tmp: RawUtf8;
-begin
-  case ValueType of // some direct conversion of simple types
-    imvBoolean:
-      DestValue := PBoolean(V)^;
-    imvEnum..imvInt64:
-      case SizeInStorage of
-        1:
-          DestValue := PByte(V)^;
-        2:
-          DestValue := PWord(V)^;
-        4:
-          if ValueType = imvInteger then
-            DestValue := PInteger(V)^
-          else
-            DestValue := PCardinal(V)^;
-        8:
-          if vIsQword in ValueKindAsm then
-            DestValue := PQWord(V)^
-          else
-            DestValue := PInt64(V)^;
-      end;
-    imvDouble,
-    imvDateTime:
-      DestValue := unaligned(PDouble(V)^);
-    imvCurrency:
-      DestValue := PCurrency(V)^;
-    imvRawUtf8:
-      RawUtf8ToVariant(PRawUtf8(V)^, DestValue);
-    imvString:
-      begin
-        StringToUtf8(PString(V)^, tmp);
-        RawUtf8ToVariant(tmp, DestValue);
-      end;
-    imvWideString:
-      begin
-        RawUnicodeToUtf8(PPointer(V)^, length(PWideString(V)^), tmp);
-        RawUtf8ToVariant(tmp, DestValue);
-      end;
-    imvVariant:
-      DestValue := PVariant(V)^;
-  else
-    begin
-      // use generic AddJson() method for complex "..." content
-      AsJson(tmp, V);
-      JsonToVariantInPlace(DestValue, pointer(tmp), Options);
-    end;
   end;
 end;
 
@@ -2828,7 +2668,7 @@ procedure TInterfaceMethodArgument.AddAsVariant(
 var
   tmp: variant;
 begin
-  AsVariant(tmp, V, Dest.Options);
+  ArgRtti.ValueToVariant(V, TVarData(tmp), @Dest.Options);
   if Dest.IsArray then
     Dest.AddItem(tmp)
   else
@@ -2874,10 +2714,10 @@ begin
     imvDynArray:
       if _Safe(Value)^.IsArray then
       begin
+        VariantSaveJson(Value, twJsonEscape, json);
         arr := nil; // recreate using a proper dynamic array
         dyn.InitRtti(ArgRtti, arr);
         try
-          VariantSaveJson(Value, twJsonEscape, json);
           dyn.LoadFromJson(pointer(json));
           json := dyn.SaveToJson({EnumSetsAsText=}true);
           _Json(json, Value, JSON_FAST);
@@ -2888,9 +2728,9 @@ begin
     imvRecord:
       if _Safe(Value)^.IsObject then
       begin
+        VariantSaveJson(Value, twJsonEscape, json);
         SetLength(rec, ArgRtti.Size);
         try
-          VariantSaveJson(Value, twJsonEscape, json);
           RecordLoadJson(rec[0], pointer(json), ArgRtti.Info);
           json := SaveJson(rec[0], ArgRtti.Info, {EnumSetsAsText=}true);
           _Json(json, Value, JSON_FAST);
@@ -3049,7 +2889,8 @@ begin
         if arginfo^.ValueType = imvDynArray then
           // write [value] or ["value"]
           W.Add('[');
-        if arginfo^.ValueKindAsm * [vIsString, vIsDynArrayString] <> [] then
+        if (rcfJsonString in arginfo^.ArgRtti.Flags) or
+           (vIsDynArrayString in arginfo^.ValueKindAsm) then
           W.AddJsonString(value)
         else
           W.AddNoJsonEscape(pointer(value), length(value));
@@ -3452,14 +3293,6 @@ begin
         case a^.ValueType of
           imvInterface:
             InterfaceWrite(Params, ctxt.Method^, ctxt.Method^.Args[arg], V^);
-          imvDynArray:
-            begin
-              if vIsObjArray in a^.ValueKindAsm then
-                Params.AddObjArrayJson(V^, opt)
-              else
-                Params.AddDynArrayJson(ctxt.DynArrays[a^.IndexVar]);
-              Params.AddComma;
-            end;
         else
           begin
             a^.AddJson(Params, V, opt);
@@ -3527,7 +3360,7 @@ begin
           ctxt.ResultType := a^.ValueType;
           if a^.ValueType in [imvBoolean..imvCurrency] then
             // ordinal/real result values to CPU/FPU registers
-            MoveFast(V^, ctxt.Result^, a^.SizeInStorage);
+            MoveFast(V^, ctxt.Result^, a^.ArgRtti.Size);
         end;
         if c.Json = nil then
           break;
@@ -3595,7 +3428,7 @@ const
 
   /// which TRttiParserType are actually serialized as JSON Strings
   _SMV_STRING =
-    [imvRawUtf8..imvBinary, imvDateTime];
+    [imvRawUtf8..imvWideString, imvDateTime];
 
   _FROM_RTTI: array[TRttiParserType] of TInterfaceMethodValueType = (
     imvNone,           //  ptNone
@@ -3618,10 +3451,10 @@ const
     imvSynUnicode,     //  ptSynUnicode
     imvDateTime,       //  ptDateTime
     imvDateTime,       //  ptDateTimeMS
-    imvBinary,         //  ptGuid
-    imvBinary,         //  ptHash128
-    imvBinary,         //  ptHash256
-    imvBinary,         //  ptHash512
+    imvRecord,         //  ptGuid
+    imvRecord,         //  ptHash128
+    imvRecord,         //  ptHash256
+    imvRecord,         //  ptHash512
     imvInt64,          //  ptOrm
     imvInt64,          //  ptTimeLog
     imvUnicodeString,  //  ptUnicodeString
@@ -3922,29 +3755,29 @@ begin
       ValueVar := ARGS_TO_VAR[ValueType];
       ErrorMsg := ''; // seems supported
       case ValueType of
-      imvNone:
-        case ArgRtti.Info^.Kind of
-          rkInteger:
-            ErrorMsg := ' - use integer/cardinal instead';
-          rkFloat:
-            ErrorMsg := ' - use double/currency instead';
-        else
-          FormatUtf8(' (%)', [ToText(ArgRtti.Info^.Kind)], ErrorMsg);
-        end;
-      imvObject:
-        if ArgRtti.ValueRtlClass = vcList then
-          ErrorMsg := ' - use TObjectList or T*ObjArray instead'
-        else if (ArgRtti.ValueRtlClass = vcCollection) and
-                (ArgRtti.CollectionItem = nil) then
-          ErrorMsg := ' - inherit from TInterfacedCollection or ' +
-            'call Rtti.RegisterCollection() first'
-        else if ValueDirection = imdResult then
-          ErrorMsg := ' - class not allowed as function result: ' +
-            'use a var/out parameter';
-      imvInterface:
-        if ValueDirection <> imdConst then
-          ErrorMsg := ' - interface not allowed as output: ' +
-            'use a const parameter';
+        imvNone:
+          case ArgRtti.Info^.Kind of
+            rkInteger:
+              ErrorMsg := ' - use integer/cardinal instead';
+            rkFloat:
+              ErrorMsg := ' - use double/currency instead';
+          else
+            FormatUtf8(' (%)', [ToText(ArgRtti.Info^.Kind)], ErrorMsg);
+          end;
+        imvObject:
+          if ArgRtti.ValueRtlClass = vcList then
+            ErrorMsg := ' - use TObjectList or T*ObjArray instead'
+          else if (ArgRtti.ValueRtlClass = vcCollection) and
+                  (ArgRtti.CollectionItem = nil) then
+            ErrorMsg := ' - inherit from TInterfacedCollection or ' +
+              'call Rtti.RegisterCollection() first'
+          else if ValueDirection = imdResult then
+            ErrorMsg := ' - class not allowed as function result: ' +
+              'use a var/out parameter';
+        imvInterface:
+          if ValueDirection <> imdConst then
+            ErrorMsg := ' - interface not allowed as output: ' +
+              'use a const parameter';
       end;
       if ErrorMsg <> '' then
         raise EInterfaceFactory.CreateUtf8(
@@ -3979,11 +3812,8 @@ begin
         inc(ArgsManagedCount);
       end;
       if rcfSpi in ArgRtti.Flags then
-      begin
         // as defined by Rtti.RegisterUnsafeSpiType()
-        include(ValueKindAsm, vIsSpi);
         include(HasSpiParams, ValueDirection);
-      end;
     end;
     if ArgsOutputValuesCount = 0 then
       // plain procedure with no out param -> recognize some known signatures
@@ -4059,69 +3889,37 @@ begin
          (ValueDirection in [imdVar, imdOut]) or
          ((ValueDirection = imdResult) and
           (ValueType in ARGS_RESULT_BY_REF)) then
-        Include(ValueKindAsm, vPassedByReference);
-      if ValueType in _SMV_STRING then
-        Include(ValueKindAsm, vIsString);
+        include(ValueKindAsm, vPassedByReference);
       case ValueType of
         imvInteger,
         imvCardinal,
         imvInt64:
           if rcfQWord in ArgRtti.Cache.Flags then
-            Include(ValueKindAsm,vIsQword);
+            include(ValueKindAsm, vIsQword);
         imvDouble,
         imvDateTime:
           begin
             {$ifdef HAS_FPREG}
             ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
             {$endif HAS_FPREG}
-            if ValueType = imvDateTime then
-            begin
-              include(ValueKindAsm, vIsString);
-              if ArgRtti.Parser = ptDateTimeMS then
-                include(ValueKindAsm, vIsDateTimeMS);
-            end;
           end;
         imvDynArray:
-          if rcfObjArray in ArgRtti.Flags then
-            Include(ValueKindAsm, vIsObjArray)
-          else if (ArgRtti.ArrayRtti<>nil) and
-                  (_FROM_RTTI[ArgRtti.ArrayRtti.Parser] in _SMV_STRING) then
-            Include(ValueKindAsm, vIsDynArrayString);
-      end;
-      case ValueType of
-        imvBoolean:
-          SizeInStorage := 1;
-        imvInteger,
-        imvCardinal:
-          SizeInStorage := 4;
-        imvInt64,
-        imvDouble,
-        imvDateTime,
-        imvCurrency:
-          SizeInStorage := 8;
-        imvEnum:
-          SizeInStorage := ArgRtti.Cache.EnumInfo.SizeInStorageAsEnum;
+          if (ArgRtti.ArrayRtti <> nil) and
+             ((rcfBinary in ArgRtti.ArrayRtti.Flags) or
+              (_FROM_RTTI[ArgRtti.ArrayRtti.Parser] in _SMV_STRING)) then
+            include(ValueKindAsm, vIsDynArrayString);
         imvSet:
-          begin
-            SizeInStorage := ArgRtti.Cache.EnumInfo.SizeInStorageAsSet;
-            if not (SizeInStorage in [1, 2, 4]) then
-              raise EInterfaceFactory.CreateUtf8(
-                '%.Create: unexpected SizeInStorage=% in %.% method % parameter' +
-                ' for % set - we support only byte/integer/Int64 sizes',
-                [self, SizeInStorage, fInterfaceName, URI, ParamName^, ArgTypeName^]);
-          end;
+          if not (ArgRtti.Size in [1, 2, 4, 8]) then
+            raise EInterfaceFactory.CreateUtf8(
+              '%.Create: unexpected RTTI size = % in %.% method % parameter' +
+              ' for % set - we support only byte/word/integer/Int64 sizes',
+              [self, ArgRtti.Size, fInterfaceName, URI, ParamName^, ArgTypeName^]);
         imvRecord:
           if ArgRtti.Size <= POINTERBYTES then
             raise EInterfaceFactory.CreateUtf8(
               '%.Create: % record too small in %.% method % parameter: it ' +
               'should be at least % bytes (i.e. a pointer) to be on stack',
-              [self, ArgTypeName^, fInterfaceName, URI, ParamName^, POINTERBYTES])
-          else
-            SizeInStorage := POINTERBYTES; // handle only records when passed by ref
-        imvBinary:
-          SizeInStorage := ArgRtti.Size;
-      else
-        SizeInStorage := POINTERBYTES;
+              [self, ArgTypeName^, fInterfaceName, URI, ParamName^, POINTERBYTES]);
       end;
       OffsetAsValue := ArgsSizeAsValue;
       inc(ArgsSizeAsValue, ArgRtti.Size);
@@ -4140,13 +3938,10 @@ begin
       end;
       {$ifdef CPU32}
       if ValueDirection = imdConst then
-        if ValueType = imvBinary then
-          SizeInStack := SizeInBinary
-        else
-          SizeInStack := ARGS_IN_STACK_SIZE[ValueType]
+        SizeInStack := ARGS_IN_STACK_SIZE[ValueType]
       else
       {$endif CPU32}
-        SizeInStack := POINTERBYTES; // always 8 bytes alignes on 64-bit
+        SizeInStack := POINTERBYTES; // always 8 bytes aligned on 64-bit
       if
         {$ifndef CPUARM}
         // on ARM, ordinals>POINTERBYTES can also be placed in the normal registers !!
@@ -6371,9 +6166,11 @@ begin
         if aResult <> nil then
           // make unique due to JsonDecode() by caller
           if log.CustomResults = '' then
-            FastSetString(aResult^, pointer(aMethod.DefaultResult), length(aMethod.DefaultResult))
+            FastSetString(aResult^,
+              pointer(aMethod.DefaultResult), length(aMethod.DefaultResult))
           else
-            FastSetString(aResult^, pointer(log.CustomResults), length(log.CustomResults));
+            FastSetString(aResult^,
+              pointer(log.CustomResults), length(log.CustomResults));
       end
       else if aErrorMsg <> nil then
         aErrorMsg^ := log.CustomResults;
@@ -7086,7 +6883,6 @@ begin
   SetOptions(aOptions);
   // initialize temporary storage for call arguments
   SetLength(fStorage, fMethod^.ArgsSizeAsValue);
-  SetLength(fDynArray, aMethod^.ArgsUsedCount[imvvDynArray]);
   // assign the parameters storage to the fValues[] pointers
   SetLength(fValues, length(aMethod^.Args));
   V := @fValues[1];
@@ -7094,8 +6890,6 @@ begin
   for a := 1 to length(fMethod^.Args) - 1 do
   begin
     V^ := @fStorage[arg^.OffsetAsValue];
-    if arg^.ValueVar = imvvDynArray then
-      fDynArray[arg^.IndexVar].InitRtti(arg^.ArgRtti, V^^);
     inc(V);
     inc(arg);
   end;
@@ -7354,7 +7148,7 @@ begin
         imvvRawUtf8:
           PRawUtf8(V^)^ := '';
         imvvDynArray:
-          fDynArray[arg^.IndexVar].Clear;
+          FastDynArrayClear(V^, arg^.ArgRtti.ArrayRtti.Info);
         imvvObject:
           PObject(V^)^.Free;
         imvvInterface:
@@ -7581,13 +7375,6 @@ begin
                 raise EInterfaceFactory.CreateUtf8('OnCallback=nil for %(%: %)',
                   [fMethod^.InterfaceDotMethodName, arg^.ParamName^,
                    arg^.ArgTypeName^]);
-            imvDynArray:
-              begin
-                ctxt.Json := fDynArray[arg^.IndexVar].LoadFromJson(ctxt.Json);
-                if ctxt.Json = nil then
-                  exit;
-                IgnoreComma(ctxt.Json);
-              end;
           else
             if not arg^.SetFromJson(ctxt, fMethod, fValues[a], Error) then
               exit;
@@ -7629,15 +7416,7 @@ begin
         begin
           if ResAsJsonObject then
             Res.AddPropName(arg^.ParamName^);
-          case arg^.ValueType of
-            imvDynArray:
-              if vIsObjArray in arg^.ValueKindAsm then
-                Res.AddObjArrayJson(fValues[a]^, opt[arg^.ValueDirection = imdVar])
-              else
-                Res.AddDynArrayJson(fDynArray[arg^.IndexVar]);
-          else
-            arg^.AddJson(Res, fValues[a], opt[arg^.ValueDirection = imdVar]);
-          end;
+          arg^.AddJson(Res, fValues[a], opt[arg^.ValueDirection = imdVar]);
           Res.AddComma;
         end;
       end;

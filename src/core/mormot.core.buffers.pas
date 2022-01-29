@@ -1036,6 +1036,7 @@ function BinToBase64Short(Bin: PAnsiChar; BinBytes: integer): ShortString; overl
 
 /// fast conversion from binary data into prefixed/suffixed Base64 encoded UTF-8 text
 // - with optional JSON_BASE64_MAGIC_C prefix (UTF-8 encoded \uFFF0 special code)
+// - may use AVX2 optimized asm (10GB/s) on FPC x86_64
 function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUtf8; overload;
 
 /// fast conversion from binary into prefixed/suffixed Base64 with 64 chars per line

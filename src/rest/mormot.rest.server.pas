@@ -4206,7 +4206,7 @@ begin
       begin
         a := met.ArgIndex(pointer(name), length(name), {input=}true);
         forcestring := (a >= 0) and
-                       (vIsString in met.Args[a].ValueKindAsm);
+                       (rcfJsonString in met.Args[a].ArgRtti.Flags);
       end
       else
         forcestring := false;
@@ -4425,6 +4425,7 @@ begin
        PInterfaceMethod(ServiceMethod)^.ArgsInputIsOctetStream and
        not fCall^.InBodyTypeIsJson then
       // encode binary as Base64, as expected by InternalExecuteSoaByInterface
+      // may use AVX2 on FPC x86_64 so performance is not an issue here
       fCall^.InBody := BinToBase64(fCall^.InBody, '["', '"]', false);
   end
   else

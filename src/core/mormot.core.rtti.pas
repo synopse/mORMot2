@@ -1989,6 +1989,7 @@ type
   // - rcfIsManaged is set if a value of this type expects finalization
   // - rcfObjArray is for T*ObjArray dynamic arrays
   // - rcfBinary is for hexadecimal serialization of integers
+  // - rcfJsonString when is to be serialized as text (ptStringTypes or rcfBinary)
   // - rcfWithoutRtti is set if was created purely by text, and uses fake RTTI
   // - rcfSpi identifies types containing Sensitive Personal Information
   // (e.g. a bank card number or a plain password) which should be hidden
@@ -2012,6 +2013,7 @@ type
     rcfIsManaged,
     rcfObjArray,
     rcfBinary,
+    rcfJsonString,
     rcfWithoutRtti,
     rcfSpi,
     rcfHookWrite,
@@ -2290,7 +2292,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the Value is 0 / nil / '' / null
     function ValueIsVoid(Data: PAnsiChar): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+     // {$ifdef HASINLINE}inline;{$endif}
     /// compare two stored values of this type
     // - not implemented in this class (raise an ERttiException)
     // but in TRttiJson, so that it will use mormot.core.data comparison
@@ -2299,7 +2301,9 @@ type
     /// fill a variant with a stored value of this type
     // - not implemented in this class (raise an ERttiException)
     // but in TRttiJson, so that it will use mormot.core.variants process
-    function ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt; virtual;
+    // - complex objects are converted into a TDocVariant, after JSON serialization
+    function ValueToVariant(Data: pointer; out Dest: TVarData;
+      Options: pointer{PDocVariantOptions} = nil): PtrInt; virtual;
     /// fill a value from random - including strings and nested types
     procedure ValueRandom(Data: pointer);
       {$ifdef HASINLINE}inline;{$endif}
@@ -7398,6 +7402,8 @@ begin
   if (fArrayRtti <> nil) and
      (rcfIsManaged in fArrayRtti.Flags) then
     include(fFlags, rcfArrayItemManaged);
+  if aParser in ptStringTypes then
+    include(fFlags, rcfJsonString);
   fClassNewInstance := @_New_NotImplemented;
   result := self;
 end;
@@ -7456,11 +7462,18 @@ begin
       begin
         result := false;
         s := fCache.Size;
-        repeat
-          dec(s);
-          if Data[s] <> #0 then
-            exit;
-        until s = 0;
+        if s >= 4 then
+          repeat
+            dec(s, 4);
+            if PInteger(Data + s)^ <> 0 then
+              exit;
+          until s < 4;
+        if s > 0 then
+          repeat
+            if Data[s - 1] <> #0 then
+              exit;
+            dec(s);
+          until s = 0;
         result := true;
       end;
   end;
@@ -7474,7 +7487,7 @@ begin
 end;
 
 function TRttiCustom.{%H-}ValueToVariant(Data: pointer;
-  out Dest: TVarData): PtrInt;
+  out Dest: TVarData; Options: pointer): PtrInt;
 begin
   raise ERttiException.CreateUtf8('%.ValueToVariant not implemented -> ' +
     'please include mormot.core.json unit to register TRttiJson', [self]);
@@ -7544,12 +7557,14 @@ begin
     begin
       BinarySize := 0;
       exclude(fFlags, rcfBinary);
+      if not (Kind in rkStringTypes) then
+        exclude(fFlags, rcfJsonString);
     end
     else
     begin
       if BinarySize = 0 then
         BinarySize := fCache.Size;
-      include(fFlags, rcfBinary);
+      fFlags := fFlags + [rcfBinary, rcfJsonString];
     end;
     fBinarySize := BinarySize;
     SetParserType(Parser, ParserComplex); // notify format change (e.g. for json)

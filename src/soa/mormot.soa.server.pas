@@ -1213,11 +1213,11 @@ begin
               with Args[a] do
                 if (ValueDirection <> imdOut) and
                    (ValueType <> imvInterface) and
-                   not IsDefault(Sender.Values[a]) then
+                   not ArgRtti.ValueIsVoid(Sender.Values[a]) then
                 begin
                   W.AddShort(ParamName^); // in JSON_FAST_EXTENDED format
                   W.Add(':');
-                  if vIsSpi in ValueKindAsm then
+                  if rcfSpi in ArgRtti.Flags then
                     W.AddShorter('"****",')
                   else
                   begin
@@ -1259,11 +1259,11 @@ begin
               for a := ArgsOutFirst to ArgsOutLast do
                 with Args[a] do
                   if (ValueDirection <> imdConst) and
-                     not IsDefault(Sender.Values[a]) then
+                     not ArgRtti.ValueIsVoid(Sender.Values[a]) then
                   begin
                     W.AddShort(ParamName^);
                     W.Add(':');
-                    if vIsSpi in ValueKindAsm then
+                    if rcfSpi in ArgRtti.Flags then
                       W.AddShorter('"****",')
                     else
                     begin
@@ -1306,8 +1306,9 @@ begin
   if exec.CurrentStep < smsBefore then
   begin
     W.CancelAll;
-    W.Add('"POST",{Method:"%",Input:{',
-      [exec.Method^.InterfaceDotMethodName]);
+    W.AddShort('"POST",{Method:"');
+    W.AddJsonEscape(pointer(exec.Method^.InterfaceDotMethodName));
+    W.AddShort('%",Input:{');
   end;
   if exec.CurrentStep < smsAfter then
     W.AddShort('},Output:{Failed:"Probably due to wrong input"');
@@ -1316,7 +1317,11 @@ begin
   if Ctxt.RemoteIPIsLocalHost then
     W.Add('}', ',')
   else
-    W.Add(',IP:"%"},', [Ctxt.RemoteIP]);
+  begin
+    W.AddShorter(',IP:"');
+    W.AddString(Ctxt.RemoteIP);
+    W.AddShorter('"},');
+  end;
   with Ctxt.ServiceExecution^ do
     IRestOrm(LogRest).AsyncBatchRawAppend(LogClass, W);
 end;

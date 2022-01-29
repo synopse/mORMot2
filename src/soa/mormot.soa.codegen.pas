@@ -556,7 +556,6 @@ const
     wString,   // imvString
     wRawUtf8,  // imvRawByteString
     wRawUtf8,  // imvWideString
-    wRawUtf8,  // imvBinary
     wRecord,   // imvRecord
     wVariant,  // imvVariant
     wObject,   // imvObject

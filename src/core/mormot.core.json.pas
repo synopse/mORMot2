@@ -1787,7 +1787,9 @@ type
     /// compare two stored values of this type
     function ValueCompare(Data, Other: pointer; CaseInsensitive: boolean): integer; override;
     /// fill a variant with a stored value of this type
-    function ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt; override;
+    // - complex objects are converted into a TDocVariant, after JSON serialization
+    function ValueToVariant(Data: pointer; out Dest: TVarData;
+      Options: pointer{PDocVariantOptions} = nil): PtrInt; override;
     /// unserialize some JSON input into Data^
     procedure ValueLoadJson(Data: pointer; var Json: PUtf8Char; EndOfObject: PUtf8Char;
       ParserOptions: TJsonParserOptions; CustomVariantOptions: PDocVariantOptions;
@@ -9667,14 +9669,19 @@ begin
   fCompare[CaseInsensitive](Data, Other, Info, result); // at least _BC_Default
 end;
 
-function TRttiJson.ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt;
+function TRttiJson.ValueToVariant(Data: pointer; out Dest: TVarData;
+  Options: pointer{PDocVariantOptions}): PtrInt;
+var
+  tmp: pointer;
+  json: PUtf8Char;
 label
   fro;
 begin
   // see TRttiCustomProp.GetValueDirect
   PCardinal(@Dest.VType)^ := Cache.RttiVarDataVType;
   case Cache.RttiVarDataVType of
-    varInt64, varBoolean:
+    varInt64,
+    varBoolean:
       // rkInteger, rkBool using VInt64 for proper cardinal support
 fro:  Dest.VInt64 := FromRttiOrd(Cache.RttiOrd, Data);
     varWord64:
@@ -9684,7 +9691,8 @@ fro:  Dest.VInt64 := FromRttiOrd(Cache.RttiOrd, Data);
           PCardinal(@Dest.VType)^ := varInt64; // fix VType
         Dest.VInt64 := PInt64(Data)^;
       end;
-    varDouble, varCurrency:
+    varDouble,
+    varCurrency:
       Dest.VInt64 := PInt64(Data)^;
     varString:
       // rkString
@@ -9718,14 +9726,21 @@ fro:  Dest.VInt64 := FromRttiOrd(Cache.RttiOrd, Data);
       end;
    else
      case Cache.Kind of
-       rkEnumeration, rkSet:
+       rkEnumeration,
+       rkSet:
          begin
            PCardinal(@Dest.VType)^ := varInt64;
            goto fro;
          end;
      else
-       raise EDocVariant.CreateUtf8(
-         'Unsupported %.InitArrayFrom(%)', [self, ToText(Cache.Kind)^]);
+       begin
+         tmp := nil;
+         SaveJson(Data^, Info, [], RawUtf8(tmp)); // from temporary JSON
+         PCardinal(@Dest.VType)^ := varNull;
+         json := tmp;
+         GetJsonToAnyVariant(variant(Dest), json, nil, Options, true);
+         FastAssignNew(tmp);
+       end;
      end;
   end;
   result := Cache.ItemSize;
