@@ -403,8 +403,8 @@ type
     fLastCounter: cardinal;
     fComputedCount: Int64;
     fCollisions: cardinal;
-    fCrypto: array[0..7] of cardinal; // only fCrypto[6..7] are used in practice
     fCryptoCRC: cardinal;
+    fCrypto: array[0..7] of cardinal; // only fCrypto[6..7] are used in practice
     fCryptoAesE, fCryptoAesD: TAes; // Initialized if aSharedObfuscationKeyNewKdf
   public
     /// initialize the generator for the given 16-bit process identifier
@@ -2800,6 +2800,7 @@ var
   crc: cardinal;
   key: THash256Rec;
 begin
+  inherited Create;
   fIdentifier := aIdentifier;
   fIdentifierShifted := aIdentifier shl 15;
   // compute obfuscation key using hash diffusion of the supplied text

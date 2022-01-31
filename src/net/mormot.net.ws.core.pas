@@ -1090,6 +1090,7 @@ end;
 
 constructor TWebSocketProtocol.Create(const aName, aUri: RawUtf8);
 begin
+  inherited Create;
   fName := aName;
   fUri := aUri;
   fConnectionFlags := [hsrWebsockets];

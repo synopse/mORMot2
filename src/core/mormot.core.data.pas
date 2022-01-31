@@ -359,6 +359,9 @@ type
     // this default implementation will call AssignError()
     procedure AssignTo(Dest: TSynPersistent); virtual;
     procedure AssignError(Source: TSynPersistent);
+    // can be used as faster alternative to inherited Create
+    procedure AutoRegister;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// virtual constructor called at instance creation
     // - this constructor also registers the class type to the Rtti global list
@@ -3078,6 +3081,12 @@ end;
 
 { TSynPersistent }
 
+procedure TSynPersistent.AutoRegister;
+begin
+  if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
+    Rtti.DoRegister(PClass(self)^); // ensure TRttiCustom is set
+end;
+
 constructor TSynPersistent.Create;
 begin
   if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
@@ -3248,7 +3257,7 @@ end;
 
 constructor TSynPersistentLock.Create;
 begin
-  inherited Create;
+  AutoRegister; // faster alternative to inherited Create;
   fSafe := NewSynLocker;
 end;
 
@@ -4243,6 +4252,7 @@ var
   p: integer;
   i: PtrInt;
 begin
+  inherited Create;
   for p := 0 to 9 do
     if aHashTables = 1 shl p then
     begin

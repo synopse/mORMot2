@@ -2787,6 +2787,7 @@ end;
 
 constructor TSynMonitorMemory.Create(aTextNoSpace: boolean);
 begin
+  inherited Create;
   FAllocatedUsed := TSynMonitorOneSize.Create(aTextNoSpace);
   FAllocatedReserved := TSynMonitorOneSize.Create(aTextNoSpace);
   FPhysicalMemoryFree := TSynMonitorOneSize.Create(aTextNoSpace);
@@ -2945,6 +2946,7 @@ end;
 
 constructor TSynMonitorDisk.Create;
 begin
+  inherited Create;
   fAvailableSize := TSynMonitorOneSize.Create({nospace=}false);
   fFreeSize := TSynMonitorOneSize.Create({nospace=}false);
   fTotalSize := TSynMonitorOneSize.Create({nospace=}false);

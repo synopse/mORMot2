@@ -660,6 +660,7 @@ var
   ErrMsg: RawUtf8;
   log: ISynLog;
 begin
+  inherited Create;
   if high(aServers) < 0 then
     fLog := TSynLog
   else

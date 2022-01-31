@@ -3631,6 +3631,7 @@ constructor TSynBloomFilter.Create(aSize: integer; aFalsePositivePercent: double
 const
   LN2 = 0.69314718056;
 begin
+  inherited Create;
   if aSize < 0 then
     fSize := 1000
   else
@@ -3653,6 +3654,7 @@ end;
 
 constructor TSynBloomFilter.Create(const aSaved: RawByteString; aMagic: cardinal);
 begin
+  inherited Create;
   if not LoadFrom(aSaved, aMagic) then
     raise ESynException.CreateUtf8('%.Create with invalid aSaved content', [self]);
 end;

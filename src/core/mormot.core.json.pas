@@ -10431,7 +10431,7 @@ end;
 
 constructor TSynAutoCreateFields.Create;
 begin
-  AutoCreateFields(self);
+  AutoCreateFields(self); // will make AutoRegister = inherited Create if needed
 end; // no need to call the void inherited TSynPersistent
 
 destructor TSynAutoCreateFields.Destroy;

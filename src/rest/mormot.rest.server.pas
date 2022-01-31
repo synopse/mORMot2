@@ -4554,6 +4554,7 @@ var
   rnd: THash256;
   blob: RawBlob;
 begin
+  AutoRegister; // faster alternative to inherited Create;
   fUser := aUser;
   if (aCtxt <> nil) and
      (User <> nil) and

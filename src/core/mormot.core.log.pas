@@ -104,8 +104,7 @@ type
     // - if nothing is available, will log as hexadecimal pointers, without
     // debugging information
     constructor Create(const aExeName: TFileName = ''; MabCreate: boolean = true;
-      DebugToConsole: boolean = false);
-      reintroduce;
+      DebugToConsole: boolean = false); reintroduce;
     /// save all debugging information in the .mab custom binary format
     // - if no file name is specified, it will be saved as ExeName.mab or DllName.mab
     // - this file content can be appended to the executable via SaveToExe method
@@ -3039,6 +3038,7 @@ var
   ExeFile, MabFile: TFileName;
   MapAge, MabAge: TUnixTime;
 begin
+  inherited Create;
   fSymbols.InitSpecific(TypeInfo(TDebugSymbolDynArray), fSymbol, ptRawUtf8,
     @fSymbolsCount, true);
   fUnits.InitSpecific(TypeInfo(TDebugUnitDynArray), fUnit, ptRawUtf8,
