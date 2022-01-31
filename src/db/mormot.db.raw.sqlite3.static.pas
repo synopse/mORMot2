@@ -1201,6 +1201,7 @@ end;
 
 procedure TSqlite3LibraryStatic.BeforeInitialization;
 begin
+  inherited BeforeInitialization; // set SQLITE_CONFIG_MULTITHREAD
   {$ifdef FPC}
   ForceToUseSharedMemoryManager;
   {$else}
@@ -1217,6 +1218,7 @@ procedure TSqlite3LibraryStatic.AfterInitialization;
 var
   error: RawUtf8;
 begin
+  inherited AfterInitialization; // do nothing by default
   if (EXPECTED_SQLITE3_VERSION <> '') and
      not IdemPChar(pointer(fVersionText), EXPECTED_SQLITE3_VERSION) then
   begin

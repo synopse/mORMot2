@@ -3563,6 +3563,8 @@ type
     // - Returns SQLITE_MISUSE, if is called after sqlite3.initialize() and before
     // sqlite3.shutdown()
     // - Returns non-zero when the option is unknown or SQLite is unable to set it.
+    // - TSqlite3Library.BeforeInitialization will set SQLITE_CONFIG_MULTITHREAD,
+    // and ForceToUseSharedMemoryManager method use SQLITE_CONFIG_MALLOC
     config: function(Operation: integer): integer; cdecl varargs;
 
     /// Used to make global configuration changes to current database connection
@@ -3926,11 +3928,14 @@ type
     constructor Create; virtual;
     /// this method is called by Create after SQlite3 is loaded, but before
     // sqlite3_initialize is called
-    // - do nothing by default, but you may override it
+    // - will set SQLITE_CONFIG_MULTITHREAD, i.e. application is responsible for
+    // serializing access to database connections and prepared statements - as
+    // is the case with our TSqlDatabase and its explicit Lock/LockJson/UnLock
     procedure BeforeInitialization; virtual;
     /// this method is called by Create after SQlite3 is loaded, and after
     // sqlite3_initialize is called
-    // - do nothing by default, but you may override it
+    // - do nothing by default, but TSqlite3LibraryStatic will override it
+    // to check if the static linked library matches the source expectations
     procedure AfterInitialization; virtual;
     /// Will change the SQLite3 configuration to use Delphi/FPC memory manager
     // - this will reduce memory fragmentation, and enhance speed, especially
@@ -3939,6 +3944,7 @@ type
     // overriding the BeforeInitialization virtual method - as does the
     // TSqlite3LibraryStatic class
     procedure ForceToUseSharedMemoryManager; virtual;
+
     /// Returns the current version number as a plain integer
     // - equals e.g. 3008003001 for '3.8.3.1'
     property VersionNumber: cardinal
@@ -4723,7 +4729,8 @@ type
 
   /// simple wrapper for direct SQLite3 database manipulation
   // - embed the SQLite3 database calls into a common object
-  // - thread-safe call of all SQLite3 queries (SQLITE_THREADSAFE 0 in sqlite.c)
+  // - thread-safe call of all SQLite3 queries on this connection - since
+  // TSqlite3Library.AfterInitialization did set SQLITE_CONFIG_MULTITHREAD flag
   // - can cache last results for SELECT statements, if property UseCache is true:
   //  this can speed up most read queries, for web server or client UI e.g.
   TSqlDataBase = class(TSynPersistentLock)
@@ -5680,6 +5687,10 @@ end;
 
 procedure TSqlite3Library.BeforeInitialization;
 begin
+  // disables mutexing on database connection and prepared statement objects
+  // -> our TSqlDataBase will do explicit Lock/LockJson/UnLock calls
+  config(SQLITE_CONFIG_MULTITHREAD);
+  // we don't check for errors here, since failure is only about performance
 end;
 
 procedure TSqlite3Library.AfterInitialization;
@@ -7820,6 +7831,8 @@ begin
     sqlite3.bind_zeroblob(Request, Param, Size), 'bind_zeroblob');
 end;
 
+{.$define NOSQLITE3FPUSAVE} // only slightly faster
+
 procedure TSqlRequest.Close;
 {$ifndef NOSQLITE3FPUSAVE}
 var
@@ -7908,19 +7921,19 @@ end;
 
 function TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
   var aValues: TInt64DynArray): integer;
-var
-  Res: integer;
 begin
   result := 0;
   try
     Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     if FieldCount > 0 then
-      repeat
-        Res := Step;
-        if Res = SQLITE_ROW then
-          // retrieve first column values
-          AddInt64(aValues, result, sqlite3.column_int64(Request, 0));
-      until Res = SQLITE_DONE;
+      while true do
+        case Step of
+          SQLITE_ROW:
+            // retrieve first column values
+            AddInt64(aValues, result, sqlite3.column_int64(Request, 0));
+          SQLITE_DONE:
+            break;
+        end;
   finally
     Close; // always release statement
   end;
@@ -7957,19 +7970,19 @@ end;
 
 function TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
   var aValues: TRawUtf8DynArray): integer;
-var
-  Res: integer;
 begin
   result := 0;
   try
     Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     if FieldCount > 0 then
-      repeat
-        Res := Step;
-        if Res = SQLITE_ROW then
+    while true do
+      case Step of
+        SQLITE_ROW:
           // retrieve first column values
           AddRawUtf8(aValues, result, sqlite3.column_text(Request, 0));
-      until Res = SQLITE_DONE;
+        SQLITE_DONE:
+          break;
+      end;
   finally
     Close; // always release statement
   end;
