@@ -359,29 +359,11 @@ type
     // this default implementation will call AssignError()
     procedure AssignTo(Dest: TSynPersistent); virtual;
     procedure AssignError(Source: TSynPersistent);
-    // can be used as faster alternative to inherited Create
-    procedure AutoRegister;
-      {$ifdef HASINLINE}inline;{$endif}
   public
-    /// virtual constructor called at instance creation
-    // - this constructor also registers the class type to the Rtti global list
-    constructor Create; override;
-    /// very efficiently retrieve the TRttiCustom associated with this class
-    // - since Create did register it, just return the first vmtAutoTable slot
-    class function RttiCustom: TRttiCustom;
-      {$ifdef HASINLINE}inline;{$endif}
     /// allows to implement a TPersistent-like assignement mechanism
     // - inherited class should override AssignTo() protected method
     // to implement the proper assignment
     procedure Assign(Source: TSynPersistent); virtual;
-    /// optimized initialization code
-    // - somewhat faster than the regular RTL implementation
-    // - warning: this optimized version won't initialize the vmtIntfTable
-    // for this class hierarchy: as a result, you would NOT be able to
-    // implement an interface with a TSynPersistent descendent (but you should
-    // not need to, but inherit from TInterfacedObject)
-    // - warning: under FPC, it won't initialize fields management operators
-    class function NewInstance: TObject; override;
   end;
 
   /// used to determine the exact class type of a TSynPersistent
@@ -3081,25 +3063,6 @@ end;
 
 { TSynPersistent }
 
-procedure TSynPersistent.AutoRegister;
-begin
-  if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
-    Rtti.DoRegister(PClass(self)^); // ensure TRttiCustom is set
-end;
-
-constructor TSynPersistent.Create;
-begin
-  if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
-    Rtti.DoRegister(PClass(self)^); // ensure TRttiCustom is set
-end;
-
-class function TSynPersistent.RttiCustom: TRttiCustom;
-begin
-  // inlined Rtti.Find(ClassType): we know it is the first slot
-  result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
-  // assert(result.InheritsFrom(TRttiCustom));
-end;
-
 procedure TSynPersistent.AssignError(Source: TSynPersistent);
 begin
   raise EConvertError.CreateFmt('Cannot assign a %s to a %s',
@@ -3118,14 +3081,6 @@ begin
   else
     AssignError(nil);
 end;
-
-class function TSynPersistent.NewInstance: TObject;
-begin
-  // bypass vmtIntfTable and vmt^.vInitTable (FPC management operators)
-  GetMem(pointer(result), InstanceSize); // InstanceSize is inlined
-  FillCharFast(pointer(result)^, InstanceSize, 0);
-  PPointer(result)^ := pointer(self); // store VMT
-end; // no benefit of rewriting FreeInstance/CleanupInstance
 
 
 { TSynList }

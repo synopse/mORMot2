@@ -2679,6 +2679,9 @@ type
   // - also features some protected virtual methods for custom RTTI/JSON process
   TObjectWithCustomCreate = class(TObject)
   protected
+    // can be used as faster alternative to inherited Create
+    procedure AutoRegister;
+      {$ifdef HASINLINE}inline;{$endif}
     /// called by TRttiJson.SetParserType when this class is registered
     // - used e.g. to register TOrm.ID field which is not published as RTTI
     // - in TSynPersistent descendants, can change the Rtti.JsonSave callback
@@ -2728,7 +2731,20 @@ type
     // - is declared as virtual so that inherited classes may have a root
     // constructor to override
     // - will be recognized by our RTTI serialization/initialization process
-    constructor Create; virtual; abstract;
+    // - will register the class type to the Rtti global list
+    constructor Create; virtual;
+    /// optimized initialization code
+    // - somewhat faster than the regular RTL implementation
+    // - warning: this optimized version won't initialize the vmtIntfTable
+    // for this class hierarchy: as a result, you would NOT be able to
+    // implement an interface with a TSynPersistent descendent (but you should
+    // not need to, but inherit from TInterfacedObject)
+    // - warning: under FPC, it won't initialize fields management operators
+    class function NewInstance: TObject; override;
+    /// very efficiently retrieve the TRttiCustom associated with this class
+    // - since Create did register it, just return the first vmtAutoTable slot
+    class function RttiCustom: TRttiCustom;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
   {$M-}
 
@@ -2747,9 +2763,6 @@ type
     /// will register the "ID":... field value for proper JSON serialization
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
   public
-    /// this constructor initializes the instance
-    // - will register the class type to the Rtti global list
-    constructor Create; overload; override;
     /// this constructor initializes the instance with a given ID
     constructor CreateWithID(aID: TID);
     /// this property gives direct access to the class instance ID
@@ -8603,6 +8616,32 @@ end;
 
 { TObjectWithCustomCreate }
 
+procedure TObjectWithCustomCreate.AutoRegister;
+begin
+  if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
+    Rtti.DoRegister(PClass(self)^); // ensure TRttiCustom is set
+end;
+
+constructor TObjectWithCustomCreate.Create;
+begin
+  AutoRegister;
+end;
+
+class function TObjectWithCustomCreate.RttiCustom: TRttiCustom;
+begin
+  // inlined Rtti.Find(ClassType): we know it is the first slot
+  result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
+  // assert(result.InheritsFrom(TRttiCustom));
+end;
+
+class function TObjectWithCustomCreate.NewInstance: TObject;
+begin
+  // bypass vmtIntfTable and vmt^.vInitTable (FPC management operators)
+  GetMem(pointer(result), InstanceSize); // InstanceSize is inlined
+  FillCharFast(pointer(result)^, InstanceSize, 0);
+  PPointer(result)^ := pointer(self); // store VMT
+end; // no benefit of rewriting FreeInstance/CleanupInstance
+
 class procedure TObjectWithCustomCreate.RttiCustomSetParser(Rtti: TRttiCustom);
 begin
   // do nothing by default
@@ -8644,12 +8683,6 @@ end;
 
 
 { TObjectWithID }
-
-constructor TObjectWithID.Create;
-begin
-  if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
-    Rtti.DoRegister(PClass(self)^); // ensure TRttiCustom is set
-end;
 
 constructor TObjectWithID.CreateWithID(aID: TID);
 begin
