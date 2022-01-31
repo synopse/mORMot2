@@ -1962,7 +1962,7 @@ begin
   P := pointer(jumboFrame.payload);
   MoveFast(JUMBO_HEADER, P^, SizeOf(JUMBO_HEADER));
   inc(P, SizeOf(JUMBO_HEADER));
-  P := ToVarUInt32(FramesCount, P);
+  P := ToVarUInt32(FramesCount, P); // store max
   for i := 0 to FramesCount do
   begin
     len := length(Frames[i].payload);
@@ -1985,23 +1985,23 @@ const
 procedure TWebSocketProtocolBinary.ProcessIncomingFrames(
   Sender: TWebSocketProcess; P, PMax: PByte);
 var
-  n, i, j: integer;
+  max, i, j: integer;
   frame: TWebSocketFrame;
   tmp: ShortString;
 begin
-  P := FromVarUInt32Safe(P, PMax, cardinal(n));
+  P := FromVarUInt32Safe(P, PMax, cardinal(max));
   if P <> nil then
-    for i := 0 to n do
+    for i := 0 to max do
     begin
       frame.opcode := focBinary;
       frame.content := [];
       frame.tix := 0;
       FromVarString(P, PMax, frame.payload, CP_UTF8);
-      FormatShort('GetSubFrame(%/%)', [i + 1, n + 1], tmp);
+      FormatShort('GetSubFrame(%/%)', [i + 1, max + 1], tmp);
       Sender.Log(frame, tmp);
       if i = 0 then
         j := 0
-      else if i = n then
+      else if i = max then
         j := 1
       else
         j := 2;

@@ -504,8 +504,7 @@ type
     procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
       const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8); overload;
       {$ifdef HASINLINE} inline; {$endif}
-    procedure Prepare(const aHttp: THttpRequestContext;
-      const aRemoteIP: RawUtf8); overload;
+    procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8); overload;
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(AppendedHeader: RawUtf8);
     /// input parameter containing the caller message body

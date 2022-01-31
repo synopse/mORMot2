@@ -208,6 +208,7 @@
     {$define ISFPC34}
     {$define FPC_PROVIDE_ATTR_TABLE} // introducing TTypeData.AttributeTable
     {$define STRCNT32}               // 32-bit TAnsiRec.Ref even on 64-bit CPU
+    // see https://gitlab.com/freepascal.org/fpc/source/-/issues/38018
     {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
   {$endif VER3_4}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}

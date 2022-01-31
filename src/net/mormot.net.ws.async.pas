@@ -515,7 +515,6 @@ begin
     ProcessStop; // OnClientDisconnected - called in read thread pool
 end;
 
-
 function TWebSocketAsyncProcess.SendBytes(P: pointer; Len: PtrInt): boolean;
 begin
   // try to send all in non-blocking mode, or subscribe for biggest writes
