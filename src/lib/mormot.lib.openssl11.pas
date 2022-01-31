@@ -2245,7 +2245,8 @@ begin
   result := libcrypto.CRYPTO_malloc(num, _file, line);
 end;
 
-function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
+function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn;
+  f: dyn_MEM_free_fn): integer; cdecl;
 begin
   result := libcrypto.CRYPTO_set_mem_functions(m, r, f);
 end;
@@ -2485,7 +2486,8 @@ begin
   result := libcrypto.X509_getm_notAfter(x);
 end;
 
-function X509V3_EXT_conf_nid(conf: Plhash_st_CONF_VALUE; ctx: PX509V3_CTX; ext_nid: integer; value: PUtf8Char): PX509_EXTENSION;
+function X509V3_EXT_conf_nid(conf: Plhash_st_CONF_VALUE; ctx: PX509V3_CTX;
+   ext_nid: integer; value: PUtf8Char): PX509_EXTENSION;
 begin
   result := libcrypto.X509V3_EXT_conf_nid(conf, ctx, ext_nid, value);
 end;
@@ -2500,7 +2502,8 @@ begin
   result := libcrypto.X509_delete_ext(x, loc);
 end;
 
-procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer, subject: PX509; req: PX509_REQ; crl: PX509_CRL; flags: integer);
+procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer, subject: PX509;
+   req: PX509_REQ; crl: PX509_CRL; flags: integer);
 begin
   libcrypto.X509V3_set_ctx(ctx, issuer, subject, req, crl, flags);
 end;
@@ -2515,12 +2518,14 @@ begin
   libcrypto.X509_EXTENSION_free(a);
 end;
 
-function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer;
+function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char;
+   typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer;
 begin
   result := libcrypto.X509_NAME_add_entry_by_txt(name, field, typ, bytes, len, loc, _set);
 end;
 
-function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
+function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer;
+   flags: cardinal): integer;
 begin
   result := libcrypto.X509_NAME_print_ex(_out, nm, indent, flags);
 end;
@@ -2921,7 +2926,8 @@ begin
   libcrypto.ASN1_INTEGER_free(a);
 end;
 
-function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT;
+function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT;
+  p4: PBN_CTX): PEC_POINT;
 begin
   result := libcrypto.EC_POINT_bn2point(p1, p2, p3, p4);
 end;
@@ -3907,7 +3913,8 @@ function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
   kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_bio_PrivateKey';
 
-function PEM_write_bio_PKCS8PrivateKey(p1: PBIO; p2: PEVP_PKEY; p3: PEVP_CIPHER; p4: PUtf8Char; p5: integer; p6: Ppem_password_cb; p7: pointer): integer; cdecl;
+function PEM_write_bio_PKCS8PrivateKey(p1: PBIO; p2: PEVP_PKEY; p3: PEVP_CIPHER;
+  p4: PUtf8Char; p5: integer; p6: Ppem_password_cb; p7: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_bio_PKCS8PrivateKey';
 
 function EVP_aes_256_cbc(): PEVP_CIPHER; cdecl;
