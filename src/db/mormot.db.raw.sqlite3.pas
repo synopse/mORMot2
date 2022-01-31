@@ -4400,13 +4400,15 @@ type
     function ExecuteJson(aDB: TSqlite3DB; const aSql: RawUtf8;
       Expand: boolean = false; aResultCount: PPtrInt = nil;
       MaxMemory: PtrUInt = 512 shl 20; Options: TTextWriterOptions = []): RawUtf8;
+    /// Execute one SQL statement step into a JSON object
+    function ExecuteStepJson(aDB: TSqlite3DB; W: TJsonWriter): boolean;
     /// Execute one SQL statement which return the results as a TDocVariant array
     // - if aSql is '', the statement should have been prepared, reset and bound
     // if necessary - if aSql <> '' then the statement would be closed internally
     // - if any error occurs, ESqlite3Exception is catched and null is returned
     procedure ExecuteDocVariant(aDB: TSqlite3DB; const aSql: RawUtf8;
       out aResult: variant; aResultModel: TDocVariantModel = mFastFloat;
-      aMaxRows: PtrInt = 1 shl 20);
+      aMaxRows: PtrInt = 1 shl 20; aBlobNoMagic: boolean = false);
     /// Execute all SQL statements in the aSql UTF-8 encoded string, results will
     // be written as ANSI text in OutFile
     procedure ExecuteDebug(aDB: TSqlite3DB; const aSql: RawUtf8;
@@ -4539,7 +4541,10 @@ type
     /// return the field value as a variant, first Col is 0
     // - SQLITE_NULL/SQLITE_INTEGER/SQLITE_FLOAT/SQLITE_TEXT values are returned as
     // varNull/varInt64/varDouble/varString, SQLITE_BLOB as BinToBase64WithMagic
-    procedure FieldVariant(Col: integer; var Value: variant);
+    // unless BlobNoMagic=true and then a RawByteString/varString variant is set
+    // - returns the SQLite3 field type of this column
+    function FieldVariant(Col: integer; var Value: variant;
+      BlobNoMagic: boolean = false): integer;
     /// return the field type of this column
     // - retrieve the "SQLite3" column type as returned by sqlite3.column_type -
     //  i.e. SQLITE_NULL, SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, or SQLITE_BLOB
@@ -4553,8 +4558,12 @@ type
     // returned by sqlite3.column_decltype()
     // - note that prior to Delphi 2009, you may loose content during conversion
     function FieldDeclaredTypeS(Col: integer): string;
+    /// append one column value of the current Row to a JSON stream
+    procedure FieldToJson(WR: TJsonWriter; Value: TSqlite3Value;
+      DoNotFetchBlobs: boolean);
     /// append all columns values of the current Row to a JSON stream
     // - will use WR.Expand to guess the expected output format
+    // - will implement twoIgnoreDefaultInRecord in WR.CustomOptions setting
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data
     procedure FieldsToJson(WR: TResultsWriter; DoNotFetchBlobs: boolean = false);
@@ -8111,8 +8120,28 @@ begin
   end;
 end;
 
+function TSqlRequest.ExecuteStepJson(aDB: TSqlite3DB; W: TJsonWriter): boolean;
+var
+  f: PtrInt;
+begin
+  result := Step = SQLITE_ROW;
+  if not result then
+    exit;
+  W.Add('{');
+  for f := 0 to FieldCount - 1 do
+  begin
+    W.Add('"');
+    W.AddNoJsonEscape(sqlite3.column_name(fRequest, f));
+    W.Add('"', ':');
+    FieldToJson(W, sqlite3.column_value(Request, f), {noblob=}false);
+  end;
+  W.CancelLastComma;
+  W.Add('}');
+end;
+
 procedure TSqlRequest.ExecuteDocVariant(aDB: TSqlite3DB; const aSql: RawUtf8;
-  out aResult: variant; aResultModel: TDocVariantModel; aMaxRows: PtrInt);
+  out aResult: variant; aResultModel: TDocVariantModel; aMaxRows: PtrInt;
+  aBlobNoMagic: boolean);
 var
   dv: TDocVariantData absolute aResult;
   opt: PDocVariantOptions;
@@ -8139,10 +8168,12 @@ begin
             begin
               SetLength(values, FieldCount);
               for f := 0 to FieldCount - 1 do
-                FieldVariant(f, values[f]);
+                FieldVariant(f, values[f], aBlobNoMagic);
               if cap = n then
               begin
                 cap := NextGrow(cap);
+                if cap > aMaxRows then
+                  cap := aMaxRows;
                 dv.Capacity := cap;
                 v := @dv.Values[n];
               end;
@@ -8241,10 +8272,13 @@ begin
   result := sqlite3.column_type(Request, Col) = SQLITE_NULL;
 end;
 
-procedure TSqlRequest.FieldVariant(Col: integer; var Value: variant);
+function TSqlRequest.FieldVariant(Col: integer; var Value: variant;
+  BlobNoMagic: boolean): integer;
 var
   v: TSqlite3Value;
   p: PUtf8Char;
+  b: pointer;
+  blen: integer;
   d: TRttiVarData absolute Value;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
@@ -8252,7 +8286,8 @@ begin
   if d.VType <> 0 then
     VarClearProc(d.Data);
   v := sqlite3.column_value(Request, Col);
-  case sqlite3.value_type(v) of
+  result := sqlite3.value_type(v);
+  case result of
     SQLITE_INTEGER:
       begin
         d.VType := varInt64;
@@ -8274,8 +8309,12 @@ begin
       begin
         d.VType := varString;
         d.Data.VString := nil; // avoid GPF below
-        BinToBase64WithMagic(sqlite3.value_blob(v), sqlite3.value_bytes(v),
-          RawUtf8(d.Data.VString));
+        b := sqlite3.value_blob(v);
+        blen := sqlite3.value_bytes(v);
+        if BlobNoMagic then
+          FastSetRawByteString(RawByteString(d.Data.VString), b, blen)
+        else
+          BinToBase64WithMagic(b, blen, RawUtf8(d.Data.VString));
       end;
     // SQLITE_NULL will left Value as null value
   end;
@@ -8475,72 +8514,71 @@ begin
   result := sqlite3.stmt_readonly(Request) <> 0;
 end;
 
+procedure TSqlRequest.FieldToJson(WR: TJsonWriter; Value: TSqlite3Value;
+  DoNotFetchBlobs: boolean);
+begin
+  case sqlite3.value_type(Value) of
+    SQLITE_BLOB:
+      if DoNotFetchBlobs then
+        WR.AddShort('null')
+      else
+        WR.WrBase64(sqlite3.value_blob(Value), sqlite3.value_bytes(Value),
+          {withMagic=}true);
+    SQLITE_NULL:
+      WR.AddNull; // returned also for ""
+    SQLITE_INTEGER:
+      WR.Add(sqlite3.value_int64(Value));
+    SQLITE_FLOAT:
+      WR.AddDouble(sqlite3.value_double(Value));
+    SQLITE_TEXT:
+      begin
+        WR.Add('"');
+        WR.AddJsonEscape(sqlite3.value_text(Value), 0);
+        WR.Add('"');
+      end;
+  end;
+  WR.AddComma;
+end;
+
 procedure TSqlRequest.FieldsToJson(WR: TResultsWriter; DoNotFetchBlobs: boolean);
 var
-  i: PtrInt;
-  P: PUtf8Char;
-  typ: integer;
+  f: PtrInt;
+  v: TSqlite3Value; // faster to work at SQLite3 value level
 begin
   if Request = 0 then
     raise ESqlite3Exception.Create(RequestDB, SQLITE_MISUSE, 'FieldsToJson');
   if WR.Expand then
     WR.Add('{');
-  for i := 0 to FieldCount - 1 do
+  for f := 0 to FieldCount - 1 do
   begin
-    typ := sqlite3.column_type(Request, i); // fast evaluation: type may vary
-    P := nil;
+    v := sqlite3.column_value(Request, f); // fast evaluation: type may vary
     if WR.Expand then
     begin
       if twoIgnoreDefaultInRecord in WR.CustomOptions then
       begin
         // used e.g. by DirectExplainQueryPlan() to reduce output verbosity
-        case typ of
+        case sqlite3.value_type(v) of
           SQLITE_BLOB:
             if DoNotFetchBlobs or
-               (sqlite3.column_bytes(Request, i) = 0) then
+               (sqlite3.value_bytes(v) = 0) then
               continue;
           SQLITE_NULL:
             continue;
           SQLITE_INTEGER:
-            if sqlite3.column_int64(Request, i) = 0 then
+            if sqlite3.value_int64(v) = 0 then
               continue;
           SQLITE_FLOAT:
-            if sqlite3.column_double(Request, i) = 0 then
+            if sqlite3.value_double(v) = 0 then
               continue;
           SQLITE_TEXT:
-            begin
-              P := sqlite3.column_text(Request, i);
-              if P = nil then
-                continue;
-            end;
+            if sqlite3.value_text(v) = nil then
+              continue;
         end;
       end;
       // if we reached here, there is some field value to append
-      WR.AddString(WR.ColNames[i]); // '"'+ColNames[]+'":'
+      WR.AddString(WR.ColNames[f]); // '"'+ColNames[]+'":'
     end;
-    case typ of
-      SQLITE_BLOB:
-        if DoNotFetchBlobs then
-          WR.AddShort('null')
-        else
-          WR.WrBase64(pointer(sqlite3.column_blob(Request, i)),
-            sqlite3.column_bytes(Request, i), {withMagic=}true);
-      SQLITE_NULL:
-        WR.AddNull; // returned also for ""
-      SQLITE_INTEGER:
-        WR.Add(sqlite3.column_int64(Request, i));
-      SQLITE_FLOAT:
-        WR.AddDouble(sqlite3.column_double(Request, i));
-      SQLITE_TEXT:
-        begin
-          WR.Add('"');
-          if P = nil then
-            P := sqlite3.column_text(Request, i);
-          WR.AddJsonEscape(P, 0);
-          WR.Add('"');
-        end;
-    end; // case ColTypes[]
-    WR.AddComma;
+    FieldToJson(WR, v, DoNotFetchBlobs); // append the value and a trailing ','
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then
