@@ -4746,25 +4746,6 @@ const
   X509_FLAG_NO_ATTRIBUTES = 1 shl 11;
   X509_FLAG_NO_IDS = 1 shl 12;
   
-  XN_FLAG_SEP_MASK = $f shl 16;
-  XN_FLAG_COMPAT = 0;
-  XN_FLAG_SEP_COMMA_PLUS = 1 shl 16;
-  XN_FLAG_SEP_CPLUS_SPC = 2 shl 16;
-  XN_FLAG_SEP_SPLUS_SPC = 3 shl 16;
-  XN_FLAG_SEP_MULTILINE = 4 shl 16;
-  XN_FLAG_DN_REV = 1 shl 20;
-  XN_FLAG_FN_MASK = $3 shl 21;
-  XN_FLAG_FN_SN = 0;
-  XN_FLAG_FN_LN = 1 shl 21;
-  XN_FLAG_FN_OID = 2 shl 21;
-  XN_FLAG_FN_NONE = 3 shl 21;
-  XN_FLAG_SPC_EQ = 1 shl 23;
-  XN_FLAG_DUMP_UNKNOWN_FIELDS = 1 shl 24;
-  XN_FLAG_FN_ALIGN = 1 shl 25;
-  XN_FLAG_RFC2253 = ASN1_STRFLGS_RFC2253 or XN_FLAG_SEP_COMMA_PLUS or XN_FLAG_DN_REV or XN_FLAG_FN_SN or XN_FLAG_DUMP_UNKNOWN_FIELDS;
-  XN_FLAG_ONELINE = ASN1_STRFLGS_RFC2253 or ASN1_STRFLGS_ESC_QUOTE or XN_FLAG_SEP_CPLUS_SPC or XN_FLAG_SPC_EQ or XN_FLAG_FN_SN;
-  XN_FLAG_MULTILINE = ASN1_STRFLGS_ESC_CTRL or ASN1_STRFLGS_ESC_MSB or XN_FLAG_SEP_MULTILINE or XN_FLAG_SPC_EQ or XN_FLAG_FN_LN or XN_FLAG_FN_ALIGN;
-  
   LH_LOAD_MULT = 256;
   //_LHASH = OPENSSL_LHASH;
   //LHASH_NODE = OPENSSL_LH_NODE;
@@ -18838,9 +18819,6 @@ function X509_REQ_print_fp(bp: PPointer; req: PX509_REQ): integer; cdecl;
 
 function X509_NAME_print(bp: PBIO; name: PX509_NAME; obase: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_print';
-
-function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_print_ex';
 
 function X509_print_ex(bp: PBIO; x: PX509; nmflag: cardinal; cflag: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_print_ex';

@@ -629,12 +629,43 @@ const
                          ASN1_STRFLGS_DUMP_UNKNOWN or
                          ASN1_STRFLGS_DUMP_DER;
 
+  XN_FLAG_SEP_MASK = $f shl 16;
+  XN_FLAG_COMPAT = 0;
+  XN_FLAG_SEP_COMMA_PLUS = 1 shl 16;
+  XN_FLAG_SEP_CPLUS_SPC = 2 shl 16;
+  XN_FLAG_SEP_SPLUS_SPC = 3 shl 16;
+  XN_FLAG_SEP_MULTILINE = 4 shl 16;
+  XN_FLAG_DN_REV = 1 shl 20;
+  XN_FLAG_FN_MASK = $3 shl 21;
+  XN_FLAG_FN_SN = 0;
+  XN_FLAG_FN_LN = 1 shl 21;
+  XN_FLAG_FN_OID = 2 shl 21;
+  XN_FLAG_FN_NONE = 3 shl 21;
+  XN_FLAG_SPC_EQ = 1 shl 23;
+  XN_FLAG_DUMP_UNKNOWN_FIELDS = 1 shl 24;
+  XN_FLAG_FN_ALIGN = 1 shl 25;
+  XN_FLAG_RFC2253 = ASN1_STRFLGS_RFC2253 or
+                    XN_FLAG_SEP_COMMA_PLUS or
+                    XN_FLAG_DN_REV or
+                    XN_FLAG_FN_SN or
+                    XN_FLAG_DUMP_UNKNOWN_FIELDS;
+  XN_FLAG_ONELINE = ASN1_STRFLGS_RFC2253 or
+                    ASN1_STRFLGS_ESC_QUOTE or
+                    XN_FLAG_SEP_CPLUS_SPC or
+                    XN_FLAG_SPC_EQ or
+                    XN_FLAG_FN_SN;
+  XN_FLAG_MULTILINE = ASN1_STRFLGS_ESC_CTRL or
+                      ASN1_STRFLGS_ESC_MSB or
+                      XN_FLAG_SEP_MULTILINE or
+                      XN_FLAG_SPC_EQ or
+                      XN_FLAG_FN_LN or
+                      XN_FLAG_FN_ALIGN;
+
   MBSTRING_FLAG = $1000;
   MBSTRING_UTF8 = MBSTRING_FLAG;
   MBSTRING_ASC = MBSTRING_FLAG or 1;
   MBSTRING_BMP = MBSTRING_FLAG or 2;
   MBSTRING_UNIV = MBSTRING_FLAG or 4;
-
   MBSTRING: array[{utf8=}boolean] of integer = (
     MBSTRING_ASC,
     MBSTRING_UTF8);
@@ -954,7 +985,7 @@ type
 
   X509_NAME = object
   public
-    procedure ToUtf8(out result: RawUtf8);
+    procedure ToUtf8(out result: RawUtf8; flags: cardinal = XN_FLAG_RFC2253);
     procedure AddEntry(const Name, Value: RawUtf8);
     procedure AddEntries(
       const Country, State, Locality, Organization, OrgUnit, CommonName: RawUtf8);
@@ -1296,6 +1327,7 @@ procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer, subject: PX509; req: PX509_RE
 function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
 procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
 function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
+function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
 function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
   flags: cardinal): integer; cdecl;
 function X509_NAME_entry_count(name: PX509_NAME): integer; cdecl;
@@ -1917,6 +1949,7 @@ type
     X509_gmtime_adj: function(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
     X509_EXTENSION_free: procedure(a: PX509_EXTENSION); cdecl;
     X509_NAME_add_entry_by_txt: function(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
+    X509_NAME_print_ex: function(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     X509_NAME_print_ex_fp: function(fp: PPointer; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     X509_NAME_entry_count: function(name: PX509_NAME): integer; cdecl;
     X509_NAME_oneline: function(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
@@ -2033,7 +2066,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..167] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..168] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2089,6 +2122,7 @@ const
     'X509_gmtime_adj',
     'X509_EXTENSION_free',
     'X509_NAME_add_entry_by_txt',
+    'X509_NAME_print_ex',
     'X509_NAME_print_ex_fp',
     'X509_NAME_entry_count',
     'X509_NAME_oneline',
@@ -2484,6 +2518,11 @@ end;
 function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer;
 begin
   result := libcrypto.X509_NAME_add_entry_by_txt(name, field, typ, bytes, len, loc, _set);
+end;
+
+function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
+begin
+  result := libcrypto.X509_NAME_print_ex(_out, nm, indent, flags);
 end;
 
 function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME;
@@ -3522,6 +3561,10 @@ function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char;
   typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_add_entry_by_txt';
 
+function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer;
+  flags: cardinal): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_NAME_print_ex';
+
 function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
   flags: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_print_ex_fp';
@@ -4269,16 +4312,15 @@ end;
 
 { X509_NAME }
 
-procedure X509_NAME.ToUtf8(out result: RawUtf8);
+procedure X509_NAME.ToUtf8(out result: RawUtf8; flags: cardinal);
 var
-  temp: array[0..1023] of AnsiChar;
+  bio: PBIO;
 begin
   if @self = nil then
     exit;
-  temp[0] := #0;
-  X509_NAME_oneline(@self, @temp, SizeOf(temp) - 1);
-  if temp[0] <> #0 then
-    FastSetString(result, @temp, StrLen(@temp));
+  bio := BIO_new(BIO_s_mem);
+  X509_NAME_print_ex(bio, @self, 0, flags);
+  result := bio.ToUtf8AndFree;
 end;
 
 procedure X509_NAME.AddEntry(const Name, Value: RawUtf8);
@@ -4940,6 +4982,7 @@ var
   ciph: PSSL_CIPHER;
   P: PUtf8Char;
   h: RawUtf8;
+  //ext: TX509_Extensions; exts: TRawUtf8DynArray;
   cipher: array[byte] of AnsiChar;
 begin
   fSocket := Socket;
@@ -5035,12 +5078,37 @@ begin
       res := SSL_get_verify_result(fSsl);
       if fPeer <> nil then
       begin
+        //writeln(fPeer.SetExtension(NID_netscape_comment, 'toto est le plus bo'));
+        //writeln(fPeer.SetUsage([kuCodeSign, kuDigitalSignature, kuTlsServer, kuTlsClient]));
         Context.PeerIssuer := fPeer.IssuerName;
         Context.PeerSubject := fPeer.SubjectName;
         if (Context.WithPeerInfo or
            (not Context.IgnoreCertificateErrors and
             (res <> X509_V_OK))) then // include full peer info on failure
           Context.PeerInfo := fPeer.PeerInfo;
+        // writeln(Context.PeerInfo);
+        // writeln(fPeer.SerialNumber);
+        // exts := fPeer.SubjectAlternativeNames;
+        // for len := 0 to high(exts) do
+        //   writeln('dns=',exts[len]);
+        // ext := fPeer.GetExtensions;
+        // writeln(length(ext));
+        // for len := 0 to high(ext) do
+        //   writeln(OBJ_nid2sn(ext[len].nid),'=',OBJ_nid2ln(ext[len].nid),'=',ext[len].nid);
+        // writeln('NotBefore= ',DateTimeToStr(fPeer.NotBefore));
+        // writeln('NotAfter= ',DateTimeToStr(fPeer.NotAfter));
+        // writeln('SubjectKeyIdentifier=',fPeer.SubjectKeyIdentifier);
+        // writeln('IssuerKeyIdentifier=',fPeer.IssuerKeyIdentifier);
+        // writeln('Usage=',word(fPeer.GetUsage));
+        // writeln('kuDigitalSignature=',fPeer.HasUsage(kuDigitalSignature));
+        // writeln('kuCodeSign=',fPeer.HasUsage(kuCodeSign));
+        // writeln('kuTlsClient=',fPeer.HasUsage(kuTlsClient));
+        // writeln('KeyUsage=',fPeer.KeyUsage);
+        // writeln('ExtendedKeyUsage=',fPeer.ExtendedKeyUsage);
+        // writeln('IssuerName=',fPeer.IssuerName);
+        // writeln('SubjectName=',fPeer.SubjectName);
+        // writeln(fPeer.ExtensionText(NID_basic_constraints));
+        // writeln(length(fPeer.ToBinary));
       end;
       if res <> X509_V_OK then
       begin
