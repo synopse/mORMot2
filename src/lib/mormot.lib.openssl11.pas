@@ -4896,16 +4896,39 @@ end;
 
 const
   // list taken on 2021-02-19 from https://ssl-config.mozilla.org/
-  // - prefer CHACHA20-POLY1305 if no AES acceleration is available
   SAFE_CIPHERLIST: array[ {aes=} boolean ] of PUtf8Char = (
-    'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:' +
-    'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:' +
-    'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:' +
-    'DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384',
-    'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:' +
-    'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:' +
-    'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:' +
-    'DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384');
+    // without AES acceleration: prefer CHACHA20-POLY1305
+    'ECDHE-ECDSA-CHACHA20-POLY1305:' +
+    'ECDHE-RSA-CHACHA20-POLY1305:' +
+    'ECDHE-ECDSA-AES128-GCM-SHA256:' +
+    'ECDHE-RSA-AES128-GCM-SHA256:' +
+    'ECDHE-ECDSA-AES256-GCM-SHA384:' +
+    'ECDHE-RSA-AES256-GCM-SHA384:' +
+    'DHE-RSA-AES128-GCM-SHA256:' +
+    'DHE-RSA-AES256-GCM-SHA384',
+    // with AES acceleration
+    'ECDHE-ECDSA-AES128-GCM-SHA256:' +
+    'ECDHE-RSA-AES128-GCM-SHA256:' +
+    'ECDHE-ECDSA-AES256-GCM-SHA384:' +
+    'ECDHE-RSA-AES256-GCM-SHA384:' +
+    'ECDHE-ECDSA-CHACHA20-POLY1305:' +
+    'ECDHE-RSA-CHACHA20-POLY1305:' +
+    'DHE-RSA-AES128-GCM-SHA256:' +
+    'DHE-RSA-AES256-GCM-SHA384');
+
+function HasHWAes: boolean; {$ifdef HASINLINE} inline; {$endif}
+begin
+  result :=
+    {$ifdef CPUINTEL}
+      cfAESNI in CpuFeatures;
+    {$else}
+      {$ifdef CPUARM}
+        ahcAES in CpuFeatures;
+      {$else}
+        false;
+      {$endif CPUARM}
+    {$endif CPUINTEL}
+end;
 
 // see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
 
@@ -4957,8 +4980,7 @@ begin
       fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
   end;
   if Context.CipherList = '' then
-    Context.CipherList := SAFE_CIPHERLIST[
-      {$ifdef CPUINTEL} cfAESNI in CpuFeatures {$else} false {$endif} ];
+    Context.CipherList := SAFE_CIPHERLIST[HasHWAes];
   EOpenSslClient.Check(self, 'AfterConnection setcipherlist',
     SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)),
     @Context.LastError);
