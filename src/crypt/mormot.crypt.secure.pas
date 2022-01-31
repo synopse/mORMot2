@@ -395,17 +395,17 @@ type
   // - all its methods are thread-safe, even during obfuscation processing
   TSynUniqueIdentifierGenerator = class(TSynPersistent)
   protected
+    fSafe: TLightLock;
     fUnixCreateTime: cardinal;
     fLatestCounterOverflowUnixCreateTime: cardinal;
     fIdentifier: TSynUniqueIdentifierProcess;
     fIdentifierShifted: cardinal;
     fLastCounter: cardinal;
+    fComputedCount: Int64;
+    fCollisions: cardinal;
     fCrypto: array[0..7] of cardinal; // only fCrypto[6..7] are used in practice
     fCryptoCRC: cardinal;
-    fSafe: TSynLocker;
     fCryptoAesE, fCryptoAesD: TAes; // Initialized if aSharedObfuscationKeyNewKdf
-    function GetComputedCount: Int64;
-    function GetCollisions: Int64;
   public
     /// initialize the generator for the given 16-bit process identifier
     // - you can supply an obfuscation key, which should be shared for the
@@ -462,7 +462,7 @@ type
     property CryptoCRC: cardinal
       read fCryptoCRC;
     /// direct access to the associated mutex
-    property Safe: TSynLocker
+    property Safe: TLightLock
       read fSafe;
   published
     /// the process identifier, associated with this generator
@@ -470,11 +470,11 @@ type
       read fIdentifier;
     /// how many times ComputeNew method has been called
     property ComputedCount: Int64
-      read GetComputedCount;
+      read fComputedCount;
     /// how many times ComputeNew method did have a collision and a fake
     // increased timestamp has been involved
-    property Collisions: Int64
-      read GetCollisions;
+    property Collisions: cardinal
+      read fCollisions;
     /// low-level access to the last generated timestamp
     // - you may need to persist this value if a lot of Collisions happened, and
     // the timestamp was faked - you may also call WaitForSafeCreateTime
@@ -2735,11 +2735,6 @@ end;
 
 { TSynUniqueIdentifierGenerator }
 
-const
-  // fSafe.Padding[] slots
-  SYNUNIQUEGEN_COMPUTECOUNT = 0;
-  SYNUNIQUEGEN_COLLISIONCOUNT = 0;
-
 procedure TSynUniqueIdentifierGenerator.ComputeNew(
   out result: TSynUniqueIdentifierBits);
 var
@@ -2747,7 +2742,11 @@ var
 begin
   currentTime := UnixTimeUtc; // under Windows faster than GetTickCount64
   fSafe.Lock;
+  {$ifdef HASFASTTRYFINALLY}
   try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
     if currentTime > fUnixCreateTime then // time may have been tweaked: compare
     begin
       fUnixCreateTime := currentTime;
@@ -2757,14 +2756,17 @@ begin
     begin
       // collide if more than 32768 per second (unlikely) -> tweak the timestamp
       inc(fUnixCreateTime);
+      inc(fCollisions);
       fLastCounter := 0;
     end
     else
       inc(fLastCounter);
     result.Value := Int64(fLastCounter or fIdentifierShifted) or
                     (Int64(fUnixCreateTime) shl 31);
-    inc(fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VInt64);
+    inc(fComputedCount);
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     fSafe.UnLock;
   end;
 end;
@@ -2772,16 +2774,6 @@ end;
 function TSynUniqueIdentifierGenerator.ComputeNew: Int64;
 begin
   ComputeNew(PSynUniqueIdentifierBits(@result)^);
-end;
-
-function TSynUniqueIdentifierGenerator.GetComputedCount: Int64;
-begin
-  result := fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VInt64;
-end;
-
-function TSynUniqueIdentifierGenerator.GetCollisions: Int64;
-begin
-  result := fSafe.Padding[SYNUNIQUEGEN_COLLISIONCOUNT].VInt64;
 end;
 
 procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(
@@ -2810,9 +2802,6 @@ var
 begin
   fIdentifier := aIdentifier;
   fIdentifierShifted := aIdentifier shl 15;
-  fSafe.Init;
-  fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT] := 0;
-  fSafe.LockedInt64[SYNUNIQUEGEN_COLLISIONCOUNT] := 0;
   // compute obfuscation key using hash diffusion of the supplied text
   len := length(aSharedObfuscationKey);
   if aSharedObfuscationKeyNewKdf > 0 then
@@ -2850,7 +2839,6 @@ end;
 
 destructor TSynUniqueIdentifierGenerator.Destroy;
 begin
-  fSafe.Done;
   fCryptoAesE.Done;
   fCryptoAesD.Done;
   FillCharFast(fCrypto, SizeOf(fCrypto), 0);
