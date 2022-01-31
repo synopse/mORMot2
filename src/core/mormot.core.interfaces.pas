@@ -2100,9 +2100,8 @@ type
     Result: PInt64;
     ResultType: TInterfaceMethodValueType; // type of value stored into result
     ServiceCustomAnswerPoint: PServiceCustomAnswer;
-    Value:     array[0..MAX_METHOD_ARGS - 1] of pointer;
-    I64s:      array[0..MAX_METHOD_ARGS - 1] of Int64;
-    DynArrays: array[0..MAX_METHOD_ARGS - 1] of TDynArray;
+    Value: array[0..MAX_METHOD_ARGS - 1] of pointer;
+    I64s:  array[0..MAX_METHOD_ARGS - 1] of Int64;
   end;
 
 
@@ -2195,6 +2194,8 @@ type
     fNotifyDestroy: TOnFakeInstanceDestroy;
     fFakeID: TInterfacedObjectFakeID;
     fServiceFactory: TObject; // holds a TServiceFactory instance
+    fParams: TJsonWriter;
+    fParamsSafe: TLightLock;
     // the JITed asm stubs will redirect to these JSON-oriented process
     procedure FakeCallGetJsonFromStack(
       var ctxt: TFakeCallContext; var Json: RawUtf8);
@@ -2361,7 +2362,7 @@ type
   public
     /// initialize the execution instance
     constructor Create(aFactory: TInterfaceFactory; aMethod: PInterfaceMethod;
-      const aOptions: TInterfaceMethodOptions);
+      const aOptions: TInterfaceMethodOptions); virtual;
     /// allow to hook method execution
     // - if optInterceptInputOutput is defined in Options, then Sender.Input/Output
     // fields will contain the execution data context when Hook is called
@@ -2746,22 +2747,30 @@ end;
 
 function TInterfaceMethod.ArgIndex(ArgName: PUtf8Char; ArgNameLen: integer;
   Input: boolean): PtrInt;
+var
+  a: PInterfaceMethodArgument;
 begin
   if ArgNameLen > 0 then
     if Input then
     begin
+      a := @Args[ArgsInFirst];
       for result := ArgsInFirst to ArgsInLast do
-        with Args[result] do
-          if (ValueDirection in [imdConst, imdVar]) and
-             IdemPropName(ParamName^, ArgName, ArgNameLen) then
-              exit;
+        if (a^.ValueDirection in [imdConst, imdVar]) and
+           IdemPropName(a^.ParamName^, ArgName, ArgNameLen) then
+            exit
+        else
+          inc(a);
     end
     else
+    begin
+      a := @Args[ArgsOutFirst];
       for result := ArgsOutFirst to ArgsOutLast do
-        with Args[result] do
-          if (ValueDirection <> imdConst) and
-             IdemPropName(ParamName^, ArgName, ArgNameLen) then
-              exit;
+        if (a^.ValueDirection <> imdConst) and
+           IdemPropName(a^.ParamName^, ArgName, ArgNameLen) then
+            exit
+        else
+          inc(a);
+    end;
   result := -1;
 end;
 
@@ -3114,14 +3123,12 @@ begin
            (a^.InStackOffset >= 0) then
           V := @ctxt.Stack.Stack[a^.InStackOffset] // value is on stack
         else
-          V := @ctxt.I64s[a^.IndexVar]; // for results in CPU
+          V := @ctxt.I64s[a^.IndexVar]; // for results in registers
     {$ifdef CPUX86}
     end; // case RegisterIdent of
     {$endif CPUX86}
     if vPassedByReference in a^.ValueKindAsm then
       V := PPointer(V)^;
-    if a^.ValueType = imvDynArray then
-      {%H-}ctxt.DynArrays[a^.IndexVar].InitRtti(a^.ArgRtti, V^);
     ctxt.Value[arg] := V;
     inc(a);
   end;
@@ -3237,6 +3244,7 @@ begin
   fInvoke := aInvoke;
   fNotifyDestroy := aNotifyDestroy;
   fServiceFactory := aServiceFactory;
+  fParams := TJsonWriter.CreateOwnedStream(8192);
 end;
 
 destructor TInterfacedObjectFake.Destroy;
@@ -3257,55 +3265,62 @@ begin
     end;
   end;
   inherited Destroy;
+  fParams.Free;
 end;
 
 procedure TInterfacedObjectFake.FakeCallGetJsonFromStack(
   var ctxt: TFakeCallContext; var Json: RawUtf8);
 var
-  Params: TJsonWriter;
+  W: TJsonWriter;
   opt: TTextWriterWriteObjectOptions;
-  arg: integer;
+  arg: PtrInt;
   a: PInterfaceMethodArgument;
   V: PPointer;
-  temp: TTextWriterStackBuffer;
 begin
   FakeCallGetParamsFromStack(ctxt);
   // generate the ParamsJson input from c^.Value[]
-  Params := TJsonWriter.CreateOwnedStream(temp);
+  if fParamsSafe.TryLock then
+  begin
+    W := fParams; // reuse a per-callback TJsonWriter instance
+    W.CancelAll;
+  end
+  else
+    W := TJsonWriter.CreateOwnedStream(8192); // paranoid thread-safety call
   try
     if ifoJsonAsExtended in fOptions then
-      Params.CustomOptions := Params.CustomOptions + [twoForceJsonExtended]
+      W.CustomOptions := W.CustomOptions + [twoForceJsonExtended]
     else // e.g. for AJAX
-      Params.CustomOptions := Params.CustomOptions + [twoForceJsonStandard];
+      W.CustomOptions := W.CustomOptions + [twoForceJsonStandard];
     if ifoDontStoreVoidJson in fOptions then
     begin
       opt := DEFAULT_WRITEOPTIONS[true];
-      Params.CustomOptions := Params.CustomOptions + [twoIgnoreDefaultInRecord];
+      W.CustomOptions := W.CustomOptions + [twoIgnoreDefaultInRecord];
     end
     else
       opt := DEFAULT_WRITEOPTIONS[false];
-    a := @ctxt.Method^.Args[1];
-    for arg := 1 to length(ctxt.Method^.Args) - 1 do
+    a := @ctxt.Method^.Args[ctxt.Method^.ArgsInFirst];
+    for arg := ctxt.Method^.ArgsInFirst to ctxt.Method^.ArgsInLast do
     begin
       if a^.ValueDirection in [imdConst, imdVar] then
       begin
         V := ctxt.Value[arg];
-        case a^.ValueType of
-          imvInterface:
-            InterfaceWrite(Params, ctxt.Method^, ctxt.Method^.Args[arg], V^);
+        if a^.ValueType = imvInterface then
+          InterfaceWrite(W, ctxt.Method^, a^, V^)
         else
-          begin
-            a^.AddJson(Params, V, opt);
-            Params.AddComma;
-          end;
+        begin
+          a^.AddJson(W, V, opt);
+          W.AddComma;
         end;
       end;
       inc(a);
     end;
-    Params.CancelLastComma;
-    Params.SetText(Json); // without [ ]
+    W.CancelLastComma;
+    W.SetText(Json); // without [ ]
   finally
-    Params.Free;
+    if W = fParams then
+      fParamsSafe.UnLock
+    else
+      W.Free;
   end;
 end;
 
@@ -7365,20 +7380,17 @@ begin
               ctxt.Json := ParObjValues[a]
           else if ctxt.Json = nil then
             break; // premature end of ..] (ParObjValuesUsed=false)
-          case arg^.ValueType of
-            imvInterface:
-              if Assigned(OnCallback) then
-                // retrieve TRestServerUriContext.ExecuteCallback fake interface
-                // via TServiceContainerServer.GetFakeCallback
-                OnCallback(ctxt.Json, arg^.ArgRtti, PInterface(fValues[a])^)
-              else
-                raise EInterfaceFactory.CreateUtf8('OnCallback=nil for %(%: %)',
-                  [fMethod^.InterfaceDotMethodName, arg^.ParamName^,
-                   arg^.ArgTypeName^]);
-          else
-            if not arg^.SetFromJson(ctxt, fMethod, fValues[a], Error) then
-              exit;
-          end;
+          if arg^.ValueType = imvInterface then
+            if Assigned(OnCallback) then
+              // retrieve TRestServerUriContext.ExecuteCallback fake interface
+              // via TServiceContainerServer.GetFakeCallback
+              OnCallback(ctxt.Json, arg^.ArgRtti, PInterface(fValues[a])^)
+            else
+              raise EInterfaceFactory.CreateUtf8('OnCallback=nil for %(%: %)',
+                [fMethod^.InterfaceDotMethodName, arg^.ParamName^,
+                 arg^.ArgTypeName^])
+          else if not arg^.SetFromJson(ctxt, fMethod, fValues[a], Error) then
+            exit;
         end;
       end;
     end;
@@ -7393,16 +7405,14 @@ begin
         c := pointer(fValues[fMethod^.ArgsResultIndex]);
         if c^.Header = '' then
           // set to 'Content-Type: application/json; charset=UTF-8' by default
-          fServiceCustomAnswerHead := JSON_CONTENT_TYPE_HEADER_VAR
-        else
-          // implementation could override the Header content
-          fServiceCustomAnswerHead := c^.Header;
+          c^.Header := JSON_CONTENT_TYPE_HEADER_VAR;
+        // implementation could override the Header content
+        fServiceCustomAnswerHead := c^.Header;
         Res.ForceContent(c^.Content);
         if c^.Status = 0 then
           // Values[]=@Records[] is filled with 0 by default
-          fServiceCustomAnswerStatus := HTTP_SUCCESS
-        else
-          fServiceCustomAnswerStatus := c^.Status;
+          c^.Status := HTTP_SUCCESS;
+        fServiceCustomAnswerStatus := c^.Status;
         result := true;
         exit;
       end;
