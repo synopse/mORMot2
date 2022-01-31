@@ -93,17 +93,6 @@ type
 
 { ***************** TServiceFactoryServer Service Provider }
 
-  /// execute method from/to JSON for TServiceFactoryServer.ExecuteJson
-  TInterfaceMethodExecuteServer = class(TInterfaceMethodExecute)
-  protected
-    // used internally by TServiceFactoryServer.fExecuteCached
-    fCached: TLightLock;
-    fCachedWR: TJsonWriter;
-  public
-    /// finalize this execution context
-    destructor Destroy; override;
-  end;
-
   /// server-side service provider uses this to store one internal instance
   // - used by TServiceFactoryServer in sicClientDriven, sicPerSession,
   // sicPerUser or sicPerGroup mode
@@ -170,7 +159,7 @@ type
     fOnMethodExecute: TOnServiceCanExecute;
     fOnExecute: TInterfaceMethodExecuteEventDynArray;
     fExecuteLock: TRTLCriticalSection;
-    fExecuteCached: array of TInterfaceMethodExecuteServer;
+    fExecuteCached: TInterfaceMethodExecuteCachedDynArray;
     procedure SetServiceLogByIndex(const aMethods: TInterfaceFactoryMethodBits;
       const aLogRest: IRestOrm; aLogClass: TOrmServiceLogClass);
     procedure SetTimeoutSecInt(value: cardinal);
@@ -586,23 +575,12 @@ end;
 
 { ***************** TServiceFactoryServer Service Provider }
 
-{ TInterfaceMethodExecuteServer }
-
-destructor TInterfaceMethodExecuteServer.Destroy;
-begin
-  inherited Destroy;
-  fCachedWR.Free;
-end;
-
-
 { TServiceFactoryServer }
 
 constructor TServiceFactoryServer.Create(aRestServer: TRestServer;
   aInterface: PRttiInfo; aInstanceCreation: TServiceInstanceImplementation;
   aImplementationClass: TInterfacedClass; const aContractExpected: RawUtf8;
   aTimeOutSec: cardinal; aSharedInstance: TInterfacedObject);
-var
-  i: PtrInt;
 begin
   // extract RTTI from the interface
   InitializeCriticalSection(fExecuteLock);
@@ -686,14 +664,8 @@ begin
       end;
   end;
   SetLength(fStats, fInterface.MethodsCount);
-  SetLength(fExecuteCached, fInterface.MethodsCount);
-  for i := 0 to fInterface.MethodsCount - 1 do
-  begin
-    // prepare some reusable execution context (avoid most memory allocations)
-    fExecuteCached[i] := TInterfaceMethodExecuteServer.Create(
-      fInterface, @fInterface.Methods[i], []);
-    fExecuteCached[i].fCachedWR := TJsonWriter.CreateOwnedStream(16384);
-  end;
+  // prepare some reusable execution context (avoid most memory allocations)
+  TInterfaceMethodExecuteCached.Prepare(fInterface, fExecuteCached);
 end;
 
 procedure TServiceFactoryServer.SetTimeoutSecInt(value: cardinal);
@@ -1334,12 +1306,11 @@ var
   instancePtr: pointer; // weak IInvokable reference
   execres: boolean;
   opt: TInterfaceMethodOptions;
-  exec: TInterfaceMethodExecute;
+  exec: TInterfaceMethodExecuteCached;
   timeStart, timeEnd: Int64;
   m: PtrInt;
   stats: TSynMonitorInputOutput;
   err: ShortString;
-  temp: TTextWriterStackBuffer;
 begin
   if mlInterfaces in fRestServer.StatLevels then
     QueryPerformanceMicroSeconds(timeStart);
@@ -1415,6 +1386,7 @@ begin
   err := '';
   stats := nil;
   exec := nil;
+  WR := nil;
   try
     if fImplementationClassKind = ickFake then
       if Inst.Instance <> fSharedInstance then
@@ -1438,90 +1410,71 @@ begin
       if fBackgroundThread = nil then
         fBackgroundThread := fRestServer.Run.NewBackgroundThreadMethod(
           '% %', [self, fInterface.InterfaceName]);
-    exec := fExecuteCached[m];
-    if TInterfaceMethodExecuteServer(exec).fCached.TryLock then
-    begin
-      // use the cached instance, set current options and reuse its TJsonWriter
-      exec.Options := opt;
-      WR := TInterfaceMethodExecuteServer(exec).fCachedWR;
-    end
+    fExecuteCached[m].Acquire(opt, exec, WR);
+    Ctxt.ThreadServer^.Factory := self;
+    if not (optForceStandardJson in opt) and
+       ((Ctxt.Call.InHead = '') or
+        (Ctxt.ClientKind = ckFramework)) then
+      // return extended/optimized pseudo-JSON, as recognized by mORMot
+      WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended]
     else
-    begin
-      // another thread is already using this instance -> create transient
-      exec := TInterfaceMethodExecute.Create(fInterface, Ctxt.ServiceMethod, opt);
-      WR := TJsonWriter.CreateOwnedStream(temp);
-    end;
+      // return standard JSON, as expected e.g. by a regular AJAX client
+      WR.CustomOptions := WR.CustomOptions + [twoForceJsonStandard];
+    if optDontStoreVoidJson in opt then
+      WR.CustomOptions := WR.CustomOptions + [twoIgnoreDefaultInRecord];
+    // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
+    Ctxt.ServiceResultStart(WR);
+    if mlInterfaces in fRestServer.StatLevels then
+      stats := GetStats(Ctxt, m);
+    if optExecLockedPerInterface in opt then
+      EnterCriticalSection(fExecuteLock);
     try
-      Ctxt.ThreadServer^.Factory := self;
-      if not (optForceStandardJson in opt) and
-         ((Ctxt.Call.InHead = '') or
-          (Ctxt.ClientKind = ckFramework)) then
-        // return extended/optimized pseudo-JSON, as recognized by mORMot
-        WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended]
+      exec.BackgroundExecutionThread := fBackgroundThread;
+      exec.OnCallback := Ctxt.ExecuteCallback;
+      if fOnExecute <> nil then
+        exec.AddInterceptors(fOnExecute);
+      if Ctxt.ServiceExecution^.LogRest <> nil then
+        exec.AddInterceptor(OnLogRestExecuteMethod);
+      if (fImplementationClassKind = ickFake) and
+         ((Ctxt.ServiceParameters = nil) or
+          (Ctxt.ServiceParameters^ = '[')) and
+         not ((optExecInMainThread in exec.Options) or
+              (optExecInPerInterfaceThread in exec.Options)) and
+         (exec.Method^.ArgsOutputValuesCount = 0) then
+        // params already as TInterfacedObjectFake expected JSON array
+        execres := exec.ExecuteJsonFake(Inst.Instance, Ctxt.ServiceParameters)
       else
-        // return standard JSON, as expected e.g. by a regular AJAX client
-        WR.CustomOptions := WR.CustomOptions + [twoForceJsonStandard];
-      if optDontStoreVoidJson in opt then
-        WR.CustomOptions := WR.CustomOptions + [twoIgnoreDefaultInRecord];
-      // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
-      Ctxt.ServiceResultStart(WR);
-      if mlInterfaces in fRestServer.StatLevels then
-        stats := GetStats(Ctxt, m);
-      if optExecLockedPerInterface in opt then
-        EnterCriticalSection(fExecuteLock);
-      try
-        exec.BackgroundExecutionThread := fBackgroundThread;
-        exec.OnCallback := Ctxt.ExecuteCallback;
-        if fOnExecute <> nil then
-          exec.AddInterceptors(fOnExecute);
-        if Ctxt.ServiceExecution^.LogRest <> nil then
-          exec.AddInterceptor(OnLogRestExecuteMethod);
-        if (fImplementationClassKind = ickFake) and
-           ((Ctxt.ServiceParameters = nil) or
-            (Ctxt.ServiceParameters^ = '[')) and
-           not ((optExecInMainThread in exec.Options) or
-                (optExecInPerInterfaceThread in exec.Options)) and
-           (exec.Method^.ArgsOutputValuesCount = 0) then
-          // params already as TInterfacedObjectFake expected JSON array
-          execres := exec.ExecuteJsonFake(Inst.Instance, Ctxt.ServiceParameters)
-        else
-          // regular execution
-          execres := exec.ExecuteJson([instancePtr], Ctxt.ServiceParameters,
-            WR, @err, Ctxt.ForceServiceResultAsJsonObject);
-        if not execres then
-        begin
-          // wrong request returns HTTP error 406
-          if err[0] <> #0 then
-            Ctxt.Error('%', [err], HTTP_NOTACCEPTABLE)
-          else
-            ExecuteError(self, Ctxt, 'execution failed (probably due to bad ' +
-              'input parameters: e.g. did you initialize your input record(s)?)',
-               HTTP_NOTACCEPTABLE);
-          exit;
-        end;
-        Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
-        Ctxt.Call.OutStatus := exec.ServiceCustomAnswerStatus;
-      finally
-        if optExecLockedPerInterface in opt then
-          LeaveCriticalSection(fExecuteLock);
-      end;
-      if Ctxt.Call.OutHead = '' then
+        // regular execution
+        execres := exec.ExecuteJson([instancePtr], Ctxt.ServiceParameters,
+          WR, @err, Ctxt.ForceServiceResultAsJsonObject);
+      if not execres then
       begin
-        // <>'' for TServiceCustomAnswer, where body has already been written
-        Ctxt.ServiceResultEnd(WR, Inst.InstanceID);
-        Ctxt.Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
-        Ctxt.Call.OutStatus := HTTP_SUCCESS;
+        // wrong request returns HTTP error 406
+        if err[0] <> #0 then
+          Ctxt.Error('%', [err], HTTP_NOTACCEPTABLE)
+        else
+          ExecuteError(self, Ctxt, 'execution failed (probably due to bad ' +
+            'input parameters: e.g. did you initialize your input record(s)?)',
+             HTTP_NOTACCEPTABLE);
+        exit;
       end;
-      WR.SetText(Ctxt.Call.OutBody);
+      Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
+      Ctxt.Call.OutStatus := exec.ServiceCustomAnswerStatus;
     finally
-      Ctxt.ThreadServer^.Factory := nil;
-      if exec = fExecuteCached[m] then
-        WR.CancelAll // will reuse this instance and its buffer
-      else
-        WR.Free;
+      if optExecLockedPerInterface in opt then
+        LeaveCriticalSection(fExecuteLock);
     end;
+    if Ctxt.Call.OutHead = '' then
+    begin
+      // <>'' for TServiceCustomAnswer, where body has already been written
+      Ctxt.ServiceResultEnd(WR, Inst.InstanceID);
+      Ctxt.Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
+      Ctxt.Call.OutStatus := HTTP_SUCCESS;
+    end;
+    WR.SetText(Ctxt.Call.OutBody);
   finally
     try
+      Ctxt.ThreadServer^.Factory := nil;
       if InstanceCreation = sicSingle then
         // always release single shot instance immediately (no GC)
         InstanceFree(Inst.Instance);
@@ -1543,10 +1496,7 @@ begin
       begin
         if Ctxt.ServiceExecution^.LogRest <> nil then
           FinalizeLogRest(Ctxt, exec, timeEnd);
-        if exec = fExecuteCached[m] then
-          TInterfaceMethodExecuteServer(exec).fCached.UnLock
-        else
-          exec.Free;
+        fExecuteCached[m].Release(exec);
       end;
     end;
   end;

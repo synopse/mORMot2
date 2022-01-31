@@ -2463,6 +2463,35 @@ type
     function TempTextWriter: TJsonWriter;
   end;
 
+  TInterfaceMethodExecuteCached = class;
+
+  /// set reusable interface methods execution from/to JSON
+  TInterfaceMethodExecuteCachedDynArray = array of TInterfaceMethodExecuteCached;
+
+  /// reusable interface method execution from/to JSON
+  // - used e.g. by TServiceFactoryServer.ExecuteJson or
+  // TMvcRendererAbstract.ExecuteCommand
+  TInterfaceMethodExecuteCached = class(TInterfaceMethodExecute)
+  protected
+    fCached: TLightLock;
+    fCachedWR: TJsonWriter;
+  public
+    /// initialize a TInterfaceMethodExecuteCachedDynArray of per-method caches
+    class procedure Prepare(aFactory: TInterfaceFactory;
+      out Cached: TInterfaceMethodExecuteCachedDynArray);
+    /// initialize the execution instance
+    constructor Create(aFactory: TInterfaceFactory; aMethod: PInterfaceMethod;
+      const aOptions: TInterfaceMethodOptions); override;
+    /// finalize this execution context
+    destructor Destroy; override;
+    /// will use this instance if possible, or create a temporary one
+    procedure Acquire(opt: TInterfaceMethodOptions;
+      out exec: TInterfaceMethodExecuteCached; out WR: TJsonWriter);
+    // will release this instance if was acquired, or free a temporary one
+    procedure Release(exec: TInterfaceMethodExecuteCached);
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
 
 /// low-level execution of a procedure of object in a given background thread
 procedure BackgroundExecuteThreadMethod(const method: TThreadMethod;
@@ -7437,6 +7466,60 @@ begin
     // release any managed input/output parameters from fValues[]
     AfterExecute;
   end;
+end;
+
+
+{ TInterfaceMethodExecuteCached }
+
+class procedure TInterfaceMethodExecuteCached.Prepare(aFactory: TInterfaceFactory;
+  out Cached: TInterfaceMethodExecuteCachedDynArray);
+var
+  i: PtrInt;
+begin
+  // prepare some reusable execution context (avoid most memory allocations)
+  SetLength(Cached, aFactory.MethodsCount);
+  for i := 0 to aFactory.MethodsCount - 1 do
+    Cached[i] := Create(aFactory, @aFactory.Methods[i], []);
+end;
+
+constructor TInterfaceMethodExecuteCached.Create(aFactory: TInterfaceFactory;
+  aMethod: PInterfaceMethod; const aOptions: TInterfaceMethodOptions);
+begin
+  inherited Create(aFactory, aMethod, aOptions);
+  fCachedWR := TJsonWriter.CreateOwnedStream(16384);
+end;
+
+destructor TInterfaceMethodExecuteCached.Destroy;
+begin
+  inherited Destroy;
+  fCachedWR.Free;
+end;
+
+procedure TInterfaceMethodExecuteCached.Acquire(opt: TInterfaceMethodOptions;
+  out exec: TInterfaceMethodExecuteCached; out WR: TJsonWriter);
+begin
+  if fCached.TryLock then
+  begin
+    // reuse this shared instance between calls
+    SetOptions(opt);
+    exec := self;
+    fCachedWR.CancelAll;
+    WR := fCachedWR;
+  end
+  else
+  begin
+    // on thread contention, will use a transient temporary instance
+    exec := TInterfaceMethodExecuteCached.Create(fFactory, fMethod, opt);
+    WR := exec.fCachedWR;
+  end;
+end;
+
+procedure TInterfaceMethodExecuteCached.Release(exec: TInterfaceMethodExecuteCached);
+begin
+  if exec = self then
+    fCached.UnLock // ready for the next call
+  else
+    exec.Free;     // remove the thread-specific temporary instance
 end;
 
 

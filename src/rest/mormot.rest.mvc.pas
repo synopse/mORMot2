@@ -433,6 +433,7 @@ type
     fMethodIndex: integer;
     fMethodReturnsAction: boolean;
     fInput: RawUtf8;
+    fExecuteCached: TInterfaceMethodExecuteCachedDynArray;
     procedure Renders(var outContext: variant; status: cardinal;
       forcesError: boolean); virtual; abstract;
     function Redirects(const action: TMvcAction): boolean; virtual;
@@ -441,6 +442,8 @@ type
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
     constructor Create(aApplication: TMvcApplication); reintroduce;
+    /// finalize this rendering context
+    destructor Destroy; override;
     /// main execution method of the rendering process
     // - Input should have been set with the incoming execution context
     procedure ExecuteCommand(aMethodIndex: integer); virtual;
@@ -1574,6 +1577,13 @@ end;
 constructor TMvcRendererAbstract.Create(aApplication: TMvcApplication);
 begin
   fApplication := aApplication;
+  TInterfaceMethodExecuteCached.Prepare(aApplication.Factory, fExecuteCached);
+end;
+
+destructor TMvcRendererAbstract.Destroy;
+begin
+  inherited Destroy;
+  ObjArrayClear(fExecuteCached);
 end;
 
 procedure TMvcRendererAbstract.CommandError(const ErrorName: RawUtf8;
@@ -1594,14 +1604,13 @@ end;
 procedure TMvcRendererAbstract.ExecuteCommand(aMethodIndex: integer);
 var
   action: TMvcAction;
-  exec: TInterfaceMethodExecute;
+  exec: TInterfaceMethodExecuteCached;
   isAction: boolean;
   WR: TJsonWriter;
   m: PInterfaceMethod;
   methodOutput: RawUtf8;
   renderContext, info: variant;
   err: ShortString;
-  tmp: TTextWriterStackBuffer;
 begin
   action.ReturnedStatus := HTTP_SUCCESS;
   fMethodIndex := aMethodIndex;
@@ -1612,32 +1621,27 @@ begin
         try
           m := @fApplication.fFactory.Methods[fMethodIndex];
           isAction := m^.ArgsResultIsServiceCustomAnswer;
-          WR := TJsonWriter.CreateOwnedStream(tmp);
+          fExecuteCached[fMethodIndex].Acquire([], exec, WR);
           try
             WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended];
             WR.Add('{');
-            exec := TInterfaceMethodExecute.Create(fApplication.fFactory, m, []);
-            try
-              exec.ServiceCustomAnswerStatus := action.ReturnedStatus;
-              err := '';
-              if not exec.ExecuteJson([fApplication.fFactoryEntry],
-                  pointer(fInput), WR, @err, true) then
-              begin
-                if err = '' then
-                  err := 'execution error';
-                raise EMvcException.CreateUtf8('%.CommandRunMethod(I%): %',
-                  [self, m^.InterfaceDotMethodName, err])
-              end;
-              action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
-              action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
-            finally
-              exec.Free;
+            exec.ServiceCustomAnswerStatus := action.ReturnedStatus;
+            err := '';
+            if not exec.ExecuteJson([fApplication.fFactoryEntry],
+                pointer(fInput), WR, @err, true) then
+            begin
+              if err = '' then
+                err := 'execution error';
+              raise EMvcException.CreateUtf8('%.CommandRunMethod(I%): %',
+                [self, m^.InterfaceDotMethodName, err])
             end;
+            action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
+            action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
             if not isAction then
               WR.Add('}');
             WR.SetText(methodOutput);
           finally
-            WR.Free;
+            fExecuteCached[fMethodIndex].Release(exec);
           end;
           if isAction then
             // was a TMvcAction mapped in a TServiceCustomAnswer record
