@@ -233,8 +233,8 @@ type
       const Fields: TFieldBits; out Json: RawUtf8); overload;
     /// internal TOrm value serialization to a JSON object
     procedure GetJsonValue(Value: TOrm; withID: boolean;
-      Occasion: TOrmOccasion; out Json: RawUtf8); overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      Occasion: TOrmOccasion; var Json: RawUtf8); overload;
+      {$ifdef FPC} inline; {$endif} // avoid URW1111 on Delphi 2010
     /// access to a thread-safe internal cached TJsonWriter instance
     function AcquireJsonWriter: TJsonWriter;
       {$ifdef HASINLINE} inline; {$endif}
@@ -626,7 +626,7 @@ begin
 end;
 
 procedure TRestOrm.GetJsonValue(Value: TOrm; withID: boolean;
-  Occasion: TOrmOccasion; out Json: RawUtf8);
+  Occasion: TOrmOccasion; var Json: RawUtf8);
 begin
   GetJsonValue(Value, withID, Value.Orm.SimpleFieldsBits[Occasion], Json);
 end;
