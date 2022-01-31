@@ -1956,7 +1956,7 @@ function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;
     data := aSentData;
     if (data = '') and
        (aRec <> nil) then
-      data := aRec.GetJsonValues(True, False, EVENT2OCCASION[aEvent]);
+      GetJsonValue(aRec, false, EVENT2OCCASION[aEvent], data);
     histclass.InitializeFields([
       'ModifiedRecord', aTableIndex + aID shl 6,
       'Event', ord(event),

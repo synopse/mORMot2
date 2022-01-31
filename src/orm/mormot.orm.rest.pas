@@ -78,6 +78,8 @@ type
     fCache: TRestCache;
     fTransactionActiveSession: cardinal;
     fTransactionTable: TOrmClass;
+    fTempJsonWriter: TJsonWriter;
+    fTempJsonWriterLock: TLightLock;
     /// compute SELECT ... FROM TABLE WHERE ...
     function SQLComputeForSelect(Table: TOrmClass;
       const FieldNames, WhereClause: RawUtf8): RawUtf8;
@@ -226,6 +228,19 @@ type
     constructor CreateWithoutRest(aModel: TOrmModel); reintroduce; virtual;
     /// release internal used instances
     destructor Destroy; override;
+    /// internal TOrm value serialization to a JSON object
+    procedure GetJsonValue(Value: TOrm; withID: boolean;
+      const Fields: TFieldBits; out Json: RawUtf8); overload;
+    /// internal TOrm value serialization to a JSON object
+    procedure GetJsonValue(Value: TOrm; withID: boolean;
+      Occasion: TOrmOccasion; out Json: RawUtf8); overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// access to a thread-safe internal cached TJsonWriter instance
+    function AcquireJsonWriter: TJsonWriter;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// release the thread-safe cached TJsonWriter returned by AcquireJsonWriter
+    procedure ReleaseJsonWriter(WR: TJsonWriter);
+      {$ifdef HASINLINE} inline; {$endif}
     /// low-level access to the current TOrm class holding a transaction
     // - equals nil outside of a TransactionBegin/Commit scope
     property TransactionTable: TOrmClass
@@ -544,6 +559,7 @@ implementation
 constructor TRestOrm.Create(aRest: TRest);
 begin
   inherited Create;
+  fTempJsonWriter := TJsonWriter.CreateOwnedStream(16384);
   if aRest = nil then
     exit;
   fRest := aRest;
@@ -565,6 +581,7 @@ begin
      (fModel.Owner = self) then
     // make sure we are the Owner (TRestStorage has fModel<>nil e.g.)
     FreeAndNilSafe(fModel);
+  fTempJsonWriter.Free;
 end;
 
 function TRestOrm.SQLComputeForSelect(Table: TOrmClass;
@@ -587,6 +604,52 @@ begin
         result := ''
       else
         result := SqlFromSelect(SqlTableName, FieldNames, WhereClause, '');
+end;
+
+function TRestOrm.AcquireJsonWriter: TJsonWriter;
+begin
+  if fTempJsonWriterLock.TryLock then
+    result := fTempJsonWriter
+  else
+    result := TJsonWriter.CreateOwnedStream(8100);
+end;
+
+procedure TRestOrm.ReleaseJsonWriter(WR: TJsonWriter);
+begin
+  if WR = fTempJsonWriter then
+  begin
+    WR.CancelAll;
+    fTempJsonWriterLock.UnLock;
+  end
+  else
+    WR.Free;
+end;
+
+procedure TRestOrm.GetJsonValue(Value: TOrm; withID: boolean;
+  Occasion: TOrmOccasion; out Json: RawUtf8);
+begin
+  GetJsonValue(Value, withID, Value.Orm.SimpleFieldsBits[Occasion], Json);
+end;
+
+procedure TRestOrm.GetJsonValue(Value: TOrm; withID: boolean;
+  const Fields: TFieldBits; out Json: RawUtf8);
+var
+  WR: TJsonWriter;
+begin
+  // faster than Json := Value.GetJsonValues(true, withID, Fields);
+  WR := AcquireJsonWriter;
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    Value.AppendAsJsonObject(WR, Fields, withID);
+    WR.SetText(Json);
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+  {$endif HASFASTTRYFINALLY}
+    ReleaseJsonWriter(WR);
+  end;
 end;
 
 procedure TRestOrm.GetJsonValuesForAdd(TableIndex: integer; Value: TOrm;
@@ -625,7 +688,7 @@ begin
   if not ForceID and IsZero(fields) then
     result := ''
   else
-    result := Value.GetJsonValues(true, ForceID, fields);
+    GetJsonValue(Value, ForceID, fields, result);
 end;
 
 function TRestOrm.InternalAdd(Value: TOrm; SendData: boolean;
@@ -1154,9 +1217,9 @@ begin
   result := OneFieldValues(Table, 'RowID', WhereClause, TInt64DynArray(DocID));
 end;
 
-function TRestOrm.FTSMatch(Table: TOrmFts3Class;
-  const MatchClause: RawUtf8; var DocID: TIDDynArray;
-  const PerFieldWeight: array of double; limit, offset: integer): boolean;
+function TRestOrm.FTSMatch(Table: TOrmFts3Class; const MatchClause: RawUtf8;
+  var DocID: TIDDynArray; const PerFieldWeight: array of double;
+  limit: integer; offset: integer): boolean;
 var
   WhereClause: RawUtf8;
   i: PtrInt;
@@ -1761,7 +1824,7 @@ begin
     exit;
   end;
   fCache.Notify(Value, ooUpdate); // will serialize Value (JsonValues may not be enough)
-  JsonValues := Value.GetJsonValues(true, false, FieldBits);
+  GetJsonValue(Value, {withid=}false, FieldBits, JsonValues);
   WriteLock;
   try
     // may be within a batch in another thread

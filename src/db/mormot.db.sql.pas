@@ -2996,7 +2996,7 @@ begin
           begin
             if c[2] = 'Z' then
               raise ESqlDBException.Create(
-                'Only 656 parameters in :AA to :ZZ range');
+                'Only up to 656 parameters are possible in :AA to :ZZ range');
             c[1] := 'A';
             inc(c[2]);
           end
@@ -3522,7 +3522,8 @@ function TSqlDBConnectionProperties.SharedTransaction(SessionID: cardinal;
   begin
     result := ThreadSafeConnection;
     if result <> fSharedTransactions[index].Connection then
-      raise ESqlDBException.CreateUtf8('%.SharedTransaction(sessionID=%) with mixed thread connections: % and %',
+      raise ESqlDBException.CreateUtf8(
+        '%.SharedTransaction(sessionID=%) with mixed thread connections: % and %',
         [self, SessionID, result, fSharedTransactions[index].Connection]);
   end;
 
@@ -5856,8 +5857,8 @@ begin
             VType := varString;
         end;
     else
-      raise ESqlDBException.CreateUtf8('%.ColumnToVariant: Invalid ColumnType(%)=%',
-        [self, Col, ord(result)]);
+      raise ESqlDBException.CreateUtf8(
+        '%.ColumnToVariant: Invalid ColumnType(%)=%', [self, Col, ord(result)]);
     end;
   end;
 end;

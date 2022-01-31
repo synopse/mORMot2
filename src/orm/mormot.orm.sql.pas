@@ -792,7 +792,7 @@ begin
       else
         FormatUtf8(limit.InsertFmt, [Stmt.Limit], limitSQL);
     end;
-    W := TJsonWriter.CreateOwnedStream(GetTempBuffer^);
+    W := TJsonWriter.CreateOwnedStream(fTempBuffer^);
     try
       W.AddShorter('select ');
       if limit.Position = posSelect then
@@ -2148,7 +2148,7 @@ begin
     exit;
   end;
   result := '';
-  WR := TJsonWriter.CreateOwnedStream(GetTempBuffer^);
+  WR := TJsonWriter.CreateOwnedStream(fTempBuffer^);
   try
     WR.AddString(fSelectAllDirectSQL);
     where := @Prepared.Where;

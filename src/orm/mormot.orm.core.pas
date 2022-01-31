@@ -2208,7 +2208,7 @@ type
     procedure GetJsonValues(W: TOrmWriter); overload;
     /// return the UTF-8 encoded JSON objects for the values of this TOrm
     // - the JSON buffer will be finalized if needed (e.g. non expanded mode),
-  	// and the supplied TOrmWriter instance will be freed by this method
+    // and the supplied TOrmWriter instance will be freed by this method
     // - layout and fields should have been set at TOrmWriter construction:
     // to append some content to an existing TOrmWriter, call the
     // AppendAsJsonObject() method
@@ -2249,7 +2249,8 @@ type
     // method will add the JSON object directly to any TOrmWriter
     // - by default, will append the simple fields, unless the Fields optional
     // parameter is customized to a non void value
-    procedure AppendAsJsonObject(W: TOrmWriter; Fields: TFieldBits);
+    procedure AppendAsJsonObject(W: TJsonWriter; Fields: TFieldBits;
+      WithID: boolean);
     /// will append all the FillPrepare() records as an expanded JSON array
     // - generates '[{rec1},{rec2},...]' using a loop similar to:
     // ! while FillOne do .. AppendJsonObject() ..
@@ -2258,7 +2259,7 @@ type
     // - by default, will append the simple fields, unless the Fields optional
     // parameter is customized to a non void value
     // - see also IRestOrm.AppendListAsJsonArray for a high-level wrapper method
-    procedure AppendFillAsJsonArray(const FieldName: RawUtf8; W: TOrmWriter;
+    procedure AppendFillAsJsonArray(const FieldName: RawUtf8; W: TJsonWriter;
       const Fields: TFieldBits = []);
     /// change TDocVariantData.Options for all variant published fields
     // - may be used to replace e.g. JSON_FAST_EXTENDED by JSON_FAST
@@ -6936,43 +6937,55 @@ begin
     W.Add('}');
 end;
 
-procedure TOrm.AppendAsJsonObject(W: TOrmWriter; Fields: TFieldBits);
+procedure TOrm.AppendAsJsonObject(W: TJsonWriter; Fields: TFieldBits;
+  WithID: boolean);
 var // Fields are not "const" since are modified if zero
   i: PtrInt;
   P: TOrmProperties;
-  Props: TOrmPropInfoList;
+  nfo: ^TOrmPropInfo;
 begin
   if self = nil then
   begin
     W.AddNull;
     exit;
   end;
-  W.AddShorter('{"ID":');
-  W.Add(fID);
+  if WithID then
+  begin
+    W.AddShorter('{"ID":');
+    W.Add(fID);
+    W.AddComma;
+  end
+  else
+    W.Add('{');
   P := Orm;
   if IsZero(Fields) then
     Fields := P.SimpleFieldsBits[ooSelect];
-  Props := P.Fields;
-  for i := 0 to Props.Count - 1 do
+  nfo := pointer(P.Fields.List);
+  for i := 0 to P.Fields.Count - 1 do
+  begin
     if byte(i) in Fields then
     begin
-      W.Add(',', '"');
-      W.AddNoJsonEscape(pointer(Props.List[i].Name), length(Props.List[i].Name));
+      W.Add('"');
+      W.AddNoJsonEscape(pointer(nfo^.Name), length(nfo^.Name));
       W.Add('"', ':');
-      Props.List[i].GetJsonValues(self, W);
+      nfo^.GetJsonValues(self, W);
+      W.AddComma;
     end;
+    inc(nfo);
+  end;
+  W.CancelLastComma;
   W.Add('}');
 end;
 
 procedure TOrm.AppendFillAsJsonArray(const FieldName: RawUtf8;
-  W: TOrmWriter; const Fields: TFieldBits);
+  W: TJsonWriter; const Fields: TFieldBits);
 begin
   if FieldName <> '' then
     W.AddFieldName(FieldName);
   W.Add('[');
   while FillOne do
   begin
-    AppendAsJsonObject(W, Fields);
+    AppendAsJsonObject(W, Fields, {withID=}true);
     W.AddComma;
   end;
   W.CancelLastComma;

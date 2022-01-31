@@ -3720,13 +3720,13 @@ procedure TRestServerUriContext.ExecuteOrmWrite;
     Rec := Table.Create;
     try
       Rec.FillFrom(pointer(fCall^.InBody), @bits);
-      Rec.ComputeFieldsBeforeWrite(Server.ORM, Occasion);
+      Rec.ComputeFieldsBeforeWrite(Server.Orm, Occasion);
       with TableModelProps.Props do
         if Occasion = oeAdd then
           bits := bits + ComputeBeforeAddFieldsBits
         else
           bits := bits + ComputeBeforeUpdateFieldsBits;
-      fCall^.Inbody := Rec.GetJsonValues(true, Rec.IDValue <> 0, bits);
+      fServer.OrmInstance.GetJsonValue(Rec, Rec.IDValue <> 0, bits, fCall^.InBody);
     finally
       Rec.Free;
     end;
@@ -4492,7 +4492,7 @@ begin
      (Service = nil) then
     raise EServiceException.CreateUtf8(
       '%.ExecuteSoaByInterface invalid call', [self]);
-  tmp.Init(fCall^.Inbody);
+  tmp.Init(fCall^.InBody);
   try
     JsonDecode(tmp.buf, @RPC_NAMES, length(RPC_NAMES), @values, true);
     if values[0].Text = nil then // Method name required

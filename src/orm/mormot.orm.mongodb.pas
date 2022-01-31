@@ -315,7 +315,7 @@ var
   name: RawUtf8;
 begin
   sf := length(SubFields);
-  W := TBsonWriter.Create(GetTempBuffer^);
+  W := TBsonWriter.Create(fTempBuffer^);
   try
     W.BsonDocumentBegin;
     if WithID then
@@ -917,7 +917,7 @@ begin
     result := '';
     exit;
   end;
-  W := TJsonWriter.CreateOwnedStream(GetTempBuffer^);
+  W := TJsonWriter.CreateOwnedStream(fTempBuffer^);
   try
     W.Add('{');
     for i := 0 to doc.Count - 1 do
@@ -1244,7 +1244,7 @@ var
         [ClassType, SQL], sllError);
       exit;
     end;
-    B := TBsonWriter.Create(GetTempBuffer^);
+    B := TBsonWriter.Create(fTempBuffer^);
     try
       B.BsonDocumentBegin;
       if Stmt.OrderByField <> nil then
@@ -1316,7 +1316,7 @@ var
           distinct := Stmt.Select[i].Field;
           distinctName := fStoredClassMapping^.FieldNameByIndex(distinct - 1);
         end;
-    B := TBsonWriter.Create(GetTempBuffer^);
+    B := TBsonWriter.Create(fTempBuffer^);
     try
       B.BsonDocumentBegin;
       if Stmt.Where <> nil then
@@ -1507,7 +1507,7 @@ begin
           try
             W := fStoredClassRecordProps.CreateJsonWriter(MS,
               ForceAjax or (Owner = nil) or not Owner.Owner.NoAjaxJson,
-              withID, bits, {rowcounts=}0, 0, GetTempBuffer);
+              withID, bits, {rowcounts=}0, 0, fTempBuffer);
             try
               ResCount := GetJsonValues(Res, extFieldNames, W);
               result := MS.DataString;

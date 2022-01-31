@@ -1563,8 +1563,7 @@ begin
   InitializeEngine;
 end;
 
-constructor TRestOrmServerDB.Create(aRest: TRest;
-  aDB: TSqlDataBase; aOwnDB: boolean);
+constructor TRestOrmServerDB.Create(aRest: TRest; aDB: TSqlDataBase; aOwnDB: boolean);
 begin
   fDB := aDB; // should be done before CreateWithoutRest/Create
   if aOwnDB then
@@ -1811,6 +1810,8 @@ end;
 
 function TRestOrmServerDB.MainEngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
+var
+  WR: TJsonWriter;
 begin
   // faster direct access with no ID inlining
   result := '';
@@ -1819,23 +1820,21 @@ begin
      (DB = nil) then
     exit;
   // we don't use DB.LockJson() cache because we have already a per-ID cache
+  WR := nil;
   DB.Lock;
   try
     PrepareCachedStatement(
       Model.TableProps[TableModelIndex].SQL.SelectOneWithID, 1);
     fStatement^.Bind(1, ID);
-    result := fStatement^.ExecuteJson(DB.DB, '', true);
+    // faster than fStatement^.ExecuteJson()
+    WR := AcquireJsonWriter;
+    if fStatement^.ExecuteStepJson(DB.DB, WR) then
+      WR.SetText(result);
   finally
+    ReleaseJsonWriter(WR);
     GetAndPrepareStatementRelease(nil, 'id=%', [ID]);
     DB.UnLock;
   end;
-  if result <> '' then
-    if IsNotAjaxJson(pointer(result)) then
-      // '{"fieldCount":2,"values":["ID","FirstName"]}'#$A -> ID not found
-      result := ''
-    else
-      // list '[{...}]'#10 -> object '{...}'
-      TrimChars(result, 1, 2);
 end;
 
 function TRestOrmServerDB.MainEngineRetrieveBlob(TableModelIndex: integer;

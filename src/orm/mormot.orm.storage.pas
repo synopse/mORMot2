@@ -520,7 +520,6 @@ type
     procedure RecordVersionFieldHandle(Occasion: TOrmOccasion;
       var Decoder: TJsonObjectDecoder);
     function GetStoredClassName: RawUtf8;
-    function GetTempBuffer: PTextWriterStackBuffer;
   public
     /// initialize the abstract storage data
     constructor Create(aClass: TOrmClass; aServer: TRestOrmServer); reintroduce; virtual;
@@ -1749,6 +1748,7 @@ begin
     fStoredClassRecordProps.SqlTableName + ' LIMIT 1';
   fBasicSqlHasRows[true] := fBasicSqlHasRows[false];
   system.delete(fBasicSqlHasRows[true], 8, 3);
+  GetMem(fTempBuffer, SizeOf(fTempBuffer^)); // 8KB pre-allocated buffer
 end;
 
 destructor TRestStorage.Destroy;
@@ -1766,8 +1766,7 @@ begin
     fStorageVirtual.fStatic := nil;
     fStorageVirtual.fStaticStorage := nil;
   end;
-  if fTempBuffer <> nil then
-    FreeMem(fTempBuffer);
+  FreeMem(fTempBuffer);
 end;
 
 function TRestStorage.CreateSqlMultiIndex(Table: TOrmClass;
@@ -1879,13 +1878,6 @@ begin
     result := ''
   else
     ClassToText(fStoredClass, result);
-end;
-
-function TRestStorage.GetTempBuffer: PTextWriterStackBuffer;
-begin
-  if fTempBuffer = nil then
-    GetMem(fTempBuffer, SizeOf(fTempBuffer^)); // 8KB pre-allocated buffer
-  result := fTempBuffer;
 end;
 
 
@@ -2014,7 +2006,7 @@ function TRestStorageTOrm.UpdateOne(ID: TID;
   const Values: TSqlVarDynArray): boolean;
 var
   rec: TOrm;
-  sentdata: RawUtf8;
+  json: RawUtf8;
 begin
   if ID <= 0 then
   begin
@@ -2025,10 +2017,10 @@ begin
   try
     rec.SetFieldSqlVars(Values);
     rec.IDValue := ID;
-    sentdata := rec.GetJsonValues(true, False, ooUpdate);
+    GetJsonValue(rec, {withID=}false, fStoredClassRecordProps.CopiableFieldsBits, json);
     StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'UpdateOne' {$endif});
     try
-      result := UpdateOne(rec, rec.Orm.CopiableFieldsBits, sentdata);
+      result := UpdateOne(rec, fStoredClassRecordProps.CopiableFieldsBits, json);
     finally
       StorageUnLock;
     end;
@@ -2831,7 +2823,7 @@ begin
     raise ERestStorage.CreateUtf8('%.GetJsonValues on % with Stmt.Where[]=%:' +
       ' our in-memory engine only supports a single WHERE clause operation',
       [self, fStoredClass, length(Stmt.Where)]);
-  tmp := GetTempBuffer; // aBufSize=65500 is ignored if tmp<>nil
+  tmp := fTempBuffer; // aBufSize=65500 is ignored if tmp<>nil
   if Stmt.Where = nil then
     // no WHERE statement -> get all rows -> guess rows count
     if (Stmt.Limit > 0) and
@@ -2877,7 +2869,7 @@ begin
             result := FindWhere(Field, Value, Operation,
               GetJsonValuesEvent, W, Stmt.Limit, Stmt.Offset);
         opIn:
-          // only handle ID IN (..) by now
+          // only handle  ID IN (..)  syntax by now
           if (Stmt.Where[0].Field <> 0) or
              (Stmt.Offset > 0) then
             goto err
@@ -3002,12 +2994,13 @@ begin
         exit;
       if Stmt.SelectFunctionCount = 0 then
       begin
-        // save rows as JSON, with appropriate search according to Where.* arguments
+        // this is the main execution block, for regular SELECT statements
         MS := TRawByteStringStream.Create;
         try
           ForceAjax := ForceAjax or not Owner.Owner.NoAjaxJson;
           StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'GetJsonValues' {$endif});
           try
+            // save rows as JSON, with appropriate search according to Where.*
             ResCount := GetJsonValues(MS, ForceAjax, Stmt);
           finally
             StorageUnLock;
@@ -3021,9 +3014,10 @@ begin
               (Stmt.SelectFunctionCount <> 1) or
               (Stmt.Limit > 1) or
               (Stmt.Offset <> 0) then
-        // handle a single max() or count() function with no LIMIT nor OFFSET
+        // handle a single max() or count() SQL function with no LIMIT nor OFFSET
         exit
       else
+        // handle the known max() or count() SQL functions
         case Stmt.Select[0].FunctionKnown of
           funcCountStar:
             if Stmt.Where = nil then
@@ -3471,7 +3465,7 @@ begin
     if i < 0 then
       result := ''
     else
-      result := fValue[i].GetJsonValues(true, true, ooSelect);
+      GetJsonValue(fValue[i], {withID=}true, [], result);
   finally
     StorageUnLock;
   end;
@@ -3755,7 +3749,7 @@ begin
     result := true;
     if Owner <> nil then
       Owner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
-        ID, fValue[i].GetJsonValues(True, False, ooUpdate), nil, nil);
+        ID, '', nil, fValue[i]);
   finally
     StorageUnLock;
   end;
@@ -4243,6 +4237,7 @@ function TOrmVirtualTableJson.Insert(aRowID: Int64;
   var Values: TSqlVarDynArray; out insertedRowID: Int64): boolean;
 var
   rec: TOrm;
+  json: RawUtf8;
 begin
   result := false;
   if (self = nil) or
@@ -4254,8 +4249,8 @@ begin
     begin
       if aRowID > 0 then
         rec.IDValue := aRowID;
-      insertedRowID := fStaticInMemory.AddOne(rec, aRowID > 0,
-        rec.GetJsonValues(true, false, ooInsert));
+      fStaticInMemory.GetJsonValue(rec, false, ooInsert, json);
+      insertedRowID := fStaticInMemory.AddOne(rec, aRowID > 0, json);
       if insertedRowID > 0 then
       begin
         if fStaticInMemory.Owner <> nil then
