@@ -3212,7 +3212,7 @@ end;
 
 constructor TSynPersistentLock.Create;
 begin
-  AutoRegister; // faster alternative to inherited Create;
+  inherited Create; // may have been overriden
   fSafe := NewSynLocker;
 end;
 
@@ -3415,7 +3415,7 @@ end;
 
 constructor TSynPersistentStore.Create(const aName: RawUtf8);
 begin
-  Create;
+  inherited Create; // may have been overriden
   fName := aName;
 end;
 
@@ -3428,14 +3428,14 @@ end;
 constructor TSynPersistentStore.CreateFromBuffer(
   aBuffer: pointer; aBufferLen: integer; aLoad: TAlgoCompressLoad);
 begin
-  Create('');
+  inherited Create; // may have been overriden
   LoadFrom(aBuffer, aBufferLen, aLoad);
 end;
 
 constructor TSynPersistentStore.CreateFromFile(const aFileName: TFileName;
   aLoad: TAlgoCompressLoad);
 begin
-  Create('');
+  inherited Create; // may have been overriden
   LoadFromFile(aFileName, aLoad);
 end;
 
@@ -4207,7 +4207,7 @@ var
   p: integer;
   i: PtrInt;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   for p := 0 to 9 do
     if aHashTables = 1 shl p then
     begin
@@ -4371,7 +4371,7 @@ end;
 
 constructor TRawUtf8List.CreateEx(aFlags: TRawUtf8ListFlags);
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fNameValueSep := '=';
   fFlags := aFlags;
   fValues.InitSpecific(TypeInfo(TRawUtf8DynArray), fValue, ptRawUtf8, @fCount,

@@ -8592,7 +8592,7 @@ end;
 constructor TSynCache.Create(aMaxCacheRamUsed: cardinal;
   aCaseSensitive: boolean; aTimeoutSeconds: cardinal);
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fNameValue.Init(aCaseSensitive);
   fMaxRamUsed := aMaxCacheRamUsed;
   fTimeoutSeconds := aTimeoutSeconds;
@@ -10431,7 +10431,7 @@ end;
 
 constructor TSynAutoCreateFields.Create;
 begin
-  AutoCreateFields(self); // will make AutoRegister = inherited Create if needed
+  AutoCreateFields(self); // will make AutoRegister if needed
 end; // no need to call the void inherited TSynPersistent
 
 destructor TSynAutoCreateFields.Destroy;

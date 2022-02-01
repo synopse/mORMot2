@@ -1375,7 +1375,7 @@ end;
 
 constructor TSynMonitorSizeParent.Create(aTextNoSpace: boolean);
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fTextNoSpace := aTextNoSpace;
 end;
 
@@ -1405,7 +1405,7 @@ end;
 
 constructor TSynMonitor.Create;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fTotalTime := TSynMonitorTime.Create;
   fLastTime := TSynMonitorOneTime.Create;
   fMinimalTime := TSynMonitorOneTime.Create;
@@ -2482,7 +2482,7 @@ var
   i: PtrInt;
   it, kt, ut: Int64;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fProcesses.Init(TypeInfo(TSystemUseProcessDynArray), fProcess);
   if not RetrieveSystemTimes(it, kt, ut) then
     exit; // no system monitoring API on Linux or oldest Windows
@@ -2787,7 +2787,7 @@ end;
 
 constructor TSynMonitorMemory.Create(aTextNoSpace: boolean);
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   FAllocatedUsed := TSynMonitorOneSize.Create(aTextNoSpace);
   FAllocatedReserved := TSynMonitorOneSize.Create(aTextNoSpace);
   FPhysicalMemoryFree := TSynMonitorOneSize.Create(aTextNoSpace);
@@ -2946,7 +2946,7 @@ end;
 
 constructor TSynMonitorDisk.Create;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fAvailableSize := TSynMonitorOneSize.Create({nospace=}false);
   fFreeSize := TSynMonitorOneSize.Create({nospace=}false);
   fTotalSize := TSynMonitorOneSize.Create({nospace=}false);

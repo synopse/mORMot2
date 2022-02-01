@@ -3593,7 +3593,7 @@ begin
     for i := high(CpuCache) downto low(CpuCache) do
     begin
       CpuCacheSize := CpuCache[i].Size;
-      if CpuCacheSize <> 0 then
+      if CpuCacheSize <> 0 then // append the biggest level Cache size
       begin
         cpu := RawUtf8(format('%s %s cache', [cpu, KB(CpuCacheSize)]));
         break;

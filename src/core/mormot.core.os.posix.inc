@@ -2599,17 +2599,29 @@ begin
   if cache <> nil then
   begin
     CpuCacheText := TrimU(cache);
-    CpuInfoText := ' ' + CpuCacheText + ' cache';
     CpuCacheSize := GetNextCardinal(cache);
     while cache^ = ' ' do
       inc(cache);
     case cache^ of
-      'k', 'K':
+      'k',
+      'K':
         CpuCacheSize := CpuCacheSize shl 10;
-      'm', 'M':
+      'm',
+      'M':
         CpuCacheSize := CpuCacheSize shl 20;
-      'g', 'G':
+      'g',
+      'G':
         CpuCacheSize := CpuCacheSize shl 30;
+    end;
+    if CpuCacheSize < 1 shl 20 then
+    begin
+      str(CpuCacheSize shr 10, CpuInfoText);
+      CpuInfoText := CpuInfoText + 'KB cache';
+    end
+    else
+    begin
+      str(CpuCacheSize shr 20, CpuInfoText);
+      CpuInfoText := CpuInfoText + 'MB cache';
     end;
   end;
   SystemInfo.release := release;
@@ -2632,7 +2644,7 @@ begin
   {$endif OSANDROID}
   if (SystemInfo.dwNumberOfProcessors > 0) and
      (modname <> nil) then
-    CpuInfoText := Format('%d x %s (' + CPU_ARCH_TEXT + ')%s',
+    CpuInfoText := Format('%d x %s %s (' + CPU_ARCH_TEXT + ')',
       [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
   if CpuInfoText = '' then
     CpuInfoText := CPU_ARCH_TEXT;

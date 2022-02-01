@@ -3038,7 +3038,7 @@ var
   ExeFile, MabFile: TFileName;
   MapAge, MabAge: TUnixTime;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fSymbols.InitSpecific(TypeInfo(TDebugSymbolDynArray), fSymbol, ptRawUtf8,
     @fSymbolsCount, true);
   fUnits.InitSpecific(TypeInfo(TDebugUnitDynArray), fUnit, ptRawUtf8,
@@ -6068,7 +6068,7 @@ end;
 
 constructor TSynLogSettings.Create;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fDestinationPath := GetSystemPath(spLog);
   fLevels := LOG_STACKTRACE + [sllNewRun];
   fRotateFileCount := 2;

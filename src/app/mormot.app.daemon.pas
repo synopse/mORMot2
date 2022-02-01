@@ -208,7 +208,7 @@ constructor TSynDaemon.Create(aSettingsClass: TSynDaemonSettingsClass;
 var
   fn: TFileName;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   if aWorkFolder = '' then
     fWorkFolderName := Executable.ProgramFilePath
   else
