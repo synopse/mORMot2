@@ -4391,7 +4391,7 @@ end;
 
 constructor TRestRunThreads.Create(aOwner: TRest);
 begin
-  inherited Create;
+  inherited Create; // initialize fSafe
   fOwner := aOwner;
 end;
 

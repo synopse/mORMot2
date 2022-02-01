@@ -1926,7 +1926,7 @@ end;
 
 constructor TEccCertificate.Create;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fContent.Head.Version := 1;
   fMaxVersion := 1;
 end;
@@ -2925,7 +2925,7 @@ end;
 
 constructor TEccCertificateSecretSetting.Create;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fPasswordRounds := DEFAULT_ECCROUNDS;
 end;
 
@@ -2944,7 +2944,7 @@ end;
 
 constructor TEccSignatureCertified.Create;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fCertified.Version := 1;
 end;
 
@@ -3181,7 +3181,7 @@ end;
 
 constructor TEccCertificateChain.Create;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fMaxVersion := 2;
 end;
 

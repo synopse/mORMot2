@@ -79,8 +79,7 @@ type
     // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
     // would store the values within this TSynQueue instance
     // - a name can optionally be assigned to this instance
-    constructor Create(aTypeInfo: PRttiInfo;
-      const aName: RawUtf8 = ''); reintroduce; virtual;
+    constructor Create(aTypeInfo: PRttiInfo; const aName: RawUtf8 = ''); reintroduce; virtual;
     /// finalize the storage
     // - would release all internal stored values, and call WaitPopFinalize
     destructor Destroy; override;
@@ -2298,7 +2297,7 @@ end;
 
 constructor TBlockingProcessPool.Create(aClass: TBlockingProcessPoolItemClass);
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   if aClass = nil then
     fClass := TBlockingProcessPoolItem
   else
@@ -2425,7 +2424,7 @@ constructor TSynParallelProcess.Create(ThreadPoolCount: integer;
 var
   i: PtrInt;
 begin
-  inherited Create;
+  inherited Create; // initialize fSafe
   if ThreadPoolCount < 0 then
     raise ESynThread.CreateUtf8('%.Create(%,%)',
       [Self, ThreadPoolCount, ThreadName]);

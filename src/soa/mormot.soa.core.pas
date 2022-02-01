@@ -1625,7 +1625,7 @@ end;
 
 constructor TServicesPublishedInterfacesList.Create(aTimeoutMS: integer);
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fTimeOut := aTimeoutMS;
   fDynArray.Init(TypeInfo(TServicesPublishedInterfacesDynArray), List, @Count);
   fDynArrayTimeoutTix.Init(TypeInfo(TInt64DynArray), fTimeoutTix, @fTimeoutTixCount);

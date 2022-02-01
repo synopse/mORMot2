@@ -2384,6 +2384,7 @@ var
   privateCopy: RawUtf8;
   values: array[0..4] of TValuePUtf8Char;
 begin
+  inherited Create; // may have been overriden
   fKey := Key;
   privateCopy := Json;
   JsonDecode(privateCopy,
@@ -2800,7 +2801,7 @@ var
   crc: cardinal;
   key: THash256Rec;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fIdentifier := aIdentifier;
   fIdentifierShifted := aIdentifier shl 15;
   // compute obfuscation key using hash diffusion of the supplied text

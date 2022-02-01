@@ -364,7 +364,7 @@ implementation
 constructor TThreadSafeManager.Create(aEngineClass: TThreadSafeEngineClass;
   aOnLog: TSynLogProc; aMaxPerThreadEngines: integer);
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fEngineClass := aEngineClass;
   fEngines := TSynObjectListLightLocked.Create;
   fMaxEngines := aMaxPerThreadEngines;
@@ -650,7 +650,7 @@ end;
 constructor TThreadSafeEngine.Create(aManager: TThreadSafeManager;
   aThreadData: pointer; aTag: PtrInt; aThreadID: TThreadID);
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fManager := aManager;
   fCreateTix := GetTickCount64;
   fThreadID := aThreadId;

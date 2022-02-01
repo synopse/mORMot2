@@ -2068,7 +2068,7 @@ var
   desc: RawByteString;
   n, s, i: PtrInt;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fExe := {$ifdef OSPOSIX} './' + {$endif} Executable.ProgramName;
   n := length(aServices);
   SetLength(fServices, n);

@@ -644,9 +644,9 @@ constructor TJwtAbstract.Create(const aAlgorithm: RawUtf8; aClaims: TJwtClaims;
   aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
   aIDObfuscationKeyNewKdf: integer);
 begin
+  inherited Create; // may have been overriden
   if aAlgorithm = '' then
     raise EJwtException.CreateUtf8('%.Create(algo?)', [self]);
-  inherited Create;
   if high(aAudience) >= 0 then
   begin
     fAudience := TRawUtf8DynArrayFrom(aAudience);

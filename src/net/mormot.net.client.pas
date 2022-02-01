@@ -3199,7 +3199,7 @@ end;
 constructor THttpRequestCached.Create(const aUri: RawUtf8; aKeepAliveSeconds,
   aTimeOutSeconds: integer; const aToken: RawUtf8; aOnlyUseClientSocket: boolean);
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fKeepAlive := aKeepAliveSeconds * 1000;
   if aTimeOutSeconds > 0 then // 0 means no cache
     fCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),

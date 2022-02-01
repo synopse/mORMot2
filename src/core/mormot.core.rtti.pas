@@ -2676,12 +2676,10 @@ type
   {$M+}
   /// abstract parent class with published properties and a virtual constructor
   // - is the parent of both TSynPersistent and TOrm classes
+  // - will ensure the class type is registered to the Rtti global list
   // - also features some protected virtual methods for custom RTTI/JSON process
   TObjectWithCustomCreate = class(TObject)
   protected
-    // can be used as faster alternative to inherited Create
-    procedure AutoRegister;
-      {$ifdef HASINLINE}inline;{$endif}
     /// called by TRttiJson.SetParserType when this class is registered
     // - used e.g. to register TOrm.ID field which is not published as RTTI
     // - in TSynPersistent descendants, can change the Rtti.JsonSave callback
@@ -2730,10 +2728,10 @@ type
     /// virtual constructor called at instance creation
     // - is declared as virtual so that inherited classes may have a root
     // constructor to override
-    // - will be recognized by our RTTI serialization/initialization process
-    // - will register the class type to the Rtti global list
+    // - is recognized by our RTTI serialization/initialization process
     constructor Create; virtual;
     /// optimized initialization code
+    // - will also register the class type to the Rtti global list
     // - somewhat faster than the regular RTL implementation
     // - warning: this optimized version won't initialize the vmtIntfTable
     // for this class hierarchy: as a result, you would NOT be able to
@@ -8616,15 +8614,8 @@ end;
 
 { TObjectWithCustomCreate }
 
-procedure TObjectWithCustomCreate.AutoRegister;
-begin
-  if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
-    Rtti.DoRegister(PClass(self)^); // ensure TRttiCustom is set
-end;
-
 constructor TObjectWithCustomCreate.Create;
-begin
-  AutoRegister;
+begin // do nothing by default but may be overriden
 end;
 
 class function TObjectWithCustomCreate.RttiCustom: TRttiCustom;
@@ -8636,6 +8627,9 @@ end;
 
 class function TObjectWithCustomCreate.NewInstance: TObject;
 begin
+  // register the class to the RTTI cache
+  if PPointer(PAnsiChar(self) + vmtAutoTable)^ = nil then
+    Rtti.DoRegister(self); // ensure TRttiCustom is set
   // bypass vmtIntfTable and vmt^.vInitTable (FPC management operators)
   GetMem(pointer(result), InstanceSize); // InstanceSize is inlined
   FillCharFast(pointer(result)^, InstanceSize, 0);

@@ -506,7 +506,7 @@ var
   methods: TPublishedMethodInfoDynArray;
   i: integer;
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   if Ident <> '' then
     fIdent := Ident
   else

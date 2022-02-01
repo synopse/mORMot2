@@ -4554,7 +4554,7 @@ var
   rnd: THash256;
   blob: RawBlob;
 begin
-  AutoRegister; // faster alternative to inherited Create;
+  // inherited Create; // not mandatory - should not be overriden
   fUser := aUser;
   if (aCtxt <> nil) and
      (User <> nil) and
@@ -7231,7 +7231,7 @@ end;
 constructor TRestHttpServerDefinition.Create;
 begin
   fOptions := HTTPSERVER_DEFAULT_OPTIONS;
-  inherited Create;
+  inherited Create; // may have been overriden
 end;
 
 

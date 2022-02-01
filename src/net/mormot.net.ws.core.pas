@@ -1090,7 +1090,7 @@ end;
 
 constructor TWebSocketProtocol.Create(const aName, aUri: RawUtf8);
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fName := aName;
   fUri := aUri;
   fConnectionFlags := [hsrWebsockets];
@@ -2404,7 +2404,7 @@ constructor TWebSocketProcess.Create(aProtocol: TWebSocketProtocol;
   aOwnerConnectionID: THttpServerConnectionID; aOwnerThread: TSynThread;
   aSettings: PWebSocketProcessSettings; const aProcessName: RawUtf8);
 begin
-  inherited Create;
+  inherited Create; // may have been overriden
   fProcessName := aProcessName;
   fProtocol := aProtocol;
   fOwnerConnectionID := aOwnerConnectionID;
