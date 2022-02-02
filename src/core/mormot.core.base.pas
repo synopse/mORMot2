@@ -8042,6 +8042,7 @@ var
 procedure XorEntropy(var e: THash512Rec);
 var
   lec: PLecuyer;
+  guid: THash128Rec;
   {$ifdef CPUINTEL}
   i: PtrInt;
   {$endif CPUINTEL}
@@ -8058,7 +8059,9 @@ begin
   e.r[1].c3 := e.r[1].c3 xor PtrUInt(lec); // any threadvar is thread-specific
   // Windows CoCreateGuid, Linux /proc/sys/kernel/random/uuid, FreeBSD syscall,
   // then fallback to /dev/urandom or RTL mtwist_u32rand - may be slow
-  CreateGUID(TGuid(e.r[2].b));
+  CreateGUID(TGuid(guid));
+  e.r[2].L := e.r[2].L xor guid.L;
+  e.r[2].H := e.r[2].H xor guid.H;
   // no mormot.core.os yet, so we can't use QueryPerformanceMicroSeconds()
   unaligned(PDouble(@e.r[3].Lo)^) := Now * 2123923447; // cross-platform time
   {$ifdef CPUINTEL} // use low-level Intel/AMD opcodes
@@ -8068,6 +8071,9 @@ begin
       e.r[0].c[i] := e.r[0].c[i] xor RdRand32;
   e.r[3].Hi := e.r[3].Hi xor Rdtsc; // has changed in-between
   {$else}
+  {$ifdef OSDARWIN}
+  e.r[3].Lo := e.r[3].Lo xor mach_absolute_time;
+  {$endif OSDARWIN}
   e.r[3].Hi := e.r[3].Hi xor GetTickCount64; // always defined in FPC RTL
   {$endif CPUINTEL}
   crc128c(@e, SizeOf(e), _EntropyGlobal.b); // simple diffusion to move forward
