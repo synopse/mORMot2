@@ -6334,20 +6334,22 @@ procedure TRestServer.LockedSessionDelete(aSessionIndex: integer;
   Ctxt: TRestServerUriContext);
 var
   a: TAuthSession;
+  soa: integer;
 begin
+  soa := 0;
   if (self <> nil) and
      (cardinal(aSessionIndex) < cardinal(fSessions.Count)) then
   begin
     a := fSessions.List[aSessionIndex];
     if fServices <> nil then
-      (fServices as TServiceContainerServer).OnCloseSession(a.IDCardinal);
+      soa := (fServices as TServiceContainerServer).OnCloseSession(a.IDCardinal);
     if Ctxt = nil then
-      InternalLog('Deleted deprecated session %:%/%',
-        [a.User.LogonName, a.IDCardinal, fSessions.Count], sllUserAuth)
+      InternalLog('Deleted deprecated session %:%/% soa=%',
+        [a.User.LogonName, a.IDCardinal, fSessions.Count, soa], sllUserAuth)
     else
-      InternalLog('Deleted session %:%/% from %/%',
+      InternalLog('Deleted session %:%/% from %/% soa=%',
         [a.User.LogonName, a.IDCardinal, fSessions.Count, a.RemoteIP,
-         Ctxt.Call^.LowLevelConnectionID], sllUserAuth);
+         Ctxt.Call^.LowLevelConnectionID, soa], sllUserAuth);
     if Assigned(OnSessionClosed) then
       OnSessionClosed(self, a, Ctxt);
     fSessions.Delete(aSessionIndex);

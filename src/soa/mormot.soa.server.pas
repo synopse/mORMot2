@@ -171,7 +171,7 @@ type
     procedure InstanceFree(Obj: TInterfacedObject);
     procedure InstanceFreeGC(Obj: TInterfacedObject);
     function DoInstanceGC(Force: boolean): PtrInt;
-    procedure DoInstanceGCSession(aSessionID: cardinal);
+    function DoInstanceGCSession(aSessionID: cardinal): integer;
     /// called by ExecuteMethod to append input/output params to Sender.TempTextWriter
     procedure OnLogRestExecuteMethod(Sender: TInterfaceMethodExecuteRaw;
       Step: TInterfaceMethodExecuteEventStep);
@@ -271,7 +271,8 @@ type
     /// low-level method called from client CacheFlush/_ping_ URI
     function RenewSession(Ctxt: TRestServerUriContext): integer;
     /// make some garbage collection when session is finished
-    procedure OnCloseSession(aSessionID: cardinal);
+    // - return the number of instances released during this process
+    function OnCloseSession(aSessionID: cardinal): integer;
 
     /// the associated TRestServer instance
     property RestServer: TRestServer
@@ -443,7 +444,8 @@ type
     procedure RecordVersionNotifyDelete(TableIndex: integer;
       const ID: TID; const Revision: TRecordVersion);
     /// make some garbage collection when session is finished
-    procedure OnCloseSession(aSessionID: cardinal); virtual;
+    // - return the number of instances released during this process
+    function OnCloseSession(aSessionID: cardinal): integer; virtual;
     /// log method execution information to a TOrmServiceLog table
     // - TServiceFactoryServer.SetServiceLog() will be called for all registered
     // interfaced-based services of this container
@@ -841,10 +843,11 @@ begin
       InstanceFree(Obj);   // immediate _Release - maybe on specific thread
 end;
 
-procedure TServiceFactoryServer.DoInstanceGCSession(aSessionID: cardinal);
+function TServiceFactoryServer.DoInstanceGCSession(aSessionID: cardinal): integer;
 var
   i: PtrInt;
 begin
+  result := 0;
   fInstances.Safe.WriteLock;
   try
     for i := fInstances.Count - 1 downto 0 do // downto for proper Delete(i)
@@ -852,11 +855,13 @@ begin
       begin
         fInstanceGC.Add(fInstance[i].Instance);
         fInstances.DynArray.Delete(i);
+        inc(result);
       end;
   finally
     fInstances.Safe.WriteUnLock;
   end;
-  DoInstanceGC({force=}false); // release now outside of the lock
+  if result <> 0 then
+    DoInstanceGC({force=}false); // release now outside of the lock
 end;
 
 function TServiceFactoryServer.Get(out Obj): boolean;
@@ -938,10 +943,11 @@ begin
   end;
 end;
 
-procedure TServiceFactoryServer.OnCloseSession(aSessionID: cardinal);
+function TServiceFactoryServer.OnCloseSession(aSessionID: cardinal): integer;
 var
   inst: TServiceFactoryServerInstance;
 begin
+  result := 0;
   if fInstances.Count > 0 then
     case InstanceCreation of
       sicPerSession:
@@ -951,7 +957,7 @@ begin
         end;
       sicClientDriven:
         // release ASAP if was not notified by client
-        DoInstanceGCSession(aSessionID);
+        result := DoInstanceGCSession(aSessionID);
     end;
 end;
 
@@ -1746,12 +1752,14 @@ begin
   end;
 end;
 
-procedure TServiceContainerServer.OnCloseSession(aSessionID: cardinal);
+function TServiceContainerServer.OnCloseSession(aSessionID: cardinal): integer;
 var
   i: PtrInt;
 begin
+  result := 0;
   for i := 0 to high(fInterface) do
-    TServiceFactoryServer(fInterface[i].Service).OnCloseSession(aSessionID);
+    inc(result, TServiceFactoryServer(fInterface[i].Service).
+      OnCloseSession(aSessionID));
 end;
 
 procedure TServiceContainerServer.FakeCallbackAdd(aFakeInstance: TObject);
