@@ -1105,7 +1105,7 @@ begin
   if Len <= 0 then
     exit;
   tmp.Init(Len * 3);
-  Len := UnicodeToUtf8(tmp.Buf, Len * 3, P, Len); // use RTL function
+  Len := UnicodeToUtf8(tmp.Buf, Len * 3, P, Len); // RTL function is good enough
   if Len > 0 then
     dec(Len); // UnicodeToUtf8() result includes the null terminator
   FastSetString(res, tmp.buf, Len);

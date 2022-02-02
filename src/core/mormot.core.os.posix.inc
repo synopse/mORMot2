@@ -1466,8 +1466,9 @@ begin
 end;
 
 function fpsysctlhwint(hwid: cint): Int64;
-var mib: array[0..1] of cint;
-    len: cint;
+var
+  mib: array[0..1] of cint;
+  len: cint;
 begin
   result := 0;
   mib[0] := CTL_HW;
@@ -1477,8 +1478,9 @@ begin
 end;
 
 function fpsysctlhwstr(hwid: cint; var temp: ShortString): pointer;
-var mib: array[0..1] of cint;
-    len: cint;
+var
+  mib: array[0..1] of cint;
+  len: cint;
 begin
   mib[0] := CTL_HW;
   mib[1] := hwid;
@@ -1563,13 +1565,13 @@ var
   fn, status, tgid: RawUtf8;
 begin
   result := nil;
-  d := FpOpendir('/proc'); // faster alternative to FindFirst()
+  d := FpOpendir('/proc'); // (much) faster alternative to FindFirst()
   if d = nil then
     exit;
   n := 0;
   SetLength(result, 128);
   repeat
-    e := FpReaddir(d^);
+    e := FpReaddir(d^); // FPC RTL use getdents64 syscall on Linux and BSD :)
     if e = nil then
       break;
     if ((e.d_type = DT_UNKNOWN) or
@@ -1808,7 +1810,8 @@ begin
          (tot > 1 shl 20) then
       begin
   //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
-        SetLength(result, n + 1);
+        if n = length(result) then
+          SetLength(result, NextGrow(n));
         result[n].name := fs;
         result[n].mounted := fn;
         result[n].size := tot;
@@ -1817,6 +1820,7 @@ begin
     end;
     p := GotoNextLine(p);
   until p = nil;
+  SetLength(result, n);
 end;
 
 {$ifdef OSBSDDARWIN}

@@ -580,7 +580,7 @@ var
   /// some textual information about the current CPU
   // - contains e.g. '4 x Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz 3MB cache'
   CpuInfoText: RawUtf8;
-  /// the on-chip cache size as returned by the OS
+  /// the on-chip cache size, in bytes, as returned by the OS
   // - retrieved from /proc/cpuinfo "cache size" entry (L3 cache) on Linux or
   // CpuCache[3/4].Size (from GetLogicalProcessorInformation) on Windows
   CpuCacheSize: cardinal;
@@ -3166,7 +3166,9 @@ function GetCurrentThreadInfo: ShortString;
 // ! end;
 // - you should better not use such a giant-lock, but an instance-dedicated
 // critical section/TSynLocker or TRWLock - these functions are just here to be
-// convenient, for non time-critical process (e.g. singleton initialization)
+// convenient, for non time-critical process (e.g. singleton initialization
+// of external libraries, or before RegisterGlobalShutdownRelease() which will
+// use it anyway)
 procedure GlobalLock;
 
 /// release the giant lock for thread-safe shared process
@@ -4333,7 +4335,7 @@ begin
   result := '';
   if FileName = '' then
     exit;
-  F := FileOpenSequentialRead(FileName);
+  F := FileOpenSequentialRead(FileName); // = plain fpOpen() on POSIX
   if ValidHandle(F) then
   begin
     if HasNoSize then
