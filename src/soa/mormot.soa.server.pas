@@ -1048,10 +1048,11 @@ begin
             if tix > P^.LastAccess then
             begin
               fRestServer.InternalLog('%.RetrieveInstance: deleted I% % ' +
-                'instance (id=%) after % minutes timeout (max % minutes)',
+                'instance (id=%) after % minutes timeout',
                 [ClassType, fInterfaceUri, P^.Instance, P^.InstanceID,
-                 tix div 60, fInstanceTimeOut div 60], sllInfo);
+                 fInstanceTimeOut div 60], sllInfo);
               InstanceFreeGC(P^.Instance);
+              fInstances.DynArray.Delete(i);
             end;
           end;
       end;
