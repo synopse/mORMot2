@@ -2560,12 +2560,11 @@ type
     procedure FillFrom(const aDocVariant: variant); overload;
     /// fill a published property value of this object from a UTF-8 encoded value
     // - see TPropInfo about proper Delphi / UTF-8 type mapping/conversion
-    // - use this method to fill a BLOB property, i.e. a property defined with
-    // type RawBlob, since by default all BLOB properties are not
-    // set by the standard Retrieve() method (to save bandwidth)
+    // - the property is searched by PropName (trying first at PropIndex position)
     // - if FieldBits is defined, it will store the identified field index
-    procedure FillValue(PropName, Value: PUtf8Char; ValueLen: PtrInt;
-      wasString: boolean; FieldBits: PFieldBits = nil);
+    procedure FillValue(var PropIndex: PtrInt; PropName, Value: PUtf8Char;
+      PropLen, ValueLen: PtrInt; wasString: boolean; FieldBits: PFieldBits = nil);
+      {$ifdef HASINLINE} inline; {$endif}
 
     /// return true if all published properties values in Other are identical to
     // the published properties of this object
@@ -6571,6 +6570,26 @@ begin
   end;
 end;
 
+procedure TOrm.FillValue(var PropIndex: PtrInt; PropName, Value: PUtf8Char;
+  PropLen, ValueLen: PtrInt; wasString: boolean; FieldBits: PFieldBits);
+var
+  field: TOrmPropInfo;
+begin
+  if self <> nil then
+    if IsRowID(PropName) then
+      SetID(Value, fID)
+    else
+    begin
+      field := Orm.Fields.ByName(PropName, PropLen, PropIndex);
+      if field <> nil then
+      begin
+        field.SetValue(self, Value, ValueLen, wasString);
+        if FieldBits <> nil then
+          Include(FieldBits^, field.PropertyIndex);
+      end;
+    end;
+end;
+
 procedure TOrm.FillFrom(const JsonRecord: RawUtf8; FieldBits: PFieldBits);
 var
   tmp: TSynTempBuffer; // work on a private copy
@@ -6586,10 +6605,11 @@ end;
 procedure TOrm.FillFrom(P: PUtf8Char; FieldBits: PFieldBits);
 var
   F: array[0..MAX_SQLFIELDS - 1] of PUtf8Char; // store field/property names
+  L: array[0..MAX_SQLFIELDS - 1] of integer;   // and lens
   wasString: boolean;
-  i, n: PtrInt;
+  i, j, n: PtrInt;
   ValueLen: integer;
-  Prop, Value: PUtf8Char;
+  Value: PUtf8Char;
 begin
   if FieldBits <> nil then
     FillZero(FieldBits^);
@@ -6601,6 +6621,7 @@ begin
     else
       inc(P);
   // set each property from values using efficient TOrmPropInfo.SetValue()
+  j := 0; // for optimistic in-order field name lookup in FillValue
   if Expect(P, FIELDCOUNT_PATTERN, 14) then
   begin
     // NOT EXPANDED - optimized format with a JSON array of JSON values, fields first
@@ -6614,12 +6635,12 @@ begin
     if not Expect(P, VALUES_PATTERN, 11) then
       exit;
     for i := 0 to n do
-      F[i] := GetJsonField(P, P);
+      F[i] := GetJsonField(P, P, nil, nil, @L[i]);
     for i := 0 to n do
     begin
       Value := GetJsonFieldOrObjectOrArray(
         P, @wasString, nil, true, true, @ValueLen);
-      FillValue({%H-}F[i], Value, ValueLen, wasString, FieldBits);
+      FillValue(j, {%H-}F[i], Value, {%H-}L[i], ValueLen, wasString, FieldBits);
     end;
   end
   else if P^ = '{' then
@@ -6628,13 +6649,13 @@ begin
     //  [{"f1":"1v1","f2":1v2}]
     inc(P);
     repeat
-      Prop := GetJsonPropName(P);
-      if (Prop = nil) or
+      F[0] := GetJsonPropName(P, @L[0]);
+      if (F[0] = nil) or
          (P = nil) then
         break;
       Value := GetJsonFieldOrObjectOrArray(
         P, @wasString, nil, true, true, @ValueLen);
-      FillValue(Prop, Value, ValueLen, wasString, FieldBits);
+      FillValue(j, F[0], Value, L[0], ValueLen, wasString, FieldBits);
     until P = nil;
   end;
 end;
@@ -6768,29 +6789,6 @@ begin
   end;
   W.CancelLastComma;
   W.Add(']');
-end;
-
-procedure TOrm.FillValue(PropName, Value: PUtf8Char; ValueLen: PtrInt;
-  wasString: boolean; FieldBits: PFieldBits);
-var
-  field: TOrmPropInfo;
-begin
-  if self <> nil then
-    if IsRowID(PropName) then
-      SetID(Value, fID)
-    else
-    begin
-      field := Orm.Fields.ByName(PropName);
-      if field <> nil then
-      begin
-        if (ValueLen = 0) and
-           (Value <> nil) then
-          ValueLen := StrLen(Value);
-        field.SetValue(self, Value, ValueLen, wasString);
-        if FieldBits <> nil then
-          Include(FieldBits^, field.PropertyIndex);
-      end;
-    end;
 end;
 
 function TOrm.SetFieldSqlVars(const Values: TSqlVarDynArray): boolean;
@@ -7908,45 +7906,22 @@ end;
 
 class procedure TOrm.RttiJsonRead(var Context: TJsonParserContext; Instance: TObject);
 var
-  cur: POrmPropInfo;
-  f: TOrmPropInfo;
-  props: TOrmPropInfoList;
   name: PUtf8Char;
   namelen: integer;
+  i: PtrInt;
   orm: TOrm absolute Instance;
 begin
   // manually parse incoming JSON object using Orm.Fields.SetValue()
   if not Context.ParseObject then
     exit; // invalid or {} or null
-  props := OrmProps.Fields;
-  cur := pointer(props.List);
+  i := 0; // for optimistic property name lookup
   repeat
      name := GetJsonPropName(Context.Json, @namelen);
      if name = nil then
        Context.Valid := false;
      if not Context.ParseNextAny then // GetJsonFieldOrObjectOrArray()
        exit;
-     if IsRowID(name, namelen) then // handle both ID and RowID names
-       SetID(Context.Value, orm.fID)
-     else
-     begin
-       if (cur <> nil) and
-          IdemPropNameU(cur^.Name, name, namelen) then
-       begin
-         f := cur^; // optimistic O(1) property lookup
-         if f <> props.Last then
-           inc(cur)
-         else
-           cur := nil;
-       end
-       else
-       begin
-         f := props.ByName(name); // O(log(n)) binary search
-         cur := nil;
-       end;
-       if f <> nil then // just ignore unknown property names
-         f.SetValue(orm, Context.Value, Context.ValueLen, Context.WasString);
-     end;
+     orm.FillValue(i, name, Context.Value, namelen, Context.ValueLen, Context.WasString);
   until Context.EndOfObject = '}';
   Context.ParseEndOfObject;
 end;
@@ -8093,7 +8068,7 @@ begin
   result := '';
   if self = nil then
     exit;
-  P := Orm.Fields.ByName(pointer(PropName));
+  P := Orm.Fields.ByName(pointer(PropName)); // fast O(log(n)) binary search
   if P <> nil then
     P.GetValueVar(self, False, result, nil);
 end;
@@ -8104,7 +8079,7 @@ var
 begin
   if self = nil then
     exit;
-  P := Orm.Fields.ByName(pointer(PropName));
+  P := Orm.Fields.ByName(pointer(PropName)); // fast O(log(n)) binary search
   if P <> nil then
     P.SetValue(self, Value, ValueLen, false);
 end;
@@ -10289,7 +10264,7 @@ end;
 function TOrmModelProperties.GetProp(const PropName: RawUtf8): TOrmPropInfo;
 begin
   if self <> nil then
-    result := Props.Fields.ByName(pointer(PropName))
+    result := Props.Fields.ByName(pointer(PropName)) // O(log(n)) binary search
   else
     result := nil;
 end;

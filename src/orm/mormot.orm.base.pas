@@ -1933,6 +1933,11 @@ type
     // - returns nil if not found
     function ByName(aName: PUtf8Char): TOrmPropInfo; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// find an item in the list at aDefaultIndex position, and
+    // using O(log(n)) binary search as fallback
+    // - returns nil if not found
+    function ByName(aName: PUtf8Char; aNameLen: PtrInt;
+      var aDefaultIndex: PtrInt): TOrmPropInfo; overload;
     /// find an item in the list using O(log(n)) binary search
     // - returns -1 if not found
     function IndexByName(const aName: RawUtf8): integer; overload;
@@ -2755,7 +2760,8 @@ type
 
   /// for TRestCache, stores a table values
   TRestCacheEntryValue = packed record
-    /// corresponding ID
+    /// corresponding TOrm ID
+    // - stored in increasing order for efficient O(log(n)) binary search
     ID: TID;
     /// GetTickCount64 shr 9 timestamp when this cached value was stored
     // - resulting time period has therefore a resolution of 512 ms, and
@@ -2814,8 +2820,7 @@ type
     /// add the supplied ID to the Value[] array
     procedure SetCache(aID: TID); overload;
     /// update/refresh the cached JSON serialization of a given ID
-    procedure SetJson(aID: TID; const aJson: RawUtf8;
-      aTag: cardinal = 0); overload;
+    procedure SetJson(aID: TID; const aJson: RawUtf8; aTag: cardinal = 0); overload;
     /// retrieve a JSON serialization of a given ID from cache
     function RetrieveJson(aID: TID; var aJson: RawUtf8;
       aTag: PCardinal = nil): boolean; overload;
@@ -4075,25 +4080,34 @@ end;
 
 function TOrmPropInfo.SetFieldSqlVar(Instance: TObject;
   const aValue: TSqlVar): boolean;
+var
+  tmp: RawUtf8;
 begin
+  result := true;
   case aValue.VType of
     ftInt64:
-      SetValueVar(Instance, Int64ToUtf8(aValue.VInt64), false);
+      Int64ToUtf8(aValue.VInt64, tmp);
     ftCurrency:
-      SetValueVar(Instance, Curr64ToStr(aValue.VInt64), false);
+      Curr64ToStr(aValue.VInt64, tmp);
     ftDouble:
-      SetValueVar(Instance, DoubleToStr(aValue.VDouble), false);
+      DoubleToStr(aValue.VDouble, tmp);
     ftDate:
-      SetValueVar(Instance, DateTimeToIso8601Text(aValue.VDateTime, 'T',
-        svoDateWithMS in aValue.Options), true);
+      DateTimeToIso8601TextVar(
+        aValue.VDateTime, 'T', tmp, svoDateWithMS in aValue.Options);
     ftBlob:
-      SetValueVar(Instance, RawBlobToBlob(aValue.VBlob, aValue.VBlobLen), true);
+      tmp := RawBlobToBlob(aValue.VBlob, aValue.VBlobLen);
     ftUtf8:
-      SetValue(Instance, aValue.VText, StrLen(aValue.VText), true);
+      begin
+        SetValue(Instance, aValue.VText, StrLen(aValue.VText), true);
+        exit;
+      end
   else
-    SetValue(Instance, nil, 0, false);
+    begin
+      SetValue(Instance, nil, 0, false);
+      exit;
+    end;
   end;
-  result := true;
+  SetValueVar(Instance, tmp, aValue.VType in [ftDate, ftBlob, ftUtf8]);
 end;
 
 const
@@ -7244,6 +7258,31 @@ begin
     result := fList[i];
 end;
 
+function TOrmPropInfoList.ByName(aName: PUtf8Char; aNameLen: PtrInt;
+  var aDefaultIndex: PtrInt): TOrmPropInfo;
+var
+  i: PtrInt;
+begin
+  i := aDefaultIndex;
+  if PtrUInt(i) < PtrUInt(fCount) then
+  begin
+    result := fList[i];
+    if IdemPropNameU(result.Name, aName, aNameLen) then
+    begin
+      inc(aDefaultIndex); // is likely to be in proper order
+      exit;
+    end;
+  end;
+  i := IndexByName(aName); // fast O(log(n)) binary search
+  if i < 0 then
+    result := nil
+  else
+  begin
+    result := fList[i];
+    aDefaultIndex := i + 1; // may be back in order (e.g. no blob select)
+  end;
+end;
+
 function TOrmPropInfoList.IndexByName(aName: PUtf8Char): PtrInt;
 var
   cmp, L, R: PtrInt;
@@ -10316,14 +10355,15 @@ begin
   end;
 end;
 
-procedure TRestCacheEntry.SetJson(aID: TID; const aJson: RawUtf8; aTag: cardinal);
+procedure TRestCacheEntry.SetJson(aID: TID; const aJson: RawUtf8;
+  aTag: cardinal);
 var
   Rec: TRestCacheEntryValue;
   i: integer; // FastLocateSorted() required integer
 begin
   Rec.ID := aID;
   Rec.Json := aJson;
-  Rec.Timestamp512 := GetTickCount64 shr 9;
+  Rec.Timestamp512 := GetTickCount64 shr 9; // 512ms resolution
   Rec.Tag := aTag;
   Mutex.Lock;
   try
