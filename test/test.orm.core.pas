@@ -619,7 +619,7 @@ begin
     Check(not T.SameValues(T2));
     T2.FillFrom(s);
     Check(T.SameValues(T2));
-    Check(T2.GetJsonValues(false, true, ooSelect) = s);
+    CheckEqual(T2.GetJsonValues(false, true, ooSelect), s);
     T.IDValue := 10;
     s := T.GetJsonValues(true, true, ooSelect);
     {$ifdef VERBOSE}    writeln(s); {$endif}
@@ -627,7 +627,7 @@ begin
     Check(not T.SameValues(T2));
     T2.FillFrom(s);
     Check(T.SameValues(T2));
-    Check(T2.GetJsonValues(true, true, ooSelect) = s);
+    CheckEqual(T2.GetJsonValues(true, true, ooSelect), s);
     obj := T.GetSimpleFieldsAsDocVariant;
     s3 := VariantSaveJson(obj);
     Check(s3 = s);

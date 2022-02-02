@@ -2351,6 +2351,20 @@ begin
   P := GotoNextJsonItem(P, 1, @EndOfObject);
   Check(P <> nil);
   Check(EndOfObject = '}');
+  U := '"filters":[{"name":"name1","value":"value1","comparetype":">"},' +
+    '{"name":"name2","value":"value2","comparetype":"="}], "Limit":100}';
+  P := UniqueRawUtf8(U);
+  Check(GetJsonPropName(P) = 'filters');
+  Check((P <> nil) and
+        (P^ = '['));
+  P := GotoNextJsonItem(P, EndOfObject);
+  Check(EndOfObject = ',');
+  Check(GetJsonPropName(P) = 'Limit');
+  Check((P <> nil) and
+        (P^ = '1'));
+  P := GotoNextJsonItem(P, EndOfObject);
+  Check(P <> nil);
+  Check(EndOfObject = '}');
   for strict := false to true do
   begin
     check(IsValidJson('null', strict));

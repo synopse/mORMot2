@@ -7335,7 +7335,9 @@ begin
                 if Name = nil then
                   exit; // invalid JSON object in input
                 Val := P;
-                P := GotoNextJsonItem(P, 1, @EndOfObject);
+                P := GotoNextJsonItem(P, EndOfObject);
+                if P = nil then
+                  break;
                 for a := a1 to fMethod^.ArgsInLast do
                 begin
                   arg := @fMethod^.Args[a];

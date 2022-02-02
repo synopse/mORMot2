@@ -2565,6 +2565,12 @@ type
     procedure FillValue(var PropIndex: PtrInt; PropName, Value: PUtf8Char;
       PropLen, ValueLen: PtrInt; wasString: boolean; FieldBits: PFieldBits = nil);
       {$ifdef HASINLINE} inline; {$endif}
+    /// fill a published property value of this object from the next UTF-8 JSON
+    // - just a wrapper around GetJsonFieldOrObjectOrArray() and FillValue()
+    // - the property is searched by PropName (trying first at PropIndex position)
+    // - if FieldBits is defined, it will store the identified field index
+    procedure FillValueJson(var PropIndex: PtrInt; PropName: PUtf8Char;
+      PropLen: PtrInt; var Json: PUtf8Char;  FieldBits: PFieldBits = nil);
 
     /// return true if all published properties values in Other are identical to
     // the published properties of this object
@@ -6590,6 +6596,18 @@ begin
     end;
 end;
 
+procedure TOrm.FillValueJson(var PropIndex: PtrInt; PropName: PUtf8Char;
+  PropLen: PtrInt; var Json: PUtf8Char;  FieldBits: PFieldBits);
+var
+  Value: PUtf8Char;
+  ValueLen: integer;
+  wasString: boolean;
+begin
+  Value := GetJsonFieldOrObjectOrArray(
+    Json, @wasString, nil, true, true, @ValueLen);
+  FillValue(PropIndex, PropName, Value, PropLen, ValueLen, wasString, FieldBits);
+end;
+
 procedure TOrm.FillFrom(const JsonRecord: RawUtf8; FieldBits: PFieldBits);
 var
   tmp: TSynTempBuffer; // work on a private copy
@@ -6606,16 +6624,13 @@ procedure TOrm.FillFrom(P: PUtf8Char; FieldBits: PFieldBits);
 var
   F: array[0..MAX_SQLFIELDS - 1] of PUtf8Char; // store field/property names
   L: array[0..MAX_SQLFIELDS - 1] of integer;   // and lens
-  wasString: boolean;
   i, j, n: PtrInt;
-  ValueLen: integer;
-  Value: PUtf8Char;
 begin
   if FieldBits <> nil then
     FillZero(FieldBits^);
   if P = nil then
     exit;
-  while P^ <> '{' do  // go to start of object
+  while P^ <> '{' do  // go to start of object (handle both [{obj}] and {obj})
     if P^ = #0 then
       exit
     else
@@ -6624,10 +6639,10 @@ begin
   j := 0; // for optimistic in-order field name lookup in FillValue
   if Expect(P, FIELDCOUNT_PATTERN, 14) then
   begin
-    // NOT EXPANDED - optimized format with a JSON array of JSON values, fields first
+    // NOT EXPANDED - optimized format with an array of JSON values, names first
     //  {"fieldCount":2,"values":["f1","f2","1v1",1v2],"rowCount":1}
     n := GetNextItemCardinal(P, #0) - 1;
-    if cardinal(n) > high(F) then
+    if PtrUInt(n) > high(F) then
       exit;
     if Expect(P, ROWCOUNT_PATTERN, 12) then
       // just ignore "rowCount":.. here
@@ -6635,27 +6650,21 @@ begin
     if not Expect(P, VALUES_PATTERN, 11) then
       exit;
     for i := 0 to n do
-      F[i] := GetJsonField(P, P, nil, nil, @L[i]);
+      F[i] := GetJsonField(P, P, nil, nil, @L[i]); // parse names first
     for i := 0 to n do
-    begin
-      Value := GetJsonFieldOrObjectOrArray(
-        P, @wasString, nil, true, true, @ValueLen);
-      FillValue(j, {%H-}F[i], Value, {%H-}L[i], ValueLen, wasString, FieldBits);
-    end;
+      FillValueJson(j, {%H-}F[i], {%H-}L[i], P, FieldBits); // parse values
   end
   else if P^ = '{' then
   begin
-    // EXPANDED FORMAT - standard format with a JSON array of JSON objects
+    // EXPANDED FORMAT - standard format with (an array of) JSON objects
     //  [{"f1":"1v1","f2":1v2}]
     inc(P);
     repeat
-      F[0] := GetJsonPropName(P, @L[0]);
+      F[0] := GetJsonPropName(P, @L[0]); // parse name:
       if (F[0] = nil) or
          (P = nil) then
         break;
-      Value := GetJsonFieldOrObjectOrArray(
-        P, @wasString, nil, true, true, @ValueLen);
-      FillValue(j, F[0], Value, L[0], ValueLen, wasString, FieldBits);
+      FillValueJson(j, F[0], L[0], P, FieldBits); // parse value
     until P = nil;
   end;
 end;
@@ -7447,7 +7456,8 @@ begin
   for i := 0 to props.Count - 1 do
     if GetBitPtr(@Fields, i) then
     begin
-      val := GetJsonFieldOrObjectOrArray(Json, @wasstring, nil, true, true, @vallen);
+      val := GetJsonFieldOrObjectOrArray(
+        Json, @wasstring, nil, true, true, @vallen);
       props.List[i].SetValue(self, val, vallen, wasstring);
     end;
   result := Json <> nil;

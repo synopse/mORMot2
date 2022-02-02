@@ -245,7 +245,7 @@ function GetJsonPropName(var Json: PUtf8Char; Len: PInteger = nil;
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
 procedure GetJsonPropName(var P: PUtf8Char; out PropName: ShortString); overload;
 
-/// decode a JSON content in an UTF-8 encoded buffer
+/// decode a JSON content from an UTF-8 encoded buffer
 // - GetJsonField() will only handle JSON "strings" or numbers - if
 // HandleValuesAsObjectOrArray is TRUE, this function will process JSON {
 // objects } or [ arrays ] and add a #0 at the end of it
@@ -260,6 +260,14 @@ function GetJsonFieldOrObjectOrArray(var Json: PUtf8Char;
   WasString: PBoolean = nil; EndOfObject: PUtf8Char = nil;
   HandleValuesAsObjectOrArray: boolean = false;
   NormalizeBoolean: boolean = true; Len: PInteger = nil): PUtf8Char;
+  {$ifdef FPC} inline; {$endif}
+
+/// decode a JSON object or array from an UTF-8 encoded buffer
+// - as called by GetJsonFieldOrObjectOrArray() for HandleValuesAsObjectOrArray
+// - return the position of the next JSON item (with EndOfObject and optionally
+// Len^ properly set) or nil on parsing error
+function GetJsonObjectOrArray(P: PUtf8Char;
+  EndOfObject: PUtf8Char; Len: PInteger = nil): PUtf8Char;
 
 /// retrieve the next JSON item as a RawJson variable
 // - buffer can be either any JSON item, i.e. a string, a number or even a
@@ -297,14 +305,14 @@ function GotoEndJsonItemString(P: PUtf8Char): PUtf8Char;
 // GotoEndJsonItemStrict() if you expect a more standard JSON parsing
 function GotoEndJsonItem(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
 
-/// reach positon just after the current JSON item in the supplied UTF-8 buffer
+/// reach position just after the current JSON item in the supplied UTF-8 buffer
 // - in respect to GotoEndJsonItem(), this function will validate for strict
 // JSON simple values, i.e. real numbers or only true/false/null constants,
 // and refuse commens or MongoDB extended syntax like {age:{$gt:18}}
 // - numbers and escaped strings are not fully validated, just their charset
 function GotoEndJsonItemStrict(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
 
-/// reach the positon of the next JSON item in the supplied UTF-8 buffer
+/// reach the position of the next JSON item(s) in the supplied UTF-8 buffer
 // - buffer can be either any JSON item, i.e. a string, a number or even a
 // JSON array (ending with ]) or a JSON object (ending with })
 // - returns nil if the specified number of items is not available in buffer
@@ -312,7 +320,13 @@ function GotoEndJsonItemStrict(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
 // character (optionally in EndOfObject) - i.e. result will be at the start of
 // the next object, and EndOfObject may be ',','}',']'
 function GotoNextJsonItem(P: PUtf8Char; NumberOfItemsToJump: cardinal = 1;
-  EndOfObject: PAnsiChar = nil; PMax: PUtf8Char = nil; Strict: boolean = false): PUtf8Char;
+  EndOfObject: PAnsiChar = nil; PMax: PUtf8Char = nil;
+  Strict: boolean = false): PUtf8Char; overload;
+
+/// reach the position of the next JSON item in the supplied UTF-8 buffer
+// - similar to the GotoNextJsonItem() with NumberOfItemsToJump=1
+function GotoNextJsonItem(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
+  {$ifdef FPC}inline;{$endif}
 
 /// search the EndOfObject of a JSON buffer, just like GetJsonField() does
 function ParseEndOfObject(P: PUtf8Char; out EndOfObject: AnsiChar): PUtf8Char;
@@ -2592,7 +2606,9 @@ type
     procedure InitCount(Strict: boolean; PMax: PUtf8Char;
       First: TJsonGotoEndParserState);
     // reusable method able to jump over any JSON value (up to Max)
-    function GotoEnd(P: PUtf8Char): PUtf8Char;
+    function GotoEnd(P: PUtf8Char): PUtf8Char; overload;
+    function GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
+      {$ifdef HASINLINE} inline; {$endif}
  end;
 
 procedure TJsonGotoEndParser.Init(Strict: boolean; PMax: PUtf8Char);
@@ -2643,7 +2659,7 @@ begin
         inc(P)
       until not (P^ in [#1..' ']);
     {$endif FPC}
-    case JsonFirst[P^] of // FPC and Delphi will use a jump table
+    case JsonFirst[P^] of // FPC and Delphi will use a jump table :)
       jtNone:
         exit;// unexpected character in JSON input
       jtDoubleQuote: // '"'
@@ -2872,6 +2888,19 @@ prop:     if ExpectStandard then
         (P^ <> #0) do
     inc(P);
   result := P; // points to the next meaningful char
+end;
+
+function TJsonGotoEndParser.GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char;
+var
+  c: AnsiChar;
+begin
+  result := GotoEnd(P);
+  if result = nil then
+    exit;
+  c := result^; // return last jcEndOfJsonFieldOr0
+  EndOfObject := c;
+  if c <> #0 then
+    inc(result);
 end;
 
 function IsValidJson(const s: RawUtf8; strict: boolean): boolean;
@@ -3540,49 +3569,34 @@ begin
   if HandleValuesAsObjectOrArray and
      (P^ in ['{', '[']) then
   begin
+    wStr := false;
     result := P;
-    P := GotoEndJsonItem(P);
+    P := GetJsonObjectOrArray(P, EndOfObject, Len);
     if P <> nil then
-    begin
       // was a valid object or array
-      if Len <> nil then
-        Len^ := P - result;
-      if WasString <> nil then
-        WasString^ := false;
-      while (P^ <= ' ') and
-            (P^ <> #0) do
-        inc(P);
-      if EndOfObject <> nil then
-        EndOfObject^ := P^;
-      if P^ <> #0 then
-      begin
-        P^ := #0; // make zero-terminated
-        inc(P);
-      end;
-      Json := P;
-    end
+      Json := P
     else
       result := nil;
   end
   else
   begin
     result := GetJsonField(P, JSON, @wStr, EndOfObject, Len);
-    if WasString <> nil then
-      WasString^ := wStr;
     if not wStr and
        NormalizeBoolean and
        (result <> nil) then
-    begin
+    repeat
       if PInteger(result)^ = TRUE_LOW then
         result := pointer(SmallUInt32Utf8[1]) // normalize true -> 1
       else if PInteger(result)^ = FALSE_LOW then
         result := pointer(SmallUInt32Utf8[0]) // normalize false -> 0
       else
-        exit;
+        break;
       if Len <> nil then
-        Len^ := 1;
-    end;
+        Len^ := 1; // result = '0' or '1'
+    until true;
   end;
+  if WasString <> nil then
+    WasString^ := wStr;
 end;
 
 procedure GetJsonItemAsRawJson(var P: PUtf8Char; var result: RawJson;
@@ -3661,6 +3675,37 @@ begin
       dec(NumberOfItemsToJump);
     until NumberOfItemsToJump = 0;
   result := P;
+end;
+
+function GotoNextJsonItem(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char;
+var
+  parser: TJsonGotoEndParser;
+begin
+  {%H-}parser.Init(false, nil);
+  result := parser.GotoEnd(P, EndOfObject);
+end;
+
+function GetJsonObjectOrArray(P: PUtf8Char;
+  EndOfObject: PUtf8Char; Len: PInteger): PUtf8Char;
+var
+  parser: TJsonGotoEndParser;
+begin
+  {%H-}parser.Init({strict=}false, nil);
+  result := parser.GotoEnd(P);
+  if result = nil then
+    exit;
+  if Len <> nil then
+    Len^ := result - P;
+  while (result^ <= ' ') and
+        (result^ <> #0) do
+    inc(result);
+  if EndOfObject <> nil then
+    EndOfObject^ := result^;
+  if result^ <> #0 then
+  begin
+    result^ := #0; // make zero-terminated
+    inc(result);
+  end;
 end;
 
 function JsonArrayCount(P, PMax: PUtf8Char; Strict: boolean): integer;
@@ -7357,7 +7402,7 @@ nxt:  propname := GetJsonPropName(Ctxt.Json, @propnamelen);
               IdemPropName('ClassName', propname, propnamelen) then
       begin
         // woStoreClassName was used -> just ignore the class name
-        Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject);
+        Ctxt.Json := GotoNextJsonItem(Ctxt.Json, Ctxt.EndOfObject);
         if Ctxt.Json <> nil then
           goto nxt;
         goto no;
@@ -7372,7 +7417,7 @@ nxt:  propname := GetJsonPropName(Ctxt.Json, @propnamelen);
             if (rcfReadIgnoreUnknownFields in root.Flags) or
                (jpoIgnoreUnknownProperty in Ctxt.Options) then
             begin
-              Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject);
+              Ctxt.Json := GotoNextJsonItem(Ctxt.Json, Ctxt.EndOfObject);
               if Ctxt.Json = nil then
                 goto no;
             end
@@ -7602,7 +7647,7 @@ begin
       item := pointer(Data); // record (or object) are stored by value
     for f := 0 to fieldcount - 1 do
       if props[f] = nil then // skip jpoIgnoreUnknownProperty
-        Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject)
+        Ctxt.Json := GotoNextJsonItem(Ctxt.Json, Ctxt.EndOfObject)
       else if not JsonLoadProp(item, props[f]^, Ctxt) then
       begin
         Ctxt.Json := nil;
