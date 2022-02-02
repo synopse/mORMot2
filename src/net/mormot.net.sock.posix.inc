@@ -605,6 +605,7 @@ const
 
 function getifaddrs(var ifap: pifaddrs): Integer; cdecl;
   external clib name 'getifaddrs';
+
 procedure freeifaddrs(ifap: pifaddrs); cdecl;
   external clib name 'freeifaddrs';
 
@@ -707,7 +708,8 @@ begin
           end;
         if mac <> '' then
         begin
-          SetLength(result, n + 1);
+          if n = length(result) then
+            SetLength(result, NextGrow(n));
           result[n].Name := info^.ifa_name;
           result[n].Address := mac;
           inc(n);
@@ -715,6 +717,7 @@ begin
       end;
       info := info^.ifa_next;
     until info = nil;
+    SetLength(result, n);
   finally
     freeifaddrs(list);
   end;
@@ -728,6 +731,7 @@ begin
 end;
 
 {$ifdef OSLINUX}
+// on Android, /sys/class/net is not readable from the standard user :(
 
 function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
 var
@@ -768,7 +772,6 @@ end;
 
 function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
 begin
-  // on Android, /sys/class/net is not readable from the standard user
   result := nil;
 end;
 

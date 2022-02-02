@@ -1475,7 +1475,7 @@ begin
   end;
 end;
 
-{$ifdef CPU64}
+{$ifdef CPUX64}
 function IsRowID(FieldName: PUtf8Char): boolean;
 var
   f: Int64;
@@ -1501,20 +1501,18 @@ begin
   else
     result := false;
 end;
-{$endif CPU64}
+{$endif CPUX64}
 
 function IsRowID(FieldName: PUtf8Char; FieldLen: integer): boolean;
 begin
-  case FieldLen of
-    2:
-      result := PWord(FieldName)^ and $dfdf = ord('I') + ord('D') shl 8;
-    5:
-      result := (PInteger(FieldName)^ and $dfdfdfdf =
-                 ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
-                (ord(FieldName[4]) and $df = ord('D'));
+  if FieldLen = 2 then
+    result := PWord(FieldName)^ and $dfdf = ord('I') + ord('D') shl 8
+  else if FieldLen = 5 then
+    result := (PInteger(FieldName)^ and $dfdfdfdf =
+               ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
+              (ord(FieldName[4]) and $df = ord('D'))
   else
     result := false;
-  end;
 end;
 
 function IsRowIDShort(const FieldName: ShortString): boolean;

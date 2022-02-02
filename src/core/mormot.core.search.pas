@@ -70,7 +70,7 @@ type
 /// search for matching file names
 // - just a wrapper around FindFirst/FindNext
 // - you may specify several masks in Mask, e.g. as '*.jpg;*.jpeg'
-function FindFiles(const Directory,Mask: TFileName;
+function FindFiles(const Directory, Mask: TFileName;
   const IgnoreFileName: TFileName = ''; SortByName: boolean = false;
   IncludesDir: boolean = true; SubFolder: boolean = false): TFindFilesDynArray;
 
@@ -78,7 +78,7 @@ function FindFiles(const Directory,Mask: TFileName;
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
 
 /// ensure all files in Dest folder(s) do match the one in Reference
-// - won't copy all files from Reference folders, but only update files already
+// - won't copy all files from Reference folders, but will update files already
 // existing in Dest, which did change since last synchronization
 // - will also process recursively nested folders if SubFolder is true
 // - will use file content instead of file date check if ByContent is true
@@ -1515,7 +1515,7 @@ begin
       dir := IncludeTrailingPathDelimiter(Directory);
     SearchFolder('');
     if SortByName and
-       (da.Count > 0) then
+       (da.Count > 1) then
       da.Sort(SortDynArrayFileName);
   end;
   da.Capacity := count; // trim result[]
