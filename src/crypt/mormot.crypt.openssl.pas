@@ -755,7 +755,7 @@ begin
   if result <> nil then
     exit;
   EOpenSslCrypto.CheckAvailable(self, 'Main');
-  GlobalLock;
+  GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
   try
     if MainAesPrngOsl = nil then
       MainAesPrngOsl := RegisterGlobalShutdownRelease(TAesPrngOsl.Create);

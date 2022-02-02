@@ -5539,7 +5539,7 @@ class function TSynTimeZone.Default: TSynTimeZone;
 begin
   if SharedSynTimeZone = nil then
   begin
-    GlobalLock;
+    GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
     try
       if SharedSynTimeZone = nil then
         SharedSynTimeZone :=

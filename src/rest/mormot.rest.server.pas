@@ -4953,6 +4953,7 @@ begin
 end;
 
 var
+  ServerNonceSafe: TLightLock;
   ServerNonceHash: TSha3; // faster than THmacSha256 on small input
   ServerNonceCache: array[boolean] of record
     tix: cardinal;
@@ -4965,7 +4966,7 @@ var
   hash: TSha3;
   res: THash256;
 begin
-  ticks := Ctxt.TickCount64 div (60 * 5 * 1000); // 5 minutes resolution
+  ticks := Ctxt.TickCount64 shr 18; // 4.3 minutes resolution
   if Previous then
     dec(ticks);
   with ServerNonceCache[Previous] do
@@ -4982,13 +4983,10 @@ begin
     RandomBytes(@res, SizeOf(res)); // good enough as seed
     hash.Init(SHA3_256);
     hash.Update(@res, SizeOf(res));
-    GlobalLock;
-    try
-      if ServerNonceHash.Algorithm <> SHA3_256 then
-        ServerNonceHash := hash;
-    finally
-      GlobalUnLock;
-    end;
+    ServerNonceSafe.Lock;
+    if ServerNonceHash.Algorithm <> SHA3_256 then
+      ServerNonceHash := hash;
+    ServerNonceSafe.UnLock;
   end;
   hash := ServerNonceHash; // thread-safe SHA-3 sponge reuse
   hash.Update(@ticks, SizeOf(ticks));

@@ -6814,7 +6814,7 @@ begin
   result := MainAesPrng;
   if result <> nil then
     exit;
-  GlobalLock;
+  GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
   try
     if MainAesPrng = nil then
       MainAesPrng := RegisterGlobalShutdownRelease(TAesPrng.Create);
@@ -7062,7 +7062,7 @@ begin
   result := MainAesPrngSystem;
   if result = nil then
   begin
-    GlobalLock;
+    GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
     try
       if MainAesPrngSystem = nil then
         MainAesPrngSystem := RegisterGlobalShutdownRelease(TSystemPrng.Create);

@@ -4186,7 +4186,7 @@ var
   n: RawUtf8;
 begin
   TAesPrng.Main; // initialize MainAesPrng
-  GlobalLock;
+  GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
   try
     if GlobalCryptAlgo <> nil then
       exit;

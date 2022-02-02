@@ -546,6 +546,7 @@ type
   protected
     /// name and values interning are shared among all TDocVariantData instances
     fInternNames, fInternValues: TRawUtf8Interning;
+    fInternSafe: TLightLock;
     function CreateInternNames: TRawUtf8Interning;
     function CreateInternValues: TRawUtf8Interning;
     /// fast getter implementation
@@ -3346,6 +3347,8 @@ end;
 { ************** Custom Variant Types with JSON support }
 
 var
+  SynVariantTypesSafe: TLightLock;
+
   /// internal list of our TSynInvokeableVariantType instances
   // - SynVariantTypes[0] is always DocVariantVType
   // - SynVariantTypes[1] is typically BsonVariantType from mormot.db.nosql.bson
@@ -3386,7 +3389,7 @@ function SynRegisterCustomVariantType(
 var
   i: PtrInt;
 begin
-  GlobalLock;
+  SynVariantTypesSafe.Lock;
   try
     for i := 0 to length(SynVariantTypes) - 1 do
     begin
@@ -3400,7 +3403,7 @@ begin
     if sioHasTryJsonToVariant in result.Options then
       ObjArrayAdd(SynVariantTryJsonTypes, result);
   finally
-    GlobalUnLock;
+    SynVariantTypesSafe.UnLock;
   end;
 end;
 
@@ -4639,12 +4642,12 @@ end;
 
 function TDocVariant.CreateInternNames: TRawUtf8Interning;
 begin
-  GlobalLock;
+  fInternSafe.Lock;
   try
     if fInternNames = nil then
       fInternNames := TRawUtf8Interning.Create;
   finally
-    GlobalUnLock;
+    fInternSafe.UnLock;
   end;
   result := fInternNames;
 end;
@@ -4658,12 +4661,12 @@ end;
 
 function TDocVariant.CreateInternValues: TRawUtf8Interning;
 begin
-  GlobalLock;
+  fInternSafe.Lock;
   try
     if fInternValues = nil then
       fInternValues := TRawUtf8Interning.Create;
   finally
-    GlobalUnLock;
+    fInternSafe.UnLock;
   end;
   result := fInternValues;
 end;

@@ -2611,12 +2611,18 @@ begin
 end;
 
 function NewEngine(aCodePage: cardinal): TSynAnsiConvert;
+var
+  i: PtrInt;
 begin
-  GlobalLock;
+  SynAnsiConvertListLock.WriteLock;
   try
-    result := GetEngine(aCodePage); // avoid any (unlikely) race condition
-    if result <> nil then
+    i := WordScanIndex(pointer(SynAnsiConvertListCodePage),
+      SynAnsiConvertListCount, aCodePage);
+    if i >= 0 then
+    begin
+      result := SynAnsiConvertList[i]; // avoid any (unlikely) race condition
       exit;
+    end;
     if aCodePage = CP_UTF8 then
       result := TSynAnsiUtf8.Create(CP_UTF8)
     else if aCodePage = CP_UTF16 then
@@ -2626,12 +2632,10 @@ begin
     else
       result := TSynAnsiConvert.Create(aCodePage);
     RegisterGlobalShutdownRelease(result);
-    SynAnsiConvertListLock.WriteLock;
     ObjArrayAdd(SynAnsiConvertList, result);
     AddWord(SynAnsiConvertListCodePage, SynAnsiConvertListCount, aCodePage);
-    SynAnsiConvertListLock.WriteUnLock;
   finally
-    GlobalUnLock;
+    SynAnsiConvertListLock.WriteUnLock;
   end;
 end;
 

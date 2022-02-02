@@ -1237,7 +1237,7 @@ class function TSynMustache.Parse(const aTemplate: RawUtf8): TSynMustache;
 begin
   if SynMustacheCache = nil then
   begin
-    GlobalLock;
+    GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
     try
       if SynMustacheCache = nil then
         SynMustacheCache := RegisterGlobalShutdownRelease(

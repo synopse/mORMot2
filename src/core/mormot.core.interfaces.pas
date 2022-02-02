@@ -3518,19 +3518,6 @@ const
 var
   InterfaceFactoryCache: TSynObjectListLightLocked;
 
-function InitializeInterfaceFactoryCache: TSynObjectListLightLocked;
-begin
-  GlobalLock;
-  try
-    if InterfaceFactoryCache = nil then // paranoid thread-safety
-      InterfaceFactoryCache :=
-        RegisterGlobalShutdownRelease(TSynObjectListLightLocked.Create);
-  finally
-    GlobalUnLock;
-  end;
-  result := InterfaceFactoryCache;
-end;
-
 function FactorySearch(F: PInterfaceFactory; n: integer; nfo: PRttiInfo): TInterfaceFactory;
 begin
   if n <> 0 then
@@ -3552,16 +3539,11 @@ begin
      (aInterface^.Kind <> rkInterface) then
     raise EInterfaceFactory.CreateUtf8('%.Get(invalid)', [self]);
   cache := InterfaceFactoryCache;
-  if cache = nil then
-    cache := InitializeInterfaceFactoryCache
-  else
-  begin
-    cache.Safe.ReadLock; // multiple reads lock
-    result := FactorySearch(pointer(cache.List), cache.Count, aInterface);
-    cache.Safe.ReadUnLock;
-    if result <> nil then
-      exit; // retrieved from cache
-  end;
+  cache.Safe.ReadLock; // multiple reads lock
+  result := FactorySearch(pointer(cache.List), cache.Count, aInterface);
+  cache.Safe.ReadUnLock;
+  if result <> nil then
+    exit; // retrieved from cache
   cache.Safe.WriteLock; // exclusive write lock
   try
     result := FactorySearch(pointer(cache.List), cache.Count, aInterface);
@@ -4695,8 +4677,6 @@ begin
      (self = TInterfaceFactoryGenerated) then
     raise EInterfaceFactory.CreateUtf8('%.RegisterInterface(nil)', [self]);
   cache := InterfaceFactoryCache;
-  if cache = nil then
-    cache := InitializeInterfaceFactoryCache;
   cache.Safe.WriteLock;
   try
     if FactorySearch(pointer(cache.List), cache.Count, aInterface) <> nil then
@@ -7652,10 +7632,12 @@ begin
   {$ifdef CPUARM}
   ArmFakeStubAddr := @TInterfacedObjectFake.ArmFakeStub;
   {$endif CPUARM}
-  GlobalInterfaceResolver := TInterfaceResolverList.Create;
-  RegisterGlobalShutdownRelease(GlobalInterfaceResolver);
+  GlobalInterfaceResolver :=
+    RegisterGlobalShutdownRelease(TInterfaceResolverList.Create);
   GlobalInterfaceResolver.Add(TypeInfo(IAutoLocker), TAutoLocker);
   GlobalInterfaceResolver.Add(TypeInfo(ILockedDocVariant), TLockedDocVariant);
+  InterfaceFactoryCache :=
+    RegisterGlobalShutdownRelease(TSynObjectListLightLocked.Create);
 end;
 
 

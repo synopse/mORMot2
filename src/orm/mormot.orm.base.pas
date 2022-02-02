@@ -4218,7 +4218,7 @@ class procedure TOrmPropInfoRtti.RegisterTypeInfo(aTypeInfo: PRttiInfo);
 begin
   if OrmPropInfoRegistration = nil then
   begin
-    GlobalLock;
+    GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
     try
       if OrmPropInfoRegistration = nil then
         OrmPropInfoRegistration := RegisterGlobalShutdownRelease(

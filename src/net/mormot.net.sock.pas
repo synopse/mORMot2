@@ -283,7 +283,8 @@ procedure IP6Short(psockaddr: pointer; var s: ShortString; withport: boolean);
 
 /// convert a MAC address value into a RawUtf8 text
 // - returns e.g. '12:50:b6:1e:c6:aa'
-// - could be used to convert some binary buffer into human-friendly hexa string
+// - could be used to convert some binary buffer into human-friendly hexadecimal
+// string, e.g. by asn1_string_st.ToHex() in our mormot.lib.openssl11 wrapper
 function MacToText(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
 
 /// enumerate all IP addresses of the current computer
@@ -1888,6 +1889,7 @@ var
 
   // GetMacAddresses / GetMacAddressesText cache
   MacAddresses: array[{UpAndDown=}boolean] of record
+    Safe: TLightLock;
     Searched: boolean; // searched once: no change during process lifetime
     Addresses: TMacAddressDynArray;
     Text: array[{WithoutName=}boolean] of RawUtf8;
@@ -1932,7 +1934,7 @@ begin
   begin
     if not Searched then
     begin
-      mormot.core.os.GlobalLock;
+      Safe.Lock;
       try
         if not Searched then
         begin
@@ -1940,7 +1942,7 @@ begin
           Searched := true;
         end;
       finally
-        mormot.core.os.GlobalUnLock;
+        Safe.UnLock;
       end;
     end;
     result := Addresses;

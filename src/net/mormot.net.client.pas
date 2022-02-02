@@ -1367,6 +1367,7 @@ end;
 
 var
   _PROXYSET: boolean; // retrieve environment variables only once
+  _PROXYSAFE: TLightLock;
   _PROXY: array[{https:}boolean] of RawUtf8;
 
 function GetProxyForUri(const uri: RawUtf8; fromSystem: boolean): RawUtf8;
@@ -1377,13 +1378,13 @@ var
 begin
   if not _PROXYSET then
   begin
-    GlobalLock;
+    _PROXYSAFE.Lock;
     StringToUtf8(GetEnvironmentVariable('HTTP_PROXY'),  _PROXY[false]);
     StringToUtf8(GetEnvironmentVariable('HTTPS_PROXY'), _PROXY[true]);
     if _PROXY[true] = '' then
       _PROXY[true] := _PROXY[false];
     _PROXYSET := true;
-    GlobalUnLock;
+    _PROXYSAFE.UnLock;
   end;
   result := _PROXY[IdemPChar(pointer(uri), 'HTTPS://')];
   {$ifdef USEWININET}

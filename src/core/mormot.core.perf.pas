@@ -2683,7 +2683,7 @@ begin
   if (ProcessSystemUse = nil) and
      aCreateIfNone then
   begin
-    GlobalLock; // paranoid thread-safety
+    GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
     try
       if ProcessSystemUse = nil then
         ProcessSystemUse := RegisterGlobalShutdownRelease(
