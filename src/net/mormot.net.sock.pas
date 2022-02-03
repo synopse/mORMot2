@@ -160,6 +160,7 @@ type
   TNetSocket = ^TNetSocketWrap;
 
   TNetSocketDynArray = array of TNetSocket;
+  PNetSocketDynArray = ^TNetSocketDynArray;
 
   PTerminated = ^boolean; // on FPC system.PBoolean doesn't exist :(
 
@@ -228,6 +229,16 @@ function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
   out netsocket: TNetSocket; netaddr: PNetAddr = nil): TNetResult;
 
+/// resolve the TNetAddr of the address:port layer - maybe from cache
+function GetSocketAddressFromCache(const address, port: RawUtf8;
+  layer: TNetLayer; out addr: TNetAddr; var fromcache, tobecached: boolean): TNetResult;
+
+/// try to connect to several address:port servers simultaneously
+// - return up to neededcount connected TNetAddr, until timeoutms expires
+// - sockets are closed unless sockets^[] should contain the result[] sockets
+function GetReachableNetAddr(const address, port: array of RawUtf8;
+  timeoutms: integer = 1000; neededcount: integer = 1;
+  sockets: PNetSocketDynArray = nil): TNetAddrDynArray;
 
 var
   /// contains the raw Socket API version, as returned by the Operating System
@@ -1346,22 +1357,14 @@ end;
 
 { ******** TNetSocket Cross-Platform Wrapper }
 
-function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
-  dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
-  out netsocket: TNetSocket; netaddr: PNetAddr): TNetResult;
+function GetSocketAddressFromCache(const address, port: RawUtf8; layer: TNetLayer;
+  out addr: TNetAddr; var fromcache, tobecached: boolean): TNetResult;
 var
-  addr: TNetAddr;
-  sock: TSocket;
-  fromcache, tobecached: boolean;
-  connectendtix: Int64;
   p: cardinal;
 begin
-  netsocket := nil;
   fromcache := false;
   tobecached := false;
-  // resolve the TNetAddr of the address:port layer - maybe from cache
   if (layer in nlIP) and
-     (not dobind) and
      Assigned(NewSocketAddressCache) and
      ToCardinal(port, p, 1) then
     if (address = '') or
@@ -1380,6 +1383,101 @@ begin
     end
   else
     result := addr.SetFrom(address, port, layer);
+end;
+
+function GetReachableNetAddr(const address, port: array of RawUtf8;
+  timeoutms, neededcount: integer; sockets: PNetSocketDynArray): TNetAddrDynArray;
+var
+  i, n: PtrInt;
+  s: TSocket;
+  sock: TNetSocketDynArray;
+  addr: TNetAddrDynArray;
+  res: TNetResult;
+  tix: Int64;
+begin
+  result := nil;
+  if sockets <> nil then
+    sockets^ := nil;
+  if neededcount <= 0 then
+    exit;
+  n := length(address);
+  if (n = 0) or
+     (length(port) <> n) then
+    exit;
+  SetLength(sock, n);
+  SetLength(addr, n);
+  n := 0;
+  for i := 0 to length(sock) - 1 do
+  begin
+    res := addr[n].SetFrom(address[i], port[i], nlTcp); // bypass DNS cache here
+    if res <> nrOK then
+      continue;
+    s := socket(PSockAddr(@addr[n])^.sa_family, _ST[nlTcp], _IP[nlTcp]);
+    if (s < 0) or
+       (TNetSocket(s).MakeAsync <> nrOk) then
+      continue;
+    connect(s, @addr[n], addr[n].Size); // non-blocking connect() once
+    if TNetSocket(s).MakeBlocking <> nrOk then
+      continue;
+    sock[n] := TNetSocket(s);
+    inc(n);
+  end;
+  if n = 0 then
+    exit;
+  if neededcount > n then
+    neededcount := n;
+  SetLength(result, n);
+  if sockets <> nil then
+    SetLength(sockets^, n);
+  n := 0;
+  tix := GetTickCount64 + timeoutms;
+  repeat
+    for i := 0 to length(result) - 1 do
+      if (sock[i] <> nil) and
+         (sock[i].WaitFor(1, [neWrite]) = [neWrite]) then
+      begin
+        if sockets = nil then
+          sock[i].ShutdownAndClose(false)
+        else
+          sockets^[n] := sock[i]; // let caller own this socket from now on
+        sock[i] := nil; // mark this socket as closed
+        result[n] := addr[i];
+        inc(n);
+        dec(neededcount);
+        if neededcount = 0 then
+          break;
+      end;
+  until (neededcount = 0) or
+        (GetTickCount64 > tix);
+  if n <> length(result) then
+  begin
+    for i := 0 to length(result) - 1 do
+      if sock[i] <> nil then
+        sock[i].ShutdownAndClose(false);
+    SetLength(result, n);
+    if sockets <> nil then
+      SetLength(sockets^, n);
+  end;
+end;
+
+function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
+  dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
+  out netsocket: TNetSocket; netaddr: PNetAddr): TNetResult;
+var
+  addr: TNetAddr;
+  sock: TSocket;
+  fromcache, tobecached: boolean;
+  connectendtix: Int64;
+begin
+  netsocket := nil;
+  fromcache := false;
+  tobecached := false;
+  // resolve the TNetAddr of the address:port layer - maybe from cache
+  if dobind then
+    result := addr.SetFrom(address, port, layer)
+  else
+    result := GetSocketAddressFromCache(
+      address, port, layer, addr, fromcache, tobecached);
   if result <> nrOK then
     exit;
   // create the raw Socket instance
