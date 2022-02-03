@@ -1935,7 +1935,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// find an item in the list at aDefaultIndex position, and
     // using O(log(n)) binary search as fallback
-    // - returns nil if not found
+    // - returns nil if not found, or the property info and set aDefaultIndex
+    // to the next item
     function ByName(aName: PUtf8Char; aNameLen: PtrInt;
       var aDefaultIndex: PtrInt): TOrmPropInfo; overload;
     /// find an item in the list using O(log(n)) binary search
@@ -2042,9 +2043,11 @@ type
   POrmTableFieldType = ^TOrmTableFieldType;
 
   {$ifdef NOPOINTEROFFSET}
+  TOrmTableData = PUtf8Char;
   TOrmTableDataArray = PPUtf8CharArray;
   TOrmTableJsonDataArray = TPUtf8CharDynArray;
   {$else} // reduce memory consumption by half on 64-bit CPUs
+  TOrmTableData = integer;
   TOrmTableDataArray = PIntegerArray; // 0 = nil, or offset in fDataStart[]
   TOrmTableJsonDataArray = TIntegerDynArray;
   {$endif NOPOINTEROFFSET}
@@ -8859,8 +8862,8 @@ procedure TOrmTableAbstract.GetMSRowSetValues(Dest: TStream; RowFirst, RowLast: 
 const
   FIELDTYPE_TOXML: array[TSqlDBFieldType] of RawUtf8 = (
     '', '', ' dt:type="i8"', ' dt:type="float"',
-    ' dt:type="number" rs:dbtype="currency"',
-    ' dt:type="dateTime"', ' dt:type="string"', ' dt:type="bin.hex"');
+    ' dt:type="number" rs:dbtype="currency"', ' dt:type="dateTime"',
+    ' dt:type="string"', ' dt:type="bin.hex"');
 var
   W: TTextWriter;
   f, r: PtrInt;
@@ -9209,7 +9212,7 @@ begin
 end;
 
 {$ifdef CPUX86}
-procedure ExchgData(P1, P2: PPointer; FieldCount: PtrUInt);
+procedure ExchgData(P1, P2: TOrmTableDataArray; FieldCount: PtrUInt);
 {$ifdef FPC} nostackframe; assembler; {$endif}
 asm     // eax=P1 edx=P2 ecx=FieldCount
         push    esi
@@ -9226,9 +9229,9 @@ asm     // eax=P1 edx=P2 ecx=FieldCount
         pop     esi
 end;
 {$else}
-procedure ExchgData(P1, P2: PIntegerArray; FieldCount: PtrUInt); inline;
+procedure ExchgData(P1, P2: TOrmTableDataArray; FieldCount: PtrUInt); inline;
 var
-  p: integer; // Data[] = 32-bit pointer or 32-bit offset
+  p: TOrmTableData; // Data[] = 32/64-bit pointer or 32-bit offset
 begin
   repeat
     dec(FieldCount);
@@ -9289,8 +9292,8 @@ begin
               CurrentRow := i
             else if CurrentRow = i then
               CurrentRow := j;
-            ExchgData(pointer(@Data[OI - Params.FieldIndex]),
-                      pointer(@Data[OJ - Params.FieldIndex]), Params.FieldCount);
+            ExchgData(@Data[OI - Params.FieldIndex],
+                      @Data[OJ - Params.FieldIndex], Params.FieldCount);
           end;
           if P = I then
             SetPivot(OJ)
@@ -9480,8 +9483,8 @@ begin
         if i <= j then
         begin
           if i <> j then // swap elements (PUtf8Char or offset)
-            ExchgData(pointer(@Data[i * FieldCount]),
-                      pointer(@Data[j * FieldCount]), FieldCount);
+            ExchgData(@Data[i * FieldCount],
+                      @Data[j * FieldCount], FieldCount);
           if p = i then
             p := j
           else if p = j then
