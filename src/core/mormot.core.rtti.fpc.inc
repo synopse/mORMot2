@@ -773,7 +773,7 @@ asm
         movzx   eax, byte ptr [s1 + rax]
         sub     rax, rdx
         ret
-@1:     inc     eax
+@1:     mov     al, 1
 end;
 
 function _ansistr_compare_equal(s1, s2: pointer): SizeInt; nostackframe; assembler;
@@ -806,7 +806,7 @@ asm
         jz      @1
         test    s1, s1
         jnz     @ok
-@1:     inc     eax // not zero is enough
+@1:     mov     al, 1 // not zero is enough
 end;
 
 procedure _dynarray_incr_ref(p: pointer); nostackframe; assembler;

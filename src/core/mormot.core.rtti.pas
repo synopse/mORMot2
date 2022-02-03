@@ -2194,6 +2194,7 @@ type
   /// internal function handler for filling a value with some randomness
   TRttiCustomRandom = procedure(Data: pointer; Rtti: TRttiCustom);
 
+  /// used internally by our RTTI text definition
   TRttiCustomFromTextExpectedEnd = (
     eeNothing,
     eeSquare,

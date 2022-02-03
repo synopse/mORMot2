@@ -413,7 +413,7 @@ function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         xor     cl, al
         shr     eax, 8
         xor     eax, dword ptr [rcx * 4 + r9]
-        inc     r8
+        add     r8, 1
         jnz     @sml
 @0:     not     eax
 @z:     ret
@@ -424,7 +424,7 @@ function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         xor     cl, al
         shr     eax, 8
         xor     eax, dword ptr [rcx * 4 + r9]
-        inc     r8
+        add     r8, 1
         jnz     @head
         not     eax
         ret
@@ -467,7 +467,7 @@ function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         xor     cl, al
         shr     eax, 8
         xor     eax, dword ptr [rcx * 4 + r9]
-        inc     r8
+        add     r8, 1
         jnz     @tail
 @e:     not     eax
 end;
@@ -1532,9 +1532,9 @@ function Hash32(Data: PCardinalArray; Len: integer): cardinal;
         add     r9d, eax
         add     Data, 16
         {$ifdef WIN64ABI}
-        dec     r8d
+        sub     r8d, 1
         {$else}
-        dec     esi
+        sub     esi, 1
         {$endif WIN64ABI}
         jnz     @by16
 @by4:   mov     dh, dl
@@ -1722,7 +1722,7 @@ procedure bswap64array(a, b: PQWordArray; n: PtrInt);
         mov     qword ptr [b], rax
         add     a, 8
         add     b, 8
-        dec     n
+        sub     n, 1
         jnz @1
 end;
 
@@ -2279,7 +2279,7 @@ procedure crcblockssse42(crc128, data128: PBlock128; count: integer);
         crc32   r10d, dword ptr [rax + 8]
         crc32   r11d, dword ptr [rax + 12]
         add     rax, 16
-        dec     ecx
+        sub     ecx, 1
         jnz     @s
         mov     dword ptr [rdx], r8d
         mov     dword ptr [rdx + 4], r9d
@@ -2299,7 +2299,7 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         jmp     @align
 @7:     crc32   eax, byte ptr [buf]
         add     buf, 1
-        dec     len
+        sub     len, 1
         jz      @0
 @align: test    buf, 7
         jnz     @7
@@ -2327,7 +2327,7 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 @s:     db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
         {$endif FPC}
         add     buf, 8
-        dec     len
+        sub     len, 1
         jnz     @s
         jmp     @2
 end;
@@ -2570,7 +2570,7 @@ asm     // rcx=src, edx=size, r8=dest
 @27:    mov     rbx, qword ptr [r14 + rsi] // inline move by 8 bytes
         mov     qword ptr [r8 + rsi], rbx
         add     rsi, 8
-        dec     r12
+        sub     r12, 1
         jnz     @27
         mov     rbx, qword ptr [r14 + rsi] // 1..7 remaining bytes
         and     r15, 7
@@ -2578,14 +2578,14 @@ asm     // rcx=src, edx=size, r8=dest
 @28:    mov     byte ptr [r8 + rsi], bl
         shr     rbx, 8
         add     rsi, 1
-        dec     r15
+        sub     r15, 1
         jnz     @28
         jmp     @31
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @29:    mov     bl, byte ptr [r14 + rsi] // overlaping move
         mov     byte ptr [r8 + rsi], bl
         add     rsi, 1
-        dec     r12
+        sub     r12, 1
         jnz     @29
         cmp     rcx, r9
         jnz     @33
@@ -2654,14 +2654,14 @@ function InterlockedIncrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, 1
    lock xadd    dword ptr [I], eax // atomic eax=[I] + [I]:=[I]+eax
-        inc     eax
+        add     eax, 1
 end;
 
 function InterlockedDecrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, -1
    lock xadd    dword ptr [I], eax // atomic eax=[I] + [I]:=[I]+eax
-        dec     eax
+        sub     eax, 1
 end;
 
 function StrCntDecFree(var refcnt: TStrCnt): boolean;

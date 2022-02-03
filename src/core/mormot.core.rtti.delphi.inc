@@ -158,8 +158,7 @@ asm     // eax=aTypeInfo edx=aIndex
         push    edx
         shr     edx, 2 // fast by-four scanning
         jz      @1
-@4:     dec     edx
-        movzx   ecx, byte ptr [eax]
+@4:     movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
         movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
@@ -167,6 +166,7 @@ asm     // eax=aTypeInfo edx=aIndex
         lea     eax, [eax + ecx + 1]
         movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
+        dec     edx
         jnz     @4
         pop     edx
         and     edx, 3

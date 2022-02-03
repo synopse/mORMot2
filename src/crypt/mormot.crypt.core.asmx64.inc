@@ -1101,7 +1101,7 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         add     eax, r13d
         movdqa  xmm4, xmm6
         movdqa  xmm5, xmm7
-        dec     rcx
+        sub     rcx, 1
         jne     @loop2
         add     eax, [rdx]
         mov     [rdx], eax
@@ -1530,7 +1530,7 @@ asm     // W=rcx Buf=rdx
         add     eax, [rsi - 16 * 4]   // W[i-16]
         mov     [rsi], eax
         add     rsi, 4
-        dec     ecx
+        sub     ecx, 1
         jnz     @@2
         pop     rbx
         pop     rdi
@@ -1559,7 +1559,7 @@ function gf2_multiply(x, y, m, bits: PtrUInt): PtrUInt;
         test    dil, 1
         {$endif WIN64ABI}
         cmovne  rax, r10
-        dec     bits
+        sub     bits, 1
         jne     @s
 end;
 
@@ -3087,7 +3087,7 @@ procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
         aesimc  xmm0, xmm0
         movups  dqword ptr [RK], xmm0
         add     RK, 16
-        dec     eax
+        sub     eax, 1
         jnz     @loop
 end;
 
@@ -3138,7 +3138,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [dest], xmm15  // fOut := fIn xor IV
         add     source, 16
         add     dest, 16
-        dec     eax
+        sub     eax, 1
         jnz     @s
         movups  dqword ptr [iv], xmm7
 @z:     {$ifdef WIN64ABI}
@@ -3211,7 +3211,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [dest], xmm15  // fOut := fIn xor fIV
         add     source, 16
         add     dest, 16
-        dec     eax
+        sub     eax, 1
         jnz     @s
         movups  dqword ptr [iv], xmm7
 @z:     {$ifdef WIN64ABI}
@@ -3266,7 +3266,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 @sml:   aesenc xmm2, xmm1
       	movups xmm1, dqword ptr [rcx]
       	add    rcx, $10
-      	dec    al
+      	sub    al, 1
       	jne    @sml
       	aesenclast xmm2, xmm1
       	pxor   xmm0, xmm0
@@ -3337,7 +3337,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov    dword ptr [rsp + $4c], r10d
         bswap  r9d
         lea    r10, [r8 + $6]
-        dec    al // code below doesn't include the last aesenclast round
+        sub    al, 1 // code below doesn't include the last aesenclast round
         xor    r9d, ebp
         bswap  r10d
         mov    dword ptr [rsp + $5c], r9d
@@ -3657,7 +3657,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         aesenc xmm4, xmm1
         aesenc xmm5, xmm1
         movups xmm1, dqword ptr [rcx]
-        dec    al
+        sub    al, 1
         jne    @loop4
         aesenclast xmm2, xmm1
         aesenclast xmm3, xmm1
@@ -3683,7 +3683,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         aesenc xmm3, xmm1
         aesenc xmm4, xmm1
         movups xmm1, dqword ptr [rcx]
-        dec    al
+        sub    al, 1
         jne    @loop3
         aesenclast xmm2, xmm1
         aesenclast xmm3, xmm1
@@ -3808,7 +3808,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 @sml:   aesenc xmm2, xmm1
       	movups xmm1, dqword ptr [rcx]
       	add    rcx, $10
-      	dec    al
+      	sub    al, 1
       	jne    @sml
       	aesenclast xmm2, xmm1
       	pxor   xmm0, xmm0
@@ -3900,7 +3900,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov    dword ptr [rsp + $4c], r10d
         bswap  r9d
         lea    r10, [r8 + $6]
-        dec    al // code below doesn't include the last aesenclast round
+        sub    al, 1 // code below doesn't include the last aesenclast round
         xor    r9d, ebp
         bswap  r10d
         mov    dword ptr [rsp + $5c], r9d
@@ -4307,7 +4307,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         aesenc xmm4, xmm1
         aesenc xmm5, xmm1
         movups xmm1, dqword ptr [rcx]
-        dec    al
+        sub    al, 1
         jne    @loop4
         aesenclast xmm2, xmm1
         aesenclast xmm3, xmm1
@@ -4333,7 +4333,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         aesenc xmm3, xmm1
         aesenc xmm4, xmm1
         movups xmm1, dqword ptr [rcx]
-        dec    al
+        sub    al, 1
         jne    @loop3
         aesenclast xmm2, xmm1
         aesenclast xmm3, xmm1
@@ -4457,7 +4457,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm7, xmm15              // fIV := fOut
         add     src, 16
         add     dest, 16
-        dec     blocks
+        sub     blocks, 1
         jnz     @s
         movups  dqword ptr [aes].TAesCfc.fIV, xmm7
 @z:     {$ifdef WIN64ABI}
@@ -4522,7 +4522,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm7, xmm14               // fIV := fIn
         add     src, 16
         add     dest, 16
-        dec     blocks
+        sub     blocks, 1
         jnz     @s
         movups  dqword ptr [aes].TAesCfc.fIV, xmm7
 @z:     {$ifdef WIN64ABI}
@@ -4597,7 +4597,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm7, xmm15              // fIV := fOut
         add     src, 16
         add     dest, 16
-        dec     blocks
+        sub     blocks, 1
         jnz     @s
         movups  dqword ptr [aes].TAesCfc.fIV, xmm7
 @z:     {$ifdef WIN64ABI}
@@ -4675,7 +4675,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm7, xmm14               // fIV := fIn
         add     src, 16
         add     dest, 16
-        dec     blocks
+        sub     blocks, 1
         jnz     @s
         movups  dqword ptr [aes].TAesCfc.fIV, xmm7
 @z:     {$ifdef WIN64ABI}
@@ -4766,7 +4766,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         crc32   r13d, dword ptr [rsi + 12]
         add     rdi, 16
         add     rsi, 16
-        dec     ecx
+        sub     ecx, 1
         jnz     @s
         movups  dqword ptr [rdx].TAesCfc.fIV, xmm7
         mov     dword ptr [rdx + 0].TAesCfc.fMac.plain, eax
@@ -4870,7 +4870,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         crc32   r9d, dword ptr [rsi + 12]
         add     rdi, 16
         add     rsi, 16
-        dec     ecx
+        sub     ecx, 1
         jnz     @s
         movups  dqword ptr [rdx].TAesCfc.fIV, xmm7
         mov     dword ptr [rdx + 0].TAesCfc.fMac.plain, eax
@@ -4984,7 +4984,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         crc32   r13d, dword ptr [rsi + 12]
         add     rdi, 16
         add     rsi, 16
-        dec     ecx
+        sub     ecx, 1
         jnz     @s
         movups  dqword ptr [rdx].TAesCfc.fIV, xmm7
         mov     dword ptr [rdx + 0].TAesCfc.fMac.plain, eax
@@ -5100,7 +5100,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         crc32   r9d, dword ptr [rsi + 12]
         add     rdi, 16
         add     rsi, 16
-        dec     ecx
+        sub     ecx, 1
         jnz     @s
         movups  dqword ptr [rdx].TAesCfc.fIV, xmm7
         mov     dword ptr [rdx + 0].TAesCfc.fMac.plain, eax
@@ -5239,7 +5239,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pxor    xmm3, xmm2
         movups  dqword ptr [ptab + 0D0H], xmm3
         lea     ptab, [ptab - 20H]
-        dec     al
+        sub     al, 1
         jne     @init
         {$ifdef WIN64ABI}
         jmp     @exit
@@ -5491,8 +5491,8 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @ins:   pslldq  xmm0, 1
         pinsrb  xmm0, byte ptr [data], 00H
-        dec     data
-        dec     datalen
+        sub     data, 1
+        sub     datalen, 1
         jnz     @ins
         jmp     @s
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
@@ -5981,7 +5981,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pxor    xmm13, xmm5
         pxor    xmm14, xmm6
         pxor    xmm15, xmm7
-        dec     len
+        sub     len, 1
         shr     len, 7
         // process 128 bytes per iteration
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
@@ -6010,7 +6010,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         aesenc  xmm14, xmm6
         aesenc  xmm15, xmm7
         add     data, 128
-        dec     len
+        sub     len, 1
         jne     @loop
         aesenc  xmm8, xmm8
         aesenc  xmm9, xmm9
@@ -6146,7 +6146,7 @@ asm
 @s:     db $F2, $48, $0F, $38, $F1, $02
         {$endif FPC}
         add     buf, 8
-        dec     len
+        sub     len, 1
         jnz     @s
 @2:     test    cl, 4
         jz      @3
