@@ -1430,7 +1430,7 @@ begin
   if sockets <> nil then
     SetLength(sockets^, n);
   n := 0;
-  tix := GetTickCount64 + timeoutms;
+  tix := mormot.core.os.GetTickCount64 + timeoutms;
   repeat
     for i := 0 to length(result) - 1 do
       if (sock[i] <> nil) and
@@ -1448,7 +1448,7 @@ begin
           break;
       end;
   until (neededcount = 0) or
-        (GetTickCount64 > tix);
+        (mormot.core.os.GetTickCount64 > tix);
   if n <> length(result) then
   begin
     for i := 0 to length(result) - 1 do
@@ -1470,9 +1470,9 @@ var
   connectendtix: Int64;
 begin
   netsocket := nil;
+  // resolve the TNetAddr of the address:port layer - maybe from cache
   fromcache := false;
   tobecached := false;
-  // resolve the TNetAddr of the address:port layer - maybe from cache
   if dobind then
     result := addr.SetFrom(address, port, layer)
   else
@@ -2004,7 +2004,7 @@ begin
   begin
     if Sep = ' ' then
     begin
-      now := GetTickCount64 shr 15; // refresh every 32768 ms
+      now := mormot.core.os.GetTickCount64 shr 15; // refresh every 32768 ms
       if now <> Tix then
         Tix := now
       else
@@ -2666,7 +2666,7 @@ begin
   PollForPendingEvents(timeoutMS); // inc(fGettingOne) +  blocking epoll_wait
   result := GetOnePending(notif, call);
   if Assigned(fOnGetOneIdle) then
-    fOnGetOneIdle(self, GetTickCount64);
+    fOnGetOneIdle(self, mormot.core.os.GetTickCount64);
   {$else}
   // non-blocking call of PollForPendingEvents()
   byte(notif.events) := 0;
