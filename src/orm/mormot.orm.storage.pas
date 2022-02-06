@@ -3112,7 +3112,8 @@ const
   _CALLER: array[boolean] of string[7] = (
     'Json', 'Binary');
 var
-  f, dup: PtrInt;
+  f: PtrInt;
+  dup: integer;
   dupfield: RawUtf8;
   timer: TPrecisionTimer;
 begin

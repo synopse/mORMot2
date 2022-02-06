@@ -53,7 +53,7 @@ unit mormot.core.fpcx64mm;
 // - FPCMM_BOOSTER will use 2x more tiny blocks arenas - likely to be wasteful;
 // - will enable FPCMM_SMALLNOTWITHMEDIUM trying to reduce medium sleeps;
 // - warning: depending on the workload and hardware, it may actually be slower,
-// triggering more Meidum arena contention, and consuming more RAM: consider
+// triggering more Medium arena contention, and consuming more RAM: consider
 // FPCMM_SERVER as a fair alternative.
 {.$define FPCMM_BOOST}
 {.$define FPCMM_BOOSTER}

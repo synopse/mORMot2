@@ -6482,7 +6482,10 @@ end;
 
 function Base64ToBinSafe(const s: RawByteString): RawByteString;
 begin
-  Base64ToBinSafe(pointer(s), length(s), result);
+  if s = '' then
+    result := ''
+  else
+    Base64ToBinSafe(pointer(s), length(s), result);
 end;
 
 function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt): RawByteString;

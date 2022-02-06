@@ -2206,18 +2206,21 @@ function GetAllBits(Bits, BitCount: cardinal): boolean;
 
 type
   /// fast access to 8-bit integer bits
-  // - the compiler will generate bt/btr/bts opcodes
+  // - compiler will generate bt/btr/bts opcodes - note: they may be slow when
+  // applied on a memory location, but not on a byte value (register)
   TBits8 = set of 0..7;
   PBits8 = ^TBits8;
   TBits8Array = array[ 0 .. MaxInt - 1 ] of TBits8;
 
   /// fast access to 32-bit integer bits
-  // - the compiler will generate bt/btr/bts opcodes
+  // - compiler will generate bt/btr/bts opcodes - note: they may be slow when
+  // applied on a memory location, but not on an integer value (register)
   TBits32 = set of 0..31;
   PBits32 = ^TBits32;
 
   /// fast access to 64-bit integer bits
-  // - the compiler will generate bt/btr/bts opcodes
+  // - compiler will generate bt/btr/bts opcodes - note: they may be slow when
+  // applied on a memory location, but not on a Int64 value (register)
   // - as used by GetBit64/SetBit64/UnSetBit64
   TBits64 = set of 0..63;
   PBits64 = ^TBits64;
