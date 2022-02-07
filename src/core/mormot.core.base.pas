@@ -520,7 +520,7 @@ type
   type
     {$ifdef FPC}
 
-    TStrRec = packed record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
+    TStrRec = record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
     case integer of
       0: (
           {$ifdef HASCODEPAGE}
@@ -542,7 +542,7 @@ type
       {$endif HASCODEPAGE}
     end;
 
-    TDynArrayRec = packed record
+    TDynArrayRec = record
       refCnt: TDACnt; // =SizeInt
       high: TDALen;   // =SizeInt (differs from Delphi: equals length-1)
       function GetLength: TDALen; inline;
