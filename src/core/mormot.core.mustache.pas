@@ -71,18 +71,18 @@ type
 
   /// store a {{mustache}} tag
   TSynMustacheTag = record
-    /// the kind of the tag
-    Kind: TSynMustacheTagKind;
     /// points to the mtText buffer start
     // - main template's text is not allocated as a separate string during
     // parsing, but will rather be copied directly from the template memory
     TextStart: PUtf8Char;
     /// stores the mtText buffer length
     TextLen: integer;
-    /// the index in Tags[] of the other end of this section
+    /// the index in Tags[] of the other end of this section (16-bit)
     // - either the index of mtSectionEnd for mtSection/mtInvertedSection
     // - or the index of mtSection/mtInvertedSection for mtSectionEnd
-    SectionOppositeIndex: integer;
+    SectionOppositeIndex: SmallInt;
+    /// the kind of the tag
+    Kind: TSynMustacheTagKind;
     /// the tag content, excluding trailing {{ }} and corresponding symbol
     // - is not set for mtText nor mtSetDelimiter
     Value: RawUtf8;
@@ -133,6 +133,7 @@ type
     fWriter: TJsonWriter;
     fOwner: TSynMustache;
     fEscapeInvert: boolean;
+    fOwnWriter: boolean;
     fHelpers: TSynMustacheHelpers;
     fOnStringTranslate: TOnStringTranslate;
     procedure TranslateBlock(Text: PUtf8Char; TextLen: Integer); virtual;
@@ -146,6 +147,8 @@ type
   public
     /// initialize the rendering context for the given text writer
     constructor Create(Owner: TSynMustache; WR: TJsonWriter);
+    /// release this rendering context instance
+    destructor Destroy; override;
     /// the registered Expression Helpers, to handle {{helperName value}} tags
     // - use TSynMustache.HelperAdd/HelperDelete class methods to manage the list
     // or retrieve standard helpers via TSynMustache.HelpersGetStandardList
@@ -179,6 +182,7 @@ type
       ListCurrentDocumentType: TSynInvokeableVariantType;
     end;
     fTempGetValueFromContextHelper: TVariantDynArray;
+    fReuse: TLightLock;
     procedure PushContext(aDoc: TVarData);
     procedure PopContext; override;
     procedure AppendValue(const ValueName: RawUtf8; UnEscape: boolean);
@@ -198,7 +202,9 @@ type
     // - you should not use this constructor directly, but the
     // corresponding TSynMustache.Render*() methods
     constructor Create(Owner: TSynMustache; WR: TJsonWriter;
-      SectionMaxCount: integer; const aDocument: variant);
+      SectionMaxCount: integer; const aDocument: variant; OwnWriter: boolean);
+    /// allow to reuse this Mustache template rendering context
+    procedure CancelAll;
   end;
 
   /// maintain a list of {{mustache}} partials
@@ -278,7 +284,8 @@ type
     fTemplate: RawUtf8;
     fTags: TSynMustacheTagDynArray;
     fInternalPartials: TSynMustachePartials;
-    fSectionMaxCount: Integer;
+    fSectionMaxCount: integer;
+    fCachedContext: TSynMustacheContextVariant;
     // standard helpers implementation
     class procedure DateTimeToText(const Value: variant; out Result: variant);
     class procedure DateToText(const Value: variant; out Result: variant);
@@ -316,7 +323,7 @@ type
     // - an internal templates cache is maintained by this class function
     // - returns TRUE and set aContent the rendered content on success
     // - returns FALSE if the template is not correct
-    class function TryRenderJson(const aTemplate,aJson: RawUtf8;
+    class function TryRenderJson(const aTemplate, aJson: RawUtf8;
       out aContent: RawUtf8): boolean;
   public
     /// initialize and parse a pre-rendered {{mustache}} template
@@ -371,8 +378,7 @@ type
     // - the rendering extended in fTags[] is supplied as parameters
     // - you can specify a list of partials via TSynMustachePartials.CreateOwned
     procedure RenderContext(Context: TSynMustacheContext;
-      TagStart, TagEnd: integer;
-      Partials: TSynMustachePartials;
+      TagStart, TagEnd: integer; Partials: TSynMustachePartials;
       NeverFreePartials: boolean);
     /// renders the {{mustache}} template from a variant defined context
     // - the context is given via a custom variant type implementing
@@ -474,6 +480,13 @@ begin
   fWriter := WR;
 end;
 
+destructor TSynMustacheContext.Destroy;
+begin
+  inherited Destroy;
+  if fOwnWriter then
+    fWriter.Free;
+end;
+
 procedure TSynMustacheContext.TranslateBlock(Text: PUtf8Char; TextLen: Integer);
 var
   s: string;
@@ -492,22 +505,30 @@ end;
 { TSynMustacheContextVariant }
 
 constructor TSynMustacheContextVariant.Create(Owner: TSynMustache;
-  WR: TJsonWriter; SectionMaxCount: integer; const aDocument: variant);
+  WR: TJsonWriter; SectionMaxCount: integer; const aDocument: variant;
+  OwnWriter: boolean);
 begin
+  fOwnWriter := OwnWriter;
   inherited Create(Owner, WR);
-  SetLength(fContext, SectionMaxCount + 1);
+  SetLength(fContext, SectionMaxCount + 4);
   PushContext(TVarData(aDocument)); // weak copy
+end;
+
+procedure TSynMustacheContextVariant.CancelAll;
+begin
+  fContextCount := 0;
+  fEscapeInvert := false;
+  fWriter.CancelAll;
+  fReuse.UnLock;
 end;
 
 function TSynMustacheContextVariant.GetDocumentType(
   const aDoc: TVarData): TSynInvokeableVariantType;
 begin
-  result := nil;
-  if aDoc.VType <= varAny then
-    exit;
-  if fContextCount > 0 then
-    result := fContext[0].DocumentType;
-  result.FindSynVariantType(aDoc.VType, result); // faster than FindCustomVariantType
+  if cardinal(aDoc.VType) < varFirstCustom then
+    result := nil
+  else
+    result := DocVariantType.FindSynVariantType(aDoc.VType); // fast enough
 end;
 
 procedure TSynMustacheContextVariant.PushContext(aDoc: TVarData);
@@ -1143,7 +1164,7 @@ begin
               'mtSetDelimiter syntax is e.g. {{=<% %>=}}');
           fTagStart := PWord(fScanStart)^;
           fTagStop := PWord(fScanStart + 3)^;
-          continue; // do not call AddTag(mtSetDelimiter)
+          continue; // do not call AddTag(Kind=mtSetDelimiter)
         end;
       mtVariableUnescape:
         if (Symbol = '{') and
@@ -1286,6 +1307,8 @@ begin
   finally
     Free;
   end;
+  fCachedContext := TSynMustacheContextVariant.Create(self,
+    TJsonWriter.CreateOwnedStream(8192), SectionMaxCount + 4, Null, true);
 end;
 
 procedure TSynMustache.RenderContext(Context: TSynMustacheContext;
@@ -1381,24 +1404,26 @@ function TSynMustache.Render(const Context: variant;
   Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
   const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
 var
-  W: TJsonWriter;
-  Ctxt: TSynMustacheContext;
+  Ctxt: TSynMustacheContextVariant;
   tmp: TTextWriterStackBuffer;
 begin
-  W := TJsonWriter.CreateOwnedStream(tmp);
+  Ctxt := fCachedContext; // thread-safe reuse of a shared rendering context
+  if Ctxt.fReuse.TryLock then
+    Ctxt.PushContext(TVarData(Context)) // weak copy
+  else
+    Ctxt := TSynMustacheContextVariant.Create(
+      self, TJsonWriter.CreateOwnedStream(tmp), SectionMaxCount, Context, true);
   try
-    Ctxt := TSynMustacheContextVariant.Create(self, W, SectionMaxCount, Context);
-    try
-      Ctxt.Helpers := Helpers;
-      Ctxt.OnStringTranslate := OnTranslate;
-      Ctxt.EscapeInvert := EscapeInvert;
-      RenderContext(Ctxt, 0, high(fTags), Partials, false);
-      W.SetText(result);
-    finally
-      Ctxt.Free;
-    end;
+    Ctxt.Helpers := Helpers;
+    Ctxt.OnStringTranslate := OnTranslate;
+    Ctxt.EscapeInvert := EscapeInvert;
+    RenderContext(Ctxt, 0, high(fTags), Partials, false);
+    Ctxt.Writer.SetText(result);
   finally
-    W.Free;
+    if Ctxt = fCachedContext then
+      Ctxt.CancelAll
+    else
+      Ctxt.Free;
   end;
 end;
 
@@ -1427,6 +1452,7 @@ destructor TSynMustache.Destroy;
 begin
   FreeAndNil(fInternalPartials);
   inherited;
+  fCachedContext.Free;
 end;
 
 function TSynMustache.FoundInTemplate(const text: RawUtf8): boolean;
