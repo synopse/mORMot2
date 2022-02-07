@@ -3113,7 +3113,7 @@ const
     'Json', 'Binary');
 var
   f: PtrInt;
-  dup: integer;
+  dup: integer; // should be an integer and not a PtrInt for ForceRehash(@dup)
   dupfield: RawUtf8;
   timer: TPrecisionTimer;
 begin

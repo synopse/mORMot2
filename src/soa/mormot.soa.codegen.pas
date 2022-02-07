@@ -1226,7 +1226,7 @@ begin
     'time',          NowToString,
     'year',          CurrentYear,
     'mORMotVersion', SYNOPSE_FRAMEWORK_VERSION,
-    'Executable', VarStringOrNull(StringToUtf8(Executable.Version.DetailedOrVoid)),
+    'Executable',    VarStringOrNull(StringToUtf8(Executable.Version.DetailedOrVoid)),
     'exeInfo',       Executable.Version.VersionInfo,
     'exeName',       Executable.ProgramName,
     'hasorm',        fORM.Count > 0,

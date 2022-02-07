@@ -9185,9 +9185,8 @@ Copiabl:include(CopiableFieldsBits, i);
   begin
     fRecordManySourceProp := Fields.ByRawUtf8Name('Source') as TOrmPropInfoRttiInstance;
     if fRecordManySourceProp = nil then
-      raise EModelException.CreateUtf8('% expects a SOURCE field', [Table])
-    else
-      fRecordManyDestProp := Fields.ByRawUtf8Name('Dest') as TOrmPropInfoRttiInstance;
+      raise EModelException.CreateUtf8('% expects a SOURCE field', [Table]);
+    fRecordManyDestProp := Fields.ByRawUtf8Name('Dest') as TOrmPropInfoRttiInstance;
     if fRecordManyDestProp = nil then
       raise EModelException.CreateUtf8('% expects a DEST field', [Table]);
   end;
