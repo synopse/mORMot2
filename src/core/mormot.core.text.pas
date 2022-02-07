@@ -1355,6 +1355,10 @@ function AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8;
 procedure AddRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
   const Value: RawUtf8); overload;
 
+/// add Value[] items to Values[], with an external count variable, for performance
+procedure AddRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
+  const Value: TRawUtf8DynArray); overload;
+
 /// true if both TRawUtf8DynArray are the same
 // - comparison is case-sensitive
 function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray): boolean; overload;
@@ -6588,6 +6592,20 @@ begin
     SetLength(Values, NextGrow(capacity));
   Values[ValuesCount] := Value;
   inc(ValuesCount);
+end;
+
+procedure AddRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
+  const Value: TRawUtf8DynArray);
+var
+  n, o, i: PtrInt;
+begin
+  n := length(Value);
+  o := ValuesCount;
+  inc(ValuesCount, n);
+  if ValuesCount > Length(Values) then
+    SetLength(Values, NextGrow(ValuesCount));
+  for i := 0 to n - 1 do
+    Values[o + i] := Value[i];
 end;
 
 function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray): boolean;
