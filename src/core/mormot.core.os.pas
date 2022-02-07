@@ -728,11 +728,24 @@ const
   {$ifdef FPC}
     'Free Pascal'
     {$ifdef VER2_6_4} + ' 2.6.4'{$endif}
-    {$ifdef VER3_0}   + ' 3.0'  {$ifdef VER3_0_4} + '.4' {$else}
-    {$ifdef VER3_0_2} + '.2'    {$endif} {$endif} {$endif}
-    {$ifdef VER3_1}   + ' 3.1'  {$ifdef VER3_1_1} + '.1' {$endif} {$endif}
-    {$ifdef VER3_2}   + ' 3.2'  {$endif}
-    {$ifdef VER3_3}   + ' 3.3'  {$ifdef VER3_3_1} + '.1' {$endif} {$endif}
+    {$ifdef VER3_0}   + ' 3.0'
+      {$ifdef VER3_0_4}   + '.4' {$else}
+        {$ifdef VER3_0_2} + '.2' {$endif}
+      {$endif VER3_0_4}
+    {$endif VER3_0}
+    {$ifdef VER3_1}   + ' 3.1'
+       {$ifdef VER3_1_1} + '.1' {$endif}
+    {$endif VER3_1}
+    {$ifdef VER3_2}   + ' 3.2'
+      {$ifdef VER3_2_4}     + '.4' {$else}
+        {$ifdef VER3_2_3}   + '.3' {$else}
+          {$ifdef VER3_2_2} + '.2' {$endif}
+        {$endif VER3_2_3}
+      {$endif VER3_2_4}
+    {$endif VER3_2}
+    {$ifdef VER3_3}   + ' 3.3'
+       {$ifdef VER3_3_1} + '.1' {$endif}
+    {$endif VER3_3}
     {$ifdef VER3_4}   + ' 3.4'  {$endif}
   {$else}
     'Delphi'
@@ -4216,7 +4229,7 @@ begin
     until false;
   end
   else
-    // use ICU or cwstring/RTL for accurate conversion
+    // use WinAPI, ICU or cwstring/RTL for accurate conversion
     res[0] := AnsiChar(
       Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
 end;
