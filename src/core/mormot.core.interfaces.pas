@@ -362,7 +362,7 @@ type
     /// computes a TDocVariant containing the input or output arguments values
     // - Values[] should point to the input/output raw binary values, as stored
     // in TInterfaceMethodExecute.Values during execution
-    procedure ArgsStackAsDocVariant(const Values: TPointerDynArray;
+    procedure ArgsStackAsDocVariant(Values: PPointerArray;
       out Dest: TDocVariantData; Input: boolean);
   end;
 
@@ -2329,7 +2329,9 @@ type
     smsError);
 
   /// the TInterfaceMethodExecute.OnExecute signature
-  // - optInterceptInputOutput should be defined in Options
+  // - optInterceptInputOutput should be defined in Options so that
+  // Sender.Input/Output values will be filled with parameters (slower but
+  // easier to consume than Sender.Values raw pointers)
   // - is called for each Step, i.e. smsBefore/smsAfter
   // - smsError is called when TInterfaceMethodExecute.LastException was raised
   TOnInterfaceMethodExecute = procedure(Sender: TInterfaceMethodExecuteRaw;
@@ -2344,7 +2346,7 @@ type
     fFactory: TInterfaceFactory;
     fMethod: PInterfaceMethod;
     fStorage: TByteDynArray;
-    fValues: TPointerDynArray;
+    fValues: PPointerArray;
     fAlreadyExecuted: boolean;
     fOptions: TInterfaceMethodOptions;
     fDocVariantOptions: TDocVariantOptions;
@@ -2381,7 +2383,7 @@ type
     /// low-level direct access to the current input/output parameter values
     // - you should not need to access this, but rather set
     // optInterceptInputOutput in Options, and read Input/Output content
-    property Values: TPointerDynArray
+    property Values: PPointerArray
       read fValues;
     /// reference to the actual execution method callbacks
     property OnExecute: TInterfaceMethodExecuteEventDynArray
@@ -2974,7 +2976,7 @@ begin
   end;
 end;
 
-procedure TInterfaceMethod.ArgsStackAsDocVariant(const Values: TPointerDynArray;
+procedure TInterfaceMethod.ArgsStackAsDocVariant(Values: PPointerArray;
   out Dest: TDocVariantData; Input: boolean);
 var
   a: PtrInt;
@@ -6757,15 +6759,13 @@ asm
         // copy (push) stack content (if any)
         mov     rcx, [r12].TCallMethodArgs.StackSize
         mov     rdx, [r12].TCallMethodArgs.StackAddr
-        jmp     @checkstack
-@addstack:
-        dec     ecx
-        push    qword ptr [rdx]
-        sub     rdx, 8
-@checkstack:
         test    ecx, ecx
-        jnz     @addstack
-        // fill registers and call method
+        jz      @z
+@s:     push    qword ptr [rdx]
+        sub     rdx, 8
+        sub     ecx, 1
+        jnz     @s
+@z:     // fill registers and call method
         {$ifdef OSPOSIX}
         // Linux/BSD System V AMD64 ABI
         mov     rdi, [r12 + TCallMethodArgs.ParamRegs + REGRDI * 8 - 8]
@@ -6905,10 +6905,11 @@ begin
   fFactory := aFactory;
   fMethod := aMethod;
   SetOptions(aOptions);
-  // initialize temporary storage for call arguments
-  SetLength(fStorage, fMethod^.ArgsSizeAsValue);
+  // initialize temporary storage for call arguments and fValues pointers
+  SetLength(fStorage, integer(fMethod^.ArgsSizeAsValue) +
+                      length(aMethod^.Args) shl POINTERSHR);
   // assign the parameters storage to the fValues[] pointers
-  SetLength(fValues, length(aMethod^.Args));
+  fValues := @fStorage[fMethod^.ArgsSizeAsValue];
   V := @fValues[1];
   arg := @fMethod^.Args[1];
   for a := 1 to length(fMethod^.Args) - 1 do
@@ -6972,11 +6973,6 @@ begin
         inc(a);
       until false;
     end;
-  if optInterceptInputOutput in fOptions then
-  begin
-    Input.InitFast(fMethod^.ArgsInputValuesCount, dvObject);
-    Output.InitFast(fMethod^.ArgsOutputValuesCount, dvObject);
-  end;
 end;
 
 procedure TInterfaceMethodExecuteRaw.RawExecute(
@@ -7077,8 +7073,8 @@ begin
     fCurrentStep := smsBefore;
     if fOnExecute <> nil then
     begin
-      if (Input.Count = 0) and
-         (optInterceptInputOutput in Options) then
+      if (optInterceptInputOutput in Options) and
+         (fMethod^.ArgsInputValuesCount <> 0) then
         fMethod^.ArgsStackAsDocVariant(fValues, fInput, true);
       for e := 0 to length(fOnExecute) - 1 do
       try
@@ -7114,13 +7110,18 @@ begin
       fCurrentStep := smsAfter;
       if fOnExecute <> nil then
       begin
-        if (Output.Count = 0) and
-           (optInterceptInputOutput in Options) then
+        if (optInterceptInputOutput in Options) and
+           (fMethod^.ArgsOutputValuesCount <> 0) then
           fMethod^.ArgsStackAsDocVariant(fValues, fOutput, false);
         for e := 0 to length(fOnExecute) - 1 do
         try
           fOnExecute[e](self, smsAfter);
         except // ignore any exception during interception
+        end;
+        if optInterceptInputOutput in Options then
+        begin
+          fInput.Clear;
+          fOutput.Clear;
         end;
       end;
     except
@@ -7166,11 +7167,19 @@ begin
     repeat
       case arg^.ValueVar of
         imvvString:
+          {$ifdef FPC}
+          FastAssignNew(V^^);
+          {$else}
           PString(V^)^ := '';
+          {$endif FPC}
         imvvWideString:
           PWideString(V^)^ := '';
         imvvRawUtf8:
+          {$ifdef FPC}
+          FastAssignNew(V^^);
+          {$else}
           PRawUtf8(V^)^ := '';
+          {$endif FPC}
         imvvDynArray:
           FastDynArrayClear(V^, arg^.ArgRtti.ArrayRtti.Info);
         imvvObject:
