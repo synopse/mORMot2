@@ -2112,9 +2112,9 @@ type
     /// free associated memory and owned records
     destructor Destroy; override;
     /// copy basic reading parameters of a TOrmTable into this instance
-    // - only work for basic Get() or Results[] access
+    // - work for basic Get() or Results[] access, and distinct Step() cursor
     // - the Results[] remain in the source TOrmTable: source TOrmTable has to
-    // remain available (i.e. not destroyed) before this TOrmTable
+    // remain available (i.e. not destroyed before this copy TOrmTable)
     procedure AssignRead(source: TOrmTableAbstract); virtual;
 
     /// read-only access to the ID of a particular row
@@ -2713,6 +2713,11 @@ type
     /// handle type conversion to string
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
+    /// return the number of TOrmTable rows to browse
+    function IterateCount(const V: TVarData): integer; override;
+    /// allow to loop over the mapped TOrmTable rows
+    procedure Iterate(var Dest: TVarData; const V: TVarData;
+      Index: integer); override;
   end;
 
 
@@ -5870,7 +5875,7 @@ var
   tmp: pointer;
 begin
   GetValuePointer(Instance, tmp);
-  W.WrBase64(tmp, length(RawByteString(tmp)), true);
+  W.WrBase64(tmp, length(RawByteString(tmp)), {withmagic=}true);
   if fGetterIsFieldPropOffset = 0 then
     FastAssignNew(tmp);
 end;
@@ -9563,6 +9568,8 @@ begin
 end;
 
 function TOrmTableAbstract.Step(SeekFirst: boolean; RowVariant: PVariant): boolean;
+var
+  v: POrmTableRowVariantData absolute RowVariant;
 begin
   result := false;
   if (self = nil) or
@@ -9579,13 +9586,13 @@ begin
     exit;
   if OrmTableRowVariantType = nil then
     OrmTableRowVariantType := SynRegisterCustomVariantType(TOrmTableRowVariant);
-  if (PVarData(RowVariant)^.VType = OrmTableRowVariantType.VarType) and
-     (POrmTableRowVariantData(RowVariant)^.VTable = self) and
-     (POrmTableRowVariantData(RowVariant)^.VRow < 0) then
+  if (v^.VType = OrmTableRowVariantType.VarType) and
+     (v^.VTable = self) and
+     (v^.VRow < 0) then
     exit; // already initialized -> quick exit
   VarClearAndSetType(RowVariant^, OrmTableRowVariantType.VarType);
-  POrmTableRowVariantData(RowVariant)^.VTable := self;
-  POrmTableRowVariantData(RowVariant)^.VRow := -1; // follow fStepRow
+  v^.VTable := self;
+  v^.VRow := -1; // follow fStepRow
 end;
 
 function TOrmTableAbstract.FieldBuffer(
@@ -10025,20 +10032,29 @@ var
   r, f: integer;
   rv: TOrmTableRowVariantData absolute Instance;
 begin
+  result := false;
   if rv.VTable = nil then
-    raise EOrmTable.CreateUtf8('Invalid %.% call', [self, Name]);
+    if NoException then
+      exit
+    else
+      raise EOrmTable.CreateUtf8('Invalid %.% call', [self, Name]);
   r := rv.VRow;
   if r < 0 then
   begin
     r := rv.VTable.fStepRow;
     if (r = 0) or
        (r > rv.VTable.fRowCount) then
-      raise EOrmTable.CreateUtf8('%.%: no previous Step', [self, Name]);
+       if NoException then
+         exit
+       else
+        raise EOrmTable.CreateUtf8('%.%: no previous Step', [self, Name]);
   end;
   f := rv.VTable.FieldIndex(PUtf8Char(Name));
-  result := f >= 0;
   if f >= 0 then
+  begin
     rv.VTable.GetVariant(r, f, PVariant(@Dest)^);
+    result := true;
+  end;
 end;
 
 procedure TOrmTableRowVariant.Cast(var Dest: TVarData; const Source: TVarData);
@@ -10085,6 +10101,20 @@ begin
     r := TOrmTableRowVariantData(Value).VTable.fStepRow;
   TOrmTableRowVariantData(Value).VTable.ToDocVariant(r, tmp);
   W.AddVariant(tmp, twJsonEscape);
+end;
+
+function TOrmTableRowVariant.IterateCount(const V: TVarData): integer;
+begin
+  result := TOrmTableRowVariantData(V).VTable.fRowCount;
+end;
+
+procedure TOrmTableRowVariant.Iterate(var Dest: TVarData;
+  const V: TVarData; Index: integer);
+begin
+  if cardinal(Index) < cardinal(TOrmTableRowVariantData(V).VTable.fRowCount) then
+    Dest := V
+  else
+    TRttiVarData(Dest).VType := varEmpty;
 end;
 
 
