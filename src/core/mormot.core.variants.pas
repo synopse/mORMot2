@@ -230,8 +230,13 @@ type
     constructor Create; virtual;
     /// search of a registered custom variant type from its low-level VarType
     // - will first compare with its own VarType for efficiency
+    // - returns true and set the matching CustomType if found, false otherwise
     function FindSynVariantType(aVarType: Word;
-      out CustomType: TSynInvokeableVariantType): boolean;
+      out CustomType: TSynInvokeableVariantType): boolean; overload;
+    /// search of a registered custom variant type from its low-level VarType
+    // - will first compare with its own VarType for efficiency
+    // - returns the matching custom variant type, nil if not found
+    function FindSynVariantType(aVarType: Word): TSynInvokeableVariantType; overload;
     /// customization of JSON parsing into variants
     // - is enabled only if the sioHasTryJsonToVariant option is set
     // - will be called by e.g. by VariantLoadJson() or GetVariantFromJsonField()
@@ -2957,7 +2962,7 @@ begin
       {$endif FPC}
     else if vt < varByRef then // varByRef has no refcount -> nothing to clear
       if vt = docv then
-        PDocVariantData(V)^.ClearFast
+        PDocVariantData(V)^.ClearFast // faster than Clear
       {$ifdef HASVARUSTRING}
       else if vt = varUString then
         UnicodeString(V^.VAny) := ''
@@ -3369,17 +3374,14 @@ begin
      (cardinal(aVarType) < varArray) then
   begin
     t := pointer(SynVariantTypes);
-    if t <> nil then
-    begin
-      n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
-      repeat
-        result := t^;
-        if result.VarType = aVarType then
-          exit;
-        inc(t);
-        dec(n);
-      until n = 0;
-    end;
+    n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
+    repeat
+      result := t^;
+      if result.VarType = aVarType then
+        exit;
+      inc(t);
+      dec(n);
+    until n = 0;
   end;
   result := nil;
 end;
@@ -3490,12 +3492,6 @@ var
       [self, name, CallDesc^.ArgCount]);
   end;
 
-  procedure TryFunction;
-  begin
-    if not DoFunction(Dest^, Source, name, args) then
-      RaiseInvalid;
-  end;
-
 begin
   // circumvent https://bugs.freepascal.org/view.php?id=38653 and
   // inverted args order FPC bugs, avoid unneeded conversion to varOleString
@@ -3594,20 +3590,23 @@ begin
     // note: IntGet was already tried in function trailer
     DISPATCH_METHOD:
       if Dest <> nil then
-        TryFunction
+      begin
+        if not DoFunction(Dest^, Source, name, args) then
+          RaiseInvalid;
+      end
       else if not DoProcedure(Source, name, args) then
       begin
         PCardinal(@res)^ := varEmpty;
         try
-          TryFunction;
+          if not DoFunction(Dest^, Source, name, args) then
+            RaiseInvalid;
         finally
           VarClearProc(res);
         end;
       end;
     DISPATCH_PROPERTYGET:
-      if Dest <> nil then
-        TryFunction
-      else
+      if (Dest = nil) or
+         not DoFunction(Dest^, Source, name, args) then
         RaiseInvalid;
     DISPATCH_PROPERTYPUT:
       if (Dest <> nil) or
@@ -3682,6 +3681,16 @@ begin
   else
     CustomType := FindSynVariantTypeFromVType(aVarType);
   result := CustomType <> nil;
+end;
+
+function TSynInvokeableVariantType.FindSynVariantType(
+  aVarType: Word): TSynInvokeableVariantType;
+begin
+  if (self <> nil) and
+     (aVarType = VarType) then
+    result := self
+  else
+    result := FindSynVariantTypeFromVType(aVarType);
 end;
 
 procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData;
@@ -8941,9 +8950,9 @@ direct:         if Dest <> nil then
                 // use standard RTL behavior for non-mORMot custom variants
                 ct.DispInvoke(pointer(vp), Source, CallDesc, Params)
               else
-               VarInvalidOp
+                VarInvalidOp
             else
-             VarInvalidOp;
+              VarInvalidOp;
           end;
       else
         VarInvalidOp;
