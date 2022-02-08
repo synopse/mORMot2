@@ -384,6 +384,9 @@ type
     function LoadFromStream(s: TStream; maxversion: byte): boolean;
   end;
 
+  PEccCertificateContentV1 = ^TEccCertificateContentV1;
+  PEccCertificateContentV2 = ^TEccCertificateContentV2;
+
   /// points to a TEccCertificate binary buffer for ECC secp256r1 cryptography
   PEccCertificateContent = ^TEccCertificateContent;
 
