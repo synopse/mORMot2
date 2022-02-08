@@ -1374,6 +1374,18 @@ type
     // - self-signed certificate could be included - but add them with caution
     // - the Certificate should have one of cuCA, cuDigitalSignature usages
     function Add(const cert: ICryptCert): boolean;
+    /// load a register a certificate or certificate chain from a memory buffer
+    // - returns the serials of added certificate(s)
+    function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray;
+    /// load a register a certificate file or file chain
+    // - returns the serials of added certificate(s)
+    // - the Certificate should have one of cuCA, cuDigitalSignature usages
+    function AddFromFile(const FileName: TFileName): TRawUtf8DynArray;
+    /// search and register all certificate files from a given folder
+    // - returns the serials of added certificate(s)
+    // - the Certificate(s) should have one of cuCA, cuDigitalSignature usages
+    function AddFromFolder(const Folder: TFileName;
+      const Mask: TFileName = FILES_ALL; Recursive: boolean = false): TRawUtf8DynArray;
     /// add a new Serial number to the internal Certificate Revocation List
     function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean;
@@ -1404,6 +1416,10 @@ type
     function GetBySerial(const Serial: RawUtf8): ICryptCert; virtual; abstract;
     function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; virtual; abstract;
     function Add(const cert: ICryptCert): boolean; virtual; abstract;
+    function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; virtual; abstract;
+    function AddFromFile(const FileName: TFileName): TRawUtf8DynArray; virtual;
+    function AddFromFolder(const Folder, Mask: TFileName;
+       Recursive: boolean): TRawUtf8DynArray; virtual;
     function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; virtual; abstract;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; virtual; abstract;
@@ -4142,6 +4158,56 @@ function TCryptCert.Instance: TCryptCert;
 begin
   result := self;
 end;
+
+
+{ TCryptStore }
+
+function TCryptStore.AddFromFile(const FileName: TFileName): TRawUtf8DynArray;
+var
+  tmp: RawByteString;
+begin
+  tmp := StringFromFile(FileName);
+  if tmp <> '' then
+    result := AddFromBuffer(tmp)
+  else
+    result := nil;
+end;
+
+function TCryptStore.AddFromFolder(const Folder, Mask: TFileName;
+  Recursive: boolean): TRawUtf8DynArray;
+var
+  n: integer;
+
+  procedure SearchFolder(const DirName: TFileName);
+  var
+    F: TSearchRec;
+  begin
+    if FindFirst(DirName + Mask, faAnyfile - faDirectory, F) = 0 then
+    begin
+      repeat
+        if SearchRecValidFile(F) and
+           (F.Size < 65535) then // certificate files are expected to be < 64KB
+          AddRawUtf8(result, n, AddFromFile(DirName + F.Name));
+      until FindNext(F) <> 0;
+      FindClose(F);
+    end;
+    if Recursive and
+       (FindFirst(DirName + '*', faDirectory, F) = 0) then
+    begin
+      repeat
+        if SearchRecValidFolder(F) then
+          SearchFolder(IncludeTrailingPathDelimiter(DirName + F.Name));
+      until FindNext(F) <> 0;
+      FindClose(F);
+    end;
+  end;
+
+begin
+  n := 0;
+  SearchFolder(IncludeTrailingPathDelimiter(Folder));
+  SetLength(result, n);
+end;
+
 
 
 { TCryptStoreAlgo }

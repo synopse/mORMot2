@@ -1668,6 +1668,7 @@ end;
 type
   EOpenSslCert = class(EOpenSsl);
 
+  /// ICryptCert factory using OpenSSL X509
   TCryptCertAlgoOpenSsl = class(TCryptCertAlgo)
   protected
     fHash: PEVP_MD;

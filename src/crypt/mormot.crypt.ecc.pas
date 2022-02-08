@@ -5167,6 +5167,7 @@ type
     function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
     function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; override;
     function Add(const cert: ICryptCert): boolean; override;
+    function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; override;
     function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; override;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; override;
@@ -5232,6 +5233,11 @@ begin
       result := fEcc.Add(a.fEcc) >= 0;
     a.fEccByRef := result; // will be owned by fEcc chain
   end;
+end;
+
+function TCryptStoreInternal.AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray;
+begin
+  result := fEcc.AddFromBuffer(Content);
 end;
 
 function TCryptStoreInternal.Revoke(const Serial: RawUtf8;
