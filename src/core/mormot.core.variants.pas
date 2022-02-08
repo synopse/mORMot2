@@ -212,14 +212,16 @@ type
     // - also circumvent FPC 3.2+ inverted parameters order
     {$ifdef FPC_VARIANTSETVAR}
     procedure DispInvoke(Dest: PVarData; var Source: TVarData;
+      CallDesc: PCallDesc; Params: Pointer); override;
     {$else} // see http://mantis.freepascal.org/view.php?id=26773
     {$ifdef ISDELPHIXE7}
     procedure DispInvoke(Dest: PVarData; [ref] const Source: TVarData;
+      CallDesc: PCallDesc; Params: Pointer); override;
     {$else}
     procedure DispInvoke(Dest: PVarData; const Source: TVarData;
+      CallDesc: PCallDesc; Params: Pointer); override;
     {$endif ISDELPHIXE7}
     {$endif FPC_VARIANTSETVAR}
-      CallDesc: PCallDesc; Params: Pointer); override;
     /// override those abstract methods for getter/setter implementation
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; virtual;
@@ -3463,17 +3465,19 @@ var
   DispInvokeArgOrderInverted: boolean; // circumvent FPC 3.2+ breaking change
 {$endif FPC}
 
-procedure TSynInvokeableVariantType.DispInvoke(
 {$ifdef FPC_VARIANTSETVAR}
-  Dest: PVarData; var Source: TVarData;
+procedure TSynInvokeableVariantType.DispInvoke(
+  Dest: PVarData; var Source: TVarData; CallDesc: PCallDesc; Params: Pointer);
 {$else} // see http://mantis.freepascal.org/view.php?id=26773
   {$ifdef ISDELPHIXE7}
+procedure TSynInvokeableVariantType.DispInvoke(
   Dest: PVarData; [ref] const Source: TVarData; // why not just "var" ????
+  CallDesc: PCallDesc; Params: Pointer);
   {$else}
-  Dest: PVarData; const Source: TVarData;
+procedure TSynInvokeableVariantType.DispInvoke(
+  Dest: PVarData; const Source: TVarData; CallDesc: PCallDesc; Params: Pointer);
   {$endif ISDELPHIXE7}
 {$endif FPC_VARIANTSETVAR}
-  CallDesc: PCallDesc; Params: Pointer);
 var
   name: string;
   res: TVarData;
