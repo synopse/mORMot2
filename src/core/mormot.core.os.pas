@@ -591,15 +591,14 @@ var
   // - contains e.g. 'LENOVO 20HES23B0U ThinkPad T470'
   BiosInfoText: RawUtf8;
 
-  {$ifdef OSWINDOWS}
   /// Level 1 to 4 CPU caches as returned by GetLogicalProcessorInformation
   // - yes, Intel introduced a Level 4 cache (eDRAM) with some Haswell/Iris CPUs
-  // - we don't retrieve this information from Linux / POSIX yet
+  // - this information is not retrieved on all Linux / POSIX systems yet
   // - only Unified or Data caches are include (not Instruction or Trace)
+  // - note: some CPU - like the Apple M1 - have 128 bytes of LineSize
   CpuCache: array[1..4] of record
     Count, Size, LineSize: cardinal;
   end;
-  {$endif OSWINDOWS}
 
   {$ifdef OSLINUXANDROID}
   /// contains the Flags: or Features: value of Linux /proc/cpuinfo
@@ -4190,13 +4189,13 @@ end;
 
 function Unicode_CodePage: integer;
 begin
-{$ifdef FPC}
+  {$ifdef FPC}
   // = GetSystemCodePage on POSIX, Lazarus may override to UTF-8 on Windows
   result := DefaultSystemCodePage;
-{$else}
+  {$else}
   // Delphi always uses the main Windows System Code Page
   result := GetACP;
-{$endif FPC}
+  {$endif FPC}
 end;
 
 function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt;

@@ -2262,6 +2262,8 @@ function getpagesize: integer; cdecl; external clib;
 
 {$ifdef OSLINUX}
 
+function get_nprocs: integer;  cdecl; external clib;
+
 procedure SetLinuxDistrib(const release: RawUtf8);
 var
   distrib: TOperatingSystem;
@@ -2440,6 +2442,25 @@ procedure crc32blocksarm64(crc128, data128: PBlock128; count: integer); external
 
 {$endif CPUAARCH64}
 
+function KB(Size: cardinal): shortstring;
+begin
+  if Size >= 1 shl 30 then
+  begin
+    str(Size shr 30, result);
+    result := result + 'GB';
+  end
+  else if Size >= 1 shl 20 then
+  begin
+    str(Size shr 20, result);
+    result := result + 'MB';
+  end
+  else
+  begin
+    str(Size shr 10, result);
+    result := result + 'KB';
+  end
+end;
+
 procedure InitializeSpecificUnit;
 var
   P: PAnsiChar;
@@ -2482,6 +2503,17 @@ begin
   modname := fpsysctlhwstr(HW_MODEL, temp);
   with uts do
     OSVersionText := sysname + '-' + release + ' ' + version;
+  {$ifdef OSDARWIN}
+  CpuCache[1].LineSize := fpsysctlhwint(HW_CACHELINE);
+  CpuCache[1].Size := fpsysctlhwint(HW_L1DCACHESIZE);
+  CpuCache[2].LineSize := fpsysctlhwint(HW_CACHELINE);
+  CpuCache[2].Size := fpsysctlhwint(HW_L2CACHESIZE);
+  CpuCacheSize := CpuCache[2].Size;
+  if CpuCacheSize = 0 then
+    CpuCacheSize := CpuCache[1].Size;
+  if CpuCacheSize <> 0 then
+    CpuCacheText := 'L1=' + KB(CpuCache[1].Size) + ' L2=' + KB(CpuCache[2].Size);
+  {$endif OSDARWIN}
   {$else}
   {$ifdef OSANDROID}
   release := GetSystemProperty('ro.build.version.release');
@@ -2606,30 +2638,19 @@ begin
     CpuCacheSize := GetNextCardinal(cache);
     while cache^ = ' ' do
       inc(cache);
-    case cache^ of
-      'k',
+    case upcase(cache^) of
       'K':
         CpuCacheSize := CpuCacheSize shl 10;
-      'm',
       'M':
         CpuCacheSize := CpuCacheSize shl 20;
-      'g',
       'G':
         CpuCacheSize := CpuCacheSize shl 30;
-    end;
-    if CpuCacheSize < 1 shl 20 then
-    begin
-      str(CpuCacheSize shr 10, CpuInfoText);
-      CpuInfoText := CpuInfoText + 'KB cache';
-    end
-    else
-    begin
-      str(CpuCacheSize shr 20, CpuInfoText);
-      CpuInfoText := CpuInfoText + 'MB cache';
     end;
   end;
   SystemInfo.release := release;
   {$endif OSBSDDARWIN}
+  if CpuCacheSize <> 0 then
+    CpuInfoText := KB(CpuCacheSize) + ' cache';
   SystemInfo.uts.release := uts.Release;
   SystemInfo.uts.sysname := uts.Sysname;
   SystemInfo.uts.version := uts.Version;
@@ -2638,16 +2659,25 @@ begin
                     GetNextCardinal(P) shl 8 +
                     GetNextCardinal(P);
   OSVersion32.os := OS_KIND;
-  MoveSmall(@KernelRevision, @OSVersion32.utsrelease, SizeOf(OSVersion32.utsrelease));
+  MoveSmall(@KernelRevision, @OSVersion32.utsrelease, 3); // 24-bit version
   with SystemInfo.uts do
     OSVersionText := sysname + ' ' + release;
   if SystemInfo.release <> '' then
     OSVersionText := SystemInfo.release + ' - ' + OSVersionText;
   {$ifdef OSANDROID}
   OSVersionText := 'Android (' + OSVersionText + ')';
+  {$else}
+  {$ifdef OSLINUX}
+  if SystemInfo.dwNumberOfProcessors = 0 then // e.g. QEMU limited /proc/cpuinfo
+    SystemInfo.dwNumberOfProcessors := get_nprocs;
+  {$endif OSLINUX}
   {$endif OSANDROID}
-  if (SystemInfo.dwNumberOfProcessors > 0) and
-     (modname <> nil) then
+  if SystemInfo.dwNumberOfProcessors = 0 then
+    SystemInfo.dwNumberOfProcessors := 1;
+  if modname = nil then
+    CpuInfoText := Format('%d x generic ' + CPU_ARCH_TEXT + ' cpu %s',
+      [SystemInfo.dwNumberOfProcessors, CpuInfoText])
+  else
     CpuInfoText := Format('%d x %s %s (' + CPU_ARCH_TEXT + ')',
       [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
   if CpuInfoText = '' then

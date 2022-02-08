@@ -10420,6 +10420,7 @@ var
   rk: TKeyArray;
   bi, bo: TAesBlock;
   shablock: array[0..63] of byte;
+  i: PtrInt;
 {$endif USEARMCRYPTO}
 begin
   ComputeAesStaticTables;
@@ -10492,6 +10493,17 @@ begin
       // ARMv8 SHA HW opcodes seem not available
       exclude(CpuFeatures, ahcSha2);
     end;
+  i := PosEx('x generic', CpuInfoText);
+  if i <> 0 then
+  begin // some VM/QEMU software don't actually return a proper CPU name
+    inc(i, 9);
+    if ahcCRC32 in CpuFeatures then
+      insert(' crc', CpuInfoText, i);
+    if ahcSha2 in CpuFeatures then
+      insert(' sha', CpuInfoText, i);
+    if ahcAes in CpuFeatures then
+      insert(' aes', CpuInfoText, i);
+  end;
   {$endif USEARMCRYPTO}
   assert(SizeOf(TMd5Buf) = SizeOf(TMd5Digest));
   assert(SizeOf(TAes) = AES_CONTEXT_SIZE);
