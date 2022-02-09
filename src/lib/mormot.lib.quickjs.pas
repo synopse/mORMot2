@@ -405,7 +405,8 @@ type
     /// create a JS_TAG_OBJECT from a class instance published properties
     procedure FromClass(instance: TObject; out result: JSValue);
     /// create a JS Value by unserializing JSON - maybe creating a JS_TAG_OBJECT
-    procedure FromJson(const json: RawUtf8; out result: JSValue);
+    procedure FromJson(const json: RawUtf8; out result: JSValue;
+      exceptonerror: boolean = true);
     /// create a Date object value from its Unix MS timestamp
     procedure FromUnixMSTime(val: TUnixMSTime; out result: JSValue);
     /// create a Date object value from a TDateTime value
@@ -3445,14 +3446,16 @@ begin
   FromJson(ObjectToJson(instance), result);
 end;
 
-procedure TJSContext.FromJson(const json: RawUtf8; out result: JSValue);
+procedure TJSContext.FromJson(const json: RawUtf8; out result: JSValue;
+  exceptonerror: boolean);
 var
   saved: cardinal;
 begin
   saved := SetFpuFlags(ffLibrary);
   try
     result := JSValue(JS_ParseJSON(@self, pointer(json), length(json), '<inline>'));
-    if result.IsException then
+    if exceptonerror and
+       result.IsException then
       raise EQuickJS.Create(@self, 'JSContext.FromJson', result);
   finally
     ResetFpuFlags(saved);
@@ -3503,7 +3506,11 @@ begin
     {$endif HASVARUSTRING}
     vtWideString:
       result := FromW(val.VWideString, length(WideString(val.VWideString)));
-    vtString, vtPChar, vtChar, vtWideChar, vtClass:
+    vtString,
+    vtPChar,
+    vtChar,
+    vtWideChar,
+    vtClass:
       begin
         tmp := nil;
         VarRecToUtf8(val, RawUtf8(tmp)); // return as new RawUtf8 instance
@@ -3520,12 +3527,6 @@ begin
 end;
 
 procedure TJSContext.FromVariant(const val: variant; out result: JSValue);
-
-  procedure DoComplex;
-  begin // sub-procedure to avoid temporary try..finally for other cases
-    FromJson(VariantSaveJson(val), result);
-  end;
-
 var
   tmp: TVarData;
   vt: cardinal;
@@ -3594,8 +3595,16 @@ begin
         result := FromW(PPointer(VAny)^, length(PUnicodeString(VAny)^))
       else
       {$endif HASVARUSTRING}
-        // not recognizable vt -> seralize as JSON to handle also custom types
-        DoComplex;
+        begin
+          // not recognizable vt -> seralize as JSON to handle also custom types
+          tmp.VAny := nil;
+          try
+            _VariantSaveJson(val, twJsonEscape, RawUtf8(tmp.VAny));
+            FromJson(RawUtf8(tmp.VAny), result, {exceptonerror=}false);
+          finally
+            FastAssignNew(tmp.VAny);
+          end;
+        end;
     end;
 end;
 
