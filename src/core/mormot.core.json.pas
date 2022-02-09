@@ -6006,12 +6006,13 @@ begin
     varOleStrByRef:
       AddTextW(PPointer(v.VAny)^, Escape)
   else
-    if vt >= varArray then // complex types are always < varArray
-      AddNull
-    else if DocVariantType.FindSynVariantType(vt, cv) then // our custom types
-      cv.ToJson(self, Value)
-    else if not CustomVariantToJson(self, Value, Escape) then // generic CastTo
-      raise EJsonException.CreateUtf8('%.AddVariant VType=%', [self, vt]);
+    begin
+      cv := FindSynVariantType(vt); // our custom types
+      if cv <> nil then
+        cv.ToJson(self, @v)
+      else if not CustomVariantToJson(self, @v, Escape) then // other custom
+        raise EJsonException.CreateUtf8('%.AddVariant VType=%', [self, vt]);
+    end;
   end;
 end;
 

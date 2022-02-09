@@ -233,12 +233,8 @@ type
     /// search of a registered custom variant type from its low-level VarType
     // - will first compare with its own VarType for efficiency
     // - returns true and set the matching CustomType if found, false otherwise
-    function FindSynVariantType(aVarType: Word;
-      out CustomType: TSynInvokeableVariantType): boolean; overload;
-    /// search of a registered custom variant type from its low-level VarType
-    // - will first compare with its own VarType for efficiency
-    // - returns the matching custom variant type, nil if not found
-    function FindSynVariantType(aVarType: Word): TSynInvokeableVariantType; overload;
+    function FindSynVariantType(aVarType: cardinal;
+      out CustomType: TSynInvokeableVariantType): boolean;
     /// customization of JSON parsing into variants
     // - is enabled only if the sioHasTryJsonToVariant option is set
     // - will be called by e.g. by VariantLoadJson() or GetVariantFromJsonField()
@@ -297,6 +293,14 @@ type
   // - used by SynRegisterCustomVariantType() function
   TSynInvokeableVariantTypeClass = class of TSynInvokeableVariantType;
 
+var
+  /// internal list of our TSynInvokeableVariantType instances
+  // - SynVariantTypes[0] is always DocVariantVType
+  // - SynVariantTypes[1] is e.g. BsonVariantType from mormot.db.nosql.bson
+  // - instances are owned by Variants.pas as TInvokeableVariantType instances
+  // - is defined here for proper FindSynVariantType inlining
+  SynVariantTypes: array of TSynInvokeableVariantType;
+
 /// register a custom variant type to handle properties
 // - the registration process is thread-safe
 // - this will implement an internal mechanism used to bypass the default
@@ -304,6 +308,11 @@ type
 // - is called in case of TDocVariant, TBsonVariant or TSqlDBRowVariant
 function SynRegisterCustomVariantType(
   aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
+
+/// search of a registered custom variant type from its low-level VarType
+// - returns the matching custom variant type, nil if not found
+function FindSynVariantType(aVarType: cardinal): TSynInvokeableVariantType;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// try to serialize a custom variant value into JSON
 // - as used e.g. by TJsonWriter.AddVariant
@@ -3196,24 +3205,16 @@ end;
 var
   SynVariantTypesSafe: TLightLock;
 
-  /// internal list of our TSynInvokeableVariantType instances
-  // - SynVariantTypes[0] is always DocVariantVType
-  // - SynVariantTypes[1] is typically BsonVariantType from mormot.db.nosql.bson
-  // - instances are owned by Variants.pas as TInvokeableVariantType /
-  // TCustomVariantType
-  SynVariantTypes: array of TSynInvokeableVariantType;
-
   /// list of custom types (but not DocVariantVType) supporting TryJsonToVariant
   SynVariantTryJsonTypes: array of TSynInvokeableVariantType;
 
-function FindSynVariantTypeFromVType(aVarType: word): TSynInvokeableVariantType;
-  {$ifdef HASINLINE}inline;{$endif}
+function FindSynVariantType(aVarType: cardinal): TSynInvokeableVariantType;
 var
   n: integer;
   t: ^TSynInvokeableVariantType;
 begin
-  if (cardinal(aVarType) >= varFirstCustom) and
-     (cardinal(aVarType) < varArray) then
+  if (aVarType >= varFirstCustom) and
+     (aVarType < varArray) then
   begin
     t := pointer(SynVariantTypes);
     n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
@@ -3516,25 +3517,15 @@ var
     result := false;
 end;
 
-function TSynInvokeableVariantType.FindSynVariantType(aVarType: Word;
+function TSynInvokeableVariantType.FindSynVariantType(aVarType: cardinal;
   out CustomType: TSynInvokeableVariantType): boolean;
 begin
   if (self <> nil) and
      (aVarType = VarType) then
     CustomType := self
   else
-    CustomType := FindSynVariantTypeFromVType(aVarType);
+    CustomType := mormot.core.variants.FindSynVariantType(aVarType);
   result := CustomType <> nil;
-end;
-
-function TSynInvokeableVariantType.FindSynVariantType(
-  aVarType: Word): TSynInvokeableVariantType;
-begin
-  if (self <> nil) and
-     (aVarType = VarType) then
-    result := self
-  else
-    result := FindSynVariantTypeFromVType(aVarType);
 end;
 
 procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData;
@@ -3563,7 +3554,7 @@ begin
       handler := self
     else
     begin
-      handler := FindSynVariantTypeFromVType(vt);
+      handler := mormot.core.variants.FindSynVariantType(vt);
       if handler = nil then
         exit;
     end;

@@ -190,7 +190,6 @@ type
     function AppendSection(const ValueName: RawUtf8): TSynMustacheSectionType;
       override;
     function GotoNextListItem: boolean; override;
-    function GetDocumentType(const aDoc: TVarData): TSynInvokeableVariantType;
     function GetValueFromContext(const ValueName: RawUtf8;
       var Value: TVarData): TSynMustacheSectionType;
     function GetValueCopyFromContext(const ValueName: RawUtf8): variant;
@@ -522,15 +521,6 @@ begin
   fReuse.UnLock;
 end;
 
-function TSynMustacheContextVariant.GetDocumentType(
-  const aDoc: TVarData): TSynInvokeableVariantType;
-begin
-  if cardinal(aDoc.VType) < varFirstCustom then
-    result := nil
-  else
-    result := DocVariantType.FindSynVariantType(aDoc.VType); // fast enough
-end;
-
 procedure TSynMustacheContextVariant.PushContext(aDoc: TVarData);
 begin
   if fContextCount >= length(fContext) then
@@ -539,7 +529,7 @@ begin
   with fContext[fContextCount] do
   begin
     Document := aDoc;
-    DocumentType := GetDocumentType(aDoc);
+    DocumentType := FindSynVariantType(aDoc.VType);
     ListCurrent := -1;
     if DocumentType = nil then
       ListCount := -1
@@ -808,7 +798,7 @@ begin
       if ListCurrent >= ListCount then
         exit;
       DocumentType.Iterate(ListCurrentDocument, Document, ListCurrent);
-      ListCurrentDocumentType := GetDocumentType(ListCurrentDocument);
+      ListCurrentDocumentType := FindSynVariantType(ListCurrentDocument.VType);
       result := true;
     end;
 end;
