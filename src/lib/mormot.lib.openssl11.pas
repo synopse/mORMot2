@@ -4892,8 +4892,8 @@ type
 threadvar
   _PeerVerify: TOpenSslClient; // OpenSSL is a dumb library for sure
 
-function AfterConnectionPeerVerify(wasok: integer;
-  store: PX509_STORE_CTX): integer; cdecl;
+function AfterConnectionPeerVerify(
+  wasok: integer; store: PX509_STORE_CTX): integer; cdecl;
 var
   peer: PX509;
   c: TOpenSslClient;
@@ -4902,8 +4902,12 @@ begin
   c := _PeerVerify;
   c.fContext.PeerIssuer := peer.IssuerName;
   c.fContext.PeerSubject := peer.SubjectName;
-  result := ord(c.fContext.OnEachPeerVerify(
-    c.fSocket, c.fContext, wasok <> 0, c.fSsl, peer));
+  try
+    result := ord(c.fContext.OnEachPeerVerify(
+      c.fSocket, c.fContext, wasok <> 0, c.fSsl, peer));
+  except
+    result := false; // abort the connection on exception within callback
+  end;
 end;
 
 function AfterConnectionAskPassword(buf: PUtf8Char; size, rwflag: integer;
@@ -4913,13 +4917,17 @@ var
   pwd: RawUtf8;
 begin
   c := _PeerVerify;
-  pwd := c.fContext.OnPrivatePassword(c.fSocket, c.fContext, c.fSsl);
-  result := length(pwd);
-  if result <> 0 then
-    if size > result  then
-      MoveSmall(pointer(pwd), buf, result + 1) // +1 to include trailing #0
-    else
-      result := 0; // buf[0..size-1] is too small for this password -> abort
+  try
+    pwd := c.fContext.OnPrivatePassword(c.fSocket, c.fContext, c.fSsl);
+    result := length(pwd);
+    if result <> 0 then
+      if size > result  then
+        MoveSmall(pointer(pwd), buf, result + 1) // +1 to include trailing #0
+      else
+        result := 0; // buf[0..size-1] is too small for this password -> abort
+  except
+    result := 0; // abort on exception within callback
+  end;
 end;
 
 function GetNextCsv(var P: PUtf8Char; var value: RawUtf8): boolean;
