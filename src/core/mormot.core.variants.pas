@@ -2840,7 +2840,7 @@ procedure RawUtf8ToVariant(const Txt: RawUtf8; var Value: TVarData;
 begin
   if ExpectedValueType = varString then
   begin
-    RawUtf8ToVariant(Txt,variant(Value));
+    RawUtf8ToVariant(Txt, variant(Value));
     exit;
   end;
   VarClearAndSetType(variant(Value), ExpectedValueType);
@@ -3830,70 +3830,77 @@ begin
   result := dvoReturnNullForUnknownProperty in Data.VOptions; // to avoid error
 end;
 
-procedure TDocVariant.ToJson(W: TJsonWriter; const Value: variant);
+procedure TDocVariant.ToJson(W: TJsonWriter; Value: PVarData);
 var
-  ndx: PtrInt;
-  vt: cardinal;
   forced: TTextWriterOptions;
+  nam: PPUtf8Char;
+  val: PVariant;
+  n: integer;
   checkExtendedPropName: boolean;
 begin
-  vt := TDocVariantData(Value).VType;
-  if vt > varNull then
-    if vt = DocVariantVType then
-      with TDocVariantData(Value) do
-        if [dvoIsArray, dvoIsObject] * VOptions = [] then
-          W.AddNull
-        else
-        begin
-          forced := [];
-          if [twoForceJsonExtended, twoForceJsonStandard] * W.CustomOptions = [] then
-          begin
-            if dvoSerializeAsExtendedJson in VOptions then
-              forced := [twoForceJsonExtended]
-            else
-              forced := [twoForceJsonStandard];
-            W.CustomOptions := W.CustomOptions + forced;
-          end;
-          if IsObject then
-          begin
-            checkExtendedPropName := twoForceJsonExtended in W.CustomOptions;
-            W.Add('{');
-            for ndx := 0 to VCount - 1 do
-            begin
-              if checkExtendedPropName and
-                 JsonPropNameValid(pointer(VName[ndx])) then
-                W.AddNoJsonEscape(pointer(VName[ndx]), Length(VName[ndx]))
-              else
-              begin
-                W.Add('"');
-                W.AddJsonEscape(pointer(VName[ndx]));
-                W.Add('"');
-              end;
-              W.Add(':');
-              W.AddVariant(VValue[ndx], twJsonEscape);
-              W.AddComma;
-            end;
-            W.CancelLastComma;
-            W.Add('}');
-          end
+  if cardinal(Value.VType) = varVariantByRef then // inlined Safe()^
+    Value := Value.VPointer;
+  if cardinal(Value.VType) <> DocVariantVType then
+    W.AddNull
+  else
+  begin
+    forced := [];
+    if [twoForceJsonExtended, twoForceJsonStandard] * W.CustomOptions = [] then
+    begin
+      if dvoSerializeAsExtendedJson in PDocVariantData(Value)^.VOptions then
+        forced := [twoForceJsonExtended]
+      else
+        forced := [twoForceJsonStandard];
+      W.CustomOptions := W.CustomOptions + forced;
+    end;
+    n := PDocVariantData(Value)^.VCount;
+    val := pointer(PDocVariantData(Value)^.VValue);
+    if PDocVariantData(Value)^.IsObject then
+    begin
+      checkExtendedPropName := twoForceJsonExtended in W.CustomOptions;
+      W.Add('{');
+      nam := pointer(PDocVariantData(Value)^.VName);
+      if n <> 0 then
+        repeat
+          if checkExtendedPropName and
+             JsonPropNameValid(nam^) then
+            W.AddNoJsonEscape(nam^, PStrLen(nam^ - _STRLEN)^)
           else
           begin
-            W.Add('[');
-            for ndx := 0 to VCount - 1 do
-            begin
-              W.AddVariant(VValue[ndx], twJsonEscape);
-              W.AddComma;
-            end;
-            W.CancelLastComma;
-            W.Add(']');
+            W.Add('"');
+            W.AddJsonEscape(nam^);
+            W.Add('"');
           end;
-          if forced <> [] then
-            W.CustomOptions := W.CustomOptions - forced;
-        end
+          W.Add(':');
+          W.AddVariant(val^, twJsonEscape);
+          dec(n);
+          if n = 0 then
+            break;
+          W.AddComma;
+          inc(nam);
+          inc(val);
+        until false;
+      W.Add('}');
+    end
+    else if PDocVariantData(Value)^.IsArray then
+    begin
+      W.Add('[');
+      if n <> 0 then      
+        repeat
+          W.AddVariant(val^, twJsonEscape);
+          dec(n);
+          if n = 0 then
+            break;
+          W.AddComma;
+          inc(val);
+        until false;
+      W.Add(']');
+    end
     else
-      raise EDocVariant.CreateUtf8('Unexpected variant type %', [vt])
-  else
-    W.AddNull;
+      W.AddNull;
+    if forced <> [] then
+      W.CustomOptions := W.CustomOptions - forced;
+  end;
 end;
 
 procedure TDocVariant.Clear(var V: TVarData);
@@ -5071,7 +5078,9 @@ function TDocVariantData.InitJsonInPlace(Json: PUtf8Char;
 var
   EndOfObject: AnsiChar;
   Name: PUtf8Char;
-  NameLen, cap: integer;
+  NameLen: integer;
+  n, cap: PtrInt;
+  Val: PVariant;
   intnames, intvalues: TRawUtf8Interning;
 begin
   Init(aOptions);
@@ -5109,26 +5118,28 @@ begin
               exit; // invalid content
           end;
           SetLength(VValue, cap);
+          Val := pointer(VValue);
+          n := 0;
           repeat
-            if VCount = cap then
+            if n = cap then
             begin
               // grow if our initial guess was aborted due to huge input
               cap := NextGrow(cap);
               SetLength(VValue, cap);
+              Val := @VValue[n];
             end;
             // unserialize the next item
-            GetJsonToAnyVariant(VValue[VCount], Json, @EndOfObject, @VOptions,
+            GetJsonToAnyVariant(val^, Json, @EndOfObject, @VOptions,
               {double=}false{is set from VOptions});
             if Json = nil then
-            begin
-              VCount := 0;
               exit; // invalid input
-            end;
             if intvalues <> nil then
-              intvalues.UniqueVariant(VValue[VCount]);
-            inc(VCount);
+              intvalues.UniqueVariant(val^);
+            inc(Val);
+            inc(n);
           until EndOfObject = ']';
           // no SetLength(VValue,VCount) if NextGrow() was used on huge input
+          VCount := n;
         end;
       end;
     '{':
@@ -5163,24 +5174,27 @@ begin
           else
             intnames := nil;
           SetLength(VValue, cap);
+          Val := pointer(VValue);
           SetLength(VName, cap);
+          n := 0;
           repeat
             // see http://docs.mongodb.org/manual/reference/mongodb-extended-Json
             Name := GetJsonPropName(Json, @NameLen);
             if Name = nil then
               exit;
-            if VCount = cap then
+            if n = cap then
             begin
               // grow if our initial guess was aborted due to huge input
               cap := NextGrow(cap);
               SetLength(VValue, cap);
               SetLength(VName, cap);
+              Val := @VValue[n];
             end;
             if intnames <> nil then
-              intnames.Unique(VName[VCount], Name, NameLen)
+              intnames.Unique(VName[n], Name, NameLen)
             else
-              FastSetString(VName[VCount], Name, NameLen);
-            GetJsonToAnyVariant(VValue[VCount], Json, @EndOfObject, @VOptions,
+              FastSetString(VName[n], Name, NameLen);
+            GetJsonToAnyVariant(Val^, Json, @EndOfObject, @VOptions,
               {double=}false{is set from VOptions});
             if Json = nil then
               if EndOfObject = '}' then // valid object end
@@ -5188,10 +5202,12 @@ begin
               else
                 exit; // invalid input
             if intvalues <> nil then
-              intvalues.UniqueVariant(VValue[VCount]);
-            inc(VCount);
+              intvalues.UniqueVariant(Val^);
+            inc(n);
+            inc(Val);
           until EndOfObject = '}';
           // no SetLength(VValue/VNAme,VCount) if NextGrow() on huge input
+          VCount := n;
         end;
       end;
     'n',
@@ -5688,6 +5704,8 @@ end;
 
 function TDocVariantData.AddValueFromText(const aName, aValue: RawUtf8;
   DoUpdate, AllowVarDouble: boolean): integer;
+var
+  v: PVariant;
 begin
   if aName = '' then
   begin
@@ -5702,13 +5720,13 @@ begin
       'AddValueFromText: Duplicated [%] name', [aName]);
   if result < 0 then
     result := InternalAdd(aName);
-  VarClear(VValue[result]);
-  if not GetVariantFromNotStringJson(pointer(aValue),
-         TVarData(VValue[result]), AllowVarDouble) then
+  v := @VValue[result];
+  VarClear(v^);
+  if not GetVariantFromNotStringJson(pointer(aValue), PVarData(v)^, AllowVarDouble) then
     if dvoInternValues in VOptions then
-      DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
+      DocVariantType.InternValues.UniqueVariant(v^, aValue)
     else
-      RawUtf8ToVariant(aValue, VValue[result]);
+      RawUtf8ToVariant(aValue, v^);
 end;
 
 procedure TDocVariantData.AddByPath(const aSource: TDocVariantData;
@@ -5781,14 +5799,16 @@ end;
 
 function TDocVariantData.AddItemFromText(const aValue: RawUtf8;
   AllowVarDouble: boolean; aIndex: integer): integer;
+var
+  v: PVariant;
 begin
   result := InternalAdd('', aIndex);
-  if not GetVariantFromNotStringJson(pointer(aValue),
-           TVarData(VValue[result]), AllowVarDouble) then
+  v := @VValue[result];
+  if not GetVariantFromNotStringJson(pointer(aValue), PVarData(v)^, AllowVarDouble) then
     if dvoInternValues in VOptions then
-      DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
+      DocVariantType.InternValues.UniqueVariant(v^, aValue)
     else
-      RawUtf8ToVariant(aValue, VValue[result]);
+      RawUtf8ToVariant(aValue, v^);
 end;
 
 function TDocVariantData.AddItemText(
@@ -7029,7 +7049,9 @@ function TDocVariantData.GetJsonByStartName(const aStartName: RawUtf8): RawUtf8;
 var
   Up: array[byte] of AnsiChar;
   temp: TTextWriterStackBuffer;
-  ndx: PtrInt;
+  n: integer;
+  nam: PPUtf8Char;
+  val: PVariant;
   W: TJsonWriter;
 begin
   if (not IsObject) or
@@ -7042,24 +7064,31 @@ begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('{');
-    for ndx := 0 to VCount - 1 do
-      if IdemPChar(Pointer(VName[ndx]), Up) then
+    n := VCount;
+    nam := pointer(VName);
+    val := pointer(VValue);
+    repeat
+      if IdemPChar(nam^, Up) then
       begin
         if (dvoSerializeAsExtendedJson in VOptions) and
-           JsonPropNameValid(pointer(VName[ndx])) then
-        begin
-          W.AddNoJsonEscape(pointer(VName[ndx]), Length(VName[ndx]));
-        end
+           JsonPropNameValid(nam^) then
+          W.AddNoJsonEscape(nam^, PStrLen(nam^ - _STRLEN)^)
         else
         begin
           W.Add('"');
-          W.AddJsonEscape(pointer(VName[ndx]));
+          W.AddJsonEscape(nam^);
           W.Add('"');
         end;
         W.Add(':');
-        W.AddVariant(VValue[ndx], twJsonEscape);
+        W.AddVariant(val^, twJsonEscape);
         W.AddComma;
       end;
+      dec(n);
+      if n = 0 then
+        break;
+      inc(nam);
+      inc(val);
+    until false;
     W.CancelLastComma;
     W.Add('}');
     W.SetText(result);
