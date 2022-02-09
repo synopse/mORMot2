@@ -4906,7 +4906,7 @@ begin
     result := ord(c.fContext.OnEachPeerVerify(
       c.fSocket, c.fContext, wasok <> 0, c.fSsl, peer));
   except
-    result := false; // abort the connection on exception within callback
+    result := 0; // abort the connection on exception within callback
   end;
 end;
 
