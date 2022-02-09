@@ -6675,7 +6675,7 @@ var
 begin
   if _Safe(aDocVariant)^.IsObject then
   begin
-    VariantSaveJson(aDocVariant, twJsonEscape, json);
+    DocVariantType.ToJson(@aDocVariant, json);
     FillFrom(pointer(json));
   end;
 end;

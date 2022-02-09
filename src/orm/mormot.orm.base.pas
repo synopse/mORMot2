@@ -2706,8 +2706,8 @@ type
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
   public
-    /// customization of variant into JSON serialization
-    procedure ToJson(W: TJsonWriter; const Value: variant); override;
+    /// Table Row variant into JSON serialization
+    procedure ToJson(W: TJsonWriter; Value: PVarData); override;
     /// handle type conversion to string
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
     /// handle type conversion to string
@@ -10091,15 +10091,15 @@ begin
   end;
 end;
 
-procedure TOrmTableRowVariant.ToJson(W: TJsonWriter; const Value: variant);
+procedure TOrmTableRowVariant.ToJson(W: TJsonWriter; Value: PVarData);
 var
   r: PtrInt;
   tmp: variant; // write row via a TDocVariant
 begin
-  r := TOrmTableRowVariantData(Value).VRow;
+  r := POrmTableRowVariantData(Value)^.VRow;
   if r < 0 then
-    r := TOrmTableRowVariantData(Value).VTable.fStepRow;
-  TOrmTableRowVariantData(Value).VTable.ToDocVariant(r, tmp);
+    r := POrmTableRowVariantData(Value)^.VTable.fStepRow;
+  POrmTableRowVariantData(Value)^.VTable.ToDocVariant(r, tmp);
   W.AddVariant(tmp, twJsonEscape);
 end;
 

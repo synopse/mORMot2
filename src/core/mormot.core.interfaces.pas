@@ -2746,7 +2746,7 @@ begin
     imvDynArray:
       if _Safe(Value)^.IsArray then
       begin
-        VariantSaveJson(Value, twJsonEscape, json);
+        DocVariantType.ToJson(@Value, json);
         arr := nil; // recreate using a proper dynamic array
         dyn.InitRtti(ArgRtti, arr);
         try
@@ -2760,7 +2760,7 @@ begin
     imvRecord:
       if _Safe(Value)^.IsObject then
       begin
-        VariantSaveJson(Value, twJsonEscape, json);
+        DocVariantType.ToJson(@Value, json);
         SetLength(rec, ArgRtti.Size);
         try
           RecordLoadJson(rec[0], pointer(json), ArgRtti.Info);

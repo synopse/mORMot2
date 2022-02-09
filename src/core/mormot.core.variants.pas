@@ -248,7 +248,12 @@ type
     function TryJsonToVariant(var Json: PUtf8Char; var Value: variant;
       EndOfObject: PUtf8Char): boolean; virtual;
     /// customization of variant into JSON serialization
-    procedure ToJson(W: TJsonWriter; const Value: variant); virtual;
+    procedure ToJson(W: TJsonWriter; Value: PVarData); overload; virtual;
+    /// save a variant as UTF-8 encoded JSON
+    // - implemented as a wrapper around ToJson()
+    procedure ToJson(Value: PVarData; var Json: RawUtf8;
+      const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
+      Format: TTextWriterJsonFormat = jsonCompact); overload; virtual;
     /// clear the content
     // - this default implementation will set VType := varEmpty
     // - override it if your custom type needs to manage its internal memory
@@ -316,7 +321,7 @@ function FindSynVariantType(aVarType: cardinal): TSynInvokeableVariantType;
 
 /// try to serialize a custom variant value into JSON
 // - as used e.g. by TJsonWriter.AddVariant
-function CustomVariantToJson(W: TJsonWriter; const Value: variant;
+function CustomVariantToJson(W: TJsonWriter; Value: PVarData;
   Escape: TTextWriterKind): boolean;
 
 
@@ -711,7 +716,7 @@ type
     function InternValues: TRawUtf8Interning;
       {$ifdef HASINLINE}inline;{$endif}
     // this implementation will write the content as JSON object or array
-    procedure ToJson(W: TJsonWriter; const Value: variant); override;
+    procedure ToJson(W: TJsonWriter; Value: PVarData); override;
     /// will check if the value is an array, and return the number of items
     // - if the document is an array, will return the items count (0 meaning
     // void array) - used e.g. by TSynMustacheContextVariant
@@ -1283,9 +1288,10 @@ type
     // - will write either a JSON object or array, depending of the internal
     // layout of this instance (i.e. Kind property value)
     // - will write  'null'  if Kind is dvUndefined
-    // - implemented as just a wrapper around VariantSaveJson()
+    // - implemented as just a wrapper around DocVariantType.ToJson()
     function ToJson(const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
       Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
+      {$ifdef HASINLINE}inline;{$endif}
     /// save a document as UTF-8 encoded JSON file
     // - you may then use InitJsonFromFile() to load and parse this file
     procedure SaveToJsonFile(const FileName: TFileName);
@@ -3492,9 +3498,28 @@ begin
   result := false;
 end;
 
-procedure TSynInvokeableVariantType.ToJson(W: TJsonWriter; const Value: variant);
+procedure TSynInvokeableVariantType.ToJson(W: TJsonWriter; Value: PVarData);
 begin
   raise ESynVariant.CreateUtf8('%.ToJson is not implemented', [self]);
+end;
+
+procedure TSynInvokeableVariantType.ToJson(Value: PVarData;
+  var Json: RawUtf8; const Prefix, Suffix: RawUtf8; Format: TTextWriterJsonFormat);
+var
+  W: TJsonWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  W := TJsonWriter.CreateOwnedStream(temp);
+  try
+    if Prefix <> '' then
+      W.AddString(Prefix);
+    ToJson(W, Value); // direct TSynInvokeableVariantType serialization
+    if Suffix <> '' then
+      W.AddString(Suffix);
+    W.SetText(Json, Format);
+  finally
+    W.Free;
+  end;
 end;
 
 function TSynInvokeableVariantType.IsOfType(const V: variant): boolean;
@@ -3576,19 +3601,19 @@ begin
   Dest := v;
 end;
 
-function CustomVariantToJson(W: TJsonWriter; const Value: variant;
+function CustomVariantToJson(W: TJsonWriter; Value: PVarData;
   Escape: TTextWriterKind): boolean;
 var
   v: TCustomVariantType;
   tmp: variant;
 begin
   result := true;
-  if FindCustomVariantType(TVarData(Value).VType, v) then
+  if FindCustomVariantType(Value.VType, v) then
     if v.InheritsFrom(TSynInvokeableVariantType) then
       TSynInvokeableVariantType(v).ToJson(W, Value)
     else
       try
-        v.CastTo(TVarData(tmp), TVarData(Value), varNativeString);
+        v.CastTo(TVarData(tmp), Value^, varNativeString);
         W.AddVariant(tmp, Escape);
       except
         result := false;
@@ -4010,7 +4035,7 @@ begin
   begin
     if Source.VType <> VarType then
       RaiseCastError;
-    VariantSaveJson(variant(Source), twJsonEscape, json);
+    DocVariantType.ToJson(@Source, json);
     RawUtf8ToVariant(json, Dest, AVarType); // convert to JSON text
   end;
 end;
@@ -7337,25 +7362,8 @@ end;
 
 function TDocVariantData.ToJson(const Prefix, Suffix: RawUtf8;
   Format: TTextWriterJsonFormat): RawUtf8;
-var
-  W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
 begin
-  if (cardinal(VType) <> DocVariantVType) and
-     (VType > varNull) then
-  begin
-    result := ''; // null -> 'null'
-    exit;
-  end;
-  W := TJsonWriter.CreateOwnedStream(temp);
-  try
-    W.AddString(Prefix);
-    DocVariantType.ToJson(W, variant(self));
-    W.AddString(Suffix);
-    W.SetText(result, Format);
-  finally
-    W.Free;
-  end;
+  DocVariantType.ToJson(@self, result, Prefix, Suffix, Format);
 end;
 
 procedure TDocVariantData.SaveToJsonFile(const FileName: TFileName);
@@ -7369,7 +7377,7 @@ begin
   try
     W := TJsonWriter.Create(F, 65536);
     try
-      DocVariantType.ToJson(W, variant(self));
+      DocVariantType.ToJson(W, @self);
       W.FlushFinal;
     finally
       W.Free;
@@ -7522,7 +7530,7 @@ function TDocVariantData.ToUrlEncode(const UriRoot: RawUtf8): RawUtf8;
 var
   json: RawUtf8; // temporary in-place modified buffer
 begin
-  VariantSaveJson(variant(self), twJsonEscape, json);
+  DocVariantType.ToJson(@self, json);
   result := UrlEncodeJsonObject(UriRoot, Pointer(json), []);
 end;
 
