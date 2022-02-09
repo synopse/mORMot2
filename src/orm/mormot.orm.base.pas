@@ -6326,8 +6326,8 @@ var
   json: RawUtf8;
   da: TDynArray;
 begin
+  _VariantSaveJson(Source, twJsonEscape, json);
   GetDynArray(Instance, da);
-  VariantSaveJson(Source, twJsonEscape, json);
   da.LoadFromJson(pointer(json));
 end;
 

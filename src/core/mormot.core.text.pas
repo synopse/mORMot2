@@ -1755,27 +1755,34 @@ function VariantToUtf8(const V: Variant; var Text: RawUtf8): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// save a variant value into a JSON content
-// - is properly implemented by mormot.core.json.pas: if this unit is not
-// included in the project, this function will raise an exception
-// - follows the TTextWriter.AddVariant() and VariantLoadJson() format
-// - is able to handle simple and custom variant types, for instance:
-// !  VariantSaveJson(1.5)='1.5'
-// !  VariantSaveJson('test')='"test"'
-// !  o := _Json('{ BSON: [ "test", 5.05, 1986 ] }');
-// !  VariantSaveJson(o)='{"BSON":["test",5.05,1986]}'
-// !  o := _Obj(['name','John','doc',_Obj(['one',1,'two',_Arr(['one',2])])]);
-// !  VariantSaveJson(o)='{"name":"John","doc":{"one":1,"two":["one",2]}}'
-// - note that before Delphi 2009, any varString value is expected to be
-// a RawUtf8 instance - which does make sense in the mORMot area
-procedure VariantSaveJson(const Value: variant; Escape: TTextWriterKind;
-  var result: RawUtf8); overload;
-
-/// save a variant value into a JSON content
-// - just a wrapper around the overloaded procedure
+// - just a wrapper around the _VariantSaveJson procedure redirection
 function VariantSaveJson(const Value: variant;
   Escape: TTextWriterKind = twJsonEscape): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// save a variant value into a JSON content
+// - just a wrapper around the _VariantSaveJson procedure redirection
+procedure VariantSaveJson(const Value: variant; Escape: TTextWriterKind;
+  var result: RawUtf8); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 var
+  /// save a variant value into a JSON content
+  // - is implemented by mormot.core.json.pas and mormot.core.variants.pas:
+  // will raise an exception if none of these units is included in the project
+  // - follows the TTextWriter.AddVariant() and VariantLoadJson() format
+  // - is able to handle simple and custom variant types, for instance:
+  // !  VariantSaveJson(1.5)='1.5'
+  // !  VariantSaveJson('test')='"test"'
+  // !  o := _Json('{ BSON: [ "test", 5.05, 1986 ] }');
+  // !  VariantSaveJson(o)='{"BSON":["test",5.05,1986]}'
+  // !  o := _Obj(['name','John','doc',_Obj(['one',1,'two',_Arr(['one',2])])]);
+  // !  VariantSaveJson(o)='{"name":"John","doc":{"one":1,"two":["one",2]}}'
+  // - note that before Delphi 2009, any varString value is expected to be
+  // a RawUtf8 instance - which does make sense in the mORMot area
+  _VariantSaveJson: procedure(const Value: variant; Escape: TTextWriterKind;
+    var result: RawUtf8);
+
   /// unserialize a JSON content into a variant
   // - is properly implemented by mormot.core.json.pas: if this unit is not
   // included in the project, this function is nil
@@ -1785,7 +1792,7 @@ var
 
   /// write a TDateTime into strict ISO-8601 date and/or time text
   // - is implemented by DateTimeToIso8601TextVar from mormot.core.datetime.pas:
-  // if this unit is not included in the project, this function is nil
+  // if this unit is not included in the project, an ESynException is raised
   // - used by VariantToUtf8() for TDateTime conversion
   _VariantToUtf8DateTimeToIso8601: procedure(DT: TDateTime; FirstChar: AnsiChar;
     var result: RawUtf8; WithMS: boolean);
@@ -8933,9 +8940,6 @@ begin
         Curr64ToStr(VInt64, result);
       varDate:
         begin
-          if not Assigned(_VariantToUtf8DateTimeToIso8601) then
-            raise ESynException.Create('VariantToUtf8(varDate) unsupported:' +
-              ' please include mormot.core.json to your uses clause');
           _VariantToUtf8DateTimeToIso8601(VDate, 'T', result, {withms=}false);
           wasString := true;
         end;
@@ -8993,7 +8997,7 @@ begin
       else
       {$endif HASVARUSTRING}
         // not recognizable vt -> seralize as JSON to handle also custom types
-        VariantSaveJson(V, twJsonEscape, result);
+        _VariantSaveJson(V, twJsonEscape, result); // = mormot.core.variants.pas
     end;
 end;
 
@@ -9023,26 +9027,30 @@ begin
   VariantToUtf8(V, Text, result);
 end;
 
-procedure VariantSaveJson(const Value: variant; Escape: TTextWriterKind;
-  var result: RawUtf8);
-var
-  temp: TTextWriterStackBuffer;
-begin
-  // not very fast, but creates valid JSON
-  with DefaultJsonWriter.CreateOwnedStream(temp) do
-  try
-    AddVariant(Value, Escape); // may encounter TObjectVariant -> WriteObject
-    SetText(result);
-  finally
-    Free;
-  end;
-end;
-
 function VariantSaveJson(const Value: variant; Escape: TTextWriterKind): RawUtf8;
 begin
-  VariantSaveJson(Value, Escape, result);
+  _VariantSaveJson(Value, Escape, result);
 end;
 
+procedure VariantSaveJson(const Value: variant; Escape: TTextWriterKind;
+  var result: RawUtf8);
+begin
+  _VariantSaveJson(Value, Escape, result);
+end;
+
+procedure __VariantSaveJson(const Value: variant; Escape: TTextWriterKind;
+  var result: RawUtf8);
+begin
+  raise ESynException.Create('VariantSaveJson() unsupported:' +
+    ' please include mormot.core.variants to your uses clause');
+end;
+
+procedure __VariantToUtf8DateTimeToIso8601(DT: TDateTime; FirstChar: AnsiChar;
+  var result: RawUtf8; WithMS: boolean);
+begin
+  raise ESynException.Create('VariantToUtf8(varDate) unsupported:' +
+    ' please include mormot.core.datetime to your uses clause');
+end;
 
 
 { ************ Text Formatting functions }
@@ -11017,6 +11025,8 @@ begin
     HTML_ESC[hfOutsideAttributes, c] := ord(c in [#0, '&', '<', '>']);
     HTML_ESC[hfWithinAttributes, c] := ord(c in [#0, '&', '"']);
   end;
+  _VariantToUtf8DateTimeToIso8601 := __VariantToUtf8DateTimeToIso8601;
+  _VariantSaveJson := __VariantSaveJson;
 end;
 
 

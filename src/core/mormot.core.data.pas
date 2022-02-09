@@ -5786,23 +5786,11 @@ end;
 
 procedure _BS_VariantComplex(Data: PVariant; Dest: TBufferWriter);
 var
-  temp: TTextWriterStackBuffer;
-  tempstr: RawUtf8;
+  temp: RawUtf8;
 begin
-  // not very fast, but creates valid JSON - see also VariantSaveJson()
-  with DefaultJsonWriter.CreateOwnedStream(temp) do
-  try
-    AddVariant(Data^, twJsonEscape);
-    if WrittenBytes = 0 then
-      Dest.WriteVar(@temp, PendingBytes) // no tempstr allocation needed
-    else
-    begin
-      SetText(tempstr);
-      Dest.Write(tempstr);
-    end;
-  finally
-    Free;
-  end;
+  // not very fast, but creates valid JSON
+  _VariantSaveJson(Data^, twJsonEscape, temp);
+  Dest.Write(temp);
 end;
 
 procedure _BL_VariantComplex(Data: PVariant; var Source: TFastReader);

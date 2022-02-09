@@ -4055,7 +4055,7 @@ procedure TRestUriContext.ReturnsJson(const Value: variant;
 var
   json: RawUtf8;
 begin
-  VariantSaveJson(Value, Escape, json);
+  _VariantSaveJson(Value, Escape, json);
   if MakeHumanReadable and
      (json <> '') and
      (json[1] in ['{', '[']) then

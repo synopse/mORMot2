@@ -3603,6 +3603,45 @@ begin
   result := GetEnumName(TypeInfo(TDocVariantKind), ord(kind));
 end;
 
+procedure NeedJsonEscape(const Value: variant; var Json: RawUtf8;
+  Escape: TTextWriterKind);
+var
+  temp: TTextWriterStackBuffer;
+begin
+  with TJsonWriter.CreateOwnedStream(temp) do
+    try
+      AddVariant(Value, Escape); // will use mormot.core.json serialization
+      SetText(Json, jsonCompact);
+    finally
+      Free;
+    end;
+end;
+
+procedure __VariantSaveJson(V: PVarData; Escape: TTextWriterKind;
+  var result: RawUtf8);
+var
+  cv: TSynInvokeableVariantType;
+  vt: cardinal;
+  dummy: boolean;
+begin
+  // is likely to be called from AddVariant() but can be used for simple values
+  if cardinal(V.VType) = varVariantByRef then
+    V := V^.VPointer;
+  cv := FindSynVariantType(V.VType);
+  if cv = nil then
+  begin
+    vt := V.VType;
+    if (vt >= varFirstCustom) or
+       ((Escape <> twNone) and
+        not (vt in [varEmpty..varDate, varBoolean, varShortInt..varWord64])) then
+      NeedJsonEscape(PVariant(V)^, result, Escape)
+    else
+      VariantToUtf8(PVariant(V)^, result, dummy); // simple values are never escaped
+  end
+  else
+    cv.ToJson(V, result);
+end;
+
 
 { EDocVariant }
 
@@ -8656,6 +8695,7 @@ begin
   // redirect to the feature complete variant wrapper functions
   BinaryVariantLoadAsJson := _BinaryVariantLoadAsJson;
   VariantClearSeveral := _VariantClearSeveral;
+  _VariantSaveJson := @__VariantSaveJson;
   SortDynArrayVariantComp := pointer(@FastVarDataComp);
   // setup FastVarDataComp() efficient lookup comparison functions
   for ins := false to true do

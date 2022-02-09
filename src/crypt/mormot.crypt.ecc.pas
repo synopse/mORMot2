@@ -2361,7 +2361,7 @@ end;
 
 function TEccCertificate.ToJson(withBase64: boolean): RawUtf8;
 begin
-  VariantSaveJson(ToVariant(withBase64), twJsonEscape, result);
+  _VariantSaveJson(ToVariant(withBase64), twJsonEscape, result);
 end;
 
 function TEccCertificate.ToFile(const filename: TFileName): boolean;
@@ -4057,7 +4057,7 @@ end;
 
 function TEccCertificateChain.SaveToFileContent: RawUtf8;
 begin
-  VariantSaveJson(SaveToFileVariant, twJsonEscape, result{%H-});
+  _VariantSaveJson(SaveToFileVariant, twJsonEscape, result{%H-});
 end;
 
 function TEccCertificateChain.LoadFromFileContent(

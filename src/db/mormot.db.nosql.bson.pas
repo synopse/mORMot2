@@ -3542,7 +3542,7 @@ procedure TBsonWriter.BsonWriteVariant(const name: RawUtf8; const value: variant
           end;
       else
         begin
-          VariantSaveJson(value, twJsonEscape, temp);
+          _VariantSaveJson(value, twJsonEscape, temp);
           json := pointer(temp);
           BsonWriteFromJson(name, json, nil);
           if json = nil then

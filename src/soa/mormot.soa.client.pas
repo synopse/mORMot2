@@ -384,7 +384,7 @@ begin
     end;
     pendings := fSafe.LockedInt64[0];
     timer.Start;
-    VariantSaveJson(pending.Input, twJsonEscape, params);
+    _VariantSaveJson(pending.Input, twJsonEscape, params);
     if (params <> '') and
        (params[1] = '[') then
       // trim [..] for URI call
