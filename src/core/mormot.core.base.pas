@@ -3261,7 +3261,7 @@ function RleUnCompressPartial(src, dst: PByteArray; size, max: PtrUInt): PtrUInt
 // defined in this unit to put this asm code in mormot.core.base.asmx64.inc
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
 
-/// DynArrayHashTableAdjust() version for 16-bit HashTable[]
+/// DynArrayHashTableAdjust() version for 16-bit HashTable[] - SSE2 asm on x86_64
 procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: PtrInt);
 
 

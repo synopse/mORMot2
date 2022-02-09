@@ -9092,7 +9092,7 @@ procedure TFastReHash.Process(Hasher: PDynArrayHasher; count: PtrInt);
 var
   fnd, ndx: PtrInt;
 label
-  s, ok;
+  s;
 begin
   // should match FindOrNew() logic
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
@@ -9118,16 +9118,20 @@ s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
         begin
           // we can use this void entry (most common case)
           PWordArray(Hasher^.fHashTableStore)[ndx] := ht;
-          goto ok;
+          inc(P, siz); // next item
+          inc(ht);
+          dec(count);
+          if count <> 0 then
+            goto s;
+          exit;
         end;
       end
       else
       {$endif DYNARRAYHASH_16BIT}
-      if Hasher^.fHashTableStore[ndx] = 0 then
+      if Hasher^.fHashTableStore[ndx] = 0 then // void entry
       begin
-        // we can use this void entry (most common case)
         Hasher^.fHashTableStore[ndx] := ht;
-ok:     inc(P, siz); // next item
+        inc(P, siz); // next item
         inc(ht);
         dec(count);
         if count <> 0 then
