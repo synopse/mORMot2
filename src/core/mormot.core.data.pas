@@ -8909,7 +8909,7 @@ begin
   if fHashTableSize - n < n shr 2 then
   begin
     // grow hash table when 25% void
-    ForceReHash(nil);
+    ForceReHash;
     ndx := Find(aHashCode, {foradd=}true); // recompute position
     if ndx >= 0 then
       RaiseFatalCollision('HashAdd', aHashCode);
@@ -9528,7 +9528,7 @@ end;
 
 procedure TDynArrayHashed.ForceReHash;
 begin
-  fHash.ForceReHash(nil);
+  fHash.ForceReHash;
 end;
 
 {$ifndef PUREMORMOT2}

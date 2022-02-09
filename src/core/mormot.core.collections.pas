@@ -930,7 +930,7 @@ begin
                (value < fCount);
   fDynArray.Count := value; // will resize the dynamic array
   if forcehash then
-    fHasher^.ForceReHash(nil);
+    fHasher^.ForceReHash;
 end;
 
 function TIListParent.GetCapacity: PtrInt;

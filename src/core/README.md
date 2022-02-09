@@ -186,6 +186,7 @@ Performance Monitoring functions shared by all framework units
 
 High-Level Multi-Threading features shared by all framework units
 - Thread-Safe `TSynQueue` and `TPendingTaskList`
+- Thread-Safe `ILockedDocVariant` Storage
 - Background Thread Processing
 - Parallel Execution in a Thread Pool
 - Server Process Oriented Thread Pool
