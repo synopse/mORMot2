@@ -525,8 +525,8 @@ type
   public
     /// the UTF-8 encoded name of this element
     Name: PUtf8Char;
-    /// the name length (in chars) of this element
-    NameLen: integer;
+    /// the name length (in chars) of this element - 16-bit encoded
+    NameLen: word;
     /// index of this element in the original sequence list
     // - is correct only when the element has been reset before the parsing
     // loop, e.g.:
@@ -608,6 +608,9 @@ type
     // this initialized TBsonElement
     procedure FromVariant(const aName: RawUtf8; const aValue: Variant;
       var aTemp: RawByteString);
+    /// fill a BSON Element structure from a TBsonVariantData value
+    procedure FromBsonVariant(aValue: PVarData);
+      {$ifdef HASINLINE} inline; {$endif}
     /// fill a BSON Element structure from a BSON document
     // - will check the document length then set Kind := betDoc and Data.DocList
     // - will return TRUE if the supplied doc has a valid length, FALSE otherwise
@@ -2071,6 +2074,23 @@ end;
 
 { ************ TBsonVariantData / TBsonVariant Custom Variant Storage }
 
+// defined here for proper inlining
+procedure TBsonElement.FromBsonVariant(aValue: PVarData);
+begin
+  // here we know that aValue is a TBsonVariantData
+  Name := nil;
+  NameLen := 0;
+  Kind := PBsonVariantData(aValue)^.VKind;
+  if Kind = betObjectID then
+  begin
+    ElementBytes := SizeOf(TBsonObjectID);
+    Element := @PBsonVariantData(aValue)^.VObjectID;
+  end
+  else
+    FromBson(PBsonVariantData(aValue)^.VBlob);
+end;
+
+
 { TBsonVariant }
 
 constructor TBsonVariant.Create;
@@ -2786,7 +2806,7 @@ function TBsonElement.ToRawUtf8: RawUtf8;
   end;
 
 begin
-  case Kind of
+  case Kind of // direct conversion of most simple types
     betFloat:
       DoubleToStr(unaligned(PDouble(Element)^), result);
     betString:
@@ -2795,8 +2815,12 @@ begin
       Int32ToUtf8(PInteger(Element)^, result);
     betInt64:
       Int64ToUtf8(PInt64(Element)^, result);
+    betBoolean:
+      result := BOOL_UTF8[PBoolean(Element)^];
     betDecimal128:
       PDecimal128(Element)^.ToText(result);
+    betObjectID:
+      PBsonObjectID(Element)^.ToText(result);
   else
     ComplexType;
   end;
@@ -2974,7 +2998,7 @@ begin
     0..varDate,
     varBoolean..high(ELEMKIND):
       begin
-        // simple types
+        // simple types will be inlined in 64-bit InternalStorage
         Element := @Data.InternalStorage;
         Kind := ELEMKIND[vt];
         case Kind of
@@ -3034,18 +3058,21 @@ str:    Kind := betString;
         goto st2;
       end;
   else
-    if vt = cardinal(BsonVariantType.VarType) then
+    if vt = cardinal(BsonVariantType.VarType) then // inlined FromBsonVariant()
     begin
       Kind := vbson.VKind;
-      case Kind of
-        betObjectID:
-          FromBson(@vbson.VObjectID); // stored inlined
+      if Kind = betObjectID then
+      begin
+        ElementBytes := SizeOf(TBsonObjectID);
+        Element := @vbson.VObjectID;
+      end
       else
+      begin
         FromBson(vbson.VBlob); // complex type stored as a RawByteString
+        if ElementBytes < 0 then
+          raise EBsonException.CreateUtf8('TBsonElement.FromVariant(bson,%)',
+            [ToText(Kind)^]);
       end;
-      if ElementBytes < 0 then
-        raise EBsonException.CreateUtf8('TBsonElement.FromVariant(bson,%)',
-          [ToText(Kind)^]);
     end
     else if vt = cardinal(DocVariantVType) then
     begin
