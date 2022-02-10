@@ -388,6 +388,15 @@ type
     /// optional Authorization: Bearer header value
     property AuthBearer: RawUtf8
       read fAuthBearer write fAuthBearer;
+    /// contain the body data retrieved from the server - from inherited Http
+    property Content: RawByteString
+      read Http.Content;
+    /// contain the body data length retrieved from the server - from inherited Http
+    property ContentLength: Int64
+      read Http.ContentLength;
+    /// contain the response headers retrieved from the server - from inherited Http
+    property Headers: RawUtf8
+      read Http.Headers;
     /// optional authorization callback
     // - is triggered by Request() on HTTP_UNAUTHORIZED (401) status
     // - see e.g. THttpClientSocket.AuthorizeSspi class method for SSPI auth
