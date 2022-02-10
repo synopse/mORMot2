@@ -3574,7 +3574,7 @@ end;
 function _numbits256(const V: THash256Rec): integer;
 begin
   result := BsrQWord(V.Q[3]) + 1; // use fast BSR intrinsic (returns 255 if 0)
-  if byte(result) = 0 then
+  if byte(result) = 0 then        // byte(255 + 1) = 0
   begin
     result := BsrQWord(V.Q[2]) + 1;
     if byte(result) = 0 then

@@ -1308,7 +1308,7 @@ function TMvcViewsMustache.GetRenderer(methodIndex: integer;
 var
   age: TUnixTime;
 begin
-  if cardinal(methodIndex) >= fFactory.MethodsCount then
+  if cardinal(methodIndex) >= cardinal(fFactory.MethodsCount) then
     raise EMvcException.CreateUtf8(
       '%.Render(methodIndex=%)', [self, methodIndex]);
   with fViews[methodIndex],

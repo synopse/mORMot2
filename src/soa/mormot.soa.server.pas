@@ -1097,7 +1097,7 @@ begin
     // initialize a new sicClientDriven instance
     if (InstanceCreation = sicClientDriven) and
        ((cardinal(aMethodIndex - Length(SERVICE_PSEUDO_METHOD))
-          < fInterface.MethodsCount) or
+          < cardinal(fInterface.MethodsCount)) or
         (aMethodIndex = ord(imInstance))) then
       AddNew;
     exit;
@@ -1128,7 +1128,8 @@ begin
   end;
   // new TInterfacedObject corresponding to this session/user/group/thread
   if (InstanceCreation <> sicClientDriven) and
-     (cardinal(aMethodIndex - Length(SERVICE_PSEUDO_METHOD)) < fInterface.MethodsCount) then
+     (cardinal(aMethodIndex - Length(SERVICE_PSEUDO_METHOD)) <
+      cardinal(fInterface.MethodsCount)) then
     AddNew;
 end;
 

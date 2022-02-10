@@ -507,7 +507,7 @@ type
     fInterfaceTypeInfo: PRttiInfo;
     fInterfaceIID: TGUID;
     fInterfaceRtti: TRttiJson;
-    fMethodsCount: cardinal;
+    fMethodsCount: integer;
     fAddMethodsLevel: integer;
     fMethods: TInterfaceMethodDynArray;
     fMethod: TDynArrayHashed;
@@ -618,7 +618,7 @@ type
     /// the number of internal methods
     // - does not include the default AddRef/Release/QueryInterface methods
     // - nor the _free_/_contract_/_signature_ pseudo-methods
-    property MethodsCount: cardinal
+    property MethodsCount: integer
       read fMethodsCount;
     /// identifies a CallbackReleased() method in this interface
     // - i.e. the index in Methods[] of the following signature:
@@ -3195,7 +3195,7 @@ begin
   self := SelfFromInterface;
   // setup context
   ctxt.Stack := stack;
-  if stack.MethodIndex >= fFactory.MethodsCount then
+  if stack.MethodIndex >= PtrUInt(fFactory.MethodsCount) then
     raise EInterfaceFactory.CreateUtf8('%.FakeCall(%) failed: out of range %',
       [self, fFactory.fInterfaceName, stack.MethodIndex]);
   ctxt.Method := @fFactory.fMethods[stack.MethodIndex];
@@ -4198,7 +4198,7 @@ begin
   else
   begin
     dec(MethodIndex, Length(SERVICE_PSEUDO_METHOD));
-    if cardinal(MethodIndex) < MethodsCount then
+    if cardinal(MethodIndex) < cardinal(fMethodsCount) then
       result := fMethods[MethodIndex].Uri
     else
       result := '';
@@ -5806,7 +5806,7 @@ end;
 
 procedure TInterfaceStub.InstanceDestroyed(aFakeID: TInterfacedObjectFakeID);
 var
-  m, r, asmndx: integer;
+  m, r, asmndx: PtrInt;
   num: cardinal;
 begin
   if self <> nil then
@@ -6095,7 +6095,7 @@ function TInterfaceStub.Invoke(const aMethod: TInterfaceMethod;
   aFakeID: PInterfacedObjectFakeID;
   aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
-  ndx: cardinal;
+  ndx: PtrUInt;
   rule: integer;
   ExecutesCtxtJson: TOnInterfaceStubExecuteParamsJson;
   ExecutesCtxtVariant: TOnInterfaceStubExecuteParamsVariant;
@@ -6104,7 +6104,7 @@ var
   log: TInterfaceStubLog;
 begin
   ndx := aMethod.ExecutionMethodIndex - RESERVED_VTABLE_SLOTS;
-  if ndx >= fInterface.MethodsCount then
+  if ndx >= PtrUInt(fInterface.MethodsCount) then
     result := false
   else
     begin
