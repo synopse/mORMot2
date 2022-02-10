@@ -1334,6 +1334,8 @@ end;
 
 procedure TWebSocketFrameList.Push(
   const frame: TWebSocketFrame; currentSec: cardinal);
+var
+  n: PtrInt;
 begin
   if self = nil then
     exit;
@@ -1343,12 +1345,14 @@ begin
     currentSec := GetTickCount64 shr 10;
   Safe.Lock;
   try
-    if Count >= length(List) then
-      SetLength(List, NextGrow(Count));
-    List[Count] := frame;
+    n := Count;
+    if n >= length(List) then
+      SetLength(List, NextGrow(n));
+    List[n] := frame;
     if currentSec > 0 then
-      List[Count].tix := currentSec + fTimeoutSec;
-    inc(Count);
+      List[n].tix := currentSec + fTimeoutSec;
+    inc(n);
+    Count := n;
   finally
     Safe.UnLock;
   end;
