@@ -1097,6 +1097,7 @@ begin
         // 'HOST:'
         inc(P, 5);
         GetTrimmed(P, Host);
+        HeadersUnFiltered := true; // may still be needed
       end
   else
     // unrecognized name should be stored in Headers
