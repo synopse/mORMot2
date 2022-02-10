@@ -5033,9 +5033,12 @@ begin
     if Assigned(Context.OnPrivatePassword) then
       SSL_CTX_set_default_passwd_cb(fCtx, AfterConnectionAskPassword)
     else if Context.PrivatePassword <> '' then
-      SSL_CTX_set_default_passwd_cb_userdata(fCtx, pointer(Context.PrivatePassword));
+      SSL_CTX_set_default_passwd_cb_userdata(
+        fCtx, pointer(Context.PrivatePassword));
     SSL_CTX_use_PrivateKey_file(
       fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
+    EOpenSslClient.Check(self, 'AfterConnection check_private_key',
+      SSL_CTX_check_private_key(fCtx), @Context.LastError);
   end;
   if Context.CipherList = '' then
     Context.CipherList := SAFE_CIPHERLIST[HasHWAes];
