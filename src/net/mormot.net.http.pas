@@ -1774,10 +1774,16 @@ procedure THttpServerRequestAbstract.Prepare(
 begin
   fUrl := aUrl;
   fMethod := aMethod;
+  fRemoteIP := aRemoteIP;
   fInHeaders := aInHeaders;
+  fHost := '';
+  fAuthBearer := '';
+  fUserAgent := '';
   fInContent := aInContent;
   fInContentType := aInContentType;
-  fRemoteIP := aRemoteIP;
+  fOutContent := '';
+  fOutContentType := '';
+  fOutCustomHeaders := '';
 end;
 
 procedure THttpServerRequestAbstract.Prepare(const aHttp: THttpRequestContext;
