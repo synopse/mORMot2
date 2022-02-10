@@ -976,6 +976,8 @@ type
     // TEccCertificateChain input
     // - returns the serials of added certificate(s)
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray;
+    /// register certificates from another certificate chain
+    function AddFrom(Chain: TEccCertificateChain): TRawUtf8DynArray;
     /// returns the serials of the stored certificate(s)
     function GetSerials: TRawUtf8DynArray;
     /// save the whole certificates chain as an array of Base64 encoded content
@@ -3552,6 +3554,25 @@ begin
   result := InternalAdd(cert, ecvValidSelfSigned);
 end;
 
+function TEccCertificateChain.AddFrom(Chain: TEccCertificateChain): TRawUtf8DynArray;
+var
+  i: PtrInt;
+  n: integer;
+begin
+  result := nil;
+  if Chain = nil then
+    exit;
+  n := 0;
+  for i := 0 to length(Chain.fItems) - 1 do
+    if Add(Chain.fItems[i]) >= 0 then
+      AddRawUtf8(result, n, Chain.fItems[i].GetSerial);
+  for i := 0 to length(Chain.fCrl) - 1 do
+    with Chain.fCrl[i] do
+      Revoke(Serial, Date, TCryptCertRevocationReason(Reason));
+  if n <> length(result) then
+    SetLength(result, n);
+end;
+
 function TEccCertificateChain.AddFromBuffer(
   const Content: RawByteString): TRawUtf8DynArray;
 var
@@ -3570,7 +3591,7 @@ begin
         chain := TEccCertificateChain.CreateVersion(fMaxVersion);
         try
           if chain.LoadFromJson(Content) then
-            AddRawUtf8(result, n, chain.GetSerials);
+            AddRawUtf8(result, n, AddFrom(chain));
         finally
           chain.Free;
         end;
@@ -3580,7 +3601,8 @@ begin
         // from JSON object serialized TEccCertificate
         cert := TEccCertificate.CreateVersion(fMaxVersion);
         try
-          if cert.FromJson(Content) then
+          if cert.FromJson(Content) and
+             (Add(cert) >= 0) then
             AddRawUtf8(result, n, cert.GetSerial);
         finally
           cert.Free;
@@ -3589,8 +3611,7 @@ begin
   else
     begin
       if not Base64ToBinSafe(pointer(Content), length(Content), bin) then
-        // try raw input if this content was not Base64 encoded
-        bin := Content;
+        bin := Content; // try raw input if was not Base64 encoded
       if (length(bin) > 8) and
          (PCardinal(bin)^ = CHAIN_MAGIC) then
       begin
@@ -3598,7 +3619,7 @@ begin
         chain := TEccCertificateChain.CreateVersion(fMaxVersion);
         try
           if chain.LoadFromBinary(bin) then
-            AddRawUtf8(result, n, chain.GetSerials);
+            AddRawUtf8(result, n, AddFrom(chain));
         finally
           chain.Free;
         end;
@@ -3611,7 +3632,8 @@ begin
         // from binary TEccCertificate
         cert := TEccCertificate.CreateVersion(fMaxVersion);
         try
-          if cert.LoadFromBinary(bin) then
+          if cert.LoadFromBinary(bin) and
+             (Add(cert) >= 0) then
             AddRawUtf8(result, n, cert.GetSerial);
         finally
           cert.Free;
