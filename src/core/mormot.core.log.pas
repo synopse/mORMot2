@@ -5021,7 +5021,11 @@ begin
     {$ifdef CPUINTEL}
       Add(':');
       AddBinToHex(@CpuFeatures, SizeOf(CpuFeatures));
-    {$endif}
+    {$endif CPUINTEL}
+    {$ifdef CPUARM3264}
+      Add(':', {$ifdef CPUARM} '-' {$else} '+' {$endif}); // ARM marker
+      AddBinToHex(@CpuFeatures, SizeOf(CpuFeatures));
+    {$endif CPUARM3264}
       AddShorter(' OS=');
     {$ifdef OSWINDOWS}
       Add(ord(OSVersion));
