@@ -52,7 +52,6 @@ type
   protected
     fData: RawByteString;
     fDataAccess: TSqlDBProxyStatementRandomAccess;
-    fTemp64: Int64;
     procedure InternalInitFieldDefs; override;
     function GetRecordCount: integer; override;
     function GetRowFieldData(Field: TField; RowIndex: integer;
@@ -298,7 +297,7 @@ begin
       mormot.db.core.ftCurrency:
         begin
           // ftFloat expects a DOUBLE value
-          unaligned(PDouble(@fTemp64)^) := PCurrency(result)^;
+          PDouble(@fTemp64)^ := PCurrency(result)^;
           result := @fTemp64;
         end;
       mormot.db.core.ftUtf8,

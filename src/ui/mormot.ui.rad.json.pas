@@ -56,7 +56,6 @@ type
     fForceWideString: boolean;
     {$endif UNICODE}
     fTableShouldBeFreed: boolean;
-    fTemp64: Int64;
     fTempBlob: RawBlob;
     procedure InternalInitFieldDefs; override;
     function GetRecordCount: integer; override;
@@ -301,7 +300,7 @@ begin
       SetInt64(P, fTemp64);
     oftFloat,
     oftCurrency:
-      unaligned(PDouble(@fTemp64)^) := GetExtended(P);
+      PDouble(@fTemp64)^ := GetExtended(P);
     oftEnumerate,
     oftSet:
       if info^.ContentTypeInfo = nil then
@@ -310,15 +309,15 @@ begin
         goto txt;
     oftDateTime,
     oftDateTimeMS:
-      unaligned(PDouble(@fTemp64)^) := Iso8601ToDateTimePUtf8Char(P, 0);
+      PDouble(@fTemp64)^ := Iso8601ToDateTimePUtf8Char(P, 0);
     oftTimeLog,
     oftModTime,
     oftCreateTime:
-      unaligned(PDouble(@fTemp64)^) := TimeLogToDateTime(GetInt64(P));
+      PDouble(@fTemp64)^ := TimeLogToDateTime(GetInt64(P));
     oftUnixTime:
-      unaligned(PDouble(@fTemp64)^) := UnixTimeToDateTime(GetInt64(P));
+      PDouble(@fTemp64)^ := UnixTimeToDateTime(GetInt64(P));
     oftUnixMSTime:
-      unaligned(PDouble(@fTemp64)^) := UnixMSTimeToDateTime(GetInt64(P));
+      PDouble(@fTemp64)^ := UnixMSTimeToDateTime(GetInt64(P));
     oftBlob:
       begin
         fTempBlob := BlobToRawBlob(P);

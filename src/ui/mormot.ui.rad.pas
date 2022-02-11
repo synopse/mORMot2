@@ -56,6 +56,7 @@ type
   protected
     fCurrentRow: integer;
     fIsCursorOpen: boolean;
+    fTemp64: Int64;
 
     // TDataSet overridden methods
     function AllocRecordBuffer: TRecordBuffer; override;
@@ -169,7 +170,6 @@ type
     fValues: TVariantDynArray;
     fColumns: array of TDocVariantArrayDataSetColumn;
     fValuesCount: integer;
-    fTemp64: Int64;
     fTempUtf8: RawUtf8;
     fTempBlob: RawByteString;
     procedure InternalInitFieldDefs; override;
@@ -325,12 +325,12 @@ begin
     ftDate,
     ftTime,
     ftDateTime:
-      if PDateTime(data)^ = 0 then // handle 30/12/1899 date as NULL
+      if PInt64(data)^ = 0 then // handle 30/12/1899 date as NULL
         result := false
       else
       begin
         // inlined DataConvert(Field,data,dest,true)
-        ts := DateTimeToTimeStamp(PDateTime(data)^);
+        ts := DateTimeToTimeStamp(unaligned(PDateTime(data)^));
         case Field.DataType of
           ftDate:
             PDateTimeRec(dest)^.Date := ts.Date;
@@ -842,7 +842,7 @@ begin
   result := nil; // default is null on error
   f := Field.Index;
   if (cardinal(RowIndex) >= cardinal(fValuesCount)) or
-     (cardinal(f) >= cardinal(length(fColumns))) then
+     (PtrUInt(f) >= PtrUInt(length(fColumns))) then
     exit;
   col := @fColumns[f];
   if col^.FieldType in
@@ -864,34 +864,36 @@ begin
   v := @dv^.Values[ndx];
   if VarIsEmptyOrNull(v^) then
     exit
+  else if OnlyCheckNull then
+    result := @fTemp64
   else
-  begin
-    result := @fTemp64;
-    if not OnlyCheckNull then
-      case col^.FieldType of
-        mormot.db.core.ftInt64:
-          VariantToInt64(v^, fTemp64);
-        mormot.db.core.ftDouble,
-        mormot.db.core.ftDate:
-          VariantToDouble(v^, unaligned(PDouble(@fTemp64)^));
-        mormot.db.core.ftUtf8:
+    case col^.FieldType of
+      mormot.db.core.ftInt64:
+        if VariantToInt64(v^, fTemp64) then
+          result := @fTemp64;
+      mormot.db.core.ftDouble:
+        if VariantToDouble(v^, PDouble(@fTemp64)^) then
+          result := @fTemp64;
+      mormot.db.core.ftDate:
+        if VariantToDateTime(v^, PDateTime(@fTemp64)^) then
+          result := @fTemp64;
+      mormot.db.core.ftUtf8:
+        begin
+          VariantToUtf8(v^, fTempUtf8, wasstring);
+          result := pointer(fTempUtf8);
+          ResultLen := length(fTempUtf8);
+        end;
+      mormot.db.core.ftBlob:
+        begin
+          VariantToUtf8(v^, fTempUtf8, wasstring);
+          if Base64MagicCheckAndDecode(
+               pointer(fTempUtf8), length(fTempUtf8), fTempBlob) then
           begin
-            VariantToUtf8(v^, fTempUtf8, wasstring);
-            result := pointer(fTempUtf8);
-            ResultLen := length(fTempUtf8);
+            result := pointer(fTempBlob);
+            ResultLen := length(fTempBlob);
           end;
-        mormot.db.core.ftBlob:
-          begin
-            VariantToUtf8(v^, fTempUtf8, wasstring);
-            if Base64MagicCheckAndDecode(
-                 pointer(fTempUtf8), length(fTempUtf8), fTempBlob) then
-            begin
-              result := pointer(fTempBlob);
-              ResultLen := length(fTempBlob);
-            end;
-          end;
-      end;
-  end;
+        end;
+    end;
 end;
 
 const
