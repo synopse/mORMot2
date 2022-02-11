@@ -1289,9 +1289,10 @@ type
     // layout of this instance (i.e. Kind property value)
     // - will write  'null'  if Kind is dvUndefined
     // - implemented as just a wrapper around DocVariantType.ToJson()
-    function ToJson(const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
-      Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
-      {$ifdef HASINLINE}inline;{$endif}
+    function ToJson: RawUtf8; overload;
+    /// save a document as UTF-8 encoded JSON
+    function ToJson(const Prefix, Suffix: RawUtf8;
+      Format: TTextWriterJsonFormat): RawUtf8; overload;
     /// save a document as UTF-8 encoded JSON file
     // - you may then use InitJsonFromFile() to load and parse this file
     procedure SaveToJsonFile(const FileName: TFileName);
@@ -7358,6 +7359,11 @@ begin
       exit;
   end;
   InternalSetValue(result, aValue);
+end;
+
+function TDocVariantData.ToJson: RawUtf8;
+begin // note: FPC has troubles inlining this, but is a slow function anyway
+  DocVariantType.ToJson(@self, result, '', '', jsonCompact);
 end;
 
 function TDocVariantData.ToJson(const Prefix, Suffix: RawUtf8;
