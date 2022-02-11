@@ -4421,10 +4421,12 @@ begin
     dv := Doc.A_['col'];
     for i := 1 to 9 do
       dv^.AddItem(_ObjFast(['a','a','b',i]));
-    s := Doc.ToJson;
-    CheckEqual(s , '{"sc":1,"sd":2,"hh":3,"dnh":4,"col":[{"a":"a","b":1},' +
+    j := dv^.ToJson;
+    CheckEqual(j, '[{"a":"a","b":1},' +
       '{"a":"a","b":2},{"a":"a","b":3},{"a":"a","b":4},{"a":"a","b":5},' +
-      '{"a":"a","b":6},{"a":"a","b":7},{"a":"a","b":8},{"a":"a","b":9}]}');
+      '{"a":"a","b":6},{"a":"a","b":7},{"a":"a","b":8},{"a":"a","b":9}]');
+    s := Doc.ToJson;
+    CheckEqual(s , '{"sc":1,"sd":2,"hh":3,"dnh":4,"col":' + j + '}');
     Doc.Clear;
     Doc.Init;
   end;
