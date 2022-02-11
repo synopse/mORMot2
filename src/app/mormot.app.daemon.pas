@@ -182,7 +182,7 @@ begin
     with aLogClass.Family do
     begin
       DestinationPath := LogPath;
-      PerThreadLog := ptIdentifiedInOnFile; // ease multi-threaded server debug
+      PerThreadLog := ptIdentifiedInOneFile; // ease multi-threaded server debug
       RotateFileCount := LogRotateFileCount;
       if RotateFileCount > 0 then
       begin

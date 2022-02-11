@@ -1364,7 +1364,7 @@ begin
   with TSynLogTestLog.Family do
   begin
     Level := withLogs;
-    PerThreadLog := ptIdentifiedInOnFile;
+    PerThreadLog := ptIdentifiedInOneFile;
     HighResolutionTimestamp := true;
     if (tcoLogVerboseRotate in options) and
        (Level = LOG_VERBOSE) then

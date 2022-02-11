@@ -186,10 +186,10 @@ type
       read fHasDebugInfo;
   end;
 
-  {$ifndef PUREMORMOT2}
+{$ifndef PUREMORMOT2}
   // backward compatibility type redirection
   TSynMapFile = TDebugFile;
-  {$endif PUREMORMOT2}
+{$endif PUREMORMOT2}
 
 
 { ************** Logging via TSynLogFamily, TSynLog, ISynLog }
@@ -535,7 +535,7 @@ type
   // - by default, ptMergedInOneFile will indicate that all threads are logged
   // in the same file, in occurence order
   // - if set to ptOneFilePerThread, it will create one .log file per thread
-  // - if set to ptIdentifiedInOnFile, a new column will be added for each
+  // - if set to ptIdentifiedInOneFile, a new column will be added for each
   // log row, with the corresponding ThreadID - LogView tool will be able to
   // display per-thread logging, if needed - note that your application shall
   // use a thread pool (just like all mORMot servers classes do), otherwise
@@ -547,7 +547,7 @@ type
   TSynLogPerThreadMode = (
     ptMergedInOneFile,
     ptOneFilePerThread,
-    ptIdentifiedInOnFile,
+    ptIdentifiedInOneFile,
     ptNoThreadProcess);
 
   /// how stack trace shall be computed during logging
@@ -1291,6 +1291,10 @@ type
 
   TSynLogDynArray = array of TSynLog;
 
+{$ifndef PUREMORMOT2}
+const
+  ptIdentifiedInOnFile = ptIdentifiedInOneFile;
+{$endif PUREMORMOT2}
 
 
 { ************** High-Level Logs and Exception Related Features }
@@ -1594,7 +1598,7 @@ type
     property EventText[index: integer]: RawUtf8
       read GetEventText;
     /// retrieve all event thread IDs
-    // - contains something if TSynLogFamily.PerThreadLog was ptIdentifiedInOnFile
+    // - contains something if TSynLogFamily.PerThreadLog was ptIdentifiedInOneFile
     // - for ptMergedInOneFile (default) or ptOneFilePerThread logging process,
     // the array will be void (EventThread=nil)
     property EventThread: TWordDynArray
@@ -3771,7 +3775,7 @@ begin
         SynLogLookupThreadVar[fIdent] := result
       else
       begin
-        fPerThreadLog := ptIdentifiedInOnFile; // rotation requires one file
+        fPerThreadLog := ptIdentifiedInOneFile; // rotation requires one file
         fGlobalLog := result;
       end
     else
@@ -3851,7 +3855,7 @@ begin
   begin
     result := fGlobalLog;
     if result <> nil then
-      // ptMergedInOneFile and ptIdentifiedInOnFile (most common case)
+      // ptMergedInOneFile and ptIdentifiedInOneFile (most common case)
       exit;
     if (fPerThreadLog = ptOneFilePerThread) and
        (fRotateFileCount = 0) and
@@ -3865,7 +3869,7 @@ begin
         result := CreateSynLog;
     end
     else
-      // new ptMergedInOneFile or ptIdentifiedInOnFile
+      // new ptMergedInOneFile or ptIdentifiedInOneFile
       result := CreateSynLog;
     {$ifndef NOEXCEPTIONINTERCEPT}
     // we should check this now, so that any exception is handled in this log
@@ -4075,7 +4079,7 @@ begin
       // we know TRttiCustom is in the slot, and Private is TSynLogFamily
       P := TRttiCustom(P).PrivateSlot;
       result := TSynLogFamily(P).fGlobalLog;
-      // <>nil for ptMergedInOneFile and ptIdentifiedInOnFile (most common case)
+      // <>nil for ptMergedInOneFile and ptIdentifiedInOneFile (most common case)
       if result = nil then
         goto sl;
     end
@@ -4266,7 +4270,7 @@ begin
   // or we have a single context (ptNoThreadProcess) which needs to be updated
   fThreadContext := @fThreadContexts[fThreadIndex - 1];
   fThreadContext^.ID := fThreadID;
-  if (fFamily.fPerThreadLog = ptIdentifiedInOnFile) and
+  if (fFamily.fPerThreadLog = ptIdentifiedInOneFile) and
      (fThreadContext^.ThreadName = '') and
      (sllInfo in fFamily.fLevel) and
      (CurrentThreadName[0] <> #0) then
@@ -4749,7 +4753,7 @@ var
 begin
   if (self <> nil) and
      (sllInfo in fFamily.fLevel) and
-     (fFamily.fPerThreadLog = ptIdentifiedInOnFile) then
+     (fFamily.fPerThreadLog = ptIdentifiedInOneFile) then
   begin
     if Name = '' then
       n := GetCurrentThreadName
@@ -5158,7 +5162,7 @@ begin
       AddRecursion(i, sllNone);
     end;
   LogCurrentTime;
-  if fFamily.fPerThreadLog = ptIdentifiedInOnFile then
+  if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
     fWriter.AddInt18ToChars3(fThreadIndex);
   fCurrentLevel := Level;
   fWriter.AddShorter(LOG_LEVEL_TEXT[Level]);
@@ -5212,7 +5216,7 @@ begin
   end;
   CreateLogWriter;
   LogFileHeader;
-  if fFamily.fPerThreadLog = ptIdentifiedInOnFile then
+  if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
   begin
     c := pointer(fThreadContexts);
     for i := 1 to fThreadContextCount do
@@ -5964,7 +5968,7 @@ begin
     for i := 0 to high(SynLogFamily) do
       with SynLogFamily[i] do
         if (sllInfo in Level) and
-           (PerThreadLog = ptIdentifiedInOnFile) and
+           (PerThreadLog = ptIdentifiedInOneFile) and
            (fGlobalLog <> nil) then
           fGlobalLog.LogThreadName(name); // try to put the full name in log
   finally
@@ -6088,7 +6092,7 @@ begin
     aLogClass := TSynLog;
   f := aLogClass.Family;
   f.DestinationPath := EnsureDirectoryExists(fDestinationPath);
-  f.PerThreadLog := ptIdentifiedInOnFile; // ease multi-threaded server debug
+  f.PerThreadLog := ptIdentifiedInOneFile; // ease multi-threaded server debug
   f.RotateFileCount := fRotateFileCount;
   if fRotateFileCount > 0 then
   begin
