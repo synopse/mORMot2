@@ -1508,7 +1508,6 @@ type
     fExeName, fExeVersion, fInstanceName: RawUtf8;
     fHost, fUser, fCPU, fOSDetailed, fFramework: RawUtf8;
     fExeDate: TDateTime;
-    fIntelCPU: TIntelCpuFeatures;
     fOS: TWindowsVersion;
     fOSServicePack: integer;
     fWow64: boolean;
@@ -1538,6 +1537,9 @@ type
     fLogProcSortInternalOrder: TLogProcSortOrder;
     /// used by ProcessOneLine//GetLogLevelTextMap
     fLogLevelsTextMap: array[TSynLogInfo] of cardinal;
+    fIntelCPU: TIntelCpuFeatures;
+    fArm32CPU: TArm32HwCaps;
+    fArm64CPU: TArm64HwCaps;
     procedure SetLogProcMerged(const Value: boolean);
     function GetEventText(index: integer): RawUtf8;
     function GetLogLevelFromText(LineBeg: PUtf8Char): TSynLogInfo;
@@ -1636,12 +1638,18 @@ type
     /// custom headers, to be searched as .ini content
     property Headers: RawUtf8
       read fHeaders;
-    /// the available CPU features, as recognized at program startup
+    /// the available Intel/AMD CPU features, as recognized at program startup
     // - is extracted from the last part of the CPU property text
     // - you could use the overloaded ToText() function to show it in an
     // human-friendly way
     property IntelCPU: TIntelCpuFeatures
       read fIntelCPU;
+    /// the available 32-bit ARM CPU features, as recognized at program startup
+    property Arm32CPU: TArm32HwCaps
+      read fArm32CPU;
+    /// the available 64-bit ARM CPU features, as recognized at program startup
+    property Arm64CPU: TArm64HwCaps
+      read fArm64CPU;
   published
     /// the associated executable name (with path)
     // - returns e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe'
@@ -6386,7 +6394,15 @@ begin
        not GetOne(' FREQ=', aWow64) then
       exit;
     Split(fCPU, ':', fCpu, feat);
-    mormot.core.text.HexToBin(pointer(feat), @fIntelCPU, SizeOf(fIntelCPU));
+    if feat <> '' then
+      case feat[1] of
+        '-': // ARM32 marker
+          mormot.core.text.HexToBin(pointer(feat), @fArm32CPU, SizeOf(fArm32CPU));
+        '+': // AARCH64 marker
+          mormot.core.text.HexToBin(pointer(feat), @fArm64CPU, SizeOf(fArm64CPU));
+      else
+        mormot.core.text.HexToBin(pointer(feat), @fIntelCPU, SizeOf(fIntelCPU));
+      end;
     fWow64 := aWow64 = '1';
     SetInt64(PBeg, fFreq);
     while (PBeg < PEnd) and
