@@ -6344,10 +6344,10 @@ begin
     if fServices <> nil then
       soa := (fServices as TServiceContainerServer).OnCloseSession(a.IDCardinal);
     if Ctxt = nil then
-      InternalLog('Deleted deprecated session %:%/% soa=%',
+      InternalLog('Deleted deprecated session %:%/% soaGC=%',
         [a.User.LogonName, a.IDCardinal, fSessions.Count, soa], sllUserAuth)
     else
-      InternalLog('Deleted session %:%/% from %/% soa=%',
+      InternalLog('Deleted session %:%/% from %/% soaGC=%',
         [a.User.LogonName, a.IDCardinal, fSessions.Count, a.RemoteIP,
          Ctxt.Call^.LowLevelConnectionID, soa], sllUserAuth);
     if Assigned(OnSessionClosed) then
@@ -6393,7 +6393,7 @@ begin
      (Ctxt.Session > CONST_AUTHENTICATION_NOT_USED) then
   begin
     // retrieve session from its ID
-    result := LockedSessionFind(Ctxt.Session, nil);
+    result := LockedSessionFind(Ctxt.Session, nil); // O(log(n)) binary search
     if result <> nil then
     begin
       // found the session
@@ -7022,23 +7022,21 @@ begin
 end;
 
 procedure TRestServer.Timestamp(Ctxt: TRestServerUriContext);
-
-  procedure ComputeInfo;
-  var
-    info: TDocVariantData;
-  begin
-    fTimestampInfoCacheTix := Ctxt.TickCount64 shr 12;
-    {%H-}info.InitFast;
-    InternalInfo(Ctxt, info);
-    fTimestampInfoCache := info.ToJson('', '', jsonHumanReadable);
-  end;
-
+var
+  info: TDocVariantData;
+  tix: cardinal;
 begin
   if IdemPropNameU(Ctxt.UriBlobFieldName, 'info') and
      not (rsoTimestampInfoUriDisable in fOptions) then
   begin
-    if Ctxt.TickCount64 shr 12 <> fTimestampInfoCacheTix then
-      ComputeInfo; // cache refreshed every 4 seconds
+    tix := Ctxt.TickCount64 shr 12; // cache refreshed every 4.096 seconds
+    if tix <> fTimestampInfoCacheTix then
+    begin
+      fTimestampInfoCacheTix := tix;
+      {%H-}info.InitFast;
+      InternalInfo(Ctxt, info);
+      fTimestampInfoCache := info.ToJson('', '', jsonHumanReadable);
+    end;
     Ctxt.Returns(fTimestampInfoCache);
   end
   else

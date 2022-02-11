@@ -5595,7 +5595,7 @@ var
   tmp: RawUtf8; // so that the caller won't need to reserve such a temp var
 begin
   FastSetString(tmp, aName, aNameLen);
-  result := InternalAdd(tmp);
+  result := InternalAdd(tmp, -1);
 end;
 
 function TDocVariantData.InternalAdd(
@@ -7362,7 +7362,7 @@ begin
 end;
 
 function TDocVariantData.ToJson: RawUtf8;
-begin // note: FPC has troubles inlining this, but is a slow function anyway
+begin // note: FPC has troubles inlining this, but it is a slow method anyway
   DocVariantType.ToJson(@self, result, '', '', jsonCompact);
 end;
 
@@ -7496,21 +7496,21 @@ begin
   if (VCount > 0) and
      IsObject then
     with TJsonWriter.CreateOwnedStream(temp) do
-    try
-      ndx := 0;
-      repeat
-        AddString(VName[ndx]);
-        AddString(NameValueSep);
-        AddVariant(VValue[ndx], escape);
-        inc(ndx);
-        if ndx = VCount then
-          break;
-        AddString(ItemSep);
-      until false;
-      SetText(Result);
-    finally
-      Free;
-    end;
+      try
+        ndx := 0;
+        repeat
+          AddString(VName[ndx]);
+          AddString(NameValueSep);
+          AddVariant(VValue[ndx], escape);
+          inc(ndx);
+          if ndx = VCount then
+            break;
+          AddString(ItemSep);
+        until false;
+        SetText(Result);
+      finally
+        Free;
+      end;
 end;
 
 function TDocVariantData.ToTextPairs(const NameValueSep: RawUtf8;
