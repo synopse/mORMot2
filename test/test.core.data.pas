@@ -4411,7 +4411,23 @@ var
   lTable: TOrmTableJson;
   lRefreshed: Boolean;
 begin
-  Doc.Init;
+  for ndx := 1 to 10 do
+  begin
+    Doc.InitFast;
+    Doc.I['sc'] := 1;
+    Doc.I['sd'] := 2;
+    Doc.I['hh'] := 3;
+    Doc.I['dnh'] := 4;
+    dv := Doc.A_['col'];
+    for i := 1 to 9 do
+      dv^.AddItem(_ObjFast(['a','a','b',i]));
+    s := Doc.ToJson;
+    CheckEqual(s , '{"sc":1,"sd":2,"hh":3,"dnh":4,"col":[{"a":"a","b":1},' +
+      '{"a":"a","b":2},{"a":"a","b":3},{"a":"a","b":4},{"a":"a","b":5},' +
+      '{"a":"a","b":6},{"a":"a","b":7},{"a":"a","b":8},{"a":"a","b":9}]}');
+    Doc.Clear;
+    Doc.Init;
+  end;
   Check(Doc.Kind = dvUndefined);
   Check(not Doc.IsObject);
   Check(not Doc.IsArray);
