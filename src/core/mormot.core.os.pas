@@ -5871,6 +5871,8 @@ end;
 
 procedure TSynLocker.Lock;
 begin
+  if fSection.LockCount<0 then
+    Exit;
   case fRWUse of
     uSharedLock:
       begin
