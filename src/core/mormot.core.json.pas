@@ -3015,8 +3015,6 @@ var
   {$else}
   tab: PJsonCharSet;
   {$endif CPUX86NOTPIC}
-label
-  lit;
 begin
   // see http://www.ietf.org/rfc/rfc4627.txt
   if WasString <> nil then
@@ -3079,7 +3077,7 @@ begin
           c := P^;
           if not (jcJsonStringMarker in tab[c]) then
           begin
-lit:        inc(P);
+            inc(P);
             D^ := c;
             inc(D);
             continue; // very fast parsing of most UTF-8 chars within "string"
@@ -3095,7 +3093,12 @@ lit:        inc(P);
           inc(P); // P^ was '\' here
           c := JSON_UNESCAPE[P^];
           if c > JSON_UNESCAPE_UTF16 then
-            goto lit // direct un-escape of most \x values
+          begin
+            inc(P);
+            D^ := c;
+            inc(D);
+            continue; // direct un-escape of most \x values
+          end
           else if c = JSON_UNESCAPE_UNEXPECTED then
             exit; // avoid \#0 potential buffer overflow issue or control char
           // JSON_UNESCAPE_UTF16: decode '\u0123' UTF-16 into UTF-8
