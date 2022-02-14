@@ -306,7 +306,9 @@ end;
 function TWebSocketAsyncConnection.SendDirect(const tmp: TSynTempBuffer;
   opcode: TWebSocketFrameOpCode; timeout: integer): boolean;
 begin
-  if self = nil then
+  if (self = nil) or
+     (fProcess = nil) or
+     fProcess.fConnectionCloseWasSent then
     result := false
   else
   begin
@@ -322,9 +324,8 @@ end;
 { TWebSocketAsyncConnections }
 
 constructor TWebSocketAsyncConnections.Create(const aPort: RawUtf8;
-  const OnStart, OnStop: TOnNotifyThread;
-  aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
-  aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
+  const OnStart, OnStop: TOnNotifyThread; aConnectionClass: TAsyncConnectionClass;
+  const ProcessName: RawUtf8; aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
   aThreadPoolCount: integer);
 begin
   inherited Create(aPort, OnStart, OnStop, aConnectionClass, ProcessName,
@@ -555,14 +556,14 @@ var
   log: ISynLog;
 begin
   log := TSynLog.Enter(self, 'Destroy');
-  // no more incoming request
-  Shutdown;
   // notify at once all client connections - don't wait for answer
   closing.opcode := focConnectionClose;
   closing.content := [];
   closing.tix := 0;
   WebSocketBroadcast(closing, nil);
   log.Log(sllTrace, 'Destroy: WebSocketBroadcast(focConnectionClose) done', self);
+  // no more incoming request
+  Shutdown;
   // close any pending connection
   inherited Destroy;
   log.Log(sllTrace, 'Destroy: inherited THttpAsyncServer done', self);
