@@ -585,7 +585,7 @@ var
     tmp: TTextWriterStackBuffer;
   begin
     tag := href;
-    with TBaseWriter.CreateOwnedStream(tmp) do
+    with TTextWriter.CreateOwnedStream(tmp) do
     try
       PB := P;
       while P <> nil do

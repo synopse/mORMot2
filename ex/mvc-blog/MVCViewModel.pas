@@ -26,6 +26,8 @@ uses
   mormot.core.os,
   mormot.core.test,
   mormot.core.rtti,
+  mormot.core.threads,
+  mormot.db.core,
   mormot.rest.core,
   mormot.rest.server,
   mormot.rest.mvc,
@@ -136,6 +138,8 @@ type
     property HasFts: boolean read fHasFts write fHasFts;
   end;
 
+
+
 implementation
 
 resourcestring
@@ -185,8 +189,18 @@ end;
 procedure TBlogApplication.MonthToText(const Value: variant; out result: variant);
 const
   MONTHS: array[0..11] of RawUtf8 = (
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December');
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December');
 var
   month: integer;
 begin

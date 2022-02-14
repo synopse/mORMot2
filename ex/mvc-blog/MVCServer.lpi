@@ -68,7 +68,7 @@
         <CompilerOptions>
           <Version Value="11"/>
           <Target>
-            <Filename Value="MVCServer"/>
+            <Filename Value="exe/MVCServer"/>
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
@@ -86,6 +86,14 @@
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
+          <Other>
+            <OtherDefines Count="4">
+              <Define0 Value="FPC_X64MM"/>
+              <Define1 Value="FPCMM_SERVER"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+            </OtherDefines>
+          </Other>
         </CompilerOptions>
       </Item3>
     </BuildModes>
@@ -119,7 +127,7 @@
   <CompilerOptions>
     <Version Value="11"/>
     <Target>
-      <Filename Value="MVCServer"/>
+      <Filename Value="exe/MVCServer"/>
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>
