@@ -118,11 +118,17 @@ type
   // - default secNone will use plain HTTP connection
   // - secSSL will use HTTPS secure connection
   // - secSynShaAes will use our proprietary SHA-256 / AES-256-CTR encryption
-  // identified as 'synshaaes' as ACCEPT-ENCODING: header parameter
+  // identified as 'synshaaes' as ACCEPT-ENCODING: header parameter - but since
+  // encodings are optional in HTTP, it is not possible to rely on it for securing
+  // the line which may be plain, so this is marked as deprecated - use HTTPS or
+  // encrypted WebSockets instead
   TRestHttpServerSecurity = (
     secNone,
-    secSSL,
-    secSynShaAes);
+    secSSL
+    {$ifndef PUREMORMOT2} ,
+    secSynShaAes
+    {$endif PUREMORMOT2}
+    );
 
 
 const
@@ -259,9 +265,7 @@ type
     // to be initialized to handle incoming connections (default is 32, which
     // may be sufficient for most cases, maximum is 256)
     // - the aHttpServerSecurity can be set to secSSL to initialize a HTTPS
-    // instance (after proper certificate installation as explained in the SAD
-    // pdf), or to secSynShaAes if you want our proprietary SHA-256 /
-    // AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes"
+    // instance (after proper certificate installation as explained in the SAD pdf)
     // - optional aAdditionalUrl parameter can be used e.g. to registry an URI
     // to server static file content, by overriding TRestHttpServer.Request
     // - for THttpApiServer, you can specify an optional name for the HTTP queue
@@ -283,9 +287,7 @@ type
     // for http.sys, the public address could be used for TRestServer.SetPublicUri()
     // - aDomainName is the Urlprefix to be used for HttpAddUrl API call
     // - the aHttpServerSecurity can be set to secSSL to initialize a HTTPS
-    // instance (after proper certificate installation as explained in the SAD
-    // pdf), or to secSynShaAes if you want our proprietary SHA-256 /
-    // AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes"
+    // instance (after proper certificate installation as explained in the SAD pdf)
     // - optional aAdditionalUrl parameter can be used e.g. to registry an URI
     // to server static file content, by overriding TRestHttpServer.Request
     // - for THttpApiServer, you can specify an optional name for the HTTP queue
@@ -328,9 +330,7 @@ type
     // default HTTP_DEFAULT_ACCESS_RIGHTS access right setting - but you shall
     // better rely on the authentication feature included in the framework
     // - the aHttpServerSecurity can be set to secSSL to initialize a HTTPS
-    // instance (after proper certificate installation as explained in the SAD
-    // pdf), or to secSynShaAes if you want our proprietary SHA-256 /
-    // AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes"
+    // instance (after proper certificate installation as explained in the SAD pdf)
     // - return true on success, false on error (e.g. duplicated Root value)
     function AddServer(aServer: TRestServer;
       aRestAccessRights: POrmAccessRights = nil;
@@ -755,7 +755,7 @@ begin
   end;
   // setup the newly created server instance
   fHttpServer.OnRequest := Request;
-  {$ifndef PUREMORMOT2}
+  {$ifndef PUREMORMOT2} // deprecated since unsafe
   if aSecurity = secSynShaAes then
     fHttpServer.RegisterCompress(CompressShaAes, 0); // CompressMinSize=0
   {$endif PUREMORMOT2}
