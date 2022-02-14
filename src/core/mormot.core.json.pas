@@ -3345,8 +3345,6 @@ var
   WasString: boolean;
   EndOfObject: AnsiChar;
   tab: PJsonCharSet;
-label
-  e;
 begin
   // should match GotoNextJsonObjectOrArray() and JsonPropNameValid()
   result := nil; // returns nil on invalid input
@@ -3417,7 +3415,9 @@ begin
         if P^ = #0 then
           exit;
       until P^ in [':', '='];
-    goto e;
+    Json := P + 1;
+    result := Name;
+    exit;
   end;
   if Len <> nil then
     Len^ := P - Name;
@@ -3427,7 +3427,7 @@ begin
     if P^ = #0 then
       exit;
   until P^ = ':';
-e:Json := P + 1;
+  Json := P + 1;
   result := Name;
 end;
 
