@@ -98,8 +98,8 @@ type
 // - the OldPassWord must be correct, otherwise the resulting file will be corrupted
 // - any password can be '' to mark no encryption as input or output
 // - the password may be a JSON-serialized TSynSignerParams object, or will use
-// AES-OFB-128 (or AES-CTR-128 if ForceSQLite3AESCTR is set) after SHAKE_128 with
-// rounds=1000 and a fixed salt on plain password text
+// AES-CTR-128 (or AES-OFB-128 if ForceSQLite3AESCTR is false) after SHAKE_128
+// with rounds=1000 and a fixed salt on plain password text
 // - please note that this encryption is compatible only with SQlite3 files made
 // with SynSQLiteStatic.pas unit (not external/official/wxsqlite3 dll)
 // - implementation is NOT compatible with the official SQLite Encryption Extension
@@ -135,8 +135,9 @@ var
   ForceSQLite3LegacyAes: boolean;
 
   /// global flag to use AES-CTR instead of AES-OFB encryption
-  // - on x86_64 our optimized asm is 2.5GB/s instead of 770MB/s
-  ForceSQLite3AesCtr: boolean;
+  // - on x86_64 our optimized asm is 2.5GB/s for CTR instead of 770MB/s for OFB
+  // - enabled in PUREMORMOT2 mode, since performance is better on x86_64 (or OpenSSL)
+  ForceSQLite3AesCtr: boolean {$ifdef PUREMORMOT2} = true {$endif};
 
 
 

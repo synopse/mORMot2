@@ -4071,7 +4071,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups xmm0, dqword ptr [rcx + $60] // 256-bit AES
         // encrypt + MAC 8 * 128-bit blocks (128 bytes) from src into dest
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@edone: // MAC plain
+@edone: // MAC plain (and input prefetch)
         mov    r12d, dword ptr [rbx]
         mov    r13d, dword ptr [rbx + 4]
         mov    r14d, dword ptr [rbx + 8]
