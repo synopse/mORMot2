@@ -365,7 +365,7 @@ type
   // - should process the supplied peer information, and return true to continue
   // and accept the connection, or false to abort the connection
   // - Context.PeerIssuer and PeerSubject have been properly populated from Peer
-  // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509
+  // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509 pointers
   TOnNetTlsEachPeerVerify = function(Socket: TNetSocket; Context: PNetTlsContext;
     wasok: boolean; TLS, Peer: pointer): boolean of object;
 

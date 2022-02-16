@@ -30,7 +30,7 @@ interface
 
 uses
   {$ifdef OSWINDOWS}
-  Windows, // needed here e.g. for redefinition of standard types
+  Windows, // needed here e.g. for redefinition/redirection of standard types
   Messages,
   {$endif OSWINDOWS}
   classes,
