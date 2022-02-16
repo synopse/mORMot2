@@ -730,8 +730,20 @@ type
 {$MINENUMSIZE 4}
 
 type
-  PSSL = pointer;
+  PSSL = ^SSL;
   PPSSL = ^PSSL;
+  PX509 = ^X509;
+  PX509DynArray = array of PX509;
+  Pstack_st_X509 = pointer;
+
+  SSL = object
+  public
+    function GetPeerCertificate: PX509;
+    function GetPeerCertificates: PX509DynArray;
+    function GetPeerCertificatesAsPEM: RawUtf8;
+    procedure Free;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
 
   BIO = object
   public
@@ -1070,7 +1082,6 @@ type
   TX509Usages = set of TX509Usage;
 
   PX509V3_CTX = ^v3_ext_ctx;
-  PX509 = ^X509;
 
   /// wrapper to the PX509 abstract pointer
   X509 = object
@@ -1143,6 +1154,8 @@ type
     function SetUsage(usages: TX509Usages): boolean;
     /// serialize the certificate as DER raw binary
     function ToBinary: RawByteString;
+    /// serialize the certificate as PEM text
+    function ToPEM: RawUtf8;
     /// release this X509 Certificate instance
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1232,6 +1245,7 @@ function SSL_get_error(s: PSSL; ret_code: integer): integer; cdecl;
 function SSL_ctrl(ssl: PSSL; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
 procedure SSL_set_bio(s: PSSL; rbio: PBIO; wbio: PBIO); cdecl;
 function SSL_get_peer_certificate(s: PSSL): PX509; cdecl;
+function SSL_get_peer_cert_chain(s: PSSL): Pstack_st_X509; cdecl;
 procedure SSL_free(ssl: PSSL); cdecl;
 function SSL_connect(ssl: PSSL): integer; cdecl;
 procedure SSL_set_connect_state(s: PSSL); cdecl;
@@ -1357,7 +1371,10 @@ function ASN1_TIME_set_string_X509(s: PASN1_TIME; str: PUtf8Char): integer; cdec
 function ASN1_TIME_to_tm(s: PASN1_TIME; tm: Ptm): integer; cdecl;
 function ASN1_TIME_normalize(s: PASN1_TIME): integer; cdecl;
 function OPENSSL_sk_pop(st: POPENSSL_STACK): pointer; cdecl;
-function OPENSSL_sk_num(p1: POPENSSL_STACK): integer; cdecl;
+function OPENSSL_sk_num(p1: POPENSSL_STACK): integer;
+  {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
+function OPENSSL_sk_value(p1: POPENSSL_STACK; p2: integer): pointer;
+  {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function ASN1_BIT_STRING_get_bit(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
 function OBJ_nid2ln(n: integer): PUtf8Char; cdecl;
 function OBJ_nid2sn(n: integer): PUtf8Char; cdecl;
@@ -1369,6 +1386,7 @@ function ASN1_STRING_length(x: PASN1_STRING): integer;
 function ASN1_STRING_print_ex(_out: PBIO; str: PASN1_STRING; flags: cardinal): integer; cdecl;
 function PEM_read_bio_X509(bp: PBIO; x: PPX509; cb: Ppem_password_cb;
   u: pointer): PX509; cdecl;
+function PEM_write_bio_X509(bp: PBIO; x: PX509): integer; cdecl;
 function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
   u: pointer): PEVP_PKEY; cdecl;
 function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
@@ -1507,6 +1525,7 @@ function BN_num_bytes(bn: PBIGNUM): integer;
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
 procedure DTLSv1_handle_timeout(s: PSSL);
 
+function OpenSSLStackToDynArray(stack: pointer): TPointerDynArray;
 function TmToDateTime(const t: tm): TDateTime;
 
 /// load a private key from a binary buffer, optionally with a password
@@ -1518,6 +1537,9 @@ function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
 // - caller should make result.Free once done with the result
 function LoadPublicKey(PublicKey: pointer; PublicKeyLen: integer;
   const PublicKeyPassword: RawUtf8 = ''): PEVP_PKEY;
+
+/// convert e.g. SSL.GetPeerCertificates result as a PEM text
+function PX509DynArrayToPem(const X509: PX509DynArray): RawUtf8;
 
 /// create a new X509 Certificate Instance
 // - with a random serial number
@@ -1580,6 +1602,7 @@ type
     SSL_ctrl: function(ssl: PSSL; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
     SSL_set_bio: procedure(s: PSSL; rbio: PBIO; wbio: PBIO); cdecl;
     SSL_get_peer_certificate: function(s: PSSL): PX509; cdecl;
+    SSL_get_peer_cert_chain: function(s: PSSL): Pstack_st_X509; cdecl;
     SSL_free: procedure(ssl: PSSL); cdecl;
     SSL_connect: function(ssl: PSSL): integer; cdecl;
     SSL_set_connect_state: procedure(s: PSSL); cdecl;
@@ -1607,7 +1630,7 @@ type
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..45] of RawUtf8 = (
+  LIBSSL_ENTRIES: array[0..46] of RawUtf8 = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -1630,6 +1653,7 @@ const
     'SSL_ctrl',
     'SSL_set_bio',
     'SSL_get_peer_certificate',
+    'SSL_get_peer_cert_chain',
     'SSL_free',
     'SSL_connect',
     'SSL_set_connect_state',
@@ -1766,6 +1790,11 @@ end;
 function SSL_get_peer_certificate(s: PSSL): PX509;
 begin
   result := libssl.SSL_get_peer_certificate(s);
+end;
+
+function SSL_get_peer_cert_chain(s: PSSL): Pstack_st_X509;
+begin
+  result := libssl.SSL_get_peer_cert_chain(s);
 end;
 
 procedure SSL_free(ssl: PSSL);
@@ -1978,6 +2007,7 @@ type
     ASN1_TIME_normalize: function(s: PASN1_TIME): integer; cdecl;
     OPENSSL_sk_pop: function(st: POPENSSL_STACK): pointer; cdecl;
     OPENSSL_sk_num: function(p1: POPENSSL_STACK): integer; cdecl;
+    OPENSSL_sk_value: function(p1: POPENSSL_STACK; p2: integer): pointer; cdecl;
     ASN1_BIT_STRING_get_bit: function(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
     OBJ_nid2ln: function(n: integer): PUtf8Char; cdecl;
     OBJ_nid2sn: function(n: integer): PUtf8Char; cdecl;
@@ -1986,6 +2016,7 @@ type
     ASN1_STRING_length: function(x: PASN1_STRING): integer; cdecl;
     ASN1_STRING_print_ex: function(_out: PBIO; str: PASN1_STRING; flags: cardinal): integer; cdecl;
     PEM_read_bio_X509: function(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
+    PEM_write_bio_X509: function(bp: PBIO; x: PX509): integer; cdecl;
     PEM_read_bio_PrivateKey: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
     PEM_read_bio_PUBKEY: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
     PEM_read_bio_RSAPublicKey: function(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
@@ -2066,7 +2097,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..168] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..170] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2151,6 +2182,7 @@ const
     'ASN1_TIME_normalize',
     'OPENSSL_sk_pop',
     'OPENSSL_sk_num',
+    'OPENSSL_sk_value',
     'ASN1_BIT_STRING_get_bit',
     'OBJ_nid2ln',
     'OBJ_nid2sn',
@@ -2159,6 +2191,7 @@ const
     'ASN1_STRING_length',
     'ASN1_STRING_print_ex',
     'PEM_read_bio_X509',
+    'PEM_write_bio_X509',
     'PEM_read_bio_PrivateKey',
     'PEM_read_bio_PUBKEY',
     'PEM_read_bio_RSAPublicKey',
@@ -2672,6 +2705,11 @@ begin
   result := libcrypto.OPENSSL_sk_num(p1);
 end;
 
+function OPENSSL_sk_value(p1: POPENSSL_STACK; p2: integer): pointer;
+begin
+  result := libcrypto.OPENSSL_sk_value(p1, p2);
+end;
+
 function ASN1_BIT_STRING_get_bit(a: PASN1_BIT_STRING; n: integer): integer;
 begin
   result := libcrypto.ASN1_BIT_STRING_get_bit(a, n);
@@ -2711,6 +2749,11 @@ function PEM_read_bio_X509(bp: PBIO; x: PPX509; cb: Ppem_password_cb;
   u: pointer): PX509;
 begin
   result := libcrypto.PEM_read_bio_X509(bp, x, cb, u);
+end;
+
+function PEM_write_bio_X509(bp: PBIO; x: PX509): integer;
+begin
+  result := libcrypto.PEM_write_bio_X509(bp, x);
 end;
 
 function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
@@ -3317,6 +3360,9 @@ procedure SSL_set_bio(s: PSSL; rbio: PBIO; wbio: PBIO); cdecl;
 function SSL_get_peer_certificate(s: PSSL): PX509; cdecl;
   external LIB_SSL name _PU + 'SSL_get_peer_certificate';
 
+function SSL_get_peer_cert_chain(s: PSSL): Pstack_st_X509; cdecl;
+  external LIB_SSL name _PU + 'SSL_get_peer_cert_chain';
+
 procedure SSL_free(ssl: PSSL); cdecl;
   external LIB_SSL name _PU + 'SSL_free';
 
@@ -3657,6 +3703,9 @@ function OPENSSL_sk_pop(st: POPENSSL_STACK): pointer; cdecl;
 function OPENSSL_sk_num(p1: POPENSSL_STACK): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_num';
 
+function OPENSSL_sk_value(p1: POPENSSL_STACK; p2: integer): pointer; cdecl;
+  external LIB_CRYPTO name _PU + 'OPENSSL_sk_value';
+
 function ASN1_BIT_STRING_get_bit(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_BIT_STRING_get_bit';
 
@@ -3680,6 +3729,9 @@ function ASN1_STRING_print_ex(_out: PBIO; str: PASN1_STRING; flags: cardinal): i
 
 function PEM_read_bio_X509(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_X509';
+
+function PEM_write_bio_X509(bp: PBIO; x: PX509): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'PEM_write_bio_X509';
 
 function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
   u: pointer): PEVP_PKEY; cdecl;
@@ -4072,6 +4124,47 @@ begin
   result := EncodeDate(t.tm_year + 1900, t.tm_mon + 1, t.tm_mday) +
             EncodeTime(t.tm_hour, t.tm_min, t.tm_sec, 0);
 end;
+
+function OpenSSLStackToDynArray(stack: pointer): TPointerDynArray;
+var
+  i: PtrInt;
+begin
+  // low-level method needing an explicit result typecast e.g. to PX509DynArray
+  SetLength(result, OPENSSL_sk_num(stack));
+  for i := 0 to length(result) - 1 do
+    result[i] := OPENSSL_sk_value(stack, i);
+end;
+
+
+{ SSL }
+
+function SSL.GetPeerCertificate: PX509;
+begin
+  if @self = nil then
+    result := nil
+  else
+    result := SSL_get_peer_certificate(@self);
+end;
+
+function SSL.GetPeerCertificates: PX509DynArray;
+begin
+  if @self = nil then
+    result := nil
+  else
+    result := PX509DynArray(OpenSSLStackToDynArray(SSL_get_peer_cert_chain(@self)));
+end;
+
+function SSL.GetPeerCertificatesAsPEM: RawUtf8;
+begin
+  result := PX509DynArrayToPem(GetPeerCertificates);
+end;
+
+procedure SSL.Free;
+begin
+  if @self <> nil then
+    SSL_free(@self);
+end;
+
 
 { EVP_PKEY }
 
@@ -4761,6 +4854,19 @@ begin
   bio.Free;
 end;
 
+function X509.ToPEM: RawUtf8;
+var
+  bio: PBIO;
+begin
+  result := '';
+  if @self = nil then
+    exit;
+  bio := BIO_new(BIO_s_mem);
+  if PEM_write_bio_X509(bio, @self) = OPENSSLSUCCESS then
+    result := bio.ToUtf8;
+  bio.Free;
+end;
+
 procedure X509.Free;
 begin
   if @self <> nil then
@@ -4805,6 +4911,22 @@ begin
     result := d2i_X509_bio(bio, nil);
     bio.Free;
   end;
+end;
+
+function PX509DynArrayToPem(const X509: PX509DynArray): RawUtf8;
+var
+  bio: PBIO;
+  i: PtrInt;
+begin
+  result := '';
+  if X509 = nil then
+    exit;
+  bio := BIO_new(BIO_s_mem);
+  for i := 0 to length(X509) - 1 do
+    if X509[i] <> nil then
+      PEM_write_bio_X509(bio, X509[i]);
+  result := bio.ToUtf8;
+  bio.Free;
 end;
 
 
@@ -5087,7 +5209,8 @@ begin
   else
   begin
     // OpenSSL powered certificate validation
-    fPeer := SSL_get_peer_certificate(fSsl);
+    fPeer := fSsl.GetPeerCertificate;
+    //writeln(fSsl.GetPeerCertificatesAsPEM);
     if (fPeer = nil) and
        not Context.IgnoreCertificateErrors then
       EOpenSslClient.Check(self, 'AfterConnection getpeercertificate',
@@ -5151,7 +5274,7 @@ begin
   begin
     if fDoSslShutdown then
       SSL_shutdown(fSsl);
-    SSL_free(fSsl);
+    fSsl.Free;
     SSL_CTX_free(fCtx);
   end;
   inherited Destroy;

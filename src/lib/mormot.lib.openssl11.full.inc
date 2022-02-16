@@ -11516,9 +11516,6 @@ function AES_wrap_key(key: PAES_KEY; iv: PByte; _out: PByte; _in: PByte; inlen: 
 function AES_unwrap_key(key: PAES_KEY; iv: PByte; _out: PByte; _in: PByte; inlen: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'AES_unwrap_key';
 
-function OPENSSL_sk_value(p1: POPENSSL_STACK; p2: integer): pointer; cdecl;
-  external LIB_CRYPTO name _PU + 'OPENSSL_sk_value';
-
 function OPENSSL_sk_set(st: POPENSSL_STACK; i: integer; data: pointer): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_set';
 
@@ -21222,9 +21219,6 @@ procedure PEM_dek_info(buf: PUtf8Char; typ: PUtf8Char; len: integer; str: PUtf8C
 function PEM_read_X509(fp: PPointer; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_X509';
 
-function PEM_write_bio_X509(bp: PBIO; x: PX509): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_write_bio_X509';
-
 function PEM_write_X509(fp: PPointer; x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_X509';
 
@@ -24312,9 +24306,6 @@ function i2d_SSL_SESSION(_in: PSSL_SESSION; pp: PPByte): integer; cdecl;
 
 function d2i_SSL_SESSION(a: PPSSL_SESSION; pp: PPByte; length: integer): PSSL_SESSION; cdecl;
   external LIB_SSL name _PU + 'd2i_SSL_SESSION';
-
-function SSL_get_peer_cert_chain(s: PSSL): Pstack_st_X509; cdecl;
-  external LIB_SSL name _PU + 'SSL_get_peer_cert_chain';
 
 function SSL_CTX_get_verify_mode(ctx: PSSL_CTX): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_get_verify_mode';
