@@ -576,6 +576,81 @@ const
   X509_CHECK_FLAG_NEVER_CHECK_SUBJECT = $20;
   _X509_CHECK_FLAG_DOT_SUBDOMAINS = $8000;
 
+  X509_V_ERR_PATH_LENGTH_EXCEEDED = 25;
+  X509_V_ERR_INVALID_PURPOSE = 26;
+  X509_V_ERR_CERT_UNTRUSTED = 27;
+  X509_V_ERR_CERT_REJECTED = 28;
+  X509_V_ERR_SUBJECT_ISSUER_MISMATCH = 29;
+  X509_V_ERR_AKID_SKID_MISMATCH = 30;
+  X509_V_ERR_AKID_ISSUER_SERIAL_MISMATCH = 31;
+  X509_V_ERR_KEYUSAGE_NO_CERTSIGN = 32;
+  X509_V_ERR_UNABLE_TO_GET_CRL_ISSUER = 33;
+  X509_V_ERR_UNHANDLED_CRITICAL_EXTENSION = 34;
+  X509_V_ERR_KEYUSAGE_NO_CRL_SIGN = 35;
+  X509_V_ERR_UNHANDLED_CRITICAL_CRL_EXTENSION = 36;
+  X509_V_ERR_INVALID_NON_CA = 37;
+  X509_V_ERR_PROXY_PATH_LENGTH_EXCEEDED = 38;
+  X509_V_ERR_KEYUSAGE_NO_DIGITAL_SIGNATURE = 39;
+  X509_V_ERR_PROXY_CERTIFICATES_NOT_ALLOWED = 40;
+  X509_V_ERR_INVALID_EXTENSION = 41;
+  X509_V_ERR_INVALID_POLICY_EXTENSION = 42;
+  X509_V_ERR_NO_EXPLICIT_POLICY = 43;
+  X509_V_ERR_DIFFERENT_CRL_SCOPE = 44;
+  X509_V_ERR_UNSUPPORTED_EXTENSION_FEATURE = 45;
+  X509_V_ERR_UNNESTED_RESOURCE = 46;
+  X509_V_ERR_PERMITTED_VIOLATION = 47;
+  X509_V_ERR_EXCLUDED_VIOLATION = 48;
+  X509_V_ERR_SUBTREE_MINMAX = 49;
+  X509_V_ERR_APPLICATION_VERIFICATION = 50;
+  X509_V_ERR_UNSUPPORTED_CONSTRAINT_TYPE = 51;
+  X509_V_ERR_UNSUPPORTED_CONSTRAINT_SYNTAX = 52;
+  X509_V_ERR_UNSUPPORTED_NAME_SYNTAX = 53;
+  X509_V_ERR_CRL_PATH_VALIDATION_ERROR = 54;
+  X509_V_ERR_PATH_LOOP = 55;
+  X509_V_ERR_SUITE_B_INVALID_VERSION = 56;
+  X509_V_ERR_SUITE_B_INVALID_ALGORITHM = 57;
+  X509_V_ERR_SUITE_B_INVALID_CURVE = 58;
+  X509_V_ERR_SUITE_B_INVALID_SIGNATURE_ALGORITHM = 59;
+  X509_V_ERR_SUITE_B_LOS_NOT_ALLOWED = 60;
+  X509_V_ERR_SUITE_B_CANNOT_SIGN_P_384_WITH_P_256 = 61;
+  X509_V_ERR_HOSTNAME_MISMATCH = 62;
+  X509_V_ERR_EMAIL_MISMATCH = 63;
+  X509_V_ERR_IP_ADDRESS_MISMATCH = 64;
+  X509_V_ERR_DANE_NO_MATCH = 65;
+  X509_V_ERR_EE_KEY_TOO_SMALL = 66;
+  X509_V_ERR_CA_KEY_TOO_SMALL = 67;
+  X509_V_ERR_CA_MD_TOO_WEAK = 68;
+  X509_V_ERR_INVALID_CALL = 69;
+  X509_V_ERR_STORE_LOOKUP = 70;
+  X509_V_ERR_NO_VALID_SCTS = 71;
+  X509_V_ERR_PROXY_SUBJECT_NAME_VIOLATION = 72;
+  X509_V_ERR_OCSP_VERIFY_NEEDED = 73;
+  X509_V_ERR_OCSP_VERIFY_FAILED = 74;
+  X509_V_ERR_OCSP_CERT_UNKNOWN = 75;
+
+  X509_V_FLAG_CB_ISSUER_CHECK = $0;
+  X509_V_FLAG_USE_CHECK_TIME = $2;
+  X509_V_FLAG_CRL_CHECK = $4;
+  X509_V_FLAG_CRL_CHECK_ALL = $8;
+  X509_V_FLAG_IGNORE_CRITICAL = $10;
+  X509_V_FLAG_X509_STRICT = $20;
+  X509_V_FLAG_ALLOW_PROXY_CERTS = $40;
+  X509_V_FLAG_POLICY_CHECK = $80;
+  X509_V_FLAG_EXPLICIT_POLICY = $100;
+  X509_V_FLAG_INHIBIT_ANY = $200;
+  X509_V_FLAG_INHIBIT_MAP = $400;
+  X509_V_FLAG_NOTIFY_POLICY = $800;
+  X509_V_FLAG_EXTENDED_CRL_SUPPORT = $1000;
+  X509_V_FLAG_USE_DELTAS = $2000;
+  X509_V_FLAG_CHECK_SS_SIGNATURE = $4000;
+  X509_V_FLAG_TRUSTED_FIRST = $8000;
+  X509_V_FLAG_SUITEB_128_LOS_ONLY = $10000;
+  X509_V_FLAG_SUITEB_192_LOS = $20000;
+  X509_V_FLAG_SUITEB_128_LOS = $30000;
+  X509_V_FLAG_PARTIAL_CHAIN = $80000;
+  X509_V_FLAG_NO_ALT_CHAINS = $100000;
+  X509_V_FLAG_NO_CHECK_TIME = $200000;
+
   // X509_get_key_usage() returned flags
   X509v3_KU_ENCIPHER_ONLY = $0001;
   X509v3_KU_CRL_SIGN = $0002;
@@ -599,12 +674,51 @@ const
   XKU_DVCS = $80;
   XKU_ANYEKU = $100;
 
+  X509_L_FILE_LOAD = 1;
+  X509_L_ADD_DIR = 2;
+
   // X509V3_EXT_print() flags
   X509V3_EXT_UNKNOWN_MASK = $f shl 16;
   X509V3_EXT_DEFAULT = 0;
   X509V3_EXT_ERROR_UNKNOWN = 1 shl 16;
   X509V3_EXT_PARSE_UNKNOWN = 2 shl 16;
   X509V3_EXT_DUMP_UNKNOWN = 3 shl 16;
+
+  // X509_STORE_CTX_set_purpose() flags
+  X509_PURPOSE_DYNAMIC = $1;
+  X509_PURPOSE_DYNAMIC_NAME = $2;
+  X509_PURPOSE_SSL_CLIENT = 1;
+  X509_PURPOSE_SSL_SERVER = 2;
+  X509_PURPOSE_NS_SSL_SERVER = 3;
+  X509_PURPOSE_SMIME_SIGN = 4;
+  X509_PURPOSE_SMIME_ENCRYPT = 5;
+  X509_PURPOSE_CRL_SIGN = 6;
+  X509_PURPOSE_ANY = 7;
+  X509_PURPOSE_OCSP_HELPER = 8;
+  X509_PURPOSE_TIMESTAMP_SIGN = 9;
+  X509_PURPOSE_MIN = 1;
+  X509_PURPOSE_MAX = 9;
+
+  // X509_STORE_CTX_set_trust() flags
+  X509_TRUST_DEFAULT = 0;
+  X509_TRUST_COMPAT = 1;
+  X509_TRUST_SSL_CLIENT = 2;
+  X509_TRUST_SSL_SERVER = 3;
+  X509_TRUST_EMAIL = 4;
+  X509_TRUST_OBJECT_SIGN = 5;
+  X509_TRUST_OCSP_SIGN = 6;
+  X509_TRUST_OCSP_REQUEST = 7;
+  X509_TRUST_TSA = 8;
+  X509_TRUST_MIN = 1;
+  X509_TRUST_MAX = 8;
+  X509_TRUST_DYNAMIC = 1 shl 0;
+  X509_TRUST_DYNAMIC_NAME = 1 shl 1;
+  X509_TRUST_NO_SS_COMPAT = 1 shl 2;
+  X509_TRUST_DO_SS_COMPAT = 1 shl 3;
+  X509_TRUST_OK_ANY_EKU = 1 shl 4;
+  X509_TRUST_TRUSTED = 1;
+  X509_TRUST_REJECTED = 2;
+  X509_TRUST_UNTRUSTED = 3;
 
   ASN1_STRFLGS_ESC_2253 = 1;
   ASN1_STRFLGS_ESC_CTRL = 2;
@@ -735,6 +849,7 @@ type
   PX509 = ^X509;
   PX509DynArray = array of PX509;
   Pstack_st_X509 = pointer;
+  PX509_LOOKUP = pointer;
 
   SSL = object
   public
@@ -984,6 +1099,12 @@ type
   PX509_CERT_AUX = type pointer;
   PPX509_CERT_AUX = ^PX509_CERT_AUX;
 
+  PX509_LOOKUP_METHOD = pointer;
+  PPX509_LOOKUP_METHOD = ^PX509_LOOKUP_METHOD;
+
+  PX509_VERIFY_PARAM = pointer;
+  PPX509_VERIFY_PARAM = ^PX509_VERIFY_PARAM;
+
   Pstack_st_CONF_VALUE = type pointer;
   Plhash_st_CONF_VALUE = type pointer;
 
@@ -1004,15 +1125,30 @@ type
   end;
 
   PPX509_NAME = ^PX509_NAME;
+  PPX509_LOOKUP = ^PX509_LOOKUP;
 
   PX509_PUBKEY = type pointer;
   PPX509_PUBKEY = ^PX509_PUBKEY;
 
-  PX509_STORE = type pointer;
+  PX509_STORE = ^X509_STORE;
   PPX509_STORE = ^PX509_STORE;
 
-  PX509_STORE_CTX = type pointer;
+  PX509_STORE_CTX = ^X509_STORE_CTX;
   PPX509_STORE_CTX = ^PX509_STORE_CTX;
+
+  X509_STORE = object
+  public
+
+    procedure Free;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
+  X509_STORE_CTX = object
+  public
+
+    procedure Free;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
 
   PX509_OBJECT = type pointer;
   PPX509_OBJECT = ^PX509_OBJECT;
@@ -1156,7 +1292,10 @@ type
     function ToBinary: RawByteString;
     /// serialize the certificate as PEM text
     function ToPEM: RawUtf8;
+    /// increment the X509 reference count to avoid premature release
+    function Acquire: integer;
     /// release this X509 Certificate instance
+    // - in practice, decrement the X509 reference count and free it once 0
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -1208,6 +1347,7 @@ type
   SSL_verify_cb = function(preverify_ok: integer; x509_ctx: PX509_STORE_CTX): integer; cdecl;
   Ppem_password_cb = function(buf: PUtf8Char; size, rwflag: integer; userdata: pointer): integer; cdecl;
   ECDH_compute_key_KDF = function(_in: pointer; inlen: PtrUInt; _out: pointer; outlen: PPtrUInt): pointer; cdecl;
+  X509_STORE_CTX_verify_cb = function(p1: integer; p2: PX509_STORE_CTX): integer; cdecl;
 
   dyn_MEM_malloc_fn = function(p1: PtrUInt; p2: PUtf8Char; p3: integer): pointer; cdecl;
   dyn_MEM_realloc_fn = function(p1: pointer; p2: PtrUInt; p3: PUtf8Char; p4: integer): pointer; cdecl;
@@ -1317,6 +1457,9 @@ function BIO_new_socket(sock: integer; close_flag: integer): PBIO; cdecl;
 function X509_get_issuer_name(a: PX509): PX509_NAME; cdecl;
 function X509_get_subject_name(a: PX509): PX509_NAME; cdecl;
 function X509_get_pubkey(x: PX509): PEVP_PKEY; cdecl;
+function X509_up_ref(x: PX509): integer; cdecl;
+procedure X509_STORE_free(v: PX509_STORE); cdecl;
+procedure X509_STORE_CTX_free(ctx: PX509_STORE_CTX); cdecl;
 procedure X509_free(a: PX509); cdecl;
 function X509_new(): PX509; cdecl;
 function X509_set_version(x: PX509; version: integer): integer; cdecl;
@@ -1366,6 +1509,37 @@ function X509_get_extended_key_usage(x: PX509): cardinal; cdecl;
 function X509V3_EXT_print(_out: PBIO; ext: PX509_EXTENSION; flag: cardinal; indent: integer): integer; cdecl;
 function i2d_X509_bio(bp: PBIO; x509: PX509): integer; cdecl;
 function d2i_X509_bio(bp: PBIO; x509: PPX509): PX509; cdecl;
+function X509_STORE_new(): PX509_STORE; cdecl;
+function X509_STORE_load_locations(ctx: PX509_STORE; _file: PUtf8Char; dir: PUtf8Char): integer; cdecl;
+function X509_STORE_set_default_paths(ctx: PX509_STORE): integer; cdecl;
+function X509_STORE_add_cert(ctx: PX509_STORE; x: PX509): integer; cdecl;
+function X509_STORE_add_crl(ctx: PX509_STORE; x: PX509_CRL): integer; cdecl;
+function X509_STORE_add_lookup(v: PX509_STORE; m: PX509_LOOKUP_METHOD): PX509_LOOKUP; cdecl;
+function X509_STORE_set_flags(ctx: PX509_STORE; flags: cardinal): integer; cdecl;
+function X509_STORE_set1_param(ctx: PX509_STORE; pm: PX509_VERIFY_PARAM): integer; cdecl;
+function X509_STORE_get0_param(ctx: PX509_STORE): PX509_VERIFY_PARAM; cdecl;
+procedure X509_STORE_set_verify_cb(ctx: PX509_STORE; verify_cb: X509_STORE_CTX_verify_cb); cdecl;
+function X509_LOOKUP_hash_dir(): PX509_LOOKUP_METHOD; cdecl;
+function X509_LOOKUP_file(): PX509_LOOKUP_METHOD; cdecl;
+function X509_LOOKUP_ctrl(ctx: PX509_LOOKUP; cmd: integer; argc: PUtf8Char;
+  argl: integer; ret: PPUtf8Char): integer; cdecl;
+function X509_load_cert_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
+function X509_load_crl_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
+function X509_load_cert_crl_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
+function X509_STORE_CTX_new(): PX509_STORE_CTX; cdecl;
+function X509_STORE_CTX_init(ctx: PX509_STORE_CTX; store: PX509_STORE;
+  x509: PX509; chain: Pstack_st_X509): integer; cdecl;
+procedure X509_STORE_CTX_set_verify_cb(ctx: PX509_STORE_CTX; verify: X509_STORE_CTX_verify_cb); cdecl;
+procedure X509_STORE_CTX_set_cert(c: PX509_STORE_CTX; x: PX509); cdecl;
+function X509_verify_cert(ctx: PX509_STORE_CTX): integer; cdecl;
+function X509_STORE_CTX_get_error(ctx: PX509_STORE_CTX): integer; cdecl;
+function X509_verify_cert_error_string(n: integer): PUtf8Char; cdecl;
+function X509_verify(a: PX509; r: PEVP_PKEY): integer; cdecl;
+procedure X509_STORE_CTX_set_time(ctx: PX509_STORE_CTX; flags: cardinal; t: time_t); cdecl;
+function X509_STORE_CTX_set_purpose(ctx: PX509_STORE_CTX; purpose: integer): integer; cdecl;
+function X509_STORE_CTX_set_trust(ctx: PX509_STORE_CTX; trust: integer): integer; cdecl;
+function X509_LOOKUP_load_file(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
+function X509_LOOKUP_add_dir(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
 function ASN1_TIME_set(s: PASN1_TIME; t: time_t): PASN1_TIME; cdecl;
 function ASN1_TIME_set_string_X509(s: PASN1_TIME; str: PUtf8Char): integer; cdecl;
 function ASN1_TIME_to_tm(s: PASN1_TIME; tm: Ptm): integer; cdecl;
@@ -1955,6 +2129,9 @@ type
     X509_get_issuer_name: function(a: PX509): PX509_NAME; cdecl;
     X509_get_subject_name: function(a: PX509): PX509_NAME; cdecl;
     X509_get_pubkey: function(x: PX509): PEVP_PKEY; cdecl;
+    X509_up_ref: function(x: PX509): integer; cdecl;
+    X509_STORE_free: procedure(v: PX509_STORE); cdecl;
+    X509_STORE_CTX_free: procedure(ctx: PX509_STORE_CTX); cdecl;
     X509_free: procedure(a: PX509); cdecl;
     X509_new: function(): PX509; cdecl;
     X509_set_version: function(x: PX509; version: integer): integer; cdecl;
@@ -2001,6 +2178,33 @@ type
     X509V3_EXT_print: function(_out: PBIO; ext: PX509_EXTENSION; flag: cardinal; indent: integer): integer; cdecl;
     i2d_X509_bio: function(bp: PBIO; x509: PX509): integer; cdecl;
     d2i_X509_bio: function(bp: PBIO; x509: PPX509): PX509; cdecl;
+    X509_STORE_new: function(): PX509_STORE; cdecl;
+    X509_STORE_load_locations: function(ctx: PX509_STORE; _file: PUtf8Char; dir: PUtf8Char): integer; cdecl;
+    X509_STORE_set_default_paths: function(ctx: PX509_STORE): integer; cdecl;
+    X509_STORE_add_cert: function(ctx: PX509_STORE; x: PX509): integer; cdecl;
+    X509_STORE_add_crl: function(ctx: PX509_STORE; x: PX509_CRL): integer; cdecl;
+    X509_STORE_add_lookup: function(v: PX509_STORE; m: PX509_LOOKUP_METHOD): PX509_LOOKUP; cdecl;
+    X509_STORE_set_flags: function(ctx: PX509_STORE; flags: cardinal): integer; cdecl;
+    X509_STORE_set1_param: function(ctx: PX509_STORE; pm: PX509_VERIFY_PARAM): integer; cdecl;
+    X509_STORE_get0_param: function(ctx: PX509_STORE): PX509_VERIFY_PARAM; cdecl;
+    X509_STORE_set_verify_cb: procedure(ctx: PX509_STORE; verify_cb: X509_STORE_CTX_verify_cb); cdecl;
+    X509_LOOKUP_hash_dir: function(): PX509_LOOKUP_METHOD; cdecl;
+    X509_LOOKUP_file: function(): PX509_LOOKUP_METHOD; cdecl;
+    X509_LOOKUP_ctrl: function(ctx: PX509_LOOKUP; cmd: integer; argc: PUtf8Char; argl: integer; ret: PPUtf8Char): integer; cdecl;
+    X509_load_cert_file: function(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
+    X509_load_crl_file: function(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
+    X509_load_cert_crl_file: function(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
+    X509_STORE_CTX_new: function(): PX509_STORE_CTX; cdecl;
+    X509_STORE_CTX_init: function(ctx: PX509_STORE_CTX; store: PX509_STORE; x509: PX509; chain: Pstack_st_X509): integer; cdecl;
+    X509_STORE_CTX_set_verify_cb: procedure(ctx: PX509_STORE_CTX; verify: X509_STORE_CTX_verify_cb); cdecl;
+    X509_STORE_CTX_set_cert: procedure(c: PX509_STORE_CTX; x: PX509); cdecl;
+    X509_verify_cert: function(ctx: PX509_STORE_CTX): integer; cdecl;
+    X509_STORE_CTX_get_error: function(ctx: PX509_STORE_CTX): integer; cdecl;
+    X509_verify_cert_error_string: function(n: integer): PUtf8Char; cdecl;
+    X509_verify: function(a: PX509; r: PEVP_PKEY): integer; cdecl;
+    X509_STORE_CTX_set_time: procedure(ctx: PX509_STORE_CTX; flags: cardinal; t: time_t); cdecl;
+    X509_STORE_CTX_set_purpose: function(ctx: PX509_STORE_CTX; purpose: integer): integer; cdecl;
+    X509_STORE_CTX_set_trust: function(ctx: PX509_STORE_CTX; trust: integer): integer; cdecl;
     ASN1_TIME_set: function(s: PASN1_TIME; t: time_t): PASN1_TIME; cdecl;
     ASN1_TIME_set_string_X509: function(s: PASN1_TIME; str: PUtf8Char): integer; cdecl;
     ASN1_TIME_to_tm: function(s: PASN1_TIME; tm: Ptm): integer; cdecl;
@@ -2097,7 +2301,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..170] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..200] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2130,6 +2334,9 @@ const
     'X509_get_issuer_name',
     'X509_get_subject_name',
     'X509_get_pubkey',
+    'X509_up_ref',
+    'X509_STORE_free',
+    'X509_STORE_CTX_free',
     'X509_free',
     'X509_new',
     'X509_set_version',
@@ -2176,6 +2383,33 @@ const
     'X509V3_EXT_print',
     'i2d_X509_bio',
     'd2i_X509_bio',
+    'X509_STORE_new',
+    'X509_STORE_load_locations',
+    'X509_STORE_set_default_paths',
+    'X509_STORE_add_cert',
+    'X509_STORE_add_crl',
+    'X509_STORE_add_lookup',
+    'X509_STORE_set_flags',
+    'X509_STORE_set1_param',
+    'X509_STORE_get0_param',
+    'X509_STORE_set_verify_cb',
+    'X509_LOOKUP_hash_dir',
+    'X509_LOOKUP_file',
+    'X509_LOOKUP_ctrl',
+    'X509_load_cert_file',
+    'X509_load_crl_file',
+    'X509_load_cert_crl_file',
+    'X509_STORE_CTX_new',
+    'X509_STORE_CTX_init',
+    'X509_STORE_CTX_set_verify_cb',
+    'X509_STORE_CTX_set_cert',
+    'X509_verify_cert',
+    'X509_STORE_CTX_get_error',
+    'X509_verify_cert_error_string',
+    'X509_verify',
+    'X509_STORE_CTX_set_time',
+    'X509_STORE_CTX_set_purpose',
+    'X509_STORE_CTX_set_trust',
     'ASN1_TIME_set',
     'ASN1_TIME_set_string_X509',
     'ASN1_TIME_to_tm',
@@ -2279,7 +2513,7 @@ begin
 end;
 
 function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn;
-  f: dyn_MEM_free_fn): integer; cdecl;
+  f: dyn_MEM_free_fn): integer;
 begin
   result := libcrypto.CRYPTO_set_mem_functions(m, r, f);
 end;
@@ -2437,6 +2671,21 @@ end;
 function X509_get_pubkey(x: PX509): PEVP_PKEY;
 begin
   result := libcrypto.X509_get_pubkey(x);
+end;
+
+function X509_up_ref(x: PX509): integer;
+begin
+  result := libcrypto.X509_up_ref(x);
+end;
+
+procedure X509_STORE_free(v: PX509_STORE);
+begin
+  libcrypto.X509_STORE_free(v);
+end;
+
+procedure X509_STORE_CTX_free(ctx: PX509_STORE_CTX);
+begin
+  libcrypto.X509_STORE_CTX_free(ctx);
 end;
 
 procedure X509_free(a: PX509);
@@ -2673,6 +2922,154 @@ end;
 function d2i_X509_bio(bp: PBIO; x509: PPX509): PX509;
 begin
   result := libcrypto.d2i_X509_bio(bp, x509);
+end;
+
+function X509_STORE_new(): PX509_STORE;
+begin
+  result := libcrypto.X509_STORE_new();
+end;
+
+function X509_STORE_load_locations(ctx: PX509_STORE; _file: PUtf8Char; dir: PUtf8Char): integer;
+begin
+  result := libcrypto.X509_STORE_load_locations(ctx, _file, dir);
+end;
+
+function X509_STORE_set_default_paths(ctx: PX509_STORE): integer;
+begin
+  result := libcrypto.X509_STORE_set_default_paths(ctx);
+end;
+
+function X509_STORE_add_cert(ctx: PX509_STORE; x: PX509): integer;
+begin
+  result := libcrypto.X509_STORE_add_cert(ctx, x);
+end;
+
+function X509_STORE_add_crl(ctx: PX509_STORE; x: PX509_CRL): integer;
+begin
+  result := libcrypto.X509_STORE_add_crl(ctx, x);
+end;
+
+function X509_STORE_add_lookup(v: PX509_STORE; m: PX509_LOOKUP_METHOD): PX509_LOOKUP;
+begin
+  result := libcrypto.X509_STORE_add_lookup(v, m);
+end;
+
+function X509_STORE_set_flags(ctx: PX509_STORE; flags: cardinal): integer;
+begin
+  result := libcrypto.X509_STORE_set_flags(ctx, flags);
+end;
+
+function X509_STORE_set1_param(ctx: PX509_STORE; pm: PX509_VERIFY_PARAM): integer;
+begin
+  result := libcrypto.X509_STORE_set1_param(ctx, pm);
+end;
+
+function X509_STORE_get0_param(ctx: PX509_STORE): PX509_VERIFY_PARAM;
+begin
+  result := libcrypto.X509_STORE_get0_param(ctx);
+end;
+
+procedure X509_STORE_set_verify_cb(ctx: PX509_STORE; verify_cb: X509_STORE_CTX_verify_cb);
+begin
+  libcrypto.X509_STORE_set_verify_cb(ctx, verify_cb);
+end;
+
+function X509_LOOKUP_hash_dir(): PX509_LOOKUP_METHOD;
+begin
+  result := libcrypto.X509_LOOKUP_hash_dir();
+end;
+
+function X509_LOOKUP_file(): PX509_LOOKUP_METHOD;
+begin
+  result := libcrypto.X509_LOOKUP_file();
+end;
+
+function X509_LOOKUP_ctrl(ctx: PX509_LOOKUP; cmd: integer; argc: PUtf8Char;
+  argl: integer; ret: PPUtf8Char): integer;
+begin
+  result := libcrypto.X509_LOOKUP_ctrl(ctx, cmd, argc, argl, ret);
+end;
+
+function X509_load_cert_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer;
+begin
+  result := libcrypto.X509_load_cert_file(ctx, _file, typ);
+end;
+
+function X509_load_crl_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer;
+begin
+  result := libcrypto.X509_load_crl_file(ctx, _file, typ);
+end;
+
+function X509_load_cert_crl_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer;
+begin
+  result := libcrypto.X509_load_cert_crl_file(ctx, _file, typ);
+end;
+
+function X509_STORE_CTX_new(): PX509_STORE_CTX;
+begin
+  result := libcrypto.X509_STORE_CTX_new();
+end;
+
+function X509_STORE_CTX_init(ctx: PX509_STORE_CTX; store: PX509_STORE;
+  x509: PX509; chain: Pstack_st_X509): integer;
+begin
+  result := libcrypto.X509_STORE_CTX_init(ctx, store, X509, chain);
+end;
+
+procedure X509_STORE_CTX_set_verify_cb(ctx: PX509_STORE_CTX;
+  verify: X509_STORE_CTX_verify_cb);
+begin
+  libcrypto.X509_STORE_CTX_set_verify_cb(ctx, verify);
+end;
+
+procedure X509_STORE_CTX_set_cert(c: PX509_STORE_CTX; x: PX509);
+begin
+  libcrypto.X509_STORE_CTX_set_cert(c, x);
+end;
+
+function X509_verify_cert(ctx: PX509_STORE_CTX): integer;
+begin
+  result := libcrypto.X509_verify_cert(ctx);
+end;
+
+function X509_STORE_CTX_get_error(ctx: PX509_STORE_CTX): integer;
+begin
+  result := libcrypto.X509_STORE_CTX_get_error(ctx);
+end;
+
+function X509_verify_cert_error_string(n: integer): PUtf8Char;
+begin
+  result := libcrypto.X509_verify_cert_error_string(n);
+end;
+
+function X509_verify(a: PX509; r: PEVP_PKEY): integer;
+begin
+  result := libcrypto.X509_verify(a, r);
+end;
+
+procedure X509_STORE_CTX_set_time(ctx: PX509_STORE_CTX; flags: cardinal; t: time_t);
+begin
+  libcrypto.X509_STORE_CTX_set_time(ctx, flags, t);
+end;
+
+function X509_STORE_CTX_set_purpose(ctx: PX509_STORE_CTX; purpose: integer): integer;
+begin
+  result := libcrypto.X509_STORE_CTX_set_purpose(ctx, purpose);
+end;
+
+function X509_STORE_CTX_set_trust(ctx: PX509_STORE_CTX; trust: integer): integer;
+begin
+  result := libcrypto.X509_STORE_CTX_set_trust(ctx, trust);
+end;
+
+function X509_LOOKUP_load_file(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
+begin
+  result := libcrypto.X509_LOOKUP_ctrl(ctx, X509_L_FILE_LOAD, name, typ, nil);
+end;
+
+function X509_LOOKUP_add_dir(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
+begin
+  result := libcrypto.X509_LOOKUP_ctrl(ctx, X509_L_ADD_DIR, name, typ, nil);
 end;
 
 function ASN1_TIME_set(s: PASN1_TIME; t: time_t): PASN1_TIME;
@@ -3541,6 +3938,15 @@ function X509_get_subject_name(a: PX509): PX509_NAME; cdecl;
 function X509_get_pubkey(x: PX509): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get_pubkey';
 
+function X509_up_ref(x: PX509): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_up_ref';
+
+procedure X509_STORE_free(v: PX509_STORE); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_free';
+
+procedure X509_STORE_CTX_free(ctx: PX509_STORE_CTX); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_free';
+
 procedure X509_free(a: PX509); cdecl;
   external LIB_CRYPTO name _PU + 'X509_free';
 
@@ -3684,6 +4090,87 @@ function i2d_X509_bio(bp: PBIO; x509: PX509): integer; cdecl;
 
 function d2i_X509_bio(bp: PBIO; x509: PPX509): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_bio';
+
+function X509_STORE_new(): PX509_STORE; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_new';
+
+function X509_STORE_load_locations(ctx: PX509_STORE; _file: PUtf8Char; dir: PUtf8Char): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_load_locations';
+
+function X509_STORE_set_default_paths(ctx: PX509_STORE): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_set_default_paths';
+
+function X509_STORE_add_cert(ctx: PX509_STORE; x: PX509): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_add_cert';
+
+function X509_STORE_add_crl(ctx: PX509_STORE; x: PX509_CRL): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_add_crl';
+
+function X509_STORE_add_lookup(v: PX509_STORE; m: PX509_LOOKUP_METHOD): PX509_LOOKUP; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_add_lookup';
+
+function X509_STORE_set_flags(ctx: PX509_STORE; flags: cardinal): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_set_flags';
+
+function X509_STORE_set1_param(ctx: PX509_STORE; pm: PX509_VERIFY_PARAM): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_set1_param';
+
+function X509_STORE_get0_param(ctx: PX509_STORE): PX509_VERIFY_PARAM; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_get0_param';
+
+procedure X509_STORE_set_verify_cb(ctx: PX509_STORE; verify_cb: X509_STORE_CTX_verify_cb); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_set_verify_cb';
+
+function X509_LOOKUP_hash_dir(): PX509_LOOKUP_METHOD; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_LOOKUP_hash_dir';
+
+function X509_LOOKUP_file(): PX509_LOOKUP_METHOD; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_LOOKUP_file';
+
+function X509_LOOKUP_ctrl(ctx: PX509_LOOKUP; cmd: integer; argc: PUtf8Char; argl: integer; ret: PPUtf8Char): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_LOOKUP_ctrl';
+
+function X509_load_cert_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_load_cert_file';
+
+function X509_load_crl_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_load_crl_file';
+
+function X509_load_cert_crl_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_load_cert_crl_file';
+
+function X509_STORE_CTX_new(): PX509_STORE_CTX; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_new';
+
+function X509_STORE_CTX_init(ctx: PX509_STORE_CTX; store: PX509_STORE; x509: PX509; chain: Pstack_st_X509): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_init';
+
+procedure X509_STORE_CTX_set_verify_cb(ctx: PX509_STORE_CTX; verify: X509_STORE_CTX_verify_cb); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set_verify_cb';
+
+procedure X509_STORE_CTX_set_cert(c: PX509_STORE_CTX; x: PX509); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set_cert';
+
+function X509_verify_cert(ctx: PX509_STORE_CTX): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_verify_cert';
+
+function X509_STORE_CTX_get_error(ctx: PX509_STORE_CTX): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_get_error';
+
+function X509_verify_cert_error_string(n: integer): PUtf8Char; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_verify_cert_error_string';
+
+function X509_verify(a: PX509; r: PEVP_PKEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_verify';
+
+procedure X509_STORE_CTX_set_time(ctx: PX509_STORE_CTX; flags: cardinal; t: time_t); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set_time';
+
+function X509_STORE_CTX_set_purpose(ctx: PX509_STORE_CTX; purpose: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set_purpose';
+
+function X509_STORE_CTX_set_trust(ctx: PX509_STORE_CTX; trust: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set_trust';
 
 function ASN1_TIME_set(s: PASN1_TIME; t: time_t): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_TIME_set';
@@ -4444,6 +4931,25 @@ begin
 end;
 
 
+
+{ X509_STORE_CTX }
+
+procedure X509_STORE_CTX.Free;
+begin
+  if @self <> nil then
+    X509_STORE_CTX_free(@self);
+end;
+
+{ X509_STORE }
+
+procedure X509_STORE.Free;
+begin
+  if @self <> nil then
+    X509_STORE_free(@self);
+end;
+
+
+
 { asn1_string_st }
 
 function asn1_string_st.Data: pointer;
@@ -4865,6 +5371,14 @@ begin
   if PEM_write_bio_X509(bio, @self) = OPENSSLSUCCESS then
     result := bio.ToUtf8;
   bio.Free;
+end;
+
+function X509.Acquire: integer;
+begin
+  if @self = nil then
+    result := -1
+  else
+    result := X509_up_ref(@self);
 end;
 
 procedure X509.Free;
