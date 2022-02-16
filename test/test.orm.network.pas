@@ -190,7 +190,9 @@ begin
     DataBase.DB.Synchronous := smOff;
     DataBase.DB.LockingMode := lmExclusive;
     Server := TRestHttpServer.Create(HTTP_DEFAULTPORT, [DataBase], '+',
-      HTTP_DEFAULT_MODE, 16, secSynShaAes, '', '', [{rsoLogVerbose}]);
+      HTTP_DEFAULT_MODE, 16,
+      {$ifdef PUREMORMOT2} secNone {$else} secSynShaAes {$endif},
+      '', '', [rsoLogVerbose]);
     fRunConsole := FormatString('%using % %',
       [fRunConsole, Server.HttpServer, Server.HttpServer.APIVersion]);
     Database.NoAjaxJson := true; // expect not expanded JSON from now on
@@ -447,7 +449,8 @@ begin
       end;
     // launch one HTTP server for all TRestServerDB instances
     Server := TRestHttpServer.Create(HTTP_DEFAULTPORT, [Instance[0].Database,
-      Instance[1].Database, Instance[2].Database], '+', HTTP_DEFAULT_MODE, 4, secNone);
+      Instance[1].Database, Instance[2].Database], '+', HTTP_DEFAULT_MODE, 4,
+      secNone, '', '', [rsoLogVerbose]);
     // initialize the clients
     for i := 0 to high(Instance) do
       with Instance[i] do
