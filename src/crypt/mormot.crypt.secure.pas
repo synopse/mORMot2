@@ -1635,7 +1635,7 @@ function NextPem(var P: PUtf8Char; Kind: PPemKind = nil): RawUtf8;
 
 /// quickly check the begin/end of a single-instance PEM text
 // - do not validate the internal Base64 encoding, just the trailer/ending lines
-// - expects a single-instance PEM, i.e. with a single key or certificate within
+// - expects at least a single-instance PEM, with ----BEGIN and -----END markers
 function IsPem(const pem: RawUtf8): boolean;
 
 /// low-level binary-to-DER encoder
@@ -4443,25 +4443,66 @@ end;
 
 function IsPem(const pem: RawUtf8): boolean;
 var
-  l: PtrUInt;
+  i: PtrUInt;
 begin
-  l := length(pem);
-  while (l > 0) and
-        (pem[l] < ' ') do
-    dec(l); // ignore trailing #13#10
-  result := (l > 10) and
-            (PCardinal(pem)^ = $2d2d2d2d) and // start and end with ----
-            (PCardinal(PAnsiChar(pointer(pem)) + l - 4)^ = $2d2d2d2d);
+  i := PosEx('-----BEGIN', pem); // ignore e.g. any trailing comments
+  result := (i <> 0) and
+            (PosEx('-----END', pem, i + 10) <> 0);
 end;
 
-function PemToDerBuf(s, d: PUtf8Char): PUtf8Char;
+function PemHeader(lab: PUtf8Char): TPemKind;
+begin
+  for result := succ(low(result)) to high(result) do
+    if IdemPropNameUSameLenNotNull(@PEM_BEGIN[result][12], lab, 10) then
+      exit;
+  result := low(result);
+end;
+
+function GotoMarker(P: PUtf8Char): PUtf8Char;
+begin
+  result := nil;
+  repeat
+    if P = nil then
+      exit;
+    if PCardinal(P)^ = $2d2d2d2d then
+      break;
+    P := GotoNextLine(P);
+  until false;
+  result := P;
+end;
+
+function ParsePem(var P: PUtf8Char; Kind: PPemKind; var Len: PtrInt;
+  ExcludeMarkers: boolean): PUtf8Char;
+var
+  start: PUtf8Char;
+begin
+  result := nil;
+  start := GotoMarker(P);
+  if start = nil then
+    exit;
+  if Kind <> nil then
+    Kind^ := PemHeader(start + 11);   // label just after '-----BEGIN '
+  P := GotoMarker(GotoNextLine(start));
+  if P = nil  then
+    exit;  // no trailing '-----END '
+  if ExcludeMarkers then
+    start := GotoNextLine(start)
+  else
+    P := GotoNextLine(P);
+  result := start;
+  Len := P - start;
+  if ExcludeMarkers then
+    P := GotoNextLine(P);
+end;
+
+function Base64IgnoreLineFeeds(s, d: PUtf8Char): PUtf8Char;
 var
   c: AnsiChar;
 begin
   repeat
     c := s^;
     inc(s);
-    if c <= ' ' then
+    if c <= ' ' then // do not append any space or line feed
       continue
     else if c = '-' then
       break; // no need to check #0 since -----END... will eventually appear
@@ -4473,52 +4514,34 @@ end;
 
 function PemToDer(const pem: RawUtf8): RawByteString;
 var
-  s, d: PUtf8Char;
+  P: PUtf8Char;
+  len: PtrInt;
   base64: TSynTempBuffer; // pem is small, so a 4KB temp buffer is fine enough
 begin
-  if IsPem(pem) then
+  P := pointer(pem);
+  P := ParsePem(P, nil, len, {excludemarkers=}true);
+  if P <> nil then
   begin
-    s := GotoNextLine(pointer(pem));
-    if s <> nil then
-    begin
-      d := PemToDerBuf(s, base64.Init(length(pem) - (s - pointer(pem))));
-      result := Base64ToBinSafe(base64.buf, d - base64.buf);
-      base64.Done;
-      if result <> '' then
-        exit;
-    end;
+    base64.Init(len);
+    len := Base64IgnoreLineFeeds(P, base64.buf) - base64.buf;
+    result := Base64ToBinSafe(base64.buf, len);
+    base64.Done;
+    if result <> '' then
+      exit;
   end;
   result := pem;
 end;
 
-function PemHeader(lab: PUtf8Char): TPemKind;
-begin
-  for result := succ(low(result)) to high(result) do
-    if IdemPropNameUSameLenNotNull(@PEM_BEGIN[result][12], lab, 10) then
-      exit;
-  result := low(result);
-end;
-
 function NextPem(var P: PUtf8Char; Kind: PPemKind): RawUtf8;
 var
-  start: PUtf8Char;
+  len: PtrInt;
+  pem: PUtf8Char;
 begin
-  result := '';
-  if P = nil then
-    exit;
-  start := GotoNextNotSpace(P);
-  if PCardinal(start)^ <> $2d2d2d2d then
-    exit;
-  if Kind <> nil then
-    Kind^ := PemHeader(start + 11); // label just after '-----BEGIN '
-  P := start;
-  repeat
-    P := GotoNextLine(P);
-    if P = nil then
-      exit;
-  until PCardinal(P)^ = $2d2d2d2d;
-  P := GotoNextLine(P);
-  FastSetString(result, start, P - start);
+  pem := ParsePem(P, Kind, len, {excludemarkers=}false);
+  if pem = nil then
+    result := ''
+  else
+    FastSetString(result, pem, len);
 end;
 
 const
