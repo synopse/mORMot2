@@ -3007,6 +3007,8 @@ begin
   else
   {$endif OSPOSIX}
     OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
+  if aTLSContext <> nil then
+    aTLSContext^ := TLS; // copy back information to the caller TNetTlsContext
 end;
 
 constructor TCrtSocket.OpenUri(const aUri: RawUtf8; out aAddress: RawUtf8;
