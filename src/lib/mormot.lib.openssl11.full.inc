@@ -18588,9 +18588,6 @@ function X509_cmp(a: PX509; b: PX509): integer; cdecl;
 function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_cmp';
 
-function X509_NAME_hash(x: PX509_NAME): cardinal; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_hash';
-
 function X509_NAME_hash_old(x: PX509_NAME): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_hash_old';
 
