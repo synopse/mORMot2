@@ -21014,9 +21014,6 @@ function PEM_read_X509(fp: PPointer; x: PPX509; cb: Ppem_password_cb; u: pointer
 function PEM_write_X509(fp: PPointer; x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_X509';
 
-function PEM_read_bio_X509_AUX(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_read_bio_X509_AUX';
-
 function PEM_read_X509_AUX(fp: PPointer; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_X509_AUX';
 

@@ -1156,6 +1156,9 @@ type
   public
     function SetDefaultPaths: boolean;
     function AddCertificate(x: PX509): boolean;
+    function AddFromBinary(const Der: RawByteString): boolean;
+    /// returns the number of added certificates
+    function AddFromPem(const Pem: RawUtf8): integer;
     // - CAFile format is concatenated PEM certificates and CRLs
     // - CAFolder expects the certificates to be stored as hash.N (or hash.rN for
     // CRLs), with hash.N being X509_NAME.Hash SHA1 first four bytes - see
@@ -1319,7 +1322,7 @@ type
     /// serialize the certificate as DER raw binary
     function ToBinary: RawByteString;
     /// serialize the certificate as PEM text
-    function ToPEM: RawUtf8;
+    function ToPem: RawUtf8;
     /// increment the X509 reference count to avoid premature release
     function Acquire: integer;
     /// release this X509 Certificate instance
@@ -1536,6 +1539,7 @@ function X509_get_extended_key_usage(x: PX509): cardinal; cdecl;
 function X509V3_EXT_print(_out: PBIO; ext: PX509_EXTENSION; flag: cardinal; indent: integer): integer; cdecl;
 function i2d_X509_bio(bp: PBIO; x509: PX509): integer; cdecl;
 function d2i_X509_bio(bp: PBIO; x509: PPX509): PX509; cdecl;
+function PEM_read_bio_X509_AUX(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
 function X509_STORE_new(): PX509_STORE; cdecl;
 function X509_STORE_load_locations(ctx: PX509_STORE; _file: PUtf8Char; dir: PUtf8Char): integer; cdecl;
 function X509_STORE_set_default_paths(ctx: PX509_STORE): integer; cdecl;
@@ -1745,6 +1749,9 @@ function PX509DynArrayToPem(const X509: PX509DynArray): RawUtf8;
 /// convert e.g. SSL.GetPeerCertificates result as list of PeerInfo text
 function PX509DynArrayToText(const X509: PX509DynArray): RawUtf8;
 
+/// finalize a dynamic array of X509 instances
+procedure PX509DynArrayFree(const X509: PX509DynArray);
+
 /// create a new X509 Certificate Instance
 // - with a random serial number
 // - use PX509.SetValidity/SetBasic/SetUsage methods to set additional fields
@@ -1754,7 +1761,12 @@ function NewCertificate: PX509;
 /// unserialize a new X509 Certificate Instance
 // - from DER binary as serialized by X509.ToBinary
 // - use LoadCertificate(PemToDer()) to load a PEM certificate
-function LoadCertificate(const Binary: RawByteString): PX509;
+function LoadCertificate(const Der: RawByteString): PX509;
+
+/// unserialize one or several new X509 Certificate Instance from PEM
+// - from PEM concatenated content
+// - once done with the X509 instances, free them e.g. using PX509DynArrayFree()
+function LoadCertificates(const Pem: RawUtf8): PX509DynArray;
 
 /// create a new X509 Certificates Store Instance
 function NewCertificateStore: PX509_STORE;
@@ -2216,6 +2228,7 @@ type
     X509V3_EXT_print: function(_out: PBIO; ext: PX509_EXTENSION; flag: cardinal; indent: integer): integer; cdecl;
     i2d_X509_bio: function(bp: PBIO; x509: PX509): integer; cdecl;
     d2i_X509_bio: function(bp: PBIO; x509: PPX509): PX509; cdecl;
+    PEM_read_bio_X509_AUX: function(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
     X509_STORE_new: function(): PX509_STORE; cdecl;
     X509_STORE_load_locations: function(ctx: PX509_STORE; _file: PUtf8Char; dir: PUtf8Char): integer; cdecl;
     X509_STORE_set_default_paths: function(ctx: PX509_STORE): integer; cdecl;
@@ -2339,7 +2352,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..201] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..202] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2422,6 +2435,7 @@ const
     'X509V3_EXT_print',
     'i2d_X509_bio',
     'd2i_X509_bio',
+    'PEM_read_bio_X509_AUX',
     'X509_STORE_new',
     'X509_STORE_load_locations',
     'X509_STORE_set_default_paths',
@@ -2966,6 +2980,11 @@ end;
 function d2i_X509_bio(bp: PBIO; x509: PPX509): PX509;
 begin
   result := libcrypto.d2i_X509_bio(bp, x509);
+end;
+
+function PEM_read_bio_X509_AUX(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509;
+begin
+  result := libcrypto.PEM_read_bio_X509_AUX(bp, x, cb, u);
 end;
 
 function X509_STORE_new(): PX509_STORE;
@@ -4138,6 +4157,9 @@ function i2d_X509_bio(bp: PBIO; x509: PX509): integer; cdecl;
 function d2i_X509_bio(bp: PBIO; x509: PPX509): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_bio';
 
+function PEM_read_bio_X509_AUX(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
+  external LIB_CRYPTO name _PU + 'PEM_read_bio_X509_AUX';
+
 function X509_STORE_new(): PX509_STORE; cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_new';
 
@@ -5100,6 +5122,37 @@ begin
             (X509_STORE_add_cert(@self, x) = OPENSSLSUCCESS);
 end;
 
+function X509_STORE.AddFromBinary(const Der: RawByteString): boolean;
+var
+  x: PX509;
+begin
+  result := false;
+  if (@self = nil) or
+     (Der = '') then
+    exit;
+  x := LoadCertificate(Der);
+  if x = nil then
+    exit;
+  result := X509_STORE_add_cert(@self, x) = OPENSSLSUCCESS;
+  x.Free;
+end;
+
+function X509_STORE.AddFromPem(const Pem: RawUtf8): integer;
+var
+  x: PX509DynArray;
+  i: PtrInt;
+begin
+  result := 0;
+  if (@self = nil) or
+     (Pem = '') then
+    exit;
+  x := LoadCertificates(Pem);
+  for i := 0 to length(x) - 1 do
+    if AddCertificate(x[i]) then
+      inc(result);
+  PX509DynArrayFree(x);
+end;
+
 function X509_STORE.SetLocations(const CAFile, CAFolder: RawUtf8): boolean;
 begin
   result := (@self <> nil) and
@@ -5554,7 +5607,7 @@ begin
   bio.Free;
 end;
 
-function X509.ToPEM: RawUtf8;
+function X509.ToPem: RawUtf8;
 var
   bio: PBIO;
 begin
@@ -5607,18 +5660,39 @@ begin
     x.Free;
 end;
 
-function LoadCertificate(const Binary: RawByteString): PX509;
+function LoadCertificate(const Der: RawByteString): PX509;
 var
   bio: PBIO;
 begin
-  if Binary = '' then
+  if Der = '' then
     result := nil
   else
   begin
-    bio := BIO_new_mem_buf(pointer(Binary), length(Binary));
+    bio := BIO_new_mem_buf(pointer(Der), length(Der));
     result := d2i_X509_bio(bio, nil);
     bio.Free;
   end;
+end;
+
+function LoadCertificates(const Pem: RawUtf8): PX509DynArray;
+var
+  bio: PBIO;
+  x: PX509;
+  n: integer;
+begin
+  result := nil;
+  if Pem = '' then
+    exit;
+  bio := BIO_new_mem_buf(pointer(Pem), length(Pem));
+  n := 0;
+  repeat
+    x := PEM_read_bio_X509_AUX(bio, nil, nil, nil);
+    if x = nil then
+      break;
+    PtrArrayAdd(result, x, n);
+  until false;
+  SetLength(result, n);
+  bio.Free;
 end;
 
 function NewCertificateStore: PX509_STORE;
@@ -5668,6 +5742,14 @@ begin
     exit;
   for i := 0 to length(X509) - 1 do
     result := result +  X509[i].PeerInfo + '---------'#13#10;
+end;
+
+procedure PX509DynArrayFree(const X509: PX509DynArray);
+var
+  i: PtrInt;
+begin
+  for i := 0 to length(X509) - 1 do
+    X509[i].Free;
 end;
 
 
@@ -5865,6 +5947,7 @@ var
   v: integer;
   P: PUtf8Char;
   h: RawUtf8;
+  //x: PX509DynArray;
   //ext: TX509_Extensions; exts: TRawUtf8DynArray;
 begin
   fSocket := Socket;
@@ -5949,6 +6032,9 @@ begin
     fPeer := fSsl.PeerCertificate;
     // writeln(fSsl.PeerCertificatesAsPEM);
     // writeln(fSsl.PeerCertificatesAsText);
+    //x := LoadCertificates(fSsl.PeerCertificatesAsPEM);
+    //writeln(PX509DynArrayToPem(x));
+    //PX509DynArrayFree(x);
     if (fPeer = nil) and
        not Context.IgnoreCertificateErrors then
       EOpenSslClient.Check(self, 'AfterConnection getpeercertificate',
