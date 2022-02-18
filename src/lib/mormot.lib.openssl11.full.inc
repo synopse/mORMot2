@@ -2225,18 +2225,6 @@ const
   SN_basic_constraints = 'basicConstraints';
   LN_basic_constraints = 'X509v3 Basic Constraints';
   NID_basic_constraints = 87;
-  SN_crl_number = 'crlNumber';
-  LN_crl_number = 'X509v3 CRL Number';
-  NID_crl_number = 88;
-  SN_crl_reason = 'CRLReason';
-  LN_crl_reason = 'X509v3 CRL Reason Code';
-  NID_crl_reason = 141;
-  SN_invalidity_date = 'invalidityDate';
-  LN_invalidity_date = 'Invalidity Date';
-  NID_invalidity_date = 142;
-  SN_delta_crl = 'deltaCRL';
-  LN_delta_crl = 'X509v3 Delta CRL Indicator';
-  NID_delta_crl = 140;
   SN_issuing_distribution_point = 'issuingDistributionPoint';
   LN_issuing_distribution_point = 'X509v3 Issuing Distribution Point';
   NID_issuing_distribution_point = 770;
@@ -5064,19 +5052,6 @@ const
   GEN_URI = 6;
   GEN_IPADD = 7;
   GEN_RID = 8;
-  
-  CRLDP_ALL_REASONS = $807f;
-  CRL_REASON_NONE = -1;
-  CRL_REASON_UNSPECIFIED = 0;
-  CRL_REASON_KEY_COMPROMISE = 1;
-  CRL_REASON_CA_COMPROMISE = 2;
-  CRL_REASON_AFFILIATION_CHANGED = 3;
-  CRL_REASON_SUPERSEDED = 4;
-  CRL_REASON_CESSATION_OF_OPERATION = 5;
-  CRL_REASON_CERTIFICATE_HOLD = 6;
-  CRL_REASON_REMOVE_FROM_CRL = 8;
-  CRL_REASON_PRIVILEGE_WITHDRAWN = 9;
-  CRL_REASON_AA_COMPROMISE = 10;
   
   IDP_PRESENT = $1;
   IDP_INVALID = $2;
@@ -8703,8 +8678,6 @@ type
   PPstack_st_X509_NAME = ^Pstack_st_X509_NAME;
   PX509_extension_st = pointer;
   PPX509_extension_st = ^PX509_extension_st;
-  Pstack_st_X509_EXTENSION = pointer;
-  PPstack_st_X509_EXTENSION = ^Pstack_st_X509_EXTENSION;
   Px509_attributes_st = pointer;
   PPx509_attributes_st = ^Px509_attributes_st;
   Pstack_st_X509_ATTRIBUTE = pointer;
@@ -8721,8 +8694,6 @@ type
   PPstack_st_X509 = ^Pstack_st_X509;
   Pstack_st_X509_TRUST = pointer;
   PPstack_st_X509_TRUST = ^Pstack_st_X509_TRUST;
-  Pstack_st_X509_REVOKED = pointer;
-  PPstack_st_X509_REVOKED = ^Pstack_st_X509_REVOKED;
   PX509_crl_info_st = pointer;
   PPX509_crl_info_st = ^PX509_crl_info_st;
   Pstack_st_X509_CRL = pointer;
@@ -9109,12 +9080,6 @@ type
   PPEC_KEY_METHOD = ^PEC_KEY_METHOD;
   PSSL_DANE = pointer;
   PPSSL_DANE = ^PSSL_DANE;
-  PX509_CRL = pointer;
-  PPX509_CRL = ^PX509_CRL;
-  PX509_CRL_METHOD = pointer;
-  PPX509_CRL_METHOD = ^PX509_CRL_METHOD;
-  PX509_REVOKED = pointer;
-  PPX509_REVOKED = ^PX509_REVOKED;
   PX509_LOOKUP = pointer;
   PPX509_LOOKUP = ^PX509_LOOKUP;
   PX509_SIG_INFO = pointer;
@@ -12812,12 +12777,6 @@ function ASN1_INTEGER_dup(x: PASN1_INTEGER): PASN1_INTEGER; cdecl;
 function ASN1_INTEGER_cmp(x: PASN1_INTEGER; y: PASN1_INTEGER): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_INTEGER_cmp';
 
-function ASN1_ENUMERATED_new(): PASN1_ENUMERATED; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_ENUMERATED_new';
-
-procedure ASN1_ENUMERATED_free(a: PASN1_ENUMERATED); cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_ENUMERATED_free';
-
 function d2i_ASN1_ENUMERATED(a: PPASN1_ENUMERATED; _in: PPByte; len: integer): PASN1_ENUMERATED; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_ASN1_ENUMERATED';
 
@@ -13097,12 +13056,6 @@ function i2d_ASN1_GENERALIZEDTIME(a: PASN1_GENERALIZEDTIME; _out: PPByte): integ
 function ASN1_GENERALIZEDTIME_it(): PASN1_ITEM; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_GENERALIZEDTIME_it';
 
-function ASN1_TIME_new(): PASN1_TIME; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_TIME_new';
-
-procedure ASN1_TIME_free(a: PASN1_TIME); cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_TIME_free';
-
 function d2i_ASN1_TIME(a: PPASN1_TIME; _in: PPByte; len: integer): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_ASN1_TIME';
 
@@ -13189,12 +13142,6 @@ function ASN1_ENUMERATED_get_int64(pr: PInt64; a: PASN1_ENUMERATED): integer; cd
 
 function ASN1_ENUMERATED_set_int64(a: PASN1_ENUMERATED; r: Int64): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_ENUMERATED_set_int64';
-
-function ASN1_ENUMERATED_set(a: PASN1_ENUMERATED; v: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_ENUMERATED_set';
-
-function ASN1_ENUMERATED_get(a: PASN1_ENUMERATED): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_ENUMERATED_get';
 
 function BN_to_ASN1_ENUMERATED(bn: PBIGNUM; ai: PASN1_ENUMERATED): PASN1_ENUMERATED; cdecl;
   external LIB_CRYPTO name _PU + 'BN_to_ASN1_ENUMERATED';
@@ -17587,12 +17534,6 @@ procedure X509_CRL_set_meth_data(crl: PX509_CRL; dat: pointer); cdecl;
 function X509_CRL_get_meth_data(crl: PX509_CRL): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_get_meth_data';
 
-function X509_REQ_verify(a: PX509_REQ; r: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REQ_verify';
-
-function X509_CRL_verify(a: PX509_CRL; r: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_verify';
-
 function NETSCAPE_SPKI_verify(a: PNETSCAPE_SPKI; r: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'NETSCAPE_SPKI_verify';
 
@@ -17626,9 +17567,6 @@ function X509_http_nbio(rctx: POCSP_REQ_CTX; pcert: PPX509): integer; cdecl;
 function X509_REQ_sign_ctx(x: PX509_REQ; ctx: PEVP_MD_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_sign_ctx';
 
-function X509_CRL_sign(x: PX509_CRL; pkey: PEVP_PKEY; md: PEVP_MD): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_sign';
-
 function X509_CRL_sign_ctx(x: PX509_CRL; ctx: PEVP_MD_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_sign_ctx';
 
@@ -17655,12 +17593,6 @@ function d2i_X509_fp(fp: PPointer; x509: PPX509): PX509; cdecl;
 
 function i2d_X509_fp(fp: PPointer; x509: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'i2d_X509_fp';
-
-function d2i_X509_CRL_fp(fp: PPointer; crl: PPX509_CRL): PX509_CRL; cdecl;
-  external LIB_CRYPTO name _PU + 'd2i_X509_CRL_fp';
-
-function i2d_X509_CRL_fp(fp: PPointer; crl: PX509_CRL): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'i2d_X509_CRL_fp';
 
 function d2i_X509_REQ_fp(fp: PPointer; req: PPX509_REQ): PX509_REQ; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_REQ_fp';
@@ -17737,18 +17669,6 @@ function i2d_PUBKEY_fp(fp: PPointer; pkey: PEVP_PKEY): integer; cdecl;
 function d2i_PUBKEY_fp(fp: PPointer; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_PUBKEY_fp';
 
-function d2i_X509_CRL_bio(bp: PBIO; crl: PPX509_CRL): PX509_CRL; cdecl;
-  external LIB_CRYPTO name _PU + 'd2i_X509_CRL_bio';
-
-function i2d_X509_CRL_bio(bp: PBIO; crl: PX509_CRL): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'i2d_X509_CRL_bio';
-
-function d2i_X509_REQ_bio(bp: PBIO; req: PPX509_REQ): PX509_REQ; cdecl;
-  external LIB_CRYPTO name _PU + 'd2i_X509_REQ_bio';
-
-function i2d_X509_REQ_bio(bp: PBIO; req: PX509_REQ): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'i2d_X509_REQ_bio';
-
 function d2i_RSAPrivateKey_bio(bp: PBIO; rsa: PPRSA): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_RSAPrivateKey_bio';
 
@@ -17814,9 +17734,6 @@ function X509_ATTRIBUTE_dup(xa: PX509_ATTRIBUTE): PX509_ATTRIBUTE; cdecl;
 
 function X509_EXTENSION_dup(ex: PX509_EXTENSION): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509_EXTENSION_dup';
-
-function X509_CRL_dup(crl: PX509_CRL): PX509_CRL; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_dup';
 
 function X509_REVOKED_dup(rev: PX509_REVOKED): PX509_REVOKED; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REVOKED_dup';
@@ -18040,9 +17957,6 @@ function X509_ATTRIBUTE_it(): PASN1_ITEM; cdecl;
 function X509_ATTRIBUTE_create(nid: integer; atrtype: integer; value: pointer): PX509_ATTRIBUTE; cdecl;
   external LIB_CRYPTO name _PU + 'X509_ATTRIBUTE_create';
 
-function X509_EXTENSION_new(): PX509_EXTENSION; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_EXTENSION_new';
-
 function d2i_X509_EXTENSION(a: PPX509_EXTENSION; _in: PPByte; len: integer): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_EXTENSION';
 
@@ -18202,12 +18116,6 @@ function X509_get0_trust_objects(x: PX509): Pstack_st_ASN1_OBJECT; cdecl;
 function X509_get0_reject_objects(x: PX509): Pstack_st_ASN1_OBJECT; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get0_reject_objects';
 
-function X509_REVOKED_new(): PX509_REVOKED; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REVOKED_new';
-
-procedure X509_REVOKED_free(a: PX509_REVOKED); cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REVOKED_free';
-
 function d2i_X509_REVOKED(a: PPX509_REVOKED; _in: PPByte; len: integer): PX509_REVOKED; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_REVOKED';
 
@@ -18232,11 +18140,11 @@ function i2d_X509_CRL_INFO(a: PX509_CRL_INFO; _out: PPByte): integer; cdecl;
 function X509_CRL_INFO_it(): PASN1_ITEM; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_INFO_it';
 
-function X509_CRL_new(): PX509_CRL; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_new';
+function d2i_X509_CRL_fp(fp: PPointer; crl: PPX509_CRL): PX509_CRL; cdecl;
+  external LIB_CRYPTO name _PU + 'd2i_X509_CRL_fp';
 
-procedure X509_CRL_free(a: PX509_CRL); cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_free';
+function i2d_X509_CRL_fp(fp: PPointer; crl: PX509_CRL): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'i2d_X509_CRL_fp';
 
 function d2i_X509_CRL(a: PPX509_CRL; _in: PPByte; len: integer): PX509_CRL; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_CRL';
@@ -18246,9 +18154,6 @@ function i2d_X509_CRL(a: PX509_CRL; _out: PPByte): integer; cdecl;
 
 function X509_CRL_it(): PASN1_ITEM; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_it';
-
-function X509_CRL_add0_revoked(crl: PX509_CRL; rev: PX509_REVOKED): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_add0_revoked';
 
 function X509_CRL_get0_by_serial(crl: PX509_CRL; ret: PPX509_REVOKED; serial: PASN1_INTEGER): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_get0_by_serial';
@@ -18382,9 +18287,6 @@ function X509_certificate_type(x: PX509; pubkey: PEVP_PKEY): integer; cdecl;
 function X509_REQ_get_version(req: PX509_REQ): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_get_version';
 
-function X509_REQ_set_version(x: PX509_REQ; version: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REQ_set_version';
-
 function X509_REQ_set_subject_name(req: PX509_REQ; name: PX509_NAME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_set_subject_name';
 
@@ -18451,53 +18353,17 @@ function X509_REQ_add1_attr_by_NID(req: PX509_REQ; nid: integer; typ: integer; b
 function X509_REQ_add1_attr_by_txt(req: PX509_REQ; attrname: PUtf8Char; typ: integer; bytes: PByte; len: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_add1_attr_by_txt';
 
-function X509_CRL_set_version(x: PX509_CRL; version: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_set_version';
-
-function X509_CRL_set_issuer_name(x: PX509_CRL; name: PX509_NAME): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_set_issuer_name';
-
 function X509_CRL_set1_lastUpdate(x: PX509_CRL; tm: PASN1_TIME): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_set1_lastUpdate';
-
-function X509_CRL_set_lastUpdate(x: PX509_CRL; tm: PASN1_TIME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_set1_lastUpdate';
 
 function X509_CRL_set1_nextUpdate(x: PX509_CRL; tm: PASN1_TIME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_set1_nextUpdate';
-
-function X509_CRL_set_nextUpdate(x: PX509_CRL; tm: PASN1_TIME): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_set1_nextUpdate';
-
-function X509_CRL_sort(crl: PX509_CRL): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_sort';
-
-function X509_CRL_up_ref(crl: PX509_CRL): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_up_ref';
-
-function X509_CRL_get_version(crl: PX509_CRL): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_get_version';
 
 function X509_CRL_get0_lastUpdate(crl: PX509_CRL): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_get0_lastUpdate';
 
 function X509_CRL_get0_nextUpdate(crl: PX509_CRL): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_get0_nextUpdate';
-
-function X509_CRL_get_lastUpdate(crl: PX509_CRL): PASN1_TIME; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_get_lastUpdate';
-
-function X509_CRL_get_nextUpdate(crl: PX509_CRL): PASN1_TIME; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_get_nextUpdate';
-
-function X509_CRL_get_issuer(crl: PX509_CRL): PX509_NAME; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_get_issuer';
-
-function X509_CRL_get0_extensions(crl: PX509_CRL): Pstack_st_X509_EXTENSION; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_get0_extensions';
-
-function X509_CRL_get_REVOKED(crl: PX509_CRL): Pstack_st_X509_REVOKED; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_get_REVOKED';
 
 procedure X509_CRL_get0_signature(crl: PX509_CRL; psig: PPASN1_BIT_STRING; palg: PPX509_ALGOR); cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_get0_signature';
@@ -18507,18 +18373,6 @@ function X509_CRL_get_signature_nid(crl: PX509_CRL): integer; cdecl;
 
 function i2d_re_X509_CRL_tbs(req: PX509_CRL; pp: PPByte): integer; cdecl;
   external LIB_CRYPTO name _PU + 'i2d_re_X509_CRL_tbs';
-
-function X509_REVOKED_get0_serialNumber(x: PX509_REVOKED): PASN1_INTEGER; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REVOKED_get0_serialNumber';
-
-function X509_REVOKED_set_serialNumber(x: PX509_REVOKED; serial: PASN1_INTEGER): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REVOKED_set_serialNumber';
-
-function X509_REVOKED_get0_revocationDate(x: PX509_REVOKED): PASN1_TIME; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REVOKED_get0_revocationDate';
-
-function X509_REVOKED_set_revocationDate(r: PX509_REVOKED; tm: PASN1_TIME): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REVOKED_set_revocationDate';
 
 function X509_REVOKED_get0_extensions(r: PX509_REVOKED): Pstack_st_X509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REVOKED_get0_extensions';
@@ -18724,12 +18578,6 @@ function X509_CRL_delete_ext(x: PX509_CRL; loc: integer): PX509_EXTENSION; cdecl
 function X509_CRL_add_ext(x: PX509_CRL; ex: PX509_EXTENSION; loc: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_add_ext';
 
-function X509_CRL_get_ext_d2i(x: PX509_CRL; nid: integer; crit: PInteger; idx: PInteger): pointer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_get_ext_d2i';
-
-function X509_CRL_add1_ext_i2d(x: PX509_CRL; nid: integer; value: pointer; crit: integer; flags: cardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_add1_ext_i2d';
-
 function X509_REVOKED_get_ext_count(x: PX509_REVOKED): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REVOKED_get_ext_count';
 
@@ -18748,29 +18596,11 @@ function X509_REVOKED_get_ext(x: PX509_REVOKED; loc: integer): PX509_EXTENSION; 
 function X509_REVOKED_delete_ext(x: PX509_REVOKED; loc: integer): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REVOKED_delete_ext';
 
-function X509_REVOKED_add_ext(x: PX509_REVOKED; ex: PX509_EXTENSION; loc: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REVOKED_add_ext';
-
-function X509_REVOKED_get_ext_d2i(x: PX509_REVOKED; nid: integer; crit: PInteger; idx: PInteger): pointer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REVOKED_get_ext_d2i';
-
-function X509_REVOKED_add1_ext_i2d(x: PX509_REVOKED; nid: integer; value: pointer; crit: integer; flags: cardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_REVOKED_add1_ext_i2d';
-
 function X509_EXTENSION_create_by_NID(ex: PPX509_EXTENSION; nid: integer; crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509_EXTENSION_create_by_NID';
 
 function X509_EXTENSION_create_by_OBJ(ex: PPX509_EXTENSION; obj: PASN1_OBJECT; crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509_EXTENSION_create_by_OBJ';
-
-function X509_EXTENSION_set_object(ex: PX509_EXTENSION; obj: PASN1_OBJECT): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_EXTENSION_set_object';
-
-function X509_EXTENSION_set_critical(ex: PX509_EXTENSION; crit: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_EXTENSION_set_critical';
-
-function X509_EXTENSION_set_data(ex: PX509_EXTENSION; data: PASN1_OCTET_STRING): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_EXTENSION_set_data';
 
 function X509at_get_attr_count(x: Pstack_st_X509_ATTRIBUTE): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509at_get_attr_count';
@@ -21009,9 +20839,6 @@ function PEM_read_bio_X509_REQ(bp: PBIO; x: PPX509_REQ; cb: Ppem_password_cb; u:
 function PEM_read_X509_REQ(fp: PPointer; x: PPX509_REQ; cb: Ppem_password_cb; u: pointer): PX509_REQ; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_X509_REQ';
 
-function PEM_write_bio_X509_REQ(bp: PBIO; x: PX509_REQ): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_write_bio_X509_REQ';
-
 function PEM_write_X509_REQ(fp: PPointer; x: PX509_REQ): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_X509_REQ';
 
@@ -21026,9 +20853,6 @@ function PEM_read_bio_X509_CRL(bp: PBIO; x: PPX509_CRL; cb: Ppem_password_cb; u:
 
 function PEM_read_X509_CRL(fp: PPointer; x: PPX509_CRL; cb: Ppem_password_cb; u: pointer): PX509_CRL; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_X509_CRL';
-
-function PEM_write_bio_X509_CRL(bp: PBIO; x: PX509_CRL): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_write_bio_X509_CRL';
 
 function PEM_write_X509_CRL(fp: PPointer; x: PX509_CRL): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_X509_CRL';

@@ -1812,7 +1812,7 @@ begin
             Country, State, Locality, Organization, OrgUnit, CommonName);
       EOpenSslCert.Check(X509_set_issuer_name(x, name)); // issuer := subject
       EOpenSslCert.Check(X509_set_pubkey(x, key));
-      if X509_sign(x, key, GetMD) = 0 then
+      if x.Sign(key, GetMD) = 0 then
         RaiseErrorGenerate('Self Sign');
     end
     else
