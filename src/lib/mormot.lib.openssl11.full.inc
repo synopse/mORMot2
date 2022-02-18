@@ -9066,8 +9066,6 @@ type
   OPENSSL_CSTRING = PUtf8Char;
   POPENSSL_CSTRING = ^OPENSSL_CSTRING;
 
-  OPENSSL_sk_compfunc = function(p1: pointer; p2: pointer): integer; cdecl;
-  OPENSSL_sk_freefunc = procedure(p1: pointer); cdecl;
   OPENSSL_sk_copyfunc = function(p1: pointer): pointer; cdecl;
 
   sk_OPENSSL_STRING_compfunc = function(a: PPUtf8Char; b: PPUtf8Char): integer; cdecl;
@@ -11404,9 +11402,6 @@ function AES_unwrap_key(key: PAES_KEY; iv: PByte; _out: PByte; _in: PByte; inlen
 function OPENSSL_sk_set(st: POPENSSL_STACK; i: integer; data: pointer): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_set';
 
-function OPENSSL_sk_new(cmp: OPENSSL_sk_compfunc): POPENSSL_STACK; cdecl;
-  external LIB_CRYPTO name _PU + 'OPENSSL_sk_new';
-
 function OPENSSL_sk_new_null(): POPENSSL_STACK; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_new_null';
 
@@ -11416,32 +11411,17 @@ function OPENSSL_sk_new_reserve(c: OPENSSL_sk_compfunc; n: integer): POPENSSL_ST
 function OPENSSL_sk_reserve(st: POPENSSL_STACK; n: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_reserve';
 
-procedure OPENSSL_sk_free(p1: POPENSSL_STACK); cdecl;
-  external LIB_CRYPTO name _PU + 'OPENSSL_sk_free';
-
-procedure OPENSSL_sk_pop_free(st: POPENSSL_STACK; func: OPENSSL_sk_freefunc); cdecl;
-  external LIB_CRYPTO name _PU + 'OPENSSL_sk_pop_free';
-
 function OPENSSL_sk_deep_copy(p1: POPENSSL_STACK; c: OPENSSL_sk_copyfunc; f: OPENSSL_sk_freefunc): POPENSSL_STACK; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_deep_copy';
 
 function OPENSSL_sk_insert(sk: POPENSSL_STACK; data: pointer; where: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_insert';
 
-function OPENSSL_sk_delete(st: POPENSSL_STACK; loc: integer): pointer; cdecl;
-  external LIB_CRYPTO name _PU + 'OPENSSL_sk_delete';
-
 function OPENSSL_sk_delete_ptr(st: POPENSSL_STACK; p: pointer): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_delete_ptr';
 
-function OPENSSL_sk_find(st: POPENSSL_STACK; data: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'OPENSSL_sk_find';
-
 function OPENSSL_sk_find_ex(st: POPENSSL_STACK; data: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_find_ex';
-
-function OPENSSL_sk_push(st: POPENSSL_STACK; data: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'OPENSSL_sk_push';
 
 function OPENSSL_sk_unshift(st: POPENSSL_STACK; data: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_unshift';

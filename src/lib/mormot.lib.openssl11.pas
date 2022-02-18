@@ -956,8 +956,30 @@ type
   PBIO_METHOD = type pointer;
   PPBIO_METHOD = ^PBIO_METHOD;
 
-  POPENSSL_STACK = type pointer;
+  POPENSSL_STACK = ^OPENSSL_STACK;
   PPOPENSSL_STACK = ^POPENSSL_STACK;
+
+  OPENSSL_sk_compfunc = function(p1: pointer; p2: pointer): integer; cdecl;
+  OPENSSL_sk_freefunc = procedure(p1: pointer); cdecl;
+
+  OPENSSL_STACK = object
+  private
+    function GetItem(index: PtrInt): pointer;
+      {$ifdef HASINLINE} inline; {$endif}
+  public
+    function Count: integer;
+    function Add(one: pointer): integer;
+    function Find(one: pointer): integer;
+    function Extract(index: integer): pointer;
+    /// low-level method needing an explicit result typecast e.g. to PX509DynArray
+    function ToDynArray: TPointerDynArray;
+    /// note: instances should be released explicitely before or call e.g. FreeX509
+    procedure Free;
+    /// make PX509().Free to all items, then free the stack
+    procedure FreeX509;
+    property Items[index: PtrInt]: pointer
+      read GetItem;
+  end;
 
   PBIGNUM = type pointer;
   PPBIGNUM = ^PBIGNUM;
@@ -1575,6 +1597,13 @@ function ASN1_TIME_set(s: PASN1_TIME; t: time_t): PASN1_TIME; cdecl;
 function ASN1_TIME_set_string_X509(s: PASN1_TIME; str: PUtf8Char): integer; cdecl;
 function ASN1_TIME_to_tm(s: PASN1_TIME; tm: Ptm): integer; cdecl;
 function ASN1_TIME_normalize(s: PASN1_TIME): integer; cdecl;
+function OPENSSL_sk_new(cmp: OPENSSL_sk_compfunc): POPENSSL_STACK; cdecl;
+procedure OPENSSL_sk_free(p1: POPENSSL_STACK); cdecl;
+procedure OPENSSL_sk_pop_free(st: POPENSSL_STACK; func: OPENSSL_sk_freefunc); cdecl;
+function OPENSSL_sk_delete(st: POPENSSL_STACK; loc: integer): pointer; cdecl;
+function OPENSSL_sk_find(st: POPENSSL_STACK; data: pointer): integer; cdecl;
+function OPENSSL_sk_push(st: POPENSSL_STACK; data: pointer): integer;
+  {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function OPENSSL_sk_pop(st: POPENSSL_STACK): pointer; cdecl;
 function OPENSSL_sk_num(p1: POPENSSL_STACK): integer;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
@@ -1730,9 +1759,6 @@ function TmToDateTime(const t: tm): TDateTime;
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
 procedure DTLSv1_handle_timeout(s: PSSL);
 
-/// low-level method needing an explicit result typecast e.g. to PX509DynArray
-function OpenSSLStackToDynArray(stack: pointer): TPointerDynArray;
-
 /// load a private key from a binary buffer, optionally with a password
 // - caller should make result.Free once done with the result
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
@@ -1774,6 +1800,9 @@ function NewCertificateStore: PX509_STORE;
 /// create a new X509 Certificates Store Context
 function NewCertificateStoreCtx(store: PX509_STORE; x509: PX509;
   chain: Pstack_st_X509; callback: X509_STORE_CTX_verify_cb): PX509_STORE_CTX;
+
+/// create a new OpenSSL pointer Stack storage instance
+function NewOpenSslStack: POPENSSL_STACK;
 
 
 { ************** TLS / HTTPS Encryption Layer using OpenSSL for TCrtSocket }
@@ -2260,6 +2289,12 @@ type
     ASN1_TIME_set_string_X509: function(s: PASN1_TIME; str: PUtf8Char): integer; cdecl;
     ASN1_TIME_to_tm: function(s: PASN1_TIME; tm: Ptm): integer; cdecl;
     ASN1_TIME_normalize: function(s: PASN1_TIME): integer; cdecl;
+    OPENSSL_sk_new: function(cmp: OPENSSL_sk_compfunc): POPENSSL_STACK; cdecl;
+    OPENSSL_sk_free: procedure(p1: POPENSSL_STACK); cdecl;
+    OPENSSL_sk_pop_free: procedure(st: POPENSSL_STACK; func: OPENSSL_sk_freefunc); cdecl;
+    OPENSSL_sk_delete: function(st: POPENSSL_STACK; loc: integer): pointer; cdecl;
+    OPENSSL_sk_find: function(st: POPENSSL_STACK; data: pointer): integer; cdecl;
+    OPENSSL_sk_push: function(st: POPENSSL_STACK; data: pointer): integer; cdecl;
     OPENSSL_sk_pop: function(st: POPENSSL_STACK): pointer; cdecl;
     OPENSSL_sk_num: function(p1: POPENSSL_STACK): integer; cdecl;
     OPENSSL_sk_value: function(p1: POPENSSL_STACK; p2: integer): pointer; cdecl;
@@ -2352,7 +2387,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..202] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..208] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2467,6 +2502,12 @@ const
     'ASN1_TIME_set_string_X509',
     'ASN1_TIME_to_tm',
     'ASN1_TIME_normalize',
+    'OPENSSL_sk_new',
+    'OPENSSL_sk_free',
+    'OPENSSL_sk_pop_free',
+    'OPENSSL_sk_delete',
+    'OPENSSL_sk_find',
+    'OPENSSL_sk_push',
     'OPENSSL_sk_pop',
     'OPENSSL_sk_num',
     'OPENSSL_sk_value',
@@ -3153,6 +3194,36 @@ end;
 function ASN1_TIME_normalize(s: PASN1_TIME): integer;
 begin
   result := libcrypto.ASN1_TIME_normalize(s);
+end;
+
+function OPENSSL_sk_new(cmp: OPENSSL_sk_compfunc): POPENSSL_STACK;
+begin
+  result := libcrypto.OPENSSL_sk_new(cmp);
+end;
+
+procedure OPENSSL_sk_free(p1: POPENSSL_STACK);
+begin
+  libcrypto.OPENSSL_sk_free(p1);
+end;
+
+procedure OPENSSL_sk_pop_free(st: POPENSSL_STACK; func: OPENSSL_sk_freefunc);
+begin
+  libcrypto.OPENSSL_sk_pop_free(st, func);
+end;
+
+function OPENSSL_sk_delete(st: POPENSSL_STACK; loc: integer): pointer;
+begin
+  result := libcrypto.OPENSSL_sk_delete(st, loc);
+end;
+
+function OPENSSL_sk_find(st: POPENSSL_STACK; data: pointer): integer;
+begin
+  result := libcrypto.OPENSSL_sk_find(st, data);
+end;
+
+function OPENSSL_sk_push(st: POPENSSL_STACK; data: pointer): integer;
+begin
+  result := libcrypto.OPENSSL_sk_push(st, data);
 end;
 
 function OPENSSL_sk_pop(st: POPENSSL_STACK): pointer;
@@ -4253,6 +4324,24 @@ function ASN1_TIME_to_tm(s: PASN1_TIME; tm: Ptm): integer; cdecl;
 function ASN1_TIME_normalize(s: PASN1_TIME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_TIME_normalize';
 
+function OPENSSL_sk_new(cmp: OPENSSL_sk_compfunc): POPENSSL_STACK; cdecl;
+  external LIB_CRYPTO name _PU + 'OPENSSL_sk_new';
+
+procedure OPENSSL_sk_pop_free(st: POPENSSL_STACK; func: OPENSSL_sk_freefunc); cdecl;
+      external LIB_CRYPTO name _PU +
+
+procedure OPENSSL_sk_free(p1: POPENSSL_STACK); cdecl;
+  external LIB_CRYPTO name _PU + 'OPENSSL_sk_free';
+
+function OPENSSL_sk_delete(st: POPENSSL_STACK; loc: integer): pointer; cdecl;
+  external LIB_CRYPTO name _PU + 'OPENSSL_sk_delete';
+
+function OPENSSL_sk_find(st: POPENSSL_STACK; data: pointer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'OPENSSL_sk_find';
+
+function OPENSSL_sk_push(st: POPENSSL_STACK; data: pointer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'OPENSSL_sk_push';
+
 function OPENSSL_sk_pop(st: POPENSSL_STACK): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_pop';
 
@@ -4681,18 +4770,61 @@ begin
             EncodeTime(t.tm_hour, t.tm_min, t.tm_sec, 0);
 end;
 
-function OpenSSLStackToDynArray(stack: pointer): TPointerDynArray;
+function NewOpenSslStack: POPENSSL_STACK;
+begin
+  result := OPENSSL_sk_new(nil);
+end;
+
+
+{ OPENSSL_STACK }
+
+function OPENSSL_STACK.Count: integer;
+begin
+  if @self = nil then
+    result := 0 // OPENSSL_sk_num(nil) would return -1
+  else
+    result := OPENSSL_sk_num(@self);
+end;
+
+function OPENSSL_STACK.Add(one: pointer): integer;
+begin
+  result := OPENSSL_sk_push(@self, one);
+end;
+
+function OPENSSL_STACK.Find(one: pointer): integer;
+begin
+  result := OPENSSL_sk_find(@self, one);
+end;
+
+function OPENSSL_STACK.Extract(index: integer): pointer;
+begin
+  result := OPENSSL_sk_delete(@self, index);
+end;
+
+function OPENSSL_STACK.GetItem(index: PtrInt): pointer;
+begin
+  result := OPENSSL_sk_value(@self, index);
+end;
+
+function OPENSSL_STACK.ToDynArray: TPointerDynArray;
 var
   i: PtrInt;
 begin
-  if stack = nil then
-    result := nil // OPENSSL_sk_num(nil) would return -1
-  else
-  begin
-    SetLength(result, OPENSSL_sk_num(stack));
-    for i := 0 to length(result) - 1 do
-      result[i] := OPENSSL_sk_value(stack, i);
-  end;
+  SetLength(result, Count);
+  for i := 0 to length(result) - 1 do
+    result[i] := OPENSSL_sk_value(@self, i);
+end;
+
+procedure OPENSSL_STACK.Free;
+begin
+  if @self <> nil then
+    OPENSSL_sk_free(@self);
+end;
+
+procedure OPENSSL_STACK.FreeX509;
+begin
+  if @self <> nil then
+    OPENSSL_sk_pop_free(@self, @X509_free);
 end;
 
 
@@ -4754,7 +4886,7 @@ end;
 
 function SSL.PeerCertificates: PX509DynArray;
 begin
- result := PX509DynArray(OpenSSLStackToDynArray(PeerChain));
+ result := PX509DynArray(POPENSSL_STACK(PeerChain).ToDynArray);
 end;
 
 function SSL.PeerCertificatesAsPEM: RawUtf8;
