@@ -1776,7 +1776,7 @@ function PX509DynArrayToPem(const X509: PX509DynArray): RawUtf8;
 function PX509DynArrayToText(const X509: PX509DynArray): RawUtf8;
 
 /// finalize a dynamic array of X509 instances
-procedure PX509DynArrayFree(const X509: PX509DynArray);
+procedure PX509DynArrayFree(var X509: PX509DynArray);
 
 /// create a new X509 Certificate Instance
 // - with a random serial number
@@ -5876,12 +5876,13 @@ begin
     result := result +  X509[i].PeerInfo + '---------'#13#10;
 end;
 
-procedure PX509DynArrayFree(const X509: PX509DynArray);
+procedure PX509DynArrayFree(var X509: PX509DynArray);
 var
   i: PtrInt;
 begin
   for i := 0 to length(X509) - 1 do
     X509[i].Free;
+  X509 := nil;
 end;
 
 
