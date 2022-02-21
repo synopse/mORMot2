@@ -1365,9 +1365,13 @@ type
     /// search for a certificate from its (hexadecimal) identifier
     function GetBySerial(const Serial: RawUtf8): ICryptCert;
     /// quickly check if a given certificate ID is part of the CRL
+    // - returns crrNotRevoked if the serial is not known as part of the CRL
+    // - returns the reason why this certificate has been revoked otherwise
+    function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; overload;
+    /// quickly check if a given certificate is part of the CRL
     // - returns crrNotRevoked is the serial is not known as part of the CRL
     // - returns the reason why this certificate has been revoked otherwise
-    function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason;
+    function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; overload;
     /// register a certificate in the internal certificate chain
     // - returns false e.g. if the certificate was not valid, or its
     // serial was already part of the internal list
@@ -1405,6 +1409,8 @@ type
       Data: pointer; Len: integer): TCryptCertValidity;
     /// how many certificates are currently stored
     function Count: integer;
+    /// how many CRLs are currently stored
+    function CrlCount: integer;
     /// call e.g. CertAlgo.New to prepare a new ICryptCert to add to this store
     function CertAlgo: TCryptCertAlgo;
   end;
@@ -1416,7 +1422,9 @@ type
     function FromBinary(const Binary: RawByteString): boolean; virtual; abstract;
     function ToBinary: RawByteString; virtual; abstract;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; virtual; abstract;
-    function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; virtual; abstract;
+    function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason;
+      overload; virtual; abstract;
+    function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; overload; virtual;
     function Add(const cert: ICryptCert): boolean; virtual; abstract;
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; virtual; abstract;
     function AddFromFile(const FileName: TFileName): TRawUtf8DynArray; virtual;
@@ -1428,6 +1436,7 @@ type
     function Verify(const Signature: RawUtf8;
       Data: pointer; Len: integer): TCryptCertValidity; virtual; abstract;
     function Count: integer; virtual; abstract;
+    function CrlCount: integer; virtual; abstract;
     function CertAlgo: TCryptCertAlgo; virtual; abstract;
   end;
 
@@ -4166,6 +4175,14 @@ end;
 
 
 { TCryptStore }
+
+function TCryptStore.IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason;
+begin
+  if Assigned(cert) then
+    result := IsRevoked(cert.GetSerial)
+  else
+    result := crrNotRevoked;
+end;
 
 function TCryptStore.AddFromFile(const FileName: TFileName): TRawUtf8DynArray;
 var

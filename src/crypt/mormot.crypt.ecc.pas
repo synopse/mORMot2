@@ -5196,6 +5196,7 @@ type
     function Verify(const Signature: RawUtf8;
       Data: pointer; Len: integer): TCryptCertValidity; override;
     function Count: integer; override;
+    function CrlCount: integer; override;
     function CertAlgo: TCryptCertAlgo; override;
   end;
 
@@ -5287,6 +5288,11 @@ end;
 function TCryptStoreInternal.Count: integer;
 begin
   result := length(fEcc.fItems);
+end;
+
+function TCryptStoreInternal.CrlCount: integer;
+begin
+  result := length(fEcc.fCrl);
 end;
 
 var
