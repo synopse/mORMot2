@@ -16,9 +16,6 @@ unit mormot.db.sql.ibx;
 
   For low level connection, uses the MWA Software Firebird Pascal API package,
   (fbintf) part of IBX for Lazarus - https://www.mwasoftware.co.uk/fb-pascal-api
-  This version work with trunk version of IBX
-  svn co https://svn.mwasoftware.co.uk/public/ibx/trunk ibx
-  more details on https://forum.lazarus.freepascal.org/index.php/topic,56267.0.html
   Only fbintf package need to be installed
 
   - With explicit StartTransaction (or Batch): all statements in connection
@@ -33,7 +30,7 @@ unit mormot.db.sql.ibx;
     default dFirebird create two indexes on ID, one ascending, second descending
     nedded for select max(ID) - see http://www.firebirdfaq.org/faq205
   - Batch is implemented for insert, update, delete using "execute block"
-  - TODO: Firebird4 API interface, with its new IBatch interface for
+  - Firebird4 API interface, with its new IBatch interface for
     insert/update also implemented in fbintf package.
 }
 
@@ -202,6 +199,8 @@ type
     fResults: IResults;
     fMeta: IMetaData;
     fColumnsMeta: array of TIBXColumnsMeta;
+    fIbxParams: ISQLParams;
+    farrParams: array of ISQLParam;
     // Internal Transaction used for all statements if not explicit StartTransaction/Batch
     // This transaction is Started and COMMIT after execution (auto commit)
     fInternalTPB: ITPB;
@@ -430,7 +429,11 @@ begin
   fStatement.SetStaleReferenceChecks(false);
   fStatement.SetRetainInterfaces(true);
   fColumnCount := 0;
-  fColumn.ForceReHash;
+  fColumn.ReHash;
+  fIbxParams := fStatement.GetSQLParams;
+  SetLength(farrParams, fIbxParams.Count);
+  for i:=0 to fIbxParams.Count-1 do
+    farrParams[i] := fIbxParams.getSQLParam(i);
   if ExpectResults then
   begin
     fMeta := fStatement.GetMetaData;
@@ -452,6 +455,17 @@ begin
     end;
   end;
   SQLLogEnd;
+end;
+
+function DynRawUtf8ArrayToConst(const aValue: TRawUtf8DynArray): TTVarRecDynArray;
+var ndx: PtrInt;
+begin
+  SetLength(Result, Length(aValue));
+  for ndx := 0 to Length(aValue) - 1 do
+  begin
+    result[ndx].VType := vtAnsiString;
+    result[ndx].VAnsiString := pointer(aValue[ndx]);
+  end;
 end;
 
 function Param2Type(const aParam: ISQLParam): RawUtf8;
@@ -527,9 +541,79 @@ end;
 procedure TSqlDBIbxStatement.ExecutePrepared;
 var
   con: TSqlDBIbxConnection;
-  iParams: ISQLParams;
-  iParam : ISQLParam;
   i: integer;
+
+  procedure BatchArrayExecute;
+  var
+    iP, iA: PtrInt;
+  begin
+    fStatement.SetBatchRowLimit(fParamsArrayCount);
+    for iA:=0 to fParamsArrayCount-1 do
+    begin
+      for iP := 0 to fParamCount - 1 do
+      // set parameters as expected by FirebirdSQL
+      begin
+        with fParams[iP] do
+        begin
+          case VType of
+            ftUnknown,
+            ftNull:
+              farrParams[iP].SetIsNull(True);
+          else
+            if VArray[iA]='null' then
+              farrParams[iP].SetIsNull(True)
+            else
+            begin
+              case VType of
+                ftDate:
+                  farrParams[iP].SetAsDateTime(Iso8601ToDateTimePUtf8Char(
+                    PUtf8Char(pointer(VArray[iA])) + 1, Length(VArray[iA]) - 2));
+                ftInt64:
+                  farrParams[iP].SetAsInt64(GetInt64(pointer(VArray[iA])));
+                ftDouble:
+                  farrParams[iP].SetAsDouble(GetExtended(pointer(VArray[iA])));
+                ftCurrency:
+                  farrParams[iP].SetAsCurrency(StrToCurrency(pointer(VArray[iA])));
+                ftUtf8:
+                  farrParams[iP].SetAsString(UnQuoteSqlString(VArray[iA]));
+                ftBlob:
+                  farrParams[iP].SetAsString(VArray[iA]);
+              else
+                raise ESqlDBIbx.CreateUtf8(
+                  '%.ExecutePrepared: Invalid type parameter #%', [self, i]);
+              end;
+            end
+          end;
+        end;
+      end;
+      try
+        fStatement.AddToBatch;
+      except
+        on E: EIBBatchBufferOverflow do
+        begin
+          if fAutoStartCommitTrans then
+          begin
+            fStatement.ExecuteBatch(fInternalTransaction);
+            InternalCommitTransaction;
+            InternalStartTransaction;
+          end
+          else
+            fStatement.ExecuteBatch(con.fTransaction);
+          {you might want to check the batch completion info here - see 6.8.3}
+          fStatement.AddToBatch;
+        end
+        else
+          raise;
+      end;
+    end;
+    if fAutoStartCommitTrans then
+    begin
+      fStatement.ExecuteBatch(fInternalTransaction);
+      InternalCommitTransaction;
+    end
+    else
+      fStatement.ExecuteBatch(con.fTransaction);
+  end;
 
   procedure BlockArrayExecute;
   const
@@ -539,7 +623,7 @@ var
     aPar: TRawUtf8DynArray;
     aParTyp: TRawUtf8DynArray;
     iP, iA, iStart, iEnd, iCnt, iStmCount: integer;
-    W: TJsonWriter;
+    W: TTextWriter;
     newStatement: IStatement;
 
     procedure PrepareBlockStatement;
@@ -553,6 +637,8 @@ var
     procedure ExecuteBlockStatement;
     var
       iP, iA, ndx: PtrInt;
+      iParams: ISQLParams;
+      iParam: ISQLParam;
     begin
       // Bind Params
       iParams := newStatement.GetSQLParams;
@@ -619,12 +705,12 @@ var
     oldSQL := StringReplaceAll(fSql, '?', '%');
     SetLength(aParTyp, fParamCount);
     SetLength(aPar, fParamCount);
-    for iP := 0 to fParamCount-1 do
-      aParTyp[iP] := Param2Type(iParams.Params[iP]);
+    for iP:=0 to fParamCount-1 do
+      aParTyp[iP] := Param2Type(fIbxParams.Params[iP]);
     iStart := 0;
     iStmCount := Round(fParamsArrayCount /
                  Round(fParamsArrayCount / cMaxStm + 0.5));
-    W := TJsonWriter.CreateOwnedStream(49152);
+    W := TTextWriter.CreateOwnedStream(49152);
     try
       while iStart < fParamsArrayCount do
       begin
@@ -657,7 +743,7 @@ var
               FormatUtf8(':p%', [iCnt], aPar[iP]);
               Inc(iCnt);
             end;
-            W.Add(oldSQL, RawUtf8DynArrayToArrayOfConst(aPar));
+            W.Add(oldSQL, DynRawUtf8ArrayToConst(aPar));
             W.Add(';', #10);
           end;
           W.AddShort('end');
@@ -691,46 +777,48 @@ begin
       fStatement.SetRetainInterfaces(true);
     end;
   end;
-  iParams := fStatement.GetSQLParams;
   if fParamsArrayCount > 0 then      // Array Bindings
   begin
-    if iParams.Count <> fParamCount then
+    if fIbxParams.Count <> fParamCount then
       raise ESqlDBIbx.CreateUtf8(
         '%.ExecutePrepared expected % bound parameters, got %',
-        [self, iParams.Count, fParamCount]);
+        [self, fIbxParams.Count, fParamCount]);
     if fExpectResults then
       raise ESqlDBIbx.CreateUtf8(
         '%.ExecutePrepared cant ExpectResults with ArrayParams', [self]);
-    BlockArrayExecute;
+    if fStatement.HasBatchMode and
+       (fStatement.GetSQLStatementType in [SQLInsert,SQLUpdate]) then
+      BatchArrayExecute
+    else
+      BlockArrayExecute;
   end
   else
   begin
-    if iParams.Count <> fParamCount then
+    if fIbxParams.Count <> fParamCount then
       raise ESqlDBIbx.CreateUtf8(
         '%.ExecutePrepared expected % bound parameters, got %',
-        [self, iParams.Count, fParamCount]);
+        [self, fIbxParams.Count, fParamCount]);
     for i := 0 to fParamCount - 1 do
     // set parameters as expected by FirebirdSQL
     begin
-      iParam := iParams.getSQLParam(i);
       with fParams[i] do
       begin
         case VType of
           ftUnknown,
           ftNull:
-            iParam.SetIsNull(True);
+            farrParams[i].SetIsNull(True);
           ftDate:
-            iParam.SetAsDateTime(PDateTime(@VInt64)^);
+            farrParams[i].SetAsDateTime(PDateTime(@VInt64)^);
           ftInt64:
-            iParam.SetAsInt64(PInt64(@VInt64)^);
+            farrParams[i].SetAsInt64(PInt64(@VInt64)^);
           ftDouble:
-            iParam.SetAsDouble(unaligned(PDouble(@VInt64)^));
+            farrParams[i].SetAsDouble(unaligned(PDouble(@VInt64)^));
           ftCurrency:
-            iParam.SetAsCurrency(PCurrency(@VInt64)^);
+            farrParams[i].SetAsCurrency(PCurrency(@VInt64)^);
           ftUtf8:
-            iParam.SetAsString(VData);
+            farrParams[i].SetAsString(VData);
           ftBlob:
-            iParam.SetAsString(VData);
+            farrParams[i].SetAsString(VData);
         else
           raise ESqlDBIbx.CreateUtf8(
             '%.ExecutePrepared: Invalid type parameter #%', [self, i]);
@@ -1087,7 +1175,7 @@ var
   Status: IStatus;
   log: ISynLog;
 
-  function GenerateDPB: IDPB;
+  function GenerateDPB(aCreateDb: boolean=false): IDPB;
   var
     i: PtrInt;
     ParamValue: string;
@@ -1102,6 +1190,9 @@ var
       // that the name is all lowercase with no leading 'isc_dpb_' prefix
       if Trim(fDBParams.Names[i]) = '' then
         continue;
+      if (not aCreateDb) and
+         (Trim(fDBParams.Names[i]) = 'isc_dpb_page_size') then
+        continue;
       DPBItem := result.AddByTypeName(fDBParams.Names[i]);
       ParamValue := fDBParams.ValueFromIndex[i];
        // A database parameter either contains a string value (case 1)
@@ -1114,9 +1205,9 @@ var
         isc_dpb_sys_user_name,
         isc_dpb_license,
         isc_dpb_encrypt_key,
+        isc_dpb_page_size,
         isc_dpb_lc_messages,
         isc_dpb_lc_ctype,
-        isc_dpb_page_size,
         isc_dpb_sql_role_name:
           DPBItem.SetAsString(ParamValue);
         isc_dpb_sql_dialect:
@@ -1166,6 +1257,7 @@ begin
         (Status.GetIBErrorCode = isc_network_error)) and // Database not found
        fCreateDbIfNotExists then
     begin
+      DPB := GenerateDPB(true);
       DPB.Add(isc_dpb_set_db_SQL_dialect).AsByte := 3; // use SQL Dialect 3
       if DPB.Find(isc_dpb_lc_ctype)=nil then
         DPB.Add(isc_dpb_lc_ctype).AsString := 'UTF8';
@@ -1195,9 +1287,12 @@ begin
         fTransaction.Commit;
       fTransaction := nil;
     end;
-    if fAttachment <> nil then
+    if fAttachment<> nil then
     begin
-      fAttachment.Disconnect(true);
+      try
+        fAttachment.Disconnect(true);
+      except
+      end;
       fAttachment := nil;
     end;
   end;
@@ -1341,7 +1436,7 @@ begin
   SetCreateDescendingOnlyPK(false);
   fDbms := dFirebird;
   fBatchSendingAbilities := [cCreate, cUpdate, cDelete];
-  fBatchMaxSentAtOnce := 5000;  // iters <= 32767 for better performance
+  fBatchMaxSentAtOnce := 10000;  // iters <= 32767 for better performance
   if aServerName = '' then
     ThreadingMode := tmMainConnection;
   fUseCache := true;
@@ -1357,7 +1452,6 @@ end;
 function TSqlDBIbxConnectionProperties.NewConnection: TSqlDBConnection;
 begin
   result := TSqlDBIbxConnection.Create(self);
-  TSqlDBIbxConnection(result).InternalProcess(speCreated);
 end;
 
 function TSqlDBIbxConnectionProperties.SqlCreate(const aTableName: RawUtf8;
