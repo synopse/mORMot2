@@ -1254,6 +1254,8 @@ type
     // returns the reason, CRL_REASON_NONE=-1 if none found - can check >= 0
     function IsRevoked(const serialnumber: RawUtf8): integer; overload;
     function IsRevoked(serial: PASN1_INTEGER): integer; overload;
+    function AddFrom(another: PX509_CRL): integer;
+    function AddFromPem(const Pem: RawUtf8): integer;
     function AddRevokedSerial(serial: PASN1_INTEGER; ca: PX509;
       reason: integer = 0; nextUpdateDays: integer = 30): boolean;
     function AddRevokedCertificate(x, ca: PX509;
@@ -1284,16 +1286,25 @@ type
 
   X509_STORE = object
   public
+    function CertificateCount: integer;
+    function CrlCount: integer;
     function Certificates: PX509DynArray;
     function Crls: PX509_CRLDynArray;
     // caller should make result.Free once done (to decrease refcount)
-    function BySerial(const Serial: RawUtf8): PX509;
-    function IsRevoked(const Serial: RawUtf8): integer;
+    function BySerial(const serial: RawUtf8): PX509;
+    // returns the revocation reason
+    function IsRevoked(const serial: RawUtf8): integer; overload;
+    function IsRevoked(serial: PASN1_INTEGER): integer; overload;
     function SetDefaultPaths: boolean;
+    // will increase the certificate refcount
     function AddCertificate(x: PX509): boolean;
-    function AddFromBinary(const Der: RawByteString): boolean;
-    /// returns the number of added certificates
-    function AddFromPem(const Pem: RawUtf8): integer;
+    function AddCrl(c: PX509_CRL): boolean;
+    // try binary DER serialization of X509 Certificate or CRL
+    function AddFromBinary(const Der: RawByteString): RawUtf8;
+    /// returns the number of added certificates or CRLs
+    function AddCertificateFromPem(const Pem: RawUtf8;
+      Serials: PRawUtf8DynArray = nil): integer;
+    function AddCrlFromPem(const Pem: RawUtf8): integer;
     // - CAFile format is concatenated PEM certificates and CRLs
     // - CAFolder expects the certificates to be stored as hash.N (or hash.rN for
     // CRLs), with hash.N being X509_NAME.Hash SHA1 first four bytes - see
@@ -1363,7 +1374,10 @@ type
   /// wrapper to the PX509 abstract pointer
   X509 = object
   public
+    function GetSerial: PASN1_INTEGER;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetName: PX509_NAME;
+      {$ifdef HASINLINE} inline; {$endif}
     /// the Certificate Genuine Serial Number
     // - e.g. '04:f9:25:39:39:f8:ce:79:1a:a4:0e:b3:fa:72:e3:bc:9e:d6'
     function SerialNumber: RawUtf8;
@@ -1680,9 +1694,11 @@ function X509_CRL_get_nextUpdate(crl: PX509_CRL): PASN1_TIME; cdecl;
 function d2i_X509_CRL_bio(bp: PBIO; crl: PPX509_CRL): PX509_CRL; cdecl;
 function i2d_X509_CRL_bio(bp: PBIO; crl: PX509_CRL): integer; cdecl;
 function PEM_write_bio_X509_CRL(bp: PBIO; x: PX509_CRL): integer; cdecl;
+function PEM_read_bio_X509_CRL(bp: PBIO; x: PPX509_CRL; cb: Ppem_password_cb; u: pointer): PX509_CRL; cdecl;
 function X509_CRL_add1_ext_i2d(x: PX509_CRL; nid: integer; value: pointer; crit: integer; flags: cardinal): integer; cdecl;
 function X509_CRL_get_ext_d2i(x: PX509_CRL; nid: integer; crit: PInteger; idx: PInteger): pointer; cdecl;
 function X509_CRL_add0_revoked(crl: PX509_CRL; rev: PX509_REVOKED): integer; cdecl;
+function X509_CRL_delete_ext(x: PX509_CRL; loc: integer): PX509_EXTENSION; cdecl;
 function X509_CRL_get_REVOKED(crl: PX509_CRL): Pstack_st_X509_REVOKED; cdecl;
 function X509_CRL_get0_extensions(crl: PX509_CRL): Pstack_st_X509_EXTENSION; cdecl;
 function X509_CRL_sort(crl: PX509_CRL): integer; cdecl;
@@ -1956,8 +1972,11 @@ function NewCertificateCrl: PX509_CRL;
 
 /// unserialize a new X509 Certificate CRL Instance
 // - from DER binary as serialized by X509_CRL.ToBinary
-// - use LoadCertificateCrl(PemToDer()) to load a PEM certificate CRL
 function LoadCertificateCrl(const Der: RawByteString): PX509_CRL;
+
+/// unserialize a new X509 Certificate CRL Instance
+// - from PEM as serialized by X509_CRL.ToPem
+function LoadCertificateCrlFromPem(const Pem: RawUtf8): PX509_CRL;
 
 /// create a new X509 Certificate Request Instance
 // - caller should make result.Free once done with the result
@@ -2447,9 +2466,11 @@ type
     d2i_X509_CRL_bio: function(bp: PBIO; crl: PPX509_CRL): PX509_CRL; cdecl;
     i2d_X509_CRL_bio: function(bp: PBIO; crl: PX509_CRL): integer; cdecl;
     PEM_write_bio_X509_CRL: function(bp: PBIO; x: PX509_CRL): integer; cdecl;
+    PEM_read_bio_X509_CRL: function(bp: PBIO; x: PPX509_CRL; cb: Ppem_password_cb; u: pointer): PX509_CRL; cdecl;
     X509_CRL_add1_ext_i2d: function(x: PX509_CRL; nid: integer; value: pointer; crit: integer; flags: cardinal): integer; cdecl;
     X509_CRL_get_ext_d2i: function(x: PX509_CRL; nid: integer; crit: PInteger; idx: PInteger): pointer; cdecl;
     X509_CRL_add0_revoked: function(crl: PX509_CRL; rev: PX509_REVOKED): integer; cdecl;
+    X509_CRL_delete_ext: function(x: PX509_CRL; loc: integer): PX509_EXTENSION; cdecl;
     X509_CRL_get_REVOKED: function(crl: PX509_CRL): Pstack_st_X509_REVOKED; cdecl;
     X509_CRL_get0_extensions: function(crl: PX509_CRL): Pstack_st_X509_EXTENSION; cdecl;
     X509_CRL_sort: function(crl: PX509_CRL): integer; cdecl;
@@ -2602,7 +2623,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..256] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..258] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2708,9 +2729,11 @@ const
     'd2i_X509_CRL_bio',
     'i2d_X509_CRL_bio',
     'PEM_write_bio_X509_CRL',
+    'PEM_read_bio_X509_CRL',
     'X509_CRL_add1_ext_i2d',
     'X509_CRL_get_ext_d2i',
     'X509_CRL_add0_revoked',
+    'X509_CRL_delete_ext',
     'X509_CRL_get_REVOKED',
     'X509_CRL_get0_extensions',
     'X509_CRL_sort',
@@ -3401,6 +3424,11 @@ begin
   result := libcrypto.PEM_write_bio_X509_CRL(bp, x);
 end;
 
+function PEM_read_bio_X509_CRL(bp: PBIO; x: PPX509_CRL; cb: Ppem_password_cb; u: pointer): PX509_CRL;
+begin
+  result := libcrypto.PEM_read_bio_X509_CRL(bp, x, cb, u);
+end;
+
 function X509_CRL_add1_ext_i2d(x: PX509_CRL; nid: integer; value: pointer;
   crit: integer; flags: cardinal): integer;
 begin
@@ -3416,6 +3444,11 @@ end;
 function X509_CRL_add0_revoked(crl: PX509_CRL; rev: PX509_REVOKED): integer;
 begin
   result := libcrypto.X509_CRL_add0_revoked(crl, rev);
+end;
+
+function X509_CRL_delete_ext(x: PX509_CRL; loc: integer): PX509_EXTENSION;
+begin
+  result := libcrypto.X509_CRL_delete_ext(x, loc);
 end;
 
 function X509_CRL_get_REVOKED(crl: PX509_CRL): Pstack_st_X509_REVOKED;
@@ -4804,6 +4837,9 @@ function i2d_X509_CRL_bio(bp: PBIO; crl: PX509_CRL): integer; cdecl;
 function PEM_write_bio_X509_CRL(bp: PBIO; x: PX509_CRL): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_bio_X509_CRL';
 
+function PEM_read_bio_X509_CRL(bp: PBIO; x: PPX509_CRL; cb: Ppem_password_cb; u: pointer): PX509_CRL; cdecl;
+  external LIB_CRYPTO name _PU + 'PEM_read_bio_X509_CRL';
+
 function X509_CRL_add1_ext_i2d(x: PX509_CRL; nid: integer; value: pointer; crit: integer; flags: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_add1_ext_i2d';
 
@@ -4812,6 +4848,9 @@ function X509_CRL_get_ext_d2i(x: PX509_CRL; nid: integer; crit: PInteger; idx: P
 
 function X509_CRL_add0_revoked(crl: PX509_CRL; rev: PX509_REVOKED): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_add0_revoked';
+
+function X509_CRL_delete_ext(x: PX509_CRL; loc: integer): PX509_EXTENSION; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_CRL_delete_ext';
 
 function X509_CRL_get_REVOKED(crl: PX509_CRL): Pstack_st_X509_REVOKED; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_get_REVOKED';
@@ -5499,7 +5538,8 @@ begin
         inc(s);
       if cipher[s] >= ' ' then
       begin
-        cipher[d] := cipher[s];
+        if s <> d then
+          cipher[d] := cipher[s];
         inc(d);
       end;
       inc(s);
@@ -6035,6 +6075,34 @@ begin
   result := CRL_REASON_NONE; // = -1 if not revoked
 end;
 
+function X509_CRL.AddFrom(another: PX509_CRL): integer;
+var
+  rev: Pstack_st_X509_REVOKED;
+  i: PtrInt;
+begin
+  result := 0;
+  if (@self = nil) or
+     (another = nil) then
+    exit;
+  rev := Revoked;
+  if rev^.Count = 0 then
+    exit;
+  for i := 0 to rev^.Count - 1 do
+    if X509_CRL_add0_revoked(@self, rev.GetItem(i)) = OPENSSLSUCCESS then
+      inc(result);
+  if result <> 0 then
+    X509_CRL_sort(@self);
+end;
+
+function X509_CRL.AddFromPem(const Pem: RawUtf8): integer;
+var
+  crl: PX509_CRL;
+begin
+  crl := LoadCertificateCrlFromPem(Pem);
+  result := AddFrom(crl);
+  crl.Free;
+end;
+
 function X509_CRL.AddRevokedSerial(serial: PASN1_INTEGER; ca: PX509;
   reason: integer; nextUpdateDays: integer): boolean;
 var
@@ -6045,7 +6113,8 @@ begin
   if (@self = nil) or
      (serial = nil) or
      (IsRevoked(serial) >= 0) or
-     not ca.IsCA then
+     ((ca <> nil) and
+      (not ca.IsCA)) then
     exit;
   rev := X509_REVOKED_new();
   X509_REVOKED_set_serialNumber(rev, serial);
@@ -6058,10 +6127,15 @@ begin
   if reason = 0 then
     reason := CRL_REASON_SUPERSEDED;
   rev.SetReason(reason);
-  X509_CRL_add0_revoked(@self, rev);
-  X509_CRL_sort(@self);
-  X509_CRL_set_issuer_name(@self, ca.GetName);
-  result := true;
+  if X509_CRL_add0_revoked(@self, rev) = OPENSSLSUCCESS then
+  begin
+    X509_CRL_sort(@self);
+    if ca <> nil then
+      X509_CRL_set_issuer_name(@self, ca.GetName);
+    result := true;
+  end
+  else
+    rev^.Free;
 end;
 
 function X509_CRL.AddRevokedCertificate(x, ca: PX509; nextUpdateDays: integer): boolean;
@@ -6167,6 +6241,29 @@ end;
 
 { X509_STORE }
 
+function CountObjects(store: PX509_STORE; crl: boolean): integer;
+var
+  i: integer; // no PtrInt here for integer C API parameters
+  p: pointer;
+  obj: Pstack_st_X509_OBJECT;
+begin
+  result := 0;
+  if store = nil then
+    exit;
+  X509_STORE_lock(store);
+  obj := X509_STORE_get0_objects(store);
+  for i := 0 to obj^.Count - 1 do
+  begin
+    p := obj^.GetItem(i);
+    if crl then
+      p := X509_OBJECT_get0_X509_CRL(p)
+    else
+      p := X509_OBJECT_get0_X509(p);
+    inc(result, ord(p <> nil));
+  end;
+  X509_STORE_unlock(store);
+end;
+
 function GetObjects(store: PX509_STORE; crl: boolean): TPointerDynArray;
 var
   i, n: integer; // no PtrInt here for integer C API parameters
@@ -6187,11 +6284,21 @@ begin
     else
       p := X509_OBJECT_get0_X509(p);
     if p <> nil then
-      PtrArrayAdd(result, p, n);
+      PtrArrayAdd(result, p, n); // store by reference with no Acquire
   end;
   X509_STORE_unlock(store);
   if n <> 0 then
     DynArrayFakeLength(result, n);
+end;
+
+function X509_STORE.CertificateCount: integer;
+begin
+  result := CountObjects(@self, {crl=}false);
+end;
+
+function X509_STORE.CrlCount: integer;
+begin
+  result := CountObjects(@self, {crl=}true);
 end;
 
 function X509_STORE.Certificates: PX509DynArray;
@@ -6204,14 +6311,14 @@ begin
   result := PX509_CRLDynArray(GetObjects(@self, {crl=}true));
 end;
 
-function X509_STORE.BySerial(const Serial: RawUtf8): PX509;
+function X509_STORE.BySerial(const serial: RawUtf8): PX509;
 var
   i: PtrInt;
   c: PX509DynArray;
 begin
   c := Certificates;
   for i := 0 to length(c) - 1 do
-    if c[i].SerialNumber = Serial then
+    if c[i].SerialNumber = serial then
     begin
       result := c[i];
       result.Acquire;
@@ -6220,7 +6327,7 @@ begin
   result := nil;
 end;
 
-function X509_STORE.IsRevoked(const Serial: RawUtf8): integer;
+function X509_STORE.IsRevoked(const serial: RawUtf8): integer;
 var
   i: PtrInt;
   c: PX509_CRLDynArray;
@@ -6228,7 +6335,22 @@ begin
   c := Crls;
   for i := 0 to length(c) - 1 do
   begin
-    result := c[i].IsRevoked(Serial);
+    result := c[i].IsRevoked(serial);
+    if result >= 0 then
+      exit;
+  end;
+  result := CRL_REASON_NONE; // -1 if not revoked
+end;
+
+function X509_STORE.IsRevoked(serial: PASN1_INTEGER): integer;
+var
+  i: PtrInt;
+  c: PX509_CRLDynArray;
+begin
+  c := Crls;
+  for i := 0 to length(c) - 1 do
+  begin
+    result := c[i].IsRevoked(serial);
     if result >= 0 then
       exit;
   end;
@@ -6248,35 +6370,83 @@ begin
             (X509_STORE_add_cert(@self, x) = OPENSSLSUCCESS);
 end;
 
-function X509_STORE.AddFromBinary(const Der: RawByteString): boolean;
+function X509_STORE.AddCrl(c: PX509_CRL): boolean;
+begin
+  result := (@self <> nil) and
+            (c <> nil) and
+            (X509_STORE_add_crl(@self, c) = OPENSSLSUCCESS);
+end;
+
+function X509_STORE.AddFromBinary(const Der: RawByteString): RawUtf8;
 var
   x: PX509;
+  c: PX509_CRL;
 begin
-  result := false;
+  result := '';
   if (@self = nil) or
      (Der = '') then
     exit;
   x := LoadCertificate(Der);
-  if x = nil then
-    exit;
-  result := X509_STORE_add_cert(@self, x) = OPENSSLSUCCESS;
-  x.Free;
+  if x <> nil then
+  begin
+    if AddCertificate(x) then
+      result := x.SerialNumber;
+    x.Free;
+  end
+  else
+  begin
+    c := LoadCertificateCrl(Der);
+    if c <> nil then
+    begin
+      AddCrl(c);
+      c.Free;
+    end;
+  end;
 end;
 
-function X509_STORE.AddFromPem(const Pem: RawUtf8): integer;
+procedure AddSerial(var Serials: TRawUtf8DynArray; x: PX509);
+var
+  n: PtrInt;
+begin
+  n := length(Serials);
+  SetLength(Serials, n + 1);
+  Serials[n] := x^.SerialNumber;
+end;
+
+function X509_STORE.AddCertificateFromPem(const Pem: RawUtf8;
+  Serials: PRawUtf8DynArray): integer;
 var
   x: PX509DynArray;
   i: PtrInt;
 begin
   result := 0;
-  if (@self = nil) or
-     (Pem = '') then
+  if @self = nil then
     exit;
   x := LoadCertificates(Pem);
   for i := 0 to length(x) - 1 do
     if AddCertificate(x[i]) then
+    begin
       inc(result);
-  PX509DynArrayFree(x);
+      if Serials <> nil then
+        AddSerial(Serials^, x[i]);
+    end
+    else
+      x[i].Free;
+end;
+
+function X509_STORE.AddCrlFromPem(const Pem: RawUtf8): integer;
+var
+  c: PX509_CRL;
+begin
+  result := 0;
+  if @self = nil then
+    exit;
+  c := LoadCertificateCrlFromPem(Pem);
+  if c <> nil then
+    if AddCrl(c) then
+      inc(result)
+    else
+      c.Free;
 end;
 
 function X509_STORE.SetLocations(const CAFile, CAFolder: RawUtf8): boolean;
@@ -6415,6 +6585,14 @@ end;
 
 { X509 }
 
+function X509.GetSerial: PASN1_INTEGER;
+begin
+  if @self = nil then
+    result := nil
+  else
+    result := X509_get_serialNumber(@self);
+end;
+
 function X509.GetName: PX509_NAME;
 begin
   if @self = nil then
@@ -6425,18 +6603,12 @@ end;
 
 function X509.SerialNumber: RawUtf8;
 begin
-  if @self = nil then
-    result := ''
-  else
-    X509_get_serialNumber(@self).ToHex(result);
+  GetSerial.ToHex(result);
 end;
 
 function X509.SubjectName: RawUtf8;
 begin
-  if @self = nil then
-    result := ''
-  else
-    X509_get_subject_name(@self).ToUtf8(result);
+  GetName.ToUtf8(result);
 end;
 
 function X509.IssuerName: RawUtf8;
@@ -6857,6 +7029,18 @@ end;
 function LoadCertificateCrl(const Der: RawByteString): PX509_CRL;
 begin
   result := BioLoad(Der, @d2i_X509_CRL_bio);
+end;
+
+function LoadCertificateCrlFromPem(const Pem: RawUtf8): PX509_CRL;
+var
+  bio: PBIO;
+begin
+  result := nil;
+  if Pem = '' then
+    exit;
+  bio := BIO_new_mem_buf(pointer(Pem), length(Pem));
+  result := PEM_read_bio_X509_CRL(bio, nil, nil, nil);
+  bio.Free;
 end;
 
 function NewCertificateRequest: PX509_REQ;

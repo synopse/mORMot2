@@ -18552,9 +18552,6 @@ function X509_CRL_get_ext_by_critical(x: PX509_CRL; crit: integer; lastpos: inte
 function X509_CRL_get_ext(x: PX509_CRL; loc: integer): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_get_ext';
 
-function X509_CRL_delete_ext(x: PX509_CRL; loc: integer): PX509_EXTENSION; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_CRL_delete_ext';
-
 function X509_CRL_add_ext(x: PX509_CRL; ex: PX509_EXTENSION; loc: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_add_ext';
 
@@ -20827,9 +20824,6 @@ function PEM_write_bio_X509_REQ_NEW(bp: PBIO; x: PX509_REQ): integer; cdecl;
 
 function PEM_write_X509_REQ_NEW(fp: PPointer; x: PX509_REQ): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_X509_REQ_NEW';
-
-function PEM_read_bio_X509_CRL(bp: PBIO; x: PPX509_CRL; cb: Ppem_password_cb; u: pointer): PX509_CRL; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_read_bio_X509_CRL';
 
 function PEM_read_X509_CRL(fp: PPointer; x: PPX509_CRL; cb: Ppem_password_cb; u: pointer): PX509_CRL; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_X509_CRL';
