@@ -8706,8 +8706,6 @@ type
   PPlhash_st = ^Plhash_st;
   Pstack_st_X509_LOOKUP = pointer;
   PPstack_st_X509_LOOKUP = ^Pstack_st_X509_LOOKUP;
-  Pstack_st_X509_OBJECT = pointer;
-  PPstack_st_X509_OBJECT = ^Pstack_st_X509_OBJECT;
   Pstack_st_X509_VERIFY_PARAM = pointer;
   PPstack_st_X509_VERIFY_PARAM = ^Pstack_st_X509_VERIFY_PARAM;
   Pstack_st_PKCS7_SIGNER_INFO = pointer;
@@ -16682,29 +16680,11 @@ procedure X509_OBJECT_free(a: PX509_OBJECT); cdecl;
 function X509_OBJECT_get_type(a: PX509_OBJECT): X509_LOOKUP_TYPE; cdecl;
   external LIB_CRYPTO name _PU + 'X509_OBJECT_get_type';
 
-function X509_OBJECT_get0_X509(a: PX509_OBJECT): PX509; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_OBJECT_get0_X509';
-
 function X509_OBJECT_set1_X509(a: PX509_OBJECT; obj: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_OBJECT_set1_X509';
 
-function X509_OBJECT_get0_X509_CRL(a: PX509_OBJECT): PX509_CRL; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_OBJECT_get0_X509_CRL';
-
 function X509_OBJECT_set1_X509_CRL(a: PX509_OBJECT; obj: PX509_CRL): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_OBJECT_set1_X509_CRL';
-
-function X509_STORE_lock(ctx: PX509_STORE): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_STORE_lock';
-
-function X509_STORE_unlock(ctx: PX509_STORE): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_STORE_unlock';
-
-function X509_STORE_up_ref(v: PX509_STORE): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_STORE_up_ref';
-
-function X509_STORE_get0_objects(v: PX509_STORE): Pstack_st_X509_OBJECT; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_STORE_get0_objects';
 
 function X509_STORE_CTX_get1_certs(st: PX509_STORE_CTX; nm: PX509_NAME): Pstack_st_X509; cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_get1_certs';

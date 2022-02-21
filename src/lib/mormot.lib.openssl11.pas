@@ -1193,6 +1193,7 @@ type
 
   PX509_CRL = ^X509_CRL;
   PPX509_CRL = ^PX509_CRL;
+  PX509_CRLDynArray = array of PX509_CRL;
   PX509_REVOKED = ^X509_REVOKED;
   PPX509_REVOKED = ^PX509_REVOKED;
   PX509_CRL_METHOD = pointer;
@@ -1249,8 +1250,10 @@ type
     function NextUpdate: TDateTime;
     function IssuerName: RawUtf8;
     function Revoked: Pstack_st_X509_REVOKED;
-    function IsRevoked(const serialnumber: RawUtf8): boolean; overload;
-    function IsRevoked(serial: PASN1_INTEGER): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    // returns the reason, CRL_REASON_NONE=-1 if none found - can check >= 0
+    function IsRevoked(const serialnumber: RawUtf8): integer; overload;
+    function IsRevoked(serial: PASN1_INTEGER): integer; overload;
     function AddRevokedSerial(serial: PASN1_INTEGER; ca: PX509;
       reason: integer = 0; nextUpdateDays: integer = 30): boolean;
     function AddRevokedCertificate(x, ca: PX509;
@@ -1281,6 +1284,11 @@ type
 
   X509_STORE = object
   public
+    function Certificates: PX509DynArray;
+    function Crls: PX509_CRLDynArray;
+    // caller should make result.Free once done (to decrease refcount)
+    function BySerial(const Serial: RawUtf8): PX509;
+    function IsRevoked(const Serial: RawUtf8): integer;
     function SetDefaultPaths: boolean;
     function AddCertificate(x: PX509): boolean;
     function AddFromBinary(const Der: RawByteString): boolean;
@@ -1310,6 +1318,8 @@ type
 
   PX509_OBJECT = type pointer;
   PPX509_OBJECT = ^PX509_OBJECT;
+  Pstack_st_X509_OBJECT = POPENSSL_STACK;
+  PPstack_st_X509_OBJECT = ^Pstack_st_X509_OBJECT;
 
   X509_algor_st = record
     algorithm: PASN1_OBJECT;
@@ -1694,6 +1704,14 @@ function X509_STORE_set_flags(ctx: PX509_STORE; flags: cardinal): integer; cdecl
 function X509_STORE_set1_param(ctx: PX509_STORE; pm: PX509_VERIFY_PARAM): integer; cdecl;
 function X509_STORE_get0_param(ctx: PX509_STORE): PX509_VERIFY_PARAM; cdecl;
 procedure X509_STORE_set_verify_cb(ctx: PX509_STORE; verify_cb: X509_STORE_CTX_verify_cb); cdecl;
+function X509_STORE_lock(ctx: PX509_STORE): integer; cdecl;
+function X509_STORE_unlock(ctx: PX509_STORE): integer; cdecl;
+function X509_STORE_up_ref(v: PX509_STORE): integer; cdecl;
+function X509_STORE_get0_objects(v: PX509_STORE): Pstack_st_X509_OBJECT; cdecl;
+function X509_OBJECT_get0_X509(a: PX509_OBJECT): PX509;
+  {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
+function X509_OBJECT_get0_X509_CRL(a: PX509_OBJECT): PX509_CRL;
+  {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_LOOKUP_hash_dir(): PX509_LOOKUP_METHOD; cdecl;
 function X509_LOOKUP_file(): PX509_LOOKUP_METHOD; cdecl;
 function X509_LOOKUP_ctrl(ctx: PX509_LOOKUP; cmd: integer; argc: PUtf8Char;
@@ -2453,6 +2471,12 @@ type
     X509_STORE_set1_param: function(ctx: PX509_STORE; pm: PX509_VERIFY_PARAM): integer; cdecl;
     X509_STORE_get0_param: function(ctx: PX509_STORE): PX509_VERIFY_PARAM; cdecl;
     X509_STORE_set_verify_cb: procedure(ctx: PX509_STORE; verify_cb: X509_STORE_CTX_verify_cb); cdecl;
+    X509_STORE_lock: function(ctx: PX509_STORE): integer; cdecl;
+    X509_STORE_unlock: function(ctx: PX509_STORE): integer; cdecl;
+    X509_STORE_up_ref: function(v: PX509_STORE): integer; cdecl;
+    X509_STORE_get0_objects: function(v: PX509_STORE): Pstack_st_X509_OBJECT; cdecl;
+    X509_OBJECT_get0_X509: function(a: PX509_OBJECT): PX509; cdecl;
+    X509_OBJECT_get0_X509_CRL: function(a: PX509_OBJECT): PX509_CRL; cdecl;
     X509_LOOKUP_hash_dir: function(): PX509_LOOKUP_METHOD; cdecl;
     X509_LOOKUP_file: function(): PX509_LOOKUP_METHOD; cdecl;
     X509_LOOKUP_ctrl: function(ctx: PX509_LOOKUP; cmd: integer; argc: PUtf8Char; argl: integer; ret: PPUtf8Char): integer; cdecl;
@@ -2578,7 +2602,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..250] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..256] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2708,6 +2732,12 @@ const
     'X509_STORE_set1_param',
     'X509_STORE_get0_param',
     'X509_STORE_set_verify_cb',
+    'X509_STORE_lock',
+    'X509_STORE_unlock',
+    'X509_STORE_up_ref',
+    'X509_STORE_get0_objects',
+    'X509_OBJECT_get0_X509',
+    'X509_OBJECT_get0_X509_CRL',
     'X509_LOOKUP_hash_dir',
     'X509_LOOKUP_file',
     'X509_LOOKUP_ctrl',
@@ -3493,6 +3523,36 @@ end;
 procedure X509_STORE_set_verify_cb(ctx: PX509_STORE; verify_cb: X509_STORE_CTX_verify_cb);
 begin
   libcrypto.X509_STORE_set_verify_cb(ctx, verify_cb);
+end;
+
+function X509_STORE_lock(ctx: PX509_STORE): integer;
+begin
+  result := libcrypto.X509_STORE_lock(ctx);
+end;
+
+function X509_STORE_unlock(ctx: PX509_STORE): integer;
+begin
+  result := libcrypto.X509_STORE_unlock(ctx);
+end;
+
+function X509_STORE_up_ref(v: PX509_STORE): integer;
+begin
+  result := libcrypto.X509_STORE_up_ref(v);
+end;
+
+function X509_STORE_get0_objects(v: PX509_STORE): Pstack_st_X509_OBJECT;
+begin
+  result := libcrypto.X509_STORE_get0_objects(v);
+end;
+
+function X509_OBJECT_get0_X509(a: PX509_OBJECT): PX509;
+begin
+  result := libcrypto.X509_OBJECT_get0_X509(a);
+end;
+
+function X509_OBJECT_get0_X509_CRL(a: PX509_OBJECT): PX509_CRL;
+begin
+  result := libcrypto.X509_OBJECT_get0_X509_CRL(a);
 end;
 
 function X509_LOOKUP_hash_dir(): PX509_LOOKUP_METHOD;
@@ -4816,6 +4876,24 @@ function X509_STORE_get0_param(ctx: PX509_STORE): PX509_VERIFY_PARAM; cdecl;
 procedure X509_STORE_set_verify_cb(ctx: PX509_STORE; verify_cb: X509_STORE_CTX_verify_cb); cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_set_verify_cb';
 
+function X509_STORE_lock(ctx: PX509_STORE): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_lock';
+
+function X509_STORE_unlock(ctx: PX509_STORE): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_unlock';
+
+function X509_STORE_up_ref(v: PX509_STORE): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_up_ref';
+
+function X509_STORE_get0_objects(v: PX509_STORE): Pstack_st_X509_OBJECT; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_get0_objects';
+
+function X509_OBJECT_get0_X509(a: PX509_OBJECT): PX509; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_OBJECT_get0_X509';
+
+function X509_OBJECT_get0_X509_CRL(a: PX509_OBJECT): PX509_CRL; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_OBJECT_get0_X509_CRL';
+
 function X509_LOOKUP_hash_dir(): PX509_LOOKUP_METHOD; cdecl;
   external LIB_CRYPTO name _PU + 'X509_LOOKUP_hash_dir';
 
@@ -5912,33 +5990,49 @@ begin
     result := X509_CRL_get_REVOKED(@self);
 end;
 
-function X509_CRL.IsRevoked(const serialnumber: RawUtf8): boolean;
+function X509_CRL.IsRevoked(const serialnumber: RawUtf8): integer;
 var
   rev: Pstack_st_X509_REVOKED;
+  r: PX509_REVOKED;
   i: PtrInt;
 begin
-  result := true;
   rev := Revoked;
   for i := 0 to rev^.Count - 1 do
-    if PX509_REVOKED(rev.GetItem(i)).SerialNumber = serialnumber then
-      exit;
-  result := false;
+  begin
+    r := rev.GetItem(i);
+    if r.SerialNumber = serialnumber then
+    begin
+      result := r.Reason;
+      if (result >= 0) and
+         (result <> CRL_REASON_REMOVE_FROM_CRL) then
+        exit;
+    end;
+  end;
+  result := CRL_REASON_NONE; // = -1 if not revoked
 end;
 
-function X509_CRL.IsRevoked(serial: PASN1_INTEGER): boolean;
+function X509_CRL.IsRevoked(serial: PASN1_INTEGER): integer;
 var
   rev: Pstack_st_X509_REVOKED;
+  r: PX509_REVOKED;
   i: PtrInt;
 begin
   if serial.Len <> 0 then
   begin
-    result := true;
     rev := Revoked;
     for i := 0 to rev^.Count - 1 do
-      if X509_REVOKED_get0_serialNumber(rev.GetItem(i)).Equals(serial^) then
-        exit;
+    begin
+      r := rev.GetItem(i);
+      if X509_REVOKED_get0_serialNumber(r).Equals(serial^) then
+      begin
+        result := r.Reason;
+        if (result >= 0) and
+           (result <> CRL_REASON_REMOVE_FROM_CRL) then
+          exit;
+      end;
+    end;
   end;
-  result := false;
+  result := CRL_REASON_NONE; // = -1 if not revoked
 end;
 
 function X509_CRL.AddRevokedSerial(serial: PASN1_INTEGER; ca: PX509;
@@ -5950,7 +6044,7 @@ begin
   result := false;
   if (@self = nil) or
      (serial = nil) or
-     IsRevoked(serial) or
+     (IsRevoked(serial) >= 0) or
      not ca.IsCA then
     exit;
   rev := X509_REVOKED_new();
@@ -6072,6 +6166,74 @@ end;
 
 
 { X509_STORE }
+
+function GetObjects(store: PX509_STORE; crl: boolean): TPointerDynArray;
+var
+  i, n: integer; // no PtrInt here for integer C API parameters
+  p: pointer;
+  obj: Pstack_st_X509_OBJECT;
+begin
+  result := nil;
+  if store = nil then
+    exit;
+  n := 0;
+  X509_STORE_lock(store);
+  obj := X509_STORE_get0_objects(store);
+  for i := 0 to obj^.Count - 1 do
+  begin
+    p := obj^.GetItem(i);
+    if crl then
+      p := X509_OBJECT_get0_X509_CRL(p)
+    else
+      p := X509_OBJECT_get0_X509(p);
+    if p <> nil then
+      PtrArrayAdd(result, p, n);
+  end;
+  X509_STORE_unlock(store);
+  if n <> 0 then
+    DynArrayFakeLength(result, n);
+end;
+
+function X509_STORE.Certificates: PX509DynArray;
+begin
+  result := PX509DynArray(GetObjects(@self, {crl=}false));
+end;
+
+function X509_STORE.Crls: PX509_CRLDynArray;
+begin
+  result := PX509_CRLDynArray(GetObjects(@self, {crl=}true));
+end;
+
+function X509_STORE.BySerial(const Serial: RawUtf8): PX509;
+var
+  i: PtrInt;
+  c: PX509DynArray;
+begin
+  c := Certificates;
+  for i := 0 to length(c) - 1 do
+    if c[i].SerialNumber = Serial then
+    begin
+      result := c[i];
+      result.Acquire;
+      exit;
+    end;
+  result := nil;
+end;
+
+function X509_STORE.IsRevoked(const Serial: RawUtf8): integer;
+var
+  i: PtrInt;
+  c: PX509_CRLDynArray;
+begin
+  c := Crls;
+  for i := 0 to length(c) - 1 do
+  begin
+    result := c[i].IsRevoked(Serial);
+    if result >= 0 then
+      exit;
+  end;
+  result := CRL_REASON_NONE; // -1 if not revoked
+end;
 
 function X509_STORE.SetDefaultPaths: boolean;
 begin
@@ -6658,7 +6820,8 @@ begin
       break;
     PtrArrayAdd(result, x, n);
   until false;
-  SetLength(result, n);
+  if n <> 0 then
+    DynArrayFakeLength(result, n);
   bio.Free;
 end;
 
