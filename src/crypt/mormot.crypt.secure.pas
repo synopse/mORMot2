@@ -1572,6 +1572,7 @@ type
   TPemKind = (
     pemUnspecified,
     pemCertificate,
+    pemCrl,
     pemPrivateKey,
     pemPublicKey,
     pemRsaPrivateKey,
@@ -1590,6 +1591,7 @@ const
   PEM_BEGIN: array[TPemKind] of RawUtf8 = (
     '-----BEGIN PRIVACY-ENHANCED MESSAGE-----'#13#10,
     '-----BEGIN CERTIFICATE-----'#13#10,
+    '-----BEGIN X509 CRL-----'#13#10,
     '-----BEGIN PRIVATE KEY-----'#13#10,
     '-----BEGIN PUBLIC KEY-----'#13#10,
     '-----BEGIN RSA PRIVATE KEY-----'#13#10,
@@ -1606,6 +1608,7 @@ const
   PEM_END: array[TPemKind] of RawUtf8 = (
     '-----END PRIVACY-ENHANCED MESSAGE-----'#13#10,
     '-----END CERTIFICATE-----'#13#10,
+    '-----END X509 CRL-----'#13#10,
     '-----END PRIVATE KEY-----'#13#10,
     '-----END PUBLIC KEY-----'#13#10,
     '-----END RSA PRIVATE KEY-----'#13#10,
