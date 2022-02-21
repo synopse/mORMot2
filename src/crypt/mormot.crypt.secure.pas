@@ -1387,7 +1387,9 @@ type
     function AddFromFolder(const Folder: TFileName;
       const Mask: TFileName = FILES_ALL; Recursive: boolean = false): TRawUtf8DynArray;
     /// add a new Serial number to the internal Certificate Revocation List
-    function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
+    // - on some engines (our internal ECC, but not OpenSSL), Reason=crrNotRevoked
+    // could be used to unregister a certificate revocation
+    function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean;
     /// check if the certificate is valid, against known certificates chain
     // - will check internal properties of the certificate (e.g. validity dates),
@@ -1420,7 +1422,7 @@ type
     function AddFromFile(const FileName: TFileName): TRawUtf8DynArray; virtual;
     function AddFromFolder(const Folder, Mask: TFileName;
        Recursive: boolean): TRawUtf8DynArray; virtual;
-    function Revoke(const Serial: RawUtf8; RevocationDate: TDateTime;
+    function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; virtual; abstract;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; virtual; abstract;
     function Verify(const Signature: RawUtf8;
