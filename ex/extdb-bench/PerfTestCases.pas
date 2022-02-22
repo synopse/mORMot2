@@ -402,7 +402,7 @@ begin
   lProps := TSqlDBIbxConnectionProperties.Create(cFirebirdServerIbx,
     cFirebirdDBFileIbx, cUserName, cPassword);
   lProps.FirebirdLibraryPathName := cFIREBIRDEMBEDDEDDLL;
-  lProps.CreateDescendingPK := True;
+  lProps.CreateDescendingOnlyPK := True;
   RunExternal(lProps);
 end;
 {$endif USEIBX}
