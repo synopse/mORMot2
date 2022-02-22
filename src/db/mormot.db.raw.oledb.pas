@@ -996,7 +996,7 @@ begin
   else
   begin
     result := (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
-      IdemPChar(@Header[4], 'STANDARD JET');
+              IdemPChar(@Header[4], 'STANDARD JET');
     FileClose(F);
   end;
 end;
@@ -1008,14 +1008,24 @@ begin
       result := ftUnknown;
     DBTYPE_NULL:
       result := ftNull;
-    DBTYPE_I1, DBTYPE_I2, DBTYPE_I4, DBTYPE_I8,
-    DBTYPE_UI1, DBTYPE_UI2, DBTYPE_UI4, DBTYPE_UI8, DBTYPE_BOOL:
+    DBTYPE_I1,
+    DBTYPE_I2,
+    DBTYPE_I4,
+    DBTYPE_I8,
+    DBTYPE_UI1,
+    DBTYPE_UI2,
+    DBTYPE_UI4,
+    DBTYPE_UI8,
+    DBTYPE_BOOL:
       result := ftInt64;
     DBTYPE_CY:
       result := ftCurrency;
-    DBTYPE_R4, DBTYPE_R8:
+    DBTYPE_R4,
+    DBTYPE_R8:
       result := ftDouble;
-    DBTYPE_DECIMAL, DBTYPE_NUMERIC, DBTYPE_VARNUMERIC:
+    DBTYPE_DECIMAL,
+    DBTYPE_NUMERIC,
+    DBTYPE_VARNUMERIC:
       case bScale of // number of digits to the right of the decimal point
         0:
           result := ftInt64;
@@ -1024,9 +1034,14 @@ begin
       else
         result := ftDouble;
       end;
-    DBTYPE_DATE, DBTYPE_DBDATE, DBTYPE_DBTIME, DBTYPE_FILETIME, DBTYPE_DBTIMESTAMP:
+    DBTYPE_DATE,
+    DBTYPE_DBDATE,
+    DBTYPE_DBTIME,
+    DBTYPE_FILETIME,
+    DBTYPE_DBTIMESTAMP:
       result := ftDate;
-    DBTYPE_BYTES, DBTYPE_UDT:
+    DBTYPE_BYTES,
+    DBTYPE_UDT:
       result := ftBlob;
   else // all other types will be converted to text
     result := ftUtf8;

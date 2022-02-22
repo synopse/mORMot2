@@ -44,7 +44,7 @@ Shared Types and Definitions for Database Access
 - Nullable Values Stored as Variant
 - Date/Time SQL encoding
 - SQL Parameters Inlining and Processing
-- `TJSONWriter` Specialized for Database Export
+- `TResultsWriter` Specialized for Database Export
 - `TSelectStatement` SQL SELECT Parser
 - JSON Object Decoder and SQL Generation
 - `TID` Processing Functions
