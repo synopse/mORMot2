@@ -432,7 +432,7 @@ begin
   fColumn.ReHash;
   fIbxParams := fStatement.GetSQLParams;
   SetLength(farrParams, fIbxParams.Count);
-  for i:=0 to fIbxParams.Count-1 do
+  for i := 0 to fIbxParams.Count - 1 do
     farrParams[i] := fIbxParams.getSQLParam(i);
   if ExpectResults then
   begin
@@ -458,7 +458,8 @@ begin
 end;
 
 function DynRawUtf8ArrayToConst(const aValue: TRawUtf8DynArray): TTVarRecDynArray;
-var ndx: PtrInt;
+var
+  ndx: PtrInt;
 begin
   SetLength(Result, Length(aValue));
   for ndx := 0 to Length(aValue) - 1 do
@@ -705,7 +706,7 @@ var
     oldSQL := StringReplaceAll(fSql, '?', '%');
     SetLength(aParTyp, fParamCount);
     SetLength(aPar, fParamCount);
-    for iP:=0 to fParamCount-1 do
+    for iP := 0 to fParamCount-1 do
       aParTyp[iP] := Param2Type(fIbxParams.Params[iP]);
     iStart := 0;
     iStmCount := Round(fParamsArrayCount /
@@ -1175,7 +1176,7 @@ var
   Status: IStatus;
   log: ISynLog;
 
-  function GenerateDPB(aCreateDb: boolean=false): IDPB;
+  function GenerateDPB(aCreateDb: boolean = false): IDPB;
   var
     i: PtrInt;
     ParamValue: string;

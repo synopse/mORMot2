@@ -2296,9 +2296,9 @@ begin
     inc(r[1]);
     Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2c');
     // validate CRL
-    Check(st2.Revoke(c3.GetSerial, 0, crrWithdrawn));
+    Check(st2.Revoke(c3, 0, crrWithdrawn));
     Check(st2.Verify(s, pointer(r), length(r)) = cvRevoked, 's2d');
-    Check(st2.Revoke(c3.GetSerial, 0, crrNotRevoked));
+    Check(st2.Revoke(c3, 0, crrNotRevoked));
     Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2e');
     // ensure new certs are not recognized by previous stores
     if st3 <> nil then

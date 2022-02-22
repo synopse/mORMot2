@@ -990,7 +990,7 @@ type
     /// returns all values as a JSON object of string fields
     function AsJson: RawUtf8;
     /// fill the supplied two arrays of RawUtf8 with the stored values
-    procedure AsNameValues(out Names,Values: TRawUtf8DynArray);
+    procedure AsNameValues(out Names, Values: TRawUtf8DynArray);
     /// search for a Name, return the associated Value as variant
     // - returns null if the name was not found
     function ValueVariantOrNull(const aName: RawUtf8): variant;

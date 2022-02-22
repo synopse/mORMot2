@@ -349,7 +349,8 @@ type
   /// callback raised by INetTls.AfterConnection to validate a peer
   // - at this point, Context.CipherName is set, but PeerInfo, PeerIssuer and
   // PeerSubject are not - it is up to the event to compute the PeerInfo value
-  // - TLS is an opaque structure, typically an OpenSSL PSSL pointer
+  // - TLS is an opaque structure, typically an OpenSSL PSSL pointer, so you
+  // could use e.g. PSSL(TLS).PeerCertificates array
   TOnNetTlsPeerValidate = procedure(Socket: TNetSocket;
     Context: PNetTlsContext; TLS: pointer) of object;
 
@@ -843,6 +844,7 @@ type
     procedure SetSendTimeout(aSendTimeout: integer); virtual;
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
     function GetRawSocket: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
     // - could have been assigned by a Tunnel.From() call
@@ -852,7 +854,7 @@ type
     // - depending on the actual INetTls implementation, some fields may not
     // be used nor populated - currently only supported by mormot.lib.openssl11
     TLS: TNetTlsContext;
-    /// can be assigned from TSynLog.DoLog class method for low-level logging
+    /// can be assigned to TSynLog.DoLog class method for low-level logging
     OnLog: TSynLogProc;
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead

@@ -3699,6 +3699,7 @@ type
   // - defined as TMethod to avoid dependency with the mormot.core.log unit
   // - match class procedure TSynLog.DoLog
   // - used e.g. by global variables like WindowsServiceLog in mormot.core.os
+  // or TCrtSocket.OnLog in mormot.net.sock
   TSynLogProc = procedure(Level: TSynLogInfo; const Fmt: RawUtf8;
      const Args: array of const; Instance: TObject = nil) of object;
 
