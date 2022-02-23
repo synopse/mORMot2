@@ -2011,7 +2011,7 @@ begin
     result := FakeCallbackReplaceID(pointer(fFakeCallbacks.List),
       fFakeCallbacks.Count, aConnectionIDOld, aConnectionIDNew);
   finally
-    fFakeCallbacks.Safe.ReadOnlyLock;
+    fFakeCallbacks.Safe.ReadOnlyUnLock;
   end;
 end;
 
