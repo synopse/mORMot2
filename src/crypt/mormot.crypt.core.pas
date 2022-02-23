@@ -1332,17 +1332,17 @@ type
   /// thread-safe class containing a TAes encryption/decryption engine
   TAesLocked = class
   protected
-    fSafe: TRTLCriticalSection; // TAes is enough for CS padding
+    fSafe: TLightLock; // TAes is enough for cache line padding of this lock
     fAes: TAes;
   public
     /// initialize the instance
     constructor Create; virtual;
     /// finalize all used memory and resources
     destructor Destroy; override;
-    /// enter the associated mutex
+    /// enter the associated TTLightLock
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
-    /// leave the associated mutex
+    /// leave the associated TTLightLock
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -6554,24 +6554,22 @@ end;
 
 constructor TAesLocked.Create;
 begin
-  InitializeCriticalSection(fSafe);
 end;
 
 destructor TAesLocked.Destroy;
 begin
   inherited Destroy;
-  DeleteCriticalSection(fSafe);
   fAes.Done; // fill AES buffer with 0 for safety
 end;
 
 procedure TAesLocked.Lock;
 begin
-  EnterCriticalSection(fSafe);
+  fSafe.Lock;
 end;
 
 procedure TAesLocked.UnLock;
 begin
-  LeaveCriticalSection(fSafe);
+  fSafe.UnLock;
 end;
 
 
@@ -6886,22 +6884,22 @@ var
 begin
   if fSeedAfterBytes = 0 then
     exit;
-  EnterCriticalSection(fSafe);
+  fSafe.Lock;
   alreadyseeding := fSeeding;
   fSeeding := true;
-  LeaveCriticalSection(fSafe);
+  fSafe.UnLock;
   if not alreadyseeding then
     try
       // 128 bytes is the HmacSha512 key block size
       entropy := GetEntropy(128, fSeedEntropySource);
       Pbkdf2HmacSha512(entropy, Executable.User, fSeedPbkdf2Round, key.b);
-      EnterCriticalSection(fSafe);
+      fSafe.Lock;
       try
         fAes.EncryptInit(key.Lo, fAesKeySize);
         DefaultHasher128(@TAesContext(fAes.Context).iv, @key.Hi,SizeOf(key.Hi));
         fBytesSinceSeed := 0;
       finally
-        LeaveCriticalSection(fSafe);
+        fSafe.UnLock;
       end;
     finally
       FillZero(key.b); // avoid the ephemeral key to appear in clear on stack
@@ -6928,7 +6926,7 @@ begin
   if (fSeedAfterBytes <> 0) and
      (fBytesSinceSeed > fSeedAfterBytes) then
     Seed;
-  EnterCriticalSection(fSafe);
+  fSafe.Lock;
   with TAesContext(fAes.Context) do
   begin
     DoBlock(rk, iv, Block{%H-}); // block=AES(iv)
@@ -6938,7 +6936,7 @@ begin
   end;
   inc(fBytesSinceSeed, 16);
   inc(fTotalBytes, 16);
-  LeaveCriticalSection(fSafe);
+  fSafe.UnLock;
 end;
 
 procedure TAesPrng.FillRandom(out Buffer: THash256);
@@ -6946,7 +6944,7 @@ begin
   if (fSeedAfterBytes <> 0) and
      (fBytesSinceSeed > fSeedAfterBytes) then
     Seed;
-  EnterCriticalSection(fSafe);
+  fSafe.Lock;
   with TAesContext(fAes.Context) do
   begin
     DoBlock(rk, iv, THash256Rec({%H-}Buffer).Lo);
@@ -6960,7 +6958,7 @@ begin
   end;
   inc(fBytesSinceSeed, 32);
   inc(fTotalBytes, 32);
-  LeaveCriticalSection(fSafe);
+  fSafe.UnLock;
 end;
 
 procedure TAesPrng.FillRandom(Buffer: pointer; Len: PtrInt);
@@ -6980,7 +6978,7 @@ begin
   Len := main shl AesBlockShift;
   if remain <> 0 then
     inc(Len, SizeOf(TAesBlock));
-  EnterCriticalSection(fSafe);
+  fSafe.Lock;
   inc(fBytesSinceSeed, Len);
   inc(fTotalBytes, Len);
   if main < 8 then
@@ -7005,7 +7003,7 @@ begin
       if TAesContext(fAes.Context).iv.b[15] = 0 then
         CtrNistCarryBigEndian(TAesContext(fAes.Context).iv.b);
     end;
-    LeaveCriticalSection(fSafe);
+    fSafe.UnLock;
     exit;
   end;
   // big buffers will release the lock before processing
@@ -7017,7 +7015,7 @@ begin
   if H < bswap64(aes.iv.H) then // propagate big-endian 64-bit CTR overflow
     TAesContext(fAes.Context).iv.L := bswap64(bswap64(aes.iv.L) + 1);
   TAesContext(fAes.Context).iv.H := bswap64(H);
-  LeaveCriticalSection(fSafe);
+  fSafe.UnLock;
   // unlocked AES computation
   if main <> 0 then
     {$ifdef USEAESNI64}
