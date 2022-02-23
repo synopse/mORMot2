@@ -4418,6 +4418,14 @@ begin
   s := Doc.ToJson;
   CheckEqual(s, '[null]');
   Doc.Clear;
+  Doc.InitFast;
+  Doc.S['a'] := 'A';
+  s := Doc.U['b'];
+  CheckEqual(s, '');
+  Check(Doc.S['c'] = '');
+  s := Doc.ToJson;
+  CheckEqual(s, '{"a":"A"}');
+  Doc.Clear;
   for ndx := 1 to 10 do
   begin
     Doc.InitFast;
