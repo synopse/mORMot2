@@ -930,8 +930,12 @@ type
     // !  assert(variant(Doc).name='John');
     // !end;
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    procedure Init(aOptions: TDocVariantOptions = [];
-      aKind: TDocVariantKind = dvUndefined); overload;
+    procedure Init(aOptions: TDocVariantOptions = []); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// initialize a TDocVariantData to store a content of some known type
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    procedure Init(aOptions: TDocVariantOptions;
+      aKind: TDocVariantKind); overload;
     /// initialize a TDocVariantData to store some document-based content
     // - use the options corresponding to the supplied TDocVariantModel
     // - if you call Init*() methods in a row, ensure you call Clear in-between
@@ -4626,6 +4630,16 @@ begin
   result := pointer(VValue);
 end;
 
+procedure TDocVariantData.Init(aOptions: TDocVariantOptions);
+begin
+  VType := DocVariantVType;
+  aOptions := aOptions - [dvoIsArray, dvoIsObject];
+  VOptions := aOptions;
+  pointer(VName) := nil; // to avoid GPF
+  pointer(VValue) := nil;
+  VCount := 0;
+end;
+
 procedure TDocVariantData.Init(aOptions: TDocVariantOptions;
   aKind: TDocVariantKind);
 var
@@ -5197,14 +5211,17 @@ begin
             GetJsonToAnyVariant(val^, Json, @EndOfObject, @VOptions,
               {double=}false{is set from VOptions});
             if Json = nil then
-              exit; // invalid input
+              break; // invalid input
             if intvalues <> nil then
               intvalues.UniqueVariant(val^);
             inc(Val);
             inc(n);
           until EndOfObject = ']';
           // no SetLength(VValue,VCount) if NextGrow() was used on huge input
-          VCount := n;
+          if Json = nil then
+            VValue := nil
+          else
+            VCount := n;
         end;
       end;
     '{':
@@ -5246,7 +5263,7 @@ begin
             // see http://docs.mongodb.org/manual/reference/mongodb-extended-Json
             Name := GetJsonPropName(Json, @NameLen);
             if Name = nil then
-              exit;
+              break; // invalid input
             if n = cap then
             begin
               // grow if our initial guess was aborted due to huge input
@@ -5265,14 +5282,21 @@ begin
               if EndOfObject = '}' then // valid object end
                 Json := @NULCHAR
               else
-                exit; // invalid input
+                break; // invalid input
             if intvalues <> nil then
               intvalues.UniqueVariant(Val^);
             inc(n);
             inc(Val);
           until EndOfObject = '}';
           // no SetLength(VValue/VNAme,VCount) if NextGrow() on huge input
-          VCount := n;
+          if (Name = nil) or
+             (Json = nil) then
+           begin
+             VName := nil;
+             VValue := nil;
+           end
+           else
+             VCount := n;
         end;
       end;
     'n',
@@ -5445,8 +5469,8 @@ end;
 procedure TDocVariantData.ClearFast;
 begin
   PInteger(@VType)^ := 0; // clear VType and VOptions
-  RawUtf8DynArrayClear(VName);
-  VariantDynArrayClear(VValue);
+  FastDynArrayClear(@VName, TypeInfo(RawUtf8));
+  FastDynArrayClear(@VValue, TypeInfo(variant));
   VCount := 0;
 end;
 
