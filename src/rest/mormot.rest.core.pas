@@ -3979,7 +3979,7 @@ begin
   begin
     result := GetTickCount64;
     if self <> nil then
-      fTix64 := result;
+      fTix64 := result; // store in cache during the whole request flow
   end
   else
     result := fTix64;

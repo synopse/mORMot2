@@ -45,9 +45,9 @@ But please do not forget to put somewhere in your credit window or documentation
 
 For instance, if you select the MPL license, here are the requirements:
 - You accept the license terms with no restriction - see http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;
-- You have to publish any modified unit in a public web site (e.g. http://SoftwareCompany.com/MPL), with a description of applied modifications, and no removal of the original license header in source code;
+- You have to publish any modified unit in a public web site (e.g. http://YourSoftwareCompany.com/MPL), with a description of applied modifications, and no removal of the original license header in source code;
 - You make appear some notice available in the program (About box, documentation, online help), stating e.g.
-*This software uses some third-party code of the Synopse mORMot framework (C) 2021 Arnaud Bouchez - https://synopse.info - under Mozilla Public License 1.1; modified source code is available at http://SoftwareCompany.com/MPL*
+*This software uses some third-party code of the Synopse mORMot framework (C) 2022 Arnaud Bouchez - https://synopse.info - under Mozilla Public License 1.1; modified source code is available at http://SoftwareCompany.com/MPL*
 
 
 ## Derivate Open Source Works
@@ -57,19 +57,19 @@ If you want to include part of the framework source code in your own open-source
     {
       Will serve static content and DWS dynamic content via http.sys
       kernel mode high-performance HTTP server (available since XP SP2).
-      See http://blog.synopse.info/post/2011/03/11/HTTP-server-using-fast-http.sys-kernel-mode-server
+      See http://blog.synopse.info?post/2011/03/11/HTTP-server-using-fast-http.sys-kernel-mode-server
       WARNING: you need to first register the server URI and port to the http.sys stack.
       That is, run the application at least once as administrator.
 
       Sample based on official mORMot's sample
       "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 
-      Synopse mORMot framework. Copyright (C) 2021 Arnaud Bouchez
+      Synopse mORMot framework. Copyright (C) 2022 Arnaud Bouchez
         Synopse Informatique - https://synopse.info
       Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1
     }
 
-For instance, this comment was included in the great *DelphiWebScript* project by Eric Grange - http://code.google.com/p/dwscript
+For instance, this comment was included in the great *DelphiWebScript* project by Eric Grange - https://bitbucket.org/egrange/dwscript/src/master
 
 You need to ensure that your Open Source project licensing is compatible with our Licensing Terms, and, if possible, notify us that you use our code.
 
