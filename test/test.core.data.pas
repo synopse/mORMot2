@@ -4411,6 +4411,13 @@ var
   lTable: TOrmTableJson;
   lRefreshed: Boolean;
 begin
+  V := _Json('[{"id":0}');
+  Check(VarIsEmpty(V));
+  Doc.InitFast;
+  Doc.AddItem(_Json('[{"id":0}'));
+  s := Doc.ToJson;
+  CheckEqual(s, '[null]');
+  Doc.Clear;
   for ndx := 1 to 10 do
   begin
     Doc.InitFast;
