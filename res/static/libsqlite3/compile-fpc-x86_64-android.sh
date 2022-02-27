@@ -16,7 +16,8 @@ echo ---------------------------------------------------
 echo Compiling for FPC on $ARCH using $GCC
 $GCC --target=x86_64-linux-android21 -static -O2  -Wno-pointer-sign -DNDEBUG -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -c sqlite3mc.c -o sqlite3-$ARCH.o
 
-$CROSS/llvm-strip sqlite3-$ARCH.o
+#$CROSS/llvm-strip sqlite3-$ARCH.o
+# striping remove all exported symbols :(
 
 cp sqlite3-$ARCH.o $DST
 cp sqlite3-$ARCH.o $DST2
