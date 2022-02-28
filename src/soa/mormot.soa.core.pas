@@ -748,6 +748,27 @@ type
       const aMethodsNames: array of RawUtf8; aSubscribe: boolean = true); overload;
   end;
 
+  /// service definition with a method which will be called when a callback
+  // interface instance is released on the client side
+  // - may be used to implement safe publish/subscribe mechanism using
+  // interface callbacks, e.g. over WebSockets
+  IServiceWithCallbackReleased = interface(IInvokable)
+    ['{8D518FCB-62C3-42EB-9AE7-96ED322140F7}']
+    /// will be called when a callback is released on the client side
+    // - this method matches the TInterfaceFactory.MethodIndexCallbackReleased
+    // signature, so that it will be called with the interface instance by
+    // TServiceContainerServer.FakeCallbackRelease
+    // - you may use it as such - see sample Project31ChatServer.dpr:
+    // ! procedure TChatService.CallbackReleased(const callback: IInvokable;
+    // !   const interfaceName: RawUtf8);
+    // ! begin  // unsubscribe from fConnected: array of IChatCallback
+    // !   if interfaceName = 'IChatCallback' then
+    // !     InterfaceArrayDelete(fConnected, callback);
+    // ! end;
+    procedure CallbackReleased(const callback: IInvokable;
+      const interfaceName: RawUtf8);
+  end;
+
   /// a callback interface used to notify a TOrm modification in real time
   // - will be used e.g. by TRestServer.RecordVersionSynchronizeSubscribeMaster()
   // - all methods of this interface will be called asynchronously when
