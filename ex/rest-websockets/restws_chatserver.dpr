@@ -1,5 +1,5 @@
 /// simple SOA server using callbacks for a chat room
-program Project31ChatServer;
+program restws_chatserver;
 
 {$APPTYPE CONSOLE}
 
@@ -16,10 +16,10 @@ uses
   mormot.rest.http.server,
   mormot.rest.memserver,
   mormot.soa.core,
-  Project31ChatCallbackInterface in 'Project31ChatCallbackInterface.pas';
+  restws_chatinterface in 'restws_chatinterface.pas';
 
 type
-  TChatService = class(TInterfacedObject,IChatService)
+  TChatService = class(TInterfacedObject, IChatService)
   protected
     fConnected: array of IChatCallback;
   public

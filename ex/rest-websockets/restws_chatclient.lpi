@@ -8,7 +8,7 @@
         <UseDefaultCompilerOptions Value="True"/>
       </Flags>
       <SessionStorage Value="InProjectDir"/>
-      <Title Value="Project31ChatServer"/>
+      <Title Value="restws_chatclient"/>
       <Scaled Value="True"/>
       <ResourceType Value="res"/>
       <UseXPManifest Value="True"/>
@@ -37,7 +37,7 @@
     </RequiredPackages>
     <Units>
       <Unit>
-        <Filename Value="Project31ChatServer.dpr"/>
+        <Filename Value="restws_chatclient.dpr"/>
         <IsPartOfProject Value="True"/>
       </Unit>
     </Units>
@@ -46,7 +46,7 @@
     <Version Value="11"/>
     <PathDelim Value="\"/>
     <Target>
-      <Filename Value="Project31ChatServer"/>
+      <Filename Value="restws_chatclient"/>
     </Target>
     <SearchPaths>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
@@ -72,6 +72,39 @@
       </Item>
       <Item>
         <Name Value="EFOpenError"/>
+      </Item>
+      <Item>
+        <Name Value="EInterfaceFactoryException"/>
+      </Item>
+      <Item>
+        <Name Value="EAssertionFailed"/>
+      </Item>
+      <Item>
+        <Name Value="ERttiException"/>
+      </Item>
+      <Item>
+        <Name Value="EFastReader"/>
+      </Item>
+      <Item>
+        <Name Value="RunError(216)"/>
+      </Item>
+      <Item>
+        <Name Value="ENetSock"/>
+      </Item>
+      <Item>
+        <Name Value="EThreadError"/>
+      </Item>
+      <Item>
+        <Name Value="ESynCrypto"/>
+      </Item>
+      <Item>
+        <Name Value="ERelayProtocol"/>
+      </Item>
+      <Item>
+        <Name Value="EServiceException"/>
+      </Item>
+      <Item>
+        <Name Value="EFCreateError"/>
       </Item>
     </Exceptions>
   </Debugging>

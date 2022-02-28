@@ -1,5 +1,5 @@
 /// simple SOA client using callbacks for a chat room
-program Project31ChatClient;
+program restws_chatclient;
 
 {$APPTYPE CONSOLE}
 
@@ -14,10 +14,10 @@ uses
   mormot.soa.core,
   mormot.rest.client,
   mormot.rest.http.client,
-  Project31ChatCallbackInterface in 'Project31ChatCallbackInterface.pas';
+  restws_chatinterface in 'restws_chatinterface.pas';
 
 type
-  TChatCallback = class(TInterfacedCallback,IChatCallback)
+  TChatCallback = class(TInterfacedCallback, IChatCallback)
   protected
     procedure NotifyBlaBla(const pseudo, msg: string);
   end;
@@ -31,10 +31,11 @@ begin
 end;
 
 procedure Run;
-var Client: TRestHttpClientWebsockets;
-    pseudo,msg: string;
-    Service: IChatService;
-    callback: IChatCallback;
+var
+  Client: TRestHttpClientWebsockets;
+  pseudo,msg: string;
+  Service: IChatService;
+  callback: IChatCallback;
 begin
   writeln('Connecting to the local Websockets server...');
   Client := TRestHttpClientWebsockets.Create('127.0.0.1','8888',TSQLModel.Create([]));

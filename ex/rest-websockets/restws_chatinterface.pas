@@ -1,4 +1,4 @@
-unit Project31ChatCallbackInterface;
+unit restws_chatinterface;
 
 interface
 
