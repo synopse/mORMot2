@@ -3,10 +3,9 @@ unit restws_chatinterface;
 interface
 
 uses
-  SysUtils,
   mormot.core.base,
-  mormot.soa.server,
-  mormot.core.interfaces;
+  mormot.core.interfaces, // for TInterfaceFactory.RegisterInterfaces
+  mormot.soa.core;        // for IServiceWithCallbackReleased
 
 type
   IChatCallback = interface(IInvokable)
@@ -28,5 +27,7 @@ implementation
 
 initialization
   TInterfaceFactory.RegisterInterfaces([
-    TypeInfo(IChatService),TypeInfo(IChatCallback)]);
+    TypeInfo(IChatCallback),
+    TypeInfo(IChatService)
+    ]);
 end.

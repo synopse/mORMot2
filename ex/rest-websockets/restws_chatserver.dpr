@@ -4,7 +4,7 @@ program restws_chatserver;
 {$APPTYPE CONSOLE}
 
 uses
-  {.$I SynDprUses.inc} // use FastMM4 on older versions of Delphi
+  {$I SynDprUses.inc} // use FastMM4 on older versions of Delphi
   SysUtils,
   Classes,
   mormot.core.base,
@@ -13,9 +13,10 @@ uses
   mormot.core.text,
   mormot.core.interfaces,
   mormot.net.ws.core,
-  mormot.rest.http.server,
-  mormot.rest.memserver,
   mormot.soa.core,
+  mormot.soa.server,
+  mormot.rest.memserver,
+  mormot.rest.http.server,
   restws_chatinterface in 'restws_chatinterface.pas';
 
 type
@@ -23,19 +24,21 @@ type
   protected
     fConnected: array of IChatCallback;
   public
+    // IChatService methods
     procedure Join(const pseudo: string; const callback: IChatCallback);
     procedure BlaBla(const pseudo,msg: string);
+    // IServiceWithCallbackReleased method
     procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
   end;
 
-procedure TChatService.Join(const pseudo: string;
-  const callback: IChatCallback);
+procedure TChatService.Join(const pseudo: string; const callback: IChatCallback);
 begin
   InterfaceArrayAdd(fConnected,callback);
 end;
 
 procedure TChatService.BlaBla(const pseudo,msg: string);
-var i: integer;
+var
+  i: PtrInt;
 begin
   for i := high(fConnected) downto 0 do // downwards for InterfaceArrayDelete()
     try
@@ -47,24 +50,25 @@ end;
 
 procedure TChatService.CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
 begin
-  if interfaceName='IChatCallback' then
+  if interfaceName = 'IChatCallback' then
     InterfaceArrayDelete(fConnected,callback);
 end;
 
 
 procedure Run;
-var HttpServer: TSQLHttpServer;
-    Server: TSQLRestServerFullMemory;
+var
+  HttpServer: TSQLHttpServer;
+  Server: TSQLRestServerFullMemory;
 begin
   Server := TSQLRestServerFullMemory.CreateWithOwnModel([]);
   try
     Server.CreateMissingTables;
-    Server.ServiceDefine(TChatService,[IChatService],sicShared).
-      SetOptions([],[optExecLockedPerInterface]). // thread-safe fConnected[]
+    Server.ServiceDefine(TChatService, [IChatService], sicShared).
+      SetOptions([], [optExecLockedPerInterface]). // thread-safe fConnected[]
       ByPassAuthentication := true;
-    HttpServer := TSQLHttpServer.Create('8888',[Server],'+',useBidirSocket);
+    HttpServer := TSQLHttpServer.Create('8888', [Server], '+', WEBSOCKETS_DEFAULT_MODE);
     try
-      HttpServer.WebSocketsEnable(Server,PROJECT31_TRANSMISSION_KEY)^.
+      HttpServer.WebSocketsEnable(Server, PROJECT31_TRANSMISSION_KEY)^.
         SetFullLog; // full verbose logs for this demo
       TextColor(ccLightGreen);
       writeln('WebSockets Chat Server running on localhost:8888'#13#10);
@@ -84,7 +88,8 @@ end;
 
 
 begin
-  with TSynlog.Family do begin // enable logging to file and to console
+  with TSynlog.Family do
+  begin // enable logging to file and to console
     Level := LOG_VERBOSE;
     EchoToConsole := LOG_VERBOSE;
     PerThreadLog := ptIdentifiedInOnFile;
