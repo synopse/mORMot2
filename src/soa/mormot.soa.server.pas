@@ -1847,7 +1847,7 @@ begin
     // avoid stack overflow ;)
     fRestServer.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
       [ClassType, fakeID, Values[0].Name.Text], sllDebug);
-  fFakeCallbacks.Safe.ReadOnlyLock;
+  fFakeCallbacks.Safe.WriteLock; // may include a nested WriteLock (reentrant)  
   try
     fake := FakeCallbackFind(
       pointer(fFakeCallbacks.List), fFakeCallbacks.Count, connectionID, fakeID);
@@ -1882,7 +1882,7 @@ begin
         Ctxt.Success;
     end;
   finally
-    fFakeCallbacks.Safe.ReadOnlyUnLock;
+    fFakeCallbacks.Safe.WriteUnLock;
   end;
 end;
 
