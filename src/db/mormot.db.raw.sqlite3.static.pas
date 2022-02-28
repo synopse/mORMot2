@@ -6,7 +6,7 @@ unit mormot.db.raw.sqlite3.static;
 {
   *****************************************************************************
 
-    Statically linked SQLite3 3.37.2 engine with optional AES encryption
+    Statically linked SQLite3 3.38.0 engine with optional AES encryption
     - TSqlite3LibraryStatic Implementation
     - Encryption-Related Functions
 
@@ -998,13 +998,14 @@ function sqlite3_config(operation: integer): integer; cdecl varargs; external;
 function sqlite3_db_config(DB: TSqlite3DB; operation: integer): integer; cdecl varargs; external;
 function sqlite3_trace_v2(DB: TSqlite3DB; Mask: integer; Callback: TSqlTraceCallback;
   UserData: Pointer): Pointer; cdecl; external;
+function sqlite3_error_offset(DB: TSqlite3DB): integer; cdecl; external;
 
 
 { TSqlite3LibraryStatic }
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this value
-  EXPECTED_SQLITE3_VERSION = '3.37.2';
+  EXPECTED_SQLITE3_VERSION = '3.38.0';
 
   // where to download the latest available static binaries, including SQLite3
   EXPECTED_STATIC_DOWNLOAD = 'https://synopse.info/files/mormot2static.7z';
@@ -1184,6 +1185,7 @@ begin
   soft_heap_limit64      := @sqlite3_soft_heap_limit64;
   config                 := @sqlite3_config;
   db_config              := @sqlite3_db_config;
+  error_offset           := @sqlite3_error_offset;
 
   // ForceToUseSharedMemoryManager call before initialize otherwise SQLITE_MISUSE
   BeforeInitialization;

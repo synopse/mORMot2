@@ -200,7 +200,7 @@ const
 
   /// possible error codes for sqlite_exec() and sqlite3.step()
   // - as verified by sqlite3_check()
-  SQLITE_ERRORS = [SQLITE_ERROR..SQLITE_ROW-1];
+  SQLITE_ERRORS = [SQLITE_ERROR .. SQLITE_ROW-1];
 
 
   /// The sqlite3.load_extension() interface loads an extension into a single database connection.
@@ -1265,7 +1265,7 @@ type
   TFTSMatchInfo = packed record
     nPhrase: integer;
     nCol: integer;
-    hits: array[1..9] of record
+    hits: array[1 .. 9] of record
       this_row: integer;
       all_rows: integer;
       docs_with_hits: integer;
@@ -1771,7 +1771,7 @@ type
   // transaction that sees that historical version of the database rather than the
   // most recent version.
   TSqlite3Snapshot = record
-    hidden: array[0..47] of Byte;
+    hidden: array[0 .. 47] of Byte;
   end;
 
   PSqlite3Snapshot = ^TSqlite3Snapshot;
@@ -2128,7 +2128,7 @@ type
     close: function(DB: TSqlite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.37.2', when used in conjunction with our
+    // - currently returns '3.38.0', when used in conjunction with our
     // mormot.db.raw.sqlite3.static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
@@ -2137,8 +2137,8 @@ type
     /// Returns the integer version of the SQLite database engine like 3034000
     libversion_number: function: integer; cdecl;
 
-    /// Returns string containing the date and time of the check-in (UTC) and a SHA1
-    // or SHA3-256 hash of the entire source tree.
+    /// Returns string containing the date and time of the check-in (UTC) and a
+    // SHA1 or SHA3-256 hash of the entire source tree.
     sourceid: function: PUtf8Char; cdecl;
 
     /// Returns zero if and only if SQLite was compiled with mutexing code omitted due
@@ -2152,7 +2152,8 @@ type
     // SQLITE_CONFIG_SINGLETHREAD, SQLITE_CONFIG_MULTITHREAD, or SQLITE_CONFIG_SERIALIZED.
     // T- he return value of the sqlite3.threadsafe() function shows only the compile-time setting
     // of thread safety, not any run-time changes to that setting made by sqlite3.config().
-    // - In other words, the return value from sqlite3.threadsafe() is unchanged by calls to sqlite3_config().
+    // - In other words, the return value from sqlite3.threadsafe() is unchanged by calls
+    // to sqlite3_config().
     threadsafe: function: integer; cdecl;
 
     /// Returns the numeric result code or extended result code for the most
@@ -2161,7 +2162,8 @@ type
 
     /// Returns the extended result code for the most recent failed sqlite3 API
     // call associated with a database connection
-    // - Use sqlite3.extended_result_codes() to enabled or disabled on a per database connection basis
+    // - Use sqlite3.extended_result_codes() to enabled or disabled on a
+    // per database connection basis
     extended_errcode: function(DB: TSqlite3DB): integer; cdecl;
 
     /// Returns English-language text that describes the most recent error,
@@ -2192,6 +2194,16 @@ type
     // - The extended result codes are disabled by default for historical compatibility.
     // - The extended code for the most recent error can be obtained using sqlite3.extended_errcode()
     extended_result_codes: function(DB: TSqlite3DB; OnOff: integer): integer; cdecl;
+
+    /// Returns UTF-8 position level of the most recent faulty SQL token.
+    // - If the most recent error references a specific token in the input
+    // SQL, the sqlite3.error_offset() interface returns the byte offset
+    // of the start of that token. The byte offset returned by
+    // sqlite3_error_offset() assumes that the input SQL is UTF8.
+    // - If the most recent error does not reference a specific token in the
+    // input SQL, then the sqlite3.error_offset() function returns -1.
+    // - Available since revision 3.38.0, on 2022-02-22.
+    error_offset: function(DB: TSqlite3DB): integer; cdecl;
 
     /// Determine if the currently entered text seems to form a complete SQL statement
     // or if additional input is needed before sending the text into SQLite for parsing.
@@ -3922,6 +3934,7 @@ type
     /// Destroys a TSqlite3Snapshot
     // - The application must eventually free every TSqlite3Snapshot object using this routine
     // to avoid a memory leak.
+    // - When dynamically loaded, is checked that is indeed the last linked function.
     snapshot_free: function(DB: TSqlite3DB; Snapshot: PSqlite3Snapshot): integer; cdecl;
 
     /// Initialize the internal version numbers and call AfterInitialization
@@ -5408,7 +5421,7 @@ const
   SQLITE3_MAGIC = $ABA5A5AB;
 
   /// the "magic" 16 bytes header stored at the begining of every SQlite3 file
-  SQLITE_FILE_HEADER: array[0..15] of AnsiChar = 'SQLite format 3';
+  SQLITE_FILE_HEADER: array[0 .. 15] of AnsiChar = 'SQLite format 3';
 
 var
   SQLITE_FILE_HEADER128: THash128Rec absolute SQLITE_FILE_HEADER;
@@ -5422,7 +5435,7 @@ implementation
 function SqlVarToSQlite3Context(const Res: TSqlVar;
   Context: TSqlite3FunctionContext): boolean;
 var
-  tmp: array[0..31] of AnsiChar;
+  tmp: array[0 .. 31] of AnsiChar;
 begin
   case Res.VType of
     ftNull:
@@ -5653,9 +5666,9 @@ end;
 function sqlite3_resultToErrorCode(aResult: integer): TSqlite3ErrorCode;
 begin
   case aResult of
-    SQLITE_OK..SQLITE_NOTADB:
+    SQLITE_OK .. SQLITE_NOTADB:
       result := TSqlite3ErrorCode(aResult + ord(secOK));
-    SQLITE_ROW..SQLITE_DONE:
+    SQLITE_ROW .. SQLITE_DONE:
       result := TSqlite3ErrorCode(aResult + ord(secROW));
   else
     result := secUnknown;
@@ -5835,7 +5848,7 @@ end;
 const
   // warning: those entry should follow EXACTLY the order in TSqlite3Library
   // methods, from @initialize() to the last one
-  SQLITE3_ENTRIES: array[0..171] of PAnsiChar = (
+  SQLITE3_ENTRIES: array[0 .. 172] of PAnsiChar = (
     'sqlite3_initialize',
     'sqlite3_shutdown',
     'sqlite3_open',
@@ -5853,6 +5866,7 @@ const
     'sqlite3_errstr',
     'sqlite3_system_errno',
     'sqlite3_extended_result_codes',
+    'sqlite3_error_offset',
     'sqlite3_complete',
     'sqlite3_keyword_count',
     'sqlite3_keyword_name',
@@ -6037,7 +6051,8 @@ begin
   if (Assigned(limit) and
       (LibraryResolve(fLoader.Handle, 'sqlite3_limit') <> @limit)) or
      (Assigned(snapshot_free) and
-      (LibraryResolve(fLoader.Handle, SQLITE3_ENTRIES[171]) <> @snapshot_free)) then
+      (LibraryResolve(fLoader.Handle,
+        SQLITE3_ENTRIES[high(SQLITE3_ENTRIES)]) <> @snapshot_free)) then
     raise ESqlite3Exception.CreateUtf8( // paranoid check
       '%.Create: please check SQLITE3_ENTRIES[] order for %', [self, LibraryName]);
   if (not Assigned(initialize)) or

@@ -7106,7 +7106,8 @@ begin
     end;
   end;
   // not in cache (or not cachable) -> prepare now
-  if fProperties.ReconnectAfterConnectionError and AllowReconnect then
+  if fProperties.ReconnectAfterConnectionError and
+     AllowReconnect then
   begin
     TryPrepare({doraise=}false);
     if result <> nil then
