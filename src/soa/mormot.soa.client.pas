@@ -267,7 +267,7 @@ type
 
 implementation
 
- uses
+uses
   mormot.rest.client;
 
 { ***************** TServiceContainerClientAbstract Service Provider }

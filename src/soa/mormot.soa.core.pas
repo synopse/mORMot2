@@ -637,6 +637,8 @@ type
     function GetMethodName(ListInterfaceMethodIndex: integer): RawUtf8;
     procedure CheckInterface(const aInterfaces: array of PRttiInfo);
     function AddServiceInternal(aService: TServiceFactory): PtrInt;
+    function AddServiceMethodInternal(const aInterfaceDotMethodName: RawUtf8;
+      aService: TServiceFactory; var aMethodIndex: integer): PServiceContainerInterfaceMethod; virtual;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
     /// retrieve a service provider from its URI
     function GetService(const aUri: RawUtf8): TServiceFactory;
@@ -1340,43 +1342,41 @@ begin
     result := length(fInterface);
 end;
 
+function TServiceContainer.AddServiceMethodInternal(
+  const aInterfaceDotMethodName: RawUtf8; aService: TServiceFactory;
+  var aMethodIndex: integer): PServiceContainerInterfaceMethod;
+begin
+  result := fInterfaceMethods.AddUniqueName(aInterfaceDotMethodName);
+  result^.InterfaceService := aService;
+  result^.InterfaceMethodIndex := aMethodIndex;
+  inc(aMethodIndex);
+end;
+
 function TServiceContainer.AddServiceInternal(aService: TServiceFactory): PtrInt;
 var
-  MethodIndex: integer;
-
-  procedure AddOne(const aInterfaceDotMethodName: RawUtf8);
-  var
-    p: PServiceContainerInterfaceMethod;
-  begin
-    p := fInterfaceMethods.AddUniqueName(aInterfaceDotMethodName);
-    p^.InterfaceService := aService;
-    p^.InterfaceMethodIndex := MethodIndex;
-    inc(MethodIndex);
-  end;
-
-var
-  aUri: RawUtf8;
-  internal: TServiceInternalMethod;
+  ndx: integer;
+  im: TServiceInternalMethod;
   m: PtrInt;
+  uri: RawUtf8;
 begin
   if (self = nil) or
      (aService = nil) then
     raise EServiceException.CreateUtf8(
       '%.AddServiceInternal(%)', [self, aService]);
-  // add TServiceFactory to the internal list
+  // add TServiceFactory to the im list
   if ExpectMangledUri then
-    aUri := aService.fInterfaceMangledUri
+    uri := aService.fInterfaceMangledUri
   else
-    aUri := aService.fInterfaceUri;
-  PServiceContainerInterface(fInterfaces.AddUniqueName(aUri, @result))^.
+    uri := aService.fInterfaceUri;
+  PServiceContainerInterface(fInterfaces.AddUniqueName(uri, @result))^.
     Service := aService;
   // add associated methods - first SERVICE_PSEUDO_METHOD[], then from interface
-  aUri := aUri + '.';
-  MethodIndex := 0;
-  for internal := Low(internal) to High(internal) do
-    AddOne(aUri + SERVICE_PSEUDO_METHOD[internal]);
+  uri := uri + '.';
+  ndx := 0;
+  for im := Low(im) to High(im) do
+    AddServiceMethodInternal(uri + SERVICE_PSEUDO_METHOD[im], aService, ndx);
   for m := 0 to aService.fInterface.MethodsCount - 1 do
-    AddOne(aUri + aService.fInterface.Methods[m].Uri);
+    AddServiceMethodInternal(uri + aService.fInterface.Methods[m].Uri, aService, ndx);
 end;
 
 procedure TServiceContainer.CheckInterface(const aInterfaces: array of PRttiInfo);
