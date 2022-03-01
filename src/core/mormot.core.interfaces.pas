@@ -437,7 +437,7 @@ const
   /// maximum number of methods handled by interfaces
   // - if you think this constant is too low, you are about to break
   // the "Interface Segregation" SOLID principle: so don't ask to increase
-  // this value, we won't allow to write un-SOLID code! :)
+  // this value, we won't allow to write obviously un-SOLID code! :)
   MAX_METHOD_COUNT = 128;
 
   /// maximum number of method arguments handled by interfaces
@@ -490,6 +490,21 @@ type
   // which "Interface Segregation" principle is obviously broken
   TInterfaceFactoryMethodBits = set of 0 .. MAX_METHOD_COUNT - 1;
 
+  /// index-based reference to one TInterfaceFactory argument
+  TInterfaceFactoryArgument = record
+    /// the index of the method argument in TInterfaceFactory.Methods[]
+    MethodIndex: byte;
+    /// the index of the method argument in TInterfaceFactory.Methods[].Args[]
+    ArgIndex: byte;
+  end;
+
+  /// index-based reference to several TInterfaceFactory argument
+  TInterfaceFactoryArgumentDynArray = array of TInterfaceFactoryArgument;
+
+  /// per-type reference of TInterfaceFactory arguments
+  TInterfaceFactoryPerArgumentDynArray =
+     array[TInterfaceMethodValueType] of TInterfaceFactoryArgumentDynArray;
+
   /// a dynamic array of TInterfaceFactory instances
   TInterfaceFactoryObjArray = array of TInterfaceFactory;
 
@@ -522,6 +537,7 @@ type
     {$endif CPUX86}
     fMethodIndexCallbackReleased: integer;
     fMethodIndexCurrentFrameCallback: integer;
+    fArgUsed: TInterfaceFactoryPerArgumentDynArray;
     procedure AddMethodsFromTypeInfo(aInterface: PRttiInfo); virtual; abstract;
     // low-level JIT redirection of the VMT to TInterfacedObjectFake.FakeCall
     function GetMethodsVirtualTable: pointer;
@@ -620,6 +636,9 @@ type
     // - nor the _free_/_contract_/_signature_ pseudo-methods
     property MethodsCount: integer
       read fMethodsCount;
+    /// reference all known interface arguments per value type
+    property ArgUsed: TInterfaceFactoryPerArgumentDynArray
+      read fArgUsed;
     /// identifies a CallbackReleased() method in this interface
     // - i.e. the index in Methods[] of the following signature:
     // ! procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUtf8);
@@ -3711,6 +3730,8 @@ constructor TInterfaceFactory.Create(aInterface: PRttiInfo);
 var
   m, a, reg: integer;
   WR: TJsonWriter;
+  vt: TInterfaceMethodValueType;
+  used: array[TInterfaceMethodValueType] of word;
   ErrorMsg: RawUtf8;
   {$ifdef HAS_FPREG}
   ValueIsInFPR: boolean;
@@ -3760,6 +3781,7 @@ begin
   fMethodIndexCurrentFrameCallback := -1;
   fMethodIndexCallbackReleased := -1;
   SetLength(fMethods, MethodsCount);
+  FillCharFast(used, SizeOf(used), 0);
   // compute additional information for each method
   for m := 0 to MethodsCount - 1 do
   with fMethods[m] do
@@ -3782,6 +3804,7 @@ begin
       ValueType := _FROM_RTTI[ArgRtti.Parser];
       ValueVar := ARGS_TO_VAR[ValueType];
       ErrorMsg := ''; // seems supported
+      inc(used[ValueType]);
       case ValueType of
         imvNone:
           case ArgRtti.Info^.Kind of
@@ -3891,6 +3914,9 @@ begin
        (Args[1].ValueType = imvRawByteString) then
       ArgsInputIsOctetStream := true;
   end;
+  for vt := low(vt) to high(vt) do
+    SetLength(fArgUsed[vt], used[vt]);
+  FillCharFast(used, SizeOf(used), 0); // used now as index below
   // compute asm low-level layout of the parameters for each method
   for m := 0 to MethodsCount - 1 do
   with fMethods[m] do
@@ -3905,6 +3931,15 @@ begin
     for a := 0 to high(Args) do
     with Args[a] do
     begin
+      if a <> 0 then
+      begin
+        with fArgUsed[ValueType, used[ValueType]] do
+        begin
+          MethodIndex := m;
+          ArgIndex := a;
+        end;
+        inc(used[ValueType]);
+      end;
       RegisterIdent := 0;
       {$ifdef HAS_FPREG}
       FPRegisterIdent := 0;
@@ -4074,30 +4109,30 @@ begin
   try
     // compute the default results JSON array for all methods
     for m := 0 to MethodsCount - 1 do
-    with fMethods[m] do
-    begin
-      WR.CancelAll;
-      WR.Add('[');
-      for a := ArgsOutFirst to ArgsOutLast do
-        with Args[a] do
-        if ValueDirection <> imdConst then
-          AddDefaultJson(WR);
-      WR.CancelLastComma;
-      WR.Add(']');
-      WR.SetText(DefaultResult);
-    end;
+      with fMethods[m] do
+      begin
+        WR.CancelAll;
+        WR.Add('[');
+        for a := ArgsOutFirst to ArgsOutLast do
+          with Args[a] do
+          if ValueDirection <> imdConst then
+            AddDefaultJson(WR);
+        WR.CancelLastComma;
+        WR.Add(']');
+        WR.SetText(DefaultResult);
+      end;
     // compute the service contract as a JSON array
     WR.CancelAll;
     WR.Add('[');
     for m := 0 to MethodsCount - 1 do
-    with fMethods[m] do
-    begin
-      WR.Add('{"method":"%","arguments":[',[URI]);
-      for a := 0 to High(Args) do
-        Args[a].SerializeToContract(WR);
-      WR.CancelLastComma;
-      WR.AddShorter(']},');
-    end;
+      with fMethods[m] do
+      begin
+        WR.Add('{"method":"%","arguments":[',[URI]);
+        for a := 0 to High(Args) do
+          Args[a].SerializeToContract(WR);
+        WR.CancelLastComma;
+        WR.AddShorter(']},');
+      end;
     WR.CancelLastComma;
     WR.Add(']');
     WR.SetText(fContract);
