@@ -2208,13 +2208,13 @@ type
   // - as used e.g. by TInterfaceFactoryClient.CreateFakeInstance
   TInterfacedObjectFake = class(TInterfacedObjectFakeRaw)
   protected
+    fFakeID: TInterfacedObjectFakeID;
     fOptions: TInterfacedObjectFakeOptions;
     fInvoke: TOnFakeInstanceInvoke;
-    fNotifyDestroy: TOnFakeInstanceDestroy;
-    fFakeID: TInterfacedObjectFakeID;
     fServiceFactory: TObject; // holds a TServiceFactory instance
-    fParams: TJsonWriter;
     fParamsSafe: TLightLock;
+    fParams: TJsonWriter;
+    fNotifyDestroy: TOnFakeInstanceDestroy;
     // the JITed asm stubs will redirect to these JSON-oriented process
     procedure FakeCallGetJsonFromStack(
       var ctxt: TFakeCallContext; var Json: RawUtf8);
@@ -3916,7 +3916,7 @@ begin
   end;
   for vt := low(vt) to high(vt) do
     SetLength(fArgUsed[vt], used[vt]);
-  FillCharFast(used, SizeOf(used), 0); // used now as index below
+  FillCharFast(used, SizeOf(used), 0); // used as index below
   // compute asm low-level layout of the parameters for each method
   for m := 0 to MethodsCount - 1 do
   with fMethods[m] do

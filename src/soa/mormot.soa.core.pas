@@ -636,7 +636,8 @@ type
       IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
     function GetMethodName(ListInterfaceMethodIndex: integer): RawUtf8;
     procedure CheckInterface(const aInterfaces: array of PRttiInfo);
-    function AddServiceInternal(aService: TServiceFactory): PtrInt;
+    procedure ClearServiceList; virtual;
+    function AddServiceInternal(aService: TServiceFactory): PtrInt; virtual;
     function AddServiceMethodInternal(const aInterfaceDotMethodName: RawUtf8;
       aService: TServiceFactory; var aMethodIndex: integer): PServiceContainerInterfaceMethod; virtual;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
@@ -1319,10 +1320,17 @@ end;
 constructor TServiceContainer.Create(aOwner: TInterfaceResolver);
 begin
   fOwner := aOwner;
+  ClearServiceList;
+end;
+
+procedure TServiceContainer.ClearServiceList;
+begin
+  fInterface := nil;
+  fInterfaceMethod := nil;
   fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
-    fInterface, ptRawUtf8, nil, {caseinsensitive=}true);
+    fInterface, ptRawUtf8, nil, {caseinsensitive=}not fExpectMangledUri);
   fInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
-    fInterfaceMethod, ptRawUtf8, nil, {caseinsensitive=}true);
+    fInterfaceMethod, ptRawUtf8, nil, {caseinsensitive=}not fExpectMangledUri);
 end;
 
 destructor TServiceContainer.Destroy;
@@ -1361,8 +1369,7 @@ var
 begin
   if (self = nil) or
      (aService = nil) then
-    raise EServiceException.CreateUtf8(
-      '%.AddServiceInternal(%)', [self, aService]);
+    raise EServiceException.CreateUtf8('%.AddServiceInternal(%)', [self, aService]);
   // add TServiceFactory to the im list
   if ExpectMangledUri then
     uri := aService.fInterfaceMangledUri
@@ -1409,12 +1416,7 @@ begin
     exit;
   fExpectMangledUri := Mangled;
   toregisteragain := fInterface; // same services, but other URIs
-  fInterface := nil;
-  fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
-    fInterface, ptRawUtf8, nil, {caseinsensitive=}not Mangled);
-  fInterfaceMethod := nil;
-  fInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
-    fInterfaceMethod, ptRawUtf8, nil, {caseinsens=}not Mangled);
+  ClearServiceList;
   for i := 0 to high(toregisteragain) do
     AddServiceInternal(toregisteragain[i].Service);
 end;
