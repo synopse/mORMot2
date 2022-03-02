@@ -4163,8 +4163,7 @@ end;
 function TCryptCert.IsEqual(const another: ICryptCert): boolean;
 begin
   // HasPrivateKey is not part of the comparison
-  result := (@self <> nil) and
-            Assigned(another) and
+  result := Assigned(another) and
             (GetPeerInfo = another.GetPeerInfo); // should be good enough
 end;
 
