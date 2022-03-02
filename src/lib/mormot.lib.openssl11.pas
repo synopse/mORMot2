@@ -1256,10 +1256,10 @@ type
     function IsRevoked(serial: PASN1_INTEGER): integer; overload;
     function AddFrom(another: PX509_CRL): integer;
     function AddFromPem(const Pem: RawUtf8): integer;
-    function AddRevokedSerial(serial: PASN1_INTEGER; ca: PX509;
-      reason: integer = 0; nextUpdateDays: integer = 30): boolean;
-    function AddRevokedCertificate(x, ca: PX509;
-      nextUpdateDays: integer = 30): boolean;
+    function AddRevokedSerial(serial: PASN1_INTEGER; ca: PX509; reason: integer = 0;
+      lastUpdateDays: integer = 0; nextUpdateDays: integer = 30): boolean;
+    function AddRevokedCertificate(x, ca: PX509; reason: integer;
+      lastUpdateDays: integer = 0; nextUpdateDays: integer = 30): boolean;
     function Extensions: Pstack_st_X509_EXTENSION;
     function GetExtensions: TX509_Extensions;
     function Extension(nid: integer): PX509_EXTENSION;
@@ -1290,6 +1290,7 @@ type
     function CrlCount: integer;
     function Certificates: PX509DynArray;
     function Crls: PX509_CRLDynArray;
+    function MainCrl: PX509_CRL;
     // caller should make result.Free once done (to decrease refcount)
     function BySerial(const serial: RawUtf8): PX509;
     // returns the revocation reason
@@ -6104,7 +6105,7 @@ begin
 end;
 
 function X509_CRL.AddRevokedSerial(serial: PASN1_INTEGER; ca: PX509;
-  reason: integer; nextUpdateDays: integer): boolean;
+  reason, lastUpdateDays, nextUpdateDays: integer): boolean;
 var
   rev: PX509_REVOKED;
   tm: PASN1_TIME;
@@ -6119,8 +6120,12 @@ begin
   rev := X509_REVOKED_new();
   X509_REVOKED_set_serialNumber(rev, serial);
   tm := ASN1_TIME_new(); // now
-  X509_REVOKED_set_revocationDate(rev, tm);
   X509_CRL_set_lastUpdate(@self, tm);
+  if lastUpdateDays >= 0 then
+    X509_gmtime_adj(tm, SecsPerDay * lastUpdateDays);
+  X509_REVOKED_set_revocationDate(rev, tm);
+  if lastUpdateDays >= 0 then
+    X509_gmtime_adj(tm, -SecsPerDay * lastUpdateDays);
   X509_gmtime_adj(tm, SecsPerDay * nextUpdateDays);
   X509_CRL_set_nextUpdate(@self, tm);
   ASN1_TIME_free(tm);
@@ -6138,10 +6143,12 @@ begin
     rev^.Free;
 end;
 
-function X509_CRL.AddRevokedCertificate(x, ca: PX509; nextUpdateDays: integer): boolean;
+function X509_CRL.AddRevokedCertificate(x, ca: PX509;
+  reason, lastUpdateDays, nextUpdateDays: integer): boolean;
 begin
   result := (x <> nil) and
-            AddRevokedSerial(X509_get_serialNumber(x), ca, nextUpdateDays);
+            AddRevokedSerial(X509_get_serialNumber(x), ca,
+              reason, lastUpdateDays, nextUpdateDays);
 end;
 
 function X509_CRL.Extensions: Pstack_st_X509_EXTENSION;
@@ -6309,6 +6316,25 @@ end;
 function X509_STORE.Crls: PX509_CRLDynArray;
 begin
   result := PX509_CRLDynArray(GetObjects(@self, {crl=}true));
+end;
+
+function X509_STORE.MainCrl: PX509_CRL;
+var
+  i: integer; // no PtrInt here for integer C API parameters
+  obj: Pstack_st_X509_OBJECT;
+begin
+  obj := X509_STORE_get0_objects(@self);
+  for i := 0 to obj^.Count - 1 do
+  begin
+    result := X509_OBJECT_get0_X509_CRL(obj^.GetItem(i));
+    if result <> nil then
+      exit; // just return the first registered CRL instance
+  end;
+  result := NewCertificateCrl;
+  if AddCrl(result) then
+    exit;
+  result.Free;
+  result := nil;
 end;
 
 function X509_STORE.BySerial(const serial: RawUtf8): PX509;
