@@ -1204,6 +1204,8 @@ type
   PX509_CRL = ^X509_CRL;
   PPX509_CRL = ^PX509_CRL;
   PX509_CRLDynArray = array of PX509_CRL;
+  Pstack_st_X509_CRL = POPENSSL_STACK;
+  PPstack_st_X509_CRL = ^Pstack_st_X509_CRL;
   PX509_REVOKED = ^X509_REVOKED;
   PPX509_REVOKED = ^PX509_REVOKED;
   PX509_CRL_METHOD = pointer;
@@ -1301,6 +1303,8 @@ type
     function Certificates: PX509DynArray;
     function Crls: PX509_CRLDynArray;
     function MainCrl: PX509_CRL;
+    function StackX509: Pstack_st_X509;
+    function StackX509_CRL: Pstack_st_X509_CRL;
     // caller should make result.Free once done (to decrease refcount)
     function BySerial(const serial: RawUtf8): PX509;
     // returns the revocation reason
@@ -1643,7 +1647,8 @@ function BIO_new_socket(sock: integer; close_flag: integer): PBIO; cdecl;
 function X509_get_issuer_name(a: PX509): PX509_NAME; cdecl;
 function X509_get_subject_name(a: PX509): PX509_NAME; cdecl;
 function X509_get_pubkey(x: PX509): PEVP_PKEY; cdecl;
-function X509_up_ref(x: PX509): integer; cdecl;
+function X509_up_ref(x: PX509): integer;
+  {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 procedure X509_STORE_free(v: PX509_STORE); cdecl;
 procedure X509_STORE_CTX_free(ctx: PX509_STORE_CTX); cdecl;
 procedure X509_free(a: PX509); cdecl;
@@ -1710,7 +1715,8 @@ procedure X509_CRL_free(a: PX509_CRL); cdecl;
 function X509_CRL_verify(a: PX509_CRL; r: PEVP_PKEY): integer; cdecl;
 function X509_CRL_sign(x: PX509_CRL; pkey: PEVP_PKEY; md: PEVP_MD): integer; cdecl;
 function X509_CRL_dup(crl: PX509_CRL): PX509_CRL; cdecl;
-function X509_CRL_up_ref(crl: PX509_CRL): integer; cdecl;
+function X509_CRL_up_ref(crl: PX509_CRL): integer;
+  {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_CRL_set_version(x: PX509_CRL; version: integer): integer; cdecl;
 function X509_CRL_set_issuer_name(x: PX509_CRL; name: PX509_NAME): integer; cdecl;
 function X509_CRL_set_lastUpdate(x: PX509_CRL; tm: PASN1_TIME): integer; cdecl;
@@ -6380,7 +6386,7 @@ end;
 function CountObjects(store: PX509_STORE; crl: boolean): integer;
 var
   i: integer; // no PtrInt here for integer C API parameters
-  p: pointer;
+  p: pointer; // either PX509 or PX509_CRL
   obj: Pstack_st_X509_OBJECT;
 begin
   result := 0;
@@ -6403,7 +6409,7 @@ end;
 function GetObjects(store: PX509_STORE; crl: boolean): TPointerDynArray;
 var
   i, n: integer; // no PtrInt here for integer C API parameters
-  p: pointer;
+  p: pointer;    // either PX509 or PX509_CRL
   obj: Pstack_st_X509_OBJECT;
 begin
   result := nil;
@@ -6427,6 +6433,38 @@ begin
     DynArrayFakeLength(result, n);
 end;
 
+// our own version of X509_STORE_get1_all_certs() - not exported on oldest API
+function StackObjects(store: PX509_STORE; crl: boolean): POPENSSL_STACK;
+var
+  i: integer; // no PtrInt here for integer C API parameters
+  p: pointer; // either PX509 or PX509_CRL
+  obj: Pstack_st_X509_OBJECT;
+begin
+  result := nil;
+  if store = nil then
+    exit;
+  X509_STORE_lock(store);
+  obj := X509_STORE_get0_objects(store);
+  for i := 0 to obj^.Count - 1 do
+  begin
+    p := obj^.GetItem(i);
+    if crl then
+      p := X509_OBJECT_get0_X509_CRL(p)
+    else
+      p := X509_OBJECT_get0_X509(p);
+    if p = nil then
+      continue;
+    if crl then // inlined Acquire
+      X509_CRL_up_ref(p)
+    else
+      X509_up_ref(p);
+    if result = nil then
+      result := NewOpenSslStack;
+    result.Add(p);
+  end;
+  X509_STORE_unlock(store);
+end;
+
 function X509_STORE.CertificateCount: integer;
 begin
   result := CountObjects(@self, {crl=}false);
@@ -6445,6 +6483,16 @@ end;
 function X509_STORE.Crls: PX509_CRLDynArray;
 begin
   result := PX509_CRLDynArray(GetObjects(@self, {crl=}true));
+end;
+
+function X509_STORE.StackX509: Pstack_st_X509;
+begin
+  result := StackObjects(@self, {crl=}false);
+end;
+
+function X509_STORE.StackX509_CRL: Pstack_st_X509_CRL;
+begin
+  result := StackObjects(@self, {crl=}true);
 end;
 
 function X509_STORE.MainCrl: PX509_CRL;
@@ -7228,6 +7276,10 @@ function NewPkcs12(const Password: RawUtf8; PrivKey: PEVP_PKEY;
   Cert: PX509; CA: Pstack_st_X509; nid_key, nid_cert, iter, mac_iter: integer;
   const FriendlyName: RawUtf8): PPKCS12;
 begin
+  EOpenSsl.CheckAvailable(nil, 'NewPkcs12');
+  if (Cert <> nil) and
+     (X509_check_private_key(Cert, PrivKey) <> OPENSSLSUCCESS) then
+    raise EOpenSsl.Create('NewPkcs12: PrivKey does not match Cert');
   result := PKCS12_create(pointer(Password), pointer(FriendlyName),
     PrivKey, Cert, CA, nid_key, nid_cert, iter, mac_iter, 0);
 end;

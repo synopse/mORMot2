@@ -8686,8 +8686,6 @@ type
   PPstack_st_X509_TRUST = ^Pstack_st_X509_TRUST;
   PX509_crl_info_st = pointer;
   PPX509_crl_info_st = ^PX509_crl_info_st;
-  Pstack_st_X509_CRL = pointer;
-  PPstack_st_X509_CRL = ^Pstack_st_X509_CRL;
   Pstack_st_X509_INFO = pointer;
   PPstack_st_X509_INFO = ^Pstack_st_X509_INFO;
   Plhash_node_st = pointer;
