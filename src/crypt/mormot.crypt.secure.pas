@@ -1288,8 +1288,10 @@ type
     // - mormot.crypt.ecc will use the SaveToBinary/SaveToSecureBinary format
     // - mormot.crypt.openssl will use X509.ToBinary DER format if PrivatePassword
     // is not set, or the PEM format with concatanated certificate and private
-    // key text (in that order) if PrivatePassword is set
-    function Save(const PrivatePassword: RawUtf8 = ''): RawByteString;
+    // key text (in that order) if PrivatePassword is set, or #PKCS12 layout
+    // if Format is 'PKCS12'
+    function Save(const PrivatePassword: RawUtf8 = '';
+      const Format: RawUtf8 = ''): RawByteString;
     /// compute a digital signature of some digital content
     // - memory buffer will be hashed then signed using the private secret key
     // of this certificate instance
@@ -1332,7 +1334,8 @@ type
     function GetNotAfter: TDateTime; virtual; abstract;
     function GetUsage: TCryptCertUsages; virtual; abstract;
     function GetPeerInfo: RawUtf8; virtual; abstract;
-    function Save(const PrivatePassword: RawUtf8): RawByteString; virtual; abstract;
+    function Save(const PrivatePassword, Format: RawUtf8): RawByteString;
+      virtual; abstract;
     function HasPrivateSecret: boolean; virtual; abstract;
     function GetPrivateKey: RawByteString; virtual; abstract;
     function IsEqual(const another: ICryptCert): boolean; virtual;

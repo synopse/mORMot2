@@ -1196,6 +1196,7 @@ type
     procedure AddEntry(const Name, Value: RawUtf8);
     procedure AddEntries(const Country, State, Locality,
       Organization, OrgUnit, CommonName: RawUtf8);
+    function Compare(another: PX509_NAME): integer;
     // as used for X509_STORE.SetLocations() CAFolder 'Hash.N' names
     function Hash: cardinal;
   end;
@@ -1304,10 +1305,11 @@ type
     function Certificates: PX509DynArray;
     function Crls: PX509_CRLDynArray;
     function MainCrl: PX509_CRL;
-    function StackX509: Pstack_st_X509;
-    function StackX509_CRL: Pstack_st_X509_CRL;
+    function StackX509(addref: boolean = true): Pstack_st_X509;
+    function StackX509_CRL(addref: boolean = true): Pstack_st_X509_CRL;
     // caller should make result.Free once done (to decrease refcount)
     function BySerial(const serial: RawUtf8): PX509;
+    function HasSerial(serial: PASN1_INTEGER): boolean;
     // returns the revocation reason
     function IsRevoked(const serial: RawUtf8): integer; overload;
     function IsRevoked(serial: PASN1_INTEGER): integer; overload;
@@ -1425,6 +1427,7 @@ type
     /// if the Certificate X509v3 Basic Constraints contains 'CA:TRUE'
     // - match kuCA flag in GetUsage/HasUsage
     function IsCA: boolean;
+    function IsSelfSigned: boolean;
     /// the X509v3 Key and Extended Key Usage Flags of this Certificate
     function GetUsage: TX509Usages;
     /// check a X509v3 Key and Extended Key Usage Flag of this Certificate
@@ -1693,6 +1696,7 @@ function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
 function X509_NAME_entry_count(name: PX509_NAME): integer; cdecl;
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
 function X509_NAME_hash(x: PX509_NAME): cardinal; cdecl;
+function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
 function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
 function X509_digest(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer; cdecl;
 function X509_get_serialNumber(x: PX509): PASN1_INTEGER;
@@ -2491,6 +2495,7 @@ type
     X509_NAME_entry_count: function(name: PX509_NAME): integer; cdecl;
     X509_NAME_oneline: function(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
     X509_NAME_hash: function(x: PX509_NAME): cardinal; cdecl;
+    X509_NAME_cmp: function(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
     X509_STORE_CTX_get_current_cert: function(ctx: PX509_STORE_CTX): PX509; cdecl;
     X509_digest: function(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer; cdecl;
     X509_get_serialNumber: function(x: PX509): PASN1_INTEGER; cdecl;
@@ -2694,7 +2699,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..267] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..268] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2763,6 +2768,7 @@ const
     'X509_NAME_entry_count',
     'X509_NAME_oneline',
     'X509_NAME_hash',
+    'X509_NAME_cmp',
     'X509_STORE_CTX_get_current_cert',
     'X509_digest',
     'X509_get_serialNumber',
@@ -3316,6 +3322,11 @@ end;
 function X509_NAME_hash(x: PX509_NAME): cardinal;
 begin
   result := libcrypto.X509_NAME_hash(x);
+end;
+
+function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer;
+begin
+  result := libcrypto.X509_NAME_cmp(a, b);
 end;
 
 function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509;
@@ -4857,6 +4868,9 @@ function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8C
 function X509_NAME_hash(x: PX509_NAME): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_hash';
 
+function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_NAME_cmp';
+
 function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_get_current_cert';
 
@@ -6084,6 +6098,14 @@ begin
   AddEntry('CN', CommonName);
 end;
 
+function X509_NAME.Compare(another: PX509_NAME): integer;
+begin
+  if @self = another then // not done in OpenSSL C code
+    result := 0
+  else
+    result := X509_NAME_cmp(@self, another); // will compare the DER binary
+end;
+
 function X509_NAME.Hash: cardinal;
 begin
   if @self = nil then
@@ -6463,7 +6485,7 @@ begin
 end;
 
 // our own version of X509_STORE_get1_all_certs() - not exported on oldest API
-function StackObjects(store: PX509_STORE; crl: boolean): POPENSSL_STACK;
+function StackObjects(store: PX509_STORE; crl, addref: boolean): POPENSSL_STACK;
 var
   i: integer; // no PtrInt here for integer C API parameters
   p: pointer; // either PX509 or PX509_CRL
@@ -6483,10 +6505,11 @@ begin
       p := X509_OBJECT_get0_X509(p);
     if p = nil then
       continue;
-    if crl then // inlined Acquire
-      X509_CRL_up_ref(p)
-    else
-      X509_up_ref(p);
+    if addref then
+      if crl then // inlined Acquire
+        X509_CRL_up_ref(p)
+      else
+        X509_up_ref(p);
     if result = nil then
       result := NewOpenSslStack;
     result.Add(p);
@@ -6514,14 +6537,14 @@ begin
   result := PX509_CRLDynArray(GetObjects(@self, {crl=}true));
 end;
 
-function X509_STORE.StackX509: Pstack_st_X509;
+function X509_STORE.StackX509(addref: boolean): Pstack_st_X509;
 begin
-  result := StackObjects(@self, {crl=}false);
+  result := StackObjects(@self, {crl=}false, addref);
 end;
 
-function X509_STORE.StackX509_CRL: Pstack_st_X509_CRL;
+function X509_STORE.StackX509_CRL(addref: boolean): Pstack_st_X509_CRL;
 begin
-  result := StackObjects(@self, {crl=}true);
+  result := StackObjects(@self, {crl=}true, addref);
 end;
 
 function X509_STORE.MainCrl: PX509_CRL;
@@ -6557,6 +6580,23 @@ begin
       exit;
     end;
   result := nil;
+end;
+
+function X509_STORE.HasSerial(serial: PASN1_INTEGER): boolean;
+var
+  i: PtrInt;
+  c: PX509DynArray;
+begin
+  if (@self <> nil) and
+     (serial <> nil) then
+  begin
+    result := true;
+    c := Certificates;
+    for i := 0 to length(c) - 1 do
+      if c[i].GetSerial = serial then
+        exit;
+  end;
+  result := false;
 end;
 
 function X509_STORE.IsRevoked(const serial: RawUtf8): integer;
@@ -6896,6 +6936,12 @@ begin
   result := PosEx('CA:TRUE', ExtensionText(NID_basic_constraints)) <> 0;
 end;
 
+function X509.IsSelfSigned: boolean;
+begin
+  result := (@self <> nil) and
+      (X509_get_issuer_name(@self).Compare(X509_get_subject_name(@self)) = 0);
+end;
+
 const
   KU: array[kuEncipherOnly .. kuDecipherOnly] of integer = (
     X509v3_KU_ENCIPHER_ONLY,
@@ -7043,8 +7089,8 @@ begin
     (X509_gmtime_adj(X509_getm_notAfter(@self),  SecsPerDay * ExpireDays) <> nil);
 end;
 
-function X509.SetExtension(nid: cardinal; const value: RawUtf8; issuer: PX509;
-  subject: PX509): boolean;
+function X509.SetExtension(nid: cardinal; const value: RawUtf8;
+  issuer, subject: PX509): boolean;
 var
   x, old: PX509_EXTENSION;
   prev, p: integer;

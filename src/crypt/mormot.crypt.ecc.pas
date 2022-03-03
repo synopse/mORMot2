@@ -4934,7 +4934,7 @@ type
     function GetPeerInfo: RawUtf8; override;
     function Load(const Saved: RawByteString;
       const PrivatePassword: RawUtf8): boolean; override;
-    function Save(const PrivatePassword: RawUtf8): RawByteString; override;
+    function Save(const PrivatePassword, Format: RawUtf8): RawByteString; override;
     function HasPrivateSecret: boolean; override;
     function GetPrivateKey: RawByteString; override;
     function IsEqual(const another: ICryptCert): boolean; override;
@@ -5112,8 +5112,10 @@ begin
     result := '';
 end;
 
-function TCryptCertInternal.Save(const PrivatePassword: RawUtf8): RawByteString;
+function TCryptCertInternal.Save(
+  const PrivatePassword, Format: RawUtf8): RawByteString;
 begin
+  // our proprietary implementation has a single custom binary format
   if fEcc <> nil then
     if fEcc.InheritsFrom(TEccCertificateSecret) then
       if PrivatePassword = '' then

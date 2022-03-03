@@ -420,7 +420,8 @@ type
   end;
 
   /// most used asymmetric algorithms published by OpenSSL
-  // - as implemented e.g. by TJwtAbstractOsl inherited classes
+  // - as implemented e.g. by TJwtAbstractOsl inherited classes, or
+  // TCryptAsymOsl/TCryptCertAlgoOpenSsl implementing TCryptAsym/ICryptCert
   TOpenSslAsym = (
     osaES256,
     osaES384,
@@ -633,6 +634,14 @@ type
 
 
 { ************** Register OpenSSL to our General Cryptography Catalog }
+
+var
+  /// direct access to the OpenSSL TCryptAsym factories
+  CryptAsymOpenSsl: array[TOpenSslAsym] of TCryptAsym;
+
+  /// direct access to the OpenSSL ICryptCert factories
+  CryptCertAlgoOpenSsl: array[TOpenSslAsym] of TCryptCertAlgo;
+
 
 /// call once at program startup to use OpenSSL when its performance matters
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
@@ -1628,7 +1637,7 @@ begin
   fDefaultHashAlgorithm := OSA_HASH[fOsa];
   fEvpType := OSA_EVPTYPE[fOsa];
   fBitsOrCurve := OSA_BITSORCURVE[fOsa];
-  inherited Create(name);
+  inherited Create(name); // also register it to GlobalCryptAlgo main list
 end;
 
 constructor TCryptAsymOsl.Create(osa: TOpenSslAsym);
@@ -1706,7 +1715,7 @@ type
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
-    function Save(const PrivatePassword: RawUtf8): RawByteString; override;
+    function Save(const PrivatePassword, Format: RawUtf8): RawByteString; override;
     function HasPrivateSecret: boolean; override;
     function GetPrivateKey: RawByteString; override;
     function Sign(Data: pointer; Len: integer): RawUtf8; override;
@@ -1740,6 +1749,7 @@ type
       Data: pointer; Len: integer): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
+    // return our favorite osaES256 algorithm for signing Certificates
     function CertAlgo: TCryptCertAlgo; override;
   end;
 
@@ -1935,7 +1945,7 @@ begin
   result := fX509.PeerInfo;
 end;
 
-function TCryptCertOpenSsl.Save(const PrivatePassword: RawUtf8): RawByteString;
+function TCryptCertOpenSsl.Save(const PrivatePassword, Format: RawUtf8): RawByteString;
 begin
   result := '';
   if fX509 = nil then
@@ -1946,9 +1956,12 @@ begin
     exit;
   if fPrivKey = nil then
     RaiseError('Save(password) with no Private Key');
-  // concatenate PEM certificate and PEM private key
-  result := DerToPem(result, pemCertificate) + #13#10#13#10 +
-            fPrivKey.PrivateKeyToPem(PrivatePassword);
+  if Format = 'PKCS12' then
+    result := fX509.ToPkcs12(fPrivKey, PrivatePassword)
+  else
+    // concatenate PEM certificate and PEM private key
+    result := DerToPem(result, pemCertificate) + #13#10#13#10 +
+              fPrivKey.PrivateKeyToPem(PrivatePassword);
 end;
 
 function TCryptCertOpenSsl.Load(const Saved: RawByteString;
@@ -2204,23 +2217,77 @@ begin
     (cert.Instance as TCryptCertOpenSsl).fX509, nil, r, days);
 end;
 
-function TCryptStoreOpenSsl.IsValid(const cert: ICryptCert): TCryptCertValidity;
+function ToValidity(err: integer): TCryptCertValidity;
 begin
-  if cert = nil then
-    result := cvBadParameter
+  case err of
+    X509_V_OK:
+      result := cvValidSigned; // caller would know about cvValidSelfSigned
+    X509_V_ERR_UNSPECIFIED:
+      result := cvUnknown;
+    X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT,
+    X509_V_ERR_UNABLE_TO_GET_CRL,
+    X509_V_ERR_UNABLE_TO_DECRYPT_CERT_SIGNATURE,
+    X509_V_ERR_UNABLE_TO_DECRYPT_CRL_SIGNATURE,
+    X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY,
+    X509_V_ERR_CERT_SIGNATURE_FAILURE,
+    X509_V_ERR_CRL_SIGNATURE_FAILURE:
+      result := cvCorrupted;
+    X509_V_ERR_CERT_NOT_YET_VALID,
+    X509_V_ERR_CERT_HAS_EXPIRED:
+      result := cvDeprecatedAuthority;
+    X509_V_ERR_CRL_NOT_YET_VALID,
+    X509_V_ERR_CRL_HAS_EXPIRED,
+    X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD,
+    X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD,
+    X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD,
+    X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD:
+      result := cvInvalidDate;
+    X509_V_ERR_CERT_REVOKED:
+      result := cvRevoked;
+    X509_V_ERR_INVALID_CA:
+      result := cvUnknownAuthority;
   else
-    ;
+    // X509_V_ERR_OUT_OF_MEM,
+    // X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT,
+    // X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN,
+    // X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY,
+    // X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE,
+    // X509_V_ERR_CERT_CHAIN_TOO_LONG,
+    // X509_V_ERR_INVALID_CA,
+    result := cvWrongUsage;
+  end;
 end;
 
-function TCryptStoreOpenSsl.Verify(const Signature: RawUtf8; Data: pointer;
-  Len: integer): TCryptCertValidity;
+function TCryptStoreOpenSsl.IsValid(const cert: ICryptCert): TCryptCertValidity;
+var
+  x: PX509;
+  res: integer;
 begin
+  result := cvBadParameter;
+  if cert = nil then
+    exit;
+  x := (cert.Instance as TCryptCertOpenSsl).fX509;
+  if x = nil then
+    exit;
+  res := fStore.Verify(x);
+  if res = X509_V_OK then
+    if x.IsSelfSigned then
+      result := cvValidSelfSigned
+    else
+      result := cvValidSigned
+  else
+    result := ToValidity(res);
+end;
 
+function TCryptStoreOpenSsl.Verify(const Signature: RawUtf8;
+  Data: pointer; Len: integer): TCryptCertValidity;
+begin
+  result := cvNotSupported;
 end;
 
 function TCryptStoreOpenSsl.CertAlgo: TCryptCertAlgo;
 begin
-
+  result := CryptCertAlgoOpenSsl[osaES256];
 end;
 
 
@@ -2256,8 +2323,8 @@ begin
   TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with osaES256
   for osa := low(osa) to high(osa) do
   begin
-    TCryptAsymOsl.Create(osa);
-    TCryptCertAlgoOpenSsl.Create(osa);
+    CryptAsymOpenSsl[osa] := TCryptAsymOsl.Create(osa);
+    CryptCertAlgoOpenSsl[osa] := TCryptCertAlgoOpenSsl.Create(osa);
   end;
 end;
 
