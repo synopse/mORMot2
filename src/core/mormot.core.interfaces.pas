@@ -3095,7 +3095,7 @@ begin
         begin
           if ArgsObject.Count <> integer(ArgsInputValuesCount) then
             exit;
-          doc.Init(ArgsObject.Options);
+          {%H-}doc.Init(ArgsObject.Options);
           for a := ArgsInFirst to ArgsInLast do
             if Args[a].ValueDirection in [imdConst, imdVar] then
               Args[a].FixValueAndAddToObject(ArgsObject.Values[doc.Count], doc);
