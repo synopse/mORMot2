@@ -992,9 +992,6 @@ const
   EVP_MAX_IV_LENGTH = 16;
   EVP_MAX_BLOCK_LENGTH = 32;
   
-  PKCS5_SALT_LEN = 8;
-  PKCS5_DEFAULT_ITER = 2048;
-  
   SN_undef = 'UNDEF';
   LN_undef = 'undefined';
   NID_undef = 0;
@@ -6032,13 +6029,6 @@ const
   PKCS12_R_UNKNOWN_DIGEST_ALGORITHM = 118;
   PKCS12_R_UNSUPPORTED_PKCS12_MODE = 119;
   
-  PKCS12_KEY_ID = 1;
-  PKCS12_IV_ID = 2;
-  PKCS12_MAC_ID = 3;
-  PKCS12_DEFAULT_ITER = PKCS5_DEFAULT_ITER;
-  PKCS12_MAC_KEY_LENGTH = 20;
-  PKCS12_SALT_LEN = 8;
-  
   KEY_EX = $10;
   KEY_SIG = $80;
   
@@ -8840,8 +8830,6 @@ type
   PPPKCS12_st = ^PPKCS12_st;
   PPKCS12_SAFEBAG_st = pointer;
   PPPKCS12_SAFEBAG_st = ^PPKCS12_SAFEBAG_st;
-  Pstack_st_PKCS12_SAFEBAG = pointer;
-  PPstack_st_PKCS12_SAFEBAG = ^Pstack_st_PKCS12_SAFEBAG;
   Ppkcs12_bag_st = pointer;
   PPpkcs12_bag_st = ^Ppkcs12_bag_st;
   Pstack_st_SRP_gN_cache = pointer;
@@ -10794,10 +10782,6 @@ type
   PPOCSP_SERVICELOC = ^POCSP_SERVICELOC;
   PPKCS12_MAC_DATA = pointer;
   PPPKCS12_MAC_DATA = ^PPKCS12_MAC_DATA;
-  PPKCS12 = pointer;
-  PPPKCS12 = ^PPKCS12;
-  PPKCS12_SAFEBAG = pointer;
-  PPPKCS12_SAFEBAG = ^PPKCS12_SAFEBAG;
 
   sk_PKCS12_SAFEBAG_compfunc = function(a: PPPKCS12_SAFEBAG; b: PPPKCS12_SAFEBAG): integer; cdecl;
   sk_PKCS12_SAFEBAG_freefunc = procedure(a: PPKCS12_SAFEBAG); cdecl;
@@ -22688,18 +22672,6 @@ function OPENSSL_utf82uni(asc: PUtf8Char; asclen: integer; uni: PPByte; unilen: 
 function OPENSSL_uni2utf8(uni: PByte; unilen: integer): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_uni2utf8';
 
-function PKCS12_new(): PPKCS12; cdecl;
-  external LIB_CRYPTO name _PU + 'PKCS12_new';
-
-procedure PKCS12_free(a: PPKCS12); cdecl;
-  external LIB_CRYPTO name _PU + 'PKCS12_free';
-
-function d2i_PKCS12(a: PPPKCS12; _in: PPByte; len: integer): PPKCS12; cdecl;
-  external LIB_CRYPTO name _PU + 'd2i_PKCS12';
-
-function i2d_PKCS12(a: PPKCS12; _out: PPByte): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'i2d_PKCS12';
-
 function PKCS12_it(): PASN1_ITEM; cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_it';
 
@@ -22760,35 +22732,23 @@ procedure PKCS12_PBE_add(); cdecl;
 function PKCS12_parse(p12: PPKCS12; pass: PUtf8Char; pkey: PPEVP_PKEY; cert: PPX509; ca: PPstack_st_X509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_parse';
 
-function PKCS12_create(pass: PUtf8Char; name: PUtf8Char; pkey: PEVP_PKEY; cert: PX509; ca: Pstack_st_X509; nid_key: integer; nid_cert: integer; iter: integer; mac_iter: integer; keytype: integer): PPKCS12; cdecl;
-  external LIB_CRYPTO name _PU + 'PKCS12_create';
-
-function PKCS12_add_cert(pbags: PPstack_st_PKCS12_SAFEBAG; cert: PX509): PPKCS12_SAFEBAG; cdecl;
-  external LIB_CRYPTO name _PU + 'PKCS12_add_cert';
-
-function PKCS12_add_key(pbags: PPstack_st_PKCS12_SAFEBAG; key: PEVP_PKEY; key_usage: integer; iter: integer; key_nid: integer; pass: PUtf8Char): PPKCS12_SAFEBAG; cdecl;
-  external LIB_CRYPTO name _PU + 'PKCS12_add_key';
-
 function PKCS12_add_safe(psafes: PPstack_st_PKCS7; bags: Pstack_st_PKCS12_SAFEBAG; safe_nid: integer; iter: integer; pass: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_add_safe';
 
 function PKCS12_add_safes(safes: Pstack_st_PKCS7; p7_nid: integer): PPKCS12; cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_add_safes';
 
-function i2d_PKCS12_bio(bp: PBIO; p12: PPKCS12): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'i2d_PKCS12_bio';
+function d2i_PKCS12(a: PPPKCS12; _in: PPByte; len: integer): PPKCS12; cdecl;
+  external LIB_CRYPTO name _PU + 'd2i_PKCS12';
+
+function i2d_PKCS12(a: PPKCS12; _out: PPByte): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'i2d_PKCS12';
 
 function i2d_PKCS12_fp(fp: PPointer; p12: PPKCS12): integer; cdecl;
   external LIB_CRYPTO name _PU + 'i2d_PKCS12_fp';
 
-function d2i_PKCS12_bio(bp: PBIO; p12: PPPKCS12): PPKCS12; cdecl;
-  external LIB_CRYPTO name _PU + 'd2i_PKCS12_bio';
-
 function d2i_PKCS12_fp(fp: PPointer; p12: PPPKCS12): PPKCS12; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_PKCS12_fp';
-
-function PKCS12_newpass(p12: PPKCS12; oldpass: PUtf8Char; newpass: PUtf8Char): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'PKCS12_newpass';
 
 function RAND_DRBG_new(typ: integer; flags: cardinal; parent: PRAND_DRBG): PRAND_DRBG; cdecl;
   external LIB_CRYPTO name _PU + 'RAND_DRBG_new';
