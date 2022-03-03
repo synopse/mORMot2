@@ -1010,8 +1010,9 @@ type
     function ToDynArray: TPointerDynArray;
     /// note: instances should be released explicitely before or call e.g. FreeX509
     procedure Free;
-    /// make PX509().Free to all items, then free the stack
+    /// make PX509/PX509_CRL.Free to all items, then free the stack
     procedure FreeX509;
+    procedure FreeX509_CRL;
     property Items[index: PtrInt]: pointer
       read GetItem; default;
   end;
@@ -1311,7 +1312,7 @@ type
     function IsRevoked(const serial: RawUtf8): integer; overload;
     function IsRevoked(serial: PASN1_INTEGER): integer; overload;
     function SetDefaultPaths: boolean;
-    // will increase the certificate refcount
+    // both methods will increase the certificate/CRL refcount
     function AddCertificate(x: PX509): boolean;
     function AddCrl(c: PX509_CRL): boolean;
     // try binary DER serialization of X509 Certificate or CRL
@@ -1463,6 +1464,12 @@ type
     function ToBinary: RawByteString;
     /// serialize the certificate as PEM text
     function ToPem: RawUtf8;
+    /// serialize the certificate and associated private key as PKCS12 raw binary
+    // - nid_key/nid_cert could be retrieved from OBJ_txt2nid()
+    function ToPkcs12(pkey: PEVP_PKEY; const password: RawUtf8;
+      CA: Pstack_st_X509 = nil; nid_key: integer = 0; nid_cert: integer = 0;
+      iter: integer = 0; mac_iter: integer = 0;
+      const FriendlyName: RawUtf8 = ''): RawByteString;
     /// increment the X509 reference count to avoid premature release
     function Acquire: integer;
     /// sign this Certificate with the supplied private key and algorithm
@@ -1814,6 +1821,7 @@ function OPENSSL_sk_value(p1: POPENSSL_STACK; p2: integer): pointer;
 function ASN1_BIT_STRING_get_bit(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
 function OBJ_nid2ln(n: integer): PUtf8Char; cdecl;
 function OBJ_nid2sn(n: integer): PUtf8Char; cdecl;
+function OBJ_txt2nid(s: PUtf8Char): integer; cdecl;
 function OBJ_obj2nid(o: PASN1_OBJECT): integer;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function ASN1_STRING_data(x: PASN1_STRING): PByte;
@@ -2035,6 +2043,7 @@ function LoadCertificateRequest(const Der: RawByteString): PX509_REQ;
 function NewOpenSslStack: POPENSSL_STACK;
 
 /// create a new OpenSSL PKCS12 structure instance with all given parameters
+// - nid_key/nid_cert could be retrieved from OBJ_txt2nid()
 function NewPkcs12(const Password: RawUtf8; PrivKey: PEVP_PKEY; Cert: PX509;
   CA: Pstack_st_X509 = nil; nid_key: integer = 0; nid_cert: integer = 0;
   iter: integer = 0; mac_iter: integer = 0;
@@ -2594,6 +2603,7 @@ type
     ASN1_BIT_STRING_get_bit: function(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
     OBJ_nid2ln: function(n: integer): PUtf8Char; cdecl;
     OBJ_nid2sn: function(n: integer): PUtf8Char; cdecl;
+    OBJ_txt2nid: function(s: PUtf8Char): integer; cdecl;
     OBJ_obj2nid: function(o: PASN1_OBJECT): integer; cdecl;
     ASN1_STRING_data: function(x: PASN1_STRING): PByte; cdecl;
     ASN1_STRING_length: function(x: PASN1_STRING): integer; cdecl;
@@ -2684,7 +2694,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..266] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..267] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2865,6 +2875,7 @@ const
     'ASN1_BIT_STRING_get_bit',
     'OBJ_nid2ln',
     'OBJ_nid2sn',
+    'OBJ_txt2nid',
     'OBJ_obj2nid',
     'ASN1_STRING_data',
     'ASN1_STRING_length',
@@ -3888,6 +3899,11 @@ begin
   result := libcrypto.OBJ_nid2sn(n);
 end;
 
+function OBJ_txt2nid(s: PUtf8Char): integer;
+begin
+  result := libcrypto.OBJ_txt2nid(s);
+end;
+
 function OBJ_obj2nid(o: PASN1_OBJECT): integer;
 begin
   result := libcrypto.OBJ_obj2nid(o);
@@ -4417,6 +4433,8 @@ begin
       for api := low(LIBCRYPTO_ENTRIES) to high(LIBCRYPTO_ENTRIES) do
         libcrypto.Resolve(pointer(libprefix + LIBCRYPTO_ENTRIES[api]),
           @P[api], {onfail=}EOpenSsl);
+      if not Assigned(libcrypto.X509_print) then // last known entry
+        raise EOpenSsl.Create('OpenSslInitialize: incorrect libcrypto API');
       // attempt to load libssl
       libssl.TryLoadLibrary([
         OpenSslDefaultSsl,
@@ -4433,6 +4451,8 @@ begin
       for api := low(LIBSSL_ENTRIES) to high(LIBSSL_ENTRIES) do
         libssl.Resolve(pointer(libprefix + LIBSSL_ENTRIES[api]),
           @P[api], {onfail=}EOpenSsl);
+      if not Assigned(libssl.SSL_add1_host) then // last known entry
+        raise EOpenSsl.Create('OpenSslInitialize: incorrect libssl API');
       // nothing is to be initialized with OpenSSL 1.1.*
       {$ifdef OPENSSLUSERTLMM}
       if libcrypto.CRYPTO_set_mem_functions(@rtl_malloc, @rtl_realloc, @rtl_free) = 0 then
@@ -5177,6 +5197,9 @@ function OBJ_nid2sn(n: integer): PUtf8Char; cdecl;
 function OBJ_obj2nid(o: PASN1_OBJECT): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_obj2nid';
 
+function OBJ_txt2nid(s: PUtf8Char): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'OBJ_txt2nid';
+
 function ASN1_STRING_data(x: PASN1_STRING): PByte; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_STRING_data';
 
@@ -5651,6 +5674,12 @@ procedure OPENSSL_STACK.FreeX509;
 begin
   if @self <> nil then
     OPENSSL_sk_pop_free(@self, @X509_free);
+end;
+
+procedure OPENSSL_STACK.FreeX509_CRL;
+begin
+  if @self <> nil then
+    OPENSSL_sk_pop_free(@self, @X509_CRL_free);
 end;
 
 
@@ -7120,6 +7149,24 @@ end;
 function X509.ToPem: RawUtf8;
 begin
   result := BioSave(@self, @PEM_write_bio_X509, CP_UTF8);
+end;
+
+function X509.ToPkcs12(pkey: PEVP_PKEY; const password: RawUtf8;
+  CA: Pstack_st_X509; nid_key, nid_cert, iter, mac_iter: integer;
+  const FriendlyName: RawUtf8): RawByteString;
+var
+  p12: PPKCS12;
+begin
+  result := '';
+  if (@self = nil) or
+     (pkey = nil) then
+    exit;
+  p12 := NewPkcs12(
+    password, pkey, @self, CA, nid_key, nid_cert, iter, mac_iter, FriendlyName);
+  if p12 = nil then
+    exit;
+  result := p12.ToBinary;
+  p12.Free;
 end;
 
 function X509.Acquire: integer;

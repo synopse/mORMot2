@@ -13612,9 +13612,6 @@ function OBJ_txt2obj(s: PUtf8Char; no_name: integer): PASN1_OBJECT; cdecl;
 function OBJ_obj2txt(buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_obj2txt';
 
-function OBJ_txt2nid(s: PUtf8Char): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'OBJ_txt2nid';
-
 function OBJ_ln2nid(s: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_ln2nid';
 
