@@ -1391,10 +1391,14 @@ function GetEnumType(aTypeInfo: PRttiInfo; out List: PShortString): integer;
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 
 /// get the corresponding enumeration name, without the first lowercase chars
-// (otDone -> 'Done')
+// - e.g. otDone -> 'Done'
 // - this will return the code-based English text; use GetEnumCaption() to
 // retrieve the enumeration display text
 function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
+
+/// get the enumeration name, without the first lowercase chars, and uncamelcased
+// - e.g. otProcessDone -> 'Process Done'
+function GetEnumNameUnCamelCase(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
 
 /// helper to retrieve all texts of an enumerate
 // - may be used as cache for overloaded ToText() content
@@ -4815,6 +4819,11 @@ end;
 function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
 begin
   result := TrimLeftLowerCaseShort(GetEnumName(aTypeInfo, aIndex));
+end;
+
+function GetEnumNameUnCamelCase(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
+begin
+  result := UnCamelCase(GetEnumNameTrimed(aTypeInfo, aIndex));
 end;
 
 procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);

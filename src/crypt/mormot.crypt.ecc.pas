@@ -5115,7 +5115,7 @@ end;
 function TCryptCertInternal.Save(
   const PrivatePassword, Format: RawUtf8): RawByteString;
 begin
-  // our proprietary implementation has a single custom binary format
+  // our proprietary implementation do not use the Format parameter
   if fEcc <> nil then
     if fEcc.InheritsFrom(TEccCertificateSecret) then
       if PrivatePassword = '' then
