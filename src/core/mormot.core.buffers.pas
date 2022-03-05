@@ -2211,6 +2211,34 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
+  /// TStream with an internal memory buffer
+  // - can be beneficial e.g. reading from a file by small chunks
+  TBufferedStreamReader = class(TStreamWithPosition)
+  protected
+    fBuffer: RawByteString;
+    fSource: TStream;
+    fBufferPos: PAnsiChar;
+    fBufferLeft: integer;
+    fOwnStream: TStream;
+    fSize: Int64;
+    function GetSize: Int64; override;
+  public
+    /// initialize the source TStream and the internal buffer
+    constructor Create(aSource: TStream;
+      aBufSize: integer = 65536); overload; reintroduce;
+    /// initialize a source file and the internal buffer
+    constructor Create(const aSourceFileName: TFileName;
+      aBufSize: integer = 65536); overload; reintroduce;
+    /// finalize this instance and its buffer
+    destructor Destroy; override;
+    /// overriden method to flush buffer on rewind
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    /// will read up to Count bytes from the internal buffer or source TStream
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// this TStream is read-only: calling this method will raise an exception
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
 
 /// compute the crc32c checksum of a given file
 // - this function maps the THashFile signature
@@ -9487,6 +9515,91 @@ function TNestedStreamReader.{%H-}Write(const Buffer; Count: Longint): Longint;
 begin
   raise EStreamError.Create('Unexpected TNestedStreamReader.Write');
 end;
+
+
+{ TBufferedStreamReader }
+
+function TBufferedStreamReader.GetSize: Int64;
+begin
+  result := fSize;
+end;
+
+constructor TBufferedStreamReader.Create(aSource: TStream; aBufSize: integer);
+begin
+  SetLength(fBuffer, aBufSize);
+  fSource := aSource;
+  fSize := fSource.Size; // get it once
+  fSource.Seek(0, soBeginning);
+end;
+
+constructor TBufferedStreamReader.Create(const aSourceFileName: TFileName;
+  aBufSize: integer);
+begin
+  Create(TFileStream.Create(aSourceFileName, fmOpenRead or fmShareDenyNone));
+  fOwnStream := fSource;
+end;
+
+destructor TBufferedStreamReader.Destroy;
+begin
+  inherited Destroy;
+  fOwnStream.Free;
+end;
+
+function TBufferedStreamReader.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+var
+  prev: Int64;
+begin
+  prev := fPosition;
+  result := inherited Seek(Offset, Origin);
+  if prev <> fPosition then
+    fBufferLeft := 0; // deprecate buffer content
+end;
+
+function TBufferedStreamReader.Read(var Buffer; Count: Longint): Longint;
+var
+  dest: PAnsiChar;
+  avail: integer;
+begin
+  result := 0;
+  if Count <= 0 then
+    exit;
+  if fPosition + Count > fSize then
+    Count := fSize - fPosition;
+  dest := @Buffer;
+  while Count <> 0 do
+  begin
+    avail := fBufferLeft;
+    if avail > Count then
+      avail := Count;
+    if avail <> 0 then
+    begin
+      MoveFast(fBufferPos^, dest^, avail);
+      inc(fBufferPos, avail);
+      dec(fBufferLeft, avail);
+      inc(result, avail);
+      dec(Count, avail);
+      if Count = 0 then
+        break;
+      inc(dest, avail);
+    end;
+    if Count > length(fBuffer) then
+    begin // big requests would read directly from stream
+      inc(result, fSource.Read(dest^, Count));
+      break;
+    end;
+    fBufferPos := pointer(fBuffer); // fill buffer and retry
+    fBufferLeft := fSource.Read(fBufferPos^, length(fBuffer));
+    if fBufferLeft <= 0 then
+      break;
+  end;
+  inc(fPosition, result);
+end;
+
+function TBufferedStreamReader.Write(const Buffer; Count: Longint): Longint;
+begin
+  raise EStreamError.Create('Unexpected TBufferedStreamReader.Write');
+end;
+
 
 
 function HashFile(const FileName: TFileName; Hasher: THasher): cardinal;

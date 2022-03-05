@@ -6495,7 +6495,9 @@ end;
 procedure TTestCoreBase._DeltaCompress;
 var
   o, n, d, s: RawByteString;
-  i: integer;
+  i, buflen, chunk: integer;
+  P: PAnsiChar;
+  s1, s2: TStream;
 begin
   n := RandomTextParagraph(100);
   d := DeltaCompress(n, o{%H-});
@@ -6531,7 +6533,30 @@ begin
   insert(RandomIdentifier(50), n, 200);
   d := DeltaCompress(n, o);
   check(DeltaExtract(d, o, s) = dsSuccess, 'delta-+');
-  Check(s = n);
+  if CheckFailed(s = n, 'delta extract') then
+    exit;
+  s1 := TRawByteStringStream.Create(s);
+  try
+    for buflen := 8 to 32 do
+      for chunk := 1 to buflen * 3 do
+      begin
+        s2 := TBufferedStreamReader.Create(s1, buflen);
+        try
+          P := pointer(n);
+          FillCharFast(P^, length(n), 48);
+          repeat
+            i := s2.Read(P^, chunk);
+            inc(P, i);
+          until i = 0;
+          CheckEqual(s2.Position, length(n));
+          CheckEqual(s, n);
+        finally
+          s2.Free;
+        end;
+      end;
+  finally
+    s1.Free;
+  end;
 end;
 
 procedure TTestCoreBase.BloomFilters;
