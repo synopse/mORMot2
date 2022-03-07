@@ -892,6 +892,7 @@ type
   PPX509 = ^PX509;
   PX509DynArray = array of PX509;
   Pstack_st_X509 = POPENSSL_STACK;
+  PPstack_st_X509 = ^Pstack_st_X509;
 
   SSL = object
   public
@@ -1492,8 +1493,13 @@ type
   Pstack_st_PKCS12_SAFEBAG = POPENSSL_STACK;
   PPstack_st_PKCS12_SAFEBAG = ^Pstack_st_PKCS12_SAFEBAG;
 
-  /// wrapper to the PPKCS12 abstract pointer
+  /// wrapper to the PKCS12 abstract pointer
   PKCS12 = object
+    /// parse and extract the private key, certificate and CAs in this PKCS12 store
+    // - use pointers to result structures, nil if one is not needed
+    // - caller should call needed privatekey^.Free, cert^.Free and ca^.FreeX509
+    function Extract(const password: RawUtf8;
+      privatekey: PPEVP_PKEY; cert: PPX509; ca: PPstack_st_X509): boolean;
     /// serialize the PKCS12 Structure as DER raw binary
     function ToBinary: RawByteString;
     /// release this PKCS12 Structure instance
@@ -1792,6 +1798,8 @@ function X509_verify(a: PX509; r: PEVP_PKEY): integer; cdecl;
 procedure X509_STORE_CTX_set_time(ctx: PX509_STORE_CTX; flags: cardinal; t: time_t); cdecl;
 function X509_STORE_CTX_set_purpose(ctx: PX509_STORE_CTX; purpose: integer): integer; cdecl;
 function X509_STORE_CTX_set_trust(ctx: PX509_STORE_CTX; trust: integer): integer; cdecl;
+procedure X509_STORE_CTX_set0_untrusted(ctx: PX509_STORE_CTX; sk: Pstack_st_X509); cdecl;
+procedure X509_STORE_CTX_set0_param(ctx: PX509_STORE_CTX; param: PX509_VERIFY_PARAM); cdecl;
 function X509_LOOKUP_load_file(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
 function X509_LOOKUP_add_dir(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
 function PKCS12_new(): PPKCS12; cdecl;
@@ -1804,6 +1812,7 @@ function PKCS12_add_key(pbags: PPstack_st_PKCS12_SAFEBAG; key: PEVP_PKEY; key_us
 function i2d_PKCS12_bio(bp: PBIO; p12: PPKCS12): integer; cdecl;
 function d2i_PKCS12_bio(bp: PBIO; p12: PPPKCS12): PPKCS12; cdecl;
 function PKCS12_newpass(p12: PPKCS12; oldpass: PUtf8Char; newpass: PUtf8Char): integer; cdecl;
+function PKCS12_parse(p12: PPKCS12; pass: PUtf8Char; pkey: PPEVP_PKEY; cert: PPX509; ca: PPstack_st_X509): integer; cdecl;
 function ASN1_TIME_new(): PASN1_TIME; cdecl;
 procedure ASN1_TIME_free(a: PASN1_TIME); cdecl;
 function ASN1_TIME_set(s: PASN1_TIME; t: time_t): PASN1_TIME; cdecl;
@@ -2582,6 +2591,8 @@ type
     X509_STORE_CTX_set_time: procedure(ctx: PX509_STORE_CTX; flags: cardinal; t: time_t); cdecl;
     X509_STORE_CTX_set_purpose: function(ctx: PX509_STORE_CTX; purpose: integer): integer; cdecl;
     X509_STORE_CTX_set_trust: function(ctx: PX509_STORE_CTX; trust: integer): integer; cdecl;
+    X509_STORE_CTX_set0_untrusted: procedure(ctx: PX509_STORE_CTX; sk: Pstack_st_X509); cdecl;
+    X509_STORE_CTX_set0_param: procedure(ctx: PX509_STORE_CTX; param: PX509_VERIFY_PARAM); cdecl;
     PKCS12_new: function(): PPKCS12; cdecl;
     PKCS12_free: procedure(a: PPKCS12); cdecl;
     PKCS12_create: function(pass: PUtf8Char; name: PUtf8Char; pkey: PEVP_PKEY; cert: PX509; ca: Pstack_st_X509; nid_key: integer; nid_cert: integer; iter: integer; mac_iter: integer; keytype: integer): PPKCS12; cdecl;
@@ -2590,6 +2601,7 @@ type
     i2d_PKCS12_bio: function(bp: PBIO; p12: PPKCS12): integer; cdecl;
     d2i_PKCS12_bio: function(bp: PBIO; p12: PPPKCS12): PPKCS12; cdecl;
     PKCS12_newpass: function(p12: PPKCS12; oldpass: PUtf8Char; newpass: PUtf8Char): integer; cdecl;
+    PKCS12_parse: function(p12: PPKCS12; pass: PUtf8Char; pkey: PPEVP_PKEY; cert: PPX509; ca: PPstack_st_X509): integer; cdecl;
     ASN1_TIME_new: function(): PASN1_TIME; cdecl;
     ASN1_TIME_free: procedure(a: PASN1_TIME); cdecl;
     ASN1_TIME_set: function(s: PASN1_TIME; t: time_t): PASN1_TIME; cdecl;
@@ -2699,7 +2711,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..268] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..271] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2855,6 +2867,8 @@ const
     'X509_STORE_CTX_set_time',
     'X509_STORE_CTX_set_purpose',
     'X509_STORE_CTX_set_trust',
+    'X509_STORE_CTX_set0_untrusted',
+    'X509_STORE_CTX_set0_param',
     'PKCS12_new',
     'PKCS12_free',
     'PKCS12_create',
@@ -2863,6 +2877,7 @@ const
     'i2d_PKCS12_bio',
     'd2i_PKCS12_bio',
     'PKCS12_newpass',
+    'PKCS12_parse',
     'ASN1_TIME_new',
     'ASN1_TIME_free',
     'ASN1_TIME_set',
@@ -3767,6 +3782,16 @@ begin
   result := libcrypto.X509_STORE_CTX_set_trust(ctx, trust);
 end;
 
+procedure X509_STORE_CTX_set0_untrusted(ctx: PX509_STORE_CTX; sk: Pstack_st_X509);
+begin
+  libcrypto.X509_STORE_CTX_set0_untrusted(ctx, sk);
+end;
+
+procedure X509_STORE_CTX_set0_param(ctx: PX509_STORE_CTX; param: PX509_VERIFY_PARAM);
+begin
+  libcrypto.X509_STORE_CTX_set0_param(ctx, param);
+end;
+
 function X509_LOOKUP_load_file(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
 begin
   result := libcrypto.X509_LOOKUP_ctrl(ctx, X509_L_FILE_LOAD, name, typ, nil);
@@ -3818,6 +3843,12 @@ end;
 function PKCS12_newpass(p12: PPKCS12; oldpass, newpass: PUtf8Char): integer;
 begin
   result := libcrypto.PKCS12_newpass(p12, oldpass, newpass);
+end;
+
+function PKCS12_parse(p12: PPKCS12; pass: PUtf8Char;
+  pkey: PPEVP_PKEY; cert: PPX509; ca: PPstack_st_X509): integer;
+begin
+  result := libcrypto.PKCS12_parse(p12, pass, pkey, cert, ca);
 end;
 
 function ASN1_TIME_new(): PASN1_TIME;
@@ -5130,6 +5161,12 @@ function X509_STORE_CTX_set_purpose(ctx: PX509_STORE_CTX; purpose: integer): int
 function X509_STORE_CTX_set_trust(ctx: PX509_STORE_CTX; trust: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set_trust';
 
+procedure X509_STORE_CTX_set0_untrusted(ctx: PX509_STORE_CTX; sk: Pstack_st_X509); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set0_untrusted';
+
+procedure X509_STORE_CTX_set0_param(ctx: PX509_STORE_CTX; param: PX509_VERIFY_PARAM); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set0_param';
+
 function PKCS12_new(): PPKCS12; cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_new';
 
@@ -5153,6 +5190,9 @@ function d2i_PKCS12_bio(bp: PBIO; p12: PPPKCS12): PPKCS12; cdecl;
 
 function PKCS12_newpass(p12: PPKCS12; oldpass: PUtf8Char; newpass: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_newpass';
+
+function PKCS12_parse(p12: PPKCS12; pass: PUtf8Char; pkey: PPEVP_PKEY; cert: PPX509; ca: PPstack_st_X509): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'PKCS12_parse';
 
 function ASN1_TIME_new(): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_TIME_new';
@@ -7239,6 +7279,13 @@ end;
 
 
 { PKCS12 }
+
+function PKCS12.Extract(const password: RawUtf8; privatekey: PPEVP_PKEY;
+  cert: PPX509; ca: PPstack_st_X509): boolean;
+begin
+  result := (@self <> nil) and
+    (PKCS12_parse(@self, pointer(password), privatekey, cert, ca) = OPENSSLSUCCESS);
+end;
 
 function PKCS12.ToBinary: RawByteString;
 begin

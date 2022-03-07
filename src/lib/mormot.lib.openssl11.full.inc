@@ -16788,9 +16788,6 @@ function X509_STORE_CTX_get0_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
 function X509_STORE_CTX_get0_untrusted(ctx: PX509_STORE_CTX): Pstack_st_X509; cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_get0_untrusted';
 
-procedure X509_STORE_CTX_set0_untrusted(ctx: PX509_STORE_CTX; sk: Pstack_st_X509); cdecl;
-  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set0_untrusted';
-
 procedure X509_STORE_CTX_set_chain(ctx: PX509_STORE_CTX; sk: Pstack_st_X509); cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set0_untrusted';
 
@@ -16991,9 +16988,6 @@ function X509_STORE_CTX_get_num_untrusted(ctx: PX509_STORE_CTX): integer; cdecl;
 
 function X509_STORE_CTX_get0_param(ctx: PX509_STORE_CTX): PX509_VERIFY_PARAM; cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_get0_param';
-
-procedure X509_STORE_CTX_set0_param(ctx: PX509_STORE_CTX; param: PX509_VERIFY_PARAM); cdecl;
-  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set0_param';
 
 function X509_STORE_CTX_set_default(ctx: PX509_STORE_CTX; name: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set_default';
@@ -22720,9 +22714,6 @@ function PKCS12_AUTHSAFES_it(): PASN1_ITEM; cdecl;
 
 procedure PKCS12_PBE_add(); cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_PBE_add';
-
-function PKCS12_parse(p12: PPKCS12; pass: PUtf8Char; pkey: PPEVP_PKEY; cert: PPX509; ca: PPstack_st_X509): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'PKCS12_parse';
 
 function PKCS12_add_safe(psafes: PPstack_st_PKCS7; bags: Pstack_st_PKCS12_SAFEBAG; safe_nid: integer; iter: integer; pass: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_add_safe';
