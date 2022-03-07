@@ -64,11 +64,11 @@ type
     teInvalidOptionNegotiation); // RFC2347 Option Extension
 
 const
-  TFTP_RRQ = 1;
-  TFTP_WRQ = 2;
-  TFTP_DAT = 3;
-  TFTP_ACK = 4;
-  TFTP_ERR = 5;
+  TFTP_RRQ  = 1;
+  TFTP_WRQ  = 2;
+  TFTP_DAT  = 3;
+  TFTP_ACK  = 4;
+  TFTP_ERR  = 5;
   TFTP_OACK = 6; // RFC2347
 
   toLast = toErr;
@@ -83,10 +83,6 @@ const
     'ACK ',
     'ERR ',
     'OACK ');
-
-  /// RFC2348 minimum supported TFTP block size
-  // - original RFC1350 defines 512 bytes, but we support RFC2348 blksize option
-  TFTP_MINSIZE = 8;
 
   /// RFC2348 maximum supported TFTP block size
   // - original RFC1350 defines 512 bytes, but we support RFC2348 blksize option
@@ -186,6 +182,8 @@ type
     /// generate the initial RRQ/WRQ request Frame/FrameLen on client side
     // - following current OpCode/FileName and the current options
     procedure GenerateRequestFrame;
+    /// generate a new ACK response in Frame/FrameLen and increase CurrentSequence
+    procedure GenerateAcknowledgeFrame;
     /// generate an ERR packet in Frame/FrameLen
     procedure GenerateErrorFrame(err: TTftpError; const msg: RawUtf8);
   end;
@@ -203,8 +201,11 @@ function ToText(e: TTftpError): PShortString; overload;
 
 { ******************** TClientTftp Client Connection Class }
 
+
 implementation
 
+
+{ ******************** TFTP Protocol Definitions }
 
 function ToOpcode(const frame: TTftpFrame): TTftpOpcode;
 begin
@@ -229,9 +230,10 @@ begin
   seq := swap(frame.Sequence);
   case c of
     toRrq,
-    toWrq:
+    toWrq,
+    toOck:
       if len <= 0 then
-        /// 'RRQ filename' / 'WRQ filename'
+        // 'RRQ filename' / 'WRQ filename' / 'OACK option'
         AppendShortBuffer(@frame.Header, StrLen(@frame.Header), result)
       else
         // all options will be included with #0 terminated (logged as space)
@@ -275,19 +277,23 @@ end;
 procedure TTftpContext.SetDefaultOptions(op: TTftpOpcode);
 begin
   OpCode := op;
-  TimeoutSec := TFTP_DEFAULTTIMEOUT;
-  BlockSize := TFTP_DEFAULTSIZE; // = 512
-  TransferSize := TFTP_NOTRANSFERSIZE; // = -1
-  WindowSize := TFTP_DEFAULTWINDOWSIZE; // as before RFC7440
+  TimeoutSec := TFTP_DEFAULTTIMEOUT;    // = 5
+  BlockSize := TFTP_DEFAULTSIZE;        // = 512
+  TransferSize := TFTP_NOTRANSFERSIZE;  // = -1
+  WindowSize := TFTP_DEFAULTWINDOWSIZE; // = 1 as before RFC7440
+  CurrentSequence := 0;
+  CurrentSize := 0;
 end;
 
 procedure TTftpContext.AppendTextToFrame(const Text: RawUtf8);
 var
-  l: PtrInt;
+  len: PtrInt;
 begin
-  l := length(Text) + 1; // include trailing #0
-  MoveFast(pointer(Text)^, PByteArray(@Frame)[FrameLen], l);
-  inc(FrameLen, l);
+  len := length(Text) + 1; // include trailing #0
+  if FrameLen + len > SizeOf(Frame) then
+    exit; // paranoid
+  MoveFast(pointer(Text)^, PByteArray(@Frame)[FrameLen], len);
+  inc(FrameLen, len);
 end;
 
 const
@@ -300,7 +306,7 @@ const
 
 function TTftpContext.ParseFrame: boolean;
 var
-  len: integer;
+  len: PtrInt;
   P: PUtf8Char;
   v: RawUtf8;
 
@@ -315,7 +321,8 @@ var
     else
     begin
       FastSetString(v, P, vlen);
-      inc(P, vlen);
+      inc(P, vlen + 1);
+      dec(len);
       result := true;
     end;
   end;
@@ -330,13 +337,13 @@ var
 begin
   result := false; // error if exit
   SetDefaultOptions(ToOpcode(Frame));
-  dec(FrameLen, SizeOf(Frame.Opcode));
-  if (FrameLen <= 0) or
-     (Frame.Header[FrameLen] <> 0) or // should end with a trailing #0
+  len := FrameLen - SizeOf(Frame.Opcode);
+  if (len <= 0) or
+     (len > SizeOf(Frame)) or
+     (Frame.Header[len - 1] <> 0) or // should end with a trailing #0
      not (OpCode in [toRrq, toWrq, toOck]) then
     exit;
   P := @Frame.Header;
-  len := FrameLen;
   if not GetNext then
     exit;
   FileName := v;
@@ -358,10 +365,10 @@ begin
           if not GetNextCardinal(1, 255, TimeoutSec) then
             exit;
         1:
-          if not GetNextCardinal(TFTP_MINSIZE, TFTP_MAXSIZE, BlockSize) then
+          if not GetNextCardinal(8, TFTP_MAXSIZE, BlockSize) then
             exit;
         2:
-          if not GetNextCardinal(0, MaxInt, TransferSize) then
+          if not GetNextCardinal(0, MaxInt, TransferSize) then // up to 2GB
             exit;
         3:
           if not GetNextCardinal(1, 65535, WindowSize) then
@@ -401,9 +408,17 @@ begin
   Append('windowsize', WindowSize,   TFTP_DEFAULTWINDOWSIZE);
 end;
 
+procedure TTftpContext.GenerateAcknowledgeFrame;
+begin
+  inc(CurrentSequence);
+  Frame.Opcode := swap(word(TFTP_ACK));
+  Frame.Sequence := CurrentSequence;
+  FrameLen := SizeOf(Frame.Opcode) + SizeOf(Frame.Sequence);
+end;
+
 procedure TTftpContext.GenerateErrorFrame(err: TTftpError; const msg: RawUtf8);
 begin
-  Frame.Opcode := TFTP_ERR;
+  Frame.Opcode := swap(word(TFTP_ERR));
   Frame.Sequence := CurrentSequence;
   FrameLen := SizeOf(Frame.Opcode) + SizeOf(Frame.Sequence);
   if msg <> '' then
@@ -412,6 +427,10 @@ begin
     // if no error message is set, use RTTI to generate something in English
     AppendTextToFrame(GetEnumNameUnCamelCase(TypeInfo(TTftpError), ord(err)));
 end;
+
+
+
+{ ******************** TClientTftp Client Connection Class }
 
 
 
