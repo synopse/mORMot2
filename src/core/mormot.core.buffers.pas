@@ -2225,10 +2225,10 @@ type
   public
     /// initialize the source TStream and the internal buffer
     constructor Create(aSource: TStream;
-      aBufSize: integer = 65536); overload; reintroduce;
+      aBufSize: integer = 65536); reintroduce; overload;
     /// initialize a source file and the internal buffer
     constructor Create(const aSourceFileName: TFileName;
-      aBufSize: integer = 65536); overload; reintroduce;
+      aBufSize: integer = 65536); reintroduce; overload;
     /// finalize this instance and its buffer
     destructor Destroy; override;
     /// overriden method to flush buffer on rewind
@@ -9551,8 +9551,11 @@ var
 begin
   prev := fPosition;
   result := inherited Seek(Offset, Origin);
-  if prev <> fPosition then
+  if prev <> result then
+  begin
+    fSource.Seek(result, soBeginning);
     fBufferLeft := 0; // deprecate buffer content
+  end;
 end;
 
 function TBufferedStreamReader.Read(var Buffer; Count: Longint): Longint;
