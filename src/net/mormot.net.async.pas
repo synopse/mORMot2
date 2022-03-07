@@ -426,7 +426,7 @@ type
   // two file descriptors: you may better add the following line to your
   // /etc/limits.conf or /etc/security/limits.conf system file:
   // $ * hard nofile 65535
-  TAsyncConnections = class(TServerGeneric)
+  TAsyncConnections = class(TNotifiedThread)
   protected
     fConnectionClass: TAsyncConnectionClass;
     fConnection: TAsyncConnectionDynArray; // sorted by TAsyncConnection.Handle

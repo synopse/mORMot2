@@ -87,25 +87,9 @@ type
     {$endif USEWININET}
   end;
 
-  /// abstract class to implement a server thread
-  // - do not use this class, but rather the THttpServer, THttpApiServer
-  // or TWebSocketServer (as defined in mormot.net.websock)
-  TServerGeneric = class(TSynThread)
-  protected
-    fProcessName: RawUtf8;
-    fOnHttpThreadStart: TOnNotifyThread;
-    procedure SetOnTerminate(const Event: TOnNotifyThread); virtual;
-    procedure NotifyThreadStart(Sender: TSynThread);
-  public
-    /// initialize the server instance, in non suspended state
-    constructor Create(CreateSuspended: boolean;
-      const OnStart, OnStop: TOnNotifyThread;
-      const ProcessName: RawUtf8); reintroduce; virtual;
-  end;
-
   /// abstract parent class to implement a HTTP server
   // - do not use it, but rather THttpServer/THttpAsyncServer or THttpApiServer
-  THttpServerGeneric = class(TServerGeneric)
+  THttpServerGeneric = class(TNotifiedThread)
   protected
     fShutdownInProgress: boolean;
     /// optional event handlers for process interception
@@ -1349,35 +1333,6 @@ begin
 end;
 
 {$endif USEWININET}
-
-
-{ TServerGeneric }
-
-constructor TServerGeneric.Create(CreateSuspended: boolean;
-  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8);
-begin
-  fProcessName := ProcessName;
-  fOnHttpThreadStart := OnStart;
-  SetOnTerminate(OnStop);
-  inherited Create(CreateSuspended);
-end;
-
-procedure TServerGeneric.NotifyThreadStart(Sender: TSynThread);
-begin
-  if Sender = nil then
-    raise EHttpServer.CreateUtf8('%.NotifyThreadStart(nil)', [self]);
-  if Assigned(fOnHttpThreadStart) and
-     (not Assigned(Sender.StartNotified)) then
-  begin
-    fOnHttpThreadStart(Sender);
-    Sender.StartNotified := self;
-  end;
-end;
-
-procedure TServerGeneric.SetOnTerminate(const Event: TOnNotifyThread);
-begin
-  fOnThreadTerminate := Event;
-end;
 
 
 { THttpServerGeneric }

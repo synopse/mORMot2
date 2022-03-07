@@ -2224,6 +2224,7 @@ type
     function GetSize: Int64; override;
   public
     /// initialize the source TStream and the internal buffer
+    // - will also rewind the aSource position to its beginning
     constructor Create(aSource: TStream;
       aBufSize: integer = 65536); reintroduce; overload;
     /// initialize a source file and the internal buffer

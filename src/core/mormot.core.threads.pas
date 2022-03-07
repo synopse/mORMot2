@@ -1016,6 +1016,23 @@ type
     property Terminated;
   end;
 
+  /// abstract class to implement a thread with start/stop notifications
+  // - e.g. a server thread
+  // - do not use this class, but rather the THttpServer, THttpApiServer
+  // or TWebSocketServer (as defined in mormot.net.websock)
+  TNotifiedThread = class(TSynThread)
+  protected
+    fProcessName: RawUtf8;
+    fOnHttpThreadStart: TOnNotifyThread;
+    procedure SetOnTerminate(const Event: TOnNotifyThread); virtual;
+    procedure NotifyThreadStart(Sender: TSynThread);
+  public
+    /// initialize the server instance, in non suspended state
+    constructor Create(CreateSuspended: boolean;
+      const OnStart, OnStop: TOnNotifyThread;
+      const ProcessName: RawUtf8); reintroduce; virtual;
+  end;
+
   TSynThreadPool = class;
 
   /// defines the work threads used by TSynThreadPool
@@ -2972,6 +2989,37 @@ begin
   Resume;
 end;
 {$endif HASTTHREADSTART}
+
+
+
+{ TNotifiedThread }
+
+constructor TNotifiedThread.Create(CreateSuspended: boolean;
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8);
+begin
+  fProcessName := ProcessName;
+  fOnHttpThreadStart := OnStart;
+  SetOnTerminate(OnStop);
+  inherited Create(CreateSuspended);
+end;
+
+procedure TNotifiedThread.NotifyThreadStart(Sender: TSynThread);
+begin
+  if Sender = nil then
+    raise ESynThread.CreateUtf8('%.NotifyThreadStart(nil)', [self]);
+  if Assigned(fOnHttpThreadStart) and
+     (not Assigned(Sender.StartNotified)) then
+  begin
+    fOnHttpThreadStart(Sender);
+    Sender.StartNotified := self;
+  end;
+end;
+
+procedure TNotifiedThread.SetOnTerminate(const Event: TOnNotifyThread);
+begin
+  fOnThreadTerminate := Event;
+end;
+
 
 
 { TSynThreadPool }
