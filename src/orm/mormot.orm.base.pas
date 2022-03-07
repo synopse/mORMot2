@@ -2248,6 +2248,8 @@ type
     /// get all values for a specified field into a dynamic integer array
     // - returns the number of rows in Values[]
     function GetRowValues(Field: PtrInt; out Values: TInt64DynArray): integer; overload;
+    /// get all IDs stored
+    function GetIDs: TIDDynArray;
     /// get all values for a specified field as CSV
     // - don't perform any conversion, but create a CSV from raw PUtf8Char data
     function GetRowValues(Field: PtrInt; const Sep: RawUtf8 = ',';
@@ -8587,6 +8589,16 @@ begin
     SetInt64(GetResults(Field), Values[i]);
   end;
   result := fRowCount;
+end;
+
+function TOrmTableAbstract.GetIDs: TIDDynArray;
+begin
+  if (self = nil) or
+     (fRowCount = 0) or
+     (fFieldIndexID < 0) then
+    result := nil
+  else
+    GetRowValues(fFieldIndexID, TInt64DynArray(result));
 end;
 
 function TOrmTableAbstract.GetRowLengths(Field: PtrInt; LenStore: PSynTempBuffer): integer;
