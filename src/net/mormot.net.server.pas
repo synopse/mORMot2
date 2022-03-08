@@ -208,7 +208,7 @@ type
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
     property OnHttpThreadStart: TOnNotifyThread
-      read fOnHttpThreadStart write fOnHttpThreadStart;
+      read fOnThreadStart write fOnThreadStart;
     /// event handler called when a working Thread is terminating
     // - called in the corresponding thread context
     // - the TThread.OnTerminate event will be called within a Synchronize()
@@ -1510,7 +1510,7 @@ begin
   fSockPort := aPort;
   SetServerKeepAliveTimeOut(KeepAliveTimeOut); // 30 seconds by default
   // event handlers set before inherited Create to be visible in childs
-  fOnHttpThreadStart := OnStart;
+  fOnThreadStart := OnStart;
   SetOnTerminate(OnStop);
   fProcessName := ProcessName; // TSynThreadPoolTHttpServer needs it now
   fHeadersUnFiltered := aHeadersUnFiltered;
@@ -2633,7 +2633,7 @@ begin
   SetRemoteIPHeader(From.RemoteIPHeader);
   SetRemoteConnIDHeader(From.RemoteConnIDHeader);
   fLoggingServiceName := From.fLoggingServiceName;
-  inherited Create(false, From.fOnHttpThreadStart, From.fOnThreadTerminate, From.ProcessName);
+  inherited Create(false, From.fOnThreadStart, From.fOnThreadTerminate, From.ProcessName);
 end;
 
 procedure THttpApiServer.DestroyMainThread;

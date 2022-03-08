@@ -1023,7 +1023,7 @@ type
   TNotifiedThread = class(TSynThread)
   protected
     fProcessName: RawUtf8;
-    fOnHttpThreadStart: TOnNotifyThread;
+    fOnThreadStart: TOnNotifyThread;
     procedure SetOnTerminate(const Event: TOnNotifyThread); virtual;
     procedure NotifyThreadStart(Sender: TSynThread);
   public
@@ -2998,7 +2998,7 @@ constructor TNotifiedThread.Create(CreateSuspended: boolean;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8);
 begin
   fProcessName := ProcessName;
-  fOnHttpThreadStart := OnStart;
+  fOnThreadStart := OnStart;
   SetOnTerminate(OnStop);
   inherited Create(CreateSuspended);
 end;
@@ -3007,10 +3007,10 @@ procedure TNotifiedThread.NotifyThreadStart(Sender: TSynThread);
 begin
   if Sender = nil then
     raise ESynThread.CreateUtf8('%.NotifyThreadStart(nil)', [self]);
-  if Assigned(fOnHttpThreadStart) and
+  if Assigned(fOnThreadStart) and
      (not Assigned(Sender.StartNotified)) then
   begin
-    fOnHttpThreadStart(Sender);
+    fOnThreadStart(Sender);
     Sender.StartNotified := self;
   end;
 end;
