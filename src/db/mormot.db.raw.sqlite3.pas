@@ -702,7 +702,7 @@ const
   // - sqlite3.status()
   // - Memory allocation statistics are enabled by default unless SQLite is compiled
   // with SQLITE_DEFAULT_MEMSTATUS=0 in which case memory allocation statistics
-  // are disabled by default.
+  // are disabled by default - which is the case our static in sqlite3mc.c
   SQLITE_CONFIG_MEMSTATUS = 9;
   /// This option takes a single argument which is a pointer to an instance of the
   // sqlite3_mutex_methods structure
@@ -1001,7 +1001,8 @@ const
   // - The amount returned is the sum of the allocation sizes as reported by the
   // xSize method in TSqlite3MemMethods.
   // - Needs SQLITE_CONFIG_MEMSTATUS to be active by SQLITE_DEFAULT_MEMSTATUS at
-  // compile time or using sqlite3.config() at runtime and before library intialization.
+  // compile time or using sqlite3.config() at runtime and before library
+  // intialization - our static .o/.obj disabled it by default in sqlite3mc.c.
   SQLITE_STATUS_MEMORY_USED = 0;
   /// Number of pages used out of the pagecache memory allocator that was configured
   // using SQLITE_CONFIG_PAGECACHE.
@@ -1018,7 +1019,8 @@ const
   // - Only the value returned in the pHighwater is of interest.
   // - The value written into the pCurrent is undefined.
   // - Needs SQLITE_CONFIG_MEMSTATUS to be active by SQLITE_DEFAULT_MEMSTATUS at
-  // compile time or using sqlite3.config() at runtime and before library intialization.
+  // compile time or using sqlite3.config() at runtime and before library
+  // intialization - our static .o/.obj disabled it by default in sqlite3mc.c
   SQLITE_STATUS_MALLOC_SIZE = 5;
   /// The pHighwater parameter records the deepest parser stack.
   // - The pCurrent value is undefined.
@@ -1030,7 +1032,8 @@ const
   SQLITE_STATUS_PAGECACHE_SIZE = 7;
   /// Number of separate memory allocations currently checked out.
   // - Needs SQLITE_CONFIG_MEMSTATUS to be active by SQLITE_DEFAULT_MEMSTATUS at
-  // compile time or using sqlite3.config() at runtime and before library intialization.
+  // compile time or using sqlite3.config() at runtime and before library
+  // intialization - our static .o/.obj disabled it by default in sqlite3mc.c
   SQLITE_STATUS_MALLOC_COUNT = 9;
 
 
@@ -3532,13 +3535,15 @@ type
     // so this value is not available, unless you override the BeforeInitialization virtual
     // method and set the SQLITE_CONFIG_MEMSTATUS value to 1
     // - Needs SQLITE_CONFIG_MEMSTATUS to be active by SQLITE_DEFAULT_MEMSTATUS at
-    // compile time or using sqlite3.config() at runtime and before library intialization.
+    // compile time or using sqlite3.config() at runtime and before library
+    // intialization - our static .o/.obj disabled it by default in sqlite3mc.c
     memory_used: function: Int64; cdecl;
 
     /// Returns the maximum value of sqlite3.memory_used() since the high-water mark
     // was last reset
     // - Needs SQLITE_CONFIG_MEMSTATUS to be active by SQLITE_DEFAULT_MEMSTATUS at
-    // compile time or using sqlite3.config() at runtime and before library intialization.
+    // compile time or using sqlite3.config() at runtime and before library
+    // intialization - our static .o/.obj disabled it by default in sqlite3mc.c
     memory_highwater: function(resetFlag: integer): Int64; cdecl;
 
     /// Sets and/or queries the soft limit on the amount of heap memory
@@ -3559,7 +3564,8 @@ type
     // while this limit is global for the process, so this allows to limit the
     // total cache size
     // - Needs SQLITE_CONFIG_MEMSTATUS to be active by SQLITE_DEFAULT_MEMSTATUS at
-    // compile time or using sqlite3.config() at runtime and before library intialization.
+    // compile time or using sqlite3.config() at runtime and before library
+    // intialization - our static .o/.obj disabled it by default in sqlite3mc.c
     soft_heap_limit64: function(N: Int64): Int64; cdecl;
 
     /// Used to make global configuration changes to current database
