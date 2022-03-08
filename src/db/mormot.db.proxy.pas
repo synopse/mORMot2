@@ -556,6 +556,9 @@ type
     // ! Create(aProps,'remotedb');
     // - you can optionally register one user credential
     // - parameter aHttps is ignored by this class
+    // - is implemented via a THttpServer instance, which will maintain one
+    // thread per client connection, which is as expected by some DB drivers e.g.
+    // for transaction consistency
     constructor Create(aProperties: TSqlDBConnectionProperties;
       const aDatabaseName: RawUtf8; const aPort: RawUtf8 = SYNDB_DEFAULT_HTTP_PORT;
       const aUserName: RawUtf8 = ''; const aPassword: RawUtf8 = '';
@@ -1947,6 +1950,7 @@ var
 begin
   inherited;
   FormatUtf8('DBRemote %', [aDatabaseName], ident);
+  // good old THttpServer will maintain one thread per connection as expected
   fServer := THttpServer.Create(aPort, nil, nil, ident, fThreadPoolCount);
   THttpServer(fServer).WaitStarted;
   fServer.OnRequest := Process;
