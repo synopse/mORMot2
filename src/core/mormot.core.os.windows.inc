@@ -3084,7 +3084,7 @@ var
   i: PtrInt;
 begin
   dec(ArgCount); // first argument is the service name to be ignored
-  if (ArgCount <= 0) or
+  if (ArgCount < 0) or
      not Assigned(ServiceSingle) then
     exit;
   SetLength(ServiceSingle.fArgsList, ArgCount);
