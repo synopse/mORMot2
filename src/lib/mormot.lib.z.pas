@@ -126,7 +126,7 @@ type
 
 type
   /// class of Exceptions raised by ZCheck()
-  EZLib = class(Exception);
+  EZLib = class(ExceptionWithProps);
 
   /// main access to the zlib API for compression/uncompression
   // - we encapsulated all low-level C calls into this object-oriented structure

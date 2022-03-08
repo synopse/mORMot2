@@ -253,7 +253,7 @@ function Utf8FirstLineToUtf16Length(source: PUtf8Char): PtrInt;
 
 type
   /// Exception raised by this unit in case of fatal conversion issue
-  ESynUnicode = class(Exception);
+  ESynUnicode = class(ExceptionWithProps);
 
   /// an abstract class to handle Ansi to/from Unicode translation
   // - implementations of this class will handle efficiently all Code Pages

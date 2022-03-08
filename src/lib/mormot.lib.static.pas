@@ -259,7 +259,7 @@ end;
 // see e.g. #define assert(x) in QuickJS cutils.h
 
 type
-  ELibStatic = class(Exception);
+  ELibStatic = class(ExceptionWithProps);
 
 procedure pas_assertfailed(cond, fn: PAnsiChar; line: integer); cdecl;
  {$ifdef FPC} public name _PREFIX + 'pas_assertfailed'; {$endif}

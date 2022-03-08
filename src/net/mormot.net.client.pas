@@ -807,8 +807,8 @@ type
   protected
     fLastError: integer;
   public
-    /// create a WinINet exception, with the error message as text
-    constructor Create;
+    /// create and raise a WinINet exception, with the error message as text
+    class procedure RaiseFromLastError;
   published
     /// the associated WSAGetLastError value
     property LastError: integer
@@ -857,7 +857,7 @@ type
   end;
 
   /// WinHttp exception type
-  EWinHttp = class(Exception);
+  EWinHttp = class(ESynException);
 
   /// establish a client connection to a WebSocket server using the Windows API
   // - used by TWinWebSocketClient class
@@ -908,7 +908,7 @@ type
 
 type
   /// libcurl exception type
-  ECurlHttp = class(Exception);
+  ECurlHttp = class(ExceptionWithProps);
 
   /// a class to handle HTTP/1.1 request using the libcurl library
   // - libcurl is a free and easy-to-use cross-platform URL transfer library,
@@ -2491,7 +2491,7 @@ procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
             RaiseLastModuleError(winhttpdll, EWinHttp);
           inc(Current, BytesWritten);
           if not fOnUpload(Self, Current, L) then
-            raise EWinHttp.CreateFmt('OnUpload Canceled %s', [aMethod]);
+            raise EWinHttp.CreateUtf8('%: OnUpload canceled %', [self, aMethod]);
         end;
       end;
     end
@@ -2515,7 +2515,8 @@ begin
         wraNegotiate:
           winAuth := WINHTTP_AUTH_SCHEME_NEGOTIATE;
       else
-        raise EWinHttp.CreateFmt('Unsupported AuthScheme=%d', [ord(AuthScheme)]);
+        raise EWinHttp.CreateUtf8(
+          '%: unsupported AuthScheme=%', [self, ord(AuthScheme)]);
       end;
       if not WinHttpApi.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
          winAuth, pointer(AuthUserName), pointer(AuthPassword), nil) then
@@ -2604,12 +2605,16 @@ end;
 
 { EWinINet }
 
-constructor EWinINet.Create;
+class procedure EWinINet.RaiseFromLastError;
+var
+  err: integer;
+  E: EWinINet;
 begin
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
-  fLastError := GetLastError;
-  inherited CreateFmt(
-    '%s (%x)', [SysErrorMessageWinInet(fLastError), fLastError]);
+  err := GetLastError;
+  E := CreateFmt('%s (%x)', [SysErrorMessageWinInet(err), err]);
+  E.fLastError := err;
+  raise E;
 end;
 
 
@@ -2627,7 +2632,7 @@ begin
   fSession := InternetOpenA(Pointer(fExtendedOptions.UserAgent), OpenType,
     pointer(fProxyName), pointer(fProxyByPass), 0);
   if fSession = nil then
-    raise EWinINet.Create;
+    EWinINet.RaiseFromLastError;
   InternetSetOption(fConnection, INTERNET_OPTION_CONNECT_TIMEOUT,
     @ConnectionTimeOut, SizeOf(ConnectionTimeOut));
   InternetSetOption(fConnection, INTERNET_OPTION_SEND_TIMEOUT,
@@ -2637,7 +2642,7 @@ begin
   fConnection := InternetConnectA(fSession, pointer(fServer), fPort,
     nil, nil, INTERNET_SERVICE_HTTP, 0, 0);
   if fConnection = nil then
-    raise EWinINet.Create;
+    EWinINet.RaiseFromLastError;
 end;
 
 procedure TWinINet.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
@@ -2658,7 +2663,7 @@ begin
   FRequest := HttpOpenRequestA(FConnection, Pointer(aMethod), Pointer(aUrl),
     nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags, 0);
   if FRequest = nil then
-    raise EWinINet.Create;
+    EWinINet.RaiseFromLastError;
 end;
 
 procedure TWinINet.InternalCloseRequest;
@@ -2675,7 +2680,7 @@ begin
   if (hdr <> '') and
      not HttpAddRequestHeadersA(fRequest, Pointer(hdr), length(hdr),
        HTTP_ADDREQ_FLAG_COALESCE) then
-    raise EWinINet.Create;
+    EWinINet.RaiseFromLastError;
 end;
 
 procedure TWinINet.InternalSendRequest(const aMethod: RawUtf8; const aData:
@@ -2692,7 +2697,7 @@ begin
     buff.dwStructSize := SizeOf(buff);
     buff.dwBufferTotal := Length(aData);
     if not HttpSendRequestExA(fRequest, @buff, nil, 0, 0) then
-      raise EWinINet.Create;
+      EWinINet.RaiseFromLastError;
     datapos := 0;
     while datapos < datalen do
     begin
@@ -2704,17 +2709,18 @@ begin
         Bytes := max;
       if not InternetWriteFile(fRequest,
          @PByteArray(aData)[datapos], Bytes, BytesWritten) then
-        raise EWinINet.Create;
+        EWinINet.RaiseFromLastError;
       inc(datapos, BytesWritten);
       if not fOnUpload(Self, datapos, datalen) then
         raise EWinINet.CreateFmt('OnUpload Canceled %s', [aMethod]);
     end;
     if not HttpEndRequest(fRequest, nil, 0, 0) then
-      raise EWinINet.Create;
+      EWinINet.RaiseFromLastError;
   end
-  else // blocking send with no callback
-if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
-    raise EWinINet.Create;
+  else
+  // blocking send with no callback
+  if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
+    EWinINet.RaiseFromLastError;
 end;
 
 function TWinINet.InternalGetInfo(Info: cardinal): RawUtf8;
@@ -2747,14 +2753,14 @@ end;
 function TWinINet.InternalQueryDataAvailable: cardinal;
 begin
   if not InternetQueryDataAvailable(fRequest, result, 0, 0) then
-    raise EWinINet.Create;
+    EWinINet.RaiseFromLastError;
 end;
 
 function TWinINet.InternalReadData(var Data: RawByteString; Read: integer; Size:
   cardinal): cardinal;
 begin
   if not InternetReadFile(fRequest, @PByteArray(Data)[Read], Size, result) then
-    raise EWinINet.Create;
+    EWinINet.RaiseFromLastError;
 end;
 
 destructor TWinINet.Destroy;
@@ -2818,7 +2824,7 @@ begin
     if _http.Request(url, 'GET', 0, inH, '', '', outH, outD) = 101 then
       fSocket := _http.fSocket
     else
-      raise EWinHttp.Create('WebSocketClient creation fail');
+      raise EWinHttp.CreateUtf8('%.Create: % handshake failed', [self, _http]);
   finally
     _http.Free;
   end;

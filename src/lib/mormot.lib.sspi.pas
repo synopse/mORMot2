@@ -290,7 +290,7 @@ function CertFindCertificateInStore(hCertStore: HCERTSTORE;
 
 type
   /// exception class raised during SSPI process
-  ESynSspi = class(Exception)
+  ESynSspi = class(ExceptionWithProps)
   public
     constructor CreateLastOSError(const aContext: TSecContext);
   end;

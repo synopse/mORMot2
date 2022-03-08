@@ -269,7 +269,7 @@ var
 
 type
   /// Exception types raised by this mormot.core.os unit
-  EOSException = class(Exception);
+  EOSException = class(ExceptionWithProps);
 
   /// the recognized operating systems
   // - it will also recognize most Linux distributions

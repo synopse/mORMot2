@@ -40,7 +40,7 @@ uses
 
 type
   /// low-level exception raised during libcurl library access
-  ECurl = class(Exception);
+  ECurl = class(ExceptionWithProps);
 
   /// low-level options for libcurl library API calls
   TCurlOption = (
