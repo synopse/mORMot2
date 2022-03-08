@@ -3287,7 +3287,7 @@ type
   SERVICE_STATUS_HANDLE = cardinal;
   TServiceTableEntry = record
     lpServiceName: PChar;
-    lpServiceProc: procedure(ArgCount: cardinal; Args: PPChar); stdcall;
+    lpServiceProc: procedure(ArgCount: integer; Args: PPChar); stdcall;
   end;
   PServiceTableEntry = ^TServiceTableEntry;
 

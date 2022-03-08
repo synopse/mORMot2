@@ -3079,17 +3079,19 @@ end;
     and subsequent arguments are any strings passed to the service by the process
     that called the StartService function to start the service.  }
     
-procedure ServiceProc(ArgCount: cardinal; Args: PPChar); stdcall;
+procedure ServiceProc(ArgCount: integer; Args: PPChar); stdcall;
 var
   i: PtrInt;
 begin
-  if not Assigned(ServiceSingle) then
+  dec(ArgCount); // first argument is the service name to be ignored
+  if (ArgCount <= 0) or
+     not Assigned(ServiceSingle) then
     exit;
-  SetLength(ServiceSingle.fArgsList, ArgCount - 1);
-  for i := 0 to ArgCount - 2 do
+  SetLength(ServiceSingle.fArgsList, ArgCount);
+  for i := 0 to ArgCount - 1 do
   begin
-    Inc(Args);
-    ServiceSingle.fArgsList[i] := Args^;
+    inc(Args);
+    ServiceSingle.fArgsList[i] := Args^; // convert to string
   end;
   ServiceSingle.fStatusHandle := RegisterServiceCtrlHandler(
     pointer(ServiceSingle.fSName), @ServiceSingle.ControlHandler);
