@@ -6885,6 +6885,7 @@ begin
     begin
       if MaxDepth > 0 then
       begin
+        param := X509_VERIFY_PARAM_new();
         X509_VERIFY_PARAM_set_flags(param, X509_V_FLAG_PARTIAL_CHAIN);
         X509_VERIFY_PARAM_set_depth(param, MaxDepth);
         X509_STORE_CTX_set0_param(c, param);
