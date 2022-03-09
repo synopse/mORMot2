@@ -1331,9 +1331,10 @@ type
     function SetLocations(const CAFile: RawUtf8;
       const CAFolder: RawUtf8 = ''): boolean;
     // returns 0 on success, or an error code (optionally in errstr^/errcert^)
+    // - allow partial chain verification if MaxDepth<>0
     function Verify(x509: PX509; chain: Pstack_st_X509 = nil;
       errstr: PPUtf8Char = nil; errcert: PPX509 = nil;
-      callback: X509_STORE_CTX_verify_cb = nil): integer;
+      callback: X509_STORE_CTX_verify_cb = nil; MaxDepth: integer = 0): integer;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -1800,6 +1801,15 @@ function X509_STORE_CTX_set_purpose(ctx: PX509_STORE_CTX; purpose: integer): int
 function X509_STORE_CTX_set_trust(ctx: PX509_STORE_CTX; trust: integer): integer; cdecl;
 procedure X509_STORE_CTX_set0_untrusted(ctx: PX509_STORE_CTX; sk: Pstack_st_X509); cdecl;
 procedure X509_STORE_CTX_set0_param(ctx: PX509_STORE_CTX; param: PX509_VERIFY_PARAM); cdecl;
+function X509_VERIFY_PARAM_new(): PX509_VERIFY_PARAM; cdecl;
+procedure X509_VERIFY_PARAM_free(param: PX509_VERIFY_PARAM); cdecl;
+function X509_VERIFY_PARAM_set_flags(param: PX509_VERIFY_PARAM; flags: cardinal): integer; cdecl;
+function X509_VERIFY_PARAM_clear_flags(param: PX509_VERIFY_PARAM; flags: cardinal): integer; cdecl;
+function X509_VERIFY_PARAM_get_flags(param: PX509_VERIFY_PARAM): cardinal; cdecl;
+function X509_VERIFY_PARAM_set_purpose(param: PX509_VERIFY_PARAM; purpose: integer): integer; cdecl;
+function X509_VERIFY_PARAM_set_trust(param: PX509_VERIFY_PARAM; trust: integer): integer; cdecl;
+procedure X509_VERIFY_PARAM_set_depth(param: PX509_VERIFY_PARAM; depth: integer); cdecl;
+procedure X509_VERIFY_PARAM_set_auth_level(param: PX509_VERIFY_PARAM; auth_level: integer); cdecl;
 function X509_LOOKUP_load_file(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
 function X509_LOOKUP_add_dir(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
 function PKCS12_new(): PPKCS12; cdecl;
@@ -2593,6 +2603,15 @@ type
     X509_STORE_CTX_set_trust: function(ctx: PX509_STORE_CTX; trust: integer): integer; cdecl;
     X509_STORE_CTX_set0_untrusted: procedure(ctx: PX509_STORE_CTX; sk: Pstack_st_X509); cdecl;
     X509_STORE_CTX_set0_param: procedure(ctx: PX509_STORE_CTX; param: PX509_VERIFY_PARAM); cdecl;
+    X509_VERIFY_PARAM_new: function(): PX509_VERIFY_PARAM; cdecl;
+    X509_VERIFY_PARAM_free: procedure(param: PX509_VERIFY_PARAM); cdecl;
+    X509_VERIFY_PARAM_set_flags: function(param: PX509_VERIFY_PARAM; flags: cardinal): integer; cdecl;
+    X509_VERIFY_PARAM_clear_flags: function(param: PX509_VERIFY_PARAM; flags: cardinal): integer; cdecl;
+    X509_VERIFY_PARAM_get_flags: function(param: PX509_VERIFY_PARAM): cardinal; cdecl;
+    X509_VERIFY_PARAM_set_purpose: function(param: PX509_VERIFY_PARAM; purpose: integer): integer; cdecl;
+    X509_VERIFY_PARAM_set_trust: function(param: PX509_VERIFY_PARAM; trust: integer): integer; cdecl;
+    X509_VERIFY_PARAM_set_depth: procedure(param: PX509_VERIFY_PARAM; depth: integer); cdecl;
+    X509_VERIFY_PARAM_set_auth_level: procedure(param: PX509_VERIFY_PARAM; auth_level: integer); cdecl;
     PKCS12_new: function(): PPKCS12; cdecl;
     PKCS12_free: procedure(a: PPKCS12); cdecl;
     PKCS12_create: function(pass: PUtf8Char; name: PUtf8Char; pkey: PEVP_PKEY; cert: PX509; ca: Pstack_st_X509; nid_key: integer; nid_cert: integer; iter: integer; mac_iter: integer; keytype: integer): PPKCS12; cdecl;
@@ -2711,7 +2730,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..271] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..280] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2869,6 +2888,15 @@ const
     'X509_STORE_CTX_set_trust',
     'X509_STORE_CTX_set0_untrusted',
     'X509_STORE_CTX_set0_param',
+    'X509_VERIFY_PARAM_new',
+    'X509_VERIFY_PARAM_free',
+    'X509_VERIFY_PARAM_set_flags',
+    'X509_VERIFY_PARAM_clear_flags',
+    'X509_VERIFY_PARAM_get_flags',
+    'X509_VERIFY_PARAM_set_purpose',
+    'X509_VERIFY_PARAM_set_trust',
+    'X509_VERIFY_PARAM_set_depth',
+    'X509_VERIFY_PARAM_set_auth_level',
     'PKCS12_new',
     'PKCS12_free',
     'PKCS12_create',
@@ -3790,6 +3818,51 @@ end;
 procedure X509_STORE_CTX_set0_param(ctx: PX509_STORE_CTX; param: PX509_VERIFY_PARAM);
 begin
   libcrypto.X509_STORE_CTX_set0_param(ctx, param);
+end;
+
+function X509_VERIFY_PARAM_new(): PX509_VERIFY_PARAM;
+begin
+  result := libcrypto.X509_VERIFY_PARAM_new();
+end;
+
+procedure X509_VERIFY_PARAM_free(param: PX509_VERIFY_PARAM);
+begin
+  libcrypto.X509_VERIFY_PARAM_free(param);
+end;
+
+function X509_VERIFY_PARAM_set_flags(param: PX509_VERIFY_PARAM; flags: cardinal): integer;
+begin
+  result := libcrypto.X509_VERIFY_PARAM_set_flags(param, flags);
+end;
+
+function X509_VERIFY_PARAM_clear_flags(param: PX509_VERIFY_PARAM; flags: cardinal): integer;
+begin
+  result := libcrypto.X509_VERIFY_PARAM_clear_flags(param, flags);
+end;
+
+function X509_VERIFY_PARAM_get_flags(param: PX509_VERIFY_PARAM): cardinal;
+begin
+  result := libcrypto.X509_VERIFY_PARAM_get_flags(param);
+end;
+
+function X509_VERIFY_PARAM_set_purpose(param: PX509_VERIFY_PARAM; purpose: integer): integer;
+begin
+  result := libcrypto.X509_VERIFY_PARAM_set_purpose(param, purpose);
+end;
+
+function X509_VERIFY_PARAM_set_trust(param: PX509_VERIFY_PARAM; trust: integer): integer;
+begin
+  result := libcrypto.X509_VERIFY_PARAM_set_trust(param, trust);
+end;
+
+procedure X509_VERIFY_PARAM_set_depth(param: PX509_VERIFY_PARAM; depth: integer);
+begin
+  libcrypto.X509_VERIFY_PARAM_set_depth(param, depth);
+end;
+
+procedure X509_VERIFY_PARAM_set_auth_level(param: PX509_VERIFY_PARAM; auth_level: integer);
+begin
+  libcrypto.X509_VERIFY_PARAM_set_auth_level(param, auth_level);
 end;
 
 function X509_LOOKUP_load_file(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
@@ -5166,6 +5239,33 @@ procedure X509_STORE_CTX_set0_untrusted(ctx: PX509_STORE_CTX; sk: Pstack_st_X509
 
 procedure X509_STORE_CTX_set0_param(ctx: PX509_STORE_CTX; param: PX509_VERIFY_PARAM); cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set0_param';
+
+function X509_VERIFY_PARAM_new(): PX509_VERIFY_PARAM; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_new';
+
+procedure X509_VERIFY_PARAM_free(param: PX509_VERIFY_PARAM); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_free';
+
+function X509_VERIFY_PARAM_set_flags(param: PX509_VERIFY_PARAM; flags: cardinal): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set_flags';
+
+function X509_VERIFY_PARAM_clear_flags(param: PX509_VERIFY_PARAM; flags: cardinal): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_clear_flags';
+
+function X509_VERIFY_PARAM_get_flags(param: PX509_VERIFY_PARAM): cardinal; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_get_flags';
+
+function X509_VERIFY_PARAM_set_purpose(param: PX509_VERIFY_PARAM; purpose: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set_purpose';
+
+function X509_VERIFY_PARAM_set_trust(param: PX509_VERIFY_PARAM; trust: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set_trust';
+
+procedure X509_VERIFY_PARAM_set_depth(param: PX509_VERIFY_PARAM; depth: integer); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set_depth';
+
+procedure X509_VERIFY_PARAM_set_auth_level(param: PX509_VERIFY_PARAM; auth_level: integer); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set_auth_level';
 
 function PKCS12_new(): PPKCS12; cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_new';
@@ -6769,9 +6869,11 @@ begin
 end;
 
 function X509_STORE.Verify(x509: PX509; chain: Pstack_st_X509;
-  errstr: PPUtf8Char; errcert: PPX509; callback: X509_STORE_CTX_verify_cb): integer;
+  errstr: PPUtf8Char; errcert: PPX509; callback: X509_STORE_CTX_verify_cb;
+  MaxDepth: integer): integer;
 var
   c: PX509_STORE_CTX;
+  param: PX509_VERIFY_PARAM;
 begin
   result := -1;
   if @self = nil then
@@ -6781,6 +6883,12 @@ begin
   try
     if X509_STORE_CTX_init(c, @self, x509, chain) = OPENSSLSUCCESS then
     begin
+      if MaxDepth > 0 then
+      begin
+        X509_VERIFY_PARAM_set_flags(param, X509_V_FLAG_PARTIAL_CHAIN);
+        X509_VERIFY_PARAM_set_depth(param, MaxDepth);
+        X509_STORE_CTX_set0_param(c, param);
+      end;
       if Assigned(callback) then
         X509_STORE_CTX_set_verify_cb(c, callback);
       if X509_verify_cert(c) = OPENSSLSUCCESS then

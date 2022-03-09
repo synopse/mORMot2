@@ -16995,12 +16995,6 @@ function X509_STORE_CTX_set_default(ctx: PX509_STORE_CTX; name: PUtf8Char): inte
 procedure X509_STORE_CTX_set0_dane(ctx: PX509_STORE_CTX; dane: PSSL_DANE); cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set0_dane';
 
-function X509_VERIFY_PARAM_new(): PX509_VERIFY_PARAM; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_new';
-
-procedure X509_VERIFY_PARAM_free(param: PX509_VERIFY_PARAM); cdecl;
-  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_free';
-
 function X509_VERIFY_PARAM_inherit(_to: PX509_VERIFY_PARAM; from: PX509_VERIFY_PARAM): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_inherit';
 
@@ -17009,27 +17003,6 @@ function X509_VERIFY_PARAM_set1(_to: PX509_VERIFY_PARAM; from: PX509_VERIFY_PARA
 
 function X509_VERIFY_PARAM_set1_name(param: PX509_VERIFY_PARAM; name: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set1_name';
-
-function X509_VERIFY_PARAM_set_flags(param: PX509_VERIFY_PARAM; flags: cardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set_flags';
-
-function X509_VERIFY_PARAM_clear_flags(param: PX509_VERIFY_PARAM; flags: cardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_clear_flags';
-
-function X509_VERIFY_PARAM_get_flags(param: PX509_VERIFY_PARAM): cardinal; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_get_flags';
-
-function X509_VERIFY_PARAM_set_purpose(param: PX509_VERIFY_PARAM; purpose: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set_purpose';
-
-function X509_VERIFY_PARAM_set_trust(param: PX509_VERIFY_PARAM; trust: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set_trust';
-
-procedure X509_VERIFY_PARAM_set_depth(param: PX509_VERIFY_PARAM; depth: integer); cdecl;
-  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set_depth';
-
-procedure X509_VERIFY_PARAM_set_auth_level(param: PX509_VERIFY_PARAM; auth_level: integer); cdecl;
-  external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set_auth_level';
 
 function X509_VERIFY_PARAM_get_time(param: PX509_VERIFY_PARAM): time_t; cdecl;
   external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_get_time';
