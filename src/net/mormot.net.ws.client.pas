@@ -136,7 +136,8 @@ type
     // - alternatively, you can specify your own custom TWebSocketProtocol
     // instance (owned by this method and immediately released on error)
     // - will return '' on success, or an error message on failure
-    function WebSocketsUpgrade(const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
+    function WebSocketsUpgrade(
+      const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
       aWebSocketsAjax: boolean = false;
       aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress];
       aProtocol: TWebSocketProtocol = nil; const aCustomHeaders: RawUtf8 = ''): RawUtf8;
