@@ -1974,10 +1974,10 @@ procedure QueryPerformanceMicroSeconds(out Value: Int64);
 function ValidHandle(Handle: THandle): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// check for unsafe '..' '/xxx' 'c:xxx' or '\\' patterns in a filename
+/// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a filename
 function SafeFileName(const FileName: TFileName): boolean;
 
-/// check for unsafe '..' '/xxx' 'c:xxx' or '\\' patterns in a filename
+/// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a filename
 function SafeFileNameU(const FileName: RawUtf8): boolean;
 
 /// get a file date and time, from its name
@@ -4283,6 +4283,7 @@ begin
             (FileName[1] <> '/') and
             (PosExString('..', FileName) = 0) and
             (PosExString(':', FileName) = 0) and
+            (PosExString('~', FileName) = 0) and
             (PosExString('\\', FileName) = 0);
 end;
 
@@ -4292,6 +4293,7 @@ begin
             (FileName[1] <> '/') and
             (PosEx('..', FileName) = 0) and
             (PosExChar(':', FileName) = 0) and
+            (PosExChar('~', FileName) = 0) and
             (PosEx('\\', FileName) = 0);
 end;
 
