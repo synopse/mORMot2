@@ -2772,12 +2772,12 @@ procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
 procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 
 /// retrieve 512-bit of entropy, from system time and current execution state
-// - entropy is gathered over several sources like RTL Now(), Random(), CreateGUID(),
+// - entropy is gathered over several sources like RTL Now(), CreateGUID(),
 // current gsl_rng_taus2 Lecuyer state, and RdRand32/Rdtsc low-level Intel opcodes
 // - the resulting output is to be hashed - e.g. with DefaultHasher128
 // - execution is fast, but not enough as unique seed for a cryptographic PRNG:
 // TAesPrng.GetEntropy will call it as one of its entropy sources, in addition
-// to system-retrieved randomness
+// to system-retrieved randomness from mormot.core.os.pas' XorOSEntropy()
 procedure XorEntropy(var e: THash512Rec);
 
 /// convert the endianness of a given unsigned 32-bit integer into BigEndian
@@ -3584,6 +3584,13 @@ type
     function Seek(Offset: Longint; Origin: Word): Longint; override;
   end;
   {$M-}
+
+  /// TStream with two protected fPosition/fSize fields
+  TStreamWithPositionAndSize = class(TStreamWithPosition)
+  protected
+    fSize: Int64;
+    function GetSize: Int64; override;
+  end;
 
   /// TStream using a RawByteString as internal storage
   // - default TStringStream uses UTF-16 WideChars since Delphi 2009, so it is
@@ -11013,6 +11020,14 @@ end;
 function TStreamWithPosition.Seek(Offset: Longint; Origin: Word): Longint;
 begin
   result := Seek(Offset, TSeekOrigin(Origin)); // call the 64-bit version above
+end;
+
+
+{ TStreamWithPositionAndSize }
+
+function TStreamWithPositionAndSize.GetSize: Int64;
+begin
+  result := fSize;
 end;
 
 

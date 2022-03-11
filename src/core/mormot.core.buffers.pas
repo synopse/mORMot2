@@ -2183,12 +2183,10 @@ type
   end;
 
   /// TStream allowing to read from some nested TStream instances
-  TNestedStreamReader = class(TStreamWithPosition)
+  TNestedStreamReader = class(TStreamWithPositionAndSize)
   protected
-    fSize: Int64;
     fNested: array of TNestedStream;
     fContentRead: ^TNestedStream;
-    function GetSize: Int64; override;
   public
     /// overriden method to call Flush on rewind, i.e. if position is set to 0
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
@@ -2213,15 +2211,13 @@ type
 
   /// TStream with an internal memory buffer
   // - can be beneficial e.g. reading from a file by small chunks
-  TBufferedStreamReader = class(TStreamWithPosition)
+  TBufferedStreamReader = class(TStreamWithPositionAndSize)
   protected
     fBuffer: RawByteString;
     fSource: TStream;
     fBufferPos: PAnsiChar;
     fBufferLeft: integer;
     fOwnStream: TStream;
-    fSize: Int64;
-    function GetSize: Int64; override;
   public
     /// initialize the source TStream and the internal buffer
     // - will also rewind the aSource position to its beginning
@@ -6229,7 +6225,7 @@ begin
   if result = 0 then
     exit;
   blen := result * 3;
-  Base64EncodeAvx2(sp, blen, rp); // handle >32 bytes of data using AVX2
+  Base64EncodeAvx2(sp, blen, rp); // handle >=32 bytes of data using AVX2
   Base64EncodeLoop(rp, sp, blen, @b64enc); // good inlining code generation
 end;
 
@@ -6317,7 +6313,7 @@ end;
 
 function BinToBase64Line(sp: PAnsiChar; len: PtrUInt; const Prefix, Suffix: RawUtf8): RawUtf8;
 const
-  PERLINE = (64 * 3) div 4;
+  PERLINE = (64 * 3) div 4; // = 48 bytes for 64 chars per line
 var
   p: PAnsiChar;
   outlen, last: PtrUInt;
@@ -6335,7 +6331,7 @@ begin
   begin
     Base64EncodeMain(p, sp, PERLINE); // may use AVX2 on FPC x86_64
     inc(sp, PERLINE);
-    PWord(p + 64)^ := $0a0d;
+    PWord(p + 64)^ := $0a0d; // on all systems for safety
     inc(p, 66);
     dec(len, PERLINE);
   end;
@@ -9399,11 +9395,6 @@ begin
     fNested[i].Stream.Free;
 end;
 
-function TNestedStreamReader.GetSize: Int64;
-begin
-  result := fSize; // Flush should have been called
-end;
-
 function TNestedStreamReader.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
 begin
   if (Offset = 0) and
@@ -9519,11 +9510,6 @@ end;
 
 
 { TBufferedStreamReader }
-
-function TBufferedStreamReader.GetSize: Int64;
-begin
-  result := fSize;
-end;
 
 constructor TBufferedStreamReader.Create(aSource: TStream; aBufSize: integer);
 begin
