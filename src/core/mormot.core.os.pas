@@ -1980,6 +1980,14 @@ function SafeFileName(const FileName: TFileName): boolean;
 /// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a filename
 function SafeFileNameU(const FileName: RawUtf8): boolean;
 
+const
+  /// the path delimiter character to be changed into PathDelim on current OS
+  InvertedPathDelim = {$ifdef OSWINDOWS} '/' {$else} '\' {$endif};
+
+/// ensure all \ / path delimiters are normalized into the current OS expectation
+// - i.e. normalize file name to use '\' on Windows, or '/' on POSIX
+function NormalizeFileName(const FileName: TFileName): TFileName;
+
 /// get a file date and time, from its name
 // - returns 0 if file doesn't exist
 // - returns the local file age, encoded as TDateTime
@@ -4295,6 +4303,11 @@ begin
             (PosExChar(':', FileName) = 0) and
             (PosExChar('~', FileName) = 0) and
             (PosEx('\\', FileName) = 0);
+end;
+
+function NormalizeFileName(const FileName: TFileName): TFileName;
+begin
+  result := StringReplace(FileName, InvertedPathDelim, PathDelim, [rfReplaceAll]);
 end;
 
 procedure DisplayError(const fmt: string; const args: array of const);
