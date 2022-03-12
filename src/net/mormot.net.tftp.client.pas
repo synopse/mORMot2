@@ -505,7 +505,7 @@ begin
             inc(LastReceivedSequenceHi, 1 shl 16); // 16-bit overflow
         end;
         FileStream.WriteBuffer(Frame^.Data, len);
-        if len < BlockSize then
+        if len < integer(BlockSize) then
         begin
           if len < 0 then
             result := teDiskFull

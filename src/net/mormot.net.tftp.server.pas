@@ -271,7 +271,7 @@ begin
     result := teFileNotFound;
     fn := GetFileName(Context.FileName);
     if (fn = '') or
-       not FileExists(Context.FileName) then
+       not FileExists(fn) then
       exit;
     Context.FileStream := TBufferedStreamReader.Create(fn, RRQ_MEM_CHUNK);
     if Context.FileStream.Size < maxInt then
@@ -292,7 +292,7 @@ begin
     result := teFileAlreadyExists;
     fn := GetFileName(Context.FileName);
     if (fn = '') or
-       FileExists(Context.FileName) then
+       FileExists(fn) then
       exit;
     Context.FileStream := TFileStream.Create(fn, fmCreate);
     result := teNoError;

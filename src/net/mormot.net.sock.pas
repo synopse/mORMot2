@@ -151,9 +151,9 @@ type
     function Port: TNetPort;
     function SetPort(p: TNetPort): TNetResult;
     function Size: integer;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     function IsEqualAfter64(const another: TNetAddr): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     function IsEqual(const another: TNetAddr): boolean;
     function NewSocket(layer: TNetLayer): TNetSocket;
   end;
