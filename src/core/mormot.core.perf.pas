@@ -2175,7 +2175,7 @@ end;
 
 procedure TSynMonitorUsage.LoadTrack(var Track: TSynMonitorUsageTrack);
 var
-  p, v: PtrInt;
+  ndx, v: PtrInt;
   g: TSynMonitorUsageGranularity;
   val, int: PDocVariantData;
 begin
@@ -2185,8 +2185,8 @@ begin
     begin
       val := GetAsDocVariantSafe(Track.Name);
       if val <> nil then
-        for p := 0 to length(Track.Props) - 1 do
-          with Track.Props[p] do
+        for ndx := 0 to length(Track.Props) - 1 do
+          with Track.Props[ndx] do
             if val^.GetAsDocVariant(Name, int) and
                (int^.Count > 0) and
                int^.IsArray then

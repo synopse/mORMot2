@@ -914,13 +914,19 @@ type
     function GetArrayExistingByName(const aName: RawUtf8): PDocVariantData;
     function GetArrayOrAddByName(const aName: RawUtf8): PDocVariantData;
     function GetAsDocVariantByIndex(aIndex: integer): PDocVariantData;
+    function GetVariantByPath(const aNameOrPath: RawUtf8): Variant;
+      {$ifdef HASINLINE}inline;{$endif}
     function InternalAdd(aName: PUtf8Char; aNameLen: integer): integer; overload;
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalUniqueValue(aIndex: PtrInt);
     function InternalNextPath(var P: PUtf8Char; aName: PShortString;
       aPathDelim: AnsiChar): PtrInt;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
+    procedure InternalNotFound(var Dest: variant; aName: PUtf8Char); overload;
+    procedure InternalNotFound(var Dest: variant; aIndex: integer); overload;
+    function InternalNotFound(aName: PUtf8Char): PVariant; overload;
+    function InternalNotFound(aIndex: integer): PDocVariantData; overload;
     procedure ClearFast;
   public
     /// initialize a TDocVariantData to store some document-based content
@@ -1519,6 +1525,7 @@ type
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - it will return Unassigned if there is no item at the supplied aPath
     // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
+    // - see also the P[] property if the default aPathDelim = '.' is enough
     function GetValueByPath(
       const aPath: RawUtf8; aPathDelim: AnsiChar = '.'): variant; overload;
     /// retrieve a value, given its path
@@ -1526,6 +1533,7 @@ type
     // - returns FALSE if there is no item at the supplied aPath
     // - returns TRUE and set the found value in aValue
     // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
+    // - see also the P[] property if the default aPathDelim = '.' is enough
     function GetValueByPath(const aPath: RawUtf8; out aValue: variant;
       aPathDelim: AnsiChar = '.'): boolean; overload;
     /// retrieve a value, given its path
@@ -1949,7 +1957,7 @@ type
     // is release, you should not use Value[] but rather
     // GetValueOrRaiseException or GetValueOrNull/GetValueOrEmpty
     // - see U[] I[] B[] D[] O[] O_[] A[] A_[] _[] properties for direct access
-    // of strong typed values
+    // of strong typed values, or P[] to retrieve a variant from its path
     property Value[const aNameOrIndex: Variant]: Variant
       read GetValueOrItem write SetValueOrItem; default;
 
@@ -2027,6 +2035,12 @@ type
     // GetAsDocVariantSafe)
     property _[aIndex: integer]: PDocVariantData
       read GetAsDocVariantByIndex;
+    /// direct access to a dvObject value stored property value from its path name
+    // - default Value[] will check only names in the current object properties,
+    // whereas this property will recognize e.g. 'parent.child' nested objects
+    // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
+    property P[const aNameOrPath: RawUtf8]: Variant
+      read GetVariantByPath;
   end;
   {$A+} { packet object not allowed since Delphi 2009 :( }
 
@@ -2781,12 +2795,11 @@ begin
         d.VAny := nil;
         VariantToUtf8(PVariant(s)^, RawUtf8(d.VAny)); // store a RawUtf8 instance
       end;
-  else
-    if not SetVariantUnRefSimpleValue(PVariant(s)^, d) then
-      if vt = DocVariantVType then
-        DocVariantType.CopyByValue(d, s^)
-      else
-        Dest := PVariant(s)^;
+  else // note: varVariant should not happen here
+    if vt = DocVariantVType then
+      DocVariantType.CopyByValue(d, s^)
+    else
+      Dest := PVariant(s)^;
   end;
 end;
 
@@ -3993,17 +4006,21 @@ end;
 
 procedure TDocVariant.Copy(var Dest: TVarData; const Source: TVarData;
   const Indirect: boolean);
+begin
+  //Assert(Source.VType=DocVariantVType);
+  if Indirect then
+    SetVariantByRef(variant(Source), variant(Dest))
+  else
+    CopyByValue(Dest, Source);
+end;
+
+procedure TDocVariant.CopyByValue(var Dest: TVarData; const Source: TVarData);
 var
   S: TDocVariantData absolute Source;
   D: TDocVariantData absolute Dest;
   i: PtrInt;
 begin
   //Assert(Source.VType=DocVariantVType);
-  if Indirect then
-  begin
-    SetVariantByRef(variant(Source), variant(Dest));
-    exit;
-  end;
   VarClearAndSetType(variant(Dest), PCardinal(@S)^); // VType + VOptions
   pointer(D.VName) := nil; // avoid GPF
   pointer(D.VValue) := nil;
@@ -4019,12 +4036,6 @@ begin
     for i := 0 to S.VCount - 1 do
       D.VValue[i] := S.VValue[i];
   end;
-end;
-
-procedure TDocVariant.CopyByValue(var Dest: TVarData; const Source: TVarData);
-begin
-  //Assert(Source.VType=DocVariantVType);
-  Copy(Dest, Source, {indirect=}false);
 end;
 
 procedure TDocVariant.Cast(var Dest: TVarData; const Source: TVarData);
@@ -6649,6 +6660,38 @@ begin
       pointer(VName), @aName^[1], ord(aName^[0]), VCount);
 end;
 
+procedure TDocVariantData.InternalNotFound(var Dest: variant; aName: PUtf8Char);
+begin
+  if dvoReturnNullForUnknownProperty in VOptions then
+    SetVariantNull(Dest)
+  else
+    raise EDocVariant.CreateUtf8('[%] property not found', [aName])
+end;
+
+procedure TDocVariantData.InternalNotFound(var Dest: variant; aIndex: integer);
+begin
+  if dvoReturnNullForUnknownProperty in VOptions then
+    SetVariantNull(Dest)
+  else
+    raise EDocVariant.CreateUtf8('Out of range [%] (count=%)', [aIndex, VCount]);
+end;
+
+function TDocVariantData.InternalNotFound(aName: PUtf8Char): PVariant;
+begin
+  if dvoReturnNullForUnknownProperty in VOptions then
+    result := @DocVariantDataFake
+  else
+    raise EDocVariant.CreateUtf8('[%] property not found', [aName])
+end;
+
+function TDocVariantData.InternalNotFound(aIndex: integer): PDocVariantData;
+begin
+  if dvoReturnNullForUnknownProperty in VOptions then
+    result := @DocVariantDataFake
+  else
+    raise EDocVariant.CreateUtf8('Out of range [%] (count=%)', [aIndex, VCount]);
+end;
+
 function TDocVariantData.DeleteByPath(
   const aPath: RawUtf8; aPathDelim: AnsiChar): boolean;
 var
@@ -7040,7 +7083,7 @@ end;
 function TDocVariantData.GetPVariantByPath(
   const aPath: RawUtf8; aPathDelim: AnsiChar): PVariant;
 var
-  P: PUtf8Char;
+  path: PUtf8Char;
   ndx: PtrInt;
   n: ShortString;
 begin
@@ -7053,18 +7096,29 @@ begin
     exit;
   end;
   result := @self;
-  P := pointer(aPath);
+  path := pointer(aPath);
   repeat
     with _Safe(result^)^ do
     begin
-      ndx := InternalNextPath(P, @n, aPathDelim);
+      ndx := InternalNextPath(path, @n, aPathDelim);
       result := nil;
       if ndx < 0 then
         exit;
       result := @VValue[ndx];
     end;
-  until P = nil;
+  until path = nil;
   // if we reached here, we have result=found item
+end;
+
+function TDocVariantData.GetVariantByPath(const aNameOrPath: RawUtf8): Variant;
+var
+  v: PVariant;
+begin
+  v := GetPVariantByPath(aNameOrPath, '.');
+  if v <> nil then
+    SetVariantByValue(v^, result)
+  else
+    InternalNotFound(result, pointer(aNameOrPath));
 end;
 
 function TDocVariantData.GetDocVariantByPath(const aPath: RawUtf8;
@@ -7297,11 +7351,7 @@ var
   Source: PVariant;
 begin
   if cardinal(Index) >= cardinal(VCount) then
-    if dvoReturnNullForUnknownProperty in VOptions then
-      SetVariantNull(Dest)
-    else
-      raise EDocVariant.CreateUtf8(
-        'Out of range Values[%] (count=%)', [Index, VCount])
+    InternalNotFound(Dest, Index)
   else if DestByRef then
     SetVariantByRef(VValue[Index], Dest)
   else
@@ -7321,10 +7371,7 @@ var
 begin
   ndx := GetValueIndex(aName, aNameLen, aCaseSensitive);
   if ndx < 0 then
-    if dvoReturnNullForUnknownProperty in VOptions then
-      SetVariantNull(Dest)
-    else
-      raise EDocVariant.CreateUtf8('[%] property not found', [aName])
+    InternalNotFound(Dest, aName)
   else
     RetrieveValueOrRaiseException(ndx, Dest, DestByRef);
   result := ndx >= 0;
@@ -7601,10 +7648,7 @@ var
 begin
   ndx := GetValueIndex(aName);
   if ndx < 0 then
-    if dvoReturnNullForUnknownProperty in VOptions then
-      result := @DocVariantDataFake
-    else
-      raise EDocVariant.CreateUtf8('[%] property not found', [aName])
+    result := InternalNotFound(pointer(aName))
   else
     result := @VValue[ndx];
 end;
@@ -7725,11 +7769,8 @@ function TDocVariantData.GetAsDocVariantByIndex(
 begin
   if cardinal(aIndex) < cardinal(VCount) then
     result := _Safe(VValue[aIndex])
-  else if dvoReturnNullForUnknownProperty in VOptions then
-    result := @DocVariantDataFake
   else
-    raise EDocVariant.CreateUtf8(
-      'Out of range _[%] (count=%)', [aIndex, VCount]);
+    result := InternalNotFound(aIndex);
 end;
 
 function _Obj(const NameValuePairs: array of const;

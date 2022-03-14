@@ -856,7 +856,7 @@ end;
 class function TSynMustachePartials.CreateOwned(
   const Partials: variant): TSynMustachePartials;
 var
-  p: PtrInt;
+  ndx: PtrInt;
 begin
   result := nil;
   with _Safe(Partials)^ do
@@ -865,8 +865,8 @@ begin
     begin
       result := TSynMustachePartials.Create;
       result.fOwned := true;
-      for p := 0 to Count - 1 do
-        result.Add(names[p], VariantToUtf8(Values[p]));
+      for ndx := 0 to Count - 1 do
+        result.Add(names[ndx], VariantToUtf8(Values[ndx]));
     end;
 end;
 
