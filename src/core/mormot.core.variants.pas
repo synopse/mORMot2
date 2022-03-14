@@ -920,6 +920,7 @@ type
     procedure InternalUniqueValue(aIndex: PtrInt);
     function InternalNextPath(var P: PUtf8Char; aName: PShortString;
       aPathDelim: AnsiChar): PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure ClearFast;
   public
     /// initialize a TDocVariantData to store some document-based content
