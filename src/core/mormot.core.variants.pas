@@ -272,8 +272,9 @@ type
     // - should return Unassigned if the FullName does not match any value
     // - will identify TDocVariant storage, or resolve and call the generic
     // TSynInvokeableVariantType.IntGet() method until nested value match
+    // - you can set e.g. PathDelim = '/' to search e.g. for 'parent/child'
     procedure Lookup(var Dest: TVarData; const Instance: TVarData;
-      FullName: PUtf8Char);
+      FullName: PUtf8Char; PathDelim: AnsiChar = '.');
     /// will check if the value is an array, and return the number of items
     // - if the document is an array, will return the items count (0 meaning
     // void array) - used e.g. by TSynMustacheContextVariant
@@ -917,7 +918,8 @@ type
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalUniqueValue(aIndex: PtrInt);
-    function InternalNextPath(var P: PUtf8Char; aName: PShortString): PtrInt;
+    function InternalNextPath(var P: PUtf8Char; aName: PShortString;
+      aPathDelim: AnsiChar): PtrInt;
     procedure ClearFast;
   public
     /// initialize a TDocVariantData to store some document-based content
@@ -1515,13 +1517,16 @@ type
     /// retrieve a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - it will return Unassigned if there is no item at the supplied aPath
-    function GetValueByPath(const aPath: RawUtf8): variant; overload;
+    // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
+    function GetValueByPath(
+      const aPath: RawUtf8; aPathDelim: AnsiChar = '.'): variant; overload;
     /// retrieve a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - returns FALSE if there is no item at the supplied aPath
     // - returns TRUE and set the found value in aValue
-    function GetValueByPath(const aPath: RawUtf8;
-      out aValue: variant): boolean; overload;
+    // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
+    function GetValueByPath(const aPath: RawUtf8; out aValue: variant;
+      aPathDelim: AnsiChar = '.'): boolean; overload;
     /// retrieve a value, given its path
     // - path is defined as a list of names, e.g. ['doc','glossary','title']
     // - returns Unassigned if there is no item at the supplied aPath
@@ -1534,13 +1539,16 @@ type
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - if the supplied aPath does not match any object, it will return nil
     // - if aPath is found, returns a pointer to the corresponding value
-    function GetPVariantByPath(const aPath: RawUtf8): PVariant;
+    // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
+    function GetPVariantByPath(
+      const aPath: RawUtf8; aPathDelim: AnsiChar = '.'): PVariant;
     /// retrieve a reference to a TDocVariant, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - if the supplied aPath does not match any object, it will return false
     // - if aPath stores a valid TDocVariant, returns true and a pointer to it
+    // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
     function GetDocVariantByPath(const aPath: RawUtf8;
-      out aValue: PDocVariantData): boolean;
+      out aValue: PDocVariantData; aPathDelim: AnsiChar = '.'): boolean;
     /// retrieve a dvObject in the dvArray, from a property value
     // - {aPropName:aPropValue} will be searched within the stored array,
     // and the corresponding item will be copied into Dest, on match
@@ -1580,8 +1588,9 @@ type
     // - aCreateIfNotExisting=true will force missing nested objects creation
     // - returns FALSE if there is no item to be set at the supplied aPath
     // - returns TRUE and set the found value in aValue
+    // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
     function SetValueByPath(const aPath: RawUtf8; const aValue: variant;
-      aCreateIfNotExisting: boolean = false): boolean;
+      aCreateIfNotExisting: boolean = false; aPathDelim: AnsiChar = '.'): boolean;
 
     /// add a value in this document
     // - if aName is set, if dvoCheckForDuplicatedNames option is set, any
@@ -1680,11 +1689,13 @@ type
     procedure AddOrUpdateFrom(const aDocVariant: Variant;
       aOnlyAddMissing: boolean = false);
     /// add one or several properties, specified by path, from another object
-    // - path are defined as open array, e.g. ['doc','glossary','title']
+    // - path are defined as open array, e.g. ['doc','glossary','title'], but
+    // could also contained nested paths, e.g. ['doc.glossary', title'] or
+    // ['doc', 'glossary/title'] of aPathDelim is '/'
     // - matching values would be added as root values, with the path as name
     // - instance and supplied aSource should be a dvObject
     procedure AddByPath(const aSource: TDocVariantData;
-      const aPaths: array of RawUtf8);
+      const aPaths: array of RawUtf8; aPathDelim: AnsiChar = '.');
     /// delete a value/item in this document, from its index
     // - return TRUE on success, FALSE if the supplied index is not correct
     function Delete(Index: PtrInt): boolean; overload;
@@ -1697,7 +1708,8 @@ type
     /// delete a value/item in this document, from its name
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - return TRUE on success, FALSE if the supplied name does not exist
-    function DeleteByPath(const aPath: RawUtf8): boolean;
+    // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
+    function DeleteByPath(const aPath: RawUtf8; aPathDelim: AnsiChar = '.'): boolean;
     /// delete a value in this document, by property name match
     // - {aPropName:aPropValue} will be searched within the stored array or
     // object, and the corresponding item will be deleted, on match
@@ -3559,7 +3571,7 @@ begin
 end;
 
 procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData;
-  const Instance: TVarData; FullName: PUtf8Char);
+  const Instance: TVarData; FullName: PUtf8Char; PathDelim: AnsiChar);
 var
   handler: TSynInvokeableVariantType;
   v, tmp: TVarData; // PVarData wouldn't store e.g. RowID/count
@@ -3577,7 +3589,7 @@ begin
   repeat
     if vt < varFirstCustom then
       exit; // we need a complex type to lookup
-    GetNextItemShortString(FullName, @n, '.'); // n ends with #0
+    GetNextItemShortString(FullName, @n, PathDelim); // n ends with #0
     if n[0] in [#0, #254] then
       exit;
     if vt = VarType then
@@ -5819,7 +5831,7 @@ begin
 end;
 
 procedure TDocVariantData.AddByPath(const aSource: TDocVariantData;
-  const aPaths: array of RawUtf8);
+  const aPaths: array of RawUtf8; aPathDelim: AnsiChar);
 var
   p, added: PtrInt;
   v: TVarData;
@@ -5830,7 +5842,7 @@ begin
     exit;
   for p := 0 to High(aPaths) do
   begin
-    DocVariantType.Lookup(v, TVarData(aSource), pointer(aPaths[p]));
+    DocVariantType.Lookup(v, TVarData(aSource), pointer(aPaths[p]), aPathDelim);
     if cardinal(v.VType) < varNull then
       continue; // path not found
     added := InternalAdd(aPaths[p]);
@@ -6625,9 +6637,9 @@ const
       FindNonVoidRawUtf8);
 
 function TDocVariantData.InternalNextPath(
-  var P: PUtf8Char; aName: PShortString): PtrInt;
+  var P: PUtf8Char; aName: PShortString; aPathDelim: AnsiChar): PtrInt;
 begin
-  GetNextItemShortString(P, aName, '.');
+  GetNextItemShortString(P, aName, aPathDelim);
   if (aName^[0] in [#0, #254]) or
      (VCount = 0) then
     result := -1
@@ -6636,7 +6648,8 @@ begin
       pointer(VName), @aName^[1], ord(aName^[0]), VCount);
 end;
 
-function TDocVariantData.DeleteByPath(const aPath: RawUtf8): boolean;
+function TDocVariantData.DeleteByPath(
+  const aPath: RawUtf8; aPathDelim: AnsiChar): boolean;
 var
   P: PUtf8Char;
   v: PDocVariantData;
@@ -6649,7 +6662,7 @@ begin
   P := pointer(aPath);
   v := @self;
   repeat
-    ndx := v^.InternalNextPath(P, @n);
+    ndx := v^.InternalNextPath(P, @n, aPathDelim);
     if P = nil then
     begin
       // we reached the last item of the path, which is to be deleted
@@ -6993,7 +7006,8 @@ begin
   end;
 end;
 
-function TDocVariantData.GetValueByPath(const aPath: RawUtf8): variant;
+function TDocVariantData.GetValueByPath(
+  const aPath: RawUtf8; aPathDelim: AnsiChar): variant;
 var
   Dest: TVarData;
 begin
@@ -7001,13 +7015,13 @@ begin
   if (cardinal(VType) <> DocVariantVType) or
      (not IsObject) then
     exit;
-  DocVariantType.Lookup(Dest, TVarData(self), pointer(aPath));
+  DocVariantType.Lookup(Dest, TVarData(self), pointer(aPath), aPathDelim);
   if cardinal(Dest.VType) >= varNull then
     result := variant(Dest); // copy
 end;
 
 function TDocVariantData.GetValueByPath(const aPath: RawUtf8;
-  out aValue: variant): boolean;
+  out aValue: variant; aPathDelim: AnsiChar): boolean;
 var
   Dest: TVarData;
 begin
@@ -7015,14 +7029,15 @@ begin
   if (cardinal(VType) <> DocVariantVType) or
      (not IsObject) then
     exit;
-  DocVariantType.Lookup(Dest, TVarData(self), pointer(aPath));
+  DocVariantType.Lookup(Dest, TVarData(self), pointer(aPath), aPathDelim);
   if Dest.VType = varEmpty then
     exit;
   aValue := variant(Dest); // copy
   result := true;
 end;
 
-function TDocVariantData.GetPVariantByPath(const aPath: RawUtf8): PVariant;
+function TDocVariantData.GetPVariantByPath(
+  const aPath: RawUtf8; aPathDelim: AnsiChar): PVariant;
 var
   P: PUtf8Char;
   ndx: PtrInt;
@@ -7041,7 +7056,7 @@ begin
   repeat
     with _Safe(result^)^ do
     begin
-      ndx := InternalNextPath(P, @n);
+      ndx := InternalNextPath(P, @n, aPathDelim);
       result := nil;
       if ndx < 0 then
         exit;
@@ -7052,11 +7067,11 @@ begin
 end;
 
 function TDocVariantData.GetDocVariantByPath(const aPath: RawUtf8;
-  out aValue: PDocVariantData): boolean;
+  out aValue: PDocVariantData; aPathDelim: AnsiChar): boolean;
 var
   v: PVariant;
 begin
-  v := GetPVariantByPath(aPath);
+  v := GetPVariantByPath(aPath, aPathDelim);
   result := (v <> nil) and
             _Safe(v^, aValue);
 end;
@@ -7227,7 +7242,7 @@ begin
 end;
 
 function TDocVariantData.SetValueByPath(const aPath: RawUtf8;
-  const aValue: variant; aCreateIfNotExisting: boolean): boolean;
+  const aValue: variant; aCreateIfNotExisting: boolean; aPathDelim: AnsiChar): boolean;
 var
   P: PUtf8Char;
   v: PDocVariantData;
@@ -7240,7 +7255,7 @@ begin
   P := pointer(aPath);
   v := @self;
   repeat
-    ndx := v^.InternalNextPath(P, @n);
+    ndx := v^.InternalNextPath(P, @n, aPathDelim);
     if P = nil then
       break; // we reached the last item of the path, which is the value to set
     if ndx < 0 then
