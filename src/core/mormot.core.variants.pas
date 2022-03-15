@@ -920,7 +920,7 @@ type
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalUniqueValue(aIndex: PtrInt);
-    function InternalNextPath(var P: PUtf8Char; aName: PShortString;
+    function InternalNextPath(var aCsv: PUtf8Char; aName: PShortString;
       aPathDelim: AnsiChar): PtrInt;
       {$ifdef FPC}inline;{$endif}
     procedure InternalNotFound(var Dest: variant; aName: PUtf8Char); overload;
@@ -4960,7 +4960,7 @@ procedure TDocVariantData.InitArrayFrom(const aItems: TDynArray;
   aOptions: TDocVariantOptions);
 var
   n: integer;
-  P: PByte;
+  pb: PByte;
   v: PVarData;
   item: TRttiCustom;
   json: RawUtf8;
@@ -4986,10 +4986,10 @@ begin
     // handle array of simple types
     VCount := n;
     SetLength(VValue, n);
-    P := aItems.Value^;
+    pb := aItems.Value^;
     v := pointer(VValue);
     repeat
-      inc(P, item.ValueToVariant(P, v^));
+      inc(pb, item.ValueToVariant(pb, v^));
       inc(v);
       dec(n);
     until n = 0;
@@ -5008,7 +5008,7 @@ function TDocVariantData.InitArrayFromResults(Json: PUtf8Char; JsonLen: PtrInt;
   aOptions: TDocVariantOptions): boolean;
 var
   fieldcount, rowcount, capa, r, f: PtrInt;
-  P, V: PUtf8Char;
+  J, V: PUtf8Char;
   VLen: integer;
   wasstring: boolean;
   endofobj: AnsiChar;
@@ -5018,8 +5018,8 @@ var
 begin
   result := false;
   Init(aOptions, dvArray);
-  P := GotoNextNotSpace(Json);
-  if IsNotExpandedBuffer(P, Json + JsonLen, fieldcount, rowcount) then
+  J := GotoNextNotSpace(Json);
+  if IsNotExpandedBuffer(J, Json + JsonLen, fieldcount, rowcount) then
   begin
     // A. Not Expanded (more optimized) format as array of values
     // {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
@@ -5032,7 +5032,7 @@ begin
     proto.Capacity := fieldcount;
     for f := 1 to fieldcount do
     begin
-      V := GetJsonField(P, P, @wasstring, nil, @VLen);
+      V := GetJsonField(J, J, @wasstring, nil, @VLen);
       if not wasstring then
         exit; // should start with field names
       proto.AddValue(V, VLen, null);
@@ -5046,8 +5046,8 @@ begin
       val := dv^.InitFrom(proto, {values=}false); // names byref + void values
       for f := 1 to fieldcount do
       begin
-        GetJsonToAnyVariant(val^, P, @endofobj, @aOptions, false{double=aOptions});
-        if P = nil then
+        GetJsonToAnyVariant(val^, J, @endofobj, @aOptions, false{double=aOptions});
+        if J = nil then
           exit;
         inc(val);
       end;
@@ -5059,12 +5059,12 @@ begin
     // B. Expanded format as array of objects (each with field names)
     // [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...]
     // 1. get first object (will reuse its field names)
-    P := GotoFieldCountExpanded(P);
-    if (P = nil) or
-       (P^ = ']') then
+    J := GotoFieldCountExpanded(J);
+    if (J = nil) or
+       (J^ = ']') then
       exit; // [] -> valid, but void data
-    P := proto.InitJsonInPlace(P, aOptions, @endofobj);
-    if P = nil then
+    J := proto.InitJsonInPlace(J, aOptions, @endofobj);
+    if J = nil then
       exit;
     rowcount := 0;
     capa := 16;
@@ -5073,16 +5073,16 @@ begin
     dv^ := proto;
     // 2. get values (assume fieldcount are always the same as in the first object)
     repeat
-      while (P^ <> '{') and
-            (P^ <> ']') do // go to next object beginning
-        if P^ = #0 then
+      while (J^ <> '{') and
+            (J^ <> ']') do // go to next object beginning
+        if J^ = #0 then
           exit
         else
-          inc(P);
+          inc(J);
       inc(rowcount);
-      if P^ = ']' then
+      if J^ = ']' then
         break;
-      inc(P); // jmp '}'
+      inc(J); // jmp '}'
       if rowcount = capa then
       begin
         capa := NextGrow(capa);
@@ -5095,24 +5095,24 @@ begin
       val := dv^.InitFrom(proto, {values=}false);
       for f := 1 to proto.Count do
       begin
-        P := GotoEndJsonItemString(P); // ignore field names (assume same order)
-        if P = nil then
+        J := GotoEndJsonItemString(J); // ignore field names (assume same order)
+        if J = nil then
           break;
-        inc(P); // ignore jcEndOfJsonFieldOr0
-        GetJsonToAnyVariant(val^, P, @endofobj, @aOptions, false{double=aOptions});
-        if P = nil then
+        inc(J); // ignore jcEndOfJsonFieldOr0
+        GetJsonToAnyVariant(val^, J, @endofobj, @aOptions, false{double=aOptions});
+        if J = nil then
           break;
         inc(val);
       end;
       if endofobj <> '}' then
       begin
-        P := nil;
+        J := nil;
         break;
       end;
     until false;
     SetCount(rowcount);
   end;
-  if P = nil then
+  if J = nil then
     Clear
   else
     result := true;
@@ -5845,19 +5845,19 @@ end;
 procedure TDocVariantData.AddByPath(const aSource: TDocVariantData;
   const aPaths: array of RawUtf8; aPathDelim: AnsiChar);
 var
-  p, added: PtrInt;
+  ndx, added: PtrInt;
   v: TVarData;
 begin
   if (aSource.Count = 0) or
      (not aSource.IsObject) or
      IsArray then
     exit;
-  for p := 0 to High(aPaths) do
+  for ndx := 0 to High(aPaths) do
   begin
-    DocVariantType.Lookup(v, TVarData(aSource), pointer(aPaths[p]), aPathDelim);
+    DocVariantType.Lookup(v, TVarData(aSource), pointer(aPaths[ndx]), aPathDelim);
     if cardinal(v.VType) < varNull then
       continue; // path not found
-    added := InternalAdd(aPaths[p]);
+    added := InternalAdd(aPaths[ndx]);
     PVarData(@VValue[added])^ := v;
     if dvoInternValues in VOptions then
       InternalUniqueValue(added);
@@ -6497,17 +6497,17 @@ end;
 function TDocVariantData.Rename(
   const aFromPropName, aToPropName: TRawUtf8DynArray): integer;
 var
-  n, p, ndx: PtrInt;
+  n, prop, ndx: PtrInt;
 begin
   result := 0;
   n := length(aFromPropName);
   if length(aToPropName) = n then
-    for p := 0 to n - 1 do
+    for prop := 0 to n - 1 do
     begin
-      ndx := GetValueIndex(aFromPropName[p]);
+      ndx := GetValueIndex(aFromPropName[prop]);
       if ndx >= 0 then
       begin
-        VName[ndx] := aToPropName[p];
+        VName[ndx] := aToPropName[prop];
         inc(result);
       end;
     end;
@@ -6649,9 +6649,9 @@ const
       FindNonVoidRawUtf8);
 
 function TDocVariantData.InternalNextPath(
-  var P: PUtf8Char; aName: PShortString; aPathDelim: AnsiChar): PtrInt;
+  var aCsv: PUtf8Char; aName: PShortString; aPathDelim: AnsiChar): PtrInt;
 begin
-  GetNextItemShortString(P, aName, aPathDelim);
+  GetNextItemShortString(aCsv, aName, aPathDelim);
   if (aName^[0] in [#0, #254]) or
      (VCount = 0) then
     result := -1
@@ -6695,7 +6695,7 @@ end;
 function TDocVariantData.DeleteByPath(
   const aPath: RawUtf8; aPathDelim: AnsiChar): boolean;
 var
-  P: PUtf8Char;
+  csv: PUtf8Char;
   v: PDocVariantData;
   ndx: PtrInt;
   n: ShortString;
@@ -6703,11 +6703,11 @@ begin
   result := false;
   if IsArray then
     exit;
-  P := pointer(aPath);
+  csv := pointer(aPath);
   v := @self;
   repeat
-    ndx := v^.InternalNextPath(P, @n, aPathDelim);
-    if P = nil then
+    ndx := v^.InternalNextPath(csv, @n, aPathDelim);
+    if csv = nil then
     begin
       // we reached the last item of the path, which is to be deleted
       result := v^.Delete(ndx);
@@ -7136,7 +7136,7 @@ function TDocVariantData.GetValueByPath(
 var
   found, res: PVarData;
   vt: cardinal;
-  P: integer;
+  ndx: integer;
 begin
   VarClear(result{%H-});
   if (cardinal(VType) <> DocVariantVType) or
@@ -7144,14 +7144,14 @@ begin
      (high(aDocVariantPath) < 0) then
     exit;
   found := @self;
-  P := 0;
+  ndx := 0;
   repeat
-    found := PDocVariantData(found).GetVarData(aDocVariantPath[P]);
+    found := PDocVariantData(found).GetVarData(aDocVariantPath[ndx]);
     if found = nil then
       exit;
-    if P = high(aDocVariantPath) then
+    if ndx = high(aDocVariantPath) then
       break; // we found the item!
-    inc(P);
+    inc(ndx);
     // if we reached here, we should try for the next scope within Dest
     repeat
       vt := found^.VType;
@@ -7299,7 +7299,7 @@ end;
 function TDocVariantData.SetValueByPath(const aPath: RawUtf8;
   const aValue: variant; aCreateIfNotExisting: boolean; aPathDelim: AnsiChar): boolean;
 var
-  P: PUtf8Char;
+  csv: PUtf8Char;
   v: PDocVariantData;
   ndx: PtrInt;
   n: ShortString;
@@ -7307,11 +7307,11 @@ begin
   result := false;
   if IsArray then
     exit;
-  P := pointer(aPath);
+  csv := pointer(aPath);
   v := @self;
   repeat
-    ndx := v^.InternalNextPath(P, @n, aPathDelim);
-    if P = nil then
+    ndx := v^.InternalNextPath(csv, @n, aPathDelim);
+    if csv = nil then
       break; // we reached the last item of the path, which is the value to set
     if ndx < 0 then
       if aCreateIfNotExisting then
