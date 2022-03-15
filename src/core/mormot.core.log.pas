@@ -5563,6 +5563,12 @@ end;
 
 procedure TSynLog.AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
 
+{$ifndef NOEXCEPTIONINTERCEPT}
+var
+  nointerceptbackup: boolean; // paranoid precaution
+  nointercept: PBoolean;
+{$endif NOEXCEPTIONINTERCEPT}
+
 {$ifdef CPU64}
 
   procedure AddStackManual(Stack: PPtrUInt);
@@ -5584,20 +5590,13 @@ procedure TSynLog.AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
       result := false;
     end;
 
-    function IsBadReadPtr(addr: pointer; len: integer): boolean;
+    function IsReadeable(addr: pointer): boolean;
     begin
       try
-        asm
-            mov     eax, addr
-            mov     ecx, len
-    @s:     mov     dl, [eax]
-            inc     eax
-            dec     ecx
-            jnz     @S
-    @e: end;
-        result := false; // if we reached here, everything is ok
+        Hash32(addr, 12); // try to read 12 bytes
+        result := true;   // if we reached here, everything is ok
       except
-        result := true;
+        result := false;
       end;
     end;
 
@@ -5617,16 +5616,18 @@ procedure TSynLog.AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
         mov     max_stack, eax
       // mov eax,fs:[18h]; mov ecx,dword ptr [eax+4]; mov max_stack,ecx
     end;
-    if PtrUInt(Stack) >= min_stack then
+    if PtrUInt(Stack) < min_stack then
+      exit;
     try
       fWriter.Add(' ');
       while PtrUInt(Stack) < max_stack do
       begin
         st := Stack^;
         if ((st > max_stack) or
-           (st < min_stack)) and
-           not IsBadReadPtr(pointer(st - 8), 12) and
-           ((PByte(st - 5)^ = $E8) or check2(st)) then
+            (st < min_stack)) and
+           IsReadeable(pointer(st - 8)) and // check 12 readable bytes
+           ((PByte(st - 5)^ = $E8) or
+             check2(st)) then
           if TDebugFile.Log(fWriter, st, false) then
           begin
             dec(depth);
@@ -5648,12 +5649,17 @@ var
 begin
   if fFamily.StackTraceLevel <= 0 then
     exit;
-  {$ifdef OSWINDOWS}
-  if fFamily.StackTraceUse = stOnlyManual then
-    AddStackManual(stack)
-  else
-  begin
-    try
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  nointercept := @ExceptionIgnorePerThread;
+  nointerceptbackup := nointercept^;
+  nointercept^ := true;
+  {$endif NOEXCEPTIONINTERCEPT}
+  try
+    {$ifdef OSWINDOWS}
+    if fFamily.StackTraceUse = stOnlyManual then
+      AddStackManual(stack)
+    else
+    begin
       logged := 0;
       n := RtlCaptureStackBackTrace(2, fFamily.StackTraceLevel, @BackTrace, nil);
       if n <> 0 then
@@ -5666,11 +5672,14 @@ begin
       if (logged < 2) and
          (fFamily.StackTraceUse <> stOnlyAPI) then
         AddStackManual(stack);
-    except
-      // just ignore any access violation here 
     end;
+    {$endif OSWINDOWS}
+  except
+    // just ignore any access violation here
   end;
-  {$endif OSWINDOWS}
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  nointercept^ := nointerceptbackup;
+  {$endif NOEXCEPTIONINTERCEPT}
 end;
 
 {$endif FPC}
