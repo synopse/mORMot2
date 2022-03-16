@@ -756,18 +756,21 @@ procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
   // truncated to 16 non space chars (including #0)
   {%H-}trunc: array[0..15] of AnsiChar;
-  i, L: integer;
+  i, L, c4: integer;
 begin
   if Name = '' then
     exit;
   L := 0; // trim unrelevant spaces and prefixes when filling the 16 chars
   i := 1;
   if Name[1] = 'T' then
-    if PCardinal(Name)^ =
-         ord('T') + ord('S') shl 8 + ord('Q') shl 16 + ord('L') shl 24 then
+  begin
+    c4 := PCardinal(Name)^ and $dfdfdfdf;
+    if (c4 = ord('T') + ord('S') shl 8 + ord('Q') shl 16 + ord('L') shl 24) or
+       (c4 = ord('T') + ord('O') shl 8 + ord('R') shl 16 + ord('M') shl 24) then
       i := 5
     else
       i := 2;
+  end;
   while i <= length(Name) do
   begin
     if Name[i] > ' ' then

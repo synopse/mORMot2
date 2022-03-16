@@ -4242,9 +4242,10 @@ begin
     // efficient TThreadID hash on all architectures
     hash := 0;
     repeat
-      hash := hash xor (id and (MAXLOGTHREAD - 1));
+      hash := hash xor id;
       id := id shr (MAXLOGTHREADBITS - 1); // -1 for less collisions under Linux
     until id = 0; // on Windows, a single loop iteration is enough
+    hash := hash and (MAXLOGTHREAD - 1);
     fThreadLastHash := hash;
     fThreadIndex := fThreadHash[hash];
     // fast O(1) loookup of the associated thread context
@@ -4319,9 +4320,10 @@ begin
       // not empty slot
       hash := 0; // efficient TThreadID hash on all architectures
       repeat
-        hash := hash xor (id and (MAXLOGTHREAD - 1));
+        hash := hash xor id;
         id := id shr (MAXLOGTHREADBITS - 1); // -1 for less collisions on Linux
       until id = 0;
+      hash := hash and (MAXLOGTHREAD - 1);
       secondpass := false;
       repeat
         if fThreadHash[hash] = 0 then
@@ -5969,13 +5971,13 @@ begin
     'WebSocket',       'WS',
     'Asynch',          'A',
     'Async',           'A',
-    'Parallel',        'Par',
+    'Parallel',        'Prl',
     'Timer',           'Tmr',
     'Thread',          'Thd',
     'Database',        'DB',
     'Backup',          'Bak',
-    'Server',          'Svr',
-    'Client',          'Clt',
+    'Server',          'Srv',
+    'Client',          'Cli',
     'synopse',         'syn',
     'memory',          'mem',
     '  ',              ' '
