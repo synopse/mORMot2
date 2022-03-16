@@ -1936,12 +1936,12 @@ type
     /// the OS-level exception code
     // - could be $0EEDFAE0 of $0EEDFADE for Delphi-generated exceptions
     ECode: DWord;
+    /// = FPC's RaiseProc() FrameCount if EStack is Frame: PCodePointer
+    EStackCount: integer;
     /// the address where the exception occured
     EAddr: PtrUInt;
     /// the optional stack trace
     EStack: PPtrUInt;
-    /// = FPC's RaiseProc() FrameCount if EStack is Frame: PCodePointer
-    EStackCount: integer;
     /// timestamp of this exception, as number of seconds since UNIX Epoch
     // - UnixTimeUtc is faster than NowUtc or GetSystemTime
     // - use UnixTimeToDateTime() to convert it into a regular TDateTime

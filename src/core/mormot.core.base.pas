@@ -8432,8 +8432,8 @@ begin
   {$ifdef WITH_ERMS}
   if not (cfSSE2 in CpuFeatures) then
     ERMSB_MIN_SIZE := 0 // FillCharFast will fallback to rep stosb
-    // but MoveFast() is likely to abort -> recompile with HASNOSSE2 conditional
-    // or ensure mormot.core.os is used so that it will redirect to RTL Move()
+    // but MoveFast/SynLz are likely to abort -> recompile with HASNOSSE2 conditional
+    // note: mormot.core.os.pas InitializeSpecificUnit will notify it on console
   else if cfERMS in CpuFeatures then
     ERMSB_MIN_SIZE := 4096; // "on 32-bit strings have to be at least 4KB"
   {$endif WITH_ERMS}

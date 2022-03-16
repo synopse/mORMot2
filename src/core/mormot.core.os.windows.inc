@@ -3386,8 +3386,7 @@ begin
     RedirectCode(@MoveFast, @System.Move);
     RedirectCode(@SynLZcompress1, @SynLZcompress1Pas);
     RedirectCode(@SynLZdecompress1, @SynLZdecompress1Pas);
-    ConsoleWrite('WARNING: Old not SSE2 CPU detected -> ' +
-      'please recompile with HASNOSSE2', ccLightRed);
+    ConsoleWrite('WARNING: too old CPU - recompile with HASNOSSE2', ccLightRed);
     // note: FillCharFast is handled by mormot.core.base via ERMSB
     // and Byte/Word/IntegerScanIndex() are likely to GPF at runtime
   end;

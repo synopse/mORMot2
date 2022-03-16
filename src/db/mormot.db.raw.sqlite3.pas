@@ -8576,7 +8576,6 @@ begin
     if WR.Expand then
     begin
       if twoIgnoreDefaultInRecord in WR.CustomOptions then
-      begin
         // used e.g. by DirectExplainQueryPlan() to reduce output verbosity
         case sqlite3.value_type(v) of
           SQLITE_BLOB:
@@ -8595,7 +8594,6 @@ begin
             if sqlite3.value_text(v) = nil then
               continue;
         end;
-      end;
       // if we reached here, there is some field value to append
       WR.AddString(WR.ColNames[f]); // '"'+ColNames[]+'":'
     end;
