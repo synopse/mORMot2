@@ -1889,14 +1889,20 @@ var
   ExeInstanceDebugFile: TDebugFile;
 
 function GetInstanceDebugFile: TDebugFile;
-  {$ifdef FPC} inline; {$endif}
+var
+  new: TDebugFile;
 begin
   result := ExeInstanceDebugFile;
-  if result = nil then
-  begin
-    result := TDebugFile.Create;
-    ExeInstanceDebugFile := result;
-  end;
+  if result <> nil then
+    exit;
+  new := TDebugFile.Create;
+  EnterCriticalSection(GlobalThreadLock);
+  if ExeInstanceDebugFile = nil then
+    ExeInstanceDebugFile := new
+  else
+    new.Free;
+  result := ExeInstanceDebugFile;
+  LeaveCriticalSection(GlobalThreadLock);
 end;
 
 
@@ -3077,6 +3083,11 @@ begin
     // supplied e.g. 'exec.map', 'exec.dbg' or even plain 'exec'/'exec.exe'
     fDebugFile := aExeName;
   MabFile := ChangeFileExt(fDebugFile, '.mab');
+  if not FileExists(MabFile) then
+    if not IsDirectoryWritable(ExtractFilePath(MabFile)) then
+      // read/only exe folder -> store .mab in local non roaming user folder
+      MabFile := IncludeTrailingPathDelimiter(GetSystemPath(spUserData)) +
+                   ExtractFileName(Mabfile);
   EnterCriticalSection(GlobalThreadLock);
   try
     MapAge := FileAgeToUnixTimeUtc(fDebugFile);
@@ -3387,7 +3398,9 @@ begin
   if (W = nil) or
      (aAddressAbsolute = 0) then
     exit;
-  debug := GetInstanceDebugFile;
+  debug := ExeInstanceDebugFile;
+  if debug <> nil then
+    debug := GetInstanceDebugFile;
   if (debug <> nil) and
      debug.HasDebugInfo then
   begin
@@ -5573,6 +5586,7 @@ var
 
   procedure AddStackManual(Stack: PPtrUInt);
   begin
+    // not implemented yet
   end;
 
 {$else}
@@ -5625,7 +5639,7 @@ var
         st := Stack^;
         if ((st > max_stack) or
             (st < min_stack)) and
-           IsReadeable(pointer(st - 8)) and // check 12 readable bytes
+           IsReadeable(pointer(st - 8)) and
            ((PByte(st - 5)^ = $E8) or
              check2(st)) then
           if TDebugFile.Log(fWriter, st, false) then
@@ -5859,7 +5873,7 @@ end;
 procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
   Depth: integer);
 var
-  infos: TSynLogExceptionInfos; // use thread-safe local copy
+  infos: TSynLogExceptionInfos; // use thread-safe local copy of static array
   index, last, n, i: PtrInt;
 begin
   if GlobalLastExceptionIndex < 0 then
