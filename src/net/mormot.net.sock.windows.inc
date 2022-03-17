@@ -9,9 +9,6 @@
 
 uses
   Windows;
-  
-function NetLastError(AnotherNonFatal: integer = 0{NO_ERROR};
-  Error: PInteger = nil): TNetResult; forward;
 
 
 { ******** WinSock2 Type Definitions }
@@ -111,53 +108,53 @@ const
 const
   IP_OPTIONS          = 1;
   IP_HDRINCL          = 2;
-  IP_TOS              = 3;          { set/get IP Type Of Service       }
-  IP_TTL              = 4;          { set/get IP Time To Live          }
-  IP_MULTICAST_IF     = 9;          { set/get IP multicast interface   }
-  IP_MULTICAST_TTL    = 10;         { set/get IP multicast timetolive  }
-  IP_MULTICAST_LOOP   = 11;         { set/get IP multicast loopback    }
-  IP_ADD_MEMBERSHIP   = 12;         { add  an IP group membership      }
-  IP_DROP_MEMBERSHIP  = 13;         { drop an IP group membership      }
-  IP_DONTFRAGMENT     = 14;         { set/get IP Don't Fragment flag   }
+  IP_TOS              = 3;          // set/get IP Type Of Service
+  IP_TTL              = 4;          // set/get IP Time To Live
+  IP_MULTICAST_IF     = 9;          // set/get IP multicast interface
+  IP_MULTICAST_TTL    = 10;         // set/get IP multicast timetolive
+  IP_MULTICAST_LOOP   = 11;         // set/get IP multicast loopback
+  IP_ADD_MEMBERSHIP   = 12;         // add  an IP group membership
+  IP_DROP_MEMBERSHIP  = 13;         // drop an IP group membership
+  IP_DONTFRAGMENT     = 14;         // set/get IP Don't Fragment flag
 
-  IP_DEFAULT_MULTICAST_TTL   = 1;   { normally limit m'casts to 1 hop  }
-  IP_DEFAULT_MULTICAST_LOOP  = 1;   { normally hear sends if a member  }
-  IP_MAX_MEMBERSHIPS         = 20;  { per socket; must fit in one mbuf }
+  IP_DEFAULT_MULTICAST_TTL   = 1;   // normally limit m'casts to 1 hop
+  IP_DEFAULT_MULTICAST_LOOP  = 1;   // normally hear sends if a member
+  IP_MAX_MEMBERSHIPS         = 20;  // per socket; must fit in one mbuf
 
-  SOL_SOCKET      = $ffff;          { options for socket level }
+  SOL_SOCKET      = $ffff;          // options for socket level
 
-  { Option flags per-socket }
-  SO_DEBUG        = $0001;          { turn on debugging info recording }
-  SO_ACCEPTCONN   = $0002;          { socket has had listen() }
-  SO_REUSEADDR    = $0004;          { allow local address reuse }
-  SO_KEEPALIVE    = $0008;          { keep connections alive }
-  SO_DONTROUTE    = $0010;          { just use interface addresses }
-  SO_BROADCAST    = $0020;          { permit sending of broadcast msgs }
-  SO_USELOOPBACK  = $0040;          { bypass hardware when possible }
-  SO_LINGER       = $0080;          { linger on close if data present }
-  SO_OOBINLINE    = $0100;          { leave received OOB data in line }
+  // Option flags per-socket
+  SO_DEBUG        = $0001;          // turn on debugging info recording
+  SO_ACCEPTCONN   = $0002;          // socket has had listen()
+  SO_REUSEADDR    = $0004;          // allow local address reuse
+  SO_KEEPALIVE    = $0008;          // keep connections alive
+  SO_DONTROUTE    = $0010;          // just use interface addresses
+  SO_BROADCAST    = $0020;          // permit sending of broadcast msgs
+  SO_USELOOPBACK  = $0040;          // bypass hardware when possible
+  SO_LINGER       = $0080;          // linger on close if data present
+  SO_OOBINLINE    = $0100;          // leave received OOB data in line
   SO_DONTLINGER   = $ff7f;
-  { Additional options }
-  SO_SNDBUF       = $1001;          { send buffer size }
-  SO_RCVBUF       = $1002;          { receive buffer size }
-  SO_SNDLOWAT     = $1003;          { send low-water mark }
-  SO_RCVLOWAT     = $1004;          { receive low-water mark }
-  SO_SNDTIMEO     = $1005;          { send timeout }
-  SO_RCVTIMEO     = $1006;          { receive timeout }
-  SO_ERROR        = $1007;          { get error status and clear }
-  SO_TYPE         = $1008;          { get socket type }
-  { WinSock 2 extension -- new options }
-  SO_GROUP_ID       = $2001;        { ID of a socket group}
-  SO_GROUP_PRIORITY = $2002;        { the relative priority within a group}
-  SO_MAX_MSG_SIZE   = $2003;        { maximum message size }
-  SO_PROTOCOL_INFOA = $2004;        { WSAPROTOCOL_INFOA structure }
-  SO_PROTOCOL_INFOW = $2005;        { WSAPROTOCOL_INFOW structure }
+  // Additional options
+  SO_SNDBUF       = $1001;          // send buffer size
+  SO_RCVBUF       = $1002;          // receive buffer size
+  SO_SNDLOWAT     = $1003;          // send low-water mark
+  SO_RCVLOWAT     = $1004;          // receive low-water mark
+  SO_SNDTIMEO     = $1005;          // send timeout
+  SO_RCVTIMEO     = $1006;          // receive timeout
+  SO_ERROR        = $1007;          // get error status and clear
+  SO_TYPE         = $1008;          // get socket type
+  // WinSock 2 extension -- new options
+  SO_GROUP_ID       = $2001;        // ID of a socket group}
+  SO_GROUP_PRIORITY = $2002;        // the relative priority within a group}
+  SO_MAX_MSG_SIZE   = $2003;        // maximum message size
+  SO_PROTOCOL_INFOA = $2004;        // WSAPROTOCOL_INFOA structure
+  SO_PROTOCOL_INFOW = $2005;        // WSAPROTOCOL_INFOW structure
   SO_PROTOCOL_INFO  = SO_PROTOCOL_INFOA;
-  PVD_CONFIG        = $3001;        { configuration info for service provider }
-  { Option for opening sockets for synchronous access }
+  PVD_CONFIG        = $3001;        // configuration info for service provider
+  // Option for opening sockets for synchronous access
   SO_SYNCHRONOUS_ALERT    = $10;
   SO_SYNCHRONOUS_NONALERT = $20;
-  { Other NT-specific options }
+  // Other NT-specific options
   SO_OPENTYPE              = $7008;
   SO_MAXDG                 = $7009;
   SO_MAXPATHDG             = $700A;
@@ -185,29 +182,29 @@ const
   NI_DGRAM         = $10;
 
 const
-  SOCK_STREAM     = 1;               { stream socket }
-  SOCK_DGRAM      = 2;               { datagram socket }
-  SOCK_RAW        = 3;               { raw-protocol interface }
-  SOCK_RDM        = 4;               { reliably-delivered message }
-  SOCK_SEQPACKET  = 5;               { sequenced packet stream }
+  SOCK_STREAM     = 1;               // stream socket
+  SOCK_DGRAM      = 2;               // datagram socket
+  SOCK_RAW        = 3;               // raw-protocol interface
+  SOCK_RDM        = 4;               // reliably-delivered message
+  SOCK_SEQPACKET  = 5;               // sequenced packet stream
 
-  { TCP options }
+  // TCP options
   TCP_NODELAY     = $0001;
 
-  { Address families }
-  AF_UNSPEC       = 0;               { unspecified }
-  AF_INET         = 2;               { internetwork: UDP, TCP, etc }
-  AF_INET6        = 23;              { Internetwork Version 6 }
+  // Address families
+  AF_UNSPEC       = 0;               // unspecified
+  AF_INET         = 2;               // internetwork: UDP, TCP, etc
+  AF_INET6        = 23;              // Internetwork Version 6
   AF_MAX          = 24;
 
-  { Protocol families, same as address families for now }
+  // Protocol families, same as address families for now
   PF_UNSPEC       = AF_UNSPEC;
   PF_INET         = AF_INET;
   PF_INET6        = AF_INET6;
   PF_MAX          = AF_MAX;
 
 type
-  { Structure used by kernel to store most addresses }
+  // Structure used by kernel to store most addresses
   PSockAddr = ^TSockAddr;
   TSockAddr = sockaddr_in;
 
@@ -231,7 +228,7 @@ const
   AI_NUMERICHOST = $4;  // Nodename must be a numeric address AnsiString
 
 type
-  { Structure used for manipulating the linger option }
+  // Structure used for manipulating the linger option
   PLinger = ^TLinger;
   TLinger = packed record
     l_onoff: word;
@@ -243,12 +240,10 @@ const
   MSG_PEEK      = $02;  // Peek at incoming messages
 
 const
-  NO_ERROR = 0;
-
-  { All Windows Sockets error constants are biased by WSABASEERR from the "normal" }
+  // All Windows Sockets error constants are biased by WSABASEERR offset
   WSABASEERR              = 10000;
 
-  { Windows Sockets definitions of regular Microsoft C error constants }
+  // Windows Sockets definitions of regular Microsoft C error constants
   WSAEINTR                = (WSABASEERR + 4);  // legacy flag
   WSAEBADF                = (WSABASEERR + 9);
   WSAEACCES               = (WSABASEERR + 13);
@@ -256,7 +251,7 @@ const
   WSAEINVAL               = (WSABASEERR + 22);
   WSAEMFILE               = (WSABASEERR + 24);
 
-  { Windows Sockets definitions of regular Berkeley error constants }
+  // Windows Sockets definitions of regular Berkeley error constants
   WSAEWOULDBLOCK          = (WSABASEERR + 35);
   WSAEINPROGRESS          = (WSABASEERR + 36);
   WSAEALREADY             = (WSABASEERR + 37);
@@ -295,7 +290,7 @@ const
   WSAESTALE               = (WSABASEERR + 70);
   WSAEREMOTE              = (WSABASEERR + 71);
 
-  { Extended Windows Sockets error constant definitions }
+  // Extended Windows Sockets error constant definitions
   WSASYSNOTREADY          = (WSABASEERR+91);
   WSAVERNOTSUPPORTED      = (WSABASEERR+92);
   WSANOTINITIALISED       = (WSABASEERR+93);
@@ -312,16 +307,16 @@ const
   WSA_E_CANCELLED         = (WSABASEERR+111);
   WSAEREFUSED             = (WSABASEERR+112);
 
-  { Error return codes from gethostbyname() and gethostbyaddr() }
-  { Authoritative Answer: Host not found }
+  // Error return codes from gethostbyname() and gethostbyaddr()
+  // Authoritative Answer: Host not found
   WSAHOST_NOT_FOUND       = (WSABASEERR+1001);
-  { Non-Authoritative: Host not found, or SERVERFAIL }
+  // Non-Authoritative: Host not found, or SERVERFAIL
   WSATRY_AGAIN            = (WSABASEERR+1002);
-  { Non recoverable errors, FORMERR, REFUSED, NOTIMP }
+  // Non recoverable errors, FORMERR, REFUSED, NOTIMP
   WSANO_RECOVERY          = (WSABASEERR+1003);
-  { Valid name, no data record of requested type }
+  // Valid name, no data record of requested type
   WSANO_DATA              = (WSABASEERR+1004);
-  { no address, look for MX record }
+  // no address, look for MX record
   WSANO_ADDRESS           = WSANO_DATA;
 
 const

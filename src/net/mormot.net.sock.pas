@@ -92,8 +92,8 @@ type
     /// raise ENetSock if res is not nrOK or nrRetry
     class procedure Check(res: TNetResult; const Context: ShortString);
     /// call NetLastError and raise ENetSock if not nrOK nor nrRetry
-    class procedure CheckLastError(const Context: ShortString; ForceRaise: boolean = false;
-      AnotherNonFatal: integer = 0);
+    class procedure CheckLastError(const Context: ShortString;
+      ForceRaise: boolean = false; AnotherNonFatal: integer = 0);
   published
     property LastError: TNetResult
       read fLastError default nrOk;
@@ -128,6 +128,8 @@ type
 
 
 const
+  NO_ERROR = 0;
+
   /// the socket protocol layers over the IP protocol
   nlIP = [nlTcp, nlUdp];
 
@@ -227,6 +229,12 @@ type
     procedure SetTimeOut(aSeconds: integer);
   end;
 
+/// internal low-level function retrieving the latest socket error information
+function NetLastError(AnotherNonFatal: integer = NO_ERROR;
+  Error: system.PInteger = nil): TNetResult;
+
+/// internal low-level function retrieving the latest socket error message
+function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): ShortString;
 
 /// create a new Socket connected or bound to a given ip:port
 function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
@@ -1155,8 +1163,7 @@ const
     'Refused',
     'Connect Timeout');
 
-function NetLastError(AnotherNonFatal: integer = NO_ERROR;
-  Error: PInteger = nil): TNetResult;
+function NetLastError(AnotherNonFatal: integer; Error: system.PInteger): TNetResult;
 var
   err: integer;
 begin
@@ -1185,7 +1192,7 @@ begin
     result := nrRetry;
 end;
 
-function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): ShortString;
+function NetLastErrorMsg(AnotherNonFatal: integer): ShortString;
 var
   nr: TNetResult;
   err: integer;
