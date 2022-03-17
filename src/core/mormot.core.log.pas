@@ -553,9 +553,12 @@ type
     ptNoThreadProcess);
 
   /// how stack trace shall be computed during logging
+  // - stOnlyAPI is the first (and default) value, since manual stack makes
+  // unexpected detections, and was reported as very slow on Windows 11
+  // - on FPC, these values are ignored, because RTL CaptureBacktrace() is used 
   TSynLogStackTraceUse = (
-    stManualAndAPI,
     stOnlyAPI,
+    stManualAndAPI,
     stOnlyManual);
 
   /// how file existing shall be handled during logging
@@ -894,20 +897,13 @@ type
       read fRotateFileAtHour write fRotateFileAtHour;
     /// the recursive depth of stack trace symbol to write
     // - used only if exceptions are handled, or by sllStackTrace level
-    // - default value is 30, maximum is 255
-    // - if stOnlyAPI is defined as StackTraceUse under Windows XP, maximum
-    // value may be around 60, due to RtlCaptureStackBackTrace() API limitations
+    // - default value is 30, maximum is 255 (but API may never reach so high)
     property StackTraceLevel: byte
       read fStackTraceLevel write fStackTraceLevel;
     /// how the stack trace shall use only the Windows API
-    // - the class will use low-level RtlCaptureStackBackTrace() API to retrieve
-    // the call stack: in some cases, it is not able to retrieve it, therefore
-    // a manual walk of the stack can be processed - since this manual call can
-    // trigger some unexpected access violations or return wrong positions,
-    // you can disable this optional manual walk by setting it to stOnlyAPI
-    // - default is stManualAndAPI, i.e. use RtlCaptureStackBackTrace() API and
-    // perform a manual stack walk if the API returned no address (or <3); but
-    // within the IDE, it will use stOnlyAPI, to ensure no annoyning AV occurs
+    // - default is stOnlyAPI, i.e. use RtlCaptureStackBackTrace() API with
+    // no manual stack walk (which tends to report wrong calls)
+    // - on FPC, this property is ignored in favor of RTL CaptureBacktrace() 
     property StackTraceUse: TSynLogStackTraceUse
       read fStackTraceUse write fStackTraceUse;
     /// how existing log file shall be handled
@@ -3417,7 +3413,7 @@ begin
      (aAddressAbsolute = 0) then
     exit;
   debug := ExeInstanceDebugFile;
-  if debug <> nil then
+  if debug = nil then
     debug := GetInstanceDebugFile;
   if (debug <> nil) and
      debug.HasDebugInfo then
@@ -3772,11 +3768,6 @@ begin
   fStackTraceLevel := 30;
   fWithUnitName := true;
   fWithInstancePointer := true;
-  {$ifndef FPC}
-  if (OSVersion >= wEleven) or // AddStackManual has troubles with Windows 11
-     (DebugHook <> 0) then // never let stManualAndAPI trigger AV within the IDE
-    fStackTraceUse := stOnlyAPI;
-  {$endif FPC}
   fExceptionIgnore := TList.Create;
   fLevelStackTrace := [sllStackTrace, sllException, sllExceptionOS,
                        sllError, sllFail, sllLastError, sllDDDError];
@@ -7443,7 +7434,7 @@ begin
   for i := 1 to length(text) do
     if ord(text[i]) in [33..126] then
     begin
-      // only printable ASCII chars
+      // only non-space printable ASCII chars
       P^ := text[i];
       inc(P);
     end;
