@@ -5595,7 +5595,7 @@ begin
         if (i = 0) or
            (frames[i] <> frames[i - 1]) then
           if TDebugFile.Log(fWriter, PtrUInt(frames[i]),
-               {notcode=}false, {symbol=}false) then
+               {notcode=}false, {assymbol=}false) then
           begin
             dec(depth);
             if depth = 0 then
@@ -5610,12 +5610,6 @@ end;
 
 procedure TSynLog.AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
 
-{$ifndef NOEXCEPTIONINTERCEPT}
-var
-  nointerceptbackup: boolean; // paranoid precaution
-  nointercept: PBoolean;
-{$endif NOEXCEPTIONINTERCEPT}
-
 {$ifdef CPU64}
 
   procedure AddStackManual(Stack: PPtrUInt);
@@ -5625,23 +5619,22 @@ var
 
 {$else}
 
-  procedure AddStackManual(Stack: PPtrUInt);
+  procedure AddStackManual(Stack: PPtrUInt); 
 
-    function CheckAsmX86(xret: PtrUInt): boolean;
+    function CheckAsmX86(xret: PtrUInt): boolean; // naive detection
     var
       i: PtrUInt;
     begin
       result := true;
-      if SeemsRealPointer(pointer(xret - 8)) then // VirtualQuery may be slow
-        try
-          if PByte(xret - 5)^ = $E8 then
+      try
+        if PByte(xret - 5)^ = $E8 then
+          exit;
+        for i := 2 to 7 do
+          if PWord(xret - i)^ and $38FF = $10FF then
             exit;
-          for i := 2 to 7 do
-            if PWord(xret - i)^ and $38FF = $10FF then
-              exit;
-        except
-          // ignore any GPF
-        end;
+      except
+        // ignore any GPF
+      end;
       result := false;
     end;
 
@@ -5670,22 +5663,20 @@ var
       begin
         st := Stack^;
         inc(Stack);
-        if (st >= min_stack) and
-           (st <= max_stack) then
-          continue; // on-stack pointer is no code
-        if debug <> nil then // log if part of .mab information
-        begin
-          if not debug.IsCode(st) then // very quick check
-            continue;
-        end
-        else if not CheckAsmX86(st) then // log raw hexa if no debug info
+        if ((st >= min_stack) and  // on-stack pointer is no code
+            (st <= max_stack)) or
+           ((debug <> nil) and // faster than SeemsRealPointer/VirtualQuery
+            not debug.IsCode(st)) or
+           ((debug = nil) and
+            not SeemsRealPointer(pointer(st - 8))) then
           continue;
-        if TDebugFile.Log(fWriter, st, false) then
-        begin
-          dec(depth);
-          if depth = 0 then
-            break;
-        end;
+        if CheckAsmX86(st) then
+          if TDebugFile.Log(fWriter, st, false) then
+          begin
+            dec(depth);
+            if depth = 0 then
+              break;
+          end;
       end;
     except
       // just ignore any access violation here
@@ -5697,6 +5688,10 @@ var
 var
   n, i, logged: integer;
   BackTrace: array[byte] of PtrUInt;
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  nointercept: PBoolean;
+  nointerceptbackup: boolean; // paranoid precaution
+  {$endif NOEXCEPTIONINTERCEPT}
 begin
   if fFamily.StackTraceLevel <= 0 then
     exit;
@@ -5707,11 +5702,9 @@ begin
   {$endif NOEXCEPTIONINTERCEPT}
   try
     {$ifdef OSWINDOWS}
-    if fFamily.StackTraceUse = stOnlyManual then
-      AddStackManual(stack)
-    else
+    logged := 0;
+    if fFamily.StackTraceUse <> stOnlyManual then
     begin
-      logged := 0;
       n := RtlCaptureStackBackTrace(2, fFamily.StackTraceLevel, @BackTrace, nil);
       if n <> 0 then
       begin
@@ -5720,10 +5713,10 @@ begin
           if TDebugFile.Log(fWriter, BackTrace[i], false) then
             inc(logged);
       end;
-      if (logged < 2) and
-         (fFamily.StackTraceUse <> stOnlyAPI) then
-        AddStackManual(stack);
     end;
+    if (logged < 2) and
+       (fFamily.StackTraceUse <> stOnlyAPI) then
+      AddStackManual(stack);
     {$endif OSWINDOWS}
   except
     // just ignore any access violation here
