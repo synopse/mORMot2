@@ -3773,7 +3773,8 @@ begin
   fWithUnitName := true;
   fWithInstancePointer := true;
   {$ifndef FPC}
-  if DebugHook <> 0 then // never let stManualAndAPI trigger AV within the IDE
+  if (OSVersion >= wEleven) or // AddStackManual has troubles with Windows 11
+     (DebugHook <> 0) then // never let stManualAndAPI trigger AV within the IDE
     fStackTraceUse := stOnlyAPI;
   {$endif FPC}
   fExceptionIgnore := TList.Create;
