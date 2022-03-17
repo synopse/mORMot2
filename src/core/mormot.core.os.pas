@@ -2393,6 +2393,11 @@ function ReserveExecutableMemory(size: cardinal): pointer;
 // - do nothing on Windows and Linux, but may be needed on OpenBSD
 procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 
+/// check if the supplied pointer is actually pointing to some memory page
+// - will call slow but safe VirtualQuery API on Windows, or try a fpaccess()
+// syscall on POSIX systems (works on Linux at least)
+function SeemsRealPointer(p: pointer): boolean;
+
 /// return the PIDs of all running processes
 // - under Windows, is a wrapper around EnumProcesses() PsAPI call
 // - on Linux, will enumerate /proc/* pseudo-files

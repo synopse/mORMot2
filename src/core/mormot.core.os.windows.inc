@@ -1072,6 +1072,40 @@ begin
     inc(P);
 end;
 
+const
+  PAGE_GUARD = $0100;
+  PAGE_VALID = $00e6; // PAGE_READONLY or PAGE_READWRITE or PAGE_EXECUTE or
+      // PAGE_EXECUTE_READ or PAGE_EXECUTE_READWRITE or PAGE_EXECUTE_WRITECOPY
+
+var
+  LastMemInfo: TMemoryBasicInformation; // simple cache
+
+function SeemsRealPointer(p: pointer): boolean;
+var
+  meminfo: TMemoryBasicInformation;
+begin
+  result := false;
+  if PtrUInt(p) <= 65535 then
+    exit;
+  if (LastMemInfo.State <> 0) and
+     (PtrUInt(p) - PtrUInt(LastMemInfo.BaseAddress) <=
+       PtrUInt(LastMemInfo.RegionSize)) then
+    result := true // reuse last memory region information if we can
+  else
+  begin
+    // VirtualQuery API is slow but better than raising an exception
+    // see https://stackoverflow.com/a/37547837/458259
+    FillChar(meminfo, SizeOf(meminfo), 0);
+    result := (VirtualQuery(p, meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
+              (meminfo.RegionSize >= SizeOf(pointer)) and
+              (meminfo.State = MEM_COMMIT) and
+              (meminfo.Protect and PAGE_VALID <> 0) and
+              (meminfo.Protect and PAGE_GUARD = 0);
+    if result then
+      LastMemInfo := meminfo;
+  end;
+end;
+
 function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
 var n: cardinal;
 begin

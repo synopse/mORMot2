@@ -1455,6 +1455,14 @@ begin
   end;
 end;
 
+function SeemsRealPointer(p: pointer): boolean;
+begin
+  // let the GPF happen silently in the kernel
+  result := (PtrUInt(p) > 65535) and
+            (fpaccess(p, F_OK) <> 0) and
+            (fpgeterrno <> ESysEFAULT);
+end;
+
 {$ifdef OSBSDDARWIN}
 
 function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
