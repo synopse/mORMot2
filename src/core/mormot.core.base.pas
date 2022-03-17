@@ -633,6 +633,14 @@ const
 procedure DynArrayFakeLength(var arr; len: TDALen);
   {$ifdef HASINLINE} inline; {$endif}
 
+/// same as Length() but if you are sure that arr <> nil
+function DynArrayNotNilLength(var arr): TDALen;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// same as High() but if you are sure that arr <> nil
+function DynArrayNotNilHigh(var arr): TDALen;
+  {$ifdef HASINLINE} inline; {$endif}
+
 {$ifndef CPUARM}
 type
   /// used as ToByte() to properly truncate any integer into 8-bit
@@ -5604,6 +5612,16 @@ end;
 procedure DynArrayFakeLength(var arr; len: TDALen);
 begin
   PDALen(PAnsiChar(arr) - _DALEN)^ := len - _DAOFF;
+end;
+
+function DynArrayNotNilLength(var arr): TDALen;
+begin
+  result := PDALen(PAnsiChar(arr) - _DALEN)^ + _DAOFF;
+end;
+
+function DynArrayNotNilHigh(var arr): TDALen;
+begin
+  result := PDALen(PAnsiChar(arr) - _DALEN)^ + (_DAOFF - 1);
 end;
 
 {$ifdef FPC} // some FPC-specific low-level code due to diverse compiler or RTL
