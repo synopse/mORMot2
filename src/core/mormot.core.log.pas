@@ -5614,62 +5614,65 @@ var
 
   procedure AddStackManual(Stack: PPtrUInt);
 
-    function check2(xret: PtrUInt): boolean;
+    function CheckAsmX86(xret: PtrUInt): boolean;
     var
       i: PtrUInt;
     begin
       result := true;
-      for i := 2 to 7 do
-        if PWord(xret - i)^ and $38FF = $10FF then
-          exit;
+      if SeemsRealPointer(pointer(xret - 8)) then // VirtualQuery may be slow
+        try
+          if PByte(xret - 5)^ = $E8 then
+            exit;
+          for i := 2 to 7 do
+            if PWord(xret - i)^ and $38FF = $10FF then
+              exit;
+        except
+          // ignore any GPF
+        end;
       result := false;
-    end;
-
-    function IsReadeable(addr: pointer): boolean;
-    begin
-      try
-        Hash32(addr, 12); // try to read 12 bytes
-        result := true;   // if we reached here, everything is ok
-      except
-        result := false;
-      end;
     end;
 
   var
     st, max_stack, min_stack, depth: PtrUInt;
+    debug: TDebugFile;
   begin
-    depth := fFamily.StackTraceLevel;
-    if depth = 0 then
-      exit;
     asm
         mov     min_stack, ebp
-    end;
-    if Stack = nil then // if no Stack pointer set, retrieve current one
-      Stack := pointer(min_stack);
-    asm
         mov     eax, fs:[4]
         mov     max_stack, eax
-      // mov eax,fs:[18h]; mov ecx,dword ptr [eax+4]; mov max_stack,ecx
     end;
-    if PtrUInt(Stack) < min_stack then
+    if Stack = nil then // if no Stack pointer set, retrieve current one
+      Stack := pointer(min_stack)
+    else if PtrUInt(Stack) < min_stack then
       exit;
+    debug := GetInstanceDebugFile;
+    if (debug <> nil) and
+       not debug.HasDebugInfo then
+      // slow SeemsRealPointer/VirtualQuery validation if no .map info
+      debug := nil;
+    fWriter.Add(' ');
+    depth := fFamily.StackTraceLevel;
     try
-      fWriter.Add(' ');
       while PtrUInt(Stack) < max_stack do
       begin
         st := Stack^;
-        if ((st > max_stack) or
-            (st < min_stack)) and
-           IsReadeable(pointer(st - 8)) and
-           ((PByte(st - 5)^ = $E8) or
-             check2(st)) then
-          if TDebugFile.Log(fWriter, st, false) then
-          begin
-            dec(depth);
-            if depth = 0 then
-              break;
-          end;
         inc(Stack);
+        if (st >= min_stack) and
+           (st <= max_stack) then
+          continue; // on-stack pointer is no code
+        if debug <> nil then // log if part of .mab information
+        begin
+          if not debug.IsCode(st) then // very quick check
+            continue;
+        end
+        else if not CheckAsmX86(st) then // log raw hexa if no debug info
+          continue;
+        if TDebugFile.Log(fWriter, st, false) then
+        begin
+          dec(depth);
+          if depth = 0 then
+            break;
+        end;
       end;
     except
       // just ignore any access violation here
