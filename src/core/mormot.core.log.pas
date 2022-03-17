@@ -133,6 +133,8 @@ type
     /// compute the relative memory address from its absolute (pointer) value
     function AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
       {$ifdef HASINLINE}inline;{$endif}
+    /// check if this memory address is part of the code segments
+    function IsCode(aAddressAbsolute: PtrUInt): boolean;
     /// retrieve a symbol according to a relative code address
     // - use fast O(log n) binary search
     function FindSymbol(aAddressOffset: integer): PtrInt;
@@ -3372,10 +3374,26 @@ end;
 
 function TDebugFile.AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
 begin
-  if self = nil then
+  if (self = nil) or
+     (aAddressAbsolute = 0) then
     result := 0
   else
     result := PtrInt(aAddressAbsolute) - PtrInt(fCodeOffset);
+end;
+
+function TDebugFile.IsCode(aAddressAbsolute: PtrUInt): boolean;
+var
+  offset: integer;
+begin
+  offset := AbsoluteToOffset(aAddressAbsolute);
+  result := (offset <> 0) and
+            HasDebugInfo and
+            (((fUnit <> nil) and
+              (offset >= fUnit[0].Symbol.Start) and
+              (offset <= fUnit[length(fUnit) - 1].Symbol.Stop)) or
+             ((fSymbol <> nil) and
+              (offset >= fSymbol[0].Start) and
+              (offset <= fSymbol[length(fSymbol) - 1].Stop)));
 end;
 
 class function TDebugFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;

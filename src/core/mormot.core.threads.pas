@@ -3062,7 +3062,7 @@ begin
     fProcessing := true;
     DoExecute;
   except
-    // ignore any exception
+    // ignore any exception during processing method
   end;
   fProcessing := false;
   fLog.NotifyThreadEnded;
