@@ -2735,6 +2735,7 @@ end;
 procedure TDebugFile.GenerateFromMapOrDbg(aDebugToConsole: boolean);
 var
   P, PEnd: PUtf8Char;
+  sections: TDebugUnitDynArray;
 
   procedure NextLine;
   begin
@@ -2756,7 +2757,7 @@ var
       inc(P);
     result := false;
     if (P + 10 < PEnd) and
-       (PInteger(P)^ =
+       (PInteger(P)^ = // 0001:## = function, 0002:## = const, 0005:##=pdata..
          ord('0') + ord('0') shl 8 + ord('0') shl 16 + ord('1') shl 24) and
        (P[4] = ':') then
     begin
@@ -2769,7 +2770,7 @@ var
             (P^ = ' ') do
         inc(P);
       if P < PEnd then
-        result := true;
+        result := true; // and P points to symbol name
     end;
   end;
 
@@ -2778,8 +2779,6 @@ var
     Beg: PAnsiChar;
     U: TDebugUnit;
   begin
-    // we just need the unit names now for ReadSymbols to detect and trim them
-    // final Unit[] will be filled in ReadLines with potential nested files
     NextLine;
     NextLine;
     while (P < PEnd) and
@@ -2788,6 +2787,8 @@ var
     while (P + 10 < PEnd) and
           (P^ >= ' ') do
     begin
+      // we just need the unit names now for ReadSymbols to detect and trim them
+      // final Unit[] will be filled in ReadLines with potential nested files
       if GetCode(U.Symbol.Start) and
          HexDisplayToBin(PAnsiChar(P), @U.Symbol.Stop, 4) then
       begin
@@ -2870,6 +2871,8 @@ var
       end;
       NextLine;
     end;
+    sections := fUnit;
+    SetLength(sections, fUnitsCount);
     fUnits.Clear; // ReadLines will repopulate all units :)
   end;
 
@@ -2934,7 +2937,7 @@ var
   end;
 
 var
-  i: PtrInt;
+  i, j: PtrInt;
   mapcontent: RawUtf8;
 begin
   fSymbols.Capacity := 8000;
@@ -2957,6 +2960,21 @@ begin
       if (Symbol.Start = 0) and
          (Symbol.Stop = 0) then
         fUnits.Delete(i); // occurs with Delphi 2010 :(
+  for i := 0 to fUnitsCount - 1 do
+    with fUnit[i] do
+      if Symbol.Stop = 0 then
+      begin
+        if i < fUnitsCount - 1 then
+          Symbol.Stop := fUnit[i + 1].Symbol.Start - 1;
+        for j := 0 to length(sections) - 1 do
+          if sections[j].Symbol.Name = Symbol.Name then
+          begin
+            if (Symbol.Stop = 0) or
+               (sections[j].Symbol.Stop < Symbol.Stop) then
+              Symbol.Stop := sections[j].Symbol.Stop;
+            break;
+          end;
+      end;
   for i := 0 to fSymbolsCount - 2 do
     fSymbol[i].Stop := fSymbol[i + 1].Start - 1;
   if fSymbolsCount > 0 then
@@ -3098,14 +3116,16 @@ begin
       fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
       fUnits.Capacity := fUnitsCount;
       for i := 0 to fUnitsCount - 2 do
-        fUnit[i].Symbol.Stop := fUnit[i + 1].Symbol.Start - 1;
+        if fUnit[i].Symbol.Stop = 0 then
+          fUnit[i].Symbol.Stop := fUnit[i + 1].Symbol.Start - 1;
       if fUnitsCount <> 0 then // wild guess of the last unit end of code
         with fUnit[fUnitsCount - 1] do
-          if Addr <> nil then
-            // units may overlap with .inc -> use Addr[]
-            Symbol.Stop := Addr[high(Addr)] + 64
-          else
-            Symbol.Stop := Symbol.Start;
+          if Symbol.Stop = 0 then
+            if Addr <> nil then
+              // units may overlap with .inc -> use Addr[]
+              Symbol.Stop := Addr[high(Addr)] + 64
+            else
+              Symbol.Stop := Symbol.Start;
     end;
     // search for a .mab file matching the running .exe/.dll name
     if (fSymbolsCount = 0) and
@@ -3295,7 +3315,7 @@ var
   L, R: PtrInt;
   s: PDebugSymbol;
 begin
-  R := high(fSymbol);
+  R := length(fSymbol) - 1;
   L := 0;
   if (R >= 0) and
      (aAddressOffset >= fSymbol[0].Start) and
@@ -3318,7 +3338,7 @@ var
   L, R: PtrInt;
   s: PDebugSymbol;
 begin
-  R := high(fUnit);
+  R := length(fUnit) - 1;
   L := 0;
   if (R >= 0) and
      (aAddressOffset >= fUnit[0].Symbol.Start) and
@@ -3348,7 +3368,9 @@ begin
   begin
     u := @fUnit[result];
     // unit found -> search line number
-    max := high(u^.Addr);
+    if u^.Addr = nil then
+      exit;
+    max := DynArrayNotNilHigh(u^.Addr);
     L := 0;
     R := max;
     if R >= 0 then
@@ -3386,10 +3408,10 @@ begin
             HasDebugInfo and
             (((fUnit <> nil) and
               (offset >= fUnit[0].Symbol.Start) and
-              (offset <= fUnit[length(fUnit) - 1].Symbol.Stop)) or
+              (offset <= fUnit[DynArrayNotNilHigh(fUnit)].Symbol.Stop)) or
              ((fSymbol <> nil) and
               (offset >= fSymbol[0].Start) and
-              (offset <= fSymbol[length(fSymbol) - 1].Stop)));
+              (offset <= fSymbol[DynArrayNotNilHigh(fSymbol)].Stop)));
 end;
 
 class function TDebugFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
