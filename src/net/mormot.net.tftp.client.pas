@@ -130,13 +130,19 @@ type
             Header: array[0 .. TFTP_MAXSIZE + 1] of byte;
           );
         TFTP_DAT,
-        TFTP_ACK,
-        TFTP_ERR:
+        TFTP_ACK:
           (
             /// the block sequence number
             Sequence: TTftpSequence;
             /// data block content - up to 64KB of data is theoritically possible
             Data: array[0 .. TFTP_MAXSIZE - 1] of byte;
+          );
+        TFTP_ERR:
+          (
+            /// the TTftpError value, netword-ordered
+            ErrorCode: word;
+            /// the #0 terminated Error message
+            ErrorMsg: array[0 .. 511] of byte;
           );
   end;
   {$A+}
@@ -201,9 +207,8 @@ type
     FileName: RawUtf8;
     /// the transmitted file content, as a TStream
     FileStream: TStream;
-    /// the UDP connection dedicated to this transfer
-    // - each TFTP connection has its own ephemeral port
-    Socket: TNetSocket;
+    /// the UDP/IP connection to be used by SendFrame() method
+    Sock: TNetSocket;
     /// size of the processing frame
     FrameLen: integer;
     /// the processing frame - with up to 64KB of content
@@ -235,11 +240,14 @@ type
     // - following current OpCode/FileName and the current options
     procedure GenerateRequestFrame;
     /// generate an ERR packet in Frame/FrameLen
-    procedure GenerateErrorFrame(err: TTftpError; const msg: RawUtf8);
+    procedure GenerateErrorFrame(buffer: pointer;
+      err: TTftpError; const msg: RawUtf8);
     /// compute TimeOutTix from TimeoutSec
     procedure SetTimeoutTix;
-    /// finalize this UDP Socket connection and associated FileStream
-    procedure Close;
+    /// send Frame/FrameLen to Remote address over Sock, and set TimeoutTix
+    function SendFrame: TNetResult;
+    /// close Sock and FileStream
+    procedure Shutdown;
   end;
 
   TTftpContextDynArray = array of TTftpContext;
@@ -292,8 +300,12 @@ begin
         // 'RRQ filename' / 'WRQ filename' / 'OACK option'
         AppendShortBuffer(@frame.Header, StrLen(@frame.Header), result)
       else
+      begin
         // all options will be included with #0 terminated (logged as space)
+        if len > 240 then
+          len := 240; // ensure at least beginning of frame is logged
         AppendShortBuffer(@frame.Header, len, result);
+      end;
     toDat,
     toAck:
       begin
@@ -351,9 +363,9 @@ var
   len: PtrInt;
 begin
   len := length(Text) + 1; // include trailing #0
-  if FrameLen + len > SizeOf(Frame) then
+  if FrameLen + len > SizeOf(Frame^) then
     exit; // paranoid
-  MoveFast(pointer(Text)^, PByteArray(@Frame)[FrameLen], len);
+  MoveFast(pointer(Text)^, PByteArray(Frame)[FrameLen], len);
   inc(FrameLen, len);
 end;
 
@@ -588,8 +600,8 @@ begin
   //    >-------+---+---~~---+---+
   //   <  optN  | 0 | valueN | 0 |
   //   >-------+---+---~~---+---+
-  Frame.Opcode := swap(word(ord(OpCode)));
-  FrameLen := SizeOf(Frame.OpCode);
+  Frame^.Opcode := swap(word(ord(OpCode)));
+  FrameLen := SizeOf(Frame^.OpCode);
   AppendTextToFrame(FileName);
   AppendTextToFrame('octet');
   Append('timeout',    TimeoutSec,   TFTP_DEFAULTTIMEOUT);
@@ -598,14 +610,20 @@ begin
   Append('windowsize', WindowSize,   TFTP_DEFAULTWINDOWSIZE);
 end;
 
-procedure TTftpContext.GenerateErrorFrame(err: TTftpError; const msg: RawUtf8);
+procedure TTftpContext.GenerateErrorFrame(
+  buffer: pointer; err: TTftpError; const msg: RawUtf8);
 begin
   //        2 bytes  2 bytes        string    1 byte
   //        -----------------------------------------
   // ERROR | 05    |  ErrorCode |   ErrMsg   |   0  |
   //       -----------------------------------------
-  Frame.Opcode := swap(word(TFTP_ERR));
-  FrameLen := SizeOf(Frame.Opcode);
+  Frame := buffer;
+  Frame^.Opcode := swap(word(TFTP_ERR));
+  if err > teLast then
+    Frame^.ErrorCode := 0
+  else
+    Frame^.ErrorCode := swap(word(ord(err)));
+  FrameLen := SizeOf(Frame^.Opcode) + SizeOf(Frame^.ErrorCode);
   if msg <> '' then
     AppendTextToFrame(msg)
   else
@@ -618,10 +636,24 @@ begin
   TimeoutTix := GetTickCount64 + TimeoutSec * 1000;
 end;
 
-procedure TTftpContext.Close;
+function TTftpContext.SendFrame: TNetResult;
 begin
-  Socket.ShutdownAndClose({rdwr=}true);
-  FileStream.Free;
+  if Sock = nil then
+    result := nrNotImplemented
+  else if FrameLen = 0 then
+    result := nrUnknownError // paranoid
+  else
+    result := Sock.SendTo(Frame, FrameLen, Remote);
+  if (result = nrOk) and
+     (ToOpCode(Frame^) <> toErr) then
+    SetTimeoutTix;
+end;
+
+procedure TTftpContext.Shutdown;
+begin
+  FreeAndNil(FileStream);
+  Sock.ShutdownAndClose({rwdr=}true);
+  Sock := nil; // make it reentrant
 end;
 
 
