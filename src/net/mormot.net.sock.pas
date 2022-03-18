@@ -150,6 +150,7 @@ type
     function IPShort(withport: boolean = false): ShortString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     procedure IPShort(out result: ShortString; withport: boolean = false); overload;
+    function IPWithPort: RawUtf8;
     function Port: TNetPort;
     function SetPort(p: TNetPort): TNetResult;
     function Size: integer;
@@ -1331,6 +1332,14 @@ begin
         mormot.core.base.StrLen(@psockaddr_un(@Addr)^.sun_path));
     {$endif OSPOSIX}
   end;
+end;
+
+function TNetAddr.IPWithPort: RawUtf8;
+var
+  tmp: shortstring;
+begin
+  IPShort(tmp, {withport=}true);
+  ShortStringToAnsi7String(tmp, result);
 end;
 
 function TNetAddr.Port: TNetPort;
