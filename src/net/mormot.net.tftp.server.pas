@@ -54,6 +54,8 @@ type
     fSockAddr: TNetAddr;
     fExecuteMessage: RawUtf8;
     fFrame: PUdpFrame;
+    /// will loop for any pending UDP frame, and execute FrameReceived method
+    procedure DoExecute; override;
     // this is the main processing method for all incoming frames
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); virtual; abstract;
     procedure OnShutdown; virtual; abstract;
@@ -64,8 +66,6 @@ type
       const BindAddress, BindPort, ProcessName: RawUtf8); reintroduce;
     /// finalize the processing thread
     destructor Destroy; override;
-    /// will loop for any pending UDP frame, and execute FrameReceived method
-    procedure Execute; override;
   end;
 
 
@@ -75,7 +75,8 @@ type
   /// tune what is TTftpThread accepting
   TTftpThreadOption = (
     ttoRrq,
-    ttoWrq);
+    ttoWrq,
+    ttoLowLevelLog);
 
   TTftpThreadOptions = set of TTftpThreadOption;
 
@@ -86,8 +87,8 @@ type
   protected
     fContext: TTftpContext;
     fOwner: TTftpServerThread;
-    procedure Execute; override;
-    procedure Shutdown; // do not make virtual
+    fFrameMaxSize: integer;
+    procedure DoExecute; override;
   public
     /// initialize this connection
     constructor Create(const Source: TTftpContext; Owner: TTftpServerThread); reintroduce;
@@ -100,21 +101,21 @@ type
   // any incoming requests from UDP packets and create a connection thread
   TTftpServerThread = class(TUdpServerThread)
   protected
-    fConnection: array of TTftpConnectionThread;
+    fConnection: TSynObjectListLocked;
     fFileFolder: TFileName;
-    fConnectionCount: integer;
     fMaxConnections: integer;
     fMaxRetry: integer;
     fOptions: TTftpThreadOptions;
+    function GetConnectionCount: integer;
     // default implementation will read/write from FileFolder
     procedure SetFileFolder(const Value: TFileName);
     function GetFileName(const FileName: RawUtf8): TFileName; virtual;
-    function GetRrqStream(var Context: TTftpContext): TTftpError; virtual;
-    function GetWrqStream(var Context: TTftpContext): TTftpError; virtual;
+    function SetRrqStream(var Context: TTftpContext): TTftpError; virtual;
+    function SetWrqStream(var Context: TTftpContext): TTftpError; virtual;
     // main processing methods for all incoming frames
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnIdle; override;
-    procedure OnShutdown; override;
+    procedure OnShutdown; override; // = Destroy
   public
     /// initialize and bind the server instance, in non-suspended state
     constructor Create(const SourceFolder: TFileName;
@@ -125,7 +126,7 @@ type
   published
     /// how many requests are currently used
     property ConnectionCount: integer
-      read fConnectionCount;
+      read GetConnectionCount;
     /// how many concurrent requests are allowed at most - default is 100
     property MaxConnections: integer
       read fMaxConnections write fMaxConnections;
@@ -137,7 +138,7 @@ type
       read fFileFolder write SetFileFolder;
   end;
 
-
+(*
   /// server thread handling several TFTP connections
   // - a single thread will bind to the supplied UDP address:port, then will
   // process any incoming requests from UDP packets
@@ -179,7 +180,7 @@ type
       read fFileFolder write SetFileFolder;
   end;
 
-
+*)
 
 { ******************** TServerTftp Asynchronous Server Class }
 
@@ -225,7 +226,7 @@ begin
   FreeMem(fFrame);
 end;
 
-procedure TUdpServerThread.Execute;
+procedure TUdpServerThread.DoExecute;
 var
   len: integer;
   tix, lasttix: cardinal;
@@ -283,28 +284,23 @@ constructor TTftpConnectionThread.Create(
 begin
   fContext := Source;
   fOwner := Owner;
-  inherited Create({suspended=}false, fOwner.LogClass,
-    FormatUtf8('tftp%', [InterlockedIncrement(TTftpConnectionThreadCounter)]));
+  fFrameMaxSize := Source.BlockSize + 4; // e.g. 512 + 4
+  GetMem(fContext.Frame, fFrameMaxSize);
+  inherited Create({suspended=}false, fOwner.LogClass, FormatUtf8('%%',
+    [TFTP_OPCODE[Source.OpCode], InterlockedIncrement(TTftpConnectionThreadCounter)]));
 end;
 
 destructor TTftpConnectionThread.Destroy;
 begin
-  Shutdown;
-  inherited Destroy;
-end;
-
-procedure TTftpConnectionThread.Execute;
-begin
-
-end;
-
-procedure TTftpConnectionThread.Shutdown;
-begin
-  if self = nil then
-    exit;
-  // TODO: send a local packet to immediatly release the connection?
-  fContext.Socket.ShutdownAndClose({rdwr=}true);
   Terminate;
+  fContext.Shutdown;
+  inherited Destroy;
+  FreeMem(fContext.Frame);
+end;
+
+procedure TTftpConnectionThread.DoExecute;
+begin
+
 end;
 
 
@@ -315,12 +311,16 @@ constructor TTftpServerThread.Create(const SourceFolder: TFileName;
   Options: TTftpThreadOptions; LogClass: TSynLogClass;
   const BindAddress, BindPort, ProcessName: RawUtf8);
 begin
+  fConnection := TSynObjectListLocked.Create;
   SetFileFolder(SourceFolder);
-  fMaxConnections := 100; // good enough for a TFTP instance
+  fMaxConnections := 100; // good enough for a regular TFTP server
   fMaxRetry := 5;
   fOptions := Options;
   inherited Create(LogClass, BindAddress, BindPort, ProcessName);
 end;
+
+// note: no need to override Destroy since OnShutdown is eventually called
+//       and will release fConnection list
 
 procedure TTftpServerThread.TerminateAndWaitFinished(TimeOutMs: integer);
 var
@@ -328,14 +328,21 @@ var
   endtix: Int64;
 begin
   endtix := mormot.core.os.GetTickCount64 + TimeOutMs;
-  for i := 0 to fConnectionCount - 1 do
-    fConnection[i].Terminate; // first notify all sub threads to terminate
-  inherited TerminateAndWaitFinished(TimeOutMs); // main thread
-  for i := 0 to fConnectionCount - 1 do
-    fConnection[i].TerminateAndWaitFinished(
+  // first notify all sub threads to terminate
+  for i := 0 to fConnection.Count - 1 do
+    TTftpConnectionThread(fConnection.List[i]).Terminate;
+  // shutdown and wait for main accept() thread
+  inherited TerminateAndWaitFinished(TimeOutMs);
+  // wait for sub threads finalization
+  for i := 0 to fConnection.Count - 1 do
+    TTftpConnectionThread(fConnection.List[i]).TerminateAndWaitFinished(
       endtix - mormot.core.os.GetTickCount64);
 end;
 
+function TTftpServerThread.GetConnectionCount: integer;
+begin
+  result := fConnection.Count;
+end;
 
 procedure TTftpServerThread.SetFileFolder(const Value: TFileName);
 begin
@@ -355,7 +362,7 @@ end;
 const
   RRQ_MEM_CHUNK = 128 shl 10; // buffered read in 128KB chunks
 
-function TTftpServerThread.GetRrqStream(var Context: TTftpContext): TTftpError;
+function TTftpServerThread.SetRrqStream(var Context: TTftpContext): TTftpError;
 var
   fn: TFileName;
 begin
@@ -376,7 +383,7 @@ begin
     result := teIllegalOperation;
 end;
 
-function TTftpServerThread.GetWrqStream(var Context: TTftpContext): TTftpError;
+function TTftpServerThread.SetWrqStream(var Context: TTftpContext): TTftpError;
 var
   fn: TFileName;
 begin
@@ -395,8 +402,65 @@ begin
 end;
 
 procedure TTftpServerThread.OnFrameReceived(len: integer; var remote: TNetAddr);
+var
+  op: TTftpOpcode;
+  c: TTftpContext;
+  res: TTftpError;
+  nr: TNetResult;
+  ip: RawUtf8;
 begin
-
+  // is called from TTftpServerThread.DoExecute context (so fLog is set)
+  // with a RRQ/WRQ incoming UDP frame on port 69
+  if len < 4 then
+    exit;
+  ip := remote.IP;
+  fLog.Log(sllTrace, '%.OnFrameReceived: % %',
+    [self, ip, ToText(PTftpFrame(fFrame)^, len)]);
+  op := ToOpCode(PTftpFrame(fFrame)^);
+  if not (op in [toRrq, toWrq]) then
+    exit; // just ignore to avoid DoS on fuzzing
+  if fConnection.Count >= fMaxConnections then
+  begin
+    // this request will be ignored with no ERR sent -> client will retry later
+    fLog.Log(sllDebug, '%.OnFrameReceived: Too Many Connections = %',
+      [self, fConnection.Count]);
+    exit;
+  end;
+  FillCharFast(c, SizeOf(c), 0);
+  c.Sock := remote.NewSocket(nlUdp); // create new c.Sock on ephemeral port
+  if c.Sock = nil then
+  begin
+    fLog.Log(sllWarning, '%.OnFrameReceived: NewSocket failed as %',
+      [self, NetLastErrorMsg]);
+    exit;
+  end;
+  c.Remote := remote;
+  if op = toRrq then
+    res := SetRrqStream(c)
+  else
+    res := SetWrqStream(c);
+  if res = teNoError then
+    // this is the main request parsing method
+    res := c.ParseRequest(fFrame, len);
+  if res <> teNoError then
+  begin
+    c.GenerateErrorFrame(fFrame, res, '');
+    fLog.Log(sllTrace, '%.OnFrameReceived: % % failed as %',
+      [self, TFTP_OPCODE[op], c.FileName, ToText(c.Frame^, len)]);
+    c.SendFrame;
+    c.Shutdown;
+    exit;
+  end;
+  nr := c.SendFrame; // send initial DAT/OACK
+  if nr = nrOk then
+    // actual RRQ/WRQ transmission will take place on a dedicated thread
+    fConnection.Add(TTftpConnectionThread.Create(c, self))
+  else
+  begin
+    c.Shutdown;
+    fLog.Log(sllDebug, '%.OnFrameReceived: [%] sending %',
+      [self, ToText(nr)^, ToText(c.Frame^)]);
+  end;
 end;
 
 procedure TTftpServerThread.OnIdle;
@@ -405,17 +469,16 @@ begin
 end;
 
 procedure TTftpServerThread.OnShutdown;
-var
-  i: PtrInt;
 begin
   // called by Executed on Terminated
-  for i := 0 to fConnectionCount - 1 do
-    fConnection[i].Shutdown;
-  for i := 0 to fConnectionCount - 1 do
-    FreeAndNilSafe(fConnection[i]);
-  fConnectionCount := 0;
+  if fConnection = nil then
+    exit;
+  fConnection.ClearFromLast;
+  FreeAndNil(fConnection);
 end;
 
+
+(*
 
 { TTftpThreadOld }
 
@@ -673,7 +736,7 @@ begin
   for i := 0 to fConnectionCount - 1 do
     fConnection[i].Close;
 end;
-
+*)
 
 
 { ******************** TServerTftp Asynchronous Server Class }
