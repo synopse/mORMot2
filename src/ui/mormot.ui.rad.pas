@@ -57,7 +57,6 @@ type
     fCurrentRow: integer;
     fIsCursorOpen: boolean;
     fTemp64: Int64;
-
     // TDataSet overridden methods
     function AllocRecordBuffer: TRecordBuffer; override;
     procedure FreeRecordBuffer(var Buffer: TRecordBuffer); override;
@@ -79,7 +78,6 @@ type
     procedure SetBookmarkData(Buffer: TRecordBuffer; Data: pointer); override;
     procedure SetRecNo(Value: integer); override;
     function GetRecNo: integer; override;
-
     procedure InternalOpen; override;
     // result should point to Int64,Double,Blob,Utf8 data (if ResultLen<>nil)
     function GetRowFieldData(Field: TField; RowIndex: integer;

@@ -2490,8 +2490,8 @@ begin
           if debugtoconsole then
             writeln('-------------- ', files[prevfile]);
           u := debug.fUnits.NewPtr;
-          u^.Symbol.Name := StringToAnsi7(GetFileNameWithoutExt(Ansi7ToString(
-            files[prevfile])));
+          u^.Symbol.Name := StringToAnsi7(GetFileNameWithoutExt(
+            Ansi7ToString(files[prevfile])));
           if (prevfile <= high(filesdir)) and
              ({%H-}filesdir[prevfile] > 0) then
             u^.FileName := dirs[filesdir[prevfile] - 1];

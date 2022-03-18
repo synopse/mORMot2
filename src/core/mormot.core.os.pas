@@ -2395,7 +2395,7 @@ procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 
 /// check if the supplied pointer is actually pointing to some memory page
 // - will call slow but safe VirtualQuery API on Windows, or try a fpaccess()
-// syscall on POSIX systems (works on Linux at least)
+// syscall on POSIX systems (validated on Linux only)
 function SeemsRealPointer(p: pointer): boolean;
 
 /// return the PIDs of all running processes

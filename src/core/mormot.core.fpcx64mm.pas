@@ -385,9 +385,9 @@ implementation
 
   The original FastMM4 was enhanced as such, especially in FPCMM_SERVER mode:
   - FPC compatibility, even on POSIX/Linux, also for FPC specific API behavior;
-  - Memory leaks and thread sleep tracked with almost no performance impact;
-  - Detailed per-block statistics with almost no performance penalty;
-  - x86_64 code was refactored and tuned in regard to 2020's hardware;
+  - Memory leaks and thread contention tracked without performance impact;
+  - Detailed per-block statistics with little performance penalty;
+  - x86_64 code was refactored and tuned in respect to 2020's hardware;
   - Inlined SSE2 movaps loop or ERMS are more efficient that subfunction(s);
   - New round-robin thread-friendly arenas of tiny blocks;
   - Tiny and small blocks can fed from their own pool, not the medium pool;
@@ -558,7 +558,7 @@ const
     {$undef FPCMM_MEDIUM32BIT}
     MAP_POPULATE = 0;
   {$else}
-    /// put the mapping in first 2 GB of memory (31-bit addresses) - 2.4.20,2.6
+    /// put the mapping in first 2 GB of memory (31-bit addresses) - 2.4.20, 2.6
     MAP_32BIT = $40;
     /// populate (prefault) pagetables to avoid page faults later - 2.5.46
     MAP_POPULATE = $08000;

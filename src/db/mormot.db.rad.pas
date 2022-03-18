@@ -336,7 +336,7 @@ begin
   end
   else
     PEnd := pointer(P);
-  PEnd^ := #0;
+  PEnd^ := #0; // make dest buffer #0 terminated
   // remove leading 0
   PBeg := @ADest;
   while (PBeg[0] = '0') and

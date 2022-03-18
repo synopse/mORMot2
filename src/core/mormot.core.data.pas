@@ -582,7 +582,7 @@ type
     /// the light single Read / exclusive Write lock associated to this list
     // - could be used to protect shared resources within the internal process,
     // for index-oriented methods like Delete/Items/Count...
-    // - use Safe lock methods with a try ... finally block
+    // - use Safe lock methods within a try ... finally block
     property Safe: TRWLock
       read fSafe;
   end;

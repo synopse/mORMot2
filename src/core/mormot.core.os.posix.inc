@@ -1457,7 +1457,7 @@ end;
 
 function SeemsRealPointer(p: pointer): boolean;
 begin
-  // let the GPF happen silently in the kernel
+  // let the GPF happen silently in the kernel (validated on Linux only)
   result := (PtrUInt(p) > 65535) and
             (fpaccess(p, F_OK) <> 0) and
             (fpgeterrno <> ESysEFAULT);
