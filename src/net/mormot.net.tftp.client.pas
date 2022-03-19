@@ -27,6 +27,7 @@ uses
   mormot.core.text,
   mormot.core.rtti,
   mormot.core.buffers,
+  mormot.core.log,
   mormot.net.sock;
 
 
@@ -161,10 +162,6 @@ type
   TTftpContext = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// the remote host address which initiated the request
-    // - should be the first field e.g. for efficient GetConnection() lookup
-    // - includes the ephemeral port, so allow multiple connections per host
-    Remote: TNetAddr;
     /// the toRrq/toWrq request opcode
     // - as filled by ParseRequest()
     OpCode: TTftpOpcode;
@@ -214,6 +211,10 @@ type
     /// the processing frame - with up to 64KB of content
     // - should have been set before calling SetDefaultOptions
     Frame: PTftpFrame;
+    /// the remote host address which initiated the request
+    // - this big field is included last, for better code generation
+    // - includes the ephemeral port, so allow multiple connections per host
+    Remote: TNetAddr;
     /// set the default TimeoutSec/BlockSize/TransferSize/WindowSize values
     procedure SetDefaultOptions(op: TTftpOpcode);
     /// append some text to Frame/FrameLen
@@ -226,12 +227,12 @@ type
     // response within the Frame/FrameLen buffer, reading the first RRQ data packet
     // from the associated FileStream
     // - for OACK, return teNoError and set OpCode and override options values
-    function ParseRequest(buffer: pointer; len: integer): TTftpError;
-    /// parse a DAT/ACK Frame/FrameLen
+    function ParseRequest(len: integer): TTftpError;
+    /// parse a DAT/ACK Frame/FrameLen then generate the ACK/DAT answer
     // - for DAT (writing request), return teNoError and call GenerateAckFrame
     // - for ACK (reading request), return teNoError and call GenerateNextDataFrame
     // or return
-    function ParseData(op: TTftpOpcode; len: integer): TTftpError;
+    function ParseData(len: integer): TTftpError;
     /// generate an ACK datagram in Frame/FrameLen
     procedure GenerateAckFrame;
     /// generate a DAT datagram in Frame/FrameLen, calling OnFileData
@@ -240,12 +241,13 @@ type
     // - following current OpCode/FileName and the current options
     procedure GenerateRequestFrame;
     /// generate an ERR packet in Frame/FrameLen
-    procedure GenerateErrorFrame(buffer: pointer;
-      err: TTftpError; const msg: RawUtf8);
+    procedure GenerateErrorFrame(err: TTftpError; const msg: RawUtf8);
     /// compute TimeOutTix from TimeoutSec
     procedure SetTimeoutTix;
     /// send Frame/FrameLen to Remote address over Sock, and set TimeoutTix
     function SendFrame: TNetResult;
+    /// generate and send an ERR packet, then close Sock and FileStream
+    procedure SendErrorAndShutdown(err: TTftpError; log: TSynLog; const caller: shortstring);
     /// close Sock and FileStream
     procedure Shutdown;
   end;
@@ -377,7 +379,7 @@ const
     'windowsize',
     nil);
 
-function TTftpContext.ParseRequest(buffer: pointer; len: integer): TTftpError;
+function TTftpContext.ParseRequest(len: integer): TTftpError;
 var
   P: PUtf8Char;
   v: RawUtf8;
@@ -409,11 +411,10 @@ var
 begin
   result := teIllegalOperation; // error on exit exit
   if (@self = nil) or
-     (buffer = nil) or
+     (Frame = nil) or
      (len < 4) or
      (FileStream = nil) then
     exit;
-  Frame := buffer;
   FrameLen := len;
   SetDefaultOptions(ToOpcode(Frame^));
   len := FrameLen - SizeOf(Frame^.Opcode);
@@ -428,7 +429,7 @@ begin
   FileName := v;
   if OpCode <> toOck then
     if not GetNext or
-       IdemPropNameU(v, 'mail') then // we support "octet" and "netascii" data
+       not IdemPropNameU(v, 'octet') then // supports only 8-bit transfer
       exit;
   if GetNext then
   begin
@@ -471,7 +472,7 @@ begin
       //       +-------+---~~---+---+---~~---+---+---~~---+---+---~~---+---+
       // OACK |   6   |  opt1  | 0 | value1 | 0 |  optN  | 0 | valueN | 0 |
       //      +-------+---~~---+---+---~~---+---+---~~---+---+---~~---+---+
-    Frame^.Opcode := swap(word(TFTP_OACK));
+      Frame^.Opcode := swap(word(TFTP_OACK));
   end
   else
     // RFC 1350 regular response
@@ -496,9 +497,12 @@ begin
   end;
 end;
 
-function TTftpContext.ParseData(op: TTftpOpcode; len: integer): TTftpError;
+function TTftpContext.ParseData(len: integer): TTftpError;
+var
+  op: TTftpOpcode;
 begin
   result := teIllegalOperation;
+  op := ToOpCode(Frame^);
   dec(len, 4);
   if (len < 0) or
      (op <> OpDataAck) or
@@ -611,13 +615,12 @@ begin
 end;
 
 procedure TTftpContext.GenerateErrorFrame(
-  buffer: pointer; err: TTftpError; const msg: RawUtf8);
+  err: TTftpError; const msg: RawUtf8);
 begin
   //        2 bytes  2 bytes        string    1 byte
   //        -----------------------------------------
   // ERROR | 05    |  ErrorCode |   ErrMsg   |   0  |
   //       -----------------------------------------
-  Frame := buffer;
   Frame^.Opcode := swap(word(TFTP_ERR));
   if err > teLast then
     Frame^.ErrorCode := 0
@@ -647,6 +650,16 @@ begin
   if (result = nrOk) and
      (ToOpCode(Frame^) <> toErr) then
     SetTimeoutTix;
+end;
+
+procedure TTftpContext.SendErrorAndShutdown(err: TTftpError; log: TSynLog;
+  const caller: shortstring);
+begin
+  GenerateErrorFrame(err, '');
+  log.Log(sllTrace, '%: % % failed as %',
+    [caller, TFTP_OPCODE[OpCode], FileName, ToText(Frame^, FrameLen)]);
+  SendFrame;
+  Shutdown;
 end;
 
 procedure TTftpContext.Shutdown;

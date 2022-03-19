@@ -9,7 +9,7 @@ unit mormot.net.tftp.server;
     TFTP Server Processing with RFC 1350/2347/2348/2349/7440 Support
     - Abstract UDP Server
     - TFTP Connection Thread and State Machine
-    - TServerTftp Server Class
+    - TTftpServerThread Server Class
 
     Current limitation: only RRQ requests are supported yet.
 
@@ -96,15 +96,19 @@ type
     destructor Destroy; override;
   end;
 
+
+{ ******************** TTftpServerThread Server Class }
+
   /// server thread handling several TFTP connections
-  // - a main thread binds to the supplied UDP address:port, then will process
-  // any incoming requests from UDP packets and create a connection thread
+  // - this main thread binds the supplied UDP address:port, then process any
+  // incoming requests from UDP packets and create TTftpConnectionThread instances
   TTftpServerThread = class(TUdpServerThread)
   protected
     fConnection: TSynObjectListLocked;
     fFileFolder: TFileName;
     fMaxConnections: integer;
     fMaxRetry: integer;
+    fConnectionTotal: integer;
     fOptions: TTftpThreadOptions;
     function GetConnectionCount: integer;
     // default implementation will read/write from FileFolder
@@ -114,7 +118,6 @@ type
     function SetWrqStream(var Context: TTftpContext): TTftpError; virtual;
     // main processing methods for all incoming frames
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
-    procedure OnIdle; override;
     procedure OnShutdown; override; // = Destroy
   public
     /// initialize and bind the server instance, in non-suspended state
@@ -130,59 +133,18 @@ type
     /// how many concurrent requests are allowed at most - default is 100
     property MaxConnections: integer
       read fMaxConnections write fMaxConnections;
-    /// how many retries should be done after timeout - default is 5
+    /// how many retries should be done after timeout
+    // - default is 1 (i.e. it will send up to 2 times the DAT packet)
     property MaxRetry: integer
       read fMaxRetry write fMaxRetry;
+    /// how many connections have been processed since the server start
+    property ConnectionTotal: integer
+      read fConnectionTotal;
     /// the local folder where the files are read or written
     property FileFolder: TFileName
       read fFileFolder write SetFileFolder;
   end;
 
-(*
-  /// server thread handling several TFTP connections
-  // - a single thread will bind to the supplied UDP address:port, then will
-  // process any incoming requests from UDP packets
-  // - each connection will maintain its own state machine, and the main thred
-  // will process all connection clients one after the other
-  TTftpThreadOld = class(TUdpServerThread)
-  protected
-    fConnection: TTftpContextDynArray;
-    fConnectionCount: integer;
-    fConnections: TDynArray;
-    fFileFolder: TFileName;
-    fOptions: TTftpThreadOptions;
-    fMaxConnections: integer;
-    fMaxRetry: integer;
-    fOnFileDataStream: TStream;
-    procedure SetFileFolder(const Value: TFileName); virtual;
-    function SendFrame(var ctxt: TTftpContext): boolean;
-    procedure RemoveConnection(conn: PTftpContext); virtual;
-    // default implementation will read/write from FileFolder
-    function GetFileName(const FileName: RawUtf8): TFileName; virtual;
-    function GetRrqStream(var Context: TTftpContext): TTftpError; virtual;
-    function GetWrqStream(var Context: TTftpContext): TTftpError; virtual;
-    // main processing methods for all incoming frames
-    procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
-    procedure OnIdle; override;
-    procedure OnShutdown; override;
-  published
-    /// how many requests are currently used
-    property ConnectionCount: integer
-      read fConnectionCount;
-    /// how many concurrent requests are allowed at most - default is 100
-    property MaxConnections: integer
-      read fMaxConnections write fMaxConnections;
-    /// how many retries should be done after timeout - default is 5
-    property MaxRetry: integer
-      read fMaxRetry write fMaxRetry;
-    /// the local folder where the files are read or written
-    property FileFolder: TFileName
-      read fFileFolder write SetFileFolder;
-  end;
-
-*)
-
-{ ******************** TServerTftp Asynchronous Server Class }
 
 
 
@@ -196,6 +158,7 @@ implementation
 
 procedure TUdpServerThread.OnIdle;
 begin
+  // do nothing by default
 end;
 
 constructor TUdpServerThread.Create(LogClass: TSynLogClass;
@@ -284,7 +247,8 @@ constructor TTftpConnectionThread.Create(
 begin
   fContext := Source;
   fOwner := Owner;
-  fFrameMaxSize := Source.BlockSize + 4; // e.g. 512 + 4
+  inc(fOwner.fConnectionTotal);
+  fFrameMaxSize := Source.BlockSize + 16; // e.g. 512 + 16
   GetMem(fContext.Frame, fFrameMaxSize);
   inherited Create({suspended=}false, fOwner.LogClass, FormatUtf8('%%',
     [TFTP_OPCODE[Source.OpCode], InterlockedIncrement(TTftpConnectionThreadCounter)]));
@@ -299,11 +263,70 @@ begin
 end;
 
 procedure TTftpConnectionThread.DoExecute;
+var
+  len: integer;
+  res: TTftpError;
+  nr: TNetResult;
 begin
-
+  fLog.Add.Log(sllDebug, 'DoExecute % % %',
+    [fContext.Remote.IPShort({withport=}true), TFTP_OPCODE[fContext.OpCode],
+     fContext.FileName], self);
+  fContext.RetryCount := fOwner.MaxRetry;
+  fContext.Sock.SetReceiveTimeout(1000); // check fTerminated every second
+  repeat
+    // try to receive a frame on this UDP/IP link
+    len := fContext.Sock.RecvFrom(fContext.Frame, fFrameMaxSize, fContext.Remote);
+    fLog.Add.Log(sllTrace, 'DoExecute %', [ToText(fContext.Frame^)], self);
+    if Terminated or
+       (len = 0) then // -1=error, 0=shutdown
+      break;
+    if len < 0 then
+    begin
+      // network error (may be timeout)
+      nr := NetLastError;
+      if nr <> nrRetry then
+      begin
+        fLog.Add.Log(sllTrace, 'DoExecute recvfrom=%', [ToText(nr)^], self);
+        break;
+      end;
+      if mormot.core.os.GetTickCount64 >= fContext.TimeoutTix then
+        // wait for incoming UDP packet within the timeout period
+        continue;
+      // retry after timeout
+      if fContext.RetryCount = 0 then
+        break;
+      dec(fContext.RetryCount);
+      // will send again the previous ACK/DAT frame
+    end
+    else
+    begin
+      // parse incoming DAT/ACK
+      res := fContext.ParseData(len);
+      if Terminated then
+        break;
+      if res <> teNoError then
+      begin
+        if res <> teFinished then
+          // fatal error - e.g. teDiskFull
+          fContext.SendErrorAndShutdown(res, fLog, 'DoExecute');
+        break;
+      end;
+    end;
+    // send next ACK or DAT block
+    nr := fContext.SendFrame;
+    if nr <> nrOk then
+    begin
+      fLog.Log(sllDebug, 'DoExecute: % abort sending %',
+        [ToText(nr)^, ToText(fContext.Frame^)], self);
+      break;
+    end;
+    fContext.RetryCount := fOwner.MaxRetry;
+  until Terminated;
+  // Destroy will call fContext.Shutdown
 end;
 
 
+{ ******************** TTftpServerThread Server Class }
 
 { TTftpServerThread }
 
@@ -313,8 +336,8 @@ constructor TTftpServerThread.Create(const SourceFolder: TFileName;
 begin
   fConnection := TSynObjectListLocked.Create;
   SetFileFolder(SourceFolder);
-  fMaxConnections := 100; // good enough for a regular TFTP server
-  fMaxRetry := 5;
+  fMaxConnections := 100; // = 100 threads, good enough for regular TFTP server
+  fMaxRetry := 2;
   fOptions := Options;
   inherited Create(LogClass, BindAddress, BindPort, ProcessName);
 end;
@@ -322,21 +345,42 @@ end;
 // note: no need to override Destroy since OnShutdown is eventually called
 //       and will release fConnection list
 
-procedure TTftpServerThread.TerminateAndWaitFinished(TimeOutMs: integer);
+procedure TTftpServerThread.OnShutdown;
 var
   i: PtrInt;
+begin
+  // called by Executed on Terminated
+  if fConnection = nil then
+    exit;
+  for i := 0 to fConnection.Count - 1 do
+    TTftpConnectionThread(fConnection.List[i]).Terminate; // async release
+  fConnection.ClearFromLast;
+  FreeAndNil(fConnection);
+end;
+
+procedure TTftpServerThread.TerminateAndWaitFinished(TimeOutMs: integer);
+var
+  i: integer;
   endtix: Int64;
+  t: ^TTftpConnectionThread;
 begin
   endtix := mormot.core.os.GetTickCount64 + TimeOutMs;
   // first notify all sub threads to terminate
-  for i := 0 to fConnection.Count - 1 do
-    TTftpConnectionThread(fConnection.List[i]).Terminate;
+  t := pointer(fConnection.List);
+  for i := 1 to fConnection.Count do
+  begin
+    t^.Terminate;
+    inc(t);
+  end;
   // shutdown and wait for main accept() thread
   inherited TerminateAndWaitFinished(TimeOutMs);
   // wait for sub threads finalization
-  for i := 0 to fConnection.Count - 1 do
-    TTftpConnectionThread(fConnection.List[i]).TerminateAndWaitFinished(
-      endtix - mormot.core.os.GetTickCount64);
+  t := pointer(fConnection.List);
+  for i := 1 to fConnection.Count do
+  begin
+    t^.TerminateAndWaitFinished(endtix - mormot.core.os.GetTickCount64);
+    inc(t);
+  end;
 end;
 
 function TTftpServerThread.GetConnectionCount: integer;
@@ -407,339 +451,62 @@ var
   c: TTftpContext;
   res: TTftpError;
   nr: TNetResult;
-  ip: RawUtf8;
 begin
   // is called from TTftpServerThread.DoExecute context (so fLog is set)
   // with a RRQ/WRQ incoming UDP frame on port 69
   if len < 4 then
     exit;
-  ip := remote.IP;
-  fLog.Log(sllTrace, '%.OnFrameReceived: % %',
-    [self, ip, ToText(PTftpFrame(fFrame)^, len)]);
+  // validate incoming frame
+  fLog.Log(sllTrace, 'OnFrameReceived: % %',
+    [remote.IPShort, ToText(PTftpFrame(fFrame)^, len)], self);
   op := ToOpCode(PTftpFrame(fFrame)^);
   if not (op in [toRrq, toWrq]) then
     exit; // just ignore to avoid DoS on fuzzing
   if fConnection.Count >= fMaxConnections then
   begin
     // this request will be ignored with no ERR sent -> client will retry later
-    fLog.Log(sllDebug, '%.OnFrameReceived: Too Many Connections = %',
-      [self, fConnection.Count]);
+    fLog.Log(sllDebug, 'OnFrameReceived: Too Many Connections = %',
+      [fConnection.Count], self);
     exit;
   end;
   FillCharFast(c, SizeOf(c), 0);
-  c.Sock := remote.NewSocket(nlUdp); // create new c.Sock on ephemeral port
+  // create new c.Sock on ephemeral port
+  c.Sock := remote.NewSocket(nlUdp);
   if c.Sock = nil then
   begin
-    fLog.Log(sllWarning, '%.OnFrameReceived: NewSocket failed as %',
-      [self, NetLastErrorMsg]);
+    fLog.Log(sllWarning, 'OnFrameReceived: NewSocket failed as %',
+      [NetLastErrorMsg], self);
     exit;
   end;
+  // create the associated TStream to read to or write from
   c.Remote := remote;
+  c.Frame := pointer(fFrame);
   if op = toRrq then
     res := SetRrqStream(c)
   else
     res := SetWrqStream(c);
+  // main request parsing method (if TStream exists)
   if res = teNoError then
-    // this is the main request parsing method
-    res := c.ParseRequest(fFrame, len);
+    res := c.ParseRequest(len);
   if res <> teNoError then
   begin
-    c.GenerateErrorFrame(fFrame, res, '');
-    fLog.Log(sllTrace, '%.OnFrameReceived: % % failed as %',
-      [self, TFTP_OPCODE[op], c.FileName, ToText(c.Frame^, len)]);
-    c.SendFrame;
-    c.Shutdown;
+    c.SendErrorAndShutdown(res, fLog, 'OnFrameReceived');
     exit;
   end;
-  nr := c.SendFrame; // send initial DAT/OACK
+  // send initial DAT/OACK response
+  nr := c.SendFrame;
   if nr = nrOk then
     // actual RRQ/WRQ transmission will take place on a dedicated thread
     fConnection.Add(TTftpConnectionThread.Create(c, self))
   else
   begin
     c.Shutdown;
-    fLog.Log(sllDebug, '%.OnFrameReceived: [%] sending %',
-      [self, ToText(nr)^, ToText(c.Frame^)]);
+    fLog.Log(sllDebug, 'OnFrameReceived: [%] sending %',
+      [ToText(nr)^, ToText(c.Frame^)], self);
   end;
 end;
 
-procedure TTftpServerThread.OnIdle;
-begin
 
-end;
-
-procedure TTftpServerThread.OnShutdown;
-begin
-  // called by Executed on Terminated
-  if fConnection = nil then
-    exit;
-  fConnection.ClearFromLast;
-  FreeAndNil(fConnection);
-end;
-
-
-(*
-
-{ TTftpThreadOld }
-
-procedure TTftpThreadOld.SetFileFolder(const Value: TFileName);
-begin
-  if fFileFolder <> Value then
-    fFileFolder := IncludeTrailingPathDelimiter(Value);
-end;
-
-function TTftpThreadOld.GetFileName(const FileName: RawUtf8): TFileName;
-begin
-  result := NormalizeFileName(Utf8ToString(FileName));
-  if SafeFileName(result) then
-    result := fFileFolder + result
-  else
-    result := '';
-end;
-
-function TTftpThreadOld.GetRrqStream(var Context: TTftpContext): TTftpError;
-var
-  fn: TFileName;
-begin
-  if ttoRrq in fOptions then
-  begin
-    result := teFileNotFound;
-    fn := GetFileName(Context.FileName);
-    if (fn = '') or
-       not FileExists(fn) then
-      exit;
-    Context.FileStream := TBufferedStreamReader.Create(fn, RRQ_MEM_CHUNK);
-    if Context.FileStream.Size < maxInt then
-      result := teNoError
-    else
-      FreeAndNil(Context.FileStream);
-  end
-  else
-    result := teIllegalOperation;
-end;
-
-function TTftpThreadOld.GetWrqStream(var Context: TTftpContext): TTftpError;
-var
-  fn: TFileName;
-begin
-  if ttoWrq in fOptions then
-  begin
-    result := teFileAlreadyExists;
-    fn := GetFileName(Context.FileName);
-    if (fn = '') or
-       FileExists(fn) then
-      exit;
-    Context.FileStream := TFileStream.Create(fn, fmCreate);
-    result := teNoError;
-  end
-  else
-    result := teIllegalOperation;
-end;
-
-function TTftpThreadOld.SendFrame(var ctxt: TTftpContext): boolean;
-begin
-  result := (ctxt.FrameLen = 0) or
-            (fSock.SendTo(ctxt.Frame, ctxt.FrameLen, ctxt.Remote) = nrOK);
-  if result then
-    ctxt.SetTimeoutTix;
-end;
-
-procedure TTftpThreadOld.RemoveConnection(conn: PTftpContext);
-begin
-  if conn = nil then
-    exit;
-  conn^.FileStream.Free;
-  fConnections.Delete((PtrUInt(conn) - PtrUInt(fConnection)) div SizeOf(conn^));
-end;
-
-function GetConnection(conn: PTftpContext; var addr: TNetAddr; n: integer): PTftpContext;
-{$ifdef CPU64}
-var
-  i64: Int64;
-{$endif CPU64}
-begin
-  if n > 0 then
-  begin
-    result := conn;
-    {$ifdef CPU64}
-    i64 := PInt64(@addr)^;
-    {$endif CPU64}
-    repeat
-      // TTftpContext.Remote is the first field
-      {$ifdef CPU64}
-      if PInt64(result)^ <> i64 then // very fast brute force O(n) search
-      {$else}
-      if PInt64(result)^ <> PInt64(@addr)^ then
-      {$endif CPU64}
-      begin
-        inc(result); // most common case within the loop is to continue
-        dec(n);
-        if n = 0 then
-          break
-        else
-          continue;
-      end
-      else if result^.Remote.IsEqualAfter64(addr) then
-        exit;
-      inc(result);
-      dec(n);
-      if n = 0 then
-        break;
-    until false;
-  end;
-  result := nil;
-end;
-
-procedure TTftpThreadOld.OnFrameReceived(len: integer; var remote: TNetAddr);
-
-  procedure SendError(err: TTftpError; c: PTftpContext = nil;
-    const msg: RawUtf8 = '');
-  var
-    ctxt: TTftpContext;
-  begin
-    ctxt.Remote := remote;
-    ctxt.Frame := pointer(fFrame);
-    ctxt.GenerateErrorFrame(err, msg);
-    SendFrame(ctxt);
-    if c <> nil then
-      RemoveConnection(c);
-  end;
-
-var
-  op: TTftpOpcode;
-  res: TTftpError;
-  c: PTftpContext;
-  new: TTftpContext;
-begin
-  // frame is in fFrame/len
-  c := GetConnection(pointer(fConnection), remote, fConnectionCount);
-  if len = 0 then // fSock.RecvFrom=0 on shutdown
-  begin
-    RemoveConnection(c);
-    exit;
-  end;
-  op := ToOpCode(PTftpFrame(fFrame)^);
-  if (op = toUndefined) or
-     (len < 4) then
-    // invalid frame
-    exit;
-  case op of
-    toRrq,
-    toWrq:
-      // new request
-      if c <> nil then
-        SendError(teIllegalOperation, c, 'Already Active Connection')
-      else if fConnectionCount > fMaxConnections then
-        SendError(teIllegalOperation, c, 'Too Many Connections')
-      else
-      begin
-        FillCharFast(new, SizeOf(new), 0);
-        new.Remote := remote;
-        new.Socket := remote.NewSocket(nlUdp); // create new ephemeral port
-        if new.Socket = nil then
-          exit;
-        new.Socket.SetReceiveTimeout(1000);
-        case op of
-          toRrq:
-            res := GetRrqStream(new);
-          toWrq:
-            res := GetWrqStream(new);
-        else
-          res := teIllegalOperation;
-        end;
-        if res = teNoError then
-          res := new.ParseRequest(fFrame, len);
-        if res <> teNoError then
-        begin
-          SendError(res);
-          new.FileStream.Free;
-        end
-        else if SendFrame(new) then // send ACK/OACK
-          fConnections.Add(new)
-        else
-          new.FileStream.Free;
-      end;
-    toDat, // during WRQ
-    toAck: // during RRQ
-      begin
-        if c = nil then
-          res := teIllegalOperation
-        else
-          res := c^.ParseData(op, len);
-        case res of
-          teNoError:
-            case op of
-              toAck:
-                // send next RRQ block(s)
-                repeat
-                  if not SendFrame(c^) then
-                  begin
-                    RemoveConnection(c);
-                    exit;
-                  end;
-                  dec(c^.LastReceivedSequenceWindowCounter);
-                  if c^.LastReceivedSequenceWindowCounter = 0 then
-                    break;
-                  c^.GenerateNextDataFrame;
-                until c^.FrameLen < 0;
-                // note: this pattern expect the OS buffer to be big enough
-                // for sending all frames: WindowSize should remain small
-              toDat:
-                // send ACK after received next WRQ block
-                if not SendFrame(c^) then
-                begin
-                  RemoveConnection(c);
-                  exit;
-                end;
-            end;
-          teFinished:
-            begin
-              if op = toDat then
-                SendFrame(c^); // final WRQ acknowledge
-              RemoveConnection(c);
-            end
-        else
-          SendError(res);
-        end;
-      end;
-    toErr:
-      RemoveConnection(c);
-  end;
-end;
-
-procedure TTftpThreadOld.OnIdle;
-var
-  i: PtrInt;
-  tix: Int64;
-begin
-  if fConnectionCount = 0 then
-    exit;
-  tix := mormot.core.os.GetTickCount64;
-  for i := fConnectionCount - 1 downto 0 do
-    with fConnection[i] do
-      if TimeoutTix >= tix then
-        // we didn't receive the ACK in the expected time frame
-        if RetryCount = fMaxRetry then
-          RemoveConnection(@fConnection[i])
-        else
-        begin
-
-          inc(RetryCount);
-        end;
-end;
-
-procedure TTftpThreadOld.OnShutdown;
-var
-  i: PtrInt;
-begin
-  // called by Executed on Terminated
-  for i := 0 to fConnectionCount - 1 do
-    fConnection[i].Close;
-end;
-*)
-
-
-{ ******************** TServerTftp Asynchronous Server Class }
 
 end.
 
