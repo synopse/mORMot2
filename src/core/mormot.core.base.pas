@@ -1182,8 +1182,9 @@ function ToDouble(const text: RawUtf8; out value: double): boolean;
 // - return the last written char position (write in reverse order in P^)
 // - typical use:
 //  !function Int32ToUtf8(Value: PtrInt): RawUtf8;
-//  !var tmp: array[0..23] of AnsiChar;
-//  !    P: PAnsiChar;
+//  !var
+//  !  tmp: array[0..23] of AnsiChar;
+//  !  P: PAnsiChar;
 //  !begin
 //  !  P := StrInt32(@tmp[23],Value);
 //  !  SetString(result,P,@tmp[23]-P);

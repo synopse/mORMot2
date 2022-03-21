@@ -2921,7 +2921,8 @@ type
     // !end; // local hidden IUnknown will release the lock for the method
     // - warning: under FPC, you should assign its result to a local variable -
     // see bug http://bugs.freepascal.org/view.php?id=26602
-    // !var LockFPC: IUnknown;
+    // !var
+    // !  LockFPC: IUnknown;
     // !begin
     // !  ... // unsafe code
     // !  LockFPC := Safe.ProtectMethod;

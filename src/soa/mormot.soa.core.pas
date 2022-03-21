@@ -234,7 +234,8 @@ type
   // only: the client only needs the ICalculator interface
   // - then TRestServer and TRestClientUri will both have access to the
   // service, via their Services property, e.g. as:
-  // !var I: ICalculator;
+  // !var
+  // !  I: ICalculator;
   // !...
   // ! if Services.Info(ICalculator).Get(I) then
   // !   result := I.Add(10,20);

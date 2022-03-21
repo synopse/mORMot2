@@ -390,9 +390,10 @@ type
     // - you can specify a list of partials via TSynMustachePartials.CreateOwned,
     // a list of Expression Helpers, or a custom {{"English text}} callback
     // - can be used e.g. via a TDocVariant:
-    // !var mustache := TSynMustache;
-    // !    doc: variant;
-    // !    html: RawUtf8;
+    // !var
+    // !  mustache := TSynMustache;
+    // !  doc: variant;
+    // !  html: RawUtf8;
     // !begin
     // !  mustache := TSynMustache.Parse(
     // !    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');

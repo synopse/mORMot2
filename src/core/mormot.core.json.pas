@@ -440,7 +440,9 @@ function JsonObjectAsJsonArrays(Json: PUtf8Char;
 // - may be used to prepare configuration files before loading;
 // for example we store server configuration in file config.json and
 // put some comments in this file then code for loading is:
-// !var cfg: RawUtf8;
+// !var
+// !  cfg: RawUtf8;
+// ! ...
 // !  cfg := StringFromFile(ExtractFilePath(paramstr(0))+'Config.json');
 // !  RemoveCommentsFromJson(@cfg[1]);
 // !  pLastChar := JsonToObject(sc,pointer(cfg),configValid);

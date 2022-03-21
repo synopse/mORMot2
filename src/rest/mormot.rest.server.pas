@@ -80,7 +80,8 @@ type
   /// points to the currently running service on the server side
   // - your code may call the ServiceRunningContext global function
   // once in a method, since per-thread access does cost some CPU
-  // !var context: PServiceRunningContext;
+  // !var
+  // !  context: PServiceRunningContext;
   // !begin
   // !  context := ServiceRunningContext; // threadvar access once
   // !  ...
@@ -2396,8 +2397,9 @@ function ToText(res: TOnAuthenticationFailedReason): PShortString; overload;
 // ! with ServiceRunningContext do
 // !   ... access TServiceRunningContext members
 // or as a local variable:
-// !var context: PServiceRunningContext;
-// !    inContentType: RawUtf8;
+// !var
+// !  context: PServiceRunningContext;
+// !  inContentType: RawUtf8;
 // !begin
 // !  context := ServiceRunningContext; // threadvar access once
 // !  ...

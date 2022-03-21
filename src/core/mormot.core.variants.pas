@@ -589,7 +589,8 @@ type
     /// initialize a variant instance to store per-reference document-based content
     // - same as New(aValue, JSON_FAST);
     // - to be used e.g. as
-    // !var v: variant;
+    // !var
+    // !  v: variant;
     // !begin
     // !  TDocVariant.NewFast(v);
     // !  ...
@@ -602,7 +603,8 @@ type
     /// initialize several variant instances to store document-based content
     // - replace several calls to TDocVariantData.InitFast
     // - to be used e.g. as
-    // !var v1,v2,v3: TDocVariantData;
+    // !var
+    // !  v1, v2, v3: TDocVariantData;
     // !begin
     // !  TDocVariant.NewFast([@v1,@v2,@v3]);
     // !  ...
@@ -931,7 +933,8 @@ type
   public
     /// initialize a TDocVariantData to store some document-based content
     // - can be used with a stack-allocated TDocVariantData variable:
-    // !var Doc: TDocVariantData; // stack-allocated variable
+    // !var
+    // !  Doc: TDocVariantData; // stack-allocated variable
     // !begin
     // !  Doc.Init;
     // !  Doc.AddValue('name','John');
@@ -954,7 +957,8 @@ type
     /// initialize a TDocVariantData to store per-reference document-based content
     // - same as Doc.Init(JSON_FAST);
     // - can be used with a stack-allocated TDocVariantData variable:
-    // !var Doc: TDocVariantData; // stack-allocated variable
+    // !var
+    // !  Doc: TDocVariantData; // stack-allocated variable
     // !begin
     // !  Doc.InitFast;
     // !  Doc.AddValue('name','John');
@@ -973,7 +977,8 @@ type
     /// initialize a TDocVariantData to store document-based object content
     // - object will be initialized with data supplied two by two, as Name,Value
     // pairs, e.g.
-    // !var Doc: TDocVariantData; // stack-allocated variable
+    // !var
+    // !  Doc: TDocVariantData; // stack-allocated variable
     // !begin
     // !  Doc.InitObject(['name','John','year',1972]);
     // which is the same as:
@@ -992,7 +997,8 @@ type
       Model: TDocVariantModel); overload;
     /// initialize a variant instance to store some document-based array content
     // - array will be initialized with data supplied as parameters, e.g.
-    // !var Doc: TDocVariantData; // stack-allocated variable
+    // !var
+    // !  Doc: TDocVariantData; // stack-allocated variable
     // !begin
     // !  Doc.InitArray(['one',2,3.0]);
     // !  assert(Doc.Count=3);
@@ -1173,7 +1179,8 @@ type
     /// to be called before any Init*() method call, when a previous Init*()
     // has already be performed on the same instance, to avoid memory leaks
     // - for instance:
-    // !var Doc: TDocVariantData; // stack-allocated variable
+    // !var
+    // !  Doc: TDocVariantData; // stack-allocated variable
     // !begin
     // !  Doc.InitArray(['one',2,3.0]); // no need of any Doc.Clear here
     // !  assert(Doc.Count=3);
@@ -1945,7 +1952,8 @@ type
     // !   Writeln(aVariant._(i));
     // - this property will return the value as varByRef (just like with
     // variant late binding of any TDocVariant instance), so you can write:
-    // !var Doc: TDocVariantData; // stack-allocated variable
+    // !var
+    // !  Doc: TDocVariantData; // stack-allocated variable
     // !begin
     // !  Doc.InitJson('{arr:[1,2]}');
     // !  assert(Doc.Count=2);

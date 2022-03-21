@@ -1487,7 +1487,9 @@ type
       const aInterfaceName: RawUtf8); reintroduce; overload; virtual;
     /// initialize an interface stub from TypeInfo(IMyInterface)
     // - assign the fake class instance to a stubbed interface variable:
-    // !var I: ICalculator;
+    // !var
+    // !  I: ICalculator;
+    // ! ...
     // !  TInterfaceStub.Create(TypeInfo(ICalculator),I);
     // !  Check(I.Add(10,20)=0,'Default result');
     constructor Create(aInterface: PRttiInfo;
@@ -1496,7 +1498,9 @@ type
     // - you shall have registered the interface by a previous call to
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...])
     // - once registered, create and use the fake class instance as such:
-    // !var I: ICalculator;
+    // !var
+    // !  I: ICalculator;
+    // ! ...
     // !  TInterfaceStub.Create(ICalculator,I);
     // !  Check(I.Add(10,20)=0,'Default result');
     // - if the supplied TGUID has not been previously registered, raise an Exception
@@ -1806,7 +1810,8 @@ type
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IPersistence),...])
     // - once registered, create and use the fake class instance as such:
     // !procedure TMyTestCase.OneTestCaseMethod;
-    // !var Persist: IPersistence;
+    // !var
+    // !  Persist: IPersistence;
     // ! ...
     // !   TInterfaceMock.Create(IPersistence,Persist,self).
     // !     ExpectsCount('SaveItem',qoEqualTo,1)]);

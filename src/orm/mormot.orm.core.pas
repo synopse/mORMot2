@@ -157,7 +157,8 @@ type
     // !   TOrmClientID = type TID;
     // !   TOrmOrder = class(TOrm)
     // !   ...
-    // !   published OrderedBy: TOrmClientID read fOrderedBy write fOrderedBy;
+    // !   published OrderedBy: TOrmClientID
+    // !     read fOrderedBy write fOrderedBy;
     // !   ...
     // then this OrderedBy property will be tied to the TOrmClient class
     // of the corresponding model, and the field value will be reset to 0 when
@@ -174,7 +175,8 @@ type
     // !   TOrmClientToBeDeletedID = type TID;
     // !   TOrmOrder = class(TOrm)
     // !   ...
-    // !   published OrderedBy: TOrmClientToBeDeletedID read fOrderedBy write fOrderedBy;
+    // !   published OrderedBy: TOrmClientToBeDeletedID
+    // !     read fOrderedBy write fOrderedBy;
     // !   ...
     // then this OrderedBy property will be tied to the TOrmClient class
     // of the corresponding model, and the whole record will be deleted when
@@ -485,9 +487,10 @@ type
     // executables than Generics.Collections, and need no try..finally Free: a
     // single TIList<TOrm> class will be reused for all IList<>
     // - you can write for instance:
-    // !var list: IList<TOrmTest>;
-    // !    R: TOrmTest;
-    // !    orm: IRestOrm
+    // !var
+    // !  list: IList<TOrmTest>;
+    // !  R: TOrmTest;
+    // !  orm: IRestOrm
     // ! ...
     // !    if orm.RetrieveIList(TOrmTest, list, 'ID,Test') then
     // !      for R in list do
@@ -749,9 +752,9 @@ type
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID;
     /// create a new member, from a supplied list of field values
     // - implements REST POST collection
-    // - the aSimpleFields parameters must follow explicitly the order of published
-    // properties of the supplied aTable class, excepting the RawBlob and
-    // TOrmMany kind (i.e. only so called "simple fields")
+    // - the aSimpleFields parameters must follow explicitly the order of
+    // published properties of the supplied aTable class, excepting the RawBlob
+    // and TOrmMany kind (i.e. only so called "simple fields")
     // - the aSimpleFields must have exactly the same count of parameters as
     // there are "simple fields" in the published properties
     // - if ForcedID is set to non null, client sends this ID to be used
@@ -2611,8 +2614,10 @@ type
     // - this overloaded version expect the dynamic array to have been defined
     // with a not null index attribute, e.g.
     // ! published
-    // !   property Ints: TIntegerDynArray index 1 read fInts write fInts;
-    // !   property Currency: TCurrencyDynArray index 2 read fCurrency write fCurrency;
+    // !   property Ints: TIntegerDynArray
+    // !     index 1 read fInts write fInts;
+    // !   property Currency: TCurrencyDynArray
+    // !     index 2 read fCurrency write fCurrency;
     // - if the field index is not existing or not a dynamic array, result.IsVoid
     // will be TRUE
     function DynArray(DynArrayFieldIndex: integer): TDynArray; overload;
@@ -3000,26 +3005,32 @@ type
   // pointing in opposite directions
   // - by default, only two TOrm (i.e. INTEGER) fields must be created,
   // named "Source" and "Dest", the first pointing to the source record (the one
-  // with a TOrmMany published property) and the second to the destination record
+  // with a TOrmMany published property) and the second to the destination
+  // record - note that by design, those source/dest tables are stored as
+  // TOrm* pointers, so are limited to 32-bit ID values on 32-bit systems
   // - you should first create a type inheriting from TOrmMany, which
   // will define the pivot table, providing optional "through" parameters if needed
   // ! TOrmProductDest = class(TOrm);
   // ! TOrmProductSource = class;
   // ! TOrmProductDestPivot = class(TOrmMany)
-  // ! private
+  // ! protected
   // !  fSource: TOrmProductSource;
   // !  fDest: TOrmProductDest;
   // !  fTime: TDateTime;
   // ! published
-  // !   property Source: TOrmProductSource read fSource; // map Source column
-  // !   property Dest: TOrmProductDest read fDest; // map Dest column
-  // !   property AssociationTime: TDateTime read fTime write fTime;
+  // !   property Source: TOrmProductSource   // map Source column
+  // !     read fSource;
+  // !   property Dest: TOrmProductDest       // map Dest column
+  // !     read fDest;
+  // !   property AssociationTime: TDateTime
+  // !     read fTime write fTime;
   // ! end;
   // ! TOrmProductSource = class(TOrm)
-  // ! private
+  // ! protected
   // !   fDestList: TOrmProductDestPivot;
   // ! published
-  // !   DestList: TOrmProductDestPivot read fDestList;
+  // !   DestList: TOrmProductDestPivot
+  // !     read fDestList;
   // ! end;
   // - in all cases, at leat two 'Source' and 'Dest' published properties must
   // be declared as TOrm children in any TOrmMany descendant
@@ -3039,6 +3050,7 @@ type
   protected
     // internal fields initialized during TOrm.Create
     // - map to the Source and Dest properties field values in TOrm values
+    // - here we refer to PtrInt = pointer = TOrm properties
     fSourceID: PPtrInt;
     fDestID: PPtrInt;
     /// retrieve the TOrmMany ID from a given source+dest IDs pair
@@ -3269,10 +3281,14 @@ type
   // ! protected
   // !   fMinX, fMaxX, fMinY, fMaxY: double;
   // ! published
-  // !   property MinX: double read fMinX write fMinX;
-  // !   property MaxX: double read fMaxX write fMaxX;
-  // !   property MinY: double read fMinY write fMinY;
-  // !   property MaxY: double read fMaxY write fMaxY;
+  // !   property MinX: double
+  // !     read fMinX write fMinX;
+  // !   property MaxX: double
+  // !     read fMaxX write fMaxX;
+  // !   property MinY: double
+  // !     read fMinY write fMinY;
+  // !   property MaxY: double
+  // !     read fMaxY write fMaxY;
   // ! end;
   // - since SQLite version 3.24.0, TOrmRTree can have auxiliary columns
   // that store arbitrary data, having their property name starting with '_'
@@ -3311,10 +3327,14 @@ type
   // ! protected
   // !   fMinX, fMaxX, fMinY, fMaxY: integer;
   // ! published
-  // !   property MinX: integer read fMinX write fMinX;
-  // !   property MaxX: integer read fMaxX write fMaxX;
-  // !   property MinY: integer read fMinY write fMinY;
-  // !   property MaxY: integer read fMaxY write fMaxY;
+  // !   property MinX: integer
+  // !     read fMinX write fMinX;
+  // !   property MaxX: integer
+  // !     read fMaxX write fMaxX;
+  // !   property MinY: integer
+  // !     read fMinY write fMinY;
+  // !   property MaxY: integer
+  // !     read fMaxY write fMaxY;
   // ! end;
   // - since SQLite version 3.24.0, TOrmRTreeInteger can have auxiliary
   // columns that store arbitrary data, having their property name starting with '_'

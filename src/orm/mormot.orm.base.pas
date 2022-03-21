@@ -504,9 +504,12 @@ const
 
   /// the SQL field property types with their TNullable* equivalency
   // - those types may be stored in a variant published property, e.g.
-  // ! property Int: TNullableInteger read fInt write fInt;
-  // ! property Txt: TNullableUtf8Text read fTxt write fTxt;
-  // ! property Txt: TNullableUtf8Text index 32 read fTxt write fTxt;
+  // ! property Int: TNullableInteger
+  // !   read fInt write fInt;
+  // ! property Txt: TNullableUtf8Text
+  // !   read fTxt write fTxt;
+  // ! property Txt: TNullableUtf8Text
+  // !   index 32 read fTxt write fTxt;
   NULLABLE_TYPES =
     [oftInteger, oftBoolean, oftEnumerate, oftFloat, oftCurrency,
      oftDateTime, oftTimeLog, oftUtf8Text];
@@ -995,7 +998,8 @@ type
       read fAttributes write fAttributes;
     /// the optional width of this field, in external databases
     // - is set e.g. by index attribute of TOrm published properties as
-    // ! property MyProperty: RawUtf8 index 10;
+    // ! property MyProperty: RawUtf8
+    // !   index 10;
     property FieldWidth: integer
       read fFieldWidth;
   public
@@ -7178,7 +7182,8 @@ begin
   if IsRowID(pointer(aItem.Name)) and
      not (pilAllowIDFields in fOptions) then
     raise EOrmException.CreateUtf8(
-      '%.Add: % should not include a [%] published property', [self, fTable, aItem.Name]);
+      '%.Add: % should not include a [%] published property',
+        [self, fTable, aItem.Name]);
   // check that this property name is not already defined
   for f := 0 to fCount - 1 do
     if IdemPropNameU(fList[f].Name, aItem.Name) then
