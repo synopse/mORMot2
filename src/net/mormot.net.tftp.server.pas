@@ -89,6 +89,7 @@ type
     fOwner: TTftpServerThread;
     fFrameMaxSize: integer;
     procedure DoExecute; override;
+    procedure NotifyShutdown;
   public
     /// initialize this connection
     constructor Create(const Source: TTftpContext; Owner: TTftpServerThread); reintroduce;
@@ -119,6 +120,7 @@ type
     // main processing methods for all incoming frames
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnShutdown; override; // = Destroy
+    procedure NotifyShutdown;
   public
     /// initialize and bind the server instance, in non-suspended state
     constructor Create(const SourceFolder: TFileName;
@@ -258,6 +260,8 @@ destructor TTftpConnectionThread.Destroy;
 begin
   Terminate;
   fContext.Shutdown;
+  if fOwner <> nil then
+    fOwner.fConnection.Remove(self);
   inherited Destroy;
   FreeMem(fContext.Frame);
 end;
@@ -268,7 +272,7 @@ var
   res: TTftpError;
   nr: TNetResult;
 begin
-  fLog.Add.Log(sllDebug, 'DoExecute % % %',
+  fLog.Log(sllDebug, 'DoExecute % % %',
     [fContext.Remote.IPShort({withport=}true), TFTP_OPCODE[fContext.OpCode],
      fContext.FileName], self);
   fContext.RetryCount := fOwner.MaxRetry;
@@ -276,7 +280,7 @@ begin
   repeat
     // try to receive a frame on this UDP/IP link
     len := fContext.Sock.RecvFrom(fContext.Frame, fFrameMaxSize, fContext.Remote);
-    fLog.Add.Log(sllTrace, 'DoExecute %', [ToText(fContext.Frame^)], self);
+    fLog.Log(sllTrace, 'DoExecute %', [ToText(fContext.Frame^)], self);
     if Terminated or
        (len = 0) then // -1=error, 0=shutdown
       break;
@@ -286,7 +290,7 @@ begin
       nr := NetLastError;
       if nr <> nrRetry then
       begin
-        fLog.Add.Log(sllTrace, 'DoExecute recvfrom=%', [ToText(nr)^], self);
+        fLog.Log(sllTrace, 'DoExecute recvfrom=%', [ToText(nr)^], self);
         break;
       end;
       if mormot.core.os.GetTickCount64 >= fContext.TimeoutTix then
@@ -325,6 +329,12 @@ begin
   // Destroy will call fContext.Shutdown
 end;
 
+procedure TTftpConnectionThread.NotifyShutdown;
+begin
+  fOwner := nil;
+  Terminate;
+end;
+
 
 { ******************** TTftpServerThread Server Class }
 
@@ -334,7 +344,7 @@ constructor TTftpServerThread.Create(const SourceFolder: TFileName;
   Options: TTftpThreadOptions; LogClass: TSynLogClass;
   const BindAddress, BindPort, ProcessName: RawUtf8);
 begin
-  fConnection := TSynObjectListLocked.Create;
+  fConnection := TSynObjectListLocked.Create({ownobject=}false);
   SetFileFolder(SourceFolder);
   fMaxConnections := 100; // = 100 threads, good enough for regular TFTP server
   fMaxRetry := 2;
@@ -346,16 +356,28 @@ end;
 //       and will release fConnection list
 
 procedure TTftpServerThread.OnShutdown;
-var
-  i: PtrInt;
 begin
   // called by Executed on Terminated
   if fConnection = nil then
     exit;
-  for i := 0 to fConnection.Count - 1 do
-    TTftpConnectionThread(fConnection.List[i]).Terminate; // async release
-  fConnection.ClearFromLast;
+  NotifyShutdown;
   FreeAndNil(fConnection);
+end;
+
+procedure TTftpServerThread.NotifyShutdown;
+var
+  i: integer;
+  t: ^TTftpConnectionThread;
+begin
+  if (self = nil) or
+     (fConnection = nil) then
+    exit;
+  t := pointer(fConnection.List);
+  for i := 1 to fConnection.Count do
+  begin
+    t^.NotifyShutdown;
+    inc(t);
+  end;
 end;
 
 procedure TTftpServerThread.TerminateAndWaitFinished(TimeOutMs: integer);
@@ -366,12 +388,7 @@ var
 begin
   endtix := mormot.core.os.GetTickCount64 + TimeOutMs;
   // first notify all sub threads to terminate
-  t := pointer(fConnection.List);
-  for i := 1 to fConnection.Count do
-  begin
-    t^.Terminate;
-    inc(t);
-  end;
+  NotifyShutdown;
   // shutdown and wait for main accept() thread
   inherited TerminateAndWaitFinished(TimeOutMs);
   // wait for sub threads finalization
