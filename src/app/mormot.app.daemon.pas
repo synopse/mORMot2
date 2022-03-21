@@ -38,8 +38,9 @@ uses
 type
   /// abstract parent containing information able to initialize a TSynDaemon class
   // - will handle persistence as JSON local files
-  // - you may consider using TDDDAppSettingsAbstract from dddInfraSettings
-  TSynDaemonSettings  = class(TSynJsonFileSettings)
+  // - by default in this abstract parent class, no property is published to let
+  // inherited classes define the values customizable from JSON serialization
+  TSynDaemonAbstractSettings  = class(TSynJsonFileSettings)
   protected
     fServiceName: string;
     fServiceDisplayName: string;
@@ -68,7 +69,6 @@ type
     // - several depending services may be set by appending #0 between names
     property ServiceDependencies: string
       read fServiceDependencies write fServiceDependencies;
-  published
     /// the service name, as used internally by Windows or the TSynDaemon class
     // - default is the executable name
     property ServiceName: string
@@ -87,9 +87,30 @@ type
     property LogRotateFileCount: integer
       read fLogRotateFileCount write fLogRotateFileCount;
   end;
+
+  /// abstract parent containing information able to initialize a TSynDaemon class
+  // - by default, will publish the principal properties to that RTTI will handle
+  // persistence as JSON local files
+  TSynDaemonSettings  = class(TSynDaemonAbstractSettings)
+  published
+    /// the service name, as used internally by Windows or the TSynDaemon class
+    // - default is the executable name
+    property ServiceName;
+    /// the service name, as displayed by Windows or at the console level
+    // - default is the executable name
+    property ServiceDisplayName;
+    /// if not void, will enable the logs (default is LOG_STACKTRACE)
+    property Log: TSynLogInfos
+      read fLog write fLog;
+    /// allow to customize where the logs should be written
+    property LogPath: TFileName
+      read fLogPath write fLogPath;
+    /// how many files will be rotated (default is 2)
+    property LogRotateFileCount;
+  end;
   
   /// meta-class of TSynDaemon settings information
-  TSynDaemonSettingsClass = class of TSynDaemonSettings;
+  TSynDaemonSettingsClass = class of TSynDaemonAbstractSettings;
 
 
 
@@ -106,7 +127,7 @@ type
   protected
     fConsoleMode: boolean;
     fWorkFolderName: TFileName;
-    fSettings: TSynDaemonSettings;
+    fSettings: TSynDaemonAbstractSettings;
     function CustomCommandLineSyntax: string; virtual;
     {$ifdef OSWINDOWS}
     procedure DoStart(Sender: TService);
@@ -137,7 +158,7 @@ type
       read fConsoleMode;
     /// the settings associated with this daemon
     // - will be allocated in Create constructor, and released in Destroy
-    property Settings: TSynDaemonSettings
+    property Settings: TSynDaemonAbstractSettings
       read fSettings;
   end;
 
@@ -148,9 +169,9 @@ implementation
 
 { ************ Parent Daemon Settings Class }
 
-{ TSynDaemonSettings }
+{ TSynDaemonAbstractSettings }
 
-constructor TSynDaemonSettings.Create;
+constructor TSynDaemonAbstractSettings.Create;
 begin
   inherited Create;
   fLog := LOG_STACKTRACE + [sllNewRun];
@@ -159,7 +180,7 @@ begin
   fServiceDisplayName := fServiceName;
 end;
 
-function TSynDaemonSettings.ServiceDescription: string;
+function TSynDaemonAbstractSettings.ServiceDescription: string;
 var
   versionnumber: string;
 begin
@@ -174,7 +195,7 @@ begin
   end;
 end;
 
-procedure TSynDaemonSettings.SetLog(aLogClass: TSynLogClass);
+procedure TSynDaemonAbstractSettings.SetLog(aLogClass: TSynLogClass);
 begin
   if (self <> nil) and
      (Log <> []) and
