@@ -44,11 +44,11 @@ type
   protected
     fServiceName: string;
     fServiceDisplayName: string;
-    fLog: TSynLogInfos;
-    fLogPath: TFileName;
-    fLogRotateFileCount: integer;
-    fLogClass: TSynLogClass;
     fServiceDependencies: string;
+    fLog: TSynLogInfos;
+    fLogRotateFileCount: integer;
+    fLogPath: TFileName;
+    fLogClass: TSynLogClass;
   public
     /// initialize and set the default settings
     constructor Create; override;
@@ -83,14 +83,15 @@ type
     /// allow to customize where the logs should be written
     property LogPath: TFileName
       read fLogPath write fLogPath;
-    /// how many files will be rotated (default is 2)
+    /// how many files will be rotated
+    // - default is 2
     property LogRotateFileCount: integer
       read fLogRotateFileCount write fLogRotateFileCount;
   end;
 
   /// abstract parent containing information able to initialize a TSynDaemon class
-  // - by default, will publish the principal properties to that RTTI will handle
-  // persistence as JSON local files
+  // - by default, will publish the main properties to that RTTI will handle
+  // properly persistence of those fields in the JSON local settings file
   TSynDaemonSettings  = class(TSynDaemonAbstractSettings)
   published
     /// the service name, as used internally by Windows or the TSynDaemon class
