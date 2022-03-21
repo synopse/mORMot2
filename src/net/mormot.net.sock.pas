@@ -1580,7 +1580,8 @@ begin
     if dobind then
     begin
       // bound Socket should remain open for 5 seconds after a closesocket()
-      sock.SetLinger(5);
+      if layer <> nlUdp then
+        sock.SetLinger(5);
       // Server-side binding/listening of the socket to the address:port
       if (bind(sock.Socket, @addr, addr.Size) <> NO_ERROR) or
          ((layer <> nlUdp) and
@@ -1623,11 +1624,16 @@ end;
 
 procedure TNetSocketWrap.SetOpt(prot, name: integer;
   value: pointer; valuelen: integer);
+var
+  err: TNetResult;
+  low: integer;
 begin
   if @self = nil then
     raise ENetSock.Create('SetOptions(%d,%d) with no socket', [prot, name]);
-  if setsockopt(TSocket(@self), prot, name, value, valuelen) <> NO_ERROR then
-    raise ENetSock.Create('SetOptions(%d,%d)', [prot, name], NetLastError);
+  if setsockopt(TSocket(@self), prot, name, value, valuelen) = NO_ERROR then
+    exit;
+  err := NetLastError(NO_ERROR, @low);
+  raise ENetSock.Create('SetOptions(%d,%d) sockerr=%d', [prot, name, low], err);
 end;
 
 function TNetSocketWrap.GetOptInt(prot, name: integer): integer;
