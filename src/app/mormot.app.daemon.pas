@@ -59,7 +59,7 @@ type
     procedure SetLog(aLogClass: TSynLogClass);
     /// returns user-friendly description of the service, including version
     // information and company copyright (if available)
-    function ServiceDescription: string;
+    function ServiceDescription: string; virtual;
     /// read-only access to the TSynLog class, if SetLog() has been called
     property LogClass: TSynLogClass
       read fLogClass;
