@@ -41,6 +41,8 @@ uses
 { ******************** Abstract UDP Server }
 
 type
+  EUdpServer = class(ENetSock);
+
   /// work memory buffer of the maximum size of UDP frame (64KB)
   TUdpFrame = array[word] of byte;
 
@@ -76,6 +78,7 @@ type
   TTftpThreadOption = (
     ttoRrq,
     ttoWrq,
+    ttoAllowSubFolders,
     ttoLowLevelLog);
 
   TTftpThreadOptions = set of TTftpThreadOption;
@@ -88,6 +91,7 @@ type
     fContext: TTftpContext;
     fOwner: TTftpServerThread;
     fFrameMaxSize: integer;
+    fFileSize: integer;
     procedure DoExecute; override;
     procedure NotifyShutdown;
   public
@@ -173,17 +177,21 @@ begin
   ident := ProcessName;
   if ident = '' then
     FormatUtf8('udp%srv', [BindPort], ident);
+  if LogClass <> nil then
+     LogClass.Add.Log(sllTrace, 'Create: bind %:% for input requests on %',
+       [BindAddress, BindPort, ident], self);
   res := NewSocket(BindAddress, BindPort, nlUdp, {bind=}true,
     5000, 5000, 5000, 10, fSock, @fSockAddr);
   if res <> nrOk then
     // on binding error, raise exception before the thread is actually created
-    raise ENetSock.Create('%s.Create binding error on %s:%s',
+    raise EUdpServer.Create('%s.Create binding error on %s:%s',
       [ClassNameShort(self)^, BindAddress, BindPort], res);
   inherited Create({suspended=}false, LogClass, ident);
 end;
 
 destructor TUdpServerThread.Destroy;
 begin
+  fLogClass.Add.Log(sllDebug, 'Destroy: ending %', [fProcessName]);
   TerminateAndWaitFinished;
   inherited Destroy;
   if fSock <> nil then
@@ -203,7 +211,7 @@ begin
   // main server process loop
   try
     if fSock = nil then // paranoid check
-      raise ENetSock.CreateFmt('%.Execute: Bind failed', [ClassNameShort(self)^]);
+      raise EUdpServer.CreateFmt('%s.Execute: Bind failed', [ClassNameShort(self)^]);
     while not Terminated do
     begin
       if fSock.WaitFor(1000, [neRead]) <> [] then
@@ -251,9 +259,12 @@ begin
   fOwner := Owner;
   inc(fOwner.fConnectionTotal);
   fFrameMaxSize := Source.BlockSize + 16; // e.g. 512 + 16
+  fFileSize := fContext.FileStream.Size;
   GetMem(fContext.Frame, fFrameMaxSize);
-  inherited Create({suspended=}false, fOwner.LogClass, FormatUtf8('%%',
-    [TFTP_OPCODE[Source.OpCode], InterlockedIncrement(TTftpConnectionThreadCounter)]));
+  FreeOnTerminate := true;
+  inherited Create({suspended=}false, fOwner.LogClass, FormatUtf8('%#% % %',
+    [TFTP_OPCODE[Source.OpCode], InterlockedIncrement(TTftpConnectionThreadCounter),
+     fContext.FileName, KB(fFileSize)]));
 end;
 
 destructor TTftpConnectionThread.Destroy;
@@ -271,7 +282,9 @@ var
   len: integer;
   res: TTftpError;
   nr: TNetResult;
+  tix: Int64;
 begin
+  tix := mormot.core.os.GetTickCount64;
   fLog.Log(sllDebug, 'DoExecute % % %',
     [fContext.Remote.IPShort({withport=}true), TFTP_OPCODE[fContext.OpCode],
      fContext.FileName], self);
@@ -280,7 +293,10 @@ begin
   repeat
     // try to receive a frame on this UDP/IP link
     len := fContext.Sock.RecvFrom(fContext.Frame, fFrameMaxSize, fContext.Remote);
-    fLog.Log(sllTrace, 'DoExecute %', [ToText(fContext.Frame^)], self);
+    if Terminated then
+      break;
+    if ttoLowLevelLog in fOwner.fOptions then
+      fLog.Log(sllTrace, 'DoExecute %', [ToText(fContext.Frame^)], self);
     if Terminated or
        (len = 0) then // -1=error, 0=shutdown
       break;
@@ -327,6 +343,10 @@ begin
     fContext.RetryCount := fOwner.MaxRetry;
   until Terminated;
   // Destroy will call fContext.Shutdown
+  tix := mormot.core.os.GetTickCount64 - tix;
+  if tix <> 0 then
+    fLog.Log(sllTrace, 'DoExecute: % finished at %/s',
+      [fContext.FileName, KB((fFileSize * 1000) div tix)], self);
 end;
 
 procedure TTftpConnectionThread.NotifyShutdown;
@@ -416,7 +436,9 @@ end;
 function TTftpServerThread.GetFileName(const FileName: RawUtf8): TFileName;
 begin
   result := NormalizeFileName(Utf8ToString(FileName));
-  if SafeFileName(result) then
+  if SafeFileName(result) and
+     ((ttoAllowSubFolders in fOptions) or
+      (Pos(PathDelim, result) = 0)) then
     result := fFileFolder + result
   else
     result := '';

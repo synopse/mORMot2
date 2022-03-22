@@ -586,17 +586,17 @@ begin
   //      ----------------------------------
   // DAT | 03    |   Block #  |   Data     |
   //     ----------------------------------
+  inc(LastReceivedSequence);
+  if LastReceivedSequence = 0 then
+    inc(LastReceivedSequenceHi, 1 shl 16);
   Frame^.Opcode := swap(word(TFTP_DAT));
   Frame^.Sequence := swap(LastReceivedSequence);
   if CurrentSize <> FileStream.Position then
     FileStream.Seek(Int64(CurrentSize), soBeginning);
   FrameLen := FileStream.Read(Frame^.Data,  BlockSize);
   // FrameLen=0 is possible for last block
-  inc(CurrentSize, FrameLen);
-  inc(LastReceivedSequence);
-  if LastReceivedSequence = 0 then
-    inc(LastReceivedSequenceHi, 1 shl 16);
   inc(FrameLen, SizeOf(Frame^.Opcode) + SizeOf(Frame^.Sequence));
+  inc(CurrentSize, BlockSize);
 end;
 
 procedure TTftpContext.GenerateRequestFrame;
