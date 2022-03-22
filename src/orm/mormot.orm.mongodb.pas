@@ -313,9 +313,10 @@ var
   i, n, sf: integer;
   W: TBsonWriter;
   name: RawUtf8;
+  temp: TTextWriterStackBuffer; // shared fTempBuffer is not protected now
 begin
   sf := length(SubFields);
-  W := TBsonWriter.Create(fTempBuffer^);
+  W := TBsonWriter.Create(temp);
   try
     W.BsonDocumentBegin;
     if WithID then
@@ -909,6 +910,7 @@ var
   i: PtrInt;
   name: RawUtf8;
   W: TJsonWriter;
+  temp: TTextWriterStackBuffer; // shared fTempBuffer is not protected now
 begin
   if (doc.VarType <> DocVariantType.VarType) or
      (doc.Kind <> dvObject) or
@@ -917,7 +919,7 @@ begin
     result := '';
     exit;
   end;
-  W := TJsonWriter.CreateOwnedStream(fTempBuffer^);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('{');
     for i := 0 to doc.Count - 1 do

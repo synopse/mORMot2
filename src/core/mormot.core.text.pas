@@ -1929,6 +1929,8 @@ function FormatVariant(const Format: RawUtf8; const Args: array of const): varia
 
 /// append some path parts into a single file name with proper path delimiters
 // - set EndWithDelim=true if you want to create e.g. full a folder name
+// - similar to os.path.join() in the Python RTL
+// - e.g. on Windows: MakePath(['abc', 1, 'toto.json']) = 'abc\1\toto.json'
 function MakePath(const Part: array of const; EndWithDelim: boolean = false;
   Delim: AnsiChar = PathDelim): TFileName;
 

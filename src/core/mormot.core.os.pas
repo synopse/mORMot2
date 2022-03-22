@@ -1986,6 +1986,7 @@ const
 
 /// ensure all \ / path delimiters are normalized into the current OS expectation
 // - i.e. normalize file name to use '\' on Windows, or '/' on POSIX
+// - see MakePath() from mormot.core.text.pas to concatenate path items
 function NormalizeFileName(const FileName: TFileName): TFileName;
 
 /// get a file date and time, from its name
@@ -6473,7 +6474,7 @@ begin
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
   NULL_STR_VAR := 'null';
   BOOL_UTF8[false] := 'false';
-  BOOL_UTF8[true] := 'true';
+  BOOL_UTF8[true]  := 'true';
   // minimal stubs which will be properly implemented in mormot.core.log.pas
   GetExecutableLocation := _GetExecutableLocation;
   SetThreadName := _SetThreadName;

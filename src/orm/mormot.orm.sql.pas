@@ -753,6 +753,7 @@ var
   limit: TSqlDBDefinitionLimitClause;
   limitSQL, name: RawUtf8;
   f, n: PtrInt;
+  temp: TTextWriterStackBuffer; // shared fTempBuffer is not protected now
 begin
   result := false;
   if SQL = '' then
@@ -792,7 +793,7 @@ begin
       else
         FormatUtf8(limit.InsertFmt, [Stmt.Limit], limitSQL);
     end;
-    W := TJsonWriter.CreateOwnedStream(fTempBuffer^);
+    W := TJsonWriter.CreateOwnedStream(temp);
     try
       W.AddShorter('select ');
       if limit.Position = posSelect then
@@ -2140,6 +2141,7 @@ var
   {$ifdef DEBUGSQLVIRTUALTABLE}
   log: RawUtf8;
   {$endif DEBUGSQLVIRTUALTABLE}
+  temp: TTextWriterStackBuffer; // shared fTempBuffer is not protected now
 begin
   if (Prepared.WhereCount = 0) and
      (Prepared.OrderByCount = 0) then
@@ -2148,7 +2150,7 @@ begin
     exit;
   end;
   result := '';
-  WR := TJsonWriter.CreateOwnedStream(fTempBuffer^);
+  WR := TJsonWriter.CreateOwnedStream(temp);
   try
     WR.AddString(fSelectAllDirectSQL);
     where := @Prepared.Where;
