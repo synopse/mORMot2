@@ -161,6 +161,12 @@ type
   {$else}
   TTftpContext = object
   {$endif USERECORDWITHMETHODS}
+  private
+    Parse: PUtf8Char;
+    ParseLen: PtrInt;
+    Parsed: RawUtf8;
+    function GetNext: boolean;
+    function GetNextCardinal(min, max: cardinal; out c: cardinal): boolean;
   public
     /// the toRrq/toWrq request opcode
     // - as filled by ParseRequest()
@@ -221,13 +227,19 @@ type
     procedure AppendTextToFrame(const Text: RawUtf8);
     /// parse the initial RRQ/WRQ/OACK frame buffer/len
     // - Remote and Socket should have been set before calling this method
-    // - should be the first call for server side process
-    // - also initialize the state machine, and the associated FileStream
-    // - for RRQ/WRQ, return teNoError and set OpCode/FileName and the toAck/toOck
-    // response within the Frame/FrameLen buffer, reading the first RRQ data packet
-    // from the associated FileStream
-    // - for OACK, return teNoError and set OpCode and override options values
-    function ParseRequest(len: integer): TTftpError;
+    // - first call for server side process, to initialize the state machine
+    // - returns teIllegalOperation on parsing error
+    // - for RRQ/WRQ, return teNoError and set OpCode/FileName fields
+    // - for OACK, return teNoError and set OpCode
+    // - after teNoError, caller should then call ParseRequestOptions()
+    function ParseRequestFileName(len: integer): TTftpError;
+    /// parse the options of RRQ/WRQ/OACK frame buffer/len
+    // - caller should have called ParseRequestFileName() then set FileStream
+    // - for RRQ/WRQ, the toAck/toOck response within the Frame/FrameLen buffer,
+    // reading the first RRQ data packet from the associated FileStream
+    // - for OACK, set OpCode and override options values
+    // - return teInvalidOptionNegotiation if options are out of range or unknown
+    function ParseRequestOptions: TTftpError;
     /// parse a DAT/ACK Frame/FrameLen then generate the ACK/DAT answer
     // - for DAT (writing request), return teNoError and call GenerateAckFrame
     // - for ACK (reading request), return teNoError and call GenerateNextDataFrame
@@ -371,6 +383,57 @@ begin
   inc(FrameLen, len);
 end;
 
+function TTftpContext.GetNext: boolean;
+var
+  vlen: PtrInt;
+begin
+  vlen := StrLen(Parse);
+  dec(ParseLen, vlen);
+  if ParseLen <= 0 then
+    result := false
+  else
+  begin
+    FastSetString(Parsed, Parse, vlen);
+    inc(Parse, vlen + 1);
+    dec(ParseLen);
+    result := true;
+  end;
+end;
+
+function TTftpContext.GetNextCardinal(min, max: cardinal; out c: cardinal): boolean;
+begin
+  result := GetNext and
+            ToCardinal(Parsed, c, min) and
+            ({%H-}c <= max);
+end;
+
+function TTftpContext.ParseRequestFileName(len: integer): TTftpError;
+begin
+  result := teIllegalOperation; // error on exit exit
+  if (@self = nil) or
+     (Frame = nil) or
+     (len < 4) then
+    exit;
+  SetDefaultOptions(ToOpcode(Frame^));
+  FrameLen := len;
+  ParseLen := len - SizeOf(Frame^.Opcode);
+  if (ParseLen <= 0) or
+     (ParseLen > SizeOf(Frame.Header)) or
+     (Frame^.Header[ParseLen - 1] <> 0) or // should end with a trailing #0
+     not (OpCode in [toRrq, toWrq, toOck]) then
+    exit;
+  Parse := @Frame^.Header;
+  if not GetNext then
+    exit;
+  FileName := Parsed;
+  if OpCode <> toOck then
+    if not GetNext or
+       not IdemPropNameU(Parsed, 'octet') then // supports only 8-bit transfer
+      exit;
+  result := teNoError;
+  // caller should now set the FileStream field, and call ParseRequestOptions
+end;
+
 const
   TFTP_OPTIONS: array[0.. 4] of PAnsiChar = (
     'timeout',
@@ -379,58 +442,9 @@ const
     'windowsize',
     nil);
 
-function TTftpContext.ParseRequest(len: integer): TTftpError;
-var
-  P: PUtf8Char;
-  v: RawUtf8;
-
-  function GetNext: boolean;
-  var
-    vlen: PtrInt;
-  begin
-    vlen := StrLen(P);
-    dec(len, vlen);
-    if len <= 0 then
-      result := false
-    else
-    begin
-      FastSetString(v, P, vlen);
-      inc(P, vlen + 1);
-      dec(len);
-      result := true;
-    end;
-  end;
-
-  function GetNextCardinal(min, max: cardinal; out c: cardinal): boolean;
-  begin
-    result := GetNext and
-              ToCardinal(v, c, min) and
-              ({%H-}c <= max);
-  end;
-
+function TTftpContext.ParseRequestOptions: TTftpError;
 begin
-  result := teIllegalOperation; // error on exit exit
-  if (@self = nil) or
-     (Frame = nil) or
-     (len < 4) or
-     (FileStream = nil) then
-    exit;
-  FrameLen := len;
-  SetDefaultOptions(ToOpcode(Frame^));
-  len := FrameLen - SizeOf(Frame^.Opcode);
-  if (len <= 0) or
-     (len > SizeOf(Frame.Header)) or
-     (Frame^.Header[len - 1] <> 0) or // should end with a trailing #0
-     not (OpCode in [toRrq, toWrq, toOck]) then
-    exit;
-  P := @Frame^.Header;
-  if not GetNext then
-    exit;
-  FileName := v;
-  if OpCode <> toOck then
-    if not GetNext or
-       not IdemPropNameU(v, 'octet') then // supports only 8-bit transfer
-      exit;
+  // caller should have set the FileStream from FileName parsed field
   if GetNext then
   begin
     // RFC 2347 Option Extension with its OACK
@@ -439,8 +453,8 @@ begin
     FrameLen := SizeOf(Frame^.Opcode);
     repeat
       if OpCode <> toOck then
-        AppendTextToFrame(v); // include option name to OACK answer
-      case IdemPPChar(pointer(v), @TFTP_OPTIONS) of
+        AppendTextToFrame(Parsed); // include option name to OACK answer
+      case IdemPPChar(pointer(Parsed), @TFTP_OPTIONS) of
         0:
           if not GetNextCardinal(1, 255, TimeoutSec) then
             exit;
@@ -454,7 +468,7 @@ begin
           begin
             // compute and send back the actual RRQ file size in OACK
             TransferSize := FileStream.Size;
-            v := 'tsize'#0 + UInt32ToUtf8(TransferSize) + #0;
+            Parsed := 'tsize'#0 + UInt32ToUtf8(TransferSize) + #0;
           end;
         3:
           if not GetNextCardinal(1, 65535, WindowSize) then
@@ -465,7 +479,7 @@ begin
         exit; // unsupported option
       end;
       if OpCode <> toOck then
-        AppendTextToFrame(v); // include option value to OACK answer
+        AppendTextToFrame(Parsed); // include option value to OACK answer
     until not GetNext;
     if OpCode <> toOck then
       //        2 bytes  string   1b   string  1b   string  1b   string  1b

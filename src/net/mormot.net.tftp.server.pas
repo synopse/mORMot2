@@ -171,7 +171,7 @@ var
 begin
   GetMem(fFrame, SizeOf(fFrame^));
   ident := ProcessName;
-  if ident <> '' then
+  if ident = '' then
     FormatUtf8('udp%srv', [BindPort], ident);
   res := NewSocket(BindAddress, BindPort, nlUdp, {bind=}true,
     5000, 5000, 5000, 10, fSock, @fSockAddr);
@@ -392,6 +392,8 @@ begin
   // shutdown and wait for main accept() thread
   inherited TerminateAndWaitFinished(TimeOutMs);
   // wait for sub threads finalization
+  if fConnection = nil then
+    exit;
   t := pointer(fConnection.List);
   for i := 1 to fConnection.Count do
   begin
@@ -495,22 +497,28 @@ begin
       [NetLastErrorMsg], self);
     exit;
   end;
-  // create the associated TStream to read to or write from
+  // main request parsing method (if TStream exists)
   c.Remote := remote;
   c.Frame := pointer(fFrame);
-  if op = toRrq then
-    res := SetRrqStream(c)
-  else
-    res := SetWrqStream(c);
-  // main request parsing method (if TStream exists)
+  res := c.ParseRequestFileName(len);
   if res = teNoError then
-    res := c.ParseRequest(len);
+  begin
+    // create the associated TStream to read to or write from
+    if op = toRrq then
+      res := SetRrqStream(c)
+    else
+      res := SetWrqStream(c);
+    if res = teNoError then
+      // compute the toAck/toOck response
+      res := c.ParseRequestOptions;
+  end;
+  // send back error frame if needed
   if res <> teNoError then
   begin
     c.SendErrorAndShutdown(res, fLog, 'OnFrameReceived');
     exit;
   end;
-  // send initial DAT/OACK response
+  // send initial DAT/OACK response when request was validated
   nr := c.SendFrame;
   if nr = nrOk then
     // actual RRQ/WRQ transmission will take place on a dedicated thread
