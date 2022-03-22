@@ -3055,18 +3055,28 @@ begin
 end;
 
 procedure TLoggedThread.Execute;
+var
+  ilog: ISynLog;
 begin
   try
     SetCurrentThreadName(fProcessName);
-    fLog := fLogClass.Add;
+    if fLogClass <> nil then
+    begin
+      ilog := fLogClass.Enter('Execute %', [fProcessName], self);
+      fLog := ilog.Instance;
+    end;
     fProcessing := true;
     DoExecute;
   except
     // ignore any exception during processing method
   end;
   fProcessing := false;
-  fLog.NotifyThreadEnded;
-  fLog := nil;
+  if fLog <> nil then
+  begin
+    ilog := nil; // leave Enter() above
+    fLog.NotifyThreadEnded;
+    fLog := nil;
+  end;
 end;
 
 procedure TLoggedThread.TerminateAndWaitFinished(TimeOutMs: integer);
