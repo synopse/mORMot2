@@ -296,7 +296,9 @@ begin
     if Terminated then
       break;
     if ttoLowLevelLog in fOwner.fOptions then
-      fLog.Log(sllTrace, 'DoExecute %', [ToText(fContext.Frame^)], self);
+      fLog.Log(sllTrace, 'DoExecute recv % %/%',
+        [ToText(fContext.Frame^, fContext.FrameLen),
+         fContext.CurrentSize, fFileSize], self);
     if Terminated or
        (len = 0) then // -1=error, 0=shutdown
       break;
@@ -306,7 +308,7 @@ begin
       nr := NetLastError;
       if nr <> nrRetry then
       begin
-        fLog.Log(sllTrace, 'DoExecute recvfrom=%', [ToText(nr)^], self);
+        fLog.Log(sllTrace, 'DoExecute recvfrom failed: %', [ToText(nr)^], self);
         break;
       end;
       if mormot.core.os.GetTickCount64 >= fContext.TimeoutTix then
@@ -328,11 +330,15 @@ begin
       begin
         if res <> teFinished then
           // fatal error - e.g. teDiskFull
-          fContext.SendErrorAndShutdown(res, fLog, 'DoExecute');
+          fContext.SendErrorAndShutdown(res, fLog, self, 'DoExecute');
         break;
       end;
     end;
     // send next ACK or DAT block
+    if ttoLowLevelLog in fOwner.fOptions then
+      fLog.Log(sllTrace, 'DoExecute send % %/%',
+        [ToText(fContext.Frame^, fContext.FrameLen),
+         fContext.CurrentSize, fFileSize], self);
     nr := fContext.SendFrame;
     if nr <> nrOk then
     begin
@@ -537,10 +543,13 @@ begin
   // send back error frame if needed
   if res <> teNoError then
   begin
-    c.SendErrorAndShutdown(res, fLog, 'OnFrameReceived');
+    c.SendErrorAndShutdown(res, fLog, self, 'OnFrameReceived');
     exit;
   end;
   // send initial DAT/OACK response when request was validated
+  if ttoLowLevelLog in fOptions then
+    fLog.Log(sllTrace, 'OnFrameReceived send %',
+      [ToText(c.Frame^, c.FrameLen)], self);
   nr := c.SendFrame;
   if nr = nrOk then
     // actual RRQ/WRQ transmission will take place on a dedicated thread

@@ -259,7 +259,8 @@ type
     /// send Frame/FrameLen to Remote address over Sock, and set TimeoutTix
     function SendFrame: TNetResult;
     /// generate and send an ERR packet, then close Sock and FileStream
-    procedure SendErrorAndShutdown(err: TTftpError; log: TSynLog; const caller: shortstring);
+    procedure SendErrorAndShutdown(err: TTftpError; log: TSynLog;
+      obj: TObject; const caller: shortstring);
     /// close Sock and FileStream
     procedure Shutdown;
   end;
@@ -436,10 +437,10 @@ end;
 
 const
   TFTP_OPTIONS: array[0.. 4] of PAnsiChar = (
-    'timeout',
-    'blksize',
-    'tsize',
-    'windowsize',
+    'TIMEOUT',
+    'BLKSIZE',
+    'TSIZE',
+    'WINDOWSIZE',
     nil);
 
 function TTftpContext.ParseRequestOptions: TTftpError;
@@ -667,11 +668,11 @@ begin
 end;
 
 procedure TTftpContext.SendErrorAndShutdown(err: TTftpError; log: TSynLog;
-  const caller: shortstring);
+  obj: TObject; const caller: shortstring);
 begin
   GenerateErrorFrame(err, '');
   log.Log(sllTrace, '%: % % failed as %',
-    [caller, TFTP_OPCODE[OpCode], FileName, ToText(Frame^, FrameLen)]);
+    [caller, TFTP_OPCODE[OpCode], FileName, ToText(Frame^, FrameLen)], obj);
   SendFrame;
   Shutdown;
 end;
