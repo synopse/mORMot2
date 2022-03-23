@@ -74,7 +74,12 @@ type
 { ******************** TFTP Connection Thread and State Machine }
 
 type
-  /// tune what is TTftpThread accepting
+  /// tune what is TTftpServerThread accepting
+  // - ttoRrq will let the TFTP server processing RRQ/Get requests
+  // - ttoWrq will let the TFTP server processing WRQ/Put requests
+  // - ttoAllowSubFolders will allow RRW/WRQ to access nested files in
+  // TTftpServerThread.FileFolder sub-directories
+  // - ttoLowLevelLog will log each incoming/outgoing TFTP/UDP frames
   TTftpThreadOption = (
     ttoRrq,
     ttoWrq,
@@ -130,7 +135,8 @@ type
     constructor Create(const SourceFolder: TFileName;
       Options: TTftpThreadOptions; LogClass: TSynLogClass;
       const BindAddress, BindPort, ProcessName: RawUtf8); reintroduce;
-    /// notify the server thread to be terminated, and wait for finish
+    /// notify the server thread(s) to be terminated, and wait for pending
+    // threads to actually abort their background process
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); override;
   published
     /// how many requests are currently used

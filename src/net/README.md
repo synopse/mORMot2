@@ -97,3 +97,19 @@ RTSP Stream Tunnelling over HTTP as defined by Apple at https://goo.gl/CX6VA3
 - RTSP over HTTP Tunnelling 
 
 Encapsulate a RTSP TCP/IP duplex video stream into two HTTP links, one POST for upgoing commands, and one GET for downloaded video.
+
+### mormot.net.tftp.client
+
+TFTP Protocol and Client with RFC 1350/2347/2348/2349/7440 Support
+- TFTP Protocol Definitions
+
+Current limitation: no Client code is defined yet - only the raw TFTP protocol.
+
+### mormot.net.tftp.server;
+
+TFTP Server Processing with RFC 1350/2347/2348/2349/7440 Support
+- Abstract UDP Server
+- TFTP Connection Thread and State Machine
+- `TTftpServerThread` Server Class
+
+Current limitation: only RRQ requests are supported/tested yet.

@@ -8,7 +8,7 @@ unit mormot.net.tftp.client;
 
     TFTP Protocol and Client with RFC 1350/2347/2348/2349/7440 Support
     - TFTP Protocol Definitions
-    - TClientTftp Client Connection Class
+    - TClientTftp Client Connection Class (not yet implemented)
 
   *****************************************************************************
 
