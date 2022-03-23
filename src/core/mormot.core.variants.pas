@@ -2807,7 +2807,7 @@ begin
     if vt = DocVariantVType then
       DocVariantType.CopyByValue(d, s^)
     else
-      Dest := PVariant(s)^;
+      SetVariantUnRefSimpleValue(PVariant(s)^, d);
   end;
 end;
 
