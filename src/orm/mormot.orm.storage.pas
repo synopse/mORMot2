@@ -2558,83 +2558,82 @@ begin
   end;
   // full scan optimized search for a specified value
   found := 0;
-  if P.InheritsFrom(TOrmPropInfoRttiInt32) and
-     (TOrmPropInfoRttiInt32(P).PropRtti.Kind in
-        [rkInteger, rkEnumeration, rkSet]) then
-  begin
-    // search 8/16/32-bit properties
-    v := GetInt64(pointer(WhereValue), err); // 64-bit for cardinal
-    if err <> 0 then
-      exit;
-    vp := pointer(fValue);
-    nfo := TOrmPropInfoRtti(P).PropInfo;
-    offs := TOrmPropInfoRtti(P).GetterIsFieldPropOffset;
-    if offs <> 0 then
-    begin
-      // plain field with no getter
-      ot := TOrmPropInfoRtti(P).PropRtti.Cache.RttiOrd;
-      if ot in [roSLong, roULong] then
+  case P.PropInfoClass of
+    picInt32:
       begin
-        // handle very common 32-bit integer field
-        for i := 0 to fCount - 1 do
-          if (PCardinal(vp^ + offs)^ = cardinal(v)) and
-             FoundOneAndReachedLimit then
-            break
+        // search 8/16/32-bit properties
+        if not GetInt64Bool(pointer(WhereValue), v) then // 64-bit for cardinal
+          exit;
+        vp := pointer(fValue);
+        nfo := TOrmPropInfoRtti(P).PropInfo;
+        offs := TOrmPropInfoRtti(P).GetterIsFieldPropOffset;
+        if offs <> 0 then
+        begin
+          // plain field with no getter
+          ot := TOrmPropInfoRtti(P).PropRtti.Cache.RttiOrd;
+          if ot in [roSLong, roULong] then
+          begin
+            // handle very common 32-bit integer field
+            for i := 0 to fCount - 1 do
+              if (PCardinal(vp^ + offs)^ = cardinal(v)) and
+                 FoundOneAndReachedLimit then
+                break
+              else
+                inc(vp);
+          end
           else
-            inc(vp);
-      end
-      else
-        // inlined GetOrdProp() for 8-bit or 16-bit values
-        for i := 0 to fCount - 1 do
-          if (FromRttiOrd(ot, pointer(vp^ + offs)) = v) and
-             FoundOneAndReachedLimit then
-            break
-          else
-            inc(vp);
-    end
-    else
-      // has getter -> use GetOrdProp()
-      for i := 0 to fCount - 1 do
-        if (nfo^.GetOrdProp(pointer(vp^)) = v) and
-           FoundOneAndReachedLimit then
-          break
+            // inlined GetOrdProp() for 8-bit or 16-bit values
+            for i := 0 to fCount - 1 do
+              if (FromRttiOrd(ot, pointer(vp^ + offs)) = v) and
+                 FoundOneAndReachedLimit then
+                break
+              else
+                inc(vp);
+        end
         else
-          inc(vp);
-  end
-  else if P.InheritsFrom(TOrmPropInfoRttiInt64) then
-  begin
-    // search 64-bit integer property
-    v := GetInt64(pointer(WhereValue), err);
-    if err <> 0 then
-      exit;
-    nfo := TOrmPropInfoRtti(P).PropInfo;
-    offs := TOrmPropInfoRtti(P).GetterIsFieldPropOffset;
-    if offs <> 0 then
+          // has getter -> use GetOrdProp()
+          for i := 0 to fCount - 1 do
+            if (nfo^.GetOrdProp(pointer(vp^)) = v) and
+               FoundOneAndReachedLimit then
+              break
+            else
+              inc(vp);
+      end;
+    picInt64:
+      begin
+        // search 64-bit integer property
+        v := GetInt64(pointer(WhereValue), err);
+        if err <> 0 then
+          exit;
+        nfo := TOrmPropInfoRtti(P).PropInfo;
+        offs := TOrmPropInfoRtti(P).GetterIsFieldPropOffset;
+        if offs <> 0 then
+        begin
+          // plain field with no getter
+          vp := pointer(fValue);
+          for i := 0 to fCount - 1 do
+            if (PInt64(vp^ + offs)^ = v) and
+               FoundOneAndReachedLimit then
+              break
+            else
+              inc(vp);
+        end
+        else
+          // search using the getter method
+          for i := 0 to fCount - 1 do
+            if (nfo^.GetInt64Prop(fValue[i]) = v) and
+               FoundOneAndReachedLimit then
+              break;
+      end;
+  else
     begin
-      // plain field with no getter
-      vp := pointer(fValue);
+      // generic search using fast CompareValue() overridden method
+      P.SetValueVar(fSearchRec, WhereValue, false); // private copy for comparison
       for i := 0 to fCount - 1 do
-        if (PInt64(vp^ + offs)^ = v) and
-           FoundOneAndReachedLimit then
-          break
-        else
-          inc(vp);
-    end
-    else
-      // search using the getter method
-      for i := 0 to fCount - 1 do
-        if (nfo^.GetInt64Prop(fValue[i]) = v) and
+        if (P.CompareValue(fValue[i], fSearchRec, CaseInsensitive) = 0) and
            FoundOneAndReachedLimit then
           break;
-  end
-  else
-  begin
-    // generic search using fast CompareValue() overridden method
-    P.SetValueVar(fSearchRec, WhereValue, false); // private copy for comparison
-    for i := 0 to fCount - 1 do
-      if (P.CompareValue(fValue[i], fSearchRec, CaseInsensitive) = 0) and
-         FoundOneAndReachedLimit then
-        break;
+    end;
   end;
   result := found;
 end;
@@ -2762,25 +2761,27 @@ begin
   // search WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
   dec(WhereField);
   P := fStoredClassRecordProps.Fields.List[WhereField];
-  if P.InheritsFrom(TOrmPropInfoRttiInt32) then
-  begin
-    for i := 0 to fCount - 1 do
-    begin
-      v := TOrmPropInfoRttiInt32(P).GetValueInt32(fValue[i]);
-      if v > max then
-        max := v;
-    end;
-    result := true;
-  end
-  else if P.InheritsFrom(TOrmPropInfoRttiInt64) then
-  begin
-    for i := 0 to fCount - 1 do
-    begin
-      v := TOrmPropInfoRttiInt64(P).GetValueInt64(fValue[i]);
-      if v > max then
-        max := v;
-    end;
-    result := true;
+  case P.PropInfoClass of
+    picInt32:
+      begin
+        for i := 0 to fCount - 1 do
+        begin
+          v := TOrmPropInfoRttiInt32(P).GetValueInt32(fValue[i]);
+          if v > max then
+            max := v;
+        end;
+        result := true;
+      end;
+    picInt64:
+      begin
+        for i := 0 to fCount - 1 do
+        begin
+          v := TOrmPropInfoRttiInt64(P).GetValueInt64(fValue[i]);
+          if v > max then
+            max := v;
+        end;
+        result := true;
+      end;
   end;
 end;
 
@@ -2805,8 +2806,7 @@ end;
 function TRestStorageInMemory.GetJsonValues(Stream: TStream; Expand: boolean;
   Stmt: TSelectStatement): PtrInt;
 var
-  ndx, KnownRowsCount: PtrInt;
-  j: PtrInt;
+  ndx, KnownRowsCount, j: PtrInt;
   id: Int64;
   W: TOrmWriter;
   IsNull: boolean;

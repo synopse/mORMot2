@@ -918,6 +918,14 @@ type
   /// set of ORM attributes for a TOrmPropInfo definition
   TOrmPropInfoAttributes = set of TOrmPropInfoAttribute;
 
+  /// allow a quick detection of some particular TOrmPropInfo classes
+  // - picInt32 match TOrmPropInfoRttiInt32
+  // - picInt64 match TOrmPropInfoRttiInt64
+  TOrmPropInfoClassType = (
+    picOther,
+    picInt32,
+    picInt64);
+
   /// abstract parent class to store information about a published property
   // - property information could be retrieved from RTTI (TOrmPropInfoRtti*),
   // or be defined by code (TOrmPropInfoCustom derivated classes) when RTTI
@@ -930,6 +938,7 @@ type
     fOrmFieldTypeStored: TOrmFieldType;
     fSqlDBFieldType: TSqlDBFieldType;
     fAttributes: TOrmPropInfoAttributes;
+    fPropInfoClass: TOrmPropInfoClassType;
     fFieldWidth: integer;
     fPropertyIndex: integer;
     function GetNameDisplay: string; virtual;
@@ -990,6 +999,9 @@ type
       read fSqlDBFieldType;
     /// the corresponding column type name, as managed for abstract database access
     function SqlDBFieldTypeName: PShortString;
+    /// allow quick detection of some TOrmPropInfo classes
+    property PropInfoClass: TOrmPropInfoClassType
+      read fPropInfoClass;
     /// the ORM attributes of this property
     // - contains aIsUnique e.g for TOrm published properties marked as
     // ! property MyProperty: RawUtf8 stored AS_UNIQUE;
@@ -4476,6 +4488,7 @@ begin
     fIntegerGetPropOffset := fGetterIsFieldPropOffset <> 0;
   if fPropType^.RttiOrd in [roSLong, roULong] then
     fIntegerSetPropOffset := fSetterIsFieldPropOffset <> 0;
+  fPropInfoClass := picInt32;
 end;
 
 function TOrmPropInfoRttiInt32.GetValueInt32(Instance: TObject): integer;
@@ -4773,6 +4786,7 @@ constructor TOrmPropInfoRttiInt64.Create(aPropInfo: PRttiProp;
 begin
   inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
   fIsQWord := fPropType^.IsQword;
+  fPropInfoClass := picInt64;
 end;
 
 procedure TOrmPropInfoRttiInt64.SetValueInt64(Instance: TObject; V64: Int64);

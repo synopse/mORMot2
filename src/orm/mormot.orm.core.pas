@@ -5257,6 +5257,7 @@ function TOrmTable.InitOneFieldType(field: PtrInt; out size: integer;
 var
   prop: TOrmPropInfo;
 begin
+  // caller did already reset size/info fields as expected
   if Assigned(fQueryColumnTypes) then
     result := fQueryColumnTypes[field]
   else if Assigned(fQueryTables) then
