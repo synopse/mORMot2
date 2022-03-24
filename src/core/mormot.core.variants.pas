@@ -2763,6 +2763,7 @@ var
   d: TVarData absolute Dest;
   dt: cardinal absolute Dest;
   vt: cardinal;
+  cv: TSynInvokeableVariantType;
 begin
   s := @Source;
   VarClear(Dest);
@@ -2804,8 +2805,8 @@ begin
         VariantToUtf8(PVariant(s)^, RawUtf8(d.VAny)); // store a RawUtf8 instance
       end;
   else // note: varVariant should not happen here
-    if vt = DocVariantVType then
-      DocVariantType.CopyByValue(d, s^)
+    if DocVariantType.FindSynVariantType(vt, cv) then
+      cv.CopyByValue(d, s^) // needed e.g. for TBsonVariant
     else
       SetVariantUnRefSimpleValue(PVariant(s)^, d);
   end;
