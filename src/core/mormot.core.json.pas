@@ -921,8 +921,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetInt(const aName: RawUtf8): Int64;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetBool(const aName: RawUtf8): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
   public
     /// the internal Name/Value storage
     List: TSynNameValueItemDynArray;
@@ -978,8 +976,9 @@ type
     /// search for a Name, return the associated Value as integer
     function ValueInt(const aName: RawUtf8; const aDefaultValue: Int64 = 0): Int64;
     /// search for a Name, return the associated Value as boolean
-    // - returns true only if the value is exactly '1'
+    // - returns true only if the value is exactly '1' / 'true'
     function ValueBool(const aName: RawUtf8): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// search for a Name, return the associated Value as an enumerate
     // - returns true and set aEnum if aName was found, and associated value
     // matched an aEnumTypeInfo item
@@ -1039,9 +1038,9 @@ type
     property Int[const aName: RawUtf8]: Int64
       read GetInt;
     /// search for a Name, return the associated Value as boolean
-    // - returns true if aName stores '1' as associated value
+    // - returns true if aName stores '1' / 'true' as associated value
     property Bool[const aName: RawUtf8]: boolean
-      read GetBool;
+      read ValueBool;
   end;
 
 
@@ -8454,7 +8453,7 @@ end;
 
 function TSynNameValue.ValueBool(const aName: RawUtf8): boolean;
 begin
-  result := Value(aName) = '1';
+  result := GetBoolean(pointer(Value(aName)));
 end;
 
 function TSynNameValue.ValueEnum(const aName: RawUtf8; aEnumTypeInfo: PRttiInfo;
@@ -8515,11 +8514,6 @@ end;
 function TSynNameValue.GetInt(const aName: RawUtf8): Int64;
 begin
   result := ValueInt(aName, 0);
-end;
-
-function TSynNameValue.GetBool(const aName: RawUtf8): boolean;
-begin
-  result := Value(aName) = '1';
 end;
 
 function TSynNameValue.AsCsv(const KeySeparator, ValueSeparator, IgnoreKey: RawUtf8): RawUtf8;
