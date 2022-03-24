@@ -46,7 +46,7 @@
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Release="1"/>
-    <Files Count="98">
+    <Files Count="100">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -440,6 +440,14 @@
         <Filename Value="../../src/ui/mormot.ui.rad.sql.pas"/>
         <UnitName Value="mormot.ui.rad.sql"/>
       </Item98>
+      <Item99>
+        <Filename Value="../../src/net/mormot.net.tftp.client.pas"/>
+        <UnitName Value="mormot.net.tftp.client"/>
+      </Item99>
+      <Item100>
+        <Filename Value="../../src/net/mormot.net.tftp.server.pas"/>
+        <UnitName Value="mormot.net.tftp.server"/>
+      </Item100>
     </Files>
     <CompatibilityMode Value="True"/>
     <UsageOptions>

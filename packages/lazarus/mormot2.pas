@@ -36,7 +36,7 @@ uses
   mormot.rest.server, mormot.rest.sqlite3, mormot.script.core, 
   mormot.script.quickjs, mormot.soa.client, mormot.soa.codegen, 
   mormot.soa.core, mormot.soa.server, mormot.ui.rad, mormot.ui.rad.json, 
-  mormot.ui.rad.sql;
+  mormot.ui.rad.sql, mormot.net.tftp.client, mormot.net.tftp.server;
 
 implementation
 
