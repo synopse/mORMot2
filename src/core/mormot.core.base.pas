@@ -1088,6 +1088,10 @@ function GetInt64(P: PUtf8Char): Int64; overload;
 // - if P if nil or not start with a valid numerical value, returns Default
 function GetInt64Def(P: PUtf8Char; const Default: Int64): Int64;
 
+/// get the 64-bit integer value from P^, recognizing true/false/yes/no input
+// - return true on correct parsing, false if P is no number or boolean
+function GetInt64Bool(P: PUtf8Char; out V: Int64): boolean;
+
 /// get the 64-bit signed integer value stored in P^
 procedure SetInt64(P: PUtf8Char; var result: Int64);
   {$ifdef CPU64}inline;{$endif}
@@ -4591,6 +4595,27 @@ begin
             (PInteger(P)^ <> FALSE_LOW) and
             ((PInteger(P)^ = TRUE_LOW) or
              ((PInteger(P)^ and $ffff) <> ord('0')));
+end;
+
+function GetInt64Bool(P: PUtf8Char; out V: Int64): boolean;
+var
+  err, c: integer;
+begin
+  result := P <> nil;
+  if not result then
+    exit;
+  V := GetInt64(P, err);
+  if err = 0 then
+    exit;
+  c := PInteger(P)^ and $dfdfdfdf;
+  if (c = ord('F') + ord('A') shl 8 + ord('L') shl 16 + ord('S') shl 24) or
+     (c and $ffffff = ord('N') + ord('O') shl 8) then
+    V := 0
+  else if (c = ord('T') + ord('R') shl 8 + ord('U') shl 16 + ord('E') shl 24) or
+          (c = ord('Y') + ord('E') shl 8 + ord('S') shl 16) then
+    V := 1
+  else
+    result := false;
 end;
 
 function GetCardinalDef(P: PUtf8Char; Default: PtrUInt): PtrUInt;
