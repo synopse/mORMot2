@@ -2768,7 +2768,7 @@ begin
   s := @Source;
   VarClear(Dest);
   vt := s^.VType;
-  if vt = varVariantByRef then
+  while vt = varVariantByRef do
   begin
     s := s^.VPointer;
     vt := s^.VType;
