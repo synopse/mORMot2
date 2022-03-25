@@ -4504,6 +4504,15 @@ begin
   Check(MakeCsv([1, 2, 3]) = '1,2,3');
   Check(MakeCsv([1, '2', 3], true) = '1,2,3,');
   Check(MakeCsv([1, '2 ,', 3]) = '1,2 ,3');
+  U := '';
+  AppendLine(U, []);
+  CheckEqual(U, '');
+  AppendLine(U, ['a', 1]);
+  CheckEqual(U, 'a1');
+  AppendLine(U, [2, 3, 4, 5]);
+  CheckEqual(U, 'a1'#13#10'2345');
+  AppendLine(U, ['bcdef']);
+  CheckEqual(U, 'a1'#13#10'2345'#13#10'bcdef');
   U := QuotedStr('', '"');
   CheckEqual(U, '""');
   U := QuotedStr('abc', '"');

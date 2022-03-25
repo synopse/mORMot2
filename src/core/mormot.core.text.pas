@@ -1840,7 +1840,7 @@ type
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
-function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8): integer;
+function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8): PtrInt;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text, returning FALSE if the argument was not a string value
@@ -1926,6 +1926,11 @@ procedure FormatShort16(const Format: RawUtf8; const Args: array of const;
 
 /// fast Format() function replacement, for UTF-8 content stored in variant
 function FormatVariant(const Format: RawUtf8; const Args: array of const): variant;
+
+/// append some text to a RawUtf8, ensuring previous text is separated with CRLF
+// - could be used e.g. to update HTTP headers
+procedure AppendLine(var Text: RawUtf8; const Args: array of const;
+  const Separator: shortstring = #13#10);
 
 /// append some path parts into a single file name with proper path delimiters
 // - set EndWithDelim=true if you want to create e.g. full a folder name
@@ -9124,7 +9129,7 @@ begin
   result := true;
 end;
 
-function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8): integer;
+function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8): PtrInt;
 var
   i: PtrInt;
   v64: Int64;
@@ -9435,6 +9440,8 @@ type
     procedure Parse(const Format: RawUtf8; const Args: array of const);
     procedure DoDelim(const Part: array of const; EndWithDelim: boolean;
       Delim: AnsiChar);
+    procedure DoAppendLine(var Text: RawUtf8; Arg: PVarRec; ArgCount: integer;
+      const Separator: shortstring);
     procedure Write(Dest: PUtf8Char);
     procedure WriteUtf8(var result: RawUtf8);
     procedure WriteString(var result: string);
@@ -9527,6 +9534,36 @@ begin
     inc(c);
   end;
   last := c;
+end;
+
+procedure TFormatUtf8.DoAppendLine(var Text: RawUtf8;
+  Arg: PVarRec; ArgCount: integer; const Separator: shortstring);
+var
+  c: PTempUtf8;
+begin
+  if ArgCount <= 0 then
+    exit;
+  argN := length(Text);
+  L := argN;
+  c := @blocks;
+  if (Text <> '') and
+     (Separator[0] <> #0) then
+  begin
+    c^.Len := ord(Separator[0]);
+    inc(L, c^.Len);
+    c^.Text := @Separator[1];
+    c^.TempRawUtf8 := nil;
+    inc(c);
+  end;
+  repeat
+    inc(L, VarRecToTempUtf8(Arg^, c^));
+    inc(Arg);
+    inc(c);
+    dec(ArgCount)
+  until ArgCount = 0;
+  last := c;
+  SetLength(Text, L);
+  Write(PUtf8Char(@PByteArray(Text)[argN]));
 end;
 
 procedure TFormatUtf8.Write(Dest: PUtf8Char);
@@ -9707,6 +9744,14 @@ end;
 function FormatString(const Format: RawUtf8; const Args: array of const): string;
 begin
   FormatString(Format, Args, result);
+end;
+
+procedure AppendLine(var Text: RawUtf8; const Args: array of const;
+  const Separator: shortstring);
+var
+  f: TFormatUtf8;
+begin
+  {%H-}f.DoAppendLine(Text, @Args[0], length(Args), Separator);
 end;
 
 function MakePath(const Part: array of const; EndWithDelim: boolean;
