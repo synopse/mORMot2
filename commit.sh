@@ -6,6 +6,7 @@ V2=${VERS::-2}
 #echo V2=$V2
 V2=$((V2+1))
 echo -e "'2.0.$V2'\r">src/mormot.commit.inc
+cp src/mormot.commit.inc ~/dev/lib2/src/mormot.commit.inc
 
 git add --all
 git commit
