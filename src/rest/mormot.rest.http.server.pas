@@ -217,7 +217,9 @@ type
     fOptions: TRestHttpServerOptions;
     fOnCustomRequest: TOnRestHttpServerRequest;
     procedure SetAccessControlAllowOrigin(const Value: RawUtf8);
-    procedure ComputeAccessControlHeader(Ctxt: THttpServerRequestAbstract);
+    procedure ComputeAccessControlHeader(Ctxt: THttpServerRequestAbstract;
+      ReplicateAllowHeaders: boolean);
+    function ComputeHostUrl(Ctxt: THttpServerRequestAbstract): RawUtf8;
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
     procedure HttpThreadStart(Sender: TThread); virtual;
     procedure HttpThreadTerminate(Sender: TThread); virtual;
@@ -959,14 +961,41 @@ begin
 end;
 {$endif USEHTTPSYS}
 
+procedure AdjustHostUrl(
+  var Call: TRestUriParams; Server: TRestServer; const HostRoot: RawUtf8);
+var
+  loc: RawUtf8;
+  hostlen: PtrInt;
+begin
+  // caller ensured HostRoot <> ''
+  if (Call.OutStatus = HTTP_MOVEDPERMANENTLY) or
+     (Call.OutStatus = HTTP_TEMPORARYREDIRECT) then
+  begin
+    loc := FindIniNameValue(pointer(Call.OutHead), 'LOCATION: ');
+    if (loc <> '') and
+       (loc[1] = '/') then
+      delete(loc, 1, 1); // what is needed for real URI doesn't help here
+    hostlen := length(HostRoot);
+    if (length(loc) > hostlen) and
+       (loc[hostlen + 1] = '/') and
+       IdemPropNameU(HostRoot, pointer(loc), hostlen) then
+      // hostroot/method -> method on same domain
+      Call.OutHead := 'Location: ' + copy(loc, hostlen + 1, maxInt);
+  end
+  else if (Server <> nil) and
+          ExistsIniName(pointer(Call.OutHead), 'SET-COOKIE:') then
+    // cookie Path=/hostroot... -> /...
+    Call.OutHead := StringReplaceAll(Call.OutHead,
+      '; Path=/' + Server.Model.Root, '; Path=/')
+end;
+
 function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   call: TRestUriParams;
   tls: boolean;
-  i, hostlen: PtrInt;
-  P: PUtf8Char;
-  headers, hostroot, loc: RawUtf8;
   match: TRestModelMatch;
+  i: PtrInt;
+  P: PUtf8Char;
   serv: TRestServer;
 begin
   tls := hsrHttps in Ctxt.ConnectionFlags;
@@ -991,11 +1020,7 @@ begin
     if fAccessControlAllowOrigin = '' then
       Ctxt.OutCustomHeaders := 'Access-Control-Allow-Origin:'
     else
-    begin
-      FindNameValue(Ctxt.InHeaders, 'ACCESS-CONTROL-REQUEST-HEADERS:', headers);
-      Ctxt.OutCustomHeaders := 'Access-Control-Allow-Headers: ' + headers;
-      ComputeAccessControlHeader(Ctxt);
-    end;
+      ComputeAccessControlHeader(Ctxt, {ReplicateAllowHeaders=}true);
     result := HTTP_NOCONTENT;
   end
   else if (Ctxt.Method = '') or
@@ -1005,7 +1030,7 @@ begin
     result := HTTP_BADREQUEST
   else
   begin
-    // compute URI, handling any virtual host domain
+    // compute URI
     call.Init;
     call.LowLevelConnectionID := Ctxt.ConnectionID;
     call.LowLevelConnectionFlags := TRestUriParamsLowLevelFlags(Ctxt.ConnectionFlags);
@@ -1013,29 +1038,16 @@ begin
     call.LowLevelBearerToken := Ctxt.AuthBearer;
     call.LowLevelUserAgent := Ctxt.UserAgent;
     if fHosts.Count > 0 then
-    begin
-      hostroot := Ctxt.Host;
-      i := PosExChar(':', hostroot);
-      if i > 0 then
-        SetLength(hostroot, i - 1); // trim any port
-      if hostroot <> '' then
-        // e.g. 'Host: project1.com' -> 'root1'
-        hostroot := fHosts.Value(hostroot);
-      if hostroot <> '' then
-        if (Ctxt.Url = '') or
-           (PWord(Ctxt.Url)^ = ord('/')) then
-          call.Url := hostroot
-        else if Ctxt.Url[1] = '/' then
-          call.Url := hostroot + Ctxt.Url
-        else
-          call.Url := hostroot + '/' + Ctxt.Url;
-    end;
+      call.Url := ComputeHostUrl(Ctxt) // handle any virtual host domain
+    else
+      Ctxt.Host := ''; // no AdjustHostUrl() below
     if call.Url = '' then
-      if (Ctxt.Url <> '') and
-         (Ctxt.Url[1] = '/') then
-        call.Url := copy(Ctxt.Url, 2, maxInt)
-      else
-        call.Url := Ctxt.Url;
+    begin
+      call.Url := Ctxt.Url;
+      if (call.Url <> '') and
+         (call.Url[1] = '/') then
+        delete(call.Url, 1, 1); // normalize URI
+    end;
     call.Method := Ctxt.Method;
     call.InHead := Ctxt.InHeaders;
     call.InBody := Ctxt.InContent;
@@ -1111,37 +1123,21 @@ begin
       // default content type is JSON
       Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
     // handle HTTP redirection and cookies over virtual hosts
-    if hostroot <> '' then
-    begin
-      if (result = HTTP_MOVEDPERMANENTLY) or
-         (result = HTTP_TEMPORARYREDIRECT) then
-      begin
-        loc := FindIniNameValue(P, 'LOCATION: ');
-        if (loc <> '') and
-           (loc[1] = '/') then
-          delete(loc, 1, 1); // what is needed for real URI doesn't help here
-        hostlen := length(hostroot);
-        if (length(loc) > hostlen) and
-           (loc[hostlen + 1] = '/') and
-           IdemPropNameU(hostroot, pointer(loc), hostlen) then
-          // hostroot/method -> method on same domain
-          call.OutHead := 'Location: ' + copy(loc, hostlen + 1, maxInt);
-      end
-      else if (serv <> nil) and
-              ExistsIniName(pointer(call.OutHead), 'SET-COOKIE:') then
-        // cookie Path=/hostroot... -> /...
-        call.OutHead := StringReplaceAll(call.OutHead,
-          '; Path=/' + serv.Model.Root, '; Path=/')
-    end;
+    if Ctxt.Host <> '' then
+      AdjustHostUrl(call, serv, Ctxt.Host);
     TrimSelf(call.OutHead);
-    Ctxt.OutCustomHeaders := call.OutHead;
     if call.OutInternalState <> 0 then
-      Ctxt.OutCustomHeaders := FormatUtf8('%'#13#10'Server-InternalState: %',
-        [Ctxt.OutCustomHeaders, call.OutInternalState]);
+      if call.OutHead = '' then
+        Ctxt.OutCustomHeaders := FormatUtf8(
+          'Server-InternalState: %', [call.OutInternalState])
+      else
+        Ctxt.OutCustomHeaders := FormatUtf8('%'#13#10'Server-InternalState: %',
+          [call.OutHead, call.OutInternalState])
+    else
+      Ctxt.OutCustomHeaders := call.OutHead;
     // handle optional CORS origin
     if fAccessControlAllowOrigin <> '' then
-      ComputeAccessControlHeader(Ctxt);
-    Ctxt.OutCustomHeaders := TrimU(Ctxt.OutCustomHeaders);
+      ComputeAccessControlHeader(Ctxt, {ReplicateAllowHeaders=}false);
   end;
 end;
 
@@ -1194,10 +1190,15 @@ begin
 end;
 
 procedure TRestHttpServer.ComputeAccessControlHeader(
-  Ctxt: THttpServerRequestAbstract);
+  Ctxt: THttpServerRequestAbstract; ReplicateAllowHeaders: boolean);
 var
-  origin: RawUtf8;
+  headers, origin: RawUtf8;
 begin
+  if ReplicateAllowHeaders then
+  begin
+    FindNameValue(Ctxt.InHeaders, 'ACCESS-CONTROL-REQUEST-HEADERS:', headers);
+    Ctxt.OutCustomHeaders := 'Access-Control-Allow-Headers: ' + headers;
+  end;
   // note: caller did ensure that fAccessControlAllowOrigin<>''
   FindNameValue(Ctxt.InHeaders, 'ORIGIN: ', origin);
   if origin = '' then
@@ -1215,6 +1216,29 @@ begin
   if fAccessControlAllowCredential then
     Ctxt.OutCustomHeaders := Ctxt.OutCustomHeaders + #13#10 +
       'Access-Control-Allow-Credentials: true';
+  Ctxt.OutCustomHeaders := TrimU(Ctxt.OutCustomHeaders);
+end;
+
+function TRestHttpServer.ComputeHostUrl(Ctxt: THttpServerRequestAbstract): RawUtf8;
+var
+  i: PtrInt;
+begin
+  // caller ensured fHosts.Count > 0
+  result := Ctxt.Host;
+  i := PosExChar(':', result);
+  if i > 0 then
+    SetLength(result, i - 1); // trim any port
+  if result <> '' then
+    // e.g. 'Host: project1.com' -> 'root1'
+    result := fHosts.Value(result);
+  if result <> '' then
+    // e.g. 'Host: project1.com' -> 'root1/url'
+    if (Ctxt.Url <> '') and
+       (PWord(Ctxt.Url)^ <> ord('/')) then
+      if Ctxt.Url[1] = '/' then
+        result := result + Ctxt.Url
+      else
+        result := result + '/' + Ctxt.Url;
 end;
 
 function TRestHttpServer.WebSocketsEnable(
