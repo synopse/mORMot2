@@ -159,7 +159,12 @@ type
     coSourceQuote          = 10133,
     coFTPAccount           = 10134,
     coCookieList           = 10135,
+    coUserName             = 10173,
+    coPassword             = 10174,    
+    coMailFrom             = 10186,
+    coMailRcpt             = 10187,
     coUnixSocketPath       = 10231,
+    coMimePost             = 10269,
     coWriteFunction        = 20011,
     coReadFunction         = 20012,
     coProgressFunction     = 20056,
@@ -320,6 +325,15 @@ type
     ciAppConnectTimeT       = 6291512  // (3) SSL handshake
   );
 
+  /// low-level parameter for CURL_OPT_USE_SSL
+  TCurlUseSSL = (
+    cusNone,
+    cusTry,
+    cusControl,
+    cusAll,
+    cusLast
+  );
+
   {$ifdef LIBCURLMULTI}
 
   /// low-level result codes for libcurl library API calls in "multi" mode
@@ -444,6 +458,10 @@ type
 
   /// low-level access to the libcurl share interface
   TCurlShare = type pointer;
+
+  /// low-level access to the libcurl mime interface
+  TCurlMime = type pointer;
+  TCurlMimePart = type pointer;
 
   /// low-level access to the libcurl library instance in "multi" mode
   TCurlMulti = type pointer;
@@ -634,6 +652,19 @@ type
     /// return the text description of an error code
     share_strerror: function(code: CURLSHcode): PAnsiChar; cdecl;
 
+    /// create a mime context and return its handle
+    mime_init: function(curl: TCurl): TCurlMime; cdecl;
+    /// release a mime handle and its substructures
+    mime_free: procedure(mime: TCurlMime); cdecl;
+    /// append a new empty part to the given mime context and return a handle to the created part
+    mime_addpart: function(mime: TCurlMime): TCurlMimePart; cdecl;
+    /// set mime/form part data
+    mime_data: function(part: TCurlMimePart; data: PAnsiChar; size: Integer): TCurlResult; cdecl;
+    /// sets a mime part name
+    mime_name: function(part: TCurlMimePart; name: PAnsiChar): TCurlResult; cdecl;
+    /// sets a mime part content type
+    mime_type: function(part: TCurlMimePart; mimetype: PAnsiChar):TCurlResult; cdecl;
+
     {$ifdef LIBCURLMULTI}
     /// add an easy handle to a multi session
     multi_add_handle: function(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl;
@@ -781,6 +812,19 @@ implementation
   /// return string describing error code
   function curl_share_strerror(code: CURLSHcode): PAnsiChar;  cdecl; external;
 
+  /// initializes a new mime structure
+  function curl_mime_init: function(curl: TCurl): TCurlMime; cdecl; external;
+  /// used to clean up data previously built/appended with curl_mime_addpart and other mime-handling functions
+  function curl_mime_free: procedure(mime: TCurlMime); cdecl; external;
+  /// creates and appends a new empty part to the given mime structure
+  function curl_mime_addpart: function(mime: TCurlMime): TCurlMimePart; cdecl; external;
+  /// sets a mime part's body content from memory data
+  function curl_mime_data: function(part: TCurlMimePart; data: PAnsiChar; size: Integer): TCurlResult; cdecl; external;
+  /// sets a mime part's name
+  function curl_mime_name: function(part: TCurlMimePart; name: PAnsiChar): TCurlResult; cdecl; external;
+  /// sets a mime part's content type
+  function curl_mime_type: function(part: TCurlMimePart; mimetype: PAnsiChar):TCurlResult; cdecl; external;
+
   {$ifdef LIBCURLMULTI}
   /// add an easy handle to a multi session
   function curl_multi_add_handle(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl; external;
@@ -887,13 +931,15 @@ var
   api: PtrInt;
 
 const
-  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 33 {$else} 19 {$endif}] of PAnsiChar = (
+  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 39 {$else} 25 {$endif}] of PAnsiChar = (
     'curl_global_init', 'curl_global_init_mem', 'curl_global_cleanup', 'curl_version_info',
     'curl_easy_init', 'curl_easy_setopt', 'curl_easy_perform', 'curl_easy_cleanup',
     'curl_easy_getinfo', 'curl_easy_duphandle', 'curl_easy_reset',
     'curl_easy_strerror', 'curl_slist_append', 'curl_slist_free_all',
     'curl_formadd', 'curl_formfree', 'curl_share_init',
-    'curl_share_cleanup','curl_share_setopt', 'curl_share_strerror'
+    'curl_share_cleanup','curl_share_setopt', 'curl_share_strerror',
+    'curl_mime_init', 'curl_mime_free', 'curl_mime_addpart', 'curl_mime_data',
+    'curl_mime_name', 'curl_mime_type'
     {$ifdef LIBCURLMULTI},
     'curl_multi_add_handle', 'curl_multi_assign', 'curl_multi_cleanup',
     'curl_multi_fdset', 'curl_multi_info_read', 'curl_multi_init',
@@ -938,6 +984,12 @@ begin
     curl.share_cleanup := @curl_share_cleanup;
     curl.share_setopt := @curl_share_setopt;
     curl.share_strerror := @curl_share_strerror;
+    curl.mime_init := @curl_mime_init;
+    curl.mime_free := @curl_mime_free;
+    curl.mime_addpart := @curl_mime_addpart;
+    curl.mime_data := @curl_mime_data;
+    curl.mime_name := @curl_mime_name;
+    curl.mime_type := @curl_mime_type;
     {$ifdef LIBCURLMULTI}
     curl.multi_add_handle := @curl_multi_add_handle;
     curl.multi_assign := @curl_multi_assign;
