@@ -2992,8 +2992,8 @@ begin
        not (hfConnectionClose in fHttp.HeaderFlags) and
        (fServer.Async.fLastOperationSec > fKeepAliveSec) then
     begin
-      fOwner.DoLog(sllTrace,
-        'DoRequest KeepAlive timeout: close connnection', [], self);
+      fOwner.DoLog(sllTrace, 'DoRequest KeepAlive=% timeout: close connnection',
+        [fKeepAliveSec], self);
       include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
     end;
     req.SetupResponse(fHttp, fServer.fCompressGz,

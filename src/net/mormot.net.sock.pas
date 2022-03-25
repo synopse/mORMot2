@@ -965,7 +965,7 @@ type
     // - raise ENetSock exception on socket error
     procedure SockSend(const Values: array of const); overload;
     /// simulate writeln() with a single line - includes trailing #13#10
-    procedure SockSend(const Line: RawByteString); overload;
+    procedure SockSend(const Line: RawByteString; NoCrLf: boolean = false); overload;
     /// append P^ data into SndBuf (used by SockSend(), e.g.) - no trailing #13#10
     // - call SockSendFlush to send it through the network via SndLow()
     procedure SockSend(P: pointer; Len: integer); overload;
@@ -3140,8 +3140,8 @@ begin
   {$endif OSLINUX}
 end;
 
-procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8;
-  doBind, aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket);
+procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
+  aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket);
 
   procedure DoTlsHandshake;
   begin
@@ -3684,11 +3684,12 @@ begin
   SockSendCRLF;
 end;
 
-procedure TCrtSocket.SockSend(const Line: RawByteString);
+procedure TCrtSocket.SockSend(const Line: RawByteString; NoCrLf: boolean);
 begin
   if Line <> '' then
     SockSend(pointer(Line), Length(Line));
-  SockSendCRLF;
+  if not NoCrLf then
+    SockSendCRLF;
 end;
 
 function TCrtSocket.SockSendRemainingSize: integer;

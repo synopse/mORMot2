@@ -1948,11 +1948,11 @@ var
     if hsoIncludeDateHeader in fOptions then
     begin
       SetHttpDateNowUtcCache;
-      ClientSock.SockSend(HttpDateNowUtcCache);
+      ClientSock.SockSend(HttpDateNowUtcCache, {NoCrLf=}true);
     end;
     if not (hsoNoXPoweredHeader in Options) then
-      ClientSock.SockSend(XPOWEREDNAME + ': ' + XPOWEREDVALUE + #13#10);
-    ClientSock.SockSend('Server: ');
+      ClientSock.SockSend(XPOWEREDNAME + ': ' + XPOWEREDVALUE);
+    ClientSock.SockSend('Server: ', {NoCrLf=}true);
     ClientSock.SockSend(fServerName);
     ClientSock.CompressDataAndWriteHeaders(
       ctxt.OutContentType, ctxt.fOutContent, nil);
@@ -2171,8 +2171,7 @@ begin
          (fServer.MaximumAllowedContentLength > 0) and
          (Http.ContentLength > fServer.MaximumAllowedContentLength) then
       begin
-        SockSend('HTTP/1.0 413 Payload Too Large'#13#10#13#10'Rejected');
-        SockSendFlush('');
+        SockSendFlush('HTTP/1.0 413 Payload Too Large'#13#10#13#10'Rejected');
         result := grOversizedPayload;
         exit;
       end;
