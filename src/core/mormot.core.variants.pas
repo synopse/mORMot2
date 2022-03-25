@@ -2763,7 +2763,7 @@ var
   d: TVarData absolute Dest;
   dt: cardinal absolute Dest;
   vt: cardinal;
-  cv: TSynInvokeableVariantType;
+  ct: TSynInvokeableVariantType;
 begin
   s := @Source;
   VarClear(Dest);
@@ -2805,8 +2805,8 @@ begin
         VariantToUtf8(PVariant(s)^, RawUtf8(d.VAny)); // store a RawUtf8 instance
       end;
   else // note: varVariant should not happen here
-    if DocVariantType.FindSynVariantType(vt, cv) then
-      cv.CopyByValue(d, s^) // needed e.g. for TBsonVariant
+    if DocVariantType.FindSynVariantType(vt, ct) then
+      ct.CopyByValue(d, s^) // needed e.g. for TBsonVariant
     else
       SetVariantUnRefSimpleValue(PVariant(s)^, d);
   end;
@@ -3584,13 +3584,16 @@ end;
 
 function TSynInvokeableVariantType.FindSynVariantType(aVarType: cardinal;
   out CustomType: TSynInvokeableVariantType): boolean;
+var
+  ct: TSynInvokeableVariantType;
 begin
   if (self <> nil) and
      (aVarType = VarType) then
-    CustomType := self
+    ct := self
   else
-    CustomType := mormot.core.variants.FindSynVariantType(aVarType);
-  result := CustomType <> nil;
+    ct := mormot.core.variants.FindSynVariantType(aVarType);
+  CustomType := ct;
+  result := ct <> nil;
 end;
 
 procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData;

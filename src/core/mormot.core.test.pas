@@ -881,11 +881,13 @@ var
   s: string[3];
   last: TKind;
   rnd: cardinal;
+  lec: PLecuyer;
 begin
+  lec := Lecuyer;
   last := paragraph;
   while WordCount > 0 do
   begin
-    rnd := Random32; // get 32 bits of randomness for up to 4 words per loop
+    rnd := lec.Next; // get 32 bits of randomness for up to 4 words per loop
     for n := 0 to rnd and 3 do
     begin
       // consume up to 4*5 = 20 bits from rnd

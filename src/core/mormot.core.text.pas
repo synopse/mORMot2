@@ -3819,7 +3819,7 @@ begin
   begin
     S := P;
     {$ifdef CPUINTEL}
-    S := PosChar(S, Sep);
+    S := PosChar(S, Sep); // SSE2 asm on i386 and x86_64
     if S = nil then
       S := P + StrLen(P);
     {$else}

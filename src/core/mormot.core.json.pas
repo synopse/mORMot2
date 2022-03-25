@@ -5964,7 +5964,8 @@ var
 begin
   vt := v.VType;
   case vt of
-    varEmpty, varNull:
+    varEmpty,
+    varNull:
       AddNull;
     varSmallint:
       Add(v.VSmallint);
@@ -6523,8 +6524,14 @@ begin
     case VType of
       vtPointer:
         AddNull;
-      vtString, vtAnsiString, {$ifdef HASVARUSTRING}vtUnicodeString, {$endif}
-      vtPChar, vtChar, vtWideChar, vtWideString, vtClass:
+      vtString,
+      vtAnsiString,
+      {$ifdef HASVARUSTRING}vtUnicodeString, {$endif}
+      vtPChar,
+      vtChar,
+      vtWideChar,
+      vtWideString,
+      vtClass:
         begin
           Add('"');
           case VType of
