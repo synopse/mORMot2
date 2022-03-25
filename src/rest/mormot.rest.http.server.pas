@@ -657,10 +657,12 @@ constructor TRestHttpServer.Create(const aPort: RawUtf8;
   const aQueueName: SynUnicode; aOptions: TRestHttpServerOptions);
 var
   i, j: PtrInt;
+  hso: THttpServerOptions;
   ErrMsg: RawUtf8;
   log: ISynLog;
 begin
   inherited Create; // may have been overriden
+  // prepare the running parameters
   if high(aServers) < 0 then
     fLog := TSynLog
   else
@@ -688,6 +690,7 @@ begin
     fPublicAddress := Executable.Host;
   end;
   fUse := aUse;
+  // register the Server(s) URI(s)
   if high(aServers) >= 0 then
   begin
     for i := 0 to high(aServers) do
@@ -712,6 +715,16 @@ begin
     for i := 0 to high(aServers) do
       SetDBServer(i, aServers[i], aSecurity, HTTP_DEFAULT_ACCESS_RIGHTS);
   end;
+  // start the actual Server threads
+  hso := [];
+  if rsoHeadersUnFiltered in fOptions then
+    include(hso, hsoHeadersUnfiltered);
+  if rsoLogVerbose in fOptions then
+    include(hso, hsoLogVerbose);
+  if rsoIncludeDateHeader in fOptions then
+    include(hso, hsoIncludeDateHeader);
+  if rsoNoXPoweredHeader in fOptions then
+    include(hso, hsoNoXPoweredHeader);
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then
   try
@@ -720,8 +733,8 @@ begin
         'try useHttpSocket/useHttpAsync',
         [ToText(aUse)^, OSVersionInfoEx], self);
     // first try to use fastest http.sys
-    fHttpServer := THttpApiServer.Create(false, aQueueName, HttpThreadStart,
-      HttpThreadTerminate, TrimU(fDBServerNames));
+    fHttpServer := THttpApiServer.Create(aQueueName, HttpThreadStart,
+      HttpThreadTerminate, TrimU(fDBServerNames), hso);
     for i := 0 to high(aServers) do
       HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity,
         fUse in HTTP_API_REGISTERING_MODES, true);
@@ -737,7 +750,7 @@ begin
       if fUse in [useHttpApiOnly, useHttpApiRegisteringURIOnly] then
         // propagate fatal exception with no fallback to the sockets HTTP server
         raise;
-      aUse := useHttpSocket; // useHttpAsync seems less stable on Windows
+      aUse := useHttpSocket; // conservative: HttpAsync is less tested on Win
     end;
   end;
   {$endif USEHTTPSYS}
@@ -746,8 +759,7 @@ begin
     // http.sys not running -> create one instance of our pure socket servers
     if aUse in [low(HTTPSERVERSOCKETCLASS)..high(HTTPSERVERSOCKETCLASS)] then
       fHttpServer := HTTPSERVERSOCKETCLASS[aUse].Create(fPort, HttpThreadStart,
-        HttpThreadTerminate, TrimU(fDBServerNames), aThreadPoolCount, 30000,
-        rsoHeadersUnFiltered in fOptions, false, rsoLogVerbose in fOptions)
+        HttpThreadTerminate, TrimU(fDBServerNames), aThreadPoolCount, 30000, hso)
     else
       raise ERestHttpServer.CreateUtf8('%.Create(% ): unsupported %',
         [self, fDBServerNames, ToText(aUse)^]);

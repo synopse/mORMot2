@@ -532,7 +532,8 @@ type
     /// will set all header values from lines
     // - Content-Type/Content-Encoding/Location will be set in KnownHeaders[]
     // - all other headers will be set in temp UnknownHeaders[]
-    procedure SetHeaders(P: PUtf8Char; var UnknownHeaders: HTTP_UNKNOWN_HEADERS);
+    procedure SetHeaders(P: PUtf8Char; var UnknownHeaders: HTTP_UNKNOWN_HEADERS;
+      NoXPoweredHeader: boolean);
     /// add one header value to the internal headers
     // - SetHeaders() method should have been called before to initialize the
     // internal UnknownHeaders[] array
@@ -2114,28 +2115,25 @@ begin
   pEntityChunks := @DataChunk;
 end;
 
-{$ifndef NOXPOWEREDNAME}
 const
   XPN: PUtf8Char = XPOWEREDNAME;
   XPV: PUtf8Char = XPOWEREDVALUE;
-{$endif NOXPOWEREDNAME}
 
 procedure HTTP_RESPONSE.SetHeaders(P: PUtf8Char;
-  var UnknownHeaders: HTTP_UNKNOWN_HEADERS);
+  var UnknownHeaders: HTTP_UNKNOWN_HEADERS; NoXPoweredHeader: boolean);
 begin
   Headers.pUnknownHeaders := pointer(UnknownHeaders);
-  {$ifdef NOXPOWEREDNAME}
-  Headers.UnknownHeaderCount := 0;
-  {$else}
-  with UnknownHeaders[0] do
-  begin
-    pName := XPN;
-    NameLength := length(XPOWEREDNAME);
-    pRawValue := XPV;
-    RawValueLength := length(XPOWEREDVALUE);
-  end;
-  Headers.UnknownHeaderCount := 1;
-  {$endif NOXPOWEREDNAME}
+  if NoXPoweredHeader then
+    Headers.UnknownHeaderCount := 0
+  else
+    with UnknownHeaders[0] do
+    begin
+      pName := XPN;
+      NameLength := length(XPOWEREDNAME);
+      pRawValue := XPV;
+      RawValueLength := length(XPOWEREDVALUE);
+      Headers.UnknownHeaderCount := 1;
+    end;
   if P <> nil then
     repeat
       while ord(P^) in [10, 13] do

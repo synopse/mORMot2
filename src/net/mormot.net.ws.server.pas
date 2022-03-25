@@ -169,8 +169,7 @@ type
     constructor Create(const aPort: RawUtf8;
       const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
       ServerThreadPoolCount: integer = 2; KeepAliveTimeOut: integer = 30000;
-      HeadersUnFiltered: boolean = false; CreateSuspended: boolean = false;
-      aLogVerbose: boolean = false); override;
+      ProcessOptions: THttpServerOptions = []); override;
     /// close the server
     destructor Destroy; override;
     /// will send a given frame to all connected clients
@@ -358,7 +357,7 @@ end;
 constructor TWebSocketServer.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount, KeepAliveTimeOut: integer;
-  HeadersUnFiltered, CreateSuspended, aLogVerbose: boolean);
+  ProcessOptions: THttpServerOptions);
 begin
   // override with custom processing classes
   fSocketClass := TWebSocketServerSocket;
@@ -369,13 +368,13 @@ begin
   fProtocols := TWebSocketProtocolList.Create;
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
-  if aLogVerbose then
+  if hsoLogVerbose in ProcessOptions then
     fSettings.SetFullLog;
   if ServerThreadPoolCount > 4 then
     ServerThreadPoolCount := 4; // don't loose threads for nothing
   // start the server
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
-    KeepAliveTimeOut, HeadersUnFiltered, CreateSuspended);
+    KeepAliveTimeOut, ProcessOptions);
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(

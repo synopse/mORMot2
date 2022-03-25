@@ -31,6 +31,7 @@ uses
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.rtti,
+  mormot.core.datetime,
   mormot.net.sock,
   mormot.net.http,
   {$ifdef USEWININET}
@@ -87,11 +88,30 @@ type
     {$endif USEWININET}
   end;
 
+  /// available HTTP server options
+  // - some THttpServerGeneric classes may have only partial support of them
+  // - hsoHeadersUnfiltered will store all headers, not only relevant (i.e.
+  // include raw Content-Length, Content-Type and Content-Encoding entries)
+  // - hsoNoXPoweredHeader excludes 'X-Powered-By: mORMot 2 synopse.info' header
+  // - hsoCreateSuspended won't start the server thread immediately
+  // - hsoLogVerbose could be used to debug a server in production
+  // - hsoIncludeDateHeader will let all answers include a Date: ... HTTP header
+  THttpServerOption = (
+    hsoHeadersUnfiltered,
+    hsoNoXPoweredHeader,
+    hsoCreateSuspended,
+    hsoLogVerbose,
+    hsoIncludeDateHeader);
+
+  /// how a THttpServerGeneric class is expected to process incoming requests
+  THttpServerOptions = set of THttpServerOption;
+
   /// abstract parent class to implement a HTTP server
   // - do not use it, but rather THttpServer/THttpAsyncServer or THttpApiServer
   THttpServerGeneric = class(TNotifiedThread)
   protected
     fShutdownInProgress: boolean;
+    fOptions: THttpServerOptions;
     /// optional event handlers for process interception
     fOnRequest: TOnHttpServerRequest;
     fOnBeforeBody: TOnHttpServerBeforeBody;
@@ -130,10 +150,9 @@ type
     procedure ParseRemoteIPConnID(const Headers: RawUtf8;
       var RemoteIP: RawUtf8; var RemoteConnID: THttpServerConnectionID);
   public
-    /// initialize the server instance, in non suspended state
-    constructor Create(CreateSuspended: boolean; 
-      const OnStart, OnStop: TOnNotifyThread;
-      const ProcessName: RawUtf8); reintroduce; virtual;
+    /// initialize the server instance
+    constructor Create(const OnStart, OnStop: TOnNotifyThread;
+      const ProcessName: RawUtf8; ProcessOptions: THttpServerOptions); reintroduce; virtual;
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
     // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -277,6 +296,10 @@ type
     //  $ proxy_set_header      X-Conn-ID       $connection
     property RemoteConnIDHeader: RawUtf8
       read fRemoteConnIDHeader write SetRemoteConnIDHeader;
+    /// allow to customize this HTTP server instance
+    // - some inherited classes may have only partial support of those options
+    property Options: THttpServerOptions
+      read fOptions write fOptions;
   published
     /// returns the API version used by the inherited implementation
     property ApiVersion: RawUtf8
@@ -464,7 +487,6 @@ type
     fNginxSendFileFrom: array of TFileName;
     fSockPort: RawUtf8;
     fHeaderRetrieveAbortDelay: cardinal;
-    fHeadersUnFiltered: boolean;
     fExecuteMessage: RawUtf8;
     procedure SetServerKeepAliveTimeOut(Value: cardinal);
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
@@ -494,10 +516,9 @@ type
     // the background thread: caller should therefore call WaitStarted after
     // THttpServer.Create()
     constructor Create(const aPort: RawUtf8;
-      const OnStart, OnStop: TOnNotifyThread;
-      const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
-      KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
-      CreateSuspended: boolean = false; aLogVerbose: boolean = false); reintroduce; virtual;
+      const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+      ServerThreadPoolCount: integer = 32; KeepAliveTimeOut: integer = 30000;
+      ProcessOptions: THttpServerOptions = []); reintroduce; virtual;
     /// defines the WebSockets protocols to be used for this Server
     // - this default implementation will raise an exception
     // - returns the associated PWebSocketProcessSettings reference on success
@@ -529,12 +550,6 @@ type
     // $ }
     // - call this method several times to register several folders
     procedure NginxSendFileFrom(const FileNameLeftTrim: TFileName);
-    /// by default, only relevant headers are added to internal headers list
-    // - for instance, Content-Length, Content-Type and Content-Encoding are
-    // stored as fields in this THttpSocket, but not included in its Headers[]
-    // - set this property to true to include all incoming headers
-    property HeadersUnFiltered: boolean
-      read fHeadersUnFiltered;
     /// milliseconds delay to reject a connection due to too long header retrieval
     // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
     property HeaderRetrieveAbortDelay: cardinal
@@ -631,10 +646,9 @@ type
   public
     /// create a socket-based HTTP Server, ready to be bound and listening on a port
     constructor Create(const aPort: RawUtf8;
-      const OnStart, OnStop: TOnNotifyThread;
-      const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
-      KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
-      CreateSuspended: boolean = false; aLogVerbose: boolean = false); override;
+      const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+      ServerThreadPoolCount: integer = 32; KeepAliveTimeOut: integer = 30000;
+      ProcessOptions: THttpServerOptions = []); override;
     /// release all memory and handlers
     destructor Destroy; override;
     /// access to the main server low-level Socket
@@ -750,9 +764,10 @@ type
     // - if you will call AddUrl() methods later, set CreateSuspended to TRUE,
     // then call explicitly the Resume method, after all AddUrl() calls, in
     // order to start the server
-    constructor Create(CreateSuspended: boolean; QueueName: SynUnicode = '';
+    constructor Create(QueueName: SynUnicode = '';
       const OnStart: TOnNotifyThread = nil; const OnStop: TOnNotifyThread = nil;
-      const ProcessName: RawUtf8 = ''); reintroduce;
+      const ProcessName: RawUtf8 = ''; ProcessOptions: THttpServerOptions = []);
+        reintroduce;
     /// create a HTTP/1.1 processing clone from the main thread
     // - do not use directly - is called during thread pool creation
     constructor CreateClone(From: THttpApiServer); virtual;
@@ -1126,10 +1141,11 @@ type
     // - will raise an exception if http.sys or websocket.dll is not available
     // (e.g. before Windows 8) or if the request queue creation failed
     // - for aPingTimeout explanation see PingTimeout property documentation
-    constructor Create(CreateSuspended: boolean; aSocketThreadsCount: integer = 1;
+    constructor Create(aSocketThreadsCount: integer = 1;
       aPingTimeout: integer = 0; const QueueName: SynUnicode = '';
       const aOnWSThreadStart: TOnNotifyThread = nil;
-      const aOnWSThreadTerminate: TOnNotifyThread = nil); reintroduce;
+      const aOnWSThreadTerminate: TOnNotifyThread = nil;
+      ProcessOptions: THttpServerOptions = []); reintroduce;
     /// create a WebSockets processing clone from the main thread
     // - do not use directly - is called during thread pool creation
     constructor CreateClone(From: THttpApiServer); override;
@@ -1241,19 +1257,10 @@ end;
 
 procedure THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   CompressGz, MaxSizeAtOnce: integer);
-var
-  P, PEnd: PUtf8Char;
-  len: PtrInt;
-  reason: RawUtf8;
-  fn: TFileName;
-begin
-  // note: caller should have set hfConnectionClose in Context.HeaderFlags
-  // process content
-  Context.ContentLength := 0;
-  if OutContentType = NORESPONSE_CONTENT_TYPE then
-    OutContentType := '' // true HTTP always expects a response
-  else if (OutContent <> '') and
-          (OutContentType = STATICFILE_CONTENT_TYPE) then
+
+  procedure ProcessStaticFile;
+  var
+    fn: TFileName;
   begin
     ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
     Utf8ToFileName(OutContent, fn);
@@ -1267,23 +1274,39 @@ begin
         fRespStatus := HTTP_NOTFOUND;
       end;
   end;
-  StatusCodeToReason(fRespStatus, reason);
-  if fErrorMessage <> '' then
+
+  procedure ProcessErrorMessage;
   begin
     OutCustomHeaders := '';
     OutContentType := 'text/html; charset=utf-8'; // create message to display
-    OutContent := FormatUtf8('<body style="font-family:verdana">'#10 +
+    FormatUtf8('<body style="font-family:verdana">'#10 +
       '<h1>% Server Error %</h1><hr><p>HTTP % %<p>%<p><small>' + XPOWEREDVALUE,
-      [fServer.ServerName, fRespStatus, fRespStatus, reason,
-       HtmlEscapeString(fErrorMessage)]);
+      [fServer.ServerName, fRespStatus, fRespStatus, fRespReason,
+       HtmlEscapeString(fErrorMessage)], RawUtf8(fOutContent));
   end;
+
+var
+  P, PEnd: PUtf8Char;
+  len: PtrInt;
+begin
+  // note: caller should have set hfConnectionClose in Context.HeaderFlags
+  // process content
+  Context.ContentLength := 0;
+  if OutContentType = NORESPONSE_CONTENT_TYPE then
+    OutContentType := '' // true HTTP always expects a response
+  else if (OutContent <> '') and
+          (OutContentType = STATICFILE_CONTENT_TYPE) then
+    ProcessStaticFile;
+  StatusCodeToReason(fRespStatus, fRespReason);
+  if fErrorMessage <> '' then
+    ProcessErrorMessage;
   // append Command
   Context.Head.Reset;
   if hfConnectionClose in Context.HeaderFlags then
     Context.Head.Append('HTTP/1.0 ')
   else
     Context.Head.Append('HTTP/1.1 ');
-  Context.Head.Append([fRespStatus, ' ', reason], {crlf=}true);
+  Context.Head.Append([fRespStatus, ' ', fRespReason], {crlf=}true);
   // custom headers from Request() method
   P := pointer(OutCustomHeaders);
   if P <> nil then
@@ -1306,9 +1329,13 @@ begin
   // generic headers
   Context.Head.Append('Server: ');
   Context.Head.Append(fServer.ServerName, {crlf=}true);
-  {$ifndef NOXPOWEREDNAME}
-  Context.Head.Append(XPOWEREDNAME + ': ' + XPOWEREDVALUE, true);
-  {$endif NOXPOWEREDNAME}
+  if hsoIncludeDateHeader in fServer.Options then
+  begin
+    SetHttpDateNowUtcCache;
+    Context.Head.Append(HttpDateNowUtcCache);
+  end;
+  if not (hsoNoXPoweredHeader in fServer.Options) then
+    Context.Head.Append(XPOWEREDNAME + ': ' + XPOWEREDVALUE, true);
   Context.Content := OutContent;
   Context.ContentType := OutContentType;
   Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // also set State
@@ -1337,11 +1364,12 @@ end;
 
 { THttpServerGeneric }
 
-constructor THttpServerGeneric.Create(CreateSuspended: boolean;
-  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8);
+constructor THttpServerGeneric.Create(const OnStart, OnStop: TOnNotifyThread;
+  const ProcessName: RawUtf8; ProcessOptions: THttpServerOptions);
 begin
   SetServerName('mORMot2 (' + OS_TEXT + ')');
-  inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
+  fOptions := ProcessOptions;
+  inherited Create(hsoCreateSuspended in fOptions, OnStart, OnStop, ProcessName);
 end;
 
 procedure THttpServerGeneric.RegisterCompress(aFunction: THttpSocketCompress;
@@ -1505,7 +1533,7 @@ end;
 constructor THttpServerSocketGeneric.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  aHeadersUnFiltered: boolean; CreateSuspended: boolean; aLogVerbose: boolean);
+  ProcessOptions: THttpServerOptions);
 begin
   fSockPort := aPort;
   SetServerKeepAliveTimeOut(KeepAliveTimeOut); // 30 seconds by default
@@ -1513,8 +1541,7 @@ begin
   fOnThreadStart := OnStart;
   SetOnTerminate(OnStop);
   fProcessName := ProcessName; // TSynThreadPoolTHttpServer needs it now
-  fHeadersUnFiltered := aHeadersUnFiltered;
-  inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
+  inherited Create(OnStart, OnStop, ProcessName, ProcessOptions);
 end;
 
 function THttpServerSocketGeneric.WebSocketsEnable(const aWebSocketsURI,
@@ -1611,10 +1638,10 @@ end;
 
 { THttpServer }
 
-constructor THttpServer.Create(const aPort: RawUtf8; const OnStart,
-  OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+constructor THttpServer.Create(const aPort: RawUtf8;
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  aHeadersUnFiltered: boolean; CreateSuspended: boolean; aLogVerbose: boolean);
+  ProcessOptions: THttpServerOptions);
 begin
   fInternalHttpServerRespList := TSynList.Create;
   InitializeCriticalSection(fProcessCS);
@@ -1625,7 +1652,7 @@ begin
   if fSocketClass = nil then
     fSocketClass := THttpServerSocket;
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
-    KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended);
+    KeepAliveTimeOut, ProcessOptions);
   if ServerThreadPoolCount > 0 then
   begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
@@ -1918,11 +1945,15 @@ var
       until P^ = #0;
     end;
     // 2.2. generic headers
-    ClientSock.SockSend([
-      {$ifndef NOXPOWEREDNAME}
-      XPOWEREDNAME + ': ' + XPOWEREDVALUE + #13#10 +
-      {$endif NOXPOWEREDNAME}
-      'Server: ', fServerName]);
+    if hsoIncludeDateHeader in fOptions then
+    begin
+      SetHttpDateNowUtcCache;
+      ClientSock.SockSend(HttpDateNowUtcCache);
+    end;
+    if not (hsoNoXPoweredHeader in Options) then
+      ClientSock.SockSend(XPOWEREDNAME + ': ' + XPOWEREDVALUE + #13#10);
+    ClientSock.SockSend('Server: ');
+    ClientSock.SockSend(fServerName);
     ClientSock.CompressDataAndWriteHeaders(
       ctxt.OutContentType, ctxt.fOutContent, nil);
     if ClientSock.KeepAliveClient then
@@ -2103,7 +2134,7 @@ begin
          (fServer = nil) or
          fServer.Terminated then
         exit;
-      noheaderfilter := fServer.HeadersUnFiltered;
+      noheaderfilter := hsoHeadersUnfiltered in fServer.Options;
     end
     else
       noheaderfilter := false;
@@ -2579,14 +2610,14 @@ begin
     [Http.Version.MajorVersion, Http.Version.MinorVersion], result);
 end;
 
-constructor THttpApiServer.Create(CreateSuspended: boolean;
-  QueueName: SynUnicode; const OnStart, OnStop: TOnNotifyThread;
-  const ProcessName: RawUtf8);
+constructor THttpApiServer.Create(QueueName: SynUnicode;
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+  ProcessOptions: THttpServerOptions);
 var
   binding: HTTP_BINDING_INFO;
 begin
   SetLength(fLogDataStorage, SizeOf(HTTP_LOG_FIELDS_DATA)); // should be done 1st
-  inherited Create({suspended=}true, OnStart, OnStop, ProcessName);
+  inherited Create(OnStart, OnStop, ProcessName, ProcessOptions);
   HttpApiInitialize; // will raise an exception in case of failure
   EHttpApiServer.RaiseOnError(hInitialize,
     Http.Initialize(Http.Version, HTTP_INITIALIZE_SERVER));
@@ -2610,7 +2641,7 @@ begin
     EHttpApiServer.RaiseOnError(hCreateHttpHandle,
       Http.CreateHttpHandle(fReqQueue));
   fReceiveBufferSize := 1 shl 20; // i.e. 1 MB
-  if not CreateSuspended then
+  if not (hsoCreateSuspended in ProcessOptions) then
     Suspended := False;
 end;
 
@@ -2633,7 +2664,8 @@ begin
   SetRemoteIPHeader(From.RemoteIPHeader);
   SetRemoteConnIDHeader(From.RemoteConnIDHeader);
   fLoggingServiceName := From.fLoggingServiceName;
-  inherited Create(false, From.fOnThreadStart, From.fOnThreadTerminate, From.ProcessName);
+  inherited Create(From.fOnThreadStart, From.fOnThreadTerminate,
+   From.ProcessName, From.Options - [hsoCreateSuspended]);
 end;
 
 procedure THttpApiServer.DestroyMainThread;
@@ -2778,9 +2810,8 @@ var
         [StatusCode, outstat], msg);
       if E <> nil then
         msg := FormatUtf8('%% Exception raised:<br>', [msg, E]);
-      reps^.SetContent(datachunkmem, msg + HtmlEscapeString(ErrorMsg)
-        {$ifndef NOXPOWEREDNAME} + '</p><p><small>' + XPOWEREDVALUE {$endif},
-        'text/html; charset=utf-8');
+      msg := msg + HtmlEscapeString(ErrorMsg) + ('</p><p><small>' + XPOWEREDVALUE);
+      reps^.SetContent(datachunkmem, msg, 'text/html; charset=utf-8');
       Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, reps^, nil,
         bytessent, nil, 0, nil, fLogData);
     except
@@ -2833,7 +2864,8 @@ var
       end;
     // send response
     reps^.Version := req^.Version;
-    reps^.SetHeaders(pointer(ctxt.OutCustomHeaders), heads);
+    reps^.SetHeaders(pointer(ctxt.OutCustomHeaders),
+      heads, hsoNoXPoweredHeader in fOptions);
     if fCompressAcceptEncoding <> '' then
       reps^.AddCustomHeader(pointer(fCompressAcceptEncoding), heads, false);
     with reps^.headers.KnownHeaders[respServer] do
@@ -4104,11 +4136,12 @@ end;
 
 { THttpApiWebSocketServer }
 
-constructor THttpApiWebSocketServer.Create(CreateSuspended: boolean;
+constructor THttpApiWebSocketServer.Create(
   aSocketThreadsCount, aPingTimeout: integer; const QueueName: SynUnicode;
-  const aOnWSThreadStart, aOnWSThreadTerminate: TOnNotifyThread);
+  const aOnWSThreadStart, aOnWSThreadTerminate: TOnNotifyThread;
+  ProcessOptions: THttpServerOptions);
 begin
-  inherited Create(CreateSuspended, QueueName);
+  inherited Create(QueueName, nil, nil, '', ProcessOptions);
   if not (WebSocketApi.WebSocketEnabled) then
     raise EWebSocketApi.Create('WebSocket API not supported');
   fPingTimeout := aPingTimeout;

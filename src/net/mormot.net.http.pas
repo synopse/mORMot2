@@ -488,7 +488,8 @@ type
     fAuthBearer,
     fUserAgent,
     fOutContentType,
-    fOutCustomHeaders: RawUtf8;
+    fOutCustomHeaders,
+    fRespReason: RawUtf8;
     fInContent,
     fOutContent: RawByteString;
     fRequestID: integer;
@@ -498,12 +499,13 @@ type
     fRespStatus: integer;
     fConnectionThread: TSynThread;
   public
-    /// prepare an incoming request
+    /// prepare an incoming request from explicit values
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
     procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
       const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8); overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// prepare an incoming request from a parsed THttpRequestContext
     procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8); overload;
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(AppendedHeader: RawUtf8);
@@ -1137,7 +1139,7 @@ begin
   if P = nil then
     exit;
   GetNextItem(P, ' ', CommandMethod); // GET
-  GetNextItem(P, ' ', CommandUri);    // /path
+  GetNextItem(P, ' ', CommandUri);    // /path/to/resource
   if not IdemPChar(P, 'HTTP/1.') then
     exit;
   if not (hfConnectionClose in HeaderFlags) then
@@ -1704,7 +1706,8 @@ begin
     exit;
   end;
   // optionaly uncompress content
-  Http.UncompressData;
+  if Http.CompressContentEncoding >= 0 then
+    Http.UncompressData;
   if Assigned(OnLog) then
     OnLog(sllTrace, 'GetBody len=%', [Http.ContentLength], self);
   {$ifdef SYNCRTDEBUGLOW}

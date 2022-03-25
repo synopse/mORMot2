@@ -2456,13 +2456,17 @@ type
   // on server side - it should also be enabled for the client
   // - rsoLogVerbose would include a lot of detailed information, useful only
   // to debug the low-level server process - to be enabled only when required
+  // - rsoNoXPoweredHeader excludes 'X-Powered-By: mORMot 2 synopse.info' header
+  // - rsoIncludeDateHeader will let all answers include a Date: ... HTTP header
   TRestHttpServerOption = (
     rsoOnlyJsonRequests,
     rsoRedirectServerRootUriForExactCase,
     rsoHeadersUnFiltered,
     rsoCompressSynLZ,
     rsoCompressGZip,
-    rsoLogVerbose);
+    rsoLogVerbose,
+    rsoNoXPoweredHeader,
+    rsoIncludeDateHeader);
 
   /// how to customize TRestHttpServer process
   TRestHttpServerOptions = set of TRestHttpServerOption;

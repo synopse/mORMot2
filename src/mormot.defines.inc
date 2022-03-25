@@ -57,9 +57,6 @@
   {.$define HASNOSSE2} // force x87 code on very very old CPU
 {$endif CPUX86}
 
-{.$define NOXPOWEREDNAME}
-// define this to avoid sending "X-Powered-By: Synopse mORMot" HTTP header
-
 {.$define NOSYNDBZEOS}
 // make mormot.db.sql.zeos.pas a "void" unit - defined for FPC/Lazarus packages only
 

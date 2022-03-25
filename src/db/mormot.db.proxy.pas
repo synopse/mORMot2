@@ -1918,7 +1918,7 @@ var
   status: integer;
 begin
   inherited;
-  fServer := THttpApiServer.Create(false, '');
+  fServer := THttpApiServer.Create('', nil, nil, '', []);
   status := THttpApiServer(fServer).AddUrl(
     fDatabaseName, fPort, fHttps, '+', true);
   if status <> NO_ERROR then

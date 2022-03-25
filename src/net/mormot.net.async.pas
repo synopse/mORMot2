@@ -753,10 +753,9 @@ type
   public
     /// create an event-driven HTTP Server
     constructor Create(const aPort: RawUtf8;
-      const OnStart, OnStop: TOnNotifyThread;
-      const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
-      KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
-      CreateSuspended: boolean = false; aLogVerbose: boolean = false); override;
+      const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+      ServerThreadPoolCount: integer = 32; KeepAliveTimeOut: integer = 30000;
+      ProcessOptions: THttpServerOptions = []); override;
     /// finalize the HTTP Server
     destructor Destroy; override;
   published
@@ -2750,7 +2749,7 @@ end;
 procedure THttpAsyncConnection.HttpInit;
 begin
   fHttp.ProcessInit({instream=}nil); // ready to process this HTTP request
-  if fServer.HeadersUnFiltered then
+  if hsoHeadersUnfiltered in fServer.Options then
     include(fHttp.Options, hroHeadersUnfiltered);
   fHttp.Head.Reserve(fServer.HeadersDefaultBufferSize); // 2KB by default
   fHeadersSec := 0;
@@ -2955,7 +2954,8 @@ begin
         exit; // rejected or upgraded
     end;
   // optionaly uncompress content
-  fHttp.UncompressData;
+  if fHttp.CompressContentEncoding >= 0 then
+    fHttp.UncompressData;
   // compute the HTTP/REST process
   result := soClose;
   req := THttpServerRequest.Create(fServer, fRemoteConnID, {thread=}nil, []);
@@ -2992,8 +2992,8 @@ begin
        not (hfConnectionClose in fHttp.HeaderFlags) and
        (fServer.Async.fLastOperationSec > fKeepAliveSec) then
     begin
-      fOwner.DoLog(sllTrace, 'DoRequest KeepAlive timeout: close connnection',
-        [], self);
+      fOwner.DoLog(sllTrace,
+        'DoRequest KeepAlive timeout: close connnection', [], self);
       include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
     end;
     req.SetupResponse(fHttp, fServer.fCompressGz,
@@ -3024,10 +3024,9 @@ end;
 
 { THttpAsyncServer }
 
-constructor THttpAsyncServer.Create(const aPort: RawUtf8; const OnStart,
-  OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
-  ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  aHeadersUnFiltered: boolean; CreateSuspended: boolean; aLogVerbose: boolean);
+constructor THttpAsyncServer.Create(const aPort: RawUtf8;
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+  ServerThreadPoolCount, KeepAliveTimeOut: integer; ProcessOptions: THttpServerOptions);
 var
   aco: TAsyncConnectionsOptions;
 begin
@@ -3038,7 +3037,7 @@ begin
   fCompressGz := -1;
   fHeadersDefaultBufferSize := 2048; // one fpcx64mm small block
   // setup connections
-  if aLogVerbose then
+  if hsoLogVerbose in ProcessOptions then
     aco := ASYNC_OPTION_VERBOSE // for server debugging
   else
     aco := ASYNC_OPTION_PROD;   // default is to log only errors/warnings
@@ -3054,7 +3053,7 @@ begin
   fAsync.fAsyncServer := self;
   // launch this TThread instance, but as suspended since Execute is void
   inherited Create(aPort, OnStart, OnStop, fProcessName, ServerThreadPoolCount,
-    KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended);
+    KeepAliveTimeOut, ProcessOptions);
 end;
 
 destructor THttpAsyncServer.Destroy;

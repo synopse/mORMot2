@@ -124,10 +124,9 @@ type
   public
     /// create an event-driven HTTP/WebSockets Server
     constructor Create(const aPort: RawUtf8;
-      const OnStart, OnStop: TOnNotifyThread;
-      const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
-      KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
-      CreateSuspended: boolean = false; aLogVerbose: boolean = false); override;
+      const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+      ServerThreadPoolCount: integer = 32; KeepAliveTimeOut: integer = 30000;
+      ProcessOptions: THttpServerOptions = []); override;
     /// finalize the HTTP/WebSockets Server
     destructor Destroy; override;
     /// allow to customize the WebSockets processing
@@ -175,7 +174,7 @@ type
     constructor Create(const aPort: RawUtf8; const OnStart, OnStop: TOnNotifyThread;
       const aProcessName: RawUtf8; ServerThreadPoolCount: integer;
       const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
-      aWebSocketsAjax, aLogVerbose: boolean); reintroduce; overload;
+      aWebSocketsAjax: boolean; ProcessOptions: THttpServerOptions); reintroduce; overload;
     /// defines the WebSockets protocols to be used for this Server
     // - i.e. 'synopsebin' and optionally 'synopsejson' modes
     // - if aWebSocketsURI is '', any URI would potentially upgrade; you can
@@ -534,7 +533,7 @@ end;
 constructor TWebSocketAsyncServer.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  aHeadersUnFiltered: boolean; CreateSuspended: boolean; aLogVerbose: boolean);
+  ProcessOptions: THttpServerOptions);
 begin
   // initialize protocols and connections
   fConnectionClass := TWebSocketAsyncConnection;
@@ -543,11 +542,11 @@ begin
   fProtocols := TWebSocketProtocolList.Create;
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
-  if aLogVerbose then
+  if hsoLogVerbose in ProcessOptions then
     fSettings.SetFullLog;
   // start the HTTP/WebSockets server threads
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
-    KeepAliveTimeOut, aHeadersUnFiltered, CreateSuspended, aLogVerbose);
+    KeepAliveTimeOut, ProcessOptions);
 end;
 
 destructor TWebSocketAsyncServer.Destroy;
@@ -616,12 +615,11 @@ end;
 
 constructor TWebSocketAsyncServerRest.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const aProcessName: RawUtf8;
-  ServerThreadPoolCount: integer;
-  const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
-  aWebSocketsAjax, aLogVerbose: boolean);
+  ServerThreadPoolCount: integer; const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
+  aWebSocketsAjax: boolean; ProcessOptions: THttpServerOptions);
 begin
   inherited Create(aPort, OnStart, OnStop, aProcessName, ServerThreadPoolCount,
-    {alive=}30000, {headersunfiltered=}false, {suspended=}false, aLogVerbose);
+    {alive=}30000, ProcessOptions);
   WebSocketsEnable(aWebSocketsURI, aWebSocketsEncryptionKey, aWebSocketsAjax);
 end;
 
