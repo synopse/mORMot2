@@ -435,8 +435,9 @@ type
     /// convert the stored date and time to its text in HTTP-like format
     // - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
     // "Date", "Expires" or "Last-Modified" HTTP header
-    // - handle UTC/GMT time zone by default
-    procedure ToHttpDate(out text: RawUtf8; const tz: RawUtf8 = 'GMT');
+    // - handle UTC/GMT time zone by default, and allow a 'Date: ' prefix
+    procedure ToHttpDate(out text: RawUtf8; const tz: RawUtf8 = 'GMT';
+      const prefix: RawUtf8 = '');
     /// convert the stored date and time into its Iso-8601 text, with no Milliseconds
     procedure ToIsoDateTime(out text: RawUtf8; const FirstTimeChar: AnsiChar = 'T');
     /// convert the stored date into its Iso-8601 text with no time part
@@ -506,6 +507,15 @@ function HttpDateToDateTime(const httpdate: RawUtf8; var datetime: TDateTime;
 /// convert some "HTTP-date" format as defined by RFC 7231 into date/time
 function HttpDateToDateTime(const httpdate: RawUtf8;
   tolocaltime: boolean = false): TDateTime; overload;
+
+var
+  /// contains the current UTC timestamp as the full 'Date' HTTP header
+  // - e.g. 'Date: Tue, 15 Nov 1994 12:45:26 GMT'#13#10
+  HttpDateNowUtcCache: RawUtf8;
+
+/// refresh HttpDateNowUtcCache if needed
+// - won't overwrite the current value when called more than once per second
+procedure SetHttpDateNowUtcCache(tix: Int64 = 0);
 
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
@@ -2019,18 +2029,20 @@ begin
   result := 21;
 end;
 
-procedure TSynSystemTime.ToHttpDate(out text: RawUtf8; const tz: RawUtf8);
+procedure TSynSystemTime.ToHttpDate(out text: RawUtf8; const tz, prefix: RawUtf8);
 begin
   if DayOfWeek = 0 then
     PSynDate(@self)^.ComputeDayOfWeek; // first 4 fields do match
-  FormatUtf8('%, % % % %:%:% %', [
+  FormatUtf8('%%, % % % %:%:% %', [
+    prefix,
     HTML_WEEK_DAYS[DayOfWeek],
     UInt2DigitsToShortFast(Day),
     HTML_MONTH_NAMES[Month],
     UInt4DigitsToShort(Year),
     UInt2DigitsToShortFast(Hour),
     UInt2DigitsToShortFast(Minute),
-    UInt2DigitsToShortFast(Second), tz], text);
+    UInt2DigitsToShortFast(Second),
+    tz], text);
 end;
 
 procedure TSynSystemTime.ToIsoDateTime(out text: RawUtf8;
@@ -2264,6 +2276,24 @@ function HttpDateToDateTime(const httpdate: RawUtf8;
 begin
   if not HttpDateToDateTime(httpdate, result, tolocaltime) then
     result := 0;
+end;
+
+var
+  _HttpDateNowUtcTix: cardinal; // = GetTickCount64 div 1024 (every second)
+
+procedure SetHttpDateNowUtcCache(tix: Int64);
+var
+  T: TSynSystemTime;
+  c: cardinal;
+begin
+  if tix = 0 then
+    tix := GetTickCount64;
+  c := tix shr 10;
+  if c = _HttpDateNowUtcTix then
+    exit;
+  T.FromNowUtc;
+  T.ToHttpDate(HttpDateNowUtcCache, 'GMT'#13#10, 'Date: ');
+  _HttpDateNowUtcTix := c; // should be the last assignment
 end;
 
 function TimeToString: RawUtf8;
