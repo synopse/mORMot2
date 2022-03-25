@@ -663,7 +663,7 @@ type
     /// sets a mime part name
     mime_name: function(part: TCurlMimePart; name: PAnsiChar): TCurlResult; cdecl;
     /// sets a mime part content type
-    mime_type: function(part: TCurlMimePart; mimetype: PAnsiChar):TCurlResult; cdecl;
+    mime_type: function(part: TCurlMimePart; mimetype: PAnsiChar): TCurlResult; cdecl;
 
     {$ifdef LIBCURLMULTI}
     /// add an easy handle to a multi session
@@ -813,17 +813,17 @@ implementation
   function curl_share_strerror(code: CURLSHcode): PAnsiChar;  cdecl; external;
 
   /// initializes a new mime structure
-  function curl_mime_init: function(curl: TCurl): TCurlMime; cdecl; external;
+  function curl_mime_init(curl: TCurl): TCurlMime; cdecl; external;
   /// used to clean up data previously built/appended with curl_mime_addpart and other mime-handling functions
-  function curl_mime_free: procedure(mime: TCurlMime); cdecl; external;
+  procedure curl_mime_free(mime: TCurlMime); cdecl; external;
   /// creates and appends a new empty part to the given mime structure
-  function curl_mime_addpart: function(mime: TCurlMime): TCurlMimePart; cdecl; external;
+  function curl_mime_addpart(mime: TCurlMime): TCurlMimePart; cdecl; external;
   /// sets a mime part's body content from memory data
-  function curl_mime_data: function(part: TCurlMimePart; data: PAnsiChar; size: Integer): TCurlResult; cdecl; external;
+  function curl_mime_data(part: TCurlMimePart; data: PAnsiChar; size: Integer): TCurlResult; cdecl; external;
   /// sets a mime part's name
-  function curl_mime_name: function(part: TCurlMimePart; name: PAnsiChar): TCurlResult; cdecl; external;
+  function curl_mime_name(part: TCurlMimePart; name: PAnsiChar): TCurlResult; cdecl; external;
   /// sets a mime part's content type
-  function curl_mime_type: function(part: TCurlMimePart; mimetype: PAnsiChar):TCurlResult; cdecl; external;
+  function curl_mime_type(part: TCurlMimePart; mimetype: PAnsiChar): TCurlResult; cdecl; external;
 
   {$ifdef LIBCURLMULTI}
   /// add an easy handle to a multi session
@@ -937,7 +937,7 @@ const
     'curl_easy_getinfo', 'curl_easy_duphandle', 'curl_easy_reset',
     'curl_easy_strerror', 'curl_slist_append', 'curl_slist_free_all',
     'curl_formadd', 'curl_formfree', 'curl_share_init',
-    'curl_share_cleanup','curl_share_setopt', 'curl_share_strerror',
+    'curl_share_cleanup', 'curl_share_setopt', 'curl_share_strerror',
     'curl_mime_init', 'curl_mime_free', 'curl_mime_addpart', 'curl_mime_data',
     'curl_mime_name', 'curl_mime_type'
     {$ifdef LIBCURLMULTI},
