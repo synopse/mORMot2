@@ -509,6 +509,9 @@ type
     procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8); overload;
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(AppendedHeader: RawUtf8);
+    /// append some values to the OutCustomHeaders output parameter
+    // - will maintain CRLF between lines, but not on the last line
+    procedure AddOutHeader(const Values: array of const);
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
     property InContent: RawByteString
@@ -1815,6 +1818,11 @@ begin
       fInHeaders := AppendedHeader
     else
       fInHeaders := fInHeaders + #13#10 + AppendedHeader;
+end;
+
+procedure THttpServerRequestAbstract.AddOutHeader(const Values: array of const);
+begin
+  AppendLine(fOutCustomHeaders, Values);
 end;
 
 

@@ -219,7 +219,7 @@ type
     procedure SetAccessControlAllowOrigin(const Value: RawUtf8);
     procedure ComputeAccessControlHeader(Ctxt: THttpServerRequestAbstract;
       ReplicateAllowHeaders: boolean);
-    function ComputeHostUrl(Ctxt: THttpServerRequestAbstract): RawUtf8;
+    procedure ComputeHostUrl(Ctxt: THttpServerRequestAbstract; var HostUrl: RawUtf8);
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
     procedure HttpThreadStart(Sender: TThread); virtual;
     procedure HttpThreadTerminate(Sender: TThread); virtual;
@@ -547,7 +547,8 @@ begin
   try
     n := length(fDBServers);
     for i := 0 to n - 1 do
-      if (fDBServers[i].Server.Model.UriMatch(aServer.Model.Root) <> rmNoMatch) and
+      if (fDBServers[i].Server.Model.
+           UriMatch(aServer.Model.Root, {checkcase=}false) <> rmNoMatch) and
          (fDBServers[i].Security = aSecurity) then
         exit; // register only once per URI Root address and per protocol
     {$ifdef USEHTTPSYS}
@@ -705,7 +706,7 @@ begin
         begin
           fDBServerNames := fDBServerNames + ' ' + Root;
           for j := i + 1 to high(aServers) do
-            if aServers[j].Model.UriMatch(Root) <> rmNoMatch then
+            if aServers[j].Model.UriMatch(Root, false) <> rmNoMatch then
               FormatUtf8('Duplicated Root URI: % and %',
                 [Root, aServers[j].Model.Root], ErrMsg);
         end;
@@ -992,7 +993,7 @@ end;
 function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   call: TRestUriParams;
-  tls: boolean;
+  tls, matchcase: boolean;
   match: TRestModelMatch;
   i: PtrInt;
   P: PUtf8Char;
@@ -1009,7 +1010,7 @@ begin
     // RootRedirectToUri() to redirect ip:port root URI to a given sub-URI
     if fRootRedirectToUri[tls] <> '' then
     begin
-      Ctxt.OutCustomHeaders := 'Location: ' + fRootRedirectToUri[tls];
+      Ctxt.AddOutHeader(['Location: ', fRootRedirectToUri[tls]]);
       result := HTTP_TEMPORARYREDIRECT;
     end
     else
@@ -1038,7 +1039,7 @@ begin
     call.LowLevelBearerToken := Ctxt.AuthBearer;
     call.LowLevelUserAgent := Ctxt.UserAgent;
     if fHosts.Count > 0 then
-      call.Url := ComputeHostUrl(Ctxt) // handle any virtual host domain
+      ComputeHostUrl(Ctxt, call.Url) // handle any virtual host domain
     else
       Ctxt.Host := ''; // no AdjustHostUrl() below
     if call.Url = '' then
@@ -1059,13 +1060,14 @@ begin
       // search and call any matching TRestServer instance
       result := HTTP_NOTFOUND; // page not found by default (e.g. wrong URL)
       match := rmNoMatch;
+      matchcase := rsoRedirectServerRootUriForExactCase in fOptions;
       if fDBSingleServer <> nil then
         // optimized for the most common case of a single DB server
         with fDBSingleServer^ do
         begin
           if (Security = secSSL) = tls then
           begin
-            match := Server.Model.UriMatch(call.Url);
+            match := Server.Model.UriMatch(call.Url, matchcase);
             if match = rmNoMatch then
               exit;
             call.RestAccessRights := RestAccessRights;
@@ -1082,7 +1084,7 @@ begin
               if (Security = secSSL) = tls then
               begin
                 // registered for http or https
-                match := Server.Model.UriMatch(call.Url);
+                match := Server.Model.UriMatch(call.Url, matchcase);
                 if match = rmNoMatch then
                   continue;
                 call.RestAccessRights := RestAccessRights;
@@ -1096,13 +1098,14 @@ begin
       if (match = rmNoMatch) or
          (serv = nil) then
         exit;
-      if (rsoRedirectServerRootUriForExactCase in fOptions) and
+      if matchcase and
          (match = rmMatchWithCaseChange) then
       begin
         // force redirection to exact Server.Model.Root case sensitivity
         call.OutStatus := HTTP_TEMPORARYREDIRECT;
-        call.OutHead := 'Location: /' + serv.Model.Root +
-          copy(call.Url, length(serv.Model.Root)  + 1, maxInt);
+        call.OutHead := 'Location: /' + call.Url;
+        MoveFast(pointer(serv.Model.Root)^, PByteArray(call.OutHead)[11],
+          length(serv.Model.Root)); // overwrite url root from Model.Root
       end
       else
         // call matching TRestServer.Uri()
@@ -1126,15 +1129,9 @@ begin
     if Ctxt.Host <> '' then
       AdjustHostUrl(call, serv, Ctxt.Host);
     TrimSelf(call.OutHead);
+    Ctxt.OutCustomHeaders := call.OutHead;
     if call.OutInternalState <> 0 then
-      if call.OutHead = '' then
-        Ctxt.OutCustomHeaders := FormatUtf8(
-          'Server-InternalState: %', [call.OutInternalState])
-      else
-        Ctxt.OutCustomHeaders := FormatUtf8('%'#13#10'Server-InternalState: %',
-          [call.OutHead, call.OutInternalState])
-    else
-      Ctxt.OutCustomHeaders := call.OutHead;
+      Ctxt.AddOutHeader(['Server-InternalState: ', call.OutInternalState]);
     // handle optional CORS origin
     if fAccessControlAllowOrigin <> '' then
       ComputeAccessControlHeader(Ctxt, {ReplicateAllowHeaders=}false);
@@ -1197,7 +1194,7 @@ begin
   if ReplicateAllowHeaders then
   begin
     FindNameValue(Ctxt.InHeaders, 'ACCESS-CONTROL-REQUEST-HEADERS:', headers);
-    Ctxt.OutCustomHeaders := 'Access-Control-Allow-Headers: ' + headers;
+    Ctxt.AddOutHeader(['Access-Control-Allow-Headers: ', headers]);
   end;
   // note: caller did ensure that fAccessControlAllowOrigin<>''
   FindNameValue(Ctxt.InHeaders, 'ORIGIN: ', origin);
@@ -1207,38 +1204,38 @@ begin
     origin := fAccessControlAllowOrigin
   else if fAccessControlAllowOriginsMatch.Match(origin) < 0 then
     exit;
-  Ctxt.OutCustomHeaders := Ctxt.OutCustomHeaders + #13#10 +
+  Ctxt.AddOutHeader([
     'Access-Control-Allow-Methods: POST, PUT, GET, DELETE, LOCK, OPTIONS'#13#10 +
     'Access-Control-Max-Age: 1728000'#13#10 +
     // see http://blog.import.io/tech-blog/exposing-headers-over-cors-with-access-control-expose-headers
     'Access-Control-Expose-Headers: content-length,location,server-internalstate'#13#10 +
-    'Access-Control-Allow-Origin: ' + origin;
+    'Access-Control-Allow-Origin: ', origin]);
   if fAccessControlAllowCredential then
     Ctxt.OutCustomHeaders := Ctxt.OutCustomHeaders + #13#10 +
       'Access-Control-Allow-Credentials: true';
-  Ctxt.OutCustomHeaders := TrimU(Ctxt.OutCustomHeaders);
 end;
 
-function TRestHttpServer.ComputeHostUrl(Ctxt: THttpServerRequestAbstract): RawUtf8;
+procedure TRestHttpServer.ComputeHostUrl(
+  Ctxt: THttpServerRequestAbstract; var HostUrl: RawUtf8);
 var
   i: PtrInt;
 begin
   // caller ensured fHosts.Count > 0
-  result := Ctxt.Host;
-  i := PosExChar(':', result);
+  HostUrl := Ctxt.Host;
+  i := PosExChar(':', HostUrl);
   if i > 0 then
-    SetLength(result, i - 1); // trim any port
-  if result <> '' then
+    SetLength(HostUrl, i - 1); // trim any port
+  if HostUrl <> '' then
     // e.g. 'Host: project1.com' -> 'root1'
-    result := fHosts.Value(result);
-  if result <> '' then
+    HostUrl := fHosts.Value(HostUrl);
+  if HostUrl <> '' then
     // e.g. 'Host: project1.com' -> 'root1/url'
     if (Ctxt.Url <> '') and
        (PWord(Ctxt.Url)^ <> ord('/')) then
       if Ctxt.Url[1] = '/' then
-        result := result + Ctxt.Url
+        HostUrl := HostUrl + Ctxt.Url
       else
-        result := result + '/' + Ctxt.Url;
+        HostUrl := HostUrl + '/' + Ctxt.Url;
 end;
 
 function TRestHttpServer.WebSocketsEnable(
