@@ -2451,6 +2451,9 @@ type
   // - rsoRedirectServerRootUriForExactCase to search root URI case-sensitive,
   // mainly to avoid errors with HTTP cookies, which path is case-sensitive -
   // when set, such not exact case will be redirected via a HTTP 307 command
+  // - rsoAllowSingleServerNoRoot will allow URI with no Model.Root prefix, i.e.
+  // 'GET url' to be handled as 'GET root/url' - by design, it would work only
+  // with a single registered TRestServer (to know which Model.Root to use)
   // - rsoHeadersUnFiltered maps THttpServer.HeadersUnFiltered property
   // - rsoCompressSynLZ and rsoCompressGZip enable SynLZ and GZip compression
   // on server side - it should also be enabled for the client
@@ -2461,6 +2464,7 @@ type
   TRestHttpServerOption = (
     rsoOnlyJsonRequests,
     rsoRedirectServerRootUriForExactCase,
+    rsoAllowSingleServerNoRoot,
     rsoHeadersUnFiltered,
     rsoCompressSynLZ,
     rsoCompressGZip,

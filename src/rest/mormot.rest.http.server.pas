@@ -548,7 +548,7 @@ begin
     n := length(fDBServers);
     for i := 0 to n - 1 do
       if (fDBServers[i].Server.Model.
-           UriMatch(aServer.Model.Root, {checkcase=}false) <> rmNoMatch) and
+           UriMatch(aServer.Model.Root, false) <> rmNoMatch) and
          (fDBServers[i].Security = aSecurity) then
         exit; // register only once per URI Root address and per protocol
     {$ifdef USEHTTPSYS}
@@ -1069,7 +1069,13 @@ begin
           begin
             match := Server.Model.UriMatch(call.Url, matchcase);
             if match = rmNoMatch then
-              exit;
+              if rsoAllowSingleServerNoRoot in fOptions then
+              begin
+                match := rmMatchExact; // forge proper 'modelroot/url'
+                call.Url := Server.Model.Root + '/' + call.Url;
+              end
+              else
+                exit;
             call.RestAccessRights := RestAccessRights;
             serv := Server;
           end;
