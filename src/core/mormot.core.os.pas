@@ -3802,12 +3802,11 @@ var
 procedure StatusCode2Reason(Code: cardinal; var Reason: RawUtf8);
 begin
   case Code of
+    // HTTP_SUCCESS: is set at startup
     HTTP_CONTINUE:
       Reason := 'Continue';
     HTTP_SWITCHINGPROTOCOLS:
       Reason := 'Switching Protocols';
-    HTTP_SUCCESS:
-      Reason := 'OK';
     HTTP_CREATED:
       Reason := 'Created';
     HTTP_ACCEPTED:
@@ -3902,22 +3901,18 @@ var
 begin
   if Code = 200 then
   begin
-    Hi := 2; // optimistic approach :)
-    Lo := 0;
-    Reason := ReasonCache[2, 0];
-  end
-  else
-  begin
-    Hi := Code div 100;
-    Lo := Code - Hi * 100;
-    if not ((Hi in [1..5]) and
-            (Lo in [0..13])) then
-    begin
-      Hi := 5;
-      Lo := 13; // returns cached 'Invalid Request'
-    end;
-    Reason := ReasonCache[Hi, Lo];
+    Reason := ReasonCache[2, 0]; // optimistic approach :)
+    exit;
   end;
+  Hi := Code div 100;
+  Lo := Code - Hi * 100;
+  if not ((Hi in [1..5]) and
+          (Lo in [0..13])) then
+  begin
+    Hi := 5;
+    Lo := 13; // returns cached 'Invalid Request'
+  end;
+  Reason := ReasonCache[Hi, Lo];
   if Reason <> '' then
     exit;
   StatusCode2Reason(Code, Reason);
@@ -6475,6 +6470,7 @@ begin
   NULL_STR_VAR := 'null';
   BOOL_UTF8[false] := 'false';
   BOOL_UTF8[true]  := 'true';
+  ReasonCache[2, 0] := 'OK'; // HTTP_SUCCESS
   // minimal stubs which will be properly implemented in mormot.core.log.pas
   GetExecutableLocation := _GetExecutableLocation;
   SetThreadName := _SetThreadName;
