@@ -794,6 +794,8 @@ type
     function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
+    procedure InternalSetBuffer(aBuf: PUtf8Char; aBufSize: integer);
+      {$ifdef HASINLINE} inline; {$endif}
   public
     /// direct access to the low-level current position in the buffer
     // - you should not use this field directly
@@ -813,22 +815,19 @@ type
     // - will use an external buffer (which may be allocated on stack)
     constructor Create(aStream: TStream; aBuf: pointer; aBufSize: integer); overload;
     /// the data will be written to an internal TRawByteStringStream
-    // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
-    // to retrieve directly the content without any data move nor allocation
     // - default internal buffer size if 4096 (enough for most JSON objects)
     // - consider using a stack-allocated buffer and the overloaded method
     constructor CreateOwnedStream(aBufSize: integer = 4096); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use an external buffer (which may be allocated on stack)
-    // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
-    // to retrieve directly the content without any data move nor allocation
     constructor CreateOwnedStream(aBuf: pointer; aBufSize: integer); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use the stack-allocated TTextWriterStackBuffer if possible
-    // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
-    // to retrieve directly the content without any data move nor allocation
     constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
-      aBufSize: integer = SizeOf(TTextWriterStackBuffer)); overload;
+      aBufSize: integer); overload;
+    /// the data will be written to an internal TRawByteStringStream
+    // - will use the stack-allocated TTextWriterStackBuffer
+    constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer); overload;
     /// the data will be written to an external file
     // - you should call explicitly FlushFinal or FlushToStream to write
     // any pending data to the file
@@ -4819,6 +4818,19 @@ end;
 
 { TTextWriter }
 
+var
+  DefaultTextWriterTrimEnum: boolean; // see TTextWriter.SetDefaultEnumTrim()
+
+procedure TTextWriter.InternalSetBuffer(aBuf: PUtf8Char; aBufSize: integer);
+begin
+  fTempBuf := aBuf;
+  fTempBufSize := aBufSize;
+  B := aBuf - 1; // Add() methods will append at B+1
+  BEnd := aBuf + (aBufSize - 16); // -16 to avoid buffer overwrite/overread
+  if DefaultTextWriterTrimEnum then
+    Include(fCustomOptions, twoTrimLeftEnumSets);
+end;
+
 constructor TTextWriter.Create(aStream: TStream; aBufSize: integer);
 begin
   SetStream(aStream);
@@ -4833,38 +4845,41 @@ begin
   SetBuffer(aBuf, aBufSize);
 end;
 
-constructor TTextWriter.CreateOwnedFileStream(
-  const aFileName: TFileName; aBufSize: integer);
-begin
-  DeleteFile(aFileName);
-  Create(TFileStream.Create(aFileName, fmCreate or fmShareDenyWrite), aBufSize);
-  Include(fCustomOptions, twoStreamIsOwned);
-end;
-
 constructor TTextWriter.CreateOwnedStream(aBuf: pointer; aBufSize: integer);
 begin
-  SetStream(TRawByteStringStream.Create);
+  fStream := TRawByteStringStream.Create; // inlined SetStream()
+  fCustomOptions := [twoStreamIsOwned];
   SetBuffer(aBuf, aBufSize);
-  Include(fCustomOptions, twoStreamIsOwned);
 end;
 
 constructor TTextWriter.CreateOwnedStream(aBufSize: integer);
 begin
-  Create(TRawByteStringStream.Create, aBufSize);
-  Include(fCustomOptions, twoStreamIsOwned);
+  CreateOwnedStream(nil, aBufSize);
 end;
 
 constructor TTextWriter.CreateOwnedStream(
   var aStackBuf: TTextWriterStackBuffer; aBufSize: integer);
 begin
   if aBufSize > SizeOf(aStackBuf) then // too small -> allocate on heap
-    CreateOwnedStream(aBufSize)
+    CreateOwnedStream(nil, aBufSize)
   else
-  begin
-    SetStream(TRawByteStringStream.Create);
-    SetBuffer(@aStackBuf, SizeOf(aStackBuf));
-    Include(fCustomOptions, twoStreamIsOwned);
-  end;
+    CreateOwnedStream(aStackBuf);
+end;
+
+constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer);
+begin
+  fStream := TRawByteStringStream.Create; // inlined SetStream()
+  fCustomOptions := [twoStreamIsOwned, twoBufferIsExternal]; // SetBuffer()
+  InternalSetBuffer(@aStackBuf, SizeOf(aStackBuf));
+end;
+
+constructor TTextWriter.CreateOwnedFileStream(
+  const aFileName: TFileName; aBufSize: integer);
+begin
+  DeleteFile(aFileName);
+  fStream := TFileStream.Create(aFileName, fmCreate or fmShareDenyWrite);
+  fCustomOptions := [twoStreamIsOwned];
+  SetBuffer(nil, aBufSize);
 end;
 
 destructor TTextWriter.Destroy;
@@ -5025,9 +5040,6 @@ begin
     result := PtrUInt(B - fTempBuf + 1) + fTotalFileSize - fInitialStreamPosition;
 end;
 
-var
-  DefaultTextWriterTrimEnum: boolean;
-  
 class procedure TTextWriter.SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
 begin
   DefaultTextWriterTrimEnum := aShouldTrimEnumsAsText;
@@ -5038,17 +5050,10 @@ begin
   if aBufSize <= 16 then
     raise ESynException.CreateUtf8('%.SetBuffer(size=%)', [self, aBufSize]);
   if aBuf = nil then
-    GetMem(fTempBuf, aBufSize)
+    GetMem(aBuf, aBufSize)
   else
-  begin
-    fTempBuf := aBuf;
     Include(fCustomOptions, twoBufferIsExternal);
-  end;
-  fTempBufSize := aBufSize;
-  B := fTempBuf - 1; // Add() methods will append at B+1
-  BEnd := fTempBuf + (fTempBufSize - 16); // -16 to avoid buffer overwrite/overread
-  if DefaultTextWriterTrimEnum then
-    Include(fCustomOptions, twoTrimLeftEnumSets);
+  InternalSetBuffer(aBuf, aBufSize);
 end;
 
 procedure TTextWriter.SetStream(aStream: TStream);
