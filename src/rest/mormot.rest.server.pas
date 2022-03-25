@@ -170,7 +170,7 @@ type
     fTableIndex: integer;
     fAuthSession: TAuthSession;
     fServer: TRestServer;
-    fUri, fUriWithoutSignature, fUriUnderscoreAsSlash, fUriBlobFieldName: RawUtf8;
+    fUri, fUriUnderscoreAsSlash, fUriBlobFieldName: RawUtf8;
     fUriAfterRoot: PUtf8Char;
     fThreadServer: PServiceRunningContext;
     fTable: TOrmClass;
@@ -486,8 +486,8 @@ type
     property Uri: RawUtf8
       read fUri;
     /// same as Call^.Uri, but without the &session_signature=... ending
-    property UriWithoutSignature: RawUtf8
-      read fUriWithoutSignature;
+    // - will compute it from Call^.Url and UriSessionSignaturePos
+    function UriWithoutSignature: RawUtf8;
     /// points inside Call^.Uri, after the 'root/' prefix
     property UriAfterRoot: PUtf8Char
       read fUriAfterRoot;
@@ -2678,7 +2678,7 @@ end;
 
 function TRestServerUriContext.UriDecodeRest: boolean;
 var
-  i, j, slash: PtrInt;
+  i, j, slash, parlen: PtrInt;
   par, P: PUtf8Char;
 begin
   // expects 'ModelRoot[/TableName[/TableID][/UriBlobFieldName]][?param=...]' format
@@ -2711,15 +2711,15 @@ begin
   // compute URI without any root nor parameter
   inc(i, j + 2);
   fUriAfterRoot := P + i - 1;
-  if ParametersPos = 0 then
-    FastSetString(fUri, UriAfterRoot, length(Call^.Url) - i + 1)
-  else
-    FastSetString(fUri, UriAfterRoot, ParametersPos - i);
+  parlen := fParametersPos;
+  if parlen = 0 then
+    parlen := length(Call^.Url) + 1;
+  FastSetString(fUri, UriAfterRoot, parlen - i);
   // compute Table, TableID and UriBlobFieldName
   slash := PosExChar('/', fUri);
   if slash > 0 then
   begin
-    fUri[slash] := #0;
+    fUri[slash] := #0; // will ensure fUri is unique
     par := pointer(fUri);
     InternalSetTableFromTableName(par, slash - 1);
     inc(par, slash);
@@ -2737,14 +2737,14 @@ begin
       begin
         // handle "ModelRoot/TableName/UriBlobFieldName/ID"
         fTableID := GetCardinalDef(P + 1, cardinal(-1));
-        FastSetString(fUriBlobFieldName, par, par - P);
+        parlen := par - P;
       end
       else
-        FastSetString(fUriBlobFieldName, par, StrLen(par));
+        parlen := StrLen(par);
     end
     else
     begin
-      FastSetString(fUriBlobFieldName, par, StrLen(par));
+      parlen := StrLen(par);
       if rsoMethodUnderscoreAsSlashUri in Server.Options then
       begin
         fUriUnderscoreAsSlash := Uri;
@@ -2755,23 +2755,29 @@ begin
         until i = 0;
       end;
     end;
-    SetLength(fUri, slash - 1);
+    FastSetString(fUriBlobFieldName, par, parlen);
+    PStrLen(PtrUInt(fUri) - _STRLEN)^ := slash - 1; // in-place truncation
   end
   else
     // "ModelRoot/TableName"
     InternalSetTableFromTableName(pointer(fUri), length(fUri));
-  // compute UriSessionSignaturePos and UriWithoutSignature
-  if ParametersPos > 0 then
+  // compute UriSessionSignaturePos
+  if Server.fHandleAuthentication and
+     (ParametersPos > 0) then
     if IdemPChar(Parameters, 'SESSION_SIGNATURE=') then
       fUriSessionSignaturePos := ParametersPos
     else
       fUriSessionSignaturePos := PosEx('&session_signature=', Call^.Url,
         ParametersPos + 1);
-  if fUriSessionSignaturePos = 0 then
-    fUriWithoutSignature := Call^.Url
-  else
-    FastSetString(fUriWithoutSignature, pointer(Call^.Url), UriSessionSignaturePos - 1);
   result := True;
+end;
+
+function TRestServerUriContext.UriWithoutSignature: RawUtf8;
+begin
+  if fUriSessionSignaturePos = 0 then
+    result := Call^.Url
+  else
+    FastSetString(result, pointer(Call^.Url), UriSessionSignaturePos - 1);
 end;
 
 procedure TRestServerUriContext.UriDecodeSoaByMethod;
