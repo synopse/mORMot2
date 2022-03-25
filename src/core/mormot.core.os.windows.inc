@@ -888,9 +888,9 @@ type
 
 const
   {$ifdef FPC}
-  cDelphiException = $E0465043;
+  cRtlException = $E0465043; // $E0 F P C
   {$else}
-  cDelphiException = $0EEDFADE;
+  cRtlException = $0EEDFADE; // Delphi exception
   {$endif FPC}
 
 procedure LogExcept(stack: PPtrUInt; const Exc: TExceptionRecord);
@@ -906,7 +906,7 @@ begin
   try
     _RawLogException := nil; // disable nested exception
     ctxt.ECode := Exc.ExceptionCode;
-    if (Exc.ExceptionCode = cDelphiException) and
+    if (Exc.ExceptionCode = cRtlException) and
        (Exc.ExceptObject <> nil) then
     begin
       if Exc.ExceptObject.InheritsFrom(Exception) then

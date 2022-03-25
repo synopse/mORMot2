@@ -2438,7 +2438,9 @@ type
     /// efficient PerHash[].Pairs thread-safety during Find/AddToPairs
     Safe: TRWLightLock;
     /// speedup search by name e.g. from a loop
-    Last: TRttiCustom;
+    LastName: TRttiCustom;
+    /// speedup search by PRttiInfo e.g. from a loop
+    LastInfo: TRttiCustom;
     /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by Name[0][1]
     PerHash: array[0..RTTICUSTOMTYPEINFOHASH] of TRttiCustomListPair;
   end;
@@ -7911,11 +7913,17 @@ begin
   begin
     // our optimized "hash table of the poor" (tm) lookup
     k := @PerKind^[Info^.Kind];
+    // try latest found RTTI
+    result := k^.LastInfo;
+    if (result <> nil) and
+       (result.Info = Info) then
+      exit;
     // note: we tried to include RawName[2] and $df, but with no gain
     k^.Safe.ReadLock;
     result := LockedFind(Info, @k^.PerHash[(PtrUInt(Info.RawName[0]) xor
       PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH]);
     k^.Safe.ReadUnLock;
+    k^.LastInfo := result;
   end
   else
     // direct lookup of the vmtAutoTable slot for classes
@@ -7980,7 +7988,7 @@ begin
   begin
     k := @PerKind^[Kind];
     // try latest found value e.g. calling from JsonRetrieveObjectRttiCustom()
-    result := k^.Last;
+    result := k^.LastName;
     if (result <> nil) and
        (PStrLen(PAnsiChar(pointer(result.Name)) - _STRLEN)^ = NameLen) and
        IdemPropNameUSameLenNotNull(pointer(result.Name), Name, NameLen) then
@@ -7994,7 +8002,7 @@ begin
       result := LockedFindNameInPairs(pointer(result), p^.PairsEnd, Name, NameLen);
     k^.Safe.ReadUnLock;
     if result <> nil then
-      k^.Last := result;
+      k^.LastName := result;
   end
   else
     result := nil;
