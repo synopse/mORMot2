@@ -2616,7 +2616,8 @@ var
   binding: HTTP_BINDING_INFO;
 begin
   SetLength(fLogDataStorage, SizeOf(HTTP_LOG_FIELDS_DATA)); // should be done 1st
-  inherited Create(OnStart, OnStop, ProcessName, ProcessOptions);
+  inherited Create(OnStart, OnStop, ProcessName, ProcessOptions + [hsoCreateSuspended]);
+  fOptions := ProcessOptions;
   HttpApiInitialize; // will raise an exception in case of failure
   EHttpApiServer.RaiseOnError(hInitialize,
     Http.Initialize(Http.Version, HTTP_INITIALIZE_SERVER));
@@ -2640,7 +2641,7 @@ begin
     EHttpApiServer.RaiseOnError(hCreateHttpHandle,
       Http.CreateHttpHandle(fReqQueue));
   fReceiveBufferSize := 1 shl 20; // i.e. 1 MB
-  if not (hsoCreateSuspended in ProcessOptions) then
+  if Suspended then
     Suspended := False;
 end;
 
