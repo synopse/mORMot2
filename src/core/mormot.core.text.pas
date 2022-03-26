@@ -795,7 +795,7 @@ type
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
     procedure InternalSetBuffer(aBuf: PUtf8Char; aBufSize: integer);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef FPC} inline; {$endif}
   public
     /// direct access to the low-level current position in the buffer
     // - you should not use this field directly
