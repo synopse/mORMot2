@@ -953,9 +953,10 @@ begin
           exit;
         V := GetJsonFieldOrObjectOrArray(
           P, @wasString, @EndOfObject, true, true, @Vlen);
-        if V = nil then
-          exit;
-        if Nlen = 3 then
+        if P = nil then
+          exit; // error in parsed input
+        if (Nlen = 3) and
+           (V <> nil) then
         begin
           c := PInteger(N)^;
           for claim := low(JWT.reg) to high(JWT.reg) do
