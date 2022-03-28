@@ -3769,50 +3769,37 @@ end;
 function Utf8CompareDouble(P1, P2: PUtf8Char): PtrInt;
 var
   V1, V2: TSynExtended;
-  Err: integer;
-label
-  er;
+  err: integer;
 begin
-  if P1 = P2 then
-  begin
-    result := 0;
+  result := StrComp(P1, P2); // compare as string as fallback
+  if result = 0 then         // also handle P1=P2
     exit;
-  end;
-  V1 := GetExtended(P1, Err);
-  if Err <> 0 then
-  begin
-er: result := Utf8IComp(P1, P2);
-    exit;
-  end;
-  V2 := GetExtended(P2, Err);
-  if Err <> 0 then
-    goto er;
-  if V1 < V2 then // we don't care about exact = for a sort: Epsilon check is slow
-    result := -1
-  else
-    result := +1;
+  V1 := GetExtended(P1, err);
+  if err <> 0 then
+    exit; // any invalid double value -> compare as strings
+  V2 := GetExtended(P2, err);
+  if err = 0 then
+    if V1 < V2 then // we don't care about exact = for a sort: Epsilon check is slow
+      result := -1
+    else
+      result := +1;
 end;
 
 function Utf8CompareIso8601(P1, P2: PUtf8Char): PtrInt;
 var
   V1, V2: TDateTime;
 begin
-  if P1 = P2 then
-  begin
-    result := 0;
+  result := StrComp(P1, P2);
+  if result = 0 then
     exit;
-  end;
-  Iso8601ToDateTimePUtf8CharVar(P1, 0, V1);
+  Iso8601ToDateTimePUtf8CharVar(P1, 0, V1); // normalize values ('T', 'Z'...)
   Iso8601ToDateTimePUtf8CharVar(P2, 0, V2);
-  if (V1 = 0) or
-     (V2 = 0) then // any invalid date -> compare as strings
-    result := StrComp(P1, P2)
-  else if SameValue(V1, V2, 1 / MSecsPerDay) then
-    result := 0
-  else if V1 < V2 then
-    result := -1
-  else
-    result := +1;
+  if (V1 <> 0) and
+     (V2 <> 0) then // any invalid date -> compare as strings
+    if V1 < V2 then
+      result := -1
+    else
+      result := +1;
 end;
 
 
