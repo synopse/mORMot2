@@ -1480,6 +1480,25 @@ type
     /// used by tests to set as false and force using SQlite3 virtual tables for
     // TOrmVirtualTableJson static tables (module JSON or BINARY)
     procedure SetStaticVirtualTableDirect(direct: boolean);
+    /// call this method when the internal DB content is known to be invalid
+    // - by default, all REST/CRUD requests and direct SQL statements are
+    // scanned and identified as potentially able to change the internal SQL/JSON
+    // cache used at SQLite3 database level; but some implementation (e.g.
+    // TRestStorageExternal classes defined in mormot.orm.sql) could flush
+    // the database content without proper notification
+    procedure FlushInternalDBCache;
+    /// this method is called internally after any successfull deletion to
+    // ensure relational database coherency
+    // - reset all matching TRecordReference properties in the database Model,
+    // for database coherency, into 0
+    // - delete all records containing a matched TRecordReferenceToBeDeleted
+    // property value in the database Model (e.g. TOrmHistory)
+    // - reset all matching TOrm properties in the database Model,
+    // for database coherency, into 0
+    // - important notice: we don't use FOREIGN KEY constraints in this framework,
+    // and handle all integrity check within this method (it's therefore less
+    // error-prone, and more cross-database engine compatible)
+    function AfterDeleteForceCoherency(aTableIndex: integer; aID: TID): boolean;
     /// create an external static redirection for a specific class
     // - call it just after Create, before IRestOrmServer.CreateMissingTables;
     // warning: if you don't call this method before CreateMissingTable method
@@ -1499,6 +1518,9 @@ type
     // - returns a newly created TRestStorageRemote instance
     function RemoteDataCreate(aClass: TOrmClass;
       aRemoteRest: TRestOrmParent): TRestOrmParent; 
+    /// fast get the associated TRestStorageRemote from its index, if any
+    // - returns nil if aTableIndex is invalid or is not assigned to a TRestStorageRemote
+    function GetRemoteTable(TableIndex: integer): TRestOrmParent;
   end;
 
 

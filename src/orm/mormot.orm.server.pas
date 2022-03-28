@@ -280,7 +280,7 @@ type
       aRemoteRest: TRestOrmParent): TRestOrmParent; virtual;
     /// fast get the associated TRestStorageRemote from its index, if any
     // - returns nil if aTableIndex is invalid or is not assigned to a TRestStorageRemote
-    function GetRemoteTable(TableIndex: integer): TRestOrm;
+    function GetRemoteTable(TableIndex: integer): TRestOrmParent;
     /// initialize change tracking for the given tables
     // - by default, it will use the TOrmHistory table to store the
     // changes - you can specify a dedicated class as aTableHistory parameter
@@ -683,7 +683,7 @@ begin
   StaticTableSetup(t, result as TRestOrm, sStaticDataTable);
 end;
 
-function TRestOrmServer.GetRemoteTable(TableIndex: integer): TRestOrm;
+function TRestOrmServer.GetRemoteTable(TableIndex: integer): TRestOrmParent;
 begin
   if (cardinal(TableIndex) >= cardinal(length(fStaticData))) or
      (fStaticData[TableIndex] = nil) or

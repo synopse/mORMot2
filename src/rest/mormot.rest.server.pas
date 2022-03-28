@@ -2756,7 +2756,7 @@ begin
       end;
     end;
     FastSetString(fUriBlobFieldName, par, parlen);
-    PStrLen(PtrUInt(fUri) - _STRLEN)^ := slash - 1; // in-place truncation
+    {%H-}PStrLen(PtrUInt(fUri) - _STRLEN)^ := slash - 1; // in-place truncation
   end
   else
     // "ModelRoot/TableName"
