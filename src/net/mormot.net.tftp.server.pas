@@ -80,11 +80,15 @@ type
   // - ttoAllowSubFolders will allow RRW/WRQ to access nested files in
   // TTftpServerThread.FileFolder sub-directories
   // - ttoLowLevelLog will log each incoming/outgoing TFTP/UDP frames
+  // - ttoDropPriviledges on POSIX would impersonate the process as 'nobody'
+  // - ttoChangeRoot on POSIX would make the FileFolder the root folder
   TTftpThreadOption = (
     ttoRrq,
     ttoWrq,
     ttoAllowSubFolders,
-    ttoLowLevelLog);
+    ttoLowLevelLog,
+    ttoDropPriviledges,
+    ttoChangeRoot);
 
   TTftpThreadOptions = set of TTftpThreadOption;
 
@@ -120,6 +124,7 @@ type
     fMaxRetry: integer;
     fConnectionTotal: integer;
     fOptions: TTftpThreadOptions;
+    fAsNobody: boolean;
     function GetConnectionCount: integer;
     // default implementation will read/write from FileFolder
     procedure SetFileFolder(const Value: TFileName);
@@ -375,13 +380,37 @@ end;
 constructor TTftpServerThread.Create(const SourceFolder: TFileName;
   Options: TTftpThreadOptions; LogClass: TSynLogClass;
   const BindAddress, BindPort, ProcessName: RawUtf8);
+{$ifdef OSPOSIX}
+var
+  ok: boolean;
+{$endif OSPOSIX}
 begin
   fConnection := TSynObjectListLocked.Create({ownobject=}false);
   SetFileFolder(SourceFolder);
   fMaxConnections := 100; // = 100 threads, good enough for regular TFTP server
   fMaxRetry := 2;
   fOptions := Options;
-  inherited Create(LogClass, BindAddress, BindPort, ProcessName);
+  inherited Create(LogClass, BindAddress, BindPort, ProcessName); // bind port
+  {$ifdef OSPOSIX}
+  if ttoDropPriviledges in fOptions then
+  begin
+    ok := DropPriviledges;
+    if not ok then
+      exclude(fOptions, ttoDropPriviledges);
+    LogClass.Add.Log(LOG_INFOWARNING[not ok],
+      'Create: DropPriviledges(nobody)=%', [ok], self);
+  end;
+  if ttoChangeRoot in fOptions then
+  begin
+    ok := ChangeRoot(StringToUtf8(ExcludeTrailingPathDelimiter(fFileFolder)));
+    if ok then
+      SetFileFolder('/')
+    else
+      exclude(fOptions, ttoDropPriviledges);
+    LogClass.Add.Log(LOG_INFOWARNING[not ok],
+      'Create: ChangeRoot(%)=%', [SourceFolder, ok], self);
+  end;
+  {$endif OSPOSIX}
 end;
 
 // note: no need to override Destroy since OnShutdown is eventually called
