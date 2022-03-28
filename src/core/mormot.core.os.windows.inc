@@ -3182,6 +3182,18 @@ begin
   end;
 end;
 
+
+function DropPriviledges(const UserName: RawUtf8): boolean;
+begin
+  result := false;
+end;
+
+function ChangeRoot(const FolderName: RawUtf8): boolean;
+begin
+  result := false;
+end;
+
+
 // redefined here so that we can share code with FPC and Delphi
 function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
    lpProcessAttributes, lpThreadAttributes: PSecurityAttributes;

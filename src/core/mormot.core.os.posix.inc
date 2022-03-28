@@ -2021,6 +2021,57 @@ begin
   fpSigaction(SIGABRT, @saNew, @saOld);
 end;
 
+type
+  TPasswd = record
+    pw_name: PAnsiChar;    // user name
+    pw_passwd: PAnsiChar;  // encrypted password
+    pw_uid: TUid;	   // user uid
+    pw_gid: TGid;	   // user gid
+    // following fields are not consistent on BSD or Linux, but not needed
+  end;
+  PPasswd  = ^TPasswd;
+
+// retrieve information of a given user by name
+function getpwnam(name: PAnsiChar): PPasswd;
+  cdecl; external clib;
+
+// sets the supplementary group IDs for the calling process
+function setgroups(n: size_t; groups: PGid): integer;
+  cdecl; external clib;
+
+function setuid(uid: TUid): integer;
+  cdecl; external clib;
+function setgid(gid: TGid): integer;
+  cdecl; external clib;
+
+// changes the root directory of the calling process
+function chroot(rootpath: PAnsiChar): integer;
+  cdecl; external clib;
+
+function DropPriviledges(const UserName: RawUtf8): boolean;
+var
+  pwnam: PPasswd;
+begin
+  result := false;
+  pwnam := getpwnam(pointer(UserName));
+  //writeln('setgid(pwnam.pw_gid)=',setgid(pwnam.pw_gid));
+  //writeln('setuid(pwnam.pw_uid)=',setuid(pwnam.pw_uid));
+  if (pwnam = nil) or
+     ((setgid(pwnam.pw_gid) <> 0) and
+      (fpgeterrno <> ESysEPERM)) or
+     ((setuid(pwnam.pw_uid) <> 0) and
+      (fpgeterrno <> ESysEPERM)) then
+    exit;
+  result := true;
+end;
+
+function ChangeRoot(const FolderName: RawUtf8): boolean;
+begin
+  result := (FolderName <> '') and
+            (FpChdir(pointer(FolderName)) = 0){ and
+            (chroot(pointer(FolderName)) = 0)};
+end;
+
 function RunUntilSigTerminatedPidFile: TFileName;
 begin
   result := RunUntilSigTerminatedPidFilePath;

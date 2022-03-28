@@ -3723,6 +3723,14 @@ procedure SynDaemonIntercept(const onlog: TSynLogProc = nil);
 
 {$endif OSWINDOWS}
 
+/// change the current UID/GID to another user, by name
+// - only implemented on POSIX by now
+function DropPriviledges(const UserName: RawUtf8 = 'nobody'): boolean;
+
+/// changes the root directory of the calling process
+// - only implemented on POSIX by now
+function ChangeRoot(const FolderName: RawUtf8): boolean;
+
 type
   /// command line patterns recognized by ParseCommandArgs()
   TParseCommand = (
@@ -3737,6 +3745,7 @@ type
     pcTooManyArguments,
     pcInvalidCommand,
     pcHasEndingBackSlash);
+
   TParseCommands = set of TParseCommand;
   PParseCommands = ^TParseCommands;
 
