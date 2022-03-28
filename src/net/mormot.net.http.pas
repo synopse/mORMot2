@@ -932,7 +932,6 @@ begin
   State := hrsNoStateMachine;
   HeaderFlags := [];
   Options := [];
-  Command := '';
   Headers := '';
   ContentType := '';
   Upgrade := '';
@@ -1685,9 +1684,10 @@ begin
       SetLength(Http.Content, Http.ContentLength); // not chuncked: direct read
       SockInRead(pointer(Http.Content), Http.ContentLength);
     end
-  else if (Http.ContentLength < 0) and // -1 means no Content-Length header
-          IdemPChar(pointer(Http.Command), 'HTTP/1.0 200') then
+  else if Http.ContentLength < 0 then // -1 means no Content-Length header
   begin
+    // no Content-Length neither chunk -> read until the connection is closed
+    // also for HTTP/1.1: https://www.rfc-editor.org/rfc/rfc7230#section-3.3.3
     if Assigned(OnLog) then
       OnLog(sllTrace, 'GetBody deprecated loop', [], self);
     // body = either Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
