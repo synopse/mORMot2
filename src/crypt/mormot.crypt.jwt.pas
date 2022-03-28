@@ -65,7 +65,8 @@ type
   // - jrcJwtID provides a unique identifier for the JWT, to prevent any replay;
   // TJwtAbstract.Compute will set an obfuscated TSynUniqueIdentifierGenerator
   // hexadecimal value stored as "jti" payload field
-  // - jrcData is set when TJwtContent.data has been filled
+  // - jrcData does not reflect any RFC 7519 registered claim, it is set when
+  // TJwtContent.data TDocVariant has been filled with some non-standard fields
   TJwtClaim = (
     jrcIssuer,
     jrcSubject,
@@ -958,6 +959,7 @@ begin
         if (Nlen = 3) and
            (V <> nil) then
         begin
+          // check for the standard JWT claims
           c := PInteger(N)^;
           for claim := low(JWT.reg) to high(JWT.reg) do
             if PInteger(JWT_CLAIMS_TEXT[claim])^ = c then

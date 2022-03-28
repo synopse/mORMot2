@@ -22,7 +22,7 @@ This folder hosts the *RESTful ORM* high-level features of the *mORMot* Open Sou
 Low-Level Basic Types and Definitions for our RESTful ORM
 - Shared ORM/JSON Fields and Values Definitions
 - ORM Ready UTF-8 Comparison Functions
-- `TJsonSerializer` Class for `TOrm` Serialization
+- `TOrmWriter` Class for `TOrm` Serialization
 - `TOrmPropInfo` ORM / RTTI Classes
 - Abstract `TOrmTableAbstract` Parent Class
 - `TOrmTableRowVariant` Custom Variant Type
@@ -35,7 +35,7 @@ Main Shared Types and Definitions for our RESTful ORM
 - `IRestOrm IRestOrmServer IRestOrmClient` Definitions
 - `TOrm` Definition
 - `RecordRef` Wrapper Definition
-- `TOrmTable TOrmTableJSON` Definitions
+- `TOrmTable TOrmTableJson` Definitions
 - `TOrmMany` Definition
 - `TOrmVirtual` Definitions
 - `TOrmProperties` Definitions
