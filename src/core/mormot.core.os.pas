@@ -3699,6 +3699,12 @@ procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
 // the file didn't disappear, which may mean that the daemon is broken)
 function RunUntilSigTerminatedForKill(waitseconds: integer = 30): boolean;
 
+var
+  /// optional folder where the .pid is created
+  // - should include a trailing '/' character
+  // - to be used if the current executable folder is read/only
+  RunUntilSigTerminatedPidFilePath: TFileName;
+
 /// local .pid file name as created by RunUntilSigTerminated(dofork=true)
 function RunUntilSigTerminatedPidFile: TFileName;
 

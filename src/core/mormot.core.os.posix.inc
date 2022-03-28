@@ -2023,8 +2023,10 @@ end;
 
 function RunUntilSigTerminatedPidFile: TFileName;
 begin
-  result := Format('%s.%s.pid',
-     [Executable.ProgramFilePath, Executable.ProgramName]);
+  result := RunUntilSigTerminatedPidFilePath;
+  if result = '' then
+    result := Executable.ProgramFilePath;
+  result := Format('%s.%s.pid', [result, Executable.ProgramName]);
 end;
 
 function RunUntilSigTerminatedForKill(waitseconds: integer): boolean;
