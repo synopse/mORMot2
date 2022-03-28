@@ -3604,6 +3604,7 @@ var
 begin
   result := nil;
   P := Json;
+  Json := nil; // Json=nil indicates error or unexpected end (#0)
   if P = nil then
     exit;
   while (P^ <= ' ') and
@@ -3625,7 +3626,7 @@ begin
   end
   else
   begin
-    result := GetJsonField(P, JSON, @wStr, EndOfObject, Len);
+    result := GetJsonField(P, Json, @wStr, EndOfObject, Len);
     if not wStr and
        NormalizeBoolean and
        (result <> nil) then
