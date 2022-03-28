@@ -2054,8 +2054,6 @@ var
 begin
   result := false;
   pwnam := getpwnam(pointer(UserName));
-  //writeln('setgid(pwnam.pw_gid)=',setgid(pwnam.pw_gid));
-  //writeln('setuid(pwnam.pw_uid)=',setuid(pwnam.pw_uid));
   if (pwnam = nil) or
      ((setgid(pwnam.pw_gid) <> 0) and
       (fpgeterrno <> ESysEPERM)) or
@@ -2068,8 +2066,8 @@ end;
 function ChangeRoot(const FolderName: RawUtf8): boolean;
 begin
   result := (FolderName <> '') and
-            (FpChdir(pointer(FolderName)) = 0){ and
-            (chroot(pointer(FolderName)) = 0)};
+            (FpChdir(pointer(FolderName)) = 0) and
+            (chroot('.') = 0);
 end;
 
 function RunUntilSigTerminatedPidFile: TFileName;
