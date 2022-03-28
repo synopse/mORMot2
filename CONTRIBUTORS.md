@@ -9,6 +9,7 @@ But nothing would have been possible without a big number of Contributors, who p
 A huge *THANK YOU* is worth giving to all of the contributors of our Open Source *mORMot* framework, since its initial release more than 10 years ago!
 
 - Alan Chate
+- Ali Erturk Turker
 - Alexander (sha)
 - Alexander (volax)
 - AlexPirate

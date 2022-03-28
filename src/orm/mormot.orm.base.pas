@@ -3793,9 +3793,10 @@ begin
   if result = 0 then
     exit;
   Iso8601ToDateTimePUtf8CharVar(P1, 0, V1); // normalize values ('T', 'Z'...)
+  if V1 = 0 then
+    exit; // any invalid date -> compare as strings
   Iso8601ToDateTimePUtf8CharVar(P2, 0, V2);
-  if (V1 <> 0) and
-     (V2 <> 0) then // any invalid date -> compare as strings
+  if V2 <> 0 then
     if V1 < V2 then
       result := -1
     else
