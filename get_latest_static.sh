@@ -17,4 +17,4 @@ wget -q -O $DOWNLOAD_PATH "$LATEST_URL"
 
 echo "Unpacking to ./static ..."
 rm -Rf ./static
-7za x $DOWNLOAD_PATH -o./
+7za x $DOWNLOAD_PATH -o./static
