@@ -153,7 +153,12 @@ const
   // connections - creating one thread per HTTP/1.1 connection - so is a good
   // idea behind a nginx reverse proxy using HTTP/1.0, whereas our new
   // useHttpAsync server scales much better with high number of connections
-  HTTP_DEFAULT_MODE = useHttpAsync;
+  
+    {$ifdef ONLYUSEHTTPSOCKET}
+      HTTP_DEFAULT_MODE = useHttpSocket;
+    {$else}
+      HTTP_DEFAULT_MODE = useHttpAsync;
+    {$endif ONLYUSEHTTPSOCKET}  
   {$endif USEHTTPSYS}
 
   /// the kind of HTTP server to be used by default for WebSockets support
