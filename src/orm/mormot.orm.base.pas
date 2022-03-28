@@ -884,7 +884,7 @@ type
       read fOrmOptions write SetOrmOptions;
   end;
 
-// for backward compatibility - use TRttiJson.Register* class methods instead
+// for backward compatibility - use Rtti/TRttiJson.Register* methods instead
 {$ifndef PUREMORMOT2}
 
 type
@@ -896,6 +896,19 @@ type
       aItem: TCollectionItemClass);
     class procedure RegisterObjArrayForJson(aDynArray: PRttiInfo; aItem: TClass); overload;
     class procedure RegisterObjArrayForJson(const aDynArrayClassPairs: array of const); overload;
+    class function RegisterCustomJSONSerializerFromText(aTypeInfo: pointer;
+      const aRTTIDefinition: RawUtf8): TRttiCustom; overload;
+    class procedure RegisterCustomJSONSerializerFromText(
+      const aTypeInfoTextDefinitionPairs: array of const); overload;
+    class procedure RegisterCustomJSONSerializerFromTextSimpleType(
+       aTypeInfo: PRttiInfo); overload;
+    class procedure RegisterCustomJSONSerializerFromTextBinaryType(
+       aTypeInfo: PRttiInfo; aDataSize: integer); overload;
+    class procedure RegisterCustomJSONSerializerFromTextBinaryType(
+      const InfoBinarySize: array of const); overload;
+    // warning: Reader/Writer have changed signature in mORMot 2
+    class function RegisterCustomJsonSerializer(Info: PRttiInfo;
+      const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
   end;
 
 const
@@ -3818,7 +3831,7 @@ begin
       ColNames[0] := '"ID":'; // as expected by AJAX
 end;
 
-// backward compatibility methods - use Rtti global instead
+// backward compatibility methods - use Rtti/TRttiJson global instead
 {$ifndef PUREMORMOT2}
 
 class procedure TJsonSerializer.RegisterClassForJson(aItemClass: TClass);
@@ -3848,6 +3861,42 @@ class procedure TJsonSerializer.RegisterObjArrayForJson(
   const aDynArrayClassPairs: array of const);
 begin
   Rtti.RegisterObjArrays(aDynArrayClassPairs);
+end;
+
+class function TJsonSerializer.RegisterCustomJSONSerializerFromText(
+  aTypeInfo: pointer; const aRTTIDefinition: RawUtf8): TRttiCustom;
+begin
+  result := Rtti.RegisterFromText(aTypeInfo, aRTTIDefinition);
+end;
+
+class procedure TJsonSerializer.RegisterCustomJSONSerializerFromText(
+  const aTypeInfoTextDefinitionPairs: array of const);
+begin
+  Rtti.RegisterFromText(aTypeInfoTextDefinitionPairs);
+end;
+
+class procedure TJsonSerializer.RegisterCustomJSONSerializerFromTextSimpleType(
+  aTypeInfo: PRttiInfo);
+begin
+  Rtti.RegisterType(aTypeInfo);
+end;
+
+class procedure TJsonSerializer.RegisterCustomJSONSerializerFromTextBinaryType(
+  aTypeInfo: PRttiInfo; aDataSize: integer);
+begin
+  Rtti.RegisterBinaryType(aTypeInfo, aDataSize);
+end;
+
+class procedure TJsonSerializer.RegisterCustomJSONSerializerFromTextBinaryType(
+  const InfoBinarySize: array of const);
+begin
+  Rtti.RegisterBinaryTypes(InfoBinarySize);
+end;
+
+class function TJsonSerializer.RegisterCustomJsonSerializer(Info: PRttiInfo;
+  const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
+begin
+  result := TRttiJson.RegisterCustomSerializer(Info, Reader, Writer);
 end;
 
 {$endif PUREMORMOT2}

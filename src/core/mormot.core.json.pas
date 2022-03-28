@@ -748,9 +748,9 @@ type
     /// append a record content as UTF-8 encoded JSON or custom serialization
     // - default serialization will use Base64 encoded binary stream, or
     // a custom serialization, in case of a previous registration via
-    // RegisterCustomJsonSerializer() class method - from a dynamic array
+    // TRttiJson.RegisterCustomSerializer() class method - from a dynamic array
     // handling this kind of records, or directly from TypeInfo() of the record
-    // - by default, custom serializers defined via RegisterCustomJsonSerializer()
+    // - by default, custom serializers defined via RegisterCustomSerializer()
     // would write enumerates and sets as integer numbers, unless
     // twoEnumSetsAsTextInRecord or twoEnumSetsAsBooleanInRecord is set in
     // the instance CustomOptions
@@ -1830,14 +1830,14 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// register a custom callback for JSON serialization of a given TypeInfo()
     // - for a dynamic array, will customize the item serialization callbacks
-    // - replace deprecated TJsonSerializer.RegisterCustomSerializer() method
+    // - replace deprecated TTextWriter.RegisterCustomJSONSerializer() method
     class function RegisterCustomSerializer(Info: PRttiInfo;
       const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
     /// unregister any custom callback for JSON serialization of a given TypeInfo()
     // - will also work after RegisterFromText()
     class function UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJson;
     /// register a custom callback for JSON serialization of a given class
-    // - replace deprecated TJsonSerializer.RegisterCustomSerializer() method
+    // - replace deprecated TTextWriter.RegisterCustomJSONSerializer() method
     class function RegisterCustomSerializerClass(ObjectClass: TClass;
       const Reader: TOnClassJsonRead; const Writer: TOnClassJsonWrite): TRttiJson;
     /// unregister any custom callback for JSON serialization of a given class

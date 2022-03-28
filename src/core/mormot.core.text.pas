@@ -613,7 +613,7 @@ type
   // - twoFlushToStreamNoAutoResize would forbid FlushToStream to resize the
   // internal memory buffer when it appears undersized - FlushFinal will set it
   // before calling a last FlushToStream
-  // - by default, custom serializers defined via RegisterCustomJsonSerializer()
+  // - by default, custom serializers set via TRttiJson.RegisterCustomSerializer()
   // would let AddRecordJson() and AddDynArrayJson() write enumerates and sets
   // as integer numbers, unless twoEnumSetsAsTextInRecord or
   // twoEnumSetsAsBooleanInRecord (exclusively) are set - for Mustache data
