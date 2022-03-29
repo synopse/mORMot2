@@ -436,7 +436,7 @@ begin
   t := pointer(fConnection.List);
   for i := 1 to fConnection.Count do
   begin
-    t^.NotifyShutdown;
+    t^.NotifyShutdown; // also set fOwner=nil to avoid fConnection.Delete()
     inc(t);
   end;
 end;

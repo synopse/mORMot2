@@ -1249,8 +1249,8 @@ begin
   if result then
     include(connection.fSubscribed, sub);
   if fDebugLog <> nil then
-    DoLog('Subscribe(%)=% % handle=% %', [pointer(connection.fSocket),
-      BOOL_STR[result], caller, connection.Handle, ToText(sub)^]);
+    DoLog('Subscribe(%)=% % handle=% % cnt=%', [pointer(connection.fSocket),
+      BOOL_STR[result], caller, connection.Handle, ToText(sub)^, poll.Count]);
 end;
 
 procedure TPollAsyncSockets.CloseConnection(var connection: TPollAsyncConnection);
