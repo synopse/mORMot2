@@ -1,7 +1,7 @@
 /// mormot.db.sql Compatible TDataset Components
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.ui.rad.sql;
+unit mormot.db.rad.ui.sql;
 
 {
   *****************************************************************************
@@ -34,7 +34,7 @@ uses
   mormot.db.rad,
   mormot.db.sql,
   mormot.db.proxy,
-  mormot.ui.rad,
+  mormot.db.rad.ui,
   {$ifdef ISDELPHIXE2}
   Data.DB;
   {$else}

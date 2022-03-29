@@ -429,16 +429,16 @@
         <UnitName Value="mormot.soa.server"/>
       </Item95>
       <Item96>
-        <Filename Value="../../src/ui/mormot.ui.rad.pas"/>
-        <UnitName Value="mormot.ui.rad"/>
+        <Filename Value="../../src/ui/mormot.db.rad.ui.pas"/>
+        <UnitName Value="mormot.db.rad.ui"/>
       </Item96>
       <Item97>
-        <Filename Value="../../src/ui/mormot.ui.rad.orm.pas"/>
-        <UnitName Value="mormot.ui.rad.orm"/>
+        <Filename Value="../../src/ui/mormot.db.rad.ui.orm.pas"/>
+        <UnitName Value="mormot.db.rad.ui.orm"/>
       </Item97>
       <Item98>
-        <Filename Value="../../src/ui/mormot.ui.rad.sql.pas"/>
-        <UnitName Value="mormot.ui.rad.sql"/>
+        <Filename Value="../../src/ui/mormot.db.rad.ui.sql.pas"/>
+        <UnitName Value="mormot.db.rad.ui.sql"/>
       </Item98>
       <Item99>
         <Filename Value="../../src/net/mormot.net.tftp.client.pas"/>

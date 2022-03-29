@@ -1,7 +1,7 @@
 /// ORM/JSON Aware TDataset Components
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.ui.rad.orm;
+unit mormot.db.rad.ui.orm;
 
 {
   *****************************************************************************
@@ -34,9 +34,9 @@ uses
   mormot.db.rad,
   mormot.db.sql,
   mormot.db.proxy,
+  mormot.db.rad.ui,
   mormot.orm.base,
   mormot.orm.core,
-  mormot.ui.rad,
   {$ifdef ISDELPHIXE2}
   Data.DB;
   {$else}

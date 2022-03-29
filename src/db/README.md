@@ -71,6 +71,24 @@ Parent Classes for `TDataSet` / `DB.pas` Database Access
 
 And the associated `mormot.db.rad.*.pas` units for FireDac, UniDac, BDE, NexusDB.
 
+### mormot.db.rad.ui
+
+Efficient Read/Only Abstract `TDataSet` for VCL/LCL/FMX UI
+- Cross-Compiler `TVirtualDataSet` Read/Only Data Access
+- JSON and Variants `TDataSet` Support
+
+### mormot.db.rad.ui.sql
+
+Efficient Read/Only `TDataSet` Working With `mormot.db.sql`
+- `TBinaryDataSet` Filled From a `TSqlDBStatement` ResultSet
+- `TSqlDataSet` For Direct `TSqlDBConnection` Sql Execution
+
+### mormot.db.rad.ui.orm
+
+Efficient Read/Only `TDataSet` for ORM and JSON Process
+- `TOrmTableDataSet` for `TOrmTable`/JSON access
+- JSON/ORM to `TDataSet` Wrappers Functions
+
 ### mormot.db.nosql.bson
 
 Efficient BSON Support for MongoDB Clients
@@ -95,4 +113,3 @@ Allow Remote HTTP Access of any `mormot.db.sql` connections via a Relay
 - Client-Side Proxy Remote Protocol
 - HTTP Server Classes for Remote Access
 - HTTP Client Classes for Remote Access
-
