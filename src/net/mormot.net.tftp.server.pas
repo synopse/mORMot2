@@ -404,7 +404,7 @@ begin
   begin
     ok := ChangeRoot(StringToUtf8(ExcludeTrailingPathDelimiter(fFileFolder)));
     if ok then
-      SetFileFolder('/')
+      fFileFolder := '/'
     else
       exclude(fOptions, ttoDropPriviledges);
     LogClass.Add.Log(LOG_INFOWARNING[not ok],

@@ -1,7 +1,7 @@
-/// JSON/ORM Aware TDataset Components
+/// ORM/JSON Aware TDataset Components
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.ui.rad.json;
+unit mormot.ui.rad.orm;
 
 {
   *****************************************************************************
@@ -72,14 +72,14 @@ type
     // - with non-Unicode version of Delphi, you can set ForceWideString to
     // force the use of WideString fields instead of AnsiString, if needed
     // - the TDataSet will be opened once created
-    constructor Create(Owner: TComponent; Table: TOrmTable
+    constructor Create(Owner: TComponent; OrmTable: TOrmTable
       {$ifndef UNICODE}; ForceWideString: boolean = false{$endif}); reintroduce;
     /// initialize the virtual TDataSet owning a TOrmTable
     // - this constructor will set TableShouldBeFreed to TRUE
     // - with non-Unicode version of Delphi, you can set ForceWideString to
     // force the use of WideString fields instead of AnsiString, if needed
     // - the TDataSet will be opened once created
-    constructor CreateOwnedTable(Owner: TComponent; Table: TOrmTable
+    constructor CreateOwnedTable(Owner: TComponent; OrmTable: TOrmTable
       {$ifndef UNICODE}; ForceWideString: boolean = false{$endif}); reintroduce;
     /// initialize the virtual TDataSet from a supplied JSON result
     // - this constructor will parse the supplied JSON content and create
@@ -194,23 +194,23 @@ implementation
 
 { TOrmTableDataSet }
 
-constructor TOrmTableDataSet.Create(Owner: TComponent; Table: TOrmTable
+constructor TOrmTableDataSet.Create(Owner: TComponent; OrmTable: TOrmTable
   {$ifndef UNICODE}; ForceWideString: boolean{$endif});
 begin
   inherited Create(Owner);
   {$ifndef UNICODE}
   fForceWideString := ForceWideString;
   {$endif UNICODE}
-  if Table <> nil then
-    fTable := Table;
+  if OrmTable <> nil then
+    fTable := OrmTable;
   Open;
 end;
 
-constructor TOrmTableDataSet.CreateOwnedTable(Owner: TComponent; Table: TOrmTable
-  {$ifndef UNICODE}; ForceWideString: boolean{$endif});
+constructor TOrmTableDataSet.CreateOwnedTable(Owner: TComponent;
+  OrmTable: TOrmTable {$ifndef UNICODE}; ForceWideString: boolean{$endif});
 begin
-  Create(Owner, Table {$ifndef UNICODE}, ForceWideString{$endif});
-  if Table <> nil then
+  Create(Owner, OrmTable {$ifndef UNICODE}, ForceWideString{$endif});
+  if OrmTable <> nil then
     fTableShouldBeFreed := true;
 end;
 

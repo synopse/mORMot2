@@ -19,7 +19,7 @@ Efficient Read/Only `TDataSet` Working With `mormot.db.sql`
 - `TBinaryDataSet` Filled From a `TSqlDBStatement` ResultSet
 - `TSqlDataSet` For Direct `TSqlDBConnection` Sql Execution
 
-### mormot.ui.rad.json
+### mormot.ui.rad.orm
 
 Efficient Read/Only `TDataSet` for ORM and JSON Process
 - `TOrmTableDataSet` for `TOrmTable`/JSON access

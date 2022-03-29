@@ -433,8 +433,8 @@
         <UnitName Value="mormot.ui.rad"/>
       </Item96>
       <Item97>
-        <Filename Value="../../src/ui/mormot.ui.rad.json.pas"/>
-        <UnitName Value="mormot.ui.rad.json"/>
+        <Filename Value="../../src/ui/mormot.ui.rad.orm.pas"/>
+        <UnitName Value="mormot.ui.rad.orm"/>
       </Item97>
       <Item98>
         <Filename Value="../../src/ui/mormot.ui.rad.sql.pas"/>
