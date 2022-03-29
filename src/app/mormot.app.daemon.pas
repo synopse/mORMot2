@@ -44,6 +44,7 @@ type
   protected
     fServiceName: string;
     fServiceDisplayName: string;
+    fServiceExecutable: string;
     fServiceDependencies: string;
     fLog: TSynLogInfos;
     fLogRotateFileCount: integer;
@@ -77,6 +78,10 @@ type
     // - default is the executable name
     property ServiceDisplayName: string
       read fServiceDisplayName write fServiceDisplayName;
+    /// the service executable path and parameters
+    // - default is void '', so the executable name (with full path) will be used
+    property ServiceExecutable: string
+      read fServiceExecutable write fServiceExecutable;
     /// if not void, will enable the logs (default is LOG_STACKTRACE)
     property Log: TSynLogInfos
       read fLog write fLog;
@@ -100,6 +105,9 @@ type
     /// the service name, as displayed by Windows or at the console level
     // - default is the executable name
     property ServiceDisplayName;
+    /// the service executable path and parameters
+    // - default is none '', so the executable name (with full path) will be used
+    property ServiceExecutable;
     /// if not void, will enable the logs (default is LOG_STACKTRACE)
     property Log: TSynLogInfos
       read fLog write fLog;
@@ -511,7 +519,8 @@ begin
       cInstall:
         with fSettings do
           Show(TServiceController.Install(ServiceName, ServiceDisplayName,
-            ServiceDescription, aAutoStart, '', ServiceDependencies) <> ssNotInstalled);
+            ServiceDescription, aAutoStart, ServiceExecutable,
+            ServiceDependencies) <> ssNotInstalled);
       cStart,
       cStop,
       cUninstall,
