@@ -676,8 +676,14 @@ type
     actCortexR52,
     actCortexM23,
     actCortexM33,
+    actNeoverseV1,
     actCortexA78,
     actCortexA78AE,
+    actCortexX1,
+    actCortex510,
+    actCortex710,
+    actCortexX2,
+    actNeoverseN2,
     actNeoverseE1,
     actCortexA78C);
   /// a set of recognized ARM/AARCH64 CPU types
@@ -4048,8 +4054,14 @@ const
     $0d13,  // actCortexR52
     $0d20,  // actCortexM23
     $0d21,  // actCortexM33
+    $0d40,  // actNeoverseV1
     $0d41,  // actCortexA78
     $0d42,  // actCortexA78AE
+    $0d44,  // actCortexX1
+    $0d46,  // actCortex510
+    $0d47,  // actCortex710
+    $0d48,  // actCortexX2
+    $0d49,  // actNeoverseN2
     $0d4a,  // actNeoverseE1
     $0d4b); // actCortexA78C
 
@@ -4084,7 +4096,8 @@ const
      'Cortex-A53', 'Cortex-A35', 'Cortex-A55', 'Cortex-A65', 'Cortex-A57',
      'Cortex-A72', 'Cortex-A73', 'Cortex-A75', 'Cortex-A76', 'Neoverse-N1',
      'Cortex-A77', 'Cortex-A76AE', 'Cortex-R52', 'Cortex-M23', 'Cortex-M33',
-     'Cortex-A78', 'Cortex-A78AE', 'Neoverse-E1', 'Cortex-A78C');
+     'Neoverse-V1', 'Cortex-A78', 'Cortex-A78AE', 'Cortex-X1', 'Cortex-510',
+     'Cortex-710', 'Cortex-X2', 'Neoverse-N2', 'Neoverse-E1', 'Cortex-A78C');
 
   ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of RawUtf8 = (
       '',
