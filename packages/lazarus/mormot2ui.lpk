@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="5">
+    <Name Value="mormot2ui"/>
+    <Type Value="RunAndDesignTime"/>
+    <Author Value="A. Bouchez, Synopse"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <SearchPaths>
+        <OtherUnitFiles Value="../../src/ui"/>
+        <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+      </SearchPaths>
+      <CodeGeneration>
+        <Optimizations>
+          <OptimizationLevel Value="3"/>
+        </Optimizations>
+      </CodeGeneration>
+      <Linking>
+        <Debugging>
+          <DebugInfoType Value="dsDwarf3"/>
+        </Debugging>
+      </Linking>
+      <Other>
+        <Verbosity>
+          <ShowHintsForUnusedUnitsInMainSrc Value="True"/>
+          <ShowHintsForSenderNotUsed Value="True"/>
+        </Verbosity>
+        <CompilerMessages>
+          <IgnoredMessages idx11047="True" idx6058="True" idx5092="True" idx5091="True" idx5060="True" idx5058="True" idx5057="True" idx5028="True" idx5024="True" idx5023="True" idx4081="True" idx4079="True" idx4055="True" idx3187="True" idx3124="True" idx3123="True"/>
+        </CompilerMessages>
+        <CustomOptions Value="-dNOSYNDBZEOS
+-dFPCMM_REPORTMEMORYLEAKS
+-dFPCMM_DEBUG
+-dNOSYNDBIBX
+-dFPCMM_SERVER"/>
+        <OtherDefines Count="6">
+          <Define0 Value="NOSYNDBZEOS"/>
+          <Define1 Value="FPCMM_REPORTMEMORYLEAKS"/>
+          <Define2 Value="FPCMM_DEBUG"/>
+          <Define3 Value="FPCMM_ASSUMEMULTITHREAD"/>
+          <Define4 Value="NOSYNDBIBX"/>
+          <Define5 Value="FPCMM_SERVER"/>
+        </OtherDefines>
+      </Other>
+    </CompilerOptions>
+    <Description Value="mORMot 2 framework LCL Components "/>
+    <License Value="MPL, GPL or LGPL"/>
+    <Version Major="2" Release="1"/>
+    <Files Count="2">
+      <Item1>
+        <Filename Value="../../src/ui/mormot.ui.grid.orm.pas"/>
+        <UnitName Value="mormot.ui.grid.orm"/>
+      </Item1>
+      <Item2>
+        <Filename Value="../../src/ui/mormot.ui.controls.pas"/>
+        <UnitName Value="mormot.ui.controls"/>
+      </Item2>
+    </Files>
+    <CompatibilityMode Value="True"/>
+    <RequiredPkgs Count="2">
+      <Item1>
+        <PackageName Value="LCLBase"/>
+      </Item1>
+      <Item2>
+        <PackageName Value="mormot2"/>
+      </Item2>
+    </RequiredPkgs>
+    <UsageOptions>
+      <IncludePath Value="$(PkgIncPath)"/>
+      <UnitPath Value="$(PkgOutDir)"/>
+    </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+      <UseFileFilters Value="True"/>
+    </PublishOptions>
+    <CustomOptions Items="ExternHelp" Version="2">
+      <_ExternHelp Items="Count"/>
+    </CustomOptions>
+  </Package>
+</CONFIG>

@@ -309,7 +309,7 @@ type
     /// retrieve the Marked[] bits array
     function GetMarkedBits: pointer;
     /// read-only access to a particular row values, as VCL text
-    // - Model is one TSQLModel instance (used to display TRecordReference)
+    // - Model is one TOrmModel instance (used to display TRecordReference)
     // - returns the text as generic string, ready to be displayed via the VCL
     // after translation, for oftEnumerate, oftTimeLog, oftRecord and all other
     // properties
@@ -660,21 +660,21 @@ end;
 procedure TOrmTableToGrid.DrawGridMouseDown(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
-  ACol, ARow: integer;
-  Hint: string; // generic string type, for VCL
+  c, r: integer;
+  s: string; // generic string type, for VCL
 begin
   if NotDefined then // avoid any possible GPF
     exit;
   fMouseDownMarkedValue := markNone;
-  TDrawGrid(Owner).MouseToCell(X, Y, ACol, ARow);
-  if cardinal(ACol) < cardinal(Table.FieldCount) then
-    if ARow = 0 then
+  TDrawGrid(Owner).MouseToCell(X, Y, c, r);
+  if cardinal(c) < cardinal(Table.FieldCount) then
+    if r = 0 then
       // click within header
       if (ssCtrl in Shift) or
          (Button <> mbLeft) then
       begin
-        // Ctrl or right button pressed -> display first row as hint
-        ShowHintString(Table.GetString(ARow, ACol), ACol, ARow, 4000);
+        // Ctrl or right button pressed -> display first row as s
+        ShowHintString(Table.GetString(r, c), c, r, 4000);
       end
       else
       begin
@@ -690,37 +690,38 @@ begin
           else
             // sort Marked[] first
             SortForce(-1, true)
-        else if fCurrentFieldOrder = ACol then
+        else if fCurrentFieldOrder = c then
           // same column -> toggle sorting order
-          SortForce(ACol, not fFieldOrder[ACol])
+          SortForce(c, not fFieldOrder[c])
         else
           // column changed -> sort ascending first
-          SortForce(ACol, true);
+          SortForce(c, true);
       end
     // click on data cell
     else if (Button = mbRight) and
-            (ssRight in Shift) and Assigned(OnRightClickCell) then
-      OnRightClickCell(Table, ACol, ARow, X, Y)
+            (ssRight in Shift) and
+            Assigned(OnRightClickCell) then
+      OnRightClickCell(Table, c, r, X, Y)
     else if (ssCtrl in Shift) or
             (Button <> mbLeft) then
     begin
       if not Assigned(OnHintText) or
-         not OnHintText(Table, ACol, ARow, Hint) then
-        Table.ExpandAsString(ARow, ACol, Client.Model, Hint);
-      // Hint := IntToStr(SelectedID);
-      ShowHintString(Hint, ACol, ARow, 4000);
+         not OnHintText(Table, c, r, s) then
+        Table.ExpandAsString(r, c, Client.Model, s);
+      // s := IntToStr(SelectedID);
+      ShowHintString(s, c, r, 4000);
     end
     else if (Button = mbLeft) and
-            (ACol = 0) and
+            (c = 0) and
             fMarkAllowed and
             (X < CheckBoxWidth + 4) then
     begin
       // on click: invert current Marked[] checkbox state
-      if Marked[ARow] then
+      if Marked[r] then
         fMouseDownMarkedValue := markOff
       else
         fMouseDownMarkedValue := markOn;
-      Marked[ARow] := (fMouseDownMarkedValue = markOn);
+      Marked[r] := (fMouseDownMarkedValue = markOn);
     end;
   TDrawGrid(Owner).Invalidate;
 end;
@@ -731,17 +732,17 @@ resourcestring
 procedure TOrmTableToGrid.DrawGridMouseMove(Sender: TObject; Shift: TShiftState;
   X, Y: Integer);
 var
-  ACol, ARow: integer;
+  c, r: integer;
 begin
   if NotDefined then // avoid any possible GPF
     exit;
-  TDrawGrid(Owner).MouseToCell(X, Y, ACol, ARow);
-  if cardinal(ACol) >= cardinal(Table.FieldCount) then
+  TDrawGrid(Owner).MouseToCell(X, Y, c, r);
+  if cardinal(c) >= cardinal(Table.FieldCount) then
     exit;
-  if ARow = 0 then
+  if r = 0 then
   begin
     // over the checkbox left of the first row: show appropriate hint
-    if (ACol = 0) and
+    if (c = 0) and
        fMarkAllowed and
        (fMarked <> nil) and
        (X < CheckBoxWidth + 4) and
@@ -757,18 +758,18 @@ begin
     end
     // over the first row, i.e. column name: show hint if name was truncated
     else if (not FieldTitleTruncatedNotShownAsHint) and
-            GetBit64(fFieldNameTruncated, ACol) and
+            GetBit64(fFieldNameTruncated, c) and
             ((Hint = nil) or
-             (Hint.Col <> ACol) or
+             (Hint.Col <> c) or
              (Hint.Row <> 0)) then
-      ShowHintString(Table.GetCaption(0, ACol), ACol, 0, 1000);
+      ShowHintString(Table.GetCaption(0, c), c, 0, 1000);
   end
   // select/unselect checkbox left of data rows
-  else if (ACol = 0) and
+  else if (c = 0) and
           fMarkAllowed and
           (fMouseDownMarkedValue <> markNone) and
           (X <= CheckBoxWidth + 4) then
-    Marked[ARow] := (fMouseDownMarkedValue = markOn);
+    Marked[r] := (fMouseDownMarkedValue = markOn);
 end;
 
 procedure TOrmTableToGrid.DrawGridMouseUp(Sender: TObject; Button: TMouseButton;
@@ -821,7 +822,7 @@ end;
 
 procedure TOrmTableToGrid.DrawGridKeyPress(Sender: TObject; var Key: Char);
 var
-  F, R: integer;
+  f, r: integer;
 begin
   // incremental key lookup
   if NotDefined then // avoid any possible GPF
@@ -840,14 +841,14 @@ begin
        (fIncrementalSearch = '') then
     begin
       // space with no lookup key -> allow mark/unmark current one
-      R := TDrawGrid(Owner).Row;
+      r := TDrawGrid(Owner).Row;
       if fMarkAllowed and
-         (R > 0) then
+         (r > 0) then
       begin
-        Marked[R] := not Marked[R];
-        inc(R);
-        if R <= Table.RowCount then
-          TDrawGrid(Owner).Row := R
+        Marked[r] := not Marked[r];
+        inc(r);
+        if r <= Table.RowCount then
+          TDrawGrid(Owner).Row := r
         else // and go to next row
           TDrawGrid(Owner).Invalidate;
       end;
@@ -863,29 +864,29 @@ begin
     exit; // nothing to search
   end;
   // search from the next row
-  F := fCurrentFieldOrder;
-  R := Table.SearchValue(fIncrementalSearch, TDrawGrid(Owner).Row + 1,
+  f := fCurrentFieldOrder;
+  r := Table.SearchValue(fIncrementalSearch, TDrawGrid(Owner).Row + 1,
     fCurrentFieldOrder, Client.Orm);
-  if R = 0 then
+  if r = 0 then
   begin
     // not found: search from the beginning
-    R := Table.SearchValue(fIncrementalSearch, 1, fCurrentFieldOrder, Client.Orm);
-    if R = 0 then
+    r := Table.SearchValue(fIncrementalSearch, 1, fCurrentFieldOrder, Client.Orm);
+    if r = 0 then
     begin
       // not found in this field: search in all fields
-      R := Table.SearchValue(fIncrementalSearch,
-        TDrawGrid(Owner).Row + 1, @F, Client.Orm);
-      if R = 0 then
+      r := Table.SearchValue(fIncrementalSearch,
+        TDrawGrid(Owner).Row + 1, @f, Client.Orm);
+      if r = 0 then
         // still not found: search in all fields from the beginning
-        R := Table.SearchValue(fIncrementalSearch, 1, @F, Client.Orm);
+        r := Table.SearchValue(fIncrementalSearch, 1, @f, Client.Orm);
     end;
   end;
-  if R > 0 then
+  if r > 0 then
   begin
     fIncrementalSearchMove := true; // DrawGridSelectCell() won't reset fIncremental
-    TDrawGrid(Owner).Row := R;
+    TDrawGrid(Owner).Row := r;
     fIncrementalSearchMove := false;
-    ShowHintString(Utf8ToString(fIncrementalSearch), F, R, 2000, clNavy);
+    ShowHintString(Utf8ToString(fIncrementalSearch), f, r, 2000, clNavy);
   end
   else
   // not found: display searched string in red
@@ -913,7 +914,7 @@ end;
 procedure TOrmTableToGrid.DrawGridKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 var
-  F: integer;
+  f: integer;
 begin
   if NotDefined or
      (Shift <> []) then // avoid any possible GPF
@@ -921,18 +922,18 @@ begin
   case Key of
     VK_LEFT: // LEFT ARROW key sort previous column
       if fCurrentFieldOrder > 0 then
-        F := fCurrentFieldOrder - 1
+        f := fCurrentFieldOrder - 1
       else
-        F := Table.FieldCount - 1;
+        f := Table.FieldCount - 1;
     VK_RIGHT: // RIGHT ARROW key sort next column
       if fCurrentFieldOrder >= Table.FieldCount - 1 then
-        F := 0
+        f := 0
       else
-        F := fCurrentFieldOrder + 1;
+        f := fCurrentFieldOrder + 1;
   else
     exit;
   end;
-  SortChange(F);
+  SortChange(f);
   Key := 0; // we proceed this key -> caller will ignore it
 end;
 
@@ -1073,7 +1074,7 @@ end;
 
 function TOrmTableToGrid.Refresh(ForceRefresh, AutoResizeColumns: boolean): boolean;
 var
-  Refreshed: boolean;
+  refreshed: boolean;
   id: TID;
 begin
   if self = nil then
@@ -1081,11 +1082,13 @@ begin
   else
   begin
     id := Table.GetID(TDrawGrid(Owner).Row);
-    if ForceRefresh then
+    if id = 0 then
+      result := false
+    else if ForceRefresh then
       result := true
     else
-      result := Client.Client.UpdateFromServer([Table], Refreshed) and
-                Refreshed;
+      result := Client.Client.UpdateFromServer([Table], refreshed) and
+                refreshed;
     if result then
       AfterRefresh(id, AutoResizeColumns);
   end;
@@ -1093,8 +1096,8 @@ end;
 
 procedure TOrmTableToGrid.AfterRefresh(const aID: TID; AutoResizeColumns: boolean);
 var
-  CurrentRow: integer;
-  Bulk: boolean;
+  r: integer;
+  dummy: boolean;
 begin
   with TDrawGrid(Owner) do
   begin
@@ -1108,40 +1111,40 @@ begin
       ColCount := Table.FieldCount;
       SetLength(fFieldOrder, Table.FieldCount);
     end;
-    CurrentRow := Table.RowFromID(aID);
-    if CurrentRow = 0 then
-      CurrentRow := 1;
-    Row := CurrentRow;
+    r := Table.RowFromID(aID);
+    if r = 0 then
+      r := 1;
+    Row := r;
     TopRow := 1;
     Invalidate;
   end;
   if AutoResizeColumns then
     Resize(nil);
   if Assigned(OnSelectCell) then
-    OnSelectCell(Owner, 0, CurrentRow, Bulk); // refresh details
+    OnSelectCell(Owner, 0, r, dummy); // refresh details
 end;
 
 procedure TOrmTableToGrid.SetFieldLengthMean(const Lengths: RawUtf8;
   aMarkAllowed: boolean);
 var
-  L, i: PtrInt;
+  l, i: PtrInt;
   c: AnsiChar;
-  Means: array of cardinal;
+  means: array of cardinal;
 begin
   if self = nil then
     Exit;
   fMarkAllowed := aMarkAllowed;
-  L := length(Lengths);
-  if L = 0 then
+  l := length(Lengths);
+  if l = 0 then
   begin
-    SetLength(Means, Table.FieldCount);
+    SetLength(means, Table.FieldCount);
     for i := 0 to Table.FieldCount - 1 do
-      Means[i] := 10; // some fixed width
+      means[i] := 10; // some fixed width
   end
-  else if Table.FieldCount = L then
+  else if Table.FieldCount = l then
   begin
-    SetLength(Means, L);
-    for i := 0 to L - 1 do
+    SetLength(means, l);
+    for i := 0 to l - 1 do
     begin
       c := Lengths[i + 1];
       if c in ['a'..'z'] then
@@ -1149,9 +1152,9 @@ begin
         Aligned[i] := galCenter;
         dec(c, 32);
       end;
-      Means[i] := ord(c) + (1 - ord('A'));
+      means[i] := ord(c) + (1 - ord('A'));
     end;
-    Table.SetFieldLengthMean(Means);
+    Table.SetFieldLengthMean(means);
   end;
   if aMarkAllowed then
     Table.FieldLengthMeanIncrease(0, 2); // space for Marked[] checkbox e.g.
@@ -1234,9 +1237,9 @@ end;
 procedure TOrmTableToGrid.SetMark(aAction: TGridAction);
 var
   i: PtrInt;
-  V: Int64;
+  v: Int64;
   current: TDateTime;
-  TimeMin, TimeMax: TTimeLogBits;
+  min, max: TTimeLogBits;
 const
   DIFFTIME: array[actMarkOlderThanOneDay..actMarkOlderThanOneYear] of double = (1,
     7, 31, 183, 365); // 183 = more or less half a year
@@ -1262,47 +1265,47 @@ begin
         case aAction of
           actMarkToday:
             begin
-              TimeMin.From(current, true);
-              TimeMax.From(current + 1, true);
+              min.From(current, true);
+              max.From(current + 1, true);
             end;
           actMarkThisWeek:
             begin
-              TimeMin.From(StartOfTheWeek(current), true);
-              TimeMax.From(EndOfTheWeek(current) + 1, true);
+              min.From(StartOfTheWeek(current), true);
+              max.From(EndOfTheWeek(current) + 1, true);
             end;
           actMarkThisMonth:
             begin
-              TimeMin.From(StartOfTheMonth(current), true);
-              TimeMax.From(EndOfTheMonth(current) + 1, true);
+              min.From(StartOfTheMonth(current), true);
+              max.From(EndOfTheMonth(current) + 1, true);
             end;
           actMarkYesterday:
             begin
-              TimeMin.From(current - 1, true);
-              TimeMax.From(current, true);
+              min.From(current - 1, true);
+              max.From(current, true);
             end;
           actMarkLastWeek:
             begin
-              TimeMin.From(IncWeek(StartOfTheWeek(current), -1), true);
-              TimeMax.From(StartOfTheWeek(current), true);
+              min.From(IncWeek(StartOfTheWeek(current), -1), true);
+              max.From(StartOfTheWeek(current), true);
             end;
           actMarkLastMonth:
             begin
-              TimeMin.From(IncMonth(StartOfTheMonth(current), -1), true);
-              TimeMax.From(StartOfTheMonth(current), true);
+              min.From(IncMonth(StartOfTheMonth(current), -1), true);
+              max.From(StartOfTheMonth(current), true);
             end;
           actMarkOlderThanOneDay..actMarkOlderThanOneYear:
             begin
-              TimeMin.Value := 1; // = 1 second after Jesus' birth = not <> 0
-              TimeMax.From(NowUTC - DIFFTIME[aAction], true);
+              min.Value := 1; // = 1 second after Jesus' birth = not <> 0
+              max.From(NowUTC - DIFFTIME[aAction], true);
             end;
         else
           exit;
         end;
         for i := 1 to RowCount do
         begin
-          V := Table.GetAsInt64(i, fFieldIndexTimeLogForMark);
-          if (V >= TimeMin.Value) and
-             (V <= TimeMax.Value) then
+          v := Table.GetAsInt64(i, fFieldIndexTimeLogForMark);
+          if (v >= min.Value) and
+             (v <= max.Value) then
             Marked[i] := true;
         end;
       end;
@@ -1345,26 +1348,26 @@ end;
 
 function TOrmTableToGrid.ExpandRowAsString(Row: PtrInt; Model: TOrmModel): string;
 var
-  F, i: PtrInt;
-  Text: string; // generic VCL-ready string
+  f, i: PtrInt;
+  s: string; // generic VCL-ready string
 begin
   result := '';
   if (self = nil) or
      (PtrUInt(Row) > PtrUInt(Table.RowCount)) or
      (Table.FieldCount <= 0) then
     exit;
-  for F := 0 to Table.FieldCount - 1 do
+  for f := 0 to Table.FieldCount - 1 do
   begin
     if (not Assigned(OnValueText)) or
-       (not OnValueText(Table, F, Row, Text)) then
-      Table.ExpandAsString(Row, F, Model, Text);
-    i := pos(#13, Text); // trim multi-line text to first line
+       (not OnValueText(Table, f, Row, s)) then
+      Table.ExpandAsString(Row, f, Model, s);
+    i := pos(#13, s); // trim multi-line s to first line
     if i > 0 then
-      SetLength(Text, i - 1);
-    if (F > 0) and
-       (Text <> '') then
-      Text := ' ' + Text;
-    result := result + Text;
+      SetLength(s, i - 1);
+    if (f > 0) and
+       (s <> '') then
+      s := ' ' + s;
+    result := result + s;
   end;
 end;
 
@@ -1404,7 +1407,7 @@ end;
 
 function TOrmTableToGrid.GetFieldIndexTimeLogForMark: integer;
 var
-  F: PtrInt;
+  f: PtrInt;
 begin
   if Self = nil then
   begin
@@ -1415,10 +1418,10 @@ begin
   begin
     // first call: initialize the cached value
     fFieldIndexTimeLogForMark := -1;
-    for F := 0 to Table.FieldCount - 1 do
-      if Table.FieldType(F) = oftTimeLog then
+    for f := 0 to Table.FieldCount - 1 do
+      if Table.FieldType(f) = oftTimeLog then
       begin
-        fFieldIndexTimeLogForMark := F;
+        fFieldIndexTimeLogForMark := f;
         break;
       end;
   end;
