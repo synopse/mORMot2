@@ -755,6 +755,11 @@ function SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8): R
 // ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
 function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
 
+/// get the order table name from a SQL statement
+// - return the word following any 'ORDER BY' statement
+// - return 'RowID' if none found
+function SqlGetOrder(const Sql: RawUTF8): RawUTF8;
+
 /// compute 'PropName in (...)' where clause for a SQL statement
 // - if Values has no value, returns ''
 // - if Values has a single value, returns 'PropName="Values0"' or inlined
@@ -2107,6 +2112,28 @@ begin
   else
     result := Select;
   result := 'SELECT ' + result + ' FROM ' + TableName + SqlFromWhere(Where);
+end;
+
+function SqlGetOrder(const Sql: RawUTF8): RawUTF8;
+var
+  P: PUtf8Char;
+  i: integer;
+begin
+  i := PosI('ORDER BY ', Sql);
+  if i > 0 then
+  begin
+    inc(i, 9);
+    while Sql[i] in [#1 .. ' '] do
+      inc(i); // trim left
+    result := copy(Sql, i, maxInt);
+    P := PosChar(pointer(Result), ' ');
+    if P = nil then
+      P := PosChar(pointer(Result), ';');
+    if P <> nil then
+      SetLength(result, P - pointer(Result)); // trim right
+  end;
+  if result = '' then // by default, a SQLite3 query is ordered by ID
+    result := ROWID_TXT;
 end;
 
 function SelectInClause(const PropName: RawUtf8; const Values: array of RawUtf8;
