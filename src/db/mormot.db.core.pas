@@ -319,7 +319,10 @@ const
     'RawBlob');   // ftBlob
 
 var
+  /// contains 'ID' as UTF-8 text with positive RefCnt (avoid const realloc)
   ID_TXT: RawUtf8;
+
+  /// contains 'RowID' as UTF-8 text with positive RefCnt (avoid const realloc)
   ROWID_TXT: RawUtf8;
 
 function ToText(op: TSqlCompareOperator): PShortString; overload;

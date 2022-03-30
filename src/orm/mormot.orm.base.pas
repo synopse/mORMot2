@@ -11182,9 +11182,9 @@ begin
   result := false; // success
   if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then
     if ForceNoRowID then
-      Text := Text + 'ID'
+      Text := Text + ID_TXT
     else
-      Text := Text + 'RowID'
+      Text := Text + ROWID_TXT
   else if (self = nil) or
           (cardinal(FieldIndex) >= cardinal(Fields.Count)) then
     result := true

@@ -3339,8 +3339,9 @@ begin
     W := fParams; // reuse a per-callback TJsonWriter instance
     W.CancelAll;
   end
-  else
-    W := TJsonWriter.CreateOwnedStream(8192); // paranoid thread-safety call
+  else 
+    // paranoid thread-safety call with its own temp buffer (seldom called)
+    W := TJsonWriter.CreateOwnedStream(8192);
   try
     if ifoJsonAsExtended in fOptions then
       W.CustomOptions := W.CustomOptions + [twoForceJsonExtended]
@@ -7448,7 +7449,7 @@ begin
             else
               raise EInterfaceFactory.CreateUtf8('OnCallback=nil for %(%: %)',
                 [fMethod^.InterfaceDotMethodName, arg^.ParamName^,
-                 arg^.ArgTypeName^])
+                 arg^.ArgTypeName^]) // paranoid (already checked before)
           else if not arg^.SetFromJson(ctxt, fMethod, fValues[a], Error) then
             exit;
         end;

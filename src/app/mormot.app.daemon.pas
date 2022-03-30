@@ -80,6 +80,7 @@ type
       read fServiceDisplayName write fServiceDisplayName;
     /// the service executable path and parameters
     // - default is void '', so the executable name (with full path) will be used
+    // - by definition, is available only on Windows
     property ServiceExecutable: string
       read fServiceExecutable write fServiceExecutable;
     /// if not void, will enable the logs (default is LOG_STACKTRACE)

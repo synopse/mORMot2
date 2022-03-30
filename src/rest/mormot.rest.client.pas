@@ -1270,9 +1270,9 @@ begin
   aClientNonce := CardinalToHexLower(OSVersionInt32) + '_' +
                   BinToHexLower(@rnd, SizeOf(rnd)); // 160-bit nonce
   result := ClientGetSessionKey(Sender, User, [
-    'username', User.LogonName,
-    'password', Sha256(Sender.fModel.Root + aServerNonce + aClientNonce +
-                       User.LogonName + User.PasswordHashHexa),
+    'username',   User.LogonName,
+    'password',   Sha256(Sender.fModel.Root + aServerNonce + aClientNonce +
+                         User.LogonName + User.PasswordHashHexa),
     'clientnonce', aClientNonce]);
 end;
 

@@ -258,12 +258,15 @@ begin
   try
     fThreadState := sRun;
     if fProcess <> nil then // may happen when debugging under FPC (alf)
-      SetCurrentThreadName('% % %', [fProcess.fProcessName, self, fProcess.Protocol.Name]);
-    WebSocketLog.Add.Log(sllDebug, 'Execute: before ProcessLoop %', [fProcess], self);
+      SetCurrentThreadName(
+        '% % %', [fProcess.fProcessName, self, fProcess.Protocol.Name]);
+    WebSocketLog.Add.Log(
+      sllDebug, 'Execute: before ProcessLoop %', [fProcess], self);
     if not Terminated and
        (fProcess <> nil) then
       fProcess.ProcessLoop;
-    WebSocketLog.Add.Log(sllDebug, 'Execute: after ProcessLoop %', [fProcess], self);
+    WebSocketLog.Add.Log(
+      sllDebug, 'Execute: after ProcessLoop %', [fProcess], self);
     if (fProcess <> nil) and
        (fProcess.Socket <> nil) and
        fProcess.Socket.InheritsFrom(THttpClientWebSockets) then

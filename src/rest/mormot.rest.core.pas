@@ -4901,7 +4901,7 @@ begin
       begin
         Server.UpdateField(RecordClass,
           'Timestamp', Int64ToUtf8(Server.GetServerTimestamp),
-          'RowID', Int64ToUtf8(fID));
+          ROWID_TXT, Int64ToUtf8(fID));
         Server.UpdateBlob(RecordClass, fID, Orm.BlobFields[0].Name, fHistory);
       end;
       result := true;

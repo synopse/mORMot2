@@ -134,12 +134,12 @@ type
     Search: TMatchSearchFunction;
     /// initialize the internal fields for a given glob search pattern
     // - note that the aPattern instance should remain in memory, since it will
-    // be pointed to by the Pattern private field of this object
+    // be pointed to by the PatternText private field of this object
     procedure Prepare(const aPattern: RawUtf8;
       aCaseInsensitive, aReuse: boolean); overload;
     /// initialize the internal fields for a given glob search pattern
     // - note that the aPattern buffer should remain in memory, since it will
-    // be pointed to by the Pattern private field of this object
+    // be pointed to by the PatternText private field of this object
     procedure Prepare(aPattern: PUtf8Char; aPatternLen: integer;
       aCaseInsensitive, aReuse: boolean); overload;
     /// initialize low-level internal fields for'*aPattern*' search
