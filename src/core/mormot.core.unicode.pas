@@ -666,11 +666,13 @@ function Utf8DecodeToRawUnicode(const S: RawUtf8): RawUnicode; overload;
 // - this version doesn't resize the length of the result RawUnicode
 // and is therefore useful before a Win32 Unicode API call (with nCount=-1)
 // - if DestLen is not nil, the resulting length (in bytes) will be stored within
+// - see also Utf8DecodeToUnicode() which uses a TSynTempBuffer for storage
 function Utf8DecodeToRawUnicodeUI(const S: RawUtf8;
   DestLen: PInteger = nil): RawUnicode; overload;
 
 /// convert a UTF-8 string into a RawUnicode string
 // - returns the resulting length (in bytes) will be stored within Dest
+// - see also Utf8DecodeToUnicode() which uses a TSynTempBuffer for storage
 function Utf8DecodeToRawUnicodeUI(const S: RawUtf8;
   var Dest: RawUnicode): integer; overload;
 
@@ -912,6 +914,15 @@ procedure Utf8ToSynUnicode(const Text: RawUtf8; var result: SynUnicode); overloa
 
 /// convert any UTF-8 encoded buffer into a generic SynUnicode Text
 procedure Utf8ToSynUnicode(Text: PUtf8Char; Len: PtrInt; var result: SynUnicode); overload;
+
+/// convert any UTF-8 encoded string into an UTF-16 temporary buffer
+// - returns the number of WideChar stored in temp (not bytes)
+// - caller should make temp.Done after temp.buf has been used
+function Utf8DecodeToUnicode(const Text: RawUtf8; var temp: TSynTempBuffer): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert any UTF-8 encoded buffer into an UTF-16 temporary buffer
+function Utf8DecodeToUnicode(Text: PUtf8Char; Len: PtrInt; var temp: TSynTempBuffer): PtrInt; overload;
 
 /// convert any Ansi 7-bit encoded String into a generic VCL Text
 // - the Text content must contain only 7-bit pure ASCII characters
@@ -4129,18 +4140,30 @@ end;
 procedure Utf8ToSynUnicode(Text: PUtf8Char; Len: PtrInt; var result: SynUnicode);
 var
   tmp: TSynTempBuffer;
+  n: PtrInt;
+begin
+  n := Utf8DecodeToUnicode(Text, Len, tmp);
+  SetString(result, PWideChar(tmp.buf), n);
+  if n <> 0 then
+    tmp.Done;
+end;
+
+function Utf8DecodeToUnicode(const Text: RawUtf8; var temp: TSynTempBuffer): PtrInt;
+begin
+  result := Utf8DecodeToUnicode(pointer(Text), length(Text), temp);
+end;
+
+function Utf8DecodeToUnicode(Text: PUtf8Char; Len: PtrInt; var temp: TSynTempBuffer): PtrInt;
 begin
   if (Text = nil) or
      (Len <= 0) then
-    result := ''
+    result := 0
   else
   begin
-    tmp.Init(Len * 3); // maximum posible unicode size (if all <#128)
-    SetString(result, PWideChar(tmp.buf), Utf8ToWideChar(tmp.buf, Text, Len) shr 1);
-    tmp.Done;
+    temp.Init(Len * 3); // maximum posible unicode size (if all <#128)
+    result := Utf8ToWideChar(temp.buf, Text, Len) shr 1;
   end;
 end;
-
 
 
 { **************** Text Case-(in)sensitive Conversion and Comparison }
