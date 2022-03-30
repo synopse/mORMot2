@@ -8,7 +8,7 @@
       <SearchPaths>
         <IncludeFiles Value="../../src;../../src/core;../../src/net"/>
         <Libraries Value="../../static/$(TargetCPU)-$(TargetOS)"/>
-        <OtherUnitFiles Value="../../src/app;../../src/core;../../src/crypt;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/script;../../src/ui"/>
+        <OtherUnitFiles Value="../../src/app;../../src/core;../../src/crypt;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/script"/>
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
       <CodeGeneration>

@@ -487,9 +487,10 @@
       {$define ORMGENERICS}
     {$ifend}
     {$if CompilerVersion >= 23.0} // = Delphi XE2
-      // Delphi XE2 has some cross-platform features
-      // e.g. {$ifdef ISDELPHIXE2}VCL.Graphics{$else}Graphics{$endif}
       {$define ISDELPHIXE2}
+      // Delphi XE2 has some cross-platform features
+      // e.g. {$ifdef NEEDVCLPREFIX}VCL.Graphics{$else}Graphics{$endif}
+      {$define NEEDVCLPREFIX}
       {$define HASVARUSTRARG}
       {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
     {$ifend}
