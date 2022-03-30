@@ -1045,7 +1045,7 @@ type
     // - returns an Int64 to properly support cardinal values
     // - return -1 on any error
     function GetOrdValue(Instance: TObject): Int64;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// low-level getter of the ordinal property value of a given instance
     // - this method will check if the corresponding property is ordinal
     // - ordinal properties smaller than rkInt64 will return an Int64-converted
@@ -1084,7 +1084,11 @@ type
     {$endif HASVARUSTRING}
     /// retrieve rkLString, rkSString, rkUString, rkWString, rkChar, rkWChar as RawUtf8
     // - this would make heap allocations and encoding conversion, so may be slow
-    procedure GetAsString(Instance: TObject; var Value: RawUtf8);
+    procedure GetAsString(Instance: TObject; var Value: RawUtf8); overload;
+    /// retrieve rkLString, rkSString, rkUString, rkWString, rkChar, rkWChar as RawUtf8
+    // - just a wrapper around the overloaded GetAsString() function
+    function GetAsString(Instance: TObject): RawUtf8; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// set rkLString, rkSString, rkUString, rkWString, rkChar, rkWChar from
     // a RawUtf8 value
     // - this would make heap allocations and encoding conversion, so may be slow
@@ -4391,6 +4395,11 @@ begin
 end;
 
 {$endif HASVARUSTRING}
+
+function TRttiProp.GetAsString(Instance: TObject): RawUtf8;
+begin
+  GetAsString(Instance, result);
+end;
 
 procedure TRttiProp.GetAsString(Instance: TObject; var Value: RawUtf8);
 var
