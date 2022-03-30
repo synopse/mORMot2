@@ -2080,6 +2080,7 @@ type
   TOrmTableDataArray = PIntegerArray; // 0 = nil, or offset in fDataStart[]
   TOrmTableJsonDataArray = TIntegerDynArray;
   {$endif NOPOINTEROFFSET}
+  POrmTableData = ^TOrmTableData;
 
   /// abstract parent to TOrmTable and TOrmTableJson classes
   // - will be fully implemented as TOrmTableJson holding JSON content
@@ -2169,6 +2170,8 @@ type
     function GetA(Row, Field: PtrInt): WinAnsiString;
     /// read-only access to a particular field value, as Win Ansi text ShortString
     function GetS(Row, Field: PtrInt): ShortString;
+    /// read-only access to a particular field value, as boolean
+    function GetB(Row, Field: PtrInt): boolean;
     /// read-only access to a particular field value, as a Variant
     // - text will be stored as RawUtf8 (as varString type)
     // - will try to use the most approriate Variant type for conversion (will
@@ -2455,6 +2458,8 @@ type
     procedure SortFields(const Fields: array of integer;
       const Asc: array of boolean;
       const CustomCompare: array of TUtf8Compare); overload;
+    /// sort result Rows, according to the Bits set to 1 first
+    procedure SortBitsFirst(var Bits);
     /// guess the field type from first non null data row
     // - if QueryTables[] are set, exact field type and enumerate TypeInfo() is
     // retrieved from the Delphi RTTI; otherwise, get from the cells content
@@ -8556,6 +8561,11 @@ begin
   Utf8ToShortString(result, Get(Row, Field));
 end;
 
+function TOrmTableAbstract.GetB(Row, Field: PtrInt): boolean;
+begin
+  result := GetBoolean(Get(Row, Field));
+end;
+
 function TOrmTableAbstract.GetString(Row, Field: PtrInt): string;
 var
   U: PUtf8Char;
@@ -9633,6 +9643,45 @@ end;
 function TOrmTableAbstract.SortCompare(Field: integer): TUtf8Compare;
 begin
   result := OrmFieldTypeComp[FieldType(Field)];
+end;
+
+procedure TOrmTableAbstract.SortBitsFirst(var Bits);
+var
+  n, i, nset: PtrInt;
+  old:  array of TOrmTableData; // local copy
+  s, d: POrmTableData;
+  pass: boolean;
+begin
+  if (self = nil) or
+     (fRowCount <= 1) or
+     (FieldCount <= 0) then
+    exit;
+  // move fData[] in two passes: set bit rows, then unset bit rows
+  n := fRowCount * FieldCount;
+  SetLength(old, n);
+  d := @fData[FieldCount]; // ignore first row = header
+  MoveFast(d^, pointer(old)^, n * SizeOf(TOrmTableData));
+  n := FieldCount * SizeOf(TOrmTableData);
+  nset := 0;
+  for pass := true downto false do
+  begin
+    s := pointer(old);
+    for i := 1 to fRowCount do
+    begin
+      if GetBitPtr(@Bits, i) = pass then
+      begin
+        MoveFast(s^, d^, n);
+        inc(d, FieldCount);
+        if pass then
+          inc(nset);
+      end;
+      inc(s, FieldCount);
+    end;
+  end;
+  // recalcultate Bits[]
+  FillCharFast(Bits, (fRowCount shr 3) + 1, 0);
+  for i := 0 to nset - 1 do
+    SetBitPtr(@Bits,i);
 end;
 
 function TOrmTableAbstract.Step(SeekFirst: boolean; RowVariant: PVariant): boolean;

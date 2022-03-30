@@ -2812,7 +2812,7 @@ type
     constructor CreateFromTables(const Tables: array of TOrmClass;
       const aSql: RawUtf8);
     /// read-only access to a particular field value, as VCL text
-    // - Client is used to display TRecordReference via the associated TOrmModel
+    // - Model is used to display TRecordReference from the associated TOrmModel
     // - returns the Field Type
     // - return generic string Text, i.e. UnicodeString for Delphi 2009+, ready
     // to be displayed to the VCL, for oftEnumerate, oftTimeLog,
@@ -2828,13 +2828,13 @@ type
     // date/time format as expected by FormatDateTime() for all date time kind
     // of fields (as oftDateTime, oftDateTimeMS, oftTimeLog, oftModTime,
     // oftCreateTime, oftUnixTime, oftUnixMSTime)
-    function ExpandAsString(Row, Field: PtrInt; const Client: IRestOrm;
+    function ExpandAsString(Row, Field: PtrInt; Model: TOrmModel;
       out Text: string; const CustomFormat: string = ''): TOrmFieldType;
     /// read-only access to a particular field value, as VCL text
     // - this method is just a wrapper around ExpandAsString method, returning
     // the content as a SynUnicode string type (i.e. UnicodeString since Delphi
     // 2009, and WideString for non Unicode versions of Delphi)
-    function ExpandAsSynUnicode(Row, Field: PtrInt; const Client: IRestOrm;
+    function ExpandAsSynUnicode(Row, Field: PtrInt; Model: TOrmModel;
       out Text: SynUnicode): TOrmFieldType;
     /// get the record class (i.e. the table) associated to a field
     // - is nil if this table has no QueryTables property
@@ -5597,7 +5597,7 @@ begin
     // slowest but always accurate Unicode comparison
     UpperUnicode := Utf8DecodeToRawUnicodeUI(RawUtf8(Search), @UpperUnicodeLen);
     while PtrUInt(result) <= PtrUInt(fRowCount) do
-      if FindUnicode(pointer(Utf8DecodeToRawUnicode(GetResults(o), 0)),
+      if FindUnicode(pointer(Utf8DecodeToRawUnicodeUI(GetResults(o))),
           pointer(UpperUnicode), UpperUnicodeLen) then
         exit
       else
@@ -5644,7 +5644,7 @@ begin
   end;
 end;
 
-function TOrmTable.ExpandAsString(Row, Field: PtrInt; const Client: IRestOrm;
+function TOrmTable.ExpandAsString(Row, Field: PtrInt; Model: TOrmModel;
   out Text: string; const CustomFormat: string): TOrmFieldType;
 var
   info: POrmTableFieldType;
@@ -5758,11 +5758,11 @@ dt:     if Value <> 0 then
               result := oftUtf8Text; // will display INTEGER field as number }
             oftRecord:
               if (Value <> 0) and
-                 (Client <> nil) then // 'TableName ID'
+                 (Model<> nil) then // 'TableName ID'
                 {$ifdef UNICODE}
-                Text := Ansi7ToString(Ref.Text(Client.Model))
+                Text := Ansi7ToString(Ref.Text(Model))
                 {$else}
-                Text := Ref.Text(Client.Model)
+                Text := Ref.Text(Model)
                 {$endif UNICODE}
               else
                 result := oftUtf8Text; // display ID number if no table model
@@ -5775,11 +5775,11 @@ dt:     if Value <> 0 then
 end;
 
 function TOrmTable.ExpandAsSynUnicode(Row, Field: PtrInt;
-  const Client: IRestOrm; out Text: SynUnicode): TOrmFieldType;
+  Model: TOrmModel; out Text: SynUnicode): TOrmFieldType;
 var
   s: string;
 begin
-  result := ExpandAsString(Row, Field, Client, s);
+  result := ExpandAsString(Row, Field, Model, s);
   StringToSynUnicode(s, Text);
 end;
 
