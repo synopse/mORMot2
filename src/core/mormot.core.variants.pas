@@ -5078,6 +5078,12 @@ begin
     J := proto.InitJsonInPlace(J, aOptions, @endofobj);
     if J = nil then
       exit;
+    if endofobj = ']' then
+    begin
+      AddItem(variant(proto)); // single item array
+      result := true;
+      exit;
+    end;
     rowcount := 0;
     capa := 16;
     Capacity := capa;
