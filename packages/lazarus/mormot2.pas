@@ -36,7 +36,8 @@ uses
   mormot.rest.server, mormot.rest.sqlite3, mormot.script.core, 
   mormot.script.quickjs, mormot.soa.client, mormot.soa.codegen, 
   mormot.soa.core, mormot.soa.server, mormot.db.rad.ui, mormot.db.rad.ui.orm, 
-  mormot.db.rad.ui.sql, mormot.net.tftp.client, mormot.net.tftp.server;
+  mormot.db.rad.ui.sql, mormot.net.tftp.client, mormot.net.tftp.server,
+  mormot.lib.gdiplus;
 
 implementation
 
