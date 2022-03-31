@@ -68,6 +68,7 @@ const
   CheckBoxWidth = 13;
 
 { some LCL/VCL cross-compatibility definitions }
+
 {$ifdef FPC}
 
 type
@@ -77,6 +78,117 @@ type
 
 const
   WM_TIMER = LM_TIMER;
+
+{$ifdef OSWINDOWS}
+
+type
+  TMetaFile = class;
+
+  /// FPC LCL is missing a Windows MetaFile support: minimal Canvas wrapper
+  // - just encapsulate the WinAPI - so is not cross platform yet
+  TMetaFileCanvas = class(TCanvas)
+  private
+    fMetafile: TMetaFile;
+  public
+    constructor Create(AMetafile: TMetaFile; ReferenceDevice: HDC);
+    constructor CreateWithComment(AMetafile: TMetaFile; ReferenceDevice: HDC;
+      const CreatedBy, Description: string);
+    destructor Destroy; override;
+  end;
+
+  /// FPC LCL is missing a Windows MetaFile support: minimal MetaFile wrapper
+  // - just encapsulate the WinAPI - so is not cross platform yet
+  TMetaFile = class(TGraphic)
+  private
+    fImageHandle: HENHMETAFILE;
+    fImageMMWidth: integer;  // in 0.01 mm logical pixels
+    fImageMMHeight: integer; // in 0.01 mm logical pixels
+    fImagePxWidth: integer;  // in device pixels
+    fImagePxHeight: integer; // in device pixels
+    fHeader: TEnhMetaHeader;
+    function GetHeader: PENHMETAHEADER;
+    procedure DeleteImage;
+    function GetAuthor: string;
+    function GetDescription: string;
+    function GetHandle: HENHMETAFILE;
+    function GetMMHeight: integer;
+    function GetMMWidth: integer;
+    procedure SetHandle(Value: HENHMETAFILE);
+    procedure SetMMHeight(Value: integer);
+    procedure SetMMWidth(Value: integer);
+  protected
+    procedure Draw(ACanvas: TCanvas; const Rect: TRect); override;
+    function GetEmpty: boolean; override;
+    function GetHeight: integer; override;
+    function GetWidth: integer; override;
+    procedure SetHeight(Value: integer); override;
+    procedure SetWidth(Value: integer); override;
+    function GetTransparent: boolean; override;
+    procedure SetTransparent(Value: boolean); override;
+  public
+    destructor Destroy; override;
+    procedure Assign(Source: TPersistent); override;
+    procedure Clear; override;
+    procedure LoadFromFile(const Filename: string); override;
+    procedure LoadFromStream(Stream: TStream); override;
+    procedure SaveToFile(const Filename: string); override;
+    procedure SaveToStream(Stream: TStream); override;
+    function ReleaseHandle: HENHMETAFILE;
+    property Handle: HENHMETAFILE
+      read GetHandle write SetHandle;
+    property Empty: boolean
+      read GetEmpty;
+    property CreatedBy: string
+      read GetAuthor;
+    property Description: string
+      read GetDescription;
+    property MMWidth: integer
+      read GetMMWidth write SetMMWidth;
+    property MMHeight: integer
+      read GetMMHeight write SetMMHeight;
+  end;
+
+
+const
+  EMR_HEADER = 1;
+  EMR_POLYBEZIER = 2;
+  EMR_POLYGON = 3;
+  EMR_POLYLINE = 4;
+  EMR_SETWINDOWEXTEX = 9;
+  EMR_SETWINDOWORGEX = 10;
+  EMR_SETVIEWPORTEXTEX = 11;
+  EMR_SETVIEWPORTORGEX = 12;
+  EMR_SETBKMODE = 18;
+  EMR_SETTEXTALIGN = 22;
+  EMR_SETTEXTCOLOR = 24;
+  EMR_SETBKCOLOR = 25;
+  EMR_OFFSETCLIPRGN = 26;
+  EMR_MOVETOEX = 27;
+  EMR_EXCLUDECLIPRECT = 29;
+  EMR_INTERSECTCLIPRECT = 30;
+  EMR_SAVEDC = 33;
+  EMR_RESTOREDC = 34;
+  EMR_SETWORLDTRANSFORM = 35;
+  EMR_SELECTOBJECT = 37;
+  EMR_CREATEPEN = 38;
+  EMR_CREATEBRUSHINDIRECT = 39;
+  EMR_DELETEOBJECT = 40;
+  EMR_ELLIPSE = 42;
+  EMR_RECTANGLE = 43;
+  EMR_ROUNDRECT = 44;
+  EMR_LINETO = 54;
+  EMR_SELECTCLIPPATH = 67;
+  EMR_EXTSELECTCLIPRGN = 75;
+  EMR_BITBLT = 76;
+  EMR_STRETCHBLT = 77;
+  EMR_STRETCHDIBITS = 81;
+  EMR_EXTCREATEFONTINDIRECTW = 82;
+  EMR_EXTTEXTOUTW = 84;
+  EMR_POLYBEZIER16 = 85;
+  EMR_POLYGON16 = 86;
+  EMR_POLYLINE16 = 87;
+
+{$endif OSWINDOWS}
 
 {$endif FPC}
 
@@ -101,12 +213,12 @@ function DrawTextBiDiModeFlags(C: TControl): integer;
 function DrawTextFlags(C: TControl; CalcOnly: boolean): integer;
 
 /// wrapper around ExtTextOutW() or TextRect() with alignment and Unicode support
-procedure TextRectUtf8(const Rect: TRect; Canvas: TCanvas; X, Y: Integer;
+procedure TextRectUtf8(const Rect: TRect; Canvas: TCanvas; X, Y: integer;
   Text: RawUtf8; Align: TAlignment = taLeftJustify; NoControlChar: boolean = false);
 
 /// wrapper around ExtTextOutW() or TextRect() with alignment and Unicode support
 // - X,Y are relative to the Rect.Left/Top corner
-procedure TextRectString(const Rect: TRect; Canvas: TCanvas; X, Y: Integer;
+procedure TextRectString(const Rect: TRect; Canvas: TCanvas; X, Y: integer;
   const Text: string; Align: TAlignment = taLeftJustify; NoControlChar: boolean = false);
 
 {$ifdef OSWINDOWS}
@@ -124,7 +236,7 @@ procedure ClearTypeEnable;
 {$else}
 
 /// some LCL compatibility function
-function ExtTextOutW(DC: HDC; X, Y: Integer; Options: LongInt; Rect: PRect;
+function ExtTextOutW(DC: HDC; X, Y: integer; Options: LongInt; Rect: PRect;
   Str: PWideChar; Count: LongInt; Dx: ObjPas.PInteger): boolean;
 
 {$endif OSWINDOWS}
@@ -185,7 +297,7 @@ type
     procedure ShowDelayedString(const Text: string; Origin: TControl;
       X, Y, Time: integer; FontColor: TColor; AlignLeft: boolean = false); overload;
     /// overridden method, Unicode ready
-    function CalcHintRect(MaxWidth: Integer; const AHint: RawUtf8;
+    function CalcHintRect(MaxWidth: integer; const AHint: RawUtf8;
       AData: Pointer): TRect; reintroduce;
     /// the column number when the hint is displayed
     property Col: integer
@@ -407,7 +519,7 @@ end;
 
 {$endif OSWINDOWS}
 
-function THintWindowDelayed.CalcHintRect(MaxWidth: Integer;
+function THintWindowDelayed.CalcHintRect(MaxWidth: integer;
   const AHint: RawUtf8; AData: Pointer): TRect;
 begin
   result := Rect(0, 0, MaxWidth, 0);
@@ -841,7 +953,7 @@ const
 
 {$else}
 
-function ExtTextOutW(DC: HDC; X, Y: Integer; Options: LongInt; Rect: PRect;
+function ExtTextOutW(DC: HDC; X, Y: integer; Options: LongInt; Rect: PRect;
   Str: PWideChar; Count: LongInt; Dx: ObjPas.PInteger): boolean;
 var
   temp: Utf8String;
@@ -853,7 +965,7 @@ end;
 
 {$endif OSWINDOWS}
 
-procedure TextRectUtf8(const Rect: TRect; Canvas: TCanvas; X, Y: Integer;
+procedure TextRectUtf8(const Rect: TRect; Canvas: TCanvas; X, Y: integer;
   Text: RawUtf8; Align: TAlignment; NoControlChar: boolean);
 var
   i: PtrInt;
@@ -874,6 +986,7 @@ begin
   inc(X, Rect.Left);
   inc(Y, Rect.Top);
   {$ifdef OSWINDOWS}
+  // direct Win32 API call
   options := ETO_CLIPPED {$ifndef FPC} or Canvas.TextFlags{$endif};
   if Canvas.Brush.Style <> bsClear then
     options := options or ETO_OPAQUE;
@@ -892,11 +1005,299 @@ begin
   {$endif OSWINDOWS}
 end;
 
-procedure TextRectString(const Rect: TRect; Canvas: TCanvas; X, Y: Integer;
+procedure TextRectString(const Rect: TRect; Canvas: TCanvas; X, Y: integer;
   const Text: string; Align: TAlignment; NoControlChar: boolean);
 begin
   TextRectUtf8(Rect, Canvas, X, Y, StringToUtf8(Text), Align, NoControlChar);
 end;
+
+
+
+{$ifdef FPC}
+{$ifdef OSWINDOWS}
+
+// those types are not defined on LCL :( -> simple WinAPI encapsulation
+
+{ TMetaFileCanvas }
+
+constructor TMetaFileCanvas.Create(AMetafile: TMetaFile; ReferenceDevice: HDC);
+begin
+  CreateWithComment(AMetafile, ReferenceDevice, AMetafile.CreatedBy,
+    AMetafile.Description);
+end;
+
+constructor TMetaFileCanvas.CreateWithComment(AMetafile: TMetaFile;
+  ReferenceDevice: HDC; const CreatedBy, Description: string);
+var
+  R: TRect;
+  ref, tmp: HDC;
+  desc: SynUnicode;
+begin
+  inherited Create;
+  fMetafile := AMetafile;
+  ref := ReferenceDevice;
+  if ref = 0 then
+    ref := GetDC(0);
+  try
+    if fMetafile.MMWidth = 0 then
+      if fMetafile.Width = 0 then
+        fMetafile.MMWidth := GetDeviceCaps(ref, HORZSIZE) * 100
+      else
+        fMetafile.MMWidth := MulDiv(fMetafile.Width,
+          GetDeviceCaps(ref, HORZSIZE) * 100, GetDeviceCaps(ref, HORZRES));
+    if fMetafile.MMHeight = 0 then
+      if fMetafile.Height = 0 then
+        fMetafile.MMHeight := GetDeviceCaps(ref, VERTSIZE) * 100
+      else
+        fMetafile.MMHeight := MulDiv(fMetafile.Height,
+          GetDeviceCaps(ref, VERTSIZE) * 100, GetDeviceCaps(ref, VERTRES));
+    R := Rect(0, 0, fMetafile.MMWidth, fMetafile.MMHeight);
+    if (CreatedBy <> '') or
+       (Description <> '') then
+      StringToSynUnicode(CreatedBy + #0 + Description + #0#0, desc);
+    tmp := CreateEnhMetafileW(ref, nil, @R, pointer(desc));
+    if tmp = 0 then
+      raise EOutOfResources.Create('TMetaFileCanvas: Out of Resources');
+    Handle := tmp;
+  finally
+    if ReferenceDevice = 0 then
+      ReleaseDC(0, ref);
+  end;
+end;
+
+destructor TMetaFileCanvas.Destroy;
+begin
+  fMetafile.Handle := CloseEnhMetafile(Handle);
+  inherited Destroy;
+end;
+
+
+{ TMetaFile }
+
+destructor TMetaFile.Destroy;
+begin
+  DeleteImage;
+  inherited Destroy;
+end;
+
+procedure TMetaFile.Assign(Source: TPersistent);
+begin
+  if (Source = nil) or
+     (Source is TMetaFile) then
+  begin
+    if fImageHandle <> 0 then
+      DeleteImage;
+    if Assigned(Source) then
+    begin
+      fImageHandle := TMetaFile(Source).Handle;
+      fImageMMWidth := TMetaFile(Source).MMWidth;
+      fImageMMHeight := TMetaFile(Source).MMHeight;
+      fImagePxWidth := TMetaFile(Source).Width;
+      fImagePxHeight := TMetaFile(Source).Height;
+      fHeader.nSize := 0;
+    end
+  end
+  else
+    inherited Assign(Source);
+end;
+
+procedure TMetaFile.DeleteImage;
+begin
+  if fImageHandle <> 0 then
+    DeleteEnhMetafile(fImageHandle);
+  fImageHandle := 0;
+  fHeader.nSize := 0;
+end;
+
+function GetRawDescription(H: HENHMETAFILE; var tmp: TSynTempBuffer): boolean;
+var
+  n: integer;
+begin
+  result := false;
+  if H = 0 then
+    exit;
+  n := GetEnhMetafileDescriptionW(H, 0, nil);
+  if n <= 0 then
+    exit;
+  tmp.Init(n * 2);
+  GetEnhMetafileDescriptionW(H, n, tmp.buf);
+  result := true;
+  // tmp.buf contains UTF-16 encoded Author + #0 + Description + #0#0
+end;
+
+function TMetaFile.GetAuthor: string;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := '';
+  if not GetRawDescription(fImageHandle, tmp) then
+    exit;
+  RawUnicodeToString(tmp.buf, StrLenW(tmp.buf), result);
+  tmp.Done;
+end;
+
+function TMetaFile.GetDescription: string;
+var
+  tmp: TSynTempBuffer;
+  P: PWideChar;
+begin
+  result := '';
+  if not GetRawDescription(fImageHandle, tmp) then
+    exit;
+  P := tmp.buf;
+  inc(P, StrLenW(tmp.buf) + 1);
+  RawUnicodeToString(P, StrLenW(P), result);
+  tmp.Done;
+end;
+
+function TMetaFile.GetEmpty: boolean;
+begin
+  result := (fImageHandle = 0);
+end;
+
+function TMetaFile.GetHandle: HENHMETAFILE;
+begin
+  result := fImageHandle;
+end;
+
+function TMetaFile.GetMMHeight: integer;
+begin
+  result := fImageMMHeight;
+end;
+
+function TMetaFile.GetMMWidth: integer;
+begin
+  result := fImageMMWidth;
+end;
+
+procedure TMetaFile.SetHandle(Value: HENHMETAFILE);
+var
+  hdr: TEnhMetaHeader;
+begin
+  if (Value <> 0) and
+     (GetEnhMetafileHeader(Value, SizeOf(hdr), @hdr) = 0) then
+    raise EInvalidImage.Create('Invalid Metafile');
+  if fImageHandle <> 0 then
+    DeleteImage;
+  fImageHandle := Value;
+  fImagePxWidth := 0;
+  fImagePxHeight := 0;
+  fImageMMWidth := hdr.rclFrame.Right - hdr.rclFrame.Left;
+  fImageMMHeight := hdr.rclFrame.Bottom - hdr.rclFrame.Top;
+end;
+
+procedure TMetaFile.SetMMHeight(Value: integer);
+begin
+  fImagePxHeight := 0;
+  if fImageMMHeight <> Value then
+    fImageMMHeight := Value;
+end;
+
+procedure TMetaFile.SetMMWidth(Value: integer);
+begin
+  fImagePxWidth := 0;
+  if fImageMMWidth <> Value then
+    fImageMMWidth := Value;
+end;
+
+procedure TMetaFile.Draw(ACanvas: TCanvas; const Rect: TRect);
+var
+  R: TRect;
+begin
+  if fImageHandle = 0 then
+    exit;
+  R := Rect;
+  PlayEnhMetaFile(ACanvas.Handle, fImageHandle, R);
+end;
+
+function TMetaFile.GetHeader: PENHMETAHEADER;
+begin
+  if fHeader.nSize = 0 then
+    GetEnhMetaFileHeader(fImageHandle, SizeOf(fHeader), @fHeader);
+  result := @fHeader;
+end;
+
+function TMetaFile.GetHeight: integer;
+begin
+  if fImageHandle = 0 then
+    result := fImagePxHeight
+  else
+    with GetHeader^ do
+      result := MulDiv(fImageMMHeight, szlDevice.cy, szlMillimeters.cy * 100);
+end;
+
+function TMetaFile.GetWidth: integer;
+begin
+  if fImageHandle = 0 then
+    result := fImagePxWidth
+  else
+    with GetHeader^ do
+      result := MulDiv(fImageMMWidth, szlDevice.cx, szlMillimeters.cx * 100);
+end;
+
+procedure TMetaFile.SetHeight(Value: integer);
+begin
+  if fImageHandle = 0 then
+    fImagePxHeight := Value
+  else
+    with GetHeader^ do
+      MMHeight := MulDiv(Value, szlMillimeters.cy * 100, szlDevice.cy);
+end;
+
+procedure TMetaFile.SetWidth(Value: integer);
+begin
+  if fImageHandle = 0 then
+    fImagePxWidth := Value
+  else
+    with GetHeader^ do
+      MMWidth := MulDiv(Value, szlMillimeters.cx * 100, szlDevice.cx);
+end;
+
+procedure TMetaFile.Clear;
+begin
+  DeleteImage;
+end;
+
+procedure TMetaFile.LoadFromFile(const Filename: string);
+begin
+  raise EComponentError.Create('Not Implemented');
+end;
+
+procedure TMetaFile.SaveToFile(const Filename: string);
+begin
+  raise EComponentError.Create('Not Implemented');
+end;
+
+procedure TMetaFile.LoadFromStream(Stream: TStream);
+begin
+  raise EComponentError.Create('Not Implemented');
+end;
+
+procedure TMetaFile.SaveToStream(Stream: TStream);
+begin
+  raise EComponentError.Create('Not Implemented');
+end;
+
+function TMetaFile.ReleaseHandle: HENHMETAFILE;
+begin
+  DeleteImage;
+  result := 0;
+end;
+
+function TMetaFile.GetTransparent: boolean;
+begin
+  // not implemented
+  result := false;
+end;
+
+procedure TMetaFile.SetTransparent(Value: boolean);
+begin
+  // not implemented
+end;
+
+{$endif OSWINDOWS}
+{$endif FPC}
+
 
 procedure Register;
 begin

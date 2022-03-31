@@ -8710,7 +8710,7 @@ end;
 procedure TObjectWithCustomCreateRttiCustomSetParser(
   O: TObjectWithCustomCreateClass; Rtti: TRttiCustom);
 begin
-  O.RttiCustomSetParser(Rtti);
+  O.RttiCustomSetParser(Rtti); // to circumvent some compiler issue
 end;
 
 
