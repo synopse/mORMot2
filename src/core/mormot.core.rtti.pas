@@ -2783,6 +2783,11 @@ type
   /// used to determine the exact class type of a TObjectWithID
   TObjectWithIDClass = class of TObjectWithID;
 
+/// internal wrapper to protected TObjectWithCustomCreate.RttiCustomSetParser()
+// - a local TCCHook was reported to have issues on FPC with class methods
+procedure TObjectWithCustomCreateRttiCustomSetParser(
+  O: TObjectWithCustomCreateClass; Rtti: TRttiCustom);
+
 
 
 implementation
@@ -8700,6 +8705,12 @@ end;
 procedure TObjectWithCustomCreate.RttiAfterReadObject;
 begin
   // nothing to do
+end;
+
+procedure TObjectWithCustomCreateRttiCustomSetParser(
+  O: TObjectWithCustomCreateClass; Rtti: TRttiCustom);
+begin
+  O.RttiCustomSetParser(Rtti);
 end;
 
 

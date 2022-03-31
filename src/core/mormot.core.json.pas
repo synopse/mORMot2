@@ -5000,10 +5000,6 @@ begin
     Ctxt.W, Data, Ctxt.Options);
 end;
 
-type
-  TCCHook = class(TObjectWithCustomCreate); // to access its protected methods
-  TCCHookClass = class of TCCHook;
-
 procedure _JS_OneProp(var c: TJsonSaveContext; p: PRttiCustomProp; Data: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 begin
@@ -5020,6 +5016,9 @@ begin
     // need to call a getter method
     p^.AddValueJson(c.W, Data, c.Options);
 end;
+
+type
+  TCCHook = class(TObjectWithCustomCreate); // to access its protected methods
 
 procedure _JS_NonExpanded(var c: TJsonSaveContext; Data: PAnsiChar; n: integer);
 var
@@ -9667,7 +9666,8 @@ begin
         // allow any kind of customization for TObjectWithCustomCreate children
         // - is used e.g. by TOrm or TObjectWithID
         n := Props.Count;
-        TCCHookClass(fValueClass).RttiCustomSetParser(self);
+        TObjectWithCustomCreateRttiCustomSetParser(
+          TObjectWithCustomCreateClass(fValueClass), self);
         if n <> Props.Count then
           fFlags := fFlags + fProps.AdjustAfterAdded; // added a prop
       end
