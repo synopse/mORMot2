@@ -2394,6 +2394,21 @@ begin
   end;
 end;
 
+function ReadRegString(Key: THandle; const Path, Value: string): string;
+var
+  siz, typ: DWORD;
+  tmp: array[byte] of char;
+  k: HKey;
+begin
+  result := '';
+  if RegOpenKeyEx(Key, pointer(Path), 0, KEY_QUERY_VALUE, k) <> ERROR_SUCCESS then
+    exit;
+  siz := 250;
+  typ := REG_SZ;
+  if RegQueryValueEx(k, pointer(Value), nil, @typ, @tmp, @siz) = ERROR_SUCCESS then
+    result := tmp;
+  RegCloseKey(k);
+end;
 
 
 { TWinCryptoApi }

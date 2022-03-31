@@ -1227,6 +1227,10 @@ type
   TWinProcessInfoDynArray = array of TWinProcessInfo;
 
 
+/// quickly retrieve a Text value from Registry
+// - could be used if TWinRegistry is not needed, e.g. for a single value
+function ReadRegString(Key: THandle; const Path, Value: string): string;
+
 /// retrieve low-level process information, from the Windows API
 procedure GetProcessInfo(aPid: cardinal;
   out aInfo: TWinProcessInfo); overload;
@@ -2563,6 +2567,10 @@ type
     // - if RaiseExceptionOnFailure is set, missing entry will call FreeLib then raise it
     function Resolve(ProcName: PAnsiChar; Entry: PPointer;
       RaiseExceptionOnFailure: ExceptionClass = nil): boolean;
+    /// cross-platform resolution of all function entries in this library
+    // - will search and fill Entry^ for all ProcName^ until ProcName^=nil
+    // - return true on success, false and call FreeLib if any entry is missing
+    function ResolveAll(ProcName: PPAnsiChar; Entry: PPointer): boolean;
     /// cross-platform call to FreeLibrary() + set fHandle := 0
     // - as called by Destroy, but you can use it directly to reload the library
     procedure FreeLib;
@@ -2571,6 +2579,9 @@ type
       aRaiseExceptionOnFailure: ExceptionClass): boolean; virtual;
     /// release associated memory and linked library
     destructor Destroy; override;
+    /// return TRUE if the library and all procedures were found
+    function Exists: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// the associated library handle
     property Handle: TLibHandle
       read fHandle write fHandle;
@@ -5086,6 +5097,29 @@ begin
   end;
 end;
 
+function TSynLibrary.ResolveAll(ProcName: PPAnsiChar; Entry: PPointer): boolean;
+begin
+  repeat
+    if ProcName^ = nil then
+      break;
+    if not Resolve(ProcName^, Entry) then
+    begin
+      FreeLib;
+      result := false;
+      exit;
+    end;
+    inc(ProcName);
+    inc(Entry);
+  until false;
+  result := true;
+end;
+
+destructor TSynLibrary.Destroy;
+begin
+  FreeLib;
+  inherited Destroy;
+end;
+
 procedure TSynLibrary.FreeLib;
 begin
   if fHandle = 0 then
@@ -5142,10 +5176,10 @@ begin
       ' - searched in %s', [ClassNameShort(self)^, libs]);
 end;
 
-destructor TSynLibrary.Destroy;
+function TSynLibrary.Exists: boolean;
 begin
-  FreeLib;
-  inherited Destroy;
+  result := (self <> nil) and
+            (fHandle <> 0);
 end;
 
 
@@ -6510,7 +6544,7 @@ var
 begin
   with InternalGarbageCollection do
   begin
-    Shutdown := true;
+    Shutdown := true; // avoid nested initialization at shutdown
     for i := Count - 1 downto 0 do
       FreeAndNilSafe(Instances[i]); // before GlobalCriticalSection deletion
   end;
