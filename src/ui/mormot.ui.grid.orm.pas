@@ -138,6 +138,7 @@ type
     fOnSelectCell: TSelectCellEvent;
     fOnRightClickCell: TRightClickCellEvent;
     fClient: TRestClientURI;
+    fModel: TOrmModel;
     fOnDrawCellBackground: TDrawCellEvent;
     fMarked: TByteDynArray;
     fMarkAllowed: boolean;
@@ -331,6 +332,9 @@ type
     /// associated Client used to retrieved the Table data
     property Client: TRestClientURI
       read fClient;
+    /// associated Client Model used to retrieved the Table data
+    property Model: TOrmModel
+      read fModel;
     /// used to display some hint text
     property Hint: THintWindowDelayed
       read fHint;
@@ -429,6 +433,8 @@ begin
   inherited Create({owner=}aGrid); // this instance will be owned by the grid
   fTable := aTable;
   fClient := aClient;
+  if aClient <> nil then
+    fModel := aClient.Model;
   fHint := THintWindowDelayed.Create(self);
   SetLength(fFieldOrder, Table.FieldCount);   // auto filled to false
   fCurrentFieldOrder := Table.FieldIndex(
@@ -583,7 +589,7 @@ begin
       TextRectString(Rect, c, x, 2, s, al);
     end
     else
-      case Table.ExpandAsString(ARow, ACol, Client.Model, s, GetCustomFormat(ACol)) of
+      case Table.ExpandAsString(ARow, ACol, fModel, s, GetCustomFormat(ACol)) of
         // very fast response (type is evaluated once)
         oftBoolean:
           // display boolean as checkbox
@@ -707,7 +713,7 @@ begin
     begin
       if not Assigned(OnHintText) or
          not OnHintText(Table, c, r, s) then
-        Table.ExpandAsString(r, c, Client.Model, s);
+        Table.ExpandAsString(r, c, fModel, s);
       // s := IntToStr(SelectedID);
       ShowHintString(s, c, r, 4000);
     end
