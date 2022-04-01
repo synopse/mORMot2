@@ -25,3 +25,9 @@ Some Custom Visual Components
 Fill a Read/Only `TDrawGrid`
 - `TOrmTableToGrid` wrapper to manage a `TDrawGrid` from a `TOrmTable`
 - Fill a `TStringGrid` from ORM results
+
+### mormot.ui.gdiplus
+
+VCL/LCL Windows GDI+ Graphics Device Interface Support
+- `TSynPicture` and associated GIF/PNG/TIFF/JPG classes
+- High-Level Function Wrappers to Manage Pictures

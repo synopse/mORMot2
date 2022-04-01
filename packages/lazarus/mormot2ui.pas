@@ -5,11 +5,10 @@
 unit mormot2ui;
 
 {$warn 5023 off : no warning about unused units}
-
 interface
 
 uses
-  mormot.ui.grid.orm, mormot.ui.controls, mormot.ui.core, 
+  mormot.ui.grid.orm, mormot.ui.controls, mormot.ui.gdiplus, mormot.ui.core, 
   LazarusPackageIntf;
 
 implementation

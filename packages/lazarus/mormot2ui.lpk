@@ -46,7 +46,7 @@
     <Description Value="mORMot 2 framework LCL Components "/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Release="1"/>
-    <Files Count="3">
+    <Files Count="4">
       <Item1>
         <Filename Value="../../src/ui/mormot.ui.grid.orm.pas"/>
         <UnitName Value="mormot.ui.grid.orm"/>
@@ -56,9 +56,13 @@
         <UnitName Value="mormot.ui.controls"/>
       </Item2>
       <Item3>
+        <Filename Value="../../src/ui/mormot.ui.gdiplus.pas"/>
+        <UnitName Value="mormot.ui.gdiplus"/>
+      </Item3>
+      <Item4>
         <Filename Value="../../src/ui/mormot.ui.core.pas"/>
         <UnitName Value="mormot.ui.core"/>
-      </Item3>
+      </Item4>
     </Files>
     <CompatibilityMode Value="True"/>
     <RequiredPkgs Count="2">
