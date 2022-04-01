@@ -524,7 +524,7 @@ procedure TSynMustacheContextVariant.CancelAll;
 begin
   fContextCount := 0;
   fEscapeInvert := false;
-  fWriter.CancelAll;
+  fWriter.CancelAllAsNew;
   fReuse.UnLock;
 end;
 
@@ -1401,26 +1401,26 @@ function TSynMustache.Render(const Context: variant;
   Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
   const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
 var
-  Ctxt: TSynMustacheContextVariant;
+  ctx: TSynMustacheContextVariant;
   tmp: TTextWriterStackBuffer;
 begin
-  Ctxt := fCachedContext; // thread-safe reuse of a shared rendering context
-  if Ctxt.fReuse.TryLock then
-    Ctxt.PushContext(TVarData(Context)) // weak copy
+  ctx := fCachedContext; // thread-safe reuse of a shared rendering context
+  if ctx.fReuse.TryLock then
+    ctx.PushContext(TVarData(Context)) // weak copy
   else
-    Ctxt := TSynMustacheContextVariant.Create(
+    ctx := TSynMustacheContextVariant.Create(
       self, TJsonWriter.CreateOwnedStream(tmp), SectionMaxCount, Context, true);
   try
-    Ctxt.Helpers := Helpers;
-    Ctxt.OnStringTranslate := OnTranslate;
-    Ctxt.EscapeInvert := EscapeInvert;
-    RenderContext(Ctxt, 0, high(fTags), Partials, false);
-    Ctxt.Writer.SetText(result);
+    ctx.Helpers := Helpers;
+    ctx.OnStringTranslate := OnTranslate;
+    ctx.EscapeInvert := EscapeInvert;
+    RenderContext(ctx, 0, high(fTags), Partials, false);
+    ctx.Writer.SetText(result);
   finally
-    if Ctxt = fCachedContext then
-      Ctxt.CancelAll
+    if ctx = fCachedContext then
+      ctx.CancelAll
     else
-      Ctxt.Free;
+      ctx.Free;
   end;
 end;
 

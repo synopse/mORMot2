@@ -618,7 +618,7 @@ procedure TRestOrm.ReleaseJsonWriter(WR: TJsonWriter);
 begin
   if WR = fTempJsonWriter then
   begin
-    WR.CancelAll;
+    WR.CancelAllAsNew;
     fTempJsonWriterLock.UnLock;
   end
   else

@@ -9656,7 +9656,7 @@ begin
      (fRowCount <= 1) or
      (FieldCount <= 0) then
     exit;
-  // move fData[] in two passes: set bit rows, then unset bit rows
+  // move fData[] in two passes: rows with bit set, then rows with bit unset
   n := fRowCount * FieldCount;
   SetLength(old, n);
   d := @fData[FieldCount]; // ignore first row = header

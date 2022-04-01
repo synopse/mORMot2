@@ -1170,7 +1170,7 @@ begin
     case Step of
       smsBefore:
         begin
-          W.CancelAll;
+          W.CancelAll; // not CancelAllAsNew to keep twoForceJsonExtended
           W.AddShort('"POST",{Method:"');
           W.AddString(InterfaceDotMethodName);
           W.AddShort('",Input:{'); // as TOrmPropInfoRttiVariant.GetJsonValues
@@ -1272,7 +1272,7 @@ begin
   W := exec.TempTextWriter;
   if exec.CurrentStep < smsBefore then
   begin
-    W.CancelAll;
+    W.CancelAll; // not CancelAllAsNew to keep twoForceJsonExtended
     W.AddShort('"POST",{Method:"');
     W.AddJsonEscape(pointer(exec.Method^.InterfaceDotMethodName));
     W.AddShort('%",Input:{');

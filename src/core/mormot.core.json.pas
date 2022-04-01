@@ -5632,7 +5632,7 @@ begin
   if fInternalJsonWriter = nil then
     fInternalJsonWriter := TJsonWriter.CreateOwnedStream
   else
-    fInternalJsonWriter.CancelAll;
+    fInternalJsonWriter.CancelAllAsNew;
   result := fInternalJsonWriter;
 end;
 

@@ -3337,7 +3337,7 @@ begin
   if fParamsSafe.TryLock then
   begin
     W := fParams; // reuse a per-callback TJsonWriter instance
-    W.CancelAll;
+    W.CancelAllAsNew;
   end
   else 
     // paranoid thread-safety call with its own temp buffer (seldom called)
@@ -7303,7 +7303,7 @@ begin
     if output <> nil then
     begin
       WR := TempTextWriter;
-      WR.CancelAll;
+      WR.CancelAll; // not CancelAllAsNew to keep twoForceJsonExtended
     end
     else if fMethod^.ArgsOutputValuesCount > 0 then
       exit
@@ -7535,7 +7535,7 @@ begin
     // reuse this shared instance between calls
     SetOptions(opt);
     exec := self;
-    fCachedWR.CancelAll;
+    fCachedWR.CancelAllAsNew;
     WR := fCachedWR;
   end
   else
