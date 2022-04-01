@@ -7,10 +7,15 @@ This folder holds the User Interface related features of the *mORMot* Open Sourc
 
 ## Units Presentation
 
+### mormot.ui.core
+
+Basic types and reusable functions for VCL/LCL User Interface support
+- Some LCL/VCL cross-compatibility definitions
+- High-Level UI Wrapper Functions
+
 ### mormot.ui.controls
 
 Some Custom Visual Components
-- High-Level UI Wrapper Functions
 - `THintWindowDelayed` as auto-hiding `THintWindow` descendant
 - `TSynLabeledEdit` as extended `TLabeledEdit`
 - `TUIComponentsPersist` to persist UI components as JSON

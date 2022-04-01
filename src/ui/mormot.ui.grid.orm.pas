@@ -54,6 +54,7 @@ uses
   mormot.orm.core,
   mormot.orm.client,
   mormot.rest.client,
+  mormot.ui.core,
   mormot.ui.controls;
 
 
@@ -654,7 +655,7 @@ begin
     fFieldOrder[ACol] := Ascending;
     fCurrentFieldOrder := ACol;
     Table.SortFields(ACol, fFieldOrder[ACol], @ARow);
-    if ids <> nil then
+    if {%H-}ids <> nil then
       Table.IDArrayToBits(fMarked[0], ids); // restore marked entries
     TDrawGrid(Owner).Row := ARow; // reselect row after sort (+ Invalidate)
     PageChanged; // hide any pending popup Hint e.g.

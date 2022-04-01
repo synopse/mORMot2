@@ -9,7 +9,8 @@ unit mormot2ui;
 interface
 
 uses
-  mormot.ui.grid.orm, mormot.ui.controls, LazarusPackageIntf;
+  mormot.ui.grid.orm, mormot.ui.controls, mormot.ui.core, 
+  LazarusPackageIntf;
 
 implementation
 
