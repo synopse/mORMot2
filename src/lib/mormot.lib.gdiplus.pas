@@ -42,10 +42,12 @@ uses
 
 {.$define GDIPLUS_USEENCODERS}
 // if defined, the GDI+ encoder list will be used - seems not necessary
+//  - should be defined here and in mormot.ui.gdiplus (i.e. Projects options)
 
 {.$define GDIPLUS_USEDPI}
 // if defined, the DrawAt() method is available, which respect dpi on drawing
 //  - should not be useful on most applications
+//  - should be defined here and in mormot.ui.gdiplus (i.e. Projects options)
 
 
 { ****************** GDI+ Shared Types }
@@ -332,7 +334,7 @@ const
 type
   /// an object wrapper to handle gdi+ image attributes
   TImageAttributes = class
-  private
+  protected
     fAttr: TGpipImageAttributes;
   public
     constructor Create; overload;
@@ -379,6 +381,8 @@ type
       clamp: Boolean = false): TGdipStatus;
     function GetAdjustedPalette(colorPalette: PColorPalette;
       colortype: TColorAdjustType): TGdipStatus;
+    property Attr: TGpipImageAttributes
+      read fAttr;
   end;
 
 
@@ -396,6 +400,7 @@ type
       Unhook: TGdiPlusUnhookProc;
     end;
     fStartupHookToken: THandle;
+    fLock: TRTLCriticalSection;
   public
     // Picture related API calls of the GDI+ class hierarchy
     Startup: function(var Token: THandle; var Input, Output): TGdipStatus; stdcall;
@@ -540,6 +545,10 @@ type
     constructor Create(aDllFileName: TFileName = ''); reintroduce;
     /// unload the GDI+ library
     destructor Destroy; override;
+    /// GDI+ is not thread-safe, so use this mutex for proper multi-threading
+    procedure Lock;
+    /// GDI+ is not thread-safe, so use this mutex for proper multi-threading
+    procedure UnLock;
   end;
 
 
@@ -553,6 +562,9 @@ function _GdipLoad: TGdiPlus;
 
 /// raise an EGdiPlus if the GDI+ library was not successfully loaded
 procedure EnsureGdipExists(const caller: shortstring);
+
+/// raise an EGdiPlus if no GDI+ library is available, or call Gdip.Lock
+procedure EnsureGdipExistsAndLock(const caller: shortstring);
 
 /// access the GDI+ library instance
 // - will try to load it if needed
@@ -575,28 +587,32 @@ type
   /// ConvertToEmfPlus/DrawAntiAliased drawing options
   TEmfConvertOptions = set of TEmfConvertOption;
 
-/// conversion of an EMF metafile into a EMF+ image
+/// conversion of an EMF metafile handle into a EMF+ image
 // - i.e. allows antialiased drawing of the EMF metafile
 // - if GDI+ 1.1 (from MSOffice) is available, will use it - otherwise, fallback
 // to our own converter
 // - return 0 if GDI+ is not available or conversion failed
 // - return an EMF+ metafile handle, to be drawing via gdip.DrawImageRect(), and
 // to be eventually released after use by gdip.DisposeImage()
+// - this procedure is thread-safe (protected by Gdip.Lock/UnLock)
 function ConvertToEmfPlus(Source: HENHMETAFILE; Width, Height: integer;
   Dest: HDC; ConvertOptions: TEmfConvertOptions = [];
   Smoothing: TSmoothingMode = smAntiAlias;
   TextRendering: TTextRenderingHint = trhClearTypeGridFit): THandle;
 
-/// draw an EMF metafile using GDI+ anti-aliased rendering
+/// draw an EMF metafile handle using GDI+ anti-aliased rendering
 // - will fallback to plain GDI drawing if GDI+ is not available
+// - this procedure is thread-safe (protected by Gdip.Lock/UnLock)
 procedure DrawAntiAliased(Source: HENHMETAFILE; Width, Height: integer;
   Dest: HDC; DestRect: TRect; ConvertOptions: TEmfConvertOptions = [];
   Smoothing: TSmoothingMode = smAntiAlias;
-  TextRendering: TTextRenderingHint = trhClearTypeGridFit);
+  TextRendering: TTextRenderingHint = trhClearTypeGridFit); overload;
 
 /// low-level internal function used e.g. by ConvertToEmfPlus()
 function MetaFileToStream(Source: HENHMETAFILE): IStream;
 
+/// low-level internal function used e.g. by BitmapToRawByteString()
+function IStreamSize(const S: IStream): Int64;
 
 
 implementation
@@ -961,6 +977,7 @@ var
   fmt: TGdipPictureType;
   {$endif GDIPLUS_USEENCODERS}
 begin
+  InitializeCriticalSection(fLock);
   // first try and search the best library name
   if (aDllFileName = '') or
      not FileExists(aDllFileName) then
@@ -1033,6 +1050,17 @@ begin
     fToken := 0;
   end;
   inherited Destroy;
+  DeleteCriticalSection(fLock);
+end;
+
+procedure TGdiPlus.Lock;
+begin
+  EnterCriticalSection(fLock);
+end;
+
+procedure TGdiPlus.UnLock;
+begin
+  LeaveCriticalSection(fLock);
 end;
 
 
@@ -1059,6 +1087,12 @@ procedure EnsureGdipExists(const caller: shortstring);
 begin
   if not Gdip.Exists then
     raise EGdiPlus.CreateFmt('%s: GDI+ not available on this system', [caller]);
+end;
+
+procedure EnsureGdipExistsAndLock(const caller: shortstring);
+begin
+  EnsureGdipExists(caller);
+  _Gdip.Lock;
 end;
 
 
@@ -1951,6 +1985,15 @@ begin
   CreateStreamOnHGlobal(glob, {ownglob=}true, result);
 end;
 
+function IStreamSize(const S: IStream): Int64;
+var
+  pos: {$ifdef FPC}QWord{$else}{$ifdef ISDELPHIXE8}LargeUInt{$else}Int64{$endif}{$endif};
+begin
+  S.Seek(0, STREAM_SEEK_END, pos);
+  result := pos;
+  S.Seek(0, STREAM_SEEK_SET, pos);
+end;
+
 function ConvertToEmfPlus(Source: HENHMETAFILE; Width, Height: integer;
   Dest: HDC; ConvertOptions: TEmfConvertOptions; Smoothing: TSmoothingMode;
   TextRendering: TTextRenderingHint): THandle;
@@ -1976,21 +2019,26 @@ begin
   begin
     // let GDI+ 1.1 make the conversion
     metast := MetaFileToStream(Source);
-    if _Gdip.LoadImageFromStream(metast, meta) = stOk then
-      try
-        _Gdip.CreateFromHDC(Dest, E.gr);
-        _Gdip.SetSmoothingMode(E.gr, Smoothing);
-        _Gdip.SetTextRenderingHint(E.gr, TextRendering);
+    _Gdip.Lock;
+    try
+      if _Gdip.LoadImageFromStream(metast, meta) = stOk then
         try
-          if _Gdip.ConvertToEmfPlus11(
-             E.gr, meta, nil, etEmfPlusOnly, nil, res) = stOk then
-            result := res;
+          _Gdip.CreateFromHDC(Dest, E.gr);
+          _Gdip.SetSmoothingMode(E.gr, Smoothing);
+          _Gdip.SetTextRenderingHint(E.gr, TextRendering);
+          try
+            if _Gdip.ConvertToEmfPlus11(
+               E.gr, meta, nil, etEmfPlusOnly, nil, res) = stOk then
+              result := res;
+          finally
+            _Gdip.DeleteGraphics(E.gr);
+          end;
         finally
-          _Gdip.DeleteGraphics(E.gr);
+          _Gdip.DisposeImage(meta);
         end;
-      finally
-        _Gdip.DisposeImage(meta);
-      end;
+    finally
+      _Gdip.UnLock;
+    end;
   end
   else
   begin
@@ -2003,14 +2051,16 @@ begin
     end;
     E.gdip := _Gdip;
     E.dest := CreateCompatibleDC(Dest);
-    _Gdip.RecordMetafile(E.dest, etEmfPlusOnly, @R, uPixel, nil, result);
-    _Gdip.CreateFromImage(result, E.gr);
-    _Gdip.SetSmoothingMode(E.gr, Smoothing);
-    _Gdip.SetTextRenderingHint(E.gr, TextRendering);
+    _Gdip.Lock;
     try
+      _Gdip.RecordMetafile(E.dest, etEmfPlusOnly, @R, uPixel, nil, result);
+      _Gdip.CreateFromImage(result, E.gr);
+      _Gdip.SetSmoothingMode(E.gr, Smoothing);
+      _Gdip.SetTextRenderingHint(E.gr, TextRendering);
       EnumEnhMetaFile(E.dest, Source, @EnumEMFFunc, @E, TRect(R));
     finally
       E.EnumerateEnd;
+      _Gdip.UnLock;
     end;
   end;
 end;
@@ -2022,7 +2072,7 @@ var
   img, gr: THandle;
 begin
   img := ConvertToEmfPlus(
-    Source, Width, Height, Dest, ConvertOptions, Smoothing, TextRendering);
+      Source, Width, Height, Dest, ConvertOptions, Smoothing, TextRendering);
   if img = 0 then
   begin
     // GDI Metafile rect includes right and bottom coords
@@ -2034,6 +2084,7 @@ begin
   else
     try
       // use GDI+ 1.0/1.1 anti-aliased rendering
+      _Gdip.Lock;
       _Gdip.CreateFromHDC(Dest, gr);
       try
         with DestRect do
@@ -2043,6 +2094,7 @@ begin
       end;
     finally
       _Gdip.DisposeImage(img);
+      _Gdip.UnLock;
     end;
 end;
 
