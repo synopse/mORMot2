@@ -1182,6 +1182,8 @@ type
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
     procedure CancelAll;
+    /// same as CancelAll, and also reset the CustomOptions
+    procedure CancelAllAsNew;
 
     /// count of added bytes to the stream
     // - see PendingBytes for the number of bytes currently in the memory buffer
@@ -1245,13 +1247,17 @@ function HtmlEscapeString(const text: string;
 
 
 const
-  /// JSON serialization options focusing of sets support
+  /// TTextWriter JSON serialization options focusing of sets support
   // - as used e.g. by TJsonWriter.AddRecordJson/AddDynArrayJson and
   // TDynArray.SaveJson methods, and SaveJson/RecordSaveJson functions
   // - to be used as TEXTWRITEROPTIONS_TEXTSET[EnumSetsAsText]
   TEXTWRITEROPTIONS_SETASTEXT: array[boolean] of TTextWriterOptions = (
     [twoFullSetsAsStar],
     [twoFullSetsAsStar, twoEnumSetsAsTextInRecord]);
+
+  /// TTextWriter JSON serialization options which should be preserved
+  // - used e.g. by TTextWriter.CancelAllAsNew to reset its CustomOptions
+  TEXTWRITEROPTIONS_RESET = [twoStreamIsOwned, twoBufferIsExternal];
 
 type
   /// callback used to echo each line of TEchoWriter class
@@ -5169,6 +5175,12 @@ begin
   if fTotalFileSize <> 0 then
     fTotalFileSize := fStream.Seek(fInitialStreamPosition, soBeginning);
   B := fTempBuf - 1;
+end;
+
+procedure TTextWriter.CancelAllAsNew;
+begin
+  CancelAll;
+  fCustomOptions := fCustomOptions * TEXTWRITEROPTIONS_RESET;
 end;
 
 procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);
