@@ -38,6 +38,7 @@ uses
 type
   /// abstract parent containing information able to initialize a TSynDaemon class
   // - will handle persistence as JSON local files
+  // - could fallback to read an .INI file if no valid JSON is found
   // - by default in this abstract parent class, no property is published to let
   // inherited classes define the values customizable from JSON serialization
   TSynDaemonAbstractSettings  = class(TSynJsonFileSettings)

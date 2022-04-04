@@ -2324,12 +2324,14 @@ type
   end;
 
   /// abstract parent class able to store settings as JSON file
+  // - would fallback and try to read an .INI file if no valid JSON is found
   TSynJsonFileSettings = class(TSynAutoCreateFields)
   protected
     fInitialJsonContent: RawUtf8;
     fFileName: TFileName;
   public
     /// read existing settings from a JSON content
+    // - if the input is no JSON object, then a .INI structure is tried
     function LoadFromJson(var aJson: RawUtf8): boolean;
     /// read existing settings from a JSON file
     function LoadFromFile(const aFileName: TFileName): boolean; virtual;
@@ -10593,6 +10595,8 @@ end;
 function TSynJsonFileSettings.LoadFromJson(var aJson: RawUtf8): boolean;
 begin
   result := JsonSettingsToObject(aJson, self);
+  if not result then
+    result := IniToObject(aJson, self);
 end;
 
 function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName): boolean;
