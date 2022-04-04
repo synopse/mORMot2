@@ -11,6 +11,7 @@ unit mormot.core.os;
   - Gather Operating System Information
   - Operating System Specific Types (e.g. TWinRegistry)
   - Unicode, Time, File, Console, Library process
+  - Cross-Platform Charset and CodePage Support
   - Per Class Properties O(1) Lookup via vmtAutoTable Slot (e.g. for RTTI cache)
   - TSynLocker/TSynLocked and Low-Level Threading Features
   - Unix Daemon and Windows Service Support
@@ -2610,6 +2611,42 @@ procedure RedirectCode(Func, RedirectFunc: Pointer);
 {$endif CPUINTEL}
 
 
+{ ************** Cross-Platform Charset and CodePage Support }
+
+{$ifdef OSPOSIX}
+const
+  ANSI_CHARSET = 0;
+  DEFAULT_CHARSET = 1;
+  SYMBOL_CHARSET = 2;
+  SHIFTJIS_CHARSET = $80;
+  HANGEUL_CHARSET = 129;
+  GB2312_CHARSET = 134;
+  CHINESEBIG5_CHARSET = 136;
+  OEM_CHARSET = 255;
+  JOHAB_CHARSET = 130;
+  HEBREW_CHARSET = 177;
+  ARABIC_CHARSET = 178;
+  GREEK_CHARSET = 161;
+  TURKISH_CHARSET = 162;
+  VIETNAMESE_CHARSET = 163;
+  THAI_CHARSET = 222;
+  EASTEUROPE_CHARSET = 238;
+  RUSSIAN_CHARSET = 204;
+  BALTIC_CHARSET = 186;
+{$else}
+{$ifdef FPC} // a missing declaration
+const
+  VIETNAMESE_CHARSET = 163;
+{$endif FPC}
+{$endif OSPOSIX}
+
+/// convert a char set to a code page
+function CharSetToCodePage(CharSet: integer): cardinal;
+
+/// convert a code page to a char set
+function CodePageToCharSet(CodePage: cardinal): integer;
+
+
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }
 
 type
@@ -4181,6 +4218,73 @@ begin
 end;
 {$endif CPUINTEL}
 
+
+
+{ ************** Cross-Platform Charset and CodePage Support }
+
+function CharSetToCodePage(CharSet: integer): cardinal;
+begin
+  case CharSet of
+    SHIFTJIS_CHARSET:
+      result := 932;
+    HANGEUL_CHARSET:
+      result := 949;
+    GB2312_CHARSET:
+      result := 936;
+    HEBREW_CHARSET:
+      result := 1255;
+    ARABIC_CHARSET:
+      result := 1256;
+    GREEK_CHARSET:
+      result := 1253;
+    TURKISH_CHARSET:
+      result := 1254;
+    VIETNAMESE_CHARSET:
+      result := 1258;
+    THAI_CHARSET:
+      result := 874;
+    EASTEUROPE_CHARSET:
+      result := 1250;
+    RUSSIAN_CHARSET:
+      result := 1251;
+    BALTIC_CHARSET:
+      result := 1257;
+  else
+    result := CODEPAGE_US; // default is ANSI_CHARSET = iso-8859-1 = windows-1252
+  end;
+end;
+
+function CodePageToCharSet(CodePage: cardinal): integer;
+begin
+  case CodePage of
+    932:
+      result := SHIFTJIS_CHARSET;
+    949:
+      result := HANGEUL_CHARSET;
+    936:
+      result := GB2312_CHARSET;
+    1255:
+      result := HEBREW_CHARSET;
+    1256:
+      result := ARABIC_CHARSET;
+    1253:
+      result := GREEK_CHARSET;
+    1254:
+      result := TURKISH_CHARSET;
+    1258:
+      result := VIETNAMESE_CHARSET;
+    874:
+      result := THAI_CHARSET;
+    1250:
+      result := EASTEUROPE_CHARSET;
+    1251:
+      result := RUSSIAN_CHARSET;
+    1257:
+      result := BALTIC_CHARSET;
+  else
+    result := ANSI_CHARSET; // default is iso-8859-1 = windows-1252
+  end;
+end;
 
 
 { ****************** Unicode, Time, File, Console, Library process }
