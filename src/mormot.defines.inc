@@ -141,6 +141,7 @@
   {$PACKSET 1}
   {$PACKENUM 1}
   {$CODEPAGE UTF8} // otherwise unexpected behavior occurs in most cases
+  {$OBJECTCHECKS OFF} // as expected e.g. when hooking classes
 
   {$define HASINLINE}
   {$define HASINLINEWINAPI} // Delphi has troubles inlining Windows API calls
