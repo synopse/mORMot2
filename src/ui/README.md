@@ -31,3 +31,11 @@ Fill a Read/Only `TDrawGrid`
 VCL/LCL Windows GDI+ Graphics Device Interface Support
 - `TSynPicture` and associated GIF/PNG/TIFF/JPG classes
 - High-Level Function Wrappers to Manage Pictures
+
+### mormot.ui.pdf
+
+High Performance PDF Engine for Windows
+- Shared types and functions
+- Internal classes mapping PDF objects
+- `TPdfDocument TPdfPage` main rendering classes
+- `TPdfDocumentGdi` for GDI/`TCanvas` rendering support
