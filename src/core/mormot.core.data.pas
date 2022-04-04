@@ -2473,6 +2473,12 @@ function UpdateIniNameValue(var Content: RawUtf8;
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
 function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
 
+/// fill a class Instance properties from an .ini content
+// - the class property fields are searched in the supplied section
+// - nested objects are searched in their own section, named from their property
+// - returns true if at least one property has been identified
+function IniToObject(const Ini: RawUtf8; Instance: TObject;
+  const SectionName: RawUtf8 = 'Main'): boolean;
 
 
 { ************ RawUtf8 String Values Interning and TRawUtf8List }
@@ -4068,6 +4074,47 @@ begin
   result := ExistsIniNameValue(Headers, HEADER_CONTENT_TYPE_UPPER,
     [JSON_CONTENT_TYPE_UPPER, 'TEXT/', 'APPLICATION/XML',
      'APPLICATION/JAVASCRIPT', 'APPLICATION/X-JAVASCRIPT', 'IMAGE/SVG+XML']);
+end;
+
+function IniToObject(const Ini: RawUtf8; Instance: TObject;
+  const SectionName: RawUtf8): boolean;
+var
+  r: TRttiCustom;
+  i: PtrInt;
+  p: PRttiCustomProp;
+  section: PUtf8Char;
+  v: RawUtf8;
+  up: array[byte] of AnsiChar;
+begin
+  result := false;
+  if (Ini = '') or
+     (Instance = nil) then
+    exit;
+  PWord(UpperCopy255(up{%H-}, SectionName))^ := ord(']');
+  section := pointer(Ini);
+  if not FindSectionFirstLine(section, @up) then
+    exit; // section not found
+  r := Rtti.RegisterClass(Instance);
+  p := pointer(r.Props.List);
+  for i := 1 to r.Props.Count do
+  begin
+    if p^.Prop <> nil then
+      if p^.Value.Kind = rkClass then
+      begin // recursive load from another per-property section
+        if IniToObject(Ini, p^.Prop^.GetObjProp(Instance), p^.Name) then
+          result := true;
+      end
+      else
+      begin
+        PWord(UpperCopy255(up{%H-}, p^.Name))^ := ord('=');
+        v := FindIniNameValue(section, @up, #0);
+        if (v <> #0) and
+           p^.Prop^.SetValueText(Instance, v) then
+          result := true;
+      end;
+    inc(p);
+  end;
+
 end;
 
 
