@@ -1677,11 +1677,11 @@ function IsContentCompressed(Content: Pointer; Len: PtrInt): boolean;
 /// fast guess of the size, in pixels, of a JPEG memory buffer
 // - will only scan for basic JPEG structure, up to the StartOfFrame (SOF) chunk
 // - returns TRUE if the buffer is likely to be a JPEG picture, and set the
-// Height + Width variable with its dimensions - but there may be false positive
-// recognition, and no waranty that the memory buffer holds a valid JPEG picture
+// Height + Width + Bits variable with its dimensions - but there may be false
+// positive recognition, and no waranty that the memory buffer is a valid JPEG
 // - returns FALSE if the buffer does not have any expected SOI/SOF markers
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
-  out Height, Width: integer): boolean; overload;
+  out Height, Width, Bits: integer): boolean; overload;
 
 
 { ************* Text Memory Buffers and Files }
@@ -8307,7 +8307,8 @@ begin
   end;
 end;
 
-function GetJpegSize(jpeg: PAnsiChar; len: PtrInt; out Height, Width: integer): boolean;
+function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
+  out Height, Width, Bits: integer): boolean;
 var
   je: PAnsiChar;
 begin
@@ -8329,6 +8330,7 @@ begin
         begin
           Height := swap(PWord(jpeg + 4)^);
           Width := swap(PWord(jpeg + 6)^);
+          Bits := PByte(jpeg + 8)^ * 8;
           result := (Height > 0) and
                     (Height < 20000) and
                     (Width > 0) and
