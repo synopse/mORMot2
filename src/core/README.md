@@ -40,6 +40,7 @@ Cross-platform functions shared by all framework units
 - Gather Operating System Information
 - Operating System Specific Types (e.g. `TWinRegistry`)
 - Unicode, Time, File, Console, Library process
+- Cross-Platform Charset and CodePage Support
 - Per Class Properties O(1) Lookup via `vmtAutoTable` Slot (e.g. for RTTI cache)
 - `TSynLocker`/`TSynLocked` and Low-Level Threading Features
 - Unix Daemon and Windows Service Support

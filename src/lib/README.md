@@ -84,6 +84,16 @@ Generic Security Service API on POSIX/Linux
 - Middle-Level GSSAPI Wrappers
 - High-Level Client and Server Authentication using GSSAPI e.g. in `mormot.core.rest`
 
+### mormot.lib.gdiplus
+
+Windows GDI+ Graphics Device Interface Support
+- GDI+ Shared Types
+- GDI+ `TImageAttributes` wrapper
+- `TGdiPlus` class for Direct Access to the GDI+ Library
+- AntiAliased Rendering of GDI MetaFile
+
+See `mormot.ui.gdiplus.pas` for high-level LCL/VCL pictures support.
+
 ### mormot.lib.quickjs
 
 Cross-Platform and Cross-Compiler JavaScript Interpreter

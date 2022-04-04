@@ -3092,7 +3092,7 @@ type
 
 constructor TAlgoDeflate.Create;
 begin
-  if fAlgoID = 0 then
+  if fAlgoID = 0 then // TAlgoDeflateFast.Create may have already set it
     fAlgoID := 2;
   inherited Create;
   fDeflateLevel := 6;
@@ -3126,7 +3126,7 @@ type
   // implements the AlgoDeflateFast global variable
   TAlgoDeflateFast = class(TAlgoDeflate)
   public
-    /// set AlgoID = 2 as genuine byte identifier for Deflate Fast
+    /// set AlgoID = 3 as genuine byte identifier for Deflate Fast
     constructor Create; override;
   end;
 
