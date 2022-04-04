@@ -1475,6 +1475,12 @@ function UpperCaseUnicode(const S: RawUtf8): RawUtf8;
 // all systems - and also slower than LowerCase/LowerCaseU versions
 function LowerCaseUnicode(const S: RawUtf8): RawUtf8;
 
+/// use the RTL to convert the SynUnicode text to UpperCase
+function UpperCaseSynUnicode(const S: SynUnicode): SynUnicode;
+
+/// use the RTL to convert the SynUnicode text to LowerCase
+function LowerCaseSynUnicode(const S: SynUnicode): SynUnicode;
+
 /// fast WinAnsi comparison using the NormToUpper[] array for all 8-bit values
 function AnsiIComp(Str1, Str2: pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
@@ -1534,8 +1540,6 @@ function UpperCaseUcs4Reference(const S: RawUtf8): RawUcs4;
 // - won't call the Operating System, so is consistent on all platforms, and
 // don't require any temporary UTF-16 decoding
 function StrPosIReference(U: PUtf8Char; const Up: RawUcs4): PUtf8Char;
-
-
 
 
 implementation
@@ -5936,6 +5940,32 @@ begin
   len := Utf8ToWideChar(tmp.buf, pointer(S), length(S)) shr 1;
   RawUnicodeToUtf8(tmp.buf, Unicode_InPlaceUpper(tmp.buf, len),result);
   tmp.Done;
+end;
+
+function UpperCaseSynUnicode(const S: SynUnicode): SynUnicode;
+begin
+  {$ifdef UNICODE}
+  result := SysUtils.UpperCase(S);
+  {$else}
+  {$ifdef HASVARUSTRING}
+  result := UnicodeUpperCase(S);
+  {$else}
+  result := WideUpperCase(s);
+  {$endif HASVARUSTRING}
+  {$endif UNICODE}
+end;
+
+function LowerCaseSynUnicode(const S: SynUnicode): SynUnicode;
+begin
+  {$ifdef UNICODE}
+  result := SysUtils.LowerCase(S);
+  {$else}
+  {$ifdef HASVARUSTRING}
+  result := UnicodeLowerCase(S);
+  {$else}
+  result := WideLowerCase(s);
+  {$endif HASVARUSTRING}
+  {$endif UNICODE}
 end;
 
 function LowerCaseUnicode(const S: RawUtf8): RawUtf8;
