@@ -1342,16 +1342,6 @@ function FindRawUtf8(const Values: TRawUtf8DynArray; const Value: RawUtf8;
 function FindRawUtf8(const Values: array of RawUtf8; const Value: RawUtf8;
   CaseSensitive: boolean = true): integer; overload;
 
-/// return the index of Value in Values[], -1 if not found
-// - here name search would use fast IdemPropNameU() function
-function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integer; overload;
-
-/// return the index of Value in Values[] using IdemPropNameU(), -1 if not found
-// - typical use with a dynamic array is like:
-// ! index := FindPropName(pointer(aDynArray),aValue,length(aDynArray));
-function FindPropName(Values: PRawUtf8;
-  const Value: RawUtf8; ValuesCount: integer): integer; overload;
-
 /// true if Value was added successfully in Values[]
 function AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8;
   NoDuplicates: boolean = false; CaseSensitive: boolean = true): boolean; overload;
@@ -6547,36 +6537,6 @@ begin
       else
         inc(Values);
   result := -1;
-end;
-
-function FindPropName(Values: PRawUtf8; const Value: RawUtf8; ValuesCount: integer): integer;
-var
-  ValueLen: TStrLen;
-begin
-  dec(ValuesCount);
-  ValueLen := length(Value);
-  if ValueLen = 0 then
-    for result := 0 to ValuesCount do
-      if Values^ = '' then
-        exit
-      else
-        inc(Values)
-  else
-    for result := 0 to ValuesCount do
-      if (PtrUInt(Values^) <> 0) and
-         (PStrLen(PtrUInt(Values^) - _STRLEN)^ = ValueLen) and
-         IdemPropNameUSameLenNotNull(pointer(Values^), pointer(Value), ValueLen) then
-        exit
-      else
-        inc(Values);
-  result := -1;
-end;
-
-function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integer;
-begin
-  result := high(Names);
-  if result >= 0 then
-    result := FindPropName(@Names[0], Name, result + 1);
 end;
 
 function FindRawUtf8(const Values: TRawUtf8DynArray; const Value: RawUtf8;
