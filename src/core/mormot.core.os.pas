@@ -4747,7 +4747,8 @@ begin
     exit;
   retry := 20;
   repeat
-    fn := Format('%s' + PathDelim + '%x.test', [dir, Random32]);
+    fn := Format('%s' + PathDelim + {$ifdef OSPOSIX} '.' + {$endif OSPOSIX}
+      '%x.test', [dir, Random32]);
     if not FileExists(fn) then
       break;
     dec(retry); // never loop forever

@@ -475,7 +475,7 @@ begin
           Start;
           writeln('Press [Enter] to quit');
           ioresult;
-          readln;
+          ConsoleWaitForEnterKey;
           writeln('Shutting down server');
         finally
           ioresult;

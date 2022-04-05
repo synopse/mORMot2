@@ -2173,7 +2173,10 @@ begin
         [servicename, TXT[dofork], Executable.Version.DetailedOrVoid], nil);
     Start;
     while SynDaemonTerminated = 0 do
-      fpPause;
+      if GetCurrentThreadID = MainThreadID then
+        CheckSynchronize(100)
+      else
+        Sleep(100);
   finally
     if Assigned(onlog) then
       onlog(sllNewRun, 'Stop /% from Sig=%',
