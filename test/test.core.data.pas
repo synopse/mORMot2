@@ -1767,6 +1767,20 @@ var
     Check(SetValueObject(G2, 'nestedobject.fieldinteger', 10));
     Check(G2.NestedObject.FieldInteger = 10);
     ClearObject(G2);
+    Check(not IniToObject('[main2]'#10'somefield=toto', G2));
+    CheckEqual(G2.SomeField, '');
+    CheckEqual(G2.NestedObject.FieldInteger, 0);
+    Check(IniToObject('[main]'#10'somefield=toto', G2));
+    CheckEqual(G2.SomeField, 'toto');
+    CheckEqual(G2.NestedObject.FieldInteger, 0);
+    Check(IniToObject('[main]'#10'somefield=titi'#10'[nestedobject]'#10'fieldinteger=7', G2));
+    CheckEqual(G2.SomeField, 'titi');
+    CheckEqual(G2.NestedObject.FieldInteger, 7);
+    Check(IniToObject('[main]'#10'[nestedobject]'#10'fieldstring=c:\abc', G2));
+    CheckEqual(G2.SomeField, 'titi');
+    CheckEqual(G2.NestedObject.FieldInteger, 7);
+    CheckEqual(G2.NestedObject.FieldString, 'c:\abc');
+    ClearObject(G2);
     ClearObject(GDtoObject);
     Check(IsObjectDefaultOrVoid(GDtoObject));
     Check(IsObjectDefaultOrVoid(G2));
@@ -4768,7 +4782,7 @@ begin
   V2.Val2 := 'blybly';
   V1.Val1 := V2.Val1;
   V1.Val2 := V2.Val2;
-  check(VariantSaveJson(V1) = VariantSaveJson(V2));
+  CheckEqual(VariantSaveJson(V1), VariantSaveJson(V2));
   Doc.Clear;
   V := _Json('{"ID": 1,"Notation": "ABC", "Price": 10.1, "CustomNotation": "XYZ"}');
   Doc.InitCopy(V, []);
@@ -4828,6 +4842,13 @@ begin
   Doc2.Clear;
   Doc2.InitJson('{"order_id": -1}');
   Check(Doc.Equals(Doc2));
+  Doc.Clear;
+  Doc.InitJson('[{"order_id": -1}]');
+  Check(Doc.IsArray);
+  Check(Doc._[0]^.Count = 1);
+  Doc2.Clear;
+  Doc2.InitArrayFromResults('[{"order_id": -1}]');
+  Check(Doc.Equals(Doc2), 'InitArrayFromResults1');
   Doc.Clear;
   Doc.InitJson(
    '{' + #13#10 +
