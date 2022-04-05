@@ -3324,8 +3324,7 @@ end;
 
 function TRttiInfo.DynArrayItemSize: PtrInt;
 begin
-  if DynArrayItemType(result) = nil then
-    result := 0;
+  DynArrayItemType(result); // fast enough (not used internally)
 end;
 
 function TRttiInfo.RttiSize: PtrInt;
