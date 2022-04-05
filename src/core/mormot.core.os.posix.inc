@@ -1393,66 +1393,56 @@ begin
 end;
 
 var
-  _HomePath,
-  _TempPath,
-  _UserPath,
-  _LogPath: TFileName;
+  _Path: array[TSystemPath] of TFileName;
 
-function GetSystemPath(kind: TSystemPath): TFileName;
+procedure SetSystemPath(kind: TSystemPath);
+var
+  s: TFileName;
 begin
   case kind of
     spLog:
-      begin
-        if _LogPath = '' then
-          if IsDirectoryWritable('/var/log') then
-             // may not be writable by not root on POSIX
-            _LogPath := '/var/log/'
-          else if IsDirectoryWritable(Executable.ProgramFilePath) then
-            _LogPath := Executable.ProgramFilePath
-          else
-            _LogPath := GetSystemPath(spUserData);
-        result := _LogPath;
-      end;
+      if IsDirectoryWritable('/var/log') then
+         // may not be writable by not root on POSIX
+        s := '/var/log/'
+      else if IsDirectoryWritable(Executable.ProgramFilePath) then
+        s := Executable.ProgramFilePath
+      else
+        s := GetSystemPath(spUserData);
     spUserData:
       begin
-        if _UserPath = '' then
-        begin
-          //  ~/.cache/appname
-          _UserPath := GetEnvironmentVariable('XDG_CACHE_HOME');
-          if (_UserPath = '') or
-             not IsDirectoryWritable(_UserPath) then
-            _UserPath := EnsureDirectoryExists(
-              GetSystemPath(spUserDocuments) + '.cache');
-          _UserPath := EnsureDirectoryExists(
-            _UserPath + TFileName(Executable.ProgramName));
-        end;
-        result := _UserPath;
+        //  ~/.cache/appname
+        s := GetEnvironmentVariable('XDG_CACHE_HOME');
+        if (s = '') or
+           not IsDirectoryWritable(s) then
+          s := EnsureDirectoryExists(GetSystemPath(spUserDocuments) + '.cache');
+        s := EnsureDirectoryExists(s + TFileName(Executable.ProgramName));
       end;
     spTempFolder:
       begin
-        if _TempPath = '' then
-        begin
-          _TempPath := GetEnvironmentVariable('TMPDIR'); // POSIX
-          if _TempPath = '' then
-            _TempPath := GetEnvironmentVariable('TMP');
-          if _TempPath = '' then
-            if DirectoryExists('/tmp') then
-              _TempPath := '/tmp'
-            else
-              _TempPath := '/var/tmp';
-          _TempPath := IncludeTrailingPathDelimiter(_TempPath);
-        end;
-        result := _TempPath;
-      end
+        s := GetEnvironmentVariable('TMPDIR'); // POSIX
+        if s = '' then
+          s := GetEnvironmentVariable('TMP');
+        if s = '' then
+          if DirectoryExists('/tmp') then
+            s := '/tmp'
+          else
+            s := '/var/tmp';
+        s := IncludeTrailingPathDelimiter(s);
+      end;
   else
-    begin
-      if _HomePath = '' then
-        // POSIX requires a value for $HOME
-        _HomePath := IncludeTrailingPathDelimiter(
-          GetEnvironmentVariable('HOME'));
-      result := _HomePath;
-    end;
+    // POSIX requires a value for $HOME
+    s := IncludeTrailingPathDelimiter(GetEnvironmentVariable('HOME'));
   end;
+  _Path[kind] := s;
+end;
+
+function GetSystemPath(kind: TSystemPath): TFileName;
+begin
+  result := _Path[kind];
+  if result <> '' then
+    exit;
+  SetSystemPath(kind);
+  result := _Path[kind];
 end;
 
 function SeemsRealPointer(p: pointer): boolean;
