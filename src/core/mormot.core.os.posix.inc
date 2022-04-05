@@ -2065,6 +2065,9 @@ begin
   result := RunUntilSigTerminatedPidFilePath;
   if result = '' then
     result := Executable.ProgramFilePath;
+  if not IsDirectoryWritable(result) then
+    // if the executable folder is not writable, use the temporary folder
+    result := GetSystemPath(spTempFolder);
   result := Format('%s.%s.pid', [result, Executable.ProgramName]);
 end;
 
