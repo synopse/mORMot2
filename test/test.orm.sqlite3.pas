@@ -706,6 +706,19 @@ var
 begin
   Model := TOrmModel.Create(
     [TOrmPeople, TOrmPeopleVersioned, TOrmTableDeleted], 'root0');
+  Master := CreateServer(SQLITE_MEMORY_DATABASE_NAME, true);
+  try
+    Rec := TOrmPeopleVersioned.Create;
+    try
+      for i := 1 to 20 do
+        Master.Orm.Add(Rec, true);
+      Master.Orm.Delete(TOrmPeopleVersioned, 'RowID>?', [2]);
+    finally
+      Rec.Free;
+    end;
+  finally
+    Master.Free;
+  end;
   CreateMaster(true);
   Slave1 := CreateServer('testversionreplicated' + DBExt, true);
   Slave2 := CreateServer('testversioncallback' + DBExt, true);
