@@ -1139,6 +1139,14 @@ type
       read FSomeField write FSomeField;
   end;
 
+  TDtoObject2 = class(TDtoObject)
+  private
+    fLevel: TSynLogInfo;
+  published
+    property Level: TSynLogInfo
+      read fLevel;
+  end;
+
   TObjectWithVariant = class(TSynPersistent)
   protected
     fValue: variant;
@@ -1217,7 +1225,7 @@ var
   JA, JA2: TTestCustomJsonArray;
   JAS: TTestCustomJsonArraySimple;
   JAV: TTestCustomJsonArrayVariant;
-  GDtoObject, G2: TDtoObject;
+  GDtoObject, G2, G3: TDtoObject;
   owv: TObjectWithVariant;
   Trans: TTestCustomJson2;
   Disco, Disco2: TTestCustomDiscogs;
@@ -1767,6 +1775,9 @@ var
     Check(SetValueObject(G2, 'nestedobject.fieldinteger', 10));
     Check(G2.NestedObject.FieldInteger = 10);
     ClearObject(G2);
+    U := ObjectToIni(G2);
+    CheckEqual(U, '[Main]'#$0A'SomeField='#$0A#$0A'[NestedObject]'#$0A +
+      'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A);
     Check(not IniToObject('[main2]'#10'somefield=toto', G2));
     CheckEqual(G2.SomeField, '');
     CheckEqual(G2.NestedObject.FieldInteger, 0);
@@ -1780,6 +1791,16 @@ var
     CheckEqual(G2.SomeField, 'titi');
     CheckEqual(G2.NestedObject.FieldInteger, 7);
     CheckEqual(G2.NestedObject.FieldString, 'c:\abc');
+    U := ObjectToIni(G2);
+    CheckEqual(U, '[Main]'#$0A'SomeField=titi'#$0A#$0A'[NestedObject]'#$0A +
+      'FieldString=c:\abc'#$0A'FieldInteger=7'#$0A'FieldVariant=null'#$0A#$0A);
+    G3 := TDtoObject2.Create;
+    U := ObjectToIni(G3);
+    CheckHash(U, $CDBF8A87);
+    TDtoObject2(G3).fLevel := sllTrace;
+    U := ObjectToIni(G3);
+    CheckHash(U, $E54B4E82);
+    G3.Free;
     ClearObject(G2);
     ClearObject(GDtoObject);
     Check(IsObjectDefaultOrVoid(GDtoObject));
