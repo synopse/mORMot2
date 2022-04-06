@@ -7085,7 +7085,7 @@ var
   Data: PByte;
 begin
   Data := GetFieldAddr(Instance);
-  W.AddRttiCustomJson(Data, fCustomParser, []);
+  W.AddRttiCustomJson(Data, fCustomParser, twJsonEscape, []);
 end;
 
 procedure TOrmPropInfoCustomJson.GetValueVar(Instance: TObject; ToSql: boolean;

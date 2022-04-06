@@ -208,6 +208,17 @@ const
   /// MIME content type used for a JPEG picture
   JPEG_CONTENT_TYPE = 'image/jpeg';
 
+  /// a IdemPPChar() compatible array of textual MIME content types
+  // - as used e.g. by IsHtmlContentTypeTextual()
+  CONTENT_TYPE_TEXTUAL: array[0..6] of PAnsiChar = (
+    JSON_CONTENT_TYPE_UPPER,
+    'TEXT/',
+    'APPLICATION/XML',
+    'APPLICATION/JAVASCRIPT',
+    'APPLICATION/X-JAVASCRIPT',
+    'IMAGE/SVG+XML',
+    nil);
+
   /// internal HTTP content-type for efficient static file sending
   // - detected e.g. by http.sys' THttpApiServer.Request or via the NGINX
   // X-Accel-Redirect header's THttpServer.Process (see
