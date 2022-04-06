@@ -2323,23 +2323,39 @@ type
     destructor Destroy; override;
   end;
 
+  /// customize TSynJsonFileSettings process
+  // - fsoDisableSaveIfNeeded will disable SaveIfNeeded method process
+  // - fsoReadIni will disable JSON loading, and expect INI
+  // - fsoWriteIni will force SaveIfNeeded to use the INI layout
+  TSynJsonFileSettingsOption = (
+    fsoDisableSaveIfNeeded,
+    fsoReadIni,
+    fsoWriteIni);
+  TSynJsonFileSettingsOptions = set of TSynJsonFileSettingsOption;
+
   /// abstract parent class able to store settings as JSON file
   // - would fallback and try to read an .INI file if no valid JSON is found
   TSynJsonFileSettings = class(TSynAutoCreateFields)
   protected
     fInitialJsonContent: RawUtf8;
     fFileName: TFileName;
+    fLoadedAsIni: boolean;
+    fSettingsOptions: TSynJsonFileSettingsOptions;
   public
     /// read existing settings from a JSON content
     // - if the input is no JSON object, then a .INI structure is tried
     function LoadFromJson(var aJson: RawUtf8): boolean;
-    /// read existing settings from a JSON file
+    /// read existing settings from a JSON or INI file file
     function LoadFromFile(const aFileName: TFileName): boolean; virtual;
     /// persist the settings as a JSON file, named from LoadFromFile() parameter
+    // - will use the INI format if it was used at loading, or fsoWriteIni is set
     procedure SaveIfNeeded; virtual;
     /// optional persistence file name, as set by LoadFromFile()
     property FileName: TFileName
       read fFileName;
+    /// allow to customize the storing process
+    property SettingsOptions: TSynJsonFileSettingsOptions
+      read fSettingsOptions write fSettingsOptions;
   end;
 
 
@@ -10595,9 +10611,16 @@ end;
 
 function TSynJsonFileSettings.LoadFromJson(var aJson: RawUtf8): boolean;
 begin
-  result := JsonSettingsToObject(aJson, self);
+  if fsoReadIni in fSettingsOptions then
+    result := false
+  else
+    result := JsonSettingsToObject(aJson, self);
   if not result then
+  begin
     result := IniToObject(aJson, self);
+    if result then
+      include(fSettingsOptions, fsoWriteIni); // save back as INI
+  end;
 end;
 
 function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName): boolean;
@@ -10612,9 +10635,13 @@ var
   saved: RawUtf8;
 begin
   if (self = nil) or
-     (fFileName = '') then
+     (fFileName = '') or
+     (fsoDisableSaveIfNeeded in fSettingsOptions) then
     exit;
-  saved := ObjectToJson(self, SETTINGS_WRITEOPTIONS);
+  if fsoWriteIni in fSettingsOptions then
+    saved := ObjectToIni(self)
+  else
+    saved := ObjectToJson(self, SETTINGS_WRITEOPTIONS);
   if saved = fInitialJsonContent then
     exit;
   FileFromString(saved, fFileName);
