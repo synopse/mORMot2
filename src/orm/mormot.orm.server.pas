@@ -1075,7 +1075,7 @@ begin
       if (fModel.TableProps[TableModelIndex].Props.RecordVersionField = nil) or
          not result then
         exit;
-      batch := TRestBatch.Create(self, fModel.Tables[TableModelIndex], 1000);
+      batch := TRestBatch.Create(self, fOrmVersionDeleteTable, 1000);
       try
         for i := 0 to high(IDs) do
           InternalRecordVersionDelete(TableModelIndex, IDs[i], batch);
