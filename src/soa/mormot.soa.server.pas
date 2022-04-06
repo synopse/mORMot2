@@ -2209,7 +2209,7 @@ begin
   try
     rec.FillFrom(NewContent, @fields);
     if fBatch = nil then
-      fSlave.ORM.Add(rec, true, true, true)
+      fSlave.Orm.Add(rec, true, true, true)
     else
       fBatch.Add(rec, true, true, fields, true);
     SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec), ooInsert);
@@ -2229,7 +2229,7 @@ begin
   try
     rec.FillFrom(ModifiedContent, @fields);
     if fBatch = nil then
-      fSlave.ORM.Update(rec, fields, true)
+      fSlave.Orm.Update(rec, fields, true)
     else
       fBatch.Update(rec, fields, true);
     SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec), ooUpdate);
@@ -2253,8 +2253,8 @@ begin
     try
       fSlave.AcquireExecution[execOrmWrite].Safe.Lock;
       TRestOrmServer(fSlave.OrmInstance).RecordVersionDeleteIgnore := true;
-      fSlave.ORM.Add(del, true, true, true);
-      fSlave.ORM.Delete(fTable, ID);
+      fSlave.Orm.Add(del, true, true, true);
+      fSlave.Orm.Delete(fTable, ID);
     finally
       TRestOrmServer(fSlave.OrmInstance).RecordVersionDeleteIgnore := false;
       fSlave.AcquireExecution[execOrmWrite].Safe.UnLock;
@@ -2292,7 +2292,7 @@ begin
   try
     fSlave.AcquireExecution[execOrmWrite].Safe.Lock;
     TRestOrmServer(fSlave.OrmInstance).RecordVersionDeleteIgnore := true;
-    fSlave.ORM.BatchSend(fBatch);
+    fSlave.Orm.BatchSend(fBatch);
   finally
     TRestOrmServer(fSlave.OrmInstance).RecordVersionDeleteIgnore := false;
     fSlave.AcquireExecution[execOrmWrite].Safe.UnLock;
@@ -2316,7 +2316,7 @@ begin
           exit;
       until GetTickCount64 > timeOut;
       fSlave.InternalLog('%.Destroy on %: active BATCH', [self, fTable], sllError);
-      fSlave.ORM.BatchSend(fBatch);
+      fSlave.Orm.BatchSend(fBatch);
       fBatch.Free;
     end;
   finally
