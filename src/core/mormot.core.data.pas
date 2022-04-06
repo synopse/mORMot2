@@ -2480,6 +2480,13 @@ function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
   const SectionName: RawUtf8 = 'Main'): boolean;
 
+/// serialize a class Instance properties into an .ini content
+// - the class property fields are written in the supplied main SectionName
+// - nested objects are written in their own section, named from their property
+function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main';
+  Options: TTextWriterWriteObjectOptions =
+    [woEnumSetsAsText, woRawBlobAsBase64, woHumanReadableEnumSetAsComment]): RawUtf8;
+
 
 { ************ RawUtf8 String Values Interning and TRawUtf8List }
 
@@ -4080,7 +4087,7 @@ function IniToObject(const Ini: RawUtf8; Instance: TObject;
   const SectionName: RawUtf8): boolean;
 var
   r: TRttiCustom;
-  i: PtrInt;
+  i: integer;
   p: PRttiCustomProp;
   section: PUtf8Char;
   v: RawUtf8;
@@ -4114,7 +4121,73 @@ begin
       end;
     inc(p);
   end;
+end;
 
+function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8;
+  Options: TTextWriterWriteObjectOptions): RawUtf8;
+var
+  W: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+  nested: TRawUtf8DynArray;
+  i, nestedcount: integer;
+  o: TTextWriterWriteObjectOptions;
+  r: TRttiCustom;
+  p: PRttiCustomProp;
+  s: RawUtf8;
+begin
+  result := '';
+  if Instance = nil then
+    exit;
+  nestedcount := 0;
+  W := DefaultJsonWriter.CreateOwnedStream(tmp);
+  try
+    W.CustomOptions := W.CustomOptions + [twoTrimLeftEnumSets];
+    W.Add('[%]'#10, [SectionName]);
+    r := Rtti.RegisterClass(Instance);
+    p := pointer(r.Props.List);
+    for i := 1 to r.Props.Count do
+    begin
+      if p^.Prop <> nil then
+        if p^.Value.Kind = rkClass then
+        begin
+          s := ObjectToIni(p^.Prop^.GetObjProp(Instance), p^.Name);
+          if s <> '' then
+            AddRawUtf8(nested, nestedcount, s);
+        end
+        else
+        begin
+          o := Options - [woHumanReadableEnumSetAsComment];
+          case p^.Value.Kind of
+            rkSet: // not supported yet in IniToObject/SetValueText above
+              exclude(o, woEnumSetsAsText);
+            rkEnumeration:
+              if woHumanReadableEnumSetAsComment in Options then
+              begin
+                p^.Value.Cache.EnumInfo^.GetEnumNameAll(
+                  s, '; values=', false, #10, true);
+                W.AddString(s);
+              end;
+          end;
+          W.AddString(p^.Name);
+          W.Add('=');
+          case p^.Value.Kind of
+            rkEnumeration: // AddValueJson() would have written "quotes"
+              W.AddTrimLeftLowerCase(p^.Value.Cache.EnumInfo^.GetEnumNameOrd(
+                p^.Prop^.GetOrdProp(Instance)));
+          else
+            p^.AddValueJson(W, Instance, o, twOnSameLine);
+          end;
+          W.Add(#10);
+        end;
+      inc(p);
+    end;
+    W.Add(#10);
+    for i := 0 to nestedcount - 1 do
+      W.AddString(nested[i]);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
 end;
 
 

@@ -2105,7 +2105,7 @@ type
     /// append the field value as JSON with proper getter method call
     // - wrap GetValue() + AddVariant() over a temp TRttiVarData
     procedure AddValueJson(W: TTextWriter; Data: pointer;
-      Options: TTextWriterWriteObjectOptions);
+      Options: TTextWriterWriteObjectOptions; K: TTextWriterKind = twNone);
   end;
 
   /// store information about the properties/fields of a given TypeInfo/PRttiInfo
@@ -3773,6 +3773,7 @@ var
   k: TRttiKind;
   v: Int64;
   f: double;
+  u: RawUtf8;
 begin
   result := false; // invalid or unsupported type
   if (@self = nil) or
@@ -3782,7 +3783,8 @@ begin
   if k in rkOrdinalTypes then
     if ToInt64(Value, v) then
       SetInt64Value(Instance, v)
-    else if k = rkEnumeration then
+    else if (k = rkEnumeration) and
+            (Value <> '') then
     begin
       v := GetEnumNameValue(TypeInfo, Value, {trimlowcase=}true);
       if v < 0 then
@@ -6564,17 +6566,17 @@ begin
 end;
 
 procedure TRttiCustomProp.AddValueJson(W: TTextWriter; Data: pointer;
-  Options: TTextWriterWriteObjectOptions);
+  Options: TTextWriterWriteObjectOptions; K: TTextWriterKind);
 var
   rvd: TRttiVarData;
-  tw: TTextWriterKind;
 begin
   GetValue(Data, rvd);
-  if Value.Parser = ptRawJson then
-    tw := twNone
-  else
-    tw := twJsonEscape;
-  W.AddVariant(variant(rvd), tw, Options);
+  if K <> twOnSameLine then
+    if Value.Parser = ptRawJson then
+      K := twNone
+    else
+      K := twJsonEscape;
+  W.AddVariant(variant(rvd), K, Options);
   if rvd.NeedsClear then
     VarClearProc(rvd.Data);
 end;

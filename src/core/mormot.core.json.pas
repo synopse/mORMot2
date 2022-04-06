@@ -606,7 +606,7 @@ type
     procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
       AnsiToWide: PWordArray; Escape: TTextWriterKind);
     // called after TRttiCustomProp.GetValueDirect/GetValueGetter
-    procedure AddRttiVarData(const Value: TRttiVarData;
+    procedure AddRttiVarData(const Value: TRttiVarData; Escape: TTextWriterKind;
       WriteOptions: TTextWriterWriteObjectOptions);
   public
     /// release all internal structures
@@ -731,7 +731,7 @@ type
     /// append complex types as JSON content using TRttiCustom
     // - called e.g. by TJsonWriter.AddVariant() for varAny / TRttiVarData
     procedure AddRttiCustomJson(Value: pointer; RttiCustom: TObject;
-      WriteOptions: TTextWriterWriteObjectOptions);
+      Escape: TTextWriterKind; WriteOptions: TTextWriterWriteObjectOptions);
     /// append a JSON value, array or document, in a specified format
     // - this overriden version will properly handle JSON escape
     function AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
@@ -6004,7 +6004,7 @@ begin
     varAny:
       // rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkObject
       // from TRttiCustomProp.GetValueDirect/GetValueGetter
-      AddRttiVarData(TRttiVarData(V), WriteOptions);
+      AddRttiVarData(TRttiVarData(V), Escape, WriteOptions);
     varVariantByRef:
       AddVariant(PVariant(v.VPointer)^, Escape, WriteOptions);
     varStringByRef:
@@ -6063,7 +6063,7 @@ begin
 end;
 
 procedure TJsonWriter.AddRttiCustomJson(Value: pointer; RttiCustom: TObject;
-  WriteOptions: TTextWriterWriteObjectOptions);
+  Escape: TTextWriterKind; WriteOptions: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
   save: TRttiJsonSave;
@@ -6073,11 +6073,12 @@ begin
   if Assigned(save) then
     save(Value, ctxt)
   else
-    BinarySaveBase64(Value, ctxt.Info.Info, rkAllTypes, {magic=}true);
+    BinarySaveBase64(Value, ctxt.Info.Info, rkAllTypes,
+      {magic=}Escape <> twOnSameLine);
 end;
 
 procedure TJsonWriter.AddRttiVarData(const Value: TRttiVarData;
-  WriteOptions: TTextWriterWriteObjectOptions);
+  Escape: TTextWriterKind; WriteOptions: TTextWriterWriteObjectOptions);
 var
   V64: Int64;
 begin
@@ -6088,7 +6089,7 @@ begin
     begin
       // rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface
       V64 := Value.Prop.Prop.GetOrdProp(Value.PropValue);
-      AddRttiCustomJson(@V64, Value.Prop.Value, WriteOptions);
+      AddRttiCustomJson(@V64, Value.Prop.Value, Escape, WriteOptions);
     end
     else
       // rkRecord,rkObject have no getter methods
@@ -6097,7 +6098,7 @@ begin
   end
   else
     // from TRttiCustomProp.GetValueDirect
-    AddRttiCustomJson(Value.PropValue, Value.Prop.Value, WriteOptions);
+    AddRttiCustomJson(Value.PropValue, Value.Prop.Value, Escape, WriteOptions);
 end;
 
 procedure TJsonWriter.AddText(const Text: RawByteString; Escape: TTextWriterKind);
