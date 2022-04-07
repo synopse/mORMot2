@@ -749,6 +749,7 @@ end;
 var
   {%H-}pthread: pointer;
   pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
+  pthread_cancel: function (thread: pointer): integer; cdecl;
 
 {$endif OSPTHREADS}
 
@@ -799,6 +800,20 @@ procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
 begin
   if ThreadID <> MainThreadID then // don't change the main process name
     SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
+end;
+
+function RawThreadKill(ThreadID: TThreadID): boolean;
+begin
+  result := false;
+  {$ifdef OSPTHREADS} // see https://stackoverflow.com/a/7989973
+  if ThreadID <> MainThreadID then // don't kill the main thread!
+    try
+      if Assigned(pthread_cancel) then
+        result := pthread_cancel(pointer(ThreadID)) = 0;
+    except
+      ; // ignore any exception (pthread confusion with its static version?)
+    end;
+  {$endif OSPTHREADS}
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
@@ -2776,7 +2791,10 @@ begin
   // -> we don't open libpthread but we get its symbol
   pthread := dlopen('libpthread.so.0', RTLD_LAZY);
   if pthread <> nil then
+  begin
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
+    @pthread_cancel := dlsym(pthread, 'pthread_cancel');
+  end;
   {$endif OSPTHREADS}
   // redirect some syscall FPC RTL functions to faster vDSO libc variant
   {$ifdef CPUARM3264}

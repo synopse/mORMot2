@@ -3773,7 +3773,6 @@ var
   k: TRttiKind;
   v: Int64;
   f: double;
-  u: RawUtf8;
 begin
   result := false; // invalid or unsupported type
   if (@self = nil) or

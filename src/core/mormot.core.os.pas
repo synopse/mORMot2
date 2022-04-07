@@ -3204,8 +3204,14 @@ procedure SwitchToThread;
 procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 
 /// low-level naming of a thread
+// - on Windows, will raise a standard "fake" exception to notify the thread name
 // - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
+
+/// try to kill/cancel a thread by ID
+// - on Windows, call the TerminateThread() API
+// - under Linux/FPC, calls pthread_cancel API which is asynchronous
+function RawThreadKill(ThreadID: TThreadID): boolean;
 
 /// name the current thread so that it would be easily identified in the IDE debugger
 // - could then be retrieved by CurrentThreadName/GetCurrentThreadName

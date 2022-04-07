@@ -575,6 +575,10 @@ end;
   {$define NOSETTHREADNAME} // only tested and supported on Delphi
 {$endif FPC}
 
+const
+  // see http://msdn.microsoft.com/en-us/library/xcb2z8hs
+  cSetThreadNameException = $406D1388;
+
 {$ifdef NOSETTHREADNAME}
 
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
@@ -584,33 +588,42 @@ end;
 {$else}
 
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
-var s: AnsiString;
-    {$ifndef ISDELPHIXE2}
-    info: record
-      FType: LongWord;     // must be 0x1000
-      FName: PAnsiChar;    // pointer to name (in user address space)
-      FThreadID: LongWord; // thread ID (-1 indicates caller thread)
-      FFlags: LongWord;    // reserved for future use, must be zero
-    end;
-    {$endif ISDELPHIXE2}
+var
+  s: AnsiString;
+  {$ifndef ISDELPHIXE2}
+  info: record
+    FType: LongWordz;     // must be 0x1000
+    FName: PAnsiChar;    // pointer to name (in user address space)
+    FThreadID: LongWord; // thread ID (-1 indicates caller thread)
+    FFlags: LongWord;    // reserved for future use, must be zero
+  end;
+  {$endif ISDELPHIXE2}
 begin
   if not IsDebuggerPresent then
     exit;
   s := AnsiString(Name);
   {$ifdef ISDELPHIXE2}
-  TThread.NameThreadForDebugging(s,ThreadID); // use
+  TThread.NameThreadForDebugging(s, ThreadID); // use
   {$else}
   info.FType := $1000;
   info.FName := pointer(s);
   info.FThreadID := ThreadID;
   info.FFlags := 0;
   try
-    RaiseException($406D1388,0,SizeOf(info) div SizeOf(LongWord),@info);
-  except {ignore} end;
+    RaiseException(
+      cSetThreadNameException, 0, SizeOf(info) div SizeOf(LongWord), @info);
+  except
+    {ignore}
+  end;
   {$endif ISDELPHIXE2}
 end;
 
 {$endif NOSETTHREADNAME}
+
+function RawThreadKill(ThreadID: TThreadID): boolean;
+begin
+  result := Windows.TerminateThread(ThreadID, 777);
+end;
 
 type
   // avoid linking of ComObj.pas just for EOleSysError
@@ -622,9 +635,6 @@ type
 {$ifndef NOEXCEPTIONINTERCEPT}
 
 const
-  // see http://msdn.microsoft.com/en-us/library/xcb2z8hs
-  cSetThreadNameException = $406D1388;
-
   // https://docs.microsoft.com/en-us/archive/blogs/yizhang/interpreting-hresults-returned-from-netclr-0x8013xxxx
   // see also https://referencesource.microsoft.com/#mscorlib/system/__hresults.cs
   DOTNET_EXCEPTIONNAME: array[0..91] of PUtf8Char = (
