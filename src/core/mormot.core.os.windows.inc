@@ -592,7 +592,7 @@ var
   s: AnsiString;
   {$ifndef ISDELPHIXE2}
   info: record
-    FType: LongWordz;     // must be 0x1000
+    FType: LongWord;     // must be 0x1000
     FName: PAnsiChar;    // pointer to name (in user address space)
     FThreadID: LongWord; // thread ID (-1 indicates caller thread)
     FFlags: LongWord;    // reserved for future use, must be zero
@@ -620,9 +620,10 @@ end;
 
 {$endif NOSETTHREADNAME}
 
-function RawThreadKill(ThreadID: TThreadID): boolean;
+function RawKillThread(Thread: TThread): boolean;
 begin
-  result := Windows.TerminateThread(ThreadID, 777);
+  result := (Thread <> nil) and
+            Windows.TerminateThread(Thread.Handle, 777);
 end;
 
 type

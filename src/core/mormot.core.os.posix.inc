@@ -802,17 +802,16 @@ begin
     SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
 end;
 
-function RawThreadKill(ThreadID: TThreadID): boolean;
+function RawKillThread(Thread: TThread): boolean;
 begin
   result := false;
-  {$ifdef OSPTHREADS} // see https://stackoverflow.com/a/7989973
-  if ThreadID <> MainThreadID then // don't kill the main thread!
-    try
-      if Assigned(pthread_cancel) then
-        result := pthread_cancel(pointer(ThreadID)) = 0;
-    except
-      ; // ignore any exception (pthread confusion with its static version?)
-    end;
+  {$ifdef OSPTHREADS}
+  try
+    if Assigned(pthread_cancel) then
+      result := pthread_cancel(pointer(Thread.ThreadID)) = 0;
+  except
+    ; // ignore any exception (pthread confusion with its static version?)
+  end;
   {$endif OSPTHREADS}
 end;
 
