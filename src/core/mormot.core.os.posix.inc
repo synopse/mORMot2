@@ -1248,7 +1248,7 @@ end;
 
 procedure AllocConsole;
 begin
-  // nothing to do on Linux
+  StdOut := StdOutputHandle;
 end;
 
 {$I-}
@@ -1261,7 +1261,7 @@ const
   TERM_CTRL: string[8] = '04261537';
 begin
 {$ifdef OSPOSIX}
-  if not stdoutIsTTY then
+  if not StdOutIsTTY then
     exit;
 {$endif OSPOSIX}
   if ord(Color) = TextAttr then
@@ -2558,7 +2558,7 @@ var
   tm: TThreadManager;
 begin
   // retrieve Kernel and Hardware information
-  stdoutIsTTY := (IsATTY(StdOutputHandle) = 1) and
+  StdOutIsTTY := (IsATTY(StdOutputHandle) = 1) and
                  IdemPChars(RawUtf8(GetEnvironmentVariable('TERM')), [
                    'XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
   modname := nil;

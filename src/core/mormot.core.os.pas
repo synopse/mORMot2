@@ -2501,29 +2501,31 @@ type
     ccYellow,
     ccWhite);
 
-{$ifdef OSPOSIX}
 var
-  stdoutIsTTY: boolean;
-{$endif OSPOSIX}
+  /// low-level handle used for console writing
+  // - may be overriden when console is redirected
+  // - on Windows, is initialized when AllocConsole or TextColor() are called
+  StdOut: THandle;
+
+  {$ifdef OSPOSIX}
+  StdOutIsTTY: boolean;
+  {$endif OSPOSIX}
 
 /// similar to Windows AllocConsole API call, to be truly cross-platform
-// - do nothing on Linux/POSIX
+// - do nothing on Linux/POSIX, but set StdOut propertly from StdOutputHandle
+// - on Windows, will call the corresponding API, and set StdOut global variable
 procedure AllocConsole;
-  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// change the console text writing color
-// - you should call this procedure to initialize StdOut global variable, if
-// you manually initialized the Windows console, e.g. via the following code:
-// ! AllocConsole;
-// ! TextColor(ccLightGray); // initialize internal console context
 procedure TextColor(Color: TConsoleColor);
-
-/// write some text to the console using a given color
-procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccLightGray;
-  NoLineFeed: boolean = false; NoColor: boolean = false); overload;
 
 /// change the console text background color
 procedure TextBackground(Color: TConsoleColor);
+
+/// write some text to the console using a given color
+// - this method is protected by its own CriticalSection for output consistency
+procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccLightGray;
+  NoLineFeed: boolean = false; NoColor: boolean = false); overload;
 
 /// will wait for the ENTER key to be pressed, processing Synchronize() pending
 // notifications, and the internal Windows Message loop (on this OS)
@@ -2556,12 +2558,6 @@ function PosixParseHex32(p: PAnsiChar): integer;
 // - under Windows, will use the CP_OEMCP encoding
 // - under Linux, will expect the console to be defined with UTF-8 encoding
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
-
-var
-  /// low-level handle used for console writing
-  // - may be overriden when console is redirected
-  // - is initialized when TextColor() is called
-  StdOut: THandle;
 
 
 type
@@ -5161,6 +5157,9 @@ begin
   end;
 end;
 
+var
+  GlobalCriticalSection, ConsoleCriticalSection: TRTLCriticalSection;
+
 {$I-}
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
@@ -5169,14 +5168,19 @@ begin
   if not HasConsole then
     exit;
   {$endif OSWINDOWS}
-  if not NoColor then
-    TextColor(Color); 
-  write(Utf8ToConsole(Text));
-  if not NoLineFeed then
-    writeln;
-  if not NoColor then
-    TextColor(ccLightGray);
-  ioresult;
+  mormot.core.os.EnterCriticalSection(ConsoleCriticalSection);
+  try
+    if not NoColor then
+      TextColor(Color);
+    write(Utf8ToConsole(Text));
+    if not NoLineFeed then
+      writeln;
+    if not NoColor then
+      TextColor(ccLightGray);
+    ioresult;
+  finally
+    mormot.core.os.LeaveCriticalSection(ConsoleCriticalSection);
+  end;
 end;
 {$I+}
 
@@ -5492,9 +5496,6 @@ end; // mormot.core.log.pas will properly decode debug info - and handle .mab
 
 
 { **************** TSynLocker Threading Features }
-
-var
-  GlobalCriticalSection: TRTLCriticalSection;
 
 procedure GlobalLock;
 begin
@@ -6642,6 +6643,7 @@ begin
   SetMultiByteRTLFileSystemCodePage(CP_UTF8);
   {$endif ISFPC27}
   InitializeCriticalSection(GlobalCriticalSection);
+  InitializeCriticalSection(ConsoleCriticalSection);
   InitializeSpecificUnit; // in mormot.core.os.posix/windows.inc files
   TrimDualSpaces(OSVersionText);
   TrimDualSpaces(OSVersionInfoEx);
@@ -6672,8 +6674,9 @@ begin
   end;
   ObjArrayClear(CurrentFakeStubBuffers);
   Executable.Version.Free;
-  DeleteCriticalSection(GlobalCriticalSection);
   FinalizeSpecificUnit; // in mormot.core.os.posix/windows.inc files
+  DeleteCriticalSection(ConsoleCriticalSection);
+  DeleteCriticalSection(GlobalCriticalSection);
 end;
 
 initialization

@@ -5395,7 +5395,7 @@ end;
 
 function IsZero(const Values: TIntegerDynArray): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   for i := 0 to length(Values) - 1 do
@@ -5406,7 +5406,7 @@ end;
 
 function IsZero(const Values: TInt64DynArray): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   for i := 0 to length(Values) - 1 do

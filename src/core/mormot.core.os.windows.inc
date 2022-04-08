@@ -187,7 +187,6 @@ procedure EnterCriticalSection;       external kernel32;
 procedure LeaveCriticalSection;       external kernel32;
 procedure DeleteCriticalSection;      external kernel32;
 function  TryEnterCriticalSection;    external kernel32;
-procedure AllocConsole;               external kernel32;
 function  CloseHandle;                external kernel32;
 procedure FileClose;                  external kernel32 name 'CloseHandle';
 function  GetCurrentThreadId;         external kernel32;
@@ -208,6 +207,24 @@ function  PostQueuedCompletionStatus; external kernel32;
 function  GetDesktopWindow;           external user32;
 function  Unicode_InPlaceUpper;       external user32 name 'CharUpperBuffW';
 function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
+
+function HasConsole: boolean;
+begin
+  if StdOut = 0 then
+  begin
+    StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
+    if StdOut = INVALID_HANDLE_VALUE then
+      StdOut := 0;
+  end;
+  result := StdOut <> 0;
+end;
+
+procedure AllocConsole;
+begin
+  Windows.AllocConsole;
+  if StdOut = 0 then
+    HasConsole; // setup StdOut
+end;
 
 {$I-}
 procedure DisplayFatalError(const title, msg: RawUtf8);
@@ -1537,17 +1554,6 @@ begin
     end;
     m := m shl 1;
   end;
-end;
-
-function HasConsole: boolean;
-begin
-  if StdOut = 0 then
-  begin
-    StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
-    if StdOut = INVALID_HANDLE_VALUE then
-      StdOut := 0;
-  end;
-  result := StdOut <> 0;
 end;
 
 var
