@@ -5336,6 +5336,7 @@ begin
            begin
              VName := nil;
              VValue := nil;
+             exit;
            end
            else
              VCount := n;

@@ -134,7 +134,6 @@ var
 // - e.g. if contains " or \ characters, as defined by
 // http://www.ietf.org/rfc/rfc4627.txt
 function NeedsJsonEscape(const Text: RawUtf8): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if the given text buffers would be escaped when written as JSON
 // - e.g. if contains " or \ characters, as defined by
@@ -145,6 +144,7 @@ function NeedsJsonEscape(P: PUtf8Char): boolean; overload;
 // - e.g. if contains " or \ characters, as defined by
 // http://www.ietf.org/rfc/rfc4627.txt
 function NeedsJsonEscape(P: PUtf8Char; PLen: integer): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// UTF-8 decode one or two \u#### JSON escaped codepoints into Dest
 // - P^ should point at 'u1234' just after \u1234
@@ -2334,7 +2334,7 @@ type
   TSynJsonFileSettingsOptions = set of TSynJsonFileSettingsOption;
 
   /// abstract parent class able to store settings as JSON file
-  // - would fallback and try to read an .INI file if no valid JSON is found
+  // - would fallback and try to read as INI file if no valid JSON is found
   TSynJsonFileSettings = class(TSynAutoCreateFields)
   protected
     fInitialJsonContent: RawUtf8;
