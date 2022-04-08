@@ -5259,10 +5259,14 @@ begin
             inc(Val);
             inc(n);
           until EndOfObject = ']';
-          // no SetLength(VValue,VCount) if NextGrow() was used on huge input
           if Json = nil then
-            VValue := nil
+          begin
+            // invalid input
+            VValue := nil;
+            exit;
+          end
           else
+            // ok - but no SetLength(..,VCount) if NextGrow() on huge input
             VCount := n;
         end;
       end;
@@ -5330,15 +5334,16 @@ begin
             inc(n);
             inc(Val);
           until EndOfObject = '}';
-          // no SetLength(VValue/VNAme,VCount) if NextGrow() on huge input
           if (Name = nil) or
              (Json = nil) then
            begin
+             // invalid input
              VName := nil;
              VValue := nil;
              exit;
            end
            else
+             // ok - but no SetLength(..,VCount) if NextGrow() on huge input
              VCount := n;
         end;
       end;
