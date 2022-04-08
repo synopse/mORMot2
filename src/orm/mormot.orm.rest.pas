@@ -2323,7 +2323,7 @@ begin
   result := BatchSend(Batch, dummyRes);
 end;
 
-function TRestOrm.{%H-}BatchSend(Table: TOrmClass; var Data: RawUtf8;
+function TRestOrm.BatchSend(Table: TOrmClass; var Data: RawUtf8;
   var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 begin
   result := EngineBatchSend(Table, Data, Results, ExpectedResultsCount);

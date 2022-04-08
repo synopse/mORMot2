@@ -1542,8 +1542,8 @@ begin
           encPostHexID,
           encPutHexID:
             begin
-              // second InternalBatchDirect() call should process the operation
-              // (may be delayed for multi-insert in InternalBatchStop)
+              // note: DB operation could be delayed in InternalBatchDirect()
+              // (for multi-insert, may be up to InternalBatchStop)
               id := runningrest.InternalBatchDirect(
                 encoding, runtableindex, runfields, simplevalue);
               Results[count] := id;

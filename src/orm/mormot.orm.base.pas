@@ -1999,11 +1999,10 @@ type
     /// fill a TRawUtf8DynArray instance from the field names
     // - excluding ID
     procedure NamesToRawUtf8DynArray(var Names: TRawUtf8DynArray);
-    /// returns the number of TOrmPropInfo in the list
+    /// returns the number of TOrmPropInfo in the list, i.e. length(List)
     property Count: integer
       read fCount;
     /// quick access to the TOrmPropInfo list
-    // - note that length(List) may not equal Count, since is its capacity
     property List: TOrmPropInfoObjArray
       read fList;
     /// low-level access to the last TOrmPropInfo in the list
