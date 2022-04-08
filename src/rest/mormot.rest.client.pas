@@ -810,7 +810,7 @@ type
     // of high activity
     // - map TOnTextWriterEcho signature, so that you will be able to set e.g.:
     // ! TSqlLog.Family.EchoCustom := aClient.ServerRemoteLog;
-    function ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
+    function ServerRemoteLog(Sender: TEchoWriter; Level: TSynLogInfo;
       const Text: RawUtf8): boolean; overload; virtual;
     /// internal method able to emulate a call to TSynLog.Add.Log()
     // - will compute timestamp and event text, than call the overloaded
@@ -2707,7 +2707,7 @@ begin
   end;
 end;
 
-function TRestClientUri.ServerRemoteLog(Sender: TTextWriter;
+function TRestClientUri.ServerRemoteLog(Sender: TEchoWriter;
   Level: TSynLogInfo; const Text: RawUtf8): boolean;
 begin
   if fRemoteLogThread = nil then

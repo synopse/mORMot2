@@ -1260,11 +1260,19 @@ const
   TEXTWRITEROPTIONS_RESET = [twoStreamIsOwned, twoBufferIsExternal];
 
 type
+  TEchoWriter = class;
+
   /// callback used to echo each line of TEchoWriter class
   // - should return TRUE on success, FALSE if the log was not echoed: but
   // TSynLog will continue logging, even if this event returned FALSE
-  TOnTextWriterEcho = function(Sender: TTextWriter; Level: TSynLogInfo;
+  TOnTextWriterEcho = function(Sender: TEchoWriter; Level: TSynLogInfo;
     const Text: RawUtf8): boolean of object;
+
+  TEchoWriterBack = record
+    Level: TSynLogInfoDynArray;
+    Text: TRawUtf8DynArray;
+    Count: PtrInt;
+  end;
 
   /// add optional echoing of the lines to TTextWriter
   // - as used e.g. by TSynLog writer for log optional redirection
@@ -1276,6 +1284,9 @@ type
     fEchoStart: PtrInt;
     fEchoBuf: RawUtf8;
     fEchos: array of TOnTextWriterEcho;
+    fBack: TEchoWriterBack;
+    fBackSafe: TLightLock;
+    fEchoPendingExecuteBackground: boolean;
     function EchoFlush: PtrInt;
     function GetEndOfLineCRLF: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1292,7 +1303,8 @@ type
     /// mark an end of line, ready to be "echoed" to registered listeners
     // - append a LF (#10) char or CR+LF (#13#10) chars to the buffer, depending
     // on the EndOfLineCRLF property value (default is LF, to minimize storage)
-    // - any callback registered via EchoAdd() will monitor this line
+    // - any callback registered via EchoAdd() will monitor this line in the
+    // current thread, or calling EchoPendingExecute from a background thread
     // - used e.g. by TSynLog for console output, as stated by Level parameter
     procedure AddEndOfLine(aLevel: TSynLogInfo = sllNone);
     /// add a callback to echo each line written by this class
@@ -1303,6 +1315,9 @@ type
     procedure EchoRemove(const aEcho: TOnTextWriterEcho);
     /// reset the internal buffer used for echoing content
     procedure EchoReset;
+    /// run all pending EchoPendingExecuteBackground notifications
+    // - should be executed from a background thread
+    procedure EchoPendingExecute;
     /// the associated TTextWriter instance
     property Writer: TTextWriter
       read fWriter;
@@ -1313,6 +1328,9 @@ type
     // - is just a wrapper around twoEndOfLineCRLF item in CustomOptions
     property EndOfLineCRLF: boolean
       read GetEndOfLineCRLF write SetEndOfLineCRLF;
+    /// if EchoPendingExecute is about to be executed in the background
+    property EchoPendingExecuteBackground: boolean
+      read fEchoPendingExecuteBackground write fEchoPendingExecuteBackground;
   end;
 
 
@@ -6386,7 +6404,7 @@ end;
 
 procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogInfo);
 var
-  i: PtrInt;
+  e, n: PtrInt;
 begin
   if twoEndOfLineCRLF in fWriter.CustomOptions then
     fWriter.AddCR
@@ -6395,14 +6413,52 @@ begin
   if fEchos <> nil then
   begin
     fEchoStart := EchoFlush;
-    for i := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
-    try
-      fEchos[i](fWriter, aLevel, fEchoBuf);
-    except // remove callback in case of exception during echoing in user code
-      MultiEventRemove(fEchos, i);
-    end;
+    if fEchoPendingExecuteBackground then
+    begin
+      fBackSafe.Lock;
+      n := fBack.Count;
+      if length(fBack.Level) = n then
+      begin
+        n := NextGrow(fBack.Count);
+        SetLength(fBack.Level, n);
+        SetLength(fBack.Text, n);
+        n := fBack.Count;
+      end;
+      fBack.Level[n] := aLevel;
+      fBack.Text[n] := fEchoBuf;
+      fBackSafe.UnLock;
+    end
+    else
+      for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
+        try
+          fEchos[e](self, aLevel, fEchoBuf);
+        except // remove callback in case of exception during echoing
+          MultiEventRemove(fEchos, e);
+        end;
     fEchoBuf := '';
   end;
+end;
+
+procedure TEchoWriter.EchoPendingExecute;
+var
+  todo: TEchoWriterBack; // thread-safe per reference copy
+  i, e: PtrInt;
+begin
+  if fBack.Count = 0 then
+    exit;
+  fBackSafe.Lock;
+  MoveFast(fBack, todo, SizeOf(fBack)); // copy without refcount
+  FillCharFast(fBack, SizeOf(fBack), 0);
+  fBackSafe.UnLock;
+  for i := 0 to todo.Count - 1 do
+    for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
+      try
+        fEchos[e](self, todo.Level[i], todo.Text[i]);
+      except // remove callback in case of exception during echoing in user code
+        MultiEventRemove(fEchos, e);
+        if fEchos = nil then
+          break;
+      end;
 end;
 
 procedure TEchoWriter.FlushToStream(Text: PUtf8Char; Len: PtrInt);

@@ -633,6 +633,7 @@ type
     fEchoRemoteEvent: TOnTextWriterEcho;
     fEchoRemoteClientOwned: boolean;
     fEchoToConsoleUseJournal: boolean;
+    fEchoToConsoleBackground: boolean;
     fEndOfLineCRLF: boolean;
     fDestroying: boolean;
     fRotateFileCurrent: cardinal;
@@ -738,7 +739,7 @@ type
     /// if the some kind of events shall be echoed to the console
     // - note that it will slow down the logging process a lot (console output
     // is slow by nature under Windows, but may be convenient for interactive
-    // debugging of services, for instance
+    // debugging of services, for instance) - see EchoToConsoleBackground
     // - this property shall be set before any actual logging, otherwise it
     // will have no effect
     // - can be set e.g. to LOG_VERBOSE in order to echo every kind of events
@@ -753,6 +754,10 @@ type
     // $ "journalctl -u UNIT --no-hostname -o short-iso-precise --since today | grep "PROCESS\[.*\]:  . " > todaysLog.log"
     property EchoToConsoleUseJournal: boolean
       read fEchoToConsoleUseJournal write SetEchoToConsoleUseJournal;
+    /// EchoToConsole output is sent from the flush background thread
+    // - enabled by default on Windows, since its console output is very slow
+    property EchoToConsoleBackground: boolean
+      read fEchoToConsoleBackground write fEchoToConsoleBackground;
     /// can be set to a callback which will be called for each log line
     // - could be used with a third-party logging system
     // - EchoToConsole or EchoCustom can be activated separately
@@ -982,12 +987,12 @@ type
     fThreadLastHash: integer;
     fThreadIndex: integer;
     fCurrentLevel: TSynLogInfo;
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    fExceptionIgnoreThreadVar: PBoolean;
-    fExceptionIgnoredBackup: boolean;
-    {$endif NOEXCEPTIONINTERCEPT}
     fInternalFlags: set of (logHeaderWritten, logInitDone);
     fDisableRemoteLog: boolean;
+    {$ifndef NOEXCEPTIONINTERCEPT}
+    fExceptionIgnoredBackup: boolean;
+    fExceptionIgnoreThreadVar: PBoolean;
+    {$endif NOEXCEPTIONINTERCEPT}
     fThreadContexts: array of TSynLogThreadContext;
     fThreadHash: TWordDynArray; // 8 KB buffer
     fStartTimestamp: Int64;
@@ -1002,6 +1007,7 @@ type
     fThreadIndexReleased: TIntegerDynArray;
     fThreadIndexReleasedCount: integer;
     fThreadContextCount: integer;
+    fNextFlushTix10: cardinal;
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
       iid: TGUID; out obj): TIntQry;
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
@@ -1039,7 +1045,7 @@ type
     procedure ThreadContextRehash;
     function NewRecursion: PSynLogThreadRecursion;
     function Instance: TSynLog;
-    function ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
+    function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogInfo;
       const Text: RawUtf8): boolean; virtual;
   public
     /// intialize for a TSynLog class instance
@@ -1382,7 +1388,7 @@ type
     procedure Unsubscribe(const Callback: ISynLogCallback); virtual;
     /// notify a given log event
     // - matches the TOnTextWriterEcho signature
-    function OnEcho(Sender: TTextWriter; Level: TSynLogInfo;
+    function OnEcho(Sender: TEchoWriter; Level: TSynLogInfo;
       const Text: RawUtf8): boolean;
   published
     /// how many registrations are currently defined
@@ -3620,24 +3626,37 @@ threadvar
 
 
 type
+  // RRD of last 128 lines to be sent to console (no need of older data)
+  TAutoFlushThreadToConsole = record
+    Safe: TLightLock;
+    Next, Count: integer;
+    Text: array[0..127] of RawUtf8; // must be a power-of-two length
+    Color: array[0..127] of TConsoleColor;
+  end;
+
   // cross-platform / cross-compiler TThread-based flush
   TAutoFlushThread = class(TThread)
   protected
     fEvent: TEvent;
     fToCompress: TFileName;
+    fStartTix: Int64;
+    fSecondElapsed: cardinal;
+    fToConsole: TAutoFlushThreadToConsole;
     procedure Execute; override;
+    procedure AddToConsole(const s: RawUtf8; c: TConsoleColor);
+    procedure FlushConsole;
   public
     constructor Create; reintroduce;
     destructor Destroy; override;
   end;
 
 var
-  AutoFlushSecondElapsed: cardinal;
   AutoFlushThread: TAutoFlushThread;
 
 constructor TAutoFlushThread.Create;
 begin
   fEvent := TEvent.Create(nil, false, false, '');
+  fStartTix := mormot.core.os.GetTickCount64;
   inherited Create(false);
 end;
 
@@ -3647,59 +3666,122 @@ begin
   fEvent.Free;
 end;
 
+procedure TAutoFlushThread.AddToConsole(const s: RawUtf8; c: TConsoleColor);
+begin
+  with fToConsole do
+  begin
+    Safe.Lock;
+    Text[Next] := s;
+    Color[Next] := c;
+    Next := (Next + 1) and high(Text); // simple round-robin data buffer
+    inc(Count);
+    Safe.UnLock;
+  end;
+end;
+
+procedure TAutoFlushThread.FlushConsole;
+var
+  i: PtrInt;
+  c: TAutoFlushThreadToConsole;
+begin
+  fToConsole.Safe.Lock;
+  c := fToConsole; // thread-safe local copy
+  Finalize(fToConsole.Text);
+  fToConsole.Count := 0;
+  fToConsole.Next := 0;
+  fToConsole.Safe.UnLock;
+  if c.Count >= length(c.Text) then
+  begin
+    ConsoleWrite('... (truncated) ...', ccBlue);
+    for i := c.Next to high(c.Text) do
+      if c.Count <> 0 then
+       begin
+        ConsoleWrite(c.Text[i], c.Color[i]);
+        dec(c.Count);
+      end;
+  end;
+  for i := 0 to c.Next - 1 do
+    if c.Count <> 0 then
+    begin
+      ConsoleWrite(c.Text[i], c.Color[i]);
+      dec(c.Count);
+    end;
+  TextColor(ccLightGray);
+end;
+
 procedure TAutoFlushThread.Execute;
 var
   i: PtrInt;
   tmp: TFileName;
-  files: TSynLogDynArray; // thread-safe local copy
+  waitms, tix10: cardinal;
+  files: TSynLogDynArray;
 begin
+  waitms := 1000;
   repeat
-    fEvent.WaitFor(1000);
+    fEvent.WaitFor(waitms);
     if Terminated then
       break;
-    if fToCompress <> '' then
-    begin
-      // background (SynLZ) compression from TSynLog.PerformRotation
-      tmp := fToCompress + '.tmp';
-      RenameFile(fToCompress, tmp);
-      LogCompressAlgo.FileCompress(tmp, fToCompress, LOG_MAGIC, true);
-      DeleteFile(tmp);
-      fToCompress := '';
-      continue; // this was not a per-second regular event
-    end;
-    EnterCriticalSection(GlobalThreadLock);
     try
-      if Terminated or
-         SynLogFileFreeing then
-        exit;
-      files := copy(SynLogFile); // don't slow down main logging process
-    finally
-      LeaveCriticalSection(GlobalThreadLock);
-    end;
-    if files <> nil then
-    try
-      inc(AutoFlushSecondElapsed);
-      for i := 0 to high(files) do
-        with files[i] do
-          if Terminated or
-             SynLogFileFreeing then
-            // avoid GPF
-            break
-          else if (fFamily.fAutoFlushTimeOut <> 0) and
-                  (fWriter <> nil) and
-                  (fWriter.PendingBytes > 1) and
-                  (AutoFlushSecondElapsed mod fFamily.fAutoFlushTimeOut = 0) then
-              Flush({forcediskwrite=}false); // write pending data
+      // 1. try background (SynLZ) compression after TSynLog.PerformRotation
+      if fToCompress <> '' then
+      begin
+        tmp := fToCompress + '.tmp';
+        RenameFile(fToCompress, tmp);
+        LogCompressAlgo.FileCompress(tmp, fToCompress, LOG_MAGIC, true);
+        DeleteFile(tmp);
+        fToCompress := '';
+        if Terminated then
+          break;
+      end;
+      // 2. try background output to the console (by default on Windows)
+      if fToConsole.Count <> 0 then
+      begin
+        FlushConsole;
+        waitms := 111; // make the console a bit more reactive
+      end
+      else
+        waitms := 500;
+      // 3. eventually flush log content to disk after AutoFlushTimeOut
+      EnterCriticalSection(GlobalThreadLock);
+      try
+        if Terminated or
+           SynLogFileFreeing then
+          break;
+        files := copy(SynLogFile); // don't slow down main logging process
+      finally
+        LeaveCriticalSection(GlobalThreadLock);
+      end;
+      if files <> nil then
+      begin
+        tix10 := mormot.core.os.GetTickCount64 shr 10;
+        for i := 0 to high(files) do
+          with files[i] do
+            if Terminated or
+               SynLogFileFreeing then
+              // avoid GPF
+              break
+            else if (fNextFlushTix10 <> 0) and
+                    (tix10 >= fNextFlushTix10) and
+                    (fWriter <> nil) and
+                    (fWriter.PendingBytes > 1) then
+                Flush({forcediskwrite=}false); // write pending data
+      end;
     except
       // on stability issue, try to identify this thread
       if not Terminated then
-      try
-        SetCurrentThreadName('log autoflush');
-      except
-        exit;
-      end;
+        try
+          SetCurrentThreadName('log autoflush');
+        except
+          break;
+        end;
     end;
   until Terminated;
+  try
+    if fToConsole.Count <> 0 then
+      FlushConsole; // always write last pending console rows
+  except
+    ; // ignore any exception at shutdown
+  end;
 end;
 
 
@@ -3790,6 +3872,9 @@ begin
   fStackTraceLevel := 30;
   fWithUnitName := true;
   fWithInstancePointer := true;
+  {$ifdef OSWINDOWS}
+  fEchoToConsoleBackground := true; // big speed-up on Windows
+  {$endif OSWINDOWS}
   fExceptionIgnore := TList.Create;
   fLevelStackTrace := [sllStackTrace, sllException, sllExceptionOS,
                        sllError, sllFail, sllLastError, sllDDDError];
@@ -3844,10 +3929,7 @@ begin
      not SynLogFileFreeing and
      (fAutoFlushTimeOut <> 0)
      {$ifndef FPC} and (DebugHook = 0) {$endif} then
-  begin
-    AutoFlushSecondElapsed := 0;
     AutoFlushThread := TAutoFlushThread.Create;
-  end;
 end;
 
 destructor TSynLogFamily.Destroy;
@@ -4514,19 +4596,28 @@ begin
 end;
 
 procedure TSynLog.Flush(ForceDiskWrite: boolean);
+var
+  diskflush: THandle;
 begin
   if fWriter = nil then
     exit;
+  diskflush := 0;
   EnterCriticalSection(GlobalThreadLock);
   try
     fWriter.FlushToStream;
     if ForceDiskWrite and
        fWriterStream.InheritsFrom(TFileStream) then
-      FlushFileBuffers(TFileStream(fWriterStream).Handle);
-    fFamily.StartAutoFlush;
+      diskflush := TFileStream(fWriterStream).Handle;
+    if AutoFlushThread = nil then
+      fFamily.StartAutoFlush;
+    fNextFlushTix10 := fFamily.AutoFlushTimeOut;
+    if fNextFlushTix10 <> 0 then
+      inc(fNextFlushTix10, mormot.core.os.GetTickCount64 shr 10);
   finally
     LeaveCriticalSection(GlobalThreadLock);
   end;
+  if diskflush <> 0 then
+    FlushFileBuffers(diskflush); // slow OS operation outside of the main lock
 end;
 
 function TSynLog.QueryInterface(
@@ -4721,7 +4812,7 @@ begin
 end;
 {$endif OSLINUX}
 
-function TSynLog.ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
+function TSynLog.ConsoleEcho(Sender: TEchoWriter; Level: TSynLogInfo;
   const Text: RawUtf8): boolean;
 begin
   result := true;
@@ -4734,8 +4825,14 @@ begin
     exit;
   end;
   {$endif OSLINUX}
-  ConsoleWrite(Text, LOG_CONSOLE_COLORS[Level]);
-  TextColor(ccLightGray);
+  if fFamily.EchoToConsoleBackground and
+     Assigned(AutoFlushThread) then
+    AutoFlushThread.AddToConsole(Text, LOG_CONSOLE_COLORS[Level])
+  else
+  begin
+    ConsoleWrite(Text, LOG_CONSOLE_COLORS[Level]);
+    TextColor(ccLightGray);
+  end;
 end;
 
 procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
@@ -4848,10 +4945,6 @@ begin
   if (log <> nil) and
      (Level in log.fFamily.fLevel) then
   begin
-    if Level = sllExceptionOS then
-      // don't make Out-Of-Memory any worse
-      log.Writer.CustomOptions := log.Writer.CustomOptions +
-        [twoFlushToStreamNoAutoResize];
     log.LogInternalFmt(Level, Fmt, Args, Instance);
     if Level = sllExceptionOS then
       // ensure all log is safely written
@@ -5495,8 +5588,9 @@ begin
   if fWriter = nil then
   begin
     fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize) as TJsonWriter;
-    fWriter.CustomOptions := fWriter.CustomOptions +
-      [twoEnumSetsAsTextInRecord, twoFullSetsAsStar, twoForceJsonExtended];
+    fWriter.CustomOptions := fWriter.CustomOptions
+      + [twoEnumSetsAsTextInRecord, twoFullSetsAsStar, twoForceJsonExtended]
+      - [twoFlushToStreamNoAutoResize]; // follow BufferSize
     fWriterEcho := TEchoWriter.Create(fWriter);
   end;
   fWriterEcho.EndOfLineCRLF := fFamily.EndOfLineCRLF;
@@ -6058,7 +6152,7 @@ begin
   inherited Destroy;
 end;
 
-function TSynLogCallbacks.OnEcho(Sender: TTextWriter; Level: TSynLogInfo;
+function TSynLogCallbacks.OnEcho(Sender: TEchoWriter; Level: TSynLogInfo;
   const Text: RawUtf8): boolean;
 var
   i: PtrInt;
@@ -6087,7 +6181,7 @@ end;
 function TSynLogCallbacks.Subscribe(const Levels: TSynLogInfos;
   const Callback: ISynLogCallback; ReceiveExistingKB: cardinal): integer;
 var
-  Reg: TSynLogCallback;
+  reg: TSynLogCallback;
   previousContent: RawUtf8;
 begin
   if Assigned(Callback) then
@@ -6103,11 +6197,11 @@ begin
             [1000000, double(fStartTimestampDateTime), fFileName]));
       Callback.Log(sllNone, previousContent);
     end;
-    Reg.Levels := Levels;
-    Reg.Callback := Callback;
+    reg.Levels := Levels;
+    reg.Callback := Callback;
     Safe.Lock;
     try
-      Registrations.Add(Reg);
+      Registrations.Add(reg);
     finally
       Safe.UnLock;
     end;
@@ -7476,14 +7570,13 @@ begin
     exit;
   start := destbuffer;
   destbuffer^ := '<';
-  destbuffer := AppendUInt32ToBuffer(
-    destbuffer + 1, ord(severity) + ord(facility) shl 3);
+  destbuffer := AppendUInt32ToBuffer(destbuffer + 1,
+    ord(severity) + ord(facility) shl 3);
   PInteger(destbuffer)^ :=
     ord('>') + ord('1') shl 8 + ord(' ') shl 16; // VERSION=1
   inc(destbuffer, 3);
   st.FromNowUtc;
-  DateToIso8601PChar(destbuffer,
-    true, st.Year, st.Month, st.Day);
+  DateToIso8601PChar(destbuffer, true, st.Year, st.Month, st.Day);
   TimeToIso8601PChar(destbuffer + 10,
     true, st.Hour, st.Minute, st.Second, st.MilliSecond, 'T', {withms=}true);
   destbuffer[23] := 'Z';
