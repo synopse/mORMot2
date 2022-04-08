@@ -4441,11 +4441,25 @@ var
   i, ndx: PtrInt;
   V, V1, V2: variant;
   s, j: RawUtf8;
+  d: TDocVariantData;
   vd: double;
   vs: single;
   lTable: TOrmTableJson;
   lRefreshed: Boolean;
 begin
+  j := '{"id": 1, "name": Tom}'; // invalid JSON
+  Check(not IsValidJson(j, {strict=}false));
+  Check(not IsValidJson(j, {strict=}true));
+  Check(not d.InitJson(j));
+  CheckEqual(d.Count, 0);
+  j := '{ id : 1 , name : ''To''''m'' , another : true }'; // valid extended JSON
+  Check(IsValidJson(j, {strict=}false));
+  Check(not IsValidJson(j, {strict=}true));
+  Check(d.InitJson(j));
+  CheckEqual(d.Count, 3);
+  CheckEqual(d.I['ID'], 1);
+  CheckEqual(d.U['NAME'], 'To''m');
+  Check(d.B['another']);
   V := _Json('[{"id":0}');
   Check(VarIsEmpty(V));
   Doc.InitFast;

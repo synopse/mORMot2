@@ -3739,7 +3739,7 @@ begin
         FlushConsole;
         waitms := 111; // make the console a bit more reactive
       end
-      else
+      else if waitms = 111 then
         waitms := 500;
       // 3. eventually flush log content to disk after AutoFlushTimeOut
       EnterCriticalSection(GlobalThreadLock);
