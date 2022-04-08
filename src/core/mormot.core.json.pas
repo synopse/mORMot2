@@ -3201,6 +3201,31 @@ begin
         if Len <> nil then
           Len^ := D - result;
       end;
+    jtSingleQuote: // extended/non-standard 'text' single quoted content
+      begin
+        inc(P);
+        result := P; // result points to the unquoted string
+        if WasString <> nil then
+          WasString^ := true;
+        D := P;
+        repeat
+          c := P^;
+          if c = #0 then
+            exit
+          else if c = '''' then
+            if P[1] = '''' then
+              inc(P) // unquote double quotes
+            else
+              break;
+          D^ := c;
+          inc(D);
+          inc(P);
+        until false;
+        inc(P);
+        D^ := #0; // make zero-terminated
+        if Len <> nil then
+          Len^ := D - result;
+      end;
     jtNullFirstChar: // 'n'
       if (PInteger(P)^ = NULL_LOW) and
          (jcEndOfJsonValueField in tab[P[4]]) then
