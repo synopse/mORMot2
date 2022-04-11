@@ -42,12 +42,12 @@ uses
 
 {.$define GDIPLUS_USEENCODERS}
 // if defined, the GDI+ encoder list will be used - seems not necessary
-//  - should be defined here and in mormot.ui.gdiplus (i.e. Projects options)
+// - should be defined here and in mormot.ui.gdiplus (i.e. Projects options)
 
 {.$define GDIPLUS_USEDPI}
 // if defined, the DrawAt() method is available, which respect dpi on drawing
-//  - should not be useful on most applications
-//  - should be defined here and in mormot.ui.gdiplus (i.e. Projects options)
+// - should not be useful on most applications
+// - should be defined here and in mormot.ui.gdiplus (i.e. Projects options)
 
 
 { ****************** GDI+ Shared Types }
@@ -582,15 +582,16 @@ type
   TEmfConvertOption = (
     ecoNoGdiPlus,
     ecoDrawString,
-    ecoInternalConvert);
+    ecoInternalConvert
+  );
 
   /// ConvertToEmfPlus/DrawAntiAliased drawing options
   TEmfConvertOptions = set of TEmfConvertOption;
 
 /// conversion of an EMF metafile handle into a EMF+ image
 // - i.e. allows antialiased drawing of the EMF metafile
-// - if GDI+ 1.1 (from MSOffice) is available, will use it - otherwise, fallback
-// to our own converter
+// - if GDI+ 1.1 (from Office 2007+ or Vista+) is available, will use it -
+// otherwise, it will fallback to our own converter, enumerating the EMF records
 // - return 0 if GDI+ is not available or conversion failed
 // - return an EMF+ metafile handle, to be drawing via gdip.DrawImageRect(), and
 // to be eventually released after use by gdip.DisposeImage()
@@ -609,7 +610,7 @@ procedure DrawAntiAliased(Source: HENHMETAFILE; Width, Height: integer;
   TextRendering: TTextRenderingHint = trhClearTypeGridFit); overload;
 
 /// low-level internal function used e.g. by ConvertToEmfPlus()
-function MetaFileToStream(Source: HENHMETAFILE): IStream;
+function MetaFileToIStream(Source: HENHMETAFILE): IStream;
 
 /// low-level internal function used e.g. by BitmapToRawByteString()
 function IStreamSize(const S: IStream): Int64;
@@ -1075,9 +1076,9 @@ function _GdipLoad: TGdiPlus;
 begin
   GlobalLock;
   try
-    if _GdipLoad = nil then
-      _GdipLoad := RegisterGlobalShutdownRelease(TGdiPlus.Create(''));
-    result := _GdipLoad;
+    if _Gdip = nil then
+      _Gdip := RegisterGlobalShutdownRelease(TGdiPlus.Create(''));
+    result := _Gdip;
   finally
     GlobalUnLock;
   end;
@@ -1174,7 +1175,7 @@ type
     BkMode, BkColor: cardinal;
   end;
 
-  /// internal data used by EnumEMFFunc() callback function
+  /// internal data used by EnumEmfCallback() callback function
   TGdiplusEnum = object
   public
     gdip: TGdiplus;
@@ -1210,6 +1211,8 @@ type
     DC: array[0..10] of TGdiplusEnumState;
     // if true, DrawText() will use DrawString and not DrawDriverString
     UseDrawString: boolean;
+    // a temporary buffer used to reduce memory allocations
+    Temp: TSynTempBuffer;
     procedure SaveDC;
     procedure RestoreDC;
     procedure ScaleMatrix(matrixOrg: THandle);
@@ -1219,7 +1222,7 @@ type
     function GetCachedPen(color, width: cardinal): THandle;
     function GetCachedSolidBrush(color: cardinal): THandle;
     function GetCachedFontIndex(aLogFont: PLogFontW): integer;
-    procedure SetCachedFontSpec(aHandle: THandle; var aObjFont: TFontSpec);
+    procedure SetCachedFontSpec(aHandle: THandle; out aObjFont: TFontSpec);
     /// helper function do draw directly a bitmap from *s to *d
     procedure DrawBitmap(
       xs, ys, ws, hs, xd, yd, wd, hd: integer; bmi, bits: pointer);
@@ -1283,23 +1286,23 @@ begin
   result := (rgb shr 16) or (rgb and $ff00) or (rgb and $ff) shl 16 or $FF000000;
 end;
 
-procedure Points16To32(PW: PWordArray; var PI: PIntegerArray; n: integer);
+procedure Points16To32(PW: PWordArray; var temp: TSynTempBuffer; n: integer);
 var
   i: PtrInt;
+  PI: PIntegerArray;
 begin
-  GetMem(PI, n * 8);
+  PI := temp.Init(n * 8);
   for i := 0 to n * 2 - 1 do
     PI^[i] := PW^[i];
 end;
 
 // EMF enumeration callback function, called from GDI
 // - draw most content with GDI+ functions via the TGdiplusEnum state machine
-function EnumEMFFunc(DC: HDC; var Table: THandleTable; Rec: PEnhMetaRecord;
+function EnumEmfCallback(DC: HDC; var Table: THandleTable; Rec: PEnhMetaRecord;
   NumObjects: DWord; var E: TGdiplusEnum): LongBool; stdcall;
 var
-  x: TXForm;
+  x: TXForm absolute E.Temp;
   mtx, path: THandle;
-  P32: PIntegerArray;
 begin
   result := true;
   with E.DC[E.nDC] do
@@ -1465,12 +1468,12 @@ begin
       EMR_POLYGON16:
         with PEMRPolygon16(Rec)^ do
         begin
-          Points16To32(@apts, P32, cpts);
+          Points16To32(@apts, E.Temp, cpts);
           if brush <> 0 then
-            E.gdip.FillPolygon(E.gr, Brush, P32, cpts, fmAlternate);
+            E.gdip.FillPolygon(E.gr, Brush, E.Temp.buf, cpts, fmAlternate);
           if pen <> 0 then
-            E.gdip.DrawPolygon(E.gr, Pen, P32, cpts);
-          freemem(P32);
+            E.gdip.DrawPolygon(E.gr, Pen, E.Temp.buf, cpts);
+          E.Temp.Done;
         end;
       EMR_POLYLINE:
         with PEMRPolyLine(Rec)^ do
@@ -1481,10 +1484,10 @@ begin
       EMR_POLYLINE16:
         with PEMRPolyLine16(Rec)^ do
         begin
-          Points16To32(@apts, P32, cpts);
-          E.gdip.DrawLines(E.gr, Pen, P32, cpts);
-          move := PPointL(PAnsiChar(P32) + (cpts - 1) * 8)^;
-          FreeMem(P32);
+          Points16To32(@apts, E.Temp, cpts);
+          E.gdip.DrawLines(E.gr, Pen, E.Temp.buf, cpts);
+          move := PPointL(PAnsiChar(E.Temp.buf) + (cpts - 1) * 8)^;
+          E.Temp.Done;
         end;
       EMR_POLYBEZIER:
         with PEMRPolyBezier(Rec)^ do
@@ -1495,10 +1498,10 @@ begin
       EMR_POLYBEZIER16:
         with PEMRPolyBezier16(Rec)^ do
         begin
-          Points16To32(@apts, P32, cpts);
-          E.gdip.DrawCurve(E.gr, Pen, P32, cpts);
-          move := PPointL(PAnsiChar(P32) + (cpts - 1) * 8)^;
-          FreeMem(P32);
+          Points16To32(@apts, E.Temp, cpts);
+          E.gdip.DrawCurve(E.gr, Pen, E.Temp.buf, cpts);
+          move := PPointL(PAnsiChar(E.Temp.buf) + (cpts - 1) * 8)^;
+          E.Temp.Done;
         end;
       EMR_BITBLT:
         begin
@@ -1654,45 +1657,46 @@ end;
 procedure TGdiplusEnum.DrawText(var EMR: TEMRExtTextOut);
 var
   df, rf: TGdipRectF;
-  flags, i: integer;
+  flags: integer;
+  drawstring: boolean;
+  i: PtrInt;
   mtx, prev: THandle;
   text: PWideChar;
-  drawstring: boolean;
-  f32: array of TGdipPointF;
   P: TPoint;
   siz: TSize;
 begin
+  text := PWideChar(PAnsiChar(@EMR) + EMR.emrtext.offString);
+  drawstring := false;
+  if UseDrawString then
+    // DrawDriverString() does not implement font fallback
+    for i := 0 to EMR.emrtext.nChars - 1 do
+      if text[i] > #$5ff then
+      begin
+        drawstring := true;
+        break;
+      end;
   with DC[nDC], EMR do
   begin
-    text := PWideChar(PAnsiChar(@EMR) + emrtext.offString);
-    drawstring := false;
-    if UseDrawString then
-      // DrawDriverString() does not implement font fallback
-      for i := 0 to emrtext.nChars - 1 do
-        if text[i] > #$5ff then
-        begin
-          drawstring := true;
-          break;
-        end;
-    SetLength(f32, emrtext.nChars);
     if drawstring or
        (emrtext.offDx = 0) then
     begin
+      Temp.Init(SizeOf(TGdipPointF)); // = 1st glyph pos = drawstring
       // if emf content is not correct -> best guess
       gdip.MeasureString(
         gr, text, emrtext.nChars, font, @GdipRectFNull, 0, @rf, nil, nil);
       siz.cx := Ceil(rf.Width);
-      flags := 5; // RealizedAdvance is set -> f32 = 1st glyph position
+      flags := 5; // RealizedAdvance is set -> Temp.buf = 1st glyph position
     end
     else
     begin
+      Temp.Init(emrtext.nChars * SizeOf(TGdipPointF));
       siz.cx := DXTextWidth(
         pointer(PAnsiChar(@EMR) + emrtext.offDx), emrText.nChars);
       if emrtext.fOptions and ETO_GLYPH_INDEX <> 0 then
-        // f32 is an array of glyph indexes
+        // Temp.buf is an array of glyph indexes
         flags := 0
       else
-        // f32 is an array of every individual glyph position
+        // Temp.buf is an array of every individual glyph position
         flags := 1;
     end;
     // determine the text bounding rectangle
@@ -1714,9 +1718,9 @@ begin
     // determine the glyph coordinates
     if drawstring or
        (emrtext.offDx = 0) then
-      PGdipPointF(f32)^ := PGdipPointF(@rf)^
+      PGdipPointF(Temp.buf)^ := PGdipPointF(@rf)^
     else
-      SetPositions(rf.X, rf.Y, pointer(f32),
+      SetPositions(rf.X, rf.Y, Temp.buf,
         pointer(PAnsiChar(@EMR) + emrtext.offDx), emrText.nChars);
     NormalizeRect(emrtext.rcl);
     if (emrtext.fOptions and ETO_CLIPPED <> 0) then
@@ -1748,11 +1752,11 @@ begin
       gdip.FillRectangle(gr, GetCachedSolidBrush(bkColor), Trunc(df.X),
         Trunc(df.Y), Ceil(df.Width), Ceil(df.Height));
     if drawstring then
-      gdip.drawstring(gr, text, emrtext.nChars, font, @df, 0,
+      gdip.DrawString(gr, text, emrtext.nChars, font, @df, 0,
         GetCachedSolidBrush(fontColor))
     else
       gdip.DrawDriverString(gr, text, emrtext.nChars, font,
-        GetCachedSolidBrush(fontColor), pointer(f32), flags, 0);
+        GetCachedSolidBrush(fontColor), Temp.buf, flags, 0);
     // Draw*String doesn't handle those -> GDI+ does not work :(
     if fontspec.underline or
        fontSpec.strikeout then
@@ -1785,6 +1789,7 @@ begin
       gdip.DeleteRegion(prev);
     end;
   end;
+  Temp.Done;
 end;
 
 procedure TGdiplusEnum.EnumerateEnd;
@@ -1948,18 +1953,18 @@ begin
   begin
     P.X := MulDiv(ViewOrg.x, WinSize.cx, ViewSize.cx) - WinOrg.x;
     P.Y := MulDiv(ViewOrg.y, WinSize.cy, ViewSize.cy) - WinOrg.y;
-    Gdip.CreateMatrix2(
+    gdip.CreateMatrix2(
       ViewSize.cx / WinSize.cx, 0, 0, ViewSize.cy / WinSize.cy, P.X, P.Y, mtx);
-    Gdip.MultiplyMatrix(mtx, destMatrix);
+    gdip.MultiplyMatrix(mtx, destMatrix);
     if matrixOrg <> 0 then
-      Gdip.MultiplyMatrix(mtx, matrixOrg);
-    Gdip.SetWorldTransform(gr, mtx);
-    Gdip.DeleteMatrix(mtx);
+      gdip.MultiplyMatrix(mtx, matrixOrg);
+    gdip.SetWorldTransform(gr, mtx);
+    gdip.DeleteMatrix(mtx);
   end;
 end;
 
 procedure TGdiplusEnum.SetCachedFontSpec(aHandle: THandle;
-  var aObjFont: TFontSpec);
+  out aObjFont: TFontSpec);
 var
   i: PtrInt;
 begin
@@ -1972,7 +1977,7 @@ begin
   Int64(aObjFont) := 0;
 end;
 
-function MetaFileToStream(Source: HENHMETAFILE): IStream;
+function MetaFileToIStream(Source: HENHMETAFILE): IStream;
 var
   bytes: cardinal;
   glob: THandle;
@@ -1999,7 +2004,7 @@ function ConvertToEmfPlus(Source: HENHMETAFILE; Width, Height: integer;
   TextRendering: TTextRenderingHint): THandle;
 var
   meta, res: THandle;
-  metast: IStream;
+  istr: IStream;
   R: TGdipRect;
   E: TGdiplusEnum;
 begin
@@ -2014,30 +2019,31 @@ begin
   R.Width := Width;
   R.Height := Height;
   FillcharFast(E, SizeOf(E), 0);
-  if assigned(_Gdip.ConvertToEmfPlus11) and
+  E.gdip := _Gdip;
+  if assigned(E.gdip.ConvertToEmfPlus11) and
      not (ecoInternalConvert in ConvertOptions) then
   begin
     // let GDI+ 1.1 make the conversion
-    metast := MetaFileToStream(Source);
-    _Gdip.Lock;
+    istr := MetaFileToIStream(Source);
+    E.gdip.Lock;
     try
-      if _Gdip.LoadImageFromStream(metast, meta) = stOk then
+      if E.gdip.LoadImageFromStream(istr, meta) = stOk then
         try
-          _Gdip.CreateFromHDC(Dest, E.gr);
-          _Gdip.SetSmoothingMode(E.gr, Smoothing);
-          _Gdip.SetTextRenderingHint(E.gr, TextRendering);
+          E.gdip.CreateFromHDC(Dest, E.gr);
+          E.gdip.SetSmoothingMode(E.gr, Smoothing);
+          E.gdip.SetTextRenderingHint(E.gr, TextRendering);
           try
-            if _Gdip.ConvertToEmfPlus11(
+            if E.gdip.ConvertToEmfPlus11(
                E.gr, meta, nil, etEmfPlusOnly, nil, res) = stOk then
               result := res;
           finally
-            _Gdip.DeleteGraphics(E.gr);
+            E.gdip.DeleteGraphics(E.gr);
           end;
         finally
-          _Gdip.DisposeImage(meta);
+          E.gdip.DisposeImage(meta);
         end;
     finally
-      _Gdip.UnLock;
+      E.gdip.UnLock;
     end;
   end
   else
@@ -2046,21 +2052,20 @@ begin
     E.UseDrawString := ecoDrawString in ConvertOptions;
     with E.DC[0] do
     begin
-      Int64(WinSize) := PInt64(@R.Width)^;
+      PInt64(@WinSize)^ := PInt64(@R.Width)^;
       ViewSize := WinSize;
     end;
-    E.gdip := _Gdip;
     E.dest := CreateCompatibleDC(Dest);
-    _Gdip.Lock;
+    E.gdip.Lock;
     try
-      _Gdip.RecordMetafile(E.dest, etEmfPlusOnly, @R, uPixel, nil, result);
-      _Gdip.CreateFromImage(result, E.gr);
-      _Gdip.SetSmoothingMode(E.gr, Smoothing);
-      _Gdip.SetTextRenderingHint(E.gr, TextRendering);
-      EnumEnhMetaFile(E.dest, Source, @EnumEMFFunc, @E, TRect(R));
+      E.gdip.RecordMetafile(E.dest, etEmfPlusOnly, @R, uPixel, nil, result);
+      E.gdip.CreateFromImage(result, E.gr);
+      E.gdip.SetSmoothingMode(E.gr, Smoothing);
+      E.gdip.SetTextRenderingHint(E.gr, TextRendering);
+      EnumEnhMetaFile(E.dest, Source, @EnumEmfCallback, @E, TRect(R));
     finally
       E.EnumerateEnd;
-      _Gdip.UnLock;
+      E.gdip.UnLock;
     end;
   end;
 end;
