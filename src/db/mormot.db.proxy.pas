@@ -1844,19 +1844,15 @@ function TSqlDBProxyStatementRandomAccess.ColumnSearch(Col: integer;
 var
   v: variant;
 begin
-  fLastGotoRow := -1; // force GotoRow() refresh
-  if (fDataRowCount > 0) and
-     (cardinal(Col) < cardinal(fColumnCount)) and
-     Step({seekfirst=}true) then
-    repeat
-      ColumnToVariant(Col, v); // fast enough for client-side lookup
-      if SortDynArrayVariantComp(
-           TVarData(v), TVarData(Value), CaseInsensitive) = 0 then
+  if cardinal(Col) < cardinal(fColumnCount) then
+    for result := 1 to fDataRowCount do
+      if GotoRow(result - 1) then
       begin
-        result := fCurrentRow;
-        exit;
+        ColumnToVariant(Col, v); // fast enough for client-side lookup
+        if SortDynArrayVariantComp(
+             TVarData(v), TVarData(Value), CaseInsensitive) = 0 then
+          exit;
       end;
-    until not Step({seekfirst=}false);
   result := 0;
 end;
 
