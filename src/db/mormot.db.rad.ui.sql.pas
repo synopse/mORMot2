@@ -56,6 +56,8 @@ type
     function GetRecordCount: integer; override;
     function GetRowFieldData(Field: TField; RowIndex: integer;
       out ResultLen: integer; OnlyCheckNull: boolean): pointer; override;
+    function SearchForField(const aLookupFieldName: RawUtf8;
+      const aLookupValue: variant; aOptions: TLocateOptions): integer; override;
   public
     /// initialize the virtual TDataSet from a FetchAllToBinary() buffer
     // - by default, ColumnDataSize would be computed from the supplied data,
@@ -304,6 +306,17 @@ begin
       mormot.db.core.ftBlob:
         ResultLen := FromVarUInt32(PByte(result));
     end; // other ColumnTypes are already in the expected format
+end;
+
+function TBinaryDataSet.SearchForField(const aLookupFieldName: RawUtf8;
+  const aLookupValue: variant; aOptions: TLocateOptions): integer;
+begin
+  if fDataAccess <> nil then
+    result := fDataAccess.ColumnSearch(
+      fDataAccess.ColumnIndex(aLookupFieldName), aLookupValue,
+      loCaseInsensitive in aOptions)
+  else
+    result := 0;
 end;
 
 

@@ -297,7 +297,6 @@ type
     fDataRowCount: integer;
     fDataRowReaderOrigin, fDataRowReader: PByte;
     fDataRowNullSize: cardinal;
-    fDataCurrentRowIndex: integer;
     fDataCurrentRowNullLen: cardinal;
     fDataCurrentRowNull: TByteDynArray;
     fDataCurrentRowValues: array of pointer;
@@ -305,10 +304,11 @@ type
     fDataCurrentRowValuesSize: cardinal;
     // per-row column type (SQLite3 only) e.g. select coalesce(column,0) from ..
     fDataCurrentRowColTypes: array of TSqlDBFieldType;
-    function IntColumnType(Col: integer; out Data: PByte): TSqlDBFieldType;
+    function InternalColumnType(Col: integer; out Data: PByte): TSqlDBFieldType;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure IntHeaderProcess(Data: PByte; DataLen: PtrInt);
-    procedure IntFillDataCurrent(var Reader: PByte; IgnoreColumnDataSize: boolean);
+    procedure InternalHeaderProcess(Data: PByte; DataLen: PtrInt);
+    procedure InternalFillDataCurrent(
+      var Reader: PByte; IgnoreColumnDataSize: boolean);
   public
     /// the Column type of the current Row
     function ColumnType(Col: integer;
@@ -452,6 +452,7 @@ type
   TSqlDBProxyStatementRandomAccess = class(TSqlDBProxyStatementAbstract)
   protected
     fRowData: TCardinalDynArray;
+    fLastGotoRow: integer;
   public
     /// initialize the internal structure from a given memory buffer
     // - by default, ColumnDataSize would be computed from the supplied data,
@@ -459,7 +460,8 @@ type
     // force e.g. SynDBVCL TSynBinaryDataSet.InternalInitFieldDefs define the
     // field as ftDefaultMemo)
     constructor Create(Data: PByte; DataLen: integer;
-      DataRowPosition: PCardinalDynArray = nil; IgnoreColumnDataSize: boolean = false); reintroduce;
+      DataRowPosition: PCardinalDynArray = nil;
+      IgnoreColumnDataSize: boolean = false); reintroduce;
 
     /// Execute a prepared SQL statement
     // - this unexpected overridden method will raise a ESqlDBRemote
@@ -473,6 +475,10 @@ type
     // via regular Column*() methods
     // - can optionally raise an ESqlDBRemote if Index is not correct
     function GotoRow(Index: integer; RaiseExceptionOnWrongIndex: boolean = false): boolean;
+    /// search for a value within the internal binary stream
+    // - used to implement e.g. TDataSet.Locate
+    function ColumnSearch(Col: integer; const Value: variant;
+      CaseInsensitive: boolean): integer;
   end;
 
 
@@ -1308,14 +1314,13 @@ end;
 
 { TSqlDBProxyStatementAbstract }
 
-procedure TSqlDBProxyStatementAbstract.IntHeaderProcess(Data: PByte; DataLen: PtrInt);
+procedure TSqlDBProxyStatementAbstract.InternalHeaderProcess(Data: PByte; DataLen: PtrInt);
 var
   magic, F, colcount: integer;
   prop: PSqlDBColumnProperty;
 begin
   fDataCurrentRowValuesStart := nil;
   fDataCurrentRowValuesSize := 0;
-  fDataCurrentRowIndex := -1;
   fDataCurrentRowNull := nil;
   fDataCurrentRowNullLen := 0;
   repeat
@@ -1350,11 +1355,11 @@ begin
   // raise ESqlDBRemote on invalid input
   fDataRowCount := 0;
   fColumnCount := 0;
-  raise ESqlDBRemote.CreateUtf8('Invalid %.IntHeaderProcess', [self]);
+  raise ESqlDBRemote.CreateUtf8('Invalid %.InternalHeaderProcess', [self]);
 end;
 
-procedure TSqlDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte;
-  IgnoreColumnDataSize: boolean);
+procedure TSqlDBProxyStatementAbstract.InternalFillDataCurrent(
+  var Reader: PByte; IgnoreColumnDataSize: boolean);
 var
   F, len: PtrInt;
   ft: TSqlDBFieldType;
@@ -1364,7 +1369,8 @@ begin
     FillCharFast(fDataCurrentRowNull[0], fDataCurrentRowNullLen, 0);
   fDataCurrentRowNullLen := FromVarUInt32(Reader);
   if fDataCurrentRowNullLen > fDataRowNullSize then
-    raise ESqlDBRemote.CreateUtf8('%.IntFillDataCurrent: Invalid rownull %>%',
+    raise ESqlDBRemote.CreateUtf8(
+      '%.InternalFillDataCurrent: Invalid rownull %>%',
       [self, fDataCurrentRowNullLen, fDataRowNullSize]);
   if fDataCurrentRowNullLen > 0 then
   begin
@@ -1404,7 +1410,7 @@ begin
           end;
       else
         raise ESqlDBRemote.CreateUtf8(
-          '%.IntFillDataCurrent: Invalid ColumnType(%)=%',
+          '%.InternalFillDataCurrent: Invalid ColumnType(%)=%',
           [self, fColumns[F].ColumnName, ord(ft)]);
       end;
     end;
@@ -1497,7 +1503,7 @@ begin
     raise ESqlDBRemote.CreateUtf8('Invalid %.ColumnType()', [self]);
 end;
 
-function TSqlDBProxyStatementAbstract.IntColumnType(Col: integer;
+function TSqlDBProxyStatementAbstract.InternalColumnType(Col: integer;
   out Data: PByte): TSqlDBFieldType;
 begin
   if (cardinal(Col) >= cardinal(fColumnCount)) or
@@ -1517,7 +1523,7 @@ function TSqlDBProxyStatementAbstract.ColumnCurrency(Col: integer): currency;
 var
   data: PByte;
 begin
-  case IntColumnType(Col, data) of
+  case InternalColumnType(Col, data) of
     ftNull:
       result := 0;
     ftInt64:
@@ -1536,7 +1542,7 @@ function TSqlDBProxyStatementAbstract.ColumnDateTime(Col: integer): TDateTime;
 var
   data: PByte;
 begin
-  case IntColumnType(Col, data) of
+  case InternalColumnType(Col, data) of
     ftNull:
       result := 0;
     ftInt64:
@@ -1556,7 +1562,7 @@ function TSqlDBProxyStatementAbstract.ColumnDouble(Col: integer): double;
 var
   data: PByte;
 begin
-  case IntColumnType(Col, data) of
+  case InternalColumnType(Col, data) of
     ftNull:
       result := 0;
     ftInt64:
@@ -1575,7 +1581,7 @@ function TSqlDBProxyStatementAbstract.ColumnInt(Col: integer): Int64;
 var
   data: PByte;
 begin
-  case IntColumnType(Col, data) of
+  case InternalColumnType(Col, data) of
     ftNull:
       result := 0;
     ftInt64:
@@ -1600,7 +1606,7 @@ function TSqlDBProxyStatementAbstract.ColumnBlob(Col: integer): RawByteString;
 var
   data: PByte;
 begin
-  case IntColumnType(Col, data) of
+  case InternalColumnType(Col, data) of
     ftNull:
       result := '';
     ftDouble,
@@ -1620,7 +1626,7 @@ function TSqlDBProxyStatementAbstract.ColumnUtf8(Col: integer): RawUtf8;
 var
   data: PByte;
 begin
-  case IntColumnType(Col, data) of
+  case InternalColumnType(Col, data) of
     ftNull:
       result := '';
     ftInt64:
@@ -1644,7 +1650,7 @@ function TSqlDBProxyStatementAbstract.ColumnString(Col: integer): string;
 var
   data: PByte;
 begin
-  case IntColumnType(Col, data) of
+  case InternalColumnType(Col, data) of
     ftNull:
       result := '';
     ftInt64:
@@ -1709,7 +1715,7 @@ begin
     EXECUTE_PREPARED_BIN[fExpectResults], exec, fDataInternalCopy);
   if fExpectResults then
     // retrieve columns information from TSqlDBStatement.FetchAllToBinary() format
-    IntHeaderProcess(pointer(fDataInternalCopy), Length(fDataInternalCopy))
+    InternalHeaderProcess(pointer(fDataInternalCopy), Length(fDataInternalCopy))
   else
     // retrieve UpdateCount value for plain cExecute command
     fUpdateCount := GetInteger(pointer(fDataInternalCopy));
@@ -1764,7 +1770,7 @@ begin
     fDataRowReader := fDataRowReaderOrigin;     // rewind TFileBufferReader
     fDataCurrentRowNullLen := fDataRowNullSize; // reset null
   end;
-  IntFillDataCurrent(fDataRowReader, false);
+  InternalFillDataCurrent(fDataRowReader, false);
   inc(fCurrentRow);
   result := true;
 end;
@@ -1778,8 +1784,9 @@ var
   i, f: PtrInt;
   reader: PByte;
 begin
+  fLastGotoRow := -1;
   inherited Create(nil);
-  IntHeaderProcess(Data, DataLen);
+  InternalHeaderProcess(Data, DataLen);
   reader := fDataRowReaderOrigin;
   if (DataRowPosition <> nil) and
      (DataRowPosition^ <> nil) then
@@ -1793,7 +1800,8 @@ begin
             begin
               // unknown size -> compute ColumnDataSize
               for i := 0 to DataRowCount - 1 do
-                IntFillDataCurrent(reader, false); // parse and set ColumnDataSize
+                // parse and set ColumnDataSize
+                InternalFillDataCurrent(reader, false);
               break;
             end
             else
@@ -1805,7 +1813,7 @@ begin
     for i := 0 to DataRowCount - 1 do
     begin
       fRowData[i] := PtrUInt(reader) - PtrUInt(fDataRowReaderOrigin);
-      IntFillDataCurrent(reader, IgnoreColumnDataSize); // compute ColumnDataSize
+      InternalFillDataCurrent(reader, IgnoreColumnDataSize); // set ColumnDataSize
     end;
   end;
 end;
@@ -1822,13 +1830,34 @@ begin
       raise ESqlDBRemote.CreateUtf8('Invalid %.GotoRow(%)', [self, Index])
     else
       exit;
-  if fDataCurrentRowIndex <> Index then
+  if fLastGotoRow <> Index then
   begin
     // compute only if changed :)
     reader := @PAnsiChar(fDataRowReaderOrigin)[fRowData[Index]];
-    IntFillDataCurrent(reader, false);
-    fDataCurrentRowIndex := Index;
+    InternalFillDataCurrent(reader, false);
+    fLastGotoRow := Index;
   end;
+end;
+
+function TSqlDBProxyStatementRandomAccess.ColumnSearch(Col: integer;
+  const Value: variant; CaseInsensitive: boolean): integer;
+var
+  v: variant;
+begin
+  fLastGotoRow := -1; // force GotoRow() refresh
+  if (fDataRowCount > 0) and
+     (cardinal(Col) < cardinal(fColumnCount)) and
+     Step({seekfirst=}true) then
+    repeat
+      ColumnToVariant(Col, v); // fast enough for client-side lookup
+      if SortDynArrayVariantComp(
+           TVarData(v), TVarData(Value), CaseInsensitive) = 0 then
+      begin
+        result := fCurrentRow;
+        exit;
+      end;
+    until not Step({seekfirst=}false);
+  result := 0;
 end;
 
 procedure TSqlDBProxyStatementRandomAccess.ExecutePrepared;
