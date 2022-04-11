@@ -30,16 +30,18 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.rtti,
   mormot.core.log,
   mormot.core.text,
   mormot.net.http,
+  mormot.net.server,
   mormot.net.async;
 
   
 type
   TSimpleHttpAsyncServer = class
   private
-    fHttpServer: THttpAsyncServer;
+    fHttpServer: THttpServerSocketGeneric;
   protected
     // this is where the process would take place
     function DoOnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -53,21 +55,30 @@ type
 
 function TSimpleHttpAsyncServer.DoOnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
-  if Assigned(fHttpServer.Async.Log) then
-    fHttpServer.Async.Log.Add.Log(sllInfo, 'DoOnRequest %', [Ctxt], self);
+  if fHttpServer is THttpAsyncServer then
+    with THttpAsyncServer(fHttpServer) do
+    if Assigned(Async.Log) then
+      Async.Log.Add.Log(sllInfo, 'DoOnRequest %', [Ctxt], self);
   if Ctxt.Method = 'GET' then
-    Ctxt.OutContent := FormatUtf8(
-      'got request % from connection #%', [Ctxt.RequestID, Ctxt.ConnectionID])
+    Ctxt.OutContent := FormatUtf8('got % request #% from connection #%',
+      [Ctxt.Url, CardinalToHexShort(Ctxt.RequestID), CardinalToHexShort(Ctxt.ConnectionID)])
+    // we use CardinalToHexShort() to keep the same length (as request by ab)
   else
     Ctxt.OutContent := Ctxt.InContent;  // POST = echo
-  Result := HTTP_SUCCESS;
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
 end;
 
 constructor TSimpleHttpAsyncServer.Create;
 begin
   inherited Create;
-  fHttpServer := THttpAsyncServer.Create('8888', nil, nil, '', 4, 30000,
-    false, false, {logverbose=}false);
+  fHttpServer := THttpAsyncServer.Create(
+    '8888', nil, nil, '', 4, 30000,
+    [hsoNoXPoweredHeader
+    //, hsoLogVerbose
+    ]);
+  //writeln('DropPriviledges=', DropPriviledges('abouchez'));
+  fHttpServer.HttpQueueLength := 100000; // needed e.g. from wrk/ab benchmarks
   fHttpServer.OnRequest := DoOnRequest;
   fHttpServer.WaitStarted; // raise exception e.g. on binding issue
 end;
@@ -85,11 +96,10 @@ begin
   with TSynLog.Family do
     begin
       Level :=
-        //
-        LOG_VERBOSE +
+        //LOG_VERBOSE +
         LOG_FILTER[lfErrors];
       //EchoToConsole := Level;
-      PerThreadLog := ptIdentifiedInOnFile;
+      PerThreadLog := ptIdentifiedInOneFile;
       HighResolutionTimestamp := true;
     end;
 
@@ -98,14 +108,14 @@ begin
     {$I-}
     writeln;
     TextColor(ccLightGreen);
-    writeln('HTTP 1.1 Async Server running on localhost:8888'#10);
+    writeln(simpleServer.fHttpServer.ClassName, ' running on localhost:8888'#10);
     TextColor(ccWhite);
     writeln('try curl http://localhost:8888/echo'#10);
     TextColor(ccLightGray);
     writeln('Press [Enter] to quit'#10);
     TextColor(ccCyan);
     //sleep(10000);
-    readln;
+    ConsoleWaitForEnterKey;
     writeln(ObjectToJson(simpleServer.fHttpServer, [woHumanReadable]));
     TextColor(ccLightGray);
     {$ifdef FPC_X64MM}
