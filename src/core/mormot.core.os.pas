@@ -210,10 +210,11 @@ const
 
   /// a IdemPPChar() compatible array of textual MIME content types
   // - as used e.g. by IsHtmlContentTypeTextual()
-  CONTENT_TYPE_TEXTUAL: array[0..6] of PAnsiChar = (
+  CONTENT_TYPE_TEXTUAL: array[0..7] of PAnsiChar = (
     JSON_CONTENT_TYPE_UPPER,
     'TEXT/',
     'APPLICATION/XML',
+    'APPLICATION/JSON',
     'APPLICATION/JAVASCRIPT',
     'APPLICATION/X-JAVASCRIPT',
     'IMAGE/SVG+XML',
