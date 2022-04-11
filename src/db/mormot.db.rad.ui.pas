@@ -383,7 +383,8 @@ var
   len: integer;
 begin
   data := GetRowFieldData(Field, RowIndex, len, false);
-  if data = nil then // should point to Blob or Utf8 data
+  if (data = nil) or
+     (len <= 0) then // should point to Blob or Utf8 data
     result := nil
   else
     case Field.DataType of
