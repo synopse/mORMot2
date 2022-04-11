@@ -1239,9 +1239,10 @@ type
     destructor Destroy; override;
     /// register object to the xref table, and set corresponding object ID
     procedure AddObject(AObject: TPdfObject); override;
-    /// retrieve an object from its object ID
+    /// retrieve an object from its object ID, nil if ObjectID is out of range
     function GetObject(ObjectID: integer): TPdfObject; override;
     /// retrieve a XRef object instance, from its object ID
+    // - note that ObjectID is not checked, and should be within 0..ItemCount-1
     property Items[ObjectID: integer]: TPdfXrefEntry
       read GetItem; default;
     /// retrieve the XRef object count
@@ -5112,11 +5113,12 @@ var
 
     procedure DefaultAppend;
     var
-      tmpU: array of WideChar;
+      tmp: TSynTempBuffer;
     begin
-      SetLength(tmpU, L + 1); // we need the text to be ending with #0
-      MoveFast(W^, tmpU[0], L * 2);
-      AddUnicodeHexTextNoUniScribe(pointer(tmpU), WinAnsiTtf, false, Canvas);
+      tmp.Init(W, L * 2);
+      PWordArray(tmp.buf)[L] := 0; // we need the text to be ending with #0
+      AddUnicodeHexTextNoUniScribe(tmp.buf, WinAnsiTtf, false, Canvas);
+      tmp.Done;
     end;
 
   begin
@@ -5136,8 +5138,8 @@ var
       USP_E_SCRIPT_NOT_IN_FONT:
         begin // need HDC and a selected font object
           res := ScriptShape(Canvas.fDoc.GetDCWithFont(WinAnsiTtf), psc, W, L,
-            max, @items[i].a, pointer(OutGlyphs), pointer(LogClust), pointer(glyphs),
-            glyphsCount);
+            max, @items[i].a, pointer(OutGlyphs), pointer(LogClust),
+            pointer(glyphs), glyphsCount);
           if res <> 0 then
           begin // we won't change font if necessary, sorry
             // we shall implement the complex technic as stated by
@@ -5169,8 +5171,8 @@ begin
     exit;
   if Canvas.RightToLeftText then
     AScriptState.uBidiLevel := 1;
-  if ScriptItemize(PW, L, max, @AScriptControl, @AScriptState, pointer(items),
-    count) <> 0 then
+  if ScriptItemize(PW, L, max, @AScriptControl, @AScriptState,
+       pointer(items), count) <> 0 then
     exit; // error trying processing Glyph Shaping -> fast return
   // 2. guess if requiring glyph shaping or layout
   ScriptGetProperties(Sp, numSp);
@@ -5181,7 +5183,8 @@ begin
       complex := true
     else if fRTL in items[i].a.fFlags then
       R2L := true;
-  if not complex and not R2L then
+  if not complex and
+     not R2L then
     exit; // avoid slower UniScribe if content does not require it
   // 3. get Visual Order, i.e. how to render the content from left to right
   SetLength(level, count);
@@ -5694,7 +5697,7 @@ var
 begin
   W.Add('xref' + CRLF + '0 ').Add(fXrefEntries.Count).Add(#10);
   for i := 0 to fXrefEntries.Count - 1 do
-    items[i].SaveToPdfWrite(W);
+    Items[i].SaveToPdfWrite(W);
 end;
 
 
@@ -6892,6 +6895,7 @@ begin
   result := CreateAnnotation(asLink, ARect, BorderStyle, BorderWidth);
   aURIObj := TPdfDictionary.Create(fXRef);
   aURIObj.fSaveAtTheEnd := true;
+  aURIObj.AddItem('Type', 'Action');
   aURIObj.AddItem('S', 'URI');
   aURIObj.AddItemTextUtf8('URI', url);
   fXRef.AddObject(aURIObj);
@@ -6932,13 +6936,13 @@ end;
 
 procedure TPdfDocument.NewDoc;
 var
-  CatalogDictionary: TPdfDictionary;
-  Dico: TPdfDictionary;
-  DicoD: TPdfDictionary;
-  RGB: TPdfStream;
+  cat: TPdfDictionary;
+  dic: TPdfDictionary;
+  dicD: TPdfDictionary;
+  rgb: TPdfStream;
   ID: TPdfArray;
-  IDs: PdfString;
-  NeedFileID: boolean;
+  hexFileID: PdfString;
+  needFileID: boolean;
   P: PAnsiChar;
 const
   ICC: array[0..139] of cardinal = (805437440, 1161970753, 4098, 1920233069,
@@ -6952,11 +6956,11 @@ const
     134348800, 335544320, 1515804770, 469893120, 335544320, 1954047348, 0,
     2037411651, 1751607666, 808591476, 1092628528, 1700949860, 1937330976,
     1936549236, 1668172064, 1869640303, 1702125938, 100, 1668506980, 0,
-    285212672, 1651467329, 1196564581, 824713282, 691550521, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 542792024, 0, 1374879744, 256,
-    3423994112, 542792024, 0, 0, 0, 0, 1987212643, 0, 16777216, 13058,
-    1987212643, 0, 16777216, 13058, 1987212643, 0, 16777216, 13058, 542792024, 0,
-    412876800, 2773417984, 4228120576, 542792024, 0, 2368995328, 748683264,
+    285212672, 1651467329, 1196564581, 824713282, 691550521, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 542792024, 0, 1374879744,
+    256, 3423994112, 542792024, 0, 0, 0, 0, 1987212643, 0, 16777216, 13058,
+    1987212643, 0, 16777216, 13058, 1987212643, 0, 16777216, 13058, 542792024,
+    0, 412876800, 2773417984, 4228120576, 542792024, 0, 2368995328, 748683264,
     2500788224, 542792024, 0, 824573952, 789577728, 2629697536);
 begin
   fLastOutline := nil;
@@ -6969,11 +6973,11 @@ begin
   fObjectList := TSynList.Create;
   fRoot := TPdfCatalog.Create;
   fRoot.fOwner := self;
-  CatalogDictionary := TPdfDictionary.Create(fXRef);
-  fXRef.AddObject(CatalogDictionary);
-  CatalogDictionary.AddItem('Type', 'Catalog');
-  fTrailer.Attributes.AddItem('Root', CatalogDictionary);
-  fRoot.SetData(CatalogDictionary);
+  cat := TPdfDictionary.Create(fXRef);
+  fXRef.AddObject(cat);
+  cat.AddItem('Type', 'Catalog');
+  fTrailer.Attributes.AddItem('Root', cat);
+  fRoot.SetData(cat);
   fRoot.PageLayout := plSinglePage;
   fObjectList.Add(fRoot);
   if UseOutlines then
@@ -6985,26 +6989,26 @@ begin
   fInfo.CreationDate := now;
   fCurrentPages := CreatePages(nil); // nil -> create root Pages XObject
   fRoot.SetPages(fCurrentPages);
-  NeedFileID := false;
+  needFileID := false;
   if fUseOptionalContent then
   begin
     if fFileFormat < pdf15 then
       fFileFormat := pdf15;
-    Dico := TPdfDictionary.Create(fXRef);
-    DicoD := TPdfDictionary.Create(fXRef);
-    DicoD.AddItem('BaseState', 'ON');  // must be ON in default configuration
-    DicoD.AddItem('OFF', TPdfArray.Create(fXRef));
-    DicoD.AddItem('Order', TPdfArray.Create(fXRef));
-    DicoD.AddItem('ListMode', 'AllPages');
+    dic := TPdfDictionary.Create(fXRef);
+    dicD := TPdfDictionary.Create(fXRef);
+    dicD.AddItem('BaseState', 'ON');  // must be ON in default configuration
+    dicD.AddItem('OFF', TPdfArray.Create(fXRef));
+    dicD.AddItem('Order', TPdfArray.Create(fXRef));
+    dicD.AddItem('ListMode', 'AllPages');
     // default value but some viewers cause trouble when missing
-    DicoD.AddItem('RBGroups', TPdfArray.Create(fXRef));
-    Dico.AddItem('D', DicoD);
-    Dico.AddItem('OCGs', TPdfArray.Create(fXRef));
-    fRoot.Data.AddItem('OCProperties', Dico);
+    dicD.AddItem('RBGroups', TPdfArray.Create(fXRef));
+    dic.AddItem('D', dicD);
+    dic.AddItem('OCGs', TPdfArray.Create(fXRef));
+    fRoot.Data.AddItem('OCProperties', dic);
   end;
   {$ifdef USE_PDFSECURITY}
   if fEncryption <> nil then
-    NeedFileID := true;
+    needFileID := true;
   {$endif USE_PDFSECURITY}
   if fPdfA <> pdfaNone then
   begin
@@ -7021,38 +7025,38 @@ begin
     {$endif USE_PDFSECURITY}
     fUseFontFallBack := true;
     fOutputIntents := TPdfArray.Create(fXRef);
-    Dico := TPdfDictionary.Create(fXRef);
-    Dico.AddItem('Type', 'OutputIntent');
-    Dico.AddItem('S', 'GTS_PdfA1');  // there is no definition GTS_PdfA2 or GTS_PdfA3
-    Dico.AddItemText('OutputConditionIdentifier', 'sRGB');
-    Dico.AddItemText('RegistryName', 'http://www.color.org');
-    RGB := TPdfStream.Create(self);
-    RGB.Attributes.AddItem('N', 3);
-    RGB.Writer.Add(@ICC, sizeof(ICC));
-    Dico.AddItem('DestOutputProfile', RGB);
-    fOutputIntents.AddItem(Dico);
-    CatalogDictionary.AddItem('OutputIntents', fOutputIntents);
+    dic := TPdfDictionary.Create(fXRef);
+    dic.AddItem('Type', 'OutputIntent');
+    dic.AddItem('S', 'GTS_PdfA1');  // there is no definition GTS_PdfA2 or GTS_PdfA3
+    dic.AddItemText('OutputConditionIdentifier', 'sRGB');
+    dic.AddItemText('RegistryName', 'http://www.color.org');
+    rgb := TPdfStream.Create(self);
+    rgb.Attributes.AddItem('N', 3);
+    rgb.Writer.Add(@ICC, sizeof(ICC));
+    dic.AddItem('DestOutputProfile', rgb);
+    fOutputIntents.AddItem(dic);
+    cat.AddItem('OutputIntents', fOutputIntents);
     fMetaData := TPdfStream.Create(Self);
     fMetaData.Attributes.AddItem('Subtype', 'XML');
     fMetaData.Attributes.AddItem('Type', 'Metadata');
     fMetaData.fFilter := '';
-    CatalogDictionary.AddItem('MarkInfo', TPdfRawText.Create('<</Marked true>>'));
-    CatalogDictionary.AddItem('Metadata', fMetaData);
+    cat.AddItem('MarkInfo', TPdfRawText.Create('<</Marked true>>'));
+    cat.AddItem('Metadata', fMetaData);
     fStructTree := TPdfDictionary.Create(fXRef);
     fRoot.Data.AddItem('StructTreeRoot', fStructTree);
-    NeedFileID := true;
+    needFileID := true;
   end;
-  if NeedFileID then
+  if needFileID then
   begin
     RandomBytes(@fFileID, SizeOf(fFileID));
-    SetLength(IDs, SizeOf(fFileID) * 2 + 2);
-    P := pointer(IDs);
+    SetLength(hexFileID, SizeOf(fFileID) * 2 + 2);
+    P := pointer(hexFileID);
     P[0] := '<';
     mormot.core.text.BinToHex(PAnsiChar(@fFileID), P + 1, 16);
     P[SizeOf(fFileID) * 2 + 1] := '>';
     ID := TPdfArray.Create(fXRef);
-    ID.AddItem(TPdfRawText.Create(IDs));
-    ID.AddItem(TPdfRawText.Create(IDs));
+    ID.AddItem(TPdfRawText.Create(hexFileID));
+    ID.AddItem(TPdfRawText.Create(hexFileID));
     fTrailer.Attributes.AddItem('ID', ID);
   end;
   {$ifdef USE_PDFSECURITY}
@@ -7149,7 +7153,6 @@ begin
   end;
 end;
 
-procedure TPdfDocument.SaveToStreamDirectBegin(AStream: TStream; ForceModDate: TDateTime);
 const
   PDF_HEADER: array[TPdfFileFormat] of AnsiChar = (
     '3', '4', '5', '6', '7');
@@ -7157,6 +7160,8 @@ const
     ' ', '1', '1', '2', '2', '3', '3');
   PDFA_CONFORMANCE: array[TPdfALevel] of AnsiChar = (
     ' ', 'A', 'B', 'A', 'B', 'A', 'B');
+
+procedure TPdfDocument.SaveToStreamDirectBegin(AStream: TStream; ForceModDate: TDateTime);
 begin
   if fSaveToStreamWriter <> nil then
     raise EPdfInvalidOperation.Create('SaveToStreamDirectBegin called twice');
@@ -7197,9 +7202,7 @@ begin
   end;
   // write beginning of the content
   fSaveToStreamWriter := TPdfWrite.Create(self, AStream);
-  fSaveToStreamWriter.Add('%PDF-1.');
-  fSaveToStreamWriter.Add(PDF_HEADER[fFileformat]);
-  fSaveToStreamWriter.Add(#10);
+  fSaveToStreamWriter.Add('%PDF-1.').Add(PDF_HEADER[fFileformat]).Add(#10);
   if fFileFormat > pdf13 then
     // PDF/A conformation requires at least four binary (>#128) characters
     fSaveToStreamWriter.Add(RawByteString('%'#237#238#239#240#10));
@@ -7217,7 +7220,8 @@ begin
     fCanvas.fPage.fSaveAtTheEnd := false;
   for i := 1 to fXRef.ItemCount - 1 do  // ignore fXRef[0] = root PDF_FREE_ENTRY
     with fXRef.Items[i] do
-      if (ByteOffset <= 0) and not Value.fSaveAtTheEnd then
+      if (ByteOffset <= 0) and
+         not Value.fSaveAtTheEnd then
       begin
         fByteOffset := fSaveToStreamWriter.Position;
         Value.WriteValueTo(fSaveToStreamWriter);
@@ -9070,7 +9074,8 @@ var
   r, p: TPdfDictionary;
   id: PdfString;
 begin
-  if (fContents = nil) or not fDoc.UseOptionalContent then
+  if (fContents = nil) or
+     not fDoc.UseOptionalContent then
     exit;
   if Group <> nil then
   begin
@@ -9229,7 +9234,8 @@ var
 begin
   result := plSinglePage;
   p := fData.PdfNameByName('PageLayout');
-  if (p = nil) or not p.InheritsFrom(TPdfName) then
+  if (p = nil) or
+     not p.InheritsFrom(TPdfName) then
     exit;
   s := p.Value;
   for result := low(TPdfPageLayout) to high(TPdfPageLayout) do
@@ -9249,7 +9255,8 @@ begin
   if d = nil then
     exit;
   m := d.PdfNameByName('NonFullScreenPageMode');
-  if (m = nil) or not (m is TPdfName) then
+  if (m = nil) or
+     not (m is TPdfName) then
     exit;
   s := m.Value;
   for result := Low(TPdfPageMode) to High(TPdfPageMode) do
@@ -10226,7 +10233,8 @@ begin
       EMR_LINETO:
         begin
           E.NeedPen;
-          if not E.Canvas.fNewPath and not Moved then
+          if not E.Canvas.fNewPath and
+             not Moved then
             E.Canvas.MoveToI(position.X, position.Y);
           E.Canvas.LineToI(PEMRLineTo(R)^.ptl.X, PEMRLineTo(R)^.ptl.Y);
           position := PEMRLineTo(R)^.ptl;
@@ -10273,7 +10281,8 @@ begin
         begin
           NormalizeRect(PRect(@PEMRARCTO(R)^.rclBox)^);
           E.NeedPen;
-          if not E.Canvas.fNewPath and not Moved then
+          if not E.Canvas.fNewPath and
+             not Moved then
             E.Canvas.MoveToI(position.X, position.Y);
           with PEMRARC(R)^, CenterPoint(TRect(rclBox)) do
           begin
