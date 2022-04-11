@@ -1298,9 +1298,6 @@ function UpperCopy255(dest: PAnsiChar; const source: RawUtf8): PAnsiChar; overlo
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
 // array[byte] of AnsiChar on the caller stack)
-// - won't use SSE4.2 instructions on supported CPUs by default, which may read
-// some bytes beyond the s string, so should be avoided e.g. over memory mapped
-// files - call explicitly UpperCopy255BufSSE42() if you are confident on your input
 function UpperCopy255Buf(dest: PAnsiChar; source: PUtf8Char; sourceLen: PtrInt): PAnsiChar;
 
 /// copy source into dest^ with WinAnsi 8-bit upper case conversion
@@ -5700,7 +5697,7 @@ begin
     _80 := PtrUInt($8080808080808080); // use registers for constants
     _61 := $6161616161616161;
     _7b := $7b7b7b7b7b7b7b7b;
-    for i := 0 to sourceLen shr 3 do
+    for i := 0 to (sourceLen - 1) shr 3 do
     begin
       c := PPtrUIntArray(source)^[i];
       d := c or _80;
@@ -5709,7 +5706,7 @@ begin
     end;
     {$else}
     // unbranched uppercase conversion of 4 chars blocks
-    for i := 0 to sourceLen shr 2 do
+    for i := 0 to (sourceLen - 1) shr 2 do
     begin
       c := PPtrUIntArray(source)^[i];
       d := c or PtrUInt($80808080);
