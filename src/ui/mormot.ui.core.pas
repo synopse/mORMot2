@@ -84,8 +84,6 @@ type
     fImagePxWidth: integer;  // in device pixels
     fImagePxHeight: integer; // in device pixels
     fHeader: TEnhMetaHeader;
-    function GetHeader: PENHMETAHEADER;
-    procedure DeleteImage;
     function GetAuthor: string;
     function GetDescription: string;
     function GetHandle: HENHMETAFILE;
@@ -107,9 +105,7 @@ type
     destructor Destroy; override;
     procedure Assign(Source: TPersistent); override;
     procedure Clear; override;
-    procedure LoadFromFile(const Filename: string); override;
     procedure LoadFromStream(Stream: TStream); override;
-    procedure SaveToFile(const Filename: string); override;
     procedure SaveToStream(Stream: TStream); override;
     function ReleaseHandle: HENHMETAFILE;
     property Handle: HENHMETAFILE
@@ -377,7 +373,7 @@ end;
 
 destructor TMetaFile.Destroy;
 begin
-  DeleteImage;
+  Clear;
   inherited Destroy;
 end;
 
@@ -387,7 +383,7 @@ begin
      (Source is TMetaFile) then
   begin
     if fImageHandle <> 0 then
-      DeleteImage;
+      Clear;
     if Assigned(Source) then
     begin
       fImageHandle := TMetaFile(Source).Handle;
@@ -402,7 +398,7 @@ begin
     inherited Assign(Source);
 end;
 
-procedure TMetaFile.DeleteImage;
+procedure TMetaFile.Clear;
 begin
   if fImageHandle <> 0 then
     DeleteEnhMetafile(fImageHandle);
@@ -479,8 +475,9 @@ begin
      (GetEnhMetafileHeader(Value, SizeOf(hdr), @hdr) = 0) then
     raise EInvalidImage.Create('Invalid Metafile');
   if fImageHandle <> 0 then
-    DeleteImage;
+    Clear;
   fImageHandle := Value;
+  fHeader := hdr;
   fImagePxWidth := 0;
   fImagePxHeight := 0;
   fImageMMWidth := hdr.rclFrame.Right - hdr.rclFrame.Left;
@@ -511,19 +508,12 @@ begin
   PlayEnhMetaFile(ACanvas.Handle, fImageHandle, R);
 end;
 
-function TMetaFile.GetHeader: PENHMETAHEADER;
-begin
-  if fHeader.nSize = 0 then
-    GetEnhMetaFileHeader(fImageHandle, SizeOf(fHeader), @fHeader);
-  result := @fHeader;
-end;
-
 function TMetaFile.GetHeight: integer;
 begin
   if fImageHandle = 0 then
     result := fImagePxHeight
   else
-    with GetHeader^ do
+    with fHeader do
       result := MulDiv(fImageMMHeight, szlDevice.cy, szlMillimeters.cy * 100);
 end;
 
@@ -532,7 +522,7 @@ begin
   if fImageHandle = 0 then
     result := fImagePxWidth
   else
-    with GetHeader^ do
+    with fHeader do
       result := MulDiv(fImageMMWidth, szlDevice.cx, szlMillimeters.cx * 100);
 end;
 
@@ -541,7 +531,7 @@ begin
   if fImageHandle = 0 then
     fImagePxHeight := Value
   else
-    with GetHeader^ do
+    with fHeader do
       MMHeight := MulDiv(Value, szlMillimeters.cy * 100, szlDevice.cy);
 end;
 
@@ -550,38 +540,49 @@ begin
   if fImageHandle = 0 then
     fImagePxWidth := Value
   else
-    with GetHeader^ do
+    with fHeader do
       MMWidth := MulDiv(Value, szlMillimeters.cx * 100, szlDevice.cx);
 end;
 
-procedure TMetaFile.Clear;
-begin
-  DeleteImage;
-end;
-
-procedure TMetaFile.LoadFromFile(const Filename: string);
-begin
-  raise EComponentError.Create('Not Implemented');
-end;
-
-procedure TMetaFile.SaveToFile(const Filename: string);
-begin
-  raise EComponentError.Create('Not Implemented');
-end;
-
 procedure TMetaFile.LoadFromStream(Stream: TStream);
+var
+  tmp: TSynTempBuffer;
+  p: PENHMETAHEADER;
 begin
-  raise EComponentError.Create('Not Implemented');
+  Clear;
+  Stream.ReadBuffer(fHeader, SizeOf(fHeader));
+  if fHeader.dSignature <> ENHMETA_SIGNATURE then
+    raise EInvalidImage.Create('Invalid Metafile Stream');
+  p := tmp.Init(fHeader.nBytes);
+  try
+    p^ := fHeader; // we already read some bytes from Stream
+    inc(p);
+    Stream.ReadBuffer(p^, fHeader.nBytes - SizeOf(p^));
+    SetHandle(SetEnhMetaFileBits(fHeader.nBytes, tmp.Buf));
+  finally
+    tmp.Done;
+  end;
 end;
 
 procedure TMetaFile.SaveToStream(Stream: TStream);
+var
+  tmp: TSynTempBuffer;
 begin
-  raise EComponentError.Create('Not Implemented');
+  if fImageHandle = 0 then
+    exit;
+  tmp.Init(GetEnhMetaFileBits(fImageHandle, 0, nil));
+  if tmp.len <> 0 then
+    try
+      GetEnhMetaFileBits(fImageHandle, tmp.len, tmp.buf);
+      Stream.WriteBuffer(tmp.buf^, tmp.len);
+    finally
+      tmp.Done;
+    end;
 end;
 
 function TMetaFile.ReleaseHandle: HENHMETAFILE;
 begin
-  DeleteImage;
+  Clear;
   result := 0;
 end;
 
