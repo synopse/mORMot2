@@ -300,7 +300,8 @@ const
     '.png',
     '.jpg',
     '.bmp',
-    '.tif');
+    '.tif'
+  );
 
 {$ifdef GDIPLUS_USEENCODERS}
 
@@ -1301,7 +1302,7 @@ end;
 function EnumEmfCallback(DC: HDC; var Table: THandleTable; Rec: PEnhMetaRecord;
   NumObjects: DWord; var E: TGdiplusEnum): LongBool; stdcall;
 var
-  x: TXForm absolute E.Temp;
+  x: TXForm;
   mtx, path: THandle;
 begin
   result := true;

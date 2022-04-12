@@ -8829,7 +8829,7 @@ begin
     begin
       Ansi := fDoc.Engine.UnicodeBufferToAnsi(PW, StrLenW(PW));
       i := 1;
-      while i < length(Ansi) do
+      while i <= length(Ansi) do
       begin // loop is MBCS ready
         inc(W, fPage.fFont.GetAnsiCharWidth(Ansi, i));
         if SysLocale.FarEast then
