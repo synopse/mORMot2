@@ -145,10 +145,14 @@ function GotoNextVarString(Source: PByte): pointer;
 
 /// retrieve a variable-length UTF-8 encoded text buffer in a newly allocation RawUtf8
 function FromVarString(var Source: PByte): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// safe retrieve a variable-length UTF-8 encoded text buffer in a newly allocation RawUtf8
 // - supplied SourceMax value will avoid any potential buffer overflow
 function FromVarString(var Source: PByte; SourceMax: PByte): RawUtf8; overload;
+
+/// retrieve a variable-length UTF-8 encoded text buffer in a newly allocation RawUtf8
+procedure FromVarString(var Source: PByte; var Value: RawUtf8); overload;
 
 /// retrieve a variable-length text buffer
 // - this overloaded function will set the supplied code page to the AnsiString
@@ -3175,11 +3179,16 @@ begin
 end;
 
 function FromVarString(var Source: PByte): RawUtf8;
+begin
+  FromVarString(Source, result);
+end;
+
+procedure FromVarString(var Source: PByte; var Value: RawUtf8);
 var
   len: PtrUInt;
 begin
   len := FromVarUInt32(Source);
-  FastSetStringCP(result, Source, len, CP_UTF8);
+  FastSetString(Value, Source, len);
   inc(Source, len);
 end;
 
@@ -3191,7 +3200,7 @@ begin
   if (Source = nil) or
       (PAnsiChar(Source) + len > PAnsiChar(SourceMax)) then
     len := 0;
-  FastSetStringCP(result, Source, len, CP_UTF8);
+  FastSetString(result, Source, len);
   inc(Source, len);
 end;
 
