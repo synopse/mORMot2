@@ -854,7 +854,7 @@ function sqlite3_normalized_sql(S: TSqlite3Statement): PUtf8Char; cdecl; externa
 function sqlite3_step(S: TSqlite3Statement): integer; cdecl; external;
 function sqlite3_table_column_metadata(DB: TSqlite3DB; zDbName, zTableName, zColumnName: PUtf8Char;
   var pzDataType, pzCollSeq: PUtf8Char;
-  var pNotNull, pPrimaryKey, pAutoinc: PInteger): integer; cdecl; external;
+  out pNotNull, pPrimaryKey, pAutoinc: integer): integer; cdecl; external;
 function sqlite3_column_count(S: TSqlite3Statement): integer; cdecl; external;
 function sqlite3_column_type(S: TSqlite3Statement; Col: integer): integer; cdecl; external;
 function sqlite3_column_decltype(S: TSqlite3Statement; Col: integer): PUtf8Char; cdecl; external;

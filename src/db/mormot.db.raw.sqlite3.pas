@@ -2756,7 +2756,7 @@ type
     // not already been done, and returns an error if any errors are encountered while loading the schema.
     table_column_metadata: function(DB: TSqlite3DB; zDbName, zTableName,
       zColumnName: PUtf8Char; var pzDataType, pzCollSeq: PUtf8Char;
-      var pNotNull, pPrimaryKey, pAutoinc: PInteger): integer; cdecl;
+      out pNotNull, pPrimaryKey, pAutoinc: integer): integer; cdecl;
 
     /// Get the number of columns in the result set for the statement
     column_count: function(S: TSqlite3Statement): integer; cdecl;
