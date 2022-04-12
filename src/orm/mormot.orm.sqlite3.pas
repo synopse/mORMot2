@@ -2231,56 +2231,56 @@ end;
 function BindDirect(Props: TOrmPropInfoList; var P: PUtf8Char; Stmt: PSqlRequest;
   const Fields: TFieldBits; firstarg: integer; id: PID): integer;
 var
+  info: TGetJsonField;
   f: PtrInt;
-  nfo: POrmPropInfo;
-  val: PUtf8Char;
-  len: integer;
-  wasstring: boolean;
+  prop: POrmPropInfo;
 begin
-  P := GotoNextNotSpace(P);
-  if P^ <> '[' then
+  info.Json := GotoNextNotSpace(P);
+  if info.Json^ <> '[' then
     raise EOrmBatchException.Create('Invalid simple batch');
-  inc(P);
+  inc(info.Json);
   if id <> nil then
-    id^ := GetNextItemInt64(P);
+    id^ := GetNextItemInt64(info.Json);
   result := firstarg;
-  nfo := pointer(Props.List);
+  prop := pointer(Props.List);
   for f := 0 to Props.Count - 1 do
   begin
     if GetBitPtr(@Fields, f) then
     begin
       inc(result);
       // regular in-place JSON decoding
-      val := GetJsonFieldOrObjectOrArray(P, @wasstring, nil, true, true, @len);
-      if (val = nil) and
-         not wasstring then
+      info.GetJsonFieldOrObjectOrArray;
+      if (info.Value = nil) and
+         not info.Wasstring then
         Stmt^.BindNull(result)
       else
-        case nfo^.SqlDBFieldType of
+        case prop^.SqlDBFieldType of
           ftInt64:
-            Stmt^.Bind(result, GetInt64(val));
+            Stmt^.Bind(result, GetInt64(info.Value));
           ftDouble,
           ftCurrency:
-            Stmt^.Bind(result, GetExtended(val));
+            Stmt^.Bind(result, GetExtended(info.Value));
           ftDate,
           ftUtf8:
             begin
-              if (len > 3) and
-                 (PCardinal(val)^  and $00ffffff = JSON_SQLDATE_MAGIC_C) then
+              if (info.ValueLen > 3) and
+                 (PCardinal(info.Value)^  and $00ffffff = JSON_SQLDATE_MAGIC_C) then
               begin
-                inc(val, 3);
-                dec(len, 3);
+                inc(info.Value, 3);
+                dec(info.ValueLen, 3);
               end;
               // direct text/iso8601 parameter binding
-              Stmt^.BindU(result, val, len, {static=}true);
+              Stmt^.BindU(result, info.Value, info.ValueLen, {static=}true);
             end;
           ftBlob:
             // with in-place Base64-decoding
-            Stmt^.BindBlobDecode(result, pointer(val), len, {static=}true);
+            Stmt^.BindBlobDecode(
+              result, pointer(info.Value), info.ValueLen, {static=}true);
         end;
     end;
-    inc(nfo);
+    inc(prop);
   end;
+  P := info.Json;
 end;
 
 function TRestOrmServerDB.InternalBatchStart(Encoding: TRestBatchEncoding;

@@ -1136,7 +1136,7 @@ type
       array[0..MAX_SQLFIELDS - 1] of TJsonObjectDecoderFieldType;
     /// number of fields decoded in FieldNames[] and FieldValues[]
     FieldCount: integer;
-    /// set to TRUE if parameters are to be :(...): inlined
+    /// define if and how the parameters are to be :(...): inlined
     InlinedParams: TJsonObjectDecoderParams;
     /// internal pointer over field names to be used after Decode() call
     // - either FieldNames, either Fields[] array as defined in Decode(), or
@@ -3249,123 +3249,124 @@ begin
   QuotedStr(Beg, P - Beg, '''', result);
 end;
 
+procedure ParseSqlValue(var info: TGetJsonField; Params: TJsonObjectDecoderParams;
+  var FieldType: TJsonObjectDecoderFieldType;  var FieldValue: RawUtf8);
+var
+  c: integer;
+  P: PUtf8Char;
+begin
+  P := info.Json;
+  if P = nil then
+  begin
+    FieldType := ftaNull;
+    FieldValue := NULL_STR_VAR;
+    exit;
+  end;
+  while P^ in [#1..' '] do
+    inc(P);
+  if (PInteger(P)^ = NULL_LOW) and
+     (P[4] in [#0, #9, #10, #13, ' ', ',', '}', ']']) then
+  begin
+    /// GetJsonField('null') returns '' -> check here to make a diff with '""'
+    FieldType := ftaNull;
+    FieldValue := NULL_STR_VAR;
+    inc(P, 4);
+    while P^ in [#1..' '] do
+      inc(P);
+    if P^ = #0 then
+      info.Json := nil
+    else
+    begin
+      info.EndOfObject := P^;
+      P^ := #0;
+      info.Json := P + 1;
+    end;
+  end
+  else if P^ in ['{', '['] then
+  begin
+    // handle nested object or array e.g. for custom variant types
+    info.Json := P;
+    info.GetJsonFieldOrObjectOrArray(true, false);
+    if P^ = '{' then
+      FieldType := ftaObject
+    else
+      FieldType := ftaArray;
+    if (info.ValueLen = 0) or
+       (Params = pNonQuoted) then
+        FastSetString(FieldValue, info.Value, info.ValueLen)
+      else
+        QuotedStr(info.Value, info.ValueLen, '''', FieldValue);
+  end
+  else
+  begin
+    // handle JSON string, number or false/true in P
+    info.Json := P;
+    info.GetJsonField;
+    if info.WasString then
+    begin
+      c := PInteger(info.Value)^ and $00ffffff;
+      if c = JSON_BASE64_MAGIC_C then
+      begin
+        FieldType := ftaBlob;
+        case Params of
+          pInlined:
+            // untouched -> recognized as BLOB by TExtractInlineParameters
+            QuotedStr(info.Value, info.ValueLen, '''', FieldValue);
+        else
+          // returned directly as RawByteString (e.g. for INSERT/UPDATE)
+          Base64ToBin(PAnsiChar(info.Value) + 3, info.ValueLen - 3,
+            RawByteString(FieldValue));
+        end;
+      end
+      else
+      begin
+        if c = JSON_SQLDATE_MAGIC_C then
+        begin
+          FieldType := ftaDate;
+          inc(info.Value, 3); // ignore \uFFF1 magic marker
+        end
+        else
+          FieldType := ftaString;
+        // regular string content
+        if Params = pNonQuoted then
+          // returned directly as RawUtf8
+          FastSetString(FieldValue, info.Value, info.ValueLen)
+        else
+          // single-quote SQL strings as in the official SQLite3 documentation
+          QuotedStr(info.Value, info.ValueLen, '''', FieldValue);
+      end;
+    end
+    else if info.Value = nil then
+    begin
+      FieldType := ftaNull;
+      FieldValue := NULL_STR_VAR;
+    end
+    else // avoid GPF, but will return invalid SQL
+    // non string params (numeric or false/true) are passed untouched
+    if PInteger(info.Value)^ = FALSE_LOW then
+    begin
+      FieldType := ftaBoolean;
+      FieldValue := SmallUInt32Utf8[0];
+    end
+    else if PInteger(info.Value)^ = TRUE_LOW then
+    begin
+      FieldType := ftaBoolean;
+      FieldValue := SmallUInt32Utf8[1];
+    end
+    else
+    begin
+      FieldType := ftaNumber;
+      FastSetString(FieldValue, info.Value, info.ValueLen);
+    end;
+  end;
+end;
+
 procedure TJsonObjectDecoder.Decode(var P: PUtf8Char;
   const Fields: TRawUtf8DynArray; Params: TJsonObjectDecoderParams;
   const RowID: TID; ReplaceRowIDWithID: boolean);
 var
-  EndOfObject: AnsiChar;
-
-  procedure GetSqlValue(ndx: PtrInt);
-  var
-    wasString: boolean;
-    res: PUtf8Char;
-    resLen, c: integer;
-  begin
-    res := P;
-    if res = nil then
-    begin
-      FieldTypeApproximation[ndx] := ftaNull;
-      FieldValues[ndx] := NULL_STR_VAR;
-      exit;
-    end;
-    while res^ in [#1..' '] do
-      inc(res);
-    if (PInteger(res)^ = NULL_LOW) and
-       (res[4] in [#0, #9, #10, #13, ' ', ',', '}', ']']) then
-    begin
-      /// GetJsonField('null') returns '' -> check here to make a diff with '""'
-      FieldTypeApproximation[ndx] := ftaNull;
-      FieldValues[ndx] := NULL_STR_VAR;
-      inc(res, 4);
-      while res^ in [#1..' '] do
-        inc(res);
-      if res^ = #0 then
-        P := nil
-      else
-      begin
-        EndOfObject := res^;
-        res^ := #0;
-        P := res + 1;
-      end;
-    end
-    else if res^ in ['{', '['] then
-    begin
-      // handle nested object or array e.g. for custom variant types
-      if res^ = '{' then
-        FieldTypeApproximation[ndx] := ftaObject
-      else
-        FieldTypeApproximation[ndx] := ftaArray;
-      if Params = pNonQuoted then
-        GetJsonArrayOrObject(res, P, @EndOfObject, FieldValues[ndx])
-      else
-        GetJsonArrayOrObjectAsQuotedStr(res, P, @EndOfObject, FieldValues[ndx]);
-    end
-    else
-    begin
-      // handle JSON string, number or false/true in P
-      res := GetJsonField(res, P, @wasString, @EndOfObject, @resLen);
-      if wasString then
-      begin
-        c := PInteger(res)^ and $00ffffff;
-        if c = JSON_BASE64_MAGIC_C then
-        begin
-          FieldTypeApproximation[ndx] := ftaBlob;
-          case Params of
-            pInlined:
-              // untouched -> recognized as BLOB by TExtractInlineParameters
-              QuotedStr(res, reslen, '''', FieldValues[ndx]);
-          else
-            // returned directly as RawByteString (e.g. for INSERT/UPDATE)
-            Base64ToBin(PAnsiChar(res) + 3, resLen - 3,
-              RawByteString(FieldValues[ndx]));
-          end;
-        end
-        else
-        begin
-          if c = JSON_SQLDATE_MAGIC_C then
-          begin
-            FieldTypeApproximation[ndx] := ftaDate;
-            inc(res, 3); // ignore \uFFF1 magic marker
-          end
-          else
-            FieldTypeApproximation[ndx] := ftaString;
-          // regular string content
-          if Params = pNonQuoted then
-            // returned directly as RawUtf8
-            FastSetString(FieldValues[ndx], res, resLen)
-          else
-            // single-quote SQL strings as in the official SQLite3 documentation
-            QuotedStr(res, reslen, '''', FieldValues[ndx]);
-        end;
-      end
-      else if res = nil then
-      begin
-        FieldTypeApproximation[ndx] := ftaNull;
-        FieldValues[ndx] := NULL_STR_VAR;
-      end
-      else // avoid GPF, but will return invalid SQL
-      // non string params (numeric or false/true) are passed untouched
-      if PInteger(res)^ = FALSE_LOW then
-      begin
-        FieldValues[ndx] := SmallUInt32Utf8[0];
-        FieldTypeApproximation[ndx] := ftaBoolean;
-      end
-      else if PInteger(res)^ = TRUE_LOW then
-      begin
-        FieldValues[ndx] := SmallUInt32Utf8[1];
-        FieldTypeApproximation[ndx] := ftaBoolean;
-      end
-      else
-      begin
-        FastSetString(FieldValues[ndx], res, resLen);
-        FieldTypeApproximation[ndx] := ftaNumber;
-      end;
-    end;
-  end;
-
-var
-  FN: PUtf8Char;
-  F, FNlen: integer;
+  info: TGetJsonField;
+  F: PtrInt;
   FieldIsRowID: boolean;
 begin
   FieldCount := 0;
@@ -3374,6 +3375,7 @@ begin
   FillCharFast(FieldTypeApproximation, SizeOf(FieldTypeApproximation),
     ord(ftaNumber{TID}));
   InlinedParams := Params;
+  info.Json := P;
   if pointer(Fields) = nil then
   begin
     // get "COL1":"VAL1" pairs, stopping at '}' or ']'
@@ -3390,40 +3392,41 @@ begin
       DecodedRowID := RowID;
     end;
     repeat
-      if P = nil then
+      if info.Json = nil then
         break;
-      FN := GetJsonPropName(P, @FNlen);
-      if (FN = nil) or
-         (P = nil) then
+      info.Value := GetJsonPropName(info.Json, @info.Valuelen);
+      if (info.Value = nil) or
+         (info.Json = nil) then
         break; // invalid JSON field name
-      FieldIsRowID := IsRowId(FN);
+      FieldIsRowID := IsRowId(info.Value, info.ValueLen);
       if FieldIsRowID then
         if RowID > 0 then
         begin
-          GetJsonField(P, P, nil, @EndOfObject); // ignore this if explicit RowID
-          if EndOfObject in [#0, '}', ']'] then
+          info.GetJsonField; // ignore this if explicit RowID was supplied
+          if info.EndOfObject in [#0, '}', ']'] then
             break
           else
             continue;
         end
         else if ReplaceRowIDWithID then
         begin
-          FN := pointer(ID_TXT);
-          FNlen := 2;
+          info.Value := pointer(ID_TXT);
+          info.Valuelen := 2;
         end;
-      FastSetString(FieldNames[FieldCount], FN, FNlen);
-      GetSqlValue(FieldCount); // update EndOfObject
-      if FieldIsRowID then
-        SetID(FieldValues[FieldCount], DecodedRowID);
-      inc(FieldCount);
-      if FieldCount = MAX_SQLFIELDS then
+      F := FieldCount;
+      if F = MAX_SQLFIELDS then
         raise EJsonObjectDecoder.Create('Too many inlines in TJsonObjectDecoder');
-    until {%H-}EndOfObject in [#0, '}', ']'];
+      FastSetString(FieldNames[F], info.Value, info.Valuelen);
+      ParseSqlValue(info, Params, FieldTypeApproximation[F], FieldValues[F]);
+      if FieldIsRowID then
+        SetID(FieldValues[F], DecodedRowID);
+      inc(FieldCount);
+    until info.EndOfObject in [#0, '}', ']'];
   end
   else
   begin
     // get "VAL1","VAL2"...
-    if P = nil then
+    if info.Json = nil then
       exit;
     if RowID > 0 then
       raise EJsonObjectDecoder.Create('TJsonObjectDecoder(expanded) won''t handle RowID');
@@ -3432,8 +3435,9 @@ begin
     DecodedFieldNames := pointer(Fields);
     FieldCount := length(Fields);
     for F := 0 to FieldCount - 1 do
-      GetSqlValue(F); // update EndOfObject
+      ParseSqlValue(info, Params, FieldTypeApproximation[F], FieldValues[F]);
   end;
+  P := info.Json;
 end;
 
 procedure TJsonObjectDecoder.Decode(const Json: RawUtf8;
@@ -3620,15 +3624,13 @@ begin
 end;
 
 function UnJsonFirstField(var P: PUtf8Char): RawUtf8;
-// expand=true: [ {"col1":val11} ] -> val11
-// expand=false: { "fieldCount":1,"values":["col1",val11] } -> vall11
 begin
   result := '';
   if P = nil then
     exit;
   if Expect(P, FIELDCOUNT_PATTERN, 14) then
   begin
-    // not expanded format
+    // expand=false: { "fieldCount":1,"values":["col1",val11] } -> vall11
     if GetNextItemCardinal(P) <> 1 then
       exit; // wrong field count
     while P^ <> '[' do
@@ -3640,7 +3642,7 @@ begin
   end
   else
   begin
-    // expanded format
+    // expand=true: [ {"col1":val11} ] -> val11
     while P^ <> '[' do
       if P^ = #0 then
         exit

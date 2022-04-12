@@ -1911,16 +1911,20 @@ begin
 end;
 
 function BatchExtractSimpleID(var Sent: PUtf8Char): TID;
+var
+  info: TGetJsonField;
 begin
   if Sent^ = '[' then
     inc(Sent);
-  result := GetInt64(GetJsonField(Sent, Sent));
-  if Sent = nil then
+  info.Json := Sent;
+  info.GetJsonField;
+  if info.Json = nil then
   begin
     result := 0; // clearly invalid input
     exit;
   end;
-  dec(Sent);
+  result := GetInt64(info.Value, info.ValueLen);
+  Sent := info.Json - 1;
   Sent^ := '['; // ignore the first field (stored in fBatch.ID)
 end;
 
@@ -1943,8 +1947,7 @@ begin
   if Encoding in [encPutHexID, encPostHexID] then
   begin
     id := BatchExtractSimpleID(Sent);
-    if (Sent = nil) or
-       (id <= 0) then
+    if id <= 0 then
       exit; // invalid input
   end
   else

@@ -215,6 +215,50 @@ procedure IgnoreComma(var P: PUtf8Char);
 function JsonPropNameValid(P: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+type
+  /// internal parsing structure used by GetJsonField() and
+  // GetJsonFieldOrObjectOrArray() wrapper functions
+  TGetJsonField = object
+    /// input/output JSON parsing buffer address
+    Json: PUtf8Char;
+    /// in-place output parsed JSON value, unescaped and #0 terminated
+    // - see associated WasString to find out its actual type
+    Value: PUtf8Char;
+    /// in-place output parsed JSON value length
+    ValueLen: integer;
+    /// set if the value was actually a JSON string
+    // - "strings" are decoded as 'strings', with WasString=true, properly JSON
+    // unescaped (e.g. any \u0123 pattern would be converted into UTF-8 content)
+    // - numbers are decoded as text, e.g. '1.234', with WasString=false
+    // - null is decoded as Value=nil and WasString=false
+    // - true/false are decoded as 'true'/'false' with WasString=false
+    WasString: boolean;
+    /// the ',' ':' or '}' separator just after the Value
+    // - may have been overwritten with a #0 termination in the input buffer
+    EndOfObject: AnsiChar;
+    /// decode a JSON field value in-place from an UTF-8 encoded text buffer
+    // - warning: will decode in the Json buffer memory itself (no memory
+    // allocation or copy), for faster process - so take care that it is not shared
+    // - Value/ValueLen/WasString is set with the parsed value
+    // - EndOfObject is set to the JSON ending char (',' ':' or '}' e.g.)
+    // - Json points to the next field to be decoded, or nil on parsing error
+    procedure GetJsonField;
+    /// decode a JSON field value in-place into a RawUtf8 string
+    procedure GetJsonValue(var Text: RawUtf8);
+    /// decode a JSON content from an UTF-8 encoded buffer
+    // - GetJsonField will only handle JSON "strings" or numbers - if
+    // HandleValuesAsObjectOrArray is TRUE, this function will process JSON {
+    // objects } or [ arrays ] and add a #0 at the end of it
+    // - warning: will decode in the Json buffer memory itself (no memory
+    // allocation or copy), for faster process - so take care that it is not shared
+    // - Value/ValueLen/WasString is set with the parsed JSON value
+    // - EndOfObject is set to the JSON ending char (',' ':' or '}' e.g.)
+    // - Json points to the next value to be decoded, or nil on parsing error
+    procedure GetJsonFieldOrObjectOrArray(
+      HandleValuesAsObjectOrArray: boolean = true; NormalizeBoolean: boolean = true);
+  end;
+
+
 /// decode a JSON field value in-place from an UTF-8 encoded text buffer
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that P^ is not shared
@@ -228,9 +272,11 @@ function JsonPropNameValid(P: PUtf8Char): boolean;
 // - true/false boolean values are returned as 'true'/'false', with WasString=false
 // - any number value is returned as its ascii representation, with WasString=false
 // - PDest points to the next field to be decoded, or nil on JSON parsing error
+// - just a compatibility wrapper around TGetJsonField.GetJsonField method
 function GetJsonField(P: PUtf8Char; out PDest: PUtf8Char;
   WasString: PBoolean = nil; EndOfObject: PUtf8Char = nil;
   Len: PInteger = nil): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// decode a JSON field name in an UTF-8 encoded buffer
 // - this function decodes in the P^ buffer memory itself (no memory allocation
@@ -269,7 +315,7 @@ function GetJsonFieldOrObjectOrArray(var Json: PUtf8Char;
   WasString: PBoolean = nil; EndOfObject: PUtf8Char = nil;
   HandleValuesAsObjectOrArray: boolean = false;
   NormalizeBoolean: boolean = true; Len: PInteger = nil): PUtf8Char;
-  {$ifdef FPC} inline; {$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// decode a JSON object or array from an UTF-8 encoded buffer
 // - as called by GetJsonFieldOrObjectOrArray() for HandleValuesAsObjectOrArray
@@ -1507,6 +1553,7 @@ type
     function Idem(const Value: RawUtf8): boolean;
       {$ifdef HASINLINE}inline;{$endif}
   end;
+  PValuePUtf8Char = ^TValuePUtf8Char;
   /// used e.g. by JsonDecode() overloaded function to returns values
   TValuePUtf8CharArray =
     array[0 .. maxInt div SizeOf(TValuePUtf8Char) - 1] of TValuePUtf8Char;
@@ -1647,14 +1694,12 @@ type
 
   /// efficient execution context of the JSON parser
   // - defined here for low-level use of TRttiJsonLoad functions
-  TJsonParserContext = object
+  // - inherit from TGetJsonField to include ParseNext/ParseNextAny unserialized
+  // Value/ValueLen and flags, and Json as current position in the JSON input
+  TJsonParserContext = object(TGetJsonField)
   public
-    /// current position in the JSON input
-    Json: PUtf8Char;
     /// true if the last parsing succeeded
     Valid: boolean;
-    /// the last parsed character, just before current JSON
-    EndOfObject: AnsiChar;
     /// customize parsing
     Options: TJsonParserOptions;
     /// how TDocVariant should be created
@@ -1665,12 +1710,6 @@ type
     Prop: PRttiCustomProp;
     /// force the item class when reading a TObjectList without "ClassName":...
     ObjectListItem: TRttiCustom;
-    /// ParseNext/ParseNextAny unserialized value
-    Value: PUtf8Char;
-    /// ParseNext/ParseNextAny unserialized value length (should be an integer)
-    ValueLen: integer;
-    /// if ParseNext/ParseNextAny unserialized a JSON string
-    WasString: boolean;
     /// TDocVariant initialization options
     DVO: TDocVariantOptions;
     /// initialize this unserialization context
@@ -3026,7 +3065,31 @@ end;
 function GetJsonField(P: PUtf8Char; out PDest: PUtf8Char; WasString: PBoolean;
   EndOfObject: PUtf8Char; Len: PInteger): PUtf8Char;
 var
-  D: PUtf8Char;
+  info: TGetJsonField;
+begin
+  info.Json := P;
+  info.GetJsonField;
+  PDest := info.Json;
+  if WasString <> nil then
+    WasString^ := info.WasString;
+  if EndOfObject <> nil then
+    EndOfObject^ := info.EndOfObject;
+  if Len <> nil then
+    Len^ := info.ValueLen;
+  result := info.Value;
+end;
+
+{ TGetJsonField }
+
+procedure TGetJsonField.GetJsonValue(var Text: RawUtf8);
+begin
+  GetJsonField;
+  FastSetString(Text, Value, ValueLen);
+end;
+
+procedure TGetJsonField.GetJsonField;
+var
+  P, D: PUtf8Char;
   c4, surrogate, extra: PtrUInt;
   c: AnsiChar;
   {$ifdef CPUX86NOTPIC}
@@ -3036,14 +3099,11 @@ var
   {$endif CPUX86NOTPIC}
 begin
   // see http://www.ietf.org/rfc/rfc4627.txt
-  if WasString <> nil then
-    // not a string by default
-    WasString^ := false;
-  if Len <> nil then
-    // ensure returns Len=0 on invalid input (PDest=nil)
-    Len^ := 0;
-  PDest := nil; // PDest=nil indicates error or unexpected end (#0)
-  result := nil;
+  P := Json;
+  Json := nil; // Json=nil indicates error or unexpected end (#0)
+  Value := nil;
+  ValueLen := 0; // ensure returns Len=0 on invalid input (Json=nil)
+  WasString := false; // not a string by default
   if P = nil then
     exit;
   while P^ <= ' ' do
@@ -3059,7 +3119,7 @@ begin
     jtFirstDigit: // '-', '0'..'9'
       begin
         // numerical value
-        result := P;
+        Value := P;
         if P^ = '0' then
           if (P[1] >= '0') and
              (P[1] <= '9') then
@@ -3070,8 +3130,7 @@ begin
         until not (jcDigitFloatChar in tab[P^]);
         if P^ = #0 then
           exit; // a JSON number value should be followed by , } or ]
-        if Len <> nil then
-          Len^ := P - result;
+        ValueLen := P - Value;
         if (P^ <= ' ') and
            (P^ <> #0) then
         begin
@@ -3083,9 +3142,8 @@ begin
       begin
         // " -> unescape P^ into D^
         inc(P);
-        result := P; // result points to the unescaped JSON string
-        if WasString <> nil then
-          WasString^ := true;
+        Value := P; // points to the unescaped JSON string
+        WasString := true;
         while not (jcJsonStringMarker in tab[P^]) do
           // not [#0, '"', '\']
           inc(P); // very fast parsing of most UTF-8 chars within "string"
@@ -3106,7 +3164,7 @@ begin
             // end of string
             break;
           if c = #0 then
-            // premature ending (PDest=nil)
+            // premature ending (leaving Json=nil)
             exit;
           // unescape JSON text: process char after \
           inc(P); // P^ was '\' here
@@ -3198,15 +3256,13 @@ begin
         // here P^='"'
         inc(P);
         D^ := #0; // make zero-terminated
-        if Len <> nil then
-          Len^ := D - result;
+        ValueLen := D - Value;
       end;
     jtSingleQuote: // extended/non-standard 'text' single quoted content
       begin
         inc(P);
-        result := P; // result points to the unquoted string
-        if WasString <> nil then
-          WasString^ := true;
+        Value := P; // points to the unquoted string
+        WasString := true;
         D := P;
         repeat
           c := P^;
@@ -3223,8 +3279,7 @@ begin
         until false;
         inc(P);
         D^ := #0; // make zero-terminated
-        if Len <> nil then
-          Len^ := D - result;
+        ValueLen := D - Value;
       end;
     jtNullFirstChar: // 'n'
       if (PInteger(P)^ = NULL_LOW) and
@@ -3232,9 +3287,8 @@ begin
          // [#0, #9, #10, #13, ' ',  ',', '}', ']']
       begin
         // null -> returns nil and WasString=false
-        result := nil;
-        if Len <> nil then
-          Len^ := 0; // when result is converted to string
+        Value := nil;
+        ValueLen := 0; // when Value is converted to string
         inc(P, 4);
       end
       else
@@ -3245,9 +3299,8 @@ begin
          // [#0, #9, #10, #13, ' ',  ',', '}', ']']
       begin
         // false -> returns 'false' and WasString=false
-        result := P;
-        if Len <> nil then
-          Len^ := 5;
+        Value := P;
+        ValueLen := 5;
         inc(P, 5);
       end
       else
@@ -3258,30 +3311,112 @@ begin
          // [#0, #9, #10, #13, ' ',  ',', '}', ']']
       begin
         // true -> returns 'true' and WasString=false
-        result := P;
-        if Len <> nil then
-          Len^ := 4;
+        Value := P;
+        ValueLen := 4;
         inc(P, 4);
       end
       else
         exit;
   else
-    // leave PDest=nil to notify error (e.g. if a {...} or [...] was supplied)
+    // leave Json=nil on error (e.g. if a {...} or [...] was supplied)
     exit;
   end;
   while not (jcEndOfJsonFieldOr0 in tab[P^]) do
     // loop until #0 , ] } : delimiter
     inc(P);
-  if EndOfObject <> nil then
-    EndOfObject^ := P^;
+  EndOfObject := P^;
   // ensure JSON value is zero-terminated, and continue after it
   if P^ <> #0 then
   begin
     P^ := #0;
-    PDest := P + 1;
+    Json := P + 1;
   end
   else
-    PDest := P;
+    Json := P;
+end;
+
+function TryGotoEndOfComment(P: PUtf8Char): PUtf8Char;
+begin
+  repeat
+    result := P; // return input P^ = '/' if no comment was found
+    inc(P);
+    if P^ = '*' then // ignore /* comment */
+    begin
+      repeat
+        inc(P);
+        if P^ = #0 then
+          exit;
+      until PWord(P)^ = ord('*') + ord('/') shl 8;
+      result := GotoNextNotSpace(P + 2);
+    end
+    else if P^ = '/' then // ignore // comment
+    begin
+      P := GotoNextLine(P + 1);
+      if P = nil then
+        exit;
+      result := GotoNextNotSpace(P);
+    end
+    else
+      exit;
+  until P^ <> '/'; // there may be other subsequent comments ;)
+end;
+
+procedure TGetJsonField.GetJsonFieldOrObjectOrArray(
+  HandleValuesAsObjectOrArray, NormalizeBoolean: boolean);
+var
+  P: PUtf8Char;
+  parser: TJsonGotoEndParser;
+begin
+  Value := nil;
+  if Json = nil then
+    exit;
+  P := Json;
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
+  if P^ = '/' then
+    P := TryGotoEndOfComment(P);
+  if HandleValuesAsObjectOrArray and
+     (P^ in ['{', '[']) then
+  begin
+    WasString := false;
+    Value := P;
+    {%H-}parser.Init({strict=}false, nil);
+    P := parser.GotoEnd(P);
+    if P = nil then
+      Value := nil
+    else
+    begin
+      ValueLen := P - Value;
+      while (P^ <= ' ') and
+            (P^ <> #0) do
+        inc(P);
+      EndOfObject := P^;
+      if P^ <> #0 then
+      begin
+        P^ := #0; // make zero-terminated as GetJsonField()
+        inc(P);
+      end;
+    end;
+    Json := P;
+  end
+  else
+  begin
+    Json := P;
+    GetJsonField;
+    if not WasString and
+       NormalizeBoolean and
+       (Value <> nil) then
+    repeat
+      if PInteger(Value)^ = TRUE_LOW then
+        Value := pointer(SmallUInt32Utf8[1]) // normalize true -> 1
+      else if PInteger(Value)^ = FALSE_LOW then
+        Value := pointer(SmallUInt32Utf8[0]) // normalize false -> 0
+      else
+        break;
+      ValueLen := 1; // result = '0' or '1'
+    until true;
+  end;
 end;
 
 function GotoEndOfJsonString2(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
@@ -3356,39 +3491,12 @@ begin
   result := nil;
 end;
 
-function TryGotoEndOfComment(P: PUtf8Char): PUtf8Char;
-begin
-  repeat
-    result := P; // return input P^ = '/' if no comment was found
-    inc(P);
-    if P^ = '*' then // ignore /* comment */
-    begin
-      repeat
-        inc(P);
-        if P^ = #0 then
-          exit;
-      until PWord(P)^ = ord('*') + ord('/') shl 8;
-      result := GotoNextNotSpace(P + 2);
-    end
-    else if P^ = '/' then // ignore // comment
-    begin
-      P := GotoNextLine(P + 1);
-      if P = nil then
-        exit;
-      result := GotoNextNotSpace(P);
-    end
-    else
-      exit;
-  until P^ <> '/'; // there may be other subsequent comments ;)
-end;
-
 function GetJsonPropName(var Json: PUtf8Char; Len: PInteger;
   NoJsonUnescape: boolean): PUtf8Char;
 var
   P, Name: PUtf8Char;
-  WasString: boolean;
-  EndOfObject: AnsiChar;
   tab: PJsonCharSet;
+  info: TGetJsonField;
 begin
   // should match GotoNextJsonObjectOrArray() and JsonPropNameValid()
   result := nil; // returns nil on invalid input
@@ -3422,11 +3530,17 @@ begin
         P := GotoEndOfJsonString2(P, tab)
       else
       begin // should be unescaped
-        Name := GetJsonField(Name - 1, Json, @WasString, @EndOfObject, Len);
-        if (Name <> nil) and
-           WasString and
-           (EndOfObject = ':') then
-          result := Name;
+        info.Json := Name - 1;
+        info.GetJsonField;
+        if (info.Value <> nil) and
+           info.WasString and
+           (info.EndOfObject = ':') then
+        begin
+          result := info.Value;
+          if Len <> nil then
+            Len^ := info.ValueLen;
+        end;
+        Json := info.Json;
         exit;
       end;
   end
@@ -3451,9 +3565,9 @@ begin
     dec(Name);
     if Len <> nil then
       Len^ := P - Name;
-    EndOfObject := P^;
+    info.EndOfObject := P^;
     P^ := #0; // Name should end with #0
-    if not (EndOfObject in [':', '=']) then // relaxed {age=10} syntax
+    if not (info.EndOfObject in [':', '=']) then // relaxed {age=10} syntax
       repeat
         inc(P);
         if P^ = #0 then
@@ -3639,53 +3753,21 @@ begin
 end;
 
 function GetJsonFieldOrObjectOrArray(var Json: PUtf8Char; WasString: PBoolean;
-  EndOfObject: PUtf8Char; HandleValuesAsObjectOrArray: boolean;
-  NormalizeBoolean: boolean; Len: PInteger): PUtf8Char;
+  EndOfObject: PUtf8Char; HandleValuesAsObjectOrArray, NormalizeBoolean: boolean;
+  Len: PInteger): PUtf8Char;
 var
-  P: PUtf8Char;
-  wStr: boolean;
+  info: TGetJsonField;
 begin
-  result := nil;
-  P := Json;
-  Json := nil; // Json=nil indicates error or unexpected end (#0)
-  if P = nil then
-    exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  if P^ = '/' then
-    P := TryGotoEndOfComment(P);
-  if HandleValuesAsObjectOrArray and
-     (P^ in ['{', '[']) then
-  begin
-    wStr := false;
-    result := P;
-    P := GetJsonObjectOrArray(P, EndOfObject, Len);
-    if P <> nil then
-      // was a valid object or array
-      Json := P
-    else
-      result := nil;
-  end
-  else
-  begin
-    result := GetJsonField(P, Json, @wStr, EndOfObject, Len);
-    if not wStr and
-       NormalizeBoolean and
-       (result <> nil) then
-    repeat
-      if PInteger(result)^ = TRUE_LOW then
-        result := pointer(SmallUInt32Utf8[1]) // normalize true -> 1
-      else if PInteger(result)^ = FALSE_LOW then
-        result := pointer(SmallUInt32Utf8[0]) // normalize false -> 0
-      else
-        break;
-      if Len <> nil then
-        Len^ := 1; // result = '0' or '1'
-    until true;
-  end;
+  info.Json := Json;
+  info.GetJsonFieldOrObjectOrArray(HandleValuesAsObjectOrArray, NormalizeBoolean);
+  Json := info.Json;
   if WasString <> nil then
-    WasString^ := wStr;
+    WasString^ := info.WasString;
+  if EndOfObject <> nil then
+    EndOfObject^ := info.EndOfObject;
+  if Len <> nil then
+    Len^ := info.ValueLen;
+  result := info.Value;
 end;
 
 procedure GetJsonItemAsRawJson(var P: PUtf8Char; var result: RawJson;
@@ -4206,9 +4288,8 @@ end;
 function GetSetNameValue(Names: PShortString; MinValue, MaxValue: integer;
   var P: PUtf8Char; out EndOfObject: AnsiChar): QWord;
 var
-  Text: PUtf8Char;
-  WasString: boolean;
-  TextLen, i: integer;
+  i: integer;
+  info: TGetJsonField;
 begin
   result := 0;
   if (P = nil) or
@@ -4229,15 +4310,16 @@ begin
       inc(P)
     else
     begin
+      info.Json := P;
       repeat
-        Text := GetJsonField(P, P, @WasString, @EndOfObject, @TextLen);
-        if (Text = nil) or
-           not WasString then
+        info.GetJsonField;
+        if (info.Value = nil) or
+           not info.WasString then
         begin
           P := nil; // invalid input (expects a JSON array of strings)
           exit;
         end;
-        if Text^ = '*' then
+        if info.Value^ = '*' then
         begin
           if MaxValue < 32 then
             result := ALLBITS_CARDINAL[MaxValue + 1]
@@ -4245,16 +4327,18 @@ begin
             result := QWord(-1);
           break;
         end;
-        if Text^ in ['a'..'z'] then
-          i := FindShortStringListExact(names, MaxValue, Text, TextLen)
+        if info.Value^ in ['a'..'z'] then
+          i := FindShortStringListExact(names, MaxValue, info.Value, info.ValueLen)
         else
           i := -1;
         if i < 0 then
-          i := FindShortStringListTrimLowerCase(names, MaxValue, Text, TextLen);
+          i := FindShortStringListTrimLowerCase(
+            names, MaxValue, info.Value, info.ValueLen);
         if i >= MinValue then
           SetBitPtr(@result, i);
         // unknown enum names (i=-1) would just be ignored
-      until EndOfObject = ']';
+      until info.EndOfObject = ']';
+      P := info.Json;
       if P = nil then
         exit; // avoid GPF below if already reached the input end
     end;
@@ -4263,7 +4347,13 @@ begin
       P := nil; // as in mORMot 1
   end
   else
-    SetQWord(GetJsonField(P, P, nil, @EndOfObject), result);
+  begin
+    info.Json := P;
+    info.GetJsonField;
+    P := info.Json;
+    SetQWord(info.Value, result);
+    EndOfObject := info.EndOfObject;
+  end;
 end;
 
 function GetSetNameValue(Info: PRttiInfo;
@@ -4464,19 +4554,21 @@ end;
 function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
 var
   i: PtrInt;
-begin // PatternLen is at least 8 bytes long
+  J: PUtf8Char;
+begin
   result := false;
-  if P = nil then
+  J := P;
+  if J = nil then
     exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  if PPtrInt(P)^ = PPtrInt(Pattern)^ then
+  while (J^ <= ' ') and
+        (J^ <> #0) do
+    inc(J);
+  if PPtrInt(J)^ = PPtrInt(Pattern)^ then // PatternLen is at least 8 bytes long
   begin
     for i := SizeOf(PtrInt) to PatternLen - 1 do
-      if P[i] <> Pattern[i] then
+      if J[i] <> Pattern[i] then
         exit;
-    inc(P, PatternLen);
+    P := J + PatternLen;
     result := true;
   end;
 end;
@@ -6321,8 +6413,8 @@ end;
 function TJsonWriter.AddJsonToXML(Json: PUtf8Char;
   ArrayName, EndOfObject: PUtf8Char): PUtf8Char;
 var
-  objEnd: AnsiChar;
-  Name, Value: PUtf8Char;
+  info: TGetJsonField;
+  Name: PUtf8Char;
   n, c: integer;
 begin
   result := nil;
@@ -6354,7 +6446,7 @@ begin
           else
             AddXmlEscape(ArrayName);
           Add('>');
-          Json := AddJsonToXML(Json, nil, @objEnd);
+          Json := AddJsonToXML(Json, nil, @info.EndOfObject);
           Add('<', '/');
           if ArrayName = nil then
             Add(n)
@@ -6362,7 +6454,7 @@ begin
             AddXmlEscape(ArrayName);
           Add('>');
           inc(n);
-        until objEnd = ']';
+        until info.EndOfObject = ']';
       end;
     end;
   '{':
@@ -6383,33 +6475,37 @@ begin
                 (Json^ <> #0) do
             inc(Json);
           if Json^ = '[' then // arrays are written as list of items, without root
-            Json := AddJsonToXML(Json, Name, @objEnd)
+            Json := AddJsonToXML(Json, Name, @info.EndOfObject)
           else
           begin
             Add('<');
             AddXmlEscape(Name);
             Add('>');
-            Json := AddJsonToXML(Json, Name, @objEnd);
+            Json := AddJsonToXML(Json, Name, @info.EndOfObject);
             Add('<', '/');
             AddXmlEscape(Name);
             Add('>');
           end;
-        until objEnd = '}';
+        until info.EndOfObject = '}';
       end;
     end;
   else
     begin // unescape the JSON content and write as UTF-8 escaped XML
-      Value := GetJsonField(Json, result, nil, EndOfObject);
-      if Value = nil then
+      info.Json := Json;
+      info.GetJsonField;
+      if info.Value = nil then
         AddNull
       else
       begin
-        c := PInteger(Value)^ and $ffffff;
+        c := PInteger(info.Value)^ and $ffffff;
         if (c = JSON_BASE64_MAGIC_C) or
            (c = JSON_SQLDATE_MAGIC_C) then
-          inc(Value, 3); // just ignore the Magic codepoint encoded as UTF-8
-        AddXmlEscape(Value);
+          inc(info.Value, 3); // ignore the Magic codepoint encoded as UTF-8
+        AddXmlEscape(info.Value);
       end;
+      if EndOfObject <> nil then
+        EndOfObject^ := info.EndOfObject;
+      result := info.Json;
       exit;
     end;
   end;
@@ -7008,30 +7104,29 @@ end;
 
 function TJsonParserContext.ParseNext: boolean;
 begin
-  Value := GetJsonField(Json, Json, @WasString, @EndOfObject, @ValueLen);
+  GetJsonField;
   result := Json <> nil;
   Valid := result;
 end;
 
 function TJsonParserContext.ParseNextAny: boolean;
 begin
-  Value := GetJsonFieldOrObjectOrArray(Json, @WasString, @EndOfObject,
-    {handleobjarr=}true, {normalizbool=}true, @ValueLen);
+  GetJsonFieldOrObjectOrArray;
   result := Json <> nil;
   Valid := result;
 end;
 
 function TJsonParserContext.ParseUtf8: RawUtf8;
 begin
-  if not ParseNext then
-    ValueLen := 0; // return ''
+  GetJsonField;
+  Valid := Json <> nil;
   FastSetString(result, Value, ValueLen)
 end;
 
 function TJsonParserContext.ParseString: string;
 begin
-  if not ParseNext then
-    ValueLen := 0; // return ''
+  GetJsonField;
+  Valid := Json <> nil;
   Utf8DecodeToString(Value, ValueLen, result);
 end;
 
@@ -7147,7 +7242,7 @@ begin
       jpoObjectListClassNameGlobalFindClass in Options);
     if (Info <> nil) and
        (Json^ = ',') then
-      Json^ := '{' // will now parse other properties as a regular Json object
+      Json^ := '{' // to parse other properties as a regular Json object
     else
     begin
       Valid := false;
@@ -8165,10 +8260,10 @@ end;
 function JsonDecode(P: PUtf8Char; Names: PPUtf8CharArray; NamesCount: integer;
   Values: PValuePUtf8CharArray; HandleValuesAsObjectOrArray: boolean): PUtf8Char;
 var
-  i: PtrInt;
-  namelen, valuelen: integer;
-  name, value: PUtf8Char;
-  EndOfObject: AnsiChar;
+  v: PValuePUtf8Char;
+  name: PUtf8Char;
+  namelen, i: integer;
+  info: TGetJsonField;
 begin
   result := nil;
   if Values = nil then
@@ -8182,29 +8277,31 @@ begin
       exit
     else
       inc(P);
-  inc(P); // jump {
+  info.Json := P + 1; // jump {
   repeat
-    name := GetJsonPropName(P, @namelen);
+    name := GetJsonPropName(info.Json, @namelen);
     if name = nil then
       exit;  // invalid Json content
-    value := GetJsonFieldOrObjectOrArray(P, nil, @EndOfObject,
-      HandleValuesAsObjectOrArray, {normalizeboolean=}true, @valuelen);
-    if not (EndOfObject in [',', '}']) then
+    info.GetJsonFieldOrObjectOrArray(HandleValuesAsObjectOrArray);
+    if not (info.EndOfObject in [',', '}']) then
       exit; // invalid item separator
+    v := pointer(Values);
     for i := 0 to NamesCount do
-      if (Values[i].Text = nil) and
+      if (v^.Text = nil) and
          IdemPropNameU(Names[i], name, namelen) then
       begin
-        Values[i].Text := value;
-        Values[i].Len := valuelen;
+        v^.Text := info.Value;
+        v^.Len := info.ValueLen;
         break;
-      end;
-  until (P = nil) or
-        (EndOfObject = '}');
-  if P = nil then // result=nil indicates failure -> points to #0 for end of text
+      end
+      else
+        inc(v);
+  until (info.Json = nil) or
+        (info.EndOfObject = '}');
+  if info.Json = nil then // result=nil indicates failure -> points to #0
     result := @NULCHAR
   else
-    result := P;
+    result := info.Json;
 end;
 
 function JsonDecode(P: PUtf8Char; const Names: array of RawUtf8;
@@ -8223,9 +8320,7 @@ end;
 function JsonDecode(Json: PUtf8Char; const aName: RawUtf8;
   WasString: PBoolean; HandleValuesAsObjectOrArray: boolean): RawUtf8;
 var
-  P: PUtf8Char;
-  Len: integer;
-  EndOfObject: AnsiChar;
+  info: TGetJsonField;
 begin
   result := '';
   if Json = nil then
@@ -8235,32 +8330,32 @@ begin
       exit
     else
       inc(Json);
-  inc(Json); // jump {
+  info.Json := Json + 1; // jump {
   repeat
-    P := GetJsonPropName(Json, @Len);
-    if P = nil then
+    info.Value := GetJsonPropName(info.Json, @info.ValueLen);
+    if info.Value = nil then
       exit;  // invalid Json content
-    if IdemPropNameU(aName, P, Len) then
+    if IdemPropNameU(aName, info.Value, info.ValueLen) then
     begin
-      P := GetJsonFieldOrObjectOrArray(Json, WasString, nil,
-        HandleValuesAsObjectOrArray, true, @Len);
-      if P <> nil then
-        FastSetString(result, P, Len);
+      info.GetJsonFieldOrObjectOrArray(HandleValuesAsObjectOrArray);
+      if info.Json <> nil then
+        FastSetString(result, info.Value, info.ValueLen);
       exit;
     end;
-    Json := GotoNextJsonItem(Json, EndOfObject);
-    if not (EndOfObject in [',', '}']) then
+    info.Json := GotoNextJsonItem(info.Json, info.EndOfObject);
+    if not (info.EndOfObject in [',', '}']) then
       exit; // invalid item separator
-  until (Json = nil) or
-        ({%H-}EndOfObject = '}');
+  until (info.Json = nil) or
+        (info.EndOfObject = '}');
 end;
 
 function JsonDecode(P: PUtf8Char; out Values: TNameValuePUtf8CharDynArray;
   HandleValuesAsObjectOrArray: boolean): PUtf8Char;
 var
   n: PtrInt;
-  field: TNameValuePUtf8Char;
-  EndOfObject: AnsiChar;
+  info: TGetJsonField;
+  nametext: PUtf8Char;
+  namelen: integer;
 begin
   {$ifdef FPC}
   Values := nil;
@@ -8275,27 +8370,30 @@ begin
       else
         inc(P);
     inc(P); // jump {
+    info.Json := P;
     repeat
-      {$ifdef CPU64}
-      field.Name.Len := 0; // TValuePUtf8Char.Len=PtrInt -> reset high bits
-      field.Value.Len := 0;
-      {$endif CPU64}
-      field.Name.Text := GetJsonPropName(P, @field.Name.Len);
-      if field.Name.Text = nil then
+      nametext := GetJsonPropName(info.Json, @nameLen);
+      if nametext = nil then
         exit;  // invalid JSON content
-      field.Value.Text := GetJsonFieldOrObjectOrArray(P, nil, @EndOfObject,
-        HandleValuesAsObjectOrArray, true, @field.Value.Len);
-      if not (EndOfObject in [',', '}']) then
+      info.GetJsonFieldOrObjectOrArray(HandleValuesAsObjectOrArray);
+      if not (info.EndOfObject in [',', '}']) then
         exit; // invalid item separator
       if n = length(Values) then
         SetLength(Values, NextGrow(n));
-      Values[n] := field;
+      with Values[n] do
+      begin
+        Name.Text := nametext;
+        Name.Len := namelen;
+        Value.Text := info.Value;
+        Value.Len := info.ValueLen;
+      end;
       inc(n);
-    until (P = nil) or
-          (EndOfObject = '}');
+    until (info.Json = nil) or
+          (info.EndOfObject = '}');
+    P := info.Json;
   end;
   DynArrayFakeLength(Values, n); // SetLength() would have made a realloc()
-  if P = nil then // result=nil indicates failure -> points to #0 for end of text
+  if P = nil then // result=nil indicates failure -> points to #0
     result := @NULCHAR
   else
     result := P;
@@ -8378,41 +8476,40 @@ end;
 
 function TSynNameValue.InitFromJson(Json: PUtf8Char; aCaseSensitive: boolean): boolean;
 var
-  P, N, V: PUtf8Char;
+  N: PUtf8Char;
   nam, val: RawUtf8;
-  Nlen, Vlen, c: integer;
-  EndOfObject: AnsiChar;
+  Nlen, c: integer;
+  info: TGetJsonField;
 begin
   result := false;
   Init(aCaseSensitive);
-  P := Json;
-  if P = nil then
+  if Json = nil then
     exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  if P^ <> '{' then
+  while (Json^ <= ' ') and
+        (Json^ <> #0) do
+    inc(Json);
+  if Json^ <> '{' then
     exit;
   repeat
-    inc(P)
-  until (P^ = #0) or
-        (P^ > ' ');
-  Json := P;
-  c := JsonObjectPropCount(P); // fast 900MB/s parsing
+    inc(Json)
+  until (Json^ = #0) or
+        (Json^ > ' ');
+  info.Json := Json;
+  c := JsonObjectPropCount(Json); // fast 900MB/s parsing
   if c <= 0 then
     exit;
   DynArray.Capacity := c;
   repeat
-    N := GetJsonPropName(Json, @Nlen);
+    N := GetJsonPropName(info.Json, @Nlen);
     if N = nil then
       exit;
-    V := GetJsonFieldOrObjectOrArray(Json, nil, @EndOfObject, true, true, @Vlen);
-    if Json = nil then
+    info.GetJsonFieldOrObjectOrArray;
+    if info.Json = nil then
       exit;
     FastSetString(nam, N, Nlen);
-    FastSetString(val, V, Vlen);
+    FastSetString(val, info.Value, info.Valuelen);
     Add(nam, val);
-  until EndOfObject = '}';
+  until info.EndOfObject = '}';
   result := true;
 end;
 

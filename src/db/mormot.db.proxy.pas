@@ -1314,10 +1314,12 @@ end;
 
 { TSqlDBProxyStatementAbstract }
 
-procedure TSqlDBProxyStatementAbstract.InternalHeaderProcess(Data: PByte; DataLen: PtrInt);
+procedure TSqlDBProxyStatementAbstract.InternalHeaderProcess(
+  Data: PByte; DataLen: PtrInt);
 var
   magic, F, colcount: integer;
   prop: PSqlDBColumnProperty;
+  colname: RawUtf8;
 begin
   fDataCurrentRowValuesStart := nil;
   fDataCurrentRowValuesSize := 0;
@@ -1336,7 +1338,8 @@ begin
     fColumn.Capacity := colcount;
     for F := 0 to colcount - 1 do
     begin
-      prop := fColumn.AddAndMakeUniqueName(FromVarString(Data));
+      FromVarString(Data, colname);
+      prop := fColumn.AddAndMakeUniqueName(colname);
       prop^.ColumnType := TSqlDBFieldType(Data^);
       inc(Data);
       prop^.ColumnValueDBSize := FromVarUInt32(Data);

@@ -1710,7 +1710,7 @@ begin
     '"BUILDYEAR":2011},{"MAJOR":1,"MINOR":2,"RELEASE":3,"BUILD":4,'));
   CheckHash(U, $74523E0F, 'hash32i');
   {$else}
-  Check(U = '[' + JSON_BASE64_MAGIC_UTF8 + BinToBase64(Test) + '"]');
+  CheckEqual(U, '[' + JSON_BASE64_MAGIC_UTF8 + BinToBase64(Test) + '"]');
   {$endif HASEXTRECORDRTTI}
   AFP.Clear;
   Check(AFP.LoadFrom(pointer(Test)) - pointer(Test) = length(Test));
@@ -4789,8 +4789,11 @@ begin
   PB := ToVarString(U, PB);
   check(PAnsiChar(PB) - pointer(res) = length(U) + 1);
   PB := pointer(res);
-  res := FromVarString(PB);
-  check(res = U);
+  U2 := FromVarString(PB);
+  check(U2 = U);
+  PB := pointer(res);
+  FromVarString(PB, U2);
+  check(U2 = U);
   Check(UnQuoteSqlStringVar('"one two"', U) <> nil);
   Check(U = 'one two');
   Check(UnQuoteSqlStringVar('one two', U) <> nil);

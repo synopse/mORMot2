@@ -866,11 +866,10 @@ const
 procedure TJwtAbstract.Parse(const Token: RawUtf8; var JWT: TJwtContent;
   out headpayload: RawUtf8; out signature: RawByteString; excluded: TJwtClaims);
 var
-  payloadend, j, toklen, c, cap, headerlen, Nlen, VLen, a: integer;
+  payloadend, j, toklen, c, cap, headerlen, Nlen, a: integer;
   P: PUtf8Char;
-  N, V: PUtf8Char;
-  wasString: boolean;
-  EndOfObject: AnsiChar;
+  N: PUtf8Char;
+  info: TGetJsonField;
   claim: TJwtClaim;
   requiredclaims: TJwtClaims;
   value: variant;
@@ -947,24 +946,24 @@ begin
         exit; // invalid input
     end;
     requiredclaims := fClaims - excluded;
+    info.Json := P;
     if cap > 0 then
       repeat
-        N := GetJsonPropName(P, @Nlen);
+        N := GetJsonPropName(info.Json, @Nlen);
         if N = nil then
           exit;
-        V := GetJsonFieldOrObjectOrArray(
-          P, @wasString, @EndOfObject, true, true, @Vlen);
-        if P = nil then
+        info.GetJsonFieldOrObjectOrArray;
+        if info.Json = nil then
           exit; // error in parsed input
         if (Nlen = 3) and
-           (V <> nil) then
+           (info.Value <> nil) then
         begin
           // check for the standard JWT claims
           c := PInteger(N)^;
           for claim := low(JWT.reg) to high(JWT.reg) do
             if PInteger(JWT_CLAIMS_TEXT[claim])^ = c then
             begin
-              if V^ = #0 then
+              if info.Value^ = #0 then
                 exit;
               include(JWT.claims, claim);
               if not (claim in fClaims) and
@@ -973,7 +972,7 @@ begin
                 JWT.result := jwtUnexpectedClaim;
                 exit;
               end;
-              FastSetString(JWT.reg[claim], V, VLen);
+              FastSetString(JWT.reg[claim], info.Value, info.ValueLen);
               if claim in requiredclaims then
                 case claim of
                   jrcJwtID:
@@ -987,7 +986,7 @@ begin
                   jrcAudience:
                     if JWT.reg[jrcAudience][1] = '[' then
                     begin
-                      aud.InitJson(JWT.reg[jrcAudience], JSON_FAST);
+                      aud.InitJsonInPlace(info.Value, JSON_FAST);
                       if aud.Count = 0 then
                         exit;
                       for j := 0 to aud.Count - 1 do
@@ -1027,12 +1026,12 @@ begin
         if jrcData in excluded then
           continue; // caller didn't want to fill JWT.data
         include(JWT.claims, jrcData);
-        GetVariantFromJsonField(V, wasString, value, @JSON_[mFast],
-          joDoubleInData in fOptions, VLen);
+        GetVariantFromJsonField(info.Value, info.WasString, value,
+          @JSON_[mFast], joDoubleInData in fOptions, info.ValueLen);
         if JWT.data.Count = 0 then
           JWT.data.Capacity := cap;
         JWT.data.AddValue(N, Nlen, value)
-      until EndOfObject = '}';
+      until info.EndOfObject = '}';
     if requiredclaims - JWT.claims <> [] then
       JWT.result := jwtMissingClaim
     else

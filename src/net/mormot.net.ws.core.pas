@@ -405,8 +405,8 @@ type
       const Content, ContentType: RawByteString; var frame: TWebSocketFrame);
         virtual; abstract;
     function FrameDecompress(const frame: TWebSocketFrame;
-      const Head: RawUtf8; const values: array of PRawByteString;
-      var contentType, content: RawByteString): boolean; virtual; abstract;
+      const Head: RawUtf8; const values: array of PRawUtf8;
+      var contentType, content: RawUtf8): boolean; virtual; abstract;
     /// convert the input information of REST request to a WebSocket frame
     procedure InputToFrame(Ctxt: THttpServerRequestAbstract; aNoAnswer: boolean;
       out request: TWebSocketFrame; out head: RawUtf8); virtual;
@@ -433,8 +433,8 @@ type
     procedure FrameCompress(const Head: RawUtf8; const Values: array of const;
       const Content, ContentType: RawByteString; var frame: TWebSocketFrame); override;
     function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUtf8;
-      const values: array of PRawByteString;
-      var contentType, content: RawByteString): boolean; override;
+      const values: array of PRawUtf8;
+      var contentType, content: RawUtf8): boolean; override;
     function FrameData(const frame: TWebSocketFrame; const Head: RawUtf8;
       HeadFound: PRawUtf8 = nil; PMax: PPByte = nil): pointer; override;
     function FrameType(const frame: TWebSocketFrame): TShort31; override;
@@ -469,8 +469,8 @@ type
       const Values: array of const; const Content, ContentType: RawByteString;
       var frame: TWebSocketFrame); override;
     function FrameDecompress(const frame: TWebSocketFrame;
-      const Head: RawUtf8; const values: array of PRawByteString;
-      var contentType, content: RawByteString): boolean; override;
+      const Head: RawUtf8; const values: array of PRawUtf8;
+      var contentType, content: RawUtf8): boolean; override;
     procedure AfterGetFrame(var frame: TWebSocketFrame); override;
     procedure BeforeSendFrame(var frame: TWebSocketFrame); override;
     function FrameData(const frame: TWebSocketFrame; const Head: RawUtf8;
@@ -1470,7 +1470,7 @@ end;
 function TWebSocketProtocolRest.FrameToInput(var request: TWebSocketFrame;
   out aNoAnswer: boolean; Ctxt: THttpServerRequestAbstract): boolean;
 var
-  URL, Method, InHeaders, NoAnswer, InContentType, InContent: RawByteString;
+  URL, Method, InHeaders, NoAnswer, InContentType, InContent: RawUtf8;
 begin
   result := FrameDecompress(request, 'r',
     [@Method, @URL, @InHeaders, @NoAnswer], InContentType, InContent);
@@ -1510,7 +1510,7 @@ end;
 function TWebSocketProtocolRest.FrameToOutput(var answer: TWebSocketFrame;
   Ctxt: THttpServerRequestAbstract): cardinal;
 var
-  status, outHeaders, outContentType, outContent: RawByteString;
+  status, outHeaders, outContentType, outContent: RawUtf8;
 begin
   result := HTTP_NOTFOUND;
   if not FrameDecompress(answer, 'a',
@@ -1633,46 +1633,35 @@ begin
 end;
 
 function TWebSocketProtocolJson.FrameDecompress(const frame: TWebSocketFrame;
-  const Head: RawUtf8; const values: array of PRawByteString;
-  var contentType, content: RawByteString): boolean;
+  const Head: RawUtf8; const values: array of PRawUtf8;
+  var contentType, content: RawUtf8): boolean;
 var
   i: PtrInt;
-  P: PUtf8Char;
-  b64: PUtf8Char;
-  b64len: integer;
-
-  procedure GetNext(var content: RawByteString);
-  var
-    txt: PUtf8Char;
-    txtlen: integer;
-  begin
-    txt := GetJsonField(P, P, nil, nil, @txtlen);
-    FastSetString(RawUtf8(content), txt, txtlen);
-  end;
-
+  info: TGetJsonField;
 begin
   result := false;
-  P := FrameData(frame, Head);
-  if P = nil then
+  info.Json := FrameData(frame, Head);
+  if info.Json = nil then
     exit;
-  if not NextNotSpaceCharIs(P, ':') or
-     not NextNotSpaceCharIs(P, '[') then
+  if not NextNotSpaceCharIs(info.Json, ':') or
+     not NextNotSpaceCharIs(info.Json, '[') then
     exit;
   for i := 0 to high(values) do
-    GetNext(values[i]^);
-  GetNext(contentType);
-  if P = nil then
+    info.GetJsonValue(values[i]^);
+  info.GetJsonValue(contentType);
+  if info.Json = nil then
     exit;
   if (contentType = '') or
      IdemPropNameU(contentType, JSON_CONTENT_TYPE) then
-    GetJsonItemAsRawJson(P, RawJson(content))
+    GetJsonItemAsRawJson(info.Json, RawJson(content))
   else if IdemPChar(pointer(contentType), 'TEXT/') then
-    GetNext(content)
+    info.GetJsonValue(content)
   else
   begin
-    b64 := GetJsonField(P, P, nil, nil, @b64len);
-    if not Base64MagicCheckAndDecode(b64, b64len, content) then
-      exit;
+    info.GetJsonField;
+    if not Base64MagicCheckAndDecode(info.Value, info.ValueLen,
+        RawByteString(content)) then
+      FastSetString(content, info.Value, info.ValueLen);
   end;
   result := true;
 end;
@@ -1912,8 +1901,8 @@ begin
 end;
 
 function TWebSocketProtocolBinary.FrameDecompress(const frame: TWebSocketFrame;
-  const Head: RawUtf8; const values: array of PRawByteString;
-  var contentType, content: RawByteString): boolean;
+  const Head: RawUtf8; const values: array of PRawUtf8;
+  var contentType, content: RawUtF8): boolean;
 var
   i: PtrInt;
   P: PByte;
@@ -1923,12 +1912,12 @@ begin
   if P = nil then
     exit;
   for i := 0 to high(values) do
-    FromVarString(P, values[i]^ ,CP_UTF8);
-  FromVarString(P, contentType, CP_UTF8);
+    FromVarString(P, values[i]^);
+  FromVarString(P, contentType);
   i := length(frame.payload) - (PAnsiChar(P) - pointer(frame.payload));
   if i < 0 then
     exit;
-  FastSetRawByteString(content, P, i);
+  FastSetString(content, P, i);
   result := true;
 end;
 

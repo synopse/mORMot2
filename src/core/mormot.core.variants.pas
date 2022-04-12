@@ -2510,6 +2510,12 @@ function GetVariantFromNotStringJson(Json: PUtf8Char;
   var Value: TVarData; AllowDouble: boolean): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// low-level function to parse a JSON buffer content into a variant
+// - warning: will decode in the Json buffer memory itself (no memory
+// allocation or copy), for faster process - so take care that it is not shared
+procedure GetJsonToAnyVariant(var Value: variant; var Info: TGetJsonField;
+  Options: PDocVariantOptions; AllowDouble: boolean = false); overload;
+
 /// low-level function to parse a JSON content into a variant
 // - internal method used by VariantLoadJson(), GetVariantFromJsonField() and
 // TDocVariantData.InitJson()
@@ -2524,6 +2530,7 @@ function GetVariantFromNotStringJson(Json: PUtf8Char;
 // if you need to access it later
 procedure GetJsonToAnyVariant(var Value: variant; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; Options: PDocVariantOptions; AllowDouble: boolean);
+    overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// identify either varInt64, varDouble, varCurrency types following JSON format
 // - any non valid number is returned as varString
@@ -4658,11 +4665,11 @@ function TDocVariantData.InitFrom(
 begin
   TRttiVarData(self).VType := TRttiVarData(CloneFrom).VType; // VType+VOptions
   VName := CloneFrom.VName;    // byref copy
+  VCount := CloneFrom.VCount;
   if CloneValues then
     VValue := CloneFrom.VValue // byref copy
   else
-    SetLength(VValue, CloneFrom.VCount); // setup void values
-  VCount := CloneFrom.VCount;
+    SetLength(VValue, VCount); // setup void values
   result := pointer(VValue);
 end;
 
@@ -5019,19 +5026,17 @@ end;
 function TDocVariantData.InitArrayFromResults(Json: PUtf8Char; JsonLen: PtrInt;
   aOptions: TDocVariantOptions): boolean;
 var
+  J: PUtf8Char;
   fieldcount, rowcount, capa, r, f: PtrInt;
-  J, V: PUtf8Char;
-  VLen: integer;
-  wasstring: boolean;
-  endofobj: AnsiChar;
+  info: TGetJsonField;
   dv: PDocVariantData;
   val: PVariant;
   proto: TDocVariantData;
 begin
   result := false;
   Init(aOptions, dvArray);
-  J := GotoNextNotSpace(Json);
-  if IsNotExpandedBuffer(J, Json + JsonLen, fieldcount, rowcount) then
+  info.Json := GotoNextNotSpace(Json);
+  if IsNotExpandedBuffer(info.Json, Json + JsonLen, fieldcount, rowcount) then
   begin
     // A. Not Expanded (more optimized) format as array of values
     // {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
@@ -5044,25 +5049,24 @@ begin
     proto.Capacity := fieldcount;
     for f := 1 to fieldcount do
     begin
-      V := GetJsonField(J, J, @wasstring, nil, @VLen);
-      if not wasstring then
+      info.GetJsonField;
+      if not info.WasString then
         exit; // should start with field names
-      proto.AddValue(V, VLen, null);
+      proto.AddValue(info.Value, info.ValueLen, null); // set proper field name
     end;
     // 3. fill all nested objects from incoming values
-    Capacity := rowcount;
-    SetCount(rowcount);
-    dv := pointer(Values);
+    SetLength(VValue, rowcount);
+    dv := pointer(VValue);
     for r := 1 to rowcount do
     begin
-      val := dv^.InitFrom(proto, {values=}false); // names byref + void values
+      val := dv^.InitFrom(proto, {values=}false); // names byref + no values
       for f := 1 to fieldcount do
       begin
-        GetJsonToAnyVariant(val^, J, @endofobj, @aOptions, false{double=aOptions});
-        if J = nil then
-          exit;
+        GetJsonToAnyVariant(val^, info, @aOptions);
         inc(val);
       end;
+      if info.Json = nil then
+        exit;
       inc(dv); // next object
     end;
   end
@@ -5071,14 +5075,14 @@ begin
     // B. Expanded format as array of objects (each with field names)
     // [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...]
     // 1. get first object (will reuse its field names)
-    J := GotoFieldCountExpanded(J);
-    if (J = nil) or
-       (J^ = ']') then
+    info.Json := GotoFieldCountExpanded(info.Json);
+    if (info.Json = nil) or
+       (info.Json^ = ']') then
       exit; // [] -> valid, but void data
-    J := proto.InitJsonInPlace(J, aOptions, @endofobj);
-    if J = nil then
+    info.Json := proto.InitJsonInPlace(info.Json, aOptions, @info.EndOfObject);
+    if info.Json = nil then
       exit;
-    if endofobj = ']' then
+    if info.EndOfObject = ']' then
     begin
       AddItem(variant(proto)); // single item array
       result := true;
@@ -5086,11 +5090,12 @@ begin
     end;
     rowcount := 0;
     capa := 16;
-    Capacity := capa;
-    dv := pointer(Values);
+    SetLength(VValue, capa);
+    dv := pointer(VValue);
     dv^ := proto;
     // 2. get values (assume fieldcount are always the same as in the first object)
     repeat
+      J := info.Json;
       while (J^ <> '{') and
             (J^ <> ']') do // go to next object beginning
         if J^ = #0 then
@@ -5100,40 +5105,33 @@ begin
       inc(rowcount);
       if J^ = ']' then
         break;
-      inc(J); // jmp '}'
+      info.Json := J + 1; // jmp '}'
       if rowcount = capa then
       begin
         capa := NextGrow(capa);
-        Capacity := capa;
-        dv := pointer(Values);
-        inc(dv, rowcount);
+        SetLength(VValue, capa);
+        dv := @VValue[rowcount];
       end
       else
         inc(dv);
       val := dv^.InitFrom(proto, {values=}false);
       for f := 1 to proto.Count do
       begin
-        J := GotoEndJsonItemString(J); // ignore field names (assume same order)
-        if J = nil then
-          break;
-        inc(J); // ignore jcEndOfJsonFieldOr0
-        GetJsonToAnyVariant(val^, J, @endofobj, @aOptions, false{double=aOptions});
-        if J = nil then
-          break;
+        info.Json := GotoEndJsonItemString(info.Json); // ignore field names
+        if info.Json = nil then
+          exit;
+        inc(info.Json); // ignore jcEndOfJsonFieldOr0
+        GetJsonToAnyVariant(val^, info, @aOptions);
+        if info.Json = nil then
+          exit;
         inc(val);
       end;
-      if endofobj <> '}' then
-      begin
-        J := nil;
-        break;
-      end;
+      if info.EndOfObject<> '}' then
+       exit;
     until false;
-    SetCount(rowcount);
   end;
-  if J = nil then
-    Clear
-  else
-    result := true;
+  VCount := rowcount;
+  result := true;
 end;
 
 function TDocVariantData.InitArrayFromResults(const Json: RawUtf8;
@@ -5197,7 +5195,7 @@ end;
 function TDocVariantData.InitJsonInPlace(Json: PUtf8Char;
   aOptions: TDocVariantOptions; aEndOfObject: PUtf8Char): PUtf8Char;
 var
-  EndOfObject: AnsiChar;
+  info: TGetJsonField;
   Name: PUtf8Char;
   NameLen: integer;
   n, cap: PtrInt;
@@ -5241,6 +5239,7 @@ begin
           SetLength(VValue, cap);
           Val := pointer(VValue);
           n := 0;
+          info.Json := Json;
           repeat
             if n = cap then
             begin
@@ -5250,24 +5249,23 @@ begin
               Val := @VValue[n];
             end;
             // unserialize the next item
-            GetJsonToAnyVariant(val^, Json, @EndOfObject, @VOptions,
-              {double=}false{is set from VOptions});
-            if Json = nil then
+            GetJsonToAnyVariant(val^, info, @VOptions);
+            if info.Json = nil then
               break; // invalid input
             if intvalues <> nil then
               intvalues.UniqueVariant(val^);
             inc(Val);
             inc(n);
-          until EndOfObject = ']';
+          until info.EndOfObject = ']';
+          Json := info.Json;
           if Json = nil then
           begin
             // invalid input
             VValue := nil;
             exit;
-          end
-          else
-            // ok - but no SetLength(..,VCount) if NextGrow() on huge input
-            VCount := n;
+          end;
+          // ok - but no SetLength(..,VCount) if NextGrow() on huge input
+          VCount := n;
         end;
       end;
     '{':
@@ -5305,46 +5303,46 @@ begin
           Val := pointer(VValue);
           SetLength(VName, cap);
           n := 0;
+          info.Json := Json;
           repeat
             // see http://docs.mongodb.org/manual/reference/mongodb-extended-Json
-            Name := GetJsonPropName(Json, @NameLen);
+            Name := GetJsonPropName(info.Json, @NameLen);
             if Name = nil then
               break; // invalid input
             if n = cap then
             begin
               // grow if our initial guess was aborted due to huge input
               cap := NextGrow(cap);
-              SetLength(VValue, cap);
               SetLength(VName, cap);
+              SetLength(VValue, cap);
               Val := @VValue[n];
             end;
             if intnames <> nil then
               intnames.Unique(VName[n], Name, NameLen)
             else
               FastSetString(VName[n], Name, NameLen);
-            GetJsonToAnyVariant(Val^, Json, @EndOfObject, @VOptions,
-              {double=}false{is set from VOptions});
-            if Json = nil then
-              if EndOfObject = '}' then // valid object end
-                Json := @NULCHAR
+            GetJsonToAnyVariant(Val^, info, @VOptions);
+            if info.Json = nil then
+              if info.EndOfObject = '}' then // valid object end
+                info.Json := @NULCHAR
               else
                 break; // invalid input
             if intvalues <> nil then
               intvalues.UniqueVariant(Val^);
             inc(n);
             inc(Val);
-          until EndOfObject = '}';
+          until info.EndOfObject = '}';
+          Json := info.Json;
           if (Name = nil) or
              (Json = nil) then
-           begin
-             // invalid input
-             VName := nil;
-             VValue := nil;
-             exit;
-           end
-           else
-             // ok - but no SetLength(..,VCount) if NextGrow() on huge input
-             VCount := n;
+          begin
+            // invalid input
+            VName := nil;
+            VValue := nil;
+            exit;
+          end;
+          // ok - but no SetLength(..,VCount) if NextGrow() on huge input
+          VCount := n;
         end;
       end;
     'n',
@@ -8047,121 +8045,135 @@ end;
 procedure GetJsonToAnyVariant(var Value: variant; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; Options: PDocVariantOptions; AllowDouble: boolean);
 var
+  info: TGetJsonField;
+begin
+  info.Json := Json;
+  GetJsonToAnyVariant(Value, Info, Options, AllowDouble);
+  if EndOfObject <> nil then
+    EndOfObject^ := info.EndOfObject;
+  Json := info.Json;
+end;
+
+procedure GetJsonToAnyVariant(var Value: variant; var Info: TGetJsonField;
+  Options: PDocVariantOptions; AllowDouble: boolean);
+var
   V: TVarData absolute Value;
-  n, Plen: integer;
+  n: integer;
   t: ^TSynInvokeableVariantType;
-  P, PBeg: PUtf8Char;
+  J, J2: PUtf8Char;
   EndOfObject2: AnsiChar;
   wasParsedWithinString: boolean;
-  wasString: boolean;
 label
   parse, parsed, astext, endobj;
 begin
   if PInteger(@V)^ <> 0 then
     VarClearProc(V);
-  if Json = nil then
+  if Info.Json = nil then
     exit;
-  if EndOfObject <> nil then
-    EndOfObject^ := ' ';
+  Info.EndOfObject := ' ';
   if (Options <> nil) and
      (dvoAllowDoubleValue in Options^) then
     AllowDouble := true;
   wasParsedWithinString := false;
-  P := Json;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  case JSON_TOKENS[P^] of
+  J := Info.Json;
+  while (J^ <= ' ') and
+        (J^ <> #0) do
+    inc(J);
+  case JSON_TOKENS[J^] of
     jtFirstDigit:  // '-', '0'..'9': numbers are directly processed
       begin
-        PBeg := P;
-        P := GetNumericVariantFromJson(P, V, AllowDouble);
-        if P = nil then
+        Info.Value := J;
+        J := GetNumericVariantFromJson(J, V, AllowDouble);
+        if J = nil then
         begin
           // not a supported number
           if AllowDouble then
           begin
-            Json := nil; // we expected the precision to be enough
+            Info.Json := nil; // we expected the precision to be enough
             exit;
           end;
           // it may be a double value, but we didn't allow them -> store as text
-          P := PBeg;
+          J := Info.Value;
           repeat
-            inc(P); // #0, ',', ']', '}'
-          until not (jcDigitFloatChar in JSON_CHARS[P^]);
-          PLen := P - PBeg;
-          P := GotoNextNotSpace(P);
-          if EndOfObject <> nil then
-            EndOfObject^ := P^;
-          if P^ <> #0 then
-            inc(P);
-          Json := P;
-          P := PBeg;
+            inc(J); // #0, ',', ']', '}'
+          until not (jcDigitFloatChar in JSON_CHARS[J^]);
+          Info.ValueLen := J - Info.Value;
+          J := GotoNextNotSpace(J);
+          Info.EndOfObject := J^;
+          if J^ <> #0 then
+            inc(J);
+          Info.Json := J;
           goto astext;
         end;
         // we parsed a full number as variant
-endobj: while (P^ <= ' ') and
-              (P^ <> #0) do
-          inc(P);
-        if EndOfObject <> nil then
-          EndOfObject^ := P^;
-        if P^ <> #0 then
-          inc(P);
-        Json := P;
+endobj: Info.ValueLen := J - Info.Value;
+        while (J^ <= ' ') and
+              (J^ <> #0) do
+          inc(J);
+        Info.EndOfObject := J^;
+        if J^ <> #0 then
+          inc(J);
+        Info.Json := J;
         exit;
       end;
     jtDoubleQuote:
-      if (Options <> nil) and
-         (dvoJsonObjectParseWithinString in Options^) then
       begin
-        P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
-        EndOfObject := nil;
-        wasParsedWithinString := true;
-      end
-      else
-      begin
-        // parse string/numerical values (or true/false/null constants)
-parse:  P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
-parsed: if {%H-}wasString or
-           not GetVariantFromNotStringJson(P, V, AllowDouble) then
+        Info.Json := J;
+        if (Options <> nil) and
+           (dvoJsonObjectParseWithinString in Options^) then
         begin
-astext:   TRttiVarData(V).VType := varString;
-          V.VAny := nil; // avoid GPF below
-          FastSetString(RawUtf8(V.VAny), P, Plen{%H-});
+          Info.GetJsonField;
+          J := Info.Value;
+          wasParsedWithinString := true;
+        end
+        else
+        begin
+          // parse string/numerical values (or true/false/null constants)
+parse:    Info.GetJsonField;
+parsed:   if Info.WasString or
+             not GetVariantFromNotStringJson(Info.Value, V, AllowDouble) then
+          begin
+astext:     TRttiVarData(V).VType := varString;
+            V.VAny := nil; // avoid GPF below
+            FastSetString(RawUtf8(V.VAny), Info.Value, Info.Valuelen);
+          end;
+          exit;
         end;
-        exit;
       end;
     jtNullFirstChar:
-      if (PInteger(P)^ = NULL_LOW) and
-         (jcEndOfJsonValueField in JSON_CHARS[P[4]]) then
+      if (PInteger(J)^ = NULL_LOW) and
+         (jcEndOfJsonValueField in JSON_CHARS[J[4]]) then
       begin
+        Info.Value := J;
         TRttiVarData(V).VType := varNull;
-        inc(P, 4);
+        inc(J, 4);
         goto endobj;
       end;
     jtFalseFirstChar:
-      if (PInteger(P + 1)^ = FALSE_LOW2) and
-         (jcEndOfJsonValueField in JSON_CHARS[P[5]]) then
+      if (PInteger(J + 1)^ = FALSE_LOW2) and
+         (jcEndOfJsonValueField in JSON_CHARS[J[5]]) then
       begin
+        Info.Value := J;
         TRttiVarData(V).VType := varBoolean;
         V.VInteger := ord(false);
-        inc(P, 5);
+        inc(J, 5);
         goto endobj;
       end;
     jtTrueFirstChar:
-      if (PInteger(P)^ = TRUE_LOW) and
-         (jcEndOfJsonValueField in JSON_CHARS[P[4]]) then
+      if (PInteger(J)^ = TRUE_LOW) and
+         (jcEndOfJsonValueField in JSON_CHARS[J[4]]) then
       begin
+        Info.Value := J;
         TRttiVarData(V).VType := varBoolean;
         V.VInteger := ord(true);
-        inc(P, 4);
+        inc(J, 4);
         goto endobj;
       end;
   end;
   // if we reach here, input Json may be some complex value
   if Options = nil then
   begin
-    Json := nil;
+    Info.Json := nil;
     exit; // clearly invalid basic JSON
   end;
   if not (dvoJsonParseDoNotTryCustomVariants in Options^) then
@@ -8172,41 +8184,48 @@ astext:   TRttiVarData(V).VType := varString;
     begin
       n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF; // call all TryJsonToVariant()
       repeat
-        PBeg := P;
+        J2 := J;
         // currently, only implemented by mormot.db.nosql.bson BsonVariantType
-        if t^.TryJsonToVariant(PBeg, Value, @EndOfObject2) then
+        if t^.TryJsonToVariant(J2, Value, @EndOfObject2) then
         begin
           if not wasParsedWithinString then
           begin
-            if EndOfObject <> nil then
-              EndOfObject^ := EndOfObject2;
-            Json := PBeg;
+            Info.EndOfObject := EndOfObject2;
+            Info.Json := J2;
           end;
           exit;
         end;
-        inc(t);
         dec(n);
-      until n = 0;
+        if n = 0 then
+          break;
+        inc(t);
+      until false;
     end;
   end;
-  if P^ in ['{', '['] then
+  if J^ in ['{', '['] then
   begin
     // default Json parsing and conversion to TDocVariant instance
-    P := TDocVariantData(Value).InitJsonInPlace(P, Options^, EndOfObject);
-    if P = nil then
+    J := TDocVariantData(Value).InitJsonInPlace(J, Options^, @EndOfObject2);
+    if J = nil then
     begin
       TDocVariantData(Value).ClearFast;
-      Json := nil;
+      Info.Json := nil;
       exit; // error parsing
     end;
     if not wasParsedWithinString then
-      Json := P;
+    begin
+      Info.EndOfObject := EndOfObject2;
+      Info.Json := J;
+    end;
   end
   else // back to simple variant types
     if wasParsedWithinString then
       goto parsed
     else
+    begin
+      Info.Json := J;
       goto parse;
+    end;
 end;
 
 function TextToVariantNumberTypeNoDouble(Json: PUtf8Char): cardinal;
@@ -8542,6 +8561,7 @@ procedure GetVariantFromJsonField(Json: PUtf8Char; wasString: boolean;
   AllowDouble: boolean; JsonLen: integer);
 var
   V: TVarData absolute Value;
+  info: TGetJsonField;
 begin
   // first handle any strict-Json syntax objects or arrays into custom variants
   if (TryCustomVariants <> nil) and
@@ -8549,7 +8569,8 @@ begin
     if (GotoNextNotSpace(Json)^ in ['{', '[']) and
        not wasString then
     begin // also supports dvoJsonObjectParseWithinString
-      GetJsonToAnyVariant(Value, Json, nil, TryCustomVariants, AllowDouble);
+      info.Json := Json;
+      GetJsonToAnyVariant(Value, info, TryCustomVariants, AllowDouble);
       exit;
     end
     else if dvoAllowDoubleValue in TryCustomVariants^ then
@@ -8571,10 +8592,13 @@ end;
 
 procedure _BinaryVariantLoadAsJson(var Value: variant; Json: PUtf8Char;
   TryCustomVariant: pointer);
+var
+  info: TGetJsonField;
 begin
   if TryCustomVariant = nil then
     TryCustomVariant := @JSON_[mFast];
-  GetJsonToAnyVariant(Value, Json, nil, TryCustomVariant, {double=}true);
+  info.Json := Json;
+  GetJsonToAnyVariant(Value, info, TryCustomVariant, {double=}true);
 end;
 
 function VariantLoadJson(var Value: Variant; const Json: RawUtf8;

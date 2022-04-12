@@ -5867,10 +5867,8 @@ end;
 function TOrmTableJson.ParseAndConvert(Buffer: PUtf8Char; BufferLen: integer): boolean;
 var
   i, max, resmax, f: PtrInt;
-  EndOfObject: AnsiChar;
-  P, V: PUtf8Char;
-  VLen: integer;
-  wasString: boolean;
+  P: PUtf8Char;
+  info: TGetJsonField;
 begin
   result := false; // error on parsing
   fFieldIndexID := -1;
@@ -5881,8 +5879,8 @@ begin
   {$ifndef NOPOINTEROFFSET}
   fDataStart := Buffer; // before first value, to ensure offset=0 means nil
   {$endif NOPOINTEROFFSET}
-  P := GotoNextNotSpace(Buffer);
-  if IsNotExpandedBuffer(P, Buffer + BufferLen, fFieldCount, fRowCount) then
+  info.Json := GotoNextNotSpace(Buffer);
+  if IsNotExpandedBuffer(info.Json, Buffer + BufferLen, fFieldCount, fRowCount) then
   begin
     // A. Not Expanded (more optimized) format as array of values
     // {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
@@ -5904,26 +5902,25 @@ begin
     dec(max);
     for i := 0 to fFieldCount - 1 do
     begin
-      V := GetJsonField(P, P, @wasString, nil, @VLen);
-      SetResults(i, V, VLen);
-      if not wasString then
+      info.GetJsonField;
+      SetResults(i, info.Value, info.ValueLen);
+      if not info.WasString then
         exit; // should start with field names
       if (fFieldIndexID < 0) and
-         IsRowID(V) then
+         IsRowID(info.Value) then
         fFieldIndexID := i;
     end;
     f := 0;
     for i := fFieldCount to max do
     begin
       // get a field value
-      V := GetJsonFieldOrObjectOrArray(P, @wasString, nil,
-        {handleobjarra=}true, {normalizebool=}false, @VLen);
-      SetResults(i, V, VLen);
-      if (P = nil) and
+      info.GetJsonFieldOrObjectOrArray({handleobjarr=}true, {normbool=}false);
+      SetResults(i, info.Value, info.ValueLen);
+      if (info.Json = nil) and
          (i <> max) then
         // failure (GetRowCountNotExpanded should have detected it)
         exit;
-      if wasString then
+      if info.WasString then
         Include(fFieldParsedAsString, f); // mark column was "string"
       inc(f);
       if f = fFieldCount then
@@ -5935,7 +5932,7 @@ begin
     // B. Expanded format as array of objects (each with field names)
     // [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...]
     // 1. get fields count from first row
-    P := GotoFieldCountExpanded(P);
+    P := GotoFieldCountExpanded(info.Json);
     if P = nil then
       exit;
     if P^ = ']' then
@@ -5958,6 +5955,7 @@ begin
     {$endif NOTORMTABLELEN}
     fData := pointer(fJsonData); // needed for SetResults() below
     fRowCount := 0;
+    info.Json := P;
     repeat
       // let fJsonResults[] point to unescaped+zeroified JSON values
       for f := 0 to fFieldCount - 1 do
@@ -5965,21 +5963,21 @@ begin
         if fRowCount = 0 then
         begin
           // get field name from 1st Row
-          V := GetJsonPropName(P, @VLen);
+          info.Value := GetJsonPropName(info.Json, @info.ValueLen);
           if (fFieldIndexID < 0) and
-             IsRowID(V) then
+             IsRowID(info.Value) then
             fFieldIndexID := f;
-          SetResults(f, V, VLen);
+          SetResults(f, info.Value, info.ValueLen);
           if P = nil then
             break;
         end
         else
         begin
           // warning: next field names are not checked, and should be correct
-          P := GotoEndJsonItemString(P);
+          P := GotoEndJsonItemString(info.Json);
           if P = nil then
             break;
-          inc(P); // ignore jcEndOfJsonFieldOr0
+          info.Json := P + 1; // ignore jcEndOfJsonFieldOr0
         end;
         if max >= resmax then
         begin // check space inside loop for GPF security
@@ -5990,18 +5988,17 @@ begin
           {$endif NOTORMTABLELEN}
           fData := pointer(fJsonData);
         end;
-        V := GetJsonFieldOrObjectOrArray(P, @wasString, @EndOfObject,
-          {handleobjectarray=}true, {normbool=}false, @VLen);
-        SetResults(max, V, VLen);
-        if P = nil then
+        info.GetJsonFieldOrObjectOrArray({objarray=}true, {normbool=}false);
+        SetResults(max, info.Value, info.ValueLen);
+        if info.Json = nil then
         begin
           // unexpected end
           fFieldCount := 0;
           break;
         end;
-        if wasString then // mark column was "string"
+        if info.WasString then // mark column was "string"
           Include(fFieldParsedAsString, f);
-        if (EndOfObject = '}') and
+        if (info.EndOfObject = '}') and
            (f < fFieldCount - 1) then
         begin
           // allow some missing fields in the input object
@@ -6010,9 +6007,9 @@ begin
         end;
         inc(max);
       end;
-      if P = nil then
-        break; // unexpected end
-      if {%H-}EndOfObject <> '}' then
+      P := info.Json;
+      if (info.EndOfObject <> '}') or
+         (P = nil) then
         // data field layout is not consistent: should never happen
         break;
       inc(fRowCount);
@@ -6024,7 +6021,7 @@ begin
           inc(P);
       if P^ = ']' then
         break;
-      inc(P); // jmp '}'
+      info.Json := P + 1; // jmp '}'
     until false;
     if max <> (fRowCount + 1) * fFieldCount then
     begin
@@ -6640,15 +6637,15 @@ begin
 end;
 
 procedure TOrm.FillValueJson(var PropIndex: PtrInt; PropName: PUtf8Char;
-  PropLen: PtrInt; var Json: PUtf8Char;  FieldBits: PFieldBits);
+  PropLen: PtrInt; var Json: PUtf8Char; FieldBits: PFieldBits);
 var
-  Value: PUtf8Char;
-  ValueLen: integer;
-  wasString: boolean;
+  info: TGetJsonField;
 begin
-  Value := GetJsonFieldOrObjectOrArray(
-    Json, @wasString, nil, true, true, @ValueLen);
-  FillValue(PropIndex, PropName, Value, PropLen, ValueLen, wasString, FieldBits);
+  info.Json := Json;
+  info.GetJsonFieldOrObjectOrArray;
+  Json := info.Json;
+  FillValue(PropIndex, PropName, info.Value, PropLen, info.ValueLen,
+    info.WasString, FieldBits);
 end;
 
 procedure TOrm.FillFrom(const JsonRecord: RawUtf8; FieldBits: PFieldBits);
@@ -6665,50 +6662,62 @@ end;
 
 procedure TOrm.FillFrom(P: PUtf8Char; FieldBits: PFieldBits);
 var
+  info: TGetJsonField;
+  i, j, n: PtrInt;
   F: array[0..MAX_SQLFIELDS - 1] of PUtf8Char; // store field/property names
   L: array[0..MAX_SQLFIELDS - 1] of integer;   // and lens
-  i, j, n: PtrInt;
 begin
   if FieldBits <> nil then
     FillZero(FieldBits^);
-  if P = nil then
+  info.Json := P;
+  if info.Json = nil then
     exit;
-  while P^ <> '{' do  // go to start of object (handle both [{obj}] and {obj})
-    if P^ = #0 then
+  while info.Json^ <> '{' do  // go to start of object (handle both [{obj}] and {obj})
+    if info.Json^ = #0 then
       exit
     else
-      inc(P);
+      inc(info.Json);
   // set each property from values using efficient TOrmPropInfo.SetValue()
   j := 0; // for optimistic in-order field name lookup in FillValue
-  if Expect(P, FIELDCOUNT_PATTERN, 14) then
+  if Expect(info.Json, FIELDCOUNT_PATTERN, 14) then
   begin
     // NOT EXPANDED - optimized format with an array of JSON values, names first
     //  {"fieldCount":2,"values":["f1","f2","1v1",1v2],"rowCount":1}
-    n := GetNextItemCardinal(P, #0) - 1;
+    n := GetNextItemCardinal(info.Json, #0) - 1;
     if PtrUInt(n) > high(F) then
       exit;
-    if Expect(P, ROWCOUNT_PATTERN, 12) then
+    if Expect(info.Json, ROWCOUNT_PATTERN, 12) then
       // just ignore "rowCount":.. here
-      GetNextItemCardinal(P, #0);
-    if not Expect(P, VALUES_PATTERN, 11) then
+      GetNextItemCardinal(info.Json, #0);
+    if not Expect(info.Json, VALUES_PATTERN, 11) then
       exit;
     for i := 0 to n do
-      F[i] := GetJsonField(P, P, nil, nil, @L[i]); // parse names first
+    begin
+      info.GetJsonField; // parse names first
+      F[i] := info.Value;
+      L[i] := info.ValueLen;
+    end;
     for i := 0 to n do
-      FillValueJson(j, {%H-}F[i], {%H-}L[i], P, FieldBits); // parse values
+    begin
+      info.GetJsonFieldOrObjectOrArray;
+      FillValue(j, F[i], info.Value, {%H-}L[i], info.ValueLen,
+        info.WasString, FieldBits); // parse values
+    end;
   end
-  else if P^ = '{' then
+  else if info.Json^ = '{' then
   begin
     // EXPANDED FORMAT - standard format with (an array of) JSON objects
     //  [{"f1":"1v1","f2":1v2}]
-    inc(P);
+    inc(info.Json);
     repeat
-      F[0] := GetJsonPropName(P, @L[0]); // parse name:
+      F[0] := GetJsonPropName(info.Json, @L[0]); // parse name:
       if (F[0] = nil) or
-         (P = nil) then
+         (info.Json = nil) then
         break;
-      FillValueJson(j, F[0], L[0], P, FieldBits); // parse value
-    until P = nil;
+      info.GetJsonFieldOrObjectOrArray;
+      FillValue(j, F[0], info.Value, L[0], info.ValueLen,
+        info.WasString, FieldBits); // parse value
+    until info.Json = nil;
   end;
 end;
 
@@ -7485,25 +7494,22 @@ end;
 function TOrm.FillFromArray(const Fields: TFieldBits; Json: PUtf8Char): boolean;
 var
   i: PtrInt;
-  val: PUtf8Char;
-  vallen: integer;
-  wasstring: boolean;
+  info: TGetJsonField;
   props: TOrmPropInfoList;
 begin
   result := false;
   Json := GotoNextNotSpace(Json);
   if Json^ <> '[' then
     exit;
-  inc(Json);
+  info.Json := Json + 1;
   props := Orm.Fields;
   for i := 0 to props.Count - 1 do
     if GetBitPtr(@Fields, i) then
     begin
-      val := GetJsonFieldOrObjectOrArray(
-        Json, @wasstring, nil, true, true, @vallen);
-      props.List[i].SetValue(self, val, vallen, wasstring);
+      info.GetJsonFieldOrObjectOrArray;
+      props.List[i].SetValue(self, info.Value, info.ValueLen, info.WasString);
     end;
-  result := Json <> nil;
+  result := info.Json <> nil;
 end;
 
 constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
@@ -7970,10 +7976,13 @@ begin
   i := 0; // for optimistic property name lookup
   repeat
      name := GetJsonPropName(Context.Json, @namelen);
-     if name = nil then
+     Context.GetJsonFieldOrObjectOrArray;
+     if (name = nil) or
+        (Context.Json = nil) then
+     begin
        Context.Valid := false;
-     if not Context.ParseNextAny then // GetJsonFieldOrObjectOrArray()
        exit;
+     end;
      orm.FillValue(i, name, Context.Value, namelen, Context.ValueLen, Context.WasString);
   until Context.EndOfObject = '}';
   Context.ParseEndOfObject;

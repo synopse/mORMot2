@@ -1079,7 +1079,7 @@ begin
       try
         for i := 0 to high(IDs) do
           InternalRecordVersionDelete(TableModelIndex, IDs[i], batch);
-        BatchSend(batch); // allow faster deletion for engines allowing it
+        BatchSend(batch); // allow faster deletion for engines supporting it
       finally
         batch.Free;
       end;
@@ -1147,25 +1147,23 @@ function TRestOrmServer.EngineBatchSend(Table: TOrmClass;
   var Data: RawUtf8; var Results: TIDDynArray;
   ExpectedResultsCount: integer): integer;
 var
-  endofobject: AnsiChar;
-  wasstring, ok: boolean;
+  info: TGetJsonField;
+  ok, runmaintrans: boolean;
+  runstatickind: TRestServerKind;
+  batchoptions: TRestBatchOptions;
   fmt: TSaveFieldsAsObject;
   tablename, value, errmsg: RawUtf8;
   encoding, runningbatchencoding: TRestBatchEncoding;
   runningbatchrest, runningrest: TRestOrm;
-  sent, cmd, cmdtable, simplevalue: PUtf8Char;
+  cmd, cmdtable, simplevalue: PUtf8Char;
   P: PAnsiChar;
   transperrow, rowcountpercurrtrans: cardinal;
   runtabletrans: array of TRestOrm;
-  runmaintrans: boolean;
   id: TID;
-  count, errors: integer;
   timeouttix: Int64;
-  batchoptions: TRestBatchOptions;
   runtable, runningbatchtable: TOrmClass;
-  runtableindex, i, tableindex: integer;
+  runtableindex, i, tableindex, count, errors: integer;
   runstatic: TRestOrm;
-  runstatickind: TRestServerKind;
   uricontext: TRestServerUriContext;
   timer: TPrecisionTimer;
   runfields: TFieldBits;
@@ -1207,19 +1205,19 @@ begin
   log := fRest.LogClass.Enter('EngineBatchSend % inlen=%',
     [Table, length(Data)], self);
   //log.Log(sllCustom2, Data, self, 100 shl 10);
-  sent := pointer(Data); // will be parsed therefore in-place modified
-  if sent = nil then
+  info.Json := pointer(Data); // will be parsed therefore in-place modified
+  if info.Json = nil then
     raise EOrmBatchException.CreateUtf8(
       '%.EngineBatchSend(%,"")', [self, Table]);
   if Table <> nil then
   begin
     tableindex := fModel.GetTableIndexExisting(Table);
     // unserialize expected sequence array as '{"Table":["cmd",values,...]}'
-    if not NextNotSpaceCharIs(sent, '{') then
+    if not NextNotSpaceCharIs(info.Json, '{') then
       raise EOrmBatchException.CreateUtf8('%.EngineBatchSend: Missing {', [self]);
-    tablename := GetJsonPropName(sent);
+    tablename := GetJsonPropName(info.Json);
     if (tablename = '') or
-       (sent = nil) or
+       (info.Json = nil) or
        not IdemPropNameU(tablename,
          fModel.TableProps[tableindex].Props.SqlTableName) then
       raise EOrmBatchException.CreateUtf8(
@@ -1228,23 +1226,23 @@ begin
   else
     // or '["cmd@Table":values,...]'
     tableindex := -1;
-  if not NextNotSpaceCharIs(sent, '[') then
+  if not NextNotSpaceCharIs(info.Json, '[') then
     raise EOrmBatchException.CreateUtf8(
       '%.EngineBatchSend: Missing [', [self]);
-  if IdemPChar(sent, '"AUTOMATICTRANSACTIONPERROW",') then
+  if IdemPChar(info.Json, '"AUTOMATICTRANSACTIONPERROW",') then
   begin
-    inc(sent, 29);
-    transperrow := GetNextItemCardinal(sent, ',');
+    inc(info.Json, 29);
+    transperrow := GetNextItemCardinal(info.Json, ',');
   end
   else
     transperrow := 0;
   SetLength(runtabletrans, fModel.TablesMax + 1);
   runmaintrans := false;
   rowcountpercurrtrans := 0;
-  if IdemPChar(sent, '"OPTIONS",') then
+  if IdemPChar(info.Json, '"OPTIONS",') then
   begin
-    inc(sent, 10);
-    byte(batchoptions) := GetNextItemCardinal(sent, ',');
+    inc(info.Json, 10);
+    byte(batchoptions) := GetNextItemCardinal(info.Json, ',');
   end
   else
     byte(batchoptions) := 0;
@@ -1270,14 +1268,15 @@ begin
       // "POST",{object}  "SIMPLE",[values]  "PUT",{object}  "DELETE",id
       repeat
         // retrieve cmd name and associated (static) table
-        if sent = nil then
+        if info.Json = nil then
           raise EOrmBatchException.CreateUtf8(
             '%.EngineBatchSend: unexpected end of input', [self]);
-        sent := GotoNextNotSpace(sent);
-        if sent^ = '"' then
+        info.Json := GotoNextNotSpace(info.Json);
+        if info.Json^ = '"' then
         begin
-          cmd := GetJsonField(sent, sent);
-          if (sent = nil) or
+          info.GetJsonField;
+          cmd := info.Value;
+          if (info.Json = nil) or
              (cmd = nil) then
             raise EOrmBatchException.CreateUtf8(
               '%.EngineBatchSend: Missing CMD', [self]);
@@ -1324,8 +1323,8 @@ begin
               // '{"Table":[...,"POST",{object},...]}'
               // or '[...,"POST@Table",{object},...]'
               encoding := encPost;
-              value := JsonGetObject(sent, @id, endofobject, true);
-              if sent = nil then
+              value := JsonGetObject(info.Json, @id, info.EndOfObject, true);
+              if info.Json = nil then
                 raise EOrmBatchException.CreateUtf8(
                   '%.EngineBatchSend: Wrong POST', [self]);
               if IsNotAllowed then
@@ -1341,8 +1340,8 @@ begin
               // '{"Table":[...,"PUT",{object},...]}'
               // or '[...,"PUT@Table",{object},...]'
               encoding := encPut;
-              value := JsonGetObject(sent, @id, endofobject, false);
-              if (sent = nil) or
+              value := JsonGetObject(info.Json, @id, info.EndOfObject, false);
+              if (info.Json = nil) or
                  (value = '') or
                  (id <= 0) then
                 raise EOrmBatchException.CreateUtf8(
@@ -1357,9 +1356,10 @@ begin
               // '{"Table":[...,"DELETE",id,...]}'
               // or '[...,"DELETE@Table",id,...]'
               encoding := encDelete;
-              id := GetInt64(GetJsonField(sent, sent, @wasstring, @endofobject));
+              info.GetJsonField;
+              id := GetInt64(info.Value, info.ValueLen);
               if (id <= 0) or
-                 wasstring then
+                 info.WasString then
                 raise EOrmBatchException.CreateUtf8(
                   '%.EngineBatchSend: Wrong DELETE', [self]);
               if IsNotAllowed then
@@ -1405,12 +1405,14 @@ begin
           // first InternalBatchDirect(sent=nil) call to check if supported
           if (runningrest.InternalBatchDirect(
                encoding, runtableindex, runfields, nil) <> 0) and
-             (sent^ = '[')  then
+             (info.Json^ = '[')  then
+          begin
             // this storage engine allows direct JSON array process
             // (see e.g. TRestOrmServerDB.InternalBatchDirect
             //  or TRestStorageTOrm.InternalBatchDirect)
-            simplevalue := GetJsonFieldOrObjectOrArray(
-              sent, nil, @endofobject, true)
+            info.GetJsonFieldOrObjectOrArray;
+            simplevalue := info.Value;
+          end
           else
           begin
             // convert input array into a JSON object as regular "POST"/"PUT"
@@ -1421,12 +1423,12 @@ begin
             else
               fmt := [sfoExtendedJson];
             value := fModel.TableProps[runtableindex].Props.
-              SaveFieldsFromJsonArray(sent, runfields, @id, @endofobject, fmt);
+              SaveFieldsFromJsonArray(info.Json, runfields, @id, @info.EndOfObject, fmt);
             if encoding = encPutHexID then
               encoding := encPut
             else
               encoding := encPost;
-            if (sent = nil) or
+            if (info.Json = nil) or
                (value = '') then
               raise EOrmBatchException.CreateUtf8(
                 '%.EngineBatchSend: % incorrect format', [self, cmd]);
@@ -1439,7 +1441,7 @@ begin
               '%.EngineBatchSend: % impossible: %', [self, cmd, errmsg]);
         end;
         if (count = 0) and
-           (endofobject = ']') then
+           (info.EndOfObject = ']') then
         begin
           // single op do not need a transaction nor InternalBatchStart/Stop
           transperrow := 0;
@@ -1583,7 +1585,7 @@ begin
             inc(errors);
         inc(count);
         inc(counts[encoding]);
-      until endofobject = ']';
+      until info.EndOfObject = ']';
       if (transperrow > 0) and
          (rowcountpercurrtrans > 0) then
         // send pending rows within transaction
@@ -1621,17 +1623,20 @@ begin
   if Table <> nil then
   begin
     // '{"Table":["cmd":values,...]}' format
-    if sent = nil then
+    if info.Json = nil then
       raise EOrmBatchException.CreateUtf8(
         '%.EngineBatchSend: % Truncated', [self, Table]);
-    while not (sent^ in ['}', #0]) do
-      inc(sent);
-    if sent^ <> '}' then
+    while not (info.Json^ in ['}', #0]) do
+      inc(info.Json);
+    if info.Json^ <> '}' then
       raise EOrmBatchException.CreateUtf8(
         '%.EngineBatchSend(%): Missing }', [self, Table]);
   end;
   // if we reached here, process was ok
-  SetLength(Results, count);
+  if count = 0 then
+    Results := nil
+  else
+    DynArrayFakeLength(Results, count);
   result := HTTP_SUCCESS;
 end;
 
