@@ -1958,17 +1958,19 @@ begin
     if rec.FillFromArray(Fields, Sent) then
     begin
       rec.IDValue := id;
-      StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'InternalBatchDirect' {$endif});
-      try
-        if Encoding = encPutHexID then
-          if UpdateOne(rec, Fields, '') then // no SentData
-            result := HTTP_SUCCESS
-          else
-            result := HTTP_NOTFOUND
+      if Encoding = encPutHexID then
+        if UpdateOne(rec, Fields, '') then // no SentData
+          result := HTTP_SUCCESS
         else
+          result := HTTP_NOTFOUND
+      else
+      begin
+        StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'InternalBatchDirect' {$endif});
+        try
           result := AddOne(rec, id > 0, ''); // no SentData
-      finally
-        StorageUnLock;
+        finally
+          StorageUnLock;
+        end;
       end;
     end;
   finally
@@ -1994,12 +1996,7 @@ begin
   try
     rec.FillFrom(SentData, @fields);
     rec.IDValue := ID;
-    StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'EngineUpdate'{$endif});
-    try
-      result := UpdateOne(rec, fields, SentData);
-    finally
-      StorageUnLock;
-    end;
+    result := UpdateOne(rec, fields, SentData);
   finally
     rec.Free;
   end;
@@ -2021,12 +2018,7 @@ begin
     rec.SetFieldSqlVars(Values);
     rec.IDValue := ID;
     GetJsonValue(rec, {withID=}false, fStoredClassRecordProps.CopiableFieldsBits, json);
-    StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'UpdateOne' {$endif});
-    try
-      result := UpdateOne(rec, fStoredClassRecordProps.CopiableFieldsBits, json);
-    finally
-      StorageUnLock;
-    end;
+    result := UpdateOne(rec, fStoredClassRecordProps.CopiableFieldsBits, json);
   finally
     rec.Free;
   end;
