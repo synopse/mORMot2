@@ -837,7 +837,7 @@ type
     State: TDocVariantEnumeratorState;
     Value: PDocVariantData;
   public
-    function MoveNext: Boolean; inline;
+    function MoveNext: Boolean; {$ifdef HASSAFEINLINE} inline; {$endif}
     function GetEnumerator: TDocVariantObjectsEnumerator; inline;
     /// returns the current Value as pointer to each TDocVariantData object
     property Current: PDocVariantData
