@@ -1372,11 +1372,8 @@ var
   rtree: TOrmRTreeClass;
   blob0, blob1: pointer;
 begin
-  if argc <> 2 then
-  begin
-    ErrorWrongNumberOfArgs(Context);
+  if not CheckNumberOfArgs(Context, 2, argc, 'rtreein') then
     exit;
-  end;
   rtree := sqlite3.user_data(Context);
   blob0 := sqlite3.value_blob(argv[0]);
   blob1 := sqlite3.value_blob(argv[1]);

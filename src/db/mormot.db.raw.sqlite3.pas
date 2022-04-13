@@ -4019,11 +4019,12 @@ procedure sqlite3InternalFreeObject(p: pointer); cdecl;
 procedure sqlite3InternalFreeRawByteString({%H-}p: pointer); cdecl;
 
 /// wrapper around sqlite3.result_error() to be called if wrong number of arguments
-procedure ErrorWrongNumberOfArgs(Context: TSqlite3FunctionContext);
+procedure ErrorWrongNumberOfArgs(Context: TSqlite3FunctionContext;
+  const caller: shortstring);
 
 /// wrapper around sqlite3.result_error() validating the expected number of arguments
 function CheckNumberOfArgs(Context: TSqlite3FunctionContext;
-  expected, sent: integer): boolean;
+  expected, sent: integer; const caller: shortstring): boolean;
 
 /// create a TSqlite3Module.pzErr UTF-8 text buffer according to the given
 // Exception class
@@ -5534,20 +5535,24 @@ begin
   RawByteString(p) := '';
 end;
 
-procedure ErrorWrongNumberOfArgs(Context: TSqlite3FunctionContext);
+procedure ErrorWrongNumberOfArgs(Context: TSqlite3FunctionContext;
+  const caller: shortstring);
+var
+  msg: ShortString;
 begin
-  sqlite3.result_error(Context, 'wrong number of arguments');
+  FormatShort('wrong number of arguments for %()', [caller], msg);
+  sqlite3.result_error(Context, @msg[1], ord(msg[0]));
 end;
 
 function CheckNumberOfArgs(Context: TSqlite3FunctionContext;
-  expected, sent: integer): boolean;
+  expected, sent: integer; const caller: shortstring): boolean;
 var
   msg: ShortString;
 begin
   if sent <> expected then
   begin
-    FormatShort('wrong number of arguments: expected %, got %',
-      [expected, sent], msg);
+    FormatShort('wrong number of arguments for %(): expected %, got %',
+      [caller, expected, sent], msg);
     sqlite3.result_error(Context, @msg[1], ord(msg[0]));
     result := false;
   end
@@ -6200,14 +6205,14 @@ end;
 procedure InternalSoundex(Context: TSqlite3FunctionContext; argc: integer;
   var argv: TSqlite3ValueArray); cdecl;
 begin
-  if CheckNumberOfArgs(Context, 1, argc) then
+  if CheckNumberOfArgs(Context, 1, argc, 'soundex') then
     sqlite3.result_int64(Context, SoundExUtf8(sqlite3.value_text(argv[0])));
 end;
 
 procedure InternalSoundexFr(Context: TSqlite3FunctionContext; argc: integer;
   var argv: TSqlite3ValueArray); cdecl;
 begin
-  if CheckNumberOfArgs(Context, 1, argc) then
+  if CheckNumberOfArgs(Context, 1, argc, 'soundexfr') then
     sqlite3.result_int64(Context, SoundExUtf8(sqlite3.value_text(argv[0]), nil,
       sndxFrench));
 end;
@@ -6215,7 +6220,7 @@ end;
 procedure InternalSoundexEs(Context: TSqlite3FunctionContext; argc: integer;
   var argv: TSqlite3ValueArray); cdecl;
 begin
-  if CheckNumberOfArgs(Context, 1, argc) then
+  if CheckNumberOfArgs(Context, 1, argc, 'soundexes') then
     sqlite3.result_int64(Context, SoundExUtf8(sqlite3.value_text(argv[0]), nil,
       sndxSpanish));
 end;
@@ -6226,11 +6231,8 @@ var
   A1, A2: Int64;
 begin
   // implements the MOD() function, just like Oracle and others
-  if argc <> 2 then
-  begin
-    ErrorWrongNumberOfArgs(Context);
-    exit; // two parameters expected
-  end;
+  if not CheckNumberOfArgs(Context, 2, argc, 'mod') then
+    exit;
   A1 := sqlite3.value_int64(argv[0]);
   A2 := sqlite3.value_int64(argv[1]);
   if A2 = 0 then // avoid computation exception, returns NULL
@@ -6244,11 +6246,8 @@ procedure InternalTimeLog(Context: TSqlite3FunctionContext; argc: integer;
 var
   TimeLog: TTimeLogBits;
 begin
-  if argc <> 1 then
-  begin
-    ErrorWrongNumberOfArgs(Context);
+  if not CheckNumberOfArgs(Context, 1, argc, 'timelog') then
     exit;
-  end;
   TimeLog.Value := sqlite3.value_int64(argv[0]);
   RawUtf8ToSQlite3Context(TimeLog.Text(True, 'T'), Context, false);
 end;
@@ -6258,11 +6257,8 @@ procedure InternalTimeLogUnix(Context: TSqlite3FunctionContext; argc: integer;
 var
   TimeLog: TTimeLogBits;
 begin
-  if argc <> 1 then
-  begin
-    ErrorWrongNumberOfArgs(Context);
+  if not CheckNumberOfArgs(Context, 1, argc, 'timelogunix') then
     exit;
-  end;
   TimeLog.Value := sqlite3.value_int64(argv[0]);
   sqlite3.result_int64(Context, TimeLog.ToUnixTime);
 end;
@@ -6297,7 +6293,7 @@ begin
       exit; // success: don't call sqlite3.result_error()
     end;
   end;
-  ErrorWrongNumberOfArgs(Context);
+  ErrorWrongNumberOfArgs(Context, 'rank');
 end;
 
 // supplies a CONCAT() function to process fast string concatenation
@@ -6334,7 +6330,7 @@ begin
       inc(resultlen, txtlen);
     end
   else
-    ErrorWrongNumberOfArgs(Context);
+    ErrorWrongNumberOfArgs(Context, 'concat');
 end;
 
 procedure InternalConcatFinal(Context: TSqlite3FunctionContext); cdecl;
@@ -6352,7 +6348,7 @@ var
   Count: integer;
 begin
   // SQL function: IntegerDynArrayContains(BlobField,10) returning a boolean
-  if not CheckNumberOfArgs(Context, 2, argc) then
+  if not CheckNumberOfArgs(Context, 2, argc, 'integerdynarraycontains') then
     exit;
   Blob := sqlite3.value_blob(argv[0]);
   if Blob <> nil then
@@ -6373,7 +6369,7 @@ var
 begin
   // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
   // for currency, expect I64 value = aCurrency*10000 = PInt64(@aCurrency)^
-  if not CheckNumberOfArgs(Context, 2, argc) then
+  if not CheckNumberOfArgs(Context, 2, argc, 'dynarraycontains') then
     exit;
   Blob := sqlite3.value_blob(argv[0]);
   if Blob <> nil then
@@ -6399,7 +6395,7 @@ var
   Value: PUtf8Char;
 begin
   // SQL function: RawUtf8DynArrayContainsCase/NoCase(BlobField,'Text'): boolean
-  if not CheckNumberOfArgs(Context, 2, argc) then
+  if not CheckNumberOfArgs(Context, 2, argc, 'rawutf8dynarraycontains') then
     exit;
   Blob := sqlite3.value_blob(argv[0]);
   if Blob <> nil then
@@ -6443,7 +6439,7 @@ begin
   // JsonGet(VariantField,'Prop*') returns the values as a JSON object
   // JsonGet(VariantField,'Obj1.Obj2.Prop1,Obj1.Prop2') to search by path
   // JsonGet(VariantField,'Obj1.Obj2.Prop*,Obj1.Prop2') to search by path
-  if not CheckNumberOfArgs(Context, 2, argc) then
+  if not CheckNumberOfArgs(Context, 2, argc, 'jsonget') then
     exit;
   if sqlite3.value_type(argv[0]) <> SQLITE_TEXT then
     sqlite3.result_null(Context)
@@ -6476,17 +6472,17 @@ begin
   // JsonHas(VariantField,'PropName') returns TRUE if matches a JSON object property
   // JsonHas(VariantField,'Obj1.Obj2.PropName') to search by path
   // JsonHas(VariantField,0) returns TRUE if the JSON array has at least one item
-  if not CheckNumberOfArgs(Context, 2, argc) then
+  if not CheckNumberOfArgs(Context, 2, argc, 'jsonhas') then
     exit;
   if sqlite3.value_type(argv[0]) <> SQLITE_TEXT then
     sqlite3.result_int64(Context, Int64(false))
   else
     case sqlite3.value_type(argv[1]) of // fast SAX search (no memory allocation)
       SQLITE_TEXT:
-        sqlite3.result_int64(Context,ord(JsonObjectByPath(
+        sqlite3.result_int64(Context, ord(JsonObjectByPath(
           sqlite3.value_text(argv[0]), sqlite3.value_text(argv[1])) <> nil));
       SQLITE_INTEGER:
-        sqlite3.result_int64(Context,ord(JsonArrayItem(
+        sqlite3.result_int64(Context, ord(JsonArrayItem(
           sqlite3.value_text(argv[0]), sqlite3.value_int64(argv[1])) <> nil));
     else
       sqlite3.result_int64(Context, Int64(false));
@@ -6505,7 +6501,7 @@ var
 begin
   // JsonSet(VariantField,'PropName','abc') to set a value
   // JsonSet(VariantField,'Obj1.Obj2.PropName','def') to set by path
-  if not CheckNumberOfArgs(Context, 3, argc) then
+  if not CheckNumberOfArgs(Context, 3, argc, 'jsonset') then
     exit;
   if sqlite3.value_type(argv[0]) <> SQLITE_TEXT then
     sqlite3.result_null(Context)
@@ -6534,10 +6530,10 @@ procedure InternalUnicodeUpper(Context: TSqlite3FunctionContext; argc: integer;
   var argv: TSqlite3ValueArray); cdecl;
 var
   input: PUtf8Char;
-  len: integer;
+  len: PtrInt;
   tmp: RawUtf8;
 begin
-  if not CheckNumberOfArgs(Context, 1, argc) then
+  if not CheckNumberOfArgs(Context, 1, argc, 'unicodeupper') then
     exit;
   input := sqlite3.value_text(argv[0]);
   len := StrLen(input);
@@ -6546,7 +6542,7 @@ begin
     FastSetString(tmp, nil, len * 2); // Unicode Upper may enhance input length
     len := Utf8UpperReference(input, pointer(tmp), len) - PUtf8Char(pointer(tmp));
   end;
-  // don't call SetLength() but set forcedlen to truncate the value
+  // don't call SetLength() but use forcedlen to truncate the value
   RawUtf8ToSQlite3Context(tmp, Context, false, {forced=}len);
 end;
 
@@ -8724,12 +8720,8 @@ var
   PLen, itemLen: PtrInt;
   caller: TSqlDataBaseSQLFunctionDynArray;
 begin
-  if argc <> 2 then
-  begin
-    // two parameters expected
-    ErrorWrongNumberOfArgs(Context);
+  if not CheckNumberOfArgs(Context, 2, argc, 'dynarrayblob') then
     exit;
-  end;
   P       := sqlite3.value_blob(argv[0]);
   PLen    := sqlite3.value_bytes(argv[0]);
   item    := sqlite3.value_blob(argv[1]);

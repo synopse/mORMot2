@@ -260,7 +260,7 @@ begin
       end;
   else
     begin
-      ErrorWrongNumberOfArgs(Context);
+      ErrorWrongNumberOfArgs(Context, 'charindex');
       exit;
     end;
   end;
@@ -268,22 +268,24 @@ begin
      (sqlite3.value_type(argv[1]) = SQLITE_NULL) then
     sqlite3.result_int64(Context, 0)
   else
-    sqlite3.result_int64(Context, PosEx(sqlite3.value_text(argv[0]),
-      sqlite3.value_text(argv[1]), StartPos));
+    sqlite3.result_int64(Context,
+      PosEx(sqlite3.value_text(argv[0]), sqlite3.value_text(argv[1]), StartPos));
 end;
 
 const
-  // BLOBs are stored as array of byte to avoid any charset conflict
+  // BLOBs are stored as array of byte to avoid any charset/IDE conflict
   BlobDali: array[0..3] of byte = (
     97, 233, 224, 231);
   BlobMonet: array[0..13] of byte = (
     224, 233, 231, ord('d'), ord('s'), ord('j'), ord('d'), ord('s'),
     ord('B'), ord('L'), ord('O'), ord('B'), ord('2'), ord('3'));
 
+  // some WinAnsi chars to avoid any charset/IDE conflict
   UTF8_E0_F4_BYTES: array[0..5] of byte = (
     $E0, $E7, $E8, $E9, $EA, $F4);
 
 var
+  // manual encoding of some UTF-8 chars to avoid any charset/IDE conflict
   _uE0, _uE7, _uE8, _uE9, _uEA, _uF4: RawUtf8;
 
 procedure TTestSQLite3Engine.DatabaseDirectAccess;
