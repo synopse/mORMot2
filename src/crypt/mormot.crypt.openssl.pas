@@ -320,6 +320,15 @@ type
     destructor Destroy; override;
   end;
 
+/// retrieve a low-level PEVP_MD digest from its algorithm name
+// - raise an EOpenSslHash if this algorithm is not found
+function OpenSslGetMd(const Algorithm: RawUtf8; const Caller: shortstring): PEVP_MD; overload;
+
+/// retrieve a low-level PEVP_MD digest from mORMot THashAlgo algorithm enum
+// - returns nil if not found, e.g. if OpenSsl is not available
+function OpenSslGetMd(Algorithm: THashAlgo): PEVP_MD; overload;
+
+
 
 { ************** OpenSSL Asymmetric Cryptography }
 
@@ -1104,11 +1113,9 @@ begin
 end;
 
 
-{ ************** OpenSSL Asymmetric Cryptography }
-
-function GetMd(const Algorithm: RawUtf8; const Caller: shortstring): PEVP_MD;
+function OpenSslGetMd(const Algorithm: RawUtf8; const Caller: shortstring): PEVP_MD;
 begin
-  EOpenSslAsymmetric.CheckAvailable(nil, Caller);
+  EOpenSslHash.CheckAvailable(nil, Caller);
   if Algorithm = 'null' then
     result := nil // e.g. for ed25519
   else
@@ -1118,10 +1125,31 @@ begin
       else
         result := EVP_get_digestbyname(pointer(Algorithm));
       if result = nil then
-        raise EOpenSslAsymmetric.CreateFmt(
+        raise EOpenSslHash.CreateFmt(
           '%s: unknown [%s] algorithm', [Caller, Algorithm]);
     end;
 end;
+
+var
+  _HashAlgoMd: array[THashAlgo] of PEVP_MD;
+
+const
+  _HASHALGONAME: array[THashAlgo] of PAnsiChar = (
+    'MD5', 'SHA1', 'SHA256', 'SHA384', 'SHA512', 'SHA3-256', 'SHA3-512');
+
+function OpenSslGetMd(Algorithm: THashAlgo): PEVP_MD;
+var
+  h: THashAlgo;
+begin
+  if (_HashAlgoMd[hfSHA256] = nil) and
+     OpenSslIsAvailable then
+    for h := low(h) to high(h) do
+      _HashAlgoMd[h] := EVP_get_digestbyname(_HASHALGONAME[h]);
+  result := _HashAlgoMd[Algorithm];
+end;
+
+
+{ ************** OpenSSL Asymmetric Cryptography }
 
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
@@ -1131,7 +1159,8 @@ var
 begin
   pkey := LoadPrivateKey(PrivateKey, PrivateKeyLen, PrivateKeyPassword);
   try
-    Signature := pkey^.Sign(GetMd(Algorithm, 'OpenSslSign'), Message, MessageLen);
+    Signature := pkey^.Sign(
+      OpenSslGetMd(Algorithm, 'OpenSslSign'), Message, MessageLen);
     result := length(Signature);
   finally
     if pkey <> nil then
@@ -1152,7 +1181,7 @@ begin
   if (pkey = nil) or
      (SignatureLen <= 0)  then
     exit;
-  md := GetMd(Algorithm, 'OpenSslVerify');
+  md := OpenSslGetMd(Algorithm, 'OpenSslVerify');
   ctx := EVP_MD_CTX_new;
   try
     // note: ED25519 requires single-pass EVP_DigestVerify()
@@ -1758,7 +1787,7 @@ type
 
 constructor TCryptCertAlgoOpenSsl.Create(osa: TOpenSslAsym);
 begin
-  fHash := GetMd(OSA_HASH[osa], 'TCryptCertAlgoOpenSsl.Create');
+  fHash := OpenSslGetMd(OSA_HASH[osa], 'TCryptCertAlgoOpenSsl.Create');
   fEvpType := OSA_EVPTYPE[osa];
   fBitsOrCurve := OSA_BITSORCURVE[osa];
   Create('x509-' + LowerCase(OSA_JWT[osa]));
