@@ -963,7 +963,7 @@ type
     function PublicKeyToPem: RawUtf8;
     procedure ToPem(out PrivateKey, PublicKey: RawUtf8);
     function Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
-    function Verify(Algo: PEVP_MD; Sign, Msg: pointer; SignLen, MsgLen: integer): boolean;
+    function Verify(Algo: PEVP_MD; Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
     function Size: integer;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -6040,8 +6040,8 @@ begin
   end;
 end;
 
-function EVP_PKEY.Verify(Algo: PEVP_MD; Sign, Msg: pointer;
-  SignLen, MsgLen: integer): boolean;
+function EVP_PKEY.Verify(Algo: PEVP_MD; Sig, Msg: pointer;
+  SigLen, MsgLen: integer): boolean;
 var
   ctx: PEVP_MD_CTX;
 begin
@@ -6051,7 +6051,7 @@ begin
     // note: ED25519 requires single-pass EVP_DigestVerify()
     result :=
       (EVP_DigestVerifyInit(ctx, nil, Algo, nil, @self) = OPENSSLSUCCESS) and
-      (EVP_DigestVerify(ctx, Sign, SignLen, Msg, MsgLen) = OPENSSLSUCCESS);
+      (EVP_DigestVerify(ctx, Sig, SigLen, Msg, MsgLen) = OPENSSLSUCCESS);
   finally
     EVP_MD_CTX_free(ctx);
   end;

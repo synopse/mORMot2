@@ -537,17 +537,17 @@ type
   // - inherited classes implement all official algorithms from https://jwt.io
   // - we abbreviate OpenSsl as Osl in class names for brevity
   // - some numbers from our regresssion tests on Linux x86_64 for JWT validation:
-  // $ 100 RS256 in 5.11ms i.e. 19,550/s, aver. 51us
-  // $ 100 RS384 in 5.09ms i.e. 19,642/s, aver. 50us
-  // $ 100 RS512 in 5.12ms i.e. 19,508/s, aver. 51us
-  // $ 100 PS256 in 5.41ms i.e. 18,474/s, aver. 54us
-  // $ 100 PS384 in 5.38ms i.e. 18,563/s, aver. 53us
-  // $ 100 PS512 in 5.33ms i.e. 18,740/s, aver. 53us
-  // $ 100 ES256 in 13.75ms i.e. 7,270/s, aver. 137us
-  // $ 100 ES384 in 118.64ms i.e. 842/s, aver. 1.18ms
-  // $ 100 ES512 in 93.95ms i.e. 1,064/s, aver. 939us
-  // $ 100 ES256K in 62.19ms i.e. 1,607/s, aver. 621us
-  // $ 100 EdDSA in 18.08ms i.e. 5,529/s, aver. 180us
+  // $ 100 RS256 in 2.03ms i.e. 47.8K/s, aver. 20us
+  // $ 100 RS384 in 1.99ms i.e. 48.9K/s, aver. 19us
+  // $ 100 RS512 in 1.99ms i.e. 48.9K/s, aver. 19us
+  // $ 100 PS256 in 2.30ms i.e. 42.3K/s, aver. 23us
+  // $ 100 PS384 in 2.26ms i.e. 43.1K/s, aver. 22us
+  // $ 100 PS512 in 2.75ms i.e. 35.4K/s, aver. 27us
+  // $ 100 ES256 in 8.64ms i.e. 11.3K/s, aver. 86us
+  // $ 100 ES384 in 81.43ms i.e. 1.1K/s, aver. 814us
+  // $ 100 ES512 in 59.81ms i.e. 1.6K/s, aver. 598us
+  // $ 100 ES256K in 40.43ms i.e. 2.4K/s, aver. 404us
+  // $ 100 EdDSA in 11.55ms i.e. 8.4K/s, aver. 115us
   TJwtAbstractOsl = class(TJwtOpenSsl)
   protected
     fAsym: TOpenSslAsym;
@@ -575,9 +575,10 @@ type
   TJwtAbstractOslClass = class of TJwtAbstractOsl;
 
   /// implements 'ES256' secp256r1 ECC algorithm over SHA-256 using OpenSSL
-  // - note that our TJwtES256 class pre-computes the public key so is faster:
-  //  TJwtES256:    100 ES256 in 6.90ms i.e. 14.1K/s, aver. 69us
-  //  TJwtES256Osl: 100 ES256 in 9.56ms i.e. 10.2K/s, aver. 95us
+  // - note that our TJwtES256 class is slightly faster on Linux x86_64:
+  // $ TJwtES256 pascal:   100 ES256 in 33.57ms i.e. 2.9K/s, aver. 335us
+  // $ TJwtES256 OpenSSL:  100 ES256 in 6.90ms i.e. 14.1K/s, aver. 69us
+  // $ TJwtES256Osl:       100 ES256 in 8.64ms i.e. 11.3K/s, aver. 86us
   TJwtES256Osl = class(TJwtAbstractOsl)
   protected
     procedure SetAlgorithm; override;
@@ -1136,7 +1137,7 @@ var
   _HashAlgoMd: array[THashAlgo] of PEVP_MD;
 
 const
-  _HASHALGONAME: array[THashAlgo] of PAnsiChar = (
+  _HASHALGONAME: array[THashAlgo] of PUtf8Char = (
     'MD5', 'SHA1', 'SHA256', 'SHA384', 'SHA512', 'SHA3-256', 'SHA3-512');
 
 function OpenSslGetMd(Algorithm: THashAlgo): PEVP_MD;

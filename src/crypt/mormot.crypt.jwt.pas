@@ -539,14 +539,14 @@ type
   // under x86) you may enable CacheTimeoutSeconds
   // - will use the OpenSSL library if available - about 5 times faster than
   // our pascal/asm code - here are some numbers on x86_64:
-  //  TJwtES256 pascal:   100 ES256 in 33.57ms i.e. 2.9K/s, aver. 335us
-  //  TJwtES256 OpenSSL:  100 ES256 in 6.90ms i.e. 14.1K/s, aver. 69us
-  // - pre-compute the public key so is even faster than TJwtES256Osl:
-  //    TJwtES256Osl:     100 ES256 in 9.56ms i.e. 10.2K/s, aver. 95us
+  // $ TJwtES256 pascal:  100 ES256 in 33.57ms i.e. 2.9K/s, aver. 335us
+  // $ TJwtES256 OpenSSL: 100 ES256 in 6.90ms i.e. 14.1K/s, aver. 69us
+  // - our direct OpenSSL access is even slightly faster than TJwtES256Osl:
+  // $ TJwtES256Osl:      100 ES256 in 8.64ms i.e. 11.3K/s, aver. 86us
   TJwtES256 = class(TJwtAbstract)
   protected
     fCertificate: TEccCertificate;
-    fVerify: TEcc256r1VerifyAbstract; // faster pre-computed public key
+    fVerify: TEcc256r1VerifyAbstract; // includes pre-computed public key
     fOwnCertificate: boolean;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
     procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
