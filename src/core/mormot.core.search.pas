@@ -41,7 +41,7 @@ uses
 
 type
   {$A-}
-  /// file found result item, as returned by FindFiles()
+  /// define one file found result item, as returned by FindFiles()
   // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef USERECORDWITHMETHODS}
   TFindFiles = record
@@ -49,7 +49,8 @@ type
   TFindFiles = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// the matching file name, including its folder name
+    /// the matching file name
+    // - including its folder name unless ffoExcludesDir is set
     Name: TFileName;
     /// the matching file attributes
     Attr: integer;
@@ -67,25 +68,51 @@ type
   /// result list, as returned by FindFiles()
   TFindFilesDynArray = array of TFindFiles;
 
-/// search for matching file names
-// - just a wrapper around FindFirst/FindNext
+  /// one optional feature of FindFiles()
+  // - ffoSortByName will sort the result files by extension then name
+  // - ffoExcludesDir won't include the path in TFindFiles.Name
+  // - ffoSubFolder will search within nested folders
+  TFindFilesOption = (
+    ffoSortByName,
+    ffoExcludesDir,
+    ffoSubFolder);
+  /// the optional features of FindFiles()
+  TFindFilesOptions = set of TFindFilesOption;
+
+/// search for matching files by names
+// - just an enhanced wrapper around FindFirst/FindNext with some options
 // - you may specify several masks in Mask, e.g. as '*.jpg;*.jpeg'
 function FindFiles(const Directory, Mask: TFileName;
-  const IgnoreFileName: TFileName = ''; SortByName: boolean = false;
-  IncludesDir: boolean = true; SubFolder: boolean = false): TFindFilesDynArray;
+  const IgnoreFileName: TFileName = '';
+  Options: TFindFilesOptions = []): TFindFilesDynArray;
+
+/// search for matching file names
+// - just a wrapper around FindFilesDynArrayToFileNames(FindFiles())
+function FindFileNames(const Directory, Mask: TFileName;
+  const IgnoreFileName: TFileName = '';
+  Options: TFindFilesOptions = []): TFileNameDynArray;
 
 /// convert a result list, as returned by FindFiles(), into an array of Files[].Name
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
 
+type
+  /// one optional feature of SynchFolders()
+  // - process recursively nested folders if sfoSubFolder is included
+  // - use file content instead of file date check if sfoByContent is included
+  // - display synched file name on console if sfoWriteFileNameToConsole is included
+  TSynchFoldersOption = (
+    sfoSubFolder,
+    sfoByContent,
+    sfoWriteFileNameToConsole);
+  /// the optional features of SynchFolders()
+  TSynchFoldersOptions = set of TSynchFoldersOption;
+
 /// ensure all files in Dest folder(s) do match the one in Reference
 // - won't copy all files from Reference folders, but will update files already
 // existing in Dest, which did change since last synchronization
-// - will also process recursively nested folders if SubFolder is true
-// - will use file content instead of file date check if ByContent is true
-// - can optionally write the synched file name to the console
 // - returns the number of files copied during the process
-function SynchFolders(const Reference, Dest: TFileName; SubFolder: boolean = false;
-  ByContent: boolean = false; WriteFileNameToConsole: boolean = false): integer;
+function SynchFolders(const Reference, Dest: TFileName;
+  Options: TSynchFoldersOptions = []): integer;
 
 
 { ****************** ScanUtf8, GLOB and SOUNDEX Text Search }
@@ -1449,7 +1476,7 @@ begin
 end;
 
 function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
-  SortByName, IncludesDir, SubFolder: boolean): TFindFilesDynArray;
+  Options: TFindFilesOptions): TFindFilesDynArray;
 var
   m, count: integer;
   dir: TFileName;
@@ -1469,18 +1496,19 @@ var
            ((IgnoreFileName = '') or
             (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
         begin
-          if IncludesDir then
-            ff.FromSearchRec(dir + folder, F)
+          if ffoExcludesDir in Options then
+            ff.FromSearchRec(folder, F)
           else
-            ff.FromSearchRec(folder, F);
+            ff.FromSearchRec(dir + folder, F);
           da.Add(ff);
         end;
       until FindNext(F) <> 0;
       FindClose(F);
     end;
-    if SubFolder and
+    if (ffoSubFolder in Options) and
        (FindFirst(dir + folder + '*', faDirectory, F) = 0) then
     begin
+      // recursive SearchFolder() call for nested directories
       repeat
         if SearchRecValidFolder(F) and
            ((IgnoreFileName = '') or
@@ -1492,20 +1520,20 @@ var
   end;
 
 begin
-  result := nil;
+  Finalize(result);
   da.Init(TypeInfo(TFindFilesDynArray), result, @count);
   if Pos(';', Mask) > 0 then
     CsvToRawUtf8DynArray(pointer(StringToUtf8(Mask)), masks, ';');
   if masks <> nil then
   begin
-    if SortByName then
+    if ffoSortByName in Options then
       QuickSortRawUtf8(masks, length(masks), nil,
         {$ifdef OSWINDOWS} @StrIComp {$else} @StrComp {$endif});
     for m := 0 to length(masks) - 1 do
     begin
       // masks[] recursion
-      masked := FindFiles(Directory, Utf8ToString(masks[m]), IgnoreFileName,
-        SortByName, IncludesDir, SubFolder);
+      masked := FindFiles(
+        Directory, Utf8ToString(masks[m]), IgnoreFileName, Options);
       da.AddArray(masked);
     end;
   end
@@ -1514,11 +1542,19 @@ begin
     if Directory <> '' then
       dir := IncludeTrailingPathDelimiter(Directory);
     SearchFolder('');
-    if SortByName and
+    if (ffoSortByName in Options) and
        (da.Count > 1) then
       da.Sort(SortDynArrayFileName);
   end;
-  da.Capacity := count; // trim result[]
+  if count <> 0 then
+    DynArrayFakeLength(result, count);
+end;
+
+function FindFileNames(const Directory, Mask, IgnoreFileName: TFileName;
+  Options: TFindFilesOptions): TFileNameDynArray;
+begin
+  result := FindFilesDynArrayToFileNames(
+    FindFiles(Directory, Mask, IgnoreFileName, Options));
 end;
 
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
@@ -1526,6 +1562,8 @@ var
   i, n: PtrInt;
 begin
   Finalize(result);
+  if Files = nil then
+    exit;
   n := length(Files);
   SetLength(result, n);
   for i := 0 to n - 1 do
@@ -1533,10 +1571,10 @@ begin
 end;
 
 {$I-}
-function SynchFolders(const Reference, Dest: TFileName; SubFolder, ByContent,
-  WriteFileNameToConsole: boolean): integer;
+function SynchFolders(const Reference, Dest: TFileName;
+  Options: TSynchFoldersOptions): integer;
 var
-  ref, dst: TFileName;
+  ref, dst, reffn, dstfn: TFileName;
   fref, fdst: TSearchRec;
   reftime: TDateTime;
   s: RawByteString;
@@ -1550,38 +1588,41 @@ begin
     repeat
       if SearchRecValidFile(fdst) then
       begin
-        if ByContent then
-          reftime := FileAgeToDateTime(ref + fdst.Name)
-        else if FindFirst(ref + fdst.Name, faAnyFile, fref) = 0 then
+        reffn := ref + fdst.Name;
+        dstfn := dst + fdst.Name;
+        if sfoByContent in Options then
+          reftime := FileAgeToDateTime(reffn)
+        else if FindFirst(reffn, faAnyFile, fref) = 0 then
         begin
-          reftime := SearchRecToDateTime(fref);
           if (fdst.Size = fref.Size) and
-             (SearchRecToDateTime(fdst) = reftime) then
-            reftime := 0;
+             (fdst.Time = fref.Time) then
+            reftime := 0
+          else
+            reftime := SearchRecToDateTime(fref);
           FindClose(fref);
         end
         else
           reftime := 0; // "continue" trigger unexpected warning on Delphi
         if reftime = 0 then
           continue; // skip if no reference file to copy from
-        s := StringFromFile(ref + fdst.Name);
+        s := StringFromFile(reffn);
         if (s = '') or
-           (ByContent and
+           ((sfoByContent in Options) and
             (length(s) = fdst.Size) and
-           (cardinal(DefaultHasher(0, pointer(s), fdst.Size)) = HashFile(dst + fdst.Name))) then
+            (DefaultHasher(0, pointer(s), fdst.Size) = HashFile(dstfn))) then
           continue;
-        FileFromString(s, dst + fdst.Name, false, reftime);
+        FileFromString(s, dstfn, false, reftime);
         inc(result);
-        if WriteFileNameToConsole then
-          writeln('synched ', dst, fdst.name);
+        if sfoWriteFileNameToConsole in Options then
+          writeln('synched ', dstfn);
       end
-      else if SubFolder and SearchRecValidFolder(fdst) then
-        inc(result, SynchFolders(ref + fdst.Name, dst + fdst.Name, SubFolder,
-          ByContent, WriteFileNameToConsole));
+      else if (sfoSubFolder in Options) and
+              SearchRecValidFolder(fdst) then
+        inc(result, SynchFolders(ref + fdst.Name, dst + fdst.Name, Options));
     until FindNext(fdst) <> 0;
     FindClose(fdst);
   end;
-  if WriteFileNameToConsole then
+  if sfoWriteFileNameToConsole in Options then
     IOResult;
 end;
 {$I+}

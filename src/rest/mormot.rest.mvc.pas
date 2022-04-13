@@ -1360,10 +1360,9 @@ begin
 end;
 
 function TMvcViewsMustache.FindTemplates(
-    const Mask: TFileName): TFileNameDynArray;
+  const Mask: TFileName): TFileNameDynArray;
 begin
-  result := FindFilesDynArrayToFileNames(FindFiles(
-    ViewTemplateFolder, Mask, '', {sorted=}false, {withdir=}false));
+  result := FindFileNames(ViewTemplateFolder, Mask, '', [ffoExcludesDir]);
 end;
 
 function TMvcViewsMustache.GetTemplate(const aFileName: TFileName): RawUtf8;

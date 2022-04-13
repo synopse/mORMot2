@@ -424,8 +424,7 @@ begin
   if (n = 1) and
      (CertFiles[0] = '*') then
   begin
-    files := FindFilesDynArrayToFileNames(FindFiles(
-      '.', '*' + ECCCERTIFICATEPUBLIC_FILEEXT));
+    files := FindFileNames('.', '*' + ECCCERTIFICATEPUBLIC_FILEEXT);
     result := 'chain' + ECCCERTIFICATES_FILEEXT;
   end
   else

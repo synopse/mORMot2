@@ -1067,8 +1067,7 @@ begin
   end
   else
     mask := fShardRootFileName + '*.dbs';
-  db := FindFiles(ExtractFilePath(mask), ExtractFileName(mask),
-    '', {sorted=}true);
+  db := FindFiles(ExtractFilePath(mask), ExtractFileName(mask), '', [ffoSortByName]);
   if db = nil then
     exit; // no existing data
   fShardOffset := -1;
