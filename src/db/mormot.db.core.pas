@@ -3624,6 +3624,8 @@ begin
 end;
 
 function UnJsonFirstField(var P: PUtf8Char): RawUtf8;
+var
+  info: TGetJsonField;
 begin
   result := '';
   if P = nil then
@@ -3654,8 +3656,10 @@ begin
         exit;
     until P^ = '{'; // go to object begining
   end;
-  if GetJsonPropName(P) <> nil then // ignore field name
-    result := GetJsonField(P, P); // get field value
+  info.Json := P;
+  if GetJsonPropName(info.Json) <> nil then // ignore field name
+    info.GetJsonValue(result); // get field value
+  P := info.Json;
 end;
 
 function IsNotAjaxJson(P: PUtf8Char): boolean;

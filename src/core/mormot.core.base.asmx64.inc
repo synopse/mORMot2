@@ -1914,7 +1914,7 @@ function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
         imul    eax, $01010101
         and     rcx, -16
         movd    xmm1, eax
-        movaps  xmm0, [rcx]
+        movaps  xmm0, [rcx]      // check first aligned 16 bytes
         add     rcx, 16
         pshufd  xmm1, xmm1, 0
         sub     rcx, r8
@@ -1927,7 +1927,7 @@ function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
         cmp     rdx, rcx
         jbe     @no
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@by16:  movaps  xmm0, [r8 + rcx]
+@by16:  movaps  xmm0, [r8 + rcx]  // next 16 bytes
         add     rcx, 16
         pcmpeqb xmm0, xmm1
         pmovmskb eax, xmm0
@@ -1963,7 +1963,7 @@ function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
         movd    xmm1, eax
         and     rcx, -16
         punpcklwd xmm1, xmm1
-        movaps  xmm0, [rcx]
+        movaps  xmm0, [rcx]      // check first aligned 16 bytes
         add     rcx, 16
         pshufd  xmm1, xmm1, 0
         sub     rcx, r8
@@ -1978,7 +1978,7 @@ function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
         cmp     rdx, rcx
         jbe     @no
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@by16:  movaps  xmm0, [r8 + rcx * 2]
+@by16:  movaps  xmm0, [r8 + rcx * 2]  // next 16 bytes
         add     rcx, 8
         pcmpeqw xmm0, xmm1
         pmovmskb eax, xmm0
@@ -2029,7 +2029,7 @@ function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): Pt
         jnz     @unal
         // eax=Value, rcx=P rdx=Count
         and     rcx, -16
-        movaps  xmm0, [rcx]
+        movaps  xmm0, [rcx]      // check first aligned 16 bytes
         add     rcx, 16
         pshufd  xmm1, xmm1, 0
         sub     rcx, r8
@@ -2044,7 +2044,7 @@ function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): Pt
         cmp     rdx, rcx
         jbe     @no
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@by16:  movaps  xmm0, [r8 + rcx * 4]
+@by16:  movaps  xmm0, [r8 + rcx * 4]  // next 16 bytes
         add     rcx, 4
         pcmpeqd xmm0, xmm1
         pmovmskb eax, xmm0

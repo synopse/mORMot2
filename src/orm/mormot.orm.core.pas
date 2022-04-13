@@ -2949,7 +2949,7 @@ type
     // AJAX-ready array of objects)
     // - the conversion into PPUtf8CharArray is made inplace and is very fast
     // (no additional memory buffer is allocated)
-    function ParseAndConvert(Buffer: PUtf8Char; BufferLen: integer): boolean;
+    function ParseAndConvert(Buffer: PUtf8Char; BufferLen: PtrInt): boolean;
     /// will check then set (if needed) internal fPrivateCopy[Hash] values
     // - returns TRUE if fPrivateCopy content changed (then fPrivateCopyHash
     // will be updated using crc32c hash if aUpdateHash is set)
@@ -2965,7 +2965,7 @@ type
     // use instead the overloaded Create constructor expecting a const
     // aJson: RawUtf8 parameter to allocate and hold a private copy of the data
     constructor Create(const aSql: RawUtf8;
-      JsonBuffer: PUtf8Char; JsonBufferLen: integer); reintroduce; overload;
+      JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt); reintroduce; overload;
     /// create the result table from a JSON-formated Data message
     // - the JSON data is parsed and formatted in-place, after having been
     // copied in the protected fPrivateCopy variable
@@ -2977,7 +2977,7 @@ type
     // - please note that the supplied JSON buffer content will be changed
     constructor CreateFromTables(const Tables: array of TOrmClass;
       const aSql: RawUtf8;
-      JsonBuffer: PUtf8Char; JsonBufferLen: integer); reintroduce; overload;
+      JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt); reintroduce; overload;
     /// create the result table from a JSON-formated Data message
     // - you can specify a set of TOrm classes which will be used to
     // retrieve the column exact type information
@@ -2989,7 +2989,7 @@ type
     // - you can set the expected column types matching the results column layout
     // - the JSON data is parsed and formatted in-place
     constructor CreateWithColumnTypes(const ColumnTypes: array of TOrmFieldType;
-      const aSql: RawUtf8; JsonBuffer: PUtf8Char; JsonBufferLen: integer);
+      const aSql: RawUtf8; JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt);
       reintroduce; overload;
     /// initialize the result table from a JSON-formated Data message
     // - you can set the expected column types matching the results column layout
@@ -5788,7 +5788,7 @@ end;
 { TOrmTableJson }
 
 constructor TOrmTableJson.Create(const aSql: RawUtf8; JsonBuffer: PUtf8Char;
-  JsonBufferLen: integer);
+  JsonBufferLen: PtrInt);
 begin // don't raise exception on error parsing
   inherited Create(aSql);
   ParseAndConvert(JsonBuffer, JsonBufferLen);
@@ -5805,7 +5805,7 @@ end;
 
 constructor TOrmTableJson.CreateFromTables(
   const Tables: array of TOrmClass; const aSql: RawUtf8;
-  JsonBuffer: PUtf8Char; JsonBufferLen: integer);
+  JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt);
 begin
   // don't raise exception on error parsing
   inherited CreateFromTables(Tables, aSql);
@@ -5827,7 +5827,7 @@ end;
 
 constructor TOrmTableJson.CreateWithColumnTypes(
   const ColumnTypes: array of TOrmFieldType; const aSql: RawUtf8;
-  JsonBuffer: PUtf8Char; JsonBufferLen: integer);
+  JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt);
 begin
   // don't raise exception on error parsing
   inherited CreateWithColumnTypes(ColumnTypes, aSql);
@@ -5864,7 +5864,7 @@ begin
   FastSetString(fPrivateCopy, pointer(aJson), aLen);
 end;
 
-function TOrmTableJson.ParseAndConvert(Buffer: PUtf8Char; BufferLen: integer): boolean;
+function TOrmTableJson.ParseAndConvert(Buffer: PUtf8Char; BufferLen: PtrInt): boolean;
 var
   i, max, resmax, f: PtrInt;
   P: PUtf8Char;

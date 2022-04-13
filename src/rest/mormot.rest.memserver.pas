@@ -313,9 +313,9 @@ end;
 procedure TRestOrmServerFullMemory.LoadFromStream(aStream: TStream);
 var
   magic, json: RawUtf8;
-  P, TableName, Data: PUtf8Char;
   t: PtrInt;
-  wasString: boolean;
+  P: PUtf8Char;
+  info: TGetJsonField;
 begin
   if aStream = nil then
     exit;
@@ -353,22 +353,24 @@ begin
           inc(P);
       if P^ = ']' then
         break;
-      inc(P);
-      TableName := GetJsonField(P, P, @wasString);
-      if not wasString or
+      info.Json := P + 1;
+      info.GetJsonField;
+      P := info.Json;
+      if not info.WasString or
          (P = nil) then
         exit;
-      t := Model.GetTableIndexPtr(TableName);
+      t := Model.GetTableIndexPtr(info.Value);
       if t < 0 then
         exit;
       if (P^ <> '[') and
          (P^ <> '{') then
         break;
-      Data := P;
+      info.Value := P;
       P := GotoEndJsonItem(P);
       if P = nil then
         break;
-      TRestStorageInMemory(fStaticData[t]).LoadFromJson(Data, P - Data);
+      TRestStorageInMemory(fStaticData[t]).LoadFromJson(
+        info.Value, P - info.Value);
     until false;
   end;
 end;

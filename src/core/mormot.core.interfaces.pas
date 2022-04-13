@@ -215,7 +215,7 @@ type
   // callback parameter
   // - implementation should set the Obj local variable to an instance of
   // a fake class implementing the aParamInfo interface
-  TOnInterfaceMethodExecuteCallback = procedure(var Par: PUtf8Char;
+  TOnInterfaceMethodExecuteCallback = procedure(var Ctxt: TJsonParserContext;
     ParamInterfaceInfo: TRttiJson; out Obj) of object;
 
   /// how TInterfaceMethod.TInterfaceMethod method will return the generated document
@@ -5569,17 +5569,16 @@ constructor TOnInterfaceStubExecuteParamsVariant.Create(aSender: TInterfaceStub;
   aMethod: PInterfaceMethod; const aParams, aEventParams: RawUtf8);
 var
   i: PtrInt;
-  P: PUtf8Char;
+  info: TGetJsonField;
   tmp: TSynTempBuffer;
 begin
   inherited;
   SetLength(fInput, fMethod^.ArgsInputValuesCount);
   tmp.Init(aParams);
   try
-    P := tmp.buf;
+    info.Json := tmp.buf;
     for i := 0 to fMethod^.ArgsInputValuesCount - 1 do
-      GetJsonToAnyVariant(
-        fInput[i], P, nil, @aSender.fInterface.DocVariantOptions, false);
+      JsonToAnyVariant(fInput[i], info, @aSender.fInterface.DocVariantOptions, false);
   finally
     tmp.Done;
   end;
@@ -7445,7 +7444,7 @@ begin
             if Assigned(OnCallback) then
               // retrieve TRestServerUriContext.ExecuteCallback fake interface
               // via TServiceContainerServer.GetFakeCallback
-              OnCallback(ctxt.Json, arg^.ArgRtti, PInterface(fValues[a])^)
+              OnCallback(ctxt, arg^.ArgRtti, PInterface(fValues[a])^)
             else
               raise EInterfaceFactory.CreateUtf8('OnCallback=nil for %(%: %)',
                 [fMethod^.InterfaceDotMethodName, arg^.ParamName^,

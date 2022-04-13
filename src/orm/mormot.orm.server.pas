@@ -1356,8 +1356,7 @@ begin
               // '{"Table":[...,"DELETE",id,...]}'
               // or '[...,"DELETE@Table",id,...]'
               encoding := encDelete;
-              info.GetJsonField;
-              id := GetInt64(info.Value, info.ValueLen);
+              id := info.GetJsonInt64;
               if (id <= 0) or
                  info.WasString then
                 raise EOrmBatchException.CreateUtf8(

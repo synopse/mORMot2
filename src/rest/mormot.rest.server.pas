@@ -463,8 +463,8 @@ type
     /// event raised by ExecuteMethod() for interface parameters
     // - match TInterfaceMethodInternalExecuteCallback signature
     // - redirect to TServiceContainerServer.GetFakeCallback
-    procedure ExecuteCallback(var Par: PUtf8Char; ParamInterfaceInfo: TRttiJson;
-      out Obj); virtual;
+    procedure ExecuteCallback(var Ctxt: TJsonParserContext;
+      ParamInterfaceInfo: TRttiJson; out Obj); virtual;
     /// use this method to send back a file from a local folder to the caller
     // - UriBlobFieldName value, as parsed from the URI, will containn the
     // expected file name in the local folder, using DefaultFileName if the
@@ -3038,7 +3038,7 @@ begin
       fLog.Log(sllServiceReturn, fCall.OutBody, self, MAX_SIZE_RESPONSE_LOG);
 end;
 
-procedure TRestServerUriContext.ExecuteCallback(var Par: PUtf8Char;
+procedure TRestServerUriContext.ExecuteCallback(var Ctxt: TJsonParserContext;
   ParamInterfaceInfo: TRttiJson; out Obj);
 var
   fakeid: PtrInt;
@@ -3047,9 +3047,9 @@ begin
     raise EServiceException.CreateUtf8('% does not implement callbacks for I%',
       [Server, ParamInterfaceInfo.Name]);
   // Par is the callback ID transmitted from the client side
-  fakeid := GetInteger(GetJsonField(Par, Par)); // GetInteger returns a PtrInt
-  if Par = nil then
-    Par := @NULCHAR; // allow e.g. '[12345]' (single interface parameter)
+  fakeid := Ctxt.ParseInteger;
+  if Ctxt.Json = nil then
+    Ctxt.Json := @NULCHAR; // allow e.g. '[12345]' (single interface parameter)
   if (fakeid = 0) or
      (ParamInterfaceInfo.Info = TypeInfo(IInvokable)) then
   begin

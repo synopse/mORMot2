@@ -329,7 +329,7 @@ procedure TTestCoreProcess.Variants;
 var
   v: Variant;
   vd: TVarData absolute v;
-  json: PUtf8Char;
+  info: TGetJsonField;
   t: pointer;
   dt: TDateTime;
   ni: TNullableInteger;
@@ -482,8 +482,8 @@ begin
   Check(ni = 10);
   Check(nt = 'toto');
   {$endif FPC}
-  json := nil;
-  GetJsonToAnyVariant(v, json, nil, nil, false);
+  info.Json := nil;
+  JsonToAnyVariant(v, info, nil, false);
   Check(vd.VType = varEmpty);
   v := VariantLoadJson('');
   Check(vd.VType = varEmpty);
@@ -1215,6 +1215,7 @@ const
 procedure TTestCoreProcess.EncodeDecodeJSON;
 var
   J, J2, U, U2: RawUtf8;
+  info: TGetJsonField;
   P: PUtf8Char;
   binary, zendframeworkJson, discogsJson: RawByteString;
   V: array[0..4] of TValuePUtf8Char;
@@ -1917,23 +1918,20 @@ var
   procedure TestGetJsonField(const s, v: RawUtf8; str, error: boolean;
     eof, next: AnsiChar);
   var
-    P, d: PUtf8Char;
-    ws: boolean;
-    e: AnsiChar;
-    l: integer;
     s2: RawUtf8;
+    info: TGetJsonField;
   begin
     s2 := s;
-    P := UniqueRawUtf8(s2);
-    P := GetJsonField(P, d, @ws, @e, @l);
-    check(error = (d = nil));
-    if d = nil then
+    info.Json := UniqueRawUtf8(s2);
+    info.GetJsonField;
+    check(error = (info.Json = nil));
+    if info.Json = nil then
       exit;
-    check(str = ws);
-    check(eof = e);
-    check(d^ = next);
-    check(l = length(v));
-    check(CompareMem(P, pointer(v), length(v)));
+    check(info.WasString = str);
+    check(info.EndOfObject = eof);
+    check(info.Json^ = next);
+    check(info.ValueLen = length(v));
+    check(CompareMem(info.Value, pointer(v), info.ValueLen));
   end;
 
 begin
@@ -2230,19 +2228,19 @@ begin
       AddVariant(U);
       J := Text;
       CheckEqual(J, U + ',' + DoubleToStr(r) + ',' + DoubleToStr(c) + ',"' + U + '"');
-      P := UniqueRawUtf8(J);
-      GetJsonToAnyVariant(Va, P, nil, nil, false);
-      Check(P <> nil);
+      info.Json := UniqueRawUtf8(J);
+      JsonToAnyVariant(Va, info, nil, false);
+      Check(info.Json <> nil);
       Check(Va = a);
-      GetJsonToAnyVariant(Va, P, nil, nil, true);
-      Check(P <> nil);
+      JsonToAnyVariant(Va, info, nil, true);
+      Check(info.Json <> nil);
       CheckSame(VariantToDoubleDef(Va), r);
-      GetJsonToAnyVariant(Va, P, nil, nil, false);
-      Check(P <> nil);
+      JsonToAnyVariant(Va, info, nil, false);
+      Check(info.Json <> nil);
       Check(Va = c);
-      GetJsonToAnyVariant(Va, P, nil, nil, false);
-      Check((P <> nil) and
-            (P^ = #0));
+      JsonToAnyVariant(Va, info, nil, false);
+      Check((info.Json <> nil) and
+            (info.Json^ = #0));
       Check(Va = U);
       binary := VariantSave(Va);
       Vb := VariantLoad(binary, @JSON_[mFast]);
@@ -2984,9 +2982,11 @@ begin
   end;
   Rtti.RegisterFromText(TypeInfo(TTestCustomDiscogs), '');
   SetString(U, PAnsiChar('true'#0'footer,'), 12);
-  Check(IdemPChar(GetJsonField(pointer(U), P), 'TRUE'));
-  Check((P <> nil) and
-        (P^ = #0));
+  info.Json := pointer(U);
+  info.GetJsonField;
+  Check(IdemPChar(info.Value, 'TRUE'));
+  Check((info.Json <> nil) and
+        (info.Json^ = #0));
   CheckEqual(U, 'true'#0'footer,', '3cce80e8df');
   // validates RawJson (custom) serialization
   Enemy := TEnemy.Create;

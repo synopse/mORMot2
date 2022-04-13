@@ -3562,6 +3562,7 @@ const
   var
     tmp: TSynTempBuffer;
     da: RawJson;
+    info: TGetJsonField;
   begin
     tmp.buf := nil;
     try
@@ -3572,15 +3573,16 @@ const
          Base64MagicCheckAndDecode(Value, tmp, ValueLen) then
       begin
         da := DynArrayBlobSaveJson(typeInfo, tmp.buf);
-        Value := pointer(da);
-        ValueLen := length(da);
+        info.Json := pointer(da);
       end
       else if createValueTempCopy then
       begin
         tmp.Init(Value, ValueLen);
-        Value := tmp.buf;
-      end;
-      GetJsonToAnyVariant(variant(result), Value, nil, @options, false);
+        info.Json := tmp.buf;
+      end
+      else
+        info.Json := Value;
+      JsonToAnyVariant(variant(result), info, @options, false);
     finally
       tmp.Done;
     end;
@@ -10810,26 +10812,28 @@ var
   decoded: TID;
   W: TOrmWriter;
   Start: PUtf8Char;
+  info: TGetJsonField;
   temp: TTextWriterStackBuffer;
 begin
   result := '';
-  if P = nil then
+  info.Json := P;
+  if info.Json = nil then
     exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  if P^ <> '[' then
+  while (info.Json^ <= ' ') and
+        (info.Json^ <> #0) do
+    inc(info.Json);
+  if info.Json^ <> '[' then
     exit;
   repeat
-    inc(P)
-  until (P^ > ' ') or
-        (P^ = #0);
+    inc(info.Json)
+  until (info.Json^ > ' ') or
+        (info.Json^ = #0);
   if ID = nil then
     decoded := 0
   else
     decoded := ID^;
   if sfoStartWithID in Format then
-    decoded := GetInt64(GetJsonField(P, P));
+    decoded := info.GetJsonInt64;
   W := TOrmWriter.CreateOwnedStream(temp);
   try
     if sfoExtendedJson in Format then
@@ -10842,20 +10846,20 @@ begin
       if GetBitPtr(@Bits, i) then
       begin
         W.AddFieldName(Fields.List[i].Name);
-        Start := P;
-        P := GotoEndJsonItem(P);
-        if (P = nil) or
-           not (P^ in [',', ']']) then
+        Start := info.Json;
+        info.Json := GotoEndJsonItem(info.Json);
+        if (info.Json = nil) or
+           not (info.Json^ in [',', ']']) then
           exit;
-        W.AddNoJsonEscape(Start, P - Start);
+        W.AddNoJsonEscape(Start, info.Json - Start);
         W.AddComma;
         repeat
-          inc(P)
-        until (P^ > ' ') or
-              (P^ = #0);
+          inc(info.Json)
+        until (info.Json^ > ' ') or
+              (info.Json^ = #0);
       end;
     if sfoEndWithID in Format then
-      decoded := GetInt64(GetJsonField(P, P));
+      decoded := info.GetJsonInt64;
     if (decoded <> 0) and
        (sfoPutIDLast in Format) then
       W.AddPropJsonInt64('ID', decoded);
@@ -10869,12 +10873,13 @@ begin
      (decoded <> 0) then
     ID^ := decoded;
   if EndOfObject <> nil then
-    EndOfObject^ := P^;
-  if P^ <> #0 then
+    EndOfObject^ := info.Json^;
+  if info.Json^ <> #0 then
     repeat
-      inc(P)
-    until (P^ > ' ') or
-          (P^ = #0);
+      inc(info.Json)
+    until (info.Json^ > ' ') or
+          (info.Json^ = #0);
+  P := info.Json;
 end;
 
 procedure TOrmPropertiesAbstract.SaveBinaryHeader(W: TBufferWriter);

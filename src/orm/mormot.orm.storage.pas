@@ -785,7 +785,7 @@ type
     // - consider using the overlaoded PUtf8Char/len method if you don't need this copy
     procedure LoadFromJson(const aJson: RawUtf8); overload;
     /// load the values from JSON data
-    procedure LoadFromJson(JsonBuffer: PUtf8Char; JsonBufferLen: integer); overload;
+    procedure LoadFromJson(JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt); overload;
     /// save the values into JSON data
     function SaveToJson(Expand: boolean): RawUtf8; overload;
     /// save the values into JSON data
@@ -1923,7 +1923,7 @@ begin
     result := 0; // clearly invalid input
     exit;
   end;
-  result := GetInt64(info.Value, info.ValueLen);
+  result := GetInt64(info.Value);
   Sent := info.Json - 1;
   Sent^ := '['; // ignore the first field (stored in fBatch.ID)
 end;
@@ -3153,7 +3153,7 @@ begin
 end;
 
 procedure TRestStorageInMemory.LoadFromJson(
-  JsonBuffer: PUtf8Char; JsonBufferLen: integer);
+  JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt);
 var
   T: TOrmTableJson;
   timer: TPrecisionTimer;

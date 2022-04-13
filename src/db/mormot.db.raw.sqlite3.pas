@@ -5603,34 +5603,36 @@ end;
 procedure JsonToSQlite3Context(json: PUtf8Char;
   Context: TSqlite3FunctionContext);
 var
-  tmp: Variant;
-  start: PUtf8Char;
+  info: TGetJsonField;
+  tmp: TRttiVarData;
 begin
   if json = nil then
     sqlite3.result_null(Context)
   else
   begin
-    start := GotoNextNotSpace(json);
-    if start^ in ['[', '{'] then
+    info.Json := GotoNextNotSpace(json);
+    if info.Json^ in ['[', '{'] then
     begin
       // JSON object or array is returned as plain TEXT
-      json := GotoEndJsonItem(start);
+      json := GotoEndJsonItem(info.Json);
       if json = nil then
         sqlite3.result_null(Context)
       else
       begin
         json^ := #0; // truncate to the matching object or array end
-        sqlite3.result_text(Context, start, json - start + 1, SQLITE_TRANSIENT);
+        sqlite3.result_text(Context, info.Json, json - info.Json + 1, SQLITE_TRANSIENT);
       end;
     end
     else
     begin
       // JSON simple types (text, numbers) would be converted via a variant
-      GetJsonToAnyVariant(tmp, start, nil, nil, {allowdouble=}true);
-      if start = nil then
+      tmp.VType := 0;
+      JsonToAnyVariant(variant(tmp), info, nil, {allowdouble=}true);
+      if info.Json = nil then
         sqlite3.result_null(Context)
       else
-        VariantToSQlite3Context(tmp, Context);
+        VariantToSQlite3Context(variant(tmp), Context);
+      VarClearProc(tmp.Data);
     end;
   end;
 end;
@@ -6496,7 +6498,9 @@ procedure InternalJsonSet(Context: TSqlite3FunctionContext; argc: integer;
 var
   doc: TDocVariantData;
   json: PUtf8Char;
-  tmp: RawUtf8;
+  info: TGetJsonField;
+  tmp: TSynTempBuffer;
+  u: RawUtf8;
   v: PVariant;
 begin
   // JsonSet(VariantField,'PropName','abc') to set a value
@@ -6508,24 +6512,21 @@ begin
   else
   begin
     json := sqlite3.value_text(argv[0]);
-    FastSetString(tmp, json, StrLen(json));
-    doc.InitJsonInPlace(pointer(tmp), JSON_FAST_FLOAT);
+    doc.InitJsonInPlace(tmp.Init(json), JSON_FAST_FLOAT);
+    tmp.Done;
     v := doc.GetPVariantByPath(sqlite3.value_text(argv[1]));
     if v <> nil then
     begin
       // update the field, then return whole JSON
-      json := sqlite3.value_text(argv[2]);
-      FastSetString(tmp, json, StrLen(json));
-      json := pointer(tmp);
-      GetJsonToAnyVariant(v^, json, nil, @JSON_[mFastFloat], false);
-      RawUtf8ToSQlite3Context(doc.ToJson, Context, false);
+      info.Json := tmp.Init(sqlite3.value_text(argv[2]));
+      JsonToAnyVariant(v^, info, @JSON_[mFastFloat], false);
+      tmp.Done;
+      u := doc.ToJson;
     end
     else
-    begin
       // field was not found: just return whole untouched JSON
-      FastSetString(tmp, json, StrLen(json)); // doc.InitJsonInPlace modified it
-      RawUtf8ToSQlite3Context(tmp, Context, false);
-    end;
+      FastSetString(u, json, StrLen(json)); // doc.InitJsonInPlace modified it
+    RawUtf8ToSQlite3Context(u, Context, false);
   end;
 end;
 

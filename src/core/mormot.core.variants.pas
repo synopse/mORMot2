@@ -2513,10 +2513,6 @@ function GetVariantFromNotStringJson(Json: PUtf8Char;
 /// low-level function to parse a JSON buffer content into a variant
 // - warning: will decode in the Json buffer memory itself (no memory
 // allocation or copy), for faster process - so take care that it is not shared
-procedure GetJsonToAnyVariant(var Value: variant; var Info: TGetJsonField;
-  Options: PDocVariantOptions; AllowDouble: boolean = false); overload;
-
-/// low-level function to parse a JSON content into a variant
 // - internal method used by VariantLoadJson(), GetVariantFromJsonField() and
 // TDocVariantData.InitJson()
 // - will instantiate either an integer, Int64, currency, double or string value
@@ -2525,12 +2521,15 @@ procedure GetJsonToAnyVariant(var Value: variant; var Info: TGetJsonField;
 // (e.g. @JSON_[mFast] for fast instance) and input is a known object or
 // array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
 // extended (e.g. BSON) syntax
-// - warning: the JSON buffer will be modified in-place during process - use
-// a temporary copy or the overloaded functions with RawUtf8 parameter
-// if you need to access it later
+procedure JsonToAnyVariant(var Value: variant; var Info: TGetJsonField;
+  Options: PDocVariantOptions; AllowDouble: boolean = false);
+
+{$ifndef PUREMORMOT2}
+/// low-level function to parse a JSON content into a variant
 procedure GetJsonToAnyVariant(var Value: variant; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; Options: PDocVariantOptions; AllowDouble: boolean);
     overload; {$ifdef HASINLINE}inline;{$endif}
+{$endif PUREMORMOT2}
 
 /// identify either varInt64, varDouble, varCurrency types following JSON format
 // - any non valid number is returned as varString
@@ -5062,7 +5061,7 @@ begin
       val := dv^.InitFrom(proto, {values=}false); // names byref + no values
       for f := 1 to fieldcount do
       begin
-        GetJsonToAnyVariant(val^, info, @aOptions);
+        JsonToAnyVariant(val^, info, @aOptions);
         inc(val);
       end;
       if info.Json = nil then
@@ -5121,7 +5120,7 @@ begin
         if info.Json = nil then
           exit;
         inc(info.Json); // ignore jcEndOfJsonFieldOr0
-        GetJsonToAnyVariant(val^, info, @aOptions);
+        JsonToAnyVariant(val^, info, @aOptions);
         if info.Json = nil then
           exit;
         inc(val);
@@ -5249,7 +5248,7 @@ begin
               Val := @VValue[n];
             end;
             // unserialize the next item
-            GetJsonToAnyVariant(val^, info, @VOptions);
+            JsonToAnyVariant(val^, info, @VOptions);
             if info.Json = nil then
               break; // invalid input
             if intvalues <> nil then
@@ -5321,7 +5320,7 @@ begin
               intnames.Unique(VName[n], Name, NameLen)
             else
               FastSetString(VName[n], Name, NameLen);
-            GetJsonToAnyVariant(Val^, info, @VOptions);
+            JsonToAnyVariant(Val^, info, @VOptions);
             if info.Json = nil then
               if info.EndOfObject = '}' then // valid object end
                 info.Json := @NULCHAR
@@ -8042,19 +8041,21 @@ begin
     inc(result); // #0, ',', ']', '}'
 end;
 
+{$ifndef PUREMORMOT2}
 procedure GetJsonToAnyVariant(var Value: variant; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; Options: PDocVariantOptions; AllowDouble: boolean);
 var
   info: TGetJsonField;
 begin
   info.Json := Json;
-  GetJsonToAnyVariant(Value, Info, Options, AllowDouble);
+  JsonToAnyVariant(Value, Info, Options, AllowDouble);
   if EndOfObject <> nil then
     EndOfObject^ := info.EndOfObject;
   Json := info.Json;
 end;
+{$endif PUREMORMOT2}
 
-procedure GetJsonToAnyVariant(var Value: variant; var Info: TGetJsonField;
+procedure JsonToAnyVariant(var Value: variant; var Info: TGetJsonField;
   Options: PDocVariantOptions; AllowDouble: boolean);
 var
   V: TVarData absolute Value;
@@ -8570,7 +8571,7 @@ begin
        not wasString then
     begin // also supports dvoJsonObjectParseWithinString
       info.Json := Json;
-      GetJsonToAnyVariant(Value, info, TryCustomVariants, AllowDouble);
+      JsonToAnyVariant(Value, info, TryCustomVariants, AllowDouble);
       exit;
     end
     else if dvoAllowDoubleValue in TryCustomVariants^ then
@@ -8598,20 +8599,20 @@ begin
   if TryCustomVariant = nil then
     TryCustomVariant := @JSON_[mFast];
   info.Json := Json;
-  GetJsonToAnyVariant(Value, info, TryCustomVariant, {double=}true);
+  JsonToAnyVariant(Value, info, TryCustomVariant, {double=}true);
 end;
 
 function VariantLoadJson(var Value: Variant; const Json: RawUtf8;
   TryCustomVariants: PDocVariantOptions; AllowDouble: boolean): boolean;
 var
   tmp: TSynTempBuffer;
-  buf: PUtf8Char;
+  info: TGetJsonField;
 begin
   tmp.Init(Json); // temp copy before in-place decoding
   try
-    buf := tmp.buf;
-    GetJsonToAnyVariant(Value, buf, nil, TryCustomVariants, AllowDouble);
-    result := buf <> nil;
+    info.Json := tmp.buf;
+    JsonToAnyVariant(Value, info, TryCustomVariants, AllowDouble);
+    result := info.Json <> nil;
   finally
     tmp.Done;
   end;
@@ -8625,9 +8626,12 @@ end;
 
 function JsonToVariantInPlace(var Value: Variant; Json: PUtf8Char;
   Options: TDocVariantOptions; AllowDouble: boolean): PUtf8Char;
+var
+  info: TGetJsonField;
 begin
-  GetJsonToAnyVariant(Value, Json, nil, @Options, AllowDouble);
-  result := Json;
+  info.Json := Json;
+  JsonToAnyVariant(Value, info, @Options, AllowDouble);
+  result := info.Json;
 end;
 
 function JsonToVariant(const Json: RawUtf8; Options: TDocVariantOptions;
