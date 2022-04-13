@@ -1258,13 +1258,22 @@ type
   HCRYPTKEY = pointer;
   HCRYPTHASH = pointer;
 
-  PCCERT_CONTEXT = pointer;
+  PCERT_INFO = pointer;
+  HCERTSTORE = pointer;
+
+  CERT_CONTEXT = record
+    dwCertEncodingType: DWORD;
+    pbCertEncoded: PByte;
+    cbCertEncoded: DWORD;
+    pCertInfo: PCERT_INFO;
+    hCertStore: HCERTSTORE;
+  end;
+  PCCERT_CONTEXT = ^CERT_CONTEXT;
   PPCCERT_CONTEXT = ^PCCERT_CONTEXT;
+
   PCCRL_CONTEXT = pointer;
   PPCCRL_CONTEXT = ^PCCRL_CONTEXT;
   PCRYPT_ATTRIBUTE = pointer;
-  PCERT_INFO = pointer;
-  HCERTSTORE = pointer;
 
   CRYPTOAPI_BLOB = record
     cbData: DWORD;
@@ -1401,6 +1410,33 @@ var
 // https://www.passcape.com/index.php?section=docsys&cmd=details&id=28
 function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
+
+type
+  /// identify the Windows system certificate stores
+  // - as used e.g. by GetSystemStoreAsPem()
+  // - scsCA contains known Certification Authority certificates, i.e. from
+  // entities entrusted to issue certificates that assert that the recipient
+  // individual, computer, or organization requesting the certificate fulfills
+  // the conditions of an established policy
+  // - scsMY holds certificates with associated private keys
+  // - scsRoot contains known Root certificates, i.e. self-signed CA certificates
+  // which are the root of the whole certificates trust tree
+  // - scsSpc contains Software Publisher Certificates
+  TSystemCertificateStore = (
+    scsCA,
+    scsMY,
+    scsRoot,
+    scsSpc);
+
+const
+  WINDOWS_CERTSTORE: array[TSystemCertificateStore] of RawUtf8 = (
+    'CA', 'MY', 'ROOT', 'SPC');
+
+/// retrieve all certificates of a given system store as PEM text
+// - will maintain an internal cache refreshed about every 4 minutes unless
+// FlushCache is set to true to force retrieval from the Windows API
+function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
+  FlushCache: boolean = false): RawUtf8;
 
 /// this global procedure should be called from each thread needing to use OLE
 // - it is called e.g. by TOleDBConnection.Create when an OleDb connection

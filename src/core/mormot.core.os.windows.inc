@@ -2486,7 +2486,8 @@ type
 
 const
   CRYPTDLL = 'Crypt32.dll';
-  CRYPTPROTECT_UI_FORBIDDEN = $1;
+  CRYPTPROTECT_UI_FORBIDDEN = 1;
+  CRYPT_STRING_BASE64HEADER = 0; // = PEM textual format
 
 function CryptProtectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
   OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWORD;
@@ -2530,6 +2531,76 @@ begin
     result := '';
 end;
 
+function CertOpenSystemStore(hProv: HCRYPTPROV;
+  szSubsystemProtocol: PAnsiChar): HCERTSTORE ;
+    stdcall; external CRYPTDLL name 'CertOpenSystemStoreA';
+
+function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
+  pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
+  stdcall; external CRYPTDLL name 'CertEnumCertificatesInStore';
+
+function CryptBinaryToString(pBinary: PByte; cbBinary, dwFlags: DWORD;
+  pszString: PAnsiChar; var pchString: DWORD): BOOL;
+    stdcall; external CRYPTDLL name 'CryptBinaryToStringA';
+
+function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWORD): BOOL;
+    stdcall; external CRYPTDLL name 'CertCloseStore';
+
+var
+  _GetSystemStoreAsPemCache: array[TSystemCertificateStore] of record
+    Tix: PtrUInt;
+    Pem: RawUtf8;
+  end;
+
+function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
+  FlushCache: boolean): RawUtf8;
+var
+  store: HCERTSTORE;
+  ctx: PCCERT_CONTEXT;
+  now: PtrUInt;
+  len, tmplen: DWORD;
+  tmp: TSynTempBuffer;
+begin
+  result := '';
+  now := GetTickCount64 shr 18; // div 262.144 seconds = refresh every 4.4 min
+  if not FlushCache then
+    with _GetSystemStoreAsPemCache[CertStore] do
+      if (Tix = now) and
+         (Pem <> '') then
+      begin
+        result := Pem;
+        exit;
+      end;
+  len := 0;
+  store := CertOpenSystemStore(nil, pointer(WINDOWS_CERTSTORE[CertStore]));
+  try
+    ctx := CertEnumCertificatesInStore(store, nil);
+    while ctx <> nil do
+    begin
+      tmplen := 0;
+      if not CryptBinaryToString(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
+          CRYPT_STRING_BASE64HEADER, nil, tmplen) then
+        break;
+      tmp.Init(tmplen);
+      if CryptBinaryToString(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
+          CRYPT_STRING_BASE64HEADER, tmp.buf, tmplen) then
+      begin
+        SetLength(result, len + tmplen);
+        MoveFast(tmp.buf^, PByteArray(result)[len], tmplen);
+        inc(len, tmplen);
+      end;
+      tmp.Done;
+      ctx := CertEnumCertificatesInStore(store, ctx);
+    end;
+  finally
+    CertCloseStore(store, 0);
+  end;
+  with _GetSystemStoreAsPemCache[CertStore] do
+  begin
+    Tix := now;
+    Pem := result;
+  end;
+end;
 
 threadvar
   OleDBCoinitialized: integer;
