@@ -1142,7 +1142,7 @@ begin
     exit;
   for i := 0 to high(fSourcePath) do
     FillDescriptionFromSource(fDescriptions,
-      format('%s%s.pas', [fSourcePath[i], aUnitName]));
+      FormatString('%%.pas', [fSourcePath[i], aUnitName]));
 end;
 
 function TWrapperContext.ContextFromMethods(int: TInterfaceFactory): variant;

@@ -23,6 +23,7 @@ uses
   mormot.core.os,
   mormot.core.text,
   mormot.core.unicode,
+  mormot.core.datetime,
   mormot.core.variants,
   mormot.core.rtti,
   mormot.core.json,
@@ -420,7 +421,8 @@ begin
   n := length(CertFiles);
   if n = 0 then
     exit;
-  if (n = 1) and (CertFiles[0] = '*') then
+  if (n = 1) and
+     (CertFiles[0] = '*') then
   begin
     files := FindFilesDynArrayToFileNames(FindFiles(
       '.', '*' + ECCCERTIFICATEPUBLIC_FILEEXT));
@@ -435,7 +437,7 @@ begin
       if not EccKeyFileFind(files[i], false) then
         exit;
     end;
-    result := format('chain%d' + ECCCERTIFICATES_FILEEXT, [UnixTimeUtc]);
+    result := FormatString('chain%' + ECCCERTIFICATES_FILEEXT, [NowToFileShort]);
   end;
   with TEccCertificateChain.CreateFromFiles(files) do
   try

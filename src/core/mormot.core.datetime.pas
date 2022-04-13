@@ -449,6 +449,10 @@ type
     /// copy Year/Month/DayOfWeek/Day fields to a TSynDate
     procedure ToSynDate(out date: TSynDate);
       {$ifdef HASINLINE}inline;{$endif}
+    /// convert the stored time into a timestamped local file name
+    // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits,
+    // expecting a date > 1999 (a current date would be fine)
+    procedure ToFileShort(out result: TShort16);
     /// fill the DayOfWeek field from the stored Year/Month/Day
     // - by default, most methods will just store 0 in the DayOfWeek field
     // - sunday is DayOfWeek 1, saturday is 7
@@ -527,6 +531,10 @@ function DateTimeToFileShort(const DateTime: TDateTime): TShort16; overload;
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
 procedure DateTimeToFileShort(const DateTime: TDateTime; out result: TShort16); overload;
+
+/// get the current time a small text layout, perfect e.g. for naming a file
+// - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits
+function NowToFileShort(localtime: boolean = false): TShort16;
 
 /// retrieve the current Time (whithout Date), in the ISO 8601 layout
 // - useful for direct on screen logging e.g.
@@ -2100,6 +2108,38 @@ begin
   date := PSynDate(@self)^; // first 4 fields do match
 end;
 
+procedure TSynSystemTime.ToFileShort(out result: TShort16);
+var
+  {$ifdef CPUX86NOTPIC}
+  tab: TWordArray absolute TwoDigitLookupW;
+  {$else}
+  tab: PWordArray;
+  {$endif CPUX86NOTPIC}
+begin
+  if IsZero then
+  begin
+    PWord(@result[0])^ := 1 + ord('0') shl 8;
+    exit;
+  end;
+  if Year > 1999 then
+    if Year < 2100 then
+      dec(Year, 2000)
+    else
+      Year := 99
+  else
+    Year := 0;
+  {$ifndef CPUX86NOTPIC}
+  tab := @TwoDigitLookupW;
+  {$endif CPUX86NOTPIC}
+  result[0] := #12;
+  PWord(@result[1])^  := tab[Year];
+  PWord(@result[3])^  := tab[Month];
+  PWord(@result[5])^  := tab[Day];
+  PWord(@result[7])^  := tab[Hour];
+  PWord(@result[9])^  := tab[Minute];
+  PWord(@result[11])^ := tab[Second];
+end;
+
 procedure TSynSystemTime.ComputeDayOfWeek;
 begin
   PSynDate(@self)^.ComputeDayOfWeek; // first 4 fields do match
@@ -2313,37 +2353,24 @@ end;
 procedure DateTimeToFileShort(const DateTime: TDateTime; out result: TShort16);
 var
   T: TSynSystemTime;
-  {$ifdef CPUX86NOTPIC}
-  tab: TWordArray absolute TwoDigitLookupW;
-  {$else}
-  tab: PWordArray;
-  {$endif CPUX86NOTPIC}
 begin
   // use 'YYMMDDHHMMSS' format
   if DateTime <= 0 then
-  begin
-    PWord(@result[0])^ := 1 + ord('0') shl 8;
-    exit;
-  end;
-  T.FromDate(DateTime);
-  if T.Year > 1999 then
-    if T.Year < 2100 then
-      dec(T.Year, 2000)
-    else
-      T.Year := 99
+    PWord(@result[0])^ := 1 + ord('0') shl 8
   else
-    T.Year := 0;
-  T.FromTime(DateTime);
-  {$ifndef CPUX86NOTPIC}
-  tab := @TwoDigitLookupW;
-  {$endif CPUX86NOTPIC}
-  result[0] := #12;
-  PWord(@result[1])^  := tab[T.Year];
-  PWord(@result[3])^  := tab[T.Month];
-  PWord(@result[5])^  := tab[T.Day];
-  PWord(@result[7])^  := tab[T.Hour];
-  PWord(@result[9])^  := tab[T.Minute];
-  PWord(@result[11])^ := tab[T.Second];
+  begin
+    T.FromDate(DateTime);
+    T.FromTime(DateTime);
+    T.ToFileShort(result);
+  end;
+end;
+
+function NowToFileShort(localtime: boolean): TShort16;
+var
+  T: TSynSystemTime;
+begin
+  T.FromNow(localtime);
+  T.ToFileShort(result);
 end;
 
 

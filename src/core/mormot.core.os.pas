@@ -2193,8 +2193,8 @@ function TemporaryFileName: TFileName;
 function GetFileNameWithoutExt(const FileName: TFileName;
   Extension: PFileName = nil): TFileName;
 
-/// compare two "array of TFileName" elements, as file names
-// - i.e. with no case sensitivity on Windows, and grouped by file extension
+/// compare two "array of TFileName" elements, grouped by file extension
+// - i.e. with no case sensitivity on Windows
 // - the expected string type is the generic RTL string, i.e. TFileName
 // - calls internally GetFileNameWithoutExt() and AnsiCompareFileName()
 function SortDynArrayFileName(const A, B): integer;
@@ -4649,6 +4649,13 @@ begin
   end;
 end;
 
+{$ifdef ISDELPHI20062007} // circumvent Delphi 2007 RTL inlining issue
+function AnsiCompareFileName(const S1, S2 : TFileName): integer;
+begin
+  result := SysUtils.AnsiCompareFileName(S1,S2);
+end;
+{$endif ISDELPHI20062007}
+
 function SortDynArrayFileName(const A, B): integer;
 var
   Aname, Aext, Bname, Bext: TFileName;
@@ -4661,13 +4668,6 @@ begin
     // if both extensions matches, compare by filename
     result := AnsiCompareFileName(Aname, Bname);
 end;
-
-{$ifdef ISDELPHI20062007} // circumvent Delphi 2007 RTL inlining issue
-function AnsiCompareFileName(const S1, S2 : TFileName): integer;
-begin
-  result := SysUtils.AnsiCompareFileName(S1,S2);
-end;
-{$endif ISDELPHI20062007}
 
 function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: boolean): TFileName;
