@@ -5260,6 +5260,8 @@ var
   {$else}
   table: PByteArray;
   {$endif CPUX86NOTPIC}
+label
+  c2low;
 begin
   // fast UTF-8 comparison using the NormToUpper[] array for all 8-bit values
   {$ifndef CPUX86NOTPIC}
@@ -5278,7 +5280,7 @@ begin
               result := table[result];
               if c2 <= 127 then
               begin
-                if c2 = 0 then
+c2low:          if c2 = 0 then
                   exit; // u1>u2 -> return u1^
                 inc(u2);
                 dec(result, table[c2]);
@@ -5296,30 +5298,30 @@ begin
             end
           else
           begin
-            result := UTF8_TABLE.GetHighUtf8Ucs4(u1);
+            if result and $20 = 0 then // fast $0..$7ff process
+            begin
+              result := (result shl 6) + byte(u1[1]) - $3080;
+              inc(u1, 2);
+            end
+            else
+              result := UTF8_TABLE.GetHighUtf8Ucs4(u1);
             if result <= 255 then
               result := table[result]; // 8-bit to upper, 32-bit as is
           end;
           if c2 <= 127 then
+            goto c2low
+          else if c2 and $20 = 0 then // fast $0..$7ff process
           begin
-            if c2 = 0 then
-              exit; // u1>u2 -> return u1^
-            inc(u2);
-            dec(result, table[c2]);
-            if result <> 0 then
-              exit;
-            continue;
+            c2 := (c2 shl 6) + byte(u2[1]) - $3080;
+            inc(u2, 2);
           end
           else
-          begin
             c2 := UTF8_TABLE.GetHighUtf8Ucs4(u2);
-            if c2 <= 255 then
-              dec(result, table[c2])
-            else // 8-bit to upper
-              dec(result, c2); // 32-bit widechar returns diff
-            if result <> 0 then
-              exit;
-          end;
+          if c2 <= 255 then
+            c2 := table[c2]; // 8-bit to upper
+          dec(result, c2);
+          if result <> 0 then
+            exit;
         until false
       else
         result := 1 // u2=''
@@ -6556,8 +6558,7 @@ end;
 
 function UpperCaseUcs4Reference(const S: RawUtf8): RawUcs4;
 var
-  n: PtrInt;
-  c: PtrUInt;
+  c, n: PtrUInt;
   U: PUtf8Char;
 begin
   if S = '' then
@@ -6594,6 +6595,8 @@ var
   {$else}
   tab: PUnicodeUpperTable;
   {$endif CPUX86NOTPIC}
+label
+  c2low;
 begin
   {$ifndef CPUX86NOTPIC}
   tab := @UU;
@@ -6611,7 +6614,7 @@ begin
               inc(result, tab.Block[0, result]); // branchless a..z -> A..Z
               if c2 <= 127 then
               begin
-                if c2 = 0 then
+c2low:          if c2 = 0 then
                   exit; // u1>u2 -> return u1^
                 inc(u2);
                 inc(c2, tab.Block[0, c2]);
@@ -6633,44 +6636,28 @@ begin
             // fast Unicode 10.0 uppercase conversion
             if result and $20 = 0 then // $0..$7ff common case
             begin
-              result := tab.Ucs4Upper((result shl 6) + byte(u1[1]) - $3080);
+              result := (result shl 6) + byte(u1[1]) - $3080;
               inc(u1, 2);
             end
             else
-            begin
               result := UTF8_TABLE.GetHighUtf8Ucs4(u1);
-              if result <= UU_MAX then
-                result := tab.Ucs4Upper(result);
-            end;
+            if result <= UU_MAX then
+              result := tab.Ucs4Upper(result);
           end;
           if c2 <= 127 then
+            goto c2low
+          else if c2 and $20 = 0 then // $0..$7ff common case
           begin
-            if c2 = 0 then
-              exit; // u1>u2 -> return u1^
-            inc(u2);
-            inc(c2, tab.Block[0, c2]);
-            dec(result, c2);
-            if result <> 0 then
-              exit;
-            continue;
+            c2 := (c2 shl 6) + byte(u2[1]) - $3080;
+            inc(u2, 2);
           end
           else
-          begin
-            if c2 and $20 = 0 then // $0..$7ff common case
-            begin
-              c2 := tab.Ucs4Upper((c2 shl 6) + byte(u2[1]) - $3080);
-              inc(u2, 2);
-            end
-            else
-            begin
-              c2 := UTF8_TABLE.GetHighUtf8Ucs4(u2);
-              if c2 <= UU_MAX then
-                c2 := tab.Ucs4Upper(c2);
-            end;
-            dec(result, c2);
-            if result <> 0 then
-              exit;
-          end;
+            c2 := UTF8_TABLE.GetHighUtf8Ucs4(u2);
+          if c2 <= UU_MAX then
+            c2 := tab.Ucs4Upper(c2);
+          dec(result, c2);
+          if result <> 0 then
+            exit;
         until false
       else
         result := 1 // u2=''

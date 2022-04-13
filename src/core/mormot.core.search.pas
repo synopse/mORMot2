@@ -4972,7 +4972,7 @@ begin
       if ch and $80 = 0 then
         inc(P)
       else
-        ch := GetHighUtf8Ucs4(P);
+        ch := UTF8_TABLE.GetHighUtf8Ucs4(P);
       if (ch <= 255) and
          (WinAnsiConvert.AnsiToWide[ch] <= 255) then
         // convert into WinAnsi char
