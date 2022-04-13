@@ -963,6 +963,7 @@ type
     function PublicKeyToPem: RawUtf8;
     procedure ToPem(out PrivateKey, PublicKey: RawUtf8);
     function Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
+    function Verify(Algo: PEVP_MD; Sign, Msg: pointer; SignLen, MsgLen: integer): boolean;
     function Size: integer;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -6034,6 +6035,23 @@ begin
       else
         result := '';
     end {else WritelnSSL_error};
+  finally
+    EVP_MD_CTX_free(ctx);
+  end;
+end;
+
+function EVP_PKEY.Verify(Algo: PEVP_MD; Sign, Msg: pointer;
+  SignLen, MsgLen: integer): boolean;
+var
+  ctx: PEVP_MD_CTX;
+begin
+  // we don't check "if @self = nil" because may be called without EVP_PKEY
+  ctx := EVP_MD_CTX_new;
+  try
+    // note: ED25519 requires single-pass EVP_DigestVerify()
+    result :=
+      (EVP_DigestVerifyInit(ctx, nil, Algo, nil, @self) = OPENSSLSUCCESS) and
+      (EVP_DigestVerify(ctx, Sign, SignLen, Msg, MsgLen) = OPENSSLSUCCESS);
   finally
     EVP_MD_CTX_free(ctx);
   end;

@@ -509,6 +509,8 @@ type
     fHashAlgorithm: RawUtf8;
     fGenEvpType: integer;
     fGenBitsOrCurve: integer;
+    fAlgoMd: PEVP_MD;
+    fPrivKey, fPubKey: PEVP_PKEY;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
     procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
       var JWT: TJwtContent); override;
@@ -1174,25 +1176,18 @@ function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
 var
   md: PEVP_MD;
   pkey: PEVP_PKEY;
-  ctx: PEVP_MD_CTX;
 begin
-  result := false;
+  md := OpenSslGetMd(Algorithm, 'OpenSslVerify');
   pkey := LoadPublicKey(PublicKey, PublicKeyLen, PublicKeyPassword);
   if (pkey = nil) or
      (SignatureLen <= 0)  then
-    exit;
-  md := OpenSslGetMd(Algorithm, 'OpenSslVerify');
-  ctx := EVP_MD_CTX_new;
-  try
-    // note: ED25519 requires single-pass EVP_DigestVerify()
-    if (EVP_DigestVerifyInit(ctx, nil, md, nil, pkey) = OPENSSLSUCCESS) and
-       (EVP_DigestVerify(ctx, Signature, SignatureLen,
-          Message, MessageLen) = OPENSSLSUCCESS) then
-      result := true {else WritelnSSL_error};
-  finally
-    EVP_MD_CTX_free(ctx);
-    pkey.Free;
-  end;
+    result := false
+  else
+    try
+      result := pkey^.Verify(md, Signature, Message, SignatureLen, MessageLen);
+    finally
+      pkey.Free;
+    end;
 end;
 
 function OpenSslGenerateKeys(EvpType, BitsOrCurve: integer): PEVP_PKEY;
@@ -1463,6 +1458,7 @@ constructor TJwtOpenSsl.Create(const aJwtAlgorithm, aHashAlgorithm: RawUtf8;
   aIDObfuscationKey: RawUtf8; aIDObfuscationKeyNewKdf: integer);
 begin
   EOpenSsl.CheckAvailable(PClass(self)^, 'Create');
+  fAlgoMd := OpenSslGetMd(aHashAlgorithm, 'TJwtOpenSsl.Create');
   fHashAlgorithm := aHashAlgorithm;
   fGenEvpType := aGenEvpType;
   fGenBitsOrCurve := aGenBitsOrCurve;
@@ -1480,6 +1476,8 @@ begin
   FillZero(fPrivateKeyPassword);
   FillZero(fPublicKey);
   FillZero(fPublicKeyPassword);
+  fPrivKey.Free;
+  fPubKey.Free;
   inherited Destroy;
 end;
 
@@ -1491,12 +1489,12 @@ end;
 function TJwtOpenSsl.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
 var
   sign: RawByteString;
-  signlen: integer;
 begin
-  signlen := OpenSslSign(fHashAlgorithm,
-    pointer(headpayload), pointer(fPrivateKey),
-    length(headpayload), length(fPrivateKey), sign, fPrivateKeyPassword);
-  if signlen = 0 then
+  if fPrivKey = nil then
+    fPrivKey := LoadPrivateKey(
+      pointer(fPrivateKey), length(fPrivateKey), fPrivateKeyPassword);
+  sign := fPrivKey^.Sign(fAlgoMd, pointer(headpayload), length(headpayload));
+  if sign = '' then
     raise EJwtException.CreateUtf8('%.ComputeSignature: OpenSslSign failed [%]',
       [self, SSL_error_short(ERR_get_error)]);
   result := BinToBase64Uri(sign);
@@ -1505,9 +1503,11 @@ end;
 procedure TJwtOpenSsl.CheckSignature(const headpayload: RawUtf8;
   const signature: RawByteString; var JWT: TJwtContent);
 begin
-  if OpenSslVerify(fHashAlgorithm, fPublicKeyPassword,
-       pointer(headpayload), pointer(fPublicKey), pointer(signature),
-       length(headpayload), length(fPublicKey), length(signature)) then
+  if fPubKey = nil then
+    fPubKey := LoadPublicKey(
+      pointer(fPublicKey), length(fPublicKey), fPublicKeyPassword);
+  if fPubKey^.Verify(fAlgoMd, pointer(signature), pointer(headpayload),
+      length(signature), length(headpayload)) then
     JWT.result := jwtValid
   else
     JWT.result := jwtInvalidSignature;
