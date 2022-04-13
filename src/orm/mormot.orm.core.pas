@@ -2881,6 +2881,7 @@ type
       UnicodeComparison: boolean = false): PtrInt; overload;
     /// retrieve QueryTables[0], if existing
     function QueryRecordType: TOrmClass;
+      {$ifdef HASINLINE}inline;{$endif}
     /// create and own a new TOrm instance for a specific Table
     // - a void TOrm instance is created, ready to be filled
     // - use the specified TOrm class or create one instance

@@ -536,7 +536,7 @@ begin
     until allFinished;
     fTimer.Stop;
     //WriteLn(' ',fTimer.PerSec(fOperationCount * 2));
-    fRunConsole := Format('%s%d=%d/s  ',
+    fRunConsole := FormatString('%%=%/s  ',
       [fRunConsole, fRunningThreadCount, fTimer.PerSec(fOperationCount * 2)]);
     // 2.4. Check INSERTed IDs consistency
     for n := 0 to fRunningThreadCount - 1 do

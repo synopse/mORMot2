@@ -2105,8 +2105,8 @@ begin
   blob := Table.OrmProps.BlobFieldPropFromRawUtf8(BlobFieldName);
   if blob = nil then
     exit;
-  result := EngineRetrieveBlob(fModel.GetTableIndexExisting(Table), aID,
-    blob, BlobData);
+  result := EngineRetrieveBlob(
+    fModel.GetTableIndexExisting(Table), aID, blob, BlobData);
 end;
 
 function TRestOrm.RetrieveBlob(Table: TOrmClass; aID: TID;
