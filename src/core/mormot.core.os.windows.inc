@@ -572,10 +572,9 @@ var
   p: PQWordRec;
 begin
   // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
-  t32 := Windows.GetTickCount; // we only have the 32-bit counter
+  t32 := Windows.GetTickCount; // we only have the 32-bit counter on XP
   p := @LastTickXP;
-  if t32 < p^.L then
-    inc(p^.H); // wrap-up overflow after 49 days
+  inc(p^.H, ord(t32 < p^.L)); // wrap-up overflow after 49 days
   p^.L := t32;
   result := p^.V;
 end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap on XP :(
@@ -1671,7 +1670,8 @@ begin
     Utf8ToConsoleDoConv(S, result);
 end;
 
-procedure FormatU(const fmt: string; const args: array of const; var result: RawUtf8);
+procedure FormatU(const fmt: string; const args: array of const;
+  var result: RawUtf8);
 begin
   result := RawUtf8(format(fmt, args));
 end;
@@ -2558,39 +2558,39 @@ var
   store: HCERTSTORE;
   ctx: PCCERT_CONTEXT;
   now: PtrUInt;
-  len, tmplen: DWORD;
+  resultlen, certlen: DWORD;
   tmp: TSynTempBuffer;
 begin
-  result := '';
   now := GetTickCount64 shr 18; // div 262.144 seconds = refresh every 4.4 min
   if not FlushCache then
     with _GetSystemStoreAsPemCache[CertStore] do
       if (Tix = now) and
          (Pem <> '') then
       begin
-        result := Pem;
+        result := Pem; // quick retrieved from cache
         exit;
       end;
-  len := 0;
+  result := '';
+  resultlen := 0;
   store := CertOpenSystemStore(nil, pointer(WINDOWS_CERTSTORE[CertStore]));
   try
     ctx := CertEnumCertificatesInStore(store, nil);
     while ctx <> nil do
     begin
-      tmplen := 0;
+      certlen := 0;
       if not CryptBinaryToString(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, nil, tmplen) then
+          CRYPT_STRING_BASE64HEADER, nil, certlen) then
         break;
-      tmp.Init(tmplen);
+      tmp.Init(certlen);
       if CryptBinaryToString(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, tmp.buf, tmplen) then
+          CRYPT_STRING_BASE64HEADER, tmp.buf, certlen) then
       begin
-        SetLength(result, len + tmplen);
-        MoveFast(tmp.buf^, PByteArray(result)[len], tmplen);
-        inc(len, tmplen);
+        SetLength(result, resultlen + certlen);
+        MoveFast(tmp.buf^, PByteArray(result)[resultlen], certlen);
+        inc(resultlen, certlen);
       end;
       tmp.Done;
-      ctx := CertEnumCertificatesInStore(store, ctx);
+      ctx := CertEnumCertificatesInStore(store, ctx); // next certificate
     end;
   finally
     CertCloseStore(store, 0);
@@ -2600,6 +2600,17 @@ begin
     Tix := now;
     Pem := result;
   end;
+end;
+
+function GetSystemStoreAsPem(CertStores: TSystemCertificateStores;
+  FlushCache: boolean): RawUtf8;
+var
+  s: TSystemCertificateStore;
+begin
+  result := '';
+  for s := low(s) to high(s) do
+    if s in CertStores then
+      result := result + GetSystemStoreAsPem(s, FlushCache);
 end;
 
 threadvar

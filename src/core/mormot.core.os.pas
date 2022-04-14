@@ -1427,6 +1427,7 @@ type
     scsMY,
     scsRoot,
     scsSpc);
+  TSystemCertificateStores = set of TSystemCertificateStore;
 
 const
   WINDOWS_CERTSTORE: array[TSystemCertificateStore] of RawUtf8 = (
@@ -1436,7 +1437,15 @@ const
 // - will maintain an internal cache refreshed about every 4 minutes unless
 // FlushCache is set to true to force retrieval from the Windows API
 function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
-  FlushCache: boolean = false): RawUtf8;
+  FlushCache: boolean = false): RawUtf8; overload;
+
+/// retrieve all certificates of given system store(s) as PEM text
+// - will maintain an internal cache refreshed about every 4 minutes
+// - just a wrapper to concatenate individual GetSystemStoreAsPem() results
+// - return CA + ROOT certificates by default, ready to validate a certificate
+function GetSystemStoreAsPem(
+  CertStores: TSystemCertificateStores = [scsCA, scsRoot];
+  FlushCache: boolean = false): RawUtf8; overload;
 
 /// this global procedure should be called from each thread needing to use OLE
 // - it is called e.g. by TOleDBConnection.Create when an OleDb connection
