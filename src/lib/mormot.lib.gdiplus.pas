@@ -1069,7 +1069,7 @@ end;
 function Gdip: TGdiPlus;
 begin
   result := _Gdip;
-  if result <> nil then
+  if result = nil then
     result := _GdipLoad;
 end;
 
