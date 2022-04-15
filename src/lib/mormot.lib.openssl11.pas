@@ -2091,6 +2091,15 @@ type
 // ! @NewNetTls := @OpenSslNewNetTls;
 function OpenSslNewNetTls: INetTls;
 
+/// retrieve the peer certificates chain from a given HTTPS server URI
+// - caller should call procedure PX509DynArrayFree(result) once done
+function GetPeerCertFromUrl(const url: RawUtf8): PX509DynArray;
+
+/// retrieve the peer certificates PEM chain from a given HTTPS server URI
+function GetPeerCertPemFromUrl(const url: RawUtf8): RawUtf8;
+
+/// retrieve the peer certificates information from a given HTTPS server URI
+function GetPeerCertInfoFromUrl(const url: RawUtf8): RawUtf8;
 
 
 implementation
@@ -8005,6 +8014,55 @@ begin
     result := TOpenSslClient.Create
   else
     result := nil;
+end;
+
+
+function GetPeerCertFromUrl(const url: RawUtf8): PX509DynArray;
+var
+  u: TUri;
+  ns: TNetSocket;
+  c: PSSL_CTX;
+  s: PSSL;
+begin
+  Finalize(result);
+  if OpenSslIsAvailable and
+     u.From(url) and
+     (NewSocket(u.Server, u.Port, nlTcp, false, 1000, 1000, 1000, 2, ns) = nrOk) then
+  try
+    // cut-down version of TOpenSslClient.AfterConnection
+    c := SSL_CTX_new(TLS_client_method);
+    SSL_CTX_set_verify(c, SSL_VERIFY_NONE, nil);
+    s := SSL_new(c);
+    SSL_set_tlsext_host_name(s, u.Server);
+    try
+      if (SSL_set_fd(s, ns.Socket) = OPENSSLSUCCESS) and
+         (SSL_connect(s) = OPENSSLSUCCESS) then
+        result := s.PeerCertificates({acquire=}true);
+    finally
+      s.Free;
+      SSL_CTX_free(c);
+    end;
+  finally
+    ns.ShutdownAndClose(true);
+  end;
+end;
+
+function GetPeerCertPemFromUrl(const url: RawUtf8): RawUtf8;
+var
+  chain: PX509DynArray;
+begin
+  chain := GetPeerCertFromUrl(url);
+  result := PX509DynArrayToPem(chain);
+  PX509DynArrayFree(chain);
+end;
+
+function GetPeerCertInfoFromUrl(const url: RawUtf8): RawUtf8;
+var
+  chain: PX509DynArray;
+begin
+  chain := GetPeerCertFromUrl(url);
+  result := PX509DynArrayToText(chain);
+  PX509DynArrayFree(chain);
 end;
 
 
