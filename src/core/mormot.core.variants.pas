@@ -848,6 +848,12 @@ type
   end;
   {$endif HASITERATORS}
 
+  /// how duplicated values could be searched
+  TSearchDuplicate = (
+    sdNone,
+    sdCaseSensitive,
+    sdCaseInsensitive);
+
   {$A-} { packet object not allowed since Delphi 2009 :( }
   /// memory structure used for TDocVariant storage of any JSON/BSON
   // document-based content as variant
@@ -1433,12 +1439,6 @@ type
     // - will call Delete() on the found entry, if aDeleteFoundEntry is true
     function GetValueEnumerate(const aName: RawUtf8; aTypeInfo: PRttiInfo;
       out aValue; aDeleteFoundEntry: boolean = false): boolean;
-    /// returns a TDocVariant object containing all properties matching the
-    // first characters of the supplied property name
-    // - returns null if the document is not a dvObject
-    // - will use IdemPChar(), so search would be case-insensitive
-    function GetValuesByStartName(const aStartName: RawUtf8;
-      TrimLeftStartName: boolean = false): variant;
     /// returns a JSON object containing all properties matching the
     // first characters of the supplied property name
     // - returns null if the document is not a dvObject
@@ -1604,6 +1604,12 @@ type
     // - raise an EDocVariant if the supplied Index is not in the 0..Count-1
     // range and dvoReturnNullForUnknownProperty is set in Options
     procedure RetrieveNameOrRaiseException(Index: integer; var Dest: RawUtf8);
+    /// returns a TDocVariant object containing all properties matching the
+    // first characters of the supplied property name
+    // - returns null if the document is not a dvObject
+    // - will use IdemPChar(), so search would be case-insensitive
+    function GetValuesByStartName(const aStartName: RawUtf8;
+      TrimLeftStartName: boolean = false): variant;
     /// set an item in this document from its index
     // - raise an EDocVariant if the supplied Index is not in 0..Count-1 range
     procedure SetValueOrRaiseException(Index: integer; const NewValue: variant);
@@ -1814,46 +1820,51 @@ type
     /// inverse the order of Names and Values of this document
     // - could be applied after a content sort if needed
     procedure Reverse;
-    /// create a TDocVariant object, from a selection of properties of this
-    // document, by property name
+    /// create a TDocVariant object, from a selection of properties of the
+    // objects of this document array, by property name
     // - if the document is a dvObject, to reduction will be applied to all
     // its properties
     // - if the document is a dvArray, the reduction will be applied to each
     // stored item, if it is a document
     procedure Reduce(const aPropNames: array of RawUtf8; aCaseSensitive: boolean;
-      out result: TDocVariantData; aDoNotAddVoidProp: boolean = false); overload;
-    /// create a TDocVariant object, from a selection of properties of this
-    // document, by property name
+      var result: TDocVariantData; aDoNotAddVoidProp: boolean = false); overload;
+    /// create a TDocVariant object, from a selection of properties of the
+    // objects of this document array, by property name
     // - always returns a TDocVariantData, even if no property name did match
     // (in this case, it is dvUndefined)
     function Reduce(const aPropNames: array of RawUtf8; aCaseSensitive: boolean;
       aDoNotAddVoidProp: boolean = false): variant; overload;
-    /// create a TDocVariant array, from the values of a single properties of
-    // this document, specified by name
+    /// create a TDocVariant array, from the values of a single property of the
+    // objects of this document array, specified by name
     // - you can optionally apply an additional filter to each reduced item
     procedure ReduceAsArray(const aPropName: RawUtf8;
-      out result: TDocVariantData;
+      var result: TDocVariantData;
       const OnReduce: TOnReducePerItem = nil); overload;
-    /// create a TDocVariant array, from the values of a single properties of
-    // this document, specified by name
+    /// create a TDocVariant array, from the values of a single property of the
+    // objects of this document array, specified by name
     // - always returns a TDocVariantData, even if no property name did match
     // (in this case, it is dvUndefined)
     // - you can optionally apply an additional filter to each reduced item
     function ReduceAsArray(const aPropName: RawUtf8;
       const OnReduce: TOnReducePerItem = nil): variant; overload;
-    /// create a TDocVariant array, from the values of a single properties of
-    // this document, specified by name
+    /// create a TDocVariant array, from the values of a single property of the
+    // objects of this document array, specified by name
     // - this overloaded method accepts an additional filter to each reduced item
     procedure ReduceAsArray(const aPropName: RawUtf8;
-      out result: TDocVariantData;
+      var result: TDocVariantData;
       const OnReduce: TOnReducePerValue); overload;
-    /// create a TDocVariant array, from the values of a single properties of
-    // this document, specified by name
+    /// create a TDocVariant array, from the values of a single property of the
+    // objects of this document array, specified by name
     // - always returns a TDocVariantData, even if no property name did match
     // (in this case, it is dvUndefined)
     // - this overloaded method accepts an additional filter to each reduced item
     function ReduceAsArray(const aPropName: RawUtf8;
       const OnReduce: TOnReducePerValue): variant; overload;
+    /// return the variant values of a single property of the objects of this
+    // document array, specified by name
+    // - returns nil if the document is not a dvArray
+    function ReduceAsVariantArray(const aPropName: RawUtf8;
+      aDuplicates: TSearchDuplicate = sdNone): TVariantDynArray;
     /// rename some properties of a TDocVariant object
     // - returns the number of property names modified
     function Rename(const aFromPropName, aToPropName: TRawUtf8DynArray): integer;
@@ -6505,7 +6516,7 @@ begin
 end;
 
 procedure TDocVariantData.Reduce(const aPropNames: array of RawUtf8;
-  aCaseSensitive: boolean; out result: TDocVariantData;
+  aCaseSensitive: boolean; var result: TDocVariantData;
   aDoNotAddVoidProp: boolean);
 var
   ndx, j: PtrInt;
@@ -6558,7 +6569,7 @@ begin
 end;
 
 procedure TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;
-  out result: TDocVariantData; const OnReduce: TOnReducePerItem);
+  var result: TDocVariantData; const OnReduce: TOnReducePerItem);
 var
   ndx: PtrInt;
   item: PDocVariantData;
@@ -6584,7 +6595,7 @@ begin
 end;
 
 procedure TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;
-  out result: TDocVariantData; const OnReduce: TOnReducePerValue);
+  var result: TDocVariantData; const OnReduce: TOnReducePerValue);
 var
   ndx: PtrInt;
   v: PVariant;
@@ -6598,6 +6609,44 @@ begin
         if (not Assigned(OnReduce)) or
            OnReduce(v^) then
           result.AddItem(v^);
+end;
+
+function NotIn(a, v: PVarData; n: integer; caseins: boolean): boolean;
+begin
+  result := false;
+  if n <> 0 then
+    repeat
+      if FastVarDataComp(a, v, caseins) = 0 then
+        exit;
+      inc(a);
+      dec(n);
+    until n = 0;
+  result := true;
+end;
+
+function TDocVariantData.ReduceAsVariantArray(const aPropName: RawUtf8;
+  aDuplicates: TSearchDuplicate): TVariantDynArray;
+var
+  n, ndx: PtrInt;
+  v: PVariant;
+begin
+  n := 0;
+  result := nil;
+  if (VCount <> 0) and
+     (aPropName <> '') and
+     IsArray then
+  for ndx := 0 to VCount - 1 do
+    if _Safe(VValue[ndx])^.GetObjectProp(aPropName, v) then
+      if (aDuplicates = sdNone) or
+         NotIn(pointer(result), pointer(v), n, aDuplicates = sdCaseInsensitive) then
+      begin
+        if length(result) = n then
+          SetLength(result, NextGrow(n));
+        SetVariantByValue(PVariant(v)^, result[n]);
+        inc(n);
+      end;
+  if n <> 0 then
+    DynArrayFakeLength(result, n);
 end;
 
 function TDocVariantData.Rename(
@@ -6691,68 +6740,6 @@ begin
   for n := 0 to high(aNames) do
     inc(result, ord(Delete(aNames[n])));
 end;
-
-function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
-  count: PtrInt): PtrInt;
-var
-  p: PUtf8Char;
-begin
-  // FPC does proper inlining in this loop
-  result := 0;
-  repeat
-    p := n[result]; // all VName[]<>'' so p=n^<>nil
-    if (PStrLen(p - _STRLEN)^ = len) and
-       CompareMemFixed(p, name, len) then
-      exit;
-    inc(result);
-    dec(count);
-  until count = 0;
-  result := -1;
-end;
-
-function FindNonVoidRawUtf8I(n: PPointerArray; name: pointer; len: TStrLen;
-  count: PtrInt): PtrInt;
-var
-  p1, p2, l: PUtf8Char;
-label
-  no;
-begin
-  result := 0;
-  p2 := name;
-  repeat
-    // inlined IdemPropNameUSameLenNotNull(p, name, len)
-    p1 := n[result]; // all VName[]<>'' so p1<>nil
-    if PStrLen(p1 - _STRLEN)^ = len then
-    begin
-      l := @p1[len - SizeOf(cardinal)];
-      dec(p2, PtrUInt(p1));
-      while PtrUInt(l) >= PtrUInt(p1) do
-        // compare 4 Bytes per loop
-        if (PCardinal(p1)^ xor PCardinal(@p2[PtrUInt(p1)])^) and $dfdfdfdf <> 0 then
-          goto no
-        else
-          inc(PCardinal(p1));
-      inc(PCardinal(l));
-      while PtrUInt(p1) < PtrUInt(l) do
-        // remaining bytes
-        if (ord(p1^) xor ord(p2[PtrUInt(p1)])) and $df <> 0 then
-          goto no
-        else
-          inc(PByte(p1));
-      exit; // match found
-no:   p2 := name;
-    end;
-    inc(result);
-    dec(count);
-  until count = 0;
-  result := -1;
-end;
-
-const
-  DocVariantFind: array[{casesensitive:}boolean] of
-    function(p: PPointerArray; n: pointer; l: TStrLen; c: PtrInt): PtrInt = (
-      FindNonVoidRawUtf8I,
-      FindNonVoidRawUtf8);
 
 function TDocVariantData.InternalNextPath(
   var aCsv: PUtf8Char; aName: PShortString; aPathDelim: AnsiChar): PtrInt;
