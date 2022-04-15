@@ -899,7 +899,7 @@ type
     function CurrentCipher: PSSL_CIPHER;
     function PeerChain: Pstack_st_X509;
     function PeerCertificate: PX509;
-    function PeerCertificates: PX509DynArray;
+    function PeerCertificates(acquire: boolean = false): PX509DynArray;
     function PeerCertificatesAsPEM: RawUtf8;
     function PeerCertificatesAsText: RawUtf8;
     function IsVerified: boolean;
@@ -963,7 +963,8 @@ type
     function PublicKeyToPem: RawUtf8;
     procedure ToPem(out PrivateKey, PublicKey: RawUtf8);
     function Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
-    function Verify(Algo: PEVP_MD; Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
+    function Verify(Algo: PEVP_MD;
+      Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
     function Size: integer;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1399,13 +1400,18 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function GetName: PX509_NAME;
       {$ifdef HASINLINE} inline; {$endif}
+    function GetPublicKey: PEVP_PKEY;
+      {$ifdef HASINLINE} inline; {$endif}
     /// the Certificate Genuine Serial Number
     // - e.g. '04:f9:25:39:39:f8:ce:79:1a:a4:0e:b3:fa:72:e3:bc:9e:d6'
     function SerialNumber: RawUtf8;
     /// the High-Level Certificate Main Subject
-    // - e.g. '/CN=synopse.info'
+    // - e.g. 'CN=synopse.info'
     // - see SubjectAlternativeNames for a full set of items
     function SubjectName: RawUtf8;
+    /// extract a given part of the Certificate Main Subject
+    // - e.g. 'synopse.info' from SubjectName = 'CN=synopse.info'
+    function GetSubject(const id: RawUtf8 = 'CN'): RawUtf8;
     /// an array of (DNS) Subject names covered by this Certificate
     // - will search and remove the 'DNS:' trailer by default (dns=true)
     // - e.g. ['synopse.info', 'www.synopse.info']
@@ -1430,6 +1436,7 @@ type
     /// if the Certificate X509v3 Basic Constraints contains 'CA:TRUE'
     // - match kuCA flag in GetUsage/HasUsage
     function IsCA: boolean;
+    /// if the Certificate issuer is itself
     function IsSelfSigned: boolean;
     /// the X509v3 Key and Extended Key Usage Flags of this Certificate
     function GetUsage: TX509Usages;
@@ -1466,6 +1473,8 @@ type
     /// set key_usage/ext_key_usage extensions
     // - any previous usage set will be first deleted
     function SetUsage(usages: TX509Usages): boolean;
+    /// check if the public key of this certificate matches a given private key
+    function MatchPrivateKey(pkey: PEVP_PKEY): boolean;
     /// serialize the certificate as DER raw binary
     function ToBinary: RawByteString;
     /// serialize the certificate as PEM text
@@ -2025,7 +2034,7 @@ procedure PX509DynArrayFree(var X509: PX509DynArray);
 function NewCertificate: PX509;
 
 /// unserialize a new X509 Certificate Instance
-// - from DER binary as serialized by X509.ToBinary
+// - from DER binary as serialized by X509.ToBinary, or PEM format
 // - use LoadCertificate(PemToDer()) to load a PEM certificate
 function LoadCertificate(const Der: RawByteString): PX509;
 
@@ -5904,9 +5913,14 @@ begin
     result := SSL_get_peer_cert_chain(@self);
 end;
 
-function SSL.PeerCertificates: PX509DynArray;
+function SSL.PeerCertificates(acquire: boolean): PX509DynArray;
+var
+  i: PtrInt;
 begin
   result := PX509DynArray(PeerChain.ToDynArray);
+  if acquire then
+    for i := 0 to high(result) do
+      result[i].Acquire;
 end;
 
 function SSL.PeerCertificatesAsPEM: RawUtf8;
@@ -6055,6 +6069,7 @@ var
   ctx: PEVP_MD_CTX;
 begin
   // we don't check "if @self = nil" because may be called without EVP_PKEY
+  // we don't check "Algo = nil" because algo may have its built-in hashing
   ctx := EVP_MD_CTX_new;
   try
     // note: ED25519 requires single-pass EVP_DigestVerify()
@@ -7049,6 +7064,14 @@ begin
     result := X509_get_subject_name(@self);
 end;
 
+function X509.GetPublicKey: PEVP_PKEY;
+begin
+  if @self = nil then
+    result := nil
+  else
+    result := X509_get_pubkey(@self);
+end;
+
 function X509.SerialNumber: RawUtf8;
 begin
   GetSerial.ToHex(result);
@@ -7057,6 +7080,43 @@ end;
 function X509.SubjectName: RawUtf8;
 begin
   GetName.ToUtf8(result);
+end;
+
+procedure GetNext(var P: PUtf8Char; Sep: AnsiChar; var result: RawUtf8);
+var
+  S, E: PUtf8Char;
+begin // see GetNextItemTrimed() from mormot.core.text
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P); // trim left
+  S := P;
+  while (S^ <> #0) and
+        (S^ <> Sep) do
+    inc(S);
+  E := S;
+  while (E > P) and (E[-1] in [#1..' ']) do
+    dec(E); // trim right
+  FastSetString(result, P, E - P);
+  if S^ <> #0 then
+    P := S + 1
+  else
+    P := nil;
+end;
+
+function X509.GetSubject(const id: RawUtf8): RawUtf8;
+var
+  p: PUtf8Char;
+  nam: RawUtf8;
+begin
+  p := pointer(SubjectName);
+  while p <> nil do
+  begin
+    GetNext(p, '=', nam);
+    GetNext(p, ',', result);
+    if nam = id then
+      exit;
+  end;
+  result := '';
 end;
 
 function X509.IssuerName: RawUtf8;
@@ -7363,6 +7423,13 @@ begin
   result := true;
 end;
 
+function X509.MatchPrivateKey(pkey: PEVP_PKEY): boolean;
+begin
+  result := (@self <> nil) and
+            (pkey <> nil) and
+            (X509_check_private_key(@self, pkey) = OPENSSLSUCCESS);
+end;
+
 function X509.ToBinary: RawByteString;
 begin
   result := BioSave(@self, @i2d_X509_bio);
@@ -7553,8 +7620,7 @@ function NewPkcs12(const Password: RawUtf8; PrivKey: PEVP_PKEY;
   const FriendlyName: RawUtf8): PPKCS12;
 begin
   EOpenSsl.CheckAvailable(nil, 'NewPkcs12');
-  if (Cert <> nil) and
-     (X509_check_private_key(Cert, PrivKey) <> OPENSSLSUCCESS) then
+  if not Cert.MatchPrivateKey(PrivKey) then
     raise EOpenSsl.Create('NewPkcs12: PrivKey does not match Cert');
   result := PKCS12_create(pointer(Password), pointer(FriendlyName),
     PrivKey, Cert, CA, nid_key, nid_cert, iter, mac_iter, 0);
