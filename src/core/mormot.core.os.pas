@@ -2223,6 +2223,21 @@ function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 function StringFromFile(const FileName: TFileName;
   HasNoSize: boolean = false): RawByteString;
 
+/// read a File content from a list of potential files
+// - returns '' if no file was found, or the first matching FileName[] content
+function StringFromFirstFile(const FileName: array of TFileName): RawByteString;
+
+/// read all Files content from a list of file names
+// - returns '' if no FileName[] file was found, or the read content
+function StringFromFiles(const FileName: array of TFileName): TRawByteStringDynArray;
+
+/// read all Files content from a list of folders names
+// - returns the content of every file contained in the supplied Folders[]
+// - with optionally the FileNames[] corresponding to each result[] content
+function StringFromFolders(const Folders: array of TFileName;
+  const Mask: TFileName = FILES_ALL;
+  FileNames: PFileNameDynArray = nil): TRawByteStringDynArray;
+
 /// create a File from a string content
 // - uses RawByteString for byte storage, whatever the codepage is
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
@@ -4603,6 +4618,76 @@ begin
     end;
     FileClose(F);
   end;
+end;
+
+function StringFromFirstFile(const FileName: array of TFileName): RawByteString;
+var
+  f: PtrInt;
+begin
+  for f := 0 to high(FileName) do
+  begin
+    result := StringFromFile(FileName[f]);
+    if result <> '' then
+      exit;
+  end;
+  result := '';
+end;
+
+function StringFromFiles(const FileName: array of TFileName): TRawByteStringDynArray;
+var
+  f: PtrInt;
+begin
+  SetLength(result, length(FileName));
+  for f := 0 to high(FileName) do
+    result[f] := StringFromFile(FileName[f]);
+end;
+
+function StringFromFolders(const Folders: array of TFileName;
+  const Mask: TFileName; FileNames: PFileNameDynArray): TRawByteStringDynArray;
+var
+  dir, fn: TFileName;
+  sr: TSearchRec;
+  f, n: PtrInt;
+  one: RawUtf8;
+begin
+  result := nil;
+  if FileNames <> nil then
+    FileNames^ := nil;
+  n := 0;
+  for f := 0 to high(Folders) do
+    if DirectoryExists(Folders[f]) then
+    begin
+      dir := IncludeTrailingPathDelimiter(Folders[f]);
+      if FindFirst(dir + Mask, faAnyFile - faDirectory, sr) = 0 then
+      begin
+        repeat
+          if SearchRecValidFile(sr) then
+          begin
+            fn := dir + sr.Name;
+            one := StringFromFile(fn);
+            if one <> '' then
+            begin
+              if length(result) = n then
+              begin
+                SetLength(result, NextGrow(n));
+                if FileNames <> nil then
+                  SetLength(FileNames^, length(result));
+              end;
+              result[n] := one;
+              if FileNames <> nil then
+                FileNames^[n] := fn;
+              inc(n);
+            end;
+          end;
+        until FindNext(sr) <> 0;
+        FindClose(sr);
+      end;
+    end;
+  if n = 0 then
+    exit;
+  DynArrayFakeLength(result, n);
+  if FileNames <> nil then
+    DynArrayFakeLength(FileNames^, n);
 end;
 
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
