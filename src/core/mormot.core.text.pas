@@ -2216,6 +2216,11 @@ procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: PtrInt); overload;
 
 /// fast conversion from hexa chars into binary data
 function HexToBin(const Hex: RawUtf8): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from hexa chars into binary data
+function HexToBin(Hex: PAnsiChar; HexLen: PtrInt;
+  var Bin: RawByteString): boolean; overload;
 
 /// fast conversion from binary data into hexa chars
 function BinToHex(const Bin: RawByteString): RawUtf8; overload;
@@ -10173,19 +10178,25 @@ begin
   mormot.core.text.BinToHex(Bin, pointer(result), BinBytes);
 end;
 
-function HexToBin(const Hex: RawUtf8): RawByteString;
-var
-  L: integer;
+function HexToBin(Hex: PAnsiChar; HexLen: PtrInt;
+  var Bin: RawByteString): boolean;
 begin
-  result := '';
-  L := length(Hex);
-  if L and 1 <> 0 then
-    L := 0
-  else // hexadecimal should be in char pairs
-    L := L shr 1;
-  pointer(result) := FastNewString(L, CP_RAWBYTESTRING);
-  if not mormot.core.text.HexToBin(pointer(Hex), pointer(result), L) then
-    result := '';
+  Bin := '';
+  if HexLen and 1 <> 0 then
+  begin
+    result := false;
+    exit; // hexadecimal should be in char pairs
+  end;
+  HexLen := HexLen shr 1;
+  pointer(Bin) := FastNewString(HexLen, CP_RAWBYTESTRING);
+  result := mormot.core.text.HexToBin(Hex, pointer(Bin), HexLen);
+  if not result then
+    Bin := '';
+end;
+
+function HexToBin(const Hex: RawUtf8): RawByteString;
+begin
+  HexToBin(pointer(Hex), length(Hex), result);
 end;
 
 function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
