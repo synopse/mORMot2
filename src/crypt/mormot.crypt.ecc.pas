@@ -213,11 +213,19 @@ type
     property Signature: TEccSignature
       read fContent.Head.Signature;
     /// persist the certificate as some binary
-    // - will use SaveToStream serialization
-    function SaveToBinary: RawByteString;
+    // - will use SaveToStream serialization, with optional StoreOnlyPublicKey
+    function SaveToBinary(PublicKeyOnly: boolean = false): RawByteString;
     /// persist the certificate as some Base64 encoded binary
     // - will use SaveToStream serialization
+    // - see PublicToBase64 to exclude the private key from a
+    // TEccCertificateSecret instance
     function ToBase64: RawUtf8;
+    /// persist only the public certificate as some Base64 encoded binary
+    // - will follow TEccCertificate.SaveToStream/ToBase64 serialization,
+    // even when called from a TEccCertificateSecret instance
+    // - could be used to safely publish the public information of a newly
+    // created certificate
+    function PublicToBase64: RawUtf8;
     /// retrieve the certificate from some Base64 encoded binary
     // - will use LoadFromStream serialization
     // - returns true on success, false otherwise
@@ -241,12 +249,6 @@ type
     // - returns true on success, false otherwise
     function FromAuth(const AuthPubKey: TFileName; const AuthBase64,
       AuthSerial: RawUtf8): boolean;
-    /// persist only the public certificate as some Base64 encoded binary
-    // - will follow TEccCertificate.SaveToStream/ToBase64 serialization,
-    // even when called from a TEccCertificateSecret instance
-    // - could be used to safely publish the public information of a newly
-    // created certificate
-    function PublicToBase64: RawUtf8;
     /// compare all fields of two Certificates
     // - don't compare the private key for inherited TEccCertificateSecret
     function IsEqual(another: TEccCertificate): boolean;
@@ -304,6 +306,9 @@ type
     // - i.e. a json containing all published properties of this instance
     // - persist ToVariant() as an human-readable JSON file
     function ToFile(const filename: TFileName): boolean;
+    /// compute the hexadecimal fingerprint of this Certificate
+    // - is the hash of its certificate and public key binary serialization
+    function GetDigest(Algo: THashAlgo): RawUtf8;
     /// the maximum storage version allowed for this Certificate
     // - is 1 by default, but could be set e.g. to 2 to enable long Subject and
     // Usage fields
@@ -504,6 +509,10 @@ type
     // - supplied hash is likely to be from SHA-256, but could be e.g. crc256c
     // - create internally a temporary TEccSignatureCertified instance
     function SignToBase64(const Hash: THash256): RawUtf8; overload;
+    /// compute a binary encoded signature of some digital content
+    function SignToBinary(Data: pointer; Len: integer): RawByteString; overload;
+    /// compute a Binary encoded signature of some digital content hash
+    function SignToBinary(const Hash: THash256): RawByteString; overload;
     /// compute a .sign digital signature of any file
     // - SHA-256/ECDSA digital signature is included in a JSON document
     // - you can set some additional metadata information for the "meta": field
@@ -686,6 +695,8 @@ type
       Data: pointer; Len: integer): TEccValidity; overload;
     /// persist the signature as some Base64 encoded binary
     function ToBase64: RawUtf8;
+    /// persist the signature as raw TEccSignatureCertifiedContent binary buffer
+    function ToBinary: RawByteString;
     /// returns a TDocVariant object of all published properties of this instance
     function ToVariant: variant; virtual;
     /// retrieve the signature from some Base64 encoded binary
@@ -697,7 +708,7 @@ type
     /// save the ECDSA signature into a ASN.1's binary DER buffer
     // - note that DER content only stores the ECDSA digital signature, so
     // all certification information is lost
-    function SaveToDERBinary: RawByteString;
+    function SaveToDerBinary: RawByteString;
     /// save the ECDSA signature into a ASN.1's binary DER file
     // - note that DER content only stores the ECDSA digital signature, so
     // all certification information is lost - consider using
@@ -708,7 +719,7 @@ type
     // - PEM is just a base64-encoded DER with some minimal header/footer
     // - note that PEM/DER content only stores the ECDSA digital signature, so
     // all certification information is lost
-    function SaveToPEMText: RawUtf8;
+    function SaveToPemText: RawUtf8;
     /// save the ECDSA signature into a X509 PEM file
     // - note that PEM/DER content only stores the ECDSA digital signature, so
     // all certification information is lost - consider using
@@ -2115,16 +2126,20 @@ begin
   FromBase64(base64);
 end;
 
-function TEccCertificate.SaveToBinary: RawByteString;
+function TEccCertificate.SaveToBinary(PublicKeyOnly: boolean): RawByteString;
 var
   st: TRawByteStringStream;
+  sav: boolean;
 begin
   result := '';
+  sav := fStoreOnlyPublicKey;
   st := TRawByteStringStream.Create;
   try
+    fStoreOnlyPublicKey := PublicKeyOnly;
     if SaveToStream(st) then
       result := st.DataString;
   finally
+    fStoreOnlyPublicKey := sav;
     st.Free;
   end;
 end;
@@ -2135,13 +2150,8 @@ begin
 end;
 
 function TEccCertificate.PublicToBase64: RawUtf8;
-var
-  sav: boolean;
 begin
-  sav := fStoreOnlyPublicKey;
-  fStoreOnlyPublicKey := true;
-  result := ToBase64;
-  fStoreOnlyPublicKey := sav;
+  result := BinToBase64(SaveToBinary({publickeyonly=}true));
 end;
 
 function TEccCertificate.IsEqual(another: TEccCertificate): boolean;
@@ -2355,10 +2365,10 @@ begin
   u := GetUsage;
   if u <> CERTIFICATE_USAGE_ALL then
     TDocVariantData(result).AddValue(
-      'Usage',         SetNameToVariant(word(u), TypeInfo(TCryptCertUsages)));
+      'Usage',  SetNameToVariant(word(u), TypeInfo(TCryptCertUsages)));
   if withBase64 then
     TDocVariantData(result).AddValue(
-      'Base64',        RawUtf8ToVariant(ToBase64));
+      'Base64', RawUtf8ToVariant(ToBase64));
 end;
 
 function TEccCertificate.ToJson(withBase64: boolean): RawUtf8;
@@ -2372,6 +2382,11 @@ begin
     result := JsonReformatToFile(ToJson, filename)
   else
     result := false;
+end;
+
+function TEccCertificate.GetDigest(Algo: THashAlgo): RawUtf8;
+begin
+  result := HashFull(Algo, SaveToBinary({publickeyonly=}true));
 end;
 
 
@@ -2556,7 +2571,7 @@ begin
           a.Free;
         end;
       finally
-        FillcharFast(pointer(plain)^, length(plain), 0);
+        FillZero(plain);
       end;
   finally
     fStoreOnlyPublicKey := pksav;
@@ -2658,7 +2673,6 @@ var
   salt, decrypted: RawByteString;
   st: TRawByteStringStream;
   aeskey: TAesKey;
-  head: integer;
   a: TAesAbstract;
 begin
   result := false;
@@ -2669,23 +2683,20 @@ begin
   if mormot.core.base.IsEqual(THash128(PRIVKEY_MAGIC), PHash128(Data)^) then
   begin
     dec(Len, 16);
-    head := 16;
-  end
-  else
-    // was with NoHeader=true (e.g. SaveToSource)
-    head := 0;
+    inc(PHash128(Data));
+  end; // may exist with NoHeader=true (e.g. SaveToSource)
   if Len and AesBlockMod <> 0 then
     exit;
-  FastSetRawByteString(salt, PAnsiChar(Data) + head, PRIVKEY_SALTSIZE);
+  FastSetRawByteString(salt, Data, PRIVKEY_SALTSIZE);
+  inc(PByte(Data), PRIVKEY_SALTSIZE);
+  XorBlock16(pointer(salt), @PRIVKEY_MAGIC);
   try
-    XorBlock16(pointer(salt), @PRIVKEY_MAGIC);
     Pbkdf2HmacSha256(PassWord, salt, Pbkdf2Round, aeskey);
     if AES = nil then
       AES := TAesCfb;
     a := AES.Create(aeskey);
     try
-      decrypted := a.DecryptPkcs7Buffer(PAnsiChar(Data) + head +
-        PRIVKEY_SALTSIZE, Len, true, false);
+      decrypted := a.DecryptPkcs7Buffer(Data, Len, true, false);
       if decrypted = '' then
         exit; // invalid content
     finally
@@ -2755,14 +2766,24 @@ end;
 
 function TEccCertificateSecret.SignToBase64(Data: pointer; Len: integer): RawUtf8;
 begin
+  result := BinToBase64(SignToBinary(Data, Len));
+end;
+
+function TEccCertificateSecret.SignToBase64(const Hash: THash256): RawUtf8;
+begin
+  result := BinToBase64(SignToBinary(Hash));
+end;
+
+function TEccCertificateSecret.SignToBinary(Data: pointer; Len: integer): RawByteString;
+begin
   if (Data = nil) or
      (Len < 0) then
     result := ''
   else
-    result := SignToBase64(Sha256Digest(Data, Len));
+    result := SignToBinary(Sha256Digest(Data, Len));
 end;
 
-function TEccCertificateSecret.SignToBase64(const Hash: THash256): RawUtf8;
+function TEccCertificateSecret.SignToBinary(const Hash: THash256): RawByteString;
 var
   sign: TEccSignatureCertified;
 begin
@@ -2773,7 +2794,7 @@ begin
     exit;
   sign := TEccSignatureCertified.CreateNew(self, Hash);
   try
-    result := sign.ToBase64;
+    result := sign.ToBinary;
   finally
     sign.Free;
   end;
@@ -3084,6 +3105,11 @@ begin
   result := BinToBase64(@fCertified, SizeOf(fCertified));
 end;
 
+function TEccSignatureCertified.ToBinary: RawByteString;
+begin
+  FastSetRawByteString(result, @fCertified, SizeOf(fCertified));
+end;
+
 function TEccSignatureCertified.ToVariant: variant;
 begin
   result := _ObjFast([
@@ -3114,7 +3140,7 @@ begin
   result := Verify(Authority, Sha256Digest(Data, Len));
 end;
 
-function TEccSignatureCertified.SaveToDERBinary: RawByteString;
+function TEccSignatureCertified.SaveToDerBinary: RawByteString;
 begin
   if not Check then
     result := ''
@@ -3127,15 +3153,15 @@ begin
   if not Check then
     result := false
   else
-    result := FileFromString(SaveToDERBinary, FileName);
+    result := FileFromString(SaveToDerBinary, FileName);
 end;
 
-function TEccSignatureCertified.SaveToPEMText: RawUtf8;
+function TEccSignatureCertified.SaveToPemText: RawUtf8;
 begin
   if not Check then
     result := ''
   else
-    result := DerToPem(EccToDer(fCertified.Signature), pemCertificate);
+    result := DerToPem(EccToDer(fCertified.Signature), pemSynopseSignature);
 end;
 
 function TEccSignatureCertified.SaveToPEMFile(const FileName: TFileName): boolean;
@@ -3143,7 +3169,7 @@ begin
   if not Check then
     result := false
   else
-    result := FileFromString(SaveToPEMText, FileName);
+    result := FileFromString(SaveToPemText, FileName);
 end;
 
 

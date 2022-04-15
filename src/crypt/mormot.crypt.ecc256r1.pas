@@ -1435,8 +1435,7 @@ var
   max: integer;
 begin
   d := @info.Data;
-  max := SizeOf(info.Data);
-  dec(max, ToVarUInt32LengthWithData(length(v2.Subject)));
+  max := SizeOf(info.Data) - ToVarUInt32LengthWithData(length(v2.Subject));
   if max < 0 then
     exit;
   d := ToVarString(v2.Subject, d);
