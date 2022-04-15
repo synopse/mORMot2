@@ -1056,6 +1056,44 @@ type
 // - returned folder name contains the trailing path delimiter (\ or /)
 function GetSystemPath(kind: TSystemPath): TFileName;
 
+type
+  /// identify the (Windows) system certificate stores for GetSystemStoreAsPem()
+  // - ignored on POSIX systems, in which the main cacert.pem file is used
+  // - scsCA contains known Certification Authority certificates, i.e. from
+  // entities entrusted to issue certificates that assert that the recipient
+  // individual, computer, or organization requesting the certificate fulfills
+  // the conditions of an established policy
+  // - scsMY holds certificates with associated private keys
+  // - scsRoot contains known Root certificates, i.e. self-signed CA certificates
+  // which are the root of the whole certificates trust tree
+  // - scsSpc contains Software Publisher Certificates
+  TSystemCertificateStore = (
+    scsCA,
+    scsMY,
+    scsRoot,
+    scsSpc);
+  TSystemCertificateStores = set of TSystemCertificateStore;
+
+var
+  /// the file name, relative to Executable.ProgramFilePath, to be searched
+  // by GetSystemStoreAsPem() to override the OS certificates store
+  // - could be set to a proper relative or absolute location, or to '' to
+  // disable this override (for security purposes)
+  GetSystemStoreAsPemLocalFile: TFileName = 'cacert.pem';
+
+/// retrieve all certificates of given system store(s) as PEM text
+// - return CA + ROOT certificates by default, ready to validate a certificate
+// - will first search for Executable.ProgramFilePath+GetSystemStoreAsPemLocalFile
+// file, then for a file pointed by a 'SSL_CA_CERT_FILE' environment variable
+// - on Windows, will use the System Crypt API over the supplied stores
+// - on POSIX, scsRoot loads the main CA file of the known system file, and
+// scsCA the additional certificate files which may not be part of the main file
+// - Darwin is not supported yet, and is handled as a BSD system
+// - an internal cache is refreshed every 4 minutes unless FlushCache is set
+function GetSystemStoreAsPem(
+  CertStores: TSystemCertificateStores = [scsCA, scsRoot];
+  FlushCache: boolean = false): RawUtf8; overload;
+
 
 { ****************** Operating System Specific Types (e.g. TWinRegistry) }
 
@@ -1411,24 +1449,6 @@ var
 function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
 
-type
-  /// identify the Windows system certificate stores
-  // - as used e.g. by GetSystemStoreAsPem()
-  // - scsCA contains known Certification Authority certificates, i.e. from
-  // entities entrusted to issue certificates that assert that the recipient
-  // individual, computer, or organization requesting the certificate fulfills
-  // the conditions of an established policy
-  // - scsMY holds certificates with associated private keys
-  // - scsRoot contains known Root certificates, i.e. self-signed CA certificates
-  // which are the root of the whole certificates trust tree
-  // - scsSpc contains Software Publisher Certificates
-  TSystemCertificateStore = (
-    scsCA,
-    scsMY,
-    scsRoot,
-    scsSpc);
-  TSystemCertificateStores = set of TSystemCertificateStore;
-
 const
   WINDOWS_CERTSTORE: array[TSystemCertificateStore] of RawUtf8 = (
     'CA', 'MY', 'ROOT', 'SPC');
@@ -1437,14 +1457,6 @@ const
 // - will maintain an internal cache refreshed about every 4 minutes unless
 // FlushCache is set to true to force retrieval from the Windows API
 function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
-  FlushCache: boolean = false): RawUtf8; overload;
-
-/// retrieve all certificates of given system store(s) as PEM text
-// - will maintain an internal cache refreshed about every 4 minutes
-// - just a wrapper to concatenate individual GetSystemStoreAsPem() results
-// - return CA + ROOT certificates by default, ready to validate a certificate
-function GetSystemStoreAsPem(
-  CertStores: TSystemCertificateStores = [scsCA, scsRoot];
   FlushCache: boolean = false): RawUtf8; overload;
 
 /// this global procedure should be called from each thread needing to use OLE

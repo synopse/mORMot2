@@ -2570,30 +2570,43 @@ begin
         result := Pem; // quick retrieved from cache
         exit;
       end;
+  // first search if bounded within the application
   result := '';
-  resultlen := 0;
-  store := CertOpenSystemStore(nil, pointer(WINDOWS_CERTSTORE[CertStore]));
-  try
-    ctx := CertEnumCertificatesInStore(store, nil);
-    while ctx <> nil do
-    begin
-      certlen := 0;
-      if not CryptBinaryToString(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, nil, certlen) then
-        break;
-      tmp.Init(certlen);
-      if CryptBinaryToString(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, tmp.buf, certlen) then
+  if GetSystemStoreAsPemLocalFile <> '' then
+    if GetSystemStoreAsPemLocalFile[2] = ':' then
+      result := StringFromFile(GetSystemStoreAsPemLocalFile)
+    else
+    result := StringFromFile(
+      Executable.ProgramFilePath + GetSystemStoreAsPemLocalFile);
+  if result = '' then
+    result := StringFromFile(GetEnvironmentVariable('SSL_CA_CERT_FILE'));
+  if result = '' then
+  begin
+    // call the Windows API to retrieve the System certificates
+    resultlen := 0;
+    store := CertOpenSystemStore(nil, pointer(WINDOWS_CERTSTORE[CertStore]));
+    try
+      ctx := CertEnumCertificatesInStore(store, nil);
+      while ctx <> nil do
       begin
-        SetLength(result, resultlen + certlen);
-        MoveFast(tmp.buf^, PByteArray(result)[resultlen], certlen);
-        inc(resultlen, certlen);
+        certlen := 0;
+        if not CryptBinaryToString(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
+            CRYPT_STRING_BASE64HEADER, nil, certlen) then
+          break;
+        tmp.Init(certlen);
+        if CryptBinaryToString(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
+            CRYPT_STRING_BASE64HEADER, tmp.buf, certlen) then
+        begin
+          SetLength(result, resultlen + certlen);
+          MoveFast(tmp.buf^, PByteArray(result)[resultlen], certlen);
+          inc(resultlen, certlen);
+        end;
+        tmp.Done;
+        ctx := CertEnumCertificatesInStore(store, ctx); // next certificate
       end;
-      tmp.Done;
-      ctx := CertEnumCertificatesInStore(store, ctx); // next certificate
+    finally
+      CertCloseStore(store, 0);
     end;
-  finally
-    CertCloseStore(store, 0);
   end;
   with _GetSystemStoreAsPemCache[CertStore] do
   begin
@@ -2610,7 +2623,7 @@ begin
   result := '';
   for s := low(s) to high(s) do
     if s in CertStores then
-      result := result + GetSystemStoreAsPem(s, FlushCache);
+      result := result + #13#10 + GetSystemStoreAsPem(s, FlushCache);
 end;
 
 threadvar

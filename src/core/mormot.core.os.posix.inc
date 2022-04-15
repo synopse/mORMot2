@@ -1459,6 +1459,80 @@ begin
   result := _Path[kind];
 end;
 
+var
+  _SystemStoreAsPem: record
+    Tix: cardinal;
+    Pem: RawUtf8;
+  end;
+
+function GetSystemStoreAsPem(CertStores: TSystemCertificateStores;
+  FlushCache: boolean): RawUtf8;
+var
+  now: cardinal;
+  files: TRawUtf8DynArray;
+  f: PtrInt;
+begin
+  now := GetTickCount64 shr 18; // div 262.144 seconds = refresh every 4.4 min
+  if not FlushCache then
+    with _SystemStoreAsPem do
+      if (Tix = now) and
+         (Pem <> '') then
+      begin
+        result := Pem; // quick retrieved from cache
+        exit;
+      end;
+  // first search if bounded within the application
+  if GetSystemStoreAsPemLocalFile <> '' then
+    if GetSystemStoreAsPemLocalFile[1] = '/' then
+      result := StringFromFile(GetSystemStoreAsPemLocalFile)
+    else
+      result := StringFromFile(
+        Executable.ProgramFilePath + GetSystemStoreAsPemLocalFile);
+  if result = '' then
+    result := StringFromFile(GetEnvironmentVariable('SSL_CA_CERT_FILE'));
+  if result = '' then
+  begin
+    // see https://go.dev/src/crypto/x509/root_unix.go as reference
+    if scsRoot in CertStores then
+      result := StringFromFirstFile([
+        {$ifdef OSLINUXANDROID}
+          '/etc/ssl/certs/ca-certificates.crt',                // Debian/Gentoo
+      	  '/etc/pki/tls/certs/ca-bundle.crt',                  // Fedora/RHEL 6
+          '/etc/ssl/ca-bundle.pem',                            // OpenSUSE
+          '/etc/pki/tls/cacert.pem',                           // OpenELEC
+          '/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem', // CentOS/RHEL 7
+          '/etc/ssl/cert.pem'                                  // Alpine Linux
+        {$else}
+      	  '/usr/local/etc/ssl/cert.pem',            // FreeBSD
+      	  '/etc/ssl/cert.pem',                      // OpenBSD
+      	  '/usr/local/share/certs/ca-root-nss.crt', // DragonFly
+      	  '/etc/openssl/certs/ca-certificates.crt'  // NetBSD
+        {$endif OSLINUXANDROID}
+        ]);
+    if scsCA in CertStores then
+    begin
+      files := StringFromFolders([
+        {$ifdef OSLINUXANDROID}
+          '/etc/ssl/certs',               // Debian/SLES10/SLES11
+          '/etc/pki/tls/certs',           // Fedora/RHEL
+      	  '/system/etc/security/cacerts'  // Android
+        {$else}
+          '/etc/ssl/certs',         // FreeBSD 12.2+
+          '/usr/local/share/certs', // FreeBSD
+          '/etc/openssl/certs'      // NetBSD
+        {$endif OSLINUXANDROID}
+        ]);
+      for f := 0 to length(files) - 1 do
+        if (PosEx('-----BEGIN', files[f]) <> 0) and
+           IsAnsiCompatible(files[f]) and
+           (PosEx(files[f], result) = 0) then // append unknown PEM files
+          result := result + #10 + files[f];
+    end;
+  end;
+  _SystemStoreAsPem.Tix := now;
+  _SystemStoreAsPem.Pem := result;
+end;
+
 function SeemsRealPointer(p: pointer): boolean;
 begin
   // let the GPF happen silently in the kernel (validated on Linux only)
