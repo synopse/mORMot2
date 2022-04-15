@@ -2422,7 +2422,7 @@ begin
      ((i > 0) and
       (fPassword[i - 1] = ',')) then
   begin
-    // handle '....,username:passwordbase64,....' or 'unsername:passwordbase64'
+    // handle '....,username:passwordbase64,....' or 'username:passwordbase64'
     inc(i, length(usr));
     j := PosEx(',', fPassword, i);
     if j = 0 then

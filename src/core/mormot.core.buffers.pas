@@ -8190,7 +8190,7 @@ const
 function GetMimeContentTypeFromExt(const FileName: TFileName; FileExt: PRawUtf8): TMimeType;
 var
   ext: RawUtf8;
-  i: integer;
+  i: PtrInt;
 begin
   result := mtUnknown;
   if FileName <> '' then

@@ -282,24 +282,84 @@ uses
 
 { TSqlDBOdbcConnection }
 
-procedure TSqlDBOdbcConnection.Connect;
 const
   DBMS_NAMES: array[0..9] of PAnsiChar = (
-    'ORACLE', 'MICROSOFT SQL', 'ACCESS', 'MYSQL', 'SQLITE',
-    'FIREBIRD', 'INTERBASE', 'POSTGRE', 'INFORMIX', nil);
+    'ORACLE',
+    'MICROSOFT SQL',
+    'ACCESS',
+    'MYSQL',
+    'SQLITE',
+    'FIREBIRD',
+    'INTERBASE',
+    'POSTGRE',
+    'INFORMIX',
+    nil);
   DBMS_TYPES: array[-1..high(DBMS_NAMES) - 1] of TSqlDBDefinition = (
-    dDefault, dOracle, dMSSQL, dJet, dMySQL, dSQLite,
-    dFirebird, dFirebird, dPostgreSql, dInformix);
+    dDefault,
+    dOracle,     // 'ORACLE'
+    dMSSQL,      // 'MICROSOFT SQL'
+    dJet,        // 'ACCESS'
+    dMySQL,      // 'MYSQL'
+    dSQLite,     // 'SQLITE'
+    dFirebird,   // 'FIREBIRD'
+    dFirebird,   // 'INTERBASE'
+    dPostgreSql, // 'POSTGRE'
+    dInformix);  // 'INFORMIX'
+
   DRIVER_NAMES: array[0..22] of PAnsiChar = (
-    'SQLSRV', 'LIBTDSODBC', 'IVSS', 'IVMSSS', 'PBSS', 'DB2CLI', 'LIBDB2',
-    'IVDB2', 'PBDB2', 'MSDB2', 'CWBODBC', 'MYODBC', 'SQORA', 'MSORCL', 'PBOR',
-    'IVOR', 'ODBCFB', 'IB', 'SQLITE', 'PSQLODBC', 'NXODBCDRIVER', 'ICLIT09B', nil);
+    'SQLSRV',
+    'LIBTDSODBC',
+    'IVSS',
+    'IVMSSS',
+    'PBSS',
+    'DB2CLI',
+    'LIBDB2',
+    'IVDB2',
+    'PBDB2',
+    'MSDB2',
+    'CWBODBC',
+    'MYODBC',
+    'SQORA',
+    'MSORCL',
+    'PBOR',
+    'IVOR',
+    'ODBCFB',
+    'IB',
+    'SQLITE',
+    'PSQLODBC',
+    'NXODBCDRIVER',
+    'ICLIT09B',
+    nil);
   DRIVER_TYPES: array[-1..high(DRIVER_NAMES) - 1] of TSqlDBDefinition = (
-    dDefault, dMSSQL, dMSSQL, dMSSQL, dMSSQL, dMSSQL, dDB2, dDB2, dDB2, dDB2,
-    dDB2, dDB2, dMySQL, dOracle, dOracle, dOracle, dOracle, dFirebird,
-    dFirebird, dSQLite, dPostgreSQL, dNexusDB, dInformix);
+    dDefault,
+    dMSSQL,      // 'SQLSRV'
+    dMSSQL,      // 'LIBTDSODBC'
+    dMSSQL,      // 'IVSS'
+    dMSSQL,      // 'IVMSSS'
+    dMSSQL,      // 'PBSS'
+    dDB2,        // 'DB2CLI'
+    dDB2,        // 'LIBDB2'
+    dDB2,        // 'IVDB2'
+    dDB2,        // 'PBDB2'
+    dDB2,        // 'MSDB2'
+    dDB2,        // 'CWBODBC'
+    dMySQL,      // 'MYODBC'
+    dOracle,     // 'SQORA'
+    dOracle,     // 'MSORCL'
+    dOracle,     // 'PBOR'
+    dOracle,     // 'IVOR'
+    dFirebird,   // 'ODBCFB'
+    dFirebird,   // 'IB'
+    dSQLite,     // 'SQLITE'
+    dPostgreSQL, // 'PSQLODBC'
+    dNexusDB,    // 'NXODBCDRIVER'
+    dInformix);  // 'ICLIT09B'
+
   DRIVERCOMPLETION: array[boolean] of SqlUSmallint = (
-    SQL_DRIVER_NOPROMPT, SQL_DRIVER_PROMPT);
+    SQL_DRIVER_NOPROMPT,
+    SQL_DRIVER_PROMPT);
+
+procedure TSqlDBOdbcConnection.Connect;
 var
   Log: ISynLog;
   Len: SqlSmallint;

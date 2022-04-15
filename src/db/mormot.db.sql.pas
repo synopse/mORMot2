@@ -4516,44 +4516,141 @@ begin
   end;
 end;
 
+const
+  COL_DECIMAL = 18; // change it if you update PCHARS[] below before 'DECIMAL'
+  COL_NUMERIC = COL_DECIMAL + 1;
+  COL_NAMES: array[0..56] of PAnsiChar = (
+    'TEXT COLLATE ISO8601', // should be before plain 'TEXT'
+    'TEXT',
+    'CHAR',
+    'NCHAR',
+    'VARCHAR',
+    'NVARCHAR',
+    'CLOB',
+    'NCLOB',
+    'DBCLOB',
+    'BIT',
+    'INT',
+    'BIGINT',
+    'DOUBLE',
+    'NUMBER',
+    'FLOAT',
+    'REAL',
+    'DECFLOAT',
+    'CURR',
+    'DECIMAL',  // warning: see COL_DECIMAL above in synch with this item
+    'NUMERIC',
+    'BLOB SUB_TYPE 1',
+    'BLOB',
+    'DATE',
+    'SMALLDATE',
+    'TIME',
+    'TINYINT',
+    'BOOL',
+    'SMALLINT',
+    'MEDIUMINT',
+    'SERIAL',
+    'YEAR',
+    'TINYTEXT',
+    'MEDIUMTEXT',
+    'NTEXT',
+    'XML',
+    'ENUM',
+    'SET',
+    'UNIQUEIDENTIFIER',
+    'MONEY',
+    'SMALLMONEY',
+    'NUM',
+    'VARRAW',
+    'RAW',
+    'LONG RAW',
+    'LONG VARRAW',
+    'TINYBLOB',
+    'MEDIUMBLOB',
+    'BYTEA',
+    'VARBIN',
+    'IMAGE',
+    'LONGBLOB',
+    'BINARY',
+    'VARBINARY',
+    'GRAPHIC',
+    'VARGRAPHIC',
+    'NULL',
+    nil);
+  COL_TYPES: array[-1 .. high(COL_NAMES) - 1] of TSqlDBFieldType = (
+    ftUnknown,
+    ftDate,      // 'TEXT COLLATE ISO8601'
+    ftUtf8,      // 'TEXT'
+    ftUtf8,      // 'CHAR'
+    ftUtf8,      // 'NCHAR'
+    ftUtf8,      // 'VARCHAR'
+    ftUtf8,      // 'NVARCHAR'
+    ftUtf8,      // 'CLOB'
+    ftUtf8,      // 'NCLOB'
+    ftUtf8,      // 'DBCLOB'
+    ftInt64,     // 'BIT'
+    ftInt64,     // 'INT'
+    ftInt64,     // 'BIGINT'
+    ftDouble,    // 'DOUBLE'
+    ftDouble,    // 'NUMBER'
+    ftDouble,    // 'FLOAT'
+    ftDouble,    // 'REAL'
+    ftDouble,    // 'DECFLOAT'
+    ftCurrency,  // 'CURR'
+    ftCurrency,  // 'DECIMAL'
+    ftCurrency,  // 'NUMERIC'
+    ftUtf8,      // 'BLOB SUB_TYPE 1'
+    ftBlob,      // 'BLOB'
+    ftDate,      // 'DATE'
+    ftDate,      // 'SMALLDATE'
+    ftDate,      // 'TIME'
+    ftInt64,     // 'TINYINT'
+    ftInt64,     // 'BOOL'
+    ftInt64,     // 'SMALLINT'
+    ftInt64,     // 'MEDIUMINT'
+    ftInt64,     // 'SERIAL'
+    ftInt64,     // 'YEAR'
+    ftUtf8,      // 'TINYTEXT'
+    ftUtf8,      // 'MEDIUMTEXT'
+    ftUtf8,      // 'NTEXT'
+    ftUtf8,      // 'XML'
+    ftUtf8,      // 'ENUM'
+    ftUtf8,      // 'SET'
+    ftUtf8,      // 'UNIQUEIDENTIFIER'
+    ftCurrency,  // 'MONEY'
+    ftCurrency,  // 'SMALLMONEY'
+    ftCurrency,  // 'NUM'
+    ftBlob,      // 'VARRAW'
+    ftBlob,      // 'RAW'
+    ftBlob,      // 'LONG RAW'
+    ftBlob,      // 'LONG VARRAW'
+    ftBlob,      // 'TINYBLOB'
+    ftBlob,      // 'MEDIUMBLOB'
+    ftBlob,      // 'BYTEA'
+    ftBlob,      // 'VARBIN'
+    ftBlob,      // 'IMAGE'
+    ftBlob,      // 'LONGBLOB'
+    ftBlob,      // 'BINARY'
+    ftBlob,      // 'VARBINARY'
+    ftBlob,      // 'GRAPHIC'
+    ftBlob,      // 'VARGRAPHIC'
+    ftNull);     // 'NULL'
+
 function TSqlDBConnectionProperties.ColumnTypeNativeToDB(
   const aNativeType: RawUtf8; aScale: integer): TSqlDBFieldType;
 
   function ColumnTypeNativeDefault: TSqlDBFieldType;
-  const
-    DECIMAL = 18; // change it if you update PCHARS[] below before 'DECIMAL'
-    NUMERIC = DECIMAL + 1;
-    PCHARS: array[0..56] of PAnsiChar = (
-      'TEXT COLLATE ISO8601', // should be before plain 'TEXT'
-      'TEXT', 'CHAR', 'NCHAR', 'VARCHAR', 'NVARCHAR', 'CLOB', 'NCLOB', 'DBCLOB',
-      'BIT', 'INT', 'BIGINT', 'DOUBLE', 'NUMBER', 'FLOAT', 'REAL', 'DECFLOAT',
-      'CURR', 'DECIMAL', 'NUMERIC', 'BLOB SUB_TYPE 1', 'BLOB', 'DATE',
-      'SMALLDATE', 'TIME', 'TINYINT', 'BOOL', 'SMALLINT', 'MEDIUMINT', 'SERIAL',
-      'YEAR', 'TINYTEXT', 'MEDIUMTEXT', 'NTEXT', 'XML', 'ENUM', 'SET',
-      'UNIQUEIDENTIFIER', 'MONEY', 'SMALLMONEY', 'NUM', 'VARRAW', 'RAW',
-      'LONG RAW', 'LONG VARRAW', 'TINYBLOB', 'MEDIUMBLOB', 'BYTEA', 'VARBIN',
-      'IMAGE', 'LONGBLOB', 'BINARY', 'VARBINARY', 'GRAPHIC', 'VARGRAPHIC',
-      'NULL', nil);
-    Types: array[-1 .. high(PCHARS) - 1] of TSqlDBFieldType = (
-      ftUnknown, ftDate,
-      ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftInt64,
-      ftInt64, ftInt64, ftDouble, ftDouble, ftDouble, ftDouble, ftDouble,
-      ftCurrency, ftCurrency, ftCurrency, ftUtf8, ftBlob, ftDate, ftDate, ftDate,
-      ftInt64, ftInt64, ftInt64, ftInt64, ftInt64, ftInt64, ftUtf8, ftUtf8,
-      ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftUtf8, ftCurrency, ftCurrency, ftCurrency,
-      ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftBlob,
-      ftBlob, ftBlob, ftBlob, ftBlob, ftBlob, ftNull);
   var
-    ndx: integer;
+    ndx: PtrInt;
   begin
-    //assert(StrComp(PCHARS[DECIMAL],'DECIMAL')=0);
-    ndx := IdemPPChar(pointer(aNativeType), @PCHARS);
+    //assert(StrComp(COL_NAMES[COL_DECIMAL],'DECIMAL')=0);
+    ndx := IdemPPChar(pointer(aNativeType), @COL_NAMES);
     if (aScale = 0) and
-       ((ndx = DECIMAL) or
-        (ndx = NUMERIC)) then
+       ((ndx = COL_DECIMAL) or
+        (ndx = COL_NUMERIC)) then
       result := ftInt64
     else
-      result := Types[ndx]; // Types[-1]=ftUnknown
+      result := COL_TYPES[ndx]; // Types[-1]=ftUnknown
   end;
 
   function ColumnTypeNativeToDBOracle: TSqlDBFieldType;
@@ -4570,8 +4667,8 @@ function TSqlDBConnectionProperties.ColumnTypeNativeToDB(
         result := ftDouble;
       end
     else if (PosEx('RAW', aNativeType) > 0) or
-          IdemPropNameU(aNativeType, 'BLOB') or
-          IdemPropNameU(aNativeType, 'BFILE') then
+            IdemPropNameU(aNativeType, 'BLOB') or
+            IdemPropNameU(aNativeType, 'BFILE') then
       result := ftBlob
     else if IdemPChar(pointer(aNativeType), 'BINARY_') or
             IdemPropNameU(aNativeType, 'FLOAT') then
@@ -4893,7 +4990,7 @@ begin
         '03135', '12152', '12154', '12157', '12514', '12520', '12537', '12545',
         '12560', '12571']) >= 0;
     dInformix:
-      // error codes based on {IBM INFORMIX ODBC DRIVER} tested with wrong data connection
+      // error codes based on {IBM INFORMIX ODBC DRIVER} on wrong data connection
       result := IdemPCharArray(PosErrorNumber(aMessage, '-'),
         ['329', '761', '902', '908', '930', '931', '951', '11017', '23101',
          '23104', '25567', '25582', '27002']) >= 0;
@@ -5243,7 +5340,8 @@ begin
 end;
 
 function TSqlDBConnectionProperties.FieldsFromList(
-  const aFields: TSqlDBColumnDefineDynArray; aExcludeTypes: TSqlDBFieldTypes): RawUtf8;
+  const aFields: TSqlDBColumnDefineDynArray;
+  aExcludeTypes: TSqlDBFieldTypes): RawUtf8;
 var
   i, n: PtrInt;
 begin
@@ -5269,14 +5367,15 @@ begin
 end;
 
 function TSqlDBConnectionProperties.SqlSelectAll(const aTableName: RawUtf8;
-  const aFields: TSqlDBColumnDefineDynArray; aExcludeTypes: TSqlDBFieldTypes): RawUtf8;
+  const aFields: TSqlDBColumnDefineDynArray;
+  aExcludeTypes: TSqlDBFieldTypes): RawUtf8;
 begin
   if (self = nil) or
      (aTableName = '') then
     result := ''
   else
     result := 'select ' + FieldsFromList(aFields, aExcludeTypes) +
-              ' from ' + SqlTableName(aTableName);
+               ' from ' + SqlTableName(aTableName);
 end;
 
 {$ifdef ISDELPHI20062007}
@@ -5300,7 +5399,7 @@ begin
      IdemPropName('ConnectionProperties', @result[L - 19], 20) then
     SetLength(result, L - 20);
   if (L > 5) and
-     IdemPropName('OleDB', pointer(result), 5) then
+     IdemPropName('OLEDB', pointer(result), 5) then
     Delete(result, 1, 5)
   else if (L > 4) and
        IdemPropName('ODBC', pointer(result), 4) then
