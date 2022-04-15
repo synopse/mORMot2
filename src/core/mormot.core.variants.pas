@@ -921,6 +921,8 @@ type
     function GetAsDocVariantByIndex(aIndex: integer): PDocVariantData;
     function GetVariantByPath(const aNameOrPath: RawUtf8): Variant;
       {$ifdef HASINLINE}inline;{$endif}
+    function GetObjectProp(const aName: RawUtf8; out aFound: PVariant): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     function InternalAdd(aName: PUtf8Char; aNameLen: integer): integer; overload;
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
       {$ifdef HASINLINE}inline;{$endif}
@@ -4603,6 +4605,71 @@ end;
 
 {$endif HASITERATORS}
 
+function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
+  count: PtrInt): PtrInt;
+var
+  p: PUtf8Char;
+begin
+  // FPC does proper inlining in this loop
+  result := 0;
+  repeat
+    p := n[result]; // all VName[]<>'' so p=n^<>nil
+    if (PStrLen(p - _STRLEN)^ = len) and
+       CompareMemFixed(p, name, len) then
+      exit;
+    inc(result);
+    dec(count);
+  until count = 0;
+  result := -1;
+end;
+
+function FindNonVoidRawUtf8I(n: PPointerArray; name: pointer; len: TStrLen;
+  count: PtrInt): PtrInt;
+var
+  p1, p2, l: PUtf8Char;
+label
+  no;
+begin
+  result := 0;
+  p2 := name;
+  repeat
+    // inlined IdemPropNameUSameLenNotNull(p, name, len)
+    p1 := n[result]; // all VName[]<>'' so p1<>nil
+    if PStrLen(p1 - _STRLEN)^ = len then
+    begin
+      l := @p1[len - SizeOf(cardinal)];
+      dec(p2, PtrUInt(p1));
+      while PtrUInt(l) >= PtrUInt(p1) do
+        // compare 4 Bytes per loop
+        if (PCardinal(p1)^ xor PCardinal(@p2[PtrUInt(p1)])^) and $dfdfdfdf <> 0 then
+          goto no
+        else
+          inc(PCardinal(p1));
+      inc(PCardinal(l));
+      while PtrUInt(p1) < PtrUInt(l) do
+        // remaining bytes
+        if (ord(p1^) xor ord(p2[PtrUInt(p1)])) and $df <> 0 then
+          goto no
+        else
+          inc(PByte(p1));
+      exit; // match found
+no:   p2 := name;
+    end;
+    inc(result);
+    dec(count);
+  until count = 0;
+  result := -1;
+end;
+
+type
+  TDocVariantFind =
+    function(p: PPointerArray; n: pointer; l: TStrLen; c: PtrInt): PtrInt;
+
+const
+  DocVariantFind: array[{casesensitive:}boolean] of TDocVariantFind = (
+      FindNonVoidRawUtf8I,
+      FindNonVoidRawUtf8);
+
 
 { TDocVariantData }
 
@@ -4698,7 +4765,7 @@ begin
   VType := DocVariantVType;
   aOptions := aOptions - [dvoIsArray, dvoIsObject];
   VOptions := aOptions;
-  pointer(VName) := nil; // to avoid GPF
+  pointer(VName) := nil; // to avoid GPF when mapped within a TVarData/variant
   pointer(VValue) := nil;
   VCount := 0;
 end;
@@ -5833,11 +5900,8 @@ begin
     exit;
   end;
   if dvoCheckForDuplicatedNames in VOptions then
-  begin
-    result := GetValueIndex(aName);
-    if result >= 0 then
+    if GetValueIndex(aName) >= 0 then
       raise EDocVariant.CreateUtf8('AddValue: Duplicated [%] name', [aName]);
-  end;
   result := InternalAdd(aName, aIndex);
   v := @VValue[result];
   if aValueOwned then
@@ -5989,10 +6053,27 @@ begin
   end;
 end;
 
+function TDocVariantData.GetObjectProp(const aName: RawUtf8;
+  out aFound: PVariant): boolean;
+var
+  ndx: PtrInt;
+begin
+  result := false;
+  if (VCount = 0) or
+     not IsObject then
+    exit;
+  ndx := DocVariantFind[IsCaseSensitive](
+        pointer(VName), pointer(aName), length(aName), VCount);
+  if ndx < 0 then
+    exit;
+  aFound := @VValue[ndx];
+  result  := true;
+end;
+
 function TDocVariantData.SearchItemByProp(const aPropName, aPropValue: RawUtf8;
   aPropValueCaseSensitive: boolean): integer;
 var
-  ndx: PtrInt;
+  v: PVariant;
 begin
   if IsObject then
   begin
@@ -6003,14 +6084,9 @@ begin
   end
   else if IsArray then
     for result := 0 to VCount - 1 do
-      with _Safe(VValue[result])^ do
-        if IsObject then
-        begin
-          ndx := GetValueIndex(aPropName);
-          if (ndx >= 0) and
-             VariantEquals(VValue[ndx], aPropValue, aPropValueCaseSensitive) then
-            exit;
-        end;
+      if _Safe(VValue[result])^.GetObjectProp(aPropName, v) and
+         VariantEquals({%H-}v^, aPropValue, aPropValueCaseSensitive) then
+        exit;
   result := -1;
 end;
 
@@ -6484,23 +6560,20 @@ end;
 procedure TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;
   out result: TDocVariantData; const OnReduce: TOnReducePerItem);
 var
-  ndx, j: PtrInt;
+  ndx: PtrInt;
   item: PDocVariantData;
+  v: PVariant;
 begin
   TVarData(result) := DV_FAST[dvArray];
-  if (VCount = 0) or
-     (aPropName = '') or
-     not IsArray then
-    exit;
-  for ndx := 0 to VCount - 1 do
-    if _SafeObject(VValue[ndx], item) then
-    begin
-      j := item^.GetValueIndex(aPropName);
-      if j >= 0 then
+  if (VCount <> 0) and
+     (aPropName <> '') and
+     IsArray then
+    for ndx := 0 to VCount - 1 do
+      if _Safe(VValue[ndx], item) and
+         {%H-}item^.GetObjectProp(aPropName, v) then
         if (not Assigned(OnReduce)) or
            OnReduce(item) then
-          result.AddItem(item^.VValue[j]);
-    end;
+          result.AddItem(v^);
 end;
 
 function TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;
@@ -6513,27 +6586,18 @@ end;
 procedure TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;
   out result: TDocVariantData; const OnReduce: TOnReducePerValue);
 var
-  ndx, j: PtrInt;
-  item: PDocVariantData;
+  ndx: PtrInt;
   v: PVariant;
 begin
   TVarData(result) := DV_FAST[dvArray];
-  if (VCount = 0) or
-     (aPropName = '') or
-     not IsArray then
-    exit;
-  for ndx := 0 to VCount - 1 do
-    if _SafeObject(VValue[ndx], item) then
-    begin
-      j := item^.GetValueIndex(aPropName);
-      if j >= 0 then
-      begin
-        v := @item^.VValue[j];
+  if (VCount <> 0) and
+     (aPropName <> '') and
+     IsArray then
+    for ndx := 0 to VCount - 1 do
+      if _Safe(VValue[ndx])^.GetObjectProp(aPropName, v) then
         if (not Assigned(OnReduce)) or
            OnReduce(v^) then
           result.AddItem(v^);
-      end;
-    end;
 end;
 
 function TDocVariantData.Rename(
@@ -6852,50 +6916,35 @@ end;
 function TDocVariantData.GetValueOrDefault(const aName: RawUtf8;
   const aDefault: variant): variant;
 var
-  ndx: PtrInt;
+  v: PVariant;
 begin
   if (cardinal(VType) <> DocVariantVType) or
-     (not IsObject) then
+     not GetObjectProp(aName, v{%H-}) then
     result := aDefault
   else
-  begin
-    ndx := GetValueIndex(aName);
-    if ndx >= 0 then
-      result := VValue[ndx]
-    else
-      result := aDefault;
-  end;
+    SetVariantByValue(v^, result);
 end;
 
 function TDocVariantData.GetValueOrNull(const aName: RawUtf8): variant;
 var
-  ndx: PtrInt;
+  v: PVariant;
 begin
   if (cardinal(VType) <> DocVariantVType) or
-     (not IsObject) then
+     not GetObjectProp(aName, v{%H-}) then
     SetVariantNull(result{%H-})
   else
-  begin
-    ndx := GetValueIndex(aName);
-    if ndx >= 0 then
-      result := VValue[ndx]
-    else
-      SetVariantNull(result);
-  end;
+    SetVariantByValue(v^, result);
 end;
 
 function TDocVariantData.GetValueOrEmpty(const aName: RawUtf8): variant;
 var
-  ndx: PtrInt;
+  v: PVariant;
 begin
-  VarClear(result{%H-});
-  if (cardinal(VType) = DocVariantVType) and
-     IsObject then
-  begin
-    ndx := GetValueIndex(aName);
-    if ndx >= 0 then
-      result := VValue[ndx];
-  end;
+  if (cardinal(VType) <> DocVariantVType) or
+     not GetObjectProp(aName, v{%H-}) then
+   VarClear(result{%H-})
+  else
+    SetVariantByValue(v^, result);
 end;
 
 function TDocVariantData.GetAsBoolean(const aName: RawUtf8; out aValue: boolean;
