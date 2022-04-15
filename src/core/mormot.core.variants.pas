@@ -141,6 +141,9 @@ function VariantToString(const V: Variant): string;
 // - will use a TDocVariantData temporary storage
 function VariantDynArrayToJson(const V: TVariantDynArray): RawUtf8;
 
+/// convert a dynamic array of variants into its text values
+function VariantDynArrayToRawUtf8DynArray(const V: TVariantDynArray): TRawUtf8DynArray;
+
 /// convert a JSON array into a dynamic array of variants
 // - will use a TDocVariantData temporary storage
 function JsonToVariantDynArray(const Json: RawUtf8): TVariantDynArray;
@@ -3059,6 +3062,19 @@ var
 begin
   tmp.InitArrayFromVariants(V);
   result := tmp.ToJson;
+end;
+
+function VariantDynArrayToRawUtf8DynArray(const V: TVariantDynArray): TRawUtf8DynArray;
+var
+  i: PtrInt;
+  ws: boolean;
+begin
+  result := nil;
+  if V = nil then
+    exit;
+  SetLength(result, length(V));
+  for i := 0 to length(V) - 1 do
+    VariantToUtf8(V[i], result[i], ws);
 end;
 
 function JsonToVariantDynArray(const Json: RawUtf8): TVariantDynArray;
