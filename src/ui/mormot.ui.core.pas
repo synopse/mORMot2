@@ -68,16 +68,19 @@ type
   private
     fMetafile: TMetaFile;
   public
+    /// setup a TCanvas to write into a TMetaFile
     constructor Create(AMetafile: TMetaFile; ReferenceDevice: HDC);
+    /// setup a TCanvas to write into a TMetaFile
     constructor CreateWithComment(AMetafile: TMetaFile; ReferenceDevice: HDC;
       const CreatedBy, Description: string);
+    /// will close the Canvas HDC and assign it to the associated TMetaFile
     destructor Destroy; override;
   end;
 
   /// FPC LCL is missing Windows MetaFile support: minimal MetaFile wrapper
   // - just encapsulate the WinAPI - so is not cross platform yet
   TMetaFile = class(TGraphic)
-  private
+  protected
     fImageHandle: HENHMETAFILE;
     fImageMMWidth: integer;  // in 0.01 mm logical pixels
     fImageMMHeight: integer; // in 0.01 mm logical pixels
@@ -86,13 +89,9 @@ type
     fHeader: TEnhMetaHeader;
     function GetAuthor: string;
     function GetDescription: string;
-    function GetHandle: HENHMETAFILE;
-    function GetMMHeight: integer;
-    function GetMMWidth: integer;
     procedure SetHandle(Value: HENHMETAFILE);
     procedure SetMMHeight(Value: integer);
     procedure SetMMWidth(Value: integer);
-  protected
     procedure Draw(ACanvas: TCanvas; const Rect: TRect); override;
     function GetEmpty: boolean; override;
     function GetHeight: integer; override;
@@ -109,7 +108,7 @@ type
     procedure SaveToStream(Stream: TStream); override;
     function ReleaseHandle: HENHMETAFILE;
     property Handle: HENHMETAFILE
-      read GetHandle write SetHandle;
+      read fImageHandle write SetHandle;
     property Empty: boolean
       read GetEmpty;
     property CreatedBy: string
@@ -117,9 +116,9 @@ type
     property Description: string
       read GetDescription;
     property MMWidth: integer
-      read GetMMWidth write SetMMWidth;
+      read fImageMMWidth write SetMMWidth;
     property MMHeight: integer
-      read GetMMHeight write SetMMHeight;
+      read fImageMMHeight write SetMMHeight;
   end;
 
 
@@ -364,7 +363,7 @@ end;
 
 destructor TMetaFileCanvas.Destroy;
 begin
-  fMetafile.Handle := CloseEnhMetafile(Handle);
+  fMetafile.SetHandle(CloseEnhMetafile(Handle));
   inherited Destroy;
 end;
 
@@ -449,22 +448,8 @@ end;
 
 function TMetaFile.GetEmpty: boolean;
 begin
-  result := (fImageHandle = 0);
-end;
-
-function TMetaFile.GetHandle: HENHMETAFILE;
-begin
-  result := fImageHandle;
-end;
-
-function TMetaFile.GetMMHeight: integer;
-begin
-  result := fImageMMHeight;
-end;
-
-function TMetaFile.GetMMWidth: integer;
-begin
-  result := fImageMMWidth;
+  result := (self = nil) or
+            (fImageHandle = 0);
 end;
 
 procedure TMetaFile.SetHandle(Value: HENHMETAFILE);
@@ -477,9 +462,11 @@ begin
   if fImageHandle <> 0 then
     Clear;
   fImageHandle := Value;
-  fHeader := hdr;
   fImagePxWidth := 0;
   fImagePxHeight := 0;
+  if Value = 0 then
+    exit;
+  fHeader := hdr;
   fImageMMWidth := hdr.rclFrame.Right - hdr.rclFrame.Left;
   fImageMMHeight := hdr.rclFrame.Bottom - hdr.rclFrame.Top;
 end;

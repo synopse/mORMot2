@@ -565,6 +565,7 @@ function _GdipLoad: TGdiPlus;
 procedure EnsureGdipExists(const caller: shortstring);
 
 /// raise an EGdiPlus if no GDI+ library is available, or call Gdip.Lock
+// - the GDI+ API is not thread-safe, so Gdip.Lock/UnLock is mandatory 
 procedure EnsureGdipExistsAndLock(const caller: shortstring);
 
 /// access the GDI+ library instance

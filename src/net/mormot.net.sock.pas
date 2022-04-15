@@ -436,7 +436,7 @@ type
     // - e.g. '/C=US/O=Let''s Encrypt/CN=R3'
     PeerIssuer: RawUtf8;
     /// output: the connected Peer subject name
-    // - e.g. '/CN=synopse.info'
+    // - e.g. 'CN=synopse.info'
     PeerSubject: RawUtf8;
     /// output: detailed information about the connected Peer
     // - stored in the native format of the TLS library, e.g. X509_print()

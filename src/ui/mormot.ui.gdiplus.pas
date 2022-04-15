@@ -916,19 +916,18 @@ var
   i: PtrInt;
 begin
   // initialize the GDI+ library if necessary
-  if not Gdip.Exists then
-    exit;
-  // register JPG and PNG pictures as TGraphic
-  if GetClass('TTiffImage') = nil then
-  begin
-    RegisterClass(TJpegImage);
-    RegisterClass(TPngImage);
-    RegisterClass(TGifImage);
-    RegisterClass(TTiffImage);
-    for i := 0 to high(PicturesExt) do
-      TPicture.RegisterFileFormat(
-        PicturesExt[i], PictureName(PictureClasses[i]), PictureClasses[i]);
-  end;
+  if Gdip.Exists then
+    // register JPG and PNG pictures as TGraphic
+    if GetClass('TTiffImage') = nil then
+    begin
+      RegisterClass(TJpegImage);
+      RegisterClass(TPngImage);
+      RegisterClass(TGifImage);
+      RegisterClass(TTiffImage);
+      for i := 0 to high(PicturesExt) do
+        TPicture.RegisterFileFormat(
+          PicturesExt[i], PictureName(PictureClasses[i]), PictureClasses[i]);
+    end;
 end;
 
 
