@@ -82,15 +82,20 @@ type
 /// search for matching files by names
 // - just an enhanced wrapper around FindFirst/FindNext with some options
 // - you may specify several masks in Mask, e.g. as '*.jpg;*.jpeg'
-function FindFiles(const Directory, Mask: TFileName;
-  const IgnoreFileName: TFileName = '';
+function FindFiles(const Directory: TFileName;
+  const Mask: TFileName = FILES_ALL; const IgnoreFileName: TFileName = '';
   Options: TFindFilesOptions = []): TFindFilesDynArray;
 
 /// search for matching file names
 // - just a wrapper around FindFilesDynArrayToFileNames(FindFiles())
-function FindFileNames(const Directory, Mask: TFileName;
-  const IgnoreFileName: TFileName = '';
-  Options: TFindFilesOptions = []): TFileNameDynArray;
+function FileNames(const Directory: TFileName;
+  const Mask: TFileName = FILES_ALL; Options: TFindFilesOptions = [];
+  const IgnoreFileName: TFileName = ''): TFileNameDynArray; overload;
+
+/// search for matching file names from path-delimited content
+// - is a wrapper around FindFileNames(MakePath())
+function FileNames(const Path: array of const; const Mask: TFileName = FILES_ALL;
+  Options: TFindFilesOptions = []): TFileNameDynArray; overload;
 
 /// convert a result list, as returned by FindFiles(), into an array of Files[].Name
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
@@ -1526,12 +1531,12 @@ begin
     CsvToRawUtf8DynArray(pointer(StringToUtf8(Mask)), masks, ';');
   if masks <> nil then
   begin
+    // recursive calls for each masks[]
     if ffoSortByName in Options then
       QuickSortRawUtf8(masks, length(masks), nil,
         {$ifdef OSWINDOWS} @StrIComp {$else} @StrComp {$endif});
     for m := 0 to length(masks) - 1 do
     begin
-      // masks[] recursion
       masked := FindFiles(
         Directory, Utf8ToString(masks[m]), IgnoreFileName, Options);
       da.AddArray(masked);
@@ -1539,6 +1544,7 @@ begin
   end
   else
   begin
+    // single mask search
     if Directory <> '' then
       dir := IncludeTrailingPathDelimiter(Directory);
     SearchFolder('');
@@ -1550,11 +1556,20 @@ begin
     DynArrayFakeLength(result, count);
 end;
 
-function FindFileNames(const Directory, Mask, IgnoreFileName: TFileName;
-  Options: TFindFilesOptions): TFileNameDynArray;
+function FileNames(const Directory, Mask: TFileName;
+  Options: TFindFilesOptions; const IgnoreFileName: TFileName): TFileNameDynArray;
 begin
   result := FindFilesDynArrayToFileNames(
     FindFiles(Directory, Mask, IgnoreFileName, Options));
+end;
+
+function FileNames(const Path: array of const; const Mask: TFileName;
+  Options: TFindFilesOptions): TFileNameDynArray;
+var
+  dir: TFileName;
+begin
+  dir := MakePath(Path, {endwithdelim=}true);
+  result := FileNames(dir, Mask, Options);
 end;
 
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;

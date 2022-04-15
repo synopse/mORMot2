@@ -424,7 +424,7 @@ begin
   if (n = 1) and
      (CertFiles[0] = '*') then
   begin
-    files := FindFileNames('.', '*' + ECCCERTIFICATEPUBLIC_FILEEXT);
+    files := FileNames('.', '*' + ECCCERTIFICATEPUBLIC_FILEEXT);
     result := 'chain' + ECCCERTIFICATES_FILEEXT;
   end
   else
