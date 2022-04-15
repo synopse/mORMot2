@@ -2053,6 +2053,7 @@ var
   str: TCryptStoreAlgo;
   st1, st2, st3: ICryptStore;
   alg: TCryptAlgos;
+  fmt: TCryptCertFormat;
 begin
   // validate AesAlgoNameEncode / TAesMode
   FillZero(key);
@@ -2210,34 +2211,45 @@ begin
     Check(c1.HasPrivateSecret);
     check(c1.GetNotBefore <= NowUtc);
     check(c1.GetNotAfter > NowUtc);
-    c2 := crt.New;
-    Check(not c2.IsEqual(c1));
-    check(c2.Load(c1.Save));
-    Check(not c2.HasPrivateSecret, 'nopwd=pubonly');
-    Check(c1.IsEqual(c2));
-    CheckEqual(c2.GetSerial, c1.GetSerial);
-    CheckEqual(c2.GetSubject, c1.GetSubject);
-    CheckEqual(c2.GetIssuerName, c1.GetIssuerName);
-    CheckEqual(c2.GetIssuerSerial, c1.GetIssuerSerial);
-    CheckSame(c2.GetNotAfter, c1.GetNotAfter);
-    CheckSame(c2.GetNotBefore, c1.GetNotBefore);
-    CheckEqual(word(c2.GetUsage), word(c1.GetUsage));
-    CheckEqual(c2.GetPeerInfo, c1.GetPeerInfo);
-    c3 := crt.New;
-    Check(not c3.IsEqual(c1));
-    Check(not c3.IsEqual(c2));
-    check(c3.Load(c1.Save('pwd'), 'pwd'));
-    Check(c3.HasPrivateSecret, 'pwd=priv');
-    Check(c3.IsEqual(c1));
-    Check(c3.IsEqual(c2));
-    CheckEqual(c3.GetSerial, c1.GetSerial);
-    CheckEqual(c3.GetSubject, c1.GetSubject);
-    CheckEqual(c3.GetIssuerName, c1.GetIssuerName);
-    CheckEqual(c3.GetIssuerSerial, c1.GetIssuerSerial);
-    CheckSame(c3.GetNotAfter, c1.GetNotAfter);
-    CheckSame(c3.GetNotBefore, c1.GetNotBefore);
-    CheckEqual(word(c3.GetUsage), word(c1.GetUsage));
-    CheckEqual(c3.GetPeerInfo, c1.GetPeerInfo);
+    for fmt := ccfBinary to ccfPem do
+    begin
+      c2 := crt.New;
+      Check(not c2.IsEqual(c1));
+      Check(c2.GetDigest <> c1.GetDigest);
+      // validate persistence in PEM/DER with no password (i.e. no private key)
+      s := c1.Save('', fmt);
+      check(c2.Load(s));
+      Check(not c2.HasPrivateSecret, 'nopwd=pubonly');
+      Check(c1.IsEqual(c2));
+      CheckEqual(c2.GetSerial, c1.GetSerial);
+      CheckEqual(c2.GetSubject, c1.GetSubject);
+      CheckEqual(c2.GetIssuerName, c1.GetIssuerName);
+      CheckEqual(c2.GetIssuerSerial, c1.GetIssuerSerial);
+      CheckEqual(c2.GetDigest, c1.GetDigest);
+      CheckSame(c2.GetNotAfter, c1.GetNotAfter);
+      CheckSame(c2.GetNotBefore, c1.GetNotBefore);
+      CheckEqual(word(c2.GetUsage), word(c1.GetUsage));
+      CheckEqual(c2.GetPeerInfo, c1.GetPeerInfo);
+      // validate persistence in PEM/DER with password-protected private key
+      c3 := crt.New;
+      Check(not c3.IsEqual(c1));
+      Check(not c3.IsEqual(c2));
+      s := c1.Save('pwd', fmt);
+      check(c3.Load(s, 'pwd'));
+      Check(c3.HasPrivateSecret, 'pwd=priv');
+      Check(c3.IsEqual(c1));
+      Check(c3.IsEqual(c2));
+      CheckEqual(c3.GetSerial, c1.GetSerial);
+      CheckEqual(c3.GetSubject, c1.GetSubject);
+      CheckEqual(c3.GetIssuerName, c1.GetIssuerName);
+      CheckEqual(c3.GetIssuerSerial, c1.GetIssuerSerial);
+      CheckSame(c3.GetNotAfter, c1.GetNotAfter);
+      CheckSame(c3.GetNotBefore, c1.GetNotBefore);
+      CheckEqual(c3.GetDigest, c1.GetDigest);
+      CheckEqual(word(c3.GetUsage), word(c1.GetUsage));
+      if fmt = ccfPem then // PKCS12 seems to add some information to X509
+        CheckEqual(c3.GetPeerInfo, c1.GetPeerInfo);
+    end;
   end;
   // validate Store High-Level Algorithms Factory
   r := RandomAnsi7(100);

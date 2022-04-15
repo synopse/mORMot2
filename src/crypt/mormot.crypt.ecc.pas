@@ -4960,11 +4960,15 @@ type
     function GetPeerInfo: RawUtf8; override;
     function Load(const Saved: RawByteString;
       const PrivatePassword: RawUtf8): boolean; override;
-    function Save(const PrivatePassword, Format: RawUtf8): RawByteString; override;
+    function Save(const PrivatePassword: RawUtf8;
+      Format: TCryptCertFormat): RawByteString; override;
     function HasPrivateSecret: boolean; override;
     function GetPrivateKey: RawByteString; override;
     function IsEqual(const another: ICryptCert): boolean; override;
-    function Sign(Data: pointer; Len: integer): RawUtf8; override;
+    function Sign(Data: pointer; Len: integer): RawByteString; override;
+    function Verify(Sign, Data: pointer;
+      SignLen, DataLen: integer): TCryptCertValidity; override;
+    function Handle: pointer; override;
     /// low-level access to internal TEccCertificate or TEccCertificateSecret
     property Ecc: TEccCertificate
       read fEcc;
@@ -5046,26 +5050,6 @@ begin
     auth, '', ExpireDays, start, true, Usages, Subjects, fMaxVersion);
 end;
 
-function TCryptCertInternal.Load(const Saved: RawByteString;
-  const PrivatePassword: RawUtf8): boolean;
-begin
-  if fEcc <> nil then
-    RaiseError('FromBinary: called twice');
-  if PrivatePassword = '' then
-  begin
-    fEcc := TEccCertificate.CreateVersion(fMaxVersion);
-    result := fEcc.LoadFromBinary(Saved); // plain public key only
-  end
-  else
-  begin
-    fEcc := TEccCertificateSecret.CreateVersion(fMaxVersion);
-    result := TEccCertificateSecret(fEcc). // encrypted and with private key
-      LoadFromSecureBinary(Saved, PrivatePassword);
-  end;
-  if not result then
-    FreeAndNil(fEcc);
-end;
-
 function TCryptCertInternal.GetSerial: RawUtf8;
 begin
   if fEcc <> nil then
@@ -5138,24 +5122,55 @@ begin
     result := '';
 end;
 
-function TCryptCertInternal.Save(
-  const PrivatePassword, Format: RawUtf8): RawByteString;
+function TCryptCertInternal.Save(const PrivatePassword: RawUtf8;
+  Format: TCryptCertFormat): RawByteString;
 begin
-  // our proprietary implementation do not use the Format parameter
-  if fEcc <> nil then
-    if fEcc.InheritsFrom(TEccCertificateSecret) then
-      if PrivatePassword = '' then
-      begin
-        TEccCertificateSecret(fEcc).StoreOnlyPublicKey := true;
-        result := fEcc.SaveToBinary;
-        TEccCertificateSecret(fEcc).StoreOnlyPublicKey := false;
-      end
-      else
-        result := TEccCertificateSecret(fEcc).SaveToSecureBinary(PrivatePassword)
-    else
-      result := fEcc.SaveToBinary
+  if fEcc = nil then
+    result := ''
+  else if not (Format in [ccfBinary, ccfPem]) then
+    result := inherited Save(PrivatePassword, Format)
   else
-    result := '';
+  begin
+    if fEcc.InheritsFrom(TEccCertificateSecret) and
+       (PrivatePassword <> '') then
+      result := TEccCertificateSecret(fEcc).SaveToSecureBinary(PrivatePassword)
+    else
+      result := fEcc.SaveToBinary({publickeyonly=}true);
+    if Format = ccfPem then
+      result := DerToPem(result, pemSynopseCertificate);
+  end;
+end;
+
+function TCryptCertInternal.Load(const Saved: RawByteString;
+  const PrivatePassword: RawUtf8): boolean;
+var
+  bin: RawByteString;
+  k: TPemKind;
+begin
+  FreeAndNil(fEcc);
+  if IsPem(Saved) then
+  begin
+    bin := PemToDer(Saved, @k);
+    if k <> pemSynopseCertificate then
+      bin := '';
+  end
+  else
+    bin := Saved;
+  if bin = '' then
+    result := false
+  else if PrivatePassword = '' then
+  begin
+    fEcc := TEccCertificate.CreateVersion(fMaxVersion);
+    result := fEcc.LoadFromBinary(bin); // plain public key only
+  end
+  else
+  begin
+    fEcc := TEccCertificateSecret.CreateVersion(fMaxVersion);
+    result := TEccCertificateSecret(fEcc). // encrypted and with private key
+      LoadFromSecureBinary(bin, PrivatePassword);
+  end;
+  if not result then
+    FreeAndNil(fEcc);
 end;
 
 function TCryptCertInternal.HasPrivateSecret: boolean;
@@ -5188,14 +5203,31 @@ begin
     result := fEcc.IsEqual(TCryptCertInternal(a).fEcc);
 end;
 
-function TCryptCertInternal.Sign(Data: pointer; Len: integer): RawUtf8;
+function TCryptCertInternal.Sign(Data: pointer; Len: integer): RawByteString;
 begin
   if HasPrivateSecret then
-    result := TEccCertificateSecret(fEcc).SignToBase64(Data, Len)
+    result := TEccCertificateSecret(fEcc).SignToBinary(Data, Len)
   else
     result := '';
 end;
 
+function TCryptCertInternal.Verify(Sign, Data: pointer;
+  SignLen, DataLen: integer): TCryptCertValidity;
+var
+  s: PEccSignatureCertifiedContent absolute Sign;
+begin
+  if (fEcc = nil) or
+     (SignLen <> SizeOf(s^)) or
+     (DataLen <= 0) then
+    result := cvBadParameter
+  else
+    result := TCryptCertValidity(fEcc.Verify(Sha256Digest(Data, DataLen), s^));
+end;
+
+function TCryptCertInternal.Handle: pointer;
+begin
+  result := fEcc;
+end;
 
 type
   /// 'syn-store' ICryptStore algorithm
@@ -5221,7 +5253,7 @@ type
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; override;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; override;
-    function Verify(const Signature: RawUtf8;
+    function Verify(const Signature: RawByteString;
       Data: pointer; Len: integer): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
@@ -5307,10 +5339,15 @@ begin
                 (cert.Instance as TCryptCertInternal).fEcc));
 end;
 
-function TCryptStoreInternal.Verify(const Signature: RawUtf8; Data: pointer;
-  Len: integer): TCryptCertValidity;
+function TCryptStoreInternal.Verify(const Signature: RawByteString;
+  Data: pointer; Len: integer): TCryptCertValidity;
+var
+  s: PEccSignatureCertifiedContent absolute Signature;
 begin
-  result := TCryptCertValidity(fEcc.IsSigned(Signature, Data, Len));
+  if length(Signature) <> SizeOf(s^) then
+    result := cvBadParameter
+  else
+    result := TCryptCertValidity(fEcc.IsSigned(s^, Data, Len));
 end;
 
 function TCryptStoreInternal.Count: integer;

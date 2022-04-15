@@ -1226,8 +1226,6 @@ type
     cvRevoked,
     cvWrongUsage);
 
-  TCryptCert = class;
-
   /// convenient wrapper of X509 Certificate subject name fields
   // - not always implemented - mainly our 'syn-es256' certificate won't
   TCryptCertFields = record
@@ -1239,6 +1237,24 @@ type
     CommonName: RawUtf8;
   end;
   PCryptCertFields = ^TCryptCertFields;
+
+  /// ICryptCert.Save possible output formats
+  // - 'syn-es256' from mormot.crypt.ecc certificate will use its own proprietary
+  // format, i.e. SaveToBinary/SaveToSecureBinary for ccfBinary, or non-standard
+  // '-----BEGIN/END SYNECC CERTIFICATE-----' headers for ccfPem
+  // - 'x509-rs256'..'x509-es256' from mormot.crypt.openssl will use the standard
+  // x509 format, as DER (or PKCS12 if PrivatePassword is set) for ccfBinary,
+  // or PEM for ccfPEM (concatenating the private key if PrivatePassword is set)
+  // - ccfHexa, ccfBase64 and ccfBase64Uri will use the ccfBinary output, then
+  // encode it as Hexadecimal or Base-64 (URI)
+  TCryptCertFormat = (
+    ccfBinary,
+    ccfPem,
+    ccfHexa,
+    ccfBase64,
+    ccfBase64Uri);
+
+  TCryptCert = class;
 
   /// abstract interface to a Certificate, as returned by Cert() factory
   // - may be X509 or not, OpenSSL implemented or not
@@ -1258,7 +1274,7 @@ type
     // - e.g. '04:f9:25:39:39:f8:ce:79:1a:a4:0e:b3:fa:72:e3:bc:9e:d6'
     function GetSerial: RawUtf8;
     /// the Low-Level Certificate Main Subject
-    // - e.g. '/CN=synopse.info' on OpenSSL, or some Baudot-encoded text
+    // - e.g. 'synopse.info' from OpenSSL X509 CN= subject field
     function GetSubject: RawUtf8;
     /// an array of all Subject names covered by this Certificate
     // - e.g. ['synopse.info', 'www.synopse.info']
@@ -1277,28 +1293,43 @@ type
     function GetUsage: TCryptCertUsages;
     /// verbose Certificate information, returned as huge text/JSON blob
     function GetPeerInfo: RawUtf8;
+    /// compute the hexadecimal fingerprint of this Certificate
+    // - is usually the hash of its binary (e.g. DER) serialization
+    function GetDigest(Algo: THashAlgo = hfSHA256): RawUtf8;
     /// load a Certificate from a Save() content
     // - PrivatePassword is needed if the input contains a private key
+    // - will only recognize and support the ccfBinary and ccfPem formats
     function Load(const Saved: RawByteString;
       const PrivatePassword: RawUtf8 = ''): boolean;
     /// serialize the Certificate as reusable content
     // - after Generate, will contain the public and private key, so
     // PrivatePassword is needed to secure its content - if PrivatePassword is
     // left to '' then only the generated public key will be serialized
-    // - mormot.crypt.ecc will use the SaveToBinary/SaveToSecureBinary format
-    // - mormot.crypt.openssl will use X509.ToBinary DER format if PrivatePassword
-    // is not set, or the PEM format with concatanated certificate and private
-    // key text (in that order) if PrivatePassword is set, or #PKCS12 layout
-    // if Format is 'PKCS12'
+    // - will use PEM by default, but you can export to another formats,
+    // depending on the underlying TCryptCertAlgo
     function Save(const PrivatePassword: RawUtf8 = '';
-      const Format: RawUtf8 = ''): RawByteString;
+      Format: TCryptCertFormat = ccfBinary): RawByteString;
     /// compute a digital signature of some digital content
     // - memory buffer will be hashed then signed using the private secret key
     // of this certificate instance
     // - you could later on verify this text signature according to the public
-    // key of this certificate, using ICertStore.Verify()
+    // key of this certificate, using ICryptCert.Verify() or ICertStore.Verify()
     // - returns '' on failure, e.g. if this Certificate has no private key
-    function Sign(Data: pointer; Len: integer): RawUtf8;
+    // - returns the binary signature of the Data buffer
+    function Sign(Data: pointer; Len: integer): RawByteString; overload;
+    /// compute a digital signature of some digital content
+    // - will use the private key of this certificate
+    // - just a wrapper around the overloaded Sign() function
+    function Sign(const Data: RawByteString): RawByteString; overload;
+    /// verify a digital signature of some digital content
+    // - will use the public key of this certificate
+    // - see ICertStore.Verify() for a complete CA chain validation
+    function Verify(Sign, Data: pointer;
+      SignLen, DataLen: integer): TCryptCertValidity; overload;
+    /// verify a digital signature of some digital content
+    // - just a wrapper around the overloaded Verify() function
+    function Verify(
+      const Signature, Data: RawByteString): TCryptCertValidity; overload;
     /// returns true if the Certificate contains a private key secret
     function HasPrivateSecret: boolean;
     /// retrieve the private key as raw binary, or '' if none
@@ -1310,6 +1341,9 @@ type
     function IsEqual(const another: ICryptCert): boolean;
     /// access to the low-level implementation class
     function Instance: TCryptCert;
+    /// access to the low-level implementation handle
+    // - e.g. PX509 for OpenSsl, or TEccCertificate for mormot.crypt.ecc
+    function Handle: pointer;
   end;
 
   /// abstract parent class to implement ICryptCert, as returned by Cert() factory
@@ -1334,13 +1368,21 @@ type
     function GetNotAfter: TDateTime; virtual; abstract;
     function GetUsage: TCryptCertUsages; virtual; abstract;
     function GetPeerInfo: RawUtf8; virtual; abstract;
-    function Save(const PrivatePassword, Format: RawUtf8): RawByteString;
-      virtual; abstract;
+    function GetDigest(Algo: THashAlgo): RawUtf8; virtual;
+    function Save(const PrivatePassword: RawUtf8;
+      Format: TCryptCertFormat): RawByteString; virtual;
     function HasPrivateSecret: boolean; virtual; abstract;
     function GetPrivateKey: RawByteString; virtual; abstract;
     function IsEqual(const another: ICryptCert): boolean; virtual;
-    function Sign(Data: pointer; Len: integer): RawUtf8; virtual; abstract;
+    function Sign(Data: pointer; Len: integer): RawByteString;
+      overload; virtual; abstract;
+    function Sign(const Data: RawByteString): RawByteString; overload; virtual;
+    function Verify(Sign, Data: pointer; SignLen, DataLen: integer): TCryptCertValidity;
+      overload; virtual; abstract;
+    function Verify(const Signature, Data: RawByteString): TCryptCertValidity;
+      overload; virtual;
     function Instance: TCryptCert;
+    function Handle: pointer; virtual; abstract;
   end;
 
   /// meta-class of the abstract parent to implement ICryptCert interface
@@ -1408,7 +1450,7 @@ type
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored signature according to the public key of
     // the associated signing authority (which should be in this Store)
-    function Verify(const Signature: RawUtf8;
+    function Verify(const Signature: RawByteString;
       Data: pointer; Len: integer): TCryptCertValidity;
     /// how many certificates are currently stored
     function Count: integer;
@@ -1436,7 +1478,7 @@ type
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; virtual; abstract;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; virtual; abstract;
-    function Verify(const Signature: RawUtf8;
+    function Verify(const Signature: RawByteString;
       Data: pointer; Len: integer): TCryptCertValidity; virtual; abstract;
     function Count: integer; virtual; abstract;
     function CrlCount: integer; virtual; abstract;
@@ -1581,6 +1623,8 @@ function Store(const name: RawUtf8): ICryptStore;
 
 type
   /// the DerToPem() supported contents of a PEM text instance
+  // - pemSynopseSignature and pemSynopseCertificate follow our proprietary
+  // mormot.crypt.ecc format, so are not compatible with other libraries
   TPemKind = (
     pemUnspecified,
     pemCertificate,
@@ -1595,7 +1639,9 @@ type
     pemDhParameters,
     pemEcParameters,
     pemSsh2EncryptedPrivateKey,
-    pemSsh2PublicKey);
+    pemSsh2PublicKey,
+    pemSynopseSignature,
+    pemSynopseCertificate);
   PPemKind = ^TPemKind;
 
 const
@@ -1614,7 +1660,9 @@ const
     '-----BEGIN DH PARAMETERS-----'#13#10,
     '-----BEGIN EC PARAMETERS-----'#13#10,
     '-----BEGIN SSH2 ENCRYPTED PRIVATE KEY-----'#13#10,
-    '-----BEGIN SSH2 PUBLIC KEY-----'#13#10);
+    '-----BEGIN SSH2 PUBLIC KEY-----'#13#10,
+    '-----BEGIN SYNECC SIGNATURE-----'#13#10,
+    '-----BEGIN SYNECC CERTIFICATE-----'#13#10);
 
   /// the supported ending markers of a PEM text instance
   PEM_END: array[TPemKind] of RawUtf8 = (
@@ -1631,7 +1679,9 @@ const
     '-----END DH PARAMETERS-----'#13#10,
     '-----END EC PARAMETERS-----'#13#10,
     '-----END SSH2 ENCRYPTED PRIVATE KEY-----'#13#10,
-    '-----END SSH2 PUBLIC KEY-----'#13#10);
+    '-----END SSH2 PUBLIC KEY-----'#13#10,
+    '-----END SYNECC SIGNATURE-----'#13#10,
+    '-----END SYNECC CERTIFICATE-----'#13#10);
 
 /// convert a binary DER content into a single-instance PEM text
 function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): RawUtf8; overload;
@@ -1642,7 +1692,7 @@ function DerToPem(const der: RawByteString; kind: TPemKind): RawUtf8; overload;
 /// convert a single-instance PEM text file into a binary DER
 // - if the supplied buffer doesn't start with '-----BEGIN .... -----'
 // trailer, will expect the input to be plain DER binary and return it
-function PemToDer(const pem: RawUtf8): RawByteString;
+function PemToDer(const pem: RawUtf8; kind: PPemKind = nil): RawByteString;
 
 /// parse a multi-PEM text input and return the next PEM content
 // - search and identify any PEM_BEGIN/PEM_END markers
@@ -1654,6 +1704,11 @@ function NextPem(var P: PUtf8Char; Kind: PPemKind = nil): RawUtf8;
 // - do not validate the internal Base64 encoding, just the trailer/ending lines
 // - expects at least a single-instance PEM, with ----BEGIN and -----END markers
 function IsPem(const pem: RawUtf8): boolean;
+
+/// quickcly check if a PEM text is likely to be encrypted
+// - search for a PEM format, with ENCRYPTED keyword
+// - won't decode the Base64 encoded binary, so may return some false negative
+function IsPemEncrypted(const pem: RawUtf8): boolean;
 
 /// low-level binary-to-DER encoder
 function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
@@ -4163,11 +4218,42 @@ begin
   RaiseError(msg);
 end;
 
+function TCryptCert.GetDigest(Algo: THashAlgo): RawUtf8;
+begin
+  result := HashFull(Algo, Save('', ccfBinary));
+end;
+
+function TCryptCert.Save(const PrivatePassword: RawUtf8;
+  Format: TCryptCertFormat): RawByteString;
+begin
+  case Format of
+    ccfHexa:
+      result := BinToHex(Save(PrivatePassword, ccfBinary));
+    ccfBase64:
+      result := BinToBase64(Save(PrivatePassword, ccfBinary));
+    ccfBase64Uri:
+      result := BinToBase64uri(Save(PrivatePassword, ccfBinary));
+  else
+    result := '';
+  end;
+end;
+
 function TCryptCert.IsEqual(const another: ICryptCert): boolean;
 begin
   // HasPrivateKey is not part of the comparison
   result := Assigned(another) and
-            (GetPeerInfo = another.GetPeerInfo); // should be good enough
+            (Save('', ccfBinary) = another.Save('', ccfBinary));
+end;
+
+function TCryptCert.Sign(const Data: RawByteString): RawByteString;
+begin
+  result := Sign(pointer(Data), length(Data));
+end;
+
+function TCryptCert.Verify(const Signature, Data: RawByteString): TCryptCertValidity;
+begin
+  result := Verify(pointer(Signature), pointer(Data),
+                   length(Signature), length(Data));
 end;
 
 function TCryptCert.Instance: TCryptCert;
@@ -4474,6 +4560,17 @@ begin
             (PosEx('-----END', pem, i + 10) <> 0);
 end;
 
+function IsPemEncrypted(const pem: RawUtf8): boolean;
+begin
+  result := IsPem(pem) and
+            (PosEx('ENCRYPTED', pem) <> 0);
+{ e.g.
+    -----BEGIN RSA PRIVATE KEY-----
+    Proc-Type: 4,ENCRYPTED
+  or
+    -----BEGIN ENCRYPTED PRIVATE KEY-----  }
+end;
+
 function PemHeader(lab: PUtf8Char): TPemKind;
 begin
   for result := succ(low(result)) to high(result) do
@@ -4536,14 +4633,14 @@ begin
   result := d;
 end;
 
-function PemToDer(const pem: RawUtf8): RawByteString;
+function PemToDer(const pem: RawUtf8; kind: PPemKind): RawByteString;
 var
   P: PUtf8Char;
   len: PtrInt;
   base64: TSynTempBuffer; // pem is small, so a 4KB temp buffer is fine enough
 begin
   P := pointer(pem);
-  P := ParsePem(P, nil, len, {excludemarkers=}true);
+  P := ParsePem(P, kind, len, {excludemarkers=}true);
   if P <> nil then
   begin
     base64.Init(len);

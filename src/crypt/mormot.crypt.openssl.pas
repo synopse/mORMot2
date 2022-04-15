@@ -1745,10 +1745,14 @@ type
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
-    function Save(const PrivatePassword, Format: RawUtf8): RawByteString; override;
+    function Save(const PrivatePassword: RawUtf8;
+      Format: TCryptCertFormat): RawByteString; override;
     function HasPrivateSecret: boolean; override;
     function GetPrivateKey: RawByteString; override;
-    function Sign(Data: pointer; Len: integer): RawUtf8; override;
+    function Sign(Data: pointer; Len: integer): RawByteString; override;
+    function Verify(Sign, Data: pointer;
+      SignLen, DataLen: integer): TCryptCertValidity; override;
+    function Handle: pointer; override;
   end;
 
   /// 'x509-store' ICryptStore algorithm
@@ -1775,7 +1779,7 @@ type
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; override;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; override;
-    function Verify(const Signature: RawUtf8;
+    function Verify(const Signature: RawByteString;
       Data: pointer; Len: integer): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
@@ -1932,7 +1936,7 @@ function TCryptCertOpenSsl.GetSubject: RawUtf8;
 var
   subs: TRawUtf8DynArray;
 begin
-  result := fX509.SubjectName;
+  result := fX509.GetSubject('CN');
   if result <> '' then
     exit;
   subs := fX509.SubjectAlternativeNames;
@@ -1975,44 +1979,70 @@ begin
   result := fX509.PeerInfo;
 end;
 
-function TCryptCertOpenSsl.Save(const PrivatePassword, Format: RawUtf8): RawByteString;
+function TCryptCertOpenSsl.Save(const PrivatePassword: RawUtf8;
+  Format: TCryptCertFormat): RawByteString;
 begin
   result := '';
   if fX509 = nil then
     exit;
-  result := fX509.ToBinary;
-  if PrivatePassword = '' then
-    // only include the X509 certificate DER binary
-    exit;
-  if fPrivKey = nil then
-    RaiseError('Save(password) with no Private Key');
-  if Format = 'PKCS12' then
-    result := fX509.ToPkcs12(fPrivKey, PrivatePassword)
+  if not (Format in [ccfBinary, ccfPem]) then
+    result := inherited Save(PrivatePassword, Format)
+  else if PrivatePassword = '' then
+  begin
+    // include the X509 certificate (but not any private key) as DER or PEM
+    result := fX509.ToBinary;
+    if Format = ccfPem then
+      result := DerToPem(result, pemCertificate);
+  end
   else
-    // concatenate PEM certificate and PEM private key
-    result := DerToPem(result, pemCertificate) + #13#10#13#10 +
-              fPrivKey.PrivateKeyToPem(PrivatePassword);
+  begin
+    // PrivatePassword will be used to encrypt the private key
+    if fPrivKey = nil then
+      RaiseError('Save(password) with no Private Key');
+    if Format = ccfPem then
+      // concatenate the certificate and its private key as PEM
+      result := DerToPem(fX509.ToBinary, pemCertificate) + #13#10 +
+                fPrivKey.PrivateKeyToPem(PrivatePassword)
+    else
+      // ccfBinary will use the PKCS12 binary encoding
+      result := fX509.ToPkcs12(fPrivKey, PrivatePassword)
+  end;
 end;
 
 function TCryptCertOpenSsl.Load(const Saved: RawByteString;
   const PrivatePassword: RawUtf8): boolean;
 var
   P: PUtf8Char;
-  cert, priv: RawByteString;
+  k: TPemKind;
+  pem, cert, priv: RawByteString;
+  pkcs12: PPKCS12;
 begin
   result := false;
   Clear;
   if Saved = '' then
     exit;
   if PrivatePassword = '' then
-    // input only include the X509 certificate DER binary
-    fX509 := LoadCertificate(Saved)
-  else
+    // input only include the X509 certificate as DER or PEM
+    if IsPem(Saved) then
+      fX509 := LoadCertificate(PemToDer(Saved))
+    else
+      fX509 := LoadCertificate(Saved)
+  else if IsPem(Saved) then
   begin
-    // PEM certificate and PEM private key were concatenated in such order
+    // PEM certificate and PEM private key were concatenated
     P := pointer(Saved);
-    cert := PemToDer(NextPem(P));
-    priv := NextPem(P);
+    repeat
+      pem := NextPem(P, @k);
+      if pem = '' then
+        break;
+      if k = pemCertificate then
+        if cert <> '' then
+          exit // should contain a single Certificate
+        else
+          cert := PemToDer(pem)
+      else
+        priv := pem; // private key may be with several TPemKind markers
+    until false;
     if (cert = '') or
        (priv = '') then
       exit;
@@ -2020,8 +2050,21 @@ begin
     if fX509 = nil then
       exit;
     fPrivKey := LoadPrivateKey(pointer(priv), length(priv), PrivatePassword);
-    if fPrivKey = nil then
+    if not fX509.MatchPrivateKey(fPrivKey) then
       Clear;
+  end
+  else
+  begin
+    // input should be some PKCS12 binary containing Certificate and Private Key
+    pkcs12 := LoadPkcs12(Saved);
+    if pkcs12 <> nil then
+    begin
+      if (not pkcs12.Extract(PrivatePassword, @fPrivKey, @fX509, nil)) or
+         (fPrivKey = nil) or
+         (fX509 = nil) then
+        Clear;
+      pkcs12.Free;
+    end;
   end;
   result := fX509 <> nil;
 end;
@@ -2039,12 +2082,39 @@ begin
     result := '';
 end;
 
-function TCryptCertOpenSsl.Sign(Data: pointer; Len: integer): RawUtf8;
+function TCryptCertOpenSsl.Sign(Data: pointer; Len: integer): RawByteString;
 begin
   if HasPrivateSecret then
-    result := BinToHexLower(fPrivKey.Sign(GetMD, Data, Len))
+    result := fPrivKey.Sign(GetMD, Data, Len)
   else
     result := '';
+end;
+
+function TCryptCertOpenSsl.Verify(Sign, Data: pointer;
+  SignLen, DataLen: integer): TCryptCertValidity;
+var
+  now: TDateTime;
+begin
+  now := NowUtc;
+  if (fX509 = nil) or
+     (SignLen <= 0) or
+     (DataLen <= 0) then
+    result := cvBadParameter
+  else if (now >= fX509.NotAfter) or
+          (now < fX509.NotBefore) then
+    result := cvDeprecatedAuthority
+  else if fX509.GetPublicKey.Verify(GetMD, Sign, Data, SignLen, DataLen) then
+    if fX509.IsSelfSigned then
+      result := cvValidSelfSigned
+    else
+      result := cvValidSigned
+  else
+    result := cvInvalidSignature;
+end;
+
+function TCryptCertOpenSsl.Handle: pointer;
+begin
+  result := fX509;
 end;
 
 
@@ -2309,7 +2379,7 @@ begin
     result := ToValidity(res);
 end;
 
-function TCryptStoreOpenSsl.Verify(const Signature: RawUtf8;
+function TCryptStoreOpenSsl.Verify(const Signature: RawByteString;
   Data: pointer; Len: integer): TCryptCertValidity;
 begin
   result := cvNotSupported;
