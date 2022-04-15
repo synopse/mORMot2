@@ -4770,7 +4770,7 @@ type
     fPageSize, fFileDefaultPageSize: cardinal;
     fFileDefaultCacheSize: integer;
     fIsMemory: boolean;
-    fPassword: RawUtf8;
+    fPassword: SpiUtf8;
     fTransactionActive: boolean;
     /// if not nil, cache is used - see UseCache property
     fCache: TSynCache;
@@ -4884,7 +4884,7 @@ type
     // Byte/Word/Integer/Cardinal/Int64/Currency/RawUtf8DynArrayContains
     // - initialize a internal mutex to ensure that all access to the database is atomic
     // - raise an ESqlite3Exception on any error
-    constructor Create(const aFileName: TFileName; const aPassword: RawUtf8 = '';
+    constructor Create(const aFileName: TFileName; const aPassword: SpiUtf8 = '';
       aOpenV2Flags: integer = 0; aDefaultCacheSize: integer = 10000;
       aDefaultPageSize: integer = 4096); reintroduce;
     /// close a database and free its memory and context
@@ -5122,7 +5122,7 @@ type
     /// read-only access to the SQlite3 password used for encryption
     // - may be a JSON-serialized TSynSignerParams object, or will use AES-OFB-128
     // after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
-    property Password: RawUtf8
+    property Password: SpiUtf8
       read fPassword;
     /// read-only access to the SQLite3 database filename opened without its path
     property FileNameWithoutPath: TFileName
@@ -6606,7 +6606,7 @@ begin
 end;
 
 constructor TSqlDataBase.Create(
-  const aFileName: TFileName; const aPassword: RawUtf8;
+  const aFileName: TFileName; const aPassword: SpiUtf8;
   aOpenV2Flags, aDefaultCacheSize, aDefaultPageSize: integer);
 var
   result: integer;

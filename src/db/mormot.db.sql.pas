@@ -1208,7 +1208,7 @@ type
   protected
     fServerName: RawUtf8;
     fDatabaseName: RawUtf8;
-    fPassWord: RawUtf8;
+    fPassWord: SpiUtf8;
     fUserID: RawUtf8;
     fForcedSchemaName: RawUtf8;
     fMainConnection: TSqlDBConnection;
@@ -1704,7 +1704,7 @@ type
       read GetMainConnection;
     /// the associated User Password, as specified at creation
     // - not published, for security reasons (may be serialized otherwise)
-    property PassWord: RawUtf8
+    property PassWord: SpiUtf8
       read fPassWord;
     /// the associated database name, as specified at creation
     // - not published, for security reasons (may be serialized otherwise)
@@ -3345,6 +3345,7 @@ end;
 destructor TSqlDBConnectionProperties.Destroy;
 begin
   fMainConnection.Free;
+  FillZero(fPassword);
   inherited;
 end;
 
