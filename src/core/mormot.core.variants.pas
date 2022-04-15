@@ -1205,6 +1205,9 @@ type
     /// check if the Document is an array - i.e. Kind = dvArray
     function IsArray: boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// check if names lookups are case sensitive in this object Document
+    function IsCaseSensitive: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// guess the TDocVariantModel corresponding to the current document Options
     // - returns true if model has been found and set
     // - returns false if no JSON_[] matches the current options
@@ -3742,7 +3745,7 @@ end;
 
 
 // defined here for proper inlining
-// PInteger() is faster than (dvoIsObject in VOptions) especially on Intel CPUs
+// PInteger() is faster than (dvoXXX in VOptions) especially on Intel CPUs
 
 function TDocVariantData.GetKind: TDocVariantKind;
 var
@@ -3767,6 +3770,11 @@ begin
   result := (PInteger(@self)^ and (1 shl (ord(dvoIsArray) + 16))) <> 0;
 end;
 
+function TDocVariantData.IsCaseSensitive: boolean;
+begin
+  result := (PInteger(@self)^ and (1 shl (ord(dvoNameCaseSensitive) + 16))) <> 0;
+end;
+
 
 { TDocVariant }
 
@@ -3784,7 +3792,7 @@ const
     'JSON',  // 2
     nil);
 
-function IntGetPseudoProp(ndx: integer; const source: TDocVariantData;
+function IntGetPseudoProp(ndx: PtrInt; const source: TDocVariantData;
   var Dest: variant): boolean;
 begin
   // sub-function to avoid temporary RawUtf8 for source.ToJson
@@ -3815,8 +3823,7 @@ begin
     result := true
   else
   begin
-    ndx := dv.GetValueIndex(
-             pointer(Name), NameLen, dvoNameCaseSensitive in dv.VOptions);
+    ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.IsCaseSensitive);
     if ndx < 0 then
       if NoException or
          (dvoReturnNullForUnknownProperty in dv.VOptions) then
@@ -3847,8 +3854,7 @@ begin
     dv.AddItem(variant(Value));
     exit;
   end;
-  ndx := dv.GetValueIndex(
-    pointer(Name), NameLen, dvoNameCaseSensitive in dv.VOptions);
+  ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.IsCaseSensitive);
   if ndx < 0 then
     ndx := dv.InternalAdd(Name, NameLen);
   dv.InternalSetValue(ndx, variant(Value));
@@ -3952,7 +3958,7 @@ begin
       begin
         temp := ToUtf8(Arguments[0]);
         Data.RetrieveValueOrRaiseException(pointer(temp), length(temp),
-          dvoNameCaseSensitive in Data.VOptions, variant(Dest), true);
+          Data.IsCaseSensitive, variant(Dest), true);
         exit;
       end;
   end;
@@ -4602,8 +4608,7 @@ end;
 
 function TDocVariantData.GetValueIndex(const aName: RawUtf8): integer;
 begin
-  result := GetValueIndex(Pointer(aName), Length(aName),
-    dvoNameCaseSensitive in VOptions);
+  result := GetValueIndex(Pointer(aName), Length(aName), IsCaseSensitive);
 end;
 
 function TDocVariantData.GetCapacity: integer;
@@ -5608,7 +5613,7 @@ begin
       exit;
     end
     else
-      nameCmp := SortDynArrayAnsiStringByCase[not (dvoNameCaseSensitive in VOptions)];
+      nameCmp := SortDynArrayAnsiStringByCase[not IsCaseSensitive];
   // compare as many in-order content as possible
   n := Another.VCount;
   if VCount < n then
@@ -5649,7 +5654,7 @@ begin
       begin
         v1 := GetVarData(ObjFields[f], nil, @ndx);
         if (cardinal(ndx) < cardinal(Another.VCount)) and
-           (SortDynArrayAnsiStringByCase[not (dvoNameCaseSensitive in VOptions)](
+           (SortDynArrayAnsiStringByCase[not IsCaseSensitive](
               ObjFields[f], Another.VName[ndx]) = 0) then
           v2 := @Another.VValue[ndx] // ObjFields are likely at the same position
         else
@@ -6249,7 +6254,7 @@ begin
   if Assigned(aNameSortedCompare) then // just like GetVarData() searches names
     namecomp := aNameSortedCompare
   else
-    namecomp := StrCompByCase[not (dvoNameCaseSensitive in Doc^.VOptions)];
+    namecomp := StrCompByCase[not Doc^.IsCaseSensitive];
   for f := 0 to Depth do
   begin
     if aPropNames[f] = '' then
@@ -6693,7 +6698,7 @@ begin
      (VCount = 0) then
     result := -1
   else
-    result := DocVariantFind[dvoNameCaseSensitive in VOptions](
+    result := DocVariantFind[IsCaseSensitive](
       pointer(VName), @aName^[1], ord(aName^[0]), VCount);
 end;
 
@@ -6831,7 +6836,7 @@ begin
     end
     else
       // O(n) lookup for name -> efficient brute force sub-functions
-      result := DocVariantFind[dvoNameCaseSensitive in VOptions](
+      result := DocVariantFind[IsCaseSensitive](
         pointer(VName), aName, aNameLen, VCount)
   else
     result := -1;
@@ -6840,8 +6845,8 @@ end;
 function TDocVariantData.GetValueOrRaiseException(
   const aName: RawUtf8): variant;
 begin
-  RetrieveValueOrRaiseException(pointer(aName), length(aName),
-    dvoNameCaseSensitive in VOptions, result, false);
+  RetrieveValueOrRaiseException(
+    pointer(aName), length(aName), IsCaseSensitive, result, false);
 end;
 
 function TDocVariantData.GetValueOrDefault(const aName: RawUtf8;
@@ -7029,7 +7034,7 @@ function TDocVariantData.GetAsPVariant(
 var
   ndx: PtrInt;
 begin
-  ndx := GetValueIndex(aName, aNameLen, dvoNameCaseSensitive in VOptions);
+  ndx := GetValueIndex(aName, aNameLen, IsCaseSensitive);
   if ndx >= 0 then
     result := @VValue[ndx]
   else
@@ -7061,7 +7066,7 @@ begin
         ndx := FastFindPUtf8CharSorted(
           pointer(VName), VCount - 1, pointer(aName), aSortedCompare)
     else
-      ndx := DocVariantFind[dvoNameCaseSensitive in VOptions](
+      ndx := DocVariantFind[IsCaseSensitive](
         pointer(VName), pointer(aName), length(aName), VCount);
     if aFoundIndex <> nil then
       aFoundIndex^ := ndx;
@@ -7428,8 +7433,8 @@ begin
     // by name lookup e.g. for Value['abc']
     VariantToUtf8(aNameOrIndex, Name, wasString);
     if wasString then
-      RetrieveValueOrRaiseException(pointer(Name), length(Name),
-        dvoNameCaseSensitive in VOptions, result, true)
+      RetrieveValueOrRaiseException(
+        pointer(Name), length(Name), IsCaseSensitive, result, true)
     else
       RetrieveValueOrRaiseException(
         GetIntegerDef(pointer(Name), -1), result, true);

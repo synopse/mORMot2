@@ -1863,7 +1863,7 @@ begin
   fLock.Enter;
   try
     fValue.RetrieveValueOrRaiseException(pointer(Name), length(Name),
-      dvoNameCaseSensitive in fValue.Options, result, false);
+      fValue.IsCaseSensitive, result, false);
   finally
     fLock.Leave;
   end;
