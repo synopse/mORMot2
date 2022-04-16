@@ -1002,11 +1002,13 @@ type
 
   OPENSSL_STACK = object
   private
-    function GetItem(index: PtrInt): pointer;
+    function GetItem(index: integer): pointer;
       {$ifdef HASINLINE} inline; {$endif}
   public
     function Count: integer;
+      {$ifdef HASINLINE} inline; {$endif}
     function Add(one: pointer): integer;
+      {$ifdef HASINLINE} inline; {$endif}
     function Find(one: pointer): integer;
     function Extract(index: integer): pointer;
     /// low-level method needing an explicit result typecast e.g. to PX509DynArray
@@ -1016,7 +1018,7 @@ type
     /// make PX509/PX509_CRL.Free to all items, then free the stack
     procedure FreeX509;
     procedure FreeX509_CRL;
-    property Items[index: PtrInt]: pointer
+    property Items[index: integer]: pointer
       read GetItem; default;
   end;
 
@@ -5823,7 +5825,7 @@ begin
   result := OPENSSL_sk_delete(@self, index);
 end;
 
-function OPENSSL_STACK.GetItem(index: PtrInt): pointer;
+function OPENSSL_STACK.GetItem(index: integer): pointer;
 begin
   result := OPENSSL_sk_value(@self, index);
 end;
@@ -6403,7 +6405,7 @@ function X509_CRL.IsRevoked(const serialnumber: RawUtf8): integer;
 var
   rev: Pstack_st_X509_REVOKED;
   r: PX509_REVOKED;
-  i: PtrInt;
+  i: integer;
 begin
   rev := Revoked;
   for i := 0 to rev^.Count - 1 do
@@ -6424,7 +6426,7 @@ function X509_CRL.IsRevoked(serial: PASN1_INTEGER): integer;
 var
   rev: Pstack_st_X509_REVOKED;
   r: PX509_REVOKED;
-  i: PtrInt;
+  i: integer;
 begin
   if serial.Len <> 0 then
   begin
@@ -6447,7 +6449,7 @@ end;
 function X509_CRL.AddFrom(another: PX509_CRL): integer;
 var
   rev: Pstack_st_X509_REVOKED;
-  i: PtrInt;
+  i: integer;
 begin
   result := 0;
   if (@self = nil) or
@@ -6540,7 +6542,7 @@ end;
 
 function X509_CRL.Extension(nid: integer): PX509_EXTENSION;
 var
-  i: PtrInt;
+  i: integer;
   ext: Pstack_st_X509_EXTENSION;
 begin
   ext := Extensions;
