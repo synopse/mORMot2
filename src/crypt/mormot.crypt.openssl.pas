@@ -2027,44 +2027,43 @@ begin
       fX509 := LoadCertificate(PemToDer(Saved))
     else
       fX509 := LoadCertificate(Saved)
-  else if IsPem(Saved) then
-  begin
-    // PEM certificate and PEM private key were concatenated
-    P := pointer(Saved);
-    repeat
-      pem := NextPem(P, @k);
-      if pem = '' then
-        break;
-      if k = pemCertificate then
-        if cert <> '' then
-          exit // should contain a single Certificate
-        else
-          cert := PemToDer(pem)
-      else
-        priv := pem; // private key may be with several TPemKind markers
-    until false;
-    if (cert = '') or
-       (priv = '') then
-      exit;
-    fX509 := LoadCertificate(cert);
-    if fX509 = nil then
-      exit;
-    fPrivKey := LoadPrivateKey(pointer(priv), length(priv), PrivatePassword);
-    if not fX509.MatchPrivateKey(fPrivKey) then
-      Clear;
-  end
   else
   begin
-    // input should be some PKCS12 binary containing Certificate and Private Key
-    pkcs12 := LoadPkcs12(Saved);
-    if pkcs12 <> nil then
+    // input include the X509 certificate and its associated private key
+    if IsPem(Saved) then
     begin
-      if (not pkcs12.Extract(PrivatePassword, @fPrivKey, @fX509, nil)) or
-         (fPrivKey = nil) or
-         (fX509 = nil) then
+      // PEM certificate and PEM private key were concatenated
+      P := pointer(Saved);
+      repeat
+        pem := NextPem(P, @k);
+        if pem = '' then
+          break;
+        if k = pemCertificate then
+          if cert <> '' then
+            exit // should contain a single Certificate
+          else
+            cert := PemToDer(pem)
+        else
+          priv := pem; // private key may be with several TPemKind markers
+      until false;
+      if (cert = '') or
+         (priv = '') then
+        exit;
+      fX509 := LoadCertificate(cert);
+      if fX509 = nil then
+        exit;
+      fPrivKey := LoadPrivateKey(pointer(priv), length(priv), PrivatePassword);
+    end
+    else
+    begin
+      // input should be some PKCS12 binary with certificate and private key
+      pkcs12 := LoadPkcs12(Saved);
+      if not pkcs12.Extract(PrivatePassword, @fPrivKey, @fX509, nil) then
         Clear;
       pkcs12.Free;
     end;
+    if not fX509.MatchPrivateKey(fPrivKey) then
+      Clear;
   end;
   result := fX509 <> nil;
 end;
