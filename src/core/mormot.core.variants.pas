@@ -928,7 +928,7 @@ type
     function GetVariantByPath(const aNameOrPath: RawUtf8): Variant;
       {$ifdef HASINLINE}inline;{$endif}
     function GetObjectProp(const aName: RawUtf8; out aFound: PVariant): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     function InternalAdd(aName: PUtf8Char; aNameLen: integer): integer; overload;
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
       {$ifdef HASINLINE}inline;{$endif}
