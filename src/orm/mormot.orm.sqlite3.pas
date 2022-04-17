@@ -1559,7 +1559,8 @@ begin
   InitializeEngine;
 end;
 
-constructor TRestOrmServerDB.Create(aRest: TRest; aDB: TSqlDataBase; aOwnDB: boolean);
+constructor TRestOrmServerDB.Create(aRest: TRest; aDB: TSqlDataBase;
+  aOwnDB: boolean);
 begin
   fDB := aDB; // should be done before CreateWithoutRest/Create
   if aOwnDB then
@@ -1573,7 +1574,8 @@ begin
   fModel := aModel;
   fModel.Owner := self; // TRestOrmServerDB.Destroy will free its TOrmModel
   fRest := aRest;
-  fOwner := aRest as TRestServer;
+  if aRest <> nil then
+    fOwner := aRest as TRestServer;
   Create(nil, aDB, aOwnDB);
 end;
 
@@ -1942,7 +1944,8 @@ begin
     fRest.AcquireExecution[execOrmWrite].Safe.Lock; // protect fJsonDecoder
     try
       fJsonDecoder.Decode(SentData, nil, pInlined, ID, false);
-      if props.RecordVersionField <> nil then
+      if (props.RecordVersionField <> nil) and
+         (fOwner <> nil) then
         fOwner.RecordVersionHandle(ooUpdate, TableModelIndex,
           fJsonDecoder, props.RecordVersionField);
       sql := fJsonDecoder.EncodeAsSql('', '', {update=}true);
@@ -2340,7 +2343,8 @@ begin
             b^.Simples[0], b^.SimpleFields, nil, nil, [sfoExtendedJson]);
       end;
       fJsonDecoder.Decode(v, nil, pInlined, b^.ID[0]);
-      if props.RecordVersionField <> nil then
+      if (props.RecordVersionField <> nil) and
+         (fOwner <> nil) then
         fOwner.RecordVersionHandle(
           ooInsert, b^.TableIndex, fJsonDecoder, props.RecordVersionField);
       sql := fJsonDecoder.EncodeAsSql(
@@ -2428,7 +2432,8 @@ begin
             if updateeventneeded then
               b^.Temp.Done;
           end;
-          if props.RecordVersionField <> nil then
+          if (props.RecordVersionField <> nil) and
+             (fOwner <> nil) then
             fOwner.RecordVersionHandle(ooInsert, b^.TableIndex,
               fJsonDecoder, props.RecordVersionField);
         end;

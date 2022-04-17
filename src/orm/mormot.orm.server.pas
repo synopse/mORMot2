@@ -489,7 +489,8 @@ constructor TRestOrmServer.Create(aRest: TRest);
 var
   t: PtrInt;
 begin
-  fOwner := aRest as TRestServer;
+  if aRest <> nil then
+    fOwner := aRest as TRestServer;
   // set fRest+fModel
   inherited Create(aRest);
   // faster direct Static call by default

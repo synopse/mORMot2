@@ -1791,8 +1791,8 @@ end;
 function TRestStorage.RecordCanBeUpdated(Table: TOrmClass; ID: TID;
   Action: TOrmEvent; ErrorMsg: PRawUtf8 = nil): boolean;
 begin
-  result := (Owner = nil) or
-            Owner.RecordCanBeUpdated(Table, ID, Action, ErrorMsg);
+  result := (fOwner = nil) or
+            fOwner.RecordCanBeUpdated(Table, ID, Action, ErrorMsg);
 end;
 
 function TRestStorage.RefreshedAndModified: boolean;
@@ -1815,8 +1815,8 @@ begin
   {$endif DEBUGSTORAGELOCK}
   if WillModifyContent and
      fStorageLockShouldIncreaseOwnerInternalState and
-     (Owner <> nil) then
-    inc(Owner.InternalState);
+     (fOwner <> nil) then
+    inc(fOwner.InternalState);
 end;
 
 procedure TRestStorage.StorageUnLock;
@@ -1846,10 +1846,10 @@ procedure TRestStorage.RecordVersionFieldHandle(Occasion: TOrmOccasion;
 begin
   if fStoredClassRecordProps.RecordVersionField = nil then
     exit;
-  if Owner = nil then
+  if fOwner = nil then
     raise ERestStorage.CreateUtf8('Owner=nil for %.%: TRecordVersion',
       [fStoredClass, fStoredClassRecordProps.RecordVersionField.Name]);
-  Owner.Owner.RecordVersionHandle(Occasion, fStoredClassProps.TableIndex,
+  fOwner.Owner.RecordVersionHandle(Occasion, fStoredClassProps.TableIndex,
     Decoder, fStoredClassRecordProps.RecordVersionField);
 end;
 
@@ -2187,8 +2187,8 @@ begin
     raise ERestStorage.CreateUtf8('%.AddOne % failed', [self, Rec]); // paranoid
   result := Rec.IDValue; // success
   fModified := true;
-  if (Owner <> nil) then
-    Owner.InternalUpdateEvent(
+  if (fOwner <> nil) then
+    fOwner.InternalUpdateEvent(
       oeAdd, fStoredClassProps.TableIndex, result, SentData, nil, Rec);
 end;
 
@@ -2295,9 +2295,9 @@ begin
     rec := fValue[aIndex];
     if rec.IDValue = fMaxID then
       fMaxID := 0; // recompute
-    if Owner <> nil then
+    if fOwner <> nil then
       // notify BEFORE deletion
-      Owner.InternalUpdateEvent(oeDelete, fStoredClassProps.TableIndex,
+      fOwner.InternalUpdateEvent(oeDelete, fStoredClassProps.TableIndex,
         rec.IDValue, '', nil, nil);
     for f := 0 to length(fUnique) - 1 do
       if fUnique[f].Hasher.FindBeforeDelete(@rec) < aIndex then
@@ -2992,7 +2992,8 @@ begin
         // this is the main execution block, for regular SELECT statements
         MS := TRawByteStringStream.Create;
         try
-          ForceAjax := ForceAjax or not Owner.Owner.NoAjaxJson;
+          if fOwner <> nil then
+            ForceAjax := ForceAjax or not fOwner.Owner.NoAjaxJson;
           StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'GetJsonValues' {$endif});
           try
             // save rows as JSON, with appropriate search according to Where.*
@@ -3609,11 +3610,11 @@ begin
     begin
       rec := match.List[i];
       P.SetValueVar(rec, SetValueString, SetValueWasString);
-      if Owner <> nil then
+      if fOwner <> nil then
       begin
         if {%H-}SetValueJson = '' then
           JsonEncodeNameSQLValue(P.Name, SetValue, SetValueJson);
-        Owner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
+        fOwner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
           rec.IDValue, SetValueJson, nil, nil);
       end;
     end;
@@ -3665,8 +3666,8 @@ begin
       fValue[i].FillFrom(SentData);
     fModified := true;
     result := true;
-    if Owner <> nil then
-      Owner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
+    if fOwner <> nil then
+      fOwner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
         ID, SentData, nil, nil);
   finally
     StorageUnLock;
@@ -3701,8 +3702,8 @@ begin
         nfo.List[f].CopyValue(Rec, dest);
     fModified := true;
     result := true;
-    if Owner <> nil then
-      Owner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
+    if fOwner <> nil then
+      fOwner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
         Rec.IDValue, SentData, nil, nil);
   finally
     StorageUnLock;
@@ -3743,8 +3744,8 @@ begin
         exit;
     fModified := true;
     result := true;
-    if Owner <> nil then
-      Owner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
+    if fOwner <> nil then
+      fOwner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
         ID, '', nil, fValue[i]);
   finally
     StorageUnLock;
@@ -3817,10 +3818,10 @@ begin
       exit;
     // set blob value directly from RTTI property description
     BlobField.SetLongStrProp(fValue[i], BlobData);
-    if Owner <> nil then
+    if fOwner <> nil then
     begin
       fStoredClassRecordProps.FieldBitsFromBlobField(BlobField, AffectedField);
-      Owner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex,
+      fOwner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex,
         aID, '', @AffectedField, nil);
     end;
     fModified := true;
@@ -3849,8 +3850,8 @@ begin
           exit;
         for f := 0 to high(BlobFields) do
           BlobFields[f].CopyValue(Value, fValue[i]);
-        if Owner <> nil then
-          Owner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex,
+        if fOwner <> nil then
+          fOwner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex,
             Value.IDValue, '', @fStoredClassRecordProps.FieldBits[oftBlob], nil);
         fModified := true;
         result := true;
@@ -4101,8 +4102,8 @@ procedure TRestStorageInMemoryExternal.StorageLock(WillModifyContent: boolean
 begin
   inherited StorageLock(WillModifyContent {$ifdef DEBUGSTORAGELOCK}, msg {$endif});
   if WillModifyContent and
-     (Owner <> nil) then
-    Owner.FlushInternalDBCache;
+     (fOwner <> nil) then
+    fOwner.FlushInternalDBCache;
 end;
 
 
