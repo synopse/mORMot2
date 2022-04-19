@@ -91,6 +91,8 @@ type
 {$ifdef CPUAARCH64}
   {$ifdef OSLINUXANDROID}
     {$define USEARMCRYPTO}
+    // AARCH64 armv8.o / sha256armv8.o are only validated on Linux yet
+    // (it should work on other POSIX ABI, but was reported to fail)
   {$endif OSLINUXANDROID}
 {$endif CPUAARCH64}
 
@@ -3949,7 +3951,7 @@ var
 
 {$ifdef CPUAARCH64}
 
-{$L ..\..\static\aarch64-linux\armv8.o} // we can reuse Linux code on any POSIX
+{$L ..\..\static\aarch64-linux\armv8.o} // could we reuse Linux .o on any POSIX?
 {$L ..\..\static\aarch64-linux\sha256armv8.o}
 
 procedure aesencryptarm128(rk, bi, bo: pointer); external;

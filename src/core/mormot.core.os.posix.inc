@@ -2578,9 +2578,9 @@ begin
 end;
 
 {$ifdef CPUAARCH64}
-{$ifdef OSLINUX}
+{$ifdef OSLINUXANDROID}
 // AARCH64 armv8.o is only validated on Linux
-// (it should work on other ABI, but was reported to fail e.g. on Mac M1)
+// (it should work on other POSIX ABI, but was reported to fail)
 
 {$define ARMV8STATIC}
 {$L ..\..\static\aarch64-linux\armv8.o} // ARMv8 crc32c Linux code
@@ -2590,7 +2590,7 @@ function crc32cby4arm64(crc, value: cardinal): cardinal; external;
 procedure crc32blockarm64(crc128, data128: PBlock128); external;
 procedure crc32blocksarm64(crc128, data128: PBlock128; count: integer); external;
 
-{$endif OSLINUX}
+{$endif OSLINUXANDROID}
 {$endif CPUAARCH64}
 
 function KB(Size: cardinal): shortstring;
