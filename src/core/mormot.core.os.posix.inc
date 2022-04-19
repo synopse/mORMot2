@@ -2578,14 +2578,19 @@ begin
 end;
 
 {$ifdef CPUAARCH64}
+{$ifdef OSLINUX}
+// AARCH64 armv8.o is only validated on Linux
+// (it should work on other ABI, but was reported to fail e.g. on Mac M1)
 
-{$L ..\..\static\aarch64-linux\armv8.o} // ARMv8 crc32c Linux code for POSIX
+{$define ARMV8STATIC}
+{$L ..\..\static\aarch64-linux\armv8.o} // ARMv8 crc32c Linux code
 
 function crc32carm64(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal; external;
 function crc32cby4arm64(crc, value: cardinal): cardinal; external;
 procedure crc32blockarm64(crc128, data128: PBlock128); external;
 procedure crc32blocksarm64(crc128, data128: PBlock128; count: integer); external;
 
+{$endif OSLINUX}
 {$endif CPUAARCH64}
 
 function KB(Size: cardinal): shortstring;
@@ -2874,7 +2879,7 @@ begin
   StrLen := @StrLenLibc; // libc version is faster than plain pascal or RTL code
   MoveFast := @MoveFastLibC;
   FillCharFast := @FillCharLibC;
-  {$ifdef CPUAARCH64}
+  {$ifdef ARMV8STATIC}
   if ahcCrc32 in CpuFeatures then
     try
       if (crc32cby4arm64(0, 1) = 3712330424) and
@@ -2891,7 +2896,7 @@ begin
     except
       exclude(CpuFeatures, ahcCrc32); // crc32 was actually not supported
     end;
-  {$endif CPUAARCH64}
+  {$endif ARMV8STATIC}
   {$endif CPUARM3264}
   {$ifdef CPUX64}
   {$ifdef OSLINUX}
