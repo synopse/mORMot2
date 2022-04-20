@@ -64,7 +64,7 @@ type
     procedure InternalStat(Ctxt: TRestServerUriContext;
       W: TJsonWriter); override;
     procedure InternalInfo(Ctxt: TRestServerUriContext;
-      var info: TDocVariantData); override;
+      var Info: TDocVariantData); override;
   public
     /// initialize a REST server with a SQLite3 database
     // - any needed TSqlVirtualTable class should have been already registered
@@ -303,10 +303,10 @@ begin
 end;
 
 procedure TRestServerDB.InternalInfo(Ctxt: TRestServerUriContext;
-  var info: TDocVariantData);
+  var Info: TDocVariantData);
 begin
-  inherited InternalInfo(Ctxt, info);
-  info.AddValue(
+  inherited InternalInfo(Ctxt, Info);
+  Info.AddValue(
     'db', FormatUtf8('% %', [ExtractFileName(DB.FileName), KB(DB.FileSize)]));
 end;
 

@@ -1657,8 +1657,9 @@ type
     Sender: TServiceFactory; Instance: TInterfacedObject) of object;
 
   /// callback allowing to customize the information returned by root/timestamp/info
-  TOnInternalInfo = procedure(Sender: TRestServerUriContext;
-    var info: TDocVariantData) of object;
+  // - Sender is indeed a TRestServerUriContext instance
+  TOnInternalInfo = procedure(Sender: TRestUriContext;
+    var Info: TDocVariantData) of object;
 
   /// a generic REpresentational State Transfer (REST) server
   // - descendent must implement the protected EngineList() Retrieve() Add()
@@ -1718,7 +1719,7 @@ type
     // called by Stat() and Info() method-based services
     procedure InternalStat(Ctxt: TRestServerUriContext; W: TJsonWriter); virtual;
     procedure AddStat(Flags: TRestServerAddStats; W: TJsonWriter);
-    procedure InternalInfo(Ctxt: TRestServerUriContext; var info: TDocVariantData); virtual;
+    procedure InternalInfo(Ctxt: TRestServerUriContext; var Info: TDocVariantData); virtual;
     procedure SetStatUsage(usage: TSynMonitorUsage);
     function GetServiceMethodStat(const aMethod: RawUtf8): TSynMonitorInputOutput;
     procedure SetRoutingClass(aServicesRouting: TRestServerUriContextClass);
@@ -6065,19 +6066,19 @@ begin
 end;
 
 procedure TRestServer.InternalInfo(Ctxt: TRestServerUriContext;
-  var info: TDocVariantData);
+  var Info: TDocVariantData);
 var
   cpu, mem, free: RawUtf8;
   now: TTimeLogBits;
   m: TSynMonitorMemory;
 begin
-  // called by root/Timestamp/info REST method
+  // called by root/Timestamp/Info REST method
   now.Value := GetServerTimestamp(Ctxt.TickCount64);
   cpu := TSystemUse.Current(false).HistoryText(0, 15, @mem);
   m := TSynMonitorMemory.Create({nospace=}true);
   try
     FormatUtf8('%/%', [m.PhysicalMemoryFree.Text, m.PhysicalMemoryTotal.Text], free);
-    info.AddNameValuesToObject([
+    Info.AddNameValuesToObject([
       'nowutc',    now.Text(true, ' '),
       'timestamp', now.Value,
       'exe',       Executable.ProgramName,
@@ -6096,7 +6097,7 @@ begin
   end;
   Stats.Lock;
   try
-    info.AddNameValuesToObject([
+    Info.AddNameValuesToObject([
       'started',    Stats.StartDate,
       'clients',    Stats.ClientsCurrent,
       'methods',    Stats.ServiceMethod,
@@ -6107,7 +6108,7 @@ begin
     Stats.Unlock;
   end;
   if Assigned(OnInternalInfo) then
-    OnInternalInfo(Ctxt, info);
+    OnInternalInfo(Ctxt, Info);
 end;
 
 procedure TRestServer.InternalStat(Ctxt: TRestServerUriContext; W: TJsonWriter);
