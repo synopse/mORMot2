@@ -2191,6 +2191,11 @@ function GetBitsCountPas(value: PtrInt): PtrInt;
 // - this redirected function will use fast SSE4.2 popcnt opcode, if available
 var GetBitsCountPtrInt: function(value: PtrInt): PtrInt = GetBitsCountPas;
 
+/// compute how many bytes are needed to store a given number of bits
+// - e.g. 0 returns 0, 1..8 returns 1, 9..16 returns 2, and so on
+function BitsToBytes(bits: byte): byte;
+  {$ifdef HASINLINE}inline;{$endif}
+
 const
   /// could be used to compute the index in a pointer list from its byte position
   POINTERSHR =     {$ifdef CPU64}  3 {$else}  2 {$endif};
@@ -7419,6 +7424,11 @@ begin
   end
   else
     result := false;
+end;
+
+function BitsToBytes(bits: byte): byte;
+begin
+  result := (bits + 7) shr 3;
 end;
 
 

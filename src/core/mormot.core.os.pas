@@ -2528,6 +2528,7 @@ function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 
 /// retrieve low-level information about a given disk partition
 // - as used by TSynMonitorDisk and GetDiskPartitionsText()
+// - warning: aDriveFolderOrFile may be modified at input
 // - only under Windows the Quotas are applied separately to aAvailableBytes
 // in respect to global aFreeBytes
 function GetDiskInfo(var aDriveFolderOrFile: TFileName;

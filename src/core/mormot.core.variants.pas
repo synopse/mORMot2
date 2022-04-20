@@ -2371,7 +2371,7 @@ function _JsonFastFloat(const Json: RawUtf8): variant;
 
 /// initialize a variant instance to store some extended document-based content
 // - this global function is an handy alias to:
-// ! _Json(JSON,JSON_FAST_EXTENDED);
+// ! _Json(JSON, JSON_FAST_EXTENDED);
 function _JsonFastExt(const Json: RawUtf8): variant;
 
 /// initialize a variant instance to store some document-based content

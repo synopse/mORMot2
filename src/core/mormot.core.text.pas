@@ -2270,7 +2270,12 @@ function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8; overlo
 function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: PtrInt): ShortString;
 
 /// fast conversion from up to 64-bit of binary data into lowercase hexa chars
-function BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: PtrInt): TShort16;
+function BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: PtrInt): TShort16; overload;
+
+/// fast conversion from up to 64-bit of binary data into lowercase hexa chars
+// - warning: here binary size is in bits (typically 1..64), not bytes
+procedure BinToHexDisplayLowerShort16(Bin: Int64; BinBits: PtrInt;
+  var Result: TShort16); overload;
 
 /// fast conversion from binary data into hexa lowercase chars, ready to be
 // used as a convenient TFileName prefix
@@ -10306,12 +10311,19 @@ begin
   BinToHexDisplayLower(Bin, @result[1], BinBytes);
 end;
 
-function BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: PtrInt): TShort16;
+function {%H-}BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: PtrInt): TShort16;
 begin
   if BinBytes > 8 then
     BinBytes := 8;
   result[0] := AnsiChar(BinBytes * 2);
   BinToHexDisplayLower(@Bin, @result[1], BinBytes);
+end;
+
+procedure BinToHexDisplayLowerShort16(Bin: Int64; BinBits: PtrInt;
+  var Result: TShort16);
+begin
+  Result[0] := AnsiChar(BitsToBytes(BinBits) * 2);
+  BinToHexDisplayLower(@Bin, @Result[1], ord(Result[0]) shr 1);
 end;
 
 {$ifdef UNICODE}
