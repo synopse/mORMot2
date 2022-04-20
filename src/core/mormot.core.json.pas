@@ -1393,7 +1393,8 @@ type
     function SaveToJson(
       EnumSetsAsText: boolean = false): RawUtf8; overload;
     /// serialize the Values[] as a JSON array
-    function SaveValuesToJson(EnumSetsAsText: boolean = false): RawUtf8;
+    function SaveValuesToJson(EnumSetsAsText: boolean = false;
+      ReFormat: TTextWriterJsonFormat = jsonCompact): RawUtf8;
     /// unserialize the content from "key":value JSON object
     // - if the JSON input may not be correct (i.e. if not coming from SaveToJson),
     // you may set EnsureNoKeyCollision=TRUE for a slow but safe keys validation
@@ -9535,11 +9536,17 @@ begin
   end;
 end;
 
-function TSynDictionary.SaveValuesToJson(EnumSetsAsText: boolean): RawUtf8;
+function TSynDictionary.SaveValuesToJson(EnumSetsAsText: boolean;
+  ReFormat: TTextWriterJsonFormat): RawUtf8;
 begin
+  if self = nil then
+  begin
+    result := '';
+    exit;
+  end;
   fSafe.RWLock(cReadOnly);
   try
-    fValues.SaveToJson(result, EnumSetsAsText);
+    fValues.SaveToJson(result, EnumSetsAsText, ReFormat);
   finally
     fSafe.RWUnLock(cReadOnly);
   end;
