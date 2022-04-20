@@ -1261,39 +1261,35 @@ end;
 function TServiceFactoryServerAbstract.SetOptions(
   const aMethod: array of RawUtf8; aOptions: TInterfaceMethodOptions;
   aAction: TServiceMethodOptionsAction): TServiceFactoryServerAbstract;
+var
+  opt, mode: TInterfaceMethodOptions;
+  m: PtrInt;
 begin
   if self <> nil then
   begin
-    if (fInstanceCreation = sicPerThread) and
-       (optExecLockedPerInterface in aOptions) then
+    opt := aOptions * INTERFACEMETHOD_THREADOPTIONS;
+    if (opt <> []) and
+       (aAction in [moaReplace, moaInclude]) and
+       (fInstanceCreation = sicPerThread) then
       raise EServiceException.CreateUtf8(
-        '%.SetOptions(I%,optExecLockedPerInterface) is not compatible ' +
-        ' with sicPerThread', [self, fInterfaceUri]);
-    if (fInstanceCreation = sicPerThread) and
-       ([optExecInMainThread, optFreeInMainThread, optExecInPerInterfaceThread,
-         optFreeInPerInterfaceThread] * aOptions <> []) then
-      raise EServiceException.CreateUtf8(
-        '%.SetOptions(I%,opt*In*Thread) is not compatible with sicPerThread',
-        [self, fInterfaceUri]);
-    if (optExecLockedPerInterface in aOptions) and
-       ([optExecInMainThread, optFreeInMainThread, optExecInPerInterfaceThread,
-         optFreeInPerInterfaceThread] * aOptions <> []) then
-      raise EServiceException.CreateUtf8(
-        '%.SetOptions(I%,optExecLockedPerInterface) with opt*In*Thread options',
-        [self, fInterfaceUri]);
+        '%.SetOptions(I%,[%]) is not compatible with sicPerThread',
+        [self, fInterfaceUri, ToText(opt)]);
     ExecutionAction(aMethod, aOptions, aAction);
-    if (optFreeInPerInterfaceThread in fAnyOptions) and
-       not (optExecInPerInterfaceThread in fAnyOptions) then
-      raise EServiceException.CreateUtf8(
-        '%.SetOptions(I%,optFreeInPerInterfaceThread)' +
-        ' without optExecInPerInterfaceThread', [self, fInterfaceUri]);
-    if ([optExecInMainThread, optFreeInMainThread] *
-         fAnyOptions <> []) and
-       ([optExecInPerInterfaceThread, optFreeInPerInterfaceThread] *
-         fAnyOptions <> []) then
-      raise EServiceException.CreateUtf8(
-        '%.SetOptions(I%): concurrent opt*InMainThread and ' +
-        'opt*InPerInterfaceThread', [self, fInterfaceUri]);
+    opt := fAnyOptions * INTERFACEMETHOD_THREADOPTIONS;
+    if opt <> [] then
+      if (optFreeInPerInterfaceThread in opt) and
+         not (optExecInPerInterfaceThread in opt) then
+        raise EServiceException.CreateUtf8(
+          '%.SetOptions(I%,optFreeInPerInterfaceThread)' +
+          ' without optExecInPerInterfaceThread', [self, fInterfaceUri])
+      else for m := 0 to high(INTERFACEMETHOD_PERTHREADOPTIONS) do
+      begin
+        mode := INTERFACEMETHOD_PERTHREADOPTIONS[m];
+        if (opt * mode <> []) and
+           (opt - mode <> []) then
+        raise EServiceException.CreateUtf8('%.SetOptions(I%): incompatible [%]',
+          [self, fInterfaceUri, ToText(opt)]);
+      end;
   end;
   result := self;
 end;

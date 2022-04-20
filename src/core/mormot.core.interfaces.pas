@@ -2265,7 +2265,10 @@ type
   /// possible service provider method options, e.g. about logging or execution
   // - see TServiceMethodOptions for a description of each available option
   TInterfaceMethodOption = (
+    optExecGlobalLocked,
+    optFreeGlobalLocked,
     optExecLockedPerInterface,
+    optFreeLockedPerInterface,
     optExecInPerInterfaceThread,
     optFreeInPerInterfaceThread,
     optFreeDelayed,
@@ -2283,8 +2286,10 @@ type
 
   /// set of per-method execution options for an interface-based service provider
   // - by default, method executions are concurrent, for better server
-  // responsiveness; if you set optExecLockedPerInterface, all methods of
-  // a given interface will be executed with a critical section
+  // responsiveness; if you set optExecLockedPerInterface/optFreeLockedPerInterface,
+  // all methods of a given interface will be executed within a critical section;
+  // if you set optExecGlobalLocked/optFreeGlobalLocked, execution is done within
+  // a critical section global to all interfaces
   // - optExecInMainThread will force the method to be called within
   // a RunningThread.Synchronize() call - it can be used e.g. if your
   // implementation rely heavily on COM servers - by default, service methods
@@ -2531,6 +2536,28 @@ procedure BackgroundExecuteInstanceRelease(instance: TObject;
 /// low-level internal function returning the TServiceRunningContext threadvar
 // - mormot.rest.server.pas' ServiceRunningContext function redirects to this
 function PerThreadRunningContextAddress: pointer;
+
+const
+  /// the TInterfaceMethodOptions which are related to custom thread execution
+  INTERFACEMETHOD_THREADOPTIONS = [
+    optExecGlobalLocked,
+    optFreeGlobalLocked,
+    optExecLockedPerInterface,
+    optFreeLockedPerInterface,
+    optExecInPerInterfaceThread,
+    optFreeInPerInterfaceThread,
+    optExecInMainThread,
+    optFreeInMainThread];
+
+  /// the related TInterfaceMethodOptions, grouped per thread mode
+  INTERFACEMETHOD_PERTHREADOPTIONS: array[0..3] of TInterfaceMethodOptions = (
+    [optExecGlobalLocked, optFreeGlobalLocked],
+    [optExecLockedPerInterface, optFreeLockedPerInterface],
+    [optExecInPerInterfaceThread, optFreeInPerInterfaceThread],
+    [optExecInMainThread, optFreeInMainThread]);
+
+/// return the interface execution options set as text
+function ToText(opt: TInterfaceMethodOptions): shortstring; overload;
 
 
 { ************ SetWeak and SetWeakZero Weak Interface Reference }
@@ -6496,6 +6523,11 @@ threadvar
 function PerThreadRunningContextAddress: pointer;
 begin
   result := @PerThreadRunningContext;
+end;
+
+function ToText(opt: TInterfaceMethodOptions): shortstring;
+begin
+  GetSetNameShort(TypeInfo(TInterfaceMethodOptions), opt, result);
 end;
 
 type
