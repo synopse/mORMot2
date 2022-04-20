@@ -2164,7 +2164,7 @@ function OemToFileName(const oem: RawByteString): TFileName;
 procedure DisplayFatalError(const title, msg: RawUtf8);
 
 /// prompt the user for an error message to notify an unexpected issue
-// - redirect to DisplayFatalError without any title
+// - redirect to DisplayFatalError() without any title
 // - expects the regular Format() layout with %s %d - not the FormatUtf8() %
 procedure DisplayError(const fmt: string; const args: array of const);
 

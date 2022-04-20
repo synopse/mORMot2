@@ -2118,7 +2118,7 @@ type
     // from any version of SQLite) by specifying a nil key
     // - Assigned(rekey)=false if encryption is not available, i.e. if
     // NOSQLITE3STATIC is defined
-    // - also see ChangeSQLEncryptTablePassWord() procedure
+    // - also see ChangeSqlEncryptTablePassWord() procedure
     rekey: function(DB: TSqlite3DB; key: pointer; keyLen: integer): integer; cdecl;
 
     /// Destructor for the sqlite3 object, which handle is DB
@@ -5061,7 +5061,7 @@ type
     // the backup - so this method will work perfectly e.g. for our ORM
     // - if specified, a password will be used to cypher BackupFileName on disk
     // (it will work only with mormot.db.raw.sqlite3.static) - you can uncypher
-    // the resulting encrypted database file via ChangeSQLEncryptTablePassWord()
+    // the resulting encrypted database file via ChangeSqlEncryptTablePassWord()
     // - returns TRUE if backup started as expected, or FALSE in case of error
     // (e.g. if there is already another backup started, if the source or
     // destination databases are locked or invalid, or if the sqlite3.dll is too

@@ -98,7 +98,7 @@ type
 // - the OldPassWord must be correct, otherwise the resulting file will be corrupted
 // - any password can be '' to mark no encryption as input or output
 // - the password may be a JSON-serialized TSynSignerParams object, or will use
-// AES-CTR-128 (or AES-OFB-128 if ForceSQLite3AESCTR is false) after SHAKE_128
+// AES-CTR-128 (or AES-OFB-128 if ForceSQLite3AesCtr is false) after SHAKE_128
 // with rounds=1000 and a fixed salt on plain password text
 // - please note that this encryption is compatible only with SQlite3 files made
 // with SynSQLiteStatic.pas unit (not external/official/wxsqlite3 dll)
@@ -112,20 +112,20 @@ type
 // cyphered format, which was much less safe (simple XOR on fixed tables), and
 // was not working on any database size, making unclean patches to the official
 // sqlite3.c amalgamation file, so is deprecated and unsupported any longer -
-// see OldSQLEncryptTablePassWordToPlain() to convert your existing databases
-function ChangeSQLEncryptTablePassWord(const FileName: TFileName;
+// see OldSqlEncryptTablePassWordToPlain() to convert your existing databases
+function ChangeSqlEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUtf8): boolean;
 
 /// this function may be used to create a plain database file from an existing
 // one encrypted with our old/deprecated/unsupported format (<1.18.4413)
-// - then call ChangeSQLEncryptTablePassWord() to convert to the new safer format
-procedure OldSQLEncryptTablePassWordToPlain(const FileName: TFileName;
+// - then call ChangeSqlEncryptTablePassWord() to convert to the new safer format
+procedure OldSqlEncryptTablePassWordToPlain(const FileName: TFileName;
   const OldPassWord: RawUtf8);
 
 /// could be used to detect a database in old/deprecated/unsupported format (<1.18.4413)
-// - to call OldSQLEncryptTablePassWordToPlain + ChangeSQLEncryptTablePassWord
+// - to call OldSqlEncryptTablePassWordToPlain + ChangeSqlEncryptTablePassWord
 // and switch to the new format
-function IsOldSQLEncryptTable(const FileName: TFileName): boolean;
+function IsOldSqlEncryptTable(const FileName: TFileName): boolean;
 
 var
   /// global flag to use initial AES encryption scheme
@@ -484,7 +484,7 @@ var
 // some external functions as expected by codecext.c and our sqlite3mc.c wrapper
 
 const
-  _CODEC_PBKDF2_SALT = 'J6CuDftfPr22FnYn';
+  CODEC_PBKDF2_SALT = 'J6CuDftfPr22FnYn';
 
 procedure CodecGenerateKey(var aes: TAes;
   userPassword: pointer; passwordLength: integer);
@@ -493,7 +493,7 @@ var
   k: THash512Rec;
 begin
   // userPassword may be TSynSignerParams JSON content
-  s.Pbkdf2(userPassword, passwordLength, k, _CODEC_PBKDF2_SALT);
+  s.Pbkdf2(userPassword, passwordLength, k, CODEC_PBKDF2_SALT);
   s.AssignTo(k, aes, {encrypt=}true);
 end;
 
@@ -600,7 +600,7 @@ begin
   result := SQLITE_OK;
 end;
 
-function ChangeSQLEncryptTablePassWord(const FileName: TFileName;
+function ChangeSqlEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUtf8): boolean;
 var
   F: THandle;
@@ -681,29 +681,29 @@ begin
   end;
 end;
 
-function IsOldSQLEncryptTable(const FileName: TFileName): boolean;
+function IsOldSqlEncryptTable(const FileName: TFileName): boolean;
 var
   F: THandle;
-  Header: array[0..2047] of byte;
+  hdr: array[0..2047] of byte;
 begin
   result := false;
   F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
   if not ValidHandle(F) then
     exit;
-  if (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
+  if (FileRead(F, hdr, SizeOf(hdr)) = SizeOf(hdr)) and
      // see https://www.sqlite.org/fileformat.html (4 in big endian = 1024 bytes)
-     (PWord(@Header[16])^ = 4) and
-     IsEqual(PHash128(@Header)^, SQLITE_FILE_HEADER128.b) then
-    if not (Header[1024] in [5, 10, 13]) then
+     (PWord(@hdr[16])^ = 4) and
+     IsEqual(PHash128(@hdr)^, SQLITE_FILE_HEADER128.b) then
+    if not (hdr[1024] in [5, 10, 13]) then
       // B-tree leaf Type to be either 5 (interior) 10 (index) or 13 (table)
       result := true;
   FileClose(F);
 end;
 
-procedure OldSQLEncryptTablePassWordToPlain(const FileName: TFileName;
+procedure OldSqlEncryptTablePassWordToPlain(const FileName: TFileName;
   const OldPassWord: RawUtf8);
 const
-  SQLEncryptTableSize = $4000;
+  OLDENCRYPTTABLESIZE = $4000;
 
   procedure CreateSqlEncryptTableBytes(const PassWord: RawUtf8; Table: PByteArray);
   // very fast table (private key) computation from a given password
@@ -715,7 +715,7 @@ const
     L := length(PassWord) - 1;
     j := 0;
     k := integer(L * ord(PassWord[1])) + 134775813; // initial value, prime number derivated
-    for i := 0 to SQLEncryptTableSize - 1 do
+    for i := 0 to OLDENCRYPTTABLESIZE - 1 do
     begin
       Table^[i] := (ord(PassWord[j + 1])) xor byte(k);
       k := integer(k * 3 + i); // fast prime-based pseudo random generator
@@ -726,54 +726,54 @@ const
     end;
   end;
 
-  procedure XorOffset(P: PByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
+  procedure XorOffset(P: PByte; Index, Count: cardinal; SqlEncryptTable: PByteArray);
   var
-    Len: cardinal;
+    len: cardinal;
   begin
     // deprecated fast and simple Cypher using Index (= offset in file)
     if Count > 0 then
       repeat
-        Index := Index and (SQLEncryptTableSize - 1);
-        Len := SQLEncryptTableSize - Index;
-        if Len > Count then
-          Len := Count;
-        XorMemory(pointer(P), @SQLEncryptTable^[Index], Len);
-        inc(P, Len);
-        inc(Index, Len);
-        dec(Count, Len);
+        Index := Index and (OLDENCRYPTTABLESIZE - 1);
+        len := OLDENCRYPTTABLESIZE - Index;
+        if len > Count then
+          len := Count;
+        XorMemory(pointer(P), @SqlEncryptTable^[Index], len);
+        inc(P, len);
+        inc(Index, len);
+        dec(Count, len);
       until Count = 0;
   end;
 
 var
   F: THandle;
   R: integer;
-  Buf: array[word] of byte; // temp buffer for read/write (64KB is enough)
-  Size, Posi: Int64;
-  OldP: array[0..SQLEncryptTableSize - 1] of byte; // 2x16KB tables
+  buf: array[word] of byte; // temp buffer for read/write (64KB seems enough)
+  size, posi: Int64;
+  oldtable: array[0..OLDENCRYPTTABLESIZE - 1] of byte; // 2x16KB tables
 begin
   F := FileOpen(FileName, fmOpenReadWrite);
   if not ValidHandle(F) then
     exit;
-  Size := FileSize(F);
-  if Size <= 1024 then
+  size := FileSize(F);
+  if size <= 1024 then
   begin
     FileClose(F); // file is to small to be modified
     exit;
   end;
   if OldPassWord <> '' then
-    CreateSqlEncryptTableBytes(OldPassWord, @OldP);
-  Posi := 1024; // don't change first page, which is uncrypted
+    CreateSqlEncryptTableBytes(OldPassWord, @oldtable);
+  posi := 1024; // don't change first page, which is uncrypted
   FileSeek64(F, 1024, soFromBeginning);
-  while Posi < Size do
+  while posi < size do
   begin
-    R := FileRead(F, Buf, SizeOf(Buf)); // read buffer
+    R := FileRead(F, buf, SizeOf(buf)); // read buffer
     if R < 0 then
       break; // stop on any read error
     if OldPassWord <> '' then
-      XorOffset(@Buf, Posi, R, @OldP); // uncrypt with old key
-    FileSeek64(F, Posi, soFromBeginning);
-    FileWrite(F, Buf, R); // update buffer
-    inc(Posi, cardinal(R));
+      XorOffset(@buf, posi, R, @oldtable); // uncrypt with oldtable key
+    FileSeek64(F, posi, soFromBeginning);
+    FileWrite(F, buf, R); // update buffer
+    inc(posi, cardinal(R));
   end;
   FileClose(F);
 end;
@@ -1009,7 +1009,7 @@ const
 
   // where to download the latest available static binaries, including SQLite3
   EXPECTED_STATIC_DOWNLOAD = 'https://synopse.info/files/mormot2static.7z';
- // 'https://github.com/synopse/mORMot2/releases/tag/sqlite.' + EXPECTED_SQLITE3_VERSION;
+  // 'https://github.com/synopse/mORMot2/releases/tag/sqlite.' + EXPECTED_SQLITE3_VERSION
 
 constructor TSqlite3LibraryStatic.Create;
 begin

@@ -480,19 +480,19 @@ begin
     FreeAndNil(Demo); // if any exception occurs in Create(), Demo.Free is OK
     check(IsSQLite3File(TempFileName));
     check(IsSQLite3FileEncrypted(TempFileName));
-    check(not IsOldSQLEncryptTable(TempFileName));
-    check(not ChangeSQLEncryptTablePassWord(TempFileName, 'password1', 'password1'));
+    check(not IsOldSqlEncryptTable(TempFileName));
+    check(not ChangeSqlEncryptTablePassWord(TempFileName, 'password1', 'password1'));
     check(IsSQLite3File(TempFileName));
     check(IsSQLite3FileEncrypted(TempFileName));
-    check(not IsOldSQLEncryptTable(TempFileName));
-    check(ChangeSQLEncryptTablePassWord(TempFileName, 'password1', ''));
+    check(not IsOldSqlEncryptTable(TempFileName));
+    check(ChangeSqlEncryptTablePassWord(TempFileName, 'password1', ''));
     check(IsSQLite3File(TempFileName));
-    check(not IsOldSQLEncryptTable(TempFileName));
+    check(not IsOldSqlEncryptTable(TempFileName));
     check(not IsSQLite3FileEncrypted(TempFileName));
-    check(ChangeSQLEncryptTablePassWord(TempFileName, '', 'NewPass'));
+    check(ChangeSqlEncryptTablePassWord(TempFileName, '', 'NewPass'));
     check(IsSQLite3File(TempFileName));
     check(IsSQLite3FileEncrypted(TempFileName));
-    check(not IsOldSQLEncryptTable(TempFileName));
+    check(not IsOldSqlEncryptTable(TempFileName));
     Demo := TSqlDataBase.Create(TempFileName, 'NewPass'); // reuse the temporary file
     Demo.Synchronous := smOff;
     Demo.LockingMode := lmExclusive;
@@ -1977,7 +1977,7 @@ begin
   {$ifndef NOSQLITE3STATIC}
   if EncryptedFile then
   begin
-    check(ChangeSQLEncryptTablePassWord(TempFileName, 'NewPass', '')); // uncrypt file
+    check(ChangeSqlEncryptTablePassWord(TempFileName, 'NewPass', '')); // uncrypt file
     check(IsSQLite3File(TempFileName));
   end;
   {$endif NOSQLITE3STATIC}

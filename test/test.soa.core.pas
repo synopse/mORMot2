@@ -1727,7 +1727,8 @@ begin
       Inst.ExpectedUserID := HTTPClient.SessionUser.ID;
       Inst.ExpectedGroupID := HTTPClient.SessionUser.GroupRights.ID;
       //SetOptions(false{$ifndef LVCL},true,[optExecInMainThread]{$endif});
-      CheckEqual(HTTPClient.CallBackGet('stat', ['findservice', 'toto'], Json),
+      CheckEqual(
+        HTTPClient.CallBackGet('stat', ['findservice', 'toto'], Json),
         HTTP_SUCCESS);
       CheckEqual(Json, '[]');
       for i := 0 to High(SERVICES) do

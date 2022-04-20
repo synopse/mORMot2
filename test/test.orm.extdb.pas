@@ -868,7 +868,7 @@ begin
         {$ifndef NOSQLITE3STATIC}
 
         // now read it after uncypher
-        check(ChangeSQLEncryptTablePassWord('testpass.db3', password, ''));
+        check(ChangeSqlEncryptTablePassWord('testpass.db3', password, ''));
         Check(IsSQLite3File('testpass.db3'));
         Check(not IsSQLite3FileEncrypted('testpass.db3'), 'encrypt3');
 

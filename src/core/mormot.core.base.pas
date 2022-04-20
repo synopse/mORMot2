@@ -2899,7 +2899,7 @@ type
     // - equals nil if len=0
     buf: pointer;
     /// default 4KB buffer allocated on stack - after the len/buf main fields
-    // - 16 last bytes are reseverd to prevent potential buffer overflow,
+    // - 16 last bytes are reserved to prevent potential buffer overflow,
     // so usable length is 4080 bytes
     tmp: array[0..4095] of AnsiChar;
     /// initialize a temporary copy of the content supplied as RawByteString
@@ -2915,6 +2915,7 @@ type
     function Init(SourceLen: PtrInt): pointer; overload;
     /// initialize a temporary buffer with the length of the internal stack
     function InitOnStack: pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// initialize the buffer returning the internal buffer size (4080 bytes)
     // - also set len to the internal buffer size
     // - could be used e.g. for an API call, first trying with plain temp.Init

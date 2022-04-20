@@ -272,7 +272,7 @@ implementation
 
 function TOrmPeople.DataAsHex(aClient: TRestClientUri): RawUtf8;
 begin
-  Result := aClient.CallBackGetResult('DataAsHex', [], RecordClass, fID);
+  result := aClient.CallBackGetResult('DataAsHex', [], RecordClass, fID);
 end;
 
 class function TOrmPeople.Sum(aClient: TRestClientUri; a, b: double;
@@ -282,7 +282,7 @@ var
 const
   METHOD: array[boolean] of RawUtf8 = ('sum', 'sum2');
 begin
-  Result := GetExtended(pointer(
+  result := GetExtended(pointer(
     aClient.CallBackGetResult(METHOD[Method2], ['a', a, 'b', b])), err);
 end;
 
@@ -4226,9 +4226,9 @@ var
   Source, Dest: PAnsiChar;
 begin
   L := Length(S);
-  SetLength(Result, L);
+  SetLength(result, L);
   Source := Pointer(S);
-  Dest := Pointer(Result);
+  Dest := Pointer(result);
   while L <> 0 do
   begin
     Ch := Source^;

@@ -356,6 +356,7 @@ type
     // - this method is thread-safe, and is optimized for AES-NI on x86_64
     procedure DoBlocksCtr(iv: PAesBlock; src, dst: pointer;
       blockcount: PtrUInt);
+      {$ifdef FPC}inline;{$endif}
     /// TRUE if the context was initialized via EncryptInit/DecryptInit
     function Initialized: boolean;
       {$ifdef FPC}inline;{$endif}

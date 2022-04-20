@@ -542,7 +542,7 @@ begin
     raise EInvalidImage.Create('Invalid Metafile Stream');
   p := tmp.Init(fHeader.nBytes);
   try
-    p^ := fHeader; // we already read some bytes from Stream
+    p^ := fHeader; // we already read EMF header bytes from Stream
     inc(p);
     Stream.ReadBuffer(p^, fHeader.nBytes - SizeOf(p^));
     SetHandle(SetEnhMetaFileBits(fHeader.nBytes, tmp.Buf));
