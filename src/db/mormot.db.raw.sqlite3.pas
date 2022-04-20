@@ -5157,14 +5157,14 @@ type
     // - this pointer is thread-safe updated, inside a critical section
     property InternalState: PCardinal
       read fInternalState write fInternalState;
-  published
-    /// read-only access to the SQLite3 database filename opened
-    property FileName: TFileName
-      read fFileName;
     /// equals TRUE if the SQLite3 database was created as ':memory:'
     // (i.e. SQLITE_MEMORY_DATABASE_NAME)
     property IsMemory: boolean
       read fIsMemory;
+  published
+    /// read-only access to the SQLite3 database filename opened
+    property FileName: TFileName
+      read fFileName;
     /// if this property is set, all ExecuteJson() responses will be cached
     // - cache is flushed on any write access to the DB (any not SELECT statement)
     // - cache is consistent only if ExecuteJson() Expand parameter is constant
@@ -7396,9 +7396,9 @@ begin
   begin
     if (fOpenV2Flags and SQLITE_OPEN_CREATE <> 0) and
        (fFileDefaultPageSize <> 0) then
-      PageSize := fFileDefaultPageSize;
+      SetPageSize(fFileDefaultPageSize);
     if fFileDefaultCacheSize <> 0 then
-      CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
+      SetCacheSize(fFileDefaultCacheSize); // 10000 by default (i.e. 40 MB)
   end;
   // always try to check for proper database content (and password)
   if not ExecuteNoException('select count(*) from sqlite_master') then
