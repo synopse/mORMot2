@@ -461,7 +461,7 @@ function DynRawUtf8ArrayToConst(const aValue: TRawUtf8DynArray): TTVarRecDynArra
 var
   ndx: PtrInt;
 begin
-  SetLength(Result, Length(aValue));
+  SetLength(result, Length(aValue));
   for ndx := 0 to Length(aValue) - 1 do
   begin
     result[ndx].VType := vtAnsiString;

@@ -6007,7 +6007,7 @@ var
   L, i: PtrInt;
 begin
   L := length(S);
-  FastSetString(Result, pointer(S), L);
+  FastSetString(result, pointer(S), L);
   for i := 0 to L - 1 do
     if PByteArray(result)[i] in [ord('a')..ord('z')] then
       dec(PByteArray(result)[i], 32);

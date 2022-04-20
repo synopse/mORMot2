@@ -2680,7 +2680,7 @@ constructor TServiceController.CreateNewService(
         OrderGroup, Dependencies, Username, Password: string;
   DesiredAccess, ServiceType, StartType, ErrorControl: cardinal);
 var
-  Exe: TFileName;
+  exeName: TFileName;
   backupError: cardinal;
 begin
   inherited Create;
@@ -2694,21 +2694,21 @@ begin
   if TargetComputer = '' then
     if GetDriveType(pointer(ExtractFileDrive(Path))) = DRIVE_REMOTE then
     begin
-      Exe := ExpandUNCFileName(Path);
-      if (copy(Exe, 1, 12) <> '\\localhost\') or
-         (Exe[14] <> '$') then
+      exeName := ExpandUNCFileName(Path);
+      if (copy(exeName, 1, 12) <> '\\localhost\') or
+         (exeName[14] <> '$') then
       begin
         if Assigned(WindowsServiceLog) then
           WindowsServiceLog(sllError,
             'CreateNewService("%","%") on remote drive: Path="%" is %',
-            [Name, DisplayName, Path, Exe], self);
+            [Name, DisplayName, Path, exeName], self);
         exit;
       end;
-      system.delete(Exe, 1, 12); // \\localhost\c$\... -> c:\...
-      Exe[2] := ':';
+      system.delete(exeName, 1, 12); // \\localhost\c$\... -> c:\...
+      exeName[2] := ':';
     end
     else
-      Exe := Path;
+      exeName := Path;
   fName := RawUtf8(Name);
   fSCHandle := OpenSCManager(
     pointer(TargetComputer), pointer(DatabaseName), SC_MANAGER_ALL_ACCESS);
@@ -2723,8 +2723,8 @@ begin
   end;
   fHandle := CreateService(fSCHandle,
     pointer(Name), pointer(DisplayName), DesiredAccess, ServiceType, StartType,
-    ErrorControl, pointer({%H-}Exe), pointer(OrderGroup), nil, pointer(Dependencies),
-    pointer(Username), pointer(Password));
+    ErrorControl, pointer({%H-}exeName), pointer(OrderGroup), nil,
+    pointer(Dependencies), pointer(Username), pointer(Password));
   if fHandle = 0 then
   begin
     backupError := GetLastError;
@@ -2765,11 +2765,11 @@ end;
 
 function TServiceController.Delete: boolean;
 begin
-  Result := FALSE;
+  result := false;
   if fHandle <> 0 then
     if DeleteService(fHandle) then
     begin
-      Result := CloseServiceHandle(fHandle);
+      result := CloseServiceHandle(fHandle);
       fHandle := 0;
     end
     else if Assigned(WindowsServiceLog) then
@@ -2801,40 +2801,40 @@ function TServiceController.GetStatus: TServiceStatus;
 begin
   FillCharFast(fStatus, SizeOf(fStatus), 0);
   QueryServiceStatus(fHandle, fStatus);
-  Result := fStatus;
+  result := fStatus;
 end;
 
 function TServiceController.Pause: boolean;
 begin
-  Result := ControlService(fHandle, SERVICE_CONTROL_PAUSE, fStatus);
+  result := ControlService(fHandle, SERVICE_CONTROL_PAUSE, fStatus);
 end;
 
 function TServiceController.Refresh: boolean;
 begin
-  Result := ControlService(fHandle, SERVICE_CONTROL_INTERROGATE, fStatus);
+  result := ControlService(fHandle, SERVICE_CONTROL_INTERROGATE, fStatus);
 end;
 
 function TServiceController.Resume: boolean;
 begin
-  Result := ControlService(fHandle, SERVICE_CONTROL_CONTINUE, fStatus);
+  result := ControlService(fHandle, SERVICE_CONTROL_CONTINUE, fStatus);
 end;
 
 function TServiceController.Shutdown: boolean;
 begin
-  Result := ControlService(fHandle, SERVICE_CONTROL_SHUTDOWN, fStatus);
+  result := ControlService(fHandle, SERVICE_CONTROL_SHUTDOWN, fStatus);
 end;
 
 function TServiceController.Start(const Args: array of PChar): boolean;
 begin
   if length(Args) = 0 then
-    Result := StartService(fHandle, 0, nil)
+    result := StartService(fHandle, 0, nil)
   else
-    Result := StartService(fHandle, length(Args), @Args[0]);
+    result := StartService(fHandle, length(Args), @Args[0]);
 end;
 
 function TServiceController.Stop: boolean;
 begin
-  Result := ControlService(fHandle, SERVICE_CONTROL_STOP, fStatus);
+  result := ControlService(fHandle, SERVICE_CONTROL_STOP, fStatus);
 end;
 
 procedure TServiceController.SetDescription(const Description: string);
@@ -3039,8 +3039,8 @@ end;
 
 function TService.GetControlHandler: TServiceControlHandler;
 begin
-  Result := fControlHandler;
-  if not Assigned(Result) then
+  result := fControlHandler;
+  if not Assigned(result) then
     if Assigned(WindowsServiceLog) then
       WindowsServiceLog(sllError, '%.GetControlHandler with ControlHandler=nil: ' +
         'use TServiceSingle or assign a custom ControlHandler', [self], self);

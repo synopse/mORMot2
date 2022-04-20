@@ -2126,11 +2126,11 @@ begin
     while Sql[i] in [#1 .. ' '] do
       inc(i); // trim left
     result := copy(Sql, i, maxInt);
-    P := PosChar(pointer(Result), ' ');
+    P := PosChar(pointer(result), ' ');
     if P = nil then
-      P := PosChar(pointer(Result), ';');
+      P := PosChar(pointer(result), ';');
     if P <> nil then
-      SetLength(result, P - pointer(Result)); // trim right
+      SetLength(result, P - pointer(result)); // trim right
   end;
   if result = '' then // by default, a SQLite3 query is ordered by ID
     result := ROWID_TXT;
