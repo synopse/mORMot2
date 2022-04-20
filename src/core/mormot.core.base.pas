@@ -2442,21 +2442,25 @@ procedure DACntAdd(var refcnt: TDACnt; increment: TDACnt);
 // - used e.g. as thread-safe atomic operation for TLightLock/TRWLock
 // - Target should be aligned, which is the case when defined as a class field
 function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
+  {$ifndef CPUINTEL} inline; {$endif}
 
 /// fast atomic addition operation on a pointer-sized integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(pointer)
 // - Target should be aligned, which is the case when defined as a class field
 procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
+  {$ifndef CPUINTEL} inline; {$endif}
 
 /// fast atomic substraction operation on a pointer-sized integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(-pointer)
 // - Target should be aligned, which is the case when defined as a class field
 procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
+  {$ifndef CPUINTEL} inline; {$endif}
 
 /// fast atomic addition operation on a 32-bit integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(pointer)
 // - Target should be aligned, which is the case when defined as a class field
 procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
+  {$ifndef CPUINTEL} inline; {$endif}
 
 {$ifndef FPC}
 
