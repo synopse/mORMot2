@@ -310,6 +310,9 @@ type
       read GetInstanceGCCount;
   end;
 
+var
+  /// global mutex used by optExecGlobalLocked and optFreeGlobalLocked
+  GlobalInterfaceExecuteMethod: TRTLCriticalSection;
 
 
 { ***************** TServiceContainerServer Services Holder }
@@ -792,9 +795,6 @@ begin
   fRestServer.Internallog('%.DoInstanceGC=% for I% %',
     [ClassType, result, InterfaceUri, ToText(fInstanceCreation)^]);
 end;
-
-var
-  GlobalInterfaceExecuteMethod: TRTLCriticalSection;
 
 procedure TServiceFactoryServer.InstanceFree(Obj: TInterfacedObject);
 var
@@ -2352,6 +2352,9 @@ end;
 
 initialization
   InitializeCriticalSection(GlobalInterfaceExecuteMethod);
+
+finalization
+  DeleteCriticalSection(GlobalInterfaceExecuteMethod);
 
 end.
 
