@@ -575,7 +575,7 @@ type
     /// prepare a TAes object with the key derivated via a Pbkdf2() call
     // - aDerivatedKey is defined as "var", since it will be zeroed after use
     procedure AssignTo(var aDerivatedKey: THash512Rec;
-      out aAES: TAes; aEncrypt: boolean);
+      out aAes: TAes; aEncrypt: boolean);
     /// fill the internal context with zeros, for security
     procedure Done;
   end;
@@ -2235,6 +2235,7 @@ begin
     tmp.Init(aParamsJson, aParamsJsonLen);
     try
       if (RecordLoadJson(k, tmp.buf, TypeInfo(TSynSignerParams)) = nil) or
+         (ord(k.algo) > ord(high(k.algo))) or
          (k.secret = '') or
          (k.salt = '') then
       begin
@@ -2259,7 +2260,7 @@ begin
 end;
 
 procedure TSynSigner.AssignTo(var aDerivatedKey: THash512Rec;
-  out aAES: TAes; aEncrypt: boolean);
+  out aAes: TAes; aEncrypt: boolean);
 var
   ks: integer;
 begin
@@ -2297,7 +2298,7 @@ begin
       exit;
     end;
   end;
-  aAES.DoInit(aDerivatedKey, ks, aEncrypt);
+  aAes.DoInit(aDerivatedKey, ks, aEncrypt);
   FillZero(aDerivatedKey.b);
 end;
 

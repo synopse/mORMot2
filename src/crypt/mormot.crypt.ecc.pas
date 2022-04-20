@@ -404,7 +404,7 @@ type
     // - will raise an EEccException if the supplied Binary is incorrect
     constructor CreateFromSecureBinary(const Binary: RawByteString;
       const PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
-      AES: TAesAbstractClass = nil); overload;
+      Aes: TAesAbstractClass = nil); overload;
     /// create a certificate with its private secret key from a password-protected
     // secure binary buffer
     // - may be used on a constant array in executable, created via SaveToSource()
@@ -412,14 +412,14 @@ type
     // - will raise an EEccException if the supplied Binary is incorrect
     constructor CreateFromSecureBinary(Data: pointer; Len: integer;
       const PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
-      AES: TAesAbstractClass = nil); overload;
+      Aes: TAesAbstractClass = nil); overload;
     /// create a certificate with its private secret key from an encrypted
     // secure .private binary file and its associated password
     // - perform all reverse steps from SaveToSecureFile() method
     // - will raise an EEccException if the supplied file is incorrect
     constructor CreateFromSecureFile(const FileName: TFileName;
       const PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
-      AES: TAesAbstractClass = nil); overload;
+      Aes: TAesAbstractClass = nil); overload;
     /// create a certificate with its private secret key from an encrypted
     // secure .private binary file stored in a given folder
     // - overloaded constructor retrieving the file directly from its folder
@@ -427,7 +427,7 @@ type
     // - will raise an EEccException if the supplied file is incorrect
     constructor CreateFromSecureFile(const FolderName: TFileName;
       const Serial, PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
-      AES: TAesAbstractClass = nil); overload;
+      Aes: TAesAbstractClass = nil); overload;
     /// finalize the instance, and safe erase fPrivateKey stored buffer
     destructor Destroy; override;
     /// returns TRUE if the private secret key is not filled with zeros
@@ -443,7 +443,7 @@ type
     // be performed fromPbkdf2HmacSha256 derivation of an user-supplied password
     function SaveToSecureFile(const PassWord: RawUtf8;
       const DestFolder: TFileName; AFStripes: integer = 64;
-      Pbkdf2Round: integer = DEFAULT_ECCROUNDS; AES: TAesAbstractClass = nil;
+      Pbkdf2Round: integer = DEFAULT_ECCROUNDS; Aes: TAesAbstractClass = nil;
       NoHeader: boolean = false): boolean;
     /// backup the private secret key into several encrypted -###.private binary files
     // - secret sharing can be used to store keys at many different places, e.g.
@@ -457,20 +457,20 @@ type
     function SaveToSecureFiles(const PassWord: RawUtf8;
       const DestFolder: TFileName; DestFileCount: integer;
       AFStripes: integer = 64; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
-      AES: TAesAbstractClass = nil; NoHeader: boolean = false): boolean;
+      Aes: TAesAbstractClass = nil; NoHeader: boolean = false): boolean;
     /// read a private secret key from an encrypted .private binary file
     // - perform all reverse steps from SaveToSecureFile() method
     // - returns TRUE on success, FALSE otherwise
     function LoadFromSecureFile(const FileName: TFileName;
       const PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
-      AES: TAesAbstractClass = nil): boolean;
+      Aes: TAesAbstractClass = nil): boolean;
     /// backup the private secret key into an encrypted secure binary buffer
     // - you should keep all your private keys in a safe place
     // - will use anti-forensic diffusion of the private key (64 stripes = 2KB)
     // - then AES-256-CFB encryption (or the one specified in AES parameter) will
     // be performed fromPbkdf2HmacSha256 derivation of an user-supplied password
     function SaveToSecureBinary(const PassWord: RawUtf8; AFStripes: integer = 64;
-      Pbkdf2Round: integer = DEFAULT_ECCROUNDS; AES: TAesAbstractClass = nil;
+      Pbkdf2Round: integer = DEFAULT_ECCROUNDS; Aes: TAesAbstractClass = nil;
       NoHeader: boolean = false): RawByteString;
     /// backup the private secret key into an encrypted source code constant
     // - may be used to integrate some private keys within an executable
@@ -480,20 +480,20 @@ type
     // encrypted format
     function SaveToSource(const ConstName, Comment, PassWord: RawUtf8;
       IncludePassword: boolean = true; AFStripes: integer = 0;
-      Pbkdf2Round: integer = 100; AES: TAesAbstractClass = nil;
+      Pbkdf2Round: integer = 100; Aes: TAesAbstractClass = nil;
       IncludeRaw: boolean = true): RawUtf8;
     /// read a private secret key from an encrypted secure binary buffer
     // - perform all reverse steps from SaveToSecureBinary() method
     // - returns TRUE on success, FALSE otherwise
     function LoadFromSecureBinary(const Binary: RawByteString;
        const PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
-       AES: TAesAbstractClass = nil): boolean; overload;
+       Aes: TAesAbstractClass = nil): boolean; overload;
     /// read a private secret key from an encrypted secure binary buffer
     // - perform all reverse steps from SaveToSecureBinary() method
     // - returns TRUE on success, FALSE otherwise
     function LoadFromSecureBinary(Data: pointer; Len: integer;
       const PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
-      AES: TAesAbstractClass = nil): boolean; overload;
+      Aes: TAesAbstractClass = nil): boolean; overload;
   public
     /// compute a Base64 encoded signature of some digital content
     // - memory buffer will be hashed using SHA-256, then will be signed using
@@ -2466,35 +2466,35 @@ end;
 
 constructor TEccCertificateSecret.CreateFromSecureBinary(
   const Binary: RawByteString; const PassWord: RawUtf8; Pbkdf2Round: integer;
-  AES: TAesAbstractClass);
+  Aes: TAesAbstractClass);
 begin
-  CreateFromSecureBinary(pointer(Binary), length(Binary), PassWord, Pbkdf2Round, AES);
+  CreateFromSecureBinary(pointer(Binary), length(Binary), PassWord, Pbkdf2Round, Aes);
 end;
 
 constructor TEccCertificateSecret.CreateFromSecureBinary(Data: pointer;
-  Len: integer; const PassWord: RawUtf8; Pbkdf2Round: integer; AES: TAesAbstractClass);
+  Len: integer; const PassWord: RawUtf8; Pbkdf2Round: integer; Aes: TAesAbstractClass);
 begin
   Create;
-  if not LoadFromSecureBinary(Data, Len, PassWord, Pbkdf2Round, AES) then
+  if not LoadFromSecureBinary(Data, Len, PassWord, Pbkdf2Round, Aes) then
     raise EEccException.CreateUtf8('Invalid %.CreateFromSecureBinary', [self]);
 end;
 
 constructor TEccCertificateSecret.CreateFromSecureFile(const FileName: TFileName;
-  const PassWord: RawUtf8; Pbkdf2Round: integer; AES: TAesAbstractClass);
+  const PassWord: RawUtf8; Pbkdf2Round: integer; Aes: TAesAbstractClass);
 begin
   Create;
-  if not LoadFromSecureFile(FileName, PassWord, Pbkdf2Round, AES) then
+  if not LoadFromSecureFile(FileName, PassWord, Pbkdf2Round, Aes) then
     raise EEccException.CreateUtf8(
       'Invalid %.CreateFromSecureFile("%")', [self, FileName]);
 end;
 
 constructor TEccCertificateSecret.CreateFromSecureFile(
   const FolderName: TFileName; const Serial, PassWord: RawUtf8;
-  Pbkdf2Round: integer; AES: TAesAbstractClass);
+  Pbkdf2Round: integer; Aes: TAesAbstractClass);
 begin
   CreateFromSecureFile(
     IncludeTrailingPathDelimiter(FolderName) + Utf8ToString(Serial),
-    PassWord, Pbkdf2Round, AES);
+    PassWord, Pbkdf2Round, Aes);
 end;
 
 destructor TEccCertificateSecret.Destroy;
@@ -2532,7 +2532,7 @@ const
   PRIVKEY_SALTSIZE = 16;
 
 function TEccCertificateSecret.SaveToSecureBinary(const PassWord: RawUtf8;
-  AFStripes, Pbkdf2Round: integer; AES: TAesAbstractClass;
+  AFStripes, Pbkdf2Round: integer; Aes: TAesAbstractClass;
   NoHeader: boolean): RawByteString;
 var
   pksav: boolean;
@@ -2543,8 +2543,8 @@ var
   e: PAnsiChar absolute result;
 begin
   result := '';
-  if AES = nil then
-    AES := TAesCfb;
+  if Aes = nil then
+    Aes := TAesCfb;
   pksav := fStoreOnlyPublicKey;
   stsav := fAFSplitStripes;
   try
@@ -2555,7 +2555,7 @@ begin
       try
         salt := TAesPrng.Fill(PRIVKEY_SALTSIZE);
         Pbkdf2HmacSha256(PassWord, salt, Pbkdf2Round, aeskey);
-        a := AES.Create(aeskey);
+        a := Aes.Create(aeskey);
         try
           enc := a.EncryptPkcs7(plain, true);
           // result := PRIVKEY_MAGIC+salt+enc; fails under FPC :(
@@ -2599,20 +2599,20 @@ end;
 
 function TEccCertificateSecret.SaveToSecureFile(const PassWord: RawUtf8;
   const DestFolder: TFileName; AFStripes, Pbkdf2Round: integer;
-  AES: TAesAbstractClass; NoHeader: boolean): boolean;
+  Aes: TAesAbstractClass; NoHeader: boolean): boolean;
 begin
   if (self = nil) or
      not DirectoryExists(DestFolder) then
     result := false
   else
     result := FileFromString(SaveToSecureBinary(PassWord, AFStripes,
-      Pbkdf2Round, AES, NoHeader), IncludeTrailingPathDelimiter(DestFolder) +
+      Pbkdf2Round, Aes, NoHeader), IncludeTrailingPathDelimiter(DestFolder) +
       SaveToSecureFileName);
 end;
 
 function TEccCertificateSecret.SaveToSecureFiles(const PassWord: RawUtf8;
   const DestFolder: TFileName; DestFileCount, AFStripes, Pbkdf2Round: integer;
-  AES: TAesAbstractClass; NoHeader: boolean): boolean;
+  Aes: TAesAbstractClass; NoHeader: boolean): boolean;
 var
   diff, one: RawByteString;
   head, index, pos, difflen, onechunk, onelen: integer;
@@ -2621,7 +2621,7 @@ begin
   if DestFileCount = 1 then
   begin
     result := SaveToSecureFile(
-      PassWord, DestFolder, AFStripes, Pbkdf2Round, AES, NoHeader);
+      PassWord, DestFolder, AFStripes, Pbkdf2Round, Aes, NoHeader);
     exit;
   end;
   result := false;
@@ -2633,7 +2633,7 @@ begin
   if DestFileCount > 255 then
     DestFileCount := 255;
   diff := SaveToSecureBinary(
-    PassWord, AFStripes * DestFileCount, Pbkdf2Round, AES, true);
+    PassWord, AFStripes * DestFileCount, Pbkdf2Round, Aes, true);
   difflen := length(diff);
   onechunk := difflen div DestFileCount;
   if NoHeader then
@@ -2661,14 +2661,14 @@ end;
 
 function TEccCertificateSecret.LoadFromSecureBinary(
   const Binary: RawByteString; const PassWord: RawUtf8;
-  Pbkdf2Round: integer; AES: TAesAbstractClass): boolean;
+  Pbkdf2Round: integer; Aes: TAesAbstractClass): boolean;
 begin
   result := LoadFromSecureBinary(
-    pointer(Binary), length(Binary), PassWord, Pbkdf2Round, AES);
+    pointer(Binary), length(Binary), PassWord, Pbkdf2Round, Aes);
 end;
 
 function TEccCertificateSecret.LoadFromSecureBinary(Data: pointer; Len: integer;
-  const PassWord: RawUtf8; Pbkdf2Round: integer; AES: TAesAbstractClass): boolean;
+  const PassWord: RawUtf8; Pbkdf2Round: integer; Aes: TAesAbstractClass): boolean;
 var
   salt, decrypted: RawByteString;
   st: TRawByteStringStream;
@@ -2692,9 +2692,9 @@ begin
   XorBlock16(pointer(salt), @PRIVKEY_MAGIC);
   try
     Pbkdf2HmacSha256(PassWord, salt, Pbkdf2Round, aeskey);
-    if AES = nil then
-      AES := TAesCfb;
-    a := AES.Create(aeskey);
+    if Aes = nil then
+      Aes := TAesCfb;
+    a := Aes.Create(aeskey);
     try
       decrypted := a.DecryptPkcs7Buffer(Data, Len, true, false);
       if decrypted = '' then
@@ -2717,7 +2717,7 @@ begin
 end;
 
 function TEccCertificateSecret.LoadFromSecureFile(const FileName: TFileName;
-  const PassWord: RawUtf8; Pbkdf2Round: integer; AES: TAesAbstractClass): boolean;
+  const PassWord: RawUtf8; Pbkdf2Round: integer; Aes: TAesAbstractClass): boolean;
 var
   FN: TFileName;
 begin
@@ -2726,12 +2726,12 @@ begin
   else
     FN := FileName;
   result := LoadFromSecureBinary(
-    StringFromFile(FN), PassWord, Pbkdf2Round, AES);
+    StringFromFile(FN), PassWord, Pbkdf2Round, Aes);
 end;
 
 function TEccCertificateSecret.SaveToSource(
   const ConstName, Comment, PassWord: RawUtf8; IncludePassword: boolean;
-  AFStripes, Pbkdf2Round: integer; AES: TAesAbstractClass;
+  AFStripes, Pbkdf2Round: integer; Aes: TAesAbstractClass;
   IncludeRaw: boolean): RawUtf8;
 var
   data: RawByteString;
@@ -2742,7 +2742,7 @@ begin
      (PassWord = '') then
     exit;
   data := SaveToSecureBinary(
-    PassWord, AFStripes, Pbkdf2Round, AES, {NoHeader=}true);
+    PassWord, AFStripes, Pbkdf2Round, Aes, {NoHeader=}true);
   if data = '' then
     exit;
   if ConstName = '' then

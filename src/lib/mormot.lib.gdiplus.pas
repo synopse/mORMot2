@@ -1784,7 +1784,7 @@ begin
       gdip.SetWorldTransform(gr, {%H-}mtx); // restore previous
       gdip.DeleteMatrix(mtx{%H-});
     end;
-    if (emrtext.fOptions and ETO_CLIPPED <> 0) then
+    if emrtext.fOptions and ETO_CLIPPED <> 0 then
     begin
       //Restore the clipping region
       gdip.SetClipRegion(gr, {%H-}prev, cmReplace);

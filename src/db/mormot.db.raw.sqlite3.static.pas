@@ -514,7 +514,7 @@ begin
   CodecGenerateKey(CodecGetWriteKey(codec)^, userPassword, passwordLength);
 end;
 
-procedure CodecAESProcess(page: cardinal; data: PUtf8Char; len: integer;
+procedure CodecAesProcess(page: cardinal; data: PUtf8Char; len: integer;
   aes: PAes; encrypt: boolean);
 var
   plain: Int64;    // bytes 16..23 should always be unencrypted
@@ -524,7 +524,7 @@ begin
      (len <= 0) or
      (integer(page) <= 0) then
     raise ESqlite3Exception.CreateUtf8(
-      'Unexpected CodecAESProcess(page=%,len=%)', [page, len]);
+      'Unexpected CodecAesProcess(page=%,len=%)', [page, len]);
   iv.c0 := page xor 668265263; // prime-based initialization
   iv.c1 := page * 2654435761;
   iv.c2 := page * 2246822519;
@@ -578,9 +578,9 @@ function CodecEncrypt(codec: pointer; page: integer; data: PUtf8Char;
   {$ifdef FPC}public name _PREFIX + 'CodecEncrypt';{$endif} export;
 begin
   if useWriteKey = 1 then
-     CodecAESProcess(page, data, len, CodecGetWriteKey(codec), true)
+     CodecAesProcess(page, data, len, CodecGetWriteKey(codec), true)
   else
-     CodecAESProcess(page, data, len, CodecGetReadKey(codec), true);
+     CodecAesProcess(page, data, len, CodecGetReadKey(codec), true);
   result := SQLITE_OK;
 end;
 
@@ -588,7 +588,7 @@ function CodecDecrypt(codec: pointer; page: integer;
   data: PUtf8Char; len: integer): integer; cdecl;
   {$ifdef FPC}public name _PREFIX + 'CodecDecrypt';{$endif} export;
 begin
-  CodecAESProcess(page, data, len, CodecGetReadKey(codec), false);
+  CodecAesProcess(page, data, len, CodecGetReadKey(codec), false);
   result := SQLITE_OK;
 end;
 
@@ -656,14 +656,14 @@ begin
       begin
         if OldPassWord <> '' then
         begin
-          CodecAESProcess(page + p, buf, pagesize, @old, false);
+          CodecAesProcess(page + p, buf, pagesize, @old, false);
           if (p = 0) and
              (page = 1) and
              (PInteger(buf)^ = 0) then
             exit; // OldPassword is obviously incorrect
         end;
         if NewPassword <> '' then
-          CodecAESProcess(page + p, buf, pagesize, @new, true);
+          CodecAesProcess(page + p, buf, pagesize, @new, true);
         inc(buf, pagesize);
       end;
       FileSeek64(F, posi, soFromBeginning);

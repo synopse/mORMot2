@@ -54,37 +54,37 @@ type
   ESynCrypto = class(ESynException);
 
 {$ifdef ASMX64}
-  {$ifdef HASAESNI}  // compiler supports asm with aesenc/aesdec opcodes
+  {$ifdef HASAESNI}          // compiler supports asm with aesenc/aesdec opcodes
     {$define USEAESNI}
     {$define USEAESNI64}
-    {$ifdef CPUX64ASM} // oldest Delphi x86_64 SSE asm is buggy
-      {$define USECLMUL}  // pclmulqdq opcodes
-      {$define USEGCMAVX} // 8x interleaved aesni + pclmulqdq asm for AES-GCM
+    {$ifdef CPUX64ASM}       // Delphi x86_64 SSE asm is buggy before XE7
+      {$define USECLMUL}     // pclmulqdq opcodes
+      {$define USEGCMAVX}    // 8x interleaved aesni + pclmulqdq asm for AES-GCM
       {$define USEAESNIHASH} // aesni+sse4.1 32-64-128 aeshash
     {$endif CPUX64ASM}
   {$endif HASAESNI}
   {$ifdef OSWINDOWS}
-    {$define CRC32C_X64} // external crc32_iscsi_01 for win64/lin64
-    {$define SHA512_X64} // external sha512_sse4 for win64/lin64
+    {$define CRC32C_X64}     // external crc32_iscsi_01 for win64/lin64
+    {$define SHA512_X64}     // external sha512_sse4 for win64/lin64
   {$endif OSWINDOWS}
   {$ifdef OSLINUX}
-    {$define CRC32C_X64} // external crc32_iscsi_01.o for win64/lin64
-    {$define SHA512_X64} // external sha512_sse4.o for win64/lin64
+    {$define CRC32C_X64}     // external crc32_iscsi_01.o for win64/lin64
+    {$define SHA512_X64}     // external sha512_sse4.o for win64/lin64
   {$endif OSLINUX}
 {$endif ASMX64}
 
 {$ifdef ASMX86}
   {$define USEAESNI}
   {$define USEAESNI32}
-  {$ifdef HASAESNI}    // compiler supports asm with aesenc/aesdec opcodes
-    {$define USECLMUL} // pclmulqdq opcodes
-    {$define USEAESNIHASH} // aesni+sse4.1 32-64-128 aeshash
+  {$ifdef HASAESNI}          // compiler supports asm with aesenc/aesdec opcodes
+    {$define USECLMUL}       // pclmulqdq opcodes
+    {$define USEAESNIHASH}   // aesni+sse4.1 32-64-128 aeshash
   {$endif HASAESNI}
   {$ifdef OSWINDOWS}
-    {$define SHA512_X86} // external sha512-x86.o for win32/lin32
+    {$define SHA512_X86}     // external sha512-x86.o for win32/lin32
   {$endif OSWINDOWS}
   {$ifdef OSLINUX}
-    {$define SHA512_X86} // external sha512-x86.o for win32/lin32
+    {$define SHA512_X86}     // external sha512-x86.o for win32/lin32
   {$endif OSLINUX}
 {$endif ASMX86}
 
@@ -2577,7 +2577,7 @@ type
     Dest: TStream;
     Buf: TAesBlock; // very small buffer for remainging 0..15 bytes
     BufCount: integer; // number of pending bytes (0..15) in Buf
-    AES: TAes;
+    Aes: TAes;
     NoCrypt: boolean; // if KeySize=0
   public
     /// initialize the AES encryption stream for an output stream (e.g.
@@ -2702,7 +2702,7 @@ const
 type
   TKeyArray = packed array[0..AesMaxRounds] of TAesBlock;
 
-  TAesContextDoBlock = procedure(const ctxt, Source, Dest);
+  TAesContextDoBlock = procedure(const Ctxt, Source, Dest);
 
   /// low-level content of TAes.Context (AES_CONTEXT_SIZE bytes)
   // - is defined privately in the implementation section
@@ -10243,14 +10243,14 @@ begin
   if KeySize = 0 then
     NoCrypt := true
   else
-    AES.EncryptInit(Key, KeySize);
+    Aes.EncryptInit(Key, KeySize);
   Dest := outStream;
 end;
 
 destructor TAesWriteStream.Destroy;
 begin
   Finish;
-  AES.Done;
+  Aes.Done;
   inherited;
 end;
 
@@ -10259,7 +10259,7 @@ begin
   if BufCount = 0 then
     exit;
   if (BufCount >= SizeOf(TAesBlock)) or
-     not AES.Initialized or NoCrypt then
+     not Aes.Initialized or NoCrypt then
     raise ESynCrypto.CreateUtf8('Unexpected %.Finish', [self]);
   XorOffset(@buf, DestSize, BufCount);
   Dest.WriteBuffer(buf, BufCount);
@@ -10287,7 +10287,7 @@ begin
   Adler := Adler32Asm(Adler, @Buffer, Count);
   if not NoCrypt then
     // KeySize=0 -> save as-is
-    if not AES.Initialized then
+    if not Aes.Initialized then
       // if error in KeySize -> default fast XorOffset()
       XorOffset(@B, DestSize, Count)
     else
@@ -10301,14 +10301,14 @@ begin
         inc(BufCount, Len);
         if BufCount < SizeOf(TAesBlock) then
           exit;
-        AES.Encrypt(buf);
+        Aes.Encrypt(buf);
         Dest.WriteBuffer(buf, SizeOf(TAesBlock));
         inc(DestSize, SizeOf(TAesBlock));
         dec(Count, Len);
-        AES.DoBlocks(@B[Len], @B[Len], cardinal(Count) shr AesBlockShift, true);
+        Aes.DoBlocks(@B[Len], @B[Len], cardinal(Count) shr AesBlockShift, true);
       end
       else
-        AES.DoBlocks(@B, @B, cardinal(Count) shr AesBlockShift, true);
+        Aes.DoBlocks(@B, @B, cardinal(Count) shr AesBlockShift, true);
       BufCount := cardinal(Count) and AesBlockMod;
       if BufCount <> 0 then
       begin

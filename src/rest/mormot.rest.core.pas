@@ -602,7 +602,7 @@ type
     // amLocked, amBackgroundThread, amBackgroundOrmSharedThread or amMainThread
     property AcquireExecutionMode[Cmd: TRestServerUriContextCommand]: TRestServerAcquireMode
       read GetAcquireExecutionMode write SetAcquireExecutionMode;
-    /// the time (in mili seconds) to try locking internal commands of this class
+    /// the time (in milli seconds) to try locking internal commands of this class
     // - this value is used only for AcquireExecutionMode[*]=amLocked
     // - by default, TRestServer.Uri() will lock for Write ORM according to
     // AcquireWriteTimeOut  (i.e. AcquireExecutionLockedTimeOut[execOrmWrite])
@@ -611,7 +611,7 @@ type
       read GetAcquireExecutionLockedTimeOut write SetAcquireExecutionLockedTimeOut;
     /// how this class will handle write access to the database
     // - is a common wrapper to AcquireExecutionMode[execOrmWrite] property
-    // - default amLocked mode will wait up to AcquireWriteTimeOut mili seconds
+    // - default amLocked mode will wait up to AcquireWriteTimeOut milli seconds
     // to have a single access to the server write ORM methods
     // - amBackgroundThread will execute the write methods in a queue, in a
     // dedicated unique thread (which can be convenient, especially for
@@ -625,7 +625,7 @@ type
     // the database engine used
     property AcquireWriteMode: TRestServerAcquireMode index execOrmWrite
       read GetAcquireExecutionMode write SetAcquireExecutionMode;
-    /// the time (in mili seconds) which the class will wait for acquiring a
+    /// the time (in milli seconds) which the class will wait for acquiring a
     // write acccess to the database, when AcquireWriteMode is amLocked
     // - is a common wrapper to AcquireExecutionLockedTimeOut[execOrmWrite]
     // - in order to handle safe transactions and multi-thread safe writing, the
@@ -2124,8 +2124,8 @@ begin
   {$ifdef OSWINDOWS}
   if Assigned(ServiceSingle) and
      (Value = amMainThread) then
-     raise ERestException.CreateUtf8('%.SetAcquireExecutionMode(%' +
-       ', amMainThread) is not compatible with a Windows Service which has ' +
+     raise ERestException.CreateUtf8('%.SetAcquireExecutionMode(%, ' +
+       'amMainThread) is not compatible with a Windows Service which has ' +
        'no main thread', [self, ToText(Cmd)^]);
   {$endif OSWINDOWS}
   fAcquireExecution[Cmd].Mode := Value;

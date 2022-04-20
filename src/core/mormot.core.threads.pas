@@ -1063,7 +1063,7 @@ type
     fOwner: TSynThreadPool;
     fThreadNumber: integer;
     {$ifndef USE_WINIOCP}
-    fProcessingContext: pointer;
+    fProcessingContext: pointer; // protected by fOwner.fSafe.Lock
     fEvent: TEvent;
     {$endif USE_WINIOCP}
     procedure NotifyThreadStart(Sender: TSynThread);
