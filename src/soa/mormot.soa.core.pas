@@ -1268,6 +1268,13 @@ begin
   if self <> nil then
   begin
     opt := aOptions * INTERFACEMETHOD_THREADOPTIONS;
+    {$ifdef OSWINDOWS}
+    if Assigned(ServiceSingle) and
+       (opt * [optExecInMainThread, optFreeInMainThread] <> []) then
+       raise EServiceException.CreateUtf8('%.SetOptions(I%): [%] are not ' +
+         'compatible with a Windows Service which has no main thread',
+         [self, fInterfaceUri, ToText(opt)]);
+    {$endif OSWINDOWS}
     if (opt <> []) and
        (aAction in [moaReplace, moaInclude]) and
        (fInstanceCreation = sicPerThread) then

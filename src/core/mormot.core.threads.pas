@@ -2293,7 +2293,7 @@ constructor TSynBackgroundThreadProcess.Create(const aThreadName: RawUtf8;
   aStats: TSynMonitorClass; CreateSuspended: boolean);
 begin
   if not Assigned(aOnProcess) then
-    raise ESynException.CreateUtf8('%.Create(aOnProcess=nil)', [self]);
+    raise ESynThread.CreateUtf8('%.Create(aOnProcess=nil)', [self]);
   if aStats <> nil then
     fStats := aStats.Create(aThreadName);
   fOnProcess := aOnProcess;

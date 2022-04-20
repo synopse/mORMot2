@@ -2121,6 +2121,13 @@ end;
 procedure TRest.SetAcquireExecutionMode(
   Cmd: TRestServerUriContextCommand; Value: TRestServerAcquireMode);
 begin
+  {$ifdef OSWINDOWS}
+  if Assigned(ServiceSingle) and
+     (Value = amMainThread) then
+     raise ERestException.CreateUtf8('%.SetAcquireExecutionMode(%' +
+       ', amMainThread) is not compatible with a Windows Service which has ' +
+       'no main thread', [self, ToText(Cmd)^]);
+  {$endif OSWINDOWS}
   fAcquireExecution[Cmd].Mode := Value;
 end;
 

@@ -3802,7 +3802,7 @@ var
   ServiceSingle: TServiceSingle = nil;
 
 /// launch the registered Service execution
-// - ServiceSingle provided by this aplication is sent to the operating system
+// - ServiceSingle provided by this application is sent to the operating system
 // - returns TRUE on success
 // - returns FALSE on error (to get extended information, call GetLastError)
 function ServiceSingleRun: boolean;
@@ -3816,10 +3816,10 @@ function ServiceStateText(State: TServiceState): string;
 
 function ToText(st: TServiceState): PShortString; overload;
 
-/// return service PID
+/// return the ProcessID of a given service, by name
 function GetServicePid(const aServiceName: string): cardinal;
 
-/// kill Windows process
+/// kill a Windows process from its ProcessID
 function KillProcess(pid: cardinal; waitseconds: integer = 30): boolean;
 
 {$else}
@@ -5855,7 +5855,8 @@ begin
   {$ifdef CPUINTEL}
   Flags := 0; // non reentrant locks need no additional thread safety
   {$else}
-  LockedDec(Flags, 1); // ARM can be weak-ordered - see shorturl.at/kuJ12
+  LockedDec(Flags, 1); // ARM can be weak-ordered
+  // https://preshing.com/20121019/this-is-why-they-call-it-a-weakly-ordered-cpu
   {$endif CPUINTEL}
 end;
 

@@ -1782,13 +1782,13 @@ begin
     if fontspec.angle <> 0 then
     begin
       gdip.SetWorldTransform(gr, {%H-}mtx); // restore previous
-      gdip.DeleteMatrix(mtx);
+      gdip.DeleteMatrix(mtx{%H-});
     end;
     if (emrtext.fOptions and ETO_CLIPPED <> 0) then
     begin
       //Restore the clipping region
       gdip.SetClipRegion(gr, {%H-}prev, cmReplace);
-      gdip.DeleteRegion(prev);
+      gdip.DeleteRegion(prev{%H-});
     end;
   end;
   Temp.Done;

@@ -2263,7 +2263,7 @@ type
   TInterfaceMethodExecuteRaw = class;
 
   /// possible service provider method options, e.g. about logging or execution
-  // - see TServiceMethodOptions for a description of each available option
+  // - see TInterfaceMethodOptions for a description of each available option
   TInterfaceMethodOption = (
     optExecGlobalLocked,
     optFreeGlobalLocked,
@@ -2297,7 +2297,8 @@ type
   // instances (e.g. TSqlite3HttpServer or TRestServerNamedPipeResponse),
   // for better response time and CPU use (this is the technical reason why
   // service implementation methods have to handle multi-threading safety
-  // carefully, e.g. by using TRTLCriticalSection mutex on purpose)
+  // carefully, e.g. by using TRTLCriticalSection mutex on purpose) - warning:
+  // a Windows Service has no 'main thread' concept, so should not use it
   // - optFreeInMainThread will force the _Release/Destroy method to be run
   // in the main thread: setting this option for any method will affect the
   // whole service class - is not set by default, for performance reasons
@@ -6550,7 +6551,7 @@ type
 
 procedure BackgroundExecuteProc(Call: pointer); forward;
 
-procedure BackGroundExecute(var synch: TBackgroundLauncher;
+procedure BackgroundExecute(var synch: TBackgroundLauncher;
   backgroundThread: TSynBackgroundThreadMethod);
 var
   event: TThreadMethod;
@@ -6562,6 +6563,13 @@ begin
     if GetCurrentThreadID = MainThreadID then
       event
     else
+    {$ifdef OSWINDOWS}
+    if Assigned(ServiceSingle) then
+       raise ESynThread.CreateUtf8('BackgroundExecute(%,backgroundThread=nil)' +
+         'is not compatible with a Windows Service which has no main thread',
+         [GetEnumName(TypeInfo(TBackgroundLauncherAction), ord(synch.Action))^])
+    else
+    {$endif OSWINDOWS}
       TThread.Synchronize(synch.Context^.RunningThread, event)
   else
     backgroundThread.RunAndWait(event);
@@ -6574,7 +6582,7 @@ var
 begin
   synch.Action := doCallMethod;
   synch.CallMethodArgs := args;
-  BackGroundExecute(synch, backgroundThread);
+  BackgroundExecute(synch, backgroundThread);
 end;
 
 procedure BackgroundExecuteThreadMethod(const method: TThreadMethod;
@@ -6584,7 +6592,7 @@ var
 begin
   synch.Action := doThreadMethod;
   synch.ThreadMethod := method;
-  BackGroundExecute(synch, backgroundThread);
+  BackgroundExecute(synch, backgroundThread);
 end;
 
 procedure BackgroundExecuteInstanceRelease(instance: TObject;
@@ -6594,7 +6602,7 @@ var
 begin
   synch.Action := doInstanceRelease;
   synch.Instance := instance as TInterfacedObject;
-  BackGroundExecute(synch, backgroundThread);
+  BackgroundExecute(synch, backgroundThread);
 end;
 
 
