@@ -144,7 +144,7 @@ type
     // defined and then any duplicate is ignored and existing index is returned
     // - you may pre-allocate the array with a previous set of Capacity property
     // - a faster alternative is to set the Count then assign values with Items[]
-    function Add(const value: T): PtrInt;
+    function Add(const value: T; wasadded: PBoolean = nil): PtrInt;
     /// insert a new value to the collection
     // - raise ESynList if loCreateUniqueIndex is set: use Remove() then Add()
     procedure Insert(ndx: PtrInt; const value: T);
@@ -300,7 +300,7 @@ type
     fSafe: TRWLock;
     function DoPop(var dest; opt: TListPop): boolean;
     function DoRemove(const value): boolean;
-    function DoAdd(const value): PtrInt;
+    function DoAdd(const value; wasadded: PBoolean): PtrInt;
     function DoAddSorted(const value; wasadded: PBoolean): integer;
     procedure DoInsert(ndx: PtrInt; const value);
     function DoFind(const value; customcompare: TDynArraySortCompare): PtrInt;
@@ -380,7 +380,7 @@ type
     procedure SetItem(ndx: PtrInt; const value: T);
   public
     /// IList<T> method to append a new value to the collection
-    function Add(const value: T): PtrInt;
+    function Add(const value: T; wasadded: PBoolean = nil): PtrInt;
     /// IList<T> method to insert a new value to the collection
     procedure Insert(ndx: PtrInt; const value: T);
     /// IList<T> method to get and remove the last item stored in the collection
@@ -767,7 +767,7 @@ end;
 
 function TSynEnumerator<T>.DoGetCurrent: T;
 begin
-  result := PT(fState.Current)^; // faster than fDynArray^.ItemCopy()
+  result := {%H-}PT(fState.Current)^; // faster than fDynArray^.ItemCopy()
 end;
 
 
@@ -847,7 +847,7 @@ begin
             fDynArray.Delete(ndx);
 end;
 
-function TIListParent.DoAdd(const value): PtrInt;
+function TIListParent.DoAdd(const value; wasadded: PBoolean): PtrInt;
 var
   added: boolean;
   v: PAnsiChar;
@@ -858,9 +858,13 @@ begin
   if h <> nil then
   begin
     result := h^.FindBeforeAdd(@value, added, h^.HashOne(@value));
+    if wasadded <> nil then
+      wasadded^ := added;
     if not added then
       exit; // already existing -> just return previous value index
-  end;
+  end
+  else if wasadded <> nil then
+    wasadded^ := true;
   v := fValue;
   n := fCount;
   if (v = nil) or
@@ -1098,9 +1102,9 @@ begin
   NewEnumerator(result.fState, Offset, Limit);
 end;
 
-function TIList<T>.Add(const value: T): PtrInt;
+function TIList<T>.Add(const value: T; wasadded: PBoolean): PtrInt;
 begin
-  result := DoAdd(value);
+  result := DoAdd(value, wasadded);
 end;
 
 procedure TIList<T>.Insert(ndx: PtrInt; const value: T);
