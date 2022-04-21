@@ -5749,13 +5749,13 @@ end;
 
 const
   DEFAULT_PDF_WIDTH = 600;
-  TtfCFP_MAC_PLATFORMID = 1;
-  TtfCFP_MS_PLATFORMID = 3;
-  TtfCFP_SYMBOL_CHAR_SET = 0;
-  TtfCFP_UNICODE_CHAR_SET = 1;
-  TtfCFP_FLAGS_SUBSET = 1;
-  TtfMFP_SUBSET = 0;
-  TtfCFP_FLAGS_TTC = 4;
+  TTFCFP_MAC_PLATFORMID = 1;
+  TTFCFP_MS_PLATFORMID = 3;
+  TTFCFP_SYMBOL_CHAR_SET = 0;
+  TTFCFP_UNICODE_CHAR_SET = 1;
+  TTFCFP_FLAGS_SUBSET = 1;
+  TTFMFP_SUBSET = 0;
+  TTFCFP_FLAGS_TTC = 4;
   TTCF_TABLE = $66637474;
 
 constructor TPdfFontType1.Create(AXref: TPdfXref; const AName: PdfString;
@@ -5835,13 +5835,13 @@ begin
   off := 0;
   for i := 0 to Header^.numberSubtables - 1 do
     with SubTable^[i] do
-      if platformID = TtfCFP_MS_PLATFORMID then
-        if platformSpecificID = TtfCFP_SYMBOL_CHAR_SET then
+      if platformID = TTFCFP_MS_PLATFORMID then
+        if platformSpecificID = TTFCFP_SYMBOL_CHAR_SET then
         begin
           aUnicodeTtf.fIsSymbolFont := true;
           off := offset;
         end
-        else if platformSpecificID = TtfCFP_UNICODE_CHAR_SET then
+        else if platformSpecificID = TTFCFP_UNICODE_CHAR_SET then
         begin
           aUnicodeTtf.fIsSymbolFont := false;
           off := offset;
@@ -6174,50 +6174,50 @@ procedure TPdfFontTrueType.PrepareForSaving;
 var
   c: AnsiChar;
   i, n, L, ndx, count: integer;
-  Descendants: TPdfArray;
-  Descendant, CIDSystemInfo: TPdfDictionary;
-  ToUnicode: TPdfStream;
-  DS: TStream;
+  fonts: TPdfArray;
+  font, info: TPdfDictionary;
+  tounicode: TPdfStream;
+  str: TStream;
   WR: TPdfWrite;
   ttfSize: cardinal;
   ttf: PdfString;
   {$ifdef USE_UNISCRIBE}
-  SubSetData: PAnsiChar;
-  SubSetMem: cardinal;
-  SubSetSize: cardinal;
-  Used: TSortedWordArray;
-  usFlags: Word;  // For CreateFontPackage
+  subdata: PAnsiChar;
+  submem: cardinal;
+  subsize: cardinal;
+  used: TSortedWordArray;
+  uniflags: Word;  // For CreateFontPackage
   {$endif USE_UNISCRIBE}
   ttcIndex: Word; // For CreateFontPackage
-  tableTag: Longword;
-  ttcNumFonts: Longword;
+  tableTag: LongWord;
+  ttcNumFonts: LongWord;
   ttcBytes: array of byte;
 begin
-  DS := TMemoryStream.Create;
-  WR := TPdfWrite.Create(fDoc, DS);
+  str := TMemoryStream.Create;
+  WR := TPdfWrite.Create(fDoc, str);
   try
     if Unicode then
     begin
       // 1. Unicode Font (see PDF 1.3 reference #5.9)
-      // create descendant font
-      Descendant := TPdfDictionary.Create(fDoc.fXRef);
-      Descendant.AddItem('Type', 'Font');
-      Descendant.AddItem('Subtype', 'CIDFontType2');
-      Descendant.AddItem('BaseFont', FName);
+      // create font font
+      font := TPdfDictionary.Create(fDoc.fXRef);
+      font.AddItem('Type', 'Font');
+      font.AddItem('Subtype', 'CIDFontType2');
+      font.AddItem('BaseFont', FName);
       if fDoc.fPdfA <> pdfaNone then
-        Descendant.AddItem('CIDToGIDMap', 'Identity');
-      CIDSystemInfo := TPdfDictionary.Create(fDoc.fXRef);
-      CIDSystemInfo.AddItem('Supplement', 0);
-      CIDSystemInfo.AddItemText('Ordering', 'Identity');
-      CIDSystemInfo.AddItemText('Registry', 'Adobe');
-      Descendant.AddItem('CIDSystemInfo', CIDSystemInfo);
+        font.AddItem('CIDToGIDMap', 'Identity');
+      info := TPdfDictionary.Create(fDoc.fXRef);
+      info.AddItem('Supplement', 0);
+      info.AddItemText('Ordering', 'Identity');
+      info.AddItemText('Registry', 'Adobe');
+      font.AddItem('CIDSystemInfo', info);
       n := WinAnsiFont.fUsedWideChar.Count;
       if n > 0 then
       begin
         fFirstChar := WinAnsiFont.fUsedWide[0].Glyph;
         fLastChar := WinAnsiFont.fUsedWide[n - 1].Glyph;
       end;
-      Descendant.AddItem('DW', WinAnsiFont.fDefaultWidth);
+      font.AddItem('DW', WinAnsiFont.fDefaultWidth);
       if (fDoc.fPdfA <> pdfaNone) or
          not WinAnsiFont.fFixedWidth then
       begin
@@ -6227,22 +6227,23 @@ begin
           with WinAnsiFont.fUsedWide[i] do
             if int <> 0 then
               WR.Add(Glyph).Add('[').Add(Width).Add(']');
-        Descendant.AddItem('W', TPdfRawText.Create(WR.Add(']').ToPdfString));
+        font.AddItem('W', TPdfRawText.Create(WR.Add(']').ToPdfString));
       end;
-      Descendant.AddItem('FontDescriptor', WinAnsiFont.fFontDescriptor);
-      fDoc.fXRef.AddObject(Descendant);
-      // create and associate descendant fonts array
-      Descendants := TPdfArray.Create(fDoc.fXRef);
-      Descendants.AddItem(Descendant);
-      Data.AddItem('DescendantFonts', Descendants);
-      // create ToUnicode CMaping
-      ToUnicode := TPdfStream.Create(fDoc);
-      ToUnicode.Writer.Add('/CIDInit /ProcSet findresource begin'#10 +
-        '12 dict begin'#10'begincmap'#10'/CIDSystemInfo'#10'<<'#10'/Registry (').Add
-        (ShortCut).Add('+0)'#10'/Ordering (UCS)'#10'/Supplement 0'#10'>> def'#10
-        + '/CMapName /').Add(ShortCut).Add('+0 def'#10'/CMapType 2 def'#10 +
-        '1 begincodespacerange'#10'<').AddHex4(fFirstChar).Add('> <').AddHex4(fLastChar).Add
-        ('>'#10'endcodespacerange'#10);
+      font.AddItem('FontDescriptor', WinAnsiFont.fFontDescriptor);
+      fDoc.fXRef.AddObject(font);
+      // create and associate font fonts array
+      fonts := TPdfArray.Create(fDoc.fXRef);
+      fonts.AddItem(font);
+      Data.AddItem('DescendantFonts', fonts);
+      // create tounicode CMaping
+      tounicode := TPdfStream.Create(fDoc);
+      tounicode.Writer.Add('/CIDInit /ProcSet findresource begin'#10 +
+        '12 dict begin'#10'begincmap'#10'/info'#10'<<'#10'/Registry (').
+        Add(ShortCut).
+        Add('+0)'#10'/Ordering (UCS)'#10'/Supplement 0'#10'>> def'#10 +
+        '/CMapName /').Add(ShortCut).Add('+0 def'#10'/CMapType 2 def'#10 +
+        '1 begincodespacerange'#10'<').AddHex4(fFirstChar).
+        Add('> <').AddHex4(fLastChar).Add('>'#10'endcodespacerange'#10);
       ndx := 0;
       while n > 0 do
       begin
@@ -6254,19 +6255,20 @@ begin
         for i := ndx to ndx + L - 1 do
           if WinAnsiFont.fUsedWide[i].int = 0 then
             dec(count);
-        ToUnicode.Writer.Add(count).Add(' beginbfchar'#10);
+        tounicode.Writer.Add(count).
+                         Add(' beginbfchar'#10);
         for i := ndx to ndx + L - 1 do
           with WinAnsiFont.fUsedWide[i] do
             if int <> 0 then
-              ToUnicode.Writer.Add('<').AddHex4(Glyph).Add('> <').AddHex4(WinAnsiFont.fUsedWideChar.Values
-                [i]).Add('>'#10);
+              tounicode.Writer.Add('<').AddHex4(Glyph).Add('> <').
+                AddHex4(WinAnsiFont.fUsedWideChar.Values[i]).Add('>'#10);
         dec(n, L);
         inc(ndx, L);
-        ToUnicode.Writer.Add('endbfchar'#10);
+        tounicode.Writer.Add('endbfchar'#10);
       end;
-      ToUnicode.Writer.Add('endcmap'#10 +
+      tounicode.Writer.Add('endcmap'#10 +
         'CMapName currentdict /CMap defineresource pop'#10'end'#10'end');
-      Data.AddItem('ToUnicode', ToUnicode);
+      Data.AddItem('ToUnicode', tounicode);
     end
     else
     begin
@@ -6322,7 +6324,7 @@ begin
                ttcIndex, ttcNumFonts) then
             ttcIndex := 0;
           {$ifdef USE_UNISCRIBE}
-          usFlags := TtfCFP_FLAGS_SUBSET or TtfCFP_FLAGS_TTC;
+          uniflags := TTFCFP_FLAGS_SUBSET or TTFCFP_FLAGS_TTC;
           {$endif USE_UNISCRIBE}
           tableTag := TTCF_TABLE;
         end
@@ -6330,7 +6332,7 @@ begin
         begin
           ttfSize := windows.GetFontData(fDoc.fDC, 0, 0, nil, 0);
           {$ifdef USE_UNISCRIBE}
-          usFlags := TtfCFP_FLAGS_SUBSET;
+          uniflags := TTFCFP_FLAGS_SUBSET;
           {$endif USE_UNISCRIBE}
           ttcIndex := 0;
           tableTag := 0;
@@ -6347,21 +6349,21 @@ begin
               HasCreateFontPackage then
             begin
               // subset magic is done by Windows (API available since XP) :)
-              Used.Count := 0;
+              used.Count := 0;
               for i := fFirstChar to fLastChar do
                 if AnsiChar(i) in fWinAnsiUsed then
-                  Used.Add(WinAnsiConvert.AnsiToWide[i]);
+                  used.Add(WinAnsiConvert.AnsiToWide[i]);
               with fUsedWideChar do
                 for i := 0 to count - 1 do
-                  Used.Add(values[i]);
-              if CreateFontPackage(pointer(ttf), ttfSize, SubSetData, SubSetMem,
-                SubSetSize, usFlags, ttcIndex, TtfMFP_SUBSET, 0,
-                TtfCFP_MS_PLATFORMID, TtfCFP_UNICODE_CHAR_SET, pointer(Used.Values),
-                Used.Count, @lpfnAllocate, @lpfnReAllocate, @lpfnFree, nil) = 0 then
+                  used.Add(values[i]);
+              if CreateFontPackage(pointer(ttf), ttfSize, subdata, submem,
+                subsize, uniflags, ttcIndex, TTFMFP_SUBSET, 0,
+                TTFCFP_MS_PLATFORMID, TTFCFP_UNICODE_CHAR_SET, pointer(used.Values),
+                used.Count, @lpfnAllocate, @lpfnReAllocate, @lpfnFree, nil) = 0 then
               begin
                 // subset was created successfully -> save to PDF file
-                FastSetRawByteString(ttf, SubSetData, SubSetSize);
-                FreeMem(SubSetData);
+                FastSetRawByteString(ttf, subdata, subsize);
+                FreeMem(subdata);
               end;
             end;
             {$endif USE_UNISCRIBE}
@@ -6375,7 +6377,7 @@ begin
     end;
   finally
     WR.Free;
-    DS.Free;
+    str.Free;
   end;
 end;
 
@@ -6457,7 +6459,8 @@ begin
   begin
     AddItem(fPage);
     AddItem(TPdfName.Create(PDF_DESTINATION_TYPE_NAMES[fType]));
-    case fType of      // if the type is dtXYZ, only Left, Top and Zoom values are used,
+    case fType of
+      // if the type is dtXYZ, only Left, Top and Zoom values are used,
       // other properties are ignored.
       dtXYZ:
         begin
@@ -6494,13 +6497,15 @@ begin
             AddItem(TPdfNull.Create);
         end;
       // if the type is dtFitH or dtFitBH, only Top property is used.
-      dtFitH, dtFitBH:
+      dtFitH,
+      dtFitBH:
         if fValues[1] >= -DEST_MAX_VALUE then
           AddItem(TPdfNumber.Create(Top))
         else
           AddItem(TPdfNull.Create);
       // if the type is dtFitV or dtFitBV, only Top property is used.
-      dtFitV, dtFitBV:
+      dtFitV,
+      dtFitBV:
         if fValues[0] >= -DEST_MAX_VALUE then
           AddItem(TPdfNumber.Create(Left))
         else
@@ -6512,7 +6517,7 @@ end;
 
 { TPdfOutlineEntry }
 
-constructor TPdfOutlineEntry.Create(AParent: TPdfOutlineEntry; TopPosition: integer = -1);
+constructor TPdfOutlineEntry.Create(AParent: TPdfOutlineEntry; TopPosition: integer);
 begin
   inherited Create;
   if AParent = nil then
@@ -6541,7 +6546,7 @@ begin
   inherited;
 end;
 
-function TPdfOutlineEntry.AddChild(TopPosition: integer = -1): TPdfOutlineEntry;
+function TPdfOutlineEntry.AddChild(TopPosition: integer): TPdfOutlineEntry;
 var
   TmpEntry: TPdfOutlineEntry;
 begin
@@ -6877,8 +6882,9 @@ begin
   result := ann;
 end;
 
-function TPdfDocument.CreateLink(const ARect: TPdfRect; const aBookmarkName:
-  RawUtf8; BorderStyle: TPdfAnnotationBorder; BorderWidth: integer): TPdfDictionary;
+function TPdfDocument.CreateLink(const ARect: TPdfRect;
+  const aBookmarkName: RawUtf8; BorderStyle: TPdfAnnotationBorder;
+  BorderWidth: integer): TPdfDictionary;
 var
   aDest: TPdfDestination;
 begin
@@ -6911,7 +6917,8 @@ begin
   fObjectList.Add(result);
 end;
 
-procedure TPdfDocument.CreateBookMark(TopPosition: single; const aBookmarkName: RawUtf8);
+procedure TPdfDocument.CreateBookMark(TopPosition: single;
+  const aBookmarkName: RawUtf8);
 var
   aDest: TPdfDestination;
   i: integer;
@@ -7024,13 +7031,14 @@ begin
       fFileFormat := pdf14;
     {$ifdef USE_PDFSECURITY}
     if fEncryption <> nil then
-      raise EPdfInvalidOperation.Create('PDF/A not allowed when encryption is enabled');
+      raise EPdfInvalidOperation.Create(
+        'PDF/A not allowed when encryption is enabled');
     {$endif USE_PDFSECURITY}
     fUseFontFallBack := true;
     fOutputIntents := TPdfArray.Create(fXRef);
     dic := TPdfDictionary.Create(fXRef);
     dic.AddItem('Type', 'OutputIntent');
-    dic.AddItem('S', 'GTS_PdfA1');  // there is no definition GTS_PdfA2 or GTS_PdfA3
+    dic.AddItem('S', 'GTS_PdfA1'); // there is no GTS_PdfA2 or GTS_PdfA3
     dic.AddItemText('OutputConditionIdentifier', 'sRGB');
     dic.AddItemText('RegistryName', 'http://www.color.org');
     rgb := TPdfStream.Create(self);
@@ -7068,7 +7076,8 @@ begin
   {$endif USE_PDFSECURITY}
 end;
 
-function TPdfDocument.AddXObject(const AName: PdfString; AXObject: TPdfXObject): integer;
+function TPdfDocument.AddXObject(
+  const AName: PdfString; AXObject: TPdfXObject): integer;
 begin
   if GetXObject(AName) <> nil then
     raise EPdfInvalidValue.CreateUtf8('AddXObject: dup name %', [AName]);
@@ -7077,7 +7086,8 @@ begin
      (AXObject.Attributes = nil) or
      (AXObject.Attributes.TypeOf <> 'XObject') or
      (AXObject.Attributes.PdfNameByName('Subtype') = nil) then
-    raise EPdfInvalidValue.CreateUtf8('AddXObject: invalid TPdfImage %', [AName]);
+    raise EPdfInvalidValue.CreateUtf8(
+      'AddXObject: invalid TPdfImage %', [AName]);
   fXRef.AddObject(AXObject);
   result := RegisterXObject(AXObject, AName);
 end;
@@ -7101,7 +7111,8 @@ begin
   FResources.AddItem('Font', TPdfDictionary.Create(fXRef));
   FResources.AddItem('XObject', TPdfDictionary.Create(fXRef));
   // create page content
-  FResources.AddItem('ProcSet', TPdfArray.CreateNames(fXRef, ['PDF', 'Text', 'ImageC']));
+  FResources.AddItem('ProcSet',
+    TPdfArray.CreateNames(fXRef, ['PDF', 'Text', 'ImageC']));
   result.AddItem('Contents', TPdfStream.Create(self));
   // assign this page to the current PDF canvas
   fCanvas.SetPage(result);
@@ -7109,7 +7120,7 @@ end;
 
 procedure TPdfDocument.FreeDoc;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if fXObjectList <> nil then
   begin
@@ -7140,15 +7151,15 @@ end;
 
 function TPdfDocument.SaveToFile(const aFileName: TFileName): boolean;
 var
-  FS: TFileStream;
+  str: TFileStream;
 begin
   try
-    FS := TFileStream.Create(aFileName, fmCreate);
+    str := TFileStream.Create(aFileName, fmCreate);
     try
-      SaveToStream(FS);
+      SaveToStream(str);
       result := true;
     finally
-      FS.Free;
+      str.Free;
     end;
   except
     on E: Exception do // error on file creation (opened in reader?)
@@ -7182,24 +7193,33 @@ begin
       '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="SynPdf">' +
       '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
       '<rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/">' +
-      '<xmp:CreateDate>')).AddIso8601(Info.CreationDate).Add('Z</xmp:CreateDate>' +
-      '<xmp:ModifyDate>').AddIso8601(Info.ModDate).Add('Z</xmp:ModifyDate>' +
-      '<xmp:CreatorTool>').AddS(Info.Creator).
+      '<xmp:CreateDate>')).AddIso8601(Info.CreationDate).
+      Add('Z</xmp:CreateDate><xmp:ModifyDate>').
+      AddIso8601(Info.ModDate).
+      Add('Z</xmp:ModifyDate><xmp:CreatorTool>').
+      AddS(Info.Creator).
       Add('</xmp:CreatorTool></rdf:Description>' +
       '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">' +
-      '<dc:title><rdf:Alt><rdf:li xml:lang="x-default">').AddS(Info.Title).
+      '<dc:title><rdf:Alt><rdf:li xml:lang="x-default">').
+      AddS(Info.Title).
       Add('</rdf:li></rdf:Alt></dc:title>' +
-      '<dc:creator><rdf:Seq><rdf:li xml:lang="x-default">').AddS(Info.Author).
+      '<dc:creator><rdf:Seq><rdf:li xml:lang="x-default">').
+      AddS(Info.Author).
       Add('</rdf:li></rdf:Seq></dc:creator>' +
       '<dc:description><rdf:Alt><rdf:li xml:lang="x-default">').
-      AddS(Info.Subject).Add('</rdf:li></rdf:Alt></dc:description>' +
+      AddS(Info.Subject).
+      Add('</rdf:li></rdf:Alt></dc:description>' +
       '</rdf:Description>' +
       '<rdf:Description rdf:about="" xmlns:pdf="http://ns.adobe.com/pdf/1.3/">' +
-      '<pdf:Keywords>').AddS(Info.Keywords).Add('</pdf:Keywords>' +
+      '<pdf:Keywords>').
+      AddS(Info.Keywords).
+      Add('</pdf:Keywords>' +
       '<pdf:Producer>' + PDF_PRODUCER + '</pdf:Producer></rdf:Description>' +
       '<rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">' +
-      '<pdfaid:part>').Add(PDFA_APART[fPdfA]).
-      Add('</pdfaid:part><pdfaid:conformance>').Add(PDFA_CONFORMANCE[fPdfA]).
+      '<pdfaid:part>').
+      Add(PDFA_APART[fPdfA]).
+      Add('</pdfaid:part><pdfaid:conformance>').
+      Add(PDFA_CONFORMANCE[fPdfA]).
       Add('</pdfaid:conformance>' +
       '</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>');
   end;
@@ -7280,7 +7300,7 @@ end;
 function TPdfDocument.GetRegisteredNotTrueTypeFont(
   const APdfFontName: PdfString): TPdfFont;
 var
-  i: integer;
+  i: PtrInt;
 begin
   // if specified standard font exists in fontlist, returns it
   with fFontList do
@@ -7297,7 +7317,7 @@ end;
 function TPdfDocument.GetRegisteredTrueTypeFont(AFontIndex: integer;
   AStyle: TPdfFontStyles; ACharSet: byte): TPdfFont;
 var
-  i: integer;
+  i: PtrInt;
 begin
   // if specified font exists in fontlist, returns the WinAnsi version
   if AFontIndex >= 0 then
@@ -7344,7 +7364,7 @@ end;
 
 function TPdfDocument.GetRegisteredTrueTypeFont(const AFontLog: TLogFontW): TPdfFont;
 var
-  i: integer;
+  i: PtrInt;
 begin
   // if specified font exists in fontlist, returns the WinAnsi version
   with fFontList do
@@ -7485,7 +7505,7 @@ begin
   Rec := @name^.FirstNameRecord;
   for i := 0 to name^.Count - 1 do
     if (Rec^.nameID = NAME_POSTCRIPT) and
-       (Rec^.platformID = TtfCFP_MS_PLATFORMID) and
+       (Rec^.platformID = TTFCFP_MS_PLATFORMID) and
        (Rec^.encodingID = 1) and
        (Rec^.languageID = $409) then
     begin
@@ -7534,12 +7554,12 @@ end;
 function TPdfDocument.CreateOrGetImage(B: TBitmap; DrawAt: PPdfBox;
   ClipRc: PPdfBox): PdfString;
 var
-  J: TJpegImage;
-  Img: TPdfImage;
-  Hash: THash128Rec;
+  jpg: TJpegImage;
+  img: TPdfImage;
+  hash: THash128Rec;
   y, w, h, row: integer;
-  nPals: cardinal;
-  Pals: array of TPaletteEntry;
+  palcount: cardinal;
+  pal: array of TPaletteEntry;
 const
   PERROW: array[TPixelFormat] of byte = (0, 1, 4, 8, 15, 16, 24, 32, 0);
 begin
@@ -7550,7 +7570,7 @@ begin
   w := B.Width;
   h := B.Height;
   if ForceNoBitmapReuse then
-    FillCharFast(Hash, sizeof(Hash), 0)
+    FillCharFast(hash, sizeof(hash), 0)
   else
   begin
     row := PERROW[B.PixelFormat];
@@ -7559,51 +7579,50 @@ begin
       B.PixelFormat := pf24bit;
       row := 24;
     end;
-    Hash.c0 := 0;
-    Hash.c1 := 1400305337; // 3 prime numbers
-    Hash.c2 := 2468776129;
-    Hash.c3 := 3121238909;
+    hash.c0 := 0;
+    hash.c1 := 1400305337; // 3 prime numbers
+    hash.c2 := 2468776129;
+    hash.c3 := 3121238909;
     if B.Palette <> 0 then
     begin
-      nPals := 0;
-      if (GetObject(B.Palette, sizeof(nPals), @nPals) <> 0) and
-         (nPals > 0) then
+      palcount := 0;
+      if (GetObject(B.Palette, sizeof(palcount), @palcount) <> 0) and
+         (palcount > 0) then
       begin
-        SetLength(Pals, nPals);
-        if GetPaletteEntries(B.Palette, 0, nPals, Pals[0]) = nPals then
-          DefaultHasher128(@Hash, pointer(Pals), nPals * sizeof(TPaletteEntry));
+        SetLength(pal, palcount);
+        if GetPaletteEntries(B.Palette, 0, palcount, pal[0]) = palcount then
+          DefaultHasher128(@hash, pointer(pal), palcount * sizeof(TPaletteEntry));
       end;
     end;
     row := (((w * row) + 31) and (not 31)) shr 3; // inlined BytesPerScanLine
     for y := 0 to h - 1 do
-      DefaultHasher128(@Hash, B.{%H-}ScanLine[y], row);
-    result := GetXObjectImageName(Hash, w, h); // search for matching image
+      DefaultHasher128(@hash, B.{%H-}ScanLine[y], row);
+    result := GetXObjectImageName(hash, w, h); // search for matching image
   end;
   if result = '' then
   begin
      // create new if no existing TPdfImage match
     if ForceJPEGCompression = 0 then
-      Img := TPdfImage.Create(Canvas.fDoc, B, true)
+      img := TPdfImage.Create(Canvas.fDoc, B, true)
     else
     begin
-      J := TJpegImage.Create;
+      jpg := TJpegImage.Create;
       try
-        J.Assign(B);
-        Img := TPdfImage.Create(Canvas.fDoc, J, false);
+        jpg.Assign(B);
+        img := TPdfImage.Create(Canvas.fDoc, jpg, false);
       finally
-        J.Free;
+        jpg.Free;
       end;
     end;
-    Img.fHash := Hash;
+    img.fHash := hash;
     result := 'SynImg' + UInt32ToPdfString(fXObjectList.ItemCount);
     if ForceJPEGCompression = 0 then
-      AddXObject(result, Img)
+      AddXObject(result, img)
     else
-      RegisterXObject(Img, result);
+      RegisterXObject(img, result);
   end;
   // draw bitmap as XObject
   if DrawAt <> nil then
-  begin
     if ClipRc <> nil then
       with DrawAt^ do
         Canvas.DrawXObjectEx(Left, Top, Width, Height,
@@ -7611,7 +7630,6 @@ begin
     else
       with DrawAt^ do
         Canvas.DrawXObject(Left, Top, Width, Height, result);
-  end;
 end;
 
 function TPdfDocument.CreateOptionalContentGroup(
@@ -7794,36 +7812,36 @@ end;
 
 function TPdfPage.GetResources(const AName: PdfString): TPdfDictionary;
 begin
-  result := PdfDictionaryByName('Resources').PdfDictionaryByName(AName);
+  result := PdfDictionaryByName('Resources').
+            PdfDictionaryByName(AName);
 end;
 
 function TPdfPage.MeasureText(const Text: PdfString; Width: single): integer;
 var
   ch: AnsiChar;
-  tmpWidth: single;
-  tmpTotalWidth: single;
+  w, tot: single;
   i: integer;
 begin
   result := 0;
-  tmpTotalWidth := 0;
+  tot := 0;
   i := 1;
   while i <= Length(Text) do
   begin
     ch := Text[i];
-    tmpWidth := fFont.GetAnsiCharWidth(Text, i) * fFontSize / 1000;
+    w := fFont.GetAnsiCharWidth(Text, i) * fFontSize / 1000;
     if (fHorizontalScaling <> 0) and
        (fHorizontalScaling <> 100) then
-      tmpWidth := tmpWidth * fHorizontalScaling / 100;
-    if tmpWidth > 0 then
-      tmpWidth := tmpWidth + fCharSpace
+      w := w * fHorizontalScaling / 100;
+    if w > 0 then
+      w := w + fCharSpace
     else
-      tmpWidth := 0;
+      w := 0;
     if (ch = ' ') and
        (fWordSpace > 0) and
        (i <> Length(Text)) then
-      tmpWidth := tmpWidth + fWordSpace;
-    tmpTotalWidth := tmpTotalWidth + tmpWidth;
-    if tmpTotalWidth > Width then
+      w := w + fWordSpace;
+    tot := tot + w;
+    if tot > Width then
       Break;
     if SysLocale.FarEast then
       i := NextCharIndex(Text, i)
@@ -7899,26 +7917,26 @@ function TPdfPage.TextWidth(const Text: PdfString): single;
 var
   i: integer;
   ch: AnsiChar;
-  tmpWidth: single;
+  w: single;
 begin
   result := 0;
   i := 1;
   while i <= Length(Text) do
   begin
     ch := Text[i];
-    tmpWidth := fFont.GetAnsiCharWidth(Text, i) * fFontSize / 1000;
+    w := fFont.GetAnsiCharWidth(Text, i) * fFontSize / 1000;
     if (fHorizontalScaling <> 0) and
        (fHorizontalScaling <> 100) then
-      tmpWidth := tmpWidth * fHorizontalScaling / 100;
-    if tmpWidth > 0 then
-      tmpWidth := tmpWidth + fCharSpace
+      w := w * fHorizontalScaling / 100;
+    if w > 0 then
+      w := w + fCharSpace
     else
-      tmpWidth := 0;
+      w := 0;
     if (ch = ' ') and
        (fWordSpace > 0) and
        (i <> Length(Text)) then
-      tmpWidth := tmpWidth + fWordSpace;
-    result := result + tmpWidth;
+      w := w + fWordSpace;
+    result := result + w;
     if SysLocale.FarEast then
       i := NextCharIndex(Text, i)
     else
@@ -7946,7 +7964,7 @@ end;
 
 function TPdfCanvas.GetPage: TPdfPage;
 begin
-  if (Self <> nil) and
+  if (self <> nil) and
      (fPage <> nil) then
     result := fPage
   else
@@ -8154,18 +8172,18 @@ const
     'TIMES', 'HELVETICA', 'COURIER');
 
 function TPdfCanvas.SetFont(const AName: RawUtf8; ASize: single;
-  AStyle: TPdfFontStyles; ACharSet, AForceTtf: integer ;
+  AStyle: TPdfFontStyles; ACharSet, AForceTtf: integer;
   AIsFixedWidth: boolean): TPdfFont;
 
   procedure SetEmbeddedFont(Standard: TPdfFontStandard);
   var
-    BaseIndex: integer;
+    base: PtrInt;
   begin
-    BaseIndex := ord(Standard) * 4 + (byte(AStyle) and 3);
-    result := fDoc.GetRegisteredNotTrueTypeFont(STANDARDFONTS[BaseIndex].name);
+    base := ord(Standard) * 4 + (byte(AStyle) and 3);
+    result := fDoc.GetRegisteredNotTrueTypeFont(STANDARDFONTS[base].name);
     if result = nil then
     begin // font not already registered -> add now
-      with STANDARDFONTS[BaseIndex] do
+      with STANDARDFONTS[base] do
         result := TPdfFontType1.Create(fDoc.fXRef, name, Widths);
       fDoc.RegisterFont(result);
     end;
@@ -8173,8 +8191,8 @@ function TPdfCanvas.SetFont(const AName: RawUtf8; ASize: single;
   end;
 
 var
-  AFont: TLogFontW;
-  FontIndex: integer;
+  lf: TLogFontW;
+  ndx: integer;
   f: TPdfFontStandard;
 begin
   result := nil;
@@ -8183,7 +8201,7 @@ begin
     exit; // avoid GPF
   if AForceTtf >= 0 then
     // an existing true type font has been specified
-    FontIndex := AForceTtf
+    ndx := AForceTtf
   else
   begin
     // handle use embedded fonts for standard fonts, if needed
@@ -8202,41 +8220,41 @@ begin
     end;
     if (fPreviousRasterFontName <> '') and
        (fPreviousRasterFontName = AName) then
-      FontIndex := fPreviousRasterFontIndex
+      ndx := fPreviousRasterFontIndex
     else
     begin
       // search the font in the global system-wide true type fonts list
-      FontIndex := fDoc.GetTrueTypeFontIndex(AName);
-      if FontIndex < 0 then
+      ndx := fDoc.GetTrueTypeFontIndex(AName);
+      if ndx < 0 then
       begin // unknown, device or raster font
         if AIsFixedWidth then // sounds to be fixed-width -> set 'Courier New'
-          FontIndex := fDoc.GetTrueTypeFontIndex(STAND_FONTS_WIN[pfsCourier]);
+          ndx := fDoc.GetTrueTypeFontIndex(STAND_FONTS_WIN[pfsCourier]);
         // do not exist as is: find equivalency of some "standard" font
         for f := low(f) to high(f) do
-          if (FontIndex < 0) and
+          if (ndx < 0) and
              IdemPChar(pointer(AName), STAND_FONTS_UPPER[f]) then
-            FontIndex := fDoc.GetTrueTypeFontIndex(STAND_FONTS_WIN[f]);
-        if FontIndex < 0 then
+            ndx := fDoc.GetTrueTypeFontIndex(STAND_FONTS_WIN[f]);
+        if ndx < 0 then
         begin // use variable width default font
-          FontIndex := fDoc.fFontFallBackIndex;
-          if FontIndex < 0 then
-            FontIndex := fDoc.GetTrueTypeFontIndex('Arial');
-          if FontIndex < 0 then
+          ndx := fDoc.fFontFallBackIndex;
+          if ndx < 0 then
+            ndx := fDoc.GetTrueTypeFontIndex('Arial');
+          if ndx < 0 then
             exit;
         end;
         fPreviousRasterFontName := AName;
-        fPreviousRasterFontIndex := FontIndex;
+        fPreviousRasterFontIndex := ndx;
       end;
     end;
   end;
   if ACharSet < 0 then
     ACharSet := fDoc.CharSet; // force the current PDF Document charset
-  result := fDoc.GetRegisteredTrueTypeFont(FontIndex + 1, AStyle, ACharSet);
+  result := fDoc.GetRegisteredTrueTypeFont(ndx + 1, AStyle, ACharSet);
   if result = nil then
   begin
     // a font of this kind is not already registered -> create it
-    FillCharFast(AFont, sizeof(AFont), 0);
-    with AFont do
+    FillCharFast(lf, sizeof(lf), 0);
+    with lf do
     begin
       lfHeight := -1000;
       if pfsBold in AStyle then
@@ -8247,10 +8265,10 @@ begin
       lfUnderline := Byte(pfsUnderline in AStyle);
       lfStrikeOut := Byte(pfsStrikeOut in AStyle);
       lfCharSet := ACharSet;
-      Utf8ToWideChar(lfFaceName, pointer(fDoc.fTrueTypeFonts[FontIndex]));
+      Utf8ToWideChar(lfFaceName, pointer(fDoc.fTrueTypeFonts[ndx]));
     end;
     // we register now the WinAnsi font to the associated fDoc
-    result := TPdfFontTrueType.Create(fDoc, FontIndex, AStyle, AFont, nil);
+    result := TPdfFontTrueType.Create(fDoc, ndx, AStyle, lf, nil);
   end;
   if AForceTtf < 0 then
     SetPdfFont(result, ASize);
@@ -8258,8 +8276,8 @@ end;
 
 function TPdfCanvas.SetFont(ADC: HDC; const ALogFont: TLogFontW; ASize: single): TPdfFont;
 var
-  AStyle: TPdfFontStyles;
-  AName: RawUtf8;
+  pfs: TPdfFontStyles;
+  name: RawUtf8;
 begin
   // try if the font is already registered
   result := fDoc.GetRegisteredTrueTypeFont(ALogFont);
@@ -8269,18 +8287,18 @@ begin
     exit;
   end;
   // font is not existing -> create new
-  AName := RawUnicodeToUtf8(ALogFont.lfFaceName, StrLenW(ALogFont.lfFaceName));
+  name := RawUnicodeToUtf8(ALogFont.lfFaceName, StrLenW(ALogFont.lfFaceName));
   if ALogFont.lfItalic <> 0 then
-    AStyle := [pfsItalic]
+    pfs := [pfsItalic]
   else
-    byte(AStyle) := 0;
+    byte(pfs) := 0;
   if ALogFont.lfUnderline <> 0 then
-    include(AStyle, pfsUnderline);
+    include(pfs, pfsUnderline);
   if ALogFont.lfStrikeOut <> 0 then
-    include(AStyle, pfsStrikeOut);
+    include(pfs, pfsStrikeOut);
   if ALogFont.lfWeight >= FW_SEMIBOLD then
-    include(AStyle, pfsBold);
-  result := SetFont(AName, ASize, AStyle, ALogFont.lfCharSet, -1,
+    include(pfs, pfsBold);
+  result := SetFont(name, ASize, pfs, ALogFont.lfCharSet, -1,
     ALogFont.lfPitchAndFamily and TMPF_FIXED_PITCH = 0);
 end;
 
@@ -8307,18 +8325,18 @@ end;
 procedure TPdfCanvas.TextRect(ARect: TPdfRect; const Text: PdfString;
   Alignment: TPdfAlignment; Clipping: boolean);
 var
-  tmpWidth: single;
-  XPos: single;
+  w: single;
+  x: single;
 begin
   // calculate text width and corresponding X position according to alignment
-  tmpWidth := TextWidth(Text);
+  w := TextWidth(Text);
   case Alignment of
     paCenter:
-      XPos := Round((ARect.Right - ARect.Left - tmpWidth) / 2);
+      x := Round((ARect.Right - ARect.Left - w) / 2);
     paRightJustify:
-      XPos := ARect.Right - ARect.Left - Round(tmpWidth);
+      x := ARect.Right - ARect.Left - Round(w);
   else
-    XPos := 0;
+    x := 0;
   end;
   // clipping client rect if needed
   if Clipping then
@@ -8337,7 +8355,7 @@ begin
   end;
   // show the text in the specified rectangle and alignment
   BeginText;
-  MoveTextPoint(ARect.Left + XPos, ARect.Top - fPage.FontSize * 0.85);
+  MoveTextPoint(ARect.Left + x, ARect.Top - fPage.FontSize * 0.85);
   ShowText(Text);
   EndText;
   if Clipping then
@@ -8347,67 +8365,63 @@ end;
 procedure TPdfCanvas.MultilineTextRect(ARect: TPdfRect; const Text: PdfString;
   WordWrap: boolean);
 var
-  i: integer;
-  S1, S2: PdfString;
-  XPos, YPos: single;
-  tmpXPos: single;
-  tmpWidth: single;
-  ln: integer;
-  ForceNL: boolean;
-  FText: PdfString;
+  i, ln: integer;
+  txt, s1, s2: PdfString;
+  xp, yp, xp2, w: single;
+  newline: boolean;
 
-  procedure ShowTextClip(S: PdfString; AWidth: single);
+  procedure ShowTextClip(txt: PdfString; w: single);
   begin
-    ShowText(copy(S, 1, MeasureText(S, AWidth))); // simple clipping
+    ShowText(copy(txt, 1, MeasureText(txt, w))); // simple clipping
   end;
 
 begin
-  YPos := ARect.Top - fPage.FontSize * 0.85;
-  XPos := ARect.Left;
-  FText := Text;
+  yp := ARect.Top - fPage.FontSize * 0.85;
+  xp := ARect.Left;
+  txt := Text;
   BeginText;
-  MoveTextPoint(XPos, YPos);
+  MoveTextPoint(xp, yp);
   i := 1;
-  S2 := GetNextWord(FText, i);
-  XPos := XPos + TextWidth(S2);
-  if (S2 <> '') and
-     (S2[Length(S2)] = ' ') then
-    XPos := XPos + fPage.WordSpace;
-  while i <= Length(FText) do
+  s2 := GetNextWord(txt, i);
+  xp := xp + TextWidth(s2);
+  if (s2 <> '') and
+     (s2[Length(s2)] = ' ') then
+    xp := xp + fPage.WordSpace;
+  while i <= Length(txt) do
   begin
-    ln := Length(S2);
+    ln := Length(s2);
     if (ln >= 2) and
-       (S2[ln] = #10) and
-       (S2[ln - 1] = #13) then
+       (s2[ln] = #10) and
+       (s2[ln - 1] = #13) then
     begin
-      S2 := copy(S2, 1, ln - 2);
-      ForceNL := true;
+      s2 := copy(s2, 1, ln - 2);
+      newline := true;
     end
     else
-      ForceNL := false;
-    S1 := GetNextWord(FText, i);
-    tmpWidth := TextWidth(S1);
-    tmpXPos := XPos + tmpWidth;
-    if (WordWrap and (tmpXPos > ARect.Right)) or
-       ForceNL then
+      newline := false;
+    s1 := GetNextWord(txt, i);
+    w := TextWidth(s1);
+    xp2 := xp + w;
+    if (WordWrap and (xp2 > ARect.Right)) or
+       newline then
     begin
-      if S2 <> '' then
-        ShowTextClip(S2, ARect.Right - ARect.Left);
-      S2 := '';
+      if s2 <> '' then
+        ShowTextClip(s2, ARect.Right - ARect.Left);
+      s2 := '';
       MoveToNextLine;
       ARect.Top := ARect.Top - fPage.Leading;
       if ARect.Top < ARect.Bottom + fPage.FontSize then
         Break;
-      XPos := ARect.Left;
+      xp := ARect.Left;
     end;
-    XPos := XPos + tmpWidth;
-    if (S1 <> '') and
-       (S1[Length(S1)] = ' ') then
-      XPos := XPos + fPage.WordSpace;
-    S2 := S2 + S1;
+    xp := xp + w;
+    if (s1 <> '') and
+       (s1[Length(s1)] = ' ') then
+      xp := xp + fPage.WordSpace;
+    s2 := s2 + s1;
   end;
-  if S2 <> '' then
-    ShowTextClip(S2, ARect.Right - ARect.Left);
+  if s2 <> '' then
+    ShowTextClip(s2, ARect.Right - ARect.Left);
   EndText;
 end;
 
@@ -8823,20 +8837,20 @@ end;
 
 function TPdfCanvas.UnicodeTextWidth(PW: PWideChar): single;
 var
-  Ansi: PdfString;
-  i, W, glyphW: integer;
+  s: PdfString;
+  i, w, w2: integer;
 begin
-  W := 0;
+  w := 0;
   if PW <> nil then
     if fPage.fFont.FTrueTypeFontsIndex = 0 then
     begin
-      Ansi := fDoc.Engine.UnicodeBufferToAnsi(PW, StrLenW(PW));
+      s := fDoc.Engine.UnicodeBufferToAnsi(PW, StrLenW(PW));
       i := 1;
-      while i <= length(Ansi) do
+      while i <= length(s) do
       begin // loop is MBCS ready
-        inc(W, fPage.fFont.GetAnsiCharWidth(Ansi, i));
+        inc(w, fPage.fFont.GetAnsiCharWidth(s, i));
         if SysLocale.FarEast then
-          i := NextCharIndex(Ansi, i)
+          i := NextCharIndex(s, i)
         else
           inc(i);
       end;
@@ -8845,18 +8859,18 @@ begin
       with TPdfFontTrueType(fPage.fFont).WinAnsiFont do
         while PW^ <> #0 do
         begin
-          glyphW := GetWideCharWidth(PW^);
-          if (glyphW = 0) and
+          w2 := GetWideCharWidth(PW^);
+          if (w2 = 0) and
              (fDoc.fUseFontFallBack) and
              (fDoc.fFontFallBackIndex >= 0) then
-            glyphW := (SetFont('', fPage.FontSize, fStyle, -1,
+            w2 := (SetFont('', fPage.FontSize, fStyle, -1,
               fDoc.fFontFallBackIndex) as TPdfFontTrueType).GetWideCharWidth(PW^);
-          if glyphW = 0 then
-            glyphW := DEFAULT_PDF_WIDTH;
-          inc(W, glyphW);
+          if w2 = 0 then
+            w2 := DEFAULT_PDF_WIDTH;
+          inc(w, w2);
           inc(PW);
         end;
-  result := (W * fPage.fFontSize) / 1000;
+  result := (w * fPage.fFontSize) / 1000;
 end;
 
 function TPdfCanvas.MeasureText(const Text: PdfString; AWidth: single): integer;
@@ -9022,9 +9036,10 @@ procedure TPdfCanvas.ArcI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer;
   clockwise: boolean; arctype: TPdfCanvasArcType; var position: TPoint);
 var
   res: teaDrawArray;
-  i: integer;
+  i: PtrInt;
 begin
-  if CalcCurveArcData(centerx, centery, W, H, Sx, Sy, Ex, Ey, clockwise, arctype, res) then
+  if CalcCurveArcData(
+       centerx, centery, W, H, Sx, Sy, Ex, Ey, clockwise, arctype, res) then
     for i := 0 to High(res) do
       with res[i] do
         case res of
@@ -9169,21 +9184,21 @@ end;
 
 function TPdfInfo.GetCreationDate: TDateTime;
 var
-  P: TPdfText;
+  p: TPdfText;
 begin
-  P := fData.PdfTextByName('CreationDate');
-  if (P = nil) or
-     not PdfDateToDateTime(P.Value, result) then
+  p := fData.PdfTextByName('CreationDate');
+  if (p = nil) or
+     not PdfDateToDateTime(p.Value, result) then
     result := 0;
 end;
 
 function TPdfInfo.GetModDate: TDateTime;
 var
-  P: TPdfText;
+  p: TPdfText;
 begin
-  P := fData.PdfTextByName('ModDate');
-  if (P = nil) or
-     not PdfDateToDateTime(P.Value, result) then
+  p := fData.PdfTextByName('ModDate');
+  if (p = nil) or
+     not PdfDateToDateTime(p.Value, result) then
     result := 0;
 end;
 
@@ -9394,30 +9409,30 @@ end;
 constructor TPdfImage.Create(aDoc: TPdfDocument; aImage: TGraphic;
   DontAddToFXref: boolean);
 var
-  B: TBitmap;
-  PInc, y: integer;
-  Pal: PdfString;
-  Pals: array of TPaletteEntry;
-  CA: TPdfArray;
-  TransparentColor: TPdfColorRGB;
+  bmp: TBitmap;
+  pinc, y: integer;
+  pal: PdfString;
+  entry: array of TPaletteEntry;
+  ca: TPdfArray;
+  transcolor: TPdfColorRGB;
 
   procedure NeedBitmap(PF: TPixelFormat);
   begin
-    B := TBitmap.Create; // create a temp bitmap (pixelformat may change)
-    B.PixelFormat := PF;
-    B.Width := fPixelWidth;
-    B.Height := fPixelHeight;
-    B.Canvas.Draw(0, 0, aImage);
+    bmp := TBitmap.Create; // create a temp bitmap (pixelformat may change)
+    bmp.PixelFormat := PF;
+    bmp.Width := fPixelWidth;
+    bmp.Height := fPixelHeight;
+    bmp.Canvas.Draw(0, 0, aImage);
   end;
 
-  procedure WritePal(P: PAnsiChar; Pal: PPaletteEntry);
+  procedure WritePal(P: PAnsiChar; pal: PPaletteEntry);
   var
     i: integer;
   begin
     P^ := '<';
     inc(P);
     for i := 0 to 255 do
-      with Pal^ do
+      with pal^ do
       begin
         P[0] := HexChars[peRed shr 4];
         P[1] := HexChars[peRed and $F];
@@ -9427,7 +9442,7 @@ var
         P[5] := HexChars[peBlue and $F];
         P[6] := ' ';
         inc(P, 7);
-        inc(Pal);
+        inc(pal);
       end;
     P^ := '>';
   end;
@@ -9459,57 +9474,57 @@ begin
   else
   begin
     if aImage.InheritsFrom(TBitmap) then
-      B := TBitmap(aImage)
+      bmp := TBitmap(aImage)
     else
       NeedBitmap(pf24bit);
     try
-      case B.PixelFormat of
+      case bmp.PixelFormat of
         pf1bit,
         pf4bit,
         pf8bit:
           begin
-            if B.PixelFormat <> pf8bit then
+            if bmp.PixelFormat <> pf8bit then
               NeedBitmap(pf8bit);
-            SetLength(Pals, 256);
-            if GetPaletteEntries(B.Palette, 0, 256, Pals[0]) <> 256 then
+            SetLength(entry, 256);
+            if GetPaletteEntries(bmp.Palette, 0, 256, entry[0]) <> 256 then
               raise EPdfInvalidValue.Create('TPdfImage');
-            SetLength(Pal, 7 * 256 + 2);
-            WritePal(pointer(Pal), pointer(Pals));
-            CA := TPdfArray.Create(nil);
-            CA.AddItem(TPdfName.Create('Indexed'));
-            CA.AddItem(TPdfName.Create('DeviceRGB'));
-            CA.AddItem(TPdfNumber.Create(255));
-            CA.AddItem(TPdfRawText.Create(Pal));
-            fAttributes.AddItem('ColorSpace', CA);
+            SetLength(pal, 7 * 256 + 2);
+            WritePal(pointer(pal), pointer(entry));
+            ca := TPdfArray.Create(nil);
+            ca.AddItem(TPdfName.Create('Indexed'));
+            ca.AddItem(TPdfName.Create('DeviceRGB'));
+            ca.AddItem(TPdfNumber.Create(255));
+            ca.AddItem(TPdfRawText.Create(pal));
+            fAttributes.AddItem('ColorSpace', ca);
             for y := 0 to fPixelHeight - 1 do
-              fWriter.Add(PAnsiChar(B.{%H-}ScanLine[y]), fPixelWidth);
+              fWriter.Add(PAnsiChar(bmp.{%H-}ScanLine[y]), fPixelWidth);
           end;
       else
         begin
           fAttributes.AddItem('ColorSpace', 'DeviceRGB');
-          if not (B.PixelFormat in [pf24bit, pf32bit]) then
+          if not (bmp.PixelFormat in [pf24bit, pf32bit]) then
             NeedBitmap(pf24bit);
-          if B.PixelFormat = pf24bit then
-            PInc := 3
+          if bmp.PixelFormat = pf24bit then
+            pinc := 3
           else
-            PInc := 4;
+            pinc := 4;
           for y := 0 to fPixelHeight - 1 do
-            fWriter.AddRGB(B.{%H-}ScanLine[y], PInc, fPixelWidth);
-          if (PInc = 3) and
-             (B.TransparentMode = tmFixed) then
+            fWriter.AddRGB(bmp.{%H-}ScanLine[y], pinc, fPixelWidth);
+          if (pinc = 3) and
+             (bmp.TransparentMode = tmFixed) then
           begin
             // [ min1 max1 ... minn maxn ]
-            TransparentColor := B.TransparentColor;
+            transcolor := bmp.TransparentColor;
             fAttributes.AddItem('Mask', TPdfArray.CreateReals(nil,
-              [(TransparentColor and $ff), (TransparentColor and $ff),
-               (TransparentColor shr 8 and $ff), (TransparentColor shr 8 and $ff),
-               (TransparentColor shr 16 and $ff), (TransparentColor shr 16 and $ff)]));
+              [(transcolor and $ff), (transcolor and $ff),
+               (transcolor shr 8 and $ff), (transcolor shr 8 and $ff),
+               (transcolor shr 16 and $ff), (transcolor shr 16 and $ff)]));
           end;
         end;
       end;
     finally
-      if B <> aImage then
-        B.Free;
+      if bmp <> aImage then
+        bmp.Free;
     end;
   end;
   fAttributes.AddItem('Width', fPixelWidth);
@@ -9534,21 +9549,21 @@ end;
 constructor TPdfImage.CreateJpegDirect(aDoc: TPdfDocument;
   aJpegFile: TMemoryStream; DontAddToFXref: boolean);
 var
-  Len, BitDepth: integer;
+  len, bits: integer;
 begin
   inherited Create(aDoc, DontAddToFXref);
-  Len := aJpegFile.Size;
-  if not GetJpegSize(aJpegFile.Memory, Len, fPixelWidth, fPixelHeight, BitDepth) then
+  len := aJpegFile.Size;
+  if not GetJpegSize(aJpegFile.Memory, len, fPixelWidth, fPixelHeight, bits) then
     exit; // JPEG format expected
   fAttributes.AddItem('Type', 'XObject');
   fAttributes.AddItem('Subtype', 'Image');
   fFilter := 'DCTDecode';
   fWriter.Save; // flush to allow direct access to fDestStream
-  fWriter.Add(aJpegFile.Memory, Len);
+  fWriter.Add(aJpegFile.Memory, len);
   fWriter.fDestStreamPosition := fWriter.fDestStream.Seek(0, soCurrent);
   fAttributes.AddItem('Width', fPixelWidth);
   fAttributes.AddItem('Height', fPixelHeight);
-  case BitDepth of
+  case bits of
     8:
       fAttributes.AddItem('ColorSpace', 'DeviceGray');
     24:
@@ -9562,13 +9577,13 @@ end;
 
 constructor TPdfFormWithCanvas.Create(aDoc: TPdfDocument; W, H: integer);
 var
-  FResources: TPdfDictionary;
+  res: TPdfDictionary;
 begin
   inherited Create(aDoc, true);
-  FResources := TPdfDictionary.Create(aDoc.fXRef);
+  res := TPdfDictionary.Create(aDoc.fXRef);
   fFontList := TPdfDictionary.Create(nil);
-  FResources.AddItem('Font', fFontList);
-  FResources.AddItem('ProcSet',
+  res.AddItem('Font', fFontList);
+  res.AddItem('ProcSet',
     TPdfArray.CreateNames(nil, ['PDF', 'Text', 'ImageC']));
   fPage := TPdfPage.Create(nil);
   fCanvas := TPdfCanvas.Create(aDoc);
@@ -9580,7 +9595,7 @@ begin
   fAttributes.AddItem('Subtype', 'Form');
   fAttributes.AddItem('BBox', TPdfArray.Create(nil, [0, 0, W, H]));
   fAttributes.AddItem('Matrix', TPdfRawText.Create('[1 0 0 1 0 0]'));
-  fAttributes.AddItem('Resources', FResources);
+  fAttributes.AddItem('Resources', res);
 end;
 
 destructor TPdfFormWithCanvas.Destroy;
@@ -9672,10 +9687,10 @@ const
   FLAGBIT: array[TPdfEncryptionPermission] of byte = (
     2, 3, 4, 5, 8, 9, 10, 11);
 var
-  RC4: TRC4;
-  MD5: TMD5;
+  rc4: TRC4;
+  md5: TMD5;
   f: TPdfEncryptionPermission;
-  Digest, Digest2: TMD5Digest;
+  dig, dig2: TMD5Digest;
   i, j: integer;
   own, usr: TPdfBuffer32;
 begin
@@ -9690,54 +9705,54 @@ begin
   // calc fOwnerPass key (Algorithm 3.3 in PDF reference doc)
   Pad(fUserPassword, usr);
   Pad(fOwnerPassword, own);
-  MD5.Full(@own, SizeOf(own), Digest);
+  md5.Full(@own, SizeOf(own), dig);
   if fLevel = elRC4_128 then
     for i := 1 to 50 do
-      MD5.Full(@Digest, sizeof(Digest), Digest);
-  RC4.Init(Digest, HASHSIZE[fLevel]);
-  RC4.Encrypt(usr, fOwnerPass, sizeof(fOwnerPass));
+      md5.Full(@dig, sizeof(dig), dig);
+  rc4.Init(dig, HASHSIZE[fLevel]);
+  rc4.Encrypt(usr, fOwnerPass, sizeof(fOwnerPass));
   if fLevel = elRC4_128 then
     for i := 1 to 19 do
     begin
-      for j := 0 to high(Digest2) do
-        Digest2[j] := Digest[j] xor i;
-      RC4.Init(Digest2, sizeof(Digest2));
-      RC4.Encrypt(fOwnerPass, fOwnerPass, sizeof(fOwnerPass));
+      for j := 0 to high(dig2) do
+        dig2[j] := dig[j] xor i;
+      rc4.Init(dig2, sizeof(dig2));
+      rc4.Encrypt(fOwnerPass, fOwnerPass, sizeof(fOwnerPass));
     end;
   // calc main file key (Algorithm 3.2 in PDF reference doc)
-  MD5.Init;
-  MD5.Update(usr, SizeOf(usr));
-  MD5.Update(fOwnerPass, sizeof(fOwnerPass));
-  MD5.Update(fFlags, sizeof(fFlags));
-  MD5.Update(aDoc.fFileID, sizeof(aDoc.fFileID));
-  MD5.final(Digest);
+  md5.Init;
+  md5.Update(usr, SizeOf(usr));
+  md5.Update(fOwnerPass, sizeof(fOwnerPass));
+  md5.Update(fFlags, sizeof(fFlags));
+  md5.Update(aDoc.fFileID, sizeof(aDoc.fFileID));
+  md5.final(dig);
   if fLevel = elRC4_128 then
     for i := 1 to 50 do
-      MD5.Full(@Digest, sizeof(Digest), Digest);
+      md5.Full(@dig, sizeof(dig), dig);
   SetLength(fInternalKey, HASHSIZE[fLevel]);
-  MoveFast(Digest, fInternalKey[0], HASHSIZE[fLevel]);
+  MoveFast(dig, fInternalKey[0], HASHSIZE[fLevel]);
   // calc fUserPass content
   case fLevel of
     elRC4_40:
       begin   // Algorithm 3.4 in PDF reference doc
-        RC4.Init(fInternalKey[0], HASHSIZE[fLevel]);
-        RC4.Encrypt(PDF_PADDING, fUserPass, sizeof(PDF_PADDING));
+        rc4.Init(fInternalKey[0], HASHSIZE[fLevel]);
+        rc4.Encrypt(PDF_PADDING, fUserPass, sizeof(PDF_PADDING));
       end;
     elRC4_128:
       begin  // Algorithm 3.5 in PDF reference doc
-        MD5.Init;
-        MD5.Update(PDF_PADDING, sizeof(PDF_PADDING));
-        MD5.Update(aDoc.fFileID, sizeof(aDoc.fFileID));
-        MD5.final(Digest);
+        md5.Init;
+        md5.Update(PDF_PADDING, sizeof(PDF_PADDING));
+        md5.Update(aDoc.fFileID, sizeof(aDoc.fFileID));
+        md5.final(dig);
         for i := 0 to 19 do
         begin
-          for j := 0 to high(Digest2) do
-            Digest2[j] := fInternalKey[j] xor i;
-          RC4.Init(Digest2, SizeOf(Digest2));
-          RC4.Encrypt(Digest, Digest, SizeOf(Digest));
+          for j := 0 to high(dig2) do
+            dig2[j] := fInternalKey[j] xor i;
+          rc4.Init(dig2, SizeOf(dig2));
+          rc4.Encrypt(dig, dig, SizeOf(dig));
         end;
-        MoveFast(Digest, fUserPass, SizeOf(Digest));
-        MoveFast(Digest, fUserPass[SizeOf(Digest)], SizeOf(Digest));
+        MoveFast(dig, fUserPass, SizeOf(dig));
+        MoveFast(dig, fUserPass[SizeOf(dig)], SizeOf(dig));
       end;
   end;
   // add encryption dictionary object
@@ -9904,7 +9919,7 @@ end;
 procedure TPdfPageGdi.SetVclCurrentMetaFile;
 var
   tmp: RawByteString;
-  Stream: TStream;
+  str: TStream;
 begin
   assert(fVclCurrentMetaFile = nil);
   fVclCurrentMetaFile := TMetaFile.Create;
@@ -9917,11 +9932,11 @@ begin
     SetLength(tmp, SynLZdecompressdestlen(pointer(fVclMetaFileCompressed)));
     SynLZdecompress1(pointer(fVclMetaFileCompressed),
       length(fVclMetaFileCompressed), pointer(tmp));
-    Stream := TRawByteStringStream.Create(tmp);
+    str := TRawByteStringStream.Create(tmp);
     try
-      fVclCurrentMetaFile.LoadFromStream(Stream);
+      fVclCurrentMetaFile.LoadFromStream(str);
     finally
-      Stream.Free;
+      str.Free;
     end;
   end;
 end;
@@ -9934,7 +9949,7 @@ end;
 
 procedure TPdfPageGdi.FlushVclCanvas;
 var
-  Stream: TRawByteStringStream;
+  str: TRawByteStringStream;
   len: integer;
 begin
   if (self = nil) or
@@ -9942,15 +9957,15 @@ begin
     exit;
   FreeAndNil(fVclCurrentCanvas);
   assert(fVclCurrentMetaFile <> nil);
-  Stream := TRawByteStringStream.Create;
+  str := TRawByteStringStream.Create;
   try
-    fVclCurrentMetaFile.SaveToStream(Stream);
-    len := Length(Stream.DataString);
+    fVclCurrentMetaFile.SaveToStream(str);
+    len := Length(str.DataString);
     SetLength(fVclMetaFileCompressed, SynLZcompressdestlen(len));
     SetLength(fVclMetaFileCompressed, SynLZcompress1(
-      pointer(Stream.DataString), len, pointer(fVclMetaFileCompressed)));
+      pointer(str.DataString), len, pointer(fVclMetaFileCompressed)));
   finally
-    Stream.Free;
+    str.Free;
   end;
   FreeAndNil(fVclCurrentMetaFile);
 end;
@@ -9968,40 +9983,40 @@ end;
 constructor TPdfForm.Create(aDoc: TPdfDocumentGdi; aMetaFile: TMetafile);
 var
   P: TPdfPageGdi;
-  FResources: TPdfDictionary;
-  W, H: integer;
-  oldPage: TPdfPage;
+  res: TPdfDictionary;
+  w, h: integer;
+  old: TPdfPage;
 begin
   inherited Create(aDoc, true);
-  W := aMetaFile.Width;
-  H := aMetaFile.Height;
+  w := aMetaFile.Width;
+  h := aMetaFile.Height;
   P := TPdfPageGdi.Create(nil);
   try
-    FResources := TPdfDictionary.Create(aDoc.fXRef);
+    res := TPdfDictionary.Create(aDoc.fXRef);
     fFontList := TPdfDictionary.Create(nil);
-    FResources.AddItem('Font', fFontList);
-    FResources.AddItem('ProcSet',
+    res.AddItem('Font', fFontList);
+    res.AddItem('ProcSet',
       TPdfArray.CreateNames(nil, ['PDF', 'Text', 'ImageC']));
     with aDoc.fCanvas do
     begin
-      oldPage := fPage;
+      old := fPage;
       fPage := P;
       try
         fPageFontList := fFontList;
         fContents := self;
-        fPage.SetPageHeight(H);
+        fPage.SetPageHeight(h);
         fFactor := 1;
         RenderMetaFile(aDoc.fCanvas, aMetaFile);
       finally
-        if oldPage <> nil then
-          SetPage(oldPage);
+        if old <> nil then
+          SetPage(old);
       end;
     end;
     fAttributes.AddItem('Type', 'XObject');
     fAttributes.AddItem('Subtype', 'Form');
-    fAttributes.AddItem('BBox', TPdfArray.Create(nil, [0, 0, W, H]));
+    fAttributes.AddItem('BBox', TPdfArray.Create(nil, [0, 0, w, h]));
     fAttributes.AddItem('Matrix', TPdfRawText.Create('[1 0 0 1 0 0]'));
-    fAttributes.AddItem('Resources', FResources);
+    fAttributes.AddItem('Resources', res);
   finally
     P.Free;
   end;
@@ -10014,7 +10029,7 @@ type
   end;
 
   TPdfEnumStatePen = record
-    null: boolean;
+    Null: boolean;
     Color, style: integer;
     Width: single;
   end;
@@ -10022,7 +10037,7 @@ type
   /// a state of the EMF enumeration engine, for the PDF canvas
   // - used also for the SaveDC/RestoreDC stack
   TPdfEnumState = record
-    position: TPoint;
+    Position: TPoint;
     Moved: boolean;
     WinSize, ViewSize: TSize;
     WinOrg, ViewOrg: TPoint;
@@ -10036,19 +10051,19 @@ type
     StretchBltMode: integer;
     ArcDirection: integer;
     // current selected pen
-    pen: TPdfEnumStatePen;
+    Pen: TPdfEnumStatePen;
     // current selected brush
-    brush: record
-      null: boolean;
+    Brush: record
+      Null: boolean;
       Color: integer;
-      style: integer;
+      Style: integer;
     end;
     // current selected font
     Font: record
       Color: integer;
-      align: integer;
+      Align: integer;
       BkMode, BkColor: integer;
-      spec: TFontSpec;
+      Spec: TFontSpec;
       LogFont: TLogFontW; // better be the last entry in TPdfEnumState record
     end;
   end;
@@ -10072,7 +10087,8 @@ type
     Obj: array of record
       case kind: integer of
         OBJ_PEN:
-          (PenColor, PenStyle: integer;
+          (PenColor: integer;
+           PenStyle: integer;
            PenWidth: single);
         OBJ_FONT:
           (FontSpec: TFontSpec;
@@ -10098,9 +10114,9 @@ type
     procedure HandleComment(Kind: TPdfGdiComment; P: PAnsiChar; Len: integer);
     procedure CreateFont(ALogFont: PEMRExtCreateFontIndirect);
     // if Canvas.Doc.JPEGCompression<>0, draw not as a bitmap but jpeg encoded
-    procedure DrawBitmap(xs, ys, ws, hs, xd, yd, wd, hd, usage: integer; Bmi:
-      PBitmapInfo; bits: pointer; clipRect: PRect; xSrcTransform: PXForm; dwRop:
-      DWord; transparent: TPdfColorRGB = $FFFFFFFF);
+    procedure DrawBitmap(xs, ys, ws, hs, xd, yd, wd, hd, usage: integer;
+      Bmi: PBitmapInfo; bits: pointer; clipRect: PRect; xSrcTransform: PXForm;
+      dwRop: DWord; transparent: TPdfColorRGB = $FFFFFFFF);
     procedure FillRectangle(const Rect: TRect; ResetNewPath: boolean);
     // the current value set to SetRGBFillColor (rg)
     property FillColor: integer
@@ -10115,7 +10131,8 @@ type
     procedure InitMetaRgn(const ClientRect: TRect);
     procedure SetMetaRgn;
     // intersect - clipping
-    function IntersectClipRect(const ClpRect: TPdfBox; const CurrRect: TPdfBox): TPdfBox;
+    function IntersectClipRect(
+      const ClpRect: TPdfBox; const CurrRect: TPdfBox): TPdfBox;
     procedure ExtSelectClipRgn(Data: PRgnDataHeader; iMode: DWord);
     // get current clipping area
     function GetClipRect: TPdfBox;
@@ -10186,7 +10203,8 @@ begin
           Font.Color := PEMRSetTextColor(R)^.crColor;
       EMR_SETTEXTALIGN:
         Font.Align := PEMRSetTextAlign(R)^.iMode;
-      EMR_EXTTEXTOUTA, EMR_EXTTEXTOUTW:
+      EMR_EXTTEXTOUTA,
+      EMR_EXTTEXTOUTW:
         E.TextOut(PEMRExtTextOut(R)^);
       EMR_SAVEDC:
         E.SaveDC;
@@ -10275,9 +10293,10 @@ begin
           NormalizeRect(PRect(@PEMRARC(R)^.rclBox)^);
           E.NeedPen;
           with PEMRARC(R)^, CenterPoint(TRect(rclBox)) do
-            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left, rclBox.Bottom -
-              rclBox.Top, ptlStart.x, ptlStart.y, ptlEnd.x, ptlEnd.y,
-              E.dc[E.nDC].ArcDirection = AD_CLOCKWISE, acArc, position);
+            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left,
+              rclBox.Bottom - rclBox.Top, ptlStart.x, ptlStart.y,
+              ptlEnd.x, ptlEnd.y, E.dc[E.nDC].ArcDirection = AD_CLOCKWISE,
+              acArc, position);
           E.Canvas.Stroke;
         end;
       EMR_ARCTO:
@@ -10290,9 +10309,10 @@ begin
           with PEMRARC(R)^, CenterPoint(TRect(rclBox)) do
           begin
             // E.Canvas.LineTo(ptlStart.x, ptlStart.y);
-            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left, rclBox.Bottom -
-              rclBox.Top, ptlStart.x, ptlStart.y, ptlEnd.x, ptlEnd.y,
-              E.dc[E.nDC].ArcDirection = AD_CLOCKWISE, acArcTo, position);
+            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left,
+              rclBox.Bottom - rclBox.Top, ptlStart.x, ptlStart.y,
+              ptlEnd.x, ptlEnd.y, E.dc[E.nDC].ArcDirection = AD_CLOCKWISE,
+              acArcTo, position);
             Moved := false;
             E.fInLined := true;
             if not E.Canvas.fNewPath then
@@ -10305,9 +10325,10 @@ begin
           NormalizeRect(PRect(@PEMRPie(R)^.rclBox)^);
           E.NeedBrushAndPen;
           with PEMRPie(R)^, CenterPoint(TRect(rclBox)) do
-            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left, rclBox.Bottom -
-              rclBox.Top, ptlStart.x, ptlStart.y, ptlEnd.x, ptlEnd.y,
-              E.dc[E.nDC].ArcDirection = AD_CLOCKWISE, acPie, position);
+            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left,
+              rclBox.Bottom - rclBox.Top, ptlStart.x, ptlStart.y,
+              ptlEnd.x, ptlEnd.y, E.dc[E.nDC].ArcDirection = AD_CLOCKWISE,
+              acPie, position);
           if pen.null then
             E.Canvas.Fill
           else
@@ -10318,9 +10339,10 @@ begin
           NormalizeRect(PRect(@PEMRChord(R)^.rclBox)^);
           E.NeedBrushAndPen;
           with PEMRChord(R)^, CenterPoint(TRect(rclBox)) do
-            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left, rclBox.Bottom -
-              rclBox.Top, ptlStart.x, ptlStart.y, ptlEnd.x, ptlEnd.y,
-              E.dc[E.nDC].ArcDirection = AD_CLOCKWISE, acChoord, position);
+            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left,
+              rclBox.Bottom - rclBox.Top, ptlStart.x, ptlStart.y,
+              ptlEnd.x, ptlEnd.y, E.dc[E.nDC].ArcDirection = AD_CLOCKWISE,
+              acChoord, position);
           if pen.null then
             E.Canvas.Fill
           else
@@ -10395,7 +10417,8 @@ begin
         begin
           if not pen.null then
             E.NeedPen;
-          E.Canvas.MoveToI(PEMRPolyBezier(R)^.aptl[0].x, PEMRPolyBezier(R)^.aptl[0].Y);
+          E.Canvas.MoveToI(
+            PEMRPolyBezier(R)^.aptl[0].x, PEMRPolyBezier(R)^.aptl[0].Y);
           for i := 0 to (PEMRPolyBezier(R)^.cptl div 3) - 1 do
             E.Canvas.CurveToCI(
               PEMRPolyBezier(R)^.aptl[i * 3 + 1].X,
@@ -10526,7 +10549,8 @@ begin
               position := PEMRPolyLineTo(R)^.aptl[PEMRPolyLineTo(R)^.cptl - 1];
             end;
           end
-          else // EMR_POLYLINETO16
+          else
+          // EMR_POLYLINETO16
           if PEMRPolyLineTo16(R)^.cpts > 0 then
           begin
             for i := 0 to PEMRPolyLineTo16(R)^.cpts - 1 do
@@ -10955,30 +10979,30 @@ end;
 
 procedure TPdfEnum.CreateFont(aLogFont: PEMRExtCreateFontIndirect);
 var
-  HF: HFONT;
-  TM: TTextMetric;
-  Old: HGDIOBJ;
-  destDC: HDC;
+  hf: HFONT;
+  tm: TTextMetric;
+  old: HGDIOBJ;
+  dest: HDC;
 begin
-  destDC := Canvas.fDoc.fDC;
-  HF := CreateFontIndirectW(aLogFont.elfw.elfLogFont);
-  Old := SelectObject(destDC, HF);
-  GetTextMetrics(destDC, TM);
-  SelectObject(destDC, Old);
-  DeleteObject(HF);
+  dest := Canvas.fDoc.fDC;
+  hf := CreateFontIndirectW(aLogFont.elfw.elfLogFont);
+  old := SelectObject(dest, hf);
+  GetTextMetrics(dest, tm);
+  SelectObject(dest, old);
+  DeleteObject(hf);
   if aLogFont^.ihFont - 1 < cardinal(length(Obj)) then
     with Obj[aLogFont^.ihFont - 1] do
     begin
       kind := OBJ_FONT;
       MoveFast(aLogFont^.elfw.elfLogFont, LogFont, sizeof(LogFont));
-      LogFont.lfPitchAndFamily := TM.tmPitchAndFamily;
+      LogFont.lfPitchAndFamily := tm.tmPitchAndFamily;
       if LogFont.lfOrientation <> 0 then
         FontSpec.angle := LogFont.lfOrientation div 10
       else // -360..+360
         FontSpec.angle := LogFont.lfEscapement div 10;
-      FontSpec.ascent := TM.tmAscent;
-      FontSpec.descent := TM.tmDescent;
-      FontSpec.cell := TM.tmHeight - TM.tmInternalLeading;
+      FontSpec.ascent := tm.tmAscent;
+      FontSpec.descent := tm.tmDescent;
+      FontSpec.cell := tm.tmHeight - tm.tmInternalLeading;
     end;
 end;
 
@@ -10986,48 +11010,47 @@ procedure TPdfEnum.DrawBitmap(xs, ys, ws, hs, xd, yd, wd, hd, usage: integer;
   Bmi: PBitmapInfo; bits: pointer; clipRect: PRect; xSrcTransform: PXForm;
   dwRop: DWord; transparent: TPdfColorRGB);
 var
-  B: TBitmap;
+  bmp: TBitmap;
   R: TRect;
-  Box, ClipRc: TPdfBox;
-  fIntFactorX, fIntFactorY, fIntOffsetX, fIntOffsetY: single;
+  box, clp: TPdfBox;
+  fx, fy, ox, oy: single;
 begin
-  B := TBitmap.Create;
+  bmp := TBitmap.Create;
   try
-    InitTransformation(xSrcTransform, fIntFactorX, fIntFactorY, fIntOffsetX,
-      fIntOffsetY);
+    InitTransformation(xSrcTransform, fx, fy, ox, oy);
     // create a TBitmap with (0,0,ws,hs) bounds from DIB bits and info
     if Bmi^.bmiHeader.biBitCount = 1 then
-      B.Monochrome := true
+      bmp.Monochrome := true
     else
-      B.PixelFormat := pf24bit;
-    B.Width := ws;
-    B.Height := hs;
-    StretchDIBits(B.Canvas.Handle, 0, 0, ws, hs, Trunc(xs + fIntOffsetX),
-      Trunc(ys + fIntOffsetY), Trunc(ws * fIntFactorX), Trunc(hs * fIntFactorY),
+      bmp.PixelFormat := pf24bit;
+    bmp.Width := ws;
+    bmp.Height := hs;
+    StretchDIBits(bmp.Canvas.Handle, 0, 0, ws, hs, Trunc(xs + ox),
+      Trunc(ys + oy), Trunc(ws * fx), Trunc(hs * fy),
       bits, Bmi^, usage, dwRop);
     if transparent <> $FFFFFFFF then
     begin
       if integer(transparent) < 0 then
         transparent := GetSysColor(transparent and $ff);
-      B.TransparentColor := transparent;
+      bmp.TransparentColor := transparent;
     end;
     // draw the bitmap on the PDF canvas
     with Canvas do
     begin
       R := TRect(Rect(xd, yd, wd + xd, hd + yd));
       NormalizeRect(R);
-      Box := BoxI(R, true);
-      ClipRc := GetClipRect;
-      if (ClipRc.Width > 0) and
-         (ClipRc.Height > 0) then
-        Doc.CreateOrGetImage(B, @Box, @ClipRc) // use cliping
+      box := BoxI(R, true);
+      clp := GetClipRect;
+      if (clp.Width > 0) and
+         (clp.Height > 0) then
+        Doc.CreateOrGetImage(bmp, @box, @clp) // use cliping
       else
-        Doc.CreateOrGetImage(B, @Box, nil);
+        Doc.CreateOrGetImage(bmp, @box, nil);
       // Doc.CreateOrGetImage() will reuse any matching TPdfImage
       // don't send bmi and bits parameters here, because of StretchDIBits above
     end;
   finally
-    B.Free;
+    bmp.Free;
   end;
 end;
 
@@ -11051,29 +11074,29 @@ type
   TGradientRectArray = array[word] of TGradientRect;
 var
   i: integer;
-  pGradientTriVertex: PTriVertexArray;
-  pGradientTri: PGradientTriArray;
-  pGradientRect: PGradientRectArray;
+  vertex: PTriVertexArray;
+  tri: PGradientTriArray;
+  r: PGradientRectArray;
   pt1, pt2: PTriVertex;
 //    Direction: TGradientDirection;
 begin
   if data^.nVer > 0 then
   begin
-    pGradientTriVertex := @data.Ver;
+    vertex := @data.Ver;
     case data^.ulMode of
       GRADIENT_FILL_RECT_H,
       GRADIENT_FILL_RECT_V:
         begin
           Canvas.NewPath;
-          pGradientRect := @pGradientTriVertex[data^.nVer];
-{      Direction := gdHorizontal;
-      if data^.ulMode = GRADIENT_FILL_RECT_V then
-        Direction := gdVertical; }
+          r := @vertex[data^.nVer];
+{         Direction := gdHorizontal;
+          if data^.ulMode = GRADIENT_FILL_RECT_V then
+            Direction := gdVertical; }
           for i := 1 to data^.nTri do
-            with pGradientRect[i - 1] do
+            with r[i - 1] do
             begin
-              pt1 := @pGradientTriVertex[UpperLeft];
-              pt2 := @pGradientTriVertex[LowerRight];
+              pt1 := @vertex[UpperLeft];
+              pt2 := @vertex[LowerRight];
               Canvas.MoveToI(pt1.X, pt1.Y);
               Canvas.LineToI(pt1.X, pt2.Y);
               Canvas.LineToI(pt2.X, pt2.Y);
@@ -11085,22 +11108,22 @@ begin
       GRADIENT_FILL_TRIANGLE:
         begin
           Canvas.NewPath;
-          pGradientTri := @pGradientTriVertex[data^.nVer];
+          tri := @vertex[data^.nVer];
           for i := 1 to data^.nTri do
-            with pGradientTri[i - 1] do
+            with tri[i - 1] do
             begin
-              with pGradientTriVertex[Vertex1] do
+              with vertex[Vertex1] do
               begin
                 FillColor := RGBA(Red, Green, Blue, 0); // ignore Alpha
                 Canvas.MoveToI(x, Y);
               end;
-              with pGradientTriVertex[Vertex2] do
+              with vertex[Vertex2] do
                 Canvas.LineToI(x, Y);
-              with pGradientTriVertex[Vertex3] do
+              with vertex[Vertex3] do
                 Canvas.LineToI(x, Y);
-              with pGradientTriVertex[Vertex1] do
+              with vertex[Vertex1] do
                 Canvas.LineToI(x, Y);
-        //DC[nDC].Moved := Point(pt1.X, pt1.Y);
+              // DC[nDC].Moved := Point(pt1.X, pt1.Y);
               Canvas.Closepath;
               Canvas.Fill;
             end;
@@ -11124,8 +11147,9 @@ begin
     EMR_POLYPOLYLINE:
       begin
         o := 0;
-        a := {%H-}pointer(PtrUInt(data) + SizeOf(TEMRPolyPolyline)
-             - SizeOf(TPoint) + (data^.nPolys - 1) * SizeOf(DWORD));
+        a := {%H-}pointer(PtrUInt(data) +
+             SizeOf(TEMRPolyPolyline) - SizeOf(TPoint) +
+             (data^.nPolys - 1) * SizeOf(DWORD));
         for i := 1 to data^.nPolys do
         begin
           f := o;
@@ -11146,8 +11170,9 @@ begin
     EMR_POLYPOLYLINE16:
       begin
         o := 0;
-        a16 := {%H-}pointer(PtrUInt(data16) + SizeOf(TEMRPolyPolyline16) -
-               SizeOf(TSmallPoint) + (data16^.nPolys - 1) * SizeOf(DWORD));
+        a16 := {%H-}pointer(PtrUInt(data16) +
+               SizeOf(TEMRPolyPolyline16) - SizeOf(TSmallPoint) +
+               (data16^.nPolys - 1) * SizeOf(DWORD));
         for i := 1 to data16^.nPolys do
         begin
           f := o;
@@ -11173,7 +11198,8 @@ begin
       Canvas.NewPath;
   end
   else
-  begin // fill
+  begin
+    // fill
     if not DC[nDC].brush.null then
     begin
       if not DC[nDC].pen.null then
@@ -11431,7 +11457,7 @@ end;
 
 procedure TPdfEnum.ScaleMatrix(Custom: PXForm; iMode: integer);
 var
-  ScaleXForm: XForm;
+  xf: XForm;
   xdim, ydim: single;
   mx, my: integer;
 begin
@@ -11545,35 +11571,35 @@ begin
       end;
     end;
     // use transformation
-    ScaleXForm := WorldTransform;
-    if (ScaleXForm.eM11 > 0) and
-       (ScaleXForm.eM22 > 0) and
-       (ScaleXForm.eM12 = 0) and
-       (ScaleXForm.eM21 = 0) then
+    xf := WorldTransform;
+    if (xf.eM11 > 0) and
+       (xf.eM22 > 0) and
+       (xf.eM12 = 0) and
+       (xf.eM21 = 0) then
     begin // Scale
-      fWorldFactorX := ScaleXForm.eM11;
-      fWorldFactorY := ScaleXForm.eM22;
+      fWorldFactorX := xf.eM11;
+      fWorldFactorY := xf.eM22;
       fWorldOffsetX := WorldTransform.eDx;
       fWorldOffsetY := WorldTransform.eDy;
     end
-    else if (ScaleXForm.eM22 = ScaleXForm.eM11) and
-            (ScaleXForm.eM21 = -ScaleXForm.eM12) then
+    else if (xf.eM22 = xf.eM11) and
+            (xf.eM21 = -xf.eM12) then
     begin // Rotate
-      fAngle := ArcSin(ScaleXForm.eM12) * c180divPI;
-      fWorldOffsetCos := ScaleXForm.eM11;
-      fWorldOffsetSin := ScaleXForm.eM12;
+      fAngle := ArcSin(xf.eM12) * c180divPI;
+      fWorldOffsetCos := xf.eM11;
+      fWorldOffsetSin := xf.eM12;
     end
-    else if (ScaleXForm.eM11 = 0) and
-            (ScaleXForm.eM22 = 0) and
-            ((ScaleXForm.eM12 <> 0) or
-             (ScaleXForm.eM21 <> 0)) then
+    else if (xf.eM11 = 0) and
+            (xf.eM22 = 0) and
+            ((xf.eM12 <> 0) or
+             (xf.eM21 <> 0)) then
     begin //Shear
 
     end
-    else if ((ScaleXForm.eM11 < 0) or
-             (ScaleXForm.eM22 < 0)) and
-            (ScaleXForm.eM12 = 0) and
-            (ScaleXForm.eM21 = 0) then
+    else if ((xf.eM11 < 0) or
+             (xf.eM22 < 0)) and
+            (xf.eM12 = 0) and
+            (xf.eM21 = 0) then
     begin //Reflection
 
     end;
@@ -11603,8 +11629,8 @@ begin
   end;
 end;
 
-function TPdfEnum.IntersectClipRect(const ClpRect: TPdfBox; const CurrRect:
-  TPdfBox): TPdfBox;
+function TPdfEnum.IntersectClipRect(const ClpRect: TPdfBox;
+  const CurrRect: TPdfBox): TPdfBox;
 begin
   result := CurrRect;
   if (ClpRect.Width <> 0) or
@@ -11679,24 +11705,22 @@ end;
 
 procedure TPdfEnum.TextOut(var R: TEMRExtTextOut);
 var
-  nspace, i: integer;
+  sx, sy, nspace, i: integer;
   cur: cardinal;
-  wW, measW, W, H, hscale: single;
-  DX: PIntegerArray; // not handled during drawing yet
-  Posi: TPoint;
-  AWidth, ASize, PosX, PosY: single;
-  tmp: array of WideChar; // R.emrtext is not #0 terminated -> use tmp[]
+  ws, ss, xs, ys, ww, mw, w, h, hscale: single;
   a, acos, asin, fscaleX, fscaleY: single;
-  AUseDX, WithClip, bOpaque: boolean;
-  tmpChar: array[0..1] of WideChar;
-  ClipRect: TPdfBox;
-  ASignX, ASignY: integer;
-  backRect: TRect;
-  Positioning: TPdfCanvasRenderMetaFileTextPositioning;
+  dx: PIntegerArray; // not handled during drawing yet
+  posi: TPoint;
+  tmp: array of WideChar; // R.emrtext is not #0 terminated -> use tmp[]
+  hasdx, clipped, isopaque: boolean;
+  tmp2: array[0..1] of WideChar;
+  clip: TPdfBox;
+  back: TRect;
+  po: TPdfCanvasRenderMetaFileTextPositioning;
   {$ifdef USE_UNISCRIBE}
-  APdfFont: TPdfFont;
-  ADC: HDC;
-  AnExtent: TSize;
+  fnt: TPdfFont;
+  dest: HDC;
+  siz: TSize;
   {$endif USE_UNISCRIBE}
 
   procedure DrawLine(var P: TPoint; aH: single);
@@ -11707,30 +11731,30 @@ var
     begin
       tmp := Pen;
       pen.color := Font.color;
-      pen.width := ASize / 15 / Canvas.fWorldFactorX / Canvas.fDevScaleX;
+      pen.width := ss / 15 / Canvas.fWorldFactorX / Canvas.fDevScaleX;
       pen.style := PS_SOLID;
       pen.null := false;
       NeedPen;
       if Font.spec.angle = 0 then
       begin
         // P = textout original coords
-        // (-W,-H) = delta to text start pos (at baseline)
-        // wW = text width
-        // aH = delta H for drawed line (from baseline)
-        Canvas.MoveToS(P.X - W, (P.Y - (H - aH)));
-        //  deltax := -W     deltaY := (-H+aH)
-        Canvas.LineToS(P.X - W + wW, (P.Y - (H - aH)));
-        //  deltax := -W+wW  deltaY := (-H+aH)
+        // (-w,-h) = delta to text start pos (at baseline)
+        // ww = text width
+        // aH = delta h for drawed line (from baseline)
+        Canvas.MoveToS(P.X - w, (P.Y - (h - aH)));
+        //  deltax := -w     deltaY := (-h+aH)
+        Canvas.LineToS(P.X - w + ww, (P.Y - (h - aH)));
+        //  deltax := -w+ww  deltaY := (-h+aH)
       end
       else
       begin
-        // rotation pattern :
-        //       rdx = deltax * acos + deltay * asin
-        //       rdy = deltay * acos - deltax * asin
-        Canvas.MoveToS(P.X + ((-W) * acos + (-H + aH) * asin),
-                       P.Y + ((-H + aH) * acos - (-W) * asin));
-        Canvas.LineToS(P.X + ((-W + wW) * acos + (-H + aH) * asin),
-                       P.Y + ((-H + aH) * acos - (-W + wW) * asin));
+        // rotation pattern:
+        //   rdx = deltax * acos + deltay * asin
+        //   rdy = deltay * acos - deltax * asin
+        Canvas.MoveToS(P.X + ((-w) * acos + (-h + aH) * asin),
+                       P.Y + ((-h + aH) * acos - (-w) * asin));
+        Canvas.LineToS(P.X + ((-w + ww) * acos + (-h + aH) * asin),
+                       P.Y + ((-h + aH) * acos - (-w + ww) * asin));
       end;
       Canvas.Stroke;
       Pen := tmp;
@@ -11744,187 +11768,183 @@ begin
     begin
       SetLength(tmp, R.emrtext.nChars + 1); // faster than WideString for our purpose
       MoveFast(pointer(PtrUInt(@R) + R.emrtext.offString)^, tmp[0], R.emrtext.nChars * 2);
-      ASignY := 1;
-      ASignX := 1;
+      sy := 1;
+      sx := 1;
       if (Canvas.fWorldFactorY) < 0 then
-        ASignY := -1;
+        sy := -1;
       if (Canvas.fWorldFactorX) < 0 then
-        ASignX := -1;
+        sx := -1;
       fscaleY := Abs(Canvas.fFactorY * Canvas.fWorldFactorY * Canvas.fDevScaleY);
       fscaleX := Abs(Canvas.fFactorX * Canvas.fWorldFactorX * Canvas.fDevScaleX);
       // guess the font size
       if Font.LogFont.lfHeight < 0 then
-        ASize := Abs(Font.LogFont.lfHeight) * fscaleY
+        ss := Abs(Font.LogFont.lfHeight) * fscaleY
       else
-        ASize := Abs(Font.spec.cell) * fscaleY;
+        ss := Abs(Font.spec.cell) * fscaleY;
       // ensure this font is selected (very fast if was already selected)
-      APdfFont := Canvas.SetFont(Canvas.fDoc.fDC, Font.LogFont, ASize);
+      fnt := Canvas.SetFont(Canvas.fDoc.fDC, Font.LogFont, ss);
       // calculate coordinates
-      Positioning := Canvas.fUseMetaFileTextPositioning;
+      po := Canvas.fUseMetaFileTextPositioning;
       if (R.emrtext.fOptions and ETO_GLYPH_INDEX <> 0) then
-        measW := 0
+        mw := 0
       else
       begin
-        AWidth := 0;
+        ws := 0;
         {$ifdef USE_UNISCRIBE}
-        if Assigned(APdfFont) and Canvas.fDoc.UseUniScribe and APdfFont.InheritsFrom
+        if Assigned(fnt) and Canvas.fDoc.UseUniScribe and fnt.InheritsFrom
           (TPdfFontTrueType) then
         begin
-          ADC := Canvas.fDoc.GetDCWithFont(TPdfFontTrueType(APdfFont));
-          if GetTextExtentPoint32W(ADC, pointer(tmp), R.emrtext.nChars, AnExtent) then
-            AWidth := (AnExtent.cX * Canvas.fPage.fFontSize) / 1000;
+          dest := Canvas.fDoc.GetDCWithFont(TPdfFontTrueType(fnt));
+          if GetTextExtentPoint32W(dest, pointer(tmp), R.emrtext.nChars, siz) then
+            ws := (siz.cX * Canvas.fPage.fFontSize) / 1000;
         end;
         {$endif USE_UNISCRIBE}
-        if AWidth = 0 then
-          AWidth := Canvas.UnicodeTextWidth(pointer(tmp));
-        measW := Round(AWidth / fscaleX);
+        if ws = 0 then
+          ws := Canvas.UnicodeTextWidth(pointer(tmp));
+        mw := Round(ws / fscaleX);
       end;
-      AUseDX := R.emrtext.offDx > 0;
+      hasdx := R.emrtext.offDx > 0;
       {$ifdef USE_UNISCRIBE}
       if Canvas.fDoc.UseUniScribe then
-        AUseDX := AUseDX and (R.emrtext.fOptions and ETO_GLYPH_INDEX <> 0);
+        hasdx := hasdx and (R.emrtext.fOptions and ETO_GLYPH_INDEX <> 0);
       {$endif USE_UNISCRIBE}
-      if AUseDX then
+      if hasdx then
       begin
-        DX := pointer(PtrUInt(@R) + R.emrtext.offDx);
-        W := DXTextWidth(DX, R.emrText.nChars);
-        if W < R.rclBounds.Right - R.rclBounds.Left then // offDX=0 or within box
-          DX := nil;
+        dx := pointer(PtrUInt(@R) + R.emrtext.offDx);
+        w := DXTextWidth(dx, R.emrText.nChars);
+        if w < R.rclBounds.Right - R.rclBounds.Left then // offDX=0 or within box
+          dx := nil;
       end
       else
-        DX := nil;
-      if DX = nil then
+        dx := nil;
+      if dx = nil then
       begin
-        W := measW;
-        if Positioning = tpExactTextCharacterPositining then
-          Positioning := tpSetTextJustification; // exact position expects DX
+        w := mw;
+        if po = tpExactTextCharacterPositining then
+          po := tpSetTextJustification; // exact position expects dx
       end;
       nspace := 0;
       hscale := 100;
-      if measW <> 0 then
+      if mw <> 0 then
       begin
         for i := 0 to R.emrtext.nChars - 1 do
           if tmp[i] = ' ' then
             inc(nspace);
-        if (Positioning = tpSetTextJustification) and
-           ((nspace = 0) or (({%H-}W - measW) < nspace)) then
-          Positioning := tpKerningFromAveragePosition;
-        if (Positioning = tpExactTextCharacterPositining) and
+        if (po = tpSetTextJustification) and
+           ((nspace = 0) or (({%H-}w - mw) < nspace)) then
+          po := tpKerningFromAveragePosition;
+        if (po = tpExactTextCharacterPositining) and
            (Font.spec.angle <> 0) then
-          Positioning := tpKerningFromAveragePosition;
-        case Positioning of
+          po := tpKerningFromAveragePosition;
+        case po of
           tpSetTextJustification:
             // we should have had a SetTextJustification() call -> modify word space
             with Canvas do
-              SetWordSpace(((W - measW) * fscaleX) / nspace);
+              SetWordSpace(((w - mw) * fscaleX) / nspace);
           tpKerningFromAveragePosition:
             begin
-              // check if DX[] width differs from PDF width
-              hscale := (W * 100) / measW;
+              // check if dx[] width differs from PDF width
+              hscale := (w * 100) / mw;
               // implement some global kerning if needed (allow hysteresis around 100%)
               if (hscale < Canvas.fKerningHScaleBottom) or
                  (hscale > Canvas.fKerningHScaleTop) then
-              begin
                 if Font.spec.angle = 0 then
                   Canvas.SetHorizontalScaling(hscale)
                 else
-                  hscale := 100;
-              end
+                  hscale := 100
               else
                 hscale := 100;
             end;
-          tpExactTextCharacterPositining:
-            tmpChar[1] := #0;
         end;
       end
       else
-        Positioning := tpSetTextJustification;
-      wW := W;                                    // right x
-      // H Align Mask = TA_CENTER or TA_RIGHT or TA_LEFT = TA_CENTER
+        po := tpSetTextJustification;
+      ww := w;                                    // right x
+      // h Align Mask = TA_CENTER or TA_RIGHT or TA_LEFT = TA_CENTER
       if (Font.Align and TA_CENTER) = TA_CENTER then
-        W := W / 2  // center x
+        w := w / 2  // center x
       else if (Font.Align and TA_CENTER) = TA_LEFT then
-        W := 0;     // left x
+        w := 0;     // left x
       // V Align mask = TA_BASELINE or TA_BOTTOM or TA_TOP = TA_BASELINE
       if (Font.Align and TA_BASELINE) = TA_BASELINE then
       // always zero ?
-        H := Abs(Font.LogFont.lfHeight) - Abs(Font.spec.cell)  // center y
+        h := Abs(Font.LogFont.lfHeight) - Abs(Font.spec.cell)  // center y
       else if (Font.Align and TA_BASELINE) = TA_BOTTOM then
-        H := Abs(Font.spec.descent)  // bottom y
+        h := Abs(Font.spec.descent)  // bottom y
       else
         // needs - vertical coords of baseline from top
-        H := -abs(Font.spec.ascent); // top
-      if ASignY < 0 then //inverted coordinates
-        H := Abs(Font.LogFont.lfHeight) + H;
-      if ASignX < 0 then
-        W := W + wW;
+        h := -abs(Font.spec.ascent); // top
+      if sy < 0 then // inverted coordinates
+        h := Abs(Font.LogFont.lfHeight) + h;
+      if sx < 0 then
+        w := w + ww;
       if (Font.align and TA_UPDATECP) = TA_UPDATECP then
-        Posi := position
+        posi := position
       else
-        Posi := R.emrtext.ptlReference;
+        posi := R.emrtext.ptlReference;
       // detect clipping
       if Canvas.fUseMetaFileTextClipping <> tcNeverClip then
       begin
         with R.emrtext.rcl do
-          WithClip := (Right > Left) and (Bottom > Top);
-        if WithClip then
-          ClipRect := Canvas.BoxI(TRect(R.emrtext.rcl), true)
+          clipped := (Right > Left) and (Bottom > Top);
+        if clipped then
+          clip := Canvas.BoxI(TRect(R.emrtext.rcl), true)
         else
         begin
           if Canvas.fUseMetaFileTextClipping = tcClipExplicit then
             with R.rclBounds do
-              WithClip := (Right > Left) and (Bottom > Top);
-          if WithClip then
-            ClipRect := Canvas.BoxI(TRect(R.rclBounds), true)
+              clipped := (Right > Left) and (Bottom > Top);
+          if clipped then
+            clip := Canvas.BoxI(TRect(R.rclBounds), true)
           else
           begin
-            WithClip := not ClipRgnNull and
+            clipped := not ClipRgnNull and
                         (Canvas.fUseMetaFileTextClipping = tcAlwaysClip);
-            if WithClip then
-              ClipRect := GetClipRect;
+            if clipped then
+              clip := GetClipRect;
           end;
         end;
       end
       else
-        WithClip := false;
-      bOpaque := not brush.null and
+        clipped := false;
+      isopaque := not brush.null and
                  (brush.Color <> clWhite) and
                  ((R.emrtext.fOptions and ETO_OPAQUE <> 0) or
                   ((Font.BkMode = OPAQUE) and
                    (Font.BkColor = brush.color)));
-      if bOpaque then
-        if WithClip then
-          backRect := TRect(R.emrtext.rcl)
+      if isopaque then
+        if clipped then
+          back := TRect(R.emrtext.rcl)
         else
         begin
-          backRect.TopLeft := Posi;
-          backRect.BottomRight := Posi;
-          inc(backRect.Right, Trunc(wW));
-          inc(backRect.Bottom, Abs(Font.LogFont.lfHeight));
+          back.TopLeft := posi;
+          back.BottomRight := posi;
+          inc(back.Right, Trunc(ww));
+          inc(back.Bottom, Abs(Font.LogFont.lfHeight));
         end;
-      NormalizeRect(backRect);
-      if WithClip then
+      NormalizeRect(back);
+      if clipped then
       begin
         Canvas.GSave;
         Canvas.NewPath;
-        Canvas.Rectangle({%H-}ClipRect.Left, {%H-}ClipRect.Top,
-          {%H-}ClipRect.Width, {%H-}ClipRect.Height);
+        Canvas.Rectangle({%H-}clip.Left, {%H-}clip.Top,
+          {%H-}clip.Width, {%H-}clip.Height);
         Canvas.ClosePath;
         Canvas.Clip;
-        if bOpaque then
+        if isopaque then
         begin
-          FillRectangle(backRect, false);
-          bOpaque := false; //do not handle more
+          FillRectangle(back, false);
+          isopaque := false; //do not handle more
         end
         else
           Canvas.NewPath;
         Canvas.fNewPath := false;
       end;
       // draw background (if any)
-      if bOpaque then
+      if isopaque then
         // don't handle BkMode, since global to the page, but only specific text
         // don't handle rotation here, since should not be used much
-        FillRectangle(backRect, true);
+        FillRectangle(back, true);
       // draw text
       FillColor := Font.color;
       {$ifdef USE_UNISCRIBE}
@@ -11936,69 +11956,70 @@ begin
         a := Font.spec.angle * cPIdiv180;
         acos := cos(a);
         asin := sin(a);
-        PosX := 0;
-        PosY := 0;
+        xs := 0;
+        ys := 0;
         Canvas.SetTextMatrix(acos, asin, -asin, acos,
-          Canvas.I2X(Posi.X - Round(W * acos + H * asin)),
-          Canvas.I2Y(Posi.Y - Round(H * acos - W * asin)));
+          Canvas.I2X(posi.X - Round(w * acos + h * asin)),
+          Canvas.I2Y(posi.Y - Round(h * acos - w * asin)));
       end
       else if (WorldTransform.eM11 = WorldTransform.eM22) and
               (WorldTransform.eM12 = -WorldTransform.eM21) and
               not SameValue(ArcCos(WorldTransform.eM11), 0, 0.0001) then
       begin
-        PosX := 0;
-        PosY := 0;
+        xs := 0;
+        ys := 0;
         if SameValue(ArcCos(WorldTransform.eM11), 0, 0.0001) or      // 0 grad
            SameValue(ArcCos(WorldTransform.eM11), cPI, 0.0001) then   // 180 grad
           Canvas.SetTextMatrix(WorldTransform.eM11, WorldTransform.eM12,
             WorldTransform.eM21, WorldTransform.eM22,
-            Canvas.S2X(Posi.X * WorldTransform.eM11 +
-              Posi.Y * WorldTransform.eM21 + WorldTransform.eDx),
-            Canvas.S2Y(Posi.X * WorldTransform.eM12 +
-              Posi.Y * WorldTransform.eM22 + WorldTransform.eDy))
+            Canvas.S2X(posi.X * WorldTransform.eM11 +
+              posi.Y * WorldTransform.eM21 + WorldTransform.eDx),
+            Canvas.S2Y(posi.X * WorldTransform.eM12 +
+              posi.Y * WorldTransform.eM22 + WorldTransform.eDy))
         else
           Canvas.SetTextMatrix(-WorldTransform.eM11, -WorldTransform.eM12, -
             WorldTransform.eM21, -WorldTransform.eM22,
-            Canvas.S2X(Posi.X * WorldTransform.eM11 +
-              Posi.Y * WorldTransform.eM21 + WorldTransform.eDx),
-            Canvas.S2Y(Posi.X * WorldTransform.eM12 +
-              Posi.Y * WorldTransform.eM22 + WorldTransform.eDy));
+            Canvas.S2X(posi.X * WorldTransform.eM11 +
+              posi.Y * WorldTransform.eM21 + WorldTransform.eDx),
+            Canvas.S2Y(posi.X * WorldTransform.eM12 +
+              posi.Y * WorldTransform.eM22 + WorldTransform.eDy));
       end
       else
       begin
         acos := 0;
         asin := 0;
         if Canvas.fViewSize.cx > 0 then
-          PosX := Posi.X - W   // zero point left
+          xs := posi.X - w   // zero point left
         else
-          PosX := Posi.X + W;  // right
+          xs := posi.X + w;  // right
         if Canvas.fViewSize.cy > 0 then
-          PosY := Posi.Y - H   // zero point beyond
+          ys := posi.Y - h   // zero point beyond
         else
-          PosY := Posi.Y + H;  // above
-        Canvas.MoveTextPoint(Canvas.S2X(PosX), Canvas.S2Y(PosY));
+          ys := posi.Y + h;  // above
+        Canvas.MoveTextPoint(Canvas.S2X(xs), Canvas.S2Y(ys));
       end;
       if (R.emrtext.fOptions and ETO_GLYPH_INDEX) <> 0 then
         Canvas.ShowGlyph(pointer(tmp), R.emrtext.nChars)
-      else if Positioning = tpExactTextCharacterPositining then
+      else if po = tpExactTextCharacterPositining then
       begin
         cur := 0;
+        tmp2[1] := #0;
         repeat
-          tmpChar[0] := tmp[cur];
-          Canvas.ShowText(@tmpChar, false);
+          tmp2[0] := tmp[cur];
+          Canvas.ShowText(@tmp2, false);
           if cur = R.emrtext.nChars - 1 then
             break;
-          PosX := PosX + DX^[cur];
+          xs := xs + dx^[cur];
           Canvas.EndText;
           Canvas.BeginText;
-          Canvas.MoveTextPoint(Canvas.S2X(PosX), Canvas.S2Y(PosY));
+          Canvas.MoveTextPoint(Canvas.S2X(xs), Canvas.S2Y(ys));
           inc(cur);
         until false;
       end
       else
         Canvas.ShowText(pointer(tmp));
       Canvas.EndText;
-      case Positioning of
+      case po of
         tpSetTextJustification:
           if nspace > 0 then
             Canvas.SetWordSpace(0);
@@ -12008,24 +12029,24 @@ begin
       end;
       // handle underline or strike out styles (direct draw PDF lines on canvas)
       if Font.LogFont.lfUnderline <> 0 then
-        DrawLine(Posi, ASize / 8 / Canvas.fWorldFactorX / Canvas.fDevScaleX);
+        DrawLine(posi, ss / 8 / Canvas.fWorldFactorX / Canvas.fDevScaleX);
       if Font.LogFont.lfStrikeOut <> 0 then
-        DrawLine(Posi, -ASize / 3 / Canvas.fWorldFactorX / Canvas.fDevScaleX);
+        DrawLine(posi, -ss / 3 / Canvas.fWorldFactorX / Canvas.fDevScaleX);
       // end any pending clipped TextRect() region
-      if WithClip then
+      if clipped then
       begin
         Canvas.GRestore;
         fFillColor := -1; // force set drawing color
       end;
       if not Canvas.fNewPath then
       begin
-        if WithClip then
+        if clipped then
           if not DC[nDC].ClipRgnNull then
           begin
-            ClipRect := GetClipRect;
+            clip := GetClipRect;
             Canvas.GSave;
             Canvas.Rectangle(
-              ClipRect.Left, ClipRect.Top, ClipRect.Width, ClipRect.Height);
+              clip.Left, clip.Top, clip.Width, clip.Height);
             Canvas.Clip;
             Canvas.GRestore;
             Canvas.NewPath;
@@ -12036,8 +12057,8 @@ begin
         Canvas.fNewPath := false;
       if (Font.align and TA_UPDATECP) = TA_UPDATECP then
       begin
-        position.X := Posi.X + Trunc(wW);
-        position.Y := Posi.Y;
+        position.X := posi.X + Trunc(ww);
+        position.Y := posi.Y;
       end;
     end;
 end;

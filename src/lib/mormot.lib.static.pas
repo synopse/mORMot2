@@ -31,6 +31,8 @@ uses
   mormot.core.base,
   mormot.core.os;
 
+
+
 { ****************** Some Linking Constants }
 
 const
@@ -49,6 +51,7 @@ const
 {$endif OSWINDOWS}
 
 
+{$ifndef NOLIBCSTATIC}
 
 { ********************** Minimal libc Replacement for Windows }
 
@@ -132,6 +135,8 @@ procedure __umodti3;
 // - on Windows, redirects to msvcrt.dll's setlocale() API
 procedure SetLibcNumericLocale;
 
+{$endif NOLIBCSTATIC}
+
 
 { ********************** Cross-Platform FPU Exceptions Masking }
 
@@ -179,6 +184,8 @@ procedure ResetFpuFlags(saved: cardinal);
 
 
 implementation
+
+{$ifndef NOLIBCSTATIC}
 
 { ****************** Link Dependencies }
 
@@ -1879,6 +1886,7 @@ end;
 
 {$endif CPUINTEL}
 
+{$endif NOLIBCSTATIC}
 
 
 { ********************** Cross-Platform FPU Exceptions Masking }

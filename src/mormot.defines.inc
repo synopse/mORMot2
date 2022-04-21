@@ -660,6 +660,13 @@
       {$define LIBQUICKJSSTATIC}
     {$endif CPUX64}
   {$endif OSWINDOWS}
+  {$ifdef CPUARM3264}
+    {$ifdef OSDARWIN}               // unsupported arch (e.g. Aarch64-Darwin)
+      {$define LIZARD_EXTERNALONLY}
+      {$define NOLIBCSTATIC}
+      {$define NOSQLITE3STATIC}
+    {$endif OSDWARWIN}
+  {$endif CPUARM3264}
 {$else}
   {$define LIZARD_EXTERNALONLY}     // no static .obj for Delphi Win32/Win64 yet
   {$ifdef CPUX86}
