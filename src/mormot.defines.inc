@@ -662,6 +662,7 @@
   {$endif OSWINDOWS}
   {$ifdef CPUARM3264}
     {$ifdef OSDARWIN}               // unsupported arch (e.g. Aarch64-Darwin)
+      {$define OSDARWINARM}
       {$define LIZARD_EXTERNALONLY}
       {$define NOLIBCSTATIC}
       {$define NOSQLITE3STATIC}
@@ -696,8 +697,10 @@
   {.$define USE_OPENSSL}
 {$else}
   {$ifndef OSANDROID}
-    // try OpenSSL on POSIX systems where likely to be unique and maintained
-    {$define USE_OPENSSL}
+    {$ifndef OSDARWINARM}
+      // try OpenSSL on POSIX systems where likely to be unique and maintained
+      {$define USE_OPENSSL}
+    {$endif OSDARWINARM}
   {$endif OSANDROID}
 {$endif OSWINDOWS}
 {$ifdef FORCE_OPENSSL}
