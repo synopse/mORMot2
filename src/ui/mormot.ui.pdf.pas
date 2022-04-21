@@ -2463,13 +2463,14 @@ type
   /// this dynamic array stores details about used unicode characters
   // - every used unicode character has its own width and glyph index in the
   // true type font content
+  // - Used maps Width and Glyph fields, to quickly search if set
   TUsedWide = array of packed record
     case byte of
       0:
         (Width: word;
          Glyph: word;);
       1:
-        (Int: integer;);
+        (Used: integer;);
   end;
 
   /// handle TrueType Font
@@ -3450,7 +3451,7 @@ begin
   result := StrToIntDef(tmp, GetACP);
 end;
 
-// GetTTCIndex() is used by TPdfFontTrueType.PrepareForSaving()
+// GetTtcIndex() is used by TPdfFontTrueType.PrepareForSaving()
 
 function FindSynUnicode(const values: array of SynUnicode;
   const value: SynUnicode): PtrInt;
@@ -3464,7 +3465,7 @@ end;
 // Looks up ttcIndex from list of font names in known ttc font collections.
 // For some locales, the lookup may fail
 // result must not be greater than FontCount-1
-function GetTTCIndex(const FontName: RawUtf8; var ttcIndex: Word;
+function GetTtcIndex(const FontName: RawUtf8; var TtcIndex: word;
   FontCount: LongWord): boolean;
 const
   // Font names for Simp/Trad Chinese, Japanese, Korean locales
@@ -3494,34 +3495,34 @@ begin
   result := true;
   if FindPropName(['batang', 'cambria', 'gulim', 'mingliu', 'mingliu-extb',
     'ms gothic', 'ms mincho', 'simsun'], FontName) >= 0 then
-    ttcIndex := 0
+    TtcIndex := 0
   else if FindPropName(['batangche', 'cambria math', 'gulimche', 'pmingliu',
     'pmingliu-extb', 'ms pgothic', 'ms pmincho', 'nsimsun'], FontName) >= 0 then
-    ttcIndex := 1
+    TtcIndex := 1
   else if FindPropName(['gungsuh', 'dotum', 'mingliu_hkscs',
     'mingliu_hkscs-extb', 'ms ui gothic'], FontName) >= 0 then
-    ttcIndex := 2
+    TtcIndex := 2
   else if FindPropName(['gungsuhche', 'dotumche'], FontName) >= 0 then
-    ttcIndex := 3
+    TtcIndex := 3
   else
   begin
     lcfn := UpperCaseSynUnicode(Utf8ToSynUnicode(FontName));
     if FindSynUnicode([BATANG_KO, GULIM_KO, MINGLIU_CH, MINGLIU_XB_CH,
       MSGOTHIC_JA, MSMINCHO_JA, SIMSUN_CHS], lcfn) >= 0 then
-      ttcIndex := 0
+      TtcIndex := 0
     else if FindSynUnicode([BATANGCHE_KO, GULIMCHE_KO, MINGLIU_HK_CH,
       PMINGLIU_XB_CH, MSPGOTHIC_JA, MSPMINCHO_JA, NSIMSUN_CHS], lcfn) >= 0 then
-      ttcIndex := 1
+      TtcIndex := 1
     else if FindSynUnicode([GUNGSUH_KO, DOTUM_KO, MINGLIU_HK_CH, MINGLIU_XBHK_CH],
       lcfn) >= 0 then
-      ttcIndex := 2
+      TtcIndex := 2
     else if FindSynUnicode([GUNGSUHCHE_KO, DOTUMCHE_KO], lcfn) >= 0 then
-      ttcIndex := 3
+      TtcIndex := 3
     else
       result := false;
   end;
   if result and
-    (ttcIndex > (FontCount - 1)) then
+    (TtcIndex > (FontCount - 1)) then
     result := false;
 end;
 
@@ -3537,7 +3538,7 @@ type
   teaDrawtype = record
     res: tcaRes;
     pts: array[0..2] of record
-      x, Y: single;
+      X, Y: single;
     end;
   end;
 
@@ -3577,11 +3578,11 @@ const
   // into a "max bound" error
   safety: TCoeff = (0.001, 4.98, 0.207, 0.0067);
 var
-  fcx, fcy: double; //  center of the ellipse
-  faRad, fbRad: double; // Semi-major axis
-  feta1, feta2: double; //  Start End angle of the arc
-  fx1, fy1, fx2, fy2: double;  //start and and endpoint
-  fArctype: TPdfCanvasArcType;  //Indicator for center to endpoints line inclusion
+  fcx, fcy: double;            // center of the ellipse
+  faRad, fbRad: double;        // semi-major axis
+  feta1, feta2: double;        // start end angle of the arc
+  fx1, fy1, fx2, fy2: double;  // start and endpoint
+  fArctype: TPdfCanvasArcType; // center to endpoints line inclusion
   fClockWise: boolean;
 
   procedure InitFuncData;
@@ -3664,13 +3665,13 @@ var
     xB, yB, xBDot, yBDot: double;
     i: integer;
     t, xA, xADot, yA, yADot: double;
-    ressize: integer; // Index var for result Array
+    ressize: integer;         // Index var for result Array
     r: ^teaDrawtype;
-    lstartx, lstarty: double;  // Start from
+    lstartx, lstarty: double; // Start from
   const
-    defaultFlatness = 0.5; // half a pixel
+    defaultFlatness = 0.5;    // half a pixel
   begin
-  // find the number of Bezier curves needed
+    // find the number of Bezier curves needed
     found := false;
     n := 1;
     while (not found) and
@@ -6009,8 +6010,8 @@ begin
   if i < 0 then // if this glyph doesn't exist in this font -> set to zero
     i := 0
   else
-    i := UnicodeFont.fUsedWide[i].int;
-  fUsedWide[result].int := i; // update Width and Glyph
+    i := UnicodeFont.fUsedWide[i].Used;
+  fUsedWide[result].Used := i; // update Width and Glyph
 end;
 
 function TPdfFontTrueType.GetAndMarkGlyphAsUsed(aGlyph: word): word;
@@ -6186,9 +6187,9 @@ var
   submem: cardinal;
   subsize: cardinal;
   used: TSortedWordArray;
-  uniflags: Word;  // For CreateFontPackage
+  uniflags: word;  // For CreateFontPackage
   {$endif USE_UNISCRIBE}
-  ttcIndex: Word; // For CreateFontPackage
+  ttcIndex: word; // For CreateFontPackage
   tableTag: LongWord;
   ttcNumFonts: LongWord;
   ttcBytes: array of byte;
@@ -6225,20 +6226,20 @@ begin
         // WinAnsiFont.fUsedWide[] contains glyphs used by ShowText
         for i := 0 to n - 1 do
           with WinAnsiFont.fUsedWide[i] do
-            if int <> 0 then
+            if Used <> 0 then
               WR.Add(Glyph).Add('[').Add(Width).Add(']');
         font.AddItem('W', TPdfRawText.Create(WR.Add(']').ToPdfString));
       end;
       font.AddItem('FontDescriptor', WinAnsiFont.fFontDescriptor);
       fDoc.fXRef.AddObject(font);
-      // create and associate font fonts array
+      // create and associate DescendantFonts array
       fonts := TPdfArray.Create(fDoc.fXRef);
       fonts.AddItem(font);
       Data.AddItem('DescendantFonts', fonts);
       // create tounicode CMaping
       tounicode := TPdfStream.Create(fDoc);
       tounicode.Writer.Add('/CIDInit /ProcSet findresource begin'#10 +
-        '12 dict begin'#10'begincmap'#10'/info'#10'<<'#10'/Registry (').
+        '12 dict begin'#10'begincmap'#10'/CIDSystemInfo'#10'<<'#10'/Registry (').
         Add(ShortCut).
         Add('+0)'#10'/Ordering (UCS)'#10'/Supplement 0'#10'>> def'#10 +
         '/CMapName /').Add(ShortCut).Add('+0 def'#10'/CMapType 2 def'#10 +
@@ -6253,13 +6254,13 @@ begin
           L := n;
         count := L; // calculate real count of items in this beginbfchar
         for i := ndx to ndx + L - 1 do
-          if WinAnsiFont.fUsedWide[i].int = 0 then
+          if WinAnsiFont.fUsedWide[i].Used = 0 then
             dec(count);
         tounicode.Writer.Add(count).
                          Add(' beginbfchar'#10);
         for i := ndx to ndx + L - 1 do
           with WinAnsiFont.fUsedWide[i] do
-            if int <> 0 then
+            if Used <> 0 then
               tounicode.Writer.Add('<').AddHex4(Glyph).Add('> <').
                 AddHex4(WinAnsiFont.fUsedWideChar.Values[i]).Add('>'#10);
         dec(n, L);
@@ -6318,9 +6319,9 @@ begin
           else // Higher bytes will be zero
             ttcNumFonts := 1;
           // we need to find out the index of the font within the ttc collection
-          // (this is not easy, so GetTTCIndex uses lookup on known ttc fonts)
+          // (this is not easy, so GetTtcIndex uses lookup on known ttc fonts)
           if (ttcNumFonts < 2) or
-             not GetTTCIndex(fDoc.fTrueTypeFonts[fTrueTypeFontsIndex - 1],
+             not GetTtcIndex(fDoc.fTrueTypeFonts[fTrueTypeFontsIndex - 1],
                ttcIndex, ttcNumFonts) then
             ttcIndex := 0;
           {$ifdef USE_UNISCRIBE}
@@ -8325,8 +8326,7 @@ end;
 procedure TPdfCanvas.TextRect(ARect: TPdfRect; const Text: PdfString;
   Alignment: TPdfAlignment; Clipping: boolean);
 var
-  w: single;
-  x: single;
+  w, x: single;
 begin
   // calculate text width and corresponding X position according to alignment
   w := TextWidth(Text);
@@ -10293,7 +10293,7 @@ begin
           NormalizeRect(PRect(@PEMRARC(R)^.rclBox)^);
           E.NeedPen;
           with PEMRARC(R)^, CenterPoint(TRect(rclBox)) do
-            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left,
+            E.Canvas.ArcI(X, Y, rclBox.Right - rclBox.Left,
               rclBox.Bottom - rclBox.Top, ptlStart.x, ptlStart.y,
               ptlEnd.x, ptlEnd.y, E.dc[E.nDC].ArcDirection = AD_CLOCKWISE,
               acArc, position);
@@ -10309,7 +10309,7 @@ begin
           with PEMRARC(R)^, CenterPoint(TRect(rclBox)) do
           begin
             // E.Canvas.LineTo(ptlStart.x, ptlStart.y);
-            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left,
+            E.Canvas.ArcI(X, Y, rclBox.Right - rclBox.Left,
               rclBox.Bottom - rclBox.Top, ptlStart.x, ptlStart.y,
               ptlEnd.x, ptlEnd.y, E.dc[E.nDC].ArcDirection = AD_CLOCKWISE,
               acArcTo, position);
@@ -10325,7 +10325,7 @@ begin
           NormalizeRect(PRect(@PEMRPie(R)^.rclBox)^);
           E.NeedBrushAndPen;
           with PEMRPie(R)^, CenterPoint(TRect(rclBox)) do
-            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left,
+            E.Canvas.ArcI(X, Y, rclBox.Right - rclBox.Left,
               rclBox.Bottom - rclBox.Top, ptlStart.x, ptlStart.y,
               ptlEnd.x, ptlEnd.y, E.dc[E.nDC].ArcDirection = AD_CLOCKWISE,
               acPie, position);
@@ -10339,7 +10339,7 @@ begin
           NormalizeRect(PRect(@PEMRChord(R)^.rclBox)^);
           E.NeedBrushAndPen;
           with PEMRChord(R)^, CenterPoint(TRect(rclBox)) do
-            E.Canvas.ArcI(x, Y, rclBox.Right - rclBox.Left,
+            E.Canvas.ArcI(X, Y, rclBox.Right - rclBox.Left,
               rclBox.Bottom - rclBox.Top, ptlStart.x, ptlStart.y,
               ptlEnd.x, ptlEnd.y, E.dc[E.nDC].ArcDirection = AD_CLOCKWISE,
               acChoord, position);
@@ -10997,8 +10997,8 @@ begin
       MoveFast(aLogFont^.elfw.elfLogFont, LogFont, sizeof(LogFont));
       LogFont.lfPitchAndFamily := tm.tmPitchAndFamily;
       if LogFont.lfOrientation <> 0 then
-        FontSpec.angle := LogFont.lfOrientation div 10
-      else // -360..+360
+        FontSpec.angle := LogFont.lfOrientation div 10 // -360..+360
+      else
         FontSpec.angle := LogFont.lfEscapement div 10;
       FontSpec.ascent := tm.tmAscent;
       FontSpec.descent := tm.tmDescent;
@@ -11115,14 +11115,14 @@ begin
               with vertex[Vertex1] do
               begin
                 FillColor := RGBA(Red, Green, Blue, 0); // ignore Alpha
-                Canvas.MoveToI(x, Y);
+                Canvas.MoveToI(X, Y);
               end;
               with vertex[Vertex2] do
-                Canvas.LineToI(x, Y);
+                Canvas.LineToI(X, Y);
               with vertex[Vertex3] do
-                Canvas.LineToI(x, Y);
+                Canvas.LineToI(X, Y);
               with vertex[Vertex1] do
-                Canvas.LineToI(x, Y);
+                Canvas.LineToI(X, Y);
               // DC[nDC].Moved := Point(pt1.X, pt1.Y);
               Canvas.Closepath;
               Canvas.Fill;

@@ -73,8 +73,10 @@ type
 
   /// abstract execution context for the TSynEnumerator<T> record
   TSynEnumeratorState = record
-    {$ifdef NOSIZEOFT} ItemSize, {$endif}
     Current, After: PtrUInt; // 2-3 pointers on stack
+    {$ifdef NOSIZEOFT}
+    ItemSize: PtrUInt;
+    {$endif NOSIZEOFT}
   end;
 
   /// efficient mean to iterate over a generic collection of a specific type
@@ -767,7 +769,8 @@ end;
 
 function TSynEnumerator<T>.DoGetCurrent: T;
 begin
-  result := {%H-}PT(fState.Current)^; // faster than fDynArray^.ItemCopy()
+  result := {%H-}PT(fState.Current)^;
+  // faster than fDynArray^.ItemCopy() - at least for simple types
 end;
 
 
@@ -1033,12 +1036,16 @@ begin
   state.Current := PtrUInt(fValue);
   if state.Current = 0 then
   begin
-    {$ifdef NOSIZEOFT} state.ItemSize := 0; {$endif}
     state.After := 0; // ensure MoveNext=false
+    {$ifdef NOSIZEOFT}
+    state.ItemSize := 0;
+    {$endif NOSIZEOFT}
     exit;
   end;
   s := fDynArray.Info.Cache.ItemSize;
-  {$ifdef NOSIZEOFT} state.ItemSize := s; {$endif}
+  {$ifdef NOSIZEOFT}
+  state.ItemSize := s;
+  {$endif NOSIZEOFT}
   state.After := state.Current + s * PtrUInt(fCount);
   dec(state.Current, s);
 end;
@@ -1058,8 +1065,10 @@ begin
   if (state.Current = 0) or
      (Offset >= fCount) then
   begin
-    {$ifdef NOSIZEOFT} state.ItemSize := 0; {$endif}
     state.After := 0;  // ensure MoveNext=false
+    {$ifdef NOSIZEOFT}
+    state.ItemSize := 0;
+    {$endif NOSIZEOFT}
     exit;
   end;
   if Limit = 0 then
@@ -1068,7 +1077,9 @@ begin
   if Limit > PtrInt(s) then
     Limit := s;
   s := fDynArray.Info.Cache.ItemSize;
-  {$ifdef NOSIZEOFT} state.ItemSize := s; {$endif}
+  {$ifdef NOSIZEOFT}
+  state.ItemSize := s;
+  {$endif NOSIZEOFT}
   inc(state.Current, s * PtrUInt(Offset));
   state.After := state.Current + s * PtrUInt(Limit);
   dec(state.Current, s);

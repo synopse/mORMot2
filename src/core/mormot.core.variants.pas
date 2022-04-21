@@ -5634,8 +5634,8 @@ begin
     exit;
   backup := VOptions - [dvoIsArray, dvoIsObject];
   ClearFast;
-  VType := DocVariantVType;
   VOptions := backup;
+  VType := DocVariantVType;
 end;
 
 procedure TDocVariantData.FillZero;
