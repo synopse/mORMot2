@@ -5155,7 +5155,10 @@ begin
     exit;
   Buffer := LockResource(HGlobal);
   Size := SizeofResource(Instance, HResInfo);
-  result := true;
+  if Size > 0 then
+    result := true
+  else
+    Close; // paranoid check
 end;
 
 procedure TExecutableResource.Close;
