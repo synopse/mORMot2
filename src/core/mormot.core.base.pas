@@ -4151,7 +4151,8 @@ var
   r: pointer;
 begin
   r := FastNewString(len, codepage);
-  if p <> nil then
+  if (p <> nil) and
+     (r <> nil) then
     MoveFast(p^, r^, len);
   FastAssignNew(s, r);
 end;
@@ -4161,7 +4162,8 @@ var
   r: pointer;
 begin
   r := FastNewString(len, CP_UTF8); // FPC will do proper constant propagation
-  if p <> nil then
+  if (p <> nil) and
+     (r <> nil) then
     MoveFast(p^, r^, len);
   FastAssignNew(s, r);
 end;
@@ -4171,7 +4173,8 @@ var
   r: pointer;
 begin
   r := FastNewString(len, CP_RAWBYTESTRING); // FPC does constant propagation
-  if p <> nil then
+  if (p <> nil) and
+     (r <> nil) then
     MoveFast(p^, r^, len);
   FastAssignNew(s, r);
 end;
