@@ -481,7 +481,32 @@ var
 
 { ************ Encryption-Related Functions }
 
-// some external functions as expected by codecext.c and our sqlite3mc.c wrapper
+{
+ Our SQlite3 static files includes a SQLite3MultipleCiphers VFS for encryption.
+ See https://github.com/synopse/mORMot2/tree/master/res/static/libsqlite3
+ The SQLite3 source is not patched to implement the VFS itself (it is not
+ mandatory), but is patched to add some key-related high-level features - see
+ https://utelle.github.io/SQLite3MultipleCiphers/docs/architecture/arch_patch
+ VFS codecext.c and sqlite3mc.c redirect to those external functions below.
+
+ Encryption is done in CodecAESProcess() using AES-CTR or AES-OFB. It uses mORMot
+ optimized asm, which is faster than OpenSSL on x86_64 (our main server target).
+ Each page is encrypted with an IV derived from its page number using AES. By
+ default with mORMot a page size is 4KB. No overhead is used for IV or HMAC
+ storage. The first bytes of the files are not encrypted, because it is mandatory
+ for proper work with most SQLite3 tools. This is what all other libraries do,
+ including the official (but not free) SSE extension from SQLite3 authors - see
+ https://utelle.github.io/SQLite3MultipleCiphers/docs/ciphers/cipher_legacy_mode
+
+ Key derivation from password is done in CodecGenerateKey() using PBKDF2 safe
+ iterative key derivation over the SHA-3 (SHAKE_128) algorithm, reduced into
+ 128-bit. There is no benefit of using AES-256 in practice, because a 128-bit
+ password using a 80-character alphabet (i.e. very strong computerized password)
+ already require at least 21 chars, which is very unlikely in practice.
+ It uses 1000 rounds by default, and you can customize the password derivation
+ using overridden parameters in JSON format instead of the plain password,
+ following TSynSignerParams fields.
+}
 
 const
   CODEC_PBKDF2_SALT = 'J6CuDftfPr22FnYn';
@@ -691,7 +716,7 @@ begin
   if not ValidHandle(F) then
     exit;
   if (FileRead(F, hdr, SizeOf(hdr)) = SizeOf(hdr)) and
-     // see https://www.sqlite.org/fileformat.html (4 in big endian = 1024 bytes)
+     // see https://www.sqlite.org/fileformat.html (4 in bigendian = 1024 bytes)
      (PWord(@hdr[16])^ = 4) and
      IsEqual(PHash128(@hdr)^, SQLITE_FILE_HEADER128.b) then
     if not (hdr[1024] in [5, 10, 13]) then
@@ -714,7 +739,7 @@ const
   begin
     L := length(PassWord) - 1;
     j := 0;
-    k := integer(L * ord(PassWord[1])) + 134775813; // initial value, prime number derivated
+    k := integer(L * ord(PassWord[1])) + 134775813; // initial value, prime based
     for i := 0 to OLDENCRYPTTABLESIZE - 1 do
     begin
       Table^[i] := (ord(PassWord[j + 1])) xor byte(k);
