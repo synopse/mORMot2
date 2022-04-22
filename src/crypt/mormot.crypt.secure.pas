@@ -497,6 +497,9 @@ const
 
 type
   /// the HMAC/SHA-3 algorithms known by TSynSigner
+  // - HMAC/SHA-1 is considered unsafe, HMAC/SHA-2 are well proven, and
+  // HMAC/SHA-3 is newer but strong, so a good candidate for safety
+  // - saSha3S128 is used by default, i.e. SHA-3 in SHAKE_128 mode
   TSignAlgo = (
     saSha1,
     saSha256,
@@ -512,6 +515,8 @@ type
   /// JSON-serialization ready object as used by TSynSigner.Pbkdf2() overloaded methods
   // - default value for unspecified parameters will be SHAKE_128 with
   // rounds=1000 and a fixed salt
+  // - a typical (extended) JSON to supply to TSynSigner.Pbkdf2() may be
+  // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
   TSynSignerParams = packed record
     algo: TSignAlgo;
     secret, salt: RawUtf8;
@@ -561,13 +566,15 @@ type
     procedure Pbkdf2(const aParams: TSynSignerParams;
       out aDerivatedKey: THash512Rec); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
-    // - accept as input a TSynSignerParams serialized as JSON object
+    // - accept as input a TSynSignerParams serialized as JSON object e.g.
+    // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
     procedure Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
       out aDerivatedKey: THash512Rec;
       const aDefaultSalt: RawUtf8 = SIGNER_DEFAULT_SALT;
       aDefaultAlgo: TSignAlgo = saSha3S128); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
-    // - accept as input a TSynSignerParams serialized as JSON object
+    // - accept as input a TSynSignerParams serialized as JSON object e.g.
+    // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
     procedure Pbkdf2(const aParamsJson: RawUtf8;
       out aDerivatedKey: THash512Rec;
       const aDefaultSalt: RawUtf8 = SIGNER_DEFAULT_SALT;

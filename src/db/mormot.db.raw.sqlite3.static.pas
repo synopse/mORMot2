@@ -97,9 +97,9 @@ type
 // involved, therefore it can process very big files with best possible speed
 // - the OldPassWord must be correct, otherwise the resulting file will be corrupted
 // - any password can be '' to mark no encryption as input or output
-// - the password may be a JSON-serialized TSynSignerParams object, or will use
-// AES-CTR-128 (or AES-OFB-128 if ForceSQLite3AesCtr is false) after SHAKE_128
-// with rounds=1000 and a fixed salt on plain password text
+// - password will use AES-128 (see ForceSQLite3AesCtr) after PBKDF2 SHAKE_128
+// with rounds=1000 or a JSON (extended) serialized TSynSignerParams object like
+// ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
 // - please note that this encryption is compatible only with SQlite3 files made
 // with SynSQLiteStatic.pas unit (not external/official/wxsqlite3 dll)
 // - implementation is NOT compatible with the official SQLite Encryption Extension
@@ -137,6 +137,7 @@ var
   /// global flag to use AES-CTR instead of AES-OFB encryption
   // - on x86_64 our optimized asm is 2.5GB/s for CTR instead of 770MB/s for OFB
   // - enabled in PUREMORMOT2 mode, since performance is better on x86_64 (or OpenSSL)
+  // - set ForceSQLite3AesCtr := true for compatibility reasons with mORMot 1
   ForceSQLite3AesCtr: boolean {$ifdef PUREMORMOT2} = true {$endif};
 
 

@@ -584,14 +584,18 @@ end;
 
 {$endif FPC}
 
-{ some numbers, with CITIES_MAX=200000, deleting 1/128 entries
+{
+  Some numbers, with CITIES_MAX=200000, deleting 1/128 entries
   first column (3..23) is the max number of indexes[] chunk to rehash
+  #abc is the number of slots in the hash table
+  adjust=abc abcMB/s match DynArrayHashTableAdjust() time fixing the indexes
+  hash=abc is the time needed to hash input (not impacted by ajust algorithm)
   -> TDynArray.Delete move() takes more time than the HashTable update :)
   1. naive loop
     for i := 0 to HashTableSize-1 do
       if HashTable[i]>aArrayIndex then
         dec(HashTable[i]);
-    3 #257  adjust=7.95ms 191.7MB hash=8us
+    3 #257  adjust=7.95ms 191.7MB/s hash=8us
     23 #195075  adjust=4.27s 548.6MB/s hash=2.47ms
   2. branchless pure pascal code is about 10x faster!
     3 #257  adjust=670us 2.2GB hash=8us

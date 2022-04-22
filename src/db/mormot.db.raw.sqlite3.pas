@@ -2109,8 +2109,9 @@ type
     /// Specify the encryption key on a newly opened database connection
     // - Assigned(key)=false if encryption is not available for this .dll
     // - mormot.db.raw.sqlite3.static will use its own internal encryption format
-    // - key/keylen may be a JSON-serialized TSynSignerParams object, or will use
-    // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
+    // - key/keylen will use AES-128 OFB/CTR after PBKDF2 SHAKE_128 with rounds=1000
+    // or a JSON (extended) serialized TSynSignerParams object like
+    // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
     key: function(DB: TSqlite3DB; key: pointer; keyLen: integer): integer; cdecl;
 
     /// change the encryption key on a database connection that is already opened
@@ -4860,12 +4861,11 @@ type
   public
     /// open a SQLite3 database file
     // - open an existing database file or create a new one if no file exists
-    // - if specified, the password will be used to cypher this file on disk
-    // (the main SQLite3 database file is encrypted, not the wal file during run);
-    // the password may be a JSON-serialized TSynSignerParams object, or will use
-    // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain
-    // password text; note that our custom encryption is not compatible with the
-    // official SQLite Encryption Extension module
+    // - password will use AES-128 (see ForceSQLite3AesCtr) after PBKDF2 SHAKE_128
+    // with rounds=1000 or a JSON (extended) serialized TSynSignerParams object like
+    // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
+    // note that our custom encryption is not compatible with the official
+    // SQLite Encryption Extension (SEE) module nor any other library
     // - you can specify some optional flags for sqlite3.open_v2() as
     // SQLITE_OPEN_READONLY or SQLITE_OPEN_READWRITE instead of supplied default
     // value (which corresponds to the sqlite3.open() behavior)
@@ -5120,8 +5120,8 @@ type
     property DB: TSqlite3DB
       read fDB;
     /// read-only access to the SQlite3 password used for encryption
-    // - may be a JSON-serialized TSynSignerParams object, or will use AES-OFB-128
-    // after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
+    // - may be a JSON-serialized TSynSignerParams object, or will use AES-128
+    // after PBKDF2 SHAKE_128 with rounds=1000 and a fixed salt on its plain text
     property Password: SpiUtf8
       read fPassword;
     /// read-only access to the SQLite3 database filename opened without its path
