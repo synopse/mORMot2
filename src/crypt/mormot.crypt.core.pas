@@ -3952,9 +3952,7 @@ var
 
 {$ifdef CPUAARCH64}
 
-{$L ..\..\static\aarch64-linux\armv8.o} // could we reuse Linux .o on any POSIX?
-{$L ..\..\static\aarch64-linux\sha256armv8.o}
-
+// aes/gcm code is already included in armv8.o from mormot.core.os:
 procedure aesencryptarm128(rk, bi, bo: pointer); external;
 procedure aesencryptarm192(rk, bi, bo: pointer); external;
 procedure aesencryptarm256(rk, bi, bo: pointer); external;
@@ -3963,6 +3961,8 @@ procedure aesdecryptarm128(rk, bi, bo: pointer); external;
 procedure aesdecryptarm192(rk, bi, bo: pointer); external;
 procedure aesdecryptarm256(rk, bi, bo: pointer); external;
 procedure gf_mul_h_arm(a, b: pointer); external;
+
+{$L ..\..\static\aarch64-linux\sha256armv8.o}
 procedure sha256_block_data_order(ctx, bi: pointer; count: PtrInt); external;
 
 {$endif CPUAARCH64}
