@@ -22,13 +22,13 @@ unit mormot.crypt.core;
 
   *****************************************************************************
 
-   Original Copyright Notices of some Open Source implementations:
+   Original Copyright Notices of some Open Source implementations, included
+   with (deep) refactoring (other routines are our own coding):
    - aes_pascal, keccak_pascal: (c) Wolfgang Ehrhardt under zlib license
    - KeccakPermutationKernel MMX/i386: (c) Eric Grange
    - MD5_386.asm: (c) Maxim Masiutin - Ritlabs, SRL
    - sha512-x86: (c) Project Nayuki under MIT license
    - sha512-x64sse4, sha256-sse4, crc32c64: (c) Intel Corporation w/ OS licence
-   Maybe with (deep) refactoring. Other routines are our own coding.
 
    Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
    to any restriction about the use of cryptographic software in your country.
@@ -2403,8 +2403,9 @@ procedure Pbkdf2Sha3(algo: TSha3Algo; const password, salt: RawByteString;
 
 /// encryption/decryption of any data using iterated SHA-3 hashing key derivation
 // - specified algo is expected to be SHAKE_128 or SHAKE_256
-// - expected the supplied data buffer to be small - for bigger content,
-// consider using TAes Cypher after 256-bit  Pbkdf2Sha3 key derivation
+// - expected the supplied data buffer to be small, because the whole buffer
+// will be hashed in XOF mode count time, so it would be slow - for big content,
+// consider using an AES Cypher after 256-bit Pbkdf2Sha3 key derivation
 procedure Pbkdf2Sha3Crypt(algo: TSha3Algo; const password, salt: RawByteString;
   count: integer; var data: RawByteString);
 

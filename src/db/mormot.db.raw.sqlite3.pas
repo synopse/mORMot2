@@ -5455,8 +5455,8 @@ begin
       sqlite3.result_double(Context, Res.VCurrency);
     ftDate:
       begin
-        DateTimeToIso8601ExpandedPChar(Res.VDateTime, tmp{%H-}, 'T',
-          svoDateWithMS in Res.Options);
+        DateTimeToIso8601ExpandedPChar(
+          Res.VDateTime, tmp{%H-}, 'T', svoDateWithMS in Res.Options);
         sqlite3.result_text(Context, tmp, -1, SQLITE_TRANSIENT_VIRTUALTABLE);
       end;
     // WARNING! use pointer(integer(-1)) instead of SQLITE_TRANSIENT=pointer(-1)
@@ -5472,8 +5472,8 @@ begin
   else
     begin
       sqlite3.result_null(Context);
-      SQLite3Log.DebuggerNotify(sllWarning, 'SqlVarToSQlite3Context(%)',
-        [ord(Res.VType)]);
+      SQLite3Log.DebuggerNotify(
+        sllWarning, 'SqlVarToSQlite3Context(%)', [ord(Res.VType)]);
       result := false; // not handled type (will set null value)
       exit;
     end;

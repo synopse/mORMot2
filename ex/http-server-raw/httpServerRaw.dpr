@@ -1,19 +1,46 @@
 program httpServerRaw;
 
 {
-
   usr@pc:~ sudo apt install wrk
-  usr@pc:~ wrk -c 10000 -t 8  http://localhost:8888/echo
-
+  usr@pc:~ wrk -c 1000 -t 4  http://localhost:8888/echo
   Running 10s test @ http://localhost:8888/echo
-    8 threads and 10000 connections
+    4 threads and 1000 connections
     Thread Stats   Avg      Stdev     Max   +/- Stdev
-      Latency     4.77ms    4.21ms 417.16ms   87.83%
-      Req/Sec    20.99k    10.12k   64.65k    77.22%
-    1644051 requests in 10.09s, 246.95MB read
-    Socket errors: connect 8987, read 0, write 0, timeout 0
-  Requests/sec: 162907.07
-  Transfer/sec:     24.47MB
+      Latency     5.46ms    2.01ms  22.48ms   72.35%
+      Req/Sec    40.34k     4.09k   65.62k    74.24%
+    1600804 requests in 10.06s, 277.85MB read
+  Requests/sec: 159093.08
+  Transfer/sec:     27.61MB
+
+  usr@pc:~ sudo apt install apache2-utils
+  usr@pc:~ ab -t 20 -n 100000 -c 1000 -k http://127.0.0.1:8888/echo
+  This is ApacheBench, Version 2.3 <$Revision: 1879490 $>
+
+  Server Software:        mORMot2
+  Server Hostname:        127.0.0.1
+  Server Port:            8888
+
+  Document Path:          /echo
+  Document Length:        53 bytes
+
+  Concurrency Level:      1000
+  Time taken for tests:   1.057 seconds
+  Complete requests:      100000
+  Failed requests:        0
+  Keep-Alive requests:    100000
+  Total transferred:      18200000 bytes
+  HTML transferred:       5300000 bytes
+  Requests per second:    94575.35 [#/sec] (mean)
+  Time per request:       10.574 [ms] (mean)
+  Time per request:       0.011 [ms] (mean, across all concurrent requests)
+  Transfer rate:          16809.29 [Kbytes/sec] received
+
+  Connection Times (ms)
+                min  mean[+/-sd] median   max
+  Connect:        0    0   1.9      0      41
+  Processing:     1    8  10.4      7     165
+  Waiting:        0    8  10.4      7     165
+  Total:          1    8  10.6      7     165
 
 }
 
@@ -61,7 +88,8 @@ begin
       Async.Log.Add.Log(sllInfo, 'DoOnRequest %', [Ctxt], self);
   if Ctxt.Method = 'GET' then
     Ctxt.OutContent := FormatUtf8('got % request #% from connection #%',
-      [Ctxt.Url, CardinalToHexShort(Ctxt.RequestID), CardinalToHexShort(Ctxt.ConnectionID)])
+      [Ctxt.Url, CardinalToHexShort(Ctxt.RequestID),
+       CardinalToHexShort(Ctxt.ConnectionID)])
     // we use CardinalToHexShort() to keep the same length (as request by ab)
   else
     Ctxt.OutContent := Ctxt.InContent;  // POST = echo
@@ -114,7 +142,6 @@ begin
     TextColor(ccLightGray);
     writeln('Press [Enter] to quit'#10);
     TextColor(ccCyan);
-    //sleep(10000);
     ConsoleWaitForEnterKey;
     writeln(ObjectToJson(simpleServer.fHttpServer, [woHumanReadable]));
     TextColor(ccLightGray);
