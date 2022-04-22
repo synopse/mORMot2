@@ -11,7 +11,8 @@ unit mormot.net.ws.core;
    - WebSockets Protocols Implementation
    - WebSockets Asynchronous Frames Parsing
    - WebSockets Client and Server Shared Process
-   
+   - TWebSocketProtocolChat Simple Protocol
+
   *****************************************************************************
 
 }
@@ -923,6 +924,47 @@ type
     function Encode(const Frame: TWebSocketFrame; Dest: PAnsiChar): integer;
   end;
 
+
+{ ******************** TWebSocketProtocolChat Simple Protocol }
+
+type
+  /// callback event triggered by TWebSocketProtocolChat for any incoming message
+  // - a first call with frame.opcode=focContinuation will take place when
+  // the connection will be upgraded to WebSockets
+  // - then any incoming focText/focBinary events will trigger this callback
+  // - eventually, a focConnectionClose will notify the connection ending
+  TOnWebSocketProtocolChatIncomingFrame = procedure(
+    Sender: TWebCrtSocketProcess;
+    const Frame: TWebSocketFrame) of object;
+
+  /// simple chatting protocol, allowing to receive and send WebSocket frames
+  // - you can use this protocol to implement simple asynchronous communication
+  // with events expecting no answers, e.g. from or as AJAX applications
+  // - see TWebSocketProtocolRest for bi-directional events expecting answers,
+  // as between mORMot client and server
+  TWebSocketProtocolChat = class(TWebSocketProtocol)
+  protected
+    fOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame;
+    procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
+      var request: TWebSocketFrame; const info: RawUtf8); override;
+  public
+    /// initialize the chat protocol with an incoming frame callback
+    constructor Create(const aName, aUri: RawUtf8;
+       const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame); overload;
+    /// compute a new instance of the WebSockets protocol, with same parameters
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
+    /// allows to send a message over the wire to a specified connection
+    // - a temporary copy of the Frame content will be made for safety
+    // - Sender identify the connection, typically from OnIncomingFrame callback
+    function SendFrame(Sender: TWebCrtSocketProcess;
+       const Frame: TWebSocketFrame): boolean;
+    /// allows to send a JSON message over the wire to a specified connection
+    function SendFrameJson(Sender: TWebCrtSocketProcess;
+       const Json: RawUtf8): boolean;
+    /// you can assign an event to this property to be notified of incoming messages
+    property OnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame
+      read fOnIncomingFrame write fOnIncomingFrame;
+  end;
 
 
 var
@@ -3135,6 +3177,75 @@ begin
     end;
   result := st;
 end;
+
+
+{ ******************** TWebSocketProtocolChat Simple Protocol }
+
+{ TWebSocketProtocolChat }
+
+constructor TWebSocketProtocolChat.Create(const aName, aUri: RawUtf8;
+  const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame);
+begin
+  inherited Create(aName, aUri);
+  fOnIncomingFrame := aOnIncomingFrame;
+end;
+
+function TWebSocketProtocolChat.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
+begin
+  result := TWebSocketProtocolChat.Create(fName, fUri);
+  if fEncryption <> nil then
+    TWebSocketProtocolChat(result).fEncryption := fEncryption.Clone;
+  TWebSocketProtocolChat(result).OnIncomingFrame := OnIncomingFrame;
+end;
+
+procedure TWebSocketProtocolChat.ProcessIncomingFrame(Sender: TWebSocketProcess;
+  var request: TWebSocketFrame; const info: RawUtf8);
+begin
+  if Assigned(OnInComingFrame) then
+  try
+    if Sender.InheritsFrom(TWebCrtSocketProcess) then
+      OnIncomingFrame(TWebCrtSocketProcess(Sender), request)
+    else
+      OnIncomingFrame(nil, request);
+  except
+    // ignore any exception in the callback
+  end;
+end;
+
+function TWebSocketProtocolChat.SendFrame(Sender: TWebCrtSocketProcess;
+  const frame: TWebSocketFrame): boolean;
+var
+  tmp: TWebSocketFrame; // SendFrame() may change frame content (e.g. mask)
+begin
+  result := false;
+  if (self = nil) or
+     (Sender = nil) or
+     (Sender.State <> wpsRun) or
+     not (frame.opcode in [focText, focBinary])  then
+    exit;
+  tmp.opcode := frame.opcode;
+  tmp.content := frame.content;
+  FastSetRawByteString(tmp.payload, Pointer(frame.payload), length(frame.payload));
+  result := Sender.SendFrame(tmp)
+end;
+
+function TWebSocketProtocolChat.SendFrameJson(Sender: TWebCrtSocketProcess;
+  const Json: RawUtf8): boolean;
+var
+  frame: TWebSocketFrame;
+begin
+  result := false;
+  if (self = nil) or
+     (Sender = nil) or
+     (Sender.State <> wpsRun) then
+    exit;
+  frame.opcode := focText;
+  frame.content := [];
+  frame.tix := 0;
+  frame.payload := Json;
+  result := Sender.SendFrame(frame)
+end;
+
 
 
 initialization

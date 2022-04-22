@@ -63,6 +63,7 @@ WebSockets Abstract Processing for Client and Server
 - WebSockets Frames Definitions
 - WebSockets Protocols Implementation
 - WebSockets Client and Server Shared Process
+- `TWebSocketProtocolChat` Simple Protocol
 
 ### mormot.net.ws.client
 
@@ -73,7 +74,6 @@ WebSockets Bidirectional Client
 ### mormot.net.ws.server
 
 WebSockets Bidirectional Server
-- `TWebSocketProtocolChat` Simple Protocol
 - `TWebSocketProcessServer` Processing Class
 - `TWebSocketServerSocket` Bidirectional REST Server
 
