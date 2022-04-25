@@ -1402,6 +1402,11 @@ type
     procedure NewDoc;
     /// add a Page to the current PDF document
     function AddPage: TPdfPage; virtual;
+    /// register a font to the internal TTF font list
+    // - some fonts may not be enumerated in the system, e.g. after calling
+    // AddFontMemResourceEx, so could be registered by this method
+    // - to be called just after Create(), before anything is written
+    function AddTrueTypeFont(const TtfName: RawUtf8): boolean;
     /// create a Pages object
     // - Pages objects can be nested, to save memory used by the Viewer
     // - only necessary if you have more than 8000 pages (this method is called
@@ -7117,6 +7122,15 @@ begin
   result.AddItem('Contents', TPdfStream.Create(self));
   // assign this page to the current PDF canvas
   fCanvas.SetPage(result);
+end;
+
+function TPdfDocument.AddTrueTypeFont(const TtfName: RawUtf8): boolean;
+begin
+  result := GetTrueTypeFontIndex(TtfName) < 0;
+  if not result then
+    exit;
+  AddRawUtf8(fTrueTypeFonts, TtfName);
+  QuickSortRawUTF8(fTrueTypeFonts, length(fTrueTypeFonts), nil, @StrIComp);
 end;
 
 procedure TPdfDocument.FreeDoc;
