@@ -9514,9 +9514,9 @@ begin
   fContentRead := pointer(s);
 end;
 
-function TNestedStreamReader.{%H-}Write(const Buffer; Count: Longint): Longint;
+function TNestedStreamReader.Write(const Buffer; Count: Longint): Longint;
 begin
-  raise EStreamError.Create('Unexpected TNestedStreamReader.Write');
+  result := RaiseStreamError(self, 'Write');
 end;
 
 
@@ -9598,7 +9598,7 @@ end;
 
 function TBufferedStreamReader.Write(const Buffer; Count: Longint): Longint;
 begin
-  raise EStreamError.Create('Unexpected TBufferedStreamReader.Write');
+  result := RaiseStreamError(self, 'Write');
 end;
 
 

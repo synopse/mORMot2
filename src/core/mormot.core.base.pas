@@ -3665,6 +3665,9 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
+/// raise a EStreamError exception - e.g. from TSynMemoryStream.Write
+function RaiseStreamError(Caller: TObject; const Context: shortstring): Longint;
+
 
 { ************ Raw Shared Constants / Types Definitions }
 
@@ -11177,9 +11180,15 @@ begin
   SetPointer(Data, DataLen);
 end;
 
-function TSynMemoryStream.{%H-}Write(const Buffer; Count: integer): Longint;
+function TSynMemoryStream.Write(const Buffer; Count: integer): Longint;
 begin
-  raise EStreamError.Create('Unexpected TSynMemoryStream.Write');
+  result := RaiseStreamError(self, 'Write');
+end;
+
+
+function {%H-}RaiseStreamError(Caller: TObject; const Context: shortstring): Longint;
+begin
+  raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller), Context]);
 end;
 
 
