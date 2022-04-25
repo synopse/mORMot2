@@ -1196,7 +1196,7 @@ begin
   end
   else
   begin
-    values[0].ToUtf8(result);
+    result := values[0].ToUtf8; // not ToUtf8(result) to please Delphi 2007
     Base64ToBin(PAnsiChar(values[1].Text), values[1].Len, Sender.fSession.Data);
     values[2].ToUtf8(Sender.fSession.Server);
     values[3].ToUtf8(Sender.fSession.Version);
