@@ -1894,6 +1894,7 @@ function EVP_CipherUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
   _in: PByte; inl: integer): integer; cdecl;
 function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
 function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
+function EVP_CIPHER_CTX_iv(ctx: PEVP_CIPHER_CTX): PByte; cdecl;
 function EVP_MD_CTX_new(): PEVP_MD_CTX; cdecl;
 procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX); cdecl;
 function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
@@ -2687,6 +2688,7 @@ type
     EVP_CipherUpdate: function(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
     EVP_CipherFinal_ex: function(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
     EVP_CIPHER_CTX_set_padding: function(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
+    EVP_CIPHER_CTX_iv: function(ctx: PEVP_CIPHER_CTX): PByte; cdecl;
     EVP_MD_CTX_new: function: PEVP_MD_CTX; cdecl;
     EVP_MD_CTX_free: procedure(ctx: PEVP_MD_CTX); cdecl;
     EVP_MD_CTX_md: function(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
@@ -2751,7 +2753,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..280] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..281] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2972,6 +2974,7 @@ const
     'EVP_CipherUpdate',
     'EVP_CipherFinal_ex',
     'EVP_CIPHER_CTX_set_padding',
+    'EVP_CIPHER_CTX_iv',
     'EVP_MD_CTX_new',
     'EVP_MD_CTX_free',
     'EVP_MD_CTX_md',
@@ -4176,6 +4179,11 @@ end;
 function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer;
 begin
   result := libcrypto.EVP_CIPHER_CTX_set_padding(c, pad);
+end;
+
+function EVP_CIPHER_CTX_iv(ctx: PEVP_CIPHER_CTX): PByte;
+begin
+  result := libcrypto.EVP_CIPHER_CTX_iv(ctx);
 end;
 
 function EVP_MD_CTX_new: PEVP_MD_CTX;
@@ -5456,6 +5464,9 @@ function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): 
 
 function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_set_padding';
+
+function EVP_CIPHER_CTX_iv(ctx: PEVP_CIPHER_CTX): PByte; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_iv';
 
 function EVP_MD_CTX_new(): PEVP_MD_CTX; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_new';

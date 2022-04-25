@@ -13840,9 +13840,6 @@ function EVP_CIPHER_CTX_key_length(ctx: PEVP_CIPHER_CTX): integer; cdecl;
 function EVP_CIPHER_CTX_iv_length(ctx: PEVP_CIPHER_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_iv_length';
 
-function EVP_CIPHER_CTX_iv(ctx: PEVP_CIPHER_CTX): PByte; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_iv';
-
 function EVP_CIPHER_CTX_original_iv(ctx: PEVP_CIPHER_CTX): PByte; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_original_iv';
 

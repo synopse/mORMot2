@@ -713,7 +713,8 @@ type
       read fIV write fIV;
     /// low-level flag indicating you can call Encrypt/Decrypt several times
     // - i.e. the IV and AEAD MAC are updated after each Encrypt/Decrypt call
-    // - is disabled for external libraries like OpenSSL
+    // - is enabled for our internal classes, and also for OpenSSL, but may be
+    // disabled for some libraries or APIs (e.g. Windows CryptoApi classes)
     // - if you call EncryptPkcs7/DecryptPkcs7 you don't have to care about it
     property IVUpdated: boolean
       read fIVUpdated;
@@ -2595,7 +2596,7 @@ type
     /// read some data is not allowed -> this method will raise an exception on call
     function Seek(Offset: Longint; Origin: Word): Longint; override;
     /// write pending data
-    // - should always be called before closeing the outStream (some data may
+    // - should always be called before closing the outStream (some data may
     // still be in the internal buffers)
     procedure Finish;
   end;
@@ -7991,7 +7992,7 @@ end;
 
 procedure TSha3Context.PadAndSwitchToSqueezingPhase;
 var
-  i: integer;
+  i: PtrInt;
 begin
   // note: the bits are numbered from 0=LSB to 7=MSB
   if BitsInQueue + 1 = Rate then

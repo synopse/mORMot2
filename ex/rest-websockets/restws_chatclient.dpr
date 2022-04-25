@@ -1,10 +1,14 @@
 /// simple SOA client using callbacks for a chat room
 program restws_chatclient;
 
-{$APPTYPE CONSOLE}
+{$I mormot.defines.inc}
+
+{$ifdef OSWINDOWS}
+  {$APPTYPE CONSOLE}
+{$endif OSWINDOWS}
 
 uses
-  {$I SynDprUses.inc} // use FastMM4 on older versions of Delphi
+  {$I mormot.uses.inc} // use FastMM4 on older versions of Delphi
   SysUtils,
   Classes,
   mormot.core.text,

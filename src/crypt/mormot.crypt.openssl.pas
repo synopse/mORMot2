@@ -711,14 +711,18 @@ end;
 procedure TAesOsl.UpdEvp(DoEncrypt: boolean; BufIn, BufOut: pointer; Count: cardinal);
 var
   outl: integer;
+var
+  c: PEVP_CIPHER_CTX;
 begin
   if (BufOut <> nil) and
      (Count and AesBlockMod <> 0) then
     raise ESynCrypto.CreateUtf8('%.%: Count=% is not a multiple of 16',
       [Owner, 'UpdEvp', Count]);
   outl := 0;
+  c := Ctx[DoEncrypt];
   EOpenSslCrypto.Check(Owner, 'UpdEvp',
-    EVP_CipherUpdate(Ctx[DoEncrypt], BufOut, @outl, BufIn, Count));
+    EVP_CipherUpdate(c, BufOut, @outl, BufIn, Count));
+  Owner.IV := PAesBlock(EVP_CIPHER_CTX_iv(c))^; // for fIVUpdated := true
   // no need to call EVP_CipherFinal_ex() since we expect no padding
 end;
 
@@ -797,6 +801,7 @@ var
 begin
   AlgoName(nam); // always #0 terminated
   fAes.Init(self, pointer(@nam[1]));
+  fIVUpdated := true; // fAes.UpdEvp() calls EVP_CIPHER_CTX_iv() to set IV
 end;
 
 destructor TAesAbstractOsl.Destroy;
