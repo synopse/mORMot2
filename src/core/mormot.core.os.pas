@@ -4984,7 +4984,8 @@ begin
   end;
   {$endif WITH_VECTOREXCEPT}
   {$ifdef WITH_RTLUNWINDPROC} // Delphi x86 RTL redirection function
-  if @RTLUnwindProc <> @SynRtlUnwind then
+  if (@RTLUnwindProc <> @SynRtlUnwind) and
+     not Assigned(oldUnWindProc) then
   begin
     oldUnWindProc := RTLUnwindProc;
     RTLUnwindProc := @SynRtlUnwind;
