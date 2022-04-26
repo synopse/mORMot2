@@ -4294,8 +4294,9 @@ procedure TTestCoreBase._UTF8;
       ($61, $41, $62, $42, $e0, $c0, $fd, $dd, $14b, $14a, $371, $370,
        $3F3, $37F, $451, $401, $435, $415, $442, $422, $4e1, $4e0, $2d00, $10a0);
   var
-    i: PtrInt;
+    i, j: PtrInt;
     up, lo, up2: array[0..10] of AnsiChar;
+    src, dst: array[byte] of AnsiChar;
   begin
     CheckEqual('A', UpperCaseReference('a'));
     CheckEqual('ABC', UpperCaseReference('aBc'));
@@ -4314,6 +4315,15 @@ procedure TTestCoreBase._UTF8;
       CheckEqual(Utf8ICompReference(@lo, @up), 0, 'CaseFoldingComp');
       CheckEqual(Utf8ILCompReference(@lo, @up, StrLen(@lo), StrLen(@up)), 0,
         'CaseFoldingLComp');
+    end;
+    FillCharFast(src, SizeOf(src), ord('a'));
+    for i := 0 to 200 do
+    begin
+      FillCharFast(dst, SizeOf(dst), 0);
+      UpperCopy255Buf(@dst, @src, i)^ := #0;
+      Check(StrLen(@dst) = i);
+      for j := 0 to i - 1 do
+        Check(dst[j] = 'A');
     end;
   end;
 
