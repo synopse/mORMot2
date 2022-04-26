@@ -5000,8 +5000,13 @@ end;
 
 function TAesAbstract.DecryptPkcs7Len(var InputLen, ivsize: integer;
   Input: pointer; IVAtBeginning, RaiseESynCryptoOnError: boolean): boolean;
+var
+  needed: integer;
 begin
-  if (InputLen < SizeOf(TAesBlock)) or
+  needed := SizeOf(TAesBlock);
+  if IVAtBeginning then
+    inc(needed, SizeOf(TAesBlock));
+  if (InputLen < needed) or
      (InputLen and AesBlockMod <> 0) then
     if RaiseESynCryptoOnError then
       raise ESynCrypto.CreateUtf8('%.DecryptPkcs7: Invalid InputLen=%',
@@ -5036,7 +5041,8 @@ begin
   P := pointer(result);
   Decrypt(@PByteArray(Input)^[ivsize], P, InputLen);
   padding := ord(P[InputLen - 1]); // result[1..len]
-  if padding > SizeOf(TAesBlock) then
+  if (padding = 0) or
+     (padding > SizeOf(TAesBlock)) then
     if RaiseESynCryptoOnError then
       raise ESynCrypto.CreateUtf8('%.DecryptPkcs7: Invalid Input', [self])
     else
@@ -6401,15 +6407,17 @@ procedure AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer;
   out Result: TShort16);
 begin
   case KeyBits of
-    128, 192, 256:
-    begin
-      Result[0] := #11;
-      PCardinal(@Result[1])^ :=
-        ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('-') shl 24;
-      PCardinal(@Result[5])^ := PCardinal(SmallUInt32Utf8[KeyBits])^;
-      Result[8] := '-'; // SmallUInt32Utf8 put a #0 there
-      PCardinal(@Result[9])^ := PCardinalArray(AESMODESTXT4LOWER)[ord(Mode)];
-    end
+    128,
+    192,
+    256:
+      begin
+        Result[0] := #11;
+        PCardinal(@Result[1])^ :=
+          ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('-') shl 24;
+        PCardinal(@Result[5])^ := PCardinal(SmallUInt32Utf8[KeyBits])^;
+        Result[8] := '-'; // SmallUInt32Utf8 put a #0 there
+        PCardinal(@Result[9])^ := PCardinalArray(AESMODESTXT4LOWER)[ord(Mode)];
+      end
   else
     PCardinal(@Result)^ := 0;
   end;
