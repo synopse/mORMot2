@@ -4963,11 +4963,16 @@ end;
 
 {$endif WITH_RAISEPROC}
 
+var
+  RawExceptionIntercepted: boolean;
+
 procedure RawExceptionIntercept(const Handler: TOnRawLogException);
 begin
   _RawLogException := Handler;
-  if not Assigned(Handler) then
+  if RawExceptionIntercepted or
+     not Assigned(Handler) then
     exit;
+  RawExceptionIntercepted := true;
   {$ifdef WITH_RAISEPROC} // FPC RTL redirection function
   if @RaiseProc <> @SynRaiseProc then
   begin
