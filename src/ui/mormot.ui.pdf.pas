@@ -3404,7 +3404,7 @@ begin
   result := ((r shr 8) or ((g shr 8) shl 8) or ((b shr 8) shl 16) or ((a shr 8) shl 24));
 end;
 
-procedure SwapBuffer(P: PWordArray; PLen: integer);
+procedure SwapBuffer(P: PWordArray; PLen: PtrInt);
 var
   i: PtrInt;
 begin
@@ -5827,10 +5827,10 @@ var
   Header: ^TCmapHeader;
   i, n, code, ndx: PtrInt;
   off: cardinal;
-  glyphIndex: integer;
-  idDeltai, glyphi: PtrInt;
+  glyph: integer;
+  delta, offs: PtrInt;
   W, numOfLongHorMetrics: word;
-  fUnitsPerEmShr: cardinal;
+  unitShr: cardinal;
 begin
   // retrieve the 'cmap' (character code mapping) table
   // see http://developer.apple.com/fonts/TTRefMan/RM06/Chap6cmap.html
@@ -5891,43 +5891,43 @@ begin
   begin
     for i := 0 to n - 1 do
       inc(Count, endCode[i] - startCode[i] + 1);
-    SetLength(values, Count);
+    SetLength(Values, Count);
     SetLength(aUnicodeTtf.fUsedWide, Count);
   end;
   ndx := 0;
   for i := 0 to n - 1 do
   begin
-    idDeltai := idDelta[i];
-    glyphi := idRangeOffset[i];
-    if glyphi <> 0 then
-      glyphi := glyphi shr 1 + i - n - startCode[i];
+    delta := idDelta[i];
+    offs := idRangeOffset[i];
+    if offs <> 0 then
+      offs := offs shr 1 + i - n - startCode[i];
     for code := startCode[i] to endCode[i] do
     begin
       aUnicodeTtf.fUsedWideChar.Values[ndx] := code;
-      if glyphi = 0 then
-        glyphIndex := code + idDeltai
+      if offs = 0 then
+        glyph := code + delta
       else
       begin
-        glyphIndex := glyphIndexArray[glyphi + code];
-        if glyphIndex <> 0 then
-          inc(glyphIndex, idDeltai);
+        glyph := glyphIndexArray[offs + code];
+        if glyph <> 0 then
+          inc(glyph, delta);
       end;
-      aUnicodeTtf.fUsedWide[ndx].Glyph := glyphIndex;
+      aUnicodeTtf.fUsedWide[ndx].Glyph := glyph;
       inc(ndx);
     end;
   end;
   // UnitsPerEm range is from 16 to 16384. This value should be a power of 2.
   // (from http://www.microsoft.com/typography/OTSPEC/head.htm)
-  fUnitsPerEmShr := 0; // fastest integer div for width calculating
+  unitShr := 0; // fastest integer div for width calculating
   for i := 14 downto 4 do
     if GetBitPtr(@head^.UnitsPerEm, i) then
     begin
-      fUnitsPerEmShr := i;
+      unitShr := i;
       break;
     end;
-  if fUnitsPerEmShr <> 0 then
+  if unitShr <> 0 then
   begin
-    W := (cardinal(fhmtx[0]) * 1000) shr fUnitsPerEmShr;
+    W := (cardinal(fhmtx[0]) * 1000) shr unitShr;
     if aUnicodeTtf.FixedWidth then
       for i := 0 to aUnicodeTtf.fUsedWideChar.Count - 1 do
         aUnicodeTtf.fUsedWide[i].Width := W
@@ -5938,7 +5938,7 @@ begin
         with aUnicodeTtf.fUsedWide[i] do
           if Glyph <> 0 then
             if Glyph <= numOfLongHorMetrics then
-              Width := (cardinal(fhmtx[Glyph * 2]) * 1000) shr fUnitsPerEmShr
+              Width := (cardinal(fhmtx[Glyph * 2]) * 1000) shr unitShr
             else
               Width := W;
     end;
@@ -6036,8 +6036,8 @@ begin
     for i := 0 to fUsedWideChar.Count - 1 do
       if fUsedWide[i].Glyph = aGlyph then
       begin
-        result := WinAnsiFont.fUsedWide[FindOrAddUsedWideChar(WideChar(fUsedWideChar.Values
-          [i]))].Glyph;
+        result := WinAnsiFont.fUsedWide[FindOrAddUsedWideChar(
+          WideChar(fUsedWideChar.Values[i]))].Glyph;
         exit; // result may be 0 if this glyph doesn't exist in the CMAP content
       end;
   result := 0; // returns 0 if not found
@@ -6363,7 +6363,7 @@ begin
                   used.Add(WinAnsiConvert.AnsiToWide[i]);
               with fUsedWideChar do
                 for i := 0 to count - 1 do
-                  used.Add(values[i]);
+                  used.Add(Values[i]);
               if CreateFontPackage(pointer(ttf), ttfSize, subdata, submem,
                 subsize, uniflags, ttcIndex, TTFMFP_SUBSET, 0,
                 TTFCFP_MS_PLATFORMID, TTFCFP_DONT_CARE, pointer(used.Values),
@@ -11985,7 +11985,7 @@ begin
         xs := 0;
         ys := 0;
         if SameValue(ArcCos(WorldTransform.eM11), 0, 0.0001) or      // 0 grad
-           SameValue(ArcCos(WorldTransform.eM11), cPI, 0.0001) then   // 180 grad
+           SameValue(ArcCos(WorldTransform.eM11), cPI, 0.0001) then  // 180 grad
           Canvas.SetTextMatrix(WorldTransform.eM11, WorldTransform.eM12,
             WorldTransform.eM21, WorldTransform.eM22,
             Canvas.S2X(posi.X * WorldTransform.eM11 +
