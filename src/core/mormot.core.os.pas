@@ -2133,14 +2133,22 @@ function FileSize(F: THandle): Int64; overload;
 function FileSeek64(Handle: THandle; const Offset: Int64;
   Origin: cardinal): Int64;
 
+/// get a file size and its UTC Unix timestamp
+// - return false if FileName was not found
+// - return true and set FileSize and FileTimestampUtc if found - note that
+// no local time conversion is done, so timestamp won't match FileAge()
+// - use a single Operating System call, so is faster than FileSize + FileAge
+function FileInfo(const FileName: TFileName; out FileSize: Int64;
+  out FileTimestampUtc: TUnixMSTime): boolean;
+
 /// get low-level file information, in a cross-platform way
 // - returns true on success
 // - here file write/creation time are given as TUnixMSTime values, for better
 // cross-platform process - note that FileCreateDateTime may not be supported
 // by most Linux file systems, so the oldest timestamp available is returned
 // as failover on such systems (probably the latest file metadata writing)
-function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize,
-  LastWriteAccess, FileCreateDateTime: Int64): boolean;
+function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
+  out LastWriteAccess, FileCreateDateTime: TUnixMSTime): boolean;
 
 /// copy one file to another, similar to the Windows API
 function CopyFile(const Source, Target: TFileName;

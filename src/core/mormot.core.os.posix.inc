@@ -903,6 +903,18 @@ begin
     result := st.st_size;
 end;
 
+function FileInfo(const FileName: TFileName; out FileSize: Int64;
+  out FileTimestampUtc: TUnixMSTime): boolean;
+var
+  st: TStat;
+begin
+  result := fpStat(pointer(FileName), st) <> 0;
+  if not result then
+    exit;
+  FileSize := st.st_size;
+  FileTimestampUtc := st.st_mtime; // no local conversion needed
+end;
+
 function FileSize(F: THandle): Int64;
 var
   st: TStat;
@@ -918,8 +930,8 @@ begin
   result := FPLSeek(Handle, Offset, Origin);
 end;
 
-function FileInfoByHandle(aFileHandle: THandle;
-  out FileId, FileSize, LastWriteAccess, FileCreateDateTime: Int64): boolean;
+function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
+  out LastWriteAccess, FileCreateDateTime: TUnixMSTime): boolean;
 var
   lastreadaccess: Int64;
   lp: stat;
@@ -931,14 +943,21 @@ begin
     exit;
   FileId := lp.st_ino;
   FileSize := lp.st_size;
-  lastreadaccess := lp.st_atime * MSecsPerSec;
-  LastWriteAccess := lp.st_mtime * MSecsPerSec;
+  lastreadaccess := lp.st_atime * MilliSecsPerSec;
+  LastWriteAccess := lp.st_mtime * MilliSecsPerSec;
+  {$ifdef OSLINUXANDROID}
+  inc(lastreadaccess, lp.st_atime_nsec div NanoSecsPerMilliSec);
+  inc(LastWriteAccess, lp.st_mtime_nsec div NanoSecsPerMilliSec);
+  {$else}
+  inc(lastreadaccess, lp.st_atimensec div NanoSecsPerMilliSec);
+  inc(LastWriteAccess, lp.st_mtimensec div NanoSecsPerMilliSec);
+  {$endif OSLINUXANDROID}
   {$ifdef OSOPENBSD}
   if (lp.st_birthtime <> 0) and
      (lp.st_birthtime < lp.st_ctime) then
     lp.st_ctime := lp.st_birthtime;
   {$endif OSOPENBSD}
-  FileCreateDateTime := lp.st_ctime * MSecsPerSec;
+  FileCreateDateTime := lp.st_ctime * MilliSecsPerSec;
   if LastWriteAccess <> 0 then
     if (FileCreateDateTime = 0) or
        (FileCreateDateTime > LastWriteAccess) then

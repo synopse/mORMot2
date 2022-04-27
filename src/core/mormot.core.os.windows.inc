@@ -373,10 +373,10 @@ begin
   result := FileSetDate(Dest, WinTime) = 0;
 end;
 
-function FileInfoByHandle(aFileHandle: THandle;
-  out FileId, FileSize, LastWriteAccess, FileCreateDateTime: Int64): boolean;
+function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
+ out LastWriteAccess, FileCreateDateTime: TUnixMSTime): boolean;
 var
-  lastreadaccess: Int64;
+  lastreadaccess: TUnixMSTime;
   lp: TByHandleFileInformation;
 begin
   result := GetFileInformationByHandle(aFileHandle, lp);
@@ -425,6 +425,21 @@ begin
   end
   else
     result := 0;
+end;
+
+function FileInfo(const FileName: TFileName; out FileSize: Int64;
+  out FileTimestampUtc: TUnixMSTime): boolean;
+var
+  FA: WIN32_FILE_ATTRIBUTE_DATA;
+  tmp: TW32Temp;
+begin
+  // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
+  result := GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA);
+  if not result then
+    exit;
+  PInt64Rec(@FileSize)^.Lo := FA.nFileSizeLow;
+  PInt64Rec(@FileSize)^.Hi := FA.nFileSizeHigh;
+  FileTimestampUtc := FileTimeToUnixTime(FA.ftLastWriteTime) // no local time
 end;
 
 function FileSize(F: THandle): Int64;
