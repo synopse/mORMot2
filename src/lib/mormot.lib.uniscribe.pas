@@ -87,8 +87,8 @@ type
 
   /// Uniscribe script analysis flag elements
   // - s0,s1,s2,s3,s4,s5,s6,s7,s8,s9: map TScriptAnalysis.eScript bits
-  // - fRTL: Rendering direction
-  // - fLayoutRTL: Set for GCP classes ARABIC/HEBREW and LOCALNUMBER
+  // - fRtl: Rendering direction - set for Right To Left scripting
+  // - fLayoutRtl: Set for GCP classes ARABIC/HEBREW and LOCALNUMBER
   // - fLinkBefore: Implies there was a ZWJ before this item
   // - fLinkAfter: Implies there is a ZWJ following this item.
   // - fLogicalOrder: Set by client as input to ScriptShape/Place
@@ -96,8 +96,8 @@ type
   // glyph indices
   TScriptAnalysis_enum = (
     s0, s1, s2, s3, s4, s5, s6, s7, s8, s9,
-    fRTL,
-    fLayoutRTL,
+    fRtl,
+    fLayoutRtl,
     fLinkBefore,
     fLinkAfter,
     fLogicalOrder,

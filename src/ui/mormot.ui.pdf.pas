@@ -5186,7 +5186,7 @@ begin
   for i := 0 to count - 2 do // don't need Count-1 = Terminator
     if fComplex in Sp^[items[i].a.eScript and (1 shl 10 - 1)]^.fFlags then
       complex := true
-    else if fRTL in items[i].a.fFlags then
+    else if fRtl in items[i].a.fFlags then
       R2L := true;
   if not complex and
      not R2L then
@@ -5759,7 +5759,9 @@ const
   TTFCFP_MS_PLATFORMID = 3;
   TTFCFP_SYMBOL_CHAR_SET = 0;
   TTFCFP_UNICODE_CHAR_SET = 1;
+  TTFCFP_DONT_CARE = 65535;
   TTFCFP_FLAGS_SUBSET = 1;
+  TTFCFP_FLAGS_COMPRESS = 2;
   TTFMFP_SUBSET = 0;
   TTFCFP_FLAGS_TTC = 4;
   TTCF_TABLE = $66637474;
@@ -6364,7 +6366,7 @@ begin
                   used.Add(values[i]);
               if CreateFontPackage(pointer(ttf), ttfSize, subdata, submem,
                 subsize, uniflags, ttcIndex, TTFMFP_SUBSET, 0,
-                TTFCFP_MS_PLATFORMID, TTFCFP_UNICODE_CHAR_SET, pointer(used.Values),
+                TTFCFP_MS_PLATFORMID, TTFCFP_DONT_CARE, pointer(used.Values),
                 used.Count, @lpfnAllocate, @lpfnReAllocate, @lpfnFree, nil) = 0 then
               begin
                 // subset was created successfully -> save to PDF file
