@@ -9332,6 +9332,9 @@ function TSynDictionary.FindAndCopy(const aKey;
 var
   ndx: PtrInt;
 begin
+  result := false;
+  if self = nil then
+    exit;
   fSafe.RWLock(cReadOnly);
   {$ifdef HASFASTTRYFINALLY}
   try
@@ -9344,9 +9347,7 @@ begin
       fValues.ItemCopy( // inlined ItemCopyAt(ndx, @aValue)
         PAnsiChar(fValues.Value^) + ndx * fValues.Info.Cache.ItemSize, @aValue);
       result := true;
-    end
-    else
-      result := false;
+    end;
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
@@ -9358,6 +9359,9 @@ function TSynDictionary.FindAndExtract(const aKey; var aValue): boolean;
 var
   ndx: PtrInt;
 begin
+  result := false;
+  if self = nil then
+    exit;
   fSafe.RWLock(cReadWrite);
   try
     ndx := fKeys.FindHashedAndDelete(aKey);
@@ -9370,9 +9374,7 @@ begin
         fTimeOuts.Delete(ndx);
       fSafe.RWUnLock(cWrite);
       result := true;
-    end
-    else
-      result := false;
+    end;
   finally
     fSafe.RWUnLock(cReadWrite);
   end;
@@ -9380,6 +9382,9 @@ end;
 
 function TSynDictionary.Exists(const aKey): boolean;
 begin
+  result := false;
+  if self = nil then
+    exit;
   fSafe.RWLock(cReadOnly);
   {$ifdef HASFASTTRYFINALLY}
   try
@@ -9397,6 +9402,9 @@ end;
 function TSynDictionary.ExistsValue(
   const aValue; aCompare: TDynArraySortCompare): boolean;
 begin
+  result := false;
+  if self = nil then
+    exit;
   fSafe.RWLock(cReadOnly);
   try
     result := fValues.Find(aValue, aCompare) >= 0;
