@@ -5703,7 +5703,7 @@ begin
     begin
       c := PPtrUIntArray(source)^[i];
       d := c or _80;
-      PPtrUIntArray(dest)^[i] := c - ((d - PtrUInt(_61)) and
+      PPtrUIntArray(dest)^[i] := c - ((d - _61) and
         not (d - _7b)) and ((not c) and _80) shr 2;
     end;
     {$else}
@@ -5713,7 +5713,7 @@ begin
       c := PPtrUIntArray(source)^[i];
       d := c or PtrUInt($80808080);
       PPtrUIntArray(dest)^[i] := c - ((d - PtrUInt($61616161)) and
-        not (d - PtrUInt($7b7b7b7b))) and ((not c) and PtrUInt($80808080)) shr 2;
+        not(d - PtrUInt($7b7b7b7b))) and ((not c) and PtrUInt($80808080)) shr 2;
     end;
     {$endif CPU64}
   end;

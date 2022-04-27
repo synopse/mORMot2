@@ -4932,12 +4932,12 @@ var
   backuplasterror: DWORD;
   backuphandler: TOnRawLogException;
 begin
-  if Assigned(_RawLogException) then
-    if (Obj <> nil) and
-       Obj.InheritsFrom(Exception) then
-    begin
-      backuplasterror := GetLastError;
-      backuphandler := _RawLogException;
+  if (Obj <> nil) and
+     Obj.InheritsFrom(Exception) then
+  begin
+    backuplasterror := GetLastError;
+    backuphandler := _RawLogException;
+    if Assigned(backuphandler) then
       try
         _RawLogException := nil; // disable nested exception
         ctxt.EClass := PPointer(Obj)^;
@@ -4954,9 +4954,9 @@ begin
       except
         { ignore any nested exception }
       end;
-      _RawLogException := backuphandler;
-      SetLastError(backuplasterror); // may have changed above
-    end;
+    _RawLogException := backuphandler;
+    SetLastError(backuplasterror); // may have changed above
+  end;
   if Assigned(OldRaiseProc) then
     OldRaiseProc(Obj, Addr, FrameCount, Frame);
 end;
@@ -4972,12 +4972,13 @@ begin
   if RawExceptionIntercepted or
      not Assigned(Handler) then
     exit;
-  RawExceptionIntercepted := true;
-  {$ifdef WITH_RAISEPROC} // FPC RTL redirection function
-  if @RaiseProc <> @SynRaiseProc then
+  RawExceptionIntercepted := true; // intercept once
+  {$ifdef WITH_RAISEPROC}
+  // FPC RTL redirection function
+  if not Assigned(OldRaiseProc) then
   begin
     OldRaiseProc := RaiseProc;
-    RaiseProc := @SynRaiseProc; // register once
+    RaiseProc := @SynRaiseProc;
   end;
   {$endif WITH_RAISEPROC}
   {$ifdef WITH_VECTOREXCEPT} // SEH32/SEH64 official API
@@ -4985,14 +4986,14 @@ begin
   if Assigned(AddVectoredExceptionHandler) then
   begin
     AddVectoredExceptionHandler(0, @SynLogVectoredHandler);
-    AddVectoredExceptionHandler := nil; // register once
+    AddVectoredExceptionHandler := nil;
   end;
   {$endif WITH_VECTOREXCEPT}
-  {$ifdef WITH_RTLUNWINDPROC} // Delphi x86 RTL redirection function
-  if (@RTLUnwindProc <> @SynRtlUnwind) and
-     not Assigned(oldUnWindProc) then
+  {$ifdef WITH_RTLUNWINDPROC}
+  // Delphi x86 RTL redirection function
+  if not Assigned(OldUnWindProc) then
   begin
-    oldUnWindProc := RTLUnwindProc;
+    OldUnWindProc := RTLUnwindProc;
     RTLUnwindProc := @SynRtlUnwind;
   end;
   {$endif WITH_RTLUNWINDPROC}
@@ -6831,6 +6832,8 @@ begin
   FinalizeSpecificUnit; // in mormot.core.os.posix/windows.inc files
   DeleteCriticalSection(ConsoleCriticalSection);
   DeleteCriticalSection(GlobalCriticalSection);
+  _RawLogException := nil;
+  RawExceptionIntercepted := true;
 end;
 
 initialization

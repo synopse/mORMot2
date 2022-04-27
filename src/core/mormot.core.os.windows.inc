@@ -930,37 +930,38 @@ begin
     exit;
   backuplasterror := GetLastError;
   backuphandler := _RawLogException;
-  try
-    _RawLogException := nil; // disable nested exception
-    ctxt.ECode := Exc.ExceptionCode;
-    if (Exc.ExceptionCode = cRtlException) and
-       (Exc.ExceptObject <> nil) then
-    begin
-      if Exc.ExceptObject.InheritsFrom(Exception) then
-        ctxt.EClass := PPointer(Exc.ExceptObject)^
+  if Assigned(backuphandler) then // paranoid check (tested before calling)
+    try
+      _RawLogException := nil; // disable nested exception
+      ctxt.ECode := Exc.ExceptionCode;
+      if (Exc.ExceptionCode = cRtlException) and
+         (Exc.ExceptObject <> nil) then
+      begin
+        if Exc.ExceptObject.InheritsFrom(Exception) then
+          ctxt.EClass := PPointer(Exc.ExceptObject)^
+        else
+          ctxt.EClass := EExternalException;
+        ctxt.EInstance := Exc.ExceptObject;
+        ctxt.ELevel := sllException;
+        ctxt.EAddr := Exc.ExceptAddr;
+      end
       else
-        ctxt.EClass := EExternalException;
-      ctxt.EInstance := Exc.ExceptObject;
-      ctxt.ELevel := sllException;
-      ctxt.EAddr := Exc.ExceptAddr;
-    end
-    else
-    begin
-      if Assigned(ExceptClsProc) then
-        ctxt.EClass := GetExceptionClass(ExceptClsProc)(Exc)
-      else
-        ctxt.EClass := EExternal;
-      ctxt.EInstance := nil;
-      ctxt.ELevel := sllExceptionOS;
-      ctxt.EAddr := Exc.ExceptionAddress;
+      begin
+        if Assigned(ExceptClsProc) then
+          ctxt.EClass := GetExceptionClass(ExceptClsProc)(Exc)
+        else
+          ctxt.EClass := EExternal;
+        ctxt.EInstance := nil;
+        ctxt.ELevel := sllExceptionOS;
+        ctxt.EAddr := Exc.ExceptionAddress;
+      end;
+      ctxt.EStack := stack;
+      ctxt.EStackCount := 0;
+      ctxt.ETimestamp := UnixTimeUtc; // fast API call
+      backuphandler(ctxt);
+    except
+      { ignore any nested exception }
     end;
-    ctxt.EStack := stack;
-    ctxt.EStackCount := 0;
-    ctxt.ETimestamp := UnixTimeUtc; // fast API call
-    backuphandler(ctxt);
-  except
-    { ignore any nested exception }
-  end;
   _RawLogException := backuphandler;
   SetLastError(backuplasterror); // code above could have changed this
 end;
@@ -992,7 +993,7 @@ end;
 {$ifdef WITH_RTLUNWINDPROC}
 
 var
-  oldUnWindProc: pointer;
+  OldUnWindProc: pointer;
 
 procedure SynRtlUnwind(TargetFrame, TargetIp: pointer;
   ExceptionRecord: PExceptionRecord; ReturnValue: Pointer); stdcall;
@@ -1005,7 +1006,7 @@ asm
         call    LogExcept
         popad
 @old:   pop     ebp // hidden push ebp at asm level
-        jmp     oldUnWindProc
+        jmp     OldUnWindProc
 end;
 
 {$endif WITH_RTLUNWINDPROC}
