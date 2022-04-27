@@ -1258,7 +1258,7 @@ type
     // - you can call this method very often: it will ensure that the
     // search process will take place at most once every second
     // - this method is thread-safe, but blocking during the process
-    function DeleteDeprecated: integer;
+    function DeleteDeprecated(tix64: Int64 = 0): integer;
     /// search of a primary key within the internal hashed dictionary
     // - returns the index of the matching item, -1 if aKey was not found
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
@@ -9006,7 +9006,7 @@ begin
     fTimeOut[i] := timeout;
 end;
 
-function TSynDictionary.DeleteDeprecated: integer;
+function TSynDictionary.DeleteDeprecated(tix64: Int64): integer;
 var
   i: PtrInt;
   now: cardinal;
@@ -9016,7 +9016,9 @@ begin
      (fSafe.Padding[DIC_TIMECOUNT].VInteger = 0) or // no entry
      (fSafe.Padding[DIC_TIMESEC].VInteger = 0) then // nothing in fTimeOut[]
     exit;
-  now := GetTickCount64 shr 10;
+  if tix64 = 0 then
+    tix64 := GetTickCount64;
+  now := tix64 shr 10;
   if fSafe.Padding[DIC_TIMETIX].VInteger = integer(now) then
     exit; // no need to search more often than every second
   fSafe.RwLock(cReadWrite); // would upgrade to cWrite only if needed

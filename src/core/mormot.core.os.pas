@@ -4597,7 +4597,7 @@ end;
 function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteString;
 var
   F: THandle;
-  Read, Size, Chunk: integer;
+  read, size, chunk: integer;
   P: PUtf8Char;
   tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
 begin
@@ -4609,34 +4609,34 @@ begin
   begin
     if HasNoSize then
     begin
-      Size := 0;
+      size := 0;
       repeat
-        Read := FileRead(F, tmp, SizeOf(tmp));
-        if Read <= 0 then
+        read := FileRead(F, tmp, SizeOf(tmp));
+        if read <= 0 then
           break;
-        SetLength(result, Size + Read); // in-place resize
-        MoveFast(tmp, PByteArray(result)^[Size], Read);
-        inc(Size, Read);
+        SetLength(result, size + read); // in-place resize
+        MoveFast(tmp, PByteArray(result)^[size], read);
+        inc(size, read);
       until false;
     end
     else
     begin
-      Size := FileSize(F);
-      if Size > 0 then
+      size := FileSize(F);
+      if size > 0 then
       begin
-        SetLength(result, Size);
+        SetLength(result, size);
         P := pointer(result);
         repeat
-          Chunk := Size;
-          Read := FileRead(F, P^, Chunk);
-          if Read <= 0 then
+          chunk := size;
+          read := FileRead(F, P^, chunk);
+          if read <= 0 then
           begin
             result := '';
             break;
           end;
-          inc(P, Read);
-          dec(Size, Read);
-        until Size = 0;
+          inc(P, read);
+          dec(size, read);
+        until size = 0;
       end;
     end;
     FileClose(F);
