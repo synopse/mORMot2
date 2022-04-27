@@ -2060,10 +2060,6 @@ function SafeFileName(const FileName: TFileName): boolean;
 /// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a filename
 function SafeFileNameU(const FileName: RawUtf8): boolean;
 
-const
-  /// the path delimiter character to be changed into PathDelim on current OS
-  InvertedPathDelim = {$ifdef OSWINDOWS} '/' {$else} '\' {$endif};
-
 /// ensure all \ / path delimiters are normalized into the current OS expectation
 // - i.e. normalize file name to use '\' on Windows, or '/' on POSIX
 // - see MakePath() from mormot.core.text.pas to concatenate path items
@@ -2169,18 +2165,24 @@ procedure DisplayFatalError(const title, msg: RawUtf8);
 procedure DisplayError(const fmt: string; const args: array of const);
 
 const
+  {$ifdef OSWINDOWS}
   /// operating-system dependent Line Feed characters
-  {$ifdef OSWINDOWS}
   CRLF = #13#10;
-  {$else}
-  CRLF = #10;
-  {$endif OSWINDOWS}
-
   /// operating-system dependent wildchar to match all files in a folder
-  {$ifdef OSWINDOWS}
   FILES_ALL = '*.*';
+  /// operating-system dependent "inverted" delimiter for NormalizeFileName()
+  InvertedPathDelim = '/';
+  /// operating-system dependent boolean if paths are case-insensitive
+  PathCaseInsensitive = true;
   {$else}
+  /// operating-system dependent Line Feed characters
+  CRLF = #10;
+  /// operating-system dependent wildchar to match all files in a folder
   FILES_ALL = '*';
+  /// operating-system dependent "inverted" delimiter for NormalizeFileName()
+  InvertedPathDelim = '\';
+  /// operating-system dependent boolean if paths are case-insensitive
+  PathCaseInsensitive = false;
   {$endif OSWINDOWS}
 
 /// get a file date and time, from a FindFirst/FindNext search
