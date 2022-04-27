@@ -514,14 +514,16 @@ const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   MinsPerDay  = HoursPerDay * MinsPerHour;
   SecsPerDay  = MinsPerDay * SecsPerMin;
   SecsPerHour = MinsPerHour * SecsPerMin;
+  MilliSecsPerSec = 1000;
+  MicroSecsPerSec = 1000000;
+  MicroSecsPerMilliSec = 1000;
+  NanoSecsPerMicroSec = 1000;
+  NanoSecsPerMilliSec = 1000000;
   C1970       = 2440588;
   D0          = 1461;
   D1          = 146097;
   D2          = 1721119;
   UnixDelta   = 25569;
-  
-  THOUSAND = Int64(1000);
-  MILLION  = Int64(THOUSAND * THOUSAND);
 
 procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
   {$ifdef HASINLINE}inline;{$endif}
@@ -600,11 +602,11 @@ end;
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 begin
   if mach_timenanosecond then
-    Value := mach_absolute_time div THOUSAND
+    Value := mach_absolute_time div NanoSecsPerMicroSec
   else
   begin
     QueryPerformanceNanosec(Value);
-    Value := Value div THOUSAND; // ns to us
+    Value := Value div NanoSecsPerMicroSec; // ns to us
   end;
 end;
 
@@ -614,7 +616,7 @@ begin
     result := mach_absolute_time
   else
     QueryPerformanceNanosec(result);
-  result := result div MILLION; // ns to ms
+  result := result div NanoSecsPerMilliSec; // ns to ms
 end;
 
 function UnixTimeUtc: TUnixTime;
@@ -630,7 +632,8 @@ var
   tz: timeval;
 begin
   fpgettimeofday(@tz, nil);
-  result := (tz.tv_sec * THOUSAND) + tz.tv_usec div THOUSAND; // in milliseconds
+  result := (tz.tv_sec * MilliSecsPerSec) +
+            tz.tv_usec div MicroSecsPerMilliSec; // in milliseconds
 end;
 
 procedure GetSystemTime(out result: TSystemTime);
@@ -639,7 +642,7 @@ var
 begin
   fpgettimeofday(@tz, nil);
   EpochToSystemTime(tz.tv_sec, result);
-  result.MilliSecond := tz.tv_usec div THOUSAND;
+  result.MilliSecond := tz.tv_usec div MicroSecsPerMilliSec;
 end;
 
 {$else}
@@ -698,7 +701,8 @@ var
 begin
   clock_gettime(CLOCK_REALTIME_FAST, @r); // likely = CLOCK_REALTIME_COARSE
   // convert from nanoseconds into milliseconds
-  result := PtrUInt(r.tv_nsec) div MILLION + (r.tv_sec * THOUSAND);
+  result := PtrUInt(r.tv_nsec) div PtrUInt(NanoSecsPerMilliSec) +
+            QWord(r.tv_sec * MilliSecsPerSec);
 end;
 
 function UnixTimeUtc: TUnixTime;
@@ -715,7 +719,8 @@ var
 begin
   clock_gettime(CLOCK_MONOTONIC_HIRES, @r);
   // convert from nanoseconds into microseconds
-  Value := PtrUInt(r.tv_nsec) div THOUSAND + r.tv_sec * MILLION;
+  Value := PtrUInt(r.tv_nsec) div PtrUInt(NanoSecsPerMicroSec) +
+           QWord(r.tv_sec * MicroSecsPerSec);
 end;
 
 procedure GetSystemTime(out result: TSystemTime);
@@ -725,7 +730,7 @@ begin
   // faster than fpgettimeofday() which makes a syscall and don't use vDSO
   clock_gettime(CLOCK_REALTIME_FAST, @r);
   EpochToSystemTime(r.tv_sec, result);
-  result.MilliSecond := r.tv_nsec div MILLION;
+  result.MilliSecond := r.tv_nsec div NanoSecsPerMilliSec;
 end;
 
 function GetTickCount64: Int64;
@@ -734,7 +739,8 @@ var
 begin
   clock_gettime(CLOCK_MONOTONIC_FAST, @tp); // likely = CLOCK_MONOTONIC_COARSE
   // convert from nanoseconds into milliseconds
-  result := PtrUInt(tp.tv_nsec) div MILLION + (tp.tv_sec * THOUSAND);
+  result := PtrUInt(tp.tv_nsec) div PtrUInt(NanoSecsPerMilliSec) +
+            QWord(tp.tv_sec * MilliSecsPerSec);
 end;
 
 {$endif OSDARWIN}
@@ -854,7 +860,7 @@ begin
   if (fpStat(pointer(FileName), st) = 0) and
      (AllowDir or
       (not FpS_ISDIR(st.st_mode))) then
-    result := st.st_mtime // no local conversion
+    result := st.st_mtime // no local conversion needed
   else
     result := 0
 end;
@@ -1080,7 +1086,7 @@ end;
 procedure SleepHiRes(ms: cardinal);
 var
   timeout: TTimespec;
-  d: cardinal;
+  s: cardinal;
 begin
   if ms = 0 then
     // handle SleepHiRes(0) special case
@@ -1098,9 +1104,9 @@ begin
     end
   else
   begin
-    d := ms div 1000;
-    timeout.tv_sec := d;
-    timeout.tv_nsec := 1000000 * (ms - d * 1000);
+    s := ms div MilliSecsPerSec;
+    timeout.tv_sec := s;
+    timeout.tv_nsec := NanoSecsPerMilliSec * (ms - s * MilliSecsPerSec);
   end;
   fpnanosleep(@timeout, nil)
   // no retry loop on ESysEINTR (as with regular RTL's Sleep)
@@ -2185,7 +2191,7 @@ begin
     result := true;
     exit;
   end;
-  tix := GetTickCount64 + waitseconds * 1000;
+  tix := GetTickCount64 + waitseconds * MilliSecsPerSec;
   repeat
     // RunUntilSigTerminated() below should delete the .pid file
     sleep(10);
