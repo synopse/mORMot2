@@ -1950,28 +1950,37 @@ begin
   with GlobalBsonObjectID do
   begin
     Safe.Lock;
-    if now > LastCreateTime then
+    {$ifdef HASFASTTRYFINALLY}
+    try
+    {$else}
     begin
-      LastCreateTime := now;
-      count := DefaultValues.Counter; // reset
-    end
-    else
-    begin
-      count := LastCounter + 1;
-      if count and COUNTER_MASK = DefaultValues.Counter then
+    {$endif HASFASTTRYFINALLY}
+      if now > LastCreateTime then
       begin
-        count := DefaultValues.Counter;
-        inc(LastCreateTime); // collision -> cheat on timestamp
+        LastCreateTime := now;
+        count := DefaultValues.Counter; // reset
+      end
+      else
+      begin
+        count := LastCounter + 1;
+        if count and COUNTER_MASK = DefaultValues.Counter then
+        begin
+          count := DefaultValues.Counter;
+          inc(LastCreateTime); // collision -> cheat on timestamp
+        end;
       end;
+      Counter.b1 := count shr 16; // stored as bigendian
+      Counter.b2 := count shr 8;
+      Counter.b3 := count;
+      LastCounter := count;
+      UnixCreateTime := bswap32(LastCreateTime);
+      MachineID := DefaultValues.MachineID;
+      ProcessID := DefaultValues.ProcessID;
+    {$ifdef HASFASTTRYFINALLY}
+    finally
+    {$endif HASFASTTRYFINALLY}
+      Safe.UnLock;
     end;
-    Counter.b1 := count shr 16; // stored as bigendian
-    Counter.b2 := count shr 8;
-    Counter.b3 := count;
-    LastCounter := count;
-    UnixCreateTime := bswap32(LastCreateTime);
-    MachineID := DefaultValues.MachineID;
-    ProcessID := DefaultValues.ProcessID;
-    Safe.UnLock;
   end;
 end;
 

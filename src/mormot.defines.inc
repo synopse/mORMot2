@@ -366,7 +366,8 @@
   {$endif ISFPC27}
 
   {$if defined(FPC_USE_WIN32_SEH) or defined(FPC_USE_WIN64_SEH)}
-    {$define HASFASTTRYFINALLY}
+    {.$define HASFASTTRYFINALLY}
+    // FPC SEH is not fully efficient and generate some additional code/calls
   {$ifend}
 
 {$else FPC}
@@ -425,7 +426,7 @@
 
   {$define DELPHI_OR_FPC_OLDRTTI}
   {$define HASINTERFACERTTI}  // interface RTTI (not oldest FPC)
-  {$define HASFASTTRYFINALLY} // Delphi Win32/Win64 uses efficient SEH
+  {$define HASFASTTRYFINALLY} // Delphi Win32/Win64 efficiently uses SEH
   {$define STRCNT32}          // 32-bit TStrRec.refCnt even on 64-bit CPU
   {$define DACNT32}           // 32-bit TDynArrayRec.refCnt even on 64-bit CPU
   {$warn UNSAFE_CODE OFF}     // Delphi for .Net does not exist any more!
