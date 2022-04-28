@@ -469,7 +469,7 @@ begin
           begin
             // compute and send back the actual RRQ file size in OACK
             TransferSize := FileStream.Size;
-            Parsed := 'tsize'#0 + UInt32ToUtf8(TransferSize); // no #0 yet
+            Parsed := UInt32ToUtf8(TransferSize); // no #0 needed
           end;
         3:
           if not GetNextCardinal(1, 65535, WindowSize) then
