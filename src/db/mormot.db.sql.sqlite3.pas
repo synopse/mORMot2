@@ -352,8 +352,8 @@ begin
   end;
 end;
 
-constructor TSqlDBSQLite3ConnectionProperties.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUtf8);
+constructor TSqlDBSQLite3ConnectionProperties.Create(
+  const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   fDbms := dSQLite;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);

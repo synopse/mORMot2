@@ -933,6 +933,10 @@ type
   TPdfName = class(TPdfText)
   protected
     procedure InternalWriteTo(W: TPdfWrite); override;
+  public
+    /// append the 'SUBSET+' prefix to the Value
+    // - used e.g. to notify that a font is included as a subset
+    procedure AppendPrefix;
   end;
 
   /// used to store an array of PDF objects
@@ -4068,6 +4072,12 @@ begin
   W.Add('/').AddEscapeName(pointer(fValue));
 end;
 
+procedure TPdfName.AppendPrefix;
+begin
+  if self <> nil then
+    fValue := 'SUBSET+' + fValue; // we ensured a single subset per font
+end;
+
 
 { TPdfArray }
 
@@ -6372,6 +6382,9 @@ begin
                 // subset was created successfully -> save to PDF file
                 FastSetRawByteString(ttf, subdata, subsize);
                 FreeMem(subdata);
+                // see 5.5.3 Font Subsets: begins with a tag followed by a +
+                TPdfName(fFontDescriptor.ValueByName('FontName')).AppendPrefix;
+                TPdfName(fFontDescriptor.ValueByName('BaseFont')).AppendPrefix;
               end;
             end;
             {$endif USE_UNISCRIBE}
