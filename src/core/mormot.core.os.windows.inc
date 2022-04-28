@@ -442,7 +442,7 @@ begin
     exit;
   PInt64Rec(@FileSize)^.Lo := FA.nFileSizeLow;
   PInt64Rec(@FileSize)^.Hi := FA.nFileSizeHigh;
-  FileTimestampUtc := FileTimeToUnixTime(FA.ftLastWriteTime) // no local time
+  FileTimestampUtc := FileTimeToUnixMSTime(FA.ftLastWriteTime) // no local time
 end;
 
 function FileSize(F: THandle): Int64;

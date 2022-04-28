@@ -923,7 +923,7 @@ function FileInfo(const FileName: TFileName; out FileSize: Int64;
 var
   st: TStat;
 begin
-  result := fpStat(pointer(FileName), st) <> 0;
+  result := fpStat(pointer(FileName), st) = 0;
   if not result then
     exit;
   FileSize := st.st_size;
