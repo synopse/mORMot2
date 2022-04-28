@@ -84,29 +84,29 @@ const
     'ERR ',
     'OACK ');
 
-  /// RFC2348 maximum supported TFTP block size
-  // - original RFC1350 defines 512 bytes, but we support RFC2348 blksize option
-  // - in theory, blksize option allows up to 64 KB of data
-  // - but TFTP_MTUSIZE is recommended, to avoid IP fragmentation
-  TFTP_MAXSIZE = 65464;
-
   /// RFC1350 default TFTP block size
-  TFTP_DEFAULTSIZE = 512;
+  TFTP_BLKSIZE_DEFAULT = 512;
 
   /// RFC2348 optimal supported TFTP maximum block size
   // - original RFC1350 defines 512 bytes, but we support RFC2348 blksize option
   // - best is up to 1468 bytes, i.e. default Ethernet MTU (1500), minus the
   // TFTP, UDP and IP headers to avoid IP fragmentation at transmission level
-  TFTP_MTUSIZE = 1468;
+  TFTP_BLKSIZE_MTU = 1468;
+
+  /// RFC2348 maximum supported TFTP block size
+  // - original RFC1350 defines 512 bytes, but we support RFC2348 blksize option
+  // - in theory, blksize option allows up to 64 KB of data
+  // - but TFTP_BLKSIZE_MTU is recommended, to avoid IP fragmentation
+  TFTP_BLKSIZE_MAX = 65464;
 
   /// default TTftpContext.TransferSize value, if no "tsize" option was defined
-  TFTP_NOTRANSFERSIZE = cardinal(-1);
+  TFTP_TSIZE_UNKNOWN = cardinal(-1);
 
   /// RFC1350 default TTftpContext.TimeoutSec value
-  TFTP_DEFAULTTIMEOUT = 5;
+  TFTP_TIMEOUT_DEFAULT = 5;
 
   /// RFC1350 default TTftpContext.WindowSize value
-  TFTP_DEFAULTWINDOWSIZE = 1;
+  TFTP_WINDOWSIZE_DEFAULT = 1;
 
 
 type
@@ -128,7 +128,7 @@ type
         TFTP_OACK:
           (
             /// the #0 terminated FileName, Mode and options fields
-            Header: array[0 .. TFTP_MAXSIZE + 1] of byte;
+            Header: array[0 .. TFTP_BLKSIZE_MAX + 1] of byte;
           );
         TFTP_DAT,
         TFTP_ACK:
@@ -136,7 +136,7 @@ type
             /// the block sequence number
             Sequence: TTftpSequence;
             /// data block content - up to 64KB of data is theoritically possible
-            Data: array[0 .. TFTP_MAXSIZE - 1] of byte;
+            Data: array[0 .. TFTP_BLKSIZE_MAX - 1] of byte;
           );
         TFTP_ERR:
           (
@@ -180,11 +180,11 @@ type
     /// the RFC 2349 "timeout" option in seconds, in range 1..255
     // - equals 5 by default if no option was specified
     TimeoutSec: cardinal;
-    /// the RFC 2348 "blksize" option, in range TFTP_MINSIZE..TFTP_MAXSIZE
-    // - equals TFTP_DEFAULTSIZE = 512 if no option was specified
+    /// the RFC 2348 "blksize" option, in range TFTP_MINSIZE..TFTP_BLKSIZE_MAX
+    // - equals TFTP_BLKSIZE_DEFAULT = 512 if no option was specified
     BlockSize: cardinal;
     /// the RFC 2349 "tsize" option, as positive cardinal
-    // - equals TFTP_NOTRANSFERSIZE = -1 if no option was specified
+    // - equals TFTP_TSIZE_UNKNOWN = -1 if no option was specified
     // - for RRQ, contains the expected final CurrentSize value
     TransferSize: cardinal;
     /// the RFC 7440 "windowsize" option, in range 1..65535
@@ -362,10 +362,10 @@ begin
   OpCode := op;
   HasExtendedOptions := false;
   RetryCount := 0;
-  TimeoutSec := TFTP_DEFAULTTIMEOUT;    // = 5
-  BlockSize := TFTP_DEFAULTSIZE;        // = 512
-  TransferSize := TFTP_NOTRANSFERSIZE;  // = -1
-  WindowSize := TFTP_DEFAULTWINDOWSIZE; // = 1 as before RFC7440
+  TimeoutSec := TFTP_TIMEOUT_DEFAULT;    // = 5 seconds
+  BlockSize := TFTP_BLKSIZE_DEFAULT;     // = 512 as before RFC7440
+  TransferSize := TFTP_TSIZE_UNKNOWN;    // = -1 meaning no tsize option
+  WindowSize := TFTP_WINDOWSIZE_DEFAULT; // = 1 as before RFC7440
   LastReceivedSequenceWindowCounter := WindowSize;
   LastReceivedSequence := 0;
   LastReceivedSequenceHi := 0;
@@ -460,16 +460,16 @@ begin
           if not GetNextCardinal(1, 255, TimeoutSec) then
             exit;
         1:
-          if not GetNextCardinal(8, TFTP_MAXSIZE, BlockSize) then
+          if not GetNextCardinal(8, TFTP_BLKSIZE_MAX, BlockSize) then
             exit;
         2:
-          if not GetNextCardinal(0, MaxInt, TransferSize) then // up to 2GB
+          if not GetNextCardinal(0, 1 shl 30, TransferSize) then // up to 1GB
             exit
           else if OpCode = toRrq then
           begin
             // compute and send back the actual RRQ file size in OACK
             TransferSize := FileStream.Size;
-            Parsed := UInt32ToUtf8(TransferSize); // no #0 needed
+            UInt32ToUtf8(TransferSize, Parsed); // AppendTextToFrame() adds #0
           end;
         3:
           if not GetNextCardinal(1, 65535, WindowSize) then
@@ -505,7 +505,7 @@ begin
       OpDataAck := toDat;
     toRrq:
       begin
-        if TransferSize = TFTP_NOTRANSFERSIZE then
+        if TransferSize = TFTP_TSIZE_UNKNOWN then
           TransferSize := FileStream.Size;
         OpDataAck := toAck;
       end;
@@ -623,10 +623,10 @@ begin
   FrameLen := SizeOf(Frame^.OpCode);
   AppendTextToFrame(FileName);
   AppendTextToFrame('octet');
-  Append('timeout',    TimeoutSec,   TFTP_DEFAULTTIMEOUT);
-  Append('blksize',    BlockSize,    TFTP_DEFAULTSIZE);
-  Append('tsize',      TransferSize, TFTP_NOTRANSFERSIZE);
-  Append('windowsize', WindowSize,   TFTP_DEFAULTWINDOWSIZE);
+  Append('timeout',    TimeoutSec,   TFTP_TIMEOUT_DEFAULT);
+  Append('blksize',    BlockSize,    TFTP_BLKSIZE_DEFAULT);
+  Append('tsize',      TransferSize, TFTP_TSIZE_UNKNOWN);
+  Append('windowsize', WindowSize,   TFTP_WINDOWSIZE_DEFAULT);
 end;
 
 procedure TTftpContext.GenerateErrorFrame(
@@ -691,7 +691,7 @@ end;
 
 
 initialization
-  assert(SizeOf(TTftpFrame) = 4 + TFTP_MAXSIZE);
+  assert(SizeOf(TTftpFrame) = 4 + TFTP_BLKSIZE_MAX);
 
 end.
 
