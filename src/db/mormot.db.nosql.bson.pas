@@ -1909,7 +1909,7 @@ const
 
 var
   GlobalBsonObjectID: record
-    Section: TRTLCriticalSection;
+    Safe: TLightLock;
     DefaultValues: packed record
       Counter: cardinal;
       MachineID: TBson24;
@@ -1921,7 +1921,6 @@ var
 
 procedure InitBsonObjectIDComputeNew;
 begin
-  InitializeCriticalSection(GlobalBsonObjectID.Section);
   with GlobalBsonObjectID.DefaultValues do
   begin
     Counter := Random32 and COUNTER_MASK;
@@ -1947,10 +1946,10 @@ procedure TBsonObjectID.ComputeNew;
 var
   now, count: cardinal;
 begin
-  now := UnixTimeUtc; // fast API call (no need of cache)
+  now := UnixTimeUtc; // fast API call (no need of cache) outside of the lock
   with GlobalBsonObjectID do
   begin
-    EnterCriticalSection(Section);
+    Safe.Lock;
     if now > LastCreateTime then
     begin
       LastCreateTime := now;
@@ -1972,7 +1971,7 @@ begin
     UnixCreateTime := bswap32(LastCreateTime);
     MachineID := DefaultValues.MachineID;
     ProcessID := DefaultValues.ProcessID;
-    LeaveCriticalSection(Section);
+    Safe.UnLock;
   end;
 end;
 
