@@ -23,6 +23,7 @@ interface
 uses
   sysutils,
   mormot.core.base,
+  mormot.core.os,
   mormot.core.unicode,
   mormot.core.text;
 
@@ -247,7 +248,7 @@ function TimeToIso8601PChar(Time: TDateTime; P: PUtf8Char; Expanded: boolean;
 function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 
 /// decode most used TimeZone text values (CEST, GMT, +0200, -0800...)
-// - on match, returns true and the time zone offset in respect to UTC
+// - on match, returns true and the time zone minutes offset in respect to UTC
 // - if P is not a time zone, returns false and leave Zone to its supplied value
 // - will recognize only the most used text values using a fixed table (RFC 822
 // with some extensions like -0000 as current system timezone) - using
@@ -688,8 +689,9 @@ type
     procedure From(Y, M, D, HH, MM, SS: cardinal); overload;
      /// fill Value from specified TDateTime
     procedure From(DateTime: TDateTime; DateOnly: boolean = false); overload;
-    /// fill Value from specified File Date
-    procedure From(FileDate: integer); overload;
+    /// fill Value from specified low-level system-specific FileAge() integer
+    // - i.e. 32-bit Windows bitmask local time, or 64-bit Unix UTC time
+    procedure FromFileDate(const FileDate: TFileAge);
     /// fill Value from Iso-8601 encoded text
     procedure From(P: PUtf8Char; L: integer); overload;
     /// fill Value from Iso-8601 encoded text
@@ -838,9 +840,6 @@ type
 
 
 implementation
-
-uses
-  mormot.core.os;
 
 
 { ************ ISO-8601 Compatible Date/Time Text Encoding }
@@ -2499,15 +2498,14 @@ begin
   Value := Iso8601ToTimeLogPUtf8Char(pointer(S), length(S));
 end;
 
-procedure TTimeLogBits.From(FileDate: integer);
+procedure TTimeLogBits.FromFileDate(const FileDate: TFileAge);
 begin
-  {$ifdef OSWINDOWS}
+  {$ifdef OSWINDOWS} // already local time
   with PLongRec(@FileDate)^ do
     From(Hi shr 9 + 1980, Hi shr 5 and 15, Hi and 31, Lo shr 11,
       Lo shr 5 and 63, Lo and 31 shl 1);
   {$else}
-  // FileDate depends on the running OS -> use FPC RTL
-  From(FileDateToDateTime(FileDate));
+  From(mormot.core.os.FileDateToDateTime(FileDate)); // convert UTC to local
   {$endif OSWINDOWS}
 end;
 

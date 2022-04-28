@@ -1739,6 +1739,9 @@ type
   // consistent field order (FPC POSIX/Windows fields do not match!)
   TSystemTime = Windows.TSystemTime;
 
+  /// system-specific type returned by FileAge(): local 32-bit bitmask on Windows
+  TFileAge = integer;
+
 {$ifdef ISDELPHI}
 
   /// redefined as our own mormot.core.os type to avoid dependency to Windows
@@ -1773,6 +1776,10 @@ function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
   {$ifdef FPC} inline; {$endif}
 
 {$else}
+
+type
+  /// system-specific type returned by FileAge(): UTC 64-bit Epoch on POSIX
+  TFileAge = TUnixTime;
 
 {$ifdef OSLINUX}
   {$define OSPTHREADS} // direct pthread calls were tested on Linux only
@@ -1997,6 +2004,10 @@ function UnixMSTimeUtc: TUnixMSTime;
 function UnixMSTimeUtcFast: TUnixMSTime;
   {$ifdef OSPOSIX} inline; {$endif}
 
+const
+  /// number of days offset between the Unix Epoch (1970) and TDateTime origin
+  UnixDelta = 25569;
+
 /// the number of minutes bias in respect to UTC/GMT date/time
 // - as retrieved via -GetLocalTimeOffset() at startup
 var
@@ -2065,6 +2076,15 @@ function SafeFileNameU(const FileName: RawUtf8): boolean;
 // - see MakePath() from mormot.core.text.pas to concatenate path items
 function NormalizeFileName(const FileName: TFileName): TFileName;
 
+/// faster cross-platform alternative to sysutils homonymous function
+// - on Windows, just redirect to WindowsFileTimeToDateTime() since FileDate
+// is already expected to be in local time from FileAge()
+// - on POSIX, FileDate is a 64-bit UTC value as returned from OS stat API, and
+// will be converted into a local TDateTime
+// - note: FPC FileAge(TDateTime) is wrong and truncates 1-2 seconds on Windows
+function FileDateToDateTime(const FileDate: TFileAge): TDateTime;
+  {$ifdef HASINLINE}{$ifdef OSWINDOWS}inline;{$endif}{$endif}
+
 /// get a file date and time, from its name
 // - returns 0 if file doesn't exist
 // - returns the local file age, encoded as TDateTime
@@ -2093,12 +2113,12 @@ function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
 // Windows TimeStamps in its headers
 function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
 
-/// convert a Windows File 32-bit TimeStamp into a regular TDateTime
+/// convert a Windows API File 32-bit TimeStamp into a regular TDateTime
 // - returns 0 if the conversion failed
 // - used e.g. by FileSetDateFromWindowsTime() on POSIX
 function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
 
-/// convert a Windows File 64-bit TimeStamp into a regular TDateTime
+/// convert a Windows API File 64-bit TimeStamp into a regular TDateTime
 // - i.e. a FILETIME value as returned by GetFileTime() Win32 API
 // - returns 0 if the conversion failed
 // - some binary formats (e.g. ISO 9660) has such FILETIME fields
@@ -2133,7 +2153,7 @@ function FileSize(F: THandle): Int64; overload;
 function FileSeek64(Handle: THandle; const Offset: Int64;
   Origin: cardinal): Int64;
 
-/// get a file size and its UTC Unix timestamp
+/// get a file size and its UTC Unix timestamp in milliseconds resolution
 // - return false if FileName was not found
 // - return true and set FileSize and FileTimestampUtc if found - note that
 // no local time conversion is done, so timestamp won't match FileAge()
@@ -2220,7 +2240,7 @@ type
       read fDontReleaseHandle write fDontReleaseHandle;
   end;
 
-/// overloaded function optimized for one pass file reading
+/// overloaded function optimized for one pass reading of a (huge) file
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
 // by http://blogs.msdn.com/b/oldnewthing/archive/2012/01/20/10258690.aspx
 // - note: under XP, we observed ERROR_NO_SYSTEM_RESOURCES problems when calling
@@ -4485,7 +4505,7 @@ end;
 
 function NowUtc: TDateTime;
 begin
-  result := UnixMSTimeUtcFast / MSecsPerDay + UnixDelta;
+  result := UnixMSTimeUtcFast / Int64(MSecsPerDay) + Int64(UnixDelta);
 end;
 
 function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;

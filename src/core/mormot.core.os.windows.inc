@@ -103,7 +103,6 @@ begin
 end;
 
 const
-  UnixDelta = 25569;
   UnixFileTimeDelta = 116444736000000000; // from year 1601 to 1970
 
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
@@ -331,8 +330,13 @@ begin
 end;
 
 const
-  faInvalidFile   = faDirectory + faVolumeID{%H-} + faSysFile{%H-} + faHidden{%H-};
+  faInvalidFile = faDirectory + faVolumeID{%H-} + faSysFile{%H-} + faHidden{%H-};
   faDirectoryMask = faDirectory + faHidden{%H-};
+
+function FileDateToDateTime(const FileDate: TFileAge): TDateTime;
+begin
+  result := WindowsFileTimeToDateTime(FileDate);
+end;
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 var
@@ -340,7 +344,7 @@ var
   ST, LT: TSystemTime;
   tmp: TW32Temp;
 begin
-  // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
+  // much faster than CreateFile, GetFileTime, CloseHandle or FindFirst/Find...
   if GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA) and
      FileTimeToSystemTime({%H-}FA.ftLastWriteTime, ST) and
      SystemTimeToTzSpecificLocalTime(nil, ST, LT) then
@@ -354,7 +358,6 @@ var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
   tmp: TW32Temp;
 begin
-  // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
   if GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA) and
      (AllowDir or
       (({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) = 0)) then
@@ -417,7 +420,7 @@ var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
   tmp: TW32Temp;
 begin
-  // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
+  // much faster than CreateFile, GetFileSize, CloseHandle
   if GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA) then
   begin
     PInt64Rec(@result)^.Lo := FA.nFileSizeLow;
@@ -433,7 +436,7 @@ var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
   tmp: TW32Temp;
 begin
-  // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
+  // much faster than CreateFile, GetFileSize, GetFileTime, CloseHandle
   result := GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA);
   if not result then
     exit;

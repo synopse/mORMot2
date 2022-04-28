@@ -10,6 +10,7 @@ uses
   unix,
   unixcp,
   unixtype,
+  unixutil,
   {$ifdef OSBSDDARWIN}
   sysctl,
   {$else}
@@ -523,7 +524,6 @@ const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   D0          = 1461;
   D1          = 146097;
   D2          = 1721119;
-  UnixDelta   = 25569;
 
 procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
   {$ifdef HASINLINE}inline;{$endif}
@@ -602,12 +602,10 @@ end;
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 begin
   if mach_timenanosecond then
-    Value := mach_absolute_time div NanoSecsPerMicroSec
+    Value := mach_absolute_time
   else
-  begin
     QueryPerformanceNanosec(Value);
-    Value := Value div NanoSecsPerMicroSec; // ns to us
-  end;
+  Value := Value div NanoSecsPerMicroSec; // ns to us
 end;
 
 function GetTickCount64: Int64;
@@ -632,7 +630,7 @@ var
   tz: timeval;
 begin
   fpgettimeofday(@tz, nil);
-  result := (tz.tv_sec * MilliSecsPerSec) +
+  result := (tz.Int64(tv_sec) * MilliSecsPerSec) +
             tz.tv_usec div MicroSecsPerMilliSec; // in milliseconds
 end;
 
@@ -701,8 +699,8 @@ var
 begin
   clock_gettime(CLOCK_REALTIME_FAST, @r); // likely = CLOCK_REALTIME_COARSE
   // convert from nanoseconds into milliseconds
-  result := PtrUInt(r.tv_nsec) div PtrUInt(NanoSecsPerMilliSec) +
-            QWord(r.tv_sec * MilliSecsPerSec);
+  result := QWord(PtrUInt(r.tv_nsec) div PtrUInt(NanoSecsPerMilliSec)) +
+            QWord(r.tv_sec) * MilliSecsPerSec;
 end;
 
 function UnixTimeUtc: TUnixTime;
@@ -719,8 +717,8 @@ var
 begin
   clock_gettime(CLOCK_MONOTONIC_HIRES, @r);
   // convert from nanoseconds into microseconds
-  Value := PtrUInt(r.tv_nsec) div PtrUInt(NanoSecsPerMicroSec) +
-           QWord(r.tv_sec * MicroSecsPerSec);
+  Value := QWord(PtrUInt(r.tv_nsec) div PtrUInt(NanoSecsPerMicroSec)) +
+           QWord(r.tv_sec) * MicroSecsPerSec;
 end;
 
 procedure GetSystemTime(out result: TSystemTime);
@@ -730,7 +728,7 @@ begin
   // faster than fpgettimeofday() which makes a syscall and don't use vDSO
   clock_gettime(CLOCK_REALTIME_FAST, @r);
   EpochToSystemTime(r.tv_sec, result);
-  result.MilliSecond := r.tv_nsec div NanoSecsPerMilliSec;
+  result.MilliSecond := PtrUInt(r.tv_nsec) div PtrUInt(NanoSecsPerMilliSec);
 end;
 
 function GetTickCount64: Int64;
@@ -739,8 +737,8 @@ var
 begin
   clock_gettime(CLOCK_MONOTONIC_FAST, @tp); // likely = CLOCK_MONOTONIC_COARSE
   // convert from nanoseconds into milliseconds
-  result := PtrUInt(tp.tv_nsec) div PtrUInt(NanoSecsPerMilliSec) +
-            QWord(tp.tv_sec * MilliSecsPerSec);
+  result := QWord(PtrUInt(tp.tv_nsec) div PtrUInt(NanoSecsPerMilliSec)) +
+            QWord(tp.tv_sec) * MilliSecsPerSec;
 end;
 
 {$endif OSDARWIN}
@@ -794,11 +792,12 @@ begin
   trunc[L] := #0;
   {$ifdef OSPTHREADS} // see https://stackoverflow.com/a/7989973
   if Assigned(pthread_setname_np) then
-  try
-    pthread_setname_np(pointer(ThreadID), @trunc[0]);
-  except
-    ; // ignore any exception (pthread confusion with its static version?)
-  end;
+    try
+      pthread_setname_np(pointer(ThreadID), @trunc[0]);
+    except
+      // ignore any exception (pthread confusion with its static version?)
+      @pthread_setname_np := nil; // don't continue that way
+    end;
   {$endif OSPTHREADS}
 end;
 
@@ -812,12 +811,13 @@ function RawKillThread(Thread: TThread): boolean;
 begin
   result := false;
   {$ifdef OSPTHREADS}
-  try
-    if Assigned(pthread_cancel) then
+  if Assigned(pthread_cancel) then
+    try
       result := pthread_cancel(pointer(Thread.ThreadID)) = 0;
-  except
-    ; // ignore any exception (pthread confusion with its static version?)
-  end;
+    except
+      // ignore any exception (pthread confusion with its static version?)
+      @pthread_cancel := nil; // don't continue that way
+    end;
   {$endif OSPTHREADS}
 end;
 
@@ -842,25 +842,29 @@ const
   faInvalidFile = faDirectory;
   faDirectoryMask = faDirectory;
 
-function FileAgeToDateTime(const FileName: TFileName): TDateTime;
-var
-  Age: integer;
+function FileDateToDateTime(const FileDate: TFileAge): TDateTime;
 begin
-  Age := FileAge(FileName);
-  if Age <> -1 then
-    result := FileDateToDateTime(Age)
+  if FileDate <= 0 then
+    result := 0
   else
-    result := 0;
+    // + unixutil.TZSeconds = UTC to local time conversion
+    result := (FileDate + TZSeconds) / SecsPerDay + UnixDelta;
+end;
+
+function FileAgeToDateTime(const FileName: TFileName): TDateTime;
+begin
+  // faster to use POSIX time than RTL FileDateToDateTime(FileAge())
+  result := FileDateToDateTime(FileAgeToUnixTimeUtc(FileName)); // UTC to local
 end;
 
 function FileAgeToUnixTimeUtc(const FileName: TFileName; AllowDir: boolean): TUnixTime;
 var
-  st: stat;
+  st: TStat;
 begin
   if (fpStat(pointer(FileName), st) = 0) and
      (AllowDir or
       (not FpS_ISDIR(st.st_mode))) then
-    result := st.st_mtime // no local conversion needed
+    result := st.st_mtime // as TUnixTime seconds, with no local conversion
   else
     result := 0
 end;
@@ -903,6 +907,17 @@ begin
     result := st.st_size;
 end;
 
+procedure StatTimeMS(const st: TStat; out time: TUnixMSTime); inline;
+begin
+  time := st.st_mtime * MilliSecsPerSec + // no local conversion needed
+          // include milliseconds information
+          {$ifdef OSLINUXANDROID}
+          st.st_mtime_nsec div NanoSecsPerMilliSec;
+          {$else}
+          st.st_mtimensec div NanoSecsPerMilliSec;
+          {$endif OSLINUXANDROID}
+end;
+
 function FileInfo(const FileName: TFileName; out FileSize: Int64;
   out FileTimestampUtc: TUnixMSTime): boolean;
 var
@@ -912,7 +927,7 @@ begin
   if not result then
     exit;
   FileSize := st.st_size;
-  FileTimestampUtc := st.st_mtime; // no local conversion needed
+  StatTimeMS(st, FileTimestampUtc);
 end;
 
 function FileSize(F: THandle): Int64;
@@ -934,7 +949,7 @@ function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
   out LastWriteAccess, FileCreateDateTime: TUnixMSTime): boolean;
 var
   lastreadaccess: Int64;
-  lp: stat;
+  lp: TStat;
   r: integer;
 begin
   r := FpFStat(aFileHandle, lp);
@@ -943,15 +958,8 @@ begin
     exit;
   FileId := lp.st_ino;
   FileSize := lp.st_size;
-  lastreadaccess := lp.st_atime * MilliSecsPerSec;
-  LastWriteAccess := lp.st_mtime * MilliSecsPerSec;
-  {$ifdef OSLINUXANDROID}
-  inc(lastreadaccess, lp.st_atime_nsec div NanoSecsPerMilliSec);
-  inc(LastWriteAccess, lp.st_mtime_nsec div NanoSecsPerMilliSec);
-  {$else}
-  inc(lastreadaccess, lp.st_atimensec div NanoSecsPerMilliSec);
-  inc(LastWriteAccess, lp.st_mtimensec div NanoSecsPerMilliSec);
-  {$endif OSLINUXANDROID}
+  StatTimeMS(lp, LastWriteAccess);
+  // some FS don't populate all fields, so we use what we actually got
   {$ifdef OSOPENBSD}
   if (lp.st_birthtime <> 0) and
      (lp.st_birthtime < lp.st_ctime) then
@@ -962,6 +970,7 @@ begin
     if (FileCreateDateTime = 0) or
        (FileCreateDateTime > LastWriteAccess) then
       FileCreateDateTime := LastWriteAccess;
+  lastreadaccess := lp.st_atime * MilliSecsPerSec;
   if lastreadaccess <> 0 then
     if (FileCreateDateTime = 0) or
        (FileCreateDateTime > lastreadaccess) then
@@ -1125,7 +1134,7 @@ begin
   begin
     s := ms div MilliSecsPerSec;
     timeout.tv_sec := s;
-    timeout.tv_nsec := NanoSecsPerMilliSec * (ms - s * MilliSecsPerSec);
+    timeout.tv_nsec := (ms - s * MilliSecsPerSec) * NanoSecsPerMilliSec;
   end;
   fpnanosleep(@timeout, nil)
   // no retry loop on ESysEINTR (as with regular RTL's Sleep)
@@ -1986,14 +1995,15 @@ begin
     ProtectedResult := SynMProtect(
       AlignedAddr, PageSize, PROT_READ or PROT_WRITE) = 0;
   if ProtectedResult then
-  try
-    for i := 0 to Size - 1 do // do not use Move() here
-      PByteArray(Old)^[i] := PByteArray(New)^[i];
-    if not LeaveUnprotected and
-       ProtectedMemory then
-      SynMProtect(AlignedAddr, PageSize, PROT_READ or PROT_EXEC);
-  except
-  end;
+    try
+      for i := 0 to Size - 1 do // do not use Move() here
+        PByteArray(Old)^[i] := PByteArray(New)^[i];
+      if not LeaveUnprotected and
+         ProtectedMemory then
+        SynMProtect(AlignedAddr, PageSize, PROT_READ or PROT_EXEC);
+    except
+      // we ignore any exception here - it should work anyway
+    end;
 end;
 
 const
@@ -2890,7 +2900,7 @@ begin
   // direct access to the pthread library if possible (Linux only)
   {$ifdef OSPTHREADS}
   // mutex_lock() is blocking when dlopen run from a .so: cthreads uses both
-  // both static and dynamic linking, which is really confusing to our code
+  // static and dynamic linking, which is really confusing to our code
   // -> we don't open libpthread but we get its symbol
   pthread := dlopen('libpthread.so.0', RTLD_LAZY);
   if pthread <> nil then
@@ -2899,7 +2909,7 @@ begin
     @pthread_cancel := dlsym(pthread, 'pthread_cancel');
   end;
   {$endif OSPTHREADS}
-  // redirect some syscall FPC RTL functions to faster vDSO libc variant
+  // some ARM/AARCH64 specific initialization
   {$ifdef CPUARM3264}
   StrLen := @StrLenLibc; // libc version is faster than plain pascal or RTL code
   MoveFast := @MoveFastLibC;
@@ -2926,9 +2936,10 @@ begin
   {$ifdef CPUX64}
   {$ifdef OSLINUX}
   {$ifndef NOPATCHRTL}
+  // redirect some syscall FPC RTL functions to faster vDSO libc variant
   {$ifndef FPC_USE_LIBC}
-  // will avoid syscall e.g. for events timeout in cthreads.pp
   RedirectCode(@Linux.clock_gettime, @clock_gettime_c);
+  // will avoid syscall e.g. for events timeout in cthreads.pp
   RedirectCode(@fpgettimeofday, @gettimeofday_c);
   {$endif FPC_USE_LIBC}
   {$endif NOPATCHRTL}
