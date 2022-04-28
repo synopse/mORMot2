@@ -5780,7 +5780,7 @@ begin
       // FPC FileAge() is wrong and truncates 1-2 seconds on Windows -> 0.01
       Check(FileInfo(fn[i], fs, fu), 'FileInfo');
       CheckEqual(fs, length(s), 'FileInfo Size');
-      CheckEqual(FileAgeToUnixTimeUtc(fn[i]), fu, 'FileAgeToUnixTimeUtc');
+      CheckEqual(FileAgeToUnixTimeUtc(fn[i]), fu div 1000, 'FileAgeToUnixTimeUtc');
       // writeln('now=',DateTimeToIso8601Text(Now));
       // writeln('utc=',DateTimeToIso8601Text(NowUtc));
       // writeln('fdt=',DateTimeToIso8601Text(fdt));

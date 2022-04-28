@@ -3057,7 +3057,7 @@ end;
 
 function UInt32ToPdfString(Value: cardinal): PdfString;
 begin
-  result := PdfString(UInt32ToUtf8(Value));
+  UInt32ToUtf8(Value, RawUtf8(result));
 end;
 
 function PdfRect(Left, Top, Right, Bottom: single): TPdfRect;
