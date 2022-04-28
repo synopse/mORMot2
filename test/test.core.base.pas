@@ -5225,7 +5225,7 @@ begin
   end;
   // validate NowUtc / TimeZoneLocalBias
   dt := NowUtc;
-  CheckSame(LocalTimeToUniversal(Now(), TimeZoneLocalBias) - dt, 0, 0.01,
+  CheckSame(LocalTimeToUniversal(Now(), TimeZoneLocalBias), dt, 0.01,
     'NowUtc should not shift nor truncate time in respect to RTL Now');
   sleep(200);
   Check(not SameValue(dt, NowUtc),
@@ -5696,9 +5696,13 @@ const
     'application/zip', 'image/gif');
 var
   i, j, n: integer;
+  fa: TFileAge;
+  fdt: TDateTime;
+  fs: Int64;
+  fu: TUnixMSTime;
   fn: array[0..10] of TFileName;
   mp, mp2: TMultiPartDynArray;
-  mpc, mpct: RawUtf8;
+  s, mpc, mpct: RawUtf8;
   st: THttpMultiPartStream;
   rfc2388: boolean;
 
@@ -5763,8 +5767,30 @@ begin
     for i := 0 to high(fn) do
     begin
       fn[i] := WorkDir + 'mp' + IntToStr(i);
-      FileFromString(StringToUtf8(MIMES[i * 2 + 1]), fn[i]);
+      StringToUtf8(MIMES[i * 2 + 1], s);
+      FileFromString(s, fn[i]);
       Check(MultiPartFormDataAddFile(fn[i], mp));
+      fa := sysutils.FileAge(fn[i]);
+      fdt := sysutils.FileDateToDateTime(fa);
+      CheckSame(fdt, mormot.core.os.FileDateToDateTime(fa), DOUBLE_SAME, 'FileDateToDateTime');
+      {$ifdef HASNEWFILEAGE}
+      Check(FileAge(fn[i], fdt), 'FileAge');
+      {$endif HASNEWFILEAGE}
+      CheckSame(fdt, mormot.core.os.FileAgeToDateTime(fn[i]), 0.01, 'fdt');
+      // FPC FileAge() is wrong and truncates 1-2 seconds on Windows -> 0.01
+      Check(FileInfo(fn[i], fs, fu), 'FileInfo');
+      CheckEqual(fs, length(s), 'FileInfo Size');
+      CheckEqual(FileAgeToUnixTimeUtc(fn[i]), fu, 'FileAgeToUnixTimeUtc');
+      // writeln('now=',DateTimeToIso8601Text(Now));
+      // writeln('utc=',DateTimeToIso8601Text(NowUtc));
+      // writeln('fdt=',DateTimeToIso8601Text(fdt));
+      // writeln('osl=',DateTimeToIso8601Text(mormot.core.os.FileAgeToDateTime(fn[i])));
+      // writeln('osu=',UnixTimeToString(FileAgeToUnixTimeUtc(fn[i])));
+      //  now=2022-04-28T13:54:06
+      //  utc=2022-04-28T11:54:06
+      //  fdt=2022-04-28T13:54:08 -> 2 seconds error from FPC RTL FileAge()
+      //  osl=2022-04-28T13:54:06
+      //  osu=2022-04-28T11:54:06
     end;
     Check(MultiPartFormDataEncode(mp, mpct, mpc, rfc2388));
     DecodeAndTest;
