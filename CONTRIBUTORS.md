@@ -77,6 +77,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Pierre le Riche
 - RalfS
 - Richard6688
+- Rik (rvk)
 - Sabbiolina
 - Sanyin
 - Sinisa (sinisav)

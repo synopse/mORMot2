@@ -6188,6 +6188,100 @@ begin
     result := fUsedWide[FindOrAddUsedWideChar(aWideChar)].Width;
 end;
 
+type
+  TTtfTableDirectory = packed record
+    sfntVersion: cardinal; // 0x00010000 for version 1.0
+    numTables: word;       // number of tables
+    searchRange: word;     // HighBit(NumTables) x 16
+    entrySelector: word;   // Log2(HighBit(NumTables))
+    rangeShift: word;      // NumTables x 16 - SearchRange
+  end;
+  PTtfTableDirectory = ^TTtfTableDirectory;
+
+  TTtfTableEntry = packed record
+    tag: cardinal;      // table identifier
+    checksum: cardinal; // checksum for this table
+    offset: cardinal;   // offset from start of font file
+    length: cardinal;   // length of this table
+  end;
+  PTtfTableEntry = ^TTtfTableEntry;
+
+const
+  // see http://www.4real.gr/technical-documents-ttf-subset.html
+  // https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6.html
+  TTF_SUBSET: array[0..9] of array[0..3] of AnsiChar = (
+    'head', 'cvt ', 'fpgm', 'prep', 'hhea', 'maxp', 'hmtx', 'cmap', 'loca', 'glyf');
+
+procedure ReduceTTF(out ttf: PDFString; SubSetData: pointer; SubSetSize: integer);
+var
+  dir: PTtfTableDirectory;
+  d, e: PTtfTableEntry;
+  head: ^TCmapHEAD;
+  n, i, len: PtrInt;
+  checksum: cardinal;
+begin
+  SetLength(ttf, SubSetSize); // maximum size
+  d := pointer(ttf);
+  inc(PTtfTableDirectory(d));
+  // identify the tables to be included
+  e := SubSetData;
+  inc(PTtfTableDirectory(e));
+  n := 0;
+  if SubSetSize > SizeOf(dir^) then
+    for i := 1 to swap(PTtfTableDirectory(SubSetData)^.numTables) do
+    begin
+      if IntegerScanIndex(@TTF_SUBSET, length(TTF_SUBSET), e^.tag) >= 0 then
+      begin
+        d^ := e^;
+        inc(d);
+        inc(n);
+      end;
+      inc(e);
+    end;
+  // update the main directory
+  if n < 8 then // pdf expects 10 tables, and our fixed dir^ below 8..15
+  begin
+    MoveFast(SubSetData^, pointer(ttf)^, SubSetSize); // paranoid
+    exit;
+  end;
+  dir := pointer(ttf);
+  dir^.sfntVersion := PTtfTableDirectory(SubSetData)^.sfntVersion;
+  dir^.numTables := swap(word(n));
+  //len := HighBit(n); // always 8 when n in 8..15
+  //dir^.searchRange := swap(len * 16);
+  //dir^.entrySelector := swap(Floor(log2(len))); // requires the Math unit
+  //dir^.rangeShift := swap((integer(n) - len) * 16);
+  dir^.searchRange := 32768; // pre-computed values for n in 8..15
+  dir^.entrySelector := 768;
+  dir^.rangeShift := 8192;
+  // include the associated data
+  checksum := 0;
+  head := nil;
+  e := pointer(ttf);
+  inc(PTtfTableDirectory(e));
+  for i := 1 to n do
+  begin
+    len := bswap32(e^.length);
+    MoveFast(PByteArray(SubSetData)[bswap32(e^.offset)], d^, len);
+    e^.offset := bswap32(PtrUInt(d) - PtrUInt(ttf));
+    if e^.tag = $64616568 then // 'head'
+      head := pointer(d);
+    while len and 3 <> 0 do begin // 32-bit padding
+      PByteArray(d)[len] := 0;
+      inc(len);
+    end;
+    inc(checksum, bswap32(e^.checksum)); // we didn't change the table itself
+    inc(PByte(d), len);
+    inc(e);
+  end;
+  // finalize the generated content
+  for i := 0 to ((SizeOf(dir^) + (n * SizeOf(e^))) shr 2) - 1 do
+    inc(checksum, PCardinalArray(ttf)[i]);
+  if head <> nil then
+    head^.checkSumAdjustment := bswap32($B1B0AFBA - checksum);
+  {%H-}PStrLen(PtrUInt(ttf) - _STRLEN)^ := PtrUInt(d) - PtrUInt(ttf); // resize
+end;
+
 procedure TPdfFontTrueType.PrepareForSaving;
 var
   c: AnsiChar;
@@ -6209,7 +6303,6 @@ var
   ttcIndex: word; // For CreateFontPackage
   tableTag: LongWord;
   ttcNumFonts: LongWord;
-  ttcBytes: array of byte;
 begin
   str := TMemoryStream.Create;
   WR := TPdfWrite.Create(fDoc, str);
@@ -6329,11 +6422,10 @@ begin
         begin
           // Yes, the font is in a .ttc collection
           // find out how many fonts are included in the collection
-          SetLength(ttcBytes, 4);
           if windows.GetFontData(
-               fDoc.fDC, TTCF_TABLE, 8, pointer(ttcBytes), 4) <> GDI_ERROR then
-            ttcNumFonts := ttcBytes[3]
-          else // Higher bytes will be zero
+               fDoc.fDC, TTCF_TABLE, 8, @ttcNumFonts, 4) <> GDI_ERROR then
+            ttcNumFonts := bswap32(ttcNumFonts)
+          else
             ttcNumFonts := 1;
           // we need to find out the index of the font within the ttc collection
           // (this is not easy, so GetTtcIndex uses lookup on known ttc fonts)
@@ -6380,7 +6472,7 @@ begin
                 used.Count, @lpfnAllocate, @lpfnReAllocate, @lpfnFree, nil) = 0 then
               begin
                 // subset was created successfully -> save to PDF file
-                FastSetRawByteString(ttf, subdata, subsize);
+                ReduceTTF(ttf, subdata, subsize);
                 FreeMem(subdata);
                 // see 5.5.3 Font Subsets: begins with a tag followed by a +
                 TPdfName(fFontDescriptor.ValueByName('FontName')).AppendPrefix;
