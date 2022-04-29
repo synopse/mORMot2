@@ -650,7 +650,8 @@ begin
     P.ValueCount := fParamsArrayCount
   else
     P.ValueCount := 1;
-  with aParam do begin
+  with aParam do
+  begin
     P.ParamType := SQLParamTypeToDBParamType(VInOut);
     if VinOut <> paramInOut then
       case VType of

@@ -2408,7 +2408,8 @@ begin
     BoxPlain := TOrmMapBoxPlain.Create;
     try
       Client.TransactionBegin(TOrmMapBoxPlain);
-      for i := 1 to COUNT do begin
+      for i := 1 to COUNT do
+      begin
         BoxPlain.fID := i*2; // force ID
         BoxPlain.MinX := i*1.0;
         BoxPlain.MaxX := i*1.0+0.5;
@@ -2418,19 +2419,22 @@ begin
       end;
       Client.Commit;
       writeln('added in ',timer.Stop); timer.Start;
-      with Client.Server as TRestServer do begin
+      with Client.Server as TRestServer do
+      begin
         CreateSqlIndex(TOrmMapBoxPlain,'MinX',false);
         CreateSqlIndex(TOrmMapBoxPlain,'MaxX',false);
         CreateSqlIndex(TOrmMapBoxPlain,'MinY',false);
         CreateSqlIndex(TOrmMapBoxPlain,'MaxY',false);
       end;
       writeln('indexes created in ',timer.Stop); timer.Start;
-      for i := 1 to COUNT do begin
+      for i := 1 to COUNT do
+      begin
         check(Client.Retrieve(i*2,BoxPlain));
         CheckBoxPlain(i);
       end;
       writeln('retrieved by id in ',timer.Stop); timer.Start;
-      for i := 1 to COUNT do begin
+      for i := 1 to COUNT do
+      begin
         BoxPlain.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
           [i*1.0+0.25,i*1.0+0.25,i*2.0+0.25,i*2.0+0.25]);
         check(BoxPlain.FillOne);

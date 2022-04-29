@@ -242,7 +242,8 @@ type
     // - could be used to quickly lookup all items of the array, using Count:
     // ! var pi: PInteger; ...
     // !   pi := list.First;        // fastest method
-    // !   for i := 1 to list.Count do begin
+    // !   for i := 1 to list.Count do
+    // !   begin
     // !     writeln(pi^);
     // !     inc(pi);
     // !   end;

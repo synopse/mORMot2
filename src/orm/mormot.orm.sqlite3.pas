@@ -985,7 +985,8 @@ begin
   try
     TOrmVirtualTableModuleSQLite3(result).Attach(aDatabase);
   except
-    on Exception do begin
+    on Exception do
+    begin
       result.Free; // should be released by hand here
       raise; // e.g. EBusinessLayerException or ESqlite3Exception
     end;

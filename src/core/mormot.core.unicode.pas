@@ -6978,9 +6978,14 @@ begin
   lz := SynLZCompress1(@tmp1, rle, @tmp2);
   writeln(SizeOf(UU)); writeln(rle); writeln(lz);
   writeln('UU_ = array[byte] of cardinal = ('); l := '  ';
-  for i := 0 to 255 do begin
+  for i := 0 to 255 do
+  begin
     l := l + '$' + HexStr(tmp2[i], 8) + ',';
-    if length(l) > 70 then begin writeln(l); l := '  '; end;
+    if length(l) > 70 then
+    begin
+      writeln(l);
+      l := '  ';
+    end;
   end;
   writeln(l, ');');
 end;
