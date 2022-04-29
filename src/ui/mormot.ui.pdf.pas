@@ -4073,9 +4073,22 @@ begin
 end;
 
 procedure TPdfName.AppendPrefix;
+var
+  prefix: RawUtf8;
+  c: cardinal;
+  i: PtrInt;
 begin
-  if self <> nil then
-    fValue := 'SUBSET+' + fValue; // we ensured a single subset per font
+  if self = nil then
+    exit;
+  SetLength(prefix, 7);
+  c := Random32; // we will consume only 24-bit of randomness
+  for i := 1 to 6 do
+  begin
+    prefix[i] := AnsiChar((c and 15) + 65);
+    c := c shr 4;
+  end;
+  prefix[7] := '+';
+  FValue := prefix+FValue; // we ensured a single subset per font
 end;
 
 
@@ -5774,7 +5787,8 @@ const
   TTFCFP_FLAGS_COMPRESS = 2;
   TTFMFP_SUBSET = 0;
   TTFCFP_FLAGS_TTC = 4;
-  TTCF_TABLE = $66637474;
+  HEAD_TABLE = $64616568; // 'head'
+  TTCF_TABLE = $66637474; // 'ttcf'
 
 constructor TPdfFontType1.Create(AXref: TPdfXref; const AName: PdfString;
   WidthArray: PSmallIntArray);
@@ -6207,12 +6221,12 @@ type
   PTtfTableEntry = ^TTtfTableEntry;
 
 const
-  // see http://www.4real.gr/technical-documents-ttf-subset.html
+  // see http://www.4real.gr/technical-documents-ttf-subset.html and
   // https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6.html
   TTF_SUBSET: array[0..9] of array[0..3] of AnsiChar = (
     'head', 'cvt ', 'fpgm', 'prep', 'hhea', 'maxp', 'hmtx', 'cmap', 'loca', 'glyf');
 
-procedure ReduceTTF(out ttf: PDFString; SubSetData: pointer; SubSetSize: integer);
+procedure ReduceTTF(out ttf: PdfString; SubSetData: pointer; SubSetSize: integer);
 var
   dir: PTtfTableDirectory;
   d, e: PTtfTableEntry;
@@ -6238,12 +6252,12 @@ begin
       end;
       inc(e);
     end;
-  // update the main directory
-  if n < 8 then // pdf expects 10 tables, and our fixed dir^ below 8..15
+  if n < 8 then // pdf expects 10 tables, and 8..15 for our fixed dir^ values
   begin
     MoveFast(SubSetData^, pointer(ttf)^, SubSetSize); // paranoid
     exit;
   end;
+  // update the main directory
   dir := pointer(ttf);
   dir^.sfntVersion := PTtfTableDirectory(SubSetData)^.sfntVersion;
   dir^.numTables := swap(word(n));
@@ -6264,9 +6278,10 @@ begin
     len := bswap32(e^.length);
     MoveFast(PByteArray(SubSetData)[bswap32(e^.offset)], d^, len);
     e^.offset := bswap32(PtrUInt(d) - PtrUInt(ttf));
-    if e^.tag = $64616568 then // 'head'
+    if e^.tag = HEAD_TABLE then // 'head'
       head := pointer(d);
-    while len and 3 <> 0 do begin // 32-bit padding
+    while len and 3 <> 0 do
+    begin // 32-bit padding
       PByteArray(d)[len] := 0;
       inc(len);
     end;
