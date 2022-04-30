@@ -1645,7 +1645,7 @@ begin
   ctxt.url := url;
   ctxt.method := method;
   ctxt.KeepAlive := KeepAlive;
-  ctxt.header := header;
+  ctxt.header := TrimU(header);
   ctxt.Data := Data;
   ctxt.DataType := DataType;
   ctxt.InStream := InStream;
