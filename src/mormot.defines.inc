@@ -550,14 +550,14 @@
     {$if CompilerVersion >= 34.0} // = Delphi 10.4
       {$define ISDELPHI104}
     {$ifend}
-    {$if CompilerVersion >= 35.0} // = Delphi 11 Alexandria
+    {$if CompilerVersion >= 35.0} // = Delphi 11.x Alexandria
       {$define ISDELPHI11}
       {$ifdef CPU64}
         {.$define ASMX64AVX}      // initial AVX/AVX2/AVX512 support - but broken
       {$endif CPU64}
     {$ifend}
-    {$if CompilerVersion >= 36.0} // = Delphi 11.1
-      {$define ISDELPHI111}
+    {$if CompilerVersion >= 36.0} // = Delphi 12
+      {$define ISDELPHI12}
     {$ifend}
   {$else}
      {$define ISDELPHI7}

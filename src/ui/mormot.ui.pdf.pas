@@ -6491,7 +6491,7 @@ begin
                 FreeMem(subdata);
                 // see 5.5.3 Font Subsets: begins with a tag followed by a +
                 TPdfName(fFontDescriptor.ValueByName('FontName')).AppendPrefix;
-                TPdfName(fFontDescriptor.ValueByName('BaseFont')).AppendPrefix;
+                TPdfName(Data.ValueByName('BaseFont')).AppendPrefix;
               end;
             end;
             {$endif USE_UNISCRIBE}
@@ -7327,7 +7327,7 @@ begin
   begin
     fMetaData.Writer.Add(RawUtf8(
       '<?xpacket begin="'#$EF#$BB#$BF'" id="W5M0MpCehiHzreSzNTczkc9d"?>' +
-      '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="SynPdf">' +
+      '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="mormot.ui.pdf">' +
       '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
       '<rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/">' +
       '<xmp:CreateDate>')).AddIso8601(Info.CreationDate).
