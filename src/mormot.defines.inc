@@ -682,8 +682,8 @@
       // other Win32/Win64 Delphi platforms "should work" (tm) as expected
       {$define NOSQLITE3STATIC}
     {$ifend}
-    {$define LIBQUICKJSSTATIC}      // seems fine BUT on Delphi 10.4 Win64
-    {$if CompilerVersion = 34.0}    // = Delphi 10.4
+    {$define LIBQUICKJSSTATIC}      // seems fine BUT on Delphi 10.4+ Win64
+    {$if CompilerVersion >= 34.0}    // = Delphi 10.4 and later
       {$undef LIBQUICKJSSTATIC}
     {$ifend}
   {$endif}
