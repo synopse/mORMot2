@@ -4444,7 +4444,8 @@ end;
 procedure TBufferWriter.WriteRawUtf8Array(Values: PPtrUIntArray;
   ValuesCount: integer);
 var
-  n, i: integer;
+  n: integer;
+  i: PtrInt;
   fixedsize, len: PtrUInt;
   P, PEnd: PByte;
   PBeg: PAnsiChar;
