@@ -1262,14 +1262,14 @@ var
   var
     CA: TCollTstDynArray;
     i: integer;
-    tmp: RawByteString;
+    tmp: RawUtf8;
     pu: PUtf8Char;
   begin
     CA := TCollTstDynArray.Create;
     try
       CA.Str := TStringList.Create;
-      tmp := J;
-      Check(JsonToObject(CA, UniqueRawUtf8(RawUtf8(tmp)), Valid)^ = #0);
+      FastSetString(tmp, pointer(J), length(J));
+      Check(JsonToObject(CA, pointer(tmp), Valid)^ = #0);
       Check(Valid);
       Check(CA.One.Color = 2);
       Check(CA.One.Name = 'test2');
@@ -1314,6 +1314,7 @@ var
       for i := 0 to high(CA.TimeLog) do
         Check(CA.TimeLog[i] = TLNow + i and 31);
       DA.Init(TypeInfo(TFVs), CA.fFileVersions);
+      FillcharFast(F, SizeOf(F), 0); // initialize all fields before DA.Add(F)
       for i := 1 to 1000 do
       begin
         F.Major := i;
