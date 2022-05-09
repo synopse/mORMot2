@@ -95,7 +95,7 @@ type
   // hash available on all platforms, for enhanced security, by calling e.g.
   // ! (aServer.AuthenticationRegister(TRestClientAuthenticationDefault) as
   // !   TRestServerAuthenticationDefault).Algorithm := suaMD5;
-  // - suaSHA1, suaSHA256 and suaSHA512 will be the slowest, to provide
+  // - suaSHA1, suaSHA256, suaSHA512 and suaSHA3 will be the slowest, to provide
   // additional level of trust, depending on your requirements: note that
   // since the hash is reduced to 32-bit resolution, those may not provide
   // higher security than suaMD5
@@ -107,7 +107,8 @@ type
     suaMD5,
     suaSHA1,
     suaSHA256,
-    suaSHA512);
+    suaSHA512,
+    suaSHA3);
 
   /// function prototype for TRestClientAuthenticationSignedUri and
   // TRestServerAuthenticationSignedUri computation of the session_signature
@@ -188,6 +189,8 @@ type
     class function ComputeSignatureSha256(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
     class function ComputeSignatureSha512(privatesalt: cardinal;
+      timestamp, url: PAnsiChar; urllen: integer): cardinal;
+    class function ComputeSignatureSha3(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
   public
     /// retrieve the method to compute the session_signature=.... value
@@ -1381,6 +1384,24 @@ begin
     result := result xor digest.c[i];
 end;
 
+class function TRestClientAuthenticationSignedUri.ComputeSignatureSha3(
+  privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
+var
+  digest: THash256Rec;
+  Sha3: TSha3;
+  i: PtrInt;
+begin
+  Sha3.Init(SHA3_256);
+  Sha3.Update(@privatesalt, 4);
+  Sha3.Update(timestamp, 8);
+  Sha3.Update(url, urllen);
+  Sha3.Final(@digest.b);
+  result := digest.c[0];
+  for i := 1 to high(digest.c) do
+    // we may have used the first 32-bit of the digest, but cascaded xor is fine
+    result := result xor digest.c[i];
+end;
+
 class function TRestClientAuthenticationSignedUri.GetComputeSignature(
   algo: TRestAuthenticationSignedUriAlgo): TOnRestAuthenticationSignedUriComputeSignature;
 begin
@@ -1396,6 +1417,8 @@ begin
       result := ComputeSignatureSha1;
     suaSHA256:
       result := ComputeSignatureSha256;
+    suaSHA3:
+      result := ComputeSignatureSha3;
     suaSHA512:
       result := ComputeSignatureSha512;
   else

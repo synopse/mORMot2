@@ -295,6 +295,8 @@ type
     procedure ClientSideRESTSignWithSha256;
     /// test the client-side implementation with SHA512 URI signature
     procedure ClientSideRESTSignWithSha512;
+    /// test the client-side implementation with SHA3 URI signature
+    procedure ClientSideRESTSignWithSha3;
     /// test the client-side implementation using TRestServerAuthenticationNone
     procedure ClientSideRESTWeakAuthentication;
     /// test the client-side implementation using TRestServerAuthenticationHttpBasic
@@ -1757,8 +1759,8 @@ begin
   end;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientAlgo(algo:
-  TRestAuthenticationSignedUriAlgo);
+procedure TTestServiceOrientedArchitecture.ClientAlgo(
+  algo: TRestAuthenticationSignedUriAlgo);
 begin
   (fClient.Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
     TRestServerAuthenticationDefault).Algorithm := algo;
@@ -1789,6 +1791,11 @@ end;
 procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA512;
 begin
   ClientAlgo(suaSHA512);
+end;
+
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA3;
+begin
+  ClientAlgo(suaSHA3);
   // restore to the default hasher
   (fClient.Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
     TRestServerAuthenticationDefault).Algorithm := suaCRC32;
