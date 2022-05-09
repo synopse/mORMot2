@@ -3847,7 +3847,7 @@ begin
             rkFloat:
               ErrorMsg := ' - use double/currency instead';
           else
-            FormatUtf8(' (%)', [ToText(ArgRtti.Info^.Kind)], ErrorMsg);
+            FormatUtf8(' (%)', [ToText(ArgRtti.Info^.Kind)^], ErrorMsg);
           end;
         imvObject:
           if ArgRtti.ValueRtlClass = vcList then
@@ -5468,6 +5468,7 @@ procedure TInterfaceStubRules.AddRule(Sender: TInterfaceStub;
   aExpectedPassCountOperator: TInterfaceStubRuleOperator; aValue: cardinal);
 var
   n, ndx: integer;
+  r: PInterfaceStubRule;
 begin
   ndx := FindRuleIndex(aParams);
   n := length(Rules);
@@ -5478,33 +5479,31 @@ begin
   if (aParams = '') and
      (aKind <> isUndefined) then
     DefaultRule := n;
-  with Rules[n] do
-  begin
-    Params := aParams;
-    case aKind of
-      isUndefined:
-        ; // do not overwrite Values for weak rules like ExpectsCount/ExpectsTrace
-      isReturns:
-        Values := '[' + aValues + ']';
-      isFails:
-        Values := ToText(Sender.ClassType) + ' returned error: ' + aValues;
-    else
-      Values := aValues;
-    end;
-    if aKind = isUndefined then
-      if aExpectedPassCountOperator = ioTraceMatch then
-        ExpectedTraceHash := aValue
-      else
-      begin
-        ExpectedPassCountOperator := aExpectedPassCountOperator;
-        ExpectedPassCount := aValue;
-      end
+  r := @Rules[n];
+  r^.Params := aParams;
+  case aKind of
+    isUndefined:
+      ; // do not overwrite Values for weak rules like ExpectsCount/ExpectsTrace
+    isReturns:
+      r^.Values := '[' + aValues + ']';
+    isFails:
+      FormatUtf8('% returned error: %', [Sender, aValues], r^.Values);
+  else
+    r^.Values := aValues;
+  end;
+  if aKind = isUndefined then
+    if aExpectedPassCountOperator = ioTraceMatch then
+      r^.ExpectedTraceHash := aValue
     else
     begin
-      Kind := aKind;
-      Execute := TMethod(aEvent);
-      ExceptionClass := aExceptionClass;
-    end;
+      r^.ExpectedPassCountOperator := aExpectedPassCountOperator;
+      r^.ExpectedPassCount := aValue;
+    end
+  else
+  begin
+    r^.Kind := aKind;
+    r^.Execute := TMethod(aEvent);
+    r^.ExceptionClass := aExceptionClass;
   end;
 end;
 
@@ -6238,7 +6237,7 @@ begin
                 end;
               end;
             isRaises:
-              raise ExceptionClass.Create(Utf8ToString(r^.Values));
+              raise r^.ExceptionClass.Create(Utf8ToString(r^.Values));
             isReturns:
               begin
                 result := true;
