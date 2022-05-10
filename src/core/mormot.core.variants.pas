@@ -6113,10 +6113,15 @@ end;
 
 function TDocVariantData.SearchItemByValue(const aValue: Variant;
   CaseInsensitive: boolean; StartIndex: PtrInt): PtrInt;
+var
+  v: PVarData;
 begin
+  v := @VValue[StartIndex];
   for result := StartIndex to VCount - 1 do
-    if FastVarDataComp(@VValue[result], @aValue, CaseInsensitive) = 0 then
-      exit;
+    if FastVarDataComp(v, @aValue, CaseInsensitive) = 0 then
+      exit
+    else
+      inc(v);
   result := -1;
 end;
 

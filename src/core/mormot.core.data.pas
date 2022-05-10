@@ -6046,7 +6046,7 @@ begin
       if pA^.Name <> '' then
       begin
         pB := rB.Props.Find(pA^.Name);
-        if pB <> nil then
+        if pB <> nil then // just ignore missing properties
         begin
           result := pA^.CompareValue(A, B, pB^, CaseInSensitive);
           if result <> 0 then
