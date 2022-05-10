@@ -216,8 +216,8 @@ function JsonPropNameValid(P: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
-  /// internal parsing structure used by legacy GetJsonField() and
-  // GetJsonFieldOrObjectOrArray() wrapper functions
+  /// internal JSON field parsing structure
+  // - used e.g. by GetJsonField() and GetJsonFieldOrObjectOrArray() wrappers
   TGetJsonField = object
     /// input/output JSON parsing buffer address
     Json: PUtf8Char;

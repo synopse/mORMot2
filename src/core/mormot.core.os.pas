@@ -462,7 +462,7 @@ const
 
   /// translate one operating system (and distribution) into a single character
   // - may be used internally e.g. for a HTTP User-Agent header, as with
-  // TFileVersion.UserAgent
+  // TFileVersion.UserAgent and UserAgentParse()
   OS_INITIAL: array[TOperatingSystem] of AnsiChar = (
     '?', // Unknown
     'W', // Windows
@@ -948,6 +948,7 @@ type
     // - e.g. 'myprogram/3.1.0.123W32' for myprogram running on Win32
     // - here OS_INITIAL[] character is used to identify the OS, with '32'
     // appended on Win32 only (e.g. 'myprogram/3.1.0.2W', is for Win64)
+    // - use UserAgentParse() to decode this text into meaningful information
     function UserAgent: RawUtf8;
     /// returns the version information of a specified exe file as text
     // - includes FileName (without path), Detailed and BuildDateTime properties

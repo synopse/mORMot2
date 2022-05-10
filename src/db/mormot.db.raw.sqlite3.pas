@@ -7111,7 +7111,8 @@ begin
   try
     if fLog <> nil then
       fLog.Add.Log(sllResult, aJsonResult, self, fLogResultMaximumSize);
-    fCache.AddOrUpdate(aSql, aJsonResult, aResultCount); // no-op if Reset was made just before
+    // next line is a no-op if Reset was made just before
+    fCache.AddOrUpdate(aSql, aJsonResult, aResultCount);
   finally
     fSafe.UnLock; // on non-concurent calls, this API is very fast
   end;
