@@ -1314,7 +1314,6 @@ var
       for i := 0 to high(CA.TimeLog) do
         Check(CA.TimeLog[i] = TLNow + i and 31);
       DA.Init(TypeInfo(TFVs), CA.fFileVersions);
-      FillcharFast(F, SizeOf(F), 0); // initialize all fields before DA.Add(F)
       for i := 1 to 1000 do
       begin
         F.Major := i;
@@ -1936,6 +1935,7 @@ var
   end;
 
 begin
+  FillcharFast(F, SizeOf(F), 0); // initialize all fields before DA.Add(F)
   TestGetJsonField('', '', false, true, #0, #0);
   TestGetJsonField('true,false', 'true', false, false, ',', 'f');
   TestGetJsonField('false,1', 'false', false, false, ',', '1');
