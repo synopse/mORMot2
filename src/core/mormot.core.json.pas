@@ -10609,7 +10609,7 @@ procedure AutoCreateFields(ObjectInstance: TObject);
 var
   rtti: TRttiJson;
   n: integer;
-  p: ^PRttiCustomProp;
+  p: PPRttiCustomProp;
 begin
   // inlined Rtti.RegisterClass()
   rtti := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
@@ -10634,7 +10634,7 @@ procedure AutoDestroyFields(ObjectInstance: TObject);
 var
   rtti: TRttiJson;
   n: integer;
-  p: ^PRttiCustomProp;
+  p: PPRttiCustomProp;
   arr: pointer;
   o: TObject;
 begin

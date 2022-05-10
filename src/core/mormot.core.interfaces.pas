@@ -5361,7 +5361,7 @@ procedure TInjectableObject.AutoResolve(aRaiseEServiceExceptionIfNotFound: boole
 var
   rtti: TRttiJson;
   n: integer;
-  p: ^PRttiCustomProp;
+  p: PPRttiCustomProp;
   addr: pointer;
 begin
   if (self = nil) or
