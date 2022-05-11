@@ -151,9 +151,6 @@ type
     /// initialize and bind the server instance, in non-suspended state
     // - will cache served file content for 15 minutes by default, but you could
     // set CacheTimeoutSecs=0 to disable any file caching
-    // - [ttoNoTimeout, ttoNoTsize, ttoNoWindowsize] options should better be
-    // set by default, since only RFC 2348 "blksize" extension has been really
-    // tested and validated yet (and should be enough in practice)
     constructor Create(const SourceFolder: TFileName;
       Options: TTftpThreadOptions; LogClass: TSynLogClass;
       const BindAddress, BindPort, ProcessName: RawUtf8;
@@ -367,7 +364,7 @@ begin
         break;
       end;
     end;
-    // send next ACK or DAT block
+    // send next ACK or DAT block(s)
     if ttoLowLevelLog in fOwner.fOptions then
       fLog.Log(sllTrace, 'DoExecute send % %/%',
         [ToText(fContext.Frame^, fContext.FrameLen),

@@ -155,11 +155,14 @@ type
   PTftpContext = ^TTftpContext;
 
   /// the supported RFC 2348/2349/7440 extended TFTP options
-  TTftpContextOptions = set of (
+  TTftpContextOption = (
     tcoBlksize,
     tcoTimeout,
     tcoTsize,
     tcoWindowsize);
+
+  /// set of supported RFC 2348/2349/7440 extended TFTP options
+  TTftpContextOptions = set of TTftpContextOption;
 
   /// the TFTP Context, following RFC 1350/2347/2348/2349/7440 specifications
   // - access an external 64KB processing buffer
@@ -209,7 +212,7 @@ type
     // - server should retry after TimeoutTix
     LastAcknowledgedSequence: TTftpSequence;
     /// RFC 7440 "windowsize" counter, set to WindowSize at each ACK
-    LastReceivedSequenceWindowCounter: cardinal;
+    LastWindowCounter: cardinal;
     /// upper 16-bit mask of the sequence number of the last DAT fragment received
     // - used to compute the correct processed size after ACK on block overflow
     LastReceivedSequenceHi: cardinal;
@@ -377,7 +380,7 @@ begin
   TransferSize := TFTP_TSIZE_UNKNOWN;    // = -1 meaning no tsize option
   WindowSize := TFTP_WINDOWSIZE_DEFAULT; // = 1 as before RFC7440
   Options := opt;
-  LastReceivedSequenceWindowCounter := WindowSize;
+  LastWindowCounter := WindowSize;
   LastReceivedSequence := 0;
   LastReceivedSequenceHi := 0;
   LastAcknowledgedSequence := 0;
@@ -448,14 +451,16 @@ begin
 end;
 
 const
-  TFTP_OPTIONS: array[0.. 4] of PAnsiChar = (
-    'TIMEOUT',
-    'BLKSIZE',
-    'TSIZE',
-    'WINDOWSIZE',
+  TFTP_OPTIONS: array[0.. ord(high(TTftpContextOption)) + 1] of PAnsiChar = (
+    'BLKSIZE',     // tcoBlksize
+    'TIMEOUT',     // tcoTimeout
+    'TSIZE',       // tcoTsize
+    'WINDOWSIZE',  // tcoWindowsize
     nil);
 
 function TTftpContext.ParseRequestOptions: TTftpError;
+var
+  i: integer;
 begin
   // caller should have set the FileStream from FileName parsed field
   if GetNext then
@@ -465,20 +470,24 @@ begin
     HasExtendedOptions := true;
     FrameLen := SizeOf(Frame^.Opcode);
     repeat
+      i := IdemPPChar(pointer(Parsed), @TFTP_OPTIONS);
+      if (cardinal(i) > cardinal(ord(high(TTftpContextOption)))) or
+         not (TTftpContextOption(i) in Options) then
+      begin
+        GetNext;  // ignore value when this extension is unsupported
+        continue; // and don't send back this option
+      end;
       if OpCode <> toOck then
         AppendTextToFrame(Parsed); // include option name to OACK answer
-      case IdemPPChar(pointer(Parsed), @TFTP_OPTIONS) of
-        0:
-          if not (tcoTimeout in Options) or
-             not GetNextCardinal(1, 255, TimeoutSec) then
+      case TTftpContextOption(i) of
+        tcoTimeout:
+          if not GetNextCardinal(1, 255, TimeoutSec) then
             exit;
-        1:
-          if not (tcoBlksize in Options) or
-             not GetNextCardinal(8, TFTP_BLKSIZE_MAX, BlockSize) then
+        tcoBlksize:
+          if not GetNextCardinal(8, TFTP_BLKSIZE_MAX, BlockSize) then
             exit;
-        2:
-          if not (tcoTsize in Options) or
-             not GetNextCardinal(0, 1 shl 30, TransferSize) then // up to 1GB
+        tcoTsize:
+          if not GetNextCardinal(0, 1 shl 30, TransferSize) then // up to 1GB
             exit
           else if OpCode = toRrq then
           begin
@@ -486,14 +495,13 @@ begin
             TransferSize := FileStream.Size;
             UInt32ToUtf8(TransferSize, Parsed); // AppendTextToFrame() adds #0
           end;
-        3:
-          if not (tcoWindowsize in Options) or
-             not GetNextCardinal(1, 65535, WindowSize) then
+        tcoWindowsize:
+          if not GetNextCardinal(1, 65535, WindowSize) then
             exit
           else
-            LastReceivedSequenceWindowCounter := WindowSize;
+            LastWindowCounter := WindowSize;
       else
-        exit; // unsupported option
+        exit; // unsupported option (paranoid)
       end;
       if OpCode <> toOck then
         AppendTextToFrame(Parsed); // include option value to OACK answer
@@ -531,6 +539,7 @@ end;
 function TTftpContext.ParseData(len: integer): TTftpError;
 var
   op: TTftpOpcode;
+  retry: integer;
 begin
   result := teIllegalOperation;
   op := ToOpCode(Frame^);
@@ -560,10 +569,10 @@ begin
             result := teFinished; // Normal Termination
           exit;
         end;
-        dec(LastReceivedSequenceWindowCounter);
-        if LastReceivedSequenceWindowCounter = 0 then
+        dec(LastWindowCounter);   // 1 for RFC1350, or typically 4
+        if LastWindowCounter = 0 then
         begin
-          LastReceivedSequenceWindowCounter := WindowSize;
+          LastWindowCounter := WindowSize;
           GenerateAckFrame;
         end
         else
@@ -572,13 +581,35 @@ begin
     toAck: // during RRQ request
       begin
         LastAcknowledgedSequence := Frame^.Sequence;
-        LastReceivedSequenceWindowCounter := WindowSize;
-        if CurrentSize > TransferSize then // >= would miss last block w/ len=0
-        begin
-          result := teFinished; // Normal Termination
-          exit;
-        end;
-        GenerateNextDataFrame;
+        LastReceivedSequence := LastAcknowledgedSequence;
+        LastWindowCounter := WindowSize;     // 1 for RFC1350, or typically 4
+        repeat
+          if CurrentSize > TransferSize then // >= miss last block with len=0
+          begin
+            result := teFinished;            // Normal Termination
+            exit;
+          end;
+          GenerateNextDataFrame;
+          dec(LastWindowCounter);
+          if LastWindowCounter = 0 then
+            break; // TTftpConnectionThread.DoExecute caller will do SendFrame
+          // send now trailing RFC7440 "windowsize" option frames
+          retry := 0;
+          while true do
+            case SendFrame of
+              nrOk:
+                break; // output frames are likely to be in HW/OS buffers
+              nrRetry:
+                begin
+                  inc(retry);
+                  if retry = 100 then
+                    exit; // never wait forever: 1 second seems enough
+                  Sleep(10);
+                end;
+            else
+              exit; // teIllegalOperation error
+            end;
+        until false;
       end;
   else
     exit;
@@ -611,7 +642,7 @@ begin
   if CurrentSize <> FileStream.Position then
     FileStream.Seek(Int64(CurrentSize), soBeginning);
   FrameLen := FileStream.Read(Frame^.Data,  BlockSize);
-  // FrameLen=0 is possible for last block
+  // data FrameLen=0 is possible for last block
   inc(FrameLen, SizeOf(Frame^.Opcode) + SizeOf(Frame^.Sequence));
   inc(CurrentSize, BlockSize);
 end;
