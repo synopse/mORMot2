@@ -136,7 +136,7 @@ type
     fAsNobody: boolean;
     fFileCache: TSynDictionary; // thread-safe <16MB files content cache
     function GetConnectionCount: integer;
-    function GetTco: TTftpContextOptions;
+    function GetContextOptions: TTftpContextOptions;
     // default implementation will read/write from FileFolder
     procedure SetFileFolder(const Value: TFileName);
     function GetFileName(const FileName: RawUtf8): TFileName; virtual;
@@ -151,6 +151,9 @@ type
     /// initialize and bind the server instance, in non-suspended state
     // - will cache served file content for 15 minutes by default, but you could
     // set CacheTimeoutSecs=0 to disable any file caching
+    // - [ttoNoTimeout, ttoNoTsize, ttoNoWindowsize] options should better be
+    // set by default, since only RFC 2348 "blksize" extension has been really
+    // tested and validated yet (and should be enough in practice)
     constructor Create(const SourceFolder: TFileName;
       Options: TTftpThreadOptions; LogClass: TSynLogClass;
       const BindAddress, BindPort, ProcessName: RawUtf8;
@@ -569,7 +572,7 @@ begin
     result := teIllegalOperation;
 end;
 
-function TTftpServerThread.GetTco: TTftpContextOptions;
+function TTftpServerThread.GetContextOptions: TTftpContextOptions;
 begin
   result := [];
   if not (ttoNoBlksize in fOptions) then
@@ -618,7 +621,7 @@ begin
   // main request parsing method (if TStream exists)
   c.Remote := remote;
   c.Frame := pointer(fFrame);
-  res := c.ParseRequestFileName(len, GetTco);
+  res := c.ParseRequestFileName(len, GetContextOptions);
   if res = teNoError then
   begin
     // create the associated TStream to read to or write from
