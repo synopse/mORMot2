@@ -154,6 +154,13 @@ type
   /// points to a TTftpContext processing buffer
   PTftpContext = ^TTftpContext;
 
+  /// the supported RFC 2348/2349/7440 extended TFTP options
+  TTftpContextOptions = set of (
+    tcoBlksize,
+    tcoTimeout,
+    tcoTsize,
+    tcoWindowsize);
+
   /// the TFTP Context, following RFC 1350/2347/2348/2349/7440 specifications
   // - access an external 64KB processing buffer
   {$ifdef USERECORDWITHMETHODS}
@@ -192,6 +199,8 @@ type
     WindowSize: cardinal;
     /// current processed size
     CurrentSize: cardinal;
+    /// RFC 2349/7440 extended TFTP options supported
+    Options: TTftpContextOptions;
     /// the sequence number of the last DAT fragment which has been received
     // - as transmitted over the wire
     LastReceivedSequence: TTftpSequence;
@@ -222,7 +231,7 @@ type
     // - includes the ephemeral port, so allow multiple connections per host
     Remote: TNetAddr;
     /// set the default TimeoutSec/BlockSize/TransferSize/WindowSize values
-    procedure SetDefaultOptions(op: TTftpOpcode);
+    procedure SetDefaultOptions(op: TTftpOpcode; opt: TTftpContextOptions);
     /// append some text to Frame/FrameLen
     procedure AppendTextToFrame(const Text: RawUtf8);
     /// parse the initial RRQ/WRQ/OACK frame buffer/len
@@ -232,7 +241,7 @@ type
     // - for RRQ/WRQ, return teNoError and set OpCode/FileName fields
     // - for OACK, return teNoError and set OpCode
     // - after teNoError, caller should then call ParseRequestOptions()
-    function ParseRequestFileName(len: integer): TTftpError;
+    function ParseRequestFileName(len: integer; opt: TTftpContextOptions): TTftpError;
     /// parse the options of RRQ/WRQ/OACK frame buffer/len
     // - caller should have called ParseRequestFileName() then set FileStream
     // - for RRQ/WRQ, the toAck/toOck response within the Frame/FrameLen buffer,
@@ -357,7 +366,8 @@ end;
 
 { TTftpContext }
 
-procedure TTftpContext.SetDefaultOptions(op: TTftpOpcode);
+procedure TTftpContext.SetDefaultOptions(
+  op: TTftpOpcode; opt: TTftpContextOptions);
 begin
   OpCode := op;
   HasExtendedOptions := false;
@@ -366,6 +376,7 @@ begin
   BlockSize := TFTP_BLKSIZE_DEFAULT;     // = 512 as before RFC7440
   TransferSize := TFTP_TSIZE_UNKNOWN;    // = -1 meaning no tsize option
   WindowSize := TFTP_WINDOWSIZE_DEFAULT; // = 1 as before RFC7440
+  Options := opt;
   LastReceivedSequenceWindowCounter := WindowSize;
   LastReceivedSequence := 0;
   LastReceivedSequenceHi := 0;
@@ -408,14 +419,15 @@ begin
             ({%H-}c <= max);
 end;
 
-function TTftpContext.ParseRequestFileName(len: integer): TTftpError;
+function TTftpContext.ParseRequestFileName(
+  len: integer; opt: TTftpContextOptions): TTftpError;
 begin
   result := teIllegalOperation; // error on exit exit
   if (@self = nil) or
      (Frame = nil) or
      (len < 4) then
     exit;
-  SetDefaultOptions(ToOpcode(Frame^));
+  SetDefaultOptions(ToOpcode(Frame^), opt);
   FrameLen := len;
   ParseLen := len - SizeOf(Frame^.Opcode);
   if (ParseLen <= 0) or
@@ -457,13 +469,16 @@ begin
         AppendTextToFrame(Parsed); // include option name to OACK answer
       case IdemPPChar(pointer(Parsed), @TFTP_OPTIONS) of
         0:
-          if not GetNextCardinal(1, 255, TimeoutSec) then
+          if not (tcoTimeout in Options) or
+             not GetNextCardinal(1, 255, TimeoutSec) then
             exit;
         1:
-          if not GetNextCardinal(8, TFTP_BLKSIZE_MAX, BlockSize) then
+          if not (tcoBlksize in Options) or
+             not GetNextCardinal(8, TFTP_BLKSIZE_MAX, BlockSize) then
             exit;
         2:
-          if not GetNextCardinal(0, 1 shl 30, TransferSize) then // up to 1GB
+          if not (tcoTsize in Options) or
+             not GetNextCardinal(0, 1 shl 30, TransferSize) then // up to 1GB
             exit
           else if OpCode = toRrq then
           begin
@@ -472,7 +487,8 @@ begin
             UInt32ToUtf8(TransferSize, Parsed); // AppendTextToFrame() adds #0
           end;
         3:
-          if not GetNextCardinal(1, 65535, WindowSize) then
+          if not (tcoWindowsize in Options) or
+             not GetNextCardinal(1, 65535, WindowSize) then
             exit
           else
             LastReceivedSequenceWindowCounter := WindowSize;

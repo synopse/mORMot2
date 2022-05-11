@@ -78,6 +78,10 @@ type
   /// tune what is TTftpServerThread accepting
   // - ttoRrq will let the TFTP server processing RRQ/Get requests
   // - ttoWrq will let the TFTP server processing WRQ/Put requests
+  // - ttoNoBlksize will disable RFC 2348 "blksize" option on TFTP server
+  // - ttoNoTimeout will disable RFC 2349 "timeout" option on TFTP server
+  // - ttoNoTsize will disable RFC 2349 "tsize" option on TFTP server
+  // - ttoNoWindowsize will disable RFC 7440 "windowsize" option on TFTP server
   // - ttoAllowSubFolders will allow RRW/WRQ to access nested files in
   // TTftpServerThread.FileFolder sub-directories
   // - ttoLowLevelLog will log each incoming/outgoing TFTP/UDP frames
@@ -86,6 +90,10 @@ type
   TTftpThreadOption = (
     ttoRrq,
     ttoWrq,
+    ttoNoBlksize,
+    ttoNoTimeout,
+    ttoNoTsize,
+    ttoNoWindowsize,
     ttoAllowSubFolders,
     ttoLowLevelLog,
     ttoDropPriviledges,
@@ -128,6 +136,7 @@ type
     fAsNobody: boolean;
     fFileCache: TSynDictionary; // thread-safe <16MB files content cache
     function GetConnectionCount: integer;
+    function GetTco: TTftpContextOptions;
     // default implementation will read/write from FileFolder
     procedure SetFileFolder(const Value: TFileName);
     function GetFileName(const FileName: RawUtf8): TFileName; virtual;
@@ -560,6 +569,19 @@ begin
     result := teIllegalOperation;
 end;
 
+function TTftpServerThread.GetTco: TTftpContextOptions;
+begin
+  result := [];
+  if not (ttoNoBlksize in fOptions) then
+    include(result, tcoBlksize);
+  if not (ttoNoTimeout in fOptions) then
+    include(result, tcoTimeout);
+  if not (ttoNoTsize in fOptions) then
+    include(result, tcoTsize);
+  if not (ttoNoWindowsize in fOptions) then
+    include(result, tcoWindowsize);
+end;
+
 procedure TTftpServerThread.OnFrameReceived(len: integer; var remote: TNetAddr);
 var
   op: TTftpOpcode;
@@ -596,7 +618,7 @@ begin
   // main request parsing method (if TStream exists)
   c.Remote := remote;
   c.Frame := pointer(fFrame);
-  res := c.ParseRequestFileName(len);
+  res := c.ParseRequestFileName(len, GetTco);
   if res = teNoError then
   begin
     // create the associated TStream to read to or write from
