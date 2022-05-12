@@ -735,7 +735,7 @@ begin
   Getmem(result, Items * Size);
 end;
 
-procedure zlibFreeMem(AppData, Block: Pointer);  cdecl;
+procedure zlibFreeMem(AppData, Block: Pointer); cdecl;
 begin
   FreeMem(Block);
 end;
