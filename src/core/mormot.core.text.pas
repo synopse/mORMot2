@@ -2689,7 +2689,7 @@ begin
     exit; // nothing to trim
   Right := PStrLen(P - _STRLEN)^ - Right; // compute new length
   if Right > 0 then
-    if PStrCnt(P - _STRCNT)^ = 1 then
+    if PStrCnt(P - _STRCNT)^ = 1 then // RefCnt=1 ?
     begin
       PStrLen(P - _STRLEN)^ := Right; // we can modify it in-place
       if Left <> 0 then

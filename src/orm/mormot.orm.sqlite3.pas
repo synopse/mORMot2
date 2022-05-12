@@ -1911,7 +1911,7 @@ begin
   DB.Lock;
   try
     PrepareCachedStatement(
-      Model.TableProps[TableModelIndex].SQL.SelectOneWithID, 1);
+      Model.TableProps[TableModelIndex].Sql.SelectOneWithID, 1);
     fStatement^.Bind(1, ID);
     // faster than fStatement^.ExecuteJson()
     WR := AcquireJsonWriter;

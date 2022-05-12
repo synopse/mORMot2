@@ -1020,7 +1020,8 @@ var
   sqladapted: RawUtf8;
 begin
   sqladapted := SQL;
-  rest := InternalAdaptSql(fModel.GetTableIndexFromSqlSelect(SQL, false), sqladapted);
+  rest := InternalAdaptSql(
+    fModel.GetTableIndexFromSqlSelect(SQL, false), sqladapted);
   if rest = nil then
     result := MainEngineList(SQL, ForceAjax, ReturnedRowCount)
   else
@@ -2288,7 +2289,7 @@ var
 begin
   rest := GetStaticTable(Table);
   if rest <> nil then
-    // faster direct call
+    // faster direct call (MongoDB, IsMemory)
     result := rest.MemberExists(Table, ID)
   else
     result := inherited MemberExists(Table, ID);

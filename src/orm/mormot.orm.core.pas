@@ -3831,7 +3831,7 @@ type
     /// pre-computed SQL statements for this TOrm in this model
     // - those statements will work for internal tables, not for external
     // tables with mapped table or fields names
-    SQL: TOrmModelPropertiesSql;
+    Sql: TOrmModelPropertiesSql;
     /// allow SQL process for one external TOrm in this model
     ExternalDB: TOrmPropertiesMapping;
     /// will by-pass automated table and field creation for this TOrm

@@ -557,7 +557,7 @@ type
     function RefreshedAndModified: boolean; virtual;
     /// TRestOrmServer.Uri use it for Static.EngineList to by-pass virtual table
     // - this default implementation will return TRUE and replace SQL with
-    // SqlSelectAll[true] if it SQL equals SqlSelectAll[false] (i.e. 'SELECT *')
+    // Sql.SelectAll[true] if it SQL equals Sql.SelectAll[false] (i.e. 'SELECT *')
     // - this method is called only if the WHERE clause of SQL refers to the
     // static table name only (not needed to check it twice)
     function AdaptSqlForEngineList(var SQL: RawUtf8): boolean; virtual;
@@ -1975,11 +1975,11 @@ begin
     result := false
   else
   begin
-    result := IdemPropNameU(fStoredClassProps.SQL.SelectAllWithRowID, SQL);
+    result := IdemPropNameU(fStoredClassProps.Sql.SelectAllWithRowID, SQL);
     if result then
       SQL := fStoredClassProps.SQL.SelectAllWithID
     else
-      result := IdemPropNameU(fStoredClassProps.SQL.SelectAllWithID, SQL);
+      result := IdemPropNameU(fStoredClassProps.Sql.SelectAllWithID, SQL);
   end;
 end;
 
@@ -2200,7 +2200,7 @@ begin
     with fStoredClassProps do
     begin
       // used by AdaptSqlForEngineList() method
-      fBasicUpperSqlSelect[false] := UpperCase(SQL.SelectAllWithRowID);
+      fBasicUpperSqlSelect[false] := UpperCase(Sql.SelectAllWithRowID);
       SetLength(fBasicUpperSqlSelect[false],
         length(fBasicUpperSqlSelect[false]) - 1); // trim right ';'
       fBasicUpperSqlSelect[true] :=

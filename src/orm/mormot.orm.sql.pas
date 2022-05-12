@@ -721,9 +721,9 @@ begin
   with fStoredClassMapping^ do
   begin
     fSelectOneDirectSQL := FormatUtf8('select % from % where %=?',
-      [SQL.TableSimpleFields[true, false], fTableName, RowIDFieldName]);
+      [Sql.TableSimpleFields[true, false], fTableName, RowIDFieldName]);
     fSelectAllDirectSQL := FormatUtf8('select %,% from %',
-      [SQL.InsertSet, RowIDFieldName, fTableName]);
+      [Sql.InsertSet, RowIDFieldName, fTableName]);
     fRetrieveBlobFieldsSQL := InternalCsvToExternalCsv(
       StoredClassRecordProps.SqlTableRetrieveBlobFields);
     fUpdateBlobFieldsSQL := InternalCsvToExternalCsv(
@@ -2444,7 +2444,7 @@ begin
         insertedRowID := EngineLockedNextID;
         with fStoredClassMapping^ do
           result := ExecuteDirectSqlVar('insert into % (%,%) values (%,?)',
-            [fTableName, SQL.InsertSet, RowIDFieldName,
+            [fTableName, Sql.InsertSet, RowIDFieldName,
              CsvOfValue('?', length(Values))],
             Values, insertedRowID, true);
       finally
