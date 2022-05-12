@@ -155,6 +155,8 @@ type
     function TableRowCount(Table: TOrmClass): Int64; override;
     /// check if there is some data rows in a specified table
     function TableHasRows(Table: TOrmClass): boolean; override;
+    /// check if there is given ID in a specified table
+    function MemberExists(Table: TOrmClass; ID: TID): boolean; override;
     /// delete a row, calling the current MongoDB server
     // - made public since a TRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TRestServer
@@ -421,6 +423,15 @@ begin
     result := fCollection.Count;
 end;
 
+function TRestStorageMongoDB.MemberExists(Table: TOrmClass; ID: TID): boolean;
+begin
+  if (fCollection = nil) or
+     (Table <> fStoredClass) then
+    result := false
+  else
+    result := fCollection.ExistOne(ID);
+end;
+
 procedure TRestStorageMongoDB.SetEngineAddComputeIdentifier(aIdentifier: word);
 begin
   fEngineGenerator.Free;
@@ -437,14 +448,16 @@ function TRestStorageMongoDB.EngineNextID: TID;
   begin
     timer.Start;
     case fEngineAddCompute of
-      eacLastIDOnce, eacLastIDEachTime:
+      eacLastIDOnce,
+      eacLastIDEachTime:
         begin
           res := fCollection.FindDoc(BsonVariant(
             '{$query:{},$orderby:{_id:-1}}'), BsonVariant(['_id', 1]));
           if not VarIsEmptyOrNull(res) then
             fEngineLastID := _Safe(res)^.I['_id'];
         end;
-      eacMaxIDOnce, eacMaxIDEachTime:
+      eacMaxIDOnce,
+      eacMaxIDEachTime:
         begin
           res := fCollection.AggregateDocFromJson(
             '{$group:{_id:null,max:{$max:"$_id"}}}');
@@ -558,7 +571,8 @@ begin
         varString:
           // handle some TEXT values
           case info.OrmFieldType of
-            oftDateTime, oftDateTimeMS:
+            oftDateTime,
+            oftDateTimeMS:
               begin
                 // ISO-8601 text as MongoDB date/time
                 Iso8601ToDateTimePUtf8CharVar(
@@ -567,7 +581,8 @@ begin
                 V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
                 V^.VDate := dt;
               end;
-            oftBlob, oftBlobCustom:
+            oftBlob,
+            oftBlobCustom:
               begin
                 // store Base64-encoded BLOB as binary
                 blob := BlobToRawBlob(RawByteString(V^.VAny));
