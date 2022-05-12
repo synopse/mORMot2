@@ -1429,8 +1429,8 @@ type
     procedure SetShutdown(Value: boolean); virtual;
     function IDText(aID: TRestStorageMultiDatabaseID): TShort16;
     function GetDB(aID: TRestStorageMultiDatabaseID): IRestOrmServer; virtual;
-    // inherited classes should implement those abstract virtual methods
-    function NewModel: TOrmModel; virtual; abstract;
+    function NewModel: TOrmModel; virtual;
+    // inherited classes should implement this abstract virtual method
     function NewDB(aID: TRestStorageMultiDatabaseID): IRestOrmServer; virtual; abstract;
   public
     /// initialize this REST storage with several database instances
@@ -1479,6 +1479,7 @@ type
   protected
     fDataFolder, fFilePrefix: TFileName;
     function GetDiskAvailableMB: integer; virtual;
+    function GetDBPassword(aID: TRestStorageMultiDatabaseID): SpiUtf8; virtual;
     function GetDBFileName(aID: TRestStorageMultiDatabaseID): TFileName; virtual;
   public
     /// initialize this REST storage with several database instances on disk
@@ -5199,6 +5200,12 @@ begin
   end;
 end;
 
+function TRestStorageMulti.NewModel: TOrmModel;
+begin
+  // no URI root in this unpublished Model
+  result := TOrmModel.Create(fModelClasses, '');
+end;
+
 procedure TRestStorageMulti.OnServerInfo(Ctxt: TRestUriContext;
   var Info: TDocVariantData);
 begin
@@ -5234,6 +5241,13 @@ begin
   name := fDataFolder;
   GetDiskInfo(name, avail, free, total);
   result := free shr 20; // returns free space in MB
+end;
+
+function TRestStorageMultiOnDisk.GetDBPassword(
+  aID: TRestStorageMultiDatabaseID): SpiUtf8;
+begin
+  // no encryption by default
+  result := '';
 end;
 
 function TRestStorageMultiOnDisk.GetDBFileName(

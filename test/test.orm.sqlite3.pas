@@ -2535,6 +2535,7 @@ begin
     Model.Free;
   end;
 end;
+
 {
   Delphi Win32:
    10000 With RTree in 806.64ms i.e. 12396/s, aver. 80us

@@ -154,8 +154,11 @@ type
     fSynchronous: TSqlSynchronousMode;
     fInitShardsIsLast: boolean;
     fCacheSizePrevious, fCacheSizeLast: integer;
+    fDBPassword: SpiUtf8;
     procedure InitShards; override;
     function InitNewShard: TRestOrm; override;
+    // you can override those methods to customize the stored SQlite3 files
+    function DBPassword(ShardIndex: integer): SpiUtf8; virtual;
     function DBFileName(ShardIndex: integer): TFileName; virtual;
   public
     /// initialize the table storage redirection for sharding over SQLite3 DB
@@ -169,10 +172,11 @@ type
       aShardRange: TID;
       aOptions: TRestStorageShardOptions = [];
       const aShardRootFileName: TFileName = '';
-      aMaxShardCount: integer = 100;
-      aSynchronous: TSqlSynchronousMode = smOff;
-      aCacheSizePrevious: integer = 250;
-      aCacheSizeLast: integer = 500); reintroduce; virtual;
+      aMaxShardCount: integer = 100; aSynchronous: TSqlSynchronousMode = smOff;
+      aCacheSizePrevious: integer = 250; aCacheSizeLast: integer = 500;
+      const aDBPassword: SpiUtf8 = ''); reintroduce; virtual;
+    /// finalize the table storage, including Shards[] instances
+    destructor Destroy; override;
   published
     /// associated file name for the SQLite3 database files
     // - contains the folder, and root file name for the storage
@@ -192,7 +196,6 @@ type
     // overriden to proper create each SQlite3 database
     fSynchronous: TSqlSynchronousMode;
     fDefaultCacheSize: integer;
-    function NewModel: TOrmModel; override;
     function NewDB(aID: TRestStorageMultiDatabaseID): IRestOrmServer; override;
   public
     /// initialize this REST storage with several SQLite3 database instances
@@ -404,7 +407,8 @@ type
     // - you can specify an associated TOrmModel but no TRest
     // - the SQlite3 database instance will be createa as lmExclusive/aSynchronous
     constructor CreateStandalone(aModel: TOrmModel; aRest: TRest;
-      const aDB: TFileName; aSynchronous: TSqlSynchronousMode = smOff;
+      const aDB: TFileName; const aPassword: SpiUtf8 = '';
+      aSynchronous: TSqlSynchronousMode = smOff;
       aDefaultCacheSize: integer = 10000); reintroduce; overload;
     /// close any owned database and free used memory
     destructor Destroy; override;
@@ -1037,11 +1041,11 @@ end;
 
 { TRestStorageShardDB }
 
-constructor TRestStorageShardDB.Create(aClass: TOrmClass;
-  aServer: TRestServer; aShardRange: TID;
-  aOptions: TRestStorageShardOptions; const aShardRootFileName: TFileName;
-  aMaxShardCount: integer; aSynchronous: TSqlSynchronousMode;
-  aCacheSizePrevious, aCacheSizeLast: integer);
+constructor TRestStorageShardDB.Create(aClass: TOrmClass; aServer: TRestServer;
+  aShardRange: TID; aOptions: TRestStorageShardOptions;
+  const aShardRootFileName: TFileName; aMaxShardCount: integer;
+  aSynchronous: TSqlSynchronousMode; aCacheSizePrevious: integer;
+  aCacheSizeLast: integer; const aDBPassword: SpiUtf8);
 var
   orm: TRestOrmServer;
 begin
@@ -1049,12 +1053,24 @@ begin
   fSynchronous := aSynchronous;
   fCacheSizePrevious := aCacheSizePrevious;
   fCacheSizeLast := aCacheSizeLast;
+  fDBPassword := aDBPassword;
   orm := aServer.OrmInstance as TRestOrmServer;
   if orm = nil then
     raise ERestStorage.CreateUtf8(
       '%.Create: % has no OrmInstance - use TRestServerDB', [self, aServer]);
   inherited Create(aClass, orm, aShardRange, aOptions, aMaxShardCount);
   orm.StaticTableSetup(fStoredClassProps.TableIndex, self, sStaticDataTable);
+end;
+
+destructor TRestStorageShardDB.Destroy;
+begin
+  inherited Destroy;
+  FillZero(fDBPassword); // to avoid forensic leak
+end;
+
+function TRestStorageShardDB.DBPassword(ShardIndex: integer): SpiUtf8;
+begin
+  result := fDBPassword; // no encryption by default
 end;
 
 function TRestStorageShardDB.DBFileName(ShardIndex: integer): TFileName;
@@ -1076,8 +1092,8 @@ begin
     cachesize := fCacheSizeLast
   else
     cachesize := fCacheSizePrevious;
-  db := TRestOrmServerDB.CreateStandalone(
-    model, fRest, DBFileName(fShardLast), fSynchronous, cachesize);
+  db := TRestOrmServerDB.CreateStandalone(model, fRest,
+    DBFileName(fShardLast), DBPassword(fShardLast), fSynchronous, cachesize);
   db._AddRef;
   result := db;
   SetLength(fShards, fShardLast + 1);
@@ -1147,17 +1163,11 @@ end;
 
 { TRestStorageMultiDB }
 
-function TRestStorageMultiDB.NewModel: TOrmModel;
-begin
-  // no URI root in this unpublished Model
-  result := TOrmModel.Create(fModelClasses, '');
-end;
-
 function TRestStorageMultiDB.NewDB(
   aID: TRestStorageMultiDatabaseID): IRestOrmServer;
 begin
-  result := TRestOrmServerDB.CreateStandalone(
-    NewModel, nil, GetDBFileName(aID), fSynchronous, fDefaultCacheSize);
+  result := TRestOrmServerDB.CreateStandalone(NewModel, nil,
+    GetDBFileName(aID), GetDBPassword(aID), fSynchronous, fDefaultCacheSize);
 end;
 
 constructor TRestStorageMultiDB.Create(aLog: TSynLogFamily;
@@ -1645,15 +1655,15 @@ begin
 end;
 
 constructor TRestOrmServerDB.CreateStandalone(aModel: TOrmModel; aRest: TRest;
-  const aDB: TFileName; aSynchronous: TSqlSynchronousMode;
+  const aDB: TFileName; const aPassword: SpiUtf8; aSynchronous: TSqlSynchronousMode;
   aDefaultCacheSize: integer);
 var
   sql: TSqlDataBase;
 begin
-  sql := TSqlDatabase.Create(aDB, '', 0, aDefaultCacheSize);
+  sql := TSqlDatabase.Create(aDB, aPassword, 0, aDefaultCacheSize);
   sql.LockingMode := lmExclusive;
   sql.Synchronous := aSynchronous;
-  CreateStandalone(aModel, aRest, sql, {owndb=}true);
+  CreateStandalone(aModel, aRest, sql, {ownsql=}true);
   CreateMissingTables;
 end;
 
@@ -1681,11 +1691,12 @@ begin
   result := not IdemPChar(Pointer(aSql), 'VACUUM');
   if result then
     exit;
+  // VACUUM is not compatible with SQLite3 virtual tables
   result := (fStaticVirtualTable = nil) or
     IsZero(fStaticVirtualTable, length(fStaticVirtualTable) * SizeOf(pointer));
   if result then
     // VACUUM will fail if there are one or more active SQL statements
-    fStatementCache.ReleaseAllDBStatements;
+    fStatementCache.ReleaseAllDBStatements; // done within DB.Lock()
 end;
 
 function TRestOrmServerDB.InternalExecute(const aSql: RawUtf8;
