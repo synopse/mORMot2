@@ -4986,10 +4986,10 @@ end;
 procedure _JS_Interface(Data: PInterface; const Ctxt: TJsonSaveContext);
 begin
   {$ifdef HASINTERFACEASTOBJECT}
-  // interfaces are saved/serialized as their own object instance,
+  // interfaces can be saved/serialized as their own object instance,
   // but not restored/unserialized in _JL_Interface()
   if Data^ <> nil then
-    Ctxt.W.WriteObject(Data^ as TObject);
+    Ctxt.W.WriteObject(Data^ as TObject)
   else
   {$endif HASINTERFACEASTOBJECT}
     Ctxt.W.AddNull;
