@@ -9218,14 +9218,14 @@ begin
   begin
     id := 'oc' + UInt32ToPdfString(Group.ObjectNumber);
     // register Group in page r p
-    r := fPage.PdfDictionaryByName('r');
+    r := fPage.PdfDictionaryByName('Resources');
     if r <> nil then
     begin
-      p := r.PdfDictionaryByName('p');
+      p := r.PdfDictionaryByName('Properties');
       if p = nil then
       begin
         p := TPdfDictionary.Create(fDoc.fXRef);
-        r.AddItem('p', p);
+        r.AddItem('Properties', p);
       end;
       if p <> nil then
         p.AddItem(id, Group);
