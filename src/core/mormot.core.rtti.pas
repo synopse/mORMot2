@@ -3616,7 +3616,7 @@ procedure TRttiInfo.InterfaceAncestors(out Ancestors: PRttiInfoDynArray;
   OnlyImplementedBy: TInterfacedObjectClass;
   out AncestorsImplementedEntry: TPointerDynArray);
 var
-  n: integer;
+  n: PtrInt;
   nfo: PRttiInfo;
   typ: PRttiInterfaceTypeData;
   entry: pointer;

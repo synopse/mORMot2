@@ -4985,7 +4985,14 @@ end;
 
 procedure _JS_Interface(Data: PInterface; const Ctxt: TJsonSaveContext);
 begin
-  Ctxt.W.AddNull;
+  {$ifdef HASINTERFACEASTOBJECT}
+  // interfaces are saved/serialized as their own object instance,
+  // but not restored/unserialized in _JL_Interface()
+  if Data^ <> nil then
+    Ctxt.W.WriteObject(Data^ as TObject);
+  else
+  {$endif HASINTERFACEASTOBJECT}
+    Ctxt.W.AddNull;
 end;
 
 procedure _JS_ID(Data: PInt64; const Ctxt: TJsonSaveContext);
@@ -7959,6 +7966,8 @@ end;
 
 procedure _JL_Interface(Data: PInterface; var Ctxt: TJsonParserContext);
 begin
+  // _JS_Interface() may have serialized the object instance, but we can't
+  // unserialize it since we don't know which class to create
   Ctxt.Valid := Ctxt.ParseNull;
   Data^ := nil;
 end;
