@@ -857,11 +857,14 @@ begin
 end;
 
 function TRestOrm.MemberExists(Table: TOrmClass; ID: TID): boolean;
+var
+  t: PtrInt;
 begin
-  if fCache.Retrieve(fModel.GetTableIndexExisting(Table), ID) <> '' then
+  t := fModel.GetTableIndexExisting(Table);
+  if fCache.Retrieve(t, ID) <> '' then
     result := true
   else
-    result := OneFieldValue(Table, 'RowID', ID) <> ''; // try from DB
+    result := EngineRetrieve(t, ID) <> ''; // try from DB
 end;
 
 function TRestOrm.OneFieldValue(Table: TOrmClass; const FieldName,
