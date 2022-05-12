@@ -368,7 +368,13 @@ type
     /// initialize a stand-alone REST ORM server with a given SQLite3 database
     // - you can specify an associated TOrmModel but no TRest
     constructor CreateStandalone(aModel: TOrmModel; aRest: TRest;
-      aDB: TSqlDataBase; aOwnDB: boolean); reintroduce;
+      aDB: TSqlDataBase; aOwnDB: boolean); reintroduce; overload;
+    /// initialize a stand-alone REST ORM server with a given SQLite3 filename
+    // - you can specify an associated TOrmModel but no TRest
+    // - the SQlite3 database instance will be createa as lmExclusive/aSynchronous
+    constructor CreateStandalone(aModel: TOrmModel; aRest: TRest;
+      const aDB: TFileName; aSynchronous: TSqlSynchronousMode = smOff;
+      aDefaultCacheSize: integer = 10000); reintroduce; overload;
     /// close any owned database and free used memory
     destructor Destroy; override;
     /// Missing tables are created if they don't exist yet for every TOrm
@@ -457,7 +463,8 @@ begin
     // not retrieved from cache -> call SQLite3 engine
     try
       n := 0;
-      jsoncached := r.ExecuteJson(aDB.DB, aSql, Expand, @n, aDB.StatementMaxMemory);
+      jsoncached := r.ExecuteJson(
+        aDB.DB, aSql, Expand, @n, aDB.StatementMaxMemory);
       // big JSON is faster than sqlite3_get_table(): less heap allocations
       inherited CreateFromTables(Tables, aSql, jsoncached);
       Assert(n = fRowCount);
@@ -581,7 +588,8 @@ begin
     prepared^.WhereCount := pInfo.nConstraint;
     prepared^.EstimatedCost := costFullScan;
     for i := 0 to pInfo.nConstraint - 1 do
-      with prepared^.Where[i], pInfo.aConstraint^[i] do
+      with prepared^.Where[i],
+           pInfo.aConstraint^[i] do
       begin
         OmitCheck := False;
         Value.VType := ftUnknown;
@@ -726,7 +734,7 @@ begin
   result := SQLITE_OK;
 end;
 
-function vt_next(var pVtabCursor: TSqlite3VTabCursor): integer; cdecl;
+function vt_Next(var pVtabCursor: TSqlite3VTabCursor): integer; cdecl;
 begin
   if TOrmVirtualTableCursor(pVtabCursor.pInstance).Next then
     result := SQLITE_OK
@@ -1028,7 +1036,6 @@ function TRestStorageShardDB.InitNewShard: TRestOrm;
 var
   db: TRestOrmServerDB;
   cachesize: integer;
-  sql: TSqlDataBase;
   model: TOrmModel;
 begin
   inc(fShardLast);
@@ -1038,12 +1045,9 @@ begin
     cachesize := fCacheSizeLast
   else
     cachesize := fCacheSizePrevious;
-  sql := TSqlDatabase.Create(DBFileName(fShardLast), '', 0, cachesize);
-  sql.LockingMode := lmExclusive;
-  sql.Synchronous := fSynchronous;
-  db := TRestOrmServerDB.CreateStandalone(model, fRest, sql, {owndb=}true);
+  db := TRestOrmServerDB.CreateStandalone(
+    model, fRest, DBFileName(fShardLast), fSynchronous, cachesize);
   db._AddRef;
-  db.CreateMissingTables;
   result := db;
   SetLength(fShards, fShardLast + 1);
   fShards[fShardLast] := result;
@@ -1578,6 +1582,19 @@ begin
   if aRest <> nil then
     fOwner := aRest as TRestServer;
   Create(nil, aDB, aOwnDB);
+end;
+
+constructor TRestOrmServerDB.CreateStandalone(aModel: TOrmModel; aRest: TRest;
+  const aDB: TFileName; aSynchronous: TSqlSynchronousMode;
+  aDefaultCacheSize: integer);
+var
+  sql: TSqlDataBase;
+begin
+  sql := TSqlDatabase.Create(aDB, '', 0, aDefaultCacheSize);
+  sql.LockingMode := lmExclusive;
+  sql.Synchronous := aSynchronous;
+  CreateStandalone(aModel, aRest, sql, {owndb=}true);
+  CreateMissingTables;
 end;
 
 destructor TRestOrmServerDB.Destroy;

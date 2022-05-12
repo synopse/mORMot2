@@ -604,7 +604,7 @@ begin
                   inc(retry);
                   if retry = 100 then
                     exit; // never wait forever: 1 second seems enough
-                  Sleep(10);
+                  SleepHiRes(10);
                 end;
             else
               exit; // teIllegalOperation error
