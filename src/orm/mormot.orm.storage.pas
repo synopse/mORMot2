@@ -13,6 +13,7 @@ unit mormot.orm.storage;
     - TOrmVirtualTableJson/TOrmVirtualTableBinary Virtual Tables
     - TRestStorageRemote for CRUD Redirection
     - TRestStorageShard as Abstract Sharded Storage Engine
+    - TRestStorageMulti as Abstract Multi-User Storage Engine
 
   *****************************************************************************
 }
@@ -1273,8 +1274,8 @@ type
   /// how TRestStorageShard will handle its partioned process
   TRestStorageShardOptions = set of TRestStorageShardOption;
 
-  /// abstract REST storage with redirection to several REST instances, implementing
-  // range ID partitioning for horizontal scaling
+  /// abstract REST storage with redirection to several REST instances,
+  // implementing range ID partitioning for horizontal scaling
   // - such database shards will allow to scale with typical BigData storage
   // - this storage will add items on a server, initializing a new server
   // when the ID reached a defined range
@@ -1384,6 +1385,115 @@ type
 
   /// class metadata of a Sharding storage engine
   TRestStorageShardClass = class of TRestStorageShard;
+
+
+{ *********** TRestStorageMulti as Abstract Multi-User Storage Engine }
+
+type
+  /// exception raised during TRestStorageMulti process
+  ERestStorageMulti = class(ERestStorage);
+
+  /// identifier of one TRestStorageMulti/TRestStorageMultiDB database
+  // - up to 63-bit could be used, but it could be a good idea to use a bit mask
+  // to reserve some bits in the User ID, which would map to a group of users
+  // (e.g. a company or organization), equal to this TRestStorageMultiID, so
+  // that your service could use TRestStorageMulti to get the corresponding
+  // IRestOrmServer instance
+  TRestStorageMultiDatabaseID = type TID;
+
+  /// abstract settings for REST storage with several database instances
+  TRestStorageMultiSettings = class(TSynAutoCreateFields)
+  protected
+    fTimeOutSec: integer;
+  published
+    /// how many seconds a DB storage instance should be kept in cache
+    property TimeOutSec: integer
+      read fTimeOutSec write fTimeOutSec;
+  end;
+
+  /// abstract REST storage with several database instances
+  // - e.g. to maintain a per-User or per-Group (company) storage
+  // - inherited class should override the NewStore virtual method, e.g.
+  // TRestStorageMultiDB as defined in mormot.orm.sqlite3.pas for SQlite3 storage
+  // - your custom class should override NewModel to provide the proper data model
+  TRestStorageMulti = class(TSynPersistentRWLightLock)
+  protected
+    fDatabaseIDBits: byte;
+    fDatabaseIDMax: TRestStorageMultiDatabaseID;
+    fLog: TSynLogFamily;
+    fCache: TSynDictionary; // TRestStorageMultiDatabaseID/IRestOrmServer
+    fSettings: TRestStorageMultiSettings;
+    fModelClasses: TOrmClassDynArray;
+    function GetShutdown: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function GetCached: RawJson;
+    procedure SetShutdown(Value: boolean); virtual;
+    function IDText(aID: TRestStorageMultiDatabaseID): TShort16;
+    function GetDB(aID: TRestStorageMultiDatabaseID): IRestOrmServer; virtual;
+    // inherited classes should implement those abstract virtual methods
+    function NewModel: TOrmModel; virtual; abstract;
+    function NewDB(aID: TRestStorageMultiDatabaseID): IRestOrmServer; virtual; abstract;
+  public
+    /// initialize this REST storage with several database instances
+    // - aDatabaseIDBits will define how many bits (1-63) are allowed for
+    // TRestStorageMultiDatabaseID values
+    // - aSettings instance will be owned by this main class instance
+    constructor Create(aLog: TSynLogFamily; aDatabaseIDBits: byte;
+      const aModelClasses: array of TOrmClass;
+      aSettings: TRestStorageMultiSettings); reintroduce;
+    /// finalize this REST storage instance and its associated databases
+    destructor Destroy; override;
+    /// could be assigned to TRestServer.OnInternalInfo to include information
+    // about the current database instances within the timestamp/info output
+    procedure OnServerInfo(Ctxt: TRestUriContext; var Info: TDocVariantData);
+    /// check if the supplied database ID matches DatabaseIDBits definition
+    function IsDatabaseIDCorrect(aID: TRestStorageMultiDatabaseID): boolean;
+    /// raise ERestStorageMulti if the supplied database ID is out of range
+    procedure EnsureDatabaseIDCorrect(aID: TRestStorageMultiDatabaseID;
+      const aCaller: shortstring);
+    /// access to the associated TSynLog instances
+    property Log: TSynLogFamily
+      read fLog;
+    /// access to a given database from its ID
+    property DB[aID: TRestStorageMultiDatabaseID]: IRestOrmServer
+      read GetDB; default;
+    /// notify that no further access is possible
+    // - setting true will release the cache and all stored IRestOrmServer
+    property Shutdown: boolean
+      read GetShutdown write SetShutdown;
+    /// how many bits are allowed to DB[] ID range
+    property DatabaseIDBits: byte
+      read fDatabaseIDBits;
+    /// access to the associated settings
+    property Settings: TRestStorageMultiSettings
+      read fSettings;
+  published
+    property Cached: RawJson
+      read GetCached;
+  end;
+
+  /// metaclass of a REST storage with several database instances
+  TRestStorageMultiClass = class of TRestStorageMulti;
+
+  /// abstract REST storage with several database instances stored in a folder
+  TRestStorageMultiOnDisk = class(TRestStorageMulti)
+  protected
+    fDataFolder, fFilePrefix: TFileName;
+    function GetDiskAvailableMB: integer; virtual;
+    function GetDBFileName(aID: TRestStorageMultiDatabaseID): TFileName; virtual;
+  public
+    /// initialize this REST storage with several database instances on disk
+    constructor Create(aLog: TSynLogFamily; aDatabaseIDBits: byte;
+      const aModelClasses: array of TOrmClass;
+      const aDataFolder, aFilePrefix: TFileName;
+      aSettings: TRestStorageMultiSettings); reintroduce;
+  published
+    /// where the data is actually stored
+    property DataFolder: TFileName
+      read fDataFolder;
+    /// how much free space there is in the data folder drive
+    property DiskAvailableMB: integer
+      read GetDiskAvailableMB;
+  end;
 
 
 
@@ -1743,9 +1853,9 @@ begin
   fStoredClassProps := fModel.Props[aClass];
   fStoredClassMapping := @fStoredClassProps.ExternalDB;
   fBasicSqlCount := 'SELECT COUNT(*) FROM ' +
-    fStoredClassRecordProps.SqlTableName;
+                    fStoredClassRecordProps.SqlTableName;
   fBasicSqlHasRows[false] := 'SELECT RowID FROM ' +
-    fStoredClassRecordProps.SqlTableName + ' LIMIT 1';
+                             fStoredClassRecordProps.SqlTableName + ' LIMIT 1';
   fBasicSqlHasRows[true] := fBasicSqlHasRows[false];
   system.delete(fBasicSqlHasRows[true], 8, 3);
   GetMem(fTempBuffer, SizeOf(fTempBuffer^)); // 8KB pre-allocated buffer
@@ -5001,6 +5111,136 @@ begin
     ObjArrayClear(fShardBatch);
     StorageUnLock;
   end;
+end;
+
+
+{ *********** TRestStorageMulti as Abstract Multi-User Storage Engine }
+
+{ TRestStorageMulti }
+
+constructor TRestStorageMulti.Create(aLog: TSynLogFamily; aDatabaseIDBits: byte;
+  const aModelClasses: array of TOrmClass; aSettings: TRestStorageMultiSettings);
+var
+  n: PtrInt;
+begin
+  if aDatabaseIDBits - 1 > 62 then
+    raise ERestStorageMulti.CreateUtf8(
+      '%.Create: invalid aDatabaseIDBits=% (1..63)', [self, aDatabaseIDBits]);
+  n := length(aModelClasses);
+  if n = 0 then
+    raise ERestStorageMulti.CreateUtf8('%.Create with no Model class', [self]);
+  SetLength(fModelClasses, n);
+  MoveFast(aModelClasses[0], fModelClasses[0], n * SizeOf(aModelClasses[0]));
+  fLog := aLog;
+  fSettings := aSettings;
+  fDatabaseIDBits := aDatabaseIDBits;
+  fDatabaseIDMax := pred(1 shl aDatabaseIDBits);
+  fCache := TSynDictionary.Create(TypeInfo(TIDDynArray),
+    TypeInfo(TInterfaceDynArray), {keyinsensitive=}false, aSettings.TimeOutSec);
+end;
+
+destructor TRestStorageMulti.Destroy;
+begin
+  SetShutdown(true);
+  inherited Destroy;
+end;
+
+function TRestStorageMulti.GetShutdown: boolean;
+begin
+  result := (self <> nil) and
+            Assigned(fCache);
+end;
+
+procedure TRestStorageMulti.SetShutdown(Value: boolean);
+begin
+  if Value = GetShutdown then
+    exit;
+  fSafe.WriteLock;
+  try
+    FreeAndNil(fCache);
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+function TRestStorageMulti.GetCached: RawJson;
+begin
+  result := fCache.SaveValuesToJson;
+end;
+
+function TRestStorageMulti.IDText(aID: TRestStorageMultiDatabaseID): TShort16;
+begin
+  BinToHexDisplayLowerShort16(aID, fDatabaseIDBits, result);
+end;
+
+function TRestStorageMulti.IsDatabaseIDCorrect(aID: TRestStorageMultiDatabaseID): boolean;
+begin
+  result := (self <> nil) and
+            (aID > 0) and
+            (aID <= fDatabaseIDMax);
+end;
+
+procedure TRestStorageMulti.EnsureDatabaseIDCorrect(
+  aID: TRestStorageMultiDatabaseID; const aCaller: shortstring);
+begin
+  if not IsDatabaseIDCorrect(aID) then
+    raise ERestStorageMulti.CreateUtf8('Invalid %.%(%)',
+      [self, aCaller, Int64ToHexShort(aID)]);
+end;
+
+function TRestStorageMulti.GetDB(aID: TRestStorageMultiDatabaseID): IRestOrmServer;
+begin
+  EnsureDatabaseIDCorrect(aID, 'GetDB');
+  if not fCache.FindAndCopy(aID, result) then
+  begin
+    result := NewDB(aID);
+    fLog.SynLog.Log(sllInfo, 'Initialized DB[%]=%',
+      [IDText(aID), ObjectFromInterface(result)], self);
+  end;
+end;
+
+procedure TRestStorageMulti.OnServerInfo(Ctxt: TRestUriContext;
+  var Info: TDocVariantData);
+begin
+  Info.AddNameValuesToObject([
+    'multi', self
+    ]);
+end;
+
+
+{ TRestStorageMultiOnDisk }
+
+constructor TRestStorageMultiOnDisk.Create(aLog: TSynLogFamily;
+  aDatabaseIDBits: byte; const aModelClasses: array of TOrmClass;
+  const aDataFolder, aFilePrefix: TFileName;
+  aSettings: TRestStorageMultiSettings);
+begin
+  inherited Create(aLog, aDatabaseIDBits, aModelClasses, aSettings);
+  if aDatafolder <> '' then
+    fDataFolder := EnsureDirectoryExists(aDatafolder);
+  fFilePrefix := aFilePrefix;
+end;
+
+function TRestStorageMultiOnDisk.GetDiskAvailableMB: integer;
+var
+  name: TFileName;
+  avail, free, total: QWord;
+begin
+  if fDataFolder = '' then
+  begin
+    result := 0;
+    exit;
+  end;
+  name := fDataFolder;
+  GetDiskInfo(name, avail, free, total);
+  result := free shr 20; // returns free space in MB
+end;
+
+function TRestStorageMultiOnDisk.GetDBFileName(
+  aID: TRestStorageMultiDatabaseID): TFileName;
+begin
+  EnsureDatabaseIDCorrect(aID, 'GetDBFileName');
+  result := FormatString('%%%.db', [fDataFolder, fFilePrefix, IDText(aID)]);
 end;
 
 
