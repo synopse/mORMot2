@@ -1158,12 +1158,18 @@ type
     function FindDoc(const Criteria: RawUtf8; const Params: array of const;
       NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = []): variant; overload;
+    /// check for an existing document in a collection, by its _id field
+    // - _id will identify the unique document to be retrieved
+    function ExistOne(const _id: TBsonObjectID): boolean; overload;
+    /// check for an existing document in a collection, by its _id field
+    // - _id will identify the unique document to be retrieved e.g. as a TID
+    function ExistOne(const _id: variant): boolean; overload;
     /// find an existing document in a collection, by its _id field
     // - _id will identify the unique document to be retrieved
     // - returns null, or a TDocVariant instance
     function FindOne(const _id: TBsonObjectID): variant; overload;
     /// find an existing document in a collection, by its _id field
-    // - _id will identify the unique document to be retrieved
+    // - _id will identify the unique document to be retrieved e.g. as a TID
     // - returns null, or a TDocVariant instance
     function FindOne(const _id: variant): variant; overload;
     /// find an existing document in a collection, by a custom Criteria value
@@ -1395,7 +1401,7 @@ type
     // - _id will identify the unique document to be deleted
     procedure RemoveOne(const _id: TBsonObjectID); overload;
     /// delete an existing document in a collection, by its _id field
-    // - _id will identify the unique document to be deleted
+    // - _id will identify the unique document to be deleted e.g. as TID
     procedure RemoveOne(const _id: variant); overload;
     /// delete an existing document or several documents in a collection
     // - Query parameter can be specified as JSON objects with parameters
@@ -3263,7 +3269,7 @@ begin
     // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
     Database.RunCommand(BsonVariant(
       '{aggregate:"%",pipeline:[%],cursor:{}}',
-      [name, pipelineJson], []), reply);
+      [fName, pipelineJson], []), reply);
     // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
     res := reply.cursor;
     if not VarIsNull(res) then
@@ -3274,7 +3280,7 @@ begin
     // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
     Database.RunCommand(BsonVariant(
       '{aggregate:"%",pipeline:[%]}',
-      [name, pipelineJson], []), reply);
+      [fName, pipelineJson], []), reply);
     // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
     res := reply.result;
   end;
@@ -3303,7 +3309,7 @@ begin
   begin
     // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
     Database.RunCommand(BsonVariant([
-      'aggregate', name,
+      'aggregate', fName,
       'pipeline', pipelineArray,
       'cursor', '{', '}']), reply);
     // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
@@ -3315,7 +3321,7 @@ begin
   begin
     // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
     Database.RunCommand(BsonVariant([
-      'aggregate', name,
+      'aggregate', fName,
       'pipeline', pipelineArray]), reply);
     // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
     res := reply.result;
@@ -3376,11 +3382,11 @@ begin
     exit;
   end;
   if Database.Client.Log <> nil then
-    log := Database.Client.Log.Enter('Drop %', [name], self);
-  result := fDatabase.RunCommand(BsonVariant('{drop:?}', [], [name]), res);
-  Database.Client.Log.Log(sllTrace, 'Drop("%")->%', [name, res], self);
+    log := Database.Client.Log.Enter('Drop %', [fName], self);
+  result := fDatabase.RunCommand(BsonVariant('{drop:?}', [], [fName]), res);
+  Database.Client.Log.Log(sllTrace, 'Drop("%")->%', [fName, res], self);
   if result = '' then
-    Database.fCollections.Delete(name);
+    Database.fCollections.Delete(fName);
 end;
 
 procedure TMongoCollection.EnsureIndex(const Keys, Options: variant);
@@ -3395,7 +3401,7 @@ begin
      (Database = nil) then
     exit;
   if Database.Client.Log <> nil then
-    log := Database.Client.Log.Enter('EnsureIndex %', [name], self);
+    log := Database.Client.Log.Enter('EnsureIndex %', [fName], self);
   if DocVariantData(Keys)^.kind <> dvObject then
     raise EMongoException.CreateUtf8('%[%].EnsureIndex(Keys?)', [self,
       FullCollectionName]);
@@ -3430,10 +3436,10 @@ begin
   doc.name := indexName;
   if useCommand then
     fDatabase.RunCommand(BsonVariant('{ createIndexes: ?, indexes: [?] }',
-      [], [name, doc]), res)
+      [], [fName, doc]), res)
   else
     fDatabase.GetCollectionOrCreate('system.indexes').Insert([doc]);
-  Database.Client.Log.Log(sllTrace, 'EnsureIndex("%",%)->%', [name, doc, res], self);
+  Database.Client.Log.Log(sllTrace, 'EnsureIndex("%",%)->%', [fName, doc, res], self);
 end;
 
 procedure TMongoCollection.EnsureIndex(const Keys: array of RawUtf8;
@@ -3459,7 +3465,7 @@ var
   res: variant;
 begin
   fDatabase.RunCommand(BsonVariant([
-    'count', name]), res);
+    'count', fName]), res);
   result := _Safe(res)^.GetValueOrDefault('n', 0);
 end;
 
@@ -3468,7 +3474,7 @@ var
   res: variant;
 begin
   fDatabase.RunCommand(BsonVariant([
-    'count', name,
+    'count', fName,
     'query', Query]), res);
   result := _Safe(res)^.GetValueOrDefault('n', 0);
 end;
@@ -3481,7 +3487,7 @@ var
   res: variant;
 begin
   query := FormatUtf8(Criteria, Args, Params, true);
-  FormatUtf8('{count:"%",query:%', [name, query], cmd);
+  FormatUtf8('{count:"%",query:%', [fName, query], cmd);
   if MaxNumberToReturn > 0 then
     cmd := FormatUtf8('%,limit:%', [cmd, MaxNumberToReturn]);
   if NumberToSkip > 0 then
@@ -3542,6 +3548,20 @@ function TMongoCollection.FindDocs(const Criteria: RawUtf8;
 begin
   FindDocs(Criteria, Params, result, Projection,
    NumberToReturn, NumberToSkip, Flags);
+end;
+
+function TMongoCollection.ExistOne(const _id: TBsonObjectID): boolean;
+begin
+  result := ExistOne(_id.ToVariant);
+end;
+
+function TMongoCollection.ExistOne(const _id: variant): boolean;
+var
+  res: variant;
+begin
+  // faster to retrieve only the _id field, not whole document
+  res := FindDoc(BsonVariant(['_id', _id]), BsonVariant(['_id', 1]), 1);
+  result := not VarIsEmptyOrNull(res);
 end;
 
 function TMongoCollection.FindOne(const _id: TBsonObjectID): variant;
