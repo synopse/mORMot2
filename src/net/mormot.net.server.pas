@@ -1355,8 +1355,8 @@ begin
   if fHttpApiRequest = nil then
     result := ''
   else
-    SetString(result, fHttpApiRequest^.CookedUrl.pFullUrl,
-      fHttpApiRequest^.CookedUrl.FullUrlLength);
+    // fHttpApiRequest^.CookedUrl.FullUrlLength seems buggy -> use ending #0
+    result := fHttpApiRequest^.CookedUrl.pFullUrl;
 end;
 
 {$endif USEWININET}
