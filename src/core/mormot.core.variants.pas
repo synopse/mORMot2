@@ -6078,20 +6078,20 @@ procedure TDocVariantData.AddObject(const aNameValuePairs: array of const;
   const aName: RawUtf8);
 var
   added: PtrInt;
-  o: PDocVariantData;
+  obj: PDocVariantData;
 begin
   if (aName <> '') and
      (dvoCheckForDuplicatedNames in VOptions) then
     if GetValueIndex(aName) >= 0 then
       raise EDocVariant.CreateUtf8('AddObject: Duplicated [%] name', [aName]);
   added := InternalAdd(aName);
-  o := @VValue[added];
-  if PInteger(o)^ = 0 then // most common case is adding a new value
-    o^.InitClone(self)     // same options than owner document
-  else if (o^.VType <> VType) or
-          not o^.IsObject then
+  obj := @VValue[added];
+  if PInteger(obj)^ = 0 then // most common case is adding a new value
+    obj^.InitClone(self)     // same options than owner document
+  else if (obj^.VType <> VType) or
+          not obj^.IsObject then
     raise EDocVariant.CreateUtf8('AddObject: wrong existing [%]', [aName]);
-  o^.AddNameValuesToObject(aNameValuePairs);
+  obj^.AddNameValuesToObject(aNameValuePairs);
   if dvoInternValues in VOptions then
     InternalUniqueValue(added);
 end;
