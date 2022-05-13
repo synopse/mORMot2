@@ -4566,6 +4566,9 @@ type
     // - returns the SQLite3 field type of this column
     function FieldVariant(Col: integer; var Value: variant;
       BlobNoMagic: boolean = false): integer;
+    /// return the field value as a TDateTime first Col is 0
+    // - SQLITE_INTEGER/SQLITE_TEXT are converted from TTimeLog/ISO-8601 content
+    function FieldDateTime(Col: integer): TDateTime;
     /// return the field type of this column
     // - retrieve the "SQLite3" column type as returned by sqlite3.column_type -
     //  i.e. SQLITE_NULL, SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, or SQLITE_BLOB
@@ -8336,6 +8339,25 @@ begin
           BinToBase64WithMagic(b, blen, RawUtf8(d.Data.VString));
       end;
     // SQLITE_NULL will left Value as null value
+  end;
+end;
+
+function TSqlRequest.FieldDateTime(Col: integer): TDateTime;
+var
+  v: TSqlite3Value;
+begin
+  if cardinal(Col) >= cardinal(FieldCount) then
+    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldDateTime');
+  v := sqlite3.column_value(Request, Col);
+  case sqlite3.value_type(v) of
+    SQLITE_TEXT:
+      Iso8601ToDateTimePUtf8CharVar(sqlite3.value_text(v), 0, result);
+    SQLITE_INTEGER:
+      result := TimeLogToDateTime(sqlite3.value_int64(v));
+    SQLITE_FLOAT:
+      result := sqlite3.value_double(v);
+  else
+    result := 0;
   end;
 end;
 
