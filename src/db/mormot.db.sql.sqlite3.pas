@@ -140,6 +140,7 @@ type
   /// implements a statement using the SQLite3 engine
   TSqlDBSQLite3Statement = class(TSqlDBStatement)
   protected
+    fDB: TSqlDataBase;
     fStatement: TSqlRequest;
     fLogSQLValues: TVariantDynArray;
     fUpdateCount: integer;
@@ -154,6 +155,9 @@ type
     // - if the supplied connection is not of TOleDBConnection type, will raise
     // an exception
     constructor Create(aConnection: TSqlDBConnection); override;
+    /// create a SQLite3 statement instance, from an existing TSqlDataBase
+    // - you could then call Prepare and Execute as usual
+    constructor CreateFrom(aSQlite3DB: TSqlDataBase);
     /// release all associated memory and SQLite3 handles
     destructor Destroy; override;
 
@@ -251,6 +255,7 @@ type
     /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDouble(Col: integer): double; override;
     /// return a Column floating point value of the current Row, first Col is 0
+    // - SQLITE_INTEGER/SQLITE_TEXT are converted from TTimeLog/ISO-8601 content
     function ColumnDateTime(Col: integer): TDateTime; override;
     /// return a Column currency value of the current Row, first Col is 0
     // - should retrieve directly the 64 bit Currency content, to avoid
@@ -281,33 +286,8 @@ function RowsToSqlite3(const Dest: TFileName; const TableName: RawUtf8;
 
 implementation
 
+
 { ************ TSqlDBSQLite3Connection* and TSqlDBSQlite3Statement Classes }
-
-function RowsToSqlite3(const Dest: TFileName; const TableName: RawUtf8;
-  Rows: TSqlDBStatement; UseMormotCollations: boolean): integer;
-var
-  DB: TSqlDBSQLite3ConnectionProperties;
-  Conn: TSqlDBSQLite3Connection;
-begin
-  result := 0;
-  if (Dest = '') or
-     (Rows = nil) or
-     (Rows.ColumnCount = 0) then
-    exit;
-  // we do not call DeleteFile(Dest) since DB may be completed on purpose
-  DB := TSqlDBSQLite3ConnectionProperties.Create(StringToUtf8(Dest), '', '', '');
-  try
-    DB.UseMormotCollations := UseMormotCollations;
-    Conn := DB.MainConnection as TSqlDBSQLite3Connection;
-    Conn.Connect;
-    result := Conn.NewTableFromRows(TableName, Rows, true);
-    Conn.Disconnect;
-  finally
-    DB.Free;
-  end;
-end;
-
-
 
 { TSqlDBSQLite3ConnectionProperties }
 
@@ -574,14 +554,7 @@ end;
 
 function TSqlDBSQLite3Statement.ColumnDateTime(Col: integer): TDateTime;
 begin
-  case ColumnType(Col) of
-    ftUtf8:
-      result := Iso8601ToDateTime(fStatement.FieldUtf8(Col));
-    ftInt64:
-      result := TimeLogToDateTime(fStatement.FieldInt(Col));
-  else
-    result := 0;
-  end;
+  result := fStatement.FieldDateTime(Col);
 end;
 
 function TSqlDBSQLite3Statement.ColumnDouble(Col: integer): double;
@@ -619,8 +592,11 @@ function TSqlDBSQLite3Statement.ColumnType(Col: integer;
 begin
   if fCurrentRow <= 0 then
     // before any TSqlDBSQLite3Statement.Step call
-    result := fConnection.Properties.ColumnTypeNativeToDB(
-      fStatement.FieldDeclaredType(Col), 8)
+    if fConnection = nil then
+      result := ftUnknown
+    else
+      result := fConnection.Properties.ColumnTypeNativeToDB(
+        fStatement.FieldDeclaredType(Col), 8)
   else
     case fStatement.FieldType(Col) of
       SQLITE_NULL:
@@ -655,6 +631,17 @@ begin
     fShouldLogSQL := true;
 end;
 
+constructor TSqlDBSQLite3Statement.CreateFrom(aSQlite3DB: TSqlDataBase);
+begin
+  if aSQlite3DB = nil then
+    raise ESqlDBException.CreateUtf8('%.CreateFrom(nil)', [self]);
+  fDB := aSQlite3DB;
+  inherited Create(nil);
+  if (SynDBLog <> nil) and
+     (sllSQL in SynDBLog.Family.Level) then
+    fShouldLogSQL := true;
+end;
+
 destructor TSqlDBSQLite3Statement.Destroy;
 begin
   try
@@ -665,12 +652,9 @@ begin
 end;
 
 procedure TSqlDBSQLite3Statement.ExecutePrepared;
-var
-  DB: TSqlDataBase;
 begin
   fCurrentRow := 0; // mark cursor on the first row
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  DB := TSqlDBSQLite3Connection(Connection).DB;
   if fExpectResults then
     exit; // execution done in Step()
   if fShouldLogSQL then
@@ -679,7 +663,7 @@ begin
     // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
     repeat // Execute all steps of the first statement
     until fStatement.Step <> SQLITE_ROW;
-    fUpdateCount := DB.LastChangeCount;
+    fUpdateCount := fDB.LastChangeCount;
   finally
     if fShouldLogSQL then
       SqlLogEnd;
@@ -713,13 +697,15 @@ begin
   if fShouldLogSQL then
     SqlLogBegin(sllDB);
   inherited Prepare(aSql, ExpectResults); // set fSql + Connect if necessary
-  fStatement.Prepare(TSqlDBSQLite3Connection(Connection).fDB.DB, aSql);
+  if fDB = nil then
+    fDB := TSqlDBSQLite3Connection(fConnection).DB;
+  fStatement.Prepare(fDB.DB, aSql);
   fColumnCount := fStatement.FieldCount;
   if fShouldLogSQL then
   begin
     fParamCount := fStatement.ParamCount;
     SetLength(fLogSQLValues, fParamCount);
-    SqlLogEnd(' %', [TSqlDBSQLite3Connection(Connection).fDB.FileNameWithoutPath]);
+    SqlLogEnd(' %', [fDB.FileNameWithoutPath]);
   end;
 end;
 
@@ -756,9 +742,8 @@ begin
     on E: Exception do
     begin
       if fShouldLogSQL then
-        SynDBLog.Add.Log(sllError, 'Error % on % for [%] as [%]', [E,
-          TSqlDBSQLite3Connection(Connection).DB.FileNameWithoutPath, SQL,
-          SqlWithInlinedParams], self);
+        SynDBLog.Add.Log(sllError, 'Error % on % for [%] as [%]',
+          [E, fDB.FileNameWithoutPath, SQL, SqlWithInlinedParams], self);
       raise;
     end;
   end;
@@ -770,6 +755,32 @@ begin
   else
     fCurrentRow := 0;
 end;
+
+
+function RowsToSqlite3(const Dest: TFileName; const TableName: RawUtf8;
+  Rows: TSqlDBStatement; UseMormotCollations: boolean): integer;
+var
+  DB: TSqlDBSQLite3ConnectionProperties;
+  Conn: TSqlDBSQLite3Connection;
+begin
+  result := 0;
+  if (Dest = '') or
+     (Rows = nil) or
+     (Rows.ColumnCount = 0) then
+    exit;
+  // we do not call DeleteFile(Dest) since DB may be completed on purpose
+  DB := TSqlDBSQLite3ConnectionProperties.Create(StringToUtf8(Dest), '', '', '');
+  try
+    DB.UseMormotCollations := UseMormotCollations;
+    Conn := DB.MainConnection as TSqlDBSQLite3Connection;
+    Conn.Connect;
+    result := Conn.NewTableFromRows(TableName, Rows, true);
+    Conn.Disconnect;
+  finally
+    DB.Free;
+  end;
+end;
+
 
 
 initialization
