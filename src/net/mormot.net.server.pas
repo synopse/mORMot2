@@ -1355,7 +1355,7 @@ begin
   if fHttpApiRequest = nil then
     result := ''
   else
-    // fHttpApiRequest^.CookedUrl.FullUrlLength seems buggy -> use ending #0
+    // fHttpApiRequest^.CookedUrl.FullUrlLength is in bytes -> use ending #0
     result := fHttpApiRequest^.CookedUrl.pFullUrl;
 end;
 

@@ -515,23 +515,23 @@ type
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
     property InContent: RawByteString
-      read fInContent;
+      read fInContent write fInContent;
     /// output parameter to be set to the response message body
     property OutContent: RawByteString
       read fOutContent write fOutContent;
   published
     /// input parameter containing the caller URI
     property Url: RawUtf8
-      read fUrl;
+      read fUrl write fUrl;
     /// input parameter containing the caller method (GET/POST...)
     property Method: RawUtf8
-      read fMethod;
+      read fMethod write fMethod;
     /// input parameter containing the caller message headers
     property InHeaders: RawUtf8
-      read fInHeaders;
+      read fInHeaders write fInHeaders;
     // input parameter defining the caller message body content type
     property InContentType: RawUtf8
-      read fInContentType;
+      read fInContentType write fInContentType;
     /// output HTTP response status
     property RespStatus: integer
       read fRespStatus write fRespStatus;
