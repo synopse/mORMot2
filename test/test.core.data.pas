@@ -4442,12 +4442,29 @@ var
   i, ndx: PtrInt;
   V, V1, V2: variant;
   s, j: RawUtf8;
-  d: TDocVariantData;
+  d, a: TDocVariantData;
   vd: double;
   vs: single;
   lTable: TOrmTableJson;
   lRefreshed: Boolean;
 begin
+  a.Init;
+  for i := 0 to 2 do
+  begin
+    d.Init;
+    d.I['id'] := i;
+    d.U['source'] := 'source' + SmallUInt32Utf8[i];
+    d.U['target'] := 'target' + SmallUInt32Utf8[i];
+    a.AddItem(Variant(d));
+    d.Clear;
+  end;
+  s := _Safe(a.ReduceAsArray('source'))^.ToCsv;
+  CheckEqual(s, 'source0,source1,source2', 'ReduceAsArray');
+  s := _Safe(a.Reduce(['source', 'target'], False))^.ToCsv;
+  CheckEqual(s, '{"source":"source0","target":"target0"},' +
+                '{"source":"source1","target":"target1"},' +
+                '{"source":"source2","target":"target2"}', 'Reduce');
+  a.Clear;
   j := '{"id": 1, "name": Tom}'; // invalid JSON
   Check(not IsValidJson(j, {strict=}false));
   Check(not IsValidJson(j, {strict=}true));

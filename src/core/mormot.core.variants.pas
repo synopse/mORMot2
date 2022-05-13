@@ -6563,6 +6563,7 @@ begin
         aPropNames, aCaseSensitive, reduced, aDoNotAddVoidProp);
       if reduced.IsObject then
         result.AddItem(variant(reduced));
+      reduced.Clear;
     end;
 end;
 
