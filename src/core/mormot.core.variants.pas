@@ -1161,8 +1161,10 @@ type
     procedure InitCopy(const SourceDocVariant: variant;
       aOptions: TDocVariantOptions);
     /// clone a document-based variant with the very same options but no data
+    // - the same options will be used, without the dvArray/dvObject flags
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitClone(const CloneFrom: TDocVariantData);
+      {$ifdef HASINLINE}inline;{$endif}
     /// low-level copy a document-based variant with the very same options and count
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - will copy Count and Names[] by reference, but Values[] only if CloneValues
@@ -1708,6 +1710,13 @@ type
     /// add one or several values to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     procedure AddItems(const aValue: array of const);
+    /// add one object document to this document
+    // - if the document is an array, keep aName=''
+    // - if the document is an object, set the new object property as aName
+    // - new object will keep the same options as this document
+    // - slightly faster than AddItem(_Obj(...)) or AddValue(aName, _Obj(...))
+    procedure AddObject(const aNameValuePairs: array of const;
+      const aName: RawUtf8 = '');
     /// add one or several values from another document
     // - supplied document should be of the same kind than the current one,
     // otherwise nothing is added
@@ -3567,7 +3576,7 @@ end;
 procedure TSynInvokeableVariantType.CopyByValue(
   var Dest: TVarData; const Source: TVarData);
 begin
-  Copy(Dest, Source, false);
+  Copy(Dest, Source, {Indirect=} false);
 end;
 
 function TSynInvokeableVariantType.TryJsonToVariant(var Json: PUtf8Char;
@@ -4752,7 +4761,8 @@ end;
 
 procedure TDocVariantData.InitClone(const CloneFrom: TDocVariantData);
 begin
-  TRttiVarData(self).VType := TRttiVarData(CloneFrom).VType; // VType+VOptions
+  TRttiVarData(self).VType := TRttiVarData(CloneFrom).VType // VType+VOptions
+    and not ((1 shl (ord(dvoIsObject) + 16)) + (1 shl (ord(dvoIsArray) + 16)));
   pointer(VName) := nil; // to avoid GPF
   pointer(VValue) := nil;
   VCount := 0;
@@ -6064,6 +6074,28 @@ begin
   end;
 end;
 
+procedure TDocVariantData.AddObject(const aNameValuePairs: array of const;
+  const aName: RawUtf8);
+var
+  added: PtrInt;
+  o: PDocVariantData;
+begin
+  if (aName <> '') and
+     (dvoCheckForDuplicatedNames in VOptions) then
+    if GetValueIndex(aName) >= 0 then
+      raise EDocVariant.CreateUtf8('AddObject: Duplicated [%] name', [aName]);
+  added := InternalAdd(aName);
+  o := @VValue[added];
+  if PInteger(o)^ = 0 then // most common case is adding a new value
+    o^.InitClone(self)     // same options than owner document
+  else if (o^.VType <> VType) or
+          not o^.IsObject then
+    raise EDocVariant.CreateUtf8('AddObject: wrong existing [%]', [aName]);
+  o^.AddNameValuesToObject(aNameValuePairs);
+  if dvoInternValues in VOptions then
+    InternalUniqueValue(added);
+end;
+
 function TDocVariantData.GetObjectProp(const aName: RawUtf8;
   out aFound: PVariant): boolean;
 var
@@ -6532,37 +6564,23 @@ begin
      (high(aPropNames) < 0) then
     exit;
   if IsObject then
-  begin
-    if aCaseSensitive then
+    for j := 0 to high(aPropNames) do
     begin
-      for j := 0 to high(aPropNames) do
-        for ndx := 0 to VCount - 1 do
-          if VName[ndx] = aPropNames[j] then
-          begin
-            if not aDoNotAddVoidProp or
-               not VarIsVoid(VValue[ndx]) then
-              result.AddValue(VName[ndx], VValue[ndx]);
-            break;
-          end;
+      ndx := DocVariantFind[aCaseSensitive](
+        pointer(VName), pointer(aPropNames[j]), length(aPropNames[j]), VCount);
+      if ndx >= 0 then
+        if not aDoNotAddVoidProp or
+           not VarIsVoid(VValue[ndx]) then
+          result.AddValue(VName[ndx], VValue[ndx]);
     end
-    else
-      for j := 0 to high(aPropNames) do
-        for ndx := 0 to VCount - 1 do
-          if IdemPropNameU(VName[ndx], aPropNames[j]) then
-          begin
-            if not aDoNotAddVoidProp or
-               not VarIsVoid(VValue[ndx]) then
-              result.AddValue(VName[ndx], VValue[ndx]);
-            break;
-          end;
-  end
   else if IsArray then
     for ndx := 0 to VCount - 1 do
     begin
       _Safe(VValue[ndx])^.Reduce(
         aPropNames, aCaseSensitive, reduced, aDoNotAddVoidProp);
-      if reduced.IsObject then
-        result.AddItem(variant(reduced));
+      if not reduced.IsObject then
+        continue;
+      result.AddItem(variant(reduced));
       reduced.Clear;
     end;
 end;
