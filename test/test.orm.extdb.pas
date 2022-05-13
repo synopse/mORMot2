@@ -1084,8 +1084,11 @@ begin
         Check(aExternalClient.Orm.TableHasRows(TOrmPeopleExt));
         Check(aExternalClient.Orm.TableMaxID(TOrmPeopleExt) = n);
         Check(aExternalClient.Orm.TableRowCount(TOrmPeopleExt) = n);
+        Check(aExternalClient.Orm.MemberExists(TOrmPeopleExt, 1));
         Check(aExternalClient.Server.Orm.TableHasRows(TOrmPeopleExt));
+        Check(aExternalClient.Server.Orm.TableMaxID(TOrmPeopleExt) = n);
         Check(aExternalClient.Server.Orm.TableRowCount(TOrmPeopleExt) = n);
+        Check(aExternalClient.Server.Orm.MemberExists(TOrmPeopleExt, 1));
         Check(RInt.FillRewind);
         while RInt.FillOne do
         begin

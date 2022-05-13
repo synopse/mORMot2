@@ -426,6 +426,8 @@ type
     // - will execute not default select max(rowid) from Table, but faster
     // $ select rowid from Table order by rowid desc limit 1
     function TableMaxID(Table: TOrmClass): TID; override;
+    /// overridden method for direct SQLite3 engine call
+    function MemberExists(Table: TOrmClass; ID: TID): boolean; override;
     /// prepared statements with parameters for faster SQLite3 execution
     // - used for SQL code with :(%): internal parameters
     property StatementCache: TSqlStatementCached
@@ -1349,13 +1351,32 @@ var
   sql: RawUtf8;
 begin
   if StaticTable[Table] <> nil then
+    // select(max(RowID)) with proper SQL detection e.g. for ext/MongoDB
     result := inherited TableMaxID(Table)
   else
   begin
     sql := 'select rowid from ' + Table.SqlTableName +
-           ' order by rowid desc limit 1';
+           ' order by rowid desc limit 1'; // faster than max(RowID) on SQlite3
     if not InternalExecute(sql, true, PInt64(@result)) then
       result := 0;
+  end;
+end;
+
+function TRestOrmServerDB.MemberExists(Table: TOrmClass; ID: TID): boolean;
+var
+  sql: RawUtf8;
+  res: Int64;
+begin
+  if StaticTable[Table] <> nil then
+    // call overriden method for ext/MongoDB/in-memory, or EngineRetrieve()
+    result := inherited MemberExists(Table, ID)
+  else
+  begin
+    FormatUtf8('select rowid from % where rowid=:(%): limit 1',
+      [Table.SqlTableName, ID], sql); // faster than EngineRetrieve() on SQLite3
+    res := 0;
+    result := InternalExecute(sql, true, @res) and
+              (res = ID);
   end;
 end;
 

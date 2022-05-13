@@ -2289,7 +2289,7 @@ var
 begin
   rest := GetStaticTable(Table);
   if rest <> nil then
-    // faster direct call (MongoDB, IsMemory)
+    // faster direct call (External, MongoDB, IsMemory)
     result := rest.MemberExists(Table, ID)
   else
     result := inherited MemberExists(Table, ID);

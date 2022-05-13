@@ -211,6 +211,8 @@ type
     function TableRowCount(Table: TOrmClass): Int64; override;
     /// overridden method for direct external database engine call
     function TableHasRows(Table: TOrmClass): boolean; override;
+    /// overridden method for direct external database engine call
+    function MemberExists(Table: TOrmClass; ID: TID): boolean; override;
     /// begin a transaction (implements REST BEGIN Member)
     // - to be used to speed up some SQL statements like Insert/Update/Delete
     // - must be ended with Commit on success
@@ -748,7 +750,7 @@ end;
 
 function TRestStorageExternal.AdaptSqlForEngineList(var SQL: RawUtf8): boolean;
 var
-  Stmt: TSelectStatement;
+  stmt: TSelectStatement;
   W: TJsonWriter;
   limit: TSqlDBDefinitionLimitClause;
   limitSQL, name: RawUtf8;
@@ -758,12 +760,12 @@ begin
   result := false;
   if SQL = '' then
     exit;
-  Stmt := TSelectStatement.Create(SQL,
+  stmt := TSelectStatement.Create(SQL,
     fStoredClassRecordProps.Fields.IndexByName,
     fStoredClassRecordProps.SimpleFieldSelect);
   try
-    if (Stmt.SqlStatement = '') or // parsing failed
-      not IdemPropNameU(Stmt.TableName, fStoredClassRecordProps.SqlTableName) then
+    if (stmt.SqlStatement = '') or // parsing failed
+      not IdemPropNameU(stmt.TableName, fStoredClassRecordProps.SqlTableName) then
     begin
       {$ifdef DEBUGSQLVIRTUALTABLE}
       InternalLog('AdaptSqlForEngineList: complex statement -> switch to ' +
@@ -771,17 +773,17 @@ begin
       {$endif DEBUGSQLVIRTUALTABLE}
       exit;
     end;
-    if Stmt.Offset <> 0 then
+    if stmt.Offset <> 0 then
     begin
       InternalLog('AdaptSqlForEngineList: unsupported OFFSET for [%]',
         [SQL], sllWarning);
       exit;
     end;
-    if Stmt.Limit = 0 then
+    if stmt.Limit = 0 then
       limit.Position := posNone
     else
     begin
-      limit := fProperties.SqlLimitClause(Stmt);
+      limit := fProperties.SqlLimitClause(stmt);
       if limit.Position = posNone then
       begin
         InternalLog('AdaptSqlForEngineList: unknown % LIMIT syntax for [%]',
@@ -789,17 +791,17 @@ begin
         exit;
       end;
       if limit.Position = posOuter then
-        FormatUtf8(limit.InsertFmt, ['%', Stmt.Limit], limitSQL)
+        FormatUtf8(limit.InsertFmt, ['%', stmt.Limit], limitSQL)
       else
-        FormatUtf8(limit.InsertFmt, [Stmt.Limit], limitSQL);
+        FormatUtf8(limit.InsertFmt, [stmt.Limit], limitSQL);
     end;
     W := TJsonWriter.CreateOwnedStream(temp);
     try
       W.AddShorter('select ');
       if limit.Position = posSelect then
         W.AddString(limitSQL);
-      for f := 0 to high(Stmt.Select) do
-        with Stmt.Select[f] do
+      for f := 0 to high(stmt.Select) do
+        with stmt.Select[f] do
         begin
           if FunctionName <> '' then
           begin
@@ -851,7 +853,7 @@ begin
       W.CancelLastComma;
       W.AddShorter(' from ');
       W.AddString(fTableName);
-      n := length(Stmt.Where);
+      n := length(stmt.Where);
       if n = 0 then
       begin
         if limit.Position = posWhere then
@@ -870,7 +872,7 @@ begin
           W.AddShorter(' and ');
         end;
         for f := 0 to n do
-          with Stmt.Where[f] do
+          with stmt.Where[f] do
           begin
             if (FunctionName <> '') or
                (Operation > high(DB_SQLOPERATOR)) then
@@ -897,23 +899,23 @@ begin
               W.AddString(ParenthesisAfter);
           end;
       end;
-      if Stmt.GroupByField <> nil then
+      if stmt.GroupByField <> nil then
       begin
         W.AddShort(' group by ');
-        for f := 0 to high(Stmt.GroupByField) do
+        for f := 0 to high(stmt.GroupByField) do
         begin
-          W.AddString(fStoredClassMapping^.FieldNameByIndex(Stmt.GroupByField[f] - 1));
+          W.AddString(fStoredClassMapping^.FieldNameByIndex(stmt.GroupByField[f] - 1));
           W.AddComma;
         end;
         W.CancelLastComma;
       end;
-      if Stmt.OrderByField <> nil then
+      if stmt.OrderByField <> nil then
       begin
         W.AddShort(' order by ');
-        for f := 0 to high(Stmt.OrderByField) do
+        for f := 0 to high(stmt.OrderByField) do
         begin
-          W.AddString(fStoredClassMapping^.FieldNameByIndex(Stmt.OrderByField[f] - 1));
-          if byte(f) in Stmt.OrderByFieldDesc then
+          W.AddString(fStoredClassMapping^.FieldNameByIndex(stmt.OrderByField[f] - 1));
+          if byte(f) in stmt.OrderByFieldDesc then
             W.AddShorter(' desc');
           W.AddComma;
         end;
@@ -929,7 +931,7 @@ begin
       W.Free;
     end;
   finally
-    Stmt.Free;
+    stmt.Free;
   end;
 end;
 
@@ -1349,21 +1351,21 @@ end;
 function TRestStorageExternal.EngineList(const SQL: RawUtf8;
   ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 var
-  Stmt: ISqlDBStatement;
+  stmt: ISqlDBStatement;
 begin
   result := '';
   if ReturnedRowCount <> nil then
     raise ERestStorage.CreateUtf8('%.EngineList(ReturnedRowCount<>nil) for %',
       [self, StoredClass]);
-  Stmt := PrepareInlinedForRows(SQL);
-  if Stmt <> nil then
+  stmt := PrepareInlinedForRows(SQL);
+  if stmt <> nil then
   try
-    Stmt.ExecutePreparedAndFetchAllAsJson(
+    stmt.ExecutePreparedAndFetchAllAsJson(
       ForceAjax or
       (Owner = nil) or
       not Owner.Owner.NoAjaxJson, result);
   except
-    Stmt := nil;
+    stmt := nil;
     HandleClearPoolOnConnectionIssue;
   end;
 end;
@@ -1371,18 +1373,18 @@ end;
 function TRestStorageExternal.EngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
 var
-  Stmt: ISqlDBStatement;
+  stmt: ISqlDBStatement;
 begin
   // TableModelIndex is not useful here
   result := '';
   if (self = nil) or
      (ID <= 0) then
     exit;
-  Stmt := PrepareDirectForRows(pointer(fSelectOneDirectSQL), [], [ID]);
-  if Stmt <> nil then
+  stmt := PrepareDirectForRows(pointer(fSelectOneDirectSQL), [], [ID]);
+  if stmt <> nil then
   try
     // Expanded=true -> '[{"ID":10,...}]'#10
-    Stmt.ExecutePreparedAndFetchAllAsJson(true, result);
+    stmt.ExecutePreparedAndFetchAllAsJson(true, result);
     if IsNotAjaxJson(pointer(result)) then
       // '{"fieldCount":2,"values":["ID","FirstName"]}'#$A -> ID not found
       result := ''
@@ -1390,7 +1392,7 @@ begin
       // list '[{...}]'#10 -> object '{...}'
       TrimChars(result, 1, 2);
   except
-    Stmt := nil;
+    stmt := nil;
     HandleClearPoolOnConnectionIssue;
   end;
 end;
@@ -1439,6 +1441,29 @@ begin
   rows.ReleaseRows;
 end;
 
+function TRestStorageExternal.MemberExists(Table: TOrmClass; ID: TID): boolean;
+var
+  rows: ISqlDBRows;
+begin
+  result := false;
+  if (self = nil) or
+     (Table <> fStoredClass) then
+    exit;
+  with fStoredClassMapping^ do
+    rows := ExecuteDirect('select % from % where %=?',
+      [RowIDFieldName, fTableName, RowIDFieldName], [ID], true);
+  if rows = nil then
+    exit;
+  if rows.Step then
+  try
+    result := rows.ColumnInt(0) = ID;
+    rows.ReleaseRows;
+  except
+    rows := nil;
+    HandleClearPoolOnConnectionIssue;
+  end;
+end;
+
 function TRestStorageExternal.EngineRetrieveBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 var
@@ -1459,7 +1484,6 @@ begin
   try
     BlobData := rows.ColumnBlob(0);
     rows.ReleaseRows;
-    rows := nil;
     result := true; // success
   except
     rows := nil;
@@ -1493,9 +1517,9 @@ begin
             BlobFields[f].SetFieldSqlVar(Value, data);
           end;
           rows.ReleaseRows;
-          rows := nil;
           result := true; // success
         except
+          rows := nil;
           HandleClearPoolOnConnectionIssue;
         end;
       end;
@@ -1574,8 +1598,8 @@ end;
 function TRestStorageExternal.EngineUpdateBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
-  Statement: ISqlDBStatement;
-  AffectedField: TFieldBits;
+  stmt: ISqlDBStatement;
+  modfields: TFieldBits;
 begin
   result := false;
   if (aID <= 0) or
@@ -1587,29 +1611,29 @@ begin
     if Owner <> nil then
       Owner.FlushInternalDBCache;
     with fStoredClassMapping^ do
-      Statement := fProperties.NewThreadSafeStatementPrepared(
+      stmt := fProperties.NewThreadSafeStatementPrepared(
         'update % set %=? where %=?',
         [fTableName, InternalToExternal(BlobField), RowIDFieldName],
         {results=}false, {except=}true);
-    if Statement <> nil then
+    if stmt <> nil then
     begin
       if BlobData = '' then
-        Statement.BindNull(1)
+        stmt.BindNull(1)
       else
-        Statement.BindBlob(1, BlobData); // fast explicit BindBlob() call
-      Statement.Bind(2, aID);
-      Statement.ExecutePrepared;
+        stmt.BindBlob(1, BlobData); // fast explicit BindBlob() call
+      stmt.Bind(2, aID);
+      stmt.ExecutePrepared;
       if Owner <> nil then
       begin
-        fStoredClassRecordProps.FieldBitsFromBlobField(BlobField, AffectedField);
+        fStoredClassRecordProps.FieldBitsFromBlobField(BlobField, modfields);
         Owner.InternalUpdateEvent(
-          oeUpdateBlob, TableModelIndex, aID, '', @AffectedField, nil);
+          oeUpdateBlob, TableModelIndex, aID, '', @modfields, nil);
         Owner.FlushInternalDBCache;
       end;
       result := true; // success
     end;
   except
-    Statement := nil;
+    stmt := nil;
     HandleClearPoolOnConnectionIssue; // leave result=false to notify error
   end;
 end;
