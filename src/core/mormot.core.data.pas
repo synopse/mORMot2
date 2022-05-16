@@ -1723,6 +1723,7 @@ type
     // if available - and fallbacks to binary comparison
     function ItemCompare(A, B: pointer; CaseInSensitive: boolean = false): integer;
     /// will reset the element content
+    // - i.e. release any managed type memory, and fill Item with zeros
     procedure ItemClear(Item: pointer);
       {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// will fill the element with some random content

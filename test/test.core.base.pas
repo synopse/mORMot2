@@ -6340,7 +6340,11 @@ var
   i, n: integer;
   exists: boolean;
 begin
+  {$ifdef HASGENERICS}
+  dict := TSynDictionary.New<RawUtf8, RawUtf8>(True);
+  {$else}
   dict := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray), TypeInfo(TRawUtf8DynArray), True);
+  {$endif HASGENERICS}
   try
     key := 'Foobar';
     val := 'lol';

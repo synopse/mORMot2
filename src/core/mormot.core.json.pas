@@ -1188,8 +1188,10 @@ type
   // - thread-safe by default, since most methods are protected by a TSynLocker;
   // use the ThreadUse option to tune thread-safety (e.g. disable or use a TRWLock)
   // - TDynArray is a wrapper which does not store anything, whereas this class
-  // is able to store both keys and values, and provide convenient methods to
+  // actually stores both keys and values, and provide convenient methods to
   // access the stored data, including JSON serialization and binary storage
+  // - consider IKeyValue<> from mormot.core.collections.pas, for more robust
+  // generics-based code where TKey/TValue are propagated to all methods
   TSynDictionary = class(TSynLocked)
   protected
     fKeys: TDynArrayHashed;

@@ -486,7 +486,7 @@ type
   // - kvoThreadCriticalSection + kvoThreadSafe will force to use a regular
   // TCriticalSection for the thread safety
   // - kvoDefaultIfNotFound will let IKeyValue<TKey, TValue>.Items[] return the
-  // default TValue (e.g. 0 or '') and don't raise an exception if TKey is not found
+  // default TValue (e.g. 0 or '') and raise no exception if TKey is not found
   TKeyValueOptions = set of (
     kvoKeyCaseInsensitive,
     kvoThreadSafe,
@@ -508,8 +508,9 @@ type
   TIKeyValueParent = class(TInterfacedObject)
   protected
     fData: TSynDictionary;
-    fKeyTypeInfo, fValueTypeInfo: PRttiInfo;
     fOptions: TKeyValueOptions;
+    function GetKeyTypeInfo: PRttiInfo;
+    function GetValueTypeInfo: PRttiInfo;
     procedure AddOne(key, value: pointer);
     procedure GetOne(key, value: pointer);
     function GetCapacity: integer;
@@ -519,8 +520,8 @@ type
   public
     /// initialize the dictionary storage, specifying dynamic array keys/values
     // - main factory is Collections.NewKeyValue<TKey, TValue> class function,
-    // which returns a IKeyValue<> interface for reusing most class specializations:
-    // you should NOT call any TIKeyValue<> constructor anywhere
+    // which returns a IKeyValue<> interface for reusing most class
+    // specializations: you should NOT call any TIKeyValue<> constructor anywhere
     constructor Create(const aContext: TNewKeyValueContext); reintroduce; virtual;
     /// finalize the dictionary storage
     destructor Destroy; override;
@@ -544,17 +545,17 @@ type
       read fOptions;
     /// low-level TypeInfo(TKey) access
     property KeyTypeInfo: PRttiInfo
-      read fKeyTypeInfo;
+      read GetKeyTypeInfo;
     /// low-level TypeInfo(TValue) access
     property ValueTypeInfo: PRttiInfo
-      read fValueTypeInfo;
+      read GetValueTypeInfo;
   end;
 
   /// thread-safe generics-based dictionary holding key/value pairs
   // - is a high level wrapper around our regular TSynDictionary
-  // - main factory is Collections.NewKeyValue<TKey, TValue> class function, which
-  // returns a IKeyValue<> interface for reusing most class specializations: you
-  // should NOT directly use a TIKeyValue<> anywhere
+  // - main factory is Collections.NewKeyValue<TKey, TValue> class function,
+  // which returns a IKeyValue<> interface for reusing most class
+  // specializations: you should NOT directly use a TIKeyValue<> anywhere
   TIKeyValue<TKey, TValue> = class(
     TIKeyValueParent, IKeyValue<TKey, TValue>)
   protected
@@ -1167,8 +1168,6 @@ end;
 constructor TIKeyValueParent.Create(const aContext: TNewKeyValueContext);
 begin
   fOptions := aContext.Options;
-  fKeyTypeInfo := aContext.KeyItemTypeInfo;
-  fValueTypeInfo := aContext.ValueItemTypeInfo;
   // validate or recognize most simple dynamic arrays from its TKey/TValue types
   if (aContext.KeyArrayTypeInfo = nil) or
      (aContext.KeyArrayTypeInfo ^.Kind <> rkDynArray) then
@@ -1189,12 +1188,12 @@ begin
     fData.ThreadUse := uRWLock;
   if (fData.Keys.Info.ArrayRtti = nil) or
      ((aContext.KeyArrayTypeInfo <> nil) and
-      (fData.Keys.Info.ArrayRtti.Info <> fKeyTypeInfo)) then
+      (fData.Keys.Info.ArrayRtti.Info <> aContext.KeyItemTypeInfo)) then
     raise ESynKeyValue.CreateUtf8('%.Create: TKey does not match %',
       [self, aContext.KeyArrayTypeInfo^.RawName]);
   if (fData.Values.Info.ArrayRtti = nil) or
      ((aContext.ValueArrayTypeInfo <> nil) and
-      (fData.Values.Info.ArrayRtti.Info <> fValueTypeInfo)) then
+      (fData.Values.Info.ArrayRtti.Info <> aContext.ValueItemTypeInfo)) then
     raise ESynKeyValue.CreateUtf8('%.Create: TValue does not match %',
       [self, aContext.ValueArrayTypeInfo^.RawName]);
 end;
@@ -1203,6 +1202,22 @@ destructor TIKeyValueParent.Destroy;
 begin
   inherited Destroy;
   fData.Free;
+end;
+
+function TIKeyValueParent.GetKeyTypeInfo: PRttiInfo;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := fData.Keys.Info.ArrayRtti.Info;
+end;
+
+function TIKeyValueParent.GetValueTypeInfo: PRttiInfo;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := fData.Values.Info.ArrayRtti.Info;
 end;
 
 procedure TIKeyValueParent.AddOne(key, value: pointer);

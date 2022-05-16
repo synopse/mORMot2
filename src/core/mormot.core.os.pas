@@ -3255,6 +3255,7 @@ type
 
 var
   /// a global thread-safe Pierre L'Ecuyer software random generator
+  // - should not be used, unless may be slightly faster than a threadvar
   SharedRandom: TLecuyerThreadSafe;
 
 {$ifdef OSPOSIX}
@@ -6760,10 +6761,13 @@ begin
             state := [sInDQ, sInArg];
             continue;
           end;
-      '|', '<', '>':
+      '|',
+      '<',
+      '>':
         if state * [sInSQ, sInDQ] = [] then
           include(result, pcHasRedirection);
-      '&', ';':
+      '&',
+      ';':
         if posix and
            (state * [sInSQ, sInDQ] = []) then
         begin
@@ -6774,7 +6778,8 @@ begin
         if posix and
            (state * [sInSQ, sBslash] = []) then
            include(result, pcHasSubCommand);
-      '(', ')':
+      '(',
+      ')':
         if posix and
            (state * [sInSQ, sInDQ] = []) then
           include(result, pcHasParenthesis);
@@ -6822,6 +6827,7 @@ begin
   until false;
   TrimSelf(s);
 end;
+
 
 procedure InitializeUnit;
 begin
