@@ -909,7 +909,7 @@ end;
 
 procedure StatTimeMS(const st: TStat; out time: TUnixMSTime); inline;
 begin
-  time := st.st_mtime * MilliSecsPerSec + // no local conversion needed
+  time := QWord(st.st_mtime) * MilliSecsPerSec + // no local conversion needed
           // include milliseconds information
           {$ifdef OSLINUXANDROID}
           st.st_mtime_nsec div NanoSecsPerMilliSec;
