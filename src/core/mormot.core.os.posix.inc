@@ -965,12 +965,12 @@ begin
      (lp.st_birthtime < lp.st_ctime) then
     lp.st_ctime := lp.st_birthtime;
   {$endif OSOPENBSD}
-  FileCreateDateTime := lp.st_ctime * MilliSecsPerSec;
+  FileCreateDateTime := Int64(lp.st_ctime) * MilliSecsPerSec;
   if LastWriteAccess <> 0 then
     if (FileCreateDateTime = 0) or
        (FileCreateDateTime > LastWriteAccess) then
       FileCreateDateTime := LastWriteAccess;
-  lastreadaccess := lp.st_atime * MilliSecsPerSec;
+  lastreadaccess := Int64(lp.st_atime) * MilliSecsPerSec;
   if lastreadaccess <> 0 then
     if (FileCreateDateTime = 0) or
        (FileCreateDateTime > lastreadaccess) then
