@@ -3846,8 +3846,6 @@ function ServiceSingleRun: boolean;
 function CurrentStateToServiceState(CurrentState: cardinal): TServiceState;
 
 /// return the ready to be displayed text of a TServiceState value
-function ServiceStateText(State: TServiceState): string;
-
 function ToText(st: TServiceState): PShortString; overload;
 
 /// return the ProcessID of a given service, by name

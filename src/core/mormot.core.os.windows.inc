@@ -3118,12 +3118,12 @@ end;
 
 function TService.ReportStatus(dwState, dwExitCode, dwWait: cardinal): BOOL;
 var
-  status: string;
+  status: PShortString;
 begin
-  status := ServiceStateText(CurrentStateToServiceState(dwState));
+  status := ToText(CurrentStateToServiceState(dwState));
   if Assigned(WindowsServiceLog) then
     WindowsServiceLog(sllInfo, '% ReportStatus(%,%,%)', 
-      [ServiceName, status, dwExitCode, dwWait], self);
+      [ServiceName, status^, dwExitCode, dwWait], self);
   if dwState = SERVICE_START_PENDING then
     fStatusRec.dwControlsAccepted := 0
   else
@@ -3140,7 +3140,7 @@ begin
   if not result then
     if Assigned(WindowsServiceLog) then
       WindowsServiceLog(sllLastError, '% ReportStatus(%,%,%)',
-        [ServiceName, status, dwExitCode, dwWait], self);
+        [ServiceName, status^, dwExitCode, dwWait], self);
 end;
 
 procedure TService.SetControlHandler(const Value: TServiceControlHandler);
@@ -3198,14 +3198,6 @@ begin
     // e.g. SERVICE_CONTROL_SHUTDOWN
     result := ssNotInstalled;
   end;
-end;
-
-function ServiceStateText(State: TServiceState): string;
-var
-  P: PShortString;
-begin
-  P := @_SERVICESTATE[State];
-  result := string(copy(P^, 3, length(P^) - 2));
 end;
 
 function GetServicePid(const aServiceName: string): cardinal;
