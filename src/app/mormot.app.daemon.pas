@@ -543,7 +543,7 @@ begin
                 end;
               cState:
                 writeln(fSettings.ServiceName,
-                  ' State=', ServiceStateText(ctrl.State));
+                  ' State=', ToText(ctrl.State)^);
             end;
           finally
             ctrl.Free;
