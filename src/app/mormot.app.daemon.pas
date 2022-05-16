@@ -131,6 +131,24 @@ type
   /// exception raised during POSIX Daemon / Windows Service process
   EDaemon = class(ESynException);
 
+  /// the commands recognized by TSynDaemon
+  // - include commands on all systems, even not the current one
+  TExecuteCommandLineCmd = (
+     cNone,
+     cVersion,
+     cVerbose,
+     cStart,
+     cStop,
+     cState,
+     cSilentKill,
+     cHelp,
+     cInstall,
+     cRun,
+     cFork,
+     cUninstall,
+     cConsole,
+     cKill);
+
   /// abstract parent to implements a POSIX Daemon / Windows Service
   // - inherit from this abstract class and override Start and Stop methods
   // - you may consider using TDDDAdministratedDaemon from dddInfraApps
@@ -156,6 +174,11 @@ type
     /// main entry point of the daemon, to process the command line switches
     // - aAutoStart is used only under Windows
     procedure CommandLine(aAutoStart: boolean = true);
+    /// alternate entry point of the daemon, for direct execution
+    // - param is used when called from CommandLine()
+    // - aAutoStart is used only under Windows
+    procedure Command(cmd: TExecuteCommandLineCmd; aAutoStart: boolean = true;
+      const param: RawUtf8 = '');
     /// inherited class should override this abstract method with proper process
     procedure Start; virtual; abstract;
     /// inherited class should override this abstract method with proper process
@@ -293,39 +316,9 @@ end;
 
 {$I-}
 
-type
-  TExecuteCommandLineCmd = (
-     cNone,
-     cVersion,
-     cVerbose,
-     cStart,
-     cStop,
-     cState,
-     cSilentKill,
-     cHelp,
-     cInstall,
-     cRun,
-     cFork,
-     cUninstall,
-     cConsole,
-     cKill);
-
-const
-  CMD_CHR: array[cHelp .. cKill] of AnsiChar = (
-    'H',  // cHelp
-    'I',  // cInstall
-    'R',  // cRun
-    'F',  // cFork
-    'U',  // cUninstall
-    'C',  // cConsole
-    'K'); // cKill
-
-procedure TSynDaemon.CommandLine(aAutoStart: boolean);
+procedure TSynDaemon.Command(cmd: TExecuteCommandLineCmd; aAutoStart: boolean;
+  const param: RawUtf8);
 var
-  cmd, c: TExecuteCommandLineCmd;
-  p: PUtf8Char;
-  ch: AnsiChar;
-  param: RawUtf8;
   exe: RawByteString;
   log: TSynLog;
   {$ifdef OSWINDOWS}
@@ -366,11 +359,11 @@ var
     spaces := StringOfChar(' ', length(Executable.ProgramName) + 4);
     {$ifdef OSWINDOWS}
     writeln('   ', Executable.ProgramName,
-      ' /console -c /verbose /help -h /version');
+            ' /console -c /verbose /help -h /version');
     writeln(spaces, '/install /uninstall /start /stop /state');
     {$else}
     writeln(' ./', Executable.ProgramName,
-      ' --console -c --verbose --help -h --version');
+            ' --console -c --verbose --help -h --version');
     writeln(spaces, '--run -r --fork -f --kill -k');
     {$endif OSWINDOWS}
     custom := CustomCommandLineSyntax;
@@ -402,8 +395,12 @@ var
       TextColor(ccLightRed);
       ExitCode := 1; // notify error to caller batch
     end;
-    msg := FormatUtf8('% [%] (%) on Service ''%''',
-      [msg, param, cmdText, fSettings.ServiceName]);
+    if param = '' then
+      msg := FormatUtf8('% (%) on Service ''%''',
+        [msg, cmdText, fSettings.ServiceName])
+    else
+      msg := FormatUtf8('% [%] (%) on Service ''%''',
+        [msg, param, cmdText, fSettings.ServiceName]);
     writeln(Utf8ToConsole(msg));
     TextColor(ccLightGray);
     log.Log(sllDebug, 'CommandLine: %', [msg], self);
@@ -414,31 +411,6 @@ begin
      (fSettings = nil) then
     exit;
   log := nil;
-  param := TrimU(StringToUtf8(paramstr(1)));
-  cmd := cNone;
-  if (param <> '') and
-     (param[1] in ['/', '-']) then
-  begin
-    p := @param[2];
-    if p^ = '-' then
-      // allow e.g. --fork switch (idem to /f -f /fork -fork)
-      inc(p);
-    ch := NormToUpper[p^];
-    for c := low(CMD_CHR) to high(CMD_CHR) do
-      if CMD_CHR[c] = ch then
-      begin
-        cmd := c;
-        break;
-      end;
-    if cmd = cNone then
-      byte(cmd) := ord(cVersion) +
-        IdemPCharArray(p, ['VERS',      // cVersion
-                           'VERB',      // cVerbose
-                           'START',     // cStart
-                           'STOP',      // cStop
-                           'STAT',      // cState
-                           'SILENTK']); // cSilentKill
-    end;
   try
     case cmd of
     cHelp:
@@ -583,6 +555,51 @@ begin
   if cmd <> cSilentKill then
     TextColor(ccLightGray);
   ioresult;
+end;
+
+const
+  CMD_CHR: array[cHelp .. cKill] of AnsiChar = (
+    'H',  // cHelp
+    'I',  // cInstall
+    'R',  // cRun
+    'F',  // cFork
+    'U',  // cUninstall
+    'C',  // cConsole
+    'K'); // cKill
+
+procedure TSynDaemon.CommandLine(aAutoStart: boolean);
+var
+  cmd, c: TExecuteCommandLineCmd;
+  p: PUtf8Char;
+  ch: AnsiChar;
+  param: RawUtf8;
+begin
+  param := TrimU(StringToUtf8(paramstr(1)));
+  cmd := cNone;
+  if (param <> '') and
+     (param[1] in ['/', '-']) then
+  begin
+    p := @param[2];
+    if p^ = '-' then
+      // allow e.g. --fork switch (idem to /f -f /fork -fork)
+      inc(p);
+    ch := NormToUpper[p^];
+    for c := low(CMD_CHR) to high(CMD_CHR) do
+      if CMD_CHR[c] = ch then
+      begin
+        cmd := c;
+        break;
+      end;
+    if cmd = cNone then
+      byte(cmd) := ord(cVersion) +
+        IdemPCharArray(p, ['VERS',      // cVersion
+                           'VERB',      // cVerbose
+                           'START',     // cStart
+                           'STOP',      // cStop
+                           'STAT',      // cState
+                           'SILENTK']); // cSilentKill
+    end;
+  Command(cmd, aAutoStart, param);
 end;
 
 
