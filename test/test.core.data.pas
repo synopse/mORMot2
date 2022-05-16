@@ -4449,13 +4449,22 @@ var
   lRefreshed: Boolean;
 begin
   a.Init;
-  for i := 0 to 2 do
+  a.AddObject(['source', 'source0', // not same order as in for loop below
+               'id',     0,
+               'dummy',  'toto',
+               'target', 'target0']);
+  for i := 1 to 2 do
   begin
     d.Init;
     d.I['id'] := i;
     d.U['source'] := 'source' + SmallUInt32Utf8[i];
     d.U['target'] := 'target' + SmallUInt32Utf8[i];
     a.AddItem(Variant(d));
+    s := _Safe(d.Reduce(['id','TARGet'], {casesens=}false))^.ToJson;
+    CheckEqual(s, '{"id":' + SmallUInt32Utf8[i] +
+      ',"target":"target' + SmallUInt32Utf8[i] + '"}');
+    s := _Safe(d.Reduce(['id','TARGet'], {casesens=}true))^.ToJson;
+    CheckEqual(s, '{"id":' + SmallUInt32Utf8[i] + '}');
     d.Clear;
   end;
   s := _Safe(a.ReduceAsArray('source'))^.ToCsv;
