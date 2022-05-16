@@ -626,9 +626,7 @@ begin
   if not aConnection.InheritsFrom(TSqlDBSQLite3Connection) then
     raise ESqlDBException.CreateUtf8('%.Create(%)', [self, aConnection]);
   inherited Create(aConnection);
-  if (SynDBLog <> nil) and
-     (sllSQL in SynDBLog.Family.Level) then
-    fShouldLogSQL := true;
+  fShouldLogSQL := (SynDBLog <> nil) and (sllSQL in SynDBLog.Family.Level);
 end;
 
 constructor TSqlDBSQLite3Statement.CreateFrom(aSQlite3DB: TSqlDataBase);
@@ -637,9 +635,7 @@ begin
     raise ESqlDBException.CreateUtf8('%.CreateFrom(nil)', [self]);
   fDB := aSQlite3DB;
   inherited Create(nil);
-  if (SynDBLog <> nil) and
-     (sllSQL in SynDBLog.Family.Level) then
-    fShouldLogSQL := true;
+  fShouldLogSQL := (SynDBLog <> nil) and (sllSQL in SynDBLog.Family.Level);
 end;
 
 destructor TSqlDBSQLite3Statement.Destroy;

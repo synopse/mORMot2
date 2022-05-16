@@ -2706,7 +2706,8 @@ begin
   end;
 end;
 
-procedure TInterfaceMethodArgument.AddValueJson(WR: TJsonWriter; const Value: RawUtf8);
+procedure TInterfaceMethodArgument.AddValueJson(WR: TJsonWriter;
+  const Value: RawUtf8);
 begin
   if rcfJsonString in ArgRtti.Flags then
   begin
