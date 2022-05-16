@@ -621,7 +621,7 @@ function UnixTimeUtc: TUnixTime;
 var
   tz: timeval;
 begin
-  fpgettimeofday(@tz, nil);
+  fpgettimeofday(@tz, nil); // from libc
   result := tz.tv_sec;
 end;
 

@@ -1212,7 +1212,7 @@ type
     procedure SetThreadUse(const Value: TSynLockerUse);
       {$ifdef HASINLINE} inline; {$endif}
   public
-    /// initialize the dictionary storage, specifyng dynamic array keys/values
+    /// initialize the dictionary storage, specifying dynamic array keys/values
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
     // would store the keys within this TSynDictionary instance
     // - aValueTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -1224,6 +1224,16 @@ type
     constructor Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
       aKeyCaseInsensitive: boolean = false; aTimeoutSeconds: cardinal = 0;
       aCompressAlgo: TAlgoCompress = nil; aHasher: THasher = nil); reintroduce; virtual;
+    {$ifdef HASGENERICS}
+    /// initialize the dictionary storage, specifying keys/values as generic types
+    // - just a convenient wrapper around TSynDictionary.Create()
+    // - consider IKeyValue<> from mormot.core.collections.pas, for more robust
+    // generics-based code where TKey/TValue are propagated to all methods
+    class function New<TKey, TValue>(aKeyCaseInsensitive: boolean = false;
+      aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
+      aHasher: THasher = nil): TSynDictionary;
+        static; {$ifdef FPC} inline; {$endif}
+    {$endif HASGENERICS}
     /// finalize the storage
     // - would release all internal stored values
     destructor Destroy; override;
@@ -8968,6 +8978,16 @@ begin
   fSafe.Padding[DIC_TIMESEC].VInteger := aTimeoutSeconds;
 end;
 
+{$ifdef HASGENERICS}
+class function TSynDictionary.New<TKey, TValue>(aKeyCaseInsensitive: boolean;
+  aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress;
+  aHasher: THasher): TSynDictionary;
+begin
+  result := TSynDictionary.Create(TypeInfo(TArray<TKey>), TypeInfo(TArray<TValue>),
+    aKeyCaseInsensitive, aTimeoutSeconds, aCompressAlgo, aHasher);
+end;
+{$endif HASGENERICS}
+
 function TSynDictionary.ComputeNextTimeOut: cardinal;
 begin
   result := fSafe.Padding[DIC_TIMESEC].VInteger;
@@ -9661,23 +9681,23 @@ var
   tmp: TTextWriterStackBuffer;
   W: TBufferWriter;
 begin
-  fSafe.RWLock(cReadOnly);
+  result := '';
+  W := TBufferWriter.Create(tmp{%H-});
   try
-    result := '';
-    if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
-      exit;
-    W := TBufferWriter.Create(tmp{%H-});
+    fSafe.RWLock(cReadOnly);
     try
+      if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
+        exit;
       DynArraySave(pointer(fKeys.Value),
         @fSafe.Padding[DIC_KEYCOUNT].VInteger, W, fKeys.Info.Info);
       DynArraySave(pointer(fValues.Value),
         @fSafe.Padding[DIC_VALUECOUNT].VInteger, W, fValues.Info.Info);
-      result := W.FlushAndCompress(NoCompression, Algo);
     finally
-      W.Free;
+      fSafe.RWUnLock(cReadOnly);
     end;
+    result := W.FlushAndCompress(NoCompression, Algo);
   finally
-    fSafe.RWUnLock(cReadOnly);
+    W.Free;
   end;
 end;
 
