@@ -630,7 +630,7 @@ var
   tz: timeval;
 begin
   fpgettimeofday(@tz, nil);
-  result := (tz.Int64(tv_sec) * MilliSecsPerSec) +
+  result := (Int64(tz.tv_sec) * MilliSecsPerSec) +
             tz.tv_usec div MicroSecsPerMilliSec; // in milliseconds
 end;
 
