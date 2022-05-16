@@ -2002,9 +2002,10 @@ function SaveJson(const Value; TypeInfo: PRttiInfo;
 
 /// serialize most kind of content as JSON, using its RTTI and a type name
 // - could be used if you know the type name and not the TypeInfo()
-// - the type should have been registered or used before to be recognized
+// - will use Rtti.RegisterTypeFromName() so the type should be known, i.e. be
+// a simple type, or have been alredy registered
 // - returns '' if TypeName is not recognized
-function SaveJson(const Value; const TypeName: RawUtf8; Kinds: TRttiKinds = [];
+function SaveJson(const Value; const TypeName: RawUtf8;
   Options: TTextWriterOptions = []): RawUtf8; overload;
 
 /// save record into its JSON serialization as saved by TJsonWriter.AddRecordJson
@@ -10303,12 +10304,12 @@ begin
   SaveJson(Value, TypeInfo, TEXTWRITEROPTIONS_SETASTEXT[EnumSetsAsText], result);
 end;
 
-function SaveJson(const Value; const TypeName: RawUtf8; Kinds: TRttiKinds;
+function SaveJson(const Value; const TypeName: RawUtf8;
   Options: TTextWriterOptions): RawUtf8;
 var
   nfo: TRttiCustom;
 begin
-  nfo := Rtti.Find(pointer(TypeName), length(TypeName), Kinds);
+  nfo := Rtti.RegisterTypeFromName(TypeName);
   if nfo = nil then
     result := ''
   else

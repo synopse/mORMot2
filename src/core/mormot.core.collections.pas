@@ -496,8 +496,10 @@ type
   /// stack parameters to ease TIKeyValue<TKey, TValue> creation
   TNewKeyValueContext = record
     Options: TKeyValueOptions;
-    KeyArrayTypeInfo, KeyItemTypeInfo: PRttiInfo;
-    ValueArrayTypeInfo, ValueItemTypeInfo: PRttiInfo;
+    KeyArrayTypeInfo,
+    KeyItemTypeInfo: PRttiInfo;
+    ValueArrayTypeInfo,
+    ValueItemTypeInfo: PRttiInfo;
     Timeout: cardinal;
     Compress: TAlgoCompress;
     Hasher: THasher;
