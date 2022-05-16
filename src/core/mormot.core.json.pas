@@ -7091,7 +7091,10 @@ begin
   end
   else if jpoHandleCustomVariants in O then
   begin
-    DVO := JSON_FAST;
+    if jpoAllowDouble in o then
+      DVO := JSON_FAST_FLOAT
+    else
+      DVO := JSON_FAST;
     CustomVariant := @DVO;
   end
   else
