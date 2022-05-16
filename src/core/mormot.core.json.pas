@@ -9113,7 +9113,7 @@ begin
     end
     else if aUpdate then
     begin
-      fValues.ItemCopyFrom(@aValue, result, {ClearBeforeCopy=}true);
+      fValues.ItemCopyFrom(aValue, result, {ClearBeforeCopy=}true);
       if tim <> 0 then
         fTimeOut[result] := tim;
     end

@@ -6336,10 +6336,28 @@ var
 
 var
   v: tvalue;
-  s, k: RawUtf8;
+  s, k, key, val: RawUtf8;
   i, n: integer;
   exists: boolean;
 begin
+  dict := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray), TypeInfo(TRawUtf8DynArray), True);
+  try
+    key := 'Foobar';
+    val := 'lol';
+    dict.AddOrUpdate(key, val);
+    s := dict.SaveToJson;
+    CheckEqual(s, '{"Foobar":"lol"}');
+    key := 'foobar';
+    val := 'xxx';
+    dict.AddOrUpdate(key, val);
+    s := dict.SaveToJson;
+    CheckEqual(s, '{"Foobar":"xxx"}');
+    key := 'FooBar';
+    dict.FindAndCopy(key, val, False);
+    CheckEqual(val, 'xxx');
+  finally
+    dict.Free;
+  end;
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   n := 1000;
   for i := 1 to 5 do
