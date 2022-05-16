@@ -936,7 +936,7 @@ type
   public
     /// append the 'SUBSET+' prefix to the Value
     // - used e.g. to notify that a font is included as a subset
-    procedure AppendPrefix;
+    function AppendPrefix: RawUtf8;
   end;
 
   /// used to store an array of PDF objects
@@ -4072,7 +4072,7 @@ begin
   W.Add('/').AddEscapeName(pointer(fValue));
 end;
 
-procedure TPdfName.AppendPrefix;
+function TPdfName.AppendPrefix: RawUtf8;
 var
   prefix: RawUtf8;
   c: cardinal;
@@ -4088,7 +4088,8 @@ begin
     c := c shr 4;
   end;
   prefix[7] := '+';
-  FValue := prefix+FValue; // we ensured a single subset per font
+  fValue := prefix + fValue; // we ensured a single subset per font
+  result := fValue;
 end;
 
 
@@ -6312,7 +6313,8 @@ begin
       font := TPdfDictionary.Create(fDoc.fXRef);
       font.AddItem('Type', 'Font');
       font.AddItem('Subtype', 'CIDFontType2');
-      font.AddItem('BaseFont', FName);
+      font.AddItem('BaseFont', // may have been prefixed
+        TPdfName(WinAnsiFont.Data.ValueByName('BaseFont')).Value);
       if fDoc.fPdfA <> pdfaNone then
         font.AddItem('CIDToGIDMap', 'Identity');
       info := TPdfDictionary.Create(fDoc.fXRef);
@@ -6346,11 +6348,11 @@ begin
       Data.AddItem('DescendantFonts', fonts);
       // create tounicode CMaping
       tounicode := TPdfStream.Create(fDoc);
-      tounicode.Writer.Add('/CIDInit /ProcSet findresource begin'#10 +
+      tounicode.Writer.Add('/CIDInit/ProcSet findresource begin'#10 +
         '12 dict begin'#10'begincmap'#10'/CIDSystemInfo'#10'<<'#10'/Registry (').
         Add(ShortCut).
         Add('+0)'#10'/Ordering (UCS)'#10'/Supplement 0'#10'>> def'#10 +
-        '/CMapName /').Add(ShortCut).Add('+0 def'#10'/CMapType 2 def'#10 +
+        '/CMapName/').Add(ShortCut).Add('+0 def'#10'/CMapType 2 def'#10 +
         '1 begincodespacerange'#10'<').AddHex4(fFirstChar).
         Add('> <').AddHex4(fLastChar).Add('>'#10'endcodespacerange'#10);
       ndx := 0;
@@ -6473,8 +6475,8 @@ begin
                 ReduceTTF(ttf, subdata, subsize);
                 FreeMem(subdata);
                 // see 5.5.3 Font Subsets: begins with a tag followed by a +
-                TPdfName(fFontDescriptor.ValueByName('FontName')).AppendPrefix;
-                TPdfName(Data.ValueByName('BaseFont')).AppendPrefix;
+                TPdfName(Data.ValueByName('BaseFont')).Value :=
+                  TPdfName(fFontDescriptor.ValueByName('FontName')).AppendPrefix;
               end;
             end;
             {$endif USE_UNISCRIBE}
