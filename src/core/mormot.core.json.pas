@@ -2000,6 +2000,13 @@ function SaveJson(const Value; TypeInfo: PRttiInfo;
   EnumSetsAsText: boolean = false): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// serialize most kind of content as JSON, using its RTTI and a type name
+// - could be used if you know the type name and not the TypeInfo()
+// - the type should have been registered or used before to be recognized
+// - returns '' if TypeName is not recognized
+function SaveJson(const Value; const TypeName: RawUtf8; Kinds: TRttiKinds = [];
+  Options: TTextWriterOptions = []): RawUtf8; overload;
+
 /// save record into its JSON serialization as saved by TJsonWriter.AddRecordJson
 // - will use default Base64 encoding over RecordSave() binary - or custom true
 // JSON format (as set by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
@@ -9684,6 +9691,8 @@ var
   W: TBufferWriter;
 begin
   result := '';
+  if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
+    exit;
   W := TBufferWriter.Create(tmp{%H-});
   try
     fSafe.RWLock(cReadOnly);
@@ -10292,6 +10301,18 @@ end;
 function SaveJson(const Value; TypeInfo: PRttiInfo; EnumSetsAsText: boolean): RawUtf8;
 begin
   SaveJson(Value, TypeInfo, TEXTWRITEROPTIONS_SETASTEXT[EnumSetsAsText], result);
+end;
+
+function SaveJson(const Value; const TypeName: RawUtf8; Kinds: TRttiKinds;
+  Options: TTextWriterOptions): RawUtf8;
+var
+  nfo: TRttiCustom;
+begin
+  nfo := Rtti.Find(pointer(TypeName), length(TypeName), Kinds);
+  if nfo = nil then
+    result := ''
+  else
+    SaveJson(Value, nfo.Cache.Info, Options, result);
 end;
 
 function RecordSaveJson(const Rec; TypeInfo: PRttiInfo;
