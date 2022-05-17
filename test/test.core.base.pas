@@ -5031,6 +5031,8 @@ begin
   CheckSame(D, 0.252314, 1e-5);
   D := IntervalTextToDateTime('+1 06:03:20');
   CheckSame(D, 1.252314, 1e-5);
+  D := Iso8601ToDateTime('2022-05-11T23:59:56.971655858Z');
+  CheckEqual(DateTimeToIso8601(D, true, 'T', true), '2022-05-11T23:59:56.971');
   CheckSame(IntervalTextToDateTime('-20 06:03:20'), -20.252314, 1e-6);
   Check(DateTimeToIso8601Text(IntervalTextToDateTime('+0 06:03:20')) = 'T06:03:20');
   tmp := DateTimeToIso8601Text(IntervalTextToDateTime('+1 06:03:20'));
