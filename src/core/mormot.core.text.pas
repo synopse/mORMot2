@@ -2188,7 +2188,11 @@ procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: PtrInt);
 /// fast conversion from one hexa char pair into a 8-bit AnsiChar
 // - return false if any invalid (non hexa) char is found in Hex^
 // - similar to HexToBin(Hex,nil,1)
-function HexToCharValid(Hex: PAnsiChar): boolean;
+function HexToCharValid(Hex: PAnsiChar): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// internal conversion from hexa pair into a AnsiChar for PIC, ARM and x86_64
+function HexToCharValid(Hex: PAnsiChar; HexToBin: PByteArray): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast check if the supplied Hex buffer is an hexadecimal representation
@@ -2199,7 +2203,11 @@ function IsHex(const Hex: RawByteString; BinBytes: PtrInt): boolean;
 // - return false if any invalid (non hexa) char is found in Hex^
 // - similar to HexToBin(Hex,Bin,1) but with Bin<>nil
 // - use HexToCharValid if you want to check a hexadecimal char content
-function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean;
+function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// internal conversion from hexa pair into a AnsiChar for PIC, ARM and x86_64
+function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char; HexToBin: PByteArray): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from two hexa bytes into a 16-bit UTF-16 WideChar
@@ -10546,6 +10554,12 @@ begin
             (ConvertHexToBin[Ord(Hex[1])] <= 15);
 end;
 
+function HexToCharValid(Hex: PAnsiChar; HexToBin: PByteArray): boolean;
+begin
+  result := (HexToBin[Ord(Hex[0])] <= 15) and
+            (HexToBin[Ord(Hex[1])] <= 15);
+end;
+
 function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean;
 var
   b, c: byte;
@@ -10566,7 +10580,33 @@ begin
        (c <> 255) then
     begin
       if Bin <> nil then
-        Bin^ := AnsiChar(b + c);
+      begin
+        inc(c, b);
+        Bin^ := AnsiChar(c);
+      end;
+      result := true;
+      exit;
+    end;
+  end;
+  result := false; // return false if any invalid char
+end;
+
+function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char; HexToBin: PByteArray): boolean;
+var
+  b, c: byte;
+begin
+  if Hex <> nil then
+  begin
+    b := HexToBin[ord(Hex[0]) + 256]; // + 256 for shl 4
+    c := HexToBin[ord(Hex[1])];
+    if (b <> 255) and
+       (c <> 255) then
+    begin
+      if Bin <> nil then
+      begin
+        inc(c, b);
+        Bin^ := AnsiChar(c);
+      end;
       result := true;
       exit;
     end;

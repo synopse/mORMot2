@@ -7735,17 +7735,23 @@ function UrlDecodeNextValue(U: PUtf8Char; out Value: RawUtf8): PUtf8Char;
 var
   Beg, V: PUtf8Char;
   len: PtrInt;
+  {$ifndef CPUX86NOTPIC}
+  tab: PByteArray; // faster on PIC, ARM and x86_64
+  {$endif CPUX86NOTPIC}
 begin
   if U <> nil then
   begin
     // compute resulting length of value
+    {$ifndef CPUX86NOTPIC}
+    tab := @ConvertHexToBin;
+    {$endif CPUX86NOTPIC}
     Beg := U;
     len := 0;
     while (U^ <> #0) and
           (U^ <> '&') do
     begin
       if (U^ = '%') and
-         HexToCharValid(PAnsiChar(U + 1)) then
+         HexToCharValid(pointer(U + 1) {$ifndef CPUX86NOTPIC}, tab{$endif}) then
         inc(U, 3)
       else
         inc(U);
@@ -7759,7 +7765,7 @@ begin
       U := Beg;
       repeat
         if (U^ = '%') and
-           HexToChar(PAnsiChar(U + 1), V) then
+           HexToChar(pointer(U + 1), V {$ifndef CPUX86NOTPIC}, tab{$endif}) then
         begin
           inc(V);
           inc(U, 3);
@@ -7784,11 +7790,17 @@ function UrlDecodeNextName(U: PUtf8Char; out Name: RawUtf8): PUtf8Char;
 var
   Beg, V: PUtf8Char;
   len: PtrInt;
+  {$ifndef CPUX86NOTPIC}
+  tab: PByteArray; // faster on PIC, ARM and x86_64
+  {$endif CPUX86NOTPIC}
 begin
   result := nil;
   if U = nil then
     exit;
   // compute resulting length of name
+  {$ifndef CPUX86NOTPIC}
+  tab := @ConvertHexToBin;
+  {$endif CPUX86NOTPIC}
   Beg := U;
   len := 0;
   repeat
@@ -7805,9 +7817,9 @@ begin
            (U[2] in ['D', 'd']) then
         begin
           result := U + 3;
-          break;  // %3d means = according to the RFC
+          break;  // %3d means ending = according to the RFC
         end
-        else if HexToCharValid(PAnsiChar(U + 1)) then
+        else if HexToCharValid(pointer(U + 1) {$ifndef CPUX86NOTPIC}, tab{$endif}) then
           inc(U, 3)
         else
           inc(U);
@@ -7824,7 +7836,7 @@ begin
   U := Beg;
   repeat
     if (U^ = '%') and
-       HexToChar(PAnsiChar(U + 1), V) then
+       HexToChar(pointer(U + 1), V {$ifndef CPUX86NOTPIC}, tab{$endif}) then
     begin
       inc(V);
       inc(U, 3);
