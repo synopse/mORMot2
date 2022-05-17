@@ -991,7 +991,10 @@ type
     // - set OnAuthentificationFailed to nil in order to avoid any retry
     property MaximumAuthentificationRetry: integer
       read fMaximumAuthentificationRetry write fMaximumAuthentificationRetry;
-    /// if the client shall retry once in case of "408 REQUEST TIMEOUT" error
+    /// if the client shall retry once after "408 REQUEST TIMEOUT" server error
+    // - this is about an HTTP error 408 returned by the server, e.g. when the
+    // ORM lock or transaction could not be acquired in a good enough time: this
+    // value does not apply to the client side timeout, e.g. at HTTP level
     property RetryOnceOnTimeout: boolean
       read fRetryOnceOnTimeout write fRetryOnceOnTimeout;
     /// how many seconds the client may try to connect after open socket failure
