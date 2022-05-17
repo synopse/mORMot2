@@ -6097,42 +6097,154 @@ begin
     result := PT_INFO[pt];
 end;
 
+type
+  // alphabetically ordered RTL/Basic types in uppercase - extracted by RTTI
+  TBasicType = (
+    btARRAY,
+    btBOOLEAN,
+    btBYTE,
+    btCARDINAL,
+    btCURRENCY,
+    btDOUBLE,
+    btEXTENDED,
+    btINT64,
+    btINTEGER,
+    btINTERFACE,
+    btLONGINT,
+    btLONGWORD,
+    btPTRINT,
+    btPTRUINT,
+    btQWORD,
+    btRAWBLOB,
+    btRAWBYTESTRING,
+    btRAWJSON,
+    btRAWUTF8,
+    btRECORD,
+    btSINGLE,
+    btSPIUTF8,
+    btSTRING,
+    btSYNUNICODE,
+    btTCREATETIME,
+    btTDATETIME,
+    btTDATETIMEMS,
+    btTFILENAME,
+    btTGUID,
+    btTHASH128,
+    btTHASH256,
+    btTHASH512,
+    btTID,
+    btTMODTIME,
+    btTRECORDREFERENCE,
+    btTRECORDREFERENCETOBEDELETED,
+    btTRECORDVERSION,
+    btTTIMELOG,
+    btTUNIXMSTIME,
+    btTUNIXTIME,
+    btUNICODESTRING,
+    btUTF8STRING,
+    btVARIANT,
+    btWIDESTRING,
+    btWORD);
+var
+  // fast branchless O(log(N)) binary search on x86_64
+  BT_NAMES: array[TBasicType] of RawUtf8;
+const
+  // warning: recognized types should match at binary storage level!
+  BT_TYPES: array[TBasicType] of TRttiParserType = (
+    ptArray,          // btARRAY
+    ptBoolean,        // btBOOLEAN
+    ptByte,           // btBYTE
+    ptCardinal,       // btCARDINAL
+    ptCurrency,       // btCURRENCY
+    ptDouble,         // btDOUBLE
+    ptExtended,       // btEXTENDED
+    ptInt64,          // btINT64
+    ptInteger,        // btINTEGER
+    ptInterface,      // btINTERFACE
+    ptInteger,        // btLONGINT
+    ptCardinal,       // btLONGWORD
+    ptPtrInt,         // btPTRINT
+    ptPtrUInt,        // btPTRUINT
+    ptQWord,          // btQWORD
+    ptRawByteString,  // btRAWBLOB
+    ptRawByteString,  // btRAWBYTESTRING
+    ptRawJson,        // btRAWJSON
+    ptRawUtf8,        // btRAWUTF8
+    ptRecord,         // btRECORD
+    ptSingle,         // btSINGLE
+    ptRawUtf8,        // btSPIUTF8
+    ptString,         // btSTRING
+    ptSynUnicode,     // btSYNUNICODE
+    ptTimeLog,        // btTCREATETIME
+    ptDateTime,       // btTDATETIME
+    ptDateTimeMS,     // btTDATETIMEMS
+    ptString,         // btTFILENAME
+    ptGuid,           // btTGUID
+    ptHash128,        // btTHASH128
+    ptHash256,        // btTHASH256
+    ptHash512,        // btTHASH512
+    ptOrm,            // btTID
+    ptTimeLog,        // btTMODTIME
+    ptOrm,            // btTRECORDREFERENCE
+    ptOrm,            // btTRECORDREFERENCETOBEDELETED
+    ptOrm,            // btTRECORDVERSION
+    ptTimeLog,        // btTTIMELOG
+    ptUnixMSTime,     // btTUNIXMSTIME
+    ptUnixTime,       // btTUNIXTIME
+    ptUnicodeString,  // btUNICODESTRING
+    ptRawUtf8,        // btUTF8STRING
+    ptVariant,        // btVARIANT
+    ptWideString,     // btWIDESTRING
+    ptWord);          // btWORD
+  BT_COMPLEX: array[TBasicType] of TRttiParserComplexType = (
+    pctNone,                       // btARRAY
+    pctNone,                       // btBOOLEAN
+    pctNone,                       // btBYTE
+    pctNone,                       // btCARDINAL
+    pctNone,                       // btCURRENCY
+    pctNone,                       // btDOUBLE
+    pctNone,                       // btEXTENDED
+    pctNone,                       // btINT64
+    pctNone,                       // btINTEGER
+    pctNone,                       // btINTERFACE
+    pctNone,                       // btLONGINT
+    pctNone,                       // btLONGWORD
+    pctNone,                       // btPTRINT
+    pctNone,                       // btPTRUINT
+    pctNone,                       // btQWORD
+    pctNone,                       // btRAWBLOB
+    pctNone,                       // btRAWBYTESTRING
+    pctNone,                       // btRAWJSON
+    pctNone,                       // btRAWUTF8
+    pctNone,                       // btRECORD
+    pctNone,                       // btSINGLE
+    pctNone,                       // btSPIUTF8
+    pctNone,                       // btSTRING
+    pctNone,                       // btSYNUNICODE
+    pctNone,                       // btTCREATETIME
+    pctCreateTime,                 // btTDATETIME
+    pctNone,                       // btTDATETIMEMS
+    pctNone,                       // btTFILENAME
+    pctNone,                       // btTGUID
+    pctNone,                       // btTHASH128
+    pctNone,                       // btTHASH256
+    pctNone,                       // btTHASH512
+    pctID,                         // btTID
+    pctModTime,                    // btTMODTIME
+    pctRecordReference,            // btTRECORDREFERENCE
+    pctRecordReferenceToBeDeleted, // btTRECORDREFERENCETOBEDELETED
+    pctRecordVersion,              // btTRECORDVERSION
+    pctTimeLog,                    // btTTIMELOG
+    pctNone,                       // btTUNIXMSTIME
+    pctNone,                       // btTUNIXTIME
+    pctNone,                       // btUNICODESTRING
+    pctNone,                       // btUTF8STRING
+    pctNone,                       // btVARIANT
+    pctNone,                       // btWIDESTRING
+    pctNone);                      // btWORD
+
 function TypeNameToStandardParserType(Name: PUtf8Char; NameLen: integer;
   Complex: PRttiParserComplexType): TRttiParserType;
-const
-  SORTEDMAX = 43;
-  // fast branchless O(log(N)) binary search on x86_64
-  SORTEDNAMES: array[0..SORTEDMAX] of PUtf8Char = (
-    'ARRAY', 'BOOLEAN', 'BYTE', 'CARDINAL', 'CURRENCY', 'DOUBLE', 'EXTENDED',
-    'INT64', 'INTEGER', 'INTERFACE', 'LONGINT', 'LONGWORD', 'PTRINT', 'PTRUINT',
-    'QWORD', 'RAWBLOB', 'RAWBYTESTRING', 'RAWJSON', 'RAWUTF8', 'RECORD',
-    'SINGLE', 'SPIUTF8', 'STRING', 'SYNUNICODE',
-    'TCREATETIME', 'TDATETIME', 'TDATETIMEMS', 'TGUID', 'THASH128', 'THASH256',
-    'THASH512', 'TID', 'TMODTIME', 'TRECORDREFERENCE', 'TRECORDREFERENCETOBEDELETED',
-    'TRECORDVERSION', 'TTIMELOG', 'TUNIXMSTIME', 'TUNIXTIME',
-    'UNICODESTRING', 'UTF8STRING', 'VARIANT', 'WIDESTRING', 'WORD');
-  // warning: recognized types should match at binary storage level!
-  SORTEDTYPES: array[0..SORTEDMAX] of TRttiParserType = (
-    ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
-    ptInt64, ptInteger, ptInterface, ptInteger, ptCardinal, ptPtrInt, ptPtrUInt,
-    ptQWord, ptRawByteString, ptRawByteString, ptRawJson, ptRawUtf8, ptRecord,
-    ptSingle, ptRawUtf8, ptString, ptSynUnicode,
-    ptTimeLog, ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256,
-// 'THASH512','TID','TMODTIME','TRECORDREFERENCE','TRECORDREFERENCETOBEDELETED'
-    ptHash512, ptOrm, ptTimeLog, ptOrm, ptOrm,
-//'TRECORDVERSION','TTIMELOG','TUNIXMSTIME','TUNIXTIME'
-    ptOrm, ptTimeLog, ptUnixMSTime, ptUnixTime,
-    ptUnicodeString, ptRawUtf8, ptVariant, ptWideString, ptWord);
-  SORTEDCOMPLEX: array[0..SORTEDMAX] of TRttiParserComplexType = (
-    pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
-    pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
-    pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
-    pctCreateTime, pctNone, pctNone, pctNone, pctNone, pctNone,
-// 'THASH512','TID','TMODTIME','TRECORDREFERENCE','TRECORDREFERENCETOBEDELETED'
-    pctNone, pctID, pctModTime, pctRecordReference, pctRecordReferenceToBeDeleted,
-//'TRECORDVERSION','TTIMELOG','TUNIXMSTIME','TUNIXTIME'
-    pctRecordVersion, pctTimeLog, pctNone, pctNone,
-    pctNone, pctNone, pctNone, pctNone, pctNone);
 var
   ndx: PtrInt;
   up: PUtf8Char;
@@ -6141,13 +6253,13 @@ var
 begin
   UpperCopy255Buf(@tmp, Name, NameLen)^ := #0;
   up := @tmp;
-  //for ndx := 1 to SORTEDMAX do if StrComp(SORTEDNAMES[ndx], SORTEDNAMES[ndx-1])<=0 then
-  //writeln(SORTEDNAMES[ndx]);
-  ndx := FastFindPUtf8CharSorted(@SORTEDNAMES, SORTEDMAX, up);
+  //for ndx := 1 to BT_MAX do if StrComp(BT_NAMES[ndx], BT_NAMES[ndx-1])<=0 then
+  //writeln(BT_NAMES[ndx]);
+  ndx := FastFindPUtf8CharSorted(@BT_NAMES, ord(high(BT_NAMES)), up);
   if ndx >= 0 then
   begin
-    result := SORTEDTYPES[ndx];
-    c := SORTEDCOMPLEX[ndx];
+    result := BT_TYPES[TBasicType(ndx)];
+    c := BT_COMPLEX[TBasicType(ndx)];
   end
   else if (NameLen < 200) and
           (tmp[0] = 'T') and // T...ID pattern in name?
@@ -8782,6 +8894,7 @@ var
   k: TRttiKind;
   t: TRttiParserType;
 begin
+  GetEnumTrimmedNames(TypeInfo(TBasicType), @BT_NAMES);
   RTTI_FINALIZE[rkLString]   := @_StringClear;
   RTTI_FINALIZE[rkWString]   := @_WStringClear;
   RTTI_FINALIZE[rkVariant]   := @_VariantClear;
