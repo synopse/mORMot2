@@ -2708,7 +2708,7 @@ type
   // see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
   // - used by thread-safe Random32/RandomBytes, storing 16 bytes per thread - a
   // stronger algorithm like Mersenne Twister (as used by FPC RTL) requires 5KB
-  // - use SeedGenerator() to use it as a sequence generator
+  // - SeedGenerator() makes it a sequence generator - or encryptor via Fill()
   // - when used as random generator (default when initialized with 0), Seed()
   // will gather and hash some system entropy
   TLecuyer = object
@@ -2741,7 +2741,8 @@ type
     function NextDouble: double;
     /// XOR some memory buffer with random bytes
     // - when used as sequence generator after SeedGenerator(), dest buffer
-    // should be filled with zeros before the call
+    // should be filled with zeros before the call if you want to use it as
+    // generator, but could be applied on any memory buffer for encryption
     procedure Fill(dest: pointer; bytes: integer);
     /// fill some string[0..size] with 7-bit ASCII random text
     procedure FillShort(var dest: ShortString; size: PtrUInt);
@@ -2804,6 +2805,10 @@ procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
 // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine
 procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
+
+/// cipher/uncipher some memory buffer using a 64-bit seed and Pierre L'Ecuyer's
+// algorithm, and its gsl_rng_taus2 generator
+procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 
 /// retrieve 512-bit of entropy, from system time and current execution state
 // - entropy is gathered over several sources like RTL Now(), CreateGUID(),
@@ -8343,6 +8348,20 @@ begin
   _Lecuyer.FillShort31(dest);
 end;
 
+procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
+var
+  gen: TLecuyer;
+begin
+  if data = '' then
+    exit;
+  {$ifdef FPC}
+  UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
+  {$endif FPC}
+  gen.SeedGenerator(key);
+  gen.Fill(@data[1], length(data));
+  FillZero(THash128(gen)); // to avoid forensic leak
+end;
+
 {$ifndef PUREMORMOT2}
 procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
 begin
@@ -8350,6 +8369,7 @@ begin
     _Lecuyer.Fill(pointer(Dest), CardinalCount shl 2);
 end;
 {$endif PUREMORMOT2}
+
 
 { MultiEvent* functions }
 
