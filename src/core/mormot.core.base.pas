@@ -2731,9 +2731,9 @@ type
     function NextDouble: double;
     /// XOR some memory buffer with random bytes
     procedure Fill(dest: pointer; count: integer);
-    /// fill some string[size] with 7-bit ASCII random text
+    /// fill some string[0..size] with 7-bit ASCII random text
     procedure FillShort(var dest: ShortString; size: PtrUInt);
-    /// fill some string[31] with 7-bit ASCII random text
+    /// fill some string[0..31] with 7-bit ASCII random text
     procedure FillShort31(var dest: TShort31);
   end;
   PLecuyer = ^TLecuyer;
@@ -8228,12 +8228,12 @@ begin
   c := seedcount;
   inc(seedcount, cardinal(count));
   if (c = 0) or
-     (c > seedcount) then // no 32-bit overflow
+     (c > seedcount) then // check for 32-bit overflow
     Seed(nil, 0); // seed at startup, and after 2^32 of output data = 16 GB
   repeat
     if count < 4 then
       break;
-    PCardinal(dest)^ := PCardinal(dest)^ xor RawNext;
+    PCardinal(dest)^ := PCardinal(dest)^ xor RawNext; // inlining won't change
     inc(PCardinal(dest));
     dec(count, 4);
     if count = 0 then

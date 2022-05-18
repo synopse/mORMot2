@@ -2168,7 +2168,7 @@ begin
   for i := 1 to 100 do
   begin
     a := Random32(maxInt);
-    r := Random;
+    r := RandomDouble;
     U := RandomUtf8(i);
     J := JsonEncode(['a', a, 'r', r, 'u', U]);
     check(IsValidJson(J));
@@ -5447,7 +5447,7 @@ begin
   Check(s2 = s);
   for i := 1 to 200 do
   begin
-    n.From(n.ToDateTime + Random * 50);
+    n.From(n.ToDateTime + RandomDouble * 50);
     now := now and not pred(1 shl 12);
     s := n.Text(true);
     id.SetTime(mugYear, n.Year);

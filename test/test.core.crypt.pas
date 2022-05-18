@@ -1337,7 +1337,7 @@ begin
   Value[16] := #$E7;
   Value[17] := #$E0;
   Check(not IsBase64(Value));
-  Check(BinToBase64(Value) = Value64);
+  CheckEqual(BinToBase64(Value), Value64);
   Check(IsBase64(Value64));
   tmp := StringFromFile(Executable.ProgramFileName);
   if length(tmp) > 1 shl 20 then

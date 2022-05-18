@@ -484,7 +484,7 @@ begin
   RandSeed := 10; // will reproduce the same Random() values
   for i := 1 to 100 do
   begin
-    Si := Random(high(Bits));
+    Si := Random(high(Bits)); // RandSeed above: no Random32()
     SetBit(Bits, Si);
     Check(GetBit(Bits, Si));
     Check(GetBitPtr(@Bits, Si));
@@ -4009,8 +4009,8 @@ begin
     CheckEqual(FormatUtf8('? %', [vj], [vj], true), s + ' ' + s);
     CheckEqual(FormatUtf8(' ?? ', [], [vs], true), ' "' + s + '" ');
     CheckEqual(FormatUtf8('? %', [vs], [vj], true), s + ' ' + s);
-    k := Int64(j) * Random(MaxInt);
-    b := Random(64);
+    k := Int64(j) * Random32(MaxInt);
+    b := Random32(64);
     s := GetBitCsv(k, b);
     l := 0;
     P := pointer(s);
@@ -4074,7 +4074,7 @@ begin
       9993:
         d := 1E-210;
     else
-      d := Random * 1E-17 - Random * 1E-19;
+      d := RandomDouble * 1E-17 - RandomDouble * 1E-19;
     end;
     str(d, a);
     s := RawUtf8(a);
@@ -4212,9 +4212,8 @@ begin
   fRunConsole := format('%s SysUtils.IntToStr %s %s/s', [fRunConsole, Timer.Stop,
     IntToThousandString(Timer.PerSec(100000))]);
   Timer.Start;
-  RandSeed := 10;
   for i := 0 to 99999 do
-    StrInt64(@varint[31], Int64(7777) * Random(maxInt));
+    StrInt64(@varint[31], Int64(7777) * Random32);
   fRunConsole := format('%s StrInt64 %s %s/s', [fRunConsole, Timer.Stop,
     IntToThousandString(Timer.PerSec(100000))]);
 end;
@@ -4278,7 +4277,7 @@ begin
     for k := 1 to 50 do
     begin
       for j := 0 to i - 1 do
-        P[j] := CHR[Random(83)];
+        P[j] := CHR[Random32(83)];
       b := AsciiToBaudot(u);
       check(BaudotToAscii(b) = u);
     end;
@@ -5014,12 +5013,12 @@ begin
   for i := 1700 to 2500 do
     Check(mormot.core.datetime.IsLeapYear(i) = SysUtils.IsLeapYear(i), 'IsLeapYear');
   // this will test typically from year 1905 to 2065
-  D := Now / 20 + Random * 20; // some starting random date/time
+  D := Now / 20 + RandomDouble * 20; // some starting random date/time
   for i := 1 to 2000 do
   begin
     Test(D, true);
     Test(D, false);
-    D := D + Random * 57; // go further a little bit: change date/time
+    D := D + RandomDouble * 57; // go further a little bit: change date/time
   end;
   b.Value := Iso8601ToTimeLog('20150504');
   Check(b.Year = 2015);
@@ -5642,7 +5641,7 @@ var
 begin
   for i := 1 to 100 do
   begin
-    s := DateTimeToIso8601(Now / 20 + Random * 20, true);
+    s := DateTimeToIso8601(Now / 20 + RandomDouble * 20, true);
     t := UrlEncode(s);
     Check(UrlDecode(t) = s);
     d := 'seleCT=' + t + '&where=' + Int32ToUtf8(i);
