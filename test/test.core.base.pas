@@ -2848,12 +2848,25 @@ begin
   end;
 end;
 
+const
+  REF_LECUYER_GENERATOR: array[0..15] of cardinal = (
+    2094674600, 1801471443, 1564436181, 3659342702,
+    1831620425, 3729943674, 687904812,  2066320563,
+    3494904290, 3023528103, 1358263417, 3202492728,
+    1577967257, 3235083616, 712712534,  1900728807);
+  REF_LECUYER_GENERATOR_TRAIL: array[0..15] of cardinal = (
+    2912814506, 4264204172, 1224264557, 457988427,
+    3671383357, 2304790299, 1068635130, 1812365788,
+    18904424,   1385490254, 3829840815, 3086100873,
+    1986702847, 635322329,  2467062584, 3233345822);
+
 procedure TTestCoreBase._Random32;
 var
   i, n: PtrInt;
   q, qp: QWord;
   c: array[0..1000] of cardinal;
   timer: TPrecisionTimer;
+  gen: TLecuyer;
 begin
   for i := 0 to high(c) do
     c[i] := Random32;
@@ -2883,6 +2896,14 @@ begin
   for i := 1 to 100 do
     RandomBytes(@c, SizeOf(c));
   NotifyTestSpeed('RandomBytes', 0, SizeOf(c) * 100, @timer);
+  for i := 0 to high(REF_LECUYER_GENERATOR) do
+  begin
+    gen.SeedGenerator(i);
+    FillCharFast(c, SizeOf(c), 0); // gen.Fill() will XOR the buffer
+    gen.Fill(@c, SizeOf(c));
+    CheckEqual(Hash32(@c, SizeOf(c)), REF_LECUYER_GENERATOR[i], 'lecgen');
+    CheckEqual(gen.Next, REF_LECUYER_GENERATOR_TRAIL[i], 'lecgentrail');
+  end;
 end;
 
 procedure TTestCoreBase._TRawUtf8Interning;

@@ -2702,19 +2702,29 @@ function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean; overload;
 
 
 type
-  /// low-level implementation a 32-bit Pierre L'Ecuyer software random generator
+  /// 32-bit Pierre L'Ecuyer software (random) generator
   // - cross-compiler and cross-platform efficient randomness generator, very
   // fast with a much better distribution than Delphi system's Random() function
   // see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
   // - used by thread-safe Random32/RandomBytes, storing 16 bytes per thread - a
   // stronger algorithm like Mersenne Twister (as used by FPC RTL) requires 5KB
+  // - use SeedGenerator() to use it as a sequence generator
+  // - when used as random generator (default when initialized with 0), Seed()
+  // will gather and hash some system entropy
   TLecuyer = object
   public
     rs1, rs2, rs3, seedcount: cardinal;
-    /// force an immediate seed of the generator from current system state
+    /// force a random seed of the generator from current system state
     // - as executed by the Next method at thread startup, and after 2^32 values
     // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
     procedure Seed(entropy: PByteArray; entropylen: PtrInt);
+    /// force a well-defined seed of the generator from a fixed initial point
+    // - to be called before Next/Fill to generate the very same output
+    // - will generate up to 16GB of predictable output, then switch to random
+    procedure SeedGenerator(fixedseed: QWord); overload;
+    /// force a well-defined seed of the generator from a buffer initial point
+    // - apply crc32c() over the fixedseed buffer to initialize the generator
+    procedure SeedGenerator(fixedseed: pointer; fixedseedbytes: integer); overload;
     /// compute the next 32-bit generated value with no Seed - internal call
     function RawNext: cardinal;
     /// compute the next 32-bit generated value
@@ -2730,7 +2740,9 @@ type
     /// compute a 64-bit floating point value
     function NextDouble: double;
     /// XOR some memory buffer with random bytes
-    procedure Fill(dest: pointer; count: integer);
+    // - when used as sequence generator after SeedGenerator(), dest buffer
+    // should be filled with zeros before the call
+    procedure Fill(dest: pointer; bytes: integer);
     /// fill some string[0..size] with 7-bit ASCII random text
     procedure FillShort(var dest: ShortString; size: PtrUInt);
     /// fill some string[0..31] with 7-bit ASCII random text
@@ -8181,6 +8193,25 @@ begin
     RawNext; // warm up
 end;
 
+procedure TLecuyer.SeedGenerator(fixedseed: QWord);
+begin
+  SeedGenerator(@fixedseed, SizeOf(fixedseed));
+end;
+
+procedure TLecuyer.SeedGenerator(fixedseed: pointer; fixedseedbytes: integer);
+begin
+  rs1 := crc32c(0,   fixedseed, fixedseedbytes);
+  rs2 := crc32c(rs1, fixedseed, fixedseedbytes);
+  rs3 := crc32c(rs2, fixedseed, fixedseedbytes);
+  if rs1 < 2 then
+    rs1 := 2;
+  if rs2 < 8 then
+    rs2 := 8;
+  if rs3 < 16 then
+    rs3 := 16;
+  seedcount := 1; // will reseet after 16GB, i.e. 2^32 of output data
+end;
+
 function TLecuyer.RawNext: cardinal;
 begin // not inlined for better code generation
   result := rs1;
@@ -8219,24 +8250,24 @@ begin
   result := Next * COEFF32; // 32-bit resolution is enough for our purpose
 end;
 
-procedure TLecuyer.Fill(dest: pointer; count: integer);
+procedure TLecuyer.Fill(dest: pointer; bytes: integer);
 var
   c: cardinal;
 begin
-  if count <= 0 then
+  if bytes <= 0 then
     exit;
   c := seedcount;
-  inc(seedcount, cardinal(count));
+  inc(seedcount, cardinal(bytes));
   if (c = 0) or
      (c > seedcount) then // check for 32-bit overflow
     Seed(nil, 0); // seed at startup, and after 2^32 of output data = 16 GB
   repeat
-    if count < 4 then
+    if bytes < 4 then
       break;
     PCardinal(dest)^ := PCardinal(dest)^ xor RawNext; // inlining won't change
     inc(PCardinal(dest));
-    dec(count, 4);
-    if count = 0 then
+    dec(bytes, 4);
+    if bytes = 0 then
       exit;
   until false;
   c := RawNext;
@@ -8244,8 +8275,8 @@ begin
     PByte(dest)^ := PByte(dest)^ xor c;
     inc(PByte(dest));
     c := c shr 8;
-    dec(count);
-  until count = 0;
+    dec(bytes);
+  until bytes = 0;
 end;
 
 procedure TLecuyer.FillShort(var dest: ShortString; size: PtrUInt);
