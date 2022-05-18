@@ -11239,7 +11239,7 @@ end;
 
 function {%H-}RaiseStreamError(Caller: TObject; const Context: shortstring): Longint;
 begin
-  raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller), Context]);
+  raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller)^, Context]);
 end;
 
 

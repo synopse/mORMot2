@@ -1240,6 +1240,79 @@ type
 
 {$endif USE_PROV_RSA_AES}
 
+  /// abstract parent class to TAesPkcs7Writer and TAesPkcs7Reader
+  TAesPkcs7Abstract = class(TStreamWithPositionAndSize)
+  protected
+    fStream: TStream;
+    fAes: TAesAbstract;
+    fBuf: RawByteString;    // internal buffer
+    fBufPos, fBufAvailable: integer;
+  public
+    /// initialize AES encryption/decryption stream for a given stream and key
+    // - aStream is typically a TMemoryStream or a TFileStream
+    // - a trailing random IV is generated/retrieved, unless an IV is supplied
+    // - AES is performed on an internal buffer of 128KB by default for efficiency
+    constructor Create(aStream: TStream; const key; keySizeBits: cardinal;
+      aesMode: TAesMode = mCtr; IV: PAesBlock = nil;
+      bufferSize: integer = 128 shl 10); overload; virtual;
+    /// initialize AES encryption/decryption stream for a given stream and password
+    // - will derivate the password using PBKDF2 over HMAC-SHA256, using lower
+    // 128-bit as AES-CTR-128 key, and the upper 128-bit as IV
+    // - you can customize the parameters if needed
+    constructor Create(aStream: TStream; const password: RawUtf8;
+      const salt: RawByteString = ''; rounds: cardinal = 1000;
+      aesMode: TAesMode = mCtr; bufferSize: integer = 128 shl 10); overload;
+    /// finalize the AES encryption stream
+    destructor Destroy; override;
+    /// position change is not allowed: this method will raise an exception
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    /// access to the associated stream, e.g. a TFileStream instance
+    property Stream: TStream
+      read fStream;
+  end;
+
+  /// multi-mode PKCS7 buffered AES encryption stream
+  // - output follow standard PKCS7 padding, with a trailing IV if needed,
+  // i.e. TAesAbstract.EncryptPkcs7 encoding
+  TAesPkcs7Writer = class(TAesPkcs7Abstract)
+  public
+    /// initialize the AES encryption stream into a given stream and a key
+    // - outStream is typically a TMemoryStream or a TFileStream
+    // - by default, a trailing random IV is generated, unless IV is supplied
+    constructor Create(outStream: TStream; const key; keySizeBits: cardinal;
+      aesMode: TAesMode = mCtr; IV: PAesBlock = nil;
+      bufferSize: integer = 128 shl 10); override;
+    /// finalize the AES encryption stream
+    // - internally call the Finish method
+    destructor Destroy; override;
+    /// reading some data is not allowed -> will raise an exception on call
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// append some data to the outStream, after encryption
+    function Write(const Buffer; Count: Longint): Longint; override;
+    /// write pending data to the Dest stream
+    // - should always be called before closing the outStream (some data may
+    // still be in the internal buffers)
+    procedure Finish;
+  end;
+
+  /// multi-mode PKCS7 buffered AES decryption stream
+  // - input should follow TAesPkcs7Writer, i.e. standard PKCS7 padding
+  TAesPkcs7Reader = class(TAesPkcs7Abstract)
+  protected
+    fStreamSize: Int64;
+  public
+    /// initialize the AES decryption stream from an intput stream and a key
+    // - inStream is typically a TMemoryStream or a TFileStream
+    // - inStream size will be checked for proper PKCS7 padding
+    // - by default, a trailing random IV is read, unless IV is supplied
+    constructor Create(inStream: TStream; const key; keySizeBits: cardinal;
+      aesMode: TAesMode = mCtr; IV: PAesBlock = nil;
+      bufferSize: integer = 128 shl 10); override;
+    /// read and decode some data from the inStream
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// writing some data is not allowed -> will raise an exception on call
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
 
 var
   /// the fastest AES implementation classes available on the system, per mode
@@ -1259,6 +1332,13 @@ const
   /// the AES chaining modes which supports AEAD process
   AES_AEAD = [mCfc, mOfc, mCtc, mGcm];
 
+  /// the AES chaining modes supported by TAesPkcs7Writer/TAesPkcs7Reader
+  // - ECB is unsafe and has no IV, and AEAD modes are out of context
+  // because we don't handle the additional AEAD information yet
+  AES_PKCS7WRITER = [mCbc .. mGcm] - AES_AEAD;
+
+
+function ToText(algo: TAesMode): PShortString; overload;
 
 /// OpenSSL-like Cipher name encoding of mormot.crypt.core AES engines
 // - return e.g. 'aes-128-cfb' or 'aes-256-gcm'
@@ -6396,6 +6476,223 @@ end;
 
 {$endif USE_PROV_RSA_AES}
 
+
+{ TAesPkcs7Abstract }
+
+var
+  AesModeIvUpdated: TAesAbstractClasses;
+
+constructor TAesPkcs7Abstract.Create(aStream: TStream; const key;
+  keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock; bufferSize: integer);
+begin
+  // IV is not used in this abstract class
+  if not (aesMode in AES_PKCS7WRITER) then
+    RaiseStreamError(self, ToText(aesMode)^);
+  dec(bufferSize, bufferSize and AesBlockMod); // fBuf[] have full AES blocks
+  if (aStream = nil) or
+     (bufferSize < 1024) then
+    RaiseStreamError(self, 'Create');
+  fBufAvailable := bufferSize;
+  fStream := aStream;
+  if AesModeIvUpdated[aesMode] = nil then
+    AesModeIvUpdated[aesMode] := TAesFast[aesMode];
+  fAes := AesModeIvUpdated[aesMode].Create(key, keySizeBits);
+  if not fAes.fIVUpdated then // Write() requires sequencial Encrypt() calls
+  begin
+    fAes.Free;
+    AesModeIvUpdated[aesMode] := TAesInternal[aesMode];
+    fAes := TAesInternal[aesMode].Create(key, keySizeBits); // fallback
+  end;
+end;
+
+const
+  TAESPKCS7WRITER_SALT = 'saltDefaultC1F942D';
+
+constructor TAesPkcs7Abstract.Create(aStream: TStream; const password: RawUtf8;
+  const salt: RawByteString; rounds: cardinal; aesMode: TAesMode;
+  bufferSize: integer);
+var
+  dig: THash256Rec;
+begin
+  Pbkdf2HmacSha256(password, salt, rounds, dig.b, TAESPKCS7WRITER_SALT);
+  Create(aStream, dig.Lo, 128, aesMode, @dig.Hi, bufferSize);
+  FillZero(dig.b);
+end;
+
+destructor TAesPkcs7Abstract.Destroy;
+begin
+  inherited Destroy;
+  fAes.Free;
+end;
+
+function TAesPkcs7Abstract.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+var
+  prev: Int64;
+begin
+  prev := fPosition;
+  result := inherited Seek(Offset, Origin);
+  if prev <> fPosition then
+    RaiseStreamError(self, 'Seek');
+end;
+
+
+{ TAesPkcs7Writer }
+
+constructor TAesPkcs7Writer.Create(outStream: TStream; const key;
+  keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock; bufferSize: integer);
+begin
+  inherited Create(outStream, key, keySizeBits, aesMode, IV, bufferSize);
+  SetLength(fBuf, fBufAvailable + SizeOf(TAesBlock)); // space for padding
+  if IV = nil then
+  begin
+    TAesPrng.Fill(fAes.fIV);
+    fStream.WriteBuffer(fAes.fIV, SizeOf(fAes.fIV)); // include IV as trailer
+  end
+  else
+    fAes.fIV := IV^; // IV is supplied by caller
+end;
+
+destructor TAesPkcs7Writer.Destroy;
+begin
+  if fBuf <> '' then
+    Finish;
+  inherited Destroy;
+end;
+
+function TAesPkcs7Writer.Read(var Buffer; Count: Longint): Longint;
+begin
+  result := RaiseStreamError(self, 'Read');
+end;
+
+function TAesPkcs7Writer.Write(const Buffer; Count: Longint): Longint;
+var
+  chunk: integer;
+begin
+  if fBuf = '' then
+    RaiseStreamError(self, 'Read');
+  result := 0;
+  repeat
+    chunk := fBufAvailable;
+    if chunk > Count then
+      chunk := Count;
+    if chunk <> 0 then
+    begin
+      MoveFast(PByteArray(@Buffer)[result], PByteArray(fBuf)[fBufPos], chunk);
+      inc(result, chunk);
+      inc(fPosition, chunk);
+      inc(fSize, chunk);
+      inc(fBufPos, chunk);
+      dec(fBufAvailable, chunk);
+      dec(Count, chunk);
+    end;
+    if fBufAvailable = 0 then
+    begin
+      if fBufPos and AesBlockMod <> 0 then
+        RaiseStreamError(self, 'Write: modulo');
+      fAes.Encrypt(pointer(fBuf), pointer(fBuf), fBufPos); // full AES blocks
+      fStream.WriteBuffer(pointer(fBuf)^, fBufPos);
+      fBufPos := 0;
+      fBufAvailable := length(fBuf) - SizeOf(TAesBlock); // for PKCS7 padding
+    end;
+  until Count = 0;
+end;
+
+procedure TAesPkcs7Writer.Finish;
+var
+  padding: integer;
+begin
+  if fBuf = '' then
+    RaiseStreamError(self, 'Finish twice');
+  padding := SizeOf(TAesBlock) - (fBufPos and AesBlockMod);
+  FillcharFast(PByteArray(fBuf)^[fBufPos], padding, padding);
+  inc(padding, fBufPos); // now we can encrypt as full AES blocks
+  fAes.Encrypt(pointer(fBuf), pointer(fBuf), padding);
+  fStream.WriteBuffer(pointer(fBuf)^, padding);
+  Finalize(fBuf); // allow Finish once
+end;
+
+
+{ TAesPkcs7Reader }
+
+constructor TAesPkcs7Reader.Create(inStream: TStream; const key;
+  keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock; bufferSize: integer);
+begin
+  fStreamSize := inStream.Size; // including padding bytes
+  if (fStreamSize and AesBlockMod <> 0) or
+     (fStreamSize < SizeOf(TAesBlock)) then
+    RaiseStreamError(self, 'Create: invalid size');
+  inherited Create(inStream, key, keySizeBits, aesMode, IV, bufferSize);
+  SetLength(fBuf, fBufAvailable);
+  fBufAvailable := 0;
+  if IV <> nil then
+    fAes.IV := IV^ // IV is supplied by caller
+  else
+  begin
+    inStream.ReadBuffer(fAes.fIV, SizeOf(fAes.IV));
+    dec(fStreamSize, SizeOf(fAes.IV));
+    if fStreamSize < SizeOf(TAesBlock) then
+      RaiseStreamError(self, 'Create: invalid size after IV');
+  end;
+end;
+
+function TAesPkcs7Reader.Read(var Buffer; Count: Longint): Longint;
+var
+  chunk, padding: integer;
+begin
+  result := 0;
+  if Count > fStreamSize then
+    Count := fStreamSize;
+  if Count <= 0 then
+    exit;
+  // now Count is the number of bytes available
+  repeat
+    if fBufAvailable = 0 then
+    begin
+      // we need to read and decode input stream into fBuf[]
+      fBufPos := 0;
+      fBufAvailable := fStream.Read(pointer(fBuf)^, length(fBuf));
+      if fBufAvailable = 0 then
+        break;
+      if fBufAvailable and AesBlockMod <> 0 then
+        RaiseStreamError(self, 'Read: invalid size modulo');
+      fAes.Decrypt(pointer(fBuf), pointer(fBuf), fBufAvailable);
+      if fBufAvailable >= fStreamSize then
+      begin
+        // last 16 bytes includes padding -> decode
+        padding := PByteArray(fBuf)[fBufAvailable - 1];
+        if (padding = 0) or
+           (padding > SizeOf(TAesBlock)) then
+          RaiseStreamError(self, 'Read: invalid padding');
+        dec(fBufAvailable, padding);
+      end;
+    end;
+    // read next possible chunk from fBuf[]
+    chunk := fBufAvailable;
+    if chunk > Count then
+      chunk := Count;
+    if chunk = 0 then
+      break;
+    MoveFast(PByteArray(fBuf)[fBufPos], PByteArray(@Buffer)[result], chunk);
+    inc(result, chunk);
+    inc(fPosition, chunk);
+    inc(fSize, chunk);
+    inc(fBufPos, chunk);
+    dec(fBufAvailable, chunk);
+    dec(fStreamSize, chunk);
+    dec(Count, chunk);
+  until Count = 0;
+end;
+
+function TAesPkcs7Reader.Write(const Buffer; Count: Longint): Longint;
+begin
+  result := RaiseStreamError(self, 'Write');
+end;
+
+
+function ToText(algo: TAesMode): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TAesMode), ord(algo));
+end;
 
 const
   AESMODESTXT4: PAnsiChar =

@@ -48,6 +48,8 @@ type
     procedure _RC4;
     /// 32-bit, 64-bit and 128-bit hashing functions including AesNiHash variants
     procedure Hashes;
+    /// stream-oriented cryptography
+    procedure Streams;
     /// Base64 encoding/decoding functions
     procedure _Base64;
     {$ifndef PUREMORMOT2}
@@ -1315,6 +1317,102 @@ begin
     Check(Hash128Test(P, @crc32c128, msg), msg{%H-});
     if Assigned(AesNiHash128) then
       Check(Hash128Test(P, @AesNiHash128, msg), msg);
+  end;
+end;
+
+procedure TTestCoreCrypto.Streams;
+var
+  w: TAesPkcs7Writer;
+  r: TAesPkcs7Reader;
+  data, data2: array[0..199] of Int64; // 1600 bytes > buffer of 1024 bytes
+  mem: TRawByteStringStream;
+  i, j: PtrInt;
+  key, iv: THash128;
+  piv: PAesBlock;
+  m: TAesMode;
+  withiv: boolean;
+  aes: TAesAbstract;
+  res, dec: RawByteString;
+begin
+  FillZero(key);
+  FillZero(iv);
+  for i := 0 to high(data) do
+  begin
+    data[i] := i * 777;
+    iv[0] := i;
+    for m := low(m) to high(m) do
+      for withiv := false to true do
+      begin
+        if not (m in AES_PKCS7WRITER) then
+          continue;
+        if withiv then
+          piv := nil  // generate random IV at output trail
+        else
+          piv := @iv; // we will supply the IV to the decoder
+        mem := TRawByteStringStream.Create;
+        w := TAesPkcs7Writer.Create(mem, key, 128, m, piv, 1024);
+        try
+          for j := 0 to i - 1 do
+            CheckEqual(w.Write(data[j], 8), 8); // write by 8 bytes chunks
+          w.Finish;
+          res := mem.DataString;
+        finally
+          w.Free;
+          mem.Free;
+        end;
+        Check(length(res) > i + 1);
+        if not withiv then // the random IV make res genuine
+        begin
+          mem := TRawByteStringStream.Create;
+          w := TAesPkcs7Writer.Create(mem, key, 128, m, piv, 1024);
+          try
+            CheckEqual(w.Write(data[0], i shl 3), i shl 3, 'write at once');
+            w.Finish;
+            Check(mem.DataString = res, 'atonce');
+          finally
+            w.Free;
+            mem.Free;
+          end;
+        end;
+        aes := TAesFast[m].Create(key);
+        try
+          if not withiv then
+            aes.IV := iv;
+          dec := aes.DecryptPkcs7(res, withiv, {raiseonerror=}false);
+          if not CheckFailed(length(dec) = i shl 3) then
+            Check(CompareMem(pointer(dec), @data, length(dec)));
+        finally
+          aes.Free;
+        end;
+        mem := TRawByteStringStream.Create(res);
+        r := TAesPkcs7Reader.Create(mem, key, 128, m, piv, 1024);
+        try
+          FillCharFast(data2, SizeOf(data2), 7);
+          if i = 0 then
+            CheckEqual(r.Read(data2[0], 8), 0)
+          else
+            for j := 0 to i - 1 do
+              CheckEqual(r.Read(data2[j], 8), 8); // read by 8 bytes chunks
+          CheckEqual(r.Read(data2[0], 8), 0, 'after');
+          CheckEqual(mem.Position, mem.Size);
+          Check(CompareMem(@data, @data2, i shl 3));
+        finally
+          r.Free;
+          mem.Free;
+        end;
+        mem := TRawByteStringStream.Create(res);
+        r := TAesPkcs7Reader.Create(mem, key, 128, m, piv, 1024);
+        try
+          FillCharFast(data2, SizeOf(data2), 1);
+          CheckEqual(r.Read(data2, SizeOf(data2) * 2), i shl 3);
+          CheckEqual(r.Read(data2[0], 8), 0, 'after2');
+          CheckEqual(mem.Position, mem.Size);
+          Check(CompareMem(@data, @data2, i shl 3));
+        finally
+          r.Free;
+          mem.Free;
+        end;
+      end;
   end;
 end;
 
