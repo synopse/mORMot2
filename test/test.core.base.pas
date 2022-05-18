@@ -447,6 +447,7 @@ const
   end;
 
 var
+  gen, ref: TLecuyer;
   Bits: array[byte] of byte;
   Bits64: Int64 absolute Bits;
   Si, i: integer;
@@ -481,46 +482,49 @@ begin
     Check(not GetBit(Bits, i));
     Check(not GetBitPtr(@Bits, i));
   end;
-  RandSeed := 10; // will reproduce the same Random() values
+  ref.SeedGenerator(0); // will reproduce the same gen.Next values
+  gen := ref;
   for i := 1 to 100 do
   begin
-    Si := Random(high(Bits)); // RandSeed above: no Random32()
+    Si := gen.Next(SizeOf(Bits) shl 3);
     SetBit(Bits, Si);
     Check(GetBit(Bits, Si));
     Check(GetBitPtr(@Bits, Si));
   end;
-  RandSeed := 10;
+  gen.SeedGenerator(0); // rewind
   for i := 1 to 100 do
-    Check(GetBit(Bits, Random(high(Bits))));
-  RandSeed := 10;
+    Check(GetBit(Bits, gen.Next(SizeOf(Bits) shl 3)));
+  gen := ref; // rewind
   for i := 1 to 100 do
   begin
-    Si := Random(high(Bits));
+    Si := gen.Next(SizeOf(Bits) shl 3);
     UnSetBit(Bits, Si);
     Check(not GetBit(Bits, Si));
     Check(not GetBitPtr(@Bits, Si));
   end;
+  Check(IsZero(@Bits, SizeOf(Bits)));
   for i := 0 to high(Bits) * 8 + 7 do
     Check(not GetBit(Bits, i));
   for i := 0 to 63 do
     Check(not GetBit64(Bits64, i));
-  RandSeed := 10;
+  gen.SeedGenerator(0);
   for i := 1 to 30 do
   begin
-    Si := Random(63);
+    Si := gen.Next(64);
     SetBit64(Bits64, Si);
     Check(GetBit64(Bits64, Si));
   end;
-  RandSeed := 10;
+  gen := ref;
   for i := 1 to 30 do
-    Check(GetBit64(Bits64, Random(63)));
-  RandSeed := 10;
+    Check(GetBit64(Bits64, gen.Next(64)));
+  gen := ref;
   for i := 1 to 30 do
   begin
-    Si := Random(63);
+    Si := gen.Next(64);
     UnSetBit64(Bits64, Si);
     Check(not GetBit64(Bits64, Si));
   end;
+  Check(IsZero(@Bits, SizeOf(Bits)));
   for i := 0 to 63 do
     Check(not GetBit64(Bits64, i));
   c := 1;
@@ -533,7 +537,6 @@ begin
     Check(GetAllBits(ALLBITS_CARDINAL[i], i));
     c := c or (1 shl i);
   end;
-  Randomize; // we fixed the RandSeed value above -> get true random now
 end;
 
 procedure TTestCoreBase.Curr64;
@@ -3281,12 +3284,17 @@ begin
       c2 := HmacCrc32c(@c1, pointer(S), 4, length(S));
       hmac32.Init(@c1, 4);
       hmac32.Update(pointer(S), length(S));
-      check(hmac32.Done = c2);
+      CheckEqual(hmac32.Done, c2, 'hmac32');
       s2 := S;
       SymmetricEncrypt(i, s2);
       check(s2 <> S);
       SymmetricEncrypt(i, s2);
-      check(s2 = S);
+      CheckEqual(s2, S, 'SymmetricEncrypt');
+      s2 := S;
+      LecuyerEncrypt(i, s2);
+      Check(s2 <> S);
+      LecuyerEncrypt(i, s2);
+      CheckEqual(s2, S, 'LecuyerEncrypt');
     end;
   Test(crc32creference, 'pas');
   Test(crc32cfast, 'fast');
