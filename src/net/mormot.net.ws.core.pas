@@ -508,7 +508,7 @@ type
     // can specify an URI to limit the protocol upgrade to a single resource
     // - will create a TProtocolAes or TEcdheProtocol instance, corresponding to
     // the supplied aKey and aServer values, to secure the transmission using
-    // a symmetric or assymetric algorithm
+    // a symmetric or assymmetric algorithm
     // - SynLZ compression is enabled by default, unless aCompressed is false
     constructor Create(const aUri: RawUtf8; aServer: boolean;
       const aKey: RawUtf8; aSettings: PWebSocketProcessSettings;
@@ -1161,7 +1161,7 @@ begin
     include(fConnectionFlags, hsrSecured)
   else
   begin
-    // 2. aKey no 'a=...'/'pw#xx.private' layout -> use symetric TProtocolAes
+    // 2. aKey no 'a=...'/'pw#xx.private' layout -> use symmetric TProtocolAes
     if aSettings.AesRounds = 0 then
       // mORMot 1.18 deprecated password derivation
       Sha256Weak(aKey, key.b)

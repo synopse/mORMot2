@@ -817,7 +817,7 @@ type
     function Clone: IProtocol;
   end;
 
-  /// implements a secure protocol using symetric AES encryption
+  /// implements a secure protocol using symmetric AES encryption
   // - as used e.g. by 'synopsebinary' WebSockets protocol
   // - a secret password is shared between client and server
   // - this class will maintain two TAesAbstract instances, one for encryption

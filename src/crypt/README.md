@@ -6,7 +6,7 @@ This folder hosts the Cryptographic Units of the *mORMot* Open Source framework,
 
 ## Cryptography
 
-Those units implement hashing, message digests, encryption, and asymetric cryptography.
+Those units implement hashing, message digests, encryption, and asymmetric cryptography.
 
 They are written in a cross-platform way in mind, with a very efficient stand-alone version (using optimized pascal code and assembly), or via an external OpenSSL library.
 
@@ -73,7 +73,7 @@ High-Performance Cryptographic Features using *OpenSSL* 1.1.1
 - *OpenSSL* Cryptographic Pseudorandom Number Generator (CSPRNG)
 - AES Cypher/Uncypher in various Modes
 - Hashers and Signers OpenSSL Wrappers
-- *OpenSSL* Asymetric Cryptography
+- *OpenSSL* Asymmetric Cryptography
 - JWT Implementation using any OpenSSL Algorithm
 - Register *OpenSSL* to our General Cryptography Catalog
 

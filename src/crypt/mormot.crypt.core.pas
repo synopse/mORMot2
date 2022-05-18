@@ -993,7 +993,7 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
-  /// AEAD combination of AES and 256-bit MAC with symetrical Encrypt/Decrypt
+  /// AEAD combination of AES and 256-bit MAC with symmetrical Encrypt/Decrypt
   TAesSymCrc = class(TAesAbstractAead)
   public
     /// perform the AES uncypher calling Encrypt()
