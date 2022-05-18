@@ -1463,8 +1463,8 @@ var
               (PInteger(pointer(Data))^ = IntArray[i]));
         V2.IDValue := IntArray[i]; // debug use - do NOT set ID in your programs!
         check(V2.DataAsHex(ClientDist) = BinToHex(Data));
-        a := Random;
-        b := Random;
+        a := RandomDouble;
+        b := RandomDouble;
         CheckSame(TOrmPeople.Sum(Client, a, b, false), a + b);
         CheckSame(TOrmPeople.Sum(Client, a, b, true), a + b);
       end;
@@ -1634,8 +1634,8 @@ begin
                 (PInteger(pointer(Data))^ = IntArray[i]));
           V2.IDValue := IntArray[i]; // debug use - do NOT set ID in your programs!
           check(V2.DataAsHex(Client) = BinToHex(Data));
-          a := Random;
-          b := Random;
+          a := RandomDouble;
+          b := RandomDouble;
           check(SameValue(TOrmPeople.Sum(Client, a, b, false), a + b, 1E-10));
           check(SameValue(TOrmPeople.Sum(Client, a, b, true), a + b, 1E-10));
         end;
@@ -1812,7 +1812,7 @@ begin
                 for i := 0 to aStatic.Count - 1 do
                 begin
                   check(ClientDist.Orm.Retrieve(aStatic.ID[i], V));
-                  V.YearOfBirth := Random(MaxInt) - Random(MaxInt);
+                  V.YearOfBirth := Int64(Random32) - Random32;
                   check(ClientDist.Orm.Update(V));
                   check(ClientDist.Orm.Retrieve(aStatic.ID[i], V));
                   check(V.SameRecord(aStatic.Items[i]));
