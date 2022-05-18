@@ -11041,7 +11041,7 @@ begin
   R.Right := MF.Width;
   R.Bottom := MF.Height;
   if ScaleY = 0 then
-    ScaleY := ScaleX; // if ScaleY is ommited -> assume symetric coordinates
+    ScaleY := ScaleX; // if ScaleY is ommited -> assume symmetric coordinates
   E := TPdfEnum.Create(C);
   try
     C.fOffsetXDef := XOff;

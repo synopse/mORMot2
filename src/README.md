@@ -20,7 +20,7 @@ The source code tree is split into the following sub-folders:
 
 - [`core`](core) for low-level shared components like text, RTTI, JSON, compression;
 - [`lib`](lib) for external third-party libraries like *zlib* or *openssl*;
-- [`crypt`](crypt) for efficient symetric/asymetric cryptography;
+- [`crypt`](crypt) for efficient symmetric/asymmetric cryptography;
 - [`net`](net) for the client/server communication layer;
 - [`db`](db) for our *SQLite3* kernel, and SQL/NoSQL direct access;
 - [`rest`](rest) for the RESTful client/server processing;

@@ -15,6 +15,6 @@ The `ecc` command-line tool manages certificate-based public-key cryptography us
 - Safe key chaining using `chain`/`chainall`
 - ECDSA digital signature using `sign`/`verify`
 - ECIES encryption using `crypt`/`decrypt`/`infocrypt`
-- Symetric encryption via `aeadcrypt`/`aeaddecrypt`
+- Symmetric encryption via `aeadcrypt`/`aeaddecrypt`
 - Centralized passwords management via `cheatinit`/`cheat`
 
