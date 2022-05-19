@@ -1353,9 +1353,11 @@ begin
         w := TAesPkcs7Writer.Create(mem, key, 128, m, piv, 1024);
         try
           for j := 0 to i - 1 do
-            CheckEqual(w.Write(data[j], 8), 8); // write by 8 bytes chunks
+            CheckEqual(w.Write(data[j], 8), 8, 'write by 8 bytes chunks');
           w.Finish;
           res := mem.DataString;
+          CheckEqual(mem.Position, mem.Size);
+          CheckEqual(mem.Size, length(res));
         finally
           w.Free;
           mem.Free;
@@ -1368,6 +1370,7 @@ begin
           try
             CheckEqual(w.Write(data[0], i shl 3), i shl 3, 'write at once');
             w.Finish;
+            CheckEqual(mem.Size, length(res));
             Check(mem.DataString = res, 'atonce');
           finally
             w.Free;
@@ -1392,7 +1395,7 @@ begin
             CheckEqual(r.Read(data2[0], 8), 0)
           else
             for j := 0 to i - 1 do
-              CheckEqual(r.Read(data2[j], 8), 8); // read by 8 bytes chunks
+              CheckEqual(r.Read(data2[j], 8), 8, 'read by 8 bytes chunks');
           CheckEqual(r.Read(data2[0], 8), 0, 'after');
           CheckEqual(mem.Position, mem.Size);
           Check(CompareMem(@data, @data2, i shl 3));

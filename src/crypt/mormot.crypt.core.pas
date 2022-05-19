@@ -2646,12 +2646,13 @@ type
       inStream, outStream: TStream; bIn, bOut: pointer; OriginalLen: cardinal = 0): integer;
   end;
 
-  /// AES encryption stream
+  /// AES encryption stream (deprecated)
   // - encrypt the Data on the fly, in a compatible way with AES() - last bytes
   // are coded with XOR (not compatible with TAesFull format)
   // - not optimized for small blocks -> ok if used AFTER TBZCompressor/TZipCompressor
   // - warning: Write() will crypt Buffer memory in place -> use AFTER T*Compressor
-  // - will use unsafe direct AES-ECB chain mode, so is considered deprecated
+  // - will use unsafe direct AES-ECB chain mode, so is considered deprecated:
+  // consider TAesPkcs7Writer and TAesPkcs7Reader instead
   TAesWriteStream = class(TStream)
   public
     Adler, // CRC from uncrypted compressed data - for Key check
@@ -2682,31 +2683,31 @@ type
   end;
 
 
-/// direct Encrypt/Decrypt of data using the TAes class
+/// direct Encrypt/Decrypt of data using the TAes class (deprecated)
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
 // - will use unsafe direct AES-ECB chain mode, so is marked as deprecated
 procedure AES(const Key; KeySize: cardinal; buffer: pointer; Len: integer;
   Encrypt: boolean); overload; deprecated;
 
-/// direct Encrypt/Decrypt of data using the TAes class
+/// direct Encrypt/Decrypt of data using the TAes class (deprecated)
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
 // - will use unsafe direct AES-ECB chain mode, so is marked as deprecated
 procedure AES(const Key; KeySize: cardinal; bIn, bOut: pointer; Len: integer;
   Encrypt: boolean); overload; deprecated;
 
-/// direct Encrypt/Decrypt of data using the TAes class
+/// direct Encrypt/Decrypt of data using the TAes class (deprecated)
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
 // - will use unsafe direct AES-ECB chain mode, so is marked as deprecated
 function AES(const Key; KeySize: cardinal; const s: RawByteString;
   Encrypt: boolean): RawByteString; overload; deprecated;
 
-/// direct Encrypt/Decrypt of data using the TAes class
+/// direct Encrypt/Decrypt of data using the TAes class (deprecated)
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
 // - will use unsafe direct AES-ECB chain mode, so is marked as deprecated
 function AES(const Key; KeySize: cardinal; buffer: pointer; Len: cardinal;
   Stream: TStream; Encrypt: boolean): boolean; overload; deprecated;
 
-/// AES and XOR encryption using the TAesFull format
+/// AES and XOR encryption using the TAesFull format (deprecated)
 // - outStream will be larger/smaller than Len (full AES encrypted)
 // - if KeySize is not in [128,192,256], will use a naive simple Xor Cypher
 // - returns true if OK
@@ -2715,7 +2716,7 @@ function AESFull(const Key; KeySize: cardinal;
   bIn: pointer; Len: integer; outStream: TStream; Encrypt: boolean;
   OriginalLen: cardinal = 0): boolean; overload; deprecated;
 
-/// AES and XOR encryption using the TAesFull format
+/// AES and XOR encryption using the TAesFull format (deprecated)
 // - bOut must be at least bIn+32/Encrypt bIn-16/Decrypt
 // - if KeySize is not in [128,192,256], will use a naive simple Xor Cypher
 // - returns outLength, -1 if error
@@ -2723,35 +2724,35 @@ function AESFull(const Key; KeySize: cardinal;
 function AESFull(const Key; KeySize: cardinal; bIn, bOut: pointer; Len: integer;
   Encrypt: boolean; OriginalLen: cardinal = 0): integer; overload; deprecated;
 
-/// AES and XOR decryption check using the TAesFull format
+/// AES and XOR decryption check using the TAesFull format (deprecated)
 // - return true if the beginning of buff contains some data AESFull-encrypted
 // with this Key
 // - if not KeySize in [128,192,256], will always return true
 // - will use unsafe direct AES-ECB chain mode, so is marked as deprecated
 function AESFullKeyOK(const Key; KeySize: cardinal; buff: pointer): boolean; deprecated;
 
-/// AES encryption using the TAes format with a supplied SHA-256 password
+/// AES encryption using the TAes format with a supplied password (deprecated)
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
 // - will use unsafe direct AES-ECB chain mode and weak direct SHA-256 (HMAC-256
 // is preferred), so is marked as deprecated
 procedure AESSHA256(Buffer: pointer; Len: integer; const Password: RawByteString;
   Encrypt: boolean); overload; deprecated;
 
-/// AES encryption using the TAes format with a supplied SHA-256 password
+/// AES encryption using the TAes format with a supplied password (deprecated)
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
 // - will use unsafe direct AES-ECB chain mode and weak direct SHA-256 (HMAC-256
 // is preferred), so is marked as deprecated
 procedure AESSHA256(bIn, bOut: pointer; Len: integer; const Password: RawByteString;
   Encrypt: boolean); overload; deprecated;
 
-/// AES encryption using the TAes format with a supplied SHA-256 password
+/// AES encryption using the TAes format with a supplied password (deprecated)
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
 // - will use unsafe direct AES-ECB chain mode and weak direct SHA-256 (HMAC-256
 // is preferred), so is marked as deprecated
 function AESSHA256(const s, Password: RawByteString;
   Encrypt: boolean): RawByteString; overload; deprecated;
 
-/// AES encryption using the TAesFull format with a supplied SHA-256 password
+/// AES encryption using the TAesFull format with a supplied password (deprecated)
 // - outStream will be larger/smaller than Len: this is a full AES version with
 // a triming TAesFullHeader at the beginning
 // - will use unsafe direct AES-ECB chain mode and weak direct SHA-256 (HMAC-256
@@ -6569,7 +6570,7 @@ var
   chunk: integer;
 begin
   if fBuf = '' then
-    RaiseStreamError(self, 'Read');
+    RaiseStreamError(self, 'Write');
   result := 0;
   repeat
     chunk := fBufAvailable;
@@ -6603,7 +6604,7 @@ var
 begin
   if fBuf = '' then
     RaiseStreamError(self, 'Finish twice');
-  padding := SizeOf(TAesBlock) - (fBufPos and AesBlockMod);
+  padding := SizeOf(TAesBlock) - (fBufPos and AesBlockMod); // PKCS7 padding
   FillcharFast(PByteArray(fBuf)^[fBufPos], padding, padding);
   inc(padding, fBufPos); // now we can encrypt as full AES blocks
   fAes.Encrypt(pointer(fBuf), pointer(fBuf), padding);
