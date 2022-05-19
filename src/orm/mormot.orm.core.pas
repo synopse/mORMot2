@@ -10156,8 +10156,8 @@ end;
 
 { TOrmModelProperties }
 
-constructor TOrmModelProperties.Create(aModel: TOrmModel; aTable:
-  TOrmClass; aKind: TOrmVirtualKind);
+constructor TOrmModelProperties.Create(aModel: TOrmModel; aTable: TOrmClass;
+  aKind: TOrmVirtualKind);
 var
   f: PtrInt;
 begin // similar to TOrmPropertiesMapping.ComputeSql

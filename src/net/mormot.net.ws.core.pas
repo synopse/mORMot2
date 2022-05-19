@@ -934,7 +934,7 @@ type
   // - then any incoming focText/focBinary events will trigger this callback
   // - eventually, a focConnectionClose will notify the connection ending
   TOnWebSocketProtocolChatIncomingFrame = procedure(
-    Sender: TWebCrtSocketProcess;
+    Sender: TWebSocketProcess;
     const Frame: TWebSocketFrame) of object;
 
   /// simple chatting protocol, allowing to receive and send WebSocket frames
@@ -956,10 +956,10 @@ type
     /// allows to send a message over the wire to a specified connection
     // - a temporary copy of the Frame content will be made for safety
     // - Sender identify the connection, typically from OnIncomingFrame callback
-    function SendFrame(Sender: TWebCrtSocketProcess;
+    function SendFrame(Sender: TWebSocketProcess;
        const Frame: TWebSocketFrame): boolean;
     /// allows to send a JSON message over the wire to a specified connection
-    function SendFrameJson(Sender: TWebCrtSocketProcess;
+    function SendFrameJson(Sender: TWebSocketProcess;
        const Json: RawUtf8): boolean;
     /// you can assign an event to this property to be notified of incoming messages
     property OnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame
@@ -3203,16 +3203,13 @@ procedure TWebSocketProtocolChat.ProcessIncomingFrame(Sender: TWebSocketProcess;
 begin
   if Assigned(OnInComingFrame) then
   try
-    if Sender.InheritsFrom(TWebCrtSocketProcess) then
-      OnIncomingFrame(TWebCrtSocketProcess(Sender), request)
-    else
-      OnIncomingFrame(nil, request);
+    OnIncomingFrame(Sender, request);
   except
     // ignore any exception in the callback
   end;
 end;
 
-function TWebSocketProtocolChat.SendFrame(Sender: TWebCrtSocketProcess;
+function TWebSocketProtocolChat.SendFrame(Sender: TWebSocketProcess;
   const frame: TWebSocketFrame): boolean;
 var
   tmp: TWebSocketFrame; // SendFrame() may change frame content (e.g. mask)
@@ -3229,7 +3226,7 @@ begin
   result := Sender.SendFrame(tmp)
 end;
 
-function TWebSocketProtocolChat.SendFrameJson(Sender: TWebCrtSocketProcess;
+function TWebSocketProtocolChat.SendFrameJson(Sender: TWebSocketProcess;
   const Json: RawUtf8): boolean;
 var
   frame: TWebSocketFrame;
