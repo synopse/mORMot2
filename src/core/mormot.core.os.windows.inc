@@ -1633,11 +1633,13 @@ procedure ConsoleWaitForEnterKey;
 var
   msg: TMsg;
 begin
-  if IsMultiThread and
-     (GetCurrentThreadID = MainThreadID) then
+  if GetCurrentThreadID = MainThreadID then
     while not ConsoleKeyPressed(VK_RETURN) do
     begin
-      CheckSynchronize{$ifndef DELPHI6OROLDER}(100){$endif};
+      if IsMultiThread then
+        CheckSynchronize{$ifndef DELPHI6OROLDER}(100){$endif}
+      else
+        Sleep(100);
       while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
         if msg.Message = WM_QUIT then
           exit

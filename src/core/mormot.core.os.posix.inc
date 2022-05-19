@@ -1326,10 +1326,12 @@ procedure ConsoleWaitForEnterKey;
 var
   c: AnsiChar;
 begin
-  if IsMultiThread and
-     (GetCurrentThreadID = MainThreadID) then
+  if GetCurrentThreadID = MainThreadID then
     repeat
-      CheckSynchronize(100);
+      if IsMultiThread then
+        CheckSynchronize(100)
+      else
+        Sleep(100);
       if UnixKeyPending then
         repeat
           c := #0;
