@@ -881,7 +881,7 @@ var
 begin
   datetime := WindowsFileTimeToDateTime(WinTime);
   result := (datetime <> 0) and
-            (FileSetDate(Dest, DateTimeToFileDate(datetime)) = 0);
+            (FileSetDate(Dest, DateTimeToFileDate(datetime)) = 0); // with LocalToEpoch()
 end;
 
 function FileAgeToWindowsTime(const FileName: TFileName): integer;

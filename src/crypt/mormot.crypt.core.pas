@@ -1314,6 +1314,23 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
+
+/// cypher/decypher any file using AES and PKCS7 padding, from a key buffer
+// - just a wrapper around TAesPkcs7Writer/TAesPkcs7Reader and TFileStream
+// - by default, a trailing random IV is expected, unless IV is supplied
+// - if src=dst a temporary .partial file is created, then will replace src
+// - raise an exception on error (e.g. missing or invalid input file)
+procedure AesPkcs7File(const src, dst: TFileName; encrypt: boolean; const key;
+  keySizeBits: cardinal; aesMode: TAesMode = mCtr; IV: PAesBlock = nil); overload;
+
+/// cypher/decypher any file using AES and PKCS7 padding, from a password
+// - just a wrapper around TAesPkcs7Writer/TAesPkcs7Reader and TFileStream
+// - will derivate the password using PBKDF2 over HMAC-SHA256, using lower
+// 128-bit as AES-CTR-128 key, and the upper 128-bit as IV
+procedure AesPkcs7File(const src, dst: TFileName; encrypt: boolean;
+  const password: RawUtf8; const salt: RawByteString = '';
+  rounds: cardinal = 1000; aesMode: TAesMode = mCtr); overload;
+
 var
   /// the fastest AES implementation classes available on the system, per mode
   // - mormot.crypt.openssl may register its own classes, e.g. TAesGcmOsl
@@ -6619,10 +6636,10 @@ constructor TAesPkcs7Reader.Create(inStream: TStream; const key;
   keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock; bufferSize: integer);
 begin
   fStreamSize := inStream.Size; // including padding bytes
+  inherited Create(inStream, key, keySizeBits, aesMode, IV, bufferSize);
   if (fStreamSize and AesBlockMod <> 0) or
      (fStreamSize < SizeOf(TAesBlock)) then
     RaiseStreamError(self, 'Create: invalid size');
-  inherited Create(inStream, key, keySizeBits, aesMode, IV, bufferSize);
   SetLength(fBuf, fBufAvailable);
   fBufAvailable := 0;
   if IV <> nil then
@@ -6689,6 +6706,82 @@ begin
   result := RaiseStreamError(self, 'Write');
 end;
 
+procedure AesPkcs7File(const src, dst: TFileName; encrypt: boolean; const key;
+  keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock);
+var
+  fn: TFileName;
+  s, d: TFileStream;
+  siz: Int64;
+  aes: TAesPkcs7Abstract;
+begin
+  siz := FileSize(src);
+  if siz <= 0 then
+    raise ESynCrypto.CreateUtf8('AesPkcs7File: no %', [src]);
+  if siz > 1 shl 20 then
+    siz := 1 shl 20
+  else
+    inc(siz, 512); // allocate what we need for a small file < 1MB
+  fn := dst;
+  if dst = src then
+  begin
+    fn := dst + '.partial'; // allow in-place replacement
+    if FileExists(fn) then
+      raise ESynCrypto.CreateUtf8('AesPkcs7File: already existing %', [fn]);
+  end;
+  try
+    s := TFileStream.Create(src, fmOpenRead or fmShareDenyNone);
+    try
+      d := TFileStream.Create(fn, fmCreate);
+      try
+        if encrypt then
+        begin
+          aes := TAesPkcs7Writer.Create(d, key, keySizeBits, aesMode, IV, siz);
+          try
+            aes.CopyFrom(s, 0);
+            TAesPkcs7Writer(aes).Finish; // write padding
+          finally
+            aes.Free;
+          end;
+        end
+        else
+        begin
+          aes := TAesPkcs7Reader.Create(s, key, keySizeBits, aesMode, IV, siz);
+          try
+            d.CopyFrom(aes, 0);
+          finally
+            aes.Free;
+          end;
+        end;
+      finally
+        d.Free;
+      end;
+      FileSetDateFrom(fn, s.Handle); // copy original file date
+    finally
+      s.Free;
+    end;
+    if dst = src then // in-place replacement from .partial file
+      if not DeleteFile(dst) or
+         not RenameFile(fn, dst) then
+        raise ESynCrypto.CreateUtf8('AesPkcs7File: error renaming %', [fn]);
+  except
+    if fn <> dst then
+      DeleteFile(fn); // remove any remaining .partial file on error
+  end;
+end;
+
+procedure AesPkcs7File(const src, dst: TFileName; encrypt: boolean;
+  const password: RawUtf8; const salt: RawByteString; rounds: cardinal;
+  aesMode: TAesMode);
+var
+  dig: THash256Rec; // see TAesPkcs7Abstract.Create() oeverload
+begin
+  Pbkdf2HmacSha256(password, salt, rounds, dig.b, TAESPKCS7WRITER_SALT);
+  try
+    AesPkcs7File(src, dst, encrypt, dig.Lo, 128, aesMode, @dig.Hi);
+  finally
+    FillZero(dig.b);
+  end;
+end;
 
 function ToText(algo: TAesMode): PShortString;
 begin
