@@ -2852,7 +2852,7 @@ end;
 function SockBase64Encode(const s: RawUtf8): RawUtf8;
 // to avoid linking mormot.core.buffers for BinToBase64()
 var
-  len: integer;
+  len: cardinal;
 begin
   result:='';
   len := length(s);
@@ -3135,7 +3135,7 @@ begin
   // in case started by systemd (port=''), listening socket is created by
   // another process and do not interrupt when it got a signal. So we need to
   // set a timeout to unlock accept() periodically and check for termination
-  if aAddress = '' then // external socket
+  if aAddress = '' then     // external socket
     ReceiveTimeout := 1000; // unblock accept every second
   {$endif OSLINUX}
 end;

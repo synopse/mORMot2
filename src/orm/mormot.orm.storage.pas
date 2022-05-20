@@ -3394,7 +3394,7 @@ begin
     try
       // check header: expect same exact RTTI
       R.VarUtf8(s);
-      if (s <> '') and // 0='' in recent mORMot 1.18 format
+      if (s <> '') and // 0='' in recent mORMot format
          not IdemPropNameU(s, 'TSqlRecordProperties') then // old buggy format
         exit;
       if not fStoredClassRecordProps.CheckBinaryHeader(R) then
