@@ -327,43 +327,52 @@ type
     function DecompressPartial(Comp, Partial: PAnsiChar; CompLen,
       PartialLen, PartialLenMax: integer): integer;
     /// compress a Stream content using this compression algorithm
-    // - source Stream is not split into 128 MB chunks, as with FileCompress,
-    // but directly compressed and including Source and Dest checksums
-    // - you should specify a Magic number to be used to identify the compressed
-    // Stream format
+    // - source Stream may be read and compressed by ChunkBytes = 4MB chunks
+    // - a 32-bit Magic number identifies the compressed content chunks
+    // - WithTrailer would finish the Dest output with a trailer block to locate
+    // the position of the compressed data, to be used e.g. when it is appended
     // - follow the StreamSynLZ() deprecated function format, if ForceHash32=true
-    // so that Hash32() is used instead of the AlgoHash() of this instance
-    function StreamCompress(Source: TCustomMemoryStream; Dest: TStream;
-      Magic: cardinal; ForceHash32: boolean = false): integer; overload;
+    // and WithTrailer=true so that Hash32() is used instead of AlgoHash()
+    function StreamCompress(Source, Dest: TStream; Magic: cardinal;
+      ForceHash32: boolean = false; WithTrailer: boolean = true;
+      ChunkBytes: PtrInt = 4 shl 20): Int64; overload;
     /// compress a Stream content using this compression algorithm into a file
-    // - source Stream is not split into 128 MB chunks, as with FileCompress,
-    // but directly compressed and including Source and Dest checksums
+    // - just a wrapper around the overloaded StreamCompress() method
+    function StreamCompress(Source: TStream; const DestFile: TFileName;
+      Magic: cardinal; ForceHash32: boolean = false;
+      WithTrailer: boolean = true; ChunkBytes: PtrInt = 4 shl 20): Int64; overload;
+    /// uncompress a Stream previously compressed via StreamCompress()
     // - you should specify a Magic number to be used to identify the compressed
     // Stream format
-    // - follow the StreamSynLZ() deprecated function format, if ForceHash32=true
-    // so that Hash32() is used instead of the AlgoHash() of this instance
-    function StreamCompress(Source: TCustomMemoryStream; const DestFile: TFileName;
-      Magic: cardinal; ForceHash32: boolean = false): integer; overload;
-    /// uncompress a Stream previoulsy compressed via StreamCompress()
-    // - you should specify a Magic number to be used to identify the compressed
-    // Stream format
+    // - if Source is not positioned at compressed data beginning, a trailer is
+    // searched at the end of the Source stream to get the proper location
+    // - returns true on success, and false on decoding error - but some chunks
+    // may have been decompressed in Dest even if false is returned
+    function StreamUnCompress(Source, Dest: TStream; Magic: cardinal;
+      ForceHash32: boolean = false): boolean; overload;
+    /// uncompress a Stream previously compressed via StreamCompress()
+    // - return nil on decompression error, or a new TMemoryStream instance
     // - follow the StreamUnSynLZ() deprecated function format, if ForceHash32=true
     // so that Hash32() is used instead of the AlgoHash() of this instance
     function StreamUnCompress(Source: TStream; Magic: cardinal;
       ForceHash32: boolean = false): TMemoryStream; overload;
-    /// uncompress a File previoulsy compressed via StreamCompress() into a Stream
+    /// uncompress a File previously compressed via StreamCompress() as TStream
     // - you should specify a Magic number to be used to identify the compressed
     // Stream format
     // - follow the StreamUnSynLZ() deprecated function format, if ForceHash32=true
     // so that Hash32() is used instead of the AlgoHash() of this instance
+    // - if the compressed data is not at Source file beginning, a trailer is
+    // searched at the end of the Source content to get the proper location
     function StreamUnCompress(const Source: TFileName; Magic: cardinal;
       ForceHash32: boolean = false): TMemoryStream; overload;
-    /// compute the real length of a given StreamCompress() buffer
+    /// compute the length of a given StreamCompress() buffer from its trailer
     // - allows to replace an existing appended content, for instance
+    // - expects StreamCompress(WithTrailer=true) format
     function StreamComputeLen(P: PAnsiChar; Len: PtrUInt; Magic: cardinal): integer;
     /// returns TRUE if the supplied file name is a compressed file,
     // matching the Magic number as supplied to FileCompress() function
     // - follow the FileIsSynLZ() deprecated function format
+    // - expects the compressed data to be at file beginning (not appended)
     function FileIsCompressed(const Name: TFileName; Magic: cardinal): boolean;
     /// compress a file content using this compression algorithm
     // - source file is split into ChunkBytes blocks (128 MB by default) for
@@ -375,8 +384,9 @@ type
     // - follow the FileSynLZ() deprecated function format, if ForceHash32=true
     // so that Hash32() is used instead of the AlgoHash() of this instance
     function FileCompress(const Source, Dest: TFileName; Magic: cardinal;
-      ForceHash32: boolean = false; ChunkBytes: Int64 = 128 shl 20): boolean;
-    /// uncompress a file previoulsy compressed via FileCompress()
+      ForceHash32: boolean = false; ChunkBytes: Int64 = 128 shl 20;
+      WithTrailer: boolean = false): boolean;
+    /// uncompress a file previously compressed via FileCompress()
     // - you should specify a Magic number to be used to identify the compressed
     // file format
     // - follow the FileUnSynLZ() deprecated function format, if ForceHash32=true
@@ -2224,7 +2234,8 @@ type
     fOwnStream: TStream;
   public
     /// initialize the source TStream and the internal buffer
-    // - will also rewind the aSource position to its beginning
+    // - will also rewind the aSource position to its beginning, and retrieve
+    // its size
     constructor Create(aSource: TStream;
       aBufSize: integer = 65536); reintroduce; overload;
     /// initialize a source file and the internal buffer
@@ -2244,6 +2255,13 @@ type
 /// compute the crc32c checksum of a given file
 // - this function maps the THashFile signature
 function HashFileCrc32c(const FileName: TFileName): RawUtf8;
+
+/// retrieve the memory buffer of a TCustomMemoryStream/TRawByteStringStream
+// - returns nil if the instance is not of those classes
+function GetStreamBuffer(S: TStream): pointer;
+
+/// check if class is a TCustomMemoryStream/TRawByteStringStream
+function IsStreamBuffer(S: TStream): boolean;
 
 
 { ************* Markup (e.g. HTML or Emoji) process }
@@ -5303,9 +5321,9 @@ type
   TAlgoCompressHead = packed record
     Magic: cardinal;
     CompressedSize: integer;
-    HashCompressed: cardinal;
+    CompressedHash: cardinal;
     UnCompressedSize: integer;
-    HashUncompressed: cardinal;
+    UncompressedHash: cardinal;
   end;
   PAlgoCompressHead = ^TAlgoCompressHead;
 
@@ -5315,62 +5333,77 @@ type
   end;
   PAlgoCompressTrailer = ^TAlgoCompressTrailer;
 
-function TAlgoCompress.StreamCompress(Source: TCustomMemoryStream;
-  Dest: TStream; Magic: cardinal; ForceHash32: boolean): integer;
+function TAlgoCompress.StreamCompress(Source, Dest: TStream; Magic: cardinal;
+  ForceHash32, WithTrailer: boolean; ChunkBytes: PtrInt): Int64;
 var
-  DataLen: integer;
+  count: Int64;
   S, D: pointer;
   Head: TAlgoCompressHead;
   Trailer: TAlgoCompressTrailer;
-  tmp: RawByteString;
+  src, dst: RawByteString;
 begin
-  if Dest = nil then
-  begin
-    result := 0;
+  result := 0;
+  if (Dest = nil) or
+     (Source = nil) then
     exit;
-  end;
-  if Source <> nil then
-  begin
-    S := Source.Memory;
-    DataLen := Source.Size;
-  end
-  else
-  begin
-    S := nil;
-    DataLen := 0;
-  end;
-  pointer(tmp) := FastNewString(AlgoCompressDestLen(DataLen), 0);
-  D := pointer(tmp);
+  count := Source.Size;
+  if count = 0 then
+    exit;
+  S := GetStreamBuffer(Source);
   Head.Magic := Magic;
-  Head.UnCompressedSize := DataLen;
-  Head.HashUncompressed := AlgoHash(ForceHash32, S, DataLen);
-  Head.CompressedSize := AlgoCompress(S, DataLen, D);
-  if Head.CompressedSize > length(tmp) then
-    raise EAlgoCompress.Create('StreamCompress: overflow'); // paranoid
-  if Head.CompressedSize > DataLen then
+  repeat
+    // compress Source into Dest with proper chunking
+    if count > ChunkBytes then
+      Head.UnCompressedSize := ChunkBytes
+    else
+      Head.UnCompressedSize := count;
+    if S = nil then
+    begin
+      FastSetRawByteString(src, nil, Head.UnCompressedSize);
+      S := pointer(src);
+    end;
+    if {%H-}dst = '' then
+      FastSetRawByteString(dst, nil, AlgoCompressDestLen(Head.UnCompressedSize));
+    dec(count, Head.UnCompressedSize); // supports premature end of input
+    if S = pointer(src) then
+      Head.UnCompressedSize := Source.Read(S^, Head.UnCompressedSize);
+    if Head.UnCompressedSize <= 0 then
+      exit; // read error
+    Head.UncompressedHash := AlgoHash(ForceHash32, S, Head.UnCompressedSize);
+    D := pointer(dst);
+    Head.CompressedSize := AlgoCompress(S, Head.UnCompressedSize, D);
+    if Head.CompressedSize >= Head.UnCompressedSize then
+    begin
+      D := S; // compression is not worth it -> store
+      Head.CompressedSize := Head.UnCompressedSize;
+      Head.CompressedHash := Head.UncompressedHash;
+    end
+    else
+      Head.CompressedHash := AlgoHash(ForceHash32, D, Head.CompressedSize);
+    Dest.WriteBuffer(Head, SizeOf(Head));
+    Dest.WriteBuffer(D^, Head.CompressedSize);
+    inc(result, SizeOf(Head) + Head.CompressedSize);
+  until count = 0;
+  if WithTrailer then
   begin
-    D := S; // compression is not worth it -> store
-    Head.CompressedSize := DataLen;
-    Head.HashCompressed := Head.HashUncompressed;
-  end
-  else
-    Head.HashCompressed := AlgoHash(ForceHash32, D, Head.CompressedSize);
-  Dest.WriteBuffer(Head, SizeOf(Head));
-  Dest.WriteBuffer(D^, Head.CompressedSize);
-  Trailer.HeaderRelativeOffset := Head.CompressedSize + (SizeOf(Head) + SizeOf(Trailer));
-  Trailer.Magic := Magic;
-  Dest.WriteBuffer(Trailer, SizeOf(Trailer));
-  result := Head.CompressedSize + (SizeOf(Head) + SizeOf(Trailer));
+    inc(result, SizeOf(Trailer));
+    Trailer.Magic := Magic;
+    Trailer.HeaderRelativeOffset := result;        // Int64 into cardinal
+    if Trailer.HeaderRelativeOffset <> result then // max 4GB compressed size
+      RaiseStreamError(self, 'StreamCompress trailer overflow');
+    Dest.WriteBuffer(Trailer, SizeOf(Trailer));
+  end;
 end;
 
-function TAlgoCompress.StreamCompress(Source: TCustomMemoryStream;
-  const DestFile: TFileName; Magic: cardinal; ForceHash32: boolean): integer;
+function TAlgoCompress.StreamCompress(Source: TStream;
+  const DestFile: TFileName; Magic: cardinal; ForceHash32, WithTrailer: boolean;
+  ChunkBytes: PtrInt): Int64;
 var
   F: TFileStream;
 begin
   F := TFileStream.Create(DestFile, fmCreate);
   try
-    result := StreamCompress(Source, F, Magic, ForceHash32);
+    result := StreamCompress(Source, F, Magic, ForceHash32, WithTrailer, ChunkBytes);
   finally
     F.Free;
   end;
@@ -5378,111 +5411,147 @@ end;
 
 function TAlgoCompress.StreamUnCompress(Source: TStream; Magic: cardinal;
   ForceHash32: boolean): TMemoryStream;
+begin
+  result := TMemoryStream.Create;
+  if not StreamUncompress(Source, result, Magic, ForceHash32) then
+    FreeAndNil(result);
+end;
+
+function TAlgoCompress.StreamUnCompress(Source, Dest: TStream; Magic: cardinal;
+  ForceHash32: boolean): boolean;
 var
   S, D: PAnsiChar;
-  sourcePosition, resultSize, sourceSize, buflen: Int64;
-  t: PAlgoCompressTrailer;
+  sourcePosition, resultSize, sourceSize: Int64;
   Head: TAlgoCompressHead;
-  Trailer: TAlgoCompressTrailer;
-  buf: RawByteString;
+  offs, rd: cardinal;
+  Trailer: TAlgoCompressTrailer absolute Head;
+  tmps, tmpd: RawByteString;
   stored: boolean;
+
+  function MagicSeek: boolean;
+  // Source not positioned as expected -> try from the end
+  var
+    t: PAlgoCompressTrailer;
+    tmplen: PtrInt;
+    tmp: array[word] of byte;
+    Trailer: TAlgoCompressTrailer absolute tmp;
+  begin
+    result := false;
+    Source.Position := sourceSize - SizeOf(Trailer);
+    if (Source.Read(Trailer, SizeOf(Trailer)) <> SizeOf(Trailer)) or
+       (Trailer.Magic <> Magic) then
+    begin
+      // may have been appended before a digital signature -> try last 64KB
+      tmplen := SizeOf(tmp);
+      if sourcesize < tmplen then
+        tmplen := sourcesize;
+      Source.Position := sourceSize - tmplen;
+      if Source.Read(tmp, tmplen) <> tmplen then
+        exit;
+      dec(tmplen, SizeOf(t^));
+      t := @tmp[tmplen];
+      repeat
+        dec(PByte(t)); // search backward
+        if PtrUInt(t) < PtrUInt(@tmp) then
+          exit;
+      until t^.Magic = Magic;
+      dec(sourceSize, PtrUInt(@tmp[tmplen]) - PtrUInt(t));    // adjust
+      sourcePosition := sourceSize - t^.HeaderRelativeOffset; // found
+    end
+    else
+      sourcePosition := sourceSize - Trailer.HeaderRelativeOffset;
+    Source.Position := sourcePosition;
+    if (Source.Read(Head, SizeOf(Head)) <> SizeOf(Head)) or
+       (Head.Magic <> Magic) then
+      exit;
+    result := true;
+  end;
+
 begin
-  result := nil;
+  result := false;
   if Source = nil then
     exit;
   sourceSize := Source.Size;
-  {$ifdef CPU32}
-  if sourceSize > maxInt then
-    exit; // result TMemoryStream should stay in memory!
-  {$endif CPU32}
   sourcePosition := Source.Position;
-  if sourceSize - sourcePosition < SizeOf(Head) then
+  if Source.Read(Head, SizeOf(Head)) <> SizeOf(Head) then
     exit;
+  if (Head.Magic <> Magic) and
+     not MagicSeek then
+    exit;
+  offs := 0;
   resultSize := 0;
   repeat
-    if (Source.Read(Head, SizeOf(Head)) <> SizeOf(Head)) or
-       (Head.Magic <> Magic) then
-    begin
-      // Source not positioned as expected -> try from the end
-      Source.Position := sourceSize - SizeOf(Trailer);
-      if (Source.Read(Trailer, SizeOf(Trailer)) <> SizeOf(Trailer)) or
-         (Trailer.Magic <> Magic) then
-      begin
-        // may have been appended before a digital signature -> try last 64KB
-        buflen := 65536;
-        if sourcesize < buflen then
-          buflen := sourcesize;
-        pointer(buf) := FastNewString(buflen, 0);
-        Source.Position := sourceSize - buflen;
-        if Source.Read(pointer(buf)^, buflen) <> buflen then
-          exit;
-        t := @PByteArray(buf)[buflen - SizeOf(t^)];
-        repeat
-          dec(PByte(t)); // search backward
-          if PtrUInt(t) < PtrUInt(buf) then
-            exit;
-        until t^.Magic = Magic;
-        sourcePosition := sourceSize - t^.HeaderRelativeOffset; // found
-      end
-      else
-        sourcePosition := sourceSize - Trailer.HeaderRelativeOffset;
-      Source.Position := sourcePosition;
-      if (Source.Read(Head, SizeOf(Head)) <> SizeOf(Head)) or
-         (Head.Magic <> Magic) then
-        exit;
-    end;
+    // read next chunk from Source
     inc(sourcePosition, SizeOf(Head));
-    if sourcePosition + Head.CompressedSize > sourceSize then
-      exit;
-    if Source.InheritsFrom(TCustomMemoryStream) then
+    S := GetStreamBuffer(Source);
+    if S <> nil then
     begin
-      S := PAnsiChar(TCustomMemoryStream(Source).Memory) + PtrUInt(sourcePosition);
+      if sourcePosition + Head.CompressedSize > sourceSize then
+        break;
+      inc(S, sourcePosition);
       Source.Seek(Head.CompressedSize, soCurrent);
     end
     else
     begin
-      if Head.CompressedSize > length({%H-}buf) then
-        FastSetRawByteString(buf, nil, Head.CompressedSize);
-      S := pointer(buf);
-      Source.Read(S^, Head.CompressedSize);
+      if Head.CompressedSize > length({%H-}tmps) then
+        FastSetRawByteString(tmps, nil, Head.CompressedSize);
+      S := pointer(tmps);
+      if Source.Read(S^, Head.CompressedSize) <> Head.CompressedSize then
+        break;
     end;
     inc(sourcePosition, Head.CompressedSize);
-    if (Source.Read(Trailer, SizeOf(Trailer)) <> SizeOf(Trailer)) or
-       (Trailer.Magic <> Magic) then
-      // trailer not available in old .synlz layout, or in multiblocks
-      Source.Position := sourcePosition
-    else
-      sourceSize := 0; // should be monoblock
-    // Source stream will now point after all data
+    // decompress chunk into Dest
     stored := (Head.CompressedSize = Head.UnCompressedSize) and
-              (Head.HashCompressed = Head.HashUncompressed);
+              (Head.CompressedHash = Head.UncompressedHash);
     if not stored then
       if AlgoDecompressDestLen(S) <> Head.UnCompressedSize then
-        exit;
-    if AlgoHash(ForceHash32, S, Head.CompressedSize) <> Head.HashCompressed then
-      exit;
-    if result = nil then
-      result := TMemoryStream.Create
+        break;
+    if AlgoHash(ForceHash32, S, Head.CompressedSize) <> Head.CompressedHash then
+      break;
+    if IsStreamBuffer(Dest) then
+    begin
+      Dest.Size := resultSize + Head.UnCompressedSize;    // resize output
+      D := PAnsiChar(GetStreamBuffer(Dest)) + resultSize; // in-place decompress
+      inc(resultSize, Head.UnCompressedSize);
+    end
     else
     begin
-      {$ifdef CPU32}
-      if resultSize + Head.UnCompressedSize > maxInt then
-      begin
-        FreeAndNil(result); // result TMemoryStream should stay in memory!
-        break;
-      end;
-      {$endif CPU32}
+      if Head.UnCompressedSize > length({%H-}tmpd) then
+        FastSetRawByteString(tmpd, nil, Head.UnCompressedSize);
+      D := pointer(tmpd);
     end;
-    result.Size := resultSize + Head.UnCompressedSize;
-    D := PAnsiChar(result.Memory) + resultSize;
-    inc(resultSize, Head.UnCompressedSize);
     if stored then
       MoveFast(S^, D^, Head.CompressedSize)
     else if (AlgoDecompress(S, Head.CompressedSize, D) <> Head.UnCompressedSize) or
-       (AlgoHash(ForceHash32, D, Head.UnCompressedSize) <> Head.HashUncompressed) then
-      FreeAndNil(result);
-  until (result = nil) or
-        (sourcePosition >= sourceSize);
+       (AlgoHash(ForceHash32, D, Head.UnCompressedSize) <> Head.UncompressedHash) then
+      break; // invalid decompression
+    if D = pointer(tmpd) then
+      Dest.WriteBuffer(D^, Head.UnCompressedSize);
+    result := true; // if we reached here, we uncompressed a block
+    // try if we have some other pending chunk(s)
+    if (sourceSize <> 0) and
+       (sourcePosition = sourceSize) then
+      break; // end of source with no trailer or next block
+    inc(offs, Head.CompressedSize + SizeOf(Head));
+    rd := Source.Read(Trailer, SizeOf(Trailer));
+    if rd <> SizeOf(Trailer) then
+    begin
+      if rd <> 0 then
+        Source.Position := sourcePosition; // rewind source
+      break; // valid uncompressed data with no more chunk
+    end;
+    if (Trailer.Magic = Magic) and
+       (Trailer.HeaderRelativeOffset = offs + SizeOf(Trailer)) then
+      break; // we reached the end trailer
+    if (Source.Read(PByteArray(@Head)[SizeOf(Trailer)],
+         SizeOf(Head) - SizeOf(Trailer)) <> SizeOf(Head) - SizeOf(Trailer)) or
+       (Head.Magic <> Magic) then
+    begin
+      Source.Position := sourcePosition; // rewind source
+      break; // valid uncompressed data with no more chunk
+    end;
+    result := false; // any decompression error on next chunk should be notified
+  until false;
 end;
 
 function TAlgoCompress.StreamUnCompress(const Source: TFileName;
@@ -5491,7 +5560,7 @@ var
   S: TStream;
 begin
   try
-    S := TSynMemoryStreamMapped.Create(Source);
+    S := FileStreamSequentialRead(Source);
     try
       result := StreamUnCompress(S, Magic, ForceHash32);
     finally
@@ -5547,13 +5616,10 @@ begin
   end;
 end;
 
-function TAlgoCompress.FileCompress(const Source, Dest: TFileName;
-  Magic: cardinal; ForceHash32: boolean; ChunkBytes: Int64): boolean;
+function TAlgoCompress.FileCompress(const Source, Dest: TFileName; Magic: cardinal;
+  ForceHash32: boolean; ChunkBytes: Int64; WithTrailer: boolean): boolean;
 var
-  src, dst: RawByteString; // tmp buffers
   S, D: THandleStream;
-  Head: TAlgoCompressHead;
-  Count: Int64;
 begin
   result := false;
   if (ChunkBytes > 0) and
@@ -5564,33 +5630,7 @@ begin
       DeleteFile(Dest);
       D := TFileStream.Create(Dest, fmCreate);
       try
-        Head.Magic := Magic;
-        Count := S.Size;
-        while Count > 0 do
-        begin
-          // compress Source into Dest with proper chunking
-          if Count > ChunkBytes then
-            Head.UnCompressedSize := ChunkBytes
-          else
-            Head.UnCompressedSize := Count;
-          if {%H-}src = '' then
-            FastSetRawByteString(src, nil, Head.UnCompressedSize);
-          if {%H-}dst = '' then
-            FastSetRawByteString(dst, nil, AlgoCompressDestLen(Head.UnCompressedSize));
-          Head.UnCompressedSize := S.Read(pointer(src)^, Head.UnCompressedSize);
-          if Head.UnCompressedSize <= 0 then
-            exit; // read error
-          Head.HashUncompressed :=
-            AlgoHash(ForceHash32, pointer(src), Head.UnCompressedSize);
-          Head.CompressedSize :=
-            AlgoCompress(pointer(src), Head.UnCompressedSize, pointer(dst));
-          Head.HashCompressed :=
-            AlgoHash(ForceHash32, pointer(dst), Head.CompressedSize);
-          if (D.Write(Head, SizeOf(Head)) <> SizeOf(Head)) or
-             (D.Write(pointer(dst)^, Head.CompressedSize) <> Head.CompressedSize) then
-            exit;
-          dec(Count, Head.UnCompressedSize);
-        end;
+        StreamCompress(S, D, Magic, ForceHash32, WithTrailer, ChunkBytes);
       finally
         D.Free;
       end;
@@ -5607,10 +5647,7 @@ end;
 function TAlgoCompress.FileUnCompress(const Source, Dest: TFileName;
   Magic: cardinal; ForceHash32: boolean): boolean;
 var
-  src, dst: RawByteString;
   S, D: THandleStream;
-  Count: Int64;
-  Head: TAlgoCompressHead;
 begin
   result := false;
   if FileExists(Source) then
@@ -5620,33 +5657,7 @@ begin
       DeleteFile(Dest);
       D := TFileStream.Create(Dest, fmCreate);
       try
-        Count := S.Size;
-        while Count > 0 do
-        begin
-          // uncompress Source into Dest with proper chunking
-          if S.Read(Head, SizeOf(Head)) <> SizeOf(Head) then
-            exit;
-          dec(Count, SizeOf(Head));
-          if (Head.Magic <> Magic) or
-             (Head.CompressedSize > Count) then
-            exit;
-          if Head.CompressedSize > length({%H-}src) then
-            FastSetRawByteString(src, nil, Head.CompressedSize);
-          if S.Read(pointer(src)^, Head.CompressedSize) <> Head.CompressedSize then
-            exit;
-          dec(Count, Head.CompressedSize);
-          if (AlgoHash(ForceHash32, pointer(src), Head.CompressedSize) <> Head.HashCompressed) or
-             (AlgoDecompressDestLen(pointer(src)) <> Head.UnCompressedSize) then
-            exit;
-          if Head.UnCompressedSize > length({%H-}dst) then
-            FastSetRawByteString(dst, nil, Head.UnCompressedSize);
-          if AlgoDecompress(pointer(src), Head.CompressedSize, pointer(dst)) <>
-              Head.UnCompressedSize then
-             exit;
-          if (AlgoHash(ForceHash32, pointer(dst), Head.UnCompressedSize) <> Head.HashUncompressed) or
-             (D.Write(pointer(dst)^, Head.UncompressedSize) <> Head.UncompressedSize) then
-            exit;
-        end;
+        result := StreamUnCompress(S, D, Magic, ForceHash32);
       finally
         D.Free;
       end;
@@ -5714,12 +5725,9 @@ begin
   if (aOldLogFileName <> '') and
      FileExists(aOldLogFileName) then
   try
-    if DirectoryExists(aDestinationPath) or
-       CreateDir(aDestinationPath) then
-      if FileCompress(aOldLogFileName,
-         aDestinationPath + ExtractFileName(aOldLogFileName) + aDestinationExt,
-         aMagic, {hash32=}true) then
-        result := DeleteFile(aOldLogFileName);
+    if FileCompress(aOldLogFileName, EnsureDirectoryExists(aDestinationPath) +
+       ExtractFileName(aOldLogFileName) + aDestinationExt, aMagic, {hash32=}true) then
+      result := DeleteFile(aOldLogFileName);
   except
     on Exception do
       result := false;
@@ -9641,6 +9649,22 @@ end;
 function HashFileCrc32c(const FileName: TFileName): RawUtf8;
 begin
   result := CardinalToHexLower(HashFile(FileName, crc32c));
+end;
+
+function GetStreamBuffer(S: TStream): pointer;
+begin
+  if S.InheritsFrom(TRawByteStringStream) then
+    result := pointer(TRawByteStringStream(S).DataString)
+  else if S.InheritsFrom(TCustomMemoryStream) then
+    result := TCustomMemoryStream(S).Memory
+  else
+    result := nil;
+end;
+
+function IsStreamBuffer(S: TStream): boolean;
+begin
+  result := S.InheritsFrom(TRawByteStringStream) or
+            S.InheritsFrom(TCustomMemoryStream);
 end;
 
 
