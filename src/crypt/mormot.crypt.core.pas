@@ -6636,6 +6636,7 @@ constructor TAesPkcs7Reader.Create(inStream: TStream; const key;
   keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock; bufferSize: integer);
 begin
   fStreamSize := inStream.Size; // including padding bytes
+  fSize := fStreamSize; // guess +/- 15 bytes
   inherited Create(inStream, key, keySizeBits, aesMode, IV, bufferSize);
   if (fStreamSize and AesBlockMod <> 0) or
      (fStreamSize < SizeOf(TAesBlock)) then
@@ -6682,6 +6683,7 @@ begin
            (padding > SizeOf(TAesBlock)) then
           RaiseStreamError(self, 'Read: invalid padding');
         dec(fBufAvailable, padding);
+        dec(fSize, padding); // refine stream size
       end;
     end;
     // read next possible chunk from fBuf[]
@@ -6693,7 +6695,6 @@ begin
     MoveFast(PByteArray(fBuf)[fBufPos], PByteArray(@Buffer)[result], chunk);
     inc(result, chunk);
     inc(fPosition, chunk);
-    inc(fSize, chunk);
     inc(fBufPos, chunk);
     dec(fBufAvailable, chunk);
     dec(fStreamSize, chunk);
