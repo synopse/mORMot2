@@ -5657,7 +5657,8 @@ begin
       DeleteFile(Dest);
       D := TFileStream.Create(Dest, fmCreate);
       try
-        result := StreamUnCompress(S, D, Magic, ForceHash32);
+        if not StreamUnCompress(S, D, Magic, ForceHash32) then
+          exit;
       finally
         D.Free;
       end;
