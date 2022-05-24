@@ -1526,7 +1526,7 @@ begin
   if aDriveFolderOrFile = '' then
     aDriveFolderOrFile := SysUtils.UpperCase(
       ExtractFileDrive(Executable.ProgramFilePath));
-  dn := SynUnicode(aDriveFolderOrFile);
+  dn := SynUnicode(aDriveFolderOrFile); // use RTL for UTF-16 conversion
   if (dn <> '') and
      (dn[2] = ':') and
      (dn[3] = #0) then
@@ -1730,7 +1730,7 @@ begin
   begin
     // GetFileVersionInfo modifies the filename parameter data while parsing
     // Copy the string const into a local variable to create a writeable copy
-    tmp := SynUnicode(aFileName);
+    tmp := SynUnicode(aFileName); // use RTL for UTF-16 conversion
     {$ifdef UNICODE}
     UniqueString(tmp);
     {$endif UNICODE}
@@ -2552,9 +2552,9 @@ begin
     result := '';
 end;
 
-function CertOpenSystemStore(hProv: HCRYPTPROV;
-  szSubsystemProtocol: PAnsiChar): HCERTSTORE ;
-    stdcall; external CRYPTDLL name 'CertOpenSystemStoreA';
+function CertOpenSystemStoreW(hProv: HCRYPTPROV;
+  szSubsystemProtocol: PWideChar): HCERTSTORE ;
+    stdcall; external CRYPTDLL name 'CertOpenSystemStoreW';
 
 function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
@@ -2605,7 +2605,7 @@ begin
   begin
     // call the Windows API to retrieve the System certificates
     resultlen := 0;
-    store := CertOpenSystemStore(nil, pointer(WINDOWS_CERTSTORE[CertStore]));
+    store := CertOpenSystemStoreW(nil, WINDOWS_CERTSTORE[CertStore]);
     try
       ctx := CertEnumCertificatesInStore(store, nil);
       while ctx <> nil do

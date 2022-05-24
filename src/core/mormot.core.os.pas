@@ -1454,7 +1454,7 @@ function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
 
 const
-  WINDOWS_CERTSTORE: array[TSystemCertificateStore] of RawUtf8 = (
+  WINDOWS_CERTSTORE: array[TSystemCertificateStore] of PWideChar = (
     'CA', 'MY', 'ROOT', 'SPC');
 
 /// retrieve all certificates of a given system store as PEM text
