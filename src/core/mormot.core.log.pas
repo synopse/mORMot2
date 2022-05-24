@@ -3665,11 +3665,14 @@ begin
   with fToConsole do
   begin
     Safe.Lock;
-    Text[Next] := s;
-    Color[Next] := c;
-    Next := (Next + 1) and high(Text); // simple round-robin data buffer
-    inc(Count);
-    Safe.UnLock;
+    try
+      Text[Next] := s;
+      Color[Next] := c;
+      Next := (Next + 1) and high(Text); // simple round-robin data buffer
+      inc(Count);
+    finally
+      Safe.UnLock;
+    end;
   end;
 end;
 
@@ -3679,11 +3682,14 @@ var
   c: TAutoFlushThreadToConsole;
 begin
   fToConsole.Safe.Lock;
-  c := fToConsole; // thread-safe local copy
-  Finalize(fToConsole.Text);
-  fToConsole.Count := 0;
-  fToConsole.Next := 0;
-  fToConsole.Safe.UnLock;
+  try
+    c := fToConsole; // thread-safe local copy
+    Finalize(fToConsole.Text);
+    fToConsole.Count := 0;
+    fToConsole.Next := 0;
+  finally
+    fToConsole.Safe.UnLock;
+  end;
   if c.Count >= length(c.Text) then
   begin
     ConsoleWrite('... (truncated) ...', ccBlue);
