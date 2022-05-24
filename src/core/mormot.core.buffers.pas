@@ -5525,7 +5525,7 @@ begin
     else if (AlgoDecompress(S, Head.CompressedSize, D) <> Head.UnCompressedSize) or
        (AlgoHash(ForceHash32, D, Head.UnCompressedSize) <> Head.UncompressedHash) then
       break; // invalid decompression
-    if D = pointer(tmpd) then
+    if D = pointer({%H-}tmpd) then
       Dest.WriteBuffer(D^, Head.UnCompressedSize);
     result := true; // if we reached here, we uncompressed a block
     // try if we have some other pending chunk(s)
