@@ -461,8 +461,8 @@ type
   // - is implemented e.g. by the SChannel API on Windows, or OpenSSL on POSIX
   // if you include mormot.lib.openssl11 to your project
   INetTls = interface
-    /// this method is called once to attach the underlying socket
-    // - should make the proper initial TLS handshake to create a session
+    /// method called once to attach the socket from the client side
+    // - should make the proper client-side TLS handshake and create a session
     // - should raise an exception on error
     procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);

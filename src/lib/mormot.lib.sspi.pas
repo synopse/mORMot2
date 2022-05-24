@@ -32,14 +32,25 @@ uses
   sysutils,
   classes,
   mormot.core.base,
-  mormot.core.os,
-  mormot.core.unicode;
+  mormot.core.os;
+  // since we use it from mormot.net.sock, we avoid mormot.core.unicode
 
 
 { ****************** Low-Level SSPI/SChannel Functions }
 
 type
   LONG_PTR = PtrInt;
+  
+  TTimeStamp = record
+    dwLowDateTime: cardinal;
+    dwHighDateTime: cardinal;
+  end;
+  PTimeStamp = ^TTimeStamp;
+
+
+  ALG_ID = cardinal;
+  TALG_IDs = array[word] of ALG_ID;
+  PALG_IDs = ^TALG_IDs;
 
   /// SSPI context handle
   TSecHandle = record
@@ -47,6 +58,12 @@ type
     dwUpper: LONG_PTR;
   end;
   PSecHandle = ^TSecHandle;
+
+  // some context aliases, as defined in SSPI headers
+  TCredHandle = type TSecHandle;
+  PCredHandle = type PSecHandle;
+  TCtxtHandle = type TSecHandle;
+  PCtxtHandle = type PSecHandle;
 
   /// SSPI context
   TSecContext = record
@@ -138,6 +155,23 @@ type
   /// pointer to SSPI supported algorithm
   PSecPkgCred_SupportedAlgs = ^TSecPkgCred_SupportedAlgs;
 
+  /// information about a SSPI connection
+  {$ifdef USERECORDWITHMETHODS}
+  TSecPkgConnectionInfo = record
+  {$else}
+  TSecPkgConnectionInfo = object
+  {$endif USERECORDWITHMETHODS}
+    dwProtocol: cardinal;
+    aiCipher: ALG_ID;
+    dwCipherStrength: cardinal;
+    aiHash: ALG_ID;
+    dwHashStrength: cardinal;
+    aiExch: ALG_ID;
+    dwExchStrength: cardinal;
+    function ToText: RawUtf8;
+  end;
+  PSecPkgConnectionInfo = ^TSecPkgConnectionInfo;
+
   /// information about SSPI Authority Identify
   TSecWinntAuthIdentityW = record
     User: PWideChar;
@@ -153,27 +187,93 @@ type
 
 const
   SECBUFFER_VERSION = 0;
-  SECBUFFER_DATA = 1;
-  SECBUFFER_TOKEN = 2;
-  SECBUFFER_PADDING = 9;
-  SECBUFFER_STREAM = 10;
-  SECPKG_CRED_INBOUND  = $00000001;
-  SECPKG_CRED_OUTBOUND = $00000002;
-  SECPKG_ATTR_SIZES = 0;
-  SECPKG_ATTR_NAMES = 1;
-  SECPKG_ATTR_STREAM_SIZES = 4;
+
+  SECBUFFER_EMPTY          = 0;
+  SECBUFFER_DATA           = 1;
+  SECBUFFER_TOKEN          = 2;
+  SECBUFFER_EXTRA          = 5;
+  SECBUFFER_STREAM_TRAILER = 6;
+  SECBUFFER_STREAM_HEADER  = 7;
+  SECBUFFER_PADDING        = 9;
+  SECBUFFER_STREAM         = 10;
+  SECBUFFER_ALERT          = 17;
+
+  SECPKG_CRED_INBOUND  = 1;
+  SECPKG_CRED_OUTBOUND = 2;
+
+  SECPKG_ATTR_SIZES            = 0;
+  SECPKG_ATTR_NAMES            = 1;
+  SECPKG_ATTR_STREAM_SIZES     = 4;
   SECPKG_ATTR_NEGOTIATION_INFO = 12;
+  SECPKG_ATTR_CONNECTION_INFO  = $5a;
+
   SECURITY_NETWORK_DREP = 0;
-  SECURITY_NATIVE_DREP = $10;
-  ISC_REQ_MUTUAL_AUTH = $00000002;
-  ISC_REQ_CONFIDENTIALITY = $00000010;
-  ISC_REQ_ALLOCATE_MEMORY = $00000100;
+  SECURITY_NATIVE_DREP  = $10;
+
+  ISC_REQ_DELEGATE           = $00000001;
+  ISC_REQ_MUTUAL_AUTH        = $00000002;
+  ISC_REQ_REPLAY_DETECT      = $00000004;
+  ISC_REQ_SEQUENCE_DETECT    = $00000008;
+  ISC_REQ_CONFIDENTIALITY    = $00000010;
+  ISC_REQ_USE_SESSION_KEY    = $00000020;
+  ISC_REQ_PROMPT_FOR_CREDS   = $00000040;
+  ISC_REQ_USE_SUPPLIED_CREDS = $00000080;
+  ISC_REQ_ALLOCATE_MEMORY    = $00000100;
+  ISC_REQ_USE_DCE_STYLE      = $00000200;
+  ISC_REQ_DATAGRAM           = $00000400;
+  ISC_REQ_CONNECTION         = $00000800;
+  ISC_REQ_CALL_LEVEL         = $00001000;
+  ISC_REQ_FRAGMENT_SUPPLIED  = $00002000;
+  ISC_REQ_EXTENDED_ERROR     = $00004000;
+  ISC_REQ_STREAM             = $00008000;
+  ISC_REQ_INTEGRITY          = $00010000;
+  ISC_REQ_IDENTIFY           = $00020000;
+  ISC_REQ_NULL_SESSION       = $00040000;
+  ISC_REQ_MANUAL_CRED_VALIDATION = $00080000;
+  ISC_REQ_RESERVED1          = $00100000;
+  ISC_REQ_FRAGMENT_TO_FIT    = $00200000;
+  ISC_REQ_FLAGS = ISC_REQ_SEQUENCE_DETECT or
+                  ISC_REQ_REPLAY_DETECT or
+                  ISC_REQ_CONFIDENTIALITY or
+                  ISC_REQ_EXTENDED_ERROR or
+                  ISC_REQ_ALLOCATE_MEMORY or
+                  ISC_REQ_STREAM;
+
+  ASC_REQ_REPLAY_DETECT   = $00000004;
+  ASC_REQ_SEQUENCE_DETECT = $00000008;
   ASC_REQ_CONFIDENTIALITY = $00000010;
   ASC_REQ_ALLOCATE_MEMORY = $00000100;
-  SEC_I_CONTINUE_NEEDED = $00090312;
-  SEC_I_COMPLETE_NEEDED = $00090313;
-  SEC_I_COMPLETE_AND_CONTINUE = $00090314;
+  ASC_REQ_EXTENDED_ERROR  = $00008000;
+  ASC_REQ_STREAM          = $00010000;
+  ASC_REQ_FLAGS = ASC_REQ_SEQUENCE_DETECT or
+                  ASC_REQ_REPLAY_DETECT or
+                  ASC_REQ_CONFIDENTIALITY or
+                  ASC_REQ_EXTENDED_ERROR or
+                  ASC_REQ_ALLOCATE_MEMORY or
+                  ASC_REQ_STREAM;
+
+  SEC_E_OK = 0;
+
+  SEC_I_CONTINUE_NEEDED        = $00090312;
+  SEC_I_COMPLETE_NEEDED        = $00090313;
+  SEC_I_COMPLETE_AND_CONTINUE  = $00090314;
+  SEC_I_CONTEXT_EXPIRED	       = $00090317;
+  SEC_I_INCOMPLETE_CREDENTIALS = $00090320;
+  SEC_I_RENEGOTIATE            = $00090321;
+  SEC_E_INCOMPLETE_MESSAGE     = $80090318;
+  SEC_E_INVALID_TOKEN          = $80090308;
+  SEC_E_ILLEGAL_MESSAGE        = $80090326;
+  SEC_E_CERT_UNKNOWN           = $80090327;
+  SEC_E_CERT_EXPIRED           = $80090328;
+
   SEC_WINNT_AUTH_IDENTITY_UNICODE = $02;
+
+  SCHANNEL_SHUTDOWN = 1;
+
+function SspiResToText(res: cardinal): string;
+
+
+// secur32.dll API calls
 
 function QuerySecurityPackageInfoW(pszPackageName: PWideChar;
   var ppPackageInfo: PSecPkgInfoW): integer; stdcall;
@@ -181,24 +281,27 @@ function QuerySecurityPackageInfoW(pszPackageName: PWideChar;
 function AcquireCredentialsHandleW(pszPrincipal, pszPackage: PWideChar;
   fCredentialUse: cardinal; pvLogonId: pointer; pAuthData: PSecWinntAuthIdentityW;
   pGetKeyFn: pointer; pvGetKeyArgument: pointer; phCredential: PSecHandle;
-  var ptsExpiry: LARGE_INTEGER): integer; stdcall;
+  ptsExpiry: PTimeStamp): integer; stdcall;
 
 function InitializeSecurityContextW(phCredential: PSecHandle; phContext: PSecHandle;
   pszTargetName: PWideChar; fContextReq, Reserved1, TargetDataRep: cardinal;
   pInput: PSecBufferDesc; Reserved2: cardinal; phNewContext: PSecHandle;
   pOutput: PSecBufferDesc; var pfContextAttr: cardinal;
-  var ptsExpiry: LARGE_INTEGER): integer; stdcall;
+  ptsExpiry: PTimeStamp): integer; stdcall;
 
 function AcceptSecurityContext(phCredential: PSecHandle; phContext: PSecHandle;
   pInput: PSecBufferDesc; fContextReq, TargetDataRep: cardinal;
   phNewContext: PSecHandle; pOutput: PSecBufferDesc; var pfContextAttr: cardinal;
-  var ptsExpiry: LARGE_INTEGER): integer; stdcall;
+  ptsExpiry: PTimeStamp): integer; stdcall;
 
 function CompleteAuthToken(phContext: PSecHandle;
   pToken: PSecBufferDesc): integer; stdcall;
 
 function QueryContextAttributesW(phContext: PSecHandle; ulAttribute: cardinal;
   pBuffer: pointer): integer; stdcall;
+
+function ApplyControlToken(phContext: PCtxtHandle;
+  pInput: PSecBufferDesc): cardinal; stdcall;
 
 function QuerySecurityContextToken(phContext: PSecHandle;
   var Token: THandle): integer; stdcall;
@@ -220,11 +323,10 @@ type
   HCRYPTPROV = pointer;
   HCERTSTORE = pointer;
   PCCERT_CONTEXT = pointer;
-  ALG_ID = pointer;
   _HMAPPER = pointer;
 
   /// SChannel credential information
-  TSChannel_Cred = record
+  TSChannelCred = record
     dwVersion: cardinal;
     cCreds: cardinal;
     paCred: PCCERT_CONTEXT;
@@ -232,7 +334,7 @@ type
     cMappers: cardinal;
     aphMappers: _HMAPPER;
     cSupportedAlgs: cardinal;
-    palgSupportedAlgs: ALG_ID;
+    palgSupportedAlgs: PALG_IDs;
     grbitEnabledProtocols: cardinal;
     dwMinimumCipherStrength: cardinal;
     dwMaximumCipherStrength: cardinal;
@@ -241,37 +343,45 @@ type
     dwCredFormat: cardinal;
   end;
   /// pointer to SChannel credential information
-  PSChannel_Cred = ^TSChannel_Cred;
+  PSChannelCred = ^TSChannelCred;
 
+  /// store a memory buffer during SChannel encryption
+  TCryptDataBlob = record
+    cbData: Cardinal;
+    pbData: Pointer;
+  end;
 
 const
   UNISP_NAME = 'Microsoft Unified Security Protocol Provider';
 
-  SP_PROT_TLS1_0_SERVER = $00000040;
-  SP_PROT_TLS1_0_CLIENT = $00000080;
-  SP_PROT_TLS1_0        = SP_PROT_TLS1_0_SERVER + SP_PROT_TLS1_0_CLIENT;
+  SP_PROT_TLS1 = $0C0;
+  SP_PROT_TLS1_SERVER = $040;
+  SP_PROT_TLS1_CLIENT = $080;
+  SP_PROT_TLS1_1 = $300;
+  SP_PROT_TLS1_1_SERVER = $100;
+  SP_PROT_TLS1_1_CLIENT = $200;
+  SP_PROT_TLS1_2 = $C00;
+  SP_PROT_TLS1_2_SERVER = $400;
+  SP_PROT_TLS1_2_CLIENT = $800;
+  SP_PROT_TLS1_3 = $3000; // Windows Server 2022 ;)
+  SP_PROT_TLS1_3_SERVER = $1000;
+  SP_PROT_TLS1_3_CLIENT = $2000 ;
 
-  SP_PROT_TLS1_1_SERVER = $00000100;
-  SP_PROT_TLS1_1_CLIENT = $00000200;
-  SP_PROT_TLS1_1        = SP_PROT_TLS1_1_SERVER + SP_PROT_TLS1_1_CLIENT;
+  PKCS12_INCLUDE_EXTENDED_PROPERTIES = $10;
 
-  // warning: TLS 1.2 should be the preferred safe default
-  SP_PROT_TLS1_2_SERVER = $00000400;
-  SP_PROT_TLS1_2_CLIENT = $00000800;
+  CERT_FIND_ANY = 0;
 
-  SP_PROT_TLS1_2  = SP_PROT_TLS1_2_SERVER + SP_PROT_TLS1_2_CLIENT;
-
-  SP_PROT_TLS1_X_SERVER =
-    SP_PROT_TLS1_0_SERVER + SP_PROT_TLS1_1_SERVER + SP_PROT_TLS1_2_SERVER;
-
-  SP_PROT_TLS1_X_CLIENT =
-    SP_PROT_TLS1_0_CLIENT + SP_PROT_TLS1_1_CLIENT + SP_PROT_TLS1_2_CLIENT;
-
-  SP_PROT_TLS1_X =
-    SP_PROT_TLS1_X_SERVER + SP_PROT_TLS1_X_CLIENT;
+  // no check is made to determine whether memory for contexts remains allocated
+  CERT_CLOSE_STORE_DEFAULT = 0;
+  // force freeing all contexts associated with the store
+  CERT_CLOSE_STORE_FORCE_FLAG = 1;
+  // checks for nonfreed certificate, CRL, and CTL context to report an error on leak
+  CERT_CLOSE_STORE_CHECK_FLAG = 2;
 
 
-function CertOpenStore(lpszStoreProvider: PAnsiChar; dwEncodingType: cardinal;
+// crypt32.dll API calls
+
+function CertOpenStoreW(lpszStoreProvider: PWideChar; dwEncodingType: cardinal;
   hCryptProv: HCRYPTPROV; dwFlags: cardinal; pvPara: pointer): HCERTSTORE; stdcall;
 
 function CertOpenSystemStoreW(hProv: HCRYPTPROV;
@@ -283,6 +393,10 @@ function CertFindCertificateInStore(hCertStore: HCERTSTORE;
   dwCertEncodingType, dwFindFlags, dwFindType: cardinal; pvFindPara: pointer;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
 
+function PFXImportCertStore(pPFX: pointer; szPassword: PWideChar;
+  dwFlags: cardinal): HCERTSTORE; stdcall;
+
+function CertFreeCertificateContext(pCertContext: PCCERT_CONTEXT): BOOL; stdcall;
 
 
 { ****************** Middle-Level SSPI Wrappers }
@@ -424,6 +538,35 @@ implementation
 
 { ****************** Low-Level SSPI/SChannel Functions }
 
+function SspiResToText(res: cardinal): string;
+begin
+  case res of
+    SEC_E_OK:
+      result := 'SEC_E_OK';
+    SEC_I_CONTINUE_NEEDED:
+      result := 'SEC_I_CONTINUE_NEEDED';
+    SEC_I_CONTEXT_EXPIRED:
+      result := 'SEC_I_CONTEXT_EXPIRED';
+    SEC_I_INCOMPLETE_CREDENTIALS:
+      result := 'SEC_I_INCOMPLETE_CREDENTIALS';
+    SEC_I_RENEGOTIATE:
+      result := 'SEC_I_RENEGOTIATE';
+    SEC_E_INCOMPLETE_MESSAGE:
+      result := 'SEC_E_INCOMPLETE_MESSAGE';
+    SEC_E_INVALID_TOKEN:
+      result := 'SEC_E_INVALID_TOKEN';
+    SEC_E_ILLEGAL_MESSAGE:
+      result := 'SEC_E_ILLEGAL_MESSAGE';
+    SEC_E_CERT_UNKNOWN:
+      result := 'SEC_E_CERT_UNKNOWN';
+    SEC_E_CERT_EXPIRED:
+      result := 'SEC_E_CERT_EXPIRED';
+  else
+    result := IntToStr(res);
+  end;
+end;
+
+
 const
   secur32 = 'secur32.dll';
 
@@ -433,6 +576,7 @@ function InitializeSecurityContextW; external secur32;
 function AcceptSecurityContext;      external secur32;
 function CompleteAuthToken;          external secur32;
 function QueryContextAttributesW;    external secur32;
+function ApplyControlToken;          external secur32;
 function QuerySecurityContextToken;  external secur32;
 function EncryptMessage;             external secur32;
 function DecryptMessage;             external secur32;
@@ -443,10 +587,12 @@ function FreeCredentialsHandle;      external secur32;
 const
   crypt32 = 'crypt32.dll';
 
-function CertOpenStore;              external crypt32;
+function CertOpenStoreW;             external crypt32;
 function CertOpenSystemStoreW;       external crypt32;
 function CertCloseStore;             external crypt32;
 function CertFindCertificateInStore; external crypt32;
+function PFXImportCertStore;         external crypt32;
+function CertFreeCertificateContext; external crypt32;
 
 
 { TSecBuffer }
@@ -471,9 +617,66 @@ begin
 end;
 
 
+{ TSecPkgConnectionInfo }
+
+function TSecPkgConnectionInfo.ToText: RawUtf8;
+var
+  alg, hsh, xch: string[5];
+begin
+  if dwProtocol and SP_PROT_TLS1 <> 0 then
+    dwProtocol := 0
+  else if dwProtocol and SP_PROT_TLS1_1 <> 0 then
+    dwProtocol := 1
+  else if dwProtocol and SP_PROT_TLS1_2 <> 0 then
+    dwProtocol := 2
+  else if dwProtocol and SP_PROT_TLS1_3 <> 0 then
+    dwProtocol := 3;
+  if aiCipher and $1f in [14..17] then
+    alg := 'AES'
+  else
+    str(aiCipher and $1f, alg);
+  case aiHash and $1f of
+    1..3:
+      hsh := 'MD';
+    4, 12..14:
+      begin
+        hsh := 'SHA';
+        if dwHashStrength = 0 then
+          case aiHash and $1f of
+            4:
+              dwHashStrength := 1;
+            12:
+              dwHashStrength := 256;
+            13:
+              dwHashStrength := 384;
+            14:
+              dwHashStrength := 512;
+          end;
+      end;
+    9:
+      hsh := 'HMAC';
+  else
+    str(aiHash and $1f, hsh);
+  end;
+  if aiExch = $a400 then
+    xch := 'RSA'
+  else if aiExch = $aa02 then
+    xch := 'DH'
+  else if aiExch = $aa05 then
+    xch := 'ECDH'
+  else if aiExch = $ae06 then
+    xch := 'ECDHE'
+  else if aiExch = $2203 then
+    xch := 'ECDSA'
+  else
+    str(aiExch, xch);
+  result := RawUtf8(format('%s_%d-%s_%d-%s_%d TLSv1.%d ',
+    [xch, dwExchStrength, alg, dwCipherStrength, hsh, dwHashStrength, dwProtocol]));
+end;
+
+
 
 { ****************** Middle-Level SSPI Wrappers }
-
 
 { ESynSspi }
 
@@ -632,7 +835,6 @@ var
   InDesc: TSecBufferDesc;
   InDescPtr: PSecBufferDesc;
   SecPkgInfo: PSecPkgInfoW;
-  Expiry: LARGE_INTEGER;
   LInCtxPtr: PSecHandle;
   OutBuf: TSecBuffer;
   OutDesc: TSecBufferDesc;
@@ -651,7 +853,7 @@ begin
       raise ESynSspi.CreateLastOSError(aSecContext);
     try
       if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_OUTBOUND,
-          nil, pAuthData, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
+          nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
         raise ESynSspi.CreateLastOSError(aSecContext);
     finally
       FreeContextBuffer(SecPkgInfo);
@@ -678,7 +880,7 @@ begin
   OutDesc.pBuffers := @OutBuf;
   Status := InitializeSecurityContextW(@aSecContext.CredHandle, LInCtxPtr,
     pszTargetName, CtxReqAttr, 0, SECURITY_NATIVE_DREP, InDescPtr, 0,
-    @aSecContext.CtxHandle, @OutDesc, CtxAttr, Expiry);
+    @aSecContext.CtxHandle, @OutDesc, CtxAttr, nil);
   result := (Status = SEC_I_CONTINUE_NEEDED) or
             (Status = SEC_I_COMPLETE_AND_CONTINUE);
   if (Status = SEC_I_COMPLETE_NEEDED) or
@@ -697,7 +899,7 @@ var
   TargetName: PWideChar;
 begin
   if aSecKerberosSpn <> '' then
-    TargetName := pointer(Utf8ToSynUnicode(aSecKerberosSpn))
+    TargetName := pointer(SynUnicode(aSecKerberosSpn))
   else if ForceSecKerberosSpn <> '' then
     TargetName := pointer(ForceSecKerberosSpn)
   else
@@ -719,14 +921,14 @@ begin
   if UserPos = 0 then
   begin
     Domain := '';
-    Utf8ToSynUnicode(aUserName, User);
+    User := SynUnicode(User);
   end
   else
   begin
-    Utf8ToSynUnicode(Copy(aUserName, 1, UserPos - 1), Domain);
-    Utf8ToSynUnicode(Copy(aUserName, UserPos + 1, MaxInt), User);
+    Domain := SynUnicode(Copy(aUserName, 1, UserPos - 1));
+    User := SynUnicode(Copy(aUserName, UserPos + 1, MaxInt));
   end;
-  Utf8ToSynUnicode(aPassword, PassWord);
+  PassWord := SynUnicode(aPassword);
   AuthIdentity.Domain := pointer(Domain);
   AuthIdentity.DomainLength := Length(Domain);
   AuthIdentity.User := pointer(User);
@@ -742,13 +944,26 @@ begin
     aSecContext, aInData, TargetName, @AuthIdentity, aOutData);
 end;
 
+// mormot.core.unicode is overkill here - avoid a conversion with a temp string
+function UpperCaseU(const S: RawByteString): RawUtf8;
+var
+  i, len: PtrInt;
+  P: PByteArray;
+begin
+  len := length(S);
+  FastSetString(result, pointer(S), len);
+  P := pointer(S);
+  for i := 0 to len - 1 do
+    if P[i] in [ord('a')..ord('z')] then
+      dec(P[i], 32);
+end;
+
 function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 var
   InBuf: TSecBuffer;
   InDesc: TSecBufferDesc;
   SecPkgInfo: PSecPkgInfoW;
-  Expiry: LARGE_INTEGER;
   LInCtxPtr: PSecHandle;
   OutBuf: TSecBuffer;
   OutDesc: TSecBufferDesc;
@@ -765,7 +980,7 @@ begin
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
     aSecContext.CreatedTick64 := GetTickCount64;
-    if IdemPChar(Pointer(aInData), 'NTLMSSP') then
+    if UpperCaseU(copy(RawUtf8(aInData), 1, 7)) =  'NTLMSSP' then // no IdemPChar()
     begin
       if QuerySecurityPackageInfoW(SECPKGNAMENTLM, SecPkgInfo) <> 0 then
         raise ESynSspi.CreateLastOSError(aSecContext);
@@ -775,7 +990,7 @@ begin
         raise ESynSspi.CreateLastOSError(aSecContext);
     try
       if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_INBOUND,
-          nil, nil, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
+          nil, nil, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
         raise ESynSspi.CreateLastOSError(aSecContext);
     finally
       FreeContextBuffer(SecPkgInfo);
@@ -792,7 +1007,7 @@ begin
   OutDesc.pBuffers := @OutBuf;
   Status := AcceptSecurityContext(@aSecContext.CredHandle, LInCtxPtr, @InDesc,
       ASC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY,
-      SECURITY_NATIVE_DREP, @aSecContext.CtxHandle, @OutDesc, CtxAttr, Expiry);
+      SECURITY_NATIVE_DREP, @aSecContext.CtxHandle, @OutDesc, CtxAttr, nil);
   result := (Status = SEC_I_CONTINUE_NEEDED) or
             (Status = SEC_I_COMPLETE_AND_CONTINUE);
   if (Status = SEC_I_COMPLETE_NEEDED) or
@@ -812,7 +1027,7 @@ begin
   if QueryContextAttributesW(@aSecContext.CtxHandle,
        SECPKG_ATTR_NAMES, @Names) <> 0 then
     raise ESynSspi.CreateLastOSError(aSecContext);
-  aUserName := RawUnicodeToUtf8(Names.sUserName, StrLenW(Names.sUserName));
+  Win32PWideCharToUtf8(Names.sUserName, StrLenW(Names.sUserName), aUserName);
   FreeContextBuffer(Names.sUserName);
 end;
 
@@ -823,14 +1038,14 @@ begin
   if QueryContextAttributesW(@aSecContext.CtxHandle,
        SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
     raise ESynSspi.CreateLastOSError(aSecContext);
-  result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name,
-              StrLenW(NegotiationInfo.PackageInfo^.Name));
+  Win32PWideCharToUtf8(NegotiationInfo.PackageInfo^.Name,
+               StrLenW(NegotiationInfo.PackageInfo^.Name), result);
   FreeContextBuffer(NegotiationInfo.PackageInfo);
 end;
 
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 begin
-  Utf8ToSynUnicode(aSecKerberosSpn, ForceSecKerberosSpn);
+  ForceSecKerberosSpn := SynUnicode(aSecKerberosSpn);
 end;
 
 var
@@ -848,7 +1063,7 @@ begin
     SECPKGNAMEHTTP := 'Negotiate';
     DomainAuthMode := damNegotiate;
   end;
-  SECPKGNAMEHTTP_UPPER := UpperCase(SECPKGNAMEHTTP);
+  SECPKGNAMEHTTP_UPPER := UpperCaseU(SECPKGNAMEHTTP);
   SECPKGNAMEHTTPWWWAUTHENTICATE := 'WWW-Authenticate: ' + SECPKGNAMEHTTP;
   SECPKGNAMEHTTPAUTHORIZATION := 'AUTHORIZATION: ' + SECPKGNAMEHTTP_UPPER + ' ';
 end;

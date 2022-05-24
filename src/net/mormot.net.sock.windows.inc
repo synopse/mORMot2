@@ -8,7 +8,8 @@
 }
 
 uses
-  Windows;
+  Windows,
+  mormot.lib.sspi; // for Low-Level SSPI/SChannel Functions
 
 
 { ******** WinSock2 Type Definitions }
@@ -936,18 +937,18 @@ begin
     sock := fTagSocket[i];
     if (rdp <> nil) and
       FD_ISSET(sock, rd{%H-}) then
+  (*
     // on heavily multi-threaded process, select() may be triggerred but
     // currently reading in another thread, so here IoctlSocket() would return
     // pending=0 whereas the socket is actually NOT closed (seen on Windows 7)
     // -> return pseRead now and let a single thread check for pending bytes and
     // detect gracefully closed sockets e.g. in TPollAsyncSockets.ProcessRead
-    (*
     if (IoctlSocket(TSocket(sock), FIONREAD, @pending) = NO_ERROR) and
        ({%H-}pending = 0) then
       // socket closed gracefully - see TCrtSocket.SockReceivePending
       include(ev, pseClosed)
     else
-    *)
+  *)
       include(ev, pseRead);
     if (wrp <> nil) and
        FD_ISSET(sock, wr{%H-}) then
@@ -972,91 +973,23 @@ end;
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 
-{ SChannel low-level API  }
-
 type
-  TCredHandle = record
-    dwLower: pointer;
-    dwUpper: pointer;
-  end;
-  PCredHandle = ^TCredHandle;
-
-  TCtxtHandle = type TCredHandle;
-  PCtxtHandle = ^TCtxtHandle;
-
-  TSChannelCred = record
-    dwVersion: cardinal;
-    cCreds: cardinal;
-    paCred: pointer;
-    hRootStore: THandle;
-    cMappers: cardinal;
-    aphMappers: pointer;
-    cSupportedAlgs: cardinal;
-    palgSupportedAlgs: PCardinal;
-    grbitEnabledProtocols: cardinal;
-    dwMinimumCipherStrength: cardinal;
-    dwMaximumCipherStrength: cardinal;
-    dwSessionLifespan: cardinal;
-    dwFlags: cardinal;
-    dwCredFormat: cardinal;
-  end;
-  PSChannelCred = ^TSChannelCred;
-
-  TSecBuffer = record
-    cbBuffer: cardinal;
-    BufferType: cardinal;
-    pvBuffer: pointer;
-  end;
-  PSecBuffer = ^TSecBuffer;
-
-  TSecBufferDesc = record
-    ulVersion: cardinal;
-    cBuffers: cardinal;
-    pBuffers: PSecBuffer;
-  end;
-  PSecBufferDesc = ^TSecBufferDesc;
-
-  TTimeStamp = record
-    dwLowDateTime: cardinal;
-    dwHighDateTime: cardinal;
-  end;
-  PTimeStamp = ^TTimeStamp;
-
-  TSecPkgContextStreamSizes = record
-    cbHeader: cardinal;
-    cbTrailer: cardinal;
-    cbMaximumMessage: cardinal;
-    cBuffers: cardinal;
-    cbBlockSize: cardinal;
-  end;
-  PSecPkgContextStreamSizes = ^TSecPkgContextStreamSizes;
-
-  ALG_ID = Cardinal;
-  TSecPkgConnectionInfo = record
-    dwProtocol: cardinal;
-    aiCipher: ALG_ID;
-    dwCipherStrength: cardinal;
-    aiHash: ALG_ID;
-    dwHashStrength: cardinal;
-    aiExch: ALG_ID;
-    dwExchStrength: cardinal;
-   end;
-  PSecPkgConnectionInfo = ^TSecPkgConnectionInfo;
-
   ESChannel = class(Exception);
 
   TSChannelClient = class(TInterfacedObject, INetTls)
   private
     fSocket: TNetSocket;
     fContext: PNetTlsContext;
-    fServerAddress: RawUtf8;
+    fServerAddressW: SynUnicode;
     fCred: TCredHandle;
     fCtxt: TCtxtHandle;
     fFlags: cardinal;
-    fSizes: TSecPkgContextStreamSizes;
+    fSizes: TSecPkgContext_StreamSizes;
     fData, fInput: AnsiString;
     fInputSize, fDataPos, fDataCount, fInputCount: integer;
     fSessionClosed: boolean;
+    fAcceptCert: PCCERT_CONTEXT;
+    fAcceptCertStore: HCERTSTORE;
     procedure ESChannelRaiseLastError(res: cardinal);
     function CheckSEC_E_OK(res: integer): cardinal;
     procedure HandshakeLoop;
@@ -1064,180 +997,12 @@ type
     destructor Destroy; override;
     procedure AfterConnection(Socket: TNetSocket;  var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
+    procedure AfterAccept(Socket: TNetSocket; const Address: TNetAddr;
+      var Context: TNetTlsContext);
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
 
-var
-  AcquireCredentialsHandle: function(pszPrincipal: PAnsiChar;
-    pszPackage: PAnsiChar; fCredentialUse: cardinal; pvLogonID: PInt64;
-    pAuthData: PSChannelCred; pGetKeyFn: pointer; pvGetKeyArgument: pointer;
-    phCredential: PCredHandle; ptsExpiry: PTimeStamp): cardinal; stdcall;
-  FreeCredentialsHandle: function(phCredential: PCredHandle): cardinal; stdcall;
-  InitializeSecurityContext: function(phCredential: PCredHandle;
-    phContext: PCtxtHandle; pszTargetName: PAnsiChar; fContextReq: cardinal;
-    Reserved1: cardinal; TargetDataRep: cardinal; pInput: PSecBufferDesc;
-    Reserved2: cardinal; phNewContext: PCtxtHandle; pOutput: PSecBufferDesc;
-    pfContextAttr: PCardinal; ptsExpiry: PTimeStamp): cardinal; stdcall;
-  DeleteSecurityContext: function(phContext: PCtxtHandle): cardinal; stdcall;
-  ApplyControlToken: function(phContext: PCtxtHandle;
-    pInput: PSecBufferDesc): cardinal; stdcall;
-  QueryContextAttributes: function(phContext: PCtxtHandle;
-    ulAttribute: cardinal; pBuffer: pointer): cardinal; stdcall;
-  FreeContextBuffer: function(pvContextBuffer: pointer): cardinal; stdcall;
-  EncryptMessage: function(phContext: PCtxtHandle; fQOP: cardinal;
-    pMessage: PSecBufferDesc; MessageSeqNo: cardinal): cardinal; stdcall;
-  DecryptMessage: function(phContext: PCtxtHandle; pMessage: PSecBufferDesc;
-    MessageSeqNo: cardinal; pfQOP: PCardinal): cardinal; stdcall;
-
-const
-  SP_PROT_TLS1 = $0C0;
-  SP_PROT_TLS1_SERVER = $040;
-  SP_PROT_TLS1_CLIENT = $080;
-  SP_PROT_TLS1_1 = $300;
-  SP_PROT_TLS1_1_SERVER = $100;
-  SP_PROT_TLS1_1_CLIENT = $200;
-  SP_PROT_TLS1_2 = $C00;
-  SP_PROT_TLS1_2_SERVER = $400;
-  SP_PROT_TLS1_2_CLIENT = $800;
-  SP_PROT_TLS1_3 = $3000; // Windows Server 2022 ;)
-  SP_PROT_TLS1_3_SERVER = $1000;
-  SP_PROT_TLS1_3_CLIENT = $2000 ;
-
-  SECPKG_CRED_INBOUND = 1;
-  SECPKG_CRED_OUTBOUND = 2;
-
-  ISC_REQ_DELEGATE = $00000001;
-  ISC_REQ_MUTUAL_AUTH = $00000002;
-  ISC_REQ_REPLAY_DETECT = $00000004;
-  ISC_REQ_SEQUENCE_DETECT = $00000008;
-  ISC_REQ_CONFIDENTIALITY = $00000010;
-  ISC_REQ_USE_SESSION_KEY = $00000020;
-  ISC_REQ_PROMPT_FOR_CREDS = $00000040;
-  ISC_REQ_USE_SUPPLIED_CREDS = $00000080;
-  ISC_REQ_ALLOCATE_MEMORY = $00000100;
-  ISC_REQ_USE_DCE_STYLE = $00000200;
-  ISC_REQ_DATAGRAM = $00000400;
-  ISC_REQ_CONNECTION = $00000800;
-  ISC_REQ_CALL_LEVEL = $00001000;
-  ISC_REQ_FRAGMENT_SUPPLIED = $00002000;
-  ISC_REQ_EXTENDED_ERROR = $00004000;
-  ISC_REQ_STREAM = $00008000;
-  ISC_REQ_INTEGRITY = $00010000;
-  ISC_REQ_IDENTIFY = $00020000;
-  ISC_REQ_NULL_SESSION = $00040000;
-  ISC_REQ_MANUAL_CRED_VALIDATION = $00080000;
-  ISC_REQ_RESERVED1 = $00100000;
-  ISC_REQ_FRAGMENT_TO_FIT = $00200000;
-  ISC_REQ_FLAGS =
-    ISC_REQ_SEQUENCE_DETECT or ISC_REQ_REPLAY_DETECT or
-    ISC_REQ_CONFIDENTIALITY or ISC_REQ_EXTENDED_ERROR or
-    ISC_REQ_ALLOCATE_MEMORY or ISC_REQ_STREAM;
-
-  SECBUFFER_VERSION = 0;
-  SECBUFFER_EMPTY = 0;
-  SECBUFFER_DATA = 1;
-  SECBUFFER_TOKEN = 2;
-  SECBUFFER_EXTRA = 5;
-  SECBUFFER_STREAM_TRAILER = 6;
-  SECBUFFER_STREAM_HEADER = 7;
-  SECBUFFER_ALERT = 17;
-
-  SEC_E_OK = 0;
-  SEC_I_CONTINUE_NEEDED = $00090312;
-  SEC_I_CONTEXT_EXPIRED	= $00090317;
-  SEC_I_INCOMPLETE_CREDENTIALS = $00090320;
-  SEC_I_RENEGOTIATE = $00090321;
-  SEC_E_INCOMPLETE_MESSAGE = $80090318;
-  SEC_E_INVALID_TOKEN = $80090308;
-  SEC_E_ILLEGAL_MESSAGE = $80090326;
-
-  DLLSecur32: PChar = 'secur32.dll';
-  UNISP_NAME = 'Microsoft Unified Security Protocol Provider';
-  SECPKG_ATTR_STREAM_SIZES = 4;
-  SECPKG_ATTR_CONNECTION_INFO = $5a;
-
-  SCHANNEL_SHUTDOWN = 1;
-
-
-function ResToText(res: cardinal): string;
-begin
-  case res of
-    SEC_E_OK:
-      result := 'SEC_E_OK';
-    SEC_I_CONTINUE_NEEDED:
-      result := 'SEC_I_CONTINUE_NEEDED';
-    SEC_I_CONTEXT_EXPIRED:
-      result := 'SEC_I_CONTEXT_EXPIRED';
-    SEC_I_INCOMPLETE_CREDENTIALS:
-      result := 'SEC_I_INCOMPLETE_CREDENTIALS';
-    SEC_I_RENEGOTIATE:
-      result := 'SEC_I_RENEGOTIATE';
-    SEC_E_INCOMPLETE_MESSAGE:
-      result := 'SEC_E_INCOMPLETE_MESSAGE';
-    SEC_E_INVALID_TOKEN:
-      result := 'SEC_E_INVALID_TOKEN';
-    SEC_E_ILLEGAL_MESSAGE:
-      result := 'SEC_E_ILLEGAL_MESSAGE';
-  else
-    result := IntToStr(res);
-  end;
-end;
-
-procedure ProtoToText(var nfo: TSecPkgConnectionInfo; out text: RawUtf8);
-var
-  alg, hsh, xch: string[5];
-begin
-  if nfo.dwProtocol and SP_PROT_TLS1 <> 0 then
-    nfo.dwProtocol := 0
-  else if nfo.dwProtocol and SP_PROT_TLS1_1 <> 0 then
-    nfo.dwProtocol := 1
-  else if nfo.dwProtocol and SP_PROT_TLS1_2 <> 0 then
-    nfo.dwProtocol := 2
-  else if nfo.dwProtocol and SP_PROT_TLS1_3 <> 0 then
-    nfo.dwProtocol := 3;
-  if nfo.aiCipher and $1f in [14..17] then
-    alg := 'AES'
-  else
-    str(nfo.aiCipher and $1f, alg);
-  case nfo.aiHash and $1f of
-    1..3:
-      hsh := 'MD';
-    4, 12..14:
-      begin
-        hsh := 'SHA';
-        if nfo.dwHashStrength = 0 then
-          case nfo.aiHash and $1f of
-            4:
-              nfo.dwHashStrength := 1;
-            12:
-              nfo.dwHashStrength := 256;
-            13:
-              nfo.dwHashStrength := 384;
-            14:
-              nfo.dwHashStrength := 512;
-          end;
-      end;
-    9:
-      hsh := 'HMAC';
-  else
-    str(nfo.aiHash and $1f, hsh);
-  end;
-  if nfo.aiExch = $a400 then
-    xch := 'RSA'
-  else if nfo.aiExch = $aa02 then
-    xch := 'DH'
-  else if nfo.aiExch = $aa05 then
-    xch := 'ECDH'
-  else if nfo.aiExch = $ae06 then
-    xch := 'ECDHE'
-  else if nfo.aiExch = $2203 then
-    xch := 'ECDSA'
-  else
-    str(nfo.aiExch, xch);
-  text := RawUtf8(format('%s_%d-%s_%d-%s_%d TLSv1.%d ', [xch, nfo.dwExchStrength,
-    alg, nfo.dwCipherStrength, hsh, nfo.dwHashStrength, nfo.dwProtocol]));
-end;
 
 
 { TSChannelClient }
@@ -1248,7 +1013,8 @@ var
 begin
   LastError := GetLastError;
   raise ESChannel.CreateFmt('<%s>: Result %x [%s], System Error %d ''%s''',
-    [fServerAddress, res, ResToText(res), LastError, SysErrorMessage(LastError)]);
+    [fServerAddressW, res, SspiResToText(res), LastError,
+     SysErrorMessage(LastError)]);
 end;
 
 function TSChannelClient.CheckSEC_E_OK(res: integer): cardinal;
@@ -1301,11 +1067,9 @@ begin
   // prepare execution context
   fSocket := Socket;
   fContext := @Context;
-  fServerAddress := ServerAddress;
-  if not Assigned(AcquireCredentialsHandle) then
-    raise ESChannel.Create('SChannel API not available');
-  CheckSEC_E_OK(AcquireCredentialsHandle(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
-    nil, nil, nil, nil, @fCred, nil));
+  fServerAddressW := SynUnicode(ServerAddress);
+  CheckSEC_E_OK(AcquireCredentialsHandleW(
+    nil, UNISP_NAME, SECPKG_CRED_OUTBOUND, nil, nil, nil, nil, @fCred, nil));
   fDataPos := 0;
   fDataCount := 0;
   fFlags := ISC_REQ_FLAGS;
@@ -1314,8 +1078,9 @@ begin
     fFlags := fFlags or ISC_REQ_MANUAL_CRED_VALIDATION;
   // initiate a ClientHello TLS message and a new fCtxt
   HandshakeBufInit(buf);
-  res := InitializeSecurityContext(@fCred, nil, pointer(ServerAddress),
-    fFlags, 0, 0, nil, 0, @fCtxt, @buf.output, @f, nil);
+  res := InitializeSecurityContextW(
+    @fCred, nil, pointer(fServerAddressW), fFlags, 0, 0,
+    nil, 0, @fCtxt, @buf.output, f, nil);
   if res <> SEC_I_CONTINUE_NEEDED then
     ESChannelRaiseLastError(res);
   if (buf.buf[2].cbBuffer = 0) or
@@ -1327,13 +1092,29 @@ begin
   // make TLS handshake and prepare for process
   SetLength(fData, TLSRECMAXSIZE);
   HandshakeLoop;
-  CheckSEC_E_OK(QueryContextAttributes(@fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
+  CheckSEC_E_OK(QueryContextAttributesW(
+    @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
   fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
   if fInputSize > TLSRECMAXSIZE then
     raise ESChannel.CreateFmt('InputSize=%d>%d on %s',
       [fInputSize, TLSRECMAXSIZE, ServerAddress]);
   SetLength(fInput, fInputSize);
   fInputCount := 0;
+end;
+
+procedure TSChannelClient.AfterAccept(Socket: TNetSocket;
+  const Address: TNetAddr; var Context: TNetTlsContext);
+begin
+  // prepare execution context
+  fSocket := Socket;
+  fContext := @Context;
+  if fContext.CertificateFile = '' then
+    fAcceptCertStore := CertOpenSystemStoreW(nil, 'MY')
+  else
+  begin
+    // to be continued :)
+  end;
+
 end;
 
 procedure TSChannelClient.HandshakeLoop;
@@ -1347,9 +1128,10 @@ procedure TSChannelClient.HandshakeLoop;
     buf.buf[0].cbBuffer := fDataCount;
     buf.buf[0].pvBuffer := pointer(fData);
     f := 0;
-    result := InitializeSecurityContext(@fCred, @fCtxt, pointer(fServerAddress),
-      fFlags, 0, 0, @buf.input, 0, nil, @buf.output, @f, nil);
-    //writeln(IntToHex(result, 8),' [',ResToText(result),'] tosend=',buf.buf[2].cbBuffer);
+    result := InitializeSecurityContextW(
+      @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
+      @buf.input, 0, nil, @buf.output, f, nil);
+    //writeln(IntToHex(result, 8),' [',SspiResToText(result),'] tosend=',buf.buf[2].cbBuffer);
     if (result = SEC_E_OK) or
        (result = SEC_I_CONTINUE_NEEDED) or
        ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then
@@ -1390,8 +1172,9 @@ begin
         (res <> SEC_E_INCOMPLETE_MESSAGE);
   CheckSEC_E_OK(res);
   // note: fDataCount trailing content may come from SECBUFFER_EXTRA bytes
-  if QueryContextAttributes(@fCtxt, SECPKG_ATTR_CONNECTION_INFO, @nfo) = SEC_E_OK then
-    ProtoToText(nfo, fContext.CipherName);
+  if QueryContextAttributesW(
+      @fCtxt, SECPKG_ATTR_CONNECTION_INFO, @nfo) = SEC_E_OK then
+    fContext.CipherName := nfo.ToText;
 end;
 
 destructor TSChannelClient.Destroy;
@@ -1415,8 +1198,8 @@ begin
         buf.cbBuffer := 0;
         buf.BufferType := SECBUFFER_TOKEN;
         buf.pvBuffer := nil;
-        if InitializeSecurityContext(@fCred, @fCtxt, nil, fFlags, 0,
-           0, nil, 0, @fCtxt, @desc, @f, nil) = SEC_E_OK then
+        if InitializeSecurityContextW(@fCred, @fCtxt, nil, fFlags, 0,
+           0, nil, 0, @fCtxt, @desc, f, nil) = SEC_E_OK then
         begin
           mormot.net.sock.Send(fSocket.Socket, buf.pvBuffer, buf.cbBuffer, 0);
           FreeContextBuffer(buf.pvBuffer);
@@ -1426,6 +1209,10 @@ begin
     DeleteSecurityContext(@fCtxt);
     FreeCredentialsHandle(@fCred);
   finally
+    if fAcceptCert <> nil then
+      CertFreeCertificateContext(fAcceptCert);
+    if fAcceptCertStore <> nil then
+      CertCloseStore(fAcceptCertStore, CERT_CLOSE_STORE_DEFAULT);
     inherited Destroy;
   end;
 end;
@@ -1439,6 +1226,8 @@ var
   needsRenegotiate: boolean;
 
   function DecryptInput: cardinal;
+  var
+    qop: cardinal;
   begin
     buf[0].cbBuffer := fInputCount;
     buf[0].BufferType := SECBUFFER_DATA;
@@ -1452,7 +1241,7 @@ var
     buf[3].cbBuffer := 0;
     buf[3].BufferType := SECBUFFER_EMPTY;
     buf[3].pvBuffer := nil;
-    result := DecryptMessage(@fCtxt, @desc, 0, nil);
+    result := DecryptMessage(@fCtxt, @desc, 0, qop);
   end;
 
 begin
@@ -1605,47 +1394,17 @@ end;
 
 var
   WsaDataOnce: TWSADATA;
-  LibSecurHandle: {$ifdef FPC}TLibHandle{$else}HMODULE{$endif};
 
 procedure InitializeUnit;
 begin
   WSAStartup($0202, WsaDataOnce);
   SocketAPIVersion := RawUtf8(Format(
     '%s.%d', [WsaDataOnce.szDescription, WsaDataOnce.wVersion]));
-  LibSecurHandle := LoadLibrary(DLLSecur32);
-  if LibSecurHandle <> 0 then
-  begin
-    AcquireCredentialsHandle :=
-      GetProcAddress(LibSecurHandle, 'AcquireCredentialsHandleA');
-    FreeCredentialsHandle :=
-      GetProcAddress(LibSecurHandle, 'FreeCredentialsHandle');
-    InitializeSecurityContext :=
-      GetProcAddress(LibSecurHandle, 'InitializeSecurityContextA');
-    DeleteSecurityContext :=
-      GetProcAddress(LibSecurHandle, 'DeleteSecurityContext');
-    ApplyControlToken :=
-      GetProcAddress(LibSecurHandle, 'ApplyControlToken');
-    QueryContextAttributes :=
-      GetProcAddress(LibSecurHandle, 'QueryContextAttributesA');
-    FreeContextBuffer :=
-      GetProcAddress(LibSecurHandle, 'FreeContextBuffer');
-    EncryptMessage :=
-      GetProcAddress(LibSecurHandle, 'EncryptMessage');
-    DecryptMessage :=
-      GetProcAddress(LibSecurHandle, 'DecryptMessage');
-    if Assigned(AcquireCredentialsHandle) and
-       Assigned(InitializeSecurityContext) and
-       Assigned(QueryContextAttributes) and
-       Assigned(EncryptMessage) and
-       Assigned(DecryptMessage) then
-     NewNetTls := SChannelNewNetTls;
-  end;
+  NewNetTls := SChannelNewNetTls;
 end;
 
 procedure FinalizeUnit;
 begin
   WSACleanup;
-  if LibSecurHandle <> 0 then
-    FreeLibrary(LibSecurHandle);
 end;
 
