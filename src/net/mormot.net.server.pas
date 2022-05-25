@@ -1804,7 +1804,7 @@ begin
             cltservsock.TLS := fSock.TLS;
           cltservsock.AcceptRequest(cltsock, @cltaddr);
           if hsoEnableTls in fOptions then
-            cltservsock.DoTlsHandshake(true, @cltaddr);
+            cltservsock.DoTlsHandshake(true);
           endtix := fHeaderRetrieveAbortDelay;
           if endtix > 0 then
             inc(endtix, mormot.core.os.GetTickCount64);
@@ -1817,8 +1817,8 @@ begin
         end;
       except
         on E: Exception do
-          // any exception would break and release the thread
-          FormatUtf8('% [%]', [E, E.Message], fExecuteMessage);
+          // do not stop thread on TLS or socket error
+          fSock.OnLog(sllTrace, 'Execute: % [%]', [E, E.Message], self);
       end;
       {$else}
       if Assigned(fThreadPool) then
@@ -2056,7 +2056,7 @@ begin
   freeme := true;
   try
     if hsoEnableTls in fServer.Options then
-      DoTlsHandshake(true, nil);
+      DoTlsHandshake(true);
     headertix := fServer.HeaderRetrieveAbortDelay;
     if headertix > 0 then
       headertix := headertix + GetTickCount64;

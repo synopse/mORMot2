@@ -981,6 +981,7 @@ type
     fSocket: TNetSocket;
     fContext: PNetTlsContext;
     fServerAddressW: SynUnicode;
+    fRemoteIP: RawUTF8;
     fCred: TCredHandle;
     fCtxt: TCtxtHandle;
     fFlags: cardinal;
@@ -998,7 +999,7 @@ type
     destructor Destroy; override;
     procedure AfterConnection(Socket: TNetSocket;  var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
-    procedure AfterAccept(Socket: TNetSocket; Address: PNetAddr;
+    procedure AfterAccept(Socket: TNetSocket; RemoteIP: RawUTF8;
       var Context: TNetTlsContext);
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
@@ -1104,8 +1105,8 @@ begin
   fInputCount := 0;
 end;
 
-procedure TSChannelClient.AfterAccept(Socket: TNetSocket;
-  Address: PNetAddr; var Context: TNetTlsContext);
+procedure TSChannelClient.AfterAccept(Socket: TNetSocket; RemoteIP: RawUTF8;
+  var Context: TNetTlsContext);
 var
   certblob: RawByteString;
   blob: TCryptDataBlob;
@@ -1114,6 +1115,7 @@ begin
   // prepare execution context
   fSocket := Socket;
   fContext := @Context;
+  fRemoteIP := RemoteIP;
   fAccept := true;
   if fContext.CertificateFile = '' then
   begin
@@ -1156,7 +1158,7 @@ begin
   fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
   if fInputSize > TLSRECMAXSIZE then
     raise ESChannel.CreateFmt('InputSize=%d>%d on %s',
-      [fInputSize, TLSRECMAXSIZE, Address^.IPShort()]);
+      [fInputSize, TLSRECMAXSIZE, fRemoteIP]);
   SetLength(fInput, fInputSize);
   fInputCount := 0;
 end;

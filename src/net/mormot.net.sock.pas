@@ -470,7 +470,7 @@ type
     // - should make the proper server-side TLS handshake and create a session
     // - should raise an exception on error
     // - TNetTlsContext should have been copied from the server properties
-    procedure AfterAccept(Socket: TNetSocket; Address: PNetAddr;
+    procedure AfterAccept(Socket: TNetSocket; RemoteIP: RawUTF8;
       var Context: TNetTlsContext);
     /// receive some data from the TLS layer
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
@@ -864,7 +864,7 @@ type
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
     function GetRawSocket: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure DoTlsHandshake(doAccept: Boolean; aClientAddr: PNetAddr);
+    procedure DoTlsHandshake(doAccept: Boolean);
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
     // - could have been assigned by a Tunnel.From() call
@@ -3147,7 +3147,7 @@ begin
   {$endif OSLINUX}
 end;
 
-procedure TCrtSocket.DoTlsHandshake(doAccept: Boolean; aClientAddr: PNetAddr);
+procedure TCrtSocket.DoTlsHandshake(doAccept: Boolean);
 begin
   try
     if not Assigned(NewNetTls) then
@@ -3159,7 +3159,7 @@ begin
       raise ENetSock.Create('%s.DoTlsHandshake; TLS is not available on this ' +
         'system - try installing OpenSSL 1.1.1', [ClassNameShort(self)^]);
     if doAccept then
-      fSecure.AfterAccept(fSock, aClientAddr, TLS)
+      fSecure.AfterAccept(fSock, fRemoteIP, TLS)
     else
       fSecure.AfterConnection(fSock, TLS, fServer);
     TLS.Enabled := true;
@@ -3232,7 +3232,7 @@ begin
       if Assigned(OnLog) then
         OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
       if aTLS then
-        DoTlsHandshake(false, nil);
+        DoTlsHandshake(false);
       exit;
     end
     else
@@ -3263,7 +3263,7 @@ begin
      aTLS and
      not doBind and
      ({%H-}PtrInt(aSock) <= 0) then
-    DoTlsHandshake(false, nil);
+    DoTlsHandshake(false);
   if Assigned(OnLog) then
     OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
       pointer(fSock.Socket), TLS.CipherName], self);
