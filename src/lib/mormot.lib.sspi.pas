@@ -952,7 +952,7 @@ var
 begin
   len := length(S);
   FastSetString(result, pointer(S), len);
-  P := pointer(S);
+  P := pointer(result);
   for i := 0 to len - 1 do
     if P[i] in [ord('a')..ord('z')] then
       dec(P[i], 32);
