@@ -1118,6 +1118,23 @@ begin
     inc(P);
 end;
 
+function GetNextItem(var P: PAnsiChar): RawUtf8;
+var
+  S: PAnsiChar;
+begin
+  result := '';
+  while P^ <= ' ' do
+    if P^ = #0 then
+      exit
+    else
+      inc(P);
+  S := P;
+  repeat
+    inc(P);
+  until P^ <= ' ';
+  FastSetString(result, S, P - S);
+end;
+
 const
   PAGE_GUARD = $0100;
   PAGE_VALID = $00e6; // PAGE_READONLY or PAGE_READWRITE or PAGE_EXECUTE or

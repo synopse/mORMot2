@@ -2683,7 +2683,10 @@ type
   public
     /// cross-platform resolution of a function entry in this library
     // - if RaiseExceptionOnFailure is set, missing entry will call FreeLib then raise it
-    function Resolve(ProcName: PAnsiChar; Entry: PPointer;
+    // - ProcName can be a space-separated list of procedure names, to try
+    // alternate API names (e.g. for OpenSSL 1.1.1/3.0 compatibility)
+    // - if ProcName starts with '?' then RaiseExceptionOnFailure = nil is set
+    function Resolve(const Prefix, ProcName: RawUtf8; Entry: PPointer;
       RaiseExceptionOnFailure: ExceptionClass = nil): boolean;
     /// cross-platform resolution of all function entries in this library
     // - will search and fill Entry^ for all ProcName^ until ProcName^=nil
@@ -5376,48 +5379,65 @@ end;
 
 { TSynLibrary }
 
-function TSynLibrary.Resolve(ProcName: PAnsiChar; Entry: PPointer;
+function TSynLibrary.Resolve(const Prefix, ProcName: RawUtf8; Entry: PPointer;
   RaiseExceptionOnFailure: ExceptionClass): boolean;
-{$ifdef OSPOSIX}
 var
+  P: PAnsiChar;
+  tmp: RawUtf8;
+{$ifdef OSPOSIX}
   dlinfo: dl_info;
 {$endif OSPOSIX}
 begin
+  result := false;
   if (Entry = nil) or
      (fHandle = 0) or
-     (ProcName = nil) then
-    result := false // avoid GPF
-  else
-  begin
-    Entry^ := LibraryResolve(fHandle, ProcName);
-    result := Entry^ <> nil;
-    {$ifdef OSPOSIX}
-    if result and
-       not fLibraryPathTested then
+     (ProcName = '') then
+    exit; // avoid GPF
+  P := pointer(ProcName);
+  repeat
+    tmp := GetNextItem(P); // try all alternate names
+    if tmp = '' then
+      break;
+    if tmp[1] = '?' then
     begin
-      fLibraryPathTested := true;
-      FillCharFast(dlinfo, SizeOf(dlinfo), 0);
-      dladdr(Entry^, @dlinfo);
-      if dlinfo.dli_fname <> nil then
-        fLibraryPath := dlinfo.dli_fname;
+      RaiseExceptionOnFailure := nil;
+      delete(tmp, 1, 1);
     end;
-    {$endif OSPOSIX}
+    if Prefix <> '' then
+      tmp := Prefix + tmp;
+    Entry^ := LibraryResolve(fHandle, pointer(tmp));
+    result := Entry^ <> nil;
+  until result;
+  {$ifdef OSPOSIX}
+  if result and
+     not fLibraryPathTested then
+  begin
+    fLibraryPathTested := true;
+    FillCharFast(dlinfo, SizeOf(dlinfo), 0);
+    dladdr(Entry^, @dlinfo);
+    if dlinfo.dli_fname <> nil then
+      fLibraryPath := dlinfo.dli_fname;
   end;
+  {$endif OSPOSIX}
   if (RaiseExceptionOnFailure <> nil) and
      not result then
   begin
     FreeLib;
-    raise RaiseExceptionOnFailure.CreateFmt('%s.Resolve(''%s''): not found in %s',
-      [ClassNameShort(self)^, ProcName, LibraryPath]);
+    raise RaiseExceptionOnFailure.CreateFmt(
+      '%s.Resolve(''%s%s''): not found in %s',
+      [ClassNameShort(self)^, Prefix, ProcName, LibraryPath]);
   end;
 end;
 
 function TSynLibrary.ResolveAll(ProcName: PPAnsiChar; Entry: PPointer): boolean;
+var
+  tmp: RawUtf8;
 begin
   repeat
     if ProcName^ = nil then
       break;
-    if not Resolve(ProcName^, Entry) then
+    FastSetString(tmp, ProcName^, StrLen(ProcName^));
+    if not Resolve('', tmp, Entry) then
     begin
       FreeLib;
       result := false;
@@ -5446,7 +5466,7 @@ end;
 function TSynLibrary.TryLoadLibrary(const aLibrary: array of TFileName;
   aRaiseExceptionOnFailure: ExceptionClass): boolean;
 var
-  i: integer;
+  i, j: PtrInt;
   lib, libs: TFileName;
   {$ifdef OSWINDOWS}
   nwd, cwd: TFileName;
@@ -5457,6 +5477,15 @@ begin
     lib := aLibrary[i];
     if lib = '' then
       continue;
+    result := true;
+    for j := 0 to i - 1 do
+      if aLibrary[j] = lib then
+      begin
+        result := false;
+        break;
+      end;
+    if not result then
+      continue; // don't try twice the same library name
     {$ifdef OSWINDOWS}
     nwd := ExtractFilePath(lib);
     if nwd <> '' then
@@ -5477,7 +5506,6 @@ begin
       if length(fLibraryPath) < length(lib) then
       {$endif OSWINDOWS}
         fLibraryPath := lib;
-      result := true;
       exit;
     end;
     if {%H-}libs = '' then
