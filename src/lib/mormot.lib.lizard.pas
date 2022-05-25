@@ -364,14 +364,14 @@ end;
 { TSynLizardDynamic }
 
 const
-  LIZARD_ENTRIES: array[0..6] of PAnsiChar = (
-   'Lizard_versionNumber',
-   'Lizard_compressBound',
-   'Lizard_compress',
-   'Lizard_sizeofState',
-   'Lizard_compress_extState',
-   'Lizard_decompress_safe',
-   'Lizard_decompress_safe_partial');
+  LIZARD_ENTRIES: array[0..6] of RawUtf8 = (
+   'versionNumber',
+   'compressBound',
+   'compress',
+   'sizeofState',
+   'compress_extState',
+   'decompress_safe',
+   'decompress_safe_partial');
 
 constructor TSynLizardDynamic.Create(const aLibraryFile: TFileName;
   aRaiseNoException: boolean);
@@ -385,7 +385,7 @@ begin
   begin
     P := @@versionNumber;
     for i := 0 to High(LIZARD_ENTRIES) do
-      if fLibrary.Resolve(LIZARD_ENTRIES[i], P, EAlgoCompress) then
+      if fLibrary.Resolve('Lizard_', LIZARD_ENTRIES[i], P, EAlgoCompress) then
         inc(P);
     if versionNumber div 10000 <> 1 then
       if aRaiseNoException then

@@ -496,13 +496,24 @@ begin
 end;
 
 const
-  GSS_NAMES: array[0 .. 17] of PAnsiChar = (
-    'gss_import_name', 'gss_display_name', 'gss_release_name',
-    'gss_acquire_cred', 'gss_acquire_cred_with_password', 'gss_release_cred',
-    'gss_init_sec_context', 'gss_accept_sec_context', 'gss_inquire_context',
-    'gss_delete_sec_context', 'gss_inquire_saslname_for_mech',
-    'gss_release_buffer', 'gss_wrap', 'gss_unwrap', 'gss_indicate_mechs',
-    'gss_release_oid_set', 'gss_display_status',
+  GSS_NAMES: array[0 .. 17] of RawUtf8 = (
+    'gss_import_name',
+    'gss_display_name',
+    'gss_release_name',
+    'gss_acquire_cred',
+    'gss_acquire_cred_with_password',
+    'gss_release_cred',
+    'gss_init_sec_context',
+    'gss_accept_sec_context',
+    'gss_inquire_context',
+    'gss_delete_sec_context',
+    'gss_inquire_saslname_for_mech',
+    'gss_release_buffer',
+    'gss_wrap',
+    'gss_unwrap',
+    'gss_indicate_mechs',
+    'gss_release_oid_set',
+    'gss_display_status',
     'krb5_gss_register_acceptor_identity');
 
 var
@@ -528,10 +539,10 @@ begin
   begin
     P := @@api.gss_import_name;
     for i := 0 to high(GSS_NAMES) do
-      api.Resolve(GSS_NAMES[i], @P^[i]); // no exception, set nil on failure
+      api.Resolve('', GSS_NAMES[i], @P^[i]); // no exception, set nil on failure
     if not Assigned(api.krb5_gss_register_acceptor_identity) then
       // try alternate function name
-      api.Resolve('gsskrb5_register_acceptor_identity',
+      api.Resolve('', 'gsskrb5_register_acceptor_identity',
         @api.krb5_gss_register_acceptor_identity);
     if Assigned(api.gss_acquire_cred) and
        Assigned(api.gss_accept_sec_context) and

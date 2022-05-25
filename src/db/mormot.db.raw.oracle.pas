@@ -1276,19 +1276,48 @@ const
     Text: 'WE8ISO8859P1'
   ));
 
-  OCI_ENTRIES: array[0..40] of PAnsiChar = (
-    'OCIClientVersion', 'OCIEnvNlsCreate',
-    'OCIHandleAlloc', 'OCIHandleFree', 'OCIServerAttach', 'OCIServerDetach',
-    'OCIAttrGet', 'OCIAttrSet', 'OCISessionBegin', 'OCISessionEnd',
-    'OCIErrorGet', 'OCIStmtPrepare', 'OCIStmtExecute', 'OCIStmtFetch',
-    'OCIBindByPos', 'OCIParamGet', 'OCITransStart', 'OCITransRollback',
-    'OCITransCommit', 'OCIDescriptorAlloc', 'OCIDescriptorFree',
-    'OCIDateTimeConstruct', 'OCIDateTimeGetDate', 'OCIDefineByPos',
-    'OCILobGetLength', 'OCILobGetChunkSize', 'OCILobOpen', 'OCILobRead',
-    'OCILobClose', 'OCILobWrite', 'OCINlsCharSetNameToId', 'OCIStmtPrepare2',
-    'OCIStmtRelease', 'OCITypeByName', 'OCIObjectNew', 'OCIObjectFree',
-    'OCINumberFromInt', 'OCIStringAssignText', 'OCICollAppend', 'OCIBindObject',
-    'OCIPasswordChange');
+  OCI_ENTRIES: array[0..40] of RawUtf8 = (
+    'ClientVersion',
+    'EnvNlsCreate',
+    'HandleAlloc',
+    'HandleFree',
+    'ServerAttach',
+    'ServerDetach',
+    'AttrGet',
+    'AttrSet',
+    'SessionBegin',
+    'SessionEnd',
+    'ErrorGet',
+    'StmtPrepare',
+    'StmtExecute',
+    'StmtFetch',
+    'BindByPos',
+    'ParamGet',
+    'TransStart',
+    'TransRollback',
+    'TransCommit',
+    'DescriptorAlloc',
+    'DescriptorFree',
+    'DateTimeConstruct',
+    'DateTimeGetDate',
+    'DefineByPos',
+    'LobGetLength',
+    'LobGetChunkSize',
+    'LobOpen',
+    'LobRead',
+    'LobClose',
+    'LobWrite',
+    'NlsCharSetNameToId',
+    'StmtPrepare2',
+    'StmtRelease',
+    'TypeByName',
+    'ObjectNew',
+    'ObjectFree',
+    'NumberFromInt',
+    'StringAssignText',
+    'CollAppend',
+    'BindObject',
+    'PasswordChange');
 
 
 { TSqlDBOracleLib }
@@ -1657,7 +1686,7 @@ begin
   TryLoadLibrary([{%H-}l1, l2, l3, LibraryFileName, LIBNAME], ESqlDBOracle);
   P := @@ClientVersion;
   for i := 0 to High(OCI_ENTRIES) do
-    Resolve(OCI_ENTRIES[i], @P[i], {raiseonfailure=}ESqlDBOracle);
+    Resolve('OCI', OCI_ENTRIES[i], @P[i], {raiseonfailure=}ESqlDBOracle);
   ClientVersion(
     major_version, minor_version, update_num, patch_num, port_update_num);
   SupportsInt64Params := (major_version > 11) or

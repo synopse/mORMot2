@@ -931,21 +931,48 @@ var
   api: PtrInt;
 
 const
-  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 39 {$else} 25 {$endif}] of PAnsiChar = (
-    'curl_global_init', 'curl_global_init_mem', 'curl_global_cleanup', 'curl_version_info',
-    'curl_easy_init', 'curl_easy_setopt', 'curl_easy_perform', 'curl_easy_cleanup',
-    'curl_easy_getinfo', 'curl_easy_duphandle', 'curl_easy_reset',
-    'curl_easy_strerror', 'curl_slist_append', 'curl_slist_free_all',
-    'curl_formadd', 'curl_formfree', 'curl_share_init',
-    'curl_share_cleanup', 'curl_share_setopt', 'curl_share_strerror',
-    'curl_mime_init', 'curl_mime_free', 'curl_mime_addpart', 'curl_mime_data',
-    'curl_mime_name', 'curl_mime_type'
+  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 39 {$else} 25 {$endif}] of RawUtf8 = (
+    'global_init',
+    'global_init_mem',
+    'global_cleanup',
+    'version_info',
+    'easy_init',
+    'easy_setopt',
+    'easy_perform',
+    'easy_cleanup',
+    'easy_getinfo',
+    'easy_duphandle',
+    'easy_reset',
+    'easy_strerror',
+    'slist_append',
+    'slist_free_all',
+    'formadd',
+    'formfree',
+    'share_init',
+    'share_cleanup',
+    'share_setopt',
+    'share_strerror',
+    'mime_init',
+    'mime_free',
+    'mime_addpart',
+    'mime_data',
+    'mime_name',
+    'mime_type'
     {$ifdef LIBCURLMULTI},
-    'curl_multi_add_handle', 'curl_multi_assign', 'curl_multi_cleanup',
-    'curl_multi_fdset', 'curl_multi_info_read', 'curl_multi_init',
-    'curl_multi_perform', 'curl_multi_remove_handle', 'curl_multi_setopt',
-    'curl_multi_socket_action', 'curl_multi_socket_all', 'curl_multi_strerror',
-    'curl_multi_timeout', 'curl_multi_wait'
+    'multi_add_handle',
+    'multi_assign',
+    'multi_cleanup',
+    'multi_fdset',
+    'multi_info_read',
+    'multi_init',
+    'multi_perform',
+    'multi_remove_handle',
+    'multi_setopt',
+    'multi_socket_action',
+    'multi_socket_all',
+    'multi_strerror',
+    'multi_timeout',
+    'multi_wait'
     {$endif LIBCURLMULTI} );
 
 {$endif LIBCURLSTATIC}
@@ -1032,7 +1059,7 @@ begin
         ], ECurl);
       P := @@curl.global_init;
       for api := low(NAMES) to high(NAMES) do
-        curl.Resolve(NAMES[api], @P[api], {raiseonfailure=}ECurl);
+        curl.Resolve('curl_', NAMES[api], @P[api], {onfailure=}ECurl);
     except
       FreeAndNil(curl); // ECurl raised during initialization above
       exit;

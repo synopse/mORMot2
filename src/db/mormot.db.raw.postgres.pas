@@ -212,30 +212,30 @@ implementation
 { ************ PostgreSQL Client Library Loading }
 
 const
-  PQ_ENTRIES: array[0..22] of PAnsiChar = (
-    'PQlibVersion',
-    'PQisthreadsafe',
-    'PQsetdbLogin',
-    'PQstatus',
-    'PQfinish',
-    'PQresultStatus',
-    'PQresultErrorField',
-    'PQerrorMessage',
-    'PQsetNoticeProcessor',
-    'PQclear',
-    'PQfreemem',
-    'PQexec',
-    'PQprepare',
-    'PQexecPrepared',
-    'PQexecParams',
-    'PQnfields',
-    'PQntuples',
-    'PQcmdTuples',
-    'PQfname',
-    'PQftype',
-    'PQgetvalue',
-    'PQgetlength',
-    'PQgetisnull');
+  PQ_ENTRIES: array[0..22] of RawUtf8 = (
+    'libVersion',
+    'isthreadsafe',
+    'setdbLogin',
+    'status',
+    'finish',
+    'resultStatus',
+    'resultErrorField',
+    'errorMessage',
+    'setNoticeProcessor',
+    'clear',
+    'freemem',
+    'exec',
+    'prepare',
+    'execPrepared',
+    'execParams',
+    'nfields',
+    'ntuples',
+    'cmdTuples',
+    'fname',
+    'ftype',
+    'getvalue',
+    'getlength',
+    'getisnull');
 
 
 { TSqlDBPostgresLib }
@@ -267,7 +267,7 @@ begin
     {%H-}l2, LIBNAME, LIBNAME2], ESqlDBPostgres);
   P := @@LibVersion;
   for i := 0 to High(PQ_ENTRIES) do
-    Resolve(PQ_ENTRIES[i], @P[I], {raiseonfailure=}ESqlDBPostgres);
+    Resolve('PQ', PQ_ENTRIES[i], @P[I], {raiseonfailure=}ESqlDBPostgres);
 end;
 
 procedure TSqlDBPostgresLib.GetRawUtf8(res: PPGresult;

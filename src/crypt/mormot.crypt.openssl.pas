@@ -95,7 +95,7 @@ type
     Ctx: array[boolean] of PEVP_CIPHER_CTX; // set and reused in CallEvp()
     procedure Init(aOwner: TAesAbstract; aCipherName: PUtf8Char);
     procedure Done;
-    procedure SetEvp(DoEncrypt: boolean; const method: string);
+    procedure SetEvp(DoEncrypt: boolean; const method: shortstring);
     procedure UpdEvp(DoEncrypt: boolean; BufIn, BufOut: pointer; Count: cardinal);
     procedure Clone(ToOwner: TAesAbstract; out ToAesOsl: TAesOsl);
   end;
@@ -687,25 +687,35 @@ begin
     EVP_CIPHER_CTX_free(Ctx[true]);
 end;
 
-procedure TAesOsl.SetEvp(DoEncrypt: boolean; const method: string);
+procedure TAesOsl.SetEvp(DoEncrypt: boolean; const method: shortstring);
 var
   c: PEVP_CIPHER_CTX;
 begin
   c := Ctx[DoEncrypt];
-  if c = nil then
+  if (c <> nil) and
+     (Owner.AlgoMode = mGcm) and
+     (OpenSslVersion >= $30000000) then
+    // on OpenSSL 3, GCM requires a full reinitialization of the context :(
+    EVP_CIPHER_CTX_reset(c)
+  else if c = nil then
   begin
-    // setup encrypt/decrypt context, with the proper key and no padding
+    // setup encrypt/decrypt context, with the proper key/IV and no padding
     c := EVP_CIPHER_CTX_new;
-    EOpenSslCrypto.Check(Owner, method,
-      EVP_CipherInit_ex(c, Cipher, nil,
-        @TAesAbstractOsl(Owner).fKey, nil, ord(DoEncrypt)));
-    EOpenSslCrypto.Check(Owner, method,
-      EVP_CIPHER_CTX_set_padding(c, 0));
     Ctx[DoEncrypt] := c;
+  end
+  else
+  begin
+    // OpenSSL allows to reuse the previous Ctxt[], just setting the (new) IV
+    EOpenSslCrypto.Check(Owner, method, EVP_CipherInit_ex2(
+      c, nil, nil, @Owner.IV, ord(DoEncrypt), nil));
+    exit;
   end;
-  // OpenSSL allows to reuse the previous Ctxt[], just setting the (new) IV
+  // full initialization of the context
   EOpenSslCrypto.Check(Owner, method,
-    EVP_CipherInit_ex(c, nil, nil, nil, @Owner.IV, ord(DoEncrypt)));
+    EVP_CipherInit_ex2(
+      c, Cipher, @TAesAbstractOsl(Owner).fKey, @Owner.IV, ord(DoEncrypt), nil));
+  EOpenSslCrypto.Check(Owner, method,
+    EVP_CIPHER_CTX_set_padding(c, 0));
 end;
 
 procedure TAesOsl.UpdEvp(DoEncrypt: boolean; BufIn, BufOut: pointer; Count: cardinal);
