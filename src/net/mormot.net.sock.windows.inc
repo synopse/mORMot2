@@ -988,6 +988,7 @@ type
     fData, fInput: AnsiString;
     fInputSize, fDataPos, fDataCount, fInputCount: integer;
     fSessionClosed: boolean;
+    fAccept: Boolean;
     fAcceptCert: PCCERT_CONTEXT;
     fAcceptCertStore: HCERTSTORE;
     procedure ESChannelRaiseLastError(res: cardinal);
@@ -997,7 +998,7 @@ type
     destructor Destroy; override;
     procedure AfterConnection(Socket: TNetSocket;  var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
-    procedure AfterAccept(Socket: TNetSocket; const Address: TNetAddr;
+    procedure AfterAccept(Socket: TNetSocket; Address: PNetAddr;
       var Context: TNetTlsContext);
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
@@ -1068,6 +1069,7 @@ begin
   fSocket := Socket;
   fContext := @Context;
   fServerAddressW := SynUnicode(ServerAddress);
+  fAccept := false;
   CheckSEC_E_OK(AcquireCredentialsHandleW(
     nil, UNISP_NAME, SECPKG_CRED_OUTBOUND, nil, nil, nil, nil, @fCred, nil));
   fDataPos := 0;
@@ -1091,7 +1093,7 @@ begin
   CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
   // make TLS handshake and prepare for process
   SetLength(fData, TLSRECMAXSIZE);
-  HandshakeLoop;
+  HandshakeLoop();
   CheckSEC_E_OK(QueryContextAttributesW(
     @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
   fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
@@ -1103,18 +1105,60 @@ begin
 end;
 
 procedure TSChannelClient.AfterAccept(Socket: TNetSocket;
-  const Address: TNetAddr; var Context: TNetTlsContext);
+  Address: PNetAddr; var Context: TNetTlsContext);
+var
+  certblob: RawByteString;
+  blob: TCryptDataBlob;
+  cred: TSChannelCred;
 begin
   // prepare execution context
   fSocket := Socket;
   fContext := @Context;
+  fAccept := true;
   if fContext.CertificateFile = '' then
-    fAcceptCertStore := CertOpenSystemStoreW(nil, 'MY')
+  begin
+    // Load certificate from Windows certificate store
+    fAcceptCertStore := CertOpenSystemStoreW(nil, 'MY');
+    fAcceptCert := CertFindCertificateInStore(fAcceptCertStore, 0, 0,
+      CERT_FIND_ANY, nil, nil);
+  end
   else
   begin
-    // to be continued :)
+    // File name in UTF8, Utf8ToFileName?
+    certblob := StringFromFile(TFileName(fContext.CertificateFile));
+    blob.cbData := Length(certblob);
+    blob.pbData := Pointer(certblob);
+    // Load certificate from file. You can use Let's Encrypt sertificate,
+    // converted to PFX:
+    // openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
+    fAcceptCertStore := PFXImportCertStore(@blob, nil,
+      PKCS12_INCLUDE_EXTENDED_PROPERTIES);
+    // Find first certificate in store
+    fAcceptCert := CertFindCertificateInStore(fAcceptCertStore, 0, 0,
+      CERT_FIND_ANY, nil, nil);
   end;
-
+  if fAcceptCert = nil then
+    raise ESChannel.Create('Certificate not available');
+  FillCharFast(cred, SizeOf(cred), 0);
+  cred.dwVersion := SCHANNEL_CRED_VERSION;
+  cred.cCreds := 1;
+  cred.paCred := @fAcceptCert;
+  CheckSEC_E_OK(AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
+    nil, @cred, nil, nil, @fCred, nil));
+  fDataPos := 0;
+  fDataCount := 0;
+  fFlags := ASC_REQ_FLAGS;
+  // make TLS handshake and prepare for process
+  SetLength(fData, TLSRECMAXSIZE);
+  HandshakeLoop();
+  CheckSEC_E_OK(QueryContextAttributesW(
+    @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
+  fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
+  if fInputSize > TLSRECMAXSIZE then
+    raise ESChannel.CreateFmt('InputSize=%d>%d on %s',
+      [fInputSize, TLSRECMAXSIZE, Address^.IPShort()]);
+  SetLength(fInput, fInputSize);
+  fInputCount := 0;
 end;
 
 procedure TSChannelClient.HandshakeLoop;
@@ -1123,14 +1167,25 @@ procedure TSChannelClient.HandshakeLoop;
   var
     f: cardinal;
     buf: THandshakeBuf;
+    LInCtxPtr: PSecHandle;
   begin
     HandshakeBufInit(buf);
     buf.buf[0].cbBuffer := fDataCount;
     buf.buf[0].pvBuffer := pointer(fData);
     f := 0;
-    result := InitializeSecurityContextW(
-      @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
-      @buf.input, 0, nil, @buf.output, f, nil);
+    if fAccept then
+    begin
+      if (fCtxt.dwLower = 0) and (fCtxt.dwUpper = 0) then
+        LInCtxPtr := nil
+      else
+        LInCtxPtr := @fCtxt;
+      result := AcceptSecurityContext(@fCred, LInCtxPtr, @buf.input,
+        fFlags, 0, @fCtxt, @buf.output, f, nil);
+    end
+    else
+      result := InitializeSecurityContextW(
+        @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
+        @buf.input, 0, nil, @buf.output, f, nil);
     //writeln(IntToHex(result, 8),' [',SspiResToText(result),'] tosend=',buf.buf[2].cbBuffer);
     if (result = SEC_E_OK) or
        (result = SEC_I_CONTINUE_NEEDED) or
@@ -1198,11 +1253,23 @@ begin
         buf.cbBuffer := 0;
         buf.BufferType := SECBUFFER_TOKEN;
         buf.pvBuffer := nil;
-        if InitializeSecurityContextW(@fCred, @fCtxt, nil, fFlags, 0,
-           0, nil, 0, @fCtxt, @desc, f, nil) = SEC_E_OK then
+        if fAccept then
         begin
-          mormot.net.sock.Send(fSocket.Socket, buf.pvBuffer, buf.cbBuffer, 0);
-          FreeContextBuffer(buf.pvBuffer);
+          if AcceptSecurityContext(@fCred, @fCtxt, nil, fFlags, 0,
+             nil, @desc, f, nil) = SEC_E_OK then
+          begin
+            mormot.net.sock.Send(fSocket.Socket, buf.pvBuffer, buf.cbBuffer, 0);
+            FreeContextBuffer(buf.pvBuffer);
+          end;
+        end
+        else
+        begin
+          if InitializeSecurityContextW(@fCred, @fCtxt, nil, fFlags, 0,
+             0, nil, 0, @fCtxt, @desc, f, nil) = SEC_E_OK then
+          begin
+            mormot.net.sock.Send(fSocket.Socket, buf.pvBuffer, buf.cbBuffer, 0);
+            FreeContextBuffer(buf.pvBuffer);
+          end;
         end;
       end;
     end;

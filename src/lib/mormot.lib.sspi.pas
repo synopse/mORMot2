@@ -269,6 +269,7 @@ const
   SEC_WINNT_AUTH_IDENTITY_UNICODE = $02;
 
   SCHANNEL_SHUTDOWN = 1;
+  SCHANNEL_CRED_VERSION = 4;
 
 function SspiResToText(res: cardinal): string;
 
