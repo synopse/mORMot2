@@ -1090,6 +1090,7 @@ type
     fTimeoutTix: cardinal;
     fSafe: TRWLightLock;
     procedure ResetIfNeeded;
+    function DoReset: Boolean;
   public
     /// initialize the internal storage
     // - aMaxCacheRamUsed can set the maximum RAM to be used for values, in bytes
@@ -8874,14 +8875,28 @@ var
   tix: cardinal;
 begin
   if fRamUsed > fMaxRamUsed then
-    Reset;
+    DoReset;
   if fTimeoutSeconds > 0 then
   begin
     tix := GetTickCount64 shr 10;
     if fTimeoutTix > tix then
-      Reset;
+      DoReset;
     fTimeoutTix := tix + fTimeoutSeconds;
   end;
+end;
+
+function TSynCache.DoReset: Boolean;
+begin
+  if fNameValue.Count <> 0 then
+  begin
+    fNameValue.DynArray.Clear;
+    fNameValue.DynArray.ForceReHash;
+    result := true; // mark something was flushed
+  end
+  else
+    result := false;
+  fRamUsed := 0;
+  fTimeoutTix := 0;
 end;
 
 function TSynCache.Find(const aKey: RawUtf8; aResultTag: PPtrInt): RawUtf8;
@@ -8893,15 +8908,18 @@ begin
      (aKey = '') then
     exit;
   fSafe.ReadLock;
-  ndx := fNameValue.Find(aKey);
-  if ndx >= 0 then
-    with fNameValue.List[ndx] do
-    begin
-      result := Value;
-      if aResultTag <> nil then
-        aResultTag^ := Tag;
-    end;
-  fSafe.ReadUnLock;
+  try
+    ndx := fNameValue.Find(aKey);
+    if ndx >= 0 then
+      with fNameValue.List[ndx] do
+      begin
+        result := Value;
+        if aResultTag <> nil then
+          aResultTag^ := Tag;
+      end;
+  finally
+    fSafe.ReadUnLock;
+  end;
 end;
 
 function TSynCache.AddOrUpdate(const aKey, aValue: RawUtf8; aTag: PtrInt): boolean;
@@ -8936,14 +8954,7 @@ begin
     exit; // avoid GPF or a lock for nothing
   fSafe.WriteLock;
   try
-    if fNameValue.Count <> 0 then
-    begin
-      fNameValue.DynArray.Clear;
-      fNameValue.DynArray.ForceReHash;
-      result := true; // mark something was flushed
-    end;
-    fRamUsed := 0;
-    fTimeoutTix := 0;
+    Result := DoReset;
   finally
     fSafe.WriteUnlock;
   end;
