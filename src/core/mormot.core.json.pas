@@ -1088,8 +1088,8 @@ type
     fMaxRamUsed: cardinal;
     fTimeoutSeconds: cardinal;
     fTimeoutTix: cardinal;
-    fSafe: TRWLightLock;
-    procedure ResetIfNeeded;
+    fSafe: TRWLock; // writes should be reentrant for Reset
+    procedure ResetIfNeeded; // call Reset after TimeoutSeconds
   public
     /// initialize the internal storage
     // - aMaxCacheRamUsed can set the maximum RAM to be used for values, in bytes
@@ -1121,7 +1121,7 @@ type
     function Reset: boolean;
     /// access to the internal R/W locker, for thread-safe process
     // - Find/AddOrUpdate methods are protected by this R/W lock
-    property Safe: TRWLightLock
+    property Safe: TRWLock
       read fSafe;
   published
     /// number of entries in the cache
@@ -8892,16 +8892,25 @@ begin
   if (self = nil) or
      (aKey = '') then
     exit;
-  fSafe.ReadLock;
-  ndx := fNameValue.Find(aKey);
-  if ndx >= 0 then
-    with fNameValue.List[ndx] do
-    begin
-      result := Value;
-      if aResultTag <> nil then
-        aResultTag^ := Tag;
-    end;
-  fSafe.ReadUnLock;
+  fSafe.ReadOnlyLock;
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    ndx := fNameValue.Find(aKey);
+    if ndx >= 0 then
+      with fNameValue.List[ndx] do
+      begin
+        result := Value;
+        if aResultTag <> nil then
+          aResultTag^ := Tag;
+      end;
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+  {$endif HASFASTTRYFINALLY}
+    fSafe.ReadOnlyUnLock;
+  end;
 end;
 
 function TSynCache.AddOrUpdate(const aKey, aValue: RawUtf8; aTag: PtrInt): boolean;
