@@ -1658,6 +1658,7 @@ function SSL_get_peer_certificate(s: PSSL): PX509; cdecl;
 function SSL_get_peer_cert_chain(s: PSSL): Pstack_st_X509; cdecl;
 procedure SSL_free(ssl: PSSL); cdecl;
 function SSL_connect(ssl: PSSL): integer; cdecl;
+function SSL_accept(ssl: PSSL): integer; cdecl;
 procedure SSL_set_connect_state(s: PSSL); cdecl;
 procedure SSL_set_accept_state(s: PSSL); cdecl;
 function SSL_read(ssl: PSSL; buf: pointer; num: integer): integer; cdecl;
@@ -1668,6 +1669,7 @@ function SSL_set_cipher_list(s: PSSL; str: PUtf8Char): integer; cdecl;
 procedure SSL_get0_alpn_selected(ssl: PSSL; data: PPByte; len: PCardinal); cdecl;
 function SSL_clear(s: PSSL): integer; cdecl;
 function TLS_client_method(): PSSL_METHOD; cdecl;
+function TLS_server_method(): PSSL_METHOD; cdecl;
 function SSL_CTX_set_default_verify_paths(ctx: PSSL_CTX): integer; cdecl;
 procedure SSL_CTX_set_default_passwd_cb(ctx: PSSL_CTX; cb: Ppem_password_cb); cdecl;
 procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer); cdecl;
@@ -2205,6 +2207,7 @@ type
     SSL_get_peer_cert_chain: function(s: PSSL): Pstack_st_X509; cdecl;
     SSL_free: procedure(ssl: PSSL); cdecl;
     SSL_connect: function(ssl: PSSL): integer; cdecl;
+    SSL_accept: function(ssl: PSSL): integer; cdecl;
     SSL_set_connect_state: procedure(s: PSSL); cdecl;
     SSL_set_accept_state: procedure(s: PSSL); cdecl;
     SSL_read: function(ssl: PSSL; buf: pointer; num: integer): integer; cdecl;
@@ -2215,6 +2218,7 @@ type
     SSL_get0_alpn_selected: procedure(ssl: PSSL; data: PPByte; len: PCardinal); cdecl;
     SSL_clear: function(s: PSSL): integer; cdecl;
     TLS_client_method: function(): PSSL_METHOD; cdecl;
+    TLS_server_method: function(): PSSL_METHOD; cdecl;
     SSL_CTX_set_default_verify_paths: function(ctx: PSSL_CTX): integer; cdecl;
     SSL_CTX_set_default_passwd_cb: procedure(ctx: PSSL_CTX; cb: Ppem_password_cb); cdecl;
     SSL_CTX_set_default_passwd_cb_userdata: procedure(ctx: PSSL_CTX; u: pointer); cdecl;
@@ -2230,7 +2234,7 @@ type
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..46] of RawUtf8 = (
+  LIBSSL_ENTRIES: array[0..48] of RawUtf8 = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -2256,6 +2260,7 @@ const
     'SSL_get_peer_cert_chain',
     'SSL_free',
     'SSL_connect',
+    'SSL_accept',
     'SSL_set_connect_state',
     'SSL_set_accept_state',
     'SSL_read',
@@ -2266,6 +2271,7 @@ const
     'SSL_get0_alpn_selected',
     'SSL_clear',
     'TLS_client_method',
+    'TLS_server_method',
     'SSL_CTX_set_default_verify_paths',
     'SSL_CTX_set_default_passwd_cb',
     'SSL_CTX_set_default_passwd_cb_userdata',
@@ -2407,6 +2413,11 @@ begin
   result := libssl.SSL_connect(ssl);
 end;
 
+function SSL_accept(ssl: PSSL): integer;
+begin
+  result := libssl.SSL_accept(ssl);
+end;
+
 procedure SSL_set_connect_state(s: PSSL);
 begin
   libssl.SSL_set_connect_state(s);
@@ -2455,6 +2466,11 @@ end;
 function TLS_client_method(): PSSL_METHOD;
 begin
   result := libssl.TLS_client_method;
+end;
+
+function TLS_server_method(): PSSL_METHOD;
+begin
+  result := libssl.TLS_server_method;
 end;
 
 function SSL_CTX_set_default_verify_paths(ctx: PSSL_CTX): integer;
@@ -4814,6 +4830,9 @@ procedure SSL_free(ssl: PSSL); cdecl;
 function SSL_connect(ssl: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_connect';
 
+function SSL_accept(ssl: PSSL): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_accept';
+
 procedure SSL_set_connect_state(s: PSSL); cdecl;
   external LIB_SSL name _PU + 'SSL_set_connect_state';
 
@@ -4843,6 +4862,9 @@ function SSL_clear(s: PSSL): integer; cdecl;
 
 function TLS_client_method(): PSSL_METHOD; cdecl;
   external LIB_SSL name _PU + 'TLS_client_method';
+
+function TLS_server_method(): PSSL_METHOD; cdecl;
+  external LIB_SSL name _PU + 'TLS_server_method';
 
 function SSL_CTX_set_default_verify_paths(ctx: PSSL_CTX): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_default_verify_paths';
@@ -7864,6 +7886,8 @@ type
     // INetTls methods
     procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
+    procedure AfterAccept(Socket: TNetSocket; RemoteIP: RawUTF8;
+      var Context: TNetTlsContext);
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
@@ -8111,6 +8135,45 @@ begin
       fPeer := nil;
     end;
   end;
+end;
+
+procedure TOpenSslClient.AfterAccept(Socket: TNetSocket; RemoteIP: RawUTF8;
+  var Context: TNetTlsContext);
+var
+  v: Integer;
+begin
+  fSocket := Socket;
+  fContext := @Context;
+  // reset output information
+  Context.LastError := '';
+  // prepare TLS connection properties
+  fCtx := SSL_CTX_new(TLS_server_method);
+  if Context.CertificateFile = '' then
+    raise EOpenSslClient.Create('CertificateFile required');
+  SSL_CTX_use_certificate_file(
+    fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM);
+  if Context.PrivatePassword <> '' then
+    SSL_CTX_set_default_passwd_cb_userdata(
+      fCtx, pointer(Context.PrivatePassword));
+  if Context.PrivateKeyFile = '' then
+    raise EOpenSslClient.Create('PrivateKeyFile required');
+  SSL_CTX_use_PrivateKey_file(
+    fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
+  EOpenSslClient.Check(self, 'AfterAccept check_private_key',
+    SSL_CTX_check_private_key(fCtx), @Context.LastError);
+  v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
+  if Context.AllowDeprecatedTls then
+    v := TLS1_VERSION; // allow TLS1.0 TLS1.1
+  SSL_CTX_set_min_proto_version(fCtx, v);
+  fSsl := SSL_new(fCtx);
+  EOpenSslClient.Check(self, 'AfterAccept setfd',
+    SSL_set_fd(fSsl, Socket.Socket), @Context.LastError);
+  // server TLS negotiation with server
+  EOpenSslClient.Check(self, 'AfterAccept connect', SSL_accept(fSsl),
+    @Context.LastError, fSsl);
+  fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
+  Context.CipherName := fSsl.CurrentCipher.Description;
+  // writeln(Context.CipherName);
 end;
 
 destructor TOpenSslClient.Destroy;
