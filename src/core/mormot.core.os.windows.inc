@@ -3391,7 +3391,8 @@ begin
 end;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
-  envaddexisting: boolean; parsed: PParseCommands): integer;
+  envaddexisting: boolean; parsed: PParseCommands; waitfordelayms: cardinal;
+  processid: PHandle): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
@@ -3453,15 +3454,20 @@ begin
       DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
     pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo) then
   begin
+    if processid <> nil then
+      processid^ := processinfo.hProcess;
     if waitfor then
-      if WaitForSingleObject(processinfo.hProcess, INFINITE) = WAIT_FAILED then
-        result := -GetLastError
-      else if not GetExitCodeProcess(processinfo.hProcess, exitcode) then
-        result := -GetLastError
-      else
-        result := exitcode
+      if WaitForSingleObject(processinfo.hProcess, waitfordelayms) = WAIT_FAILED then
+        if waitfordelayms <> INFINITE then
+          result := -1 // still runing after waitfordelayms
+        else
+          result := -GetLastError // failed to wait
+      else if GetExitCodeProcess(processinfo.hProcess, exitcode) then
+          result := exitcode      // waited for process to end -> return code
+        else
+          result := -GetLastError // was not able to retrieve exit code
     else
-      result := 0;
+      result := 0; // asynchronous process launch
     CloseHandle(processinfo.hProcess);
     CloseHandle(processinfo.hThread);
   end

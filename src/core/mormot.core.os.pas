@@ -3965,9 +3965,13 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
 // - under POSIX, calls bash only if needed, after ParseCommandArgs() analysis
 // - under Windows (especially Windows 10), creating a process can be dead slow
 // https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
+// - waitfordelay/processid are implemented on Windows only
 function RunCommand(const cmd: TFileName; waitfor: boolean;
   const env: TFileName = ''; envaddexisting: boolean = false;
-  parsed: PParseCommands = nil): integer;
+  parsed: PParseCommands = nil
+  {$ifdef OSWINDOWS} ;
+  waitfordelayms: cardinal = INFINITE; processid: PHandle = nil
+  {$endif OSWINDOWS}): integer;
 
 
 

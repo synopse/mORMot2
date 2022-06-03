@@ -2409,8 +2409,7 @@ begin
 end;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean;
-  const env: TFileName; envaddexisting: boolean;
-  parsed: PParseCommands): integer;
+  const env: TFileName; envaddexisting: boolean; parsed: PParseCommands): integer;
 var
   temp: RawUtf8;
   err: TParseCommands;
