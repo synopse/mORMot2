@@ -466,6 +466,12 @@ type
     // - should raise an exception on error
     procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
+    /// method called for each new connection on server side
+    // - should make the proper server-side TLS handshake and create a session
+    // - should raise an exception on error
+    // - TNetTlsContext should have been copied from the server properties
+    procedure AfterAccept(Socket: TNetSocket; RemoteIP: RawUTF8;
+      var Context: TNetTlsContext);
     /// receive some data from the TLS layer
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     /// send some data from the TLS layer
@@ -858,6 +864,7 @@ type
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
     function GetRawSocket: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
+    procedure DoTlsHandshake(doAccept: Boolean);
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
     // - could have been assigned by a Tunnel.From() call
@@ -3140,33 +3147,34 @@ begin
   {$endif OSLINUX}
 end;
 
-procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
-  aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket);
-
-  procedure DoTlsHandshake;
-  begin
-    try
-      if not Assigned(NewNetTls) then
-        raise ENetSock.Create('%s.OpenBind: TLS is not available - try ' +
-          'including mormot.lib.openssl11 and installing OpenSSL 1.1.1',
-          [ClassNameShort(self)^]);
-      fSecure := NewNetTls;
-      if fSecure = nil then
-        raise ENetSock.Create('%s.OpenBind; TLS is not available on this ' +
-          'system - try installing OpenSSL 1.1.1', [ClassNameShort(self)^]);
+procedure TCrtSocket.DoTlsHandshake(doAccept: Boolean);
+begin
+  try
+    if not Assigned(NewNetTls) then
+      raise ENetSock.Create('%s.DoTlsHandshake: TLS is not available - try ' +
+        'including mormot.lib.openssl11 and installing OpenSSL 1.1.1',
+        [ClassNameShort(self)^]);
+    fSecure := NewNetTls;
+    if fSecure = nil then
+      raise ENetSock.Create('%s.DoTlsHandshake; TLS is not available on this ' +
+        'system - try installing OpenSSL 1.1.1', [ClassNameShort(self)^]);
+    if doAccept then
+      fSecure.AfterAccept(fSock, fRemoteIP, TLS)
+    else
       fSecure.AfterConnection(fSock, TLS, fServer);
-      TLS.Enabled := true;
-    except
-      on E: Exception do
-      begin
-        fSecure := nil;
-        raise ENetSock.CreateFmt('%s.OpenBind(%s:%s,%s): TLS failed [%s %s]',
-          [ClassNameShort(self)^, fServer, fPort, BINDTXT[doBind],
-           ClassNameShort(E)^, E.Message]);
-      end;
+    TLS.Enabled := true;
+  except
+    on E: Exception do
+    begin
+      fSecure := nil;
+      raise ENetSock.CreateFmt('%s.DoTlsHandshake: TLS failed [%s %s]',
+        [ClassNameShort(self)^, ClassNameShort(E)^, E.Message]);
     end;
   end;
+end;
 
+procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
+  aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket);
 var
   retry: integer;
   head: RawUtf8;
@@ -3224,7 +3232,7 @@ begin
       if Assigned(OnLog) then
         OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
       if aTLS then
-        DoTlsHandshake;
+        DoTlsHandshake(false);
       exit;
     end
     else
@@ -3255,7 +3263,7 @@ begin
      aTLS and
      not doBind and
      ({%H-}PtrInt(aSock) <= 0) then
-    DoTlsHandshake;
+    DoTlsHandshake(false);
   if Assigned(OnLog) then
     OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
       pointer(fSock.Socket), TLS.CipherName], self);
