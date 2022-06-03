@@ -699,18 +699,21 @@ begin
     EVP_CIPHER_CTX_reset(c)
   else if c = nil then
   begin
-    // setup encrypt/decrypt context, with the proper key/IV and no padding
+    // allocate new encrypt/decrypt context
     c := EVP_CIPHER_CTX_new;
     Ctx[DoEncrypt] := c;
   end
   else
   begin
     // OpenSSL allows to reuse the previous Ctxt[], just setting the (new) IV
+    // -> this makes a huge performance benefit
+    // note: the latest API (i.e. EVP_CipherInit_ex on 1.1.1, EVP_CipherInit_ex2
+    // on 3.0) should be called to be able to reuse the context
     EOpenSslCrypto.Check(Owner, method, EVP_CipherInit_ex2(
       c, nil, nil, @Owner.IV, ord(DoEncrypt), nil));
     exit;
   end;
-  // full initialization of the context
+  // full initialization of the context, with the proper key/IV and no padding
   EOpenSslCrypto.Check(Owner, method,
     EVP_CipherInit_ex2(
       c, Cipher, @TAesAbstractOsl(Owner).fKey, @Owner.IV, ord(DoEncrypt), nil));

@@ -667,6 +667,7 @@ const
   HTTP_AUTH_ENABLE_NEGOTIATE = $00000008;
   HTTP_AUTH_ENABLE_KERBEROS = $00000010;
   HTTP_AUTH_ENABLE_ALL = $0000001F;
+
   HTTP_AUTH_EX_FLAG_ENABLE_KERBEROS_CREDENTIAL_CACHING = $01;
   HTTP_AUTH_EX_FLAG_CAPTURE_CREDENTIAL = $02;
 
@@ -918,25 +919,40 @@ const
     MajorVersion: 1;
     MinorVersion: 1
   );
+  HTTP_VERSION_1_2: HTTP_VERSION = (
+    MajorVersion: 1;
+    MinorVersion: 2
+  );
+
   /// error raised by HTTP API when the client disconnected (e.g. after timeout)
   HTTPAPI_ERROR_NONEXISTENTCONNECTION = 1229;
+
   // if set, available entity body is copied along with the request headers
   // into pEntityChunks
   HTTP_RECEIVE_REQUEST_FLAG_COPY_BODY = 1;
+
   // there is more entity body to be read for this request
   HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS = 1;
+  // request was routed based on host and IP binding
+  HTTP_REQUEST_FLAG_IP_ROUTED = 2;
+  // request was received over HTTP/2
+  HTTP_REQUEST_FLAG_HTTP2 = 4;
+
   // initialization for applications that use the HTTP Server API
   HTTP_INITIALIZE_SERVER = 1;
   // initialization for applications that use the HTTP configuration functions
   HTTP_INITIALIZE_CONFIG = 2;
+
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa364496
   HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER = 1;
+
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa364499
   HTTP_SEND_RESPONSE_FLAG_DISCONNECT = $00000001;
   HTTP_SEND_RESPONSE_FLAG_MORE_DATA = $00000002;
   HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA = $00000004;
   HTTP_SEND_RESPONSE_FLAG_PROCESS_RANGES = $00000020;
   HTTP_SEND_RESPONSE_FLAG_OPAQUE = $00000040;
+
   // flag which can be used by HttpRemoveUrlFromUrlGroup()
   HTTP_URL_FLAG_REMOVE_ALL = 1;
 
@@ -1877,6 +1893,8 @@ function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
   const aHeadersCount: integer): RawUtf8;
 
 {$endif USEWININET}
+
+
 
 implementation
 
