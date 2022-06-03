@@ -4242,9 +4242,11 @@ end;
 function EVP_CipherInit_ex2(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER;
   key: PByte; iv: PByte; enc: integer; params: pointer): integer;
 begin
-  if Assigned(libcrypto.EVP_CipherInit_ex2) then
+  // note: the latest API (i.e. EVP_CipherInit_ex on 1.1.1, EVP_CipherInit_ex2
+  // on 3.0) should be called to be able to reuse the context
+  if Assigned(libcrypto.EVP_CipherInit_ex2) then // OpenSSL 3.0 API
     result := libcrypto.EVP_CipherInit_ex2(ctx, cipher, key, iv, enc, params)
-  else
+  else                                // fallback to OpenSSL 1.1.1 call
     result := libcrypto.EVP_CipherInit_ex(ctx, cipher, nil, key, iv, enc);
 end;
 

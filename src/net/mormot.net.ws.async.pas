@@ -536,8 +536,10 @@ constructor TWebSocketAsyncServer.Create(const aPort: RawUtf8;
   ProcessOptions: THttpServerOptions);
 begin
   // initialize protocols and connections
-  fConnectionClass := TWebSocketAsyncConnection;
-  fConnectionsClass := TWebSocketAsyncConnections;
+  if fConnectionClass = nil then
+    fConnectionClass := TWebSocketAsyncConnection;
+  if fConnectionsClass = nil then
+    fConnectionsClass := TWebSocketAsyncConnections;
   fCallbackSendDelay := @fSettings.SendDelay;
   fProtocols := TWebSocketProtocolList.Create;
   fSettings.SetDefaults;

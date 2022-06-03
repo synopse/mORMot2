@@ -1622,7 +1622,8 @@ type
       read fUseFontFallBack write fUseFontFallBack;
     /// set the font name to be used for missing characters
     // - used only if UseFontFallBack is true
-    // - default value is 'Arial Unicode MS', if existing
+    // - default value is 'Lucida Sans Unicode' or 'Arial Unicode MS', if
+    // available - but you may also consider https://fonts.google.com/noto/fonts
     property FontFallBackName: string
       read GetFontFallBackName write SetFontFallBackName;
 
@@ -3466,7 +3467,7 @@ function FindSynUnicode(const values: array of SynUnicode;
   const value: SynUnicode): PtrInt;
 begin
   for result := 0 to high(values) do
-    if UpperCaseSynUnicode(values[result]) = value then // not fast, but working
+    if values[result] = value then
       exit;
   result := -1;
 end;
@@ -3477,7 +3478,7 @@ end;
 function GetTtcIndex(const FontName: RawUtf8; var TtcIndex: word;
   FontCount: LongWord): boolean;
 const
-  // Font names for Simp/Trad Chinese, Japanese, Korean locales
+  // lowercased Font names for Simpl/Trad Chinese, Japanese, Korean locales
   BATANG_KO = #48148#53461;
   BATANGCHE_KO = BATANG_KO + #52404;
   GUNGSUH_KO = #44417#49436;
@@ -3492,10 +3493,10 @@ const
   MINGLIU_XB_CH = MINGLIU_CH + '-extb';
   PMINGLIU_XB_CH = PMINGLIU_CH + '-extb';
   MINGLIU_XBHK_CH = MINGLIU_CH + '-extb_hkscs';
-  MSGOTHIC_JA = #65325#65331#32#12468#12471#12483#12463;
-  MSPGOTHIC_JA = #65325#65331#32#65328#12468#12471#12483#12463;
-  MSMINCHO_JA = #65325#65331#32#26126#26397;
-  MSPMINCHO_JA = #65325#65331#32#65328#26126#26397;
+  MSGOTHIC_JA = #65357#65363#32#12468#12471#12483#12463;
+  MSPGOTHIC_JA = #65357#65363#32#65328#12468#12471#12483#12463;
+  MSMINCHO_JA = #65357#65363#32#26126#26397;
+  MSPMINCHO_JA = #65357#65363#32#65328#26126#26397;
   SIMSUN_CHS = #23435#20307;
   NSIMSUN_CHS = #26032#23435#20307;
 var
@@ -3515,15 +3516,15 @@ begin
     TtcIndex := 3
   else
   begin
-    lcfn := UpperCaseSynUnicode(Utf8ToSynUnicode(FontName));
+    lcfn := LowerCaseSynUnicode(Utf8ToSynUnicode(FontName));
     if FindSynUnicode([BATANG_KO, GULIM_KO, MINGLIU_CH, MINGLIU_XB_CH,
-      MSGOTHIC_JA, MSMINCHO_JA, SIMSUN_CHS], lcfn) >= 0 then
+       MSGOTHIC_JA, MSMINCHO_JA, SIMSUN_CHS], lcfn) >= 0 then
       TtcIndex := 0
     else if FindSynUnicode([BATANGCHE_KO, GULIMCHE_KO, MINGLIU_HK_CH,
-      PMINGLIU_XB_CH, MSPGOTHIC_JA, MSPMINCHO_JA, NSIMSUN_CHS], lcfn) >= 0 then
+       PMINGLIU_XB_CH, MSPGOTHIC_JA, MSPMINCHO_JA, NSIMSUN_CHS], lcfn) >= 0 then
       TtcIndex := 1
-    else if FindSynUnicode([GUNGSUH_KO, DOTUM_KO, MINGLIU_HK_CH, MINGLIU_XBHK_CH],
-      lcfn) >= 0 then
+    else if FindSynUnicode([GUNGSUH_KO, DOTUM_KO, MINGLIU_HK_CH,
+       MINGLIU_XBHK_CH], lcfn) >= 0 then
       TtcIndex := 2
     else if FindSynUnicode([GUNGSUHCHE_KO, DOTUMCHE_KO], lcfn) >= 0 then
       TtcIndex := 3
@@ -6771,9 +6772,9 @@ begin
   fMissingBookmarks := TRawUtf8List.Create;
   fUseOutlines := AUseOutlines;
   fUseFontFallBack := true;
-  fFontFallBackIndex := GetTrueTypeFontIndex('Lucida Sans Unicode');
-  if fFontFallBackIndex < 0 then
-    fFontFallBackIndex := GetTrueTypeFontIndex('Arial Unicode MS');
+  fFontFallBackIndex := GetTrueTypeFontIndex('Arial Unicode MS');
+  if fFontFallBackIndex < 0 then // would handle at least greek/hebrew/cyrillic
+    fFontFallBackIndex := GetTrueTypeFontIndex('Lucida Sans Unicode');
   if fFontFallBackIndex < 0 then
     for i := 0 to high(fTrueTypeFonts) do
       if PosEx('Unicode', fTrueTypeFonts[i]) > 0 then
