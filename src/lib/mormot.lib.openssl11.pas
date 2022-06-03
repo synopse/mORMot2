@@ -1877,8 +1877,8 @@ function X509_VERIFY_PARAM_set_purpose(param: PX509_VERIFY_PARAM; purpose: integ
 function X509_VERIFY_PARAM_set_trust(param: PX509_VERIFY_PARAM; trust: integer): integer; cdecl;
 procedure X509_VERIFY_PARAM_set_depth(param: PX509_VERIFY_PARAM; depth: integer); cdecl;
 procedure X509_VERIFY_PARAM_set_auth_level(param: PX509_VERIFY_PARAM; auth_level: integer); cdecl;
-function X509_LOOKUP_load_file(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
-function X509_LOOKUP_add_dir(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer;
+function X509_LOOKUP_load_file(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer; cdecl;
+function X509_LOOKUP_add_dir(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer; cdecl;
 function PKCS12_new(): PPKCS12; cdecl;
 procedure PKCS12_free(a: PPKCS12); cdecl;
 function PKCS12_create(pass: PUtf8Char; name: PUtf8Char; pkey: PEVP_PKEY; cert: PX509;
@@ -5416,6 +5416,12 @@ procedure X509_VERIFY_PARAM_set_depth(param: PX509_VERIFY_PARAM; depth: integer)
 procedure X509_VERIFY_PARAM_set_auth_level(param: PX509_VERIFY_PARAM; auth_level: integer); cdecl;
   external LIB_CRYPTO name _PU + 'X509_VERIFY_PARAM_set_auth_level';
 
+function X509_LOOKUP_load_file(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_LOOKUP_load_file';
+
+function X509_LOOKUP_add_dir(ctx: PX509_LOOKUP; name: PUtf8Char; typ: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_LOOKUP_add_dir';
+
 function PKCS12_new(): PPKCS12; cdecl;
   external LIB_CRYPTO name _PU + 'PKCS12_new';
 
@@ -5465,7 +5471,7 @@ function OPENSSL_sk_new(cmp: OPENSSL_sk_compfunc): POPENSSL_STACK; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_new';
 
 procedure OPENSSL_sk_pop_free(st: POPENSSL_STACK; func: OPENSSL_sk_freefunc); cdecl;
-      external LIB_CRYPTO name _PU +
+      external LIB_CRYPTO name _PU + 'OPENSSL_sk_pop_free';
 
 procedure OPENSSL_sk_free(p1: POPENSSL_STACK); cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_free';
@@ -5788,7 +5794,8 @@ function X509_print(bp: PBIO; x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_print';
 
 
-function OpenSslInitialize(const libcryptoname, libsslname: TFileName): boolean;
+function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
+const libprefix: RawUtf8): boolean;
 begin
   OpenSslVersion := OpenSSL_version_num;
   result := true;
