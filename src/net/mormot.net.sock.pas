@@ -470,7 +470,7 @@ type
     // - should make the proper server-side TLS handshake and create a session
     // - should raise an exception on error
     // - TNetTlsContext should have been copied from the server properties
-    procedure AfterAccept(Socket: TNetSocket; RemoteIP: RawUTF8;
+    procedure AfterAccept(Socket: TNetSocket; const RemoteIP: RawUTF8;
       var Context: TNetTlsContext);
     /// receive some data from the TLS layer
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
@@ -864,7 +864,7 @@ type
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
     function GetRawSocket: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure DoTlsHandshake(doAccept: Boolean);
+    procedure DoTlsHandshake(doAccept: boolean);
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
     // - could have been assigned by a Tunnel.From() call
@@ -3147,7 +3147,7 @@ begin
   {$endif OSLINUX}
 end;
 
-procedure TCrtSocket.DoTlsHandshake(doAccept: Boolean);
+procedure TCrtSocket.DoTlsHandshake(doAccept: boolean);
 begin
   try
     if not Assigned(NewNetTls) then
@@ -3232,7 +3232,7 @@ begin
       if Assigned(OnLog) then
         OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
       if aTLS then
-        DoTlsHandshake(false);
+        DoTlsHandshake({accept=}false);
       exit;
     end
     else
@@ -3263,7 +3263,7 @@ begin
      aTLS and
      not doBind and
      ({%H-}PtrInt(aSock) <= 0) then
-    DoTlsHandshake(false);
+    DoTlsHandshake({accept=}false);
   if Assigned(OnLog) then
     OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
       pointer(fSock.Socket), TLS.CipherName], self);

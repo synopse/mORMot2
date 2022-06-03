@@ -96,7 +96,8 @@ type
   // - hsoCreateSuspended won't start the server thread immediately
   // - hsoLogVerbose could be used to debug a server in production
   // - hsoIncludeDateHeader will let all answers include a Date: ... HTTP header
-  // - hsoEnableTls enables TLS support
+  // - hsoEnableTls enables TLS support for THttpServer socket server, using
+  // Windows SChannel API or OpenSSL 1.1/3.x
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoNoXPoweredHeader,
@@ -616,6 +617,11 @@ type
   // setting KeepAliveTimeOut=0 in the THttpServer.Create constructor
   // - under windows, will trigger the firewall UAC popup at first run
   // - don't forget to use Free method when you are finished
+  // - a typical HTTPS server usecase could be:
+  // $ fHttpServer := THttpServer.Create('443', nil, nil, '', 32, 30000, [hsoEnableTls]);
+  // $ fHttpServer.WaitStarted; // raise exception e.g. on binding issue
+  // $ fHttpServer.Sock.TLS.CertificateFile := 'cert.pem'; // cert.pfx for SSPI
+  // $ fHttpServer.Sock.TLS.PrivateKeyFile := 'privkey.pem';
   THttpServer = class(THttpServerSocketGeneric)
   protected
     /// used to protect Process() call, e.g. fInternalHttpServerRespList
@@ -1804,7 +1810,7 @@ begin
             cltservsock.TLS := fSock.TLS;
           cltservsock.AcceptRequest(cltsock, @cltaddr);
           if hsoEnableTls in fOptions then
-            cltservsock.DoTlsHandshake(true);
+            cltservsock.DoTlsHandshake({accept=}true);
           endtix := fHeaderRetrieveAbortDelay;
           if endtix > 0 then
             inc(endtix, mormot.core.os.GetTickCount64);
@@ -2056,7 +2062,7 @@ begin
   freeme := true;
   try
     if hsoEnableTls in fServer.Options then
-      DoTlsHandshake(true);
+      DoTlsHandshake({accept=}true);
     headertix := fServer.HeaderRetrieveAbortDelay;
     if headertix > 0 then
       headertix := headertix + GetTickCount64;

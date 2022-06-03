@@ -981,7 +981,7 @@ type
     fSocket: TNetSocket;
     fContext: PNetTlsContext;
     fServerAddressW: SynUnicode;
-    fRemoteIP: RawUTF8;
+    fRemoteIP: RawUtf8;
     fCred: TCredHandle;
     fCtxt: TCtxtHandle;
     fFlags: cardinal;
@@ -989,7 +989,7 @@ type
     fData, fInput: AnsiString;
     fInputSize, fDataPos, fDataCount, fInputCount: integer;
     fSessionClosed: boolean;
-    fAccept: Boolean;
+    fAccept: boolean;
     fAcceptCert: PCCERT_CONTEXT;
     fAcceptCertStore: HCERTSTORE;
     procedure ESChannelRaiseLastError(res: cardinal);
@@ -999,7 +999,7 @@ type
     destructor Destroy; override;
     procedure AfterConnection(Socket: TNetSocket;  var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
-    procedure AfterAccept(Socket: TNetSocket; RemoteIP: RawUTF8;
+    procedure AfterAccept(Socket: TNetSocket; const RemoteIP: RawUtf8;
       var Context: TNetTlsContext);
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
@@ -1094,7 +1094,7 @@ begin
   CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
   // make TLS handshake and prepare for process
   SetLength(fData, TLSRECMAXSIZE);
-  HandshakeLoop();
+  HandshakeLoop;
   CheckSEC_E_OK(QueryContextAttributesW(
     @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
   fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
@@ -1105,7 +1105,7 @@ begin
   fInputCount := 0;
 end;
 
-procedure TSChannelClient.AfterAccept(Socket: TNetSocket; RemoteIP: RawUTF8;
+procedure TSChannelClient.AfterAccept(Socket: TNetSocket; const RemoteIP: RawUTF8;
   var Context: TNetTlsContext);
 var
   certblob: RawByteString;
@@ -1126,11 +1126,10 @@ begin
   end
   else
   begin
-    // File name in UTF8, Utf8ToFileName?
     certblob := StringFromFile(TFileName(fContext.CertificateFile));
     blob.cbData := Length(certblob);
-    blob.pbData := Pointer(certblob);
-    // Load certificate from file. You can use Let's Encrypt sertificate,
+    blob.pbData := pointer(certblob);
+    // Load certificate from file. You can use Let's Encrypt certificate,
     // converted to PFX:
     // openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
     fAcceptCertStore := PFXImportCertStore(@blob, nil,
@@ -1152,7 +1151,7 @@ begin
   fFlags := ASC_REQ_FLAGS;
   // make TLS handshake and prepare for process
   SetLength(fData, TLSRECMAXSIZE);
-  HandshakeLoop();
+  HandshakeLoop;
   CheckSEC_E_OK(QueryContextAttributesW(
     @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
   fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;

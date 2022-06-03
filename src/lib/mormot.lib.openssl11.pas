@@ -5473,7 +5473,7 @@ function OPENSSL_sk_new(cmp: OPENSSL_sk_compfunc): POPENSSL_STACK; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_new';
 
 procedure OPENSSL_sk_pop_free(st: POPENSSL_STACK; func: OPENSSL_sk_freefunc); cdecl;
-      external LIB_CRYPTO name _PU + 'OPENSSL_sk_pop_free';
+  external LIB_CRYPTO name _PU + 'OPENSSL_sk_pop_free';
 
 procedure OPENSSL_sk_free(p1: POPENSSL_STACK); cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_free';
@@ -5797,7 +5797,7 @@ function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 
 
 function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
-const libprefix: RawUtf8): boolean;
+  const libprefix: RawUtf8): boolean;
 begin
   OpenSslVersion := OpenSSL_version_num;
   result := true;
@@ -7895,7 +7895,7 @@ type
     // INetTls methods
     procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
-    procedure AfterAccept(Socket: TNetSocket; RemoteIP: RawUTF8;
+    procedure AfterAccept(Socket: TNetSocket; const RemoteIP: RawUtf8;
       var Context: TNetTlsContext);
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
@@ -8146,7 +8146,7 @@ begin
   end;
 end;
 
-procedure TOpenSslClient.AfterAccept(Socket: TNetSocket; RemoteIP: RawUTF8;
+procedure TOpenSslClient.AfterAccept(Socket: TNetSocket; const RemoteIP: RawUtf8;
   var Context: TNetTlsContext);
 var
   v: Integer;
