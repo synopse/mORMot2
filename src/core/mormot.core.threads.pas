@@ -3140,13 +3140,14 @@ begin
     // notify the threads we are shutting down
     for i := 0 to fWorkThreadCount - 1 do
       PostQueuedCompletionStatus(fRequestQueue, 0, nil, nil);
+      // TaskAbort() is done in Execute when fTerminated = true
     {$else}
     // notify the threads we are shutting down using the event
     for i := 0 to fWorkThreadCount - 1 do
       fWorkThread[i].fEvent.SetEvent;
     // cleanup now any pending task (e.g. THttpServerSocket instance)
     for i := 0 to fPendingContextCount - 1 do
-      TaskAbort(fPendingContext[i]); // not needed with WinIOCP
+      TaskAbort(fPendingContext[i]);
     {$endif USE_WINIOCP}
     // wait for threads to finish, with 30 seconds TimeOut
     endtix := GetTickCount64 + 30000;
@@ -3357,11 +3358,24 @@ begin
     NotifyThreadStart(self);
     repeat
       {$ifdef USE_WINIOCP}
-      if (not GetQueuedCompletionStatus(fOwner.fRequestQueue,
-           dum1, dum2, ctxt, INFINITE) and
-          fOwner.NeedStopOnIOError) or
-         fOwner.fTerminated then
+      if (not GetQueuedCompletionStatus(
+             fOwner.fRequestQueue, dum1, dum2, ctxt, INFINITE) and
+          fOwner.NeedStopOnIOError) then
         break;
+      if fOwner.fTerminated then
+      begin
+        while ctxt <> nil do // release all pending tasks at shutdown
+        begin
+          try
+            fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
+          except
+          end;
+          if not GetQueuedCompletionStatus(
+                fOwner.fRequestQueue, dum1, dum2, ctxt, 1) then
+            break;
+        end;
+        break;
+      end;
       if ctxt <> nil then
         DoTask(ctxt);
       {$else}
