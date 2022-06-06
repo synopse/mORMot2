@@ -2782,15 +2782,15 @@ end;
 procedure FileAppend(const MainFile, AppendFile: TFileName);
 var
   M, A: TStream;
-  APos: Int64;
+  pos: Int64;
 begin
   M := TFileStream.Create(MainFile, fmOpenReadWrite);
   try
-    APos := M.Seek(0, soEnd);
+    pos := M.Seek(0, soEnd);
     A := TFileStream.Create(AppendFile, fmOpenRead);
     try
-      StreamCopyUntilEnd(M, A); // faster than M.CopyFrom(A, 0);
-      FileAppendSignature(M, APos);
+      StreamCopyUntilEnd(A, M); // faster than M.CopyFrom(A, 0);
+      FileAppendSignature(M, pos);
     finally
       A.Free;
     end;
@@ -2869,11 +2869,7 @@ begin
       begin
         A := TFileStream.Create(append, fmOpenRead or fmShareDenyNone);
         try
-          repeat
-            read := A.Read(buf, SizeOf(buf));
-            if read > 0 then
-              O.WriteBuffer(buf, read);
-          until read < SizeOf(buf);
+          StreamCopyUntilEnd(A, O);
         finally
           A.Free;
         end;
