@@ -66,22 +66,13 @@ implementation
 
 {$define USE_METAFILE}
 // if defined, the PDF engine will support TMetaFile/TMetaFileCanvas
-// - it would induce a dependency to the VCL.Graphics unit
 {$ifdef NO_USE_METAFILE}
   // this special conditional can be set globaly for an application which doesn't
   // need the TMetaFile features
   {$undef USE_METAFILE}
 {$endif USE_METAFILE}
 
-{$define USE_ARC}
-// if defined, the PDF engine will support ARC, inducing a dependency to Math.pas
-{$ifdef NO_USE_ARC}
-  {$undef USE_ARC}
-{$endif USE_METAFILE}
-
-{$ifdef USE_METAFILE}
-  {$define USE_GRAPHICS_UNIT}
-{$endif USE_METAFILE}
+{$define USE_GRAPHICS_UNIT} // VCL/LCL usage is mandatory by now at low level
 
 uses
   {$ifdef OSWINDOWS}
@@ -112,14 +103,14 @@ uses
   types,
   classes,
   variants,
-  {$ifdef USE_ARC}
   math,
-  {$endif USE_ARC}
   {$ifdef USE_PDFSECURITY}
   mormot.crypt.core,
   {$endif USE_PDFSECURITY}
   {$ifdef USE_SYNGDIPLUS}
   mormot.ui.gdiplus,
+  {$else}
+  jpeg,
   {$endif USE_SYNGDIPLUS}
   mormot.core.base,
   mormot.core.os,
@@ -365,7 +356,6 @@ type
     tcAlwaysClip,
     tcNeverClip);
 
-  {$ifdef USE_ARC}
   /// is used to define the TMetaFile kind of arc to be drawn
   TPdfCanvasArcType = (
     acArc,
@@ -373,7 +363,6 @@ type
     acArcAngle,
     acPie,
     acChoord);
-  {$endif USE_ARC}
 
   /// potential font styles
   TPdfFontStyle = (
@@ -1792,10 +1781,8 @@ type
     procedure MoveToS(x, y: single);
     procedure CurveToCI(x1, y1, x2, y2, x3, y3: integer);
     procedure RoundRectI(x1, y1, x2, y2, cx, cy: integer);
-   {$ifdef USE_ARC}
     procedure ArcI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer;
       clockwise: boolean; arctype: TPdfCanvasArcType; var position: TPoint);
-   {$endif USE_ARC}
     function BoxI(const Box: TRect; Normalize: boolean): TPdfBox;
       {$ifdef HASINLINE}inline;{$endif}
     procedure PointI(x, y: single);
@@ -3537,7 +3524,6 @@ begin
 end;
 
 
-{$ifdef USE_ARC}
 type
   tcaRes = (
     caMoveto,
@@ -3845,8 +3831,6 @@ begin
   buildPathIterator;
   result := length(res) > 1;
 end;
-
-{$endif USE_ARC}
 
 
 {************ Internal classes mapping PDF objects }
@@ -9153,7 +9137,6 @@ begin
     cx * fDevScaleX * fWorldFactorX, -cy * fDevScaleY * fWorldFactorY);
 end;
 
-{$ifdef USE_ARC}
 procedure TPdfCanvas.ArcI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer;
   clockwise: boolean; arctype: TPdfCanvasArcType; var position: TPoint);
 var
@@ -9179,7 +9162,6 @@ begin
             end;
         end;
 end;
-{$endif USE_ARC}
 
 procedure TPdfCanvas.PointI(x, y: single);
 begin
@@ -10409,7 +10391,6 @@ begin
               rclBox.bottom, szlCorner.cx, szlCorner.cy);
           E.FlushPenBrush;
         end;
-  {$ifdef USE_ARC}
       EMR_ARC:
         begin
           NormalizeRect(PRect(@PEMRARC(R)^.rclBox)^);
@@ -10470,7 +10451,6 @@ begin
           else
             E.Canvas.FillStroke;
         end;
-  {$endif USE_ARC}
       EMR_FILLRGN:
         begin
           E.SelectObjectFromIndex(PEMRFillRgn(R)^.ihBrush);
@@ -11904,7 +11884,7 @@ begin
       else
         ss := Abs(Font.spec.cell) * fscaleY;
       // ensure this font is selected (very fast if was already selected)
-      fnt := Canvas.SetFont(Canvas.fDoc.fDC, Font.LogFont, ss);
+      {$ifdef USE_UNISCRIBE}fnt :={$endif} Canvas.SetFont(Canvas.fDoc.fDC, Font.LogFont, ss);
       // calculate coordinates
       po := Canvas.fUseMetaFileTextPositioning;
       if (R.emrtext.fOptions and ETO_GLYPH_INDEX <> 0) then
@@ -11913,8 +11893,8 @@ begin
       begin
         ws := 0;
         {$ifdef USE_UNISCRIBE}
-        if Assigned(fnt) and Canvas.fDoc.UseUniScribe and fnt.InheritsFrom
-          (TPdfFontTrueType) then
+        if Assigned(fnt) and Canvas.fDoc.UseUniScribe and
+           fnt.InheritsFrom(TPdfFontTrueType) then
         begin
           dest := Canvas.fDoc.GetDCWithFont(TPdfFontTrueType(fnt));
           if GetTextExtentPoint32W(dest, pointer(tmp), R.emrtext.nChars, siz) then
