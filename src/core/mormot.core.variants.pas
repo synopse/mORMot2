@@ -1242,7 +1242,7 @@ type
     // - just a wrapper around Compare(Another)=0
     function Equals(const Another: TDocVariantData;
       CaseInsensitive: boolean = false): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// low-level method called internally to reserve place for new values
     // - returns the index of the newly created item in Values[]/Names[] arrays
     // - you should not have to use it, unless you want to add some items

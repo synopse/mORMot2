@@ -178,14 +178,14 @@ type
     // caller to stop testing with such code:
     // ! if CheckFailed(A=10) then exit;
     function CheckFailed(condition: boolean; const msg: string = ''): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion
     // - condition must equals FALSE to pass the test
     // - function return TRUE if the condition failed, in order to allow the
     // caller to stop testing with such code:
     // ! if CheckNot(A<>10) then exit;
     function CheckNot(condition: boolean; const msg: string = ''): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against integers
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(a, b: Int64; const msg: RawUtf8 = ''): boolean; overload;
@@ -196,18 +196,18 @@ type
     /// used by the published methods to run test assertion against pointers/classes
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(a, b: pointer; const msg: RawUtf8 = ''): boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against integers
     // - if a=b, will fail and include '#=#' text before the supplied msg
     function CheckNotEqual(a, b: Int64; const msg: RawUtf8 = ''): boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a=b, will fail and include '#=#' text before the supplied msg
     function CheckNotEqual(const a, b: RawUtf8; const msg: RawUtf8 = ''): boolean; overload;
     /// used by the published methods to run test assertion against pointers/classes
     // - if a=b, will fail and include '#=#' text before the supplied msg
     function CheckNotEqual(a, b: pointer; const msg: RawUtf8 = ''): boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion about two double values
     // - includes some optional precision argument
     function CheckSame(const Value1, Value2: double;
