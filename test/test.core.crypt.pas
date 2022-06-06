@@ -1417,6 +1417,17 @@ begin
         end;
       end;
   end;
+  if FileExists(WorkDir + 'People.json') then
+  begin
+    AesPkcs7File(WorkDir + 'People.json',
+      WorkDir + 'people.encrypt', True, 'Thomas');
+    AesPkcs7File(WorkDir + 'people.encrypt',
+      WorkDir + 'people.decrypt', False, 'Thomas');
+    CheckEqual(FileSize(WorkDir + 'People.json'),
+      FileSize(WorkDir + 'people.decrypt'), 'AesPkcs7File size');
+    CheckEqual(HashFile(WorkDir + 'People.json'),
+      HashFile(WorkDir + 'people.decrypt'), 'AesPkcs7File hash');
+  end;
 end;
 
 procedure TTestCoreCrypto._Base64;
@@ -1424,7 +1435,7 @@ const
   Value64: RawUtf8 = 'SGVsbG8gL2Mn6XRhaXQg5+Ar';
 var
   tmp, tmp2: RawByteString;
-  b64: RawUtf8;
+  u, b64: RawUtf8;
   msg: string;
   Value: WinAnsiString;
   P: PUtf8Char;
@@ -1433,6 +1444,11 @@ var
   i64: Qword;
   enc, dec: TPrecisionTimer;
 begin
+  tmp := 'wrJQQCQkdzByZA==';
+  Check(IsBase64(tmp));
+  u := Base64ToBin(tmp);
+  CheckHash(u, $B5C83B58);
+  CheckEqual(BinToBase64(u), tmp);
   Value := 'Hello /c''0tait 67+';
   Value[10] := #$E9;
   Value[16] := #$E7;
