@@ -993,7 +993,7 @@ begin
     try
       dst := TFileStream.Create(Target, fmCreate);
       try
-        dst.CopyFrom(src, src.Size);
+        StreamCopyUntilEnd(src, dst); // faster than dst.CopyFrom()
       finally
         dst.Free;
       end;

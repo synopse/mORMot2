@@ -1942,7 +1942,9 @@ begin
   if RegQueryValueExW(key, pointer(entry), nil, nil, tmp.buf, @rsize) = 0 then
   begin
     case rtype of
-      REG_SZ, REG_EXPAND_SZ, REG_MULTI_SZ:
+      REG_SZ,
+      REG_EXPAND_SZ,
+      REG_MULTI_SZ:
         Win32PWideCharToUtf8(tmp.buf, StrLenW(tmp.buf), result);
     end;
     if andtrim then

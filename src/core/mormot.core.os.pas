@@ -2262,6 +2262,12 @@ function FileOpenSequentialRead(const FileName: TFileName): integer;
 // - is used e.g. by TRestOrmServerFullMemory and TAlgoCompress
 function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 
+/// copy all Source content into Dest from current position
+// - on Delphi, Dest.CopyFrom(Source, 0) uses GetSize and ReadBuffer which is
+// not compatible e.g. with TAesPkcs7Reader padding - and has a small buffer
+// - returns the number of bytes copied from Source to Dest
+function StreamCopyUntilEnd(Source, Dest: TStream): Int64;
+
 /// read a File content into a string
 // - content can be binary or text
 // - returns '' if file was not found or any read error occured
@@ -2684,7 +2690,7 @@ type
     /// cross-platform resolution of a function entry in this library
     // - if RaiseExceptionOnFailure is set, missing entry will call FreeLib then raise it
     // - ProcName can be a space-separated list of procedure names, to try
-    // alternate API names (e.g. for OpenSSL 1.1.1/3.0 compatibility)
+    // alternate API names (e.g. for OpenSSL 1.1.1/3.x compatibility)
     // - if ProcName starts with '?' then RaiseExceptionOnFailure = nil is set
     function Resolve(const Prefix, ProcName: RawUtf8; Entry: PPointer;
       RaiseExceptionOnFailure: ExceptionClass = nil): boolean;
@@ -4624,6 +4630,23 @@ end;
 function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 begin
   result := TFileStreamFromHandle.Create(FileOpenSequentialRead(FileName));
+end;
+
+function StreamCopyUntilEnd(Source, Dest: TStream): Int64;
+var
+  tmp: array[word] of word; // 128KB stack buffer
+  read: integer;
+begin
+  result := 0;
+  if (Source <> nil) and
+     (Dest <> nil) then
+    repeat
+      read := Source.Read(tmp, SizeOf(tmp));
+      if read <= 0 then
+        break;
+      Dest.WriteBuffer(tmp, read);
+      inc(result, read);
+    until false;
 end;
 
 function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteString;

@@ -1180,7 +1180,7 @@ begin
       try
         gz := TSynZipCompressor.Create(d, CompressionLevel, szcfGZ);
         try
-          gz.CopyFrom(s, 0);  // Count=0 for whole stream copy
+          StreamCopyUntilEnd(s, gz); // faster and safer than gz.CopyFrom(s, 0);
           result := true;
         finally
           gz.Free;
@@ -2789,7 +2789,7 @@ begin
     APos := M.Seek(0, soEnd);
     A := TFileStream.Create(AppendFile, fmOpenRead);
     try
-      M.CopyFrom(A, 0);
+      StreamCopyUntilEnd(M, A); // faster than M.CopyFrom(A, 0);
       FileAppendSignature(M, APos);
     finally
       A.Free;

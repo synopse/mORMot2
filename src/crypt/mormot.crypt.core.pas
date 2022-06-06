@@ -6743,7 +6743,7 @@ begin
         begin
           aes := TAesPkcs7Writer.Create(d, key, keySizeBits, aesMode, IV, siz);
           try
-            aes.CopyFrom(s, 0);
+            StreamCopyUntilEnd(s, aes);
             TAesPkcs7Writer(aes).Finish; // write padding
           finally
             aes.Free;
@@ -6753,7 +6753,7 @@ begin
         begin
           aes := TAesPkcs7Reader.Create(s, key, keySizeBits, aesMode, IV, siz);
           try
-            d.CopyFrom(aes, 0);
+            StreamCopyUntilEnd(aes, d); // d.CopyFrom(aes, 0) fails on Delphi
           finally
             aes.Free;
           end;

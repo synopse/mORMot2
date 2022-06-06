@@ -423,7 +423,7 @@ begin
                 try
                   dstream := aDataSet.CreateBlobStream(aField, bmWrite);
                   try
-                    dstream.CopyFrom(sstream, 0);
+                    StreamCopyUntilEnd(sstream, dstream);
                   finally
                     dstream.Free;
                   end;
