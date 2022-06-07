@@ -2149,16 +2149,16 @@ function LoadPkcs12(const Der: RawByteString): PPKCS12;
 { ************** TLS / HTTPS Encryption Layer using OpenSSL for TCrtSocket }
 
 type
-  /// exception class raised by OpenSslNewNetTls implementation class
-  EOpenSslClient = class(EOpenSsl);
+  /// exception class raised by NewOpenSslNetTls implementation class
+  EOpenSslNetTls = class(EOpenSsl);
 
 
 /// OpenSSL TLS layer communication factory - as expected by mormot.net.sock.pas
 // - on non-Windows systems, this unit initialization will register OpenSSL for TLS
 // - on Windows systems, SChannel will be kept as default so you would need to
 // set the FORCE_OPENSSL conditional, or register OpenSSL for TLS mannually:
-// ! @NewNetTls := @OpenSslNewNetTls;
-function OpenSslNewNetTls: INetTls;
+// ! @NewNetTls := @NewOpenSslNetTls;
+function NewOpenSslNetTls: INetTls;
 
 /// retrieve the peer certificates chain from a given HTTPS server URI
 // - caller should call procedure PX509DynArrayFree(result) once done
@@ -7878,14 +7878,15 @@ end;
 
 { ************** TLS / HTTPS Encryption Layer using OpenSSL for TCrtSocket }
 
-{ TOpenSslClient }
+{ TOpenSslNetTls }
 
 type
   /// OpenSSL TLS layer communication
-  TOpenSslClient = class(TInterfacedObject, INetTls)
+  TOpenSslNetTls = class(TInterfacedObject, INetTls)
   private
     fSocket: TNetSocket;
     fContext: PNetTlsContext;
+    fLastError: PRawUtf8;
     fCtx: PSSL_CTX;
     fSsl: PSSL;
     fPeer: PX509;
@@ -7895,20 +7896,21 @@ type
     // INetTls methods
     procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
-    procedure AfterAccept(Socket: TNetSocket; const RemoteIP: RawUtf8;
-      var Context: TNetTlsContext);
+    procedure AfterBind(var Context: TNetTlsContext);
+    procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
+      LastError, CipherName: PRawUtf8);
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
 
 threadvar
-  _PeerVerify: TOpenSslClient; // OpenSSL is a dumb library for sure
+  _PeerVerify: TOpenSslNetTls; // OpenSSL is a dumb library for sure
 
 function AfterConnectionPeerVerify(
   wasok: integer; store: PX509_STORE_CTX): integer; cdecl;
 var
   peer: PX509;
-  c: TOpenSslClient;
+  c: TOpenSslNetTls;
 begin
   peer := X509_STORE_CTX_get_current_cert(store);
   c := _PeerVerify;
@@ -7925,7 +7927,7 @@ end;
 function AfterConnectionAskPassword(buf: PUtf8Char; size, rwflag: integer;
   userdata: pointer): integer; cdecl;
 var
-  c: TOpenSslClient;
+  c: TOpenSslNetTls;
   pwd: RawUtf8;
 begin
   c := _PeerVerify;
@@ -8001,7 +8003,7 @@ end;
 
 // see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
 
-procedure TOpenSslClient.AfterConnection(Socket: TNetSocket;
+procedure TOpenSslNetTls.AfterConnection(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
   v: integer;
@@ -8014,6 +8016,7 @@ begin
   fContext := @Context;
   _PeerVerify := self; // safe and simple context for the callbacks
   // reset output information
+  fLastError := @Context.LastError;
   Context.CipherName := '';
   Context.PeerIssuer := '';
   Context.PeerSubject := '';
@@ -8047,12 +8050,12 @@ begin
         fCtx, pointer(Context.PrivatePassword));
     SSL_CTX_use_PrivateKey_file(
       fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
-    EOpenSslClient.Check(self, 'AfterConnection check_private_key',
+    EOpenSslNetTls.Check(self, 'AfterConnection check_private_key',
       SSL_CTX_check_private_key(fCtx), @Context.LastError);
   end;
   if Context.CipherList = '' then
     Context.CipherList := SAFE_CIPHERLIST[HasHWAes];
-  EOpenSslClient.Check(self, 'AfterConnection setcipherlist',
+  EOpenSslNetTls.Check(self, 'AfterConnection setcipherlist',
     SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)),
     @Context.LastError);
   v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
@@ -8067,18 +8070,18 @@ begin
     if GetNextCsv(P, h) then
     begin
       SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-      EOpenSslClient.Check(self, 'AfterConnection set1host',
+      EOpenSslNetTls.Check(self, 'AfterConnection set1host',
         SSL_set1_host(fSsl, pointer(h)), @Context.LastError);
       while GetNextCsv(P, h) do
-        EOpenSslClient.Check(self, 'AfterConnection add1host',
+        EOpenSslNetTls.Check(self, 'AfterConnection add1host',
           SSL_add1_host(fSsl, pointer(h)), @Context.LastError);
     end;
   end;
-  EOpenSslClient.Check(self, 'AfterConnection setfd',
+  EOpenSslNetTls.Check(self, 'AfterConnection setfd',
     SSL_set_fd(fSsl, Socket.Socket), @Context.LastError);
   // client TLS negotiation with server
-  EOpenSslClient.Check(self, 'AfterConnection connect', SSL_connect(fSsl),
-    @Context.LastError, fSsl);
+  EOpenSslNetTls.Check(self, 'AfterConnection connect',
+    SSL_connect(fSsl), @Context.LastError, fSsl);
   fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
   Context.CipherName := fSsl.CurrentCipher.Description;
   // writeln(Context.CipherName);
@@ -8097,7 +8100,7 @@ begin
     //PX509DynArrayFree(x);
     if (fPeer = nil) and
        not Context.IgnoreCertificateErrors then
-      EOpenSslClient.Check(self, 'AfterConnection getpeercertificate',
+      EOpenSslNetTls.Check(self, 'AfterConnection getpeercertificate',
         0, @Context.LastError);
     try
       if fPeer <> nil then
@@ -8146,58 +8149,71 @@ begin
   end;
 end;
 
-procedure TOpenSslClient.AfterAccept(Socket: TNetSocket; const RemoteIP: RawUtf8;
-  var Context: TNetTlsContext);
+procedure TOpenSslNetTls.AfterBind(var Context: TNetTlsContext);
 var
   v: Integer;
 begin
-  fSocket := Socket;
-  fContext := @Context;
-  // reset output information
+  // we don't store fSocket/fContext bound socket
   Context.LastError := '';
-  // prepare TLS connection properties
+  // prepare global TLS connection properties, as reused by AfterAccept()
   fCtx := SSL_CTX_new(TLS_server_method);
   if Context.CertificateFile = '' then
-    raise EOpenSslClient.Create('CertificateFile required');
+    raise EOpenSslNetTls.Create('CertificateFile required');
   SSL_CTX_use_certificate_file(
     fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM);
   if Context.PrivatePassword <> '' then
     SSL_CTX_set_default_passwd_cb_userdata(
       fCtx, pointer(Context.PrivatePassword));
   if Context.PrivateKeyFile = '' then
-    raise EOpenSslClient.Create('PrivateKeyFile required');
+    raise EOpenSslNetTls.Create('PrivateKeyFile required');
   SSL_CTX_use_PrivateKey_file(
     fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
-  EOpenSslClient.Check(self, 'AfterAccept check_private_key',
+  EOpenSslNetTls.Check(self, 'AfterAccept check_private_key',
     SSL_CTX_check_private_key(fCtx), @Context.LastError);
   v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
   if Context.AllowDeprecatedTls then
     v := TLS1_VERSION; // allow TLS1.0 TLS1.1
   SSL_CTX_set_min_proto_version(fCtx, v);
-  fSsl := SSL_new(fCtx);
-  EOpenSslClient.Check(self, 'AfterAccept setfd',
-    SSL_set_fd(fSsl, Socket.Socket), @Context.LastError);
-  // server TLS negotiation with server
-  EOpenSslClient.Check(self, 'AfterAccept connect', SSL_accept(fSsl),
-    @Context.LastError, fSsl);
-  fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
-  Context.CipherName := fSsl.CurrentCipher.Description;
-  // writeln(Context.CipherName);
+  // this global context fCtx will be reused by AfterAccept()
+  Context.AcceptCert := fCtx;
 end;
 
-destructor TOpenSslClient.Destroy;
+procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
+  const BoundContext: TNetTlsContext; LastError, CipherName: PRawUtf8);
 begin
-  if fCtx <> nil then
+  // we don't handle any fContext here on server-side connections
+  fSocket := Socket;
+  // reset output information
+  fLastError := LastError;
+  // prepare TLS connection properties from AfterBind() global context
+  if BoundContext.AcceptCert = nil then
+    raise EOpenSslNetTls.Create('AfterAccept: missing AfterBind');
+  fSsl := SSL_new(BoundContext.AcceptCert);
+  EOpenSslNetTls.Check(self, 'AfterAccept setfd',
+    SSL_set_fd(fSsl, Socket.Socket), LastError);
+  // server TLS negotiation with server
+  EOpenSslNetTls.Check(self, 'AfterAccept accept',
+    SSL_accept(fSsl), LastError, fSsl);
+  fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
+  if CipherName <> nil then
+    CipherName^ := fSsl.CurrentCipher.Description;
+  // if CipherName <> nil then writeln(CipherName^);
+end;
+
+destructor TOpenSslNetTls.Destroy;
+begin
+  if fSsl <> nil then // client or AfterAccept server connection
   begin
     if fDoSslShutdown then
       SSL_shutdown(fSsl);
     fSsl.Free;
-    SSL_CTX_free(fCtx);
   end;
+  if fCtx <> nil then
+    SSL_CTX_free(fCtx); // client or AfterBind server context
   inherited Destroy;
 end;
 
-function TOpenSslClient.Receive(Buffer: pointer; var Length: integer): TNetResult;
+function TOpenSslNetTls.Receive(Buffer: pointer; var Length: integer): TNetResult;
 var
   read, err: integer;
 begin
@@ -8217,8 +8233,9 @@ begin
           fDoSslShutdown := false;
         end;
     end;
-    if result <> nrRetry then
-      SSL_error(err, fContext^.LastError);
+    if (result <> nrRetry) and
+       (fLastError <> nil) then
+      SSL_error(err, fLastError^);
   end
   else
   begin
@@ -8227,7 +8244,7 @@ begin
   end;
 end;
 
-function TOpenSslClient.Send(Buffer: pointer; var Length: integer): TNetResult;
+function TOpenSslNetTls.Send(Buffer: pointer; var Length: integer): TNetResult;
 var
   sent, err: integer;
 begin
@@ -8247,8 +8264,9 @@ begin
           fDoSslShutdown := false;
         end;
     end;
-    if result <> nrRetry then
-      SSL_error(err, fContext^.LastError);
+    if (result <> nrRetry) and
+       (fLastError <> nil) then
+      SSL_error(err, fLastError^);
   end
   else
   begin
@@ -8257,10 +8275,10 @@ begin
   end;
 end;
 
-function OpenSslNewNetTls: INetTls;
+function NewOpenSslNetTls: INetTls;
 begin
   if OpenSslIsAvailable then
-    result := TOpenSslClient.Create
+    result := TOpenSslNetTls.Create
   else
     result := nil;
 end;
@@ -8278,7 +8296,7 @@ begin
      u.From(url) and
      (NewSocket(u.Server, u.Port, nlTcp, false, 1000, 1000, 1000, 2, ns) = nrOk) then
   try
-    // cut-down version of TOpenSslClient.AfterConnection
+    // cut-down version of TOpenSslNetTls.AfterConnection
     c := SSL_CTX_new(TLS_client_method);
     SSL_CTX_set_verify(c, SSL_VERIFY_NONE, nil);
     s := SSL_new(c);
@@ -8321,7 +8339,7 @@ initialization
   {$ifndef FORCE_OPENSSL}
   if not Assigned(NewNetTls) then
   {$endif FORCE_OPENSSL}
-    @NewNetTls := @OpenSslNewNetTls;
+    @NewNetTls := @NewOpenSslNetTls;
 
 finalization
   {$ifndef OPENSSLSTATIC}

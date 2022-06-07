@@ -621,7 +621,7 @@ type
   // $ fHttpServer := THttpServer.Create('443', nil, nil, '', 32, 30000, [hsoEnableTls]);
   // $ fHttpServer.WaitStarted; // raise exception e.g. on binding issue
   // $ fHttpServer.Sock.TLS.CertificateFile := 'cert.pem'; // cert.pfx for SSPI
-  // $ fHttpServer.Sock.TLS.PrivateKeyFile := 'privkey.pem';
+  // $ fHttpServer.Sock.TLS.PrivateKeyFile := 'privkey.pem'; // for OpenSSL only
   THttpServer = class(THttpServerSocketGeneric)
   protected
     /// used to protect Process() call, e.g. fInternalHttpServerRespList
@@ -1807,10 +1807,10 @@ begin
         cltservsock := fSocketClass.Create(self);
         try
           if hsoEnableTls in fOptions then
-            cltservsock.TLS := fSock.TLS;
+            cltservsock.TLS := fSock.TLS; // needed by cstaAccept below
           cltservsock.AcceptRequest(cltsock, @cltaddr);
           if hsoEnableTls in fOptions then
-            cltservsock.DoTlsHandshake({accept=}true);
+            cltservsock.DoTlsAfter(cstaAccept);
           endtix := fHeaderRetrieveAbortDelay;
           if endtix > 0 then
             inc(endtix, mormot.core.os.GetTickCount64);
@@ -1832,7 +1832,7 @@ begin
         // use thread pool to process the request header, and probably its body
         cltservsock := fSocketClass.Create(self);
         if hsoEnableTls in fOptions then
-          cltservsock.TLS := fSock.TLS;
+          cltservsock.TLS := fSock.TLS; // for cstaAccept in TaskProcess
         // we tried to reuse the fSocketClass instance -> no performance change
         cltservsock.AcceptRequest(cltsock, @cltaddr);
         if not fThreadPool.Push(pointer(PtrUInt(cltservsock)),
@@ -2062,7 +2062,7 @@ begin
   freeme := true;
   try
     if hsoEnableTls in fServer.Options then
-      DoTlsHandshake({accept=}true);
+      DoTlsAfter(cstaAccept);
     headertix := fServer.HeaderRetrieveAbortDelay;
     if headertix > 0 then
       headertix := headertix + GetTickCount64;

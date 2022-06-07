@@ -168,6 +168,7 @@ type
     dwHashStrength: cardinal;
     aiExch: ALG_ID;
     dwExchStrength: cardinal;
+    /// retrieve some decoded text representation of this raw information
     function ToText: RawUtf8;
   end;
   PSecPkgConnectionInfo = ^TSecPkgConnectionInfo;
@@ -622,6 +623,7 @@ end;
 
 function TSecPkgConnectionInfo.ToText: RawUtf8;
 var
+  h: byte;
   alg, hsh, xch: string[5];
 begin
   if dwProtocol and SP_PROT_TLS1 <> 0 then
@@ -636,14 +638,15 @@ begin
     alg := 'AES'
   else
     str(aiCipher and $1f, alg);
-  case aiHash and $1f of
+  h := aiHash and $1f;
+  case h of
     1..3:
       hsh := 'MD';
     4, 12..14:
       begin
         hsh := 'SHA';
         if dwHashStrength = 0 then
-          case aiHash and $1f of
+          case h of
             4:
               dwHashStrength := 1;
             12:
@@ -657,7 +660,7 @@ begin
     9:
       hsh := 'HMAC';
   else
-    str(aiHash and $1f, hsh);
+    str(h, hsh);
   end;
   if aiExch = $a400 then
     xch := 'RSA'

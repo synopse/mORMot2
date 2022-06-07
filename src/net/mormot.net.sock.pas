@@ -455,6 +455,8 @@ type
     OnAfterPeerValidate: TOnNetTlsAfterPeerValidate;
     /// called by INetTls.AfterConnection to retrieve a private password
     OnPrivatePassword: TOnNetTlsGetPassword;
+    /// opaque pointer used by INetTls.AfterBind/AfterAccept
+    AcceptCert: pointer;
   end;
 
   /// abstract definition of the TLS encrypted layer
@@ -466,12 +468,16 @@ type
     // - should raise an exception on error
     procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
-    /// method called for each new connection on server side
+    /// method called once the socket has been bound on server side
+    // - will set Context.AcceptCert with reusable server certificates info
+    procedure AfterBind(var Context: TNetTlsContext);
+    /// method called for each new connection accepted on server side
     // - should make the proper server-side TLS handshake and create a session
     // - should raise an exception on error
-    // - TNetTlsContext should have been copied from the server properties
-    procedure AfterAccept(Socket: TNetSocket; const RemoteIP: RawUTF8;
-      var Context: TNetTlsContext);
+    // - BoundContext is the associated server instance with proper AcceptCert
+    // as filled by AfterBind()
+    procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
+      LastError, CipherName: PRawUtf8);
     /// receive some data from the TLS layer
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     /// send some data from the TLS layer
@@ -483,8 +489,8 @@ type
 
 var
   /// global factory for a new TLS encrypted layer for TCrtSocket
-  // - is set to use the SChannel API on Windows; on other targets, may be nil
-  // unless the mormot.lib.openssl11.pas unit is included with your project
+  // - on Windows, this unit will set a factory using the system SChannel API
+  // - on other targets, could be set by the mormot.lib.openssl11.pas unit
   NewNetTls: TOnNewNetTls;
 
 
@@ -819,6 +825,11 @@ type
     cspNoData,
     cspDataAvailable);
 
+  TCrtSocketTlsAfter = (
+    cstaConnect,
+    cstaBind,
+    cstaAccept);
+
   {$M+}
   /// Fast low-level Socket implementation
   // - direct access to the OS (Windows, Linux) network layer API
@@ -864,7 +875,7 @@ type
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
     function GetRawSocket: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure DoTlsHandshake(doAccept: boolean);
+    procedure DoTlsAfter(caller: TCrtSocketTlsAfter);
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
     // - could have been assigned by a Tunnel.From() call
@@ -3147,27 +3158,33 @@ begin
   {$endif OSLINUX}
 end;
 
-procedure TCrtSocket.DoTlsHandshake(doAccept: boolean);
+procedure TCrtSocket.DoTlsAfter(caller: TCrtSocketTlsAfter);
 begin
   try
-    if not Assigned(NewNetTls) then
-      raise ENetSock.Create('%s.DoTlsHandshake: TLS is not available - try ' +
-        'including mormot.lib.openssl11 and installing OpenSSL 1.1.1/3.x',
-        [ClassNameShort(self)^]);
-    fSecure := NewNetTls;
     if fSecure = nil then
-      raise ENetSock.Create('%s.DoTlsHandshake; TLS is not available on this ' +
+      if Assigned(NewNetTls) then
+        fSecure := NewNetTls
+      else
+        raise ENetSock.Create('%s.DoTlsAfter: TLS support not compiled ' +
+          '- try including mormot.lib.openssl11 in your project',
+          [ClassNameShort(self)^]);
+    if fSecure = nil then
+      raise ENetSock.Create('%s.DoTlsAfter; TLS is not available on this ' +
         'system - try installing OpenSSL 1.1.1/3.x', [ClassNameShort(self)^]);
-    if doAccept then
-      fSecure.AfterAccept(fSock, fRemoteIP, TLS)
-    else
-      fSecure.AfterConnection(fSock, TLS, fServer);
+    case caller of
+      cstaConnect:
+        fSecure.AfterConnection(fSock, TLS, fServer);
+      cstaBind:
+        fSecure.AfterBind(TLS);
+      cstaAccept:
+        fSecure.AfterAccept(fSock, TLS, @TLS.LastError, @TLS.CipherName)
+    end;
     TLS.Enabled := true;
   except
     on E: Exception do
     begin
       fSecure := nil;
-      raise ENetSock.CreateFmt('%s.DoTlsHandshake: TLS failed [%s %s]',
+      raise ENetSock.CreateFmt('%s.DoTlsAfter: TLS failed [%s %s]',
         [ClassNameShort(self)^, ClassNameShort(E)^, E.Message]);
     end;
   end;
@@ -3232,7 +3249,7 @@ begin
       if Assigned(OnLog) then
         OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
       if aTLS then
-        DoTlsHandshake({accept=}false);
+        DoTlsAfter(cstaConnect);
       exit;
     end
     else
@@ -3260,10 +3277,11 @@ begin
     end;
   end;
   if (aLayer = nlTcp) and
-     aTLS and
-     not doBind and
-     ({%H-}PtrInt(aSock) <= 0) then
-    DoTlsHandshake({accept=}false);
+     aTLS then
+    if doBind then
+      DoTlsAfter(cstaBind)
+    else if {%H-}PtrInt(aSock) <= 0 then
+      DoTlsAfter(cstaConnect);
   if Assigned(OnLog) then
     OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
       pointer(fSock.Socket), TLS.CipherName], self);
