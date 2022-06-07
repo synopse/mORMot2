@@ -3906,6 +3906,11 @@ var
 // - onLog can be assigned from TSynLog.DoLog for proper logging
 procedure SynDaemonIntercept(const onlog: TSynLogProc = nil);
 
+/// disable SIGPIPE signal for the current process
+// - is called e.g. by NewOpenSslNetTls since the OpenSsl TLS layer does not
+// (yet) use MSG_NOSIGNAL when accessing the socket
+procedure SigPipeIntercept;
+
 {$endif OSWINDOWS}
 
 /// change the current UID/GID to another user, by name

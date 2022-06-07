@@ -2132,8 +2132,39 @@ begin
   saNew.sa_handler := @DoShutDown;
   fpSigaction(SIGQUIT, @saNew, @saOld);
   fpSigaction(SIGTERM, @saNew, @saOld);
-  fpSigaction(SIGINT, @saNew, @saOld);
+  fpSigaction(SIGINT,  @saNew, @saOld);
   fpSigaction(SIGABRT, @saNew, @saOld);
+end;
+
+var
+  SigPipeDisabled: boolean; // process-wide thread-safe flag
+
+procedure DoNothing(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
+begin
+end;
+
+procedure SigPipeIntercept;
+var
+  saOld, saNew: SigactionRec;
+begin
+  if SigPipeDisabled then
+    exit; // quickly return if already done
+  GlobalLock;
+  try
+    if SigPipeDisabled then
+      exit;
+    FillCharFast(saNew, SizeOf(saNew), 0);
+    saNew.sa_handler := @DoNothing;
+    {$ifdef SA_INTERRUPT} // see
+    saNew.sa_flags := SA_INTERRUPT; // SunOS
+    {$else}
+    saNew.sa_flags := SA_RESTART;
+    {$endif SA_INTERRUPT}
+    fpSigaction(SIGPIPE, @saNew, @saOld);
+    SigPipeDisabled := true; // flag set AFTER disabling it
+  finally
+    GlobalUnLock;
+  end;
 end;
 
 type
