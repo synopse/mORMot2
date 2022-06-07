@@ -1325,6 +1325,7 @@ var
   w: TAesPkcs7Writer;
   r: TAesPkcs7Reader;
   data, data2: array[0..199] of Int64; // 1600 bytes > buffer of 1024 bytes
+  siz: Int64;
   mem: TRawByteStringStream;
   i, j: PtrInt;
   key, iv: THash128;
@@ -1417,14 +1418,13 @@ begin
         end;
       end;
   end;
-  if FileExists(WorkDir + 'People.json') then
+  siz := FileSize(WorkDir + 'People.json');
+  if siz <> 0 then
   begin
-    AesPkcs7File(WorkDir + 'People.json',
-      WorkDir + 'people.encrypt', True, 'Thomas');
-    AesPkcs7File(WorkDir + 'people.encrypt',
-      WorkDir + 'people.decrypt', False, 'Thomas');
-    CheckEqual(FileSize(WorkDir + 'People.json'),
-      FileSize(WorkDir + 'people.decrypt'), 'AesPkcs7File size');
+    AesPkcs7File(WorkDir + 'People.json', WorkDir + 'people.encrypt', true, 'Thomas');
+    CheckEqual(AesPkcs7File(WorkDir + 'people.encrypt',
+      WorkDir + 'people.decrypt', false, 'Thomas'), siz, 'AesPkcs7File');
+    CheckEqual(FileSize(WorkDir + 'people.decrypt'), siz, 'AesPkcs7File size');
     CheckEqual(HashFile(WorkDir + 'People.json'),
       HashFile(WorkDir + 'people.decrypt'), 'AesPkcs7File hash');
   end;

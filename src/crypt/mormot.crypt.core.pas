@@ -1325,16 +1325,18 @@ type
 // - by default, a trailing random IV is expected, unless IV is supplied
 // - if src=dst a temporary .partial file is created, then will replace src
 // - raise an exception on error (e.g. missing or invalid input file)
-procedure AesPkcs7File(const src, dst: TFileName; encrypt: boolean; const key;
-  keySizeBits: cardinal; aesMode: TAesMode = mCtr; IV: PAesBlock = nil); overload;
+// - returns the number of bytes written to dst file
+function AesPkcs7File(const src, dst: TFileName; encrypt: boolean; const key;
+  keySizeBits: cardinal; aesMode: TAesMode = mCtr; IV: PAesBlock = nil): Int64; overload;
 
 /// cypher/decypher any file using AES and PKCS7 padding, from a password
 // - just a wrapper around TAesPkcs7Writer/TAesPkcs7Reader and TFileStream
 // - will derivate the password using PBKDF2 over HMAC-SHA256, using lower
 // 128-bit as AES-CTR-128 key, and the upper 128-bit as IV
-procedure AesPkcs7File(const src, dst: TFileName; encrypt: boolean;
+// - returns the number of bytes written to dst file
+function AesPkcs7File(const src, dst: TFileName; encrypt: boolean;
   const password: RawUtf8; const salt: RawByteString = '';
-  rounds: cardinal = 1000; aesMode: TAesMode = mCtr); overload;
+  rounds: cardinal = 1000; aesMode: TAesMode = mCtr): Int64; overload;
 
 var
   /// the fastest AES implementation classes available on the system, per mode
@@ -6712,8 +6714,8 @@ begin
   result := RaiseStreamError(self, 'Write');
 end;
 
-procedure AesPkcs7File(const src, dst: TFileName; encrypt: boolean; const key;
-  keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock);
+function AesPkcs7File(const src, dst: TFileName; encrypt: boolean; const key;
+  keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock): Int64;
 var
   fn: TFileName;
   s, d: TFileStream;
@@ -6743,7 +6745,7 @@ begin
         begin
           aes := TAesPkcs7Writer.Create(d, key, keySizeBits, aesMode, IV, siz);
           try
-            StreamCopyUntilEnd(s, aes);
+            result := StreamCopyUntilEnd(s, aes);
             TAesPkcs7Writer(aes).Finish; // write padding
           finally
             aes.Free;
@@ -6753,7 +6755,7 @@ begin
         begin
           aes := TAesPkcs7Reader.Create(s, key, keySizeBits, aesMode, IV, siz);
           try
-            StreamCopyUntilEnd(aes, d); // d.CopyFrom(aes, 0) fails on Delphi
+            result := StreamCopyUntilEnd(aes, d); // d.CopyFrom(aes, 0) fails on Delphi
           finally
             aes.Free;
           end;
@@ -6775,15 +6777,15 @@ begin
   end;
 end;
 
-procedure AesPkcs7File(const src, dst: TFileName; encrypt: boolean;
+function AesPkcs7File(const src, dst: TFileName; encrypt: boolean;
   const password: RawUtf8; const salt: RawByteString; rounds: cardinal;
-  aesMode: TAesMode);
+  aesMode: TAesMode): Int64;
 var
-  dig: THash256Rec; // see TAesPkcs7Abstract.Create() oeverload
+  dig: THash256Rec; // see TAesPkcs7Abstract.Create() overload
 begin
   Pbkdf2HmacSha256(password, salt, rounds, dig.b, TAESPKCS7WRITER_SALT);
   try
-    AesPkcs7File(src, dst, encrypt, dig.Lo, 128, aesMode, @dig.Hi);
+    result := AesPkcs7File(src, dst, encrypt, dig.Lo, 128, aesMode, @dig.Hi);
   finally
     FillZero(dig.b);
   end;
