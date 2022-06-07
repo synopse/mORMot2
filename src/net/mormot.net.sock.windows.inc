@@ -1223,8 +1223,8 @@ var
 begin
   repeat
     inc(fDataCount, CheckSocket(
-      Recv(fSocket.Socket, @PByteArray(fData)[fDataCount], length(fData) - fDataCount,
-        MSG_NOSIGNAL)));
+      Recv(fSocket.Socket, @PByteArray(fData)[fDataCount],
+        length(fData) - fDataCount, MSG_NOSIGNAL)));
     res := ComputeAndSendAnswer;
     if res = SEC_I_INCOMPLETE_CREDENTIALS then
       // check https://stackoverflow.com/a/47479968/458259

@@ -2161,7 +2161,7 @@ type
 function NewOpenSslNetTls: INetTls;
 
 var
-  /// by default NewOpenSslNetTls will disable SIG_PIPE on POSIX
+  /// force to true so that NewOpenSslNetTls won't disable SIG_PIPE on POSIX
   // - due to an OpenSSL limitation, which does not set socket MSG_NOSIGNAL
   // - just ignored on Windows
   NewOpenSslNetTlsNoSigPipeIntercept: boolean;
