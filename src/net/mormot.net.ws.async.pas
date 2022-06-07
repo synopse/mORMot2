@@ -81,6 +81,7 @@ type
   end;
 
   /// one HTTP/WebSockets server connection using non-blocking sockets
+  // - is able to upgrade from HTTP to WebSockets on client request
   TWebSocketAsyncConnection = class(THttpAsyncConnection)
   protected
     fProcess: TWebSocketAsyncProcess; // set once upgraded

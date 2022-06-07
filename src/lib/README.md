@@ -49,7 +49,7 @@ Cross-Platform and Cross-Compiler `libcurl` API
 
 ## mormot.lib.openssl11
 
-Cross-Platform and Cross-Compiler `OpenSSL` 1.1.1 API
+Cross-Platform and Cross-Compiler `OpenSSL` 1.1.1/ 3.x API
 - Dynamic or Static OpenSSL Library Loading
 - OpenSSL Library Constants
 - OpenSSL Library Types and Structures
@@ -57,10 +57,14 @@ Cross-Platform and Cross-Compiler `OpenSSL` 1.1.1 API
 - OpenSSL Helpers
 - TLS / HTTPS Encryption Layer using OpenSSL for `mormot.net.sock` / `TCrtSocket`
 
-In respect to OpenSSL 1.0.x, the new 1.1.1 API hides most structures behind getter/setter functions, and doesn't require complex initialization.
-OpenSSL 1.1.1 features TLS 1.3, and is a LTS revision (until 2023-09-11).
+Implementation notes:
+- In respect to OpenSSL 1.0.x, the new 1.1 / 3.x API hide most structures behind getter/setter functions, and doesn't require complex initialization.
+- OpenSSL 1.1.1 features TLS 1.3, and is a LTS revision (until 2023-09-11).
+- OpenSSL 3.x is also supported on some platforms (currently Windows and Linux), as the next major version.
+- OpenSSL 1.1.1 / 3.x API adaptation is done at runtime by dynamic loading.
+- The Full OpenSSL 1.1.1 API can be defined if `OPENSSLFULLAPI` conditional is set.
 
-The Full OpenSSL 1.1.1 API can be defined if `OPENSSLFULLAPI` conditional is set.
+**Legal Notice**: as stated by our LICENSE.md terms, make sure that you comply to any restriction about the use of cryptographic software in your country.
 
 ### mormot.lib.winhttp
 

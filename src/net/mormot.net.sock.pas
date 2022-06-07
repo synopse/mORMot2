@@ -3152,12 +3152,12 @@ begin
   try
     if not Assigned(NewNetTls) then
       raise ENetSock.Create('%s.DoTlsHandshake: TLS is not available - try ' +
-        'including mormot.lib.openssl11 and installing OpenSSL 1.1.1',
+        'including mormot.lib.openssl11 and installing OpenSSL 1.1.1/3.x',
         [ClassNameShort(self)^]);
     fSecure := NewNetTls;
     if fSecure = nil then
       raise ENetSock.Create('%s.DoTlsHandshake; TLS is not available on this ' +
-        'system - try installing OpenSSL 1.1.1', [ClassNameShort(self)^]);
+        'system - try installing OpenSSL 1.1.1/3.x', [ClassNameShort(self)^]);
     if doAccept then
       fSecure.AfterAccept(fSock, fRemoteIP, TLS)
     else
