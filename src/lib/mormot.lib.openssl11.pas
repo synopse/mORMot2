@@ -2160,6 +2160,12 @@ type
 // ! @NewNetTls := @NewOpenSslNetTls;
 function NewOpenSslNetTls: INetTls;
 
+var
+  /// by default NewOpenSslNetTls will disable SIG_PIPE on POSIX
+  // - due to an OpenSSL limitation, which does not set socket MSG_NOSIGNAL
+  // - just ignored on Windows
+  NewOpenSslNetTlsNoSigPipeIntercept: boolean;
+
 /// retrieve the peer certificates chain from a given HTTPS server URI
 // - caller should call procedure PX509DynArrayFree(result) once done
 function GetPeerCertFromUrl(const url: RawUtf8): PX509DynArray;
@@ -8278,7 +8284,13 @@ end;
 function NewOpenSslNetTls: INetTls;
 begin
   if OpenSslIsAvailable then
-    result := TOpenSslNetTls.Create
+  begin
+    {$ifdef OSPOSIX}
+    if not NewOpenSslNetTlsNoSigPipeIntercept then
+      SigPipeIntercept;
+    {$endif OSPOSIX}
+    result := TOpenSslNetTls.Create;
+  end
   else
     result := nil;
 end;
