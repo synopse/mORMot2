@@ -1186,13 +1186,8 @@ begin
        (connection.fWr.Len > 0) then
       // there is still some pending output bytes
       if previous = 0 then
-      begin
         // register for ProcessWrite() if not already
         result := SubscribeConnection('write', connection, pseWrite);
-        if fDebugLog <> nil then
-          DoLog('Write Subscribe(sock=%,handle=%)=% %',
-            [pointer(connection.Socket), connection.Handle, result, fWrite]);
-      end;
   finally
     //DoLog('Write: finally fProcessingWrite=%', [fProcessingWrite]);
     if result then
@@ -2575,7 +2570,7 @@ begin
   try
     // create and bind fServer to the expected TCP port
     SetExecuteState(esBinding);
-    fServer := TCrtSocket.Bind(fSockPort);
+    fServer := TCrtSocket.Bind(fSockPort); // BIND + LISTEN (TLS is done later)
     if not fServer.SockIsDefined then // paranoid check
       raise EAsyncConnections.CreateUtf8('%.Execute: bind failed', [self]);
     SetExecuteState(esRunning);
@@ -3036,7 +3031,8 @@ end;
 
 constructor THttpAsyncServer.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
-  ServerThreadPoolCount, KeepAliveTimeOut: integer; ProcessOptions: THttpServerOptions);
+  ServerThreadPoolCount, KeepAliveTimeOut: integer;
+  ProcessOptions: THttpServerOptions);
 var
   aco: TAsyncConnectionsOptions;
 begin
@@ -3123,6 +3119,7 @@ begin
   if fAsync <> nil then
     try
       fAsync.DoLog(sllTrace, 'Execute: main W loop', [], self);
+      fSock := fAsync.fServer;
       tix := mormot.core.os.GetTickCount64 shr 16; // delay=500 after 1 min idle
       lasttix := tix;
       ms := 1000; // fine if OnGetOneIdle is called in-between
@@ -3131,7 +3128,7 @@ begin
           ms := fCallbackSendDelay^; // for WebSockets frame gathering
       while not Terminated and
             not fAsync.Terminated do
-        if fAsync.fClients.fWrite.Count = 0 then
+        if fAsync.fClients.fWrite.Count + fAsync.fClients.fWrite.SubscribeCount = 0 then
         begin
           // no socket/poll/epoll API nedeed (most common case)
           if (fCallbackSendDelay <> nil) and
@@ -3153,7 +3150,8 @@ begin
         end
         else
         begin
-          // some packets queued for async sending (unlikely)
+          // some huge packets queued for async sending (seldom)
+          // note: GetOne() calls ProcessIdleTix() while looping
           if fAsync.fClients.fWrite.GetOne(ms, 'W', notif) then
             fAsync.fClients.ProcessWrite(notif);
           if fCallbackSendDelay <> nil then
