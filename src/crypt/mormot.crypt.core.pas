@@ -475,7 +475,7 @@ type
     fKey: TAesKey;
     fIV: TAesBlock;
     fAlgoMode: TAesMode;
-    fIVUpdated: boolean; // so you can call Encrypt() several times
+    fIVUpdated: boolean; // so you can chain Encrypt/Decrypt() calls
     procedure AfterCreate; virtual; // circumvent Delphi bug about const aKey
     function DecryptPkcs7Len(var InputLen, ivsize: integer; Input: pointer;
       IVAtBeginning, RaiseESynCryptoOnError: boolean): boolean;
@@ -1351,6 +1351,11 @@ const
   TAesInternal: TAesAbstractClasses = (
     TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr,
     TAesCfc, TAesOfc, TAesCtc, TAesGcm);
+
+/// create one AES instance which updates its IV between Encrypt/Decrypt calls
+// - will return either TAesFast[aesMode] or TAesInternal[aesMode] as fallback
+function AesIvUpdatedCreate(aesMode: TAesMode;
+  const key; keySizeBits: cardinal): TAesAbstract;
 
 const
   /// the AES chaining modes which supports AEAD process
@@ -6505,7 +6510,21 @@ end;
 { TAesPkcs7Abstract }
 
 var
-  AesModeIvUpdated: TAesAbstractClasses;
+  AesModeIvUpdated: TAesAbstractClasses; // IVUpdated=true -> chain En/Decrypt
+
+function AesIvUpdatedCreate(aesMode: TAesMode;
+  const key; keySizeBits: cardinal): TAesAbstract;
+begin
+  if AesModeIvUpdated[aesMode] = nil then
+    AesModeIvUpdated[aesMode] := TAesFast[aesMode]; // first try the fastest
+  result := AesModeIvUpdated[aesMode].Create(key, keySizeBits);
+  if not result.IVUpdated then // requires sequencial Encrypt/Decrypt() calls
+  begin
+    result.Free;
+    AesModeIvUpdated[aesMode] := TAesInternal[aesMode]; // our code sets the IV
+    result := TAesInternal[aesMode].Create(key, keySizeBits); // fallback
+  end;
+end;
 
 constructor TAesPkcs7Abstract.Create(aStream: TStream; const key;
   keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock; bufferSize: integer);
@@ -6519,15 +6538,7 @@ begin
     RaiseStreamError(self, 'Create');
   fBufAvailable := bufferSize;
   fStream := aStream;
-  if AesModeIvUpdated[aesMode] = nil then
-    AesModeIvUpdated[aesMode] := TAesFast[aesMode];
-  fAes := AesModeIvUpdated[aesMode].Create(key, keySizeBits);
-  if not fAes.fIVUpdated then // Write() requires sequencial Encrypt() calls
-  begin
-    fAes.Free;
-    AesModeIvUpdated[aesMode] := TAesInternal[aesMode];
-    fAes := TAesInternal[aesMode].Create(key, keySizeBits); // fallback
-  end;
+  fAes := AesIvUpdatedCreate(aesMode, key, keySizeBits);
 end;
 
 const
