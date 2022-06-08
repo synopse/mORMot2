@@ -6785,6 +6785,7 @@ begin
   except
     if fn <> dst then
       DeleteFile(fn); // remove any remaining .partial file on error
+    raise;
   end;
 end;
 
