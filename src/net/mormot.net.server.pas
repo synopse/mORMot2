@@ -360,6 +360,7 @@ type
     /// create the socket according to a server
     // - will register the THttpSocketCompress functions from the server
     // - once created, caller should call AcceptRequest() to accept the socket
+    // - if TLS is enabled, ensure server certificates are initialized once
     constructor Create(aServer: THttpServer); reintroduce;
     /// main object function called after aClientSock := Accept + Create:
     // - get Command, Method, URL, Headers and Body (if withBody is TRUE)
@@ -486,17 +487,21 @@ type
   protected
     fServerKeepAliveTimeOut: cardinal;
     fServerKeepAliveTimeOutSec: cardinal;
-    fStats: array[THttpServerSocketGetRequestResult] of integer;
-    fNginxSendFileFrom: array of TFileName;
     fSockPort: RawUtf8;
-    fHeaderRetrieveAbortDelay: cardinal;
+    fSock: TCrtSocket;
+    fSafe: TLightLock;
     fExecuteMessage: RawUtf8;
+    fHeaderRetrieveAbortDelay: cardinal;
+    fNginxSendFileFrom: array of TFileName;
+    fStats: array[THttpServerSocketGetRequestResult] of integer;
+    fServerTlsAfterBind: boolean;
     procedure SetServerKeepAliveTimeOut(Value: cardinal);
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
     procedure IncStat(one: THttpServerSocketGetRequestResult);
       {$ifdef HASINLINE} inline; {$endif}
     function OnNginxAllowSend(Context: THttpServerRequestAbstract;
       const LocalFileName: TFileName): boolean;
+    procedure InitializeServerTlsAfterBind;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetApiVersion: RawUtf8; override;
     function GetExecuteState: THttpServerExecuteState; virtual; abstract;
@@ -540,6 +545,7 @@ type
     // - calling this method is optional, but if the background thread didn't
     // actually bind the port, the server will be stopped and unresponsive with
     // no explicit error message, until it is terminated
+    // - note: hsoEnableTls support is done later, at first client connection
     procedure WaitStarted(Seconds: integer = 30);
     /// enable NGINX X-Accel internal redirection for STATICFILE_CONTENT_TYPE
     // - will define internally a matching OnSendFile event handler
@@ -560,6 +566,14 @@ type
     /// the low-level thread execution thread
     property ExecuteState: THttpServerExecuteState
       read GetExecuteState;
+    /// access to the main server low-level Socket
+    // - it's a raw TCrtSocket, which only need a socket to be bound, listening
+    // and accept incoming request
+    // - for THttpServer inherited class, will own its own instance, then
+    // THttpServerSocket/THttpServerResp are created for every connection
+    // - for THttpAsyncServer inherited class, redirect to TAsyncServer.fServer
+    property Sock: TCrtSocket
+      read fSock;
   published
     /// the bound TCP port, as specified to Create() constructor
     property SockPort: RawUtf8
@@ -620,15 +634,13 @@ type
   // - a typical HTTPS server usecase could be:
   // $ fHttpServer := THttpServer.Create('443', nil, nil, '', 32, 30000, [hsoEnableTls]);
   // $ fHttpServer.WaitStarted; // raise exception e.g. on binding issue
-  // $ fHttpServer.Sock.TLS.CertificateFile := 'cert.pem'; // cert.pfx for SSPI
+  // $ fHttpServer.Sock.TLS.CertificateFile := 'cert.pem';  // cert.pfx for SSPI
   // $ fHttpServer.Sock.TLS.PrivateKeyFile := 'privkey.pem'; // for OpenSSL only
+  // $ // now certificates will be initialized at first incoming request
   THttpServer = class(THttpServerSocketGeneric)
   protected
-    /// used to protect Process() call, e.g. fInternalHttpServerRespList
-    fProcessCS: TRTLCriticalSection;
     fThreadPool: TSynThreadPoolTHttpServer;
-    fInternalHttpServerRespList: TSynList;
-    fSock: TCrtSocket;
+    fInternalHttpServerRespList: TSynObjectListLocked;
     fHttpQueueLength: cardinal;
     fSocketClass: THttpServerSocketClass;
     fThreadRespClass: THttpServerRespClass;
@@ -638,8 +650,6 @@ type
     function GetExecuteState: THttpServerExecuteState; override;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
-    procedure InternalHttpServerRespListAdd(resp: THttpServerResp);
-    procedure InternalHttpServerRespListRemove(resp: THttpServerResp);
     /// server main loop - don't change directly
     procedure Execute; override;
     /// this method is called on every new client connection, i.e. every time
@@ -659,13 +669,6 @@ type
       ProcessOptions: THttpServerOptions = []); override;
     /// release all memory and handlers
     destructor Destroy; override;
-    /// access to the main server low-level Socket
-    // - it's a raw TCrtSocket, which only need a socket to be bound, listening
-    // and accept incoming request
-    // - THttpServerSocket are created on the fly for every request, then
-    // a THttpServerResp thread is created for handling this THttpServerSocket
-    property Sock: TCrtSocket
-      read fSock;
   published
     /// will contain the current number of connections to the server
     property ServerConnectionActive: integer
@@ -1643,6 +1646,20 @@ begin
   fOnSendFile := OnNginxAllowSend;
 end;
 
+procedure THttpServerSocketGeneric.InitializeServerTlsAfterBind;
+begin
+  fSafe.Lock; // load certificates once for all threads
+  try
+    if not fServerTlsAfterBind then
+    begin
+      fSock.DoTlsAfter(cstaBind);  // validate certificates now
+      fServerTlsAfterBind := true; // set flag AFTER proper initialization
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
 
 { THttpServer }
 
@@ -1651,8 +1668,7 @@ constructor THttpServer.Create(const aPort: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
   ProcessOptions: THttpServerOptions);
 begin
-  fInternalHttpServerRespList := TSynList.Create;
-  InitializeCriticalSection(fProcessCS);
+  fInternalHttpServerRespList := TSynObjectListLocked.Create({ownobject=}false);
   if fThreadPool <> nil then
     fThreadPool.ContentionAbortDelay := 5000; // 5 seconds default
   if fThreadRespClass = nil then
@@ -1690,29 +1706,31 @@ begin
       Sock.Close; // nlUnix expects shutdown after accept() returned
   end;
   endtix := mormot.core.os.GetTickCount64 + 20000;
-  EnterCriticalSection(fProcessCS);
   try
-    if fInternalHttpServerRespList <> nil then
+    if fInternalHttpServerRespList <> nil then // HTTP/1.1 long running threads
     begin
+      fInternalHttpServerRespList.Safe.ReadOnlyLock; // notify
       for i := 0 to fInternalHttpServerRespList.Count - 1 do
         THttpServerResp(fInternalHttpServerRespList.List[i]).Shutdown;
+      fInternalHttpServerRespList.Safe.ReadOnlyUnLock;
       repeat
         // wait for all THttpServerResp.Execute to be finished
-        if (fInternalHttpServerRespList.Count = 0) and
-           (fExecuteState <> esRunning) then
-          break;
-        LeaveCriticalSection(fProcessCS);
+        fInternalHttpServerRespList.Safe.ReadOnlyLock;
+        try
+          if (fInternalHttpServerRespList.Count = 0) and
+             (fExecuteState <> esRunning) then
+            break;
+        finally
+          fInternalHttpServerRespList.Safe.ReadOnlyUnLock;
+        end;
         SleepHiRes(10);
-        EnterCriticalSection(fProcessCS);
       until mormot.core.os.GetTickCount64 > endtix;
       FreeAndNilSafe(fInternalHttpServerRespList);
     end;
   finally
-    LeaveCriticalSection(fProcessCS);
     FreeAndNilSafe(fThreadPool); // release all associated threads
     FreeAndNilSafe(fSock);
     inherited Destroy;       // direct Thread abort, no wait till ended
-    DeleteCriticalSection(fProcessCS);
   end;
 end;
 
@@ -1729,37 +1747,6 @@ end;
 procedure THttpServer.SetHttpQueueLength(aValue: cardinal);
 begin
   fHttpQueueLength := aValue;
-end;
-
-procedure THttpServer.InternalHttpServerRespListAdd(resp: THttpServerResp);
-begin
-  if (self = nil) or
-     (fInternalHttpServerRespList = nil) or
-     (resp = nil) then
-    exit;
-  EnterCriticalSection(fProcessCS);
-  try
-    fInternalHttpServerRespList.Add(resp);
-  finally
-    LeaveCriticalSection(fProcessCS);
-  end;
-end;
-
-procedure THttpServer.InternalHttpServerRespListRemove(resp: THttpServerResp);
-var
-  i: integer;
-begin
-  if (self = nil) or
-     (fInternalHttpServerRespList = nil) then
-    exit;
-  EnterCriticalSection(fProcessCS);
-  try
-    i := fInternalHttpServerRespList.IndexOf(resp);
-    if i >= 0 then
-      fInternalHttpServerRespList.Delete(i);
-  finally
-    LeaveCriticalSection(fProcessCS);
-  end;
 end;
 
 {.$define MONOTHREAD}
@@ -1780,7 +1767,7 @@ begin
   NotifyThreadStart(self);
   // main server process loop
   try
-    fSock := TCrtSocket.Bind(fSockPort); // BIND + LISTEN
+    fSock := TCrtSocket.Bind(fSockPort); // BIND + LISTEN (TLS is done later)
     fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid check
       raise EHttpServer.CreateUtf8('%.Execute: %.Bind failed', [self, fSock]);
@@ -1806,8 +1793,6 @@ begin
       try
         cltservsock := fSocketClass.Create(self);
         try
-          if hsoEnableTls in fOptions then
-            cltservsock.TLS := fSock.TLS; // needed by cstaAccept below
           cltservsock.AcceptRequest(cltsock, @cltaddr);
           if hsoEnableTls in fOptions then
             cltservsock.DoTlsAfter(cstaAccept);
@@ -1831,14 +1816,12 @@ begin
       begin
         // use thread pool to process the request header, and probably its body
         cltservsock := fSocketClass.Create(self);
-        if hsoEnableTls in fOptions then
-          cltservsock.TLS := fSock.TLS; // for cstaAccept in TaskProcess
-        // we tried to reuse the fSocketClass instance -> no performance change
+        // note: we tried to reuse the fSocketClass instance -> no perf benefit
         cltservsock.AcceptRequest(cltsock, @cltaddr);
         if not fThreadPool.Push(pointer(PtrUInt(cltservsock)),
             {waitoncontention=}true) then
         begin
-          // returned false if there is no idle thread in the pool, and queue is full
+          // was false if there is no idle thread in the pool, and queue is full
           cltservsock.Free; // will call DirectShutdown(cltsock)
         end;
       end
@@ -1852,9 +1835,9 @@ begin
       // any exception would break and release the thread
       FormatUtf8('% [%]', [E, E.Message], fExecuteMessage);
   end;
-  EnterCriticalSection(fProcessCS);
+  fSafe.Lock;
   fExecuteState := esFinished;
-  LeaveCriticalSection(fProcessCS);
+  fSafe.UnLock;
 end;
 
 procedure THttpServer.OnConnect;
@@ -2038,10 +2021,10 @@ begin
     // add transfert stats to main socket
     if Sock <> nil then
     begin
-      EnterCriticalSection(fProcessCS);
+      fSafe.Lock;
       Sock.BytesIn := Sock.BytesIn + ClientSock.BytesIn;
       Sock.BytesOut := Sock.BytesOut + ClientSock.BytesOut;
-      LeaveCriticalSection(fProcessCS);
+      fSafe.UnLock;
       ClientSock.fBytesIn := 0;
       ClientSock.fBytesOut := 0;
     end;
@@ -2062,7 +2045,7 @@ begin
   freeme := true;
   try
     if hsoEnableTls in fServer.Options then
-      DoTlsAfter(cstaAccept);
+      DoTlsAfter(cstaAccept); // slow TLS handshake done in this sub-thread
     headertix := fServer.HeaderRetrieveAbortDelay;
     if headertix > 0 then
       headertix := headertix + GetTickCount64;
@@ -2129,7 +2112,12 @@ begin
     Http.Compress := aServer.fCompress;
     Http.CompressAcceptEncoding := aServer.fCompressAcceptEncoding;
     fSocketLayer := aServer.Sock.SocketLayer;
-    TLS.Enabled := aServer.Sock.TLS.Enabled; // not implemented yet
+    if hsoEnableTls in aServer.fOptions then
+    begin
+      if not aServer.fServerTlsAfterBind then
+        aServer.InitializeServerTlsAfterBind; // load certificates once
+      TLS := aServer.Sock.TLS;                // for cstaAccept in TaskProcess
+    end;
     OnLog := aServer.Sock.OnLog;
   end;
 end;
@@ -2265,7 +2253,7 @@ begin
   fServer := aServer;
   fServerSock := aServerSock;
   fOnThreadTerminate := fServer.fOnThreadTerminate;
-  fServer.InternalHttpServerRespListAdd(self);
+  fServer.fInternalHttpServerRespList.Add(self);
   fConnectionID := aServerSock.fRemoteConnectionID;
   FreeOnTerminate := true;
   inherited Create(false);
@@ -2427,7 +2415,7 @@ begin
             if Assigned(fOnThreadTerminate) then
               fOnThreadTerminate(self);
           finally
-            fServer.InternalHttpServerRespListRemove(self);
+            fServer.fInternalHttpServerRespList.Remove(self);
             fServer := nil;
             fOnThreadTerminate := nil;
           end;

@@ -875,7 +875,6 @@ type
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
     function GetRawSocket: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure DoTlsAfter(caller: TCrtSocketTlsAfter);
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
     // - could have been assigned by a Tunnel.From() call
@@ -922,6 +921,8 @@ type
     /// initialize the instance with the supplied accepted socket
     // - is called from a bound TCP Server, just after Accept()
     procedure AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
+    /// low-level TLS support method
+    procedure DoTlsAfter(caller: TCrtSocketTlsAfter);
     /// initialize SockIn for receiving with read[ln](SockIn^,...)
     // - data is buffered, filled as the data is available
     // - read(char) or readln() is indeed very fast
@@ -3279,7 +3280,7 @@ begin
   if (aLayer = nlTcp) and
      aTLS then
     if doBind then
-      DoTlsAfter(cstaBind)
+      DoTlsAfter(cstaBind) // never called by OpenBind(aTLS=false) in practice
     else if {%H-}PtrInt(aSock) <= 0 then
       DoTlsAfter(cstaConnect);
   if Assigned(OnLog) then
