@@ -26,6 +26,12 @@ interface
 {.$define VERBOSECLIENTLOG}
 // if defined, TRestHttpClientSocket will log low-level THttpClientSocket info
 
+{.$define CLIENTUSEWININET}
+// force HTTP/1.1 RESTful JSON default mORMot Client class to use WinHttp
+// - e.g. to try Windows built-in proxy settings
+// - but is slower and less stable in some context (e.g. useHttpAsync) 
+
+
 {$I ..\mormot.defines.inc}
 
 uses
@@ -441,7 +447,7 @@ type
 { ************ TRestHttpClientCurl REST Client Class over LibCurl }
 
   {$ifdef USELIBCURL}
-  /// HTTP/1.1 RESTful JSON Client class using libculr
+  /// HTTP/1.1 RESTful JSON Client class using libcurl
   // - will handle HTTP and HTTPS, if OpenSSL or similar libray is available
   TRestHttpClientCurl = class(TRestHttpClientRequest)
   protected
@@ -453,9 +459,13 @@ type
   { ************ TRestHttpClient/TRestHttpClients Main Usable Classes }
 
 type
-  {$ifdef USEWININET}
+  {$ifndef OSWINDOWS}
+    {$undef CLIENTUSEWININET}
+  {$endif OSWINDOWS}
+  
+  {$ifdef CLIENTUSEWININET}
 
-  /// HTTP/1.1 RESTful JSON default mORMot Client class is WinHttp on Windows
+  /// force HTTP/1.1 RESTful JSON default mORMot Client class as WinHttp
   // - for support of Windows built-in proxy settings for instance
   TRestHttpClient = TRestHttpClientWinHttp;
 
@@ -468,13 +478,15 @@ type
   TRestHttpClient = TRestHttpClientSocket;
 
   {$ifdef USELIBCURL}
-  /// HTTP/HTTPS RESTful JSON default mORMot Client class is libcurl
-  TRestHttpsClient = TRestHttpClientCurl;
+  /// set HTTP/HTTPS RESTful JSON default mORMot Client class to use libcurl
+  TRestHttpsClient = TRestHttpClientCurl;   
   {$else}
-  TRestHttpsClient = TRestHttpClientSocket; // fallback to non-TLS class
+  /// default HTTP/HTTPS RESTful JSON default mORMot Client class is our socket layer
+  // - includes direct SChannel/OpenSSL TLS support on all platforms
+  TRestHttpsClient = TRestHttpClientSocket;
   {$endif USELIBCURL}
 
-  {$endif USEWININET}
+  {$endif CLIENTUSEWININET}
 
 var
   /// a global hook variable, able to set WebSockets logging to full verbose
