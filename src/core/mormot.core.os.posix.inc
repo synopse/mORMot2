@@ -2121,23 +2121,33 @@ end;
 
 procedure SynDaemonIntercept(const onlog: TSynLogProc);
 var
-  saOld, saNew: SigactionRec;
+  sa: SigactionRec;
 begin
   // note: SIGFPE/SIGSEGV/SIGBUS/SIGILL are handled by the RTL
   if SynDaemonIntercepted then
     exit;
-  SynDaemonIntercepted := true;
-  SynDaemonInterceptLog := onlog;
-  FillCharFast(saNew, SizeOf(saNew), 0);
-  saNew.sa_handler := @DoShutDown;
-  fpSigaction(SIGQUIT, @saNew, @saOld);
-  fpSigaction(SIGTERM, @saNew, @saOld);
-  fpSigaction(SIGINT,  @saNew, @saOld);
-  fpSigaction(SIGABRT, @saNew, @saOld);
+  GlobalLock;
+  try
+    if SynDaemonIntercepted then
+      exit;
+    SynDaemonInterceptLog := onlog;
+    FillCharFast(sa, SizeOf(sa), 0);
+    sa.sa_handler := @DoShutDown;
+    fpSigaction(SIGQUIT, @sa, nil);
+    fpSigaction(SIGTERM, @sa, nil);
+    fpSigaction(SIGINT,  @sa, nil);
+    fpSigaction(SIGABRT, @sa, nil);
+    SynDaemonIntercepted := true; // flag set AFTER interception
+  finally
+    GlobalUnLock;
+  end;
 end;
 
 var
   SigPipeDisabled: boolean; // process-wide thread-safe flag
+
+// TO INVESTIGATE: we may use per-thread signal masking instead
+// http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html
 
 procedure DoNothing(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
 begin
@@ -2145,7 +2155,7 @@ end;
 
 procedure SigPipeIntercept;
 var
-  saOld, saNew: SigactionRec;
+  sa: SigactionRec;
 begin
   if SigPipeDisabled then
     exit; // quickly return if already done
@@ -2153,14 +2163,9 @@ begin
   try
     if SigPipeDisabled then
       exit;
-    FillCharFast(saNew, SizeOf(saNew), 0);
-    saNew.sa_handler := @DoNothing;
-    {$ifdef SA_INTERRUPT} // see
-    saNew.sa_flags := SA_INTERRUPT; // SunOS
-    {$else}
-    saNew.sa_flags := SA_RESTART;
-    {$endif SA_INTERRUPT}
-    fpSigaction(SIGPIPE, @saNew, @saOld);
+    FillCharFast(sa, SizeOf(sa), 0);
+    sa.sa_handler := @DoNothing;
+    fpSigaction(SIGPIPE, @sa, nil);
     SigPipeDisabled := true; // flag set AFTER disabling it
   finally
     GlobalUnLock;
