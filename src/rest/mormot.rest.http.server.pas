@@ -182,7 +182,7 @@ type
   // - please make this method thread-safe and as fast as possible
   TOnRestHttpServerRequest = function(var Call: TRestUriParams): boolean of object;
 
-  /// HTTP/1.1 RESTFUL JSON mORMot Server class
+  /// HTTP/1.1 and WebSockets RESTFUL JSON mORMot Server class
   // - this server is multi-threaded and not blocking
   // - under Windows, it will first try to use fastest http.sys kernel-mode
   // server (i.e. create a THttpApiServer instance); it should work OK under XP
@@ -191,7 +191,7 @@ type
   // a solution is to call the THttpApiServer.AddUrlAuthorize class method during
   // program setup for the desired port, or define a useHttpApiRegisteringURI
   // kind of server, in order to allow it for every user
-  // - under Linux, only THttpServer is available
+  // - under Linux, only THttpServer/THttpAsyncServer are available
   // - you can specify WEBSOCKETS_DEFAULT_MODE (= useBidirAsync) kind of server
   // to allow WebSockets upgrades and server-side notif callbacks
   // - just create it and it will serve SQL statements as UTF-8 JSON
@@ -278,7 +278,9 @@ type
       aThreadPoolCount: Integer = 32;
       aSecurity: TRestHttpServerSecurity = secNone;
       const aAdditionalUrl: RawUtf8 = ''; const aQueueName: SynUnicode = '';
-      aOptions: TRestHttpServerOptions = HTTPSERVER_DEFAULT_OPTIONS);
+      aOptions: TRestHttpServerOptions = HTTPSERVER_DEFAULT_OPTIONS;
+      const CertificateFile: TFileName = '';
+      const PrivateKeyFile: TFileName = ''; PrivateKeyPassword: RawUtf8 = '');
         reintroduce; overload;
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a ERestHttpServer exception if binding failed
@@ -657,7 +659,8 @@ constructor TRestHttpServer.Create(const aPort: RawUtf8;
   const aServers: array of TRestServer; const aDomainName: RawUtf8;
   aUse: TRestHttpServerUse; aThreadPoolCount: Integer;
   aSecurity: TRestHttpServerSecurity; const aAdditionalUrl: RawUtf8;
-  const aQueueName: SynUnicode; aOptions: TRestHttpServerOptions);
+  const aQueueName: SynUnicode; aOptions: TRestHttpServerOptions;
+  const CertificateFile, PrivateKeyFile: TFileName; PrivateKeyPassword: RawUtf8);
 var
   i, j: PtrInt;
   hso: THttpServerOptions;
@@ -766,7 +769,8 @@ begin
     else
       raise ERestHttpServer.CreateUtf8('%.Create(% ): unsupported %',
         [self, fDBServerNames, ToText(aUse)^]);
-    THttpServerSocketGeneric(fHttpServer).WaitStarted(10);
+    THttpServerSocketGeneric(fHttpServer).WaitStarted(
+      30, CertificateFile, PrivateKeyFile, PrivateKeyPassword);
   end;
   // setup the newly created server instance
   fHttpServer.OnRequest := Request;
