@@ -859,15 +859,15 @@ type
     fTimeOut: PtrInt;
     fBytesIn: Int64;
     fBytesOut: Int64;
+    fSecure: INetTls;
     fSockInEofError: integer;
-    fSocketLayer: TNetLayer;
     fWasBind: boolean;
+    fSocketLayer: TNetLayer;
     // updated by every SockSend() call
     fSndBuf: RawByteString;
     fSndBufLen: integer;
     // updated during UDP connection, accessed via PeerAddress/PeerPort
     fPeerAddr: PNetAddr;
-    fSecure: INetTls;
     procedure SetKeepAlive(aKeepAlive: boolean); virtual;
     procedure SetLinger(aLinger: integer); virtual;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
@@ -3161,16 +3161,18 @@ end;
 
 procedure TCrtSocket.DoTlsAfter(caller: TCrtSocketTlsAfter);
 begin
+  if not TLS.Enabled then // ignore duplicated calls
   try
+    if fSecure <> nil then
+      raise ENetSock.Create('%s.DoTlsAfter twice', [ClassNameShort(self)^]);
+    if Assigned(NewNetTls) then
+      fSecure := NewNetTls
+    else
+      raise ENetSock.Create('%s.DoTlsAfter: TLS support not compiled ' +
+        '- try including mormot.lib.openssl11 in your project',
+        [ClassNameShort(self)^]);
     if fSecure = nil then
-      if Assigned(NewNetTls) then
-        fSecure := NewNetTls
-      else
-        raise ENetSock.Create('%s.DoTlsAfter: TLS support not compiled ' +
-          '- try including mormot.lib.openssl11 in your project',
-          [ClassNameShort(self)^]);
-    if fSecure = nil then
-      raise ENetSock.Create('%s.DoTlsAfter; TLS is not available on this ' +
+      raise ENetSock.Create('%s.DoTlsAfter: TLS is not available on this ' +
         'system - try installing OpenSSL 1.1.1/3.x', [ClassNameShort(self)^]);
     case caller of
       cstaConnect:
