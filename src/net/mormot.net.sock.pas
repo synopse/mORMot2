@@ -478,6 +478,8 @@ type
     // as filled by AfterBind()
     procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
       LastError, CipherName: PRawUtf8);
+    /// retrieve the textual name of the cipher used following AfterAccept()
+    function GetCipherName: RawUtf8;
     /// receive some data from the TLS layer
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     /// send some data from the TLS layer
@@ -3163,7 +3165,7 @@ procedure TCrtSocket.DoTlsAfter(caller: TCrtSocketTlsAfter);
 begin
   if not TLS.Enabled then // ignore duplicated calls
   try
-    if fSecure <> nil then
+    if fSecure <> nil then // paranoid
       raise ENetSock.Create('%s.DoTlsAfter twice', [ClassNameShort(self)^]);
     if Assigned(NewNetTls) then
       fSecure := NewNetTls
@@ -3182,7 +3184,7 @@ begin
       cstaAccept:
         fSecure.AfterAccept(fSock, TLS, @TLS.LastError, @TLS.CipherName)
     end;
-    TLS.Enabled := true;
+    TLS.Enabled := true; // set the flag AFTER fSecure has been initialized
   except
     on E: Exception do
     begin

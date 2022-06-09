@@ -979,7 +979,7 @@ type
   TSChannelNetTls = class(TInterfacedObject, INetTls)
   private
     fSocket: TNetSocket;
-    fCipherName: PRawUtf8;
+    fCipherName: RawUtf8;
     fServerAddressW: SynUnicode;
     fCred: TCredHandle;
     fCtxt: TCtxtHandle;
@@ -1002,6 +1002,7 @@ type
     procedure AfterBind(var Context: TNetTlsContext);
     procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
       LastError, CipherName: PRawUtf8);
+    function GetCipherName: RawUtf8;
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
@@ -1071,7 +1072,6 @@ begin
   fSocket := Socket;
   fServerAddressW := SynUnicode(ServerAddress);
   fAccept := false;
-  fCipherName := @Context.CipherName;
   CheckSEC_E_OK(AcquireCredentialsHandleW(
     nil, UNISP_NAME, SECPKG_CRED_OUTBOUND, nil, nil, nil, nil, @fCred, nil));
   fDataPos := 0;
@@ -1096,14 +1096,7 @@ begin
   // make TLS handshake and prepare for process
   SetLength(fData, TLSRECMAXSIZE);
   HandshakeLoop;
-  CheckSEC_E_OK(QueryContextAttributesW(
-    @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
-  fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
-  if fInputSize > TLSRECMAXSIZE then
-    raise ESChannel.CreateFmt('InputSize=%d>%d on %s',
-      [fInputSize, TLSRECMAXSIZE, ServerAddress]);
-  SetLength(fInput, fInputSize);
-  fInputCount := 0;
+  Context.CipherName := fCipherName;
 end;
 
 procedure TSChannelNetTls.AfterBind(var Context: TNetTlsContext);
@@ -1142,7 +1135,6 @@ begin
   // prepare execution context
   fSocket := Socket;
   fAccept := true;
-  fCipherName := CipherName;
   // prepare TLS connection properties from AfterBind() global certificate
   if BoundContext.AcceptCert = nil then
     raise ESChannel.Create('AfterAccept: missing AfterBind');
@@ -1158,13 +1150,13 @@ begin
   // make TLS handshake and prepare for process
   SetLength(fData, TLSRECMAXSIZE);
   HandshakeLoop;
-  CheckSEC_E_OK(QueryContextAttributesW(
-    @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
-  fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
-  if fInputSize > TLSRECMAXSIZE then
-    raise ESChannel.CreateFmt('InputSize=%d>%d', [fInputSize, TLSRECMAXSIZE]);
-  SetLength(fInput, fInputSize);
-  fInputCount := 0;
+  if CipherName <> nil then
+    CipherName^ := fCipherName;
+end;
+
+function TSChannelNetTls.GetCipherName: RawUtf8;
+begin
+  result := fCipherName;
 end;
 
 procedure TSChannelNetTls.HandshakeLoop;
@@ -1233,10 +1225,21 @@ begin
         (res <> SEC_E_INCOMPLETE_MESSAGE);
   CheckSEC_E_OK(res);
   // note: fDataCount trailing content may come from SECBUFFER_EXTRA bytes
-  if fCipherName <> nil then
-    if QueryContextAttributesW(
-        @fCtxt, SECPKG_ATTR_CONNECTION_INFO, @nfo) = SEC_E_OK then
-      fCipherName^ := nfo.ToText;
+  if QueryContextAttributesW(
+      @fCtxt, SECPKG_ATTR_CONNECTION_INFO, @nfo) = SEC_E_OK then
+    fCipherName := nfo.ToText;
+  if fInputSize = 0 then
+  begin
+    // retrieve the TLS field sizes during first handshake
+    CheckSEC_E_OK(QueryContextAttributesW(
+      @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
+    fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
+    if (fInputSize = 0) or
+       (fInputSize > TLSRECMAXSIZE) then
+      raise ESChannel.CreateFmt('InputSize=%d>%d', [fInputSize, TLSRECMAXSIZE]);
+    SetLength(fInput, fInputSize);
+    fInputCount := 0;
+  end;
 end;
 
 destructor TSChannelNetTls.Destroy;

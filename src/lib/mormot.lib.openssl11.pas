@@ -7896,6 +7896,7 @@ type
     fCtx: PSSL_CTX;
     fSsl: PSSL;
     fPeer: PX509;
+    fCipherName: RawUtf8;
     fDoSslShutdown: boolean;
   public
     destructor Destroy; override;
@@ -7905,6 +7906,7 @@ type
     procedure AfterBind(var Context: TNetTlsContext);
     procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
       LastError, CipherName: PRawUtf8);
+    function GetCipherName: RawUtf8;
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
@@ -7995,16 +7997,15 @@ const
 
 function HasHWAes: boolean; {$ifdef HASINLINE} inline; {$endif}
 begin
-  result :=
-    {$ifdef CPUINTEL}
-      cfAESNI in CpuFeatures;
-    {$else}
-      {$ifdef CPUARM}
-        ahcAES in CpuFeatures;
-      {$else}
-        false;
-      {$endif CPUARM}
-    {$endif CPUINTEL}
+  {$ifdef CPUINTEL}
+  result := cfAESNI in CpuFeatures;
+  {$else}
+  {$ifdef CPUARM}
+  result := ahcAES in CpuFeatures;
+  {$else}
+  result := false;
+  {$endif CPUARM}
+  {$endif CPUINTEL}
 end;
 
 // see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
@@ -8201,9 +8202,15 @@ begin
   EOpenSslNetTls.Check(self, 'AfterAccept accept',
     SSL_accept(fSsl), LastError, fSsl);
   fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
+  fCipherName := fSsl.CurrentCipher.Description;
+  // writeln(fCipherName);
   if CipherName <> nil then
-    CipherName^ := fSsl.CurrentCipher.Description;
-  // if CipherName <> nil then writeln(CipherName^);
+    CipherName^ := fCipherName;
+end;
+
+function TOpenSslNetTls.GetCipherName: RawUtf8;
+begin
+  result := fCipherName;
 end;
 
 destructor TOpenSslNetTls.Destroy;
