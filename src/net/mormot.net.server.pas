@@ -319,6 +319,11 @@ type
   end;
 
 
+const
+  HTTPREMOTEFLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
+    [],
+    [hsrHttps, hsrSecured]);
+
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
 
@@ -494,7 +499,6 @@ type
     fHeaderRetrieveAbortDelay: cardinal;
     fNginxSendFileFrom: array of TFileName;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
-    fServerTlsAfterBind: boolean;
     procedure SetServerKeepAliveTimeOut(Value: cardinal);
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
     procedure IncStat(one: THttpServerSocketGetRequestResult);
@@ -552,7 +556,8 @@ type
     procedure WaitStarted(Seconds: integer = 30;
       const CertificateFile: TFileName = '';
       const PrivateKeyFile: TFileName = ''; PrivateKeyPassword: RawUtf8 = '');
-    /// could be called after WaitStarted(seconds,'','','') to set the TLS parameters
+    /// could be called after WaitStarted(seconds,'','','') to setup TLS
+    // - use Sock.TLS.CertificateFile/PrivateKeyFile/PrivatePassword
     procedure InitializeTlsAfterBind;
     /// enable NGINX X-Accel internal redirection for STATICFILE_CONTENT_TYPE
     // - will define internally a matching OnSendFile event handler
@@ -1591,7 +1596,8 @@ begin
   until false;
   // now the server socket has been bound, and is ready to accept connections
   if (hsoEnableTls in fOptions) and
-     (PrivateKeyFile <> '') then
+     (PrivateKeyFile <> '') and
+     not fSock.TLS.Enabled then
   begin
     StringToUtf8(CertificateFile, fSock.TLS.CertificateFile);
     StringToUtf8(PrivateKeyFile, fSock.TLS.PrivateKeyFile);
@@ -1663,15 +1669,11 @@ end;
 
 procedure THttpServerSocketGeneric.InitializeTlsAfterBind;
 begin
-  if fServerTlsAfterBind then
+  if fSock.TLS.Enabled then
     exit;
   fSafe.Lock; // load certificates once from first connected thread
   try
-    if not fServerTlsAfterBind then
-    begin
-      fSock.DoTlsAfter(cstaBind);  // validate certificates now
-      fServerTlsAfterBind := true; // set flag AFTER proper initialization
-    end;
+    fSock.DoTlsAfter(cstaBind);  // validate certificates now
   finally
     fSafe.UnLock;
   end;
@@ -1867,10 +1869,6 @@ procedure THttpServer.OnDisconnect;
 begin
   LockedDec32(@fServerConnectionActive);
 end;
-
-const
-  HTTPREMOTEFLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
-    [], [hsrHttps, hsrSecured]);
 
 procedure THttpServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread);
@@ -2128,9 +2126,9 @@ begin
     fSocketLayer := aServer.Sock.SocketLayer;
     if hsoEnableTls in aServer.fOptions then
     begin
-      if not aServer.fServerTlsAfterBind then // if not already in WaitStarted()
-        aServer.InitializeTlsAfterBind;       // load certificate(s) once
-      TLS.AcceptCert := aServer.Sock.TLS.AcceptCert;  // TaskProcess cstaAccept
+      if not aServer.fSock.TLS.Enabled then // if not already in WaitStarted()
+        aServer.InitializeTlsAfterBind;     // load certificate(s) once
+      TLS.AcceptCert := aServer.Sock.TLS.AcceptCert; // TaskProcess cstaAccept
     end;
     OnLog := aServer.Sock.OnLog;
   end;
