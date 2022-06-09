@@ -424,7 +424,7 @@ type
   /// the server-side available authentication schemes
   // - as used by THttpServerRequest.AuthenticationStatus
   // - hraNone..hraKerberos will match low-level HTTP_REQUEST_AUTH_TYPE enum as
-  // defined in HTTP 2.0 API and
+  // defined in HTTP 2.0 API
   THttpServerRequestAuthentication = (
     hraNone,
     hraFailed,
@@ -436,8 +436,8 @@ type
 
   /// available THttpServerRequest connection attributes
   // - hsrHttps will indicates that the communication was made over HTTPS
-  // - hsrSecured is set if the transmission is encrypted or in-process,
-  // using e.g. HTTPS/TLS or our proprietary AES/ECDHE algorithms
+  // - hsrSecured is set if the transmission is encrypted or in-process, using
+  // e.g. HTTPS/TLS or our proprietary AES/ECDHE algorithm over WebSockets
   // - hsrWebsockets communication was made using WebSockets
   // - hsrInProcess is done when run from the same process, i.e. on server side
   // - should exactly match TRestUriParamsLowLevelFlag in mormot.rest.core

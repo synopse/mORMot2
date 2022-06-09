@@ -501,7 +501,6 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function OnNginxAllowSend(Context: THttpServerRequestAbstract;
       const LocalFileName: TFileName): boolean;
-    procedure InitializeServerTlsAfterBind;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetApiVersion: RawUtf8; override;
     function GetExecuteState: THttpServerExecuteState; virtual; abstract;
@@ -545,8 +544,16 @@ type
     // - calling this method is optional, but if the background thread didn't
     // actually bind the port, the server will be stopped and unresponsive with
     // no explicit error message, until it is terminated
-    // - note: hsoEnableTls support is done later, at first client connection
-    procedure WaitStarted(Seconds: integer = 30);
+    // - for hsoEnableTls support, you should either specify the private key
+    // and certificate here, or set TLS.PrivateKeyFile/CertificateFile fields -
+    // the benefit of this method parameters is that the certificates are
+    // loaded and checked now, not at the first client connection or when
+    // InitializeTlsAfterBind is called explicitly
+    procedure WaitStarted(Seconds: integer = 30;
+      const CertificateFile: TFileName = '';
+      const PrivateKeyFile: TFileName = ''; PrivateKeyPassword: RawUtf8 = '');
+    /// could be called after WaitStarted(seconds,'','','') to set the TLS parameters
+    procedure InitializeTlsAfterBind;
     /// enable NGINX X-Accel internal redirection for STATICFILE_CONTENT_TYPE
     // - will define internally a matching OnSendFile event handler
     // - generating "X-Accel-Redirect: " header, trimming any supplied left
@@ -633,9 +640,7 @@ type
   // - don't forget to use Free method when you are finished
   // - a typical HTTPS server usecase could be:
   // $ fHttpServer := THttpServer.Create('443', nil, nil, '', 32, 30000, [hsoEnableTls]);
-  // $ fHttpServer.WaitStarted; // raise exception e.g. on binding issue
-  // $ fHttpServer.Sock.TLS.CertificateFile := 'cert.pem';  // cert.pfx for SSPI
-  // $ fHttpServer.Sock.TLS.PrivateKeyFile := 'privkey.pem'; // for OpenSSL only
+  // $ fHttpServer.WaitStarted('cert.pem', 'privkey.pem', '');  // cert.pfx for SSPI
   // $ // now certificates will be initialized at first incoming request
   THttpServer = class(THttpServerSocketGeneric)
   protected
@@ -1563,7 +1568,8 @@ begin
     'HTTP_BIDIR (useBidirSocket or useBidirAsync) kind of server', [self]);
 end;
 
-procedure THttpServerSocketGeneric.WaitStarted(Seconds: integer);
+procedure THttpServerSocketGeneric.WaitStarted(Seconds: integer;
+  const CertificateFile, PrivateKeyFile: TFileName; PrivateKeyPassword: RawUtf8);
 var
   tix: Int64;
 begin
@@ -1573,7 +1579,7 @@ begin
       exit;
     case GetExecuteState of
       esRunning:
-        exit;
+        break;
       esFinished:
         raise EHttpServer.CreateUtf8('%.Execute aborted due to %',
           [self, fExecuteMessage]);
@@ -1583,6 +1589,15 @@ begin
       raise EHttpServer.CreateUtf8('%.WaitStarted timeout after % seconds [%]',
         [self, Seconds, fExecuteMessage]);
   until false;
+  // now the server socket has been bound, and is ready to accept connections
+  if (hsoEnableTls in fOptions) and
+     (PrivateKeyFile <> '') then
+  begin
+    StringToUtf8(CertificateFile, fSock.TLS.CertificateFile);
+    StringToUtf8(PrivateKeyFile, fSock.TLS.PrivateKeyFile);
+    fSock.TLS.PrivatePassword := PrivateKeyPassword;
+    InitializeTlsAfterBind; // validate TLS certificate(s) now
+  end;
 end;
 
 procedure THttpServerSocketGeneric.SetServerKeepAliveTimeOut(Value: cardinal);
@@ -1646,9 +1661,11 @@ begin
   fOnSendFile := OnNginxAllowSend;
 end;
 
-procedure THttpServerSocketGeneric.InitializeServerTlsAfterBind;
+procedure THttpServerSocketGeneric.InitializeTlsAfterBind;
 begin
-  fSafe.Lock; // load certificates once for all threads
+  if fServerTlsAfterBind then
+    exit;
+  fSafe.Lock; // load certificates once from first connected thread
   try
     if not fServerTlsAfterBind then
     begin
@@ -1852,9 +1869,6 @@ begin
 end;
 
 const
-  // accessed only in the HTTP context over Sockets, not WebSockets
-  // - currently, THttpServerSocket.TLS.Enabled is never set
-  // - Windows http.sys will directly set the flags
   HTTPREMOTEFLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
     [], [hsrHttps, hsrSecured]);
 
@@ -2114,9 +2128,9 @@ begin
     fSocketLayer := aServer.Sock.SocketLayer;
     if hsoEnableTls in aServer.fOptions then
     begin
-      if not aServer.fServerTlsAfterBind then
-        aServer.InitializeServerTlsAfterBind; // load certificates once
-      TLS := aServer.Sock.TLS;                // for cstaAccept in TaskProcess
+      if not aServer.fServerTlsAfterBind then // if not already in WaitStarted()
+        aServer.InitializeTlsAfterBind;       // load certificate(s) once
+      TLS.AcceptCert := aServer.Sock.TLS.AcceptCert;  // TaskProcess cstaAccept
     end;
     OnLog := aServer.Sock.OnLog;
   end;
@@ -3026,8 +3040,7 @@ begin
             with req^.headers.KnownHeaders[reqAcceptEncoding] do
               FastSetString(inaccept, pRawValue, RawValueLength);
             compressset := ComputeContentEncoding(fCompress, pointer(inaccept));
-            if req^.pSslInfo <> nil then
-              ctxt.ConnectionFlags := [hsrHttps, hsrSecured];
+            ctxt.ConnectionFlags := HTTPREMOTEFLAGS[req^.pSslInfo <> nil];
             ctxt.fConnectionID := req^.ConnectionID;
             ctxt.fInHeaders := RetrieveHeadersAndGetRemoteIPConnectionID(
               req^, fRemoteIPHeaderUpper, fRemoteConnIDHeaderUpper,
