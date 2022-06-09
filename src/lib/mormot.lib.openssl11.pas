@@ -8164,17 +8164,17 @@ begin
   // prepare global TLS connection properties, as reused by AfterAccept()
   fCtx := SSL_CTX_new(TLS_server_method);
   if Context.CertificateFile = '' then
-    raise EOpenSslNetTls.Create('CertificateFile required');
+    raise EOpenSslNetTls.Create('AfterBind: CertificateFile required');
   SSL_CTX_use_certificate_file(
     fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM);
   if Context.PrivatePassword <> '' then
     SSL_CTX_set_default_passwd_cb_userdata(
       fCtx, pointer(Context.PrivatePassword));
   if Context.PrivateKeyFile = '' then
-    raise EOpenSslNetTls.Create('PrivateKeyFile required');
+    raise EOpenSslNetTls.Create('AfterBind: PrivateKeyFile required');
   SSL_CTX_use_PrivateKey_file(
     fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
-  EOpenSslNetTls.Check(self, 'AfterAccept check_private_key',
+  EOpenSslNetTls.Check(self, 'AfterBind check_private_key',
     SSL_CTX_check_private_key(fCtx), @Context.LastError);
   v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
   if Context.AllowDeprecatedTls then
