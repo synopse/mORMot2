@@ -125,7 +125,7 @@ const
   /// the full text of the current Synopse mORMot framework version
   // - we don't supply full version number with build revision
   // (as SYNOPSE_FRAMEWORK_VERSION), to reduce potential attacker knowledge
-  XPOWEREDVALUE = SYNOPSE_FRAMEWORK_NAME + ' 2 synopse.info';
+  XPOWEREDVALUE = SYNOPSE_FRAMEWORK_NAME + ' 2';
 
 
 { ******************** Reusable HTTP State Machine }
