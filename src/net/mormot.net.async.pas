@@ -269,7 +269,7 @@ type
     property OnStart: TOnPollAsyncFunc
       read fOnStart write fOnStart;
     /// event called on first ProcessRead() on a given connection
-    // - is assigned e.g. to TAsyncServer.OnFirstReadTryTls to setup the TLS
+    // - is assigned e.g. to TAsyncServer.OnFirstReadDoTls to setup the TLS
     // in one sub-thread of the thread pool
     property OnFirstRead: TOnPollAsyncProc
       read fOnFirstRead write fOnFirstRead;
@@ -621,7 +621,7 @@ type
     fExecuteAcceptOnly: boolean; // writes in another thread (THttpAsyncServer)
     fExecuteMessage: RawUtf8;
     fSockPort: RawUtf8;
-    procedure OnFirstReadTryTls(Sender: TPollAsyncConnection);
+    procedure OnFirstReadDoTls(Sender: TPollAsyncConnection);
     procedure SetExecuteState(State: THttpServerExecuteState); virtual;
     procedure Execute; override;
   public
@@ -1359,7 +1359,7 @@ begin
            not (fFirstRead in connection.fFlags) then
         begin
           include(connection.fFlags, fFirstRead);
-          fOnFirstRead(connection); // e.g. TAsyncServer.OnFirstReadTryTls
+          fOnFirstRead(connection); // e.g. TAsyncServer.OnFirstReadDoTls
         end;
         repeat
           if fRead.Terminated or
@@ -2500,10 +2500,10 @@ begin
   fSockPort := aPort;
   fMaxConnections := 7777777; // huge number for sure
   fMaxPending := 10000;        // fair enough for pending requests
-  if acoEnableTls in aOptions then
-    fClients.OnFirstRead := OnFirstReadTryTls;
   inherited Create(OnStart, OnStop, aConnectionClass, ProcessName, aLog,
     aOptions, aThreadPoolCount);
+  if acoEnableTls in aOptions then
+    fClients.OnFirstRead := OnFirstReadDoTls;
   // binding will be done in Execute
 end;
 
@@ -2596,12 +2596,12 @@ begin
   DoLog(sllTrace, 'Destroy finished', [], self);
 end;
 
-procedure TAsyncServer.OnFirstReadTryTls(Sender: TPollAsyncConnection);
+procedure TAsyncServer.OnFirstReadDoTls(Sender: TPollAsyncConnection);
 begin
   // slow TLS processs is done from ProcessRead in a sub-thread
   if (fServer = nil) or
      (Sender.fSecure <> nil) then // paranoid
-    raise EAsyncConnections.CreateUtf8('Unexpected %.OnFirstReadTryTls', [self]);
+    raise EAsyncConnections.CreateUtf8('Unexpected %.OnFirstReadDoTls', [self]);
   if not fServer.TLS.Enabled then  // if not already done in WaitStarted()
   begin
     fGCSafe.Lock; // load certificates once from first connected thread
@@ -2673,7 +2673,7 @@ begin
           // will use accept4() single syscall on Linux
           {DoLog(sllCustom1, 'Execute: before accepted=%', [fAccepted], self);}
           res := fServer.Sock.Accept(client, sin,
-            {async=}not (acoEnableTls in fOptions)); // see OnFirstReadTryTls
+            {async=}not (acoEnableTls in fOptions)); // see OnFirstReadDoTls
           {DoLog(sllTrace, 'Execute: Accept(%)=% sock=% #% hi=%', [fServer.Port,
             ToText(res)^, pointer(client), fAccepted, fConnectionHigh], self);}
           if Terminated then
