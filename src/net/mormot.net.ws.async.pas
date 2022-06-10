@@ -120,12 +120,18 @@ type
       aThreadPoolCount: integer); override;
   end;
 
+  /// callback signature to notify TWebSocketAsyncServer connections
+  TOnWebSocketAsyncServerEvent = procedure(Sender: TWebSocketAsyncConnection) of object;
+
   /// HTTP/WebSockets server using non-blocking sockets
   TWebSocketAsyncServer = class(THttpAsyncServer)
   protected
     fProtocols: TWebSocketProtocolList;
     fSettings: TWebSocketProcessSettings;
     fProcessClass: TWebSocketAsyncProcessClass;
+    fOnWSConnect, fOnWSDisconnect: TOnWebSocketAsyncServerEvent;
+    procedure DoConnect(Context: TWebSocketAsyncConnection); virtual;
+    procedure DoDisconnect(Context: TWebSocketAsyncConnection); virtual;
   public
     /// create an event-driven HTTP/WebSockets Server
     constructor Create(const aPort: RawUtf8;
@@ -158,6 +164,14 @@ type
     /// allow to customize the WebSockets processing classes
     property ProcessClass: TWebSocketAsyncProcessClass
       read fProcessClass write fProcessClass;
+    /// event triggerred when a new connection upgrade has been done
+    // - just before the main processing WebSockets frames process starts
+    property OnWebSocketConnect: TOnWebSocketAsyncServerEvent
+      read fOnWSConnect write fOnWSConnect;
+    /// event triggerred when a connection was closed
+    // - just after the main processing WebSockets frames process finished
+    property OnWebSocketDisconnect: TOnWebSocketAsyncServerEvent
+      read fOnWSDisconnect write fOnWSDisconnect;
   end;
 
 
@@ -277,6 +291,7 @@ function TWebSocketAsyncConnection.DecodeHeaders: integer;
       serv.IncStat(grUpgraded);
       fProcess.ProcessStart; // OnClientConnected + focContinuation event
       fProcess.fState := wpsRun;
+      serv.DoConnect(self);
     end
     else
     begin
@@ -301,6 +316,7 @@ begin
   fProcess.Shutdown({waitforpong=}true); // send focConnectionClose
   if not fProcess.fProcessEnded then
     fProcess.ProcessStop; // there is no separated thread loop to wait for
+  (fServer as TWebSocketAsyncServer).DoDisconnect(self);
 end;
 
 procedure TWebSocketAsyncConnection.BeforeDestroy;
@@ -585,6 +601,21 @@ begin
   log.Log(sllTrace, 'Destroy: inherited THttpAsyncServer done', self);
   // release internal protocols list
   fProtocols.Free;
+end;
+
+procedure TWebSocketAsyncServer.DoConnect(Context: TWebSocketAsyncConnection);
+begin
+  if Assigned(fOnWSConnect) then
+    fOnWSConnect(Context);
+end;
+
+procedure TWebSocketAsyncServer.DoDisconnect(Context: TWebSocketAsyncConnection);
+begin
+  if Assigned(fOnWSDisconnect) then
+    try
+      fOnWSDisconnect(Context);
+    except // ignore any external callback error during shutdown
+    end;
 end;
 
 function TWebSocketAsyncServer.Settings: PWebSocketProcessSettings;
