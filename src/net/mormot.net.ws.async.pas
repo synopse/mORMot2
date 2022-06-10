@@ -269,7 +269,10 @@ function TWebSocketAsyncConnection.DecodeHeaders: integer;
         fProcess.fState := wpsRun;
       end
       else
+      begin
+        proto.Free; // avoid memory leak
         raise EWebSockets.CreateUtf8('%.DecodeHeaders: upgrade failed', [self]);
+      end;
     end;
   end;
 
