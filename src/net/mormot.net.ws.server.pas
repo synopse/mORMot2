@@ -295,8 +295,9 @@ begin
     sock.RemoteConnectionID, {ownerthread=}nil, @fSettings, fProcessName);
   fWebSocketConnections.Add(sock.fProcess);
   try
+    // run main blocking loop in this connection-dedicated thread
     DoConnect(sock);
-    sock.fProcess.ProcessLoop;  // run main blocking loop
+    sock.fProcess.ProcessLoop; // will return on closing
   finally
     DoDisconnect(sock);
     fWebSocketConnections.Remove(sock.fProcess);

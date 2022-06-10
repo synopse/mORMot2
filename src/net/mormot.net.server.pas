@@ -320,6 +320,7 @@ type
 
 
 const
+  /// used to compute the request ConnectionFlags from the socket TLS state
   HTTPREMOTEFLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
     [],
     [hsrHttps, hsrSecured]);
@@ -4399,8 +4400,8 @@ begin
     exit;
   if aContext = @fServer.fServiceOverlaped then
   begin
-    if Assigned(fServer.onServiceMessage) then
-      fServer.onServiceMessage;
+    if Assigned(fServer.OnServiceMessage) then
+      fServer.OnServiceMessage;
     exit;
   end;
   conn := PHttpApiWebSocketConnection(aContext);
