@@ -733,6 +733,8 @@ begin
     include(hso, hsoIncludeDateHeader);
   if rsoNoXPoweredHeader in fOptions then
     include(hso, hsoNoXPoweredHeader);
+  if aSecurity = secSSL then
+    include(hso, hsoEnableTls);
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then
   try
