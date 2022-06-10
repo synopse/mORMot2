@@ -9043,39 +9043,7 @@ begin
   ClassUnit := _ClassUnit;
   // redirect most used FPC RTL functions to optimized x86_64 assembly
   {$ifdef FPC_CPUX64}
-  {$ifndef NOPATCHRTL}
-  RedirectCode(@system.Move, @MoveFast);
-  RedirectCode(@system.FillChar, @FillCharFast);
-  PatchCode(@fpc_ansistr_incr_ref, @_ansistr_incr_ref, $17); // fpclen=$2f
-  PatchJmp(@fpc_ansistr_decr_ref, @_ansistr_decr_ref, $27); // fpclen=$3f
-  PatchJmp(@fpc_ansistr_assign, @_ansistr_assign, $3f);    // fpclen=$3f
-  PatchCode(@fpc_ansistr_compare, @_ansistr_compare,$77); // fpclen=$12f
-  PatchCode(@fpc_ansistr_compare_equal, @_ansistr_compare_equal,$57); // fpc=$cf
-  PatchCode(@fpc_unicodestr_incr_ref, @_ansistr_incr_ref, $17);      // fpc=$2f
-  PatchJmp(@fpc_unicodestr_decr_ref, @_ansistr_decr_ref, $27);      // fpc=$3f
-  PatchJmp(@fpc_unicodestr_assign, @_ansistr_assign, $3f);         // fpc=$3f
-  PatchCode(@fpc_dynarray_incr_ref, @_dynarray_incr_ref, $17);    // fpc=$2f
-  PatchJmp(@fpc_dynarray_clear, @_dynarray_decr_ref, $2f,
-    PtrUInt(@_dynarray_decr_ref_free));
-  RedirectCode(@fpc_dynarray_decr_ref, @fpc_dynarray_clear);
-  {$ifdef FPC_HAS_CPSTRING}
-  RedirectRtlCall(@_fpc_setstring_ansistr, @_setstring_ansistr_pansichar, $2d);
-  // Delphi/Windows is never natively UTF-8, but FPC+Lazarus may be :)
-  if DefaultSystemCodePage = CP_UTF8 then
-  begin
-    // dedicated UTF-8 concatenation RTL function replacements
-    RedirectRtlUtf8(@_fpc_ansistr_concat, @_ansistr_concat_utf8);
-    RedirectRtlUtf8(@_fpc_ansistr_concat_multi, @_ansistr_concat_multi_utf8);
-  end;
-  {$ifdef FPC_X64MM}
-  RedirectCode(@fpc_ansistr_setlength, @_ansistr_setlength);
-  {$endif FPC_X64MM}
-  {$endif FPC_HAS_CPSTRING}
-  {$ifdef FPC_X64MM}
-  RedirectCode(@fpc_getmem, @_Getmem);
-  RedirectCode(@fpc_freemem, @_Freemem);
-  {$endif FPC_X64MM}
-  {$endif NOPATCHRTL}
+  RedirectRtl;
   {$endif FPC_CPUX64}
   // validate some redefined RTTI structures with compiler definitions
   assert(SizeOf(TRttiVarData) = SizeOf(TVarData));

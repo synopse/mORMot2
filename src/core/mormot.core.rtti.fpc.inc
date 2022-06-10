@@ -625,6 +625,7 @@ procedure fpc_unicodestr_assign;     external name 'FPC_UNICODESTR_ASSIGN';
 procedure fpc_dynarray_incr_ref;     external name 'FPC_DYNARRAY_INCR_REF';
 procedure fpc_dynarray_decr_ref;     external name 'FPC_DYNARRAY_DECR_REF';
 procedure fpc_dynarray_clear;        external name 'FPC_DYNARRAY_CLEAR';
+procedure fpc_variant_init;          external name 'FPC_VARIANT_INIT';
 {$ifdef FPC_X64MM}
 function  fpc_getmem(size: PtrUInt): pointer; external name 'FPC_GETMEM';
 procedure fpc_freemem;               external name 'FPC_FREEMEM';
@@ -726,8 +727,17 @@ asm
 @n:
 end;
 
+procedure _variant_init(var v: tvardata); nostackframe; assembler;
+asm
+        // RTL fpc_variant_init() calls FillChar() with a stack frame
+        xor     eax, eax // smaller code size using a zeroed register
+        mov     qword ptr[v], rax
+        mov     qword ptr[v + 8], rax
+        mov     qword ptr[v + 16], rax
+end;
+
 { note: fpc_ansistr_compare/_equal RTL do check the codepage and make a UTF-8
-  conversion if necessary, whereas Delphi _LStrCmp/_LStrEqual don't;
+  conversion if necessary, whereas Delphi _LStrCmp/_LStrEqual do not;
   involving codepage is safer, but paranoid, and 1. is (much) slower, and
   2. is not Delphi compatible -> we rather follow the Delphi's way }
 
@@ -1175,6 +1185,44 @@ begin
 end;
 
 {$endif FPC_HAS_CPSTRING}
+
+procedure RedirectRtl;
+begin
+  {$ifndef NOPATCHRTL}
+  RedirectCode(@system.Move, @MoveFast);
+  RedirectCode(@system.FillChar, @FillCharFast);
+  PatchCode(@fpc_ansistr_incr_ref, @_ansistr_incr_ref, $17); // fpclen=$2f
+  PatchJmp(@fpc_ansistr_decr_ref, @_ansistr_decr_ref, $27); // fpclen=$3f
+  PatchJmp(@fpc_ansistr_assign, @_ansistr_assign, $3f);    // fpclen=$3f
+  PatchCode(@fpc_ansistr_compare, @_ansistr_compare, $77); // fpclen=$12f
+  PatchCode(@fpc_ansistr_compare_equal, @_ansistr_compare_equal, $57);// fpc=$cf
+  PatchCode(@fpc_unicodestr_incr_ref, @_ansistr_incr_ref, $17);      // fpc=$2f
+  PatchJmp(@fpc_unicodestr_decr_ref, @_ansistr_decr_ref, $27);      // fpc=$3f
+  PatchJmp(@fpc_unicodestr_assign, @_ansistr_assign, $3f);         // fpc=$3f
+  PatchCode(@fpc_dynarray_incr_ref, @_dynarray_incr_ref, $17);    // fpc=$2f
+  PatchJmp(@fpc_dynarray_clear, @_dynarray_decr_ref, $2f,
+    PtrUInt(@_dynarray_decr_ref_free));
+  RedirectCode(@fpc_dynarray_decr_ref, @fpc_dynarray_clear);
+  PatchCode(@fpc_variant_init, @_variant_init, $0f); // fpclen=$1f
+  {$ifdef FPC_HAS_CPSTRING}
+  RedirectRtlCall(@_fpc_setstring_ansistr, @_setstring_ansistr_pansichar, $2d);
+  // Delphi/Windows is never natively UTF-8, but FPC+Lazarus may be :)
+  if DefaultSystemCodePage = CP_UTF8 then
+  begin
+    // dedicated UTF-8 concatenation RTL function replacements
+    RedirectRtlUtf8(@_fpc_ansistr_concat, @_ansistr_concat_utf8);
+    RedirectRtlUtf8(@_fpc_ansistr_concat_multi, @_ansistr_concat_multi_utf8);
+  end;
+  {$ifdef FPC_X64MM}
+  RedirectCode(@fpc_ansistr_setlength, @_ansistr_setlength);
+  {$endif FPC_X64MM}
+  {$endif FPC_HAS_CPSTRING}
+  {$ifdef FPC_X64MM}
+  RedirectCode(@fpc_getmem, @_Getmem);
+  RedirectCode(@fpc_freemem, @_Freemem);
+  {$endif FPC_X64MM}
+  {$endif NOPATCHRTL}
+end;
 
 {$endif FPC_CPUX64}
 
