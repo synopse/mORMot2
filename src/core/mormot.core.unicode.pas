@@ -5937,7 +5937,7 @@ begin
   end;
   tmp.Init(length(s) * 2);
   len := Utf8ToWideChar(tmp.buf, pointer(S), length(S)) shr 1;
-  RawUnicodeToUtf8(tmp.buf, Unicode_InPlaceUpper(tmp.buf, len),result);
+  RawUnicodeToUtf8(tmp.buf, Unicode_InPlaceUpper(tmp.buf, len), result);
   tmp.Done;
 end;
 
