@@ -1655,7 +1655,6 @@ function ExtendedToJson(tmp: PShortString; Value: TSynExtended;
 // faster Fabian Loitsch's Grisu algorithm implementation
 // - returns the count of chars stored into S, i.e. length(S)
 function DoubleToShort(S: PShortString; const Value: double): integer;
-  {$ifdef FPC}inline;{$endif}
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
 // without scientific notation
@@ -1664,7 +1663,6 @@ function DoubleToShort(S: PShortString; const Value: double): integer;
 // faster Fabian Loitsch's Grisu algorithm implementation
 // - returns the count of chars stored into S, i.e. length(S)
 function DoubleToShortNoExp(S: PShortString; const Value: double): integer;
-  {$ifdef FPC}inline;{$endif}
 
 {$ifdef DOUBLETOSHORT_USEGRISU}
 const
@@ -8181,9 +8179,7 @@ begin
     PWord(P)^ := tab[x]; // 10..99
     break;
   until false;
-  PQWordArray(buf)[0] := PQWordArray(P)[0]; // faster than MoveSmall(P,buf,result)
-  PQWordArray(buf)[1] := PQWordArray(P)[1];
-  PQWordArray(buf)[2] := PQWordArray(P)[2];
+  PHash192(buf)^ := PHash192(P)^; // faster than MoveSmall(P,buf,result)
   result := PAnsiChar(@buf[24]) - P;
 end;
 
@@ -8762,15 +8758,17 @@ var
   valueabs: double;
 begin
   valueabs := abs(Value);
-  if (valueabs > DOUBLE_HI) or
-     (valueabs < DOUBLE_LO) then
-  begin
-    // = str(Value,S) for scientific notation
-    DoubleToAscii(C_NO_MIN_WIDTH, -1, Value, pointer(S));
-    result := ord(S^[0]);
-  end
+  if (valueabs > double(DOUBLE_HI)) or
+     (valueabs < double(DOUBLE_LO)) then
+    // = str(Value,S) for scientific notation outside of 1E-9<Value<1E9 range
+    DoubleToAscii(C_NO_MIN_WIDTH, -1, Value, pointer(S))
   else
-    result := DoubleToShortNoExp(S, Value);
+  begin
+    // inlined DoubleToShortNoExp() = str(Value:0:15,S^)
+    DoubleToAscii(0, DOUBLE_PRECISION, Value, pointer(S));
+    S^[0] := AnsiChar(FloatStringNoExp(pointer(S), DOUBLE_PRECISION));
+  end;
+  result := ord(S^[0]);
 end;
 
 function DoubleToShortNoExp(S: PShortString; const Value: double): integer;
