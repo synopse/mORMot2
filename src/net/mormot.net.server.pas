@@ -97,7 +97,7 @@ type
   // - hsoLogVerbose could be used to debug a server in production
   // - hsoIncludeDateHeader will let all answers include a Date: ... HTTP header
   // - hsoEnableTls enables TLS support for THttpServer socket server, using
-  // Windows SChannel API or OpenSSL 1.1/3.x
+  // Windows SChannel API or OpenSSL - call WaitStarted() to set the certificates
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoNoXPoweredHeader,
@@ -552,11 +552,11 @@ type
     // - for hsoEnableTls support, you should either specify the private key
     // and certificate here, or set TLS.PrivateKeyFile/CertificateFile fields -
     // the benefit of this method parameters is that the certificates are
-    // loaded and checked now, not at the first client connection or when
-    // InitializeTlsAfterBind is called explicitly
+    // loaded and checked now by calling InitializeTlsAfterBind, not at the
+    // first client connection (which may be too late)
     procedure WaitStarted(Seconds: integer = 30;
       const CertificateFile: TFileName = '';
-      const PrivateKeyFile: TFileName = ''; PrivateKeyPassword: RawUtf8 = '');
+      const PrivateKeyFile: TFileName = ''; const PrivateKeyPassword: RawUtf8 = '');
     /// could be called after WaitStarted(seconds,'','','') to setup TLS
     // - use Sock.TLS.CertificateFile/PrivateKeyFile/PrivatePassword
     procedure InitializeTlsAfterBind;
@@ -1575,7 +1575,7 @@ begin
 end;
 
 procedure THttpServerSocketGeneric.WaitStarted(Seconds: integer;
-  const CertificateFile, PrivateKeyFile: TFileName; PrivateKeyPassword: RawUtf8);
+  const CertificateFile, PrivateKeyFile: TFileName; const PrivateKeyPassword: RawUtf8);
 var
   tix: Int64;
 begin

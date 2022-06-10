@@ -793,7 +793,7 @@ type
   // - also handle optimized storage of any integer/Int64/RawUtf8 values
   // - use TFileBufferReader or TFastReader for decoding of the stored binary
   TBufferWriter = class
-  private
+  protected
     fPos: PtrInt;
     fBufLen, fBufLen16: PtrInt;
     fBuffer: PByteArray;

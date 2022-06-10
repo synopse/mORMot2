@@ -280,7 +280,8 @@ type
       const aAdditionalUrl: RawUtf8 = ''; const aQueueName: SynUnicode = '';
       aOptions: TRestHttpServerOptions = HTTPSERVER_DEFAULT_OPTIONS;
       const CertificateFile: TFileName = '';
-      const PrivateKeyFile: TFileName = ''; PrivateKeyPassword: RawUtf8 = '');
+      const PrivateKeyFile: TFileName = '';
+      const PrivateKeyPassword: RawUtf8 = '');
         reintroduce; overload;
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a ERestHttpServer exception if binding failed
@@ -660,7 +661,8 @@ constructor TRestHttpServer.Create(const aPort: RawUtf8;
   aUse: TRestHttpServerUse; aThreadPoolCount: Integer;
   aSecurity: TRestHttpServerSecurity; const aAdditionalUrl: RawUtf8;
   const aQueueName: SynUnicode; aOptions: TRestHttpServerOptions;
-  const CertificateFile, PrivateKeyFile: TFileName; PrivateKeyPassword: RawUtf8);
+  const CertificateFile, PrivateKeyFile: TFileName;
+  const PrivateKeyPassword: RawUtf8);
 var
   i, j: PtrInt;
   hso: THttpServerOptions;
@@ -756,13 +758,14 @@ begin
       if fUse in [useHttpApiOnly, useHttpApiRegisteringURIOnly] then
         // propagate fatal exception with no fallback to the sockets HTTP server
         raise;
-      aUse := useHttpSocket; // conservative: HttpAsync is less tested on Win
+      aUse := useHttpSocket; // conservative: useHttpAsync is less mature on Win
     end;
   end;
   {$endif USEHTTPSYS}
   if fHttpServer = nil then
   begin
-    // http.sys not running -> create one instance of our pure socket servers
+    // create one instance of our pure socket servers
+    // (on Windows, may be used as fallback if http.sys was unsuccessfull)
     if aUse in [low(HTTPSERVERSOCKETCLASS)..high(HTTPSERVERSOCKETCLASS)] then
       fHttpServer := HTTPSERVERSOCKETCLASS[aUse].Create(fPort, HttpThreadStart,
         HttpThreadTerminate, TrimU(fDBServerNames), aThreadPoolCount, 30000, hso)

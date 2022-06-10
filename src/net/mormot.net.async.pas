@@ -3216,7 +3216,7 @@ begin
                   (fAsync.fKeepConnectionInstanceMS > 500 * 2) then
             msidle := 500 // idle server
           else
-            msidle := fAsync.fKeepConnectionInstanceMS shr 1; // proper GC pace
+            msidle := fAsync.fKeepConnectionInstanceMS shr 1; // follow GC pace
           SleepHiRes(msidle);
           // periodic trigger of IdleEverySecond and ProcessIdleTixSendFrames
           tix64 := mormot.core.os.GetTickCount64;

@@ -1989,7 +1989,7 @@ begin
   AlignedAddr :=
     Pointer((PtrUInt(Old) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
   while PtrUInt(Old) + PtrUInt(Size) >= PtrUInt(AlignedAddr) + PageSize do
-    Inc(PageSize, SystemInfo.dwPageSize);
+    inc(PageSize, SystemInfo.dwPageSize);
   ProtectedResult := SynMProtect(
     AlignedAddr, PageSize, PROT_READ or PROT_WRITE or PROT_EXEC) = 0;
   ProtectedMemory := not ProtectedResult;

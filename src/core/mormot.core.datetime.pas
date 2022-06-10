@@ -514,7 +514,7 @@ function HttpDateToDateTime(const httpdate: RawUtf8;
   tolocaltime: boolean = false): TDateTime; overload;
 
 var
-  /// contains the current UTC timestamp as the full 'Date' HTTP header
+  /// contains the current UTC timestamp as the full 'Date' HTTP header line
   // - e.g. 'Date: Tue, 15 Nov 1994 12:45:26 GMT'#13#10
   // - needs to be refreshed by an explicit SetHttpDateNowUtcCache() call
   HttpDateNowUtcCache: RawUtf8;
