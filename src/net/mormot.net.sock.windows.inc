@@ -538,7 +538,7 @@ var
   sock: TSocket;
   rd, wr: record
     fd_count: integer;
-    fd_array: array[0..0] of TSocket; // no need of 512 entries here
+    fd_array: array[0..0] of TSocket; // no need of the 512 entries of TFDSet
   end;
   rdp, wrp: PFDSet;
   tv: TTimeVal;

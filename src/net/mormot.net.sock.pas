@@ -3850,7 +3850,7 @@ function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
   StopBeforeLength: boolean): boolean;
 var
   expected, read: integer;
-  now, last, diff: Int64;
+  events: TNetEvents;
   res: TNetResult;
 begin
   result := false;
@@ -3860,7 +3860,6 @@ begin
   begin
     expected := Length;
     Length := 0;
-    last := {$ifdef OSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
     repeat
       read := expected - Length;
       if fSecure <> nil then
@@ -3890,25 +3889,17 @@ begin
           break; // good enough for now
         inc(PByte(Buffer), read);
       end;
-      now := mormot.core.os.GetTickCount64;
-      if (last = 0) or
-         (read > 0) then // check timeout from unfinished read
-        last := now
-      else
+      events := fSock.WaitFor(TimeOut, [neRead]);
+      if neError in events then
       begin
-        diff := now - last;
-        if diff >= TimeOut then
-        begin
-          if Assigned(OnLog) then
-            OnLog(sllTrace, 'TrySockRecv: timeout (diff=%>%)',
-              [diff, TimeOut], self);
-          exit; // identify read timeout as error
-        end;
-        if diff < 100 then
-          SleepHiRes(0)
-        else
-          SleepHiRes(1);
-      end;
+        Close; // connection broken or socket closed gracefully
+        exit;
+      end
+      else if neRead in events then
+        continue;
+      if Assigned(OnLog) then
+        OnLog(sllTrace, 'TrySockRecv: timeout after %ms)', [TimeOut], self);
+      exit; // identify read timeout as error
     until false;
     result := true;
   end;
@@ -4021,7 +4012,7 @@ end;
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
 var
   sent: integer;
-  now, start: Int64;
+  events: TNetEvents;
   res: TNetResult;
 begin
   result := Len = 0;
@@ -4029,7 +4020,6 @@ begin
      (Len <= 0) or
      (P = nil) then
     exit;
-  start := {$ifdef OSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
   repeat
     sent := Len;
     if fSecure <> nil then
@@ -4047,14 +4037,10 @@ begin
     else if (res <> nrOK) and
             (res <> nrRetry) then
       exit; // fatal socket error
-    now := mormot.core.os.GetTickCount64;
-    if (start = 0) or
-       (sent > 0) then
-      start := now
-    else // measure timeout since nothing written
-      if now - start > TimeOut then
-        exit; // identify timeout as error
-    SleepHiRes(1);
+    events := fSock.WaitFor(TimeOut, [neWrite]);
+    if (neError in events) or
+       not (neWrite in events) then // identify timeout as error
+      exit;
   until false;
   result := true;
 end;
