@@ -759,12 +759,14 @@ type
     /// write a 64 bit integer value
     procedure BsonWrite(const name: RawUtf8; const value: Int64); overload;
     /// write a string (UTF-8) value
-    procedure BsonWrite(const name: RawUtf8; const value: RawUtf8;
-      isJavaScript: boolean = false); overload;
+    procedure BsonWriteUtf8(const name, value: RawUtf8);
+    /// write a string, detecting TJsonWriter.AddDateTime/WrBase64 patterns
+    procedure BsonWriteUtf8OrDecode(const name: RawUtf8; value: PUtf8Char;
+      valueLen: PtrInt);
     /// write a string (UTF-8) value from a memory buffer
-    procedure BsonWrite(const name: RawUtf8; value: PUtf8Char); overload;
-    /// write a string (UTF-8) value from a memory buffer
-    procedure BsonWriteString(const name: RawUtf8; value: PUtf8Char; valueLen: integer);
+    // - if valueLen is left to its -1 default, will use StrLen(value)
+    procedure BsonWriteText(const name: RawUtf8; value: PUtf8Char;
+      valueLen: PtrInt = -1);
     /// write a binary (BLOB) value
     procedure BsonWrite(const name: RawUtf8; Data: pointer; DataLen: integer); overload;
     /// write an ObjectID value
@@ -2901,7 +2903,7 @@ begin
     ord(betBinary):
       case Mode of
         modNoMongo:
-          W.WrBase64(Data.Blob, Data.BlobLen, true);
+          W.WrBase64(Data.Blob, Data.BlobLen, {withmagic=}true);
         modMongoStrict:
           begin
             W.AddShort(BSON_JSON_BINARY[false, false]);
@@ -3343,14 +3345,11 @@ begin
   Write1(0);
 end;
 
-procedure TBsonWriter.BsonWrite(const name: RawUtf8; const value: RawUtf8;
-  isJavaScript: boolean);
-const
-  TYP: array[boolean] of TBsonElementType = (betString, betJS);
+procedure TBsonWriter.BsonWriteUtf8(const name, value: RawUtf8);
 var
   L: integer;
 begin
-  BsonWrite(name, TYP[isJavaScript]);
+  BsonWrite(name, betString);
   L := length(value) + 1; // +1 for ending #0
   Write4(L);
   if L = 1 then
@@ -3359,29 +3358,42 @@ begin
     Write(pointer(value), L);
 end;
 
-procedure TBsonWriter.BsonWrite(const name: RawUtf8; value: PUtf8Char);
+procedure TBsonWriter.BsonWriteUtf8OrDecode(const name: RawUtf8;
+  value: PUtf8Char; valueLen: PtrInt);
 var
-  L: integer;
+  blob: TSynTempBuffer;
+  dt: TDateTime;
 begin
-  BsonWrite(name, betString);
-  L := StrLen(value) + 1;
-  Write4(L);
-  if L = 1 then
-    Write1(0)
-  else
-    Write(value, L);
+  if valueLen >= 3 then
+    if (PInteger(value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
+       Base64ToBin(PAnsiChar(value + 3), valuelen - 3, blob) then
+    begin
+      // recognized '\uFFF0base64encodedbinary' pattern into betBinary
+      BsonWrite(name, blob.buf, blob.len);
+      blob.Done;
+      exit;
+    end
+    else if Iso8601CheckAndDecode(value, valueLen, dt) or
+            ((PInteger(value)^ and $ffffff = JSON_SQLDATE_MAGIC_C) and
+             Iso8601CheckAndDecode(value + 3, valueLen - 3, dt)) then
+    begin
+      // recognized TJsonWriter.AddDateTime() pattern into betDateTime
+      BsonWriteDateTime(name, dt);
+      exit;
+    end;
+  // append the in-place escaped Json text as betString
+  BsonWriteText(name, value, valueLen);
 end;
 
-procedure TBsonWriter.BsonWriteString(const name: RawUtf8; value: PUtf8Char;
-  valueLen: integer);
+procedure TBsonWriter.BsonWriteText(const name: RawUtf8; value: PUtf8Char;
+  valueLen: PtrInt);
 begin
   BsonWrite(name, betString);
-  inc(valueLen);
-  Write4(valueLen);
-  if valueLen = 1 then
-    Write1(0)
-  else
-    Write(value, valueLen);
+  if valueLen < 0 then
+    valueLen := StrLen(value);
+  Write4(valueLen + 1);
+  Write(value, valueLen);
+  Write1(0); // value may be a PUtf8Char with no trailing #0
 end;
 
 procedure TBsonWriter.BsonWriteDateTime(const name: RawUtf8; const value: TDateTime);
@@ -3544,13 +3556,13 @@ begin
     vtWideString:
       begin
         VarRecToTempUtf8(value, tmp);
-        BsonWriteString(name, tmp.Text, tmp.Len);
+        BsonWriteText(name, tmp.Text, tmp.Len);
         if tmp.TempRawUtf8 <> nil then
           RawUtf8(tmp.TempRawUtf8) := '';
       end;
   else
     raise EBsonException.CreateUtf8(
-      '%.BsonWrite(TVarRec.VType=%)', [self, value.VType]);
+      '%.BsonWrite(TVarRec.VType=%) unsupported', [self, value.VType]);
   end;
 end;
 
@@ -3567,13 +3579,13 @@ procedure TBsonWriter.BsonWriteVariant(const name: RawUtf8; const value: variant
         varUString:
           begin
             RawUnicodeToUtf8(VAny, length(UnicodeString(VAny)), temp);
-            BsonWrite(name, temp);
+            BsonWriteText(name, pointer(temp), length(temp));
           end;
       {$endif HASVARUSTRING}
         varOleStr:
           begin
             RawUnicodeToUtf8(VAny, length(WideString(VAny)), temp);
-            BsonWrite(name, temp);
+            BsonWriteText(name, pointer(temp), length(temp));
           end;
       else
         begin
@@ -3587,8 +3599,6 @@ procedure TBsonWriter.BsonWriteVariant(const name: RawUtf8; const value: variant
       end;
   end;
 
-var
-  dt: TDateTime;
 begin
   with TVarData(value) do
     case VType of
@@ -3621,13 +3631,8 @@ begin
       varCurrency:
         BsonWrite(name, VCurrency);
       varString:
-        if (VAny <> nil) and
-           (PInteger(VAny)^ and $ffffff = JSON_SQLDATE_MAGIC_C) and
-           Iso8601CheckAndDecode(PUtf8Char(VAny) + 3, Length(RawUtf8(VAny)) - 3, dt) then
-          // recognized TJsonWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
-          BsonWriteDateTime(name, dt)
-        else
-          BsonWrite(name, RawUtf8(VAny)); // expect UTF-8 content
+        // will recognize TJsonWriter.AddDateTime/WrBase64 patterns
+        BsonWriteUtf8OrDecode(name, VAny, length(RawUtf8(VAny)));
     else
       if VType = varVariantByRef then
         BsonWriteVariant(name, PVariant(VPointer)^)
@@ -3830,7 +3835,6 @@ procedure TBsonWriter.BsonWriteFromJson(const name: RawUtf8; var Json: PUtf8Char
   EndOfObject: PUtf8Char; DoNotTryExtendedMongoSyntax: boolean);
 var
   tmp: variant;
-  blob: RawByteString;
   VDouble: double;
   ValueDateTime: TDateTime absolute VDouble;
   Kind: TBsonElementType;
@@ -3883,18 +3887,8 @@ begin
             BsonWriteVariant(name, tmp); // null,boolean,Int64,double
             exit;
           end;
-        // found no simple value -> check text value
-        if Base64MagicCheckAndDecode(info.Value, info.ValueLen, blob) then
-          // recognized '\uFFF0base64encodedbinary' pattern
-          BsonWrite(name, pointer(blob), length(blob))
-        else if Iso8601CheckAndDecode(info.Value, info.ValueLen, ValueDateTime) or
-                ((PInteger(info.Value)^ and $ffffff = JSON_SQLDATE_MAGIC_C) and
-                 Iso8601CheckAndDecode(info.Value + 3, info.ValueLen - 3, ValueDateTime)) then
-          // recognized TJsonWriter.AddDateTime() pattern
-          BsonWriteDateTime(name, ValueDateTime)
-        else
-          // append the in-place escaped Json text
-          BsonWriteString(name, info.Value, info.ValueLen);
+        // no simple value -> try TJsonWriter.AddDateTime/WrBase64 patterns
+        BsonWriteUtf8OrDecode(name, info.Value, info.ValueLen);
       end;
     end;
   if TotalWritten > BSON_MAXDOCUMENTSIZE then

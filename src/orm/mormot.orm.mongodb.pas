@@ -1351,7 +1351,7 @@ var
               [ClassType, distinctName, distinctName, SQL], sllError);
             exit;
           end;
-        B.BsonWrite('_id', '$' + distinctName);
+        B.BsonWriteUtf8('_id', '$' + distinctName);
       end
       else if length(Stmt.GroupByField) = 0 then
         B.BsonWrite('_id', betNull)
@@ -1362,7 +1362,7 @@ var
         begin
           name := fStoredClassMapping^.FieldNameByIndex(
             Stmt.GroupByField[i] - 1);
-          B.BsonWrite(name, '$' + name);
+          B.BsonWriteUtf8(name, '$' + name);
         end;
         B.BsonDocumentEnd;
       end;
@@ -1383,7 +1383,7 @@ var
           if func = funcCount then
             B.BsonWrite(FUNCT[func], 1)
           else
-            B.BsonWrite(FUNCT[func], '$' +
+            B.BsonWriteUtf8(FUNCT[func], '$' +
               fStoredClassMapping^.FieldNameByIndex(Field - 1));
           B.BsonDocumentEnd;
         end;
@@ -1420,7 +1420,7 @@ var
             if FunctionName <> '' then
               if FunctionKnown = funcDistinct then
               begin
-                B.BsonWrite(name, '$_id');
+                B.BsonWriteUtf8(name, '$_id');
                 continue;
               end
               else
@@ -1431,12 +1431,12 @@ var
           begin
             B.BsonDocumentBegin(name);
             B.BsonDocumentBegin('$add', betArray);
-            B.BsonWrite('0', value);
+            B.BsonWriteUtf8('0', value);
             B.BsonWrite('1', ToBeAdded);
             B.BsonDocumentEnd(2);
           end
           else
-            B.BsonWrite(name, value);
+            B.BsonWriteUtf8(name, value);
         end;
       B.BsonDocumentEnd(3);
       B.ToBsonVariant(Query, betArray);
