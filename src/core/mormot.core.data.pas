@@ -1623,7 +1623,13 @@ type
     // make a local copy if it will be needed later (using e.g. TSynTempBufer)
     function LoadFromJson(P: PUtf8Char; EndOfObject: PUtf8Char = nil;
       CustomVariantOptions: PDocVariantOptions = nil;
-      Tolerant: boolean = false): PUtf8Char;
+      Tolerant: boolean = false): PUtf8Char; overload;
+    /// load the dynamic array content from an UTF-8 encoded JSON buffer
+    // - this method will make a private copy of the JSON for in-place parsing
+    // - returns fals in case of invalid input buffer
+    function LoadFromJson(const Json: RawUtf8;
+      CustomVariantOptions: PDocVariantOptions = nil;
+      Tolerant: boolean = false): boolean; overload;
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; Limit: cardinal; Offset: cardinal = 0);
     /// assign the current dynamic array content into a variable
@@ -7204,12 +7210,25 @@ begin
   SetCount(0); // faster to use our own routine now
   GetDataFromJson(fValue, P, EndOfObject, Info, CustomVariantOptions, Tolerant);
   if fCountP <> nil then
-    // GetDataFromJson() set the array length, not the external count
+    // GetDataFromJson() set the array length (capacity), not the external count
     if fValue^ = nil then
       fCountP^ := 0
     else
       fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
   result := P;
+end;
+
+function TDynArray.LoadFromJson(const Json: RawUtf8;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(Json);
+  try
+    result := LoadFromJson(tmp.buf, nil, CustomVariantOptions, Tolerant) <> nil;
+  finally
+    tmp.Done;
+  end;
 end;
 
 function TDynArray.ItemCopyFirstField(Source, Dest: Pointer): boolean;
