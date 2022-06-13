@@ -5305,20 +5305,6 @@ begin
   fOwnedRecords.Add(result);
 end;
 
-{$ifdef ORMGENERICS}
-procedure TOrmTable.ToNewIList(Item: TOrmClass; var Result);
-var
-  list: TIListParent;
-begin
-  list := Item.NewIList(Result);
-  if (self = nil) or
-     (fRowCount = 0) then
-    exit;
-  list.Count := fRowCount;  // allocate once
-  FillOrms(list.First, Item);
-end;
-{$endif ORMGENERICS}
-
 procedure TOrmTable.FillOrms(P: POrm; RecordType: TOrmClass);
 var
   cloned: TOrm;
@@ -5362,6 +5348,20 @@ begin
   result := TObjectList.Create;
   ToObjectList(result, RecordType);
 end;
+
+{$ifdef ORMGENERICS}
+procedure TOrmTable.ToNewIList(Item: TOrmClass; var Result);
+var
+  list: TIListParent;
+begin
+  list := Item.NewIList(Result);
+  if (self = nil) or
+     (fRowCount = 0) then
+    exit;
+  list.Count := fRowCount;  // allocate once
+  FillOrms(list.First, Item);
+end;
+{$endif ORMGENERICS}
 
 function TOrmTable.ToObjArray(var ObjArray; RecordType: TOrmClass): boolean;
 var
@@ -9006,7 +9006,7 @@ begin
   fTableRtti := Rtti.RegisterClass(aTable) as TRttiJson;
   // create a fake TRttiJson matching this TOrm class as T*ObjArray item array
   fTableObjArrayRtti := Rtti.RegisterType(TypeInfo(TOrmObjArray)).
-    ComputeFakeArrayRtti(aTable);
+    ComputeFakeObjArrayRtti(aTable);
   // initialize internal structures
   fModelMax := -1;
   fTable := aTable;
