@@ -1989,7 +1989,7 @@ procedure TTestSQLite3Engine._TOrmTableJson;
 var
   J, T: TOrmTable;
   i1, i2, aR, aF, F1, F2, n: integer;
-  fid, ffn, fln, fyb, fyd, peoplesn: PtrInt;
+  fid, ffn, fln, fyb, fyd: PtrInt;
   Comp, Comp1, Comp2: TUtf8Compare;
   row: variant;
   DA: TDynArray;
@@ -2151,7 +2151,6 @@ begin
       {$ifdef ORMGENERICS}
       T.ToNewIList(TOrmPeople, Peoples);
       CheckPeoples;
-      // Peoples := nil; // not mandatory
       {$endif ORMGENERICS}
     finally
       T.Free;

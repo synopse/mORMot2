@@ -8758,8 +8758,8 @@ var
   valueabs: double;
 begin
   valueabs := abs(Value);
-  if (valueabs > double(DOUBLE_HI)) or
-     (valueabs < double(DOUBLE_LO)) then
+  if (valueabs > {$ifdef FPC}double{$endif}(DOUBLE_HI)) or
+     (valueabs < {$ifdef FPC}double{$endif}(DOUBLE_LO)) then
     // = str(Value,S) for scientific notation outside of 1E-9<Value<1E9 range
     DoubleToAscii(C_NO_MIN_WIDTH, -1, Value, pointer(S))
   else
