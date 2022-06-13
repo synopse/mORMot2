@@ -32,6 +32,7 @@ uses
   mormot.core.buffers,
   mormot.core.rtti,
   mormot.core.datetime,
+  mormot.core.zip,
   mormot.net.sock,
   mormot.net.http,
   {$ifdef USEWININET}
@@ -1750,6 +1751,7 @@ begin
     fThreadRespClass := THttpServerResp;
   if fSocketClass = nil then
     fSocketClass := THttpServerSocket;
+  fServerSendBufferSize := 256 shl 10; // 256KB of buffers seems good enough
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions);
   if ServerThreadPoolCount > 0 then
@@ -1824,7 +1826,7 @@ begin
   fHttpQueueLength := aValue;
 end;
 
-{.$define MONOTHREAD}
+{ $define MONOTHREAD}
 // define this not to create a thread at every connection (not recommended)
 
 procedure THttpServer.Execute;
@@ -1929,177 +1931,61 @@ end;
 procedure THttpServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread);
 var
-  ctxt: THttpServerRequest;
-  respsent: boolean;
-  cod, aftercode: cardinal;
-  reason: RawUtf8;
-  errmsg: string;
-
-  function SendFileAsResponse: boolean;
-  var
-    fn: TFileName;
-  begin
-    result := true;
-    ExtractHeader(ctxt.fOutCustomHeaders, 'CONTENT-TYPE:', ctxt.fOutContentType);
-    Utf8ToFileName(ctxt.OutContent, fn);
-    if (not Assigned(fOnSendFile)) or
-       (not fOnSendFile(ctxt, fn)) then
-    begin
-       ctxt.OutContent := StringFromFile(fn);
-       if ctxt.OutContent = '' then
-       begin
-         FormatString('Impossible to send void file: %', [fn], errmsg);
-         cod := HTTP_NOTFOUND;
-         result := false; // fatal error
-       end;
-    end;
-  end;
-
-  function SendResponse: boolean;
-  var
-    P, PEnd: PUtf8Char;
-    len: PtrInt;
-  begin
-    result := not Terminated; // true=success
-    if not result then
-      exit;
-    {$ifdef SYNCRTDEBUGLOW}
-    TSynLog.Add.Log(sllCustom2, 'SendResponse respsent=% cod=%',
-      [respsent, cod], self);
-    {$endif SYNCRTDEBUGLOW}
-    respsent := true;
-    // handle case of direct sending of static file (as with http.sys)
-    if (ctxt.OutContent <> '') and
-       (ctxt.OutContentType = STATICFILE_CONTENT_TYPE) then
-      result := SendFileAsResponse
-    else if ctxt.OutContentType = NORESPONSE_CONTENT_TYPE then
-      ctxt.OutContentType := ''; // true HTTP always expects a response
-    // send response (multi-thread OK) at once
-    if (cod < HTTP_SUCCESS) or
-       (ClientSock.Http.Headers = '') then
-      cod := HTTP_NOTFOUND;
-    StatusCodeToReason(cod, reason);
-    if errmsg <> '' then
-    begin
-      ctxt.OutCustomHeaders := '';
-      ctxt.OutContentType := 'text/html; charset=utf-8'; // create message to display
-      ctxt.OutContent := FormatUtf8('<body style="font-family:verdana">'#10 +
-        '<h1>% Server Error %</h1><hr><p>HTTP % %<p>%<p><small>%',
-        [self, cod, cod, reason, HtmlEscapeString(errmsg), fServerName]);
-    end;
-    // 1. send HTTP status command
-    if ClientSock.KeepAliveClient then
-      ClientSock.SockSend(['HTTP/1.1 ', cod, ' ', reason])
-    else
-      ClientSock.SockSend(['HTTP/1.0 ', cod, ' ', reason]);
-    // 2. send headers
-    // 2.1. custom headers from Request() method
-    P := pointer(ctxt.fOutCustomHeaders);
-    if P <> nil then
-    begin
-      PEnd := P + length(ctxt.fOutCustomHeaders);
-      repeat
-        len := BufferLineLength(P, PEnd);
-        if len > 0 then
-        begin
-          // no void line (means headers ending)
-          if IdemPChar(P, 'CONTENT-ENCODING:') then
-            // custom encoding: don't compress
-            integer(ClientSock.Http.CompressAcceptHeader) := 0;
-          ClientSock.SockSend(P, len);
-          ClientSock.SockSendCRLF;
-          inc(P, len);
-        end;
-        while P^ in [#10, #13] do
-          inc(P);
-      until P^ = #0;
-    end;
-    // 2.2. generic headers
-    if hsoIncludeDateHeader in fOptions then
-    begin
-      SetHttpDateNowUtcCache;
-      ClientSock.SockSend(HttpDateNowUtcCache, {NoCrLf=}true);
-    end;
-    if not (hsoNoXPoweredHeader in Options) then
-      ClientSock.SockSend(XPOWEREDNAME + ': ' + XPOWEREDVALUE);
-    ClientSock.SockSend('Server: ', {NoCrLf=}true);
-    ClientSock.SockSend(fServerName);
-    ClientSock.CompressDataAndWriteHeaders(
-      ctxt.OutContentType, ctxt.fOutContent, nil);
-    if ClientSock.KeepAliveClient then
-    begin
-      if ClientSock.Http.CompressAcceptEncoding <> '' then
-        ClientSock.SockSend(ClientSock.Http.CompressAcceptEncoding);
-      ClientSock.SockSend('Connection: Keep-Alive'#13#10); // #13#10 -> end CRLF
-    end
-    else
-      ClientSock.SockSendCRLF; // headers must end with a void #13#10 line
-    // 3. sent HTTP body content (if any)
-    ClientSock.SockSendFlush(ctxt.OutContent); // flush all data to network
-  end;
-
+  req: THttpServerRequest;
+  output: PRawByteStringBuffer;
+  dest: TRawByteStringBuffer;
 begin
   if (ClientSock = nil) or
-     (ClientSock.Http.Headers = '') then
+     (ClientSock.Http.Headers = '') or
+     Terminated then
     // we didn't get the request = socket read error
     exit; // -> send will probably fail -> nothing to send back
-  if Terminated then
-    exit;
-  ctxt := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
+  // compute the response
+  req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
     HTTPREMOTEFLAGS[ClientSock.TLS.Enabled]);
   try
-    respsent := false;
-    ctxt.Prepare(ClientSock.Http, ClientSock.fRemoteIP);
-    try
-      cod := DoBeforeRequest(ctxt);
-      if cod > 0 then
-      begin
-        {$ifdef SYNCRTDEBUGLOW}
-        TSynLog.Add.Log(sllCustom2, 'DoBeforeRequest=%', [cod], self);
-        {$endif SYNCRTDEBUGLOW}
-        if not SendResponse or
-           (cod <> HTTP_ACCEPTED) then
-          exit;
-      end;
-      cod := Request(ctxt); // this is the main processing callback
-      aftercode := DoAfterRequest(ctxt);
-      {$ifdef SYNCRTDEBUGLOW}
-      TSynLog.Add.Log(sllCustom2, 'Request=% DoAfterRequest=%', [cod, aftercode], self);
-      {$endif SYNCRTDEBUGLOW}
-      if aftercode > 0 then
-        cod := aftercode;
-      if respsent or
-         SendResponse then
-        DoAfterResponse(ctxt, cod);
-      {$ifdef SYNCRTDEBUGLOW}
-      TSynLog.Add.Log(sllCustom2, 'DoAfterResponse respsent=% errmsg=%',
-        [respsent, errmsg], self);
-      {$endif SYNCRTDEBUGLOW}
-    except
-      on E: Exception do
-        if not respsent then
-        begin
-          // notify the exception as server response
-          FormatString('%: %', [E, E.Message], errmsg);
-          cod := HTTP_SERVERERROR;
-          SendResponse;
-        end;
-    end;
+    req.Prepare(ClientSock.Http, ClientSock.fRemoteIP);
+    DoRequest(req);
+    output := req.SetupResponse(
+      ClientSock.Http, fCompressGz, fServerSendBufferSize);
   finally
-    // add transfert stats to main socket
-    if Sock <> nil then
+    req.Free;
+  end;
+  // send back the response
+  if Terminated then
+    exit;
+  if hfConnectionClose in ClientSock.Http.HeaderFlags then
+    ClientSock.fKeepAliveClient := false;
+  if ClientSock.TrySndLow(output.Buffer, output.Len) then // header[+body]
+    while not Terminated do
     begin
-      fSafe.Lock;
-      Sock.BytesIn := Sock.BytesIn + ClientSock.BytesIn;
-      Sock.BytesOut := Sock.BytesOut + ClientSock.BytesOut;
-      fSafe.UnLock;
-      ClientSock.fBytesIn := 0;
-      ClientSock.fBytesOut := 0;
-    end;
-    ctxt.Free;
+      case ClientSock.Http.State of
+        hrsResponseDone:
+          break; // finished
+        hrsSendBody:
+          begin
+            dest.Reset; // body is retrieved from Content/ContentStream
+            ClientSock.Http.ProcessBody(dest, fServerSendBufferSize);
+            if ClientSock.TrySndLow(dest.Buffer, dest.Len) then
+              continue; // send body by fServerSendBufferSize chunks
+          end;
+      end;
+      ClientSock.fKeepAliveClient := false; // force socket close on error
+      break;
+    end
+  else
+    ClientSock.fKeepAliveClient := false;
+  // add transfert stats to main socket
+  if Sock <> nil then
+  begin
+    fSafe.Lock;
+    Sock.BytesIn := Sock.BytesIn + ClientSock.BytesIn;
+    Sock.BytesOut := Sock.BytesOut + ClientSock.BytesOut;
+    fSafe.UnLock;
+    ClientSock.fBytesIn := 0;
+    ClientSock.fBytesOut := 0;
   end;
 end;
-
 
 
 { THttpServerSocket }
@@ -2412,7 +2298,8 @@ procedure THttpServerResp.Execute;
                   exit;
                 fServer.IncStat(res);
                 case res of
-                  grBodyReceived, grHeaderReceived:
+                  grBodyReceived,
+                  grHeaderReceived:
                     begin
                       if res = grBodyReceived then
                         fServer.IncStat(grHeaderReceived);
