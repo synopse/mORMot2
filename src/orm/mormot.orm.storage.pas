@@ -2185,6 +2185,7 @@ var
   f, n: PtrInt;
   fields: TOrmPropInfoList;
 begin
+  // setup the storage instance
   inherited Create(aClass, aServer);
   if (fStoredClassProps <> nil) and
      (fStoredClassProps.Kind in INSERT_WITH_ID) then
@@ -2192,20 +2193,22 @@ begin
       [self, aClass]);
   fFileName := aFileName;
   fBinaryFile := aBinaryFile;
-  fValues.Init(TypeInfo(TOrmObjArray), fValue, TOrmDynArrayHashOne,
-    TOrmDynArrayCompare, nil, @fCount); // hashed and compared by ID
-  fSearchRec := fStoredClass.Create;
+  fSearchRec := fStoredClass.Create; // used to searched values
+  // hashed and compared by ID, with proper T*ObjArray (fake) RTTI information
+  fValues.InitRtti(fStoredClassRecordProps.TableObjArrayRtti, fValue,
+    TObjectWithIDDynArrayHashOne, TObjectWithIDDynArrayCompare, nil, @fCount);
+  // setup SELECT statements as used by AdaptSqlForEngineList() method
   if (ClassType <> TRestStorageInMemory) and
      (fStoredClassProps <> nil) then
     with fStoredClassProps do
     begin
-      // used by AdaptSqlForEngineList() method
       fBasicUpperSqlSelect[false] := UpperCase(Sql.SelectAllWithRowID);
       SetLength(fBasicUpperSqlSelect[false],
         length(fBasicUpperSqlSelect[false]) - 1); // trim right ';'
       fBasicUpperSqlSelect[true] :=
         StringReplaceAll(fBasicUpperSqlSelect[false], ' ROWID,', ' ID,');
     end;
+  // initialize fUnique[] fUniquePerField[] lookup tables
   fields := fStoredClassRecordProps.Fields;
   n := GetBitsCount(fStoredClassRecordProps.IsUniqueFieldsBits, fields.Count);
   if n > 0 then

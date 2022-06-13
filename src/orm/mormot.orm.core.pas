@@ -3533,6 +3533,7 @@ type
     fFilters: TSynFilterOrValidateObjArrayArray;
     fModel: array of TOrmPropertiesModelEntry; // associated TOrmModel instances
     fModelMax: integer;
+    fTableObjArrayRtti: TBytes; // pointer()=TRttiJson of fake TOrm*ObjArray
     /// add an entry in fModel[] / fModelMax
     procedure InternalRegisterModel(aModel: TOrmModel; aTableIndex: integer;
       aProperties: TOrmModelProperties);
@@ -3578,6 +3579,10 @@ type
     procedure AddFilterOrValidate(const aFieldName: RawUtf8;
       aFilter: TSynFilterOrValidate); overload;
 
+    /// RTTI information of a fake but compatible TOrm*ObjArray
+    // - just a raw copy of TOrmObjArray RTTI with the proper array item info
+    // - as used e.g. by TOrm.NewIList and TRestStorageInMemory.Create
+    function TableObjArrayRtti: TRttiJson; {$ifdef HASINLINE}inline;{$endif}
     /// list all TOrm fields of this TOrm
     // - ready to be used by TOrmTableJson.CreateFromTables()
     // - i.e. the class itself then, all fields of type oftID (excluding oftMany)
@@ -5304,30 +5309,13 @@ end;
 procedure TOrmTable.ToNewIList(Item: TOrmClass; var Result);
 var
   list: TIListParent;
-  cloned, one: TOrm;
-  r: integer;
-  rec: POrm;
 begin
   list := Item.NewIList(Result);
   if (self = nil) or
      (fRowCount = 0) then
     exit;
-  cloned := Item.Create;
-  try
-    cloned.FillPrepare(self);
-    list.Count := fRowCount;  // allocate once
-    rec := list.First;        // fast direct iteration
-    for r := 1 to fRowCount do
-    begin
-      one := Item.Create;
-      rec^ := one;
-      inc(rec);
-      cloned.fFill.Fill(r, one);
-      one.fInternalState := fInternalState;
-    end;
-  finally
-    cloned.Free;
-  end;
+  list.Count := fRowCount;  // allocate once
+  FillOrms(list.First, Item);
 end;
 {$endif ORMGENERICS}
 
@@ -8316,8 +8304,8 @@ end;
 {$ifdef ORMGENERICS}
 class function TOrm.NewIList(var IListOrm): TIListParent;
 begin
-  result := TIList<TOrm>.Create(
-    TypeInfo(TOrmObjArray), self.ClassInfo, [], ptClass);
+  result := TIList<TOrm>.CreateRtti(
+    OrmProps.TableObjArrayRtti, self.ClassInfo, [], ptClass);
   // all IList<T> share the same VMT -> assign shared TIList<TOrm>
   IList<TOrm>(IListOrm) := TIList<TOrm>(result);
 end;
@@ -8992,6 +8980,11 @@ begin
   end;
 end;
 
+function TOrmProperties.TableObjArrayRtti: TRttiJson;
+begin
+  result := pointer(fTableObjArrayRtti);
+end;
+
 const // the most ambigous keywords - others may be used as column names
   SQLITE3_KEYWORDS = ' from where group in as ';
 
@@ -9011,6 +9004,9 @@ begin
   // register for JsonToObject() and for TOrmPropInfoRttiTID.Create()
   // (should have been done before in TOrmModel.Create/AddTable)
   fTableRtti := Rtti.RegisterClass(aTable) as TRttiJson;
+  // create a fake TRttiJson matching this TOrm class as T*ObjArray item array
+  fTableObjArrayRtti := Rtti.RegisterType(TypeInfo(TOrmObjArray)).
+    ComputeFakeArrayRtti(aTable);
   // initialize internal structures
   fModelMax := -1;
   fTable := aTable;
