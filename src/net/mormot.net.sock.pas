@@ -3493,7 +3493,7 @@ begin
   end;
 end;
 
-{.$define SYNCRTDEBUGLOW2}
+{ $define SYNCRTDEBUGLOW2}
 
 procedure TCrtSocket.Close;
 {$ifdef SYNCRTDEBUGLOW2}
@@ -3527,7 +3527,7 @@ begin
     fSock.ShutdownAndClose({rdwr=}fWasBind);
   {$ifdef SYNCRTDEBUGLOW2}
   QueryPerformanceMicroSeconds(stop);
-  if assigned(OnLog) then OnLog(sllTrace, 'ShutdownAndClose(%): %', [fWasBind, stop-start], self);
+  TSynLog.Add.Log(sllTrace, 'ShutdownAndClose(%): %', [fWasBind, stop-start], self);
   {$endif SYNCRTDEBUGLOW2}
   fSock := TNetSocket(-1);
   // don't reset fServer/fPort/fTls/fWasBind: caller may use them to reconnect
@@ -3691,7 +3691,7 @@ begin
         vtUnicodeString:
           begin
             Unicode_WideToShort(VUnicodeString, // assume WinAnsi encoding
-              length(UnicodeString(VUnicodeString)), 1252, tmp);
+              length(UnicodeString(VUnicodeString)), CODEPAGE_US, tmp);
             SockSend(@tmp[1], Length(tmp));
           end;
         {$endif HASVARUSTRING}

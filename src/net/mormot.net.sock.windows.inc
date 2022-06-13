@@ -514,7 +514,8 @@ var
   v: TLinger;
 begin
   v.l_linger := linger;
-  v.l_onoff := ord(linger >= 0);
+  v.l_onoff := 0; // don't wait - ord(linger >= 0) would wait
+  // https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-closesocket
   SetOpt(SOL_SOCKET, SO_LINGER, @v, SizeOf(v));
 end;
 
