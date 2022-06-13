@@ -435,9 +435,9 @@ begin
     Check(Rec.FillTable.RowCount = 113);
     // release main http client/server and main database instances
     CleanUp;
-    assert(Client = nil);
-    assert(Server = nil);
-    assert(DataBase = nil);
+    Check(Client = nil);
+    Check(Server = nil);
+    Check(DataBase = nil);
     // create 3 TRestServerDB + TRestHttpClient instances (and TOrmModel)
     for i := 0 to high(Instance) do
       with Instance[i] do

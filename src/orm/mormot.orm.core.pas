@@ -8304,8 +8304,11 @@ end;
 {$ifdef ORMGENERICS}
 class function TOrm.NewIList(var IListOrm): TIListParent;
 begin
-  result := TIList<TOrm>.CreateRtti(
-    OrmProps.TableObjArrayRtti, self.ClassInfo, [], ptClass);
+  if self = nil then
+    result := nil
+  else
+    result := TIList<TOrm>.CreateRtti(
+      OrmProps.TableObjArrayRtti, self.ClassInfo, [], ptClass);
   // all IList<T> share the same VMT -> assign shared TIList<TOrm>
   IList<TOrm>(IListOrm) := TIList<TOrm>(result);
 end;
