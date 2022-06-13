@@ -2791,6 +2791,12 @@ type
 procedure TObjectWithCustomCreateRttiCustomSetParser(
   O: TObjectWithCustomCreateClass; Rtti: TRttiCustom);
 
+/// TDynArraySortCompare compatible function, sorting by TObjectWithID/TOrm.ID
+function TObjectWithIDDynArrayCompare(const Item1, Item2): integer;
+
+/// TDynArrayHashOne compatible function, hashing TObjectWithID/TOrm.ID
+function TObjectWithIDDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
+
 
 
 implementation
@@ -8885,6 +8891,38 @@ class procedure TObjectWithID.RttiCustomSetParser(Rtti: TRttiCustom);
 begin
   Rtti.Props.Add(
     TypeInfo(TID), PtrInt(@TObjectWithID(nil).fID), 'ID', {first=}true);
+end;
+
+
+{$ifdef CPUX64}
+
+// very efficient branchless asm - rcx/rdi=Item1 rdx/rsi=Item2
+function TObjectWithIDDynArrayCompare(const Item1, Item2): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rcx, qword ptr [Item1]
+        mov     rdx, qword ptr [Item2]
+        mov     rcx, qword ptr [rcx + TObjectWithID.fID]
+        mov     rdx, qword ptr [rdx + TObjectWithID.fID]
+        xor     eax, eax
+        cmp     rcx, rdx
+        seta    al
+        sbb     eax, 0
+end;
+
+{$else}
+
+function TObjectWithIDDynArrayCompare(const Item1,Item2): integer;
+begin
+  // we assume Item1<>nil and Item2<>nil
+  result := CompareQWord(TObjectWithID(Item1).fID, TObjectWithID(Item2).fID);
+  // inlined branchless comparison or correct x86 asm for older Delphi
+end;
+
+{$endif CPUX64}
+
+function TObjectWithIDDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0, pointer(@TObjectWithID(Elem).fID), SizeOf(TID));
 end;
 
 

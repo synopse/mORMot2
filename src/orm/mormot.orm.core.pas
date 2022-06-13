@@ -4567,12 +4567,6 @@ procedure EncodeMultiInsertSQLite3(Props: TOrmProperties;
   BatchOptions: TRestBatchOptions; FieldCount, RowCount: integer;
   var result: RawUtf8);
 
-/// TDynArraySortCompare compatible function, sorting by TOrm.ID
-function TOrmDynArrayCompare(const Item1, Item2): integer;
-
-/// TDynArrayHashOne compatible function, hashing TOrm.ID
-function TOrmDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
-
 /// create a TRecordReference with the corresponding parameters
 function RecordReference(Model: TOrmModel; aTable: TOrmClass;
   aID: TID): TRecordReference; overload;
@@ -4960,37 +4954,6 @@ end;
 
 
 { ************ TOrmModel TOrmTable IRestOrm Core Definitions }
-
-{$ifdef CPUX64}
-
-// very efficient branchless asm - rcx/rdi=Item1 rdx/rsi=Item2
-function TOrmDynArrayCompare(const Item1, Item2): integer;
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     rcx, qword ptr [Item1]
-        mov     rdx, qword ptr [Item2]
-        mov     rcx, qword ptr [rcx + TOrm.fID]
-        mov     rdx, qword ptr [rdx + TOrm.fID]
-        xor     eax, eax
-        cmp     rcx, rdx
-        seta    al
-        sbb     eax, 0
-end;
-
-{$else}
-
-function TOrmDynArrayCompare(const Item1,Item2): integer;
-begin
-  // we assume Item1<>nil and Item2<>nil
-  result := CompareQWord(TOrm(Item1).fID, TOrm(Item2).fID);
-  // inlined branchless comparison or correct x86 asm for older Delphi
-end;
-
-{$endif CPUX64}
-
-function TOrmDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0, pointer(@TOrm(Elem).fID), SizeOf(TID));
-end;
 
 function GetVirtualTableSqlCreate(Props: TOrmProperties): RawUtf8;
 var
