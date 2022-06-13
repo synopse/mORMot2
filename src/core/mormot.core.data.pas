@@ -1267,6 +1267,10 @@ type
     // - aCaseInsensitive will be used for ptStringTypes
     function InitSpecific(aTypeInfo: PRttiInfo; var aValue; aKind: TRttiParserType;
       aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false): TRttiParserType;
+    /// set a specific TRttiParserType for this dynamic array
+    // - could be called after InitRtti() to set the Compare() function
+    // - as used by InitSpecific() after InitRtti(Rtti.RegisterType(aTypeInfo))
+    function SetParserType(aKind: TRttiParserType; aCaseInsensitive: boolean): TRttiParserType;
     /// initialize the wrapper with a one-dimension dynamic array
     // - low-level method, as called by Init() and InitSpecific()
     // - can be called directly for a very fast TDynArray initialization
@@ -1619,14 +1623,14 @@ type
     // of an invalid input buffer
     // - this method will recognize T*ObjArray types, and will first free
     // any existing instance before unserializing, to avoid memory leak
-    // - warning: the content of P^ will be modified during parsing: please
-    // make a local copy if it will be needed later (using e.g. TSynTempBufer)
+    // - warning: the content of P^ will be modified during parsing: make a
+    // local copy if it will be needed later (using e.g. the overloaded method)
     function LoadFromJson(P: PUtf8Char; EndOfObject: PUtf8Char = nil;
       CustomVariantOptions: PDocVariantOptions = nil;
       Tolerant: boolean = false): PUtf8Char; overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - this method will make a private copy of the JSON for in-place parsing
-    // - returns fals in case of invalid input buffer
+    // - returns false in case of invalid input buffer, true on success
     function LoadFromJson(const Json: RawUtf8;
       CustomVariantOptions: PDocVariantOptions = nil;
       Tolerant: boolean = false): boolean; overload;
@@ -2050,6 +2054,10 @@ type
     // - if CaseInsensitive is set to TRUE, it will ignore difference in 7-bit
     // alphabetic characters (e.g. compare 'a' and 'A' as equal)
     procedure Init(aTypeInfo: PRttiInfo; var aValue; aHashItem: TDynArrayHashOne = nil;
+      aCompare: TDynArraySortCompare = nil; aHasher: THasher = nil;
+      aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false);
+    /// initialize the wrapper with a one-dimension dynamic array from our RTTI
+    procedure InitRtti(aRtti: TRttiCustom; var aValue; aHashItem: TDynArrayHashOne = nil;
       aCompare: TDynArraySortCompare = nil; aHasher: THasher = nil;
       aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false);
     /// initialize the wrapper with a one-dimension dynamic array
@@ -6635,6 +6643,12 @@ begin
     raise EDynArray.CreateUtf8('TDynArray.InitSpecific: % is %, expected rkDynArray',
       [aTypeInfo.RawName, ToText(aTypeInfo.Kind)^]);
   InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
+  result := SetParserType(aKind, aCaseInsensitive);
+end;
+
+function TDynArray.SetParserType(aKind: TRttiParserType;
+  aCaseInsensitive: boolean): TRttiParserType;
+begin
   case aKind of
     ptNone:
       if Assigned(fInfo.ArrayRtti) then
@@ -6647,10 +6661,10 @@ begin
   fCompare := PT_SORT[aCaseInsensitive, result];
   if not Assigned(fCompare) then
     if result = ptVariant then
-      raise EDynArray.CreateUtf8('TDynArray.InitSpecific(%): missing mormot.core.json',
+      raise EDynArray.CreateUtf8('TDynArray.SetParserType(%): missing mormot.core.json',
         [Info.Name, ToText(result)^])
     else if aKind <> ptNone then
-      raise EDynArray.CreateUtf8('TDynArray.InitSpecific(%) unsupported %',
+      raise EDynArray.CreateUtf8('TDynArray.SetParserType(%) unsupported %',
         [Info.Name, ToText(result)^]);
 end;
 
@@ -9510,8 +9524,16 @@ procedure TDynArrayHashed.Init(aTypeInfo: PRttiInfo; var aValue;
   aHashItem: TDynArrayHashOne; aCompare: TDynArraySortCompare;
   aHasher: THasher; aCountPointer: PInteger; aCaseInsensitive: boolean);
 begin
+  InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aHashItem, aCompare,
+    aHasher, aCountPointer, aCaseInsensitive);
+end;
+
+procedure TDynArrayHashed.InitRtti(aRtti: TRttiCustom; var aValue;
+  aHashItem: TDynArrayHashOne; aCompare: TDynArraySortCompare;
+  aHasher: THasher; aCountPointer: PInteger; aCaseInsensitive: boolean);
+begin
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
-    Init(aTypeInfo, aValue, aCountPointer);
+    InitRtti(aRtti, aValue, aCountPointer);
   fHash.Init(@self, aHashItem, nil, aHasher, aCompare, nil, aCaseInsensitive);
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := fHash.fCompare;
 end;

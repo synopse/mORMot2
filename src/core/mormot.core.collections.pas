@@ -336,7 +336,10 @@ type
     // ! li := Collections.NewList<T>;
     // ! {$endif FPC_64}
     constructor Create(aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo;
-      aOptions: TListOptions = []; aSortAs: TRttiParserType = ptNone); overload;
+      aOptions: TListOptions = []; aSortAs: TRttiParserType = ptNone);
+    /// internal constructor to create an IList<T> instance from our RTTI
+    constructor CreateRtti(aDynArray: TRttiCustom; aItemTypeInfo: PRttiInfo;
+      aOptions: TListOptions = []; aSortAs: TRttiParserType = ptNone);
     /// finalize the array storage, mainly the internal TDynArray
     destructor Destroy; override;
     /// IList<> method to delete one item inside the collection from its index
@@ -358,7 +361,7 @@ type
     /// IList<> method returning true if Sort() or AddSorted() have been used
     function Sorted: boolean;
     /// low-level IList<> method to access the first item of the collection
-    function First: pointer;  inline;
+    function First: pointer; inline;
     /// IList<> method to return the number of items actually stored
     property Count: PtrInt
       read fCount write SetCount;
@@ -366,7 +369,7 @@ type
     property Capacity: PtrInt
       read GetCapacity write SetCapacity;
     /// IList<> method to access an associated lightweight read/write lock
-    function Safe: PRWLock;   inline;
+    function Safe: PRWLock; inline;
     /// low-level IList<> method to access to the internal TDynArray wrapper
     function Data: PDynArray; inline;
   end;
@@ -782,23 +785,26 @@ end;
 
 constructor TIListParent.Create(aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo;
   aOptions: TListOptions; aSortAs: TRttiParserType);
-var
-  r: PRttiInfo;
 begin
   fOptions := aOptions;
-  r := aDynArrayTypeInfo;
-  if (r = nil) or
-     (r^.Kind <> rkDynArray) then
+  if (aDynArrayTypeInfo = nil) or
+     (aDynArrayTypeInfo^.Kind <> rkDynArray) then
      raise ESynList.CreateUtf8('%.Create: % should be a dynamic array of T',
-       [self, r^.Name^]);
-  aSortAs := fDynArray.InitSpecific(r, fValue, aSortAs, // aSortAs=ptNone->RTTI
-    @fCount, loCaseInsensitive in fOptions);
+       [self, aDynArrayTypeInfo^.Name^]);
+  CreateRtti(Rtti.RegisterType(aDynArrayTypeInfo), aItemTypeInfo, aOptions, aSortAs);
+end;
+
+constructor TIListParent.CreateRtti(aDynArray: TRttiCustom;
+  aItemTypeInfo: PRttiInfo; aOptions: TListOptions; aSortAs: TRttiParserType);
+begin
+  fDynArray.InitRtti(aDynArray, fValue, @fCount);
+  aSortAs := fDynArray.SetParserType(aSortAs, // aSortAs=ptNone->RTTI
+    loCaseInsensitive in fOptions);
   if (fDynArray.Info.ArrayRtti = nil) or
-     ((aDynArrayTypeInfo <> nil) and
-      (fDynArray.Info.ArrayRtti.Kind <> aItemTypeInfo^.Kind))  then
+     (fDynArray.Info.ArrayRtti.Kind <> aItemTypeInfo^.Kind)  then
     raise ESynList.CreateUtf8('%.Create<%> (%) does not match % (%)',
       [self, aItemTypeInfo^.RawName, ToText(aItemTypeInfo^.Kind)^,
-       aDynArrayTypeInfo.RawName, ToText(fDynArray.Info.ArrayRtti.Kind)^]);
+       aDynArray.Info^.RawName, ToText(fDynArray.Info.ArrayRtti.Kind)^]);
   if loNoFinalize in fOptions then
     fDynArray.NoFinalize := true; // force weak references
   if loCreateUniqueIndex in fOptions then
