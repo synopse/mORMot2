@@ -121,10 +121,10 @@ type
       APalette: HPALETTE); override;
     procedure SaveToClipboardFormat(var AFormat: Word; var AData: THandle;
       var APalette: HPALETTE); override;
-    {$ifdef ISDELPHI102}
-    class function CanLoadFromStream(pmStream: TStream): boolean; override;
-    {$endif ISDELPHI102}
     {$endif FPC}
+    class function CanLoadFromMemory(first4: cardinal): boolean; virtual;
+    class function CanLoadFromStream(pmStream: TStream): boolean;
+      {$ifdef ISDELPHI102} override; {$endif}
     /// save the picture into any GIF/PNG/JPG/TIFF format
     // - CompressionQuality is used for gptJPG format saving
     // and is expected to be from 0 to 100; for gptTIF format, use
@@ -154,6 +154,8 @@ type
 
   /// sub class to handle .PNG file extension
   TPngImage = class(TSynPicture)
+  public
+    class function CanLoadFromMemory(first4: cardinal): boolean; override;
   end;
 
   /// sub class to handle .JPG file extension
@@ -162,6 +164,7 @@ type
     fCompressionQuality: integer;
   public
     constructor Create; override;
+    class function CanLoadFromMemory(first4: cardinal): boolean; override;
     /// implements the saving feature
     procedure SaveToStream(Stream: TStream); override;
     /// the associated encoding quality (from 0 to 100)
@@ -172,6 +175,8 @@ type
 
   /// sub class to handle .GIF file extension
   TGifImage = class(TSynPicture)
+  public
+    class function CanLoadFromMemory(first4: cardinal): boolean; override;
   end;
 
   /// sub class to handle .TIF file extension
@@ -183,6 +188,7 @@ type
     fActivePage: integer;
     procedure SelectPage(index: integer);
   public
+    class function CanLoadFromMemory(first4: cardinal): boolean; override;
     /// extract a page from the TIFF and assign it to a bitmap
     procedure ExtractPage(index: integer; wBMP: TBitmap);
     /// retrieve the number of pages in the TIFF file
@@ -824,14 +830,35 @@ begin
       result.Canvas.Unlock;
     end;
   end;
+
 end;
 
-{$ifdef ISDELPHI102}
-class function TSynPicture.CanLoadFromStream(pmStream: TStream): boolean;
-begin          
-  result := true; // just assume it is OK, as we do on oldest Delphi
+class function TSynPicture.CanLoadFromMemory(first4: cardinal): boolean;
+begin
+  result := (first4 and $00ffffff = $ffd8ff) or // JPEG
+            (first4 and $00ffffff = $492049) or // TIFF
+            (first4 = $38464947) or  // GIF
+            (first4 = $474e5089);   // PNG
 end;
-{$endif ISDELPHI102}
+
+class function TSynPicture.CanLoadFromStream(pmStream: TStream): boolean;
+var
+  pos: Int64;
+  v: cardinal;
+begin
+  pos := pmStream.Position;
+  result := (pmStream.Read(v, SizeOf(v)) = SizeOf(v)) and
+            CanLoadFromMemory(v);
+  pmStream.Position := pos;
+end;
+
+
+{ TPngImage }
+
+class function TPngImage.CanLoadFromMemory(first4: cardinal): boolean;
+begin
+  result := first4 = $474e5089; // PNG
+end;
 
 
 { TJpegImage }
@@ -842,13 +869,31 @@ begin
   fCompressionQuality := 80; // default quality
 end;
 
+class function TJpegImage.CanLoadFromMemory(first4: cardinal): boolean;
+begin
+  result := first4 and $00ffffff = $ffd8ff; // JPEG
+end;
+
 procedure TJpegImage.SaveToStream(Stream: TStream);
 begin
   SaveAs(Stream, gptJPG, fCompressionQuality);
 end;
 
 
+{ TGifImage }
+
+class function TGifImage.CanLoadFromMemory(first4: cardinal): boolean;
+begin
+  result := first4 = $38464947; // GIF
+end;
+
+
 { TTiffImage }
+
+class function TTiffImage.CanLoadFromMemory(first4: cardinal): boolean;
+begin
+  result := first4 and $00ffffff = $492049; // TIFF
+end;
 
 procedure TTiffImage.ExtractPage(index: integer; wBMP: TBitmap);
 var
