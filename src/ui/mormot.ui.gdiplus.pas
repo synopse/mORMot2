@@ -121,6 +121,9 @@ type
       APalette: HPALETTE); override;
     procedure SaveToClipboardFormat(var AFormat: Word; var AData: THandle;
       var APalette: HPALETTE); override;
+    {$ifdef ISDELPHI102}
+    class function CanLoadFromStream(pmStream: TStream): boolean; override;
+    {$endif ISDELPHI102}
     {$endif FPC}
     /// save the picture into any GIF/PNG/JPG/TIFF format
     // - CompressionQuality is used for gptJPG format saving
@@ -822,6 +825,13 @@ begin
     end;
   end;
 end;
+
+{$ifdef ISDELPHI102}
+class function TSynPicture.CanLoadFromStream(pmStream: TStream): boolean;
+begin          
+  result := true; // just assume it is OK, as we do on oldest Delphi
+end;
+{$endif ISDELPHI102}
 
 
 { TJpegImage }
