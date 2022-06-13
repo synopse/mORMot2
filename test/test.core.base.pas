@@ -115,6 +115,7 @@ type
     class function Sum(aClient: TRestClientUri; a, b: double; Method2: boolean): double;
   end;
   TOrmPeopleObjArray = array of TOrmPeople;
+  POrmPeople = ^TOrmPeople;
 
   TOrmPeopleTimed = class(TOrmPeople)
   private

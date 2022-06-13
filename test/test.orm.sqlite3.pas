@@ -78,7 +78,7 @@ type
     EncryptedFile: boolean;
     Demo: TSqlDataBase;
     Req: RawUtf8;
-    JS: RawUtf8;
+    JS, JSExp: RawUtf8;
     DV: variant;
     BackupTimer: TPrecisionTimer;
     function OnBackupProgress(Sender: TSqlDatabaseBackupThread): boolean;
@@ -461,7 +461,9 @@ begin
   Demo.Commit;
   Req := 'SELECT * FROM People WHERE LastName=''M' + _uF4 + 'net'' ORDER BY FirstName;';
   check(WinAnsiToUtf8(Utf8ToWinAnsi(Req)) = Req, 'WinAnsiToUtf8/Utf8ToWinAnsi');
-  JS := Demo.ExecuteJson(Req); // get result in JSON format
+  JSExp := Demo.ExecuteJson(Req, {expand=}true);
+  Demo.CacheFlush;
+  JS := Demo.ExecuteJson(Req, {expand=}false); // get result in JSON format
   FileFromString(JS, WorkDir + 'Test1.json');
   CheckHash(JS, $40C1649A, 'ExecuteJson');
   R.Prepare(Demo.DB, 'SELECT * FROM People WHERE LastName=? ORDER BY FirstName');
@@ -1987,17 +1989,55 @@ procedure TTestSQLite3Engine._TOrmTableJson;
 var
   J, T: TOrmTable;
   i1, i2, aR, aF, F1, F2, n: integer;
-  fid, ffn, fln, fyb, fyd: PtrInt;
+  fid, ffn, fln, fyb, fyd, peoplesn: PtrInt;
   Comp, Comp1, Comp2: TUtf8Compare;
-  {$ifdef ORMGENERICS}
-  Peoples: IList<TOrmPeople>;
-  {$endif ORMGENERICS}
   row: variant;
-  lContactDataQueueDynArray: TDynArray;
+  DA: TDynArray;
+  P: TOrmPeopleObjArray;
   lContactDataQueueArray: TRawUtf8DynArray;
   lContactDataQueueJSON: TDocVariantData;
   lData, s: RawUtf8;
   lDocData: TDocVariantData;
+
+  procedure CheckPeopleArray(p: POrmPeople; n: PtrInt);
+  var
+    r: PtrInt;
+  begin
+    checkEqual(n, J.RowCount);
+    for r := 1 to n do
+      begin
+        checkEqual(p^.IDValue, J.GetAsInteger(r, fid));
+        checkEqual(p^.FirstName, J.GetU(r, ffn));
+        checkEqual(p^.LastName, J.GetU(r, fln));
+        checkEqual(p^.YearOfBirth, J.GetAsInteger(r, fyb));
+        checkEqual(p^.YearOfDeath, J.GetAsInteger(r, fyd));
+        inc(p);
+      end;
+  end;
+
+{$ifdef ORMGENERICS}
+var
+  Peoples: IList<TOrmPeople>;
+
+  procedure CheckPeoples;
+  var
+    r: PtrInt;
+    p: TOrmPeople;
+  begin
+    checkEqual(Peoples.Count, J.RowCount, 'Peoples');
+    for r := 1 to Peoples.Count do
+    begin
+      p := Peoples[r - 1];
+      checkEqual(p.id, J.GetAsInteger(r, fid), 'id');
+      checkEqual(p.FirstName, J.GetU(r, ffn), 'fn');
+      checkEqual(p.LastName, J.GetU(r, fln), 'ln');
+      checkEqual(p.YearOfBirth, J.GetAsInteger(r, fyb), 'yb');
+      checkEqual(p.YearOfDeath, J.GetAsInteger(r, fyd), 'yd');
+    end;
+    Peoples := nil; // not mandatory, but ensure data is retrieved
+  end;
+{$endif ORMGENERICS}
+
 const
   TEST_DATA = '[' +
     '{"REC_ID":29915,"CHANNEL":117,"PHONE":"5004392222,12345678","RINGS":0,' +
@@ -2052,16 +2092,30 @@ begin
       finally
         Free;
       end;
+    fid := J.FieldIndex('ID');
+    ffn := J.FieldIndex('FirstName');
+    fln := J.FieldIndex('LastName');
+    fyb := J.FieldIndex('YearOfBirth');
+    fyd := J.FieldIndex('YearOfDeath');
+    DA.Init(TypeInfo(TOrmPeopleObjArray), P);
+    checkEqual(DA.Count, 0);
+    check(DA.LoadFromJson(JS));
+    CheckPeopleArray(DA.Value^, DA.Count);
+    DA.Clear; // should free all P[] items
+    checkEqual(DA.Count, 0);
+    check(DA.LoadFromJson(JSExp)); // [{ID:...},{ID:...},...]
+    CheckPeopleArray(DA.Value^, DA.Count);
+    DA.Clear;
     Demo.Execute('VACUUM;');
     T := TOrmTableDB.Create(Demo, [], Req, true); // re-test after VACCUM
     try
       check(T.RowCount = J.RowCount);
       check(T.FieldCount = J.FieldCount);
-      fid := T.FieldIndex('ID');
-      ffn := T.FieldIndex('FirstName');
-      fln := T.FieldIndex('LastName');
-      fyb := T.FieldIndex('YearOfBirth');
-      fyd := T.FieldIndex('YearOfDeath');
+      checkEqual(fid, T.FieldIndex('ID'));
+      checkEqual(ffn, T.FieldIndex('FirstName'));
+      checkEqual(fln, T.FieldIndex('LastName'));
+      checkEqual(fyb, T.FieldIndex('YearOfBirth'));
+      checkEqual(fyd, T.FieldIndex('YearOfDeath'));
       check(fid = 0);
       check(T.FieldIndex('RowID') = fid);
       for aF := 0 to T.FieldCount - 1 do
@@ -2090,36 +2144,24 @@ begin
       check(n = J.RowCount);
       with T.ToObjectList(TOrmPeople) do
       try
-        check(Count = J.RowCount);
-        for aR := 1 to Count do
-          with TOrmPeople(Items[aR - 1]) do
-          begin
-            check(IDValue = J.GetAsInteger(aR, fid));
-            check(FirstName = J.GetU(aR, ffn));
-            check(LastName = J.GetU(aR, fln));
-            check(YearOfBirth = J.GetAsInteger(aR, fyb));
-            check(YearOfDeath = J.GetAsInteger(aR, fyd));
-          end;
+        CheckPeopleArray(pointer(List), Count);
       finally
         Free;
       end;
       {$ifdef ORMGENERICS}
       T.ToNewIList(TOrmPeople, Peoples);
-      check(Peoples.Count = J.RowCount);
-      for aR := 1 to Peoples.Count do
-        with Peoples[aR - 1] do
-        begin
-          checkEqual(id, J.GetAsInteger(aR, fid), 'id');
-          checkEqual(FirstName, J.GetU(aR, ffn), 'fn');
-          checkEqual(LastName, J.GetU(aR, fln), 'ln');
-          checkEqual(YearOfBirth, J.GetAsInteger(aR, fyb), 'yb');
-          checkEqual(YearOfDeath, J.GetAsInteger(aR, fyd), 'yd');
-        end;
+      CheckPeoples;
       // Peoples := nil; // not mandatory
       {$endif ORMGENERICS}
     finally
       T.Free;
     end;
+    {$ifdef ORMGENERICS}
+    check(TOrmPeople.NewIList(Peoples).Data.LoadFromJson(JS));
+    CheckPeoples;
+    check(TOrmPeople.NewIList(Peoples).Data.LoadFromJson(JSExp));
+    CheckPeoples;
+    {$endif ORMGENERIC}
     for aF := 0 to J.FieldCount - 1 do
     begin
       J.SortFields(aF);
@@ -2204,9 +2246,9 @@ begin
     J.Free;
   end;
   lContactDataQueueJSON.InitJson(TEST_DATA);
-  lContactDataQueueDynArray.Init(TypeInfo(TRawUtf8DynArray), lContactDataQueueArray);
+  DA.Init(TypeInfo(TRawUtf8DynArray), lContactDataQueueArray);
   lContactDataQueueJSON.ToRawUtf8DynArray(lContactDataQueueArray);
-  lData := lContactDataQueueDynArray.SaveToJson;
+  lData := DA.SaveToJson;
   lDocData.InitJson(lData, [dvoJsonObjectParseWithinString]);
   check(lDocData.Count = 3);
   CheckHash(lDocData.ToJson, $FCF948A5);
