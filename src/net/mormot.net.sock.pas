@@ -3495,16 +3495,17 @@ end;
 
 procedure TCrtSocket.Close;
 {$ifdef SYNCRTDEBUGLOW2}
-var
+var // closesocket() or shutdown() are slow e.g. on Windows with wrong Linger
   start, stop: int64;
 {$endif SYNCRTDEBUGLOW2}
 begin
+  // reset internal state
   fSndBufLen := 0; // always reset (e.g. in case of further Open)
   fSockInEofError := 0;
   ioresult; // reset readln/writeln value
   if SockIn <> nil then
   begin
-    PTextRec(SockIn)^.BufPos := 0;  // reset input buffer
+    PTextRec(SockIn)^.BufPos := 0;  // reset input buffer, but keep allocated
     PTextRec(SockIn)^.BufEnd := 0;
   end;
   if SockOut <> nil then
@@ -3514,7 +3515,10 @@ begin
   end;
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
-  fSecure := nil; // perform the TLS shutdown round and release the TLS context
+  // perform the TLS shutdown round and release the TLS context
+  fSecure := nil; // will depend on the actual implementation class
+  TLS.Enabled := false;
+  // actually close the socket and mark it as not SockIsDefined (<0)
   {$ifdef SYNCRTDEBUGLOW2}
   QueryPerformanceMicroSeconds(start);
   {$endif SYNCRTDEBUGLOW2}
