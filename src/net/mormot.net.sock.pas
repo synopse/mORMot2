@@ -3163,16 +3163,13 @@ end;
 
 procedure TCrtSocket.DoTlsAfter(caller: TCrtSocketTlsAfter);
 begin
-  if not TLS.Enabled then // ignore duplicated calls
+  if fSecure = nil then // ignore duplicated calls
   try
-    if fSecure <> nil then // paranoid
-      raise ENetSock.Create('%s.DoTlsAfter twice', [ClassNameShort(self)^]);
-    if Assigned(NewNetTls) then
-      fSecure := NewNetTls
-    else
+    if not Assigned(NewNetTls) then
       raise ENetSock.Create('%s.DoTlsAfter: TLS support not compiled ' +
         '- try including mormot.lib.openssl11 in your project',
         [ClassNameShort(self)^]);
+    fSecure := NewNetTls;
     if fSecure = nil then
       raise ENetSock.Create('%s.DoTlsAfter: TLS is not available on this ' +
         'system - try installing OpenSSL 1.1.1/3.x', [ClassNameShort(self)^]);
@@ -3202,6 +3199,7 @@ var
   head: RawUtf8;
   res: TNetResult;
 begin
+  TLS.Enabled := false; // reset this flag which is set at output
   fSocketLayer := aLayer;
   fWasBind := doBind;
   if {%H-}PtrInt(aSock)<=0 then

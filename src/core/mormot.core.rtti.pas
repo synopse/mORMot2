@@ -8028,7 +8028,7 @@ begin
   if Kind <> rkDynArray then
     raise ERttiException.CreateUtf8('ComputeFakeArrayRtti %?', [Name]);
   SetLength(result, InstanceSize);
-  MoveFast(pointer(self)^, pointer(result)^, InstanceSize);
+  MoveFast(pointer(self)^, pointer(result)^, InstanceSize); // weak copy
   TRttiCustom(pointer(result)).fObjArrayClass := aItemClass;
   TRttiCustom(pointer(result)).fArrayRtti := Rtti.RegisterClass(aItemClass);
 end; // no need to set other fields like Name

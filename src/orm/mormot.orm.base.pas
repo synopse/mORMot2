@@ -5794,7 +5794,7 @@ begin
   begin
     offs := fGetterIsFieldPropOffset;
     if offs <> 0 then
-    begin // avoid any temporary variable
+    begin // avoid any temporary variable and threadlocked refcount
       p1 := PPointer(PtrUInt(Item1) + offs)^;
       p2 := PPointer(PtrUInt(Item2) + offs)^;
     end
