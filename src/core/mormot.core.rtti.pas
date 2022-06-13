@@ -2339,6 +2339,8 @@ type
     /// retrieve an instance of a given class per RTTI
     // - previously registered by SetPrivateSlot
     function GetPrivateSlot(aClass: TClass): pointer;
+    /// create a fake TRttiCustom clone with an overloaded ArrayRtti
+    function ComputeFakeArrayRtti(aItemClass: TClass): TBytes;
     /// low-level RTTI kind, taken from Rtti property
     property Kind: TRttiKind
       read fCache.Kind;
@@ -8020,6 +8022,15 @@ begin
     result := FindPrivateSlot(aClass, result);
   fPrivateSlotsSafe.UnLock;
 end;
+
+function TRttiCustom.ComputeFakeArrayRtti(aItemClass: TClass): TBytes;
+begin
+  if Kind <> rkDynArray then
+    raise ERttiException.CreateUtf8('ComputeFakeArrayRtti %?', [Name]);
+  SetLength(result, InstanceSize);
+  MoveFast(pointer(self)^, pointer(result)^, InstanceSize);
+  TRttiCustom(pointer(result)).fArrayRtti := Rtti.RegisterClass(aItemClass);
+end; // no need to set other fields like Name
 
 function TRttiCustom.SetPrivateSlot(aObject: TObject): pointer;
 begin
