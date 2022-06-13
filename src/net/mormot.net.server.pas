@@ -67,8 +67,8 @@ type
       aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
       aConnectionFlags: THttpServerRequestFlags); virtual;
     /// prepare one reusable HTTP State Machine for sending the response
-    procedure SetupResponse(var Context: THttpRequestContext;
-      CompressGz, MaxSizeAtOnce: integer);
+    function SetupResponse(var Context: THttpRequestContext;
+      CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
     /// just a wrapper around fErrorMessage := FormatString()
     procedure SetErrorMessage(const Fmt: RawUtf8; const Args: array of const);
     /// the associated server instance
@@ -307,7 +307,7 @@ type
     /// returns the API version used by the inherited implementation
     property ApiVersion: RawUtf8
       read GetApiVersion;
-    /// the Server name, UTF-8 encoded, e.g. 'mORMot/1.18 (Linux)'
+    /// the Server name, UTF-8 encoded, e.g. 'mORMot2 (Linux)'
     // - will be served as "Server: ..." HTTP header
     // - for THttpApiServer, when called from the main instance, will propagate
     // the change to all cloned instances, and included in any HTTP API 2.0 log
@@ -500,6 +500,8 @@ type
     fHeaderRetrieveAbortDelay: cardinal;
     fNginxSendFileFrom: array of TFileName;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
+    fCompressGz: integer;
+    function DoRequest(Ctxt: THttpServerRequest): boolean;
     procedure SetServerKeepAliveTimeOut(Value: cardinal);
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
     procedure IncStat(one: THttpServerSocketGetRequestResult);
@@ -509,6 +511,8 @@ type
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetApiVersion: RawUtf8; override;
     function GetExecuteState: THttpServerExecuteState; virtual; abstract;
+    function GetRegisterCompressGzStatic: boolean;
+    procedure SetRegisterCompressGzStatic(Value: boolean);
   public
     /// create a Server Thread, ready to be bound and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -599,6 +603,9 @@ type
     // - see THttpApiServer.SetTimeOutLimits(aIdleConnection) parameter
     property ServerKeepAliveTimeOut: cardinal
       read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
+    /// if we should search for local .gz cached file when serving static files
+    property RegisterCompressGzStatic: boolean
+      read GetRegisterCompressGzStatic write SetRegisterCompressGzStatic;
     /// how many invalid HTTP headers have been rejected
     property StatHeaderErrors: integer
       index grError read GetStat;
@@ -657,6 +664,7 @@ type
     fThreadRespClass: THttpServerRespClass;
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
+    fServerSendBufferSize: integer;
     fExecuteState: THttpServerExecuteState;
     function GetExecuteState: THttpServerExecuteState; override;
     function GetHttpQueueLength: cardinal; override;
@@ -1277,8 +1285,8 @@ begin
     id^ := 0; // ensure no overflow (31-bit range)
 end;
 
-procedure THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
-  CompressGz, MaxSizeAtOnce: integer);
+function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
+  CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
 
   procedure ProcessStaticFile;
   var
@@ -1360,8 +1368,8 @@ begin
     Context.Head.Append(XPOWEREDNAME + ': ' + XPOWEREDVALUE, true);
   Context.Content := OutContent;
   Context.ContentType := OutContentType;
-  Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // also set State
-  // now TAsyncConnectionsSockets.Write(Head) should be called
+  result := Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // also set State
+  // now TAsyncConnectionsSockets.Write(result) should be called
 end;
 
 procedure THttpServerRequest.SetErrorMessage(const Fmt: RawUtf8;
@@ -1547,23 +1555,37 @@ end;
 
 { THttpServerSocketGeneric }
 
-function THttpServerSocketGeneric.GetApiVersion: RawUtf8;
-begin
-  result := SocketApiVersion;
-end;
-
 constructor THttpServerSocketGeneric.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
   ProcessOptions: THttpServerOptions);
 begin
   fSockPort := aPort;
+  fCompressGz := -1;
   SetServerKeepAliveTimeOut(KeepAliveTimeOut); // 30 seconds by default
   // event handlers set before inherited Create to be visible in childs
   fOnThreadStart := OnStart;
   SetOnTerminate(OnStop);
   fProcessName := ProcessName; // TSynThreadPoolTHttpServer needs it now
   inherited Create(OnStart, OnStop, ProcessName, ProcessOptions);
+end;
+
+function THttpServerSocketGeneric.GetApiVersion: RawUtf8;
+begin
+  result := SocketApiVersion;
+end;
+
+function THttpServerSocketGeneric.GetRegisterCompressGzStatic: boolean;
+begin
+  result := fCompressGz >= 0;
+end;
+
+procedure THttpServerSocketGeneric.SetRegisterCompressGzStatic(Value: boolean);
+begin
+  if Value then
+    fCompressGz := CompressIndex(fCompress, @CompressGzip)
+  else
+    fCompressGz := -1;
 end;
 
 function THttpServerSocketGeneric.WebSocketsEnable(const aWebSocketsURI,
@@ -1604,6 +1626,39 @@ begin
     StringToUtf8(PrivateKeyFile, fSock.TLS.PrivateKeyFile);
     fSock.TLS.PrivatePassword := PrivateKeyPassword;
     InitializeTlsAfterBind; // validate TLS certificate(s) now
+  end;
+end;
+
+function THttpServerSocketGeneric.DoRequest(Ctxt: THttpServerRequest): boolean;
+var
+  cod: integer;
+begin
+  result := false; // error
+  try
+    Ctxt.RespStatus := DoBeforeRequest(Ctxt);
+    if Ctxt.RespStatus > 0 then
+    begin
+      Ctxt.SetErrorMessage('Rejected % Request', [Ctxt.Url]);
+      IncStat(grRejected);
+    end
+    else
+    begin
+      // execute the main processing callback
+      Ctxt.RespStatus := Request(Ctxt);
+      cod := DoAfterRequest(Ctxt);
+      if cod > 0 then
+        Ctxt.RespStatus := cod;
+    end;
+    result := true; // success
+  except
+    on E: Exception do
+      begin
+        // intercept and return Internal Server Error 500
+        Ctxt.RespStatus := HTTP_SERVERERROR;
+        Ctxt.SetErrorMessage('%: %', [E, E.Message]);
+        IncStat(grException);
+        // will keep soClose as result to shutdown the connection
+      end;
   end;
 end;
 

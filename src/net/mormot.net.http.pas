@@ -294,9 +294,9 @@ type
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
     // - and if Content is not '', will add 'Content-Type: ' header
     // - always compute ContentLength and add a 'Content-Length: ' header
-    // - then append small content (<MaxSizeAtOnce) to Head if possible, and
+    // - then append small content (<MaxSizeAtOnce) to result if possible, and
     // refresh the final State to hrsSendBody/hrsResponseDone
-    procedure CompressContentAndFinalizeHead(MaxSizeAtOnce: integer);
+    function CompressContentAndFinalizeHead(MaxSizeAtOnce: integer): PRawByteStringBuffer;
     /// body sending socket entry point of our asynchronous HTTP Server
     // - to be called when some bytes could be written to output socket
     procedure ProcessBody(var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
@@ -1367,8 +1367,8 @@ begin
   result := true; // notify the next main state change
 end;
 
-procedure THttpRequestContext.CompressContentAndFinalizeHead(
-  MaxSizeAtOnce: integer);
+function THttpRequestContext.CompressContentAndFinalizeHead(
+  MaxSizeAtOnce: integer): PRawByteStringBuffer;
 begin
   // same logic than THttpSocket.CompressDataAndWriteHeaders below
   if (integer(CompressAcceptHeader) <> 0) and
@@ -1397,6 +1397,7 @@ begin
     Head.Append('Connection: Keep-Alive', {crlf=}true);
   end;
   Head.Append(nil, 0, {crlf=}true); // headers always end with a void line
+  result := @Head;
   Process.Reset;
   if ContentStream = nil then
     if ContentLength = 0 then
@@ -1419,6 +1420,7 @@ begin
         Process.Append(Content);
         Content := ''; // release ASAP
         Head.Reset; // DoRequest will use Process
+        result := @Process;
         State := hrsResponseDone;
       end
       else

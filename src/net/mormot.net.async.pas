@@ -764,12 +764,9 @@ type
   THttpAsyncServer = class(THttpServerSocketGeneric)
   protected
     fAsync: THttpAsyncConnections;
-    fCompressGz: integer;
     fHeadersDefaultBufferSize: integer;
     fConnectionClass: TAsyncConnectionClass;
     fConnectionsClass: THttpAsyncConnectionsClass;
-    function GetRegisterCompressGzStatic: boolean;
-    procedure SetRegisterCompressGzStatic(Value: boolean);
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetExecuteState: THttpServerExecuteState; override;
@@ -784,9 +781,6 @@ type
     /// finalize the HTTP Server
     destructor Destroy; override;
   published
-    /// if we should search for local .gz cached file when serving static files
-    property RegisterCompressGzStatic: boolean
-      read GetRegisterCompressGzStatic write SetRegisterCompressGzStatic;
     /// initial capacity of internal per-connection Headers buffer
     // - 2 KB by default is within the mormot.core.fpcx64mm SMALL blocks limit
     // so will use up to 3 locks before contention
@@ -3020,7 +3014,6 @@ end;
 function THttpAsyncConnection.DoRequest: TPollAsyncSocketOnReadWrite;
 var
   req: THttpServerRequest;
-  cod: integer;
   output: PRawByteStringBuffer;
 begin
   // check the status
@@ -3041,34 +3034,11 @@ begin
   result := soClose;
   req := THttpServerRequest.Create(fServer, fRemoteConnID, {thread=}nil, []);
   try
+    // let the associated THttpAsyncServer execute the request
     req.Prepare(fHttp, fRemoteIP);
-    try
-      req.RespStatus := fServer.DoBeforeRequest(req);
-      if req.RespStatus > 0 then
-      begin
-        req.SetErrorMessage('Rejected % Request', [fHttp.CommandUri]);
-        fServer.IncStat(grRejected);
-      end
-      else
-      begin
-        // execute the main processing callback
-        req.RespStatus := fServer.Request(req);
-        cod := fServer.DoAfterRequest(req);
-        if cod > 0 then
-          req.RespStatus := cod;
-      end;
+    if fServer.DoRequest(req) then
       result := soContinue;
-    except
-      on E: Exception do
-        begin
-          // intercept and return Internal Server Error 500
-          req.RespStatus := HTTP_SERVERERROR;
-          req.SetErrorMessage('%: %', [E, E.Message]);
-          fServer.IncStat(grException);
-          // will keep soClose as result to shutdown the connection
-        end;
-    end;
-    // prepare the response for the HTTP state machine
+    // handle HTTP/1.1 keep alive timeout
     if (fKeepAliveSec > 0) and
        not (hfConnectionClose in fHttp.HeaderFlags) and
        (fServer.Async.fLastOperationSec > fKeepAliveSec) then
@@ -3077,20 +3047,19 @@ begin
         [fKeepAliveSec], self);
       include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
     end;
-    req.SetupResponse(fHttp, fServer.fCompressGz,
+    // compute the response for the HTTP state machine
+    output := req.SetupResponse(fHttp, fServer.fCompressGz,
       fServer.fAsync.fClients.fSendBufferSize);
+    // now fHttp.State is final as hrsSendBody or hrsResponseDone
     fRespStatus := req.RespStatus;
   finally
     req.Free;
   end;
   // now try socket send() with headers (and small body if hrsResponseDone)
-  // then TPollAsyncSockets.ProcessWrite/subscribe if needed if hrsSendBody
-  if fHttp.Head.Len <> 0 then
-    output := @fHttp.Head
-  else
-    output := @fHttp.Process;
+  // then TPollAsyncSockets.ProcessWrite/subscribe would process hrsSendBody
   fServer.fAsync.fClients.Write(self, output.Buffer, output.Len, {timeout=}1000);
   // will call THttpAsyncConnection.AfterWrite once sent to finish/continue
+  // see THttpServer.Process() for the blocking equivalency of this async code
 end;
 
 
@@ -3116,7 +3085,6 @@ begin
   if fProcessName = '' then
     fProcessName := aPort;
   // initialize HTTP parsing
-  fCompressGz := -1;
   fHeadersDefaultBufferSize := 2048; // one fpcx64mm small block
   // setup connections
   if hsoLogVerbose in ProcessOptions then
@@ -3158,19 +3126,6 @@ function THttpAsyncServer.GetExecuteState: THttpServerExecuteState;
 begin
   result := fAsync.fExecuteState; // state comes from THttpAsyncConnections
   fExecuteMessage := fAsync.fExecuteMessage;
-end;
-
-function THttpAsyncServer.GetRegisterCompressGzStatic: boolean;
-begin
-  result := fCompressGz >= 0;
-end;
-
-procedure THttpAsyncServer.SetRegisterCompressGzStatic(Value: boolean);
-begin
-  if Value then
-    fCompressGz := CompressIndex(fCompress, @CompressGzip)
-  else
-    fCompressGz := -1;
 end;
 
 function THttpAsyncServer.GetHttpQueueLength: cardinal;
