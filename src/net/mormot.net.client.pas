@@ -1437,7 +1437,6 @@ procedure THttpClientSocket.RequestInternal(
     const Fmt: RawUtf8; const Args: array of const);
   var
     msg: RawUtf8;
-    wastls: boolean;
   begin
     FormatUtf8(Fmt, Args, msg);
     //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
@@ -1450,12 +1449,11 @@ procedure THttpClientSocket.RequestInternal(
     else
     begin
       // recreate the connection and try again
-      wastls := TLS.Enabled; // Close would reset it
       Close;
       //if Assigned(OnLog) then
       //   OnLog(sllTrace, 'DoRetry after close', [], self);
       try
-        OpenBind(fServer, fPort, {bind=}false, wastls);
+        OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
         HttpStateReset;
         include(ctxt.retry, rMain);
         RequestInternal(ctxt);

@@ -3199,7 +3199,7 @@ var
   head: RawUtf8;
   res: TNetResult;
 begin
-  TLS.Enabled := false; // reset this flag which is set at output
+  TLS.Enabled := false; // reset this flag which is set at output if aTLS=true
   fSocketLayer := aLayer;
   fWasBind := doBind;
   if {%H-}PtrInt(aSock)<=0 then
@@ -3517,7 +3517,7 @@ begin
     exit; // no opened connection, or Close already executed
   // perform the TLS shutdown round and release the TLS context
   fSecure := nil; // will depend on the actual implementation class
-  TLS.Enabled := false;
+  // don't reset TLS.Enabled := false because it is needed e.g. on re-connect
   // actually close the socket and mark it as not SockIsDefined (<0)
   {$ifdef SYNCRTDEBUGLOW2}
   QueryPerformanceMicroSeconds(start);
