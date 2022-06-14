@@ -588,9 +588,9 @@ end;
   Some numbers, with CITIES_MAX=200000, deleting 1/128 entries
   first column (3..23) is the max number of indexes[] chunk to rehash
   #abc is the number of slots in the hash table
-  adjust=abc abcMB/s match DynArrayHashTableAdjust() time fixing the indexes
-  hash=abc is the time needed to hash input (not impacted by ajust algorithm)
-  -> TDynArray.Delete move() takes more time than the HashTable update :)
+  adjust=.. match DynArrayHashTableAdjust() time fixing the indexes
+  hash=ms is the time needed to hash input (not impacted by adjusting algorithm)
+  -> TDynArray.Delete move() now takes more time than the HashTable update :)
   1. naive loop
     for i := 0 to HashTableSize-1 do
       if HashTable[i]>aArrayIndex then
@@ -1528,11 +1528,11 @@ function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @by16:  add     eax, dword ptr [Data]
         add     r9d, eax
-        add     eax, dword ptr [Data+4]
+        add     eax, dword ptr [Data + 4]
         add     r9d, eax
-        add     eax, dword ptr [Data+8]
+        add     eax, dword ptr [Data + 8]
         add     r9d, eax
-        add     eax, dword ptr [Data+12]
+        add     eax, dword ptr [Data + 12]
         add     r9d, eax
         add     Data, 16
         {$ifdef WIN64ABI}
@@ -1587,26 +1587,26 @@ function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
         push    r12
         push    rbx
         mov     r12d, -1640531535
-        lea     r10, [rcx+rdx]
-        lea     eax, [r8+165667B1H]
+        lea     r10, [rcx + rdx]
+        lea     eax, [r8 + 165667B1H]
         cmp     rdx, 15
         jbe     @2
-        lea     rsi, [r10-10H]
-        lea     ebx, [r8+24234428H]
-        lea     edi, [r8-7A143589H]
-        lea     eax, [r8+61C8864FH]
+        lea     rsi, [r10 - 16]
+        lea     ebx, [r8 + 24234428H]
+        lea     edi, [r8 - 7A143589H]
+        lea     eax, [r8 + 61C8864FH]
 @1:     imul    r9d, dword ptr [rcx], -2048144777
         add     rcx, 16
-        imul    r11d, dword ptr [rcx-0CH], -2048144777
+        imul    r11d, dword ptr [rcx - 12], -2048144777
         add     ebx, r9d
-        lea     r9d, [r11+rdi]
+        lea     r9d, [r11 + rdi]
         rol     ebx, 13
         rol     r9d, 13
         imul    ebx, r12d
         imul    edi, r9d, -1640531535
-        imul    r9d, dword ptr [rcx-8H], -2048144777
+        imul    r9d, dword ptr [rcx - 8], -2048144777
         add     r8d, r9d
-        imul    r9d, dword ptr [rcx-4H], -2048144777
+        imul    r9d, dword ptr [rcx - 4], -2048144777
         rol     r8d, 13
         imul    r8d, r12d
         add     eax, r9d
@@ -1627,14 +1627,14 @@ function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
         cmp     r10, r9
         jc      @4
         mov     r8, r9
-@3:     imul    edx, dword ptr [r8-4H], -1028477379
+@3:     imul    edx, dword ptr [r8 - 4], -1028477379
         add     r8, 4
         add     eax, edx
         ror     eax, 15
         imul    eax, 668265263
         cmp     r10, r8
         jnc     @3
-        lea     rdx, [r10-4H]
+        lea     rdx, [r10 - 4]
         sub     rdx, rcx
         mov     rcx, rdx
         and     rcx, 0FFFFFFFFFFFFFFFCH
