@@ -1735,7 +1735,7 @@ type
     /// generate a new IList<TOrm> instance for the specific TOrm class
     // - a single TIList<TOrm> instance will be shared for all TOrm classes,
     // even on oldest compilers which do not support specialization
-    // - the returned IList<T: TOrm> will own and free each T instance
+    // - the weakly returned IList<T: TOrm> will own and free each T instance
     // - as used e.g. by TOrmTable.ToNewIList()
     class function NewIList(var IListOrm): TIListParent;
     {$endif ORMGENERICS}
@@ -2903,12 +2903,15 @@ type
     procedure ToObjectList(DestList: TObjectList;
       RecordType: TOrmClass = nil); overload;
     {$ifdef ORMGENERICS}
-    /// create a IList<TOrm> with TOrm instances corresponding to this resultset
+    /// create a IList<TOrm*> with TOrm instances corresponding to this resultset
     // - always returns an IList<> instance, even if the TOrmTable is nil or void
     // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
     // executables than Generics.Collections, and need no try..finally Free: a
     // single TIList<TOrm> class will be reused for all IList<>
-    procedure ToNewIList(Item: TOrmClass; var Result);
+    function ToIList<T: TOrm>: IList<T>;
+    /// create a IList<TOrm> with TOrm instances corresponding to this resultset
+    // - weak typed result - rather use the ToIList<T> function (which calls it)
+    procedure ToNewIList(Item: TOrmClass; var IListOrm);
     {$endif ORMGENERICS}
     /// fill an existing T*ObjArray variable with TOrm instances
     // corresponding to this TOrmTable result set
@@ -5350,16 +5353,21 @@ begin
 end;
 
 {$ifdef ORMGENERICS}
-procedure TOrmTable.ToNewIList(Item: TOrmClass; var Result);
+procedure TOrmTable.ToNewIList(Item: TOrmClass; var IListOrm);
 var
   list: TIListParent;
 begin
-  list := Item.NewIList(Result);
+  list := Item.NewIList(IListOrm);
   if (self = nil) or
      (fRowCount = 0) then
     exit;
   list.Count := fRowCount;  // allocate once
   FillOrms(list.First, Item);
+end;
+
+function TOrmTable.ToIList<T>: IList<T>;
+begin
+  ToNewIList(T, result);
 end;
 {$endif ORMGENERICS}
 
