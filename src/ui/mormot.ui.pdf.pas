@@ -2993,7 +2993,7 @@ var
 begin
   DecodeDate(ADate, D[2], D[3], D[4]);
   DecodeTime(ADate, D[5], D[6], D[7], D[8]);
-  SetLength(result, 17);
+  SetLength(result{%H-}, 17);
   YearToPChar(D[2], pointer(PtrInt(result) + 2));
   PWord(result)^ := ord('D') + ord(':') shl 8;
   for i := 3 to 7 do
@@ -6210,7 +6210,7 @@ begin
   e := SubSetData;
   inc(PTtfTableDirectory(e));
   n := 0;
-  if SubSetSize > SizeOf(dir^) then
+  if SubSetSize > SizeOf(PTtfTableDirectory) then
     for i := 1 to swap(PTtfTableDirectory(SubSetData)^.numTables) do
     begin
       if IntegerScanIndex(@TTF_SUBSET, length(TTF_SUBSET), e^.tag) >= 0 then
