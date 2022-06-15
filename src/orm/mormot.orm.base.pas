@@ -6422,7 +6422,8 @@ begin
     GetDynArray(Item2, da2);
     n := da1.Count;
     result := n - da2.Count;
-    if result = 0 then
+    if (result = 0) and
+       (n <> 0) then
       if fObjArray <> nil then
         result := ObjectCompare(da1.Value^, da2.Value^, n, CaseInsensitive)
       else

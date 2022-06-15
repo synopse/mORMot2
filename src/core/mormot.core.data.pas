@@ -8002,38 +8002,35 @@ var
 begin
   n := GetCount;
   result := n - B.Count;
-  if result <> 0 then
-    exit;
-  if fInfo.Cache.ItemInfo <> B.Info.Cache.ItemInfo then
-  begin
-    result := ComparePointer(fValue^, B.fValue^);
-    exit;
-  end;
-  if Assigned(fCompare) and
-     not ignorecompare then
-  begin
-    // use specified fCompare() function
-    P1 := fValue^;
-    P2 := B.fValue^;
-    s := fInfo.Cache.ItemSize;
-    for i := 1 to n do
+  if (result = 0) and
+     (n <> 0) then
+    if fInfo.Cache.ItemInfo <> B.Info.Cache.ItemInfo then
+      result := ComparePointer(fValue^, B.fValue^)
+    else if Assigned(fCompare) and
+       not ignorecompare then
     begin
-      result := fCompare(P1^, P2^);
-      if result <> 0 then
-        exit;
-      inc(P1, s);
-      inc(P2, s);
-    end;
-  end
-  else if not(rcfArrayItemManaged in fInfo.Flags) then
-    // binary comparison with length (always CaseSensitive)
-    result := MemCmp(fValue^, B.fValue^, n * fInfo.Cache.ItemSize)
-  else if rcfObjArray in fInfo.Flags then
-    // T*ObjArray comparison of published properties
-    result := ObjectCompare(fValue^, B.fValue^, n, not CaseSensitive)
-  else
-    result := BinaryCompare(fValue^, B.fValue^, fInfo.Cache.ItemInfo, n,
-      not CaseSensitive);
+      // use specified fCompare() function
+      P1 := fValue^;
+      P2 := B.fValue^;
+      s := fInfo.Cache.ItemSize;
+      for i := 1 to n do
+      begin
+        result := fCompare(P1^, P2^);
+        if result <> 0 then
+          exit;
+        inc(P1, s);
+        inc(P2, s);
+      end;
+    end
+    else if not(rcfArrayItemManaged in fInfo.Flags) then
+      // binary comparison with length (always CaseSensitive)
+      result := MemCmp(fValue^, B.fValue^, n * fInfo.Cache.ItemSize)
+    else if rcfObjArray in fInfo.Flags then
+      // T*ObjArray comparison of published properties
+      result := ObjectCompare(fValue^, B.fValue^, n, not CaseSensitive)
+    else
+      result := BinaryCompare(fValue^, B.fValue^, fInfo.Cache.ItemInfo, n,
+        not CaseSensitive);
 end;
 
 procedure TDynArray.Copy(Source: PDynArray; ObjArrayByRef: boolean);
